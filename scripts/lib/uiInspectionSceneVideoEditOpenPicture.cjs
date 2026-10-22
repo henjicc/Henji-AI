@@ -97,7 +97,44 @@ async function measurePlayback(page, ms, after) {
   // 日志含本地时区偏移，按实际时间过滤；字符串比较会把上一轮同日事件算入。
   const events = (await page.evaluate(async after => (await window.henjiNative.logging.queryLogEvents({ date: after.slice(0, 10), afterTimestamp: after, keyword: 'video_edit.decode', limit: 3000 })).events, after)).filter(entry => Date.parse(entry.timestamp) >= Date.parse(after))
   const counts = {}; for (const entry of events) counts[entry.event] = (counts[entry.event] ?? 0) + 1
-  return { presented: frames.length, frames: span + 1, seconds: Math.round(seconds * 100) / 100, fps: Math.round(frames.length / seconds * 10) / 10, timelineRate: Math.round(rate * 10) / 10, skipped, stalls, stalledMs: stalls.reduce((sum, stall) => sum + stall.gapMs, 0), decodeEvents: counts, workerActivity: snapshot.workers.map(worker => ({ ...worker, renders: snapshot.events.filter(entry => entry.worker === worker.id && entry.at >= playbackStarted && entry.kind === 'render.completed').length })), decodeSummaries: snapshot.events.filter(entry => entry.kind === 'worker.log' && entry.at >= playbackStarted && program.has(entry.worker) && entry.event === 'video_edit.decode.lookahead.summary').map(entry => entry.context), nativeBefore, nativeAfter: await page.evaluate(() => window.henjiNative.videoFrames.stats()).catch(() => null), lookaheadBudget: snapshot.events.filter(entry => entry.kind === 'worker.log' && entry.at >= playbackStarted && program.has(entry.worker) && entry.event === 'video_edit.decode.lookahead.budget').map(entry => entry.context), fpsBySecond: Array.from({ length: Math.floor(seconds) }, (_, index) => frames.filter(frame => frame[0] >= first[0] + index * 1000 && frame[0] < first[0] + (index + 1) * 1000).length) }
+  const renderBar = await page.locator('[data-video-edit-render-window]').evaluateAll(elements => elements.map(element => ({ state: element.dataset.videoEditRenderWindow, startFrame: Number(element.dataset.startFrame), endFrame: Number(element.dataset.endFrame) })))
+  const segmentMeasurements = renderBar.map(segment => {
+    const samples = renders.filter(event => event.frame >= segment.startFrame && event.frame < segment.endFrame && event.renderCached === false && event.presented && Number.isFinite(event.renderElapsedMs))
+    return { ...segment, samples: samples.length, overBudget: samples.filter(event => event.renderElapsedMs > budget).length, maxMs: Math.max(0, ...samples.map(event => event.renderElapsedMs)) }
+  })
+  const droppedEvents = (await page.evaluate(async after => (await window.henjiNative.logging.queryLogEvents({ date: after.slice(0, 10), afterTimestamp: after, keyword: 'video_edit.render_cache.dropped', limit: 100 })).events, after)).filter(entry => Date.parse(entry.timestamp) >= Date.parse(after))
+  return { renderBar, segmentMeasurements, droppedEvents, cachedFrames: renders.filter(event => event.renderCached).length, presented: frames.length, frames: span + 1, seconds: Math.round(seconds * 100) / 100, fps: Math.round(frames.length / seconds * 10) / 10, timelineRate: Math.round(rate * 10) / 10, skipped, stalls, stalledMs: stalls.reduce((sum, stall) => sum + stall.gapMs, 0), decodeEvents: counts, workerActivity: snapshot.workers.map(worker => ({ ...worker, renders: snapshot.events.filter(entry => entry.worker === worker.id && entry.at >= playbackStarted && entry.kind === 'render.completed').length })), decodeSummaries: snapshot.events.filter(entry => entry.kind === 'worker.log' && entry.at >= playbackStarted && program.has(entry.worker) && entry.event === 'video_edit.decode.lookahead.summary').map(entry => entry.context), nativeBefore, nativeAfter: await page.evaluate(() => window.henjiNative.videoFrames.stats()).catch(() => null), lookaheadBudget: snapshot.events.filter(entry => entry.kind === 'worker.log' && entry.at >= playbackStarted && program.has(entry.worker) && entry.event === 'video_edit.decode.lookahead.budget').map(entry => entry.context), fpsBySecond: Array.from({ length: Math.floor(seconds) }, (_, index) => frames.filter(frame => frame[0] >= first[0] + index * 1000 && frame[0] < first[0] + (index + 1) * 1000).length) }
+}
+
+/** 可选预渲染验收：正式公共能力只写工程副本的预览缓存，随后核对节目真实命中及段边界。 */
+async function measureRenderedSegment(page, documentId) {
+  const { authorizeMcpConnection, connectMcpClient, callTool, operationEnvelope, disableMcp } = require('./uiInspectionMcpClient.cjs')
+  const identity = await authorizeMcpConnection(page, { name: '分段预渲染免费验收', allowWrites: true })
+  const client = await connectMcpClient(identity.config, 'Henji render segment Reality')
+  const ref = { kind: 'video_edit.document', id: documentId }, property = 'video_edit.document.render_cache'
+  try {
+    const preference = 'video_edit.document.render_preference'
+    const baseline = await callTool(client, 'read_application_entity', { ref, propertyIds: [preference] })
+    const changed = await callTool(client, 'change_application_entities', operationEnvelope([baseline], { summary: '关闭自动渲染以单独验证指定段', changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties: { [preference]: { autoRender: false } } }] }))
+    assert.equal(changed.executionState, 'completed', JSON.stringify(changed))
+    const read = async () => (await callTool(client, 'read_application_entity', { ref, propertyIds: [property] })).data.properties[property]
+    let before = await read()
+    for (let retry = 0; before.rendering && retry < 100; retry++) { await page.waitForTimeout(100); before = await read() }
+    assert.equal(before.rendering, null, '自动任务须停止')
+    assert.ok(before.windows.some(window => window.performance?.sampleFrames >= 15), '正向播放须产生可读的实测样本')
+    const segment = before.windows.find(window => window.state !== 'ready' && window.startFrame < 600) ?? before.windows[0]
+    assert.ok(segment, '须有可验收的段')
+    const range = { startFrame: segment.startFrame, endFrame: segment.endFrame }
+    const started = await callTool(client, 'render_video_edit_preview', operationEnvelope([], { documentRef: ref, range, scope: 'all' }))
+    let after = await read(), deadline = Date.now() + 180000
+    while (Date.now() < deadline && (after.rendering || !after.windows.some(window => window.startFrame === range.startFrame && window.state === 'ready'))) {
+      await page.waitForTimeout(300); after = await read()
+    }
+    assert.ok(after.windows.some(window => window.startFrame === range.startFrame && window.state === 'ready'), '指定段须完成编码并回读为ready')
+    const playback = await measurePlayback(page, 12000, new Date().toISOString())
+    assert.ok(playback.cachedFrames > 0, '正向播放须实际读取预览文件')
+    return { before, range, started, after, playback }
+  } finally { await client.close(); await disableMcp(page) }
 }
 
 /**
@@ -239,6 +276,7 @@ function createVideoEditOpenPictureScene() {
           if (process.env.HENJI_OPEN_PICTURE_PLAYBACK === '1') {
             evidence[`playback${evidence.runs.length}`] = await measurePlayback(page, 12000, new Date().toISOString())
             console.log('[open-picture-playback]', JSON.stringify(evidence[`playback${evidence.runs.length}`]))
+            if (process.env.HENJI_OPEN_PICTURE_RENDER_SEGMENT === '1' && evidence.runs.length === 0) { evidence.renderedSegment = await measureRenderedSegment(page, manifest.mainVideoEditId); save(); console.log('[open-picture-rendered-segment]', JSON.stringify(evidence.renderedSegment)) }
           }
           const worker = await workerSnapshot(page)
           const renders = worker.events.filter(event => event.kind === 'render.completed' || event.kind === 'init.completed' || event.kind === 'update.completed').slice(0, 30).map(({ kind, at, frame, elapsedMs, presented, decodeMs, gpuMs, error, preparationStages }) => ({ kind, at: Math.round(at), frame, elapsedMs: Math.round(elapsedMs), presented, decodeMs, gpuMs, error, preparationStages }))

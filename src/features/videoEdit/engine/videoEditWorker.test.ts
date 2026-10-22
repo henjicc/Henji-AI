@@ -3,6 +3,7 @@ import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { videoEditComposition } from '@/core/videoEdit/document'
 import type { RenderRequest, RenderResponse } from './videoEditWorker'
 import type { VideoEditPresentationCapture } from './videoEditGpuCompositor'
+import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 
 const state = vi.hoisted(() => ({ render: vi.fn(), readRgb: vi.fn(), performance: [] as CodeFramePerformance[] }))
@@ -11,6 +12,7 @@ vi.mock('./videoEditRenderer', () => ({ VideoEditRenderer: class {
   render = state.render
   async dispose() {}
   cancelPresentation() {}
+  setRenderCache() {}
   retainLookahead() {}
   async prepareLookahead() { return false }
   codeDiagnostics() { return {} }
@@ -53,7 +55,7 @@ function render(pixels: ImageBitmap, completion: Promise<void> = Promise.resolve
     const capture = args[7] as VideoEditPresentationCapture | undefined
     capture?.(Promise.resolve(pixels))
     // Simulates canvas expiry during the asynchronous GPU completion wait.
-    return { presented, completion, canvas: { transferToImageBitmap() { throw new Error('画布纹理已过期') } }, gpuMs: 0 }
+    return { presented, renderCached: false, decodeMs: 0, completion, canvas: { transferToImageBitmap() { throw new Error('画布纹理已过期') } }, gpuMs: 0 }
   })
 }
 const request = { kind: 'render', frame: 15, sequential: false } as const
@@ -117,4 +119,20 @@ it('两帧流水的迟到完成保留各自成本，不读下一帧重置后的�
   await vi.waitFor(() => expect(messages.some(message => message.id === firstId && !message.phase)).toBe(true))
   expect(second.codePerformance?.[0]).toMatchObject({ frame: 31, gpuMs: 32 })
   expect(messages.find(message => message.id === firstId && !message.phase)?.codePerformance?.[0]).toMatchObject({ frame: 30, gpuMs: 31 })
+})
+
+
+it('逐帧回执携带预览来源与实际耗时，扣除正常呈现等待并保留阶段名', async () => {
+  await init(true)
+  let now = 1000
+  const clock = vi.spyOn(performance, 'now').mockImplementation(() => now)
+  state.render.mockImplementation(async () => {
+    now += 40; recordVideoEditPreparation('presentDeadline', 40)
+    now += 8; recordVideoEditPreparation('codeReady', 8)
+    return { presented: true, renderCached: true, completion: Promise.resolve(), decodeMs: 8, gpuMs: 40 }
+  })
+  try {
+    const result = await send({ ...request, sequential: true })
+    expect(result).toMatchObject({ renderCached: true, renderElapsedMs: 8, renderStages: { presentDeadline: 40, codeReady: 8 } })
+  } finally { clock.mockRestore() }
 })

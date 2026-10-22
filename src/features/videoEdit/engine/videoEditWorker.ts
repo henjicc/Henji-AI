@@ -4,7 +4,7 @@ import { VideoEditSharedCompilation, type SharedCompilationResponse } from './vi
 import { installAuthorMetadataCache } from './videoEditAuthorMetadataCache'
 import { installAuthorNativeModules } from './videoEditAuthorModules'
 import { setVideoEditCodeCompilerWorkerFactory } from './videoEditCodeCompiler'
-import { videoEditPreparationSnapshot, recordVideoEditPreparation } from './videoEditPreparationTiming'
+import { videoEditPreparationSnapshot, videoEditPreparationDelta, recordVideoEditPreparation } from './videoEditPreparationTiming'
 import type { VideoEditTimingContext } from './videoEditFirstFrameTiming'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import { VideoEditProxyFrames } from './videoEditProxyFrames'
@@ -56,7 +56,7 @@ export type RenderRequest = { id: number } & (
   | { kind: 'audio'; start: number; duration: number; retainIdle?: boolean }
   /** Acceptance probes only (task 2.7): high-precision counters and one row of the last high-precision composition. */
   | { kind: 'precision'; row?: number })
-export type RenderResponse = { approximate?: boolean; gpuDeviceLost?: string; authorElements?: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation; authorMetadata?: import('./videoEditAuthorParameters').AuthorEffectMetadata; elements?: import('./videoEditAuthorElements').AuthorElementObservation[]; preparationStages?: ReturnType<typeof videoEditPreparationSnapshot>; codePerformance?: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[]; id: number; phase?: 'submitted'; error?: string; effectErrors?: string[]; bitmap?: ImageBitmap; history?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
+export type RenderResponse = { renderCached?: boolean; renderElapsedMs?: number; renderStages?: Record<string, number>; approximate?: boolean; gpuDeviceLost?: string; authorElements?: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation; authorMetadata?: import('./videoEditAuthorParameters').AuthorEffectMetadata; elements?: import('./videoEditAuthorElements').AuthorElementObservation[]; preparationStages?: ReturnType<typeof videoEditPreparationSnapshot>; codePerformance?: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[]; id: number; phase?: 'submitted'; error?: string; effectErrors?: string[]; bitmap?: ImageBitmap; history?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
 /** Structured log entries the worker cannot write itself; the render session forwards them to the application log. */
 export interface RenderLogMessage { kind: 'log'; level: 'debug' | 'info' | 'warn'; message: string; event: string; context: Record<string, unknown> }
 /** 原生显卡帧通道（preload 交来的端口）。不进入渲染队列；渲染器经它读取原生解码帧，诊断只供真实性测试。 */
@@ -228,6 +228,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
       } else if (request.kind === 'render') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
         const renderStarted = performance.now()
+        const preparationBefore = videoEditPreparationSnapshot()
         traceVideoEditFrame('worker.queue', request.frame, receivedAt, renderStarted)
         let snapshot: Promise<ImageBitmap> | undefined
         // A canvas texture expires across asynchronous boundaries. Copy in the draw
@@ -239,6 +240,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
           void snapshot.catch(() => {})
         }, { maxPixels: needsPixels ? Infinity : 1280 * 720, gpu: !direct && !request.readRgb && !request.history }) : undefined
         const result = await renderer.render(request.frame, request.sequential, request.scrubbing, () => renderer?.document.revision === revision, request.deadline, undefined, request.quality, capture).catch(error => { if (snapshot) void snapshot.then(bitmap => bitmap.close(), () => {}); throw error })
+        const renderStages = videoEditPreparationDelta(preparationBefore)
         releaseForeground()
         if (result.presented) decodeLookahead?.update(renderer.document, request.frame, request.sequential === true, renderCacheWindows)
         const readCodePerformance = renderer.captureCodePerformance()
@@ -253,6 +255,11 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
           await result.completion
           traceVideoEditFrame('compositor.complete', request.frame, start)
           recordVideoEditPreparation('presentComplete', performance.now() - start)
+          // 流水播放会主动等待刷新时刻，这段等待不是计算瓶颈，不能使正常画面标红。
+          const renderElapsedMs = Math.max(0, performance.now() - renderStarted - (renderStages.presentDeadline ?? 0))
+          renderStages.presentComplete = performance.now() - start
+          renderStages.decode = result.decodeMs
+          renderStages.composite = Math.max(0, result.gpuMs - (renderStages.presentDeadline ?? 0))
           const transferStarted = performance.now()
           const pixels = snapshot ? await snapshot : undefined
           if (pixels) owned.add(pixels)
@@ -267,7 +274,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
           const bitmap = rgb || direct || !result.presented ? undefined : pixels
           traceVideoEditFrame('bitmap.prepare', request.frame, transferStarted)
           const postedAt = performance.now()
-          self.postMessage({ id: request.id, bitmap, history, rgb, authorElements, effectErrors: result.effectErrors, sourceTimestamps: result.sourceTimestamps, blankPictures: result.blankPictures, singleFrameReads: result.singleFrameReads, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, ...(result.approximate ? { approximate: true } : {}), decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics(), codePerformance: readCodePerformance(), preparationStages: videoEditPreparationSnapshot() } satisfies RenderResponse, { transfer: [...(rgb ? [rgb.buffer as ArrayBuffer] : bitmap ? [bitmap] : []), ...(history ? [history] : [])] })
+          self.postMessage({ id: request.id, renderCached: result.renderCached, renderElapsedMs, renderStages, bitmap, history, rgb, authorElements, effectErrors: result.effectErrors, sourceTimestamps: result.sourceTimestamps, blankPictures: result.blankPictures, singleFrameReads: result.singleFrameReads, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, ...(result.approximate ? { approximate: true } : {}), decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics(), codePerformance: readCodePerformance(), preparationStages: videoEditPreparationSnapshot() } satisfies RenderResponse, { transfer: [...(rgb ? [rgb.buffer as ArrayBuffer] : bitmap ? [bitmap] : []), ...(history ? [history] : [])] })
           if (bitmap) owned.delete(bitmap)
           traceVideoEditFrame('worker.post', request.frame, postedAt)
           if (history) owned.delete(history)

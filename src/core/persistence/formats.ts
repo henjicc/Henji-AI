@@ -95,6 +95,7 @@ export const PERSISTENCE_EXCLUSIONS = [
   { id: 'screen-recording-standard-exports', readEntry: 'src/features/screenRecording/application/recordingProductService.ts', reason: 'Markdown/HTML 与 PNG/GIF 是面向用户交付的外部标准文件，回读只验证发布字节，不作为项目数据解释；可编辑产物复用已登记的 image-edit-v3 与 image-document-package。运行期导出记录不落盘。' },
   { id: 'session-state', readEntry: 'electron/main/services/documents/session-state.ts', reason: '明示可丢弃的撤销/视口缓存；文档仍能从权威文件完整打开。' },
   { id: 'working-copy-links', readEntry: 'electron/main/services/image-editor-v3/image-document/working-copy-links.ts / canvas-layers/canvas-layer-packages.ts', reason: '可由权威包与工作副本重建的同步投影，业务文档和未保存工作副本在 image-working-copy 中受保护。' },
+  { id: 'video-edit-render-cache', readEntry: 'electron/main/services/video/render-cache.ts / src/features/videoEdit/application/videoEditRenderPerformance.ts', reason: '预览文件及按内容指纹保存的本机播放性能样本均可重建；版本变化直接失效并回收，不改变工程文件或用户设置。' },
   { id: 'derived-media', readEntry: 'electron/main/services/audio/ / audio-edit/speech-energy-service.ts / video/ / fonts/scanner.ts / local-inference/', reason: '波形、声音低谷、缩略帧、字体目录缓存、区域检测/跟踪缓存可从原媒体重算；不是独立用户内容，人工校对仍由作品文档保存。' },
   { id: 'external-media-and-fonts', readEntry: '项目素材/生成结果/字体目录/代码/*.ts', reason: '图片、视频、音频、字体和作者源码的字节保持原样；来源格式属于外部编码协议，代码的API/语言版本由code-version固定。' },
   { id: 'sqlite-owned-content', readEntry: 'electron/main/services/db-migrations.ts', reason: '生成历史、自定义模型、素材库/标签/文件夹关系、助手记忆与调用账本统一由既有SQLite账本负责；不另建迁移账本。' },

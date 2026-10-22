@@ -1206,7 +1206,7 @@ it('预渲染窗口在正向播放时整帧取自预览文件，与实时合成�
   const renderer = new VideoEditRenderer(document, 3840)
   renderer.setRenderCache([{ key: 'w1', startFrame: 60, endFrame: 120, url: 'D:/cache/w1.mp4', width: 3840, height: 2160, fps: 60 }])
   try {
-    for (let frame = 58; frame <= 61; frame++) { boundary.draws = []; await (await renderer.render(frame, true)).completion; expect(boundary.draws.at(-1)?.ids).toEqual(frame < 60 ? ['clip', 'top'] : ['render-cache:w1']) }
+    for (let frame = 58; frame <= 61; frame++) { boundary.draws = []; await (await renderer.render(frame, true)).completion; expect(boundary.draws.at(-1)?.ids).toEqual(frame < 60 ? ['clip', 'top'] : ['render-cache:w1:60']) }
     // Window frames come from the file at their offset; source layers schedule only the frames outside it.
     expect(us(boundary.draws.at(-1)!.timestamps)).toEqual(us([1 / 60]))
     expect(boundary.scheduled.find(value => value.path === 'D:/cache/w1.mp4')?.timestamps[0]).toBe(videoEditPictureSeconds(0))
@@ -1396,5 +1396,28 @@ it('取消前瞻图片后，原生解码完成之前不再启动下一份推测�
     finish({ width: 32, height: 32, close }); await vi.waitFor(() => expect(close).toHaveBeenCalledOnce())
     expect(await renderer.prepareLookahead(targets[1], new AbortController().signal)).toBe(true)
     expect(decode).toHaveBeenCalledTimes(2)
+  } finally { await renderer.dispose() }
+})
+
+
+it('重复内容预览在不同位置共享文件且每次从段内零点播放，位置更新立即生效', async () => {
+  boundary.scheduled = []
+  const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
+  document.clips = [{ ...document.clips[0], duration: 180 }]
+  const renderer = new VideoEditRenderer(document, 3840)
+  const cache = { key: 'shared', url: 'shared-preview.mp4', width: 3840, height: 2160, fps: 60 }
+  renderer.setRenderCache([{ ...cache, startFrame: 0, endFrame: 30 }, { ...cache, startFrame: 30, endFrame: 60 }])
+  try {
+    for (let frame = 0; frame <= 31; frame++) {
+      const result = await renderer.render(frame, true); await result.completion
+      expect(result.renderCached).toBe(true)
+      expect(us(result.sourceTimestamps)).toEqual(us([(frame % 30) / 60]))
+    }
+    await renderer.stopPlayback()
+    renderer.setRenderCache([{ ...cache, startFrame: 90, endFrame: 120 }])
+    const moved = await renderer.render(91, true); await moved.completion
+    expect(moved.renderCached).toBe(true)
+    expect(us(moved.sourceTimestamps)).toEqual(us([1 / 60]))
+    expect((await renderer.render(91, false)).renderCached).toBe(false)
   } finally { await renderer.dispose() }
 })

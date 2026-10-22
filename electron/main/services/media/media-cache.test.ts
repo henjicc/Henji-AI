@@ -142,6 +142,20 @@ describe('video render cache store', () => {
   })
 })
 
+it('相同内容跨文档有独立归属，删除一个文档不影响另一个预览', async () => {
+  const root = await temporary(), manager = new MediaCacheManager(host(root))
+  const render = new VideoRenderCacheService(manager.createCache('render', undefined, { extension: '.mp4' }), manager.createCache('render', undefined, { extension: '.json' }), () => manager.categoryDirectory('render'))
+  for (const projectId of ['one', 'two']) {
+    const temporaryPath = await render.begin(projectId, 'same', 'h264')
+    await fs.writeFile(temporaryPath, Buffer.alloc(16))
+    await render.commit(temporaryPath, { projectId, sequenceId: 's', windowKey: 'same', profile: 'h264', startFrame: 0, endFrame: 30, width: 1920, height: 1080, fps: 30 })
+  }
+  expect((await render.list('one'))[0].path).not.toBe((await render.list('two'))[0].path)
+  await render.remove({ projectId: 'one' })
+  expect(await render.list('one')).toEqual([])
+  expect(await render.list('two')).toHaveLength(1)
+})
+
 describe('media cache shutdown', () => {
   it('does no maintenance or settings writes after stop (the database closes on quit)', async () => {
     const owner = host(await temporary())

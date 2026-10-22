@@ -77,12 +77,12 @@ export function useTimelineMenu(instance: VideoEditInstance, onError: (error: un
       // 回到来源继续编辑（4.1）：片段记着来源时打开来源文档并定位，或打开生成记录
       if (inPlace) items.unshift(...inPlace.items({ ...(clipId ? { clipId } : {}), ...(trackId ? { trackId } : {}), frame: inPlace.frameAt(event.clientX) }))
       if (!clipId) {
-        // 渲染预览（PR“渲染入点到出点”）：有入出点时只渲染这段，否则整条序列；只渲染渲染条上标黄的段落。
+        // 渲染预览（PR“渲染入点到出点”）：有入出点时只渲染这段，否则整条序列；包括实时段，跳过已就绪段。
         const projectId = instance.document.id
         const cache = readVideoEditRenderCache(projectId)
         const range = instance.inFrame !== null || instance.outFrame !== null ? { startFrame: instance.inFrame ?? 0, endFrame: instance.outFrame ?? Math.max(1, cache.totalFrames) } : undefined
         if (cache.rendering) items.push({ id: 'render_preview_cancel', label: `取消渲染预览（${cache.rendering.done}/${cache.rendering.total}）`, icon: <CircleStop size={UI_ICON_SIZE.md} />, divider: true, onClick: () => cancelVideoEditRenderCache(projectId) })
-        else items.push({ id: 'render_preview', label: range ? '渲染入点到出点' : '渲染预览', icon: <MonitorPlay size={UI_ICON_SIZE.md} />, divider: true, disabled: cache.needsRenderFrames === 0, onClick: () => { void renderVideoEditRenderCache(projectId, { ...(range ? { range } : {}), scope: 'needed' }).catch(onError) } })
+        else items.push({ id: 'render_preview', label: range ? '渲染入点到出点' : '渲染预览', icon: <MonitorPlay size={UI_ICON_SIZE.md} />, divider: true, disabled: !cache.windows.some(window => window.state !== 'ready' && (!range || window.endFrame > range.startFrame && window.startFrame < range.endFrame)), onClick: () => { void renderVideoEditRenderCache(projectId, { ...(range ? { range } : {}), scope: 'all' }).catch(onError) } })
         const auto = getVideoEditRenderPreference(projectId).autoRender
         items.push({ id: 'render_preview_auto', label: auto ? '关闭空闲时自动渲染' : '开启空闲时自动渲染', icon: <TimerReset size={UI_ICON_SIZE.md} />, onClick: () => { try { setVideoEditRenderPreference(projectId, { autoRender: !auto }) } catch (error) { onError(error) } } })
         items.push({ id: 'render_preview_clear', label: '删除渲染文件', icon: <Trash2 size={UI_ICON_SIZE.md} />, disabled: cache.readyFrames === 0 && !cache.rendering, onClick: () => { void clearVideoEditRenderCache(projectId).catch(onError) } })

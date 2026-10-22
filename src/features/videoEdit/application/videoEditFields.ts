@@ -115,7 +115,7 @@ schemas['video_edit.document'].proxyPreference = z.object({ enabled: z.boolean()
 schemas['video_edit.media'].proxyState = z.object({ status: z.enum(['none', 'generating', 'ready']), progress: z.number().min(0).max(1), error: z.string() }).strict()
 schemas['video_edit.document'].playbackResolution = videoEditPlaybackResolutionSchema
 schemas['video_edit.document'].renderPreference = z.object({ autoRender: z.boolean() }).strict()
-schemas['video_edit.document'].renderCache = z.object({ windows: z.array(z.object({ startFrame: z.number().int(), endFrame: z.number().int(), state: z.enum(['ready', 'rendering', 'needs_render', 'realtime']) }).strict()), readyFrames: z.number().int(), needsRenderFrames: z.number().int(), totalFrames: z.number().int(), rendering: z.object({ done: z.number().int(), total: z.number().int() }).strict().nullable() }).strict()
+schemas['video_edit.document'].renderCache = z.object({ windows: z.array(z.object({ startFrame: z.number().int(), endFrame: z.number().int(), state: z.enum(['ready', 'rendering', 'dropped', 'predicted', 'realtime']), performance: z.object({ sampleFrames: z.number().int(), overBudgetFrames: z.number().int(), p90Ms: z.number() }).strict().optional() }).strict()), readyFrames: z.number().int(), needsRenderFrames: z.number().int(), totalFrames: z.number().int(), rendering: z.object({ done: z.number().int(), total: z.number().int() }).strict().nullable() }).strict()
 schemas['video_edit.clip'].codeCurves = codeMaterialCurvesSchema
 schemas['video_edit.clip'].codeVersionId = z.string().min(1).max(100)
 schemas['video_edit.clip'].linkId = z.string().max(100)
@@ -245,7 +245,7 @@ const descriptions: Record<string, string> = {
   'video_edit.document.active_sequence_id': '当前序列 ID；空字符串表示没有序列。新项目不含任何序列，可在 video_edit.document 下通过 video_edit.sequence 集合创建（name 与可选 width/height/frame_rate），再放入素材。',
   'video_edit.document.proxy_preference': '代理看片偏好。enabled=true 时节目在播放与拖动播放头时、源监视器看片时用已有低分辨率代理，节目停下后换回原片完整画质；false 一律用原片。导出默认用原片，可在导出设置中选择代理；声音、选帧、跟踪与智能区域分析始终用原片。没有代理的素材仍用原片。autoCreate=true 导入超过1920×1080的视频时自动后台创建代理（原片的一半、短边最高1080）；本机按剪辑记住，不改内容，可事务撤销。',
   'video_edit.media.proxy_state': '代理状态，只读：none无代理、generating后台创建中、ready已有；progress为0–1，error为失败原因。代理创建使用generate_video_edit_proxy，切换使用video_edit.document.proxy_preference。',
-  'video_edit.document.render_cache': '当前序列的渲染条，只读：每三十秒一段，ready 已渲染（节目完整分辨率流畅播放）、rendering 正在渲染、needs_render 画面较重可能无法实时播放、realtime 能实时播放；rendering 为进行中的预渲染进度。渲染使用 render_video_edit_preview；修改内容后受影响段落回到 needs_render。',
+  'video_edit.document.render_cache': '当前序列的渲染条，只读：按剪辑点分段，长段最多五秒，ready 已渲染（节目完整分辨率流畅播放）、rendering 正在渲染、dropped 实测超预算比例超过5%（红）、predicted 尚无足够样本但预计吃力（黄）、realtime 实测流畅或预计轻量；performance 为最近最多600个实时合成帧的样本数、超预算帧数与p90毫秒；rendering 为进行中的预渲染进度。渲染使用 render_video_edit_preview；修改内容后仅受影响段落的预览与实测失效。',
   'video_edit.document.render_preference': '预渲染偏好。autoRender=true（默认）时，打开节目监视器后、编辑停下 3 秒且没有播放、拖动或导出时，自动在后台从播放头附近开始渲染渲染条上可能卡顿的段落；播放、拖动、导出时暂停让出显卡，再次编辑会取消并等停下后重来。false 只在手动渲染或 render_video_edit_preview 时渲染。本机按剪辑记住，不改内容，可事务撤销。',
   'video_edit.document.playback_resolution': '节目监视器的回放分辨率（只影响看片时的流畅度与清晰度，不改剪辑内容，不进剪辑历史）。resolution：full 完整、half 1/2、quarter 1/4、eighth 1/8（按序列宽高各缩小到该比例渲染，素材多、效果重、播放卡顿时调低）。fullWhenPaused：true 暂停时自动回到完整分辨率（默认，便于看清细节），false 暂停时也用所选分辨率。导出、选帧加入资产库、设为项目封面始终按完整分辨率，与此无关。按剪辑记住。',
   'video_edit.clip.effect_ids': '效果执行顺序（从上到下依次处理画面；声音片段上是音频效果，依次处理声音）。',

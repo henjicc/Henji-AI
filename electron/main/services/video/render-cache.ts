@@ -10,8 +10,8 @@ import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
  * 渲染层先 begin 拿到临时文件、按块写入编码结果，再 commit 原子改名；中途失败或取消 discard。
  * 说明记录所属剪辑与序列：删除剪辑、删除序列、启动时发现剪辑已不存在，都按它回收。
  */
-export function videoRenderCacheKey(windowKey: string, profile: string): string {
-  return createHash('sha256').update(JSON.stringify(['render-v1', windowKey, profile])).digest('hex')
+export function videoRenderCacheKey(windowKey: string, profile: string, projectId: string): string {
+  return createHash('sha256').update(JSON.stringify(['render-v2', projectId, windowKey, profile])).digest('hex')
 }
 
 interface Pending { key: string; projectId: string }
@@ -52,7 +52,7 @@ export class VideoRenderCacheService {
   }
 
   async begin(projectId: string, windowKey: string, profile: string): Promise<string> {
-    const key = videoRenderCacheKey(windowKey, profile)
+    const key = videoRenderCacheKey(windowKey, profile, projectId)
     const temporary = await this.files.prepareTemporary(key)
     if (!temporary) throw new Error('作品目录不可用，暂时无法预渲染。')
     await fs.writeFile(temporary, new Uint8Array(), { flag: 'wx' })
@@ -62,7 +62,7 @@ export class VideoRenderCacheService {
 
   async commit(temporaryPath: string, entry: VideoRenderCacheEntry): Promise<VideoRenderCacheStoredEntry> {
     const pending = this.pending.get(temporaryPath)
-    const key = videoRenderCacheKey(entry.windowKey, entry.profile)
+    const key = videoRenderCacheKey(entry.windowKey, entry.profile, entry.projectId)
     if (!pending || pending.key !== key || pending.projectId !== entry.projectId) throw new Error('预渲染临时文件无效。')
     this.pending.delete(temporaryPath)
     const bytes = (await fs.stat(temporaryPath)).size

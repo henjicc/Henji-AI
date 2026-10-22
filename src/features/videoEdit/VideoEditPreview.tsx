@@ -62,7 +62,8 @@ import { createLogger } from '@/core/logging'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { VIDEO_EDIT_PLAYBACK_RESOLUTIONS, VIDEO_EDIT_PLAYBACK_RESOLUTION_LABELS, videoEditPreviewDivisor, type VideoEditPlaybackResolution, type VideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution'
 import { getVideoEditPlaybackResolution, setVideoEditPlaybackResolution } from './application/videoEditPlaybackResolution'
-import { readyVideoEditRenderWindows } from './application/videoEditRenderCache'
+import { flushVideoEditRenderPerformance } from './application/videoEditRenderPerformance'
+import { readyVideoEditRenderWindows, recordVideoEditProgramRender } from './application/videoEditRenderCache'
 
 const logger = createLogger('features.videoEdit.preview')
 /** 节目控制条低于这个宽度时不显示时间码：时间码 112 + 默认按钮 ~360 + 显示比例 ~70 + 回放分辨率 ~56 + 更多 28 + 间距 */
@@ -482,6 +483,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           if (appliedDocument.sampleRate !== document.sampleRate || appliedDocument.channels !== document.channels) { await finishVideoEditAudioFade(); meter?.dispose(); meter = undefined; await audio?.close(); audio = undefined; if (!stopped) setLevels([]) }
           // 固定刷新周期合流最新快照，避免计时器误差及 Worker 往返耗时逐帧累加。
           if (parameterUpdate) lastParameterUpdate = parameterTick
+          // 内容或位置改变必须立即撤下旧映射，不能等下一次 250ms 缓存轮询才更新。
+          renderer.setRenderCache([]); appliedRenderCache = ''; renderCacheCheckedAt = -Infinity
           await renderer.updateDocument(document, useOriginal); await audioRenderer?.updateDocument(document); appliedDocument = document; appliedSequence = sequence; appliedProxy = useOriginal ? 'original' : proxyState(availableProxies); lastRequested = -1
           if (!parameterUpdate && !liveProjection) lastFrame = -1
           if (stopped) return
@@ -494,7 +497,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         if (performance.now() - renderCacheCheckedAt > 250) {
           renderCacheCheckedAt = performance.now()
           const ready = readyVideoEditRenderWindows(instance.document.id, document)
-          const signature = ready.map(window => window.key).join(',')
+          const signature = JSON.stringify(ready)
           if (signature !== appliedRenderCache) { appliedRenderCache = signature; renderer.setRenderCache(ready) }
         }
         const divisor = captureFull > 0 ? 1 : videoEditPreviewDivisor(getVideoEditPlaybackResolution(instance.document.id), current.playing)
@@ -521,6 +524,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           const initialResult = await renderer.present(initialFrame, direction === 1, false, undefined, undefined, undefined, 'interactive', historyEnabled)
           if (!stopped) setEffectFailure(initialResult.effectErrors?.join('\n') ?? null)
           if (stopped) { initialResult.history?.close(); return }
+          recordVideoEditProgramRender(instance.document.id, document, initialFrame, initialResult, direction === 1)
           if (initialResult.presented === true) recordPresentation(initialFrame, initialResult, requestedAt, false, document)
           if (!current.playing || !listVideoEditInstances().includes(instance) || videoMotionComposition(instance) !== document || videoEditProgramCommandIdentity(instance.document.id) !== command) { wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
           if (initialResult.presented === false) { lastFrame = -1; lastRequested = -1; wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
@@ -554,7 +558,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           surface.dataset.playStartFrame = String(startFrame)
           droppedFrames = 0; surface.dataset.droppedFrames = '0'
         }
-        if (!current.playing && wasPlaying) stopAudio()
+        if (!current.playing && wasPlaying) { stopAudio(); void flushVideoEditRenderPerformance() }
         wasPlaying = current.playing
         if (current.playing) {
           // 声音为主时钟：正常速度正放有声音时，画面按扬声器实际输出的时刻呈现，长时间播放不因两套时钟的频差漂移。
@@ -625,6 +629,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
               if (!scheduled) timer = setTimeout(() => { void loop() }, 0)
               return
             }
+            recordVideoEditProgramRender(instance.document.id, document, target, result, playing && direction === 1 && !scrubbing && !liveRecording)
             if (result.presented === false) { if (!liveRecording) lastFrame = -1; lastRequested = -1; if (!scheduled) timer = setTimeout(() => { void loop() }, 0); return }
             if (!recordPresentation(target, result, requestedAt, scrubbing, document)) { if (!scheduled) timer = setTimeout(() => { void loop() }, 0); return }
             approximateFrame = result.approximate ? target : -1
@@ -672,6 +677,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     let retired = false
     stopCurrent = (): void => {
       if (retired) return
+      void flushVideoEditRenderPerformance()
       retired = true; for (const event of idleEvents) window.removeEventListener(event, interaction, true); unregisterCapture(); unsubscribe(); unsubscribeView(); unsubscribeScrub(); unsubscribeMotion(); unsubscribeRegions(); unsubscribeTracks(); clearTimeout(timer); clearInterval(meterTimer); instance.playing = false; stopAudio(); scrubber.stop()
       const closeAudio = (): Promise<void> | undefined => { meter?.dispose(); return audio?.close() }
       programReleases.set(instance, Promise.allSettled([meter ? finishVideoEditAudioFade().then(closeAudio) : closeAudio(), renderer.dispose(), audioRenderer?.dispose()]))

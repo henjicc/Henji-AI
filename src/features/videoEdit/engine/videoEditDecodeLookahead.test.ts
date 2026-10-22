@@ -135,3 +135,16 @@ it('浏览器回退仍复用同一图片和代码前瞻队列，不依赖原生�
   expect(prepare).toHaveBeenCalledOnce(); expect(prepare.mock.calls[0][0]).toMatchObject({ kind: 'image', media: { id: 'a' } })
   scheduler.cancel()
 })
+
+
+it('五秒及更短预渲染段在前瞻范围内预打开，平移后仍按段内偏移定位', () => {
+  const { composition } = fixture()
+  const windows = [
+    { key: 'first', startFrame: 120, endFrame: 180, url: 'preview-first.mp4', width: 1920, height: 1080, fps: 30 },
+    { key: 'second', startFrame: 180, endFrame: 210, url: 'preview-second.mp4', width: 1920, height: 1080, fps: 30 },
+  ]
+  const targets = videoEditDecodeTargets(composition, 150, true, windows)
+  expect(targets.find(target => target.media.path === windows[0].url)).toMatchObject({ time: 1, distance: 0, purpose: 'playback' })
+  expect(targets.find(target => target.media.path === windows[1].url)).toMatchObject({ time: 0, distance: 1, purpose: 'playback' })
+  expect(videoEditDecodeTargets(composition, 150, false, windows).every(target => !target.media.path.startsWith('preview-'))).toBe(true)
+})

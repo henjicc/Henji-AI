@@ -21,5 +21,5 @@ export async function handleVideoEditRenderCacheCapability(id: string, raw: unkn
   const view = readVideoEditRenderCache(input.documentRef.id)
   const verified = plan.pendingWindows === 0 ? plan.readyFrames === plan.requestedFrames : view.rendering !== null
   return { documentRef: input.documentRef, ...plan, verified,
-    message: plan.requestedFrames === 0 ? '所选范围没有需要渲染的段落，已能实时播放。' : plan.pendingWindows === 0 ? '所选范围已全部渲染，可完整分辨率流畅播放。' : `已在后台开始渲染 ${plan.pendingWindows} 段（每段三十秒），播放时自动暂停；进度见 video_edit.document.render_cache。` }
+    message: plan.requestedFrames === 0 ? '所选范围没有需要渲染的段落，已能实时播放。' : plan.pendingWindows === 0 ? '所选范围已全部渲染，可完整分辨率流畅播放。' : `已在后台开始渲染 ${plan.pendingWindows} 段（按剪辑点分段，最多五秒），播放时自动暂停；进度见 video_edit.document.render_cache。` }
 }
