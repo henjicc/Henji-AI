@@ -1,3 +1,4 @@
+import { superKeyframeSessionId } from '@/core/creativeIntent/captureIntent'
 import { z } from 'zod'
 import type { ApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { CREATIVE_INTENT_CAPABILITIES } from '@/core/application-control/domains/creativeIntent/creativeIntentCapabilities'
@@ -55,6 +56,16 @@ export function creativeIntentPrivateAccess(capabilityId: string, input: unknown
   }
   const capability = CREATIVE_INTENT_CAPABILITIES.find(value => value.id === capabilityId && value.dataClasses.includes('C2'))
   if (!capability) return undefined
+  if (capabilityId === 'read_video_edit_super_keyframes') {
+    const { draftRef } = z.object({ draftRef: applicationRefSchema }).parse(input)
+    const record = intentRecord(draftRef), session = record.head.sessions.find(value => value.id === superKeyframeSessionId(record.draftId))
+    if (session && !session.consent?.textUpload) throw new Error('PERMISSION_DENIED:这组讲解尚未授权读取。')
+    const baseline = JSON.stringify(session)
+    return { assertCurrent: () => {
+      record.host.assertCurrent()
+      if (JSON.stringify(record.host.read().sessions.find(value => value.id === superKeyframeSessionId(record.draftId))) !== baseline) throw new Error('PERMISSION_DENIED:讲解或授权已变化，请重新读取。')
+    } }
+  }
   const parsed = z.object({ documentRef: applicationRefSchema.optional(), draftRef: applicationRefSchema.optional(), sessionId: z.string() }).parse(input)
   const host = parsed.documentRef ? intentHost(parsed.documentRef) : parsed.draftRef ? intentRecord(parsed.draftRef).host : undefined
   if (!host || host.documentRef.kind !== `${capability.domain}.document`) throw new Error('PERMISSION_DENIED:讲解必须来自目标原稿的文档。')

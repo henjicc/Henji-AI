@@ -16,6 +16,7 @@ import { optimizeVideoEditMotionOffThread } from './videoEditMotionWorkerClient'
 import { captureVideoMotionReference, readVideoIntentAnnotation, sampleVideoMotionReference, videoMotionConstraintOptionsSchema, type VideoMotionConstraintOptions } from './videoEditIntentAnnotationAdapter'
 import { reviewedMovementChanges, type IntentDifferencePlan } from '@/core/creativeIntent/intentPlan'
 import { staggerMotion, hasStaggerMotion } from '@/core/creativeIntent/stagger'
+import { classifyMotionCapture, superKeyframeSessionId } from '@/core/creativeIntent/captureIntent'
 
 const logger = createLogger('features.videoEdit.motionDraft')
 const PAGE_SAMPLE_BUDGET = 256
@@ -48,12 +49,13 @@ export type MotionCaptureProperty = Exclude<MotionProperty, 'pivot'>
 export interface MotionPresentation { frame: number; revision: number; sequenceId: string; at: number; scrubbing?: boolean }
 interface PresentedPose { timeline: Timeline; pose: Pose; monoUs: number; clockId: string }
 export interface VideoMotionState {
-  owner: VideoEditInstance; draft: MotionDraft; status: 'recording' | 'paused' | 'reviewing' | 'optimizing';
+  owner: VideoEditInstance; draft: MotionDraft; automatic?: boolean; activeTargetId?: string; status: 'recording' | 'paused' | 'reviewing' | 'optimizing';
   mode: MotionCaptureMode; property: MotionCaptureProperty; speed: 1 | 0.5 | 0.25; capture: 'place' | 'record';
   pose: Pose; presentation?: MotionPresentation; preview: 'original' | string; candidates: MotionCandidate[];
   recent: MotionSample[]; pending: MotionSample[]; pinnedSamples?: MotionSample[]; selectedTakeIds?: string[]; intent?: MotionIntent;
   message?: string; generationMs?: number; inputLatencies: number[];
   original?: MotionCandidate; originalRef?: StoredCreativeIntentResource; endpoints?: [MotionSample, MotionSample]; appliedBaseDigest?: string
+  takeTargets?: Record<string, string>
   constraints?: VideoMotionConstraintOptions
   reviewRequest?: number
 }
@@ -64,6 +66,7 @@ const listeners = new Set<() => void>(); let revision = 0
 export function subscribeVideoMotion(listener: () => void): () => void { listeners.add(listener); return () => { listeners.delete(listener) } }
 export function videoMotionRevision(): number { return revision }
 export function videoMotionState(owner: VideoEditInstance): VideoMotionState | undefined { return states.get(owner) }
+export function videoMotionOrigin(owner: VideoEditInstance): number | undefined { return runtimes.get(owner)?.startedAt }
 /** Public metadata CRUD must invalidate the same document-owned preview/capture cache. */
 export function syncVideoMotionMetadata(owner: VideoEditInstance): void {
   const state = states.get(owner), runtime = runtimes.get(owner)
@@ -78,6 +81,10 @@ export function syncVideoMotionMetadata(owner: VideoEditInstance): void {
   }
   const candidatesChanged = JSON.stringify(state.draft.candidateRefs) !== JSON.stringify(draft.candidateRefs)
   state.draft = structuredClone(draft)
+  const retained = new Set(draft.takes.map(take => take.id))
+  state.recent = state.recent.filter(sample => retained.has(sample.takeRef))
+  state.pinnedSamples = state.pinnedSamples?.filter(sample => retained.has(sample.takeRef))
+  state.endpoints = state.recent.length ? [state.recent[0], state.recent.at(-1)!] : undefined
   state.selectedTakeIds = head(owner).motionOptions?.find(options => options.draftId === draft.id)?.selectedTakeIds
   if (candidatesChanged) { runtime.controller?.abort(); runtime.inputRevision++; state.candidates = []; state.original = undefined; state.preview = 'original' }
   publish(state)
@@ -87,8 +94,11 @@ function publish(state: VideoMotionState, preview = true): void {
   revision++; for (const listener of listeners) listener()
 }
 function head(owner: VideoEditInstance): CreativeIntents { return owner.document.creativeIntents ?? { drafts: [], sessions: [], resources: [] } }
+function activeTarget(state: VideoMotionState): MotionDraft['targets'][number] {
+  return state.draft.targets.find(target => target.ref.id === state.activeTargetId) ?? state.draft.targets[0]
+}
 function targetClip(state: VideoMotionState): VideoEditClip {
-  const id = state.draft.targets[0].ref.id
+  const id = activeTarget(state).ref.id
   const clip = state.owner.document.sequences.flatMap(s => s.clips).find(c => `${state.owner.document.id}:${c.id}` === id)
   if (!clip) throw new Error('原片段已移除，请选择片段重新示范。')
   return clip
@@ -108,6 +118,17 @@ function timeline(state: VideoMotionState): Timeline | null {
   return { sequenceRef: { kind: 'video_edit.sequence', id: `${state.owner.document.id}:${seq.id}` }, frame: evidence.frame, fps: seq.frameRate, visitRef: `${state.owner.document.id}:${seq.id}/${runtime.visit}` }
 }
 function mono(state: VideoMotionState): number { return Math.max(0, Math.round((performance.now() - runtimes.get(state.owner)!.startedAt) * 1000)) }
+/** 开始、暂停和轨迹折返划分连续段；所有段落仍属于同一个原稿。 */
+function beginAutomaticTake(state: VideoMotionState, at = mono(state)): void {
+  if (!state.automatic) return
+  const runtime = runtimes.get(state.owner)!
+  runtime.takeId = crypto.randomUUID()
+  state.draft.takes.push({ id: runtime.takeId, intent: 'demonstrate', pathDemonstration: false, placement: true, monoSpanUs: [at, at], direction: 0, visitRef: null, timelineRange: [state.owner.frame, state.owner.frame], samplePages: [], geometryDigest: activeTarget(state).geometryDigest })
+}
+function endAutomaticTake(state: VideoMotionState): void {
+  const take = state.draft.takes.find(value => value.id === runtimes.get(state.owner)?.takeId)
+  if (state.automatic && take) take.monoSpanUs[1] = Math.max(take.monoSpanUs[1], mono(state))
+}
 function invalidate(state: VideoMotionState): void { const runtime = runtimes.get(state.owner); if (runtime) { runtime.controller?.abort(); runtime.inputRevision++ } state.candidates = []; state.original = undefined; state.originalRef = undefined; state.draft.candidateRefs = []; delete state.draft.selectedCandidateRef; state.preview = 'original' }
 async function persistHead(state: VideoMotionState, resources: StoredCreativeIntentResource[] = []): Promise<void> {
   const runtime = runtimes.get(state.owner)!
@@ -131,7 +152,9 @@ async function discardUnpublishedResources(state: VideoMotionState, resources: S
     catch (error) { logger.warn('清理未发布原稿资源失败', { event: 'video_edit.motion.resource_cleanup.failed', error, context: { documentId: state.owner.document.id } }) }
   }
 }
-export async function startVideoMotion(id: string, capture: 'place' | 'record' = 'record'): Promise<void> {
+export async function startVideoMotion(id: string, capture?: 'place' | 'record'): Promise<void> {
+  const automatic = capture === undefined
+  capture ??= 'record'
   assertApplicationWritesAllowed()
   const owner = requireVideoEditInstance(id)
   const busy = videoEditBusyReason(id); if (busy) throw new Error(busy)
@@ -144,13 +167,25 @@ export async function startVideoMotion(id: string, capture: 'place' | 'record' =
   const baseDigest = await motionDigest(motionClipBase(clip)); const geometryDigest = await motionDigest(motionClipGeometry(sequence, clip))
   if (getActiveVideoEditSequence(owner) !== sequence || owner.selection !== clip.id) throw new Error('选中的片段已改变，请重新开始示范。')
   const pose = motionClipPose(clip, owner.frame)
-  const draft = motionDraftSchema.parse({ id: crypto.randomUUID(), version: 1, ownerRef: { kind: 'document.video_edit', id }, mode: 'animated', label: '超级关键帧原稿', fidelity: .5,
+  const previousState = states.get(owner)
+  let continued = automatic && previousState?.automatic && !previousState.draft.applications.length ? previousState : undefined
+  if (continued && head(owner).sessions.find(session => session.id === superKeyframeSessionId(continued!.draft.id))?.retentionStatus === 'deleted') continued = undefined
+  if (continued) for (const target of continued.draft.targets) {
+    const current = owner.document.sequences.flatMap(value => value.clips).find(value => `${id}:${value.id}` === target.ref.id)
+    // AI 经通用属性应用后，作品基态变化；下一次录制建立新组，旧证据仍可读回。
+    if (!current || await motionDigest(motionClipBase(current)) !== target.baseDigest) { continued = undefined; break }
+  }
+  if (getActiveVideoEditSequence(owner) !== sequence || owner.selection !== clip.id) throw new Error('选中的片段已改变，请重新开始录制。')
+  const draft = continued ? structuredClone(continued.draft) : motionDraftSchema.parse({ id: crypto.randomUUID(), version: 1, ownerRef: { kind: 'document.video_edit', id }, mode: 'animated', label: '超级关键帧原稿', fidelity: .5,
     sourceDigest: baseDigest, targets: [{ ref: { kind: 'video_edit.clip', id: `${id}:${clip.id}` }, ownerRef: { kind: 'document.video_edit', id }, editable: [], basePose: pose, baseDigest, geometryDigest, compositionSize: [sequence.width, sequence.height] }],
     clockSegments: [], takes: [], pins: [], constraints: [], recipeRefs: [], candidateRefs: [], applications: [] })
+  const targetId = `${id}:${clip.id}`
+  if (!draft.targets.some(target => target.ref.id === targetId)) draft.targets.push({ ref: { kind: 'video_edit.clip', id: targetId }, ownerRef: draft.ownerRef, editable: [], basePose: pose, baseDigest, geometryDigest, compositionSize: [sequence.width, sequence.height] })
   const previous = runtimes.get(owner); previous?.controller?.abort(); previous?.release(); previous?.unsubscribe()
-  const state: VideoMotionState = { owner, draft, status: 'recording', capture, mode: 'navigate', property: 'position', speed: 1, pose, preview: 'original', candidates: [], recent: [], pending: [], inputLatencies: [] }
-  const runtime: CaptureRuntime = { startedAt: performance.now(), seq: 0, visit: 0, lastDirection: 0, pointerActive: false, release: holdVideoEditActivity(id, '动作示范'), unsubscribe: () => {}, previewRevision: 0, inputRevision: 0 }
+  const state: VideoMotionState = { owner, draft, automatic, activeTargetId: targetId, status: 'recording', capture, mode: 'navigate', property: 'position', speed: 1, pose, preview: 'original', candidates: [], recent: [], pending: [], inputLatencies: [] }
+  const runtime: CaptureRuntime = { startedAt: continued && previous ? previous.startedAt : performance.now(), seq: continued && previous ? previous.seq : 0, visit: continued && previous ? previous.visit + 1 : 0, lastDirection: 0, pointerActive: false, release: holdVideoEditActivity(id, '动作示范'), unsubscribe: () => {}, previewRevision: 0, inputRevision: 0 }
   states.set(owner, state); runtimes.set(owner, runtime); owner.motionRecording = true; owner.playbackRate = 1
+  beginAutomaticTake(state)
   const unregisterClose = registerVideoEditClosePreparation(owner, () => stopVideoMotion(id))
   const release = runtime.release
   runtime.release = () => { release(); unregisterClose() }
@@ -158,6 +193,7 @@ export async function startVideoMotion(id: string, capture: 'place' | 'record' =
     if (state.status !== 'recording' && state.status !== 'paused') return
     try { owningSequence(state) } catch (error) { pauseVideoMotion(id); state.message = error instanceof Error ? error.message : '示范已暂停。'; publish(state, false) }
   })
+  invalidate(state)
   await persistHead(state); publish(state)
   logger.info('动作示范开始', { event: 'video_edit.motion.start', context: { documentId: id, capture } })
 }
@@ -176,9 +212,9 @@ export async function proposeVideoExplanationMotion(id: string, plans: readonly 
   const timelineAt = (frame: number): Timeline => ({ sequenceRef: { kind: 'video_edit.sequence', id: `${id}:${sequence.id}` }, frame, fps: sequence.frameRate, visitRef: visit })
   const poses: MotionSample[] = [...new Set(range)].map((frame, index) => ({ seq: index, monoUs: index, timeline: timelineAt(frame), clockSegmentRef: clock, sampleId: `${take}:${index}`, takeRef: take, targetRef: change.targetRef,
     pose: { ...motionClipPose(clip, frame), position: frame === range[1] ? change.after as [number, number] : change.before as [number, number] }, gestureKind: 'place', quality: 'presented', confirmed: true, event: 'up' }))
-  state.draft.label = '讲解移动'; state.draft.targets[0].editable = ['position']; state.draft.fidelity = 1
+  state.draft.label = '讲解移动'; activeTarget(state).editable = ['position']; state.draft.fidelity = 1
   state.draft.clockSegments = [{ id: clock, monoSpanUs: [0, Math.max(1, poses.length - 1)], mode: range[0] === range[1] ? 'hold' : 'scrub', start: timelineAt(range[0]), end: timelineAt(range[1]), anchors: [] }]
-  state.draft.takes = [{ id: take, intent: 'demonstrate', pathDemonstration: false, placement: true, monoSpanUs: [0, Math.max(1, poses.length - 1)], direction: Math.sign(range[1] - range[0]) as -1 | 0 | 1, visitRef: visit, timelineRange: range, samplePages: [], geometryDigest: state.draft.targets[0].geometryDigest }]
+  state.draft.takes = [{ id: take, intent: 'demonstrate', pathDemonstration: false, placement: true, monoSpanUs: [0, Math.max(1, poses.length - 1)], direction: Math.sign(range[1] - range[0]) as -1 | 0 | 1, visitRef: visit, timelineRange: range, samplePages: [], geometryDigest: activeTarget(state).geometryDigest }]
   state.pending = poses; state.recent = poses; state.endpoints = [poses[0], poses.at(-1)!]; state.status = 'reviewing'
   owner.motionRecording = false; runtime.release(); runtime.unsubscribe()
   await flushVideoMotion(state); await optimizeVideoMotion(id)
@@ -189,7 +225,7 @@ export function recordVideoMotionPresentation(owner: VideoEditInstance, evidence
   if (!state || !runtime) return
   if (state.status === 'recording' && evidence.revision !== videoMotionComposition(owner)?.revision) return
   state.presentation = evidence
-  if (state.status === 'recording') { const composition = videoMotionComposition(owner); const clip = composition?.clips.find(c => `${owner.document.id}:${c.id}` === state.draft.targets[0].ref.id); if (clip) state.pose = motionClipPose(clip, evidence.frame) }
+  if (state.status === 'recording') { const composition = videoMotionComposition(owner); const clip = composition?.clips.find(c => `${owner.document.id}:${c.id}` === activeTarget(state).ref.id); if (clip) state.pose = motionClipPose(clip, evidence.frame) }
   if (runtime.inputAt !== undefined) {
     const latency = Math.max(0, evidence.at - runtime.inputAt); state.inputLatencies.push(latency)
     if (state.inputLatencies.length > 2048) state.inputLatencies.shift()
@@ -197,7 +233,7 @@ export function recordVideoMotionPresentation(owner: VideoEditInstance, evidence
   }
   if (state.status !== 'recording') return
   captureClock(state)
-  if (runtime.pendingEvent || runtime.pointerActive && runtime.gestureStarted || state.mode === 'demonstrate' && state.capture === 'record' && state.draft.takes.length > 0) {
+  if (runtime.pendingEvent || runtime.pointerActive && runtime.gestureStarted || !state.automatic && state.mode === 'demonstrate' && state.capture === 'record' && state.draft.takes.length > 0) {
     capturePose(state, runtime.pendingEvent ?? 'sample'); runtime.pendingEvent = undefined; runtime.presented?.(); runtime.pendingPresentation = undefined; runtime.presented = undefined
   }
 }
@@ -208,10 +244,20 @@ function captureClock(state: VideoMotionState): void {
   const direction = previous?.end ? Math.sign(t.frame - previous.end.frame) : 0
   const scrubbing = state.presentation?.scrubbing ?? state.owner.scrubbing
   const seek = Boolean(previous?.end && !state.owner.playing && !scrubbing && direction)
-  const reverse = Boolean(direction && runtime.lastDirection && direction !== runtime.lastDirection)
+  const previousDirection = state.automatic ? state.draft.takes.find(take => take.id === runtime.takeId)?.direction ?? 0 : runtime.lastDirection
+  const reverse = Boolean(direction && previousDirection && direction !== previousDirection)
+  const currentTake = state.draft.takes.find(take => take.id === runtime.takeId)
+  const becomesTrajectory = (state.owner.playing || scrubbing) && (runtime.pointerActive || Boolean(runtime.pendingEvent))
+  const firstSampleAt = currentTake ? Math.min(...currentTake.samplePages.map(page => page.monoSpanUs[0]), ...state.pending.filter(sample => sample.takeRef === currentTake.id).map(sample => sample.monoUs)) : Infinity
+  const crossedSeek = state.draft.clockSegments.some(clock => clock.mode === 'seek' && clock.monoSpanUs[0] > firstSampleAt)
+  // 不把定位跳转或折返硬拼成单调轨迹；保留全部原始段与墙钟，算法无需补造路径。
+  if (state.automatic && currentTake && (reverse || seek && !currentTake.placement || becomesTrajectory && currentTake.placement && crossedSeek)) {
+    currentTake.monoSpanUs[1] = at
+    beginAutomaticTake(state, at)
+  }
   if (seek || reverse) {
     runtime.visit++; t.visitRef = `${t.sequenceRef.id}/${runtime.visit}`
-    if (state.capture === 'record' || reverse) runtime.takeId = undefined
+    if (!state.automatic && (state.capture === 'record' || reverse)) runtime.takeId = undefined
     state.draft.clockSegments.push({ id: crypto.randomUUID(), mode: 'seek', monoSpanUs: [at, at], start: previous!.end, end: t, anchors: [] }); previous = undefined
   }
   const mode = state.owner.playing ? 'play' : scrubbing && direction ? 'scrub' : 'hold'
@@ -224,7 +270,7 @@ function captureClock(state: VideoMotionState): void {
     state.draft.clockSegments.push(segment); runtime.clockId = segment.id
   }
   if (direction) runtime.lastDirection = direction
-  if (direction && state.mode === 'navigate' && state.capture === 'record' && !runtime.pointerActive) runtime.takeId = undefined
+  if (!state.automatic && direction && state.mode === 'navigate' && state.capture === 'record' && !runtime.pointerActive) runtime.takeId = undefined
 }
 function capturePose(state: VideoMotionState, event: MotionSample['event'], inputAt?: number, anchor?: PresentedPose): void {
   const runtime = runtimes.get(state.owner)!; const clock = state.draft.clockSegments.find(s => s.id === (anchor?.clockId ?? runtime.clockId)); const at = anchor?.monoUs ?? clock?.anchors.at(-1)?.monoUs ?? mono(state); const t = anchor?.timeline ?? timeline(state)
@@ -232,14 +278,20 @@ function capturePose(state: VideoMotionState, event: MotionSample['event'], inpu
   runtime.lastFrame = t.frame
   if (!runtime.takeId) {
     runtime.takeId = crypto.randomUUID()
-    state.draft.takes.push({ id: runtime.takeId, intent: 'demonstrate', pathDemonstration: false, ...(state.capture === 'place' ? { placement: true as const } : {}), monoSpanUs: [at, at], direction: 0, visitRef: t.visitRef, timelineRange: [t.frame, t.frame], samplePages: [], geometryDigest: state.draft.targets[0].geometryDigest })
+    state.draft.takes.push({ id: runtime.takeId, intent: 'demonstrate', pathDemonstration: false, ...(state.capture === 'place' || state.automatic && !state.owner.playing && !state.owner.scrubbing ? { placement: true as const } : {}), monoSpanUs: [at, at], direction: 0, visitRef: t.visitRef, timelineRange: [t.frame, t.frame], samplePages: [], geometryDigest: activeTarget(state).geometryDigest })
   }
   const take = state.draft.takes.find(v => v.id === runtime.takeId)!
+  if (state.automatic && !take.samplePages.length && !state.pending.some(sample => sample.takeRef === take.id)) {
+    take.timelineRange = [t.frame, t.frame]; take.direction = 0
+  }
+  if (take.visitRef === null) take.visitRef = t.visitRef
   if (take.direction === 0 && take.timelineRange![0] !== t.frame) take.direction = Math.sign(t.frame - take.timelineRange![0]) as -1 | 1
   take.monoSpanUs[1] = at; take.timelineRange![1] = t.frame
+  const captureKind = classifyMotionCapture(true, state.owner.playing, !!state.owner.scrubbing, Boolean(runtime.pointerActive && runtime.gestureOrigin && runtime.gestureOrigin.timeline.frame !== t.frame))
+  if (state.automatic && captureKind === 'trajectory') delete take.placement
   if (!clock) return
-  const sample: MotionSample = { sampleId: crypto.randomUUID(), seq: runtime.seq++, monoUs: at, timeline: t, clockSegmentRef: clock.id, takeRef: take.id, targetRef: state.draft.targets[0].ref, pose: structuredClone(anchor?.pose ?? state.pose), quality: 'presented', confirmed: true, gestureKind: state.property === 'position' ? 'move' : state.property === 'rotationTurns' ? 'rotate' : 'scale', event }
-  if (!state.draft.targets[0].editable.includes(state.property)) state.draft.targets[0].editable.push(state.property)
+  const sample: MotionSample = { sampleId: crypto.randomUUID(), seq: runtime.seq++, monoUs: at, timeline: t, clockSegmentRef: clock.id, takeRef: take.id, targetRef: activeTarget(state).ref, pose: structuredClone(anchor?.pose ?? state.pose), quality: 'presented', confirmed: true, gestureKind: state.property === 'position' ? 'move' : state.property === 'rotationTurns' ? 'rotate' : 'scale', event }
+  if (!state.automatic && !activeTarget(state).editable.includes(state.property)) activeTarget(state).editable.push(state.property)
   state.pending.push(sample); state.recent.push(sample); state.endpoints = [state.endpoints?.[0] ?? sample, sample]
   if (state.recent.length > OVERLAY_SAMPLE_BUDGET) state.recent.shift()
   if (inputAt !== undefined) runtime.inputAt = inputAt
@@ -261,6 +313,9 @@ export function demonstrateVideoMotion(id: string, pose: Pose, event: MotionSamp
       capturePose(state, 'down', undefined, origin)
       if (current.frame !== origin.timeline.frame) capturePose(state, 'dwell-end')
     }
+  }
+  if (state.automatic) {
+    for (const property of ['position', 'rotationTurns', 'scaleXY'] as const) if (JSON.stringify(state.pose[property]) !== JSON.stringify(pose[property]) && !activeTarget(state).editable.includes(property)) activeTarget(state).editable.push(property)
   }
   runtime.gestureStarted = true; state.pose = structuredClone(pose); runtime.pendingEvent = event; runtime.inputAt = inputAt
   if (!runtime.pendingPresentation) runtime.pendingPresentation = new Promise(resolve => { runtime.presented = resolve })
@@ -315,6 +370,7 @@ export async function stopVideoMotion(id: string): Promise<void> {
     try { await Promise.race([runtime.pendingPresentation, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('最新姿态尚未显示，请等待画面恢复后再结束示范。')), 10000) })]) } finally { if (timer) clearTimeout(timer) }
   }
   state.status = 'reviewing'; setVideoEditPlaybackRate(id, 1)
+  endAutomaticTake(state)
   runtime.pointerActive = false
   try { await flushVideoMotion(state); await saveVideoEdit(id) }
   catch (error) { state.status = 'paused'; state.message = '原稿已保留，保存尚未完成；恢复写入后请再次结束示范。'; publish(state); throw error }
@@ -325,8 +381,11 @@ export async function stopVideoMotion(id: string): Promise<void> {
 }
 export function pauseVideoMotion(id: string): void {
   const state = states.get(requireVideoEditInstance(id)); if (!state) return
+  if (state.status !== 'recording') return
+  endAutomaticTake(state)
   state.status = 'paused'; const runtime = runtimes.get(state.owner)!; runtime.pointerActive = false; runtime.pendingEvent = undefined; runtime.inputAt = undefined; runtime.presented?.(); runtime.pendingPresentation = undefined; runtime.presented = undefined
   runtime.pausedAt = state.draft.clockSegments.at(-1)?.monoSpanUs[1] ?? mono(state); publish(state)
+  if (state.automatic) runtime.takeId = undefined
 }
 export function resumeVideoMotion(id: string): void {
   const state = states.get(requireVideoEditInstance(id)); if (!state) return
@@ -335,7 +394,7 @@ export function resumeVideoMotion(id: string): void {
   setVideoEditPlaybackRate(id, state.speed)
   const runtime = runtimes.get(state.owner)!; const at = mono(state)
   if (runtime.pausedAt !== undefined && at > runtime.pausedAt) state.draft.clockSegments.push({ id: crypto.randomUUID(), monoSpanUs: [runtime.pausedAt, at], mode: 'gap', start: null, end: null, anchors: [] })
-  runtime.pausedAt = undefined; runtime.takeId = undefined; publish(state)
+  runtime.pausedAt = undefined; runtime.takeId = undefined; beginAutomaticTake(state); publish(state)
 }
 export async function reopenVideoMotion(id: string, draftId: string): Promise<void> {
   const owner = requireVideoEditInstance(id); const draft = head(owner).drafts.find(d => d.id === draftId)
@@ -348,7 +407,8 @@ export async function reopenVideoMotion(id: string, draftId: string): Promise<vo
   }
   const expectedInput = readInput()
   const options = head(owner).motionOptions?.find(o => o.draftId === draftId)
-  const state: VideoMotionState = { owner, draft: structuredClone(draft), status: 'reviewing', mode: 'navigate', property: 'position', speed: 1, capture: 'place', pose: draft.targets[0].basePose, preview: 'original', candidates: [], recent: [], pending: [], inputLatencies: [], intent: options?.intent, selectedTakeIds: options?.selectedTakeIds, appliedBaseDigest: options?.appliedBaseDigest }
+  const target = draft.targets.find(value => value.ref.id === `${id}:${owner.selection}`) ?? draft.targets[0]
+  const state: VideoMotionState = { owner, draft: structuredClone(draft), automatic: head(owner).sessions.some(session => session.id === superKeyframeSessionId(draftId)), activeTargetId: target.ref.id, status: 'reviewing', mode: 'navigate', property: 'position', speed: 1, capture: 'place', pose: target.basePose, preview: 'original', candidates: [], recent: [], pending: [], inputLatencies: [], intent: options?.intent, selectedTakeIds: options?.selectedTakeIds, appliedBaseDigest: options?.appliedBaseDigest }
   state.pinnedSamples = []
   for (const ref of draft.recipeRefs) {
     const resource = head(owner).resources.find(r => r.resourceId === ref.resourceId)
@@ -373,15 +433,30 @@ export async function reopenVideoMotion(id: string, draftId: string): Promise<vo
     if (state.original) assertCandidateCurrent(state.original, motionCandidateIdentity({ ...state.draft, fidelity: 1 }, { ...input, intent: undefined, beatFrames: undefined }))
   } catch (error) { state.candidates = []; state.original = undefined; state.preview = 'base'; state.message = error instanceof Error ? error.message : '原稿已保留，请重新示范。' }
   const previous = runtimes.get(owner); previous?.controller?.abort(); previous?.release(); previous?.unsubscribe()
-  states.set(owner, state); runtimes.set(owner, { startedAt: performance.now(), seq: 0, visit: 0, lastDirection: 0, pointerActive: false, preferredCandidateId: state.preview, release: () => {}, unsubscribe: () => {}, previewRevision: 0, inputRevision: 0 })
+  const elapsedUs = Math.max(0, ...draft.clockSegments.map(clock => clock.monoSpanUs[1]), ...draft.takes.map(take => take.monoSpanUs[1]))
+  states.set(owner, state); runtimes.set(owner, { startedAt: performance.now() - elapsedUs / 1000, seq: Math.max(-1, ...draft.takes.flatMap(take => take.samplePages.map(page => page.seqSpan[1]))) + 1, visit: draft.clockSegments.length, lastDirection: 0, pointerActive: false, preferredCandidateId: state.preview, release: () => {}, unsubscribe: () => {}, previewRevision: 0, inputRevision: 0 })
   publish(state)
 }
 async function inputFor(state: VideoMotionState): Promise<OptimizeMotionInput> {
   const sequence = owningSequence(state); const clip = targetClip(state)
   const draft = structuredClone(state.draft)
-  const baseDigest = await motionDigest(motionClipBase(clip))
-  if (baseDigest !== state.draft.targets[0].baseDigest && baseDigest !== state.appliedBaseDigest || await motionDigest(motionClipGeometry(sequence, clip)) !== state.draft.targets[0].geometryDigest) throw new Error('片段或画幅已修改，请保留原稿并重新示范。')
+  const clips = new Map<string, VideoEditClip>()
+  for (const target of draft.targets) {
+    const containing = state.owner.document.sequences.find(value => value.clips.some(item => `${state.owner.document.id}:${item.id}` === target.ref.id))
+    const current = containing?.clips.find(item => `${state.owner.document.id}:${item.id}` === target.ref.id)
+    if (!containing || !current) throw new Error('录制目标已移除，请重新读取原稿。')
+    assertVideoEditClipsEditable(containing, [current.id])
+    const baseDigest = await motionDigest(motionClipBase(current))
+    if (baseDigest !== target.baseDigest && !(target.ref.id === activeTarget(state).ref.id && baseDigest === state.appliedBaseDigest) || await motionDigest(motionClipGeometry(videoEditComposition(state.owner.document, containing.id), current)) !== target.geometryDigest) throw new Error('片段或画幅已修改，请保留原稿并重新示范。')
+    clips.set(target.ref.id, current)
+  }
   const samples: MotionSample[] = []
+  const takeTargets = new Map<string, string>()
+  for await (const page of readMotionPages(state.owner.document.id, draft)) if (page.kind === 'samples') for (const sample of page.entries) {
+    const previous = takeTargets.get(sample.takeRef)
+    if (previous && previous !== sample.targetRef.id) throw new Error('一段包含多个目标，无法自动整理；请按原始采样直接编写关键帧。')
+    takeTargets.set(sample.takeRef, sample.targetRef.id)
+  }
   if (targetClip(state) !== clip) throw new Error('片段已有后续修改，请重新预览。')
   const annotations = state.constraints?.annotations.map(choice => {
     const mark = sequence.annotations.find(a => a.id === choice.id)
@@ -400,8 +475,9 @@ async function inputFor(state: VideoMotionState): Promise<OptimizeMotionInput> {
       relative.current.identity = await motionDigest(captureVideoMotionReference(sequence, current, reference.mode))
     }
   }
+  state.takeTargets = Object.fromEntries([...takeTargets, ...draft.targets.map(target => [`annotation:${target.ref.id}`, target.ref.id] as const)])
   const takeIds = [...draft.takes.map(t => t.id), ...draft.targets.map(t => `annotation:${t.ref.id}`)]
-  return { draft, samples, selectedTakeIds: state.selectedTakeIds, intent: state.intent, annotations, relative, beatFrames: clip.snapToBeat ? (sequence.markers ?? []).filter(mark => mark.type === 'beat').map(mark => mark.frame).sort((a, b) => a - b) : undefined, mappings: Object.fromEntries(takeIds.map(takeId => [takeId, { positionToNative: [1, 0, 0, 1, -.5, -.5], pivotToNative: [1, 0, 0, 1, 0, 0], clipStart: clip.start, scaleFactor: 1, rotationOffsetDegrees: 0 }])) }
+  return { draft, samples, selectedTakeIds: state.selectedTakeIds, intent: state.intent, annotations, relative, beatFrames: clip.snapToBeat ? (sequence.markers ?? []).filter(mark => mark.type === 'beat').map(mark => mark.frame).sort((a, b) => a - b) : undefined, mappings: Object.fromEntries(takeIds.map(takeId => [takeId, { positionToNative: [1, 0, 0, 1, -.5, -.5], pivotToNative: [1, 0, 0, 1, 0, 0], clipStart: (clips.get(takeTargets.get(takeId) ?? takeId.replace(/^annotation:/, '')) ?? clip).start, scaleFactor: 1, rotationOffsetDegrees: 0 }])) }
 }
 
 /** Same domain entry for UI and the shared entity-property adapter; selecting never edits artwork. */
@@ -429,7 +505,7 @@ export async function configureVideoMotionConstraints(id: string, choice: { anno
   const resource = await storeMotionResource(id, parsed, 'recipe')
   if (states.get(state.owner) !== state || getActiveVideoEditSequence(state.owner).revision !== sequence.revision) { await discardUnpublishedResources(state, [resource]); throw new Error('画面已改变，请重新选择约束') }
   invalidate(state); state.constraints = parsed
-  if (parsed.annotations.some(a => a.role !== 'text') && !state.draft.targets[0].editable.includes('position')) state.draft.targets[0].editable.push('position')
+  if (parsed.annotations.some(a => a.role !== 'text') && !activeTarget(state).editable.includes('position')) activeTarget(state).editable.push('position')
   state.draft.recipeRefs = [{ resourceId: resource.resourceId, bytes: resource.bytes, digest: resource.digest }]
   await persistHead(state, [resource]); publish(state)
 }
@@ -554,12 +630,15 @@ export async function applyVideoMotion(id: string): Promise<void> {
   const runtime = runtimes.get(state.owner)!; const inputRevision = runtime.inputRevision
   const input = await inputFor(state); assertCandidateCurrent(candidate, motionCandidateIdentity(state.draft, input))
   if (states.get(state.owner) !== state || runtime.inputRevision !== inputRevision) throw new Error('原稿已有后续修改，请重新预览。')
-  const contentVersion = state.owner.contentVersion; const clip = targetClip(state); const seq = owningSequence(state)
+  const contentVersion = state.owner.contentVersion; const seq = owningSequence(state)
   const transactionId = crypto.randomUUID()
   editVideoProject(id, document => {
     if (!isVideoEditContentCurrent(state.owner, contentVersion)) throw new Error('片段已有后续修改，请重新预览。')
     const sequence = document.sequences.find(s => s.id === seq.id)!
-    sequence.clips = sequence.clips.map(c => c.id === clip.id ? mergeMotionClipCurves(c, candidate.motions) : c)
+    for (const targetSequence of document.sequences) targetSequence.clips = targetSequence.clips.map(current => {
+      const motions = candidate.motions.filter(motion => state.takeTargets?.[motion.takeId] === `${id}:${current.id}`)
+      return motions.length ? mergeMotionClipCurves(current, motions) : current
+    })
     const ids = new Set(state.constraints?.annotations.filter(a => a.role !== 'text').map(a => a.id))
     sequence.annotations = sequence.annotations.map(mark => {
       if (!ids.has(mark.id)) return mark
@@ -596,11 +675,11 @@ export function videoMotionComposition(owner: VideoEditInstance): VideoEditCompo
   const base = getActiveVideoEditSequence(owner); const state = states.get(owner); const runtime = runtimes.get(owner)
   if (!state || !runtime) return base
   if (runtime.cached?.base === base && runtime.cached.revision === runtime.previewRevision) return runtime.cached.composition
-  const target = base.clips.find(c => refKey({ kind: 'video_edit.clip', id: `${owner.document.id}:${c.id}` }) === refKey(state.draft.targets[0].ref))
+  const target = base.clips.find(c => refKey({ kind: 'video_edit.clip', id: `${owner.document.id}:${c.id}` }) === refKey(activeTarget(state).ref))
   if (!target) return base
   let clip = target
   if (state.status === 'recording' || state.status === 'paused') {
-    const properties = new Set(state.draft.targets[0].editable)
+    const properties = new Set(activeTarget(state).editable)
     if (runtime.pendingEvent || runtime.pointerActive) properties.add(state.property)
     if (properties.size) {
       clip = { ...target, curves: { ...target.curves } }
@@ -610,8 +689,12 @@ export function videoMotionComposition(owner: VideoEditInstance): VideoEditCompo
     }
   } else {
     const candidate = state.preview === 'original' ? state.original : state.candidates.find(c => c.id === state.preview)
-    if (candidate) clip = mergeMotionClipCurves(target, candidate.motions)
+    if (candidate) clip = mergeMotionClipCurves(target, candidate.motions.filter(motion => state.takeTargets?.[motion.takeId] === `${owner.document.id}:${target.id}`))
   }
-  const composition = clip === target ? base : { ...base, revision: base.revision + runtime.previewRevision, clips: base.clips.map(c => c === target ? clip : c) }
+  const candidate = state.status === 'reviewing' ? state.preview === 'original' ? state.original : state.candidates.find(value => value.id === state.preview) : undefined
+  const composition = candidate ? { ...base, revision: base.revision + runtime.previewRevision, clips: base.clips.map(current => {
+    const motions = candidate.motions.filter(motion => state.takeTargets?.[motion.takeId] === `${owner.document.id}:${current.id}`)
+    return motions.length ? mergeMotionClipCurves(current, motions) : current
+  }) } : clip === target ? base : { ...base, revision: base.revision + runtime.previewRevision, clips: base.clips.map(c => c === target ? clip : c) }
   runtime.cached = { base, revision: runtime.previewRevision, composition }; return composition
 }

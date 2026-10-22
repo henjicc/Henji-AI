@@ -103,6 +103,15 @@ it('普通诊断入口只填草稿，自动优化不清空已有草稿', async (
   await waitFor(() => expect(mocks.prompt).toHaveBeenCalledTimes(1))
   expect(screen.getByTestId('draft').textContent).toBe('诊断草稿')
 })
+it('录制引用追加入口保留未发送文字，不自动发送', async () => {
+  openAssistant('希望结尾停两秒')
+  render(<EmbeddedConversation />)
+  await waitFor(() => expect(screen.getByTestId('draft').textContent).toBe('希望结尾停两秒'))
+  act(() => openAssistant('处理超级关键帧', { appendToDraft: true, autoSend: false }))
+  await waitFor(() => expect(useAssistantUiStore.getState().pendingGoal).toBeNull())
+  expect(screen.getByTestId('draft').textContent).toBe('希望结尾停两秒')
+  expect(mocks.prompt).not.toHaveBeenCalled()
+})
 
 it('自动发送失败不会循环重试或丢掉草稿', async () => {
   mocks.prompt.mockRejectedValue(new Error('断网'))

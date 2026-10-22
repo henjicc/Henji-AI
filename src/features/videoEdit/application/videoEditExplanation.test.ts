@@ -14,6 +14,10 @@ import { appendVideoEditClip, closeVideoEditProject, getActiveVideoEditSequence,
 import { getApplicationReflectionRegistry } from '@/features/application-control/capabilities/applicationControlRegistry'
 import { storeMotionResource, storeMotionResourceBytes, readMotionResource, readMotionResourceBytes } from './videoEditMotionResources'
 import { startVideoExplanation, pauseVideoExplanation, resumeVideoExplanation, stopVideoExplanation, videoExplanationState, recordVideoExplanationPresentation, recordVideoExplanationPointer, preflightVideoExplanation, transcribeVideoExplanation, readVideoExplanationPage, correctVideoExplanationText, videoExplanationJsonl, eraseVideoExplanation, reopenVideoExplanation, retryVideoExplanationSave, retainVideoExplanationAudio, readVideoExplanationReview, correctVideoExplanationBinding, pickVideoExplanationBinding } from './videoEditExplanation'
+import { startSuperKeyframes, finishSuperKeyframes, pauseSuperKeyframes, resumeSuperKeyframes, configureSuperKeyframeMicrophone } from './videoEditSuperKeyframes'
+import { videoMotionState, recordVideoMotionPresentation, videoMotionComposition, demonstrateVideoMotion } from './videoEditMotionDraft'
+import { useAssistantUiStore } from '@/features/assistant/store/assistantUiStore'
+import { captureMicrophone } from '@/features/creativeIntent/recording/microphone'
 
 const capture = vi.hoisted(()=>({block:undefined as ((block:CapturedAudioBlock)=>void)|undefined,interrupt:undefined as ((message:string)=>void)|undefined,stop:vi.fn(async()=>{}),deny:false}))
 vi.mock('./videoEditExplanationVisual',()=>({captureExplanationPixels:vi.fn(async()=>({bytes:new Uint8Array([137,80,78,71,13,10,26,10]),size:[200,100]}))}))
@@ -49,6 +53,36 @@ it('共用 visual 资源保存入口保留结构化 JSON 与二进制 PNG 的编
 })
 function present(owner:Awaited<ReturnType<typeof setup>>,frame:number){setVideoEditView(owner.document.id,{frame});recordVideoExplanationPresentation(owner,{frame,sequenceId:owner.activeSequenceId,revision:owner.document.revision,at:clock})}
 function audio(){capture.block!({firstFrame:4800,samples:new Float32Array(4800).fill(.2),sampleRate:48000,monoStartUs:100_000,uncertaintyUs:10_000})}
+it('超级关键帧默认麦克风、暂停续段、转写后引用交接，同组继续录制不丢已转写段落', async () => {
+  localStorage.removeItem('henji-recording-setup')
+  const owner = await setup(), id = owner.document.id
+  setVideoEditView(id, { selection: getActiveVideoEditSequence(owner).clips[0].id })
+  await startSuperKeyframes(id)
+  expect(getPlatform().audioEdit.recording.microphone).toHaveBeenCalledWith(true, expect.any(String))
+  const draftId = videoMotionState(owner)!.draft.id
+  clock = 200; present(owner, 0); audio()
+  recordVideoMotionPresentation(owner, { sequenceId: owner.activeSequenceId, frame: 0, revision: videoMotionComposition(owner)!.revision, at: clock })
+  demonstrateVideoMotion(id, { ...videoMotionState(owner)!.pose, position: [.7, .5] })
+  recordVideoMotionPresentation(owner, { sequenceId: owner.activeSequenceId, frame: 0, revision: videoMotionComposition(owner)!.revision, at: clock })
+  clock = 300; await pauseSuperKeyframes(id)
+  expect(videoExplanationState(owner)!.collector.session.state).toBe('paused')
+  clock = 400; await resumeSuperKeyframes(id)
+  clock = 500; present(owner, 10)
+  clock = 600; await finishSuperKeyframes(id)
+  expect(videoMotionState(owner)!.draft.takes).toHaveLength(2)
+  expect(videoExplanationState(owner)!.collector.session.pages.some(page => page.kind === 'transcript')).toBe(true)
+  expect(useAssistantUiStore.getState().pendingGoalOptions).toMatchObject({ autoSend: false, attachments: [{ attachment: { modality: 'super_keyframes', summary: { takeCount: 2, hasNarration: true } } }] })
+  const transcriptPages = videoExplanationState(owner)!.collector.session.pages.filter(page => page.kind === 'transcript')
+  clock = 700; await startSuperKeyframes(id)
+  expect(videoMotionState(owner)!.draft.id).toBe(draftId)
+  expect(videoExplanationState(owner)!.collector.session.pages.filter(page => page.kind === 'transcript')).toEqual(transcriptPages)
+  await configureSuperKeyframeMicrophone(id, true, 'chosen-microphone')
+  expect(vi.mocked(captureMicrophone).mock.lastCall?.[4]).toMatchObject({ deviceId: 'chosen-microphone' })
+  await configureSuperKeyframeMicrophone(id, false, 'chosen-microphone')
+  expect(videoExplanationState(owner)!.microphone).toBeUndefined()
+  clock = 800; await finishSuperKeyframes(id)
+  expect(videoMotionState(owner)!.draft.takes).toHaveLength(3)
+})
 it('起点重叠不阻止终点独立确认，轮廓还原指向时的位置而非后来移动的位置', async()=>{
   const owner=await setup(),id=owner.document.id
   editVideoProject(id,doc=>{doc.sequences[0].clips.push({...doc.sequences[0].clips[0],id:'overlap',scale:.3});return doc})

@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { serializeMessage, type LlmContentPart } from '@henjicc/ai-sdk'
 import type { SessionManager } from '@earendil-works/pi-coding-agent'
-import { agentAttachmentSchema, type AgentAttachment } from '../../../../src/core/assistant/attachments'
+import { agentAttachmentSchema, superKeyframeAttachmentContext, type AgentAttachment } from '../../../../src/core/assistant/attachments'
 import type { EmbeddedModel, PreparedEmbeddedAttachment } from './contracts'
 import { embeddedInputModalities } from '../../../../src/core/assistant/embeddedAgent'
 import { estimateContextTokens } from './contextBudget'
@@ -25,7 +25,7 @@ export class PiAttachments {
     const entry = this.entries().find(item => text.endsWith(markerText(item.marker)))
     if (!entry) return 0
     return entry.items.reduce((sum, { attachment }) => sum + estimateContextTokens(`用户附件：${attachment.displayName}（${attachment.mediaRef}）`)
-      + (entry.marker !== this.currentMarker ? 0 : attachment.modality === 'image' ? 4096
+      + (attachment.modality === 'super_keyframes' ? estimateContextTokens(superKeyframeAttachmentContext(attachment)) : entry.marker !== this.currentMarker ? 0 : attachment.modality === 'image' ? 4096
         : attachment.modality === 'video' ? Math.max(4096, Math.ceil((attachment.durationSeconds ?? attachment.sizeBytes / 65536) * 1024))
           : Math.max(1024, Math.ceil((attachment.durationSeconds ?? attachment.sizeBytes / 16000) * 64))), 0)
   }
@@ -43,6 +43,10 @@ export class PiAttachments {
     await fs.mkdir(directory, { recursive: true })
     const items: StoredAttachments['items'] = []
     for (const item of attachments) {
+      if (item.attachment.modality === 'super_keyframes') {
+        items.push({ attachment: item.attachment, hash: createHash('sha256').update(JSON.stringify(item.attachment)).digest('hex') })
+        continue
+      }
       const bytes = Buffer.from(item.data, 'base64')
       const hash = createHash('sha256').update(bytes).digest('hex')
       const temporary = path.join(directory, `${hash}.${randomUUID()}.tmp`)
@@ -89,6 +93,10 @@ export class PiAttachments {
         content.push({ ...part, text: text.slice(0, -markerText(entry.marker).length) })
         for (const { attachment, hash } of entry.items) {
           const textType = responses ? 'input_text' : 'text'
+          if (attachment.modality === 'super_keyframes') {
+            content.push({ type: textType, text: superKeyframeAttachmentContext(attachment) })
+            continue
+          }
           content.push({ type: textType, text: `用户附件：${attachment.displayName}（${attachment.mediaRef}）` })
           if (entry.marker !== this.currentMarker) continue
           if (!embeddedInputModalities(selected.model.capabilities, selected.api).includes(attachment.modality)) {

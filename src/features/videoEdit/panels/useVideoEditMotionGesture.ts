@@ -31,6 +31,8 @@ export function useVideoEditMotionGesture(owner: VideoEditInstance, onError: (er
   }
   const down = (event: PointerEvent<HTMLDivElement>): void => {
     const state = videoMotionState(owner); if (!state || state.status !== 'recording' || event.button !== 0) return
+    // 沿现有增量手势计算；无需预选属性，修饰键直接表达旋转或缩放。
+    if (state.automatic) state.property = event.shiftKey ? 'rotationTurns' : event.ctrlKey || event.metaKey ? 'scaleXY' : 'position'
     const rect = event.currentTarget.getBoundingClientRect(); if (!rect.width || !rect.height) return
     cancel(); const target = ownerWindowOf(event.currentTarget)
     const blur = (): void => { cancel(); pause() }

@@ -3,7 +3,7 @@ import { refKey, type ClockSegment, type TimelineSpan } from './contracts'
 import type { ExplanationEvent, ExplanationSession } from './schema'
 
 /** JSONL is private data, never executable commands and never the application log. */
-export async function* serializeRecordingInput(session: ExplanationSession, events: Iterable<ExplanationEvent> | AsyncIterable<ExplanationEvent>, input: { size: [number, number]; request?: string; includeImages?: boolean; finalState?: (ref: ApplicationRef) => Readonly<Record<string, unknown>> | undefined }): AsyncGenerator<string> {
+export async function* serializeRecordingInput(session: ExplanationSession, events: Iterable<ExplanationEvent> | AsyncIterable<ExplanationEvent>, input: { size: [number, number]; request?: string; includeImages?: boolean; directApplication?: boolean; finalState?: (ref: ApplicationRef) => Readonly<Record<string, unknown>> | undefined }): AsyncGenerator<string> {
   const refs = new Map<string, string>(); const dictionary: Record<string, ApplicationRef> = {}
   const alias = (ref: ApplicationRef): string => {
     const key = refKey(ref); let value = refs.get(key)
@@ -41,5 +41,5 @@ export async function* serializeRecordingInput(session: ExplanationSession, even
     yield JSON.stringify({ ...base, ...payload })
   }
   const finalState = Object.fromEntries(Object.entries(dictionary).flatMap(([key, ref]) => { const value = input.finalState?.(ref); return value ? [[key, value]] : [] }))
-  yield JSON.stringify({ kind: 'request', text: input.request ?? '', bindings: session.bindings, finalState, missing: [], imageAttachments: input.includeImages === false ? [] : session.visualEvidenceRefs, execution: 'preview-only; recorded commands already happened' })
+  yield JSON.stringify({ kind: 'request', text: input.request ?? '', bindings: session.bindings, finalState, missing: [], imageAttachments: input.includeImages === false ? [] : session.visualEvidenceRefs, execution: input.directApplication ? '直接应用整组关键帧，一次事务；用户要求挑选时才预览。录制命令已发生，不可重放。' : 'preview-only; recorded commands already happened' })
 }

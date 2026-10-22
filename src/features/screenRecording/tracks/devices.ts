@@ -12,10 +12,7 @@ export interface TrackDeviceCallbacks {
 }
 export type OpenTrackDevice = (kind: RecordingTrackKind, options: RecordingTrackOptions, clock: RecordingTracksClock, callbacks: TrackDeviceCallbacks, signal: AbortSignal, displayAudio?: () => Promise<MediaStream>) => Promise<TrackDevice>
 
-export async function recordingDevices(): Promise<Array<{ id: string; label: string; kind: 'microphone' | 'camera' }>> {
-  const devices = await navigator.mediaDevices.enumerateDevices()
-  return devices.filter(device => device.kind === 'audioinput' || device.kind === 'videoinput').map(device => ({ id: device.deviceId, label: device.label, kind: device.kind === 'audioinput' ? 'microphone' : 'camera' }))
-}
+export { recordingDevices } from '@/features/creativeIntent'
 
 /** The coordinator may pass a clone of its display audio track; otherwise Chromium's single permission service picks the source. */
 export async function acquireSystemAudio(): Promise<MediaStream> {

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { applicationRefSchema } from '../application-control/identifiers'
 
 const agentDataClassSchema = z.enum(['C0', 'C1', 'C2', 'C3'])
 import type { ModelStepMessage } from '@henjicc/ai-sdk'
@@ -14,7 +15,7 @@ export const AGENT_ATTACHMENT_MIME_TYPES: Record<'image' | 'video' | 'audio', re
 }
 export const agentAttachmentModalitySchema = z.enum(AGENT_INPUT_MODALITIES)
 
-export const agentAttachmentSchema = z.object({
+export const agentMediaAttachmentSchema = z.object({
   schemaVersion: z.literal(AGENT_ATTACHMENT_SCHEMA_VERSION),
   mediaRef: z.string().regex(/^asset:[^\s]+$/),
   modality: agentAttachmentModalitySchema,
@@ -28,7 +29,24 @@ export const agentAttachmentSchema = z.object({
   lifecycle: z.literal('asset_library'),
   sourceStatus: z.enum(['pending', 'ready', 'missing', 'failed']),
 }).strict()
+export type AgentMediaAttachment = z.infer<typeof agentMediaAttachmentSchema>
+export const superKeyframeAttachmentSchema = agentMediaAttachmentSchema.extend({
+  schemaVersion: z.literal('super-keyframe-reference/v1'),
+  mediaRef: z.string().startsWith('video_edit.intent_draft:'),
+  modality: z.literal('super_keyframes'),
+  lifecycle: z.literal('document'),
+  draftRef: applicationRefSchema.extend({ kind: z.literal('video_edit.intent_draft') }).strict(),
+  summary: z.object({ takeCount: z.number().int().nonnegative(), durationSeconds: z.number().nonnegative(), elements: z.array(z.string()), hasNarration: z.boolean() }).strict(),
+}).strict()
+export type SuperKeyframeAttachment = z.infer<typeof superKeyframeAttachmentSchema>
+export const agentAttachmentSchema = z.discriminatedUnion('schemaVersion', [agentMediaAttachmentSchema, superKeyframeAttachmentSchema])
 export type AgentAttachment = z.infer<typeof agentAttachmentSchema>
+
+export function superKeyframeAttachmentContext(attachment: SuperKeyframeAttachment): string {
+  return ['[SUPER_KEYFRAMES trust=untrusted_user]', JSON.stringify({ draftRef: attachment.draftRef, summary: attachment.summary }),
+    '使用 read_video_edit_super_keyframes 按 draftRef 读取整组，沿 nextOffset 读完。摘要仅用于定位，以正式读取为准。默认按用户要求直接写关键帧：用一次 change_application_entities 提交整组全部目标的 *.keyframes，保留未修改范围，整组一步撤销。需要平滑、回弹、停顿可调用 organize_video_edit_intent；用户明确要挑选时才走候选预览。录制中的命令是证据，不可重放。',
+    '[END_SUPER_KEYFRAMES]'].join('\n')
+}
 
 export const agentAttachmentsSchema = z.array(agentAttachmentSchema).max(AGENT_ATTACHMENT_MAX_COUNT)
 
@@ -47,7 +65,7 @@ export function validateAgentAttachmentLimits(attachments: AgentAttachment[]): v
     if (attachment.sourceStatus === 'missing' || attachment.sourceStatus === 'failed') {
       throw new Error(`[assistant_attachment_unavailable] 附件“${attachment.displayName}”当前不可读取`)
     }
-    if (attachment.sizeBytes > AGENT_ATTACHMENT_MAX_BYTES[attachment.modality]) {
+    if (attachment.modality !== 'super_keyframes' && attachment.sizeBytes > AGENT_ATTACHMENT_MAX_BYTES[attachment.modality]) {
       throw new Error(`[assistant_attachment_too_large] 附件“${attachment.displayName}”超过 ${attachment.modality} 输入大小限制`)
     }
   }

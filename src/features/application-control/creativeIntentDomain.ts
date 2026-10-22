@@ -1,4 +1,4 @@
-import { CREATIVE_INTENT_CAPABILITIES } from '@/core/application-control/domains/creativeIntent/creativeIntentCapabilities'
+import { CREATIVE_INTENT_CAPABILITIES, READ_VIDEO_MOTION_GROUP, videoMotionOrganizeOptionsSchema } from '@/core/application-control/domains/creativeIntent/creativeIntentCapabilities'
 import { reviewSemanticIntent } from '@/core/creativeIntent/semanticIntent'
 import { semanticRecordingInput, semanticRecordingResolutions } from '@/core/creativeIntent/semanticIntentRecording'
 import { creativeIntentRegistration } from './creativeIntentReflection'
@@ -15,6 +15,7 @@ import { prepareSemanticImage } from './creativeIntentImages'
 import { assertApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { creativeExplanationRegistration, CreativeExplanationMutationExecutor } from './creativeIntentExplanation'
 import { ApplicationWriteExecution, applicationWritePreflight } from '@/core/application-control/execution/writeExecution'
+import { readVideoMotionGroup } from '@/features/videoEdit'
 const logger = createLogger('features.applicationControl.creativeIntent')
 type InputProgress = { baseline: string; offset: number; imageOffset: number; receipt?: string }
 const inputReads = new WeakMap<object, Map<string, InputProgress>>()
@@ -63,6 +64,18 @@ export const creativeIntentApplicationDomain: ApplicationDomainModule = {
       const domain = definition.domain as IntentDomain
       logger.info('意图处理开始', { event: 'creative_intent.process.start', requestId: context.requestId, capabilityId: definition.id })
       try {
+        if ('offset' in input && 'draftRef' in input) {
+          const group = READ_VIDEO_MOTION_GROUP.inputSchema.parse(input), record = intentRecord(group.draftRef)
+          const key = `group:${recordingKey(record.documentRef, record.draftId, context)}`, reads = recordingReads(record.host.owner)
+          const baseline = JSON.stringify([record.draft, record.head.sessions])
+          if (group.offset === 0) reads.set(key, { baseline, offset: 0, imageOffset: 0 })
+          const progress = reads.get(key)
+          if (!progress || progress.baseline !== baseline || progress.offset !== group.offset) throw new Error('超级关键帧分页不连续或原稿已变化，请从 offset=0 重新读取。')
+          const result = await readVideoMotionGroup(record.documentRef.id, record.draftId, group.offset, context.signal)
+          if (context.callerGrant) assertApplicationCallerGrant(context.callerGrant)
+          progress.offset = result.nextOffset ?? group.offset
+          return { resultRef: group.draftRef, ...result, revision: intentRevisions(domain)[domain], scopeRevisions: intentRevisions(domain) }
+        }
         if ('documentRef' in input) {
           const source = recordingSource(input.documentRef, input.sessionId, context)
           const reads = recordingReads(source.host.owner)
@@ -127,6 +140,9 @@ export const creativeIntentApplicationDomain: ApplicationDomainModule = {
         await applicationWritePreflight(context, async () => { await record.host.prepare(record.draft); context.signal.throwIfAborted() })
         return (context.execution ?? new ApplicationWriteExecution()).atomic(() => record.host.read(), async () => {
         try {
+        const options = definition.id === 'organize_video_edit_intent' ? videoMotionOrganizeOptionsSchema.parse(input) : undefined
+        if (options?.motionIntent) await intentProvider(domain).configureMotion!(record.documentRef.id, { intent: options.motionIntent, selectedTakeIds: options.takeIds ?? record.draft.takes.map(take => take.id) })
+        else if (options?.takeIds) await record.host.configure({ selectedTakeIds: options.takeIds })
         if (review?.plan) {
           const actions = review.plan.actions
           if (domain === 'video_edit' && actions.length === 1 && actions[0].kind === 'motion') await intentProvider(domain).configureMotion!(record.documentRef.id, { intent: actions[0].intent, selectedTakeIds: [actions[0].takeId] })

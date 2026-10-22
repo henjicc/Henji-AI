@@ -82,3 +82,8 @@ export async function captureMicrophone(originMs: number, onBlock: (block: Captu
   } catch (error) { await release(); throw error }
 }
 import { correlateRecordingClock, RECORDING_CLOCK_RECALIBRATION_SECONDS, recordingClockDriftUncertainty } from '@/core/audioEdit/recordingClock'
+
+export async function recordingDevices(): Promise<Array<{ id: string; label: string; kind: 'microphone' | 'camera' }>> {
+  const devices = await navigator.mediaDevices.enumerateDevices()
+  return devices.filter(device => device.kind === 'audioinput' || device.kind === 'videoinput').map(device => ({ id: device.deviceId, label: device.label, kind: device.kind === 'audioinput' ? 'microphone' : 'camera' }))
+}

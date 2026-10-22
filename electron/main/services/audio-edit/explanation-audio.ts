@@ -10,6 +10,7 @@ import { encodeRecordingWav, type RecordingAudioRequest, type RecordingAudioResu
 import { timestampedAsrService, prepareTimestampedAsrWithReceipt, executeTimestampedAsrWithReceipt, type TimestampedAsrService, type TimestampedAsrReceipt } from './timestamped-asr'
 import { createAudioEditTask, updateAudioEditTask, registerAudioEditTaskController, deleteAudioEditTasks, getAudioEditStoredTask } from './task-store'
 import { createMainLogger } from '../logging'
+import { withPreprocessedSpeech } from './speech-preprocess'
 
 const logger = createMainLogger('main.audio_edit.explanation')
 interface ExplanationTranscriptionReceipt extends TimestampedAsrReceipt { output?: RecordingAudioResult }
@@ -129,13 +130,20 @@ export class ExplanationAudioService {
     await this.asr.preflight({ modelId: request.modelId, sourcePath: audioPath, durationMs })
   }
   async transcribe(request: Extract<RecordingAudioRequest, { action: 'transcribe' }>): Promise<RecordingAudioResult> {
+    if (!request.audioUploadReceipt) throw new Error('请先确认音频外发与转写费用。')
     if (this.active.has(request.sessionId)) throw new Error('这次讲解正在转写，请等待或取消。')
     const controller = new AbortController(); this.active.set(request.sessionId, controller)
-    try { return await this.performTranscription(request, controller) } finally { this.active.delete(request.sessionId) }
+    try {
+      const prepared = await this.prepareRecording(request)
+      // 恢复供应商任务或已回执的结果时不重新处理、上传或计费。
+      if (prepared.prior?.output || prepared.prior?.rawOutput || prepared.existing && !prepared.neverSubmitted) return await this.performTranscription(request, controller)
+      return await withPreprocessedSpeech(prepared.audioPath, controller.signal, audioPath => this.performTranscription(request, controller, audioPath))
+    } finally { this.active.delete(request.sessionId) }
   }
-  private async performTranscription(request: Extract<RecordingAudioRequest, { action: 'transcribe' }>, controller: AbortController): Promise<RecordingAudioResult> {
+  private async performTranscription(request: Extract<RecordingAudioRequest, { action: 'transcribe' }>, controller: AbortController, processedPath?: string): Promise<RecordingAudioResult> {
     if (!request.audioUploadReceipt) throw new Error('请先确认音频外发与转写费用。')
-    const { audioPath, durationMs, projectId, inputDigest, sourceDigest, existing, prior, neverSubmitted } = await this.prepareRecording(request)
+    const { audioPath: originalPath, durationMs, projectId, inputDigest, sourceDigest, existing, prior, neverSubmitted } = await this.prepareRecording(request)
+    const audioPath = processedPath ?? originalPath
     if (prior?.output) return prior.output
     if (!existing || neverSubmitted) await this.asr.preflight({ modelId: request.modelId, sourcePath: audioPath, durationMs })
     const plan = prepareTimestampedAsrWithReceipt(this.asr, { modelId: request.modelId, audioPath, durationMs }, prior, sourceDigest)

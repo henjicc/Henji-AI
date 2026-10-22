@@ -3,8 +3,37 @@ import { ExplanationSendConfirmation } from './ExplanationSendConfirmation'
 import type { ExplanationSendRequest } from '../application/explanationGeneration'
 import { useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Dropdown, UiButton, UiChipButton, UiDisclosurePanel, UiGroup, UiFormRow, UiIconButton, UiSegmented, UiOptionButton, UiRangeInput, UiError, UiLoading } from '@/components/ui'
-import { Check, ChevronDown, PinOff, Play, Square, Pause } from 'lucide-react'
+import { Dropdown, UiButton, UiChipButton, UiDisclosurePanel, UiGroup, UiFormRow, UiIconButton, UiSegmented, UiOptionButton, UiRangeInput, UiError, UiLoading, UiSwitch, UI_TEXT_META_CLASS } from '@/components/ui'
+import { Check, ChevronDown, PinOff, Play, Square, Pause, Trash2 } from 'lucide-react'
+
+/** 剪辑录制面板；图片随手摆与 3D 镜头仍保留各自原有工作流。 */
+export function SuperKeyframeRecordingControls(props: {
+  status: 'idle' | 'recording' | 'paused' | 'reviewing' | 'optimizing'; busy: boolean; message?: string
+  microphone: boolean; deviceId: string; devices: { value: string; label: string }[]
+  takes: { id: string; label: string }[]
+  onMicrophone: (enabled: boolean) => void; onDevice: (id: string) => void; onRemove: (id: string) => void
+  onStart: () => void; onPause: () => void; onResume: () => void; onFinish: () => void; onHandoff: () => void
+}): React.ReactElement {
+  const recording = props.status === 'recording', paused = props.status === 'paused'
+  return <div className="flex flex-col gap-3">
+    <UiGroup labelWidth={72}>
+      <UiFormRow label="麦克风" density="compact"><UiSwitch aria-label="麦克风" checked={props.microphone} disabled={props.busy} onCheckedChange={props.onMicrophone} /></UiFormRow>
+      <UiFormRow label="输入设备" density="compact"><Dropdown size="sm" appearance="field" className="w-full" buttonClassName="w-full" minWidthStrategy="none" ariaLabel="输入设备" value={props.deviceId} options={props.devices} disabled={props.busy} onSelect={props.onDevice} /></UiFormRow>
+    </UiGroup>
+    {!!props.takes.length && <UiGroup title="本组段落" titleTone="compact" labelWidth={72}>
+      <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">{props.takes.map(take => <div key={take.id} className="flex items-center justify-between gap-2">
+        <span className={UI_TEXT_META_CLASS}>{take.label}</span><UiIconButton size="xs" tooltip={`删除${take.label}`} aria-label={`删除${take.label}`} disabled={props.busy || recording || paused} onClick={() => props.onRemove(take.id)}><Trash2 /></UiIconButton>
+      </div>)}</div>
+    </UiGroup>}
+    {props.message && <UiError size="xs" message={props.message} />}
+    <div className="flex items-center justify-end gap-2">
+      {recording || paused ? <><UiButton variant="quiet" size="sm" disabled={props.busy} onClick={recording ? props.onPause : props.onResume}>{recording ? <Pause /> : <Play />}{recording ? '暂停' : '继续录制'}</UiButton><UiButton variant="primary" size="sm" disabled={props.busy} onClick={props.onFinish}><Square />{props.busy ? '正在处理' : '完成'}</UiButton></> : <>
+        <UiButton variant={props.takes.length ? 'quiet' : 'primary'} size="sm" disabled={props.busy} onClick={props.onStart}><Play />{props.takes.length ? '再录一段' : '开始录制'}</UiButton>
+        {!!props.takes.length && <UiButton variant="primary" size="sm" disabled={props.busy} onClick={props.onHandoff}>{props.busy ? '正在处理' : '交给 AI'}</UiButton>}
+      </>}
+    </div>
+  </div>
+}
 
 interface SharedCreativeIntentControlsProps {
   status: 'idle' | 'recording' | 'paused' | 'reviewing' | 'optimizing'
