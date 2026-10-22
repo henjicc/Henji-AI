@@ -47,6 +47,26 @@ describe('Tooltip', () => {
     expect(tooltip.style.left).toBe('192px'); expect(tooltip.style.top).toBe('90px')
   })
 
+  it('点击后不再冒出说明：指针停在按钮上不再计时弹出，鼠标点击带来的聚焦也不显示；离开再进来恢复', () => {
+    vi.useFakeTimers(); measure()
+    render(<Tooltip content="设置" delay={300}><UiIconButton aria-label="设置" /></Tooltip>)
+    const button = screen.getByRole('button', { name: '设置' })
+    fireEvent.mouseEnter(button)
+    fireEvent.pointerDown(button); fireEvent.focus(button)
+    act(() => vi.advanceTimersByTime(600))
+    expect(screen.queryByRole('tooltip')).toBeNull()
+    fireEvent.mouseEnter(button)
+    act(() => vi.advanceTimersByTime(600))
+    expect(screen.queryByRole('tooltip')).toBeNull()
+    fireEvent.mouseLeave(button); fireEvent.mouseEnter(button)
+    act(() => vi.advanceTimersByTime(300))
+    expect(screen.getByRole('tooltip')).toBeTruthy()
+    // 键盘导航带来的聚焦立即显示
+    fireEvent.mouseLeave(button); fireEvent.blur(button)
+    fireEvent.keyDown(document, { key: 'Tab' }); fireEvent.focus(button)
+    expect(screen.getByRole('tooltip')).toBeTruthy()
+  })
+
   it('聚焦时测量靠左且靠上的提示，翻到下方并夹紧', () => {
     measure()
     render(<Tooltip content="完整说明"><UiIconButton aria-label="说明" /></Tooltip>)

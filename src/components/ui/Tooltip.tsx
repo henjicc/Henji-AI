@@ -5,6 +5,20 @@ import { UI_DURATION } from './motion'
 import { useDialogTransition } from './useDialogTransition'
 import { resolveTooltipPosition, TOOLTIP_VIEWPORT_GUTTER_PX, type TooltipAnchorRect, type TooltipPlacement } from './tooltipPosition'
 
+/** 最近一次输入是不是指针（按文档记录，跨窗口浮出的面板各算各的）：键盘导航带来的聚焦才显示说明，等同浏览器的 :focus-visible 判断。 */
+const pointerModality = new WeakMap<Document, boolean>()
+function lastInputWasPointer(node: Node): boolean {
+    const doc = node.ownerDocument ?? (node as Document)
+    if (!pointerModality.has(doc)) {
+        pointerModality.set(doc, false)
+        doc.addEventListener('pointerdown', () => pointerModality.set(doc, true), true)
+        doc.addEventListener('keydown', () => pointerModality.set(doc, false), true)
+    }
+    return pointerModality.get(doc) === true
+}
+// 主窗口启动即开始记录，避免第一次点击发生在登记之前。
+if (typeof document !== 'undefined') lastInputWasPointer(document)
+
 export type { TooltipPlacement } from './tooltipPosition'
 
 interface TooltipContentProps extends Omit<React.HTMLAttributes<HTMLSpanElement>, 'content' | 'children'> {
@@ -105,12 +119,19 @@ export default function Tooltip({ children, content, delay = 300, className, con
         const node = triggerRef.current
         return Boolean(node && (node.getAttribute('aria-expanded') === 'true' || node.querySelector('[aria-expanded="true"]')))
     }
+    // 点过一次后，直到指针离开再进来之前都不再显示：点击常常打开弹窗或面板，说明不该再冒出来压在上面。
+    const pressedRef = useRef(false)
     const show = () => {
         clearTimers()
-        if (!content || expanded()) return
+        if (!content || expanded() || pressedRef.current) return
         setOpen(true)
     }
-    const dismiss = () => { clearTimers(); setOpen(false) }
+    const dismiss = () => { clearTimers(); setOpen(false); pressedRef.current = true }
+    // 聚焦只在键盘导航（显示焦点框）时显示说明；鼠标点击带来的聚焦不显示。
+    const showOnFocus = (event: React.FocusEvent) => {
+        if (lastInputWasPointer(event.target as Node)) return
+        show()
+    }
     // 浮层是点击后才展开的：每次渲染后再看一眼，展开了就收起说明。
     useEffect(() => { if (open && expanded()) dismiss() })
     const handleMouseEnter = (event: React.MouseEvent) => {
@@ -123,6 +144,7 @@ export default function Tooltip({ children, content, delay = 300, className, con
     }
     const handleMouseLeave = () => {
         clearTimers()
+        pressedRef.current = false
         if (!visible) return
         setOpen(false)
     }
@@ -136,7 +158,7 @@ export default function Tooltip({ children, content, delay = 300, className, con
     const triggerEvents: React.HTMLAttributes<HTMLElement> = {
         onMouseEnter: handleMouseEnter,
         onMouseMove: event => { if (anchor === 'pointer-start') setPointer({ clientX: event.clientX, clientY: event.clientY }) },
-        onMouseLeave: handleMouseLeave, onFocus: show, onBlur: handleMouseLeave,
+        onMouseLeave: handleMouseLeave, onFocus: showOnFocus, onBlur: handleMouseLeave,
         onPointerDown: dismiss,
         onKeyDown: event => { if (event.key === 'Escape' && visible) { clearTimers(); setOpen(false) } },
     }
@@ -156,7 +178,7 @@ export default function Tooltip({ children, content, delay = 300, className, con
             className={`relative ${shouldFlex ? 'flex' : 'inline-block'} ${shouldFlex ? childClassName.match(/flex-\d+|flex-grow/)?.[0] || '' : ''}`}
             onMouseEnter={handleMouseEnter}
             onMouseMove={event => { if (anchor === 'pointer-start') setPointer({ clientX: event.clientX, clientY: event.clientY }) }}
-            onMouseLeave={handleMouseLeave} onFocus={show} onBlur={handleMouseLeave} onPointerDown={dismiss}
+            onMouseLeave={handleMouseLeave} onFocus={showOnFocus} onBlur={handleMouseLeave} onPointerDown={dismiss}
             onKeyDown={event => { if (event.key === 'Escape' && visible) { clearTimers(); setOpen(false) } }}>
             {children}
         </span>}
