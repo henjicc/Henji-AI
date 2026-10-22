@@ -100,11 +100,19 @@ export default function Tooltip({ children, content, delay = 300, className, con
     }, [])
     useEffect(() => clearTimers, [clearTimers])
 
+    // 触发器展开着自己的浮层（菜单、面板）时不显示说明：浮层已经说明了一切，说明框只会压在浮层上。
+    const expanded = (): boolean => {
+        const node = triggerRef.current
+        return Boolean(node && (node.getAttribute('aria-expanded') === 'true' || node.querySelector('[aria-expanded="true"]')))
+    }
     const show = () => {
         clearTimers()
-        if (!content) return
+        if (!content || expanded()) return
         setOpen(true)
     }
+    const dismiss = () => { clearTimers(); setOpen(false) }
+    // 浮层是点击后才展开的：每次渲染后再看一眼，展开了就收起说明。
+    useEffect(() => { if (open && expanded()) dismiss() })
     const handleMouseEnter = (event: React.MouseEvent) => {
         if (!content) return
         setPointer({ clientX: event.clientX, clientY: event.clientY })
@@ -129,6 +137,7 @@ export default function Tooltip({ children, content, delay = 300, className, con
         onMouseEnter: handleMouseEnter,
         onMouseMove: event => { if (anchor === 'pointer-start') setPointer({ clientX: event.clientX, clientY: event.clientY }) },
         onMouseLeave: handleMouseLeave, onFocus: show, onBlur: handleMouseLeave,
+        onPointerDown: dismiss,
         onKeyDown: event => { if (event.key === 'Escape' && visible) { clearTimers(); setOpen(false) } },
     }
     const childEvents = children.props as React.HTMLAttributes<HTMLElement>
@@ -136,6 +145,7 @@ export default function Tooltip({ children, content, delay = 300, className, con
         onMouseEnter: event => { childEvents.onMouseEnter?.(event); triggerEvents.onMouseEnter?.(event) },
         onMouseMove: event => { childEvents.onMouseMove?.(event); triggerEvents.onMouseMove?.(event) },
         onMouseLeave: event => { childEvents.onMouseLeave?.(event); triggerEvents.onMouseLeave?.(event) },
+        onPointerDown: event => { childEvents.onPointerDown?.(event); triggerEvents.onPointerDown?.(event) },
         onFocus: event => { childEvents.onFocus?.(event); triggerEvents.onFocus?.(event) },
         onBlur: event => { childEvents.onBlur?.(event); triggerEvents.onBlur?.(event) },
         onKeyDown: event => { childEvents.onKeyDown?.(event); triggerEvents.onKeyDown?.(event) },
@@ -146,7 +156,7 @@ export default function Tooltip({ children, content, delay = 300, className, con
             className={`relative ${shouldFlex ? 'flex' : 'inline-block'} ${shouldFlex ? childClassName.match(/flex-\d+|flex-grow/)?.[0] || '' : ''}`}
             onMouseEnter={handleMouseEnter}
             onMouseMove={event => { if (anchor === 'pointer-start') setPointer({ clientX: event.clientX, clientY: event.clientY }) }}
-            onMouseLeave={handleMouseLeave} onFocus={show} onBlur={handleMouseLeave}
+            onMouseLeave={handleMouseLeave} onFocus={show} onBlur={handleMouseLeave} onPointerDown={dismiss}
             onKeyDown={event => { if (event.key === 'Escape' && visible) { clearTimers(); setOpen(false) } }}>
             {children}
         </span>}

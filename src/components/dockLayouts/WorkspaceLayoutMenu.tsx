@@ -36,7 +36,7 @@ export function WorkspaceLayoutMenu({ workspaceId, dockApi }: { workspaceId: str
   </UiOptionButton>
   const actionItem = (key: string, icon: JSX.Element, label: string, onClick: () => void, options: { danger?: boolean; disabled?: boolean } = {}) => <UiOptionButton key={key} role="menuitem" variant="menu" size="sm"
     disabled={busy || !layouts.ready || options.disabled} onClick={onClick}>
-    <span className={`flex w-full items-center gap-2 ${options.danger ? 'text-danger' : ''}`}><span className="flex w-3.5 shrink-0 justify-center">{icon}</span><span className="min-w-0 flex-1 truncate">{label}</span></span>
+    <span className={`flex w-full items-center gap-2 ${options.danger ? 'text-danger-text' : ''}`}><span className="flex w-3.5 shrink-0 justify-center">{icon}</span><span className="min-w-0 flex-1 truncate">{label}</span></span>
   </UiOptionButton>
   const submit = () => {
     if (!editing) return
@@ -46,7 +46,7 @@ export function WorkspaceLayoutMenu({ workspaceId, dockApi }: { workspaceId: str
   }
 
   return <PanelTrigger panelSize="menu" panelPadding="menu" open={open} onOpenChange={(next) => { setOpen(next); if (!next) { setEditing(null); setError(null) } }} renderPanel={() => (
-    <div className="flex w-60 flex-col" role="menu" aria-label="工作区布局">
+    <div className="flex min-w-52 flex-col" role="menu" aria-label="工作区布局">
       <div className="flex flex-col gap-0.5">{builtin.map(preset => presetItem(preset))}</div>
       {custom.length > 0 && <div className="mt-1 flex flex-col gap-0.5 border-t border-line pt-1">{custom.map(preset => presetItem(preset))}</div>}
       <div className="mt-1 flex flex-col gap-0.5 border-t border-line pt-1">
@@ -65,7 +65,7 @@ export function WorkspaceLayoutMenu({ workspaceId, dockApi }: { workspaceId: str
       {(error || layouts.error) && <UiInlineStatus role="alert" className="mt-1 px-2">{error || layouts.error}</UiInlineStatus>}
     </div>
   )}>
-    {({ togglePanel }) => <UiButton size="md" aria-haspopup="menu" aria-expanded={open} onClick={togglePanel} data-panel-trigger-button tooltip="工作区布局：切换、重置或保存面板摆放">
+    {({ togglePanel }) => <UiButton size="md" aria-haspopup="menu" aria-expanded={open} onClick={togglePanel} data-panel-trigger-button>
       <LayoutPanelLeft className="mr-1" />{active?.name ?? '工作区'}{layouts.dirty ? <span aria-label="已调整" className="ml-1 h-1.5 w-1.5 rounded-full bg-accent" /> : null}
     </UiButton>}
   </PanelTrigger>

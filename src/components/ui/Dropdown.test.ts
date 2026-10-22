@@ -162,7 +162,7 @@ describe('Dropdown 键盘交互', () => {
     if (!panel) throw new Error('下拉浮层未渲染')
     expect(panel.style.top).toBe('632px')
     // 普通界面上的下拉是实底浮层（玻璃只给压在画布与媒体上的 surface="glass"）
-    expect(panel.classList.contains('bg-panel')).toBe(true)
+    expect(panel.classList.contains('bg-overlay')).toBe(true)
     expect(panel.classList.contains('ui-glass')).toBe(false)
   })
 

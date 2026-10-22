@@ -307,8 +307,12 @@ export const UI_BUTTON_RESET_CLASS =
  *   一整块玻璃（深浅主题由主题引擎派生 glass 令牌，浅色下是浅底 + 深色纱），内部选项不各自模糊。
  * 圆角取输入与菜单档 8；内容裁到圆角内。
  */
+/**
+ * 实底浮层（菜单、下拉、弹出面板、右键菜单、日期选择）：底色用浮层令牌 overlay，比所在面板抬一级，
+ * 加强分隔描边与浮层阴影，压在任何面板上都分得出上下两层；里面的菜单项悬停改用 overlay-hover（见 index.css）。
+ */
 export const UI_TRIGGER_PANEL_CLASS =
-  `bg-panel border border-line-strong shadow-panel overflow-hidden ${UI_RADIUS_CLASS.field} text-text1`;
+  `ui-overlay-surface bg-overlay border border-line-strong shadow-panel overflow-hidden ${UI_RADIUS_CLASS.field} text-text1`;
 
 export const UI_TRIGGER_PANEL_GLASS_CLASS =
   `ui-glass ui-glass-elevated overflow-hidden ${UI_RADIUS_CLASS.field} text-text1`;
@@ -332,7 +336,8 @@ export type UiTriggerPanelPadding = keyof typeof UI_TRIGGER_PANEL_PADDING_CLASS;
 
 /** 锚定浮层按内容选档；定位器进一步收紧到宿主边界和可用高度。 */
 export const UI_TRIGGER_PANEL_SIZE_CLASS = {
-  menu: 'w-[min(92vw,clamp(12rem,20vw,22.5rem))] [--trigger-panel-max-height:min(60vh,24rem)]',
+  // 菜单按选项内容定宽（至少 10rem，上限 22.5rem 再截断），不随窗口宽度变宽
+  menu: 'w-max min-w-40 max-w-[min(92vw,22.5rem)] [--trigger-panel-max-height:min(60vh,24rem)]',
   compact: 'w-[min(92vw,clamp(16rem,28vw,24rem))] [--trigger-panel-max-height:min(70vh,32rem)]',
   content: 'w-[min(92vw,clamp(24rem,48vw,45rem))] [--trigger-panel-max-height:min(78vh,40rem)]',
   workspace: 'w-[min(94vw,clamp(40rem,80vw,60rem))] [--trigger-panel-max-height:min(88vh,52rem)]',

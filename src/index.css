@@ -29,6 +29,10 @@
   --panel-rgb: 33 33 33;
   --raised: #272727;
   --raised-rgb: 39 39 39;
+  --overlay: #272727;
+  --overlay-rgb: 39 39 39;
+  --overlay-hover: #313131;
+  --overlay-hover-rgb: 49 49 49;
   --segment-selected: #393939;
   --segment-selected-rgb: 57 57 57;
   --control: #2B2B2B;
@@ -391,6 +395,12 @@
   .ui-glass-adaptive-option:hover:not(:disabled):not([aria-disabled='true']),
   .ui-glass-adaptive-option.ui-option-highlighted {
     background-color: rgb(var(--hover-rgb));
+  }
+
+  /* 浮层底色比面板高一级，菜单项悬停也要再高一级才看得出（overlay-hover）。 */
+  .ui-overlay-surface .ui-glass-adaptive-option:hover:not(:disabled):not([aria-disabled='true']),
+  .ui-overlay-surface .ui-glass-adaptive-option.ui-option-highlighted {
+    background-color: rgb(var(--overlay-hover-rgb));
   }
 
   .ui-glass .ui-glass-adaptive-option:hover:not(:disabled):not([aria-disabled='true']),
@@ -1024,15 +1034,8 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 }
 
 .henji-cameraStage-dock .dv-groupview {
-  border-radius: var(--radius-control);
-  overflow: hidden;
-}
-
-/* 面板内容层不在组元素里（defaultRenderer="always"），组的圆角裁不到它：内容层自己圆下边两个角，
- * 否则有底色的面板（时间线）下角是直角，与圆角的组和描边对不上（dockview 自带的 spaced 主题同样处理）。 */
-.henji-cameraStage-dock .dv-render-overlay {
-  border-bottom-left-radius: var(--radius-control);
-  border-bottom-right-radius: var(--radius-control);
+  /* 停靠面板组一律直角（用户确认）：面板之间靠 4px 间隙分开，圆角反而让面板像浮起的卡片，与命令带、助手不协调。 */
+  border-radius: 0;
   overflow: hidden;
 }
 
@@ -1043,9 +1046,9 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 
 /* 停靠宿主顶部与命令带之间也留一道间隙，宽度与 dockviewHostTheme 的 gap（4px）一致、底色同间隙；
  * box-sizing 让 h-full 的宿主连同这道空隙一起占满，dockview 只拿到余下的高度。
- * 停靠在窗口边上的智能助手外沿用同一道间隙（.dock-gap-surface），和停靠面板读成同一套可拆分面板。 */
+ * 停靠在窗口边上的智能助手外沿用同一道间隙（.ui-dock-gap-surface），和停靠面板读成同一套可拆分面板。 */
 .dockview-host,
-.dock-gap-surface {
+.ui-dock-gap-surface {
   box-sizing: border-box;
   background: linear-gradient(var(--shade), var(--shade)), rgb(var(--gap-rgb));
 }
@@ -1056,7 +1059,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 /* 激活面板组描边（DockviewHost 的 ActiveGroupOutline）：与选中标签底部强调线同粗（1.5px）、同色。 */
 .dock-active-outline {
   border: 1.5px solid rgb(var(--accent-rgb));
-  border-radius: var(--radius-control);
+  border-radius: 0;
 }
 
 /* 剪辑面板标签（PR）：选中线到菜单图标为止。左内边距 16 与 3D 镜头参考的纯文字标签一致；

@@ -130,7 +130,8 @@ describe('设计令牌：尺寸、圆角、动效、层级', () => {
     }
     // 面板的 clamp 及高度预算必须真实生成，不能只是 TS 字符串登记。
     expect([...rules.values()].filter(declarations => declarations.has('--trigger-panel-max-height'))).toHaveLength(4)
-    expect([...rules.values()].filter(declarations => declarations.get('width')?.includes('clamp('))).toHaveLength(4)
+    // 菜单档按内容定宽（w-max + 上限），其余三档按窗口 clamp。
+    expect([...rules.values()].filter(declarations => declarations.get('width')?.includes('clamp('))).toHaveLength(3)
   })
 
   it('六档方形按钮实际生成的宽高使用同一变量，图标类与数值登记一致', async () => {

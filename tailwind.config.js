@@ -204,6 +204,8 @@ export default {
         canvas: withOpacity('--canvas-rgb'),
         panel: withOpacity('--panel-rgb'),
         raised: withOpacity('--raised-rgb'),
+        // 浮层（菜单、下拉、弹出面板）与浮层里的悬停：bg-overlay / bg-overlay-hover
+        overlay: { DEFAULT: withOpacity('--overlay-rgb'), hover: withOpacity('--overlay-hover-rgb') },
         'segment-selected': withOpacity('--segment-selected-rgb'),
         control: {
           DEFAULT: withOpacity('--control-rgb'),

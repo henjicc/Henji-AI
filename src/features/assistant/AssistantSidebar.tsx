@@ -16,15 +16,17 @@ import { useAssistantUiStore, type AssistantDockMode } from './store/assistantUi
 
 /**
  * 停靠态和剪辑、音频编辑的停靠面板是同一套语言：外沿留 4px 间隙（与面板组之间的间隙同宽同色），
- * 面板本身是控件圆角、无描边、无阴影的面板组。悬浮态才是卡片语义，保留圆角 + 四边框 + 浮层阴影。
+ * 面板本身直角、无描边、无阴影，内容区底色与工作区主区同为窗口底（命令带仍是面板底，和各工作区的命令带齐平同色）。
+ * 悬浮态才是卡片语义，保留圆角 + 四边框 + 浮层阴影 + 面板底。
  */
 const SURFACE_BY_MODE = {
   floating: 'rounded-xl',
-  left: 'rounded-control border-x-0 border-y-0 shadow-none',
-  right: 'rounded-control border-x-0 border-y-0 shadow-none',
+  left: '',
+  right: '',
 } as const
+const DOCKED_SURFACE_CLASS = 'bg-window text-text1'
 /** 停靠时朝向工作区露出一道间隙，和工作区里的面板分开；顶部与工作区命令带齐平。 */
-const GAP_BY_MODE = { floating: '', left: 'dock-gap-surface pr-1', right: 'dock-gap-surface pl-1' } as const
+const GAP_BY_MODE = { floating: '', left: 'ui-dock-gap-surface pr-1', right: 'ui-dock-gap-surface pl-1' } as const
 
 /** 命令带标题跟随当前内容：历史与记忆没有自己的头带，靠这里说明“正在看哪里”。 */
 const contentViewTitles = {
@@ -120,7 +122,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
         // 收起中不可点击；过渡结束即卸载，不只依赖计时器（任务 5.8）
         {...(closing ? { inert: '' } : {})}
         onTransitionEnd={onTransitionEnd}
-        className={`relative flex h-full min-h-0 w-full flex-col overflow-hidden ${UI_PANEL_SURFACE_CLASS} transition-[opacity,transform] duration-180 ease-out ${
+        className={`relative flex h-full min-h-0 w-full flex-col overflow-hidden ${mode === 'floating' || interaction.dragging ? UI_PANEL_SURFACE_CLASS : DOCKED_SURFACE_CLASS} transition-[opacity,transform] duration-180 ease-out ${
           interaction.dragging ? SURFACE_BY_MODE.floating : SURFACE_BY_MODE[mode]
         } ${isVisible ? 'pointer-events-auto translate-x-0 translate-y-0 scale-100 opacity-100' : `pointer-events-none ${hiddenTransform}`}`}
       >
