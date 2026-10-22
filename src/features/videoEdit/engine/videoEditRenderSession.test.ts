@@ -5,8 +5,8 @@ import { resolve, sep } from 'node:path'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import type { RenderRequest } from './videoEditWorker'
 import { recordVideoEditMaskUpdate } from '../application/videoEditMaskEditing'
-import { videoEditClipSchema, videoEditComposition } from '@/core/videoEdit/document'
-import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
+import { createVideoEditSequence, videoEditClipSchema, videoEditComposition } from '@/core/videoEdit/document'
+import { addLegacyVideoEditTracks, createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { VideoEditRenderTransport } from './videoEditRenderTransport'
 
@@ -77,6 +77,23 @@ beforeEach(() => {
 })
 afterEach(() => { vi.useRealTimers() })
 
+it('字体范围展开嵌套序列时不沿用外层转场', async () => {
+  const project = createVideoEditTestDocument('嵌套转场字体')
+  project.items = [{ id: 'item', name: '文字', kind: 'text' }, { id: 'nested-item', name: '子序列', kind: 'sequence', sequenceId: project.sequences[0].id }]
+  const child = project.sequences[0]
+  const base = makeVideoEditItemClip(project, 'item', child.id, { frame: 0, duration: 30 })
+  child.clips = [{ ...base, id: 'inner' }]
+  const parent = createVideoEditSequence('父序列'); addLegacyVideoEditTracks(parent)
+  parent.clips = [{ ...base, id: 'nested', kind: 'sequence', itemId: 'nested-item' }, { ...base, id: 'after', start: 30 }]
+  parent.transitions = [{ id: 'cross', kind: 'cross_dissolve', leftClipId: 'nested', rightClipId: 'after', durationFrames: 10 }]
+  project.sequences.push(parent)
+  const fonts = vi.fn(async (_document: VideoEditComposition) => [])
+  const session = new VideoEditRenderTransport({ fonts, proxies: async () => ({}), maskUpdateTime: () => undefined }, videoEditComposition(project, parent.id))
+  await session.prepareGpu()
+  await session.present(5)
+  expect(fonts.mock.lastCall![0].sequences!.map(sequence => sequence.clips.map(clip => clip.id))).toEqual([['inner']])
+  await session.dispose()
+})
 it('初始化不读取代码字体，逐帧只请求当前范围，连续帧复用字体准备', async () => {
   const project = createVideoEditTestDocument('延迟字体')
   project.items = [{ id: 'item', name: '占位', kind: 'text' }]

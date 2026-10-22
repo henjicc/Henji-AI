@@ -91,7 +91,8 @@ export class VideoEditRenderTransport {
         const id = document.items.find(item => item.id === clip.itemId)?.sequenceId
         const nested = id && document.sequences?.find(sequence => sequence.id === id)
         if (nested) {
-          const composition = { ...document, ...nested, fps: nested.frameRate.numerator / nested.frameRate.denominator }
+          // 嵌套序列没有自己的转场时不能沿用外层的，否则转场找不到所挂片段。
+          const composition = { ...document, ...nested, transitions: nested.transitions, fps: nested.frameRate.numerator / nested.frameRate.denominator }
           const nestedFrame = frame < 0 ? -1 : videoEditNestedFrame(sequence, clip, composition, frame)
           sequences.push({ ...nested, clips: visit(composition, nestedFrame, new Set(seen)) })
         }
