@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest'
 vi.mock('./audio-worker-client', () => ({ invokeAudioWorker: vi.fn(async () => ({})) }))
-import { audioRepairMaskDimensions, encodeAudioRepairMask, parseSpectrogram, runAudioRepair } from './dsp-adapter'
+import { audioRepairMaskDimensions, encodeAudioRepairMask, parseSpectrogram, readSpectrogram, runAudioRepair } from './dsp-adapter'
 import { invokeAudioWorker } from './audio-worker-client'
 
 it('validates HJSP header and preserves planar u8 payload with time/frequency metadata', () => {
@@ -10,6 +10,9 @@ it('validates HJSP header and preserves planar u8 payload with time/frequency me
   for (const [offset, value] of [[8, m.sampleRate], [12, m.channels], [16, m.fftSize], [20, m.hop], [32, m.bins]]) view.setUint32(offset, value, true)
   view.setBigUint64(24, 2n, true); view.setBigUint64(40, 100n, true); view.setBigUint64(48, 200n, true); bytes[64] = 255
   const result = parseSpectrogram(bytes, m, 200)
+  expect(readSpectrogram(bytes)).toEqual(result)
+  expect(result.values.buffer).toBe(bytes.buffer)
+  expect(result.values.byteOffset).toBe(bytes.byteOffset + 64)
   expect(result.values.length).toBe(516); expect(result.values[0]).toBe(255); expect(result.startFrame).toBe(100)
   expect(() => parseSpectrogram(bytes.subarray(0, bytes.length - 1), m, 200)).toThrow('不匹配')
   bytes[0] = 0; expect(() => parseSpectrogram(bytes, m, 200)).toThrow('文件头')

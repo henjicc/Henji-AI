@@ -65,6 +65,25 @@ function createAudioEditSpectralScene({ setupToolbox, clickNamedButton }) {
       await page.waitForFunction(() => document.querySelector('[data-audio-spectral-editor] canvas[data-waveform-state="ready"]'), null, { timeout: 30000 })
       await capture('spectral-01-overview')
 
+      // 真容器确认着色器成功绘制，并验证同一数据在设备丢失后回退、恢复。
+      const gpu = await page.evaluate(() => {
+        const canvas = document.querySelector('canvas[data-spectrogram-state="ready"]')
+        const gl = canvas.getContext('webgl2')
+        if (!gl) return { available: false }
+        const error = gl.getError()
+        const extension = gl.getExtension('WEBGL_lose_context')
+        if (extension) { window.__spectrogramRestore = () => extension.restoreContext(); extension.loseContext() }
+        return { available: true, error, canRestore: !!extension }
+      })
+      assert.ok(gpu.available, '本机应使用 WebGL2 绘制频谱')
+      assert.equal(gpu.error, 0, '频谱 WebGL2 不应产生错误')
+      if (gpu.canRestore) {
+        await page.waitForFunction(() => document.querySelector('canvas[data-spectrogram-state="ready"]')?.getContext('2d'))
+        await capture('spectral-01-cpu-fallback')
+        await page.evaluate(() => { window.__spectrogramRestore(); delete window.__spectrogramRestore })
+        await page.waitForFunction(() => document.querySelector('canvas[data-spectrogram-state="ready"]')?.getContext('webgl2'))
+      }
+
       // 修复画笔：在总览里把整段啸叫（6–7 秒）一笔涂完——修复用涂抹区域前后的干净声音来补，只涂中间一段时两侧仍是啸叫，生成修复记录并重新取已编辑的频谱。
       await page.getByRole('button', { name: '修复画笔 · B', exact: true }).click()
       const spectrum = page.locator('[data-audio-spectral-editor] canvas[data-spectrogram-state]')
@@ -87,7 +106,10 @@ function createAudioEditSpectralScene({ setupToolbox, clickNamedButton }) {
         const rate = 48000
         const read = async (mode) => {
           const chunk = await window.henjiNative.audio.editSpectrogram({ projectId: id, startFrame: Math.round(rate * 6.4), endFrame: Math.round(rate * 6.6), mode, fftSize: 2048, hop: 2048, channel: 0 })
-          const mean = (low, high) => { let total = 0, count = 0; for (let t = 0; t < chunk.timeBins; t += 1) for (let bin = low; bin <= high; bin += 1) { total += chunk.values[t * chunk.frequencyBins + bin]; count += 1 } return total / count }
+          // 返回值覆盖固定块，统计仍只取请求的 6.4–6.6 秒，不能把整块平均进来。
+          const first = Math.max(0, Math.ceil((Math.round(rate * 6.4) - chunk.startFrame) / chunk.hop))
+          const last = Math.min(chunk.timeBins, Math.ceil((Math.round(rate * 6.6) - chunk.startFrame) / chunk.hop))
+          const mean = (low, high) => { let total = 0, count = 0; for (let t = first; t < last; t += 1) for (let bin = low; bin <= high; bin += 1) { total += chunk.values[t * chunk.frequencyBins + bin]; count += 1 } return total / count }
           return { whistle: mean(211, 216), voice: mean(12, 14) }
         }
         return { source: await read('source'), edited: await read('edited') }
