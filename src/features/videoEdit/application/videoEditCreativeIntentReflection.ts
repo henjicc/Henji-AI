@@ -39,7 +39,7 @@ function open(documentRef: ApplicationRef) {
       async prepare(draft: MotionDraft) {
         assertCurrent()
         // Reopening the UI service navigates. Public background work must not silently do so.
-        if (!draft.targets.every(t => t.ref.id === `${id}:${owner.selection}`)) throw new Error('请在原剪辑选中此原稿的片段后整理；不会切换当前编辑目标。')
+        if (!draft.targets.some(t => t.ref.id === `${id}:${owner.selection}`)) throw new Error('请在原剪辑选中此原稿的片段后整理；不会切换当前编辑目标。')
         const state = videoMotionState(owner)
         if (state && state.status !== 'reviewing') throw new Error('请先结束当前录制或整理。')
         await reopenVideoMotion(id, draft.id); assertCurrent()

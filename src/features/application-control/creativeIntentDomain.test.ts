@@ -30,6 +30,9 @@ import { createImageLayoutCandidates } from '@/core/imageEdit/v3/layoutCandidate
 import { explanationSessionSchema } from '@/core/creativeIntent/schema'
 import { creativeIntentPrivateAccess } from './creativeIntentAuthorization'
 import { applicationTransactionFailureFactsSchema } from '@/core/application-control/applicationTransactionFailureFacts'
+import { readVideoMotionGroup } from '@/features/videoEdit/application/videoEditMotionGroup'
+import { removeSuperKeyframeTake } from '@/features/videoEdit/application/videoEditSuperKeyframes'
+import { superKeyframeSessionId } from '@/core/creativeIntent/captureIntent'
 
 vi.mock('@/features/videoEdit/application/videoEditMotionWorkerClient', () => ({ optimizeVideoEditMotionOffThread: vi.fn(async (input: Parameters<typeof optimizeMotionDraft>[0], signal: AbortSignal, pages?: AsyncIterable<Parameters<typeof optimizeMotionDraft>[0]['samples']>) => {
   const samples = [...input.samples]; if (pages) for await (const page of pages) samples.push(...page); signal.throwIfAborted()
@@ -59,6 +62,55 @@ async function setup() {
   const draftRef = intentRef({ kind: 'video_edit.document', id }, 'intent_draft', state.draft.id)
   return { owner, state, draftRef }
 }
+it('整组分页保留全部目标采样与时间；删除段落后正式读取不再返回该段样本', async () => {
+  const { owner, state } = await setup(), app = createApplicationHarness()
+  try {
+    const page = await readVideoMotionGroup(owner.document.id, state.draft.id, 0, new AbortController().signal)
+    const records = page.lines.map(line => JSON.parse(line))
+    expect(records.find(record => record.kind === 'super-keyframes').units.position).toContain('画幅比例')
+    expect(records.filter(record => record.kind === 'sample')).toHaveLength(state.recent.length)
+    expect(records.find(record => record.kind === 'take').targetRefs).toEqual([state.draft.targets[0].ref])
+    const take = state.draft.takes[0]
+    await removeSuperKeyframeTake(owner.document.id, state.draft.id, take.id)
+    const after = await readVideoMotionGroup(owner.document.id, state.draft.id, 0, new AbortController().signal)
+    expect(after.lines.map(line => JSON.parse(line)).filter(record => record.kind === 'sample' && record.takeRef === take.id)).toHaveLength(0)
+    expect(videoMotionState(owner)!.recent.some(sample => sample.takeRef === take.id)).toBe(false)
+  } finally { app.dispose() }
+})
+it('外部发现最近整组并走同一读取能力，讲解授权撤销后不能继续读取', async () => {
+  const { owner, state, draftRef } = await setup(), app = createApplicationHarness(), id = owner.document.id
+  try {
+    const first = recordingFixtureSession(), second = recordingFixtureSession()
+    first.id = superKeyframeSessionId(state.draft.id); first.ownerRef.id = id; first.consent!.textUpload = true
+    second.id = superKeyframeSessionId('newest'); second.ownerRef.id = id; second.createdAt = '2026-10-22T12:00:00.000Z'; second.consent!.textUpload = true
+    updateVideoEditCreativeIntents(id, { ...owner.document.creativeIntents!, drafts: [...owner.document.creativeIntents!.drafts, { ...structuredClone(state.draft), id: 'newest' }], sessions: [second, first] })
+    const listed = await app.requireResult('list_application_entities', { entityType: 'video_edit.intent_draft', limit: 10 })
+    expect((listed.refs as ApplicationRef[])[0].id).toBe(`${id}:newest`)
+    const input = { draftRef }, privateAccess = creativeIntentPrivateAccess('read_video_edit_super_keyframes', input)
+    const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'external-super-keyframes', capabilityIds: ['read_video_edit_super_keyframes'], permissions: ['video_edit:read'], allowWrites: false, allowDestructive: false, privateAccess }))
+    const invoke = () => session.execute({ id: 'read_video_edit_super_keyframes', version: 1, input }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })
+    const result = await invoke()
+    expect(result.ok, JSON.stringify(result)).toBe(true)
+    if (result.ok) expect((result.data.lines as string[]).join('\n')).toContain(state.recent[0].sampleId)
+    const head = structuredClone(owner.document.creativeIntents!); head.sessions.find(value => value.id === first.id)!.consent!.textUpload = false
+    updateVideoEditCreativeIntents(id, head)
+    await expect(invoke()).rejects.toThrow('授权已变化')
+  } finally { app.dispose() }
+})
+it('AI 给定多目标、多属性曲线走一次正式通用事务，一步作品撤销恢复整组', async () => {
+  const { owner } = await setup(), app = createApplicationHarness(), id = owner.document.id
+  try {
+    appendVideoEditClip(id)
+    const clips = getActiveVideoEditSequence(owner).clips, before = structuredClone(clips), history = owner.past.length
+    const baseline = await app.read({ kind: 'video_edit.document', id })
+    const curves = [{ time: 0, value: 0, interpolation: 'linear' }, { time: 20, value: .3, interpolation: 'ease' }]
+    await app.requireResult('change_application_entities', { summary: '应用整组超级关键帧', changes: clips.map(clip => ({ kind: 'set_properties', entityType: 'video_edit.clip', target: { kind: 'video_edit.clip', id: `${id}:${clip.id}` }, properties: { 'video_edit.clip.x.keyframes': curves, 'video_edit.clip.rotation.keyframes': [{ time: 0, value: 0, interpolation: 'linear' }, { time: 20, value: 90, interpolation: 'linear' }] } })) }, baseline.revisions as Record<string, number>)
+    expect(owner.past.length).toBe(history + 1)
+    expect(getActiveVideoEditSequence(owner).clips.every(clip => clip.curves?.x?.[1].value === .3)).toBe(true)
+    await app.requireResult('undo_video_edit', { documentRef: { kind: 'video_edit.document', id } })
+    expect(getActiveVideoEditSequence(owner).clips).toEqual(before)
+  } finally { app.dispose() }
+})
 it('正式 describe → change/invoke → read：钉点保持、候选应用与一次作品撤销', async () => {
   const { owner, state, draftRef } = await setup(), app = createApplicationHarness()
   try {

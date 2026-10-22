@@ -1,3 +1,4 @@
+import { superKeyframeSessionId } from '@/core/creativeIntent/captureIntent'
 import { z } from 'zod'
 import { fieldDescriptors, fieldReadValues, unrestrictedCollectionAvailability, type ApplicationEntityRegistration, type JsonValue } from '@/core/application-control'
 import { motionDraftSchema, takeSchema, pinSchema, resourceRefSchema } from '@/core/creativeIntent/contracts'
@@ -22,7 +23,13 @@ export function creativeIntentRegistration(domain: IntentDomain, type: IntentEnt
     provider: {
       entityType,
       async listEntities(request) {
-        const refs = intentDocuments(domain).flatMap(document => intentHost(document).read().drafts.flatMap(draft => type === 'intent_draft' ? [intentRef(document, type, draft.id)] : (type === 'intent_take' ? draft.takes.map(t => t.id) : type === 'intent_pin' ? draft.pins.map(p => p.id) : draft.candidateRefs.map(c => c.resourceId)).map(id => intentRef(document, type, draft.id, id))))
+        const documents = intentDocuments(domain)
+        const drafts = documents.flatMap(document => {
+          const head = intentHost(document).read()
+          return head.drafts.map((draft, index) => ({ document, draft, index, at: head.sessions.find(session => session.id === superKeyframeSessionId(draft.id))?.createdAt ?? '' }))
+        })
+        if (domain === 'video_edit') drafts.sort((a, b) => b.at.localeCompare(a.at) || b.index - a.index)
+        const refs = drafts.flatMap(({ document, draft }) => type === 'intent_draft' ? [intentRef(document, type, draft.id)] : (type === 'intent_take' ? draft.takes.map(t => t.id) : type === 'intent_pin' ? draft.pins.map(p => p.id) : draft.candidateRefs.map(c => c.resourceId)).map(id => intentRef(document, type, draft.id, id)))
         const offset = request.cursor ? Number(request.cursor) : 0
         if (!Number.isSafeInteger(offset) || offset < 0) throw new Error('目录游标无效，请重新读取第一页。')
         return { refs: refs.slice(offset, offset + request.limit), nextCursor: offset + request.limit < refs.length ? String(offset + request.limit) : null, revisions: intentRevisions(domain), total: refs.length }
