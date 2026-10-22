@@ -78,6 +78,8 @@ function createAudioEditScene({ setupToolbox, clickNamedButton }) {
       const editor = page.locator('[data-audio-spectral-editor]')
       await waveform.waitFor({ state: 'visible' })
       await page.waitForFunction(() => document.querySelector('[data-audio-spectral-editor] canvas[data-waveform-state="ready"]'))
+      // 文字稿与处理在同一组标签里，上一个场景可能停在“处理”：先切回文字稿
+      await page.locator('.dv-tab').filter({ hasText: '文字稿' }).first().click()
       assert.equal(await page.locator('[data-audio-overlay="deleted"]').count(), 1)
       const bounds = await waveform.boundingBox()
       assert.ok(bounds && bounds.height >= 120)

@@ -251,8 +251,8 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     if (!waveSelection || disabled) return
     try {
       editAudioEditProject(project.id, (current) => editAudioEditRange(current, waveSelection, mode))
-      // 删除、静音后清掉选区，标记直接露出来；恢复保留选区方便继续操作。
-      if (mode !== 'restore') { setWaveSelection(null); setSelectedBlockIds([]) }
+      // 删除后那段声音不在了，清掉选区让删除标记露出来；静音、恢复保留选区（与 Audition 一致），方便接着操作。
+      if (mode === 'delete') { setWaveSelection(null); setSelectedBlockIds([]) }
     } catch (error) { notifyError(error) }
   }
   const waveActions = audioWaveActions(project, (action) => void run(action))
