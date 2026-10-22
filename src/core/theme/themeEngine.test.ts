@@ -282,6 +282,19 @@ describe('themeEngine 令牌集合', () => {
     }
   })
 
+  it('浮起来的玻璃（弹出面板、菜单）比所在面板高一级，压在纯黑或纯白画面上主要、辅助文字都可读', () => {
+    for (const { seed } of COMBOS) {
+      const t = deriveThemeTokens(seed).colors
+      for (const bed of [WHITE, 'rgb(0,0,0)', t.panel, t.media]) {
+        const surface = compositeOver(t.glassOverlayTint, bed)
+        expect(contrastRatio(t.text1, surface)).toBeGreaterThanOrEqual(THEME_TEXT_MIN_CONTRAST)
+        expect(contrastRatio(t.text3, surface)).toBeGreaterThanOrEqual(THEME_TEXT_MIN_CONTRAST)
+      }
+      // 深色下压在黑色画面上也不比面板更暗（不再是一块“黑洞”）
+      if (seed.mode === 'dark') expect(hexToOklch(compositeOver(t.glassOverlayTint, 'rgb(0,0,0)')).L).toBeGreaterThanOrEqual(hexToOklch(t.panel).L - 0.02)
+    }
+  })
+
   it('深色玻璃与遮罩保持现有 index.css 数值（第二段接线不改深色观感）', () => {
     const t = deriveThemeTokens(DEFAULT_THEME_SEED).colors
     expect(t.glassTint).toBe('rgba(0,0,0,0.72)') // 4.3：由 0.66 提到 0.72，辅助文字在玻璃上 ≥ 4.5

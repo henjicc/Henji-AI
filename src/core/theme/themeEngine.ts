@@ -171,6 +171,7 @@ export const THEME_COLOR_TOKEN_NAMES = [
   'waveCut',
   // 玻璃材质（按模式派生）
   'glassTint',
+  'glassOverlayTint',
   'glassEdge',
   'glassSheen',
   'glassHover',
@@ -213,6 +214,8 @@ export const THEME_TEXT_MIN_CONTRAST = 4.5;
 export const DARK_GLASS_TINT_ALPHA = 0.72;
 /** 浅色玻璃底：面板色 82%（纸白下查看器、画布上的玻璃浮层） */
 export const LIGHT_GLASS_TINT_ALPHA = 0.82;
+/** 浮起来的玻璃底的不透明度：在白、黑两种极端底上辅助文字都 ≥ 4.5:1（themeEngine.test 断言）。 */
+export const GLASS_OVERLAY_TINT_ALPHA = 0.92;
 /** 玻璃上的强调选中底透明度（深色 / 浅色） */
 const GLASS_SELECTED_ACCENT_ALPHA = { dark: 0.28, light: 0.18 } as const;
 
@@ -675,6 +678,8 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
       // 4.3：0.66 时辅助文字压在玻璃上只有 4.16–4.44:1（设置弹窗、画布“更多”菜单、资产浮动面板），提到 0.72，
       // 玻璃下是中灰内容（#808080）时 text3 仍 ≥ 4.5（themeEngine.test 断言）；纸白不变。
       glassTint: `rgba(0,0,0,${DARK_GLASS_TINT_ALPHA})`,
+      // 浮起来的玻璃（弹出面板、菜单）：浮层色加透明度，读起来比所在面板高一级，压在黑色画面上也不会变成一块黑。
+      glassOverlayTint: withAlpha(t.overlay, GLASS_OVERLAY_TINT_ALPHA),
       glassEdge: 'rgba(255,255,255,0.16)',
       glassSheen: 'rgba(255,255,255,0.1)',
       glassHover: 'rgba(255,255,255,0.14)',
@@ -692,6 +697,7 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
   } else {
     Object.assign(t, {
       glassTint: withAlpha(t.panel, LIGHT_GLASS_TINT_ALPHA),
+      glassOverlayTint: withAlpha(t.overlay, GLASS_OVERLAY_TINT_ALPHA),
       glassEdge: withAlpha(t.text1, 0.12),
       glassSheen: 'rgba(255,255,255,0.6)',
       glassHover: withAlpha(t.text1, 0.06),

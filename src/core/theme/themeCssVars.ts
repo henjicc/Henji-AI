@@ -43,6 +43,7 @@ export interface ThemeComponentCssVar {
  */
 export const THEME_COMPONENT_CSS_VARS: readonly ThemeComponentCssVar[] = [
   { name: '--ui-glass-tint', token: 'glassTint', note: '玻璃底（毛玻璃关闭时由 data-ui-blur 规则改实底）' },
+  { name: '--ui-glass-overlay-tint', token: 'glassOverlayTint', note: '浮起来的玻璃底（弹出面板、菜单；毛玻璃关闭时改 overlay 实底）' },
   { name: '--ui-glass-edge', token: 'glassEdge', note: '玻璃受光边' },
   { name: '--ui-glass-sheen', token: 'glassSheen', note: '玻璃顶部高光' },
   { name: '--ui-glass-hover', token: 'glassHover', note: '玻璃上的悬停' },
