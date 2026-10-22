@@ -1,3 +1,4 @@
+import { WorkspaceLayoutMenu } from '@/components/dockLayouts/WorkspaceLayoutMenu'
 import { countVideoEditTiming } from './engine/videoEditFirstFrameTiming'
 import { retainVideoEditProgramWarmup } from './engine/videoEditProgramPool'
 import { ICON_TOOL_SCREEN_RECORDING, UI_ICON_SIZE } from '@/core/theme/icons'
@@ -76,7 +77,7 @@ function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEdi
     {marked && <span className="mr-1 text-xs tabular-nums text-text3" data-video-edit-export-range>导出范围 {videoEditFrameTimecode(marked.startFrame, sequence!.fps)}–{videoEditFrameTimecode(marked.endFrame - 1, sequence!.fps)}</span>}
     <UiIconButton aria-label="撤销" tooltip={undo.tooltip} disabledReason={undo.tooltip} disabled={!undo.enabled} onClick={() => command('undo')}><Undo2  /></UiIconButton>
     <UiIconButton aria-label="重做" tooltip={redo.tooltip} disabledReason={redo.tooltip} disabled={!redo.enabled} onClick={() => command('redo')}><Redo2  /></UiIconButton>
-    <VideoEditLayoutMenu api={api} />
+    <VideoEditLayoutMenu api={api} /><WorkspaceLayoutMenu workspaceId="video_edit" />
     <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-line" />
     <UiButton onClick={() => run(async () => {
       const { setRecordingDestination } = await import('@/features/screenRecording')

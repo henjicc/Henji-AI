@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDockview, type DockviewApi } from 'dockview-react'
-import { defaultVideoEditLayout, dockVideoEditGroup, dockVideoEditPanel, parseVideoEditLayout, resetVideoEditLayout, restoreVideoEditLayout, saveVideoEditLayout, showVideoEditPanel, VIDEO_EDIT_LAYOUT_STORAGE_KEY } from './videoEditDockLayout'
+import { defaultVideoEditLayout, dockVideoEditGroup, dockVideoEditPanel, parseVideoEditLayout, resetVideoEditLayout, showVideoEditPanel, VIDEO_EDIT_LAYOUT_STORAGE_KEY } from './videoEditDockLayout'
 
-vi.mock('@/core/logging', () => ({ createLogger: () => ({ warn: vi.fn() }) }))
+vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), warn: vi.fn() }) }))
 let api: DockviewApi
 let host: HTMLDivElement
 let created: Record<string, number>
@@ -52,26 +52,20 @@ describe('剪辑面板布局', () => {
     expect(api.getPanel('style_kits')!.group).toBe(api.getPanel('effects')!.group)
   })
 
-  it('保存并恢复关闭与浮动状态，全部关闭后仍能按单实例恢复', () => {
+  it('序列化严格解析保留关闭与浮动状态，旧标题使用当前定义', () => {
     resetVideoEditLayout(api)
     api.getPanel('timeline')!.api.close()
     api.addFloatingGroup(api.getPanel('effects')!)
-    saveVideoEditLayout(api)
-    const saved = localStorage.getItem(VIDEO_EDIT_LAYOUT_STORAGE_KEY)!
-    expect(parseVideoEditLayout(saved).panels.timeline).toBeUndefined()
-    // 旧名称保存的布局恢复后改用当前面板名
-    const renamed = JSON.parse(saved) as { panels: Record<string, { title?: string }> }
-    renamed.panels.project.title = '项目素材'
-    expect(parseVideoEditLayout(JSON.stringify(renamed)).panels.project.title).toBe('素材')
-    restoreVideoEditLayout(api)
-    expect(api.getPanel('timeline')).toBeUndefined()
+    const saved = api.toJSON()
+    saved.panels.project.title = '项目素材'
+    const parsed = parseVideoEditLayout(JSON.stringify(saved))
+    expect(parsed.panels.timeline).toBeUndefined()
+    expect(parsed.panels.project.title).toBe('素材')
+    api.fromJSON(parsed, { reuseExistingPanels: true })
     expect(api.getPanel('effects')!.api.location.type).toBe('floating')
     expect(created.program).toBe(1)
-    api.closeAllGroups(); saveVideoEditLayout(api); restoreVideoEditLayout(api)
-    expect(api.totalPanels).toBe(0)
-    const restored = showVideoEditPanel(api, 'program')
-    expect(showVideoEditPanel(api, 'program')).toBe(restored)
-    expect(api.totalPanels).toBe(1)
+    api.closeAllGroups()
+    expect(parseVideoEditLayout(JSON.stringify(api.toJSON())).panels).toEqual({})
   })
 
   it.each(['annotations', 'content', 'tracking', 'color_grade', 'title_templates', 'effects_library', 'presets', 'style_kits'] as const)('%s 打开、重开及浮动贴回都作为检查器标签，不增加默认分组', id => {
@@ -149,11 +143,12 @@ describe('剪辑面板布局', () => {
     duplicate.floatingGroups = [{ data: { id: 'duplicate', views: ['program'] }, position: { left: 0, top: 0, width: 400, height: 300 } }]
     expect(() => parseVideoEditLayout(JSON.stringify(duplicate))).toThrow('重复或缺失')
     const unknown = defaultVideoEditLayout(); unknown.panels.program.contentComponent = 'unregistered'
-    expect(() => parseVideoEditLayout(JSON.stringify(unknown))).toThrow('无效的剪辑面板')
+    expect(() => parseVideoEditLayout(JSON.stringify(unknown))).toThrow('无效的工作区面板')
     const popout = defaultVideoEditLayout(); popout.popoutGroups = []
     expect(() => parseVideoEditLayout(JSON.stringify(popout))).toThrow('不支持')
     localStorage.setItem(VIDEO_EDIT_LAYOUT_STORAGE_KEY, '{broken')
-    restoreVideoEditLayout(api)
+    expect(() => parseVideoEditLayout(localStorage.getItem(VIDEO_EDIT_LAYOUT_STORAGE_KEY)!)).toThrow()
+    resetVideoEditLayout(api)
     expect(api.totalPanels).toBe(8)
     expect(api.groups).toHaveLength(4)
     expect(created.program).toBe(1)

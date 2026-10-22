@@ -1,3 +1,4 @@
+import { bindWorkspaceLayoutDock } from '@/components/dockLayouts/useWorkspaceLayoutPresets'
 import { focusVideoEditPanelElement } from './videoEditPanelFocus'
 import { VideoEditAnnotationsPanel } from '../panels/VideoEditAnnotationsPanel'
 import { VideoEditStylesPanel } from '../panels/VideoEditStylesPanel'
@@ -8,7 +9,6 @@ import { ownerWindowOf } from '@/utils/crossRealmDom'
 import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type IWatermarkPanelProps, type IDockviewPanelProps } from 'dockview-react'
 import 'dockview-react/dist/styles/dockview.css'
 import { UiButton, UiEmpty } from '@/components/ui'
-import { createLogger } from '@/core/logging'
 import { VIDEO_EDIT_FOCUSABLE_PANELS } from '@/core/videoEdit/panels'
 import { focusVideoEditPanel, listVideoEditInstances, subscribeVideoEdit, videoEditRevision, subscribeVideoEditView, type VideoEditInstance } from '../application/videoEditService'
 import { VideoEditPreview } from '../VideoEditPreview'
@@ -26,11 +26,10 @@ import { DockviewHost } from '@/components/DockviewHost'
 import { dockviewHostTheme } from '@/components/dockviewHostTheme'
 import { bindDockDragGestures, dockFloatingGroupsBack, DOCKVIEW_HOST_DND_OPTIONS } from '@/components/dockviewDocking'
 import { VideoEditDockHeaderActions, VideoEditDockTab } from './VideoEditDockChrome'
-import { dockVideoEditGroup, restoreVideoEditLayout, saveVideoEditLayout, showVideoEditPanel, VIDEO_EDIT_PANELS, type VideoEditPanelId } from './videoEditDockLayout'
-import { bindVideoEditPopoutDock, canFloatVideoEditDockSource, floatVideoEditDockSource, focusVideoEditPopoutPanel, isVideoEditPanelPoppedOut, listVideoEditPopouts, resetVideoEditWorkspaceLayout, restoreVideoEditPopouts, trackVideoEditDockPanel } from './popout/videoEditPopouts'
+import { dockVideoEditGroup, showVideoEditPanel, VIDEO_EDIT_PANELS, type VideoEditPanelId } from './videoEditDockLayout'
+import { dockVideoEditPopoutWindow, bindVideoEditPopoutDock, canFloatVideoEditDockSource, floatVideoEditDockSource, focusVideoEditPopoutPanel, isVideoEditPanelPoppedOut, listVideoEditPopouts, resetVideoEditWorkspaceLayout, restoreVideoEditPopouts, trackVideoEditDockPanel } from './popout/videoEditPopouts'
 import { VideoEditPopoutPortals } from './popout/VideoEditPopoutPortals'
 
-const logger = createLogger('features.videoEdit.layout')
 interface DockContext { instance: VideoEditInstance; onError: (reason: unknown) => void; onEffectsAdded?: (effectIds: readonly string[]) => void }
 const Context = createContext<DockContext | null>(null)
 const subscribeHidden = (): (() => void) => () => {}
@@ -152,40 +151,35 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
   const onReady = useCallback(({ api }: DockviewReadyEvent): void => {
     disposeRef.current()
     apiRef.current = api
-    restoreVideoEditLayout(api)
-    // 应用内浮动组已不是入口（重要记录 001）：旧布局里的浮动组恢复后贴回默认方位。
-    dockFloatingGroupsBack(api, group => dockVideoEditGroup(api, group))
     const root = hostRef.current
     bindVideoEditPopoutDock(api, window, root)
     const unbindGestures = root ? bindDockDragGestures(api, { root, canFloat: canFloatVideoEditDockSource, float: (source, at) => floatVideoEditDockSource(api, source, at) }) : () => {}
-    // Dock 只在剪辑已打开时挂载：此时恢复上次浮出的面板，没有剪辑时不会弹窗。
-    restoreVideoEditPopouts(api)
-    // 打开项目时左侧堆叠先显示「素材」：上次停在效果控件等标签时，进来不便找素材。
-    // 只切换那一组的可见标签，随后把激活面板交还时间线，空格播放等快捷键照常作用于时间线。
-    const project = api.getPanel('project')
-    if (project && project.api.location.type === 'grid') {
-      project.api.setActive()
-      const timeline = api.getPanel('timeline')
-      if (timeline && timeline.api.location.type === 'grid' && timeline.group !== project.group) timeline.api.setActive()
-    }
-    // 激活面板只是高亮；键盘焦点也要真正进入时间线，打开项目后直接按空格就能播放。
-    if (api.getPanel('timeline')?.api.location.type === 'grid') focusVideoEditPanelElement('timeline')
+    const unbindLayout = bindWorkspaceLayoutDock('video_edit', api, {
+      beforeApply: () => { for (const entry of listVideoEditPopouts()) dockVideoEditPopoutWindow(entry.key) },
+      capturePreset: () => { for (const entry of listVideoEditPopouts()) dockVideoEditPopoutWindow(entry.key); return api.toJSON() },
+      afterApply: () => dockFloatingGroupsBack(api, group => dockVideoEditGroup(api, group)),
+      onRestored: () => {
+        restoreVideoEditPopouts(api)
+        // Dock 只在剪辑已打开时挂载：此时恢复上次浮出的面板，没有剪辑时不会弹窗。
+        // 打开项目时左侧堆叠先显示「素材」：上次停在效果控件等标签时，进来不便找素材。
+        // 只切换那一组的可见标签，随后把激活面板交还时间线，空格播放等快捷键照常作用于时间线。
+        const project = api.getPanel('project')
+        if (project && project.api.location.type === 'grid') {
+          project.api.setActive()
+          const timeline = api.getPanel('timeline')
+          if (timeline && timeline.api.location.type === 'grid' && timeline.group !== project.group) timeline.api.setActive()
+        }
+        // 激活面板只是高亮；键盘焦点也要真正进入时间线，打开项目后直接按空格就能播放。
+        if (api.getPanel('timeline')?.api.location.type === 'grid') focusVideoEditPanelElement('timeline')
+      },
+      onError,
+    })
     onApiChange(api)
-    let timer: ReturnType<typeof setTimeout> | undefined
-    let failed = false
-    const save = (): void => {
-      clearTimeout(timer); timer = undefined
-      try { saveVideoEditLayout(api); failed = false } catch (error) {
-        if (!failed) { logger.warn('剪辑面板布局保存失败', { event: 'video_edit.layout.save.failed', error }); onError(new Error('面板布局未能保存，下次打开时将恢复原布局。')) }
-        failed = true
-      }
-    }
-    const event = api.onDidLayoutChange(() => { clearTimeout(timer); timer = setTimeout(save, 200) })
     const focus = api.onDidActivePanelChange(value => {
       const panel = value.panel?.id
       if (panel && (VIDEO_EDIT_FOCUSABLE_PANELS as readonly string[]).includes(panel) && listVideoEditInstances().includes(instance)) focusVideoEditPanel(instance.document.id, panel as VideoEditInstance['activePanel'], { reveal: false })
     })
-    disposeRef.current = () => { event.dispose(); focus.dispose(); unbindGestures(); if (timer !== undefined) save() }
+    disposeRef.current = () => { unbindLayout(); focus.dispose(); unbindGestures() }
   }, [onApiChange, onError, instance])
   useEffect(() => () => { bindVideoEditPopoutDock(null); disposeRef.current(); apiRef.current = null; onApiChange(null) }, [onApiChange])
   const context = useMemo(() => ({ instance, onError, onEffectsAdded }), [instance, onError, onEffectsAdded])

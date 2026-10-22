@@ -1,3 +1,5 @@
+import { workspaceLayoutController, WorkspaceLayoutSaveError } from '@/services/workspaceLayouts/workspaceLayoutService'
+import { bindWorkspaceLayoutDock } from '@/components/dockLayouts/useWorkspaceLayoutPresets'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DockviewReact, type DockviewApi, type DockviewGroupPanel, type DockviewReadyEvent, type IDockviewPanelProps } from 'dockview-react'
@@ -9,11 +11,6 @@ import { dockviewHostTheme } from '@/components/dockviewHostTheme'
 import { UiError } from '@/components/ui'
 import { createLogger } from '@/core/logging'
 import type { ImageEditorPanelDefinitionV3 } from '../panelFramework/panelRegistry'
-import {
-  resetImageEditorDockLayoutV3,
-  validateImageEditorDockLayoutV3,
-  type ImageEditorLayoutStoreV3,
-} from '../panelFramework/layout'
 import { ImageEditorDockHeaderActionsV3, ImageEditorDockTabV3 } from './ImageEditorDockChromeV3'
 import { useImageEditorShellV3 } from './ImageEditorShellContextV3'
 
@@ -55,16 +52,16 @@ function registeredPanel(definition: ImageEditorPanelDefinitionV3): (props: IDoc
 }
 
 export function ImageEditorDockV3({
-  layoutStore,
+  workspaceId,
   onApiChange,
   onRestoreCollapsed,
 }: {
-  layoutStore: ImageEditorLayoutStoreV3
+  workspaceId: string
   onApiChange: (api: DockviewApi | null) => void
   onRestoreCollapsed: (ids: readonly string[]) => void
 }): JSX.Element {
   const { t } = useTranslation('ui')
-  const { controller, panels, api, collapsed, restoreDefault } = useImageEditorShellV3()
+  const { panels, api, collapsed, restoreDefault } = useImageEditorShellV3()
   const hostRef = useRef<HTMLDivElement>(null)
   const disposeRef = useRef<() => void>(() => {})
   const collapsedRef = useRef(collapsed)
@@ -83,24 +80,19 @@ export function ImageEditorDockV3({
 
   const onReady = useCallback(({ api: readyApi }: DockviewReadyEvent): void => {
     disposeRef.current()
-    logger.debug('图片面板布局恢复开始', { event: 'image_editor.layout.restore.start', profileId: controller.profile.id })
-    try {
-      const saved = layoutStore.load(controller.profile.id)
-      if (saved === undefined) resetImageEditorDockLayoutV3(readyApi, panels, titles)
-      else {
-        validateImageEditorDockLayoutV3(saved, panels)
-        readyApi.fromJSON(saved.dock)
-        onRestoreCollapsed(saved.collapsed)
-      }
-      logger.debug('图片面板布局恢复完成', { event: 'image_editor.layout.restore.completed' })
-    } catch (error) {
-      logger.warn('图片面板布局恢复失败', { event: 'image_editor.layout.restore.failed', error })
-      resetImageEditorDockLayoutV3(readyApi, panels, titles)
-      onRestoreCollapsed([])
-      setLayoutFailed(true)
-    }
-    const previewGroup = readyApi.getPanel('preview')?.group
-    if (previewGroup) previewGroup.api.locked = true
+    const layoutBinding = bindWorkspaceLayoutDock(workspaceId, readyApi, {
+      capture: () => ({ ...readyApi.toJSON(), collapsed: [...collapsedRef.current] }),
+      afterApply: layout => {
+        onRestoreCollapsed((layout as typeof layout & { collapsed?: string[] }).collapsed ?? [])
+        const previewGroup = readyApi.getPanel('preview')?.group
+        if (previewGroup) previewGroup.api.locked = true
+      },
+      onError: error => {
+        logger.warn('图片面板布局读取或保存失败', { event: 'image_editor.layout.failed', error })
+        if (error instanceof WorkspaceLayoutSaveError) setSaveFailed(true)
+        else setLayoutFailed(true)
+      },
+    })
     onApiChange(readyApi)
     const root = hostRef.current
     const unbind = root ? bindDockDragGestures(readyApi, { root }) : () => {}
@@ -116,24 +108,11 @@ export function ImageEditorDockV3({
     }
     const panelAdded = readyApi.onDidAddPanel(layoutAfterPaint)
     layoutAfterPaint()
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const save = (): void => {
-      timer = undefined
-      try {
-        layoutStore.save(controller.profile.id, { dock: readyApi.toJSON(), collapsed: [...collapsedRef.current] })
-        setSaveFailed(false)
-      } catch (error) {
-        logger.warn('图片面板布局保存失败', { event: 'image_editor.layout.save.failed', error })
-        setSaveFailed(true)
-      }
-    }
-    const event = readyApi.onDidLayoutChange(() => { clearTimeout(timer); timer = setTimeout(save, 200) })
     disposeRef.current = () => {
-      event.dispose(); panelAdded.dispose(); unbind()
+      layoutBinding(); panelAdded.dispose(); unbind()
       if (layoutFrame !== undefined) cancelAnimationFrame(layoutFrame)
-      if (timer !== undefined) { clearTimeout(timer); save() }
     }
-  }, [controller.profile.id, layoutStore, panels, titles, onApiChange, onRestoreCollapsed])
+  }, [workspaceId, onApiChange, onRestoreCollapsed])
 
   useEffect(() => () => { disposeRef.current(); onApiChange(null) }, [onApiChange])
   useEffect(() => {
@@ -175,8 +154,8 @@ export function ImageEditorDockV3({
       onRetry={() => { restoreDefault(); setLayoutFailed(false) }} />}
     {saveFailed && <UiError title={t('imageEditor.v3.panels.saveFailed', { defaultValue: '面板布局未能保存' })}
       message={t('imageEditor.v3.panels.saveFailedMessage', { defaultValue: '图片编辑内容不受影响，下次打开时可能恢复原布局。' })}
-      retryLabel={t('imageEditor.v3.panels.defaultLayout', { defaultValue: '恢复默认布局' })}
-      onRetry={() => { restoreDefault(); setSaveFailed(false) }} />}
+      retryLabel={t('common.retry', { defaultValue: '重试保存' })}
+      onRetry={() => { void workspaceLayoutController(workspaceId).retrySave().then(() => setSaveFailed(false)).catch(() => setSaveFailed(true)) }} />}
     <DockviewHost ref={hostRef} className="h-full min-h-0 min-w-0 flex-1">
       <DockviewReact className="henji-cameraStage-dock h-full min-h-0 w-full" theme={theme} components={components}
         {...DOCKVIEW_HOST_DND_OPTIONS} floatingGroupBounds="boundedWithinViewport" defaultRenderer="always" keyboardNavigation

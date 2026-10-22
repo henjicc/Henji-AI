@@ -1,3 +1,4 @@
+import { WorkspaceLayoutMenu } from '@/components/dockLayouts/WorkspaceLayoutMenu'
 import { UiInlineStatus } from '@/components/ui'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
@@ -493,6 +494,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
         center={<StagePathContextBar />}
         trailing={(
           <>
+            <WorkspaceLayoutMenu workspaceId="camera_stage" />
             {videoProgressLabel && (
               <span role="status" className="max-w-28 truncate text-xs tabular-nums text-text2" title={videoProgressLabel}>
                 {videoProgressLabel}

@@ -340,6 +340,12 @@
       "fingerprint": "f64ff3c850f12db57ae02ab1364b93700c992e57791ab2259f14273c1dc411c4",
       "supportedFrom": 1,
       "minReaderVersion": 1
+    },
+    "workspace-layouts": {
+      "version": 1,
+      "fingerprint": "af337dc2da2f7711ad8d76a80986605b27bc5fb8f8b22ae074ace67da0a502a0",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
     }
   },
   "devBreaks": []

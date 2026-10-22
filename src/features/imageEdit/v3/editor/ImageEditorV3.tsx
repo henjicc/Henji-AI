@@ -76,6 +76,7 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
       </> : <ImageEditorShellV3
         controller={controller}
         contentDisabled={props.contentDisabled}
+        layoutWorkspaceId={props.layoutWorkspaceId}
         layoutStore={imageEditorWorkspaceLayoutStoreV3(props.layoutWorkspaceId ?? props.profileId)}
         commandBar={panelActions => (
           <ImageEditorCommandBarV3

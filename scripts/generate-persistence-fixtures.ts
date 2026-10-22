@@ -1,3 +1,5 @@
+import { createWorkspaceLayoutEnvelope } from '../src/core/workspaceLayouts/schema'
+import { defaultCameraStageLayout } from '../src/features/cameraStage/layout/dockLayout'
 import { MOTION_CANDIDATE_VERSION } from '../src/core/creativeIntent/persistence'
 import { mcpConnectionStorageSchema } from '../src/core/persistence/mcpConnectionSchema'
 import { createRecordingDocument } from '../src/core/screenRecording/document'
@@ -263,6 +265,7 @@ const values: Record<string, unknown> = {
   onboarding: { version: 2, status: 'in_progress', entryReason: 'fresh_install', activeStepId: 'provider', completedStepIds: ['welcome'], configuredProviders: [], verifiedProviders: [], shownHintIds: [], firstTaskPrepared: false, firstTaskCompleted: false, startedAt: timestamp, completedAt: null },
   'subtitle-manifest': { version: SUBTITLE_MANIFEST_VERSION, projectId: document.id, sequenceId: sequence.id, signature: 'golden-signature', startFrame: 0, endFrame: 90, soundClips: [soundClip], soundIdentities: { 'golden-sound-clip': 'golden-sound-identity' }, captions: sequence.captions, committed: true },
   'storyboard-metadata': { version: 1, gridRows: 2, gridCols: 2, frameNotes: ['远景', '特写'] },
+  'workspace-layouts': createWorkspaceLayoutEnvelope({ activeId: 'default', current: defaultCameraStageLayout(), users: [{ id: 'user-golden', name: '个人布局', layout: defaultCameraStageLayout(true) }] }),
   'setting-records': { key: 'user_data_root', value: '{"root":"/persistence-project","locale":"zh"}', type: 'json' },
   'asset-records': { id: 'golden-asset', media_type: 'code', display_name: '代码标题', file_path: '/persistence-project/代码/标题.henjicode', source: 'video-edit', mime_type: 'application/x-henji-code', size_bytes: 100, width: null, height: null, duration_seconds: null, thumbnail_name: null, inspection_status: 'pending', inspection_error: null, file_modified_at: null, content_identity: null, last_used_at: null, created_at: 1791504000000, updated_at: 1791504000000 },
   'generation-presets': { id: 'golden-preset', name: '黄金生成预设', description: null, model_id: null, params: '{}', is_favorite: 0, use_count: 0, created_at: timestamp, updated_at: timestamp },

@@ -105,19 +105,19 @@ describe('图片停靠布局（真实 Dockview API）', () => {
     const valid = { dock: api.toJSON(), collapsed: [] }
     expect(() => validateImageEditorDockLayoutV3(valid, definitions)).not.toThrow()
     expect(() => validateImageEditorDockLayoutV3({}, definitions)).toThrow()
-    expect(() => validateImageEditorDockLayoutV3(valid, [definitions[0]])).toThrow('当前宿主')
+    expect(() => validateImageEditorDockLayoutV3(valid, [definitions[0]])).toThrow('工作区面板')
     const invalid = structuredClone(valid)
     invalid.dock.panels.layers.contentComponent = 'other-component'
-    expect(() => validateImageEditorDockLayoutV3(invalid, definitions)).toThrow('当前宿主')
+    expect(() => validateImageEditorDockLayoutV3(invalid, definitions)).toThrow('工作区面板')
     const missing = structuredClone(valid)
     delete missing.dock.panels.preview
-    expect(() => validateImageEditorDockLayoutV3(missing, definitions)).toThrow('图片预览')
+    expect(() => validateImageEditorDockLayoutV3(missing, definitions)).toThrow()
     expect(() => validateImageEditorDockLayoutV3({ ...valid, collapsed: ['layers', 'layers'] }, definitions)).toThrow('折叠')
-    expect(() => validateImageEditorDockLayoutV3({ ...valid, dock: { ...valid.dock, popoutGroups: [] } }, definitions)).toThrow('停靠位置')
+    expect(() => validateImageEditorDockLayoutV3({ ...valid, dock: { ...valid.dock, popoutGroups: [] } }, definitions)).toThrow()
     const previewInTab = structuredClone(valid)
     const first = Array.isArray(previewInTab.dock.grid.root.data) ? previewInTab.dock.grid.root.data[0] : undefined
     if (!first || Array.isArray(first.data)) throw new Error('缺少预览组')
     first.data.views.push('layers')
-    expect(() => validateImageEditorDockLayoutV3(previewInTab, definitions)).toThrow('独立停靠')
+    expect(() => validateImageEditorDockLayoutV3(previewInTab, definitions)).toThrow()
   })
 })

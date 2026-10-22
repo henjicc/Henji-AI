@@ -1,0 +1,192 @@
+{
+  "version": 1,
+  "minReaderVersion": 1,
+  "content": {
+    "activeId": "default",
+    "current": {
+      "grid": {
+        "width": 1440,
+        "height": 860,
+        "orientation": "HORIZONTAL",
+        "root": {
+          "type": "branch",
+          "data": [
+            {
+              "type": "branch",
+              "size": 1160,
+              "data": [
+                {
+                  "type": "leaf",
+                  "size": 640,
+                  "data": {
+                    "id": "viewport-group",
+                    "views": [
+                      "viewport"
+                    ],
+                    "activeView": "viewport"
+                  }
+                },
+                {
+                  "type": "leaf",
+                  "size": 220,
+                  "data": {
+                    "id": "timeline-group",
+                    "views": [
+                      "timeline"
+                    ],
+                    "activeView": "timeline"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "branch",
+              "size": 280,
+              "data": [
+                {
+                  "type": "leaf",
+                  "size": 400,
+                  "data": {
+                    "id": "objects-group",
+                    "views": [
+                      "objects"
+                    ],
+                    "activeView": "objects"
+                  }
+                },
+                {
+                  "type": "leaf",
+                  "size": 460,
+                  "data": {
+                    "id": "properties-group",
+                    "views": [
+                      "properties"
+                    ],
+                    "activeView": "properties"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "panels": {
+        "viewport": {
+          "id": "viewport",
+          "contentComponent": "viewport",
+          "title": "视口",
+          "renderer": "always"
+        },
+        "objects": {
+          "id": "objects",
+          "contentComponent": "objects",
+          "title": "场景对象",
+          "renderer": "always"
+        },
+        "properties": {
+          "id": "properties",
+          "contentComponent": "properties",
+          "title": "属性",
+          "renderer": "always"
+        },
+        "timeline": {
+          "id": "timeline",
+          "contentComponent": "timeline",
+          "title": "状态关键帧",
+          "renderer": "always"
+        }
+      },
+      "activeGroup": "viewport-group"
+    },
+    "users": [
+      {
+        "id": "user-golden",
+        "name": "个人布局",
+        "layout": {
+          "grid": {
+            "width": 1440,
+            "height": 860,
+            "orientation": "HORIZONTAL",
+            "root": {
+              "type": "branch",
+              "data": [
+                {
+                  "type": "branch",
+                  "size": 1200,
+                  "data": [
+                    {
+                      "type": "leaf",
+                      "size": 740,
+                      "data": {
+                        "id": "viewport-group",
+                        "views": [
+                          "viewport"
+                        ],
+                        "activeView": "viewport"
+                      }
+                    },
+                    {
+                      "type": "leaf",
+                      "size": 120,
+                      "data": {
+                        "id": "timeline-group",
+                        "views": [
+                          "timeline"
+                        ],
+                        "activeView": "timeline"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "branch",
+                  "size": 240,
+                  "data": [
+                    {
+                      "type": "leaf",
+                      "data": {
+                        "id": "inspector-group",
+                        "views": [
+                          "objects",
+                          "properties"
+                        ],
+                        "activeView": "objects"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "panels": {
+            "viewport": {
+              "id": "viewport",
+              "contentComponent": "viewport",
+              "title": "视口",
+              "renderer": "always"
+            },
+            "objects": {
+              "id": "objects",
+              "contentComponent": "objects",
+              "title": "场景对象",
+              "renderer": "always"
+            },
+            "properties": {
+              "id": "properties",
+              "contentComponent": "properties",
+              "title": "属性",
+              "renderer": "always"
+            },
+            "timeline": {
+              "id": "timeline",
+              "contentComponent": "timeline",
+              "title": "状态关键帧",
+              "renderer": "always"
+            }
+          },
+          "activeGroup": "viewport-group"
+        }
+      }
+    ]
+  }
+}

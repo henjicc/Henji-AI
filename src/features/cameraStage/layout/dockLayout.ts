@@ -1,5 +1,7 @@
-import type { DockviewApi } from 'dockview-react'
-import { useCameraStageViewportStore } from '../store/cameraStageViewportStore'
+import { Orientation, type DockviewApi, type SerializedDockview } from 'dockview-react'
+import { registerWorkspaceLayout } from '@/services/workspaceLayouts/workspaceLayoutService'
+import { createLogger } from '@/core/logging'
+const logger = createLogger('features.cameraStage.layout')
 
 /** dockview 布局存储键与默认布局构建（供容器与面板头汉堡菜单共用） */
 
@@ -17,60 +19,28 @@ export const CAMERA_STAGE_PANEL_TITLES = {
   timeline: '状态关键帧',
 } as const
 
-export function buildDefaultLayout(api: DockviewApi): void {
-  api.clear()
-  api.addPanel({ id: 'viewport', component: 'viewport', title: CAMERA_STAGE_PANEL_TITLES.viewport, renderer: 'always' })
-  api.addPanel({
-    id: 'objects',
-    component: 'objects',
-    title: CAMERA_STAGE_PANEL_TITLES.objects,
-    position: { referencePanel: 'viewport', direction: 'right' },
-    initialWidth: 280,
-  })
-  api.addPanel({
-    id: 'properties',
-    component: 'properties',
-    title: CAMERA_STAGE_PANEL_TITLES.properties,
-    position: { referencePanel: 'objects', direction: 'below' },
-  })
-  api.addPanel({
-    id: 'timeline',
-    component: 'timeline',
-    title: CAMERA_STAGE_PANEL_TITLES.timeline,
-    position: { referencePanel: 'viewport', direction: 'below' },
-    initialHeight: 220,
-  })
-}
-
-function syncPanelTitles(api: DockviewApi): void {
-  for (const id of ['viewport', 'objects', 'timeline'] as const) {
-    const panel = api.getPanel(id)
-    if (panel && panel.title !== CAMERA_STAGE_PANEL_TITLES[id]) panel.api.setTitle(CAMERA_STAGE_PANEL_TITLES[id])
+export function defaultCameraStageLayout(focus = false): SerializedDockview {
+  return {
+    grid: { width: 1440, height: 860, orientation: Orientation.HORIZONTAL, root: { type: 'branch', data: [
+      { type: 'branch', size: focus ? 1200 : 1160, data: [
+        { type: 'leaf', size: focus ? 740 : 640, data: { id: 'viewport-group', views: ['viewport'], activeView: 'viewport' } },
+        { type: 'leaf', size: focus ? 120 : 220, data: { id: 'timeline-group', views: ['timeline'], activeView: 'timeline' } },
+      ] },
+      { type: 'branch', size: focus ? 240 : 280, data: focus
+        ? [{ type: 'leaf', data: { id: 'inspector-group', views: ['objects', 'properties'], activeView: 'objects' } }]
+        : [{ type: 'leaf', size: 400, data: { id: 'objects-group', views: ['objects'], activeView: 'objects' } }, { type: 'leaf', size: 460, data: { id: 'properties-group', views: ['properties'], activeView: 'properties' } }],
+      },
+    ] } },
+    panels: Object.fromEntries(Object.entries(CAMERA_STAGE_PANEL_TITLES).map(([id, title]) => [id, { id, contentComponent: id, title, renderer: 'always' as const }])), activeGroup: 'viewport-group',
   }
 }
-
-export function restoreLayout(api: DockviewApi): void {
-  const saved = localStorage.getItem(LAYOUT_STORAGE_KEY)
-  if (saved) {
-    try {
-      api.fromJSON(JSON.parse(saved))
-      syncPanelTitles(api)
-      return
-    } catch {
-      localStorage.removeItem(LAYOUT_STORAGE_KEY)
-    }
-  }
-  buildDefaultLayout(api)
+export const cameraStageLayoutPresets = registerWorkspaceLayout({
+  workspaceId: 'camera_stage', panels: Object.entries(CAMERA_STAGE_PANEL_TITLES).map(([id, title]) => ({ id, title })),
+  builtinPresets: [{ id: 'default', name: '默认', layout: defaultCameraStageLayout() }, { id: 'viewport', name: '专注视口', layout: defaultCameraStageLayout(true) }],
+  readLegacy: () => { const raw = localStorage.getItem(LAYOUT_STORAGE_KEY); return raw ? JSON.parse(raw) as SerializedDockview : undefined },
+})
+export function resetLayout(_api: DockviewApi): void {
+  void cameraStageLayoutPresets.resetActive().catch(error => logger.warn('三维布局重置失败', { error }))
 }
-
-/** 清除记忆布局并重建默认布局 */
-export function resetLayout(api: DockviewApi): void {
-  localStorage.removeItem(LAYOUT_STORAGE_KEY)
-  buildDefaultLayout(api)
-}
-
-/** 重置整个工作区：面板布局 + 四窗格视口来源（命令带与面板菜单共用同一个动作）。 */
-export function resetCameraStageWorkspace(api: DockviewApi): void {
-  resetLayout(api)
-  useCameraStageViewportStore.getState().resetViewports()
-}
+/** 布局入口只重置当前预设，不修改场景或视口来源。 */
+export function resetCameraStageWorkspace(api: DockviewApi): void { resetLayout(api) }
