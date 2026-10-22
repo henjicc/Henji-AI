@@ -7,6 +7,8 @@ import type { WorkspaceId } from '@/core/types/workspace'
 import type { AssetLibraryView } from '@/features/assets/store/assetLibraryStore'
 import { Sparkles } from 'lucide-react'
 import { ICON_SETTINGS } from '@/core/theme/icons'
+import { AppMenuBar } from '@/components/appMenu/AppMenuBar'
+import { useGlobalAppMenus } from '@/components/appMenu/useGlobalAppMenus'
 
 const logger = createLogger('components.WindowControls')
 
@@ -41,13 +43,18 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
   const [isDesktopShell, setIsDesktopShell] = React.useState<boolean>(false)
   const [isMacOS, setIsMacOS] = React.useState<boolean>(false)
   const [isMaximized, setIsMaximized] = React.useState<boolean>(false)
-  const tabs: TabConfig[] = [
+  const tabs: TabConfig[] = React.useMemo(() => [
     { id: 'generation', label: t('tabs.generation') },
     { id: 'nodes', label: t('tabs.canvas') },
     { id: 'videoEdit', label: t('tabs.videoEdit') },
     { id: 'tools', label: t('tabs.tools') },
     { id: 'assets', label: t('tabs.assets') },
-  ]
+  ], [t])
+  const noop = React.useCallback(() => undefined, [])
+  useGlobalAppMenus({
+    activeWorkspace: activeTab, workspaces: tabs, onWorkspaceChange: onTabChange ?? noop,
+    assistantOpen, onToggleAssistant: onAssistantClick ?? noop, assetFloating: assetView === 'floating', onToggleAssets: onAssetClick ?? noop,
+  })
 
   React.useEffect(() => {
     setIsDesktopShell(isDesktopRuntime())
@@ -159,7 +166,11 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
             {maximizeControl}
           </div>
         ) : (
-          <span className="truncate text-13 font-semibold tracking-wide">{t('windowControls.appName')}</span>
+          <>
+            <span className="mr-2 shrink-0 text-13 font-semibold tracking-wide">{t('windowControls.appName')}</span>
+            {/* Windows 菜单栏在应用名后面；macOS 用系统菜单栏（同一份菜单模型），窗口内不画。 */}
+            <AppMenuBar />
+          </>
         )}
       </div>
 

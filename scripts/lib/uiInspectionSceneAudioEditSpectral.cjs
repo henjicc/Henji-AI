@@ -188,6 +188,19 @@ function createAudioEditSpectralScene({ setupToolbox, clickNamedButton }) {
       await page.waitForTimeout(300)
       await capture('spectral-06-100ms')
 
+      // 标题栏菜单栏：音频编辑声明了“编辑 / 音频”菜单；打开“编辑”看撤销重做与快捷键，再用方向键切到“音频”。
+      await page.getByRole('menuitem', { name: '编辑', exact: true }).click()
+      await page.getByRole('menu', { name: '编辑' }).waitFor({ state: 'visible' })
+      assert.ok(await page.getByRole('menuitem', { name: /撤销/ }).count(), '编辑菜单应有撤销')
+      await page.waitForTimeout(300)
+      await capture('spectral-app-menu-edit')
+      await page.keyboard.press('ArrowRight')
+      await page.getByRole('menu', { name: '音频' }).waitFor({ state: 'visible' })
+      assert.equal(await page.getByRole('menu', { name: '编辑' }).count(), 0, '方向键切到“音频”后“编辑”菜单应收起')
+      await page.waitForTimeout(300)
+      await capture('spectral-app-menu-audio')
+      await page.keyboard.press('Escape')
+
       // 连续快速来回缩放：界面线程不能被频谱拖住；停手后目标精度要尽快画齐（其间先借相邻精度垫着）。
       await page.evaluate(() => {
         const longTasks = []
