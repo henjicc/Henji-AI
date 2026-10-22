@@ -58,5 +58,7 @@ it('源、处理结果、声道和精度隔离缓存，失败不会发布半块'
 it('块 key 不依赖视口，且所有计算参数均参与身份', () => {
   const key = spectrogramTileKey('source', 'source', undefined, 2048, 512, undefined, 0)
   expect(spectrogramTileKey('source', 'source', undefined, 2048, 512, undefined, 0)).toBe(key)
+  expect(spectrogramTileKey('source', 'source', undefined, 2048, 512, undefined, 0, 1024)).not.toBe(key)
+  expect(spectrogramTileKey('source', 'source', undefined, 2048, 512, undefined, 0, 2048, true)).not.toBe(key)
   for (const candidate of [spectrogramTileKey('other', 'source', undefined, 2048, 512, undefined, 0), spectrogramTileKey('source', 'edited', 'v2', 2048, 512, undefined, 0), spectrogramTileKey('source', 'source', undefined, 4096, 512, undefined, 0), spectrogramTileKey('source', 'source', undefined, 2048, 256, undefined, 0), spectrogramTileKey('source', 'source', undefined, 2048, 512, 0, 0), spectrogramTileKey('source', 'source', undefined, 2048, 512, undefined, 1)]) expect(candidate).not.toBe(key)
 })

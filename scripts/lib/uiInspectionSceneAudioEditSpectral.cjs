@@ -2,6 +2,8 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { execFile } = require('node:child_process')
+const { promisify } = require('node:util')
 const { createAudioEditDocument, removeAudioEditDocument } = require('./audioEditDocumentFixture.cjs')
 
 /**
@@ -43,7 +45,7 @@ function createAudioEditSpectralScene({ setupToolbox, clickNamedButton }) {
           await leave.click()
           await page.getByRole('button', { name: '返回工具', exact: true }).waitFor({ timeout: 10000 })
         }
-        await removeAudioEditDocument(page, current.id)
+        for (const id of current.ids) await removeAudioEditDocument(page, id)
       } finally {
         fs.rmSync(current.directory, { recursive: true, force: true })
       }
@@ -53,7 +55,7 @@ function createAudioEditSpectralScene({ setupToolbox, clickNamedButton }) {
       const file = path.join(directory, 'voice-with-defects.wav')
       writeFixture(file)
       const project = await createAudioEditDocument(page, { sourcePath: file, name: '波形频谱验收' })
-      fixture = { id: project.id, directory }
+      fixture = { ids: [project.id], directory }
       await setupToolbox(page)
       await clickNamedButton(page, /^(音频编辑)/)
       await page.locator(`[data-project-id="${project.id}"]:visible`).first().click()
@@ -64,6 +66,11 @@ function createAudioEditSpectralScene({ setupToolbox, clickNamedButton }) {
       await page.waitForFunction(() => document.querySelector('[data-audio-spectral-editor] canvas[data-spectrogram-state="ready"]'), null, { timeout: 60000 })
       await page.waitForFunction(() => document.querySelector('[data-audio-spectral-editor] canvas[data-waveform-state="ready"]'), null, { timeout: 30000 })
       await capture('spectral-01-overview')
+
+      const { buildSync } = require('esbuild')
+      const parityBundle = buildSync({ entryPoints: [path.join(__dirname, 'spectrogramGpuParity.ts')], bundle: true, write: false, format: 'iife', globalName: 'spectrogramParity', platform: 'browser' }).outputFiles[0].text
+      const parity = await page.evaluate(source => new Function(`${source}; return spectrogramParity.verifySpectrogramGpuParity();`)(), parityBundle)
+      console.log(`频谱 CPU/GPU 一致性：${JSON.stringify(parity)}`)
 
       // 真容器确认着色器成功绘制，并验证同一数据在设备丢失后回退、恢复。
       const gpu = await page.evaluate(() => {
@@ -167,6 +174,20 @@ function createAudioEditSpectralScene({ setupToolbox, clickNamedButton }) {
       assert.ok(Math.abs(frame - (range.start + (range.end - range.start) * 0.5)) < (range.end - range.start) * 0.03, `拖动播放头应停在刻度中间：${frame}`)
       await capture('spectral-05-playhead')
 
+      // 精确缩到约 100ms，核对视口实际范围，不能仅凭滚轮次数猜测。
+      await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.3)
+      for (let step = 0; step < 20; step++) {
+        const current = await view(), span = current.end - current.start
+        if (Math.abs(span - 4800) <= 4) break
+        await page.mouse.wheel(0, Math.log(4800 / span) / 0.0025)
+        await page.waitForTimeout(100)
+      }
+      const closeup = await view()
+      assert.ok(Math.abs(closeup.end - closeup.start - 4800) <= 4, '放大截图应覆盖约 0.1 秒')
+      await page.waitForFunction(() => document.querySelector('[data-audio-spectral-editor][data-spectrogram-status="ready"] canvas[data-spectrogram-state="ready"]'), null, { timeout: 60000 })
+      await page.waitForTimeout(300)
+      await capture('spectral-06-100ms')
+
       // 工作区布局：三种内置布局切换，每种都完整显示七个面板的标签。
       for (const [name, suffix] of [['口播', 'voice'], ['专注', 'focus'], ['经典', 'classic']]) {
         await page.getByRole('button', { name: /^(工作区|经典|口播|专注)/ }).click()
@@ -176,6 +197,21 @@ function createAudioEditSpectralScene({ setupToolbox, clickNamedButton }) {
         await editor.waitFor({ state: 'visible' })
         await capture(`spectral-layout-${suffix}`)
       }
+
+      // 连续 7 分钟谐波与确定种子的底噪，专门暴露总览的低频块状和周期性接缝。
+      const longFile = path.join(directory, 'harmonics-noise-7min.wav')
+      const { ffmpegPath } = require('./mediaBinaries.cjs')
+      await promisify(execFile)(ffmpegPath, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'aevalsrc=0.15*sin(2*PI*73*t)+0.09*sin(2*PI*146*t)+0.05*sin(2*PI*219*t)+0.025*sin(2*PI*(440*t+20*sin(t/4))):s=48000:d=420', '-f', 'lavfi', '-i', 'anoisesrc=color=pink:amplitude=0.008:sample_rate=48000:duration=420:seed=42', '-filter_complex', '[0:a][1:a]amix=inputs=2:normalize=0', '-ac', '2', '-c:a', 'pcm_s16le', longFile], { windowsHide: true, timeout: 60000 })
+      const longProject = await createAudioEditDocument(page, { sourcePath: longFile, name: '七分钟频谱验收' })
+      fixture.ids.push(longProject.id)
+      await page.getByRole('button', { name: '返回音频列表', exact: true }).click()
+      await page.locator(`[data-project-id="${longProject.id}"]:visible`).first().click()
+      await page.waitForFunction(() => document.querySelector('[data-audio-spectral-editor][data-spectrogram-status="ready"] canvas[data-spectrogram-state="ready"]'), null, { timeout: 120000 })
+      const overview = await view()
+      assert.equal(overview.start, 0)
+      assert.equal(overview.end, 420 * 48000)
+      await page.waitForTimeout(300)
+      await capture('spectral-07-full-7min')
 
     },
   }

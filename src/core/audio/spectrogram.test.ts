@@ -16,6 +16,7 @@ describe('频谱图映射与栅格化', () => {
     }
     expect(spectrogramHzAt(0, 20, 20000, 'log')).toBeCloseTo(20)
     expect(spectrogramHzAt(1, 20, 20000, 'log')).toBeCloseTo(20000)
+    expect(spectrogramHzAt(1, 20, 24000, 'log')).toBe(24000)
   })
 
   it('色表两端与中点', () => {
@@ -24,14 +25,14 @@ describe('频谱图映射与栅格化', () => {
     expect(lut[128 * 4]).toBeGreaterThan(120)
   })
 
-  it('最高频点画在最上面，缩小时一列取覆盖帧里最响的一帧', () => {
+  it('最高频点画在最上面，缩小时混合均值仍保住单帧瑕疵', () => {
     // 频点 8（奈奎斯特，8Hz）全亮，其余全暗；只有第 5 帧有一个短促的亮点在频点 2。
     const source = data((frame, bin) => bin === 8 ? 255 : frame === 5 && bin === 2 ? 255 : 0)
     const pixels = rasterizeSpectrogram(source, { channel: 0, startFrame: 0, endFrame: 32, width: 2, height: 4, minHz: 0, maxHz: 8, scale: 'linear' }, lut)
-    expect(pixels[0]).toBe(255) // 第一行第一列：最高频
+    expect(pixels[0]).toBeGreaterThan(245) // 第一行第一列：最高频
     const bottomRight = (3 * 2 + 1) * 4
     const bottomLeft = (3 * 2) * 4
-    expect(pixels[(2 * 2 + 1) * 4]).toBe(255) // 第二列（帧 4..7）里的频点 2 亮点
+    expect(pixels[(2 * 2 + 1) * 4]).toBeGreaterThan(245) // 第二列（帧 4..7）里的频点 2 亮点
     expect(pixels[(2 * 2) * 4]).toBe(0)
     expect(pixels[bottomLeft]).toBe(0); expect(pixels[bottomRight]).toBe(0)
   })

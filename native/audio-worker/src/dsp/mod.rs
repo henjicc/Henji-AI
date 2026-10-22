@@ -25,6 +25,11 @@ pub struct SpectrogramRequest {
     pub output_path: PathBuf,
     #[serde(default = "default_fft")]
     pub fft_size: usize,
+    /// 省略时窗长等于 FFT 长度；较短的窗补零，不改变时域分辨率。
+    pub window_size: Option<usize>,
+    /// 可选的连续窗口聚合；旧调用仍保持每列一个窗口。
+    #[serde(default)]
+    pub time_pooling: bool,
     pub hop: Option<usize>,
     pub channel: Option<usize>,
     pub start_frame: Option<u64>,
