@@ -48,11 +48,17 @@ export function UiOverflowRow({
   const [compressPinned, setCompressPinned] = useState(false)
   const [measureTick, setMeasureTick] = useState(0)
   const mountedKey = items.map((item) => item.id).join('|') + '#' + hiddenIds.join('|')
+  // 父组件每次渲染都会新建 items 数组：测量只随“有哪些项、优先级与固定”变化，尺寸变化交给 ResizeObserver。
+  // 否则父组件逐帧重渲染（播放、拖动播放头）时每帧都强制同步布局读取全部项宽度。
+  const layoutKey = items.map((item) => `${item.id}:${item.priority}:${item.pinned ? 1 : 0}`).join('|')
+  const itemsRef = useRef(items)
+  itemsRef.current = items
 
   // 每次渲染后测量可见项与入口，再算一次收纳；结果不变时不触发重渲染。
   useLayoutEffect(() => {
     const container = containerRef.current
     if (!container) return
+    const items = itemsRef.current
     for (const [id, element] of itemElements.current) {
       const pinned = items.find((item) => item.id === id)?.pinned
       // 被压缩的 pinned 项保留压缩前的自然宽度
@@ -83,7 +89,7 @@ export function UiOverflowRow({
     const shouldCompress = pinnedWidth + reserve > available
     if (shouldCompress !== compressPinned) setCompressPinned(shouldCompress)
     // measureTick：尺寸观察器触发的重测
-  }, [alwaysShowOverflow, compressPinned, hiddenIds, items, measureTick])
+  }, [alwaysShowOverflow, compressPinned, hiddenIds, layoutKey, measureTick])
 
   // 容器或任一项尺寸变化（窗口缩放、参数值改变了触发器文字）时重算
   useLayoutEffect(() => {

@@ -109,19 +109,31 @@ function put(entries: VideoEditCodeMetadata, definitionId: string, version: Code
 }
 /** Rebuild only default/referenced declarations. Unused historical source is
  * checked when explicitly requested; it is never executed or trusted as IR. */
+/** 打开剪辑时检查代码素材的进度（已完成 / 总数），供“正在打开”界面显示；没有进行中的检查时为 null。 */
+export interface VideoEditCodePreparationProgress { done: number; total: number }
+let preparationProgress: VideoEditCodePreparationProgress | null = null
+const preparationListeners = new Set<() => void>()
+function publishPreparation(value: VideoEditCodePreparationProgress | null): void { preparationProgress = value; for (const listener of preparationListeners) listener() }
+export function videoEditCodePreparationProgress(): VideoEditCodePreparationProgress | null { return preparationProgress }
+export function subscribeVideoEditCodePreparation(listener: () => void): () => void { preparationListeners.add(listener); return () => { preparationListeners.delete(listener) } }
+
 export async function prepareVideoEditCodeMetadata(document: VideoEditDocument): Promise<VideoEditCodeMetadata> {
   const metadata: VideoEditCodeMetadata = new Map()
   initializeVideoEditCodeSourceRuntime()
   const references = videoEditCodeReferences(document)
   // 各版本互不依赖：并发读取与编译（编译检查共用有界的检查会话池），结果按引用顺序写入。
   const unique = [...new Map(references.map(instance => [instance.versionId, instance])).values()]
+  let done = 0
+  if (unique.length) publishPreparation({ done, total: unique.length })
   const compiled = await mapWithConcurrency(unique, CODE_PREPARATION_CONCURRENCY, async instance => {
     const manifest = document.codeMaterials!.find(definition => definition.id === instance.definitionId)!.versions.find(version => version.id === instance.versionId)!
     await loadCodeSourceReferences(manifest)
     const version = codeMaterialSource(document, instance)
     await verifyCodeSourceReferences(version, documentCodeSourceResolver(document))
-    return { instance, version, program: await compileVideoEditCode(version.compilation) }
-  })
+    const program = await compileVideoEditCode(version.compilation)
+    publishPreparation({ done: ++done, total: unique.length })
+    return { instance, version, program }
+  }).finally(() => { if (unique.length) publishPreparation(null) })
   for (const { instance, version, program } of compiled) put(metadata, instance.definitionId, version, program)
   validateCodeMaterialDocument(document, instance => {
     const entry = metadata.get(instance.versionId)

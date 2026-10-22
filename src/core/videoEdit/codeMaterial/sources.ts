@@ -33,7 +33,10 @@ export const codeFilePathSchema = z.string().min(1).refine(value => /^[a-zA-Z0-9
 export const codeSourceHashSchema = z.string().regex(/^[a-f0-9]{64}$/)
 // Bundled third-party author modules (including Three.js) exceed the retired DSL limit.
 export const CODE_AUTHOR_SOURCE_MAX_BYTES = 16 * 1024 ** 2
-export const codeSourceTextSchema = z.string().max(CODE_AUTHOR_SOURCE_MAX_BYTES).refine(value => new TextEncoder().encode(value).byteLength <= CODE_AUTHOR_SOURCE_MAX_BYTES, '单文件源码最多16MiB。')
+const sourceEncoder = new TextEncoder()
+/** 一个 UTF-16 码元在 UTF-8 中最多 3 字节：长度三倍不超限时必然不超限，不必逐次整份编码（每次规范化都会校验全部源码）。 */
+const withinSourceBytes = (value: string): boolean => value.length * 3 <= CODE_AUTHOR_SOURCE_MAX_BYTES || sourceEncoder.encode(value).byteLength <= CODE_AUTHOR_SOURCE_MAX_BYTES
+export const codeSourceTextSchema = z.string().max(CODE_AUTHOR_SOURCE_MAX_BYTES).refine(withinSourceBytes, '单文件源码最多16MiB。')
 export const codeMaterialFilesSchema = z.object({ entry: codeFilePathSchema, files: z.record(codeFilePathSchema, codeSourceTextSchema), resolvedImports: z.record(z.string(), z.record(z.string(), z.string())).optional() }).strict().refine(value => Object.prototype.hasOwnProperty.call(value.files, value.entry), '入口文件不存在。')
 export const codeSourcesSchema = z.array(z.object({ hash: codeSourceHashSchema, source: codeSourceTextSchema }).strict()).superRefine((sources, context) => {
   if (new Set(sources.map(source => source.hash)).size !== sources.length) context.addIssue({ code: 'custom', message: '源码内容表的哈希不能重复。' })
@@ -41,7 +44,7 @@ export const codeSourcesSchema = z.array(z.object({ hash: codeSourceHashSchema, 
 /** `source` is an authoring shorthand only, never a persisted legacy format. */
 export function normalizeCodeMaterialFiles(input: string | CodeMaterialFiles): CodeMaterialFiles {
   const raw = typeof input === 'string' ? { entry: 'main.ts', files: { 'main.ts': input } } : input
-  if (raw && typeof raw === 'object' && raw.files && typeof raw.files === 'object') for (const [path, source] of Object.entries(raw.files)) if (typeof source === 'string' && (source.length > CODE_AUTHOR_SOURCE_MAX_BYTES || new TextEncoder().encode(source).byteLength > CODE_AUTHOR_SOURCE_MAX_BYTES)) throw new CodeMaterialError('SOURCE_LIMIT', `${path} 源码最多16MiB。`)
+  if (raw && typeof raw === 'object' && raw.files && typeof raw.files === 'object') for (const [path, source] of Object.entries(raw.files)) if (typeof source === 'string' && (source.length > CODE_AUTHOR_SOURCE_MAX_BYTES || !withinSourceBytes(source))) throw new CodeMaterialError('SOURCE_LIMIT', `${path} 源码最多16MiB。`)
   const parsed = codeMaterialFilesSchema.safeParse(raw)
   if (!parsed.success) throw new CodeMaterialError('SYNTAX', parsed.error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('；'))
   return parsed.data

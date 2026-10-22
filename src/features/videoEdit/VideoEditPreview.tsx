@@ -203,6 +203,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     if (!visible) { setVideoEditView(instance.document.id, { playing: false }, true); setPreparing(false); setLevels([]); return }
     const previousRelease = programReleases.get(instance) ?? Promise.resolve()
     setRenderFailure(null); setEffectFailure(null); setPictureReady(false)
+    let pictureShown = false
     let stopped = false
     let stopCurrent: () => void = () => {}
     const stop = (): void => { stopped = true; stopCurrent() }
@@ -395,7 +396,11 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       }
       if (presentedSequenceId !== composition.id) { presentedSequenceId = composition.id; firstPresentationAt = performance.now() }
       retainExplanationPixels(surface, target, result.history)
-      if (result.presented === true) { recordVideoEditFirstFrame(instance.document.id, composition.id, { frame: target, decodeMs: result.decodeMs, gpuMs: result.gpuMs, sourceTimestamps: result.sourceTimestamps }); setPictureReady(true) }
+      if (result.presented === true) {
+        recordVideoEditFirstFrame(instance.document.id, composition.id, { frame: target, decodeMs: result.decodeMs, gpuMs: result.gpuMs, sourceTimestamps: result.sourceTimestamps })
+        // 只在首帧时改状态：逐帧调用 setState 会让整个节目面板（含工具栏）跟着每帧重渲染。
+        if (!pictureShown) { pictureShown = true; setPictureReady(true) }
+      }
       lastPresentation = requestedAt
       surface.dataset.requestedAt = String(requestedAt); surface.dataset.renderMs = String(performance.now() - requestedAt)
       surface.dataset.decodeMs = String(result.decodeMs ?? 0); surface.dataset.gpuMs = String(result.gpuMs ?? 0)

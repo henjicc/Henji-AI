@@ -43,6 +43,21 @@ async function sampleProgram(page, startedAt, durationMs) {
   return samples
 }
 
+/** CPU 采样（HENJI_OPEN_PICTURE_PROFILE=1）：按函数自身耗时排序，定位主线程长任务。 */
+async function profileStart(page) {
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send('Profiler.enable'); await cdp.send('Profiler.setSamplingInterval', { interval: 200 }); await cdp.send('Profiler.start')
+  return cdp
+}
+async function profileStop(cdp, file) {
+  const { profile } = await cdp.send('Profiler.stop'); await cdp.detach()
+  fs.writeFileSync(file, JSON.stringify(profile))
+  const self = new Map(); const byId = new Map(profile.nodes.map(node => [node.id, node]))
+  const deltas = profile.timeDeltas ?? []
+  profile.samples.forEach((id, index) => { const node = byId.get(id); const key = `${node.callFrame.functionName || '(anonymous)'} ${node.callFrame.url.split('/').pop()}:${node.callFrame.lineNumber + 1}`; self.set(key, (self.get(key) ?? 0) + (deltas[index] ?? 0) / 1000) })
+  return [...self].sort((left, right) => right[1] - left[1]).slice(0, 25).map(([name, ms]) => ({ name, ms: Math.round(ms) }))
+}
+
 function summarizeSamples(samples) {
   // “正在准备画面”浮层本身有文字和图标，出现时不算画面上屏。
   const visible = sample => sample.spread !== null && sample.spread >= VISIBLE_SPREAD && !sample.preparing
@@ -95,10 +110,25 @@ function createVideoEditOpenPictureScene() {
             await page.getByRole('button', { name: '剪辑', exact: true }).click()
           }
           const after = new Date().toISOString()
+          const profiling = process.env.HENJI_OPEN_PICTURE_PROFILE === '1'
+          const openProfile = profiling ? await profileStart(page) : null
           const startedAt = performance.now()
           await openVideoEditProjectCard(page, projectId)
           const openedMs = Math.round(performance.now() - startedAt)
           const samples = await sampleProgram(page, startedAt, durationMs)
+          if (openProfile) evidence[`profileOpen${evidence.runs.length}`] = await profileStop(openProfile, path.join(root, `open-${evidence.runs.length}.cpuprofile`))
+          if (profiling) {
+            // 拖动播放头 4 秒：记录主线程长任务与节目实际呈现的帧数。
+            const slider = page.getByRole('slider', { name: '剪辑时间定位' }).first(); const box = await slider.boundingBox()
+            await page.evaluate(() => { window.__scrubLong = []; window.__scrubObserver = new PerformanceObserver(list => { for (const entry of list.getEntries()) window.__scrubLong.push(Math.round(entry.duration)) }); window.__scrubObserver.observe({ type: 'longtask' }); window.__scrubFrames = 0; const canvas = document.querySelector('canvas[aria-label="剪辑画面"]'); window.__scrubMo = new MutationObserver(() => window.__scrubFrames++); window.__scrubMo.observe(canvas, { attributes: true, attributeFilter: ['data-presented-frame'] }) })
+            const scrubProfile = await profileStart(page)
+            await page.mouse.move(box.x + 20, box.y + box.height / 2); await page.mouse.down()
+            for (let step = 0; step <= 240; step++) { await page.mouse.move(box.x + 20 + (box.width - 40) * (step / 240) * 0.5, box.y + box.height / 2); await page.waitForTimeout(16) }
+            await page.mouse.up()
+            evidence[`profileScrub${evidence.runs.length}`] = await profileStop(scrubProfile, path.join(root, `scrub-${evidence.runs.length}.cpuprofile`))
+            evidence[`scrub${evidence.runs.length}`] = await page.evaluate(() => { window.__scrubObserver.disconnect(); window.__scrubMo.disconnect(); return { presentedFrames: window.__scrubFrames, longTasks: window.__scrubLong } })
+            console.log('[open-picture-profile]', JSON.stringify({ open: evidence[`profileOpen${evidence.runs.length}`]?.slice(0, 12), scrub: evidence[`scrub${evidence.runs.length}`], scrubTop: evidence[`profileScrub${evidence.runs.length}`].slice(0, 12) }))
+          }
           const worker = await workerSnapshot(page)
           const renders = worker.events.filter(event => event.kind === 'render.completed' || event.kind === 'init.completed' || event.kind === 'update.completed').slice(0, 30).map(({ kind, at, frame, elapsedMs, presented, decodeMs, gpuMs, error, preparationStages }) => ({ kind, at: Math.round(at), frame, elapsedMs: Math.round(elapsedMs), presented, decodeMs, gpuMs, error, preparationStages }))
           const query = keyword => page.evaluate(async ({ after, keyword }) => (await window.henjiNative.logging.queryLogEvents({ date: after.slice(0, 10), afterTimestamp: after, keyword, limit: 3000 })).events, { after, keyword })
