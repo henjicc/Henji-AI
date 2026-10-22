@@ -33,7 +33,8 @@ import { useAudioEditStore } from './store/audioEditStore'
 import { AudioWaveToolbar } from './spectral/AudioWaveWorkspace'
 import { audioWaveActions, useAudioWaveEditor } from './spectral/audioWaveEditorState'
 import { AudioEditDock } from './workspace/AudioEditDock'
-import { AudioEditLayoutMenu } from './workspace/AudioEditLayoutMenu'
+import { WorkspaceLayoutMenu } from '@/components/dockLayouts/WorkspaceLayoutMenu'
+import { AUDIO_EDIT_WORKSPACE_ID } from './workspace/audioEditDockLayout'
 import { AudioEditWorkspaceContext, type AudioEditDeliveryFormat, type AudioEditWorkspace } from './workspace/audioEditWorkspaceContext'
 
 import { applyAudioEditSuggestion, audioEditSuggestionStates, DEFAULT_AUDIO_EDIT_VIEW_SETTINGS, dismissAudioEditSuggestion, editAudioEditRange, setAudioEditBlocks } from '@/core/audioEdit/edits'
@@ -301,7 +302,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
         <UiIconButton size="md" aria-label="查找与替换" on={textSearch.isOpen} aria-expanded={textSearch.isOpen} tooltip={textSearch.isOpen ? '关闭查找替换' : '查找与替换 · Ctrl+F'} onClick={() => { if (textSearch.isOpen) textSearch.close(); else { textSearch.open(); dockApi?.getPanel('transcript')?.api.setActive() } }}><Search /></UiIconButton>
         <AudioEditUndoButton key={project.id} project={project} canUndo={Boolean(state.past.length)} disabled={disabled} onUndo={state.undo} onError={notifyError} onRestored={() => { state.setSelectedBlockIds([]); setWaveSelection(null); showNotification(notificationMessage('audioUndoAll')) }} />
         <UiIconButton size="md" disabled={disabled || !state.future.length} onClick={state.redo} aria-label="重做" tooltip="重做"><Redo2 /></UiIconButton>
-        <AudioEditLayoutMenu api={dockApi} />
+        <WorkspaceLayoutMenu workspaceId={AUDIO_EDIT_WORKSPACE_ID} />
         {/* 一条带只有这一条分隔线：左侧是编辑工具，右侧是交付动作 */}
         <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-line" />
         <VideoEditSendMenu mediaKind="audio" disabled={disabled || Boolean(sourceError)} notify={showNotification} resolveSource={async () => ({ type: 'document', docRef: await videoEditDocumentRef(project.id), includeProcessing: withRx })} />

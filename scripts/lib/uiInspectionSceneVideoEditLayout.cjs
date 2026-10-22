@@ -161,7 +161,7 @@ function createVideoEditLayoutScene() {
         openedJson = JSON.stringify(readVideoEditFile(file))
         evidence.firstPresentedMs = performance.now() - openedAt
         await page.evaluate(() => window.__videoLayoutWatchCanvas(document.querySelector('canvas[aria-label="剪辑画面"]')))
-        await page.getByTitle('布局验收文字', { exact: true }).click()
+        await page.locator('[data-video-edit-clip]').filter({ hasText: '布局验收文字' }).first().click()
         await page.getByRole('slider', { name: '剪辑时间定位' }).click({ position: { x: 120.1, y: 12 } }); await presented(page, 120)
         await page.evaluate(() => { window.__videoLayoutOriginalCanvas = document.querySelector('canvas[aria-label="剪辑画面"]') })
         const baseline = { frame: await page.getByRole('slider', { name: '剪辑时间定位' }).getAttribute('aria-valuenow'), selection: await page.locator('[data-video-edit-effects-clip-name]').first().textContent() }

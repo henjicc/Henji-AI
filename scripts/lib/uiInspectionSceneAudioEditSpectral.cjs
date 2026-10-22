@@ -169,7 +169,7 @@ function createAudioEditSpectralScene({ setupToolbox, clickNamedButton }) {
 
       // 工作区布局：三种内置布局切换，每种都完整显示七个面板的标签。
       for (const [name, suffix] of [['口播', 'voice'], ['专注', 'focus'], ['经典', 'classic']]) {
-        await page.getByRole('button', { name: /^(工作区|经典|口播|专注)$/ }).click()
+        await page.getByRole('button', { name: /^(工作区|经典|口播|专注)/ }).click()
         await page.getByRole('menuitemradio', { name, exact: true }).click()
         await page.waitForTimeout(400)
         assert.equal(await page.locator('.dv-tab').count(), 7, `${name}布局应有七个面板`)

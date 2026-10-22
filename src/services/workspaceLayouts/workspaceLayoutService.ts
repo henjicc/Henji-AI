@@ -136,14 +136,17 @@ export class WorkspaceLayoutController {
   async updateCurrent(layout: SerializedDockview): Promise<void> {
     this.assertReady(); this.publish({ current: this.validate(layout) }); await this.persist()
   }
+  /**
+   * 切换或重置布局先在界面上生效；配置还没读完或读取失败时不写回（不覆盖用户原有配置），
+   * 这样“恢复默认布局”在布局读取失败时仍然可用。
+   */
   async apply(id: string): Promise<void> {
-    this.assertReady()
     const preset = this.state.presets.find(p => p.id === id)
     if (!preset) throw new Error('没有此布局预设，请重新读取预设列表')
     const layout = this.validate(preset.layout)
     this.applyLayout?.(clone(layout))
     this.publish({ activeId: id, current: layout })
-    await this.persist()
+    if (this.state.ready && !this.blocked) await this.persist()
   }
   async retrySave(): Promise<void> { await this.persist() }
   async resetActive(): Promise<void> { await this.apply(this.state.activeId) }

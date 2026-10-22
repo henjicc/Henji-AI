@@ -1,8 +1,11 @@
-import { Orientation, type DockviewApi, type SerializedDockview } from 'dockview-react'
+import { Orientation, type SerializedDockview } from 'dockview-react'
 import { createLogger } from '@/core/logging'
+import { registerWorkspaceLayout } from '@/services/workspaceLayouts/workspaceLayoutService'
 
 const logger = createLogger('features.audioEdit.layout')
-export const AUDIO_EDIT_LAYOUT_STORAGE_KEY = 'henji.audioEdit.dockLayout.v1'
+export const AUDIO_EDIT_WORKSPACE_ID = 'audio_edit'
+/** 接入共享布局服务之前的本机布局，首次加载时只读迁入。 */
+const AUDIO_EDIT_LAYOUT_STORAGE_KEY = 'henji.audioEdit.dockLayout.v1'
 
 export const AUDIO_EDIT_PANELS = [
   { id: 'editor', title: '编辑器' },
@@ -52,7 +55,6 @@ export const AUDIO_EDIT_LAYOUT_PRESETS = [
     leaf({ id: 'right-group', size: 280, views: ['effects', 'process', 'delivery'] }),
   )) },
 ] as const
-export type AudioEditLayoutPresetId = typeof AUDIO_EDIT_LAYOUT_PRESETS[number]['id']
 
 /** 校验保存过的布局：只认识本工作区的面板，每个面板恰好出现一次；不对就退回默认。 */
 export function parseAudioEditLayout(raw: string): SerializedDockview {
@@ -74,22 +76,14 @@ export function parseAudioEditLayout(raw: string): SerializedDockview {
   return value
 }
 
-export function applyAudioEditLayoutPreset(api: DockviewApi, id: AudioEditLayoutPresetId): void {
-  const preset = AUDIO_EDIT_LAYOUT_PRESETS.find(item => item.id === id) ?? AUDIO_EDIT_LAYOUT_PRESETS[0]
-  api.fromJSON(preset.layout())
-}
-
-export function restoreAudioEditLayout(api: DockviewApi, storage: Pick<Storage, 'getItem' | 'removeItem'> = localStorage): void {
-  const saved = storage.getItem(AUDIO_EDIT_LAYOUT_STORAGE_KEY)
-  if (saved) {
-    try { api.fromJSON(parseAudioEditLayout(saved)); return } catch (error) {
-      logger.warn('音频编辑布局无效，已恢复默认', { event: 'audio_edit.layout.invalid', error })
-      storage.removeItem(AUDIO_EDIT_LAYOUT_STORAGE_KEY)
-    }
-  }
-  applyAudioEditLayoutPreset(api, 'classic')
-}
-
-export function saveAudioEditLayout(api: DockviewApi, storage: Pick<Storage, 'setItem'> = localStorage): void {
-  storage.setItem(AUDIO_EDIT_LAYOUT_STORAGE_KEY, JSON.stringify(api.toJSON()))
-}
+/** 布局预设走共享的工作区布局服务（与剪辑、3D 镜头参考、图片编辑同一套：另存、改名、删除、重置、助手读写）。 */
+export const audioEditLayoutPresets = registerWorkspaceLayout({
+  workspaceId: AUDIO_EDIT_WORKSPACE_ID,
+  panels: AUDIO_EDIT_PANELS,
+  builtinPresets: AUDIO_EDIT_LAYOUT_PRESETS.map(preset => ({ id: preset.id, name: preset.name, layout: preset.layout() })),
+  validate: (layout) => { parseAudioEditLayout(JSON.stringify(layout)) },
+  readLegacy: () => {
+    try { const raw = localStorage.getItem(AUDIO_EDIT_LAYOUT_STORAGE_KEY); return raw ? parseAudioEditLayout(raw) : undefined }
+    catch (error) { logger.warn('旧的音频编辑布局无效，改用默认布局', { event: 'audio_edit.layout.legacy_invalid', error }); return undefined }
+  },
+})

@@ -6,7 +6,11 @@ import { dockviewHostTheme } from '@/components/dockviewHostTheme'
 import { bindDockDragGestures, dockFloatingGroupsBack, DOCKVIEW_HOST_DND_OPTIONS } from '@/components/dockviewDocking'
 import { AudioWaveWorkspace } from '../spectral/AudioWaveWorkspace'
 import { AudioEditDeliveryPanel, AudioEditEffectsPanel, AudioEditHistoryPanel, AudioEditProcessPanel, AudioEditSelectionPanel, AudioEditTranscriptPanel } from './AudioEditPanels'
-import { restoreAudioEditLayout, saveAudioEditLayout } from './audioEditDockLayout'
+import { bindWorkspaceLayoutDock } from '@/components/dockLayouts/useWorkspaceLayoutPresets'
+import { createLogger } from '@/core/logging'
+import { AUDIO_EDIT_WORKSPACE_ID } from './audioEditDockLayout'
+
+const logger = createLogger('features.audioEdit.layout')
 
 /**
  * 音频编辑停靠工作区：编辑器、文字稿、处理、效果组、选区、历史、交付七个面板，和剪辑、3D 镜头参考共用同一套
@@ -36,11 +40,13 @@ export function AudioEditDock({ onReady }: { onReady?: (api: DockviewApi) => voi
   const ready = useRef(onReady)
   ready.current = onReady
   const handleReady = useCallback((event: DockviewReadyEvent) => {
-    restoreAudioEditLayout(event.api)
-    dockFloatingGroupsBack(event.api, (group) => group.api.moveTo({ position: 'right' }))
     unbind.current()
-    unbind.current = host.current ? bindDockDragGestures(event.api, { root: host.current }) : () => {}
-    event.api.onDidLayoutChange(() => saveAudioEditLayout(event.api))
+    const gestures = host.current ? bindDockDragGestures(event.api, { root: host.current }) : () => {}
+    const layout = bindWorkspaceLayoutDock(AUDIO_EDIT_WORKSPACE_ID, event.api, {
+      afterApply: () => dockFloatingGroupsBack(event.api, (group) => group.api.moveTo({ position: 'right' })),
+      onError: (error) => logger.warn('音频编辑布局恢复或保存失败', { event: 'audio_edit.layout.failed', error }),
+    })
+    unbind.current = () => { gestures(); layout() }
     ready.current?.(event.api)
   }, [])
   useEffect(() => () => unbind.current(), [])

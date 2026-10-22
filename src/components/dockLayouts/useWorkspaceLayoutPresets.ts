@@ -44,11 +44,12 @@ export function bindWorkspaceLayoutDock(workspaceId: string, api: DockviewApi, o
   // 默认布局立即可见；异步配置读取完成前不订阅保存，避免空白初始布局覆盖用户配置。
   const initial = controller.getSnapshot()
   apply(initial.current, true)
+  // 切换与重置预设随时可用（配置读失败时也能恢复默认布局）；只有自动保存要等配置读完。
+  detach = controller.attach(apply, options.capturePreset ?? capture)
   const connect = (): void => {
     if (disposed) return
     if (controller.getSnapshot().current !== initial.current) apply(controller.getSnapshot().current, true)
     options.onRestored?.()
-    detach = controller.attach(apply, options.capturePreset ?? capture)
     const event = api.onDidLayoutChange(() => {
       if (applying) return
       const serialized = JSON.stringify(capture())
