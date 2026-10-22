@@ -343,7 +343,9 @@ export function Canvas() {
   useCanvasNodeFocusTracking(wrapperRef);
   const focusedNodeId = useFocusedCanvasNodeId();
 
+  const tidy = useCanvasTidy(currentProjectId, nodes, renderGraph.nodes);
   useCanvasShortcuts({
+    tidy,
     wrapperRef,
     reactFlowInstance,
     selectedUploadNodeId: selectedUploadTarget.nodeId,
@@ -401,7 +403,6 @@ export function Canvas() {
   const { onNodeContextMenu, hideNodeContextMenu, nodeContextMenu } = useNodeParameterContextMenu(closeNodeMenu);
   // 低倍率内容 LOD：只在跨越阈值时翻转一次 class，节点正文的显隐全部由 CSS 承担
   const isContentLodLow = useCanvasContentLod();
-  const tidy = useCanvasTidy(currentProjectId, nodes, renderGraph.nodes);
 
   // 有意不开 onlyRenderVisibleElements：裁剪带来的节点挂载/卸载抖动是平移/缩放时
   // 数百毫秒长任务的主要来源（240 节点实测 zoom 长任务 550ms → 0）。

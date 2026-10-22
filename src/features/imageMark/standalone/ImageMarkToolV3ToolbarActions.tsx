@@ -1,4 +1,5 @@
 import { ChevronDown, Download } from 'lucide-react'
+import { ImageEditorFileAppMenus } from './ImageEditorFileAppMenus'
 import { useTranslation } from 'react-i18next'
 
 import { PanelTrigger, UI_TEXT_META_CLASS, UiButton, UiOptionButton } from '@/components/ui'
@@ -56,9 +57,16 @@ export function ImageMarkToolV3ToolbarActions({
     ? resolveImageEditorReadinessReasonV3(host.rasterExportReadiness, t)
       ?? t('imageEditor.v3.host.export.defaultUnavailable')
     : undefined
+  // 两种菜单共用格式名称和不可用原因，不让标题栏另维护一套导出判断。
+  const exportOptions = host.rasterExportOptions.map(({ format, readiness }) => ({
+    format, readiness, label: rasterExportFormatLabel(format, t),
+    disabledReason: readiness.state === 'ready' ? undefined
+      : resolveImageEditorReadinessReasonV3(readiness, t) ?? t('imageEditor.v3.host.export.defaultUnavailable'),
+  }))
 
   return (
     <>
+      <ImageEditorFileAppMenus host={host} onSave={onSave} onSaveAs={onSaveAs} exportOptions={exportOptions} />
       <ImageMarkSourceMenu
         disabled={host.isHostBusy}
         onOpenFile={() => void host.runAfterSave(onOpenFile)}
@@ -143,12 +151,10 @@ export function ImageMarkToolV3ToolbarActions({
                 aria-label={t('imageEditor.v3.host.toolbar.exportMenuAria')}
                 className="flex flex-col gap-0.5"
               >
-                {host.rasterExportOptions
-                  .map(({ format, readiness }) => {
+                {exportOptions
+                  .map(({ format, readiness, label, disabledReason }) => {
                   const disabled = readiness.state !== 'ready'
-                  const reason = disabled
-                    ? resolveImageEditorReadinessReasonV3(readiness, t)
-                    : undefined
+                  const reason = disabledReason
                   return (
                     <UiOptionButton
                       key={format}
@@ -162,7 +168,7 @@ export function ImageMarkToolV3ToolbarActions({
                       size="md" className="w-full gap-2 disabled:cursor-not-allowed disabled:opacity-50"
                       onClick={() => void host.handleRasterExport(format)}
                     >
-                      {rasterExportFormatLabel(format, t)}
+                      {label}
                     </UiOptionButton>
                   )
                   })}

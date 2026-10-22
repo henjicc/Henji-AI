@@ -1,4 +1,5 @@
 import { WorkspaceLayoutMenu } from '@/components/dockLayouts/WorkspaceLayoutMenu'
+import { VideoEditAppMenus } from './VideoEditAppMenus'
 import { countVideoEditTiming } from './engine/videoEditFirstFrameTiming'
 import { retainVideoEditProgramWarmup } from './engine/videoEditProgramPool'
 import { ICON_TOOL_SCREEN_RECORDING, UI_ICON_SIZE } from '@/core/theme/icons'
@@ -171,6 +172,7 @@ export default function VideoEditApp(): React.ReactElement {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [projectId])
   return <div ref={rootRef} className="relative flex h-full min-h-0 flex-col bg-window text-text1" onFocusCapture={event => focusPanel(event.target)} onPointerDownCapture={event => focusPanel(event.target)} onPointerMoveCapture={event => { hovered.current = elementOfEventTarget(event.target) }} onKeyDown={event => dispatchKey(event.nativeEvent)}>
+    <VideoEditAppMenus />
     {instance ? <>
       <ApplicationOperationReviewBanner documentId={instance.document.id} domain="video_edit" label="剪辑" />
       <VideoEditImportProgress projectId={instance.document.id} />

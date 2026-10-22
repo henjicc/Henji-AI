@@ -475,6 +475,12 @@ const updaterApi: HenjiUpdaterApi = {
 }
 
 const api: HenjiNativeApi = {
+  appMenu: {
+    update: menus => nativeInvoke('appMenu:update', menus),
+    onInvoke: listener => subscribeChannel('appMenu:invoke', payload => {
+      if (payload && typeof payload === 'object' && 'id' in payload && typeof payload.id === 'string') listener({ id: payload.id })
+    }),
+  },
   embeddedAgent: createEmbeddedAgentApi(nativeInvoke),
   mcp: createMcpApi(nativeInvoke),
   applicationControl: createApplicationControlApi(nativeInvoke),

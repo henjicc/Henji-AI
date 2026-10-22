@@ -9,6 +9,7 @@ import { Sparkles } from 'lucide-react'
 import { ICON_SETTINGS } from '@/core/theme/icons'
 import { AppMenuBar } from '@/components/appMenu/AppMenuBar'
 import { useGlobalAppMenus } from '@/components/appMenu/useGlobalAppMenus'
+import { useNativeAppMenus } from '@/components/appMenu/useNativeAppMenus'
 
 const logger = createLogger('components.WindowControls')
 
@@ -41,8 +42,9 @@ interface WindowControlsProps {
 const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation', assetView = 'closed', onTabChange, onAssetClick, onOpenSettings, onPrefetchSettings, assistantOpen = false, onAssistantClick }) => {
   const { t } = useI18n('ui')
   const [isDesktopShell, setIsDesktopShell] = React.useState<boolean>(false)
-  const [isMacOS, setIsMacOS] = React.useState<boolean>(false)
+  const [isMacOS, setIsMacOS] = React.useState<boolean>(() => navigator.userAgent.includes('Mac'))
   const [isMaximized, setIsMaximized] = React.useState<boolean>(false)
+  useNativeAppMenus(isDesktopShell && isMacOS)
   const tabs: TabConfig[] = React.useMemo(() => [
     { id: 'generation', label: t('tabs.generation') },
     { id: 'nodes', label: t('tabs.canvas') },

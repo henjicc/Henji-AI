@@ -7,6 +7,7 @@ import { UI_DURATION } from '@/components/ui/motion'
 import { useUiPrimaryBudget } from '@/components/ui/actionPriority'
 import { prefetchWhenIdle } from '@/utils/idlePrefetch'
 import { listPrefetchOrder, workspaceLoaders } from '../workspaces/workspaceLoaders'
+import { AppMenuVisibilityContext } from './appMenu/appMenuVisibility'
 
 // 懒加载工作区组件（loader 复用 workspaceLoaders，保证与空闲预取命中同一份模块缓存）
 const GenerationWorkspace = lazy(workspaceLoaders.generation)
@@ -65,21 +66,21 @@ const TabContainer: React.FC<TabContainerProps> = ({ containerRef, activeTab, in
             {visitedTabs.has('generation') && (
                 <div data-application-surface-id="workspace.generation" className={activeTab === 'generation' ? 'h-full' : 'hidden'}>
                     <Suspense fallback={<LoadingPlaceholder />}>
-                        <GenerationWorkspace />
+                        <AppMenuVisibilityContext.Provider value={activeTab === 'generation'}><GenerationWorkspace /></AppMenuVisibilityContext.Provider>
                     </Suspense>
                 </div>
             )}
             {visitedTabs.has('nodes') && (
                 <div data-application-surface-id="workspace.canvas" className={activeTab === 'nodes' ? 'h-full' : 'hidden'}>
                     <Suspense fallback={<LoadingPlaceholder />}>
-                        <CanvasWorkspace />
+                        <AppMenuVisibilityContext.Provider value={activeTab === 'nodes'}><CanvasWorkspace /></AppMenuVisibilityContext.Provider>
                     </Suspense>
                 </div>
             )}
             {visitedTabs.has('tools') && (
                 <div data-application-surface-id="workspace.tools" className={activeTab === 'tools' ? 'h-full' : 'hidden'}>
                     <Suspense fallback={<LoadingPlaceholder />}>
-                        <ToolboxWorkspace />
+                        <AppMenuVisibilityContext.Provider value={activeTab === 'tools'}><ToolboxWorkspace /></AppMenuVisibilityContext.Provider>
                     </Suspense>
                 </div>
             )}
@@ -91,7 +92,7 @@ const TabContainer: React.FC<TabContainerProps> = ({ containerRef, activeTab, in
             {visitedTabs.has('assets') && (
                 <div data-application-surface-id="workspace.assets" className={activeTab === 'assets' ? 'h-full' : 'hidden'}>
                     <Suspense fallback={<LoadingPlaceholder />}>
-                        <AssetLibraryWorkspace />
+                        <AppMenuVisibilityContext.Provider value={activeTab === 'assets'}><AssetLibraryWorkspace /></AppMenuVisibilityContext.Provider>
                     </Suspense>
                 </div>
             )}

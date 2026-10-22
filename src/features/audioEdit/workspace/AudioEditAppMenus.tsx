@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useAppMenuVisibility } from '@/components/appMenu/appMenuVisibility'
 import { contributeAppMenus } from '@/core/appMenu/appMenu'
 import { useAudioEditWorkspace } from './audioEditWorkspaceContext'
 
@@ -8,14 +9,15 @@ import { useAudioEditWorkspace } from './audioEditWorkspaceContext'
  */
 export function AudioEditAppMenus({ onExport, onUndoAll }: { onExport: () => void; onUndoAll?: () => void }): null {
   const workspace = useAudioEditWorkspace()
+  const visible = useAppMenuVisibility()
   const { history, waveSelection, disabled, editSelection, textSearch } = workspace
   const busy = disabled ? '正在处理，请稍候' : undefined
   const noSelection = waveSelection ? undefined : '先在波形上拖出一段选区'
-  useEffect(() => contributeAppMenus('audioEdit', [
+  useEffect(() => visible ? contributeAppMenus('audioEdit', [
     { menu: 'file', order: 10, items: [{ kind: 'command', id: 'audioEdit.export', label: '导出音频…', ...(busy ? { disabledReason: busy } : {}), run: onExport }] },
     { menu: 'edit', order: 0, items: [
-      { kind: 'command', id: 'audioEdit.undo', label: '撤销', shortcut: 'Ctrl+Z', ...(!history.past.length ? { disabledReason: '没有可撤销的操作' } : busy ? { disabledReason: busy } : {}), run: history.undo },
-      { kind: 'command', id: 'audioEdit.redo', label: '重做', shortcut: 'Ctrl+Shift+Z', ...(!history.future.length ? { disabledReason: '没有可重做的操作' } : busy ? { disabledReason: busy } : {}), run: history.redo },
+      { kind: 'command', id: 'audioEdit.undo', editRole: 'undo', label: '撤销', shortcut: 'Ctrl+Z', ...(!history.past.length ? { disabledReason: '没有可撤销的操作' } : busy ? { disabledReason: busy } : {}), run: history.undo },
+      { kind: 'command', id: 'audioEdit.redo', editRole: 'redo', label: '重做', shortcut: 'Ctrl+Shift+Z', ...(!history.future.length ? { disabledReason: '没有可重做的操作' } : busy ? { disabledReason: busy } : {}), run: history.redo },
       ...(onUndoAll ? [{ kind: 'command' as const, id: 'audioEdit.undoAll', label: '全部撤销…', ...(!history.past.length ? { disabledReason: '没有可撤销的操作' } : {}), run: onUndoAll }] : []),
     ] },
     { menu: 'edit', order: 10, items: [
@@ -27,6 +29,6 @@ export function AudioEditAppMenus({ onExport, onUndoAll }: { onExport: () => voi
       { kind: 'command', id: 'audioEdit.selection.mute', label: '静音选区', shortcut: 'M', ...(noSelection || busy ? { disabledReason: noSelection ?? busy } : {}), run: () => editSelection('mute') },
       { kind: 'command', id: 'audioEdit.selection.restore', label: '恢复选区', ...(noSelection || busy ? { disabledReason: noSelection ?? busy } : {}), run: () => editSelection('restore') },
     ] },
-  ]), [history, waveSelection, busy, noSelection, editSelection, textSearch, onExport, onUndoAll])
+  ]) : undefined, [visible, history, waveSelection, busy, noSelection, editSelection, textSearch, onExport, onUndoAll])
   return null
 }

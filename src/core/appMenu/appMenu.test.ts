@@ -6,6 +6,11 @@ afterEach(() => { disposers.splice(0).forEach(dispose => dispose()) })
 const noop = (): void => undefined
 
 describe('应用菜单登记表', () => {
+  it('编辑语义随模型序列化，不暴露执行函数', () => {
+    disposers.push(contributeAppMenus('edit-role', [{ menu: 'edit', items: [{ kind: 'command', id: 'test.undo', label: '撤销', editRole: 'undo', run: noop }] }]))
+    expect(toNativeAppMenu()[0].submenu[0]).toMatchObject({ editRole: 'undo' })
+    expect(toNativeAppMenu()[0].submenu[0]).not.toHaveProperty('run')
+  })
   it('公共菜单在两端、工作区菜单在中间；同名菜单按分组顺序合并并自动加分隔线；撤回后消失', () => {
     disposers.push(contributeAppMenus('app', [
       { menu: 'help', items: [{ kind: 'command', id: 'app.about', label: '关于', run: noop }] },
@@ -44,5 +49,11 @@ describe('应用菜单登记表', () => {
       { type: 'submenu', id: 'layout', label: '工作区布局', enabled: true, submenu: [{ type: 'normal', id: 'layout.reset', label: '重置', accelerator: 'CmdOrCtrl+Shift+R', enabled: false }] },
     ] })
     expect(toElectronAccelerator('Delete')).toBe('Delete')
+    expect(toElectronAccelerator('Ctrl+Shift+←')).toBe('CmdOrCtrl+Shift+Left')
+    expect(toElectronAccelerator('PgDn')).toBe('PageDown')
+  })
+  it('子菜单禁用后，旧原生菜单回传的子命令同样不可执行', () => {
+    disposers.push(contributeAppMenus('disabled-parent', [{ menu: 'file', items: [{ kind: 'submenu', id: 'export', label: '导出', disabledReason: '正在导出', items: [{ kind: 'command', id: 'export.png', label: 'PNG', run: noop }] }] }]))
+    expect(findAppMenuCommand('export.png')?.disabledReason).toBe('正在导出')
   })
 })

@@ -11,6 +11,7 @@
 
 /** 顶层菜单 id：公共菜单固定为 file、edit、view、window、help；工作区菜单用自己的 id（如 sequence、clip、marker、audio、image、layer）。 */
 export type AppMenuId = string
+export type AppMenuEditRole = 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'selectAll'
 
 export interface AppMenuCommand {
   kind: 'command'
@@ -19,6 +20,8 @@ export interface AppMenuCommand {
   label: string
   /** 显示用的快捷键，统一写 Windows 形式（Ctrl+Shift+Z），macOS 端自动换成 ⌘⇧Z。 */
   shortcut?: string
+  /** 编辑语义仅供原生菜单补缺，不取代工作区 run。 */
+  editRole?: AppMenuEditRole
   /** 不可用时给出原因，菜单里灰显并在悬停说明里显示原因（与按钮的 disabledReason 一致）。 */
   disabledReason?: string
   /** 勾选态（开关类，如“显示智能助手”）。 */
@@ -79,7 +82,10 @@ export function findAppMenuCommand(id: string, menus: readonly AppMenu[] = snaps
   const walk = (items: readonly AppMenuEntry[]): AppMenuCommand | undefined => {
     for (const item of items) {
       if (item.kind === 'command' && item.id === id) return item
-      if (item.kind === 'submenu') { const found = walk(item.items); if (found) return found }
+      if (item.kind === 'submenu') {
+        const found = walk(item.items)
+        if (found) return item.disabledReason ? { ...found, disabledReason: item.disabledReason } : found
+      }
     }
     return undefined
   }
@@ -115,20 +121,22 @@ export interface AppMenuNativeItem {
   type: 'normal' | 'checkbox' | 'separator' | 'submenu'
   id?: string; label?: string; accelerator?: string; enabled?: boolean; checked?: boolean
   submenu?: AppMenuNativeItem[]
+  editRole?: AppMenuEditRole
 }
 export interface AppMenuNativeMenu { id: string; label: string; submenu: AppMenuNativeItem[] }
 
 /** 显示用快捷键（Ctrl+Shift+Z）转 Electron accelerator（CmdOrCtrl+Shift+Z）。 */
 export function toElectronAccelerator(shortcut: string | undefined): string | undefined {
   if (!shortcut) return undefined
-  return shortcut.split('+').map(part => part.trim()).map(part => part.toLowerCase() === 'ctrl' ? 'CmdOrCtrl' : part).join('+')
+  const names: Record<string, string> = { ctrl: 'CmdOrCtrl', '←': 'Left', '→': 'Right', '↑': 'Up', '↓': 'Down', pgup: 'PageUp', pgdn: 'PageDown' }
+  return shortcut.split('+').map(part => part.trim()).map(part => names[part.toLowerCase()] ?? part).join('+')
 }
 
 export function toNativeAppMenu(menus: readonly AppMenu[] = snapshot): AppMenuNativeMenu[] {
   const convert = (items: readonly AppMenuEntry[]): AppMenuNativeItem[] => items.map((item): AppMenuNativeItem => {
     if (item.kind === 'separator') return { type: 'separator' }
     if (item.kind === 'submenu') return { type: 'submenu', id: item.id, label: item.label, enabled: !item.disabledReason, submenu: convert(item.items) }
-    return { type: item.checked === undefined ? 'normal' : 'checkbox', id: item.id, label: item.label, accelerator: toElectronAccelerator(item.shortcut), enabled: !item.disabledReason, ...(item.checked === undefined ? {} : { checked: item.checked }) }
+    return { type: item.checked === undefined ? 'normal' : 'checkbox', id: item.id, label: item.label, accelerator: toElectronAccelerator(item.shortcut), enabled: !item.disabledReason, ...(item.editRole ? { editRole: item.editRole } : {}), ...(item.checked === undefined ? {} : { checked: item.checked }) }
   })
   return menus.map(menu => ({ id: String(menu.id), label: menu.label, submenu: convert(menu.items) }))
 }

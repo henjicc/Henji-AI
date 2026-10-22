@@ -1,3 +1,4 @@
+import { createElectronAppMenu } from './appMenu'
 import { createElectronApplicationControl } from './applicationControl'
 import type { PlatformRuntime } from '@/platform/contracts'
 import { createElectronAiRuntime } from './aiRuntime'
@@ -37,6 +38,7 @@ import { createElectronScreenRecording } from './screenRecording'
 
 export function createElectronPlatform(): PlatformRuntime {
   return {
+    appMenu: createElectronAppMenu(),
     screenRecording: createElectronScreenRecording(),
     embeddedAgent: createElectronEmbeddedAgent(),
     mcp: createElectronMcp(),

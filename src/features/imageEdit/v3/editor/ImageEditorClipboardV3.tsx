@@ -8,10 +8,11 @@ import { copyImageEditClipboardV3, pasteImageEditClipboardV3 } from '../applicat
 import type { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
 import type { ImageEditorV3Controller } from './types'
 import { useImageEditorSessionStoreV3 } from '../store'
+import { ImageEditorAppMenusV3 } from './ImageEditorAppMenusV3'
 
 const logger = createLogger('features.imageEdit.v3.clipboard')
 type Action = 'copy' | 'merged' | 'paste'
-export function ImageEditorClipboardV3({ bus, controller }: { bus: ImageEditCommandBusV3; controller: ImageEditorV3Controller }): JSX.Element {
+export function ImageEditorClipboardV3({ bus, controller, disabled }: { bus: ImageEditCommandBusV3; controller: ImageEditorV3Controller; disabled?: boolean }): JSX.Element {
   const anchor = useRef<HTMLDivElement>(null)
   const operation = useRef<AbortController>()
   const [busy, setBusy] = useState(false)
@@ -47,6 +48,7 @@ export function ImageEditorClipboardV3({ bus, controller }: { bus: ImageEditComm
     return () => { window.removeEventListener('keydown', down, true); operation.current?.abort() }
   }, [bus, controller.sessionId])
   return <div ref={anchor} className="flex min-w-0 items-center gap-1">
+    <ImageEditorAppMenusV3 controller={controller} clipboard={execute} busy={busy} disabled={disabled} />
     <PanelTrigger panelPadding="menu" panelSize="menu" closeOnPanelClick renderPanel={() => <div role="menu" aria-label="图片剪贴板" className="flex flex-col gap-1">
       <UiOptionButton variant="menu" role="menuitem" disabled={busy} onClick={() => { void execute('copy') }}><Copy className={`${UI_ICON_SIZE_CLASS.md}`} />复制图层或选区 Ctrl+C</UiOptionButton>
       <UiOptionButton variant="menu" role="menuitem" disabled={busy} onClick={() => { void execute('merged') }}><Layers className={`${UI_ICON_SIZE_CLASS.md}`} />复制合成结果 Ctrl+Shift+C</UiOptionButton>
