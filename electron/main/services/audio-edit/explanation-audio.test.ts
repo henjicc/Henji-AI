@@ -8,6 +8,7 @@ import type { AudioEditStoredTask } from './task-store'
 import type { RecordingAudioRequest } from '../../../../src/core/audioEdit/recordingAudio'
 import { normalizeTimestampedTranscript } from '../../../../src/core/audioEdit/timestampedTranscript'
 import { ExplanationAudioService } from './explanation-audio'
+import { invokeAudioWorker } from './audio-worker-client'
 
 const ledger = vi.hoisted(() => new Map<string, AudioEditStoredTask & { document_id: string }>())
 const failures = vi.hoisted(() => ({ completion: false }))
@@ -16,6 +17,7 @@ vi.mock('../ai-runtime/native-file-upload', () => ({ scopedUploadFile: vi.fn() }
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), error: vi.fn() }) }))
 vi.mock('../ai-runtime/sdk-runtime', () => ({ sdkRuntimeContext: { transport: { fetch: async () => { throw new Error('REAL_NETWORK_FORBIDDEN') } }, credentials: { get: () => undefined } } }))
 vi.mock('./timestamped-asr', async importOriginal => ({ ...await importOriginal<typeof import('./timestamped-asr')>(), timestampedAsrService: undefined }))
+vi.mock('./audio-worker-client', () => ({ invokeAudioWorker: vi.fn(async (command: { input_path: string; output_path: string }) => { await fs.copyFile(command.input_path, command.output_path); return { sampleRate: 48000 } }) }))
 vi.mock('./task-store', () => ({
   getAudioEditStoredTask: (id: string) => ledger.get(id),
   createAudioEditTask: (input: { requestId:string;projectId:string;inputDigest:string }) => { if (ledger.has(input.requestId)) throw new Error('duplicate'); ledger.set(input.requestId,{request_id:input.requestId,document_id:input.projectId,input_digest:input.inputDigest,state:'queued',provider_task_id:null,result_json:null}) },
@@ -38,6 +40,21 @@ function fixtureAsr(): Pick<TimestampedAsrService,'prepare'|'execute'|'preflight
 beforeEach(async()=>{ root=await fs.mkdtemp(path.join(os.tmpdir(),'henji-recording-test-')); ledger.clear(); failures.completion = false })
 afterEach(async()=>{ await fs.rm(root,{recursive:true,force:true}) })
 describe('E06/E09 零网络录音与转写生命周期',()=>{
+  it('转写只消费预处理副本，成功后清理副本；预处理失败不提交收费请求', async () => {
+    const asr = fixtureAsr(), service = new ExplanationAudioService(root, asr)
+    await service.write({ action: 'write', sessionId, chunkId, sampleRate: 48000, samples: synthetic() })
+    vi.mocked(invokeAudioWorker).mockRejectedValueOnce(new Error('降噪失败'))
+    await expect(service.transcribe(request())).rejects.toThrow('降噪失败')
+    expect(asr.execute).not.toHaveBeenCalled()
+    expect(ledger.size).toBe(0)
+    vi.mocked(asr.execute).mockImplementationOnce(async plan => {
+      expect(plan.audioPath).toContain('normalized.wav')
+      expect(await fs.readFile(plan.audioPath)).toEqual(Buffer.from(await service.read(sessionId, chunkId)))
+      return dto
+    })
+    await service.transcribe(request())
+    expect((await fs.readdir(path.join(root, sessionId))).filter(name => name.startsWith('speech-'))).toEqual([])
+  })
   it.each(['normalize', 'cancel', 'receipt'] as const)('供应商完成后 %s 失败，重载后只解析付费原始结果，不依赖凭据或重新提交', async stage => {
     const asr = fixtureAsr()
     const service = new ExplanationAudioService(root, asr)

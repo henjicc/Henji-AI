@@ -13,12 +13,14 @@ use vst3_host::{
 const PROTOCOL_VERSION: u32 = 1;
 
 mod dsp;
+mod speech_preprocess;
 mod pyramid;
 mod spectral_server;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Command {
+    SpeechPreprocess(speech_preprocess::Request),
     Spectrogram(dsp::SpectrogramRequest),
     SpectralHeal(dsp::HealRequest),
     Declick(dsp::DeclickRequest),
@@ -179,6 +181,7 @@ fn execute(command: Command) -> Result<Value, Box<dyn Error>> {
             plugins.dedup();
             Ok(json!({ "plugins": plugins }))
         }
+        Command::SpeechPreprocess(request) => speech_preprocess::run(request),
         Command::Inspect { plugin_path, sample_rate } => inspect(&plugin_path, sample_rate),
         Command::Process { plugin_path, input_path, output_path, parameters, bypass } => {
             process(&plugin_path, &input_path, &output_path, &parameters, bypass)
