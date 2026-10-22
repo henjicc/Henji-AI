@@ -422,7 +422,6 @@ const audioApi: HenjiAudioApi = {
   transcribeEditProject: (payload) => ipcRenderer.invoke('audioEdit:asr:transcribe', payload),
   exportEditProject: (payload) => nativeInvoke('audioEdit:export', payload),
   listEditProcessors: () => nativeInvoke('audioEdit:processors:list'),
-  editSpectrogram: payload => nativeInvoke('audioEdit:spectrogram', payload),
   spectralTile: payload => nativeInvoke('audioEdit:spectralTile', payload),
   spectralCancel: requestId => nativeInvoke('audioEdit:spectralCancel', { requestId }),
   onSpectralProgress: handler => {

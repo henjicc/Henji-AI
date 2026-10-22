@@ -1,4 +1,4 @@
-import type { AudioEditGainRegion, AudioEditRepair, AudioEditRenderedAudio, AudioEditSpectrogramChunk, AudioEditSpectrogramRequest } from '@/core/audioEdit/regions'
+import type { AudioEditGainRegion, AudioEditRepair, AudioEditRenderedAudio } from '@/core/audioEdit/regions'
 import { audioEditGainRegionsSchema, audioEditRepairsSchema } from '@/core/audioEdit/regions'
 import { getPlatform } from '@/platform/runtime'
 import type { AudioEditSpectralTileRequest, AudioEditSpectralTile, AudioEditSpectralProgress } from '@/core/audioEdit/spectralPyramid'
@@ -12,11 +12,6 @@ export async function setAudioEditRegions(projectId: string, regions: { gainRegi
   if (expectedVersion !== undefined && instance.version !== expectedVersion) throw new Error('音频已发生变化，请重新读取后再修改')
   editAudioEditProject(projectId, document => ({ ...document, ...(gainRegions === undefined ? {} : { gainRegions }), ...(repairs === undefined ? {} : { repairs }) }))
   await flushAudioEditProject(projectId)
-}
-export async function getAudioEditSpectrogram(request: AudioEditSpectrogramRequest): Promise<AudioEditSpectrogramChunk> {
-  await loadAudioEditProject(request.projectId)
-  await flushAudioEditProject(request.projectId)
-  return getPlatform().audioEdit.spectrogram(request)
 }
 const spectralRequests = new Map<string, { cancelled: boolean }>()
 export async function getAudioEditSpectralTile(request: AudioEditSpectralTileRequest): Promise<AudioEditSpectralTile> {
@@ -47,4 +42,10 @@ export async function repairAudioEditRegion(projectId: string, repair: AudioEdit
   if (instance.document.repairs?.some(r => r.id === repair.id)) throw new Error('该修复引用已存在，请修改已有修复或使用新的引用')
   await setAudioEditRegions(projectId, { repairs: [...instance.document.repairs ?? [], repair] }, instance.version)
   return renderAudioEdit(projectId, requestId)
+}
+/** 频谱金字塔取块的唯一入口，供显示端调度器注入。 */
+export const audioEditSpectralClient = {
+  fetch: getAudioEditSpectralTile,
+  cancel: (requestId: string): void => { void cancelAudioEditSpectralTile(requestId).catch(() => undefined) },
+  subscribe: subscribeAudioEditSpectralProgress,
 }

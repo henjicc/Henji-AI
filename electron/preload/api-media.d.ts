@@ -1,4 +1,4 @@
-import type { AudioEditSpectrogramRequest, AudioEditSpectrogramChunk, AudioEditRenderedAudio } from '../../src/core/audioEdit/regions'
+import type { AudioEditRenderedAudio } from '../../src/core/audioEdit/regions'
 import type { AudioEditSpectralTileRequest, AudioEditSpectralTile, AudioEditSpectralProgress } from '../../src/core/audioEdit/spectralPyramid'
 export interface HenjiImageMergeStoryboardImagesPayload {
   frameSources: string[]
@@ -360,7 +360,6 @@ export interface HenjiAudioApi {
   prepareEditProcessing(projectId: string, requestId: string): Promise<void>
   exportEditProject(payload: AudioEditExportRequest): Promise<AudioEditExportResult>
   listEditProcessors(): Promise<AudioEditProcessorDescriptor[]>
-  editSpectrogram(request: AudioEditSpectrogramRequest): Promise<AudioEditSpectrogramChunk>
   spectralTile(request: AudioEditSpectralTileRequest): Promise<AudioEditSpectralTile>
   spectralCancel(requestId: string): Promise<void>
   onSpectralProgress(handler: (progress: AudioEditSpectralProgress) => void): () => void

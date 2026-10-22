@@ -18,7 +18,8 @@ import { useAudioEditWorkspace } from '../workspace/audioEditWorkspaceContext'
 import { AudioSpectralEditor, type AudioPlayheadSource } from './AudioSpectralEditor'
 import type { AudioEditorTool } from './spectralEditorModel'
 import { audioWaveToolForKey, type audioWaveActions, type AudioWaveEditorState } from './audioWaveEditorState'
-import { useAudioEditSpectrogram } from './useAudioEditSpectrogram'
+import { useAudioEditSpectral } from './useAudioEditSpectral'
+import { audioEditSpectralClient } from '../application/audioEditRegions'
 
 const TOOLS: Array<{ id: AudioEditorTool; label: string; icon: React.ReactNode }> = [
   { id: 'time', label: '时间选区 · V', icon: <TextCursor /> },
@@ -130,7 +131,7 @@ export function AudioWaveWorkspace() {
     observer.observe(element)
     return () => { observer.disconnect(); window.clearTimeout(timer) }
   }, [])
-  const spectrogram = useAudioEditSpectrogram(project.id, editor.view, columns, duration, edited ? 'edited' : 'source', project.revision)
+  const spectrogram = useAudioEditSpectral(audioEditSpectralClient, project.id, editor.view, columns, duration, edited ? 'edited' : 'source', project.revision)
   // 标记以剪后时间线为准：文字稿删掉的词和波形上删除的区间都是“删除”，相邻的合并成一段；静音按剪后片段的静音标记；停顿预览是“待处理”。
   const spans = React.useMemo(() => buildProjectAudioEditTimeline(project), [project])
   const pending = workspace.silencePreview.ranges
@@ -170,7 +171,7 @@ export function AudioWaveWorkspace() {
   }} tabIndex={-1}>
     <div className="min-h-0 flex-1">
       <AudioSpectralEditor sampleRate={rate} durationFrames={duration} waveform={waveform}
-        {...(spectrogram.data ? { spectrogram: spectrogram.data } : {})} spectrogramStatus={spectrogram.status} {...(spectrogram.error ? { spectrogramError: spectrogram.error } : {})} onRetrySpectrogram={spectrogram.retry}
+        {...(spectrogram.tiles ? { spectrogram: spectrogram.tiles } : {})} spectrogramStatus={spectrogram.status} {...(spectrogram.error ? { spectrogramError: spectrogram.error } : {})} onRetrySpectrogram={spectrogram.retry}
         view={editor.view} onViewChange={editor.setView} display={editor.display} tool={editor.tool} brushPixels={editor.brushPixels}
         playhead={playheadSource} onSeek={onSeek} displayGain={autoGain ? workspace.previewGain : 1}
         selection={selection ? { start: selection.startFrame, end: selection.endFrame } : null}

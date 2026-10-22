@@ -2,8 +2,6 @@ import { z } from 'zod'
 import { BrowserWindow } from 'electron'
 import { audioEditSpectralTileRequestSchema } from '../../../src/core/audioEdit/spectralPyramid'
 import { getAudioEditSpectralTile, cancelAudioEditSpectralTile, subscribeAudioEditSpectralProgress } from '../services/audio-edit/spectral-pyramid'
-import { audioEditSpectrogramRequestSchema } from '../../../src/core/audioEdit/regions'
-import { getAudioEditSpectrogram } from '../services/audio-edit/spectrogram'
 import { renderAudioEditProject, prepareAudioEditRenderSource } from '../services/audio-edit/render'
 import { registerAudioSampleHandlers } from './audio-samples'
 import { registerExplanationAudioHandlers } from './explanation-audio'
@@ -38,7 +36,6 @@ export function registerAudioIpc(): void {
       if (!window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('audioEdit:spectralProgress', progress)
     }
   })
-  registerIpcHandler('audioEdit:spectrogram', input => audioEditSpectrogramRequestSchema.parse(input), getAudioEditSpectrogram)
   registerIpcHandler('audioEdit:render', input => z.object({ projectId: z.string().min(1), requestId: z.string().optional(), includeProcessing: z.boolean().optional() }).strict().parse(input), async request => {
     const project = await requireAudioEditProject(request.projectId)
     return runAudioEditTask(project.id, 'render', signal => renderAudioEditProject(project, request.includeProcessing ?? project.vstEnabled, signal), request.requestId, JSON.stringify([project, request.includeProcessing]), true)

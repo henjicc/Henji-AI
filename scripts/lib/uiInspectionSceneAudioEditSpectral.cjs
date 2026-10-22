@@ -112,11 +112,11 @@ function createAudioEditSpectralScene({ setupToolbox, clickNamedButton }) {
       const levels = await page.evaluate(async (id) => {
         const rate = 48000
         const read = async (mode) => {
-          const chunk = await window.henjiNative.audio.editSpectrogram({ projectId: id, startFrame: Math.round(rate * 6.4), endFrame: Math.round(rate * 6.6), mode, fftSize: 2048, hop: 2048, channel: 0 })
-          // 返回值覆盖固定块，统计仍只取请求的 6.4–6.6 秒，不能把整块平均进来。
-          const first = Math.max(0, Math.ceil((Math.round(rate * 6.4) - chunk.startFrame) / chunk.hop))
-          const last = Math.min(chunk.timeBins, Math.ceil((Math.round(rate * 6.6) - chunk.startFrame) / chunk.hop))
-          const mean = (low, high) => { let total = 0, count = 0; for (let t = first; t < last; t += 1) for (let bin = low; bin <= high; bin += 1) { total += chunk.values[t * chunk.frequencyBins + bin]; count += 1 } return total / count }
+          // 基础层（每列 512 帧）第 0 块覆盖前 10 秒；高频段 2048 窗的频点号与旧接口一致，取 6.4–6.6 秒的列。
+          const tile = await window.henjiNative.audio.spectralTile({ projectId: id, mode, level: 0, tile: 0, requestId: `heal-check-${mode}-${Date.now()}` })
+          const bins = tile.lowBins + tile.highBins
+          const first = Math.ceil(rate * 6.4 / 512), last = Math.floor(rate * 6.6 / 512)
+          const mean = (low, high) => { let total = 0, count = 0; for (let t = first; t < last; t += 1) for (let bin = low; bin <= high; bin += 1) { total += tile.values[((t - tile.columnStart) * bins + tile.lowBins + bin) * 2 + 1]; count += 1 } return total / count }
           return { whistle: mean(211, 216), voice: mean(12, 14) }
         }
         return { source: await read('source'), edited: await read('edited') }
@@ -188,6 +188,29 @@ function createAudioEditSpectralScene({ setupToolbox, clickNamedButton }) {
       await page.waitForTimeout(300)
       await capture('spectral-06-100ms')
 
+      // 连续快速来回缩放：界面线程不能被频谱拖住；停手后目标精度要尽快画齐（其间先借相邻精度垫着）。
+      await page.evaluate(() => {
+        const longTasks = []
+        const observer = new PerformanceObserver(list => list.getEntries().forEach(entry => longTasks.push(Math.round(entry.duration))))
+        observer.observe({ type: 'longtask' })
+        let worst = 0, last = performance.now(), running = true
+        const tick = (now) => { worst = Math.max(worst, now - last); last = now; if (running) requestAnimationFrame(tick) }
+        requestAnimationFrame(tick)
+        window.__spectralStress = () => { running = false; observer.disconnect(); return { worstFrameMs: Math.round(worst), longTasks } }
+      })
+      for (let step = 0; step < 48; step++) {
+        await page.mouse.wheel(0, Math.floor(step / 6) % 2 === 0 ? 320 : -320)
+        await page.waitForTimeout(25)
+      }
+      const stress = await page.evaluate(() => window.__spectralStress())
+      const settleStart = Date.now()
+      await page.waitForFunction(() => document.querySelector('[data-audio-spectral-editor] canvas[data-spectrogram-detail="exact"]'), null, { timeout: 30000 })
+      const settleMs = Date.now() - settleStart
+      console.log(`频谱连续缩放：${JSON.stringify({ ...stress, settleMs })}`)
+      assert.ok(stress.worstFrameMs < 120, `连续缩放时最长一帧应低于 120ms：${JSON.stringify(stress)}`)
+      assert.ok(stress.longTasks.every(duration => duration < 120), `连续缩放时不应有超过 120ms 的界面长任务：${JSON.stringify(stress)}`)
+      assert.ok(settleMs < 1500, `停手后应在 1.5 秒内画齐目标精度：${settleMs}ms`)
+
       // 工作区布局：三种内置布局切换，每种都完整显示七个面板的标签。
       for (const [name, suffix] of [['口播', 'voice'], ['专注', 'focus'], ['经典', 'classic']]) {
         await page.getByRole('button', { name: /^(工作区|经典|口播|专注)/ }).click()
@@ -215,8 +238,13 @@ function createAudioEditSpectralScene({ setupToolbox, clickNamedButton }) {
       const longProject = await createAudioEditDocument(page, { sourcePath: longFile, name: '七分钟频谱验收' })
       fixture.ids.push(longProject.id)
       await page.getByRole('button', { name: '返回音频列表', exact: true }).click()
+      const openedAt = Date.now()
       await page.locator(`[data-project-id="${longProject.id}"]:visible`).first().click()
       await page.waitForFunction(() => document.querySelector('[data-audio-spectral-editor][data-spectrogram-status="ready"] canvas[data-spectrogram-state="ready"]'), null, { timeout: 120000 })
+      const firstPictureMs = Date.now() - openedAt
+      await page.waitForFunction(() => document.querySelector('[data-audio-spectral-editor] canvas[data-spectrogram-detail="exact"]'), null, { timeout: 120000 })
+      console.log(`七分钟素材：首次出图 ${firstPictureMs}ms，总览画齐 ${Date.now() - openedAt}ms`)
+      assert.ok(Date.now() - openedAt < 8000, '七分钟素材的总览应在 8 秒内画齐（含首次整文件计算）')
       const overview = await view()
       assert.equal(overview.start, 0)
       assert.equal(overview.end, 420 * 48000)

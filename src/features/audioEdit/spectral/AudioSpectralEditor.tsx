@@ -4,7 +4,8 @@ import { UiEmpty, UiError, UiLoading } from '@/components/ui'
 import { UI_TEXT_TIMECODE_CLASS } from '@/components/ui/styleTokens'
 import { WaveformView } from '@/components/waveform/WaveformView'
 import type { WaveformPalette } from '@/components/waveform/waveformDraw'
-import { formatSpectrogramHz, spectrogramNyquist, spectrogramTicks, type SpectrogramData } from '@/core/audio/spectrogram'
+import { formatSpectrogramHz, spectrogramTicks } from '@/core/audio/spectrogram'
+import type { SpectralTileSet } from '@/core/audio/spectralTiles'
 import { AUDIO_SCOPE_COLORS } from '@/core/theme/colorTokens'
 import type { WaveformState } from '@/hooks/useWaveformData'
 import { AUDIO_EDIT_MIN_VIEW_FRAMES, clampViewport, type WaveformViewport } from '../waveformViewport'
@@ -23,7 +24,7 @@ export interface AudioSpectralEditorProps {
   sampleRate: number
   durationFrames: number
   waveform: WaveformState
-  spectrogram?: SpectrogramData
+  spectrogram?: SpectralTileSet
   spectrogramStatus: 'idle' | 'loading' | 'ready' | 'error'
   spectrogramError?: string
   onRetrySpectrogram?: () => void
@@ -113,7 +114,7 @@ function useFrameViewport(view: WaveformViewport, onViewChange: (view: WaveformV
  */
 export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
   const { sampleRate, durationFrames, view, display, tool, selection, spectralSelection } = props
-  const nyquist = props.spectrogram ? spectrogramNyquist(props.spectrogram) : sampleRate / 2
+  const nyquist = (props.spectrogram?.sampleRate ?? sampleRate) / 2
   const [amplitudeZoom, setAmplitudeZoom] = React.useState(1)
   const [frequency, setFrequency] = React.useState<FrequencyView>({ minHz: 20, maxHz: nyquist, scale: 'log' })
   const [split, setSplit] = React.useState(DEFAULT_SPLIT)
@@ -132,7 +133,7 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
   const hoverLine = React.useRef<HTMLDivElement | null>(null)
   const hoverLabel = React.useRef<HTMLSpanElement | null>(null)
   const playheadNodes = React.useRef(new Map<string, HTMLElement>())
-  const channels = props.waveform.data?.pyramid.channelCount ?? props.spectrogram?.channelCount ?? 1
+  const channels = props.waveform.data?.pyramid.channelCount ?? props.spectrogram?.channels ?? 1
   const lanes = React.useMemo(() => Array.from({ length: channels }, (_, index) => index), [channels])
   const viewport = useFrameViewport(view, props.onViewChange)
 
@@ -351,7 +352,7 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
   const spectrumBody = props.spectrogramStatus === 'error'
     ? <UiError message={props.spectrogramError ?? '频谱图没有生成出来。'} {...(props.onRetrySpectrogram ? { onRetry: props.onRetrySpectrogram } : {})} />
     : props.spectrogramStatus === 'loading' && !props.spectrogram ? <UiLoading message="正在生成频谱图…" />
-      : <SpectrogramView data={props.spectrogram} lanes={lanes} startFrame={view.start} endFrame={view.end} minHz={frequency.minHz} maxHz={frequency.maxHz} scale={frequency.scale} label="频谱图" />
+      : <SpectrogramView {...(props.spectrogram ? { tiles: props.spectrogram } : {})} lanes={lanes} startFrame={view.start} endFrame={view.end} minHz={frequency.minHz} maxHz={frequency.maxHz} scale={frequency.scale} label="频谱图" />
 
   return <div className="grid h-full min-h-0 select-none grid-cols-[minmax(0,1fr)_auto] grid-rows-[20px_22px_auto_minmax(0,1fr)] bg-panel" data-audio-spectral-editor data-tool={tool} data-display={display} data-spectrogram-status={props.spectrogramStatus}
     data-view-start={Math.round(view.start)} data-view-end={Math.round(view.end)}>

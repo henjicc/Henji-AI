@@ -25,24 +25,4 @@ export const audioEditRepairsSchema = z.array(audioEditRepairSchema).max(10000)
 export type AudioEditGainRegion = z.infer<typeof audioEditGainRegionSchema>
 export type AudioEditRepair = z.infer<typeof audioEditRepairSchema>
 
-export const audioEditSpectrogramRequestSchema = z.object({
-  projectId: z.string().min(1), startFrame: frame, endFrame: frame,
-  mode: z.enum(['source', 'edited']).default('source'),
-  fftSize: z.number().int().min(256).max(8192).refine(n => (n & (n - 1)) === 0).default(2048),
-  /** 实际 Hann 窗长；省略保持旧行为，短于 FFT 时补零。 */
-  windowSize: z.number().int().min(256).max(8192).refine(n => (n & (n - 1)) === 0).optional(),
-  /** 总览列覆盖连续窗口，防止大 hop 跳过短促瑕疵。 */
-  timePooling: z.boolean().optional(),
-  /** 相邻两列的间隔（采样帧）；未启用 timePooling 时保持每列一个窗口。 */
-  hop: z.number().int().positive().max(1 << 24).optional(), channel: frame.optional(), requestId: z.string().min(1).optional(),
-}).strict().refine(r => r.endFrame > r.startFrame, '频谱范围无效')
-  .refine(r => r.windowSize === undefined || r.windowSize <= r.fftSize, '频谱窗长不能超过 FFT 大小')
-export type AudioEditSpectrogramRequest = z.input<typeof audioEditSpectrogramRequestSchema>
-export interface AudioEditSpectrogramChunk {
-  sampleRate: number; channels: number; fftSize: number; hop: number
-  /** 返回固定块覆盖范围，起点可能早于请求；长范围从 endFrame 继续，消费者按时间戳裁取。 */
-  startFrame: number; endFrame: number; timeBins: number; frequencyBins: number
-  /** channel-major, then time, then ascending frequency; dB = value / 255 * 120 - 120. */
-  values: Uint8Array
-}
 export interface AudioEditRenderedAudio { audioPath: string; durationFrames: number; sampleRate: number; channels: number; revision: number }

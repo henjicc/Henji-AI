@@ -1,6 +1,7 @@
 import React from 'react'
 import { SPECTROGRAM_COLORMAP_HEX } from '@/core/theme/colorTokens'
-import { buildSpectrogramLut, rasterizeSpectrogram, type SpectrogramData, type SpectrogramScale } from '@/core/audio/spectrogram'
+import { buildSpectrogramLut, type SpectrogramScale } from '@/core/audio/spectrogram'
+import { rasterizeSpectralTiles, spectralCoverage, type SpectralTileSet } from '@/core/audio/spectralTiles'
 import { createSpectrogramGl, type SpectrogramGl } from './spectrogramGl'
 import { createLogger } from '@/core/logging'
 
@@ -10,7 +11,8 @@ let sharedLut: Uint8ClampedArray | undefined
 const spectrogramLut = (): Uint8ClampedArray => (sharedLut ??= buildSpectrogramLut(SPECTROGRAM_COLORMAP_HEX))
 
 export interface SpectrogramViewProps {
-  data?: SpectrogramData
+  /** 频谱金字塔的已到块；version 变化即重画。 */
+  tiles?: SpectralTileSet
   /** 自上而下画哪些声道，每个声道各占一行；默认全部。 */
   lanes?: readonly number[]
   /** 可见区间（源采样帧）。 */
@@ -27,9 +29,9 @@ export interface SpectrogramViewProps {
 
 /**
  * 频谱图（声音能量随时间与频率的分布）。只负责绘制；选区、画笔与缩放等交互由宿主叠在上面。
- * GPU 纹理仅随数据更新；设备丢失时用独立的二维画布回退，原画布保留以接收恢复事件。
+ * 块按槽常驻显存，只上传新到的块；设备丢失时用独立的二维画布回退，原画布保留以接收恢复事件。
  */
-export const SpectrogramView = React.memo(function SpectrogramView({ data, lanes, startFrame, endFrame, minHz, maxHz, scale = 'log', boost, className, label }: SpectrogramViewProps) {
+export const SpectrogramView = React.memo(function SpectrogramView({ tiles, lanes, startFrame, endFrame, minHz, maxHz, scale = 'log', boost, className, label }: SpectrogramViewProps) {
   const host = React.useRef<HTMLDivElement | null>(null)
   const canvas = React.useRef<HTMLCanvasElement | null>(null)
   const fallback = React.useRef<HTMLCanvasElement | null>(null)
@@ -89,25 +91,28 @@ export const SpectrogramView = React.memo(function SpectrogramView({ data, lanes
       const context = cpu ? element.getContext('2d') : null
       const gpu = cpu ? null : renderer.current
       if (!context && !gpu) return
-      if (!data || !(endFrame > startFrame)) { context?.clearRect(0, 0, width, height); gpu?.clear(); element.dataset.spectrogramState = 'empty'; return }
-      const channels = lanes ?? Array.from({ length: data.channelCount }, (_, index) => index)
+      if (!tiles || !tiles.version || !(endFrame > startFrame)) { context?.clearRect(0, 0, width, height); gpu?.clear(); element.dataset.spectrogramState = 'empty'; delete element.dataset.spectrogramDetail; return }
+      const channels = lanes ?? Array.from({ length: tiles.channels }, (_, index) => index)
       const laneHeight = Math.max(1, Math.floor(height / Math.max(1, channels.length)))
       const lut = spectrogramLut()
-      try { gpu?.upload(data) } catch (error) { logger.warn('频谱纹理上传失败', { event: 'spectrogram.upload.failed', error }); gpu?.dispose(); renderer.current = null; setCpu(true); return }
-      channels.forEach((channel, lane) => {
-        const rows = lane === channels.length - 1 ? height - laneHeight * lane : laneHeight
-        if (rows <= 0) return
-        if (gpu) { gpu.draw({ channel, startFrame, endFrame, width, height: rows, minHz, maxHz, scale, boost }, height - laneHeight * lane - rows); return }
-        const pixels = rasterizeSpectrogram(data, { channel, startFrame, endFrame, width, height: rows, minHz, maxHz, scale, boost }, lut,
-          channels.length === 1 ? buffer.current : undefined)
-        if (channels.length === 1) buffer.current = pixels
-        context?.putImageData(new ImageData(pixels as Uint8ClampedArray<ArrayBuffer>, width, rows), 0, laneHeight * lane)
-      })
+      try {
+        channels.forEach((channel, lane) => {
+          const rows = lane === channels.length - 1 ? height - laneHeight * lane : laneHeight
+          if (rows <= 0) return
+          if (gpu) { gpu.draw(tiles, { channel, startFrame, endFrame, width, height: rows, minHz, maxHz, scale, boost }, height - laneHeight * lane - rows); return }
+          const pixels = rasterizeSpectralTiles(tiles, { channel, startFrame, endFrame, width, height: rows, minHz, maxHz, scale, boost }, lut,
+            channels.length === 1 ? buffer.current : undefined)
+          if (channels.length === 1) buffer.current = pixels
+          context?.putImageData(new ImageData(pixels as Uint8ClampedArray<ArrayBuffer>, width, rows), 0, laneHeight * lane)
+        })
+      } catch (error) { logger.warn('频谱显卡绘制失败', { event: 'spectrogram.gpu.draw_failed', error }); gpu?.dispose(); renderer.current = null; setCpu(true); return }
       element.dataset.spectrogramState = 'ready'
+      // 供验收与诊断：视口是否已全部用目标精度画出（其余为借用相邻精度的过渡画面）。
+      element.dataset.spectrogramDetail = spectralCoverage(tiles, { startFrame, endFrame, width })
     })
     return () => cancelAnimationFrame(frame)
   // eslint-disable-next-line react-hooks/exhaustive-deps -- laneKey stands for the lanes array
-  }, [size, pixelRatio, data, laneKey, startFrame, endFrame, minHz, maxHz, scale, boost, cpu, generation])
+  }, [size, pixelRatio, tiles, tiles?.version, laneKey, startFrame, endFrame, minHz, maxHz, scale, boost, cpu, generation])
 
   return <div ref={host} className={`relative h-full min-w-0 bg-media ${className ?? ''}`}>
     <canvas ref={canvas} className={cpu ? 'hidden' : 'block h-full w-full'} data-spectrogram-state={cpu ? undefined : 'empty'} {...(label && !cpu ? { role: 'img', 'aria-label': label } : { 'aria-hidden': true })} />

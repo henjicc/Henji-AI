@@ -221,7 +221,20 @@ impl Store {
             "coveredFrames":covered,"done":done});
         let mut temporary = tempfile::NamedTempFile::new_in(&self.directory)?;
         serde_json::to_writer(&mut temporary, &manifest)?;
-        temporary.persist(self.directory.join("manifest.json"))?;
+        // Windows 上主进程正在读清单时替换会被拒绝访问；读取只持有很短时间，稍等重试，不能让整遍计算失败。
+        let target = self.directory.join("manifest.json");
+        let mut attempt = 0;
+        loop {
+            match temporary.persist(&target) {
+                Ok(_) => break,
+                Err(error) if error.error.kind() == std::io::ErrorKind::PermissionDenied && attempt < 100 => {
+                    temporary = error.file;
+                    attempt += 1;
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                Err(error) => return Err(error.error.into()),
+            }
+        }
         Ok(manifest)
     }
 }

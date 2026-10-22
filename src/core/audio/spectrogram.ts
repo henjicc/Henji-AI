@@ -1,29 +1,11 @@
-import { buildSpectrumTexture, sampleSpectrum, type SpectrumTexture } from './spectrogramTexture'
-
 /*
- * 频谱图的纯计算：色表、频率轴映射与栅格化。数据来自音频 Worker 的 spectrogram 命令
- * （每声道每帧每频点一个 u8，0..255 对应 -120..0 dB），这里只负责把它画成像素，不做 FFT。
+ * 频谱图的纯计算：色表与频率轴映射。数据与栅格化见 spectralTiles.ts（频谱金字塔块）。
  */
-
-export interface SpectrogramData {
-  sampleRate: number
-  fftSize: number
-  hop: number
-  /** 第一列左边界对应的源采样帧；STFT 中心位于 startFrame + hop / 2。 */
-  startFrame: number
-  frameCount: number
-  binCount: number
-  channelCount: number
-  /** 声道优先、帧次之、频点最后（低频到高频）。 */
-  values: Uint8Array
-}
 
 export type SpectrogramScale = 'log' | 'linear'
 
 /** 对数轴的下限；低于它的频率在对数轴上没有意义（直流附近）。 */
 export const SPECTROGRAM_MIN_LOG_HZ = 20
-
-export function spectrogramNyquist(data: Pick<SpectrogramData, 'sampleRate'>): number { return data.sampleRate / 2 }
 
 /** 0..1 的纵向位置（0 = 底部）对应的频率。 */
 export function spectrogramHzAt(position: number, minHz: number, maxHz: number, scale: SpectrogramScale): number {
@@ -65,50 +47,6 @@ export function buildSpectrogramLut(stops: readonly string[]): Uint8ClampedArray
     lut[level * 4 + 3] = 255
   }
   return lut
-}
-
-export interface SpectrogramRasterRequest {
-  channel: number
-  /** 可见区间（源采样帧）。 */
-  startFrame: number
-  endFrame: number
-  width: number
-  height: number
-  minHz: number
-  maxHz: number
-  scale: SpectrogramScale
-  /** 亮度补偿：把 u8 读数整体抬高（正数更亮），用来让安静的素材也看得清。 */
-  boost?: number
-}
-
-const rasterTextures = new WeakMap<SpectrogramData, SpectrumTexture>()
-
-/** CPU 回退与 GPU 使用同一时间金字塔、插值坐标和峰值/能量混合规则。 */
-export function rasterizeSpectrogram(data: SpectrogramData, request: SpectrogramRasterRequest, lut: Uint8ClampedArray, out?: Uint8ClampedArray): Uint8ClampedArray {
-  const { width, height } = request
-  const pixels = out && out.length === width * height * 4 ? out : new Uint8ClampedArray(width * height * 4)
-  let texture = rasterTextures.get(data)
-  if (!texture) { texture = buildSpectrumTexture(data, 4096, 2048); rasterTextures.set(data, texture) }
-  const channel = Math.min(Math.max(0, request.channel), data.channelCount - 1)
-  const binHz = data.sampleRate / data.fftSize
-  const span = Math.max(1e-9, request.endFrame - request.startFrame)
-  const boost = Math.round(request.boost ?? 0)
-  const rows = Array.from({ length: height }, (_, row) => {
-    const hz = (p: number): number => spectrogramHzAt(p, request.minHz, request.maxHz, request.scale) / binHz
-    return { low: hz(1 - (row + 1) / height), high: hz(1 - row / height), center: hz(1 - (row + 0.5) / height) }
-  })
-  for (let column = 0; column < width; column++) {
-    const left = (request.startFrame - data.startFrame + span * column / width) / data.hop
-    const right = (request.startFrame - data.startFrame + span * (column + 1) / width) / data.hop
-    for (let row = 0; row < height; row++) {
-      const frequency = rows[row]
-      const value = sampleSpectrum(texture, channel, left, right, frequency.low, frequency.high, frequency.center)
-      const index = (right <= 0 || left >= data.frameCount ? 0 : Math.min(255, Math.max(0, Math.round(value) + boost))) * 4
-      const at = (row * width + column) * 4
-      pixels[at] = lut[index]; pixels[at + 1] = lut[index + 1]; pixels[at + 2] = lut[index + 2]; pixels[at + 3] = 255
-    }
-  }
-  return pixels
 }
 
 /** 频率刻度：在可见频率范围内取约 count 个整齐的刻度值（对数轴取 1-2-5 序列）。 */
