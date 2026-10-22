@@ -1,3 +1,4 @@
+import type { VideoEditContentTarget, VideoEditLookaheadScope } from './videoEditDecodeLookahead'
 import { codeMediaInputKey, codeMediaInputComposition } from '@/core/videoEdit/codeMediaInput'
 import { codeFilterInputComposition } from '@/core/videoEdit/codeFilterInput'
 import type { AuthorGpuInputs } from './videoEditAuthorModule'
@@ -15,7 +16,7 @@ import { isShaderGraphTransition, shaderGraphTransitionSpec } from '@/core/video
 import type { VideoEditEffect } from '@/core/videoEdit/compositing'
 import { evaluateVideoEditClip, evaluateVideoEditBuiltinParameters, videoEditClipValue } from '@/core/videoEdit/keyframes'
 import { videoEditClipMedia, videoEditNestedComposition, videoEditDuration, activeVideoEditClips, audibleVideoEditClips, clipSourceSeconds, videoEditVisibleTracks, type VideoEditClip, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
-import { videoEditNestedFrame } from '@/core/videoEdit/nestedSequences'
+import { videoEditNestedFrame, videoEditNestedPictureFrame, videoEditNestedPictureKey } from '@/core/videoEdit/nestedSequences'
 import { assertVideoEditSequenceGraph, VIDEO_EDIT_MAX_SEQUENCE_DEPTH } from '@/core/videoEdit/sequenceGraph'
 import { VideoEditCodePicture } from './videoEditCodePicture'
 import { videoEditNestedAudio } from './videoEditNestedAudio'
@@ -150,7 +151,7 @@ export class VideoEditRenderer {
   /** The paused frame a playback schedule was built for ahead of play (see `armPlayback`). */
   private armedFrame?: number
   private armExpiry?: ReturnType<typeof setTimeout>
-  private readonly images = new Map<string, { path: string; controller: AbortController; pending: Promise<ImageBitmap>; bytes: number; ready: boolean }>()
+  private readonly images = new Map<string, { path: string; controller: AbortController; pending: Promise<ImageBitmap>; bytes: number; ready: boolean; predecoded?: boolean }>()
   private imageLoads = 0
   private readonly imageQueue: Array<() => void> = []
   private disposed = false
@@ -196,50 +197,79 @@ export class VideoEditRenderer {
   }
   private ensureCompositor(): VideoEditGpuCompositor {
     if (this.disposed) throw new DOMException('剪辑渲染已关闭。', 'AbortError')
-    if (!this.compositor) { this.compositor = this.nestedOwner?.compositor?.fork(this.canvas, () => this.capturePresentation) ?? new VideoEditGpuCompositor(this.canvas, undefined, () => this.capturePresentation, (durationMs, stage = 'ready') => this.timing?.(`compositor.${stage}`, durationMs)); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor) }
+    if (!this.compositor) { this.compositor = this.nestedOwner?.compositor?.fork(this.canvas, () => this.capturePresentation) ?? new VideoEditGpuCompositor(this.canvas, undefined, () => this.capturePresentation, (durationMs, stage = 'ready') => this.timing?.(`compositor.${stage}`, durationMs), () => this.onPlaybackIdle?.()); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor) }
     return this.compositor!
   }
   /** Image media decoded ahead for code clips about to start; kept until those clips draw them (or the warm-up expires). */
   private readonly warmImages = new Set<string>()
-  private warmImagesTimer?: ReturnType<typeof setTimeout>
-  /**
-   * The first frame of a top-level code clip or code effect starting in (frame, frame + within], not in `skip`.
-   * Program playback warms it ahead (`warmAhead`) so entering the clip does not stall.
-   */
-  upcomingCodeStart(frame: number, within: number, skip: ReadonlySet<string>): { frame: number; key: string } | undefined {
-    if (!this.previewWidth || this.nestedOwner) return undefined
-    const visible = videoEditVisibleTracks(this.document)
-    let best: { frame: number; key: string } | undefined
-    for (const clip of this.document.clips) {
-      if (clip.start <= frame || clip.start > frame + within || !visible.has(clip.track) || !(clip.kind === 'code' || activeVideoEditEffects(clip).some(effect => effect.code))) continue
-      // Prerendered: playback draws the cache file there, the clip itself never runs.
-      if (this.cachedWindow(clip.start)) continue
-      const key = `${this.document.revision}:${clip.id}`
-      if (!skip.has(key) && (!best || clip.start < best.frame)) best = { frame: clip.start, key }
-    }
-    return best
+  private readonly warmScopes = new Set<string>()
+  onPlaybackIdle?: () => void
+  private speculativeImageLoads = 0
+  private get lookaheadOwner(): VideoEditRenderer { return this.nestedOwner?.lookaheadOwner ?? this }
+  private lookaheadRenderers(): VideoEditRenderer[] {
+    const renderers = new Set<VideoEditRenderer>([this])
+    for (const renderer of renderers) for (const entry of [...renderer.nestedPictures.values(), ...renderer.codeInputs.values(), ...renderer.filterInputs.values()]) renderers.add(entry.renderer)
+    return [...renderers]
   }
-  /** Compiles and draws one discarded frame of the code clips starting at `frame`, concurrently with playback. */
-  async warmAhead(frame: number, signal: AbortSignal): Promise<string[]> {
-    if (this.disposed || !this.previewWidth || this.nestedOwner) return []
-    const document = this.document
-    const clips = activeVideoEditClips(document, frame).filter(clip => clip.kind === 'code' || activeVideoEditEffects(clip).some(effect => effect.code))
-    if (!clips.length) return []
-    const compositor = this.ensureCompositor()
-    const { VideoEditCodeSources } = await import('./videoEditCodeSources')
-    if (this.disposed || this.document !== document || signal.aborted) return []
-    this.codeSources ??= new VideoEditCodeSources(document, () => compositor.code())
-    const images = new Map<string, ImageBitmap>()
-    for (const id of new Set(clips.flatMap(clip => [...codeMaterialImageIds(clip.code), ...activeVideoEditEffects(clip).flatMap(effect => [...codeMaterialImageIds(effect.code)])]))) {
-      const media = document.media.find(value => value.id === id && value.kind === 'image')
-      if (!media) continue
-      this.warmImages.add(id)
-      images.set(id, await this.image(media))
+  get waitingForPresentation(): boolean { return this.compositor?.waitingForPresentation === true }
+  readonly lookaheadMetrics = { imagePrepared: 0, imageHits: 0, codePrepared: 0, codeHits: 0, budgetSkipped: 0 }
+  private nestedPicture(child: VideoEditComposition, key: string): { renderer: VideoEditRenderer; tail: Promise<unknown> } {
+    const owner = this.nestedOwner ?? this
+    let entry = owner.nestedPictures.get(key)
+    if (!entry) {
+      const renderer = new VideoEditRenderer(child, this.previewWidth, undefined, 64 * 1024 ** 2, this.frames, owner)
+      renderer.setRenderDivisor(this.renderDivisor)
+      entry = { renderer, tail: Promise.resolve() }; owner.nestedPictures.set(key, entry)
     }
-    clearTimeout(this.warmImagesTimer)
-    this.warmImagesTimer = setTimeout(() => this.warmImages.clear(), 10_000)
-    if (this.disposed || this.document !== document || signal.aborted) return []
-    return this.codeSources.warmAhead(document, clips, frame, videoEditRenderSize(document.width, document.height, this.renderDivisor), images, signal)
+    return entry
+  }
+  private lookaheadRenderer(scopes: readonly VideoEditLookaheadScope[], create: boolean): VideoEditRenderer | undefined {
+    return scopes.reduce<VideoEditRenderer | undefined>((renderer, scope) => {
+      if (!renderer) return undefined
+      if (scope.input && scope.parent) {
+        let entry = renderer.codeInputs.get(scope.key)
+        if (!entry && create) {
+          const child = new VideoEditRenderer(scope.document, undefined, undefined, 1, this.frames, renderer, renderer.sequencePath)
+          entry = { renderer: child, tail: Promise.resolve(), document: scope.parent, sourceKey: scope.input.sampleKey, ownerKey: `code-input:${scope.key}` }
+          renderer.codeInputs.set(scope.key, entry)
+        }
+        return entry?.renderer
+      }
+      const owner = renderer.nestedOwner ?? renderer
+      return (create ? renderer.nestedPicture(scope.document, scope.key) : owner.nestedPictures.get(scope.key))?.renderer
+    }, this)
+  }
+  /** 仅保护当前窗口内的缓存；切换/停止后撤销保护，由正常渲染清理资源。 */
+  retainLookahead(targets: readonly VideoEditContentTarget[]): void {
+    this.warmScopes.clear(); this.warmImages.clear()
+    for (const renderer of this.lookaheadRenderers()) renderer.warmImages.clear()
+    for (const target of targets) {
+      for (const scope of target.scopes) this.warmScopes.add(scope.key)
+      if (target.media) this.lookaheadRenderer(target.scopes, false)?.warmImages.add(target.media.id)
+    }
+  }
+  /** 只做模块/元数据和图片准备，不渲染废弃帧，不向节目 GPU 队列插入作者绘制。 */
+  async prepareLookahead(target: VideoEditContentTarget, signal: AbortSignal): Promise<boolean> {
+    if (this.disposed || signal.aborted) return false
+    if (target.media && this.lookaheadRenderer(target.scopes, false)?.images.has(target.media.id)) return true
+    if (target.media && this.speculativeImageLoads > 0) { this.lookaheadMetrics.budgetSkipped++; return false }
+    const renderers = this.lookaheadRenderers()
+    const bytes = renderers.reduce((sum, renderer) => sum + [...renderer.images.values()].reduce((sum, image) => sum + image.bytes, 0), 0)
+    if (renderers.length >= 12 && !this.lookaheadRenderer(target.scopes, false) || target.media && bytes + target.media.width * target.media.height * 4 > 256 * 1024 ** 2) { this.lookaheadMetrics.budgetSkipped++; return false }
+    const renderer = this.lookaheadRenderer(target.scopes, true)!
+    if (target.media) {
+      renderer.warmImages.add(target.media.id)
+      if (renderer.images.has(target.media.id)) return true
+      await renderer.image(target.media, true, signal)
+      this.lookaheadMetrics.imagePrepared++
+    } else {
+      const compositor = renderer.ensureCompositor()
+      const { VideoEditCodeSources } = await import('./videoEditCodeSources')
+      if (signal.aborted || renderer.disposed) return false
+      renderer.codeSources ??= new VideoEditCodeSources(renderer.document, () => compositor.code(), undefined, () => { this.lookaheadMetrics.codeHits++ })
+      this.lookaheadMetrics.codePrepared += await renderer.codeSources.prepareAhead(target.document, [target.clip], signal)
+    }
+    return true
   }
   /** Only devices/pipelines: no project media, render targets or sound are opened during workspace warmup. */
   async prepareGpu(): Promise<void> { await this.ensureCompositor().prepare() }
@@ -258,7 +288,7 @@ export class VideoEditRenderer {
     await compositor.prepare()
     const { VideoEditCodeSources } = await import('./videoEditCodeSources')
     if (!current()) return
-    this.codeSources ??= new VideoEditCodeSources(document, () => compositor.code())
+    this.codeSources ??= new VideoEditCodeSources(document, () => compositor.code(), undefined, () => { this.lookaheadOwner.lookaheadMetrics.codeHits++ })
     await this.codeSources.prepare(document, clips, frame, current, undefined, { preparationOnly: true })
   }
   /** Preview only (task 4.9): the canvas, composition targets and owned pictures are 1/divisor of the sequence size. */
@@ -321,16 +351,25 @@ export class VideoEditRenderer {
     }
     return source
   }
-  private image(media: VideoEditMedia): Promise<ImageBitmap> {
+  private image(media: VideoEditMedia, speculative = false, signal?: AbortSignal): Promise<ImageBitmap> {
     let image = this.images.get(media.id)
     if (!image) {
       const controller = new AbortController()
-      const native = this.boundedImageLoad(controller.signal, async () => {
+      const cancel = (): void => controller.abort()
+      signal?.addEventListener('abort', cancel, { once: true })
+      const load = async (): Promise<ImageBitmap> => {
         const started = performance.now()
         const response = await fetch(media.path, { signal: controller.signal }); if (!response.ok) throw videoEditSourceReadError(media.name, new Error(String(response.status)))
         const bitmap = await createImageBitmap(await response.blob())
-        recordVideoEditPreparation('imageDecode', performance.now() - started)
+        recordVideoEditPreparation(speculative ? 'lookaheadImageDecode' : 'imageDecode', performance.now() - started)
         return bitmap
+      }
+      // 推测解码独占自己的单并发许可，不能排在节目两条前台图片许可之前。
+      const owner = this.lookaheadOwner
+      if (speculative) owner.speculativeImageLoads++
+      const native = (speculative ? load() : this.boundedImageLoad(controller.signal, load)).finally(() => {
+        signal?.removeEventListener('abort', cancel)
+        if (speculative) owner.speculativeImageLoads--
       }).then(bitmap => {
         if (this.disposed || controller.signal.aborted || this.images.get(media.id)?.pending !== pending) { bitmap.close(); throw new DOMException('原图片已取消。', 'AbortError') }
         if (bitmap.width < 1 || bitmap.height < 1 || bitmap.width > 8192 || bitmap.height > 8192) { bitmap.close(); throw new Error('图片边长须在1到8192像素之间。') }
@@ -339,7 +378,7 @@ export class VideoEditRenderer {
         // 超预算时先释放拖动中暂留的空闲图片（最旧的先），仍放不下才报错。
         for (const key of [...this.idleImages.keys()]) { if (others() + bytes <= 256 * 1024 ** 2) break; this.idleImages.delete(key); this.releaseImage(key) }
         if (others() + bytes > 256 * 1024 ** 2) { bitmap.close(); throw new Error('解码图片超过256MiB预算，请减少同时显示的图片。') }
-        const entry = this.images.get(media.id)!; entry.bytes = bytes; entry.ready = true
+        const entry = this.images.get(media.id)!; entry.bytes = bytes; entry.ready = true; entry.predecoded = speculative
         return bitmap
       })
       let abort!: () => void
@@ -692,7 +731,7 @@ export class VideoEditRenderer {
    * no canvas readback, bitmap copy or external upload is required. */
   private async prepareCodeInputs(document: VideoEditComposition, active: VideoEditClip[], frame: number, sequential: boolean, quality: EffectQuality, current: () => boolean, context: NestedFrameContext, path: string[]): Promise<Map<string, VideoEditCodePicture>> {
     const requests = active.flatMap(clip => Object.entries(clip.code?.parameters ?? {}).flatMap(([parameter, reference]) => isCodeImageReference(reference) && reference.kind !== 'image' ? [{ clip, parameter, reference, source: codeMediaInputComposition(document, clip, reference, frame) }] : []))
-    const keep = new Set(requests.map(request => request.source.sessionKey))
+    const keep = new Set([...requests.map(request => request.source.sessionKey), ...(this.nestedOwner ?? this).warmScopes])
     if (keep.size > 32) throw new Error('同时读取的视频画面超过32份，请减少输入。')
     await this.disposeCodeInputs(keep)
     let shared = context.inputs.get(this)
@@ -726,7 +765,7 @@ export class VideoEditRenderer {
             await session.renderer.updateDocument(source.document)
             session.sourceKey = source.sampleKey; session.document = document
           }
-          const result = await session.renderer.render(source.frame, sequential, false, current, undefined, { context, key: targetKey, ownerKey: session.ownerKey, path, opaqueBackground: true }, quality)
+          const result = await session.renderer.render(source.frame, false, false, current, undefined, { context, key: targetKey, ownerKey: session.ownerKey, path, opaqueBackground: true }, quality)
           if (!current() || !result.presented || !result.nestedPicture) throw new DOMException('旧视频输入画面已取消。', 'AbortError')
           await result.completion
           if (!current()) throw new DOMException('旧视频输入画面已取消。', 'AbortError')
@@ -815,7 +854,7 @@ export class VideoEditRenderer {
     if (!this.codeSources && (composite || active.some(clip => ['code', 'graphic'].includes(clip.kind) || activeVideoEditEffects(clip).length))) {
       const { VideoEditCodeSources } = await import('./videoEditCodeSources')
       if (this.disposed) throw new DOMException('剪辑渲染已关闭。', 'AbortError')
-      this.codeSources ??= new VideoEditCodeSources(document, () => this.compositor!.code())
+      this.codeSources ??= new VideoEditCodeSources(document, () => this.compositor!.code(), undefined, () => { this.lookaheadOwner.lookaheadMetrics.codeHits++ })
     }
     const imageIds = new Set(active.flatMap(clip => [...codeMaterialImageIds(clip.code), ...activeVideoEditEffects(clip).flatMap(effect => [...codeMaterialImageIds(effect.code)]), ...(clip.kind === 'image' ? [videoEditClipMedia(document, clip)?.id ?? ''] : [])]))
     const imageMedia = [...imageIds].map(id => {
@@ -824,7 +863,11 @@ export class VideoEditRenderer {
       return media
     }).filter(media => media.kind === 'image')
     if (imageMedia.length > 32 || imageMedia.reduce((sum, media) => sum + media.width * media.height * 4, 0) > 256 * 1024 ** 2) throw new Error('可见图片超过32份或256MiB预算，请减少同时显示的图片。')
-    for (const id of imageIds) this.warmImages.delete(id)
+    for (const id of imageIds) {
+      this.warmImages.delete(id)
+      const image = this.images.get(id)
+      if (image?.predecoded) { image.predecoded = false; this.lookaheadOwner.lookaheadMetrics.imageHits++ }
+    }
     for (const id of this.images.keys()) if (!imageIds.has(id) && !this.warmImages.has(id)) this.releaseImage(id)
     const imagesReady = (async () => {
       const inputs = new Map<string, ImageBitmap | VideoEditCodePicture>(await Promise.all(imageMedia.map(async media => [media.id, await this.image(media)] as const)))
@@ -858,22 +901,15 @@ export class VideoEditRenderer {
       if (clip.kind === 'sequence') {
         const child = videoEditNestedComposition(document, clip)!
         if (path.includes(child.id) || path.length >= VIDEO_EDIT_MAX_SEQUENCE_DEPTH) throw new Error('嵌套序列存在循环或超过可渲染层数。')
-        const sourceFrame = videoEditNestedFrame(document, clip, child, frame, !Number.isInteger(frame))
-        const childFrame = frame < clip.start || frame >= clip.start + clip.duration ? Math.min(videoEditDuration(child) - 1, sourceFrame) : sourceFrame
-        const childKey = child.multicam ? `${child.id}:${clip.multicamCameraId ?? child.multicam.cameras[0].id}` : child.id
+        const childFrame = videoEditNestedPictureFrame(document, clip, child, frame)
+        const childKey = videoEditNestedPictureKey(child, clip)
         const key = `${quality}:${childKey}:${childFrame}`
         let picture = nestedContext.pictures.get(key)
         if (!picture) {
           const size = videoEditRenderSize(child.width, child.height, this.renderDivisor)
           nestedContext.bytes += size.width * size.height * 8
           if (nestedContext.bytes > 512 * 1024 ** 2) throw new Error('当前嵌套画面超过显存预算，请降低回放分辨率或减少同时显示的嵌套片段。')
-          const owner = this.nestedOwner ?? this
-          let entry = owner.nestedPictures.get(childKey)
-          if (!entry) {
-            const renderer = new VideoEditRenderer(child, this.previewWidth, undefined, 64 * 1024 ** 2, this.frames, owner)
-            renderer.setRenderDivisor(this.renderDivisor)
-            entry = { renderer, tail: Promise.resolve() }; owner.nestedPictures.set(childKey, entry)
-          }
+          const entry = this.nestedPicture(child, childKey)
           const targetKey = `nested:frame:${childFrame}`
           const keys = nestedContext.keys.get(childKey) ?? new Set<string>(); keys.add(targetKey); nestedContext.keys.set(childKey, keys)
           const renderer = entry.renderer
@@ -1066,7 +1102,7 @@ export class VideoEditRenderer {
     }
     if (!nestedRender && !keepLive) {
       for (const [id, entry] of this.nestedPictures) if (nestedContext.keys.has(id)) (await entry.renderer.compositor?.code())?.releaseNestedFrames(nestedContext.keys.get(id)!)
-      for (const id of retireIdle(this.idleNested, [...this.nestedPictures.keys()].filter(id => !nestedContext.keys.has(id)), scrubLimit)) {
+      for (const id of retireIdle(this.idleNested, [...this.nestedPictures.keys()].filter(id => !nestedContext.keys.has(id) && !this.warmScopes.has(id)), scrubLimit)) {
         const entry = this.nestedPictures.get(id); this.nestedPictures.delete(id); await entry?.renderer.dispose()
       }
     }

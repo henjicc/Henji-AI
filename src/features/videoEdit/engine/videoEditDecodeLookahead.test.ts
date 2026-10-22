@@ -108,3 +108,30 @@ it('预算不足仅记录放弃，不打开；暂停防抖后才启动，停止�
   await vi.advanceTimersByTimeAsync(200)
   expect(backend.canPreopen).toHaveBeenCalledTimes(count)
 })
+
+it('前台仍有流水帧时不开始前瞻，完成后每次只发一个任务', async () => {
+  vi.useFakeTimers()
+  const { composition } = fixture(), { backend, calls } = harness()
+  let idle = false
+  const scheduler = new VideoEditDecodeLookahead(backend as unknown as VideoEditNativeFrames, media => media, { idle: () => idle, prepare: async () => true, retain: () => {} })
+  scheduler.beforeFrame(composition, 0, true); scheduler.update(composition, 0, true, [])
+  await vi.advanceTimersByTimeAsync(10); expect(calls).toHaveLength(0)
+  idle = true; scheduler.update(composition, 0, true, [])
+  await vi.advanceTimersByTimeAsync(10); expect(calls).toHaveLength(1)
+  idle = false; scheduler.beforeFrame(composition, 1, true); calls[0].finish()
+  await vi.advanceTimersByTimeAsync(10); expect(calls).toHaveLength(1)
+  scheduler.cancel()
+})
+
+it('浏览器回退仍复用同一图片和代码前瞻队列，不依赖原生预算接口', async () => {
+  vi.useFakeTimers()
+  const { composition, base } = fixture()
+  composition.media[0] = { ...composition.media[0], kind: 'image' }
+  composition.clips = [{ ...base, kind: 'image' }]
+  const prepare = vi.fn(async (_target: unknown, _signal: AbortSignal) => true)
+  const scheduler = new VideoEditDecodeLookahead(undefined, media => media, { idle: () => true, prepare, retain: () => {} })
+  scheduler.beforeFrame(composition, 0, true); scheduler.update(composition, 0, true, [])
+  await vi.advanceTimersByTimeAsync(10)
+  expect(prepare).toHaveBeenCalledOnce(); expect(prepare.mock.calls[0][0]).toMatchObject({ kind: 'image', media: { id: 'a' } })
+  scheduler.cancel()
+})

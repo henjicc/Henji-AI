@@ -214,7 +214,7 @@ it('嵌套合成共享父 GPU 设备，子合成器销毁不销毁父设备，�
   await compositor.blank(64, 64, 0, 1 / 30)
   await compositor.dispose(); expect(state.destroyedManagers).toBe(destroyed + 1)
 })
-function copyFixture(fence: () => Promise<void>, capture?: () => ((pixels: Promise<ImageBitmap>) => void) | undefined) {
+function copyFixture(fence: () => Promise<void>, capture?: () => ((pixels: Promise<ImageBitmap>) => void) | undefined, idle?: () => void) {
   const closed = vi.fn(); const destroyed = vi.fn()
   const pass = { setPipeline: vi.fn(), setBindGroup: vi.fn(), draw: vi.fn(), end: vi.fn() }
   const device = {
@@ -226,7 +226,7 @@ function copyFixture(fence: () => Promise<void>, capture?: () => ((pixels: Promi
   state.device = device
   const canvasView = { canvas: true }
   const output = { width: 3840, height: 2160, getContext: () => ({ configure: vi.fn(), getCurrentTexture: () => ({ createView: () => canvasView }) }) } as unknown as OffscreenCanvas
-  const compositor = new VideoEditGpuCompositor(output, undefined, capture)
+  const compositor = new VideoEditGpuCompositor(output, undefined, capture, undefined, idle)
   const sample = { timestamp: 0, duration: 1 / 60, displayWidth: 3840, displayHeight: 2160, rotation: 0, flip: false, toVideoFrame: () => ({ visibleRect: { width: 3840, height: 2160 }, close: closed }) } as unknown as VideoSample
   return { compositor, sample, device, closed, destroyed, canvasView, pass, output }
 }
@@ -306,13 +306,16 @@ it('未来帧仍等指定时刻，取消等待不能提交已失效画面', asyn
   const callbacks = new Map<number, FrameRequestCallback>(); let token = 0
   const request = vi.fn((callback: FrameRequestCallback) => { callbacks.set(++token, callback); return token })
   vi.stubGlobal('self', { requestAnimationFrame: request, cancelAnimationFrame: (id: number) => callbacks.delete(id) })
-  const { compositor, device } = copyFixture(async () => {}); const document = createVideoEditDocument('未来呈现')
+  const idle = vi.fn()
+  const { compositor, device } = copyFixture(async () => {}, undefined, idle); const document = createVideoEditDocument('未来呈现')
   let owned = true
   const rendering = compositor.draw(videoEditComposition(document, document.sequences[0].id), [], [], () => owned, performance.timeOrigin + performance.now() + 1000)
   for (let index = 0; index < 20; index++) await Promise.resolve()
   expect(request).toHaveBeenCalledOnce(); expect(device.queue.submit).not.toHaveBeenCalled()
+  expect(compositor.waitingForPresentation).toBe(true); expect(idle).toHaveBeenCalledOnce()
   owned = false; compositor.cancelPresentation()
   expect((await rendering).presented).toBe(false); expect(device.queue.submit).not.toHaveBeenCalled(); expect(callbacks.size).toBe(0)
+  expect(compositor.waitingForPresentation).toBe(false)
   await compositor.dispose()
 })
 it('同队列顺序复制不逐层等待，外部解码帧保留到完成；销毁等待所有复制释放', async () => {

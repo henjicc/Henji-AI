@@ -121,7 +121,9 @@ describe('videoFrames preload', () => {
   })
 
   it('answers worker session requests on the same port; sessions opened there always belong to that route', async () => {
+    const { parseVoid } = await import('../main/ipc/registry')
     const invoke = vi.fn(async (channel: string, payload?: unknown) => {
+      if (channel === 'videoFrames:stats') parseVoid(payload)
       // Main-process decoder errors arrive named after their code (registerIpcHandler keeps name and message, 3.1).
       if (channel === 'videoFrames:frameAt') throw Object.assign(new Error('解码会话不存在或不属于当前窗口'), { name: 'VideoDecoderError:SESSION_GONE' })
       return { channel, payload }
@@ -138,10 +140,10 @@ describe('videoFrames preload', () => {
     await vi.waitFor(() => expect(replies).toHaveLength(4))
     expect(invoke).toHaveBeenCalledWith('videoFrames:openDecoder', { route, path: 'D:/a.mov', purpose: 'playback' })
     expect(invoke).toHaveBeenCalledWith('videoFrames:closeStream', { streamId: 'vf-1' })
-    expect(invoke).toHaveBeenCalledWith('videoFrames:stats', {})
+    expect(invoke).toHaveBeenCalledWith('videoFrames:stats', undefined)
     expect(replies.find((reply) => reply.id === 7)).toEqual({ type: 'response', id: 7, result: { channel: 'videoFrames:openDecoder', payload: { route, path: 'D:/a.mov', purpose: 'playback' } } })
     expect(replies.find((reply) => reply.id === 8)).toEqual({ type: 'response', id: 8, error: '解码会话不存在或不属于当前窗口', code: 'SESSION_GONE' })
-    expect(replies.find((reply) => reply.id === 9)).toEqual({ type: 'response', id: 9, result: { channel: 'videoFrames:stats', payload: {} } })
+    expect(replies.find((reply) => reply.id === 9)).toEqual({ type: 'response', id: 9, result: { channel: 'videoFrames:stats', payload: undefined } })
   })
 
   it('routes sound sessions to the port that opened them and transfers each PCM block to the worker without another copy', async () => {

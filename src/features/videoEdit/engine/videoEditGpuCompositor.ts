@@ -145,7 +145,7 @@ export class VideoEditGpuCompositor {
   private blankTexture?: GpuTexture
   /** 帧混合管线，按输出平面格式；首次使用时编译。 */
   private readonly blendPipelines = new Map<string, Promise<GpuRenderPipeline>>()
-  constructor(readonly canvas: OffscreenCanvas, private readonly shared?: VideoEditGpuCompositor, private readonly capturePresentation?: () => VideoEditPresentationCapture | undefined, readyTiming?: (durationMs: number, stage?: string) => void) {
+  constructor(readonly canvas: OffscreenCanvas, private readonly shared?: VideoEditGpuCompositor, private readonly capturePresentation?: () => VideoEditPresentationCapture | undefined, readyTiming?: (durationMs: number, stage?: string) => void, private readonly onPresentationWait?: () => void) {
     this.context = getWebGpuContext(canvas)
     this.manager.onDeviceLost(reason => { this.lost = reason })
     const started = performance.now()
@@ -452,6 +452,8 @@ export class VideoEditGpuCompositor {
       return [mediaId, { texture: this.texture(key, key, picture), width: picture.width, height: picture.height, owner: this.device, premultiplied: true, source: picture }]
     }))
   }
+  /** 画面已准备完毕、只等刷新时刻时，可启动不绘制的低优先级准备。 */
+  get waitingForPresentation(): boolean { return this.waits.size > 0 }
   async draw(document: VideoEditComposition, clips: VideoEditClip[], pictures: VideoEditPicture[], shouldPresent: () => boolean, deadline?: number, target?: VideoEditCodePicture): Promise<{ presented: boolean; completion: Promise<void> }> {
     await this.ready
     if (this.disposed || !shouldPresent()) return { presented: false, completion: Promise.resolve() }
@@ -466,7 +468,7 @@ export class VideoEditGpuCompositor {
       let request = 0
       const finish = (): void => { self.cancelAnimationFrame(request); this.waits.delete(finish); resolve() }
       const tick = (at: number): void => { if (!shouldPresent() || performance.timeOrigin + at >= deadline - 0.8) finish(); else request = self.requestAnimationFrame(tick) }
-      this.waits.add(finish); request = self.requestAnimationFrame(tick)
+      this.waits.add(finish); request = self.requestAnimationFrame(tick); this.onPresentationWait?.()
     })
     traceVideoEditFrame('compositor.deadline', -1, deadlineStarted)
     if (deadline !== undefined) recordVideoEditPreparation('presentDeadline', performance.now() - deadlineStarted)

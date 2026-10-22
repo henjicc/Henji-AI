@@ -162,7 +162,8 @@ export function createVideoFramesApi(nativeInvoke: NativeInvoke): HenjiVideoFram
       reply({ error: '未知的帧通道请求' })
       return
     }
-    const payload = ROUTED_CALLS.has(call.method) ? { ...call.params, route } : call.params
+    // stats 的 IPC 使用 parseVoid，端口上的空对象不能原样传给主进程。
+    const payload = call.method === 'stats' ? undefined : ROUTED_CALLS.has(call.method) ? { ...call.params, route } : call.params
     try {
       const { result, transfer } = transferable(call.method, await nativeInvoke(channel, payload))
       reply({ result }, transfer)

@@ -1,3 +1,8 @@
+import { videoEditDecodeTargets } from './videoEditDecodeLookahead'
+import { videoEditDecodeSource } from '@/core/videoEdit/proxy'
+import { createVideoEditTestDocument, addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
+import { createVideoEditSequence, videoEditComposition, type VideoEditClip } from '@/core/videoEdit/document'
+import { VideoEditProxyFrames } from './videoEditProxyFrames'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { VideoEditMedia } from '@/core/videoEdit/document'
 import type { VideoFrameDecoderInfo, VideoFrameRequestTag, VideoFrameScheduleEvent, VideoFrameStreamEndedPayload } from '@/platform/contracts/videoFrames'
@@ -79,6 +84,16 @@ describe('前瞻与原生预算', () => {
     return { frames, log, setLimit: (bytes: number) => { limit = bytes } }
   }
 
+  it('短空档复用预算快照，快照之后预打开的会话仍扣除余量', async () => {
+    const channel = new FakeChannel(), { frames, setLimit } = managed(channel)
+    setLimit(2500)
+    expect(await frames.canPreopen()).toBe(true)
+    const warm = frames.preopen(media()); await warm.ready; warm.release()
+    expect(await frames.canPreopen()).toBe(false)
+    expect(channel.calls.filter(call => call.method === 'stats')).toHaveLength(1)
+    await frames.disposeIdle()
+  })
+
   it('余量足够保留超过四个，紧张时按时间距离回收；前台预算拒绝后继续回收重试', async () => {
     const channel = new FakeChannel(), { frames, log, setLimit } = managed(channel)
     for (let index = 0; index < 6; index++) { const warm = frames.preopen(media({ path: `${index}.mp4` })); await warm.ready; warm.release() }
@@ -97,7 +112,7 @@ describe('前瞻与原生预算', () => {
     await (await current.ready).clipFrames()!.frameAt(0)
     expect(frames.openSessions).toBe(1)
     expect(log).toHaveBeenCalledWith('debug', expect.any(String), 'video_edit.decode.idle.evicted', expect.objectContaining({ reason: 'foreground' }))
-    frames.release(current.key); await frames.disposeIdle()
+    frames.release(current.key); await frames.disposeIdle(); await frames.settled()
     expect(frames.openSessions).toBe(0)
   })
 
@@ -128,13 +143,69 @@ describe('前瞻与原生预算', () => {
     await frames.disposeIdle()
   })
 
+  it('嵌套剪辑点映射的代理路径、修订与 purpose 被正式播放源命中', async () => {
+    const channel = new FakeChannel(), { frames } = managed(channel)
+    const document = createVideoEditTestDocument('嵌套切点'), child = createVideoEditSequence('子序列')
+    addLegacyVideoEditTracks(document.sequences[0]); addLegacyVideoEditTracks(child)
+    document.media = [media({ sourceRevision: 'revision:proxy:key' })]
+    document.items = [{ id: 'video', name: '视频', kind: 'video', mediaId: 'm' }, { id: 'child', name: '嵌套', kind: 'sequence', sequenceId: child.id }]
+    const clip: VideoEditClip = { id: 'video-clip', itemId: 'video', name: '视频', kind: 'video', track: 1, start: 30, duration: 30, sourceInUs: 2_000_000, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '' }
+    child.clips = [clip]; document.sequences.push(child)
+    document.sequences[0].clips = [{ ...clip, id: 'parent', itemId: 'child', kind: 'sequence', start: 30, duration: 90, sourceInUs: 0, speed: { numerator: 2, denominator: 1 } }]
+    const composition = videoEditComposition(document, document.sequences[0].id)
+    const target = videoEditDecodeTargets(composition, 0, true)[0]
+    expect(target).toMatchObject({ clipId: clip.id, purpose: 'playback', distance: 1.5 })
+    const proxy = { path: 'proxy.mp4', key: 'key', contentIdentity: 'content', preset: 'auto' as const, width: 1920, height: 1080, bytes: 100 }
+    const warm = frames.preopen(videoEditDecodeSource(target.media, proxy, true, 'playback'), { ...target, signal: new AbortController().signal, openOnly: true })
+    await warm.ready; warm.release()
+    expect(channel.calls.filter(call => call.method === 'schedule')).toHaveLength(0)
+    channel.answers.schedule = params => {
+      channel.frame(String(params.streamId), { kind: 'schedule', id: String(params.scheduleId), index: 0 }, 2_000_000)
+      channel.event({ type: 'schedule_done', streamId: String(params.streamId), scheduleId: String(params.scheduleId), reason: 'completed', message: null, delivered: 1 })
+      return { scheduleId: params.scheduleId, count: 1 }
+    }
+    const proxyFrames = new VideoEditProxyFrames(frames, new Map([['m', proxy]])), opened = proxyFrames.open(document.media[0])
+    for await (const picture of (await opened.ready).schedule([target.time])) picture?.close()
+    expect(channel.calls.filter(call => call.method === 'openDecoder').map(call => call.params)).toEqual([{ path: 'proxy.mp4', purpose: 'playback' }])
+    proxyFrames.release(opened.key); await frames.disposeIdle()
+  })
+
+  it('前台抢占尚在打开的前瞻只停止后续工作，已开的会话在切点继续复用', async () => {
+    const channel = new FakeChannel(), { frames } = managed(channel)
+    let finish!: (info: VideoFrameDecoderInfo) => void
+    channel.answers.openDecoder = () => new Promise(resolve => { finish = resolve })
+    const warm = frames.preopen(media(), { time: 2, purpose: 'seek', signal: new AbortController().signal, openOnly: true })
+    const cancelled = expect(warm.ready).rejects.toMatchObject({ name: 'AbortError' })
+    await flush(); frames.cancelSpeculative(); finish(channel.info('ahead'))
+    await cancelled; warm.release()
+    const opened = frames.open(media()); await (await opened.ready).clipFrames()!.frameAt(2)
+    expect(channel.calls.filter(call => call.method === 'openDecoder')).toHaveLength(1)
+    frames.release(opened.key); await frames.disposeIdle()
+  })
+
+  it('窗口之外的闲置会话在预算充足时也释放，只保留即将使用的 purpose', async () => {
+    const channel = new FakeChannel(), { frames } = managed(channel)
+    for (const [path, purpose] of [['current.mp4', 'playback'], ['current.mp4', 'seek'], ['past.mp4', 'playback']] as const) {
+      const warm = frames.preopen(media({ path }), { time: 0, purpose, signal: new AbortController().signal, openOnly: true })
+      await warm.ready; warm.release()
+    }
+    expect(frames.openSessions).toBe(3)
+    await frames.maintain(new Map([['current.mp4', 0]]), new Map([['current.mp4\0\0playback', true]]))
+    expect(frames.openSessions).toBe(1)
+    const reuse = frames.preopen(media({ path: 'current.mp4' }), { time: 0, purpose: 'playback', signal: new AbortController().signal, openOnly: true })
+    await reuse.ready; reuse.release()
+    expect(channel.calls.filter(call => call.method === 'openDecoder')).toHaveLength(3)
+    await frames.disposeIdle()
+  })
+
   it('旧服务缺少可选预算字段时保守放弃，不影响正常打开', async () => {
     const channel = new FakeChannel(), { frames } = managed(channel)
     channel.answers.stats = () => ({ native: { streams: [], budget: { vramLimitBytes: 10000, vramReservedBytes: 0 } } })
     expect(await frames.canPreopen()).toBe(false)
     const warm = frames.preopen(media()); await warm.ready; warm.release()
     await frames.maintain(new Map())
-    expect(frames.openSessions).toBe(0)
+    expect(frames.openSessions).toBe(1)
+    await frames.disposeIdle()
   })
 
   it('空白起点尚无已开会话时，使用原生冷启动保留量预打开首个文件', async () => {
@@ -186,6 +257,7 @@ describe('前瞻与原生预算', () => {
     const warm = frames.preopen(media()); await warm.ready; warm.release()
     let close!: () => void
     channel.answers.closeStream = () => new Promise<void>(resolve => { close = resolve })
+    channel.answers.stats = () => ({ native: { streams: [{ kind: 'decoder' }], budget: { vramLimitBytes: 1000, vramReservedBytes: 1000, largestSessionBytes: 1000, hardwareSessionLimit: 1, hardwareSessions: 1, decoderSessionLimit: 1 } } })
     const maintaining = frames.maintain(new Map())
     await flush()
     const current = frames.open(media({ path: 'current.mp4' }))

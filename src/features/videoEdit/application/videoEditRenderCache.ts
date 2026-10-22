@@ -228,7 +228,7 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
     }
     for (const window of pending) {
       job.controller.signal.throwIfAborted()
-      if (!listVideoEditInstances().includes(instance)) throw new DOMException('原剪辑已关闭，预渲染已停止。', 'AbortError')
+      assertOwner()
       job.current = window.key; publishVideoEdit()
       const path = await platform.mediaCache.renderBegin({ projectId, windowKey: window.key, profile: encoding.profile })
       const output = new Output({ format: new Mp4OutputFormat(), target: new StreamTarget(new WritableStream({ write: async chunk => { await platform.system.fs.writeFile(path, chunk.data, { position: chunk.position }) } }), { chunked: true, chunkSize: 4 * 1024 * 1024 }) })
@@ -237,8 +237,12 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
         output.addVideoTrack(video, { frameRate: composition.fps })
         await output.start()
         for (let frame = window.startFrame; frame < window.endFrame; frame++) {
-          // Playing, scrubbing and exporting take the GPU: wait instead of competing with them.
-          while ((instance.playing || instance.scrubbing || instance.busy) && !job.controller.signal.aborted) await new Promise(resolve => setTimeout(resolve, 100))
+          // 每帧核对原实例；重开后的新实例不能让旧任务继续占用同一显卡。
+          assertOwner()
+          while (listVideoEditInstances().some(value => value.playing || value.scrubbing || value.busy)) {
+            await new Promise(resolve => setTimeout(resolve, 100))
+            assertOwner()
+          }
           job.controller.signal.throwIfAborted()
           await session!.render(frame, true)
           await video.add((frame - window.startFrame) / composition.fps, 1 / composition.fps)
@@ -266,6 +270,10 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
     signal?.removeEventListener('abort', abort)
     jobs.delete(instance); publishVideoEdit()
     await session?.dispose()
+  }
+  function assertOwner(): void {
+    if (!listVideoEditInstances().includes(instance)) job.controller.abort(new DOMException('原剪辑已关闭，预渲染已停止。', 'AbortError'))
+    job.controller.signal.throwIfAborted()
   }
   function result(cancelled: boolean): VideoEditRenderCacheResult {
     return { renderedWindows: job.done, cancelled, requestedFrames: windows.reduce((sum, window) => sum + window.endFrame - window.startFrame, 0),

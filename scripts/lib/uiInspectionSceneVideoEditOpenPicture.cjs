@@ -66,9 +66,13 @@ const scrubPercentile = (values, q) => { const sorted = [...values].sort((a, b) 
  */
 async function measurePlayback(page, ms, after) {
   await page.locator('[data-video-edit-timeline-viewport]').first().focus(); await page.keyboard.press('Home'); await page.waitForTimeout(1500)
+  const nativeBefore = await page.evaluate(() => window.henjiNative.videoFrames.stats()).catch(() => null)
+  const playbackStarted = await page.evaluate(() => performance.now())
   await page.evaluate(() => { window.__playFrames = []; const canvas = document.querySelector('canvas[aria-label="剪辑画面"]'); window.__playMo = new MutationObserver(() => window.__playFrames.push([performance.now(), Number(canvas.dataset.presentedFrame)])); window.__playMo.observe(canvas, { attributes: true, attributeFilter: ['data-presented-frame'] }) })
   await page.keyboard.press('Space'); await page.waitForTimeout(ms); await page.keyboard.press('Space')
   const frames = await page.evaluate(() => { window.__playMo.disconnect(); return window.__playFrames })
+  // 呈现统计已封口；等停止汇总回传，避免漏掉最后一个切点的前瞻命中。
+  await page.waitForFunction(started => window.__videoLayoutEvidence.events.some(entry => entry.kind === 'worker.log' && entry.at >= started && entry.event === 'video_edit.decode.lookahead.summary' && entry.context?.reason === 'stop'), playbackStarted, { timeout: 2000 })
   const first = frames[0], last = frames.at(-1)
   if (!first) return { presented: 0 }
   const span = last[1] - first[1], seconds = (last[0] - first[0]) / 1000, rate = span / seconds
@@ -82,7 +86,7 @@ async function measurePlayback(page, ms, after) {
   // 每次卡顿那一帧的阶段构成：节目 Worker 回执带累计阶段耗时，与上一次回执相减。
   const snapshot = await workerSnapshot(page)
   const program = new Set(snapshot.workers.filter(worker => worker.direct && !worker.terminated).map(worker => worker.id))
-  const renders = snapshot.events.filter(event => event.kind === 'render.completed' && program.has(event.worker) && event.preparationStages).sort((a, b) => a.at - b.at)
+  const renders = snapshot.events.filter(event => event.kind === 'render.completed' && event.at >= playbackStarted && program.has(event.worker) && event.preparationStages).sort((a, b) => a.at - b.at)
   for (const stall of stalls) {
     const index = renders.findIndex(event => event.frame === stall.frame)
     if (index <= 0) continue
@@ -90,9 +94,10 @@ async function measurePlayback(page, ms, after) {
     stall.renderMs = Math.round(event.elapsedMs); stall.decodeMs = Math.round(event.decodeMs ?? 0); stall.gpuMs = Math.round(event.gpuMs ?? 0)
     stall.stages = Object.fromEntries(Object.entries(event.preparationStages).map(([name, value]) => [name, Math.round(value.ms - (previous.preparationStages[name]?.ms ?? 0))]).filter(([, ms]) => ms >= 5))
   }
-  const events = (await page.evaluate(async after => (await window.henjiNative.logging.queryLogEvents({ date: after.slice(0, 10), afterTimestamp: after, keyword: 'video_edit.decode', limit: 3000 })).events, after))
+  // 日志含本地时区偏移，按实际时间过滤；字符串比较会把上一轮同日事件算入。
+  const events = (await page.evaluate(async after => (await window.henjiNative.logging.queryLogEvents({ date: after.slice(0, 10), afterTimestamp: after, keyword: 'video_edit.decode', limit: 3000 })).events, after)).filter(entry => Date.parse(entry.timestamp) >= Date.parse(after))
   const counts = {}; for (const entry of events) counts[entry.event] = (counts[entry.event] ?? 0) + 1
-  return { presented: frames.length, frames: span + 1, seconds: Math.round(seconds * 100) / 100, fps: Math.round(frames.length / seconds * 10) / 10, timelineRate: Math.round(rate * 10) / 10, skipped, stalls, stalledMs: stalls.reduce((sum, stall) => sum + stall.gapMs, 0), decodeEvents: counts }
+  return { presented: frames.length, frames: span + 1, seconds: Math.round(seconds * 100) / 100, fps: Math.round(frames.length / seconds * 10) / 10, timelineRate: Math.round(rate * 10) / 10, skipped, stalls, stalledMs: stalls.reduce((sum, stall) => sum + stall.gapMs, 0), decodeEvents: counts, workerActivity: snapshot.workers.map(worker => ({ ...worker, renders: snapshot.events.filter(entry => entry.worker === worker.id && entry.at >= playbackStarted && entry.kind === 'render.completed').length })), decodeSummaries: snapshot.events.filter(entry => entry.kind === 'worker.log' && entry.at >= playbackStarted && program.has(entry.worker) && entry.event === 'video_edit.decode.lookahead.summary').map(entry => entry.context), nativeBefore, nativeAfter: await page.evaluate(() => window.henjiNative.videoFrames.stats()).catch(() => null), lookaheadBudget: snapshot.events.filter(entry => entry.kind === 'worker.log' && entry.at >= playbackStarted && program.has(entry.worker) && entry.event === 'video_edit.decode.lookahead.budget').map(entry => entry.context), fpsBySecond: Array.from({ length: Math.floor(seconds) }, (_, index) => frames.filter(frame => frame[0] >= first[0] + index * 1000 && frame[0] < first[0] + (index + 1) * 1000).length) }
 }
 
 /**

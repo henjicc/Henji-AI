@@ -62,3 +62,15 @@ it('bounds unused module history while retaining a visible instance', async () =
   await pool.dispose()
   expect(dispose).toHaveBeenCalledTimes(36)
 })
+
+it('前瞻模块加载挂起时，当前帧的实例读取不排在加载后面', async () => {
+  load.mockResolvedValue({ name: 'current', draw() {} })
+  const pool = new VideoEditAuthorPrograms({} as GpuDevice)
+  const program = await pool.inspect(bundle()), current = await pool.instance('clip', program)
+  let finish!: (value: { name: string; draw(): void }) => void
+  load.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+  const future = pool.inspect(bundle())
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+  expect(await pool.instance('clip', program)).toBe(current)
+  finish({ name: 'future', draw() {} }); await future; await pool.dispose()
+})

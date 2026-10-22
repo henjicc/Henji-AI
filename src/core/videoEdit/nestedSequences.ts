@@ -1,5 +1,5 @@
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from './time'
-import { createVideoEditSequence, videoEditDocumentSchema, videoEditVisibleTracks, type VideoEditClip, type VideoEditDocument, type VideoEditSequence, type VideoEditComposition } from './document'
+import { createVideoEditSequence, videoEditDocumentSchema, videoEditDuration, videoEditVisibleTracks, type VideoEditClip, type VideoEditDocument, type VideoEditSequence, type VideoEditComposition } from './document'
 import { assertVideoEditClipsEditable } from './lockedTracks'
 import { clipSourceSeconds } from './document'
 import { videoEditTransitionClipIds } from './transitions'
@@ -16,6 +16,14 @@ export function videoEditNestedFrame(parent: Pick<VideoEditComposition, 'fps'>, 
   // A child may be shortened after nesting. Keep the parent's edit and source clock; its now-empty tail is transparent.
   const seconds = clipSourceSeconds(clip, frame, parent.fps)
   return continuous ? Math.max(0, seconds * child.fps) : videoEditSequenceFrameAtSeconds(seconds, child.fps)
+}
+/** 节目与前瞻共用转场余量的末帧钳制，以及多机位实例键。 */
+export function videoEditNestedPictureFrame(parent: VideoEditComposition, clip: VideoEditClip, child: VideoEditComposition, frame: number): number {
+  const source = videoEditNestedFrame(parent, clip, child, frame, !Number.isInteger(frame))
+  return frame < clip.start || frame >= clip.start + clip.duration ? Math.min(videoEditDuration(child) - 1, source) : source
+}
+export function videoEditNestedPictureKey(child: VideoEditComposition, clip: VideoEditClip): string {
+  return child.multicam ? `${child.id}:${clip.multicamCameraId ?? child.multicam.cameras[0].id}` : child.id
 }
 /** Existing sequence rows are a projection; create a persisted item only when it is actually placed. */
 export function ensureVideoEditSequenceItem(document: VideoEditDocument, sequenceId: string): { document: VideoEditDocument; itemId: string } {

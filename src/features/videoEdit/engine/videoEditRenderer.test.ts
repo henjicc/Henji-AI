@@ -1,3 +1,4 @@
+import { videoEditLookaheadTargets } from './videoEditDecodeLookahead'
 import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -666,19 +667,15 @@ it('可见原视频和代码画面走同一合成，静态变换修改复用纹�
   } finally { await renderer.dispose() }
   expect(boundary.compilerDisposed).toBe(1)
 })
-it('播放头前方的代码片段提前编译并画一帧不显示的预热画面，实例保留到进入片段，不打断当前帧', async () => {
+it('顶层代码提前准备模块但不绘制废弃帧，进入时复用同一版本', async () => {
   const document = mixedFixture(); document.clips[1] = { ...document.clips[1], start: 90, duration: 60 }
   const renderer = new VideoEditRenderer(document, 3840)
   try {
     await (await renderer.render(0, true)).completion
-    expect(boundary.compilerCalls).toBe(0)
-    expect(renderer.upcomingCodeStart(0, 60, new Set())).toBeUndefined()
-    const upcoming = renderer.upcomingCodeStart(40, 60, new Set())!
-    expect(upcoming.frame).toBe(90)
-    expect(renderer.upcomingCodeStart(40, 60, new Set([upcoming.key]))).toBeUndefined()
-    expect(await renderer.warmAhead(upcoming.frame, new AbortController().signal)).toEqual(['code-clip'])
-    expect(boundary.compilerCalls).toBe(1); expect(boundary.warmed).toEqual(['code-clip']); expect(boundary.protectedInstances).toEqual(['code-clip'])
-    // Entering the clip reuses the compiled program: no second compilation on the boundary frame.
+    const targets = videoEditLookaheadTargets(document, 40, true).content
+    renderer.retainLookahead(targets)
+    for (const target of targets) await renderer.prepareLookahead(target, new AbortController().signal)
+    expect(boundary.compilerCalls).toBe(1); expect(boundary.warmed).toEqual([]); expect(boundary.generatorCalls).toBe(0)
     await (await renderer.render(90, true)).completion
     expect(boundary.compilerCalls).toBe(1); expect(boundary.generatorCalls).toBe(1)
   } finally { await renderer.dispose() }
@@ -1353,4 +1350,51 @@ it('拖动时的空闲会话按最近使用保留，超出上限释放最旧的�
   expect(retireIdle(table, ['c'], 2)).toEqual([])
   expect(retireIdle(table, ['c', 'b', 'd'], 2)).toEqual(['c'])
   expect(retireIdle(table, ['b', 'd'], 0)).toEqual(['b', 'd'])
+})
+
+it('嵌套切点预备图片和代码后，经过当前帧再进入仍命中同一渲染器缓存', async () => {
+  const document = mixedFixture(), images = imageFixture()
+  document.media.push(...images.media); document.items.push(...images.items)
+  const child = createVideoEditSequence('未来嵌套'); addLegacyVideoEditTracks(child)
+  child.clips = [images.clips[0], document.clips[1]]
+  const item = { id: 'future-nested', name: child.name, kind: 'sequence' as const, sequenceId: child.id }
+  document.items.push(item); document.sequences = [...document.sequences!, child]
+  document.clips = [document.clips[0], { ...document.clips[0], id: 'parent', itemId: item.id, kind: 'sequence', start: 60, duration: 60, sourceInUs: 0 }]
+  const fetchImage = vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob() })
+  const decode = vi.fn(async () => ({ width: 32, height: 32, close: vi.fn() }))
+  vi.stubGlobal('fetch', fetchImage); vi.stubGlobal('createImageBitmap', decode)
+  const renderer = new VideoEditRenderer(document, 1920)
+  try {
+    const targets = videoEditLookaheadTargets(document, 0, true).content
+    expect(targets.map(target => target.kind)).toEqual(['image', 'code'])
+    renderer.retainLookahead(targets)
+    for (const target of targets) await renderer.prepareLookahead(target, new AbortController().signal)
+    expect(boundary.generatorCalls).toBe(0); expect(boundary.warmed).toEqual([])
+    await renderer.render(0, true)
+    await renderer.render(60, true)
+    expect(fetchImage).toHaveBeenCalledOnce(); expect(decode).toHaveBeenCalledOnce()
+    expect(boundary.compilerCalls).toBe(1)
+    expect(renderer.lookaheadMetrics).toMatchObject({ imagePrepared: 1, imageHits: 1, codePrepared: 1, codeHits: 1 })
+  } finally { await renderer.dispose() }
+})
+
+it('取消前瞻图片后，原生解码完成之前不再启动下一份推测解码', async () => {
+  const document = imageFixture(2), renderer = new VideoEditRenderer(document)
+  const targets = videoEditLookaheadTargets(document, 0, true).content
+  const controller = new AbortController(), close = vi.fn()
+  let finish!: (bitmap: { width: number; height: number; close: () => void }) => void
+  const decode = vi.fn().mockImplementationOnce(() => new Promise(resolve => { finish = resolve })).mockResolvedValue({ width: 32, height: 32, close })
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob() }))
+  vi.stubGlobal('createImageBitmap', decode)
+  try {
+    const pending = renderer.prepareLookahead(targets[0], controller.signal)
+    const cancelled = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    await vi.waitFor(() => expect(decode).toHaveBeenCalledOnce())
+    controller.abort(); await cancelled
+    expect(await renderer.prepareLookahead(targets[1], new AbortController().signal)).toBe(false)
+    expect(decode).toHaveBeenCalledOnce()
+    finish({ width: 32, height: 32, close }); await vi.waitFor(() => expect(close).toHaveBeenCalledOnce())
+    expect(await renderer.prepareLookahead(targets[1], new AbortController().signal)).toBe(true)
+    expect(decode).toHaveBeenCalledTimes(2)
+  } finally { await renderer.dispose() }
 })

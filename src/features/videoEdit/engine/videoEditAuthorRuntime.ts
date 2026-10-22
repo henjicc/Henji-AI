@@ -122,12 +122,14 @@ export class VideoEditAuthorRuntime {
       }
       for (const [key, source] of Object.entries(assets)) {
         if (!(source instanceof ImageBitmap) || this.canvasImages.has(key)) continue
+        const pixelsStarted = performance.now()
         const canvas = new OffscreenCanvas(source.width, source.height)
         const context = canvas.getContext('2d', { willReadFrequently: true })
         if (!context) throw new Error('Canvas2D 不可用。')
         context.drawImage(source, 0, 0)
         this.canvasImages.set(key, { source, pixels: context.getImageData(0, 0, source.width, source.height), version: ++this.assetVersion })
         canvas.width = canvas.height = 1
+        recordVideoEditPreparation('authorAssetPixels', performance.now() - pixelsStarted)
       }
       // Reusing a bitmap lets Chromium change its low-quality downsampling
       // after GPU promotion. Keep immutable pixels, with a fresh image each frame,

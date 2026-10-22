@@ -42,9 +42,10 @@ export class VideoEditAuthorPrograms {
     return module
   }
 
-  inspect(bundle: CodeAuthorBundle): Promise<CodeAuthorProgram> {
+  async inspect(bundle: CodeAuthorBundle): Promise<CodeAuthorProgram> {
+    // 模块读取与加载不能占住实例生命周期队列，当前帧可继续使用已就绪的模块。
+    const effect = await this.module(bundle)
     return this.enqueue(async () => {
-      const effect = await this.module(bundle)
       if (this.closed) throw new Error('作者渲染会话已关闭。')
       const program: CodeAuthorProgram = { ...authorEffectMetadata(effect), seed: 0, apiVersion: 4, languageVersion: 4, bundle }
       const pinned = new Set([bundle, ...[...this.instances.values()].map(value => value.program.bundle)])
