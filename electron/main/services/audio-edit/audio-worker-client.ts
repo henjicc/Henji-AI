@@ -13,7 +13,7 @@ interface WorkerResponse<T> {
   error?: string
 }
 
-function executablePath(): string | null {
+export function audioWorkerExecutablePath(): string | null {
   const name = process.platform === 'win32' ? 'henji-audio-worker.exe' : 'henji-audio-worker'
   const candidates = app.isPackaged
     ? [path.join(process.resourcesPath, 'resources', name)]
@@ -26,7 +26,7 @@ function executablePath(): string | null {
 
 export async function invokeAudioWorker<T>(command: Record<string, unknown>, timeoutMs = 20_000, signal?: AbortSignal): Promise<T> {
   signal?.throwIfAborted()
-  const binary = executablePath()
+  const binary = audioWorkerExecutablePath()
   if (!binary) throw new Error('AUDIO_WORKER_UNAVAILABLE：音频 Worker 尚未安装。')
   const id = crypto.randomUUID()
   const child = spawn(binary, [], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })

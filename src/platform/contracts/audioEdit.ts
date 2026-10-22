@@ -1,4 +1,5 @@
 import type { AudioEditSpectrogramRequest, AudioEditSpectrogramChunk, AudioEditRenderedAudio } from '@/core/audioEdit/regions'
+import type { AudioEditSpectralTileRequest, AudioEditSpectralTile, AudioEditSpectralProgress } from '@/core/audioEdit/spectralPyramid'
 import type {
   AudioEditExportRequest,
   AudioEditExportResult,
@@ -29,6 +30,9 @@ export interface AudioEditAsrModel {
  * 发起前渲染层先把修改写完；转写与重新定位的结果返回给渲染层实例，由文档会话保存。
  */
 export interface AudioEditPlatform {
+  spectralTile(request: AudioEditSpectralTileRequest): Promise<AudioEditSpectralTile>
+  spectralCancel(requestId: string): Promise<void>
+  onSpectralProgress(handler: (progress: AudioEditSpectralProgress) => void): () => void
   spectrogram(request: AudioEditSpectrogramRequest): Promise<AudioEditSpectrogramChunk>
   render(request: { projectId: string; requestId?: string; includeProcessing?: boolean }): Promise<AudioEditRenderedAudio>
   /** 修复与区间音量已生效、删除与静音未套用的音频（时间轴同原素材），供波形显示编辑后的样子。 */

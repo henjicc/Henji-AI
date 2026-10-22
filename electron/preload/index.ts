@@ -1,4 +1,5 @@
 import { createApplicationControlApi } from './application-control-api'
+import type { AudioEditSpectralProgress } from '../../src/core/audioEdit/spectralPyramid'
 import { createAudioLoudnessApi } from './audio-loudness-api'
 import { createScreenRecordingApi } from './screen-recording-api'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
@@ -422,6 +423,13 @@ const audioApi: HenjiAudioApi = {
   exportEditProject: (payload) => nativeInvoke('audioEdit:export', payload),
   listEditProcessors: () => nativeInvoke('audioEdit:processors:list'),
   editSpectrogram: payload => nativeInvoke('audioEdit:spectrogram', payload),
+  spectralTile: payload => nativeInvoke('audioEdit:spectralTile', payload),
+  spectralCancel: requestId => nativeInvoke('audioEdit:spectralCancel', { requestId }),
+  onSpectralProgress: handler => {
+    const listener = (_event: Electron.IpcRendererEvent, progress: AudioEditSpectralProgress): void => handler(progress)
+    ipcRenderer.on('audioEdit:spectralProgress', listener)
+    return () => ipcRenderer.removeListener('audioEdit:spectralProgress', listener)
+  },
   renderEditAudio: payload => nativeInvoke('audioEdit:render', payload),
   editedSourceAudio: payload => nativeInvoke('audioEdit:editedSource', payload),
   prepareEditPreviewChunk: (payload) => nativeInvoke('audioEdit:preview:chunk', payload),

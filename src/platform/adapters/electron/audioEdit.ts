@@ -35,6 +35,9 @@ function cancellable<TRequest extends object, TResult>(call: (payload: TRequest 
 
 export function createElectronAudioEdit(): AudioEditPlatform {
   return {
+    spectralTile: request => api().spectralTile(request),
+    spectralCancel: requestId => api().spectralCancel(requestId),
+    onSpectralProgress: handler => api().onSpectralProgress(handler),
     recording: {
       release: sessionId => api().recording.release(sessionId),
       archive: sessionId => api().recording.archive(sessionId),
