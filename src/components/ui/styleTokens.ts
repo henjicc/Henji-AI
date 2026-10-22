@@ -299,7 +299,7 @@ export const UI_BUTTON_RESET_CLASS =
   '!outline-none focus:!outline-none focus-visible:!outline-none !ring-0 focus:!ring-0 focus-visible:!ring-0 shadow-none focus:shadow-none';
 
 /**
- * 下拉菜单与 PanelTrigger 的浮层表面（设计稿“菜单与浮层：玻璃仅压在媒体上”）。
+ * 下拉菜单与 PanelTrigger 的浮层表面。实底档在设置开启毛玻璃时由 index.css 自动换成玻璃（2026-10-22 用户确认），关闭时为 overlay 实底。
  *
  * - 默认实底：面板底 + 强分隔发丝线 + 浮层投影。浮层内的字段（raised）、选项格（raised）与悬停/选中底
  *   都比它亮，层次清楚；与“关闭毛玻璃”时玻璃浮层的退化外观一致。
@@ -336,8 +336,8 @@ export type UiTriggerPanelPadding = keyof typeof UI_TRIGGER_PANEL_PADDING_CLASS;
 
 /** 锚定浮层按内容选档；定位器进一步收紧到宿主边界和可用高度。 */
 export const UI_TRIGGER_PANEL_SIZE_CLASS = {
-  // 菜单按选项内容定宽（至少 10rem，上限 22.5rem 再截断），不随窗口宽度变宽
-  menu: 'w-max min-w-40 max-w-[min(92vw,22.5rem)] [--trigger-panel-max-height:min(60vh,24rem)]',
+  // 菜单按选项内容定宽（至少 8rem，上限 22.5rem 再截断），不随窗口宽度变宽
+  menu: 'w-max min-w-32 max-w-[min(92vw,22.5rem)] [--trigger-panel-max-height:min(60vh,24rem)]',
   compact: 'w-[min(92vw,clamp(16rem,28vw,24rem))] [--trigger-panel-max-height:min(70vh,32rem)]',
   content: 'w-[min(92vw,clamp(24rem,48vw,45rem))] [--trigger-panel-max-height:min(78vh,40rem)]',
   workspace: 'w-[min(94vw,clamp(40rem,80vw,60rem))] [--trigger-panel-max-height:min(88vh,52rem)]',

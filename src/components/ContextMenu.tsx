@@ -62,7 +62,7 @@ function MenuList({ items, onClose }: { items: MenuItem[]; onClose: () => void }
             role="menu"
             tabIndex={-1}
             data-context-menu
-            className="flex min-w-44 max-w-sm flex-col outline-none"
+            className="flex min-w-32 max-w-sm flex-col outline-none"
             onKeyDown={moveFocus}
         >
             {items.map((item, index) => (
@@ -75,7 +75,7 @@ function MenuList({ items, onClose }: { items: MenuItem[]; onClose: () => void }
                         disabled={item.disabled === true}
                         aria-disabled={item.disabled === true}
                         tooltip={item.title}
-                        className="w-full gap-3"
+                        className="w-full gap-2"
                         onKeyDown={event => {
                             if (event.key !== 'Enter' && event.key !== ' ') return
                             // 阻止按钮原生激活，避免同一次按键执行两遍
@@ -104,7 +104,7 @@ function MenuList({ items, onClose }: { items: MenuItem[]; onClose: () => void }
 /**
  * 右键菜单与按钮菜单（任务 5.9 收敛）：浮层本身走 `PanelTrigger` 的锚点模式，与下拉、参数面板共用
  * 定位（视口夹取、上下翻转）、浮层归属（子浮层与模态层）、Escape 只关最上层、跨文档挂载；
- * 菜单项是 `UiOptionButton variant="menu"`，悬停、禁用、玻璃自适应与其他菜单一致。宽度按内容（176–384）。
+ * 菜单项是 `UiOptionButton variant="menu"`，悬停、禁用、玻璃自适应与其他菜单一致。宽度按内容（128–384）。
  */
 const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, visible, surface = 'solid' }) => {
     const anchor = position.anchor ?? { left: position.x, top: position.y, bottom: position.y, width: 0 }

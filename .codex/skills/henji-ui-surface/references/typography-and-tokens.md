@@ -79,7 +79,7 @@ unusedToken 检查 styleTokens 导出的真实 AST 消费、CSS --ui 变量和 T
 <!-- 自动生成；修改源配置后运行 npm run gen:token-docs。门禁只说明可自动证明的范围。 -->
 | 维度 | 实际配置值域 | 自动门禁 |
 |---|---|---|
-| 颜色令牌 | gap / window / canvas / panel / raised / segment-selected / control / hover / selected / selected-accent / line / edge / media / scrim / text1 / text2 / text3 / text / accent / danger / success / warning / on / clip / wave | ESLint 固定灰色板/字面量；check:colors（旧别名与未定义类） |
+| 颜色令牌 | gap / window / canvas / panel / raised / overlay / segment-selected / control / hover / selected / selected-accent / line / edge / media / scrim / text1 / text2 / text3 / text / accent / danger / success / warning / on / clip / wave | ESLint 固定灰色板/字面量；check:colors（旧别名与未定义类） |
 | 字号/行高 | 13: 13px/20px；15: 15px/22px；3xs: 10px/14px；2xs: 11px/16px；xs: 12px/16px；sm: 14px/20px；base: 16px/24px；xl: 20px/28px；display: 40px/48px | ESLint 字号任意值；check:ui-residue |
 | 圆角 | none: 0；full: 9999px；control: var(--radius-control)；field: var(--radius-field)；overlay: var(--radius-overlay)；md: var(--radius-control)；lg: var(--radius-field)；xl: var(--radius-overlay)；hairline: 1px | ESLint rounded 任意值；check:ui-residue（嵌套层级只由 DOM oversizedRadius） |
 | 阴影 | none / panel / node-selected / node-error / thumb / thumb-ring / thumb-sm | ESLint shadow 任意值；check:ui-residue（使用位置只由 DOM shadowOutsideOverlay） |

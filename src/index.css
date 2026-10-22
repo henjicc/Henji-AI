@@ -311,6 +311,20 @@
     box-shadow: inset 0 1px 0 0 var(--ui-glass-sheen);
   }
 
+  /*
+   * 打开毛玻璃时，普通界面上的实底浮层（菜单、右键菜单、下拉、弹出面板）也换成同一块玻璃（2026-10-22 用户确认）；
+   * 关闭毛玻璃时保持 overlay 实底（比面板高一级）。内部选项、分隔线、控件随下方 :is(...) 选择器一起切到玻璃档。
+   * 根选择器包在 :where 里，不抬高特异性。
+   */
+  /* 类名写两遍：实底档的 bg-overlay / border-line-strong / shadow-panel 在 utilities 层，后出现，需要更高特异性才能盖住。 */
+  :where(:root:not([data-ui-blur='off'])) .ui-overlay-surface.ui-overlay-surface {
+    background-color: var(--ui-glass-tint);
+    -webkit-backdrop-filter: var(--ui-glass-filter);
+    backdrop-filter: var(--ui-glass-filter);
+    border-color: var(--ui-glass-edge);
+    box-shadow: inset 0 1px 0 0 var(--ui-glass-sheen), var(--shadow-overlay);
+  }
+
   /* 抬升的玻璃浮层：保留受光内边，同时补上外层悬浮阴影。 */
   .ui-glass-elevated {
     box-shadow: inset 0 1px 0 0 var(--ui-glass-sheen), var(--shadow-overlay);
@@ -337,12 +351,12 @@
    * data-ui-blur='off' 上面的变量恢复为原来的 surface / border / layer 实底。
    * 品牌选中态和主按钮不会带这个标记，因此不会被冲淡。
    */
-  .ui-glass .ui-glass-adaptive-control {
+  :is(.ui-glass, :where(:root:not([data-ui-blur='off'])) .ui-overlay-surface) .ui-glass-adaptive-control {
     background-color: var(--ui-glass-control-tint);
     border-color: var(--ui-glass-control-border);
   }
 
-  .ui-glass .ui-glass-adaptive-control:hover:not(:disabled) {
+  :is(.ui-glass, :where(:root:not([data-ui-blur='off'])) .ui-overlay-surface) .ui-glass-adaptive-control:hover:not(:disabled) {
     background-color: var(--ui-glass-control-hover);
   }
 
@@ -350,11 +364,11 @@
    * 一块玻璃内部的区域/内容表面：只改变 tint，不重复 blur。
    * 关闭毛玻璃时，上面的变量会让它们与外壳一起恢复为完整实体色。
    */
-  .ui-glass .ui-glass-adaptive-region {
+  :is(.ui-glass, :where(:root:not([data-ui-blur='off'])) .ui-overlay-surface) .ui-glass-adaptive-region {
     background-color: var(--ui-glass-region-tint);
   }
 
-  .ui-glass .ui-glass-adaptive-surface {
+  :is(.ui-glass, :where(:root:not([data-ui-blur='off'])) .ui-overlay-surface) .ui-glass-adaptive-surface {
     background-color: var(--ui-glass-surface-tint);
   }
 
@@ -367,7 +381,7 @@
     border-color: rgb(var(--line-rgb));
   }
 
-  .ui-glass .ui-glass-adaptive-divider {
+  :is(.ui-glass, :where(:root:not([data-ui-blur='off'])) .ui-overlay-surface) .ui-glass-adaptive-divider {
     border-color: var(--ui-glass-surface-divider);
   }
 
@@ -382,7 +396,7 @@
     background-color: rgb(var(--hover-rgb));
   }
 
-  .ui-glass .ui-glass-adaptive-nav:hover:not(:disabled) {
+  :is(.ui-glass, :where(:root:not([data-ui-blur='off'])) .ui-overlay-surface) .ui-glass-adaptive-nav:hover:not(:disabled) {
     background-color: var(--ui-glass-control-hover);
   }
 
@@ -403,8 +417,8 @@
     background-color: rgb(var(--overlay-hover-rgb));
   }
 
-  .ui-glass .ui-glass-adaptive-option:hover:not(:disabled):not([aria-disabled='true']),
-  .ui-glass .ui-glass-adaptive-option.ui-option-highlighted {
+  :is(.ui-glass, :where(:root:not([data-ui-blur='off'])) .ui-overlay-surface) .ui-glass-adaptive-option:hover:not(:disabled):not([aria-disabled='true']),
+  :is(.ui-glass, :where(:root:not([data-ui-blur='off'])) .ui-overlay-surface) .ui-glass-adaptive-option.ui-option-highlighted {
     background-color: var(--ui-glass-hover);
   }
 
@@ -423,7 +437,7 @@
     background-color: var(--selected-accent-hover);
   }
 
-  .ui-glass .ui-glass-adaptive-selected {
+  :is(.ui-glass, :where(:root:not([data-ui-blur='off'])) .ui-overlay-surface) .ui-glass-adaptive-selected {
     background-color: var(--ui-glass-selected-accent);
   }
 
@@ -431,7 +445,7 @@
     background-color: rgb(var(--raised-rgb));
   }
 
-  .ui-glass .ui-glass-adaptive-tile {
+  :is(.ui-glass, :where(:root:not([data-ui-blur='off'])) .ui-overlay-surface) .ui-glass-adaptive-tile {
     background-color: var(--ui-glass-control-tint);
   }
 
@@ -548,11 +562,11 @@
     color: rgb(var(--text1-rgb));
   }
 
-  .ui-glass .ui-btn-quiet:hover:not(:disabled):not([aria-disabled='true']) {
+  :is(.ui-glass, :where(:root:not([data-ui-blur='off'])) .ui-overlay-surface) .ui-btn-quiet:hover:not(:disabled):not([aria-disabled='true']) {
     background-color: var(--ui-glass-hover);
   }
 
-  .ui-glass .ui-btn-quiet:active:not(:disabled):not([aria-disabled='true']) {
+  :is(.ui-glass, :where(:root:not([data-ui-blur='off'])) .ui-overlay-surface) .ui-btn-quiet:active:not(:disabled):not([aria-disabled='true']) {
     background-color: var(--ui-glass-press);
   }
 
@@ -573,7 +587,7 @@
     background-color: var(--selected-accent-hover);
   }
 
-  .ui-glass .ui-btn-on {
+  :is(.ui-glass, :where(:root:not([data-ui-blur='off'])) .ui-overlay-surface) .ui-btn-on {
     background-color: var(--ui-glass-selected-accent);
   }
 
@@ -595,11 +609,11 @@
     background-color: rgb(var(--control-pressed-rgb));
   }
 
-  .ui-glass .ui-btn-secondary {
+  :is(.ui-glass, :where(:root:not([data-ui-blur='off'])) .ui-overlay-surface) .ui-btn-secondary {
     background-color: var(--ui-glass-control-tint);
   }
 
-  .ui-glass .ui-btn-secondary:hover:not(:disabled):not([aria-disabled='true']) {
+  :is(.ui-glass, :where(:root:not([data-ui-blur='off'])) .ui-overlay-surface) .ui-btn-secondary:hover:not(:disabled):not([aria-disabled='true']) {
     background-color: var(--ui-glass-control-hover);
   }
 

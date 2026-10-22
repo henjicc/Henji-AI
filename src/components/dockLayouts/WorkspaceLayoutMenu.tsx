@@ -46,7 +46,7 @@ export function WorkspaceLayoutMenu({ workspaceId, dockApi }: { workspaceId: str
   }
 
   return <PanelTrigger panelSize="menu" panelPadding="menu" open={open} onOpenChange={(next) => { setOpen(next); if (!next) { setEditing(null); setError(null) } }} renderPanel={() => (
-    <div className="flex min-w-52 flex-col" role="menu" aria-label="工作区布局">
+    <div className="flex flex-col" role="menu" aria-label="工作区布局">
       <div className="flex flex-col gap-0.5">{builtin.map(preset => presetItem(preset))}</div>
       {custom.length > 0 && <div className="mt-1 flex flex-col gap-0.5 border-t border-line pt-1">{custom.map(preset => presetItem(preset))}</div>}
       <div className="mt-1 flex flex-col gap-0.5 border-t border-line pt-1">

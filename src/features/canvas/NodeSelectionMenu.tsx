@@ -165,7 +165,7 @@ function NodeMenuList({ sections, allowedTypes, uploadKinds, onChoose }: NodeMen
       role="menu"
       aria-label={t('node.menuTitle')}
       tabIndex={-1}
-      className="flex min-w-44 max-w-sm flex-col outline-none"
+      className="flex min-w-32 max-w-sm flex-col outline-none"
       onKeyDown={handleKeyDown}
     >
       {sections.map(({ section, items }, sectionIndex) => (
@@ -188,7 +188,7 @@ function NodeMenuList({ sections, allowedTypes, uploadKinds, onChoose }: NodeMen
                 tabIndex={-1}
                 variant="menu"
                 size="md"
-                className="w-full gap-3"
+                className="w-full gap-2"
                 onClick={() => {
                   if (chooseFileFirst) {
                     uploadInputRef.current?.click()

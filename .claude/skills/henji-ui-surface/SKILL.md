@@ -47,7 +47,7 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 | 按钮 | `UiButton` 五档 `primary`/`secondary`/`quiet`（默认）/`danger`/`dangerSolid` + `link` + `media`；`UiIconButton` 默认静默，`on`/`tone`/`shape`/`size`。外观只由枚举决定，调用点 className 只放布局 | 本文「动作层级」 |
 | 选中 | 分段例外：**中性抬起底 + 强文字**（`UiSegmented` / 双段开关）；其余一眼可辨：**淡强调底**（`selected-accent`，强调色低透明度）+ 强调文字 / 勾 / 指示条（重要记录 012；分段例外按 017 与缺陷修复记录 014）；强调色**实底**只给唯一主动作；悬停只用中性抬升，悬停与选中不得同色 | 本文「选中态词汇表」 |
 | 尺寸 | 控件高 28/32/36（`size` sm/md/lg）；字号 20/16/14/13/12/11（正文 13）；圆角 6 控件 / 8 输入与菜单 / 12 浮层；间距 2/4/6/8/12/16/20/24/32；动效 120/180/240（查看器 500） | `references/typography-and-tokens.md`、`references/motion.md` |
-| 材质 | **按钮扁平**：纯色实底，不用渐变、顶部高光、内描边、投影或按下位移，层次只靠颜色（静息 → 悬停 → 按下逐档加深）；“质感”来自配色、留白与对齐，不来自写实光影（重要记录 016）；**玻璃只压在图片、视频、画布上**（`ui-glass`、`UiPanel variant="glass"`、浮层 `surface="glass"`），纯色界面上的浮层一律实底 | `references/color-and-material.md` |
+| 材质 | **按钮扁平**：纯色实底，不用渐变、顶部高光、内描边、投影或按下位移，层次只靠颜色（静息 → 悬停 → 按下逐档加深）；“质感”来自配色、留白与对齐，不来自写实光影（重要记录 016）；**常驻表面的玻璃只压在图片、视频、画布上**（`ui-glass`、`UiPanel variant="glass"`、浮层 `surface="glass"`）；菜单、右键菜单、下拉、弹出面板这类实底浮层（`ui-overlay-surface`）在设置开启毛玻璃时自动换成同一块玻璃、关闭时为 overlay 实底（2026-10-22 用户确认），调用点不用判断 | `references/color-and-material.md` |
 | 骨架 | 一个视图一条命令带：`UiToolbar variant="command"`（左端 / `center` / `trailing` / `subordinate`），一个表面一个主动作 | 本文「页面骨架」 |
 | 字体 | 拉丁与数字 Geist，时间码与数值 Geist Mono（`UI_TEXT_TIMECODE_CLASS`），中文系统字体 | `references/typography-and-tokens.md` |
 
