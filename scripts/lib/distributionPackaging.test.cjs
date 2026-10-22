@@ -175,13 +175,15 @@ test('静态 CRT：Windows 追加 +crt-static 并保留已有 rustflags，其他
   assert.equal(dynamicMsvcRuntimeOf(Buffer.from('KERNEL32.dll\0api-ms-win-crt-heap-l1-1-0.dll\0')), null)
 })
 
-test('打包核对：macOS 同样要求 asar 外内置模型及通用许可文件', () => {
+test('打包核对：macOS 同样要求 asar 外内置模型、音频 Worker 及通用许可文件', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'henji-packaged-mac-'))
   try {
     const licenses = path.join(dir, '痕迹AI.app', 'Contents', 'Resources', 'resources', 'licenses')
     const bundledModels = path.join(path.dirname(licenses), 'local-models')
     fs.cpSync(path.resolve(__dirname, '../../resources/local-models'), bundledModels, { recursive: true })
     for (const file of expectedLicenseFiles('darwin')) writeFile(path.join(licenses, file), 'text')
+    assert.match(verifyPackagedResources({ appOutDir: dir, platform: 'darwin', productFilename: '痕迹AI' }).join('\n'), /缺少 henji-audio-worker/)
+    writeFile(path.join(path.dirname(licenses), 'henji-audio-worker'), 'worker')
     assert.deepEqual(verifyPackagedResources({ appOutDir: dir, platform: 'darwin', productFilename: '痕迹AI' }), [])
     fs.unlinkSync(path.join(bundledModels, 'text_detection_ppocr/pp-ocrv6_tiny_det.onnx'))
     assert.match(verifyPackagedResources({ appOutDir: dir, platform: 'darwin', productFilename: '痕迹AI' }).join('\n'), /缺少内置模型/)
