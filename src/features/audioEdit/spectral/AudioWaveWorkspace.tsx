@@ -100,6 +100,7 @@ export function AudioWaveWorkspace() {
   const workspace = useAudioEditWorkspace()
   const { project, wave: editor, waveSelection: selection, setWaveSelection: onSelection, seek: onSeek, editSelection: onEditSelection, waveActions: actions, disabled } = workspace
   const { durationFrames: duration, sampleRate: rate } = project.source
+  const autoGain = useAudioEditPlaybackStore(state => state.autoGain && state.mode !== 'delivery')
   const edited = Boolean(project.repairs?.some(repair => repair.enabled) || project.gainRegions?.some(region => region.enabled))
   // 有修复或区间音量时，波形改读“已编辑、未删除”的音频（时间轴同原素材），删除与静音仍用叠加标记表示。
   const [editedPath, setEditedPath] = React.useState<string | null>(null)
@@ -171,7 +172,7 @@ export function AudioWaveWorkspace() {
       <AudioSpectralEditor sampleRate={rate} durationFrames={duration} waveform={waveform}
         {...(spectrogram.data ? { spectrogram: spectrogram.data } : {})} spectrogramStatus={spectrogram.status} {...(spectrogram.error ? { spectrogramError: spectrogram.error } : {})} onRetrySpectrogram={spectrogram.retry}
         view={editor.view} onViewChange={editor.setView} display={editor.display} tool={editor.tool} brushPixels={editor.brushPixels}
-        playhead={playheadSource} onSeek={onSeek}
+        playhead={playheadSource} onSeek={onSeek} displayGain={autoGain ? workspace.previewGain : 1}
         selection={selection ? { start: selection.startFrame, end: selection.endFrame } : null}
         onSelectionChange={(next) => onSelection(next && next.end > next.start ? { startFrame: next.start, endFrame: next.end } : null)}
         spectralSelection={editor.spectralSelection} onSpectralSelectionChange={editor.setSpectralSelection}

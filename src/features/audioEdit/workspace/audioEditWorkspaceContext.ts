@@ -31,6 +31,8 @@ export interface AudioEditWorkspace {
   seek: (frame: number) => void
   navigateToFrame: (frame: number) => void
   togglePlayback: () => Promise<void>
+  /** 试听自动增益的倍数（只影响试听与波形显示，不改导出）。 */
+  previewGain: number
   delivery: AudioEditDelivery
   silencePreview: { ranges: AudioEditRange[]; pending: boolean; error?: string }
   /** 处理只作用于选区（文字选中的词或波形选区）。 */

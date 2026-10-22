@@ -74,4 +74,14 @@ describe('waveform drawing', () => {
     expect(drawWaveform(recorder().context, { width: 200, height: 40, pixelRatio: 1, data: data(), startFrame: 6000, endFrame: 6100, tier: 'standard', tone: 'neutral', palette, detail })).toBe('peaks')
     expect(drawWaveform(recorder().context, { width: 200, height: 40, pixelRatio: 1, startFrame: 0, endFrame: 10, tier: 'standard', tone: 'neutral', palette })).toBe('empty')
   })
+
+  it('single layer draws one opaque envelope per lane instead of peak + loudness', () => {
+    const layered = recorder(), single = recorder()
+    const base = { width: 200, height: 100, pixelRatio: 1, data: data(), startFrame: 0, endFrame: 48000, tier: 'standard' as const, tone: 'neutral' as const, palette }
+    drawWaveform(layered.context, base)
+    drawWaveform(single.context, { ...base, layers: 'single' })
+    expect(layered.fills).toHaveLength(4)
+    expect(single.fills).toHaveLength(2)
+    expect(single.fills.every(fill => fill.alpha === 1)).toBe(true)
+  })
 })

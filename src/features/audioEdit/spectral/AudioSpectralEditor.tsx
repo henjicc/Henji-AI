@@ -34,6 +34,8 @@ export interface AudioSpectralEditorProps {
   /** 修复画笔的屏幕半径（CSS 像素）。 */
   brushPixels: number
   playhead: AudioPlayheadSource
+  /** 波形显示增益：试听开着自动增益时，波形按放大后的电平画，看到的就是听到的。 */
+  displayGain?: number
   onSeek: (frame: number) => void
   selection: AudioTimeSelection | null
   onSelectionChange: (selection: AudioTimeSelection | null) => void
@@ -338,7 +340,9 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
   const step = timeTickStep(view, contentWidth, sampleRate)
   const ticks: number[] = []
   for (let frame = Math.ceil(view.start / step) * step; frame <= view.end && ticks.length < 200; frame += step) ticks.push(frame)
-  const waveTicks = amplitudeTicks(amplitudeZoom)
+  const displayGain = props.displayGain ?? 1
+  // 刻度标的是原始电平：显示增益与纵向缩放一起换算到刻度位置。
+  const waveTicks = amplitudeTicks(amplitudeZoom * displayGain)
   const hzTicks = spectrogramTicks(frequency.minHz, frequency.maxHz, frequency.scale)
   const laneFraction = 100 / Math.max(1, channels)
   const total = Math.max(1, durationFrames)
@@ -388,7 +392,7 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
       {showWave && <div className="relative min-h-0" style={{ height: showSpectrum ? `${split * 100}%` : '100%' }}>
         {lanes.map(lane => <div key={lane} className="pointer-events-none absolute inset-x-0 h-px" style={{ top: `${(lane + 0.5) * laneFraction}%`, background: AUDIO_SCOPE_COLORS.grid }} />)}
         {props.waveform.data
-          ? <WaveformView waveform={props.waveform} startSeconds={view.start / sampleRate} endSeconds={view.end / sampleRate} lanes={lanes} gain={amplitudeZoom} palette={SCOPE_WAVE_PALETTE} label="音频波形" />
+          ? <WaveformView waveform={props.waveform} startSeconds={view.start / sampleRate} endSeconds={view.end / sampleRate} lanes={lanes} gain={amplitudeZoom * displayGain} palette={SCOPE_WAVE_PALETTE} layers="single" label="音频波形" />
           : props.waveform.status === 'error' ? <UiError message={props.waveform.error ?? '波形没有读出来。'} /> : <UiLoading message="正在读取波形…" />}
         {lanes.slice(1).map(lane => <div key={lane} className="pointer-events-none absolute inset-x-0 h-px bg-line" style={{ top: `${lane * laneFraction}%` }} />)}
       </div>}

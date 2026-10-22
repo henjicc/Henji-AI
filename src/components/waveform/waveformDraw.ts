@@ -32,7 +32,15 @@ export interface WaveformDrawOptions {
   detail?: WaveformDetailWindow
   /** 振幅倍数，覆盖数据自带的显示增益；音频编辑按真实电平（1 = 0 dBFS 顶到行高）再乘纵向缩放。超出行高的部分被裁掉。 */
   gain?: number
+  /**
+   * 层次：`layered`（默认）峰值层半透明 + 响度层实色；`single` 只画一层实色峰值包络，
+   * 放大到每列只有几十个采样时直接画采样曲线（参照 Audition 的波形编辑器）。
+   */
+  layers?: 'layered' | 'single'
 }
+
+/** single 档：每列不超过这么多采样时改画采样曲线，不再画包络。 */
+const TRACE_FRAMES_PER_COLUMN = 24
 
 const OPACITY = { neutral: { peak: 0.45, rms: 1 }, clip: { peak: 0.38, rms: 0.85 } } as const
 /** 采样间距达到这么多 CSS 像素时画采样点曲线。 */
@@ -114,6 +122,7 @@ export function drawWaveform(ctx: CanvasRenderingContext2D, options: WaveformDra
   const detailCovers = tier === 'standard' && !!detail && framesPerColumn < baseSamples && detail.firstFrame <= startFrame && detail.firstFrame + detail.frameCount >= Math.min(endFrame, pyramid.frameCount)
   const sampleSpacingCss = columns / span / pixelRatio
   const mode: WaveformRenderMode = detailCovers ? (sampleSpacingCss >= POINT_SPACING_CSS ? 'points' : 'samples') : 'peaks'
+  const single = options.layers === 'single'
   const segments = waveformSegments(width, startFrame, endFrame, tone === 'clip' ? undefined : options.playedFrame, options.cutRanges)
   const opacity = OPACITY[tone]
   const peak = new Float32Array(columns)
@@ -124,7 +133,7 @@ export function drawWaveform(ctx: CanvasRenderingContext2D, options: WaveformDra
     const top = lane * laneHeight
     const mid = top + laneHeight / 2
     const amplitude = Math.max(0, laneHeight / 2 - pad)
-    if (mode === 'points') {
+    if (mode === 'points' || (single && mode === 'samples' && framesPerColumn <= TRACE_FRAMES_PER_COLUMN)) {
       drawPoints(ctx, options, detail!.channels[channel] ?? detail!.channels[0], detail!.firstFrame, gain, top, laneHeight, mid, amplitude, segments, sampleSpacingCss)
       return
     }
@@ -134,10 +143,10 @@ export function drawWaveform(ctx: CanvasRenderingContext2D, options: WaveformDra
       ctx.save()
       clipTo(ctx, parts, top, laneHeight)
       ctx.fillStyle = colorOf(kind, tone, palette)
-      ctx.globalAlpha = opacity.peak
+      ctx.globalAlpha = single ? 1 : opacity.peak
       traceArea(ctx, peak, gain, mid, amplitude)
       ctx.fill()
-      if (tier === 'standard') {
+      if (tier === 'standard' && !single) {
         ctx.globalAlpha = opacity.rms
         traceArea(ctx, rms, gain, mid, amplitude)
         ctx.fill()

@@ -267,7 +267,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     history: { past: state.past, future: state.future, undo: state.undo, redo: state.redo },
     textSearch, wave: waveEditor, waveActions, waveSelection,
     setWaveSelection: (next) => { setWaveSelection(next); if (selectedBlockIds.length) setSelectedBlockIds([]) },
-    editSelection, seek: seekSourceFrame, navigateToFrame, togglePlayback, delivery,
+    editSelection, seek: seekSourceFrame, navigateToFrame, togglePlayback, previewGain: normalizationGain, delivery,
     silencePreview: { ranges: silencePreview.ranges, pending: silencePreview.pending, ...(silencePreview.error ? { error: silencePreview.error } : {}) },
     selectionOnly, setSelectionOnly, processRange: range, selectedBlocks, selectedBlockIds, setSelectedBlockIds,
     setBlocksIncluded: state.setBlocksIncluded, setReferenceScript: state.setReferenceScript, setVstEnabled: state.setVstEnabled,
