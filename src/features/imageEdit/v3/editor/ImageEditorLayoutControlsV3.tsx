@@ -66,7 +66,7 @@ export function ImageEditorLayoutControlsV3({ bus, controller, openRequest = 0 }
     resetFidelity()
     setError(undefined)
     if (!value) adapter.cancel()
-  }} alignment="bottomRight" surface="glass" panelPadding="content" panelWidth="content"
+  }} alignment="bottomRight" panelPadding="content" panelWidth="content"
     renderPanel={() => <UiGroup labelWidth={96} gap="stack" className="w-96 max-w-full min-w-0" data-image-layout-controls>
       {state.candidates.length > 0 && <UiFormRow label={surfaceText('surfaceGrammar.layoutPlan')} density="compact">
         {options.length <= 5 && options.every(option => option.label.length <= 4)
