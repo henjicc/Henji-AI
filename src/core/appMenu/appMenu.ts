@@ -13,7 +13,7 @@
 export type AppMenuId = string
 
 export interface AppMenuCommand {
-  kind: 'command'
+  kind: 'action'
   /** 全局唯一、稳定（“工作区.动作”，如 videoEdit.split）；macOS 原生菜单回传它。 */
   id: string
   label: string
@@ -78,7 +78,7 @@ export function getAppMenus(): readonly AppMenu[] { return snapshot }
 export function findAppMenuCommand(id: string, menus: readonly AppMenu[] = snapshot): AppMenuCommand | undefined {
   const walk = (items: readonly AppMenuEntry[]): AppMenuCommand | undefined => {
     for (const item of items) {
-      if (item.kind === 'command' && item.id === id) return item
+      if (item.kind === 'action' && item.id === id) return item
       if (item.kind === 'submenu') { const found = walk(item.items); if (found) return found }
     }
     return undefined

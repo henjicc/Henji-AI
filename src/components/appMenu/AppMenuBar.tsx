@@ -62,7 +62,7 @@ function AppMenuList({ items, label, onClose, onMove }: { items: readonly AppMen
     if (next === null) return
     event.preventDefault(); enabled[next]?.focus()
   }
-  const run = (item: Extract<AppMenuEntry, { kind: 'command' }>): void => {
+  const run = (item: Extract<AppMenuEntry, { kind: 'action' }>): void => {
     if (item.disabledReason) return
     onClose()
     // 先让菜单收起一帧再执行：动作可能打开弹窗或做重活。

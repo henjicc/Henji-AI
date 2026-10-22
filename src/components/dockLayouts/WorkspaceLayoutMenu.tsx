@@ -31,9 +31,9 @@ export function WorkspaceLayoutMenu({ workspaceId, dockApi }: { workspaceId: str
   useEffect(() => contributeAppMenus(`layout.${workspaceId}`, [{ menu: 'view', order: 10, items: [{
     kind: 'submenu', id: `layout.${workspaceId}.presets`, label: '工作区布局', ...(layouts.ready ? {} : { disabledReason: '布局还在读取' }),
     items: [
-      ...layouts.presets.map(preset => ({ kind: 'command' as const, id: `layout.${workspaceId}.apply.${preset.id}`, label: preset.name, checked: preset.id === layouts.activeId, run: () => layouts.apply(preset.id) })),
+      ...layouts.presets.map(preset => ({ kind: 'action' as const, id: `layout.${workspaceId}.apply.${preset.id}`, label: preset.name, checked: preset.id === layouts.activeId, run: () => layouts.apply(preset.id) })),
       { kind: 'separator' as const },
-      { kind: 'command' as const, id: `layout.${workspaceId}.reset`, label: `重置为“${active?.name ?? '默认'}”`, ...(layouts.dirty ? {} : { disabledReason: '当前布局没有调整' }), run: () => layouts.resetActive() },
+      { kind: 'action' as const, id: `layout.${workspaceId}.reset`, label: `重置为“${active?.name ?? '默认'}”`, ...(layouts.dirty ? {} : { disabledReason: '当前布局没有调整' }), run: () => layouts.resetActive() },
     ],
   }] }]), [workspaceId, layouts, active?.name])
   const presetItem = (preset: typeof layouts.presets[number]) => <UiOptionButton key={preset.id} role="menuitemradio" aria-checked={preset.id === layouts.activeId}

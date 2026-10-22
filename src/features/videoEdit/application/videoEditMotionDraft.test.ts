@@ -70,6 +70,8 @@ it('超级关键帧现有分组的 UiSwitch 可一步修改当前片段吸附开
   const owner = await setup(), id = owner.document.id, onError = vi.fn(), history = owner.past.length
   const view = render(createElement(VideoEditMotionControls, { owner, onError }))
   fireEvent.click(view.getByRole('button', { name: '超级关键帧' }))
+  // 吸附开关收在默认折叠的“参照与约束”区里。
+  fireEvent.click(view.getByRole('button', { name: '参照与约束' }))
   fireEvent.click(view.getByRole('switch', { name: '吸附到节拍' }))
   expect(getActiveVideoEditSequence(owner).clips[0].snapToBeat).toBe(true); expect(owner.past).toHaveLength(history + 1)
   expect(onError).not.toHaveBeenCalled(); view.unmount()

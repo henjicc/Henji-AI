@@ -20,26 +20,26 @@ export function useGlobalAppMenus({ activeWorkspace, workspaces, onWorkspaceChan
   useEffect(() => {
     const openSettings = useUiStore.getState().openSettings
     const workspaceItems: AppMenuEntry[] = workspaces.filter(item => item.id !== 'assets').map(item => ({
-      kind: 'command', id: `app.workspace.${item.id}`, label: item.label, checked: item.id === activeWorkspace, run: () => onWorkspaceChange(item.id),
+      kind: 'action', id: `app.workspace.${item.id}`, label: item.label, checked: item.id === activeWorkspace, run: () => onWorkspaceChange(item.id),
     }))
     return contributeAppMenus('app', [
       { menu: 'file', order: 90, items: [
-        { kind: 'command', id: 'app.settings', label: '设置…', run: () => openSettings() },
+        { kind: 'action', id: 'app.settings', label: '设置…', run: () => openSettings() },
         { kind: 'separator' },
-        { kind: 'command', id: 'app.quit', label: '退出', run: () => getPlatform().window.close() },
+        { kind: 'action', id: 'app.quit', label: '退出', run: () => getPlatform().window.close() },
       ] },
       { menu: 'window', order: 0, items: workspaceItems },
       { menu: 'window', order: 10, items: [
-        { kind: 'command', id: 'app.assistant', label: '智能助手', checked: assistantOpen, run: onToggleAssistant },
-        { kind: 'command', id: 'app.assets', label: '资产库浮动面板', checked: assetFloating, run: onToggleAssets },
+        { kind: 'action', id: 'app.assistant', label: '智能助手', checked: assistantOpen, run: onToggleAssistant },
+        { kind: 'action', id: 'app.assets', label: '资产库浮动面板', checked: assetFloating, run: onToggleAssets },
       ] },
       { menu: 'window', order: 20, items: [
-        { kind: 'command', id: 'app.logs', label: '日志与诊断', run: () => openLogWindow() },
-        { kind: 'command', id: 'app.minimize', label: '最小化', run: () => getPlatform().window.minimize() },
+        { kind: 'action', id: 'app.logs', label: '日志与诊断', run: () => openLogWindow() },
+        { kind: 'action', id: 'app.minimize', label: '最小化', run: () => getPlatform().window.minimize() },
       ] },
       { menu: 'help', order: 0, items: [
-        { kind: 'command', id: 'app.shortcuts', label: '查看与快捷键设置', run: () => openSettings({ tab: 'general', sectionId: 'general-view' }) },
-        { kind: 'command', id: 'app.about', label: '关于痕迹AI与检查更新', run: () => openSettings({ tab: 'general', sectionId: 'general-about' }) },
+        { kind: 'action', id: 'app.shortcuts', label: '查看与快捷键设置', run: () => openSettings({ tab: 'general', sectionId: 'general-view' }) },
+        { kind: 'action', id: 'app.about', label: '关于痕迹AI与检查更新', run: () => openSettings({ tab: 'general', sectionId: 'general-about' }) },
       ] },
     ])
   }, [activeWorkspace, workspaces, onWorkspaceChange, assistantOpen, onToggleAssistant, assetFloating, onToggleAssets])

@@ -12,10 +12,10 @@ it('点开菜单执行命令；不可用项不执行；指针移到其他菜单�
   vi.useFakeTimers()
   const undo = vi.fn(), settings = vi.fn()
   disposers.push(contributeAppMenus('test', [
-    { menu: 'file', items: [{ kind: 'command', id: 'settings', label: '设置…', run: settings }] },
+    { menu: 'file', items: [{ kind: 'action', id: 'settings', label: '设置…', run: settings }] },
     { menu: 'edit', items: [
-      { kind: 'command', id: 'undo', label: '撤销', shortcut: 'Ctrl+Z', run: undo },
-      { kind: 'command', id: 'redo', label: '重做', disabledReason: '没有可重做的操作', run: vi.fn() },
+      { kind: 'action', id: 'undo', label: '撤销', shortcut: 'Ctrl+Z', run: undo },
+      { kind: 'action', id: 'redo', label: '重做', disabledReason: '没有可重做的操作', run: vi.fn() },
     ] },
   ]))
   render(<AppMenuBar />)
