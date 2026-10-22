@@ -19,7 +19,8 @@ function useDockGroupMaximized(containerApi: DockviewApi, group: DockviewGroupPa
 }
 const maximizeLabelOf = (maximized: boolean): string => maximized ? '恢复面板组大小' : '最大化面板组'
 
-export function VideoEditDockTab({ api, containerApi }: IDockviewPanelHeaderProps): React.ReactElement {
+/** titleSlot：用别的内容代替面板名（时间线面板显示已打开的序列，与 PR 一致）。 */
+export function VideoEditDockTab({ api, containerApi, titleSlot }: IDockviewPanelHeaderProps & { titleSlot?: React.ReactNode }): React.ReactElement {
   const [title, setTitle] = useState(api.title ?? '')
   const [group, setGroup] = useState(api.group)
   const [active, setActive] = useState(api.group.activePanel?.id === api.id)
@@ -34,7 +35,7 @@ export function VideoEditDockTab({ api, containerApi }: IDockviewPanelHeaderProp
   // 与 PR 一致：标签只有标题和紧跟其后的面板菜单（关闭在菜单里），选中线只到菜单为止。
   // 非当前标签也占住菜单的位置（不可见），切换叠放面板时各标签文字位置不动。
   return <span className="flex h-full items-center gap-1.5 text-xs" data-dock-tab={api.id} data-dock-tab-title={title}>
-    <span>{title}</span>
+    {titleSlot ?? <span>{title}</span>}
     {active ? <VideoEditPanelMenu containerApi={containerApi} group={group} /> : <span aria-hidden="true" className="invisible flex"><UiIconButton size="2xs" tabIndex={-1}><Menu  /></UiIconButton></span>}
   </span>
 }

@@ -6,7 +6,7 @@ import { VideoEditPresetsPanel } from '../panels/VideoEditPresetsPanel'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createRafScheduler, type RafScheduler } from '@/utils/createRafScheduler'
 import { ownerWindowOf } from '@/utils/crossRealmDom'
-import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type IWatermarkPanelProps, type IDockviewPanelProps } from 'dockview-react'
+import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type IWatermarkPanelProps, type IDockviewPanelProps, type IDockviewPanelHeaderProps } from 'dockview-react'
 import 'dockview-react/dist/styles/dockview.css'
 import { UiButton, UiEmpty } from '@/components/ui'
 import { VIDEO_EDIT_FOCUSABLE_PANELS } from '@/core/videoEdit/panels'
@@ -26,6 +26,7 @@ import { DockviewHost } from '@/components/DockviewHost'
 import { dockviewHostTheme } from '@/components/dockviewHostTheme'
 import { bindDockDragGestures, dockFloatingGroupsBack, DOCKVIEW_HOST_DND_OPTIONS } from '@/components/dockviewDocking'
 import { VideoEditDockHeaderActions, VideoEditDockTab } from './VideoEditDockChrome'
+import { VideoEditSequenceTabs } from '../panels/VideoEditSequenceTabs'
 import { dockVideoEditGroup, showVideoEditPanel, VIDEO_EDIT_PANELS, type VideoEditPanelId } from './videoEditDockLayout'
 import { dockVideoEditPopoutWindow, bindVideoEditPopoutDock, canFloatVideoEditDockSource, floatVideoEditDockSource, focusVideoEditPopoutPanel, isVideoEditPanelPoppedOut, listVideoEditPopouts, resetVideoEditWorkspaceLayout, restoreVideoEditPopouts, trackVideoEditDockPanel } from './popout/videoEditPopouts'
 import { VideoEditPopoutPortals } from './popout/VideoEditPopoutPortals'
@@ -46,6 +47,14 @@ type PanelBody = (props: { visible: boolean }) => React.ReactElement
 function ProjectBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="project"><VideoEditProjectPanel {...useDock(visible)} visible={visible} /></div> }
 function EffectsBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0"><VideoEditEffectsPanel {...useDock(visible)} visible={visible} /></div> }
 function ProgramBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="flex h-full min-h-0 flex-col" data-video-edit-panel="program"><VideoEditPreview {...useDock(visible)} visible={visible} /></div> }
+/** 时间线面板的标签直接是已打开序列的名称（PR 的做法）：多开序列时在标签上切换，不再写“时间线”三个字。 */
+function TimelineTabTitle(): React.ReactElement {
+  const { instance, onError } = useDock(true)
+  return instance.activeSequenceId ? <VideoEditSequenceTabs instance={instance} onError={onError} placement="dock" /> : <span>时间线</span>
+}
+function DockTab(props: IDockviewPanelHeaderProps): React.ReactElement {
+  return <VideoEditDockTab {...props} titleSlot={props.api.id === 'timeline' ? <TimelineTabTitle /> : undefined} />
+}
 function TimelineBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="flex h-full min-h-0 flex-col" data-video-edit-panel="timeline"><VideoEditTimeline {...useDock(visible)} visible={visible} /></div> }
 function ContentBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="content"><VideoEditTimedContentPanel {...useDock(visible)} visible={visible} /></div> }
 function EffectsLibraryBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="effects_library"><VideoEditEffectsLibraryPanel {...useDock(visible)} visible={visible} /></div> }
@@ -187,7 +196,7 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
     {/* 层叠隔离与分隔条拖动保护见 DockviewHost（与 3D 镜头参考共用） */}
     <DockviewHost ref={hostRef} className="h-full min-h-0 w-full">
       <DockviewReact className="henji-cameraStage-dock henji-videoEdit-dock dockview-theme-abyss h-full min-h-0 w-full" theme={VIDEO_EDIT_DOCK_THEME} components={COMPONENTS}
-        defaultTabComponent={VideoEditDockTab} rightHeaderActionsComponent={VideoEditDockHeaderActions} watermarkComponent={EmptyLayout}
+        defaultTabComponent={DockTab} rightHeaderActionsComponent={VideoEditDockHeaderActions} watermarkComponent={EmptyLayout}
         {...DOCKVIEW_HOST_DND_OPTIONS} defaultRenderer="always" onReady={onReady} />
     </DockviewHost>
     <VideoEditPopoutPortals onFocusPanel={id => { if (id !== 'effects_library' && listVideoEditInstances().includes(instance)) focusVideoEditPanel(instance.document.id, id, { reveal: false }) }}

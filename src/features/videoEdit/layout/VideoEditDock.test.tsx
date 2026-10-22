@@ -553,11 +553,13 @@ it('面板菜单紧跟在组内当前标签的标题旁（PR），切换当前�
   act(() => { dock.layout(1440, 860); dock.getPanel('timeline')!.api.moveTo({ group: dock.getPanel('program')!.group, position: 'center' }) })
   const menuTabs = (): string[] => view.getAllByRole('button', { name: '面板菜单' }).map(button => button.closest('.dv-tab')?.textContent ?? '')
   expect(menuTabs()).toHaveLength(dock.groups.length)
-  expect(menuTabs().filter(text => text.includes('时间线'))).toHaveLength(1)
+  // 时间线面板的标签直接显示序列名称（PR 的做法）
+  const sequenceName = document.sequences[0].name
+  expect(menuTabs().filter(text => text.includes(sequenceName))).toHaveLength(1)
   expect(menuTabs().some(text => text.includes('节目画面'))).toBe(false)
   act(() => dock.getPanel('program')!.api.setActive())
   expect(menuTabs().some(text => text.includes('节目画面'))).toBe(true)
-  expect(menuTabs().some(text => text.includes('时间线'))).toBe(false)
+  expect(menuTabs().some(text => text.includes(sequenceName))).toBe(false)
 })
 
 it('宿主重复发布不重绘隐藏素材面板，重新显示时读到最新文档', () => {
