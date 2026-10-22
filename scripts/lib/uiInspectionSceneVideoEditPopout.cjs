@@ -58,10 +58,13 @@ function createVideoEditPopoutScene() {
       const windows = async () => (await allWindows()).filter(window => !foreignWindowIds.includes(window.id)).map(window => ({ ...window, main: window.id === mainWindowId }))
       const popOut = async (title) => {
         await group(page, title).locator('.dv-tab').filter({ has: page.locator(`[data-dock-tab-title="${title}"]`) }).click()
-        const opened = app.waitForEvent('window', { timeout: 30000 })
         await group(page, title).getByRole('button', { name: '面板菜单', exact: true }).click()
-        await button(page, '浮动面板').click()
-        const child = await opened; await child.waitForLoadState('domcontentloaded')
+        // 先登记窗口监听，并同时接住点击与窗口等待的失败，避免点击超时时遗留未处理的拒绝。
+        const [child] = await Promise.all([
+          app.waitForEvent('window', { timeout: 30000 }),
+          page.getByRole('menuitem', { name: '浮动面板', exact: true }).click(),
+        ])
+        await child.waitForLoadState('domcontentloaded')
         await child.locator(`[data-video-edit-panel]`).first().waitFor({ state: 'visible', timeout: 30000 })
         return child
       }
@@ -81,8 +84,17 @@ function createVideoEditPopoutScene() {
 
         phase('open-project')
         await button(page, '剪辑').first().click(); if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
-        await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1'))
+        await button(page, '生成').click()
+        await page.evaluate(async () => {
+          localStorage.removeItem('henji.videoEdit.dockLayout.v1')
+          localStorage.removeItem('henji.videoEdit.popoutLayout.v1')
+          await window.henjiNative.settings.delete('workspace.layout.video_edit')
+        })
+        // 从空生成页重载后再观测，避免漏掉先前空剪辑页创建、随后被节目接管的预热 Worker。
+        await page.reload({ waitUntil: 'domcontentloaded' })
+        await button(page, '生成').waitFor({ state: 'visible' })
         await observeWorkers(page); observed = true
+        await button(page, '剪辑').first().click()
         await dialogs(app, [file], file); await openVideoEditFile(page, file); await presented(page, 0)
         const identity = await authorizeMcpConnection(page, { name: '独立浮窗验收', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji popout Reality')
         await playback(0, false); await presented(page, 0)
@@ -196,7 +208,8 @@ function createVideoEditPopoutScene() {
         await shot('popout-docked-back')
         evidence.phases.push('标题栏贴回：节目画面回主窗口，无残留窗口')
 
-        await button(page, '关闭项目').click(); await waitReleased(page)
+        // 空剪辑页会继续预热；离开工作区后再要求所有 Worker 退场，包含预热池的释放回执。
+        await button(page, '关闭项目').click(); await button(page, '生成').click(); await waitReleased(page)
         evidence.resources = await workerSnapshot(page); assert.equal(evidence.resources.live, 0)
         evidence.completed = true; store()
       } catch (error) { evidence.failed = { phase: evidence.currentPhase, message: String(error.message ?? error), stack: error.stack }; store(); await shot('popout-failed').catch(() => {}); throw error }
@@ -204,6 +217,7 @@ function createVideoEditPopoutScene() {
         await client?.close().catch(() => {}); await disableMcp(page).catch(() => {})
         await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter(window => window.getTitle().startsWith('痕迹AI · ')).forEach(window => window.close())).catch(() => {})
         if (await button(page, '关闭项目').isVisible().catch(() => false)) await button(page, '关闭项目').click().catch(() => {})
+        await button(page, '生成').click().catch(() => {})
         if (observed) { await waitReleased(page).catch(error => { evidence.completed = false; evidence.releaseFailure = String(error) }); evidence.resources = await workerSnapshot(page).catch(() => evidence.resources) }
         await page.evaluate(() => { window.__videoLayoutObservers?.forEach(observer => observer.disconnect()); if (window.__videoLayoutNativeWorker) window.Worker = window.__videoLayoutNativeWorker; localStorage.removeItem('henji.videoEdit.dockLayout.v1') }).catch(() => {}); store()
       }
@@ -261,9 +275,11 @@ function createVideoEditDockGesturesScene() {
         evidence.ctrlPreviewVisible = await page.locator('[data-dock-float-preview]:not(.hidden)').isVisible()
         evidence.ctrlDockOverlayVisible = await page.locator('.dv-drop-target-anchor, .dv-drop-target-selection').evaluateAll(nodes => nodes.some(node => getComputedStyle(node).visibility !== 'hidden' && node.getBoundingClientRect().width > 0))
         await shot('dock-ctrl-drag-preview')
-        const floated = app.waitForEvent('window', { timeout: 30000 })
-        await page.mouse.up(); await page.keyboard.up('Control')
-        const effects = await floated; await effects.waitForLoadState('domcontentloaded')
+        const [effects] = await Promise.all([
+          app.waitForEvent('window', { timeout: 30000 }),
+          (async () => { await page.mouse.up(); await page.keyboard.up('Control') })(),
+        ])
+        await effects.waitForLoadState('domcontentloaded')
         await effects.locator('[data-video-edit-panel="effects"]').waitFor({ state: 'visible', timeout: 30000 })
         assert.equal(evidence.ctrlPreviewVisible, true, 'Ctrl 拖动时应显示浮动窗口预览')
         assert.equal(evidence.ctrlDockOverlayVisible, false, 'Ctrl 拖动时不应显示停靠指示')
@@ -353,9 +369,11 @@ function createVideoEditDockGesturesScene() {
         await page.mouse.move(outside.x, outside.y, { steps: 16 })
         evidence.outsidePreviewVisible = await page.locator('[data-dock-float-preview]:not(.hidden)').isVisible()
         await shot('dock-outside-float-preview')
-        const floatedTimeline = app.waitForEvent('window', { timeout: 30000 })
-        await page.mouse.up()
-        const timeline = await floatedTimeline; await timeline.waitForLoadState('domcontentloaded')
+        const [timeline] = await Promise.all([
+          app.waitForEvent('window', { timeout: 30000 }),
+          page.mouse.up(),
+        ])
+        await timeline.waitForLoadState('domcontentloaded')
         await timeline.locator('[data-video-edit-panel="timeline"]').waitFor({ state: 'visible', timeout: 30000 })
         assert.equal(evidence.outsidePreviewVisible, true, '拖到空白处应显示浮动窗口预览')
         await timeline.locator('[data-window-titlebar="panel"]').getByRole('button', { name: '关闭时间线', exact: true }).click()

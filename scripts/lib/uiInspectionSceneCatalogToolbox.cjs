@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检启动器使用 CommonJS 场景工厂。 */
+const assert = require('node:assert/strict')
 const { createAudioEditScene } = require('./uiInspectionSceneAudioEdit.cjs')
 const { createAudioEditSpectralScene } = require('./uiInspectionSceneAudioEditSpectral.cjs')
 const { createAudioEditHomeScene } = require('./uiInspectionSceneAudioEditHome.cjs')
@@ -1817,9 +1818,25 @@ function createToolboxScenes(context) {
       id: 'toolbox-camera-stage',
       surface: '工具箱',
       name: '工具箱-3D 镜头工程',
-      setup: async (page) => {
+      writesUserData: true,
+      setup: async (page, _app, { capture }) => {
         await setupCameraStageProjectList(page)
         await settlePage(page, 700)
+        await capture('project-list')
+        await page.getByRole('button', { name: /^(新建镜头参考|New Camera Stage)$/i }).first().click()
+        const viewport = page.locator('[data-camera-stage-viewport-id] canvas').first()
+        await viewport.waitFor({ state: 'visible', timeout: 30000 })
+        const canvas = await viewport.elementHandle()
+        for (const [current, next] of [['默认', '专注视口'], ['专注视口', '默认']]) {
+          await page.getByRole('button', { name: current, exact: true }).click()
+          await page.getByRole('menuitemradio', { name: next, exact: true }).click()
+          await settlePage(page)
+          assert.equal(await canvas.evaluate(element => element.isConnected), true, '切换镜头参考布局保留原视口 canvas')
+        }
+        await page.getByRole('button', { name: '重置布局', exact: true }).click()
+        await settlePage(page)
+        assert.equal(await canvas.evaluate(element => element.isConnected), true, '重置镜头参考布局保留原视口 canvas')
+        await capture('viewport-layout-restored')
       },
     },
     {

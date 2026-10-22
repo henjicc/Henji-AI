@@ -19,6 +19,7 @@ import { closeAllVideoEdits, openSeededVideoEdit } from '../application/videoEdi
 import { focusVideoEditPanel, setVideoEditView, publishVideoEdit } from '../application/videoEditService'
 
 const lifetime = vi.hoisted(() => ({ created: 0, live: 0, peak: 0, disposed: 0 }))
+const previewSession = vi.hoisted(() => ({ created: 0, disposed: 0 }))
 const effectScroll = vi.hoisted(() => vi.fn())
 const projectRenders = vi.hoisted(() => vi.fn())
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
@@ -56,12 +57,17 @@ vi.mock('../panels/VideoEditEffectsPanel', async () => {
 vi.mock('../VideoEditTimeline', () => ({ VideoEditTimeline: () => <div>时间线</div> }))
 vi.mock('../VideoEditPreview', async () => {
   const { useEffect } = await import('react')
-  return { VideoEditPreview: function Preview(): React.ReactElement {
+  return { VideoEditPreview: function Preview({ visible }: { visible: boolean }): React.ReactElement {
     useEffect(() => {
       lifetime.created++; lifetime.live++; lifetime.peak = Math.max(lifetime.peak, lifetime.live)
       return () => { lifetime.live--; lifetime.disposed++ }
     }, [])
-    return <div>节目画面</div>
+    useEffect(() => {
+      if (!visible) return
+      previewSession.created++
+      return () => { previewSession.disposed++ }
+    }, [visible])
+    return <div>节目画面{visible && <canvas data-testid="program-canvas" />}</div>
   } }
 })
 
@@ -70,11 +76,26 @@ beforeEach(async () => {
   await videoEditLayoutPresets.load()
   await videoEditLayoutPresets.restore({ activeId: 'editing', current: defaultVideoEditLayout(), users: [] })
   localStorage.clear(); lifetime.created = 0; lifetime.live = 0; lifetime.peak = 0; lifetime.disposed = 0
+  previewSession.created = 0; previewSession.disposed = 0
   effectScroll.mockClear()
   vi.stubGlobal('ResizeObserver', class { observe(): void {} unobserve(): void {} disconnect(): void {} })
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 1440, 860))
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
+
+it('共享预设切换、重置与另存恢复不让节目短暂隐藏或重建预览会话', async () => {
+  const document = createVideoEditDocument('节目预设生命周期')
+  const instance = { document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], openSequenceIds: [], frame: 0, playing: false, past: [], future: [] } as unknown as VideoEditInstance
+  const view = render(<VideoEditDock instance={instance} onError={vi.fn()} onApiChange={() => {}} />)
+  const canvas = view.getByTestId('program-canvas')
+  let saved = ''
+  await act(async () => { saved = await videoEditLayoutPresets.saveAs('节目布局') })
+  for (const id of ['grading', 'editing', saved]) {
+    await act(async () => { await videoEditLayoutPresets.apply(id); await videoEditLayoutPresets.resetActive() })
+    expect(view.getByTestId('program-canvas')).toBe(canvas)
+    expect(previewSession).toEqual({ created: 1, disposed: 0 })
+  }
+})
 
 it('另存与切换预设收回系统浮窗，预设只记录停靠布局并保留节目实例', async () => {
   const document = createVideoEditDocument('预设浮窗验收')
