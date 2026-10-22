@@ -104,11 +104,26 @@ async function measureScrub(page, pattern, pct) {
   const program = new Set(snapshot.workers.filter(worker => worker.direct && !worker.terminated).map(worker => worker.id))
   const renders = snapshot.events.filter(event => event.kind === 'render.completed' && event.at >= from && program.has(event.worker))
   const stat = key => ({ p50: pct(renders.map(event => event[key] ?? 0), .5), p90: pct(renders.map(event => event[key] ?? 0), .9) })
+  // 流水线：相邻两次请求的间隔，以及“上一帧完成 → 下一次请求发出”的空档（大说明主线程拖慢，接近 0 说明渲染侧是瓶颈）。
+  const requested = snapshot.events.filter(event => event.kind === 'render' && event.at >= from && program.has(event.worker)).map(event => event.at).sort((a, b) => a - b)
+  const completedAt = renders.map(event => event.at).sort((a, b) => a - b)
+  const intervals = requested.slice(1).map((at, index) => at - requested[index])
+  const gaps = requested.slice(1).map(at => { const previous = completedAt.filter(done => done <= at).pop(); return previous === undefined ? null : at - previous }).filter(value => value !== null)
+  // 最长的几次停顿：发生在第几秒、停了多久、停顿前那一帧的渲染耗时，用来区分是渲染慢还是没有发请求。
+  const stalls = intervals.map((value, index) => ({ at: Math.round(requested[index] - from), ms: Math.round(value) })).sort((a, b) => b.ms - a.ms).slice(0, 8)
+  const pipeline = { requestIntervalMs: { p50: pct(intervals, .5), p90: pct(intervals, .9), max: Math.round(Math.max(0, ...intervals)) }, gapAfterCompleteMs: { p50: pct(gaps, .5), p90: pct(gaps, .9) }, stalls, stalledMs: Math.round(intervals.filter(value => value > 100).reduce((a, b) => a + b, 0)) }
+  // 最慢几帧的阶段构成：Worker 回执带累计阶段耗时，与上一帧相减即这一帧花在各阶段的时间。
+  const ordered = [...renders].sort((a, b) => a.at - b.at)
+  const slowest = ordered.map((event, index) => ({ event, previous: ordered[index - 1] })).filter(entry => entry.previous && entry.event.preparationStages && entry.previous.preparationStages)
+    .sort((a, b) => b.event.elapsedMs - a.event.elapsedMs).slice(0, 3).map(({ event, previous }) => ({
+      at: Math.round(event.at - from), elapsedMs: Math.round(event.elapsedMs), decodeMs: Math.round(event.decodeMs ?? 0),
+      stages: Object.fromEntries(Object.entries(event.preparationStages).map(([name, value]) => [name, { ms: Math.round(value.ms - (previous.preparationStages[name]?.ms ?? 0)), count: value.count - (previous.preparationStages[name]?.count ?? 0) }]).filter(([, value]) => value.ms >= 5 || value.count > 0 && value.ms >= 1)),
+    }))
   const decoderEvents = await page.evaluate(async after => (await window.henjiNative.logging.queryLogEvents({ date: after.slice(0, 10), afterTimestamp: after, keyword: 'video_decoder.request.completed', limit: 5000 })).events, after)
   const decoder = {}
   for (const entry of decoderEvents) { const type = entry.context?.type ?? '?'; decoder[type] ??= { count: 0, totalMs: 0 }; decoder[type].count++; decoder[type].totalMs += Math.round(entry.context?.elapsedMs ?? 0) }
   await page.waitForTimeout(1500)
-  return { ...(top ? { top: top.slice(0, 15), profilePath } : {}), debug, movesPerSecond: Math.round(moves / (pattern.ms / 1000) * 10) / 10, requests: snapshot.events.filter(event => event.kind === 'render' && event.at >= from && program.has(event.worker)).length, fps: Math.round(presentedFrames / (pattern.ms / 1000) * 10) / 10, presentedFrames, renders: renders.length, elapsedMs: stat('elapsedMs'), decodeMs: stat('decodeMs'), gpuMs: stat('gpuMs'), decoder }
+  return { ...(top ? { top: top.slice(0, 15), profilePath } : {}), slowest, pipeline, debug, movesPerSecond: Math.round(moves / (pattern.ms / 1000) * 10) / 10, requests: snapshot.events.filter(event => event.kind === 'render' && event.at >= from && program.has(event.worker)).length, fps: Math.round(presentedFrames / (pattern.ms / 1000) * 10) / 10, presentedFrames, renders: renders.length, elapsedMs: stat('elapsedMs'), decodeMs: stat('decodeMs'), gpuMs: stat('gpuMs'), decoder }
 }
 
 function summarizeSamples(samples) {

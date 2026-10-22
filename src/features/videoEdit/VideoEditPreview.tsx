@@ -103,16 +103,11 @@ function programDropZoneAt(event: React.DragEvent<HTMLElement>): VideoEditDropMo
   return x < 0.25 ? 'insert' : x >= 0.75 ? 'replace' : 'overwrite'
 }
 
-/** The Program GPU surface belongs to the project: a remount (dock ↔ popout window) waits until the previous session actually retired. */
-/**
- * 起播预热的时机：点击定位、松手后画面一出来就预热（人从松手到按空格至少一两百毫秒，正好用来解码）；
- * 拖动中指针停住这么久也预热，再动一下即中止（取消原生解码很便宜）。
- */
-const PLAY_ARM_SCRUB_REST_MS = 120
 /** 刷新周期每隔这么久才重新量一次（窗口可能被拖到另一块显示器）。 */
 const DISPLAY_PERIOD_REFRESH_MS = 5000
 /** 第一块声音已混好时的起播提前量：只够把它排进声音时钟。 */
 const PLAY_PREMIXED_LEAD_SECONDS = 0.03
+/** The Program GPU surface belongs to the project: a remount (dock ↔ popout window) waits until the previous session actually retired. */
 const programReleases = new WeakMap<VideoEditInstance, Promise<unknown>>()
 function VideoEditProgramPrewarm(): null {
   useEffect(() => retainVideoEditProgramWarmup(), [])
@@ -619,9 +614,9 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           }
         }
         // 首帧后的第一秒留给用户操作；停稳且没有输入时再准备声音与前向解码，播放命令仍可按需准备。
-        // 拖动播放头期间只在指针真正停住（PLAY_ARM_SCRUB_REST_MS 内没有输入）时预热：按“距上次出图多久”判断时，
-        // 复杂工程每帧渲染慢于该阈值，会在拖动中逐帧打开又撤掉连续解码与首段混音，与拖动取帧争用解码服务（实测一次拖动约 16 次）。
-        if (!playing && performance.now() - firstPresentationAt >= 1100 && (current.scrubbing ? performance.now() - lastInteractionAt >= PLAY_ARM_SCRUB_REST_MS : armedDocument !== undefined || performance.now() - lastInteractionAt >= 180) && lastFrame === current.frame && current.frame === lastRequested && !!current.scrubbing === lastScrubbing && (armedDocument !== document || armedFrame !== current.frame) && captureFull === 0) {
+        // 按住拖动播放头期间不预热：预热要打开连续解码并预混首段声音（复杂工程约 0.6 秒），循环等它完成期间不再请求新画面，
+        // 拖动方向反转、指针短暂停住时就出现半秒以上的停顿；松手时由上面的 releasedScrub 预热一次，起播照样即时。
+        if (!playing && performance.now() - firstPresentationAt >= 1100 && !current.scrubbing && (armedDocument !== undefined || performance.now() - lastInteractionAt >= 180) && lastFrame === current.frame && current.frame === lastRequested && !!current.scrubbing === lastScrubbing && (armedDocument !== document || armedFrame !== current.frame) && captureFull === 0) {
           await preparePlayback(document, current.frame)
           if (stopped) return
           // 刷新周期在后台量，不挡住紧接着的起播。
