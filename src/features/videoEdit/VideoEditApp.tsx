@@ -1,4 +1,5 @@
 import { WorkspaceLayoutMenu } from '@/components/dockLayouts/WorkspaceLayoutMenu'
+import { VideoEditAppMenus } from './VideoEditAppMenus'
 import { countVideoEditTiming } from './engine/videoEditFirstFrameTiming'
 import { retainVideoEditProgramWarmup } from './engine/videoEditProgramPool'
 import { ICON_TOOL_SCREEN_RECORDING, UI_ICON_SIZE } from '@/core/theme/icons'
@@ -11,6 +12,7 @@ import { videoEditUserErrorMessage } from './application/videoEditUserError'
 import { subscribeVideoEditImportCompletion } from './application/videoEditImportTask'
 import { VideoEditImportProgress } from './panels/VideoEditImportProgress'
 import { VideoEditProjectsPage } from './VideoEditProjectsPage'
+import { VideoEditOpeningOverlay } from './panels/VideoEditOpeningOverlay'
 import { ChevronDown, ChevronLeft, Download, FolderInput, FolderOpen, Keyboard, Redo2, Undo2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Z_LAYERS } from '@/core/theme/zLayers'
@@ -130,6 +132,8 @@ export default function VideoEditApp(): React.ReactElement {
   const onNotice = useCallback((message: string | null): void => { if (message) showNotification(message, 'success') }, [showNotification])
   useEffect(() => subscribeVideoEditImportCompletion((_projectId, imported, skipped) => { if (skipped) onNotice(notificationText('filesImported', { imported, skipped })) }), [onNotice])
   const run = (operation: () => unknown | Promise<unknown>): void => { void Promise.resolve().then(operation).catch(onError) }
+  /** 正在打开的项目名：打开期间显示进度，不让界面看起来卡住。 */
+  const [opening, setOpening] = useState<string | null>(null)
   const chooseProjectFolder = async (): Promise<void> => {
     const selected = await openDialog({ directory: true, multiple: false })
     const folder = Array.isArray(selected) ? selected[0] : selected
@@ -171,19 +175,21 @@ export default function VideoEditApp(): React.ReactElement {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [projectId])
   return <div ref={rootRef} className="relative flex h-full min-h-0 flex-col bg-window text-text1" onFocusCapture={event => focusPanel(event.target)} onPointerDownCapture={event => focusPanel(event.target)} onPointerMoveCapture={event => { hovered.current = elementOfEventTarget(event.target) }} onKeyDown={event => dispatchKey(event.nativeEvent)}>
+    <VideoEditAppMenus />
     {instance ? <>
       <ApplicationOperationReviewBanner documentId={instance.document.id} domain="video_edit" label="剪辑" />
       <VideoEditImportProgress projectId={instance.document.id} />
       <VideoEditToolbar instance={instance} api={dockApi} run={run} onNotice={onNotice} />
       <VideoEditFontWarnings document={videoEditCommittedDocument(instance)} />
       <div className="min-h-0 flex-1" aria-label="剪辑面板工作区"><VideoEditDock instance={instance} onError={onError} onApiChange={setDockApi} /></div>
-    </> : <div className="min-h-0 flex-1">
+    </> : <div className="relative min-h-0 flex-1">
       {/* 剪辑页 = 项目列表（作品索引）；打开项目 = 打开它的主剪辑 */}
       <VideoEditProjectsPage
         onCreate={() => run(createVideoEditProject)}
         onOpenFolder={() => run(chooseProjectFolder)}
-        onOpen={project => run(() => openVideoEditProject(project))}
+        onOpen={project => { setOpening(project.name); run(() => openVideoEditProject(project).finally(() => setOpening(null))) }}
       />
+      {opening && <VideoEditOpeningOverlay name={opening} />}
     </div>}
     {/* 剪辑自身的保存失败要一直提示到重试成功：浮在底部中间，不占面板空间 */}
     {audioDialog?.kind === 'gain' && <VideoEditAudioGainDialog key={audioDialog.target.sequenceId + audioDialog.target.clipIds.join(':')} target={audioDialog.target} onClose={closeVideoEditAudioDialog} />}

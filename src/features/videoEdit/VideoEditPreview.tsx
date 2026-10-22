@@ -14,7 +14,7 @@ import { ICON_VIDEO_EDIT_PROXY } from '@/core/theme/icons'
 import { autoSwitchVideoEditMulticam, switchVideoEditMulticam, videoEditProgramMulticam } from './application/videoEditMulticam'
 import { getVideoEditProxyPreference, setVideoEditProxyPreference, videoEditProxySignature } from './application/videoEditProxy'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton,  UiOptionButton, UiOverflowRow, UiPanel } from '@/components/ui'
+import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton, UiLoading, UiOptionButton, UiOverflowRow, UiPanel } from '@/components/ui'
 import { ArrowRightFromLine, ArrowRightToLine, ArrowUpFromLine, BookmarkPlus, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser, FastForward, Gauge, FoldHorizontal, ImagePlus, ImageUp, MapPin, MoreHorizontal, MousePointer2, Move, Pause, PenLine, Play, Rewind, RotateCcw, SkipBack, SkipForward, Square, SquareDashed, StepBack, StepForward, type LucideIcon } from 'lucide-react'
 import Tooltip from '@/components/ui/Tooltip'
 import { Z_LAYERS } from '@/core/theme/zLayers'
@@ -103,16 +103,15 @@ function programDropZoneAt(event: React.DragEvent<HTMLElement>): VideoEditDropMo
   return x < 0.25 ? 'insert' : x >= 0.75 ? 'replace' : 'overwrite'
 }
 
-/** The Program GPU surface belongs to the project: a remount (dock ↔ popout window) waits until the previous session actually retired. */
-/**
- * 起播预热的时机：点击定位、松手后画面一出来就预热（人从松手到按空格至少一两百毫秒，正好用来解码）；
- * 拖动中指针停住这么久也预热，再动一下即中止（取消原生解码很便宜）。
- */
-const PLAY_ARM_SCRUB_REST_MS = 120
 /** 刷新周期每隔这么久才重新量一次（窗口可能被拖到另一块显示器）。 */
 const DISPLAY_PERIOD_REFRESH_MS = 5000
+/** 拖动时相邻两次请求相差至少这么多帧算快速拖动，允许先显示关键帧近似画面。 */
+const VIDEO_EDIT_FAST_SCRUB_FRAMES = 4
+/** 近似画面在指针停住这么久后补成精确帧。 */
+const VIDEO_EDIT_EXACT_AFTER_REST_MS = 90
 /** 第一块声音已混好时的起播提前量：只够把它排进声音时钟。 */
 const PLAY_PREMIXED_LEAD_SECONDS = 0.03
+/** The Program GPU surface belongs to the project: a remount (dock ↔ popout window) waits until the previous session actually retired. */
 const programReleases = new WeakMap<VideoEditInstance, Promise<unknown>>()
 function VideoEditProgramPrewarm(): null {
   useEffect(() => retainVideoEditProgramWarmup(), [])
@@ -181,6 +180,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     })
   }, [instance, visible, onError, changeMode])
   const [preparing, setPreparing] = useState(false)
+  /** 本次挂载的渲染器是否已有画面上屏；之前显示“正在准备画面”，避免打开工程时只看到一块黑。 */
+  const [pictureReady, setPictureReady] = useState(false)
   const [retry, setRetry] = useState(0)
   const gpuRecoveryTimes = useRef<number[]>([])
   const [effectFailure, setEffectFailure] = useState<string | null>(null)
@@ -200,7 +201,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
   useEffect(() => {
     if (!visible) { setVideoEditView(instance.document.id, { playing: false }, true); setPreparing(false); setLevels([]); return }
     const previousRelease = programReleases.get(instance) ?? Promise.resolve()
-    setRenderFailure(null); setEffectFailure(null)
+    setRenderFailure(null); setEffectFailure(null); setPictureReady(false)
+    let pictureShown = false
     let stopped = false
     let stopCurrent: () => void = () => {}
     const stop = (): void => { stopped = true; stopCurrent() }
@@ -250,7 +252,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       const moved = observedAudioFrame !== instance.frame
       observedAudioFrame = instance.frame
       if (instance.playing || releasedScrub || moved && !instance.scrubbing) scrubber.stop()
-      if (!instance.playing && instance.scrubbing && moved) scrubAudio(instance.frame / appliedDocument.fps)
+      // 拖动出声跟着节目实际呈现的画面走（见 recordPresentation），声音不会跑到画面前面。
     })
     let audioRenderer: VideoEditRenderSession | undefined
     // No available proxy means the session already plays the originals: both read as 'original', so starting paused does not rebuild.
@@ -271,6 +273,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     let lastFrame = -1
     let appliedFonts = renderer.fontPresentationRevision
     let lastScrubbing = false
+    /** 屏幕上是快速拖动时的关键帧近似画面（帧号）；指针停住或松手后按精确方式补这一帧。-1 表示是精确画面。 */
+    let approximateFrame = -1
     let clockStart = 0
     let clockPerformanceStart = 0
     let startFrame = 0
@@ -318,7 +322,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           meter ??= createVideoEditAudioMeter(context, document.channels)
           return { context, destination: meter.input }
         },
-        mix: (from, duration) => (audioRenderer ??= new VideoEditRenderSession(document)).mixAudio(from, duration),
+        mix: (from, duration) => (audioRenderer ??= new VideoEditRenderSession(document)).mixAudio(from, duration, true),
         isCurrent: () => !stopped && !instance.playing && videoMotionComposition(instance) === document && appliedDocument === document,
         onError,
       })
@@ -393,7 +397,11 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       }
       if (presentedSequenceId !== composition.id) { presentedSequenceId = composition.id; firstPresentationAt = performance.now() }
       retainExplanationPixels(surface, target, result.history)
-      if (result.presented === true) recordVideoEditFirstFrame(instance.document.id, composition.id, { frame: target, decodeMs: result.decodeMs, gpuMs: result.gpuMs, sourceTimestamps: result.sourceTimestamps })
+      if (result.presented === true) {
+        recordVideoEditFirstFrame(instance.document.id, composition.id, { frame: target, decodeMs: result.decodeMs, gpuMs: result.gpuMs, sourceTimestamps: result.sourceTimestamps })
+        // 只在首帧时改状态：逐帧调用 setState 会让整个节目面板（含工具栏）跟着每帧重渲染。
+        if (!pictureShown) { pictureShown = true; setPictureReady(true) }
+      }
       lastPresentation = requestedAt
       surface.dataset.requestedAt = String(requestedAt); surface.dataset.renderMs = String(performance.now() - requestedAt)
       surface.dataset.decodeMs = String(result.decodeMs ?? 0); surface.dataset.gpuMs = String(result.gpuMs ?? 0)
@@ -402,6 +410,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       surface.dataset.scrubbing = String(scrubbing); surface.dataset.presentedFrame = String(target)
       surface.dataset.presentedRevision = String(revision); surface.dataset.renderDivisor = String(appliedDivisor)
       if (result.presented !== false) recordVideoMotionPresentation(instance, { frame: target, revision, sequenceId: composition.id, at: performance.now(), scrubbing })
+      // 拖动播放头时声音颗粒取刚呈现这一帧的时间：画面跟不上指针时声音也等画面，音画始终对齐。
+      if (scrubbing && result.presented !== false && !instance.playing) scrubAudio(target / composition.fps)
       if (result.presented === true) recordVideoExplanationPresentation(instance, { frame: target, revision: composition.revision, sequenceId: composition.id, composition, at: performance.now(), scrubbing })
       if (failedDocument === undefined) { setRenderFailure(null); failedRetryMs = 2000 }
       return true
@@ -570,8 +580,13 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         const next = Math.max(lastFrame, submittedFrame, queuedFrame) + 1
         const target = liveRecording ? due : playing ? direction === 1 ? videoEditPlaybackTarget(next, due, startFrame, videoEditDuration(document)) : Math.min(startFrame, Math.max(0, lastFrame - 1)) : current.frame
         if (playing && direction === 1 && !liveRecording && target > Math.max(next, startFrame) && target !== lastRequested) { droppedFrames += target - Math.max(next, startFrame); surface.dataset.droppedFrames = String(droppedFrames) }
+        // 近似画面停留：指针停住 VIDEO_EDIT_EXACT_AFTER_REST_MS 或已松手，就按精确方式重取这一帧。
+        if (!playing && approximateFrame >= 0 && approximateFrame === target && target === lastRequested && (!current.scrubbing || performance.now() - lastInteractionAt >= VIDEO_EDIT_EXACT_AFTER_REST_MS)) { lastRequested = -1; approximateFrame = -1 }
         if (target !== lastRequested || (!!current.scrubbing !== lastScrubbing && !current.scrubbing)) {
           const scrubbing = !!current.scrubbing
+          // 快速拖动（相邻两次请求相差至少 VIDEO_EDIT_FAST_SCRUB_FRAMES 帧）：必须重新定位才到得了的图层先给关键帧，画面跟手；
+          // 慢速拖动始终是精确帧，逐帧找点不受影响。
+          const scrubMode: boolean | 'fast' = scrubbing && !playing && lastRequested >= 0 && Math.abs(target - lastRequested) >= VIDEO_EDIT_FAST_SCRUB_FRAMES ? 'fast' : scrubbing
           const requestedAt = performance.now()
           const deadline = playing && !liveRecording ? performance.timeOrigin + clockPerformanceStart + Math.abs(target - startFrame) / document.fps / (current.playbackRate ?? 1) * 1000 : undefined
           lastRequested = target
@@ -581,7 +596,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           const pipelined = playing && direction === 1 && !liveRecording && !historyEnabled
           if (pipelined) { playbackInFlight++; unsubmitted++; queuedFrame = Math.max(queuedFrame, target) }
           let submitted = false
-          const presentation = renderer.present(target, pipelined, scrubbing, deadline, scrubbing || pipelined ? () => {
+          const presentation = renderer.present(target, pipelined, scrubMode, deadline, scrubbing || pipelined ? () => {
             if (pipelined) { submitted = true; unsubmitted--; submittedFrame = Math.max(submittedFrame, target); if (playbackInFlight >= 3 || unsubmitted >= 2) return }
             if (!stopped) { scheduled = true; timer = setTimeout(() => { void loop() }, 0) }
           } : undefined, undefined, 'interactive', historyEnabled, !playing && !scrubbing).finally(() => { if (pipelined) { playbackInFlight--; if (!submitted) unsubmitted-- } })
@@ -606,13 +621,16 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
             }
             if (result.presented === false) { if (!liveRecording) lastFrame = -1; lastRequested = -1; if (!scheduled) timer = setTimeout(() => { void loop() }, 0); return }
             if (!recordPresentation(target, result, requestedAt, scrubbing, document)) { if (!scheduled) timer = setTimeout(() => { void loop() }, 0); return }
+            approximateFrame = result.approximate ? target : -1
             setEffectFailure(result.effectErrors?.join('\n') ?? null)
             lastFrame = target; lastScrubbing = scrubbing
             if (playing && current.playing && current.playbackDirection === direction && videoEditProgramCommandIdentity(instance.document.id) === command) setVideoEditView(instance.document.id, { frame: target }, true)
           }
         }
         // 首帧后的第一秒留给用户操作；停稳且没有输入时再准备声音与前向解码，播放命令仍可按需准备。
-        if (!playing && performance.now() - firstPresentationAt >= 1100 && (armedDocument !== undefined || performance.now() - lastInteractionAt >= 180) && lastFrame === current.frame && current.frame === lastRequested && !!current.scrubbing === lastScrubbing && (armedDocument !== document || armedFrame !== current.frame) && (!current.scrubbing || performance.now() - lastPresentation > PLAY_ARM_SCRUB_REST_MS) && captureFull === 0) {
+        // 按住拖动播放头期间不预热：预热要打开连续解码并预混首段声音（复杂工程约 0.6 秒），循环等它完成期间不再请求新画面，
+        // 拖动方向反转、指针短暂停住时就出现半秒以上的停顿；松手时由上面的 releasedScrub 预热一次，起播照样即时。
+        if (!playing && performance.now() - firstPresentationAt >= 1100 && !current.scrubbing && (armedDocument !== undefined || performance.now() - lastInteractionAt >= 180) && lastFrame === current.frame && current.frame === lastRequested && !!current.scrubbing === lastScrubbing && (armedDocument !== document || armedFrame !== current.frame) && captureFull === 0) {
           await preparePlayback(document, current.frame)
           if (stopped) return
           // 刷新周期在后台量，不挡住紧接着的起播。
@@ -757,6 +775,10 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         <VideoEditCodeElementOverlay instance={instance} enabled={visible && mode === 'select'} onError={onError} /></>}
       </div>
       <VideoEditLevelMeter className="absolute bottom-3 right-2 top-3" levels={levels.length ? levels : Array.from({ length: document.channels }, () => ({ peak: 0, rms: 0 }))} title="节目播放电平" />
+      {!pictureReady && !renderFailure && <div className="pointer-events-none absolute inset-0 flex items-center justify-center" data-video-edit-program-preparing>
+        {/* 节目底是不随主题的媒体黑：放在玻璃浮层里，浅色主题下文字也看得清 */}
+        <div className="ui-glass rounded-xl px-4"><UiLoading size="sm" message="正在准备画面…" /></div>
+      </div>}
       {(preparing || collecting) && <div className="absolute left-2 top-2 flex max-w-full items-center gap-2 rounded-lg bg-media-scrim p-1 text-xs text-on-media">
         {preparing && <><span className="whitespace-nowrap px-1">正在准备流畅预览…</span><UiButton variant="media" size="sm" onClick={() => { stopPreview.current(); setPreparing(false) }}>取消准备</UiButton></>}
         {collecting && !preparing && <span className="whitespace-nowrap px-1">正在处理当前帧…</span>}

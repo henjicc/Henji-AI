@@ -23,8 +23,6 @@ extraResources:
     to: resources/video-edit-styles
   - from: resources/video-edit-preview
     to: resources/video-edit-preview
-  - from: native/audio-worker/target/release/henji-audio-worker.exe
-    to: resources/henji-audio-worker.exe
   # 许可说明（任务 3.3）：README、项目 LICENSE、THIRD-PARTY-NOTICES（与“设置 → 关于”同源），Windows 另含
   # FFmpeg GPLv3 全文与构建信息、原生解码服务许可声明；由 npm run gen:licenses 生成（electron:build 以 --strict 运行）。
   # third-party-licenses.json 已进入渲染产物，指纹文件只供增量判断，二者不随包。
@@ -53,6 +51,9 @@ win:
   # 用的 ffmpeg.exe/ffprobe.exe 同在 resources/video-decoder/（由 npm run build:video-decoder 产出到 target/release，
   # electron:build 已串联；pdb 等开发产物不随包）。运行时只按 process.resourcesPath 定位，安装包不读开发目录与诊断变量。
   extraResources:
+    # 音频 Worker（频谱、波形、响度等）按平台随包：Windows 带 .exe，macOS 为无扩展名的可执行文件。
+    - from: native/audio-worker/target/release/henji-audio-worker.exe
+      to: resources/henji-audio-worker.exe
     - from: native/video-decoder/target/release
       to: resources/video-decoder
       filter:
@@ -99,6 +100,9 @@ mac:
   asarUnpack:
     - node_modules/ffmpeg-ffprobe-static/**
   category: public.app-category.graphics-design
+  extraResources:
+    - from: native/audio-worker/target/release/henji-audio-worker
+      to: resources/henji-audio-worker
   target:
     - target: dmg
 dmg:

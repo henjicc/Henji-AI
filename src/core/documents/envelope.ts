@@ -18,6 +18,18 @@ export const MAX_DOCUMENT_FILE_BYTES = 256 * 1024 * 1024
 export const documentIdSchema = z.string().regex(DOCUMENT_ID_PATTERN, '文档 ID 无效。')
 const isoTimestampSchema = z.iso.datetime({ offset: true })
 
+/**
+ * 外壳时间统一写 ISO 字符串。外部脚本或工具改写文件时常把它写成毫秒时间戳：内容完好，只是写法不同，
+ * 校验前按同一时刻换成 ISO（下次保存即写回标准写法），不因此拒绝整份作品。schema 本身不变。
+ */
+function normalizeEnvelopeTimestamps(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw
+  const record = raw as Record<string, unknown>
+  const convert = (value: unknown): unknown => typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 8.64e15 ? new Date(value).toISOString() : value
+  if (typeof record.createdAt !== 'number' && typeof record.updatedAt !== 'number') return raw
+  return { ...record, createdAt: convert(record.createdAt), updatedAt: convert(record.updatedAt) }
+}
+
 export interface DocumentEnvelope {
   format: typeof DOCUMENT_FORMAT
   envelopeVersion: number
@@ -74,6 +86,7 @@ export function documentEnvelopeMinReaderVersion(raw: unknown): number | undefin
 const envelopeForward = new WeakMap<DocumentEnvelope, { envelopeVersion: number; minReaderVersion: number; fields: ReturnType<typeof persistenceForwardFields> }>()
 
 export function upgradeDocumentEnvelope(raw: unknown, backupPath?: string): DocumentEnvelope {
+  raw = normalizeEnvelopeTimestamps(raw)
   const version = documentEnvelopeVersion(raw)
   const minReaderVersion = documentEnvelopeMinReaderVersion(raw)
   const forward = version > DOCUMENT_ENVELOPE_VERSION
@@ -107,7 +120,7 @@ export class DocumentFormatError extends Error {
 
 /** 校验外壳；类型是否登记、版本能否打开由调用方按登记表判断。 */
 export function parseDocumentEnvelope(raw: unknown): DocumentEnvelope {
-  const result = documentEnvelopeSchema.safeParse(raw)
+  const result = documentEnvelopeSchema.safeParse(normalizeEnvelopeTimestamps(raw))
   if (!result.success) {
     throw new DocumentFormatError(`不是有效的痕迹AI文档：${result.error.issues[0]?.message ?? '格式错误'}`, { cause: result.error })
   }

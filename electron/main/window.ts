@@ -2,6 +2,7 @@ import { BrowserWindow, screen } from 'electron'
 import path from 'node:path'
 import { resolveAppIconPath } from './app-icon'
 import { bindWindowStateEvents } from './ipc/window'
+import { bindAppMenuWindow } from './ipc/app-menu'
 import { createMainLogger } from './services/logging/main-logger'
 import { cleanupAllVideoFrameExports } from './services/video/frame-export'
 import { closeLogWindow } from './windows/log-window'
@@ -63,6 +64,7 @@ export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
     },
   })
   mainWindow = win
+  bindAppMenuWindow(win)
 
   const openSession = bindWindowStateEvents(win, Boolean(options.beforeRendererLoad))
   // 只有剪辑系统浮窗的受控 about:blank 请求放行，其余开窗一律拒绝。

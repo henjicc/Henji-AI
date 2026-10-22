@@ -23,6 +23,8 @@ export function videoEditNativeRotation(degrees: number | null | undefined): Vid
  * Times are seconds on the same clock as the browser backend (`ptsUs` is mediabunny's `microsecondTimestamp`).
  */
 export class VideoEditNativePicture {
+  /** 快速拖动时只解了目标所在关键帧的近似画面。 */
+  approximate = false
   readonly timestamp: number
   readonly duration: number
   readonly codedWidth: number

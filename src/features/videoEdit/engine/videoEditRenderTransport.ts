@@ -273,7 +273,7 @@ export class VideoEditRenderTransport {
   }
   setTracks(tracks: VideoEditTrackResults): void { if (!this.disposed) this.worker.postMessage({ kind: 'tracks', tracks, id: 0 } satisfies RenderRequest) }
   invalidateDocument(revision: number): void { if (!this.disposed) this.worker.postMessage({ kind: 'invalidate', revision, id: 0 } satisfies RenderRequest) }
-  async present(frame: number, sequential = false, scrubbing = false, deadline?: number, submitted?: () => void, readRgb?: { width: number; height: number }, quality: EffectQuality = 'interactive', history = false, observeElements = false): Promise<RenderResponse> {
+  async present(frame: number, sequential = false, scrubbing: import('./videoEditRenderer').VideoEditScrubMode = false, deadline?: number, submitted?: () => void, readRgb?: { width: number; height: number }, quality: EffectQuality = 'interactive', history = false, observeElements = false): Promise<RenderResponse> {
     await this.ready
     const document = this.document
     const result = await this.request({ kind: 'render', frame, sequential, scrubbing, deadline, quality, ...(observeElements ? { observeElements: true } : {}), ...(readRgb ? { readRgb } : {}), ...(history ? { history: true } : {}) }, [], submitted)
@@ -295,9 +295,10 @@ export class VideoEditRenderTransport {
     try { this.canvas.getContext('2d')!.drawImage(result.bitmap, 0, 0) } finally { result.bitmap.close() }
     return { canvas: this.canvas, sourceTimestamps: result.sourceTimestamps ?? [], singleFrameReads: result.singleFrameReads ?? 0 }
   }
-  async mixAudio(start: number, duration: number): Promise<AudioBuffer> {
+  /** `retainIdle`：拖动播放头的声音颗粒，保留最近用过的空闲声音来源，避免每个颗粒重开会话。 */
+  async mixAudio(start: number, duration: number, retainIdle = false): Promise<AudioBuffer> {
     await this.ready
-    const { channels } = await this.request({ kind: 'audio', start, duration })
+    const { channels } = await this.request({ kind: 'audio', start, duration, ...(retainIdle ? { retainIdle } : {}) })
     if (!channels?.length) throw new Error('剪辑混音没有返回声音。')
     const buffer = new AudioBuffer({ numberOfChannels: channels.length, sampleRate: this.document.sampleRate, length: channels[0].length })
     channels.forEach((channel, index) => buffer.getChannelData(index).set(channel))

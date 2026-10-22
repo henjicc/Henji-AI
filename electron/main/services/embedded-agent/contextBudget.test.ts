@@ -3,6 +3,11 @@ import { SessionManager, type AgentSession } from '@earendil-works/pi-coding-age
 import { archiveToolResult, contextReader } from './contextReader'
 import { budgetContext, estimateContextTokens, messageTokens, projectText } from './contextBudget'
 
+type ToolResultMessage = Extract<AgentSession['messages'][number], { role: 'toolResult' }>
+/** Pi 1.x 的会话消息 details 只收 JSON；工具返回值的 details 仍是 unknown，测试按会话落盘形状收窄。 */
+const toolMessage = (toolName: string, toolCallId: string, result: { content: ToolResultMessage['content']; details?: unknown }, isError = false, timestamp = 0): ToolResultMessage =>
+  ({ role: 'toolResult', toolName, toolCallId, content: result.content, details: result.details as ToolResultMessage['details'], isError, timestamp })
+
 it('ASCII 规则不变，CJK/BMP 逐码点计一、emoji 和扩展汉字计二', () => {
   expect(estimateContextTokens('abc_def123 !')).toBe(6)
   expect(estimateContextTokens('中文é。、　')).toBe(6)
@@ -14,7 +19,7 @@ it('技能与参考超过普通结果上限仍保留原文，续页跨轮保留�
   const text = '技能正文。'.repeat(2400)
   const skill = archiveToolResult(manager, { content: [{ type: 'text', text }], details: undefined }, true)
   expect(skill.content[0]).toEqual({ type: 'text', text })
-  const skillMessage: AgentSession['messages'][number] = { role: 'toolResult', toolName: 'load_assistant_skill', toolCallId: 'skill', ...skill, isError: false, timestamp: 0 }
+  const skillMessage = toolMessage('load_assistant_skill', 'skill', skill)
   const normal: AgentSession['messages'][number] = { role: 'toolResult', toolName: 'read_application_entity', toolCallId: 'ordinary', content: [{ type: 'text', text: '普通资料'.repeat(3000) }], isError: false, timestamp: 0 }
   const user: AgentSession['messages'][number] = { role: 'user', content: '继续', timestamp: 0 }
   const result = budgetContext([skillMessage, normal, user], { contextWindow: 16000, maxOutputTokens: 1024, instructions: '', tools: [] })
@@ -31,7 +36,7 @@ it('技能与参考超过普通结果上限仍保留原文，续页跨轮保留�
     const part = page.content[0]; if (part.type !== 'text') throw new Error('text')
     const data = JSON.parse(part.text) as { data: string; nextOffset: number }
     expect(estimateContextTokens(part.text)).toBeLessThanOrEqual(16000)
-    const pageMessage: AgentSession['messages'][number] = { role: 'toolResult', toolName: 'read_assistant_context', toolCallId: `page-${offset}`, ...page, isError: false, timestamp: 0 }
+    const pageMessage = toolMessage('read_assistant_context', `page-${offset}`, page)
     expect(budgetContext([pageMessage, user], { contextWindow: 24000, maxOutputTokens: 1024, instructions: '', tools: [] })[0]).toMatchObject({ content: page.content })
     restored += data.data; offset = data.nextOffset
   }
@@ -68,8 +73,7 @@ it('中文大结果保留失败事实并按模型窗口投影，原文分页无�
   const manager = SessionManager.inMemory()
   const archived = archiveToolResult(manager, { content: [{ type: 'text', text: original }], details: undefined })
   const reference = `tool:${(archived.details as { resultId: string }).resultId}:0`
-  const message: AgentSession['messages'][number] = { role: 'toolResult', toolName: 'read_project', toolCallId: 'result',
-    ...archived, isError: true, timestamp: Date.now() }
+  const message = toolMessage('read_project', 'result', archived, true, Date.now())
   manager.appendMessage(message)
   const reader = contextReader(manager)
   const large = budgetContext([message], { contextWindow: 16000, maxOutputTokens: 1024, instructions: '系统', tools: [reader] })

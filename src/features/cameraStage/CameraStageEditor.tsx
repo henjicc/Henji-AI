@@ -1,3 +1,4 @@
+import { CameraStageAppMenus } from './CameraStageAppMenus'
 import { WorkspaceLayoutMenu } from '@/components/dockLayouts/WorkspaceLayoutMenu'
 import { UiInlineStatus } from '@/components/ui'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
@@ -489,6 +490,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
 
   return (
     <div className="flex h-full flex-1 flex-col overflow-hidden bg-window">
+      <CameraStageAppMenus />
       <UiToolbar
         variant="command"
         center={<StagePathContextBar />}

@@ -1,4 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCanvasAppMenus, type CanvasMenuActions } from './useCanvasAppMenus'
+import { useCanvasStore } from '@/stores/canvasStore'
 import type { ReactFlowInstance } from '@xyflow/react'
 import { canvasEventBus } from '@/features/canvas/application/canvasServices'
 import {
@@ -16,6 +18,7 @@ import {
 import { mediaSourceNodeType } from '@/features/canvas/application/assetMediaAssignment'
 
 interface UseCanvasShortcutsParams {
+  tidy?: { start: () => Promise<void>; busy: boolean }
   wrapperRef: React.RefObject<HTMLDivElement>
   reactFlowInstance: ReactFlowInstance<CanvasNode, CanvasEdge>
   selectedUploadNodeId: string | null
@@ -58,7 +61,7 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
     setSelectedNode
   } = params
 
-  const copiedSnapshotRef = useRef<ClipboardSnapshot | null>(null)
+  const [copiedSnapshot, setCopiedSnapshot] = useState<ClipboardSnapshot | null>(null)
   const pasteImageHandledRef = useRef(false)
   const pointerPositionRef = useRef<{ x: number; y: number } | null>(null)
 
@@ -150,6 +153,25 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
     }
   }, [addNode, reactFlowInstance, scheduleCanvasPersist, selectedUploadKinds, selectedUploadNodeId, setSelectedNode, wrapperRef])
 
+  const actions = useMemo<CanvasMenuActions>(() => ({
+    copy: () => {
+      if (!selectedNodeIds.length) return
+      const selected = new Set(selectedNodeIds)
+      setCopiedSnapshot({ nodes: nodes.filter(node => selected.has(node.id)), edges: edges.filter(edge => selected.has(edge.source) && selected.has(edge.target)) })
+    },
+    paste: async () => { if (copiedSnapshot?.nodes.length) await duplicateNodes(copiedSnapshot.nodes.map(node => node.id)) },
+    undo: () => { if (undo()) scheduleCanvasPersist(0) },
+    redo: () => { if (redo()) scheduleCanvasPersist(0) },
+    group: () => { if (selectedNodeIds.length >= 2 && groupNodes(selectedNodeIds)) scheduleCanvasPersist(0) },
+    assetGroup: () => { if (selectedNodeIds.length >= 2) createAssetGroup(selectedNodeIds) },
+    delete: async () => {
+      const ids = selectedNodeIds.length ? selectedNodeIds : selectedNodeId ? [selectedNodeId] : []
+      if (ids.length) await deleteNodes(ids)
+    },
+    selectAll: () => useCanvasStore.getState().onNodesChange(nodes.map(node => ({ id: node.id, type: 'select', selected: true }))),
+  }), [selectedNodeIds, selectedNodeId, nodes, edges, copiedSnapshot, duplicateNodes, undo, redo, scheduleCanvasPersist, groupNodes, createAssetGroup, deleteNodes])
+  useCanvasAppMenus(actions, selectedNodeIds.length || (selectedNodeId ? 1 : 0), Boolean(copiedSnapshot?.nodes.length), params.tidy)
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // 画布是背景宿主，不能接管模态编辑器、确认框或已被控件处理的按键。
@@ -168,55 +190,41 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
       if (isCopy) {
         if (selectedNodeIds.length === 0) return
         event.preventDefault()
-        const selectedIdSet = new Set(selectedNodeIds)
-        copiedSnapshotRef.current = {
-          nodes: nodes.filter((node) => selectedIdSet.has(node.id)),
-          edges: edges.filter(
-            (edge) => selectedIdSet.has(edge.source) && selectedIdSet.has(edge.target)
-          ),
-        }
+        actions.copy()
         return
       }
 
       if (isPaste) {
         // 是否为剪贴板媒体粘贴（新建节点/写入选中上传节点）由 document 的 paste 事件监听器判定，
         // 这里统一延后一帧检查 pasteImageHandledRef，避免与内部节点复制粘贴重复触发
-        const copied = copiedSnapshotRef.current
         pasteImageHandledRef.current = false
         window.setTimeout(() => {
           if (pasteImageHandledRef.current) {
             pasteImageHandledRef.current = false
             return
           }
-          if (!copied || copied.nodes.length === 0) return
-          void duplicateNodes(copied.nodes.map((node) => node.id))
+          void actions.paste()
         }, 0)
         return
       }
 
       if (isUndo || isRedo) {
         event.preventDefault()
-        const changed = isUndo ? undo() : redo()
-        if (changed) {
-          scheduleCanvasPersist(0)
-        }
+        if (isUndo) actions.undo(); else actions.redo()
         return
       }
 
       if (isAssetGroup) {
         if (selectedNodeIds.length < 2) return
         event.preventDefault()
-        createAssetGroup(selectedNodeIds)
+        actions.assetGroup()
         return
       }
 
       if (isGroup) {
         if (selectedNodeIds.length < 2) return
         event.preventDefault()
-        const createdGroupId = groupNodes(selectedNodeIds)
-        if (createdGroupId) {
-          scheduleCanvasPersist(0)
-        }
+        actions.group()
         return
       }
 
@@ -230,7 +238,7 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
       if (idsToDelete.length === 0) return
 
       event.preventDefault()
-      void deleteNodes(idsToDelete)
+      void actions.delete()
     }
 
     document.addEventListener('keydown', handleKeyDown)
@@ -238,6 +246,7 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [
+    actions,
     deleteNodes,
     createAssetGroup,
     duplicateNodes,

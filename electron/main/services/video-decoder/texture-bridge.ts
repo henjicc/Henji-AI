@@ -241,7 +241,8 @@ export function parseVideoFrameDecoderRequest(input: unknown): VideoFrameDecoder
 export function parseVideoFrameAtRequest(input: unknown): VideoFrameAtRequest {
   const record = parseRecord(input, '取帧请求')
   if (typeof record.time !== 'number' || !Number.isFinite(record.time)) throw new Error('取帧参数 time 无效')
-  return { streamId: parseId(record, 'streamId'), time: record.time, ticket: parseId(record, 'ticket') }
+  if (record.keyOnly !== undefined && typeof record.keyOnly !== 'boolean') throw new Error('取帧参数 keyOnly 无效')
+  return { streamId: parseId(record, 'streamId'), time: record.time, ticket: parseId(record, 'ticket'), ...(record.keyOnly ? { keyOnly: true } : {}) }
 }
 
 export function parseVideoFrameScheduleRequest(input: unknown): VideoFrameScheduleRequest {
@@ -326,7 +327,7 @@ export class VideoFrameBridge {
 
   async frameAt(targetId: number, request: VideoFrameAtRequest): Promise<VideoFrameAtResult> {
     this.ownedDecoder(request.streamId, targetId)
-    return this.options.service.frameAt(request.streamId, request.time, request.ticket)
+    return this.options.service.frameAt(request.streamId, request.time, request.ticket, {}, request.keyOnly === true)
   }
 
   async schedule(targetId: number, request: VideoFrameScheduleRequest): Promise<VideoFrameScheduleAck> {

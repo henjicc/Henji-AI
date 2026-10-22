@@ -69,13 +69,18 @@ export const useAssistantUiStore = create<AssistantUiState>()(
     {
       name: 'henji-assistant-ui',
       version: 1,
+      // 是否打开不记忆：每次启动都收起，只在用户点开或需要它的流程（如口播布局、一键优化）时打开。
+      // 旧版本存下的 open 也不采用。
       partialize: (state) => ({
-        open: state.open,
         mode: state.mode,
         floatingPosition: state.floatingPosition,
         size: state.size,
         embeddedAccess: state.embeddedAccess,
       }),
+      merge: (persisted, current) => {
+        const { open: _open, ...rest } = (persisted ?? {}) as Partial<AssistantUiState>
+        return { ...current, ...rest }
+      },
     }
   )
 )

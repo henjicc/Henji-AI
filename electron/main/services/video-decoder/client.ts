@@ -225,8 +225,8 @@ export class VideoDecoderService {
   }
 
   /** 按时间取单帧：命中时 `frame` 事件先于响应到达。 */
-  async frameAt(streamId: string, time: number, ticket: string, options: VideoDecoderRequestOptions = {}): Promise<VideoDecoderFrameAtResult> {
-    return this.call<VideoDecoderFrameAtResult>({ type: 'frame_at', streamId, time, ticket }, options)
+  async frameAt(streamId: string, time: number, ticket: string, options: VideoDecoderRequestOptions = {}, keyOnly = false): Promise<VideoDecoderFrameAtResult> {
+    return this.call<VideoDecoderFrameAtResult>({ type: 'frame_at', streamId, time, ticket, ...(keyOnly ? { keyOnly: true } : {}) }, options)
   }
 
   async schedule(request: { streamId: string; scheduleId: string; times?: number[]; range?: { from: number; to?: number } }, options: VideoDecoderRequestOptions = {}): Promise<VideoDecoderScheduleAck> {

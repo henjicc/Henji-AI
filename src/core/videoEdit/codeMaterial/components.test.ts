@@ -27,6 +27,19 @@ describe('位置解析与固定组件依赖', () => {
     read.mockResolvedValue('外部修改'); await expect(loadCodeSourceReferences(version)).rejects.toThrow('main.ts 已被外部修改')
     read.mockRejectedValue(new Error('main.ts 缺失，请恢复备份')); await expect(loadCodeSourceReferences(version)).rejects.toThrow('main.ts 缺失')
   })
+  it('紧跟完整核对的内部步骤可在时限内复用核对结果；默认仍每次读盘', async () => {
+    const addressed = await addressCodeMaterialFiles('export const reuse=1;')
+    const version = { entry: addressed.entry, files: addressed.files.map(file => ({ ...file, location: '/项目/代码/复用/v1/main.ts' })) }
+    const read = vi.fn(async () => addressed.codeSources[0].source); installCodeSourceReader(read)
+    await loadCodeSourceReferences(version)
+    await loadCodeSourceReferences(version, { reuseVerifiedWithinMs: 30_000 })
+    expect(read).toHaveBeenCalledTimes(1)
+    await loadCodeSourceReferences(version)
+    expect(read).toHaveBeenCalledTimes(2)
+    const moved = { ...version, files: version.files.map(file => ({ ...file, location: '/项目/代码/复用/v2/main.ts' })) }
+    await loadCodeSourceReferences(moved, { reuseVerifiedWithinMs: 30_000 })
+    expect(read).toHaveBeenCalledTimes(3)
+  })
   it('同名组件的旧版本和最新版本同时导入时分别钉住、重写和链接；文件移动保留组件导入', async () => {
     const versions = []
     for (const version of [1, 2]) {

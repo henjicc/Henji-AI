@@ -31,6 +31,7 @@ import { UI_SCALE_MODES } from '@/core/theme/uiScale'
 import { useAudioEditStore } from './store/audioEditStore'
 import { audioWaveActions, useAudioWaveEditor } from './spectral/audioWaveEditorState'
 import { AudioEditDock } from './workspace/AudioEditDock'
+import { AudioEditAppMenus } from './workspace/AudioEditAppMenus'
 import { WorkspaceLayoutMenu } from '@/components/dockLayouts/WorkspaceLayoutMenu'
 import { AUDIO_EDIT_WORKSPACE_ID } from './workspace/audioEditDockLayout'
 import { AudioEditWorkspaceContext, type AudioEditDeliveryFormat, type AudioEditWorkspace } from './workspace/audioEditWorkspaceContext'
@@ -311,6 +312,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
       <AudioEditFileMenu key={project.id} name={project.name} disabled={disabled} onRename={(name) => void run(() => renameAudioEditDocument(project.id, name))} onRelink={() => void relinkSource()} />
     </UiToolbar>
     <AudioEditWorkspaceContext.Provider value={workspace}>
+      <AudioEditAppMenus onExport={() => void exportProject()} />
       <div className="min-h-0 flex-1"><AudioEditDock onReady={setDockApi} /></div>
     </AudioEditWorkspaceContext.Provider>
     <AudioEditViewSettings open={viewSettingsOpen} onClose={() => setViewSettingsOpen(false)} value={project.viewSettings ?? DEFAULT_AUDIO_EDIT_VIEW_SETTINGS} onChange={(viewSettings) => update({ viewSettings })} />

@@ -1,3 +1,4 @@
+import { GenerationAppMenus } from './GenerationWorkspace/components/GenerationAppMenus'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useGenerationLifecycleContext } from '@/features/generation/application/generationLifecycle'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -234,6 +235,7 @@ const GenerationWorkspace: React.FC = () => {
   }
   return (
     <div className="relative flex h-full flex-1 flex-col overflow-hidden bg-window text-text1">
+      <GenerationAppMenus onSearch={toggleSearch} onClear={() => setIsClearDialogOpen(true)} hasTasks={tasks.length > 0} />
       {notification && <UiToast message={notification.message} tone={notification.type} visible={notificationVisible} />}
       <main className="relative z-raised flex min-h-0 flex-1 flex-col">
         {/* 命令带：类型分段 + 搜索 + 更多；搜索展开时筛选条作为从属带紧贴其下（不另画底色与边框） */}

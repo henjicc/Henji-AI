@@ -28,8 +28,24 @@ export function componentSourceMetadata(source: string): { metadata: CodeCompone
 }
 /** A comment keeps all version metadata with the immutable text file during ordinary file transfers. */
 export function packageComponentSource(source: string, metadata: CodeComponentMetadata): string { return `${headerPrefix}${JSON.stringify(codeComponentMetadataSchema.parse(metadata))}\n${source}` }
-export function codeComponentImports(source: string, fileName = '组件.ts'): Array<{ specifier: string; name: string; version?: number }> {
-  const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.ES2020, true, ts.ScriptKind.TS)
+type CodeComponentImport = { specifier: string; name: string; version?: number }
+/**
+ * 同一份源码的组件导入不变：按源码文本缓存解析结果。完整 TypeScript 解析在主线程上很重，
+ * 打开剪辑、准备字体、每次呈现后安装代码元素都会经 codeMaterialSource 走到这里（39 个版本的工程实测打开时 1.9 秒）。
+ * 解析出错的源码不缓存，每次都照常报错。
+ */
+const componentImportCache = new Map<string, readonly CodeComponentImport[]>()
+const COMPONENT_IMPORT_CACHE_LIMIT = 1024
+export function codeComponentImports(source: string, fileName = '组件.ts'): CodeComponentImport[] {
+  const cached = componentImportCache.get(source)
+  if (cached) { componentImportCache.delete(source); componentImportCache.set(source, cached); return cached.map(entry => ({ ...entry })) }
+  const parsed = parseCodeComponentImports(source, fileName)
+  componentImportCache.set(source, parsed.map(entry => ({ ...entry })))
+  while (componentImportCache.size > COMPONENT_IMPORT_CACHE_LIMIT) componentImportCache.delete(componentImportCache.keys().next().value!)
+  return parsed
+}
+function parseCodeComponentImports(source: string, fileName: string): CodeComponentImport[] {
+  const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.ES2020, false, ts.ScriptKind.TS)
   return file.statements.flatMap(statement => {
     if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) return []
     const specifier = statement.moduleSpecifier.text

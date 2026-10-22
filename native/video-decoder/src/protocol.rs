@@ -74,8 +74,15 @@ pub enum Command {
         #[serde(default)]
         transfer: Option<String>,
     },
-    /// 按时间取单帧：命中时先发 `frame` 事件再响应。
-    FrameAt { stream_id: String, time: f64, ticket: String },
+    /// 按时间取单帧：命中时先发 `frame` 事件再响应。`keyOnly`：只解目标所在关键帧（快速拖动时的近似画面），
+    /// 响应带 `approximate`；随后同一时间的精确请求从该关键帧继续向前解，不再重新定位。
+    FrameAt {
+        stream_id: String,
+        time: f64,
+        ticket: String,
+        #[serde(default)]
+        key_only: bool,
+    },
     /// 连续计划取帧：`times`（每项恰好一帧或缺帧）或 `range`（区间内每一帧）。
     Schedule {
         stream_id: String,
@@ -265,7 +272,9 @@ mod tests {
             Command::OpenDecoder { stream_id: "vf-1".into(), path: "D:\\素材\\a.mov".into(), stream_index: None, purpose: Some(DecodePurpose::Seek), pool_size: None, hardware: Some(HardwareMode::Off), format: Some(SharedFormat::Rgbaf16), transfer: None }
         );
         let frame_at = parse_request(br#"{"id":"10","type":"frame_at","streamId":"vf-1","time":1.5,"ticket":"t1"}"#).unwrap();
-        assert_eq!(frame_at.command, Command::FrameAt { stream_id: "vf-1".into(), time: 1.5, ticket: "t1".into() });
+        assert_eq!(frame_at.command, Command::FrameAt { stream_id: "vf-1".into(), time: 1.5, ticket: "t1".into(), key_only: false });
+        let key_only = parse_request(br#"{"id":"14","type":"frame_at","streamId":"vf-1","time":1.5,"ticket":"t2","keyOnly":true}"#).unwrap();
+        assert_eq!(key_only.command, Command::FrameAt { stream_id: "vf-1".into(), time: 1.5, ticket: "t2".into(), key_only: true });
         let schedule = parse_request(br#"{"id":"11","type":"schedule","streamId":"vf-1","scheduleId":"s1","times":[0,0.0166]}"#).unwrap();
         assert_eq!(schedule.command, Command::Schedule { stream_id: "vf-1".into(), schedule_id: "s1".into(), times: Some(vec![0.0, 0.0166]), range: None });
         let range = parse_request(br#"{"id":"12","type":"schedule","streamId":"vf-1","scheduleId":"s2","range":{"from":2}}"#).unwrap();

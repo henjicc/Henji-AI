@@ -7,6 +7,9 @@ import type { WorkspaceId } from '@/core/types/workspace'
 import type { AssetLibraryView } from '@/features/assets/store/assetLibraryStore'
 import { Sparkles } from 'lucide-react'
 import { ICON_SETTINGS } from '@/core/theme/icons'
+import { AppMenuBar } from '@/components/appMenu/AppMenuBar'
+import { useGlobalAppMenus } from '@/components/appMenu/useGlobalAppMenus'
+import { useNativeAppMenus } from '@/components/appMenu/useNativeAppMenus'
 
 const logger = createLogger('components.WindowControls')
 
@@ -39,15 +42,21 @@ interface WindowControlsProps {
 const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation', assetView = 'closed', onTabChange, onAssetClick, onOpenSettings, onPrefetchSettings, assistantOpen = false, onAssistantClick }) => {
   const { t } = useI18n('ui')
   const [isDesktopShell, setIsDesktopShell] = React.useState<boolean>(false)
-  const [isMacOS, setIsMacOS] = React.useState<boolean>(false)
+  const [isMacOS, setIsMacOS] = React.useState<boolean>(() => navigator.userAgent.includes('Mac'))
   const [isMaximized, setIsMaximized] = React.useState<boolean>(false)
-  const tabs: TabConfig[] = [
+  useNativeAppMenus(isDesktopShell && isMacOS)
+  const tabs: TabConfig[] = React.useMemo(() => [
     { id: 'generation', label: t('tabs.generation') },
     { id: 'nodes', label: t('tabs.canvas') },
     { id: 'videoEdit', label: t('tabs.videoEdit') },
     { id: 'tools', label: t('tabs.tools') },
     { id: 'assets', label: t('tabs.assets') },
-  ]
+  ], [t])
+  const noop = React.useCallback(() => undefined, [])
+  useGlobalAppMenus({
+    activeWorkspace: activeTab, workspaces: tabs, onWorkspaceChange: onTabChange ?? noop,
+    assistantOpen, onToggleAssistant: onAssistantClick ?? noop, assetFloating: assetView === 'floating', onToggleAssets: onAssetClick ?? noop,
+  })
 
   React.useEffect(() => {
     setIsDesktopShell(isDesktopRuntime())
@@ -159,7 +168,11 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
             {maximizeControl}
           </div>
         ) : (
-          <span className="truncate text-13 font-semibold tracking-wide">{t('windowControls.appName')}</span>
+          <>
+            <span className="mr-2 shrink-0 text-13 font-semibold tracking-wide">{t('windowControls.appName')}</span>
+            {/* Windows 菜单栏在应用名后面；macOS 用系统菜单栏（同一份菜单模型），窗口内不画。 */}
+            <AppMenuBar />
+          </>
         )}
       </div>
 

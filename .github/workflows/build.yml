@@ -395,7 +395,7 @@ jobs:
   #
   # 平台矩阵按「构建机架构与目标架构一致」拆分：better-sqlite3 需要编译、
   # sharp 依赖按宿主架构安装的 @img/sharp-* 可选包，跨架构交叉编译容易失败，
-  # 因此 macOS x64 用 Intel runner、arm64 用 Apple Silicon runner，
+  # 因此 macOS arm64 用 Apple Silicon runner（只发布 Windows x64 与 macOS arm64，不做 Intel Mac），
   # 并把 matrix.arch 显式传给 electron-builder，各自只出自己那一份。
   #
   # max-parallel: 1 —— electron-builder 会把产物发布到同一个 GitHub Release，
@@ -413,10 +413,6 @@ jobs:
           - os: windows-latest
             label: Windows x64
             artifact: windows-x64
-            arch: x64
-          - os: macos-15-intel
-            label: macOS x64
-            artifact: macos-x64
             arch: x64
           - os: macos-latest
             label: macOS arm64

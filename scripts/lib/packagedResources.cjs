@@ -96,7 +96,11 @@ function verifyPackagedResources({ appOutDir, platform, productFilename, videoDe
   if (strayTopLevel.length) {
     problems.push(`app.asar 混入了 files 包含项之外的内容（文件匹配规则退化成整个仓库？）：${strayTopLevel.slice(0, 12).join(', ')}${strayTopLevel.length > 12 ? ' …' : ''}`)
   }
-  if (platform !== 'win32') return problems
+  // 音频 Worker 是频谱、波形与响度的唯一实现，macOS 同样必须随包（曾因只写了 .exe 路径而缺失）；Windows 在下方连同动态依赖一起核对。
+  if (platform !== 'win32') {
+    if (!fs.existsSync(path.join(bundledDir, 'henji-audio-worker'))) problems.push('缺少 henji-audio-worker')
+    return problems
+  }
 
   // 原生服务与 FFmpeg：文件集合恰好一致、逐个字节一致。
   const decoderDir = path.join(bundledDir, 'video-decoder')

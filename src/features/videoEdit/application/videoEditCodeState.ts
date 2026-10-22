@@ -10,25 +10,52 @@ import { codeMaterialSource, codeMaterialVersion, validateCodeMaterialDocument, 
 import type { CodeMaterialMetadata, CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
 import type { CodeMaterialVersion } from '@/core/videoEdit/codeMaterialPersistence'
+import { mapWithConcurrency } from '@/utils/mapWithConcurrency'
+
+/** 打开剪辑时同时准备的代码版本数。 */
+export const CODE_PREPARATION_CONCURRENCY = 4
 
 interface Checked { definitionId: string; source: string; apiVersion: number; languageVersion: number; metadata: CodeMaterialMetadata; program: CodeMaterialProgram; bytes: number }
 export type VideoEditCodeMetadata = Map<string, Checked>
 const states = new WeakMap<object, VideoEditCodeMetadata>()
 const checkedPrograms = new Map<string, CodeMaterialProgram>()
+let checkedProgramBytes = 0
+const compilingPrograms = new Map<string, Promise<CodeMaterialProgram>>()
+/**
+ * 已检查程序按最近使用保留。上限必须高于一份工程常见的代码版本数：按顺序遍历超过上限的版本时，LRU 每次都会
+ * 恰好淘汰下一个要用的，导致打开、字体与渲染准备各自全部重新编译（39 个版本的工程实测每轮 2～5 秒）。
+ * 程序带着打包后的源码，所以同时按字节限额。
+ */
+const CHECKED_PROGRAM_LIMIT = 512
+const CHECKED_PROGRAM_BYTES = 192 * 1024 ** 2
+const programBytes = (program: CodeMaterialProgram): number => program.bundle.code.length * 2
 export async function compileVideoEditCode(source: string | CodeMaterialFiles, signal?: AbortSignal): Promise<CodeMaterialProgram> {
   initializeVideoEditCodeSourceRuntime()
   signal?.throwIfAborted()
   const files = normalizeCodeMaterialFiles(source), key = codeMaterialFilesKey(files)
   const cached = checkedPrograms.get(key)
   if (cached) { checkedPrograms.delete(key); checkedPrograms.set(key, cached); return cached }
+  // 打开、字体与渲染准备会并发请求同一版本：没有取消信号的请求共用同一次编译。
+  if (!signal) {
+    const pending = compilingPrograms.get(key)
+    if (pending) return pending
+    const compiling = compileVideoEditCode(files, new AbortController().signal).finally(() => { if (compilingPrograms.get(key) === compiling) compilingPrograms.delete(key) })
+    compilingPrograms.set(key, compiling)
+    return compiling
+  }
   const bundle = await prepareVideoEditAuthorBundle(files, signal)
   const program = await inspectVideoEditAuthor(bundle, signal)
   signal?.throwIfAborted()
-  while (checkedPrograms.size >= 32) checkedPrograms.delete(checkedPrograms.keys().next().value!)
-  checkedPrograms.set(key, program)
+  const previous = checkedPrograms.get(key)
+  if (previous) { checkedPrograms.delete(key); checkedProgramBytes -= programBytes(previous) }
+  checkedPrograms.set(key, program); checkedProgramBytes += programBytes(program)
+  for (const [oldest, value] of checkedPrograms) {
+    if (checkedPrograms.size <= CHECKED_PROGRAM_LIMIT && checkedProgramBytes <= CHECKED_PROGRAM_BYTES || oldest === key) break
+    checkedPrograms.delete(oldest); checkedProgramBytes -= programBytes(value)
+  }
   return program
 }
-export function releaseVideoEditCodeCompiler(): void { releaseSharedVideoEditCompiler(); checkedPrograms.clear() }
+export function releaseVideoEditCodeCompiler(): void { releaseSharedVideoEditCompiler(); checkedPrograms.clear(); checkedProgramBytes = 0 }
 
 export function installVideoEditCodeMetadata(owner: object, metadata: VideoEditCodeMetadata): void { states.set(owner, metadata) }
 export function readVideoEditCodeMetadata(owner: object, document: VideoEditDocument): CodeMaterialMetadataReader {
@@ -82,17 +109,32 @@ function put(entries: VideoEditCodeMetadata, definitionId: string, version: Code
 }
 /** Rebuild only default/referenced declarations. Unused historical source is
  * checked when explicitly requested; it is never executed or trusted as IR. */
+/** 打开剪辑时检查代码素材的进度（已完成 / 总数），供“正在打开”界面显示；没有进行中的检查时为 null。 */
+export interface VideoEditCodePreparationProgress { done: number; total: number }
+let preparationProgress: VideoEditCodePreparationProgress | null = null
+const preparationListeners = new Set<() => void>()
+function publishPreparation(value: VideoEditCodePreparationProgress | null): void { preparationProgress = value; for (const listener of preparationListeners) listener() }
+export function videoEditCodePreparationProgress(): VideoEditCodePreparationProgress | null { return preparationProgress }
+export function subscribeVideoEditCodePreparation(listener: () => void): () => void { preparationListeners.add(listener); return () => { preparationListeners.delete(listener) } }
+
 export async function prepareVideoEditCodeMetadata(document: VideoEditDocument): Promise<VideoEditCodeMetadata> {
   const metadata: VideoEditCodeMetadata = new Map()
   initializeVideoEditCodeSourceRuntime()
   const references = videoEditCodeReferences(document)
-  for (const instance of references) if (!metadata.has(instance.versionId)) {
+  // 各版本互不依赖：并发读取与编译（编译检查共用有界的检查会话池），结果按引用顺序写入。
+  const unique = [...new Map(references.map(instance => [instance.versionId, instance])).values()]
+  let done = 0
+  if (unique.length) publishPreparation({ done, total: unique.length })
+  const compiled = await mapWithConcurrency(unique, CODE_PREPARATION_CONCURRENCY, async instance => {
     const manifest = document.codeMaterials!.find(definition => definition.id === instance.definitionId)!.versions.find(version => version.id === instance.versionId)!
     await loadCodeSourceReferences(manifest)
     const version = codeMaterialSource(document, instance)
     await verifyCodeSourceReferences(version, documentCodeSourceResolver(document))
-    put(metadata, instance.definitionId, version, await compileVideoEditCode(version.compilation))
-  }
+    const program = await compileVideoEditCode(version.compilation)
+    publishPreparation({ done: ++done, total: unique.length })
+    return { instance, version, program }
+  }).finally(() => { if (unique.length) publishPreparation(null) })
+  for (const { instance, version, program } of compiled) put(metadata, instance.definitionId, version, program)
   validateCodeMaterialDocument(document, instance => {
     const entry = metadata.get(instance.versionId)
     if (!entry) throw new CodeMaterialError('COMPATIBILITY', '固定代码版本未能完成检查。')

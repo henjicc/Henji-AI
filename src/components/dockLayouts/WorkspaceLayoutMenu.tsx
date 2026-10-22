@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useAppMenuVisibility } from '@/components/appMenu/appMenuVisibility'
+import { useEffect, useState } from 'react'
 import type { DockviewApi } from 'dockview-react'
 import { Check, LayoutPanelLeft, Pencil, RotateCcw, Save, SaveAll, Trash2 } from 'lucide-react'
 import { PanelTrigger, UiButton, UiInlineStatus, UiInput, UiOptionButton } from '@/components/ui'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useWorkspaceLayoutPresets } from './useWorkspaceLayoutPresets'
+import { contributeAppMenus } from '@/core/appMenu/appMenu'
 
 type Editing = { kind: 'save' | 'rename'; name: string } | null
 
@@ -12,6 +14,7 @@ type Editing = { kind: 'save' | 'rename'; name: string } | null
  * 只组合现有菜单控件；预设状态与保存逻辑全在共享布局服务里，各工作区不维护第二份。
  */
 export function WorkspaceLayoutMenu({ workspaceId, dockApi }: { workspaceId: string; dockApi?: DockviewApi | null }): JSX.Element {
+  const visible = useAppMenuVisibility()
   const layouts = useWorkspaceLayoutPresets(workspaceId, dockApi)
   const [editing, setEditing] = useState<Editing>(null)
   const [error, setError] = useState<string | null>(null)
@@ -26,6 +29,15 @@ export function WorkspaceLayoutMenu({ workspaceId, dockApi }: { workspaceId: str
     void action().then(() => { setEditing(null); close?.() }, reason => setError(reason instanceof Error ? reason.message : '布局操作没有完成')).finally(() => setBusy(false))
   }
   const iconSize = UI_ICON_SIZE.sm
+  // 同一份预设也进标题栏“视图”菜单（这个按钮所在的工作区显示时才声明）。
+  useEffect(() => visible ? contributeAppMenus(`layout.${workspaceId}`, [{ menu: 'view', order: 10, items: [{
+    kind: 'submenu', id: `layout.${workspaceId}.presets`, label: '工作区布局', ...(layouts.ready ? {} : { disabledReason: '布局还在读取' }),
+    items: [
+      ...layouts.presets.map(preset => ({ kind: 'action' as const, id: `layout.${workspaceId}.apply.${preset.id}`, label: preset.name, checked: preset.id === layouts.activeId, run: () => layouts.apply(preset.id) })),
+      { kind: 'separator' as const },
+      { kind: 'action' as const, id: `layout.${workspaceId}.reset`, label: `重置为“${active?.name ?? '默认'}”`, ...(layouts.dirty ? {} : { disabledReason: '当前布局没有调整' }), run: () => layouts.resetActive() },
+    ],
+  }] }]) : undefined, [visible, workspaceId, layouts, active?.name])
   const presetItem = (preset: typeof layouts.presets[number]) => <UiOptionButton key={preset.id} role="menuitemradio" aria-checked={preset.id === layouts.activeId}
     variant="menu" size="sm" active={preset.id === layouts.activeId} disabled={busy || !layouts.ready} onClick={() => run(() => layouts.apply(preset.id), close)}>
     <span className="flex w-full items-center gap-2">

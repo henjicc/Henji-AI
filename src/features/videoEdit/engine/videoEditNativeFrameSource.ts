@@ -126,7 +126,7 @@ export class VideoEditNativeDecoderSession {
   }
 
   /** The picture showing at `time`, or null when the file has none there. */
-  async frameAt(time: number): Promise<VideoEditNativePicture | null> {
+  async frameAt(time: number, keyOnly = false): Promise<VideoEditNativePicture | null> {
     if (this.closing || this.ended) throw this.ended ?? closedFailure()
     const ticket = `t${++this.next}`
     let ticketEntry!: Ticket
@@ -135,12 +135,14 @@ export class VideoEditNativeDecoderSession {
     this.tickets.set(ticket, ticketEntry)
     let taken = false
     try {
-      const result = await this.channel.call('frameAt', { streamId: this.info.streamId, time, ticket }).catch(error => { throw decodeFailure(this.name, error) })
+      const result = await this.channel.call('frameAt', { streamId: this.info.streamId, time, ticket, ...(keyOnly ? { keyOnly } : {}) }).catch(error => { throw decodeFailure(this.name, error) })
       if (!result.found) return null
       let timer: ReturnType<typeof setTimeout> | undefined
       const frame = await Promise.race([arrived, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(decodeFailure(this.name, new Error('原生帧未送达'))), FRAME_ARRIVAL_TIMEOUT_MS) })]).finally(() => clearTimeout(timer))
       taken = true
-      return this.picture(frame)
+      const picture = this.picture(frame)
+      if (result.approximate) picture.approximate = true
+      return picture
     } finally {
       this.tickets.delete(ticket)
       // A frame that arrived (or arrives) for an abandoned read goes straight back.
@@ -453,7 +455,7 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
     try { return await this.snapshot(picture, videoEditGpuFrameUsesChroma(picture)) } finally { picture.close() }
   }
 
-  async sample(time: number, direction: number, singleFrame = false): Promise<{ sample?: VideoEditGpuFrame; hit: boolean }> {
+  async sample(time: number, direction: number, singleFrame = false, approximate = false): Promise<{ sample?: VideoEditGpuFrame; hit: boolean; approximate?: boolean }> {
     if (this.disposed) throw closedFailure()
     if (this.failure) throw this.failure
     const source = this.source()
@@ -461,18 +463,27 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
     this.direction = Math.sign(direction)
     if (direction === 0 || changed) this.cancelSpeculative()
     const cached = this.cached(time)
-    if (cached) { if (direction !== 0) this.prefetch(source, time, direction); return { sample: cached, hit: true } }
+    if (cached) { recordVideoEditPreparation('scrubCacheHit', 0); if (direction !== 0) this.prefetch(source, time, direction); return { sample: cached, hit: true } }
     const session = await source.seek()
     if (this.disposed) throw closedFailure()
     if (session.intraOnly || singleFrame) {
       // A first still needs only one picture. Decode the GOP natively without importing/copying its preceding frames.
       // Continuous scrubbing keeps the existing window cache and speculative neighbour decoding.
-      const picture = await source.lane.run(() => session.frameAt(time))
+      const queued = performance.now()
+      const picture = await source.lane.run(async () => {
+        recordVideoEditPreparation('scrubLaneWait', performance.now() - queued)
+        const started = performance.now()
+        const value = await session.frameAt(time, approximate && !session.intraOnly)
+        recordVideoEditPreparation(value?.approximate ? 'scrubKeyFrame' : 'scrubExactFrame', performance.now() - started)
+        return value
+      })
       if (this.disposed) { picture?.close(); throw closedFailure() }
       if (!picture) return { hit: false }
+      const keyFrame = picture.approximate
       const copy = await this.normalize(picture)
+      // 关键帧按它自己的时间入缓存：对它自身的时间它就是精确画面，查目标时间不会命中它。
       this.cache.put(this.path, copy.clone(), new Set())
-      return { sample: copy, hit: false }
+      return { sample: copy, hit: false, ...(keyFrame ? { approximate: true } : {}) }
     }
     // A window can end without this time's picture for it: delivered and already evicted before this request joined, or
     // the window was stopped. Decode once more instead of showing nothing (task 3.1: a scrubbed layer showed no picture);
@@ -482,7 +493,9 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
       if (already) return { sample: already, hit: true }
       const start = Math.floor(time / VIDEO_EDIT_NATIVE_SEEK_WINDOW_SECONDS) * VIDEO_EDIT_NATIVE_SEEK_WINDOW_SECONDS
       const window = this.window(source, start, false)
+      const waited = performance.now()
       const picture = await new Promise<VideoEditGpuFrame | undefined>((resolve, reject) => window.waiters.add({ time, resolve, reject }))
+      recordVideoEditPreparation('scrubWindow', performance.now() - waited)
       if (picture) {
         if (direction !== 0) this.prefetch(source, time, direction)
         return { sample: picture, hit: false }
