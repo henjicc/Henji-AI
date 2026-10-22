@@ -1,4 +1,4 @@
-export { CreativeIntentControls, type CreativeIntentControlsProps } from './ui/CreativeIntentControls'
+export { CreativeIntentControls, SuperKeyframeRecordingControls, type CreativeIntentControlsProps } from './ui/CreativeIntentControls'
 export { CreativeIntentOverlay, type CreativeIntentGhost } from './ui/CreativeIntentOverlay'
 export { RecordingCollector, type RecordingPresentation } from './recording/RecordingCollector'
 export { captureMicrophone, recordingDevices, type CapturedAudioBlock, type MicrophoneCapture } from './recording/microphone'
