@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createServer, type Server } from 'node:http'
+import { createServer, type IncomingHttpHeaders, type Server } from 'node:http'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -31,10 +31,18 @@ const model: LlmModelConfig = { providerId: 'test', modelId: 'fixture', displayN
     jsonOutput: false, structuredOutputMode: 'none', reasoning: false, sampling: true, contextWindow: 32768, maxOutputTokens: 1024, usage: true } }
 const cleanup: Array<() => Promise<unknown>> = []
 afterEach(async () => { for (const close of cleanup.reverse()) await close(); cleanup.length = 0 })
+/** Pi 1.x 按首次声明顺序发工具：保留的工具位置不变，新加载的按名称接在后面，不打乱已缓存的前缀。 */
+function expectStableToolOrder(previous: string[], next: string[]) {
+  const kept = previous.filter(name => next.includes(name))
+  expect(next.slice(0, kept.length)).toEqual(kept)
+  const added = next.slice(kept.length)
+  expect(added).toEqual([...added].sort())
+}
 async function fixture(capabilities: Partial<LlmModelConfig['capabilities']> = {}, api: 'openai-completions' | 'openai-responses' = 'openai-completions') {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-pi-test-'))
   cleanup.push(() => fs.rm(directory, { recursive: true, force: true }))
   const requests: Array<{ tools: Array<{ function: { name: string } }>; messages: Array<{ role: string; content: string }>; input?: Array<{ role: string; content: unknown }>; max_tokens?: number; max_completion_tokens?: number; reasoning_effort?: string }> = []
+  const headers: IncomingHttpHeaders[] = []
   let mode: 'tool' | 'error' | 'wait' = 'tool'
   let usage: Record<string, unknown> | undefined
   let toolPlan = [{ name: 'read_project', arguments: { id: 'project' } as Record<string, unknown> }]
@@ -43,6 +51,7 @@ async function fixture(capabilities: Partial<LlmModelConfig['capabilities']> = {
     for await (const chunk of request) chunks.push(Buffer.from(chunk))
     const body = JSON.parse(Buffer.concat(chunks).toString()) as typeof requests[number]
     requests.push(body)
+    headers.push(request.headers)
     if (mode === 'error') { response.writeHead(400, { 'Content-Type': 'application/json' }); response.end(JSON.stringify({ error: { message: 'fixture rejection' } })); return }
     response.writeHead(200, { 'Content-Type': 'text/event-stream' })
     response.flushHeaders()
@@ -82,7 +91,7 @@ async function fixture(capabilities: Partial<LlmModelConfig['capabilities']> = {
   const configuration = { directory, model: { providerId: 'test', model: { ...model, capabilities: { ...model.capabilities, ...capabilities } }, baseUrl: `http://127.0.0.1:${address.port}/v1`, api, apiKey: 'fixture-key' },
     instructions: '你是测试中的痕迹助手。', tools: [{ name: 'read_project', description: '读取项目', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false } }] }
   await engine.command({ action: 'configure', input: configuration })
-  return { engine, requests, events, tool, directory, configuration, setUsage: (value: Record<string, unknown>) => { usage = value }, setMode: (value: typeof mode) => { mode = value },
+  return { engine, requests, headers, events, tool, directory, configuration, setUsage: (value: Record<string, unknown>) => { usage = value }, setMode: (value: typeof mode) => { mode = value },
     setToolPlan: (value: typeof toolPlan) => { toolPlan = value } }
 }
 function applicationCatalog(allowWrites = true) {
@@ -95,6 +104,18 @@ function applicationCatalog(allowWrites = true) {
 }
 
 describe('Pi official SDK engine', () => {
+  it('OpenRouter 兼容端点不附带 Pi 的归因头', async () => {
+    const f = await fixture()
+    f.setToolPlan([])
+    await f.engine.command({ action: 'configure', input: { ...f.configuration,
+      model: { ...f.configuration.model, baseUrl: f.configuration.model.baseUrl.replace('/v1', '/openrouter.ai/v1') } } })
+    await f.engine.command({ action: 'prompt', input: { text: '回答', context: '{}' } })
+    expect(f.headers).toHaveLength(1)
+    expect(f.headers[0]).not.toHaveProperty('http-referer')
+    expect(f.headers[0]).not.toHaveProperty('x-openrouter-title')
+    expect(f.headers[0]).not.toHaveProperty('x-openrouter-categories')
+  })
+
   it('未知模型能力使用共享输出预算，推理默认 high 并尊重已有 low 设置', async () => {
     const f = await fixture({ reasoning: true, contextWindow: null, maxOutputTokens: null })
     f.setToolPlan([])
@@ -312,7 +333,7 @@ describe('Pi official SDK engine', () => {
     const editNames = (f.requests.at(-1)!.tools as unknown as Array<{ name: string }>).map(tool => tool.name)
     expect(editNames).toEqual(expect.arrayContaining(['observe_video_edit_frame', 'read_application_media', 'change_application_entities', 'load_application_tools']))
     expect(editNames).toEqual(expect.arrayContaining(videoEditCreativeTools()))
-    expect(editNames).toEqual([...editNames].sort())
+    expectStableToolOrder((f.requests.at(-2)!.tools as unknown as Array<{ name: string }>).map(tool => tool.name), editNames)
     expect(editNames).not.toContain('export_video_edit'); expect(editNames).not.toContain('get_canvas_document')
     for (const [surface, basic] of [['tool.camera_stage', 'observe_camera_stage_scene'], ['workspace.generation', 'search_models'], ['settings.general', 'search_application_settings']]) {
       await f.engine.command({ action: 'prompt', input: { text: '当前页面', context: JSON.stringify({ surface: { id: surface } }) } })
@@ -337,7 +358,9 @@ describe('Pi official SDK engine', () => {
     expect(names(0)).not.toContain('get_model_schema')
     expect(names(1)).toEqual(expect.arrayContaining(['get_model_schema', 'prepare_generation_task', 'create_visible_generation_task', 'wait_generation_task']))
     expect(names(1)).not.toContain('render_camera_stage_output')
-    expect(names(1)).toEqual([...names(1)].sort())
+    expectStableToolOrder(names(0), names(1))
+    // 离开再回来的工具在 Pi 里重新声明并接到末尾，复用只比较集合与定义。
+    const byName = (tools: typeof loadedTools) => [...tools].sort((a, b) => a.function.name.localeCompare(b.function.name))
     const loadedTools = f.requests[1].tools
     expect(f.tool).toHaveBeenCalledTimes(1)
     expect(f.tool.mock.calls[0]).toMatchObject([expect.any(String), 'get_model_schema', { modelId: 'fixture-model' }, expect.any(AbortSignal)])
@@ -348,7 +371,7 @@ describe('Pi official SDK engine', () => {
     expect(names(-1)).not.toContain('create_visible_generation_task')
     await f.engine.command({ action: 'prompt', input: { text: '继续画布任务', context: canvas } })
     expect(names(-1)).toContain('create_visible_generation_task')
-    expect(f.requests.at(-1)!.tools).toEqual(loadedTools)
+    expect(byName(f.requests.at(-1)!.tools)).toEqual(byName(loadedTools))
     const snapshot = await f.engine.command({ action: 'snapshot' }) as { sessionId: string }
     const restored = new PiEngine(() => undefined, f.tool)
     cleanup.push(() => restored.dispose())
@@ -357,7 +380,7 @@ describe('Pi official SDK engine', () => {
     await restored.command({ action: 'open', input: snapshot.sessionId })
     await restored.command({ action: 'prompt', input: { text: '继续', context: canvas } })
     expect(names(-1)).toContain('create_visible_generation_task')
-    expect(f.requests.at(-1)!.tools).toEqual(loadedTools)
+    expect(byName(f.requests.at(-1)!.tools)).toEqual(byName(loadedTools))
     await restored.command({ action: 'configure', input: { ...configuration, tools: applicationCatalog(false).tools } })
     await restored.command({ action: 'prompt', input: { text: '只读', context: canvas } })
     expect(names(-1)).not.toContain('create_visible_generation_task')
