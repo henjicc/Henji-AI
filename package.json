@@ -78,6 +78,7 @@
     "lint:fix": "eslint src --ext ts,tsx --fix",
     "electron:dev": "npm run prepare:media-binaries && npm run build:audio-worker && npm run gen:progress-seeds && npm run gen:licenses && node scripts/electron-vite-dev.cjs",
     "electron:bundle": "node scripts/run-electron-bundle.cjs",
+    "electron:prod": "node scripts/electron-prod.cjs",
     "electron:build": "npm run prepare:media-binaries && npm run gen:progress-seeds && npm run gen:catalog && npm run build:audio-worker && npm run build:video-decoder && npm run gen:licenses -- --strict && npm run check:colors && npm run check:surface:strict && npm run check:icons:strict && npm run check:ui-residue && npm run check:model-i18n && npm run check:main-imports && npm run check:sdk && npm run check:assistant-capabilities && npm run build:sdk && tsc -p tsconfig.electron.json && electron-vite build",
     "electron:pack": "npm run electron:build && electron-builder --dir",
     "electron:dist": "npm run electron:build && electron-builder",

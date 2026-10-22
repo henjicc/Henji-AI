@@ -58,6 +58,7 @@ Henji-AI（痕迹AI）是 **Electron + React + TypeScript** 桌面应用，聚�
 ```bash
 npm install                    # 安装依赖
 npm run electron:dev -- --background  # Electron 开发模式：窗口启动后最小化，禁用后台节流并持续渲染（测试优先）
+npm run electron:prod -- --background  # 本机正式构建：生产产物 + 真实资料目录，行为与安装包一致；交给用户测试一律用它
 npm run electron:dev                 # 仅在必须验证启动聚焦行为时使用普通前台启动
 npm run dev                    # 裸 Vite 渲染层（不含主进程能力，不能作桌面验收依据）
 npm run lint                   # 渲染层 lint
@@ -167,6 +168,7 @@ npm run test:reality -- --suite integration
 1. 跑完 [testing.md](docs/rules/testing.md) 中与本次改动匹配的检查，如实报告结果
 2. 只有关键结论依赖真实 Electron 的布局命中、合成呈现、原生桥接或生命周期，且精确测试不足以证明时，才运行正式 `npm run test:reality -- --suite ui|ui-audit --only <相关场景>`；运行产物过期时才加 `--build`。出现“点击/拖拽/悬浮”等词、修改 TSX 或已有精确测试覆盖的交互，不自动触发 Reality。需要真实应用视觉审查时禁止使用浏览器、ego-browser 或 Chrome 代替 Electron，并由 Agent 打开实际截图目视检查。
 3. **只有本次改动需要把真实应用交给用户继续查看、改变了 Electron 运行时代码，或实际运行过会中断开发实例的构建/Reality 验收时，最终回复前才检查并维护开发环境。** 分析、规则/文档、测试文件、纯 SDK、纯脚本和无需真实窗口的局部逻辑任务不启动、不重启开发环境。需要维护时只识别工作目录属于当前仓库的 `npm run electron:dev` 进程，禁止按 `node` / `Electron` 名称宽泛结束其他项目进程，并优先使用 `npm run electron:dev -- --background`：
+   - **交给用户测试的一律是本机正式构建（2026-10-23 用户确认）**：用户要求“测试时的行为与正式安装版一致”。开发版的按需依赖预构建（首次碰到新依赖整页刷新）、StrictMode 双挂载、未压缩与调试检查都会让行为与安装包不同，因此交付用户查看、体验或验收时启动 `npm run electron:prod -- --background --dev-skip-onboarding`（先 `electron:bundle` 再用生产产物与真实资料目录启动；产物已最新时加 `--skip-build`）。`electron:dev` 只留给 Agent 自己快速迭代；完整安装包只用于发版验收或验证安装、更新流程。下面几条中的启动/重启命令在交付用户时均按此替换
    - 未运行：在可持续运行的终端会话中执行 `npm run electron:dev -- --background`，确认启动成功后再交付
    - 已运行且本次改动需要重启：只结束当前仓库对应的完整开发进程树，然后重新执行 `npm run electron:dev -- --background`
    - 已运行且无需重启：保持现状，不得重复启动第二个实例
