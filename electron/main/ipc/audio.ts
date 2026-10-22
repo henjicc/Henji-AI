@@ -1,4 +1,7 @@
 import { z } from 'zod'
+import { BrowserWindow } from 'electron'
+import { audioEditSpectralTileRequestSchema } from '../../../src/core/audioEdit/spectralPyramid'
+import { getAudioEditSpectralTile, cancelAudioEditSpectralTile, subscribeAudioEditSpectralProgress } from '../services/audio-edit/spectral-pyramid'
 import { audioEditSpectrogramRequestSchema } from '../../../src/core/audioEdit/regions'
 import { getAudioEditSpectrogram } from '../services/audio-edit/spectrogram'
 import { renderAudioEditProject, prepareAudioEditRenderSource } from '../services/audio-edit/render'
@@ -28,6 +31,13 @@ import type {
  * 这里只剩导入时探测素材，以及按文档 ID（参数名沿用 projectId）执行的转写、分析、处理、试听与导出。
  */
 export function registerAudioIpc(): void {
+  registerIpcHandler('audioEdit:spectralTile', input => audioEditSpectralTileRequestSchema.parse(input), getAudioEditSpectralTile)
+  registerIpcHandler('audioEdit:spectralCancel', input => z.object({ requestId: z.string().min(1).max(200) }).strict().parse(input), ({ requestId }) => cancelAudioEditSpectralTile(requestId))
+  subscribeAudioEditSpectralProgress(progress => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('audioEdit:spectralProgress', progress)
+    }
+  })
   registerIpcHandler('audioEdit:spectrogram', input => audioEditSpectrogramRequestSchema.parse(input), getAudioEditSpectrogram)
   registerIpcHandler('audioEdit:render', input => z.object({ projectId: z.string().min(1), requestId: z.string().optional(), includeProcessing: z.boolean().optional() }).strict().parse(input), async request => {
     const project = await requireAudioEditProject(request.projectId)

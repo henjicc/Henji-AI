@@ -37,6 +37,10 @@ export function audioEditCacheDirectory(projectId: string): string {
   if (!directory) throw new Error('作品目录不可用，暂时无法处理口播。')
   return directory
 }
+/** 频谱按素材内容寻址，在同一媒体缓存根下跨文档复用，不随某一文档删除。 */
+export function audioEditSpectralCacheDirectory(): string {
+  return audioEditCacheDirectory('spectral-pyramid-v1')
+}
 // 口播文档离开作品（回收站、删除空草稿、从列表移除）时清掉程序目录 AudioEdit/<文档 ID>（解码缓存、处理结果）
 // 与任务回执，都可重建；还有任务在跑时不动（下次离开或手动清理时再说）。别的类型的文档 ID 在这里没有数据，不受影响。
 registerDocumentProgramStateCleaner('audio_edit', async (docId) => {

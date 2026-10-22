@@ -1,7 +1,7 @@
 //! Native, file-based DSP. All frame ranges are half-open sample-frame indices,
 //! never interleaved sample indices. Outputs must not exist (also protects input
 //! aliases/hard links); a sibling temporary is published only after success.
-mod audio;
+pub(crate) mod audio;
 mod heal;
 mod lpc;
 mod spectrum;

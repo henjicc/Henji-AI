@@ -13,6 +13,8 @@ use vst3_host::{
 const PROTOCOL_VERSION: u32 = 1;
 
 mod dsp;
+mod pyramid;
+mod spectral_server;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -185,6 +187,10 @@ fn execute(command: Command) -> Result<Value, Box<dyn Error>> {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    // 专用实例显式开启并发；旧的一行请求、关闭 stdin 调用保持原执行线程与顺序。
+    if std::env::args().any(|arg| arg == "--spectral-server") {
+        return spectral_server::run();
+    }
     let stdin = io::stdin();
     let mut stdout = io::BufWriter::new(io::stdout().lock());
     for line in stdin.lock().lines() {
