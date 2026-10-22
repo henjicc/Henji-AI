@@ -22,6 +22,8 @@ Electron 自动化脚本通过 CDP/Playwright 启动构建产物。需要临时�
 
 ## 打包配置
 
+**目标平台（2026-10-22 用户确认）**：只支持 Windows x64 与 macOS arm64（Apple 芯片）。不做 Intel Mac（x64 macOS）、不做 Windows ARM、不做 32 位与 Linux；原生程序（`henji-audio-worker`、视频解码服务等）只为这两个目标构建与签名，macOS 不打 universal 包。
+
 `electron-builder.yml` 当前配置：Windows NSIS/MSI、macOS DMG、GitHub Releases 发布通道、`better-sqlite3`/`sharp` 原生模块 unpack、manifest/seeds 资源分发。`resources/icons/` 是打包图标来源。
 
 随包原生程序与 FFmpeg（安装目录 `resources/resources/` 下，主进程只按 `process.resourcesPath` 定位，安装包不读开发目录与 `HENJI_*` 诊断变量）：
