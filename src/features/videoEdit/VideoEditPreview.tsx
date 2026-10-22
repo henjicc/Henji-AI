@@ -14,7 +14,7 @@ import { ICON_VIDEO_EDIT_PROXY } from '@/core/theme/icons'
 import { autoSwitchVideoEditMulticam, switchVideoEditMulticam, videoEditProgramMulticam } from './application/videoEditMulticam'
 import { getVideoEditProxyPreference, setVideoEditProxyPreference, videoEditProxySignature } from './application/videoEditProxy'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton,  UiOptionButton, UiOverflowRow, UiPanel } from '@/components/ui'
+import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton, UiLoading, UiOptionButton, UiOverflowRow, UiPanel } from '@/components/ui'
 import { ArrowRightFromLine, ArrowRightToLine, ArrowUpFromLine, BookmarkPlus, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser, FastForward, Gauge, FoldHorizontal, ImagePlus, ImageUp, MapPin, MoreHorizontal, MousePointer2, Move, Pause, PenLine, Play, Rewind, RotateCcw, SkipBack, SkipForward, Square, SquareDashed, StepBack, StepForward, type LucideIcon } from 'lucide-react'
 import Tooltip from '@/components/ui/Tooltip'
 import { Z_LAYERS } from '@/core/theme/zLayers'
@@ -181,6 +181,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     })
   }, [instance, visible, onError, changeMode])
   const [preparing, setPreparing] = useState(false)
+  /** 本次挂载的渲染器是否已有画面上屏；之前显示“正在准备画面”，避免打开工程时只看到一块黑。 */
+  const [pictureReady, setPictureReady] = useState(false)
   const [retry, setRetry] = useState(0)
   const gpuRecoveryTimes = useRef<number[]>([])
   const [effectFailure, setEffectFailure] = useState<string | null>(null)
@@ -200,7 +202,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
   useEffect(() => {
     if (!visible) { setVideoEditView(instance.document.id, { playing: false }, true); setPreparing(false); setLevels([]); return }
     const previousRelease = programReleases.get(instance) ?? Promise.resolve()
-    setRenderFailure(null); setEffectFailure(null)
+    setRenderFailure(null); setEffectFailure(null); setPictureReady(false)
     let stopped = false
     let stopCurrent: () => void = () => {}
     const stop = (): void => { stopped = true; stopCurrent() }
@@ -393,7 +395,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       }
       if (presentedSequenceId !== composition.id) { presentedSequenceId = composition.id; firstPresentationAt = performance.now() }
       retainExplanationPixels(surface, target, result.history)
-      if (result.presented === true) recordVideoEditFirstFrame(instance.document.id, composition.id, { frame: target, decodeMs: result.decodeMs, gpuMs: result.gpuMs, sourceTimestamps: result.sourceTimestamps })
+      if (result.presented === true) { recordVideoEditFirstFrame(instance.document.id, composition.id, { frame: target, decodeMs: result.decodeMs, gpuMs: result.gpuMs, sourceTimestamps: result.sourceTimestamps }); setPictureReady(true) }
       lastPresentation = requestedAt
       surface.dataset.requestedAt = String(requestedAt); surface.dataset.renderMs = String(performance.now() - requestedAt)
       surface.dataset.decodeMs = String(result.decodeMs ?? 0); surface.dataset.gpuMs = String(result.gpuMs ?? 0)
@@ -757,6 +759,10 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         <VideoEditCodeElementOverlay instance={instance} enabled={visible && mode === 'select'} onError={onError} /></>}
       </div>
       <VideoEditLevelMeter className="absolute bottom-3 right-2 top-3" levels={levels.length ? levels : Array.from({ length: document.channels }, () => ({ peak: 0, rms: 0 }))} title="节目播放电平" />
+      {!pictureReady && !renderFailure && <div className="pointer-events-none absolute inset-0 flex items-center justify-center" data-video-edit-program-preparing>
+        {/* 节目底是不随主题的媒体黑：放在玻璃浮层里，浅色主题下文字也看得清 */}
+        <div className="ui-glass rounded-xl px-4"><UiLoading size="sm" message="正在准备画面…" /></div>
+      </div>}
       {(preparing || collecting) && <div className="absolute left-2 top-2 flex max-w-full items-center gap-2 rounded-lg bg-media-scrim p-1 text-xs text-on-media">
         {preparing && <><span className="whitespace-nowrap px-1">正在准备流畅预览…</span><UiButton variant="media" size="sm" onClick={() => { stopPreview.current(); setPreparing(false) }}>取消准备</UiButton></>}
         {collecting && !preparing && <span className="whitespace-nowrap px-1">正在处理当前帧…</span>}

@@ -91,6 +91,12 @@ describe('文档外壳', () => {
       { ...base, format: 'henji-document', envelopeVersion: 1, id: '../x' },
     ]) expect(() => parseDocumentText(JSON.stringify(raw))).toThrowError(expect.objectContaining({ code: 'invalid-content', formatId: 'document-envelope' }))
   })
+  it('外部工具写成毫秒时间戳的外壳时间按同一时刻读成 ISO，非法数值仍拒绝', () => {
+    const at = Date.parse('2026-10-21T06:21:08.496Z')
+    const envelope = parseDocumentText(JSON.stringify({ ...base, format: 'henji-document', envelopeVersion: 1, updatedAt: at }))
+    expect(envelope.updatedAt).toBe('2026-10-21T06:21:08.496Z')
+    for (const updatedAt of [-1, 1.5, 9e15]) expect(() => parseDocumentText(JSON.stringify({ ...base, format: 'henji-document', envelopeVersion: 1, updatedAt }))).toThrowError(expect.objectContaining({ code: 'invalid-content' }))
+  })
 })
 
 describe('项目说明', () => {

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { sha256HexString } from '../../../utils/save/hash'
+import { mapWithConcurrency } from '../../../utils/mapWithConcurrency'
 import { CODE_MATERIAL_LIMITS, CodeMaterialError } from './contract'
 
 export interface CodeMaterialFiles { entry: string; files: Record<string, string>; resolvedImports?: Record<string, Record<string, string>> }
@@ -56,6 +57,10 @@ export function codeFilesFromInput(input: { source?: string; files?: Record<stri
 // Source content is session memory, never part of a video document. I/O is injected by the host.
 const contents = new Map<string, string>()
 const transient = new Set<string>()
+/** 位置与内容最近一次读盘核对通过的时刻。 */
+const verifiedLocations = new Map<string, number>()
+/** 打开剪辑后紧接着的内部准备步骤复用核对结果的时长。 */
+export const CODE_SOURCE_REVERIFY_MS = 30_000
 let reader: ((file: CodeFileReference) => Promise<string>) | undefined
 export function installCodeSourceReader(read: (file: CodeFileReference) => Promise<string>): void { reader = read }
 export function rememberCodeSource(hash: string, source: string): void { contents.set(hash, source) }
@@ -72,28 +77,39 @@ export function componentFileReferences(imports: readonly CodeComponentPin[] = [
   }
   return files
 }
-export async function loadCodeSourceReferences(version: { files: readonly CodeFileReference[]; imports?: readonly CodeComponentPin[] }): Promise<void> {
-  const checked = new Set<string>()
+/**
+ * 读取并核对一个版本引用的源码。默认每次都读盘核对位置与内容（外部修改、缺失要及时报出）；
+ * `reuseVerifiedWithinMs` 只给紧跟在一次完整核对之后的内部步骤用（打开剪辑后的字体与渲染准备），
+ * 同一位置与内容在这段时间内核对过就不再重读。
+ */
+export async function loadCodeSourceReferences(version: { files: readonly CodeFileReference[]; imports?: readonly CodeComponentPin[] }, options: { reuseVerifiedWithinMs?: number } = {}): Promise<void> {
+  const pending = new Map<string, CodeFileReference>()
+  const now = Date.now()
   for (const file of [...version.files, ...componentFileReferences(version.imports)]) {
-    const key = JSON.stringify([file.location, file.hash]); if (checked.has(key)) continue
-    checked.add(key)
-    if (transient.has(file.location)) continue
+    const key = JSON.stringify([file.location, file.hash])
+    if (pending.has(key) || transient.has(file.location)) continue
+    const verifiedAt = verifiedLocations.get(key)
+    if (options.reuseVerifiedWithinMs && verifiedAt !== undefined && now - verifiedAt <= options.reuseVerifiedWithinMs && contents.has(file.hash)) continue
     // 渲染 Worker 没有读取服务，使用主线程已校验并发来的源码。
     if (!reader && contents.has(file.hash)) continue
     if (!reader) throw new CodeMaterialError('COMPATIBILITY', '源码文件读取服务尚未就绪，请重新打开剪辑。')
-    const source = await reader(file)
+    pending.set(key, file)
+  }
+  // 每次读取都核对磁盘上的位置与内容（外部修改、缺失要及时报出）；同一版本的文件并发读取。
+  await Promise.all([...pending.values()].map(async file => {
+    const source = await reader!(file)
     if (await sha256HexString(source) !== file.hash) throw new CodeMaterialError('COMPATIBILITY', `${file.path} 已被外部修改，请从项目备份恢复原文件，或将改动保存为新版本。`)
     rememberCodeSource(file.hash, source)
-  }
+    verifiedLocations.set(JSON.stringify([file.location, file.hash]), Date.now())
+  }))
 }
 /** 渲染 Worker 不读盘：主线程读好并校验后，把尚未发送的源码随文档一起发过去。 */
 export async function collectCodeSourceTexts(versions: Iterable<{ files: readonly CodeFileReference[]; imports?: readonly CodeComponentPin[] }>, sent?: Set<string>): Promise<Record<string, string>> {
   const result: Record<string, string> = {}
-  for (const version of versions) {
-    const files = [...version.files, ...componentFileReferences(version.imports)]
-    // 已发送过的版本内容不可变，编辑时不再逐次读盘。
-    if (sent && files.every(file => sent.has(file.hash))) continue
-    await loadCodeSourceReferences(version)
+  // 已发送过的版本内容不可变，编辑时不再逐次读盘；其余版本并发读取，再按原顺序收集。
+  const pending = [...versions].map(version => ({ version, files: [...version.files, ...componentFileReferences(version.imports)] })).filter(({ files }) => !sent || !files.every(file => sent.has(file.hash)))
+  await mapWithConcurrency(pending, 8, ({ version }) => loadCodeSourceReferences(version, { reuseVerifiedWithinMs: CODE_SOURCE_REVERIFY_MS }))
+  for (const { files } of pending) {
     for (const file of files) {
       const source = contents.get(file.hash)
       if (source === undefined || sent?.has(file.hash)) continue
