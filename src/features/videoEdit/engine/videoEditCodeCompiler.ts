@@ -3,6 +3,7 @@ import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeMaterialErrorCode, CodeSourceSpan } from '@/core/videoEdit/codeMaterial/contract'
 import type { AuthorBundle } from './videoEditAuthorBundle'
 import { directAuthorBundle } from './videoEditAuthorModules'
+import { authorJsLocations } from './videoEditAuthorJsLocations'
 
 export type CodeCompilerResponse = { id: number; cacheHit?: boolean } & ({ bundle: AuthorBundle } | { error: { code: CodeMaterialErrorCode; message: string; sourceSpan?: CodeSourceSpan } })
 export interface CodeCompilerWorker {
@@ -75,10 +76,8 @@ export class VideoEditCodeCompiler {
     if (this.disposed) return Promise.reject(new Error('源码读取会话已关闭。'))
     if (signal?.aborted) return Promise.reject(signal.reason)
     const direct = directAuthorBundle(files)
-    if (direct) return import('./videoEditAuthorJsLocations').then(({ authorJsLocations }) => {
-      signal?.throwIfAborted()
-      return { ...direct, locations: authorJsLocations(files) }
-    })
+    // 静态导入：Worker 构建里的动态导入会触发 Vite 4 预加载分析缺陷（构建失败）；acorn 体积小。
+    if (direct) return Promise.resolve({ ...direct, locations: authorJsLocations(files) })
     return this.request(files, 'author.bundle', signal).then(response => { if ('bundle' in response) return response.bundle; throw new Error('模块打包返回了错误的结果类型。') })
   }
   private request(files: CodeMaterialFiles, kind: 'author.bundle', signal?: AbortSignal): Promise<CodeCompilerResponse> {
