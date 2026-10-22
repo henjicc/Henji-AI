@@ -3,6 +3,7 @@ import { Brush, Hand, MoveLeft, MoveRight, RotateCcw, SquareDashed, TextCursor, 
 import ContextMenu from '@/components/ContextMenu'
 import { PanelTrigger, UiButton, UiFormRow, UiIconButton, UiRangeInput, UiSegmented, UiTextToken } from '@/components/ui'
 import { useContextMenu } from '@/hooks/useContextMenu'
+import { DockHeaderPortal } from '@/components/dockLayouts/DockHeaderPortal'
 import NumberInput from '@/components/ui/NumberInput'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import type { AudioEditRange } from '@/core/audioEdit/types'
@@ -172,6 +173,10 @@ export function AudioWaveWorkspace() {
     if (event.key === ' ' && !(event.target instanceof HTMLElement && event.target.closest('button'))) { event.preventDefault(); void workspace.togglePlayback(); return }
     if (selection && !disabled && (event.key === 'Delete' || event.key.toLowerCase() === 'm')) { event.preventDefault(); onEditSelection(event.key === 'Delete' ? 'delete' : 'mute') }
   }} tabIndex={-1}>
+    {/* 编辑工具放在“编辑器”标签行右侧；面板组太窄时留在面板顶部这一行。 */}
+    <DockHeaderPortal panelId="audio_edit:editor" fallback={tools => <div className="flex h-band-header shrink-0 items-center border-b border-gap px-2">{tools}</div>}>
+      <AudioWaveToolbar editor={editor} selection={selection} disabled={disabled} actions={workspace.waveActions} onEditSelection={onEditSelection} />
+    </DockHeaderPortal>
     <div className="min-h-0 flex-1">
       <AudioSpectralEditor sampleRate={rate} durationFrames={duration} waveform={waveform}
         {...(spectrogram.tiles ? { spectrogram: spectrogram.tiles } : {})} spectrogramStatus={spectrogram.status} {...(spectrogram.error ? { spectrogramError: spectrogram.error } : {})} onRetrySpectrogram={spectrogram.retry}

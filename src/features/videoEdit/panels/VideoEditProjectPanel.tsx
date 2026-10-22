@@ -32,6 +32,7 @@ import { VideoEditProjectEditDialog, type ProjectEditDialog } from './VideoEditP
 import { VideoEditProjectThumbnail } from './VideoEditProjectThumbnail'
 import { VideoEditCodeCreateDialog } from './VideoEditCodeCreateDialog'
 import { VideoEditAudioChannelsDialog, type VideoEditAudioChannelsTarget } from './VideoEditAudioChannelsDialog'
+import { DockHeaderPortal } from '@/components/dockLayouts/DockHeaderPortal'
 import { VideoEditProjectDocumentsButton } from './VideoEditProjectDocuments'
 import { readVideoEditCodeMetadata } from '../application/videoEditCodeState'
 import { selectVideoEditProjectItems, videoEditBinPath, videoEditProjectColumns, videoEditProjectRows, type VideoEditProjectEntry, type VideoEditProjectRow, type VideoEditProjectSort, type VideoEditProjectSortKey } from './videoEditProjectModel'
@@ -348,7 +349,8 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
         <span className="min-w-0 truncate text-xs text-text2" data-user-content data-video-edit-current-bin>{binPath.at(-1)?.name}</span>
       </div>}
       <UiSearchInput className="mr-1 min-w-28 flex-1" aria-label="搜索素材" placeholder="搜索素材" size="sm" value={keyword} onChange={event => setKeyword(event.target.value)} />
-      <div className="ml-auto flex shrink-0 items-center gap-0.5">
+      {/* 视图、资产库、文档、新建、导入放到“素材”标签行右侧；浮出为独立窗口时留在这一行。 */}
+      <DockHeaderPortal panelId="video_edit:project" fallback={tools => <div className="ml-auto flex shrink-0 items-center gap-0.5">{tools}</div>}><>
       <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
         <UiOptionButton variant="menu" size="sm" className="gap-2" active={view === 'list'} onClick={() => setView('list')}><List size={UI_ICON_SIZE.sm} />列表视图</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" active={view === 'grid'} onClick={() => setView('grid')}><Grid2X2 size={UI_ICON_SIZE.sm} />缩略图视图</UiOptionButton>
@@ -375,7 +377,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       </div>}>
         {({ open, togglePanel }) => <UiIconButton aria-label="导入" tooltip="导入文件或文件夹" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Import /></UiIconButton>}
       </PanelTrigger>
-      </div>
+      </></DockHeaderPortal>
     </div>
     <div className="min-h-0 flex-1 overflow-x-auto" aria-label="素材项列表" onDoubleClick={event => { if (!(event.target as HTMLElement).closest('[data-video-edit-project-entry]')) choose() }} onContextMenu={event => { pointerAt.current = { left: event.clientX, top: event.clientY, bottom: event.clientY, width: 0 }; menu.showMenu(event, blankMenu()) }}>
       {!entries.length ? <UiEmpty className="h-full" title={keyword ? '没有匹配的素材项' : '此素材箱为空'} description={keyword ? '尝试其他名称或标签。' : '双击空白导入文件，或从资产库拖入素材。'} />

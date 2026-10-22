@@ -5,6 +5,7 @@ import type { DockviewApi, DockviewGroupPanel, IDockviewHeaderActionsProps, IDoc
 import { PanelTrigger, UiIconButton, UiOptionButton } from '@/components/ui'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { toggleDockGroupMaximized } from '@/components/dockviewDocking'
+import { setDockHeaderSlot } from '@/components/dockLayouts/dockHeaderSlots'
 import { showVideoEditPanel, VIDEO_EDIT_PANELS } from './videoEditDockLayout'
 import { dockVideoEditPopout, isVideoEditPanelPoppedOut, isVideoEditPopoutPanel, popOutVideoEditGroup, popOutVideoEditPanel, resetVideoEditWorkspaceLayout, subscribeVideoEditPopouts, videoEditPopoutRevision } from './popout/videoEditPopouts'
 
@@ -67,11 +68,24 @@ function VideoEditPanelMenu({ containerApi, group }: { containerApi: DockviewApi
   </PanelTrigger>
 }
 
-/** 面板头右端只留最大化／恢复（悬停面板组时出现）；面板菜单在当前标签标题旁。 */
+/** 标签行放面板工具所需的最小面板组宽度（px）：工具约 5 个图标加标签与最大化按钮。 */
+const DOCK_HEADER_TOOLS_MIN_WIDTH = 340
+
+/** 面板头右端：当前面板自己的工具（经插槽放入），以及最大化／恢复；面板菜单在当前标签标题旁。 */
 export function VideoEditDockHeaderActions({ api, containerApi, group }: IDockviewHeaderActionsProps): React.ReactElement {
   const maximized = useDockGroupMaximized(containerApi, group)
   const label = maximizeLabelOf(maximized)
+  const [active, setActive] = useState(group.activePanel?.id)
+  // 面板组窄到放不下“标签 + 工具”时不提供插槽，工具留在面板内部；否则标签会被挤进溢出列表。
+  const [roomy, setRoomy] = useState(group.api.width >= DOCK_HEADER_TOOLS_MIN_WIDTH)
+  useEffect(() => {
+    setActive(group.activePanel?.id)
+    setRoomy(group.api.width >= DOCK_HEADER_TOOLS_MIN_WIDTH)
+    const events = [group.api.onDidActivePanelChange(() => setActive(group.activePanel?.id)), group.api.onDidDimensionsChange(event => setRoomy(event.width >= DOCK_HEADER_TOOLS_MIN_WIDTH))]
+    return () => events.forEach(event => event.dispose())
+  }, [group])
   return <div className="flex h-full items-center gap-1 pr-1" data-video-edit-dock-actions>
+    {active && roomy && <div key={active} className="flex min-w-0 items-center gap-0.5" data-video-edit-dock-header-slot={active} ref={element => setDockHeaderSlot(`video_edit:${active}`, element)} />}
     {api.location.type === 'grid' && <UiIconButton size="xs" tooltip={label} aria-label={label} onClick={() => toggleDockGroupMaximized(containerApi, undefined, group)}>{maximized ? <Minimize2  /> : <Maximize2  />}</UiIconButton>}
   </div>
 }
