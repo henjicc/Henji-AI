@@ -339,7 +339,7 @@ it('空闲会话准备 GPU 后只允许接管一次，项目接管后使用该�
   expect(platform.disconnect).toHaveBeenCalledOnce()
 })
 
-it('切换预打开在普通文档更新前发送，只包含首帧可见的直接视频，重复切换合并为最新目标', async () => {
+it('切换预打开在普通文档更新前发送，交给 Worker 按首帧前瞻挑选视频，重复切换合并为最新目标', async () => {
   const document = composition()
   document.items = [{ id: 'video', name: '视频', kind: 'video', mediaId: 'pro' }]
   document.tracks = [{ id: 'v', name: '视频', index: 1, kind: 'video', enabled: true, locked: false, muted: false, solo: false }]
@@ -351,7 +351,7 @@ it('切换预打开在普通文档更新前发送，只包含首帧可见的直�
   for (let i = 0; i < 12; i++) await Promise.resolve()
   const messages = workers[0].messages.filter(value => value.message.kind === 'preopen')
   expect(messages).toHaveLength(1)
-  expect(messages[0].message).toMatchObject({ media: [{ id: 'pro', path: `url:${document.media[0].path}` }] })
+  expect(messages[0].message).toMatchObject({ frame: 0, document: { id: 'latest', media: expect.arrayContaining([expect.objectContaining({ id: 'pro', path: `url:${document.media[0].path}` })]) } })
   expect(workers[0].messages.some(value => value.message.kind === 'update')).toBe(false)
   await session.dispose()
 })
