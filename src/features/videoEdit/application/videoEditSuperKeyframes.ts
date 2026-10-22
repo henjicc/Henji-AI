@@ -43,8 +43,8 @@ export async function resumeSuperKeyframes(id: string): Promise<void> {
   const owner = requireVideoEditInstance(id), motion = videoMotionState(owner)
   if (motion?.automatic && motion.activeTargetId !== `${id}:${owner.selection}`) {
     await stopVideoMotion(id)
-    await startVideoMotion(id)
-    try { await resumeVideoExplanation(id, true) } catch (error) { pauseVideoMotion(id); throw error }
+    await stopVideoExplanation(id)
+    await startSuperKeyframes(id)
     return
   }
   await resumeVideoExplanation(id, true)

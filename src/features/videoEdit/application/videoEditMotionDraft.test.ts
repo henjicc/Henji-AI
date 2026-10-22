@@ -76,6 +76,7 @@ it('自动采集保留同组多目标，不把纯时间轴定位录成动作，�
   updateVideoEditClipProperties(id, owner.activeSequenceId, first.id, { x: .2, rotation: 45, scale: 1.2 })
   present(owner, 12)
   expect(state.draft.takes[0].placement).toBe(true)
+  expect(state.draft.takes[0].timelineRange).toEqual([12, 12])
   expect(state.draft.targets[0].editable).toEqual(expect.arrayContaining(['position', 'rotationTurns', 'scaleXY']))
   await stopVideoMotion(id)
   setVideoEditView(id, { selection: second.id, frame: second.start })
@@ -120,6 +121,23 @@ it('多目标候选按各片段起点映射关键帧，整组应用只增加一�
   await applyVideoMotion(id)
   expect(owner.past.length).toBe(history + 1)
   for (const clip of getActiveVideoEditSequence(owner).clips) expect(clip.curves?.x?.find(key => key.time === 30)?.value).toBeCloseTo(.3)
+})
+it('自动轨迹折返保留同组全部采样，连续段符合原稿时钟与访问约束', async () => {
+  const owner = await setup(), id = owner.document.id
+  await startVideoMotion(id); present(owner, 0)
+  const state = videoMotionState(owner)!
+  setVideoMotionPointer(id, true); setVideoEditView(id, { scrubbing: true })
+  for (const frame of [10, 20, 10, 5]) {
+    demonstrateVideoMotion(id, { ...state.pose, position: [.5 + frame / 100, .5] })
+    present(owner, frame)
+  }
+  setVideoMotionPointer(id, false); await stopVideoMotion(id)
+  expect(state.draft.takes).toHaveLength(2)
+  const samples = []
+  for await (const page of readMotionPages(id, state.draft)) if (page.kind === 'samples') samples.push(...page.entries)
+  expect(samples.filter(sample => sample.event === 'sample').map(sample => sample.timeline!.frame)).toEqual([10, 20, 10, 5])
+  await configureVideoMotion(id, { selectedTakeIds: [state.draft.takes[1].id] })
+  await expect(optimizeVideoMotion(id)).resolves.toBeUndefined()
 })
 
 it('节拍吸附从片段通用开关进入正式整理；原稿不吸附、钉点优先、标记变化拒绝旧候选', async () => {
