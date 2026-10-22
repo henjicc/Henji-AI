@@ -20,6 +20,7 @@ import type { AudioEditorTool } from './spectralEditorModel'
 import { audioWaveToolForKey, type audioWaveActions, type AudioWaveEditorState } from './audioWaveEditorState'
 import { useAudioEditSpectral } from './useAudioEditSpectral'
 import { audioEditSpectralClient } from '../application/audioEditRegions'
+import { audioEditScrub } from '../preview/audioEditScrub'
 
 const TOOLS: Array<{ id: AudioEditorTool; label: string; icon: React.ReactNode }> = [
   { id: 'time', label: '时间选区 · V', icon: <TextCursor /> },
@@ -174,6 +175,10 @@ export function AudioWaveWorkspace() {
         {...(spectrogram.tiles ? { spectrogram: spectrogram.tiles } : {})} spectrogramStatus={spectrogram.status} {...(spectrogram.error ? { spectrogramError: spectrogram.error } : {})} onRetrySpectrogram={spectrogram.retry}
         view={editor.view} onViewChange={editor.setView} display={editor.display} tool={editor.tool} brushPixels={editor.brushPixels}
         playhead={playheadSource} onSeek={onSeek} displayGain={autoGain ? workspace.previewGain : 1}
+        onScrubStart={frame => audioEditScrub(project.id)?.start(frame)}
+        onScrubMove={frame => audioEditScrub(project.id)?.move(frame)}
+        onScrubEnd={() => audioEditScrub(project.id)?.end()}
+        onScrubStep={frame => audioEditScrub(project.id)?.step(frame)}
         selection={selection ? { start: selection.startFrame, end: selection.endFrame } : null}
         onSelectionChange={(next) => onSelection(next && next.end > next.start ? { startFrame: next.start, endFrame: next.end } : null)}
         spectralSelection={editor.spectralSelection} onSpectralSelectionChange={editor.setSpectralSelection}
