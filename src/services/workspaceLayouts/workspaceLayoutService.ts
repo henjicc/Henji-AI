@@ -13,6 +13,8 @@ export interface WorkspaceLayoutRegistration {
   builtinPresets: readonly WorkspaceLayoutPreset[]
   validate?: (layout: SerializedDockview) => void
   readLegacy?: () => SerializedDockview | undefined
+  /** 切换到某个预设后的工作区专属动作（如“口播”布局顺带打开智能助手）；只在主动切换时触发，读取保存的布局不触发。 */
+  onApply?: (presetId: string) => void
 }
 export interface WorkspaceLayoutState {
   activeId: string
@@ -146,6 +148,7 @@ export class WorkspaceLayoutController {
     const layout = this.validate(preset.layout)
     this.applyLayout?.(clone(layout))
     this.publish({ activeId: id, current: layout })
+    this.registration.onApply?.(id)
     if (this.state.ready && !this.blocked) await this.persist()
   }
   async retrySave(): Promise<void> { await this.persist() }

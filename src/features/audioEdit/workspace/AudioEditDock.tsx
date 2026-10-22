@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type IDockviewPanelHeaderProps, type IDockviewPanelProps } from 'dockview-react'
+import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type IDockviewHeaderActionsProps, type IDockviewPanelHeaderProps, type IDockviewPanelProps } from 'dockview-react'
 import 'dockview-react/dist/styles/dockview.css'
 import { DockviewHost } from '@/components/DockviewHost'
 import { dockviewHostTheme } from '@/components/dockviewHostTheme'
 import { bindDockDragGestures, dockFloatingGroupsBack, DOCKVIEW_HOST_DND_OPTIONS } from '@/components/dockviewDocking'
-import { AudioWaveWorkspace } from '../spectral/AudioWaveWorkspace'
+import { AudioWaveToolbar, AudioWaveWorkspace } from '../spectral/AudioWaveWorkspace'
+import { useAudioEditWorkspace } from './audioEditWorkspaceContext'
 import { AudioEditDeliveryPanel, AudioEditEffectsPanel, AudioEditHistoryPanel, AudioEditProcessPanel, AudioEditSelectionPanel, AudioEditTranscriptPanel } from './AudioEditPanels'
 import { bindWorkspaceLayoutDock } from '@/components/dockLayouts/useWorkspaceLayoutPresets'
 import { createLogger } from '@/core/logging'
@@ -34,6 +35,24 @@ function DockTab(props: IDockviewPanelHeaderProps): React.ReactElement {
   return <span className="px-2 text-xs">{title}</span>
 }
 
+/**
+ * 编辑器面板的工具（编辑工具、显示方式、选区操作）放在它自己的标签行右侧：顶部命令带只剩一行，
+ * 标签行也不再空着；工具随编辑器面板走，叠放时只在编辑器是当前标签时出现。
+ */
+function DockHeaderActions({ group }: IDockviewHeaderActionsProps): React.ReactElement | null {
+  const workspace = useAudioEditWorkspace()
+  const [editor, setEditor] = useState(group.activePanel?.id === 'editor')
+  useEffect(() => {
+    setEditor(group.activePanel?.id === 'editor')
+    const disposable = group.api.onDidActivePanelChange(() => setEditor(group.activePanel?.id === 'editor'))
+    return () => disposable.dispose()
+  }, [group])
+  if (!editor) return null
+  return <div className="flex h-full min-w-0 items-center pr-1" data-audio-edit-editor-tools>
+    <AudioWaveToolbar editor={workspace.wave} selection={workspace.waveSelection} disabled={workspace.disabled} actions={workspace.waveActions} onEditSelection={workspace.editSelection} />
+  </div>
+}
+
 export function AudioEditDock({ onReady }: { onReady?: (api: DockviewApi) => void }): React.ReactElement {
   const host = useRef<HTMLDivElement | null>(null)
   const unbind = useRef<() => void>(() => {})
@@ -51,6 +70,6 @@ export function AudioEditDock({ onReady }: { onReady?: (api: DockviewApi) => voi
   }, [])
   useEffect(() => () => unbind.current(), [])
   return <DockviewHost ref={host} className="h-full w-full">
-    <DockviewReact className="henji-cameraStage-dock dockview-theme-abyss" theme={AUDIO_EDIT_DOCK_THEME} components={COMPONENTS} defaultTabComponent={DockTab} {...DOCKVIEW_HOST_DND_OPTIONS} onReady={handleReady} />
+    <DockviewReact className="henji-cameraStage-dock dockview-theme-abyss" theme={AUDIO_EDIT_DOCK_THEME} components={COMPONENTS} defaultTabComponent={DockTab} rightHeaderActionsComponent={DockHeaderActions} {...DOCKVIEW_HOST_DND_OPTIONS} onReady={handleReady} />
   </DockviewHost>
 }

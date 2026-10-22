@@ -48,21 +48,23 @@ export function AudioWaveToolbar({ editor, selection, disabled, actions, onEditS
       画笔
       <UiRangeInput className="!w-24 shrink-0" aria-label="画笔大小" min={4} max={48} step={1} value={editor.brushPixels} onChange={event => editor.setBrushPixels(Number(event.target.value))} />
     </label>}
-    <div className="ml-auto flex min-w-0 items-center gap-0.5">
-      {editor.spectralSelection && <UiButton size="sm" disabled={disabled} disabledReason="正在处理，请稍候" tooltip="用周围的声音补上框选区域，去掉其中的杂音" onClick={() => { actions.healArea(editor.spectralSelection!); editor.setSpectralSelection(null) }}><Wand2 className="mr-1" />修复框选区域</UiButton>}
+    {/* 选区操作在面板标签行里，用图标按钮（说明在悬停提示里），窄布局也放得下；整组同档。 */}
+    {(editor.spectralSelection || selection) && <span aria-hidden="true" className="mx-0.5 h-4 w-px shrink-0 bg-line" />}
+    <div role="group" aria-label="选区操作" className="flex min-w-0 items-center gap-0.5">
+      {editor.spectralSelection && <UiIconButton size="sm" aria-label="修复框选区域" disabled={disabled} disabledReason="正在处理，请稍候" tooltip="修复框选区域：用周围的声音补上，去掉其中的杂音" onClick={() => { actions.healArea(editor.spectralSelection!); editor.setSpectralSelection(null) }}><Wand2 /></UiIconButton>}
       {selection && <>
-        <UiButton size="sm" variant="danger" disabled={disabled} disabledReason="正在处理，请稍候" tooltip="删除选区 · Delete" onClick={() => onEditSelection('delete')}><Trash2 className="mr-1" />删除</UiButton>
-        <UiButton size="sm" disabled={disabled} disabledReason="正在处理，请稍候" tooltip="静音选区 · M" onClick={() => onEditSelection('mute')}><VolumeX className="mr-1" />静音</UiButton>
+        <UiIconButton size="sm" tone="danger" aria-label="删除选区" disabled={disabled} disabledReason="正在处理，请稍候" tooltip="删除选区 · Delete" onClick={() => onEditSelection('delete')}><Trash2 /></UiIconButton>
+        <UiIconButton size="sm" aria-label="静音选区" disabled={disabled} disabledReason="正在处理，请稍候" tooltip="静音选区 · M" onClick={() => onEditSelection('mute')}><VolumeX /></UiIconButton>
         <PanelTrigger panelSize="compact" panelPadding="content" open={gainOpen} onOpenChange={setGainOpen} renderPanel={() => <div className="flex w-56 flex-col gap-3">
           <UiFormRow label="音量（dB）" density="compact"><NumberInput ariaLabel="音量变化（dB）" value={gainDb} min={-60} max={24} step={0.5} precision={1} onChange={setGainDb} /></UiFormRow>
           <UiButton variant="secondary" disabled={disabled} disabledReason="正在处理，请稍候" onClick={() => { actions.gain(selection, gainDb); setGainOpen(false) }}>应用到选区</UiButton>
         </div>}>
-          {({ open, togglePanel }) => <UiButton size="sm" disabled={disabled} disabledReason="正在处理，请稍候" aria-expanded={open} onClick={togglePanel} data-panel-trigger-button><Volume1 className="mr-1" />音量</UiButton>}
+          {({ open, togglePanel }) => <UiIconButton size="sm" aria-label="调整选区音量" disabled={disabled} disabledReason="正在处理，请稍候" tooltip={open ? undefined : '调整选区音量'} aria-expanded={open} on={open} onClick={togglePanel} data-panel-trigger-button><Volume1 /></UiIconButton>}
         </PanelTrigger>
-        <UiButton size="sm" disabled={disabled} disabledReason="正在处理，请稍候" tooltip="选区内从无声渐强到原音量" onClick={() => actions.fadeIn(selection)}><MoveRight className="mr-1" />淡入</UiButton>
-        <UiButton size="sm" disabled={disabled} disabledReason="正在处理，请稍候" tooltip="选区内从原音量渐弱到无声" onClick={() => actions.fadeOut(selection)}><MoveLeft className="mr-1" />淡出</UiButton>
-        {actions.canDeclick(selection) && <UiButton size="sm" disabled={disabled} disabledReason="正在处理，请稍候" tooltip="用前后的声音补上这一小段，去掉爆音、咔嗒声" onClick={() => actions.declick(selection)}><Wand2 className="mr-1" />去爆音</UiButton>}
-        <UiButton size="sm" disabled={disabled} disabledReason="正在处理，请稍候" onClick={() => onEditSelection('restore')}><RotateCcw className="mr-1" />恢复</UiButton>
+        <UiIconButton size="sm" aria-label="淡入" disabled={disabled} disabledReason="正在处理，请稍候" tooltip="淡入：选区内从无声渐强到原音量" onClick={() => actions.fadeIn(selection)}><MoveRight /></UiIconButton>
+        <UiIconButton size="sm" aria-label="淡出" disabled={disabled} disabledReason="正在处理，请稍候" tooltip="淡出：选区内从原音量渐弱到无声" onClick={() => actions.fadeOut(selection)}><MoveLeft /></UiIconButton>
+        {actions.canDeclick(selection) && <UiIconButton size="sm" aria-label="去爆音" disabled={disabled} disabledReason="正在处理，请稍候" tooltip="去爆音：用前后的声音补上这一小段，去掉爆音、咔嗒声" onClick={() => actions.declick(selection)}><Wand2 /></UiIconButton>}
+        <UiIconButton size="sm" aria-label="恢复选区" disabled={disabled} disabledReason="正在处理，请稍候" tooltip="恢复选区：撤掉选区内的删除和静音" onClick={() => onEditSelection('restore')}><RotateCcw /></UiIconButton>
       </>}
     </div>
   </div>

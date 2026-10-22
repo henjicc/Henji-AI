@@ -15,7 +15,6 @@ import { ICON_TOOL_AUDIO_EDIT } from '@/core/theme/icons'
 import { DocumentLibraryPage } from '@/features/documents/DocumentLibraryPage'
 import { returnFromEmbedded, useEmbeddedHost } from '@/features/documents/embeddedDocuments'
 import { useNotification } from '@/contexts/NotificationContext'
-import { openAssistant } from '@/features/assistant/store/assistantUiStore'
 import { getPlatform } from '@/platform/runtime'
 import { saveDialog } from '@/platform/desktopApi'
 import { useAudioEditPreview } from './preview/useAudioEditPreview'
@@ -30,7 +29,6 @@ import { useAudioEditSilencePreview } from './preview/useAudioEditSilencePreview
 import { useSettingsStore } from '@/stores/settingsStore'
 import { UI_SCALE_MODES } from '@/core/theme/uiScale'
 import { useAudioEditStore } from './store/audioEditStore'
-import { AudioWaveToolbar } from './spectral/AudioWaveWorkspace'
 import { audioWaveActions, useAudioWaveEditor } from './spectral/audioWaveEditorState'
 import { AudioEditDock } from './workspace/AudioEditDock'
 import { WorkspaceLayoutMenu } from '@/components/dockLayouts/WorkspaceLayoutMenu'
@@ -79,7 +77,6 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     setVstEnabled: state.setVstEnabled,
   })))
   const { project, selectedBlockIds } = state
-  useEffect(() => { if (project?.id) openAssistant() }, [project?.id])
   const [asrModels, setAsrModels] = useState<AudioEditAsrModel[]>([])
   const [processors, setProcessors] = useState<AudioEditProcessorDescriptor[]>([])
   const [busy, setBusy] = useState(false)
@@ -285,7 +282,6 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
       variant="command"
       center={<div className={`flex items-center ${UI_INLINE_GAP_CLASS.group}`}><AudioEditPlaybackModeSwitch delivery={delivery} /></div>}
       centerLayout="fit"
-      subordinate={<AudioWaveToolbar editor={waveEditor} selection={waveSelection} disabled={disabled} actions={waveActions} onEditSelection={editSelection} />}
       trailing={<>
         {runningTasks.map((task) => <span key={task.requestId} role="status" className="flex items-center gap-1">
           <span className="text-xs tabular-nums text-text2">正在处理{task.progress === undefined ? '…' : ` ${Math.round(task.progress * 100)}%`}</span>

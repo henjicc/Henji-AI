@@ -1,6 +1,7 @@
 import { Orientation, type SerializedDockview } from 'dockview-react'
 import { createLogger } from '@/core/logging'
 import { registerWorkspaceLayout } from '@/services/workspaceLayouts/workspaceLayoutService'
+import { openAssistant } from '@/features/assistant/store/assistantUiStore'
 
 const logger = createLogger('features.audioEdit.layout')
 export const AUDIO_EDIT_WORKSPACE_ID = 'audio_edit'
@@ -86,4 +87,6 @@ export const audioEditLayoutPresets = registerWorkspaceLayout({
     try { const raw = localStorage.getItem(AUDIO_EDIT_LAYOUT_STORAGE_KEY); return raw ? parseAudioEditLayout(raw) : undefined }
     catch (error) { logger.warn('旧的音频编辑布局无效，改用默认布局', { event: 'audio_edit.layout.legacy_invalid', error }); return undefined }
   },
+  // 打开音频不再自动开助手（助手开关沿用用户上次的状态）；只有主动切到“口播”布局时，顺带打开助手处理口播。
+  onApply: (presetId) => { if (presetId === 'voice') openAssistant() },
 })

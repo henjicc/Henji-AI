@@ -34,6 +34,16 @@ describe('统一工作区布局预设', () => {
     expect(controller.getSnapshot()).toMatchObject({ activeId: 'default', users: [] })
     expect(JSON.parse(data.values().next().value!).version).toBe(1)
   })
+  it('只有主动切换预设才触发工作区专属动作，读取保存的布局不触发', async () => {
+    const onApply = vi.fn()
+    const { registration, storage } = fixture()
+    const controller = new WorkspaceLayoutController({ ...registration, onApply }, storage)
+    await controller.load()
+    expect(onApply).not.toHaveBeenCalled()
+    await controller.apply('focus')
+    expect(onApply).toHaveBeenCalledWith('focus')
+  })
+
   it('内置预设不可删除、重命名或覆盖，空名称不写配置', async () => {
     const { controller, storage } = fixture(); await controller.load()
     await expect(controller.remove('default')).rejects.toThrow('内置')
