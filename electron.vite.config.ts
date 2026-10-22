@@ -65,6 +65,8 @@ export default defineConfig({
       include: [
         // 剪辑降噪只在拖动/播放带声音的片段时才加载；不登记会在第一次用到时整页刷新。
         '@shiguredo/rnnoise-wasm',
+        // 代码素材的打包器只在第一次打开含代码素材的剪辑时加载；不登记会在打开项目途中整页刷新。
+        'esbuild-wasm',
         '@tiptap/core',
         '@tiptap/extension-document',
         '@tiptap/extension-hard-break',
