@@ -3,7 +3,7 @@ import { Expand, Keyboard, MoreHorizontal, Pause, Play, SkipBack, Volume2, ZoomI
 import { PanelTrigger, UiIconButton, UiInlineStatus, UiOverflowRow, UiRangeInput, UiSwitch, type UiOverflowRowItem } from '@/components/ui'
 import { UI_TEXT_TIMECODE_CLASS } from '@/components/ui/styleTokens'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
-import { ICON_SETTINGS as SettingsIcon, UI_ICON_SIZE } from '@/core/theme/icons'
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
 import { AUDIO_EDIT_MIN_VIEW_FRAMES, zoomViewport } from '../waveformViewport'
 import { useAudioEditWorkspace } from './audioEditWorkspaceContext'
@@ -88,7 +88,6 @@ export function AudioEditTransport() {
     )}>
       {({ open, togglePanel }) => <UiIconButton size="sm" aria-label="快捷键" tooltip="快捷键" on={open} aria-expanded={open} onClick={togglePanel} data-panel-trigger-button><Keyboard /></UiIconButton>}
     </PanelTrigger> },
-    { id: 'settings', priority: 20, node: <UiIconButton size="sm" tooltip="文字稿显示设置" aria-label="文字稿显示设置" onClick={workspace.openViewSettings}><SettingsIcon /></UiIconButton> },
   ]
   return <div className="flex h-10 shrink-0 items-center gap-1.5 border-t border-gap bg-panel px-2" data-audio-transport>
     <UiIconButton size="md" disabled={!ready} disabledReason="正在准备试听" onClick={() => workspace.seek(0)} tooltip="回到开头" aria-label="回到开头"><SkipBack /></UiIconButton>

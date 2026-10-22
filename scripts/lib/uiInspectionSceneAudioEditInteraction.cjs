@@ -182,6 +182,7 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
       await page.getByRole('button', { name: '撤销；长按撤销所有修改', exact: true }).click(); await waitCuts(0)
       await waitForAudioEditContent(page, id, (content) => content.transcript[2].included)
       await page.getByText('自定义处理参数', { exact: true }).click()
+      await showPanel('文字稿')
       await page.getByRole('button', { name: '文字稿显示设置', exact: true }).click()
       const padding = page.getByRole('slider', { name: '文字左右留白', exact: true })
       await padding.focus(); await page.keyboard.press('Home')

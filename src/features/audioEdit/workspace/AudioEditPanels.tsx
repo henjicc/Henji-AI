@@ -2,12 +2,12 @@ import { Fragment, useEffect, useMemo, useRef } from 'react'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import { FileAudio, History, Lock, LockOpen, RotateCcw, Sparkles, Trash2 } from 'lucide-react'
 import {
-  Dropdown, UiButton, UiChipButton, UiEmpty, UiFormRow, UiGroup, UiOptionButton, UiRangeInput, UiSwitch, UiTextArea, UiTextToken,
+  Dropdown, UiButton, UiChipButton, UiEmpty, UiFormRow, UiGroup, UiIconButton, UiOptionButton, UiRangeInput, UiSwitch, UiTextArea, UiTextToken,
   UI_TEXT_META_CLASS, UI_TEXT_SECONDARY_CLASS,
 } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
-import { UI_ICON_SIZE } from '@/core/theme/icons'
+import { ICON_SETTINGS as SettingsIcon, UI_ICON_SIZE } from '@/core/theme/icons'
 import { buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
 import { normalizeAudioEditFiller } from '@/core/audioEdit/analysis'
 import { DEFAULT_AUDIO_EDIT_SETTINGS, DEFAULT_AUDIO_EDIT_VIEW_SETTINGS } from '@/core/audioEdit/edits'
@@ -86,8 +86,10 @@ export function AudioEditTranscriptPanel() {
   const interrupted = workspace.tasks.some((task) => task.kind === 'transcription' && ['failed', 'cancelled'].includes(task.state)) && !transcript.length
   const pause = () => { followPausedUntilRef.current = Date.now() + 2500 }
 
-  return <div className="flex h-full min-h-0 flex-col bg-panel" data-audio-edit-panel="transcript">
+  return <div className="relative flex h-full min-h-0 flex-col bg-panel" data-audio-edit-panel="transcript">
     {search.isOpen && <div className="shrink-0 border-b border-gap px-3 py-2"><AudioEditFindReplace search={search} disabled={disabled} /></div>}
+    {/* 文字稿自己的显示设置（字号、留白、波形上方字幕）就放在文字稿面板里 */}
+    {!search.isOpen && <UiIconButton size="sm" className="absolute right-2 top-2 z-raised" tooltip="文字稿显示设置" aria-label="文字稿显示设置" onClick={workspace.openViewSettings}><SettingsIcon /></UiIconButton>}
     <div ref={containerRef} className="min-h-0 flex-1" style={{ paddingLeft: viewSettings.sidePadding, paddingRight: viewSettings.sidePadding, fontSize: viewSettings.textSize }}
       onPointerDown={pause} onWheel={pause} onTouchMove={pause}>
       {transcript.length === 0 ? (
