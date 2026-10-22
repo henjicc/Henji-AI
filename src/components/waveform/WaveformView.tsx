@@ -74,28 +74,32 @@ export const WaveformView = React.memo(function WaveformView({ waveform, startSe
     }
     measure()
     if (typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(measure)
+    let frame = 0
+    const observer = new ResizeObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(measure) })
     observer.observe(element)
-    return () => observer.disconnect()
+    return () => { observer.disconnect(); cancelAnimationFrame(frame) }
   }, [])
 
   React.useLayoutEffect(() => {
-    const element = canvas.current
-    if (!element || size.width <= 0 || size.height <= 0) return
-    const width = Math.max(1, Math.round(size.width * pixelRatio))
-    const heightPx = Math.max(1, Math.round(size.height * pixelRatio))
-    if (element.width !== width) element.width = width
-    if (element.height !== heightPx) element.height = heightPx
-    const context = element.getContext('2d')
-    if (!context) return
-    const mode = drawWaveform(context, {
-      width, height: heightPx, pixelRatio, data, ...(lanes ? { lanes } : {}), startFrame, endFrame, tier, tone, palette,
-      ...(playedSeconds !== undefined ? { playedFrame: playedSeconds * rate } : {}),
-      ...(cutRanges?.length ? { cutRanges: cutRanges.map(range => [range.start * rate, range.end * rate] as const) } : {}),
-      ...(detail ? { detail } : {}),
-      ...(gain !== undefined ? { gain } : {}),
+    const frame = requestAnimationFrame(() => {
+      const element = canvas.current
+      if (!element || size.width <= 0 || size.height <= 0) return
+      const width = Math.max(1, Math.round(size.width * pixelRatio))
+      const heightPx = Math.max(1, Math.round(size.height * pixelRatio))
+      if (element.width !== width) element.width = width
+      if (element.height !== heightPx) element.height = heightPx
+      const context = element.getContext('2d')
+      if (!context) return
+      const mode = drawWaveform(context, {
+        width, height: heightPx, pixelRatio, data, ...(lanes ? { lanes } : {}), startFrame, endFrame, tier, tone, palette,
+        ...(playedSeconds !== undefined ? { playedFrame: playedSeconds * rate } : {}),
+        ...(cutRanges?.length ? { cutRanges: cutRanges.map(range => [range.start * rate, range.end * rate] as const) } : {}),
+        ...(detail ? { detail } : {}),
+        ...(gain !== undefined ? { gain } : {}),
+      })
+      element.dataset.waveformMode = mode
     })
-    element.dataset.waveformMode = mode
+    return () => cancelAnimationFrame(frame)
   // eslint-disable-next-line react-hooks/exhaustive-deps -- cutKey / laneKey stand for the arrays' contents
   }, [size, pixelRatio, data, laneKey, startFrame, endFrame, tier, tone, palette, playedSeconds, rate, cutKey, detail, gain])
 

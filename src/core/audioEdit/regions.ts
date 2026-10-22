@@ -35,6 +35,7 @@ export const audioEditSpectrogramRequestSchema = z.object({
 export type AudioEditSpectrogramRequest = z.input<typeof audioEditSpectrogramRequestSchema>
 export interface AudioEditSpectrogramChunk {
   sampleRate: number; channels: number; fftSize: number; hop: number
+  /** 返回固定块覆盖范围，起点可能早于请求；长范围从 endFrame 继续，消费者按时间戳裁取。 */
   startFrame: number; endFrame: number; timeBins: number; frequencyBins: number
   /** channel-major, then time, then ascending frequency; dB = value / 255 * 120 - 120. */
   values: Uint8Array
