@@ -34,6 +34,21 @@ export interface ContentDiskCacheOptions {
 }
 
 const KEY_PATTERN = /^[0-9a-f]{64}$/
+const LOCKED_RENAME = new Set(['EPERM', 'EACCES', 'EBUSY'])
+
+/**
+ * 原子改名进缓存。键由内容身份决定，同键内容必然相同：Windows 上目标正被另一请求读写时改名会被拒绝，
+ * 这时目标已是同一份内容，丢弃临时文件即可，不算失败。
+ */
+async function publish(temporary: string, target: string): Promise<void> {
+  try {
+    await fs.rename(temporary, target)
+  } catch (error) {
+    const exists = LOCKED_RENAME.has((error as NodeJS.ErrnoException).code ?? '') && await fs.stat(target).then(stat => stat.isFile() && stat.size > 0, () => false)
+    if (!exists) throw error
+    await removeUnmanagedCachePath(temporary, { force: true }).catch(() => undefined)
+  }
+}
 const STALE_TEMPORARY_MS = 10 * 60 * 1000
 
 export function createContentDiskCache(options: ContentDiskCacheOptions): ContentDiskCache {
@@ -136,7 +151,7 @@ export function createContentDiskCache(options: ContentDiskCacheOptions): Conten
       try {
         await fs.mkdir(path.dirname(target), { recursive: true })
         await fs.writeFile(temporary, bytes)
-        await fs.rename(temporary, target)
+        await publish(temporary, target)
       } catch (error) {
         await removeUnmanagedCachePath(temporary, { force: true }).catch(() => undefined)
         throw error
@@ -154,7 +169,7 @@ export function createContentDiskCache(options: ContentDiskCacheOptions): Conten
       if (!target) throw new Error('缓存目录不可用。')
       if (path.dirname(temporaryFile) !== path.dirname(target) || !path.basename(temporaryFile).startsWith(`${key}${extension}.`) || !temporaryFile.endsWith('.tmp')) throw new Error('临时文件不属于该缓存键。')
       try {
-        await fs.rename(temporaryFile, target)
+        await publish(temporaryFile, target)
       } catch (error) {
         await removeUnmanagedCachePath(temporaryFile, { force: true }).catch(() => undefined)
         throw error

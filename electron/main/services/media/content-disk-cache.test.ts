@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createContentDiskCache } from './content-disk-cache'
 
 const key = (digit: string): string => digit.repeat(64)
@@ -11,9 +11,20 @@ async function directory(): Promise<string> {
   directories.push(value)
   return value
 }
-afterEach(async () => { await Promise.all(directories.splice(0).map(value => fs.rm(value, { recursive: true, force: true }))) })
+afterEach(async () => { vi.restoreAllMocks()
+  await Promise.all(directories.splice(0).map(value => fs.rm(value, { recursive: true, force: true }))) })
 
 describe('content disk cache', () => {
+  it('同键并发写入时目标被占用改名失败，目标已是同一内容就算成功，不留临时文件；目标不存在仍报错', async () => {
+    const root = await directory()
+    const cache = createContentDiskCache({ directory: () => root, extension: '.hwpk' })
+    await cache.write(key('b'), Uint8Array.of(7, 8))
+    const locked = Object.assign(new Error('EPERM: operation not permitted, rename'), { code: 'EPERM' })
+    vi.spyOn(fs, 'rename').mockRejectedValue(locked)
+    await expect(cache.write(key('b'), Uint8Array.of(7, 8))).resolves.toBeUndefined()
+    expect((await fs.readdir(root)).filter(name => name.endsWith('.tmp'))).toEqual([])
+    await expect(cache.write(key('c'), Uint8Array.of(1))).rejects.toThrow('EPERM')
+  })
   it('writes atomically, reads back, refuses foreign keys and treats a missing directory as disabled', async () => {
     const root = path.join(await directory(), 'nested')
     const cache = createContentDiskCache({ directory: () => root, extension: '.hwpk' })
