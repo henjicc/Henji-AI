@@ -1042,11 +1042,15 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 }
 
 /* 停靠宿主顶部与命令带之间也留一道间隙，宽度与 dockviewHostTheme 的 gap（4px）一致、底色同间隙；
- * box-sizing 让 h-full 的宿主连同这道空隙一起占满，dockview 只拿到余下的高度。 */
-.dockview-host {
+ * box-sizing 让 h-full 的宿主连同这道空隙一起占满，dockview 只拿到余下的高度。
+ * 停靠在窗口边上的智能助手外沿用同一道间隙（.dock-gap-surface），和停靠面板读成同一套可拆分面板。 */
+.dockview-host,
+.dock-gap-surface {
   box-sizing: border-box;
-  padding-top: 4px;
   background: linear-gradient(var(--shade), var(--shade)), rgb(var(--gap-rgb));
+}
+.dockview-host {
+  padding-top: 4px;
 }
 
 /* 激活面板组描边（DockviewHost 的 ActiveGroupOutline）：与选中标签底部强调线同粗（1.5px）、同色。 */

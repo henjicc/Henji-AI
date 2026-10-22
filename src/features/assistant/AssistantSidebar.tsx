@@ -15,14 +15,16 @@ import { useAssistantUiStore, type AssistantDockMode } from './store/assistantUi
 
 
 /**
- * 停靠态是窗口 chrome 的一部分，不是浮层：直角、无阴影、只留朝向工作区的那一条边。
- * 悬浮态才是卡片语义，保留圆角 + 四边框 + 浮层阴影。
+ * 停靠态和剪辑、音频编辑的停靠面板是同一套语言：外沿留 4px 间隙（与面板组之间的间隙同宽同色），
+ * 面板本身是控件圆角、无描边、无阴影的面板组。悬浮态才是卡片语义，保留圆角 + 四边框 + 浮层阴影。
  */
 const SURFACE_BY_MODE = {
   floating: 'rounded-xl',
-  left: 'border-y-0 border-l-0 shadow-none',
-  right: 'border-y-0 border-r-0 shadow-none',
+  left: 'rounded-control border-x-0 border-y-0 shadow-none',
+  right: 'rounded-control border-x-0 border-y-0 shadow-none',
 } as const
+/** 停靠时朝向工作区露出一道间隙，和工作区里的面板分开；顶部与工作区命令带齐平。 */
+const GAP_BY_MODE = { floating: '', left: 'dock-gap-surface pr-1', right: 'dock-gap-surface pl-1' } as const
 
 /** 命令带标题跟随当前内容：历史与记忆没有自己的头带，靠这里说明“正在看哪里”。 */
 const contentViewTitles = {
@@ -108,7 +110,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
       <div
         ref={interaction.panelRef}
         data-assistant-sidebar
-        className={`pointer-events-none fixed z-panel min-h-0 ${mode === 'floating' || interaction.dragging ? 'will-change-transform' : ''}`}
+        className={`pointer-events-none fixed z-panel min-h-0 ${mode === 'floating' || interaction.dragging ? 'will-change-transform' : isVisible ? GAP_BY_MODE[mode] : ''}`}
         style={positionStyle}
       >
       <aside
