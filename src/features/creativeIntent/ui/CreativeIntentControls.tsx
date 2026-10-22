@@ -4,7 +4,7 @@ import type { ExplanationSendRequest } from '../application/explanationGeneratio
 import { useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Dropdown, UiButton, UiChipButton, UiDisclosurePanel, UiGroup, UiFormRow, UiIconButton, UiSegmented, UiOptionButton, UiRangeInput, UiError, UiLoading } from '@/components/ui'
-import { Check, ChevronDown, Pin, PinOff, Play, Square, Pause } from 'lucide-react'
+import { Check, ChevronDown, PinOff, Play, Square, Pause } from 'lucide-react'
 
 interface SharedCreativeIntentControlsProps {
   status: 'idle' | 'recording' | 'paused' | 'reviewing' | 'optimizing'
