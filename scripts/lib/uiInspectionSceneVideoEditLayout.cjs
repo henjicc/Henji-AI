@@ -31,7 +31,11 @@ async function presented(page, frame) {
 }
 async function savedLayout(page) {
   await page.waitForTimeout(250)
-  return page.evaluate(key => JSON.parse(localStorage.getItem(key)), STORAGE_KEY)
+  return page.evaluate(async () => {
+    const saved = await window.henjiNative.settings.get('workspace.layout.video_edit')
+    if (!saved) throw new Error('共享剪辑布局尚未保存')
+    return JSON.parse(saved.value).content.current
+  })
 }
 function layoutSignature(layout) {
   const groups = []
@@ -152,6 +156,11 @@ function createVideoEditLayoutScene() {
       if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
       await button(page, '生成').click()
       await page.evaluate(key => localStorage.removeItem(key), STORAGE_KEY)
+      // 退出工作区后预热 Worker 仍保留五秒；重载生成页，确保观测从任何剪辑 Worker 创建前开始。
+      // 同时清掉隔离资料里的新布局键，避免其他场景留下的内存预设影响默认基线。
+      await page.evaluate(() => window.henjiNative.settings.delete('workspace.layout.video_edit'))
+      await page.reload({ waitUntil: 'domcontentloaded' })
+      await button(page, '生成').waitFor({ state: 'visible' })
       await observeWorkers(page)
       try {
         await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file)
@@ -181,6 +190,14 @@ function createVideoEditLayoutScene() {
           evidence.steps.push({ name, ...current, frame: baseline.frame, selection: baseline.selection, workerIds: worker.workers.filter(item => !item.terminated).map(item => item.id) })
         }
         await stable('默认布局'); await capture('video-layout-default')
+        const originalWorkerId = (await workerSnapshot(page)).workers.find(worker => !worker.terminated).id
+        for (const [current, next] of [['编辑', '调色'], ['调色', '编辑']]) {
+          await button(page, current).click()
+          await page.getByRole('menuitemradio', { name: next, exact: true }).click()
+          await presented(page, 120)
+          await stable(`切换${next}预设`)
+          assert.equal((await workerSnapshot(page)).workers.find(worker => !worker.terminated).id, originalWorkerId, '切换预设保留同一个 Worker')
+        }
         let rebuiltSessions = 0
 
         // Real mouse movement drives Dockview's pointer DnD inside the Electron host.
@@ -205,6 +222,11 @@ function createVideoEditLayoutScene() {
         // The same real drag at the content's edge must split the group again.
         target = group(page, '节目画面'); box = await target.boundingBox()
         evidence.edgeDrag = await pointerDrag(page, tab(page, '素材'), target, { x: 8, y: box.height / 2 })
+        // 窗口边缘停靠在 pointerup 后的任务中落位，等待实际布局提交再核对分组。
+        await page.waitForFunction(() => {
+          const control = title => document.querySelector(`[data-dock-tab-title="${title}"]`)?.closest('.dv-tab')?.getAttribute('aria-controls')
+          return control('素材') !== control('节目画面')
+        })
         assert.notEqual(await tab(page, '素材').getAttribute('aria-controls'), await tab(page, '节目画面').getAttribute('aria-controls'), '边缘拖入拆分面板')
         // 按下同组标签开始拖动即切换组内当前标签（节目暂时不可见并释放），拆分后节目回到可见并重建一份画面。
         await presented(page, 120)
@@ -268,7 +290,7 @@ function createVideoEditLayoutScene() {
         await layoutAction(page, '效果控件'); await stable('页面往返恢复', false)
         evidence.restoration.pageRoundTrip = true; await capture('video-layout-page-restored')
         await layoutAction(page, '重置布局'); await stable('最终重置', false)
-        await button(page, '关闭项目').click(); await waitReleased(page)
+        await button(page, '关闭项目').click(); await button(page, '生成').click(); await waitReleased(page)
         evidence.resources = await workerSnapshot(page)
         assert.equal(evidence.resources.live, 0); assert.equal(evidence.resources.peakLive, 1)
         assert.ok(evidence.resources.workers.every(worker => worker.disposedAt && worker.terminatedAt), '所有节目 Worker 均完成资源释放与终止')
@@ -279,7 +301,8 @@ function createVideoEditLayoutScene() {
         fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
         await capture('video-layout-failed').catch(() => {}); throw error
       } finally {
-        if (await button(page, '关闭项目').isVisible().catch(() => false)) { await button(page, '关闭项目').click({ timeout: 10000 }).catch(() => {}); await waitReleased(page).catch(() => {}) }
+        if (await button(page, '关闭项目').isVisible().catch(() => false)) await button(page, '关闭项目').click({ timeout: 10000 }).catch(() => {})
+        await button(page, '生成').click().catch(() => {}); await waitReleased(page).catch(() => {})
         evidence.resources = await workerSnapshot(page).catch(() => evidence.resources)
         fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
         await page.evaluate(({ key, previousLayout }) => {

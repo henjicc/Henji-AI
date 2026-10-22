@@ -51,8 +51,17 @@ function createImageEditDockingScene(context) {
     await settlePage(page)
     assert.equal(await host.locator('[data-command-bar]').count(), 1, '只能有一条命令带')
     assert.ok(await host.locator('[data-context-bar]').count() <= 1, '从属选项最多一条')
-    assert.equal(await host.locator('[data-editor-panel-id]').count(), 2, '默认图层/属性必须完整')
+    assert.deepEqual(await host.locator('[data-editor-panel-id]').evaluateAll(elements => elements.map(element => element.dataset.editorPanelId).sort()),
+      ['adjustments', 'channels', 'color', 'history', 'layers', 'properties'], '默认登记面板必须完整且各只有一份')
+    assert.equal(await host.locator('[data-editor-panel-id]:visible').count(), 2, '默认图层/属性必须可见，其余保留为标签')
     await capture('default')
+    const preview = await host.locator('[data-preview-surface]').elementHandle()
+    for (const [current, next] of [['默认', '专注画布'], ['专注画布', '默认']]) {
+      await host.getByRole('button', { name: current, exact: true }).click()
+      await page.getByRole('menuitemradio', { name: next, exact: true }).click()
+      await settlePage(page)
+      assert.equal(await preview.evaluate(element => element.isConnected), true, `${prefix} 切换预设保留原预览实例`)
+    }
 
     await host.getByRole('button', { name: '收起图层', exact: true }).click()
     await settlePage(page)
@@ -66,8 +75,10 @@ function createImageEditDockingScene(context) {
 
     const layerGroup = host.locator('.dv-groupview').filter({ has: page.locator('[data-dock-tab="layers"]') })
     const propertiesTitle = host.locator('[data-dock-tab="properties"] > span').first()
+    const originalTabs = await layerGroup.locator('[data-dock-tab]').evaluateAll(elements => elements.map(element => element.dataset.dockTab))
     await drag(page, propertiesTitle, layerGroup.locator('.dv-content-container').first())
-    assert.equal(await layerGroup.locator('[data-dock-tab]').count(), 3, '图层、历史与拖入的属性应共享标签组')
+    assert.deepEqual(await layerGroup.locator('[data-dock-tab]').evaluateAll(elements => elements.map(element => element.dataset.dockTab).sort()),
+      [...originalTabs, 'properties'].sort(), '原有标签与拖入的属性应共享同一组，不丢失或复制面板')
     await host.locator('[data-dock-tab="layers"] > span').first().click()
     await settlePage(page)
     await capture('tabs')
@@ -80,6 +91,7 @@ function createImageEditDockingScene(context) {
     await host.locator('[data-editor-panel-id="properties"][data-panel-mode="docked"]').waitFor({ state: 'visible' })
     await menu(page, '恢复默认布局')
     await settlePage(page)
+    assert.equal(await preview.evaluate(element => element.isConnected), true, `${prefix} 重置布局保留原预览实例`)
     const sashes = host.locator('[data-editor-panel-workspace] .dv-sash:visible')
     assert.ok(await sashes.count() >= 2, '左右与上下分隔条应存在')
     await capture('restored')
@@ -99,9 +111,7 @@ function createImageEditDockingScene(context) {
     const after = await host.locator('[data-preview-surface]').boundingBox()
     assert.ok(after && Math.abs(after.width - before.width) >= 12, `拖动分隔条应真正调整画面与停靠宽度：${JSON.stringify({ before, after, sashHit })}`)
     await capture('resized')
-    await host.getByRole('button', { name: '关闭图层面板', exact: true }).click()
-    await host.getByRole('button', { name: '关闭属性面板', exact: true }).click()
-    await host.getByRole('button', { name: '关闭历史面板', exact: true }).click()
+    for (const title of ['图层', '属性', '历史', '通道', '调整与滤镜', '颜色']) await menu(page, `关闭${title}面板`)
     assert.equal(await host.locator('[data-editor-panel-id]').count(), 0, '所有面板应关闭')
     assert.ok(await host.getByRole('button', { name: '面板', exact: true }).isVisible(), '空布局保留恢复入口')
     await capture('panels-hidden')
@@ -187,8 +197,7 @@ function createImageEditDockingScene(context) {
 function createImageEditLayoutFailureScene(context) {
   return {
     id: 'image-edit-layout-failure', surface: '工具箱', name: '图片编辑-布局存取失败与恢复', writesUserData: true,
-    launchArgs: ['--dev-surface=tool.image_edit', '--dev-media=tests/fixtures/image-inpainting/face-scratch-source.png'],
-    expectedLogEvents: ['image_editor.layout.restore.failed', 'image_editor.layout.save.failed'],
+    expectedLogEvents: ['workspace_layout.load.failed', 'workspace_layout.save.failed', 'image_editor.layout.failed'],
     setup: async (page, app, { capture: captureRaw }) => {
       const editor = page.locator('[data-image-editor-v3]:visible')
       const capture = async suffix => {
@@ -197,69 +206,75 @@ function createImageEditLayoutFailureScene(context) {
         await context.settlePage(page)
         await captureRaw(suffix)
       }
-      await editor.waitFor({ state: 'visible', timeout: 30000 })
+      const openImage = async () => {
+        await context.setupToolbox(page)
+        await context.clickNamedButton(page, /^(图片编辑|Image Edit)/i)
+        await page.getByRole('button', { name: '打开图片', exact: true }).click()
+        await editor.waitFor({ state: 'visible', timeout: 30000 })
+      }
       const panelAction = async label => {
         await editor.getByRole('button', { name: '面板', exact: true }).click()
         await page.getByRole('menuitem', { name: label, exact: true }).click()
         await context.settlePage(page)
       }
-      await panelAction('恢复默认布局')
-      await page.waitForTimeout(300) // 正式布局仓库的 200ms 保存 debounce。
-      const replaceImage = async () => {
-        await app.evaluate(({ dialog }, filePath) => {
-          globalThis.__imageLayoutOpenDialog = dialog.showOpenDialog
-          dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filePath] })
-        }, path.resolve(__dirname, '../../tests/fixtures/image-inpainting/face-scratch-source.png'))
-        try {
-          const previous = await editor.elementHandle()
-          await editor.getByRole('button', { name: '打开', exact: true }).click()
-          await page.getByRole('button', { name: '打开图片', exact: true }).click()
-          await page.getByRole('button', { name: '不保存', exact: true }).click()
-          await page.waitForFunction(element => !element.isConnected, previous, { timeout: 20000 })
-          await editor.waitFor({ state: 'visible', timeout: 20000 })
-        } finally {
-          await app.evaluate(({ dialog }) => {
-            dialog.showOpenDialog = globalThis.__imageLayoutOpenDialog
-            delete globalThis.__imageLayoutOpenDialog
+      // 故障只注入隔离实例的正式设置 IPC；旧 Map/structuredClone 仓库已不再负责布局存取。
+      await app.evaluate(({ ipcMain, dialog }, filePath) => {
+        const channels = ['appSettings:get', 'appSettings:set']
+        const originals = channels.map(channel => [channel, ipcMain._invokeHandlers.get(channel)])
+        globalThis.__imageLayoutFault = { originals, dialog: dialog.showOpenDialog, mode: 'read', hits: { read: 0, write: 0 } }
+        dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filePath] })
+        for (const [channel, original] of originals) {
+          ipcMain.removeHandler(channel)
+          ipcMain.handle(channel, (event, request) => {
+            const fixture = globalThis.__imageLayoutFault
+            const mode = channel === 'appSettings:get' ? 'read' : 'write'
+            if (request.key === 'workspace.layout.image_edit.toolbox.full' && fixture.mode === mode) {
+              fixture.hits[mode]++
+              return { ok: false, error: { code: 'FIXTURE_FAILURE', message: `巡检布局${mode === 'read' ? '读取' : '保存'}失败夹具` } }
+            }
+            return original(event, request)
           })
         }
-      }
-      await page.evaluate(() => {
-        window.__imageLayoutGet = Map.prototype.get
-        Map.prototype.get = function (key) {
-          const value = window.__imageLayoutGet.call(this, key)
-          if (key === 'full' && value?.dock && Array.isArray(value.collapsed)) throw new Error('巡检布局读取失败夹具')
-          return value
-        }
-      })
+      }, path.resolve(__dirname, '../../tests/fixtures/image-inpainting/face-scratch-source.png'))
       try {
-        await replaceImage()
+        // 控制器按工作区缓存；重载后才会重新读取持久配置。
+        await page.reload({ waitUntil: 'domcontentloaded' })
+        await openImage()
         await editor.getByText('面板布局无法恢复，已使用默认布局', { exact: true }).waitFor({ state: 'visible' })
+        const preview = await editor.locator('[data-preview-surface]').elementHandle()
         await capture('layout-load-failed')
-      } finally {
-        await page.evaluate(() => { Map.prototype.get = window.__imageLayoutGet; delete window.__imageLayoutGet })
-      }
-      await editor.getByRole('button', { name: '恢复默认布局', exact: true }).click()
-      await context.settlePage(page)
-      await capture('layout-load-recovered')
-      await page.evaluate(() => {
-        window.__imageLayoutClone = window.structuredClone
-        window.structuredClone = function (value, options) {
-          if (value?.dock && Array.isArray(value.collapsed)) throw new Error('巡检布局保存失败夹具')
-          return window.__imageLayoutClone(value, options)
-        }
-      })
-      try {
+        await app.evaluate(() => { globalThis.__imageLayoutFault.mode = null })
+        await editor.getByRole('button', { name: '恢复默认布局', exact: true }).click()
+        await editor.getByText('面板布局无法恢复，已使用默认布局', { exact: true }).waitFor({ state: 'hidden' })
+        assert.equal(await preview.evaluate(element => element.isConnected), true, '读取失败后恢复布局不能重建预览')
+        await capture('layout-load-recovered')
+
+        // 读取失败的控制器保护原配置、禁止写回；新会话恢复正常读取后再单独验证保存失败。
+        await page.reload({ waitUntil: 'domcontentloaded' })
+        await openImage()
+        await panelAction('恢复默认布局')
+        await page.waitForTimeout(300)
+        await app.evaluate(() => { globalThis.__imageLayoutFault.mode = 'write' })
         await panelAction('关闭图层面板')
         await editor.getByText('面板布局未能保存', { exact: true }).waitFor({ state: 'visible' })
         await capture('layout-save-failed')
+        await app.evaluate(() => { globalThis.__imageLayoutFault.mode = null })
+        await editor.getByRole('button', { name: '重试保存', exact: true }).click()
+        await editor.getByText('面板布局未能保存', { exact: true }).waitFor({ state: 'hidden' })
+        const stored = await page.evaluate(async () => JSON.parse((await window.henjiNative.settings.get('workspace.layout.image_edit.toolbox.full')).value))
+        assert.equal(stored.content.current.panels.layers, undefined, '重试应保存内存中的关闭状态')
+        const hits = await app.evaluate(() => globalThis.__imageLayoutFault.hits)
+        assert.ok(hits.read > 0 && hits.write > 0, '读取与保存故障都必须实际触发')
+        await panelAction('恢复默认布局')
+        await capture('layout-save-recovered')
       } finally {
-        await page.evaluate(() => { window.structuredClone = window.__imageLayoutClone; delete window.__imageLayoutClone })
+        await app.evaluate(({ ipcMain, dialog }) => {
+          const fixture = globalThis.__imageLayoutFault
+          for (const [channel, handler] of fixture.originals) { ipcMain.removeHandler(channel); ipcMain.handle(channel, handler) }
+          dialog.showOpenDialog = fixture.dialog
+          delete globalThis.__imageLayoutFault
+        })
       }
-      await editor.getByRole('button', { name: '恢复默认布局', exact: true }).click()
-      await context.settlePage(page)
-      await editor.getByText('面板布局未能保存', { exact: true }).waitFor({ state: 'hidden' })
-      await capture('layout-save-recovered')
     },
   }
 }

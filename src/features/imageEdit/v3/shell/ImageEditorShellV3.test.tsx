@@ -1,7 +1,7 @@
 import { installHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 // @vitest-environment jsdom
 import '@/tests/imageEditDocumentFixture'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useEffect } from 'react'
 import type { DockviewApi } from 'dockview-react'
@@ -15,6 +15,7 @@ import { ImageEditorPanelRegistryV3, type ImageEditorPanelContextV3 } from '../p
 import { createImageEditorMemoryLayoutStoreV3, resetImageEditorDockLayoutV3, type ImageEditorLayoutStoreV3 } from '../panelFramework/layout'
 import { getImageEditorHostProfileV3 } from '../application/imageEditorHostProfiles'
 import { ImageEditorShellV3 } from './ImageEditorShellV3'
+import { workspaceLayoutController } from '@/services/workspaceLayouts/workspaceLayoutService'
 
 const documentFixture = createImageEditDocumentV3({ documentId: 'shell-test-document', width: 1600, height: 900 })
 const visibility = vi.fn()
@@ -54,6 +55,20 @@ beforeEach(async () => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 describe('图片 Shell 与面板可见生命周期', () => {
+  it('共享预设切换、重置与另存恢复保持同一个预览 DOM 和挂载实例', async () => {
+    render(<Harness />)
+    const layouts = workspaceLayoutController(`image_edit.shell-test-${workspaceNumber}.full`)
+    await act(async () => { await layouts.load() })
+    const preview = screen.getByTestId('shell-preview')
+    let saved = ''
+    await act(async () => { saved = await layouts.saveAs('我的布局') })
+    for (const id of ['canvas', 'default', saved]) {
+      await act(async () => { await layouts.apply(id); await layouts.resetActive() })
+      expect(screen.getByTestId('shell-preview')).toBe(preview)
+      expect(previewMount).toHaveBeenCalledTimes(1)
+    }
+  })
+
   it('同帧重建面板后内容真正可见且预览保持同一实例', async () => {
     let api: DockviewApi | null = null
     const rendered = render(<Harness onApi={value => { api = value; value?.layout(1200, 800) }} />)
