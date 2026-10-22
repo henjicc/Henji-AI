@@ -1,3 +1,4 @@
+import type { AppMenuPlatform } from './appMenu'
 import type { AiRuntimePlatform } from './aiRuntime'
 import type { LlmRuntimePlatform } from './llmRuntime'
 import type { GenerationHistoryPlatform, PresetsPlatform, SettingsPlatform } from './localRecords'
@@ -34,6 +35,7 @@ import type { MusicAnalysisPlatform } from './musicAnalysis'
 import type { ScreenRecordingPlatform } from './screenRecording'
 
 export interface PlatformRuntime {
+  appMenu: AppMenuPlatform
   screenRecording: ScreenRecordingPlatform
   embeddedAgent: EmbeddedAgentPlatform
   applicationControl: ApplicationHostPlatform

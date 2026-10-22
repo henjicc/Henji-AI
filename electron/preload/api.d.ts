@@ -1,3 +1,4 @@
+import type { AppMenuPlatform } from '../../src/platform/contracts/appMenu'
 import type { HenjiEmbeddedAgentApi } from './api-assistant'
 import type { HenjiAssistantApi } from './api-assistant'
 import type { ApplicationHostPlatform, McpPlatform } from '../../src/core/application-control/localHostContracts'
@@ -52,6 +53,7 @@ export type { HenjiDocumentsApi } from './api-documents'
 export type { HenjiGenerationHistoryApi, HenjiPresetsApi, HenjiSettingsApi } from './api-local-records'
 
 export interface HenjiNativeApi {
+  appMenu: AppMenuPlatform
   screenRecording: ScreenRecordingPlatform
   embeddedAgent: HenjiEmbeddedAgentApi
   applicationControl: ApplicationHostPlatform

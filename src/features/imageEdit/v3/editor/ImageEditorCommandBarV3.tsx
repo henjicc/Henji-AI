@@ -131,7 +131,7 @@ export function ImageEditorCommandBarV3({
       >
         <Undo2  />
       </UiIconButton>
-      <div {...(contentDisabled ? { inert: '' } : {})}><ImageEditorClipboardV3 bus={bus} controller={controller} /></div>
+      <div {...(contentDisabled ? { inert: '' } : {})}><ImageEditorClipboardV3 bus={bus} controller={controller} disabled={contentDisabled} /></div>
       <UiIconButton size="md"
         className="shrink-0"
         disabled={contentDisabled || !controller.canRedo}

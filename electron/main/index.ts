@@ -1,4 +1,5 @@
 import { registerApplicationControlIpc } from './ipc/application-control'
+import { registerAppMenuIpc } from './ipc/app-menu'
 import { app, BrowserWindow, dialog } from 'electron'
 import path from 'node:path'
 import { warmApiMartEndpointPreference, warmGrsaiEndpointPreference } from '@henjicc/ai-sdk'
@@ -171,6 +172,7 @@ app.whenReady().then(async () => {
   registerVideoDecoderIpc()
   registerVideoFramesIpc()
   registerWindowIpc()
+  registerAppMenuIpc()
   registerApplicationControlIpc()
   if (isAssistantCliMode() || process.argv.includes('--verify-model')) registerMcpIpc()
   registerEmbeddedAgentIpc()

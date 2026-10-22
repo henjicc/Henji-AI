@@ -21,6 +21,7 @@ import { collectImageEditLayerIdsV3, type ImageEditLayerV3 } from '@/core/imageE
 import type { ImageEditorCapabilityReadinessV3 } from '../application/imageEditorHostProfiles'
 import { useImageEditorSessionStoreV3 } from '../store'
 import {
+  getEffectiveSelectedIds,
   canDragImageEditLayerRowV3,
   canDeleteImageEditLayersV3,
   createImageEditLayerFromChoiceV3,
@@ -52,17 +53,6 @@ const EMPTY_LAYER_IDS: readonly string[] = []
 interface ImageEditorLayerCreationCapabilityV3 {
   choice: ImageEditLayerCreationChoiceV3
   readiness: ImageEditorCapabilityReadinessV3
-}
-
-function getEffectiveSelectedIds(
-  index: ReadonlyMap<string, ImageEditLayerTreeRowV3>,
-  selectedLayerIds: readonly string[],
-): string[] {
-  const selected = new Set(selectedLayerIds)
-  return selectedLayerIds.filter((id) => {
-    const location = index.get(id)
-    return location && !location.ancestors.some((ancestor) => selected.has(ancestor.id))
-  })
 }
 
 /** 新效果默认作用于图片内容，不吞掉最上方的标注交互层。 */

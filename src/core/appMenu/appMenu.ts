@@ -11,6 +11,7 @@
 
 /** 顶层菜单 id：公共菜单固定为 file、edit、view、window、help；工作区菜单用自己的 id（如 sequence、clip、marker、audio、image、layer）。 */
 export type AppMenuId = string
+export type AppMenuEditRole = 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'selectAll'
 
 export interface AppMenuCommand {
   kind: 'action'
@@ -19,6 +20,8 @@ export interface AppMenuCommand {
   label: string
   /** 显示用的快捷键，统一写 Windows 形式（Ctrl+Shift+Z），macOS 端自动换成 ⌘⇧Z。 */
   shortcut?: string
+  /** 编辑语义仅供原生菜单补缺，不取代工作区 run。 */
+  editRole?: AppMenuEditRole
   /** 不可用时给出原因，菜单里灰显并在悬停说明里显示原因（与按钮的 disabledReason 一致）。 */
   disabledReason?: string
   /** 勾选态（开关类，如“显示智能助手”）。 */
@@ -64,22 +67,58 @@ export function contributeAppMenus(owner: string, sections: readonly AppMenuSect
   const previous = contributions.get(owner)
   const entry: Contribution = { owner, sequence: previous?.sequence ?? ++sequence, sections }
   contributions.set(owner, entry)
-  rebuild()
-  return () => { if (contributions.get(owner) === entry) { contributions.delete(owner); rebuild() } }
+  schedule()
+  return () => { if (contributions.get(owner) === entry) { contributions.delete(owner); schedule() } }
+}
+
+/*
+ * 工作区常在每次状态变化（播放走帧、拖动节点）时撤回再重新声明。合并到一个微任务里重建，且只有可见内容
+ * （名称、可用性、勾选、快捷键）变化时才通知菜单栏与原生菜单；执行函数经稳定的转发调用最新一次声明。
+ */
+let dirty = false
+let scheduled = false
+let notifyPending = false
+let lastSignature = ''
+const latestRuns = new Map<string, AppMenuCommand['run']>()
+function schedule(): void {
+  dirty = true
+  if (scheduled) return
+  scheduled = true
+  queueMicrotask(() => {
+    scheduled = false
+    flush()
+    if (!notifyPending) return
+    notifyPending = false
+    listeners.forEach(listener => listener())
+  })
+}
+function flush(): void {
+  if (!dirty) return
+  dirty = false
+  latestRuns.clear()
+  const next = rebuild()
+  const signature = JSON.stringify(next, (_key, value: unknown) => typeof value === 'function' ? undefined : value)
+  if (signature === lastSignature) return
+  lastSignature = signature
+  snapshot = next
+  notifyPending = true
 }
 
 export function subscribeAppMenus(listener: () => void): () => void {
   listeners.add(listener)
   return () => { listeners.delete(listener) }
 }
-export function getAppMenus(): readonly AppMenu[] { return snapshot }
+export function getAppMenus(): readonly AppMenu[] { flush(); return snapshot }
 
 /** 按 id 找菜单项（macOS 原生菜单点击回传、测试用）。 */
-export function findAppMenuCommand(id: string, menus: readonly AppMenu[] = snapshot): AppMenuCommand | undefined {
+export function findAppMenuCommand(id: string, menus: readonly AppMenu[] = getAppMenus()): AppMenuCommand | undefined {
   const walk = (items: readonly AppMenuEntry[]): AppMenuCommand | undefined => {
     for (const item of items) {
       if (item.kind === 'action' && item.id === id) return item
-      if (item.kind === 'submenu') { const found = walk(item.items); if (found) return found }
+      if (item.kind === 'submenu') {
+        const found = walk(item.items)
+        if (found) return item.disabledReason ? { ...found, disabledReason: item.disabledReason } : found
+      }
     }
     return undefined
   }
@@ -87,7 +126,7 @@ export function findAppMenuCommand(id: string, menus: readonly AppMenu[] = snaps
   return undefined
 }
 
-function rebuild(): void {
+function rebuild(): readonly AppMenu[] {
   const byMenu = new Map<AppMenuId, { label?: string; first: number; sections: { order: number; seq: number; items: readonly AppMenuEntry[] }[] }>()
   for (const contribution of [...contributions.values()].sort((a, b) => a.sequence - b.sequence)) {
     contribution.sections.forEach((section, index) => {
@@ -102,12 +141,20 @@ function rebuild(): void {
     const slot = byMenu.get(id)
     if (!slot) return null
     const groups = slot.sections.sort((a, b) => a.order - b.order || a.seq - b.seq).map(section => section.items).filter(items => items.length)
-    const items = groups.flatMap((group, index) => index ? [{ kind: 'separator' } as const, ...group] : [...group])
+    const items = groups.flatMap((group, index) => index ? [{ kind: 'separator' } as const, ...group] : [...group]).map(relay)
     return items.length ? { id, label: known[id] ?? slot.label ?? id, items } : null
   }
   const middle = [...byMenu.entries()].filter(([id]) => !APP_MENU_LEADING.includes(id) && !APP_MENU_TRAILING.includes(id)).sort((a, b) => a[1].first - b[1].first).map(([id]) => id)
-  snapshot = [...APP_MENU_LEADING, ...middle, ...APP_MENU_TRAILING].map(build).filter((menu): menu is AppMenu => Boolean(menu))
-  listeners.forEach(listener => listener())
+  return [...APP_MENU_LEADING, ...middle, ...APP_MENU_TRAILING].map(build).filter((menu): menu is AppMenu => Boolean(menu))
+}
+
+/** 菜单里放转发函数，内容未变时沿用旧快照也能执行到最新声明的动作。 */
+function relay(item: AppMenuEntry): AppMenuEntry {
+  if (item.kind === 'separator') return item
+  if (item.kind === 'submenu') return { ...item, items: item.items.map(relay) }
+  latestRuns.set(item.id, item.run)
+  const id = item.id
+  return { ...item, run: () => { const run = latestRuns.get(id); return run?.() } }
 }
 
 /** macOS 原生菜单用的可序列化模型（去掉 run）。 */
@@ -115,20 +162,22 @@ export interface AppMenuNativeItem {
   type: 'normal' | 'checkbox' | 'separator' | 'submenu'
   id?: string; label?: string; accelerator?: string; enabled?: boolean; checked?: boolean
   submenu?: AppMenuNativeItem[]
+  editRole?: AppMenuEditRole
 }
 export interface AppMenuNativeMenu { id: string; label: string; submenu: AppMenuNativeItem[] }
 
 /** 显示用快捷键（Ctrl+Shift+Z）转 Electron accelerator（CmdOrCtrl+Shift+Z）。 */
 export function toElectronAccelerator(shortcut: string | undefined): string | undefined {
   if (!shortcut) return undefined
-  return shortcut.split('+').map(part => part.trim()).map(part => part.toLowerCase() === 'ctrl' ? 'CmdOrCtrl' : part).join('+')
+  const names: Record<string, string> = { ctrl: 'CmdOrCtrl', '←': 'Left', '→': 'Right', '↑': 'Up', '↓': 'Down', pgup: 'PageUp', pgdn: 'PageDown' }
+  return shortcut.split('+').map(part => part.trim()).map(part => names[part.toLowerCase()] ?? part).join('+')
 }
 
-export function toNativeAppMenu(menus: readonly AppMenu[] = snapshot): AppMenuNativeMenu[] {
+export function toNativeAppMenu(menus: readonly AppMenu[] = getAppMenus()): AppMenuNativeMenu[] {
   const convert = (items: readonly AppMenuEntry[]): AppMenuNativeItem[] => items.map((item): AppMenuNativeItem => {
     if (item.kind === 'separator') return { type: 'separator' }
     if (item.kind === 'submenu') return { type: 'submenu', id: item.id, label: item.label, enabled: !item.disabledReason, submenu: convert(item.items) }
-    return { type: item.checked === undefined ? 'normal' : 'checkbox', id: item.id, label: item.label, accelerator: toElectronAccelerator(item.shortcut), enabled: !item.disabledReason, ...(item.checked === undefined ? {} : { checked: item.checked }) }
+    return { type: item.checked === undefined ? 'normal' : 'checkbox', id: item.id, label: item.label, accelerator: toElectronAccelerator(item.shortcut), enabled: !item.disabledReason, ...(item.editRole ? { editRole: item.editRole } : {}), ...(item.checked === undefined ? {} : { checked: item.checked }) }
   })
   return menus.map(menu => ({ id: String(menu.id), label: menu.label, submenu: convert(menu.items) }))
 }

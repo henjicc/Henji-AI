@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
 import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from './videoEditCommands'
-import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, setVideoEditView, switchVideoEditSequence, undoVideoEdit } from './videoEditService'
+import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, setVideoEditView, subscribeVideoEdit, switchVideoEditSequence, undoVideoEdit } from './videoEditService'
 import { copyVideoEditTimeline, updateVideoEditTrack } from './videoEditTimeline'
 import { registerVideoEditTimelineViewport } from './videoEditTimelineViewport'
 import { registerVideoEditSourcePresenter, readVideoEditSource, updateVideoEditSource, observeVideoEditSource } from './videoEditSource'
@@ -43,6 +43,20 @@ it('逐帧命令发出试听意图，直接定位和跳转命令不发声', asyn
     expect(listen).toHaveBeenLastCalledWith({ scope: 'program', seconds: 10 / 30 })
     await executeVideoEditCommand(captureVideoEditCommandContext(id, 'timeline'), 'go_start')
     expect(listen).toHaveBeenCalledTimes(2)
+  } finally { off() }
+})
+it('复制后立即通知菜单刷新粘贴状态，不新增编辑历史', async () => {
+  const { owner, id } = await fixture()
+  setVideoEditView(id, { frame: 500 })
+  const past = owner.past.length
+  const changed = vi.fn()
+  const off = subscribeVideoEdit(changed)
+  try {
+    expect(videoEditCommandState(captureVideoEditCommandContext(id, 'timeline'), 'paste').enabled).toBe(false)
+    await executeVideoEditCommand(captureVideoEditCommandContext(id, 'timeline'), 'copy')
+    expect(changed).toHaveBeenCalledOnce()
+    expect(videoEditCommandState(captureVideoEditCommandContext(id, 'timeline'), 'paste').enabled).toBe(true)
+    expect(owner.past).toHaveLength(past)
   } finally { off() }
 })
 it('元数据写入不使捕获的命令上下文失效，内容编辑仍使其失效', async () => {

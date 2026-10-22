@@ -1,5 +1,5 @@
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
-import { withVideoEditCurrentMetadata, editVideoProject, requireVideoEditInstance, setVideoEditTimelineView, type VideoEditInstance } from './videoEditService'
+import { withVideoEditCurrentMetadata, editVideoProject, publishVideoEdit, requireVideoEditInstance, setVideoEditTimelineView, type VideoEditInstance } from './videoEditService'
 import { createLogger } from '@/core/logging'
 import { videoEditDocumentSchema, type VideoEditSequence } from '@/core/videoEdit/document'
 import { applyVideoEditTimelineEdit, applyVideoEditTimelineEditResult, copyVideoEditClips, type VideoEditClipboard, type VideoEditTimelineEdit } from '@/core/videoEdit/timelineEdits'
@@ -16,6 +16,8 @@ const clipboards = new WeakMap<VideoEditInstance, VideoEditClipboard>()
 export function copyVideoEditTimeline(projectId: string, sequenceId: string, clipIds?: string[], linked: VideoEditRelations = true): void {
   const owner = requireVideoEditInstance(projectId)
   clipboards.set(owner, copyVideoEditClips(owner.document, sequenceId, clipIds ?? owner.selectedClipIds, clipIds ? linked : false))
+  // 复制不改文档，但需要让菜单与其他订阅者刷新“粘贴”的可用状态。
+  publishVideoEdit()
 }
 export function readVideoEditClipboard(projectId: string): VideoEditClipboard | undefined {
   const value = clipboards.get(requireVideoEditInstance(projectId))

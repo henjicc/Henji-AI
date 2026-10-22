@@ -216,3 +216,15 @@ export function createImageEditLayerFromChoiceV3(
     createImageEditOperationParametersV3(adjustmentId, workingSpace),
   )
 }
+
+/** 选择父组时不重复处理其子图层，菜单与图层面板共用。 */
+export function getEffectiveSelectedIds(
+  index: ReadonlyMap<string, ImageEditLayerTreeRowV3>,
+  selectedLayerIds: readonly string[],
+): string[] {
+  const selected = new Set(selectedLayerIds)
+  return selectedLayerIds.filter((id) => {
+    const location = index.get(id)
+    return location && !location.ancestors.some((ancestor) => selected.has(ancestor.id))
+  })
+}
