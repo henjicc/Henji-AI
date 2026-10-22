@@ -351,10 +351,11 @@ it('真实画面移动连续更新只写一次历史，改选区和Escape取消�
 function installAudioGraph(resume: () => Promise<void> = async () => {}) {
   const nodes: Array<{ start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> }> = []
   const node = () => ({ connect: vi.fn(), disconnect: vi.fn() })
-  const createGain = vi.fn(() => ({ ...node(), gain: { value: 1 } }))
+  const createGain = vi.fn(() => ({ ...node(), gain: { value: 1, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), cancelAndHoldAtTime: vi.fn() } }))
   const createSource = vi.fn(() => { const source = { ...node(), buffer: null, start: vi.fn(), stop: vi.fn(), onended: undefined }; nodes.push(source); return source })
   const close = vi.fn().mockResolvedValue(undefined)
   vi.stubGlobal('AudioContext', class {
+    sampleRate = 48000
     private clock = 1; get currentTime() { this.clock += .001; return this.clock }
     destination = node(); resume = resume; close = close; createGain = createGain; createBufferSource = createSource
     createChannelSplitter = node; createAnalyser = () => ({ ...node(), fftSize: 1024, smoothingTimeConstant: 0, getFloatTimeDomainData: (data: Float32Array) => data.fill(.25) })
@@ -366,6 +367,18 @@ async function audioPreviewFixture() {
   appendVideoEditMedia(owner.document.id, { id: 'audio-actual', name: '音画', path: 'D:/audio.mp4', kind: 'video', width: 320, height: 180, durationSeconds: 3, hasAudio: true }); appendVideoEditClip(owner.document.id, 'audio-actual')
   setVideoEditView(owner.document.id, { frame: 0, playing: true }); return owner
 }
+it('单击节目定位不发声，拖动和逐帧试听不等待画面返回，暂停后的电平仍来自声音总线', async () => {
+  const graph = installAudioGraph(); const owner = await audioPreviewFixture(); setVideoEditView(owner.document.id, { playing: false })
+  pixel.mixAudio.mockImplementation(async (_from: number, duration: number) => ({ duration }))
+  const onError = vi.fn(); render(<VideoEditPreview instance={owner} onError={onError} />)
+  await act(async () => {})
+  await act(async () => { setVideoEditView(owner.document.id, { frame: 5 }); await vi.advanceTimersByTimeAsync(5) })
+  expect(graph.nodes).toHaveLength(0)
+  await act(async () => { setVideoEditView(owner.document.id, { frame: 6, scrubbing: true }); await vi.advanceTimersByTimeAsync(5) })
+  expect(graph.nodes).toHaveLength(1); expect(pixel.requests).toHaveLength(1)
+  expect(pixel.mixAudio).toHaveBeenLastCalledWith(.2, .08)
+  expect(onError).not.toHaveBeenCalled()
+})
 it('音频启动等待后隐藏，晚到resume不新建退役节点', async () => {
   let resume!: () => void; const graph = installAudioGraph(() => new Promise<void>(resolve => { resume = resolve }))
   const owner = await audioPreviewFixture(); const onError = vi.fn(); const view = render(<VideoEditPreview instance={owner} onError={onError} />)

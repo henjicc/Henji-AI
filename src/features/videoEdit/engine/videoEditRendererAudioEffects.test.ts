@@ -14,6 +14,23 @@ vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), info: 
 beforeAll(() => { (globalThis as { WorkerGlobalScope?: unknown }).WorkerGlobalScope ??= class {} })
 
 const RATE = 48000
+// 显式基准仅测正式混音算法与PCM读取，不把该数字冒充真实设备端到端延迟。
+if (process.env.HENJI_SCRUB_BENCHMARK === '1') it('擦洗80ms单段混音耗时', async () => {
+  for (const [name, effects] of [['原声', []], ['均衡与限幅', [builtin('parametric_eq'), builtin('limiter')]], ['重效果链', [builtin('noise_reduction'), builtin('pitch_shift', { semitones: -2 }), builtin('reverb')]]] as const) {
+    const renderer = new VideoEditRenderer(sound({ effects: [...effects] }), undefined, { width: 1, height: 1 } as OffscreenCanvas, 8 * 1024 ** 3, backend())
+    try {
+      const timings: number[] = []
+      for (let i = 0; i < 35; i++) {
+        const start = performance.now(); const result = await renderer.mixAudio(1 + (i % 5) / 30, .08)
+        const elapsed = performance.now() - start
+        expect(result[0]).toHaveLength(3840)
+        if (i >= 5) timings.push(elapsed)
+      }
+      timings.sort((a, b) => a - b)
+      process.stdout.write(`擦洗混音基准 ${JSON.stringify({ name, medianMs: timings[15], p95Ms: timings[28], maxMs: timings[29] })}\n`)
+    } finally { await renderer.dispose() }
+  }
+})
 it('固有音频停用后恢复默认音量，附加音频总开关跳过效果，预览导出一致且原参数保留', async () => {
   const composition = sound({ volume: 0, disabledIntrinsicSections: ['audio'], effectsEnabled: false, effects: [builtin('gain_balance', { gain: 12 })] })
   const before = structuredClone(composition.clips[0])

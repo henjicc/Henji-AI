@@ -6,6 +6,7 @@ import { resolveImageDisplayUrl } from '@/services/imageSource'
 import { VideoEditSourceFrames, videoEditSourceBackend } from '../engine/videoEditSourceFrames'
 import { createVideoEditAudioMeter, type VideoEditAudioLevel } from '../engine/videoEditAudioMeter'
 import { VideoEditSourceSoundPlayer } from '../engine/videoEditSourceSound'
+import { fadeVideoEditAudio, finishVideoEditAudioFade, VIDEO_EDIT_AUDIO_FADE_SECONDS } from '../engine/videoEditAudioScheduler'
 import { VIDEO_EDIT_CONTAINER_TIMESTAMP_TOLERANCE_SECONDS } from '@/core/videoEdit/time'
 
 /** Reverse steps aim below the shown picture by more than the tolerance the renderer adds to every picture lookup. */
@@ -49,7 +50,7 @@ const NATIVE_SOUND_CLOCK_MS = 50
 /** Native forward playback and cached reverse frames share one source owner. */
 export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: (itemId: string) => VideoEditMedia,
   observe: (itemId: string, observation: VideoEditSourceObservation) => void, observeLevel?: (levels: VideoEditAudioLevel[]) => void,
-  resolveAudioLayout?: (itemId: string) => VideoEditAudioMapping[] | undefined, proxyProjectId?: string): { present: VideoEditSourcePresenter; release: () => Promise<void>; dispose: () => Promise<void> } {
+  resolveAudioLayout?: (itemId: string) => VideoEditAudioMapping[] | undefined, proxyProjectId?: string): { present: VideoEditSourcePresenter; scrub: (seconds: number, volume: number) => void; release: () => Promise<void>; dispose: () => Promise<void> } {
   let element: HTMLVideoElement | HTMLAudioElement | HTMLImageElement | undefined
   let currentItem = ''
   let currentPath = ''
@@ -72,11 +73,15 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
   let frameClockUs = 0
   let audio: AudioContext | undefined
   let audioSource: MediaElementAudioSourceNode | undefined
+  let audioGain: GainNode | undefined
+  let scrubSound: VideoEditSourceSoundPlayer | undefined
+  let scrubTime: number | undefined
+  let scrubMeterTimer: ReturnType<typeof setInterval> | undefined
   let meter: ReturnType<typeof createVideoEditAudioMeter> | undefined
   let meterTimer: ReturnType<typeof setInterval> | undefined
   let nativeView: NativeSourceView | undefined
   let backendChoice: Promise<Awaited<ReturnType<typeof videoEditSourceBackend>> | undefined> | undefined
-  const stopNative = (view: NativeSourceView | undefined): void => { if (!view) return; view.run?.abort(new Error('源播放已停止。')); view.run = undefined; view.playing = false; view.sound?.stop() }
+  const stopNative = (view: NativeSourceView | undefined, preserveScrub = false): void => { if (!view) return; view.run?.abort(new Error('源播放已停止。')); view.run = undefined; view.playing = false; if (preserveScrub) view.sound?.stopPlayback(); else view.sound?.stop() }
   const releaseNative = (): void => {
     const view = nativeView; nativeView = undefined
     if (!view) return
@@ -178,14 +183,23 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
     releaseNative(); backendChoice = undefined
     generation++
     const media = element
-    clearInterval(meterTimer); meterTimer = undefined; audioSource?.disconnect(); audioSource = undefined; meter?.dispose(); meter = undefined
-    if (audio) { const retired = audio; audio = undefined; sourceFramesReleased = Promise.allSettled([sourceFramesReleased, retired.close()]).then(() => undefined) }
+    scrubTime = undefined; clearInterval(scrubMeterTimer); scrubMeterTimer = undefined
+    if (scrubSound) { sourceFramesReleased = Promise.allSettled([sourceFramesReleased, scrubSound.dispose()]).then(() => undefined); scrubSound = undefined }
+    clearInterval(meterTimer); meterTimer = undefined
+    const retiredAudio = audio; const retiredGain = audioGain; const retiredSource = audioSource; const retiredMeter = meter
+    audio = undefined; audioGain = undefined; audioSource = undefined; meter = undefined
+    const fading = media instanceof HTMLMediaElement && !media.paused && retiredAudio && retiredGain
+    if (fading) fadeVideoEditAudio(retiredGain, retiredAudio.currentTime)
+    const retireAudio = async (): Promise<void> => {
+      if (fading) await finishVideoEditAudioFade()
+      if (media instanceof HTMLMediaElement) { media.pause(); media.removeAttribute('src'); media.load() }
+      retiredSource?.disconnect(); retiredGain?.disconnect(); retiredMeter?.dispose(); await retiredAudio?.close()
+    }
+    sourceFramesReleased = Promise.allSettled([sourceFramesReleased, retireAudio()]).then(() => undefined)
     observeLevel?.([])
     element = undefined; currentItem = ''; currentPath = ''; currentRevision = undefined; currentLayout = 'null'; presentedTimeUs = 0; nativePresentedTimeUs = undefined; nativePresentedSeconds = undefined
     if (media instanceof HTMLMediaElement) {
-      media.pause()
       if (media instanceof HTMLVideoElement && videoFrame !== undefined) media.cancelVideoFrameCallback(videoFrame)
-      media.removeAttribute('src'); media.load()
     } else media?.removeAttribute('src')
     videoFrame = undefined; media?.remove()
   }
@@ -342,10 +356,12 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
         }
       }
       operation.signal.throwIfAborted()
+      const preserveScrub = !request.playing && scrubTime !== undefined && Math.abs(request.timeUs / 1e6 - scrubTime) < 1e-6
+      if (!preserveScrub) { scrubTime = undefined; scrubSound?.stop(); nativeView?.sound?.stop(); clearInterval(scrubMeterTimer); scrubMeterTimer = undefined }
       if (nativeView) {
         const view = nativeView
         const wasPlaying = view.playing
-        stopNative(view); observeLevel?.([])
+        stopNative(view, preserveScrub); observeLevel?.([])
         if (view.owner) {
           // A paused view already showing this clock (in/out, volume changes) keeps its confirmed picture, like a media
           // element that needs no seek; re-presenting would widen the window in which a later request supersedes this one.
@@ -364,9 +380,14 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
       }
       const target = element!
       if (target instanceof HTMLImageElement) return { timeUs: 0, presentedTimeUs: 0, playing: false, volume: request.volume }
+      if (!target.paused && audioGain && audio) {
+        fadeVideoEditAudio(audioGain, audio.currentTime)
+        await finishVideoEditAudioFade()
+        operation.signal.throwIfAborted()
+      }
+      target.pause()
       target.volume = request.volume
       target.muted = request.playbackDirection === -1
-      target.pause()
       if (!request.playing || request.playbackDirection === -1) { clearInterval(meterTimer); meterTimer = undefined; observeLevel?.([]) }
       if (target instanceof HTMLVideoElement && videoFrame !== undefined) target.cancelVideoFrameCallback(videoFrame)
       videoFrame = undefined
@@ -400,11 +421,14 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
       if (request.playing && request.playbackDirection !== -1) {
         if (observeLevel && (media.kind === 'audio' || media.hasAudio === true)) {
           audio ??= new AudioContext()
-          if (!meter) { meter = createVideoEditAudioMeter(audio, 2); audioSource = audio.createMediaElementSource(target); audioSource.connect(meter.input) }
+          if (!meter) { meter = createVideoEditAudioMeter(audio, 2); audioGain = audio.createGain(); audioGain.gain.value = 0; audioSource = audio.createMediaElementSource(target); audioSource.connect(audioGain); audioGain.connect(meter.input) }
           await abortable(audio.resume(), operation.signal)
+          audioGain!.gain.cancelScheduledValues(audio.currentTime)
+          audioGain!.gain.setValueAtTime(0, audio.currentTime)
           meterTimer ??= setInterval(() => observeLevel(!target.paused && !target.muted && !target.ended ? meter!.read() : [{ peak: 0, rms: 0 }, { peak: 0, rms: 0 }]), 50)
         }
         await abortable(target.play(), operation.signal)
+        if (audioGain && audio) audioGain.gain.linearRampToValueAtTime(1, audio.currentTime + VIDEO_EDIT_AUDIO_FADE_SECONDS)
       }
       operation.signal.throwIfAborted()
       if (request.playing && request.playbackDirection === -1) startReverse(target, media)
@@ -413,5 +437,19 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
     } catch (error) { if (pending === operation) release(); throw error }
     finally { signal.removeEventListener('abort', abort); if (pending === operation) pending = undefined }
   }
-  return { present, release: () => { pending?.abort(new Error('源预览已关闭。')); release(); return sourceFramesReleased }, dispose: () => { disposed = true; pending?.abort(new Error('源预览面板已关闭。')); pending = undefined; release(); return sourceFramesReleased } }
+  const scrub = (seconds: number, volume: number): void => {
+    if (disposed || !currentItem) return
+    const media = resolveMedia(currentItem)
+    if (media.kind === 'image' || media.hasAudio === false && media.kind !== 'audio') return
+    const item = currentItem
+    scrubTime = seconds
+    const sound = nativeView?.sound ?? (scrubSound ??= new VideoEditSourceSoundPlayer(media, undefined, resolveAudioLayout?.(item)))
+    const fps = media.frameRate ? media.frameRate.numerator / media.frameRate.denominator : 30
+    sound.scrub(seconds, volume, () => !disposed && currentItem === item && scrubTime !== undefined && Math.floor(scrubTime * fps + 1e-6) === Math.floor(seconds * fps + 1e-6), error => {
+      observe(item, { timeUs: Math.round(seconds * 1e6), presentedTimeUs, playing: false, volume, error: error instanceof Error ? error.message : String(error) })
+    })
+    clearInterval(scrubMeterTimer)
+    scrubMeterTimer = setInterval(() => observeLevel?.(sound.levels()), 40)
+  }
+  return { present, scrub, release: () => { pending?.abort(new Error('源预览已关闭。')); release(); return sourceFramesReleased }, dispose: () => { disposed = true; pending?.abort(new Error('源预览面板已关闭。')); pending = undefined; release(); return sourceFramesReleased } }
 }

@@ -1,58 +1,112 @@
-/** Mixed sound is requested in blocks of this length. */
 export const VIDEO_EDIT_AUDIO_BLOCK_SECONDS = 0.5
-/** A block is requested once the playback clock is this close to its start. */
 export const VIDEO_EDIT_AUDIO_LOOKAHEAD_SECONDS = 0.4
+export const VIDEO_EDIT_AUDIO_FADE_SECONDS = 0.005
 
-/** One pump of the scheduler: where the clock is and how to get and place the next block. */
 export interface VideoEditAudioPump {
   context: BaseAudioContext
   destination: AudioNode
-  /** Context time at which timeline second 0 would sound (the playback clock origin on the audio clock). */
   origin: number
-  /** Current playback position (timeline seconds). */
   timelineTime: number
-  /** No sound is requested at or after this time. */
   endTime: number
   mix(from: number, duration: number): Promise<AudioBuffer>
-  /** Whether a finished block still belongs to the playback that requested it. */
   isCurrent(): boolean
   onError(error: unknown): void
 }
 
-/**
- * Forward playback sound shared by the program and source monitors: mixed blocks are requested just ahead of the
- * playback clock, one at a time, and placed on the audio clock at `origin + from`; a block that arrives late starts
- * part-way in so it stays in sync with the picture. `stop()` silences every placed block and discards blocks still
- * being mixed.
- */
+/** 保留当前包络值再淡出，快速起停时也不会跳回满幅。 */
+export function fadeVideoEditAudio(gain: GainNode, at: number): number {
+  gain.gain.cancelAndHoldAtTime(at)
+  const end = at + VIDEO_EDIT_AUDIO_FADE_SECONDS
+  gain.gain.linearRampToValueAtTime(0, end)
+  return end
+}
+
+/** 关闭设备或断开总线前，留出已排入音频时钟的淡出尾部。 */
+export async function finishVideoEditAudioFade(): Promise<void> {
+  await new Promise(resolve => setTimeout(resolve, VIDEO_EDIT_AUDIO_FADE_SECONDS * 1000 + 5))
+}
+
+interface AudioRun {
+  context: BaseAudioContext
+  gain: GainNode
+  nodes: Set<AudioBufferSourceNode>
+  originFrame: number
+  retired: boolean
+  started: boolean
+}
+
+/** 节目和源监视器共用：整数采样帧排块，每轮独立包络，旧异步结果不能影响新播放。 */
 export class VideoEditAudioScheduler {
-  private readonly nodes = new Set<AudioBufferSourceNode>()
+  private run?: AudioRun
   private generation = 0
   private pending = false
-  private next = 0
+  private from = 0
+  private nextFrame?: number
 
-  /** Starts a run at timeline second `from` (the next block requested). */
-  start(from: number): void { this.next = from }
+  start(from: number): void {
+    this.stop()
+    this.from = from
+    this.nextFrame = undefined
+  }
 
   pump(request: VideoEditAudioPump): void {
-    if (this.pending || this.next >= request.timelineTime + VIDEO_EDIT_AUDIO_LOOKAHEAD_SECONDS || this.next >= request.endTime) return
-    const duration = Math.min(VIDEO_EDIT_AUDIO_BLOCK_SECONDS, request.endTime - this.next)
-    const from = this.next; this.next += duration; this.pending = true
-    const generation = this.generation
     const { context } = request
-    void request.mix(from, duration).then(buffer => {
+    const rate = context.sampleRate
+    const fromFrame = this.nextFrame ?? Math.round(this.from * rate)
+    const endFrame = Math.round(request.endTime * rate)
+    if (this.pending || fromFrame >= Math.round((request.timelineTime + VIDEO_EDIT_AUDIO_LOOKAHEAD_SECONDS) * rate) || fromFrame >= endFrame) return
+    if (!this.run) {
+      const gain = context.createGain(); gain.gain.value = 0; gain.connect(request.destination)
+      this.run = { context, gain, nodes: new Set(), originFrame: Math.round(request.origin * rate), retired: false, started: false }
+    }
+    const run = this.run
+    const frames = Math.min(Math.round(VIDEO_EDIT_AUDIO_BLOCK_SECONDS * rate), endFrame - fromFrame)
+    this.nextFrame = fromFrame + frames; this.pending = true
+    const generation = this.generation
+    void request.mix(fromFrame / rate, frames / rate).then(buffer => {
       if (generation !== this.generation || !request.isCurrent()) return
-      const node = context.createBufferSource(); node.buffer = buffer; node.connect(request.destination)
-      const when = request.origin + from
-      const offset = Math.max(0, context.currentTime - when)
-      if (offset < buffer.duration) { node.start(Math.max(when, context.currentTime), offset); this.nodes.add(node); node.onended = () => { this.nodes.delete(node); node.disconnect() } }
-      else node.disconnect()
-    }).catch(error => { if (generation === this.generation && request.isCurrent()) request.onError(error) }).finally(() => { this.pending = false })
+      const scheduledFrame = run.originFrame + fromFrame
+      const nowFrame = Math.ceil(context.currentTime * rate - 1e-6)
+      const offsetFrame = Math.max(0, nowFrame - scheduledFrame)
+      const availableFrames = Math.min(frames, Math.round(buffer.duration * rate))
+      if (offsetFrame >= availableFrames) return
+      const when = Math.max(scheduledFrame, nowFrame) / rate
+      const fade = Math.min(VIDEO_EDIT_AUDIO_FADE_SECONDS, (availableFrames - offsetFrame) / rate / 2)
+      const node = context.createBufferSource(); node.buffer = buffer
+      let entry: GainNode | undefined
+      if (!run.started) {
+        run.gain.gain.setValueAtTime(0, when)
+        run.gain.gain.linearRampToValueAtTime(1, when + fade)
+        run.started = true
+      } else if (offsetFrame > 0) {
+        entry = context.createGain(); entry.gain.setValueAtTime(0, when)
+        entry.gain.linearRampToValueAtTime(1, when + fade)
+        entry.connect(run.gain)
+      }
+      // 最后一块自然结束也要淡出；普通相邻块之间不加包络，避免周期性音量凹陷。
+      if (fromFrame + frames === endFrame) {
+        const end = (scheduledFrame + availableFrames) / rate
+        run.gain.gain.setValueAtTime(1, Math.max(when + fade, end - fade))
+        run.gain.gain.linearRampToValueAtTime(0, end)
+      }
+      node.connect(entry ?? run.gain); run.nodes.add(node)
+      node.onended = () => {
+        run.nodes.delete(node); node.disconnect(); entry?.disconnect()
+        if (run.retired && !run.nodes.size) run.gain.disconnect()
+      }
+      node.start(when, offsetFrame / rate, (availableFrames - offsetFrame) / rate)
+    }).catch(error => {
+      if (generation === this.generation && request.isCurrent()) request.onError(error)
+    }).finally(() => { if (generation === this.generation) this.pending = false })
   }
 
   stop(): void {
-    this.generation++
-    for (const node of this.nodes) { try { node.stop() } catch { /* already ended */ } node.disconnect() }
-    this.nodes.clear()
+    this.generation++; this.pending = false
+    const run = this.run; this.run = undefined
+    if (!run) return
+    run.retired = true
+    const end = fadeVideoEditAudio(run.gain, run.context.currentTime)
+    for (const node of run.nodes) node.stop(end)
+    if (!run.nodes.size) run.gain.disconnect()
   }
 }

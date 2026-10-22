@@ -1,4 +1,5 @@
 import { requestVideoEditAnnotationMonitor, askAssistantAtVideoEditFrame } from './videoEditAnnotations'
+import { requestVideoEditScrub } from '../engine/videoEditAudioScrub'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { VIDEO_EDIT_COMMANDS, VIDEO_EDIT_TOOL_COMMANDS, isVideoEditToolCommand, type VideoEditCommandId, type VideoEditCommandScope } from '@/core/videoEdit/commands'
 import { placeVideoEditItems } from '@/core/videoEdit/projectItems'
@@ -363,8 +364,14 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
         const media = owner!.document.media.find(media => media.id === owner!.document.items.find(item => item.id === source!.itemId)?.mediaId)!
         const fps = media.frameRate ? media.frameRate.numerator / media.frameRate.denominator : sequence.fps
         const frame = Math.max(0, Math.min(Math.ceil(media.durationSeconds * fps - 1e-6) - 1, Math.round((media.kind === 'video' ? source!.presentedTimeUs : source!.timeUs) / 1e6 * fps) + direction))
-        await updateVideoEditSource(projectId, { timeUs: Math.min(Math.round(media.durationSeconds * 1e6), Math.round((frame + (media.kind === 'video' ? .5 : 0)) / fps * 1e6)), playing: false })
-      } else setVideoEditView(projectId, { frame: Math.max(0, Math.min(videoEditDuration(sequence) - 1, context.frame + direction)), playing: false })
+        const timeUs = Math.min(Math.round(media.durationSeconds * 1e6), Math.round((frame + (media.kind === 'video' ? .5 : 0)) / fps * 1e6))
+        requestVideoEditScrub(projectId, { scope: 'source', seconds: timeUs / 1e6 })
+        await updateVideoEditSource(projectId, { timeUs, playing: false })
+      } else {
+        const frame = Math.max(0, Math.min(videoEditDuration(sequence) - 1, context.frame + direction))
+        setVideoEditView(projectId, { frame, playing: false })
+        if (frame !== context.frame) requestVideoEditScrub(projectId, { scope: 'program', seconds: frame / sequence.fps })
+      }
       return
     }
   }

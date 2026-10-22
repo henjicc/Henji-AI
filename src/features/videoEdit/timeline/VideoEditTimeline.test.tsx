@@ -496,10 +496,15 @@ it('空白点击与静止片段点击不编辑或定位，标尺实际定位更�
   fireEvent.pointerDown(host, event(header + 400, 120)); fireEvent.pointerUp(host, event(header + 400, 120))
   expect(owner.selectedClipIds).toEqual([]); expect(owner.frame).toBe(0); expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history)
   const ruler = view.getByRole('slider', { name: '剪辑时间定位' })
-  fireEvent.pointerDown(ruler, event(header + 40, 14)); fireEvent.pointerUp(host, event(header + 40, 14))
+  fireEvent.pointerDown(ruler, event(header + 40, 14))
+  expect(owner.scrubbing).toBe(false)
+  fireEvent.pointerUp(host, event(header + 40, 14))
   expect(owner.frame).toBe(20); expect(ruler.getAttribute('aria-valuenow')).toBe('20'); expect(owner.scrubbing).toBe(false)
   act(() => setVideoEditView(owner.document.id, { frame: 31 })); expect(ruler.getAttribute('aria-valuenow')).toBe('31'); expect(view.getByLabelText('当前时间码').textContent).toBe('00:00:01:01')
   expect(owner.document).toBe(baseline); expect(onError).not.toHaveBeenCalled()
+  fireEvent.pointerDown(ruler, event(header + 40, 14)); fireEvent.pointerMove(host, event(header + 60, 14))
+  expect(owner.scrubbing).toBe(true)
+  fireEvent.pointerUp(host, event(header + 60, 14)); expect(owner.scrubbing).toBe(false)
 })
 
 it('边缘持续滚动使用同一命中坐标，取消释放动画资源且无领域草稿', () => {
