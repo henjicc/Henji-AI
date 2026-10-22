@@ -8,6 +8,8 @@ import type { EmbeddedAgentPrompt } from '@/core/assistant/embeddedAgent'
 export type AssistantDockMode = 'left' | 'right' | 'floating'
 
 export interface AssistantGoalOptions {
+  /** 录制引用追加到已有输入草稿，保留用户尚未发送的文字和附件。 */
+  appendToDraft?: boolean
   autoSend?: boolean
   context?: string
   attachments?: AssistantAttachmentDraft[]

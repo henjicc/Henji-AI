@@ -6,6 +6,7 @@ import { SessionManager } from '@earendil-works/pi-coding-agent'
 import { PiAttachments } from './piAttachments'
 import type { EmbeddedModel, PreparedEmbeddedAttachment } from './contracts'
 import { budgetContext } from './contextBudget'
+import type { SuperKeyframeAttachment } from '../../../../src/core/assistant/attachments'
 
 const directories: string[] = []
 afterEach(async () => { vi.restoreAllMocks(); for (const directory of directories.splice(0)) await fs.rm(directory, { recursive: true, force: true }) })
@@ -20,6 +21,19 @@ async function fixture() {
   directories.push(directory)
   return new PiAttachments(directory, SessionManager.inMemory())
 }
+it('超级关键帧在纯文本模型中解引用，重开会话后仍保留且不读取媒体缓存', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-pi-reference-'))
+  directories.push(directory)
+  const manager = SessionManager.inMemory(), references = new PiAttachments(directory, manager)
+  const attachment: SuperKeyframeAttachment = { schemaVersion: 'super-keyframe-reference/v1', mediaRef: 'video_edit.intent_draft:doc:group', draftRef: { kind: 'video_edit.intent_draft', id: 'doc:group' }, summary: { takeCount: 2, durationSeconds: 4, elements: ['标题'], hasNarration: true }, modality: 'super_keyframes', lifecycle: 'document', displayName: '超级关键帧', mimeType: 'application/vnd.henji.super-keyframes', sizeBytes: 0, dataClass: 'C2', sourceStatus: 'ready' }
+  const text = await references.attach('处理录制', [{ attachment, data: '' }])
+  const reopened = new PiAttachments(directory, manager), read = vi.spyOn(fs, 'readFile')
+  expect(reopened.visible(text)).toEqual({ text: '处理录制', attachments: [attachment] })
+  const plain = { ...model, model: { ...model.model, capabilities: {} } } as EmbeddedModel
+  const result = JSON.stringify(await reopened.apply({ messages: [{ role: 'user', content: text }] }, plain))
+  expect(result).toContain('read_video_edit_super_keyframes'); expect(result).toContain('doc:group')
+  expect(result).not.toContain('base64'); expect(read).not.toHaveBeenCalled()
+})
 it('同轮工具循环复用编码，下一条用户消息将历史媒体降为引用', async () => {
   const attachments = await fixture()
   const text = await attachments.attach('查看视频', [media('video')])

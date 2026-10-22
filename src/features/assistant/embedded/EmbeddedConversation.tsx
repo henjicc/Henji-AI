@@ -6,7 +6,7 @@ import { assistantErrorMessage } from '@/core/assistant/assistantErrorPresentati
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { RotateCcw, Sparkles } from 'lucide-react'
 import { Dropdown, UiButton, UiEmpty, UiError } from '@/components/ui'
-import { createEmptyPromptDocument, createPlainTextPromptDocument } from '@/core/inputs/promptDocument'
+import { createEmptyPromptDocument, createPlainTextPromptDocument, toModelPromptText } from '@/core/inputs/promptDocument'
 import { buildEmbeddedPromptContext, type EmbeddedAgentModel, type EmbeddedAgentPrompt } from '@/core/assistant/embeddedAgent'
 import { getPlatform } from '@/platform/runtime'
 import { useUiStore } from '@/stores/uiStore'
@@ -90,7 +90,10 @@ export function EmbeddedConversation(): JSX.Element {
     // Consume before submission: StrictMode and snapshot updates must not resend.
     pending.setPendingGoal(null)
     if (options?.autoSend && selectedModel) send(pendingGoal, (options.attachments ?? []).map(item => item.attachment), options)
-    else { setDocument(createPlainTextPromptDocument(pendingGoal)); setAttachments(options?.attachments ?? []); setPreparedRequest(options ?? undefined) }
+    else if (options?.appendToDraft) {
+      setDocument(current => toModelPromptText(current).trim() ? current : createPlainTextPromptDocument(pendingGoal))
+      setAttachments(current => [...new Map([...current, ...(options.attachments ?? [])].map(item => [item.attachment.mediaRef, item])).values()])
+    } else { setDocument(createPlainTextPromptDocument(pendingGoal)); setAttachments(options?.attachments ?? []); setPreparedRequest(options ?? undefined) }
   }, [modelsLoaded, pendingGoal, selectedModel, send, submitting])
   const isEmpty = !state.messages.length && !state.sendingMessage && !optimistic && !state.pendingMessages?.length
   const needsModel = modelsLoaded && models.length === 0

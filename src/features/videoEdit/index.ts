@@ -13,3 +13,5 @@ export { makeRecordingClipEffect, suggestRecordingClipZoom } from './application
 export { analyzeVideoEditScreenAttentionOffThread } from './application/videoEditScreenAttentionWorkerClient'
 export { observeVideoEditFrame } from './application/videoEditFrameObservation'
 export { prepareVideoEditAudioGain, measureVideoEditClips } from './application/videoEditLoudness'
+export { removeSuperKeyframeTake, superKeyframeAttachment, openVideoSuperKeyframesInAssistant } from './application/videoEditSuperKeyframes'
+export { listVideoEditInstances, subscribeVideoEditDomain, videoEditDomainRevision } from './application/videoEditService'

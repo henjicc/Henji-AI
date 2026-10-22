@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { applicationRefSchema } from '../application-control/identifiers'
-import { agentAttachmentsSchema, type AgentAttachment } from './attachments'
+import { agentAttachmentsSchema, type AgentAttachment, type AgentMediaAttachment } from './attachments'
 import { HOST_ANNOTATION_PREVIEW_CHARACTERS, type HostContextSnapshot } from '../application-control/hostContracts'
 
 export const EMBEDDED_CONTEXT_MAX_CHARACTERS = 16000
@@ -33,7 +33,7 @@ export function buildEmbeddedPromptContext(snapshot: HostContextSnapshot): strin
 }
 
 /** 界面与执行边界共用真实传输支持的输入模态。 */
-export function embeddedInputModalities(capabilities: Partial<Record<AgentAttachment['modality'], boolean>>, api: string): AgentAttachment['modality'][] {
+export function embeddedInputModalities(capabilities: Partial<Record<AgentMediaAttachment['modality'], boolean>>, api: string): AgentMediaAttachment['modality'][] {
   return (['image', 'video', 'audio'] as const).filter(type => capabilities[type] && !(api === 'openai-responses' && type === 'audio'))
 }
 
@@ -78,7 +78,7 @@ export interface EmbeddedAgentSnapshot {
   pendingMessages?: Array<{ id: string; text: string; attachments?: AgentAttachment[]; error?: string }>
 }
 export interface EmbeddedAgentSession { id: string; title: string; updatedAt: string }
-export interface EmbeddedAgentModel { providerId: string; modelId: string; name: string; inputModalities: AgentAttachment['modality'][] }
+export interface EmbeddedAgentModel { providerId: string; modelId: string; name: string; inputModalities: AgentMediaAttachment['modality'][] }
 export interface EmbeddedAgentPlatform {
   snapshot(): Promise<EmbeddedAgentSnapshot>
   models(): Promise<EmbeddedAgentModel[]>

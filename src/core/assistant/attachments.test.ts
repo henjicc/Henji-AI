@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   AGENT_ATTACHMENT_SCHEMA_VERSION,
   agentAttachmentSchema,
+  superKeyframeAttachmentSchema, superKeyframeAttachmentContext, validateAgentAttachmentLimits,
 } from './attachments'
 
 function attachment(modality: unknown) {
@@ -32,4 +33,14 @@ describe('agentAttachmentSchema', () => {
       expect.objectContaining({ path: ['modality'] }),
     ]))
   })
+})
+
+it('超级关键帧引用可序列化读回，引用解析为整组读取与单事务应用上下文', () => {
+  const value = superKeyframeAttachmentSchema.parse({ ...attachment('super_keyframes'), schemaVersion: 'super-keyframe-reference/v1', mediaRef: 'video_edit.intent_draft:project:group', lifecycle: 'document', draftRef: { kind: 'video_edit.intent_draft', id: 'project:group' }, summary: { takeCount: 2, durationSeconds: 3, elements: ['标题'], hasNarration: true } })
+  expect(agentAttachmentSchema.parse(JSON.parse(JSON.stringify(value)))).toEqual(value)
+  expect(() => validateAgentAttachmentLimits([value])).not.toThrow()
+  expect(superKeyframeAttachmentContext(value)).toContain('read_video_edit_super_keyframes')
+  expect(superKeyframeAttachmentContext(value)).toContain('一次 change_application_entities')
+  expect(superKeyframeAttachmentContext(value)).toContain('project:group')
+  expect(agentAttachmentSchema.safeParse({ ...value, draftRef: { kind: 'image_edit.intent_draft', id: 'other' } }).success).toBe(false)
 })

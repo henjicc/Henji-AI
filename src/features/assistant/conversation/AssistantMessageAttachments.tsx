@@ -3,6 +3,7 @@ import AudioPlayer from '@/components/AudioPlayer'
 import { UI_TEXT_META_CLASS } from '@/components/ui'
 import type { AgentAttachment } from '@/core/assistant/attachments'
 import { refreshAssistantAttachments } from './assistantAttachments'
+import { SuperKeyframeReferenceCard } from './SuperKeyframeReferenceCard'
 
 export function AssistantMessageAttachments({ attachments }: { attachments: AgentAttachment[] }): JSX.Element | null {
   const [resolved, setResolved] = useState<Awaited<ReturnType<typeof refreshAssistantAttachments>>>([])
@@ -15,6 +16,7 @@ export function AssistantMessageAttachments({ attachments }: { attachments: Agen
   return (
     <div className="mt-2 grid grid-cols-2 gap-2">
       {attachments.map((attachment, index) => {
+        if (attachment.modality === 'super_keyframes') return <div key={attachment.mediaRef} className="col-span-2"><SuperKeyframeReferenceCard attachment={attachment} /></div>
         const asset = resolved[index]?.asset
         const unavailable = !asset || asset.inspectionStatus !== 'ready'
         return (

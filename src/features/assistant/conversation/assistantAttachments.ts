@@ -3,6 +3,7 @@ import {
   AGENT_ATTACHMENT_MAX_COUNT,
   AGENT_ATTACHMENT_SCHEMA_VERSION,
   type AgentAttachment,
+  type AgentMediaAttachment,
 } from '@/core/assistant/attachments'
 import { addMediaReferenceToLibrary } from '@/features/assets/services/assetCollectionService'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
@@ -12,7 +13,7 @@ import { resolveLocalAssetPath } from '@/features/assets/services/assetCollectio
 import { urlToFile } from '@/utils/imageConversion'
 import { toFetchableMediaUrl } from '@/services/imageSource'
 import { AGENT_ATTACHMENT_MAX_BYTES, AGENT_ATTACHMENT_FORMATS, AGENT_ATTACHMENT_MIME_TYPES } from '@/core/assistant/attachments'
-export const ALL_ATTACHMENT_MODALITIES: AgentAttachment['modality'][] = ['image', 'video', 'audio']
+export const ALL_ATTACHMENT_MODALITIES: AgentMediaAttachment['modality'][] = ['image', 'video', 'audio']
 export function validateAssistantAttachmentFile(file: Pick<File, 'name' | 'type' | 'size'>, modalities: AgentAttachment['modality'][]): void {
   const modality = inferAssistantAttachmentModality(file)
   if (!modality || !modalities.includes(modality)) throw new Error(`当前模型不支持“${file.name}”的附件类型，请切换模型。`)
@@ -53,7 +54,7 @@ export function assistantAttachmentDraftReducer(
   return [...byRef.values()].slice(0, AGENT_ATTACHMENT_MAX_COUNT)
 }
 
-export function inferAssistantAttachmentModality(file: Pick<File, 'type' | 'name'>): AgentAttachment['modality'] | null {
+export function inferAssistantAttachmentModality(file: Pick<File, 'type' | 'name'>): AgentMediaAttachment['modality'] | null {
   if (file.type.startsWith('image/')) return 'image'
   if (file.type.startsWith('video/')) return 'video'
   if (file.type.startsWith('audio/')) return 'audio'
@@ -64,7 +65,7 @@ export function inferAssistantAttachmentModality(file: Pick<File, 'type' | 'name
   return null
 }
 
-export function assetToAgentAttachment(asset: AssetRecord): AgentAttachment {
+export function assetToAgentAttachment(asset: AssetRecord): AgentMediaAttachment {
   if (asset.mediaType === 'code') throw new Error('可编辑代码素材请通过剪辑资产引用读取，不能作为图片、视频或音频附件发送。')
   return {
     schemaVersion: AGENT_ATTACHMENT_SCHEMA_VERSION,
@@ -107,8 +108,9 @@ export async function refreshAssistantAttachments(attachments: AgentAttachment[]
   attachment: AgentAttachment
   asset: AssetRecord | null
 }>> {
-  const ids = attachments.map((attachment) => attachment.mediaRef.slice('asset:'.length))
+  const ids = attachments.map((attachment) => attachment.modality === 'super_keyframes' ? null : attachment.mediaRef.slice('asset:'.length))
   const assets = await Promise.all(ids.map(async (id) => {
+    if (!id) return null
     try { return (await inspectAssets([id]))[0] ?? null } catch { return null }
   }))
   return attachments.map((attachment, index) => ({ attachment, asset: assets[index] }))

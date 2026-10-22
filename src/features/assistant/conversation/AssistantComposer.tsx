@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type Dra
 import { ArrowUp, AudioLines, Paperclip, Square, X } from 'lucide-react'
 
 import { PromptEditor, UI_FIELD_FOCUS_WITHIN_CLASS, UI_FIELD_SURFACE_CLASS, UI_TEXT_META_CLASS, UiButton, UiError, UiIconButton, UiInput } from '@/components/ui'
-import { AGENT_ATTACHMENT_MAX_COUNT, AGENT_ATTACHMENT_FORMATS, type AgentAttachment } from '@/core/assistant/attachments'
+import { AGENT_ATTACHMENT_MAX_COUNT, AGENT_ATTACHMENT_FORMATS, type AgentAttachment, type AgentMediaAttachment } from '@/core/assistant/attachments'
+import { SuperKeyframeReferenceCard } from './SuperKeyframeReferenceCard'
 import {
   toModelPromptText,
   type PromptDocumentV1,
@@ -28,7 +29,7 @@ interface AssistantComposerProps {
   disabled: boolean
   busy: boolean
   submitting: boolean
-  inputModalities?: AgentAttachment['modality'][]
+  inputModalities?: AgentMediaAttachment['modality'][]
   controls?: ReactNode
   onCancel?: () => void
   onImportingChange?: (value: boolean) => void
@@ -58,7 +59,7 @@ export function AssistantComposer({
   const mounted = useRef(true)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   const { isDragging, dragData, endDrag } = useDragDrop()
-  const unavailable = attachments.some((item) => !inputModalities.includes(item.attachment.modality))
+  const unavailable = attachments.some((item) => item.attachment.modality !== 'super_keyframes' && !inputModalities.includes(item.attachment.modality))
   const attachmentLabel = `添加${inputModalities.map((type) => ({ image: '图片', video: '视频', audio: '音频' })[type]).join('、')}`
 
   const addSources = useCallback(async (sources: Array<File | HenjiDragTransferData>): Promise<void> => {
@@ -107,7 +108,7 @@ export function AssistantComposer({
   const submit = useCallback((): void => {
     const text = toModelPromptText(value).trim()
     if ((!text && attachments.length === 0) || disabled || submitting || importingRef.current || unavailable) return
-    onSubmit(text || '请分析我附加的媒体。', attachments.map(item => item.attachment))
+    onSubmit(text || (attachments.some(item => item.attachment.modality === 'super_keyframes') ? '请处理这组超级关键帧。' : '请分析我附加的媒体。'), attachments.map(item => item.attachment))
   }, [attachments, disabled, onSubmit, submitting, unavailable, value])
 
   const selectedMedia = () => useNavigationStore.getState().activeWorkspace === 'nodes'
@@ -174,8 +175,8 @@ export function AssistantComposer({
         {attachments.length > 0 ? (
           <div className="flex gap-2 overflow-x-auto px-2 pb-1 pt-2">
             {attachments.map(item => (
-              <div key={item.attachment.mediaRef} className="relative w-20 shrink-0">
-                {item.attachment.modality === 'image' ? (
+              <div key={item.attachment.mediaRef} className={item.attachment.modality === 'super_keyframes' ? 'relative min-w-0 flex-1 pr-6' : 'relative w-20 shrink-0'}>
+                {item.attachment.modality === 'super_keyframes' ? <SuperKeyframeReferenceCard attachment={item.attachment} disabled={attachmentsDisabled || importing} onChange={attachment => onAttachmentsChange(attachments.map(entry => entry === item ? { ...entry, attachment } : entry))} /> : item.attachment.modality === 'image' ? (
                   <img src={item.previewSrc} alt={item.attachment.displayName} className="h-14 w-full rounded-md bg-media object-cover" />
                 ) : item.attachment.modality === 'video' ? (
                   <video src={item.previewSrc} aria-label={item.attachment.displayName} className="h-14 w-full rounded-md bg-media object-cover" muted />

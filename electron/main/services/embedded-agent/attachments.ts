@@ -11,6 +11,7 @@ export async function prepareEmbeddedAttachments(attachments: AgentAttachment[],
   let total = 0
   for (const attachment of attachments) {
     signal.throwIfAborted()
+    if (attachment.modality === 'super_keyframes') { prepared.push({ attachment, data: '' }); continue }
     if (!model.model.capabilities[attachment.modality]) throw new Error(`当前模型不支持“${attachment.displayName}”的附件类型，请移除附件或切换模型。`)
     if (!embeddedInputModalities(model.model.capabilities, model.api).includes(attachment.modality)) throw new Error('当前模型的连接方式不支持音频输入，请选择使用兼容对话接口的音频模型。')
     const asset = await inspectAsset(attachment.mediaRef.slice('asset:'.length))
