@@ -9,7 +9,7 @@ import { runAudioEditTask } from './task-store'
 import { prepareAudioEditRenderSource } from './render'
 
 export function spectrogramTileKey(source: unknown, mode: string, edited: unknown, fftSize: number, hop: number, channel: number | undefined, tile: number, windowSize = fftSize, timePooling = false): string {
-  return audioRenderKey(['spectrogram-tile-v3', source, mode, edited, fftSize, windowSize, timePooling, hop, channel, tile])
+  return audioRenderKey(['spectrogram-tile-v4', source, mode, edited, fftSize, windowSize, timePooling, hop, channel, tile])
 }
 
 /** 返回固定块对齐的连续范围，最多 8 MiB；长范围从 endFrame 继续。 */
@@ -37,7 +37,7 @@ export async function getAudioEditSpectrogram(raw: AudioEditSpectrogramRequest):
       }, signal))
     }
     return result
-  }, request.requestId, JSON.stringify(['spectrogram-tile-v3', project.source, request.mode === 'edited' ? project.revision : undefined, request]), true)
+  }, request.requestId, JSON.stringify(['spectrogram-tile-v4', project.source, request.mode === 'edited' ? project.revision : undefined, request]), true)
   // 回执只存文件引用；IPC 保持 Uint8Array 契约，不做数组化或 base64 中转。
   return joinSpectrogramChunks(await Promise.all(files.map(async file => readSpectrogram(await fs.readFile(file)))))
 }

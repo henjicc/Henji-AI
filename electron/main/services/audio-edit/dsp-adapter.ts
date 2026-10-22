@@ -42,6 +42,9 @@ export function encodeAudioRepairMask(bytes: Uint8Array, width: number, height: 
 }
 export async function runSpectrogram(input: string, output: string, options: { startFrame: number; endFrame: number; fftSize: number; windowSize?: number; timePooling?: boolean; hop: number; channel?: number }, signal?: AbortSignal): Promise<void> {
   const metadata = await invokeAudioWorker<unknown>({ type: 'spectrogram', input_path: input, output_path: output, fft_size: options.fftSize, window_size: options.windowSize, time_pooling: options.timePooling, hop: options.hop, start_frame: options.startFrame, end_frame: options.endFrame, ...(options.channel === undefined ? {} : { channel: options.channel }) }, 120000, signal)
+  // 旧版音频处理程序不认识窗长参数，会按整个 FFT 长度开窗（时间方向被抹平）却照常返回结果：按回执核对，宁可报错也不画错。
+  const applied = (metadata as { windowSize?: unknown } | null)?.windowSize
+  if (options.windowSize !== undefined && options.windowSize !== options.fftSize && applied !== options.windowSize) throw new Error('音频处理组件版本与程序不匹配，频谱没有生成。请更新后重试。')
   // 校验后原样发布 Worker 的 HJSP，避免 JSON/base64 编解码和一次整块拷贝。
   parseSpectrogram(await fs.readFile(output), metadata, options.endFrame)
 }
