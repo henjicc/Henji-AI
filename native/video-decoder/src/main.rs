@@ -305,8 +305,8 @@ fn main() {
                     respond(&request.id, Err(error));
                 }
             }
-            Command::FrameAt { stream_id, time, ticket } => {
-                if let Err(error) = service.streams.dispatch(&stream_id, decode::SessionCommand::FrameAt { request_id: request.id.clone(), time, ticket }) {
+            Command::FrameAt { stream_id, time, ticket, key_only } => {
+                if let Err(error) = service.streams.dispatch(&stream_id, decode::SessionCommand::FrameAt { request_id: request.id.clone(), time, ticket, key_only }) {
                     respond(&request.id, Err(error));
                 }
             }

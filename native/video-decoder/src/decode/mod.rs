@@ -102,7 +102,7 @@ pub enum SchedulePlan {
 
 #[derive(Debug)]
 pub enum SessionCommand {
-    FrameAt { request_id: String, time: f64, ticket: String },
+    FrameAt { request_id: String, time: f64, ticket: String, key_only: bool },
     Schedule { schedule_id: String, plan: SchedulePlan },
     Cancel { schedule_id: String },
 }
@@ -429,7 +429,7 @@ mod imp {
                     },
                 };
                 match command {
-                    SessionCommand::FrameAt { request_id, time, ticket } => self.frame_at(&request_id, time, ticket),
+                    SessionCommand::FrameAt { request_id, time, ticket, key_only } => self.frame_at(&request_id, time, ticket, key_only),
                     SessionCommand::Schedule { schedule_id, plan } => self.run_schedule(schedule_id, plan),
                     SessionCommand::Cancel { .. } => {}
                 }
@@ -623,6 +623,25 @@ mod imp {
             }
         }
 
+        /// 当前候选帧已是 `ticks` 处的画面（候选帧不晚于它，且下一帧晚于它）。
+        fn covers(&self, ticks: i64) -> bool {
+            let Some(candidate) = self.candidate.as_ref().map(frame_ts) else { return false };
+            candidate <= ticks && self.lookahead.as_ref().map(frame_ts).is_some_and(|next| ticks < next)
+        }
+
+        /// 取 `ticks` 是否必须重新定位（向后、或跳到别的 GOP）；同一 GOP 内向前时续解即可，近似取帧也照常续解到精确帧。
+        fn needs_seek(&self, ticks: i64) -> bool {
+            let key = self.input.key_before(ticks);
+            seek_decision(ticks, &self.position(), key, self.forward_limit) == Decision::Seek
+        }
+
+        /// 定位到 `ticks` 所在关键帧，只解出这一帧作为候选帧（不再向前推进到目标）。返回是否定位过（总是）。
+        fn locate_key(&mut self, ticks: i64) -> Result<bool, ServiceError> {
+            self.start_run(ticks, true)?;
+            self.candidate = self.next_frame()?;
+            Ok(true)
+        }
+
         /// 按需定位并推进到 `ticks`。返回是否定位过。
         fn locate(&mut self, ticks: i64, flush_on_seek: bool) -> Result<bool, ServiceError> {
             if let Some(queued) = &self.queued {
@@ -771,14 +790,23 @@ mod imp {
             }
         }
 
-        fn frame_at(&mut self, request_id: &str, time: f64, ticket: String) {
+        fn frame_at(&mut self, request_id: &str, time: f64, ticket: String, key_only: bool) {
             let started = Instant::now();
             if !time.is_finite() {
                 crate::respond(request_id, Err(ServiceError::new("INVALID_REQUEST", "时间无效")));
                 return;
             }
             let ticks = seconds_to_ticks(time, self.time_base);
-            let seeked = match self.locate(ticks, true) {
+            // 近似取帧：已解出的候选帧就是目标、或同一 GOP 内向前续解时照常给精确帧；只有必须重新定位时才只解目标所在关键帧。
+            // 会话停在关键帧之后，同一时间随后的精确请求按“续解”从这里接着向前解。
+            let mut approximate = false;
+            let located = if key_only && !self.covers(ticks) && self.queued.is_none() && self.needs_seek(ticks) {
+                approximate = true;
+                self.locate_key(ticks)
+            } else {
+                self.locate(ticks, true)
+            };
+            let seeked = match located {
                 Ok(seeked) => seeked,
                 Err(error) => {
                     if error.code == "DECODE_FAILED" {
@@ -798,6 +826,9 @@ mod imp {
                     value["ticket"] = json!(ticket);
                     value["found"] = json!(true);
                     value["seeked"] = json!(seeked);
+                    if approximate {
+                        value["approximate"] = json!(true);
+                    }
                     value["decodeMs"] = json!(started.elapsed().as_secs_f64() * 1000.0);
                     crate::respond(request_id, Ok(value));
                 }

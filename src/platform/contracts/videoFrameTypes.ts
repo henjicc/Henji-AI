@@ -115,6 +115,8 @@ export interface VideoFrameAtRequest {
   time: number
   /** 请求标识，随帧元数据 `request.id` 返回。 */
   ticket: string
+  /** 快速拖动时的近似取帧：必须重新定位时只解目标所在关键帧（结果带 `approximate`），同一 GOP 内向前照常给精确帧。 */
+  keyOnly?: boolean
 }
 
 export interface VideoFrameAtResult {
@@ -126,6 +128,8 @@ export interface VideoFrameAtResult {
   durationSeconds?: number
   seeked: boolean
   decodeMs: number
+  /** 只解了目标所在关键帧的近似画面（`keyOnly` 请求且需要重新定位时）。 */
+  approximate?: boolean
 }
 
 /** 连续计划：`times` 每项恰好对应一帧或一个缺帧事件；`range` 交付区间 [from, to) 内每一帧。 */

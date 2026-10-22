@@ -367,7 +367,7 @@ async function audioPreviewFixture() {
   appendVideoEditMedia(owner.document.id, { id: 'audio-actual', name: '音画', path: 'D:/audio.mp4', kind: 'video', width: 320, height: 180, durationSeconds: 3, hasAudio: true }); appendVideoEditClip(owner.document.id, 'audio-actual')
   setVideoEditView(owner.document.id, { frame: 0, playing: true }); return owner
 }
-it('单击节目定位不发声，拖动和逐帧试听不等待画面返回，暂停后的电平仍来自声音总线', async () => {
+it('单击节目定位不发声；拖动出声跟着节目实际呈现的画面，画面回来之前不先出声', async () => {
   const graph = installAudioGraph(); const owner = await audioPreviewFixture(); setVideoEditView(owner.document.id, { playing: false })
   pixel.mixAudio.mockImplementation(async (_from: number, duration: number) => ({ duration }))
   const onError = vi.fn(); render(<VideoEditPreview instance={owner} onError={onError} />)
@@ -375,7 +375,17 @@ it('单击节目定位不发声，拖动和逐帧试听不等待画面返回，�
   await act(async () => { setVideoEditView(owner.document.id, { frame: 5 }); await vi.advanceTimersByTimeAsync(5) })
   expect(graph.nodes).toHaveLength(0)
   await act(async () => { setVideoEditView(owner.document.id, { frame: 6, scrubbing: true }); await vi.advanceTimersByTimeAsync(5) })
-  expect(graph.nodes).toHaveLength(1); expect(pixel.requests).toHaveLength(1)
+  // 画面还没回来：不先出声，否则声音会跑到画面前面。
+  expect(graph.nodes).toHaveLength(0)
+  // 依次让节目的取帧回来，直到拖到的第 6 帧呈现。
+  for (let index = 0; index < 4 && !pixel.requests.some(entry => entry.frame === 6); index++) {
+    await act(async () => { pixel.requests.at(-1)!.resolve({ sourceTimestamps: [0], presented: true }); await vi.advanceTimersByTimeAsync(5) })
+  }
+  expect(graph.nodes).toHaveLength(0)
+  const request = pixel.requests.find(entry => entry.frame === 6)!
+  expect(request).toBeDefined()
+  await act(async () => { request.resolve({ sourceTimestamps: [.2], presented: true }); await vi.advanceTimersByTimeAsync(5) })
+  expect(graph.nodes).toHaveLength(1)
   expect(pixel.mixAudio).toHaveBeenLastCalledWith(.2, .08, true)
   expect(onError).not.toHaveBeenCalled()
 })

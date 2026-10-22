@@ -227,12 +227,12 @@ export class VideoEditFrameRouter implements VideoEditFrameBackend {
     }
     void decision.backend.catch(() => undefined)
     return {
-      sample: async (time, direction, singleFrame) => {
+      sample: async (time, direction, singleFrame, approximate) => {
         await decision.backend
         if (disposed) throw new Error('预览解码已关闭。')
         return this.read(decision, media, async backend => {
           if (disposed) throw new Error('预览解码已关闭。')
-          return seeker(backend).sample(time, direction, singleFrame)
+          return seeker(backend).sample(time, direction, singleFrame, approximate)
         })
       },
       dispose: async () => { disposed = true; await Promise.allSettled([...seekers.values()].map(value => value.dispose())); seekers.clear() },

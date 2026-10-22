@@ -273,7 +273,7 @@ export class VideoEditRenderTransport {
   }
   setTracks(tracks: VideoEditTrackResults): void { if (!this.disposed) this.worker.postMessage({ kind: 'tracks', tracks, id: 0 } satisfies RenderRequest) }
   invalidateDocument(revision: number): void { if (!this.disposed) this.worker.postMessage({ kind: 'invalidate', revision, id: 0 } satisfies RenderRequest) }
-  async present(frame: number, sequential = false, scrubbing = false, deadline?: number, submitted?: () => void, readRgb?: { width: number; height: number }, quality: EffectQuality = 'interactive', history = false, observeElements = false): Promise<RenderResponse> {
+  async present(frame: number, sequential = false, scrubbing: import('./videoEditRenderer').VideoEditScrubMode = false, deadline?: number, submitted?: () => void, readRgb?: { width: number; height: number }, quality: EffectQuality = 'interactive', history = false, observeElements = false): Promise<RenderResponse> {
     await this.ready
     const document = this.document
     const result = await this.request({ kind: 'render', frame, sequential, scrubbing, deadline, quality, ...(observeElements ? { observeElements: true } : {}), ...(readRgb ? { readRgb } : {}), ...(history ? { history: true } : {}) }, [], submitted)

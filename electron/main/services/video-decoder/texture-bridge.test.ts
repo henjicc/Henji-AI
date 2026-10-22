@@ -388,7 +388,10 @@ describe('VideoFrameBridge decoder sessions', () => {
     await expect(bridge.frameAt(8, { streamId: 'vf-1', time: 1, ticket: 't1' })).rejects.toThrow('不属于当前窗口')
     await expect(bridge.frameAt(7, { streamId: 'vf-2', time: 1, ticket: 't1' })).rejects.toThrow()
     await expect(bridge.frameAt(7, { streamId: 'vf-1', time: 1, ticket: 't1' })).resolves.toMatchObject({ ticket: 't1', found: true, ptsUs: 1_000_000 })
-    expect(native.service.frameAt).toHaveBeenCalledWith('vf-1', 1, 't1')
+    expect(native.service.frameAt).toHaveBeenCalledWith('vf-1', 1, 't1', {}, false)
+    // 快速拖动的关键帧近似取帧原样转给解码服务。
+    await bridge.frameAt(7, { streamId: 'vf-1', time: 2, ticket: 't3', keyOnly: true })
+    expect(native.service.frameAt).toHaveBeenLastCalledWith('vf-1', 2, 't3', {}, true)
     await expect(bridge.schedule(8, { streamId: 'vf-1', scheduleId: 's1', times: [0] })).rejects.toThrow()
     await expect(bridge.schedule(7, { streamId: 'vf-1', scheduleId: 's1', times: [0, 0.5] })).resolves.toEqual({ scheduleId: 's1', count: 2 })
     expect(native.service.schedule).toHaveBeenCalledWith({ streamId: 'vf-1', scheduleId: 's1', times: [0, 0.5] })
@@ -437,6 +440,8 @@ describe('texture bridge helpers', () => {
       expect(() => parseVideoFrameDecoderRequest(invalid)).toThrow()
     }
     expect(parseVideoFrameAtRequest({ streamId: 'vf-1', time: 1.25, ticket: 't-1' })).toEqual({ streamId: 'vf-1', time: 1.25, ticket: 't-1' })
+    expect(parseVideoFrameAtRequest({ streamId: 'vf-1', time: 1.25, ticket: 't-1', keyOnly: true })).toEqual({ streamId: 'vf-1', time: 1.25, ticket: 't-1', keyOnly: true })
+    expect(() => parseVideoFrameAtRequest({ streamId: 'vf-1', time: 1.25, ticket: 't-1', keyOnly: 'yes' })).toThrow('keyOnly')
     for (const invalid of [{ streamId: 'vf-1', time: Number.NaN, ticket: 't' }, { streamId: 'vf 1', time: 1, ticket: 't' }, { streamId: 'vf-1', time: 1 }]) {
       expect(() => parseVideoFrameAtRequest(invalid)).toThrow()
     }

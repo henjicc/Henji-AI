@@ -105,6 +105,10 @@ function programDropZoneAt(event: React.DragEvent<HTMLElement>): VideoEditDropMo
 
 /** 刷新周期每隔这么久才重新量一次（窗口可能被拖到另一块显示器）。 */
 const DISPLAY_PERIOD_REFRESH_MS = 5000
+/** 拖动时相邻两次请求相差至少这么多帧算快速拖动，允许先显示关键帧近似画面。 */
+const VIDEO_EDIT_FAST_SCRUB_FRAMES = 4
+/** 近似画面在指针停住这么久后补成精确帧。 */
+const VIDEO_EDIT_EXACT_AFTER_REST_MS = 90
 /** 第一块声音已混好时的起播提前量：只够把它排进声音时钟。 */
 const PLAY_PREMIXED_LEAD_SECONDS = 0.03
 /** The Program GPU surface belongs to the project: a remount (dock ↔ popout window) waits until the previous session actually retired. */
@@ -248,7 +252,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       const moved = observedAudioFrame !== instance.frame
       observedAudioFrame = instance.frame
       if (instance.playing || releasedScrub || moved && !instance.scrubbing) scrubber.stop()
-      if (!instance.playing && instance.scrubbing && moved) scrubAudio(instance.frame / appliedDocument.fps)
+      // 拖动出声跟着节目实际呈现的画面走（见 recordPresentation），声音不会跑到画面前面。
     })
     let audioRenderer: VideoEditRenderSession | undefined
     // No available proxy means the session already plays the originals: both read as 'original', so starting paused does not rebuild.
@@ -269,6 +273,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     let lastFrame = -1
     let appliedFonts = renderer.fontPresentationRevision
     let lastScrubbing = false
+    /** 屏幕上是快速拖动时的关键帧近似画面（帧号）；指针停住或松手后按精确方式补这一帧。-1 表示是精确画面。 */
+    let approximateFrame = -1
     let clockStart = 0
     let clockPerformanceStart = 0
     let startFrame = 0
@@ -404,6 +410,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       surface.dataset.scrubbing = String(scrubbing); surface.dataset.presentedFrame = String(target)
       surface.dataset.presentedRevision = String(revision); surface.dataset.renderDivisor = String(appliedDivisor)
       if (result.presented !== false) recordVideoMotionPresentation(instance, { frame: target, revision, sequenceId: composition.id, at: performance.now(), scrubbing })
+      // 拖动播放头时声音颗粒取刚呈现这一帧的时间：画面跟不上指针时声音也等画面，音画始终对齐。
+      if (scrubbing && result.presented !== false && !instance.playing) scrubAudio(target / composition.fps)
       if (result.presented === true) recordVideoExplanationPresentation(instance, { frame: target, revision: composition.revision, sequenceId: composition.id, composition, at: performance.now(), scrubbing })
       if (failedDocument === undefined) { setRenderFailure(null); failedRetryMs = 2000 }
       return true
@@ -572,8 +580,13 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         const next = Math.max(lastFrame, submittedFrame, queuedFrame) + 1
         const target = liveRecording ? due : playing ? direction === 1 ? videoEditPlaybackTarget(next, due, startFrame, videoEditDuration(document)) : Math.min(startFrame, Math.max(0, lastFrame - 1)) : current.frame
         if (playing && direction === 1 && !liveRecording && target > Math.max(next, startFrame) && target !== lastRequested) { droppedFrames += target - Math.max(next, startFrame); surface.dataset.droppedFrames = String(droppedFrames) }
+        // 近似画面停留：指针停住 VIDEO_EDIT_EXACT_AFTER_REST_MS 或已松手，就按精确方式重取这一帧。
+        if (!playing && approximateFrame >= 0 && approximateFrame === target && target === lastRequested && (!current.scrubbing || performance.now() - lastInteractionAt >= VIDEO_EDIT_EXACT_AFTER_REST_MS)) { lastRequested = -1; approximateFrame = -1 }
         if (target !== lastRequested || (!!current.scrubbing !== lastScrubbing && !current.scrubbing)) {
           const scrubbing = !!current.scrubbing
+          // 快速拖动（相邻两次请求相差至少 VIDEO_EDIT_FAST_SCRUB_FRAMES 帧）：必须重新定位才到得了的图层先给关键帧，画面跟手；
+          // 慢速拖动始终是精确帧，逐帧找点不受影响。
+          const scrubMode: boolean | 'fast' = scrubbing && !playing && lastRequested >= 0 && Math.abs(target - lastRequested) >= VIDEO_EDIT_FAST_SCRUB_FRAMES ? 'fast' : scrubbing
           const requestedAt = performance.now()
           const deadline = playing && !liveRecording ? performance.timeOrigin + clockPerformanceStart + Math.abs(target - startFrame) / document.fps / (current.playbackRate ?? 1) * 1000 : undefined
           lastRequested = target
@@ -583,7 +596,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           const pipelined = playing && direction === 1 && !liveRecording && !historyEnabled
           if (pipelined) { playbackInFlight++; unsubmitted++; queuedFrame = Math.max(queuedFrame, target) }
           let submitted = false
-          const presentation = renderer.present(target, pipelined, scrubbing, deadline, scrubbing || pipelined ? () => {
+          const presentation = renderer.present(target, pipelined, scrubMode, deadline, scrubbing || pipelined ? () => {
             if (pipelined) { submitted = true; unsubmitted--; submittedFrame = Math.max(submittedFrame, target); if (playbackInFlight >= 3 || unsubmitted >= 2) return }
             if (!stopped) { scheduled = true; timer = setTimeout(() => { void loop() }, 0) }
           } : undefined, undefined, 'interactive', historyEnabled, !playing && !scrubbing).finally(() => { if (pipelined) { playbackInFlight--; if (!submitted) unsubmitted-- } })
@@ -608,6 +621,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
             }
             if (result.presented === false) { if (!liveRecording) lastFrame = -1; lastRequested = -1; if (!scheduled) timer = setTimeout(() => { void loop() }, 0); return }
             if (!recordPresentation(target, result, requestedAt, scrubbing, document)) { if (!scheduled) timer = setTimeout(() => { void loop() }, 0); return }
+            approximateFrame = result.approximate ? target : -1
             setEffectFailure(result.effectErrors?.join('\n') ?? null)
             lastFrame = target; lastScrubbing = scrubbing
             if (playing && current.playing && current.playbackDirection === direction && videoEditProgramCommandIdentity(instance.document.id) === command) setVideoEditView(instance.document.id, { frame: target }, true)
