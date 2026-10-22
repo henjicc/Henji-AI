@@ -60,8 +60,8 @@ export class RecordingCollector {
     if (this.session.state !== 'recording') return
     at = this.time(at); this.record(at, { kind: 'control', action: focus ? 'focus-lost' : 'pause-recording' }); at = Math.max(at + 1, this.current!.monoSpanUs[1]); this.extend(at); this.session.state = 'paused'; this.picture = undefined; this.open(at, 'gap', null); this.seal()
   }
-  resume(at: number): void {
-    if (!['paused', 'recoverable'].includes(this.session.state)) throw new Error('当前讲解不能继续录制。')
+  resume(at: number, continueGroup = false): void {
+    if (!['paused', 'recoverable', ...(continueGroup ? ['reviewing'] : [])].includes(this.session.state)) throw new Error('当前讲解不能继续录制。')
     at = this.time(at)
     const last = this.session.clockSegments.at(-1)
     if (!this.current && last) this.open(last.monoSpanUs[1], 'gap', null)

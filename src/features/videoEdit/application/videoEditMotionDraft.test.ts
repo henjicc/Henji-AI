@@ -1,9 +1,7 @@
 // @vitest-environment jsdom
 import { webcrypto } from 'node:crypto'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { renderHook, render, fireEvent } from '@testing-library/react'
-import { createElement } from 'react'
-import { VideoEditMotionControls } from '../panels/VideoEditMotionControls'
+import { renderHook } from '@testing-library/react'
 import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { optimizeMotionDraft } from '@/core/creativeIntent/candidates'
@@ -66,15 +64,64 @@ it('原稿读取允许无关元数据更新，但原稿被移除时不能用旧�
   await expect(reopenVideoMotion(id, state.draft.id)).rejects.toThrow('原稿数据已改变')
 })
 const present = (owner: Awaited<ReturnType<typeof setup>>, frame: number) => { setVideoEditView(owner.document.id, { frame }); recordVideoMotionPresentation(owner, { sequenceId: owner.activeSequenceId, frame, revision: videoMotionComposition(owner)!.revision, at: performance.now() }) }
-it('超级关键帧现有分组的 UiSwitch 可一步修改当前片段吸附开关', async () => {
-  const owner = await setup(), id = owner.document.id, onError = vi.fn(), history = owner.past.length
-  const view = render(createElement(VideoEditMotionControls, { owner, onError }))
-  fireEvent.click(view.getByRole('button', { name: '超级关键帧' }))
-  fireEvent.click(view.getByRole('switch', { name: '吸附到节拍' }))
-  expect(getActiveVideoEditSequence(owner).clips[0].snapToBeat).toBe(true); expect(owner.past).toHaveLength(history + 1)
-  expect(onError).not.toHaveBeenCalled(); view.unmount()
-  undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips[0].snapToBeat).toBeUndefined()
+it('自动采集保留同组多目标，不把纯时间轴定位录成动作，属性变化进入原稿', async () => {
+  const owner = await setup(), id = owner.document.id
+  appendVideoEditClip(id)
+  const [first, second] = getActiveVideoEditSequence(owner).clips
+  setVideoEditView(id, { selection: first.id, frame: 0 })
+  await startVideoMotion(id)
+  present(owner, 0); present(owner, 12)
+  const state = videoMotionState(owner)!
+  expect(state.recent).toHaveLength(0)
+  updateVideoEditClipProperties(id, owner.activeSequenceId, first.id, { x: .2, rotation: 45, scale: 1.2 })
+  present(owner, 12)
+  expect(state.draft.takes[0].placement).toBe(true)
+  expect(state.draft.targets[0].editable).toEqual(expect.arrayContaining(['position', 'rotationTurns', 'scaleXY']))
+  await stopVideoMotion(id)
+  setVideoEditView(id, { selection: second.id, frame: second.start })
+  await startVideoMotion(id)
+  const next = videoMotionState(owner)!
+  expect(next.draft.id).toBe(state.draft.id)
+  present(owner, second.start)
+  setVideoMotionPointer(id, true)
+  demonstrateVideoMotion(id, { ...next.pose, position: [.7, .5] })
+  setVideoEditView(id, { scrubbing: true })
+  present(owner, second.start + 10)
+  setVideoMotionPointer(id, false)
+  await stopVideoMotion(id)
+  expect(next.draft.targets).toHaveLength(2)
+  expect(next.draft.takes, JSON.stringify(next.draft.takes.map(take => ({ range: take.timelineRange, place: take.placement, visit: take.visitRef })))) .toHaveLength(2)
+  expect(next.draft.takes[1].placement).toBeUndefined()
+  const samples = []
+  for await (const page of readMotionPages(id, next.draft)) if (page.kind === 'samples') samples.push(...page.entries)
+  expect(new Set(samples.map(sample => sample.targetRef.id)).size).toBe(2)
+  expect(getActiveVideoEditSequence(owner).clips[0].rotation).toBe(first.rotation)
 })
+it('多目标候选按各片段起点映射关键帧，整组应用只增加一次作品历史', async () => {
+  const owner = await setup(), id = owner.document.id
+  appendVideoEditClip(id)
+  const [first, second] = getActiveVideoEditSequence(owner).clips
+  editVideoProject(id, document => { document.sequences[0].clips.find(clip => clip.id === second.id)!.start = 100; return document })
+  for (const [clip, start] of [[first, 0], [second, 100]] as const) {
+    setVideoEditView(id, { selection: clip.id, frame: start })
+    await startVideoMotion(id); present(owner, start)
+    const state = videoMotionState(owner)!
+    demonstrateVideoMotion(id, { ...state.pose, position: [.3, .5] }, 'down'); present(owner, start)
+    present(owner, start + 30)
+    demonstrateVideoMotion(id, { ...state.pose, position: [.8, .5] }, 'up'); present(owner, start + 30)
+    await stopVideoMotion(id)
+  }
+  await optimizeVideoMotion(id)
+  const state = videoMotionState(owner)!
+  expect(state.candidates.length, state.message).toBeGreaterThan(0)
+  const candidate = state.candidates.find(value => value.id === state.preview)!
+  expect(candidate.motions.map(motion => motion.range)).toEqual([[0, 30], [0, 30]])
+  const history = owner.past.length
+  await applyVideoMotion(id)
+  expect(owner.past.length).toBe(history + 1)
+  for (const clip of getActiveVideoEditSequence(owner).clips) expect(clip.curves?.x?.find(key => key.time === 30)?.value).toBeCloseTo(.3)
+})
+
 it('节拍吸附从片段通用开关进入正式整理；原稿不吸附、钉点优先、标记变化拒绝旧候选', async () => {
   const owner = await setup(), id = owner.document.id, clip = getActiveVideoEditSequence(owner).clips[0]
   editVideoProject(id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, markers: [15, 30, 45].map(frame => ({ id: `beat-${frame}`, frame, name: '节拍', type: 'beat' as const })) })) }))

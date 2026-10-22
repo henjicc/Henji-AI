@@ -1,6 +1,7 @@
 import { videoEditClipSchema, type VideoEditClip, type VideoEditDocument, type VideoEditSequence } from '@/core/videoEdit/document'
 import { editVideoProject, requireVideoEditInstance, updateVideoEditGesture, type VideoEditGesture } from './videoEditService'
 import { writeVideoEditClipKeyframes, putVideoEditKeyframe, type VideoEditAnimatableKey, type VideoEditKeyframes } from '@/core/videoEdit/keyframes'
+import { demonstrateVideoMotion, videoMotionState } from './videoEditMotionDraft'
 
 /** 效果控件里可直接调的片段固有属性（PR 的“运动 / 不透明度 / 音量”等固定效果）。 */
 export type VideoEditClipPropertyKey = VideoEditAnimatableKey
@@ -61,6 +62,20 @@ function patchDocument(sequenceId: string, clipId: string, patch: VideoEditClipP
  * 不带手势时就是一次完整编辑（单击步进、输入后回车、重置）。数值先按 schema 边界夹取。
  */
 export function updateVideoEditClipProperties(projectId: string, sequenceId: string, clipId: string, patch: VideoEditClipPropertyPatch, gesture?: VideoEditGesture): VideoEditDocument {
+  const owner = requireVideoEditInstance(projectId), motion = videoMotionState(owner)
+  if (motion?.automatic && motion.status === 'recording' && motion.activeTargetId === `${projectId}:${clipId}` && owner.activeSequenceId === sequenceId) {
+    const values = normalizePatch(patch), pose = structuredClone(motion.pose)
+    if (values.x !== undefined) pose.position[0] = values.x + .5
+    if (values.y !== undefined) pose.position[1] = values.y + .5
+    if (values.rotation !== undefined) pose.rotationTurns = values.rotation / 360
+    if (values.scale !== undefined) pose.scaleXY = [values.scale, values.scale]
+    if (['x', 'y', 'rotation', 'scale'].some(key => key in values)) {
+      demonstrateVideoMotion(projectId, pose, 'up')
+      delete values.x; delete values.y; delete values.rotation; delete values.scale
+      if (!Object.keys(values).length) return owner.document
+      patch = values
+    }
+  }
   const update = patchDocument(sequenceId, clipId, normalizePatch(patch), requireVideoEditInstance(projectId).frame)
   if (gesture) {
     if (gesture.projectId !== projectId) throw new Error('原参数调整已结束，请重新编辑。')
