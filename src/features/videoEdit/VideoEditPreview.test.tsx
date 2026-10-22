@@ -13,6 +13,7 @@ import { registerVideoEditSourcePresenter, updateVideoEditSource } from './appli
 import { resetVideoEditPlaybackResolutionCache, setVideoEditPlaybackResolution } from './application/videoEditPlaybackResolution'
 import { setVideoEditPosterFrame } from './application/videoEditProgramCapture'
 import { startVideoMotion, setVideoMotionOptions, setVideoMotionPointer, videoMotionState, videoMotionComposition } from './application/videoEditMotionDraft'
+const stopNotification = vi.hoisted(() => vi.fn())
 const pixel = vi.hoisted(() => ({ preopen: vi.fn(), arm: vi.fn(async () => undefined), requests: [] as Array<{ frame: number; sequential?: boolean; deadline?: number; submitted?: () => void; resolve: (value: { sourceTimestamps: number[]; presented?: boolean; history?: ImageBitmap }) => void; reject: (error: Error) => void }>, sessions: 0, update: vi.fn(), invalidate: vi.fn(), dispose: vi.fn(), mixAudio: vi.fn(), scale: vi.fn() }))
 vi.mock('./application/videoEditProjectCover', () => ({ saveVideoEditPosterCover: vi.fn(async () => undefined), updateVideoEditProjectCover: vi.fn(async () => undefined) }))
 vi.mock('./engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
@@ -27,10 +28,12 @@ vi.mock('./engine/videoEditRenderSession', () => ({ VideoEditRenderSession: clas
   mixAudio = pixel.mixAudio
   setRenderDivisor = pixel.scale
   armPlayback = pixel.arm
+  stopPlayback = stopNotification
   setSmartRegions = vi.fn()
   present(frame: number, sequential?: boolean, _scrubbing?: boolean, deadline?: number, submitted?: () => void) { return new Promise((resolve, reject) => pixel.requests.push({ frame, sequential, deadline, resolve, reject, submitted })) }
 } }))
 beforeEach(() => {
+  stopNotification.mockClear()
   vi.useFakeTimers(); installHarnessNativeStorage(); pixel.requests = []; pixel.sessions = 0; pixel.preopen.mockClear(); pixel.arm.mockClear(); pixel.invalidate.mockClear(); pixel.update.mockResolvedValue(undefined); pixel.dispose.mockResolvedValue(undefined); pixel.scale.mockReset(); pixel.scale.mockResolvedValue(undefined); localStorage.clear(); resetVideoEditPlaybackResolutionCache()
   vi.spyOn(getPlatform().system, 'memoryInfo').mockResolvedValue({ availableBytes: 4 * 1024 ** 3, totalBytes: 8 * 1024 ** 3 })
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/preview.henji-video')
@@ -39,6 +42,15 @@ beforeEach(() => {
   HTMLCanvasElement.prototype.transferControlToOffscreen = vi.fn(() => ({} as OffscreenCanvas))
 })
 afterEach(async () => { cleanup(); await vi.advanceTimersByTimeAsync(5001); vi.useRealTimers(); for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
+it('暂停时即使画面未变化或上一帧仍在解码，也立即通知 Worker 取消前瞻', async () => {
+  const owner = await createVideoEditProject(); appendVideoEditClip(owner.document.id)
+  const view = render(<VideoEditPreview instance={owner} onError={vi.fn()} />)
+  await act(async () => {})
+  act(() => setVideoEditView(owner.document.id, { playing: true }))
+  act(() => setVideoEditView(owner.document.id, { playing: false }))
+  expect(stopNotification).toHaveBeenCalledWith(owner.frame)
+  view.unmount()
+})
 it('讲解回执像素用于真实节目呈现；后续普通帧不能显示旧图，关闭释放位图', async () => {
   const draw = vi.fn()
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (this: HTMLCanvasElement) { return this.getAttribute('aria-hidden') === 'true' ? { drawImage: draw } as unknown as CanvasRenderingContext2D : null })

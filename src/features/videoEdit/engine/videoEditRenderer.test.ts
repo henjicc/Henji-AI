@@ -1305,6 +1305,29 @@ it('预热解码尚未返回时超时取消，未交付帧也不会遗留排程'
   } finally { await renderer.dispose(); vi.useRealTimers() }
 })
 
+it('原生预算管理时未来段不走旧半秒预取；停止立即回收当前排程', async () => {
+  const scheduled: string[] = [], closed: string[] = []
+  const backend: VideoEditFrameBackend = {
+    managesIdleSessions: true,
+    open: media => ({ key: media.path, ready: Promise.resolve({ clipFrames: () => ({ frameAt: async () => null, async *frames() {} }), clipAudio: () => undefined,
+      async *schedule(timestamps) {
+        scheduled.push(media.path)
+        try { for (const timestamp of timestamps) yield { timestamp, duration: 1 / 30, format: 'NV12', close: () => {} } as unknown as VideoSample }
+        finally { closed.push(media.path) }
+      },
+    }) }), release: () => {}, seeker: () => { throw new Error('播放测试不走定位。') },
+  }
+  const document = fixture(), base = document.clips[0]
+  document.clips = [{ ...base, duration: 30 }, { ...base, id: 'next', itemId: 'item-B', start: 30 }]
+  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  try {
+    await renderer.render(20, true)
+    expect(scheduled).toEqual([document.media[0].path])
+    await renderer.stopPlayback()
+    expect(closed).toEqual(scheduled)
+  } finally { await renderer.dispose() }
+})
+
 it('同一原片在时间线空档后复用时分开排程，不在空档中扣留下一段的帧', async () => {
   boundary.scheduled = []
   const document = fixture(), clip = document.clips[0]

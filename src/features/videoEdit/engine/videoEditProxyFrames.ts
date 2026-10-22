@@ -5,6 +5,7 @@ import type { VideoEditFrameCache } from './videoEditFrameCache'
 
 /** The single picture-source selection, shared by native and WebCodecs through the existing router. Audio stays original. */
 export class VideoEditProxyFrames implements VideoEditFrameBackend {
+  get managesIdleSessions(): boolean { return this.backend.managesIdleSessions === true }
   private readonly handles = new Map<string, string[]>()
   private next = 0
   constructor(private readonly backend: VideoEditFrameBackend, private readonly proxies: Map<string, VideoProxyResult>) {}

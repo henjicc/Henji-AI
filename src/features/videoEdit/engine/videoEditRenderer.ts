@@ -55,7 +55,7 @@ interface PlaybackStream {
   /** Initial contiguous pictures already owned by the bounded seek cache. */
   cachedUntilFrame: number
   samples: AsyncGenerator<VideoEditDecodedPicture | null, void, unknown>
-  /** Only the run containing the playhead is primed; future cuts remain demand driven. */
+  /** 当前播放段的首帧；原生未来片段由 Worker 按预算预定位。 */
   primed?: Promise<IteratorResult<VideoEditDecodedPicture | null, void>>
   /** Serializes pulls; one file never serves two clips at the same frame. */
   tail: Promise<unknown>
@@ -70,7 +70,7 @@ interface PlaybackSchedule { document: VideoEditComposition; endFrame: number; s
 export type VideoEditScrubMode = boolean | 'fast'
 /** 拖动播放头混音时保留的空闲声音来源（含嵌套序列的声音渲染器）上限。 */
 export const VIDEO_EDIT_IDLE_AUDIO_SOURCES = 8
-/** 拖动播放头时保留的空闲素材定位会话与嵌套序列渲染器上限（4K 硬件解码会话占用显存，不宜更多）。 */
+/** 浏览器回退路径的闲置读取器上限；原生会话按服务端预算保留，不使用此数量。 */
 export const VIDEO_EDIT_IDLE_SCRUB_RENDERERS = 4
 /** 拖动播放头时保留的空闲已解码图片上限（另受 256MiB 图片预算约束）。 */
 export const VIDEO_EDIT_IDLE_SCRUB_IMAGES = 6
@@ -560,12 +560,18 @@ export class VideoEditRenderer {
       await stream.samples.return(); if (!stream.released) this.release(stream)
     }))
   }
+  async stopPlayback(): Promise<void> {
+    this.lastForwardFrame = undefined
+    await this.disposePlayback()
+    await Promise.all([...this.nestedPictures.values(), ...this.codeInputs.values(), ...this.filterInputs.values()].map(entry => entry.renderer.stopPlayback()))
+  }
   /**
    * A cut onto another scheduled file must not open and position its decoder on the boundary frame (a 4K long-GOP
    * start costs tens of milliseconds). Start decoding its first picture half a second ahead; runs further away
    * still borrow nothing from the native frame pool.
    */
   private primeUpcomingStreams(frame: number): void {
+    if (this.frames.managesIdleSessions) return
     const horizon = frame + Math.ceil(this.document.fps / 2)
     for (const stream of this.playback?.streams ?? []) {
       const first = stream.entries[0]
@@ -841,7 +847,7 @@ export class VideoEditRenderer {
     }))
     // A cut opens a new demuxer/decoder; doing that on the boundary frame stalls playback.
     // Open and decode the first picture of clips starting within half a second ahead of time.
-    const upcoming = sequential && this.previewWidth ? this.upcomingVideoClips(document, frame, visible) : []
+    const upcoming = sequential && this.previewWidth && !this.frames.managesIdleSessions ? this.upcomingVideoClips(document, frame, visible) : []
     for (const clip of upcoming) this.preroll(clip, document)
     let cacheHits = 0
     let blankPictures = 0
@@ -1053,10 +1059,8 @@ export class VideoEditRenderer {
     // cache: closing a native seek decoder held the GPU for about 100ms, a dropped frame at every start of playback.
     const keepLive = !!cachedWindow
     const activePaths = new Set(canPresent() ? active.map(clip => this.clipMedia(document, clip)?.path) : this.seekers.keys())
-    // 拖动播放头时镜头来回切换：不在画面里的素材定位会话与嵌套序列渲染器按最近使用保留至多
-    // VIDEO_EDIT_IDLE_SCRUB_RENDERERS 个，拖回来时不必重开（4K 原片每次重开解码会话约 120ms，复杂工程一次拖动约 16 次）。
-    // 非拖动时照旧立即释放，空闲会话占用的显存不随停留时间累积。
-    const scrubLimit = _scrubbing ? VIDEO_EDIT_IDLE_SCRUB_RENDERERS : 0
+    // 原生文件会话由共享后端按服务端预算保留，渲染器只释放闲置读取器；浏览器仍用原有 LRU。
+    const scrubLimit = this.frames.managesIdleSessions ? 0 : _scrubbing ? VIDEO_EDIT_IDLE_SCRUB_RENDERERS : 0
     if (!keepLive) for (const path of retireIdle(this.idleSeekers, [...this.seekers.keys()].filter(path => !activePaths.has(path)), scrubLimit)) {
       const seeker = this.seekers.get(path); this.seekers.delete(path); await seeker?.dispose()
     }

@@ -43,6 +43,7 @@ interface Route {
 
 /** 端口请求方法 → IPC 通道（解码会话的取帧请求，权限与归属仍由主进程按发起窗口检查）。 */
 const PORT_CALL_CHANNELS: Record<VideoFramePortCall['method'], string> = {
+  stats: 'videoFrames:stats',
   openDecoder: 'videoFrames:openDecoder',
   frameAt: 'videoFrames:frameAt',
   schedule: 'videoFrames:schedule',

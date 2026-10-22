@@ -236,9 +236,15 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       }
     })
     let observedScrubbing = !!instance.scrubbing
+    let observedPlaying = instance.playing
+    let observedCommand = videoEditProgramCommandIdentity(instance.document.id)
     let observedAudioFrame = instance.frame
     const unsubscribeView = subscribeVideoEditView(() => {
       if (stopped) return
+      const command = videoEditProgramCommandIdentity(instance.document.id)
+      if (observedPlaying && (!instance.playing || observedCommand !== command)) renderer.stopPlayback(instance.frame)
+      observedPlaying = instance.playing
+      observedCommand = command
       const releasedScrub = observedScrubbing && !instance.scrubbing
       observedScrubbing = !!instance.scrubbing
       // A different frame (including a played frame) invalidates the Worker playback plan.

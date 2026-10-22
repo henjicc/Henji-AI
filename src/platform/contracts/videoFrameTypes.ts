@@ -217,6 +217,7 @@ export const VIDEO_AUDIO_MAX_READ_FRAMES = 2 * 192_000
  * 不经页面主线程。请求与帧、计划事件共用同一端口；`id` 由消费方分配，响应原样带回。
  */
 export type VideoFramePortCall =
+  | { method: 'stats'; params: Record<string, never> }
   | { method: 'openDecoder'; params: Omit<VideoFrameDecoderRequest, 'route'> }
   | { method: 'frameAt'; params: VideoFrameAtRequest }
   | { method: 'schedule'; params: VideoFrameScheduleRequest }
@@ -227,6 +228,7 @@ export type VideoFramePortCall =
   | { method: 'closeAudio'; params: { audioId: string } }
 
 export interface VideoFramePortCallResults {
+  stats: VideoFrameBridgeStats
   openDecoder: VideoFrameDecoderInfo
   frameAt: VideoFrameAtResult
   schedule: VideoFrameScheduleAck
@@ -341,7 +343,7 @@ export interface VideoFrameNativeStats {
   streams: Array<{ streamId: string; kind?: 'test' | 'decoder'; format: VideoSharedFormat | null; width: number; height: number; running: boolean; counters: VideoFrameNativeStreamCounters }>
   audioSessions?: number
   /** 资源预算的上限与占用（3.1）。 */
-  budget?: { vramLimitBytes: number; vramReservedBytes: number; vramPeakReservedBytes: number; hardwareSessions: number; hardwareSessionLimit: number; decoderSessionLimit: number }
+  budget?: { vramLimitBytes: number; vramReservedBytes: number; vramPeakReservedBytes: number; hardwareSessions: number; hardwareSessionLimit: number; decoderSessionLimit: number; largestSessionBytes?: number; foregroundReserveBytes?: number }
 }
 
 export interface VideoFrameBridgeStats {

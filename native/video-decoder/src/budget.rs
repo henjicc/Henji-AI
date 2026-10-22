@@ -104,6 +104,8 @@ struct Usage {
     reserved: HashMap<String, u64>,
     hardware: usize,
     peak_reserved: u64,
+    /// 已实际登记过的最大单会话，用于预打开给前台保留余量；不由渲染层估算。
+    largest_session: u64,
 }
 
 /// 全服务共享的预算账本。
@@ -184,6 +186,7 @@ impl Budget {
         }
         usage.reserved.insert(stream_id.to_string(), bytes);
         usage.peak_reserved = usage.peak_reserved.max(reserved + bytes);
+        usage.largest_session = usage.largest_session.max(bytes);
         Ok(VramTicket { usage: self.usage.clone(), stream_id: stream_id.to_string() })
     }
 
@@ -193,6 +196,9 @@ impl Budget {
             "vramLimitBytes": usage.limits.vram_bytes,
             "vramReservedBytes": usage.reserved.values().sum::<u64>(),
             "vramPeakReservedBytes": usage.peak_reserved,
+            "largestSessionBytes": usage.largest_session,
+            // 尚无实测会话时先为前台留一半额度，允许空白起点预打开首个文件；后续用实测最大值。
+            "foregroundReserveBytes": if usage.largest_session == 0 { usage.limits.vram_bytes.div_ceil(2) } else { usage.largest_session },
             "hardwareSessions": usage.hardware,
             "hardwareSessionLimit": usage.limits.hardware_sessions,
             "decoderSessionLimit": usage.limits.decoder_sessions,
@@ -221,6 +227,7 @@ mod tests {
     fn vram_reservations_are_bounded_and_returned() {
         let budget = Budget::default();
         budget.set_limits(Limits { vram_bytes: 1000, hardware_sessions: 1, decoder_sessions: 2 });
+        assert_eq!(budget.stats()["foregroundReserveBytes"], 500);
         let first = budget.reserve_vram("a", 600).unwrap();
         let error = budget.reserve_vram("b", 500).err().unwrap();
         assert_eq!(error.code, "BUDGET_EXCEEDED");
@@ -230,6 +237,8 @@ mod tests {
         assert_eq!(budget.stats()["vramPeakReservedBytes"], 600);
         drop(second);
         assert_eq!(budget.stats()["vramReservedBytes"], 0);
+        assert_eq!(budget.stats()["largestSessionBytes"], 600);
+        assert_eq!(budget.stats()["foregroundReserveBytes"], 600);
     }
 
     #[test]

@@ -60,6 +60,7 @@ function mediaKey(media: VideoEditMedia): string { return `${media.path}\u0000${
  * again. A forced backend is never replaced.
  */
 export class VideoEditFrameRouter implements VideoEditFrameBackend {
+  get managesIdleSessions(): boolean { return this.native?.managesIdleSessions === true && this.settings.forced !== 'browser' }
   private readonly decisions = new Map<string, Decision>()
   private readonly opened = new Map<string, RoutedFileSource>()
   private readonly pending = new Set<string>()

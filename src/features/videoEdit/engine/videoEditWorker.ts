@@ -8,7 +8,8 @@ import { videoEditPreparationSnapshot, recordVideoEditPreparation } from './vide
 import type { VideoEditTimingContext } from './videoEditFirstFrameTiming'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import { VideoEditProxyFrames } from './videoEditProxyFrames'
-import type { VideoProxyResult } from '@/core/videoEdit/proxy'
+import { videoEditDecodeSource, type VideoProxyResult } from '@/core/videoEdit/proxy'
+import { VideoEditDecodeLookahead } from './videoEditDecodeLookahead'
 import { VideoEditRenderer } from './videoEditRenderer'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { VideoEditNativeFrameReceiver } from './videoEditNativeFrames'
@@ -31,6 +32,7 @@ import type { VideoEditParameterUpdate } from './videoEditParameterUpdate'
  */
 export interface RenderDecodeOptions extends VideoEditDecodeSettings { localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
 export type RenderRequest = { id: number } & (
+  { kind: 'stopPlayback'; frame: number } |
   { kind: 'fonts'; fonts: FontPayload[]; availableIds: string[]; reset: boolean } |
   { kind: 'init'; traceFrames?: boolean; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; previewWidth?: number; surface?: OffscreenCanvas; cacheBudgetBytes?: number; decode?: RenderDecodeOptions } | { kind: 'update'; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
   | { kind: 'replaceContent'; document: VideoEditComposition; codeSources?: Record<string, string>; localPaths: Record<string, string> }
@@ -43,7 +45,7 @@ export type RenderRequest = { id: number } & (
   | { kind: 'authorMetadata'; url: string; locations?: import('./videoEditAuthorBundle').AuthorSourceLocations }
   | { kind: 'authorRelease'; url: string }
   | { kind: 'authorFrame'; assets?: Record<string, ImageBitmap>; url: string; params: import('./videoEditAuthorModule').AuthorParameters; info: import('./videoEditAuthorModule').AuthorFrameInfo; options?: Parameters<VideoEditRenderer['renderAuthorFrame']>[4] }
-  | { kind: 'preopen'; media: VideoEditComposition['media']; localPaths: Record<string, string>; timing?: VideoEditTimingContext }
+  | { kind: 'preopen'; document: VideoEditComposition; frame: number; localPaths: Record<string, string>; timing?: VideoEditTimingContext }
   /** 已分析好的智能区域段落（4.7d），按素材地址与分析种类；不进渲染队列，下一次渲染即生效。 */
   | { kind: 'tracks'; tracks: VideoEditTrackResults }
   | { kind: 'regions'; regions: VideoEditSmartRegionSegments }
@@ -81,26 +83,15 @@ let nativeFrames: VideoEditNativeFrameReceiver | undefined
 let nativeDiagnostics: NativeFrameDiagnostics | undefined
 let nativeBackend: VideoEditNativeFrames | undefined
 let router: VideoEditFrameRouter | undefined
-let preopened: Array<() => void> = []
-let preopenTimer: ReturnType<typeof setTimeout> | undefined
-function releasePreopened(): void { clearTimeout(preopenTimer); for (const release of preopened) release(); preopened = [] }
+let decodeLookahead: VideoEditDecodeLookahead | undefined
+function releasePreopened(): void { decodeLookahead?.cancel() }
 function preopenMedia(request: Extract<RenderRequest, { kind: 'preopen' }>): void {
   releasePreopened()
-  if (!nativeBackend) return
+  if (!decodeLookahead) return
   if (request.timing) { timing = request.timing; timedStages.clear() }
-  timingEvent('native.preopen.start')
-  for (const media of request.media.slice(0, 2)) {
-    const path = request.localPaths[media.path]
-    if (!path) continue
-    localPaths.set(media.path, path)
-    try {
-      const reservation = nativeBackend.preopen(media)
-      preopened.push(reservation.release)
-      const started = performance.now()
-      void reservation.ready.then(() => { if (timing?.startedAt === request.timing?.startedAt) timingEvent('native.preopen.ready', performance.now() - started) }).catch(error => log('info', '序列预打开失败，正式取帧时重试', 'video_edit.render.preopen.failed', { sequenceId: request.timing?.sequenceId, reason: String(error) }))
-    } catch (error) { log('info', '序列预打开不可用，正式取帧时重试', 'video_edit.render.preopen.failed', { reason: String(error) }) }
-  }
-  preopenTimer = setTimeout(releasePreopened, 2000)
+  for (const [url, path] of Object.entries(request.localPaths)) localPaths.set(url, path)
+  decodeLookahead.beforeFrame(request.document, request.frame, false)
+  decodeLookahead.update(request.document, request.frame, false, [])
 }
 let effectWarnings = new Set<string>()
 /** Code clips the program playback reaches within this many seconds are prepared ahead, outside the render queue. */
@@ -136,7 +127,8 @@ function frameBackend(decode: RenderDecodeOptions | undefined): VideoEditProxyFr
   setLocalPaths(decode?.localPaths)
   const channel = decode?.nativeAvailable && decode.forced !== 'browser' ? nativeFrames : undefined
   // Runtime native failures are recovered per read by the router (task 3.1).
-  nativeBackend = channel ? new VideoEditNativeFrames({ channel, localPath: media => localPaths.get(media.path) ?? renderCachePaths.get(media.path) }) : undefined
+  nativeBackend = channel ? new VideoEditNativeFrames({ channel, localPath: media => localPaths.get(media.path) ?? renderCachePaths.get(media.path), retainIdle: direct, log }) : undefined
+  decodeLookahead = nativeBackend && direct ? new VideoEditDecodeLookahead(nativeBackend, media => videoEditDecodeSource(media, proxies.get(media.id), true, 'playback')) : undefined
   router = new VideoEditFrameRouter(new VideoEditBrowserFrames(), nativeBackend, { nativeAvailable: !!nativeBackend, ...(decode?.forced ? { forced: decode.forced } : {}) }, log)
   return new VideoEditProxyFrames(router, proxies)
 }
@@ -144,8 +136,9 @@ function frameBackend(decode: RenderDecodeOptions | undefined): VideoEditProxyFr
 async function disposeRenderer(): Promise<void> {
   releasePreopened()
   await renderer?.dispose()
+  await nativeBackend?.disposeIdle()
   await nativeBackend?.settled(); router?.dispose()
-  nativeBackend = undefined; router = undefined
+  nativeBackend = undefined; router = undefined; decodeLookahead = undefined
 }
 function handleNativeFrames(request: NativeFramesRequest): void {
   if (request.kind === 'nativeFrames.attach') { void nativeFrames?.dispose(); nativeFrames = new VideoEditNativeFrameReceiver(request.port, undefined, (stage, durationMs) => timingEvent(`native.${stage}`, durationMs)); nativeDiagnostics = undefined; return }
@@ -168,6 +161,8 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
   if (event.data.kind === 'nativeFrames.attach' || event.data.kind === 'nativeFrames.diagnose') { handleNativeFrames(event.data); return }
   const request = event.data
   const receivedAt = performance.now()
+  if (['init', 'update', 'replaceContent', 'parameters', 'dispose', 'invalidate', 'renderCache', 'stopPlayback'].includes(request.kind)) releasePreopened()
+  if (request.kind === 'render' && renderer) decodeLookahead?.beforeFrame(renderer.document, request.frame, request.sequential === true)
   if (request.kind === 'init') enableVideoEditFrameTrace(request.traceFrames === true)
   if (['init', 'update', 'replaceContent', 'parameters', 'dispose', 'fonts'].includes(request.kind)) { warmingAhead?.abort(); warmingAhead = undefined; if (request.kind !== 'parameters') warmedAhead.clear() }
   if (request.kind === 'preopen') { preopenMedia(request); return }
@@ -211,7 +206,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
         recordVideoEditPreparation('fontLoad', performance.now() - started)
         self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'init') {
-        await disposeRenderer(); renderer = new VideoEditRenderer(request.document, request.previewWidth, request.surface, request.cacheBudgetBytes, frameBackend(request.decode), undefined, [request.document.id], timingEvent); direct = !!request.surface
+        await disposeRenderer(); direct = !!request.surface; renderer = new VideoEditRenderer(request.document, request.previewWidth, request.surface, request.cacheBudgetBytes, frameBackend(request.decode), undefined, [request.document.id], timingEvent)
         renderer.setRenderCache(renderCacheWindows)
         self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'replaceContent') {
@@ -242,6 +237,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
           void snapshot.catch(() => {})
         }, { maxPixels: needsPixels ? Infinity : 1280 * 720, gpu: !direct && !request.readRgb && !request.history }) : undefined
         const result = await renderer.render(request.frame, request.sequential, request.scrubbing, () => renderer?.document.revision === revision, request.deadline, undefined, request.quality, capture).catch(error => { if (snapshot) void snapshot.then(bitmap => bitmap.close(), () => {}); throw error })
+        if (result.presented) decodeLookahead?.update(renderer.document, request.frame, request.sequential === true, renderCacheWindows)
         const readCodePerformance = renderer.captureCodePerformance()
         const authorElements = request.observeElements && result.presented ? renderer.observeAuthorElements(request.frame) : undefined
         traceVideoEditFrame('worker.render', request.frame, renderStarted)
@@ -283,6 +279,9 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
           self.postMessage({ id: request.id, phase: 'submitted' } satisfies RenderResponse)
           void finish().catch(error => self.postMessage({ id: request.id, ...videoEditRenderFailure(error) } satisfies RenderResponse))
         } else await finish()
+      } else if (request.kind === 'stopPlayback') {
+        await renderer?.stopPlayback()
+        if (renderer) { decodeLookahead?.beforeFrame(renderer.document, request.frame, false); decodeLookahead?.update(renderer.document, request.frame, false, renderCacheWindows) }
       } else if (request.kind === 'prepareGpu') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
         await renderer.prepareGpu(); self.postMessage({ id: request.id } satisfies RenderResponse)

@@ -1,5 +1,5 @@
 import type { VideoEditMedia } from '@/core/videoEdit/document'
-import type { VideoFrameDecoderInfo, VideoFrameScheduleEvent, VideoFrameStreamEndedPayload } from '@/platform/contracts/videoFrames'
+import type { VideoFrameDecoderInfo, VideoFrameNativeStats, VideoFrameScheduleEvent, VideoFrameStreamEndedPayload } from '@/platform/contracts/videoFrames'
 import type { VideoEditFrameCache } from './videoEditFrameCache'
 import { VIDEO_EDIT_NATIVE_SOUND_READY, type VideoEditClipAudio, type VideoEditClipFrames, type VideoEditFrameBackend, type VideoEditFrameSeeker, type VideoEditFrameSource, type VideoEditSnapshot } from './videoEditFrameSource'
 import { createVideoEditNativeClipAudio, openVideoEditNativePcm, type VideoEditPcmSession } from './videoEditNativeAudio'
@@ -261,7 +261,58 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
   readonly lane = new NativeSeekLane()
   private playback?: Promise<VideoEditNativeDecoderSession>
   private seekSession?: Promise<VideoEditNativeDecoderSession>
+  private readonly opening = new Set<Promise<VideoEditNativeDecoderSession>>()
   private closed = false
+  active = 0
+  private activeSeek = 0
+  private activePlayback = 0
+  lastUsed = performance.now()
+  distance = Infinity
+  private warming?: { abort: AbortController; done: Promise<void> }
+  private warmed = new Set<'playback' | 'seek'>()
+
+  get idle(): boolean { return this.active === 0 && !this.warming && this.opening.size === 0 }
+  get hasSessions(): boolean { return !!this.playback || !!this.seekSession }
+  get hasIdleSessions(): boolean { return !this.warming && (!!this.playback && !this.opening.has(this.playback) && !this.activePlayback || !!this.seekSession && !this.opening.has(this.seekSession) && !this.activeSeek) }
+  hasSession(purpose: 'playback' | 'seek'): boolean { return !!(purpose === 'playback' ? this.playback : this.seekSession) }
+
+  cancelWarm(): void { this.warming?.abort.abort() }
+  async settleWarm(): Promise<void> { await this.warming?.done.catch(() => undefined) }
+
+  /** 前台先取消推测读取；同文件等待取消收束，避免旧计划取消新计划。 */
+  async use<T>(operation: () => Promise<T>): Promise<T> {
+    this.active++; this.activeSeek++; this.lastUsed = performance.now()
+    this.owner.cancelSpeculative()
+    try { await this.warming?.done.catch(() => undefined); return await operation() }
+    finally { this.active--; this.activeSeek--; this.lastUsed = performance.now() }
+  }
+
+  async warm(time: number, purpose: 'playback' | 'seek', signal: AbortSignal): Promise<void> {
+    if (this.active || this.warming || this.warmed.has(purpose)) return
+    const abort = new AbortController()
+    const cancel = (): void => abort.abort()
+    signal.addEventListener('abort', cancel, { once: true })
+    if (signal.aborted) cancel()
+    const task = { abort, done: Promise.resolve() }
+    this.warming = task
+    task.done = (async () => {
+      if (abort.signal.aborted) return
+      const session = await this.session(purpose)
+      if (abort.signal.aborted) return
+      let decoded = false
+      for await (const picture of session.run({ times: [time] }, abort.signal)) { if (picture) decoded = true; picture?.close() }
+      if (!abort.signal.aborted && !decoded) throw decodeFailure(this.media.name, new Error('入点没有可解码画面。'), 'file')
+      if (!abort.signal.aborted) this.warmed.add(purpose)
+    })().finally(async () => {
+      signal.removeEventListener('abort', cancel)
+      if (abort.signal.aborted && !this.active) await this.retire()
+      if (this.warming === task) this.warming = undefined
+    })
+    await task.done
+    if (abort.signal.aborted) {
+      throw new DOMException('预打开已取消。', 'AbortError')
+    }
+  }
 
   constructor(private readonly owner: VideoEditNativeFrames, readonly media: VideoEditMedia, private readonly path: string) {}
 
@@ -269,11 +320,13 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
     if (this.closed) return Promise.reject(closedFailure())
     const field = purpose === 'playback' ? 'playback' : 'seekSession'
     let pending = this[field]
+    if (pending && this.active && this.warmed.delete(purpose)) this.owner.log('debug', '命中提前定位的解码会话', 'video_edit.decode.preopen.hit', { mediaId: this.media.id, purpose, durationMs: 0 })
     if (!pending) {
-      const opening = this.owner.openSession(this.media, this.path, purpose)
+      const opening = this.owner.openSession(this.media, this.path, purpose, !!this.warming && !this.active)
+      this.opening.add(opening)
       // A failed open is not kept (a restored file is read again), nor is a session whose stream ended: the next
       // read opens a new one on the restarted service (task 3.1).
-      opening.then(session => session.whenEnded(() => { if (this[field] === opening) this[field] = undefined }), () => { if (this[field] === opening) this[field] = undefined })
+      opening.then(session => { this.opening.delete(opening); session.whenEnded(() => { if (this[field] === opening) this[field] = undefined }) }, () => { this.opening.delete(opening); if (this[field] === opening) this[field] = undefined })
       this[field] = pending = opening
     }
     return pending
@@ -289,15 +342,24 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
   reset(): void {
     const sessions = [this.playback, this.seekSession]
     this.playback = undefined; this.seekSession = undefined
+    this.warmed.clear()
     this.lane.cancelSpeculative()
     for (const pending of sessions) void pending?.then(session => session.close('service'), () => undefined)
+  }
+
+  async retire(): Promise<void> {
+    const sessions: Array<Promise<VideoEditNativeDecoderSession> | undefined> = []
+    // 同文件正在播放时仍可让出闲置定位会话，反之亦然；不能把整个文件都当成忙碌。
+    if (!this.activePlayback && (!this.playback || !this.opening.has(this.playback))) { sessions.push(this.playback); this.playback = undefined; this.warmed.delete('playback') }
+    if (!this.activeSeek && (!this.seekSession || !this.opening.has(this.seekSession))) { sessions.push(this.seekSession); this.seekSession = undefined; this.warmed.delete('seek'); this.lane.cancelSpeculative() }
+    await Promise.allSettled(sessions.map(async pending => (await pending)?.close()))
   }
 
   clipFrames(): VideoEditClipFrames | undefined {
     if (this.media.kind !== 'video') return undefined
     return {
       frames: start => this.frames(start),
-      frameAt: seconds => this.lane.run(async () => { recordVideoEditPreparation('nativeFrameAt', 0); return (await this.seek()).frameAt(seconds) }),
+      frameAt: seconds => this.use(() => this.lane.run(async () => { recordVideoEditPreparation('nativeFrameAt', 0); return (await this.seek()).frameAt(seconds) })),
     }
   }
 
@@ -309,7 +371,11 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
 
   async *schedule(timestamps: readonly number[], signal?: AbortSignal): AsyncGenerator<VideoEditNativePicture | null, void, unknown> {
     if (this.media.kind !== 'video') return
-    yield* (await this.session('playback')).run({ times: timestamps }, signal)
+    this.active++; this.activePlayback++; this.lastUsed = performance.now(); this.owner.cancelSpeculative()
+    try {
+      await this.warming?.done.catch(() => undefined)
+      if (!signal?.aborted) yield* (await this.session('playback')).run({ times: timestamps }, signal)
+    } finally { this.active--; this.activePlayback--; this.lastUsed = performance.now() }
   }
 
   private async *frames(start: number): AsyncGenerator<VideoEditNativePicture, void, unknown> {
@@ -322,6 +388,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
   async close(): Promise<void> {
     if (this.closed) return
     this.closed = true
+    this.cancelWarm()
     this.lane.cancelSpeculative()
     await Promise.allSettled([this.playback, this.seekSession].map(async pending => (await pending)?.close()))
   }
@@ -334,6 +401,9 @@ export interface VideoEditNativeFramesOptions {
   maxSessions?: number
   /** Whether sound is decoded natively (default `VIDEO_EDIT_NATIVE_SOUND_READY`). */
   sound?: boolean
+  /** 预览 Worker 统一管理闲置会话；导出和独立读取保持立即释放。 */
+  retainIdle?: boolean
+  log?: (level: 'debug' | 'info', message: string, event: string, context: Record<string, unknown>) => void
 }
 
 /** The native frame backend of one renderer. */
@@ -343,6 +413,61 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
   private sessions = 0
 
   constructor(private readonly options: VideoEditNativeFramesOptions) {}
+  get managesIdleSessions(): boolean { return this.options.retainIdle === true }
+
+  log(level: 'debug' | 'info', message: string, event: string, context: Record<string, unknown>): void { this.options.log?.(level, message, event, context) }
+
+  cancelSpeculative(): void { for (const { source } of this.files.values()) source.cancelWarm() }
+  private async settleSpeculative(): Promise<void> { await Promise.all([...this.files.values()].map(entry => entry.source.settleWarm())) }
+
+  /** 余量完全由服务端给出（实测最大会话或冷启动保留量）；旧服务缺字段时不做推测打开。 */
+  private headroom(stats: VideoFrameNativeStats | null | undefined, extra: number): boolean {
+    const budget = stats?.budget
+    const reserve = budget?.foregroundReserveBytes ?? budget?.largestSessionBytes
+    if (!budget || !reserve) return false
+    return budget.vramLimitBytes - budget.vramReservedBytes >= reserve * extra
+      && budget.hardwareSessionLimit - budget.hardwareSessions >= extra
+      && budget.decoderSessionLimit - stats.streams.filter(stream => stream.kind === 'decoder').length >= extra
+      && (this.options.maxSessions ?? VIDEO_EDIT_NATIVE_MAX_SESSIONS) - this.sessions >= extra
+  }
+
+  async canPreopen(): Promise<boolean> {
+    const stats = await this.options.channel.call('stats', {}).catch(() => undefined)
+    return this.headroom(stats?.native, 2)
+  }
+
+  needsPreopen(media: VideoEditMedia, purpose: 'playback' | 'seek'): boolean {
+    const source = this.files.get(`${media.path}\u0000${media.sourceRevision ?? ''}`)?.source
+    return !source || (source.idle && !source.hasSession(purpose))
+  }
+
+  /** 最远且最久未用的文件先回收；引用本身可继续存在，下次读取会重新打开会话。 */
+  private async evictOne(reason = 'budget'): Promise<boolean> {
+    const entries = [...this.files.entries()].filter(([, entry]) => entry.source.hasIdleSessions)
+      .sort((a, b) => (b[1].source.distance - a[1].source.distance || a[1].source.lastUsed - b[1].source.lastUsed))
+    const entry = entries[0]
+    if (!entry) return false
+    const [key, { source, users }] = entry, started = performance.now()
+    if (users === 0 && source.idle) this.files.delete(key)
+    const closing = users === 0 && source.idle ? source.close() : source.retire()
+    this.closing.add(closing)
+    try { await closing } finally { this.closing.delete(closing) }
+    this.log('debug', '闲置解码会话已释放', 'video_edit.decode.idle.evicted', { mediaId: source.media.id, reason, distanceSeconds: Number.isFinite(source.distance) ? source.distance : undefined, durationMs: performance.now() - started })
+    return true
+  }
+
+  async maintain(distances: ReadonlyMap<string, number>): Promise<void> {
+    if (!this.options.retainIdle) return
+    for (const { source } of this.files.values()) source.distance = distances.get(source.media.path) ?? Infinity
+    for (;;) {
+      const stats = await this.options.channel.call('stats', {}).catch(() => undefined)
+      if (this.headroom(stats?.native, 1) || !await this.evictOne(stats?.native?.budget ? 'budget' : 'budget_unavailable')) return
+    }
+  }
+
+  async disposeIdle(): Promise<void> {
+    for (const [key, entry] of this.files) if (entry.users === 0) { this.files.delete(key); await entry.source.close() }
+  }
 
   /** Whether the native service can be asked to read this media item at all. */
   reads(media: VideoEditMedia): boolean { return media.kind !== 'image' && !!this.options.localPath(media) }
@@ -355,8 +480,10 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
   }
 
   /** Opens a native decoder session, counted against the per-renderer limit (an exceeded budget is a `budget` failure). */
-  async openSession(media: VideoEditMedia, path: string, purpose: 'playback' | 'seek'): Promise<VideoEditNativeDecoderSession> {
+  async openSession(media: VideoEditMedia, path: string, purpose: 'playback' | 'seek', speculative = false): Promise<VideoEditNativeDecoderSession> {
     const limit = this.options.maxSessions ?? VIDEO_EDIT_NATIVE_MAX_SESSIONS
+    if (this.options.retainIdle && !speculative && this.sessions >= limit) { this.cancelSpeculative(); await this.settleSpeculative(); await this.settled() }
+    if (this.options.retainIdle && !speculative) while (this.sessions >= limit && await this.evictOne('foreground')) { /* 当前帧优先腾出名额。 */ }
     if (this.sessions >= limit) throw new VideoEditNativeFailure(videoEditNativeFailureMessage(media.name, 'budget'), 'budget', 'BUDGET_EXCEEDED')
     this.sessions++
     try {
@@ -364,7 +491,17 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
       // briefly stalls decoding, and 16 ready pictures (267ms at 60fps) cover it without a dropped frame.
       const deep = purpose === 'playback' && media.id.startsWith('render-cache:')
       const started = performance.now()
-      const info = await this.options.channel.call('openDecoder', { path, purpose, ...(deep ? { poolSize: 16 } : {}) })
+      const open = () => this.options.channel.call('openDecoder', { path, purpose, ...(deep ? { poolSize: 16 } : {}) })
+      let info: VideoFrameDecoderInfo
+      for (;;) {
+        try { info = await open(); break } catch (error) {
+          if (speculative || !this.options.retainIdle || videoEditNativeFailureKind(videoEditNativeOpenFailure(media.name, error)) !== 'budget') throw error
+          const before = this.sessions
+          this.cancelSpeculative(); await this.settleSpeculative(); await this.settled()
+          if (await this.evictOne('foreground') || this.sessions < before) continue
+          throw error
+        }
+      }
       recordVideoEditPreparation(purpose === 'playback' ? 'nativeOpenPlayback' : 'nativeOpenSeek', performance.now() - started)
       return new VideoEditNativeDecoderSession(this.options.channel, info, media.name, () => { this.sessions--; recordVideoEditPreparation(purpose === 'playback' ? 'nativeClosedPlayback' : 'nativeClosedSeek', 0) })
     } catch (error) { this.sessions--; throw videoEditNativeOpenFailure(media.name, error) }
@@ -387,12 +524,12 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
     return { key, source: entry.source }
   }
 
-  /** A short-lived reservation warms the same seek decoder later acquired by the visible frame. */
-  preopen(media: VideoEditMedia): { ready: Promise<void>; release: () => void } {
+  /** 短期引用预打开共享会话；指定目标时解到入点，正式读取复用相同的定位或播放会话。 */
+  preopen(media: VideoEditMedia, target?: { time: number; purpose: 'playback' | 'seek'; signal: AbortSignal }): { ready: Promise<void>; release: () => void } {
     const { key, source } = this.acquire(media)
     let released = false
-    const release = (): void => { if (!released) { released = true; this.release(key) } }
-    const ready = source.seek().then(() => undefined).catch(error => { release(); throw error })
+    const release = (): void => { if (!released) { released = true; this.release(key, target?.signal.aborted === true) } }
+    const ready = (target ? source.warm(target.time, target.purpose, target.signal) : source.seek().then(() => undefined)).catch(error => { release(); throw error })
     return { ready, release }
   }
 
@@ -405,9 +542,10 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
     }
   }
 
-  release(key: string): void {
+  release(key: string, discard = false): void {
     const entry = this.files.get(key)
     if (!entry || --entry.users > 0) return
+    if (this.options.retainIdle && !discard && entry.source.hasSessions) return
     this.files.delete(key)
     const closing = entry.source.close().finally(() => this.closing.delete(closing))
     this.closing.add(closing)
@@ -455,7 +593,12 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
     try { return await this.snapshot(picture, videoEditGpuFrameUsesChroma(picture)) } finally { picture.close() }
   }
 
-  async sample(time: number, direction: number, singleFrame = false, approximate = false): Promise<{ sample?: VideoEditGpuFrame; hit: boolean; approximate?: boolean }> {
+  sample(time: number, direction: number, singleFrame = false, approximate = false): Promise<{ sample?: VideoEditGpuFrame; hit: boolean; approximate?: boolean }> {
+    if (this.disposed) return Promise.reject(closedFailure())
+    return this.backend.managesIdleSessions ? this.source().use(() => this.sampleActive(time, direction, singleFrame, approximate)) : this.sampleActive(time, direction, singleFrame, approximate)
+  }
+
+  private async sampleActive(time: number, direction: number, singleFrame: boolean, approximate: boolean): Promise<{ sample?: VideoEditGpuFrame; hit: boolean; approximate?: boolean }> {
     if (this.disposed) throw closedFailure()
     if (this.failure) throw this.failure
     const source = this.source()
@@ -608,6 +751,7 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
     this.windows.clear()
     if (this.opened) this.backend.release(this.opened.key)
     this.opened = undefined
-    this.cache.deleteMedia(this.path)
+    // 原生会话跨片段保留时，已复制的 GOP 帧也交给原有有界帧缓存淘汰，避免切回时重新解码。
+    if (!this.backend.managesIdleSessions) this.cache.deleteMedia(this.path)
   }
 }

@@ -70,6 +70,135 @@ function backend(channel: FakeChannel, options: { maxSessions?: number; sound?: 
 
 afterEach(() => { vi.useRealTimers() })
 
+describe('前瞻与原生预算', () => {
+  function managed(channel: FakeChannel) {
+    const log = vi.fn()
+    const frames = new VideoEditNativeFrames({ channel, localPath: item => item.path, retainIdle: true, log })
+    let limit = 10_000
+    channel.answers.stats = () => ({ native: { streams: Array.from({ length: frames.openSessions }, () => ({ kind: 'decoder' })), budget: { vramLimitBytes: limit, vramReservedBytes: frames.openSessions * 1000, largestSessionBytes: 1000, hardwareSessionLimit: 10, hardwareSessions: frames.openSessions, decoderSessionLimit: 10 } } })
+    return { frames, log, setLimit: (bytes: number) => { limit = bytes } }
+  }
+
+  it('余量足够保留超过四个，紧张时按时间距离回收；前台预算拒绝后继续回收重试', async () => {
+    const channel = new FakeChannel(), { frames, log, setLimit } = managed(channel)
+    for (let index = 0; index < 6; index++) { const warm = frames.preopen(media({ path: `${index}.mp4` })); await warm.ready; warm.release() }
+    const distances = new Map(Array.from({ length: 6 }, (_, index) => [`${index}.mp4`, index]))
+    await frames.maintain(distances)
+    expect(frames.openSessions).toBe(6)
+    expect(await frames.canPreopen()).toBe(true)
+    setLimit(2500); await frames.maintain(distances)
+    expect(frames.openSessions).toBe(1)
+    const reuse = frames.preopen(media({ path: '0.mp4' })); await reuse.ready; reuse.release()
+    expect(channel.calls.filter(call => call.method === 'openDecoder')).toHaveLength(6)
+    expect(await frames.canPreopen()).toBe(false)
+    let rejected = false
+    channel.answers.openDecoder = () => { if (!rejected) { rejected = true; throw new VideoEditNativeCallError('预算不足', 'BUDGET_EXCEEDED') } return channel.info('current') }
+    const current = frames.open(media({ path: 'current.mp4' }))
+    await (await current.ready).clipFrames()!.frameAt(0)
+    expect(frames.openSessions).toBe(1)
+    expect(log).toHaveBeenCalledWith('debug', expect.any(String), 'video_edit.decode.idle.evicted', expect.objectContaining({ reason: 'foreground' }))
+    frames.release(current.key); await frames.disposeIdle()
+    expect(frames.openSessions).toBe(0)
+  })
+
+  it('入点首帧完成后播放复用同一会话；取消打开中的任务不再发定位命令且归还预算', async () => {
+    const channel = new FakeChannel(), { frames, log } = managed(channel)
+    channel.answers.schedule = params => {
+      channel.frame(String(params.streamId), { kind: 'schedule', id: String(params.scheduleId), index: 0 }, 2_000_000)
+      channel.event({ type: 'schedule_done', streamId: String(params.streamId), scheduleId: String(params.scheduleId), reason: 'completed', message: null, delivered: 1 })
+      return { scheduleId: params.scheduleId, count: 1 }
+    }
+    const controller = new AbortController()
+    const warm = frames.preopen(media(), { time: 2, purpose: 'playback', signal: controller.signal })
+    await warm.ready; warm.release()
+    const opened = frames.open(media()), source = await opened.ready
+    for await (const picture of source.schedule([2])) picture?.close()
+    expect(channel.calls.filter(call => call.method === 'openDecoder')).toHaveLength(1)
+    expect(log).toHaveBeenCalledWith('debug', expect.any(String), 'video_edit.decode.preopen.hit', expect.objectContaining({ purpose: 'playback' }))
+    frames.release(opened.key)
+    let finish!: (value: VideoFrameDecoderInfo) => void
+    channel.answers.openDecoder = () => new Promise(resolve => { finish = resolve })
+    const cancelled = new AbortController()
+    const pending = frames.preopen(media({ path: 'next.mp4' }), { time: 3, purpose: 'seek', signal: cancelled.signal })
+    const rejected = expect(pending.ready).rejects.toMatchObject({ name: 'AbortError' })
+    await flush(); cancelled.abort(); finish(channel.info('cancelled'))
+    await rejected; pending.release()
+    expect(channel.calls.filter(call => call.method === 'schedule')).toHaveLength(2)
+    expect(frames.openSessions).toBe(1)
+    await frames.disposeIdle()
+  })
+
+  it('旧服务缺少可选预算字段时保守放弃，不影响正常打开', async () => {
+    const channel = new FakeChannel(), { frames } = managed(channel)
+    channel.answers.stats = () => ({ native: { streams: [], budget: { vramLimitBytes: 10000, vramReservedBytes: 0 } } })
+    expect(await frames.canPreopen()).toBe(false)
+    const warm = frames.preopen(media()); await warm.ready; warm.release()
+    await frames.maintain(new Map())
+    expect(frames.openSessions).toBe(0)
+  })
+
+  it('空白起点尚无已开会话时，使用原生冷启动保留量预打开首个文件', async () => {
+    const channel = new FakeChannel(), { frames } = managed(channel)
+    channel.answers.stats = () => ({ native: { streams: [], budget: { vramLimitBytes: 10000, vramReservedBytes: 0, largestSessionBytes: 0, foregroundReserveBytes: 5000, hardwareSessionLimit: 10, hardwareSessions: 0, decoderSessionLimit: 10 } } })
+    expect(await frames.canPreopen()).toBe(true)
+  })
+
+  it('同文件播放仍在运行时，可以回收其闲置定位会话；不取消当前播放计划', async () => {
+    const channel = new FakeChannel(), { frames, setLimit } = managed(channel)
+    const opened = frames.open(media()), source = await opened.ready
+    await source.clipFrames()!.frameAt(0)
+    const playback = source.schedule([0, 1])
+    const first = playback.next(); await flush()
+    const params = channel.last('schedule') as { streamId: string; scheduleId: string }
+    channel.frame(params.streamId, { kind: 'schedule', id: params.scheduleId, index: 0 }, 0)
+    ;(await first).value?.close()
+    expect(frames.openSessions).toBe(2)
+    setLimit(2500); await frames.maintain(new Map([[media().path, 0]]))
+    expect(frames.openSessions).toBe(1)
+    expect(channel.calls.filter(call => call.method === 'cancelSchedule')).toHaveLength(0)
+    expect(channel.last('closeStream').streamId).not.toBe(params.streamId)
+    await playback.return(); frames.release(opened.key); await frames.disposeIdle()
+  })
+
+  it('前台遇到预算拒绝先等待被取消的后台打开归还名额，再重试；不把预算错误交给当前帧', async () => {
+    const channel = new FakeChannel(), { frames } = managed(channel)
+    let finish!: (value: VideoFrameDecoderInfo) => void
+    channel.answers.openDecoder = params => {
+      if (params.path === 'future.mp4') return new Promise(resolve => { finish = resolve })
+      if (frames.openSessions > 1) throw new VideoEditNativeCallError('预算不足', 'BUDGET_EXCEEDED')
+      return channel.info('foreground')
+    }
+    const warm = frames.preopen(media({ path: 'future.mp4' }), { time: 2, purpose: 'playback', signal: new AbortController().signal })
+    const cancelled = expect(warm.ready).rejects.toMatchObject({ name: 'AbortError' })
+    await flush()
+    const opened = frames.open(media({ path: 'current.mp4' })), source = await opened.ready
+    const current = source.clipFrames()!.frameAt(0)
+    await flush(); finish(channel.info('future'))
+    await cancelled; await current; warm.release()
+    expect(frames.openSessions).toBe(1)
+    expect(channel.last('frameAt')).toMatchObject({ streamId: 'foreground' })
+    frames.release(opened.key); await frames.disposeIdle()
+  })
+
+  it('闲置回收尚未完成时前台等待关闭屏障，不把正在归还的会话算作不可回收占用', async () => {
+    const channel = new FakeChannel()
+    const frames = new VideoEditNativeFrames({ channel, localPath: item => item.path, retainIdle: true, maxSessions: 1 })
+    const warm = frames.preopen(media()); await warm.ready; warm.release()
+    let close!: () => void
+    channel.answers.closeStream = () => new Promise<void>(resolve => { close = resolve })
+    const maintaining = frames.maintain(new Map())
+    await flush()
+    const current = frames.open(media({ path: 'current.mp4' }))
+    const read = (await current.ready).clipFrames()!.frameAt(0)
+    await flush()
+    expect(channel.calls.filter(call => call.method === 'openDecoder')).toHaveLength(1)
+    delete channel.answers.closeStream; close()
+    await maintaining; await read
+    expect(channel.calls.filter(call => call.method === 'openDecoder')).toHaveLength(2)
+    frames.release(current.key); await frames.disposeIdle()
+  })
+})
+
 describe('原生帧源：连续计划', () => {
   it('每个时间恰好一帧或空，按请求顺序交付；帧与缺帧事件乱序到达也按序号对齐；计划外的帧立即交回', async () => {
     const channel = new FakeChannel()

@@ -138,10 +138,10 @@ describe('videoFrames preload', () => {
     await vi.waitFor(() => expect(replies).toHaveLength(4))
     expect(invoke).toHaveBeenCalledWith('videoFrames:openDecoder', { route, path: 'D:/a.mov', purpose: 'playback' })
     expect(invoke).toHaveBeenCalledWith('videoFrames:closeStream', { streamId: 'vf-1' })
-    expect(invoke.mock.calls.map(([channel]) => channel)).not.toContain('videoFrames:stats')
+    expect(invoke).toHaveBeenCalledWith('videoFrames:stats', {})
     expect(replies.find((reply) => reply.id === 7)).toEqual({ type: 'response', id: 7, result: { channel: 'videoFrames:openDecoder', payload: { route, path: 'D:/a.mov', purpose: 'playback' } } })
     expect(replies.find((reply) => reply.id === 8)).toEqual({ type: 'response', id: 8, error: '解码会话不存在或不属于当前窗口', code: 'SESSION_GONE' })
-    expect(replies.find((reply) => reply.id === 9)).toEqual({ type: 'response', id: 9, error: '未知的帧通道请求' })
+    expect(replies.find((reply) => reply.id === 9)).toEqual({ type: 'response', id: 9, result: { channel: 'videoFrames:stats', payload: {} } })
   })
 
   it('routes sound sessions to the port that opened them and transfers each PCM block to the worker without another copy', async () => {

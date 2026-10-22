@@ -1087,4 +1087,48 @@ mod imp {
             }
         }
     }
+
+    #[cfg(test)]
+    mod reuse_measurement {
+        use super::*;
+
+        /// 仅显式运行：两份相同码流、不同文件路径，测复用 AVCodecContext 的最佳收益上界。
+        /// 只测 demux + 解到首帧；共享纹理池未参与，不把这个数字当完整 open_decoder 耗时。
+        #[test]
+        #[ignore = "需要 HENJI_DECODER_REUSE_SAMPLE 指向本机真实视频"]
+        fn compare_recycled_decoder() {
+            let path = std::env::var("HENJI_DECODER_REUSE_SAMPLE").expect("指定真实视频路径");
+            let second = std::env::temp_dir().join(format!("henji-decoder-reuse-{}.mp4", std::process::id()));
+            std::fs::copy(&path, &second).unwrap();
+            let platform = crate::platform::create().unwrap();
+            let paths = [path, second.to_string_lossy().into_owned()];
+            let mut reused: Option<Decoder> = None;
+            let mut rows = Vec::new();
+            for index in 0..14 {
+                // 交替先后顺序，剔除首次冷读，减少文件缓存和显卡频率造成的偏差。
+                for recycle in if index % 2 == 0 { [false, true] } else { [true, false] } {
+                    let started = Instant::now();
+                    let control = StreamControl::new(0);
+                    let input = Input::open(&paths[index % 2], None, control.stop.clone()).unwrap();
+                    let opened = started.elapsed().as_secs_f64() * 1000.0;
+                    let parameters = input.parameters();
+                    let decoder = if recycle && reused.is_some() {
+                        let mut decoder = reused.take().unwrap(); decoder.flush(); decoder
+                    } else {
+                        Decoder::open(DecoderSetup { parameters, time_base: input.stream().time_base, has_alpha: false, purpose: Purpose::Playback, hardware: Some(platform.hardware_device().unwrap()), device_profiles: &|name| platform.has_decoder_profile(name) }).unwrap()
+                    };
+                    let mut primer = Primer { input, decoder, tracker: RunTracker::default(), pending: None, last_fed_dts: None, draining: false, drained: false, tracker_key: None, all_key: true };
+                    let picture = primer.first_frame(&control).unwrap();
+                    assert!(picture.is_hardware(), "此实验必须实际硬解");
+                    let elapsed = started.elapsed().as_secs_f64() * 1000.0;
+                    drop(picture);
+                    if recycle { reused = Some(primer.decoder); }
+                    if index >= 2 { rows.push(json!({ "recycled": recycle, "demuxMs": opened, "firstFrameMs": elapsed })); }
+                }
+            }
+            eprintln!("REUSE_MEASUREMENT {}", json!({ "sample": paths[0], "rows": rows }));
+            drop(reused);
+            std::fs::remove_file(second).unwrap();
+        }
+    }
 }

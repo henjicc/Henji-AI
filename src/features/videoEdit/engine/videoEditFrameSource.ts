@@ -102,6 +102,8 @@ export type VideoEditSnapshot = (sample: VideoEditDecodedPicture, compact: boole
 
 /** One decoder implementation; a renderer owns one instance and every source it opens. */
 export interface VideoEditFrameBackend {
+  /** 原生后端统一按预算保留闲置会话，并由 Worker 低优先级前瞻定位。 */
+  readonly managesIdleSessions?: boolean
   /**
    * Opens the source of `media`, sharing one parsed file among all users of the same path and revision.
    * Every call must be paired with exactly one `release(key)`. A failed open is not cached, so a restored or

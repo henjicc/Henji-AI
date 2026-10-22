@@ -5,7 +5,7 @@ import type { SharedCompilationRequest, SharedCompilationResponse } from './vide
 import { videoEditTimingContext, videoEditTimingEvent, type VideoEditTimingContext } from './videoEditFirstFrameTiming'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import type { VideoProxyResult } from '@/core/videoEdit/proxy'
-import { activeVideoEditClips, videoEditClipMedia, type VideoEditComposition } from '@/core/videoEdit/document'
+import { activeVideoEditClips, type VideoEditComposition } from '@/core/videoEdit/document'
 import { isLikelyLocalImagePath, toFetchableMediaUrl } from '@/services/imageSource'
 import { getPlatform } from '@/platform/runtime'
 import { createLogger } from '@/core/logging'
@@ -321,16 +321,14 @@ export class VideoEditRenderTransport {
       await this.content.check(document)
       if (this.disposed || version !== this.preopenVersion) return
       const mapped = this.mediaDocument(document)
-      const media = [...new Map(activeVideoEditClips(mapped, frame)
-        .filter(clip => clip.kind === 'video')
-        .flatMap(clip => { const media = videoEditClipMedia(mapped, clip); return media && !this.proxies[media.id] ? [[media.path, media] as const] : [] })).values()].slice(0, 2)
-      this.worker.postMessage({ kind: 'preopen', id: 0, media, localPaths: this.localPaths(document), timing: videoEditTimingContext(this.proxyProjectId, document.id) } satisfies RenderRequest)
+      this.worker.postMessage({ kind: 'preopen', id: 0, document: mapped, frame, localPaths: this.localPaths(document), timing: videoEditTimingContext(this.proxyProjectId, document.id) } satisfies RenderRequest)
     }).catch(error => { if (!this.disposed && version === this.preopenVersion) logger.info('序列预打开未完成，按正式渲染路径检查素材', { event: 'video_edit.render.preopen.skipped', error, context: { sequenceId: document.id } }) })
   }
   /** Preview only (task 4.9): later frames draw at 1/divisor of the sequence size; resolves once the worker applied it. */
   async setRenderDivisor(divisor: number): Promise<void> { await this.ready; await this.request({ kind: 'scale', divisor }) }
   /** Paused preview only: positions forward playback at this frame ahead of play, so pressing play starts at once. */
   async armPlayback(frame: number): Promise<void> { await this.ready; await this.request({ kind: 'arm', frame }) }
+  stopPlayback(frame: number): void { if (!this.disposed) this.worker.postMessage({ kind: 'stopPlayback', id: 0, frame } satisfies RenderRequest) }
   /** 智能区域（4.7d）：已分析好的段落交给 Worker，下一次渲染即使用。 */
   setSmartRegions(regions: VideoEditSmartRegionSegments): void { if (!this.disposed) this.worker.postMessage({ kind: 'regions', regions, id: 0 } satisfies RenderRequest) }
   /** Ready pre-rendered windows of the current sequence (program playback only); local files map to worker URLs here. */
