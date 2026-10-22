@@ -61,6 +61,41 @@ async function profileStop(cdp, file) {
 const scrubPercentile = (values, q) => { const sorted = [...values].sort((a, b) => a - b); return sorted.length ? Math.round(sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))]) : null }
 
 /**
+ * 正向播放流畅度（HENJI_OPEN_PICTURE_PLAYBACK=1）：从序列开头播放 ms 毫秒，记录节目每次实际呈现的帧号与时刻，
+ * 统计跳帧、超过 2.5 帧间隔的卡顿（附帧号，便于对照剪辑点）与解码预打开日志。
+ */
+async function measurePlayback(page, ms, after) {
+  await page.locator('[data-video-edit-timeline-viewport]').first().focus(); await page.keyboard.press('Home'); await page.waitForTimeout(1500)
+  await page.evaluate(() => { window.__playFrames = []; const canvas = document.querySelector('canvas[aria-label="剪辑画面"]'); window.__playMo = new MutationObserver(() => window.__playFrames.push([performance.now(), Number(canvas.dataset.presentedFrame)])); window.__playMo.observe(canvas, { attributes: true, attributeFilter: ['data-presented-frame'] }) })
+  await page.keyboard.press('Space'); await page.waitForTimeout(ms); await page.keyboard.press('Space')
+  const frames = await page.evaluate(() => { window.__playMo.disconnect(); return window.__playFrames })
+  const first = frames[0], last = frames.at(-1)
+  if (!first) return { presented: 0 }
+  const span = last[1] - first[1], seconds = (last[0] - first[0]) / 1000, rate = span / seconds
+  const budget = 1000 / Math.max(1, Math.round(rate))
+  let skipped = 0; const stalls = []
+  for (let index = 1; index < frames.length; index++) {
+    const gap = frames[index][0] - frames[index - 1][0], step = frames[index][1] - frames[index - 1][1]
+    if (step > 1) skipped += step - 1
+    if (gap > budget * 2.5) stalls.push({ frame: frames[index][1], gapMs: Math.round(gap), skipped: Math.max(0, step - 1) })
+  }
+  // 每次卡顿那一帧的阶段构成：节目 Worker 回执带累计阶段耗时，与上一次回执相减。
+  const snapshot = await workerSnapshot(page)
+  const program = new Set(snapshot.workers.filter(worker => worker.direct && !worker.terminated).map(worker => worker.id))
+  const renders = snapshot.events.filter(event => event.kind === 'render.completed' && program.has(event.worker) && event.preparationStages).sort((a, b) => a.at - b.at)
+  for (const stall of stalls) {
+    const index = renders.findIndex(event => event.frame === stall.frame)
+    if (index <= 0) continue
+    const event = renders[index], previous = renders[index - 1]
+    stall.renderMs = Math.round(event.elapsedMs); stall.decodeMs = Math.round(event.decodeMs ?? 0); stall.gpuMs = Math.round(event.gpuMs ?? 0)
+    stall.stages = Object.fromEntries(Object.entries(event.preparationStages).map(([name, value]) => [name, Math.round(value.ms - (previous.preparationStages[name]?.ms ?? 0))]).filter(([, ms]) => ms >= 5))
+  }
+  const events = (await page.evaluate(async after => (await window.henjiNative.logging.queryLogEvents({ date: after.slice(0, 10), afterTimestamp: after, keyword: 'video_edit.decode', limit: 3000 })).events, after))
+  const counts = {}; for (const entry of events) counts[entry.event] = (counts[entry.event] ?? 0) + 1
+  return { presented: frames.length, frames: span + 1, seconds: Math.round(seconds * 100) / 100, fps: Math.round(frames.length / seconds * 10) / 10, timelineRate: Math.round(rate * 10) / 10, skipped, stalls, stalledMs: stalls.reduce((sum, stall) => sum + stall.gapMs, 0), decodeEvents: counts }
+}
+
+/**
  * 在节目时间定位条上按给定方式拖动，统计节目实际呈现的帧数、节目 Worker 每帧往返/解码/GPU 耗时与原生取帧请求。
  * `offset(t)`：t∈[0,1] 时播放头相对起点（时间线 30% 处）的秒数；`sweep`：从开头扫到一半。
  */
@@ -195,6 +230,10 @@ function createVideoEditOpenPictureScene() {
             evidence[`scrub${evidence.runs.length}`] = {}
             for (const pattern of patterns) evidence[`scrub${evidence.runs.length}`][pattern.name] = await measureScrub(page, pattern, scrubPercentile)
             console.log('[open-picture-scrub]', JSON.stringify(evidence[`scrub${evidence.runs.length}`]))
+          }
+          if (process.env.HENJI_OPEN_PICTURE_PLAYBACK === '1') {
+            evidence[`playback${evidence.runs.length}`] = await measurePlayback(page, 12000, new Date().toISOString())
+            console.log('[open-picture-playback]', JSON.stringify(evidence[`playback${evidence.runs.length}`]))
           }
           const worker = await workerSnapshot(page)
           const renders = worker.events.filter(event => event.kind === 'render.completed' || event.kind === 'init.completed' || event.kind === 'update.completed').slice(0, 30).map(({ kind, at, frame, elapsedMs, presented, decodeMs, gpuMs, error, preparationStages }) => ({ kind, at: Math.round(at), frame, elapsedMs: Math.round(elapsedMs), presented, decodeMs, gpuMs, error, preparationStages }))
