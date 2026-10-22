@@ -28,6 +28,28 @@ export const BLACK_HEX = '#000000';
  * 与 Audition 的频谱显示同一观感（深紫 → 品红 → 橙 → 亮黄）。
  */
 export const SPECTROGRAM_COLORMAP_HEX = ['#000004', '#1b0c41', '#4a0c6b', '#781c6d', '#a52c60', '#cf4446', '#ed6925', '#fb9b06', '#f7d13d', '#fcffa4'] as const;
+/**
+ * 音频编辑示波区（波形、频谱、导航条）的固定配色，参照 Audition：近黑底、亮绿波形、红色播放头、白色半透明选区。
+ * 和画面底色一样属于“看内容”的区域，不随界面主题变化，深浅主题下读数一致。
+ */
+export const AUDIO_SCOPE_COLORS = {
+  background: '#0b0f0d',
+  grid: 'rgba(255,255,255,0.07)',
+  wave: '#3ce49a',
+  waveCut: '#3a4a43',
+  navigator: '#06120c',
+  navigatorWave: '#2e9e6c',
+  playhead: '#ff4a3d',
+  playheadHandle: '#4c9dff',
+  selection: 'rgba(255,255,255,0.2)',
+  selectionEdge: 'rgba(255,255,255,0.6)',
+  viewWindow: 'rgba(255,255,255,0.1)',
+  viewWindowEdge: 'rgba(255,255,255,0.75)',
+  hover: 'rgba(255,255,255,0.45)',
+  deleted: 'rgba(255,74,61,0.22)',
+  muted: 'rgba(0,0,0,0.5)',
+  pending: 'rgba(250,199,117,0.22)',
+} as const;
 /** 剪辑预设样片的暗角与代码渲染验收形状颜色，属于画面内容，不随界面主题变化。 */
 export const VIDEO_EDIT_AUTHOR_CONTENT_COLORS = {
   vignetteCenter: 'rgba(0,0,0,0)',

@@ -3,9 +3,11 @@ import { SpectrogramView } from '@/components/audio/SpectrogramView'
 import { UiEmpty, UiError, UiLoading } from '@/components/ui'
 import { UI_TEXT_TIMECODE_CLASS } from '@/components/ui/styleTokens'
 import { WaveformView } from '@/components/waveform/WaveformView'
+import type { WaveformPalette } from '@/components/waveform/waveformDraw'
 import { formatSpectrogramHz, spectrogramNyquist, spectrogramTicks, type SpectrogramData } from '@/core/audio/spectrogram'
+import { AUDIO_SCOPE_COLORS } from '@/core/theme/colorTokens'
 import type { WaveformState } from '@/hooks/useWaveformData'
-import { AUDIO_EDIT_MIN_VIEW_FRAMES, type WaveformViewport } from '../waveformViewport'
+import { AUDIO_EDIT_MIN_VIEW_FRAMES, clampViewport, type WaveformViewport } from '../waveformViewport'
 import {
   amplitudeTicks, brushRadius, CLICK_SLOP_PX, formatTimecode, frameAtX, hzAtY, normalizeSpectralSelection, normalizeTimeSelection, panTime, timeTickStep, xAtFrame, yAtHz,
   zoomAmplitude, zoomFrequency, zoomTime,
@@ -14,6 +16,8 @@ import {
 
 export type AudioEditorDisplay = 'both' | 'waveform' | 'spectrum'
 export interface AudioEditorRegion { id: string; start: number; end: number; lowHz?: number; highHz?: number }
+/** 播放位置的来源：播放时每帧都在变，编辑区直接改播放头的位置，不经过 React 重新渲染。 */
+export interface AudioPlayheadSource { current: () => number; subscribe: (listener: (frame: number) => void) => () => void }
 
 export interface AudioSpectralEditorProps {
   sampleRate: number
@@ -29,23 +33,27 @@ export interface AudioSpectralEditorProps {
   tool: AudioEditorTool
   /** 修复画笔的屏幕半径（CSS 像素）。 */
   brushPixels: number
-  playheadFrame: number
+  playhead: AudioPlayheadSource
   onSeek: (frame: number) => void
   selection: AudioTimeSelection | null
   onSelectionChange: (selection: AudioTimeSelection | null) => void
   spectralSelection: AudioSpectralSelection | null
   onSpectralSelectionChange: (selection: AudioSpectralSelection | null) => void
   onBrushStroke: (stroke: AudioBrushStroke) => void
-  /** 已删除 / 已静音的区间（源采样帧），在两个视图上叠一层标记。 */
-  cutRanges: ReadonlyArray<{ start: number; end: number; mode: 'delete' | 'mute' }>
+  /** 已删除 / 已静音 / 待处理（停顿预览）的区间（源采样帧），在两个视图上叠一层标记。 */
+  cutRanges: ReadonlyArray<{ start: number; end: number; mode: 'delete' | 'mute' | 'pending' }>
   /** 已有的修复记录：频谱上画出轮廓，方便找到改过的地方。 */
   repairs: readonly AudioEditorRegion[]
   /** 右键编辑区：宿主弹出针对选区的菜单。 */
   onContextMenu?: (event: React.MouseEvent) => void
+  /** 刻度下方的字幕条（宿主按可见区间排好），没有转写稿时不传。 */
+  captionLane?: React.ReactNode
 }
 
 const RULER_WIDTH = 'w-11'
 const DEFAULT_SPLIT = 0.45
+const SCOPE_WAVE_PALETTE: Partial<WaveformPalette> = { wave: AUDIO_SCOPE_COLORS.wave, wavePlayed: AUDIO_SCOPE_COLORS.wave, clipWave: AUDIO_SCOPE_COLORS.wave, waveCut: AUDIO_SCOPE_COLORS.waveCut, line: AUDIO_SCOPE_COLORS.grid, lineStrong: AUDIO_SCOPE_COLORS.grid }
+const NAVIGATOR_PALETTE: Partial<WaveformPalette> = { ...SCOPE_WAVE_PALETTE, wave: AUDIO_SCOPE_COLORS.navigatorWave, wavePlayed: AUDIO_SCOPE_COLORS.navigatorWave, clipWave: AUDIO_SCOPE_COLORS.navigatorWave }
 
 type Pane = 'waveform' | 'spectrum'
 type Drag =
@@ -54,6 +62,8 @@ type Drag =
   | { kind: 'brush'; pointer: number; points: AudioBrushPoint[] }
   | { kind: 'pan'; pointer: number; x: number; view: WaveformViewport }
   | { kind: 'split'; pointer: number; y: number; top: number; height: number }
+  | { kind: 'playhead'; pointer: number }
+  | { kind: 'navigator'; pointer: number; x: number; width: number; view: WaveformViewport; edge: 'left' | 'right' | 'move' }
 
 function useNonPassiveWheel(ref: React.RefObject<HTMLElement | null>, handler: (event: WheelEvent) => void): void {
   const latest = React.useRef(handler)
@@ -68,46 +78,116 @@ function useNonPassiveWheel(ref: React.RefObject<HTMLElement | null>, handler: (
 }
 
 /**
- * 波形 + 频谱编辑区（参照 Audition 的波形编辑器）：上下两种视图共用一个时间视口，横向缩放永远联动。
- * - 内容区滚轮：以指针为中心缩放时间；Shift + 滚轮平移。
+ * 视口变化按帧合并：一帧里的多次滚轮或拖动只提交最后一次，连续操作时以待提交的视口为准继续累加。
+ */
+function useFrameViewport(view: WaveformViewport, onViewChange: (view: WaveformViewport) => void): { latest: () => WaveformViewport; request: (next: WaveformViewport) => void } {
+  const pending = React.useRef<WaveformViewport | null>(null)
+  const frame = React.useRef<number | null>(null)
+  const commit = React.useRef(onViewChange)
+  commit.current = onViewChange
+  React.useEffect(() => () => { if (frame.current !== null) cancelAnimationFrame(frame.current) }, [])
+  return {
+    latest: () => pending.current ?? view,
+    request: (next) => {
+      pending.current = next
+      if (frame.current !== null) return
+      frame.current = requestAnimationFrame(() => {
+        frame.current = null
+        const value = pending.current
+        pending.current = null
+        if (value) commit.current(value)
+      })
+    },
+  }
+}
+
+/**
+ * 波形 + 频谱编辑区（参照 Audition 的波形编辑器）：顶部导航条看全局，上下两种视图共用一个时间视口，横向缩放永远联动。
+ * - 内容区滚轮：以指针为中心缩放时间；Shift + 滚轮或按住滚轮拖动：平移。
  * - 右侧 dB 刻度上滚轮：波形纵向缩放；Hz 刻度上滚轮：频谱频率范围缩放。
  * - 左键拖动按当前工具：时间选区 / 频谱框选 / 修复画笔 / 平移；单击定位播放头并取消选区。
+ * - 时间刻度上的播放头把手可以拖动；导航条拖动选框平移、拖左右边缘缩放、点空白处跳转。
  * 只负责显示与手势，编辑动作（删除、静音、修复）由宿主根据选区执行。
  */
 export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
-  const { sampleRate, durationFrames, view, display, tool, selection, spectralSelection, playheadFrame } = props
+  const { sampleRate, durationFrames, view, display, tool, selection, spectralSelection } = props
   const nyquist = props.spectrogram ? spectrogramNyquist(props.spectrogram) : sampleRate / 2
   const [amplitudeZoom, setAmplitudeZoom] = React.useState(1)
   const [frequency, setFrequency] = React.useState<FrequencyView>({ minHz: 20, maxHz: nyquist, scale: 'log' })
   const [split, setSplit] = React.useState(DEFAULT_SPLIT)
-  const [livePoints, setLivePoints] = React.useState<AudioBrushPoint[] | null>(null)
-  const [hover, setHover] = React.useState<{ x: number; y: number; pane: Pane } | null>(null)
+  const [trail, setTrail] = React.useState(0)
+  const [brushHover, setBrushHover] = React.useState<{ x: number; y: number } | null>(null)
+  const [contentWidth, setContentWidth] = React.useState(800)
   const drag = React.useRef<Drag | null>(null)
+  const brushPoints = React.useRef<AudioBrushPoint[] | null>(null)
+  const trailFrame = React.useRef<number | null>(null)
   const content = React.useRef<HTMLDivElement | null>(null)
+  const navigator = React.useRef<HTMLDivElement | null>(null)
+  const ruler = React.useRef<HTMLDivElement | null>(null)
   const waveRuler = React.useRef<HTMLDivElement | null>(null)
   const spectrumRuler = React.useRef<HTMLDivElement | null>(null)
-  const waveformPane = React.useRef<HTMLDivElement | null>(null)
   const spectrumPane = React.useRef<HTMLDivElement | null>(null)
+  const hoverLine = React.useRef<HTMLDivElement | null>(null)
+  const hoverLabel = React.useRef<HTMLSpanElement | null>(null)
+  const playheadNodes = React.useRef(new Map<string, HTMLElement>())
   const channels = props.waveform.data?.pyramid.channelCount ?? props.spectrogram?.channelCount ?? 1
   const lanes = React.useMemo(() => Array.from({ length: channels }, (_, index) => index), [channels])
+  const viewport = useFrameViewport(view, props.onViewChange)
 
   React.useEffect(() => { setFrequency(previous => ({ ...previous, maxHz: Math.min(previous.maxHz, nyquist) || nyquist })) }, [nyquist])
+  React.useLayoutEffect(() => {
+    const element = content.current
+    if (!element || typeof ResizeObserver === 'undefined') return
+    let frame: number | null = null
+    const observer = new ResizeObserver(([entry]) => {
+      if (frame !== null) return
+      frame = requestAnimationFrame(() => { frame = null; setContentWidth(entry.contentRect.width) })
+    })
+    observer.observe(element)
+    return () => { observer.disconnect(); if (frame !== null) cancelAnimationFrame(frame) }
+  }, [])
+
+  // 播放头：直接改各条竖线的位置（导航条、刻度把手、内容区），不让整块编辑区每帧重新渲染。
+  const viewRef = React.useRef(view)
+  viewRef.current = view
+  const placePlayhead = React.useCallback((frame: number) => {
+    const current = viewRef.current
+    const inView = frame >= current.start && frame <= current.end
+    for (const [key, node] of playheadNodes.current) {
+      if (key === 'navigator') { node.style.left = `${Math.max(0, Math.min(100, frame / Math.max(1, durationFrames) * 100))}%`; continue }
+      node.style.left = `${xAtFrame(frame, 100, current)}%`
+      // 不在可见区时只是看不见（把手仍保留在无障碍树里，键盘仍可操作）
+      node.style.opacity = inView ? '1' : '0'
+      node.style.pointerEvents = inView ? '' : 'none'
+      if (key === 'handle') { node.setAttribute('aria-valuenow', String(Math.round(frame))); node.setAttribute('aria-valuetext', formatTimecode(frame, sampleRate)) }
+    }
+  }, [durationFrames, sampleRate])
+  const { playhead } = props
+  React.useEffect(() => playhead.subscribe(placePlayhead), [playhead, placePlayhead])
+  React.useLayoutEffect(() => { placePlayhead(playhead.current()) }, [view, playhead, placePlayhead, display, split])
+  const playheadRef = (key: string) => (node: HTMLElement | null) => { if (node) playheadNodes.current.set(key, node); else playheadNodes.current.delete(key) }
 
   const showWave = display !== 'spectrum'
   const showSpectrum = display !== 'waveform'
-  const width = (): number => content.current?.getBoundingClientRect().width ?? 1
   const minimumView = Math.min(durationFrames, AUDIO_EDIT_MIN_VIEW_FRAMES)
 
   useNonPassiveWheel(content, (event) => {
     if (durationFrames <= 0) return
     event.preventDefault()
     const rect = content.current!.getBoundingClientRect()
+    const current = viewport.latest()
     if (event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
-      const delta = (event.shiftKey ? event.deltaY : event.deltaX) / Math.max(1, rect.width) * (view.end - view.start)
-      props.onViewChange(panTime(view, delta, durationFrames))
+      const delta = (event.shiftKey ? event.deltaY : event.deltaX) / Math.max(1, rect.width) * (current.end - current.start)
+      viewport.request(panTime(current, delta, durationFrames))
       return
     }
-    props.onViewChange(zoomTime(view, (event.clientX - rect.left) / Math.max(1, rect.width), event.deltaY, durationFrames, minimumView))
+    viewport.request(zoomTime(current, (event.clientX - rect.left) / Math.max(1, rect.width), event.deltaY, durationFrames, minimumView))
+  })
+  useNonPassiveWheel(navigator, (event) => {
+    if (durationFrames <= 0) return
+    event.preventDefault()
+    // 导航条上滚轮以当前可见区的中心缩放（指针在导航条上的位置对应的是整段，不是可见区）。
+    viewport.request(zoomTime(viewport.latest(), 0.5, event.deltaY, durationFrames, minimumView))
   })
   useNonPassiveWheel(waveRuler, (event) => { event.preventDefault(); setAmplitudeZoom(current => zoomAmplitude(current, event.deltaY)) })
   useNonPassiveWheel(spectrumRuler, (event) => {
@@ -128,17 +208,23 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
     const y = (clientY - rect.top) % lane
     return { frame: frameAtX(clientX - rect.left, rect.width, view), hz: hzAtY(y, lane, frequency) }
   }
+  const scheduleTrail = () => {
+    if (trailFrame.current !== null) return
+    trailFrame.current = requestAnimationFrame(() => { trailFrame.current = null; setTrail(value => value + 1) })
+  }
 
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || durationFrames <= 0) return
+    if ((event.button !== 0 && event.button !== 1) || durationFrames <= 0) return
     const rect = event.currentTarget.getBoundingClientRect()
     const x = event.clientX - rect.left
     const pane = paneAt(event.clientY)
     event.currentTarget.setPointerCapture(event.pointerId)
-    if (tool === 'hand') { drag.current = { kind: 'pan', pointer: event.pointerId, x: event.clientX, view }; return }
+    // 按住滚轮（中键）拖动：任何工具下都是平移。
+    if (event.button === 1 || tool === 'hand') { event.preventDefault(); drag.current = { kind: 'pan', pointer: event.pointerId, x: event.clientX, view }; return }
     if (pane === 'spectrum' && tool === 'brush') {
       const point = spectrumPoint(event.clientX, event.clientY)
-      drag.current = { kind: 'brush', pointer: event.pointerId, points: [point] }; setLivePoints([point]); return
+      brushPoints.current = [point]
+      drag.current = { kind: 'brush', pointer: event.pointerId, points: brushPoints.current }; scheduleTrail(); return
     }
     if (pane === 'spectrum' && tool === 'marquee') {
       drag.current = { kind: 'marquee', pointer: event.pointerId, origin: spectrumPoint(event.clientX, event.clientY), x: event.clientX, y: event.clientY, moved: false }; return
@@ -147,11 +233,15 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
   }
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
-    setHover({ x: event.clientX - rect.left, y: event.clientY - rect.top, pane: paneAt(event.clientY) })
+    const x = event.clientX - rect.left
+    // 悬停竖线与时间读数：直接改样式，不触发渲染。
+    if (hoverLine.current) { hoverLine.current.style.display = ''; hoverLine.current.style.left = `${x}px` }
+    if (hoverLabel.current) { hoverLabel.current.style.display = ''; hoverLabel.current.style.left = `${x}px`; hoverLabel.current.textContent = formatTimecode(frameAtX(x, rect.width, view), sampleRate) }
+    if (tool === 'brush') setBrushHover(paneAt(event.clientY) === 'spectrum' ? { x, y: event.clientY - rect.top } : null)
     const current = drag.current
     if (!current || current.pointer !== event.pointerId) return
-    if (current.kind === 'pan') { props.onViewChange(panTime(current.view, -(event.clientX - current.x) / Math.max(1, rect.width) * (current.view.end - current.view.start), durationFrames)); return }
-    if (current.kind === 'brush') { current.points.push(spectrumPoint(event.clientX, event.clientY)); setLivePoints([...current.points]); return }
+    if (current.kind === 'pan') { viewport.request(panTime(current.view, -(event.clientX - current.x) / Math.max(1, rect.width) * (current.view.end - current.view.start), durationFrames)); return }
+    if (current.kind === 'brush') { current.points.push(spectrumPoint(event.clientX, event.clientY)); scheduleTrail(); return }
     if (current.kind === 'marquee') {
       current.moved ||= Math.hypot(event.clientX - current.x, event.clientY - current.y) > CLICK_SLOP_PX
       if (current.moved) props.onSpectralSelectionChange(normalizeSpectralSelection(current.origin, spectrumPoint(event.clientX, event.clientY), durationFrames, nyquist))
@@ -159,7 +249,7 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
     }
     if (current.kind === 'time') {
       current.moved ||= Math.abs(event.clientX - current.x) > CLICK_SLOP_PX
-      if (current.moved) props.onSelectionChange(normalizeTimeSelection(current.origin, frameAtX(event.clientX - rect.left, rect.width, view), durationFrames))
+      if (current.moved) props.onSelectionChange(normalizeTimeSelection(current.origin, frameAtX(x, rect.width, view), durationFrames))
     }
   }
   const finish = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -169,7 +259,7 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
     const rect = event.currentTarget.getBoundingClientRect()
     if (current.kind === 'brush') {
-      setLivePoints(null)
+      brushPoints.current = null; setTrail(value => value + 1)
       const pane = spectrumPane.current!.getBoundingClientRect()
       props.onBrushStroke({ points: current.points, ...brushRadius(props.brushPixels, pane.width, pane.height / Math.max(1, channels), view, frequency) })
       return
@@ -181,6 +271,51 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
     }
     if (current.kind === 'time') props.onSpectralSelectionChange(null)
   }
+  const leave = () => {
+    if (hoverLine.current) hoverLine.current.style.display = 'none'
+    if (hoverLabel.current) hoverLabel.current.style.display = 'none'
+    setBrushHover(null)
+  }
+
+  // 刻度区：按下即定位播放头并可拖动（把手与刻度空白处一样）。
+  const rulerFrame = (clientX: number) => { const rect = ruler.current!.getBoundingClientRect(); return Math.round(frameAtX(clientX - rect.left, rect.width, view)) }
+  const onRulerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || durationFrames <= 0) return
+    event.currentTarget.setPointerCapture(event.pointerId)
+    drag.current = { kind: 'playhead', pointer: event.pointerId }
+    props.onSeek(rulerFrame(event.clientX))
+  }
+  const onRulerMove = (event: React.PointerEvent<HTMLDivElement>) => { if (drag.current?.kind === 'playhead' && drag.current.pointer === event.pointerId) props.onSeek(rulerFrame(event.clientX)) }
+  const onRulerUp = (event: React.PointerEvent<HTMLDivElement>) => { if (drag.current?.kind === 'playhead') { drag.current = null; event.currentTarget.releasePointerCapture(event.pointerId) } }
+  const onHandleKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = event.shiftKey ? sampleRate : Math.max(1, Math.round((view.end - view.start) / 100))
+    const frame = playhead.current()
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); props.onSeek(Math.max(0, Math.min(durationFrames, frame + (event.key === 'ArrowLeft' ? -step : step)))) }
+    else if (event.key === 'Home' || event.key === 'End') { event.preventDefault(); props.onSeek(event.key === 'Home' ? 0 : durationFrames) }
+  }
+
+  // 导航条：拖动选框平移，拖左右边缘缩放，点空白处把可见区中心移过去。
+  const onNavigatorDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || durationFrames <= 0) return
+    event.preventDefault()
+    const rect = event.currentTarget.getBoundingClientRect()
+    const target = event.target instanceof Element ? event.target.closest('[data-navigator-edge]') : null
+    const edge = (target?.getAttribute('data-navigator-edge') ?? 'jump') as 'left' | 'right' | 'move' | 'jump'
+    const current = viewport.latest()
+    const next = edge === 'jump' ? clampViewport((event.clientX - rect.left) / rect.width * durationFrames - (current.end - current.start) / 2, current.end - current.start, durationFrames) : current
+    if (edge === 'jump') viewport.request(next)
+    drag.current = { kind: 'navigator', pointer: event.pointerId, x: event.clientX, width: rect.width, view: next, edge: edge === 'jump' ? 'move' : edge }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+  const onNavigatorMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const current = drag.current
+    if (current?.kind !== 'navigator' || current.pointer !== event.pointerId) return
+    const delta = (event.clientX - current.x) / Math.max(1, current.width) * durationFrames
+    if (current.edge === 'left') viewport.request({ start: Math.max(0, Math.min(current.view.end - minimumView, current.view.start + delta)), end: current.view.end })
+    else if (current.edge === 'right') viewport.request({ start: current.view.start, end: Math.min(durationFrames, Math.max(current.view.start + minimumView, current.view.end + delta)) })
+    else viewport.request(clampViewport(current.view.start + delta, current.view.end - current.view.start, durationFrames))
+  }
+  const onNavigatorUp = (event: React.PointerEvent<HTMLDivElement>) => { if (drag.current?.kind === 'navigator') { drag.current = null; event.currentTarget.releasePointerCapture(event.pointerId) } }
 
   const onSplitDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return
@@ -199,42 +334,65 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
   const percentX = (frame: number) => `${xAtFrame(frame, 100, view)}%`
   const spanStyle = (start: number, end: number): React.CSSProperties => ({ left: percentX(Math.max(view.start, start)), width: `${Math.max(0, xAtFrame(Math.min(view.end, end), 100, view) - xAtFrame(Math.max(view.start, start), 100, view))}%` })
   const visible = (start: number, end: number) => end > view.start && start < view.end
-  const cursor = tool === 'hand' ? 'cursor-grab' : tool === 'brush' && hover?.pane === 'spectrum' ? 'cursor-none' : tool === 'marquee' && hover?.pane === 'spectrum' ? 'cursor-crosshair' : 'cursor-text'
-  const step = timeTickStep(view, width(), sampleRate)
+  const cursor = tool === 'hand' ? 'cursor-grab' : tool === 'brush' && brushHover ? 'cursor-none' : tool === 'marquee' ? 'cursor-crosshair' : 'cursor-text'
+  const step = timeTickStep(view, contentWidth, sampleRate)
   const ticks: number[] = []
   for (let frame = Math.ceil(view.start / step) * step; frame <= view.end && ticks.length < 200; frame += step) ticks.push(frame)
   const waveTicks = amplitudeTicks(amplitudeZoom)
   const hzTicks = spectrogramTicks(frequency.minHz, frequency.maxHz, frequency.scale)
   const laneFraction = 100 / Math.max(1, channels)
+  const total = Math.max(1, durationFrames)
+  const selectionStyle = { background: AUDIO_SCOPE_COLORS.selection, borderColor: AUDIO_SCOPE_COLORS.selectionEdge }
 
   const spectrumBody = props.spectrogramStatus === 'error'
     ? <UiError message={props.spectrogramError ?? '频谱图没有生成出来。'} {...(props.onRetrySpectrogram ? { onRetry: props.onRetrySpectrogram } : {})} />
     : props.spectrogramStatus === 'loading' && !props.spectrogram ? <UiLoading message="正在生成频谱图…" />
       : <SpectrogramView data={props.spectrogram} lanes={lanes} startFrame={view.start} endFrame={view.end} minHz={frequency.minHz} maxHz={frequency.maxHz} scale={frequency.scale} label="频谱图" />
 
-  return <div className="grid h-full min-h-0 select-none grid-cols-[minmax(0,1fr)_auto] grid-rows-[24px_minmax(0,1fr)] bg-gap" data-audio-spectral-editor data-tool={tool} data-display={display} data-spectrogram-status={props.spectrogramStatus}>
-    {/* 时间刻度 */}
-    <div className="relative overflow-hidden border-b border-line" aria-hidden>
-      {ticks.map(frame => <div key={frame} className="absolute inset-y-0 flex items-end" style={{ left: percentX(frame) }}>
-        <span className="h-2 w-px bg-line-strong" />
-        <span className={`${UI_TEXT_TIMECODE_CLASS} absolute bottom-1.5 left-1 whitespace-nowrap text-2xs text-text3`}>{formatTimecode(frame, sampleRate, step)}</span>
+  return <div className="grid h-full min-h-0 select-none grid-cols-[minmax(0,1fr)_auto] grid-rows-[20px_22px_auto_minmax(0,1fr)] bg-panel" data-audio-spectral-editor data-tool={tool} data-display={display} data-spectrogram-status={props.spectrogramStatus}
+    data-view-start={Math.round(view.start)} data-view-end={Math.round(view.end)}>
+    {/* 导航条：整段的缩略波形，框住的是当前可见范围 */}
+    <div ref={navigator} className="relative mx-1 mt-1 touch-none overflow-hidden rounded-hairline" style={{ background: AUDIO_SCOPE_COLORS.navigator }} aria-label="全局导航：拖动选框平移，拖左右边缘缩放，点空白处跳转"
+      onPointerDown={onNavigatorDown} onPointerMove={onNavigatorMove} onPointerUp={onNavigatorUp} onPointerCancel={onNavigatorUp} onLostPointerCapture={() => { if (drag.current?.kind === 'navigator') drag.current = null }}>
+      {props.waveform.data && <div className="pointer-events-none absolute inset-0"><WaveformView waveform={props.waveform} tier="mini" startSeconds={0} endSeconds={durationFrames / Math.max(1, sampleRate)} palette={NAVIGATOR_PALETTE} /></div>}
+      <div data-navigator-edge="move" className="absolute inset-y-0 cursor-grab rounded-hairline border active:cursor-grabbing"
+        style={{ left: `${view.start / total * 100}%`, width: `${Math.max(0.4, (view.end - view.start) / total * 100)}%`, background: AUDIO_SCOPE_COLORS.viewWindow, borderColor: AUDIO_SCOPE_COLORS.viewWindowEdge }}>
+        {(['left', 'right'] as const).map(edge => <div key={edge} data-navigator-edge={edge} className={`absolute inset-y-0 w-2 cursor-ew-resize ${edge === 'left' ? '-left-1' : '-right-1'}`} />)}
+      </div>
+      <div ref={playheadRef('navigator')} className="pointer-events-none absolute inset-y-0 w-px" style={{ background: AUDIO_SCOPE_COLORS.playhead }} />
+    </div>
+    <div className={`${RULER_WIDTH}`} aria-hidden />
+
+    {/* 时间刻度：按下定位播放头，拖动把手或刻度跟着走 */}
+    <div ref={ruler} className="relative cursor-pointer touch-none overflow-hidden border-b border-line" onPointerDown={onRulerDown} onPointerMove={onRulerMove} onPointerUp={onRulerUp} onPointerCancel={onRulerUp}>
+      {ticks.map(frame => <div key={frame} className="pointer-events-none absolute inset-y-0 flex items-end" style={{ left: percentX(frame) }}>
+        <span className="h-1.5 w-px bg-line-strong" />
+        <span className={`${UI_TEXT_TIMECODE_CLASS} absolute bottom-1 left-1 whitespace-nowrap text-2xs text-text3`}>{formatTimecode(frame, sampleRate, step)}</span>
       </div>)}
-      {selection && visible(selection.start, selection.end) && <div className="absolute inset-y-0 bg-accent-tint" style={spanStyle(selection.start, selection.end)} />}
-      <div className="absolute inset-y-0 w-px bg-accent" style={{ left: percentX(playheadFrame) }} />
+      {selection && visible(selection.start, selection.end) && <div className="pointer-events-none absolute inset-y-0" style={{ ...spanStyle(selection.start, selection.end), background: AUDIO_SCOPE_COLORS.selection }} />}
+      <span ref={hoverLabel} className={`${UI_TEXT_TIMECODE_CLASS} pointer-events-none absolute top-0.5 z-raised ml-1 whitespace-nowrap rounded-hairline bg-panel px-0.5 text-2xs text-text1`} style={{ display: 'none' }} />
+      <div ref={playheadRef('handle')} role="slider" tabIndex={0} aria-label="播放位置" aria-valuemin={0} aria-valuemax={durationFrames} onKeyDown={onHandleKey}
+        className="absolute bottom-0 h-full w-3 -translate-x-1/2 cursor-ew-resize outline-none focus-visible:ring-2 focus-visible:ring-accent-ring" data-audio-playhead-handle>
+        {/* 播放头把手：倒三角，与 Audition 一致画在刻度底部 */}
+        <svg viewBox="0 0 12 9" className="absolute bottom-0 left-0 h-[9px] w-3" aria-hidden>{/* icon-token-allow: 播放头把手是定位图形，不是图标 */}<path d="M0 0h12L6 9z" fill={AUDIO_SCOPE_COLORS.playheadHandle} /></svg>
+      </div>
     </div>
     <div className={`${RULER_WIDTH} border-b border-l border-line`} aria-hidden />
+    {props.captionLane ? <div className="relative h-7 overflow-hidden border-b border-gap">{props.captionLane}</div> : <div />}
+    {props.captionLane ? <div className={`${RULER_WIDTH} border-b border-l border-gap`} aria-hidden /> : <div />}
 
     {/* 内容区：波形在上、频谱在下，共用时间视口 */}
-    <div ref={content} className={`relative flex min-h-0 touch-none flex-col overflow-hidden ${cursor}`} role="application" aria-label="音频波形与频谱编辑区"
-      onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={finish} onPointerCancel={finish} onLostPointerCapture={() => { drag.current = null; setLivePoints(null) }}
-      onPointerLeave={() => setHover(null)} onContextMenu={props.onContextMenu}>
-      {showWave && <div ref={waveformPane} className="relative min-h-0" style={{ height: showSpectrum ? `${split * 100}%` : '100%' }}>
+    <div ref={content} className={`relative flex min-h-0 touch-none flex-col overflow-hidden ${cursor}`} style={{ background: AUDIO_SCOPE_COLORS.background }} role="application" aria-label="音频波形与频谱编辑区"
+      onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={finish} onPointerCancel={finish} onLostPointerCapture={() => { if (drag.current?.kind === 'brush') { brushPoints.current = null; setTrail(value => value + 1) } drag.current = null }}
+      onPointerLeave={leave} onContextMenu={props.onContextMenu} onAuxClick={event => event.preventDefault()}>
+      {showWave && <div className="relative min-h-0" style={{ height: showSpectrum ? `${split * 100}%` : '100%' }}>
+        {lanes.map(lane => <div key={lane} className="pointer-events-none absolute inset-x-0 h-px" style={{ top: `${(lane + 0.5) * laneFraction}%`, background: AUDIO_SCOPE_COLORS.grid }} />)}
         {props.waveform.data
-          ? <WaveformView waveform={props.waveform} startSeconds={view.start / sampleRate} endSeconds={view.end / sampleRate} lanes={lanes} gain={amplitudeZoom} label="音频波形" />
+          ? <WaveformView waveform={props.waveform} startSeconds={view.start / sampleRate} endSeconds={view.end / sampleRate} lanes={lanes} gain={amplitudeZoom} palette={SCOPE_WAVE_PALETTE} label="音频波形" />
           : props.waveform.status === 'error' ? <UiError message={props.waveform.error ?? '波形没有读出来。'} /> : <UiLoading message="正在读取波形…" />}
         {lanes.slice(1).map(lane => <div key={lane} className="pointer-events-none absolute inset-x-0 h-px bg-line" style={{ top: `${lane * laneFraction}%` }} />)}
       </div>}
-      {showWave && showSpectrum && <div className="relative h-1.5 shrink-0 cursor-row-resize bg-window hover:bg-hover" role="separator" aria-orientation="horizontal" aria-label="调整波形与频谱的高度"
+      {showWave && showSpectrum && <div className="relative h-1.5 shrink-0 cursor-row-resize bg-gap hover:bg-hover" role="separator" aria-orientation="horizontal" aria-label="调整波形与频谱的高度"
         onPointerDown={onSplitDown} onPointerMove={onSplitMove} onPointerUp={onSplitUp} />}
       {showSpectrum && <div ref={spectrumPane} className="relative min-h-0 flex-1">
         {spectrumBody}
@@ -243,17 +401,19 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
         {lanes.map(lane => <React.Fragment key={lane}>
           {props.repairs.filter(region => visible(region.start, region.end) && region.lowHz !== undefined).map(region => <div key={region.id} className="pointer-events-none absolute border border-dashed border-on-media/70"
             style={{ ...spanStyle(region.start, region.end), top: `${lane * laneFraction + yAtHz(region.highHz!, laneFraction, frequency)}%`, height: `${yAtHz(region.lowHz!, laneFraction, frequency) - yAtHz(region.highHz!, laneFraction, frequency)}%` }} />)}
-          {spectralSelection && visible(spectralSelection.start, spectralSelection.end) && <div className="pointer-events-none absolute border border-accent-ring bg-accent-tint"
-            style={{ ...spanStyle(spectralSelection.start, spectralSelection.end), top: `${lane * laneFraction + yAtHz(spectralSelection.highHz, laneFraction, frequency)}%`, height: `${yAtHz(spectralSelection.lowHz, laneFraction, frequency) - yAtHz(spectralSelection.highHz, laneFraction, frequency)}%` }} />}
+          {spectralSelection && visible(spectralSelection.start, spectralSelection.end) && <div className="pointer-events-none absolute border"
+            style={{ ...spanStyle(spectralSelection.start, spectralSelection.end), ...selectionStyle, top: `${lane * laneFraction + yAtHz(spectralSelection.highHz, laneFraction, frequency)}%`, height: `${yAtHz(spectralSelection.lowHz, laneFraction, frequency) - yAtHz(spectralSelection.highHz, laneFraction, frequency)}%` }} />}
         </React.Fragment>)}
-        {livePoints && <BrushTrail points={livePoints} radius={props.brushPixels} view={view} frequency={frequency} lanes={channels} />}
-        {tool === 'brush' && hover?.pane === 'spectrum' && !livePoints && spectrumPane.current && <div className="pointer-events-none absolute rounded-full border border-on-media"
-          style={{ left: hover.x - props.brushPixels, top: hover.y - (spectrumPane.current.offsetTop) - props.brushPixels, width: props.brushPixels * 2, height: props.brushPixels * 2 }} />}
+        {brushPoints.current && <BrushTrail version={trail} points={brushPoints.current} radius={props.brushPixels} view={view} frequency={frequency} lanes={channels} />}
+        {tool === 'brush' && brushHover && !brushPoints.current && spectrumPane.current && <div className="pointer-events-none absolute rounded-full border border-on-media"
+          style={{ left: brushHover.x - props.brushPixels, top: brushHover.y - spectrumPane.current.offsetTop - props.brushPixels, width: props.brushPixels * 2, height: props.brushPixels * 2 }} />}
       </div>}
-      {/* 跨两种视图的标记：删除/静音、时间选区、播放头 */}
-      {props.cutRanges.filter(range => visible(range.start, range.end)).map(range => <div key={`${range.start}-${range.end}`} className={`pointer-events-none absolute inset-y-0 ${range.mode === 'delete' ? 'bg-danger-tint' : 'bg-scrim-soft'}`} style={spanStyle(range.start, range.end)} />)}
-      {selection && visible(selection.start, selection.end) && <div className="pointer-events-none absolute inset-y-0 border-x border-accent-ring bg-accent-tint" style={spanStyle(selection.start, selection.end)} />}
-      <div className="pointer-events-none absolute inset-y-0 w-px bg-accent" style={{ left: percentX(playheadFrame) }} />
+      {/* 跨两种视图的标记：删除/静音、时间选区、悬停线、播放头 */}
+      {props.cutRanges.filter(range => visible(range.start, range.end)).map(range => <div key={`${range.mode}:${range.start}-${range.end}`} className="pointer-events-none absolute inset-y-0" data-audio-overlay={range.mode === 'pending' ? 'preview' : range.mode === 'delete' ? 'deleted' : 'mute'}
+        style={{ ...spanStyle(range.start, range.end), background: AUDIO_SCOPE_COLORS[range.mode === 'delete' ? 'deleted' : range.mode === 'mute' ? 'muted' : 'pending'] }} />)}
+      {selection && visible(selection.start, selection.end) && <div className="pointer-events-none absolute inset-y-0 border-x" data-audio-selection style={{ ...spanStyle(selection.start, selection.end), ...selectionStyle }} />}
+      <div ref={hoverLine} className="pointer-events-none absolute inset-y-0 w-px" style={{ display: 'none', background: AUDIO_SCOPE_COLORS.hover }} />
+      <div ref={playheadRef('content')} className="pointer-events-none absolute inset-y-0 w-px" style={{ background: AUDIO_SCOPE_COLORS.playhead }} data-audio-playhead />
     </div>
 
     {/* 右侧刻度：dB 在波形旁、Hz 在频谱旁；在刻度上滚轮做纵向缩放 */}
@@ -275,8 +435,8 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
   </div>
 }
 
-/** 画笔拖动中的轨迹预览（屏幕坐标即时绘制，松手后交给宿主变成修复记录）。 */
-function BrushTrail({ points, radius, view, frequency, lanes }: { points: readonly AudioBrushPoint[]; radius: number; view: WaveformViewport; frequency: FrequencyView; lanes: number }) {
+/** 画笔拖动中的轨迹预览（屏幕坐标即时绘制，松手后交给宿主变成修复记录）；每帧最多重画一次。 */
+function BrushTrail({ points, radius, view, frequency, lanes }: { version: number; points: readonly AudioBrushPoint[]; radius: number; view: WaveformViewport; frequency: FrequencyView; lanes: number }) {
   const host = React.useRef<SVGSVGElement | null>(null)
   const [size, setSize] = React.useState({ width: 0, height: 0 })
   React.useLayoutEffect(() => { const rect = host.current?.getBoundingClientRect(); if (rect) setSize({ width: rect.width, height: rect.height }) }, [])

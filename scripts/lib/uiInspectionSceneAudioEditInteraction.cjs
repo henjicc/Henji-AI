@@ -64,8 +64,13 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
       await page.locator(`[data-project-id="${id}"]:visible`).first().click()
       await page.waitForFunction(() => Boolean(window.__audioInteractionTap))
       await page.evaluate(() => window.__restoreAudioInteractionTap())
-      const waveform = page.getByRole('slider', { name: '口播波形定位' })
+      const waveform = page.getByRole('application', { name: '音频波形与频谱编辑区' })
+      const handle = page.getByRole('slider', { name: '播放位置' })
+      const editor = page.locator('[data-audio-spectral-editor]')
       await waveform.waitFor()
+      // 处理参数在“处理”面板（经典布局里与文字稿同组），先切到它
+      const showPanel = (name) => page.locator('.dv-tab').filter({ hasText: name }).first().click()
+      await showPanel('处理')
       const waitPreview = async () => page.waitForFunction(() => !document.body.textContent.includes('正在更新停顿预览…'))
       await waitPreview()
       assert.equal(await page.getByRole('slider', { name: '静音阈值', exact: true }).isVisible(), false, '默认隐藏参数')
@@ -76,11 +81,12 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
         await waveform.scrollIntoViewIfNeeded()
         const { x, y, hit } = await waveform.evaluate((element, { seconds, rate }) => {
           const rect = element.getBoundingClientRect()
-          const start = Number(element.dataset.viewStart)
-          const end = Number(element.dataset.viewEnd)
+          const view = element.closest('[data-audio-spectral-editor]')
+          const start = Number(view.dataset.viewStart)
+          const end = Number(view.dataset.viewEnd)
           const ratio = (seconds * rate - start) / Math.max(1, end - start)
           const px = rect.left + rect.width * Math.min(1, Math.max(0, ratio))
-          const py = Math.min(rect.top + rect.height * 0.65, window.innerHeight - 4)
+          const py = Math.min(rect.top + rect.height * 0.25, window.innerHeight - 4)
           const target = document.elementFromPoint(px, py)
           return { x: px, y: py, hit: ratio >= 0 && ratio <= 1 && Boolean(target) && element.contains(target) }
         }, { seconds, rate })
@@ -95,17 +101,17 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
         await page.mouse.move(to.x, to.y, { steps: 12 })
         await page.mouse.up()
       }
-      const playhead = () => waveform.evaluate((element) => Number(element.getAttribute('aria-valuenow')))
+      const playhead = () => handle.evaluate((element) => Number(element.getAttribute('aria-valuenow')))
       const seek = async (seconds) => {
         const point = await pointAt(seconds)
         await page.mouse.click(point.x, point.y)
-        await page.waitForFunction(({ frame, tolerance }) => Math.abs(Number(document.querySelector('[aria-label="口播波形定位"]').getAttribute('aria-valuenow')) - frame) <= tolerance,
+        await page.waitForFunction(({ frame, tolerance }) => Math.abs(Number(document.querySelector('[data-audio-playhead-handle]').getAttribute('aria-valuenow')) - frame) <= tolerance,
           { frame: seconds * rate, tolerance: rate * 0.05 })
       }
       // 点播放后等播放头真的走起来再采样，避免“还没出声”被误判为静音或把起播延迟算进结果
       const playFrom = async (frame) => {
-        await page.getByTitle('播放', { exact: true }).click()
-        await page.waitForFunction((from) => Number(document.querySelector('[aria-label="口播波形定位"]').getAttribute('aria-valuenow')) > from,
+        await page.getByRole('button', { name: '播放', exact: true }).click()
+        await page.waitForFunction((from) => Number(document.querySelector('[data-audio-playhead-handle]').getAttribute('aria-valuenow')) > from,
           frame + rate * 0.1, { timeout: 5000 })
         await page.waitForTimeout(80)
       }
@@ -114,10 +120,10 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
       await page.keyboard.press('m')
       await waitCuts(1)
       assert.equal(await page.locator('[data-audio-overlay="mute"]').count(), 1)
-      await waveform.focus(); await page.keyboard.press('Delete'); await waitCuts(2)
-      assert.equal(await page.locator('[data-audio-deleted]').count(), 1)
+      await page.keyboard.press('Delete'); await waitCuts(2)
+      assert.equal(await page.locator('[data-audio-overlay="deleted"]').count(), 1)
       await page.getByRole('button', { name: '撤销；长按撤销所有修改', exact: true }).click(); await waitCuts(1)
-      assert.equal(await page.locator('[data-audio-deleted]').count(), 0)
+      assert.equal(await page.locator('[data-audio-overlay="deleted"]').count(), 0)
       const rms = () => page.evaluate(() => {
         const samples = new Float32Array(window.__audioInteractionTap.fftSize)
         window.__audioInteractionTap.getFloatTimeDomainData(samples)
@@ -133,11 +139,11 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
       const mutedPlayhead = await playhead()
       assert.ok(mutedPlayhead >= muted.startFrame && mutedPlayhead < muted.endFrame, `采样时播放头应在静音区间内（${mutedPlayhead} 不在 ${muted.startFrame}–${muted.endFrame}）`)
       assert.ok(mutedLevel < 0.001, `剪后试听应输出真实静音（RMS ${mutedLevel.toFixed(4)}）`)
-      await page.getByTitle('暂停', { exact: true }).click()
+      await page.getByRole('button', { name: '暂停', exact: true }).click()
       await page.getByRole('radio', { name: '原始', exact: true }).click(); await seek(listenAt)
       await playFrom(listenAt * rate)
       assert.ok(await rms() > 0.02, '原始对比保留原声音')
-      await page.getByTitle('暂停', { exact: true }).click()
+      await page.getByRole('button', { name: '暂停', exact: true }).click()
       await page.getByRole('radio', { name: '剪后', exact: true }).click()
       const targetPath = path.join(directory, '静音导出.wav')
       await page.evaluate(async ({ id, targetPath }) => {
@@ -156,10 +162,10 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
       await page.mouse.click(restorePoint.x, restorePoint.y, { button: 'right' })
       await page.getByText('恢复选区', { exact: true }).last().click()
       await waitCuts(0)
-      // 窄窗口下选区操作收进播放条右侧的“更多”浮层：放不下时先展开它
-      const clearSelection = page.getByRole('button', { name: '取消选区', exact: true })
-      if (!await clearSelection.isVisible()) await page.locator('[data-overflow-menu] button').last().click()
-      await clearSelection.click()
+      // Esc 取消选区（编辑器面板接收按键）
+      await page.locator('[data-audio-edit-panel="editor"]').focus()
+      await page.keyboard.press('Escape')
+      await page.waitForFunction(() => !document.querySelector('[data-audio-selection]'))
       await page.getByText('自定义处理参数', { exact: true }).click()
       const threshold = page.getByRole('slider', { name: '静音阈值', exact: true })
       await threshold.focus()
@@ -176,7 +182,7 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
       await page.getByRole('button', { name: '撤销；长按撤销所有修改', exact: true }).click(); await waitCuts(0)
       await waitForAudioEditContent(page, id, (content) => content.transcript[2].included)
       await page.getByText('自定义处理参数', { exact: true }).click()
-      await page.getByTitle('界面设置', { exact: true }).click()
+      await page.getByRole('button', { name: '文字稿显示设置', exact: true }).click()
       const padding = page.getByRole('slider', { name: '文字左右留白', exact: true })
       await padding.focus(); await page.keyboard.press('Home')
       for (let step = 0; step < 8; step++) await page.keyboard.press('ArrowRight')
@@ -193,30 +199,31 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
       await page.waitForFunction((scale) => document.documentElement.dataset.uiScale === scale, initialScale)
       await page.keyboard.press('Escape')
       await page.waitForFunction(() => !document.querySelector('[role="dialog"]'))
+      await showPanel('文字稿')
       assert.ok(await page.locator('[data-audio-word]').first().evaluate((element) => parseFloat(getComputedStyle(element).fontSize) >= 28))
       const action = page.getByRole('button', { name: '撤销；长按撤销所有修改', exact: true })
       assert.equal(await action.evaluate((element) => getComputedStyle(element).backgroundColor), 'rgba(0, 0, 0, 0)', '静息动作不应绘制按钮背景')
       await page.locator('[data-audio-word]').first().hover()
       await page.keyboard.down('Control'); await page.mouse.wheel(0, -300); await page.keyboard.up('Control')
       await page.waitForFunction((scale) => document.documentElement.dataset.uiScale !== scale, initialScale)
-      await page.getByTitle('界面设置', { exact: true }).click()
+      await page.getByRole('button', { name: '文字稿显示设置', exact: true }).click()
       await pickUiScale(page, initialScale)
       await page.waitForFunction((scale) => document.documentElement.dataset.uiScale === scale, initialScale)
       await page.keyboard.press('Escape')
       await waveform.hover()
-      await page.keyboard.down('Control'); await page.mouse.wheel(0, -400); await page.keyboard.up('Control')
+      await page.mouse.wheel(0, -400)
       await page.waitForFunction(() => {
-        const waveform = document.querySelector('[aria-label="口播波形定位"]')
-        return Number(waveform.dataset.viewEnd) - Number(waveform.dataset.viewStart) < 48000 * 16
+        const view = document.querySelector('[data-audio-spectral-editor]')
+        return Number(view.dataset.viewEnd) - Number(view.dataset.viewStart) < 48000 * 16
       })
       assert.equal(await page.evaluate(() => document.documentElement.dataset.uiScale), initialScale, '波形缩放不应改变整个界面大小')
-      const viewStart = Number(await waveform.getAttribute('data-view-start'))
+      const viewStart = Number(await editor.getAttribute('data-view-start'))
       const bounds = await waveform.boundingBox()
       await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
       await page.mouse.down({ button: 'middle' })
       await page.mouse.move(bounds.x + bounds.width / 3, bounds.y + bounds.height / 2, { steps: 8 })
       await page.mouse.up({ button: 'middle' })
-      assert.ok(Number(await waveform.getAttribute('data-view-start')) > viewStart, '中键平移必须保留')
+      assert.ok(Number(await editor.getAttribute('data-view-start')) > viewStart, '中键平移必须保留')
       await page.getByRole('button', { name: '显示全部', exact: true }).click()
       await waitPreview()
       // 标准截图需要口播保持打开；口播与临时音频在截图后由 cleanup 删除。

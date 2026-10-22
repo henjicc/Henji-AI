@@ -123,7 +123,7 @@ async function openAudioEditList(page) {
 /** “新建口播”= 导入音频或视频（对话框已替换为测试音频），导入即建草稿并进入编辑器。 */
 async function importDraft(page) {
   await button(page, '新建口播').click()
-  await page.getByRole('slider', { name: '口播波形定位' }).waitFor({ state: 'visible', timeout: 20000 })
+  await page.getByRole('slider', { name: '播放位置' }).waitFor({ state: 'visible', timeout: 20000 })
   await page.waitForTimeout(300)
 }
 
@@ -220,7 +220,7 @@ async function runAudioEditDocumentsRestart({ launch, userDataDir, outDir }) {
     let prompt = await leavePrompt(page)
     await shot('graphite-leave-prompt')
     await prompt.getByRole('button', { name: '取消', exact: true }).click()
-    await page.getByRole('slider', { name: '口播波形定位' }).waitFor({ state: 'visible', timeout: 5000 })
+    await page.getByRole('slider', { name: '播放位置' }).waitFor({ state: 'visible', timeout: 5000 })
     assert.equal(fs.existsSync(draftOne.path), true, '取消后草稿文件必须还在')
 
     // 保存：起名查重（同一文件夹已有“口播查重”），换名后转正
@@ -271,7 +271,7 @@ async function runAudioEditDocumentsRestart({ launch, userDataDir, outDir }) {
 
     // 重新打开已保存的口播再编辑：离开时不询问，改动写进文件
     await card(page, saved.id).click()
-    await page.getByRole('slider', { name: '口播波形定位' }).waitFor({ state: 'visible', timeout: 20000 })
+    await page.getByRole('slider', { name: '播放位置' }).waitFor({ state: 'visible', timeout: 20000 })
     await typeReferenceScript(page, '第二次修改的参考稿')
     await clickBack(page)
     await button(page, '新建口播').waitFor({ state: 'visible', timeout: 15000 })
@@ -301,7 +301,7 @@ async function runAudioEditDocumentsRestart({ launch, userDataDir, outDir }) {
     await shot('paper-list-after-restart')
 
     await card(second, saved.id).click()
-    await second.getByRole('slider', { name: '口播波形定位' }).waitFor({ state: 'visible', timeout: 20000 })
+    await second.getByRole('slider', { name: '播放位置' }).waitFor({ state: 'visible', timeout: 20000 })
     const area = second.getByPlaceholder('用于对齐内容，不替代真实识别文本')
     if (!(await area.isVisible().catch(() => false))) await second.getByText('参考逐字稿', { exact: true }).first().click()
     assert.equal(await area.inputValue(), '第二次修改的参考稿', '重新打开后界面内容应与文件一致')

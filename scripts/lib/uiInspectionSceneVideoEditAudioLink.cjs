@@ -58,7 +58,7 @@ function createVideoEditAudioLinkScene() {
       await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.2, { steps: 8 })
       await page.mouse.up()
       await page.getByRole('button', { name: '删除', exact: true }).click()
-      await page.waitForFunction(() => document.querySelector('[data-audio-spectral-editor] .bg-danger-tint'), null, { timeout: 10000 })
+      await page.waitForFunction(() => document.querySelector('[data-audio-spectral-editor] [data-audio-overlay="deleted"]'), null, { timeout: 10000 })
       await capture('audio-link-02-deleted')
 
       await back.click()

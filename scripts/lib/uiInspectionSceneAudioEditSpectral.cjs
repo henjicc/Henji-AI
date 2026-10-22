@@ -117,6 +117,44 @@ function createAudioEditSpectralScene({ setupToolbox, clickNamedButton }) {
       await capture('spectral-03-selection')
       await page.keyboard.press('Escape')
 
+      // 按住滚轮拖动：任何工具下都是平移；播放位置不变。
+      const view = () => editor.evaluate(element => ({ start: Number(element.dataset.viewStart), end: Number(element.dataset.viewEnd) }))
+      const handle = page.getByRole('slider', { name: '播放位置' })
+      const before = await view()
+      const position = await handle.getAttribute('aria-valuenow')
+      await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.3)
+      await page.mouse.down({ button: 'middle' })
+      await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.3, { steps: 8 })
+      await page.mouse.up({ button: 'middle' })
+      await page.waitForFunction((start) => Number(document.querySelector('[data-audio-spectral-editor]').dataset.viewStart) > start, before.start)
+      assert.equal(await handle.getAttribute('aria-valuenow'), position, '中键平移不能移动播放头')
+
+      // 导航条：点空白处把可见区移过去，框住的范围跟着走。
+      const navigator = page.locator('[data-navigator-edge="move"]')
+      const strip = await navigator.evaluate(element => element.parentElement.getBoundingClientRect().toJSON())
+      await page.mouse.click(strip.x + strip.width * 0.05, strip.y + strip.height / 2)
+      await page.waitForFunction(() => Number(document.querySelector('[data-audio-spectral-editor]').dataset.viewStart) < 48000 * 1.5)
+      // 刻度上拖动播放头：按下定位、拖动跟随。
+      const ruler = await handle.evaluate(element => element.parentElement.getBoundingClientRect().toJSON())
+      await page.mouse.move(ruler.x + ruler.width * 0.2, ruler.y + ruler.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(ruler.x + ruler.width * 0.5, ruler.y + ruler.height / 2, { steps: 6 })
+      await page.mouse.up()
+      const range = await view()
+      const frame = Number(await handle.getAttribute('aria-valuenow'))
+      assert.ok(Math.abs(frame - (range.start + (range.end - range.start) * 0.5)) < (range.end - range.start) * 0.03, `拖动播放头应停在刻度中间：${frame}`)
+      await capture('spectral-05-playhead')
+
+      // 工作区布局：三种内置布局切换，每种都完整显示七个面板的标签。
+      for (const name of ['口播', '专注', '经典']) {
+        await page.getByRole('button', { name: /^(工作区|经典|口播|专注)$/ }).click()
+        await page.getByRole('menuitemradio', { name, exact: true }).click()
+        await page.waitForTimeout(400)
+        assert.equal(await page.locator('.dv-tab').count(), 7, `${name}布局应有七个面板`)
+        await editor.waitFor({ state: 'visible' })
+        await capture(`spectral-layout-${name}`)
+      }
+
     },
   }
 }

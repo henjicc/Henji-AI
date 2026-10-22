@@ -26,6 +26,8 @@ export interface WaveformViewProps {
   className?: string
   /** 振幅倍数，覆盖自动显示增益（音频编辑按真实电平显示并支持纵向缩放）。 */
   gain?: number
+  /** 覆盖主题配色（音频编辑示波区用固定的 Audition 式配色）。 */
+  palette?: Partial<WaveformPalette>
   /** 可访问名称；不传时视为装饰。 */
   label?: string
   /** 悬停读数使用的总时长（秒）；默认可见区间长度。 */
@@ -41,7 +43,7 @@ function readout(seconds: number): string {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
 }
 
-export const WaveformView = React.memo(function WaveformView({ waveform, startSeconds, endSeconds, lanes, tier = 'standard', tone = 'neutral', playedSeconds, cutRanges, gain, height, className, label, durationSeconds, onSeek, onSeekStart, onSeekMove, onSeekEnd }: WaveformViewProps) {
+export const WaveformView = React.memo(function WaveformView({ waveform, startSeconds, endSeconds, lanes, tier = 'standard', tone = 'neutral', playedSeconds, cutRanges, gain, palette: paletteOverride, height, className, label, durationSeconds, onSeek, onSeekStart, onSeekMove, onSeekEnd }: WaveformViewProps) {
   const host = React.useRef<HTMLDivElement | null>(null)
   const canvas = React.useRef<HTMLCanvasElement | null>(null)
   const [size, setSize] = React.useState({ width: 0, height: 0 })
@@ -50,7 +52,7 @@ export const WaveformView = React.memo(function WaveformView({ waveform, startSe
   const lastRatio = React.useRef(0)
   const dragged = React.useRef(false)
   const { colors } = useThemeTokens()
-  const palette = React.useMemo<WaveformPalette>(() => ({ wave: colors.wave, wavePlayed: colors.wavePlayed, waveCut: colors.waveCut, clipWave: colors.clipWave, line: colors.line, lineStrong: colors.lineStrong }), [colors])
+  const palette = React.useMemo<WaveformPalette>(() => ({ wave: colors.wave, wavePlayed: colors.wavePlayed, waveCut: colors.waveCut, clipWave: colors.clipWave, line: colors.line, lineStrong: colors.lineStrong, ...paletteOverride }), [colors, paletteOverride])
   const data = waveform.data
   const pyramid = data?.pyramid
   const rate = pyramid?.sampleRate ?? 1

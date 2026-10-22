@@ -131,10 +131,10 @@
       "reason": "日期面板宽度按 7 列 32 宽日期格加 6 个 4px 间距（= 248）定，由日历网格决定"
     },
     {
-      "file": "src/features/audioEdit/AudioEditTimeline.tsx",
+      "file": "src/features/audioEdit/spectral/AudioSpectralEditor.tsx",
       "category": "arbitraryValue",
-      "values": ["-left-[5px]", "w-[11px]"],
-      "reason": "音频时间轴源位置游标的命中区 11 宽、左移 5 让 1px 游标线居中，由游标线宽推出"
+      "values": ["h-[9px]"],
+      "reason": "时间刻度上的播放头倒三角把手高 9、宽 12，按 viewBox 12×9 的图形比例取，与刻度高度对齐"
     },
     {
       "file": "src/features/canvas/nodes/AssetGroupNode.tsx",

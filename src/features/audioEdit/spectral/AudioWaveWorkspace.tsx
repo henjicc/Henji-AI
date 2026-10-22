@@ -1,15 +1,21 @@
 import React from 'react'
 import { Brush, Hand, MoveLeft, MoveRight, RotateCcw, SquareDashed, TextCursor, Trash2, Volume1, VolumeX, Wand2 } from 'lucide-react'
 import ContextMenu from '@/components/ContextMenu'
-import { PanelTrigger, UiButton, UiFormRow, UiIconButton, UiRangeInput, UiSegmented } from '@/components/ui'
+import { PanelTrigger, UiButton, UiFormRow, UiIconButton, UiRangeInput, UiSegmented, UiTextToken } from '@/components/ui'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import NumberInput from '@/components/ui/NumberInput'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
-import type { AudioEditProjectDocument, AudioEditRange } from '@/core/audioEdit/types'
+import type { AudioEditRange } from '@/core/audioEdit/types'
+import { buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
+import { buildProjectAudioEditTimeline } from '@/core/audioEdit/timeline'
 import { useWaveformData } from '@/hooks/useWaveformData'
 import { getPlatform } from '@/platform/runtime'
 import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
-import { AudioSpectralEditor } from './AudioSpectralEditor'
+import { AudioEditMatchedText } from '../AudioEditTextTools'
+import type { WaveformViewport } from '../waveformViewport'
+import { AudioEditTransport } from '../workspace/AudioEditTransport'
+import { useAudioEditWorkspace } from '../workspace/audioEditWorkspaceContext'
+import { AudioSpectralEditor, type AudioPlayheadSource } from './AudioSpectralEditor'
 import type { AudioEditorTool } from './spectralEditorModel'
 import { audioWaveToolForKey, type audioWaveActions, type AudioWaveEditorState } from './audioWaveEditorState'
 import { useAudioEditSpectrogram } from './useAudioEditSpectrogram'
@@ -60,18 +66,40 @@ export function AudioWaveToolbar({ editor, selection, disabled, actions, onEditS
   </div>
 }
 
-export function AudioWaveWorkspace({ project, editor, selection, onSelection, onSeek, onEditSelection, actions, disabled }: {
-  project: AudioEditProjectDocument
-  editor: AudioWaveEditorState
-  selection: AudioEditRange | null
-  onSelection: (range: AudioEditRange | null) => void
-  onSeek: (frame: number) => void
-  onEditSelection: (mode: 'delete' | 'mute' | 'restore') => void
-  actions: ReturnType<typeof audioWaveActions>
-  disabled: boolean
-}) {
+/** 刻度下方的字幕条：只排可见区间里的字幕，单击选中、双击改字、右键删除声音（与文字稿同一套操作）。 */
+function CaptionLane({ view }: { view: WaveformViewport }) {
+  const workspace = useAudioEditWorkspace()
+  const { project } = workspace
+  const rate = project.source.sampleRate
+  const groups = React.useMemo(() => project.transcript.some(block => block.captionBreakAfter !== undefined)
+    ? buildAudioEditCaptionGroups(project.transcript, rate)
+    : project.transcript.map(block => ({ id: block.id, startFrame: block.startFrame, endFrame: block.endFrame, blocks: [block] })), [project.transcript, rate])
+  const length = Math.max(1, view.end - view.start)
+  const position = (frame: number) => (frame - view.start) / length * 100
+  return <div className="absolute inset-x-0 inset-y-0.5" data-audio-captions>
+    {groups.filter(group => group.endFrame > view.start && group.startFrame < view.end).slice(0, 400).map(group => <div key={group.id} className="absolute flex h-6 gap-0.5 overflow-hidden whitespace-nowrap pr-0.5"
+      style={{ left: `${position(Math.max(view.start, group.startFrame))}%`, width: `${(Math.min(view.end, group.endFrame) - Math.max(view.start, group.startFrame)) / length * 100}%` }}>
+      {group.blocks.map(block => <UiTextToken appearance="chip" key={block.id} disabled={workspace.disabled} selected={workspace.selectedBlockIds.includes(block.id)} excluded={!block.included}
+        title={`${block.text} · 单击选中，双击编辑，右键删除`}
+        onClick={() => { workspace.setSelectedBlockIds([block.id]); workspace.navigateToFrame(block.startFrame) }} onDoubleClick={() => workspace.editBlock(block.id)}
+        onContextMenu={(event) => { event.preventDefault(); workspace.setSelectedBlockIds([block.id]); workspace.deleteBlock(block.id) }}>
+        <span className="block w-full truncate">{block.text ? <AudioEditMatchedText block={block} search={workspace.textSearch} /> : '（空字幕）'}</span>
+      </UiTextToken>)}
+    </div>)}
+  </div>
+}
+
+/** 播放位置的订阅源（模块级，跨面板共用）：编辑区直接改播放头位置，不经过 React 渲染。 */
+const playheadSource: AudioPlayheadSource = {
+  current: () => useAudioEditPlaybackStore.getState().sourceFrame,
+  subscribe: (listener) => useAudioEditPlaybackStore.subscribe((state, previous) => { if (state.sourceFrame !== previous.sourceFrame) listener(state.sourceFrame) }),
+}
+
+/** 编辑器面板：导航条、刻度、波形与频谱，底部是走带。 */
+export function AudioWaveWorkspace() {
+  const workspace = useAudioEditWorkspace()
+  const { project, wave: editor, waveSelection: selection, setWaveSelection: onSelection, seek: onSeek, editSelection: onEditSelection, waveActions: actions, disabled } = workspace
   const { durationFrames: duration, sampleRate: rate } = project.source
-  const sourceFrame = useAudioEditPlaybackStore(state => state.sourceFrame)
   const edited = Boolean(project.repairs?.some(repair => repair.enabled) || project.gainRegions?.some(region => region.enabled))
   // 有修复或区间音量时，波形改读“已编辑、未删除”的音频（时间轴同原素材），删除与静音仍用叠加标记表示。
   const [editedPath, setEditedPath] = React.useState<string | null>(null)
@@ -89,50 +117,77 @@ export function AudioWaveWorkspace({ project, editor, selection, onSelection, on
   React.useLayoutEffect(() => {
     const element = host.current
     if (!element || typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(([entry]) => setColumns(Math.round(entry.contentRect.width * Math.max(1, window.devicePixelRatio || 1))))
+    // 尺寸停下来再换算列数：拖动面板或开关侧栏的过程中不重新取频谱（第一次测量立即生效）。
+    let timer: number | undefined
+    let measured = false
+    const observer = new ResizeObserver(([entry]) => {
+      window.clearTimeout(timer)
+      const next = Math.round(entry.contentRect.width * Math.max(1, window.devicePixelRatio || 1))
+      if (!measured) { measured = true; setColumns(next); return }
+      timer = window.setTimeout(() => setColumns(next), 150)
+    })
     observer.observe(element)
-    return () => observer.disconnect()
+    return () => { observer.disconnect(); window.clearTimeout(timer) }
   }, [])
   const spectrogram = useAudioEditSpectrogram(project.id, editor.view, columns, duration, edited ? 'edited' : 'source', project.revision)
-  const cutRanges = React.useMemo(() => (project.cuts ?? []).filter(cut => cut.enabled).map(cut => ({ start: cut.startFrame, end: cut.endFrame, mode: cut.mode ?? 'delete' as const })), [project.cuts])
+  // 标记以剪后时间线为准：文字稿删掉的词和波形上删除的区间都是“删除”，相邻的合并成一段；静音按剪后片段的静音标记；停顿预览是“待处理”。
+  const spans = React.useMemo(() => buildProjectAudioEditTimeline(project), [project])
+  const pending = workspace.silencePreview.ranges
+  const cutRanges = React.useMemo(() => {
+    const ranges: Array<{ start: number; end: number; mode: 'delete' | 'mute' | 'pending' }> = []
+    let cursor = 0
+    for (const span of spans) {
+      if (cursor < span.sourceStartFrame) ranges.push({ start: cursor, end: span.sourceStartFrame, mode: 'delete' })
+      if (span.muted) ranges.push({ start: span.sourceStartFrame, end: span.sourceEndFrame, mode: 'mute' })
+      cursor = span.sourceEndFrame
+    }
+    if (cursor < duration) ranges.push({ start: cursor, end: duration, mode: 'delete' })
+    return [...ranges, ...pending.map(range => ({ start: range.startFrame, end: range.endFrame, mode: 'pending' as const }))]
+  }, [spans, duration, pending])
   const repairs = React.useMemo(() => (project.repairs ?? []).filter(repair => repair.enabled && repair.kind === 'spectral_heal').map(repair => ({ id: repair.id, start: repair.startFrame, end: repair.endFrame, lowHz: repair.lowHz, highHz: repair.highHz })), [project.repairs])
   const menu = useContextMenu()
-  // 播放时播放头跑出视野就翻页跟随。
-  React.useEffect(() => {
-    const { view, setView } = editor
-    if (sourceFrame < view.start || sourceFrame > view.end) {
-      const length = view.end - view.start
-      setView({ start: Math.max(0, Math.min(duration - length, sourceFrame - length * 0.1)), end: Math.max(0, Math.min(duration - length, sourceFrame - length * 0.1)) + length })
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- follow only when the playhead moves
-  }, [sourceFrame])
+  // 播放时播放头跑出视野就翻页跟随（订阅播放位置，不让整个面板每帧重新渲染）。
+  const viewRef = React.useRef(editor.view)
+  viewRef.current = editor.view
+  const setView = editor.setView
+  React.useEffect(() => playheadSource.subscribe((frame) => {
+    const view = viewRef.current
+    if (!useAudioEditPlaybackStore.getState().playing || (frame >= view.start && frame <= view.end)) return
+    const length = view.end - view.start
+    const start = Math.max(0, Math.min(duration - length, frame - length * 0.1))
+    setView({ start, end: start + length })
+  }), [duration, setView])
   const iconSize = UI_ICON_SIZE.md
-  return <div ref={host} className="h-full min-h-0" data-spectrogram-mode={edited ? 'edited' : 'source'} onKeyDown={(event) => {
+  return <div ref={host} className="flex h-full min-h-0 flex-col outline-none" data-spectrogram-mode={edited ? 'edited' : 'source'} data-audio-edit-panel="editor" onKeyDown={(event) => {
     if (event.target instanceof HTMLElement && event.target.closest('input,textarea,[contenteditable="true"]')) return
     if (event.ctrlKey || event.metaKey || event.altKey) return
     const tool = audioWaveToolForKey(event.key)
     if (tool) { event.preventDefault(); editor.setTool(tool); return }
     if (event.key === 'Escape') { onSelection(null); editor.setSpectralSelection(null); return }
+    if (event.key === ' ' && !(event.target instanceof HTMLElement && event.target.closest('button'))) { event.preventDefault(); void workspace.togglePlayback(); return }
     if (selection && !disabled && (event.key === 'Delete' || event.key.toLowerCase() === 'm')) { event.preventDefault(); onEditSelection(event.key === 'Delete' ? 'delete' : 'mute') }
   }} tabIndex={-1}>
-    <AudioSpectralEditor sampleRate={rate} durationFrames={duration} waveform={waveform}
-      {...(spectrogram.data ? { spectrogram: spectrogram.data } : {})} spectrogramStatus={spectrogram.status} {...(spectrogram.error ? { spectrogramError: spectrogram.error } : {})} onRetrySpectrogram={spectrogram.retry}
-      view={editor.view} onViewChange={editor.setView} display={editor.display} tool={editor.tool} brushPixels={editor.brushPixels}
-      playheadFrame={sourceFrame} onSeek={onSeek}
-      selection={selection ? { start: selection.startFrame, end: selection.endFrame } : null}
-      onSelectionChange={(next) => onSelection(next && next.end > next.start ? { startFrame: next.start, endFrame: next.end } : null)}
-      spectralSelection={editor.spectralSelection} onSpectralSelectionChange={editor.setSpectralSelection}
-      onBrushStroke={actions.healStroke} cutRanges={cutRanges} repairs={repairs}
-      onContextMenu={(event) => menu.showMenu(event, [
-        { id: 'heal', label: '修复框选区域', icon: <Wand2 size={iconSize} />, disabled: !editor.spectralSelection || disabled, onClick: () => { actions.healArea(editor.spectralSelection!); editor.setSpectralSelection(null) } },
-        { id: 'delete', label: '删除选区 · Delete', icon: <Trash2 size={iconSize} />, disabled: !selection || disabled, onClick: () => onEditSelection('delete') },
-        { id: 'mute', label: '静音选区 · M', icon: <VolumeX size={iconSize} />, disabled: !selection || disabled, onClick: () => onEditSelection('mute') },
-        { id: 'fade-in', label: '淡入', icon: <MoveRight size={iconSize} />, disabled: !selection || disabled, onClick: () => actions.fadeIn(selection!) },
-        { id: 'fade-out', label: '淡出', icon: <MoveLeft size={iconSize} />, disabled: !selection || disabled, onClick: () => actions.fadeOut(selection!) },
-        { id: 'declick', label: '去爆音', icon: <Wand2 size={iconSize} />, disabled: !selection || disabled || !actions.canDeclick(selection), onClick: () => actions.declick(selection!) },
-        { id: 'restore', label: '恢复选区', icon: <RotateCcw size={iconSize} />, disabled: !selection || disabled, onClick: () => onEditSelection('restore') },
-      ])} />
+    <div className="min-h-0 flex-1">
+      <AudioSpectralEditor sampleRate={rate} durationFrames={duration} waveform={waveform}
+        {...(spectrogram.data ? { spectrogram: spectrogram.data } : {})} spectrogramStatus={spectrogram.status} {...(spectrogram.error ? { spectrogramError: spectrogram.error } : {})} onRetrySpectrogram={spectrogram.retry}
+        view={editor.view} onViewChange={editor.setView} display={editor.display} tool={editor.tool} brushPixels={editor.brushPixels}
+        playhead={playheadSource} onSeek={onSeek}
+        selection={selection ? { start: selection.startFrame, end: selection.endFrame } : null}
+        onSelectionChange={(next) => onSelection(next && next.end > next.start ? { startFrame: next.start, endFrame: next.end } : null)}
+        spectralSelection={editor.spectralSelection} onSpectralSelectionChange={editor.setSpectralSelection}
+        onBrushStroke={actions.healStroke} cutRanges={cutRanges} repairs={repairs}
+        {...(project.transcript.length && (project.viewSettings?.timelineCaptions ?? true) ? { captionLane: <CaptionLane view={editor.view} /> } : {})}
+        onContextMenu={(event) => menu.showMenu(event, [
+          { id: 'heal', label: '修复框选区域', icon: <Wand2 size={iconSize} />, disabled: !editor.spectralSelection || disabled, onClick: () => { actions.healArea(editor.spectralSelection!); editor.setSpectralSelection(null) } },
+          { id: 'delete', label: '删除选区 · Delete', icon: <Trash2 size={iconSize} />, disabled: !selection || disabled, onClick: () => onEditSelection('delete') },
+          { id: 'mute', label: '静音选区 · M', icon: <VolumeX size={iconSize} />, disabled: !selection || disabled, onClick: () => onEditSelection('mute') },
+          { id: 'fade-in', label: '淡入', icon: <MoveRight size={iconSize} />, disabled: !selection || disabled, onClick: () => actions.fadeIn(selection!) },
+          { id: 'fade-out', label: '淡出', icon: <MoveLeft size={iconSize} />, disabled: !selection || disabled, onClick: () => actions.fadeOut(selection!) },
+          { id: 'declick', label: '去爆音', icon: <Wand2 size={iconSize} />, disabled: !selection || disabled || !actions.canDeclick(selection), onClick: () => actions.declick(selection!) },
+          { id: 'restore', label: '恢复选区', icon: <RotateCcw size={iconSize} />, disabled: !selection || disabled, onClick: () => onEditSelection('restore') },
+        ])} />
+    </div>
+    <AudioEditTransport />
     <ContextMenu visible={menu.menuVisible} position={menu.menuPosition} items={menu.menuItems} onClose={menu.hideMenu} />
   </div>
 }
-
