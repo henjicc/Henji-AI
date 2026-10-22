@@ -30,7 +30,8 @@ import { yieldVideoEditSource } from './application/videoEditSource'
 import { subscribeVideoEditTracking, videoEditTrackResults } from './application/videoEditTracking'
 import { subscribeVideoEditSmartRegions, videoEditSmartRegionSegments } from './application/videoEditSmartRegions'
 import { createVideoEditAudioMeter, type VideoEditAudioLevel } from './engine/videoEditAudioMeter'
-import { VIDEO_EDIT_AUDIO_BLOCK_SECONDS, VideoEditAudioScheduler } from './engine/videoEditAudioScheduler'
+import { finishVideoEditAudioFade, VIDEO_EDIT_AUDIO_BLOCK_SECONDS, VideoEditAudioScheduler } from './engine/videoEditAudioScheduler'
+import { subscribeVideoEditScrub, VideoEditAudioScrubber } from './engine/videoEditAudioScrub'
 import { alignVideoEditClockToDisplay, followVideoEditAudioClock, measureVideoEditDisplayPeriod, nextVideoEditDisplayFrame, videoEditAudioClockOrigin, videoEditLiveFrame, videoEditPlaybackTarget } from './engine/videoEditDisplayClock'
 import { VideoEditLevelMeter } from './panels/VideoEditLevelMeter'
 import { VideoEditTrackingOverlay } from './panels/VideoEditTrackingOverlay'
@@ -228,11 +229,12 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       if (next === appliedDocument) return
       const parameters = next && videoEditParameterUpdate(appliedDocument, next)
       if (!parameters || videoEditParameterAffectsAudio(appliedDocument, parameters)) {
-        if (next !== appliedDocument) { stopAudio(); setLevels([]) }
+        if (next !== appliedDocument) { stopAudio(); scrubber.stop(); setLevels([]) }
         renderer.invalidateDocument(next?.revision ?? instance.document.revision)
       }
     })
     let observedScrubbing = !!instance.scrubbing
+    let observedAudioFrame = instance.frame
     const unsubscribeView = subscribeVideoEditView(() => {
       if (stopped) return
       const releasedScrub = observedScrubbing && !instance.scrubbing
@@ -245,6 +247,10 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         if (document === appliedDocument) void preparePlayback(document, instance.frame)
       }
       if (!instance.playing || instance.playbackDirection !== direction || activeCommand && videoEditProgramCommandIdentity(instance.document.id) !== activeCommand) { stopAudio(); setLevels([]) }
+      const moved = observedAudioFrame !== instance.frame
+      observedAudioFrame = instance.frame
+      if (instance.playing || releasedScrub || moved && !instance.scrubbing) scrubber.stop()
+      if (!instance.playing && instance.scrubbing && moved) scrubAudio(instance.frame / appliedDocument.fps)
     })
     let audioRenderer: VideoEditRenderSession | undefined
     // No available proxy means the session already plays the originals: both read as 'original', so starting paused does not rebuild.
@@ -298,8 +304,28 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     let appliedDivisor: VideoEditRenderDivisor = 1
     let captureFull = 0
     const audioScheduler = new VideoEditAudioScheduler()
+    const scrubber = new VideoEditAudioScrubber()
+    const scrubAudio = (seconds: number): void => {
+      const document = videoMotionComposition(instance)
+      if (!document || instance.playing || !audibleVideoEditClips(document).length) return
+      scrubber.request({
+        seconds, fps: document.fps, endTime: videoEditDuration(document) / document.fps,
+        prepare: async () => {
+          audio ??= new AudioContext({ sampleRate: document.sampleRate })
+          const context = audio
+          await context.resume()
+          if (stopped || audio !== context) throw new DOMException('擦洗声音已关闭。', 'AbortError')
+          meter ??= createVideoEditAudioMeter(context, document.channels)
+          return { context, destination: meter.input }
+        },
+        mix: (from, duration) => (audioRenderer ??= new VideoEditRenderSession(document)).mixAudio(from, duration),
+        isCurrent: () => !stopped && !instance.playing && videoMotionComposition(instance) === document && appliedDocument === document,
+        onError,
+      })
+    }
+    const unsubscribeScrub = subscribeVideoEditScrub(instance.document.id, intent => { if (intent.scope === 'program') scrubAudio(intent.seconds) })
     const stopAudio = (): void => audioScheduler.stop()
-    const meterTimer = setInterval(() => { if (!stopped && meter) setLevels(instance.playing && instance.playbackDirection === 1 ? meter.read() : Array.from({ length: appliedDocument.channels }, () => ({ peak: 0, rms: 0 }))) }, 50)
+    const meterTimer = setInterval(() => { if (!stopped && meter) setLevels(meter.read()) }, 50)
     let lastPresentation = -Infinity
     let firstPresentationAt = Infinity
     let presentedSequenceId = ''
@@ -316,7 +342,10 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       try {
         if (audibleVideoEditClips(document).length && (!audio || audio.sampleRate === document.sampleRate)) {
           audio ??= new AudioContext({ sampleRate: document.sampleRate }); void audio.resume().catch(() => undefined)
-          const from = frame / document.fps; const duration = Math.min(VIDEO_EDIT_AUDIO_BLOCK_SECONDS, videoEditDuration(document) / document.fps - from)
+          // 与调度器共用采样网格，否则非整数帧率的首块预混会因浮点起点不同而失配。
+          const firstSample = Math.round(frame / document.fps * document.sampleRate)
+          const from = firstSample / document.sampleRate
+          const duration = Math.min(Math.round(VIDEO_EDIT_AUDIO_BLOCK_SECONDS * document.sampleRate), Math.round(videoEditDuration(document) / document.fps * document.sampleRate) - firstSample) / document.sampleRate
           if (duration > 0) { const block = { document, from, duration, buffer: (audioRenderer ??= new VideoEditRenderSession(document)).mixAudio(from, duration), ready: false }; firstBlock = block; block.buffer.then(() => { block.ready = true }, () => undefined) }
         }
         if (!stopped) await renderer.armPlayback(frame)
@@ -422,6 +451,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           failedDocument = undefined
         }
         if (appliedDocument !== document) {
+          scrubber.stop()
           const sequence = current.document.sequences.find(sequence => sequence.id === document.id)
           const liveProjection = videoMotionState(current)?.status === 'recording' && sequence === appliedSequence && document.media === appliedDocument.media && document.items === appliedDocument.items
           const parameterUpdate = captureFull === 0 && videoEditParameterUpdate(appliedDocument, document)
@@ -433,7 +463,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           }
           if ((!parameterUpdate && !liveProjection) || parameterUpdate && videoEditParameterAffectsAudio(appliedDocument, parameterUpdate)) { stopAudio(); wasPlaying = false }
           if (parameterUpdate) renderer.invalidateDocument(document.revision)
-          if (appliedDocument.sampleRate !== document.sampleRate || appliedDocument.channels !== document.channels) { meter?.dispose(); meter = undefined; await audio?.close(); audio = undefined; if (!stopped) setLevels([]) }
+          if (appliedDocument.sampleRate !== document.sampleRate || appliedDocument.channels !== document.channels) { await finishVideoEditAudioFade(); meter?.dispose(); meter = undefined; await audio?.close(); audio = undefined; if (!stopped) setLevels([]) }
           // 固定刷新周期合流最新快照，避免计时器误差及 Worker 往返耗时逐帧累加。
           if (parameterUpdate) lastParameterUpdate = parameterTick
           await renderer.updateDocument(document, useOriginal); await audioRenderer?.updateDocument(document); appliedDocument = document; appliedSequence = sequence; appliedProxy = useOriginal ? 'original' : proxyState(availableProxies); lastRequested = -1
@@ -618,8 +648,9 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     let retired = false
     stopCurrent = (): void => {
       if (retired) return
-      retired = true; for (const event of idleEvents) window.removeEventListener(event, interaction, true); unregisterCapture(); unsubscribe(); unsubscribeView(); unsubscribeMotion(); unsubscribeRegions(); unsubscribeTracks(); clearTimeout(timer); clearInterval(meterTimer); instance.playing = false; stopAudio(); meter?.dispose()
-      programReleases.set(instance, Promise.allSettled([audio?.close(), renderer.dispose(), audioRenderer?.dispose()]))
+      retired = true; for (const event of idleEvents) window.removeEventListener(event, interaction, true); unregisterCapture(); unsubscribe(); unsubscribeView(); unsubscribeScrub(); unsubscribeMotion(); unsubscribeRegions(); unsubscribeTracks(); clearTimeout(timer); clearInterval(meterTimer); instance.playing = false; stopAudio(); scrubber.stop()
+      const closeAudio = (): Promise<void> | undefined => { meter?.dispose(); return audio?.close() }
+      programReleases.set(instance, Promise.allSettled([meter ? finishVideoEditAudioFade().then(closeAudio) : closeAudio(), renderer.dispose(), audioRenderer?.dispose()]))
       retainExplanationPixels(surface, -1)
       explanationSurface?.remove(); explanationSurface = undefined
       surface.remove(); if (canvas.current === surface) canvas.current = null

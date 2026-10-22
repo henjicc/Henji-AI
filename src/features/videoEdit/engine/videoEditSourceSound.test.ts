@@ -33,7 +33,7 @@ it('声音按画面时钟对齐：源秒数在 performance 时刻 at 发声，�
     get currentTime() { return reads++ < 1 ? 5 : 5.01 }, sampleRate: 48000, destination: {},
     resume: vi.fn(async () => undefined),
     close: vi.fn(async () => undefined),
-    createGain: () => { const node = { gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn(), channelCount: 2, channelCountMode: 'max' }; created.push(node); return node },
+    createGain: () => { const node = { gain: { value: 1, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), cancelAndHoldAtTime: vi.fn() }, connect: vi.fn(), disconnect: vi.fn(), channelCount: 2, channelCountMode: 'max' }; created.push(node); return node },
     createChannelSplitter: () => ({ connect: vi.fn(), disconnect: vi.fn() }),
     createAnalyser: () => ({ fftSize: 0, smoothingTimeConstant: 0, connect: vi.fn(), disconnect: vi.fn(), getFloatTimeDomainData: vi.fn() }),
     createBufferSource: () => { const source = { connect: vi.fn(), start: vi.fn(), stop: vi.fn(), disconnect: vi.fn(), buffer: null, onended: null }; sources.push(source); return source },
@@ -51,7 +51,7 @@ it('声音按画面时钟对齐：源秒数在 performance 时刻 at 发声，�
   player.pump(2, () => true, () => {})
   expect(mixes).toEqual([[2, .5]])
   await vi.waitFor(() => expect(sources).toHaveLength(1))
-  expect(sources[0].start.mock.calls[0][0]).toBeCloseTo(5.01 + .0167, 9); expect(sources[0].start.mock.calls[0][1]).toBe(0)
+  expect(sources[0].start.mock.calls[0][0]).toBeCloseTo(Math.round((5.01 + .0167) * 48000) / 48000, 9); expect(sources[0].start.mock.calls[0][1]).toBe(0)
   // Through the monitor volume (clamped to 1), then the level meter.
   expect(sources[0].connect).toHaveBeenCalledWith(created.at(-1))
   expect(documents).toHaveLength(1)

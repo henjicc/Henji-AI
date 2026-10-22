@@ -32,6 +32,8 @@ vi.mock('../engine/videoEditSourceSound', () => ({ VideoEditSourceSoundPlayer: c
   constructor(media: VideoEditMedia) { this.record = { media, calls: [], disposed: false }; sound.players.push(this.record) }
   async prepare(volume: number) { this.record.calls.push(['prepare', volume]) }
   start(seconds: number, at: number) { this.record.calls.push(['start', seconds, at]) }
+  stopPlayback() { this.record.calls.push(['stopPlayback']) }
+  scrub(seconds: number) { this.record.calls.push(['scrub', seconds]) }
   pump(seconds: number, _current: () => boolean, onError: (error: unknown) => void) { this.record.calls.push(['pump', seconds]); if (sound.fail) onError(sound.fail) }
   levels() { return [{ peak: .5, rms: .25 }, { peak: .5, rms: .25 }] }
   stop() { this.record.calls.push(['stop']) }
@@ -50,7 +52,7 @@ beforeEach(() => {
   Object.defineProperty(HTMLVideoElement.prototype, 'requestVideoFrameCallback', { configurable: true, value: vi.fn((callback: VideoFrameRequestCallback) => { frameCallbacks.set(++nextFrame, callback); return nextFrame }) })
   Object.defineProperty(HTMLVideoElement.prototype, 'cancelVideoFrameCallback', { configurable: true, value: vi.fn((id: number) => frameCallbacks.delete(id)) })
 })
-afterEach(() => { host.remove(); vi.useRealTimers(); vi.restoreAllMocks(); delete (HTMLVideoElement.prototype as Partial<HTMLVideoElement>).requestVideoFrameCallback; delete (HTMLVideoElement.prototype as Partial<HTMLVideoElement>).cancelVideoFrameCallback })
+afterEach(() => { host.remove(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); delete (HTMLVideoElement.prototype as Partial<HTMLVideoElement>).requestVideoFrameCallback; delete (HTMLVideoElement.prototype as Partial<HTMLVideoElement>).cancelVideoFrameCallback })
 
 async function loadVideo(): Promise<HTMLVideoElement> {
   const video = host.querySelector('video')!
@@ -68,6 +70,56 @@ function presentRequestedPicture(video: HTMLVideoElement, fps: number): void {
   // A paused seek inside a frame returns its start timestamp, not the seek clock.
   presentFrame(Math.floor(video.currentTime * fps) / fps)
 }
+it.each(['browser', 'native'] as const)('源%s单击无试听，擦洗独立于画面等待，普通定位取消试听并释放计时器', async backend => {
+  vi.useFakeTimers(); gpu.backend = backend
+  const levels = vi.fn(); const presenter = createVideoEditSourcePresenter(host, () => ({ ...media, hasAudio: true }), vi.fn(), levels)
+  const opening = presenter.present({ itemId: 'item', timeUs: 0, playing: false, volume: .5 }, new AbortController().signal)
+  const video = await loadVideo()
+  if (backend === 'browser') presentFrame(0)
+  await opening
+  expect(sound.players.flatMap(player => player.calls).filter(([kind]) => kind === 'scrub')).toEqual([])
+  gpu.blocked = true
+  presenter.scrub(1, .5)
+  const moving = presenter.present({ itemId: 'item', timeUs: 1_000_000, playing: false, volume: .5 }, new AbortController().signal)
+  expect(sound.players.at(-1)!.calls).toContainEqual(['scrub', 1])
+  await vi.advanceTimersByTimeAsync(40)
+  expect(levels).toHaveBeenCalledWith([{ peak: .5, rms: .25 }, { peak: .5, rms: .25 }])
+  if (backend === 'browser') presentRequestedPicture(video, 30)
+  else gpu.requests.shift()!()
+  await moving
+  const player = sound.players.at(-1)!; const stoppedBefore = player.calls.filter(([kind]) => kind === 'stop').length
+  const click = presenter.present({ itemId: 'item', timeUs: 2_000_000, playing: false, volume: .5 }, new AbortController().signal)
+  if (backend === 'browser') presentRequestedPicture(video, 30)
+  else { await Promise.resolve(); gpu.requests.shift()!() }
+  await click
+  expect(player.calls.filter(([kind]) => kind === 'stop').length).toBeGreaterThan(stoppedBefore)
+  await presenter.dispose(); expect(vi.getTimerCount()).toBe(0); expect(player.disposed).toBe(true)
+})
+
+it('媒体元素开始淡入、暂停与切换素材先淡出，旧节点在尾部结束后断开', async () => {
+  vi.useFakeTimers()
+  const gains: Array<{ gain: { value: number; setValueAtTime: ReturnType<typeof vi.fn>; linearRampToValueAtTime: ReturnType<typeof vi.fn>; cancelScheduledValues: ReturnType<typeof vi.fn>; cancelAndHoldAtTime: ReturnType<typeof vi.fn> }; connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }> = []
+  const node = () => ({ connect: vi.fn(), disconnect: vi.fn() })
+  const context = { currentTime: 1, destination: {}, resume: vi.fn(async () => {}), close: vi.fn(async () => {}),
+    createGain: () => { const gain = { ...node(), gain: { value: 1, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), cancelScheduledValues: vi.fn(), cancelAndHoldAtTime: vi.fn() } }; gains.push(gain); return gain },
+    createChannelSplitter: node, createAnalyser: () => ({ ...node(), getFloatTimeDomainData: vi.fn() }), createMediaElementSource: node,
+  }
+  vi.stubGlobal('AudioContext', vi.fn(() => context))
+  const presenter = createVideoEditSourcePresenter(host, () => ({ ...media, hasAudio: true }), vi.fn(), vi.fn())
+  const opening = presenter.present({ itemId: 'item', timeUs: 0, playing: true, volume: 1 }, new AbortController().signal)
+  const video = await loadVideo(); presentFrame(0); await opening
+  const envelope = gains.at(-1)!
+  expect(envelope.gain.linearRampToValueAtTime).toHaveBeenCalledWith(1, 1.005)
+  const pause = presenter.present({ itemId: 'item', timeUs: 0, playing: false, volume: 1 }, new AbortController().signal)
+  expect(envelope.gain.cancelAndHoldAtTime).toHaveBeenCalledWith(1)
+  expect(video.paused).toBe(false)
+  await vi.advanceTimersByTimeAsync(10); await pause; expect(video.paused).toBe(true)
+  await presenter.present({ itemId: 'item', timeUs: 0, playing: true, volume: 1 }, new AbortController().signal)
+  const released = presenter.release()
+  expect(envelope.disconnect).not.toHaveBeenCalled(); expect(video.paused).toBe(false)
+  await vi.advanceTimersByTimeAsync(10); await released
+  expect(video.paused).toBe(true); expect(envelope.disconnect).toHaveBeenCalledOnce(); expect(context.close).toHaveBeenCalledOnce()
+})
 it('反向静音逐帧等待同源GPU完成，停止确认原生同帧并取消在途合成', async () => {
   vi.useFakeTimers()
   vi.spyOn(performance, 'now').mockImplementation(() => Date.now())

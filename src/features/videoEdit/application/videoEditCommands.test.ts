@@ -10,6 +10,7 @@ import { registerVideoEditSourcePresenter, readVideoEditSource, updateVideoEditS
 import { createLegacyTrackVideoEditProject } from './videoEditDocumentTestKit'
 import { selectVideoEditTransition } from './videoEditTransitions'
 import { updateVideoEditCreativeIntents } from './videoEditService'
+import { subscribeVideoEditScrub } from '../engine/videoEditAudioScrub'
 
 // 过渡命令的画面试渲染需要 GPU Worker；命令层只验证编辑与撤销，试渲染由 videoEditCodeService.test 覆盖。
 vi.mock('./videoEditCodeTrial', async () => ({ ...await vi.importActual<typeof import('./videoEditCodeTrial')>('./videoEditCodeTrial'), trialVideoEditCodeDocument: async () => undefined }))
@@ -31,6 +32,19 @@ async function fixture() {
   setVideoEditTimelineView(id, { selectedClipIds: [first] }, first)
   return { owner, id, first, second, sequence: getActiveVideoEditSequence(owner) }
 }
+it('逐帧命令发出试听意图，直接定位和跳转命令不发声', async () => {
+  const { id } = await fixture(); const listen = vi.fn(); const off = subscribeVideoEditScrub(id, listen)
+  try {
+    setVideoEditView(id, { frame: 10 })
+    expect(listen).not.toHaveBeenCalled()
+    await executeVideoEditCommand(captureVideoEditCommandContext(id, 'timeline'), 'step_forward')
+    expect(listen).toHaveBeenLastCalledWith({ scope: 'program', seconds: 11 / 30 })
+    await executeVideoEditCommand(captureVideoEditCommandContext(id, 'program'), 'step_back')
+    expect(listen).toHaveBeenLastCalledWith({ scope: 'program', seconds: 10 / 30 })
+    await executeVideoEditCommand(captureVideoEditCommandContext(id, 'timeline'), 'go_start')
+    expect(listen).toHaveBeenCalledTimes(2)
+  } finally { off() }
+})
 it('元数据写入不使捕获的命令上下文失效，内容编辑仍使其失效', async () => {
   const { id } = await fixture()
   const context = captureVideoEditCommandContext(id, 'timeline', { frame: 20 })
@@ -91,6 +105,7 @@ it('关闭或换序列后原菜单失效，属性定位保留多选并明确主�
 })
 it('源 I/O 为半开范围，插入保留原路径和范围；J/K/L 与步进使用同一源请求', async () => {
   const { owner, id } = await fixture()
+  const listen = vi.fn(); const offScrub = subscribeVideoEditScrub(id, listen)
   appendVideoEditMedia(id, { id: 'media', kind: 'video', name: '原视频', path: 'D:/source.mp4', durationSeconds: 5, width: 3840, height: 2160, frameRate: { numerator: 60, denominator: 1 }, hasAudio: true })
   const item = owner.document.items.find(item => item.mediaId === 'media')!
   const dispose = registerVideoEditSourcePresenter(id, async request => ({ timeUs: request.timeUs, presentedTimeUs: request.timeUs, playing: request.playing, volume: request.volume, playbackDirection: request.playbackDirection ?? 1 }))
@@ -105,6 +120,7 @@ it('源 I/O 为半开范围，插入保留原路径和范围；J/K/L 与步进�
       expect(readVideoEditSource(id)).toMatchObject({ playing, playbackDirection: direction })
     }
     await executeVideoEditCommand(captureVideoEditCommandContext(id, 'source'), 'step_forward')
+    expect(listen).toHaveBeenCalledOnce(); expect(listen).toHaveBeenCalledWith({ scope: 'source', seconds: 2.025 })
     expect(readVideoEditSource(id)).toMatchObject({ playing: false, timeUs: 2_025_000 })
     setVideoEditView(id, { frame: 500 })
     await executeVideoEditCommand(captureVideoEditCommandContext(id, 'source'), 'insert')
@@ -120,7 +136,7 @@ it('源 I/O 为半开范围，插入保留原路径和范围；J/K/L 与步进�
     await updateVideoEditSource(id, { timeUs: 3_000_000 })
     await expect(executeVideoEditCommand(staleSource, 'mark_in')).rejects.toThrow('后续操作')
     expect(readVideoEditSource(id).inUs).toBe(2_016_667)
-  } finally { dispose() }
+  } finally { offScrub(); dispose() }
 })
 it('手动节目穿梭与公共入口相同，等待源暂停确认后才开始且不覆盖后续定位', async () => {
   const { owner, id } = await fixture()

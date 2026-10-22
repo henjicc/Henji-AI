@@ -29,7 +29,7 @@ type PointerGesture = BaseGesture & (
   | { kind: 'box'; initial: string[]; additive: boolean; linked: VideoEditRelations }
   | { kind: 'hand'; left: number; last: number; region?: TimelineRegionKind }
   /** `snap`: Shift held — the playhead snaps to edit points, markers and the sequence in/out (Premiere). */
-  | { kind: 'seek'; snap: boolean }
+  | { kind: 'seek'; snap: boolean; moved: boolean }
   | { kind: 'height'; trackId: string; height: number; next: number }
   | { kind: 'razor'; clipId: string; linked: VideoEditRelations }
   /** 过渡块（PR）：拖左右缘改时长、拖中间平移；淡化手柄：拖到的长度就是淡入／淡出。都是一次手势，文档实时预览、松手一步撤销。 */
@@ -184,7 +184,8 @@ export function useTimelinePointer(options: Options) {
     } else if (gesture.kind === 'seek') {
       const raw = Math.max(0, Math.min(Math.floor(videoEditFps(sequence.frameRate) * VIDEO_EDIT_MAX_SEQUENCE_SECONDS), Math.round(at.x / pixels)))
       const frame = snapTimelineFrame(sequence.id, gesture.snap ? timelineSnapPoints(sequence, { extra: [instance.inFrame, instance.outFrame].filter((value): value is number => value !== null) }) : [], raw, TIMELINE_SNAP_PIXELS / pixels)
-      setVideoEditView(instance.document.id, { playing: false, frame })
+      gesture.moved ||= Math.abs(at.x - gesture.origin.x) >= 3
+      setVideoEditView(instance.document.id, { playing: false, frame, scrubbing: gesture.moved })
     } else if (gesture.kind === 'hand' && viewport.current) {
       viewport.current.scrollLeft = gesture.left + gesture.origin.x - gesture.client.x
       if (gesture.region) current.current.scrollRegion(gesture.region, gesture.last - gesture.client.y)
@@ -263,7 +264,7 @@ export function useTimelinePointer(options: Options) {
     const linked = videoEditPickRelations(instance.linkedSelection !== false, event.altKey)
     try {
       if (instance.tool === 'hand') { const host = viewport.current!; const region = timelineRegionAt(layout, at.y); capture({ ...base(event), kind: 'hand', origin: { x: event.clientX, y: event.clientY }, left: host.scrollLeft, last: event.clientY, ...(region ? { region } : {}) }); return }
-      if (target.closest('[data-video-edit-ruler]')) { const gesture: PointerGesture = { ...base(event), kind: 'seek', snap: event.shiftKey }; capture(gesture); setVideoEditView(instance.document.id, { scrubbing: true }); applyPointer(gesture); return }
+      if (target.closest('[data-video-edit-ruler]')) { const gesture: PointerGesture = { ...base(event), kind: 'seek', snap: event.shiftKey, moved: false }; capture(gesture); applyPointer(gesture); return }
       // 轨道选择（PR）：默认选全部轨道上点击处之后（向后工具为之前）的片段，按住 Shift 只选这一条轨道；Ctrl 加选。
       if (instance.tool === 'track' || instance.tool === 'track_backward') { if (row) select(selectVideoEditTrackFrom(sequence, row.track.index, Math.max(0, Math.round(at.x / pixels)), !event.shiftKey, linked, instance.tool === 'track' ? 'forward' : 'backward'), false, event.ctrlKey || event.metaKey, linked); return }
       if (instance.tool === 'zoom') { capture({ ...base(event), kind: 'zoom', zoomOut: event.altKey }); return }

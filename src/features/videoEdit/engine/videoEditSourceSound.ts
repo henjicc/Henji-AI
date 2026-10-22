@@ -2,7 +2,8 @@ import type { VideoEditComposition, VideoEditMedia } from '@/core/videoEdit/docu
 import type { VideoEditAudioMapping } from '@/core/videoEdit/audioChannels'
 import { videoEditFps } from '@/core/videoEdit/time'
 import { createVideoEditAudioMeter, type VideoEditAudioLevel } from './videoEditAudioMeter'
-import { VideoEditAudioScheduler } from './videoEditAudioScheduler'
+import { finishVideoEditAudioFade, VideoEditAudioScheduler } from './videoEditAudioScheduler'
+import { VideoEditAudioScrubber } from './videoEditAudioScrub'
 import { VideoEditRenderSession } from './videoEditRenderSession'
 
 /** Source monitor sound runs at this rate (the program default); the native service resamples to it. */
@@ -32,17 +33,14 @@ export function videoEditSourceSoundComposition(media: VideoEditMedia, layout?: 
   }
 }
 
-/**
- * Forward playback sound of a source item the media element cannot play (files only the native decoder reads,
- * task 2.3): mixed blocks from a dedicated render session, placed on an audio clock aligned with the picture clock,
- * through the monitor volume and a level meter. Reverse and paused playback are silent, like the program monitor.
- */
+/** 源声音使用专用渲染会话混音，经监视器音量和电平输出；支持正向播放与暂停时的显式擦洗试听。 */
 export class VideoEditSourceSoundPlayer {
   private context?: AudioContext
   private gain?: GainNode
   private meter?: ReturnType<typeof createVideoEditAudioMeter>
   private session?: VideoEditRenderSession
   private readonly scheduler = new VideoEditAudioScheduler()
+  private readonly scrubber = new VideoEditAudioScrubber()
   private origin = 0
   private disposed = false
 
@@ -64,7 +62,7 @@ export class VideoEditSourceSoundPlayer {
   /** Source second `seconds` sounds at `at` on the `performance.now()` clock (where the picture clock puts it). */
   start(seconds: number, at: number): void {
     if (!this.context) throw new Error('源声音尚未就绪。')
-    this.scheduler.stop()
+    this.stop()
     this.origin = this.context.currentTime + (at - performance.now()) / 1000 - seconds
     this.scheduler.start(seconds)
   }
@@ -82,13 +80,27 @@ export class VideoEditSourceSoundPlayer {
 
   levels(): VideoEditAudioLevel[] { return this.meter?.read() ?? [] }
 
+  /** 原生与媒体元素源的擦洗均复用正式源混音，音量及电平保持一致。 */
+  scrub(seconds: number, volume: number, isCurrent: () => boolean, onError: (error: unknown) => void): void {
+    this.scheduler.stop()
+    const fps = this.media.frameRate ? videoEditFps(this.media.frameRate) : 30
+    this.scrubber.request({
+      seconds, fps, endTime: this.media.durationSeconds,
+      prepare: async () => { await this.prepare(volume); return { context: this.context!, destination: this.gain! } },
+      mix: (from, duration) => (this.session ??= this.createSession(videoEditSourceSoundComposition(this.media, this.layout))).mixAudio(from, duration),
+      isCurrent: () => !this.disposed && isCurrent(), onError,
+    })
+  }
+
   /** Silences placed blocks and discards blocks still being mixed. */
-  stop(): void { this.scheduler.stop() }
+  stop(): void { this.scheduler.stop(); this.scrubber.stop() }
+  stopPlayback(): void { this.scheduler.stop() }
 
   async dispose(): Promise<void> {
     if (this.disposed) return
     this.disposed = true
-    this.scheduler.stop()
+    this.stop()
+    await finishVideoEditAudioFade()
     this.meter?.dispose(); this.gain?.disconnect()
     await Promise.allSettled([this.context?.close(), this.session?.dispose()])
   }
