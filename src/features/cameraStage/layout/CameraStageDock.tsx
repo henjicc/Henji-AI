@@ -1,3 +1,5 @@
+import { bindWorkspaceLayoutDock } from '@/components/dockLayouts/useWorkspaceLayoutPresets'
+import { createLogger } from '@/core/logging'
 import React, {
   createContext,
   forwardRef,
@@ -23,11 +25,11 @@ import { DockviewHost } from '@/components/DockviewHost'
 import { dockviewHostTheme } from '@/components/dockviewHostTheme'
 import { bindDockDragGestures, dockFloatingGroupsBack, DOCKVIEW_HOST_DND_OPTIONS } from '@/components/dockviewDocking'
 import { DockHeaderActions, DockTab } from './DockChrome'
-import { LAYOUT_STORAGE_KEY, resetCameraStageWorkspace, restoreLayout } from './dockLayout'
+import { resetCameraStageWorkspace } from './dockLayout'
 
 /**
  * 3D 镜头参考停靠工作区：用 dockview 承载「视口 / 场景对象 / 属性（场景设置）/ 状态关键帧」四个可停靠面板，
- * 支持拖拽重排、调整大小、折叠（tab 分组），布局记忆到 localStorage、可重置默认布局。
+ * 支持拖拽重排、调整大小、折叠（tab 分组），布局交给共享预设服务持久保存、可重置当前预设。
  * dockview 只做布局容器；面板内容全部复用现有 Ui* 面板组件；面板头由 DockChrome 精简为 AE 风格。
  */
 
@@ -73,15 +75,17 @@ const CameraStageDock = forwardRef<CameraStageDockHandle, CameraStageDockProps>(
 
     const onReady = useCallback((event: DockviewReadyEvent): void => {
       apiRef.current = event.api
-      restoreLayout(event.api)
       // 应用内浮动组已不是入口（Shift 拖动浮出已关闭）：旧布局里的浮动组恢复后贴到右侧。
       dockFloatingGroupsBack(event.api, (group) => group.api.moveTo({ position: 'right' }))
       // PR 式拖放：整个区域四边可停靠。3D 镜头参考没有独立窗口，Ctrl 拖动与空白处松开不浮出。
       unbindRef.current()
-      unbindRef.current = hostRef.current ? bindDockDragGestures(event.api, { root: hostRef.current }) : () => {}
-      event.api.onDidLayoutChange(() => {
-        localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(event.api.toJSON()))
+      const gestures = hostRef.current ? bindDockDragGestures(event.api, { root: hostRef.current }) : () => {}
+      const layout = bindWorkspaceLayoutDock('camera_stage', event.api, {
+        afterApply: () => dockFloatingGroupsBack(event.api, group => group.api.moveTo({ position: 'right' })),
+        onError: error => createLogger('features.cameraStage.layout').warn('布局读取或保存失败', { error }),
       })
+      unbindRef.current = () => { layout(); gestures() }
+
     }, [])
 
     useEffect(() => () => unbindRef.current(), [])

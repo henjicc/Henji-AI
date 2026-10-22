@@ -1,13 +1,13 @@
+import { parseWorkspaceDockLayout } from '@/core/workspaceLayouts/validation'
 /** @vitest-environment jsdom */
 import React from 'react'
 import { createPortal } from 'react-dom'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { DockviewApi } from 'dockview-react'
 
 import { createDefaultAnimation } from '../domain/animationTypes'
 import { createDefaultCameraStageSceneSnapshot } from '../domain/defaultSceneSnapshot'
-import { CAMERA_STAGE_PANEL_TITLES, LAYOUT_STORAGE_KEY, restoreLayout } from '../layout/dockLayout'
+import { CAMERA_STAGE_PANEL_TITLES, defaultCameraStageLayout } from '../layout/dockLayout'
 import { DockTab } from '../layout/DockChrome'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import ObjectListPanel from './ObjectListPanel'
@@ -116,20 +116,12 @@ describe('停靠布局标题', () => {
   })
 
   it('恢复旧布局后把旧标题（资源管理器、时间轴）回写为统一术语', () => {
-    localStorage.setItem(LAYOUT_STORAGE_KEY, '{}')
-    const panels = new Map(Object.entries({ viewport: '视口', objects: '资源管理器', timeline: '时间轴' }).map(([id, title]) => {
-      const panel = { title, api: { setTitle: vi.fn((next: string) => { panel.title = next }) } }
-      return [id, panel]
-    }))
-    const api = {
-      fromJSON: vi.fn(),
-      getPanel: (id: string) => panels.get(id),
-    } as unknown as DockviewApi
+    const layout = defaultCameraStageLayout()
+    layout.panels.objects.title = '资源管理器'
+    layout.panels.timeline.title = '时间轴'
+    const parsed = parseWorkspaceDockLayout(JSON.stringify(layout), Object.entries(CAMERA_STAGE_PANEL_TITLES).map(([id, title]) => ({ id, title })))
+    expect(parsed.panels.objects.title).toBe('场景对象')
+    expect(parsed.panels.timeline.title).toBe('状态关键帧')
 
-    restoreLayout(api)
-
-    expect(panels.get('objects')?.title).toBe(CAMERA_STAGE_PANEL_TITLES.objects)
-    expect(panels.get('timeline')?.title).toBe(CAMERA_STAGE_PANEL_TITLES.timeline)
-    expect(panels.get('viewport')?.api.setTitle).not.toHaveBeenCalled()
   })
 })

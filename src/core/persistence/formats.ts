@@ -1,3 +1,4 @@
+import { workspaceLayoutEnvelopeSchema, WORKSPACE_LAYOUT_VERSION } from '../workspaceLayouts/schema'
 import { RESOURCE_PERSISTENCE_FORMATS } from './resourceContracts'
 import { paidApprovalSettingsSchema, paidReservationSchema, paidApprovalReceiptSchema } from '../application-control/paidApproval'
 import { FILE_PERSISTENCE_FORMATS } from './fileContracts'
@@ -48,6 +49,7 @@ function format(id: string, name: string, version: number, versionSource: string
 /** Single inventory. SQL payloads inherit the existing SQLite ledger, never a parallel ledger. */
 export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   format('generation-output-timings', '生成结果语音时间戳', 1, 'generation_submissions.response_json.metadata.outputTimings（SQLite 既有账本）', 'electron/main/services/ai-runtime/generation-submissions.ts::decodeResponse', generationOutputTimingsSchema, 'sqlite-ledger'),
+  format('workspace-layouts', '工作区布局预设', WORKSPACE_LAYOUT_VERSION, 'settings.workspace.layout.<workspaceId>.version', 'src/services/workspaceLayouts/workspaceLayoutService.ts::load', workspaceLayoutEnvelopeSchema, 'sqlite-ledger'),
   ...RESOURCE_PERSISTENCE_FORMATS,
   { ...format('document-envelope', '文档外壳', documentEnvelopeContract.version, 'DocumentEnvelope.envelopeVersion', 'electron/main/services/documents/document-file.ts::loadDocumentFile', documentEnvelopeSchema), migrations: documentEnvelopeContract.migrations },
   ...FILE_PERSISTENCE_FORMATS,

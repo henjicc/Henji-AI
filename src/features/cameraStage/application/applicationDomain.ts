@@ -1,3 +1,4 @@
+import '../layout/dockLayout'
 import type { ApplicationDomainModule } from '@/features/application-control/domainModule'
 import { createCameraStageReflectionRegistrations } from './cameraStageReflection'
 import { CAMERA_STAGE_MUTATION_ENTITY_TYPES, CameraStageMutationExecutor, CameraStageMotionOperationExecutor } from './cameraStageControlExecutors'

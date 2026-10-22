@@ -7,7 +7,7 @@ import type { DockviewApi } from 'dockview-react'
 
 import type { VideoEditInstance } from '../application/videoEditService'
 import { VideoEditDock } from './VideoEditDock'
-import { dockVideoEditPanel, resetVideoEditLayout, saveVideoEditLayout, showVideoEditPanel } from './videoEditDockLayout'
+import { defaultVideoEditLayout, dockVideoEditPanel, resetVideoEditLayout, videoEditLayoutPresets, showVideoEditPanel } from './videoEditDockLayout'
 import { activateVideoEditPopoutPanel, dockVideoEditPopout, dockVideoEditPopoutWindow, floatVideoEditDockSource, listVideoEditPopouts, popOutVideoEditGroup, popOutVideoEditPanel, resetVideoEditWorkspaceLayout } from './popout/videoEditPopouts'
 import { VIDEO_EDIT_POPOUT_LAYOUT_STORAGE_KEY } from './popout/videoEditPopoutLayout'
 import { videoEditKeyboardCommand } from '../application/videoEditKeyboard'
@@ -65,13 +65,39 @@ vi.mock('../VideoEditPreview', async () => {
   } }
 })
 
-beforeEach(() => {
+beforeEach(async () => {
+  installHarnessNativeStorage()
+  await videoEditLayoutPresets.load()
+  await videoEditLayoutPresets.restore({ activeId: 'editing', current: defaultVideoEditLayout(), users: [] })
   localStorage.clear(); lifetime.created = 0; lifetime.live = 0; lifetime.peak = 0; lifetime.disposed = 0
   effectScroll.mockClear()
   vi.stubGlobal('ResizeObserver', class { observe(): void {} unobserve(): void {} disconnect(): void {} })
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 1440, 860))
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
+
+it('另存与切换预设收回系统浮窗，预设只记录停靠布局并保留节目实例', async () => {
+  const document = createVideoEditDocument('预设浮窗验收')
+  const instance = { document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], openSequenceIds: [], frame: 0, playing: false, past: [], future: [] } as unknown as VideoEditInstance
+  let api: DockviewApi | null = null
+  const onError = vi.fn()
+  render(<VideoEditDock instance={instance} onError={onError} onApiChange={value => { api = value }} />)
+  const dock = api as unknown as DockviewApi
+  const program = dock.getPanel('program')
+  const { host } = createPopoutTestHost()
+  act(() => { popOutVideoEditPanel(dock, 'effects', host) })
+  expect(listVideoEditPopouts()).toHaveLength(1)
+  await act(async () => { await videoEditLayoutPresets.saveAs('我的布局') })
+  expect(listVideoEditPopouts()).toHaveLength(0)
+  expect(videoEditLayoutPresets.getSnapshot().users[0].layout.panels.effects).toBeDefined()
+  expect(videoEditLayoutPresets.getSnapshot().users[0].layout.popoutGroups).toBeUndefined()
+  act(() => { popOutVideoEditPanel(dock, 'effects', host) })
+  await act(async () => { await videoEditLayoutPresets.apply('grading') })
+  expect(listVideoEditPopouts()).toHaveLength(0)
+  expect(dock.getPanel('color_grade')?.api.isVisible).toBe(true)
+  expect(dock.getPanel('program')).toBe(program)
+  expect(onError).not.toHaveBeenCalled()
+})
 
 it('未访问的隐藏面板不挂载，首次显示后保留挂载状态', () => {
   const document = createVideoEditDocument('首次挂载')
@@ -487,7 +513,7 @@ it('旧布局里的应用内浮动组恢复后贴回主区域（浮动统一为�
   let api: DockviewApi | null = null
   const first = render(<VideoEditDock instance={makeInstance('旧浮动组')} onError={vi.fn()} onApiChange={value => { api = value }} />)
   let dock = api as unknown as DockviewApi
-  act(() => { dock.layout(1440, 860); dock.addFloatingGroup(dock.getPanel('effects')!); saveVideoEditLayout(dock) })
+  act(() => { dock.layout(1440, 860); dock.addFloatingGroup(dock.getPanel('effects')!); void videoEditLayoutPresets.updateCurrent(dock.toJSON()) })
   expect(dock.getPanel('effects')!.api.location.type).toBe('floating')
   first.unmount()
   const second = render(<VideoEditDock instance={makeInstance('旧浮动组')} onError={vi.fn()} onApiChange={value => { api = value }} />)

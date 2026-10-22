@@ -1,3 +1,5 @@
+import { registerWorkspaceLayout } from '@/services/workspaceLayouts/workspaceLayoutService'
+import { parseWorkspaceDockLayout } from '@/core/workspaceLayouts/validation'
 import { Orientation, positionToDirection, type DockviewApi, type DockviewGroupPanel, type IDockviewPanel, type SerializedDockview } from 'dockview-react'
 import { createLogger } from '@/core/logging'
 import { toggleDockGroupMaximized, type DockDropZone } from '@/components/dockviewDocking'
@@ -47,76 +49,30 @@ export function defaultVideoEditLayout(): SerializedDockview {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-function finitePositive(value: unknown): value is number { return typeof value === 'number' && Number.isFinite(value) && value > 0 }
-
-/** Reject unknown renderers, duplicate program views and system-window state before Dockview sees them. */
 export function parseVideoEditLayout(raw: string): SerializedDockview {
-  const value: unknown = JSON.parse(raw)
-  if (!isRecord(value) || !isRecord(value.grid) || !isRecord(value.panels) || value.popoutGroups !== undefined || value.edgeGroups !== undefined) throw new Error('不支持的剪辑布局')
-  const { grid, panels } = value
-  if (!finitePositive(grid.width) || !finitePositive(grid.height) || ![Orientation.HORIZONTAL, Orientation.VERTICAL].includes(grid.orientation as Orientation)) throw new Error('无效的布局尺寸')
-  const known = new Set<string>(VIDEO_EDIT_PANELS.map(panel => panel.id))
-  for (const [id, panel] of Object.entries(panels)) {
-    if (!known.has(id) || !isRecord(panel) || panel.id !== id || panel.contentComponent !== id) throw new Error('无效的剪辑面板')
-    // Inactive tabs retain a single mounted view, including its preview session.
-    panel.renderer = 'always'
-    // 面板名以当前定义为准：保存过的布局里可能还是旧名称（如“项目素材”改称“素材”之前保存的）。
-    panel.title = VIDEO_EDIT_PANELS.find(definition => definition.id === id)?.title
-  }
-  const seen = new Set<string>()
-  const groups = new Set<string>()
-  const checkGroup = (group: unknown): void => {
-    if (!isRecord(group) || typeof group.id !== 'string' || groups.has(group.id) || !Array.isArray(group.views)) throw new Error('无效的面板分组')
-    groups.add(group.id)
-    for (const id of group.views) {
-      if (typeof id !== 'string' || !known.has(id) || seen.has(id) || !panels[id]) throw new Error('重复或缺失的剪辑面板')
-      seen.add(id)
-    }
-    if (group.activeView !== undefined && !group.views.includes(group.activeView)) throw new Error('无效的活动面板')
-  }
-  const checkNode = (node: unknown, depth = 0): void => {
-    if (!isRecord(node) || depth > 8 || (node.size !== undefined && !finitePositive(node.size))) throw new Error('无效的布局节点')
-    if (node.type === 'leaf') checkGroup(node.data)
-    else if (node.type === 'branch' && Array.isArray(node.data)) node.data.forEach(child => checkNode(child, depth + 1))
-    else throw new Error('无效的布局节点')
-  }
-  if (!isRecord(grid.root) || grid.root.type !== 'branch') throw new Error('无效的布局根节点')
-  checkNode(grid.root)
-  if (value.floatingGroups !== undefined) {
-    if (!Array.isArray(value.floatingGroups)) throw new Error('无效的浮动面板')
-    for (const floating of value.floatingGroups) {
-      if (!isRecord(floating) || !isRecord(floating.position) || !finitePositive(floating.position.width) || !finitePositive(floating.position.height)) throw new Error('无效的浮动面板尺寸')
-      const position = floating.position
-      if (!['top', 'bottom'].some(key => typeof position[key] === 'number' && Number.isFinite(position[key])) || !['left', 'right'].some(key => typeof position[key] === 'number' && Number.isFinite(position[key]))) throw new Error('无效的浮动面板位置')
-      if (floating.grid !== undefined && isRecord(floating.grid)) checkNode(floating.grid.root)
-      else checkGroup(floating.data)
-    }
-  }
-  if (seen.size !== Object.keys(panels).length) throw new Error('布局含有未挂载面板')
-  return value as unknown as SerializedDockview
+  return parseWorkspaceDockLayout(raw, VIDEO_EDIT_PANELS)
 }
 
-export function restoreVideoEditLayout(api: DockviewApi, storage: Pick<Storage, 'getItem'> = localStorage): void {
-  try {
-    const saved = storage.getItem(VIDEO_EDIT_LAYOUT_STORAGE_KEY)
-    api.fromJSON(saved ? parseVideoEditLayout(saved) : defaultVideoEditLayout(), { reuseExistingPanels: true })
-  } catch (error) {
-    logger.warn('剪辑布局恢复失败，恢复默认布局', { event: 'video_edit.layout.restore.failed', error })
-    api.fromJSON(defaultVideoEditLayout(), { reuseExistingPanels: true })
-  }
-}
-
-export function saveVideoEditLayout(api: DockviewApi, storage: Pick<Storage, 'setItem'> = localStorage): void {
-  storage.setItem(VIDEO_EDIT_LAYOUT_STORAGE_KEY, JSON.stringify(api.toJSON()))
-}
-
+/** 原有入口统一委托共享预设服务。 */
 export function resetVideoEditLayout(api: DockviewApi): void {
-  // reuseExistingPanels keeps mounted preview and timeline components during reset.
-  api.fromJSON(defaultVideoEditLayout(), { reuseExistingPanels: true })
+  const controller = videoEditLayoutPresets
+  if (controller.getSnapshot().ready) void controller.resetActive().catch(error => logger.warn('剪辑布局重置失败', { error }))
+  else api.fromJSON(defaultVideoEditLayout(), { reuseExistingPanels: true })
 }
+
+function colorGradeLayout(): SerializedDockview {
+  const layout = defaultVideoEditLayout()
+  layout.panels.color_grade = { id: 'color_grade', contentComponent: 'color_grade', title: '全能调色', renderer: 'always' }
+  if (!Array.isArray(layout.grid.root.data)) throw new Error('默认布局根节点无效')
+  const inspector = layout.grid.root.data[2]
+  if (inspector.type === 'leaf' && !Array.isArray(inspector.data)) { inspector.size = 480; inspector.data.views.unshift('color_grade'); inspector.data.activeView = 'color_grade' }
+  return layout
+}
+export const videoEditLayoutPresets = registerWorkspaceLayout({
+  workspaceId: 'video_edit', panels: VIDEO_EDIT_PANELS,
+  builtinPresets: [{ id: 'editing', name: '编辑', layout: defaultVideoEditLayout() }, { id: 'grading', name: '调色', layout: colorGradeLayout() }],
+  readLegacy: () => { const raw = localStorage.getItem(VIDEO_EDIT_LAYOUT_STORAGE_KEY); return raw ? parseVideoEditLayout(raw) : undefined },
+})
 
 export function showVideoEditPanel(api: DockviewApi, id: VideoEditPanelId): IDockviewPanel {
   const existing = api.getPanel(id)

@@ -1,4 +1,5 @@
-import type { DockviewApi, SerializedDockview } from 'dockview-react'
+import { parseWorkspaceDockLayout } from '@/core/workspaceLayouts/validation'
+import { Orientation, type DockviewApi, type SerializedDockview } from 'dockview-react'
 
 import type { ImageEditorHostProfileIdV3 } from '../application/imageEditorHostProfiles'
 import type { ImageEditorPanelDefinitionV3 } from './panelRegistry'
@@ -28,7 +29,7 @@ export function createImageEditorMemoryLayoutStoreV3(): ImageEditorLayoutStoreV3
   }
 }
 
-// 应用会话偏好按工作区隔离；编辑器卸载后仍保留，退出应用后释放。
+// 旧版会话布局仅供一次性迁入共享服务；正式宿主不再调用 save。
 const workspaceLayouts = new Map<string, ImageEditorLayoutStoreV3>()
 export function imageEditorWorkspaceLayoutStoreV3(workspaceId: string): ImageEditorLayoutStoreV3 {
   let store = workspaceLayouts.get(workspaceId)
@@ -54,70 +55,25 @@ export function validateImageEditorDockLayoutV3(
   const allowed = new Set(definitions.map(({ id }) => id))
   if (value.collapsed.some(id => typeof id !== 'string' || !allowed.has(id))
     || new Set(value.collapsed).size !== value.collapsed.length) throw new Error('折叠面板无效')
-  const dock = value.dock
-  if (!isRecord(dock.panels) || !isRecord(dock.grid)
-    || !Number.isFinite(dock.grid.width) || !Number.isFinite(dock.grid.height)
-    || Number(dock.grid.width) < 0 || Number(dock.grid.height) < 0
-    || !['HORIZONTAL', 'VERTICAL'].includes(String(dock.grid.orientation))) {
-    throw new Error('停靠网格无效')
+  const dock = parseWorkspaceDockLayout(JSON.stringify(value.dock), [{ id: 'preview' }, ...definitions])
+  if (!dock.panels.preview) throw new Error('缺少图片预览')
+  let previewFound = false
+  const inspect = (node: unknown, floating: boolean): void => {
+    if (!isRecord(node)) return
+    if (node.type === 'branch' && Array.isArray(node.data)) { node.data.forEach(child => inspect(child, floating)); return }
+    const group = node.data
+    if (!isRecord(group) || !Array.isArray(group.views) || !group.views.includes('preview')) return
+    if (floating || group.views.length !== 1 || group.hideHeader !== true || group.locked !== true) throw new Error('图片预览必须独立停靠')
+    previewFound = true
   }
-  const ids = Object.keys(dock.panels)
-  if (!ids.includes(IMAGE_EDITOR_PREVIEW_PANEL_V3)) throw new Error('缺少图片预览')
-  for (const id of ids) {
-    const panel = dock.panels[id]
-    if ((id !== IMAGE_EDITOR_PREVIEW_PANEL_V3 && !allowed.has(id))
-      || !isRecord(panel) || panel.id !== id || panel.contentComponent !== id) {
-      throw new Error(`面板不属于当前宿主：${id}`)
-    }
-  }
-  // 系统浮窗和 edgeGroup 不属于本任务宿主，禁止借布局导入打开外部窗口。
-  if (dock.popoutGroups !== undefined || dock.edgeGroups !== undefined) throw new Error('不支持此停靠位置')
-  if (dock.floatingGroups !== undefined && !Array.isArray(dock.floatingGroups)) throw new Error('浮动布局无效')
-  const nodes: { node: unknown; floating: boolean }[] = [{ node: dock.grid.root, floating: false }]
-  const seenNodes = new Set<unknown>()
-  const used = new Set<string>()
-  const groups = new Set<string>()
-  let gridPreview = false
-  const collect = (data: unknown, floating: boolean): void => {
-    if (!isRecord(data) || typeof data.id !== 'string' || groups.has(data.id)
-      || !Array.isArray(data.views) || !data.views.length) throw new Error('面板组无效')
-    groups.add(data.id)
-    for (const id of data.views) {
-      if (typeof id !== 'string' || !ids.includes(id) || used.has(id)) throw new Error('面板组引用无效')
-      if (id === IMAGE_EDITOR_PREVIEW_PANEL_V3) {
-        if (floating || data.views.length !== 1 || data.hideHeader !== true || data.locked !== true) throw new Error('图片预览必须独立停靠')
-        gridPreview = true
-      }
-      used.add(id)
-    }
-    if (data.activeView !== undefined && !data.views.includes(data.activeView)) throw new Error('当前标签无效')
-  }
+  inspect(dock.grid.root, false)
   for (const floating of dock.floatingGroups ?? []) {
-    if (!isRecord(floating) || !isRecord(floating.position)) throw new Error('浮动位置无效')
-    const position = floating.position
-    for (const coordinate of ['width', 'height']) {
-      if (!Number.isFinite(position[coordinate])) throw new Error('浮动位置无效')
-    }
-    if (['left', 'right', 'top', 'bottom'].some(key => position[key] !== undefined && !Number.isFinite(position[key]))
-      || ![position.left, position.right].some(Number.isFinite)
-      || ![position.top, position.bottom].some(Number.isFinite)) throw new Error('浮动锚点无效')
-    if (Number(position.width) <= 0 || Number(position.height) <= 0) throw new Error('浮动尺寸无效')
-    if (floating.grid !== undefined) {
-      if (!isRecord(floating.grid)) throw new Error('浮动网格无效')
-      nodes.push({ node: floating.grid.root, floating: true })
-    } else collect(floating.data, true)
+    const entry = floating as unknown as Record<string, unknown>
+    if (isRecord(entry.grid)) inspect(entry.grid.root, true)
+    else inspect({ type: 'leaf', data: entry.data }, true)
   }
-  while (nodes.length) {
-    const entry = nodes.pop()!
-    const node = entry.node
-    if (!isRecord(node) || seenNodes.has(node)) throw new Error('停靠节点无效')
-    seenNodes.add(node)
-    if (node.size !== undefined && (!Number.isFinite(node.size) || Number(node.size) < 0)) throw new Error('停靠尺寸无效')
-    if (node.type === 'branch' && Array.isArray(node.data)) nodes.push(...node.data.map(node => ({ node, floating: entry.floating })))
-    else if (node.type === 'leaf') collect(node.data, entry.floating)
-    else throw new Error('停靠节点类型无效')
-  }
-  if (!gridPreview || used.size !== ids.length) throw new Error('面板布局引用不完整')
+  if (!previewFound) throw new Error('图片预览必须独立停靠')
+
 }
 
 export function showImageEditorPanelV3(
@@ -139,26 +95,27 @@ export function showImageEditorPanelV3(
   })
 }
 
+export function defaultImageEditorLayout(definitions: readonly ImageEditorPanelDefinitionV3[], focus = false): SerializedDockview {
+  const groups: { type: 'leaf'; size: number; data: { id: string; views: string[]; activeView: string } }[] = []
+  for (const panel of definitions) {
+    if (groups.length && (focus || panel.defaultPlacement === 'tab')) groups[0].data.views.push(panel.id)
+    else groups.push({ type: 'leaf', size: 280, data: { id: `image-${panel.id}`, views: [panel.id], activeView: panel.id } })
+  }
+  return {
+    grid: { width: 1440, height: 860, orientation: Orientation.HORIZONTAL, root: { type: 'branch', data: [
+      { type: 'leaf', size: focus ? 1200 : 1040, data: { id: 'image-preview', views: ['preview'], activeView: 'preview', locked: true, hideHeader: true } },
+      ...(groups.length ? [{ type: 'branch' as const, size: focus ? 240 : 400, data: groups }] : []),
+    ] } },
+    panels: Object.fromEntries([{ id: 'preview', title: '画布' }, ...definitions].map(({ id, title }) => [id, { id, title, contentComponent: id, renderer: 'always' as const }])),
+    activeGroup: 'image-preview',
+  }
+}
+
+/** 默认布局构造保留为宿主及测试入口；用户重置走共享 resetActive。 */
 export function resetImageEditorDockLayoutV3(
   api: DockviewApi,
   definitions: readonly ImageEditorPanelDefinitionV3[],
   title: (definition: ImageEditorPanelDefinitionV3) => string,
 ): void {
-  const preview = api.getPanel(IMAGE_EDITOR_PREVIEW_PANEL_V3)
-  if (preview && preview.group.api.location.type === 'grid') {
-    // 恢复布局不能重建预览：保留正在编辑的画面、GPU 租约与工具会话。
-    for (const panel of [...api.panels]) if (panel !== preview) api.removePanel(panel)
-  } else {
-    api.clear()
-    const previewGroup = api.addGroup({ direction: 'right', id: 'image-preview', locked: true, hideHeader: true })
-    api.addPanel({ id: IMAGE_EDITOR_PREVIEW_PANEL_V3, component: IMAGE_EDITOR_PREVIEW_PANEL_V3, renderer: 'always', position: { referenceGroup: previewGroup, direction: 'within' } })
-  }
-  for (const definition of definitions) showImageEditorPanelV3(api, definition, title(definition))
-  // 同组新增标签不抢走该组默认面板的焦点；历史仍可从标签或面板菜单打开。
-  const activeGroups = new Set<string>()
-  for (const definition of definitions) {
-    const panel = api.getPanel(definition.id)
-    if (panel && !activeGroups.has(panel.group.id)) { activeGroups.add(panel.group.id); panel.api.setActive() }
-  }
-  api.getPanel(IMAGE_EDITOR_PREVIEW_PANEL_V3)?.api.setActive()
+  api.fromJSON(defaultImageEditorLayout(definitions.map(definition => ({ ...definition, title: title(definition) }))), { reuseExistingPanels: true })
 }

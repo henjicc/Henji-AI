@@ -1,3 +1,4 @@
+import { workspaceLayoutApplicationDomain } from './workspaceLayoutDomain'
 import { canvasApplicationDomain } from '@/features/canvas/application/applicationDomain'
 import { cameraStageApplicationDomain } from '@/features/cameraStage/application/applicationDomain'
 import { assetsApplicationDomain } from '@/features/assets/application/applicationDomain'
@@ -27,6 +28,7 @@ export function initializeApplicationDomainBindings(): void {
 }
 
 export const APPLICATION_DOMAINS: readonly ApplicationDomainModule[] = [
+  workspaceLayoutApplicationDomain,
   screenRecordingApplicationDomain,
   canvasApplicationDomain,
   cameraStageApplicationDomain,

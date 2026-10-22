@@ -1,3 +1,4 @@
+import '../layout/videoEditDockLayout'
 import { startVideoEditAudioDocumentLinks, sendVideoEditClipToAudioEdit } from './videoEditAudioLinks'
 import { sendVideoEditAudioCapability } from '@/core/application-control/domains/videoEdit/videoEditAudioLinkCapability'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'

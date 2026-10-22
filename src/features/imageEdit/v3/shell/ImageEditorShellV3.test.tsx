@@ -1,3 +1,4 @@
+import { installHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 // @vitest-environment jsdom
 import '@/tests/imageEditDocumentFixture'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -29,18 +30,20 @@ const registry = new ImageEditorPanelRegistryV3([
   { id: 'layers', title: '图层', titleKey: 'imageEditor.v3.layers.title', order: 0, component: Body, onVisibilityChange: visibility },
   { id: 'properties', title: '属性', titleKey: 'imageEditor.v3.properties.title', order: 1, component: Body },
 ])
+let workspaceNumber = 0
 function Harness({ store, onApi, profileId = 'full' }: {
   store?: ImageEditorLayoutStoreV3
   onApi?: (api: DockviewApi | null) => void
   profileId?: 'full' | 'quick'
 }): JSX.Element {
   const { controller } = useImageEditorControllerV3({ document: documentFixture, profileId, onDocumentChange: vi.fn() })
-  return <div><ImageEditorShellV3 controller={controller} registry={registry} layoutStore={store} onDockApiChange={onApi}
+  return <div><ImageEditorShellV3 controller={controller} layoutWorkspaceId={`shell-test-${workspaceNumber}`} registry={registry} layoutStore={store} onDockApiChange={onApi}
     commandBar={actions => <UiToolbar variant="command" trailing={actions}>图片编辑</UiToolbar>}
     toolRail={<div>工具</div>} preview={<Preview />} /></div>
 }
 
 beforeEach(async () => {
+  installHarnessNativeStorage(); workspaceNumber++
   await i18n.changeLanguage('zh-CN')
   visibility.mockClear(); previewMount.mockClear()
   vi.stubGlobal('ResizeObserver', class { observe(): void {} unobserve(): void {} disconnect(): void {} })
@@ -92,7 +95,7 @@ describe('图片 Shell 与面板可见生命周期', () => {
     await screen.findByRole('button', { name: '关闭图层面板' })
     fireEvent.click(screen.getByRole('button', { name: '面板' }))
     fireEvent.click(await screen.findByRole('menuitem', { name: '恢复默认布局' }))
-    expect(dock.panels.map(({ id }) => id)).toEqual(['preview', 'layers', 'properties'])
+    expect(dock.panels.map(({ id }) => id).sort()).toEqual(['layers', 'preview', 'properties'])
     expect(previewMount).toHaveBeenCalledTimes(1)
     expect(documentFixture.revision).toBe(0)
   })

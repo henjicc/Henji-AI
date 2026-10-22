@@ -1035,6 +1035,23 @@
       "samples": {
         "v1.json": "a744ea1cac3def56301b40bec9bb9977e30ed89cb1322bcab1a8ad208096c650"
       }
+    },
+    "workspace-layouts": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "af337dc2da2f7711ad8d76a80986605b27bc5fb8f8b22ae074ace67da0a502a0"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "44771fb3a77b4b8920f5dfa0bcf2db8fcb5d1c3d7f1943ef2dfa1938f9612300"
+      }
     }
   },
   "devBreaks": []

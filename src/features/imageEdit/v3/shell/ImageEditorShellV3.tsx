@@ -1,5 +1,6 @@
+import { WorkspaceLayoutMenu } from '@/components/dockLayouts/WorkspaceLayoutMenu'
+import { registerImageEditorLayout } from '../panelFramework/layoutPresets'
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
-import { useTranslation } from 'react-i18next'
 import type { DockviewApi } from 'dockview-react'
 
 import type { ImageEditorV3Controller } from '../editor/types'
@@ -8,7 +9,7 @@ import historyPanels from '../panelEntries/history'
 import channelPanels from '../panelEntries/channels'
 import adjustmentPanels from '../panelEntries/adjustments'
 import { ImageEditorPanelRegistryV3, type ImageEditorPanelDefinitionV3 } from '../panelFramework/panelRegistry'
-import { createImageEditorMemoryLayoutStoreV3, resetImageEditorDockLayoutV3, type ImageEditorLayoutStoreV3 } from '../panelFramework/layout'
+import { type ImageEditorLayoutStoreV3 } from '../panelFramework/layout'
 import { ImageEditorDockV3 } from './ImageEditorDockV3'
 import { ImageEditorPanelMenuV3 } from './ImageEditorDockChromeV3'
 import { ImageEditorShellContextV3 } from './ImageEditorShellContextV3'
@@ -17,20 +18,20 @@ import { ImageEditorShellContextV3 } from './ImageEditorShellContextV3'
 const entries = import.meta.glob<readonly ImageEditorPanelDefinitionV3[]>(['../panelEntries/*.ts', '../panelEntries/*.tsx', '!../panelEntries/shell.tsx', '!../panelEntries/history.tsx', '!../panelEntries/channels.tsx', '!../panelEntries/adjustments.tsx'], { eager: true, import: 'default' })
 const defaultRegistry = new ImageEditorPanelRegistryV3([...shellPanels, ...historyPanels, ...channelPanels, ...adjustmentPanels, ...Object.values(entries).flat()])
 
-export function ImageEditorShellV3({ controller, commandBar, toolRail, preview, registry = defaultRegistry, layoutStore, onDockApiChange, contentDisabled }: {
+export function ImageEditorShellV3({ controller, commandBar, toolRail, preview, registry = defaultRegistry, layoutStore, layoutWorkspaceId, onDockApiChange, contentDisabled }: {
   controller: ImageEditorV3Controller
   commandBar: (panelActions: ReactNode) => ReactNode
   toolRail: ReactNode
   preview: ReactNode
   registry?: ImageEditorPanelRegistryV3
   layoutStore?: ImageEditorLayoutStoreV3
+  layoutWorkspaceId?: string
   onDockApiChange?: (api: DockviewApi | null) => void
   contentDisabled?: boolean
 }): JSX.Element {
-  const { t } = useTranslation('ui')
-  const memoryStore = useRef<ImageEditorLayoutStoreV3>()
-  memoryStore.current ??= createImageEditorMemoryLayoutStoreV3()
   const panels = useMemo(() => registry.list(controller.profile), [registry, controller.profile])
+  const workspaceId = `image_edit.${layoutWorkspaceId ?? controller.profile.id}.${controller.profile.id}`
+  const layouts = useMemo(() => registerImageEditorLayout(workspaceId, controller.profile.id, panels, layoutStore), [workspaceId, controller.profile.id, panels, layoutStore])
   const [api, setApi] = useState<DockviewApi | null>(null)
   const onApiChangeRef = useRef(onDockApiChange)
   onApiChangeRef.current = onDockApiChange
@@ -48,13 +49,13 @@ export function ImageEditorShellV3({ controller, commandBar, toolRail, preview, 
   const restoreDefault = useCallback((): void => {
     if (!api) return
     setCollapsed(new Set())
-    resetImageEditorDockLayoutV3(api, panels, definition => t(definition.titleKey, { defaultValue: definition.title }))
-  }, [api, panels, t])
+    void layouts.resetActive().catch(() => undefined)
+  }, [api, layouts])
   return <ImageEditorShellContextV3.Provider value={{ controller, preview, panels, api, collapsed, toggleCollapsed, restoreDefault }}>
-    {commandBar(<ImageEditorPanelMenuV3 />)}
+    {commandBar(<><ImageEditorPanelMenuV3 /><WorkspaceLayoutMenu workspaceId={workspaceId} /></>)}
     <div className="relative flex min-h-0 min-w-0 flex-1" {...(contentDisabled ? { inert: '' } : {})}>
       {toolRail}
-      <ImageEditorDockV3 key={controller.profile.id} layoutStore={layoutStore ?? memoryStore.current}
+      <ImageEditorDockV3 key={workspaceId} workspaceId={workspaceId}
         onApiChange={acceptApi} onRestoreCollapsed={restoreCollapsed} />
     </div>
   </ImageEditorShellContextV3.Provider>
