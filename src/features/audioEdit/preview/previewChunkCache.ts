@@ -1,4 +1,5 @@
 import type { AudioEditPreviewChunk, AudioEditPreviewMode, AudioEditProjectDocument, AudioEditTimelineSpan } from '@/core/audioEdit/types'
+import { applyAudioEditSpliceFade, buildAudioEditSpliceFades, type AudioEditSpliceFade } from '@/core/audioEdit/spliceDeclick'
 import { getPlatform } from '@/platform/runtime'
 import { flushAudioEditProject } from '../application/audioEditProjectInstances'
 
@@ -6,8 +7,11 @@ import { flushAudioEditProject } from '../application/audioEditProjectInstances'
 export class PreviewChunkCache {
   private readonly blocks = new Map<number, Promise<AudioEditPreviewChunk>>()
   private flushed: Promise<void> | undefined
+  private readonly fades: readonly AudioEditSpliceFade[]
 
-  constructor(private readonly project: AudioEditProjectDocument, private readonly mode: AudioEditPreviewMode, private readonly spans: readonly AudioEditTimelineSpan[]) {}
+  constructor(private readonly project: AudioEditProjectDocument, private readonly mode: AudioEditPreviewMode, private readonly spans: readonly AudioEditTimelineSpan[]) {
+    this.fades = buildAudioEditSpliceFades(spans, project.source.sampleRate)
+  }
 
   private block(frame: number): Promise<AudioEditPreviewChunk> {
     const { sampleRate, durationFrames } = this.project.source
@@ -28,9 +32,10 @@ export class PreviewChunkCache {
   }
 
   async read(cursor: number, limit: number): Promise<AudioEditPreviewChunk | null> {
-    const span = this.spans.find(candidate => cursor >= candidate.sourceStartFrame && cursor < candidate.sourceEndFrame)
-      ?? this.spans.find(candidate => candidate.sourceStartFrame >= cursor)
-    if (!span) return null
+    let index = this.spans.findIndex(candidate => cursor >= candidate.sourceStartFrame && cursor < candidate.sourceEndFrame)
+    if (index < 0) index = this.spans.findIndex(candidate => candidate.sourceStartFrame >= cursor)
+    if (index < 0) return null
+    const span = this.spans[index]
     const start = Math.max(cursor, span.sourceStartFrame)
     const { sampleRate, durationFrames, channels } = this.project.source
     const count = Math.min(limit, span.sourceEndFrame - start, (Math.floor(start / sampleRate) + 1) * sampleRate - start)
@@ -39,7 +44,9 @@ export class PreviewChunkCache {
     const block = await this.block(start)
     const end = Math.min(start + count, block.sourceEndFrame)
     if (end <= start) throw new Error('此位置无法读取音频，请重新定位后重试')
-    return { ...block, sourceStartFrame: start, sourceEndFrame: end, pcm: block.pcm.slice((start - block.sourceStartFrame) * block.channels * 4, (end - block.sourceStartFrame) * block.channels * 4) }
+    const samples = new Float32Array(block.pcm, (start - block.sourceStartFrame) * block.channels * 4, (end - start) * block.channels)
+    const pcm = this.mode === 'source' ? samples.slice() : applyAudioEditSpliceFade(samples, block.channels, start - span.sourceStartFrame, this.fades[index])
+    return { ...block, sourceStartFrame: start, sourceEndFrame: end, pcm: pcm.buffer as ArrayBuffer }
   }
 
   async grain(frame: number): Promise<{ pcm: ArrayBuffer; channels: number }> {

@@ -39,9 +39,53 @@ it('80ms 试听跨秒边界和删除拼接点，静音及双声道顺序与正�
   expect(grain).toHaveLength(3840 * 2)
   expect(Array.from(grain.slice(0, 4))).toEqual([47000, -47000, 47001, -47001])
   expect(Array.from(grain.slice(2000, 4000))).toEqual(Array(2000).fill(0))
-  expect(Array.from(grain.slice(4000, 4004))).toEqual([144000, -144000, 144001, -144001])
+  expect(grain[4000]).toBe(0)
+  expect(grain[4001]).toBeCloseTo(0)
+  expect(grain[4002]).toBeCloseTo(144001 / 240, 3)
+  expect(grain[4003]).toBeCloseTo(-144001 / 240, 3)
   expect(prepare.mock.calls.map(([request]) => request.sourceStartFrame)).toEqual([0, 144000])
   expect(flush).toHaveBeenCalledTimes(1)
+})
+
+it.each(['edited', 'delivery'] as const)('%s 连续播放与擦洗在跨秒拼接点一致，缓存重读不叠加淡变', async mode => {
+  prepare.mockImplementation(async ({ sourceStartFrame, frameCount }) => ({
+    sourceStartFrame, sourceEndFrame: sourceStartFrame + frameCount, channels: 2, sampleRate: 48000,
+    pcm: Float32Array.from({ length: frameCount * 2 }, (_, i) => {
+      const value = sourceStartFrame + Math.floor(i / 2) < 49000 ? 0.75 : -0.5
+      return i % 2 ? -value : value
+    }).buffer,
+  }))
+  const spans = [span(0, 48100), span(96000, 144000)]
+  const cache = new PreviewChunkCache(project, mode, spans)
+  const grain = new Float32Array((await cache.grain(47800)).pcm)
+  const first = await cache.read(47800, 3840)
+  const second = await cache.read(48000, 3840)
+  const third = await cache.read(48100, 3540)
+  const playback = new Float32Array(grain.length)
+  playback.set(new Float32Array(first!.pcm))
+  playback.set(new Float32Array(second!.pcm), 200 * 2)
+  playback.set(new Float32Array(third!.pcm), 300 * 2)
+  expect(playback).toEqual(grain)
+  let maxJump = 0
+  for (let i = 2; i < grain.length; i++) maxJump = Math.max(maxJump, Math.abs(grain[i] - grain[i - 2]))
+  expect(maxJump).toBeLessThan(0.004)
+  expect(new Float32Array((await cache.read(48000, 100))!.pcm)).toEqual(new Float32Array(second!.pcm))
+  const original = new PreviewChunkCache(project, 'source', [span(0, project.source.durationFrames)])
+  expect(new Float32Array((await original.read(48000, 100))!.pcm)).toEqual(Float32Array.from({ length: 200 }, (_, i) => i % 2 ? -0.75 : 0.75))
+})
+
+it('静音状态切换降低跳变，连续未静音片段不产生音量凹陷', async () => {
+  prepare.mockImplementation(async ({ sourceStartFrame, frameCount }) => ({
+    sourceStartFrame, sourceEndFrame: sourceStartFrame + frameCount, channels: 2, sampleRate: 48000,
+    pcm: new Float32Array(frameCount * 2).fill(0.75).buffer,
+  }))
+  const cache = new PreviewChunkCache(project, 'edited', [span(0, 1000), span(1000, 2000, true), span(2000, 2500), span(2500, 4000)])
+  const samples = new Float32Array((await cache.grain(0)).pcm)
+  let maxJump = 0
+  for (let i = 2; i < samples.length; i++) maxJump = Math.max(maxJump, Math.abs(samples[i] - samples[i - 2]))
+  expect(maxJump).toBeLessThan(0.004)
+  expect(samples.slice(1000 * 2, 2000 * 2)).toEqual(new Float32Array(2000))
+  expect(samples.slice(2240 * 2)).toEqual(new Float32Array(samples.length - 2240 * 2).fill(0.75))
 })
 
 it('交付的前后补静音和尾部短段不越界、不循环，读取失败可重试', async () => {

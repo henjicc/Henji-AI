@@ -11,6 +11,8 @@ vi.mock('../video/ffmpeg-loader', () => ({ loadFfmpegPath: async () => 'ffmpeg',
 vi.mock('./process', () => ({ runAudioEditProcess: async (_bin: string, args: string[]) => { const script = await fs.readFile(args[args.indexOf('-filter_complex_script') + 1], 'utf8'); state.calls.push(script.includes('aeval') ? 'gain' : 'cuts'); await fs.writeFile(args.at(-1)!, script) } }))
 import { renderAudioEditProject } from './render'
 import { cachedAudioFile } from './render-cache'
+import { audioRenderKey } from './render-cache'
+import { buildProjectAudioEditTimeline } from '../../../../src/core/audioEdit/timeline'
 let project: AudioEditProjectDocument
 beforeEach(async () => {
   state.dir = await fs.mkdtemp(path.join(os.tmpdir(), 'audio-render-')); state.calls = []
@@ -36,4 +38,22 @@ it('failed and cancelled cache builds never publish, and simultaneous readers sh
   const controller = new AbortController()
   await expect(cachedAudioFile(state.dir, 'cancel', 'wav', async p => { await fs.writeFile(p, 'partial'); controller.abort() }, controller.signal)).rejects.toThrow()
   expect((await fs.readdir(state.dir))).toEqual(['ok.wav'])
+})
+
+it('剪辑引用和 WAV 共用带微淡变的渲染，旧硬切成品缓存不再命中', async () => {
+  project.vstEnabled = false
+  project.repairs = []
+  project.gainRegions = []
+  project.cuts![0] = { ...project.cuts![0], startFrame: 12000, endFrame: 24000 }
+  const oldKey = audioRenderKey([path.join(state.dir, 'source.wav'), buildProjectAudioEditTimeline(project)])
+  await fs.writeFile(path.join(state.dir, `finished-${oldKey}.wav`), '旧硬切缓存')
+  const result = await renderAudioEditProject(project)
+  expect(result.durationFrames).toBe(36000)
+  expect(state.calls).toEqual(['cuts'])
+  expect(result.audioPath).not.toBe(path.join(state.dir, `finished-${oldKey}.wav`))
+  const graph = await fs.readFile(result.audioPath, 'utf8')
+  expect(graph).toContain('afade=t=out:ss=11760:ns=240:curve=tri')
+  expect(graph).toContain('afade=t=in:ss=0:ns=240:curve=tri')
+  expect((await renderAudioEditProject(project)).audioPath).toBe(result.audioPath)
+  expect(state.calls).toEqual(['cuts'])
 })

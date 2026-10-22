@@ -94,12 +94,13 @@ export async function renderAudioEditProject(project: AudioEditProjectDocument, 
     const spans = buildProjectAudioEditTimeline(project)
     const durationFrames = editedDurationFrames(spans)
     if (!durationFrames) throw new Error('当前没有可渲染的声音，请保留至少一段音频。')
-    const key = audioRenderKey([source, spans])
+    // 拼接算法变更只失效成品缓存，源时间上的修复、增益与效果缓存仍可复用。
+    const key = audioRenderKey(['splice-declick-v1', source, spans, project.source.sampleRate])
     const audioPath = await cachedAudioFile(audioEditCacheDirectory(project.id), `finished-${key}`, 'wav', async output => {
       const script = `${output}.filter`
       try {
         const ffmpeg = await loadFfmpegPath()
-        await fs.writeFile(script, buildAudioEditConcatFilter(spans, '0:a:0'))
+        await fs.writeFile(script, buildAudioEditConcatFilter(spans, '0:a:0', project.source.sampleRate))
         await runAudioEditProcess(ffmpeg, ['-v', 'error', '-y', '-i', source, ...await ffmpegFilterComplexFileArgs(ffmpeg, script), '-map', '[out]', '-c:a', 'pcm_f32le', output], signal)
         await validateAudioEditAudio(output, project.source.sampleRate, project.source.channels, durationFrames, signal)
       } finally { await removeUnmanagedCachePath(script, { force: true }) }
