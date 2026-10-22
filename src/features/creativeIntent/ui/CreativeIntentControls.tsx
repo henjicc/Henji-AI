@@ -4,7 +4,7 @@ import type { ExplanationSendRequest } from '../application/explanationGeneratio
 import { useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Dropdown, UiButton, UiGroup, UiFormRow, UiSegmented, UiOptionButton, UiRangeInput, UiError, UiLoading } from '@/components/ui'
-import { PinOff, Play, Square, Pause, RotateCcw } from 'lucide-react'
+import { PinOff, Play, Square, Pause } from 'lucide-react'
 import { Virtuoso } from 'react-virtuoso'
 
 interface SharedCreativeIntentControlsProps {
@@ -99,17 +99,17 @@ export function CreativeIntentControls(props: CreativeIntentControlsProps): Reac
     </UiGroup>}
     {(props.canPin || props.pins.length > 0) && <UiGroup title={t('creativeIntent.pins', { defaultValue: '钉住姿态' })} titleTone="compact" divided>
       {row('', <div className="flex gap-1">
-        <UiButton variant="quiet" size="sm" className="min-w-0 flex-1" disabled={!props.canPin || busy} onClick={props.onPin}>{props.pinLabel ?? (camera ? t('creativeIntent.pinCamera', { defaultValue: '钉住当前机位' }) : motion ? t('creativeIntent.pinPosition', { defaultValue: '钉住当前位置' }) : t('creativeIntent.pinLayer', { defaultValue: '钉住所选图层' }))}</UiButton>
-        {motion?.onPinEnd && <UiButton variant="quiet" size="sm" className="min-w-0 flex-1" disabled={recording || busy || props.status === 'idle'} onClick={motion.onPinEnd}>{t('creativeIntent.pinEnd', { defaultValue: '钉住终点' })}</UiButton>}
+        <UiButton variant="secondary" size="sm" className="min-w-0 flex-1" disabled={!props.canPin || busy} onClick={props.onPin}>{props.pinLabel ?? (camera ? t('creativeIntent.pinCamera', { defaultValue: '钉住当前机位' }) : motion ? t('creativeIntent.pinPosition', { defaultValue: '钉住当前位置' }) : t('creativeIntent.pinLayer', { defaultValue: '钉住所选图层' }))}</UiButton>
+        {motion?.onPinEnd && <UiButton variant="secondary" size="sm" className="min-w-0 flex-1" disabled={recording || busy || props.status === 'idle'} onClick={motion.onPinEnd}>{t('creativeIntent.pinEnd', { defaultValue: '钉住终点' })}</UiButton>}
       </div>)}
       {props.pins.length > 0 && row(t('creativeIntent.pinned', { defaultValue: '已钉住' }), <div className="h-24"><Virtuoso data={props.pins} itemContent={(_, pin) => <UiOptionButton variant="menu" size="sm" className="w-full" disabled={busy} onClick={() => props.onUnpin(pin.id)}><PinOff size={UI_ICON_SIZE.sm} />{t('creativeIntent.unpin', { defaultValue: '解钉 · {{label}}', label: pin.label })}</UiOptionButton>} /></div>)}
     </UiGroup>}
     {props.candidates.length > 0 && <UiGroup title={t('creativeIntent.comparison', { defaultValue: '候选对照' })} titleTone="compact" divided>
       {row(t('creativeIntent.candidates', { defaultValue: '候选' }), <div className="flex flex-col gap-1">
-        <UiOptionButton variant="menu" size="sm" className="w-full" active={props.selected === 'original'} onClick={() => props.onPreview('original')}><RotateCcw size={UI_ICON_SIZE.sm} />{camera ? t('creativeIntent.original', { defaultValue: '原稿' }) : t('creativeIntent.originalA', { defaultValue: '原稿 A' })}</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="w-full" active={props.selected === 'original'} onClick={() => props.onPreview('original')}>{camera ? t('creativeIntent.original', { defaultValue: '原稿' }) : t('creativeIntent.originalA', { defaultValue: '原稿 A' })}</UiOptionButton>
         {props.candidates.map(candidate => <UiOptionButton key={candidate.id} variant="menu" size="sm" className="w-full" active={props.selected === candidate.id} onClick={() => props.onPreview(candidate.id)}>{candidate.label}{camera ? '' : ' B'}</UiOptionButton>)}
       </div>)}
-      {demonstration && row('', <UiButton variant="quiet" size="sm" className="w-full" onClick={demonstration.onPlay}><Play  />{t('creativeIntent.play', { defaultValue: '正常速预览' })}</UiButton>)}
+      {demonstration && row('', <UiButton variant="secondary" size="sm" className="w-full" onClick={demonstration.onPlay}><Play  />{t('creativeIntent.play', { defaultValue: '正常速预览' })}</UiButton>)}
     </UiGroup>}
     {props.message && row('', <UiError size="sm" title={demonstration ? t('creativeIntent.demonstrationError', { defaultValue: '请调整示范' }) : t('creativeIntent.layoutError', { defaultValue: '请调整布局' })} message={props.message} />)}
     {busy ? row('', <><UiLoading size="sm" message={camera ? t('creativeIntent.cameraLoading', { defaultValue: '正在整理机位…' }) : motion ? t('creativeIntent.motionLoading', { defaultValue: '正在整理动作…' }) : t('creativeIntent.layoutLoading', { defaultValue: '正在整理布局…' })} /><UiButton variant="quiet" size="sm" className="w-full" onClick={props.onCancel}>{t('creativeIntent.cancel', { defaultValue: '取消整理' })}</UiButton></>) : <UiGroup divided>

@@ -785,6 +785,17 @@ body {
   background: rgb(var(--text2-rgb) / 0.72) padding-box;
 }
 
+/* 停靠面板里的滚动条静止时隐藏，指针移到可滚动区域上才出现（覆盖式），面板底部不再常挂一条灰杠。 */
+.henji-cameraStage-dock ::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+.henji-cameraStage-dock :hover::-webkit-scrollbar-thumb {
+  background: rgb(var(--text2-rgb) / 0.45) padding-box;
+}
+.henji-cameraStage-dock ::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--text2-rgb) / 0.72) padding-box;
+}
+
 /* 模型选择器的供应商栏使用常驻的自定义横向滚动条，隐藏会受系统设置自动消失的原生滚动条。 */
 .model-provider-scroll-viewport {
   scrollbar-width: none;
@@ -1051,6 +1062,29 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   /* 停靠面板组一律直角（用户确认）：面板之间靠 4px 间隙分开，圆角反而让面板像浮起的卡片，与命令带、助手不协调。 */
   border-radius: 0;
   overflow: hidden;
+}
+
+/*
+ * 面板组放不下的标签：dockview 默认画“> 3”（箭头加数字），看不出含义。改成常见的“+3”（还有 3 个面板），
+ * 辅助文字色，悬停提亮并出中性底；点开仍是隐藏面板的列表。组件不开放自定义，只能在这里改样式。
+ */
+.henji-cameraStage-dock .dv-tabs-overflow-dropdown-default {
+  display: flex;
+  align-items: center;
+  height: 22px;
+  margin: 0 2px;
+  padding: 0 6px;
+  border-radius: var(--radius-control);
+  color: rgb(var(--text3-rgb));
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.henji-cameraStage-dock .dv-tabs-overflow-dropdown-default > svg { display: none; }
+.henji-cameraStage-dock .dv-tabs-overflow-dropdown-default > span::before { content: '+'; }
+.henji-cameraStage-dock .dv-tabs-overflow-dropdown-default:hover {
+  color: rgb(var(--text1-rgb));
+  background-color: rgb(var(--hover-rgb));
 }
 
 /* 有间隙后不再需要分隔线：dockview 在每个非首视图的起始边画一条 --dv-separator-border 的线，会在深色间隙里留下一道浅线。 */
