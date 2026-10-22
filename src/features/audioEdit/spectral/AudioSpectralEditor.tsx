@@ -38,6 +38,11 @@ export interface AudioSpectralEditorProps {
   /** 波形显示增益：试听开着自动增益时，波形按放大后的电平画，看到的就是听到的。 */
   displayGain?: number
   onSeek: (frame: number) => void
+  /** 明确的试听手势：单击只定位，拖动和键盘单步才出声。 */
+  onScrubStart?: (frame: number) => void
+  onScrubMove?: (frame: number) => void
+  onScrubEnd?: () => void
+  onScrubStep?: (frame: number) => void
   selection: AudioTimeSelection | null
   onSelectionChange: (selection: AudioTimeSelection | null) => void
   spectralSelection: AudioSpectralSelection | null
@@ -65,7 +70,7 @@ type Drag =
   | { kind: 'brush'; pointer: number; points: AudioBrushPoint[] }
   | { kind: 'pan'; pointer: number; x: number; view: WaveformViewport }
   | { kind: 'split'; pointer: number; y: number; top: number; height: number }
-  | { kind: 'playhead'; pointer: number }
+  | { kind: 'playhead'; pointer: number; x: number; moved: boolean; frame: number }
   | { kind: 'navigator'; pointer: number; x: number; width: number; view: WaveformViewport; edge: 'left' | 'right' | 'move' }
 
 function useNonPassiveWheel(ref: React.RefObject<HTMLElement | null>, handler: (event: WheelEvent) => void): void {
@@ -122,6 +127,11 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
   const [brushHover, setBrushHover] = React.useState<{ x: number; y: number } | null>(null)
   const [contentWidth, setContentWidth] = React.useState(800)
   const drag = React.useRef<Drag | null>(null)
+  const endScrub = React.useRef(props.onScrubEnd)
+  endScrub.current = props.onScrubEnd
+  React.useEffect(() => () => {
+    if (drag.current?.kind === 'playhead' && drag.current.moved) endScrub.current?.()
+  }, [])
   const brushPoints = React.useRef<AudioBrushPoint[] | null>(null)
   const trailFrame = React.useRef<number | null>(null)
   const content = React.useRef<HTMLDivElement | null>(null)
@@ -285,15 +295,39 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
   const onRulerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || durationFrames <= 0) return
     event.currentTarget.setPointerCapture(event.pointerId)
-    drag.current = { kind: 'playhead', pointer: event.pointerId }
-    props.onSeek(rulerFrame(event.clientX))
+    const frame = rulerFrame(event.clientX)
+    drag.current = { kind: 'playhead', pointer: event.pointerId, x: event.clientX, moved: false, frame }
+    props.onSeek(frame)
   }
-  const onRulerMove = (event: React.PointerEvent<HTMLDivElement>) => { if (drag.current?.kind === 'playhead' && drag.current.pointer === event.pointerId) props.onSeek(rulerFrame(event.clientX)) }
-  const onRulerUp = (event: React.PointerEvent<HTMLDivElement>) => { if (drag.current?.kind === 'playhead') { drag.current = null; event.currentTarget.releasePointerCapture(event.pointerId) } }
+  const onRulerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const current = drag.current
+    if (current?.kind !== 'playhead' || current.pointer !== event.pointerId) return
+    if (!current.moved) {
+      if (Math.abs(event.clientX - current.x) <= CLICK_SLOP_PX) return
+      current.moved = true
+      props.onScrubStart?.(current.frame)
+    }
+    const frame = rulerFrame(event.clientX)
+    if (frame === current.frame) return
+    current.frame = frame
+    if (props.onScrubMove) props.onScrubMove(frame)
+    else props.onSeek(frame)
+  }
+  const onRulerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    const current = drag.current
+    if (current?.kind !== 'playhead' || current.pointer !== event.pointerId) return
+    drag.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+    if (current.moved) props.onScrubEnd?.()
+  }
   const onHandleKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const step = event.shiftKey ? sampleRate : Math.max(1, Math.round((view.end - view.start) / 100))
     const frame = playhead.current()
-    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); props.onSeek(Math.max(0, Math.min(durationFrames, frame + (event.key === 'ArrowLeft' ? -step : step)))) }
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault()
+      const next = Math.max(0, Math.min(durationFrames, frame + (event.key === 'ArrowLeft' ? -step : step)))
+      if (next !== frame) (props.onScrubStep ?? props.onSeek)(next)
+    }
     else if (event.key === 'Home' || event.key === 'End') { event.preventDefault(); props.onSeek(event.key === 'Home' ? 0 : durationFrames) }
   }
 
@@ -369,7 +403,7 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
     <div className={`${RULER_WIDTH}`} aria-hidden />
 
     {/* 时间刻度：按下定位播放头，拖动把手或刻度跟着走 */}
-    <div ref={ruler} className="relative cursor-pointer touch-none overflow-hidden border-b border-line" onPointerDown={onRulerDown} onPointerMove={onRulerMove} onPointerUp={onRulerUp} onPointerCancel={onRulerUp}>
+    <div ref={ruler} className="relative cursor-pointer touch-none overflow-hidden border-b border-line" onPointerDown={onRulerDown} onPointerMove={onRulerMove} onPointerUp={onRulerUp} onPointerCancel={onRulerUp} onLostPointerCapture={onRulerUp}>
       {ticks.map(frame => <div key={frame} className="pointer-events-none absolute inset-y-0 flex items-end" style={{ left: percentX(frame) }}>
         <span className="h-1.5 w-px bg-line-strong" />
         <span className={`${UI_TEXT_TIMECODE_CLASS} absolute bottom-1 left-1 whitespace-nowrap text-2xs text-text3`}>{formatTimecode(frame, sampleRate, step)}</span>

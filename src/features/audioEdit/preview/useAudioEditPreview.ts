@@ -3,11 +3,11 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { buildProjectAudioEditTimeline, editedDurationFrames, findTranscriptBlockForPlayback, nextRetainedSourceFrame, sourceFrameToOutputFrame } from '@/core/audioEdit/timeline'
 import { compileAudioEditXmlTimeline } from '@/core/audioEdit/xml'
 import type { AudioEditPreviewMode, AudioEditProjectDocument, AudioEditTimelineSpan } from '@/core/audioEdit/types'
-import { getPlatform } from '@/platform/runtime'
 import { createLogger } from '@/core/logging'
 import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
 import { createPreviewOutput } from './previewGain'
-import { flushAudioEditProject } from '../application/audioEditProjectInstances'
+import { PreviewChunkCache } from './previewChunkCache'
+import { bindAudioEditScrub, createScrubScheduler } from './audioEditScrub'
 
 const CHUNK_SECONDS = 1
 const BUFFER_SECONDS = 3
@@ -49,10 +49,37 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
   const enqueuedFramesRef = useRef(0)
   const endedRef = useRef(false)
   const playingRef = useRef(false)
+  const scrubDirtyRef = useRef(false)
+  const cancelScrubRef = useRef<() => void>(() => undefined)
+  const resumeRef = useRef<Promise<void> | null>(null)
   const activeSpans = useMemo(() => project ? playbackSpans(project, mode) : [], [mode, project])
   const timeline = activeSpans
-  const spansRef = useRef(activeSpans)
-  spansRef.current = activeSpans
+  const planKey = JSON.stringify([project?.id, project?.source, mode, project?.vstEnabled, project?.processorChain, mode !== 'source' ? project?.gainRegions : undefined, mode !== 'source' ? project?.repairs : undefined, activeSpans])
+  const cacheRef = useRef<{ key: string; value: PreviewChunkCache } | null>(null)
+  if (project && cacheRef.current?.key !== planKey) cacheRef.current = { key: planKey, value: new PreviewChunkCache(project, mode, activeSpans) }
+  const cache = project ? cacheRef.current!.value : null
+
+  const resolveFrame = useCallback((requestedFrame: number) => {
+    if (!project) return 0
+    const next = mode === 'source'
+      ? Math.max(0, Math.min(project.source.durationFrames, requestedFrame))
+      : nextRetainedSourceFrame(requestedFrame, timeline)
+    return requestedFrame === 0 && mode === 'delivery' ? timeline[0]?.sourceStartFrame ?? 0 : next ?? timeline.at(-1)?.sourceEndFrame ?? project.source.durationFrames
+  }, [mode, project, timeline])
+  const resolveFrameRef = useRef(resolveFrame)
+  resolveFrameRef.current = resolveFrame
+
+  const resume = useCallback(() => {
+    const context = contextRef.current
+    if (!context || context.state !== 'suspended') return Promise.resolve()
+    // 不在暂停时挂起设备；同一设备只保留一个恢复请求，完成后不反写播放意图。
+    if (!resumeRef.current) {
+      const pending = context.resume()
+      resumeRef.current = pending
+      void pending.finally(() => { if (resumeRef.current === pending) resumeRef.current = null }).catch(() => undefined)
+    }
+    return resumeRef.current
+  }, [])
 
   const publishPosition = useCallback((sourceFrame: number) => {
     if (!project) return
@@ -64,17 +91,16 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
 
   const fillBuffer = useCallback(async () => {
     const node = nodeRef.current
-    if (!node || !project) return
+    if (!node || !project || !cache || scrubDirtyRef.current) return
     if (fillingPromiseRef.current) return fillingPromiseRef.current
     const generation = generationRef.current
     const filling = (async () => {
       try {
-        if (mode !== 'source') await flushAudioEditProject(project.id)
         while (queuedFramesRef.current < project.source.sampleRate * BUFFER_SECONDS && generation === generationRef.current) {
           const cursor = nextSourceFrameRef.current
-          const span = spansRef.current.find((candidate) => cursor >= candidate.sourceStartFrame && cursor < candidate.sourceEndFrame)
-            ?? spansRef.current.find((candidate) => candidate.sourceStartFrame >= cursor)
-          if (!span) {
+          const chunk = await cache.read(cursor, project.source.sampleRate * CHUNK_SECONDS)
+          if (generation !== generationRef.current) break
+          if (!chunk) {
             endedRef.current = true
             if (queuedFramesRef.current === 0) {
               playingRef.current = false
@@ -83,18 +109,11 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
             }
             break
           }
-          const startFrame = Math.max(cursor, span.sourceStartFrame)
-          const frameCount = Math.min(project.source.sampleRate * CHUNK_SECONDS, span.sourceEndFrame - startFrame)
-          const silenceFrames = span.muted ? frameCount : startFrame < 0 ? Math.min(frameCount, -startFrame) : startFrame >= project.source.durationFrames ? frameCount : 0
-          const chunk = silenceFrames ? { sourceStartFrame: startFrame, sourceEndFrame: startFrame + silenceFrames, channels: project.source.channels, pcm: new Float32Array(silenceFrames * project.source.channels).buffer } : await getPlatform().audioEdit.preparePreviewChunk({ projectId: project.id, sourceStartFrame: startFrame, frameCount: Math.min(frameCount, project.source.durationFrames - startFrame), mode: mode === 'source' ? 'source' : 'edited', processing: mode === 'edited' && project.vstEnabled })
-          if (generation !== generationRef.current) break
           const decodedFrames = chunk.sourceEndFrame - chunk.sourceStartFrame
           if (decodedFrames <= 0) throw new Error('此位置无法读取音频，请重新定位后重试')
           queuedFramesRef.current += decodedFrames
           enqueuedFramesRef.current += decodedFrames
-          nextSourceFrameRef.current = chunk.sourceEndFrame >= span.sourceEndFrame
-            ? spansRef.current.find((candidate) => candidate.sourceStartFrame >= span.sourceEndFrame)?.sourceStartFrame ?? span.sourceEndFrame
-            : chunk.sourceEndFrame
+          nextSourceFrameRef.current = chunk.sourceEndFrame
           node.port.postMessage({ type: 'chunk', generation, pcm: chunk.pcm, channels: chunk.channels, sourceStartFrame: chunk.sourceStartFrame, frameCount: decodedFrames }, [chunk.pcm])
           useAudioEditPlaybackStore.getState().setPreparing(false)
         }
@@ -113,15 +132,14 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
       if (fillingPromiseRef.current === filling) fillingPromiseRef.current = null
       if (generation !== generationRef.current && nodeRef.current) void fillBufferRef.current()
     })
-  }, [project, mode])
+  }, [project, cache])
   fillBufferRef.current = fillBuffer
 
   const resetAt = useCallback((requestedFrame: number) => {
     if (!project || !nodeRef.current) return
-    const next = mode === 'source'
-      ? Math.max(0, Math.min(project.source.durationFrames, requestedFrame))
-      : nextRetainedSourceFrame(requestedFrame, timeline)
-    const target = requestedFrame === 0 && mode === 'delivery' ? timeline[0]?.sourceStartFrame ?? 0 : next ?? timeline.at(-1)?.sourceEndFrame ?? project.source.durationFrames
+    cancelScrubRef.current()
+    scrubDirtyRef.current = false
+    const target = resolveFrame(requestedFrame)
     generationRef.current += 1
     queuedFramesRef.current = 0
     enqueuedFramesRef.current = 0
@@ -132,7 +150,7 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
     useAudioEditPlaybackStore.getState().setError(null)
     useAudioEditPlaybackStore.getState().setPreparing(true)
     void fillBuffer()
-  }, [fillBuffer, mode, project, publishPosition, timeline])
+  }, [fillBuffer, project, publishPosition, resolveFrame])
   resetAtRef.current = resetAt
 
   const projectId = project?.id
@@ -182,6 +200,9 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
     })()
     return () => {
       disposed = true
+      cancelScrubRef.current()
+      scrubDirtyRef.current = false
+      resumeRef.current = null
       generationRef.current += 1
       nodeRef.current?.disconnect()
       outputRef.current?.dispose()
@@ -194,11 +215,10 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
     }
   }, [channelCount, projectId, sampleRate])
 
-  const planKey = JSON.stringify([projectId, mode, project?.vstEnabled, project?.processorChain, mode !== 'source' ? project?.gainRegions : undefined, mode !== 'source' ? project?.repairs : undefined, activeSpans])
   useEffect(() => {
     if (!nodeRef.current) return
     resetAtRef.current(useAudioEditPlaybackStore.getState().sourceFrame)
-    // Persistence revisions and selection updates do not invalidate audio.
+    // 仅保存版本或选区变化不使音频缓存失效。
   }, [planKey])
 
   const togglePlayback = useCallback(async () => {
@@ -209,21 +229,81 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
       playingRef.current = false
       node.port.postMessage({ type: 'playing', value: false })
       useAudioEditPlaybackStore.getState().setPlaying(false)
-      if (context.state === 'running') await context.suspend()
       return
     }
     if (!project) return
-    if (endedRef.current && queuedFramesRef.current === 0) resetAtRef.current(0)
+    if (scrubDirtyRef.current) resetAtRef.current(useAudioEditPlaybackStore.getState().sourceFrame)
+    else if (endedRef.current && queuedFramesRef.current === 0) resetAtRef.current(0)
+    cancelScrubRef.current()
     playingRef.current = true
     node.port.postMessage({ type: 'playing', value: true })
+    useAudioEditPlaybackStore.getState().setError(null)
     useAudioEditPlaybackStore.getState().setPlaying(true)
-    if (context.state === 'suspended') await context.resume()
+    try { await resume() } catch (error) {
+      if (contextRef.current !== context || !playingRef.current) return
+      logger.error('audio_edit.preview.resume.failed', error)
+      playingRef.current = false
+      node.port.postMessage({ type: 'playing', value: false })
+      useAudioEditPlaybackStore.setState({ playing: false, preparing: false, error: '音频设备未能恢复，请重试播放' })
+      return
+    }
+    if (contextRef.current !== context || !playingRef.current) return
     if (queuedFramesRef.current < project.source.sampleRate / 4) {
       useAudioEditPlaybackStore.getState().setPreparing(true)
-      await fillBuffer()
+      await fillBufferRef.current()
     }
-    void fillBuffer()
-  }, [fillBuffer, project])
+    void fillBufferRef.current()
+  }, [project, resume])
+
+  useEffect(() => {
+    if (!projectId || !cache) return
+    let active = true
+    const failed = (error: unknown) => {
+      logger.error('audio_edit.preview.scrub.failed', error)
+      useAudioEditPlaybackStore.getState().setError(error instanceof Error ? error.message : '擦洗试听失败，请重试')
+    }
+    const scheduler = createScrubScheduler(async frame => {
+      const generation = generationRef.current
+      const [grain] = await Promise.all([cache.grain(frame), resume()])
+      return { ...grain, generation }
+    }, grain => {
+      if (!active || playingRef.current || grain.generation !== generationRef.current) return
+      nodeRef.current?.port.postMessage({ type: 'scrub', ...grain }, [grain.pcm])
+      useAudioEditPlaybackStore.getState().setError(null)
+    }, failed)
+    cancelScrubRef.current = () => { scheduler.cancel(); nodeRef.current?.port.postMessage({ type: 'scrub-stop' }) }
+    const move = (frame: number) => {
+      if (playingRef.current) { resetAtRef.current(frame); return }
+      if (!nodeRef.current) return
+      const target = resolveFrameRef.current(frame)
+      if (!scrubDirtyRef.current) {
+        scrubDirtyRef.current = true
+        generationRef.current += 1
+        nodeRef.current.port.postMessage({ type: 'reset', generation: generationRef.current })
+        queuedFramesRef.current = 0
+        enqueuedFramesRef.current = 0
+        useAudioEditPlaybackStore.getState().setPreparing(false)
+      }
+      publishPositionRef.current(target)
+      scheduler.request(target)
+    }
+    const unbind = bindAudioEditScrub(projectId, {
+      start(frame) {
+        logger.debug('audio_edit.preview.scrub.start', { projectId })
+        if (!playingRef.current) void cache.prefetch(resolveFrameRef.current(frame)).catch(error => {
+          // 邻近预取是可选加速；实际试听读取失败才提示用户，不能由过期预取覆盖当前状态。
+          if (active) logger.debug('audio_edit.preview.prefetch.failed', { projectId, message: error instanceof Error ? error.message : String(error) })
+        })
+      },
+      move,
+      step: move,
+      end() {
+        logger.debug('audio_edit.preview.scrub.completed', { projectId })
+        if (scrubDirtyRef.current) resetAtRef.current(useAudioEditPlaybackStore.getState().sourceFrame)
+      },
+    })
+    return () => { active = false; scheduler.cancel(); unbind() }
+  }, [cache, projectId, resume])
 
   return { timeline, togglePlayback, seekSourceFrame: resetAt }
 }

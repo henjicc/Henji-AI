@@ -4,10 +4,11 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
 import { useAudioEditPreview } from './useAudioEditPreview'
 import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
+import { audioEditScrub } from './audioEditScrub'
 
 const { prepare } = vi.hoisted(() => ({ prepare: vi.fn() }))
 vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ audioEdit: { preparePreviewChunk: prepare } }) }))
-vi.mock('@/core/logging', () => ({ createLogger: () => ({ error: vi.fn() }) }))
+vi.mock('@/core/logging', () => ({ createLogger: () => ({ error: vi.fn(), debug: vi.fn() }) }))
 vi.mock('../application/audioEditProjectInstances', () => ({ flushAudioEditProject: vi.fn(async () => undefined) }))
 let node: FakeNode
 function captureNode(value: FakeNode) { node = value }
@@ -46,7 +47,7 @@ beforeEach(() => {
   prepare.mockReset().mockImplementation(async (request) => chunk(request))
   useAudioEditPlaybackStore.setState({ ready: false, preparing: false, playing: false, mode: 'edited', sourceFrame: 0, outputFrame: 0, activeBlockId: null, error: null })
 })
-afterEach(() => { vi.unstubAllGlobals() })
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 it('emits zero PCM for muted spans and restores original audio in source mode', async () => {
   const fixture = project()
@@ -83,7 +84,7 @@ it('drains the final buffered samples before stopping and can replay', async () 
   const hook = renderHook(() => useAudioEditPreview(fixture))
   await waitFor(() => expect(useAudioEditPlaybackStore.getState().preparing).toBe(false))
   await act(() => hook.result.current.togglePlayback())
-  expect(useAudioEditPlaybackStore.getState().playing).toBe(true)
+  expect(useAudioEditPlaybackStore.getState()).toMatchObject({ playing: true, error: null })
   act(() => {
     node.port.onmessage({ data: { type: 'position', generation: generation(), sourceFrame: 48000, consumedFrames: 48000 } })
     node.port.onmessage({ data: { type: 'starved', generation: generation(), consumedFrames: 48000 } })
@@ -133,5 +134,138 @@ it('invalidates buffered edited audio after gain or repair changes', async () =>
   hook.rerender({ value: { ...fixture, repairs: [{ id: 'repair', kind: 'declick', startFrame: 100, endFrame: 200, lowHz: 0, highHz: 24000, strength: 1, enabled: true }] } })
   await waitFor(() => expect(generation()).toBeGreaterThan(gainGeneration))
   expect(prepare.mock.calls.at(-1)?.[0].mode).toBe('edited')
+  hook.unmount()
+})
+
+const scrubMessages = () => node.port.postMessage.mock.calls.filter(([message]) => message.type === 'scrub').map(([message]) => message)
+
+it('缓存命中时擦洗不再发 IPC，40ms 内只播放最新位置，停住后不重复发声', async () => {
+  prepare.mockImplementation(async request => ({ ...chunk(request), pcm: Float32Array.from({ length: request.frameCount }, (_, i) => (request.sourceStartFrame + i) / 480000).buffer }))
+  const hook = renderHook(() => useAudioEditPreview(project()))
+  await waitFor(() => expect(useAudioEditPlaybackStore.getState().preparing).toBe(false))
+  const requests = prepare.mock.calls.length
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] })
+  const scrub = audioEditScrub('preview')!
+  await act(async () => { scrub.start(24000); scrub.move(24000) })
+  expect(scrubMessages()).toHaveLength(1)
+  expect(new Float32Array(scrubMessages()[0].pcm)).toHaveLength(3840)
+  await act(async () => { scrub.move(30000); scrub.move(36000); await vi.advanceTimersByTimeAsync(39) })
+  expect(scrubMessages()).toHaveLength(1)
+  await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+  expect(scrubMessages()).toHaveLength(2)
+  expect(new Float32Array(scrubMessages()[1].pcm)[0]).toBeCloseTo(36000 / 480000)
+  await act(async () => { scrub.move(36000); await vi.advanceTimersByTimeAsync(200) })
+  expect(scrubMessages()).toHaveLength(2)
+  expect(prepare).toHaveBeenCalledTimes(requests)
+  await act(async () => scrub.end())
+  expect(useAudioEditPlaybackStore.getState()).toMatchObject({ playing: false, sourceFrame: 36000 })
+  hook.unmount()
+  expect(audioEditScrub('preview')).toBeUndefined()
+})
+
+it('慢速读取丢弃过期位置，结束手势后迟到的数据也不会出声', async () => {
+  const hook = renderHook(() => useAudioEditPreview(project()))
+  await waitFor(() => expect(useAudioEditPlaybackStore.getState().preparing).toBe(false))
+  const resolvers: Array<() => void> = []
+  prepare.mockImplementation(request => new Promise(resolve => { resolvers.push(() => resolve(chunk(request))) }))
+  const scrub = audioEditScrub('preview')!
+  await act(async () => { scrub.move(240000); scrub.move(336000) })
+  expect(resolvers).toHaveLength(1)
+  await act(async () => resolvers[0]())
+  expect(scrubMessages()).toHaveLength(0)
+  expect(prepare.mock.calls.at(-1)?.[0].sourceStartFrame).toBe(336000)
+  act(() => scrub.end())
+  await act(async () => resolvers[1]())
+  expect(scrubMessages()).toHaveLength(0)
+  hook.unmount()
+})
+
+it('单击定位静音，键盘单步发声，播放中拖动仍然只跳转正常播放', async () => {
+  const hook = renderHook(() => useAudioEditPreview(project()))
+  await waitFor(() => expect(useAudioEditPlaybackStore.getState().preparing).toBe(false))
+  await act(async () => hook.result.current.seekSourceFrame(24000))
+  expect(scrubMessages()).toHaveLength(0)
+  await act(async () => audioEditScrub('preview')!.step(36000))
+  expect(scrubMessages()).toHaveLength(1)
+  await act(() => hook.result.current.togglePlayback())
+  const before = generation()
+  await act(async () => { audioEditScrub('preview')!.start(36000); audioEditScrub('preview')!.move(48000) })
+  expect(generation()).toBeGreaterThan(before)
+  expect(scrubMessages()).toHaveLength(1)
+  expect(useAudioEditPlaybackStore.getState()).toMatchObject({ playing: true, sourceFrame: 48000 })
+  hook.unmount()
+})
+
+it('挂起设备恢复中快速连点只发起一次恢复，暂停不挂起且旧回执不恢复播放', async () => {
+  let done!: () => void
+  const resume = vi.spyOn(FakeContext.prototype, 'resume').mockImplementation(function (this: FakeContext) {
+    return new Promise<void>(resolve => { done = () => { this.state = 'running'; resolve() } })
+  })
+  const suspend = vi.spyOn(FakeContext.prototype, 'suspend')
+  const hook = renderHook(() => useAudioEditPreview(project()))
+  await waitFor(() => expect(useAudioEditPlaybackStore.getState().preparing).toBe(false))
+  let first!: Promise<void>, second!: Promise<void>
+  act(() => { first = hook.result.current.togglePlayback() })
+  await act(() => hook.result.current.togglePlayback())
+  act(() => { second = hook.result.current.togglePlayback() })
+  await act(() => hook.result.current.togglePlayback())
+  await act(async () => { done(); await Promise.all([first, second]) })
+  expect(resume).toHaveBeenCalledTimes(1)
+  expect(suspend).not.toHaveBeenCalled()
+  expect(useAudioEditPlaybackStore.getState().playing).toBe(false)
+  expect(node.port.postMessage.mock.calls.filter(([message]) => message.type === 'playing').at(-1)?.[0].value).toBe(false)
+  hook.unmount()
+})
+
+it.each(['source', 'edited', 'delivery'] as const)('擦洗沿 %s 正常试听的取样模式和处理参数读取', async mode => {
+  const fixture = project()
+  fixture.vstEnabled = true
+  const hook = renderHook(() => useAudioEditPreview(fixture, 4))
+  await waitFor(() => expect(useAudioEditPlaybackStore.getState().preparing).toBe(false))
+  act(() => useAudioEditPlaybackStore.getState().setMode(mode))
+  await waitFor(() => expect(useAudioEditPlaybackStore.getState().preparing).toBe(false))
+  prepare.mockClear()
+  await act(async () => audioEditScrub('preview')!.step(240000))
+  expect(scrubMessages()).toHaveLength(1)
+  expect(prepare.mock.calls[0][0]).toMatchObject({ mode: mode === 'source' ? 'source' : 'edited', processing: mode === 'edited' })
+  hook.unmount()
+})
+
+it('恢复设备失败可重试，擦洗失败清理请求后也能从下一个位置恢复', async () => {
+  vi.spyOn(FakeContext.prototype, 'resume').mockRejectedValueOnce(new Error('设备忙'))
+  const hook = renderHook(() => useAudioEditPreview(project()))
+  await waitFor(() => expect(useAudioEditPlaybackStore.getState().preparing).toBe(false))
+  await act(() => hook.result.current.togglePlayback())
+  expect(useAudioEditPlaybackStore.getState()).toMatchObject({ playing: false, error: '音频设备未能恢复，请重试播放' })
+  await act(() => hook.result.current.togglePlayback())
+  expect(useAudioEditPlaybackStore.getState().playing).toBe(true)
+  await act(() => hook.result.current.togglePlayback())
+  prepare.mockRejectedValueOnce(new Error('块读取失败'))
+  await act(async () => audioEditScrub('preview')!.step(240000))
+  expect(useAudioEditPlaybackStore.getState().error).toBe('块读取失败')
+  await act(async () => audioEditScrub('preview')!.step(288000))
+  expect(scrubMessages()).toHaveLength(1)
+  expect(useAudioEditPlaybackStore.getState().error).toBeNull()
+  hook.unmount()
+})
+
+it('设备恢复途中换模式，旧播放回调只能填充当前模式的数据', async () => {
+  let done!: () => void
+  vi.spyOn(FakeContext.prototype, 'resume').mockImplementation(function (this: FakeContext) {
+    return new Promise<void>(resolve => { done = () => { this.state = 'running'; resolve() } })
+  })
+  const fixture = project()
+  fixture.vstEnabled = true
+  const hook = renderHook(() => useAudioEditPreview(fixture))
+  await waitFor(() => expect(useAudioEditPlaybackStore.getState().preparing).toBe(false))
+  let playing!: Promise<void>
+  act(() => { playing = hook.result.current.togglePlayback() })
+  act(() => useAudioEditPlaybackStore.getState().setMode('source'))
+  await waitFor(() => expect(useAudioEditPlaybackStore.getState().preparing).toBe(false))
+  prepare.mockClear()
+  act(() => node.port.onmessage({ data: { type: 'position', generation: generation(), sourceFrame: 96000, consumedFrames: 96000 } }))
+  await act(async () => { done(); await playing })
+  expect(prepare.mock.calls.length).toBeGreaterThan(0)
+  expect(prepare.mock.calls.every(([request]) => request.mode === 'source' && request.processing === false)).toBe(true)
   hook.unmount()
 })
