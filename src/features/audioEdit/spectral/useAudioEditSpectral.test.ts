@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SPECTRAL_HIGH_BINS, SPECTRAL_TILE_COLUMNS, spectralLowBins, type AudioEditSpectralTile, type AudioEditSpectralTileRequest } from '@/core/audioEdit/spectralPyramid'
 import { SpectralTileStore } from '@/core/audio/spectralTiles'
+import { StrictMode, createElement, type ReactNode } from 'react'
 import { renderHook } from '@testing-library/react'
 import { SpectralTileScheduler, spectralNeeds, spectralOverviewLevel, useAudioEditSpectral, type SpectralTileClient } from './useAudioEditSpectral'
 
@@ -101,6 +102,14 @@ describe('频谱取块调度', () => {
 })
 
 describe('频谱取块钩子', () => {
+  it('开发模式重复挂载后仍然发出请求，不会一直停在加载中', () => {
+    const { client, pending, cancelled } = fakeClient()
+    const wrapper = ({ children }: { children: ReactNode }) => createElement(StrictMode, null, children)
+    renderHook(() => useAudioEditSpectral(client, 'p', { start: 0, end: SR * 10 }, 1000, DURATION, 'source', 0), { wrapper })
+    // 第一次挂载的请求会在卸载时取消；第二次挂载必须重新发出仍然有效的请求。
+    expect(pending.filter(item => !cancelled.includes(item.request.requestId)).length).toBeGreaterThan(0)
+  })
+
   it('原始模式下作品版本变化不重新请求；剪后模式换版本才换一套块', () => {
     const { client, pending } = fakeClient()
     const view = { start: 0, end: SR * 10 }

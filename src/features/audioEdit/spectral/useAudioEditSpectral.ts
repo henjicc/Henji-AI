@@ -157,30 +157,28 @@ export function useAudioEditSpectral(client: SpectralTileClient, projectId: stri
   const effectiveRevision = mode === 'edited' ? revision : 0
   const target = useMemo(() => ({ projectId, mode, revision: effectiveRevision }), [projectId, mode, effectiveRevision])
   const shown = useRef<{ store: SpectralTileStore; projectId: string; mode: 'source' | 'edited' } | null>(null)
-  const scheduler = useMemo(() => {
-    void attempt
+  // 调度器随挂载创建、随卸载销毁：开发模式会挂载两次，不能把已销毁的实例留给第二次挂载。
+  const [scheduler, setScheduler] = useState<SpectralTileScheduler | null>(null)
+  useEffect(() => {
     let frame = 0
-    const store = new SpectralTileStore()
-    return new SpectralTileScheduler(client, store, target,
+    const next = new SpectralTileScheduler(client, new SpectralTileStore(), target,
       () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; setVersion(value => value + 1) }) },
       message => setError(message))
+    const unsubscribe = client.subscribe(progress => next.progress(progress))
+    setError(undefined)
+    setScheduler(next)
+    return () => { unsubscribe(); next.dispose(); if (frame) cancelAnimationFrame(frame) }
   }, [client, target, attempt])
 
   useEffect(() => {
-    setError(undefined)
-    const unsubscribe = client.subscribe(progress => scheduler.progress(progress))
-    return () => { unsubscribe(); scheduler.dispose() }
-  }, [client, scheduler])
-
-  useEffect(() => {
-    scheduler.setNeeds(spectralNeeds(view, columns, duration))
+    scheduler?.setNeeds(spectralNeeds(view, columns, duration))
   }, [scheduler, view.start, view.end, columns, duration]) // eslint-disable-line react-hooks/exhaustive-deps -- view 只用起止
 
   // 同一作品同一模式换版本（或重试）时，新块到达前继续显示旧图；换作品或换模式不沿用。
-  const current = scheduler.store
+  const current = scheduler?.store
   const held = shown.current
-  const display = current.version > 0 ? current : held && held.projectId === projectId && held.mode === mode ? held.store : null
-  if (current.version > 0) shown.current = { store: current, projectId, mode }
+  const display = current && current.version > 0 ? current : held && held.projectId === projectId && held.mode === mode ? held.store : null
+  if (current && current.version > 0) shown.current = { store: current, projectId, mode }
   const displayVersion = display?.version ?? 0
   const tiles = useMemo<SpectralTileSet | undefined>(() => display && displayVersion > 0 ? {
     sampleRate: display.sampleRate, channels: display.channels, durationFrames: display.durationFrames, lowBins: display.lowBins, highBins: display.highBins,
