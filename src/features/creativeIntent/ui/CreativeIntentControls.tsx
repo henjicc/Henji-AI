@@ -20,7 +20,7 @@ export function SuperKeyframeRecordingControls(props: {
   return <div className="flex flex-col gap-3">
     <UiGroup labelWidth={72}>
       <UiFormRow label="麦克风" density="compact"><UiSwitch aria-label="麦克风" checked={props.microphone} disabled={props.busy} onCheckedChange={props.onMicrophone} /></UiFormRow>
-      <UiFormRow label={<UiTooltipText tooltip="与录屏和音频编辑共用录音设置；请暂停录制后修改。">输入设备</UiTooltipText>} density="compact"><PanelTrigger display="录音设置" size="sm" panelSize="wide" disabled={props.busy || recording} renderPanel={() => <AudioCaptureSettingsForm />} /></UiFormRow>
+      <UiFormRow label={<UiTooltipText tooltip="与录屏和音频编辑共用录音设置；请暂停录制后修改。">输入设备</UiTooltipText>} density="compact"><PanelTrigger display="录音设置" size="sm" panelSize="compact" panelPadding="content" disabled={props.busy || recording} renderPanel={() => <AudioCaptureSettingsForm />} /></UiFormRow>
     </UiGroup>
     {!!props.takes.length && <UiGroup title="本组段落" titleTone="compact" labelWidth={72}>
       <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">{props.takes.map(take => <div key={take.id} className="flex items-center justify-between gap-2">
