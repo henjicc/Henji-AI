@@ -200,6 +200,18 @@ successData.detect_video_edit_sensitive_text = { resultRef: clipRef, effectRefs:
 const recordingExportRef = ref('screen_recording.export', 'd8074d10-8d5e-45db-a99a-c1e5d91ff854')
 successData.export_screen_recording_product = { resultRef: recordingExportRef, state: 'completed', files: ['step-001.png', 'steps.md', 'steps.html'], documentRefs: [], warnings: [], verified: true }
 successData.cancel_screen_recording_export = { resultRef: recordingExportRef, verified: true }
+// 对照 assistant/application/applicationDomain.ts 的 receipt 与
+// screenRecording/application/webAppRecording.ts 的正式处理器返回值。
+for (const name of ['organize_assistant_memory', 'revert_assistant_memory']) {
+  successData[name] = { resultRef: ref('assistant.memory_settings', 'singleton'), changed: 1,
+    message: '记忆已更新，可在修改历史中查看并撤回。', verification: { verified: true, condition: '已回读记忆状态，修改写入历史。' } }
+}
+const webRecordingRef = ref('screen_recording.web_recording', '2e811354-8fe6-4fd8-a174-8e0657f5cde8')
+successData.start_web_app_recording = { resultRef: webRecordingRef, verified: true, ...revisions }
+successData.stop_web_app_recording = { resultRef: webRecordingRef, status: 'complete', durationMs: 1000, warnings: [], verified: true, ...revisions }
+// 数据轨沿 webReplay/matcher.test.ts 的 HTTP 录制条目结构，保留分页续读。
+successData.read_web_app_recording = { entries: [{ kind: 'http', id: 1, t: 10, via: 'seam', method: 'GET', url: 'https://example.test/data', headers: [], chunks: [] }], total: 2, nextOffset: 1, ...revisions }
+successData.render_web_app_replay = { resultRef: webRecordingRef, video: 'replay.mp4', width: 1280, height: 720, frames: 30, conflicts: [], warnings: [], verified: true, ...revisions }
 const taskObservation = { taskRef: ref('camera_stage.render_task', 'task'), status: 'completed', revisions: { camera_stage: 1 }, phase: null, progress: 1, outputKind: 'image', message, resultRefs: [nodeRef], recovery: null, ...revisions }
 successData.get_camera_stage_render_task = taskObservation
 successData.wait_camera_stage_render_task = { ...taskObservation, waitReason: 'terminal' }
@@ -216,7 +228,7 @@ for (const name of ['export_video_edit', 'query_video_edit_export', 'cancel_vide
 successData.query_video_edit_export = { resultRef: documentRef, message, verification: verification(), queue: [], total: 0, nextCursor: null }
 
 for (const name of ['measure_video_edit_loudness', 'normalize_video_edit_loudness']) {
-  successData[name] = { resultRef: documentRef, results: [{ clipRef, volume: 1, measurement: { integratedLufs: -16, shortTermLufs: -15, truePeakDbtp: -1, samplePeakDbfs: -2, durationSeconds: 5 } }], ...verified }
+  successData[name] = { resultRef: documentRef, results: [{ clipRef, volume: 1, gainDb: 6, measurement: { integratedLufs: -16, shortTermLufs: -15, truePeakDbtp: -1, samplePeakDbfs: -2, durationSeconds: 5 } }], ...verified }
 }
 for (const domain of ['image_edit', 'video_edit']) {
   for (const action of ['organize', 'interpret']) successData[`${action}_${domain}_intent`] = { resultRef: ref(`${domain}.intent_draft`), candidateRefs: [ref(`${domain}.intent_candidate`)], status: 'candidate', questions: [], ...revisions }

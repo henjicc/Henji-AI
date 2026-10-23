@@ -55,7 +55,8 @@ describe('外部能力面派生自真实注册表', () => {
 
   it('助手内部运行目录不透传给外部', () => {
     for (const id of NEVER_EXPOSED_DOMAINS) expect(byId.has(id), `${id} 不应出现在外部能力面`).toBe(false)
-    expect(externalWritableEntityTypes(domains).filter(type => type.startsWith('assistant.'))).toEqual(['assistant.shared_memory'])
+    expect(domains.flatMap(domain => domain.entities.map(entity => entity.id)).filter(type => type.startsWith('assistant.')).sort()).toEqual(['assistant.memory', 'assistant.memory_settings'])
+    expect(externalWritableEntityTypes(domains).filter(type => type.startsWith('assistant.'))).toEqual(['assistant.memory', 'assistant.memory_settings'])
   })
 
   it('公开写入范围与 writeExclusion 声明一致，排除项一个都不放行', () => {

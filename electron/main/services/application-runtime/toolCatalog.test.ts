@@ -117,6 +117,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.57.0'] = 'baff00c219912f3e84f0cdd1e59da24ad191ac53dd52db9495b1f2891d78c124'
     // 记忆冲突选择说明与项目条目层级预检。
     fingerprints['2.58.0'] = 'aaf71c5155285652a291b82101e9b92f2c6b5623025d8f8c3e99542da616518a'
+    // 网页应用录制的开始、停止、分页读取和重演四个工具并入公共目录。
+    fingerprints['2.59.0'] = 'fadadbae632715c224285678dabf03de7eb2b494eae60cc0f565d99966f637c6'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], `工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹：${fingerprint}`).toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {
