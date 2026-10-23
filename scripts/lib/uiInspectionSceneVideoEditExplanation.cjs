@@ -12,6 +12,7 @@ const { captureInspectionPage } = require('./uiInspectionCapture.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 function createVideoEditExplanationScene() {
   return { id: 'video-edit-explanation', surface: '剪辑', name: '剪辑-录制讲解与指代审阅', writesUserData: true,
+    launchArgs: ['--autoplay-policy=no-user-gesture-required'],
     setup: async (page, app, { capture }) => {
       const root = path.resolve('node_modules/.cache/t150-explanation'); fs.mkdirSync(root, { recursive: true })
       const evidence = { frames: [], audio: '原生麦克风与统一录音设置', interruption: '仅终止本隔离 Electron 的原生采集子进程', transcription: '受控毫秒DTO，非真实ASR', visualReview: '待逐张目视', paidCalls: 0 }
@@ -160,8 +161,11 @@ function createVideoEditExplanationScene() {
         await button(page, '查看「这里」的指向').first().waitFor(); await shot('11-转写自然段落审阅')
         await saved(doc => doc.creativeIntents?.sessions[0]?.pages.some(p => p.kind === 'transcript'))
         await button(page, '查看「这里」的指向').first().click()
-        await page.getByText('这里有几个对象重叠，请选一个', { exact: true }).first().waitFor(); await page.getByAltText('指向时保存的作品画面').first().waitFor(); await shot('11a-点词历史画面与重叠确认')
+        await page.getByText(/^(这里有几个对象重叠，请选一个|这句时间不够精确，请点选对象)$/).first().waitFor(); await page.getByAltText('指向时保存的作品画面').first().waitFor(); await shot('11a-点词历史画面与重叠确认')
         let options = await referenceOptions()
+        // 原生时钟不确定性可能优先提示粗时间；仍须同时提供真实重叠的两对象。
+        await options.first().waitFor({ state: 'visible' })
+        assert.equal(await options.filter({ hasText: /示范画面 · V[12]/ }).count(), 2)
         const sourceOption = options.filter({ hasText: '示范画面 · V1' })
         await options.filter({ hasText: '示范画面 · V2' }).hover(); await page.locator('[data-explanation-object-outline]').waitFor(); await shot('11a-另一对象悬停轮廓')
         await sourceOption.hover(); await page.locator('[data-explanation-object-outline]').waitFor(); await shot('11a-悬停对象轮廓')
@@ -194,8 +198,17 @@ function createVideoEditExplanationScene() {
         const generate = button(page, '生成候选'); await generate.waitFor()
         const footer = await generate.boundingBox(), panelBounds = await review().boundingBox()
         assert.ok(footer && panelBounds && footer.y + footer.height <= panelBounds.y + panelBounds.height, '主按钮必须完整位于面板内')
-        await generate.click(); await button(page, '应用').waitFor(); await shot('11e-正式动作候选自动打开')
-        await button(page, '应用').click(); await saved(doc => JSON.stringify(doc.sequences[0].clips) !== JSON.stringify(beforeMotion)); await shot('11f-正式动作应用')
+        await generate.click(); await review().waitFor({ state: 'hidden', timeout: 60000 })
+        // f09b6bf3b 移除旧动作面板的应用按钮，正式候选继续走公共属性事务。
+        const generatedDoc = await saved(doc => doc.creativeIntents?.drafts.some(draft => draft.candidateRefs.length))
+        const draft = generatedDoc.creativeIntents.drafts.at(-1)
+        const candidateRef = { kind: 'video_edit.intent_candidate', id: `${seeded.documentId}:${encodeURIComponent(draft.id)}:${encodeURIComponent(draft.selectedCandidateRef ?? draft.candidateRefs[0].resourceId)}` }
+        await shot('11e-正式动作候选生成')
+        const observation = await callTool(client, 'read_application_entity', { ref: candidateRef })
+        const applied = await callTool(client, 'change_application_entities', operationEnvelope([observation], { summary: '应用已审阅讲解候选', changes: [{ kind: 'set_properties', entityType: candidateRef.kind, target: candidateRef, properties: { 'video_edit.intent_candidate.applied': true } }] }))
+        assert.equal(applied.executionState, 'completed', JSON.stringify(applied))
+        evidence.flow = { basis: 'f09b6bf3b / creativeIntentFields.ts', changed: '生成后通过正式候选属性应用', assertions: '保留指代、真实音频对齐、应用与撤销' }
+         await saved(doc => JSON.stringify(doc.sequences[0].clips) !== JSON.stringify(beforeMotion)); await shot('11f-正式动作应用')
         await page.keyboard.press('Escape'); await page.keyboard.press('Control+z'); await saved(doc => JSON.stringify(doc.sequences[0].clips) === JSON.stringify(beforeMotion)); await shot('11g-动作一步撤销')
         await panel(); await button(page, '删除讲解').click(); await shot('12-删除确认')
         await page.getByRole('dialog', { name: '删除本次讲解', exact: true }).getByRole('button', { name: '删除', exact: true }).click(); await saved(doc => doc.creativeIntents?.sessions.length === 0); await close(); await shot('13-删除完成')

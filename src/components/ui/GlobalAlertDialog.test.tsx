@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import i18n from '@/i18n/config'
 import { requestAlertConfirmation, showAlertDialog, useAlertDialogStore } from '@/stores/alertDialogStore'
 import { useUiStore } from '@/stores/uiStore'
 import { GlobalAlertDialog } from './GlobalAlertDialog'
+import { UiModal } from './UiModal'
 
 describe('GlobalAlertDialog', () => {
   beforeEach(async () => {
@@ -16,6 +17,18 @@ describe('GlobalAlertDialog', () => {
   })
 
   afterEach(() => cleanup())
+
+  it('从已打开的编辑器弹窗发起全局确认时，确认位于同层末尾且不关闭编辑器', async () => {
+    render(<><GlobalAlertDialog /><UiModal isOpen title="图片编辑器" onClose={() => undefined}>作品</UiModal></>)
+    let pending!: Promise<boolean>
+    await act(async () => { pending = requestAlertConfirmation({ title: '转写', message: '使用讲解', confirmLabel: '允许本次' }) })
+    const editor = screen.getByRole('dialog', { name: '图片编辑器' }), confirmation = screen.getByRole('alertdialog')
+    expect(editor.parentElement).toBe(confirmation.parentElement)
+    expect(editor.compareDocumentPosition(confirmation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '允许本次' }))
+    await expect(pending).resolves.toBe(true)
+    expect(screen.getByRole('dialog', { name: '图片编辑器' })).toBe(editor)
+  })
 
   it('二次确认只显示明确的确认和取消动作，取消后不能趁退出动画确认', async () => {
     const pending = requestAlertConfirmation({ title: '克隆费用', message: '首次正式合成另收 138 元', confirmLabel: '确认费用，开始克隆' })

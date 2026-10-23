@@ -10,6 +10,12 @@ async function installImageExplanationFixture(page, app) {
     globalThis.__t157Transcripts = {}; globalThis.__t157Calls = 0
     ipcMain.removeHandler('audioEdit:explanation')
     ipcMain.handle('audioEdit:explanation', async (event, input) => {
+      // bc23e0733 后使用原生 PCM；仅替换外部预检和 ASR，先证明真实录音块存在。
+      if (input.action === 'preflight') {
+        const read = await originals.get('audioEdit:explanation')(event, { action: 'read', sessionId: input.sessionId, chunkId: input.chunkId })
+        if (!read.ok || !read.data || read.data.length <= 44) throw new Error('原生图片讲解录音块未保存')
+        return { ok: true, data: undefined }
+      }
       if (input.action !== 'transcribe') return originals.get('audioEdit:explanation')(event, input)
       const transcript = globalThis.__t157Transcripts[input.chunkId]
       if (!transcript) throw new Error('Missing zero-cost transcription fixture')
@@ -24,21 +30,17 @@ async function installImageExplanationFixture(page, app) {
       return { ...result, data: [...result.data.filter(v => v.providerId !== 'bailian'), { providerId: 'bailian', configured: true }] }
     })
   })
-  await page.addInitScript(() => {
-    window.__t157Streams = []
-    navigator.mediaDevices.getUserMedia = async constraints => {
-      if (constraints.video || !constraints.audio) throw new Error('Only local synthetic audio is allowed')
-      const context = new AudioContext(), tone = context.createOscillator(), gain = context.createGain(), output = context.createMediaStreamDestination()
-      tone.frequency.value = 220; gain.gain.value = .03; tone.connect(gain).connect(output); tone.start()
-      const track = output.stream.getAudioTracks()[0], original = track.stop.bind(track); let stopped = false
-      track.stop = () => { if (stopped) return; stopped = true; original(); tone.stop(); if (context.state !== 'closed') void context.close() }
-      window.__t157Streams.push(output.stream); return output.stream
-    }
-  })
-  return async () => app.evaluate(({ ipcMain }) => { for (const [key, handler] of globalThis.__t157Originals) { ipcMain.removeHandler(key); ipcMain.handle(key, handler) } })
+  return async () => {
+    await page.evaluate(() => window.__t157NativeRelease?.()).catch(() => {})
+    await app.evaluate(({ ipcMain }) => { for (const [key, handler] of globalThis.__t157Originals) { ipcMain.removeHandler(key); ipcMain.handle(key, handler) } })
+  }
 }
 
 async function runImageExplanationScene({ page, app, host, read, select, shot, evidence, store }) {
+  await page.evaluate(() => {
+    window.__t157NativeSessions = new Set()
+    window.__t157NativeRelease = window.henjiNative.audioCapture.onSamples(event => window.__t157NativeSessions.add(event.sessionId))
+  })
   const trigger = () => host().getByRole('button', { name: '录制讲解', exact: true })
   const controls = () => page.locator('[data-image-explanation-controls]')
   const button = name => page.getByRole('button', { name, exact: true })
@@ -83,7 +85,7 @@ async function runImageExplanationScene({ page, app, host, read, select, shot, e
     transcripts[audio.audioSegmentRef] = { unit: 'ms', text: '这几个等距', granularity: 'word', words: [], segments: [{ text: '这几个等距', granularity: 'word', timing: 'precise', confidence: .99, startMs: start, endMs: end }] }
   }
   await app.evaluate((_electron, transcripts) => { globalThis.__t157Transcripts = transcripts }, transcripts)
-  await button('转写并审阅').click(); await button('确认上传音频并转写').click()
+  await button('转写并审阅').click(); await button('允许本次').click()
   await button('查看「这几个」的指向').first().waitFor({ timeout: 60000 }); await shot('转写审阅')
   await button('查看「这几个」的指向').first().click()
   await page.getByAltText('指向时保存的作品画面').waitFor({ timeout: 60000 }); await shot('点词回看历史画面和图层')
@@ -101,7 +103,10 @@ async function runImageExplanationScene({ page, app, host, read, select, shot, e
   await page.waitForTimeout(1200); assert.deepEqual((await read()).document.layers, before)
   // A second local recording exercises object + destination through the same layout UI.
   await open(); await button('删除讲解').click(); await button('删除').click()
-  await button('开始录制').waitFor(); await button('开始录制').click()
+  await controls().waitFor({ state: 'hidden' })
+  for (let attempt = 0; attempt < 100 && (await read()).document.creativeIntents?.sessions.length; attempt++) await page.waitForTimeout(50)
+  assert.equal((await read()).document.creativeIntents?.sessions.length, 0, '讲解应完整删除后再录制')
+  await open(); await button('开始录制').waitFor(); await button('开始录制').click()
   await host().getByRole('button', { name: '暂停图片讲解', exact: true }).waitFor(); await controls().waitFor({ state: 'hidden' })
   await page.mouse.move(point.x, point.y); await page.keyboard.down('Control'); await page.mouse.down(); await page.waitForTimeout(160); await page.mouse.up(); await page.keyboard.up('Control')
   await page.waitForTimeout(1300)
@@ -131,15 +136,19 @@ async function runImageExplanationScene({ page, app, host, read, select, shot, e
   }
   assert.ok(alignedMovement, '移动词时必须完整落在真实音频样本内，不能猜测或截断时间戳')
   await app.evaluate((_electron, transcripts) => { globalThis.__t157Transcripts = transcripts }, movementTranscripts)
-  await button('转写并审阅').click(); await button('确认上传音频并转写').click()
+  await button('转写并审阅').click(); await button('允许本次').click()
   await button('查看「这个」的指向').waitFor({ timeout: 60000 }); await button('查看「这个」的指向').click(); await shot('移动对象与目标位置审阅')
   const movementBefore = structuredClone((await read()).document.layers)
-  await button('生成候选').click(); await layout.getByRole('radio', { name: '按讲解移动', exact: true }).waitFor(); await shot('正式移动候选自动打开')
+  await button('生成候选').click(); await layout.getByRole('button', { name: '布局方案', exact: true }).waitFor(); assert.equal(await layout.getByRole('button', { name: '布局方案', exact: true }).innerText(), '按讲解移动'); await shot('正式移动候选自动打开')
   await layout.getByRole('button', { name: '应用', exact: true }).click(); await layout.getByText('已应用，可撤销', { exact: true }).waitFor(); await shot('移动候选一步应用')
   assert.notDeepEqual((await read()).document.layers, movementBefore)
   await host().getByRole('button', { name: '随手摆', exact: true }).click(); await host().getByRole('button', { name: /^(撤销|Undo)$/ }).click(); await page.waitForTimeout(1200); await shot('移动候选一步撤销')
   assert.deepEqual((await read()).document.layers, movementBefore)
-  assert.ok(await page.evaluate(() => window.__t157Streams.every(stream => stream.getTracks().every(track => track.readyState === 'ended'))))
+  assert.ok(await page.evaluate(async () => {
+    const ids = [...window.__t157NativeSessions]
+    return ids.length >= 2 && (await Promise.all(ids.map(id => window.henjiNative.audioCapture.status(id).then(() => false, () => true)))).every(Boolean)
+  }), '原生录音会话必须全部释放')
+  evidence.flow = { basis: 'bc23e0733 / 原生录音与通用授权弹窗', changed: '替换失效 WebAudio 夹具、沿正式预检与允许本次流程', assertions: '保留全部图层、历史画面、布局应用与撤销，增加原生会话释放' }
   evidence.recording = { mode: session.mode, pointers: pointers.length, historicalFrames: session.visualEvidenceRefs.length, asrFixtureCalls: await app.evaluate(() => globalThis.__t157Calls), paidCalls: 0 }
   store()
 }

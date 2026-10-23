@@ -23,7 +23,7 @@ function createImageEditLayoutDraftScene(context, canvas = false, benchmark = fa
   return {
     id: explanation ? `image-edit-explanation${canvas ? '-node' : ''}` : `${canvas ? 'image-edit-layout-draft-node' : 'image-edit-layout-draft'}${panelReview ? '-panel' : benchmark ? '-100' : ''}`, surface: canvas ? '画布' : '图片编辑',
     name: `${canvas ? '画布图片文档节点' : '工具箱'}-${explanation ? '录制讲解审阅布局应用撤销' : benchmark ? '100层随手摆性能' : '随手摆候选钉住应用撤销重开'}`, writesUserData: true,
-    launchArgs: canvas ? [] : ['--dev-surface=tool.image_edit'],
+    launchArgs: [...(canvas ? [] : ['--dev-surface=tool.image_edit']), ...(explanation ? ['--autoplay-policy=no-user-gesture-required'] : [])],
     expectedLogEvents: ['image_edit.layout.optimize.failed'],
     setup: async (page, app, { capture }) => {
       page.setDefaultTimeout(15000)

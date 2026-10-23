@@ -3,7 +3,9 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { createHash, randomUUID } = require('node:crypto')
 const { execFileSync } = require('node:child_process')
-const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
+const { fixture } = require('./uiInspectionSceneVideoEditMotionDraft.cjs')
+const { seedVideoEditProject } = require('./uiInspectionVideoEditDocuments.cjs')
+const { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 
 function createRecordingMovieScene() {
   return { id: 'recording-movie', name: '录制成片-一分钟采集生成播放导出撤销', surface: '屏幕录制', writesUserData: true,
@@ -18,7 +20,8 @@ function createRecordingMovieScene() {
       let client
       try {
         await button('工具').click(); await page.getByText('屏幕录制', { exact: true }).first().click()
-        const sourceId = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(window => !window.webContents.getURL().includes('view=')).getMediaSourceId())
+        const sourceId = await app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows().find(window => !window.webContents.getURL().includes('view=')); window.setTitle(`录制场景-${process.pid}`); return window.getMediaSourceId() })
+        await button('刷新来源').click()
         const source = (await page.evaluate(() => window.henjiNative.screenRecording.sources())).find(value => value.id === sourceId)
         assert(source, '隔离应用窗口必须可采集')
         await page.getByRole('radio', { name: '单个窗口', exact: true }).click()
@@ -31,16 +34,16 @@ function createRecordingMovieScene() {
         }
         evidence.capture = await page.evaluate(() => window.henjiNative.screenRecording.snapshot())
         assert(evidence.capture.elapsedMs >= 60000, '必须真实录满一分钟')
-        await button('停止并保存').click(); await button('生成成片').waitFor({ timeout: 40000 })
-        await page.waitForFunction(() => [...document.querySelectorAll('button')].some(b => b.textContent === '生成成片' && !b.disabled))
+        await button('停止并保存').click(); await page.getByLabel('剪辑画面', { exact: true }).waitFor({ timeout: 90000 })
         const session = (await list('screen_recording')).find(value => value.name === '一分钟成片验收')
         const recorded = await readDocument(session.id)
         fs.writeFileSync(path.join(root, 'original-recording.json'), JSON.stringify(recorded, null, 2))
         assert(recorded.content.media.some(value => value.kind === 'camera'))
         assert(recorded.content.media.some(value => value.kind === 'microphone'))
         // Preserve actual media and original logs above; deterministic annotations make visual assertions repeatable.
-        const content = recorded.content, screenSource = content.media.find(value => value.kind === 'screen')
-        const origin = screenSource.monoUs, end = origin + screenSource.durationUs
+        const content = recorded.content
+        const { recordingRange } = require('../check-persistence-compat.cjs').loadTypeScript('src/core/screenRecording/range.ts')
+        const { startUs: origin, endUs: end } = recordingRange(content)
         const { CaptureLogCollector } = require('../check-persistence-compat.cjs').loadTypeScript('src/core/captureLog/collector.ts')
         const pages = []
         const collector = new CaptureLogCollector({ ownerRef: { kind: 'screen_recording.session', id: session.id }, sourceDigest: `sha256:${'c'.repeat(64)}`, originUs: 0, id: randomUUID }, async page => { pages.push(page) }, error => { throw error })
@@ -66,29 +69,24 @@ function createRecordingMovieScene() {
           chapters: [{ id: 'chapter', title: '演示', stepIds: ['step'] }], warnings: [],
         }
         await page.evaluate(async ({ id, revision, content }) => window.henjiNative.documents.saveDocument({ target: { id }, expectedRevision: revision, content }), { id: session.id, revision: recorded.meta.revision, content })
+        await assignIsolatedMcpPort(page)
         client = await connectMcpClient((await authorizeMcpConnection(page, { name: '成片隔离验收', allowWrites: true, allowDestructive: true })).config)
         const read = (ref, propertyIds = []) => callTool(client, 'read_application_entity', { ref, propertyIds })
-        await callTool(client, 'open_document', operationEnvelope([], { documentId: session.id }))
-        await page.getByRole('tab', { name: /^隐私/ }).click()
-        await button('确认').first().click()
-        // 页面其他区域也会出现“已确认”字样，不能据此判断写入完成；以落盘状态或错误提示为准。
-        let confirmed
-        for (let i = 0; i < 60; i++) {
-          if ((await page.getByRole('alert').allTextContents()).some(text => text.trim())) break
-          confirmed = await readDocument(session.id)
-          if (confirmed.content.understanding.privacy.candidates[0]?.status !== 'pending') break
-          await page.waitForTimeout(250)
-        }
-        assert(!(await page.getByRole('alert').allTextContents()).some(text => text.trim()), (await page.getByRole('alert').allTextContents()).join('\n'))
-        assert.deepEqual(confirmed.content.understanding.privacy.candidates.map(c => c.status), ['accepted', 'pending'])
-        await button('查看画面').first().click()
-        await page.screenshot({ path: path.join(root, 'recipe.png') }); await capture('recording-movie-recipe')
-        await page.getByRole('button', { name: /录制与生成/ }).click()
-        await button('生成成片').click()
-        await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]') || [...document.querySelectorAll('[role="alert"]')].some(node => node.textContent.trim()), null, { timeout: 300000 })
-        const error = (await page.getByRole('alert').allTextContents()).filter(text => text.trim()); assert(!error.length, error.join('\n'))
+        // 9f7b554df 移除录制工作台；隐私确认与成片仍由正式能力承载。
+        evidence.flow = { basis: '9f7b554df / screenRecording/application/applicationDomain.ts', removed: '工作台隐私页、配方页', assertions: '保留确认隔离、成片、播放、导出与一步撤销' }
+        const sessionRef = { kind: 'screen_recording.session', id: session.id }
+        const understandingRef = { kind: 'screen_recording.understanding', id: session.id }
+        content.understanding.privacy.candidates[0].status = 'accepted'
+        const confirmed = await callTool(client, 'change_application_entities', operationEnvelope([await read(understandingRef)], { summary: '确认第一项隐私遮挡', changes: [{ kind: 'set_properties', entityType: understandingRef.kind, target: understandingRef, properties: { 'screen_recording.understanding.result': content.understanding } }] }))
+        assert.equal(confirmed.executionState, 'completed', JSON.stringify(confirmed))
+        assert.deepEqual((await readDocument(session.id)).content.understanding.privacy.candidates.map(c => c.status), ['accepted', 'pending'])
+        const target = fixture(); target.name = '一分钟成片验收'; target.media = []; target.items = []; target.sequences = []
+        const seeded = await seedVideoEditProject(page, target), editing = { id: seeded.documentId }, documentRef = { kind: 'video_edit.document', id: editing.id }
+        const movie = await callTool(client, 'generate_screen_recording_movie', operationEnvelope([], { sessionRef, documentRef, recipe: {} }))
+        assert.equal(movie.executionState, 'completed', JSON.stringify(movie)); assert(movie.result.data.verified)
+        await callTool(client, 'open_document', operationEnvelope([], { documentId: editing.id }))
+        await callTool(client, 'focus_application_entity', operationEnvelope([], { ref: movie.result.data.sequenceRefs[0] }))
         await page.getByLabel('剪辑画面', { exact: true }).waitFor({ timeout: 30000 })
-        const editing = (await list('video_edit'))[0], documentRef = { kind: 'video_edit.document', id: editing.id }
         const generated = await readDocument(editing.id); evidence.generated = generated
         fs.writeFileSync(path.join(root, 'generated.json'), JSON.stringify(generated, null, 2)); store()
         const sequence = generated.content.sequences.find(value => value.name.endsWith('横版'))
@@ -134,9 +132,7 @@ function createRecordingMovieScene() {
         const undone = await readDocument(editing.id)
         assert.equal(undone.content.sequences.length, 0, '一次撤销必须移除整批成片序列'); assert.equal(undone.content.media.length, 0)
         evidence.undo = true; evidence.completed = true; store()
-        // Finish on this task's UI for the full surface audit. The unchanged editor toolbar is recorded separately.
-        await callTool(client, 'open_document', operationEnvelope([], { documentId: session.id }))
-        await button('生成成片').waitFor({ state: 'visible' })
+        await capture('recording-movie-undone')
       } catch (error) {
         evidence.failure = { message: String(error), alerts: await page.getByRole('alert').allTextContents().catch(() => []) }
         await page.screenshot({ path: path.join(root, 'failure.png') }).catch(() => {})

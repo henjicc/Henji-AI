@@ -3,7 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { createHash, randomUUID } = require('node:crypto')
 const { execFileSync } = require('node:child_process')
-const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
+const { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 
 function createRecordingProductsScene() {
   return { id: 'recording-products', name: '录制多产物-真实采集图文动图报告图片编辑', surface: '屏幕录制', writesUserData: true,
@@ -17,7 +17,8 @@ function createRecordingProductsScene() {
       let client
       try {
         await button('工具').click(); await page.getByText('屏幕录制', { exact: true }).first().click()
-        const sourceId = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(window => !window.webContents.getURL().includes('view=')).getMediaSourceId())
+        const sourceId = await app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows().find(window => !window.webContents.getURL().includes('view=')); window.setTitle(`录制场景-${process.pid}`); return window.getMediaSourceId() })
+        await button('刷新来源').click()
         const source = (await page.evaluate(() => window.henjiNative.screenRecording.sources())).find(source => source.id === sourceId)
         assert(source, '必须录制隔离应用本身')
         await page.getByRole('radio', { name: '单个窗口', exact: true }).click()
@@ -28,14 +29,15 @@ function createRecordingProductsScene() {
         await button('打标记').click(); await page.waitForTimeout(6500)
         await page.getByLabel('标记备注', { exact: true }).fill('定位错误并导出报告')
         await button('打标记').click(); await page.waitForTimeout(6500)
-        await button('停止并保存').click(); await button('生成成片').waitFor({ timeout: 30000 })
+        await button('停止并保存').click(); await page.getByLabel('剪辑画面', { exact: true }).waitFor({ timeout: 90000 })
         const session = (await page.evaluate(() => window.henjiNative.documents.listDocuments({ kind: 'screen_recording', includeDrafts: true }))).find(document => document.name === '多产物真实采集验收')
         assert(session)
         const recorded = await page.evaluate(id => window.henjiNative.documents.readDocument({ id }), session.id)
         fs.writeFileSync(path.join(root, 'recorded.json'), JSON.stringify(recorded, null, 2))
         const content = recorded.content, screen = content.media.find(media => media.kind === 'screen')
-        assert(screen && screen.durationUs > 12e6)
-        const begin = screen.monoUs, end = begin + screen.durationUs, middle = begin + Math.floor(screen.durationUs / 2)
+        const { recordingRange } = require('../check-persistence-compat.cjs').loadTypeScript('src/core/screenRecording/range.ts')
+        const { startUs: begin, endUs: end } = recordingRange(content), middle = begin + Math.floor((end - begin) / 2)
+        assert(screen && end - begin > 12e6)
         // Official collector/serializer, with synthetic pointer facts. The underlying movie is real capture.
         const { CaptureLogCollector } = require('../check-persistence-compat.cjs').loadTypeScript('src/core/captureLog/collector.ts')
         const pages = [], collector = new CaptureLogCollector({ ownerRef: { kind: 'screen_recording.session', id: session.id }, sourceDigest: `sha256:${'d'.repeat(64)}`, originUs: 0, id: randomUUID }, async page => { pages.push(page) }, error => { throw error })
@@ -57,19 +59,15 @@ function createRecordingProductsScene() {
         ]
         content.understanding.privacy.candidates = [{ id: 'confirmed', mediaId: screen.id, kind: 'email', hint: '邮箱', fingerprint: 'a'.repeat(64), startUs: begin, endUs: end, status: 'accepted', samples: [{ monoUs: begin, box: [.04, .08, .7, .12], confidence: 1 }] }]
         await page.evaluate(async ({ id, revision, content }) => window.henjiNative.documents.saveDocument({ target: { id }, expectedRevision: revision, content }), { id: session.id, revision: recorded.meta.revision, content })
+        await assignIsolatedMcpPort(page)
         client = await connectMcpClient((await authorizeMcpConnection(page, { name: '多产物隔离验收', allowWrites: true, allowDestructive: true })).config)
-        await callTool(client, 'open_document', operationEnvelope([], { documentId: session.id }))
-        // Products live behind the command band's Export button, in a dialog.
-        const openExport = async () => { if (!await button('导出所选产物').isVisible()) await button('导出').click(); await button('导出所选产物').waitFor({ state: 'visible' }) }
-        await openExport(); await capture('recording-products-options')
-        // Only the trusted native chooser is replaced. Real UI/service/renderer/fs remain unchanged.
-        const selected = path.join(root, 'chosen'); fs.mkdirSync(selected, { recursive: true })
-        await app.evaluate(({ dialog }, selected) => { global.__recordingProductsChooser = dialog.showOpenDialog; dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [selected] }) }, selected)
-        await button('导出所选产物').click()
-        await page.waitForFunction(() => document.body.textContent.includes('已导出并核对 2 步') || [...document.querySelectorAll('[role="alert"]')].some(node => node.textContent.trim()), null, { timeout: 120000 })
-        assert(!(await page.getByRole('alert').allTextContents()).filter(text => text.trim()).length, (await page.getByRole('alert').allTextContents()).join('\n'))
-        await app.evaluate(({ dialog }) => { dialog.showOpenDialog = global.__recordingProductsChooser; delete global.__recordingProductsChooser })
-        const directory = path.join(selected, fs.readdirSync(selected).find(name => name.startsWith('录制-steps-')))
+        // 9f7b554df 移除工作台产物弹窗；四类产物的正式能力仍保留。
+        evidence.flow = { basis: '9f7b554df / screenRecording/application/productCapability.ts', removed: '工作台产物弹窗与文件夹选择', assertions: '保留图文内容、真实 HTML 呈现、GIF 帧数、日志与可编辑图层' }
+        const sessionRef = { kind: 'screen_recording.session', id: session.id }
+        const outputs = await page.evaluate(() => window.henjiNative.paths.appDirectories())
+        const steps = await callTool(client, 'export_screen_recording_product', operationEnvelope([], { sessionRef, product: 'steps' }))
+        assert.equal(steps.executionState, 'completed', JSON.stringify(steps)); assert(steps.result.data.verified)
+        const directory = path.join(outputs.folders.exports, `录制-steps-${steps.result.data.resultRef.id}`)
         const md = fs.readFileSync(path.join(directory, 'steps.md'), 'utf8'), html = fs.readFileSync(path.join(directory, 'steps.html'), 'utf8')
         assert(md.includes('准备录制与添加标记') && md.includes('定位错误与交付报告')); assert(html.includes('step-002.png'))
         const png = await require('sharp')(path.join(directory, 'step-001.png')).metadata(); assert.equal(png.width, 1920); assert.equal(png.height, 1080)
@@ -87,8 +85,6 @@ function createRecordingProductsScene() {
         assert.equal(htmlShot.facts.titles.length, 2); assert(htmlShot.facts.images.every(image => image.width === 1920 && image.height === 1080))
         fs.writeFileSync(path.join(root, 'html-document.png'), Buffer.from(htmlShot.png, 'base64'))
         evidence.steps = { directory, files: fs.readdirSync(directory) }; writeEvidence()
-        const sessionRef = { kind: 'screen_recording.session', id: session.id }
-        const outputs = await page.evaluate(() => window.henjiNative.paths.appDirectories())
         for (const product of ['gif', 'bug_report', 'image_document']) {
           const execution = await callTool(client, 'export_screen_recording_product', operationEnvelope([], { sessionRef, product, stepIds: ['second'] }))
           assert.equal(execution.executionState, 'completed', JSON.stringify(execution))
@@ -123,9 +119,7 @@ function createRecordingProductsScene() {
             assert(!(await page.getByRole('alert').allTextContents()).filter(text => text.trim()).length)
           }
         }
-        // Full terminal audit belongs to this task's recording surface; the existing editor was captured above.
-        await callTool(client, 'open_document', operationEnvelope([], { documentId: session.id }))
-        await openExport()
+        await capture('recording-products-completed')
         evidence.completed = true; writeEvidence()
       } finally { writeEvidence(); if (client) await client.close().catch(() => undefined); await disableMcp(page).catch(() => undefined) }
     },

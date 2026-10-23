@@ -13,6 +13,8 @@ const button = (page, name) => page.getByRole('button', { name, exact: true })
 function createSuperKeyframePanelScenes(context) {
   return [
     { id: 'super-keyframe-panel-motion', surface: '剪辑', name: '超级关键帧-原生录音与动作时钟', writesUserData: true,
+      // 原生设备与暂停中的会话独占进程，不能污染下一场景的项目关闭。
+      launchArgs: ['--autoplay-policy=no-user-gesture-required'],
       setup: async (page, _app, { capture }) => {
         const root = path.resolve('.tmp/u4-super-keyframe'); fs.mkdirSync(root, { recursive: true })
         const source = path.join(root, 'source.png')

@@ -7,7 +7,7 @@ import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/te
 import { optimizeMotionDraft } from '@/core/creativeIntent/candidates'
 import { createVideoEditTestProject, reopenVideoEdit, failVideoEditSaves } from './videoEditDocumentTestKit'
 import { appendVideoEditClip, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, undoVideoEdit } from './videoEditService'
-import { startVideoMotion, demonstrateVideoMotion, recordVideoMotionPresentation, videoMotionState, videoMotionComposition, setVideoMotionOptions, setVideoMotionPointer, stopVideoMotion, optimizeVideoMotion, applyVideoMotion, configureVideoMotion, reopenVideoMotion, videoMotionLiveResources, setVideoMotionIntent, previewVideoMotion, pinVideoMotionFrame } from './videoEditMotionDraft'
+import { pauseVideoMotion, resumeVideoMotion, startVideoMotion, demonstrateVideoMotion, recordVideoMotionPresentation, videoMotionState, videoMotionComposition, setVideoMotionOptions, setVideoMotionPointer, stopVideoMotion, optimizeVideoMotion, applyVideoMotion, configureVideoMotion, reopenVideoMotion, videoMotionLiveResources, setVideoMotionIntent, previewVideoMotion, pinVideoMotionFrame } from './videoEditMotionDraft'
 import { readMotionPages } from './videoEditMotionResources'
 import { useVideoEditMotionGesture } from '../panels/useVideoEditMotionGesture'
 import { configureVideoMotionConstraints, organizeVideoMotionAnnotation } from './videoEditMotionDraft'
@@ -169,6 +169,8 @@ it('讲解移动转成正式动作候选，单帧不猜时长，应用后一步�
   await proposeVideoExplanationMotion(id,[plan],[0,0]);const state=videoMotionState(owner)!
   expect(state.candidates.length).toBeGreaterThan(0);expect(state.reviewRequest).toBe(1);expect(getActiveVideoEditSequence(owner).clips[0]).toEqual(before)
   expect(motionClipPose(videoMotionComposition(owner)!.clips[0],0).position[0]).toBeCloseTo(.8)
+  await reopenVideoMotion(id, state.draft.id)
+  await previewVideoMotion(id, videoMotionState(owner)!.candidates[0].id)
   const history=owner.past.length;await applyVideoMotion(id);expect(owner.past).toHaveLength(history+1)
   expect(motionClipPose(getActiveVideoEditSequence(owner).clips[0],0).position[0]).toBeCloseTo(.8)
   undoVideoEdit(id);expect(getActiveVideoEditSequence(owner).clips[0]).toEqual(before)
@@ -381,4 +383,23 @@ it('旧画面卸载不会取消同文档重开后新实例的正在示范指针'
   const before = state.pending.length; hook.unmount(); present(owner, 10)
   expect(state.pending.length).toBeGreaterThan(before)
   setVideoMotionPointer(id, false); await stopVideoMotion(id)
+})
+
+it('自动示范暂停间隔不与已封存段重叠，续录两段仍可整理', async () => {
+  const owner = await setup(), id = owner.document.id
+  await startVideoMotion(id); present(owner, 0)
+  const state = videoMotionState(owner)!
+  demonstrateVideoMotion(id, { ...state.pose, position: [.3, .5] }, 'down'); present(owner, 0)
+  present(owner, 30); demonstrateVideoMotion(id, { ...state.pose, position: [.7, .5] }, 'up'); present(owner, 30)
+  await new Promise(resolve => setTimeout(resolve, 20))
+  pauseVideoMotion(id)
+  await new Promise(resolve => setTimeout(resolve, 20))
+  resumeVideoMotion(id); present(owner, 60)
+  demonstrateVideoMotion(id, { ...state.pose, position: [.8, .5] }, 'down'); present(owner, 60)
+  demonstrateVideoMotion(id, state.pose, 'up'); present(owner, 60)
+  await stopVideoMotion(id)
+  const gap = state.draft.clockSegments.find(clock => clock.mode === 'gap')!
+  expect(state.draft.takes[0].monoSpanUs[1]).toBeLessThanOrEqual(gap.monoSpanUs[0])
+  await expect(optimizeVideoMotion(id)).resolves.toBeUndefined()
+  expect(state.candidates.length).toBeGreaterThan(0)
 })

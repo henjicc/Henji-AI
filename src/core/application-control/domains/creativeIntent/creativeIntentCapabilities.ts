@@ -32,8 +32,8 @@ export const CREATIVE_INTENT_CAPABILITIES = (['video_edit', 'image_edit'] as con
     outputSchema: capabilityOutputSchema({ resultRef: draftRef, candidateRefs: z.array(applicationRefSchema), status: z.enum(['candidate', 'confirmation_required', 'local_fallback']), questions: z.array(z.string()) }),
     resolveOperationTargets: input => [input.draftRef], resolveOperationWriteTargets: input => [input.draftRef],
     resolveObservedEffects: (_input, output) => output.status === 'confirmation_required' ? [] : [
-      { effect: 'update', entityTypes: [`${domain}.intent_draft`], propertyIds: [], targetRefs: [output.resultRef], count: 1, verified: true, evidence: [] },
-      { effect: 'create', entityTypes: [`${domain}.intent_candidate`], propertyIds: [], targetRefs: output.candidateRefs, count: output.candidateRefs.length, verified: true, evidence: [] },
+      { effect: 'update', entityTypes: [`${domain}.intent_draft`], propertyIds: [], targetRefs: [output.resultRef], count: 1, verified: true, evidence: ['已保存并回读正式原稿，核对候选引用未变化。'] },
+      { effect: 'create', entityTypes: [`${domain}.intent_candidate`], propertyIds: [], targetRefs: output.candidateRefs, count: output.candidateRefs.length, verified: true, evidence: ['已按正式资源目录回读候选并核对文件摘要与字节数。'] },
     ],
     concurrencyKey: domain, resolveConcurrencyKey: input => `${domain}:${input.draftRef.id}`, summarize: () => domain === 'video_edit' ? '候选已整理，请读回并按用户要求应用；仅在用户要求挑选时等待选择。' : '候选已整理，请读回并由用户确认后应用。',
   })

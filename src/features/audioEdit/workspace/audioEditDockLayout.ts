@@ -1,7 +1,7 @@
 import { Orientation, type SerializedDockview } from 'dockview-react'
 import { createLogger } from '@/core/logging'
 import { registerWorkspaceLayout } from '@/services/workspaceLayouts/workspaceLayoutService'
-import { openAssistant } from '@/features/assistant/store/assistantUiStore'
+import { openAssistant } from '@/features/assistant'
 
 const logger = createLogger('features.audioEdit.layout')
 export const AUDIO_EDIT_WORKSPACE_ID = 'audio_edit'

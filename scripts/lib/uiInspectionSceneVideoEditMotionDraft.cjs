@@ -21,16 +21,18 @@ function fixture(source = path.resolve('node_modules/.cache/video-edit-motion-dr
 }
 function createVideoEditMotionDraftScene() {
   return { id: 'video-edit-motion-draft', surface: '剪辑', name: '剪辑-超级关键帧采集候选应用与重开', writesUserData: true,
+    launchArgs: ['--autoplay-policy=no-user-gesture-required'],
     setup: async (page, app, { capture }) => {
       const root = path.resolve('node_modules/.cache/video-edit-motion-draft'); fs.mkdirSync(root, { recursive: true })
-      const evidence = { frames: [], candidateMs: [], latencyMs: [], abMs: [], fidelityMs: [], visualReview: '待代理逐张目视检查' }
+      const evidence = { frames: [], candidateMs: [], latencyMs: [],  visualReview: '待代理逐张目视检查' }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       let client; let seeded
-      const controls = page.locator('[data-creative-intent-controls]')
+      const controls = page.getByRole('switch', { name: '麦克风', exact: true })
       const trigger = () => page.getByRole('button', { name: /^(超级关键帧|正在示范)$/ })
       const panel = async () => { if (!await controls.isVisible()) await trigger().click(); await controls.waitFor({ state: 'visible' }) }
-      const closePanel = async () => { if (await controls.isVisible()) { await trigger().click(); await controls.waitFor({ state: 'hidden' }) } }
+      const closePanel = async () => { if (await controls.isVisible()) { await page.keyboard.press('Escape'); await controls.waitFor({ state: 'hidden' }) } }
       const shot = async name => {
+        await page.waitForTimeout(250) // 等待面板过渡结束，再保留目视证据。
         const suffix = `step-${String(evidence.frames.length + 1).padStart(3, '0')}`
         await capture(suffix)
         const native = await page.getByLabel('剪辑画面', { exact: true }).evaluate(canvas => ({ pixels: canvas.toDataURL('image/png').split(',')[1], data: { ...canvas.dataset } }))
@@ -68,8 +70,6 @@ function createVideoEditMotionDraftScene() {
           new PerformanceObserver(list => { for (const m of list.getEntries()) if (m.name.startsWith('video-motion-')) window.__motionMeasures.push({ name: m.name, duration: m.duration, end: m.startTime + m.duration }) }).observe({ entryTypes: ['measure'] })
           const canvas = document.querySelector('canvas[aria-label="剪辑画面"]'); let revision = canvas.dataset.presentedRevision
           new MutationObserver(() => { if (canvas.dataset.presentedRevision !== revision) { revision = canvas.dataset.presentedRevision; window.__motionFrames.push({ at: performance.now(), revision, frame: Number(canvas.dataset.presentedFrame) }) } }).observe(canvas, { attributes: true, attributeFilter: ['data-presented-revision'] })
-          document.addEventListener('click', event => { const target = event.target.closest?.('[data-creative-intent-controls] button'); if (target && /(?:原稿 A| B)$/.test(target.textContent.trim())) window.__motionUiInputs.push({ kind: 'ab', at: event.timeStamp }) })
-          document.addEventListener('keyup', event => { if (event.target.getAttribute?.('aria-label') === '保真度' && event.key.startsWith('Arrow')) window.__motionUiInputs.push({ kind: 'fidelity', at: event.timeStamp }) })
         })
         const scrub = async frame => {
           await closePanel()
@@ -87,62 +87,63 @@ function createVideoEditMotionDraftScene() {
           for (let i = 1; i <= 6; i++) { await page.mouse.move(x + box.width * dx * i / 6, y + box.height * dy * i / 6); await page.waitForTimeout(40); if (i % 2 === 0) await shot(name + '-' + i) }
           await page.mouse.up(); await page.waitForTimeout(80)
         }
-        await panel(); await button(page, '开始示范').click()
+        // f09b6bf3b 将旧编辑面板改为录制/交接；算法与应用仍由正式能力提供。
+        evidence.flow = { basis: 'c1c81a550 / f09b6bf3b / creativeIntentFields.ts / creativeIntentCapabilities.ts',
+          removed: ['原稿 A 按钮与 A/B 点击耗时', '保真度滑块点击耗时', '半速、属性与模式选择器'],
+          retained: ['原生拖动采集', '候选生成与播放', '保真度与钉点', '应用、撤销、重做、重开', '输入 P95 50ms、生成 P95 900ms'] }
+        const readEntity = ref => callTool(client, 'read_application_entity', { ref })
+        const change = async (ref, properties) => {
+          const result = await callTool(client, 'change_application_entities', operationEnvelope([await readEntity(ref)], { summary: '验收超级关键帧', changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties }] }))
+          assert.equal(result.executionState, 'completed', JSON.stringify(result)); return result
+        }
+        await panel()
+        if (await controls.getAttribute('aria-checked') === 'true') await controls.click()
+        await button(page, '开始录制').click(); await button(page, '暂停').waitFor()
         await scrub(20); await shot('01-不播放找位置')
         await saved(doc => doc.creativeIntents?.drafts.length === 1)
-        assert.equal(readVideoEditFile(seeded.file).creativeIntents.drafts[0].takes.length, 0, '找位置不能创建示范')
+        // c1c81a550 开始时先建空段；纯定位不得生成动作采样。
+        assert.equal(readVideoEditFile(seeded.file).creativeIntents.drafts[0].takes.flatMap(take => take.samplePages).length, 0, '找位置不能创建动作采样')
         await drag('02-拖元素示范', -.12, -.05); await scrub(90); await drag('03-分时终点', .12, .03)
-        await panel(); await button(page, '结束示范').click(); await button(page, '开始示范').waitFor({ state: 'visible' }); await shot('04-原稿封存')
-        await page.getByLabel('整理动作', { exact: true }).click(); await page.getByRole('option', { name: '轻回弹', exact: true }).click()
-        await button(page, '整理').click(); await button(page, '应用').waitFor({ state: 'visible', timeout: 90000 }); await shot('05-候选B')
-        const normalPreview = async () => {
-          await button(page, '正常速预览').click(); await closePanel()
-          await page.waitForFunction(() => { const frame = Number(document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame); return frame >= 20 && frame < 36 }, null, { timeout: 20000 })
-          await page.waitForFunction(() => Number(document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame) >= 36, null, { timeout: 20000 })
-          await playback(55)
+        await panel(); await button(page, '暂停').click(); await button(page, '继续录制').waitFor()
+        await button(page, '继续录制').click(); await button(page, '暂停').waitFor()
+        await scrub(120); await drag('04-继续录制', -.03, .02); await scrub(55)
+        await panel(); await button(page, '完成').click(); await button(page, '交给 AI').waitFor({ timeout: 30000 })
+        await closePanel(); await page.keyboard.press('Escape')
+        // 交接只写助手草稿，不发送；关闭助手以恢复原节目画幅。
+        const assistantClose = page.getByRole('button', { name: '收起智能助手', exact: true })
+        if (await assistantClose.isVisible()) await assistantClose.click()
+        const sealed = await saved(doc => doc.creativeIntents?.drafts[0]?.takes.length >= 2)
+        const draft = sealed.creativeIntents.drafts[0], draftRef = { kind: 'video_edit.intent_draft', id: `${seeded.documentId}:${encodeURIComponent(draft.id)}` }
+        assert(draft.clockSegments.length > 1, '暂停与重访时钟必须保留')
+        await shot('05-原稿封存')
+        const organize = async () => {
+          const result = await callTool(client, 'organize_video_edit_intent', operationEnvelope([await readEntity(draftRef)], { draftRef, motionIntent: { kind: 'follow_path', preserveJitter: false } }))
+          assert.equal(result.executionState, 'completed', JSON.stringify(result)); assert(result.result.data.candidateRefs.length)
+          return result.result.data.candidateRefs[0]
         }
-        await button(page, '原稿 A').click(); await normalPreview(); await shot('06-原稿A正常速')
-        await panel(); await controls.getByRole('button').filter({ hasText: / B$/ }).last().click(); await normalPreview(); await shot('07-候选B正常速对照')
-        await panel()
-        const switchSample = async original => {
-          const before = await page.getByLabel('剪辑画面', { exact: true }).getAttribute('data-presented-revision')
-          const count = await page.evaluate(() => window.__motionUiInputs.length)
-          await (original ? button(page, '原稿 A') : controls.getByRole('button').filter({ hasText: / B$/ }).last()).click()
-          await page.waitForFunction(before => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedRevision !== before, before)
-          return page.evaluate(({ count, before }) => { const input = window.__motionUiInputs[count]; const frame = window.__motionFrames.find(frame => frame.at >= input.at && frame.revision !== before); return frame.at - input.at }, { count, before })
-        }
-        for (let index = 0; index < 5; index++) { await switchSample(true); await switchSample(false) }
-        for (let index = 0; index < 30; index++) evidence.abMs.push(await switchSample(index % 2 === 0))
-        const sliderSample = async () => {
-          const baseline = await page.evaluate(() => ({ inputs: window.__motionUiInputs.length, generations: window.__motionMeasures.filter(measure => measure.name === 'video-motion-candidate-generation').length }))
-          await page.getByRole('slider', { name: '保真度' }).press('ArrowRight')
-          await page.waitForFunction(baseline => { const generation = window.__motionMeasures.filter(measure => measure.name === 'video-motion-candidate-generation')[baseline.generations]; return generation && window.__motionFrames.some(frame => frame.at >= generation.end) }, baseline, { timeout: 20000 })
-          await button(page, '应用').waitFor({ state: 'visible' })
-          return page.evaluate(baseline => { const input = window.__motionUiInputs[baseline.inputs]; const generation = window.__motionMeasures.filter(measure => measure.name === 'video-motion-candidate-generation')[baseline.generations]; return window.__motionFrames.find(frame => frame.at >= generation.end).at - input.at }, baseline)
-        }
-        for (let index = 0; index < 5; index++) await sliderSample()
-        for (let index = 0; index < 30; index++) evidence.fidelityMs.push(await sliderSample())
-        evidence.abP95Ms = quantile(evidence.abMs, .95); evidence.fidelityP95Ms = quantile(evidence.fidelityMs, .95); store()
-        await button(page, '钉住终点').click(); await button(page, '应用').waitFor({ state: 'visible', timeout: 90000 }); await shot('08-终点钉住')
-        await button(page, '应用').click(); await saved(doc => doc.creativeIntents.drafts[0].applications.at(-1)?.saved)
-        const applied = JSON.stringify(readVideoEditFile(seeded.file).sequences[0].clips[0].curves); await shot('09-应用普通曲线')
+        let candidate = await organize(); await shot('06-候选')
+        await playback(20, true)
+        await page.waitForFunction(() => Number(document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame) >= 36, null, { timeout: 20000 })
+        await playback(55); await shot('07-候选正常速播放')
+        await change(draftRef, { 'video_edit.intent_draft.fidelity': .7 }); candidate = await organize()
+        const head = readVideoEditFile(seeded.file).creativeIntents
+        const samples = head.drafts[0].takes.flatMap(take => take.samplePages.flatMap(ref => JSON.parse(fs.readFileSync(head.resources.find(r => r.resourceId === ref.resourceId).path, 'utf8')).entries))
+        const lastSample = samples.at(-1); assert(lastSample?.sampleId)
+        const pinned = await callTool(client, 'change_application_entities', operationEnvelope([await readEntity(draftRef)], { summary: '钉住最后姿态', changes: [{ kind: 'create_items', entityType: 'video_edit.intent_pin', parent: draftRef, items: [{ properties: { 'video_edit.intent_pin.sample_id': lastSample.sampleId } }] }] }))
+        assert.equal(pinned.executionState, 'completed', JSON.stringify(pinned)); candidate = await organize()
+        await change(candidate, { 'video_edit.intent_candidate.selected': true }); await shot('08-终点钉住')
+        await change(candidate, { 'video_edit.intent_candidate.applied': true })
+        await saved(doc => doc.creativeIntents.drafts[0].applications.at(-1)?.saved)
+        const applied = JSON.stringify(readVideoEditFile(seeded.file).sequences[0].clips[0].curves); assert(applied)
+        await shot('09-应用普通曲线')
         await button(page, '撤销').click(); await saved(doc => !doc.sequences[0].clips[0].curves?.x); await shot('10-一步撤销')
         await button(page, '重做').click(); await saved(doc => JSON.stringify(doc.sequences[0].clips[0].curves) === applied); await shot('11-一步重做')
         await leaveVideoEditProject(page, '保存'); await openVideoEditProjectCard(page, seeded.projectId); await playback(0)
-        await panel(); await button(page, '继续上次原稿').click(); await button(page, '原稿 A').waitFor({ state: 'visible' }); await shot('12-重开原稿与钉住点')
-        const restored = readVideoEditFile(seeded.file).creativeIntents; assert(restored.drafts[0].pins.length); assert(restored.motionOptions[0].originalRef)
-        await panel(); await button(page, '录制轨迹').click(); await button(page, '开始示范').click()
-        await page.getByLabel('录制速度', { exact: true }).click(); await page.getByRole('option', { name: '0.5x 慢录', exact: true }).click()
-        await playback(0, true); await drag('13-半速手动播放', .08, -.02)
-        const at = Number(await page.getByLabel('剪辑画面', { exact: true }).getAttribute('data-presented-frame')); await playback(at)
-        await drag('14-暂停继续操作', .08, .02)
-        await page.keyboard.down('Alt'); await panel(); await page.waitForTimeout(200); await shot('14a-修饰键示范模式'); await page.keyboard.up('Alt')
-        await panel(); await page.getByLabel('示范属性', { exact: true }).click(); await page.getByRole('option', { name: '旋转', exact: true }).click(); await drag('14b-暂停旋转示范', .04)
-        await panel(); await page.getByLabel('示范属性', { exact: true }).click(); await page.getByRole('option', { name: '缩放', exact: true }).click(); await drag('14c-暂停缩放示范', .03)
-        await panel(); await button(page, '示范运动').click(); await scrub(at + 20); await shot('15-向前示范'); await scrub(Math.max(0, at - 5)); await shot('16-倒退重访')
-        await panel(); await button(page, '结束示范').click(); await button(page, '开始示范').waitFor({ state: 'visible' }); await shot('17-录制重访段封存')
-        const last = await saved(doc => doc.creativeIntents.drafts.length === 2 && doc.creativeIntents.drafts[1].takes.length > 1)
-        assert(last.creativeIntents.drafts[1].clockSegments.some(c => c.anchors.some(a => a.playbackRate === .5)))
+        await callTool(client, 'focus_application_entity', operationEnvelope([], { ref: clipRef }))
+        await panel(); await button(page, '交给 AI').waitFor(); await shot('12-重开原稿与钉住点')
+        const restored = readVideoEditFile(seeded.file).creativeIntents
+        assert(restored.drafts[0].pins.length); assert(restored.motionOptions[0].originalRef)
+        assert.equal(restored.drafts[0].fidelity, .7); assert.equal(JSON.stringify(readVideoEditFile(seeded.file).sequences[0].clips[0].curves), applied)
         const measures = await page.evaluate(() => window.__motionMeasures)
         evidence.latencyMs = measures.filter(m => m.name === 'video-motion-input-present').map(m => m.duration)
         evidence.candidateMs = measures.filter(m => m.name === 'video-motion-candidate-generation').map(m => m.duration)
@@ -151,8 +152,6 @@ function createVideoEditMotionDraftScene() {
         store(); await leaveVideoEditProject(page, '保存')
         assert(evidence.inputP95Ms <= 50, `输入呈现 P95 ${evidence.inputP95Ms}ms 超过 50ms`)
         assert(evidence.generationP95Ms <= 900, `候选生成 P95 ${evidence.generationP95Ms}ms 超过 900ms`)
-        assert(evidence.abP95Ms <= 100, `A/B P95 ${evidence.abP95Ms}ms 超过 100ms`)
-        assert(evidence.fidelityP95Ms <= 300, `保真度 P95 ${evidence.fidelityP95Ms}ms 超过 300ms`)
       } catch (error) {
         evidence.failure = error.message
         const measures = await page.evaluate(() => window.__motionMeasures ?? []).catch(() => [])

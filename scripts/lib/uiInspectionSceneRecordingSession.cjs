@@ -133,11 +133,14 @@ function createRecordingSessionScene() {
         // 录后增益沿现有 G 对话框读回，取消不改变导入结果。
         const microphoneClip = toolbox.sequence.clips.find(clip => clip.kind === 'audio' && clip.gainDb !== undefined)
         assert(microphoneClip, '录后麦克风应保存独立增益')
-        await page.locator(`[data-video-edit-clip="${microphoneClip.id}"]`).first().click()
+        await page.locator(`[data-video-edit-clip="${microphoneClip.id}"] [aria-label^="选择片段"]`).first().click({ modifiers: ['Alt'] })
         await page.keyboard.press('g')
         const gainDialog = page.getByRole('dialog', { name: '音频增益', exact: true })
         await gainDialog.waitFor({ state: 'visible' })
         assert((await gainDialog.innerText()).includes(`${microphoneClip.gainDb.toFixed(2)} dB`), '增益对话框没有显示当前独立增益')
+        // 等弹窗动画完成后核对合成截图，避免截到上一帧。
+        await page.waitForTimeout(300)
+        await page.screenshot({ path: path.join(output, 'audio-gain.png') })
         await capture('recording-session-audio-gain')
         await gainDialog.getByRole('button', { name: '取消', exact: true }).click()
         // A recording clip is special in the editor: its own panel (pointer, zoom, frame) and the Z1 zoom lane.

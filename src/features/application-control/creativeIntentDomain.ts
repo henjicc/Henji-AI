@@ -118,7 +118,20 @@ export const creativeIntentApplicationDomain: ApplicationDomainModule = {
         }
         const record = await applicationWritePreflight(context, () => intentRecord(input.draftRef))
         let status: 'candidate' | 'confirmation_required' | 'local_fallback' = 'candidate'; let questions: string[] = []
-        const finish = () => ({ resultRef: input.draftRef, candidateRefs: record.host.read().drafts.find(d => d.id === record.draftId)!.candidateRefs.map(c => intentRef(record.documentRef, 'intent_candidate', record.draftId, c.resourceId)), status, questions, revision: intentRevisions(domain)[domain], scopeRevisions: intentRevisions(domain) })
+        const finish = async () => {
+          const head = record.host.read(), draft = head.drafts.find(d => d.id === record.draftId)
+          if (!draft) throw new Error('原稿已移除，无法核对整理结果。')
+          const baseline = JSON.stringify(draft)
+          // 保存后从正式目录回读候选资源，缺失或摘要不符时不能声称写入已核对。
+          if (status !== 'confirmation_required') for (const ref of draft.candidateRefs) {
+            const resource = head.resources.find(value => value.resourceId === ref.resourceId)
+            if (!resource || resource.kind !== 'candidate' || resource.digest !== ref.digest || resource.bytes !== ref.bytes) throw new Error('候选资源登记不完整，请重新整理。')
+            await intentProvider(domain).readResource(resource)
+          }
+          context.signal.throwIfAborted(); record.host.assertCurrent()
+          if (JSON.stringify(record.host.read().drafts.find(d => d.id === record.draftId)) !== baseline) throw new Error('核对期间原稿已有修改，请重新读取。')
+          return { resultRef: input.draftRef, candidateRefs: draft.candidateRefs.map(c => intentRef(record.documentRef, 'intent_candidate', record.draftId, c.resourceId)), status, questions, revision: intentRevisions(domain)[domain], scopeRevisions: intentRevisions(domain) }
+        }
         const review = await applicationWritePreflight(context, async () => {
         if ('semanticPlan' in input) {
           if (!('sessionId' in input) || typeof input.sessionId !== 'string' || !input.sessionId) throw new Error('语义计划需要已授权的原讲解 sessionId；不能伪造绑定或否定保护。')

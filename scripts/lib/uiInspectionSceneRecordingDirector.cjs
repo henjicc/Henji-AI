@@ -13,7 +13,7 @@ function createRecordingDirectorScene() {
   return { id: 'recording-director', name: '导演录制及改文字稿补录-模拟TTS成片导出撤销', surface: '屏幕录制', writesUserData: true,
     launchArgs: ['--autoplay-policy=no-user-gesture-required'],
     setup: async (page, app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/recording-director'); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve('.tmp/ui-inspection/recording-director'); fs.mkdirSync(root, { recursive: true })
       const evidence = { tts: 'Offline sine-wave mock; no provider submission', capture: 'Real isolated application window', paidGenerationBlocked: true }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       const unblock = await blockPaidGeneration(app)
@@ -78,13 +78,13 @@ function createRecordingDirectorScene() {
         const redubbed = await invoke('redub_screen_recording_sentence', { sessionRef: directed.sessionRef, clipRef, text: texts[2], rerecord: false })
         assert.equal(redubbed.verified, true); assert.equal(redubbed.undoSteps, 1)
         const after = await readDocument(documentRef.id), changedSequence = after.content.sequences.find(v => v.id === sequenceId)
-        const voice = changedSequence.clips.find(v => v.id === voices[1].id)
-        assert.equal(voice.text, texts[2]); assert.equal(voice.duration, 270)
+        const voice = changedSequence.clips.find(v => v.id === voices[1].id), sequenceFps = changedSequence.frameRate.numerator / changedSequence.frameRate.denominator
+        assert.equal(voice.text, texts[2]); assert.equal(voice.duration, 9 * sequenceFps)
         assert.deepEqual(changedSequence.clips.find(v => v.id === voices[0].id), voices[0])
         assert(changedSequence.clips.some(v => v.kind === 'image' && v.name === '旁白停留画面'))
-        assert(changedSequence.captions.some(v => v.clipId === voice.id && v.text === texts[2] && v.duration === 270))
+        assert(changedSequence.captions.some(v => v.clipId === voice.id && v.text === texts[2] && v.duration === 9 * sequenceFps))
         assert.equal((await page.evaluate(() => window.__recordingDirectorTour.calls)).length, 3)
-        await seek(voice.start + 210)
+        await seek(voice.start + 7 * sequenceFps)
         await page.screenshot({ path: path.join(root, 'redub.png') }); await capture('recording-director-redub')
         const exported = await invoke('export_video_edit', { documentRef, settings: { format: 'mp4', width: 1280, height: 720, fps: 30, videoBitrateMbps: 6, audioBitrateKbps: 192, fit: 'fit', loudness: null, captionMode: 'burn', addToLibrary: false } }, [await read(documentRef)])
         const taskId = exported.queue[0].id, deadline = Date.now() + 360000
@@ -95,17 +95,18 @@ function createRecordingDirectorScene() {
         assert(output && fs.existsSync(output)); fs.copyFileSync(output, path.join(root, 'redub.mp4'))
         evidence.probe = JSON.parse(execFileSync(ffprobePath, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', output], { windowsHide: true }).toString())
         assert(evidence.probe.streams.some(v => v.codec_type === 'audio')); assert(evidence.probe.streams.some(v => v.codec_type === 'video'))
-        const duration = Math.max(...changedSequence.clips.map(v => v.start + v.duration)) / 30
+        const duration = Math.max(...changedSequence.clips.map(v => v.start + v.duration)) / sequenceFps
         assert(Math.abs(Number(evidence.probe.format.duration) - duration) < .15)
-        execFileSync(ffmpegPath, ['-v', 'error', '-y', '-ss', String((voice.start + 210) / 30), '-i', output, '-frames:v', '1', path.join(root, 'export-hold.png')], { windowsHide: true })
+        execFileSync(ffmpegPath, ['-v', 'error', '-y', '-ss', String((voice.start + 7 * sequenceFps) / sequenceFps), '-i', output, '-frames:v', '1', path.join(root, 'export-hold.png')], { windowsHide: true })
         await invoke('undo_video_edit', { documentRef }, [await read(documentRef)])
         const undone = await readDocument(documentRef.id)
         assert.deepEqual(undone.content.sequences, before.content.sequences); assert.deepEqual(undone.content.media, before.content.media)
         evidence.after = after; evidence.redubbed = redubbed; evidence.undoRestored = true; evidence.completed = true
         assert(!(await page.evaluate(() => window.henjiNative.documents.listProjects())).some(v => v.name.startsWith('重放临时-')))
-        await invoke('open_document', { documentId: directed.sessionRef.id })
-        await page.getByText('改文字稿补录', { exact: true }).scrollIntoViewIfNeeded()
-        await page.screenshot({ path: path.join(root, 'redub-panel.png') })
+        // 9f7b554df 移除补录面板；上方保留正式补录、导出与一步撤销的全部断言。
+        evidence.flow = { basis: '9f7b554df', removed: '补录面板终态截图', changed: '按实际序列帧率核对九秒补录及七秒停留画面', assertions: '保留九秒时长、字幕、音画导出与完整撤销'  }
+        await page.screenshot({ path: path.join(root, 'redub-undone.png') })
+        await capture('recording-director-undone')
       } catch (error) { evidence.failure = String(error); await page.screenshot({ path: path.join(root, 'failure.png') }).catch(() => {}); throw error }
       finally { store(); await client?.close(); await disableMcp(page).catch(() => {}); await unblock() }
     },
