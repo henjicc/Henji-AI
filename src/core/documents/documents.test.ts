@@ -123,7 +123,7 @@ describe('文档类型登记', () => {
       ['audio_edit', '.hjaud', { zh: '口播', en: 'Voiceovers' }, 'json', 3],
       ['camera_stage', '.hjstg', { zh: '镜头参考', en: 'Camera Stages' }, 'json', 1],
       ['image_document', '.hjimg', { zh: '图片文档', en: 'Image Documents' }, 'package', 1],
-      ['screen_recording', '.hjrec', { zh: '录制会话', en: 'Recordings' }, 'json', 23],
+      ['screen_recording', '.hjrec', { zh: '录制会话', en: 'Recordings' }, 'json', 27],
     ])
     expect(documentKindRegistry.forFileName('a.HenjiImg')?.id).toBe('image_document')
     expect(documentKindRegistry.forFileName('a.json')).toBeUndefined()

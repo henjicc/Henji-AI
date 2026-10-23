@@ -90,7 +90,7 @@ describe('项目：新建、改名、转正', () => {
     fs.mkdirSync(path.join(env.workRoot, '项目', '未命名项目 1'))
     const project = await service.createProject()
     expect(project).toMatchObject({ name: '未命名项目 2', draft: true, external: false, locale: 'zh', folders: { generated: '生成结果', materials: '素材' }, documentCount: 0 })
-    expect(await manifestOf(project.path)).toMatchObject({ format: 'henji-project', version: 1, id: project.id, locale: 'zh', draft: true })
+    expect(await manifestOf(project.path)).toMatchObject({ format: 'henji-project', version: 2, id: project.id, locale: 'zh', draft: true })
     expect(await listFiles(project.path)).toEqual(['.henji/project.json'])
     expect((await service.listProjects()).map((item) => item.id)).toEqual([project.id])
   })
