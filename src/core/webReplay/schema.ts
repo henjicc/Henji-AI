@@ -6,7 +6,8 @@ import { z } from 'zod'
  * these schemas validate them at Henji's boundary and are checked against them in tests.
  */
 
-export const WEB_RECORDING_VERSION = 1
+/** v2: element locators may name the enclosing data-replay-id container (`act.scope`). */
+export const WEB_RECORDING_VERSION = 2
 export const WEB_RECORDING_MIN_READER_VERSION = 1
 
 const us = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
@@ -33,7 +34,7 @@ export type WebRecordingEnvironment = z.infer<typeof environmentSchema>
 
 const rectSchema = z.object({ x: finite, y: finite, width: finite, height: finite }).strict()
 export const locatorSchema = z.object({
-  replayId: z.string().optional(), act: z.object({ name: z.string(), anchor: z.string().optional() }).strict().optional(),
+  replayId: z.string().optional(), act: z.object({ name: z.string(), anchor: z.string().optional(), scope: z.string().optional() }).strict().optional(),
   role: z.string().optional(), name: z.string().optional(), tag: z.string(), path: z.string(),
 }).strict()
 export const elementInfoSchema = z.object({ locator: locatorSchema, rect: rectSchema, offset: z.tuple([finite, finite]) }).strict()

@@ -34,8 +34,11 @@ export type Modifiers = number // bit flags: 1 alt, 2 ctrl, 4 meta, 8 shift (sam
 export interface Locator {
   /** Closest `[data-replay-id]` (or the attribute the app registered). */
   replayId?: string
-  /** Closest action attribute (default `data-act`) with the nearest ancestor that has an id. */
-  act?: { name: string; anchor?: string }
+  /**
+   * Action attribute (default `data-act`) with the nearest ancestor `id` (`anchor`) and the
+   * enclosing `data-replay-id` container (`scope`), e.g. the "detail" button of node-42.
+   */
+  act?: { name: string; anchor?: string; scope?: string }
   role?: string
   name?: string
   tag: string

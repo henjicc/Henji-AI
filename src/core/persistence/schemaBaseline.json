@@ -360,8 +360,8 @@
       "minReaderVersion": 1
     },
     "web-recording": {
-      "version": 1,
-      "fingerprint": "cd1de847aec753adec2dfae551f582b1d3bfacd5f28c44861051a46f90ae9a08",
+      "version": 2,
+      "fingerprint": "fa344ca37620113320e5adf416c964a35b2bd19c3e864f385f099d5f20768efb",
       "supportedFrom": 1,
       "minReaderVersion": 1
     }

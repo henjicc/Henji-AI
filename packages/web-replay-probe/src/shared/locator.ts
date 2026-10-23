@@ -35,12 +35,25 @@ function anchorIdOf(element: Element): string | undefined {
   return anchor?.id || undefined
 }
 
-/** The element that best represents what the user acted on: explicit id, action, then interactive ancestor. */
+function closestAction(target: Element, options: LocatorOptions): Element | null {
+  return options.actionAttributes.map(a => target.closest(`[${a}]`)).find(Boolean) ?? null
+}
+
+/**
+ * The element that best represents what the user acted on. An action element inside an identified
+ * container wins over the container (a node's "detail" button, not the node); otherwise the
+ * identified element, then the action, then the nearest interactive ancestor.
+ */
 export function representativeElement(target: Element, options: LocatorOptions = DEFAULT_LOCATOR_OPTIONS): Element {
-  return target.closest(`[${options.idAttribute}]`)
-    ?? options.actionAttributes.map(a => target.closest(`[${a}]`)).find(Boolean)
-    ?? target.closest(INTERACTIVE)
-    ?? target
+  const identified = target.closest(`[${options.idAttribute}]`)
+  const action = closestAction(target, options)
+  if (action && (!identified || (identified !== action && identified.contains(action)))) return action
+  return identified ?? action ?? target.closest(INTERACTIVE) ?? target
+}
+
+/** The identified container around an element (not the element itself). */
+function scopeOf(element: Element, options: LocatorOptions): Element | null {
+  return element.parentElement?.closest(`[${options.idAttribute}]`) ?? null
 }
 
 export function describeLocator(element: Element, options: LocatorOptions = DEFAULT_LOCATOR_OPTIONS): Locator {
@@ -49,7 +62,11 @@ export function describeLocator(element: Element, options: LocatorOptions = DEFA
   if (replayId) locator.replayId = replayId
   for (const attribute of options.actionAttributes) {
     const name = element.getAttribute(attribute)
-    if (name) { locator.act = { name, anchor: anchorIdOf(element.parentElement ?? element) }; break }
+    if (name) {
+      const scope = scopeOf(element, options)?.getAttribute(options.idAttribute)
+      locator.act = { name, anchor: anchorIdOf(element.parentElement ?? element), ...(scope ? { scope } : {}) }
+      break
+    }
   }
   const role = roleOf(element)
   if (role) locator.role = role
@@ -78,20 +95,37 @@ function visible(element: Element): boolean {
   return r.width > 0 && r.height > 0
 }
 
+/** True when the element is what a click at its centre would hit (not covered by a panel). */
+function onTop(element: Element): boolean {
+  const r = element.getBoundingClientRect()
+  const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)
+  return Boolean(hit && (hit === element || element.contains(hit)))
+}
+
+/** Among same-named candidates prefer the one actually on top (e.g. a list item under an open panel). */
+function pickOnTop(candidates: Element[]): Element | undefined {
+  return candidates.find(onTop) ?? candidates[0]
+}
+
 /** Finds the element a locator names in the current page, strongest identity first. */
 export function resolveLocator(locator: Locator, options: LocatorOptions = DEFAULT_LOCATOR_OPTIONS): Element | null {
   const escape = (v: string): string => CSS.escape(v)
   if (locator.replayId) {
-    const found = [...document.querySelectorAll(`[${options.idAttribute}="${escape(locator.replayId)}"]`)].find(visible)
+    const found = pickOnTop([...document.querySelectorAll(`[${options.idAttribute}="${escape(locator.replayId)}"]`)].filter(visible))
     if (found) return found
   }
   if (locator.act) {
-    const candidates = options.actionAttributes.flatMap(a => [...document.querySelectorAll(`[${a}="${escape(locator.act!.name)}"]`)]).filter(visible)
-    const anchored = locator.act.anchor ? candidates.filter(c => anchorIdOf(c.parentElement ?? c) === locator.act!.anchor) : candidates
+    const act = locator.act
+    const all = options.actionAttributes.flatMap(a => [...document.querySelectorAll(`[${a}="${escape(act.name)}"]`)]).filter(visible)
+    // The identified container (data-replay-id) is the strongest narrowing; the nearest [id] comes next.
+    const scoped = act.scope ? all.filter(c => scopeOf(c, options)?.getAttribute(options.idAttribute) === act.scope) : all
+    const candidates = scoped.length || !act.scope ? scoped : all
+    const anchored = act.anchor ? candidates.filter(c => anchorIdOf(c.parentElement ?? c) === act.anchor) : candidates
     const pool = anchored.length ? anchored : candidates
     const named = pool.filter(c => !locator.name || accessibleName(c) === locator.name)
-    const pick = (named.length ? named : pool)
-    if (pick.length === 1 || (pick.length > 1 && locator.act.anchor && anchored.length)) return pick[0]
+    const pick = named.length ? named : pool
+    const narrowed = (act.scope && scoped.length) || (act.anchor && anchored.length)
+    if (pick.length === 1 || (pick.length > 1 && narrowed)) return pickOnTop(pick) ?? null
   }
   if (locator.path) {
     try {

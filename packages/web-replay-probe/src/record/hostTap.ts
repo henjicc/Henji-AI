@@ -81,7 +81,7 @@ export function installRandomTap(queue: EventQueue, isActive: () => boolean): ()
   }
   const getRandomValues = crypto.getRandomValues.bind(crypto)
   crypto.getRandomValues = (<T extends ArrayBufferView | null>(array: T): T => {
-    const out = getRandomValues(array as unknown as Uint8Array) as unknown as T
+    const out = getRandomValues(array as unknown as Uint8Array<ArrayBuffer>) as unknown as T
     if (isActive() && array) bytes.push(bytesToBase64(new Uint8Array(array.buffer, array.byteOffset, array.byteLength)))
     return out
   }) as typeof crypto.getRandomValues

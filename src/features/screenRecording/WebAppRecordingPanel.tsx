@@ -22,7 +22,7 @@ export function WebAppRecordingPanel({ model }: { model: WebAppRecordingModel })
           {apps.map(app => <UiOptionButton key={app.connectionId} variant="menu" active={app.connectionId === model.selected} onClick={() => model.select(app.connectionId)}>
             <span className="flex min-w-0 flex-col items-start">
               <span className="truncate">{app.app.name}{app.recordingId ? ` · ${t('recording.webapp_recordingNow')}` : ''}</span>
-              <span className="truncate text-xs text-text3">{app.env.url} · {Math.round(app.env.viewport.width)}×{Math.round(app.env.viewport.height)}</span>
+              <span className="truncate text-xs text-text3">{t(`recording.webapp_host_${app.host}`)} · {app.env.url} · {Math.round(app.env.viewport.width)}×{Math.round(app.env.viewport.height)}</span>
             </span>
           </UiOptionButton>)}
         </div> : <UiEmpty title={t('recording.webapp_noApps')} description={t('recording.webapp_noAppsHint')} />}

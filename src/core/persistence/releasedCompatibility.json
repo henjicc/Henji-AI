@@ -1101,13 +1101,16 @@
         }
       ],
       "versions": {
-        "1": "cd1de847aec753adec2dfae551f582b1d3bfacd5f28c44861051a46f90ae9a08"
+        "1": "cd1de847aec753adec2dfae551f582b1d3bfacd5f28c44861051a46f90ae9a08",
+        "2": "fa344ca37620113320e5adf416c964a35b2bd19c3e864f385f099d5f20768efb"
       },
       "readers": {
-        "1": 1
+        "1": 1,
+        "2": 1
       },
       "samples": {
-        "v1.json": "f4aa42fab2560df78d4e618d95317f705e62e2b5f234a1fe8f55c89e8232e58b"
+        "v1.json": "f4aa42fab2560df78d4e618d95317f705e62e2b5f234a1fe8f55c89e8232e58b",
+        "v2.json": "4575040ea7982e57d1d099a7ad944c227c047bf6a1dcedc5008e36106deb56a1"
       }
     }
   },
