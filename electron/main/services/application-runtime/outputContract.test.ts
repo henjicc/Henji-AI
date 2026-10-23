@@ -83,6 +83,7 @@ const successData: Record<string, Record<string, unknown>> = {
   duplicate_document: { resultRef: ref('documents.document', 'copy'), sourceRef: ref('documents.document'), name: '副本', projectId: null, ...revisions },
   collect_document_media: { resultRef: ref('documents.document'), name: '字幕项目', copiedFiles: 1, copiedDocuments: 0, missingFiles: 0, message, ...revisions },
   create_project: { resultRef: ref('documents.project', 'project'), name: '创作项目', ...revisions },
+  register_external_project: { resultRef: ref('documents.project', 'project'), name: '元宝搜索', external: true, documentCount: 0, ...revisions },
   trash_document: { resultRef: ref('documents.document'), name: '字幕项目', status: 'trashed', ...revisions },
   trash_project: { resultRef: ref('documents.project', 'project'), name: '创作项目', status: 'trashed', ...revisions },
   export_document_package: { fileName: '字幕项目.henji', files: 1, missingFiles: 0, ...revisions },
@@ -251,7 +252,7 @@ for (const name of ['create_video_edit_multicam', 'auto_switch_video_edit_multic
 }
 // 正式文档处理器的 verifyDocument/项目回执及生成取消回执已自行核实，并带 target。
 // 它们属于 passthrough 领域输出，公共桥接须保留，公共 schema 也必须明确声明。
-for (const name of ['create_document', 'open_document', 'move_document', 'duplicate_document', 'collect_document_media', 'trash_document', 'create_project', 'trash_project', 'export_document_package', 'cancel_generation_task']) {
+for (const name of ['create_document', 'open_document', 'move_document', 'duplicate_document', 'collect_document_media', 'trash_document', 'create_project', 'register_external_project', 'trash_project', 'export_document_package', 'cancel_generation_task']) {
   const data = successData[name]
   const target = name === 'cancel_generation_task' ? ref('generation.task', 'task')
     : name === 'export_document_package' ? ref('documents.document') : data.resultRef as { kind: string; id: string }

@@ -45,6 +45,8 @@ vi.mock('@/commands/documents', () => {
     setProjectMainDocument: call('setProjectMainDocument'),
     registerExternalProject: call('registerExternalProject'),
     registerExternalDocument: call('registerExternalDocument'),
+    readProjectProgress: call('readProjectProgress'),
+    writeProjectProgress: call('writeProjectProgress'),
     forgetExternalLocation: call('forgetExternalLocation'),
     exportDocumentPackage: call('exportDocumentPackage'),
     exportProjectPackage: call('exportProjectPackage'),
@@ -107,6 +109,37 @@ it('通过通用 change 修改文档名并从作品索引读回', async () => {
     const conflict = await app.change(ref, { 'documents.document.name': '已存在' })
     expect(conflict.ok).toBe(false)
     expect(fake.stored(meta.id)?.meta.name).toBe('新画布')
+  } finally {
+    app.dispose()
+  }
+})
+
+it('登记作品目录外的项目文件夹后能在里面新建剪辑，重复登记返回同一个项目', async () => {
+  const app = createApplicationHarness()
+  try {
+    type Registered = { resultRef: { id: string }; name: string; external: boolean; verification: { verified: boolean } }
+    const folder = 'D:/视频制作/2026-10-23_元宝搜索'
+    const registered = await app.requireResult('register_external_project', { path: folder }) as Registered
+    expect(registered).toMatchObject({ name: '2026-10-23_元宝搜索', external: true, verification: { verified: true } })
+    expect(fake.projects.get(registered.resultRef.id)?.path).toBe(folder)
+
+    const again = await app.requireResult('register_external_project', { path: folder }) as Registered
+    expect(again.resultRef.id).toBe(registered.resultRef.id)
+
+    const edit = await app.requireResult('create_document', { kind: 'video_edit', name: '元宝搜索', projectId: registered.resultRef.id }) as { resultRef: { id: string } }
+    expect(fake.stored(edit.resultRef.id)?.meta.container).toEqual({ kind: 'project', projectId: registered.resultRef.id })
+
+    // 制作进度是项目属性：整份写回项目根目录的 Markdown，读回以文件为准
+    const target = { kind: 'documents.project', id: registered.resultRef.id }
+    const progressId = 'documents.project.progress'
+    expect((await app.read(target, [progressId])).properties).toMatchObject({ [progressId]: '' })
+    const text = ['# 元宝搜索 · 制作进度', '', '- [x] 脚本定稿', '- [ ] 新建剪辑', ''].join('\n')
+    expect((await app.change(target, { [progressId]: text })).ok).toBe(true)
+    expect(fake.progress.get(folder)).toBe(text)
+    expect((await app.read(target, [progressId])).properties).toMatchObject({ [progressId]: text })
+    // 写空字符串 = 删掉这份文件
+    expect((await app.change(target, { [progressId]: '' })).ok).toBe(true)
+    expect(fake.progress.has(folder)).toBe(false)
   } finally {
     app.dispose()
   }

@@ -13,9 +13,10 @@ import { capabilityControl, capabilityOutputSchema, defineApplicationCapability 
  * 新建（落一个新文件 / 文件夹，重名策略）、移动（换容器并复制原项目里引用的素材）、
  * 创建副本、移到系统回收站（不可撤销）、打开（进入对应工具的界面）、导出为单文件包（4.1）。
  *
- * 导入单文件包不向助手开放：它要读用户选的一个包文件，而助手能力不收文件路径；界面的“导入单个文件…”由用户自己选文件。
+ * 导入单文件包不向助手开放：界面的“导入单个文件…”由用户自己选文件。
  *
- * 输入只收文档 / 项目 ID，不收路径；位置用项目 ID 表达（不在任何项目里 = 作品目录）。
+ * 文档与项目用 ID 指代，位置用项目 ID 表达（不在任何项目里 = 作品目录）。唯一收路径的是“登记外部项目文件夹”：
+ * 用户给出作品目录之外的文件夹（2026-10-21 起能力输入可以直接收用户给的本机路径），与剪辑页“打开项目文件夹…”同一条路。
  * 能力处理器委托渲染层唯一的通用文档操作服务（与项目页右键同一条路）。
  */
 
@@ -258,6 +259,24 @@ const createProject = defineApplicationCapability({
   summarize: (output) => `已新建项目“${output.name}”。`,
 })
 
+const registerExternalProject = defineApplicationCapability({
+  id: 'register_external_project', version: 1, title: '登记外部项目文件夹',
+  description: '把作品目录之外的一个文件夹登记成项目（没有项目说明就补写一份 .henji/project.json，文件夹里原有文件不动），之后可以在里面新建文档、列出文档；不打开、不切换界面。已经登记过的文件夹直接返回原项目。与剪辑页“打开项目文件夹…”是同一操作。',
+  domain: DOCUMENTS_DOMAIN,
+  aliases: ['打开项目文件夹', '外部项目', '登记项目', '把文件夹设为项目', 'register project folder', 'open project folder'],
+  readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'documents:write', idempotent: true, destructive: false,
+  timeoutMs: 30_000, supportsPreview: false, supportsUndo: false, requiredScopes: [],
+  producesRefs: [DOCUMENT_PROJECT_ENTITY_TYPE],
+  failureRecovery: ['作品目录本身、作品目录里的文件夹或另一个项目里的子文件夹不能单独登记：作品目录里的项目直接用 list_projects 取；子文件夹改为登记它所在的项目文件夹。'],
+  inputSchema: z.object({ path: z.string().trim().min(1).describe('文件夹的本机绝对路径（用户给出的那个文件夹）') }).strict(),
+  outputSchema: capabilityOutputSchema({ resultRef: projectRefSchema, name: z.string(), external: z.boolean(), documentCount: z.number().int().nonnegative() }),
+  concurrencyKey: 'documents_write',
+  resolveOperationTargets: () => [],
+  resolveOperationWriteTargets: (_input, operationId) => [{ kind: DOCUMENT_PROJECT_ENTITY_TYPE, id: `pending:${operationId}` }],
+  control: capabilityControl('create', [DOCUMENT_PROJECT_ENTITY_TYPE], { revisionScopes: [DOCUMENTS_DOMAIN] }),
+  summarize: (output) => `已登记项目“${output.name}”（${output.documentCount} 份文档）。`,
+})
+
 const exportPackageInput = z.object({
   documentId: z.string().min(1).optional().describe('导出单个文档（来自 list_documents）'),
   projectId: z.string().min(1).optional().describe('导出整个项目（来自 list_projects）'),
@@ -284,5 +303,5 @@ const exportDocumentPackage = defineApplicationCapability({
 })
 
 export const DOCUMENTS_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
-  listDocuments, listProjects, createDocument, openDocument, moveDocument, duplicateDocument, collectDocumentMedia, trashDocument, trashProject, createProject, exportDocumentPackage,
+  listDocuments, listProjects, createDocument, openDocument, moveDocument, duplicateDocument, collectDocumentMedia, trashDocument, trashProject, createProject, registerExternalProject, exportDocumentPackage,
 ]

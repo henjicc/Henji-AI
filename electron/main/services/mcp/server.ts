@@ -13,6 +13,7 @@ import { buildApplicationToolCatalog } from '../application-runtime/toolCatalog'
 import { EXTERNAL_CONTRACT_VERSION } from '../../../../src/core/application-control/localHostContracts'
 import type { MemoryEntryStore } from '../assistant/entry-store'
 import { MEMORY_RULES } from '../../../../src/core/assistant/memoryEntries'
+import { PROJECT_PROGRESS_RULES } from '../../../../src/core/documents/projectProgress'
 
 /** 无协议会话；授权、任务与持久操作均由应用运行时持有。 */
 export class LocalMcpServer {
@@ -57,7 +58,7 @@ export class LocalMcpServer {
       const callerId = context.authInfo?.clientId
       if (!callerId) throw new Error('调用者未获授权。')
       this.connections.assertActive(callerId)
-      const server = new Server({ ...EXTERNAL_SERVER_INFO }, { instructions: `${MEMORY_RULES}\n当前全局记忆快照：${JSON.stringify(this.memory?.read().entries ?? [])}`, capabilities: { tools: { listChanged: true }, resources: { listChanged: true, subscribe: true } } })
+      const server = new Server({ ...EXTERNAL_SERVER_INFO }, { instructions: `${MEMORY_RULES}\n${PROJECT_PROGRESS_RULES}\n当前全局记忆快照：${JSON.stringify(this.memory?.read().entries ?? [])}`, capabilities: { tools: { listChanged: true }, resources: { listChanged: true, subscribe: true } } })
       const dispatcher = new ApplicationToolDispatcher(this.connections, this.host, this.operations, this.port)
       server.setRequestHandler('tools/list', async () => ({ tools: dispatcher.catalog(callerId).tools }))
       server.setRequestHandler('resources/templates/list', async () => ({ resourceTemplates: APPLICATION_RESOURCE_TEMPLATES }))

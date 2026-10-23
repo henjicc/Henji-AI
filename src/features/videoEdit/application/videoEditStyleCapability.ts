@@ -51,7 +51,7 @@ export async function handleVideoEditStyleCapability(id: string, raw: unknown, s
       const ok = await saved(projectId) && requireVideoEditInstance(projectId).document.sequences.find(value => value.id === sequenceId)?.styleId === result.style.id
       return { resultRef: { kind: 'video_edit.project_style', id: `${projectId}:${result.style.id}` }, sequenceRef: input.sequenceRef, version: result.style.version, upgraded: result.upgraded, previous: result.previous ?? null,
         verification: { verified: ok, condition: '已保存剪辑并回读序列绑定与工程风格副本。' },
-        message: `序列已按风格“${result.style.name}” v${result.style.version} 创作${result.upgraded ? '（工程副本已升级）' : ''}；把“风格预设：${result.style.name} v${result.style.version}”写进制作说明。` }
+        message: `序列已按风格“${result.style.name}” v${result.style.version} 创作${result.upgraded ? '（工程副本已升级）' : ''}；把“风格预设：${result.style.name} v${result.style.version}”写进项目制作进度（documents.project.progress）。` }
     }
     case applyVideoEditTemplateCapability.id: {
       const input = applyVideoEditTemplateCapability.inputSchema.parse(raw); const projectId = input.documentRef.id

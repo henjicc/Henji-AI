@@ -224,4 +224,15 @@ export function registerDocumentsCapabilityHandlers(
       rethrowWithRecovery(error, '请换一个名称后重试。')
     }
   })
+
+  // 与剪辑页“打开项目文件夹…”同一入口（只登记，不打开主剪辑）
+  registrar.registerHandler('register_external_project', async (raw, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const input = parseCapabilityInput<{ path: string }>('register_external_project', raw)
+    const project = await operations().registerExternalProject(input.path)
+    const found = await operations().findProject(project.id).catch(() => null)
+    const target = { kind: DOCUMENT_PROJECT_ENTITY_TYPE, id: project.id }
+    const verification = { verified: Boolean(found && !found.missing), condition: '登记的项目已从作品索引回读确认', target }
+    return { resultRef: target, name: project.name, external: project.external, documentCount: project.documentCount, verification }
+  })
 }

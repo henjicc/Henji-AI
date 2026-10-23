@@ -1,5 +1,6 @@
 import type { ListPage, ListPageRequest } from '@/core/documents/pagination'
 import { getPlatform } from '@/platform'
+import { PROJECT_PROGRESS_FILE_NAME } from '@/core/documents/projectProgress'
 import type {
   CreateDocumentRequest,
   CreateProjectRequest,
@@ -165,6 +166,26 @@ export async function trashProject(projectId: string): Promise<void> {
 
 export async function registerExternalProject(folderPath: string): Promise<ProjectSummary> {
   return await documents().registerExternalProject(folderPath)
+}
+
+function projectProgressPath(projectPath: string): string {
+  const separator = projectPath.includes('\\') && !projectPath.includes('/') ? '\\' : '/'
+  return `${projectPath.replace(/[\\/]+$/, '')}${separator}${PROJECT_PROGRESS_FILE_NAME}`
+}
+
+/** 项目制作进度：项目根目录的 Markdown；没有这份文件时返回空字符串。 */
+export async function readProjectProgress(projectPath: string): Promise<string> {
+  const fs = getPlatform().system.fs
+  const file = projectProgressPath(projectPath)
+  return await fs.exists(file) ? await fs.readTextFile(file) : ''
+}
+
+/** 整份写回制作进度；空字符串表示删除这份文件。 */
+export async function writeProjectProgress(projectPath: string, text: string): Promise<void> {
+  const fs = getPlatform().system.fs
+  const file = projectProgressPath(projectPath)
+  if (text) await fs.writeTextFile(file, text)
+  else if (await fs.exists(file)) await fs.remove(file)
 }
 
 /** 打开别处的文档文件：登记所在项目或文件夹为外部位置，返回列表项（4.4）。 */

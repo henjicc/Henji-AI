@@ -598,6 +598,19 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
     return next
   }
 
+  /** 项目制作进度的替身：按项目文件夹路径存全文，空字符串等于没有这份文件。 */
+  readonly progress = new Map<string, string>()
+
+  async readProjectProgress(projectPath: string): Promise<string> {
+    return this.progress.get(projectPath) ?? ''
+  }
+
+  async writeProjectProgress(projectPath: string, text: string): Promise<void> {
+    this.calls.push('writeProjectProgress')
+    if (text) this.progress.set(projectPath, text)
+    else this.progress.delete(projectPath)
+  }
+
   async registerExternalProject(folderPath: string): Promise<ProjectSummary> {
     this.calls.push('registerExternalProject')
     const existing = [...this.projects.values()].find((project) => project.path === folderPath)

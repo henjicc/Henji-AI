@@ -42,7 +42,7 @@ import { createDocumentOperationChanges, defaultDocumentOperationChanges } from 
 /*
  * 通用文档操作（存储底座 2.5）：项目页卡片右键与智能助手共用的唯一领域服务。
  *
- * - 列表、重命名、移到项目 / 移出项目、创建副本、在文件夹中显示、移到回收站、新建、打开、项目列表与新建项目。
+ * - 列表、重命名、移到项目 / 移出项目、创建副本、在文件夹中显示、移到回收站、新建、打开、项目列表与新建项目、项目制作进度。
  * - 正在编辑的文档（文档会话已打开）：改名、移动、复制前先写完最后一次；改名与移动后让会话按新位置重新定位；
  *   正在编辑的文档不能移到回收站（与遗留草稿的规则相同）。
  * - 每次写入推进本服务的版本号并通知订阅者：页面据此刷新，助手的 `documents` 作用域也取这个数。
@@ -70,6 +70,8 @@ export interface DocumentOperationCommands extends DocumentSessionCommands {
   setProjectMainDocument(request: SetProjectMainDocumentRequest): Promise<ProjectSummary>
   registerExternalProject(folderPath: string): Promise<ProjectSummary>
   registerExternalDocument(filePath: string): Promise<DocumentSummary>
+  readProjectProgress(projectPath: string): Promise<string>
+  writeProjectProgress(projectPath: string, text: string): Promise<void>
   forgetExternalLocation(folderPath: string): Promise<void>
   exportDocumentPackage(request: ExportDocumentPackageRequest): Promise<PackageExportResult>
   exportProjectPackage(request: ExportProjectPackageRequest): Promise<PackageExportResult>
@@ -195,6 +197,8 @@ export const defaultDocumentOperationCommands: DocumentOperationCommands = {
   setProjectMainDocument: documentCommands.setProjectMainDocument,
   registerExternalProject: documentCommands.registerExternalProject,
   registerExternalDocument: documentCommands.registerExternalDocument,
+  readProjectProgress: documentCommands.readProjectProgress,
+  writeProjectProgress: documentCommands.writeProjectProgress,
   forgetExternalLocation: documentCommands.forgetExternalLocation,
   exportDocumentPackage: documentCommands.exportDocumentPackage,
   exportProjectPackage: documentCommands.exportProjectPackage,
@@ -526,6 +530,20 @@ export class DocumentOperations {
   /** 新建一个已命名的项目（不是草稿）。重名报错。 */
   async createProject(name: string): Promise<ProjectSummary> {
     return await this.write('create_project', name, async () => await this.commands.createProject({ name, draft: false }))
+  }
+
+  /** 项目制作进度（项目根目录的 Markdown）；找不到文件夹的项目读成空字符串。 */
+  async readProjectProgress(project: Pick<ProjectSummary, 'path' | 'missing'>): Promise<string> {
+    return project.missing ? '' : await this.commands.readProjectProgress(project.path)
+  }
+
+  /** 整份写回项目制作进度，空字符串删除这份文件。 */
+  async writeProjectProgress(projectId: string, text: string): Promise<void> {
+    await this.write('write_project_progress', projectId, async () => {
+      const project = await this.findProject(projectId)
+      if (project.missing) throw new Error('找不到这个项目的文件夹，不能写制作进度；请先确认文件夹位置后刷新列表。')
+      await this.commands.writeProjectProgress(project.path, text)
+    })
   }
 
   async renameProject(projectId: string, name: string): Promise<ProjectSummary> {

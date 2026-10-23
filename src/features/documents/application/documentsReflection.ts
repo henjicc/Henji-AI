@@ -64,7 +64,7 @@ class DocumentsReflectionProvider implements ApplicationEntityProvider {
     return propertyIds.map((propertyId) => {
       const descriptor = descriptors.get(propertyId)
       if (!descriptor || descriptor.entityType !== this.entityType) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
-      const reason = descriptor.readOnlyReason || (missing ? '文件找不到，不能改名；请先确认文件位置后刷新列表。' : '')
+      const reason = descriptor.readOnlyReason || (missing ? '文件找不到，不能修改；请先确认文件位置后刷新列表。' : '')
       return {
         propertyId, readable: true, writable: !reason, reasons: reason ? [reason] : [],
         requiredPermissions: descriptor.requiredPermissions.write.length ? descriptor.requiredPermissions.write : descriptor.requiredPermissions.read,
@@ -85,7 +85,8 @@ class DocumentsReflectionProvider implements ApplicationEntityProvider {
       return { values: fieldReadValues(DOCUMENT_FIELDS, { document }), missing: document.missing }
     }
     const project = await operations.findProject(ref.id)
-    return { values: fieldReadValues(PROJECT_FIELDS, { project }), missing: project.missing }
+    const progress = await operations.readProjectProgress(project)
+    return { values: fieldReadValues(PROJECT_FIELDS, { project, progress }), missing: project.missing }
   }
 }
 
@@ -96,7 +97,7 @@ const ENTITY_META: Record<DocumentsEntityType, { title: string; description: str
   },
   [DOCUMENTS_ENTITY_TYPES.project]: {
     title: '项目',
-    description: '装文档与素材的文件夹（总项目）；名称可改，新建用 create_project。',
+    description: '装文档与素材的文件夹（总项目）；名称与制作进度（progress，项目根目录的 Markdown）可改，新建用 create_project，登记作品目录外的文件夹用 register_external_project。',
   },
 }
 

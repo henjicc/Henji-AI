@@ -76,7 +76,7 @@ const templateFields: ApplicationFieldDefinition<VideoEditTemplate, VideoEditTem
 interface ProjectStyleDraft { projectId: string; style: VideoEditStyle; document: VideoEditDocument }
 const projectStyleFields: ApplicationFieldDefinition<ProjectStyleDraft, ProjectStyleDraft>[] = [
   field(PROJECT_STYLE_ENTITY, 'name', '风格名称', '工程副本的名称。', { kind: 'string', maxLength: 80 }, draft => draft.style.name),
-  field(PROJECT_STYLE_ENTITY, 'version', '版本号', '本工程用的版本；写进制作说明，例如“风格预设：克制高级 v3”。', { kind: 'integer' }, draft => draft.style.version),
+  field(PROJECT_STYLE_ENTITY, 'version', '版本号', '本工程用的版本；写进项目制作进度（documents.project.progress），例如“风格预设：克制高级 v3”。', { kind: 'integer' }, draft => draft.style.version),
   field(PROJECT_STYLE_ENTITY, 'library_version', '风格库里的更新版本', '风格库里同一风格的版本更高时为那个版本，否则为 null：告诉用户并问要不要升级（bind_video_edit_style）。', { kind: 'integer' }, draft => newerLibraryStyleVersion(draft.style), undefined, true),
   field(PROJECT_STYLE_ENTITY, 'guide', '风格说明书', '完整读一遍再动手。', { kind: 'string', maxLength: 64 * 1024 }, draft => draft.style.guide),
   field(PROJECT_STYLE_ENTITY, 'sample', '样片', '样片代码与设置；“样片与代码”栏写明哪些函数可以照搬。', jsonRef(PROJECT_STYLE_ENTITY, 'sample'), draft => draft.style.sample as unknown as JsonValue),

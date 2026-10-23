@@ -12,13 +12,22 @@ import { DOCUMENTS_ENTITY_TYPES, documentWriterTable, projectWriterTable, type D
 import { documentsRevisions } from './documentsReflection'
 
 /*
- * 文档与项目的属性写入（只有名称）：委托通用文档操作服务改名，与项目页“重命名”同一条路。
- * 重名时由主进程报 DocumentNameConflictError，不加后缀；撤销 = 改回原名。
+ * 文档与项目的属性写入：名称委托通用文档操作服务改名，与项目页“重命名”同一条路；
+ * 项目的制作进度整份写回项目根目录的 Markdown。重名时由主进程报 DocumentNameConflictError，不加后缀；
+ * 撤销 = 改回原名、写回原来的进度（原来没有就删掉文件）。
  */
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
 
-const undoRecords = new Map<string, { entityType: DocumentsEntityType; id: string; previousName: string; nextName: string }>()
+interface UndoRecord {
+  entityType: DocumentsEntityType
+  id: string
+  previousName: string
+  nextName: string
+  progress?: { previous: string; next: string }
+}
+
+const undoRecords = new Map<string, UndoRecord>()
 
 export class DocumentsMutationExecutor implements ApplicationMutationExecutor {
   readonly effectContract = { direct: [], cascades: [] }
@@ -37,8 +46,10 @@ export class DocumentsMutationExecutor implements ApplicationMutationExecutor {
     const previousName = await this.currentName(step.target.id)
     const nextName = draft.name ?? previousName
     if (nextName !== previousName) await this.rename(step.target.id, nextName)
+    const progress = draft.progress === undefined ? undefined : { previous: await this.currentProgress(step.target.id), next: draft.progress }
+    if (progress && progress.next !== progress.previous) await this.operations().writeProjectProgress(step.target.id, progress.next)
     const undoToken = `documents:${crypto.randomUUID()}`
-    undoRecords.set(undoToken, { entityType: this.entityType, id: step.target.id, previousName, nextName })
+    undoRecords.set(undoToken, { entityType: this.entityType, id: step.target.id, previousName, nextName, ...(progress ? { progress } : {}) })
     return {
       status: 'completed',
       resultingRevisions: documentsRevisions(this.operations()),
@@ -64,13 +75,15 @@ export class DocumentsMutationExecutor implements ApplicationMutationExecutor {
     if (!record) throw new Error('DOCUMENTS_UNDO_NOT_FOUND')
     const current = await this.currentName(record.id)
     if (current !== record.nextName) throw new Error('名称已在别处再次修改，不能撤销这次改名。')
+    if (record.progress && await this.currentProgress(record.id) !== record.progress.next) throw new Error('制作进度已在别处再次修改，不能撤销这次修改。')
     if (record.previousName !== record.nextName) await this.rename(record.id, record.previousName)
+    if (record.progress && record.progress.previous !== record.progress.next) await this.operations().writeProjectProgress(record.id, record.progress.previous)
     undoRecords.delete(undoToken)
     return {
       status: 'completed',
       resultingRevisions: documentsRevisions(this.operations()),
       directRefs: [{ kind: this.entityType, id: record.id }],
-      evidence: [{ kind: 'entity_state', target: { kind: this.entityType, id: record.id }, fact: '改名已撤销。', capturedAt: new Date().toISOString() }],
+      evidence: [{ kind: 'entity_state', target: { kind: this.entityType, id: record.id }, fact: record.progress ? '修改已撤销。' : '改名已撤销。', capturedAt: new Date().toISOString() }],
     }
   }
 
@@ -81,6 +94,11 @@ export class DocumentsMutationExecutor implements ApplicationMutationExecutor {
   private async currentName(id: string): Promise<string> {
     const operations = this.operations()
     return this.entityType === DOCUMENTS_ENTITY_TYPES.document ? (await operations.findDocument(id)).name : (await operations.findProject(id)).name
+  }
+
+  private async currentProgress(id: string): Promise<string> {
+    const operations = this.operations()
+    return await operations.readProjectProgress(await operations.findProject(id))
   }
 
   private async rename(id: string, name: string): Promise<void> {
