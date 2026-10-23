@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { WebRecordingBackupOptions, WebRecordingSummary, WebReplayRenderResult, WebReplayServerState } from '@/platform/contracts/webReplay'
+import type { WebRecordingBackupOptions, WebRecordingExportResult, WebRecordingSummary, WebReplayRenderResult, WebReplayServerState } from '@/platform/contracts/webReplay'
 import { getPlatform } from '@/platform'
+import type { WebAppBackupSetup } from '@/services/recordingSetupModel'
+import { finishWebAppBackupAudio, startWebAppBackupAudio } from './application/webAppBackupAudio'
 
 export interface WebAppRenderState { busy: boolean; progress: number; frame: string | null; result?: WebReplayRenderResult; error?: string }
 
@@ -14,8 +16,9 @@ export function useWebAppRecording(): {
   server: WebReplayServerState | null; recordings: WebRecordingSummary[]
   selectedApp: string; selectApp(id: string): void; selectedRecording: WebRecordingSummary | null; selectRecording(id: string): void
   activeId: string | null; elapsedMs: number; busy: boolean; error: string; renders: Record<string, WebAppRenderState>
-  start(backup: WebRecordingBackupOptions | null): Promise<void>; stop(): Promise<void>; render(id: string): Promise<void>; reveal(id: string, file?: string): Promise<void>
-  remove(id: string): Promise<void>; restore(id: string): Promise<void>
+  start(setup: WebAppBackupSetup, backup: WebRecordingBackupOptions | null): Promise<void>; stop(): Promise<void>; render(id: string): Promise<void>; reveal(id: string, file?: string): Promise<void>
+  removeMany(ids: string[]): Promise<string[]>; restoreMany(ids: string[]): Promise<void>
+  rename(items: Array<{ recordingId: string; title: string | null }>): Promise<void>; exportVideos(ids: string[], directory: string): Promise<WebRecordingExportResult | null>
 } {
   const [server, setServer] = useState<WebReplayServerState | null>(null)
   const [recordings, setRecordings] = useState<WebRecordingSummary[]>([])
@@ -52,9 +55,15 @@ export function useWebAppRecording(): {
   return {
     server, recordings, selectedApp, selectApp, selectedRecording, selectRecording, activeId, busy, error, renders,
     elapsedMs: active?.recordingStartedAt ? Math.max(0, now - active.recordingStartedAt) : 0,
-    start: backup => guard(async () => { await platform.start(selectedApp, backup); await reload() }),
+    start: (setup, backup) => guard(async () => {
+      const manifest = await platform.start(selectedApp, backup)
+      await reload()
+      // Sound for the backup is recorded on this page, like screen recording; a failure keeps the picture going.
+      if (backup) await startWebAppBackupAudio(manifest.id, setup).catch(e => setError(e instanceof Error ? e.message : String(e)))
+    }),
     stop: () => guard(async () => {
       if (!activeId) return
+      await finishWebAppBackupAudio(activeId)
       const manifest = await platform.stop(activeId)
       await reload()
       selectRecording(manifest.id)
@@ -70,7 +79,17 @@ export function useWebAppRecording(): {
       }
     },
     reveal: (id, file) => platform.reveal(id, file),
-    remove: id => guard(async () => { await platform.remove(id); await reload() }),
-    restore: id => guard(async () => { await platform.restore(id); await reload(); selectRecording(id) }),
+    removeMany: async ids => {
+      const removed: string[] = []
+      await guard(async () => { try { for (const id of ids) { await platform.remove(id); removed.push(id) } } finally { await reload() } })
+      return removed
+    },
+    restoreMany: ids => guard(async () => { try { for (const id of ids) await platform.restore(id) } finally { await reload() } }),
+    rename: items => guard(async () => { await platform.rename(items); await reload() }),
+    exportVideos: async (ids, directory) => {
+      let result: WebRecordingExportResult | null = null
+      await guard(async () => { result = await platform.exportVideos(ids, directory) })
+      return result
+    },
   }
 }

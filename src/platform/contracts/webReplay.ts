@@ -12,6 +12,10 @@ export const WEB_REPLAY_CHANNELS = {
   render: 'webReplay:render',
   read: 'webReplay:read',
   reveal: 'webReplay:reveal',
+  rename: 'webReplay:rename',
+  exportVideos: 'webReplay:export-videos',
+  backupAudioDirectory: 'webReplay:backup-audio-directory',
+  mixBackupAudio: 'webReplay:mix-backup-audio',
   setEnabled: 'webReplay:set-enabled',
   appsChanged: 'webReplay:apps-changed',
 } as const
@@ -75,4 +79,14 @@ export interface WebReplayPlatform {
   /** Shows a file of this recording (a rendered video) or its folder in the system file manager. */
   reveal(recordingId: string, file?: string): Promise<void>
   onAppsChanged(listener: (state: WebReplayServerState) => void): () => void
+  /** `title` null goes back to the app name plus time. */
+  rename(items: Array<{ recordingId: string; title: string | null }>): Promise<void>
+  /** Copies each recording's backup and newest replay video into `directory`, named after the recording. */
+  exportVideos(recordingIds: string[], directory: string): Promise<WebRecordingExportResult>
+  /** Where the recording page writes the backup recording's sound while recording. */
+  backupAudioDirectory(recordingId: string): Promise<string>
+  /** Lays that sound into backup.mp4 once the recording is saved; false when there was none. */
+  mixBackupAudio(recordingId: string): Promise<boolean>
 }
+
+export interface WebRecordingExportResult { files: string[]; skipped: number }

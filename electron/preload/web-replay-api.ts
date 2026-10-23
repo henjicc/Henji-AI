@@ -13,6 +13,10 @@ export function createWebReplayApi(invoke: <T>(channel: string, payload?: unknow
     render: request => invoke(WEB_REPLAY_CHANNELS.render, request),
     read: request => invoke(WEB_REPLAY_CHANNELS.read, request),
     reveal: (recordingId, file) => invoke(WEB_REPLAY_CHANNELS.reveal, { recordingId, ...(file ? { file } : {}) }),
+    rename: items => invoke(WEB_REPLAY_CHANNELS.rename, { items }),
+    exportVideos: (recordingIds, directory) => invoke(WEB_REPLAY_CHANNELS.exportVideos, { recordingIds, directory }),
+    backupAudioDirectory: recordingId => invoke(WEB_REPLAY_CHANNELS.backupAudioDirectory, { recordingId }),
+    mixBackupAudio: recordingId => invoke(WEB_REPLAY_CHANNELS.mixBackupAudio, { recordingId }),
     onAppsChanged: handler => subscribe(WEB_REPLAY_CHANNELS.appsChanged, value => handler(value as WebReplayServerState)),
   }
 }

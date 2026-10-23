@@ -19,6 +19,10 @@ export function createElectronWebReplay(): WebReplayPlatform {
     render: request => native().render(request),
     read: request => native().read(request),
     reveal: (id, file) => native().reveal(id, file),
+    rename: items => native().rename(items),
+    exportVideos: (ids, directory) => native().exportVideos(ids, directory),
+    backupAudioDirectory: id => native().backupAudioDirectory(id),
+    mixBackupAudio: id => native().mixBackupAudio(id),
     onAppsChanged: listener => native().onAppsChanged(listener),
   }
 }

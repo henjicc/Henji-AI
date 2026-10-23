@@ -98,7 +98,7 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
   } else if (!state.opening) {
     center = <UiSegmented ariaLabel={t('recording.recordMode')} value={kind} onChange={setKind} options={[{ value: 'self', label: t('recording.mode_self') }, { value: 'director', label: t('recording.mode_director') }, ...(webAppEnabled ? [{ value: 'webapp' as const, label: t('recording.mode_webapp') }] : [])]} />
     if (kind === 'webapp' && webApp.activeId) leading = <span className="flex items-center gap-2 text-sm font-medium">{t('recording.title')}<WebAppRecordingStatus model={webApp} /></span>
-    trailing = director ? null : kind === 'webapp' ? <WebAppRecordingActions model={webApp} backup={webAppBackupOptions(webAppBackup, sources)} /> : <UiButton variant="primary" loading={state.busy} disabled={!sourceId} disabledReason={t('recording.selectSource')} onClick={() => run(begin)}><ICON_TOOL_SCREEN_RECORDING />{t('recording.start')}</UiButton>
+    trailing = director ? null : kind === 'webapp' ? <WebAppRecordingActions model={webApp} setup={webAppBackup} backup={webAppBackupOptions(webAppBackup, sources)} /> : <UiButton variant="primary" loading={state.busy} disabled={!sourceId} disabledReason={t('recording.selectSource')} onClick={() => run(begin)}><ICON_TOOL_SCREEN_RECORDING />{t('recording.start')}</UiButton>
   }
 
   return <div className="flex h-full min-h-0 flex-col" data-application-surface="tool.screen_recording" data-testid="screen-recording-page">

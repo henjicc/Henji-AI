@@ -7,7 +7,7 @@ import { z } from 'zod'
  */
 
 /** v2: element locators may name the enclosing data-replay-id container (`act.scope`). */
-export const WEB_RECORDING_VERSION = 2
+export const WEB_RECORDING_VERSION = 3
 export const WEB_RECORDING_MIN_READER_VERSION = 1
 
 const us = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
@@ -112,6 +112,8 @@ const warning = z.object({ t: us, kind: z.enum(['boundary', 'error', 'resource']
 export const webRecordingManifestSchema = z.object({
   version: z.number().int().positive(), minReaderVersion: z.number().int().positive(),
   id: session, status: z.enum(['recording', 'complete', 'interrupted']), createdAt: z.string().datetime(),
+  /** v3: the name the user gave the recording; absent means app name plus time. */
+  title: z.string().min(1).max(120).optional(),
   app: appInfoSchema, probe: z.object({ version: z.string(), protocol: z.number().int() }).strict(), host: hostKindSchema, env: environmentSchema,
   /** Date.now() at the recording page's performance.now() === 0. */
   wallAtZeroMs: finite,

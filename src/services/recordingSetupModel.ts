@@ -30,8 +30,8 @@ export interface RecordingSetup extends RecordingEncoding {
   webAppBackup?: WebAppBackupSetup
 }
 /** `window` records the recorded app's window at its own size; `screen` records a monitor at `quality`. */
-export interface WebAppBackupSetup extends RecordingEncoding { enabled: boolean; range: 'window' | 'screen'; sourceId: string; quality: RecordingQuality; fps: 30 | 60 }
-export const DEFAULT_WEB_APP_BACKUP: WebAppBackupSetup = { enabled: true, range: 'window', sourceId: '', quality: '1080p', fps: 30 }
+export interface WebAppBackupSetup extends RecordingEncoding { enabled: boolean; range: 'window' | 'screen'; sourceId: string; quality: RecordingQuality; fps: 30 | 60; microphone?: boolean; systemAudio?: boolean }
+export const DEFAULT_WEB_APP_BACKUP: WebAppBackupSetup = { enabled: true, range: 'window', sourceId: '', quality: '1080p', fps: 30, microphone: true, systemAudio: false }
 export const DEFAULT_RECORDING_SETUP: RecordingSetup = { mode: 'full', saveDirectory: '', name: '', microphone: true, systemAudio: false, camera: false, cameraId: '', quality: '1080p', fps: 60, insert: true }
 
 /** What the picker and setup panel offer next time, across restarts. */
@@ -68,7 +68,7 @@ export function recordingOutput(setup: Pick<RecordingSetup, 'quality' | 'fps'> &
 /** What to ask the web recorder for; a screen that is gone falls back to the primary one. */
 export function webAppBackupOptions(backup: WebAppBackupSetup, sources: readonly CaptureSource[]): WebRecordingBackupOptions | null {
   if (!backup.enabled) return null
-  const { enabled: _enabled, range, sourceId, quality: _quality, ...encoding } = backup
+  const { enabled: _enabled, range, sourceId, quality: _quality, microphone: _microphone, systemAudio: _systemAudio, ...encoding } = backup
   if (range === 'window') return { ...encoding, target: 'window' }
   const screens = orderedScreens(sources)
   const screen = screens.find(item => item.id === sourceId) ?? screens.find(item => item.display?.primary) ?? screens[0]

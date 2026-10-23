@@ -259,7 +259,7 @@ const values: Record<string, unknown> = {
   keystore: { version: 1, keys: {} },
   'media-grants': { version: 1, roots: [{ path: '/persistence-project', grantedAt: 1791504000000 }] },
   'web-recording': {
-    version: 2, minReaderVersion: 1, id: '00000000-0000-4000-8000-0000000000a1', status: 'complete', createdAt: timestamp,
+    version: 3, minReaderVersion: 1, id: '00000000-0000-4000-8000-0000000000a1', status: 'complete', createdAt: timestamp, title: '提问演示',
     app: { name: '知多少', version: '0.1.0' }, probe: { version: '0.1.0', protocol: 1 }, host: 'tauri',
     env: { url: 'http://tauri.localhost/', viewport: { width: 1280, height: 820, dpr: 1.5 }, colorScheme: 'light', reducedMotion: false, locale: 'zh-CN', timeZone: 'Asia/Shanghai', userAgent: 'golden' },
     wallAtZeroMs: 1791504000000, durationUs: 15688200, clock: { monoAtZeroUs: 140618465380, uncertaintyUs: 223 }, fonts: ['Microsoft YaHei'],
@@ -271,7 +271,7 @@ const values: Record<string, unknown> = {
   'llm-config-journal': { version: 1, configBefore: null },
   'node-defaults': { imageGen: { modelId: 'golden-model', params: { quality: 'high' } } },
   'screen-capture': { version: 2, minReaderVersion: 1, sessionId: '00000000-0000-4000-8000-000000000001', options: { sourceId: 'screen:0:0', backend: 'auto', width: 1920, height: 1080, fps: 60, bitrate: 18000000, codec: 'hevc', rateControl: 'quality', keyframeFrames: 30, encoder: 'nvidia' }, backend: 'gfxcapture', cursorEmbedded: false, status: 'stopped', spans: [], encoding: { codec: 'hevc', encoder: 'hevc_nvenc', softwareFallback: false } },
-  'recording-setup': { rateControl: 'quality', codec: 'hevc', keyframeFrames: 30, encoder: 'auto', range: 'region', sourceId: 'screen:1:0', region: { x: .1, y: .1, width: .5, height: .5 }, mode: 'quick', saveDirectory: 'D:/录屏', microphone: true, systemAudio: true, camera: false, cameraId: '', quality: '1440p', fps: 60, insert: true, webAppBackup: { enabled: true, range: 'screen', sourceId: 'screen:1:0', quality: '2160p', fps: 30, rateControl: 'vbr', bitrate: 20_000_000 } },
+  'recording-setup': { rateControl: 'quality', codec: 'hevc', keyframeFrames: 30, encoder: 'auto', range: 'region', sourceId: 'screen:1:0', region: { x: .1, y: .1, width: .5, height: .5 }, mode: 'quick', saveDirectory: 'D:/录屏', microphone: true, systemAudio: true, camera: false, cameraId: '', quality: '1440p', fps: 60, insert: true, webAppBackup: { enabled: true, range: 'screen', sourceId: 'screen:1:0', microphone: true, systemAudio: false, quality: '2160p', fps: 30, rateControl: 'vbr', bitrate: 20_000_000 } },
   'model-defaults': modelDefaultsSchema.parse({ version: MODEL_DEFAULTS_VERSION, providerId: 'kie', models: { image: '', video: '', audio: '', transcription: 'groq.speech-recognition.whisper-large-v3-turbo' } }),
   onboarding: { version: 2, status: 'in_progress', entryReason: 'fresh_install', activeStepId: 'provider', completedStepIds: ['welcome'], configuredProviders: [], verifiedProviders: [], shownHintIds: [], firstTaskPrepared: false, firstTaskCompleted: false, startedAt: timestamp, completedAt: null },
   'subtitle-manifest': { version: SUBTITLE_MANIFEST_VERSION, projectId: document.id, sequenceId: sequence.id, signature: 'golden-signature', startFrame: 0, endFrame: 90, soundClips: [soundClip], soundIdentities: { 'golden-sound-clip': 'golden-sound-identity' }, captions: sequence.captions, committed: true },

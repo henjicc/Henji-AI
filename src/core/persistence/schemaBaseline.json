@@ -270,8 +270,8 @@
       "minReaderVersion": 1
     },
     "recording-setup": {
-      "version": 4,
-      "fingerprint": "1111704dd1bb08d3b558d9f9109e1eeb2e96cb3f45987749e83c89ff947a7e62",
+      "version": 5,
+      "fingerprint": "dbc6257d4e7a9fba37783a96ef4561860613f09d6d5dac7b2119960970b38911",
       "supportedFrom": 1,
       "minReaderVersion": 3
     },
@@ -360,8 +360,8 @@
       "minReaderVersion": 1
     },
     "web-recording": {
-      "version": 2,
-      "fingerprint": "fa344ca37620113320e5adf416c964a35b2bd19c3e864f385f099d5f20768efb",
+      "version": 3,
+      "fingerprint": "ea66782342941daf89b5470958ee9a097e5465fa8a5f356c338cf0c0d41914bc",
       "supportedFrom": 1,
       "minReaderVersion": 1
     }

@@ -4,7 +4,7 @@ import { net, shell } from 'electron'
 import type { WebRecordingManifest } from '../../../../src/core/webReplay/schema'
 import type { WebRecordingBackupOptions, WebRecordingSummary, WebReplayReadRequest, WebReplayReadResult, WebReplayRenderProgress, WebReplayRenderRequest, WebReplayRenderResult, WebReplayServerState } from '../../../../src/platform/contracts/webReplay'
 import { createMainLogger } from '../logging'
-import { BACKUP_VIDEO_FILE, WebRecordingBackupVideo } from './backupVideo'
+import { BACKUP_VIDEO_FILE, WebRecordingBackupVideo, BACKUP_AUDIO_DIRECTORY, mixWebRecordingBackupAudio } from './backupVideo'
 import { WebRecordingPlayer } from './player/player'
 import { WEB_REPLAY_PORT, WebReplayServer } from './server'
 import { webRecordingDirectory, webRecordingsRoot, WebRecordingStore } from './store'
@@ -114,6 +114,58 @@ export async function restoreWebRecording(recordingId: string): Promise<void> {
   await fs.rename(path.join(webRecordingsRoot(), TRASH, recordingId), target)
   logger.info('网页录制已恢复', { event: 'web_replay.recording.restored', context: { recordingId } })
 }
+
+/** Renaming only rewrites the manifest's title; the folder keeps its id. */
+export async function renameWebRecordings(items: Array<{ recordingId: string; title: string | null }>): Promise<void> {
+  for (const { recordingId, title } of items) {
+    const store = WebRecordingStore.forId(recordingId)
+    const { title: _old, ...manifest } = await store.readManifest()
+    await store.writeManifest({ ...manifest, ...(title ? { title } : {}) })
+  }
+  logger.info('网页录制已重命名', { event: 'web_replay.recording.renamed', context: { count: items.length } })
+}
+
+export function webRecordingTitle(manifest: WebRecordingManifest): string {
+  return manifest.title ?? `${manifest.app.name} ${new Date(manifest.createdAt).toLocaleString('zh-CN', { hour12: false })}`
+}
+
+/** Names never overwrite an existing file: a clash gets " (2)", " (3)"… */
+async function freeName(directory: string, base: string): Promise<string> {
+  const safe = base.replace(/[\\/:*?"<>|]+/g, '-').trim().slice(0, 120) || '网页录制'
+  for (let index = 1; ; index++) {
+    const candidate = path.join(directory, `${safe}${index > 1 ? ` (${index})` : ''}.mp4`)
+    if (!await fs.access(candidate).then(() => true, () => false)) return candidate
+  }
+}
+
+export async function exportWebRecordingVideos(recordingIds: string[], directory: string): Promise<{ files: string[]; skipped: number }> {
+  if (!(await fs.stat(directory).catch(() => null))?.isDirectory()) throw new Error('导出位置不是文件夹')
+  const recordings = new Map((await listWebRecordings()).map(item => [item.id, item]))
+  const files: string[] = []
+  let skipped = 0
+  for (const id of recordingIds) {
+    const recording = recordings.get(id)
+    const sources: Array<[string | null, string]> = recording ? [[recording.backupVideo, '备份录屏'], [recording.video, '重演']] : []
+    const present = sources.filter((entry): entry is [string, string] => entry[0] !== null)
+    if (!present.length) { skipped++; continue }
+    for (const [file, label] of present) {
+      const target = await freeName(directory, present.length > 1 ? `${webRecordingTitle(recording!)} ${label}` : webRecordingTitle(recording!))
+      await fs.copyFile(file, target)
+      files.push(target)
+    }
+  }
+  logger.info('网页录制视频已导出', { event: 'web_replay.recording.exported', context: { files: files.length, skipped } })
+  return { files, skipped }
+}
+
+export async function backupAudioDirectory(recordingId: string): Promise<string> {
+  const directory = path.join(webRecordingDirectory(recordingId), BACKUP_AUDIO_DIRECTORY)
+  await fs.mkdir(directory, { recursive: true })
+  return directory
+}
+
+/** The page stops its sound after the recording ended elsewhere; the picture may still be saving. */
+export function mixWebRecordingAudio(recordingId: string): Promise<boolean> { return mixWebRecordingBackupAudio(webRecordingDirectory(recordingId), 60_000) }
 
 export async function getWebRecording(recordingId: string): Promise<WebRecordingManifest> { return WebRecordingStore.forId(recordingId).readManifest() }
 
