@@ -13,6 +13,7 @@ import ThemeSection from '../sections/ThemeSection'
 import UpdateSection from '../sections/UpdateSection'
 import AboutSection from '../sections/AboutSection'
 import HardwareCapabilitiesSection from '../sections/HardwareCapabilitiesSection'
+import ExperimentalSection from '../sections/ExperimentalSection'
 import { RecordingShortcutSettings } from '@/features/screenRecording/RecordingShortcutSettings'
 import { AudioCaptureSettingsForm } from '@/features/audioCapture'
 
@@ -31,7 +32,7 @@ function exportTheme(): void {
   URL.revokeObjectURL(url)
 }
 
-/** 通用：语言与启动、查看与快捷键、外观、关于与更新。 */
+/** 通用：语言与启动、查看与快捷键、录音、外观、实验性功能、关于与更新。 */
 const GeneralTab: React.FC = () => {
   const importThemePayload = useSettingsStore((state) => state.importThemePayload)
 
@@ -71,6 +72,10 @@ const GeneralTab: React.FC = () => {
       </SettingsSection>
       <SettingsSection id="general-appearance">
         <ThemeSection onExportTheme={exportTheme} onImportTheme={handleImportTheme} />
+      </SettingsSection>
+
+      <SettingsSection id="general-experimental">
+        <ExperimentalSection />
       </SettingsSection>
 
       <SettingsSection id="general-about">

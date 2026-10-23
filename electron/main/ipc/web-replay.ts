@@ -3,12 +3,13 @@ import { z } from 'zod'
 import { WEB_REPLAY_CHANNELS } from '../../../src/platform/contracts/webReplay'
 import { registerIpcHandler, parseVoid } from './registry'
 import { assertTrustedApplicationSender } from './application-control'
-import { listWebRecordings, readWebRecording, revealWebRecording, onWebReplayStateChanged, renderWebRecording, startWebRecording, stopWebRecording, webReplayState } from '../services/web-replay/runtime'
+import { listWebRecordings, readWebRecording, revealWebRecording, setWebReplayEnabled, onWebReplayStateChanged, renderWebRecording, startWebRecording, stopWebRecording, webReplayState } from '../services/web-replay/runtime'
 
 const uuid = z.string().uuid()
 const renderSchema = z.object({ recordingId: uuid, output: z.string().min(1).optional(), fps: z.number().int().min(1).max(120).optional() }).strict()
 
 export function registerWebReplayIpc(): void {
+  registerIpcHandler(WEB_REPLAY_CHANNELS.setEnabled, raw => z.object({ enabled: z.boolean() }).strict().parse(raw), async (input, event) => { assertTrustedApplicationSender(event); return setWebReplayEnabled(input.enabled) })
   registerIpcHandler(WEB_REPLAY_CHANNELS.apps, parseVoid, async (_input, event) => { assertTrustedApplicationSender(event); return webReplayState() })
   registerIpcHandler(WEB_REPLAY_CHANNELS.start, raw => z.object({ connectionId: uuid }).strict().parse(raw), async (input, event) => { assertTrustedApplicationSender(event); return startWebRecording(input.connectionId) })
   registerIpcHandler(WEB_REPLAY_CHANNELS.stop, raw => z.object({ recordingId: uuid }).strict().parse(raw), async (input, event) => { assertTrustedApplicationSender(event); return stopWebRecording(input.recordingId) })

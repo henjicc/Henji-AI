@@ -1,11 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { WebSocket } from 'ws'
+import { WebReplayServer } from './server'
 
 const warnings: unknown[] = []
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: (...args: unknown[]) => warnings.push(args) }) }))
 vi.mock('../appPaths', () => ({ getUserFolderDir: () => process.env.TEMP ?? '/tmp' }))
-
-const { WebReplayServer } = await import('./server')
 
 const hello = { type: 'hello', protocol: 1, probeVersion: '0.1.0', app: { name: '知多少', version: '0.1.0' }, host: 'tauri', env: { url: 'http://localhost:17631/', viewport: { width: 1280, height: 820, dpr: 1.5 }, colorScheme: 'light', reducedMotion: false, locale: 'zh-CN', timeZone: 'Asia/Shanghai', userAgent: 'test' } }
 

@@ -9,7 +9,7 @@ import { registerAudioCaptureIpc } from './ipc/audio-capture'
 import { registerScreenRecordingIpc } from './ipc/screen-recording'
 import { closeRecordingControl } from './services/screen-recording/runtime'
 import { registerWebReplayIpc } from './ipc/web-replay'
-import { startWebReplayService, stopWebReplayService } from './services/web-replay/runtime'
+import { stopWebReplayService } from './services/web-replay/runtime'
 import { registerAssetLibraryIpc } from './ipc/asset-library'
 import { registerAssistantIpc } from './ipc/assistant'
 import { registerCameraStageRenderIpc } from './ipc/camera-stage-render'
@@ -183,8 +183,6 @@ app.whenReady().then(async () => {
   registerEmbeddedAgentIpc()
   initializeUpdater()
   void runLogRetention()
-  // 网页应用录制的本机连接点；端口被占用只记录状态，不影响启动。
-  void startWebReplayService()
   // 后台预热 APIMart 域名连通性，不阻塞启动；没配置 Key 的用户没有意义，跳过。
   if (getAiProviderApiKey('apimart')) {
     void warmApiMartEndpointPreference(sdkRuntimeContext.transport)

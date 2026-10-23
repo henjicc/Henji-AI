@@ -94,6 +94,7 @@ const surfaceDefinitions = [
   { id: 'settings.general.basic', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-basic' }, ...immediate },
   { id: 'settings.general.view', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-view' }, ...immediate },
   { id: 'settings.general.appearance', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-appearance' }, ...immediate },
+  { id: 'settings.general.experimental', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-experimental' }, ...immediate },
   { id: 'settings.general.about', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-about' }, ...immediate },
   { id: 'settings.providers_models', kind: 'settings', settingsTarget: { tab: 'providers', sectionId: 'providers' }, ...immediate },
   { id: 'settings.workspace', kind: 'settings', settingsTarget: { tab: 'workspace' }, ...immediate },

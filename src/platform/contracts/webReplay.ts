@@ -8,6 +8,7 @@ export const WEB_REPLAY_CHANNELS = {
   render: 'webReplay:render',
   read: 'webReplay:read',
   reveal: 'webReplay:reveal',
+  setEnabled: 'webReplay:set-enabled',
   appsChanged: 'webReplay:apps-changed',
 } as const
 
@@ -21,7 +22,7 @@ export interface WebReplayConnectedApp {
   recordingId: string | null
 }
 
-export interface WebReplayServerState { listening: boolean; port: number; error?: string; apps: WebReplayConnectedApp[] }
+export interface WebReplayServerState { enabled: boolean; listening: boolean; port: number; error?: string; apps: WebReplayConnectedApp[] }
 
 /** `output` defaults to a new file inside the recording directory. */
 export interface WebReplayRenderRequest { recordingId: string; output?: string; fps?: number }
@@ -41,6 +42,8 @@ export interface WebReplayReadRequest { recordingId: string; track: 'data' | 'be
 export interface WebReplayReadResult { entries: unknown[]; total: number; nextOffset: number | null }
 
 export interface WebReplayPlatform {
+  /** Experimental switch: starts or stops listening for probes on the local port. */
+  setEnabled(enabled: boolean): Promise<WebReplayServerState>
   apps(): Promise<WebReplayServerState>
   start(connectionId: string): Promise<WebRecordingManifest>
   stop(recordingId: string): Promise<WebRecordingManifest>

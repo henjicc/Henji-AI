@@ -31,6 +31,9 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
   ...rows('general-view', [
     ['sections.canvas.imageViewerInfoLabel', ['查看器', '分辨率', 'viewer']],
   ]),
+  ...rows('general-experimental', [
+    ['sections.experimental.webAppRecordingLabel', ['实验', '网页录制', '重演', '探针', 'experimental', 'web recording', 'replay']],
+  ]),
   ...rows('general-appearance', [
     ['sections.theme.preset.label', ['主题', '深色', '浅色', 'dark', 'light', 'theme']],
     ['sections.theme.accent.label', ['颜色', 'color']],

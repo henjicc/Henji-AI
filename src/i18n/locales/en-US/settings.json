@@ -16,6 +16,7 @@
     "general-basic": "Language & Startup",
     "general-view": "Viewing & Shortcuts",
     "general-appearance": "Appearance",
+    "general-experimental": "Experimental",
     "general-about": "About & Updates",
     "providers": "Providers & Models",
     "workspace-generation": "Generate",
@@ -295,6 +296,7 @@
     }
   },
   "sections": {
+    "experimental": { "webAppRecordingLabel": "Web app recording", "webAppRecordingHint": "Record web apps that include the Henji probe (your own Tauri, Electron or web tools). Requests and input are recorded and can be replayed offline into a video. When on, Henji waits for apps on local port 47831 and the recording page shows Web app." },
     "hardware": {
       "title": "Hardware Capabilities",
       "gpus": "Graphics",

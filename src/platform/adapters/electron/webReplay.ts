@@ -8,6 +8,7 @@ function native(): WebReplayPlatform {
 
 export function createElectronWebReplay(): WebReplayPlatform {
   return {
+    setEnabled: enabled => native().setEnabled(enabled),
     apps: () => native().apps(),
     start: id => native().start(id),
     stop: id => native().stop(id),

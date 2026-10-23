@@ -4,6 +4,7 @@ import { unrestrictedCollectionAvailability, type ApplicationEntityProvider, typ
 import { readWebAppRecordingCapability, renderWebAppReplayCapability, startWebAppRecordingCapability, stopWebAppRecordingCapability } from '@/core/application-control/domains/screenRecording/webAppCapability'
 import type { CapabilityExecutionContext } from '@/features/application-control'
 import { getPlatform } from '@/platform'
+import { WEB_APP_RECORDING_DISABLED_MESSAGE, webAppRecordingEnabled } from '../useWebAppRecordingSwitch'
 
 const APP = 'screen_recording.web_app'
 const RECORDING = 'screen_recording.web_recording'
@@ -86,6 +87,8 @@ export const WEB_APP_CAPABILITY_IDS = new Set<string>([startWebAppRecordingCapab
 export async function executeWebAppCapability(id: string, input: unknown, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {
   const platform = getPlatform().webReplay
   const permissions = context.callerGrant?.permissions
+  // Reading saved recordings stays available; recording and replay need the experimental switch.
+  if (id !== readWebAppRecordingCapability.id && !webAppRecordingEnabled()) throw new Error(WEB_APP_RECORDING_DISABLED_MESSAGE)
   if (id === startWebAppRecordingCapability.id) {
     const parsed = startWebAppRecordingCapability.inputSchema.parse(input)
     const manifest = await platform.start(parsed.appRef.id)

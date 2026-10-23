@@ -81,6 +81,8 @@ interface SettingsState {
   uiRadiusPreset: UiRadiusPreset;
   /** 界面毛玻璃效果。关闭后 `--ui-blur` 置 0，所有走该令牌的浮层一起变成不模糊 */
   uiBlurEnabled: boolean;
+  /** 实验性功能：网页应用录制与重演（默认关闭） */
+  experimentalWebAppRecording: boolean;
   /** 外观选择（预设 / 强调色 / 层级对比度 / 自定义底色）：主题颜色的唯一可写来源。 */
   themeSelection: ThemeSelection;
   /** 由 `themeSelection` 派生的生效种子（`applyRuntimeTheme` 由它推导全部令牌）；只由主题动作同步写入。 */
@@ -136,6 +138,7 @@ interface SettingsState {
   setUiScaleMode: (mode: UiScaleMode) => void;
   setUiRadiusPreset: (preset: UiRadiusPreset) => void;
   setUiBlurEnabled: (enabled: boolean) => void;
+  setExperimentalWebAppRecording: (enabled: boolean) => void;
   /** 切换主题预设；`custom` 只在存在自定义底色时生效。保留当前强调色选择与对比度档位。 */
   setThemePreset: (preset: ThemeSelectionPreset) => void;
   /** 设置强调色 `#RRGGBB`；`null` 跟随预设。 */
@@ -209,6 +212,7 @@ export const useSettingsStore = create<SettingsState>()(
       uiScaleMode: DEFAULT_UI_SCALE_MODE,
       uiRadiusPreset: 'default',
       uiBlurEnabled: true,
+      experimentalWebAppRecording: false,
       ...DEFAULT_THEME_STATE,
       startupWorkspace: 'generation',
       assetTabAction: 'floating',
@@ -283,6 +287,7 @@ export const useSettingsStore = create<SettingsState>()(
       setUiScaleMode: (uiScaleMode) => set({ uiScaleMode }),
       setUiRadiusPreset: (uiRadiusPreset) => set({ uiRadiusPreset }),
       setUiBlurEnabled: (uiBlurEnabled) => set({ uiBlurEnabled }),
+      setExperimentalWebAppRecording: (experimentalWebAppRecording) => set({ experimentalWebAppRecording }),
       setThemePreset: (preset) =>
         set((state) => {
           if (preset === THEME_CUSTOM_PRESET && !state.themeSelection.custom) return {};

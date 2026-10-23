@@ -20,7 +20,7 @@ async function fetchExternal(url: string, userAgent: string): Promise<{ status: 
 }
 
 let server: WebReplayServer | null = null
-let state: Omit<WebReplayServerState, 'apps'> = { listening: false, port: WEB_REPLAY_PORT }
+let state: Omit<WebReplayServerState, 'apps'> = { enabled: false, listening: false, port: WEB_REPLAY_PORT }
 const listeners = new Set<(state: WebReplayServerState) => void>()
 
 function snapshot(): WebReplayServerState { return { ...state, apps: server?.apps() ?? [] } }
@@ -32,19 +32,34 @@ export async function startWebReplayService(port = Number(process.env.HENJI_WEB_
   server.on('changed', () => { const value = snapshot(); listeners.forEach(fn => fn(value)) })
   try {
     await server.start(port)
-    state = { listening: true, port }
+    state = { enabled: true, listening: true, port }
   } catch (error) {
-    state = { listening: false, port, error: `本机端口 ${port} 被占用，网页应用无法连接：${String((error as Error)?.message ?? error)}` }
+    state = { enabled: true, listening: false, port, error: `本机端口 ${port} 被占用，网页应用无法连接：${String((error as Error)?.message ?? error)}` }
     logger.warn('网页录制服务未能启动', { event: 'web_replay.server.failed', context: { port }, error: String(error) })
   }
 }
 
-export async function stopWebReplayService(): Promise<void> { await server?.stop(); server = null }
+export async function stopWebReplayService(): Promise<void> {
+  const current = server
+  server = null
+  state = { enabled: false, listening: false, port: state.port }
+  await current?.stop()
+}
+
+/** The experimental setting lives in the renderer; it turns the local hub on or off without a restart. */
+export async function setWebReplayEnabled(enabled: boolean): Promise<WebReplayServerState> {
+  if (enabled && !server) await startWebReplayService()
+  else if (!enabled && server) await stopWebReplayService()
+  const value = snapshot()
+  listeners.forEach(fn => fn(value))
+  return value
+}
 
 export function webReplayState(): WebReplayServerState { return snapshot() }
 export function onWebReplayStateChanged(listener: (state: WebReplayServerState) => void): () => void { listeners.add(listener); return () => listeners.delete(listener) }
 
 function requireServer(): WebReplayServer {
+  if (!state.enabled) throw new Error('网页应用录制是实验性功能，尚未开启；请先在 设置 → 通用 → 实验性功能 中打开')
   if (!server || !state.listening) throw new Error(state.error ?? '网页录制服务尚未启动')
   return server
 }

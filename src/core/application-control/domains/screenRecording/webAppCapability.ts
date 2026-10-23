@@ -10,7 +10,7 @@ const common = { version: 1, domain: 'screen_recording', readOnly: false, risk: 
 
 export const startWebAppRecordingCapability = defineApplicationCapability({ ...common,
   id: 'start_web_app_recording', title: '开始录制网页应用',
-  description: '录制已接入痕迹探针的网页应用（Tauri、Electron 或网页）：应用会重新加载并从启动开始记录网络请求、宿主调用、随机数、页面存储和鼠标键盘操作，请求照常发出。先列出 screen_recording.web_app 选择应用。录制内容原样保存，包括密钥。',
+  description: '实验性功能，需先开启设置属性 experimental.web_app_recording。录制已接入痕迹探针的网页应用（Tauri、Electron 或网页）：应用会重新加载并从启动开始记录网络请求、宿主调用、随机数、页面存储和鼠标键盘操作，请求照常发出。先列出 screen_recording.web_app 选择应用。录制内容原样保存，包括密钥。',
   aliases: ['录制网页应用', '录制知多少', 'web app recording', '应用重演录制'],
   inputSchema: z.object({ appRef: webAppRefSchema }).strict(),
   outputSchema: capabilityOutputSchema({ resultRef: webRecordingRefSchema, verified: z.boolean() }),
@@ -23,7 +23,7 @@ export const startWebAppRecordingCapability = defineApplicationCapability({ ...c
 
 export const stopWebAppRecordingCapability = defineApplicationCapability({ ...common,
   id: 'stop_web_app_recording', title: '停止网页应用录制',
-  description: '停止录制并等待应用交回前端资源，写成可离线重演的录制文件。返回状态与录制时发现的漏网调用提醒。',
+  description: '实验性功能。停止录制并等待应用交回前端资源，写成可离线重演的录制文件。返回状态与录制时发现的漏网调用提醒。',
   aliases: ['停止网页录制'],
   inputSchema: z.object({ recordingRef: webRecordingRefSchema }).strict(),
   outputSchema: capabilityOutputSchema({ resultRef: webRecordingRefSchema, status: z.enum(['complete', 'interrupted']), durationMs: z.number().nonnegative(), warnings: z.array(z.string()), verified: z.boolean() }),
@@ -45,7 +45,7 @@ export const readWebAppRecordingCapability = defineApplicationCapability({ ...co
 
 export const renderWebAppReplayCapability = defineApplicationCapability({ ...common,
   id: 'render_web_app_replay', title: '重演网页录制并出视频',
-  description: '不联网、不启动原应用，在痕迹内用录制的前端资源重新运行界面，按录制的操作和数据重演，逐帧编码成 MP4。返回视频的本机路径与重演中发现的冲突（录制里没有的请求、缺失资源等）。',
+  description: '实验性功能，需先开启设置属性 experimental.web_app_recording。不联网、不启动原应用，在痕迹内用录制的前端资源重新运行界面，按录制的操作和数据重演，逐帧编码成 MP4。返回视频的本机路径与重演中发现的冲突（录制里没有的请求、缺失资源等）。',
   aliases: ['网页重演', '重演录制', 'replay web recording'], timeoutMs: 600000,
   inputSchema: z.object({ recordingRef: webRecordingRefSchema, fps: z.union([z.literal(24), z.literal(30), z.literal(60)]).default(30) }).strict(),
   outputSchema: capabilityOutputSchema({ resultRef: webRecordingRefSchema, video: z.string(), width: z.number().int(), height: z.number().int(), frames: z.number().int(), conflicts: z.array(z.string()), warnings: z.array(z.string()), verified: z.boolean() }),

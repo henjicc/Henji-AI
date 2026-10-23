@@ -2,6 +2,7 @@ import { WEB_REPLAY_CHANNELS, type WebReplayPlatform, type WebReplayServerState 
 
 export function createWebReplayApi(invoke: <T>(channel: string, payload?: unknown) => Promise<T>, subscribe: (channel: string, handler: (payload: unknown) => void) => () => void): WebReplayPlatform {
   return {
+    setEnabled: enabled => invoke(WEB_REPLAY_CHANNELS.setEnabled, { enabled }),
     apps: () => invoke(WEB_REPLAY_CHANNELS.apps),
     start: connectionId => invoke(WEB_REPLAY_CHANNELS.start, { connectionId }),
     stop: recordingId => invoke(WEB_REPLAY_CHANNELS.stop, { recordingId }),

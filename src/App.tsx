@@ -14,6 +14,7 @@ import { loadAllModels } from './core/loaders'
 import { registerDefaultPanels } from '@/components/params/panels/registerDefaultPanels'
 import { useApplyRuntimeTheme } from './hooks/useApplyRuntimeTheme'
 import { useRecordingShortcuts } from './features/screenRecording/useRecordingShortcuts'
+import { useWebAppRecordingSwitch } from './features/screenRecording/useWebAppRecordingSwitch'
 import { useApplyUiScale } from './hooks/useApplyUiScale'
 import { useDevToolsShortcut } from './hooks/useDevToolsShortcut'
 import { useLogWindowShortcut } from './hooks/useLogWindowShortcut'
@@ -115,6 +116,7 @@ const prefetchSettingsModal = (): void => {
 const App: React.FC = () => {
   useApplyRuntimeTheme()
   useRecordingShortcuts()
+  useWebAppRecordingSwitch()
   useEffect(() => {
     if (!(import.meta.env.DEV || import.meta.env.MODE === 'development')) return
     // 只在巡检自动化注入了测试夹具桥时加载；普通开发实例与单测不加载巡检夹具。
