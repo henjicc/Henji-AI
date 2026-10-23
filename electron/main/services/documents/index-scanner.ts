@@ -245,6 +245,10 @@ export class DocumentIndexScanner {
       const manifest = container.manifest as ProjectManifest
       const skipTop = [manifest.folders.generated, manifest.folders.materials, INTERNAL_FOLDER_NAME]
       await this.collect(container.root, container, candidates, { depth, skipTop }, report)
+      // 素材文件夹整体不扫（可能很大），只看素材类文档自己的子文件夹（如 素材/录屏/ 里的 .hjweb），且只看一层。
+      for (const name of new Set(this.options.kinds.list().flatMap((kind) => kind.projectMaterialsFolderNames ? [kind.projectMaterialsFolderNames[container.locale]] : []))) {
+        await this.collect(path.join(container.materialsDir, name), container, candidates, { depth: 0, skipTop: [] }, report)
+      }
     }
     const user = this.workspace.userContainerNow()
     for (const folder of this.standaloneFolders()) await this.collect(folder, user, candidates, { depth, skipTop: [] }, report)
