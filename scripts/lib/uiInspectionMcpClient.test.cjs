@@ -1,6 +1,17 @@
 const assert = require('node:assert/strict')
 const { test } = require('node:test')
-const { readAllMedia } = require('./uiInspectionMcpClient.cjs')
+const { readAllMedia, assignIsolatedMcpPort } = require('./uiInspectionMcpClient.cjs')
+
+test('隔离场景使用空闲端口，不接管另一个应用的默认监听', async () => {
+  const net = require('node:net'), occupied = net.createServer()
+  await new Promise(resolve => occupied.listen(0, '127.0.0.1', resolve))
+  try {
+    let configured
+    const port = await assignIsolatedMcpPort({ evaluate: async (_fn, input) => { configured = input } })
+    assert.equal(configured, port); assert.notEqual(port, occupied.address().port)
+    const reuse = net.createServer(); await new Promise(resolve => reuse.listen(port, '127.0.0.1', resolve)); await new Promise(resolve => reuse.close(resolve))
+  } finally { await new Promise(resolve => occupied.close(resolve)) }
+})
 
 test('完整字节读取显式选择chunk模式，图片默认附件不能替代分块字节', async () => {
   const original = Buffer.from('一张图片的完整二进制数据'); const calls = []

@@ -20,7 +20,7 @@ function sequenceWith(clips: VideoEditClip[]): VideoEditSequence {
     clips, annotations: [],
   } as VideoEditSequence
 }
-const music: VideoEditClip = { id: 'music', itemId: 'item', name: '配乐', kind: 'audio', track: 1, start: 48, duration: 24 * 60, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, volume: 0.8, text: '', fadeInFrames: 12 } as VideoEditClip
+const music: VideoEditClip = { id: 'music', itemId: 'item', name: '配乐', kind: 'audio', track: 1, start: 48, duration: 24 * 60, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, volume: 0.8, gainDb: 12, text: '', fadeInFrames: 12 } as VideoEditClip
 
 describe('music remix timeline layout', () => {
   it.each([24, 25, 30, 60])('fills exactly the target frames at %s fps and keeps every jumped-in beat on the original grid', fps => {
@@ -57,7 +57,7 @@ describe('music remix timeline layout', () => {
     expect(applied.clips.at(-1)!.start + applied.clips.at(-1)!.duration).toBe(48 + targetFrames)
     applied.clips.forEach((clip, k) => {
       expect(sourceSeconds(clip)).toBeCloseTo(layout.pieces[k].sourceInSeconds, 6)
-      expect(clip.volume).toBeCloseTo(0.8 * 10 ** (layout.pieces[k].gainDb / 20), 9)
+      expect(clip.volume).toBe(0.8); expect(clip.gainDb).toBe(12 + layout.pieces[k].gainDb)
     })
     expect(applied.transitions).toHaveLength(applied.clips.length - 1)
     for (const transition of applied.transitions) {

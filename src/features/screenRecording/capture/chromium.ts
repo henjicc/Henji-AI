@@ -1,3 +1,5 @@
+import { recordingEncoding, recordingKeyframes } from '@/core/screenRecording/encoding'
+import type { CaptureManifest } from '@/core/screenRecording/capture'
 import { Mp4OutputFormat, Output, StreamTarget, VideoSample, VideoSampleSource } from 'mediabunny'
 import { captureCrop, type CaptureSpan, type ScreenCaptureBackend, type ScreenCaptureOptions } from '@/core/screenRecording/capture'
 import { selectVideoEditExportEncoder, videoEditExportVideoOptions } from '@/features/videoEdit'
@@ -6,6 +8,7 @@ import { CaptureFrameClock } from '@/core/screenRecording/frameClock'
 
 const logger = createLogger('features.screenRecording.capture')
 export interface CaptureSink {
+  encoding?(value: NonNullable<CaptureManifest['encoding']>): Promise<void>
   clock(): Promise<number>
   anchor(index: number, monoUs: number): Promise<void>
   open(): Promise<CaptureSpan>
@@ -21,14 +24,27 @@ export interface ChromiumDependencies {
   mux(options: ScreenCaptureOptions, span: CaptureSpan, sink: CaptureSink): Promise<CaptureMuxer>
 }
 async function createMux(options: ScreenCaptureOptions, span: CaptureSpan, sink: CaptureSink): Promise<CaptureMuxer> {
-  const spec = { width: options.width, height: options.height, frameRate: options.fps, bitrate: options.bitrate }
-  let encoderPreference: 'hardware' | 'software' = 'hardware'
-  const codec = await selectVideoEditExportEncoder({ ...spec, encoderPreference }).catch(async error => {
-    encoderPreference = 'software'
-    logger.warn('兼容录制使用软件编码', { event: 'recording.capture.encoder.fallback', error })
-    return selectVideoEditExportEncoder({ ...spec, encoderPreference })
-  })
-  const source = new VideoSampleSource({ ...videoEditExportVideoOptions({ codec, width: options.width, height: options.height, fps: options.fps, videoBitrateMbps: options.bitrate / 1_000_000, bitrateMode: 'vbr', encoderPreference, keyframeInterval: 1 }), latencyMode: 'realtime' })
+  const encoding = recordingEncoding(options)
+  const bitrateMode = encoding.rateControl === 'cbr' ? 'cbr' : 'vbr'
+  const spec = { width: options.width, height: options.height, frameRate: options.fps, bitrate: encoding.bitrate, bitrateMode } as const
+  let encoderPreference: 'hardware' | 'software' = encoding.encoder === 'software' ? 'software' : 'hardware'
+  let codec: 'avc' | 'hevc' = encoding.codec === 'hevc' ? 'hevc' : 'avc'
+  try { await selectVideoEditExportEncoder({ ...spec, codec, encoderPreference }) }
+  catch (error) {
+    if (codec === 'hevc') {
+      codec = 'avc'
+      logger.warn('当前设备不支持 H.265 录制，改用 H.264', { event: 'recording.capture.codec.fallback', error })
+    }
+    try { await selectVideoEditExportEncoder({ ...spec, codec, encoderPreference }) }
+    catch (failure) {
+      encoderPreference = 'software'
+      logger.warn('兼容录制已改用软件编码', { event: 'recording.capture.encoder.fallback', error: failure })
+      await selectVideoEditExportEncoder({ ...spec, codec, encoderPreference })
+    }
+  }
+  if (encoding.rateControl === 'quality' || !['auto', 'software'].includes(encoding.encoder)) logger.info('兼容路径按 WebCodecs 可用码率与硬件选择能力录制', { event: 'recording.capture.encoding.adapted', context: { rateControl: encoding.rateControl, encoder: encoding.encoder, bitrateMode } })
+  await sink.encoding?.({ codec: codec === 'avc' ? 'h264' : 'hevc', encoder: encoderPreference, softwareFallback: encoderPreference === 'software' && encoding.encoder !== 'software' })
+  const source = new VideoSampleSource(videoEditExportVideoOptions({ codec, width: options.width, height: options.height, fps: options.fps, videoBitrateMbps: encoding.bitrate / 1_000_000, bitrateMode, encoderPreference, keyframeInterval: recordingKeyframes(encoding.keyframeFrames).gop / options.fps, latencyMode: 'realtime' }))
   const output = new Output({ format: new Mp4OutputFormat({ fastStart: 'fragmented', minimumFragmentDuration: 1 }), target: new StreamTarget(new WritableStream({ write: chunk => sink.write(span.index, chunk.position, chunk.data) }), { chunked: true, chunkSize: 1024 * 1024 }) })
   output.addVideoTrack(source, { frameRate: options.fps })
   await output.start()

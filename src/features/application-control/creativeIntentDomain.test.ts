@@ -111,6 +111,21 @@ it('AI 给定多目标、多属性曲线走一次正式通用事务，一步作�
     expect(getActiveVideoEditSequence(owner).clips).toEqual(before)
   } finally { app.dispose() }
 })
+it('整理候选回执必须回读真实资源，文件丢失不能返回已核对', async () => {
+  const { draftRef } = await setup(), app = createApplicationHarness()
+  const read = vi.mocked(getPlatform().system.fs.readFile).getMockImplementation()!
+  vi.mocked(getPlatform().system.fs.readFile).mockImplementation(async (...args) => {
+    const bytes = await read(...args)
+    if (new TextDecoder().decode(bytes).includes('"motions":')) throw new Error('候选文件已丢失')
+    return bytes
+  })
+  try {
+    const result = await app.call('organize_video_edit_intent', { draftRef })
+    expect(result.ok).toBe(false)
+    expect(JSON.stringify(result)).toContain('候选文件已丢失')
+  } finally { app.dispose() }
+})
+
 it('正式 describe → change/invoke → read：钉点保持、候选应用与一次作品撤销', async () => {
   const { owner, state, draftRef } = await setup(), app = createApplicationHarness()
   try {
@@ -126,6 +141,7 @@ it('正式 describe → change/invoke → read：钉点保持、候选应用与�
     expect(owner.document.creativeIntents!.drafts[0].pins).toEqual(pins)
     const baseline = await app.read(draftRef)
     const organized = await app.requireResult('organize_video_edit_intent', { draftRef, motionIntent: { kind: 'follow_path', preserveJitter: false }, takeIds: [state.draft.takes[0].id] }, baseline.revisions as Record<string, number>)
+    expect(organized.verification).toMatchObject({ verified: true })
     expect(videoMotionState(owner)!.intent).toEqual({ kind: 'follow_path', preserveJitter: false })
     expect(owner.document.creativeIntents!.drafts[0].pins).toEqual(pins)
     const candidate = (organized.candidateRefs as ApplicationRef[])[0]; expect(candidate).toBeDefined()

@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import React, { useCallback, useMemo, useState } from 'react'
 
 import AlertDialog, { type AlertDialogAction } from './AlertDialog'
@@ -112,7 +113,8 @@ export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssis
     return null
   }
 
-  return (
+  // 全局确认须与编辑器弹窗处于同一 DOM 层，避免被后挂载的 portal 遮住。
+  return createPortal(
     <AlertDialog
       key={dialogKey}
       isOpen
@@ -125,6 +127,7 @@ export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssis
       actionLayout={current.review ? 'review' : 'standard'}
       closeImmediately={Boolean(current.confirmation || current.review)}
       onClose={handleClose}
-    />
+    />,
+    document.body,
   )
 }

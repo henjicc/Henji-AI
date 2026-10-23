@@ -127,7 +127,8 @@ describe('所有登记格式的黄金样本', () => {
     for (const file of fs.readdirSync(directory).filter(file => /^v\d+\.json$/.test(file))) {
       const version = Number(file.slice(1, -5))
       const floor = baseline.formats[format.id as keyof typeof baseline.formats]?.supportedFrom ?? 1
-      if (format.storage === 'sqlite-ledger') {
+      // 带内容迁移的 SQLite 值与正式读取入口一致，先升级再校验。
+      if (format.storage === 'sqlite-ledger' && !Object.keys(format.migrations ?? {}).length) {
         it(`${format.id} ${file}记录内容由SQL账本升级，黄金样本只校验独立内容schema`, () => {
           expect(format.schema.safeParse(JSON.parse(fs.readFileSync(path.join(directory, file), 'utf8'))).success).toBe(true)
         })
@@ -158,6 +159,7 @@ describe('所有登记格式的黄金样本', () => {
         else if ((format.storage === 'local-storage' && !['model-defaults', 'onboarding'].includes(format.id)) || ['voice-library', 'llm-config', 'sound-library-folders', 'video-style-library', 'video-template-library', 'video-style-package'].includes(format.id)) content = (raw as { content: unknown }).content
         const upgraded = upgradePersistenceContent(format, content, version)
         expect(format.schema.safeParse(upgraded).success).toBe(true)
+        if (format.id === 'audio-capture-recovery') expect(upgraded).toEqual({ ...(raw as object), version: 2 })
         if (format.id === 'document.video_edit') {
           const document = videoEditDocumentSchema.parse({ format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: 'golden', name: '黄金样本', revision: 0, ...(upgraded as object) })
           const clip = document.sequences[0].clips[0]
@@ -170,6 +172,7 @@ describe('所有登记格式的黄金样本', () => {
           expect(clip.curves?.opacity?.[1].value).toBe(1)
           // v21：音频重构子片段的参数与原始源范围随片段保存；旧样本没有该字段。
           const sound = document.sequences[0].clips.find(value => value.id === 'golden-sound-clip')
+          expect(sound?.gainDb ?? 0).toBe(version >= 23 ? 19 : 0)
           if (version >= 21) expect(sound?.remix).toMatchObject({ id: 'golden-remix', granularity: 'bar', sourceOutUs: 3000000 })
           else expect(sound?.remix).toBeUndefined()
           expect(document.sequences[0].captions?.[0].translation).toBe('Golden caption')

@@ -22,6 +22,7 @@ export async function prepareScreenCapture(sessionId: string, options: ScreenCap
   try {
     if (prepared.backend === 'chromium') {
       browser = new ChromiumCaptureBackend(options, {
+        encoding: async encoding => { await api.capture({ operation: 'encoding', sessionId, encoding }) },
         clock: async () => await api.capture({ operation: 'clock', sessionId }) as number,
         anchor: async (index, monoUs) => { await api.capture({ operation: 'anchor', sessionId, index, monoUs }) },
         open: async () => await api.capture({ operation: 'open-span', sessionId }) as CaptureSpan,

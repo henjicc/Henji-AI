@@ -79,7 +79,7 @@ it('目标离开头比击中点还近时从 0 帧起并裁更多开头；起音�
   expect(heardAt(owner, result.placements[1].clipRef, 0.025)).toBeCloseTo(5 / fps, 5)
   expect(result.placements[0].trackRef).not.toEqual(result.placements[1].trackRef)
   const clip = savedVideoEdit(owner).sequences[0].clips.find(value => result.placements[1].clipRef.id.endsWith(value.id))!
-  expect(clip.volume).toBeCloseTo(10 ** (-6 / 20), 5)
+  expect(clip.gainDb).toBe(-6); expect(clip.volume).toBe(1)
   const first = savedVideoEdit(owner).sequences[0].clips.find(value => result.placements[0].clipRef.id.endsWith(value.id))!
   const cut = await placeVideoEditSoundEffects({ ...refs, placements: [{ soundRef: { kind: 'sound_library.sound', id: 'f:ding' }, at: { kind: 'cut', clipRef: result.placements[0].clipRef, edge: 'end' }, anchor: 'hit', offsetFrames: 0 }] })
   expect(heardAt(owner, cut.placements[0].clipRef, 0.05)).toBeCloseTo((first.start + first.duration) / fps, 5)

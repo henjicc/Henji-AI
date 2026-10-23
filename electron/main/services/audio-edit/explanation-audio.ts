@@ -6,7 +6,7 @@ import crypto from 'node:crypto'
 import { createReadStream, createWriteStream } from 'node:fs'
 import { ZipArchive } from 'archiver'
 import { openZip, iterateEntries, readEntryBytes, isSymbolicLinkEntry } from '../zip-archive'
-import { encodeRecordingWav, type RecordingAudioRequest, type RecordingAudioResult } from '../../../../src/core/audioEdit/recordingAudio'
+import { encodeRecordingWav, recordingAudioSessionIdSchema, type RecordingAudioRequest, type RecordingAudioResult } from '../../../../src/core/audioEdit/recordingAudio'
 import { timestampedAsrService, prepareTimestampedAsrWithReceipt, executeTimestampedAsrWithReceipt, type TimestampedAsrService, type TimestampedAsrReceipt } from './timestamped-asr'
 import { createAudioEditTask, updateAudioEditTask, registerAudioEditTaskController, deleteAudioEditTasks, getAudioEditStoredTask } from './task-store'
 import { createMainLogger } from '../logging'
@@ -21,14 +21,19 @@ export class ExplanationAudioService {
   private erased = new Set<string>()
   private io = new Map<string, Promise<unknown>>()
   constructor(private readonly root = path.join(os.tmpdir(), 'henji-explanation-audio'), private readonly asr: Pick<TimestampedAsrService, 'prepare' | 'execute' | 'preflight'> = timestampedAsrService) {}
-  private directory(id: string): string { if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('录音会话身份无效。'); return path.join(this.root, id) }
+  private directory(id: string): string {
+    if (!recordingAudioSessionIdSchema.safeParse(id).success) throw new Error('录音会话身份无效。')
+    // 普通会话保留旧目录；超级关键帧前缀不能作为 Windows 路径中的冒号。
+    return path.join(this.root, id.replace(/^super-keyframes:/, 'super-keyframes-'))
+  }
   private file(sessionId: string, chunkId: string): string { if (!/^[0-9a-f-]{36}$/i.test(chunkId)) throw new Error('录音块身份无效。'); return path.join(this.directory(sessionId), `${chunkId}.wav`) }
   async cleanupExpired(now = Date.now()): Promise<void> {
     await fs.mkdir(this.root, { recursive: true })
     for (const entry of await fs.readdir(this.root, { withFileTypes: true })) {
-      if (!entry.isDirectory() || !/^[0-9a-f-]{36}$/i.test(entry.name) || this.active.has(entry.name)) continue
-      const directory = this.directory(entry.name)
-      if (now - (await fs.stat(directory)).mtimeMs > 24 * 60 * 60 * 1000) await this.release(entry.name)
+      const sessionId = entry.name.replace(/^super-keyframes-/, 'super-keyframes:')
+      if (!entry.isDirectory() || !recordingAudioSessionIdSchema.safeParse(sessionId).success || this.active.has(sessionId)) continue
+      const directory = this.directory(sessionId)
+      if (now - (await fs.stat(directory)).mtimeMs > 24 * 60 * 60 * 1000) await this.release(sessionId)
     }
   }
   private async serial<T>(sessionId: string, operation: () => Promise<T>): Promise<T> {

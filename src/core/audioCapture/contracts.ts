@@ -27,7 +27,7 @@ export const audioCaptureDeviceSchema = z.object({
 export const audioCaptureInventorySchema = z.object({ hostApis: z.array(z.object({ id: z.string(), name: z.string(), defaultInputDevice: z.number().int() })), devices: z.array(audioCaptureDeviceSchema), defaultInputDevice: z.number().int(), asioCompiled: z.boolean() })
 export type AudioCaptureInventory = z.infer<typeof audioCaptureInventorySchema>
 export interface AudioCaptureSettingsState { settings: AudioCaptureSettings; effectiveSettings: AudioCaptureSettings; notice: string | null; revision: number }
-export const audioCaptureStatusSchema = z.object({ sessionId: z.string(), outputPath: z.string(), state: z.enum(['recording', 'paused', 'stopped']), sampleRate: z.number(), inputLatency: z.number(), callbackFrames: z.number().int().nonnegative(), frames: z.number(), writtenBytes: z.number(), durationSeconds: z.number() })
+export const audioCaptureStatusSchema = z.object({ sessionId: z.string(), outputPath: z.string(), state: z.enum(['recording', 'paused', 'stopped']), sharedSubscribers: z.number().int().nonnegative().optional(), settings: audioCaptureSettingsSchema.optional(), sampleRate: z.number(), inputLatency: z.number(), callbackFrames: z.number().int().nonnegative(), frames: z.number(), writtenBytes: z.number(), durationSeconds: z.number() })
 export type AudioCaptureStatus = z.infer<typeof audioCaptureStatusSchema>
 export interface AudioCaptureFailure { code: string; message: string; recoverable: boolean }
 export interface AudioCaptureLevel { event: 'level'; sessionId: string; peak: number[]; rms: number[]; clipped: boolean[]; durationSeconds: number; writtenBytes: number }
@@ -39,7 +39,7 @@ export interface AudioCaptureSamples {
 export type AudioCaptureEvent = AudioCaptureLevel | AudioCaptureSamples
   | { event: 'interrupted'; sessionId: string; outputPath: string; writtenBytes: number; error: AudioCaptureFailure }
   | { event: 'devicesChanged'; inventory: AudioCaptureInventory }
-export const audioCaptureStartSchema = z.object({ outputPath: z.string().min(1).max(4096), settings: audioCaptureSettingsSchema.optional(), streamSamples: z.boolean().default(false), monitor: z.literal(false).optional() }).strict()
+export const audioCaptureStartSchema = z.object({ outputPath: z.string().min(1).max(4096), settings: audioCaptureSettingsSchema.optional(), streamSamples: z.boolean().default(false), shared: z.boolean().optional(), monitor: z.literal(false).optional() }).strict()
 export type AudioCaptureStart = z.input<typeof audioCaptureStartSchema>
 /** 作品目录内尚未交给编辑器的录音；相对文件名让作品目录迁移后仍可恢复。 */
 export const audioCapturePlacementSchema = z.object({ projectId: z.string().regex(/^[\w-]+$/), startFrame: z.number().int().nonnegative(), endFrame: z.number().int().nonnegative(), revision: z.number().int().nonnegative(), spliceId: z.string().uuid() }).strict()

@@ -52,6 +52,7 @@ it('音量、时钟、声道、淡化、源身份和声音效果变化必须改�
   const before = sound(original)
   const changes: Array<(document: VideoEditDocument) => void> = [
     document => { document.sequences[0].clips[0].volume = .5 },
+    document => { document.sequences[0].clips[0].gainDb = 19 },
     document => { document.sequences[0].clips[0].sourceInUs = 1000000 },
     document => { document.sequences[0].clips[0].speed = { numerator: 2, denominator: 1 } },
     document => { document.sequences[0].clips[0].reverse = true },

@@ -42,7 +42,6 @@ export function createElectronAudioEdit(): AudioEditPlatform {
       release: sessionId => api().recording.release(sessionId),
       archive: sessionId => api().recording.archive(sessionId),
       restore: input => api().recording.restore(input),
-      microphone: (enabled, userReceipt) => api().recording.microphone(enabled, userReceipt),
       write: input => api().recording.write(input),
       read: (sessionId, chunkId) => api().recording.read(sessionId, chunkId),
       erase: sessionId => api().recording.erase(sessionId),

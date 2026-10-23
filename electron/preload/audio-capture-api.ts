@@ -4,14 +4,13 @@ type Invoke = <T>(channel: string, payload?: unknown) => Promise<T>
 type Subscribe = (channel: string, listener: (payload: unknown) => void) => () => void
 export function createAudioCaptureApi(invoke: Invoke, subscribe: Subscribe): AudioCapturePlatform {
   let deviceWatchers = 0
-  let acknowledgedSession = '', acknowledgedSequence = -1
+  const acknowledged = new Map<string, number>()
   const listen = (handler: (event: AudioCaptureEvent) => void, acknowledgeSamples: boolean) => subscribe(AUDIO_CAPTURE_EVENT_CHANNEL, payload => {
     const event = payload as AudioCaptureEvent
     try { handler(event) } finally {
       if (acknowledgeSamples && event.event === 'samples') {
-        if (acknowledgedSession !== event.sessionId) { acknowledgedSession = event.sessionId; acknowledgedSequence = -1 }
-        if (event.sequence - acknowledgedSequence >= 8) {
-          acknowledgedSequence = event.sequence
+        if (event.sequence - (acknowledged.get(event.sessionId) ?? -1) >= 8) {
+          acknowledged.set(event.sessionId, event.sequence)
           void invoke(AUDIO_CAPTURE_CHANNEL, { action: 'ack', sessionId: event.sessionId, sequence: event.sequence }).catch(() => undefined)
         }
       }
@@ -29,7 +28,7 @@ export function createAudioCaptureApi(invoke: Invoke, subscribe: Subscribe): Aud
     start: request => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'start', request }),
     pause: sessionId => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'pause', sessionId }),
     resume: sessionId => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'resume', sessionId }),
-    stop: sessionId => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'stop', sessionId }),
+    stop: async sessionId => { try { return await invoke(AUDIO_CAPTURE_CHANNEL, { action: 'stop', sessionId }) } finally { acknowledged.delete(sessionId) } },
     status: sessionId => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'status', sessionId }),
     clock: () => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'clock' }),
     recover: outputPath => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'recover', outputPath }),

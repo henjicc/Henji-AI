@@ -128,8 +128,7 @@ export async function replaySession(id: string, options: ReplayOptions, context:
         await wait(300, signal)
         if (!options.destinationId || !selected.some(v => v.id === step.id)) return
         if (!options.sourceId || !recording.source) throw new Error('重录需要选择当前应用窗口。')
-        const { backend, width, height, fps, bitrate } = recording.source.options
-        activeCapture = await startRecording({ backend, width, height, fps, bitrate, sourceId: options.sourceId }, { name: `重录-${step.title.slice(0, 70)}-${crypto.randomUUID().slice(0, 8)}`, tracks: { systemAudio: false } }, null, signal)
+        activeCapture = await startRecording({ ...recording.source.options, sourceId: options.sourceId }, { name: `重录-${step.title.slice(0, 70)}-${crypto.randomUUID().slice(0, 8)}`, tracks: { systemAudio: false } }, null, signal)
         while (recordingView().snapshot?.phase !== 'recording') {
           if (!recordingView().snapshot || ['failed', 'stopped'].includes(recordingView().snapshot!.phase)) throw new Error('重录没有开始，请检查采集权限。')
           await wait(100, signal)

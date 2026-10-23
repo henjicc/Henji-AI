@@ -7,6 +7,14 @@ function memory(): Storage {
 }
 
 describe('录制设置记忆', () => {
+  it('旧版偏好升级备份但不改写原件，新参数使用默认', () => {
+    const storage = memory(), { name: _name, ...setup } = DEFAULT_RECORDING_SETUP
+    const raw = JSON.stringify({ version: 1, content: { range: 'screen', sourceId: '', region: { x: 0, y: 0, width: 1, height: 1 }, ...setup, microphoneId: 'obsolete-browser-id' } })
+    storage.setItem('henji-recording-setup', raw)
+    expect(loadRecordingSetup(storage).setup).toEqual(DEFAULT_RECORDING_SETUP)
+    expect(storage.getItem('henji-recording-setup')).toBe(raw)
+    expect(storage.length).toBeGreaterThan(1)
+  })
   it('首次默认 60 帧；保存后重启读回上次的范围、来源、画质与帧率，会话名不保留', () => {
     const storage = memory()
     expect(loadRecordingSetup(storage)).toMatchObject({ range: 'screen', sourceId: '', setup: { fps: 60, quality: '1080p' } })

@@ -1,3 +1,5 @@
+import { recordingEncoding } from '@/core/screenRecording/encoding'
+import { loadRecordingSetup } from '@/services/recordingSetupModel'
 import { planRecordingDirector, startRecordingDirector, cancelRecordingDirector, recordingDirectorBusy } from './recordingDirectorService'
 import { planRecordingDirectorCapability, startRecordingDirectorCapability, cancelRecordingDirectorCapability, redubRecordingCapability } from '@/core/application-control/domains/screenRecording/directorCapability'
 import { redubRecordingSentence } from './recordingRedubService'
@@ -104,7 +106,7 @@ export const screenRecordingApplicationDomain: ApplicationDomainModule = {
       if (definition.id === 'start_screen_recording') {
         const parsed = startRecordingInputSchema.parse(input)
         if (parsed.destination && context.callerGrant && !context.callerGrant.permissions.includes('video_edit:write')) throw new Error('PERMISSION_DENIED:录制到剪辑还需要 video_edit:write 权限')
-        const options = captureOptionsSchema.parse({ sourceId: parsed.sourceRef.id, width: parsed.width, height: parsed.height, fps: parsed.fps, bitrate: 12_000_000, ...(parsed.region ? { region: parsed.region } : {}) })
+        const options = captureOptionsSchema.parse({ ...recordingEncoding({ ...loadRecordingSetup().setup, width: parsed.width, height: parsed.height, fps: parsed.fps }), sourceId: parsed.sourceRef.id, width: parsed.width, height: parsed.height, fps: parsed.fps, ...(parsed.region ? { region: parsed.region } : {}) })
         const id = await startRecording(options, { name: parsed.name, tracks: parsed.tracks, ...(parsed.projectId ? { projectId: parsed.projectId } : {}) }, parsed.destination, context.signal)
         return { resultRef: { kind: 'screen_recording.session', id }, verified: (await readRecordingDocument(id)).sessionId === id }
       }

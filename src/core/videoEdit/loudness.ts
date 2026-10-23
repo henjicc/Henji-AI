@@ -7,19 +7,26 @@ export const videoEditLoudnessMeasurementSchema = z.object({ integratedLufs: z.n
 export type VideoEditLoudnessMeasurement = z.infer<typeof videoEditLoudnessMeasurementSchema>
 export const VIDEO_EDIT_LOUDNESS_PRESETS = [{ value: -14, label: '网络视频 · -14 LUFS' }, { value: -16, label: '播客 · -16 LUFS' }, { value: -23, label: '广播 EBU R128 · -23 LUFS' }] as const
 export type VideoEditGainMode = 'set' | 'adjust' | 'peak_max' | 'peak_all' | 'loudness'
-export function videoEditVolumeFromDb(db: number): number {
-  if (!Number.isFinite(db)) throw new Error('增益必须是有限的 dB 数值。')
-  const volume = 10 ** (db / 20)
-  if (volume > 2 + 1e-10 || volume <= 0) throw new Error('片段当前最高支持 +6.02 dB 增益。请降低目标，或使用导出的整片响度标准化。')
-  return Math.min(2, volume)
+export const videoEditGainDbSchema = z.number().finite().min(-96).max(96)
+/** 源增益与可动画的音量独立；停用固有音量不旁路源增益。 */
+export function videoEditGainMultiplier(gainDb = 0): number { return 10 ** (gainDb / 20) }
+function checkedGain(db: number): number {
+  if (!videoEditGainDbSchema.safeParse(db).success) throw new Error('音频增益必须在 -96～+96 dB 之间。')
+  return db
 }
-export function videoEditGainVolumes(mode: VideoEditGainMode, value: number, volumes: number[], measurements: VideoEditLoudnessMeasurement[] = []): number[] {
+/** 标准化接收未施加片段增益、音量、淡化及效果的源测量，不累加旧增益。 */
+export function videoEditGainValues(mode: VideoEditGainMode, value: number, gains: number[], measurements: VideoEditLoudnessMeasurement[] = []): number[] {
   if (!Number.isFinite(value)) throw new Error('目标值必须是有限数值。')
-  if (mode === 'set') return volumes.map(() => videoEditVolumeFromDb(value))
-  if (mode === 'adjust') return volumes.map(volume => volume === 0 ? 0 : videoEditVolumeFromDb(20 * Math.log10(volume) + value))
-  if (measurements.length !== volumes.length) throw new Error('请先完成所有片段的响度测量。')
+  if (mode === 'set') return gains.map(() => checkedGain(value))
+  if (mode === 'adjust') return gains.map(gain => checkedGain(gain + value))
+  if (measurements.length !== gains.length) throw new Error('请先完成所有片段的响度测量。')
   const levels = measurements.map(measurement => mode === 'loudness' ? measurement.integratedLufs : measurement.samplePeakDbfs)
   if (levels.some(level => level === null)) throw new Error('所选声音为静音、低于测量门限或不足 400 毫秒，无法标准化。')
   const maximum = Math.max(...levels as number[])
-  return volumes.map((volume, index) => videoEditVolumeFromDb(20 * Math.log10(volume) + value - (mode === 'peak_max' ? maximum : levels[index]!)))
+  return gains.map((_, index) => checkedGain(value - (mode === 'peak_max' ? maximum : levels[index]!)))
+}
+/** 录后按源声音匹配 -16 LUFS，真峰值优先，最多放大 30 dB；静音和短片段保留。 */
+export function videoEditRecordingGainDb(gainDb: number, measurement: VideoEditLoudnessMeasurement): number {
+  if (measurement.durationSeconds < .4 || measurement.integratedLufs === null || measurement.truePeakDbtp === null) return gainDb
+  return checkedGain(Math.max(-96, Math.min(30, -16 - measurement.integratedLufs, -1 - measurement.truePeakDbtp)))
 }

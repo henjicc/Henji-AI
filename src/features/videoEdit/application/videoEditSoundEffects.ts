@@ -4,7 +4,6 @@ import { ApplicationPersistenceFailure } from '@/core/application-control/execut
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import { createLogger } from '@/core/logging'
 import type { VideoEditDocument, VideoEditSequence } from '@/core/videoEdit/document'
-import { videoEditVolumeFromDb } from '@/core/videoEdit/loudness'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { videoEditFps } from '@/core/videoEdit/time'
 import { videoEditEdgeTracks } from '@/core/videoEdit/tracks'
@@ -95,7 +94,7 @@ export async function placeVideoEditSoundEffects(input: Input, signal?: AbortSig
         if (plan.placement.trackRef && (!track || track.kind !== 'audio' || track.locked)) throw new Error('指定的轨道不是可用的音频轨道（不存在、是视频轨道或已锁定）。')
         if (track && !free(track.index, duration)) throw new Error(`指定的音频轨道在第 ${start} 帧起已有片段，请换一条轨道或省略 trackRef。`)
         if (!track) { [track] = videoEditEdgeTracks(sequence, 'audio', 1); sequence = { ...sequence, tracks: [...sequence.tracks, track] } }
-        const clip = { ...makeVideoEditItemClip({ ...document, sequences: document.sequences.map(value => value.id === sequenceId ? sequence : value) }, item.id, sequenceId, { frame: start, track: track.index, sourceInUs }), audioRole: 'sound_effect' as const, ...(plan.placement.gainDb !== undefined ? { volume: videoEditVolumeFromDb(plan.placement.gainDb) } : {}) }
+        const clip = { ...makeVideoEditItemClip({ ...document, sequences: document.sequences.map(value => value.id === sequenceId ? sequence : value) }, item.id, sequenceId, { frame: start, track: track.index, sourceInUs }), audioRole: 'sound_effect' as const, ...(plan.placement.gainDb !== undefined ? { gainDb: plan.placement.gainDb } : {}) }
         sequence = { ...sequence, clips: [...sequence.clips, clip] }
         results.push({ clipRef: { kind: 'video_edit.clip', id: `${projectId}:${clip.id}` }, soundRef: plan.placement.soundRef, startFrame: start, targetSeconds: plan.targetSeconds, anchorSeconds: plan.anchorSeconds, alignedSeconds: start / fps + plan.anchorSeconds - sourceInUs / 1e6, trimmedHeadSeconds: sourceInUs / 1e6, trackRef: { kind: 'video_edit.track', id: `${projectId}:${track.id}` } })
       }

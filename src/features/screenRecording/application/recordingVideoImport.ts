@@ -3,7 +3,7 @@ import type { RecordingDocument, RecordingMedia } from '@/core/screenRecording/d
 import { videoEditComposition, type VideoEditDocument } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { getPlatform } from '@/platform'
-import { importVideoEditSources } from '@/features/videoEdit'
+import { importVideoEditSources, prepareVideoEditRecordingGain } from '@/features/videoEdit'
 import { appendVideoEditSequence, createVideoEditProject, makeRecordingClipEffect, openVideoEditDocument, saveVideoEdit, suggestRecordingClipZoom, switchVideoEditSequence } from '@/features/videoEdit'
 import type { CaptureEvent } from '@/core/captureLog/events'
 import { RECORDING_CURSOR_EFFECT } from '@/core/videoEdit/recordingCursor'
@@ -55,7 +55,7 @@ export async function importRecordingToVideo(id: string, target: RecordingDestin
   const cursors = await recordingMovieCursorSources(recording, signal ?? new AbortController().signal, event => { if (event.kind === 'click' || event.kind === 'key') events.push(event) })
   await openVideoEditDocument({ id: target.documentId }, { focus: false })
   const items = await importVideoEditSources(target.documentId, media.map(item => ({ path: item.path })), undefined, signal,
-    (document, ids) => {
+    async (document, ids) => {
       const counts = new Map<RecordingMedia['kind'], number>()
       for (const [index, source] of media.entries()) {
         const cursor = cursors.get(source.id)
@@ -66,7 +66,21 @@ export async function importRecordingToVideo(id: string, target: RecordingDestin
         const count = (counts.get(source.kind) ?? 0) + 1; counts.set(source.kind, count)
         if (item) item.name = `${{ screen: '屏幕', microphone: '麦克风', systemAudio: '系统声音', camera: '摄像头' }[source.kind]} ${count}`
       }
-      return placeRecordingMedia(document, recording, media, ids, target, events)
+      const before = new Set(document.sequences.flatMap(sequence => sequence.clips.map(clip => clip.id)))
+      placeRecordingMedia(document, recording, media, ids, target, events)
+      if (target.sequenceId) {
+        const microphoneItems = new Set(ids.filter((_, index) => media[index].kind === 'microphone'))
+        const composition = videoEditComposition(document, target.sequenceId)
+        const clips = composition.clips.filter(clip => !before.has(clip.id) && microphoneItems.has(clip.itemId))
+        if (clips.length) {
+          const gains = await prepareVideoEditRecordingGain(composition, clips.map(clip => clip.id), signal)
+          for (const clip of document.sequences.find(sequence => sequence.id === target.sequenceId)!.clips) {
+            const gainDb = gains.get(clip.id)
+            if (gainDb !== undefined) clip.gainDb = gainDb
+          }
+        }
+      }
+      return document
     })
   await saveVideoEdit(target.documentId)
   if (target.sequenceId) await rememberEditTarget(id, target.documentId, target.sequenceId)

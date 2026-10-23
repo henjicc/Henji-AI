@@ -12,7 +12,7 @@ export { closeVideoEditProject, videoEditDocumentContent, activeVideoEditInstanc
 export { makeRecordingClipEffect, suggestRecordingClipZoom } from './application/videoEditRecordingClip'
 export { analyzeVideoEditScreenAttentionOffThread } from './application/videoEditScreenAttentionWorkerClient'
 export { observeVideoEditFrame } from './application/videoEditFrameObservation'
-export { prepareVideoEditAudioGain, measureVideoEditClips } from './application/videoEditLoudness'
+export { prepareVideoEditAudioGain, prepareVideoEditRecordingGain, measureVideoEditClips } from './application/videoEditLoudness'
 export { readVideoMotionGroup } from './application/videoEditMotionGroup'
 export { removeSuperKeyframeTake, superKeyframeAttachment, openVideoSuperKeyframesInAssistant } from './application/videoEditSuperKeyframes'
 export { listVideoEditInstances, subscribeVideoEditDomain, videoEditDomainRevision } from './application/videoEditService'

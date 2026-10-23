@@ -84,7 +84,7 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   format('preset-export', '可分享生成预设', 1, 'PresetService export.version（1.0 → 1）', 'src/services/presets/PresetService.ts::importPreset', presetExportSchema),
   format('theme-payload', '可分享主题', 2, 'ThemePayloadV2.version', 'src/core/theme/themeMigration.ts::parseThemePayload', themePayloadSchema),
   format('node-defaults', '画布默认参数', NODE_DEFAULTS_VERSION, 'henji-canvas-node-parameter-defaults-v1.version', 'src/features/canvas/application/nodeParameterDefaults.ts::load', nodeDefaultsSchema, 'local-storage'),
-  format('recording-setup', '录制设置', RECORDING_SETUP_VERSION, 'henji-recording-setup.version', 'src/features/screenRecording/recordingSetupModel.ts::loadRecordingSetup', recordingSetupSchema, 'local-storage'),
+  { ...format('recording-setup', '录制设置', RECORDING_SETUP_VERSION, 'henji-recording-setup.version', 'src/features/screenRecording/recordingSetupModel.ts::loadRecordingSetup', recordingSetupSchema, 'local-storage'), minReaderVersion: 3 },
   format('model-defaults', '默认生成与转写模型', MODEL_DEFAULTS_VERSION, 'ModelDefaultsState.version', 'src/features/settings/modelDefaultsManager.ts::loadState', modelDefaultsSchema, 'local-storage'),
   format('onboarding', '首次引导进度', ONBOARDING_VERSION, 'OnboardingStateV2.version', 'src/features/onboarding/application/onboardingManager.ts::loadState', onboardingSchema, 'local-storage'),
   format('subtitle-manifest', '字幕回填记录', SUBTITLE_MANIFEST_VERSION, '字幕声音.subtitle.json.version', 'src/features/videoEdit/application/videoEditAutoSubtitles.ts::complete', videoEditSubtitleManifestSchema),

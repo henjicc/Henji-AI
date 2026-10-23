@@ -1,3 +1,6 @@
+import { persistenceFileContract } from '../../../../../src/core/persistence/fileContracts'
+import { upgradePersistenceContent } from '../../../../../src/core/persistence/migrations'
+import { backupBeforePersistenceUpgrade } from '../../persistence/file-upgrade'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { execFile } from 'node:child_process'
@@ -83,7 +86,11 @@ function run(binary: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => execFile(binary, args, { windowsHide: true, timeout: 30_000, maxBuffer: 1024 * 1024 }, (error, stdout) => error ? reject(error) : resolve(stdout)))
 }
 export async function readCaptureManifest(directory: string): Promise<CaptureManifest> {
-  return captureManifestSchema.parse(JSON.parse(await fs.readFile(path.join(directory, 'capture.json'), 'utf8')))
+  const file = path.join(directory, 'capture.json'), text = await fs.readFile(file, 'utf8')
+  const raw = JSON.parse(text) as { version: number; minReaderVersion?: number }
+  const contract = persistenceFileContract('screen-capture')
+  const backup = await backupBeforePersistenceUpgrade(file, contract, raw.version, text)
+  return captureManifestSchema.parse(upgradePersistenceContent(contract, raw, raw.version, backup, raw.minReaderVersion))
 }
 /** Recovery produces new files; a truncated fragment never destroys the original or other spans. */
 export async function recoverCapture(directory: string): Promise<{ manifest: CaptureManifest; files: Array<{ path: string; monoUs: number; durationUs: number }>; rejected: number[] }> {

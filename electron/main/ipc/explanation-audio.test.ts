@@ -1,35 +1,22 @@
 import { beforeEach, expect, it, vi } from 'vitest'
-import type { IpcMainInvokeEvent, WebContents, PermissionCheckHandlerHandlerDetails, Session } from 'electron'
-import type { RecordingAudioRequest } from '../../../src/core/audioEdit/recordingAudio'
+import type { IpcMainInvokeEvent } from 'electron'
+import { recordingAudioRequestSchema, type RecordingAudioRequest } from '../../../src/core/audioEdit/recordingAudio'
 import { registerExplanationAudioHandlers } from './explanation-audio'
-type RequestDetails = Parameters<NonNullable<Parameters<Session['setPermissionRequestHandler']>[0]>>[3]
-
-const hooks=vi.hoisted(()=>({check:undefined as ((...args:unknown[])=>boolean)|undefined,request:undefined as ((...args:unknown[])=>void)|undefined,handler:undefined as ((input:RecordingAudioRequest,event:IpcMainInvokeEvent)=>unknown)|undefined,cancel:vi.fn(),erase:vi.fn(),release:vi.fn()}))
-vi.mock('electron',()=>({app:{on:vi.fn()},session:{defaultSession:{setPermissionCheckHandler:(fn:typeof hooks.check)=>{hooks.check=fn},setPermissionRequestHandler:(fn:typeof hooks.request)=>{hooks.request=fn},setDisplayMediaRequestHandler:vi.fn()}}}))
-vi.mock('./registry',()=>({registerIpcHandler:(_channel:string,_parse:unknown,handler:typeof hooks.handler)=>{hooks.handler=handler}}))
-vi.mock('./application-control',()=>({assertTrustedApplicationSender:vi.fn()}))
-vi.mock('../security/main-renderer-url',()=>({isTrustedMainRendererUrl:(url:string)=>url==='app://henji'}))
-vi.mock('../services/logging',()=>({createMainLogger:()=>({warn:vi.fn(),info:vi.fn()})}))
-vi.mock('../services/audio-edit/explanation-audio',()=>({explanationAudioService:{cleanupExpired:vi.fn(async()=>{}),cancel:hooks.cancel,release:hooks.release,erase:hooks.erase}}))
-beforeEach(()=>{vi.clearAllMocks();registerExplanationAudioHandlers()})
-it('知情arming仅允许可信主frame麦克风；摄像头/混合请求/非应用frame都拒绝',async()=>{
-  const handlers=new Map<string,()=>void>();const contents={id:1,getURL:()=> 'app://henji',isDestroyed:()=>false,on:(key:string,fn:()=>void)=>handlers.set(key,fn),once:(key:string,fn:()=>void)=>handlers.set(key,fn),removeListener:(key:string)=>handlers.delete(key)} as unknown as WebContents
-  const event={sender:contents} as IpcMainInvokeEvent
-  const details={mediaType:'audio'} as PermissionCheckHandlerHandlerDetails
-  expect(hooks.check!(contents,'media','',details)).toBe(false)
-  await hooks.handler!({action:'microphone',enabled:true,userReceipt:crypto.randomUUID()},event)
-  expect(hooks.check!(contents,'media','',details)).toBe(true);expect(hooks.check!(contents,'media','',{mediaType:'video'})).toBe(false)
-  for (const permission of ['geolocation','notifications','serial','unknown']) {
-    expect(hooks.check!(contents,permission,'',details)).toBe(false)
-    let granted=true;hooks.request!(contents,permission,(answer:boolean)=>{granted=answer},{isMainFrame:true,mediaTypes:['audio']});expect(granted).toBe(false)
-  }
-  for (const permission of ['clipboard-read','clipboard-sanitized-write']) {
-    expect(hooks.check!(contents,permission,'',details)).toBe(true)
-    let granted=false;hooks.request!(contents,permission,(answer:boolean)=>{granted=answer},{isMainFrame:true});expect(granted).toBe(true)
-    hooks.request!(contents,permission,(answer:boolean)=>{granted=answer},{isMainFrame:false});expect(granted).toBe(false)
-  }
-  const decide=(request:Partial<RequestDetails>)=>{let answer:boolean|undefined;hooks.request!(contents,'media',(value:boolean)=>{answer=value},request);return answer}
-  expect(decide({isMainFrame:true,mediaTypes:['audio']})).toBe(true);expect(decide({isMainFrame:true,mediaTypes:['audio','video']})).toBe(false);expect(decide({isMainFrame:false,mediaTypes:['audio']})).toBe(false)
-  handlers.get('destroyed')!();expect(hooks.check!(contents,'media','',details)).toBe(false)
-  expect(hooks.check!({getURL:()=> 'https://other.invalid'},'media','',details)).toBe(false)
+const hooks = vi.hoisted(() => ({ handler: undefined as ((input: RecordingAudioRequest, event: IpcMainInvokeEvent) => unknown) | undefined, cancel: vi.fn(), write: vi.fn() }))
+vi.mock('electron', () => ({ app: { on: vi.fn() }, session: { defaultSession: {} } }))
+vi.mock('../services/media-permissions', () => ({ mediaPermissions: { install: vi.fn() } }))
+vi.mock('./registry', () => ({ registerIpcHandler: (_channel: string, _parse: unknown, handler: typeof hooks.handler) => { hooks.handler = handler } }))
+vi.mock('./application-control', () => ({ assertTrustedApplicationSender: vi.fn() }))
+vi.mock('../services/logging', () => ({ createMainLogger: () => ({ warn: vi.fn() }) }))
+vi.mock('../services/audio-edit/explanation-audio', () => ({ explanationAudioService: { cleanupExpired: vi.fn(async () => {}), cancel: hooks.cancel, write: hooks.write } }))
+beforeEach(() => { vi.clearAllMocks(); registerExplanationAudioHandlers() })
+it('旧浏览器麦克风授权入口移除，窗口离开仍取消自己持有的讲解写入', async () => {
+  expect(recordingAudioRequestSchema.safeParse({ action: 'microphone', enabled: true, userReceipt: crypto.randomUUID() }).success).toBe(false)
+  const handlers = new Map<string, () => void>()
+  const event = { sender: { id: 1, on: (key: string, fn: () => void) => handlers.set(key, fn), once: (key: string, fn: () => void) => handlers.set(key, fn), removeListener: vi.fn() } } as unknown as IpcMainInvokeEvent
+  const request = { action: 'write' as const, sessionId: crypto.randomUUID(), chunkId: crypto.randomUUID(), sampleRate: 48000, samples: new Float32Array(480) }
+  await hooks.handler!(request, event)
+  expect(hooks.write).toHaveBeenCalledWith(request)
+  handlers.get('destroyed')!()
+  expect(hooks.cancel).toHaveBeenCalledWith(request.sessionId)
 })

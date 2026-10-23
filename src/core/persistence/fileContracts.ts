@@ -17,7 +17,7 @@ function file(id: string, name: string, version: number, versionSource: string, 
 
 /** A light registry partition: runtime file readers must not load video/compiler or the whole inventory. */
 export const FILE_PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
-  file('screen-capture', '屏幕采集恢复清单', 1, 'capture.json.version', 'electron/main/services/screen-recording/capture/storage.ts::readCaptureManifest', captureManifestSchema),
+  { ...file('screen-capture', '屏幕采集恢复清单', 2, 'capture.json.version', 'electron/main/services/screen-recording/capture/storage.ts::readCaptureManifest', captureManifestSchema), minReaderVersion: 1 },
   { ...file('web-recording', '网页应用录制', WEB_RECORDING_VERSION, 'recording.json.version', 'electron/main/services/web-replay/store.ts::WebRecordingStore.readManifest', webRecordingManifestSchema, { data: webRecordingDataSchema, behavior: webRecordingBehaviorSchema, storage: storageSnapshotSchema, resources: webRecordingResourcesSchema }), minReaderVersion: WEB_RECORDING_MIN_READER_VERSION },
   file('mcp-connections', 'MCP 连接授权存储', MCP_CONNECTION_STORAGE_VERSION, 'keystore MCP plaintext.version', 'electron/main/services/mcp/connections.ts::load', mcpConnectionStorageSchema),
   file('image-history-checkpoint', '图片历史检查点', IMAGE_EDIT_HISTORY_CHECKPOINT_VERSION_V3, 'ImageEditHistoryCheckpointV3.version', 'electron/main/services/image-editor-v3/history-pages/store.ts::readPage', imageEditHistoryCheckpointSchemaV3),

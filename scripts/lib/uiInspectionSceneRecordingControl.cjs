@@ -62,12 +62,13 @@ function createRecordingEventsScene(context) {
   return {
     id: 'recording-events', name: '屏幕录制-事件页与真实输入', surface: '录制事件', writesUserData: true,
     setup: async (page, app, { capture }) => {
-      const { authorizeMcpConnection, connectMcpClient, callTool, disableMcp } = require('./uiInspectionMcpClient.cjs')
+      const { assignIsolatedMcpPort, authorizeMcpConnection, connectMcpClient, callTool, disableMcp } = require('./uiInspectionMcpClient.cjs')
       const fixture = action => page.evaluate(action => window.henjiNative.testFixtures.recordingControl(action), action)
       let client
       try {
         await context.setupSettings(page)
         await page.keyboard.press('Escape')
+        await assignIsolatedMcpPort(page)
         const identity = await authorizeMcpConnection(page, { name: '录制事件隔离验收' })
         client = await connectMcpClient(identity.config, 'Recording events')
         const ready = await fixture('setup-events')

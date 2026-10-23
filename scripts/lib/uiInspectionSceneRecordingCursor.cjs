@@ -4,7 +4,7 @@ const path = require('node:path')
 const { execFileSync } = require('node:child_process')
 const { videoEditFixtureProject } = require('./uiInspectionSceneVideoEditProbe.cjs')
 const { seedVideoEditProject, openVideoEditProjectCard, readVideoEditFile, leaveVideoEditProject } = require('./uiInspectionVideoEditDocuments.cjs')
-const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
+const { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 
 function createRecordingCursorScene() {
   return { id: 'recording-cursor', surface: '剪辑', name: '录制光标-切分移动变速与点击像素', writesUserData: true,
@@ -25,6 +25,7 @@ function createRecordingCursorScene() {
       let client
       const evidence = {}
       try {
+        await assignIsolatedMcpPort(page)
         const auth = await authorizeMcpConnection(page, { name: '录制光标免费验收', allowWrites: true, allowDestructive: true })
         client = await connectMcpClient(auth.config)
         const documentRef = { kind: 'video_edit.document', id: seeded.documentId }

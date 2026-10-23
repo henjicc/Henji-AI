@@ -6,10 +6,11 @@ import { AudioCaptureError } from './protocol'
 import { AudioCaptureSettingsService, captureSettingsState, resolveCaptureSettings } from './settings'
 import { createMainLogger } from '../logging'
 
+interface CaptureSubscriber { owner: number; paused: boolean; lastSent: number; acknowledged: number; failed: boolean }
 const logger = createMainLogger('main.audio_capture')
 export class AudioCaptureService {
   private inventory: AudioCaptureInventory | undefined
-  private active: { owner: number; sessionId: string; outputPath: string; writtenBytes: number } | undefined
+  private active: { owner: number; sessionId: string; outputPath: string; writtenBytes: number; shared?: { settings: AudioCaptureSettings; subscribers: Map<string, CaptureSubscriber> } } | undefined
   private queue: Promise<unknown> = Promise.resolve()
   private readonly deviceWatchers = new Set<number>()
   private deviceTimer: ReturnType<typeof setInterval> | undefined
@@ -29,6 +30,32 @@ export class AudioCaptureService {
   private event(event: AudioCaptureEvent): void {
     const owner = this.active?.owner
     if ('sessionId' in event && event.sessionId !== this.active?.sessionId) return
+    const shared = this.active?.shared
+    if (shared && 'sessionId' in event) {
+      if (event.event === 'level' && this.active) this.active.writtenBytes = event.writtenBytes
+      for (const [sessionId, subscriber] of shared.subscribers) {
+        if (event.event === 'samples') {
+          if (subscriber.paused || subscriber.failed) continue
+          if (subscriber.lastSent - subscriber.acknowledged >= 128) {
+            subscriber.failed = true
+            void this.run(async () => {
+              if (!this.active?.shared?.subscribers.has(sessionId)) return
+              const status = await this.control(subscriber.owner, 'stop', sessionId)
+              this.publish(subscriber.owner, { event: 'interrupted', sessionId, outputPath: status.outputPath, writtenBytes: status.writtenBytes, error: { code: 'CONSUMER_TOO_SLOW', message: '采样接收方处理过慢，已停止此路录音，其他录音继续。', recoverable: true } })
+            }).catch(error => logger.warn('共享采样停止失败', { event: 'audio_capture.delivery.failed', error }))
+            continue
+          }
+          if (subscriber.lastSent < 0) subscriber.acknowledged = event.sequence - 1
+          subscriber.lastSent = event.sequence
+        }
+        this.publish(subscriber.owner, { ...event, sessionId })
+      }
+      if (event.event === 'interrupted') {
+        logger.warn('共享录音中断，已写文件保留', { event: 'audio_capture.recording.failed', context: { code: event.error.code } })
+        this.active = undefined; this.client.setActive(false)
+      }
+      return
+    }
     if (event.event === 'samples') {
       if (this.deliveryFailed) return
       if (this.lastSent - this.lastAcknowledged >= 128 && this.active) {
@@ -75,21 +102,46 @@ export class AudioCaptureService {
     return z.object({ formats: z.array(z.object({ sampleRate: z.number(), bitDepth: z.number(), supported: z.boolean() })) }).parse(await this.client.request('probe', { settings: native }))
   }
   async start(owner: number, request: AudioCaptureStart): Promise<AudioCaptureStatus & { notice: string | null }> {
-    if (this.active) throw new AudioCaptureError('RECORDING_ACTIVE', '已有录音会话，请先停止')
-    const { native, notice } = await this.nativeSettings(request.settings ?? this.settings.read().settings)
+    if (this.active) {
+      if (!request.shared || !request.streamSamples || !this.active.shared) throw new AudioCaptureError('RECORDING_ACTIVE', '已有独占录音会话，请先停止音频编辑录音再开始录屏或讲解。')
+      const sessionId = randomUUID(), shared = this.active.shared
+      const status = audioCaptureStatusSchema.parse(await this.client.request('status', { sessionId: this.active.sessionId }))
+      if ([...shared.subscribers.values()].every(value => value.paused)) await this.client.request('resume', { sessionId: this.active.sessionId })
+      shared.subscribers.set(sessionId, { owner, paused: false, lastSent: -1, acknowledged: -1, failed: false })
+      logger.info('共享现有麦克风采集', { event: 'audio_capture.subscription.start', context: { subscribers: shared.subscribers.size } })
+      return { ...status, sessionId, state: 'recording', sharedSubscribers: shared.subscribers.size, settings: shared.settings, notice: null }
+    }
+    const effective = (await this.getSettings()).effectiveSettings
+    const settings = request.settings ?? effective
+    const { native, notice } = await this.nativeSettings(settings)
     const sessionId = randomUUID()
     this.lastSent = -1; this.lastAcknowledged = -1; this.deliveryFailed = false
-    this.active = { owner, sessionId, outputPath: request.outputPath, writtenBytes: 0 }; this.client.setActive(true)
+    this.active = { owner, sessionId, outputPath: request.outputPath, writtenBytes: 0, ...(request.shared && request.streamSamples ? { shared: { settings, subscribers: new Map([[sessionId, { owner, paused: false, lastSent: -1, acknowledged: -1, failed: false }]]) } } : {}) }; this.client.setActive(true)
     logger.info('开始录音', { event: 'audio_capture.recording.start', context: { sessionId } })
-    try { const result = audioCaptureStatusSchema.parse(await this.client.request('start', { ...request, settings: native, sessionId })); return { ...result, notice: result.sampleRate !== native.sampleRate ? [notice, `驱动当前采样率为 ${result.sampleRate} Hz，本次按驱动设置录音。`].filter(Boolean).join(' ') : notice } }
+    try { const result = audioCaptureStatusSchema.parse(await this.client.request('start', { outputPath: request.outputPath, streamSamples: request.streamSamples ?? false, monitor: false, settings: native, sessionId })); return { ...result, settings, ...(this.active?.shared ? { sharedSubscribers: 1 } : {}), notice: result.sampleRate !== native.sampleRate ? [notice, `驱动当前采样率为 ${result.sampleRate} Hz，本次按驱动设置录音。`].filter(Boolean).join(' ') : notice } }
     catch (error) { this.active = undefined; this.client.setActive(false); logger.warn('录音启动失败', { event: 'audio_capture.recording.failed', error }); throw error }
   }
   async control(owner: number, type: 'pause' | 'resume' | 'stop' | 'status', sessionId: string): Promise<AudioCaptureStatus> {
+    if (this.active?.shared) return this.controlSubscriber(owner, type, sessionId)
     if (this.active?.owner !== owner || this.active.sessionId !== sessionId) throw new AudioCaptureError('SESSION_NOT_OWNED', '录音会话已结束或不属于当前窗口')
     const result = audioCaptureStatusSchema.parse(await this.client.request(type, { sessionId }))
     if (type === 'stop') { this.active = undefined; this.client.setActive(false); logger.info('录音已保存', { event: 'audio_capture.recording.completed', context: { sessionId, writtenBytes: result.writtenBytes } }) }
     else if (type !== 'status') logger.info('录音状态改变', { event: `audio_capture.${type}.completed`, context: { sessionId } })
     return result
+  }
+  private async controlSubscriber(owner: number, type: 'pause' | 'resume' | 'stop' | 'status', sessionId: string): Promise<AudioCaptureStatus> {
+    const active = this.active!, shared = active.shared!, subscriber = shared.subscribers.get(sessionId)
+    if (!subscriber || subscriber.owner !== owner) throw new AudioCaptureError('SESSION_NOT_OWNED', '录音订阅已结束或不属于当前窗口')
+    const othersRunning = [...shared.subscribers.entries()].some(([id, value]) => id !== sessionId && !value.paused)
+    const operation = type === 'stop' && shared.subscribers.size === 1 ? 'stop'
+      : (type === 'pause' || type === 'stop') && !subscriber.paused && !othersRunning ? 'pause'
+      : type === 'resume' && subscriber.paused && !othersRunning ? 'resume' : 'status'
+    const result = audioCaptureStatusSchema.parse(await this.client.request(operation, { sessionId: active.sessionId }))
+    if (type === 'stop') shared.subscribers.delete(sessionId)
+    else if (type !== 'status') { subscriber.paused = type === 'pause'; subscriber.lastSent = -1; subscriber.acknowledged = -1 }
+    if (!shared.subscribers.size) { this.active = undefined; this.client.setActive(false) }
+    if (type !== 'status') logger.info('麦克风订阅状态改变', { event: `audio_capture.subscription.${type}.completed`, context: { subscribers: shared.subscribers.size } })
+    return { ...result, sessionId, settings: shared.settings, sharedSubscribers: shared.subscribers.size, state: type === 'stop' ? 'stopped' : subscriber.paused ? 'paused' : 'recording' }
   }
   watchDevices(owner: number, enabled: boolean): void {
     if (enabled) this.deviceWatchers.add(owner); else this.deviceWatchers.delete(owner)
@@ -97,10 +149,16 @@ export class AudioCaptureService {
     if (this.deviceWatchers.size) { this.deviceTimer = setInterval(() => { if (!this.active) void this.run(() => this.enumerate()).catch(error => logger.debug('刷新录音设备失败', { event: 'audio_capture.devices.failed', error })) }, 10_000); this.deviceTimer.unref() }
   }
   acknowledge(owner: number, sessionId: string, sequence: number): void {
+    const subscriber = this.active?.shared?.subscribers.get(sessionId)
+    if (subscriber) { if (subscriber.owner === owner && sequence <= subscriber.lastSent) subscriber.acknowledged = Math.max(subscriber.acknowledged, sequence); return }
     if (this.active?.owner !== owner || this.active.sessionId !== sessionId) return
     if (sequence <= this.lastSent) this.lastAcknowledged = Math.max(this.lastAcknowledged, sequence)
   }
-  async releaseOwner(owner: number): Promise<void> { this.watchDevices(owner, false); if (this.active?.owner === owner) await this.control(owner, 'stop', this.active.sessionId) }
+  async releaseOwner(owner: number): Promise<void> {
+    this.watchDevices(owner, false)
+    if (this.active?.shared) { for (const [id, subscriber] of [...this.active.shared.subscribers]) if (subscriber.owner === owner) await this.control(owner, 'stop', id) }
+    else if (this.active?.owner === owner) await this.control(owner, 'stop', this.active.sessionId)
+  }
   async openAsioPanel(settings: AudioCaptureSettings): Promise<void> { const { native } = await this.nativeSettings(settings); await this.client.request('asioPanel', { device: native.device }); this.inventory = undefined }
   async recover(outputPath: string): Promise<{ writtenBytes: number }> {
     if (this.isRecordingPath(outputPath)) throw new AudioCaptureError('RECORDING_ACTIVE', '请先停止录音，再恢复文件')

@@ -1,3 +1,4 @@
+import { recordingEncoderChoices } from '../../video/hwaccel'
 import { BrowserWindow, screen, shell, type WebContents } from 'electron'
 import { createHash, randomUUID } from 'node:crypto'
 import { release } from 'node:os'
@@ -43,6 +44,7 @@ async function fail(session: Active, error: Error): Promise<void> {
 }
 
 export async function handleCaptureRequest(owner: WebContents, request: CaptureRequest): Promise<unknown> {
+  if (request.operation === 'encoders') return recordingEncoderChoices(request.codec)
   if (request.operation === 'application-source') return BrowserWindow.fromWebContents(owner)?.getMediaSourceId() ?? null
   if (request.operation === 'events') return readRecordingEvents(request.sessionId, request.offset, request.limit, request.markersOnly)
   if (request.operation === 'quick-export') {
@@ -81,7 +83,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
         }
       }
       if (request.options.backend === 'gfxcapture' && !wgc) throw new Error('当前系统不支持无光标采集，请使用兼容录制')
-      const manifest: CaptureManifest = { version: 1, sessionId: request.sessionId, options: request.options, backend, cursorEmbedded: backend === 'chromium' || request.cursor === 'embed', status: 'prepared', spans: [] }
+      const manifest: CaptureManifest = { version: 2, minReaderVersion: 1, sessionId: request.sessionId, options: request.options, backend, cursorEmbedded: backend === 'chromium' || request.cursor === 'embed', status: 'prepared', spans: [] }
       let document: RecordingSessionDocument | undefined
       const storage = new CaptureStorage(path.join(getUserFolderDir('uploads'), 'screen-recordings', request.sessionId), manifest, async value => { await document?.capture(value) })
       await storage.prepare()
@@ -155,6 +157,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
       if (!session.document) throw new Error('录制会话未创建')
       return session.document.tracks(request.tracks)
     }
+    case 'encoding': storage.manifest.encoding = request.encoding; await storage.save(); return
     case 'read': return structuredClone(storage.manifest)
     case 'clock': return now() - session.originUs
     case 'close': await closeRecordingControl(); return

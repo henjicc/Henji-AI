@@ -10,13 +10,13 @@ import { captureOptionsSchema, captureRegionFromDip, type CaptureManifest } from
 import { CaptureStorage, readCaptureManifest } from './storage'
 import { buildGfxCaptureArgs, GfxCaptureBackend } from './gfxcapture'
 vi.mock('../../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
-vi.mock('../../video/hwaccel', () => ({ invalidateEncoderCache: vi.fn(async () => undefined), getPreferredEncoder: vi.fn() }))
+vi.mock('../../video/hwaccel', async importOriginal => ({ ...await importOriginal<typeof import('../../video/hwaccel')>(), invalidateEncoderCache: vi.fn(async () => undefined), getPreferredEncoder: vi.fn() }))
 const options = captureOptionsSchema.parse({ sourceId: 'screen:0:0', width: 1920, height: 1080, fps: 60, bitrate: 12_000_000 })
 const source = { selector: 'hmonitor' as const, handle: '100', width: 3840, height: 2160 }
 const profile = { id: 'h264_nvenc' as const, label: 'NVENC', buildEncodeArgs: () => ['-c:v', 'h264_nvenc'] }
 async function fixture(): Promise<CaptureStorage> {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-capture-'))
-  const manifest: CaptureManifest = { version: 1, sessionId: randomUUID(), options, backend: 'gfxcapture', cursorEmbedded: false, status: 'prepared', spans: [] }
+  const manifest: CaptureManifest = { version: 2, sessionId: randomUUID(), options, backend: 'gfxcapture', cursorEmbedded: false, status: 'prepared', spans: [] }
   const storage = new CaptureStorage(directory, manifest); await storage.prepare(); return storage
 }
 function processFixture(): ChildProcessWithoutNullStreams {
@@ -28,6 +28,17 @@ function processFixture(): ChildProcessWithoutNullStreams {
   return child
 }
 describe('screen capture ownership and durable spans', () => {
+  it('旧清单升级时保留码率、原片与原件，并建立备份', async () => {
+    const storage = await fixture()
+    try {
+      const file = path.join(storage.directory, 'capture.json')
+      const raw = JSON.stringify({ ...storage.manifest, version: 1 })
+      await fs.writeFile(file, raw)
+      expect(await readCaptureManifest(storage.directory)).toMatchObject({ version: 2, options: { bitrate: 12_000_000 } })
+      expect(await fs.readFile(file, 'utf8')).toBe(raw)
+      expect(await fs.readdir(path.join(storage.directory, '.henji', 'backups'))).not.toHaveLength(0)
+    } finally { await fs.rm(storage.directory, { recursive: true, force: true }) }
+  })
   it('validates region and maps negative desktop DIP independently of DPI', () => {
     expect(captureRegionFromDip({ x: -1800, y: 100, width: 960, height: 540 }, { x: -1920, y: 0, width: 1920, height: 1080 })).toEqual({ x: 0.0625, y: 100 / 1080, width: .5, height: .5 })
     expect(() => captureOptionsSchema.parse({ ...options, region: { x: .8, y: 0, width: .5, height: 1 } })).toThrow()
@@ -65,6 +76,7 @@ describe('screen capture ownership and durable spans', () => {
     try {
       await backend.prepare(); await backend.start(new AbortController().signal)
       expect(spawn).toHaveBeenCalledTimes(2)
+      expect(storage.manifest.encoding).toMatchObject({ encoder: 'software', softwareFallback: true })
       const pending = backend.pause(new AbortController().signal)
       expect(storage.manifest.spans[1].finalized).toBe(false)
       await pending

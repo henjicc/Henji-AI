@@ -40,6 +40,20 @@ function fixtureAsr(): Pick<TimestampedAsrService,'prepare'|'execute'|'preflight
 beforeEach(async()=>{ root=await fs.mkdtemp(path.join(os.tmpdir(),'henji-recording-test-')); ledger.clear(); failures.completion = false })
 afterEach(async()=>{ await fs.rm(root,{recursive:true,force:true}) })
 describe('E06/E09 零网络录音与转写生命周期',()=>{
+  it('超级关键帧会话安全写入、归档恢复和过期清理，普通 UUID 目录保持兼容', async () => {
+    const service = new ExplanationAudioService(root, fixtureAsr()), logicalId = `super-keyframes:${sessionId}`
+    await service.write({ action: 'write', sessionId: logicalId, chunkId, sampleRate: 48000, samples: synthetic() })
+    const original = await service.read(logicalId, chunkId), archive = await service.archive(logicalId)
+    const backup = path.join(root, 'backup.zip'); await fs.copyFile(archive.path, backup)
+    await service.release(logicalId)
+    await service.restore({ action: 'restore', sessionId: logicalId, ...archive, path: backup })
+    expect(await service.read(logicalId, chunkId)).toEqual(original)
+    await service.cleanupExpired(Date.now() + 25 * 60 * 60 * 1000)
+    await expect(service.read(logicalId, chunkId)).rejects.toThrow()
+    await service.write({ action: 'write', sessionId, chunkId, sampleRate: 48000, samples: synthetic() })
+    expect(await fs.readFile(path.join(root, sessionId, `${chunkId}.wav`))).toEqual(Buffer.from(original))
+    await expect(service.read('super-keyframes:../escape', chunkId)).rejects.toThrow('身份无效')
+  })
   it('转写只消费预处理副本，成功后清理副本；预处理失败不提交收费请求', async () => {
     const asr = fixtureAsr(), service = new ExplanationAudioService(root, asr)
     await service.write({ action: 'write', sessionId, chunkId, sampleRate: 48000, samples: synthetic() })

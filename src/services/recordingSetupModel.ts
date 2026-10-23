@@ -1,3 +1,4 @@
+import { recordingEncoding, RECORDING_VIDEO_DEFAULTS, type RecordingEncoding, type ResolvedRecordingEncoding } from '@/core/screenRecording/encoding'
 import type { CaptureSource } from '@/core/screenRecording/contracts'
 import { createLogger } from '@/core/logging'
 import { recordingSetupSchema } from '@/core/persistence/preferenceSchemas'
@@ -14,18 +15,18 @@ export function orderedScreens(sources: readonly CaptureSource[]): CaptureSource
 export type RecordingQuality = '1080p' | '1440p' | '2160p'
 /** `full` keeps every track separate for AI editing; `quick` records the pointer in and saves one MP4. */
 export type RecordingMode = 'full' | 'quick'
-export interface RecordingSetup {
+export interface RecordingSetup extends RecordingEncoding {
   mode: RecordingMode
   /** Quick mode output folder; empty means the app's export folder. */
   saveDirectory: string
   name: string
-  microphone: boolean; microphoneId: string
+  microphone: boolean
   systemAudio: boolean
   camera: boolean; cameraId: string
   quality: RecordingQuality; fps: 30 | 60
   insert: boolean
 }
-export const DEFAULT_RECORDING_SETUP: RecordingSetup = { mode: 'full', saveDirectory: '', name: '', microphone: true, microphoneId: '', systemAudio: false, camera: false, cameraId: '', quality: '1080p', fps: 60, insert: true }
+export const DEFAULT_RECORDING_SETUP: RecordingSetup = { mode: 'full', saveDirectory: '', name: '', microphone: true, systemAudio: false, camera: false, cameraId: '', quality: '1080p', fps: 60, insert: true }
 
 /** What the picker and setup panel offer next time, across restarts. */
 export interface RememberedRecordingSetup { range: RecordingRangeMode; sourceId: string; region: RecordingRegion; setup: RecordingSetup }
@@ -33,9 +34,10 @@ const SETUP_KEY = 'henji-recording-setup'
 const logger = createLogger('features.screenRecording.setup')
 const setupContract = (): ReturnType<typeof localLibraryContract> => localLibraryContract(SETUP_KEY, recordingSetupSchema)
 
-export function loadRecordingSetup(storage: Storage = window.localStorage): RememberedRecordingSetup {
+export function loadRecordingSetup(storage: Storage | undefined = typeof window === 'undefined' ? undefined : window.localStorage): RememberedRecordingSetup {
   const fallback: RememberedRecordingSetup = { range: 'screen', sourceId: '', region: FULL_REGION, setup: DEFAULT_RECORDING_SETUP }
   try {
+    if (!storage) return fallback
     const text = storage.getItem(SETUP_KEY)
     if (!text) return fallback
     const { range, sourceId, region, ...setup } = recordingSetupSchema.parse(readLocalPersistenceJson(text, SETUP_KEY, setupContract(), storage))
@@ -50,15 +52,11 @@ export function saveRecordingSetup(value: RememberedRecordingSetup, storage: Sto
   try { storage.setItem(SETUP_KEY, serializeVersionedPersistenceJson(setupContract(), { range: value.range, sourceId: value.sourceId, region: value.region, ...setup })) }
   catch (error) { logger.warn('录制设置保存失败', { event: 'recording.setup.save.failed', error: String(error) }) }
 }
-const OUTPUT: Record<RecordingQuality, { width: number; height: number; bitrate: number }> = {
-  '1080p': { width: 1920, height: 1080, bitrate: 12_000_000 },
-  '1440p': { width: 2560, height: 1440, bitrate: 20_000_000 },
-  '2160p': { width: 3840, height: 2160, bitrate: 36_000_000 },
-}
-/** Output canvas and bitrate for the chosen quality; 60 fps gets half again the bitrate for the same detail. */
-export function recordingOutput(setup: Pick<RecordingSetup, 'quality' | 'fps'>): { width: number; height: number; fps: 30 | 60; bitrate: number } {
-  const output = OUTPUT[setup.quality]
-  return { width: output.width, height: output.height, fps: setup.fps, bitrate: setup.fps === 60 ? Math.round(output.bitrate * 1.5) : output.bitrate }
+/** 分辨率、帧率和编码设置在所有录制入口使用同一默认表；结果可直接作为采集选项，自动关键帧以省略表示。 */
+export function recordingOutput(setup: Pick<RecordingSetup, 'quality' | 'fps'> & RecordingEncoding): { width: number; height: number; fps: 30 | 60 } & ResolvedRecordingEncoding {
+  const row = RECORDING_VIDEO_DEFAULTS[{ '1080p': 0, '1440p': 1, '2160p': 2 }[setup.quality]]
+  const size = { width: row.width, height: row.height, fps: setup.fps }
+  return { ...size, ...recordingEncoding({ ...setup, ...size }) }
 }
 
 

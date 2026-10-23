@@ -145,3 +145,29 @@ it('指数淡化的单侧过渡：出点前的增益按分贝线性下降，与�
   expect(left[sample]).toBeCloseTo(original(0, sample) * videoEditAudioTransitionGains('exponential_fade', .5)[0], 6)
   expect(left[3 * RATE]).toBe(original(0, 3 * RATE))
 })
+
+it.each([false, true])('独立增益与音量关键帧叠加，效果链=%s，预览与导出逐样本一致', async effects => {
+  const volume = [{ time: 0, value: .25, interpolation: 'linear' as const }, { time: 30, value: .5, interpolation: 'linear' as const }]
+  const composition = sound({ gainDb: 18, volume: 0, curves: { volume }, effects: effects ? [builtin('gain_balance', { gain: -12 })] : [] })
+  const preview = await mix(composition, [.5, .5, .5, .5])
+  const exported = await mix(composition, Array.from({ length: 60 }, () => 1 / 30))
+  expect(exported).toEqual(preview)
+  const sample = RATE + 13
+  const gain = 10 ** ((18 - (effects ? 12 : 0)) / 20) * evaluateVideoEditKeyframes(volume, sample / RATE * composition.fps - 15, 0)
+  expect(preview[0][sample]).toBeCloseTo(original(0, sample) * gain, 6)
+})
+
+it('嵌套序列的父子源增益与各层音量相乘，预览和导出相同', async () => {
+  vi.stubGlobal('OffscreenCanvas', class { constructor(readonly width: number, readonly height: number) {} })
+  const child = sound({ start: 0, sourceInUs: 0, gainDb: 12, volume: .5 })
+  const parent = sound({ start: 0, sourceInUs: 0, gainDb: 8, volume: .25, kind: 'sequence', itemId: 'nested' })
+  parent.id = 'parent'
+  parent.items = [...parent.items, { id: 'nested', name: '子序列', kind: 'sequence', sequenceId: child.id }]
+  parent.sequences = [child]
+  const preview = await mix(parent, [.5, .5])
+  const exported = await mix(parent, Array.from({ length: 30 }, () => 1 / 30))
+  expect(exported).toEqual(preview)
+  const sample = RATE / 2 + 13
+  expect(preview[0][sample]).toBeCloseTo(signal(0, sample) * 10 * .5 * .25, 6)
+  vi.unstubAllGlobals()
+})

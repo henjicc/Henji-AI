@@ -130,11 +130,12 @@ function endAutomaticTake(state: VideoMotionState): void {
   if (state.automatic && take) take.monoSpanUs[1] = Math.max(take.monoSpanUs[1], mono(state))
 }
 function invalidate(state: VideoMotionState): void { const runtime = runtimes.get(state.owner); if (runtime) { runtime.controller?.abort(); runtime.inputRevision++ } state.candidates = []; state.original = undefined; state.originalRef = undefined; state.draft.candidateRefs = []; delete state.draft.selectedCandidateRef; state.preview = 'original' }
-async function persistHead(state: VideoMotionState, resources: StoredCreativeIntentResource[] = []): Promise<void> {
+async function persistHead(state: VideoMotionState, resources: StoredCreativeIntentResource[] = [], sourceChanged = true): Promise<void> {
   const runtime = runtimes.get(state.owner)!
   const operation = async (): Promise<void> => {
     const draft = structuredClone(state.draft)
-    draft.sourceDigest = await motionDigest({ ...draft, sourceDigest: undefined, candidateRefs: [], selectedCandidateRef: undefined, applications: [] })
+    // 选择候选、登记回执不改变原稿；不能因反序列化后的字段顺序重算其身份。
+    if (sourceChanged) draft.sourceDigest = await motionDigest({ ...draft, sourceDigest: undefined, candidateRefs: [], selectedCandidateRef: undefined, applications: [] })
     state.draft.sourceDigest = draft.sourceDigest
     const current = head(state.owner)
     const drafts = [...current.drafts.filter(d => d.id !== draft.id), draft]
@@ -384,7 +385,8 @@ export function pauseVideoMotion(id: string): void {
   if (state.status !== 'recording') return
   endAutomaticTake(state)
   state.status = 'paused'; const runtime = runtimes.get(state.owner)!; runtime.pointerActive = false; runtime.pendingEvent = undefined; runtime.inputAt = undefined; runtime.presented?.(); runtime.pendingPresentation = undefined; runtime.presented = undefined
-  runtime.pausedAt = state.draft.clockSegments.at(-1)?.monoSpanUs[1] ?? mono(state); publish(state)
+  // 暂停边界取封存后的墙钟，不能回退到上一次画面呈现时间。
+  runtime.pausedAt = Math.max(mono(state), state.draft.clockSegments.at(-1)?.monoSpanUs[1] ?? 0); publish(state)
   if (state.automatic) runtime.takeId = undefined
 }
 export function resumeVideoMotion(id: string): void {
@@ -546,7 +548,7 @@ export async function optimizeVideoMotion(id: string): Promise<void> {
     runtime.preferredCandidateId = state.preview
     state.message = result.candidates.length ? undefined : result.unavailable[0]?.message ?? '请先摆出两个不同时间的姿态。'
     state.draft.selectedCandidateRef = state.draft.candidateRefs[result.candidates.findIndex(candidate => candidate.id === state.preview)]?.resourceId
-    await persistHead(state, resources); state.generationMs = performance.now() - start
+    await persistHead(state, resources, false); state.generationMs = performance.now() - start
     performance.measure('video-motion-candidate-generation', { start, end: performance.now(), detail: { documentId: id, candidates: result.candidates.length } })
     logger.info('动作整理完成', { event: 'video_edit.motion.optimize.completed', context: { documentId: id, durationMs: state.generationMs, candidates: result.candidates.length } })
   } catch (error) { await discardUnpublishedResources(state, resources); logger.warn('动作整理失败', { event: 'video_edit.motion.optimize.failed', error, context: { documentId: id } }); throw error }
@@ -561,7 +563,7 @@ export async function previewVideoMotion(id: string, candidateId: string): Promi
   const candidate = candidateId === 'original' ? state.original : state.candidates.find(c => c.id === candidateId)
   if (!candidate) throw new Error('请先整理，再对照原稿与候选。')
   assertCandidateCurrent(candidate, motionCandidateIdentity(candidateId === 'original' ? { ...state.draft, fidelity: 1 } : state.draft, candidateId === 'original' ? { ...input, intent: undefined, beatFrames: undefined } : input))
-  state.preview = candidateId; runtimes.get(state.owner)!.preferredCandidateId = candidateId; setVideoEditPlaybackRate(id, 1); state.draft.selectedCandidateRef = state.draft.candidateRefs[state.candidates.findIndex(c => c.id === candidateId)]?.resourceId; publish(state); await persistHead(state)
+  state.preview = candidateId; runtimes.get(state.owner)!.preferredCandidateId = candidateId; setVideoEditPlaybackRate(id, 1); state.draft.selectedCandidateRef = state.draft.candidateRefs[state.candidates.findIndex(c => c.id === candidateId)]?.resourceId; publish(state); await persistHead(state, [], false)
 }
 export async function configureVideoMotion(id: string, values: { fidelity?: number; intent?: MotionIntent; selectedTakeIds?: string[]; pinSampleId?: string; unpinId?: string }): Promise<void> {
   const state = states.get(requireVideoEditInstance(id)); if (!state) return
@@ -658,11 +660,11 @@ export async function applyVideoMotion(id: string): Promise<void> {
 }
 async function saveMotionApplication(state: VideoMotionState, application: MotionDraft['applications'][number]): Promise<void> {
   try {
-    application.saved = true; await persistHead(state); await saveVideoEdit(state.owner.document.id)
+    application.saved = true; await persistHead(state, [], false); await saveVideoEdit(state.owner.document.id)
     state.message = undefined
   } catch (error) {
     application.saved = false; state.message = '动作已应用，保存尚未完成；请重试保存。'
-    try { await persistHead(state) } catch (headError) { logger.warn('应用保存状态尚未封存', { event: 'video_edit.motion.application_save_state.failed', error: headError, context: { documentId: state.owner.document.id } }) }
+    try { await persistHead(state, [], false) } catch (headError) { logger.warn('应用保存状态尚未封存', { event: 'video_edit.motion.application_save_state.failed', error: headError, context: { documentId: state.owner.document.id } }) }
     throw error
   } finally { publish(state) }
 }

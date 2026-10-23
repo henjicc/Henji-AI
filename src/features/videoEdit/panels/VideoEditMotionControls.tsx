@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useRef, useState, useSyncExternalStore } from 'react'
 import { PanelTrigger } from '@/components/ui'
-import { CreativeIntentOverlay, SuperKeyframeRecordingControls, recordingDevices } from '@/features/creativeIntent'
+import { CreativeIntentOverlay, SuperKeyframeRecordingControls } from '@/features/creativeIntent'
 import { type VideoEditInstance, getActiveVideoEditSequence } from '../application/videoEditService'
 import { videoEditClipPictureSize, videoEditClipToFrame } from '@/core/videoEdit/clipGeometry'
 import { mergeMotionClipCurves, motionClipPose } from '@/core/videoEdit/motionDraft'
@@ -15,14 +15,6 @@ export function VideoEditMotionControls({ owner, onError }: { owner: VideoEditIn
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState<string>()
   const working = useRef(false)
   const [microphone, setMicrophone] = useState(superKeyframeMicrophonePreference)
-  const [devices, setDevices] = useState<{ value: string; label: string }[]>([])
-  useEffect(() => {
-    if (!open || !navigator.mediaDevices) return
-    let active = true
-    const refresh = (): void => { void recordingDevices().then(items => { if (active) setDevices(items.filter(item => item.kind === 'microphone' && item.id !== 'default').map((item, index) => ({ value: item.id, label: item.label || `麦克风 ${index + 1}` }))) }, failure => { if (active) setError(failure instanceof Error ? failure.message : '无法读取麦克风设备。') }) }
-    refresh(); navigator.mediaDevices.addEventListener?.('devicechange', refresh)
-    return () => { active = false; navigator.mediaDevices.removeEventListener?.('devicechange', refresh) }
-  }, [open, explanation?.microphone])
   const run = (operation: () => void | Promise<void>): void => {
     if (working.current) return
     working.current = true; setBusy(true); setError(undefined)
@@ -30,13 +22,10 @@ export function VideoEditMotionControls({ owner, onError }: { owner: VideoEditIn
   }
   const draft = state?.draft ?? owner.document.creativeIntents?.drafts.at(-1)
   const prepare = async (): Promise<void> => { if (!state && draft) await reopenVideoMotion(id, draft.id) }
-  const deviceOptions = [{ value: '', label: '系统默认麦克风' }, ...devices]
-  if (microphone.deviceId && !devices.some(device => device.value === microphone.deviceId)) deviceOptions.push({ value: microphone.deviceId, label: '已选设备（当前不可用）' })
   return <PanelTrigger open={open} onOpenChange={setOpen} display="超级关键帧" appearance="quiet" size="sm" buttonClassName="w-auto" alignment="aboveCenter" gap={8} panelPadding="content" panelSize="compact" renderPanel={() => <SuperKeyframeRecordingControls
     status={state?.status ?? 'idle'} busy={busy || Boolean(explanation?.busy)} message={error ?? state?.message ?? explanation?.message}
-    microphone={microphone.enabled} deviceId={microphone.deviceId} devices={deviceOptions}
-    onMicrophone={enabled => run(async () => { await configureSuperKeyframeMicrophone(id, enabled, microphone.deviceId); setMicrophone({ ...microphone, enabled }) })}
-    onDevice={deviceId => run(async () => { await configureSuperKeyframeMicrophone(id, microphone.enabled, deviceId); setMicrophone({ ...microphone, deviceId }) })}
+    microphone={microphone.enabled}
+    onMicrophone={enabled => run(async () => { await configureSuperKeyframeMicrophone(id, enabled); setMicrophone({ ...microphone, enabled }) })}
     takes={draft?.takes.map((take, index) => ({ id: take.id, label: `第 ${index + 1} 段 · ${((take.monoSpanUs[1] - take.monoSpanUs[0]) / 1_000_000).toFixed(1)} 秒` })) ?? []}
     onStart={() => run(async () => { await prepare(); await startSuperKeyframes(id) })} onPause={() => run(() => pauseSuperKeyframes(id))} onResume={() => run(() => resumeSuperKeyframes(id))}
     onFinish={() => run(() => finishSuperKeyframes(id))} onHandoff={() => run(async () => { await prepare(); await finishSuperKeyframes(id) })}

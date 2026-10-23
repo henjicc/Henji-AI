@@ -4,7 +4,7 @@ const path = require('node:path')
 const { execFileSync } = require('node:child_process')
 const { videoEditFixtureProject } = require('./uiInspectionSceneVideoEditProbe.cjs')
 const { seedVideoEditProject, openVideoEditProjectCard, readVideoEditFile, leaveVideoEditProject } = require('./uiInspectionVideoEditDocuments.cjs')
-const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
+const { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 
 function createScreenAttentionScene() {
   return { id: 'screen-attention', surface: '剪辑', name: '录屏注意力-正式生成与推近平移回全景', writesUserData: true,
@@ -22,6 +22,7 @@ function createScreenAttentionScene() {
       const seeded = await seedVideoEditProject(page, fixture); await openVideoEditProjectCard(page, seeded.projectId)
       let client; const evidence = {}
       try {
+        await assignIsolatedMcpPort(page)
         client = await connectMcpClient((await authorizeMcpConnection(page, { name: '注意力推近免费验收', allowWrites: true, allowDestructive: true })).config)
         const documentRef = { kind: 'video_edit.document', id: seeded.documentId }
         const clipRef = { kind: 'video_edit.clip', id: `${seeded.documentId}:screen-clip` }

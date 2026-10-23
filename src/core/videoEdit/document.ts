@@ -1,3 +1,4 @@
+import { videoEditGainDbSchema } from './loudness'
 import { videoEditExportSettingsSchema } from './exportPresets'
 import { videoEditAnnotationSchema, mapVideoEditAnnotationTime } from './annotations'
 export { videoEditAnnotationSchema } from './annotations'
@@ -87,7 +88,7 @@ const videoEditClipStateSchema = z.object({
   x: videoEditClipAnimatedValueSchemas.x, y: videoEditClipAnimatedValueSchemas.y,
   scale: videoEditClipAnimatedValueSchemas.scale, rotation: videoEditClipAnimatedValueSchemas.rotation,
   anchorX: videoEditClipAnimatedValueSchemas.anchorX.optional(), anchorY: videoEditClipAnimatedValueSchemas.anchorY.optional(), curves: videoEditClipCurvesSchema.optional(),
-  opacity: videoEditClipAnimatedValueSchemas.opacity, volume: videoEditClipAnimatedValueSchemas.volume, audioRole: videoEditAudioRoleSchema.optional(), text: z.string().max(2000),
+  opacity: videoEditClipAnimatedValueSchemas.opacity, volume: videoEditClipAnimatedValueSchemas.volume, gainDb: videoEditGainDbSchema.optional(), audioRole: videoEditAudioRoleSchema.optional(), text: z.string().max(2000),
   textStyle: videoEditTextStyleSchema.optional(),
   /** PR 淡化手柄：片段开头淡入、结尾淡出的帧数（画面从透明渐显，声音按恒定功率渐强）；没有就是不淡化。 */
   fadeInFrames: z.number().int().min(1).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES).optional(), fadeOutFrames: z.number().int().min(1).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES).optional(),

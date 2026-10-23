@@ -21,7 +21,7 @@ import { captureMicrophone } from '@/features/creativeIntent/recording/microphon
 
 const capture = vi.hoisted(()=>({block:undefined as ((block:CapturedAudioBlock)=>void)|undefined,interrupt:undefined as ((message:string)=>void)|undefined,stop:vi.fn(async()=>{}),deny:false}))
 vi.mock('./videoEditExplanationVisual',()=>({captureExplanationPixels:vi.fn(async()=>({bytes:new Uint8Array([137,80,78,71,13,10,26,10]),size:[200,100]}))}))
-vi.mock('@/features/creativeIntent/recording/microphone',()=>({captureMicrophone:vi.fn(async(_origin:number,onBlock:(block:CapturedAudioBlock)=>void,onInterrupt:(message:string)=>void)=>{if(capture.deny)throw new Error('PermissionDenied');capture.block=onBlock;capture.interrupt=onInterrupt;return{stop:capture.stop}})}))
+vi.mock('@/features/creativeIntent/recording/microphone',async importOriginal=>({...await importOriginal<typeof import('@/features/creativeIntent/recording/microphone')>(),captureMicrophone:vi.fn(async(_origin:number,onBlock:(block:CapturedAudioBlock)=>void,onInterrupt:(message:string)=>void)=>{if(capture.deny)throw new Error('PermissionDenied');capture.block=onBlock;capture.interrupt=onInterrupt;return{stop:capture.stop}})}))
 const files=new Map<string,Uint8Array>(); const chunks=new Map<string,Float32Array>(); let clock=100
 beforeEach(()=>{
   installHarnessNativeStorage(); installPaidApprovalTestBridge();files.clear();chunks.clear();capture.stop.mockClear();capture.deny=false;clock=100;vi.stubGlobal('crypto',webcrypto)
@@ -32,7 +32,7 @@ beforeEach(()=>{
   vi.spyOn(getPlatform().system.fs,'remove').mockImplementation(async path=>{files.delete(path)})
   vi.spyOn(getPlatform().documents,'importFile').mockImplementation(async request=>{const path=`D:/materials/${crypto.randomUUID()}.json`;files.set(path,files.get(request.sourcePath)!);return{path,copied:true}})
   const api=getPlatform().audioEdit.recording
-  vi.spyOn(api,'microphone').mockResolvedValue();vi.spyOn(api,'write').mockImplementation(async input=>{chunks.set(input.chunkId,input.samples)})
+  vi.spyOn(api,'write').mockImplementation(async input=>{chunks.set(input.chunkId,input.samples)})
   vi.spyOn(api,'erase').mockImplementation(async()=>{chunks.clear()});vi.spyOn(api,'release').mockImplementation(async()=>{chunks.clear()});vi.spyOn(api,'cancel').mockResolvedValue();vi.spyOn(api,'restore').mockResolvedValue()
   vi.spyOn(api,'archive').mockImplementation(async()=>{const path='D:/temp/retained.zip';const bytes=new Uint8Array([1,2,3]);files.set(path,bytes);return{path,digest:`sha256:${'3'.repeat(64)}`,bytes:3}})
   vi.spyOn(modelDefaultsManager,'resolveTranscriptionModelId').mockReturnValue('groq.speech-recognition.whisper-large-v3')
@@ -58,7 +58,7 @@ it('超级关键帧默认麦克风、暂停续段、转写后引用交接，同�
   const owner = await setup(), id = owner.document.id
   setVideoEditView(id, { selection: getActiveVideoEditSequence(owner).clips[0].id })
   await startSuperKeyframes(id)
-  expect(getPlatform().audioEdit.recording.microphone).toHaveBeenCalledWith(true, expect.any(String))
+  expect(captureMicrophone).toHaveBeenCalled()
   const draftId = videoMotionState(owner)!.draft.id
   clock = 200; present(owner, 0); audio()
   recordVideoMotionPresentation(owner, { sequenceId: owner.activeSequenceId, frame: 0, revision: videoMotionComposition(owner)!.revision, at: clock })
@@ -76,9 +76,9 @@ it('超级关键帧默认麦克风、暂停续段、转写后引用交接，同�
   clock = 700; await startSuperKeyframes(id)
   expect(videoMotionState(owner)!.draft.id).toBe(draftId)
   expect(videoExplanationState(owner)!.collector.session.pages.filter(page => page.kind === 'transcript')).toEqual(transcriptPages)
-  await configureSuperKeyframeMicrophone(id, true, 'chosen-microphone')
-  expect(vi.mocked(captureMicrophone).mock.lastCall?.[4]).toMatchObject({ deviceId: 'chosen-microphone' })
-  await configureSuperKeyframeMicrophone(id, false, 'chosen-microphone')
+  await configureSuperKeyframeMicrophone(id, true)
+  expect(vi.mocked(captureMicrophone).mock.lastCall?.[4]).toBeUndefined()
+  await configureSuperKeyframeMicrophone(id, false)
   expect(videoExplanationState(owner)!.microphone).toBeUndefined()
   clock = 800; await finishSuperKeyframes(id)
   expect(videoMotionState(owner)!.draft.takes).toHaveLength(3)
@@ -248,4 +248,14 @@ it('讲解确认前预检所有待识别块，不调用识别、不改变会话'
   await expect(preflightVideoExplanation(id)).rejects.toThrow('本地媒体不可读')
   expect(getPlatform().audioEdit.recording.transcribe).not.toHaveBeenCalled();expect(videoExplanationState(owner)!.collector.session.state).toBe('reviewing')
   await preflightVideoExplanation(id);expect(getPlatform().audioEdit.recording.preflight).toHaveBeenLastCalledWith(expect.objectContaining({action:'preflight',sessionId:videoExplanationState(owner)!.collector.session.id}))
+})
+
+it('原生双声道讲解取起始声道并保留采样时间，不平均左右或把时长翻倍', async () => {
+  const owner = await setup(), id = owner.document.id
+  await startVideoExplanation(id, crypto.randomUUID())
+  clock = 200
+  capture.block!({ firstFrame: 0, samples: new Float32Array([.25, -.5, .25, -.5]), sampleRate: 48000, channels: 2, monoStartUs: 100000, uncertaintyUs: 27, bitDepth: 32 })
+  clock = 300; await stopVideoExplanation(id)
+  const write = vi.mocked(getPlatform().audioEdit.recording.write).mock.lastCall![0]
+  expect([...write.samples]).toEqual([.25, .25])
 })

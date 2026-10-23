@@ -1,3 +1,4 @@
+import { videoEditGainDbSchema } from '../../../videoEdit/loudness'
 import { z } from 'zod'
 import { applicationRefSchema } from '../../applicationCapabilities'
 import { capabilityControl, defineApplicationCapability } from '../shared/defineApplicationCapability'
@@ -17,7 +18,7 @@ export const videoEditSoundEffectPlacementSchema = z.object({
   anchor: z.enum(['hit', 'attack']).default('hit').describe('hit：声音最响的击中点对齐到目标时刻（默认，嗖、冲击、叮都用它）；attack：起音点对齐（需要声音从这一刻开始响时用）。'),
   offsetFrames: z.number().int().min(-600).max(600).default(0).describe('在目标时刻基础上提前（负）或推后（正）的帧数。'),
   trackRef: ref('video_edit.track').optional().describe('放到指定音频轨道；省略时找第一条在该区间空闲的音频轨道，没有就新建一条。'),
-  gainDb: z.number().min(-40).max(6).optional().describe('片段音量增益 dB；省略为原音量。'),
+  gainDb: videoEditGainDbSchema.optional().describe('独立音频增益 dB，-96～+96；省略为 0，不改变音量及其关键帧。'),
 }).strict()
 
 const placed = z.object({ clipRef, soundRef, startFrame: z.number().int().nonnegative(), targetSeconds: z.number(), anchorSeconds: z.number(), alignedSeconds: z.number(), trimmedHeadSeconds: z.number(), trackRef: ref('video_edit.track') }).strict()
