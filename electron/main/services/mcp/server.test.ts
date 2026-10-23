@@ -521,17 +521,30 @@ describe('本地 MCP 协议与边界', () => {
   })
 
   it('协议工具拒绝未知字段并指名字段，超限结果不落到调用方', async () => {
-    const unknownField = await (await fixture()).connect()
+    const validation = await fixture()
+    const unknownField = await validation.connect()
     const rejected = await unknownField.client.callTool({ name: 'read_application_media', arguments: { ref: { kind: 'asset', id: 'x' }, unexpected: 1 } })
     expect(rejected.isError).toBe(true)
     expect(JSON.stringify(rejected)).toContain('unexpected')
     const multiple = await unknownField.client.callTool({ name: 'read_application_media', arguments: { includeEvidence: '私密输入', includeRevisions: '私密输入', foo: 1 } })
     expect(multiple.structuredContent).toMatchObject({ error: { code: 'INVALID_INPUT', message: expect.stringContaining([
       'includeRevisions 应为 布尔值，收到字符串。',
-      'includeEvidence 应为 布尔值，收到字符串。',
+      // 约束会附上正式 schema 的字段说明，不能为旧断言删掉恢复所需的信息。
+      'includeEvidence 应为 布尔值；验证证据明细。，收到字符串。',
       '缺少必填参数 ref（对象 {kind, id}）。',
       '不认识的参数：foo。',
+      '这个工具接受：ref（必填）、mode、maxEdge、maxBytes、outputIndex、offset、length。',
+      '通用：includeRevisions、includeEvidence、includeDetails。',
     ].join('\n')) } })
+    expect(JSON.stringify(multiple)).not.toContain('私密输入')
+    expect(validation.calls).toHaveLength(0)
+    // 根据错误提示补 ref、改成布尔值、去掉未知参数后，原客户端可继续读取。
+    const recovered = await unknownField.client.callTool({ name: 'read_application_media', arguments: {
+      ref: { kind: 'asset', id: 'x' }, mode: 'chunk', includeEvidence: true, includeRevisions: true,
+    } })
+    expect(recovered.isError, JSON.stringify(recovered)).toBe(false)
+    expect(recovered.structuredContent).toMatchObject({ ok: true, data: { mimeType: 'image/png', totalBytes: 8, byteLength: 8, eof: true } })
+    expect(validation.calls).toHaveLength(1)
     // 协议自身的 _meta 不属于工具参数，不能被严格校验误伤。
     const meta = await unknownField.client.callTool({ name: 'describe_application_contract', arguments: {}, _meta: { progressToken: 'p1' } })
     expect(meta.isError, JSON.stringify(meta)).toBe(false)
