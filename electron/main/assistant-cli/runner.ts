@@ -1,3 +1,4 @@
+import { buildEmbeddedPromptContext } from '../../../src/core/assistant/embeddedAgent'
 import type { WebContents } from 'electron'
 import { getApplicationRuntime } from '../services/application-runtime/runtime'
 import { createMainLogger } from '../services/logging'
@@ -16,7 +17,7 @@ export async function runAssistantCli(owner: WebContents, options: AssistantCliO
       await new Promise<void>(resolve => setTimeout(resolve, 100))
     }
     const context = host.getContext()!
-    return await runEmbeddedCli(options, JSON.stringify({ workspace: context.workspace, canvas: context.canvas, surface: context.surface }), write)
+    return await runEmbeddedCli(options, buildEmbeddedPromptContext(context), write)
   } catch (error) {
     logger.error('命令行助手运行失败', { event: 'assistant_cli.run.failed', error })
     write({ type: 'error', message: error instanceof Error ? error.message : '命令行助手运行失败' })

@@ -331,7 +331,8 @@ export class ApplicationExecutionSupport {
 
   protected async readCurrentRevisions(
     steps: ApplicationPlannedStep[],
-    context: ApplicationExecutionContext
+    context: ApplicationExecutionContext,
+    includeRemovalTargets = true,
   ): Promise<Record<string, number>> {
     const revisions: Record<string, number> = {}
     for (const step of steps) {
@@ -343,6 +344,10 @@ export class ApplicationExecutionSupport {
             : (await this.registry.readEntity(step.parent, [], context)).revisions
           : await this.requireOperationExecutor(step).getCurrentRevisions(step.input)
       mergeRevisions(revisions, current)
+      // 集合版本不能代替条目版本：删除须核对每个目标自己的读取基线。
+      if (includeRemovalTargets && step.kind === 'collection' && step.operation.kind === 'remove') {
+        for (const target of step.operation.targets) mergeRevisions(revisions, (await this.registry.readEntity(target, [], context)).revisions)
+      }
     }
     return revisions
   }
@@ -359,7 +364,7 @@ export class ApplicationExecutionSupport {
     const removalIndexes = new Set(absentMutations.values())
     for (let index = 0; index < steps.length; index += 1) {
       if (absentMutations.has(index)) continue
-      const current = await this.readCurrentRevisions([steps[index]], context)
+      const current = await this.readCurrentRevisions([steps[index]], context, false)
       mergeRevisions(revisions, current)
       if (removalIndexes.has(index)) removalProbes.set(index, current)
     }

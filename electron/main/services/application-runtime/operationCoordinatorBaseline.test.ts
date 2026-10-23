@@ -82,3 +82,36 @@ it('旧镜头操作的核对面板读取 camera_stage 当前状态，保留待�
     expect(record).toMatchObject({ state: 'awaiting_user_confirmation', verificationState: 'unresolved', expectedRevisions: { toolbox: 3 } })
   } finally { vi.restoreAllMocks() }
 })
+
+it('项目记忆参数校验失败不登记操作，不占用重试核对锁', () => {
+  const store = Object.create(ApplicationOperationStore.prototype) as ApplicationOperationStore
+  vi.spyOn(store, 'recoverInterrupted').mockImplementation(() => undefined)
+  vi.spyOn(store, 'unresolved').mockReturnValue([])
+  vi.spyOn(store, 'get').mockReturnValue(undefined)
+  const prepare = vi.spyOn(store, 'prepare').mockImplementation(value => value as OperationRecord)
+  const coordinator = new ApplicationOperationCoordinator(store)
+  const change = { target: { layer: 'project', ownerId: 'project' }, id: 'brand-red', expectedRevision: 0, entry: { content: '本期品牌色红色。', source: 'assistant' }, actor: 'assistant', reason: '用户明确要求。' }
+  const access = { allowWrites: true, allowDestructive: false }
+  try {
+    for (const bad of [{ ...change, expectedRevision: undefined }, { ...change, entry: { ...change.entry, section: 'creative' } }]) {
+      expect(() => coordinator.prepare('caller', { operationId: randomUUID(), changes: [bad] }, 'epoch', access, 'organize_assistant_memory')).toThrow()
+    }
+    expect(prepare).not.toHaveBeenCalled()
+    expect(coordinator.prepare('caller', { operationId: randomUUID(), changes: [change] }, 'epoch', access, 'organize_assistant_memory').state).toBe('prepared')
+  } finally { vi.restoreAllMocks() }
+})
+
+it.each([1, 2])('旧项目分区校验回执只有单条建议能证明未执行（%s条）', count => {
+  const store = Object.create(ApplicationOperationStore.prototype) as ApplicationOperationStore
+  vi.spyOn(store, 'recoverInterrupted').mockImplementation(() => undefined)
+  let record: OperationRecord = { operationId: randomUUID(), callerId: 'caller', inputDigest: 'digest', capabilityId: 'organize_assistant_memory', state: 'unknown',
+    input: { changes: Array.from({ length: count }, () => ({ target: { layer: 'project', ownerId: 'project' }, entry: { section: 'creative' } })) },
+    result: { ok: false, error: { code: 'CAPABILITY_REJECTED', message: JSON.stringify([{ code: 'custom', path: [0, 'section'], message: '只有全局记忆需要分区。' }]), details: { execution: { billing: 'not_charged', targetMutation: 'unknown', notExecuted: false } } } } }
+  vi.spyOn(store, 'unresolved').mockImplementation(() => [record])
+  vi.spyOn(store, 'save').mockImplementation(value => { record = value })
+  try {
+    new ApplicationOperationCoordinator(store)
+    expect(record.state).toBe(count === 1 ? 'not_executed' : 'unknown')
+    if (count === 1) expect(record.result).toMatchObject({ error: { details: { execution: { notExecuted: true } } } })
+  } finally { vi.restoreAllMocks() }
+})

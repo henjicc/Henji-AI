@@ -19,13 +19,25 @@ describe('Pi CLI 正式服务边界', () => {
     expect(await runEmbeddedCli(options, '{"workspace":{"id":"nodes"}}', write)).toBe(0)
     expect(mocks.prompt).toHaveBeenCalledWith(expect.objectContaining({ access: 'read', model: { providerId: 'test', modelId: 'configured' }, context: '{"workspace":{"id":"nodes"}}' }), expect.any(String))
     expect(write.mock.calls[0][0].runId).toBe(mocks.prompt.mock.calls[0][1])
-    expect(write).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'completed', businessVerified: false }))
+    expect(write).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'completed', businessVerified: false, threadId: 'session' }))
     expect(mocks.dispose).toHaveBeenCalledOnce()
   })
   it('显式授权才传递完整权限，续聊使用官方会话标识', async () => {
     await runEmbeddedCli({ ...options, approvalMode: 'full_access', threadId: 'existing' }, '', vi.fn())
     expect(mocks.navigate).toHaveBeenCalledWith({ action: 'open', input: 'existing' })
     expect(mocks.prompt).toHaveBeenCalledWith(expect.objectContaining({ access: 'full' }), expect.any(String))
+  })
+  it('新对话输出的 threadId 可直接续聊，未知线程拒绝时不开始任务', async () => {
+    const write = vi.fn()
+    await runEmbeddedCli(options, '', write)
+    const threadId = write.mock.calls.at(-1)![0].threadId as string
+    await runEmbeddedCli({ ...options, threadId }, '', write)
+    expect(mocks.navigate).toHaveBeenLastCalledWith({ action: 'open', input: threadId })
+    mocks.navigate.mockRejectedValueOnce(new Error('这段对话已不存在'))
+    const before = mocks.prompt.mock.calls.length
+    await expect(runEmbeddedCli({ ...options, threadId: 'invented' }, '', write)).rejects.toThrow('这段对话已不存在')
+    expect(mocks.prompt).toHaveBeenCalledTimes(before)
+    expect(mocks.dispose).toHaveBeenCalledTimes(3)
   })
   it('失败消息和超时返回失败，超时停止当前回复并清理进程', async () => {
     mocks.snapshot.mockReturnValue({ busy: false, error: null, pendingMessages: [{ error: '初始化失败' }], messages: [] })

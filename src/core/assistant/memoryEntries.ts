@@ -98,4 +98,4 @@ export function shouldOrganizeMemory(state: Pick<MemorySnapshot, 'settings' | 'c
     && (!state.lastOrganizedAt || state.lastOrganizedAt.slice(0, 10) !== now.toISOString().slice(0, 10))
 }
 
-export const MEMORY_RULES = '每个新任务先读取最新全局记忆；在项目内工作时读取项目记忆，使用风格时读取使用者偏好。当前要求 > 项目 > 风格及风格偏好 > 全局；全局创作偏好 precedence=preference 时压过风格。全局偏好与风格冲突且未设 precedence 时先问用户，按回答逐条更新。这次/这期/项目内容记项目；某风格外观记风格；我一般/以后都/所有记全局。说不清时记窄，不从一次使用推断。纠错只改对应条目，矛盾以较新为准并说明原因；关闭记忆时不读不写。'
+export const MEMORY_RULES = '每个新任务先读取最新全局记忆；在项目内工作时读取项目记忆，使用风格时读取使用者偏好。当前要求 > 项目 > 风格及风格偏好 > 全局；全局创作偏好缺省听风格，但缺省不代表用户已作出冲突选择。新增普通偏好必须省略 precedence；“我一般用思源黑体，别用宋体”等表达只说明喜好，绝不表示偏好优先。只有用户回答了风格与偏好的冲突询问，或明确说“就算风格不同也按我的”等跨风格覆盖要求，才可按该明确选择写 precedence=style/preference，并在 reason 记录用户的选择依据；不得自行补写、推断或承诺以后冲突不再询问。全局偏好与风格冲突且未设 precedence 时，回答第一句必须先问用户听风格还是听偏好，再简述差异；本轮不推荐字体、不动手、不写 precedence，等明确答复后再逐条更新。已明确 precedence=preference 才压过风格。这次/这期/项目内容记项目；某风格外观记风格；我一般/以后都/所有记全局。说不清时记窄，不从一次使用推断。纠错只改对应条目，矛盾以较新为准并说明原因；关闭记忆时不读不写。'

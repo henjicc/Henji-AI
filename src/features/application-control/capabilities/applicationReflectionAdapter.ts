@@ -201,6 +201,9 @@ async function refreshedRevisionsIfTargetsUnchanged(
       context,
     )
     Object.assign(revisions, availability.revisions)
+    if (change.kind === 'remove_items') for (const target of change.targets) {
+      Object.assign(revisions, (await registry.readEntity(target, [], context)).revisions)
+    }
   }
   return Object.keys(revisions).length > 0 ? revisions : null
 }
@@ -480,11 +483,27 @@ export const applicationReflectionHandlers = {
     }
     const requiresReadBaseline = strictProperties.length > 0
     const baselines = await captureMutationBaselines(changes, appContext).catch((error) => { throw new ApplicationPreflightFailure(error) })
-    if (context.callerGrant && context.expectedRevisions === undefined) {
+    // 空基线与省略基线一致，需要自动读取集合可用性。
+    if (context.callerGrant && Object.keys(expected).length === 0) {
       if (changes.some((change) => change.kind === 'remove_items')) throw new ApplicationPreflightFailure(new Error('BASELINE_REQUIRED:删除前请读取目标并提供 baselineIds。'))
       const current = await refreshedRevisionsIfTargetsUnchanged(baselines, changes, appContext).catch(error => { throw new ApplicationPreflightFailure(error) })
       if (!current) throw new ApplicationPreflightFailure(new Error('CONFLICT:目标正在变化，请稍后重试。'))
       expected = current
+    } else if (context.callerGrant) {
+      // 父实体的基线不一定包含子集合的作用域；追加可自动补缺，已有版本仍由引擎核对，绝不覆盖。
+      expected = { ...expected }
+      for (const change of changes) if (change.kind === 'create_items') {
+        const availability = await getApplicationReflectionRegistry().getCollectionAvailability(change.parent, change.entityType, appContext)
+          .catch(error => { throw new ApplicationPreflightFailure(error) })
+        for (const [scope, revision] of Object.entries(availability.revisions)) if (expected[scope] === undefined) expected[scope] = revision
+      }
+    }
+    if (context.callerGrant && Object.keys(expected).length > 0) {
+      // 读取父实体所得的无关作用域不属于本次计划；只保留实际目标/集合的基线，数值不刷新。
+      const relevant = await refreshedRevisionsIfTargetsUnchanged(baselines, changes, appContext)
+        .catch(error => { throw new ApplicationPreflightFailure(error) })
+      if (!relevant) throw new ApplicationPreflightFailure(new Error('CONFLICT:目标正在变化，请重新读取。'))
+      expected = Object.fromEntries(Object.entries(expected).filter(([scope]) => relevant[scope] !== undefined))
     }
     const execute = async (revisions: Record<string, number>, attempt: number) => {
       const plan = await engine.plan({

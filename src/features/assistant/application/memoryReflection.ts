@@ -33,7 +33,7 @@ function fields(layer: MemoryLayer): ApplicationFieldDefinition<Draft, Draft>[] 
   const entityType = types[layer]
   const id = `${entityType}.entry`
   return [{ propertyId: id, storeActions: [], descriptor: { id, entityType, version: 1, title: '记忆内容',
-    description: `逐条修改，先读后带 baselineIds 保存；CONFLICT 重读合并。${MEMORY_RULES} 内容一句话最多200字，全局分区 about/creative/habits。助手调用写入 source 必须为 assistant（user 仅由用户手动编辑写入）；precedence 仅全局creative可设 style/preference。value 支持 font.zh/font.latin/font.numeric 的 fonts 优先链、style 的 id、voice 的 providerId/voiceId、aspect 的 width/height。`,
+    description: `逐条修改先读 baselineIds；CONFLICT 重读合并。${MEMORY_RULES} content 一句话≤200字，source=assistant。全局 section=about/creative/habits；项目/风格禁止 section、precedence。新增用 create_items，parent 分别为 assistant.memory_settings:singleton、documents.project:项目ID、video_edit.style:风格ID，items=[{properties:{entry:{content,source,...}}}]，ownerId 取 parent.id，条目ID及初始修订0自动生成。value：font.zh/font.latin/font.numeric 的 fonts 优先链、style.id、voice.providerId/voiceId、aspect.width/height。`,
     value: { kind: 'json', schemaRef: schemaRef('property', `${id}.value`) }, nullable: false, requiresReadBaseline: true,
     dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['settings:read'], write: ['settings:write'] }, revisionScopes: ['assistant_memory'], schemaRef: schemaRef('property', id) },
     read: draft => draft.entry as JsonValue, writer: { write: (draft, mutation) => { draft.entry = memoryEntryInputSchema.parse(mutation.value) } } }]
@@ -89,7 +89,9 @@ export class MemoryExecutor implements ApplicationMutationExecutor, ApplicationC
     const write = async (ref: ApplicationRef, target: MemoryTarget, id: string, expectedRevision: number, entry: MemoryEntryInput | null): Promise<void> => {
       const change = await writeMemory({ target, id, expectedRevision, entry: entry ? { ...entry, source: 'assistant' } : null, actor: 'assistant', reason: entry?.reason ?? '根据用户明确表达的偏好更新记忆。' })
       if (change) changes.push(change.id)
-      refs.push(ref); resultingRevisions[await scope(ref)] = change ? change.after?.revision ?? 0 : expectedRevision
+      refs.push(ref)
+      // 集合撤销由历史条目的 CAS 保护；集合回执只报告集合时钟，已删除条目没有可读取的修订。
+      if (step.kind === 'mutation') resultingRevisions[await scope(ref)] = change ? change.after?.revision ?? 0 : expectedRevision
     }
     try {
       if (step.kind === 'mutation') {
@@ -112,7 +114,16 @@ export class MemoryExecutor implements ApplicationMutationExecutor, ApplicationC
     } catch (error) { for (const id of changes.reverse()) await revertMemory(id, 'assistant'); throw error }
     return { status: 'completed', resultingRevisions, directRefs: refs, evidence: refs.map(target => ({ kind: 'entity_state', target, fact: '记忆已保存。', capturedAt: new Date().toISOString() })), undoToken: JSON.stringify(changes) }
   }
-  async undo(token: string): Promise<ApplicationCompletedStepResult> { const ids = z.array(z.string()).parse(JSON.parse(token)); for (const id of ids.reverse()) await revertMemory(id, 'assistant'); return { status: 'completed', resultingRevisions: { assistant_memory: 0 }, directRefs: [], evidence: [] } }
+  async undo(token: string): Promise<ApplicationCompletedStepResult> {
+    const ids = z.array(z.string()).parse(JSON.parse(token)), directRefs: ApplicationRef[] = []
+    for (const id of ids.reverse()) {
+      const change = (await refreshMemory()).history.find(value => value.id === id)
+      if (!change) throw new Error('NOT_FOUND：这次记忆修改已不在历史中。')
+      await revertMemory(id, 'assistant')
+      directRefs.push(refOf(change.target, change.entryId))
+    }
+    return { status: 'completed', resultingRevisions: { assistant_memory: 0 }, directRefs, evidence: directRefs.map(target => ({ kind: 'entity_state', target, fact: '记忆修改已撤回并记入历史。', capturedAt: new Date().toISOString() })) }
+  }
   async compensate(_step: Step, result: ApplicationCompletedStepResult) { return result.undoToken ? (await this.undo(result.undoToken)).evidence : [] }
 }
 

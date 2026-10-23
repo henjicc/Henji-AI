@@ -4,15 +4,24 @@ export { assertMemoryContentSafe } from './memoryPolicy'
 import { MEMORY_LIMITS, memoryEntriesSchema, memoryEntryInputSchema, memoryTargetSchema, type MemoryEntry, type MemoryHistoryEntry, type MemoryLayer } from './memoryEntries'
 
 export const memoryWriteSchema = z.object({
-  target: memoryTargetSchema,
+  target: memoryTargetSchema.describe('global 无 ownerId；project 的 ownerId=正式项目ID；style 的 ownerId=风格ID，不能用文档ID或路径。'),
   id: z.string().min(1).max(100),
-  expectedRevision: z.number().int().nonnegative(),
+  expectedRevision: z.number().int().nonnegative().describe('新增条目必须为0；修改/删除用读取到的该条目 revision，冲突重读合并。'),
   entry: memoryEntryInputSchema.nullable(),
   actor: z.enum(['user', 'assistant']),
   reason: z.string().trim().min(1).max(200),
   reverts: z.string().optional(),
   revisionFloor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER - 1).optional(),
-}).strict()
+}).strict().superRefine((write, context) => {
+  if (!write.entry) return
+  // 层级约束在公开输入边界拒绝，不能等进入写入通道才发现项目条目带了全局分区。
+  const parsed = memoryEntriesSchema(write.target.layer).safeParse([{
+    ...write.entry, id: write.id, revision: 1, updatedAt: '2026-01-01T00:00:00.000Z',
+  }])
+  if (!parsed.success) for (const issue of parsed.error.issues) {
+    context.addIssue({ code: 'custom', path: ['entry', ...issue.path.slice(1)], message: issue.message })
+  }
+})
 export type MemoryWrite = z.infer<typeof memoryWriteSchema>
 
 export function applyMemoryWrite(entries: readonly MemoryEntry[], input: MemoryWrite, now: Date, historyId: string): { entries: MemoryEntry[]; change: MemoryHistoryEntry | null } {

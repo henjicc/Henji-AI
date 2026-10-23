@@ -1,3 +1,4 @@
+import { applicationWritePreflight, type ApplicationWriteExecution } from '@/core/application-control/execution/writeExecution'
 import { getPlatform } from '@/platform/runtime'
 import { applyMemoryWrite, memoryRevertWrite, duplicateMemoryWrites, type MemoryWrite } from '@/core/assistant/memoryOperations'
 import { shouldOrganizeMemory, type MemoryEntry, type MemoryTarget,  type MemoryHistoryEntry } from '@/core/assistant/memoryEntries'
@@ -53,9 +54,18 @@ export async function revertMemory(id: string, actor: 'user' | 'assistant' = 'us
 }
 
 /** 免费的确定性整理与模型整理共用逐条写入口；不以猜测替代语义判断。 */
-export async function organizeMemory(force = false, proposals: MemoryWrite[] = []): Promise<number> {
+export async function organizeMemory(force = false, proposals: MemoryWrite[] = [], context: { execution?: ApplicationWriteExecution } = {}): Promise<number> {
   const state = await refreshMemory()
   if (!state.settings.enabled || (!force && !shouldOrganizeMemory(state, new Date()))) return 0
+  // 先完整验证所有建议，避免后一个参数错误留下前一个已执行的修改或核对锁。
+  await applicationWritePreflight(context, async () => {
+    const drafts = new Map<string, MemoryEntry[]>()
+    for (const input of proposals) {
+      const key = JSON.stringify(input.target)
+      const entries = drafts.get(key) ?? await readMemory(input.target)
+      drafts.set(key, applyMemoryWrite(entries, input, new Date(), 'preflight').entries)
+    }
+  })
   let changed = 0
   for (const input of proposals) if (await writeMemory({ ...input, actor: 'assistant', entry: input.entry ? { ...input.entry, source: 'assistant' } : null })) changed += 1
   const projects = await getPlatform().documents.listProjects()

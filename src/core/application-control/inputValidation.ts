@@ -52,7 +52,7 @@ function constraint(schema: Record<string, unknown>, fallback?: string): string 
         : typeof schema[min] === 'number' ? `（至少 ${schema[min]} ${unit}）` : `（至多 ${schema[max]} ${unit}）`
     }
   }
-  return label
+  return typeof schema.description === 'string' ? `${label}；${schema.description}` : label
 }
 
 const jsonSchema = (schema?: InputSchema): Record<string, unknown> => schema instanceof z.ZodType ? z.toJSONSchema(schema, { io: 'input', unrepresentable: 'any' }) as Record<string, unknown> : schema ?? {}

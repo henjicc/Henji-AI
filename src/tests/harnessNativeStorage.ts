@@ -238,6 +238,13 @@ let memoryState = emptyMemorySnapshot()
 const memoryListeners = new Set<() => void>()
 const NAMESPACES: Record<string, object> = {
   assistant: {
+    async markMemoryOrganized(changes: number) {
+      memoryState.changesSinceOrganization = Math.max(0, memoryState.changesSinceOrganization - changes)
+      memoryState.lastOrganizedAt = new Date().toISOString()
+      memoryState.needsOrganization = false
+      memoryState.revision++
+      memoryListeners.forEach(listener => listener())
+    },
     async getMemoryState() { return wire(memoryState.settings.enabled ? memoryState : { ...memoryState, entries: [], history: [] }) },
     onMemoryChange(listener: () => void) { memoryListeners.add(listener); return () => { memoryListeners.delete(listener) } },
     async updateMemorySettings(settings: MemorySettings) { memoryState.settings = wire(settings); memoryState.revision++; memoryListeners.forEach(listener => listener()); return wire(memoryState) },

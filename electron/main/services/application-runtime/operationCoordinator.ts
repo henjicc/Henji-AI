@@ -102,6 +102,21 @@ export class ApplicationOperationCoordinator {
     // This SDK rejection is emitted before policy/upload/ASR requests, including the recorded t179 failure.
     const nativeUploadRejected = ['generate_video_edit_subtitles', 'transcribe_audio_edit'].includes(record.capabilityId ?? '')
       && error.code === 'CAPABILITY_REJECTED' && typeof error.message === 'string' && error.message.startsWith('[native_upload_unsupported]')
+    // 三层记忆旧入口把项目条目的全局分区校验放在派发之后；单条建议在纯函数校验即拒绝，尚未落盘。
+    // 仅恢复这份可证明零执行的旧回执；多条建议可能已部分写入，仍保留核对保护。
+    const memoryChanges = record.input.changes
+    let legacyMemoryLayerRejected = false
+    if (record.capabilityId === 'organize_assistant_memory' && Array.isArray(memoryChanges) && memoryChanges.length === 1
+      && error.code === 'CAPABILITY_REJECTED' && typeof error.message === 'string') {
+      const change = object(memoryChanges[0])
+      try {
+        const issues: unknown = JSON.parse(error.message)
+        legacyMemoryLayerRejected = ['project', 'style'].includes(String(object(change.target).layer))
+          && object(change.entry).section !== undefined && Array.isArray(issues) && issues.length === 1
+          && object(issues[0]).code === 'custom' && JSON.stringify(object(issues[0]).path) === '[0,"section"]'
+          && object(issues[0]).message === '只有全局记忆需要分区。'
+      } catch { /* 非这份已知校验回执，不推断执行事实。 */ }
+    }
     // t184 统一写包装记录的结构化事实：未改动目标且未计费，即 t188 修复前被误记为 unknown 的执行前拒绝（如打开不支持格式的文档）。
     const execution = object(details.execution)
     const recordedNoEffect = execution.targetMutation === 'none' && execution.billing === 'not_charged'
@@ -109,7 +124,7 @@ export class ApplicationOperationCoordinator {
     if (record.state === 'unknown' && record.result?.ok === false
       && !details.transaction && !details.persistence && !details.effects && !details.partial
       && !record.result.effects && !record.result.data && !record.recoveryResult && !record.recoveryVerification
-      && (execution.notExecuted === true || legacyClosedDocument || nativeUploadRejected || recordedNoEffect)) {
+      && (execution.notExecuted === true || legacyClosedDocument || nativeUploadRejected || legacyMemoryLayerRejected || recordedNoEffect)) {
       const recovered: OperationRecord = { ...record, state: 'not_executed', verificationState: 'verified',
         result: { ...record.result, error: { ...error, recoverable: true, details: { ...details, execution: { notExecuted: true } } } } }
       this.store.save(recovered)

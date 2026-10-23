@@ -35,3 +35,12 @@ it('类型、枚举、范围与格式约束来自 schema，多个问题逐行列
 it('不认识的字段保持原说明，并列出必填与通用字段', () => {
   expect(message(clipSchema, { clipRef: { kind: 'video_edit.clip', id: 'clip' }, foo: 1 }, publicClipSchema)).toBe(`INVALID_INPUT:不认识的参数：foo。\n${accepted}`)
 })
+
+it('记忆新增缺基线时说明新条目使用0，项目分区错误指向具体字段', () => {
+  const schema = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('organize_assistant_memory')!.inputSchema
+  const change = { target: { layer: 'project', ownerId: 'project' }, id: 'brand', entry: { content: '本期品牌色红色。', source: 'assistant', section: 'creative' }, actor: 'assistant', reason: '用户明确要求。' }
+  expect(message(schema, { changes: [change] }, z.toJSONSchema(schema, { io: 'input' }))).toContain('新增条目必须为0')
+  const result = message(schema, { changes: [{ ...change, expectedRevision: 0 }] }, z.toJSONSchema(schema, { io: 'input' }))
+  expect(result).toContain('changes.0.entry.section')
+  expect(result).toContain('只有全局记忆需要分区')
+})

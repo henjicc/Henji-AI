@@ -14,20 +14,20 @@ export async function runEmbeddedCli(options: AssistantCliOptions, context: stri
   try {
     if (options.threadId) await service.navigate({ action: 'open', input: options.threadId })
     await service.prompt({ text: options.goal, model, context, access: options.approvalMode === 'full_access' ? 'full' : 'read' }, runId)
-    write({ type: 'started', engine: 'pi', runId, access: options.approvalMode === 'full_access' ? 'full' : 'read' })
+    write({ type: 'started', engine: 'pi', runId, access: options.approvalMode === 'full_access' ? 'full' : 'read', threadId: service.snapshot().sessionId })
     while (service.snapshot().busy) {
       if (Date.now() - startedAt >= options.timeoutMs) {
         await service.cancel()
-        write({ type: 'finished', engine: 'pi', runId, status: 'timed_out', sessionId: service.snapshot().sessionId, businessVerified: false })
+        write({ type: 'finished', engine: 'pi', runId, status: 'timed_out', sessionId: service.snapshot().sessionId, threadId: service.snapshot().sessionId, businessVerified: false })
         return 1
       }
       await new Promise<void>(resolve => setTimeout(resolve, 100))
     }
     const snapshot = service.snapshot()
     const failed = Boolean(snapshot.error || snapshot.pendingMessages?.some(message => message.error))
-    write({ type: 'finished', engine: 'pi', runId, status: failed ? 'failed' : 'completed', sessionId: snapshot.sessionId,
+    write({ type: 'finished', engine: 'pi', runId, status: failed ? 'failed' : 'completed', sessionId: snapshot.sessionId, threadId: snapshot.sessionId,
       durationMs: Date.now() - startedAt, businessVerified: false, error: snapshot.error,
       messages: snapshot.messages })
     return failed ? 1 : 0
-  } finally { service.dispose() }
+  } finally { await service.dispose() }
 }
