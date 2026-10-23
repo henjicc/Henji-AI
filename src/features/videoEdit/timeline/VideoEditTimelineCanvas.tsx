@@ -357,7 +357,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
           {picture && media && <VideoEditClipFilmstrip clipId={clip.id} source={media.path} sourceRevision={media.sourceRevision} still={media.kind === 'image'} aspect={media.width > 0 && media.height > 0 ? media.width / media.height : 16 / 9}
             mediaEndSeconds={media.durationSeconds} frameSeconds={media.frameRate ? media.frameRate.denominator / media.frameRate.numerator : 1 / 30} clip={clip} fps={fps} pixels={pixels} clipWidth={clipWidth} height={row.height - 6}
             visibleFrom={stripEdge(view.left + TIMELINE_HEADER_WIDTH - clipLeft, clipWidth, Math.floor)} visibleTo={stripEdge(view.left + view.width - clipLeft, clipWidth, Math.ceil)} devicePixelRatio={devicePixelRatio} active={visible} />}
-          {range && <VideoEditClipWaveform clipId={clip.id} sources={range.sources} startSeconds={range.startSeconds} endSeconds={range.endSeconds} reverse={clip.reverse} left={(range.from - clip.start) * pixels} width={(range.to - range.from) * pixels} visible={visible} lane={picture ? 'lower' : 'full'} />}
+          {range && <VideoEditClipWaveform clipId={clip.id} gainDb={clip.gainDb} sources={range.sources} startSeconds={range.startSeconds} endSeconds={range.endSeconds} reverse={clip.reverse} left={(range.from - clip.start) * pixels} width={(range.to - range.from) * pixels} visible={visible} lane={picture ? 'lower' : 'full'} />}
           {/* 隐藏轨/静音轨只淡化画面与波形（盖一层半透明窗口底），片段名标签不跟着变淡：整片 opacity-50 时
               纸白下标签只剩 1.5:1（4.1 对比度审计） */}
           {dimmed && <div className="pointer-events-none absolute inset-0 bg-window/50" aria-hidden="true" />}

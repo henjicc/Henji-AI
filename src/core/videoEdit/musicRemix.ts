@@ -1,3 +1,4 @@
+import { videoEditGainDbSchema } from './loudness'
 import { z } from 'zod'
 import type { MusicRemixGranularity, MusicRemixPlan } from '../audioAnalysis/music/musicRemixPlan'
 import type { VideoEditClip, VideoEditSequence } from './document'
@@ -113,7 +114,7 @@ export function applyMusicRemixToSequence(input: MusicRemixApplyInput): { sequen
     return {
       ...base, id: input.newId(), groupId, start: input.startFrame + piece.startFrame, duration: piece.durationFrames,
       ...videoEditSourceTimeFromSeconds(piece.sourceInSeconds),
-      volume: typeof template.volume === 'number' ? template.volume * 10 ** (piece.gainDb / 20) : template.volume,
+      gainDb: videoEditGainDbSchema.parse((template.gainDb ?? 0) + piece.gainDb),
       ...(fadeIn ? { fadeInFrames: Math.min(fadeIn, piece.durationFrames) } : {}),
       ...(fadeOut ? { fadeOutFrames: Math.min(fadeOut, piece.durationFrames) } : {}),
       remix: { ...input.remix, segment, ...(piece.seamConfidence === undefined ? {} : { seamConfidence: piece.seamConfidence }) },

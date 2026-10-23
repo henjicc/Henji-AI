@@ -1,3 +1,4 @@
+import { videoEditGainMultiplier } from '@/core/videoEdit/loudness'
 import type { VideoEditContentTarget, VideoEditLookaheadScope } from './videoEditDecodeLookahead'
 import { codeMediaInputKey, codeMediaInputComposition } from '@/core/videoEdit/codeMediaInput'
 import { codeFilterInputComposition } from '@/core/videoEdit/codeFilterInput'
@@ -1176,6 +1177,7 @@ export class VideoEditRenderer {
     const audioWindows = (this.document.transitions ?? []).filter(transition => videoEditTransitionMedium(transition.kind) === 'audio').flatMap((transition): VideoEditTransitionWindow[] => { try { return [videoEditTransitionWindow(this.document, transition)] } catch { return [] } })
     for (const clip of audibleVideoEditClips(this.document)) {
       const outgoing = audioWindows.filter(window => window.left.id === clip.id && window.side !== 'in'); const incoming = audioWindows.filter(window => window.right.id === clip.id && window.side !== 'out')
+      const sourceGain = videoEditGainMultiplier(clip.gainDb)
       const clipStart = clip.start / fps
       const playStart = Math.min(clip.start, ...incoming.map(window => window.start)) / fps
       const playEnd = Math.max(clip.start + clip.duration, ...outgoing.map(window => window.end)) / fps
@@ -1194,7 +1196,7 @@ export class VideoEditRenderer {
       const enveloped = videoEditClipFades(clip) || outgoing.length > 0 || incoming.length > 0 || Boolean(clip.curves?.volume?.length)
       const envelope = enveloped ? Float32Array.from({ length }, (_, sample) => {
         const seconds = sampleStartSeconds + sample / rate
-        let gain = videoEditClipValue(clip, 'volume', seconds * fps) * (seconds >= clipStart && seconds < (clip.start + clip.duration) / fps ? videoEditFadeGain(clip, seconds, fps) : 1)
+        let gain = sourceGain * videoEditClipValue(clip, 'volume', seconds * fps) * (seconds >= clipStart && seconds < (clip.start + clip.duration) / fps ? videoEditFadeGain(clip, seconds, fps) : 1)
         for (const window of [...outgoing, ...incoming]) {
           const begin = window.start / fps; const end = window.end / fps
           if (seconds >= begin && seconds < end) gain *= videoEditAudioTransitionClipGain(window, clip.id, (seconds - begin) / (end - begin))
@@ -1278,7 +1280,7 @@ export class VideoEditRenderer {
       }
       }
       const effects = activeVideoEditAudioEffects(clip)
-      if (!effects.length) { await readSound(from, to, firstSample, result, sample => envelope ? envelope[sample] : videoEditClipValue(clip, 'volume', from * fps)); continue }
+      if (!effects.length) { await readSound(from, to, firstSample, result, sample => envelope ? envelope[sample] : sourceGain * videoEditClipValue(clip, 'volume', from * fps)); continue }
       // 音频效果（4.7c）：片段音量在效果之前（限幅器的上限不被音量推高），淡化与过渡在效果之后；效果链有延迟时多读后面的素材抵消，
       // 块不连续时从前面预读一段让状态稳定。预览与导出都走这里，连续播放时与分块方式无关、逐样本一致。
       let chain = this.audioChains.get(clip.id)
@@ -1289,7 +1291,7 @@ export class VideoEditRenderer {
       if (!plan.contiguous && !rebuilt) await chain.reset(effects)
       const input = Array.from({ length: this.document.channels }, () => new Float32Array(plan.inputLength))
       const readFrom = Math.max(plan.inputStart / rate, playStart, headRoom); const readTo = Math.min((plan.inputStart + plan.inputLength) / rate, playEnd)
-      if (readFrom < readTo) await readSound(readFrom, readTo, plan.inputStart, input, sample => videoEditClipValue(clip, 'volume', (plan.inputStart + sample) / rate * fps))
+      if (readFrom < readTo) await readSound(readFrom, readTo, plan.inputStart, input, sample => sourceGain * videoEditClipValue(clip, 'volume', (plan.inputStart + sample) / rate * fps))
       const animatedEffects = effects.some(effect => Object.values(effect.builtin.curves ?? {}).some(points => points.length))
       const automated = animatedEffects ? effects.map(effect => ({ ...effect, builtin: { ...effect.builtin, params: evaluateVideoEditBuiltinParameters(effect.builtin, 0) } })) : undefined
       chain.process(input, plan.inputLength, automated ? sample => {

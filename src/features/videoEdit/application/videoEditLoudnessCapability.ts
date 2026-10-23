@@ -18,7 +18,7 @@ export async function executeVideoEditLoudnessCapability(input: Input, normalize
   const target: VideoEditGainTarget = { projectId: input.documentRef.id, sequenceId: sequence.id, clipIds: ids }
   if (!normalize) {
     const measurements = await measureVideoEditClips(target, signal)
-    return { resultRef: input.documentRef, results: clips.map((clip, index) => ({ clipRef: { kind: 'video_edit.clip', id: `${target.projectId}:${clip.id}` }, volume: clip.volume, measurement: measurements[index] })), message: '已测量所选片段的声音，未修改音量。', verified: true }
+    return { resultRef: input.documentRef, results: clips.map((clip, index) => ({ clipRef: { kind: 'video_edit.clip', id: `${target.projectId}:${clip.id}` }, volume: clip.volume, gainDb: clip.gainDb ?? 0, measurement: measurements[index] })), message: '已测量所选片段的声音，未修改音量。', verified: true }
   }
   const parsed = normalizeVideoEditLoudnessCapability.inputSchema.parse(input)
   const changes = await applyVideoEditAudioGain(target, 'loudness', parsed.targetLufs, signal)
@@ -27,5 +27,5 @@ export async function executeVideoEditLoudnessCapability(input: Input, normalize
     throw new ApplicationPersistenceFailure('响度已调整但未保存，请重试保存，不要重复标准化。', { memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'document', recovery: { capabilityId: 'save_video_edit', target: input.documentRef, replayMutation: false } }, error)
   }
   const verified = await verifyVideoEditContentSaved(owner, expected, contentVersion)
-  return { resultRef: input.documentRef, results: changes.map(change => ({ clipRef: { kind: 'video_edit.clip', id: `${target.projectId}:${change.clipId}` }, volume: change.volume, measurement: change.measurement! })), message: `所选声音已标准化到 ${parsed.targetLufs} LUFS，可一步撤销。`, verified }
+  return { resultRef: input.documentRef, results: changes.map(change => ({ clipRef: { kind: 'video_edit.clip', id: `${target.projectId}:${change.clipId}` }, volume: clips.find(clip => clip.id === change.clipId)!.volume, gainDb: change.gainDb, measurement: change.measurement! })), message: `所选源声音已通过音频增益标准化到 ${parsed.targetLufs} LUFS，可一步撤销。`, verified }
 }

@@ -1,0 +1,82 @@
+{
+  "version": 16,
+  "projectId": "golden-video",
+  "sequenceId": "golden-sequence",
+  "signature": "golden-signature",
+  "startFrame": 0,
+  "endFrame": 90,
+  "soundClips": [
+    {
+      "snapToBeat": true,
+      "id": "golden-sound-clip",
+      "itemId": "golden-sound-item",
+      "name": "鼓点",
+      "kind": "audio",
+      "track": 0,
+      "start": 0,
+      "duration": 90,
+      "sourceInUs": 0,
+      "sourceRemainder": {
+        "numerator": 0,
+        "denominator": 1
+      },
+      "x": 0,
+      "y": 0,
+      "scale": 1,
+      "rotation": 0,
+      "opacity": 1,
+      "volume": 1,
+      "gainDb": 19,
+      "text": "",
+      "pitchSemitones": -3,
+      "remix": {
+        "id": "golden-remix",
+        "segment": 0,
+        "targetFrames": 90,
+        "repetition": 0.5,
+        "granularity": "bar",
+        "seed": 0,
+        "analysisIdentity": "music-v1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "sourceInUs": 0,
+        "sourceOutUs": 3000000
+      }
+    }
+  ],
+  "soundIdentities": {
+    "golden-sound-clip": "golden-sound-identity"
+  },
+  "captions": [
+    {
+      "id": "golden-caption",
+      "start": 5,
+      "duration": 40,
+      "text": "字幕原文",
+      "sourceText": "字幕原文、",
+      "speech": {
+        "text": "字幕原文",
+        "aligned": true,
+        "words": [
+          {
+            "clipId": "golden-sound-clip",
+            "text": "字幕",
+            "startUs": 166667,
+            "endUs": 700000,
+            "precision": "word"
+          },
+          {
+            "clipId": "golden-sound-clip",
+            "text": "原文",
+            "startUs": 700000,
+            "endUs": 1500000,
+            "precision": "word"
+          }
+        ]
+      },
+      "reviewReasons": [
+        "translation"
+      ],
+      "translation": "Golden caption"
+    }
+  ],
+  "committed": true
+}

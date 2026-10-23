@@ -203,6 +203,25 @@ function createVideoEditNativeAudioScene() {
             const decode = { nativeAvailable: true, forced, localPaths: { [url]: sample.path } }
             const mixed = await page.evaluate(({ document, decode, seconds, block }) => window.__henjiNativeAudio.mix(document, decode, seconds, block), { document, decode, seconds: MIX_SECONDS, block: BLOCK_SECONDS })
             const channels = compare(mixed.channels.map((channel) => Float32Array.from(channel)), sample)
+            // 同一真实 Worker 验证源增益、音量关键帧及预览/导出分块，原解码断言保留。
+            if (sample.file === 'pcm96.wav' && forced === 'native') {
+              document.revision++
+              document.clips[0].gainDb = 18
+              document.clips[0].volume = .25
+              document.clips[0].curves = { volume: [{ time: 0, value: .25, interpolation: 'linear' }, { time: 59, value: .5, interpolation: 'linear' }] }
+              const amplified = await page.evaluate(({ document, decode }) => window.__henjiNativeAudio.mix(document, decode, 3, .5), { document, decode })
+              const exported = await page.evaluate(({ document, decode }) => window.__henjiNativeAudio.mix(document, decode, 3, 1 / 30), { document, decode })
+              let maxError = 0, blockError = 0
+              for (let channel = 0; channel < 2; channel++) for (let sampleIndex = 0; sampleIndex < mixed.channels[channel].length; sampleIndex++) {
+                const localFrame = sampleIndex / RATE * FPS - CLIP.startFrame
+                const volume = .25 + .25 * Math.min(1, Math.max(0, localFrame / 59))
+                maxError = Math.max(maxError, Math.abs(amplified.channels[channel][sampleIndex] - mixed.channels[channel][sampleIndex] * 10 ** .9 * volume))
+                blockError = Math.max(blockError, Math.abs(amplified.channels[channel][sampleIndex] - exported.channels[channel][sampleIndex]))
+              }
+              evidence.gain = { gainDb: 18, maxError, blockError }
+              assert(maxError < 1e-6, `源增益/音量叠加不正确：${maxError}`)
+              assert.equal(blockError, 0, '预览与导出分块声音不一致')
+            }
             await page.evaluate(() => window.__henjiNativeAudio.close())
             const result = { backend: forced, samples: mixed.channels[0].length, mixMs: { mean: mixed.timings.reduce((sum, value) => sum + value, 0) / mixed.timings.length, max: Math.max(...mixed.timings) }, sessionsAfterBlocks: mixed.sessions, channels }
             record.results.push(result); store()

@@ -58,7 +58,7 @@ export async function generateRecordingMovie(sessionId: string, options: Recordi
           if (gains.some(v => v.measurement?.integratedLufs === null)) warnings.push('部分声音低于响度测量门限，已保留原音量。')
           for (const id of plan.sequenceIds) {
             const audio = draft.sequences.find(v => v.id === id)!.clips.filter(v => v.kind === 'audio')
-            audio.forEach((clip, index) => { clip.volume = gains[index].volume })
+            audio.forEach((clip, index) => { clip.gainDb = gains[index].gainDb })
           }
         }
       }

@@ -20,11 +20,11 @@ it('导入事务只调整这次新增麦克风片段，系统声及原片段不�
   recording.media = ['microphone', 'systemAudio'].map(kind => ({ id: kind, kind: kind as 'microphone' | 'systemAudio', path: `/${kind}.wav`, monoUs: 0, durationUs: 2000000 }))
   for (const source of recording.media) { document.media.push({ id: source.id, path: source.path, name: source.id, kind: 'audio', durationSeconds: 2, width: 0, height: 0, hasAudio: true }); document.items.push({ id: source.id, name: source.id, kind: 'audio', mediaId: source.id }) }
   vi.mocked(getPlatform).mockReturnValue({ documents: { readDocument: async () => ({ meta: { kind: 'screen_recording' }, content: recording }), saveDocument: vi.fn() } } as unknown as ReturnType<typeof getPlatform>)
-  vi.mocked(prepareVideoEditRecordingGain).mockImplementation(async (_, ids) => new Map(ids.map(id => [id, 1.5])))
+  vi.mocked(prepareVideoEditRecordingGain).mockImplementation(async (_, ids) => new Map(ids.map(id => [id, 19])))
   let committed: typeof document | undefined
   vi.mocked(importVideoEditSources).mockImplementation(async (_, _sources, _bin, _signal, transform) => { const ids = recording.media.map(source => source.id); committed = await transform!(structuredClone(document), ids); return ids })
   await importRecordingToVideo('capture', { documentId: document.id, sequenceId: sequence.id })
-  expect(committed!.sequences[0].clips.map(clip => [clip.itemId, clip.volume])).toEqual([['microphone', 1.5], ['systemAudio', 1]])
+  expect(committed!.sequences[0].clips.map(clip => [clip.itemId, clip.volume, clip.gainDb ?? 0])).toEqual([['microphone', 1, 19], ['systemAudio', 1, 0]])
   expect(document.sequences[0].clips).toHaveLength(0)
   committed = undefined
   vi.mocked(prepareVideoEditRecordingGain).mockRejectedValueOnce(new Error('测量失败'))

@@ -69,7 +69,7 @@ export async function redubRecordingSentence(sessionId: string, options: Recordi
       const still = stillPath ? draft.media.find(v => pathKey(v.path) === pathKey(stillPath!)) : undefined
       const changed = replaceRecordingNarration(draft, target, media, options.text, still)
       const gain = await prepareVideoEditAudioGain(videoEditComposition(draft, target.sequenceId), [changed], 'loudness', targetLufs, signal, current, true)
-      changed.volume = gain[0].volume
+      changed.gainDb = gain[0].gainDb
       current()
       return videoEditDocumentSchema.parse(draft)
     })

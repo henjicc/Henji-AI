@@ -117,8 +117,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   storage: 'json',
   // 版本 1 = 旧剪辑文件第 2 版的持久字段（去掉 format / version / id / name / revision，由外壳表达）。
   version: VIDEO_EDIT_CONTENT_VERSION,
-  // 第 22 版删除了旧程序依赖的 styleKits 与序列 styleKitId：更早的程序不能正确理解，最低可读版本提高到 22。
-  minReaderVersion: 22,
+  // 源增益改变片段的实际声音；旧程序忽略它会错误播放与导出，拒绝静默降级。
+  minReaderVersion: 23,
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
@@ -133,6 +133,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
     // 21 → 22：风格说明书换成 Frameflow 的风格包机制。工程风格包转成风格副本（旧栏目并入新栏目、参考示例记进“样片与代码”），
     // 序列绑定 styleKitId 改名 styleId；新增工程模板 templates 与原生模板实例标记 clip.templateId。
     21: content => migrateVideoEditStyles(content),
+    // 22 → 23：新增可选 gainDb，缺省按 0 dB 读取，旧音量与关键帧原样保留。
+    22: content => content,
   },
   dependencyContent: ({ exportHistory: _exportHistory, ...dependencies }) => dependencies,
   createEmptyContent: createEmptyVideoEditContent,

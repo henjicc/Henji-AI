@@ -34,7 +34,7 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
   async render() { return { singleFrameReads: 0 } }
   async mixAudio(_start: number, duration: number) {
     boundary.mixes()
-    const planes = Array.from({ length: this.composition.channels }, () => new Float32Array(Math.round(duration * this.composition.sampleRate)).fill(this.composition.clips[0]?.volume ?? 0))
+    const planes = Array.from({ length: this.composition.channels }, () => new Float32Array(Math.round(duration * this.composition.sampleRate)).fill((this.composition.clips[0]?.volume ?? 0) * 10 ** ((this.composition.clips[0]?.gainDb ?? 0) / 20)))
     return { numberOfChannels: planes.length, getChannelData: (channel: number) => planes[channel] }
   }
 } }))
@@ -75,11 +75,11 @@ it('录后在草稿测量并保留单步撤销，片段音量可经现有属性�
   const { owner, target, id } = await project(), before = owner.past.length
   const volumes = await prepareVideoEditRecordingGain(videoEditComposition(owner.document, target.sequenceId), target.clipIds)
   expect(owner.past).toHaveLength(before)
-  expect([...volumes.values()]).toEqual([10 ** (.2), 10 ** (.2)])
-  editVideoSequence(id, target.sequenceId, sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, volume: volumes.get(clip.id) ?? clip.volume })) }))
+  expect([...volumes.values()]).toEqual([4, 4])
+  editVideoSequence(id, target.sequenceId, sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, gainDb: volumes.get(clip.id) ?? clip.gainDb })) }))
   expect(owner.past).toHaveLength(before + 1)
   const app = createApplicationHarness()
-  try { expect(((await app.read({ kind: 'video_edit.clip', id: `${id}:${target.clipIds[0]}` }, ['video_edit.clip.volume'])).properties as Record<string, unknown>)['video_edit.clip.volume']).toBeCloseTo(10 ** .2) }
+  try { expect(((await app.read({ kind: 'video_edit.clip', id: `${id}:${target.clipIds[0]}` }, ['video_edit.clip.gain_db'])).properties as Record<string, unknown>)['video_edit.clip.gain_db']).toBe(4) }
   finally { app.dispose() }
   undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.volume)).toEqual([1, 1])
   const controller = new AbortController(); controller.abort()
@@ -93,7 +93,7 @@ it('G 与 PR 核对一致；多选增益对话框确定一次撤销，取消不�
   fireEvent.change(view.getByLabelText('增益方式'), { target: { value: 'set' } })
   fireEvent.change(view.getByLabelText('增益 dB'), { target: { value: '-6.02' } }); fireEvent.blur(view.getByLabelText('增益 dB'))
   await act(async () => fireEvent.click(view.getByRole('button', { name: '确定' })))
-  expect(owner.past).toHaveLength(before + 1); expect(getActiveVideoEditSequence(owner).clips.every(clip => Math.abs(clip.volume - .5) < .001)).toBe(true)
+  expect(owner.past).toHaveLength(before + 1); expect(getActiveVideoEditSequence(owner).clips.every(clip => clip.gainDb === -6.02 && clip.volume === 1)).toBe(true)
   undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.volume)).toEqual([1, 1]); expect(close).toHaveBeenCalledOnce()
   cleanup(); const cancel = render(<VideoEditAudioGainDialog target={target} onClose={vi.fn()} />); fireEvent.click(cancel.getByRole('button', { name: '取消' })); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.volume)).toEqual([1, 1])
 })
@@ -104,20 +104,20 @@ it('测量只读；助手标准化经正式公共能力写音量、回读、保�
     const measured = await app.requireResult('measure_video_edit_loudness', input); expect(measured.verified).toBe(true); expect(owner.past).toHaveLength(before)
     const changed = await app.requireResult('normalize_video_edit_loudness', { ...input, targetLufs: -23 }); expect(changed.verified).toBe(true)
     expect(owner.past).toHaveLength(before + 1)
-    expect(((await app.read(input.clipRefs[0], ['video_edit.clip.volume'])).properties as Record<string, unknown>)['video_edit.clip.volume']).toBeCloseTo(10 ** (-3 / 20))
+    expect(((await app.read(input.clipRefs[0], ['video_edit.clip.gain_db'])).properties as Record<string, unknown>)['video_edit.clip.gain_db']).toBe(-3)
     undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.volume)).toEqual([1, 1])
     expect((await app.call('normalize_video_edit_loudness', { ...input, clipRefs: [{ kind: 'video_edit.clip', id: `foreign:${target.clipIds[0]}` }], targetLufs: -23 })).ok).toBe(false)
     const denied = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'read-only', capabilityIds: ['normalize_video_edit_loudness'], permissions: ['video_edit:read'], allowWrites: false, allowDestructive: false }))
-    await expect(denied.execute({ id: 'normalize_video_edit_loudness', version: 1, input: { ...input, targetLufs: -23 } }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })).rejects.toThrow('PERMISSION_DENIED')
+    await expect(denied.execute({ id: 'normalize_video_edit_loudness', version: 2, input: { ...input, targetLufs: -23 } }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })).rejects.toThrow('PERMISSION_DENIED')
     const baseline = await app.read(input.clipRefs[0])
     editVideoSequence(id, target.sequenceId, sequence => ({ ...sequence, name: '后续修改' }))
     expect((await app.call('normalize_video_edit_loudness', { ...input, targetLufs: -23 }, baseline.revisions as Record<string, number>)).ok).toBe(false)
     expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.volume)).toEqual([1, 1])
   } finally { app.dispose() }
 })
-it('轨道锁定、测量期间修改与目标超出已有音量范围不产生部分历史', async () => {
+it('轨道锁定、测量期间修改与目标超出独立增益范围不产生部分历史', async () => {
   const { owner, target, id } = await project(); const before = owner.past.length
-  await expect(applyVideoEditAudioGain(target, 'loudness', -5)).rejects.toThrow('+6.02'); expect(owner.past).toHaveLength(before)
+  await expect(applyVideoEditAudioGain(target, 'set', 97)).rejects.toThrow('-96～+96'); expect(owner.past).toHaveLength(before)
   vi.mocked(getPlatform().audioEdit.loudness.measure).mockImplementationOnce(async () => { editVideoSequence(id, target.sequenceId, sequence => ({ ...sequence, name: '另一次修改' })); return peak(1) })
   await expect(measureVideoEditClips(target)).rejects.toThrow('已有修改'); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.volume)).toEqual([1, 1])
   editVideoSequence(id, target.sequenceId, sequence => ({ ...sequence, tracks: sequence.tracks.map(track => ({ ...track, locked: true })) }))
@@ -181,7 +181,7 @@ it('成片草稿保留不可测量静音，不影响显式响度调整的失败�
   vi.mocked(getPlatform().audioEdit.loudness.measure).mockResolvedValue(peak(0))
   const composition = videoEditComposition(owner.document, target.sequenceId), history = owner.past.length
   const prepared = await prepareVideoEditAudioGain(composition, composition.clips, 'loudness', -16, undefined, undefined, true)
-  expect(prepared.map(v => v.volume)).toEqual(composition.clips.map(v => v.volume))
+  expect(prepared.map(v => v.gainDb)).toEqual(composition.clips.map(v => v.gainDb ?? 0))
   expect(owner.past).toHaveLength(history)
   await expect(applyVideoEditAudioGain(target, 'loudness', -16)).rejects.toThrow()
   expect(owner.past).toHaveLength(history)
@@ -200,7 +200,44 @@ it.each(['peak_max', 'peak_all'] as const)('%s：最大峰值共同缩放保持�
   const before = owner.past.length
   const result = await applyVideoEditAudioGain(target, mode, -12)
   expect(result[0].measurement!.samplePeakDbfs).toBeCloseTo(-12)
-  if (mode === 'peak_max') expect(result[1].volume / result[0].volume).toBeCloseTo(.5)
+  if (mode === 'peak_max') expect(result[1].gainDb).toBeCloseTo(result[0].gainDb)
   else expect(result[1].measurement!.samplePeakDbfs).toBeCloseTo(-12)
   expect(owner.past).toHaveLength(before + 1); undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.volume)).toEqual([1, .5])
+})
+
+it('超过 +6 dB 的源标准化保留音量、关键帧与效果，重复执行不累加增益', async () => {
+  const { owner, target, id } = await project()
+  editVideoSequence(id, target.sequenceId, sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, gainDb: -8, volume: .25, curves: { volume: [{ time: 0, value: .1, interpolation: 'linear' as const }, { time: 30, value: .5, interpolation: 'linear' as const }] }, fadeInFrames: 10 })) }))
+  const before = structuredClone(getActiveVideoEditSequence(owner).clips)
+  const result = await applyVideoEditAudioGain(target, 'loudness', -5)
+  expect(result.map(value => value.gainDb)).toEqual([15, 15])
+  expect(result.every(value => Math.abs(value.measurement!.integratedLufs! + 5) <= .5)).toBe(true)
+  expect(getActiveVideoEditSequence(owner).clips).toEqual(before.map(clip => ({ ...clip, gainDb: 15 })))
+  expect((await applyVideoEditAudioGain(target, 'loudness', -5)).map(value => value.gainDb)).toEqual([15, 15])
+  const app = createApplicationHarness()
+  try {
+    const ref = { kind: 'video_edit.clip', id: `${id}:${target.clipIds[0]}` }
+    expect((await app.read(ref, ['video_edit.clip.gain_db'])).properties).toMatchObject({ 'video_edit.clip.gain_db': 15 })
+    expect((await app.change(ref, { 'video_edit.clip.gain_db': 24 })).ok).toBe(true)
+    expect((await app.read(ref, ['video_edit.clip.gain_db', 'video_edit.clip.volume'])).properties).toMatchObject({ 'video_edit.clip.gain_db': 24, 'video_edit.clip.volume': .25 })
+    expect((await app.change(ref, { 'video_edit.clip.gain_db': 97 })).ok).toBe(false)
+  } finally { app.dispose() }
+})
+
+it('低电平源跨越响度门限后按复测有限校正，失败不产生部分提交', async () => {
+  const { owner, target } = await project(), before = owner.past.length
+  const measure = vi.mocked(getPlatform().audioEdit.loudness.measure)
+  measure.mockResolvedValueOnce({ ...peak(1), integratedLufs: -50 }).mockResolvedValueOnce(peak(1))
+    .mockResolvedValueOnce({ ...peak(1), integratedLufs: -17.2 }).mockResolvedValueOnce({ ...peak(1), integratedLufs: -16 })
+  const result = await applyVideoEditAudioGain(target, 'loudness', -16)
+  expect(result[0].gainDb).toBeCloseTo(35.2)
+  expect(result[1].gainDb).toBe(4)
+  expect(owner.past).toHaveLength(before + 1)
+  expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.volume)).toEqual([1, 1])
+  measure.mockResolvedValue({ ...peak(1), integratedLufs: -20 })
+  const saved = structuredClone(owner.document)
+  await expect(applyVideoEditAudioGain(target, 'loudness', -16)).rejects.toThrow('未达到标准化目标')
+  expect(owner.document).toEqual(saved)
+  expect(owner.past).toHaveLength(before + 1)
+  expect(pcm.size).toBe(0)
 })

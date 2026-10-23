@@ -73,10 +73,10 @@ export async function importRecordingToVideo(id: string, target: RecordingDestin
         const composition = videoEditComposition(document, target.sequenceId)
         const clips = composition.clips.filter(clip => !before.has(clip.id) && microphoneItems.has(clip.itemId))
         if (clips.length) {
-          const volumes = await prepareVideoEditRecordingGain(composition, clips.map(clip => clip.id), signal)
+          const gains = await prepareVideoEditRecordingGain(composition, clips.map(clip => clip.id), signal)
           for (const clip of document.sequences.find(sequence => sequence.id === target.sequenceId)!.clips) {
-            const volume = volumes.get(clip.id)
-            if (volume !== undefined) clip.volume = volume
+            const gainDb = gains.get(clip.id)
+            if (gainDb !== undefined) clip.gainDb = gainDb
           }
         }
       }

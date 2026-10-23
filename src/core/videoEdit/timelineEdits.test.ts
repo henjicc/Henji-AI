@@ -259,3 +259,15 @@ it('有声音角色的视频分离音频：角色及回避点留在声音，画�
   const sound = next.clips.find(clip => clip.sourceComponent === 'audio')!
   expect(sound.audioRole).toBe('music'); expect(sound.curves?.volume).toEqual(sequence.clips[0].curves.volume)
 })
+
+it('独立增益随拆分、复制粘贴与音视频拆离保留，音量不变', () => {
+  const { document, sequence } = fixture()
+  sequence.clips[0].gainDb = 19
+  const split = apply(document, { kind: 'split', clipIds: ['a'], frame: 40 })
+  expect(split.sequences[0].clips.filter(clip => clip.gainDb === 19)).toHaveLength(2)
+  const clipboard = copyVideoEditClips(document, sequence.id, ['a'])
+  const pasted = apply(document, { kind: 'place', clipboard, frame: 300, mode: 'paste' })
+  expect(pasted.sequences[0].clips.find(clip => clip.start === 300)).toMatchObject({ gainDb: 19, volume: sequence.clips[0].volume })
+  const separated = apply(document, { kind: 'separate_audio', clipIds: ['a'], audioTrack: 0 })
+  expect(separated.sequences[0].clips.find(clip => clip.kind === 'audio')).toMatchObject({ gainDb: 19, volume: sequence.clips[0].volume })
+})

@@ -18,7 +18,7 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   // 片段速度曲线、补帧与变调（2026-10-22）：字幕回填记录里的声音片段只新增可选字段。
   // 跟踪与防抖（2026-10-22）、音频重构 remix（2026-10-22）：同上，只新增可选字段。
   // 原生模板实例标记（2026-10-22）：字幕回填记录里的声音片段只新增可选的 templateId。
-  'subtitle-manifest': { 11: value => ({ ...value as object, version: 12 }), 12: value => ({ ...value as object, version: 13 }), 13: value => ({ ...value as object, version: 14 }), 14: value => ({ ...value as object, version: 15 }) },
+  'subtitle-manifest': { 15: value => ({ ...value as object, version: 16 }), 11: value => ({ ...value as object, version: 12 }), 12: value => ({ ...value as object, version: 13 }), 13: value => ({ ...value as object, version: 14 }), 14: value => ({ ...value as object, version: 15 }) },
 }
 /** Image layers (any depth, including smart-object documents): every `color_grade` adjustment layer's params. */
 function migrateImageColorGradeLayers(value: unknown): unknown {

@@ -134,6 +134,7 @@ const legacyFixture = (id: string, version: number): unknown => (JSON.parse(fs.r
 const legacyKits = legacyFixture('style-kits', 3) as unknown[]
 const legacyTitles = legacyFixture('title-templates', 6) as unknown[]
 const legacyPresetItems = (JSON.parse(fs.readFileSync('tests/fixtures/persistence/video-preset-package/v6.json', 'utf8')) as { items: unknown[] }).items
+// v23：源增益独立保存，保留音量与关键帧。
 videoEditDocumentSchema.parse(document)
 const { format: _format, version: _version, id: _id, name: _name, revision: _revision, ...videoContent } = document
 const soundDocument = createVideoEditDocument('节拍声音样本'), soundSequence = createVideoEditSequence()
@@ -141,6 +142,7 @@ soundSequence.id = 'golden-sound-sequence'; soundDocument.sequences.push(soundSe
 soundDocument.media.push({ id: 'golden-sound', name: '鼓点', path: '/persistence-project/素材/鼓点.wav', kind: 'audio', durationSeconds: 3, width: 0, height: 0, hasAudio: true })
 soundDocument.items.push({ id: 'golden-sound-item', name: '鼓点', kind: 'audio', mediaId: 'golden-sound' })
 const soundClip = makeVideoEditItemClip(soundDocument, 'golden-sound-item', soundSequence.id, { frame: 0, duration: 90 })
+soundClip.gainDb = 19
 soundClip.id = 'golden-sound-clip'; soundClip.snapToBeat = true; soundClip.pitchSemitones = -3
 soundClip.remix = { id: 'golden-remix', segment: 0, targetFrames: 90, repetition: 0.5, granularity: 'bar', seed: 0, analysisIdentity: `music-v1:${'b'.repeat(64)}`, sourceInUs: 0, sourceOutUs: 3000000 }
 document.media.push(...soundDocument.media)
