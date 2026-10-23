@@ -304,7 +304,9 @@ export class DocumentWorkspace {
 
   /** 新建、移入时文档的默认文件夹：项目文件夹，或作品目录下的类型文件夹。 */
   defaultDocumentFolder(kind: DocumentKindDescriptor, container: ResolvedContainer): string {
-    return container.ref.kind === 'project' ? container.root : this.standaloneFolder(kind)
+    if (container.ref.kind !== 'project') return this.standaloneFolder(kind)
+    // 素材类文档（网页录制）放在项目素材文件夹的类型子文件夹里，如 素材/录屏/。
+    return kind.projectMaterialsFolderNames ? path.join(container.materialsDir, kind.projectMaterialsFolderNames[container.locale]) : container.root
   }
 
   /** 位置换算的上下文：作品目录、全部已知项目与程序目录。 */

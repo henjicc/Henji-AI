@@ -3,7 +3,6 @@ import fs from 'node:fs/promises'
 import { release } from 'node:os'
 import path from 'node:path'
 import { desktopCapturer } from 'electron'
-import { z } from 'zod'
 import { captureOptionsSchema, type CaptureManifest } from '../../../../src/core/screenRecording/capture'
 import type { WebRecordingBackupOptions } from '../../../../src/platform/contracts/webReplay'
 import { mediaPermissions } from '../media-permissions'
@@ -14,13 +13,14 @@ import { CaptureStorage } from '../screen-recording/capture/storage'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { quickExportAudioGraph } from '../screen-recording/quick-export'
 import { recordingTracksSchema } from '../../../../src/core/screenRecording/tracks'
+import { webRecordingBackupTimingSchema } from '../../../../src/core/webReplay/videoEvents'
 
 const logger = createMainLogger('main.web_replay.backup')
 export const BACKUP_VIDEO_FILE = 'backup.mp4'
 /** Where the recording page writes the backup's microphone and system sound (its own tracks.json + files). */
 export const BACKUP_AUDIO_DIRECTORY = 'backup-audio'
 /** Picture timing of backup.mp4, kept so sound recorded beside it can be laid in later. */
-const BACKUP_TIMING_FILE = 'backup.json'
+export const BACKUP_TIMING_FILE = 'backup.json'
 const now = (): number => Number(process.hrtime.bigint() / 1000n)
 const even = (value: number, max: number): number => Math.max(2, Math.min(max, Math.floor(value / 2) * 2))
 
@@ -85,7 +85,7 @@ export class WebRecordingBackupVideo {
       await fs.writeFile(list, spans.map(span => `file '${this.storage.file(span).replace(/\\/g, '/').replace(/'/g, "'\\''")}'`).join('\n'))
       await new Promise<void>((resolve, reject) => execFile(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', '-movflags', '+faststart', output], { windowsHide: true }, error => (error ? reject(error) : resolve())))
       await fs.rm(this.storage.directory, { recursive: true, force: true })
-      await fs.writeFile(path.join(this.directory, BACKUP_TIMING_FILE), JSON.stringify({ originUs: this.originUs, spans: spans.map(({ monoUs, durationUs }) => ({ monoUs, durationUs })) }))
+      await fs.writeFile(path.join(this.directory, BACKUP_TIMING_FILE), JSON.stringify(webRecordingBackupTimingSchema.parse({ originUs: this.originUs, spans: spans.map(({ monoUs, durationUs }) => ({ monoUs, durationUs })) })))
       await mixWebRecordingBackupAudio(this.directory)
       return output
     } catch (error) {
@@ -96,7 +96,6 @@ export class WebRecordingBackupVideo {
 }
 
 const mixing = new Map<string, Promise<boolean>>()
-const timingSchema = z.object({ originUs: z.number(), spans: z.array(z.object({ monoUs: z.number(), durationUs: z.number() })) })
 
 /**
  * Lays the sound recorded beside the backup into backup.mp4 (picture stream-copied, sound mixed), then
@@ -121,7 +120,7 @@ async function mixNow(directory: string, waitMs: number): Promise<boolean> {
     if (Date.now() >= deadline) return false
     await new Promise(resolve => setTimeout(resolve, 500))
   }
-  const timing = timingSchema.parse(JSON.parse(await fs.readFile(timingFile, 'utf8')))
+  const timing = webRecordingBackupTimingSchema.parse(JSON.parse(await fs.readFile(timingFile, 'utf8')))
   const tracks = recordingTracksSchema.parse(JSON.parse(tracksText))
   // Both clocks are Henji's monotonic microseconds; only their zero points differ.
   const shift = tracks.originUs - timing.originUs

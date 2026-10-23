@@ -32,7 +32,7 @@ export const HENJI_FILE_TYPES = {
   canvas: { extension: '.hjcvs', legacyExtensions: ['.henji-canvas'], category: 'work', label: '画布', status: 'active' },
   camera_stage: { extension: '.hjstg', legacyExtensions: ['.henji-stage'], category: 'work', label: '镜头参考', status: 'active' },
   screen_recording: { extension: '.hjrec', legacyExtensions: ['.henji-recording'], category: 'work', label: '屏幕录制', status: 'active' },
-  web_recording: { extension: '.hjweb', legacyExtensions: [], category: 'work', label: '网页录制', status: 'reserved' },
+  web_recording: { extension: '.hjweb', legacyExtensions: [], category: 'work', label: '网页录制', status: 'active' },
   model_scene: { extension: '.hjmdl', legacyExtensions: [], category: 'work', label: '三维场景', status: 'reserved' },
   subtitle: { extension: '.hjsub', legacyExtensions: [], category: 'work', label: '字幕稿', status: 'reserved' },
   storyboard: { extension: '.hjsbd', legacyExtensions: [], category: 'work', label: '分镜脚本', status: 'reserved' },

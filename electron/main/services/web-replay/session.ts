@@ -19,9 +19,9 @@ export interface RecordingTarget { app: AppInfoValue; host: WebRecordingManifest
  * outlives the socket that requested it and is re-attached when the reloaded page says hello.
  */
 export class WebRecordingSession {
-  readonly id = crypto.randomUUID()
-  readonly store = WebRecordingStore.forId(this.id)
-  private assembler = new WebRecordingAssembler(this.store.storeBody)
+  readonly id: string
+  readonly store: WebRecordingStore
+  private assembler: WebRecordingAssembler
   private manifest: WebRecordingManifest
   private resources: WebRecordingResources['entries'] = []
   private externalQueue: string[] = []
@@ -39,9 +39,14 @@ export class WebRecordingSession {
 
   private backup: Promise<{ stop(): Promise<string | null> } | { reason: string } | null> | null = null
 
-  constructor(target: RecordingTarget, private readonly fetchExternal: FetchExternal, private readonly startBackup?: StartBackupVideo, readonly backupOptions: WebRecordingBackupOptions | null = null) {
+  /** `location` places the recording in a project folder (`.hjweb`); without it the recording goes to the app-data root. */
+  constructor(target: RecordingTarget, private readonly fetchExternal: FetchExternal, private readonly startBackup?: StartBackupVideo, readonly backupOptions: WebRecordingBackupOptions | null = null, location?: { id: string; directory: string; title?: string }) {
+    this.id = location?.id ?? crypto.randomUUID()
+    this.store = location ? new WebRecordingStore(location.directory) : WebRecordingStore.forId(this.id)
+    this.assembler = new WebRecordingAssembler(this.store.storeBody)
     this.manifest = {
       version: WEB_RECORDING_VERSION, minReaderVersion: WEB_RECORDING_MIN_READER_VERSION, id: this.id, status: 'recording', createdAt: new Date().toISOString(),
+      ...(location?.title ? { title: location.title } : {}),
       app: target.app, probe: target.probe, host: target.host, env: target.env, wallAtZeroMs: 0, durationUs: 0, clock: null, fonts: [], warnings: [],
     }
   }

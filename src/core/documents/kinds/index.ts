@@ -5,6 +5,7 @@ import { imageDocumentKind } from './imageDocument'
 import { createDocumentKindRegistry } from './registry'
 import { videoEditDocumentKind } from './videoEdit'
 import { screenRecordingDocumentKind } from './screenRecording'
+import { webRecordingDocumentKind } from './webRecording'
 
 export {
   createDocumentKindRegistry,
@@ -27,6 +28,7 @@ export const DOCUMENT_KINDS = [
   cameraStageDocumentKind,
   imageDocumentKind,
   screenRecordingDocumentKind,
+  webRecordingDocumentKind,
 ] as const
 
 export const documentKindRegistry = createDocumentKindRegistry(DOCUMENT_KINDS)

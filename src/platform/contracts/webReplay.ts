@@ -1,5 +1,7 @@
 import type { AppInfoValue, WebRecordingEnvironment, WebRecordingManifest } from '../../core/webReplay/schema'
 import type { RecordingEncoding } from '../../core/screenRecording/encoding'
+import type { CaptureEvent } from '../../core/captureLog/events'
+import type { RecordingCursorSource } from '../../core/videoEdit/recordingCursor'
 
 export const WEB_REPLAY_CHANNELS = {
   apps: 'webReplay:apps',
@@ -17,6 +19,8 @@ export const WEB_REPLAY_CHANNELS = {
   backupAudioDirectory: 'webReplay:backup-audio-directory',
   mixBackupAudio: 'webReplay:mix-backup-audio',
   setEnabled: 'webReplay:set-enabled',
+  importToProject: 'webReplay:import-to-project',
+  editSource: 'webReplay:edit-source',
   appsChanged: 'webReplay:apps-changed',
 } as const
 
@@ -32,8 +36,39 @@ export interface WebReplayConnectedApp {
   recordingStartedAt: number | null
 }
 
-/** A saved recording plus its most recent replay video and the window backup video, when they exist. */
-export type WebRecordingSummary = WebRecordingManifest & { video: string | null; backupVideo: string | null }
+/**
+ * A saved recording plus its most recent replay video and the window backup video, when they exist.
+ * `directory` is the recording folder: `<项目>/素材/录屏/<名称>.hjweb` for project recordings (`projectId` set),
+ * the app-data `web-recordings/<id>` folder otherwise.
+ */
+export type WebRecordingSummary = WebRecordingManifest & { video: string | null; backupVideo: string | null; directory: string; projectId: string | null }
+
+/** Where a new recording goes: a project (written as `素材/录屏/<名称>.hjweb`). Without one it goes to app data. */
+export interface WebRecordingDestination { projectId: string; name?: string }
+
+/**
+ * Brings a recording folder into a project as `.hjweb`: an existing recording by id, or any recording folder on disk
+ * (one copied elsewhere, the old app-data layout). The source is copied, never moved or changed; the copy gets a new
+ * id when its id is already used.
+ */
+export interface WebRecordingImportRequest { projectId: string; recordingId?: string; source?: string; name?: string }
+
+/**
+ * The video a recording brings into an edit, with the behavior track projected onto that video's clock and pixels.
+ * `cursor` is null when there was no pointer to place (no clock, or the picture does not match the page).
+ */
+export interface WebRecordingEditSource {
+  video: string
+  kind: 'replay' | 'backup'
+  width: number
+  height: number
+  durationUs: number
+  title: string | null
+  cursor: RecordingCursorSource | null
+  /** Click and key events on the video clock, for suggesting zoom regions. */
+  events: CaptureEvent[]
+  warnings: string[]
+}
 export interface WebReplayRenderProgress { recordingId: string; progress: number; frame: string }
 
 export interface WebReplayServerState { enabled: boolean; listening: boolean; port: number; error?: string; apps: WebReplayConnectedApp[] }
@@ -66,7 +101,7 @@ export interface WebReplayPlatform {
   setEnabled(enabled: boolean): Promise<WebReplayServerState>
   apps(): Promise<WebReplayServerState>
   /** `backup` null records data only. */
-  start(connectionId: string, backup: WebRecordingBackupOptions | null): Promise<WebRecordingManifest>
+  start(connectionId: string, backup: WebRecordingBackupOptions | null, destination?: WebRecordingDestination | null): Promise<WebRecordingManifest>
   stop(recordingId: string): Promise<WebRecordingManifest>
   recordings(): Promise<WebRecordingSummary[]>
   /** Moves a recording to the trash folder; `restore` brings it back. */
@@ -87,6 +122,9 @@ export interface WebReplayPlatform {
   backupAudioDirectory(recordingId: string): Promise<string>
   /** Lays that sound into backup.mp4 once the recording is saved; false when there was none. */
   mixBackupAudio(recordingId: string): Promise<boolean>
+  importToProject(request: WebRecordingImportRequest): Promise<WebRecordingSummary>
+  /** `prefer` picks the replay or the backup video; `auto` takes the newest replay, else the backup. */
+  editSource(recordingId: string, prefer?: 'replay' | 'backup' | 'auto'): Promise<WebRecordingEditSource>
 }
 
 export interface WebRecordingExportResult { files: string[]; skipped: number }

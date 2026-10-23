@@ -370,6 +370,12 @@
       "fingerprint": "ea66782342941daf89b5470958ee9a097e5465fa8a5f356c338cf0c0d41914bc",
       "supportedFrom": 1,
       "minReaderVersion": 1
+    },
+    "web-recording-backup-timing": {
+      "version": 1,
+      "fingerprint": "7bcca0584521113b7776f67d59295385928d47d089f5b668c2aa7770a394767a",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
     }
   },
   "devBreaks": []

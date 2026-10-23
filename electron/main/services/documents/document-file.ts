@@ -47,9 +47,9 @@ export interface LoadedDocumentFile {
   path: string
   stat: DocumentFileStat
   header: DocumentFileHeader
-  /** JSON 类型的完整外壳；包类型为 null。 */
+  /** JSON 类型的完整外壳；包类型与文件夹类型为 null。 */
   envelope: DocumentEnvelope | null
-  /** 包类型由适配器给出摘要；JSON 类型在换算内容后计算。 */
+  /** 包类型与文件夹类型由适配器给出摘要；JSON 类型在换算内容后计算。 */
   packageSummary: DocumentListSummary | null
   backupPath?: string
 }
@@ -79,14 +79,12 @@ export async function loadDocumentFile(
   const kind = kindForPath(dependencies.kinds, filePath)
   let stat: DocumentFileStat
   try {
-    const info = await fsp.stat(filePath)
-    if (!info.isFile()) throw new DocumentFormatError('文档位置不是文件。')
-    stat = { size: info.size, mtimeMs: info.mtimeMs, birthtimeMs: info.birthtimeMs }
+    stat = await statDocumentLocation(kind, filePath, dependencies.adapters)
   } catch (error) {
     if (errorCode(error) === 'ENOENT' || errorCode(error) === 'ENOTDIR') throw new DocumentNotFoundError(expectedId ?? '')
     throw error
   }
-  if (kind.storage === 'package') {
+  if (kind.storage !== 'json') {
     const adapter = dependencies.adapters.get(kind.id)
     if (!adapter) throw new DocumentUnsupportedError('这种文档的读写尚未接入。')
     const header = await adapter.readHeader(filePath)
@@ -137,6 +135,23 @@ export async function loadDocumentFile(
     createMainLogger('main.documents').warn('文档格式读取失败', { event: 'documents.load.failed', context: { format: contract.id, fromVersion: envelope.kindVersion, toVersion: kind.version }, error })
     throw error
   }
+}
+
+/**
+ * 文档位置的大小与时间：普通文档与单文件包取文件本身；文件夹类型取其中的头信息文件，
+ * 创建时间取文件夹本身。位置的形状不对（该是文件却是文件夹，或反过来）时报格式错误。
+ */
+export async function statDocumentLocation(kind: DocumentKindDescriptor, filePath: string, adapters: PackageAdapterRegistry): Promise<DocumentFileStat> {
+  const info = await fsp.stat(filePath)
+  if (kind.storage !== 'folder') {
+    if (!info.isFile()) throw new DocumentFormatError('文档位置不是文件。')
+    return { size: info.size, mtimeMs: info.mtimeMs, birthtimeMs: info.birthtimeMs }
+  }
+  if (!info.isDirectory()) throw new DocumentFormatError('文档位置不是文件夹。')
+  const headerFile = adapters.get(kind.id)?.headerFile
+  if (!headerFile) throw new DocumentUnsupportedError('这种文档的读写尚未接入。')
+  const header = await fsp.stat(path.join(filePath, headerFile))
+  return { size: header.size, mtimeMs: header.mtimeMs, birthtimeMs: info.birthtimeMs }
 }
 
 export function documentPersistenceContract(kind: DocumentKindDescriptor): PersistenceContract {

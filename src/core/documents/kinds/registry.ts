@@ -12,7 +12,7 @@ import type { DocumentKindId, DocumentListSummary, FolderLocale } from '../types
  * 显示名、图标、打开方式等界面部分由渲染层另行登记。
  */
 
-export type DocumentStorageMode = 'json' | 'package'
+export type DocumentStorageMode = 'json' | 'package' | 'folder'
 
 export interface DocumentKindDescriptor<TContent = unknown> {
   readonly id: DocumentKindId
@@ -22,9 +22,14 @@ export interface DocumentKindDescriptor<TContent = unknown> {
   readonly legacyExtensions?: readonly string[]
   /** 独立存放（不属于任何项目）时所在的作品目录子文件夹名；null 表示只能放在项目里（剪辑）。 */
   readonly standaloneFolderNames: Readonly<Record<FolderLocale, string>> | null
+  /** 放在项目里时默认在素材文件夹下的这个子文件夹（如网页录制的“录屏”）；省略时放在项目根目录。 */
+  readonly projectMaterialsFolderNames?: Readonly<Record<FolderLocale, string>>
   /** 新建草稿的自动名前缀，如“未命名画布”（后面接序号）。 */
   readonly untitledNames: Readonly<Record<FolderLocale, string>>
-  /** json：外壳 + 内容的 JSON 文件；package：单文件包（图片文档），头信息由主进程包适配器读写。 */
+  /**
+   * json：外壳 + 内容的 JSON 文件；package：单文件包（图片文档）；folder：带后缀的文件夹（网页录制 `.hjweb`），
+   * 里面的文件原样存放、不压缩。package 与 folder 的头信息都由主进程适配器读写。
+   */
   readonly storage: DocumentStorageMode
   /** 当前内容版本（外壳里的 kindVersion）。 */
   readonly version: number
@@ -88,6 +93,7 @@ function validateDescriptor(kind: DocumentKindDescriptor): void {
   const names = [
     ...Object.values(kind.untitledNames),
     ...(kind.standaloneFolderNames ? Object.values(kind.standaloneFolderNames) : []),
+    ...(kind.projectMaterialsFolderNames ? Object.values(kind.projectMaterialsFolderNames) : []),
   ]
   for (const name of names) {
     const check = normalizeEntryName(name)

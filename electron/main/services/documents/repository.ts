@@ -15,6 +15,7 @@ import { entryNameKey, keepBothEntryName, untitledEntryName } from '../../../../
 import type {
   CreateDocumentRequest,
   DocumentContainerRef,
+  DocumentKindId,
   DocumentLink,
   DocumentLinkResolution,
   DocumentMeta,
@@ -36,7 +37,7 @@ import type { LocationReport } from '../../../../src/core/storage/locationCodec'
 import { isPathInside, pathKey, samePath } from '../../../../src/core/storage/pathSyntax'
 import { writeBufferAtomically } from '../fs/atomic-file'
 import { withFileLock } from '../fs/file-lock'
-import { copyFileNoOverwrite, createFileExclusively, EntryExistsError, moveFileNoOverwrite } from '../fs/no-overwrite'
+import { copyDirectoryNoOverwrite, copyFileNoOverwrite, createDirectoryExclusively, createFileExclusively, EntryExistsError, moveDirectoryNoOverwrite, moveFileNoOverwrite } from '../fs/no-overwrite'
 import { KeyedSerialExecutor } from '../image-editor-v3/serial-executor'
 import type { MainLogger } from '../logging/main-logger'
 import {
@@ -457,7 +458,7 @@ export class DocumentRepository {
       const file = await this.locate(target)
       if (!file.header.draft) throw new DocumentNotEmptyError('只能直接删除草稿；保存过的文档请移到回收站。')
       if (!await this.isEmpty(file)) throw new DocumentNotEmptyError()
-      await fsp.rm(file.path)
+      await fsp.rm(file.path, { recursive: file.kind.storage === 'folder' })
       this.workspace.catalog.removeDocument(file.header.id)
       await this.options.removeCover?.(file.header.id)
     }))
@@ -560,6 +561,45 @@ export class DocumentRepository {
       if (!isPathInside(this.workspace.style, this.workspace.layout().root, container.root)) this.options.grantMediaRoots([container.root])
       return result
     })
+  }
+
+  /**
+   * 文件夹类型的新文档由各自的服务直接写进文件夹（网页录制边录边写）：这里在容器里该类型的默认位置
+   * 按不覆盖的方式建一个空的 `<名称><后缀>` 文件夹并返回位置，写完头信息后再用 indexDocumentAt 登记。
+   */
+  async createFolderDocumentLocation(request: { kind: DocumentKindId; container: DocumentContainerRef; name: string }): Promise<{ path: string; name: string }> {
+    const kind = this.options.kinds.require(request.kind)
+    if (kind.storage !== 'folder') throw new DocumentUnsupportedError('只有文件夹类型的文档能这样新建。')
+    return await this.logged('create_folder', { kind: kind.id, container: request.container }, async () => {
+      const container = await this.resolveContainer(request.container)
+      if (container.ref.kind === 'user' && !kind.standaloneFolderNames) throw new DocumentLocationError('这种文档只能放在项目里。')
+      const folder = this.workspace.defaultDocumentFolder(kind, container)
+      await fsp.mkdir(folder, { recursive: true })
+      const name = requireEntryName(request.name)
+      for (let attempt = 0; attempt < MAX_NAME_ATTEMPTS; attempt += 1) {
+        const target = await this.pickTarget(folder, kind.extension, { mode: 'keepBoth', name })
+        try {
+          await createDirectoryExclusively(target.path)
+          if (!isPathInside(this.workspace.style, this.workspace.layout().root, container.root)) this.options.grantMediaRoots([container.root])
+          return target
+        } catch (error) {
+          if (!(error instanceof EntryExistsError)) throw error
+        }
+      }
+      throw new Error('同名文件过多，请先整理文件夹。')
+    })
+  }
+
+  /** 把磁盘上已写好的一份文档（文件夹类型写完头信息后）登记进作品索引，不改动文件。 */
+  async indexDocumentAt(filePath: string): Promise<DocumentMeta> {
+    const file = await loadDocumentFile(path.resolve(filePath), this.fileDependencies())
+    const container = await this.workspace.containerForPath(file.path)
+    const existing = this.workspace.catalog.getDocument(file.header.id)
+    if (existing && !samePath(this.workspace.style, existing.path, file.path) && await this.tryLoad(existing.path).then(other => other?.header.id === file.header.id)) {
+      throw new DocumentLocationError('已有同一 ID 的文档。')
+    }
+    this.workspace.catalog.upsertDocument(indexedFromFile(file, container, summarizeFile(file, container, this.workspace)))
+    return metaFromFile(file, container)
   }
 
   async reveal(target: DocumentTarget): Promise<void> {
@@ -853,7 +893,7 @@ export class DocumentRepository {
     const adapter = this.requireAdapter(file)
     if (file.path !== target) {
       try {
-        await moveFileNoOverwrite(file.path, target)
+        await (file.kind.storage === 'folder' ? moveDirectoryNoOverwrite : moveFileNoOverwrite)(file.path, target)
       } catch (error) {
         if (error instanceof EntryExistsError) throw new DocumentNameConflictError(error.path)
         if (isInUseError(error)) throw new FileInUseError(undefined, { cause: error })
@@ -864,7 +904,7 @@ export class DocumentRepository {
       await adapter.writeHeader(target, patch)
     } catch (error) {
       if (file.path !== target) {
-        try { await moveFileNoOverwrite(target, file.path) }
+        try { await (file.kind.storage === 'folder' ? moveDirectoryNoOverwrite : moveFileNoOverwrite)(target, file.path) }
         catch (rollbackError) {
           this.options.logger.error('文档改名失败且未能移回原处', {
             event: 'documents.package.move.rollback_failed',
@@ -887,8 +927,9 @@ export class DocumentRepository {
     const adapter = this.requireAdapter(file)
     for (let attempt = 0; attempt < MAX_NAME_ATTEMPTS; attempt += 1) {
       const target = await this.pickTarget(folder, file.kind.extension, naming)
+      const directory = file.kind.storage === 'folder'
       try {
-        await copyFileNoOverwrite(file.path, target.path)
+        await (directory ? copyDirectoryNoOverwrite : copyFileNoOverwrite)(file.path, target.path)
       } catch (error) {
         if (!(error instanceof EntryExistsError)) throw error
         if (naming.mode === 'exact') throw new DocumentNameConflictError(error.path)
@@ -897,7 +938,7 @@ export class DocumentRepository {
       try {
         await adapter.writeHeader(target.path, { ...patch, name: target.name })
       } catch (error) {
-        await fsp.rm(target.path, { force: true }).catch(() => undefined)
+        await fsp.rm(target.path, { force: true, recursive: directory }).catch(() => undefined)
         throw error
       }
       return target.path

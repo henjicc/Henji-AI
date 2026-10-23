@@ -3,6 +3,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   ICON_TOOL_AUDIO_EDIT,
   ICON_TOOL_SCREEN_RECORDING,
+  ICON_TOOL_WEB_RECORDING,
   ICON_TOOL_CAMERA_STAGE,
   ICON_TOOL_IMAGE_EDIT,
   ICON_WORKSPACE_CANVAS,
@@ -29,6 +30,7 @@ const PRESENTATIONS: Readonly<Record<DocumentKindId, DocumentKindPresentation>> 
   audio_edit: { nameKey: 'documentLibrary.kinds.audio_edit', icon: ICON_TOOL_AUDIO_EDIT },
   camera_stage: { nameKey: 'documentLibrary.kinds.camera_stage', icon: ICON_TOOL_CAMERA_STAGE },
   image_document: { nameKey: 'documentLibrary.kinds.image_document', icon: ICON_TOOL_IMAGE_EDIT },
+  web_recording: { nameKey: 'documentLibrary.kinds.web_recording', icon: ICON_TOOL_WEB_RECORDING },
 }
 
 export function documentKindPresentation(kind: DocumentKindId): DocumentKindPresentation {

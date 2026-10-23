@@ -283,6 +283,15 @@ export class DocumentService implements DocumentsPlatform {
     return found
   }
 
+  /** 文件夹类型（网页录制）：在容器里建一个空的文档文件夹，由所属服务写入内容后调用 indexDocumentAt 登记。 */
+  createFolderDocumentLocation(request: Parameters<DocumentRepository['createFolderDocumentLocation']>[0]): Promise<{ path: string; name: string }> {
+    return this.parts.repository.createFolderDocumentLocation(request)
+  }
+
+  indexDocumentAt(filePath: string): Promise<DocumentMeta> {
+    return this.parts.repository.indexDocumentAt(filePath)
+  }
+
   forgetExternalLocation(folderPath: string): Promise<void> {
     return this.parts.projects.forgetExternal(folderPath)
   }

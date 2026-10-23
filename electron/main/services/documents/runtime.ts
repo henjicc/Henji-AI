@@ -14,6 +14,7 @@ import { createDocumentServices, type DocumentServices } from './create-services
 import { DocumentIndexStore } from './index-store'
 import { createPackageAdapterRegistry } from './package-adapters'
 import { createImageDocumentPackageAdapter } from '../image-editor-v3/image-document/package-adapter'
+import { createWebRecordingDocumentAdapter } from '../web-replay/document-adapter'
 import type { DocumentContainerRef } from '../../../../src/core/documents/types'
 import type { DocumentService } from './service'
 import type { WorkspaceLayout } from './workspace'
@@ -75,8 +76,8 @@ function getServices(): DocumentServices {
     grantMediaRoots,
     renderCover: renderCoverImage,
     hideDirectory,
-    // 单文件包适配器登记处：图片文档 .hjimg（3.5）。
-    adapters: createPackageAdapterRegistry([createImageDocumentPackageAdapter()]),
+    // 单文件包与文件夹类型的适配器登记处：图片文档 .hjimg（3.5）、网页录制 .hjweb。
+    adapters: createPackageAdapterRegistry([createImageDocumentPackageAdapter(), createWebRecordingDocumentAdapter()]),
   })
   return services
 }

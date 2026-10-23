@@ -12,7 +12,7 @@
 
 import { henjiExtension } from '../fileExtensions'
 
-export const DOCUMENT_KIND_IDS = ['video_edit', 'canvas', 'audio_edit', 'camera_stage', 'image_document', 'screen_recording'] as const
+export const DOCUMENT_KIND_IDS = ['video_edit', 'canvas', 'audio_edit', 'camera_stage', 'image_document', 'screen_recording', 'web_recording'] as const
 export type DocumentKindId = (typeof DOCUMENT_KIND_IDS)[number]
 
 export function isDocumentKindId(value: unknown): value is DocumentKindId {

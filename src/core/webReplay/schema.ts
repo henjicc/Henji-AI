@@ -9,6 +9,13 @@ import { z } from 'zod'
 /** v2: element locators may name the enclosing data-replay-id container (`act.scope`). */
 export const WEB_RECORDING_VERSION = 3
 export const WEB_RECORDING_MIN_READER_VERSION = 1
+/** Manifest N → N+1. Shared by the file format and the `.hjweb` document kind, which reads the same manifest. */
+export const WEB_RECORDING_MIGRATIONS: Readonly<Record<number, (value: unknown) => unknown>> = {
+  // v2（2026-10-23）：元素定位只新增可选的 act.scope。
+  1: value => ({ ...value as object, version: 2 }),
+  // v3（2026-10-23）：只新增可选的 title。
+  2: value => ({ ...value as object, version: 3 }),
+}
 
 const us = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
 const finite = z.number().finite()

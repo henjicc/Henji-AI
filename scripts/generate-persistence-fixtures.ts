@@ -267,6 +267,7 @@ const values: Record<string, unknown> = {
     wallAtZeroMs: 1791504000000, durationUs: 15688200, clock: { monoAtZeroUs: 140618465380, uncertaintyUs: 223 }, fonts: ['Microsoft YaHei'],
     warnings: [{ t: 7400, kind: 'boundary', message: 'xhr: GET /x' }],
   },
+  'web-recording-backup-timing': { originUs: 140619097663, spans: [{ monoUs: 666267, durationUs: 15000000 }] },
   'llm-config': llmStoredConfigSchema.parse({ providers: [{ providerId: 'synthetic', displayName: '合成测试供应商', adapter: 'openai', enabled: false }], models: [], promptProfiles: [], textProcessingPromptTemplates: [], agentProfiles: [{ id: 'golden-agent', name: '测试助手', primary: { providerId: 'synthetic', modelId: 'test' }, settings: { timeoutMs: 60000, maxRetries: 0, maxOutputTokens: 4096, contextWindowBudget: 64000 }, verifications: [], createdAt: timestamp, updatedAt: timestamp }], tools: [], policy: { allowedTools: [], requireHumanConfirmation: true }, memory: { longTermNamespace: 'golden' } }),
   'mcp-connections': mcpConnectionStorageSchema.parse({ version: 2, connections: [{ id: '00000000-0000-4000-8000-000000000001', name: '合成测试连接', token: '0'.repeat(64), allowWrites: true, allowPaid: false, allowDestructive: false }] }),
   'document-envelope': buildDocumentEnvelope({ kind: 'canvas', kindVersion: 1, id: 'golden-envelope', name: '外壳样本', createdAt: timestamp, updatedAt: timestamp, revision: 0, draft: false, content: { nodes: [], edges: [] } }),

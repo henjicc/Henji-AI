@@ -203,6 +203,7 @@ async function documentSource(source: Extract<VideoEditCreativeSourceRequest, { 
     case 'camera_stage': throw new Error('镜头参考本身不是成片：请先在画布里渲染，再把渲染结果加入剪辑。')
     case 'video_edit': throw new Error('剪辑不能作为另一个剪辑的片段来源。')
     case 'screen_recording': throw new Error('录制会话包含多条同步轨道，请使用“将录制导入剪辑”把原片按时间一起放入目标序列。')
+    case 'web_recording': throw new Error('网页录制请用 import_web_recording 导入剪辑：视频与鼠标轨道会一起放入目标序列。')
   }
 }
 

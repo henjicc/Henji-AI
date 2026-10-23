@@ -132,6 +132,9 @@ export class DocumentPackageService {
         entries.push(...packed.entries)
         missingPaths.push(...packed.missingPaths)
         entries.unshift({ name: documentEntry, bytes: packed.bytes })
+      } else if (file.kind.storage === 'folder') {
+        // 文件夹类型（`.hjweb`）：文件夹里的文件原样放进包，导入时还原成同名文件夹。
+        for (const relative of await this.walk(file.path)) entries.push({ name: `${documentEntry}/${relative}`, source: path.join(file.path, ...relative.split('/')) })
       } else {
         entries.unshift({ name: documentEntry, source: file.path })
       }

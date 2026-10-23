@@ -10,7 +10,7 @@ export function createElectronWebReplay(): WebReplayPlatform {
   return {
     setEnabled: enabled => native().setEnabled(enabled),
     apps: () => native().apps(),
-    start: (id, backup) => native().start(id, backup),
+    start: (id, backup, destination) => native().start(id, backup, destination),
     stop: id => native().stop(id),
     recordings: () => native().recordings(),
     remove: id => native().remove(id),
@@ -23,6 +23,8 @@ export function createElectronWebReplay(): WebReplayPlatform {
     exportVideos: (ids, directory) => native().exportVideos(ids, directory),
     backupAudioDirectory: id => native().backupAudioDirectory(id),
     mixBackupAudio: id => native().mixBackupAudio(id),
+    importToProject: request => native().importToProject(request),
+    editSource: (id, prefer) => native().editSource(id, prefer),
     onAppsChanged: listener => native().onAppsChanged(listener),
   }
 }

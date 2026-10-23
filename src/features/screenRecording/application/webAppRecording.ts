@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { fieldDescriptors, unrestrictedCollectionAvailability, type ApplicationEntityProvider, type ApplicationEntityRegistration, type ApplicationPropertyDescriptor, type ApplicationRef, type JsonValue } from '@/core/application-control'
-import { readWebAppRecordingCapability, renderWebAppReplayCapability, startWebAppRecordingCapability, stopWebAppRecordingCapability } from '@/core/application-control/domains/screenRecording/webAppCapability'
+import { importWebRecordingCapability, importWebRecordingToProjectCapability, readWebAppRecordingCapability, renderWebAppReplayCapability, startWebAppRecordingCapability, stopWebAppRecordingCapability } from '@/core/application-control/domains/screenRecording/webAppCapability'
+import { importWebRecordingToVideo } from './webRecordingVideoImport'
 import type { CapabilityExecutionContext } from '@/features/application-control'
 import { getPlatform } from '@/platform'
 import { finishWebAppBackupAudio, startWebAppBackupAudio } from './webAppBackupAudio'
@@ -25,6 +26,10 @@ const schemaRef = webAppSchemaRef
 const detailsSchema = z.object({
   app: z.string(), version: z.string(), host: z.string(), url: z.string(), width: z.number(), height: z.number(), dpr: z.number(),
   recordingId: z.string().nullable().optional(), durationMs: z.number().optional(), warnings: z.array(z.string()).optional(), createdAt: z.string().optional(),
+  /** 录制文件夹的本机路径；projectId 为所在项目（存进项目的 .hjweb），不属于项目时为 null。 */
+  directory: z.string().optional(), projectId: z.string().nullable().optional(),
+  /** 能直接导入剪辑的视频：最新的重演视频与备份录屏。 */
+  replayVideo: z.string().nullable().optional(), backupVideo: z.string().nullable().optional(),
 }).strict()
 
 function properties(type: WebType): ApplicationPropertyDescriptor[] {
@@ -55,6 +60,7 @@ async function valuesOf(type: WebType, id: string): Promise<Record<string, JsonV
   return { name: webRecordingDisplayName(recording), phase: recording.status, details: {
     app: recording.app.name, version: recording.app.version, host: recording.host, url: recording.env.url, width: recording.env.viewport.width, height: recording.env.viewport.height, dpr: recording.env.viewport.dpr,
     durationMs: Math.round(recording.durationUs / 1000), warnings: recording.warnings.map(w => w.message), createdAt: recording.createdAt,
+    directory: recording.directory, projectId: recording.projectId, replayVideo: recording.video, backupVideo: recording.backupVideo,
   } }
 }
 
@@ -95,21 +101,38 @@ export function webAppRecordingRegistrations(): ApplicationEntityRegistration[] 
   })) as ApplicationEntityRegistration[]
 }
 
-export const WEB_APP_CAPABILITY_IDS = new Set<string>([startWebAppRecordingCapability.id, stopWebAppRecordingCapability.id, readWebAppRecordingCapability.id, renderWebAppReplayCapability.id])
+export const WEB_APP_CAPABILITY_IDS = new Set<string>([startWebAppRecordingCapability.id, stopWebAppRecordingCapability.id, readWebAppRecordingCapability.id, renderWebAppReplayCapability.id, importWebRecordingCapability.id, importWebRecordingToProjectCapability.id])
+/** Saved recordings stay usable with the experimental switch off; only recording and replay need it. */
+const WORKS_WHEN_DISABLED = new Set<string>([readWebAppRecordingCapability.id, importWebRecordingCapability.id, importWebRecordingToProjectCapability.id])
 
 /** Handlers for the web app recording capabilities; all real work happens in the main-process service. */
 export async function executeWebAppCapability(id: string, input: unknown, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {
   const platform = getPlatform().webReplay
   const permissions = context.callerGrant?.permissions
   // Reading saved recordings stays available; recording and replay need the experimental switch.
-  if (id !== readWebAppRecordingCapability.id && !webAppRecordingEnabled()) throw new Error(WEB_APP_RECORDING_DISABLED_MESSAGE)
+  if (!WORKS_WHEN_DISABLED.has(id) && !webAppRecordingEnabled()) throw new Error(WEB_APP_RECORDING_DISABLED_MESSAGE)
   if (id === startWebAppRecordingCapability.id) {
     const parsed = startWebAppRecordingCapability.inputSchema.parse(input)
+    if (parsed.projectId && permissions && !permissions.includes('documents:write')) throw new Error('PERMISSION_DENIED:存进项目还需要 documents:write 权限')
     // The backup screen recording follows the choices on the recording page.
     const backup = loadRecordingSetup().setup.webAppBackup ?? DEFAULT_WEB_APP_BACKUP
-    const manifest = await platform.start(parsed.appRef.id, webAppBackupOptions(backup, backup.enabled && backup.range === 'screen' ? await getPlatform().screenRecording.sources() : []))
+    const manifest = await platform.start(parsed.appRef.id, webAppBackupOptions(backup, backup.enabled && backup.range === 'screen' ? await getPlatform().screenRecording.sources() : []), parsed.projectId ? { projectId: parsed.projectId, ...(parsed.name ? { name: parsed.name } : {}) } : null)
     await startWebAppBackupAudio(manifest.id, backup).catch(error => logger.warn('备份录屏的声音没能开始录制', { event: 'web_replay.backup_audio.start_failed', error: String(error) }))
-    return { resultRef: { kind: RECORDING, id: manifest.id }, verified: (await platform.recordings()).some(r => r.id === manifest.id) }
+    const saved = (await platform.recordings()).find(r => r.id === manifest.id)
+    return { resultRef: { kind: RECORDING, id: manifest.id }, directory: saved?.directory ?? '', verified: Boolean(saved) }
+  }
+  if (id === importWebRecordingCapability.id) {
+    if (permissions && !permissions.includes('screen_recording:read')) throw new Error('PERMISSION_DENIED:导入剪辑需要 screen_recording:read 权限')
+    const parsed = importWebRecordingCapability.inputSchema.parse(input)
+    const result = await importWebRecordingToVideo(parsed.recordingRef.id, parsed.destination, parsed.video, context.signal)
+    return { resultRef: { kind: 'video_edit.document', id: parsed.destination.documentId }, ...result, verified: result.itemIds.length > 0 && (!parsed.destination.sequenceId || result.clipIds.length > 0) }
+  }
+  if (id === importWebRecordingToProjectCapability.id) {
+    if (permissions && !permissions.includes('screen_recording:read')) throw new Error('PERMISSION_DENIED:读取网页录制需要 screen_recording:read 权限')
+    const parsed = importWebRecordingToProjectCapability.inputSchema.parse(input)
+    const summary = await platform.importToProject({ projectId: parsed.projectId, ...(parsed.recordingRef ? { recordingId: parsed.recordingRef.id } : {}), ...(parsed.path ? { source: parsed.path } : {}), ...(parsed.name ? { name: parsed.name } : {}) })
+    const listed = (await getPlatform().documents.listDocuments({ kind: 'web_recording', includeMissing: false })).some(document => document.id === summary.id)
+    return { resultRef: { kind: RECORDING, id: summary.id }, documentRef: { kind: 'documents.document', id: summary.id }, directory: summary.directory, verified: listed && summary.projectId === parsed.projectId }
   }
   if (id === stopWebAppRecordingCapability.id) {
     const parsed = stopWebAppRecordingCapability.inputSchema.parse(input)

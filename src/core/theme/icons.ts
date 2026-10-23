@@ -1,4 +1,5 @@
 import {
+  AppWindow,
   AudioLines,
   AudioWaveform,
   Blend,
@@ -82,6 +83,8 @@ export const ICON_TOOL_CAMERA_STAGE: LucideIcon = Clapperboard
 export const ICON_TOOL_AUDIO_EDIT: LucideIcon = AudioWaveform
 /** 屏幕录制与录制会话。 */
 export const ICON_TOOL_SCREEN_RECORDING: LucideIcon = MonitorDot
+/** 网页应用录制（`.hjweb`）。 */
+export const ICON_TOOL_WEB_RECORDING: LucideIcon = AppWindow
 /** 图片编辑中的多级 GPU 辉光。 */
 export const ICON_IMAGE_GLOW_PRO: LucideIcon = SunMedium
 

@@ -67,11 +67,19 @@ export class WebReplayServer extends EventEmitter {
   }
 
   /** Starts recording the app on this connection; the page reloads and records from its first module. */
-  async startRecording(connectionId: string, backup: WebRecordingBackupOptions | null = null): Promise<WebRecordingManifest> {
+  /** The app on this connection, or a clear error when it went away or is already recording. */
+  connectedApp(connectionId: string): ConnectedWebApp {
     const connection = this.connections.get(connectionId)
     if (!connection?.app) throw new Error('这个网页应用已断开，请确认它仍在运行')
     if (connection.session) throw new Error('这个网页应用正在录制')
-    const session = new WebRecordingSession({ app: connection.app.app, host: connection.app.host, env: connection.app.env, probe: { version: connection.app.probeVersion, protocol: 1 } }, this.fetchExternal, this.startBackup, backup)
+    return connection.app
+  }
+
+  async startRecording(connectionId: string, backup: WebRecordingBackupOptions | null = null, location?: { id: string; directory: string; title?: string }): Promise<WebRecordingManifest> {
+    const connection = this.connections.get(connectionId)
+    if (!connection?.app) throw new Error('这个网页应用已断开，请确认它仍在运行')
+    if (connection.session) throw new Error('这个网页应用正在录制')
+    const session = new WebRecordingSession({ app: connection.app.app, host: connection.app.host, env: connection.app.env, probe: { version: connection.app.probeVersion, protocol: 1 } }, this.fetchExternal, this.startBackup, backup, location)
     await session.prepare()
     this.sessions.set(session.id, session)
     connection.session = session

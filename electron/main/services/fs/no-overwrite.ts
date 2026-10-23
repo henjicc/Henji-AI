@@ -110,6 +110,17 @@ export async function createDirectoryExclusively(target: string): Promise<void> 
   }
 }
 
+/** 不覆盖地复制文件夹（目标已存在则失败）；复制不完整时删除残留。 */
+export async function copyDirectoryNoOverwrite(source: string, target: string): Promise<void> {
+  await createDirectoryExclusively(target)
+  try {
+    await fsp.cp(source, target, { recursive: true, errorOnExist: true, force: false })
+  } catch (error) {
+    await fsp.rm(target, { recursive: true, force: true }).catch(() => undefined)
+    throw error
+  }
+}
+
 async function copyDirectoryThenRemove(source: string, target: string): Promise<void> {
   try {
     await fsp.cp(source, target, { recursive: true, errorOnExist: true, force: false })

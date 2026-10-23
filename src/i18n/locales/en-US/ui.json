@@ -1746,6 +1746,7 @@
   "documentLibrary": {
     "kinds": {
       "screen_recording": "Recording",
+      "web_recording": "Web Recording",
       "video_edit": "Edit",
       "canvas": "Canvas",
       "audio_edit": "Audio",

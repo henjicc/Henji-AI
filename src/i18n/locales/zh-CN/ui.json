@@ -1746,6 +1746,7 @@
   "documentLibrary": {
     "kinds": {
       "screen_recording": "录制会话",
+      "web_recording": "网页录制",
       "video_edit": "剪辑",
       "canvas": "画布",
       "audio_edit": "音频",

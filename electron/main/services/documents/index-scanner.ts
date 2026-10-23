@@ -12,7 +12,7 @@ import { isPathInside, pathKey, samePath } from '../../../../src/core/storage/pa
 import { writeBufferAtomically } from '../fs/atomic-file'
 import type { MainLogger } from '../logging/main-logger'
 import type { IndexedDocument } from './catalog'
-import { indexedFromFile, loadDocumentFile, summarizeFile, type LoadedDocumentFile } from './document-file'
+import { indexedFromFile, loadDocumentFile, statDocumentLocation, summarizeFile, type LoadedDocumentFile } from './document-file'
 import { DocumentFormatError, DocumentNotFoundError, DocumentUnsupportedError, errorCode } from './errors'
 import type { PackageAdapterRegistry } from './package-adapters'
 import type { DocumentWorkspace, ResolvedContainer } from './workspace'
@@ -306,6 +306,18 @@ export class DocumentIndexScanner {
     for (const entry of await this.readDirectory(directory)) {
       if (entry.isSymbolicLink()) continue
       const entryPath = path.join(directory, entry.name)
+      const kind = this.options.kinds.forFileName(entry.name)
+      if (entry.isDirectory() && kind?.storage === 'folder') {
+        // 文件夹类型（`.hjweb`）本身就是一份文档：认领它，不再往里找。
+        const stat = await statDocumentLocation(kind, entryPath, this.options.adapters).catch((error: unknown) => {
+          if (isMissing(error) || error instanceof DocumentUnsupportedError) return null
+          if (!isUnreadableFileContent(error)) throw error
+          this.recordInvalid(entryPath, error, report)
+          return null
+        })
+        if (stat) candidates.push({ path: entryPath, container, mtimeMs: stat.mtimeMs, size: stat.size, birthtimeMs: stat.birthtimeMs })
+        continue
+      }
       if (entry.isDirectory()) {
         if (level >= options.depth || entry.name.startsWith('.')) continue
         if (level === 0 && options.skipTop.some((name) => sameEntryName(name, entry.name))) continue
@@ -318,7 +330,7 @@ export class DocumentIndexScanner {
         await this.collect(entryPath, container, candidates, options, report, level + 1)
         continue
       }
-      if (!entry.isFile() || !this.options.kinds.forFileName(entry.name)) continue
+      if (!entry.isFile() || !kind || kind.storage === 'folder') continue
       const stat = await statIfPresent(entryPath)
       if (!stat?.isFile()) continue
       candidates.push({ path: entryPath, container, mtimeMs: stat.mtimeMs, size: stat.size, birthtimeMs: stat.birthtimeMs })
@@ -409,7 +421,8 @@ export class DocumentIndexScanner {
     for (const row of catalog.listDocuments()) {
       if (claimed.has(row.id)) continue
       const stat = await statIfPresent(row.path)
-      if (stat && !stat.isFile()) throw new Error(`文档位置不是文件：${row.path}`)
+      const folder = this.options.kinds.get(row.kind)?.storage === 'folder'
+      if (stat && (folder ? !stat.isDirectory() : !stat.isFile())) throw new Error(`文档位置不是${folder ? '文件夹' : '文件'}：${row.path}`)
       const exists = stat !== null
       if (!exists) {
         if (!row.missing) {

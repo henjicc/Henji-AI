@@ -1,4 +1,5 @@
 import type { PersistenceMigrations } from './migrations'
+import { WEB_RECORDING_MIGRATIONS } from '../webReplay/schema'
 import { migrateEmbeddedVideoColorGradesV1 } from '../videoEdit/colorGradeMigration'
 import { migrateColorGradeParamsV1 } from '../imaging/adjustments/colorGradeMigration'
 
@@ -15,8 +16,8 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   'audio-capture-recovery': { 1: value => ({ ...value as object, version: 2 }) },
   // 实验性功能开关 experimentalWebAppRecording（2026-10-23）：只新增可选字段，缺省即关闭。
   settings: { 14: value => value },
-  // 网页录制 v2（2026-10-23）：元素定位只新增可选的 act.scope。
-  'web-recording': { 1: value => ({ ...value as object, version: 2 }), 2: value => ({ ...value as object, version: 3 }) },
+  // 网页录制：步骤与 `.hjweb` 文档类型共用（同一份 recording.json）。
+  'web-recording': WEB_RECORDING_MIGRATIONS,
   // 全能调色参数格式 v2（2026-10-21）：开尔文白平衡、创意分离色调并入色轮。
   'video-preset-package': { 5: value => ({ ...migrateEmbeddedVideoColorGradesV1(value) as object, version: 6 }) },
   'image-working-copy': { 14: value => migrateImageWorkingCopyColorGrades(value, 15) },

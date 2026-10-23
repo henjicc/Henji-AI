@@ -67,7 +67,7 @@ export class WebRecordingPlayer {
 
   constructor(private readonly store: WebRecordingStore) {}
 
-  static open(recordingId: string): WebRecordingPlayer { return new WebRecordingPlayer(WebRecordingStore.forId(recordingId)) }
+  static open(directory: string): WebRecordingPlayer { return new WebRecordingPlayer(new WebRecordingStore(directory)) }
 
   private pageNowUs(): number { return Math.round((Date.now() - this.startedAtMs) * 1000) }
   private issue(kind: ReplayIssue['kind'], message: string, t = this.pageNowUs()): void {

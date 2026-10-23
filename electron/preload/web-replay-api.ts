@@ -4,7 +4,7 @@ export function createWebReplayApi(invoke: <T>(channel: string, payload?: unknow
   return {
     setEnabled: enabled => invoke(WEB_REPLAY_CHANNELS.setEnabled, { enabled }),
     apps: () => invoke(WEB_REPLAY_CHANNELS.apps),
-    start: (connectionId, backup) => invoke(WEB_REPLAY_CHANNELS.start, { connectionId, backup }),
+    start: (connectionId, backup, destination) => invoke(WEB_REPLAY_CHANNELS.start, { connectionId, backup, ...(destination ? { destination } : {}) }),
     stop: recordingId => invoke(WEB_REPLAY_CHANNELS.stop, { recordingId }),
     recordings: () => invoke(WEB_REPLAY_CHANNELS.recordings),
     remove: recordingId => invoke(WEB_REPLAY_CHANNELS.remove, { recordingId }),
@@ -17,6 +17,8 @@ export function createWebReplayApi(invoke: <T>(channel: string, payload?: unknow
     exportVideos: (recordingIds, directory) => invoke(WEB_REPLAY_CHANNELS.exportVideos, { recordingIds, directory }),
     backupAudioDirectory: recordingId => invoke(WEB_REPLAY_CHANNELS.backupAudioDirectory, { recordingId }),
     mixBackupAudio: recordingId => invoke(WEB_REPLAY_CHANNELS.mixBackupAudio, { recordingId }),
+    importToProject: request => invoke(WEB_REPLAY_CHANNELS.importToProject, request),
+    editSource: (recordingId, prefer) => invoke(WEB_REPLAY_CHANNELS.editSource, { recordingId, ...(prefer ? { prefer } : {}) }),
     onAppsChanged: handler => subscribe(WEB_REPLAY_CHANNELS.appsChanged, value => handler(value as WebReplayServerState)),
   }
 }
