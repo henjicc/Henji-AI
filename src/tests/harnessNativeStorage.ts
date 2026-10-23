@@ -1,3 +1,5 @@
+import { emptyMemorySnapshot, type MemorySettings } from '@/core/assistant/memoryEntries'
+import { applyMemoryWrite, type MemoryWrite } from '@/core/assistant/memoryOperations'
 /**
  * harness 的进程边界替身：一份**只存内存**的 `window.henjiNative`。
  *
@@ -232,7 +234,21 @@ export function readHarnessRecordedCapabilities(): typeof recordedCapabilities {
 /** Font metadata at the IPC boundary only; parsing and filesystem discovery remain real service tests. */
 export function seedHarnessFonts(value: FontCatalog): void { fontCatalog = wire(value) }
 
+let memoryState = emptyMemorySnapshot()
+const memoryListeners = new Set<() => void>()
 const NAMESPACES: Record<string, object> = {
+  assistant: {
+    async getMemoryState() { return wire(memoryState.settings.enabled ? memoryState : { ...memoryState, entries: [], history: [] }) },
+    onMemoryChange(listener: () => void) { memoryListeners.add(listener); return () => { memoryListeners.delete(listener) } },
+    async updateMemorySettings(settings: MemorySettings) { memoryState.settings = wire(settings); memoryState.revision++; memoryListeners.forEach(listener => listener()); return wire(memoryState) },
+    async writeMemory(input: MemoryWrite) {
+      if (!memoryState.settings.enabled) throw new Error('MEMORY_DISABLED')
+      if (input.target.layer !== 'global') throw new Error('harness未实现项目或风格记忆文件，不能伪造成功。')
+      const result = applyMemoryWrite(memoryState.entries, wire(input), new Date(), uuidv4())
+      if (result.change) { memoryState.entries = result.entries; memoryState.history = [...memoryState.history, result.change].slice(-100); memoryState.revision++; memoryState.changesSinceOrganization++; memoryListeners.forEach(listener => listener()) }
+      return wire(result.change)
+    },
+  },
   runtimeInfo: { uiInspectionReadOnly: false },
   screenRecording: {
     async snapshot() { return wire(recordingSnapshot) },
@@ -355,6 +371,7 @@ export function installHarnessNativeStorage(): void {
 
 /** 清空全部存储。用例之间必须调，否则上一条用例造的素材集合会漏进下一条。 */
 export function resetHarnessNativeStorage(): void {
+  memoryState = emptyMemorySnapshot()
   publishHarnessRecordingControl(null); recordedCapabilities.splice(0)
   fontCatalog = { faces: [], revision: 0 }
   settings.clear()

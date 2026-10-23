@@ -42,8 +42,8 @@ const RESULT_SCENARIOS: Record<string, Scenario[]> = {
     { file: 'src/features/canvas/application/canvasApplicationService.test.ts', title: '按目录 schema 添加、确定性布局、合法连接并逐步撤销' },
   ],
   memory: [
-    { file: 'src/features/assistant/application/sharedMemoryReflection.test.ts', title: '共享记忆通过正式通用事务保存和清空' },
-    { file: 'src/features/assistant/application/sharedMemoryReflection.test.ts', title: '关闭记忆后通用事务不保存' },
+    { file: 'src/features/assistant/application/sharedMemoryReflection.test.ts', title: '三层记忆逐条修改，独立条目不互相覆盖' },
+    { file: 'src/features/assistant/application/sharedMemoryReflection.test.ts', title: '关闭记忆后不允许保存' },
   ],
   generation: [
     { file: 'src/features/generation/application/generationModelMutationExecutor.test.ts', title: '通过统一计划提交把模型隐藏，值真的落到 hidden_models，且可撤销' },

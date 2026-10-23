@@ -1,3 +1,4 @@
+import { MEMORY_CAPABILITIES } from './domains/assistantMemory/memoryCapabilities'
 import { resampleImageEditCapability } from './domains/imageEdit/imageEditGeometryCapabilities'
 import { CREATIVE_INTENT_CAPABILITIES } from './domains/creativeIntent/creativeIntentCapabilities'
 import { imageEditClipboardCapability } from './domains/imageEdit/imageEditClipboardCapabilities'
@@ -45,6 +46,7 @@ import { DOCUMENTS_APPLICATION_CAPABILITIES } from './domains/documents/document
 import { RECORDING_CAPABILITIES } from './domains/screenRecording/recordingCapabilities'
 
 export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
+  ...MEMORY_CAPABILITIES,
   ...RECORDING_CAPABILITIES,
   ...CREATIVE_INTENT_CAPABILITIES,
   getCurrentApplicationContextCapability,

@@ -113,6 +113,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     // 编辑器内拼接新增算法能力，删除独立全屏录音 Surface。
     fingerprints['2.56.0'] = '1e2815f71038792e779b3dc77ad0f5ce8d350670c1f22b0cbe96a142407b61ca'
     fingerprints['2.55.0'] = '9cca9214194f9f47b29e57e2cb398cf5ce0b34163faec81026ef5284a46d9a80'
+    // 三层记忆实体替换旧摘要，新增撤回与整理算法能力。
+    fingerprints['2.57.0'] = 'baff00c219912f3e84f0cdd1e59da24ad191ac53dd52db9495b1f2891d78c124'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], `工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹：${fingerprint}`).toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {

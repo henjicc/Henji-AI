@@ -10,19 +10,6 @@ import {
 
 
 import {
-  agentMemoryClearSchema,
-  agentMemoryCandidateIdSchema,
-  agentMemoryIdSchema,
-  agentMemorySettingsUpdateSchema,
-  agentMemoryUpdateSchema,
-  type AgentMemoryRecord,
-  type AgentMemoryScope,
-  type AgentMemorySettings,
-  type AgentMemorySettingsUpdate,
-  type AgentMemoryState,
-  type AgentMemoryUpdate,
-} from '@/core/assistant/memory'
-import {
   assistantSkillEnabledUpdateSchema,
   assistantSkillInstallRequestSchema,
   assistantSkillNameSchema,
@@ -95,51 +82,4 @@ export async function setAssistantSkillEnabled(
 export async function openAssistantSkillsDirectory(): Promise<string> {
   if (!isDesktopRuntime()) throw new Error(SKILLS_DESKTOP_ONLY)
   return await getPlatform().assistant.openSkillsDirectory()
-}
-
-export async function getAgentMemoryState(): Promise<AgentMemoryState> {
-  if (!isDesktopRuntime()) throw new Error('智能助手记忆仅在桌面应用中可用')
-  return await getPlatform().assistant.getMemoryState()
-}
-
-export async function updateAgentMemorySettings(
-  update: AgentMemorySettingsUpdate
-): Promise<AgentMemorySettings> {
-  if (!isDesktopRuntime()) throw new Error('智能助手记忆仅在桌面应用中可用')
-  return await getPlatform().assistant.updateMemorySettings(
-    agentMemorySettingsUpdateSchema.parse(update)
-  )
-}
-
-export async function updateAgentMemoryRecord(
-  update: AgentMemoryUpdate
-): Promise<AgentMemoryRecord> {
-  if (!isDesktopRuntime()) throw new Error('智能助手记忆仅在桌面应用中可用')
-  return await getPlatform().assistant.updateMemory(agentMemoryUpdateSchema.parse(update))
-}
-
-export async function deleteAgentMemory(memoryId: string): Promise<void> {
-  if (!isDesktopRuntime()) throw new Error('智能助手记忆仅在桌面应用中可用')
-  const parsed = agentMemoryIdSchema.parse({ memoryId })
-  await getPlatform().assistant.deleteMemory(parsed.memoryId)
-}
-
-export async function confirmAgentMemoryCandidate(
-  candidateId: string
-): Promise<AgentMemoryRecord> {
-  if (!isDesktopRuntime()) throw new Error('智能助手记忆仅在桌面应用中可用')
-  const parsed = agentMemoryCandidateIdSchema.parse({ candidateId })
-  return await getPlatform().assistant.confirmMemoryCandidate(parsed.candidateId)
-}
-
-export async function rejectAgentMemoryCandidate(candidateId: string): Promise<void> {
-  if (!isDesktopRuntime()) throw new Error('智能助手记忆仅在桌面应用中可用')
-  const parsed = agentMemoryCandidateIdSchema.parse({ candidateId })
-  await getPlatform().assistant.rejectMemoryCandidate(parsed.candidateId)
-}
-
-export async function clearAgentMemory(scope?: AgentMemoryScope): Promise<number> {
-  if (!isDesktopRuntime()) throw new Error('智能助手记忆仅在桌面应用中可用')
-  const parsed = agentMemoryClearSchema.parse({ scope })
-  return await getPlatform().assistant.clearMemories(parsed.scope)
 }

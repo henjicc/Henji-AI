@@ -119,15 +119,14 @@ const assistantApi: HenjiAssistantApi = {
   uninstallSkill: (name) => nativeInvoke('assistant:skills:uninstall', { name }),
   setSkillEnabled: (update) => nativeInvoke('assistant:skills:setEnabled', update),
   openSkillsDirectory: () => nativeInvoke('assistant:skills:openDir'),
-  getSharedMemory: () => nativeInvoke('assistant:memory:getShared'),
-  updateSharedMemory: (update) => nativeInvoke('assistant:memory:updateShared', update),
+  onMemoryChange: handler => { const listener = (): void => handler(); ipcRenderer.on('assistant:memory:changed', listener); return () => { ipcRenderer.removeListener('assistant:memory:changed', listener) } },
   getMemoryState: () => nativeInvoke('assistant:memory:getState'),
-  updateMemorySettings: (update) => nativeInvoke('assistant:memory:updateSettings', update),
-  updateMemory: (update) => nativeInvoke('assistant:memory:update', update),
-  confirmMemoryCandidate: (candidateId) => nativeInvoke('assistant:memory:confirmCandidate', { candidateId }),
-  rejectMemoryCandidate: (candidateId) => nativeInvoke('assistant:memory:rejectCandidate', { candidateId }),
-  deleteMemory: (memoryId) => nativeInvoke('assistant:memory:delete', { memoryId }),
-  clearMemories: (scope) => nativeInvoke('assistant:memory:clear', { scope }),
+  updateMemorySettings: update => nativeInvoke('assistant:memory:updateSettings', update),
+  readProjectMemory: projectId => nativeInvoke('assistant:memory:readProject', { projectId }),
+  writeMemory: input => nativeInvoke('assistant:memory:write', input),
+  recordMemoryChange: change => nativeInvoke('assistant:memory:recordChange', change),
+  requestMemoryOrganization: () => nativeInvoke('assistant:memory:requestOrganization'),
+  markMemoryOrganized: changes => nativeInvoke('assistant:memory:organized', { changes }),
 }
 
 function createStreamId(): string {

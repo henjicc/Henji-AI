@@ -1,15 +1,11 @@
-import { sharedMemoryUpdateSchema } from '../../../src/core/assistant/memory'
+import { z } from 'zod'
+import { memorySettingsSchema, memoryHistoryEntrySchema } from '../../../src/core/assistant/memoryEntries'
+import { memoryWriteSchema } from '../../../src/core/assistant/memoryOperations'
+import { getDocumentService } from '../services/documents/runtime'
 import { BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 
 
 import { assistantUserInstructionsUpdateSchema } from '../../../src/core/assistant/userInstructions'
-import {
-  agentMemoryClearSchema,
-  agentMemoryCandidateIdSchema,
-  agentMemoryIdSchema,
-  agentMemorySettingsUpdateSchema,
-  agentMemoryUpdateSchema,
-} from '../../../src/core/assistant/memory'
 
 import {
   getAssistantUserInstructions,
@@ -33,12 +29,7 @@ import {
   readAssistantSkill,
 } from '../services/assistant/skills/registry'
 import { setAssistantSkillEnabled } from '../services/assistant/skills/state'
-import {
-  clearAgentMemories,
-  getAgentMemoryStore,
-  updateAgentMemory,
-  updateAgentMemorySettings,
-} from '../services/assistant/memory'
+import { getAgentMemoryStore } from '../services/assistant/memory'
 import { getMainWindow } from '../window'
 import { parseVoid, registerIpcHandler } from './registry'
 
@@ -121,48 +112,23 @@ export function registerAssistantIpc(): void {
     },
     assertTrustedAssistantRenderer
   )
-  registerIpcHandler('assistant:memory:getShared', parseVoid, () => getAgentMemoryStore().getSharedMemory(), assertTrustedAssistantRenderer)
-  registerIpcHandler('assistant:memory:updateShared', input => sharedMemoryUpdateSchema.parse(input), input => getAgentMemoryStore().updateSharedMemory(input), assertTrustedAssistantRenderer)
-  registerIpcHandler(
-    'assistant:memory:getState',
-    parseVoid,
-    () => getAgentMemoryStore().getState(),
-    assertTrustedAssistantRenderer
-  )
-  registerIpcHandler(
-    'assistant:memory:updateSettings',
-    (input) => agentMemorySettingsUpdateSchema.parse(input),
-    (update) => updateAgentMemorySettings(update),
-    assertTrustedAssistantRenderer
-  )
-  registerIpcHandler(
-    'assistant:memory:update',
-    (input) => agentMemoryUpdateSchema.parse(input),
-    (update) => updateAgentMemory(update),
-    assertTrustedAssistantRenderer
-  )
-  registerIpcHandler(
-    'assistant:memory:confirmCandidate',
-    (input) => agentMemoryCandidateIdSchema.parse(input),
-    ({ candidateId }) => getAgentMemoryStore().confirm(candidateId),
-    assertTrustedAssistantRenderer
-  )
-  registerIpcHandler(
-    'assistant:memory:rejectCandidate',
-    (input) => agentMemoryCandidateIdSchema.parse(input),
-    ({ candidateId }) => getAgentMemoryStore().reject(candidateId),
-    assertTrustedAssistantRenderer
-  )
-  registerIpcHandler(
-    'assistant:memory:delete',
-    (input) => agentMemoryIdSchema.parse(input),
-    ({ memoryId }) => getAgentMemoryStore().delete(memoryId),
-    assertTrustedAssistantRenderer
-  )
-  registerIpcHandler(
-    'assistant:memory:clear',
-    (input) => agentMemoryClearSchema.parse(input ?? {}),
-    ({ scope }) => clearAgentMemories(scope),
-    assertTrustedAssistantRenderer
-  )
+  getAgentMemoryStore().onMemoryChange(() => { const window = getMainWindow(); if (window && !window.isDestroyed()) window.webContents.send('assistant:memory:changed') })
+  const enabled = (): void => { if (!getAgentMemoryStore().getState().settings.enabled) throw new Error('MEMORY_DISABLED：记忆已关闭。') }
+  registerIpcHandler('assistant:memory:getState', parseVoid, () => getAgentMemoryStore().read(), assertTrustedAssistantRenderer)
+  registerIpcHandler('assistant:memory:updateSettings', input => memorySettingsSchema.parse(input), input => getAgentMemoryStore().updateSettings(input), assertTrustedAssistantRenderer)
+  registerIpcHandler('assistant:memory:readProject', input => z.object({ projectId: z.string().min(1) }).strict().parse(input), async ({ projectId }) => { enabled(); return getDocumentService().readProjectMemory(projectId) }, assertTrustedAssistantRenderer)
+  registerIpcHandler('assistant:memory:write', input => memoryWriteSchema.parse(input), async input => {
+    enabled()
+    if (input.target.layer === 'global') {
+      const before = getAgentMemoryStore().getState().revision
+      const after = getAgentMemoryStore().write(input)
+      return before === after.revision ? null : after.history.at(-1) ?? null
+    }
+    if (input.target.layer !== 'project') throw new Error('INVALID_TARGET：风格记忆通过风格库保存。')
+    const change = await getDocumentService().writeProjectMemory(input, enabled, change => { getAgentMemoryStore().recordExternal(change) })
+    return change
+  }, assertTrustedAssistantRenderer)
+  registerIpcHandler('assistant:memory:recordChange', input => memoryHistoryEntrySchema.parse(input), input => getAgentMemoryStore().recordExternal(input), assertTrustedAssistantRenderer)
+  registerIpcHandler('assistant:memory:requestOrganization', parseVoid, () => { enabled(); getAgentMemoryStore().requestOrganization() }, assertTrustedAssistantRenderer)
+  registerIpcHandler('assistant:memory:organized', input => z.object({ changes: z.number().int().nonnegative() }).strict().parse(input), ({ changes }) => { enabled(); getAgentMemoryStore().markOrganized(changes) }, assertTrustedAssistantRenderer)
 }

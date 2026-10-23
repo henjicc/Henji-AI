@@ -1,4 +1,5 @@
-import type { SharedMemorySnapshot, SharedMemoryUpdate } from '../../src/core/assistant/memory'
+import type { MemoryEntry, MemorySnapshot, MemorySettings, MemoryHistoryEntry } from '../../src/core/assistant/memoryEntries'
+import type { MemoryWrite } from '../../src/core/assistant/memoryOperations'
 
 
 
@@ -16,14 +17,6 @@ import type {
   AssistantSkillManifest,
   AssistantSkillReadRequest,
 } from '../../src/core/assistant/skills'
-import type {
-  AgentMemoryRecord,
-  AgentMemoryScope,
-  AgentMemorySettings,
-  AgentMemorySettingsUpdate,
-  AgentMemoryState,
-  AgentMemoryUpdate,
-} from '../../src/core/assistant/memory'
 
 
 export interface HenjiIpcErrorEnvelope {
@@ -54,13 +47,12 @@ export interface HenjiAssistantApi {
   uninstallSkill(name: string): Promise<void>
   setSkillEnabled(update: AssistantSkillEnabledUpdate): Promise<AssistantSkillManifest>
   openSkillsDirectory(): Promise<string>
-  getSharedMemory(): Promise<SharedMemorySnapshot>
-  updateSharedMemory(update: SharedMemoryUpdate): Promise<SharedMemorySnapshot>
-  getMemoryState(): Promise<AgentMemoryState>
-  updateMemorySettings(update: AgentMemorySettingsUpdate): Promise<AgentMemorySettings>
-  updateMemory(update: AgentMemoryUpdate): Promise<AgentMemoryRecord>
-  confirmMemoryCandidate(candidateId: string): Promise<AgentMemoryRecord>
-  rejectMemoryCandidate(candidateId: string): Promise<void>
-  deleteMemory(memoryId: string): Promise<void>
-  clearMemories(scope?: AgentMemoryScope): Promise<number>
+  onMemoryChange(handler: () => void): () => void
+  getMemoryState(): Promise<MemorySnapshot>
+  updateMemorySettings(update: MemorySettings): Promise<MemorySnapshot>
+  readProjectMemory(projectId: string): Promise<MemoryEntry[]>
+  writeMemory(input: MemoryWrite): Promise<MemoryHistoryEntry | null>
+  recordMemoryChange(change: MemoryHistoryEntry): Promise<MemorySnapshot>
+  requestMemoryOrganization(): Promise<void>
+  markMemoryOrganized(changes: number): Promise<void>
 }

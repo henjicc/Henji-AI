@@ -13,7 +13,8 @@ import { readApplicationMediaResource } from '../application-runtime/mediaResour
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import { z } from 'zod'
 import type { ApplicationOperationCoordinator } from '../application-runtime/operationCoordinator'
-import type { AgentMemoryStore, SharedMemoryChange } from '../assistant/memory-store'
+import type { MemoryEntryStore, MemoryChange } from '../assistant/entry-store'
+import { emptyMemorySnapshot } from '../../../../src/core/assistant/memoryEntries'
 
 vi.mock('../application-runtime/mediaResources', async importOriginal => ({
   ...await importOriginal<typeof import('../application-runtime/mediaResources')>(),
@@ -24,7 +25,7 @@ vi.mock('../application-runtime/mediaResources', async importOriginal => ({
 
 const closers: Array<() => Promise<void>> = []
 afterEach(async () => { for (const close of closers.reverse()) await close(); closers.length = 0 })
-async function fixture(options: { ready?: boolean; pending?: boolean; operations?: ApplicationOperationCoordinator; memory?: Pick<AgentMemoryStore, 'onSharedMemoryChange'>; result?: Record<string, unknown>; reply?: (request: LocalHostRequest) => Record<string, unknown> } = {}) {
+async function fixture(options: { ready?: boolean; pending?: boolean; operations?: ApplicationOperationCoordinator; memory?: Pick<MemoryEntryStore, 'onMemoryChange' | 'read'>; result?: Record<string, unknown>; reply?: (request: LocalHostRequest) => Record<string, unknown> } = {}) {
   let saved: string | null = null
   const connections = new McpConnections({ read: () => saved, write: (value) => { saved = value } })
   const first = connections.create('客户端甲')
@@ -68,14 +69,39 @@ async function fixture(options: { ready?: boolean; pending?: boolean; operations
 }
 
 describe('本地 MCP 协议与边界', () => {
+  it('Modern 发现返回最新全局记忆快照与逐任务读取规则', async () => {
+    const state = emptyMemorySnapshot()
+    state.entries = [{ id: 'font', section: 'creative', content: '中文默认思源黑体。', source: 'user', updatedAt: new Date().toISOString(), revision: 1 }]
+    const f = await fixture({ memory: { read: () => state, onMemoryChange: () => () => undefined } })
+    const discover = async () => {
+      let discovery = ''
+      const client = new Client({ name: '记忆发现验收', version: '1' }, { versionNegotiation: { mode: { pin: '2026-07-28' } } })
+      closers.push(() => client.close())
+      await client.connect(new StreamableHTTPClientTransport(new URL(f.url()), {
+        requestInit: { headers: { Authorization: `Bearer ${f.connections.token(f.first.id)}` } },
+        fetch: async (url, init) => {
+          const response = await fetch(url, init)
+          if (typeof init?.body === 'string' && JSON.parse(init.body).method === 'server/discover') discovery = await response.clone().text()
+          return response
+        },
+      }))
+      return discovery
+    }
+    const initial = await discover()
+    expect(initial).toContain('中文默认思源黑体')
+    expect(initial).toContain('每个新任务先读取最新全局记忆')
+    state.entries = []
+    expect(await discover()).not.toContain('中文默认思源黑体')
+  })
+
   it('主进程领域修订进入原资源订阅合并机制，未订阅客户端不收，停止时解除来源', async () => {
     let revision = 1
-    let notify: ((change: SharedMemoryChange) => void) | undefined
+    let notify: ((change: MemoryChange) => void) | undefined
     const detach = vi.fn()
-    const memory = { onSharedMemoryChange: vi.fn((listener: (change: SharedMemoryChange) => void) => { notify = listener; return detach }) }
-    const uri = 'henji://entity/assistant.shared_memory/singleton'
-    const f = await fixture({ memory, reply: () => ({ ok: true, data: { ref: { kind: 'assistant.shared_memory', id: 'singleton' },
-      entityType: 'assistant.shared_memory', properties: { 'assistant.shared_memory.content': '偏好水墨' }, revisions: { assistant_memory: revision }, capturedAt: new Date(0).toISOString() } }) })
+    const memory = { read: () => emptyMemorySnapshot(), onMemoryChange: vi.fn((listener: (change: MemoryChange) => void) => { notify = listener; return detach }) }
+    const uri = 'henji://entity/assistant.memory/singleton'
+    const f = await fixture({ memory, reply: () => ({ ok: true, data: { ref: { kind: 'assistant.memory', id: 'singleton' },
+      entityType: 'assistant.memory', properties: { 'assistant.memory.content': '偏好水墨' }, revisions: { assistant_memory: revision }, capturedAt: new Date(0).toISOString() } }) })
     const a = await f.connect(); const b = await f.connect(f.second.id)
     const updatedA = vi.fn(); const updatedB = vi.fn()
     a.client.setNotificationHandler('notifications/resources/updated', updatedA)
@@ -84,7 +110,7 @@ describe('本地 MCP 协议与边界', () => {
     await b.client.listen({ resourceSubscriptions: [] })
     for (revision = 2; revision <= 20; revision++) notify?.({ domain: 'memory', revisions: { assistant_memory: revision } })
     await vi.waitFor(() => expect(updatedA).toHaveBeenCalledOnce(), { timeout: 2000 })
-    expect(memory.onSharedMemoryChange).toHaveBeenCalledOnce()
+    expect(memory.onMemoryChange).toHaveBeenCalledOnce()
     expect(updatedA.mock.calls[0][0].params.uri).toBe(uri)
     expect(updatedB).not.toHaveBeenCalled()
     await f.server.stop()

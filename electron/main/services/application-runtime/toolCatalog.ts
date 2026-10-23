@@ -1,3 +1,4 @@
+import { MEMORY_RULES } from '../../../../src/core/assistant/memoryEntries'
 import { z } from 'zod'
 import { createHash } from 'node:crypto'
 export { invalidInputMessage } from '../../../../src/core/application-control/inputValidation'
@@ -248,7 +249,8 @@ const WORKFLOWS = [
   '读取：按任务需要读取实体，获取真实引用和属性；普通操作不需要额外读取来拼接基线。删除前才必须逐个读取目标与集合父对象。',
   '修改：把 operationId（客户端生成的 UUID）连同业务参数传给写工具。普通操作省略 baselineIds，由应用自动核对；删除或要求严格按旧状态写入时提供相关 baselineIds。勿传 expectedRevisions。同一 operationId 重传返回原事实，不会重复执行。',
   '镜头参考修订：2.6.0 起文档与子实体的 revisions、resultingRevisions 和宿主 scopeRevisions 使用 camera_stage，toolbox 仅表示工具箱自身状态。旧 toolbox 镜头基线返回 BASELINE_EXPIRED；请重新 read_application_entity 读取原目标，使用新 baselineId 提交。',
-  '共享长期记忆：可通过通用实体工具读写 assistant.shared_memory，引用 id 为 singleton。新任务按需读取；有明确偏好或纠正时，带读取返回的 baselineIds 合并更新 content，CONFLICT 则重读重合并，不追加流水账；尊重用户关闭与连接写权限。查任务：生成默认用 wait_generation_task 等待终态，用户主动询问即时进度才用 get_generation_task，三维渲染用 get_camera_stage_render_task，写操作事实用 get_application_operation；等待工具由宿主跟进，其他即时查询按需调用，不需要客户端支持通知扩展。可用 subscriptions/listen 订阅工具目录变更；收到 notifications/tools/list_changed 后重新 tools/list。',
+  MEMORY_RULES,
+  '查任务：生成默认用 wait_generation_task 等待终态，用户主动询问即时进度才用 get_generation_task，三维渲染用 get_camera_stage_render_task，写操作事实用 get_application_operation；等待工具由宿主跟进，其他即时查询按需调用，不需要客户端支持通知扩展。可用 subscriptions/listen 订阅工具目录变更；收到 notifications/tools/list_changed 后重新 tools/list。',
   '取结果：看图用 read_application_media(mode="image") 直接取得图片内容；其他媒体按 offset 分块读到 eof；不支持富媒体的客户端只消费 totalBytes／eof／错误码也能理解状态并继续。',
   '失败恢复：执行状态 unknown 时禁止换标识重试，用原 operationId 查询；partial 且账本登记了仅保存恢复入口时调 retry_application_operation_save，它不会重放业务修改。',
   '前置条件：写入被会话挡住时，对目标 ref 调 describe_application_entities，propertyAvailability 的 reasons 与 recoveries 就是声明层给出的前置条件和恢复入口。',
@@ -333,7 +335,7 @@ export function buildApplicationContract(input: {
     ...(full.skills ? { skills: { tool: full.skills.tool, index: full.skills.index } } : {}),
     workflows: [
       '发现：describe_application_entities 按域查属性；list_application_entities 用分页/where 定位；read_application_entity 读属性与 baselineId。tools/list 查工具，契约 detail="full" 查排除与弃用。',
-      '写入：生成 UUID operationId，重传同 ID 返回原事实。baselineIds 普通修改/新增可省略，共享记忆和删除须读基线；删除先读目标及集合父对象。勿传 expectedRevisions。includeRevisions/includeEvidence=true 展开修订/证据。',
+      '写入：生成 UUID operationId，重传同 ID 返回原事实。baselineIds 普通修改/新增可省略，记忆条目修改和删除须读基线；删除先读目标及集合父对象。勿传 expectedRevisions。includeRevisions/includeEvidence=true 展开修订/证据。',
       '恢复：unknown 查 get_application_operation，沿原 operationId，禁止重放；partial 仅恢复保存。前置拒绝用 describe_application_entities(refs) 查条件。',
       '结果：wait_generation_task 等生成终态；read_application_media(mode="image") 看图，其他媒体读至 eof。load_assistant_skill 按适用条件读主文件和单份参考。',
       confirmationGuidance,
