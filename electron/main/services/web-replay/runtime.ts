@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { net, shell } from 'electron'
 import type { WebRecordingManifest } from '../../../../src/core/webReplay/schema'
-import type { WebReplayReadRequest, WebReplayReadResult, WebReplayRenderRequest, WebReplayRenderResult, WebReplayServerState } from '../../../../src/platform/contracts/webReplay'
+import type { WebRecordingSummary, WebReplayReadRequest, WebReplayReadResult, WebReplayRenderProgress, WebReplayRenderRequest, WebReplayRenderResult, WebReplayServerState } from '../../../../src/platform/contracts/webReplay'
 import { createMainLogger } from '../logging'
 import { WebRecordingPlayer } from './player/player'
 import { WEB_REPLAY_PORT, WebReplayServer } from './server'
@@ -67,17 +67,44 @@ function requireServer(): WebReplayServer {
 export function startWebRecording(connectionId: string): Promise<WebRecordingManifest> { return requireServer().startRecording(connectionId) }
 export function stopWebRecording(recordingId: string): Promise<WebRecordingManifest> { return requireServer().stopRecording(recordingId) }
 
+const TRASH = '.trash'
+const UUID_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** The newest replay video inside a recording directory (names sort by render time). */
+async function latestVideo(directory: string): Promise<string | null> {
+  const newest = (await fs.readdir(directory).catch(() => [] as string[])).filter(name => /^replay-.*\.mp4$/.test(name)).sort().at(-1)
+  return newest ? path.join(directory, newest) : null
+}
+
 /** Every recording on disk, newest first. Unreadable directories are skipped and logged. */
-export async function listWebRecordings(): Promise<WebRecordingManifest[]> {
+export async function listWebRecordings(): Promise<WebRecordingSummary[]> {
   const root = webRecordingsRoot()
-  const names = await fs.readdir(root).catch(() => [] as string[])
+  const names = (await fs.readdir(root).catch(() => [] as string[])).filter(name => UUID_NAME.test(name))
   const manifests = await Promise.all(names.map(async name => {
-    try { return await new WebRecordingStore(path.join(root, name)).readManifest() } catch (error) {
+    const directory = path.join(root, name)
+    try { return { ...await new WebRecordingStore(directory).readManifest(), video: await latestVideo(directory) } } catch (error) {
       logger.warn('网页录制无法读取', { event: 'web_replay.recording.unreadable', context: { name }, error: String(error) })
       return null
     }
   }))
-  return manifests.filter((m): m is WebRecordingManifest => m !== null).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  return manifests.filter((m): m is WebRecordingSummary => m !== null).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+}
+
+/** Deleting moves the directory to a trash folder beside it, so the operation can be undone. */
+export async function removeWebRecording(recordingId: string): Promise<void> {
+  if ((server?.apps() ?? []).some(app => app.recordingId === recordingId)) throw new Error('这段网页录制还在进行，请先停止')
+  if (rendering.has(recordingId)) throw new Error('这段网页录制正在重演，请等待完成')
+  const trash = path.join(webRecordingsRoot(), TRASH)
+  await fs.mkdir(trash, { recursive: true })
+  await fs.rm(path.join(trash, recordingId), { recursive: true, force: true })
+  await fs.rename(webRecordingDirectory(recordingId), path.join(trash, recordingId))
+  logger.info('网页录制已移到回收区', { event: 'web_replay.recording.removed', context: { recordingId } })
+}
+
+export async function restoreWebRecording(recordingId: string): Promise<void> {
+  const target = webRecordingDirectory(recordingId) // also validates the id
+  await fs.rename(path.join(webRecordingsRoot(), TRASH, recordingId), target)
+  logger.info('网页录制已恢复', { event: 'web_replay.recording.restored', context: { recordingId } })
 }
 
 export async function getWebRecording(recordingId: string): Promise<WebRecordingManifest> { return WebRecordingStore.forId(recordingId).readManifest() }
@@ -99,13 +126,13 @@ export async function revealWebRecording(recordingId: string, file?: string): Pr
 }
 
 const rendering = new Set<string>()
-export async function renderWebRecording(request: WebReplayRenderRequest, signal?: AbortSignal): Promise<WebReplayRenderResult> {
+export async function renderWebRecording(request: WebReplayRenderRequest, signal?: AbortSignal, onProgress?: (progress: WebReplayRenderProgress) => void): Promise<WebReplayRenderResult> {
   if (rendering.has(request.recordingId)) throw new Error('这段网页录制正在重演，请等待完成')
   rendering.add(request.recordingId)
   try {
     const output = request.output ?? path.join(webRecordingDirectory(request.recordingId), `replay-${new Date().toISOString().replace(/[:.]/g, '-')}.mp4`)
     await fs.mkdir(path.dirname(output), { recursive: true })
     logger.info('开始网页重演', { event: 'web_replay.replay.start', context: { recordingId: request.recordingId, output } })
-    return await WebRecordingPlayer.open(request.recordingId).render({ output, fps: request.fps, signal })
+    return await WebRecordingPlayer.open(request.recordingId).render({ output, fps: request.fps, signal, onFrame: onProgress ? (progress, frame) => onProgress({ recordingId: request.recordingId, progress, frame }) : undefined })
   } finally { rendering.delete(request.recordingId) }
 }

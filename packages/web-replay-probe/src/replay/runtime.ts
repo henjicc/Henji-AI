@@ -4,6 +4,7 @@ import { pointIn, resolveLocator } from '../shared/locator'
 import { callbackRefs, type TauriInternals } from '../shared/tauriRefs'
 import type { ElementInfo, HeaderList, Locator } from '../protocol'
 import { REPLAY_CONTROL, REPLAY_GLOBAL, type ReplayHost, type ReplayHttpResult } from './types'
+import { installCursorOverlay } from './cursorOverlay'
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
@@ -166,6 +167,7 @@ export function installReplayRuntime(host: ReplayHost): void {
     return { x, y }
   }
   win[REPLAY_CONTROL] = { locate, pointFor: (target: ElementInfo) => locate(target.locator, target.offset) }
+  installCursorOverlay()
   host.report({ kind: 'ready', now: performance.now() })
 }
 

@@ -5,6 +5,9 @@ export const WEB_REPLAY_CHANNELS = {
   start: 'webReplay:start',
   stop: 'webReplay:stop',
   recordings: 'webReplay:recordings',
+  remove: 'webReplay:remove',
+  restore: 'webReplay:restore',
+  renderProgress: 'webReplay:render-progress',
   render: 'webReplay:render',
   read: 'webReplay:read',
   reveal: 'webReplay:reveal',
@@ -20,7 +23,13 @@ export interface WebReplayConnectedApp {
   probeVersion: string
   /** The recording this app is producing right now, if any. */
   recordingId: string | null
+  /** Wall-clock ms when that recording actually started (after the app reloaded). */
+  recordingStartedAt: number | null
 }
+
+/** A saved recording plus its most recent replay video, if one was rendered. */
+export type WebRecordingSummary = WebRecordingManifest & { video: string | null }
+export interface WebReplayRenderProgress { recordingId: string; progress: number; frame: string }
 
 export interface WebReplayServerState { enabled: boolean; listening: boolean; port: number; error?: string; apps: WebReplayConnectedApp[] }
 
@@ -47,7 +56,12 @@ export interface WebReplayPlatform {
   apps(): Promise<WebReplayServerState>
   start(connectionId: string): Promise<WebRecordingManifest>
   stop(recordingId: string): Promise<WebRecordingManifest>
-  recordings(): Promise<WebRecordingManifest[]>
+  recordings(): Promise<WebRecordingSummary[]>
+  /** Moves a recording to the trash folder; `restore` brings it back. */
+  remove(recordingId: string): Promise<void>
+  restore(recordingId: string): Promise<void>
+  /** Live frames while a replay renders (about five per second). */
+  onRenderProgress(listener: (event: WebReplayRenderProgress) => void): () => void
   render(request: WebReplayRenderRequest): Promise<WebReplayRenderResult>
   read(request: WebReplayReadRequest): Promise<WebReplayReadResult>
   /** Shows a file of this recording (a rendered video) or its folder in the system file manager. */

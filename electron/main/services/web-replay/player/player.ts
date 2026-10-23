@@ -27,7 +27,11 @@ export interface ReplayResult {
   unusedCalls: number
   locatorMisses: number
 }
-export interface ReplayOptions { output: string; fps?: number; show?: boolean; signal?: AbortSignal }
+export interface ReplayOptions {
+  output: string; fps?: number; show?: boolean; signal?: AbortSignal
+  /** Live preview: progress 0..1 and a small JPEG data URL, about five times a second. */
+  onFrame?: (progress: number, frame: string) => void
+}
 
 type BootReply = { phase: 'bootstrap'; storage: unknown } | { phase: 'app'; boot: ReplayBoot } | { phase: 'none' }
 
@@ -201,6 +205,7 @@ export class WebRecordingPlayer {
         // A frame of another size (window resize in flight) repeats the last good one so timing stays exact.
         if (width === encoder.sourceWidth && height === encoder.sourceHeight) lastGood = bitmap
         if (lastGood) await encoder.write(lastGood)
+        if (options.onFrame && i % Math.max(1, Math.round(fps / 5)) === 0) options.onFrame(i / frameCount, `data:image/jpeg;base64,${frame.resize({ width: Math.min(1280, width) }).toJPEG(80).toString('base64')}`)
       }
       if (!encoder) throw new Error('重演窗口没有产生任何画面')
       await encoder.finish()

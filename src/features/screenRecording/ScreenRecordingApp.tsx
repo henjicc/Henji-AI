@@ -16,7 +16,7 @@ import { RecordingSetupPanel } from './RecordingSetupPanel'
 import { RecordingLive } from './RecordingLive'
 import { RecordingDirectorGoal, RecordingDirectorScript } from './RecordingDirectorPanel'
 import { recordingTimeLabel } from './useRecordingControlSnapshot'
-import { WebAppRecordingActions, WebAppRecordingPanel } from './WebAppRecordingPanel'
+import { WebAppRecordingActions, WebAppRecordingPanel, WebAppRecordingStatus } from './WebAppRecordingPanel'
 import { useWebAppRecording } from './useWebAppRecording'
 import { useSettingsStore } from '@/stores/settingsStore'
 
@@ -95,6 +95,7 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
     </>
   } else if (!state.opening) {
     center = <UiSegmented ariaLabel={t('recording.recordMode')} value={kind} onChange={setKind} options={[{ value: 'self', label: t('recording.mode_self') }, { value: 'director', label: t('recording.mode_director') }, ...(webAppEnabled ? [{ value: 'webapp' as const, label: t('recording.mode_webapp') }] : [])]} />
+    if (kind === 'webapp' && webApp.activeId) leading = <span className="flex items-center gap-2 text-sm font-medium">{t('recording.title')}<WebAppRecordingStatus model={webApp} /></span>
     trailing = director ? null : kind === 'webapp' ? <WebAppRecordingActions model={webApp} /> : <UiButton variant="primary" loading={state.busy} disabled={!sourceId} disabledReason={t('recording.selectSource')} onClick={() => run(begin)}><ICON_TOOL_SCREEN_RECORDING />{t('recording.start')}</UiButton>
   }
 

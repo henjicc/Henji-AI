@@ -31,6 +31,8 @@ export class WebRecordingSession {
   private stopped: { resolve: (m: WebRecordingManifest) => void; reject: (e: Error) => void; promise: Promise<WebRecordingManifest> } | null = null
   private journal: Promise<void> = Promise.resolve()
   state: 'starting' | 'recording' | 'stopping' | 'complete' | 'interrupted' = 'starting'
+  /** Wall-clock ms when the probe reported the recording page started. */
+  startedAt: number | null = null
 
   constructor(target: RecordingTarget, private readonly fetchExternal: FetchExternal) {
     this.manifest = {
@@ -57,6 +59,7 @@ export class WebRecordingSession {
     switch (message.type) {
       case 'started':
         this.state = 'recording'
+        this.startedAt = Date.now()
         this.manifest = { ...this.manifest, wallAtZeroMs: message.wallAtZeroMs, env: message.env }
         logger.info('网页录制开始', { event: 'web_replay.recording.started', context: { recordingId: this.id, app: this.manifest.app.name, url: message.env.url } })
         return

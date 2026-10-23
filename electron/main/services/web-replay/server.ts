@@ -18,6 +18,8 @@ export interface ConnectedWebApp {
   env: WebRecordingEnvironment
   probeVersion: string
   recordingId: string | null
+  /** Wall-clock ms when the reloaded page started recording; drives the live timer. */
+  recordingStartedAt: number | null
 }
 
 interface Connection { id: string; socket: WebSocket; app?: ConnectedWebApp; session?: WebRecordingSession }
@@ -60,7 +62,7 @@ export class WebReplayServer extends EventEmitter {
   }
 
   apps(): ConnectedWebApp[] {
-    return [...this.connections.values()].flatMap(c => (c.app ? [{ ...c.app, recordingId: c.session?.id ?? null }] : []))
+    return [...this.connections.values()].flatMap(c => (c.app ? [{ ...c.app, recordingId: c.session?.id ?? null, recordingStartedAt: c.session?.startedAt ?? null }] : []))
   }
 
   /** Starts recording the app on this connection; the page reloads and records from its first module. */
@@ -113,7 +115,7 @@ export class WebReplayServer extends EventEmitter {
       return
     }
     if (message.type === 'hello') {
-      connection.app = { connectionId: connection.id, app: message.app, host: message.host, env: message.env, probeVersion: message.probeVersion, recordingId: null }
+      connection.app = { connectionId: connection.id, app: message.app, host: message.host, env: message.env, probeVersion: message.probeVersion, recordingId: null, recordingStartedAt: null }
       const resumed = message.session ? this.sessions.get(message.session) : undefined
       if (resumed) {
         connection.session = resumed
@@ -129,7 +131,9 @@ export class WebReplayServer extends EventEmitter {
       if (session) connection.session = session
       else return
     }
+    const wasStarting = connection.session?.state === 'starting'
     connection.session?.handle(message)
+    if (wasStarting && connection.session?.state === 'recording') this.changed()
   }
 
   private send(connection: Connection, message: object): boolean {
