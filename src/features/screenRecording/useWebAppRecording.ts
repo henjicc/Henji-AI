@@ -81,6 +81,8 @@ export function useWebAppRecording(): {
     reveal: (id, file) => platform.reveal(id, file),
     removeMany: async ids => {
       const removed: string[] = []
+      // The preview keeps the selected recording's video open; let go of it before its folder moves.
+      if (ids.includes(selectedRecordingId)) { selectRecording(''); await new Promise(resolve => setTimeout(resolve, 300)) }
       await guard(async () => { try { for (const id of ids) { await platform.remove(id); removed.push(id) } } finally { await reload() } })
       return removed
     },

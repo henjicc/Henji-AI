@@ -98,6 +98,23 @@ export async function listWebRecordings(): Promise<WebRecordingSummary[]> {
   return manifests.filter((m): m is WebRecordingSummary => m !== null).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 }
 
+/**
+ * Windows refuses to move a folder while any file in it is open (a video still closing in the preview,
+ * the indexer, antivirus); those locks clear within moments, so the move is retried briefly.
+ */
+async function moveDirectory(from: string, to: string): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try { await fs.rename(from, to); return } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if ((code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES') || attempt >= 15) {
+        if (code === 'EPERM' || code === 'EBUSY' || code === 'EACCES') throw new Error('这段录制的文件正被其他程序占用，请关闭正在播放或打开它的程序后再删除')
+        throw error
+      }
+      await new Promise(resolve => setTimeout(resolve, 200))
+    }
+  }
+}
+
 /** Deleting moves the directory to a trash folder beside it, so the operation can be undone. */
 export async function removeWebRecording(recordingId: string): Promise<void> {
   if ((server?.apps() ?? []).some(app => app.recordingId === recordingId)) throw new Error('这段网页录制还在进行，请先停止')
@@ -105,13 +122,13 @@ export async function removeWebRecording(recordingId: string): Promise<void> {
   const trash = path.join(webRecordingsRoot(), TRASH)
   await fs.mkdir(trash, { recursive: true })
   await fs.rm(path.join(trash, recordingId), { recursive: true, force: true })
-  await fs.rename(webRecordingDirectory(recordingId), path.join(trash, recordingId))
+  await moveDirectory(webRecordingDirectory(recordingId), path.join(trash, recordingId))
   logger.info('网页录制已移到回收区', { event: 'web_replay.recording.removed', context: { recordingId } })
 }
 
 export async function restoreWebRecording(recordingId: string): Promise<void> {
   const target = webRecordingDirectory(recordingId) // also validates the id
-  await fs.rename(path.join(webRecordingsRoot(), TRASH, recordingId), target)
+  await moveDirectory(path.join(webRecordingsRoot(), TRASH, recordingId), target)
   logger.info('网页录制已恢复', { event: 'web_replay.recording.restored', context: { recordingId } })
 }
 
