@@ -1,6 +1,10 @@
 /*
  * 文档底座的错误类型。IPC 只把 name 与 message 传回渲染层，渲染层按 name 区分处理
  * （如 DocumentRevisionConflictError → 提示“重新载入 / 覆盖”，DocumentNameConflictError → 提示重名）。
+ *
+ * 约定：除 FileInUseError 外，这里的类型只在还没有写入任何东西时抛出（校验位置、名称、存在性、版本、类型）。
+ * 助手的写执行层据此把失败判为“没有执行”（src/core/application-control/execution/rejectionErrors.ts）；
+ * 已经写了一部分再失败时，先回滚干净再抛，回滚不了就抛别的错误，不能借这些类型掩盖半成品。
  */
 
 export { DocumentFormatError } from '../../../../src/core/documents/envelope'

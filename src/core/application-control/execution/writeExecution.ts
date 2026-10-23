@@ -1,5 +1,6 @@
 import { ApplicationPreflightFailure, ApplicationTransactionFailure } from './transactionFailure'
 import { ApplicationPersistenceFailure } from './persistence'
+import { isRejectedBeforeWrite } from './rejectionErrors'
 import type { ApplicationEffectReceipt } from '../transactions'
 
 export interface ApplicationWriteFacts {
@@ -85,9 +86,10 @@ export class ApplicationWriteExecution {
       return new ApplicationWriteFailure(error.original, { ...this.facts,
         notExecuted: error.execution.notExecuted && !this.completed && this.facts.billing === 'not_charged' && this.facts.targetMutation === 'none' && !this.effects.length }, this.effects)
     }
-    // 领域错误显式声明未执行（如画布“没有可停止的本地执行”）同样是前置拒绝；仍须同时满足无修改、未计费、无副作用。
+    // 领域错误显式声明未执行（如画布“没有可停止的本地执行”），或抛出的是约定只在写入前出现的拒绝类型（位置无效、重名、不存在……），
+    // 同样是前置拒绝；仍须同时满足无修改、未计费、无副作用。
     const details = error && typeof error === 'object' ? (error as { details?: { execution?: { notExecuted?: unknown } } }).details : undefined
-    const rejected = !this.completed && (error instanceof ApplicationPreflightFailure || details?.execution?.notExecuted === true)
+    const rejected = !this.completed && (error instanceof ApplicationPreflightFailure || details?.execution?.notExecuted === true || isRejectedBeforeWrite(error))
     const notExecuted = (!this.started || rejected) && this.facts.billing === 'not_charged' && this.facts.targetMutation === 'none' && !this.effects.length
     return new ApplicationWriteFailure(error, { ...this.facts, notExecuted,
       // none 是准备阶段的初值，进入派发后缺回执不能把它当成已确认的零修改。

@@ -24,6 +24,14 @@ describe('统一写执行通道', () => {
     const late = applicationWriteChannel((_input, context) => { context.execution.report({ targetMutation: 'applied' }); throw notExecutedFailure(new Error('after write')) })
     await expect(late({}, {})).rejects.toMatchObject({ execution: { notExecuted: false } })
   })
+  it('约定只在写入前抛出的拒绝类型（含被改道说明包住的）是零执行，其他异常仍是未知', async () => {
+    const location = Object.assign(new Error('位置无效，请选择一个文件夹。'), { name: 'DocumentLocationError' })
+    await expect(applicationWriteChannel(() => { throw location })({}, {})).rejects.toMatchObject({ execution: { notExecuted: true, targetMutation: 'none' } })
+    const wrapped = new Error('NAME_CONFLICT:同一位置已有同名文件 请换一个名称', { cause: Object.assign(new Error('重名'), { name: 'DocumentNameConflictError' }) })
+    await expect(applicationWriteChannel(() => { throw wrapped })({}, {})).rejects.toMatchObject({ execution: { notExecuted: true } })
+    const busy = Object.assign(new Error('文件正在被使用'), { name: 'FileInUseError' })
+    await expect(applicationWriteChannel(() => { throw busy })({}, {})).rejects.toMatchObject({ execution: { notExecuted: false, targetMutation: 'unknown' } })
+  })
   it('已进入统一包装的加载前拒绝是明确零执行，且保留领域原因', async () => {
     const cause = Object.assign(new Error('格式不支持'), { name: 'PersistenceError' })
     const handler = applicationWriteChannel(async (_input, context) => context.execution.preflight(() => { throw cause }))

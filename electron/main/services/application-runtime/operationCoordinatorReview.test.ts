@@ -64,3 +64,39 @@ it('读回过程中完成的操作不重新进入人工核对', async () => {
   expect(f.show).not.toHaveBeenCalled()
   expect(f.get().state).toBe('completed')
 })
+
+it('写入前就被拒绝却被旧版记成未知的记录自动收回，不再请用户核对（含已经弹出的）', () => {
+  const f = fixture()
+  const rejected = (capabilityId: string, message: string, extra: Partial<OperationRecord> = {}): OperationRecord => ({ ...f.get(), capabilityId: capabilityId as OperationRecord['capabilityId'], state: 'unknown', verificationState: 'unresolved', confirmation: undefined,
+    result: { ok: false, error: { code: 'CAPABILITY_REJECTED', message, recoverable: false, details: { execution: { billing: 'not_charged', targetMutation: 'unknown', notExecuted: false } } } }, ...extra })
+  for (const record of [
+    rejected('register_external_project', '位置无效，请选择一个文件夹。'),
+    rejected('create_document', '这种文档只能放在项目里。'),
+    rejected('render_video_edit_style', 'Parse error @:169:3'),
+    rejected('import_web_recording_to_project', 'Target already exists: cp returned EEXIST (D:/素材/录屏/a.hjweb already exists) D:/素材/录屏/a.hjweb', {
+      state: 'awaiting_user_confirmation', confirmation: applicationUserConfirmation({ title: '核对', message: '?', confirmLabel: '已经生效' }, 'review') }),
+  ]) {
+    f.set(record)
+    expect(f.coordinator.pendingReviews()).toEqual([])
+    expect(f.get()).toMatchObject({ state: 'not_executed', verificationState: 'verified', confirmation: undefined })
+  }
+  // 同样的原文出现在别的能力上不能借用：只认可证明零写入的那几条路
+  f.set(rejected('export_video_edit', 'Parse error @:1:1'))
+  expect(f.coordinator.pendingReviews()).toHaveLength(1)
+})
+
+it('已经结束但不确定改了多少的失败，面板说明出错原因与怎么选，不说成“应用重新加载”', async () => {
+  const f = fixture()
+  f.set({ ...f.get(), capabilityId: 'export_video_edit', state: 'unknown', rendererEpoch: 'old-epoch', origin: { at: Date.now(), actor: 'external' },
+    result: { ok: false, error: { code: 'CAPABILITY_REJECTED', message: '导出目录写不进去', details: { execution: { billing: 'not_charged', targetMutation: 'unknown', notExecuted: false } } } } })
+  await f.coordinator.review(f.get(), 'new-epoch', vi.fn().mockRejectedValue(new Error('gone')), () => {})
+  const message = f.show.mock.calls[0][0].message as string
+  expect(message).toContain('执行时出错：导出目录写不进去')
+  expect(message).toContain('没有改动就选“没有生效”')
+  expect(message).not.toMatch(/重新加载|执行到一半/)
+  // 英文底层报错不展示给用户
+  f.show.mockClear()
+  f.set({ ...f.get(), state: 'unknown', confirmation: undefined, result: { ok: false, error: { code: 'CAPABILITY_REJECTED', message: 'EPERM: operation not permitted', details: {} } } })
+  await f.coordinator.review(f.get(), 'new-epoch', vi.fn().mockRejectedValue(new Error('gone')), () => {})
+  expect(f.show.mock.calls[0][0].message).not.toContain('EPERM')
+})

@@ -117,15 +117,26 @@ export class ApplicationOperationCoordinator {
           && object(issues[0]).message === '只有全局记忆需要分区。'
       } catch { /* 非这份已知校验回执，不推断执行事实。 */ }
     }
+    // 2026-10-24 前，写入前就被拒绝的失败（位置校验、文档类型不能独立存放、样片代码编译不过、
+    // 复制进刚建好的空文件夹时 fs.cp 报目标已存在且随即删掉）被误记为 unknown，元宝搜索实战里留下这几条。
+    // 只认这几份可证明零写入的原文，新回执已由写执行层按错误类型与领域声明直接记为未执行。
+    const message = typeof error.message === 'string' ? error.message : ''
+    const legacyRejectedBeforeWrite = error.code === 'CAPABILITY_REJECTED' && (
+      (['register_external_project', 'create_document', 'move_document', 'duplicate_document'].includes(record.capabilityId ?? '')
+        && ['位置无效，请选择一个文件夹。', '这种文档只能放在项目里。', '请选择一个文件夹。', '不能把作品目录本身作为项目打开。', '这个文件夹在另一个项目里，不能单独作为项目打开。'].includes(message))
+      || (record.capabilityId === 'render_video_edit_style' && message.startsWith('Parse error'))
+      || (record.capabilityId === 'import_web_recording_to_project' && message.startsWith('Target already exists: cp returned EEXIST')))
     // t184 统一写包装记录的结构化事实：未改动目标且未计费，即 t188 修复前被误记为 unknown 的执行前拒绝（如打开不支持格式的文档）。
     const execution = object(details.execution)
     const recordedNoEffect = execution.targetMutation === 'none' && execution.billing === 'not_charged'
     // 旧引擎步骤内异常会包装为“操作未完整完成”并附 partial；此原文只可能在步骤外逃逸。
-    if (record.state === 'unknown' && record.result?.ok === false
+    // 已经弹给用户核对、但其实可证明零写入的旧记录，同样直接收回，不再让用户回答。
+    const awaitingReview = record.state === 'awaiting_user_confirmation' && record.confirmation?.purpose === 'review'
+    if ((record.state === 'unknown' || awaitingReview && legacyRejectedBeforeWrite) && record.result?.ok === false
       && !details.transaction && !details.persistence && !details.effects && !details.partial
       && !record.result.effects && !record.result.data && !record.recoveryResult && !record.recoveryVerification
-      && (execution.notExecuted === true || legacyClosedDocument || nativeUploadRejected || legacyMemoryLayerRejected || recordedNoEffect)) {
-      const recovered: OperationRecord = { ...record, state: 'not_executed', verificationState: 'verified',
+      && (execution.notExecuted === true || legacyClosedDocument || nativeUploadRejected || legacyMemoryLayerRejected || legacyRejectedBeforeWrite || recordedNoEffect)) {
+      const recovered: OperationRecord = { ...record, state: 'not_executed', verificationState: 'verified', confirmation: undefined,
         result: { ...record.result, error: { ...error, recoverable: true, details: { ...details, execution: { notExecuted: true } } } } }
       this.store.save(recovered)
       return recovered

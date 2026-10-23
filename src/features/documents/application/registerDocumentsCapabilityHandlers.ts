@@ -68,7 +68,8 @@ async function verifyDocument(
 
 /** 重名失败改成带改道办法的错误；其余原样抛出。 */
 function rethrowWithRecovery(error: unknown, hint: string): never {
-  if (isDocumentNameConflict(error)) throw new Error(`NAME_CONFLICT:${toError(error).message} ${hint}`)
+  // 保留原错误作为 cause：执行层据它的类型知道这次是写入前被拒绝，可以直接换名重试
+  if (isDocumentNameConflict(error)) throw new Error(`NAME_CONFLICT:${toError(error).message} ${hint}`, { cause: error })
   throw error
 }
 

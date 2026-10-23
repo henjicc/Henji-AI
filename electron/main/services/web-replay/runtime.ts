@@ -104,8 +104,8 @@ export async function startWebRecording(connectionId: string, backup: WebRecordi
     return manifest
   } catch (error) {
     forgetActiveWebRecording(id)
-    await fs.rm(created.path, { recursive: true, force: true }).catch(() => undefined)
-    throw error
+    const cleaned = await fs.rm(created.path, { recursive: true, force: true }).then(() => true, () => false)
+    throw cleaned ? error : leftBehind(error, created.path)
   }
 }
 
@@ -140,7 +140,7 @@ export async function importWebRecordingToProject(request: WebRecordingImportReq
   } catch (error) {
     // 副本整个删干净才算“没有放进项目”；删不掉时项目里留了半份，如实报原错误，由调用方核对。
     const cleaned = await fs.rm(created.path, { recursive: true, force: true }).then(() => true, () => false)
-    throw cleaned ? notImportedError(error) : error
+    throw cleaned ? notImportedError(error) : leftBehind(error, created.path)
   }
   logger.info('网页录制已放进项目', { event: 'web_replay.recording.imported', context: { projectId: request.projectId, source, directory: created.path } })
   const summary = (await listWebRecordings()).find(item => item.directory === created.path)
@@ -156,6 +156,13 @@ function notImportedError(error: unknown): Error {
 }
 async function notImported<T>(work: () => T | Promise<T>): Promise<T> {
   try { return await work() } catch (error) { throw notImportedError(error) }
+}
+/**
+ * 已经建了文件夹、失败后又没能删掉：项目里留下了半份录制。换成普通错误（不带原错误的类型），
+ * 免得原来的“写入前拒绝”类型让执行层误判为没有改动。
+ */
+function leftBehind(error: unknown, directory: string): Error {
+  return new Error(`${error instanceof Error ? error.message : String(error)}（没能清理已创建的 ${path.basename(directory)}，请检查后再试）`)
 }
 
 const TRASH = '.trash'
