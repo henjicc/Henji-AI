@@ -1,5 +1,5 @@
 import { useSettingsStore } from '@/stores/settingsStore'
-import { rememberedDefault } from '@/features/assistant/memory/memoryDefaults'
+import { rememberedDefault } from '@/services/assistantMemory/memoryDefaults'
 /** 新建序列的唯一默认入口：明确输入仍由调用方最后覆盖。 */
 export function getVideoEditSequenceDefaults(documentId?: string) {
   const defaults = useSettingsStore.getState().videoEditSequenceDefaults

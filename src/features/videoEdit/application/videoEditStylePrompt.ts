@@ -1,4 +1,4 @@
-import { cachedMemory } from '@/features/assistant/memory/memoryState'
+import { cachedMemory } from '@/services/assistantMemory/memoryState'
 import { styleGuideGenerationPrompt } from '@/core/videoEdit/styles/styleGuide'
 import type { VideoEditStyle } from '@/core/videoEdit/styles/styleSchemas'
 import type { VideoEditDocument, VideoEditSequence } from '@/core/videoEdit/document'

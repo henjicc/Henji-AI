@@ -6,8 +6,8 @@ import { fieldDescriptors, fieldReadValues, fieldWriterTable, writableProperties
   type ApplicationEntityRegistration, type ApplicationFieldDefinition, type ApplicationMutationExecutor, type ApplicationCollectionExecutor,
   type ApplicationPlannedStep, type ApplicationCompletedStepResult, type ApplicationRef, type JsonValue } from '@/core/application-control'
 import { memoryHistoryEntrySchema, memoryEntryInputSchema, type MemoryEntry, type MemoryEntryInput, type MemoryTarget, type MemoryLayer, type MemorySnapshot } from '@/core/assistant/memoryEntries'
-import { readMemory, writeMemory, refreshMemory, revertMemory } from '../memory/memoryService'
-import { videoEditStyleLibrary } from '@/features/videoEdit/application/videoEditStyleLibrary'
+import { readMemory, writeMemory, refreshMemory, revertMemory } from '@/services/assistantMemory/memoryService'
+import { styleMemoryStorage } from '@/services/assistantMemory/styleMemoryStorage'
 
 import { MEMORY_RULES } from '@/core/assistant/memoryEntries'
 const types = { global: 'assistant.memory', project: 'document.project_memory', style: 'video_edit.style_preference' } as const
@@ -50,7 +50,7 @@ export function createMemoryRegistrations(): ApplicationEntityRegistration[] {
         if (!(await refreshMemory()).settings.enabled) return { refs: [], nextCursor: null, revisions: { assistant_memory: 1 } }
         const targets: MemoryTarget[] = layer === 'global' ? [{ layer }] : layer === 'project'
           ? (await getPlatform().documents.listProjects()).map(value => ({ layer, ownerId: value.id }))
-          : (await videoEditStyleLibrary.ready(), videoEditStyleLibrary.listStyles().map(value => ({ layer, ownerId: value.style.id })))
+          : (await styleMemoryStorage().list()).map(ownerId => ({ layer, ownerId }))
         const refs: ApplicationRef[] = []
         for (const target of targets) for (const entry of await readMemory(target)) refs.push({ ...refOf(target, entry.id), label: entry.content })
         const start = Number(request.cursor ?? 0), end = start + request.limit

@@ -1,4 +1,4 @@
-import { emptyMemorySnapshot, type MemorySettings } from '@/core/assistant/memoryEntries'
+import { emptyMemorySnapshot, MEMORY_HISTORY_LIMIT, type MemoryHistoryEntry, type MemorySettings } from '@/core/assistant/memoryEntries'
 import { applyMemoryWrite, type MemoryWrite } from '@/core/assistant/memoryOperations'
 /**
  * harness 的进程边界替身：一份**只存内存**的 `window.henjiNative`。
@@ -246,6 +246,15 @@ const NAMESPACES: Record<string, object> = {
       memoryListeners.forEach(listener => listener())
     },
     async getMemoryState() { return wire(memoryState.settings.enabled ? memoryState : { ...memoryState, entries: [], history: [] }) },
+    async recordMemoryChange(change: MemoryHistoryEntry) {
+      if (!memoryState.settings.enabled) throw new Error('MEMORY_DISABLED')
+      if (memoryState.history.some(entry => entry.id === change.id)) return wire(memoryState)
+      memoryState.history = [...memoryState.history, wire(change)].slice(-MEMORY_HISTORY_LIMIT)
+      memoryState.revision++
+      memoryState.changesSinceOrganization++
+      memoryListeners.forEach(listener => listener())
+      return wire(memoryState)
+    },
     onMemoryChange(listener: () => void) { memoryListeners.add(listener); return () => { memoryListeners.delete(listener) } },
     async updateMemorySettings(settings: MemorySettings) { memoryState.settings = wire(settings); memoryState.revision++; memoryListeners.forEach(listener => listener()); return wire(memoryState) },
     async writeMemory(input: MemoryWrite) {

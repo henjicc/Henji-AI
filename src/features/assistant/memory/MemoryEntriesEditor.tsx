@@ -1,10 +1,10 @@
-import { cachedMemory, memoryErrorMessage } from './memoryState'
+import { cachedMemory, memoryErrorMessage } from '@/services/assistantMemory/memoryState'
 import { useCallback, useEffect, useState } from 'react'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { Dropdown, UiError, UiGroup, UiIconButton, UiInput, UI_TEXT_META_CLASS } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
 import { memoryEntryInputSchema, type MemoryEntry, type MemoryTarget } from '@/core/assistant/memoryEntries'
-import { readMemory, writeMemory, subscribeMemory } from './memoryService'
+import { readMemory, writeMemory, subscribeMemory } from '@/services/assistantMemory/memoryService'
 
 type Section = 'about' | 'creative' | 'habits'
 type Group = Section | 'local'

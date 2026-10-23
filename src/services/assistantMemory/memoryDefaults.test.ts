@@ -5,8 +5,7 @@ import { rememberedFont } from './memoryDefaults'
 import { getVideoEditSequenceDefaults } from '@/features/videoEdit/application/videoEditSequenceDefaults'
 const data = vi.hoisted(() => ({ memory: undefined as MemorySnapshot | undefined }))
 vi.mock('./memoryState', () => ({ cachedMemory: () => data.memory, refreshMemory: vi.fn(), subscribeMemory: vi.fn() }))
-vi.mock('@/features/documents/currentDocumentContext', () => ({ currentDocumentContext: () => ({}) }))
-vi.mock('@/features/documents/documentSessionRegistry', () => ({ getDocumentSessionRegistry: () => ({ get: () => undefined }) }))
+vi.mock('@/features/documents', () => ({ currentDocumentContext: () => ({}), getDocumentSessionRegistry: () => ({ get: () => undefined }) }))
 vi.mock('@/platform/fonts', () => ({ resolveFont: (name: string) => ['思源黑体', 'Arial', '宋体'].includes(name) ? { family: name } : undefined, fontLibrarySnapshot: vi.fn(), loadFontLibrary: vi.fn() }))
 vi.mock('@/stores/settingsStore', () => ({ useSettingsStore: { getState: () => ({ videoEditSequenceDefaults: { width: 1920, height: 1080, frameRate: 30 } }) } }))
 beforeEach(() => { data.memory = emptyMemorySnapshot(); data.memory.entries = [

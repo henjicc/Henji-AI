@@ -1,4 +1,4 @@
-import { revertMemory } from '../memory/memoryService'
+import { revertMemory } from '@/services/assistantMemory/memoryService'
 import { UiFieldMessage } from '@/components/ui'
 import { UiSpinner } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'

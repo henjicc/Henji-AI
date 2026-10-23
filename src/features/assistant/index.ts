@@ -2,3 +2,5 @@
 export { openAssistant } from './store/assistantUiStore'
 
 export { assetToAgentAttachment } from './conversation/assistantAttachments'
+
+export { MemoryEntriesEditor } from './memory/MemoryEntriesEditor'

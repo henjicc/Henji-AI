@@ -15,6 +15,7 @@ import {
 } from './harnessNativeStorage'
 import { GENERIC_FONT_FACES } from '@/core/fonts/catalog'
 import type { GenerationHistoryInsertDto } from '@/platform/contracts/localRecords'
+import type { MemoryHistoryEntry } from '@/core/assistant/memoryEntries'
 
 function historyRecord(id: string, patch: Partial<GenerationHistoryInsertDto> = {}): GenerationHistoryInsertDto {
   return { id, providerId: 'kie', modelId: 'image-model', type: 'image', prompt: '产品 Photo', params: { nested: { value: 1 } },
@@ -33,6 +34,18 @@ function historyRecord(id: string, patch: Partial<GenerationHistoryInsertDto> = 
 describe('harness 内存 native 替身', () => {
   beforeEach(() => { installHarnessNativeStorage() })
   afterEach(() => { uninstallHarnessNativeStorage() })
+  it('外部记忆历史只存副本、按标识去重，不修改全局条目，关闭后拒绝写入', async () => {
+    const api = getPlatform().assistant
+    const change: MemoryHistoryEntry = { id: 'style-change', target: { layer: 'style', ownerId: 'restrained' }, entryId: 'spacing', actor: 'user', before: null,
+      after: { id: 'spacing', content: '多留空白。', source: 'user', revision: 1, updatedAt: '2026-10-24T00:00:00Z' }, reason: '用户明确偏好。', createdAt: '2026-10-24T00:00:00Z' }
+    const saved = await api.recordMemoryChange(change)
+    expect(saved).toMatchObject({ entries: [], revision: 1, changesSinceOrganization: 1, history: [change] })
+    saved.history[0].reason = '改动回读副本'
+    expect((await api.recordMemoryChange(change)).history[0].reason).toBe(change.reason)
+    expect((await api.getMemoryState()).revision).toBe(1)
+    await api.updateMemorySettings({ enabled: false, autoOrganize: true })
+    await expect(api.recordMemoryChange({ ...change, id: 'disabled' })).rejects.toThrow('MEMORY_DISABLED')
+  })
   it('录制状态与能力事实只存不推断；重置广播空状态，未实现设备控制仍拒绝', async () => {
     const api = getPlatform().screenRecording
     expect(await api.snapshot()).toBeNull()

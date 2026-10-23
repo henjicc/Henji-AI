@@ -1,4 +1,4 @@
-import { rememberedFont } from '@/features/assistant/memory/memoryDefaults'
+import { rememberedFont } from '@/services/assistantMemory/memoryDefaults'
 import type { VideoEditSequence } from '@/core/videoEdit/document'
 import { videoEditCaptionSchema, type VideoEditCaption } from '@/core/videoEdit/timedContent'
 import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'

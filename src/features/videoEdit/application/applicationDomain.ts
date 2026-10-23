@@ -1,3 +1,5 @@
+import { registerCurrentDocumentProvider } from '@/features/documents'
+import { activeVideoEditInstance } from './videoEditService'
 import '../layout/videoEditDockLayout'
 import { startVideoEditAudioDocumentLinks, sendVideoEditClipToAudioEdit } from './videoEditAudioLinks'
 import { sendVideoEditAudioCapability } from '@/core/application-control/domains/videoEdit/videoEditAudioLinkCapability'
@@ -125,6 +127,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     for (const entityType of ['video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.clip', 'video_edit.annotation', 'video_edit.code_material', 'video_edit.code_version', 'video_edit.marker', 'video_edit.caption', 'video_edit.track', ...VIDEO_EDIT_COMPOSITE_TYPES] as const) engine.registerCollectionExecutor(new VideoEditCollectionExecutor(entityType))
   },
   registerCapabilities(registrar) {
+    registerCurrentDocumentProvider('videoEdit', host => host.activeWorkspace === 'videoEdit' ? activeVideoEditInstance()?.document.id : undefined)
     // 剪辑文档的通用打开与后台释放（3.1）：项目与文档的列出、新建、移动、删除走通用文档能力，
     // 这里只登记“打开到哪里”（剪辑工作区）和“后台持有的实例怎么释放”。
     registerDocumentOpener('video_edit', async (document) => {

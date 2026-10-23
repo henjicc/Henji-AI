@@ -1,4 +1,4 @@
-import { cachedMemory } from '@/features/assistant/memory/memoryState'
+import { cachedMemory } from '@/services/assistantMemory/memoryState'
 import type { MemoryEntry } from '@/core/assistant/memoryEntries'
 import { createLogger } from '@/core/logging'
 import { styleGuideSummary } from '@/core/videoEdit/styles/styleGuide'

@@ -5,7 +5,7 @@ import { applyMemoryWrite, type MemoryWrite } from '@/core/assistant/memoryOpera
 import type { ApplicationPlannedStep } from '@/core/application-control'
 import { createMemoryRegistrations, MemoryExecutor } from './memoryReflection'
 const fixture = vi.hoisted(() => ({ state: undefined as MemorySnapshot | undefined }))
-vi.mock('../memory/memoryService', () => ({
+vi.mock('@/services/assistantMemory/memoryService', () => ({
   refreshMemory: async () => fixture.state!,
   readMemory: async () => fixture.state!.settings.enabled ? fixture.state!.entries : [],
   writeMemory: async (input: MemoryWrite) => {
@@ -16,7 +16,6 @@ vi.mock('../memory/memoryService', () => ({
     return result.change
   }, revertMemory: vi.fn(),
 }))
-vi.mock('@/features/videoEdit/application/videoEditStyleLibrary', () => ({ videoEditStyleLibrary: {} }))
 beforeEach(() => { fixture.state = emptyMemorySnapshot() })
 const ref = { kind: 'assistant.memory', id: 'font' }
 const input = { section: 'creative' as const, content: '中文使用思源黑体。', source: 'assistant' as const }

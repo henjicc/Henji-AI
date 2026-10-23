@@ -1,3 +1,5 @@
+import { registerCurrentDocumentProvider } from '@/features/documents'
+import { useCameraStageSessionStore } from '../store/cameraStageSessionStore'
 import '../layout/dockLayout'
 import type { ApplicationDomainModule } from '@/features/application-control/domainModule'
 import { createCameraStageReflectionRegistrations } from './cameraStageReflection'
@@ -20,6 +22,7 @@ export const cameraStageApplicationDomain: ApplicationDomainModule = {
     engine.registerCollectionExecutor(new CameraStageStateKeyframeCollectionExecutor(current))
   },
   registerCapabilities(registrar) {
+    registerCurrentDocumentProvider('cameraStage', host => host.activeWorkspace === 'tools' && host.activeToolId === 'cameraStage' && useCameraStageSessionStore.getState().appView === 'editor' ? useCameraStageSessionStore.getState().lastDocumentId ?? undefined : undefined)
     registerCameraStageCapabilityHandlers(registrar)
   },
 }

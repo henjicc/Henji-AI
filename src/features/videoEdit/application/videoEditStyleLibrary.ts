@@ -1,5 +1,9 @@
-import { rememberedDefault } from '@/features/assistant/memory/memoryDefaults'
-import { refreshMemory } from '@/features/assistant/memory/memoryState'
+import { writeMemory } from '@/services/assistantMemory/memoryService'
+import { registerStyleMemoryStorage } from '@/services/assistantMemory/styleMemoryStorage'
+import { applyMemoryWrite } from '@/core/assistant/memoryOperations'
+import { getPlatform } from '@/platform/runtime'
+import { rememberedDefault } from '@/services/assistantMemory/memoryDefaults'
+import { refreshMemory } from '@/services/assistantMemory/memoryState'
 import { createLogger } from '@/core/logging'
 import { PERSISTENCE_FORMATS } from '@/core/persistence/formats'
 import { parseVersionedPersistenceJson, readLocalPersistenceJson, localLibraryContract } from '@/core/persistence/versionedJson'
@@ -126,7 +130,6 @@ export class VideoEditStyleLibrary {
   async setDefaultStyle(id: string | null, actor: 'user' | 'assistant' = 'user'): Promise<void> {
     if (id) this.requireStyle(id)
     const state = await refreshMemory()
-    const { writeMemory } = await import('@/features/assistant/memory/memoryService')
     const entries = state.entries.filter(entry => entry.value?.key === 'style').sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     if (id) await writeMemory({ target: { layer: 'global' }, id: entries[0]?.id ?? crypto.randomUUID(), expectedRevision: entries[0]?.revision ?? 0, actor, reason: '在风格库设为默认。', entry: { section: 'creative', content: `新序列默认使用${this.requireStyle(id).style.name}。`, source: actor, value: { key: 'style', id } } })
     else for (const entry of entries) await writeMemory({ target: { layer: 'global' }, id: entry.id, expectedRevision: entry.revision, actor, reason: '取消默认风格。', entry: null })
@@ -234,3 +237,20 @@ export class VideoEditStyleLibrary {
   }
 }
 export const videoEditStyleLibrary = new VideoEditStyleLibrary()
+
+// 由风格领域提供存储，记忆服务只依赖此端口；全局默认风格仍走同一记忆写入队列。
+registerStyleMemoryStorage({
+  async list() { await videoEditStyleLibrary.ready(); return videoEditStyleLibrary.listStyles().map(entry => entry.style.id) },
+  async read(id) { await videoEditStyleLibrary.ready(); return videoEditStyleLibrary.requireStyle(id).style.userPreferences ?? [] },
+  async write(input) {
+    await videoEditStyleLibrary.ready()
+    const previous = videoEditStyleLibrary.requireStyle(input.target.ownerId).style
+    const result = applyMemoryWrite(previous.userPreferences ?? [], input, new Date(), crypto.randomUUID())
+    if (result.change) {
+      await videoEditStyleLibrary.saveStyle({ ...previous, userPreferences: result.entries, version: previous.version + 1 }, undefined, true)
+      try { await getPlatform().assistant.recordMemoryChange(result.change) }
+      catch (error) { await videoEditStyleLibrary.saveStyle(previous, undefined, true); throw error }
+    }
+    return result.change
+  },
+})

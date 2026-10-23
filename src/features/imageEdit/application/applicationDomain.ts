@@ -1,3 +1,5 @@
+import { registerCurrentDocumentProvider } from '@/features/documents'
+import { listImageEditDocumentInstancesV3 } from '../v3/application/imageEditDocumentInstances'
 import { ImageEditLayerFilterMutationExecutorV3, ImageEditLayerFilterCollectionExecutorV3 } from '../v3/application/imageEditLayerFilterEntityV3'
 export { imageCreativeIntentProvider } from '../v3/application/imageEditCreativeIntentReflection'
 import type { ApplicationDomainModule } from '@/features/application-control/domainModule'
@@ -24,6 +26,11 @@ export const imageEditApplicationDomain: ApplicationDomainModule = {
     for (const entityType of ['image_edit.layer', 'image_edit.group'] as const) engine.registerCollectionExecutor(new ImageEditV3CollectionExecutor(entityType))
   },
   registerCapabilities(registrar) {
+    registerCurrentDocumentProvider('imageEdit', host => {
+      if (host.activeWorkspace !== 'tools' || host.activeToolId !== 'imageMark') return undefined
+      const images = listImageEditDocumentInstancesV3().filter(instance => instance.views > 0)
+      return images.length === 1 ? images[0].documentId : undefined
+    })
     registerImageEditCapabilityHandlers(registrar)
     registrar.registerHandler(openImageEditorWithSourceCapability.id, async (input, context) => {
       const parsed = openImageEditorWithSourceCapability.inputSchema.parse(input)
