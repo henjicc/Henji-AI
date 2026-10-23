@@ -1,10 +1,10 @@
-import { cachedMemory, memoryErrorMessage } from './memoryState'
-import { useCallback, useEffect, useState } from 'react'
+import { cachedMemory, memoryErrorMessage } from '@/services/assistantMemory/memoryState'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { Dropdown, UiError, UiGroup, UiIconButton, UiInput, UI_TEXT_META_CLASS } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
 import { memoryEntryInputSchema, type MemoryEntry, type MemoryTarget } from '@/core/assistant/memoryEntries'
-import { readMemory, writeMemory, subscribeMemory } from './memoryService'
+import { readMemory, writeMemory, subscribeMemory } from '@/services/assistantMemory/memoryService'
 
 type Section = 'about' | 'creative' | 'habits'
 type Group = Section | 'local'
@@ -20,6 +20,8 @@ export function MemoryEntriesEditor({ target, title, readOnly = false }: { targe
   const [error, setError] = useState('')
   const [draft, setDraft] = useState<Draft | null>(null)
   const [busy, setBusy] = useState(false)
+  // 回车提交后输入框随即禁用会再触发一次失焦；同一次编辑只提交一次。
+  const committing = useRef(false)
   const disabled = readOnly || cachedMemory()?.settings.enabled === false
   const key = JSON.stringify(target)
   const refresh = useCallback(async () => { try { setEntries(await readMemory(JSON.parse(key) as MemoryTarget)) } catch (cause) { setError(memoryErrorMessage(cause)) } }, [key])
@@ -35,10 +37,12 @@ export function MemoryEntriesEditor({ target, title, readOnly = false }: { targe
     entry: change === null ? null : { content: '', ...(entry ? memoryEntryInputSchema.strip().parse(entry) : {}), ...change, source: 'user', reason },
   })
   const commit = (): void => {
+    if (committing.current) return
     const text = draft?.text.trim()
     if (!draft || !text) { setDraft(null); return }
-    if (draft.kind === 'edit') { if (text !== draft.entry.content) void act(() => write(draft.entry, { content: text }, t('memory.manualReason'))); else setDraft(null); return }
-    void act(() => write(undefined, { content: text, ...(draft.group === 'local' ? {} : { section: draft.group }) }, t('memory.manualReason')))
+    if (draft.kind === 'edit') { if (text !== draft.entry.content) { committing.current = true; void act(() => write(draft.entry, { content: text }, t('memory.manualReason'))).finally(() => { committing.current = false }) } else setDraft(null); return }
+    committing.current = true
+    void act(() => write(undefined, { content: text, ...(draft.group === 'local' ? {} : { section: draft.group }) }, t('memory.manualReason'))).finally(() => { committing.current = false })
   }
   const input = (value: string): JSX.Element => <UiInput size="sm" autoFocus value={value} maxLength={200} disabled={busy} placeholder={t('memory.placeholder')}
     onChange={event => setDraft(current => current && { ...current, text: event.target.value })}

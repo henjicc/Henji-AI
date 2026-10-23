@@ -70,3 +70,5 @@ export { MoveToProjectDialog, type MoveToProjectChoice } from './MoveToProjectDi
 export { getEmbeddedHost, returnFromEmbedded, setEmbeddedHost, useEmbeddedHost, type EmbeddedHost } from './embeddedDocuments'
 export { registerDocumentCoverProvider } from './documentCovers'
 export { defaultDocumentOperationChanges, markSessionDocumentOpened } from './documentOperationChanges'
+
+export { currentDocumentContext, registerCurrentDocumentProvider } from './currentDocumentContext'

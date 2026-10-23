@@ -1,4 +1,4 @@
-import { MemoryEntriesEditor } from '@/features/assistant/memory/MemoryEntriesEditor'
+import { MemoryEntriesEditor } from '@/features/assistant'
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { Copy, FolderInput, FolderOutput, Link2, Pencil, RefreshCw, Sparkles, Star, Trash2, Wand2 } from 'lucide-react'
 import ContextMenu from '@/components/ContextMenu'

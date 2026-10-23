@@ -1,8 +1,8 @@
-import { currentDocumentContext } from '@/features/documents/currentDocumentContext'
+import { currentDocumentContext, getDocumentSessionRegistry } from '@/features/documents'
+import { memoryFontKey, resolveMemoryDefault } from '@/core/assistant/memoryDefaults'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 import { resolveMemoryValue, type MemoryEntry, type MemoryValue } from '@/core/assistant/memoryEntries'
 import { createLogger } from '@/core/logging'
-import { getDocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
 import { fontLibrarySnapshot, loadFontLibrary, resolveFont } from '@/platform/fonts'
 import { setNewTextFontResolver } from '@/core/imaging/vectorContent/text'
 import { cachedMemory, refreshMemory, subscribeMemory } from './memoryState'
@@ -17,13 +17,12 @@ function projectForDocument(documentId?: string): string | undefined {
 }
 export function rememberedDefault(key: MemoryValue['key'], documentId?: string, styleValue?: MemoryValue): ReturnType<typeof resolveMemoryValue> {
   const state = cachedMemory()
-  if (!state?.settings.enabled) return { value: styleValue, askUser: false }
   const projectId = projectForDocument(documentId)
-  return resolveMemoryValue(key, state.entries, projectId ? projects.get(projectId) ?? [] : [], styleValue)
+  return resolveMemoryDefault(key, state, projectId ? projects.get(projectId) ?? [] : [], styleValue)
 }
 /** 所有新文字入口共用字体选择；读取和渲染旧作品始终使用作品保存的字体。 */
 export function rememberedFont(text = '文字', documentId?: string, styleFont?: string): string | undefined {
-  const key = /^\s*[\d\s.,:%+−-]+$/.test(text) ? 'font.numeric' : /[\u3400-\u9fff]/.test(text) || !text ? 'font.zh' : 'font.latin'
+  const key = memoryFontKey(text)
   const result = rememberedDefault(key, documentId, styleFont ? { key, fonts: [styleFont] } : undefined)
   return result.value && 'fonts' in result.value ? result.value.fonts.find(name => Boolean(resolveFont(name))) : styleFont
 }

@@ -1,4 +1,5 @@
-import { refreshMemory } from '@/features/assistant/memory/memoryService'
+import { readMemory, refreshMemory, writeMemory, revertMemory } from '@/services/assistantMemory/memoryService'
+import { getPlatform } from '@/platform/runtime'
 // @vitest-environment jsdom
 import fs from 'node:fs'
 import path from 'node:path'
@@ -300,4 +301,22 @@ it('内置风格使用者偏好升版并持久保存，随风格包导出', asyn
   let text = ''
   await exportVideoEditStylePackage('restrained', 'D:/out/偏好.henjistyle', {}, { read: async () => text, exists: async () => false, write: async (_file, value) => { text = value } })
   expect(JSON.parse(text).content.style.userPreferences).toEqual(userPreferences)
+})
+
+it('注入的风格记忆存储走正式写入、历史和撤回，历史失败恢复原偏好', async () => {
+  await videoEditStyleLibrary.ready()
+  const target = { layer: 'style' as const, ownerId: 'restrained' }
+  const input = { target, id: 'spacing', expectedRevision: 0, actor: 'user' as const, reason: '明确风格偏好。', entry: { content: '文字多留一点空白。', source: 'user' as const } }
+  const change = await writeMemory(input)
+  expect((await readMemory(target))[0]).toMatchObject({ id: 'spacing', content: input.entry.content })
+  expect((await refreshMemory()).history.at(-1)?.id).toBe(change!.id)
+  await revertMemory(change!.id)
+  expect(await readMemory(target)).toEqual([])
+  const previous = videoEditStyleLibrary.requireStyle(target.ownerId).style
+  const record = vi.spyOn(getPlatform().assistant, 'recordMemoryChange').mockRejectedValueOnce(new Error('history unavailable'))
+  try {
+    await expect(writeMemory({ ...input, id: 'rollback' })).rejects.toThrow('history unavailable')
+    expect(videoEditStyleLibrary.requireStyle(target.ownerId).style).toMatchObject({ userPreferences: previous.userPreferences, version: previous.version })
+    expect(await readMemory(target)).toEqual([])
+  } finally { record.mockRestore() }
 })

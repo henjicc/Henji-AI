@@ -1,6 +1,6 @@
-import { initializeMemoryDefaults } from '../memory/memoryDefaults'
+import { initializeMemoryDefaults } from '@/services/assistantMemory/memoryDefaults'
 import { organizeAssistantMemoryCapability, revertAssistantMemoryCapability } from '@/core/application-control/domains/assistantMemory/memoryCapabilities'
-import { organizeMemory, revertMemory, refreshMemory } from '../memory/memoryService'
+import { organizeMemory, revertMemory, refreshMemory } from '@/services/assistantMemory/memoryService'
 import type { ApplicationDomainModule } from '@/features/application-control/domainModule'
 import { createMemoryRegistrations, MemoryExecutor, MemorySettingsExecutor } from './memoryReflection'
 export const memoryApplicationDomain: ApplicationDomainModule = {

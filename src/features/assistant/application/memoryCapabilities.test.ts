@@ -6,7 +6,7 @@ import { executeApplicationCapabilityResult } from '@/features/application-contr
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { videoEditStyleLibrary } from '@/features/videoEdit/application/videoEditStyleLibrary'
-import { refreshMemory } from '../memory/memoryService'
+import { refreshMemory } from '@/services/assistantMemory/memoryService'
 const root = { kind: 'assistant.memory_settings', id: 'singleton' }
 beforeEach(() => installHarnessNativeStorage())
 afterEach(() => { uninstallHarnessNativeStorage(); vi.restoreAllMocks() })

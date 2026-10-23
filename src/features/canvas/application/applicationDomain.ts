@@ -1,3 +1,5 @@
+import { registerCurrentDocumentProvider } from '@/features/documents'
+import { useProjectStore } from '@/stores/projectStore'
 import { CanvasPersistenceError, CanvasTransactionRolledBackError } from './canvasPersistenceService'
 import { CanvasApplicationError } from './canvasApplicationService'
 import { MultiLayerDocumentNodeApplicationError } from './multiLayerDocumentNodeApplicationService'
@@ -17,6 +19,7 @@ export const canvasApplicationDomain: ApplicationDomainModule = {
     for (const entityType of [CANVAS_ENTITY_TYPES.node, CANVAS_ENTITY_TYPES.edge]) engine.registerCollectionExecutor(new CanvasCollectionExecutor(entityType))
   },
   registerCapabilities(registrar) {
+    registerCurrentDocumentProvider('canvas', host => host.activeWorkspace === 'nodes' ? useProjectStore.getState().currentProjectId ?? undefined : undefined)
     registerCanvasCapabilityHandlers(registrar)
   },
   failure(error, normalize) {

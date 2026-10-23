@@ -107,7 +107,7 @@ export interface ApplicationDomainCoverageMetadata {
 }
 
 export const BUILTIN_APPLICATION_DOMAIN_METADATA: Readonly<Record<string, ApplicationDomainCoverageMetadata>> = {
-  memory: { migrationTask: '3.4', formalService: 'src/features/assistant/memory/memoryService.ts',
+  memory: { migrationTask: '3.4', formalService: 'src/services/assistantMemory/memoryService.ts',
     propertySources: ['src/features/assistant/application/memoryReflection.ts'], operationSource: 'src/core/application-control/domains/assistantMemory/memoryCapabilities.ts', targetKind: 'operation', surfaceIds: [] },
   screen_recording: { migrationTask: '1.5', formalService: 'src/features/screenRecording/application/recordingService.ts',
     propertySources: ['src/features/screenRecording/application/recordingReflection.ts'], operationSource: 'src/core/application-control/domains/screenRecording/recordingCapabilities.ts', targetKind: 'operation', surfaceIds: ['tool.screen_recording'] },

@@ -1,4 +1,4 @@
-import { currentDocumentContext } from '@/features/documents/currentDocumentContext'
+import { currentDocumentContext } from '@/features/documents'
 import { getAudioEditRevision } from '@/features/audioEdit/application/audioEditProjectInstances'
 import { getDocumentOperations } from '@/features/documents/documentOperations'
 import { activeVideoEditInstance, videoEditDomainRevision, subscribeVideoEdit } from '@/features/videoEdit/application/videoEditService'

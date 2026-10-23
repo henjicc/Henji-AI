@@ -1,13 +1,13 @@
-import { memoryErrorMessage } from './memoryState'
+import { memoryErrorMessage } from '@/services/assistantMemory/memoryState'
 import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronUp, Undo2 } from 'lucide-react'
 import { UiButton, UiDisclosurePanel, UiError, UiFormRow, UiGroup, UiIconButton, UiLoading, UiRecordItem, UiRecordList, UiSegmented, UiSwitch, UI_TEXT_META_CLASS } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
 import { getPlatform } from '@/platform/runtime'
 import type { MemorySnapshot } from '@/core/assistant/memoryEntries'
-import { currentDocumentContext } from '@/features/documents/currentDocumentContext'
+import { currentDocumentContext } from '@/features/documents'
 import { MemoryEntriesEditor } from './MemoryEntriesEditor'
-import { refreshMemory, revertMemory, subscribeMemory } from './memoryService'
+import { refreshMemory, revertMemory, subscribeMemory } from '@/services/assistantMemory/memoryService'
 
 export function AssistantMemorySection(): JSX.Element {
   const { t } = useI18n('settings')

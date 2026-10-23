@@ -2,7 +2,7 @@ import { applicationWritePreflight, type ApplicationWriteExecution } from '@/cor
 import { getPlatform } from '@/platform/runtime'
 import { applyMemoryWrite, memoryRevertWrite, duplicateMemoryWrites, type MemoryWrite } from '@/core/assistant/memoryOperations'
 import { shouldOrganizeMemory, type MemoryEntry, type MemoryTarget,  type MemoryHistoryEntry } from '@/core/assistant/memoryEntries'
-import { videoEditStyleLibrary } from '@/features/videoEdit/application/videoEditStyleLibrary'
+import { styleMemoryStorage } from './styleMemoryStorage'
 
 import { refreshMemory } from './memoryState'
 export { refreshMemory, cachedMemory, subscribeMemory } from './memoryState'
@@ -12,8 +12,7 @@ export async function readMemory(target: MemoryTarget): Promise<MemoryEntry[]> {
   if (!state.settings.enabled) return []
   if (target.layer === 'global') return state.entries
   if (target.layer === 'project') return getPlatform().assistant.readProjectMemory(target.ownerId)
-  await videoEditStyleLibrary.ready()
-  return videoEditStyleLibrary.requireStyle(target.ownerId).style.userPreferences ?? []
+  return styleMemoryStorage().read(target.ownerId)
 }
 
 /** UI 与通用实体共用逐条写入；同一文件串行，实际执行前仍核对条目基线。 */
@@ -24,17 +23,7 @@ export async function writeMemory(input: MemoryWrite): Promise<MemoryHistoryEntr
     if (!state.settings.enabled) throw new Error('MEMORY_DISABLED：请先在设置中开启记忆。')
     let change: MemoryHistoryEntry | null
     if (input.target.layer !== 'style') change = await getPlatform().assistant.writeMemory(input)
-    else {
-      await videoEditStyleLibrary.ready()
-      const previous = videoEditStyleLibrary.requireStyle(input.target.ownerId).style
-      const result = applyMemoryWrite(previous.userPreferences ?? [], input, new Date(), crypto.randomUUID())
-      change = result.change
-      if (change) {
-        await videoEditStyleLibrary.saveStyle({ ...previous, userPreferences: result.entries, version: previous.version + 1 }, undefined, true)
-        try { await getPlatform().assistant.recordMemoryChange(change) }
-        catch (error) { await videoEditStyleLibrary.saveStyle(previous, undefined, true); throw error }
-      }
-    }
+    else change = await styleMemoryStorage().write({ ...input, target: input.target })
     await refreshMemory()
     return change
   }
@@ -70,8 +59,7 @@ export async function organizeMemory(force = false, proposals: MemoryWrite[] = [
   for (const input of proposals) if (await writeMemory({ ...input, actor: 'assistant', entry: input.entry ? { ...input.entry, source: 'assistant' } : null })) changed += 1
   const projects = await getPlatform().documents.listProjects()
   const targets: MemoryTarget[] = [{ layer: 'global' }, ...projects.map(project => ({ layer: 'project' as const, ownerId: project.id }))]
-  await videoEditStyleLibrary.ready()
-  targets.push(...videoEditStyleLibrary.listStyles().map(entry => ({ layer: 'style' as const, ownerId: entry.style.id })))
+  targets.push(...(await styleMemoryStorage().list()).map(ownerId => ({ layer: 'style' as const, ownerId })))
   for (const target of targets) for (const input of duplicateMemoryWrites(target.layer, await readMemory(target), target)) {
     if (await writeMemory(input)) changed += 1
   }
