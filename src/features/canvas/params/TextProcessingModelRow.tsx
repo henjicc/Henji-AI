@@ -75,7 +75,7 @@ export function TextProcessingModelRow({
         <PanelTrigger
           display={selectedModelOption?.displayName ?? t('node.textProcessing.noModel')}
           disabled={choices.length === 0}
-          panelSize={panelWidth > 720 ? 'workspace' : panelWidth > 384 ? 'content' : 'compact'}
+          panelSize={panelWidth > 720 ? 'workspace' : panelWidth > 384 ? 'wide' : 'compact'}
           alignment="aboveCenter"
           gap={8}
           closeOnPanelClick={false}

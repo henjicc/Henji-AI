@@ -129,7 +129,7 @@ export function ParamGroupTrigger({
         size={compact ? 'sm' : 'md'}
         surface={compact ? 'glass' : 'solid'}
         buttonClassName={compact ? 'w-auto max-w-[116px]' : 'w-auto min-w-[108px]'}
-        panelSize={(group.panelWidth ?? 440) > 720 ? 'workspace' : 'content'}
+        panelSize={(group.panelWidth ?? 440) > 720 ? 'workspace' : 'wide'}
         alignment="aboveCenter"
         gap={compact ? 8 : 45}
         freezePositionOnOpen

@@ -57,7 +57,7 @@ it('弹窗布局类不取消默认留白，零留白必须明确选择', () => {
 
 it('Dropdown 尺寸枚举可覆盖内容测量且不受触发器宽度约束', () => {
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
-  const { getByRole, getByText } = render(<Dropdown ariaLabel="选项" panelSize="content" renderPanel={() => <span>自定义内容</span>} />)
+  const { getByRole, getByText } = render(<Dropdown ariaLabel="选项" panelSize="wide" renderPanel={() => <span>自定义内容</span>} />)
   fireEvent.click(getByRole('button', { name: '选项' }))
   const panel = getByText('自定义内容').closest('[data-dropdown-portal]') as HTMLElement
   expect(panel.className).toContain('w-[min(92vw,clamp(24rem,48vw,45rem))]')

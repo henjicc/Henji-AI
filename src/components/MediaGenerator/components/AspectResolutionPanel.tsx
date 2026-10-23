@@ -357,7 +357,7 @@ export const AspectResolutionPanel: React.FC<AspectResolutionPanelProps> = ({
       display={triggerDisplay}
       className="w-auto"
       buttonClassName="w-auto max-w-none"
-      panelSize={panelWidth > 720 ? 'workspace' : panelWidth > 384 ? 'content' : 'compact'}
+      panelSize={panelWidth > 720 ? 'workspace' : panelWidth > 384 ? 'wide' : 'compact'}
       alignment="aboveCenter"
       freezePositionOnOpen
       closeOnPanelClick={false}

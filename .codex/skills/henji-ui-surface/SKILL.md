@@ -391,6 +391,19 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 - 列表很长时靠弹窗内滚动，不靠把弹窗做宽做高。
 - 弹窗顶部不放“这个弹窗怎么用”的常驻说明：可操作性由控件本身表达（录入中显示“请按下组合键…”、冲突时显示错误、恢复按钮写明“恢复 PR 默认”）。
 
+### 浮层（PanelTrigger / Dropdown 自定义面板）宽度同样按内容选档
+
+`panelSize` 的四档都是**固定宽度区间**，不是“按内容自适应”：
+
+| 内容 | 档位 |
+|---|---|
+| 菜单、选项列表（按选项文字定宽） | `menu` |
+| 参数 / 设置表单（标签列 + 控件列，如录音设置、导出参数）、短说明、快捷键表 | `compact`（≤24rem）|
+| 自带多列内容的浮层：预设网格、生成表单 + 预览 | `wide`（24–45rem，随窗口变宽）|
+| 浮层里的完整工作面 | `workspace` |
+
+一列表单放进 `wide` 会被拉到半屏宽，控件被拉成长条——实测踩过：录音设置浮层用了旧档名 `content`（看名字像“按内容定宽”），结果 7 行参数铺满半个屏幕。拿不准时先用 `compact`，确实放不下再升档。
+
 实测踩过：剪辑快捷键弹窗用了 `editor`（最宽约 68rem），顶部还有一行说明键位来源、Esc 用法、作用范围的开发说明；内容实际只需约 26rem。
 
 ## 布局与表单
@@ -629,7 +642,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 任务历史筛选 | `UiTaskHistoryFilterBar` | 另造同义字段与标签组合 |
 | 渲染错误兜底、全局确认 | `UiErrorBoundary`（保留正式日志域）/ `GlobalAlertDialog`（App 根宿主，调用 `alertDialogStore`） | 吞掉渲染错误；在业务页重复挂载全局确认宿主 |
 | 搜索框 | `UiSearchInput`（前置放大镜、`size`、可选 `onClear` + `clearLabel` 清除按钮；`className` 落在外层只放宽度） | 自己摆一个绝对定位的放大镜再给 `UiInput` 补 `pl-8` |
-| 下拉 / 面板触发器 | `Dropdown` / `PanelTrigger`（按钮是 `UiFieldTrigger`：`appearance` field/quiet、`size`；浮层 `surface` solid/glass、`panelPadding`、`panelSize` menu/compact/content/workspace）；一行参数条用 `UiFieldLayoutContext` = `toolbar` | 自己写触发器按钮或浮层外壳；`buttonClassName` 里改外观 |
+| 下拉 / 面板触发器 | `Dropdown` / `PanelTrigger`（按钮是 `UiFieldTrigger`：`appearance` field/quiet、`size`；浮层 `surface` solid/glass、`panelPadding`、`panelSize` menu/compact/wide/workspace）；一行参数条用 `UiFieldLayoutContext` = `toolbar` | 自己写触发器按钮或浮层外壳；`buttonClassName` 里改外观 |
 | 浮层归属（点外关闭、Escape） | `useUiOverlayLayer` + `UiOverlayLayerProvider` + `resolveUiOverlayTarget` / `isTopmostUiOverlay`（`@/components/ui/overlayOwnership`，语义同 Floating UI FloatingTree）：子浮层里的点击不关父层，Escape 只关最上层，模态层（查看器、弹窗）打开期间祖先层不响应点外；不在同一 React 树的浮层根节点写 `data-ui-overlay-detached` | 每个浮层各写一份 portal 选择器白名单或只认自身 refs |
 | 右键菜单、按钮弹出的动作菜单、锚定外部元素或指针的浮层 | 动作列表用 `ContextMenu` + `useContextMenu`（`showMenu` 跟随指针，`showMenuAt` 贴按钮右缘；压在画布/媒体上传 `surface="glass"`；菜单项是 `UiOptionButton variant="menu"`，方向键与 Enter 可用，宽度按内容）；需要表单内容的锚定浮层用 `PanelTrigger` 的 `anchor`（元素或矩形）+ `open` / `onOpenChange`，自定义触发器用 children 渲染函数（任务 5.9） | 自己 `createPortal` 画菜单或面板、手算视口夹取、各写一份点外关闭与 Escape、用私有 CSS 画菜单项 |
 | 一行放不下就收进“更多” | `UiOverflowRow`（`items` 带 `priority`/`pinned`，`renderOverflow`，`alwaysShowOverflow`；收起项不挂载）；生成底栏由 `ParameterPanel` 在 `toolbar` 排布下接入 | 让参数条 `flex-wrap` 换成两行；收起项留在 DOM 里只隐藏 |

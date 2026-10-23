@@ -186,7 +186,7 @@ function CompactAspectRatioControl({
       size="sm"
       buttonClassName={COMPACT_TRIGGER_CLASS}
       surface="glass"
-      panelSize={panelWidth > 720 ? 'workspace' : panelWidth > 384 ? 'content' : 'compact'}
+      panelSize={panelWidth > 720 ? 'workspace' : panelWidth > 384 ? 'wide' : 'compact'}
       alignment="aboveCenter"
       gap={8}
       closeOnPanelClick
@@ -303,7 +303,7 @@ function CompactPanelControl({
       size="sm"
       buttonClassName={COMPACT_TRIGGER_CLASS}
       surface="glass"
-      panelSize={panelWidth > 720 ? 'workspace' : panelWidth > 384 ? 'content' : 'compact'}
+      panelSize={panelWidth > 720 ? 'workspace' : panelWidth > 384 ? 'wide' : 'compact'}
       alignment="aboveCenter"
       gap={8}
       closeOnPanelClick={false}

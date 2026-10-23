@@ -339,7 +339,8 @@ export const UI_TRIGGER_PANEL_SIZE_CLASS = {
   // 菜单按选项内容定宽（至少 8rem，上限 22.5rem 再截断），不随窗口宽度变宽
   menu: 'w-max min-w-32 max-w-[min(92vw,22.5rem)] [--trigger-panel-max-height:min(60vh,24rem)]',
   compact: 'w-[min(92vw,clamp(16rem,28vw,24rem))] [--trigger-panel-max-height:min(70vh,32rem)]',
-  content: 'w-[min(92vw,clamp(24rem,48vw,45rem))] [--trigger-panel-max-height:min(78vh,40rem)]',
+  // 宽面板（24–45rem，随窗口变宽）：只给预设列表、生成表单这类自带多列内容的浮层；参数表单一律用 compact。
+  wide: 'w-[min(92vw,clamp(24rem,48vw,45rem))] [--trigger-panel-max-height:min(78vh,40rem)]',
   workspace: 'w-[min(94vw,clamp(40rem,80vw,60rem))] [--trigger-panel-max-height:min(88vh,52rem)]',
 } as const;
 export type UiTriggerPanelSize = keyof typeof UI_TRIGGER_PANEL_SIZE_CLASS;

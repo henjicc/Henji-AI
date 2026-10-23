@@ -275,7 +275,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
     return (
       <PanelTrigger
         controlsRef={moreControlsRef}
-        panelSize={resolveMorePanelWidth(entries) > 720 ? 'workspace' : 'content'}
+        panelSize={resolveMorePanelWidth(entries) > 720 ? 'workspace' : 'wide'}
         alignment="aboveCenter"
         closeOnPanelClick={false}
         renderPanel={() => renderOverflowPanel(entries)}
