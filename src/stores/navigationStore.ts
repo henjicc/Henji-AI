@@ -13,6 +13,7 @@ import {
   type AssetLibraryView,
 } from '@/features/assets/store/assetLibraryStore'
 import { emitApplicationEvent } from '@/core/events/applicationEvents'
+import { allowNavigation } from '@/core/applicationLifecycle/navigationGuards'
 
 const logger = createLogger('stores.navigation')
 
@@ -36,24 +37,29 @@ function resolveInitialWorkspace(): WorkspaceId {
   return isStartupWorkspaceId(configured) && configured !== 'assets' ? configured : DEFAULT_WORKSPACE_ID
 }
 
-export const useNavigationStore = create<NavigationState>((set) => ({
+export const useNavigationStore = create<NavigationState>((set, get) => ({
   activeWorkspace: resolveInitialWorkspace(),
   activeToolId: null,
   revision: 0,
-  setActiveWorkspace: (activeWorkspace) => set((state) => (
+  setActiveWorkspace: (activeWorkspace) => {
+    if (activeWorkspace !== get().activeWorkspace && !allowNavigation({ workspace: activeWorkspace, toolId: get().activeToolId }, () => get().setActiveWorkspace(activeWorkspace))) return
+    set((state) => (
     state.activeWorkspace === activeWorkspace
       ? state
       : { activeWorkspace, revision: state.revision + 1 }
-  )),
-  setActiveToolId: (activeToolId) => set((state) => (
+  )) },
+  setActiveToolId: (activeToolId) => {
+    if (activeToolId !== get().activeToolId && !allowNavigation({ workspace: get().activeWorkspace, toolId: activeToolId }, () => get().setActiveToolId(activeToolId))) return
+    set((state) => (
     state.activeToolId === activeToolId
       ? state
       : { activeToolId, revision: state.revision + 1 }
-  )),
+  )) },
 }))
 
 /** 工作区导航的非 React 命令入口，同时维持素材库视图联动。 */
 export function switchWorkspace(workspace: WorkspaceId): void {
+  if (!allowNavigation({ workspace, toolId: useNavigationStore.getState().activeToolId }, () => switchWorkspace(workspace))) return
   const previousWorkspace = useNavigationStore.getState().activeWorkspace
   const assetStore = useAssetLibraryStore.getState()
 
@@ -78,6 +84,7 @@ export function switchWorkspace(workspace: WorkspaceId): void {
 
 /** 素材库入口；悬浮模式保留当前工作区，工作区模式切换到 assets。 */
 export function openAssetLibrary(view: Exclude<AssetLibraryView, 'closed'>): void {
+  if (view === 'workspace' && !allowNavigation({ workspace: 'assets', toolId: useNavigationStore.getState().activeToolId }, () => openAssetLibrary(view))) return
   const navigation = useNavigationStore.getState()
   const assetStore = useAssetLibraryStore.getState()
 

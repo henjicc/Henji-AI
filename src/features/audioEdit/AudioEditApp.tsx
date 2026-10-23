@@ -5,7 +5,9 @@ import { ApplicationOperationReviewBanner } from '@/features/application-control
 import { useShallow } from 'zustand/react/shallow'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DockviewApi } from 'dockview-react'
-import { ArrowLeft, Download, Redo2, Search } from 'lucide-react'
+import { ArrowLeft, Download, Mic, Redo2, Search, Upload } from 'lucide-react'
+import { useStore } from 'zustand'
+import { AudioCaptureView, AudioCaptureRecoveryBanner, getAudioCaptureSession } from '@/features/audioCapture'
 
 import { UiButton, UiIconButton, UiToolbar } from '@/components/ui'
 import type { AudioEditAsrModel } from '@/platform/contracts/audioEdit'
@@ -62,6 +64,8 @@ function describeAudioEditDocument(document: DocumentSummary): string | undefine
 export interface AudioEditAppProps { onBack?: () => void }
 
 export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element {
+  const capture = getAudioCaptureSession()
+  const recordingView = useStore(capture.store, state => state.visible)
   const { showNotification } = useNotification()
   const state = useAudioEditStore(useShallow((state) => ({
     project: state.project,
@@ -205,6 +209,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     const result = await exportAudioEdit({ projectId: project.id, targetPath, format, includeProcessing: withRx, ...(withSrt ? { subtitleTargetPath: targetPath.replace(/\.[^.]+$/, '') + '.srt' } : {}) })
     showNotification(notificationMessage('audioExported', { format: format.toUpperCase(), duration: formatTime(result.durationFrames, project.source.sampleRate) }))
   })
+  if (recordingView) return <AudioCaptureView />
   if (!project) {
     // 列表整页是通用文档页（3.3）：取数、筛选、草稿区与右键操作（重命名、移到项目、创建副本、删除等）都由通用组件负责
     return (
@@ -217,7 +222,11 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
         describe={describeAudioEditDocument}
         busy={disabled}
         labels={{ emptyDescription: '导入音频或视频，在波形和频谱上精修、修掉杂音，或压缩停顿、清理语气词，再导出或交给剪辑。直接引用原素材，不改原文件。' }}
-        create={{ kind: 'direct', onCreate: () => void importMedia() }}
+        create={{ kind: 'menu', options: [
+          { id: 'import', label: '导入', icon: Upload, onSelect: () => void importMedia() },
+          { id: 'record', label: '录音', icon: Mic, onSelect: () => { void capture.open().catch(notifyError) } },
+        ] }}
+        banner={<AudioCaptureRecoveryBanner />}
         onOpen={(document) => openDocument({ id: document.id, path: document.path })}
       />
     )

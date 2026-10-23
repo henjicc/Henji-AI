@@ -267,6 +267,7 @@ const values: Record<string, unknown> = {
   'subtitle-manifest': { version: SUBTITLE_MANIFEST_VERSION, projectId: document.id, sequenceId: sequence.id, signature: 'golden-signature', startFrame: 0, endFrame: 90, soundClips: [soundClip], soundIdentities: { 'golden-sound-clip': 'golden-sound-identity' }, captions: sequence.captions, committed: true },
   'storyboard-metadata': { version: 1, gridRows: 2, gridCols: 2, frameNotes: ['远景', '特写'] },
   'workspace-layouts': createWorkspaceLayoutEnvelope({ activeId: 'default', current: defaultCameraStageLayout(), users: [{ id: 'user-golden', name: '个人布局', layout: defaultCameraStageLayout(true) }] }),
+  'audio-capture-recovery': { version: 1, minReaderVersion: 1, files: ['录音 2026-10-23 120000.wav'] },
   'audio-capture-settings': audioCaptureSettingsEnvelopeSchema.parse({ version: 1, minReaderVersion: 1, settings: DEFAULT_AUDIO_CAPTURE_SETTINGS }),
   'setting-records': { key: 'user_data_root', value: '{"root":"/persistence-project","locale":"zh"}', type: 'json' },
   'asset-records': { id: 'golden-asset', media_type: 'code', display_name: '代码标题', file_path: '/persistence-project/代码/标题.henjicode', source: 'video-edit', mime_type: 'application/x-henji-code', size_bytes: 100, width: null, height: null, duration_seconds: null, thumbnail_name: null, inspection_status: 'pending', inspection_error: null, file_modified_at: null, content_identity: null, last_used_at: null, created_at: 1791504000000, updated_at: 1791504000000 },

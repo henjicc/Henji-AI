@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 const { createAudioEditScene } = require('./uiInspectionSceneAudioEdit.cjs')
 const { createAudioEditSpectralScene } = require('./uiInspectionSceneAudioEditSpectral.cjs')
 const { createAudioEditHomeScene } = require('./uiInspectionSceneAudioEditHome.cjs')
+const { createAudioCaptureScene } = require('./uiInspectionSceneAudioCapture.cjs')
 const { createAudioEditInteractionScene } = require('./uiInspectionSceneAudioEditInteraction.cjs')
 const {
   assertCompositedDisplacement,
@@ -35,6 +36,7 @@ function createToolboxScenes(context) {
   } = context
 
   return [
+    createAudioCaptureScene(context),
     createAudioEditInteractionScene(context),
     createAudioEditHomeScene(context),
     createAudioEditScene(context),

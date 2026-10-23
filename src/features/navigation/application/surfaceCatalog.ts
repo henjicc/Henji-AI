@@ -89,6 +89,8 @@ const surfaceDefinitions = [
     acceptedRefKinds: ['asset', 'asset.library'],
   },
   ...createToolboxSurfaces(TOOL_DESCRIPTORS),
+  { id: 'tool.audio_edit.record', kind: 'tool', workspace: 'tools', toolId: 'audioEdit', ...immediate },
+  { id: 'settings.general.recording', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-recording' }, ...immediate, acceptedRefKinds: ['audio_capture.settings'] },
   { id: 'settings.general', kind: 'settings', settingsTarget: { tab: 'general' }, ...immediate },
   { id: 'settings.general.basic', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-basic' }, ...immediate },
   { id: 'settings.general.view', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-view' }, ...immediate },

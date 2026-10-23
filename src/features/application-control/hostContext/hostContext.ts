@@ -1,4 +1,5 @@
 import { getAudioEditRevision } from '@/features/audioEdit/application/audioEditProjectInstances'
+import { readAudioCaptureSession } from '@/features/audioCapture'
 import { getDocumentOperations } from '@/features/documents/documentOperations'
 import { activeVideoEditInstance, videoEditDomainRevision, subscribeVideoEdit } from '@/features/videoEdit/application/videoEditService'
 import { videoEditSelectedCodeElementContext } from '@/features/videoEdit/application/videoEditCodeElements'
@@ -269,7 +270,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
           id: navigation.activeToolId === 'imageMark'
             ? 'tool.image_edit'
             : navigation.activeToolId === 'audioEdit'
-              ? 'tool.audio_edit'
+              ? readAudioCaptureSession().visible ? 'tool.audio_edit.record' : 'tool.audio_edit'
               : 'tool.camera_stage',
           kind: 'tool' as const,
           focusedRef: activeAudioProjectRef,

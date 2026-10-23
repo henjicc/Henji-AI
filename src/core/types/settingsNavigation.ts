@@ -14,7 +14,7 @@
  * 运行时可枚举：测试和能力门禁据此校验每个分区都有对应 Surface，不在别处复制一份分区列表。
  */
 export const SETTINGS_TAB_SECTIONS = {
-  general: ['general-basic', 'general-view', 'general-appearance', 'general-about'],
+  general: ['general-basic', 'general-view', 'general-recording', 'general-appearance', 'general-about'],
   providers: ['providers'],
   workspace: ['workspace-generation', 'workspace-canvas', 'workspace-video-edit', 'workspace-assets'],
   files: ['files-storage', 'files-cache', 'files-upload', 'files-download', 'files-sounds', 'files-models'],

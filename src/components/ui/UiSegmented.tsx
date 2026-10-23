@@ -10,6 +10,7 @@ export interface UiSegmentedOption<T extends string | number> {
   label: string
   icon?: ReactNode
   disabled?: boolean
+  disabledReason?: string
   title?: string
   ariaLabel?: string
 }
@@ -22,18 +23,19 @@ export interface UiSegmentedProps<T extends string | number> {
   size?: UiControlSize
   fullWidth?: boolean
   disabled?: boolean
+  disabledReason?: string
   /** 悬停/聚焦候选项时预览，离开时清除；不改变当前选择。 */
   onPreview?: (value: T | undefined) => void
 }
 
 /** 同一取值的等宽分段；单一 Tab 停靠点，方向键循环选择并跳过禁用项。 */
-export function UiSegmented<T extends string | number>({ ariaLabel, options, value, onChange, size = 'md', fullWidth = false, disabled = false, onPreview }: UiSegmentedProps<T>): JSX.Element {
+export function UiSegmented<T extends string | number>({ ariaLabel, options, value, onChange, size = 'md', fullWidth = false, disabled = false, disabledReason, onPreview }: UiSegmentedProps<T>): JSX.Element {
   const buttons = useRef(new Map<T, HTMLButtonElement>())
   const formRow = useUiFormRowLabelling()
   const fillControl = fullWidth || formRow?.fillControl === true
   const enabled = options.filter(option => !option.disabled)
   const tabValue = enabled.some(option => option.value === value) ? value : enabled[0]?.value
-  const useDropdown = options.length > 5 || options.some(option => [...option.label].length > (/\p{Script=Han}/u.test(option.label) ? 4 : 12))
+  const useDropdown = options.length > 5 || options.some(option => !/^\d{1,3}\s*[\p{Script=Han}]{1,4}$/u.test(option.label) && [...option.label].length > (/\p{Script=Han}/u.test(option.label) ? 4 : 12))
   useEffect(() => {
     if (!(import.meta.env.DEV || import.meta.env.MODE === 'development') || useDropdown) return
     const reported = new Set<T>()
@@ -50,14 +52,14 @@ export function UiSegmented<T extends string | number>({ ariaLabel, options, val
     inspect()
     return () => observer?.disconnect()
   }, [ariaLabel, options, useDropdown])
-  if (useDropdown) return <Dropdown ariaLabel={ariaLabel} options={options.map(option => ({ ...option, tooltip: option.title }))} value={value} onSelect={onChange} onPreview={onPreview} size={size} className={fillControl ? 'w-full' : undefined} disabled={disabled} />
+  if (useDropdown) return <Dropdown ariaLabel={ariaLabel} options={options.map(option => ({ ...option, tooltip: option.disabledReason ?? option.title }))} value={value} onSelect={onChange} onPreview={onPreview} size={size} className={fillControl ? 'w-full' : undefined} disabled={disabled} disabledReason={disabledReason} />
   return <div role="radiogroup" aria-label={ariaLabel} aria-disabled={disabled || undefined}
     className={`inline-grid auto-cols-fr grid-flow-col gap-0.5 rounded-lg bg-gap p-0.5 ${UI_CONTROL_HEIGHT_CLASS[size]} ${fillControl ? 'w-full' : 'w-fit'}`}>
     {/* ui-surface-allow: S1 u5 统一分段组件内部使用原语渲染选项，调用方必须用 UiSegmented。 */}
     {options.map(option => <UiOptionButton key={option.value} type="button" variant="segment" size={size}
       ref={button => { if (button) buttons.current.set(option.value, button); else buttons.current.delete(option.value) }}
       role="radio" aria-checked={value === option.value} tabIndex={!disabled && option.value === tabValue ? 0 : -1}
-      active={value === option.value} disabled={disabled || option.disabled} tooltip={option.title} aria-label={option.ariaLabel}
+      active={value === option.value} disabled={disabled || option.disabled} disabledReason={disabled ? disabledReason : option.disabledReason} tooltip={option.title} aria-label={option.ariaLabel}
       onMouseEnter={() => { if (!disabled && !option.disabled) onPreview?.(option.value) }} onMouseLeave={() => onPreview?.(undefined)}
       onFocus={() => { if (!disabled && !option.disabled) onPreview?.(option.value) }} onBlur={() => onPreview?.(undefined)}
       onClick={() => onChange(option.value)} onKeyDown={event => {

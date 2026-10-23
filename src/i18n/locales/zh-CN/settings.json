@@ -12,6 +12,7 @@
     "resultsLabel": "搜索结果"
   },
   "navSections": {
+    "general-recording": "录音",
     "general-basic": "语言与启动",
     "general-view": "查看与快捷键",
     "general-appearance": "外观",

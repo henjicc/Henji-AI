@@ -2,3 +2,4 @@
 export { createAudioEditDraft, editAudioEditProject, flushAudioEditProject, loadAudioEditProject, getAudioEditProjectInstance, subscribeAudioEditInstances } from './application/audioEditProjectInstances'
 export { transcribeAudioEdit, preflightAudioEditTranscription } from './application/audioEditApplicationService'
 export { setAudioEditRegions, renderAudioEdit, repairAudioEditRegion } from './application/audioEditRegions'
+export { importAudioEditMedia, openAudioEditDocument } from './application/audioEditDocumentService'

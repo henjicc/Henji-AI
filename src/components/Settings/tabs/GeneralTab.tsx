@@ -14,6 +14,7 @@ import UpdateSection from '../sections/UpdateSection'
 import AboutSection from '../sections/AboutSection'
 import HardwareCapabilitiesSection from '../sections/HardwareCapabilitiesSection'
 import { RecordingShortcutSettings } from '@/features/screenRecording/RecordingShortcutSettings'
+import { AudioCaptureSettingsForm } from '@/features/audioCapture'
 
 const logger = createLogger('components.Settings.tabs.GeneralTab')
 
@@ -65,6 +66,9 @@ const GeneralTab: React.FC = () => {
         <RecordingShortcutSettings />
       </SettingsSection>
 
+      <SettingsSection id="general-recording">
+        <AudioCaptureSettingsForm />
+      </SettingsSection>
       <SettingsSection id="general-appearance">
         <ThemeSection onExportTheme={exportTheme} onImportTheme={handleImportTheme} />
       </SettingsSection>

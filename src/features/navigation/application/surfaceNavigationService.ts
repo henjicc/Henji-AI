@@ -11,6 +11,7 @@ import {
   useNavigationStore,
 } from '@/stores/navigationStore'
 import { openSettingsPanel, useUiStore } from '@/stores/uiStore'
+import { getAudioCaptureSession } from '@/features/audioCapture'
 
 import {
   getApplicationSurface,
@@ -40,6 +41,7 @@ function settingsTargetMatches(
 }
 
 export function isApplicationSurfaceActive(surface: ApplicationSurfaceDefinition): boolean {
+  if (surface.id === 'tool.audio_edit.record') return useNavigationStore.getState().activeWorkspace === 'tools' && useNavigationStore.getState().activeToolId === 'audioEdit' && getAudioCaptureSession().store.getState().visible
   if (surface.id === 'overlay.assistant') return useAssistantUiStore.getState().open
   if (surface.settingsTarget) {
     const ui = useUiStore.getState()
@@ -89,6 +91,9 @@ export function openApplicationSurface(
       if (surface.workspace) switchWorkspace(surface.workspace)
       if (surface.toolId) selectToolboxTool(surface.toolId)
       else if (surface.workspace === 'tools') selectToolboxTool(null)
+      if (surface.id === 'tool.audio_edit.record') {
+        void getAudioCaptureSession().open().catch(error => logger.warn('读取录音页面设置失败', { event: 'navigation.recording.open.failed', error }))
+      }
     }
     if (!isApplicationSurfaceActive(surface)) throw new Error('SURFACE_NOT_OPEN')
     const result = {

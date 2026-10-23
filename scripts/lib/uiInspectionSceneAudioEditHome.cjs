@@ -15,7 +15,7 @@ function createAudioEditHomeScene({ setupToolbox, clickNamedButton }) {
       await page.getByText('还没有口播', { exact: true }).waitFor()
       assert.equal(await page.getByRole('textbox', { name: '搜索口播' }).count(), 0)
       const assertImportLayout = async () => {
-        const button = page.getByRole('button', { name: '新建口播', exact: true })
+        const button = page.getByRole('button', { name: '导入', exact: true })
         const bounds = await button.boundingBox()
         const textBounds = await button.evaluate((element) => {
           const range = document.createRange()

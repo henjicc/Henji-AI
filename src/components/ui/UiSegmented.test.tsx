@@ -5,6 +5,13 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { UiSegmented } from './UiSegmented'
 
 afterEach(cleanup)
+it('短数字加中文单位保持分段，并向禁用项传递原因', () => {
+  render(<UiSegmented ariaLabel="位深" value={24} onChange={() => {}} options={[{ value: 24, label: '24 位' }, { value: 32, label: '32 位浮点', disabled: true, disabledReason: '设备不支持' }]} />)
+  const option = screen.getByRole('radio', { name: '32 位浮点' })
+  expect(option.getAttribute('aria-disabled')).toBe('true')
+  fireEvent.focus(option)
+  expect(screen.getByRole('tooltip').textContent).toBe('设备不支持')
+})
 it('英文十二字符以内保持分段，中文超过四字或英文超过十二字符回落下拉', () => {
   const props = { ariaLabel: '语言', value: 'a', onChange: () => undefined }
   const view = render(<UiSegmented {...props} options={[{ value: 'a', label: 'abcdefghijkl' }]} />)

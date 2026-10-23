@@ -2,6 +2,8 @@ import { getPlatform } from '@/platform'
 import { audioCaptureSettingsSchema, type AudioCaptureSettings, type AudioCaptureSettingsState, type AudioCaptureInventory } from '@/core/audioCapture/contracts'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import type { ApplicationFieldDefinition, ApplicationPropertyDescriptor, JsonValue } from '@/core/application-control'
+import { readAudioCaptureSession } from '@/features/audioCapture'
+import { AUDIO_CAPTURE_CONTROL_EXCLUSION, AUDIO_CAPTURE_SETTINGS_TARGET } from '@/core/audioCapture/contracts'
 
 export const AUDIO_CAPTURE_ENTITY = 'audio_capture.settings'
 export const captureSchemaRef = (kind: 'entity' | 'property', id: string): ApplicationPropertyDescriptor['schemaRef'] => ({ kind, id, version: 1, catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION, digest: `sha256:${'ac'.repeat(32)}` })
@@ -11,7 +13,7 @@ const enums = (values: readonly string[]): ApplicationPropertyDescriptor['value'
 function setting(key: keyof AudioCaptureSettings, title: string, value: ApplicationPropertyDescriptor['value']): Field {
   const id = `${AUDIO_CAPTURE_ENTITY}.${key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)}`
   return { propertyId: id, storeActions: [], read: s => s.state.settings[key], writer: { write: (draft, mutation) => { draft.settings = audioCaptureSettingsSchema.parse({ ...draft.settings, [key]: mutation.value }) } },
-    descriptor: { id, entityType: AUDIO_CAPTURE_ENTITY, version: 1, title, description: title, value, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['settings:read'], write: ['settings:write'] }, revisionScopes: ['audio_capture'], schemaRef: captureSchemaRef('property', id) } }
+    descriptor: { id, entityType: AUDIO_CAPTURE_ENTITY, version: 1, title, description: `${title}；界面位置：通用 › 录音（${AUDIO_CAPTURE_SETTINGS_TARGET.sectionId}）`, value, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['settings:read'], write: ['settings:write'] }, revisionScopes: ['audio_capture'], schemaRef: captureSchemaRef('property', id) } }
 }
 export const audioCaptureFields: Field[] = [
   setting('hostApi', '录音设备类型；default 跟随系统，WASAPI 独占由 exclusive 控制', enums(audioCaptureSettingsSchema.shape.hostApi.options)),
@@ -28,10 +30,11 @@ export const audioCaptureFields: Field[] = [
 for (const [key, title, read] of [
   ['devices', '系统音频设备与设备类型；物理设备由系统维护', (s: CaptureFieldSource): JsonValue => JSON.parse(JSON.stringify(s.inventory)) as JsonValue],
   ['effective', '当前可用参数与设备回退说明；不会覆盖保存的偏好', (s: CaptureFieldSource): JsonValue => ({ settings: s.state.effectiveSettings, notice: s.state.notice })],
+  ['recording', '音频编辑录音页面及当前会话状态', (): JsonValue => readAudioCaptureSession()],
 ] as const) {
   const id = `${AUDIO_CAPTURE_ENTITY}.${key}`
   audioCaptureFields.push({ propertyId: id, storeActions: [], read, descriptor: { id, entityType: AUDIO_CAPTURE_ENTITY, version: 1, title, description: title,
-    value: { kind: 'json', schemaRef: captureSchemaRef('property', `${id}.value`) }, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['settings:read'], write: [] }, revisionScopes: ['audio_capture'], schemaRef: captureSchemaRef('property', id), readOnlyReason: '由原生音频设备枚举与设备回退解析维护，不能伪造系统设备。' } })
+    value: { kind: 'json', schemaRef: captureSchemaRef('property', `${id}.value`) }, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['settings:read'], write: [] }, revisionScopes: ['audio_capture'], schemaRef: captureSchemaRef('property', id), readOnlyReason: key === 'recording' ? AUDIO_CAPTURE_CONTROL_EXCLUSION : '由原生音频设备枚举与设备回退解析维护，不能伪造系统设备。' } })
 }
 export async function readCaptureFields(): Promise<CaptureFieldSource> {
   const api = getPlatform().audioCapture

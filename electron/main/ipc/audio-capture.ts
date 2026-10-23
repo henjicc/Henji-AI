@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, shell } from 'electron'
 import fs from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
@@ -13,6 +13,9 @@ import { AudioCaptureError } from '../services/audio-capture/protocol'
 import { mainClockUs } from '../services/audio-capture/client'
 import { createMainLogger } from '../services/logging'
 import { isTrustedMainRendererUrl } from '../security/main-renderer-url'
+import { AudioCaptureFiles } from '../services/audio-capture/files'
+import { getUserRootDir } from '../services/appPaths'
+import { getSettingsStore } from '../services/settings/store'
 
 /** 调用方提供文件位置，父目录必须已经由作品/媒体路径通道授权；原生端 create_new 禁止覆盖。 */
 export async function authorizedCapturePath(target: string, existing = false): Promise<string> {
@@ -26,17 +29,20 @@ export async function authorizedCapturePath(target: string, existing = false): P
   if (existing && (await fs.lstat(resolved)).isSymbolicLink()) throw new AudioCaptureError('PATH_DENIED', '不能通过符号链接恢复录音文件')
   return resolved
 }
-export function registerAudioCaptureIpc(): void {
-  const logger = createMainLogger('main.audio_capture.ipc')
-  const service = new AudioCaptureService(() => {
+export function audioCaptureExecutablePath(): string {
     const name = `henji-audio-capture${process.platform === 'win32' ? '.exe' : ''}`
-    const executable = app.isPackaged ? path.join(process.resourcesPath, 'resources', name) : path.join(app.getAppPath(), 'native/audio-capture/target/release', name)
+    // 未打包的生产启动入口在 out/main；与音频处理程序一致，从启动工作目录定位原生程序。
+    const executable = app.isPackaged ? path.join(process.resourcesPath, 'resources', name) : path.join(process.cwd(), 'native/audio-capture/target/release', name)
     if (!existsSync(executable)) throw new AudioCaptureError('ENGINE_MISSING', '原生录音引擎缺失，请修复安装')
     return executable
-  }, undefined, (owner, event) => {
+}
+export function registerAudioCaptureIpc(): void {
+  const logger = createMainLogger('main.audio_capture.ipc')
+  const service = new AudioCaptureService(audioCaptureExecutablePath, undefined, (owner, event) => {
     for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed() && !win.webContents.isDestroyed() && isTrustedMainRendererUrl(win.webContents.getURL()) && (owner === undefined || win.webContents.id === owner)) win.webContents.send(AUDIO_CAPTURE_EVENT_CHANNEL, event)
   })
   const watched = new Set<number>()
+  const files = new AudioCaptureFiles(getUserRootDir, getSettingsStore, target => shell.trashItem(target))
   app.once('before-quit', () => service.dispose())
   registerIpcHandler(AUDIO_CAPTURE_CHANNEL, raw => audioCaptureRequestSchema.parse(raw), async (request, event) => {
     const owner = event.sender.id
@@ -52,6 +58,13 @@ export function registerAudioCaptureIpc(): void {
     return service.run(async () => {
       assertTrustedApplicationSender(event)
       switch (request.action) {
+        case 'prepareFile': return files.prepare()
+        case 'pendingFiles': return files.pending()
+        case 'completeFile': return files.complete(request.outputPath)
+        case 'trashFile': {
+          if (service.isRecordingPath(request.outputPath)) throw new Error('请先停止录音，再放弃文件')
+          return files.discard(request.outputPath)
+        }
         case 'enumerate': return service.enumerate()
         case 'watchDevices': return service.watchDevices(owner, request.enabled)
         case 'settings': return service.getSettings()

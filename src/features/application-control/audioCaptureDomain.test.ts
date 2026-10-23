@@ -25,6 +25,8 @@ describe('原生录音通用属性', () => {
     const read = await applicationReflectionHandlers.readEntity({ ref: target }, context())
     expect(read.properties['audio_capture.settings.sample_rate']).toBe(96000)
     expect(read.properties['audio_capture.settings.devices']).toMatchObject({ asioCompiled: true })
+    expect(read.properties['audio_capture.settings.recording']).toEqual({ visible: false, phase: 'idle', durationSeconds: 0 })
+    expect(described.propertyAvailability[0].properties).toContainEqual(expect.objectContaining({ propertyId: 'audio_capture.settings.recording', writable: false }))
   })
   it('非法位深不写入，录音参数事务可撤销', async () => {
     const before = { ...settings }

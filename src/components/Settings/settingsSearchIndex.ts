@@ -20,6 +20,9 @@ const rows = (sectionId: SettingsSectionId, labelKeys: Array<string | [string, s
     : { sectionId, labelKey: item }))
 
 export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
+  ...rows('general-recording', [
+    ['navSections.general-recording', ['设备类型', '输入设备', '输入通道', '声道', '采样率', '位深', '缓冲', '独占', 'ASIO', 'WASAPI', 'microphone', 'sample rate', 'bit depth', 'buffer', 'exclusive']],
+  ]),
   ...rows('general-basic', [
     ['sections.language.label', ['语言', 'language', '中文', 'English']],
     ['sections.interface.startupWorkspaceLabel', ['启动', 'startup']],

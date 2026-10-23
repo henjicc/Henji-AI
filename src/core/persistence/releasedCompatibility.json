@@ -1069,6 +1069,23 @@
       "samples": {
         "v1.json": "65cb35d13a5c50b84c816c0a454ada616c88fbbc732a9494d36161cc2fc4bc53"
       }
+    },
+    "audio-capture-recovery": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "3a78ac28056844d1866e996b7110726908e38f5544f58d812c0578cf43d06e33"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "a7805d9c6403aaae63e5495dda5c1120cb642ad1f1cfde7ee1cc591efdb9452d"
+      }
     }
   },
   "devBreaks": []

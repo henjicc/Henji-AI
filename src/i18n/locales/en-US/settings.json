@@ -12,6 +12,7 @@
     "resultsLabel": "Search results"
   },
   "navSections": {
+    "general-recording": "Recording",
     "general-basic": "Language & Startup",
     "general-view": "Viewing & Shortcuts",
     "general-appearance": "Appearance",

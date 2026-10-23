@@ -25,6 +25,7 @@ export class AudioCaptureService {
   }
   /** 所有状态写入串行；一次开始占有设备，后来的调用不能抢走或停止它。 */
   run<T>(task: () => Promise<T>): Promise<T> { const result = this.queue.then(task); this.queue = result.catch(() => undefined); return result }
+  isRecordingPath(outputPath: string): boolean { return this.active?.outputPath === outputPath }
   private event(event: AudioCaptureEvent): void {
     const owner = this.active?.owner
     if ('sessionId' in event && event.sessionId !== this.active?.sessionId) return
@@ -102,6 +103,7 @@ export class AudioCaptureService {
   async releaseOwner(owner: number): Promise<void> { this.watchDevices(owner, false); if (this.active?.owner === owner) await this.control(owner, 'stop', this.active.sessionId) }
   async openAsioPanel(settings: AudioCaptureSettings): Promise<void> { const { native } = await this.nativeSettings(settings); await this.client.request('asioPanel', { device: native.device }); this.inventory = undefined }
   async recover(outputPath: string): Promise<{ writtenBytes: number }> {
+    if (this.isRecordingPath(outputPath)) throw new AudioCaptureError('RECORDING_ACTIVE', '请先停止录音，再恢复文件')
     logger.info('恢复录音文件', { event: 'audio_capture.recover.start' })
     try { const result = z.object({ writtenBytes: z.number() }).parse(await this.client.request('recover', { outputPath })); logger.info('录音文件已恢复', { event: 'audio_capture.recover.completed', context: result }); return result }
     catch (error) { logger.warn('录音恢复失败', { event: 'audio_capture.recover.failed', error }); throw error }

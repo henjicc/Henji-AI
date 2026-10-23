@@ -109,6 +109,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.53.0'] = '8cbdf89d670bca4e74d943ebe2d1fe43c132a4fe613322374f491d556394e1da'
     // 预渲染按剪辑点细分段：渲染状态新增实测红黄与段性能，render_video_edit_preview 默认渲染范围内全部非就绪段；新增录音设备与参数通用属性。
     fingerprints['2.54.0'] = '3412c5b518ce66684fb80a4f40af3460e6736f2fc6184c9ad0479bb87db7e94e'
+    // 音频编辑录音页与通用录音设置新增可导航 Surface；录音生命周期仍不开放。
+    fingerprints['2.55.0'] = '9cca9214194f9f47b29e57e2cb398cf5ce0b34163faec81026ef5284a46d9a80'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], `工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹：${fingerprint}`).toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {

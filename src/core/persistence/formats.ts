@@ -21,7 +21,7 @@ import { audioEditProjectSchema } from '../audioEdit/schema'
 import { assetRecordSchema, packageManifestSchema, PACKAGE_VERSION, presetRecordSchema, settingRecordSchema, videoEditTextPresetSchema, voiceLibraryRecordSchema, videoEditSubtitleManifestSchema } from './storedSchemas'
 import type { PersistenceContract } from './migrations'
 import { rendererSettingsSchema, SETTINGS_STORAGE_VERSION } from './settingsSchema'
-import { audioCaptureSettingsEnvelopeSchema, AUDIO_CAPTURE_SETTINGS_VERSION } from '../audioCapture/contracts'
+import { audioCaptureSettingsEnvelopeSchema, AUDIO_CAPTURE_SETTINGS_VERSION, audioCaptureRecoverySchema } from '../audioCapture/contracts'
 import { formatMigrations } from './formatMigrations'
 import { LOCAL_LIBRARY_FORMATS } from './versionedJson'
 import { presetExportSchema, themePayloadSchema } from './auxiliarySchemas'
@@ -50,6 +50,7 @@ function format(id: string, name: string, version: number, versionSource: string
 /** Single inventory. SQL payloads inherit the existing SQLite ledger, never a parallel ledger. */
 export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   format('audio-capture-settings', '本机录音设置', AUDIO_CAPTURE_SETTINGS_VERSION, 'settings.audio_capture.settings.version', 'electron/main/services/audio-capture/settings.ts::read', audioCaptureSettingsEnvelopeSchema, 'sqlite-ledger'),
+  format('audio-capture-recovery', '未完成录音', 1, 'settings.audio_capture.pending_files.version', 'electron/main/services/audio-capture/files.ts::read', audioCaptureRecoverySchema, 'sqlite-ledger'),
   format('generation-output-timings', '生成结果语音时间戳', 1, 'generation_submissions.response_json.metadata.outputTimings（SQLite 既有账本）', 'electron/main/services/ai-runtime/generation-submissions.ts::decodeResponse', generationOutputTimingsSchema, 'sqlite-ledger'),
   format('workspace-layouts', '工作区布局预设', WORKSPACE_LAYOUT_VERSION, 'settings.workspace.layout.<workspaceId>.version', 'src/services/workspaceLayouts/workspaceLayoutService.ts::load', workspaceLayoutEnvelopeSchema, 'sqlite-ledger'),
   ...RESOURCE_PERSISTENCE_FORMATS,

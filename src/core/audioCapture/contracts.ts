@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 export const AUDIO_CAPTURE_RATES = [8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000] as const
+export const AUDIO_CAPTURE_SETTINGS_TARGET = { tab: 'general', sectionId: 'general-recording' } as const
 export const audioCaptureSettingsSchema = z.object({
   hostApi: z.enum(['default', 'MME', 'DirectSound', 'WASAPI', 'WDM-KS', 'ASIO', 'CoreAudio']),
   /** 设备名称和同名序号跨枚举保存，PortAudio 临时索引只在主进程内部使用。 */
@@ -40,7 +41,13 @@ export type AudioCaptureEvent = AudioCaptureLevel | AudioCaptureSamples
   | { event: 'devicesChanged'; inventory: AudioCaptureInventory }
 export const audioCaptureStartSchema = z.object({ outputPath: z.string().min(1).max(4096), settings: audioCaptureSettingsSchema.optional(), streamSamples: z.boolean().default(false), monitor: z.literal(false).optional() }).strict()
 export type AudioCaptureStart = z.input<typeof audioCaptureStartSchema>
+/** 作品目录内尚未交给编辑器的录音；相对文件名让作品目录迁移后仍可恢复。 */
+export const audioCaptureRecoverySchema = z.object({ version: z.literal(1), minReaderVersion: z.literal(1), files: z.array(z.string().regex(/^录音 \d{4}-\d{2}-\d{2} \d{6}(?: \(\d+\))?\.wav$/)) }).strict()
+export type AudioCaptureFile = { outputPath: string; name: string }
 export const audioCaptureRequestSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('prepareFile') }).strict(),
+  z.object({ action: z.literal('pendingFiles') }).strict(),
+  z.object({ action: z.enum(['completeFile', 'trashFile']), outputPath: z.string().min(1).max(4096) }).strict(),
   z.object({ action: z.literal('enumerate') }).strict(),
   z.object({ action: z.literal('clock') }).strict(),
   z.object({ action: z.literal('watchDevices'), enabled: z.boolean() }).strict(),

@@ -352,6 +352,12 @@
       "fingerprint": "53e7288765fa8ebdd1caee2af3014f25abdcc76bb7197f816fcdd309a3987575",
       "supportedFrom": 1,
       "minReaderVersion": 1
+    },
+    "audio-capture-recovery": {
+      "version": 1,
+      "fingerprint": "3a78ac28056844d1866e996b7110726908e38f5544f58d812c0578cf43d06e33",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
     }
   },
   "devBreaks": []

@@ -14,6 +14,7 @@ function registrations(): ApplicationEntityRegistration[] {
     dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: [], revisionScopes: ['audio_capture'], queryCapabilityIds: ['read_application_entity'], schemaRef: captureSchemaRef('entity', ENTITY) }, properties: fieldDescriptors(audioCaptureFields),
     schemaDocuments: [
       { ref: captureSchemaRef('property', `${ENTITY}.devices.value`), value: z.toJSONSchema(audioCaptureInventorySchema) as JsonValue },
+      { ref: captureSchemaRef('property', `${ENTITY}.recording.value`), value: z.toJSONSchema(z.object({ visible: z.boolean(), phase: z.enum(['idle', 'recording', 'paused', 'stopped', 'interrupted']), durationSeconds: z.number().nonnegative() })) as JsonValue },
       { ref: captureSchemaRef('property', `${ENTITY}.effective.value`), value: z.toJSONSchema(z.object({ settings: audioCaptureSettingsSchema, notice: z.string().nullable() })) as JsonValue },
     ],
     provider: {
