@@ -126,8 +126,8 @@
       "minReaderVersion": 1
     },
     "document.video_edit": {
-      "version": 23,
-      "fingerprint": "1b046b6d450cdbf7a5920ecb4904605cfd47211173c99fbe0935ec524f2acfaf",
+      "version": 24,
+      "fingerprint": "9d5d9b0b8ebe25cd7d6cc67925156fccc20df6cf33292656942c174734ea52f9",
       "supportedFrom": 17,
       "minReaderVersion": 23
     },
@@ -156,14 +156,14 @@
       "minReaderVersion": 1
     },
     "document.screen_recording": {
-      "version": 26,
-      "fingerprint": "d51b23c9eef115111a59b8a3e76cbf22a874227095e3c87b1ccac7f86d2044a0",
+      "version": 27,
+      "fingerprint": "b4bb9da9decabae871c803a06277d28b7a0949ff65718d9af30398b3bbc71694",
       "supportedFrom": 19,
       "minReaderVersion": 26
     },
     "project": {
-      "version": 1,
-      "fingerprint": "c459d0703056998eea21df42fc3f768601d14a9423076cb1c24837e8a72db9d1",
+      "version": 2,
+      "fingerprint": "a0fb5a9d87befe1b099d8f38131a210a17fe5e5586915018975fe2a48a4c7d0c",
       "supportedFrom": 1,
       "minReaderVersion": 1
     },
@@ -312,10 +312,10 @@
       "minReaderVersion": 21
     },
     "sqlite": {
-      "version": 21,
+      "version": 22,
       "fingerprint": "b6eff11f5e95a171e12a13cc774f391e3f2ee757f75da4d6e8aa4ff1f2feb1d8",
       "supportedFrom": 21,
-      "minReaderVersion": 21
+      "minReaderVersion": 22
     },
     "sound-library-folders": {
       "version": 1,
@@ -324,8 +324,8 @@
       "minReaderVersion": 1
     },
     "video-style-library": {
-      "version": 1,
-      "fingerprint": "fc7b19ee664a2fae3ed3afaf188f27b3177399c0203327b48065562c02d72705",
+      "version": 2,
+      "fingerprint": "7a270e49c1a20528db42b8d691cfe23eeef7c3b80f31c2327da978ed1573e618",
       "supportedFrom": 1,
       "minReaderVersion": 1
     },
@@ -336,8 +336,8 @@
       "minReaderVersion": 1
     },
     "video-style-package": {
-      "version": 1,
-      "fingerprint": "f64ff3c850f12db57ae02ab1364b93700c992e57791ab2259f14273c1dc411c4",
+      "version": 2,
+      "fingerprint": "e8f5cf319d8357534a9ddfaa72e930b0de57e486936ed8b8cfa7b8b2330ad60f",
       "supportedFrom": 1,
       "minReaderVersion": 1
     },
@@ -356,6 +356,12 @@
     "audio-capture-recovery": {
       "version": 2,
       "fingerprint": "0e60f6f34de0020992b2fedd630ccc44f159d9129215cc465e259a99237e1aae",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "assistant-memory": {
+      "version": 1,
+      "fingerprint": "ef81b17a9ec478acf523f9b2a01e7356886df8662704c89788e3995d8d6c3d34",
       "supportedFrom": 1,
       "minReaderVersion": 1
     }

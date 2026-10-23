@@ -1,6 +1,25 @@
 import type Database from 'better-sqlite3'
+import { emptyMemorySnapshot } from '../../../../src/core/assistant/memoryEntries'
 
-/** 助手记忆的表（迁移账本第 9 项），唯一读写入口是 memory-store.ts。2.3 之前已存在的表与数据原样保留。 */
+/** 2026-10-23 用户授权一次性清空未正式使用的旧记忆；只在既有迁移账本内执行一次。 */
+export function replaceAssistantMemoryTablesV22(database: Database.Database): void {
+  database.exec(`
+    DROP TABLE IF EXISTS agent_memory_conflicts;
+    DROP TABLE IF EXISTS agent_memory_candidates;
+    DROP TABLE IF EXISTS agent_memories;
+    DROP TABLE IF EXISTS agent_memory_settings;
+    CREATE TABLE assistant_memory (id INTEGER PRIMARY KEY CHECK (id = 1), state_json TEXT NOT NULL);
+  `)
+  database.prepare('INSERT INTO assistant_memory(id, state_json) VALUES (1, ?)').run(JSON.stringify(emptyMemorySnapshot()))
+}
+
+export function assistantMemoryNeedsBackup(database: Database.Database): boolean {
+  return ['agent_memories', 'agent_memory_candidates'].some(table =>
+    Boolean(database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table))
+    && Boolean(database.prepare(`SELECT 1 FROM ${table} LIMIT 1`).get()))
+}
+
+/** 旧记忆表（历史迁移账本第 9 项）；仅保留创建步骤供旧数据库逐版本升级，v22 会按用户授权清空。 */
 export function createAssistantMemoryTablesV1(database: Database.Database): void {
   database.exec(`
         CREATE TABLE IF NOT EXISTS agent_memory_settings (

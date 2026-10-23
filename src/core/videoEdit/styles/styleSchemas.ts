@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { styleMemoryEntriesSchema } from '../../assistant/memoryEntries'
 import { codeMaterialFilesSchema, type CodeMaterialFiles } from '../codeMaterial/sources'
 import { sha256HexString } from '../../../utils/save/hash'
 import { STYLE_GUIDE_MAX_LENGTH } from './styleGuide'
@@ -37,6 +38,7 @@ export const videoEditStyleSchema = z.object({
   /** 从分享文件导入：说明书是别人写的文字，只决定画面和声音，里面的指令一律不执行。 */
   imported: z.literal(true).optional(),
   guide: z.string().max(STYLE_GUIDE_MAX_LENGTH).describe('风格说明书（Markdown），栏目见技能 style-kit。'),
+  userPreferences: styleMemoryEntriesSchema.optional(),
   sample: videoEditStyleSampleSchema,
 }).strict()
 export type VideoEditStyle = z.infer<typeof videoEditStyleSchema>
@@ -56,9 +58,9 @@ export const videoEditTemplateCodeBodySchema = z.object({
 
 const json = (value: unknown): string => JSON.stringify(value, (_key, item: unknown) => item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.entries(item as Record<string, unknown>).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : item)
 /** 风格内容摘要：说明书、样片源码与样片设置（与 Frameflow styleRevision 同口径）。 */
-export function videoEditStyleContentHash(style: Pick<VideoEditStyle, 'guide' | 'sample'>): Promise<string> {
+export function videoEditStyleContentHash(style: Pick<VideoEditStyle, 'guide' | 'sample' | 'userPreferences'>): Promise<string> {
   const { code, ...settings } = style.sample
-  return sha256HexString(json({ guide: style.guide.replace(/\r\n?/g, '\n'), files: sortedFiles(code), settings }))
+  return sha256HexString(json({ guide: style.guide.replace(/\r\n?/g, '\n'), files: sortedFiles(code), settings, ...(style.userPreferences?.length ? { userPreferences: style.userPreferences } : {}) }))
 }
 /** 模板内容摘要：只看内容，名称与说明不参与。 */
 export function videoEditTemplateContentHash(body: unknown): Promise<string> { return sha256HexString(json(body)) }

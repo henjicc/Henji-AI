@@ -122,6 +122,18 @@ describe('Schema结构指纹', () => {
 })
 
 describe('所有登记格式的黄金样本', () => {
+  it('录屏 v26 升级保持内容，v27 的内嵌风格偏好不提高最低可读版本', () => {
+    const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.screen_recording')!
+    const previous = JSON.parse(fs.readFileSync('tests/fixtures/persistence/document.screen_recording/v26.json', 'utf8'))
+    const original = JSON.stringify(previous)
+    expect(format.version).toBe(27)
+    expect(format.minReaderVersion).toBe(26)
+    expect(upgradePersistenceContent(format, previous.content, 26)).toEqual(previous.content)
+    expect(JSON.stringify(previous)).toBe(original)
+    const current = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.screen_recording/v27.json', 'utf8'))
+    expect(current).toMatchObject({ kindVersion: 27, kindMinReaderVersion: 26, content: { scriptCapture: { baselines: [{ content: { styles: [{ userPreferences: [{ content: '标题少用装饰线。' }] }] } }] } } })
+  })
+
   for (const format of PERSISTENCE_FORMATS) {
     const directory = path.resolve('tests/fixtures/persistence', format.id)
     for (const file of fs.readdirSync(directory).filter(file => /^v\d+\.json$/.test(file))) {

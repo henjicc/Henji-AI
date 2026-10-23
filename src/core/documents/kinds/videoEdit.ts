@@ -135,6 +135,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
     21: content => migrateVideoEditStyles(content),
     // 22 → 23：新增可选 gainDb，缺省按 0 dB 读取，旧音量与关键帧原样保留。
     22: content => content,
+    // 23 → 24：工程风格副本新增可选使用者偏好。
+    23: content => content,
   },
   dependencyContent: ({ exportHistory: _exportHistory, ...dependencies }) => dependencies,
   createEmptyContent: createEmptyVideoEditContent,

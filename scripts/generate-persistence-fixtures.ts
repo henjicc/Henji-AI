@@ -1,3 +1,4 @@
+import { emptyMemorySnapshot } from '../src/core/assistant/memoryEntries'
 import { createWorkspaceLayoutEnvelope } from '../src/core/workspaceLayouts/schema'
 import { defaultCameraStageLayout } from '../src/features/cameraStage/layout/dockLayout'
 import { MOTION_CANDIDATE_VERSION } from '../src/core/creativeIntent/persistence'
@@ -116,7 +117,7 @@ remapClip.preservePitch = true
 remapClip.pitchSemitones = 2
 sequence.clips.push(remapClip)
 // v22：工程风格副本（说明书 + 样片代码）绑定序列；代码模板联动代码定义，原生模板联动带 templateId 的图形片段。
-const goldenStyle = { id: 'golden-style', name: '黄金风格', description: '用于持久格式样本的风格。', version: 2, contentHash: 'a'.repeat(64), updatedAt: timestamp, guide: styleGuideTemplate('黄金风格', '冷静的科技讲解'), sample: { code: { entry: 'index.js', files: { 'index.js': BLANK_STYLE_SAMPLE_SOURCE } }, width: 1280, height: 720, durationSeconds: 8, fps: 24, thumbnail: 1.2, anchors: [1.2, 3.2, 5.2, 6.4, 7.8] } }
+const goldenStyle = { userPreferences: [{ id: 'golden-style-memory', content: '标题少用装饰线。', source: 'user' as const, updatedAt: timestamp, revision: 1 }], id: 'golden-style', name: '黄金风格', description: '用于持久格式样本的风格。', version: 2, contentHash: 'a'.repeat(64), updatedAt: timestamp, guide: styleGuideTemplate('黄金风格', '冷静的科技讲解'), sample: { code: { entry: 'index.js', files: { 'index.js': BLANK_STYLE_SAMPLE_SOURCE } }, width: 1280, height: 720, durationSeconds: 8, fps: 24, thumbnail: 1.2, anchors: [1.2, 3.2, 5.2, 6.4, 7.8] } }
 document.styles = [goldenStyle]
 sequence.styleId = goldenStyle.id
 const nativeGraphic = titleGraphic('lower_third', { text: '姓名', subtitle: '职务' }, 1920, 1080, 119 / 30)
@@ -209,7 +210,8 @@ const working = { format: 'henji-image-edit', formatVersion: IMAGE_WORKING_VERSI
 const replayBaseline = createVideoEditDocument('重放起点')
 replayBaseline.id = 'golden-replay'
 const replaySequence = createVideoEditSequence('原始序列')
-replaySequence.id = 'golden-replay-sequence'; replayBaseline.sequences.push(replaySequence)
+replaySequence.id = 'golden-replay-sequence'; replaySequence.styleId = goldenStyle.id; replayBaseline.sequences.push(replaySequence)
+replayBaseline.styles = [goldenStyle]
 const replayOperation = { target: { kind: 'video_edit.sequence', id: 'golden-replay:golden-replay-sequence' }, properties: { 'video_edit.sequence.name': '演示序列' } }
 const values: Record<string, unknown> = {
   'document.screen_recording': { ...createRecordingDocument(), sessionId: '00000000-0000-4000-8000-000000000005', originUs: 1000000, startUs: 3000000, endUs: 13000000, pauses: [{ startUs: 6000000, endUs: 7000000 }], status: 'stopped',
@@ -231,7 +233,7 @@ const values: Record<string, unknown> = {
   'document.audio_edit': { gainRegions: [{ id: 'gain', startFrame: 0, endFrame: 24000, gainDb: -6, fadeInFrames: 100, fadeOutFrames: 100, enabled: true }], repairs: [{ id: 'repair', kind: 'spectral_heal', startFrame: 1000, endFrame: 2000, lowHz: 100, highHz: 1000, strength: .5, enabled: true, strokes: [{ radius: .1, radiusY: .2, points: [{ x: .5, y: .5 }] }] }], source: { mediaType: 'audio', sourcePath: '/persistence-project/素材/voice.wav', audioPath: '/persistence-project/素材/voice.wav', durationFrames: 48000, sampleRate: 48000, channels: 1 }, referenceScript: '参考稿', transcript: [{ id: 'word', text: '你好', startFrame: 0, endFrame: 24000, included: true, locked: false, granularity: 'word' }], suggestions: [], vstEnabled: false, cuts: [{ id: 'cut', startFrame: 24000, endFrame: 48000, reason: 'manual', enabled: true }], processorChain: [] },
   'document.camera_stage': { objects: [{ id: 'camera', name: '主摄影机', type: 'camera', position: [0, 1, 5] }], activeCameraId: 'camera', sceneSettings: { sky: {} }, stateKeyframes: [{ id: 'key', time: 0, objects: {} }] },
   'document.image_document': { workingRevision: 0, emptyUntilRevision: 0, width: 32, height: 40, layers: image.layers.length },
-  project: buildProjectManifest({ id: 'golden-project', createdAt: timestamp, locale: 'zh', draft: false, mainVideoEditId: document.id }),
+  project: buildProjectManifest({ id: 'golden-project', createdAt: timestamp, locale: 'zh', draft: false, mainVideoEditId: document.id, memories: [{ id: 'brand', content: '这期品牌色用红色。', source: 'user', revision: 1, updatedAt: timestamp }] }),
   'project-package': { format: 'henji-package', version: 1, type: 'project', name: '黄金项目', exportedAt: timestamp, folders: { generated: '生成结果', materials: '素材' }, documents: [{ id: document.id, path: '黄金剪辑.henji-video' }] },
   'code-version': { id: 'code-version', ...sourceVersion },
   'code-author-api': { apiVersion: CODE_AUTHOR_API_VERSION },
@@ -275,7 +277,8 @@ const values: Record<string, unknown> = {
   'setting-records': { key: 'user_data_root', value: '{"root":"/persistence-project","locale":"zh"}', type: 'json' },
   'asset-records': { id: 'golden-asset', media_type: 'code', display_name: '代码标题', file_path: '/persistence-project/代码/标题.henjicode', source: 'video-edit', mime_type: 'application/x-henji-code', size_bytes: 100, width: null, height: null, duration_seconds: null, thumbnail_name: null, inspection_status: 'pending', inspection_error: null, file_modified_at: null, content_identity: null, last_used_at: null, created_at: 1791504000000, updated_at: 1791504000000 },
   'generation-presets': { id: 'golden-preset', name: '黄金生成预设', description: null, model_id: null, params: '{}', is_favorite: 0, use_count: 0, created_at: timestamp, updated_at: timestamp },
-  sqlite: { version: 21, name: 'global_media_recycle', applied_at: 1791504000000 },
+  'assistant-memory': emptyMemorySnapshot(),
+  sqlite: { version: 22, name: 'replace_assistant_memory_user_authorized_reset', applied_at: 1791504000000 },
 }
 
 /** Immutable layout bodies used by the official ZIP fixture authoring tool. */
@@ -288,9 +291,9 @@ export function generatePersistenceFixtures(root = process.cwd(), only?: string)
   for (const format of PERSISTENCE_FORMATS) {
     if (only && format.id !== only) continue
     const content = format.schema.parse(values[format.id])
-    const raw = format.id.startsWith('document.') ? buildDocumentEnvelope({ kind: format.id.slice('document.'.length), kindVersion: format.version, id: `golden-${format.id.split('.')[1]}`, name: format.name, createdAt: timestamp, updatedAt: timestamp, revision: 0, draft: false, content })
+    const raw = format.id.startsWith('document.') ? buildDocumentEnvelope({ kind: format.id.slice('document.'.length), kindVersion: format.version, kindMinReaderVersion: format.minReaderVersion ?? format.version, id: `golden-${format.id.split('.')[1]}`, name: format.name, createdAt: timestamp, updatedAt: timestamp, revision: 0, draft: false, content })
       : format.id === 'settings' || format.id === 'theme' ? { version: format.version, state: content }
-      : (format.storage === 'local-storage' && !['model-defaults', 'onboarding'].includes(format.id)) || ['voice-library', 'llm-config', 'sound-library-folders'].includes(format.id) ? { version: format.version, content } : ['video-style-library', 'video-template-library', 'video-style-package'].includes(format.id) ? { version: format.version, minReaderVersion: format.version, content } : content
+      : (format.storage === 'local-storage' && !['model-defaults', 'onboarding'].includes(format.id)) || ['voice-library', 'llm-config', 'sound-library-folders'].includes(format.id) ? { version: format.version, content } : ['video-style-library', 'video-template-library', 'video-style-package'].includes(format.id) ? { version: format.version, minReaderVersion: format.minReaderVersion ?? format.version, content } : content
     const directory = path.join(root, 'tests/fixtures/persistence', format.id)
     fs.mkdirSync(directory, { recursive: true })
     fs.writeFileSync(path.join(directory, `v${format.version}.json`), `${JSON.stringify(raw, null, 2)}\n`, { flag: 'wx' })

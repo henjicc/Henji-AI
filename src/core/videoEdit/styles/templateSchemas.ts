@@ -9,7 +9,7 @@ export const videoEditTemplateSchema = z.object({ ...videoEditTemplateMetaShape,
 export type VideoEditTemplate = z.infer<typeof videoEditTemplateSchema>
 
 /** 风格库目录里每个风格、每个模板各一份版本化 JSON 容器的内容。 */
-export const VIDEO_EDIT_STYLE_LIBRARY_VERSION = 1
+export const VIDEO_EDIT_STYLE_LIBRARY_VERSION = 2
 export const VIDEO_EDIT_TEMPLATE_LIBRARY_VERSION = 1
 
 /**
@@ -17,7 +17,7 @@ export const VIDEO_EDIT_TEMPLATE_LIBRARY_VERSION = 1
  * 导入只解析和保存，不运行任何代码；媒体是 base64 文本，单个文件不超过 16 MB。
  */
 export const VIDEO_EDIT_STYLE_PACKAGE_EXTENSION = 'henjistyle'
-export const VIDEO_EDIT_STYLE_PACKAGE_VERSION = 1
+export const VIDEO_EDIT_STYLE_PACKAGE_VERSION = 2
 export const VIDEO_EDIT_STYLE_PACKAGE_MAX_BYTES = 16 * 1024 * 1024
 const base64 = z.string().max(12 * 1024 * 1024).regex(/^[A-Za-z0-9+/]*={0,2}$/, '媒体内容必须是 base64。')
 export const videoEditStylePackageMediaSchema = z.object({

@@ -1,4 +1,7 @@
 import type { ListPage, ListPageRequest } from '../../../../src/core/documents/pagination'
+import { applyMemoryWrite, type MemoryWrite } from '../../../../src/core/assistant/memoryOperations'
+import type { MemoryEntry, MemoryHistoryEntry } from '../../../../src/core/assistant/memoryEntries'
+import { randomUUID } from 'node:crypto'
 import type { DocumentCodeFiles } from './code-files'
 import type { IndexedDocument, IndexedDocumentFilter } from './catalog'
 import type {
@@ -68,6 +71,28 @@ export class DocumentService implements DocumentsPlatform {
     codeFiles: DocumentCodeFiles
     kinds: Pick<DocumentKindRegistry, 'forFileName'>
   }) {}
+
+  async readProjectMemory(projectId: string): Promise<MemoryEntry[]> {
+    const container = await this.parts.workspace.resolveContainer({ kind: 'project', projectId })
+    return container.manifest?.memories ?? []
+  }
+
+  async writeProjectMemory(input: MemoryWrite, assertEnabled: () => void, commitHistory: (change: MemoryHistoryEntry) => void): Promise<MemoryHistoryEntry | null> {
+    if (input.target.layer !== 'project') throw new Error('INVALID_TARGET：需要项目记忆目标。')
+    const projectId = input.target.ownerId
+    return this.parts.workspace.withProjectMutation(projectId, async () => {
+      const container = await this.parts.workspace.resolveContainer({ kind: 'project', projectId })
+      if (!container.manifest) throw new Error('NOT_FOUND：项目说明不存在。')
+      const result = applyMemoryWrite(container.manifest.memories ?? [], input, new Date(), randomUUID())
+      assertEnabled()
+      if (result.change) {
+        await this.parts.workspace.writeManifest(container.root, { ...container.manifest, memories: result.entries })
+        try { assertEnabled(); commitHistory(result.change) }
+        catch (error) { await this.parts.workspace.writeManifest(container.root, container.manifest); throw error }
+      }
+      return result.change
+    })
+  }
 
   withdrawCodeComponent: DocumentsPlatform['withdrawCodeComponent'] = request => this.parts.codeFiles.withdraw(request)
   discardCodeFiles: DocumentsPlatform['discardCodeFiles'] = request => this.parts.codeFiles.discard(request)

@@ -1,0 +1,482 @@
+{
+  "version": 2,
+  "minReaderVersion": 1,
+  "content": {
+    "format": "henji-video-style",
+    "style": {
+      "id": "golden-style",
+      "name": "黄金风格",
+      "description": "用于持久格式样本的风格。",
+      "version": 2,
+      "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "updatedAt": "2026-10-09T00:00:00.000Z",
+      "imported": true,
+      "guide": "# 黄金风格\n\n> 冷静的科技讲解\n\n## 定位\n\n<!-- 2–4 句：给谁看、什么场合、要什么感觉、不要什么感觉。可附风格坐标（克制↔张扬、精密↔手作、平面↔立体、冷静↔热闹、严肃↔好玩，各 1–5）。 -->\n\n## 不变量与自由度\n\n<!-- 不变量 3–5 条：一眼能认出这个风格、任何画面都不能丢的东西。自由度：哪些地方鼓励发挥。 -->\n\n## 色彩\n\n<!-- 按角色写：底色、主文字、次要文字、强调色、语义色、压在实拍上的处理；写清比例与用法。 -->\n\n## 字体与排版\n\n<!-- 标题、正文、数字各一条字体优先级链；层级比例以画面高度为参照；字距、行距与中英混排。 -->\n\n## 版式与构图\n\n<!-- 网格与对齐、留白、视觉焦点、信息密度、形状语言（圆角/直角、线条粗细）。 -->\n\n## 动效\n\n<!-- 运动性格一句话；入场、换位、离场的曲线；快中慢三档时长；谁先动、错峰规律。 -->\n\n## 镜头与转场\n\n<!-- 一镜到底还是分镜头；转场方式；镜头时长；景深、视差、摄像机运动。 -->\n\n## 质感\n\n<!-- 颗粒、阴影、辉光、描边、圆角、材质；哪些绝对不用。 -->\n\n## 声音\n\n<!-- 音效性格、动作和音效对点的规则、音乐类型与节奏；没有要求写“不限”。 -->\n\n## 组件\n\n<!-- 标题卡、要点、数据、人名条、字幕、强调花字、片尾各写一两句做法，以及它们共用的底板和入场。 -->\n\n## 画幅适配\n\n<!-- 横屏 16:9 与竖屏 9:16 怎么变：字号参照哪条边、版式怎么重排、竖屏避开的平台遮挡区。 -->\n\n## 设计原则\n\n<!-- 硬约束：不能违反的结构性原则。倾向：默认这样做，有理由可以不这样。 -->\n\n## 正反例\n\n<!-- 做：2–4 条典型的好做法。不做：2–4 条最容易犯、最伤风格的做法。 -->\n\n## 样片与代码\n\n<!-- 样片按标准分镜演示本风格；写明哪些函数可以照搬（缓动、排版、组件绘制），哪些只是样片内容。 -->\n",
+      "userPreferences": [
+        {
+          "id": "golden-style-memory",
+          "content": "标题少用装饰线。",
+          "source": "user",
+          "updatedAt": "2026-10-09T00:00:00.000Z",
+          "revision": 1
+        }
+      ],
+      "sample": {
+        "code": {
+          "entry": "index.js",
+          "files": {
+            "index.js": "// 风格样片：按标准分镜演示本风格。整段时长、尺寸、锚点帧在风格的 sample 设置里。\n// 改风格时先改 STYLE 里的取值和下面各层的画法；分镜与文案保持标准，方便不同风格并排比较。\n// 只能用相对导入（同目录内的文件），不访问网络、文件或 DOM；量字用 OffscreenCanvas。\n//\n// 分层写法（运行时据此做运动模糊，默认 180° 快门）：\n// - layers() 从后到前返回若干层；没有 pose 的层是静止层，按当前时刻 t 在画面坐标里画。\n// - 会动的元素各成一层：在本地坐标里画内容，bounds 给出本地内容范围，pose(t) 给出\n//   { x, y, rotation, scale / scaleX / scaleY, opacity }，不可见时返回 null。内容随时间变的（计数、逐字）照常在 draw 里按 t 画。\n// - 文字从遮罩里升起这类效果：加 clip（画面坐标里固定的矩形），内容随 pose 移动，遮罩不动。\n\nconst STYLE = {\n  color: {\"bg\":\"#F4F2EE\", \"text\":\"#16181D\", \"muted\":\"#6B6F78\", \"accent\":\"#2F5BFF\", \"line\":\"#D9D6CF\"},\n  font: {\n    title: '\"HarmonyOS Sans SC\", \"Source Han Sans SC\", \"Microsoft YaHei\", sans-serif',\n    body: '\"HarmonyOS Sans SC\", \"Source Han Sans SC\", \"Microsoft YaHei\", sans-serif',\n    number: '\"DIN Alternate\", \"Bahnschrift\", \"Segoe UI\", sans-serif',\n  },\n};\n\n// 标准分镜（秒）与标准文案。\nconst SCENES = { title: [0, 1.8], list: [1.8, 3.8], data: [3.8, 5.6], name: [5.6, 6.9], end: [6.9, 8] };\nconst COPY = {\n  title: \"把想法变成画面\",\n  subtitle: \"风格样片 · STYLE SAMPLE\",\n  list: [\"统一的配色\", \"统一的字体\", \"统一的节奏\"],\n  data: { value: 87, unit: \"%\", label: \"一次通过率\" },\n  name: { name: \"林一\", role: \"动效设计师\" },\n  end: \"一个风格，处处一致\",\n};\n\nconst clamp = (v) => Math.max(0, Math.min(1, v));\nconst expoOut = (v) => (v >= 1 ? 1 : 1 - Math.pow(2, -10 * clamp(v)));\nconst cubicIn = (v) => clamp(v) ** 3;\nconst within = (t, [a, b]) => t >= a && t < b;\n// 场景内进度：入场 [a, a+inDur]，离场 [b-outDur, b]。\nfunction phase(t, [a, b], delay = 0, inDur = 0.6, outDur = 0.3) {\n  return { enter: expoOut((t - a - delay) / inDur), leave: cubicIn((t - (b - outDur)) / outDur) };\n}\nconst font = (weight, size, family) => `${weight} ${Math.round(size)}px ${family}`;\n\nfunction layers(_params, w, h) {\n  // u：以 720 高为基准的长度单位，竖屏和其他尺寸按画面高度等比缩放。\n  const u = h / 720, x = w * 0.1, C = STYLE.color, F = STYLE.font, out = [];\n  out.push({ draw: (ctx) => { ctx.fillStyle = C.bg; ctx.fillRect(0, 0, w, h); } });\n\n  // 标题：强调短线向右展开，标题与副标题上浮淡入。\n  const title = SCENES.title, ty = h * 0.5;\n  out.push({\n    bounds: [0, 0, 48 * u, 6 * u],\n    pose: (t) => {\n      const p = phase(t, title);\n      return within(t, title) && p.enter > 0.002 ? { x, y: ty - 96 * u, scaleX: p.enter, scaleY: 1, opacity: 1 - p.leave } : null;\n    },\n    draw: (ctx) => { ctx.fillStyle = C.accent; ctx.fillRect(0, 0, 48 * u, 6 * u); },\n  });\n  out.push({\n    bounds: [-10 * u, -70 * u, 520 * u, 60 * u],\n    pose: (t) => {\n      const p = phase(t, title);\n      return within(t, title) ? { x, y: ty + (1 - p.enter) * 24 * u - p.leave * 16 * u, opacity: p.enter * (1 - p.leave) } : null;\n    },\n    draw: (ctx) => {\n      ctx.fillStyle = C.text; ctx.font = font(700, 64 * u, F.title); ctx.fillText(COPY.title, 0, 0);\n      ctx.fillStyle = C.muted; ctx.font = font(400, 22 * u, F.body); ctx.fillText(COPY.subtitle, 0, 48 * u);\n    },\n  });\n\n  // 要点：每条从左侧滑入。\n  const list = SCENES.list;\n  COPY.list.forEach((item, i) => {\n    out.push({\n      bounds: [-4 * u, -40 * u, 320 * u, 14 * u],\n      pose: (t) => {\n        const p = phase(t, [list[0] + i * 0.12, list[1]], 0, 0.5, 0.3);\n        return within(t, list) && p.enter > 0 ? { x: x + (1 - p.enter) * 20 * u, y: h * 0.36 + i * 72 * u, opacity: p.enter * (1 - p.leave) } : null;\n      },\n      draw: (ctx) => {\n        ctx.fillStyle = C.accent; ctx.fillRect(0, -14 * u, 8 * u, 8 * u);\n        ctx.fillStyle = C.text; ctx.font = font(500, 36 * u, F.body); ctx.fillText(item, 28 * u, 0);\n      },\n    });\n  });\n\n  // 数据：数字计数（内容变化，静止层），进度条向右展开。\n  const data = SCENES.data, count = (t) => Math.round(COPY.data.value * expoOut((t - data[0]) / 1.2));\n  out.push({\n    draw: (ctx, t) => {\n      if (!within(t, data)) return;\n      const p = phase(t, data);\n      ctx.globalAlpha = p.enter * (1 - p.leave);\n      ctx.fillStyle = C.text; ctx.font = font(700, 140 * u, F.number); ctx.fillText(`${count(t)}${COPY.data.unit}`, x, h * 0.56);\n      ctx.fillStyle = C.muted; ctx.font = font(400, 24 * u, F.body); ctx.fillText(COPY.data.label, x, h * 0.56 + 44 * u);\n      ctx.fillStyle = C.line; ctx.fillRect(x, h * 0.72, w * 0.8, 4 * u);\n      ctx.globalAlpha = 1;\n    },\n  });\n  out.push({\n    bounds: [0, 0, 100, 4 * u],\n    pose: (t) => {\n      const p = phase(t, data), len = w * 0.8 * (count(t) / 100);\n      return within(t, data) && len > 0.5 ? { x, y: h * 0.72, scaleX: len / 100, scaleY: 1, opacity: p.enter * (1 - p.leave) } : null;\n    },\n    draw: (ctx) => { ctx.fillStyle = C.accent; ctx.fillRect(0, 0, 100, 4 * u); },\n  });\n\n  // 人名条：竖线向下长出，名字与职位淡入。\n  const name = SCENES.name, ny = h * 0.78;\n  out.push({\n    bounds: [0, 0, 6 * u, 64 * u],\n    pose: (t) => {\n      const p = phase(t, name, 0, 0.5, 0.3);\n      return within(t, name) && p.enter > 0.002 ? { x, y: ny - 40 * u, scaleX: 1, scaleY: p.enter, opacity: 1 - p.leave } : null;\n    },\n    draw: (ctx) => { ctx.fillStyle = C.accent; ctx.fillRect(0, 0, 6 * u, 64 * u); },\n  });\n  out.push({\n    draw: (ctx, t) => {\n      if (!within(t, name)) return;\n      const p = phase(t, name, 0, 0.5, 0.3);\n      ctx.globalAlpha = p.enter * (1 - p.leave);\n      ctx.fillStyle = C.text; ctx.font = font(700, 34 * u, F.title); ctx.fillText(COPY.name.name, x + 24 * u, ny - 4 * u);\n      ctx.fillStyle = C.muted; ctx.font = font(400, 20 * u, F.body); ctx.fillText(COPY.name.role, x + 24 * u, ny + 24 * u);\n      ctx.globalAlpha = 1;\n    },\n  });\n\n  // 收尾：一句话居中淡入。\n  const end = SCENES.end;\n  out.push({\n    draw: (ctx, t) => {\n      if (t < end[0]) return;\n      ctx.globalAlpha = phase(t, [end[0], 99]).enter;\n      ctx.fillStyle = C.text; ctx.font = font(700, 48 * u, F.title); ctx.textAlign = \"center\";\n      ctx.fillText(COPY.end, w / 2, h / 2 + 16 * u);\n      ctx.textAlign = \"left\"; ctx.globalAlpha = 1;\n    },\n  });\n  return out;\n}\n\nexport default {\n  name: \"风格样片\", kind: \"generator\", mode: \"dynamic\",\n  nameEnglish: \"Style sample\",\n  params: [],\n  motionBlur: { shutter: 180 },\n  layers,\n};\n"
+          }
+        },
+        "width": 1280,
+        "height": 720,
+        "durationSeconds": 8,
+        "fps": 24,
+        "thumbnail": 1.2,
+        "anchors": [
+          1.2,
+          3.2,
+          5.2,
+          6.4,
+          7.8
+        ]
+      }
+    },
+    "templates": [
+      {
+        "id": "golden-library-template",
+        "name": "黄金模板",
+        "description": "代码标题模板。",
+        "version": 3,
+        "contentHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "updatedAt": "2026-10-09T00:00:00.000Z",
+        "style": {
+          "id": "golden-style",
+          "version": 2
+        },
+        "body": {
+          "kind": "native",
+          "content": {
+            "width": 1920,
+            "height": 1080,
+            "fps": 30,
+            "clips": [
+              {
+                "name": "人名条",
+                "kind": "graphic",
+                "track": 0,
+                "start": 0,
+                "duration": 120,
+                "sourceInUs": 0,
+                "sourceRemainder": {
+                  "numerator": 0,
+                  "denominator": 1
+                },
+                "x": 0,
+                "y": 0,
+                "scale": 1,
+                "rotation": 0,
+                "opacity": 1,
+                "volume": 1,
+                "text": "",
+                "graphic": {
+                  "width": 1920,
+                  "height": 1080,
+                  "objects": [
+                    {
+                      "id": "b04d0378-142e-451f-b68f-4e937f191bb4",
+                      "name": "矩形",
+                      "kind": "rect",
+                      "parameters": {
+                        "x": 153.6,
+                        "y": 810,
+                        "rotation": 0,
+                        "opacity": 1,
+                        "width": 960,
+                        "height": 162,
+                        "fill": [
+                          0,
+                          0.49411764705882355,
+                          1,
+                          1
+                        ],
+                        "radius": 10.8
+                      },
+                      "curves": {
+                        "opacity": [
+                          {
+                            "id": "71530ef1-ce9e-496a-b0f7-665d1b088fd1",
+                            "sourceInUs": 0,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 0,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "486133ec-dc0b-4402-bc7d-b9d619b5703e",
+                            "sourceInUs": 600000,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 1,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "5d68c248-4972-4b64-9874-a1cc68d70fd9",
+                            "sourceInUs": 3366667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 1,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "dc331d17-37f5-4ea3-afed-220b6ee11596",
+                            "sourceInUs": 3966667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 0,
+                            "interpolation": "ease"
+                          }
+                        ],
+                        "x": [
+                          {
+                            "id": "4b02b340-1ed2-482a-8495-4962079e3f8e",
+                            "sourceInUs": 0,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": -230.4,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "030b3104-04aa-4f31-b263-61a6bbb3c8de",
+                            "sourceInUs": 600000,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 153.6,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "89927920-dbcf-4641-9a64-af077201350b",
+                            "sourceInUs": 3366667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 153.6,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "b63d1a40-c661-4bf6-96d4-6de03af3aa56",
+                            "sourceInUs": 3966667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 537.6,
+                            "interpolation": "ease"
+                          }
+                        ]
+                      },
+                      "visible": true
+                    },
+                    {
+                      "id": "b20d65f8-363f-4fd2-83a2-73976c3f4093",
+                      "name": "文字",
+                      "kind": "text",
+                      "parameters": {
+                        "x": 192,
+                        "y": 858.6,
+                        "rotation": 0,
+                        "opacity": 1,
+                        "scale": 1,
+                        "anchorX": 0,
+                        "anchorY": 0,
+                        "text": "姓名"
+                      },
+                      "curves": {
+                        "opacity": [
+                          {
+                            "id": "2268852c-c109-4539-8d4c-9498e4dfefae",
+                            "sourceInUs": 0,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 0,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "f01603d9-eb9e-4f0c-bb26-e9534c4e31f8",
+                            "sourceInUs": 600000,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 1,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "a210f0c2-759c-4c5d-a7b8-f4de6e6976fc",
+                            "sourceInUs": 3366667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 1,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "f1e10fa7-d47b-4c00-a040-a90fbb76207a",
+                            "sourceInUs": 3966667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 0,
+                            "interpolation": "ease"
+                          }
+                        ],
+                        "x": [
+                          {
+                            "id": "c8b0b686-9658-45b2-b05d-f7fdda1a5fce",
+                            "sourceInUs": 0,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": -192,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "dc183645-a9e6-49cc-ad0d-83bf1a9a0ed6",
+                            "sourceInUs": 600000,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 192,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "d181448a-3340-4c0f-a594-cd6ec7e82288",
+                            "sourceInUs": 3366667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 192,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "3747e9e8-76a5-4b4b-8961-cbbcf902bc93",
+                            "sourceInUs": 3966667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 576,
+                            "interpolation": "ease"
+                          }
+                        ]
+                      },
+                      "textStyle": {
+                        "fontFamily": "sans-serif",
+                        "fontWeight": 400,
+                        "fontStyle": "normal",
+                        "fontSize": 60,
+                        "fauxBold": false,
+                        "fauxItalic": false,
+                        "allCaps": false,
+                        "smallCaps": false,
+                        "superscript": false,
+                        "subscript": false,
+                        "underline": false,
+                        "align": "left",
+                        "verticalAlign": "middle",
+                        "tracking": 0,
+                        "kerning": "auto",
+                        "leading": 0,
+                        "baselineShift": 0,
+                        "tsume": 0,
+                        "fill": {
+                          "enabled": true,
+                          "color": "#ffffff"
+                        },
+                        "strokes": [],
+                        "background": {
+                          "enabled": false,
+                          "color": "#000000",
+                          "opacity": 0.7,
+                          "padding": 12,
+                          "radius": 0
+                        },
+                        "shadows": [],
+                        "boxWidth": 0,
+                        "boxHeight": 0
+                      },
+                      "visible": true
+                    },
+                    {
+                      "id": "8a1dc5d8-775e-4510-9dd1-fe6951c804e8",
+                      "name": "文字",
+                      "kind": "text",
+                      "parameters": {
+                        "x": 192,
+                        "y": 926.64,
+                        "rotation": 0,
+                        "opacity": 1,
+                        "scale": 1,
+                        "anchorX": 0,
+                        "anchorY": 0,
+                        "text": "职务"
+                      },
+                      "curves": {
+                        "opacity": [
+                          {
+                            "id": "80c588c3-54f2-4d9d-805f-d56f7fd793d2",
+                            "sourceInUs": 0,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 0,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "4e1bdb88-5c4e-4202-9891-fcd7de37edae",
+                            "sourceInUs": 600000,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 1,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "2f9eccfa-c6b8-4a46-91c6-9166c3d73002",
+                            "sourceInUs": 3366667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 1,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "ce5b84ae-746c-4668-a2e4-47cf5c8b8052",
+                            "sourceInUs": 3966667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 0,
+                            "interpolation": "ease"
+                          }
+                        ],
+                        "x": [
+                          {
+                            "id": "21d4c54b-84c4-4136-a44f-b564047b576c",
+                            "sourceInUs": 0,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": -192,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "7fbe0097-abeb-4e3b-840e-1dee7b9f3826",
+                            "sourceInUs": 600000,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 192,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "f3e1aa00-12a9-4170-9f9d-bed4b75f2679",
+                            "sourceInUs": 3366667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 192,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "9e900551-5cc8-4eb2-b8df-3b38919aed4e",
+                            "sourceInUs": 3966667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 576,
+                            "interpolation": "ease"
+                          }
+                        ]
+                      },
+                      "textStyle": {
+                        "fontFamily": "sans-serif",
+                        "fontWeight": 400,
+                        "fontStyle": "normal",
+                        "fontSize": 38.4,
+                        "fauxBold": false,
+                        "fauxItalic": false,
+                        "allCaps": false,
+                        "smallCaps": false,
+                        "superscript": false,
+                        "subscript": false,
+                        "underline": false,
+                        "align": "left",
+                        "verticalAlign": "middle",
+                        "tracking": 0,
+                        "kerning": "auto",
+                        "leading": 0,
+                        "baselineShift": 0,
+                        "tsume": 0,
+                        "fill": {
+                          "enabled": true,
+                          "color": "#ffffff"
+                        },
+                        "strokes": [],
+                        "background": {
+                          "enabled": false,
+                          "color": "#000000",
+                          "opacity": 0.7,
+                          "padding": 7.68,
+                          "radius": 0
+                        },
+                        "shadows": [],
+                        "boxWidth": 0,
+                        "boxHeight": 0
+                      },
+                      "visible": true
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "media": {
+      "thumbnail": "/9j/4AAQ",
+      "anchors": [
+        "/9j/4AAQ"
+      ]
+    }
+  }
+}
