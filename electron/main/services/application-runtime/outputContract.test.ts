@@ -248,7 +248,7 @@ for (const name of ['create_document', 'open_document', 'move_document', 'duplic
 for (const name of ['ripple_delete_video_edit_text', 'extract_video_edit_text', 'insert_video_edit_text', 'detect_video_edit_text_silence']) {
   successData[name] = { documentRef, resultRef: sequenceRef, ranges: [{ from: 0, to: 60 }], changed: true, ...verified }
 }
-for (const name of ['reset_audio_edit', 'format_audio_edit_subtitles', 'quick_process_audio_edit', 'compress_audio_edit_silence', 'clean_audio_edit_fillers', 'transcribe_audio_edit', 'process_audio_edit_sound', 'export_audio_edit', 'query_audio_edit_tasks', 'cancel_audio_edit_task', 'repair_audio_edit_region']) {
+for (const name of ['reset_audio_edit', 'format_audio_edit_subtitles', 'quick_process_audio_edit', 'compress_audio_edit_silence', 'clean_audio_edit_fillers', 'transcribe_audio_edit', 'process_audio_edit_sound', 'export_audio_edit', 'query_audio_edit_tasks', 'cancel_audio_edit_task', 'repair_audio_edit_region', 'insert_audio_edit_file']) {
   successData[name] = { resultRef: audioDocumentRef, ...verified, count: 1, shortenedMs: 100, durationFrames: 2400, tasks: [{ requestId: 'task', documentId: 'audio', kind: 'processing', state: 'completed', progress: 100 }] }
 }
 
