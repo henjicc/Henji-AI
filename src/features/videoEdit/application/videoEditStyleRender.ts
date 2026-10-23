@@ -1,5 +1,6 @@
 import { BufferTarget, CanvasSource, Mp4OutputFormat, Output } from 'mediabunny'
 import { createLogger } from '@/core/logging'
+import { notExecutedFailure } from '@/core/application-control/execution/writeExecution'
 import { styleGuideMissingSections } from '@/core/videoEdit/styles/styleGuide'
 import { nextVideoEditStyleVersion, videoEditStyleContentHash, type VideoEditStyle } from '@/core/videoEdit/styles/styleSchemas'
 import { renderPresetPreviewFrame, styleSampleTimeline } from './videoEditPresetPreview'
@@ -30,6 +31,8 @@ export async function renderVideoEditStyle(styleId: string, signal: AbortSignal,
   if (entry.builtin) throw new Error('内置风格只读，已带预览；要修改请先复制成个人风格再渲染。')
   const style: VideoEditStyle = entry.style
   logger.info('style.render.start', '渲染风格样片', { context: { styleId, width: style.sample.width, height: style.sample.height, fps: style.sample.fps } })
+  // 只有最后保存进风格库才写入；在那之前失败（样片代码编译不过、某帧没有画面、取消）什么都没改，可以修正后直接重试。
+  let saving = false
   try {
     const timeline = await styleSampleTimeline(style.sample, signal)
     const size = fit(style.sample.width, style.sample.height, PREVIEW_LONG_EDGE)
@@ -62,10 +65,14 @@ export async function renderVideoEditStyle(styleId: string, signal: AbortSignal,
     const contentHash = await videoEditStyleContentHash(style)
     const revision = nextVideoEditStyleVersion(style, contentHash)
     signal.throwIfAborted()
+    saving = true
     const saved = await videoEditStyleLibrary.saveStyle({ ...style, contentHash, version: revision.version }, media)
     const missing = styleGuideMissingSections(style.guide)
     const warnings = missing.length ? [`说明书还缺这些栏目：${missing.join('、')}。`] : []
     logger.info('style.render.completed', '风格样片已渲染', { context: { styleId, version: revision.version, changed: revision.changed, frames: timeline.frames, previewBytes: media.preview.byteLength } })
     return { entry: saved, version: revision.version, changed: revision.changed, warnings, frames: timeline.frames }
-  } catch (error) { logger.error('style.render.failed', '风格样片渲染失败', { error, context: { styleId } }); throw error }
+  } catch (error) {
+    logger.error('style.render.failed', '风格样片渲染失败', { error, context: { styleId, saving } })
+    throw saving ? error : notExecutedFailure(error)
+  }
 }

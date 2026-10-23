@@ -123,13 +123,13 @@ export async function stopWebRecording(recordingId: string): Promise<WebRecordin
  * the copy gets a new id when the id is already used, so the two never resolve to each other.
  */
 export async function importWebRecordingToProject(request: WebRecordingImportRequest): Promise<WebRecordingSummary> {
-  const source = request.recordingId ? await resolveWebRecordingDirectory(request.recordingId) : path.resolve(request.source!)
-  if (!(await fs.stat(source).catch(() => null))?.isDirectory()) throw new Error('录制文件夹不存在')
-  const manifest = await new WebRecordingStore(source).readManifest()
-  if (manifest.status === 'recording') throw new Error('这段网页录制还没有保存完整（仍标记为录制中），不能放进项目')
+  const source = await notImported(async () => request.recordingId ? await resolveWebRecordingDirectory(request.recordingId) : path.resolve(request.source!))
+  if (!(await fs.stat(source).catch(() => null))?.isDirectory()) throw notImportedError(new Error('录制文件夹不存在'))
+  const manifest = await notImported(() => new WebRecordingStore(source).readManifest())
+  if (manifest.status === 'recording') throw notImportedError(new Error('这段网页录制还没有保存完整（仍标记为录制中），不能放进项目'))
   const documents = getDocumentService()
   const title = request.name?.trim() || manifest.title || (stripHenjiExtension('web_recording', path.basename(source)) ?? path.basename(source)) || defaultProjectRecordingTitle(manifest.app.name, new Date(manifest.createdAt))
-  const created = await documents.createFolderDocumentLocation({ kind: 'web_recording', container: { kind: 'project', projectId: request.projectId }, name: webRecordingFileName(title) })
+  const created = await notImported(() => documents.createFolderDocumentLocation({ kind: 'web_recording', container: { kind: 'project', projectId: request.projectId }, name: webRecordingFileName(title) }))
   try {
     await copyDirectoryContentsNoOverwrite(source, created.path, from => path.basename(from) !== 'edit-events')
     const id = await webRecordingIdTaken(manifest.id) ? crypto.randomUUID() : manifest.id
@@ -138,13 +138,24 @@ export async function importWebRecordingToProject(request: WebRecordingImportReq
     await store.writeManifest({ ...rest, id, title: created.name })
     await documents.indexDocumentAt(created.path)
   } catch (error) {
-    await fs.rm(created.path, { recursive: true, force: true }).catch(() => undefined)
-    throw error
+    // 副本整个删干净才算“没有放进项目”；删不掉时项目里留了半份，如实报原错误，由调用方核对。
+    const cleaned = await fs.rm(created.path, { recursive: true, force: true }).then(() => true, () => false)
+    throw cleaned ? notImportedError(error) : error
   }
   logger.info('网页录制已放进项目', { event: 'web_replay.recording.imported', context: { projectId: request.projectId, source, directory: created.path } })
   const summary = (await listWebRecordings()).find(item => item.directory === created.path)
   if (!summary) throw new Error('网页录制已复制进项目，但没能读回，请重新列出网页录制')
   return summary
+}
+
+/** 放进项目没有成功、项目里也没留下任何东西：渲染层据此告诉助手可以修正后直接重试。 */
+function notImportedError(error: unknown): Error {
+  const failure = error instanceof Error ? error : new Error(String(error))
+  failure.name = 'WebRecordingNotImportedError'
+  return failure
+}
+async function notImported<T>(work: () => T | Promise<T>): Promise<T> {
+  try { return await work() } catch (error) { throw notImportedError(error) }
 }
 
 const TRASH = '.trash'

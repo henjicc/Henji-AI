@@ -96,6 +96,17 @@ export class ApplicationWriteExecution {
   }
 }
 
+/**
+ * 领域在任何业务写入之前就失败（样片代码编译不过、来源文件夹缺失、复制失败但已清理干净）时用它包装再抛出：
+ * 明确告诉执行层这次没有改动任何东西，调用方修正后可以直接用新的操作标识重试，不必请用户核对。
+ * 只有确实没有写入、没有计费、没有其他副作用时才能用。
+ */
+export function notExecutedFailure(error: unknown): Error {
+  const failure = error instanceof Error ? error : new Error(String(error))
+  const details = (failure as { details?: Record<string, unknown> }).details
+  return Object.assign(failure, { details: { ...details, execution: { notExecuted: true } } })
+}
+
 const channels = new WeakSet<object>()
 
 /** 领域分阶段操作使用同一个包装；准备阶段不调用 run/paid，异常自动为零执行。 */

@@ -6,6 +6,7 @@ import type { CapabilityExecutionContext } from '@/features/application-control'
 import { getPlatform } from '@/platform'
 import { finishWebAppBackupAudio, startWebAppBackupAudio } from './webAppBackupAudio'
 import { createLogger } from '@/core/logging'
+import { notExecutedFailure } from '@/core/application-control/execution/writeExecution'
 import { DEFAULT_WEB_APP_BACKUP, loadRecordingSetup, webAppBackupOptions } from '@/services/recordingSetupModel'
 import { WEB_APP_RECORDING_DISABLED_MESSAGE, webAppRecordingEnabled } from '../useWebAppRecordingSwitch'
 
@@ -131,6 +132,7 @@ export async function executeWebAppCapability(id: string, input: unknown, contex
     if (permissions && !permissions.includes('screen_recording:read')) throw new Error('PERMISSION_DENIED:读取网页录制需要 screen_recording:read 权限')
     const parsed = importWebRecordingToProjectCapability.inputSchema.parse(input)
     const summary = await platform.importToProject({ projectId: parsed.projectId, ...(parsed.recordingRef ? { recordingId: parsed.recordingRef.id } : {}), ...(parsed.path ? { source: parsed.path } : {}), ...(parsed.name ? { name: parsed.name } : {}) })
+      .catch((error: unknown) => { throw error instanceof Error && error.name === 'WebRecordingNotImportedError' ? notExecutedFailure(error) : error })
     const listed = (await getPlatform().documents.listDocuments({ kind: 'web_recording', includeMissing: false })).some(document => document.id === summary.id)
     return { resultRef: { kind: RECORDING, id: summary.id }, documentRef: { kind: 'documents.document', id: summary.id }, directory: summary.directory, verified: listed && summary.projectId === parsed.projectId }
   }

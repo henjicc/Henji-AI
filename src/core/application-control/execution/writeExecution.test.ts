@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ApplicationWriteExecution, ApplicationWriteFailure, applicationWriteChannel, assertApplicationWriteChannel } from './writeExecution'
+import { ApplicationWriteExecution, ApplicationWriteFailure, applicationWriteChannel, assertApplicationWriteChannel, notExecutedFailure } from './writeExecution'
 import { ApplicationPreflightFailure, ApplicationTransactionFailure } from './transactionFailure'
 
 describe('统一写执行通道', () => {
@@ -14,6 +14,15 @@ describe('统一写执行通道', () => {
     await expect(handler({}, {})).rejects.toMatchObject({ execution: { notExecuted: false, targetMutation: 'unknown' } })
     const rejected = applicationWriteChannel(async (_input, context) => context.execution.preflight(() => { throw new Error('missing') }))
     await expect(rejected({}, {})).rejects.toMatchObject({ execution: { notExecuted: true } })
+  })
+  it('领域在写入前失败并显式标明未执行时是零执行，原因与原有细节都保留', async () => {
+    // 样片代码编译不过、复制失败但已清理干净：调用方修正后直接重试，不应被“结果未知”的保护挡住
+    const cause = Object.assign(new Error('Parse error @:169:3'), { details: { stage: 'compile' } })
+    const handler = applicationWriteChannel(() => { throw notExecutedFailure(cause) })
+    await expect(handler({}, {})).rejects.toMatchObject({ message: 'Parse error @:169:3', execution: { notExecuted: true, targetMutation: 'none' } })
+    expect(cause).toMatchObject({ details: { stage: 'compile', execution: { notExecuted: true } } })
+    const late = applicationWriteChannel((_input, context) => { context.execution.report({ targetMutation: 'applied' }); throw notExecutedFailure(new Error('after write')) })
+    await expect(late({}, {})).rejects.toMatchObject({ execution: { notExecuted: false } })
   })
   it('已进入统一包装的加载前拒绝是明确零执行，且保留领域原因', async () => {
     const cause = Object.assign(new Error('格式不支持'), { name: 'PersistenceError' })
