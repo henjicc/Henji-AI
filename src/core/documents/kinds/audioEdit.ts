@@ -1,10 +1,11 @@
 import { z } from 'zod'
 import { audioEditGainRegionsSchema, audioEditRepairsSchema } from '../../audioEdit/regions'
 
+import { henjiExtension, henjiLegacyExtensions } from '../../fileExtensions'
 import type { DocumentKindDescriptor } from './registry'
 
 /*
- * 口播（`.henji-audio`，3.3 口播接入）：可以独立存放（作品目录“口播”文件夹），也可以放进项目。
+ * 口播（`.hjaud`，3.3 口播接入）：可以独立存放（作品目录“口播”文件夹），也可以放进项目。
  *
  * 内容 = 口播剪辑工程去掉外壳字段（ID、名称、创建 / 修改时间、版本由文档外壳表达）后的部分，内存形态、位置都是绝对路径：
  * - source：导入的音频或视频（默认引用原文件，重要记录 006）；新建空文档（如助手 create_document）为 null，
@@ -60,7 +61,8 @@ function isEmptyAudioEditContent(content: AudioEditDocumentContent): boolean {
 
 export const audioEditDocumentKind: DocumentKindDescriptor<AudioEditDocumentContent> = {
   id: 'audio_edit',
-  extension: '.henji-audio',
+  extension: henjiExtension('audio_edit'),
+  legacyExtensions: henjiLegacyExtensions('audio_edit'),
   standaloneFolderNames: { zh: '口播', en: 'Voiceovers' },
   untitledNames: { zh: '未命名音频', en: 'Untitled Audio' },
   storage: 'json',

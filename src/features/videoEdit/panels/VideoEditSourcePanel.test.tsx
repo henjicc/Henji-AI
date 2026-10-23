@@ -19,7 +19,7 @@ vi.mock('@/hooks/useWaveformData', () => ({ useWaveformData: () => ({ status: 'i
 beforeEach(() => {
   installHarnessNativeStorage(); feedback.scrub.mockClear()
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} })
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('/fixture/source.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('/fixture/source.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
 })
 afterEach(async () => { cleanup(); for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })

@@ -128,14 +128,14 @@ export function validatePackageEntryPath(entryName: string): string {
     || path.posix.isAbsolute(entryName)
     || /^[A-Za-z]:/.test(entryName)
   ) {
-    throw new Error(`Unsafe .henjiimg entry path: ${entryName}`)
+    throw new Error(`Unsafe .hjimg entry path: ${entryName}`)
   }
   const segments = entryName.split('/')
   if (segments.some((segment) => !segment || segment === '.' || segment === '..')) {
-    throw new Error(`Unsafe .henjiimg entry path: ${entryName}`)
+    throw new Error(`Unsafe .hjimg entry path: ${entryName}`)
   }
   if (path.posix.normalize(entryName) !== entryName) {
-    throw new Error(`Unsafe .henjiimg entry path: ${entryName}`)
+    throw new Error(`Unsafe .hjimg entry path: ${entryName}`)
   }
   if (
     entryName !== HENJI_IMAGE_PACKAGE_MANIFEST
@@ -143,14 +143,14 @@ export function validatePackageEntryPath(entryName: string): string {
     && !/^resources\/[a-f0-9]{64}$/.test(entryName)
     && !THUMBNAIL_PATH_PATTERN.test(entryName)
   ) {
-    throw new Error(`Unsupported .henjiimg entry path: ${entryName}`)
+    throw new Error(`Unsupported .hjimg entry path: ${entryName}`)
   }
   return entryName
 }
 
 function parseResource(value: unknown): HenjiImagePackageResource {
-  if (!isRecord(value)) throw new Error('Invalid .henjiimg resource record')
-  if (typeof value.resourceId !== 'string') throw new Error('Invalid .henjiimg resource id')
+  if (!isRecord(value)) throw new Error('Invalid .hjimg resource record')
+  if (typeof value.resourceId !== 'string') throw new Error('Invalid .hjimg resource id')
   const resourceId = value.resourceId as ResourceId
   const sha256 = validateHash(value.sha256, 'resource')
   if (parseResourceId(resourceId) !== sha256) throw new Error('Resource id does not match SHA-256')
@@ -167,9 +167,9 @@ function parseResource(value: unknown): HenjiImagePackageResource {
 
 function parseThumbnail(value: unknown): HenjiImagePackageThumbnail | undefined {
   if (value === undefined) return undefined
-  if (!isRecord(value)) throw new Error('Invalid .henjiimg thumbnail record')
+  if (!isRecord(value)) throw new Error('Invalid .hjimg thumbnail record')
   if (typeof value.path !== 'string' || !THUMBNAIL_PATH_PATTERN.test(value.path)) {
-    throw new Error('Invalid .henjiimg thumbnail path')
+    throw new Error('Invalid .hjimg thumbnail path')
   }
   const extension = value.path.slice(value.path.lastIndexOf('.') + 1)
   const expectedMediaType = extension === 'png'
@@ -178,7 +178,7 @@ function parseThumbnail(value: unknown): HenjiImagePackageThumbnail | undefined 
       ? 'image/webp'
       : null
   if (!expectedMediaType || value.mediaType !== expectedMediaType) {
-    throw new Error('Invalid .henjiimg thumbnail media type')
+    throw new Error('Invalid .hjimg thumbnail media type')
   }
   return {
     path: value.path,
@@ -206,12 +206,12 @@ function parseExternalSources(value: unknown): HenjiImageExternalSource[] | unde
 }
 
 export function validateHenjiImagePackageManifest(value: unknown): HenjiImagePackageManifest {
-  if (!isRecord(value)) throw new Error('Invalid .henjiimg manifest: expected object')
+  if (!isRecord(value)) throw new Error('Invalid .hjimg manifest: expected object')
   if (value.packageFormat !== HENJI_IMAGE_PACKAGE_FORMAT || value.packageVersion !== HENJI_IMAGE_PACKAGE_VERSION) {
-    throw new Error('Unsupported .henjiimg package format')
+    throw new Error('Unsupported .hjimg package format')
   }
-  if (typeof value.createdAt !== 'string') throw new Error('Invalid .henjiimg creation time')
-  if (!Array.isArray(value.resources)) throw new Error('Invalid .henjiimg resource list')
+  if (typeof value.createdAt !== 'string') throw new Error('Invalid .hjimg creation time')
+  if (!Array.isArray(value.resources)) throw new Error('Invalid .hjimg resource list')
   const resources = value.resources.map(parseResource)
   const ids = new Set<ResourceId>()
   for (const resource of resources) {

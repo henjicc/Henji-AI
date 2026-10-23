@@ -34,7 +34,7 @@ beforeEach(() => {
   useVideoEditEffectLibraryStore.setState({ favorites: [], presets: [] })
   installHarnessNativeStorage()
   vi.stubGlobal('PointerEvent', class extends MouseEvent { readonly pointerId: number; constructor(type: string, init: PointerEventInit = {}) { super(type, init); this.pointerId = init.pointerId ?? 1 } })
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue(path.resolve(path.sep, 'keyframes.henji-video'))
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue(path.resolve(path.sep, 'keyframes.hjvid'))
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
 })
 afterEach(async () => {

@@ -27,12 +27,12 @@ it('移到回收站、删除空草稿时调用登记的内部缓存清理；单�
 it('打开别处的文档文件：所在文件夹登记为外部位置并出现在列表；与已有文档同 ID 时换新 ID（4.4）', async () => {
   const { service } = env.services
   const original = await service.createDocument({ kind: 'canvas', container: { kind: 'user' }, name: '原件' })
-  const copyPath = path.join(env.outside, '拷贝.henji-canvas')
+  const copyPath = path.join(env.outside, '拷贝.hjcvs')
   await fsp.copyFile(original.meta.path, copyPath)
   const opened = await service.registerExternalDocument(copyPath)
   expect(opened.path).toBe(copyPath)
   expect(opened.id).not.toBe(original.meta.id)
   expect(opened.external).toBe(true)
   expect((await service.listDocuments()).map((document) => document.id).sort()).toEqual([original.meta.id, opened.id].sort())
-  await expect(service.registerExternalDocument(path.join(env.outside, '不存在.henji-canvas'))).rejects.toThrow('请选择一个文档文件')
+  await expect(service.registerExternalDocument(path.join(env.outside, '不存在.hjcvs'))).rejects.toThrow('请选择一个文档文件')
 })

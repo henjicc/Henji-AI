@@ -40,7 +40,7 @@ function requirePersistedCreatedDocument(created, read) {
   }
   if (!read || read.meta?.id !== documentId || read.meta.kind !== 'camera_stage'
     || read.meta.name !== created.name || read.meta.draft !== false
-    || !String(read.meta.path ?? '').endsWith(`${created.name}.henji-stage`)) {
+    || !String(read.meta.path ?? '').endsWith(`${created.name}.hjstg`)) {
     throw new Error(`后台创建的镜头参考没有按返回引用落盘：${JSON.stringify(read?.meta ?? null)}`)
   }
   return documentId

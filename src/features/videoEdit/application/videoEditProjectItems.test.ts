@@ -62,7 +62,7 @@ beforeEach(() => {
   vi.stubGlobal('OffscreenCanvas', class { getContext() { return { font: '', measureText(text: string) { const width = text.length * Number.parseFloat(this.font); return { width, actualBoundingBoxLeft: 0, actualBoundingBoxRight: width } } } } })
   installHarnessNativeStorage(); files.clear()
   vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue({ sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) })
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/project-items.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/project-items.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, value) => { files.set(path, value) })
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
   vi.spyOn(getPlatform().system.paths, 'dirname').mockResolvedValue('D:/media')
@@ -203,7 +203,7 @@ it('拖进空序列：不新建序列，按素材改这条序列的规格并落�
 })
 it('重新定位只更新原剪辑引用并关闭旧源；关闭重开不会接受旧异步结果', async () => {
   const first = await fixture(); const firstId = first.document.id
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValueOnce('D:/other-project.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValueOnce('D:/other-project.hjvid')
   const other = await createVideoEditProject(); const otherId = other!.document.id
   const image = { id: 'relink-still', name: '原图', kind: 'image' as const, path: 'D:/media/old.png', width: 320, height: 180, durationSeconds: 0, assetId: 'old-asset' }
   appendVideoEditMedia(firstId, image); appendVideoEditMedia(otherId, image)

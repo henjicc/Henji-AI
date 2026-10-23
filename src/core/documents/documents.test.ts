@@ -41,7 +41,7 @@ describe('名称规则（Windows 文件名规则）', () => {
     for (const name of ['a/b', 'a\\b', 'a:b', 'a*b', 'a?b', 'a"b', 'a<b', 'a>b', 'a|b', 'a\u0001b']) {
       expect(normalizeEntryName(name)).toMatchObject({ ok: false, reason: 'illegal_characters' })
     }
-    for (const name of ['CON', 'con', 'Nul.txt', 'COM1', 'lpt9', 'COM¹', 'aux.henji-canvas']) {
+    for (const name of ['CON', 'con', 'Nul.txt', 'COM1', 'lpt9', 'COM¹', 'aux.hjcvs']) {
       expect(normalizeEntryName(name)).toMatchObject({ ok: false, reason: 'reserved' })
     }
     expect(normalizeEntryName('CONSOLE')).toEqual({ ok: true, name: 'CONSOLE' })
@@ -61,9 +61,9 @@ describe('名称规则（Windows 文件名规则）', () => {
   })
 
   it('按扩展名取文档名（扩展名不分大小写）', () => {
-    expect(documentNameFromFileName('分镜.HENJI-CANVAS', '.henji-canvas')).toBe('分镜')
-    expect(documentNameFromFileName('分镜.henji-stage', '.henji-canvas')).toBeNull()
-    expect(documentNameFromFileName('.henji-canvas', '.henji-canvas')).toBeNull()
+    expect(documentNameFromFileName('分镜.HJCVS', '.hjcvs')).toBe('分镜')
+    expect(documentNameFromFileName('分镜.hjstg', '.hjcvs')).toBeNull()
+    expect(documentNameFromFileName('.hjcvs', '.hjcvs')).toBeNull()
   })
 })
 
@@ -107,7 +107,7 @@ describe('项目说明', () => {
     const saved = buildProjectManifest({ ...manifest, draft: false, mainVideoEditId: 'v1' })
     expect(saved).not.toHaveProperty('draft')
     expect(saved.mainVideoEditId).toBe('v1')
-    expect(inferProjectLocale(['生成结果', 'a.henji-video'], 'en')).toBe('zh')
+    expect(inferProjectLocale(['生成结果', 'a.hjvid'], 'en')).toBe('zh')
     expect(inferProjectLocale(['media'], 'zh')).toBe('en')
     expect(inferProjectLocale([], 'zh')).toBe('zh')
     expect(() => parseProjectManifestText(JSON.stringify({ ...manifest, folders: { generated: '../x', materials: 'm' } }))).toThrow('项目说明无效')
@@ -118,12 +118,12 @@ describe('文档类型登记', () => {
   it('文档类型的扩展名、独立存放文件夹与存储方式', () => {
     const rows = DOCUMENT_KINDS.map((kind) => [kind.id, kind.extension, kind.standaloneFolderNames, kind.storage, kind.version])
     expect(rows).toEqual([
-      ['video_edit', '.henji-video', null, 'json', VIDEO_EDIT_CONTENT_VERSION],
-      ['canvas', '.henji-canvas', { zh: '画布', en: 'Canvases' }, 'json', 1],
-      ['audio_edit', '.henji-audio', { zh: '口播', en: 'Voiceovers' }, 'json', 3],
-      ['camera_stage', '.henji-stage', { zh: '镜头参考', en: 'Camera Stages' }, 'json', 1],
-      ['image_document', '.henjiimg', { zh: '图片文档', en: 'Image Documents' }, 'package', 1],
-      ['screen_recording', '.henji-recording', { zh: '录制会话', en: 'Recordings' }, 'json', 23],
+      ['video_edit', '.hjvid', null, 'json', VIDEO_EDIT_CONTENT_VERSION],
+      ['canvas', '.hjcvs', { zh: '画布', en: 'Canvases' }, 'json', 1],
+      ['audio_edit', '.hjaud', { zh: '口播', en: 'Voiceovers' }, 'json', 3],
+      ['camera_stage', '.hjstg', { zh: '镜头参考', en: 'Camera Stages' }, 'json', 1],
+      ['image_document', '.hjimg', { zh: '图片文档', en: 'Image Documents' }, 'package', 1],
+      ['screen_recording', '.hjrec', { zh: '录制会话', en: 'Recordings' }, 'json', 23],
     ])
     expect(documentKindRegistry.forFileName('a.HenjiImg')?.id).toBe('image_document')
     expect(documentKindRegistry.forFileName('a.json')).toBeUndefined()
@@ -149,7 +149,7 @@ describe('文档类型登记', () => {
   it('重复的 ID、扩展名、独立文件夹与非法名称在登记时拒绝', () => {
     const canvas = documentKindRegistry.require('canvas')
     expect(() => createDocumentKindRegistry([canvas, canvas])).toThrow('重复登记')
-    expect(() => createDocumentKindRegistry([canvas, { ...documentKindRegistry.require('audio_edit'), extension: '.henji-canvas' }])).toThrow('扩展名重复')
+    expect(() => createDocumentKindRegistry([canvas, { ...documentKindRegistry.require('audio_edit'), extension: '.hjcvs' }])).toThrow('扩展名重复')
     expect(() => createDocumentKindRegistry([canvas, { ...documentKindRegistry.require('audio_edit'), standaloneFolderNames: { zh: '画布', en: 'Voice' } }])).toThrow('文件夹重名')
     expect(() => createDocumentKindRegistry([defineSkeletonDocumentKind({ id: 'canvas', extension: '.Bad', standaloneFolderNames: null, untitledNames: { zh: 'a', en: 'b' }, storage: 'json' })])).toThrow('扩展名无效')
     expect(() => createDocumentKindRegistry([defineSkeletonDocumentKind({ id: 'canvas', extension: '.ok', standaloneFolderNames: { zh: 'a:b', en: 'b' }, untitledNames: { zh: 'a', en: 'b' }, storage: 'json' })])).toThrow('不能用作文件名')

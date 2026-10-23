@@ -18,7 +18,7 @@ vi.mock('./videoEditCreativeSources', async importOriginal => ({ ...await import
 vi.mock('@/features/imageEdit/documents/imageDocumentRuntime', async importOriginal => ({ ...await importOriginal<Record<string, unknown>>(), ensureImageDocumentOpenInBackground: links.ensure }))
 vi.mock('@/commands/imageEditorV3', async importOriginal => ({ ...await importOriginal<Record<string, unknown>>(), loadImageEditorV3Document: links.load }))
 
-const docRef = { docId: 'poster', path: 'D:/作品/项目/短片/海报.henjiimg' }
+const docRef = { docId: 'poster', path: 'D:/作品/项目/短片/海报.hjimg' }
 function asset(patch: Partial<AssetRecord> = {}): AssetRecord {
   return { id: 'render-1', mediaType: 'image', displayName: '海报', filePath: 'D:/作品/项目/短片/生成结果/海报-1.png', displayUrl: '', source: 'canvas', mimeType: 'image/png', sizeBytes: 1024, width: 1920, height: 1080, durationSeconds: 0, thumbnailPath: null, thumbnailUrl: null, inspectionStatus: 'ready', inspectionError: null, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64), lastUsedAt: null, createdAt: 1, updatedAt: 1, tags: [], libraryIds: [], ...patch }
 }

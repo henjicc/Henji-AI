@@ -170,7 +170,7 @@ function createVideoEditCreativeResultsScene(context) {
         await sendMenu.click(); const backfill = page.getByRole('menuitem', { name: /替换回剪辑（原位置一帧）/ })
         await backfill.waitFor({ state: 'visible' }); evidence.imageReturnLabel = await backfill.innerText(); at = performance.now(); await backfill.click()
         // 编辑当前帧 = 一份图片文档：片段来源引用图片文档本身（保持链接，写回后自动重新渲染）
-        const edited = await savedClip(page, file, clip => clip.creativeSource?.type === 'document' && /\.henjiimg$/i.test(clip.creativeSource.docRef.path), '图片编辑结果没有回填原帧位置')
+        const edited = await savedClip(page, file, clip => clip.creativeSource?.type === 'document' && /\.hjimg$/i.test(clip.creativeSource.docRef.path), '图片编辑结果没有回填原帧位置')
         evidence.timings.imageBackfillMs = performance.now() - at
         assert.equal(edited.clip.start, 300); assert.ok(edited.clip.track > 1, '编辑帧必须位于原画面上方')
         const editedMedia = edited.document.media.find(media => media.id === edited.document.items.find(item => item.id === edited.clip.itemId).mediaId)
@@ -187,7 +187,7 @@ function createVideoEditCreativeResultsScene(context) {
         }, sceneStart)
 
         phase('voice-over')
-        // 3.3：口播是 .henji-audio 文档，经正式接口造数据（audioEditDocumentFixture.cjs）
+        // 3.3：口播是 .hjaud 文档，经正式接口造数据（audioEditDocumentFixture.cjs）
         const created = await createAudioEditDocument(page, { sourcePath: voice, name: '回填口播', granularity: 'word', transcriptRows: [
           ['cut', '删去', 0, 1, false], ['keep', '保留字幕', 1.5, 2.5, true],
         ] })

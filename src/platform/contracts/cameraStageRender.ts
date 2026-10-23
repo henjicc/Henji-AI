@@ -5,7 +5,7 @@ export interface CameraStageRenderRequest {
   requestId: string
   canvasProjectId: string
   nodeId: string
-  /** 镜头参考文档 ID（`.henji-stage` 文件头里的稳定 ID，3.2 起取代旧工程 ID）。 */
+  /** 镜头参考文档 ID（`.hjstg` 文件头里的稳定 ID，3.2 起取代旧工程 ID）。 */
   cameraStageDocumentId: string
   resolutionPreset: CameraStageRenderResolutionPreset
   outputKind: CameraStageRenderOutputKind

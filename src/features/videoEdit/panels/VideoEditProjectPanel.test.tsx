@@ -27,7 +27,7 @@ function View(): React.ReactElement { useSyncExternalStore(subscribeVideoEdit, v
 beforeEach(async () => {
   installHarnessNativeStorage(); files.clear(); onError = vi.fn()
   vi.spyOn(getPlatform().videoProxy, 'lookup').mockResolvedValue(null)
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/project-ui.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/project-ui.hjvid')
   vi.spyOn(getPlatform().system.dialog, 'open').mockResolvedValue(null)
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, value) => { files.set(path, value) })
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)

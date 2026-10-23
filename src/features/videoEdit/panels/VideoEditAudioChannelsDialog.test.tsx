@@ -10,7 +10,7 @@ import { VideoEditAudioChannelsDialog } from './VideoEditAudioChannelsDialog'
 
 beforeEach(() => {
   installHarnessNativeStorage()
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/fixture/dialog.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/fixture/dialog.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
 })
 afterEach(async () => { cleanup(); for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })

@@ -22,7 +22,7 @@ import type { DocumentCommitReason, DocumentPersistence, DocumentReadPurpose } f
 
 const packageKind: DocumentKindDescriptor<TestContent> = {
   id: 'image_document',
-  extension: '.henjiimg',
+  extension: '.hjimg',
   standaloneFolderNames: { zh: '图片文档', en: 'Image Documents' },
   untitledNames: { zh: '未命名图片', en: 'Untitled Image' },
   storage: 'package',

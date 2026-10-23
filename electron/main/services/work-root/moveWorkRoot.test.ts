@@ -48,7 +48,7 @@ function codeOf(error: unknown): string | undefined {
 beforeEach(async () => {
   base = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-work-root-'))
   oldRoot = path.join(base, '痕迹AI')
-  await writeFile(oldRoot, '项目/短片 A/短片 A.henji-video', '{"format":"henji-document"}')
+  await writeFile(oldRoot, '项目/短片 A/短片 A.hjvid', '{"format":"henji-document"}')
   await writeFile(oldRoot, '项目/短片 A/生成结果/a.png', 'png-bytes')
   await writeFile(oldRoot, '生成结果/b.mp4', 'video-bytes-video-bytes')
   await writeFile(oldRoot, '助手技能/示例/SKILL.md', '# 技能')

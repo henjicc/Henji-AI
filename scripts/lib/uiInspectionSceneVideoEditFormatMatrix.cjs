@@ -183,7 +183,7 @@ function createVideoEditFormatMatrixScene() {
           evidence.currentPhase = '生成并核对样本'; store()
           const described = matrix.ensureSamples({ only: definitions.map(sample => sample.id) })
           await page.evaluate(dir => window.henjiNative.media.allowRoot(dir), matrix.ROOT)
-          const importFile = path.join(ROOT, `import-${forced ?? 'auto'}-${Date.now()}.henji-video`)
+          const importFile = path.join(ROOT, `import-${forced ?? 'auto'}-${Date.now()}.hjvid`)
           await dialogs(app, [], importFile); await button(page, '新建项目').click(); await adoptNewVideoEditProject(page, importFile)
           await saved(page, importFile, () => true, '新建工程未保存')
 
@@ -261,7 +261,7 @@ function createVideoEditFormatMatrixScene() {
               clips: group.map(clip => ({ ...structuredClone(clip), id: `${id}-${clip.id}`, linkId: group.length > 1 ? `${id}-link` : clip.linkId, start: 0, duration: frames, sourceInUs: offsetUs, sourceRemainder: { numerator: 0, denominator: 1 } })) })
             for (const key of ['transitions', 'captions', 'markers']) delete sequence[key]
             if (!group[0].linkId || group.length === 1) sequence.clips.forEach(clip => { if (!clip.linkId) delete clip.linkId })
-            const projectFile = path.join(ROOT, `${id}.henji-video`); const output = path.join(ROOT, `${id}.mp4`)
+            const projectFile = path.join(ROOT, `${id}.hjvid`); const output = path.join(ROOT, `${id}.mp4`)
             fs.writeFileSync(projectFile, JSON.stringify(document))
             const pictureTrack = group.find(clip => clip.kind === 'video').track
             const expectedPts = frame => sample.video.pts[frame]
@@ -493,7 +493,7 @@ function createVideoEditFormatMatrixScene() {
           evidence.currentPhase = 'Tripo 用户素材'; store()
           const files = fs.readdirSync(TRIPO).filter(name => /\.(mp4|mov|mkv|mxf|webm)$/i.test(name)).map(name => path.join(TRIPO, name)).filter(file => fs.statSync(file).isFile()).sort()
           const stamp = Object.fromEntries(files.map(file => { const stat = fs.statSync(file); return [file, { size: stat.size, mtimeMs: stat.mtimeMs }] }))
-          const tripoFile = path.join(ROOT, `tripo-${forced ?? 'auto'}-${Date.now()}.henji-video`)
+          const tripoFile = path.join(ROOT, `tripo-${forced ?? 'auto'}-${Date.now()}.hjvid`)
           if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
           await page.evaluate(dir => window.henjiNative.media.allowRoot(dir), TRIPO)
           await dialogs(app, [], tripoFile); await button(page, '新建项目').click(); await adoptNewVideoEditProject(page, tripoFile); await saved(page, tripoFile, () => true, 'Tripo 工程未保存')

@@ -100,7 +100,7 @@ describe.skipIf(!process.versions.electron)('作品索引（SQLite）与扫描',
     expect(store.getDocument(doc.meta.id)).toBeNull()
     expect(store.getDocumentByPath(doc.meta.path)?.id).toBe('replacement')
     store.rebaseDocuments(project.path, path.join(env.outside, '新位置'))
-    expect(store.getDocument('replacement')?.path).toBe(path.join(env.outside, '新位置', '分镜.henji-canvas'))
+    expect(store.getDocument('replacement')?.path).toBe(path.join(env.outside, '新位置', '分镜.hjcvs'))
     store.addExternalLocation(env.outside, 'folder')
     store.clearRebuildableIndex()
     expect(store.listDocuments()).toEqual([])
@@ -155,7 +155,7 @@ describe.skipIf(!process.versions.electron)('作品索引（SQLite）与扫描',
 
     const raw = JSON.parse(await fsp.readFile(a.meta.path, 'utf8')) as Record<string, unknown>
     await fsp.writeFile(a.meta.path, JSON.stringify({ ...raw, content: { changed: true } }))
-    const movedPath = path.join(path.dirname(b.meta.path), '乙（改名）.henji-canvas')
+    const movedPath = path.join(path.dirname(b.meta.path), '乙（改名）.hjcvs')
     await fsp.rename(b.meta.path, movedPath)
     const report = await scanner.refresh()
     expect(report).toMatchObject({ readDocuments: 2, moved: 1, reassignedIds: 0 })
@@ -171,7 +171,7 @@ describe.skipIf(!process.versions.electron)('作品索引（SQLite）与扫描',
     const { service, scanner } = env.services
     const original = await service.createDocument({ kind: 'camera_stage', container: { kind: 'user' }, name: '镜头' })
     await scanner.refresh()
-    const copyPath = path.join(path.dirname(original.meta.path), '镜头 - 副本.henji-stage')
+    const copyPath = path.join(path.dirname(original.meta.path), '镜头 - 副本.hjstg')
     await fsp.copyFile(original.meta.path, copyPath)
     const report = await scanner.refresh()
     expect(report.reassignedIds).toBe(1)
@@ -205,7 +205,7 @@ describe.skipIf(!process.versions.electron)('作品索引（SQLite）与扫描',
     expect(report.reassignedIds).toBe(2)
     const copyManifest = JSON.parse(await fsp.readFile(path.join(copyRoot, '.henji', 'project.json'), 'utf8')) as { id: string; mainVideoEditId: string }
     expect(copyManifest.id).not.toBe(project.id)
-    const copyEdit = env.catalog.getDocumentByPath(path.join(copyRoot, '主剪辑.henji-video'))
+    const copyEdit = env.catalog.getDocumentByPath(path.join(copyRoot, '主剪辑.hjvid'))
     expect(copyEdit?.id).not.toBe(edit.meta.id)
     expect(copyManifest.mainVideoEditId).toBe(copyEdit?.id)
     expect(copyEdit?.projectId).toBe(copyManifest.id)
@@ -224,11 +224,11 @@ describe.skipIf(!process.versions.electron)('作品索引（SQLite）与扫描',
       await fsp.writeFile(target, text.replace(doc.meta.id, id))
       return target
     }
-    const inSubfolder = await place(path.join('整理', '分镜二.henji-canvas'), 'sub-doc')
-    await place(path.join('生成结果', '不扫.henji-canvas'), 'generated-doc')
-    await place(path.join('素材', '不扫.henji-canvas'), 'materials-doc')
-    await place(path.join('.henji', '不扫.henji-canvas'), 'internal-doc')
-    fs.writeFileSync(path.join(project.path, '坏的.henji-canvas'), '{')
+    const inSubfolder = await place(path.join('整理', '分镜二.hjcvs'), 'sub-doc')
+    await place(path.join('生成结果', '不扫.hjcvs'), 'generated-doc')
+    await place(path.join('素材', '不扫.hjcvs'), 'materials-doc')
+    await place(path.join('.henji', '不扫.hjcvs'), 'internal-doc')
+    fs.writeFileSync(path.join(project.path, '坏的.hjcvs'), '{')
     const plainFolder = path.join(env.workRoot, '项目', '手动建的')
     fs.mkdirSync(plainFolder)
 

@@ -33,7 +33,7 @@ import {
 } from './header'
 
 /*
- * `.henjiimg` 的头信息读写（3.5 图片文档）。
+ * `.hjimg` 的头信息读写（3.5 图片文档）。
  *
  * - 读：只解压 `henji-document.json` 这一个小条目；旧包没有头，才解压 manifest 推出头信息。
  * - 改：头信息与包内 V3 文档 ID 写在 zip 里，改不了单个条目，只能整包重写：

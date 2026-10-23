@@ -18,7 +18,7 @@ test('风格场景从内置资源导出生成包，正式解码后内容和两�
     const media = { preview: fs.readFileSync(path.join(resource, 'preview.mp4')),
       thumbnail: fs.readFileSync(path.join(resource, 'thumbnail.jpg')),
       anchors: fs.readdirSync(path.join(resource, 'anchors')).sort().map(file => fs.readFileSync(path.join(resource, 'anchors', file))) }
-    const filename = path.join(root, 'generated.henjistyle')
+    const filename = path.join(root, 'generated.hjsty')
     let exported = false
     const evidence = await prepareStylePackage(filename, async output => {
       exported = true

@@ -12,8 +12,7 @@ import {
   toTimestamp,
   type DocumentEnvelope,
 } from '../../../../src/core/documents/envelope'
-import type { DocumentKindDescriptor, DocumentKindRegistry } from '../../../../src/core/documents/kinds'
-import { documentNameFromFileName } from '../../../../src/core/documents/naming'
+import { documentNameForKind, type DocumentKindDescriptor, type DocumentKindRegistry } from '../../../../src/core/documents/kinds'
 import type { DocumentListSummary, DocumentMeta } from '../../../../src/core/documents/types'
 import { createLocationCodec, type LocationContext, type LocationReport } from '../../../../src/core/storage/locationCodec'
 import type { IndexedDocument } from './catalog'
@@ -62,7 +61,7 @@ export interface DocumentFileDependencies {
 
 /** 文件名去掉扩展名就是文档名（项目名就是文件夹名，同理）。 */
 export function documentNameOf(kind: DocumentKindDescriptor, filePath: string): string {
-  return documentNameFromFileName(path.basename(filePath), kind.extension) ?? path.basename(filePath)
+  return documentNameForKind(kind, path.basename(filePath)) ?? path.basename(filePath)
 }
 
 export function kindForPath(kinds: DocumentKindRegistry, filePath: string): DocumentKindDescriptor {

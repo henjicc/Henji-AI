@@ -11,7 +11,7 @@ import { insertVideoEditTracks, removeVideoEditTracks, videoEditEdgeTracks, vide
 import { closeVideoEditProject, listVideoEditInstances, undoVideoEdit } from './videoEditService'
 import { addVideoEditTracks, deleteVideoEditTracks } from './videoEditTimeline'
 
-beforeEach(() => { installHarnessNativeStorage(); vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/tracks.henji-video') })
+beforeEach(() => { installHarnessNativeStorage(); vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/tracks.hjvid') })
 afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 
 const shape = (tracks: Array<{ index: number; kind: string; name: string }>) => tracks.map(track => [track.kind, track.index, track.name])

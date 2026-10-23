@@ -11,7 +11,7 @@ import { createVideoEditTestProject } from './videoEditDocumentTestKit'
 import { createVideoEditAnnotation, deleteVideoEditAnnotation, reviewVideoEditAnnotation, sendVideoEditAnnotations, undoVideoEditAnnotationChange, updateVideoEditAnnotation } from './videoEditAnnotations'
 import { appendVideoEditClip, closeVideoEditProject, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit } from './videoEditService'
 
-beforeEach(() => { installHarnessNativeStorage(); vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/annotations.henji-video'); vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined) })
+beforeEach(() => { installHarnessNativeStorage(); vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/annotations.hjvid'); vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined) })
 afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); useAssistantUiStore.getState().setPendingGoal(null); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 it('外部公共入口发现/回读标注与thread，拒绝越权通过；内容+回复+addressed原子一步撤销回open', async () => {
   const owner = await createVideoEditTestProject(); const id = owner.document.id; appendVideoEditClip(id)

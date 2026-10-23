@@ -25,7 +25,7 @@ export async function createRecordingStepImageDocument(step: RecordingProductSte
   image.transform = [scale, 0, 0, scale, 32, imageY]
   document.layers = [background, image, createImageEditTextLayerV3(crypto.randomUUID(), '步骤标题', title), createImageEditTextLayerV3(crypto.randomUUID(), '步骤说明', description)]
   await saveImageEditorV3Document({ requestId: crypto.randomUUID(), document, expectedRevision: 0, resourceRefs: [resource.resource.resourceRef] }, signal)
-  // Creation publishes the standard .henjiimg package; thereafter cancellation must preserve it.
+  // Creation publishes the standard .hjimg package; thereafter cancellation must preserve it.
   const handle = await createImageDocument({ documentId: document.id, emptyUntilRevision: null })
   const read = await loadImageEditorV3Document({ requestId: crypto.randomUUID(), documentRef: `image-edit-v3:${document.id}` })
   if (!read || read.document.layers.length !== 4 || read.document.id !== handle.id) throw new Error('图片文档已保留，但回读校验失败，请从作品列表核对。')

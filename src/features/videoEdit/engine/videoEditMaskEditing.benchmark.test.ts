@@ -20,7 +20,7 @@ afterEach(async () => {
 // Explicit opt-in: timings are evidence, never machine-dependent CI assertions.
 it.skipIf(process.env.HENJI_MASK_BENCH !== '1')('4K mask rasterization and real gesture publication benchmark', async () => {
   installHarnessNativeStorage()
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('/mask-benchmark.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('/mask-benchmark.hjvid')
   const owner = (await createVideoEditTestProject())!
   appendVideoEditMedia(owner.document.id, { id: 'bench-media', name: 'bench', path: '/bench.mp4', kind: 'video', durationSeconds: 20, width: 3840, height: 2160 })
   appendVideoEditClip(owner.document.id, 'bench-media')

@@ -25,7 +25,7 @@ function createVideoEditScrubScene() {
       const clip = { id: 'base', mediaId: 'source', name: '4K60 主画面', kind: 'video', track: 1, start: 0, duration: 360, sourceInUs: 0, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '' }
       const fixture = { format: 'henji-video-project', version: 1, id: 'scrub-4k60', name: '4K60 连续拖动验证', revision: 0, width: 3840, height: 2160, fps: 60, media: [{ id: 'source', name: path.basename(source), path: source, kind: 'video', durationSeconds: Number(videoTrack.duration), width: 3840, height: 2160 }], clips: [clip, { ...clip, id: 'overlay', name: '4K60 叠加', track: 2, sourceInUs: 1000000, x: .3, y: .3, scale: .3 }, { ...clip, id: 'text', mediaId: undefined, name: '文字', kind: 'text', track: 3, text: '4K60', y: -.35, scale: .5 }], annotations: [] }
       const project = require('./uiInspectionSceneVideoEditProbe.cjs').videoEditFixtureProject(fixture)
-      const file = path.join(root, 'scrub.henji-video'); fs.writeFileSync(file, JSON.stringify(project))
+      const file = path.join(root, 'scrub.hjvid'); fs.writeFileSync(file, JSON.stringify(project))
       await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file)
       await observeWorkers(page)
       await button(page, '剪辑').click(); const openedAt = performance.now(); await openVideoEditFile(page, file)
@@ -57,7 +57,7 @@ function createVideoEditScrubScene() {
           const longSource = path.join(root, `${path.basename(source, path.extname(source))}-40s.mp4`)
           if (!fs.existsSync(longSource)) execFileSync(ffmpegPath, ['-v', 'error', '-y', '-stream_loop', '-1', '-i', source, '-t', '40', '-c', 'copy', longSource], { windowsHide: true })
           const longProject = structuredClone(project); longProject.id = 'scrub-boundary'; longProject.media[0].path = longSource; longProject.media[0].durationSeconds = 40; longProject.sequences[0].clips.forEach(clip => { clip.duration = 36 * 60 })
-          const longFile = path.join(root, 'boundary.henji-video'); fs.writeFileSync(longFile, JSON.stringify(longProject))
+          const longFile = path.join(root, 'boundary.hjvid'); fs.writeFileSync(longFile, JSON.stringify(longProject))
           await button(page, '关闭项目').click()
           await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, longFile)
           await openVideoEditFile(page, longFile); await waitPresented(0, 'segment-start-failed')

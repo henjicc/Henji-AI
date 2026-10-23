@@ -9,7 +9,7 @@ import { appendVideoEditClip, beginVideoEditGesture, closeVideoEditProject, edit
 
 beforeEach(() => {
   installHarnessNativeStorage()
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/clip-properties.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/clip-properties.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
 })
 afterEach(async () => {

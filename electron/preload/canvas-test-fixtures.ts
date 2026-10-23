@@ -5,7 +5,7 @@ import type { HenjiCanvasTestFixture, HenjiCanvasTestFixtureCreateRequest, Henji
 /*
  * 测试夹具里的画布读写（只在自动化 / 隔离测试模式下存在，3.4）：取代原来直接写 storyboard_projects 的原始 SQL 通道。
  * 全部经正式文档接口（与界面同一组文档 IPC），不另开通道：
- * - 内容（节点、连线、媒体池、内嵌包位置）在 `.henji-canvas` 文件里；
+ * - 内容（节点、连线、媒体池、内嵌包位置）在 `.hjcvs` 文件里；
  * - 视口与撤销记录是按文档 ID 存在程序目录的会话状态（canvas.viewport / canvas.history）。
  * 应用里已打开的画布有内存实例：直接改文件后要 reload（或先返回列表关闭会话）再打开，才会按文件重新读取。
  */

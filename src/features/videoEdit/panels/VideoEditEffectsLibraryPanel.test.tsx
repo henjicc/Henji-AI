@@ -26,7 +26,7 @@ let instance: VideoEditInstance
 beforeEach(async () => {
   vi.clearAllMocks(); useVideoEditEffectLibraryStore.setState({ favorites: [], presets: [] })
   installHarnessNativeStorage()
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/effects-library.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/effects-library.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
   vi.spyOn(compositing, 'applyVideoEditBuiltinEffect')
   instance = await createVideoEditTestProject()

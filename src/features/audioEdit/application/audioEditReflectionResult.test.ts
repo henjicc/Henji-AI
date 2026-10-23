@@ -114,7 +114,7 @@ it('通过通用 change 删除词块并让成片映射同步缩短', async () =>
   try {
     const blockRef = { kind: 'audio_edit.transcript_block', id: 'audio-result:first' }
     expect((await app.change(blockRef, { 'audio_edit.transcript_block.included': false })).ok).toBe(true)
-    // 从文档文件回读（3.3：口播是 .henji-audio 文档）
+    // 从文档文件回读（3.3：口播是 .hjaud 文档）
     const project = harnessDocumentStore().stored('audio-result')?.content as AudioEditProjectDocument
     expect(project.transcript[0].included).toBe(false)
     expect(editedDurationFrames(buildAudioEditTimeline(project.source.durationFrames, project.transcript))).toBe(48_000)

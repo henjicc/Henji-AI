@@ -1,6 +1,6 @@
 import { createLogger } from '@/core/logging'
 import type { DocumentKindId, DocumentLink, DocumentMeta, DocumentSummary } from '@/core/documents/types'
-import { documentKindRegistry } from '@/core/documents/kinds'
+import { documentKindRegistry, readableDocumentExtensions } from '@/core/documents/kinds'
 import type { VideoEditCreativeSource } from '@/core/videoEdit/creativeResult'
 import type { EmbeddedHost } from '@/features/documents/embeddedDocuments'
 import { readGenerationResultMedia } from '@/features/generation/application/generationResultSource'
@@ -99,8 +99,8 @@ export function videoEditClipSource(projectId: string, clipId: string): VideoEdi
 
 export type VideoEditClipSourceOutcome =
   | { status: 'opened'; kind: DocumentKindId | 'generation' }
-  /** 来源文档找不到：可以重新定位（extension 是原来那份文档的扩展名）；生成记录找不到不能重新定位。 */
-  | { status: 'missing'; source: VideoEditCreativeSource; extension: string | null }
+  /** 来源文档找不到：可以重新定位（extensions 是原来那类文档能读取的全部扩展名）；生成记录找不到不能重新定位。 */
+  | { status: 'missing'; source: VideoEditCreativeSource; extensions: readonly string[] | null }
 
 /** 回到来源继续编辑：打开来源文档并定位到部位，或打开生成记录。 */
 export async function openVideoEditClipSource(projectId: string, clipId: string): Promise<VideoEditClipSourceOutcome> {
@@ -108,7 +108,7 @@ export async function openVideoEditClipSource(projectId: string, clipId: string)
   if (!source) throw new Error('这个片段没有记录来源，可能是直接导入的素材。')
   if (source.type === 'generation') {
     const record = await readGenerationResultMedia(source.recordId).catch(() => null)
-    if (!record) return { status: 'missing', source, extension: null }
+    if (!record) return { status: 'missing', source, extensions: null }
     openApplicationSurface('workspace.generation')
     revealGenerationTask(source.recordId)
     logger.info('回到来源：生成记录', { event: 'video_edit.clip_source.open.completed', context: { projectId, clipId, type: 'generation' } })
@@ -119,7 +119,8 @@ export async function openVideoEditClipSource(projectId: string, clipId: string)
   const summary = resolved.status === 'found' ? await operations.findDocument(resolved.meta.id).catch(() => null) : null
   if (!summary || summary.missing) {
     logger.warn('回到来源：来源文档找不到', { event: 'video_edit.clip_source.open.missing', context: { projectId, clipId } })
-    return { status: 'missing', source, extension: kindOfPath(source.docRef.path)?.extension ?? null }
+    const kind = kindOfPath(source.docRef.path)
+    return { status: 'missing', source, extensions: kind ? readableDocumentExtensions(kind) : null }
   }
   await openDocumentFromVideoEdit(projectId, summary, source.part)
   logger.info('回到来源：文档', { event: 'video_edit.clip_source.open.completed', context: { projectId, clipId, kind: summary.kind } })

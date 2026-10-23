@@ -25,7 +25,7 @@ let ensure: Mock<[SmartRegionRequest], Promise<SmartRegionStatus>>
 let cancel: Mock<[SmartRegionRequest], Promise<void>>
 beforeEach(() => {
   installHarnessNativeStorage()
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/smart-regions.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/smart-regions.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
   // 只替换主进程分析服务这一边界；协调、领域校验、事务与读回都是正式实现。
   resetVideoEditSmartRegionsForTests()

@@ -5,7 +5,7 @@ import { audioEditProjectFromDocument } from '../../../../src/core/audioEdit/doc
 import { getDocumentService } from '../documents/runtime'
 
 /*
- * 口播的主进程读取口（3.3 口播接入）：口播是作品目录或项目里的 `.henji-audio` 文档文件，
+ * 口播的主进程读取口（3.3 口播接入）：口播是作品目录或项目里的 `.hjaud` 文档文件，
  * 唯一的写入方是渲染层的文档会话（自动保存）。转写、停顿分析、试听、处理与导出在主进程按文档 ID 读文件，
  * 渲染层发起这些操作前先把修改写完（`withAudioEditProjectOperation` 里的 flush）。
  * 主进程不再写口播内容：转写、重新定位素材的结果返回给渲染层，由实例接收后经会话保存。

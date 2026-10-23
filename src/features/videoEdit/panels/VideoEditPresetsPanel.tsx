@@ -3,6 +3,7 @@ import { FolderInput, FolderOutput, Star } from 'lucide-react'
 import { UI_COVER_FRAME_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiFormRow, UiGroup, UiIconButton, UiModal, UiOptionButton, UiSearchInput, UiSegmented, UiSwitch } from '@/components/ui'
 import { useNotification } from '@/contexts/NotificationContext'
 import { openDialog, readTextFile, saveDialog, writeTextFile } from '@/platform/desktopApi'
+import { henjiDialogExtensions } from '@/core/fileExtensions'
 import { VIDEO_EDIT_PRESET_PANEL_CATEGORIES, VIDEO_EDIT_PRESET_CATEGORY_LABELS, VIDEO_EDIT_PRESET_DEFAULTABLE, VIDEO_EDIT_PRESET_MAX_RATING, VIDEO_EDIT_PRESET_PACKAGE_EXTENSION, type VideoEditPresetCategory } from '@/core/videoEdit/presetPackage'
 import { deleteVideoEditPreset, exportVideoEditPresetPackage, importVideoEditPresetPackage, listVideoEditPresets, setVideoEditPresetDefault, setVideoEditPresetRating, videoEditPresetExportable, videoEditPresetSource, type VideoEditPresetEntry } from '../application/videoEditPresetCatalog'
 import { applyVideoEditPreset } from '../application/videoEditPresetApply'
@@ -15,6 +16,7 @@ import type { VideoEditTransitionKind } from '@/core/videoEdit/transitions'
 const TILE_SIZE = { width: 320, height: 180 }
 const DETAIL_SIZE = { width: 640, height: 360 }
 const FILTERS = [{ name: '痕迹AI剪辑预设', extensions: [VIDEO_EDIT_PRESET_PACKAGE_EXTENSION, 'json'] }]
+const OPEN_FILTERS = [{ name: '痕迹AI剪辑预设', extensions: [...henjiDialogExtensions('preset_package'), 'json'] }]
 function status(entry: VideoEditPresetEntry): string[] {
   return [entry.isDefault ? '默认' : '', entry.recommended ? '推荐' : '', entry.rating ? `${entry.rating} 星` : ''].filter(Boolean)
 }
@@ -94,7 +96,7 @@ function Content({ instance, onError, visible = true }: { instance: VideoEditIns
   const apply = (entry: VideoEditPresetEntry): void => { if (!sequence) return; void applyVideoEditPreset(instance.document.id, sequence.id, entry.category, entry.id).then(text => showNotification(text), onError) }
   const importFiles = async (): Promise<void> => {
     try {
-      const selected = await openDialog({ multiple: true, filters: FILTERS }); const paths = selected === null ? [] : Array.isArray(selected) ? selected : [selected]
+      const selected = await openDialog({ multiple: true, filters: OPEN_FILTERS }); const paths = selected === null ? [] : Array.isArray(selected) ? selected : [selected]
       let count = 0
       for (const path of paths) count += (await importVideoEditPresetPackage(await readTextFile(path))).length
       if (count) showNotification(`已导入 ${count} 个预设。`)

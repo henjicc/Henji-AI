@@ -28,8 +28,8 @@ function createVideoEditTimelineScene() {
   return { id: 'video-edit-timeline', surface: '剪辑', name: '剪辑-统一命令真实混剪与32轨500片段4K60', writesUserData: true,
     setup: async (page, app, { capture }) => {
       const root = path.resolve('node_modules/.cache/video-edit-timeline'); fs.mkdirSync(root, { recursive: true })
-      const file = path.join(root, 'timeline.henji-video'); const pressureFile = path.join(root, 'pressure.henji-video')
-      const project = readVideoEditFile('node_modules/.cache/video-edit-code-controls/code-project.henji-video')
+      const file = path.join(root, 'timeline.hjvid'); const pressureFile = path.join(root, 'pressure.hjvid')
+      const project = readVideoEditFile('node_modules/.cache/video-edit-code-controls/code-project.hjvid')
       project.id = 'timeline-mixed'; project.name = '原生代码与关联混剪'; project.revision = 0
       project.sequences = [project.sequences[0]]; const sequence = project.sequences[0]
       sequence.id = 'timeline-mixed-sequence'; sequence.annotations = []
@@ -38,7 +38,7 @@ function createVideoEditTimelineScene() {
       const code = { ...sequence.clips.find(clip => clip.kind === 'code'), id: 'timeline-code', name: '原创代码', start: 0, duration: 180, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, track: 2 }
       sequence.clips = [video, audio, code]
       expandTracks(project); fs.writeFileSync(file, JSON.stringify(project))
-      const pressure = expandTracks(readVideoEditFile('node_modules/.cache/video-edit-scrub-original/scrub.henji-video'))
+      const pressure = expandTracks(readVideoEditFile('node_modules/.cache/video-edit-scrub-original/scrub.hjvid'))
       pressure.id = 'timeline-pressure'; pressure.name = '32轨500片段原素材4K60'; pressure.revision = 0
       pressure.sequences[0].id = 'timeline-pressure-sequence'
       pressure.sequences[0].clips.push(...Array.from({ length: 497 }, (_, index) => ({ ...pressure.sequences[0].clips[0], id: 'offscreen-' + index, start: 3600 + index * 4, duration: 2, track: 31 })))

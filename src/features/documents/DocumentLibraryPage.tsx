@@ -15,7 +15,7 @@ import {
   type ProjectLibrarySecondaryAction,
 } from '@/components/ProjectLibraryPage'
 import { AlertDialog, UI_TEXT_META_CLASS } from '@/components/ui'
-import { documentKindRegistry } from '@/core/documents/kinds'
+import { documentKindRegistry, readableDocumentExtensions } from '@/core/documents/kinds'
 import { MAX_ENTRY_NAME_LENGTH, normalizeEntryName } from '@/core/documents/naming'
 import type { DocumentContainerRef, DocumentKindId, DocumentSummary, NameCheckResult } from '@/core/documents/types'
 import { openDialog } from '@/platform/desktopApi'
@@ -268,8 +268,8 @@ export function DocumentLibraryPage({
   // 打开别处的文档（4.4）：选文件后登记所在项目或文件夹为外部位置，再按本页的打开方式打开
   const openExternalFile = useCallback((): void => {
     void run('openFile', async () => {
-      const extension = documentKindRegistry.require(kind).extension.slice(1)
-      const selected = await openDialog({ multiple: false, filters: [{ name: kindName, extensions: [extension] }] })
+      const extensions = readableDocumentExtensions(documentKindRegistry.require(kind)).map((extension) => extension.slice(1))
+      const selected = await openDialog({ multiple: false, filters: [{ name: kindName, extensions }] })
       const filePath = typeof selected === 'string' ? selected : Array.isArray(selected) ? selected[0] : null
       if (!filePath) return
       const document = await operations.registerExternalDocument(filePath)

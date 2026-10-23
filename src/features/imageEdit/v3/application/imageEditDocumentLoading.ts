@@ -29,7 +29,7 @@ export async function ensureImageEditDocumentInstanceV3(documentId: string): Pro
       documentRef: `image-edit-v3:${documentId}`,
     })
     let snapshot = await read()
-    // 图片文档（.henjiimg，3.5）在这台电脑上还没有工作副本：先打开它的文档会话（解包），再读。
+    // 图片文档（.hjimg，3.5）在这台电脑上还没有工作副本：先打开它的文档会话（解包），再读。
     if (!snapshot) {
       await ensureImageDocumentOpenInBackground(documentId)
       snapshot = await read()
@@ -61,7 +61,7 @@ export async function ensureImageEditDocumentInstanceV3(documentId: string): Pro
       resourceByteSizes: Object.fromEntries(snapshot.resources.map((resource) => [resource.resourceRef, resource.byteLength])),
     }, { getQueue: () => queue })
     await ensureImageEditDocumentBindingV3(instance)
-    // 图片文档要有文档会话，助手的修改才会在空闲时写回 .henjiimg；不是图片文档时什么也不做。
+    // 图片文档要有文档会话，助手的修改才会在空闲时写回 .hjimg；不是图片文档时什么也不做。
     void ensureImageDocumentOpenInBackground(documentId).catch(() => undefined)
     return instance
   })()

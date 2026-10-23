@@ -49,7 +49,7 @@ describe('项目：新建、改名、转正', () => {
       expect(refreshSpy).toHaveBeenCalledOnce()
       const read = await service.readDocument({ id: doc.meta.id })
       expect(read.content).toEqual({ latest: true })
-      expect(read.meta.path).toBe(path.join(moved.path, '文档.henji-canvas'))
+      expect(read.meta.path).toBe(path.join(moved.path, '文档.hjcvs'))
       expect(fs.existsSync(project.path)).toBe(false)
     } finally { lockSpy.mockRestore(); refreshSpy.mockRestore() }
   }, 3_000)
@@ -82,7 +82,7 @@ describe('项目：新建、改名、转正', () => {
     expect(fs.existsSync(project.path)).toBe(false)
     const read = await service.readDocument({ id: doc.meta.id })
     expect(read.content).toEqual({ latest: true })
-    expect(read.meta.path).toBe(path.join(moved.path, '文档.henji-canvas'))
+    expect(read.meta.path).toBe(path.join(moved.path, '文档.hjcvs'))
   })
 
   it('新建项目以草稿建在“项目”里，自动名顺延，写入按语言命名子文件夹的项目说明', async () => {
@@ -122,7 +122,7 @@ describe('项目：新建、改名、转正', () => {
     expect(renamed.path).toBe(path.join(env.workRoot, '项目', '正片'))
     expect(fs.existsSync(project.path)).toBe(false)
     const read = await service.readDocument({ id: doc.meta.id })
-    expect(read.meta.path).toBe(path.join(renamed.path, '分镜.henji-canvas'))
+    expect(read.meta.path).toBe(path.join(renamed.path, '分镜.hjcvs'))
     expect(read.content).toEqual({ media: path.join(renamed.path, '生成结果', 'a.png') })
     const caseOnly = await service.renameProject({ projectId: project.id, name: 'ZHENG正片' })
     expect(caseOnly.name).toBe('ZHENG正片')
@@ -147,7 +147,7 @@ describe('项目：新建、改名、转正', () => {
     expect(env.catalog.listExternalLocations()).toEqual([expect.objectContaining({ path: saved.path, kind: 'project' })])
     expect(env.granted).toContain(saved.path)
     const read = await service.readDocument({ id: doc.meta.id })
-    expect(read.meta).toMatchObject({ path: path.join(saved.path, '未命名剪辑 1.henji-video'), container: { kind: 'project', projectId: draft.id } })
+    expect(read.meta).toMatchObject({ path: path.join(saved.path, '未命名剪辑 1.hjvid'), container: { kind: 'project', projectId: draft.id } })
   })
 
   it('另选位置不能是项目自己里面、另一个项目里或程序目录；目标重名时报错且原项目不动', async () => {

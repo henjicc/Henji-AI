@@ -244,7 +244,7 @@ async function runAudioEditDocumentsRestart({ launch, userDataDir, outDir }) {
     const saved = await documentNamed(page, '口播一号')
     assert.equal(saved.draft, false, '保存后必须去掉草稿标记')
     assert.equal(saved.id, draftOne.id, '草稿转正不换 ID')
-    assert.equal(saved.path, path.join(audioFolder, '口播一号.henji-audio'))
+    assert.equal(saved.path, path.join(audioFolder, '口播一号.hjaud'))
     await card(page, saved.id).waitFor({ state: 'visible', timeout: 15000 })
     let envelope = readEnvelope(saved.path)
     assert.equal(envelope.format, 'henji-document')

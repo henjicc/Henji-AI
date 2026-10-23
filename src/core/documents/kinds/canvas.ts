@@ -1,10 +1,11 @@
 import { persistedCanvasNodeDataSchema } from '../../persistence/businessSchemas'
 import { z } from 'zod'
 
+import { henjiExtension, henjiLegacyExtensions } from '../../fileExtensions'
 import type { DocumentKindDescriptor } from './registry'
 
 /*
- * 画布（`.henji-canvas`，3.4 画布接入）：可以独立存放（作品目录“画布”文件夹），也可以放进项目。
+ * 画布（`.hjcvs`，3.4 画布接入）：可以独立存放（作品目录“画布”文件夹），也可以放进项目。
  *
  * 内容 = 画布图的持久部分（内存形态，位置都是绝对路径）：
  * - nodes：节点（id / type / position / data，其余字段如尺寸、父节点、zIndex 原样保留）；
@@ -44,7 +45,8 @@ export type CanvasDocumentContent = z.infer<typeof canvasContentSchema>
 
 export const canvasDocumentKind: DocumentKindDescriptor<CanvasDocumentContent> = {
   id: 'canvas',
-  extension: '.henji-canvas',
+  extension: henjiExtension('canvas'),
+  legacyExtensions: henjiLegacyExtensions('canvas'),
   standaloneFolderNames: { zh: '画布', en: 'Canvases' },
   untitledNames: { zh: '未命名画布', en: 'Untitled Canvas' },
   storage: 'json',

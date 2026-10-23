@@ -18,7 +18,7 @@ vi.mock('./videoEditCodeTrial', async () => ({ ...await vi.importActual<typeof i
 beforeEach(() => {
   installHarnessNativeStorage()
   const platform = getPlatform()
-  vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/fixture/commands.henji-video')
+  vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/fixture/commands.hjvid')
   vi.spyOn(platform.system.fs, 'writeTextFile').mockResolvedValue(undefined)
   vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue('D:/fixture')
   vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)

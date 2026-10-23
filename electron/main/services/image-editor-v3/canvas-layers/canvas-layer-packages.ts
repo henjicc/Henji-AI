@@ -3,6 +3,7 @@ import { parsePersistenceJson, upgradeStoredFile } from '../../persistence/store
 import { createHash } from 'node:crypto'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import { henjiExtension } from '../../../../../src/core/fileExtensions'
 
 import type { DocumentContainerRef } from '../../../../../src/core/documents/types'
 import { replaceFileAtomically, writeBufferAtomically } from '../../fs/atomic-file'
@@ -18,7 +19,7 @@ import { KeyedSerialExecutor } from '../serial-executor'
  * 画布多图层节点的内嵌图片文档（3.4）。
  *
  * 编辑仍发生在程序目录 V3 文档仓库里的工作副本；画布写回时把每份内嵌文档打成单文件包，放进画布所在容器的
- * `.henji/canvas-layers/<文档ID>.henjilayer`，画布内容的 layerPackages 记下位置。于是：
+ * `.henji/canvas-layers/<文档ID>.hjlyr`，画布内容的 layerPackages 记下位置。于是：
  * - 移进 / 移出项目：通用移动把画布引用的 `.henji` 文件一起复制到新容器；
  * - 创建副本、拷贝整个项目文件夹：副本画布 ID 不同，打开时按包（或工作副本）分出一份新文档，节点改指向它，
  *   两边各改各的；
@@ -32,7 +33,7 @@ import { KeyedSerialExecutor } from '../serial-executor'
  * 还指着原文档的副本）提到的一律保留；读别的画布失败时整次不清理。
  */
 
-export const CANVAS_LAYER_PACKAGE_EXTENSION = '.henjilayer'
+export const CANVAS_LAYER_PACKAGE_EXTENSION = henjiExtension('canvas_layer_package')
 export const CANVAS_LAYER_FOLDER_NAME = 'canvas-layers'
 const HEADER_FORMAT = 'henji-canvas-layer'
 const HEADER_VERSION = CANVAS_LAYER_PACKAGE_VERSION

@@ -331,7 +331,7 @@ it('保存重开检查非默认滤镜固定版本，复制效果独立，滤镜�
 beforeEach(() => {
   installHarnessNativeStorage(); files.clear()
   Object.assign(boundary, { compileGate: undefined, trialGate: undefined, compileCalls: 0, trialCalls: 0, failTrial: false, proveFilters: false, filterProofs: 0, activeRenderers: 0, disposedCompilers: 0, dimensions: [], presentedFrames: [] })
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/code-project.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/code-project.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, value) => { files.set(path, value) })
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
 })

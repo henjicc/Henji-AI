@@ -56,7 +56,7 @@ function project(song, index) {
       clips: [{ id: `song-clip-${index}`, itemId: `song-item-${index}`, name: song.name, kind: 'audio', track: 0, start: 0, duration: Math.floor(seconds * FPS), sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }],
       annotations: [] })
   }
-  const file = path.join(ROOT, `music-remix-${index}.henji-video`); fs.writeFileSync(file, JSON.stringify(value))
+  const file = path.join(ROOT, `music-remix-${index}.hjvid`); fs.writeFileSync(file, JSON.stringify(value))
   return { file, value }
 }
 

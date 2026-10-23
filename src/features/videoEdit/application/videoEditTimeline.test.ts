@@ -17,7 +17,7 @@ const files = new Map<string, string>()
 beforeEach(() => {
   installHarnessNativeStorage(); files.clear()
   const platform = getPlatform()
-  vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/fixture/timeline.henji-video')
+  vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/fixture/timeline.hjvid')
   vi.spyOn(platform.system.fs, 'writeTextFile').mockImplementation(async (path, content) => { files.set(path, content) })
   vi.spyOn(platform.system.fs, 'readTextFile').mockImplementation(async path => { const value = files.get(path); if (!value) throw new Error('missing'); return value })
   vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue('D:/fixture')

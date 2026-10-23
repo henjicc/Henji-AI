@@ -656,7 +656,7 @@ function attachUiInspectionCanvasEditing(context) {
       const tempRoot = await window.henjiNative.paths.tempDir()
       const exported = await documents.exportDocumentPackage({
         target: { id: targetProjectId },
-        destination: await window.henjiNative.paths.join(tempRoot, `multi-layer-document-${crypto.randomUUID()}.henjipack`),
+        destination: await window.henjiNative.paths.join(tempRoot, `multi-layer-document-${crypto.randomUUID()}.hjpak`),
       })
       const imported = await documents.importPackage({ source: exported.path })
       const importedCanvas = imported.type === 'document' ? await window.henjiNative.testFixtures.readCanvas(imported.meta.id) : null

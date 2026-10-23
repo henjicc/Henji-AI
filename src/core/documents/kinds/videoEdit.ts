@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { migrateEmbeddedVideoColorGradesV1 } from '../../videoEdit/colorGradeMigration'
 
+import { henjiExtension, henjiLegacyExtensions } from '../../fileExtensions'
 import type { DocumentKindDescriptor } from './registry'
 import { videoEditInPlaceRecordsSchema } from '../../videoEdit/inPlacePersistence'
 import { colorLutAssetSchema } from '../../videoEdit/colorLutAsset'
@@ -10,7 +11,7 @@ import { creativeIntentsSchema } from '../../creativeIntent/persistence'
 import { VIDEO_EDIT_CONTENT_VERSION } from '../../persistence/schemaVersions'
 
 /*
- * 剪辑（`.henji-video`，3.1 剪辑接入）：项目的主文档，始终放在项目里（可以在项目之间移动）。
+ * 剪辑（`.hjvid`，3.1 剪辑接入）：项目的主文档，始终放在项目里（可以在项目之间移动）。
  *
  * 内容 = 剪辑的持久部分（内存形态，素材位置都是绝对路径）：
  * - media：引用的源文件；bins / items：素材箱与素材项；sequences：序列（轨道、片段、标注、标记、字幕、转场）；
@@ -111,7 +112,8 @@ function createEmptyVideoEditContent(): VideoEditDocumentContent {
 
 export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentContent> = {
   id: 'video_edit',
-  extension: '.henji-video',
+  extension: henjiExtension('video_edit'),
+  legacyExtensions: henjiLegacyExtensions('video_edit'),
   standaloneFolderNames: null,
   untitledNames: { zh: '未命名剪辑', en: 'Untitled Edit' },
   storage: 'json',

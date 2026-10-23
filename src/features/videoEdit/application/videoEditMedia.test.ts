@@ -66,7 +66,7 @@ beforeEach(() => {
   vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue(undefined)
   vi.spyOn(videoEditNativeMediaProbe, 'probe').mockResolvedValue({ status: 'unavailable' })
   Object.assign(video, { duration: 3, fps: 60, hasAudio: false, decodable: true, audioOnly: false })
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/asset-reference.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/asset-reference.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, content) => { files.set(path, content) })
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
   vi.spyOn(getPlatform().system.paths, 'dirname').mockResolvedValue('D:/media')

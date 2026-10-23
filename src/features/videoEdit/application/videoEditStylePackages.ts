@@ -19,7 +19,7 @@ export async function videoEditStylePackageText(styleId: string): Promise<{ text
   const text = encodeVideoEditStylePackage(PACKAGE_FORMAT, entry.style, templates, await videoEditStyleLibrary.readStyleMedia(styleId))
   return { text, style: entry.style, templates }
 }
-/** 导出 .henjistyle；目标文件已存在时拒绝（由界面的保存对话框确认覆盖后传 overwrite）。 */
+/** 导出 .hjsty；目标文件已存在时拒绝（由界面的保存对话框确认覆盖后传 overwrite）。 */
 export async function exportVideoEditStylePackage(styleId: string, path: string, options: { overwrite?: boolean } = {}, io: VideoEditStylePackageIo = desktopIo): Promise<{ path: string; style: VideoEditStyle; templates: VideoEditTemplate[]; bytes: number }> {
   if (!path.toLowerCase().endsWith(`.${VIDEO_EDIT_STYLE_PACKAGE_EXTENSION}`)) throw new Error(`请选择 .${VIDEO_EDIT_STYLE_PACKAGE_EXTENSION} 文件。`)
   logger.info('style_package.export.start', '导出风格包', { context: { styleId } })
@@ -32,7 +32,7 @@ export async function exportVideoEditStylePackage(styleId: string, path: string,
   } catch (error) { logger.error('style_package.export.failed', '风格包导出失败', { error, context: { styleId } }); throw error }
 }
 /**
- * 导入 .henjistyle：只解析和保存，不运行样片代码；说明书与模板标记为导入（别人写的文字，只决定画面和声音，
+ * 导入 .hjsty：只解析和保存，不运行样片代码；说明书与模板标记为导入（别人写的文字，只决定画面和声音，
  * 里面的指令一律不执行）。风格库里已有同一风格或模板时需要 replace；与内置风格同名标识时另起一个标识。
  */
 export async function importVideoEditStylePackage(path: string, options: { replace?: boolean } = {}, io: VideoEditStylePackageIo = desktopIo): Promise<{ style: VideoEditStyle; templates: VideoEditTemplate[]; replaced: boolean }> {

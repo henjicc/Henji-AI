@@ -78,7 +78,7 @@ export interface RelinkedHenjiImageExternalSource {
 const MAX_RELINK_SOURCE_BYTES = 8 * 1024 * 1024 * 1024
 
 function abortError(): Error {
-  const error = new Error('.henjiimg import was cancelled')
+  const error = new Error('.hjimg import was cancelled')
   error.name = 'AbortError'
   return error
 }
@@ -90,7 +90,7 @@ function throwIfAborted(signal?: AbortSignal): void {
 function resolveLimits(overrides?: Partial<HenjiImagePackageLimits>): HenjiImagePackageLimits {
   const limits = { ...DEFAULT_HENJI_IMAGE_PACKAGE_LIMITS, ...overrides }
   for (const [name, value] of Object.entries(limits)) {
-    if (!Number.isFinite(value) || value <= 0) throw new Error(`Invalid .henjiimg limit: ${name}`)
+    if (!Number.isFinite(value) || value <= 0) throw new Error(`Invalid .hjimg limit: ${name}`)
   }
   return limits
 }
@@ -150,7 +150,7 @@ async function writeEntryToStage(
       throwIfAborted(signal)
       const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value as Uint8Array)
       byteLength += chunk.byteLength
-      if (byteLength > maximumBytes) throw new Error(`.henjiimg entry exceeds limit: ${entry.fileName}`)
+      if (byteLength > maximumBytes) throw new Error(`.hjimg entry exceeds limit: ${entry.fileName}`)
       hash.update(chunk)
       await handle.writeFile(chunk)
     }
@@ -160,7 +160,7 @@ async function writeEntryToStage(
     await handle.close()
   }
   if (byteLength !== entry.uncompressedSize) {
-    throw new Error(`.henjiimg entry size mismatch: ${entry.fileName}`)
+    throw new Error(`.hjimg entry size mismatch: ${entry.fileName}`)
   }
   return {
     archivePath: entry.fileName,
@@ -185,17 +185,17 @@ function validateEntryHeader(
   entryCount: number,
   totalBytes: number,
 ): void {
-  if (entryCount > limits.maxEntries) throw new Error('.henjiimg entry count exceeds limit')
-  if (isSymbolicLinkEntry(entry)) throw new Error(`.henjiimg contains symbolic link: ${entry.fileName}`)
+  if (entryCount > limits.maxEntries) throw new Error('.hjimg entry count exceeds limit')
+  if (isSymbolicLinkEntry(entry)) throw new Error(`.hjimg contains symbolic link: ${entry.fileName}`)
   validatePackageEntryPath(entry.fileName)
   const maximum = entryLimit(entry.fileName, limits)
-  if (entry.uncompressedSize > maximum) throw new Error(`.henjiimg entry exceeds limit: ${entry.fileName}`)
-  if (totalBytes > limits.maxTotalBytes) throw new Error('.henjiimg expanded size exceeds limit')
+  if (entry.uncompressedSize > maximum) throw new Error(`.hjimg entry exceeds limit: ${entry.fileName}`)
+  if (totalBytes > limits.maxTotalBytes) throw new Error('.hjimg expanded size exceeds limit')
   const ratio = entry.uncompressedSize === 0
     ? 0
     : entry.uncompressedSize / Math.max(1, entry.compressedSize)
   if (ratio > limits.maxCompressionRatio) {
-    throw new Error(`.henjiimg suspicious compression ratio: ${entry.fileName}`)
+    throw new Error(`.hjimg suspicious compression ratio: ${entry.fileName}`)
   }
 }
 
@@ -215,7 +215,7 @@ async function stageArchive(
       entryCount += 1
       totalBytes += entry.uncompressedSize
       validateEntryHeader(entry, limits, entryCount, totalBytes)
-      if (staged.has(entry.fileName)) throw new Error(`Duplicate .henjiimg entry: ${entry.fileName}`)
+      if (staged.has(entry.fileName)) throw new Error(`Duplicate .hjimg entry: ${entry.fileName}`)
       const filePath = path.join(stagingDir, `${entryCount.toString().padStart(8, '0')}.entry`)
       const record = await writeEntryToStage(
         archive,
@@ -260,7 +260,7 @@ function verifyManifestEntries(
     }
   }
   for (const entryPath of staged.keys()) {
-    if (!expectedPaths.has(entryPath)) throw new Error(`Undeclared .henjiimg entry: ${entryPath}`)
+    if (!expectedPaths.has(entryPath)) throw new Error(`Undeclared .hjimg entry: ${entryPath}`)
   }
 }
 
@@ -268,7 +268,7 @@ export async function importHenjiImagePackage(
   request: ImportHenjiImagePackageRequest,
 ): Promise<ImportedHenjiImagePackage> {
   const sourcePath = request.sourcePath.trim()
-  if (!sourcePath) throw new Error('.henjiimg source path is empty')
+  if (!sourcePath) throw new Error('.hjimg source path is empty')
   const limits = resolveLimits(request.limits)
   await request.resourceStore.initialize()
   const stagingDir = await fsp.mkdtemp(path.join(request.resourceStore.rootDir, '.henjiimg-import-'))
@@ -277,7 +277,7 @@ export async function importHenjiImagePackage(
   try {
     const staged = await stageArchive(sourcePath, stagingDir, limits, request.signal)
     const manifestEntry = staged.get(HENJI_IMAGE_PACKAGE_MANIFEST)
-    if (!manifestEntry) throw new Error('.henjiimg manifest.json missing')
+    if (!manifestEntry) throw new Error('.hjimg manifest.json missing')
     const raw = parsePersistenceJson(await fsp.readFile(manifestEntry.filePath, 'utf8'), 'image-package')
     const upgraded = await upgradeStoredFile(sourcePath, 'image-package', raw, raw && typeof raw === 'object' && 'packageVersion' in raw ? raw.packageVersion : 0)
     const manifest = validateHenjiImagePackageManifest(upgraded)

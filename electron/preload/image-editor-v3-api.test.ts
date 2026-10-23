@@ -74,7 +74,7 @@ describe('图片编辑 V3 preload 契约', () => {
     const api = createImageEditorV3Api(
       invoke as unknown as Parameters<typeof createImageEditorV3Api>[0],
     )
-    const target = { id: 'doc-1', path: 'D:/作品/图片文档/a.henjiimg' }
+    const target = { id: 'doc-1', path: 'D:/作品/图片文档/a.hjimg' }
 
     await api.importSource({ requestId: 'source-import' })
     await api.openImageDocument({ requestId: 'open', target, recovery: 'ask' })

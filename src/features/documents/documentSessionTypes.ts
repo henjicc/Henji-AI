@@ -70,7 +70,7 @@ export type DocumentReadPurpose = 'open' | 'reload' | 'relocate'
 
 /**
  * 保存策略。JSON 类型每次保存直接写文档文件（`createJsonDocumentPersistence`）。
- * 单文件包类型（图片文档，3.5）：save 写程序目录里的工作副本，commit 在保存、空闲与关闭时写回 `.henjiimg`；
+ * 单文件包类型（图片文档，3.5）：save 写程序目录里的工作副本，commit 在保存、空闲与关闭时写回 `.hjimg`；
  * 通用仓库不读写包的内容，打开、新建与重新读取也由策略完成（read / create）。
  */
 export interface DocumentPersistence {

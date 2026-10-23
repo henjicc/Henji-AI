@@ -9,7 +9,10 @@ import { screenRecordingDocumentKind } from './screenRecording'
 export {
   createDocumentKindRegistry,
   defineSkeletonDocumentKind,
+  documentNameForKind,
   DocumentKindError,
+  readableDocumentExtensions,
+  usesLegacyDocumentExtension,
   placeholderContentSchema,
   type DocumentKindDescriptor,
   type DocumentKindRegistry,

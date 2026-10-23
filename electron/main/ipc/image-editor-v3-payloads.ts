@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { matchHenjiExtension } from '../../../src/core/fileExtensions'
 
 import {
   IMAGE_EDIT_BRUSH_TILE_MAX_RAW_BYTES_V3,
@@ -512,7 +513,7 @@ export function parseImageEditorV3CanvasLayersPreparePayload(input: unknown): Ca
         || layer.packagePath.length > MAX_LOCAL_PATH_CHARACTERS
         || layer.packagePath.includes('\0')
         || !path.isAbsolute(layer.packagePath)
-        || !layer.packagePath.toLowerCase().endsWith('.henjilayer')) {
+        || !matchHenjiExtension('canvas_layer_package', path.basename(layer.packagePath))) {
         throw new Error('Invalid canvas layer package path')
       }
       return { documentId, packagePath: layer.packagePath }

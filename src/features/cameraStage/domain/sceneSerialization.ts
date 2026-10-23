@@ -1,6 +1,6 @@
 /**
  * 3D 镜头参考场景的两种外部形态：
- * - 文档内容（`.henji-stage` 文件的 content，3.2 起的唯一持久形态）：`sceneToDocumentContent` / `sceneFromDocumentContent`；
+ * - 文档内容（`.hjstg` 文件的 content，3.2 起的唯一持久形态）：`sceneToDocumentContent` / `sceneFromDocumentContent`；
  * - 场景 JSON 字符串（带 schemaVersion，只给后台渲染请求传场景投影用）：`serializeScene` / `deserializeScene`。
  * 两者读取时走同一套逐字段规范化（`normalizeSceneRecord`），派生动画始终从状态关键帧重新编译。
  */

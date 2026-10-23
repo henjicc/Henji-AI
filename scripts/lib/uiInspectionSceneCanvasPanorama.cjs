@@ -382,7 +382,7 @@ function attachUiInspectionCanvasPanorama(context) {
           edges: [],
         },
       })
-      const exported = await documents.exportDocumentPackage({ target: { id: created.meta.id }, destination: await window.henjiNative.paths.join(targetDir, 'panorama-roundtrip.henjipack') })
+      const exported = await documents.exportDocumentPackage({ target: { id: created.meta.id }, destination: await window.henjiNative.paths.join(targetDir, 'panorama-roundtrip.hjpak') })
       const imported = await documents.importPackage({ source: exported.path })
       const read = imported.type === 'document' ? await documents.readDocument({ id: imported.meta.id }) : null
       const node = read?.content?.nodes?.[0]

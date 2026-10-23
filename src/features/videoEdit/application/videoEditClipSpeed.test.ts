@@ -16,7 +16,7 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
 } }))
 beforeEach(() => {
   installHarnessNativeStorage()
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/speed.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/speed.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
 })
 afterEach(async () => {

@@ -23,7 +23,7 @@ vi.mock('./videoEditColorLutClient', async () => {
 const closeBitmap = vi.fn()
 beforeEach(() => {
   installHarnessNativeStorage()
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/color_grade.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/color_grade.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
   vi.mocked(trialVideoEditCodeFrames).mockResolvedValue({ width: 256, height: 128, close: closeBitmap } as unknown as ImageBitmap)
   const pixels = Uint8ClampedArray.from(Array.from({ length: 256 }, (_, i) => { const x = 70 + i / 255 * 110; return [x, x, x, 255] }).flat())

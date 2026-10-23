@@ -53,6 +53,16 @@ npm run persistence:release-snapshot    # 把新版本与样本摘要追加进�
 
 不得降版本、删除格式登记或静默丢弃用户字段；停用功能也必须保留可理解的读取、导出或恢复路径。
 
+## 文件后缀
+
+自有文件后缀只登记在 `src/core/fileExtensions.ts`，代码里不写后缀字面量，一律从登记表取（`henjiExtension`、`matchHenjiExtension`、`henjiDialogExtensions`）。规则由 `fileExtensions.test.ts` 检查：
+
+- 格式为 `.hj` + 2～4 个小写字母（`.hjvid` 剪辑、`.hjaud` 口播、`.hjimg` 图片文档、`.hjcvs` 画布、`.hjstg` 镜头参考、`.hjrec` 屏幕录制、`.hjpak` 单文件包、`.hjsty` 风格包、`.hjpre` 剪辑预设、`.hjlyr` 图层包），不用杠、数字或大写，字母取常见英文缩写。
+- 按用途分作品 / 交换包 / 素材库三类；新增文件类型先在表里登记，暂未实现的只占名（`reserved`）。
+- 全表不重复，也不与常见软件的后缀冲突。
+- 改后缀时原后缀进 `legacyExtensions`，只用于读取（扫描、打开、导入）；新文件一律写当前后缀，不主动改名旧文件。2026-10-24 统一命名前的 `.henji-*`、`.henjiimg` 等按此登记为旧后缀。
+- 已发布黄金样本的文件名（如 `v1.henjipack`）与包内的格式标识（`henjiimg`、`henji-video-project` 等）不是后缀，不随改名变动。
+
 ## 错误表达
 
 更新版本创建、早于支持下限、迁移失败、内容 schema 不匹配与 JSON 截断/无法解析分别处理。只有最后一类使用“损坏”；更新版本创建提示“请升级后再打开”。用户提示复用现有错误通道，文案放 i18n；字段路径、内部版本和格式 ID 只写结构化日志。迁移失败提示步骤、原文件未修改与备份位置，禁止吞错或静默重建。

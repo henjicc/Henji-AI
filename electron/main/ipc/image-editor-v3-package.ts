@@ -12,7 +12,7 @@ import { registerIpcHandler } from './registry'
 import type { IpcMainInvokeEvent } from 'electron'
 
 /*
- * 图片文档（`.henjiimg`，3.5）的 IPC：打开（解包到工作副本 / 恢复）、重新定位、新建草稿、写回。
+ * 图片文档（`.hjimg`，3.5）的 IPC：打开（解包到工作副本 / 恢复）、重新定位、新建草稿、写回。
  * 改名、移动、副本、回收站、删空草稿走通用文档 IPC（documents:*），由单文件包适配器完成。
  * 旧的“打开可编辑文件 / 另存可编辑文件”对话框入口已由图片文档取代并删除。
  * 同文件还登记画布内嵌图片文档（3.4）的准备（打开画布时）与写出（画布写回时）。

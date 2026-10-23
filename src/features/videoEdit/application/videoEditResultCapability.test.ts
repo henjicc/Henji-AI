@@ -33,7 +33,7 @@ beforeEach(() => {
   })
   generation.read.mockReset().mockResolvedValue({ mediaType: 'image', source: 'D:/generated/poster.png', name: '海报' })
   const platform = getPlatform()
-  vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/place.henji-video')
+  vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/place.hjvid')
   vi.spyOn(platform.system.fs, 'writeTextFile').mockImplementation(async (path, text) => { files.set(path, text) })
   vi.spyOn(platform.system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
   vi.spyOn(platform.system.fs, 'exists').mockResolvedValue(true)
@@ -103,7 +103,7 @@ it('编辑当前帧先固定上方空画面轨道，再出帧交给图片编辑�
     setVideoEditView(id, { frame: 0 })
     const asset = await getPlatform().assetLibrary.createAsset({ filePath: 'D:/managed/edited.png', mediaType: 'image', source: 'canvas' })
     const past = owner.past.length
-    const receipt = await commitVideoEditCreativeResult(bound.target, { asset, origin: { type: 'document', docRef: { docId: 'doc', path: 'D:/作品/图片文档/doc.henjiimg' }, revision: 1 } })
+    const receipt = await commitVideoEditCreativeResult(bound.target, { asset, origin: { type: 'document', docRef: { docId: 'doc', path: 'D:/作品/图片文档/doc.hjimg' }, revision: 1 } })
     const placed = owner.document.sequences[0].clips.find(clip => clip.id === receipt.clipId)!
     expect(placed.start).toBe(30); expect(placed.duration).toBe(1); expect(placed.track).toBeGreaterThan(lowest.index)
     expect(owner.past).toHaveLength(past + 1)

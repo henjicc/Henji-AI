@@ -86,7 +86,7 @@ beforeEach(async () => {
   if (!registry.hasModel('kie-gpt-image-2')) registry.register(composeModelDefinition(catalog.find(model => model.meta.id === 'kie-gpt-image-2')!, kiePresentation['kie-gpt-image-2']))
   installHarnessNativeStorage(); images.resetCodeImageGenerationForTest(); state.tasks.clear(); state.providers = ['kie']; state.failTrial = false; state.submitGate = undefined; assets.clear(); files.clear(); vi.clearAllMocks()
   const platform = getPlatform()
-  vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/image-generation.henji-video')
+  vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/image-generation.hjvid')
   vi.spyOn(platform.system.fs, 'writeTextFile').mockImplementation(async (path, text) => { files.set(path, text) })
   vi.spyOn(platform.system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
   vi.spyOn(platform.system.fs, 'exists').mockResolvedValue(true)

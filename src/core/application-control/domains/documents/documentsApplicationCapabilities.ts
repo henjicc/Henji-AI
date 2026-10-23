@@ -267,7 +267,7 @@ const exportPackageInput = z.object({
 
 const exportDocumentPackage = defineApplicationCapability({
   id: 'export_document_package', version: 1, title: '导出为单个文件',
-  description: '把一份文档或整个项目连同引用的素材、内嵌图层包导出为一个 .henjipack 文件（放进作品目录的“导出”文件夹，重名自动加序号），便于发给别人或备份；对方在痕迹AI里“导入单个文件…”即可打开。不改原文档。',
+  description: '把一份文档或整个项目连同引用的素材、内嵌图层包导出为一个 .hjpak 文件（放进作品目录的“导出”文件夹，重名自动加序号），便于发给别人或备份；对方在痕迹AI里“导入单个文件…”即可打开。不改原文档。',
   domain: DOCUMENTS_DOMAIN,
   aliases: ['导出项目包', '打包项目', '导出文档包', '单文件包', 'export package'],
   readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'documents:write', idempotent: false, destructive: false,

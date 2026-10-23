@@ -133,7 +133,7 @@ describe('画布内嵌图片文档的包', () => {
   it('写回：写进容器 .henji/canvas-layers/，工作副本没变时不重写，改了再写', async () => {
     await workingCopy('layer-a')
     const first = await service.commit({ canvasId: 'canvas-1', container: user, documentIds: ['layer-a'] })
-    const target = path.join(root, '作品', '.henji', 'canvas-layers', 'layer-a.henjilayer')
+    const target = path.join(root, '作品', '.henji', 'canvas-layers', 'layer-a.hjlyr')
     expect(first).toEqual({ packages: { 'layer-a': target }, written: 1, released: 0 })
     expect(fs.existsSync(target)).toBe(true)
 
@@ -149,7 +149,7 @@ describe('画布内嵌图片文档的包', () => {
     await workingCopy('layer-a')
     const { packages } = await service.commit({ canvasId: 'canvas-1', container: user, documentIds: ['layer-a'] })
     const project: DocumentContainerRef = { kind: 'project', projectId: 'p1' }
-    const moved = path.join(root, '项目', 'p1', '.henji', 'canvas-layers', 'layer-a.henjilayer')
+    const moved = path.join(root, '项目', 'p1', '.henji', 'canvas-layers', 'layer-a.hjlyr')
     await fsp.mkdir(path.dirname(moved), { recursive: true })
     await fsp.copyFile(packages['layer-a'], moved)
     const before = (await fsp.stat(moved)).mtimeMs

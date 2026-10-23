@@ -208,7 +208,7 @@ it('复制进另一个项目与导出为单个文件（4.1）：副本落在目�
     expect(fake.stored(meta.id)?.meta.container).toEqual({ kind: 'user' })
 
     const exported = await app.call('export_document_package', { projectId: project.id }) as { ok?: boolean; data?: { fileName: string } }
-    expect(JSON.stringify(exported)).toContain('短片.henjipack')
+    expect(JSON.stringify(exported)).toContain('短片.hjpak')
     expect(JSON.stringify(exported)).not.toContain('D:/')
     expect(fake.exportedPackages.at(-1)).toMatchObject({ projectId: project.id })
     const both = await app.call('export_document_package', { documentId: meta.id, projectId: project.id })

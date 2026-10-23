@@ -78,7 +78,7 @@ function createVideoEditProjectSourceScene() {
       if (!fs.existsSync(video)) ffmpeg(['-f', 'lavfi', '-i', 'testsrc2=size=3840x2160:rate=60', '-t', '3', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '20', '-g', '60', '-pix_fmt', 'yuv420p', video])
       if (!fs.existsSync(picture)) ffmpeg(['-f', 'lavfi', '-i', 'color=c=orange:size=320x180', '-frames:v', '1', picture])
       if (!fs.existsSync(audio)) ffmpeg(['-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=3', audio])
-      const file = path.join(root, 'project.henji-video'); const evidence = { sourcePaths: { video, picture, audio }, phases: [] }
+      const file = path.join(root, 'project.hjvid'); const evidence = { sourcePaths: { video, picture, audio }, phases: [] }
       const originalStats = [video, picture, audio].map(file => ({ file, size: fs.statSync(file).size, mtime: fs.statSync(file).mtimeMs }))
       let client
       await observeWorkers(page)
@@ -230,7 +230,7 @@ function createVideoEditProjectSourceScene() {
         const sourceItem = scale.items.find(item => item.id === videoId)
         scale.items = Array.from({ length: 500 }, (_, index) => ({ ...sourceItem, id: `scale-item-${index}`, name: `4K60 ${String(index).padStart(3, '0')}`, binId: undefined }))
         scale.sequences = [scale.sequences[0]]; scale.sequences[0].clips = []; scale.sequences[0].annotations = []
-        const scaleFile = path.join(root, 'scale.henji-video'); fs.writeFileSync(scaleFile, JSON.stringify(scale))
+        const scaleFile = path.join(root, 'scale.hjvid'); fs.writeFileSync(scaleFile, JSON.stringify(scale))
         const scaleStarted = performance.now(); await dialogs(app, [scaleFile], scaleFile); await openVideoEditFile(page, scaleFile); await entry(page, 'scale-item-0').waitFor({ state: 'visible' })
         evidence.scale = { items: 500, bins: 200, firstVisibleMs: performance.now() - scaleStarted, mountedItems: await page.locator('[data-video-edit-project-entry]').count(), mountedBins: await page.locator('[data-entry-kind="bin"]').count() }
         assert.ok(evidence.scale.mountedItems < 80); assert.ok(evidence.scale.mountedBins < 80)

@@ -117,7 +117,7 @@ async function finishRuntime(collector, instance, startedAt) {
 
 /** Uses the existing restart runner's launcher; never owns a parallel Electron launch chain. */
 async function runVideoEditLayoutRestart({ launch, userDataDir, outDir }) {
-  const file = path.join(outDir, 'video-edit-layout.henji-video')
+  const file = path.join(outDir, 'video-edit-layout.hjvid')
   const evidenceFile = path.join(outDir, 'video-edit-layout-restart.json')
   const fixture = videoEditFixtureProject({ id: 'reality-video-layout-restart', name: '剪辑冷启动布局验收', revision: 0,
     width: 3840, height: 2160, fps: 60, media: [], annotations: [],

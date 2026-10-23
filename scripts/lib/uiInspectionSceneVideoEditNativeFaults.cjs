@@ -134,14 +134,14 @@ function createVideoEditNativeFaultsScene() {
       // A damaged copy: the header cut off and the rest scrambled (a partial download or a failing disk).
       const bytes = fs.readFileSync(prores); const damaged = Buffer.from(bytes.subarray(0, Math.floor(bytes.length * 0.4))); for (let index = 0; index < 4096 && index < damaged.length; index++) damaged[index] ^= 0x5a
       fs.writeFileSync(broken, damaged)
-      const faultFile = path.join(ROOT, 'faults.henji-video')
+      const faultFile = path.join(ROOT, 'faults.hjvid')
       fs.writeFileSync(faultFile, JSON.stringify(project('native-faults', '原生故障', [media('h264', h264), media('prores', prores)], [...repeated('base', 'h264', 1), ...repeated('overlay', 'prores', 2, { x: .25, y: .25, scale: .4 })])))
-      const h264File = path.join(ROOT, 'h264-only.henji-video')
+      const h264File = path.join(ROOT, 'h264-only.hjvid')
       fs.writeFileSync(h264File, JSON.stringify(project('native-faults-h264', '只有浏览器也能解的素材', [media('h264', h264)], [clip('base', 'h264', 1)])))
-      const brokenFile = path.join(ROOT, 'broken.henji-video')
+      const brokenFile = path.join(ROOT, 'broken.hjvid')
       fs.writeFileSync(brokenFile, JSON.stringify(project('native-faults-broken', '坏文件', [media('broken', broken)], [clip('broken-clip', 'broken', 1)])))
       const copies = Array.from({ length: 11 }, (_, index) => { const file = path.join(ROOT, `copy-${index}.mp4`); fs.copyFileSync(h264, file); return file })
-      const budgetFile = path.join(ROOT, 'budget.henji-video')
+      const budgetFile = path.join(ROOT, 'budget.hjvid')
       fs.writeFileSync(budgetFile, JSON.stringify(project('native-faults-budget', '同时显示 11 个视频', copies.map((file, index) => media(`copy-${index}`, file)), copies.map((_, index) => clip(`copy-clip-${index}`, `copy-${index}`, index + 1, { x: (index % 4) / 4 - .375, y: Math.floor(index / 4) / 3 - .33, scale: .24 })), 4)))
 
       const evidence = { startedAt: new Date().toISOString(), phases: {} }

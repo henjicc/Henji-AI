@@ -282,7 +282,7 @@ class CanvasReflectionProvider implements ApplicationEntityProvider {
 }
 
 const META: Record<CanvasEntityType, { title: string; description: string; parents: CanvasEntityType[]; queryIds: string[] }> = {
-  [CANVAS_ENTITY_TYPES.project]: { title: '画布', description: '一份画布文档（.henji-canvas，id 即文档 ID）的节点画布内容。', parents: [], queryIds: ['get_canvas_document'] },
+  [CANVAS_ENTITY_TYPES.project]: { title: '画布', description: '一份画布文档（.hjcvs，id 即文档 ID）的节点画布内容。', parents: [], queryIds: ['get_canvas_document'] },
   [CANVAS_ENTITY_TYPES.node]: { title: '画布节点', description: '由节点目录约束的数据与位置实体。', parents: [CANVAS_ENTITY_TYPES.project], queryIds: ['get_canvas_node'] },
   [CANVAS_ENTITY_TYPES.edge]: { title: '画布连线', description: '通过节点端口校验建立的有向连接。', parents: [CANVAS_ENTITY_TYPES.project], queryIds: ['get_canvas_document'] },
 }

@@ -44,7 +44,7 @@ beforeEach(async () => {
   // 缩略帧不是这些用例的对象：取帧一直“进行中”直到用例结束被中止，不再因替身缺 video 命名空间刷失败日志。
   vi.spyOn(getPlatform().video, 'getFilmstripFrame').mockImplementation((_request, signal) => new Promise((_resolve, reject) => signal?.addEventListener('abort', () => reject(new DOMException('用例结束', 'AbortError')))))
   generation.resolveModel.mockResolvedValue({ modelId: videoModel, providerId: 'test', selection: 'user_default' })
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/fixture/in-place.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/fixture/in-place.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => ({ left: 0, top: 0, right: 900, bottom: 300, width: 900, height: 300, x: 0, y: 0, toJSON: () => ({}) }))
   vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(300)

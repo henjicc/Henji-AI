@@ -18,9 +18,9 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
   return { id: pressureOnly ? 'video-edit-composite-pressure' : 'video-edit-composite-edit', surface: '剪辑', name: pressureOnly ? '剪辑-完整原4K60代码滤镜压力与释放' : '剪辑-原生图形滤镜转场公共回环与原4K60导出', writesUserData: true,
     setup: async (page, app, { capture }) => {
       const root = path.resolve('node_modules/.cache/video-edit-composite-edit'); fs.mkdirSync(root, { recursive: true })
-      const file = path.join(root, 'mixed.henji-video'); const pressureFile = path.join(root, 'pressure.henji-video')
-      const mixed = readFile(path.resolve('node_modules/.cache/video-edit-monitor/monitor.henji-video'))
-      const pressure = readFile(path.resolve('node_modules/.cache/video-edit-monitor/pressure.henji-video'))
+      const file = path.join(root, 'mixed.hjvid'); const pressureFile = path.join(root, 'pressure.hjvid')
+      const mixed = readFile(path.resolve('node_modules/.cache/video-edit-monitor/monitor.hjvid'))
+      const pressure = readFile(path.resolve('node_modules/.cache/video-edit-monitor/pressure.hjvid'))
       mixed.id = 'composite-mixed'; mixed.name = '原生图形滤镜转场真实混剪'; mixed.revision = 0
       mixed.sequences[0].sampleRate = 48000; mixed.sequences[0].channels = 2
       pressure.id = 'composite-pressure'; pressure.name = '原4K60完整500片段受控代码滤镜'; pressure.revision = 0

@@ -36,7 +36,7 @@ beforeEach(() => {
   stopNotification.mockClear()
   vi.useFakeTimers(); installHarnessNativeStorage(); pixel.requests = []; pixel.sessions = 0; pixel.preopen.mockClear(); pixel.arm.mockClear(); pixel.invalidate.mockClear(); pixel.update.mockResolvedValue(undefined); pixel.dispose.mockResolvedValue(undefined); pixel.scale.mockReset(); pixel.scale.mockResolvedValue(undefined); localStorage.clear(); resetVideoEditPlaybackResolutionCache()
   vi.spyOn(getPlatform().system, 'memoryInfo').mockResolvedValue({ availableBytes: 4 * 1024 ** 3, totalBytes: 8 * 1024 ** 3 })
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/preview.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/preview.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
   vi.stubGlobal('OffscreenCanvas', class {})
   HTMLCanvasElement.prototype.transferControlToOffscreen = vi.fn(() => ({} as OffscreenCanvas))

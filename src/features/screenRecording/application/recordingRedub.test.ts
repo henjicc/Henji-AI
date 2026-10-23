@@ -15,7 +15,7 @@ function fixture() {
   const recording = createRecordingDocument(), document = createVideoEditDocument('补录')
   recording.media = [{ id: 'screen', kind: 'screen', path: '/screen.mp4', monoUs: 0, durationUs: 10e6 }, { id: 'mic', kind: 'microphone', path: '/mic.wav', monoUs: 0, durationUs: 10e6 }]
   recording.understanding.transcript = [0, 5].map((start, index) => ({ id: `s${index}`, mediaId: 'mic', audioDocumentId: 'audio', startUs: start * 1e6, endUs: (start + 3) * 1e6, text: `句子${index}。`, granularity: 'segment' }))
-  document.media = recording.media.map(v => ({ id: v.id, kind: v.kind === 'screen' ? 'video' : 'audio', path: v.path, name: v.id, width: 1920, height: 1080, durationSeconds: 10, creativeSource: { type: 'document', docRef: { docId: 'session', path: '/session.henji-recording' }, revision: 1 } }))
+  document.media = recording.media.map(v => ({ id: v.id, kind: v.kind === 'screen' ? 'video' : 'audio', path: v.path, name: v.id, width: 1920, height: 1080, durationSeconds: 10, creativeSource: { type: 'document', docRef: { docId: 'session', path: '/session.hjrec' }, revision: 1 } }))
   document.items = document.media.map(v => ({ id: `i${v.id}`, mediaId: v.id, kind: v.kind, name: v.name }))
   const result = buildRecordingMoviePlan(document, recording, recording.understanding, { ...RECORDING_MOVIE_RECIPES.original, captions: true, frame: true }, '补录')
   const sequence = document.sequences.find(v => v.id === result.sequenceIds[0])!

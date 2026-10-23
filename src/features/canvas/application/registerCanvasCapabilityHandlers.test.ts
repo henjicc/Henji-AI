@@ -113,10 +113,10 @@ describe('canvas capability handlers', () => {
     expect(mocks.registerDocumentReleaser).toHaveBeenCalledWith('canvas', mocks.releaseCanvasDocument)
     const opener = mocks.registerDocumentOpener.mock.calls.find(([kind]) => kind === 'canvas')?.[1] as (document: { id: string; path: string }) => Promise<void>
     mocks.openCanvasDocument.mockResolvedValueOnce(false)
-    await opener({ id: 'canvas-1', path: '/work/a.henji-canvas' })
+    await opener({ id: 'canvas-1', path: '/work/a.hjcvs' })
     expect(mocks.openApplicationSurface).not.toHaveBeenCalled()
     mocks.openCanvasDocument.mockResolvedValueOnce(true)
-    await opener({ id: 'canvas-1', path: '/work/a.henji-canvas' })
+    await opener({ id: 'canvas-1', path: '/work/a.hjcvs' })
     expect(mocks.openApplicationSurface).toHaveBeenCalledWith('workspace.canvas')
   })
 

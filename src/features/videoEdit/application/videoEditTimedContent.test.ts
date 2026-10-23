@@ -15,7 +15,7 @@ import { reopenVideoEdit } from './videoEditDocumentTestKit'
 const files = new Map<string, string>()
 beforeEach(() => {
   installHarnessNativeStorage(); files.clear()
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/timed.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/timed.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, value) => { files.set(path, value) })
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
   vi.spyOn(getPlatform().system.fs, 'mkdir').mockResolvedValue(undefined)
@@ -167,7 +167,7 @@ it('手动与公共导出复用原快照/原文件回读，取消和错误不假
     expect(files.get(vtt)).toContain('00:00:00.500 --> 00:00:01.500'); expect(files.get(vtt)).toContain('中&lt;文&amp;字幕')
     vi.mocked(getPlatform().system.dialog.save).mockResolvedValue(null)
     expect(await exportVideoEditSubtitles(projectId, 'srt')).toEqual({ saved: false, verified: false })
-    vi.mocked(getPlatform().system.dialog.save).mockResolvedValue('D:/original.henji-video')
+    vi.mocked(getPlatform().system.dialog.save).mockResolvedValue('D:/original.hjvid')
     await expect(exportVideoEditSubtitles(projectId, 'srt')).rejects.toThrow('.srt')
   } finally { app.dispose() }
 })

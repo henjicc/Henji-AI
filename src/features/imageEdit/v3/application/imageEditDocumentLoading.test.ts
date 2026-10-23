@@ -16,7 +16,7 @@ vi.mock('@/commands/imageEditorV3', () => ({
   loadImageEditorV3Document: io.load,
   ImageEditorV3CommandRepository: class { save = io.save },
 }))
-// 不是图片文档（.henjiimg）的离屏文档：不需要先打开文档会话。
+// 不是图片文档（.hjimg）的离屏文档：不需要先打开文档会话。
 vi.mock('@/features/imageEdit/documents/imageDocumentRuntime', () => ({
   ensureImageDocumentOpenInBackground: async () => undefined,
 }))

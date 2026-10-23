@@ -192,7 +192,7 @@ async function runFreeCompositionRestart({ launch, userDataDir, outDir }) {
   const recycleDir = path.join(userDataDir, 'recycle')
   const outside = path.join(userDataDir, '外部位置')
   const media = makeMedia(path.join(outside, '素材来源'))
-  const packagePath = path.join(outside, '导出包', `${PROJECT_NAME}.henjipack`)
+  const packagePath = path.join(outside, '导出包', `${PROJECT_NAME}.hjpak`)
   const evidence = { target: 'free-composition', userDataDir, documentsRoot, passed: false, firstRun: {}, secondRun: {} }
   const save = () => fs.writeFileSync(evidenceFile, JSON.stringify(evidence, null, 2))
   let current = null
@@ -383,7 +383,7 @@ async function runFreeCompositionRestart({ launch, userDataDir, outDir }) {
     await stubSaveDialog(app, packagePath)
     await page.locator(`[data-project-id="${project.id}"]:visible`).first().click({ button: 'right' })
     await page.getByText('导出为单个文件…', { exact: true }).click()
-    await page.getByText(`已导出“${PROJECT_NAME}.henjipack”。`).waitFor({ state: 'visible', timeout: 60000 })
+    await page.getByText(`已导出“${PROJECT_NAME}.hjpak”。`).waitFor({ state: 'visible', timeout: 60000 })
     assert.ok(fs.existsSync(packagePath), '单文件包应写到选的位置')
     currentRun.package = { path: packagePath, bytes: fs.statSync(packagePath).size }
 

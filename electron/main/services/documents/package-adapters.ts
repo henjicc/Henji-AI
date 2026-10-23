@@ -1,7 +1,7 @@
 import type { DocumentKindId, DocumentListSummary } from '../../../../src/core/documents/types'
 
 /*
- * 单文件包类型（图片文档 `.henjiimg`）的头信息适配接口。
+ * 单文件包类型（图片文档 `.hjimg`）的头信息适配接口。
  *
  * 通用服务对包类型只做文件级操作（改名、移动、副本、回收站、在文件夹中显示）；
  * 换 ID、改名、草稿标记这些写在包里的头信息由适配器原子改写，包内其余内容不动。

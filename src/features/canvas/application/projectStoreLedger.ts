@@ -5,7 +5,7 @@ import type { useProjectStore } from '@/stores/projectStore'
 /*
  * projectStore（画布页界面状态）的界面动作账本。
  *
- * 3.4 起画布是 `.henji-canvas` 文档：列出、新建、改名、移动、副本、回收站都归通用文档能力，
+ * 3.4 起画布是 `.hjcvs` 文档：列出、新建、改名、移动、副本、回收站都归通用文档能力，
  * 这里只剩“显示哪份画布”的界面状态与离开流程。
  */
 

@@ -4,7 +4,7 @@ const CAMERA_STAGE_NODE_ID = '__ui_camera_stage_background'
 
 async function setupCameraStageBackgroundRender(page, context, inspection = {}) {
   const { seedAndOpenCanvasPanoramaProject, settlePage, reopenCanvasProjectFromStorage } = context
-  // 3.2：画布节点引用的是镜头参考文档 ID（作品目录里的 .henji-stage 文件）
+  // 3.2：画布节点引用的是镜头参考文档 ID（作品目录里的 .hjstg 文件）
   const stageDocumentId = await seedCameraStageDocument(page, { name: '真实性巡检-后台渲染生命周期', scene: createPlaybackFixture() })
 
   const { projectId } = await seedAndOpenCanvasPanoramaProject(page)

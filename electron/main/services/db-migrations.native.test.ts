@@ -250,7 +250,7 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
     const db = new Database(':memory:')
     try {
       runSchemaMigrations(db, SCHEMA_MIGRATIONS.slice(0, 17), { locationContext: () => context })
-      db.prepare("INSERT INTO document_index_documents (id,kind,path,path_key,name,created_at,updated_at,indexed_at) VALUES ('d1','canvas','/a.henji-canvas','/a.henji-canvas','a',1,1,1)").run()
+      db.prepare("INSERT INTO document_index_documents (id,kind,path,path_key,name,created_at,updated_at,indexed_at) VALUES ('d1','canvas','/a.hjcvs','/a.hjcvs','a',1,1,1)").run()
       expect(runSchemaMigrations(db, undefined, { locationContext: () => context }).applied).toEqual(ALL_VERSIONS.filter(version => version >= 18))
       expect(columns(db, 'document_index_projects')).toContain('last_opened_at')
       expect(db.prepare('SELECT id, last_opened_at FROM document_index_documents').all()).toEqual([{ id: 'd1', last_opened_at: null }])

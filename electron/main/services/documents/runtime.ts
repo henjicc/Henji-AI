@@ -75,7 +75,7 @@ function getServices(): DocumentServices {
     grantMediaRoots,
     renderCover: renderCoverImage,
     hideDirectory,
-    // 单文件包适配器登记处：图片文档 .henjiimg（3.5）。
+    // 单文件包适配器登记处：图片文档 .hjimg（3.5）。
     adapters: createPackageAdapterRegistry([createImageDocumentPackageAdapter()]),
   })
   return services

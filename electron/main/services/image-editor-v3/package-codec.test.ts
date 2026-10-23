@@ -181,11 +181,11 @@ function corruptManifest(resourceId: ResourceId, byteLength: number): HenjiImage
   }
 }
 
-describe('.henjiimg package codec', () => {
+describe('.hjimg package codec', () => {
   it('自包含往返文档、资源、缩略图和外链重连提示', async () => {
     const sourceStore = new ContentAddressedResourceStore(path.join(rootDir, 'source-store'))
     const source = await sourceStore.putBuffer(Buffer.from('authoritative pixels'), { mediaType: 'image/tiff' })
-    const targetPath = path.join(rootDir, 'editable.henjiimg')
+    const targetPath = path.join(rootDir, 'editable.hjimg')
     const exporter = new HenjiImagePackageCodec(sourceStore)
     const exported = await exporter.export({
       targetPath,
@@ -214,7 +214,7 @@ describe('.henjiimg package codec', () => {
     const sourceStore = new ContentAddressedResourceStore(path.join(rootDir, 'history-source-store'))
     const tile = await sourceStore.putBuffer(Buffer.from('history-only tile'))
     const envelope = historyEnvelope(tile.id, tile.byteLength)
-    const targetPath = path.join(rootDir, 'history.henjiimg')
+    const targetPath = path.join(rootDir, 'history.hjimg')
     await new HenjiImagePackageCodec(sourceStore).export({ targetPath, document: envelope })
 
     const targetStore = new ContentAddressedResourceStore(path.join(rootDir, 'history-target-store'))
@@ -236,7 +236,7 @@ describe('.henjiimg package codec', () => {
     const store = new ContentAddressedResourceStore(path.join(rootDir, 'history-size-store'))
     const tile = await store.putBuffer(Buffer.from('authoritative history tile'))
     await expect(new HenjiImagePackageCodec(store).export({
-      targetPath: path.join(rootDir, 'tampered-history.henjiimg'),
+      targetPath: path.join(rootDir, 'tampered-history.hjimg'),
       document: historyEnvelope(tile.id, tile.byteLength + 1),
     })).rejects.toThrow('History resource byte length mismatch')
   })
@@ -245,7 +245,7 @@ describe('.henjiimg package codec', () => {
     const sourceStore = new ContentAddressedResourceStore(path.join(rootDir, 'external-source-store'))
     const source = await sourceStore.putBuffer(Buffer.from('linked original'), { mediaType: 'image/tiff' })
     const envelope = { ...documentEnvelope(source.id), previewRef: undefined }
-    const targetPath = path.join(rootDir, 'linked.henjiimg')
+    const targetPath = path.join(rootDir, 'linked.hjimg')
     const hash = source.id.slice('sha256:'.length)
 
     const exported = await new HenjiImagePackageCodec(sourceStore).export({
@@ -270,7 +270,7 @@ describe('.henjiimg package codec', () => {
   })
 
   it('拒绝 zip-slip 且不会向包外落盘', async () => {
-    const packagePath = path.join(rootDir, 'zip-slip.henjiimg')
+    const packagePath = path.join(rootDir, 'zip-slip.hjimg')
     await writeRawArchive(packagePath, [{ name: '../escaped.txt', bytes: Buffer.from('owned') }])
     const store = new ContentAddressedResourceStore(path.join(rootDir, 'store'))
 
@@ -281,7 +281,7 @@ describe('.henjiimg package codec', () => {
 
   it('拒绝压缩炸弹比例与资源哈希损坏', async () => {
     const store = new ContentAddressedResourceStore(path.join(rootDir, 'store'))
-    const bombPath = path.join(rootDir, 'bomb.henjiimg')
+    const bombPath = path.join(rootDir, 'bomb.hjimg')
     await writeArchive(bombPath, [
       { name: 'manifest.json', bytes: Buffer.from('{}') },
       { name: `resources/${'a'.repeat(64)}`, bytes: Buffer.alloc(128 * 1024, 65) },
@@ -296,7 +296,7 @@ describe('.henjiimg package codec', () => {
     const bad = Buffer.from('evil')
     const hash = crypto.createHash('sha256').update(good).digest('hex')
     const resourceId = `sha256:${hash}` as ResourceId
-    const corruptPath = path.join(rootDir, 'corrupt.henjiimg')
+    const corruptPath = path.join(rootDir, 'corrupt.hjimg')
     const manifest = corruptManifest(resourceId, bad.byteLength)
     await writeArchive(corruptPath, [
       { name: 'manifest.json', bytes: Buffer.from(JSON.stringify(manifest)) },
@@ -310,7 +310,7 @@ describe('.henjiimg package codec', () => {
   it('取消导出时清理临时包并保留原目标', async () => {
     const store = new ContentAddressedResourceStore(path.join(rootDir, 'store'))
     const source = await store.putBuffer(Buffer.from('pixels'))
-    const targetPath = path.join(rootDir, 'cancelled.henjiimg')
+    const targetPath = path.join(rootDir, 'cancelled.hjimg')
     await fsp.writeFile(targetPath, 'old package')
     const controller = new AbortController()
     controller.abort()
@@ -322,6 +322,6 @@ describe('.henjiimg package codec', () => {
     })).rejects.toMatchObject({ name: 'AbortError' })
     expect(await fsp.readFile(targetPath, 'utf8')).toBe('old package')
     const files = await fsp.readdir(rootDir)
-    expect(files.filter((name) => name.includes('cancelled.henjiimg') && name.endsWith('.tmp'))).toEqual([])
+    expect(files.filter((name) => name.includes('cancelled.hjimg') && name.endsWith('.tmp'))).toEqual([])
   })
 })

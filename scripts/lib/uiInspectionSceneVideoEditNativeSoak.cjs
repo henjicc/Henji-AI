@@ -93,7 +93,7 @@ function createVideoEditNativeSoakScene() {
       const segmentMs = MINUTES * 60_000 / SEGMENTS
       // Each segment plays from frame 0 and never reaches the end (30s of margin).
       const tiles = Math.ceil((segmentMs / 1000 + 30) * FPS / TILE)
-      const file = path.join(ROOT, 'soak.henji-video'); fs.writeFileSync(file, JSON.stringify(fixture(tiles)))
+      const file = path.join(ROOT, 'soak.hjvid'); fs.writeFileSync(file, JSON.stringify(fixture(tiles)))
       const evidence = { completed: false, acceptance: MINUTES >= TOLERANCE.minimumMinutes, minutes: MINUTES, source: SOURCE, tiles, tolerance: TOLERANCE, startedAt: new Date().toISOString(), samples: [], cycles: [], stalls: [] }
       const store = () => fs.writeFileSync(path.join(ROOT, 'evidence.json'), JSON.stringify(evidence, null, 2))
       const projectRef = { kind: 'video_edit.document', id: PROJECT_ID }

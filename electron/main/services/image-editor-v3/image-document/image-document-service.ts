@@ -2,7 +2,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { performance } from 'node:perf_hooks'
 
-import { documentKindRegistry } from '../../../../../src/core/documents/kinds'
+import { documentKindRegistry, documentNameForKind } from '../../../../../src/core/documents/kinds'
 import type { ImageDocumentContent } from '../../../../../src/core/documents/kinds/imageDocument'
 import { entryNameKey, untitledEntryName } from '../../../../../src/core/documents/naming'
 import type {
@@ -49,7 +49,7 @@ import { readImageDocumentPackageHeader } from './package-file'
 import type { ImageDocumentWorkingCopyLinks } from './working-copy-links'
 
 /*
- * 图片文档服务（3.5）：`.henjiimg` 是正式文件，编辑发生在程序目录的工作副本里。
+ * 图片文档服务（3.5）：`.hjimg` 是正式文件，编辑发生在程序目录的工作副本里。
  *
  * - 打开：工作副本与文件一致（记录里的文件版本、大小、修改时间都对得上）时直接复用；
  *   工作副本有没写回的修改（意外退出）时先请用户选择恢复或使用文件里的版本；其余情况把包解到工作副本
@@ -160,7 +160,7 @@ function documentRefOf(documentId: string): `image-edit-v3:${string}` {
 
 function nameOf(filePath: string): string {
   const base = path.basename(filePath)
-  return base.toLowerCase().endsWith(KIND.extension) ? base.slice(0, -KIND.extension.length) : base
+  return documentNameForKind(KIND, base) ?? base
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -293,7 +293,7 @@ export class ImageDocumentService {
     return { status: 'ready', read: this.readResult(located, working), working: await this.workingReference(working), imported: false }
   }
 
-  /** 写回：把工作副本整包写进 `.henjiimg`。工作副本与文件一致时不写。 */
+  /** 写回：把工作副本整包写进 `.hjimg`。工作副本与文件一致时不写。 */
   async commit(request: {
     target: DocumentTarget
     expectedRevision: number

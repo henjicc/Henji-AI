@@ -49,7 +49,7 @@ describe('画布实例与内嵌图片文档的包', () => {
     seedCanvasTestProject({ id: 'copy', name: '副本', nodes: [layerNode('a', 'layer-a'), plainNode('b')], edges: [] })
     const { commands } = canvasTestRegistry()
     const stored = commands.stored('copy')!
-    stored.content = { ...(stored.content as object), layerPackages: { 'layer-a': 'D:/作品/.henji/canvas-layers/layer-a.henjilayer' } }
+    stored.content = { ...(stored.content as object), layerPackages: { 'layer-a': 'D:/作品/.henji/canvas-layers/layer-a.hjlyr' } }
     await commands.writeSessionState({ docId: 'copy', key: 'canvas.history', value: {
       revision: stored.meta.revision, history: { past: [{ nodes: [layerNode('a', 'layer-a')], edges: [] }], future: [] },
     } })
@@ -57,7 +57,7 @@ describe('画布实例与内嵌图片文档的包', () => {
 
     const instance = await getCanvasProjectInstance('copy')
     expect(prepare).toHaveBeenCalledWith(expect.objectContaining({
-      canvasId: 'copy', layers: [{ documentId: 'layer-a', packagePath: 'D:/作品/.henji/canvas-layers/layer-a.henjilayer' }],
+      canvasId: 'copy', layers: [{ documentId: 'layer-a', packagePath: 'D:/作品/.henji/canvas-layers/layer-a.hjlyr' }],
     }))
     const state = instance.store.getState()
     expect(documentRefOf(state.nodes[0])).toBe('image-edit-v3:layer-a-fork')
@@ -77,7 +77,7 @@ describe('画布实例与内嵌图片文档的包', () => {
 
   it('写回（离开时关闭）：写出包并把位置记进画布内容；位置没变时不再多写一次文档', async () => {
     seedCanvasTestProject({ id: 'canvas', name: '画布', nodes: [layerNode('a', 'layer-a'), plainNode('b')], edges: [] })
-    const target = 'D:/作品/.henji/canvas-layers/layer-a.henjilayer'
+    const target = 'D:/作品/.henji/canvas-layers/layer-a.hjlyr'
     const commit = vi.spyOn(canvasDocumentCommands(), 'commitLayers').mockResolvedValue({ packages: { 'layer-a': target }, written: 1, released: 0 })
     await getCanvasProjectInstance('canvas')
     expect(await leaveCanvasProject('canvas')).toBe('closed')
@@ -109,7 +109,7 @@ describe('画布实例与内嵌图片文档的包', () => {
 
   it('换位置前（移动、转正、创建副本共用的屏障）先写出包，内容立即带上包位置', async () => {
     seedCanvasTestProject({ id: 'moving', name: '要移动', nodes: [layerNode('a', 'layer-a')], edges: [] })
-    const target = 'D:/作品/.henji/canvas-layers/layer-a.henjilayer'
+    const target = 'D:/作品/.henji/canvas-layers/layer-a.hjlyr'
     vi.spyOn(canvasDocumentCommands(), 'commitLayers').mockResolvedValue({ packages: { 'layer-a': target }, written: 1, released: 0 })
     await getCanvasProjectInstance('moving')
     await findCanvasProjectInstance('moving')!.session.prepareTransfer()

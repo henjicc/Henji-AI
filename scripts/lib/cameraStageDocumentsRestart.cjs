@@ -213,7 +213,7 @@ async function runCameraStageDocumentsRestart({ launch, userDataDir, outDir }) {
     const saved = await documentNamed(page, '镜头一号')
     assert.equal(saved.draft, false, '保存后必须去掉草稿标记')
     assert.equal(saved.id, draftOne.id, '草稿转正不换 ID')
-    assert.equal(saved.path, path.join(stageFolder, '镜头一号.henji-stage'))
+    assert.equal(saved.path, path.join(stageFolder, '镜头一号.hjstg'))
     await card(page, saved.id).waitFor({ state: 'visible', timeout: 15000 })
     const envelope = readEnvelope(saved.path)
     assert.equal(envelope.format, 'henji-document')
@@ -253,7 +253,7 @@ async function runCameraStageDocumentsRestart({ launch, userDataDir, outDir }) {
     await closeCurrent()
 
     // ==================== 两次启动之间：在资源管理器的位置拷贝一份 ====================
-    const externalCopy = path.join(stageFolder, '镜头外部拷贝.henji-stage')
+    const externalCopy = path.join(stageFolder, '镜头外部拷贝.hjstg')
     fs.copyFileSync(saved.path, externalCopy)
 
     // ==================== 第二次启动：纸白 ====================
@@ -277,7 +277,7 @@ async function runCameraStageDocumentsRestart({ launch, userDataDir, outDir }) {
     await second.waitForTimeout(400)
     await second.getByRole('dialog').getByRole('button', { name: '确认', exact: true }).click()
     await waitUntil(async () => (await listStageDocuments(second)).some((document) => document.id === saved.id && document.name === '镜头改名'), '改名完成')
-    const renamedPath = path.join(stageFolder, '镜头改名.henji-stage')
+    const renamedPath = path.join(stageFolder, '镜头改名.hjstg')
     assert.ok(fs.existsSync(renamedPath) && !fs.existsSync(saved.path),
       `改名必须改文件名：${JSON.stringify({ files: fs.readdirSync(stageFolder), index: (await listStageDocuments(second)).map((item) => item.path) })}`)
 
@@ -291,7 +291,7 @@ async function runCameraStageDocumentsRestart({ launch, userDataDir, outDir }) {
     await moveDialog.getByRole('button', { name: '移入', exact: true }).click()
     await waitUntil(async () => (await listStageDocuments(second)).some((document) => document.id === saved.id && document.projectName === '样板项目'), '移到项目完成')
     const projectFolder = path.join(workRoot, '项目', '样板项目')
-    const movedPath = path.join(projectFolder, '镜头改名.henji-stage')
+    const movedPath = path.join(projectFolder, '镜头改名.hjstg')
     assert.ok(fs.existsSync(movedPath), `移到项目后文件应在项目文件夹里：${movedPath}`)
     const projectInternal = path.join(projectFolder, '.henji')
     assert.ok(fs.existsSync(projectInternal), '项目文件夹里应有 .henji（项目说明）')

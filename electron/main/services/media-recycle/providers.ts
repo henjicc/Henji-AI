@@ -2,7 +2,8 @@ import path from 'node:path'
 import { setImmediate as yieldToIO } from 'node:timers/promises'
 import { collectMediaReferences } from '../../../../src/core/media/mediaReferences'
 import { createLocationCodec, type LocationContext } from '../../../../src/core/storage/locationCodec'
-import { DOCUMENT_KINDS } from '../../../../src/core/documents/kinds'
+import { DOCUMENT_KINDS, readableDocumentExtensions } from '../../../../src/core/documents/kinds'
+import { henjiReadableExtensions } from '../../../../src/core/fileExtensions'
 import { getDb } from '../db'
 import { databaseLocationContext } from '../db-locations'
 import { getProgramDataDir, getProgramStoreDir, getUserModelsLocation, getUserRootDir } from '../appPaths'
@@ -104,7 +105,7 @@ export async function collectDocumentReferences(signal: AbortSignal, onlyRoot?: 
   const db = getDb()
   const context = databaseLocationContext(db)
   const refs = new Set<string>()
-  const documentExtensions = [...new Set([...DOCUMENT_KINDS.map(kind => kind.extension), '.henjipack'])]
+  const documentExtensions = [...new Set([...DOCUMENT_KINDS.flatMap(kind => readableDocumentExtensions(kind)), ...henjiReadableExtensions('document_package')])]
   const exclude = onlyRoot ? [] : [...managedMediaRoots(), getUserModelsLocation().dir]
   const roots: ReferenceScanRoot[] = onlyRoot ? [{ path: onlyRoot }] : [
     { path: context.userRoot, extensions: documentExtensions, exclude },

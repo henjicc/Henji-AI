@@ -7,6 +7,7 @@ import { UI_COVER_FRAME_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, U
 import { useNotification } from '@/contexts/NotificationContext'
 import { openDialog, saveDialog, toDisplaySrc } from '@/platform/desktopApi'
 import { parseStyleGuide } from '@/core/videoEdit/styles/styleGuide'
+import { henjiDialogExtensions } from '@/core/fileExtensions'
 import { VIDEO_EDIT_STYLE_PACKAGE_EXTENSION } from '@/core/videoEdit/styles/templateSchemas'
 import { getActiveVideoEditSequence, subscribeVideoEditDomain, videoEditDomainRevision, type VideoEditInstance } from '../application/videoEditService'
 import { videoEditStyleLibrary, type VideoEditLibraryStyle } from '../application/videoEditStyleLibrary'
@@ -18,6 +19,7 @@ import { askAssistantForStyleTemplates, askAssistantToCreateStyle } from '../app
 import { VideoEditPresetPlayer } from './VideoEditPresetPlayer'
 
 const FILTERS = [{ name: '痕迹AI风格包', extensions: [VIDEO_EDIT_STYLE_PACKAGE_EXTENSION] }]
+const OPEN_FILTERS = [{ name: '痕迹AI风格包', extensions: henjiDialogExtensions('style_package') }]
 const TILE = { width: 320, height: 180 }
 const DETAIL = { width: 640, height: 360 }
 function meta(entry: VideoEditLibraryStyle, isDefault: boolean, bound: boolean): string {
@@ -109,7 +111,7 @@ function Panel({ instance, onError, visible = true }: { instance: VideoEditInsta
     ]),
   ]
   const importFile = async (): Promise<void> => {
-    const selected = await openDialog({ multiple: false, filters: FILTERS }); const path = Array.isArray(selected) ? selected[0] : selected; if (!path) return
+    const selected = await openDialog({ multiple: false, filters: OPEN_FILTERS }); const path = Array.isArray(selected) ? selected[0] : selected; if (!path) return
     await run('import', async () => {
       let result
       try { result = await importVideoEditStylePackage(path) }

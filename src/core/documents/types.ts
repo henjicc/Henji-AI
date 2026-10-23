@@ -10,6 +10,8 @@
  * 所有路径在接口里都是绝对路径（内存形态），相对写法只出现在磁盘与数据库里。
  */
 
+import { henjiExtension } from '../fileExtensions'
+
 export const DOCUMENT_KIND_IDS = ['video_edit', 'canvas', 'audio_edit', 'camera_stage', 'image_document', 'screen_recording'] as const
 export type DocumentKindId = (typeof DOCUMENT_KIND_IDS)[number]
 
@@ -322,7 +324,7 @@ export interface DocumentIndexScanReport {
  */
 
 /** 单文件包的扩展名。 */
-export const DOCUMENT_PACKAGE_EXTENSION = '.henjipack'
+export const DOCUMENT_PACKAGE_EXTENSION = henjiExtension('document_package')
 
 export interface ExportDocumentPackageRequest {
   target: DocumentTarget

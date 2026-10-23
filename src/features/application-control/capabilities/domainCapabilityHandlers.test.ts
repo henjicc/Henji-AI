@@ -70,12 +70,12 @@ describe('toolbox capability handlers', () => {
 
   it('镜头参考登记了通用打开方式：文档打开成功后才进入 3D Surface；失败时不切换界面', async () => {
     registeredHandlers()
-    const document = { id: 'stage-1', kind: 'camera_stage', path: '/work/镜头参考/a.henji-stage' } as DocumentSummary
+    const document = { id: 'stage-1', kind: 'camera_stage', path: '/work/镜头参考/a.hjstg' } as DocumentSummary
     vi.spyOn(getDocumentOperations(), 'readDocument').mockResolvedValue({ meta: document, content: {}, missingPaths: [], externalDirectories: [], unresolved: [] })
     expect(getDocumentOperations().canOpen('camera_stage')).toBe(true)
     mocks.openCameraStageDocument.mockResolvedValue(undefined)
     await getDocumentOperations().openDocument(document)
-    expect(mocks.openCameraStageDocument).toHaveBeenCalledWith({ id: 'stage-1', path: '/work/镜头参考/a.henji-stage' })
+    expect(mocks.openCameraStageDocument).toHaveBeenCalledWith({ id: 'stage-1', path: '/work/镜头参考/a.hjstg' })
     expect(mocks.openApplicationSurface).toHaveBeenCalledWith('tool.camera_stage')
     expect(mocks.openCameraStageDocument.mock.invocationCallOrder[0]).toBeLessThan(mocks.openApplicationSurface.mock.invocationCallOrder[0])
 

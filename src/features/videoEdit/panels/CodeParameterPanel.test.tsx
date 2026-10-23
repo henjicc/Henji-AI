@@ -111,7 +111,7 @@ it('原生参数隐藏时回滚草稿，调整图层只呈现合法画面属性'
 beforeEach(async () => {
   vi.stubGlobal('OffscreenCanvas', class { getContext() { return { font: '', measureText(text: string) { const width = text.length * Number.parseFloat(this.font); return { width, actualBoundingBoxLeft: 0, actualBoundingBoxRight: width } } } } })
   installHarnessNativeStorage(); onError = vi.fn()
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/code-controls.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/code-controls.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
   owner = (await createLegacyTrackVideoEditProject())
   const programs = [source, alternate].map(compileCodeMaterial)

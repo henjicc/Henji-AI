@@ -15,7 +15,7 @@ import { createImageMarkV3ColorMode, prepareImageEditSourceLocatorV3 } from './i
 /*
  * 从一张图片新建图片文档（3.5）：打开图片 / 新建空白图片 / 粘贴 / 拖入 / 从其他工具传来。
  * 图片先导入程序目录的内容寻址资源库，按它建一份工作副本（V3 文档 ID 就是新文档的 ID），
- * 再写出草稿 `.henjiimg`。空白图片记下创建时的版本：之后没有任何编辑就算空草稿，离开时直接删除。
+ * 再写出草稿 `.hjimg`。空白图片记下创建时的版本：之后没有任何编辑就算空草稿，离开时直接删除。
  */
 
 const logger = createLogger('features.imageMark.document_source')

@@ -161,7 +161,7 @@ it('源前台播放声明节目暂停级联，逆操作恢复原命令且不覆�
 beforeEach(() => {
   installHarnessNativeStorage()
   files.clear()
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/source.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/source.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, value) => { files.set(path, value) })
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
   vi.spyOn(getPlatform().system.paths, 'dirname').mockResolvedValue('D:/media')

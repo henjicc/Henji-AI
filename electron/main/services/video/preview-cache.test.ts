@@ -19,11 +19,11 @@ afterEach(async () => {
 it('只释放旧转码及中断文件，保留素材、工程、目录和其他缓存', async () => {
   const root = await temporary(); const cache = path.join(root, 'cache', 'video-edit-preview'); await fs.mkdir(cache, { recursive: true })
   const digest = 'a'.repeat(64)
-  for (const name of [`${digest}.mp4`, `${digest}-00000000-0000-0000-0000-000000000000.partial.mp4`, 'original.mp4', 'project.henji-video', 'unknown.partial.mp4']) await fs.writeFile(path.join(cache, name), 'data')
+  for (const name of [`${digest}.mp4`, `${digest}-00000000-0000-0000-0000-000000000000.partial.mp4`, 'original.mp4', 'project.hjvid', 'unknown.partial.mp4']) await fs.writeFile(path.join(cache, name), 'data')
   await fs.mkdir(path.join(cache, `${'b'.repeat(64)}.mp4`))
   const source = path.join(root, `${digest}.mp4`); await fs.writeFile(source, 'original source')
   await clearLegacyVideoPreviewCache(root)
-  expect((await fs.readdir(cache)).sort()).toEqual([`${'b'.repeat(64)}.mp4`, 'original.mp4', 'project.henji-video', 'unknown.partial.mp4'].sort())
+  expect((await fs.readdir(cache)).sort()).toEqual([`${'b'.repeat(64)}.mp4`, 'original.mp4', 'project.hjvid', 'unknown.partial.mp4'].sort())
   expect(await fs.readFile(source, 'utf8')).toBe('original source')
   expect(log.info).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ context: { files: 2, bytes: 8 } }))
   await clearLegacyVideoPreviewCache(root); expect(log.info).toHaveBeenCalledOnce()

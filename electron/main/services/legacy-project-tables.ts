@@ -64,7 +64,7 @@ export const audioEditProjectsNeedBackup = legacyTablesHaveRows('audio_edit_proj
 
 /**
  * 画布（3.4）：删 `storyboard_projects` 与更早的 `canvas_projects`（`CanvasProjectService` 的旧表，早已不写）。
- * 画布改存 `.henji-canvas` 文档；旧工程内容不迁移（重要记录 008），有数据时账本先整库备份。
+ * 画布改存 `.hjcvs` 文档；旧工程内容不迁移（重要记录 008），有数据时账本先整库备份。
  * 原来这两张表由 `initializeLegacyProjectTables` 每次启动建表，本项之后不再有任何账本之外的建表。
  */
 export function retireCanvasProjectsV1(db: Database.Database): void {

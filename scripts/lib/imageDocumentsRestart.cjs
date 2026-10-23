@@ -9,7 +9,7 @@ const { captureInspectionPage } = require('./uiInspectionCapture.cjs')
 const { createRuntimeEvidenceCollector, queryApplicationLogs } = require('./runtimeEvidence.cjs')
 
 /*
- * 3.5 图片文档（.henjiimg 单文件包 + 程序目录工作副本 + 写回）的真实 Electron 验收，
+ * 3.5 图片文档（.hjimg 单文件包 + 程序目录工作副本 + 写回）的真实 Electron 验收，
  * 跑在 mcp-restart-check 的同一套隔离资料目录与两次完整启动上（--only image-documents）：
  *
  * 第一次启动（石墨）：工具 → 图片编辑（图片文档列表）→ 新建空白图片（草稿直接写进“图片文档/”）→
@@ -87,7 +87,7 @@ async function waitUntil(check, label, timeout = 15000) {
   }
 }
 
-/** 在测试进程里读 .henjiimg 的小条目（包头、清单），不经应用。 */
+/** 在测试进程里读 .hjimg 的小条目（包头、清单），不经应用。 */
 function readPackageEntries(file) {
   return new Promise((resolve, reject) => {
     yauzl.open(file, { lazyEntries: true }, (error, archive) => {
@@ -239,7 +239,7 @@ async function runImageDocumentsRestart({ launch, userDataDir, outDir }) {
     await page.waitForTimeout(500)
     await shot('graphite-save-name')
     await nameDialog.getByRole('button', { name: '保存', exact: true }).click()
-    const savedPath = path.join(imageFolder, '图片一号.henjiimg')
+    const savedPath = path.join(imageFolder, '图片一号.hjimg')
     await waitUntil(async () => fs.existsSync(savedPath), '保存后文件改名为“图片一号”')
     await waitUntil(async () => (await readHeader(savedPath)).header.revision >= 1, '保存时写回包')
     const afterSave = await readHeader(savedPath)
@@ -254,7 +254,7 @@ async function runImageDocumentsRestart({ launch, userDataDir, outDir }) {
     await listReady(page)
     assert.equal(await page.getByRole('alertdialog').count(), 0, '已保存的文档离开时不应询问')
     const afterClose = await readHeader(savedPath)
-    assert.ok(afterClose.header.revision > afterSave.header.revision, '关闭时应写回 .henjiimg')
+    assert.ok(afterClose.header.revision > afterSave.header.revision, '关闭时应写回 .hjimg')
     await card(page, draft.id).waitFor({ state: 'visible', timeout: 15000 })
     await shot('graphite-list-after-close')
 

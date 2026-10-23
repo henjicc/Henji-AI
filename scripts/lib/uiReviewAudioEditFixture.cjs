@@ -1,6 +1,6 @@
 /**
  * 界面核对步骤 `seedAudioEdit`：口播剪辑夹具工程（界面重设计 5.5 第二批）。
- * 在系统临时目录生成一段 12 秒的低音量正弦 WAV，经正式 preload 接口建口播文档（3.3：`.henji-audio`，
+ * 在系统临时目录生成一段 12 秒的低音量正弦 WAV，经正式 preload 接口建口播文档（3.3：`.hjaud`，
  * 见 audioEditDocumentFixture.cjs）；`transcript: true` 时写入一份固定逐字稿（含已删除的句子与语气词），
  * 不走语音识别、不产生费用。场景结束删除文档文件、从作品索引移除并删掉临时文件。
  */

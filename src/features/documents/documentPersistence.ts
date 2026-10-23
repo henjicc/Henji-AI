@@ -7,7 +7,7 @@ import type { DocumentPersistence, DocumentSessionCommands } from './documentSes
  * 保存策略（实施方案 2.4）：
  * - JSON 类型（剪辑、画布、口播、镜头参考）：每次保存直接写文档文件，主进程负责版本核对、
  *   内容没变不写、原子替换。
- * - 单文件包类型（图片文档）：save 写程序目录的工作副本、commit 在空闲与关闭时写回 `.henjiimg`，
+ * - 单文件包类型（图片文档）：save 写程序目录的工作副本、commit 在空闲与关闭时写回 `.hjimg`，
  *   由 3.5 实现 DocumentPersistence 并在打开时传入。
  */
 

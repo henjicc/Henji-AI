@@ -19,7 +19,7 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
 
 beforeEach(() => {
   installHarnessNativeStorage()
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/masks.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/masks.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
   // jsdom 没有布局与指针捕获：节目画面按 1920×480 显示（序列 1920×1080 被拉伸，验证按显示框换算）。
   Element.prototype.setPointerCapture = () => undefined

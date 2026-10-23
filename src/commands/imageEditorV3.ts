@@ -294,7 +294,7 @@ export async function readImageEditorV3BrushTiles(
   }) } finally { release() }
 }
 
-/** 图片文档（.henjiimg，3.5）：打开 / 重新定位 / 新建草稿 / 写回。 */
+/** 图片文档（.hjimg，3.5）：打开 / 重新定位 / 新建草稿 / 写回。 */
 export function openImageEditorV3ImageDocument(
   request: Parameters<ImageEditorV3Platform['openImageDocument']>[0],
 ): ReturnType<ImageEditorV3Platform['openImageDocument']> {

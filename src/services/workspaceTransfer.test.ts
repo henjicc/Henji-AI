@@ -49,7 +49,7 @@ beforeEach(async () => {
     async convertToBlob() { return new NativeBlob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }) }
   })
   const platform = getPlatform()
-  vi.spyOn(platform.system.dialog, 'save').mockResolvedValue(path.join(mediaRoot, 'project.henji-video'))
+  vi.spyOn(platform.system.dialog, 'save').mockResolvedValue(path.join(mediaRoot, 'project.hjvid'))
   vi.spyOn(platform.system.fs, 'writeTextFile').mockResolvedValue(undefined)
   vi.spyOn(platform.system.fs, 'mkdir').mockResolvedValue(undefined)
   vi.spyOn(platform.system.paths, 'dirname').mockImplementation(async value => path.dirname(value))

@@ -10,7 +10,7 @@ import { isImageDocumentHeaderEmpty } from './header'
 import { readImageDocumentPackageHeader, rewriteImageDocumentPackageHeader } from './package-file'
 
 /*
- * 图片文档（`.henjiimg`）的单文件包适配器（3.5）：登记在文档底座的适配器登记处，
+ * 图片文档（`.hjimg`）的单文件包适配器（3.5）：登记在文档底座的适配器登记处，
  * 之后扫描、改名、移动、副本、回收站、删空草稿都由通用文档仓库完成。
  *
  * - 名称不写进包，改名只改文件名（patch 里只有 name 时不重写包）。

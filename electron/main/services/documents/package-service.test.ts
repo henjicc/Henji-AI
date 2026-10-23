@@ -51,14 +51,14 @@ describe('通用单文件包（4.1）', () => {
   })
 
   it('清单中文档缺失或无法解析时报告全部失败文件，保留原包且不发布项目', async () => {
-    const source = path.join(env.outside, '不完整.henjipack')
+    const source = path.join(env.outside, '不完整.hjpak')
     await writeZip(source, {
       'henji-package.json': JSON.stringify({ format: 'henji-package', version: 1, type: 'project', name: '不完整', exportedAt: '',
-        folders: { generated: '生成结果', materials: '素材' }, documents: [{ id: 'missing-one', path: '缺少.henji-canvas' }, { id: 'broken-one', path: '无法解析.henji-canvas' }] }),
-      'content/无法解析.henji-canvas': '{',
+        folders: { generated: '生成结果', materials: '素材' }, documents: [{ id: 'missing-one', path: '缺少.hjcvs' }, { id: 'broken-one', path: '无法解析.hjcvs' }] }),
+      'content/无法解析.hjcvs': '{',
     })
     const original = await fsp.readFile(source)
-    await expect(env.services.service.importPackage({ source })).rejects.toThrow('缺少.henji-canvas、无法解析.henji-canvas')
+    await expect(env.services.service.importPackage({ source })).rejects.toThrow('缺少.hjcvs、无法解析.hjcvs')
     expect(await fsp.readFile(source)).toEqual(original)
     expect(env.catalog.listProjects()).toEqual([])
     expect(await fsp.readdir(path.join(env.workRoot, '项目'))).toEqual([])
@@ -69,7 +69,7 @@ describe('通用单文件包（4.1）', () => {
     const source = await service.createProject({ name: '短片' })
     const created = await service.createDocument({ kind: 'canvas', container: { kind: 'project', projectId: source.id }, name: '分镜' })
     const generated = write(path.join(source.path, '生成结果', '镜头 1.png'), 'png-1')
-    const layer = write(path.join(source.path, '.henji', 'canvas-layers', 'layer-a.henjilayer'), 'layer')
+    const layer = write(path.join(source.path, '.henji', 'canvas-layers', 'layer-a.hjlyr'), 'layer')
     const external = write(path.join(env.outside, '参考.jpg'), 'ref')
     const missing = path.join(env.outside, '已删除.mp4')
     await service.saveDocument({
@@ -79,28 +79,28 @@ describe('通用单文件包（4.1）', () => {
     })
 
     const exported = await service.exportDocumentPackage({ target: { id: created.meta.id } })
-    expect(exported.path).toBe(path.join(env.workRoot, '导出', '分镜.henjipack'))
+    expect(exported.path).toBe(path.join(env.workRoot, '导出', '分镜.hjpak'))
     expect(exported.missingPaths).toEqual([missing])
     // 不给位置时重名自动加序号
     const second = await service.exportDocumentPackage({ target: { id: created.meta.id } })
-    expect(path.basename(second.path)).toBe('分镜 (2).henjipack')
+    expect(path.basename(second.path)).toBe('分镜 (2).hjpak')
 
     const target = await service.createProject({ name: '另一个' })
     const imported = await service.importPackage({ source: exported.path, container: { kind: 'project', projectId: target.id } })
     if (imported.type !== 'document') throw new Error('应为文档包')
     expect(imported.meta.id).not.toBe(created.meta.id)
-    expect(imported.meta.path).toBe(path.join(target.path, '分镜.henji-canvas'))
+    expect(imported.meta.path).toBe(path.join(target.path, '分镜.hjcvs'))
     expect(await listFiles(target.path)).toEqual([
-      '.henji/canvas-layers/layer-a.henjilayer',
+      '.henji/canvas-layers/layer-a.hjlyr',
       '.henji/project.json',
-      '分镜.henji-canvas',
+      '分镜.hjcvs',
       '生成结果/镜头 1.png',
       '素材/参考.jpg',
     ])
     const stored = await readJson(imported.meta.path)
     expect(stored.content).toEqual({
       nodes: [{ imageUrl: 'henji:/生成结果/镜头 1.png' }, { ref: 'henji:/素材/参考.jpg' }, { video: missing }],
-      layerPackages: { a: 'henji:/.henji/canvas-layers/layer-a.henjilayer' },
+      layerPackages: { a: 'henji:/.henji/canvas-layers/layer-a.hjlyr' },
     })
     expect(JSON.stringify(stored)).not.toContain(env.programRoot)
     // 原文档与原文件不动
@@ -122,7 +122,7 @@ describe('通用单文件包（4.1）', () => {
       content: { source: { docId: canvas.meta.id, path: canvas.meta.path }, clip: external },
     })
     const exported = await service.exportProjectPackage({ projectId: project.id, destination: path.join(env.outside, '旅行') })
-    expect(exported.path).toBe(path.join(env.outside, '旅行.henjipack'))
+    expect(exported.path).toBe(path.join(env.outside, '旅行.hjpak'))
 
     const first = await service.importPackage({ source: exported.path })
     const again = await service.importPackage({ source: exported.path })
@@ -131,7 +131,7 @@ describe('通用单文件包（4.1）', () => {
     expect(again.project.name).toBe('旅行 (3)')
     expect(new Set([project.id, first.project.id, again.project.id]).size).toBe(3)
     expect(again.documents).toBe(2)
-    expect(await listFiles(again.project.path)).toEqual(['.henji/project.json', '引用方.henji-canvas', '画布.henji-canvas', '素材/外部.mp4', '自建文件夹/笔记.txt'])
+    expect(await listFiles(again.project.path)).toEqual(['.henji/project.json', '引用方.hjcvs', '画布.hjcvs', '素材/外部.mp4', '自建文件夹/笔记.txt'])
     const documents = await service.listDocuments({ container: { kind: 'project', projectId: again.project.id } })
     expect(documents).toHaveLength(2)
     const importedCanvas = documents.find((document) => document.name === '画布')!
@@ -169,7 +169,7 @@ describe('通用单文件包（4.1）', () => {
     expect(exported.missingPaths).toEqual([])
     const imported = await service.importPackage({ source: exported.path })
     if (imported.type !== 'project') throw new Error('应为项目包')
-    expect(await listFiles(imported.project.path)).toEqual(['.henji/project.json', '剪辑.henji-video', '导出/内置成片.mp4'])
+    expect(await listFiles(imported.project.path)).toEqual(['.henji/project.json', '剪辑.hjvid', '导出/内置成片.mp4'])
     const document = env.catalog.listDocuments({ projectId: imported.project.id, kind: 'video_edit' })[0]
     const read = await service.readDocument({ id: document.id })
     expect(read.missingPaths).toEqual([])
@@ -177,7 +177,7 @@ describe('通用单文件包（4.1）', () => {
     expect(reopened.map(entry => entry.path)).toEqual(outputPaths.map(output => output === internal ? path.join(imported.project.path, '导出', '内置成片.mp4') : output === outputPaths[2] ? path.join(imported.project.path, '导出', '已删除.mp4') : output))
     const destination = await service.createProject({ name: '移动成片历史' })
     expect(await service.moveDocument({ target: { id: document.id }, container: { kind: 'project', projectId: destination.id } })).toMatchObject({ copiedFiles: 0, missingPaths: [] })
-    expect(await listFiles(destination.path)).toEqual(['.henji/project.json', '剪辑.henji-video'])
+    expect(await listFiles(destination.path)).toEqual(['.henji/project.json', '剪辑.hjvid'])
   })
 
   it('成片重新作为源素材使用时仍是依赖，Windows 与 POSIX 缺失源素材均如实报告', async () => {
@@ -202,7 +202,7 @@ describe('通用单文件包（4.1）', () => {
   })
 
   it('不安全或无法识别的包：拒绝且不留暂存', async () => {
-    const unsafe = path.join(env.outside, '坏包.henjipack')
+    const unsafe = path.join(env.outside, '坏包.hjpak')
     await writeZip(unsafe, {
       'henji-package.json': JSON.stringify({ format: 'henji-package', version: 1, type: 'project', name: '坏', exportedAt: '', folders: { generated: '生成结果', materials: '素材' }, documents: [] }),
       'content/../逃逸.txt': 'x',
@@ -211,10 +211,10 @@ describe('通用单文件包（4.1）', () => {
     expect(fs.existsSync(path.join(env.workRoot, '逃逸.txt'))).toBe(false)
     expect((await fsp.readdir(path.join(env.workRoot, '项目')))).toEqual([])
 
-    const newer = path.join(env.outside, '新版本.henjipack')
+    const newer = path.join(env.outside, '新版本.hjpak')
     await writeZip(newer, { 'henji-package.json': JSON.stringify({ format: 'henji-package', version: 9 }) })
     await expect(env.services.service.importPackage({ source: newer })).rejects.toThrow('更新版本')
-    const notPackage = write(path.join(env.outside, '随便.henjipack'), 'not a zip')
+    const notPackage = write(path.join(env.outside, '随便.hjpak'), 'not a zip')
     await expect(env.services.service.importPackage({ source: notPackage })).rejects.toMatchObject({ name: 'DocumentFormatError' })
   })
 

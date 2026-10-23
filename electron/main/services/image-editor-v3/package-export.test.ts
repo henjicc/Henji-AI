@@ -42,7 +42,7 @@ it('streams one unique resource at a time and reopens unchanged pixel bytes', as
     return stream
   })
   const onProgress = vi.fn()
-  const targetPath = path.join(root, 'saved.henjiimg')
+  const targetPath = path.join(root, 'saved.hjimg')
   await packages.export({ targetPath, document, resources: document.resourceRefs.map((resourceId) => ({ resourceId })), onProgress })
   expect(peak).toBe(1)
   expect(onProgress.mock.calls).toEqual([[1, 2], [2, 2]])
@@ -53,7 +53,7 @@ it('streams one unique resource at a time and reopens unchanged pixel bytes', as
 
 it('cancel after the last resource preserves the original file and removes staging', async () => {
   const document = await sample()
-  const targetPath = path.join(root, 'saved.henjiimg')
+  const targetPath = path.join(root, 'saved.hjimg')
   await fsp.writeFile(targetPath, 'original')
   const controller = new AbortController()
   await expect(packages.export({ targetPath, document, signal: controller.signal,
@@ -66,7 +66,7 @@ it('cancel after the last resource preserves the original file and removes stagi
 it('corrupt resource rejects promptly and cannot publish a partial package', async () => {
   const document = await sample()
   await fsp.writeFile(resources.getFilesystemPath(document.resourceRefs[0]), Buffer.alloc(128 * 1024, 1))
-  const targetPath = path.join(root, 'saved.henjiimg')
+  const targetPath = path.join(root, 'saved.hjimg')
   await fsp.writeFile(targetPath, 'original')
   await expect(packages.export({ targetPath, document })).rejects.toThrow('Corrupt resource')
   expect(await fsp.readFile(targetPath, 'utf8')).toBe('original')
@@ -75,7 +75,7 @@ it('corrupt resource rejects promptly and cannot publish a partial package', asy
 
 it('cancel during streaming closes the resource file handle and preserves the original', async () => {
   const document = await sample()
-  const targetPath = path.join(root, 'saved.henjiimg')
+  const targetPath = path.join(root, 'saved.hjimg')
   await fsp.writeFile(targetPath, 'original')
   const controller = new AbortController()
   const open = resources.openReadStream.bind(resources)
@@ -93,7 +93,7 @@ it('cancel during streaming closes the resource file handle and preserves the or
 
 it('concurrent exports to the same path publish in request order', async () => {
   const document = await sample()
-  const targetPath = path.join(root, 'saved.henjiimg')
+  const targetPath = path.join(root, 'saved.hjimg')
   const order: string[] = []
   await Promise.all([
     packages.export({ targetPath, document, onProgress: () => { order.push('first') } }),

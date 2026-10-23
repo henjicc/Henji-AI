@@ -13,10 +13,10 @@ function createVideoEditMaskScene() {
   return { id: 'video-edit-mask', surface: '剪辑', name: '剪辑-效果遮罩拖动跟手与顶点编辑（原4K60）', writesUserData: true,
     setup: async (page, app, { capture }) => {
       const root = path.resolve('node_modules/.cache/video-edit-mask'); fs.mkdirSync(root, { recursive: true })
-      const file = path.join(root, 'mask.henji-video')
+      const file = path.join(root, 'mask.hjvid')
       const evidence = { completed: false }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
-      const project = JSON.parse(fs.readFileSync(path.resolve('node_modules/.cache/video-edit-scrub-original/scrub.henji-video'), 'utf8'))
+      const project = JSON.parse(fs.readFileSync(path.resolve('node_modules/.cache/video-edit-scrub-original/scrub.hjvid'), 'utf8'))
       project.id = 'mask-drag'; project.name = '遮罩拖动原4K60'; project.revision = 0; project.sequences = [project.sequences[0]]
       const sequence = project.sequences[0]; sequence.id = 'mask-sequence'; sequence.clips = sequence.clips.filter(clip => clip.id === 'base')
       assert.equal(sequence.width, 3840); assert.equal(sequence.height, 2160)

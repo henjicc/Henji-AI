@@ -55,7 +55,7 @@ function createVideoEditTimeRemapScene() {
     setup: async (page, app, { capture }) => {
       const root = path.resolve('node_modules/.cache/video-edit-time-remap'); fs.rmSync(root, { recursive: true, force: true }); fs.mkdirSync(root, { recursive: true })
       assert.ok(fs.existsSync(SOURCE), `缺少 4K60 素材：${SOURCE}`)
-      const file = path.join(root, 'time-remap.henji-video'); fs.writeFileSync(file, JSON.stringify(fixture()))
+      const file = path.join(root, 'time-remap.hjvid'); fs.writeFileSync(file, JSON.stringify(fixture()))
       const evidence = { completed: false, startedAt: new Date().toISOString(), source: SOURCE, tolerance: TOLERANCE, runs: {} }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       const projectRef = { kind: 'video_edit.document', id: PROJECT_ID }

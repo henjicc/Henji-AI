@@ -15,7 +15,7 @@ vi.mock('./VideoEditAnnotationThumbnail', async () => {
   return { VideoEditAnnotationThumbnail: ({ label, onJump }: { label: string; onJump: () => void }) => <UiButton aria-label={label} onClick={onJump}>标注画面</UiButton> }
 })
 vi.mock('react-virtuoso', () => ({ Virtuoso: ({ data, itemContent }: { data: unknown[]; itemContent: (index: number, entry: unknown) => React.ReactNode }) => <div>{data.map((entry, index) => <div key={index}>{itemContent(index, entry)}</div>)}</div> }))
-beforeEach(() => { installHarnessNativeStorage(); vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/notes.henji-video'); vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined); vi.spyOn(getPlatform().clipboard, 'writeText').mockResolvedValue(undefined) })
+beforeEach(() => { installHarnessNativeStorage(); vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/notes.hjvid'); vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined); vi.spyOn(getPlatform().clipboard, 'writeText').mockResolvedValue(undefined) })
 afterEach(async () => { cleanup(); for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 it('完整流转：草稿编辑→批量发送→open→Agent处理→待审查→通过/重开，筛选与跳转读取真实状态', async () => {
   const owner = await createVideoEditTestProject(); const id = owner.document.id

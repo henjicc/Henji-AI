@@ -58,7 +58,7 @@ it.each(['layer', 'filter'] as const)('删除 %s 后的历史资源经过撤销�
   expect(await documents.deleteIfRevision('source', document.revision)).toBe(true)
   const forkRoots = new Set((await documents.list()).flatMap(entry => entry.resourceRefs))
   expect((await resources.garbageCollect(forkRoots, { minimumAgeMs: 0 })).deleted).not.toContain(tile.resourceId)
-  const archive = path.join(root, 'fork.henjiimg')
+  const archive = path.join(root, 'fork.hjimg')
   await new HenjiImagePackageCodec(resources).export({ targetPath: archive, document: await documents.loadCheckpoint('fork') })
   // 通用文档复制会重写包头/文档 ID，资源及分页仍原样保留。
   await rewriteImageDocumentPackageHeader(archive, { id: 'package-copy' })

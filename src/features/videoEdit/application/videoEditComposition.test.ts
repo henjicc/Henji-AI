@@ -80,14 +80,14 @@ describe('嵌入模式与回到来源', () => {
 
   it('来源文档找不到：给出重新定位所需的类型；重新定位后本剪辑里引用它的片段一起改指向，一次撤销恢复', async () => {
     const instance = await createEditingProject()
-    const gone = { docId: 'gone-voice', path: 'D:/作品/口播/已删除.henji-audio' }
+    const gone = { docId: 'gone-voice', path: 'D:/作品/口播/已删除.hjaud' }
     const first = placeClip(instance, { type: 'document', docRef: gone })
     const second = placeClip(instance, { type: 'document', docRef: gone, revision: 2 })
     const outcome = await openVideoEditClipSource(instance.document.id, first)
-    expect(outcome).toMatchObject({ status: 'missing', extension: '.henji-audio' })
+    expect(outcome).toMatchObject({ status: 'missing', extensions: ['.hjaud', '.henji-audio'] })
 
     const found = commands.seed({ kind: 'audio_edit', name: '找回来的', content: {} })
-    await expect(relocateVideoEditClipSource(instance.document.id, gone.docId, 'D:/别处/图.henjiimg')).rejects.toThrow('同一类型')
+    await expect(relocateVideoEditClipSource(instance.document.id, gone.docId, 'D:/别处/图.hjimg')).rejects.toThrow('同一类型')
     expect(await relocateVideoEditClipSource(instance.document.id, gone.docId, found.path)).toBe(2)
     const sources = instance.document.sequences[0].clips.filter(clip => [first, second].includes(clip.id)).map(clip => clip.creativeSource)
     expect(sources).toEqual([
@@ -105,7 +105,7 @@ describe('嵌入模式与回到来源', () => {
     expect(await openVideoEditClipSource(instance.document.id, clipId)).toEqual({ status: 'opened', kind: 'generation' })
     expect(navigation.open).toHaveBeenCalledWith('workspace.generation'); expect(navigation.reveal).toHaveBeenCalledWith('history-1')
     navigation.readGeneration.mockResolvedValueOnce(null)
-    expect(await openVideoEditClipSource(instance.document.id, clipId)).toMatchObject({ status: 'missing', extension: null })
+    expect(await openVideoEditClipSource(instance.document.id, clipId)).toMatchObject({ status: 'missing', extensions: null })
   })
 })
 
@@ -130,7 +130,7 @@ describe('在剪辑里新建、移进与复制进项目', () => {
     const moving = commands.seed({ kind: 'canvas', name: '要移的画布', content: { items: [] } })
     const copying = commands.seed({ kind: 'canvas', name: '要复制的画布', content: { items: [] } })
     placeClip(instance, { type: 'document', docRef: { docId: copying.id, path: copying.path }, part: 'n1' })
-    placeClip(instance, { type: 'document', docRef: { docId: 'missing-doc', path: 'D:/没有了.henji-canvas' } })
+    placeClip(instance, { type: 'document', docRef: { docId: 'missing-doc', path: 'D:/没有了.hjcvs' } })
 
     const before = await listVideoEditReferencedDocuments(instance.document.id)
     expect(before.map(entry => [entry.docRef.docId, entry.elsewhere, Boolean(entry.document)])).toEqual([[copying.id, true, true], ['missing-doc', false, false]])

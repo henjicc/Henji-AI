@@ -201,7 +201,7 @@ export interface ImageEditorV3PackageThumbnail {
   mediaType: 'image/png' | 'image/webp'
 }
 
-/** 图片文档（.henjiimg，3.5）的位置：给了 path 先按位置找并核对 ID，找不到再按作品索引。 */
+/** 图片文档（.hjimg，3.5）的位置：给了 path 先按位置找并核对 ID，找不到再按作品索引。 */
 export interface ImageEditorV3ImageDocumentTarget {
   id: string
   path?: string
@@ -421,7 +421,7 @@ export interface ImageEditorV3Platform {
     tiles: Array<{ tileKey: string; resource: ImageEditorV3BrushTileResource }>
   }): Promise<{ tiles: ImageEditorV3LoadedBrushTile[] }>
   /**
-   * 打开图片文档：按需把 .henjiimg 解到程序目录的工作副本。recovery 为 ask 且工作副本有没写回的修改时
+   * 打开图片文档：按需把 .hjimg 解到程序目录的工作副本。recovery 为 ask 且工作副本有没写回的修改时
    * 返回 recovery，由界面询问后带着 restore（用工作副本）或 discard（用文件里的版本）再打开。
    */
   openImageDocument(request: {
@@ -441,7 +441,7 @@ export interface ImageEditorV3Platform {
     container: DocumentContainerRef
     emptyUntilRevision: number | null
   }): Promise<ImageEditorV3ImageDocumentReady>
-  /** 写回：把工作副本原子写进 .henjiimg；文件版本与 expectedRevision 不一致时报冲突，force 覆盖。 */
+  /** 写回：把工作副本原子写进 .hjimg；文件版本与 expectedRevision 不一致时报冲突，force 覆盖。 */
   commitImageDocument(request: {
     requestId: string
     target: ImageEditorV3ImageDocumentTarget

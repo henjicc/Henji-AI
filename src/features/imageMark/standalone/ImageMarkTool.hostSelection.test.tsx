@@ -60,7 +60,7 @@ vi.mock('@/features/documents/DocumentLibraryPage', () => ({
       {create.kind === 'menu' ? create.options.map((option) => (
         <button key={option.id} type="button" onClick={option.onSelect}>{option.label}</button>
       )) : null}
-      <button type="button" onClick={() => onOpen({ id: 'doc-2', path: 'D:/作品/图片文档/b.henjiimg' })}>open-doc-2</button>
+      <button type="button" onClick={() => onOpen({ id: 'doc-2', path: 'D:/作品/图片文档/b.hjimg' })}>open-doc-2</button>
     </div>
   ),
 }))
@@ -185,11 +185,11 @@ describe('ImageMarkTool（图片文档）', () => {
     fireEvent.click(screen.getByRole('button', { name: '打开图片' }))
     await screen.findByTestId('v3-image-editor')
 
-    act(() => { requestImageDocumentInEditor({ id: 'doc-3', path: 'D:/作品/图片文档/c.henjiimg' }) })
+    act(() => { requestImageDocumentInEditor({ id: 'doc-3', path: 'D:/作品/图片文档/c.hjimg' }) })
     await waitFor(() => expect(screen.getByTestId('v3-image-editor').getAttribute('data-document-id')).toBe('doc-3'))
     expect(mocks.leaveDocument).toHaveBeenCalledWith('doc-1')
     expect(mocks.openDocument).toHaveBeenCalledWith(
-      { id: 'doc-3', path: 'D:/作品/图片文档/c.henjiimg' },
+      { id: 'doc-3', path: 'D:/作品/图片文档/c.hjimg' },
       expect.objectContaining({ chooseRecovery: expect.any(Function) }),
     )
     expect(getImageDocumentWorkspace().pending).toBeNull()

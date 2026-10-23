@@ -231,7 +231,7 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
         assert.equal(stageWrite.executionState, 'completed', JSON.stringify(stageWrite))
         const storedStage = await page.evaluate((id) => window.henjiNative.documents.readDocument({ id }), stageDocumentId)
         assert.equal(storedStage.meta.name, renamed, '镜头参考改名没有落到文档文件')
-        assert.ok(storedStage.meta.path.endsWith(`${renamed}.henji-stage`), `文件名没有跟着改：${storedStage.meta.path}`)
+        assert.ok(storedStage.meta.path.endsWith(`${renamed}.hjstg`), `文件名没有跟着改：${storedStage.meta.path}`)
         const stageEntity = await callTool(client, 'read_application_entity', {
           ref: { kind: 'camera_stage.document', id: stageDocumentId }, propertyIds: ['camera_stage.document.name'],
         })

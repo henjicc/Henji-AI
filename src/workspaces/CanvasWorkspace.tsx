@@ -14,7 +14,7 @@ import { confirmCanvasPersistence } from '@/features/canvas/application/canvasPe
 import { returnFromEmbedded, useEmbeddedHost } from '@/features/documents/embeddedDocuments';
 
 /**
- * 画布工作区：“画布列表 ↔ 画布”两级视图（3.4 起画布是 `.henji-canvas` 文档）。
+ * 画布工作区：“画布列表 ↔ 画布”两级视图（3.4 起画布是 `.hjcvs` 文档）。
  * 返回列表走通用离开流程：已保存的写完关闭，草稿询问“保存 / 不保存 / 取消”，取消留在画布上。
  * 从剪辑里打开的画布（4.1 嵌入模式）返回按钮是“返回剪辑 · 项目名”：离开后回到剪辑原来的位置。
  */

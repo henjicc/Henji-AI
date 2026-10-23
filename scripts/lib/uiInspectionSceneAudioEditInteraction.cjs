@@ -43,7 +43,7 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
         wav.writeInt16LE(Math.round(Math.sin(t * 440 * Math.PI * 2) * 32767 * gain), 44 + frame * 2)
       }
       fs.writeFileSync(sourcePath, wav)
-      // 3.3：口播是 .henji-audio 文档，经正式接口造数据（audioEditDocumentFixture.cjs）
+      // 3.3：口播是 .hjaud 文档，经正式接口造数据（audioEditDocumentFixture.cjs）
       const transcript = [[0, 1, '锁定的开场。', true], [1, 4, '在波形上拖动，直接选择需要调整的声音。', false], [6, 8, '嗯', false], [10, 16, '参数可以按需展开，处理结果可以随时撤销。', false]].map(([start, end, text, locked], index) => ({ id: String(index), text, startFrame: start * rate, endFrame: end * rate, included: true, locked, granularity: index === 2 ? 'word' : 'segment' }))
       const { id } = await createAudioEditDocument(page, { sourcePath, name: '口播直接剪辑验收', patch: { transcript } })
       fixture.id = id

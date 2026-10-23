@@ -35,7 +35,7 @@ function createVideoEditFilmstripScene() {
       const fixture = { id: 'filmstrip-4k60', name: '缩略图条验证', revision: 0, width: 3840, height: 2160, fps: 60, media: [{ id: 'source', name: path.basename(source), path: source, kind: 'video', durationSeconds, width: 3840, height: 2160, frameRate: { numerator: 60, denominator: 1 }, hasAudio: false }], clips, annotations: [] }
       const project = require('./uiInspectionSceneVideoEditProbe.cjs').videoEditFixtureProject(fixture)
       project.sequences[0].tracks.forEach(track => { if (track.index >= 2) track.enabled = false; if (track.kind === 'video') track.height = 48 })
-      const file = path.join(root, 'filmstrip.henji-video'); fs.writeFileSync(file, JSON.stringify(project))
+      const file = path.join(root, 'filmstrip.hjvid'); fs.writeFileSync(file, JSON.stringify(project))
       const evidence = { machine: { cpu: os.cpus()[0].model, cores: os.cpus().length, memoryBytes: os.totalmem() }, clips: clips.length, media: probe }
       const canvas = page.getByLabel('剪辑画面', { exact: true })
       const presented = async (frame, label) => {

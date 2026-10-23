@@ -115,32 +115,32 @@ it('风格包往返：导出带说明书、样片、成员模板与预览，导�
   await videoEditStyleLibrary.saveTemplate({ id: 'shared-card', name: '人名条', description: '', version: 1, contentHash: '', updatedAt: new Date().toISOString(), style: { id: 'shared', version: 3 }, body: { kind: 'code', code: { entry: 'index.js', files: { 'index.js': CARD } } } })
   const files = new Map<string, string>()
   const fileIo: VideoEditStylePackageIo = { read: async file => files.get(file)!, write: async (file, text) => { files.set(file, text) }, exists: async file => files.has(file) }
-  const exported = await exportVideoEditStylePackage('shared', 'D:/out/分享风格.henjistyle', {}, fileIo)
+  const exported = await exportVideoEditStylePackage('shared', 'D:/out/分享风格.hjsty', {}, fileIo)
   expect(exported.templates).toHaveLength(1); expect(exported.bytes).toBeGreaterThan(100_000)
-  await expect(exportVideoEditStylePackage('shared', 'D:/out/分享风格.henjistyle', {}, fileIo)).rejects.toThrow('已存在')
-  await expect(exportVideoEditStylePackage('shared', 'D:/out/分享风格.json', {}, fileIo)).rejects.toThrow('.henjistyle')
-  const text = files.get('D:/out/分享风格.henjistyle')!
+  await expect(exportVideoEditStylePackage('shared', 'D:/out/分享风格.hjsty', {}, fileIo)).rejects.toThrow('已存在')
+  await expect(exportVideoEditStylePackage('shared', 'D:/out/分享风格.json', {}, fileIo)).rejects.toThrow('.hjsty')
+  const text = files.get('D:/out/分享风格.hjsty')!
   expect(JSON.parse(text)).toMatchObject({ version: 2, minReaderVersion: 1, content: { format: 'henji-video-style', style: { id: 'shared', version: 3 } } })
   // 另一台机器：全新风格库。
   const other = createTestStyleLibraryIo(); videoEditStyleLibrary.reset(other, undefined)
   try {
-    const imported = await importVideoEditStylePackage('D:/out/分享风格.henjistyle', {}, fileIo)
+    const imported = await importVideoEditStylePackage('D:/out/分享风格.hjsty', {}, fileIo)
     expect(imported.style).toMatchObject({ id: 'shared', version: 3, imported: true, contentHash: source.style.contentHash })
     const entry = videoEditStyleLibrary.requireStyle('shared')
     expect(entry.stale).toBe(false); expect(entry.media.anchors).toHaveLength(5)
     expect(fs.readFileSync(entry.media.preview!).equals(fs.readFileSync(source.media.preview!))).toBe(true)
     expect(videoEditStyleLibrary.requireTemplate('shared-card').template).toMatchObject({ imported: true, style: { id: 'shared' } })
-    await expect(importVideoEditStylePackage('D:/out/分享风格.henjistyle', {}, fileIo)).rejects.toThrow('replace')
-    expect((await importVideoEditStylePackage('D:/out/分享风格.henjistyle', { replace: true }, fileIo)).replaced).toBe(true)
-    files.set('D:/bad.henjistyle', text.replace('"format":"henji-video-style"', '"format":"other"'))
-    await expect(importVideoEditStylePackage('D:/bad.henjistyle', {}, fileIo)).rejects.toThrow('风格包内容无效')
-    files.set('D:/newer.henjistyle', JSON.stringify({ version: 9, minReaderVersion: 9, content: {} }))
-    await expect(importVideoEditStylePackage('D:/newer.henjistyle', {}, fileIo)).rejects.toThrow('更新版本')
+    await expect(importVideoEditStylePackage('D:/out/分享风格.hjsty', {}, fileIo)).rejects.toThrow('replace')
+    expect((await importVideoEditStylePackage('D:/out/分享风格.hjsty', { replace: true }, fileIo)).replaced).toBe(true)
+    files.set('D:/bad.hjsty', text.replace('"format":"henji-video-style"', '"format":"other"'))
+    await expect(importVideoEditStylePackage('D:/bad.hjsty', {}, fileIo)).rejects.toThrow('风格包内容无效')
+    files.set('D:/newer.hjsty', JSON.stringify({ version: 9, minReaderVersion: 9, content: {} }))
+    await expect(importVideoEditStylePackage('D:/newer.hjsty', {}, fileIo)).rejects.toThrow('更新版本')
     // 导出内置风格再导入：与内置同一标识时另起标识，不覆盖内置。
     videoEditStyleLibrary.reset(io, undefined)
-    await exportVideoEditStylePackage('restrained', 'D:/out/克制.henjistyle', {}, fileIo)
+    await exportVideoEditStylePackage('restrained', 'D:/out/克制.hjsty', {}, fileIo)
     videoEditStyleLibrary.reset(other, undefined)
-    const copy = await importVideoEditStylePackage('D:/out/克制.henjistyle', {}, fileIo)
+    const copy = await importVideoEditStylePackage('D:/out/克制.hjsty', {}, fileIo)
     expect(copy.style.id).not.toBe('restrained'); expect(videoEditStyleLibrary.requireStyle('restrained').builtin).toBe(true)
   } finally { other.dispose() }
 })
@@ -299,7 +299,7 @@ it('内置风格使用者偏好升版并持久保存，随风格包导出', asyn
   await videoEditStyleLibrary.ready()
   expect(videoEditStyleLibrary.requireStyle('restrained').style.userPreferences).toEqual(userPreferences)
   let text = ''
-  await exportVideoEditStylePackage('restrained', 'D:/out/偏好.henjistyle', {}, { read: async () => text, exists: async () => false, write: async (_file, value) => { text = value } })
+  await exportVideoEditStylePackage('restrained', 'D:/out/偏好.hjsty', {}, { read: async () => text, exists: async () => false, write: async (_file, value) => { text = value } })
   expect(JSON.parse(text).content.style.userPreferences).toEqual(userPreferences)
 })
 

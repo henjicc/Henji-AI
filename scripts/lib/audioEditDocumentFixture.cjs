@@ -1,7 +1,7 @@
 /**
  * 口播文档夹具（3.3 口播接入）：真实场景经正式 preload 接口造口播数据。
  *
- * 口播是 `.henji-audio` 文档：先用 `audio.probeEditSource` 探测素材，再用 `documents.createDocument`
+ * 口播是 `.hjaud` 文档：先用 `audio.probeEditSource` 探测素材，再用 `documents.createDocument`
  * 以给定名称（非草稿）新建；改内容用 `documents.saveDocument`（核对版本）；清理时删掉文件并从作品索引移除，
  * 不往系统回收站里放测试文件。文档 ID 由仓库生成，调用方取返回值，不能写死。
  */

@@ -41,7 +41,7 @@ beforeEach(() => {
 describe('文档底座 IPC 契约（preload 桥 → 主进程校验 → DocumentService）', () => {
   it('每个方法都注册了通道，参数原样到达服务', async () => {
     const bridge = api()
-    const target = { id: 'doc-1', path: '/work/a.henji-canvas' }
+    const target = { id: 'doc-1', path: '/work/a.hjcvs' }
     const calls: Array<[keyof DocumentsPlatform, unknown[], unknown[]]> = [
       ['listDocuments', [undefined], [{}]],
       ['listDocumentsPage', [{ kind: 'canvas', cursor: 'cursor', pageSize: 17 }], [{ kind: 'canvas', cursor: 'cursor', pageSize: 17 }]],
@@ -57,7 +57,7 @@ describe('文档底座 IPC 契约（preload 桥 → 主进程校验 → Document
       ['deleteEmptyDraft', [target], [target]],
       ['forgetDocument', ['doc-1'], ['doc-1']],
       ['revealDocument', [target], [target]],
-      ['resolveDocumentLink', [{ docId: 'doc-1', path: '/work/a.henji-canvas' }], [{ docId: 'doc-1', path: '/work/a.henji-canvas' }]],
+      ['resolveDocumentLink', [{ docId: 'doc-1', path: '/work/a.hjcvs' }], [{ docId: 'doc-1', path: '/work/a.hjcvs' }]],
       ['checkName', [{ subject: { type: 'project' }, name: 'x', location: { container: { kind: 'user' } } }], [{ subject: { type: 'project' }, name: 'x', location: { container: { kind: 'user' } } }]],
       ['getDocumentCover', ['doc-1'], ['doc-1']],
       ['saveDocumentCover', [{ docId: 'doc-1', sources: [{ source: 'a.png', sourceKind: 'image' }] }], [{ docId: 'doc-1', sources: [{ source: 'a.png', sourceKind: 'image' }] }]],
@@ -71,12 +71,12 @@ describe('文档底座 IPC 契约（preload 桥 → 主进程校验 → Document
       ['finalizeProject', [{ projectId: 'p1', name: '新', parentFolder: '/elsewhere' }], [{ projectId: 'p1', name: '新', parentFolder: '/elsewhere' }]],
       ['trashProject', ['p1'], ['p1']],
       ['registerExternalProject', ['/elsewhere/p'], ['/elsewhere/p']],
-      ['registerExternalDocument', ['/elsewhere/a.henjiimg'], ['/elsewhere/a.henjiimg']],
+      ['registerExternalDocument', ['/elsewhere/a.hjimg'], ['/elsewhere/a.hjimg']],
       ['forgetExternalLocation', ['/elsewhere/p'], ['/elsewhere/p']],
       ['revealProject', ['p1'], ['p1']],
       ['exportDocumentPackage', [{ target }], [{ target }]],
-      ['exportProjectPackage', [{ projectId: 'p1', destination: '/elsewhere/p.henjipack' }], [{ projectId: 'p1', destination: '/elsewhere/p.henjipack' }]],
-      ['importPackage', [{ source: '/elsewhere/p.henjipack', container: { kind: 'project', projectId: 'p1' } }], [{ source: '/elsewhere/p.henjipack', container: { kind: 'project', projectId: 'p1' } }]],
+      ['exportProjectPackage', [{ projectId: 'p1', destination: '/elsewhere/p.hjpak' }], [{ projectId: 'p1', destination: '/elsewhere/p.hjpak' }]],
+      ['importPackage', [{ source: '/elsewhere/p.hjpak', container: { kind: 'project', projectId: 'p1' } }], [{ source: '/elsewhere/p.hjpak', container: { kind: 'project', projectId: 'p1' } }]],
     ]
     for (const [method, args, expected] of calls) {
       const call = bridge[method] as (...values: unknown[]) => Promise<unknown>

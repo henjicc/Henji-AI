@@ -14,7 +14,7 @@ describe('作品索引游标分页', () => {
     for (let index = 0; index < 237; index++) {
       const id = `id-${index.toString().padStart(4, '0')}`
       store.upsertProject({ id, path: path.resolve(path.sep, 'projects', id), name: index % 2 ? '同名' : 'a', locale: 'zh', folders: { generated: '生成', materials: '素材' }, draft: index % 7 === 0, mainVideoEditId: null, createdAt: index % 3, external: false, missing: index % 11 === 0, manifestModifiedAt: 1, manifestSize: 1, folderCreatedAt: 1 })
-      store.upsertDocument({ id, kind: 'canvas', path: path.resolve(path.sep, 'docs', `${id}.henji-canvas`), name: index % 2 ? '同名' : 'a', projectId: id, draft: index % 7 === 0, revision: 0, kindVersion: 1, createdAt: 1, updatedAt: index % 3, fileModifiedAt: 1, fileSize: 1, fileCreatedAt: 1, summary: {}, missing: index % 11 === 0 })
+      store.upsertDocument({ id, kind: 'canvas', path: path.resolve(path.sep, 'docs', `${id}.hjcvs`), name: index % 2 ? '同名' : 'a', projectId: id, draft: index % 7 === 0, revision: 0, kindVersion: 1, createdAt: 1, updatedAt: index % 3, fileModifiedAt: 1, fileSize: 1, fileCreatedAt: 1, summary: {}, missing: index % 11 === 0 })
     }
   })
   afterEach(() => fixture.native.close())

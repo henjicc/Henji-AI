@@ -56,7 +56,7 @@ const successData: Record<string, Record<string, unknown>> = {
   analyze_video_edit_beats: { resultRef: documentRef, markerRefs: [ref('video_edit.marker')], ...verified },
   render_video_edit_style: { resultRef: ref('video_edit.style', 'mine'), version: 2, changed: true, warnings: [], media: { preview: 'C:/styles/mine/preview.mp4', thumbnail: 'C:/styles/mine/thumbnail.jpg', anchors: ['C:/styles/mine/anchors/01.jpg'] }, message, verification: { verified: true, condition: '已回读预览' } },
   import_video_edit_style_package: { resultRef: ref('video_edit.style', 'mine'), templateRefs: [ref('video_edit.template', 'card')], replaced: false, message, verification: { verified: true, condition: '已回读' } },
-  export_video_edit_style_package: { resultRef: ref('video_edit.style', 'mine'), path: 'C:/out/mine.henjistyle', templateCount: 1, bytes: 1024, message, verification: { verified: true, condition: '已写出' } },
+  export_video_edit_style_package: { resultRef: ref('video_edit.style', 'mine'), path: 'C:/out/mine.hjsty', templateCount: 1, bytes: 1024, message, verification: { verified: true, condition: '已写出' } },
   bind_video_edit_style: { resultRef: ref('video_edit.project_style', 'document:mine'), sequenceRef, version: 2, upgraded: false, previous: null, message, verification: { verified: true, condition: '已保存' } },
   apply_video_edit_template: { resultRef: documentRef, templateRef: ref('video_edit.project_template', 'document:card'), clipRefs: [clipRef], copied: true, message, verification: { verified: true, condition: '已保存' } },
   create_video_edit_template: { resultRef: ref('video_edit.project_template', 'document:card'), libraryRef: null, kind: 'native', instanceCount: 1, message, verification: { verified: true, condition: '已保存' } },

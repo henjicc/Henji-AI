@@ -18,7 +18,7 @@ function fixture() {
 }
 
 /**
- * 风格与模板真实验收（隔离资料目录）：风格面板六张内置卡片与放大详情；从界面导入 .henjistyle（只解析保存）；
+ * 风格与模板真实验收（隔离资料目录）：风格面板六张内置卡片与放大详情；从界面导入 .hjsty（只解析保存）；
  * 用正式渲染器渲染导入风格与内置风格副本的样片（预览、缩略图、锚点帧）；右键绑定到序列；
  * 模板面板单击应用与拖入时间线、改参数、分离；导出再比对往返内容。每步截图供目视。
  */
@@ -27,9 +27,9 @@ function createVideoEditStylesScene() {
     setup: async (page, app, { capture }) => {
       const outputRoot = path.resolve('.reality/video-edit-styles'); fs.mkdirSync(outputRoot, { recursive: true })
       const root = fs.mkdtempSync(path.join(outputRoot, 'run-')); fs.mkdirSync(path.join(root, 'rendered'))
-      const packagePath = process.env.HENJI_STYLE_PACKAGE || path.join(root, '内置风格验收.henjistyle')
+      const packagePath = process.env.HENJI_STYLE_PACKAGE || path.join(root, '内置风格验收.hjsty')
       if (process.env.HENJI_STYLE_PACKAGE) assert.ok(fs.existsSync(packagePath), `缺少风格包：${packagePath}`)
-      const file = path.join(root, 'styles.henji-video'); fs.writeFileSync(file, JSON.stringify(fixture()))
+      const file = path.join(root, 'styles.hjvid'); fs.writeFileSync(file, JSON.stringify(fixture()))
       const evidence = { completed: false, startedAt: new Date().toISOString(), package: packagePath, steps: {} }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       const documentRef = { kind: 'video_edit.document', id: PROJECT_ID }; const sequenceRef = { kind: 'video_edit.sequence', id: `${PROJECT_ID}:main` }
@@ -80,7 +80,7 @@ function createVideoEditStylesScene() {
         })
 
         // 3. 从界面导入风格包（系统对话框替换为固定路径）：只解析和保存，新卡片出现在个人风格最前面。
-        const exported = path.join(root, '导出往返.henjistyle')
+        const exported = path.join(root, '导出往返.hjsty')
         await dialogs(app, [packagePath], exported)
         await button(page, '导入风格包').click()
         const source = JSON.parse(fs.readFileSync(packagePath, 'utf8')).content
@@ -193,7 +193,7 @@ function createVideoEditStyleMemoryScene() {
     setup: async (page, app, { capture }) => {
       const root = path.resolve('.reality/memory-style-input')
       fs.mkdirSync(root, { recursive: true })
-      const file = path.join(root, 'memory-style.henji-video')
+      const file = path.join(root, 'memory-style.hjvid')
       fs.writeFileSync(file, JSON.stringify(fixture()))
       await button(page, '剪辑').first().click()
       if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()

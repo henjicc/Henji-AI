@@ -27,7 +27,7 @@ const source = "export default {name:\"参数\",kind:\"generator\",mode:\"dynami
 const files = new Map<string, string>()
 beforeEach(() => {
   installHarnessNativeStorage(); files.clear()
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/parameters.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/parameters.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, value) => { files.set(path, value) })
 })
 afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })

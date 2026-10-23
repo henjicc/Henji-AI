@@ -111,7 +111,7 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
       }
       if (AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS.has(definition.id) || ['transcribe_audio_edit', 'retry_audio_edit_save'].includes(definition.id)) {
         context.execution?.report({ targetMutation: 'applied', ...(recognized ? { billing: 'completed' as const, audioDocumentId: id } : {}) })
-        // 从文档文件回读核对（3.3：口播是 .henji-audio 文档）
+        // 从文档文件回读核对（3.3：口播是 .hjaud 文档）
         const read = await getDocumentOperations().readDocument({ id })
         const persisted = audioEditProjectFromDocument(read.meta, read.content).project
         if (instance.dirty || persisted.source.sourcePath !== instance.document.source.sourcePath || persisted.source.durationFrames !== instance.document.source.durationFrames || audioEditContentKey(persisted) !== audioEditContentKey(instance.document)) throw new Error('修改已提交，但回读时发现口播有新变化。请重新读取口播，不要重复提交原修改。')

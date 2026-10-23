@@ -217,8 +217,8 @@ describe('单文件包与复制进项目（4.1）', () => {
   it('导出前写完最后一次（含正在编辑的修改），导入推进版本并按容器放置', async () => {
     const kit = setup()
     const { meta } = await openEdited(kit)
-    const exported = await kit.operations.exportDocumentPackage({ id: meta.id, path: meta.path }, 'D:/外部/海报.henjipack')
-    expect(exported.path).toBe('D:/外部/海报.henjipack')
+    const exported = await kit.operations.exportDocumentPackage({ id: meta.id, path: meta.path }, 'D:/外部/海报.hjpak')
+    expect(exported.path).toBe('D:/外部/海报.hjpak')
     expect(kit.commands.packages.get(exported.path)).toMatchObject({ type: 'document', content: { items: ['a', '未保存的修改'] } })
     const project = kit.commands.seedProject({ name: '宣传片' })
     const before = kit.operations.revision()

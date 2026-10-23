@@ -57,12 +57,12 @@ describe('global media reclamation', () => {
   })
   it('scans document content off-thread and fails closed on malformed content', async () => {
     const { root, file } = await fixture()
-    const doc = path.join(root, 'canvas.henji-canvas')
+    const doc = path.join(root, 'canvas.hjcvs')
     await fs.writeFile(doc, JSON.stringify({ content: { nodes: [{ data: { imageUrl: file } }] } }))
     const refs: string[] = []
-    await scanReferenceFiles([{ path: doc }], ['.henji-canvas'], new AbortController().signal, async (_file, paths) => { refs.push(...paths) })
+    await scanReferenceFiles([{ path: doc }], ['.hjcvs'], new AbortController().signal, async (_file, paths) => { refs.push(...paths) })
     expect(refs).toContain(file)
     await fs.writeFile(doc, '{')
-    await expect(scanReferenceFiles([{ path: doc }], ['.henji-canvas'], new AbortController().signal, async () => undefined)).rejects.toThrow()
+    await expect(scanReferenceFiles([{ path: doc }], ['.hjcvs'], new AbortController().signal, async () => undefined)).rejects.toThrow()
   })
 })

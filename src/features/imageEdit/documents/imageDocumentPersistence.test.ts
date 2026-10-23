@@ -25,7 +25,7 @@ vi.mock('@/commands/imageEditorV3', () => ({
 }))
 
 const meta: DocumentMeta = {
-  id: 'doc-1', kind: 'image_document', name: '海报', path: 'D:/作品/图片文档/海报.henjiimg',
+  id: 'doc-1', kind: 'image_document', name: '海报', path: 'D:/作品/图片文档/海报.hjimg',
   container: { kind: 'user' }, draft: false, revision: 3, kindVersion: 1, createdAt: 1, updatedAt: 2,
 }
 const working = { documentRef: 'image-edit-v3:doc-1', revision: 7, previewRef: null, sourceUrl: null }

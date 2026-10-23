@@ -5,7 +5,7 @@ import crypto from 'node:crypto'
 import type { ImageEditDocumentEnvelope } from '../contracts'
 
 /*
- * 图片文档头（3.5 图片文档）：写在 `.henjiimg` 里单独的小条目 `henji-document.json`。
+ * 图片文档头（3.5 图片文档）：写在 `.hjimg` 里单独的小条目 `henji-document.json`。
  *
  * - id：文档稳定 ID（作品索引、跨文档引用、程序目录工作副本都按它找）；包内 manifest 的
  *   V3 文档 ID 与它保持一致（副本换 ID 时一并改写）。

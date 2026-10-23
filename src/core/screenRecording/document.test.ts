@@ -20,5 +20,5 @@ it('正式文档序列化后原片与事件页仍进入唯一媒体引用扫描�
   const decoded = parseDocumentText(serializeDocumentEnvelope(envelope))
   expect(recordingDocumentSchema.parse(decoded.content)).toEqual(content)
   expect(collectMediaReferences(decoded.content).sort()).toEqual([media, events, snapshotMedia].sort())
-  expect(documentKindRegistry.require('screen_recording').extension).toBe('.henji-recording')
+  expect(documentKindRegistry.require('screen_recording').extension).toBe('.hjrec')
 })

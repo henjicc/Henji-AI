@@ -45,7 +45,7 @@ export interface ExportHenjiImagePackageRequest {
 }
 
 function abortError(): Error {
-  const error = new Error('.henjiimg export was cancelled')
+  const error = new Error('.hjimg export was cancelled')
   error.name = 'AbortError'
   return error
 }
@@ -57,7 +57,7 @@ function checkAbort(signal?: AbortSignal): void {
 function normalizeThumbnailExtension(extension: string): 'png' | 'webp' {
   const normalized = extension.trim().replace(/^\./, '').toLowerCase()
   if (normalized !== 'png' && normalized !== 'webp') {
-    throw new Error('Invalid .henjiimg thumbnail extension')
+    throw new Error('Invalid .hjimg thumbnail extension')
   }
   return normalized
 }
@@ -283,7 +283,7 @@ export async function exportHenjiImagePackage(
   request: ExportHenjiImagePackageRequest,
 ): Promise<HenjiImagePackageManifest> {
   const targetPath = request.targetPath.trim()
-  if (!targetPath) throw new Error('.henjiimg export target path is empty')
+  if (!targetPath) throw new Error('.hjimg export target path is empty')
   return exportsByPath.run(path.resolve(targetPath), () => exportPackage(request, targetPath))
 }
 

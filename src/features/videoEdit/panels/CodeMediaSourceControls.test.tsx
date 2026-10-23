@@ -66,7 +66,7 @@ it('多文件草稿新建、切换、重命名、删除与保存新版本保留�
 
 beforeEach(async () => {
   installHarnessNativeStorage(); onError = vi.fn(); draw = vi.fn()
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/code-ui-source.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/code-ui-source.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage: draw } as unknown as CanvasRenderingContext2D)
   vi.mocked(bindVideoEditCodeImage).mockReset().mockResolvedValue(undefined)

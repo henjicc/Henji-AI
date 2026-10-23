@@ -190,7 +190,7 @@ function createVideoEditMultitrackScene() {
     id: 'video-edit-multitrack', surface: '剪辑', name: '剪辑-多音轨铺轨、声道映射与 FFmpeg 参考 PCM 互相关', writesUserData: true,
     setup: async (page, app, { capture }) => {
       fs.mkdirSync(ROOT, { recursive: true })
-      const file = path.join(ROOT, `multitrack-${Date.now()}.henji-video`)
+      const file = path.join(ROOT, `multitrack-${Date.now()}.hjvid`)
       const evidence = { project: file, phases: [], mixes: [], captures: [] }
       const store = () => fs.writeFileSync(path.join(ROOT, 'evidence.json'), JSON.stringify(evidence, null, 2))
       const phase = name => { evidence.currentPhase = name; store() }
@@ -424,7 +424,7 @@ function createVideoEditMultitrackScene() {
 
         phase('旧工程：无声音流清单、画面声音合一片段')
         await button(page, '关闭项目').click()
-        const legacyFile = path.join(ROOT, 'legacy.henji-video')
+        const legacyFile = path.join(ROOT, 'legacy.hjvid')
         const legacy = {
           format: 'henji-video-project', version: 2, id: 'multitrack-legacy', name: '2.6 之前的旧工程', revision: 0,
           media: [{ id: 'legacy-media', name: samples.mxf.file, path: samples.mxf.path, kind: 'video', width: 1280, height: 720, durationSeconds: 4, hasAudio: true, frameRate: { numerator: 30, denominator: 1 }, frameRateMode: 'sampled-constant' }],

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createAudioEditDocumentContent } from '../../../../src/core/audioEdit/documentContent'
 
 /*
- * 口播的主进程读取口（3.3）：按文档 ID 读 `.henji-audio` 文件，主进程不写口播内容；
+ * 口播的主进程读取口（3.3）：按文档 ID 读 `.hjaud` 文件，主进程不写口播内容；
  * 文件没变时复用上次读到的内容（试听连续请求），文件一变就重新读。
  */
 
@@ -28,7 +28,7 @@ function read(revision: number, referenceScript = '') {
 
 beforeEach(async () => {
   directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-audio-store-'))
-  file = path.join(directory, '录音.henji-audio')
+  file = path.join(directory, '录音.hjaud')
   await fs.writeFile(file, 'v1')
   clearAudioEditProjectCacheForTests()
   mocks.readDocument.mockReset()

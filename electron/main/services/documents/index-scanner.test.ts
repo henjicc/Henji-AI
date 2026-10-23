@@ -11,7 +11,7 @@ it('不可读的版本、外壳、项目说明和图片包只计 invalid，正�
     const good = await env.services.service.createDocument({ kind: 'canvas', name: '正常', container: { kind: 'user' } })
     const raw = JSON.parse(await fsp.readFile(good.meta.path, 'utf8')) as Record<string, unknown>
     for (const [name, content] of Object.entries({ kind: { ...raw, kindVersion: 999, kindMinReaderVersion: 999 }, envelope: { ...raw, envelopeVersion: 999, minReaderVersion: 999 }, missing: {} })) {
-      await fsp.writeFile(path.join(path.dirname(good.meta.path), `${name}.henji-canvas`), JSON.stringify(content))
+      await fsp.writeFile(path.join(path.dirname(good.meta.path), `${name}.hjcvs`), JSON.stringify(content))
     }
     for (const version of [999, 'future']) {
       const project = await env.services.service.createProject({ name: `坏项目-${version}` })
@@ -19,7 +19,7 @@ it('不可读的版本、外壳、项目说明和图片包只计 invalid，正�
       const manifest = JSON.parse(await fsp.readFile(file, 'utf8')) as Record<string, unknown>
       await fsp.writeFile(file, JSON.stringify({ ...manifest, version, minReaderVersion: version }))
     }
-    await fsp.writeFile(path.join(path.dirname(good.meta.path), 'empty.henjiimg'), '')
+    await fsp.writeFile(path.join(path.dirname(good.meta.path), 'empty.hjimg'), '')
     await expect(env.services.scanner.rebuild()).resolves.toMatchObject({ invalid: 6, documents: 1 })
     expect(env.catalog.getDocument(good.meta.id)?.missing).toBe(false)
     await expect(env.services.scanner.refresh()).resolves.toMatchObject({ invalid: 6, documents: 1 })
@@ -32,7 +32,7 @@ it('嵌套的无效项目说明不冒充普通目录，已索引旧副本不可�
     const doc = await env.services.service.createDocument({ kind: 'canvas', name: '旧位置', container: { kind: 'user' } })
     const raw = await fsp.readFile(doc.meta.path, 'utf8')
     const folder = path.dirname(doc.meta.path)
-    const moved = path.join(folder, '新位置.henji-canvas')
+    const moved = path.join(folder, '新位置.hjcvs')
     await fsp.writeFile(moved, raw)
     await fsp.writeFile(doc.meta.path, '{}')
     const nested = path.join(folder, '嵌套项目', '.henji')

@@ -41,7 +41,7 @@ describe('文档仓库：新建与草稿', () => {
     expect(fs.existsSync(path.join(env.workRoot, '画布'))).toBe(false)
     const first = await service.createDocument({ kind: 'canvas', container: { kind: 'user' } })
     const second = await service.createDocument({ kind: 'canvas', container: { kind: 'user' } })
-    expect(first.meta.path).toBe(path.join(env.workRoot, '画布', '未命名画布 1.henji-canvas'))
+    expect(first.meta.path).toBe(path.join(env.workRoot, '画布', '未命名画布 1.hjcvs'))
     expect(second.meta.name).toBe('未命名画布 2')
     expect(first.meta).toMatchObject({ kind: 'canvas', draft: true, revision: 0, container: { kind: 'user' } })
     const { json } = await readStored(first.meta.path)
@@ -53,7 +53,7 @@ describe('文档仓库：新建与草稿', () => {
     await env.cleanup()
     env = createTestEnvironment({ locale: 'en' })
     const created = await env.services.service.createDocument({ kind: 'camera_stage', container: { kind: 'user' } })
-    expect(created.meta.path).toBe(path.join(env.workRoot, 'Camera Stages', 'Untitled Camera Stage 1.henji-stage'))
+    expect(created.meta.path).toBe(path.join(env.workRoot, 'Camera Stages', 'Untitled Camera Stage 1.hjstg'))
     await expect(env.services.service.createDocument({ kind: 'video_edit', container: { kind: 'user' } })).rejects.toMatchObject({ name: 'DocumentLocationError' })
     await expect(env.services.service.createDocument({ kind: 'image_document', container: { kind: 'user' } })).rejects.toMatchObject({ name: 'DocumentUnsupportedError' })
   })
@@ -64,13 +64,13 @@ describe('文档仓库：新建与草稿', () => {
     expect(named.meta).toMatchObject({ name: '口播 一', draft: false })
     await expect(service.createDocument({ kind: 'audio_edit', container: { kind: 'user' }, name: '口播 一.' })).rejects.toMatchObject({ name: 'DocumentNameConflictError' })
     await expect(service.createDocument({ kind: 'audio_edit', container: { kind: 'user' }, name: 'a/b' })).rejects.toMatchObject({ name: 'DocumentNameInvalidError' })
-    expect(await listFiles(path.join(env.workRoot, '口播'))).toEqual(['口播 一.henji-audio'])
+    expect(await listFiles(path.join(env.workRoot, '口播'))).toEqual(['口播 一.hjaud'])
   })
 
   it('项目里新建：文档放在项目文件夹里，草稿名按项目语言', async () => {
     const project = await env.services.service.createProject()
     const created = await env.services.service.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: project.id } })
-    expect(created.meta.path).toBe(path.join(project.path, '未命名剪辑 1.henji-video'))
+    expect(created.meta.path).toBe(path.join(project.path, '未命名剪辑 1.hjvid'))
     expect(created.meta.container).toEqual({ kind: 'project', projectId: project.id })
   })
 })
@@ -121,7 +121,7 @@ describe('文档仓库：保存、读取与位置换算', () => {
     expect(await fsp.readFile(created.meta.path, 'utf8')).toBe(before)
     const forced = await service.saveDocument({ target, expectedRevision: 0, content: { a: 3 }, force: true })
     expect(forced.meta.revision).toBe(2)
-    expect(await listFiles(path.dirname(created.meta.path))).toEqual(['未命名画布 1.henji-canvas'])
+    expect(await listFiles(path.dirname(created.meta.path))).toEqual(['未命名画布 1.hjcvs'])
   })
 
   it('读取报告找不到的素材与无法解析的引用；程序目录里的路径原样保留', async () => {
@@ -161,14 +161,14 @@ describe('文档仓库：改名、转正、移动、副本、删除', () => {
     const canvas = await service.createDocument({ kind: 'canvas', container, name: '分镜' })
     const stage = await service.createDocument({ kind: 'camera_stage', container, name: '镜头' })
     const renamed = await service.renameDocument({ target: { id: canvas.meta.id }, name: '镜头' })
-    expect(renamed).toMatchObject({ name: '镜头', path: path.join(project.path, '镜头.henji-canvas'), revision: 0 })
+    expect(renamed).toMatchObject({ name: '镜头', path: path.join(project.path, '镜头.hjcvs'), revision: 0 })
     expect((await readStored(renamed.path)).json.name).toBe('镜头')
     const second = await service.createDocument({ kind: 'canvas', container, name: '其他' })
     await expect(service.renameDocument({ target: { id: second.meta.id }, name: 'jing头' })).resolves.toBeTruthy()
     await expect(service.renameDocument({ target: { id: second.meta.id }, name: '镜头' })).rejects.toMatchObject({ name: 'DocumentNameConflictError' })
-    expect(await listFiles(project.path)).toEqual(['.henji/project.json', 'jing头.henji-canvas', '镜头.henji-canvas', '镜头.henji-stage'])
+    expect(await listFiles(project.path)).toEqual(['.henji/project.json', 'jing头.hjcvs', '镜头.hjcvs', '镜头.hjstg'])
     const caseOnly = await service.renameDocument({ target: { id: second.meta.id }, name: 'JING头' })
-    expect(path.basename(caseOnly.path)).toBe('JING头.henji-canvas')
+    expect(path.basename(caseOnly.path)).toBe('JING头.hjcvs')
     expect(stage.meta.name).toBe('镜头')
   })
 
@@ -190,7 +190,7 @@ describe('文档仓库：改名、转正、移动、副本、删除', () => {
     const media = write(path.join(env.workRoot, '生成结果', 'a.png'))
     await service.saveDocument({ target: { id: draft.meta.id }, expectedRevision: 0, content: { media } })
     const result = await service.finalizeDocument({ target: { id: draft.meta.id }, name: '外面的画布', folder: env.outside })
-    expect(result.meta).toMatchObject({ path: path.join(env.outside, '外面的画布.henji-canvas'), draft: false, container: { kind: 'user' } })
+    expect(result.meta).toMatchObject({ path: path.join(env.outside, '外面的画布.hjcvs'), draft: false, container: { kind: 'user' } })
     expect(env.catalog.listExternalLocations()).toEqual([expect.objectContaining({ path: env.outside, kind: 'folder' })])
     expect((await readStored(result.meta.path)).json.content).toEqual({ media: 'henji:/生成结果/a.png' })
     expect((await service.readDocument({ id: draft.meta.id })).content).toEqual({ media })
@@ -211,7 +211,7 @@ describe('文档仓库：改名、转正、移动、副本、删除', () => {
     write(path.join(project.path, '生成结果', '子目录', 'a.png'), 'different content')
 
     const moved = await service.moveDocument({ target: { id: canvas.meta.id }, container: { kind: 'project', projectId: project.id } })
-    expect(moved.meta).toMatchObject({ path: path.join(project.path, '分镜.henji-canvas'), container: { kind: 'project', projectId: project.id }, revision: 2 })
+    expect(moved.meta).toMatchObject({ path: path.join(project.path, '分镜.hjcvs'), container: { kind: 'project', projectId: project.id }, revision: 2 })
     expect(moved.copiedFiles).toBe(2)
     expect(moved.missingPaths).toEqual([missing])
     expect(fs.existsSync(canvas.meta.path)).toBe(false)
@@ -243,7 +243,7 @@ describe('文档仓库：改名、转正、移动、副本、删除', () => {
     expect((await readStored(moved.meta.path)).json.content).toEqual({
       layer: 'henji:/.henji/layers/l1.png',
       looseFile: 'henji:/上传素材/参考/r.png',
-      stage: `henji://project/${from.id}/镜头.henji-stage`,
+      stage: `henji://project/${from.id}/镜头.hjstg`,
     })
     expect(env.hidden).toContain(path.join(env.workRoot, '.henji'))
     expect(fs.existsSync(path.join(env.workRoot, '.henji', 'layers', 'l1.png'))).toBe(true)
@@ -303,7 +303,7 @@ describe('文档仓库：改名、转正、移动、副本、删除', () => {
     await service.saveDocumentCover({ docId: doc.meta.id, sources: [{ source: 'x', sourceKind: 'image' }] })
     await expect(service.forgetDocument(doc.meta.id)).rejects.toMatchObject({ name: 'DocumentLocationError' })
     expect(env.catalog.getDocument(doc.meta.id)).not.toBeNull()
-    const elsewhere = path.join(env.outside, '外出.henji-stage')
+    const elsewhere = path.join(env.outside, '外出.hjstg')
     await fsp.rename(doc.meta.path, elsewhere)
     await service.forgetDocument(doc.meta.id)
     expect(env.catalog.getDocument(doc.meta.id)).toBeNull()
@@ -334,11 +334,11 @@ describe('名称检查', () => {
     const doc = await service.createDocument({ kind: 'canvas', container: { kind: 'user' }, name: 'Demo' })
     const location = { container: { kind: 'user' as const } }
     expect(await service.checkName({ subject: { type: 'document', kind: 'canvas' }, name: 'demo. ', location })).toEqual({
-      status: 'duplicate', name: 'demo', path: path.join(env.workRoot, '画布', 'demo.henji-canvas'), existingPath: doc.meta.path,
+      status: 'duplicate', name: 'demo', path: path.join(env.workRoot, '画布', 'demo.hjcvs'), existingPath: doc.meta.path,
     })
     expect(await service.checkName({ subject: { type: 'document', kind: 'camera_stage' }, name: 'Demo', location: { folder: path.dirname(doc.meta.path) } })).toMatchObject({ status: 'available' })
     expect(await service.checkName({ subject: { type: 'document', kind: 'canvas' }, name: 'DEMO', location: { renaming: doc.meta.path } })).toMatchObject({ status: 'available' })
-    expect(await service.checkName({ subject: { type: 'document', kind: 'canvas' }, name: 'Demo', location: { folder: env.outside } })).toMatchObject({ status: 'available', path: path.join(env.outside, 'Demo.henji-canvas') })
+    expect(await service.checkName({ subject: { type: 'document', kind: 'canvas' }, name: 'Demo', location: { folder: env.outside } })).toMatchObject({ status: 'available', path: path.join(env.outside, 'Demo.hjcvs') })
     expect(await service.checkName({ subject: { type: 'document', kind: 'canvas' }, name: 'NUL', location })).toMatchObject({ status: 'invalid', reason: 'reserved' })
     expect(await service.checkName({ subject: { type: 'document', kind: 'video_edit' }, name: 'x', location })).toMatchObject({ status: 'invalid', reason: 'location' })
   })

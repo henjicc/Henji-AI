@@ -41,7 +41,7 @@ function View({ visible = true, instance = owner }: { visible?: boolean; instanc
 beforeEach(async () => {
   installHarnessNativeStorage(); files.clear(); onError = vi.fn()
   vi.spyOn(getPlatform().audioEdit, 'listAsrModels').mockResolvedValue([])
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/timed-panel.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/timed-panel.hjvid')
   vi.spyOn(getPlatform().system.dialog, 'open').mockResolvedValue(null)
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, text) => { files.set(path, text) })
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)

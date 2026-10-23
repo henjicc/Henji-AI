@@ -109,7 +109,7 @@ function createVideoEditPictureGestureScene() {
   return { id: 'video-edit-picture-gesture', surface: '剪辑', name: '剪辑-32轨500片段原4K画面移动与一次撤销', writesUserData: true,
     setup: async (page, app, { capture }) => {
       const root = path.resolve('node_modules/.cache/video-edit-picture-gesture'); fs.mkdirSync(root, { recursive: true })
-      const fixture = path.resolve('node_modules/.cache/video-edit-monitor/pressure.henji-video')
+      const fixture = path.resolve('node_modules/.cache/video-edit-monitor/pressure.hjvid')
       assert.ok(fs.existsSync(fixture), '先通过正式monitor生成原4K压力工程')
       const project = readProject(fixture)
       project.id = 'picture-gesture-pressure'; project.name = '原4K画面移动'; project.revision = 0
@@ -120,7 +120,7 @@ function createVideoEditPictureGestureScene() {
       const target = sequence.clips.filter(clip => clip.kind === 'video' && clip.start <= 0 && clip.start + clip.duration > 0
         && sequence.tracks.some(track => track.index === clip.track && track.enabled && !track.locked)).sort((a, b) => b.track - a.track)[0]
       assert.ok(target, '原frame0必须有可编辑的真实视频片段')
-      const file = path.join(root, 'picture-gesture.henji-video'); fs.writeFileSync(file, JSON.stringify(project))
+      const file = path.join(root, 'picture-gesture.hjvid'); fs.writeFileSync(file, JSON.stringify(project))
       const originals = [...new Set(project.media.map(media => media.path))].map(file => ({ file, size: fs.statSync(file).size, mtimeMs: fs.statSync(file).mtimeMs }))
       const evidence = { completed: false, fixture, file, target: { id: target.id, track: target.track, sourceInUs: target.sourceInUs }, originalPaths: originals, captures: [] }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))

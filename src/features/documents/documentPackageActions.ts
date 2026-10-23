@@ -1,4 +1,5 @@
 import { DOCUMENT_PACKAGE_EXTENSION, type DocumentContainerRef, type DocumentTarget, type PackageExportResult, type PackageImportResult } from '@/core/documents/types'
+import { henjiDialogExtensions } from '@/core/fileExtensions'
 import { appDirectories, join, openDialog, saveDialog } from '@/platform/desktopApi'
 
 import { getDocumentOperations, type DocumentOperations } from './documentOperations'
@@ -11,6 +12,8 @@ import { getDocumentOperations, type DocumentOperations } from './documentOperat
 
 const EXTENSION = DOCUMENT_PACKAGE_EXTENSION.slice(1)
 const FILTERS = [{ name: '痕迹AI 单文件包', extensions: [EXTENSION] }]
+/** 导入时旧后缀的包也能选。 */
+const OPEN_FILTERS = [{ name: '痕迹AI 单文件包', extensions: henjiDialogExtensions('document_package') }]
 
 /** 默认位置：作品目录“导出”下以名称命名；取不到目录时只给文件名（系统对话框用上次的位置）。 */
 async function defaultPackagePath(name: string): Promise<string> {
@@ -46,7 +49,7 @@ export async function importPackageInteractive(
   container?: DocumentContainerRef,
   operations: DocumentOperations = getDocumentOperations(),
 ): Promise<PackageImportResult | null> {
-  const selected = await openDialog({ multiple: false, filters: FILTERS })
+  const selected = await openDialog({ multiple: false, filters: OPEN_FILTERS })
   const source = typeof selected === 'string' ? selected : Array.isArray(selected) ? selected[0] : null
   if (!source) return null
   return await operations.importPackage(source, container)

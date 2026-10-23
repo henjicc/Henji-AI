@@ -16,7 +16,7 @@ interface MissingSource {
   projectId: string
   clipId: string
   source: VideoEditCreativeSource
-  extension: string | null
+  extensions: readonly string[] | null
 }
 
 function fileNameOf(filePath: string): string {
@@ -34,8 +34,8 @@ export function useVideoEditClipSource(onError: (error: unknown) => void): { ope
   }, [onError])
 
   const relocate = useCallback(async (pending: MissingSource): Promise<void> => {
-    if (pending.source.type !== 'document' || !pending.extension) return
-    const selected = await openDialog({ multiple: false, filters: [{ name: t('videoEditProject.source.fileFilter'), extensions: [pending.extension.slice(1)] }] })
+    if (pending.source.type !== 'document' || !pending.extensions) return
+    const selected = await openDialog({ multiple: false, filters: [{ name: t('videoEditProject.source.fileFilter'), extensions: pending.extensions.map((extension) => extension.slice(1)) }] })
     const picked = typeof selected === 'string' ? selected : Array.isArray(selected) ? selected[0] : null
     if (!picked) return
     await relocateVideoEditClipSource(pending.projectId, pending.source.docRef.docId, picked)
@@ -54,7 +54,7 @@ export function useVideoEditClipSource(onError: (error: unknown) => void): { ope
       closeLabel={t('videoEditProject.source.cancel')}
       closeImmediately
       onClose={() => setMissing(null)}
-      actions={missing.source.type === 'document' && missing.extension ? [{
+      actions={missing.source.type === 'document' && missing.extensions ? [{
         label: t('videoEditProject.source.relocate'),
         variant: 'primary',
         onClick: () => {

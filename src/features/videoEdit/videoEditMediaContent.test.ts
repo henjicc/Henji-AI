@@ -55,7 +55,7 @@ beforeEach(() => {
   vi.spyOn(getPlatform().videoDecoder, 'status').mockResolvedValue({ available: false, forcedBackend: null })
   vi.stubGlobal('Worker', WorkerBoundary)
   vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} })
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/saved-content.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/saved-content.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, content) => { files.set(path, content) })
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
   vi.spyOn(getPlatform().system.paths, 'dirname').mockResolvedValue('D:/')

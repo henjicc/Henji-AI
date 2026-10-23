@@ -1,9 +1,10 @@
+import { henjiExtension, henjiLegacyExtensions } from '../../fileExtensions'
 import type { DocumentKindDescriptor } from './registry'
 import { migrateEmbeddedVideoEditStyles } from '../../videoEdit/styles/legacyStyles'
 import { createRecordingDocument, recordingDocumentSchema, type RecordingDocument } from '../../screenRecording/document'
 
 export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocument> = {
-  id: 'screen_recording', extension: '.henji-recording', storage: 'json', version: 27, minReaderVersion: 26,
+  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 27, minReaderVersion: 26,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
     // 嵌入剪辑风格新增可选的使用者偏好；旧内容保持原样，最低可读版本不变。

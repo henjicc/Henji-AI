@@ -4,7 +4,7 @@ import { audioEditProjectSchema } from './schema'
 import type { AudioEditProjectDocument, AudioEditSourceMetadata } from './types'
 
 /*
- * 口播文档内容（`.henji-audio`，3.3）与工具内存形态（AudioEditProjectDocument）的互转。主进程与渲染层共用。
+ * 口播文档内容（`.hjaud`，3.3）与工具内存形态（AudioEditProjectDocument）的互转。主进程与渲染层共用。
  *
  * 文档外壳负责 ID、名称（文件名）、创建 / 修改时间与版本；内容里是其余全部字段。
  * 工具认识的字段按 `audioEditProjectSchema` 严格校验；不认识的顶层字段（更新版本写入的）原样保留在 extras，

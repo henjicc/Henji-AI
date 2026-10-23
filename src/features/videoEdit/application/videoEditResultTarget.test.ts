@@ -36,7 +36,7 @@ beforeEach(() => {
   // 测试环境没有原生解码服务：按“不可用”走后备探测，而不是让替身抛错再记一条探测异常。
   vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue(undefined)
   vi.spyOn(videoEditNativeMediaProbe, 'probe').mockResolvedValue({ status: 'unavailable' })
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/result-target.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/result-target.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, text) => { files.set(path, text) })
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
   vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
@@ -165,7 +165,7 @@ it('口播字幕按输出秒换算到序列帧并与音频同事务，错误字�
   const { owner } = await setup(); const sequence = owner.document.sequences[0]; const audioAsset = asset({ id: 'audio', mediaType: 'audio', filePath: 'D:/results/audio.wav', width: 0, height: 0, durationSeconds: 3 })
   vi.mocked(getPlatform().assetLibrary.inspectAsset).mockResolvedValue(audioAsset)
   const target = captureVideoEditResultTarget(owner.document.id, sequence.id, { mode: 'add', frame: 30, trackId: sequence.tracks.find(track => track.kind === 'audio')!.id })
-  const origin = { type: 'document' as const, docRef: { docId: 'voice', path: 'D:/作品/口播/voice.henji-audio' }, revision: 1 }
+  const origin = { type: 'document' as const, docRef: { docId: 'voice', path: 'D:/作品/口播/voice.hjaud' }, revision: 1 }
   await expect(commitVideoEditCreativeResult(target, { asset: audioAsset, origin, captions: '1\n00:00:00,000 --> 00:00:08,000\n超长\n' })).rejects.toThrow('字幕范围')
   expect(owner.past).toHaveLength(0)
   const receipt = await commitVideoEditCreativeResult(target, { asset: audioAsset, origin, captions: '1\n00:00:00,500 --> 00:00:01,000\n剪后字幕\n' })

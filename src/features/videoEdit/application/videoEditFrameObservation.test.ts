@@ -45,7 +45,7 @@ beforeEach(() => {
     getContext() { return { imageSmoothingQuality: 'low', drawImage: (_image: unknown, ...args: number[]) => drawn.push(args), save: vi.fn(), restore: vi.fn(), setLineDash: vi.fn(), beginPath: vi.fn(), arc: vi.fn(), stroke: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), strokeRect: (...args: number[]) => pixels.rectangles.push(args), fillRect: vi.fn(), measureText: (text: string) => ({ width: text.length * 14 }), fillText: (text: string) => pixels.labels.push(text) } }
     async convertToBlob() { encodedSize = { width: this.width, height: this.height }; return new NativeBlob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }) } })
   const platform = getPlatform(); let size = { width: 0, height: 0 }
-  vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/observe.henji-video')
+  vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/observe.hjvid')
   vi.spyOn(platform.system.fs, 'writeTextFile').mockResolvedValue(undefined)
   vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue('D:/managed')
   vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)

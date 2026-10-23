@@ -47,7 +47,7 @@ beforeEach(async () => {
   vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue(fileContent)
   const system = getPlatform().system
   vi.spyOn(system.paths, 'join').mockImplementation(async (...parts) => parts.join('/'))
-  vi.spyOn(system.dialog, 'save').mockResolvedValue('D:/subtitles.henji-video')
+  vi.spyOn(system.dialog, 'save').mockResolvedValue('D:/subtitles.hjvid')
   vi.spyOn(system.fs, 'mkdir').mockResolvedValue(undefined)
   vi.spyOn(system.fs, 'exists').mockImplementation(async path => files.has(path) || texts.has(path))
   vi.spyOn(system.fs, 'writeFile').mockImplementation(async path => { files.add(path) })

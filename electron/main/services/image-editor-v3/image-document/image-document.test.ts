@@ -42,7 +42,7 @@ async function listPackages(directory: string): Promise<string[]> {
   for (const entry of await fsp.readdir(directory, { withFileTypes: true }).catch(() => [])) {
     const full = path.join(directory, entry.name)
     if (entry.isDirectory()) found.push(...await listPackages(full))
-    else if (entry.name.toLowerCase().endsWith('.henjiimg')) found.push(full)
+    else if (entry.name.toLowerCase().endsWith('.hjimg')) found.push(full)
   }
   return found
 }
@@ -53,7 +53,7 @@ async function listDocuments(): Promise<DocumentSummary[]> {
   for (const file of await listPackages(workRoot)) {
     const { header } = await readImageDocumentPackageHeader(file)
     rows.push({
-      id: header.id, kind: 'image_document', name: path.basename(file, '.henjiimg'), path: file,
+      id: header.id, kind: 'image_document', name: path.basename(file, '.hjimg'), path: file,
       container: { kind: 'user' }, draft: header.draft, revision: header.revision, kindVersion: header.kindVersion,
       createdAt: Date.parse(header.createdAt), updatedAt: Date.parse(header.updatedAt), projectName: null,
       external: false, missing: false, fileModifiedAt: 0, sizeBytes: 0, coverPath: null, summary: { ...header.summary }, lastOpenedAt: null,
@@ -176,11 +176,11 @@ it('暂存包完成后取消也不替换原文档，工作副本修改保留', a
 })
 
 describe('图片文档新建与适配器', () => {
-  it('新建草稿写进“图片文档/未命名图片 N.henjiimg”，头里有 ID、草稿标记与摘要；适配器能读', async () => {
+  it('新建草稿写进“图片文档/未命名图片 N.hjimg”，头里有 ID、草稿标记与摘要；适配器能读', async () => {
     await workingCopy('doc-a')
     const created = await service.create({ documentId: 'doc-a', container: { kind: 'user' }, emptyUntilRevision: 0 })
     expect(created.read.meta).toMatchObject({ id: 'doc-a', kind: 'image_document', name: '未命名图片 1', draft: true, revision: 0 })
-    expect(created.read.meta.path).toBe(path.join(workRoot, '图片文档', '未命名图片 1.henjiimg'))
+    expect(created.read.meta.path).toBe(path.join(workRoot, '图片文档', '未命名图片 1.hjimg'))
     expect(created.read.content).toMatchObject({ workingRevision: 0, emptyUntilRevision: 0, width: 120, height: 80, layers: 1 })
 
     await workingCopy('doc-b')
@@ -208,7 +208,7 @@ describe('图片文档新建与适配器', () => {
     await adapter.writeHeader(file, { name: '改个名字', draft: true })
     expect((await fsp.stat(file)).mtimeMs).toBe(before.mtimeMs)
 
-    const copy = path.join(path.dirname(file), '副本.henjiimg')
+    const copy = path.join(path.dirname(file), '副本.hjimg')
     await fsp.copyFile(file, copy)
     await adapter.writeHeader(copy, { id: 'doc-copy', draft: false })
     const entries = await readEntries(copy)
@@ -226,7 +226,7 @@ describe('图片文档新建与适配器', () => {
   it('改写包头失败时原文件保持原样，不留暂存文件', async () => {
     await workingCopy('doc-a')
     const created = await service.create({ documentId: 'doc-a', container: { kind: 'user' }, emptyUntilRevision: null })
-    const broken = path.join(path.dirname(created.read.meta.path), '坏的.henjiimg')
+    const broken = path.join(path.dirname(created.read.meta.path), '坏的.hjimg')
     await fsp.writeFile(broken, 'not a zip')
     await expect(createImageDocumentPackageAdapter().writeHeader(broken, { draft: false })).rejects.toThrow()
     expect(await fsp.readFile(broken, 'utf8')).toBe('not a zip')
@@ -235,7 +235,7 @@ describe('图片文档新建与适配器', () => {
 
   it('没有文档头的旧包：ID 由包内文档派生（不与画布内嵌文档冲突），写头后补上', async () => {
     await workingCopy('canvas-embedded')
-    const legacy = path.join(workRoot, '图片文档', '旧包.henjiimg')
+    const legacy = path.join(workRoot, '图片文档', '旧包.hjimg')
     await fsp.mkdir(path.dirname(legacy), { recursive: true })
     await packages.export({ targetPath: legacy, document: await documents.load('canvas-embedded') })
     const adapter = createImageDocumentPackageAdapter()
@@ -306,7 +306,7 @@ describe('图片文档写回与恢复', () => {
 
   it('文件被改名后按 ID 找到新位置写回', async () => {
     const doc = await createSaved('doc-a')
-    const renamed = path.join(path.dirname(doc.path), '海报.henjiimg')
+    const renamed = path.join(path.dirname(doc.path), '海报.hjimg')
     await fsp.rename(doc.path, renamed)
     await editWorkingCopy('doc-a')
     const committed = await service.commit({ target: { id: 'doc-a', path: doc.path }, expectedRevision: 0 })

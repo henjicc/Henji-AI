@@ -16,8 +16,10 @@ export type DocumentStorageMode = 'json' | 'package'
 
 export interface DocumentKindDescriptor<TContent = unknown> {
   readonly id: DocumentKindId
-  /** 文件扩展名，含点、小写，如 `.henji-canvas`。 */
+  /** 文件扩展名，含点、小写，如 `.hjcvs`；取自 `src/core/fileExtensions.ts` 登记表。 */
   readonly extension: string
+  /** 仍可读取的旧扩展名：扫描与打开都认，改名、移动或保存时换成当前扩展名。 */
+  readonly legacyExtensions?: readonly string[]
   /** 独立存放（不属于任何项目）时所在的作品目录子文件夹名；null 表示只能放在项目里（剪辑）。 */
   readonly standaloneFolderNames: Readonly<Record<FolderLocale, string>> | null
   /** 新建草稿的自动名前缀，如“未命名画布”（后面接序号）。 */
@@ -46,8 +48,27 @@ export interface DocumentKindRegistry {
   get(id: string): DocumentKindDescriptor | undefined
   /** 未登记时抛错。 */
   require(id: string): DocumentKindDescriptor
-  /** 按文件名的扩展名找类型（不分大小写）。 */
+  /** 按文件名的扩展名找类型（不分大小写，旧扩展名也认）。 */
   forFileName(fileName: string): DocumentKindDescriptor | undefined
+}
+
+/** 这种文档能读取的全部扩展名：当前在前，旧的在后。 */
+export function readableDocumentExtensions(kind: Pick<DocumentKindDescriptor, 'extension' | 'legacyExtensions'>): readonly string[] {
+  return [kind.extension, ...(kind.legacyExtensions ?? [])]
+}
+
+/** 文件名去掉这种文档的任一可读扩展名得到名称；扩展名不匹配时返回 null。 */
+export function documentNameForKind(kind: Pick<DocumentKindDescriptor, 'extension' | 'legacyExtensions'>, fileName: string): string | null {
+  for (const extension of readableDocumentExtensions(kind)) {
+    const name = documentNameFromFileName(fileName, extension)
+    if (name !== null) return name
+  }
+  return null
+}
+
+/** 文件用的是旧扩展名（保存时应换成当前扩展名）。 */
+export function usesLegacyDocumentExtension(kind: Pick<DocumentKindDescriptor, 'extension' | 'legacyExtensions'>, fileName: string): boolean {
+  return documentNameFromFileName(fileName, kind.extension) === null && documentNameForKind(kind, fileName) !== null
 }
 
 export class DocumentKindError extends Error {
@@ -60,7 +81,9 @@ export class DocumentKindError extends Error {
 const EXTENSION_PATTERN = /^\.[a-z0-9][a-z0-9-]{0,31}$/
 
 function validateDescriptor(kind: DocumentKindDescriptor): void {
-  if (!EXTENSION_PATTERN.test(kind.extension)) throw new DocumentKindError(`文档类型 ${kind.id} 的扩展名无效：${kind.extension}`)
+  for (const extension of readableDocumentExtensions(kind)) {
+    if (!EXTENSION_PATTERN.test(extension)) throw new DocumentKindError(`文档类型 ${kind.id} 的扩展名无效：${extension}`)
+  }
   if (!Number.isSafeInteger(kind.version) || kind.version < 1) throw new DocumentKindError(`文档类型 ${kind.id} 的版本无效`)
   const names = [
     ...Object.values(kind.untitledNames),
@@ -78,7 +101,10 @@ export function createDocumentKindRegistry(kinds: readonly DocumentKindDescripto
     validateDescriptor(kind)
     if (byId.has(kind.id)) throw new DocumentKindError(`文档类型重复登记：${kind.id}`)
     for (const other of byId.values()) {
-      if (other.extension === kind.extension) throw new DocumentKindError(`文档扩展名重复：${kind.extension}`)
+      const taken = new Set(readableDocumentExtensions(other))
+      for (const extension of readableDocumentExtensions(kind)) {
+        if (taken.has(extension)) throw new DocumentKindError(`文档扩展名重复：${extension}`)
+      }
       for (const locale of ['zh', 'en'] as const) {
         const left = other.standaloneFolderNames?.[locale]
         const right = kind.standaloneFolderNames?.[locale]
@@ -97,7 +123,7 @@ export function createDocumentKindRegistry(kinds: readonly DocumentKindDescripto
       return kind
     },
     forFileName(fileName) {
-      return list.find((kind) => documentNameFromFileName(fileName, kind.extension) !== null)
+      return list.find((kind) => documentNameForKind(kind, fileName) !== null)
     },
   }
 }

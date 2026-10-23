@@ -118,7 +118,7 @@ function getRuntime(): ImageEditorV3Runtime {
       resources,
       paths.materializationsDir,
     ),
-    // 图片文档（3.5）：.henjiimg 是正式文件，工作副本就是本仓库里同 ID 的文档；
+    // 图片文档（3.5）：.hjimg 是正式文件，工作副本就是本仓库里同 ID 的文档；
     // 锁与通用文档仓库共用（程序目录 DocumentStore/locks），写回与改名、移动互斥。
     imageDocuments: new ImageDocumentService({
       documents,
@@ -440,7 +440,7 @@ export function registerImageEditorV3Ipc(): void {
       throwIfAborted(signal)
       const result = await getRuntime().documents.listReferences(payload.cursor, payload.limit)
       throwIfAborted(signal)
-      // 图片文档（.henjiimg，3.5）的工作副本不在这里列出：它们按作品索引以文档身份出现。
+      // 图片文档（.hjimg，3.5）的工作副本不在这里列出：它们按作品索引以文档身份出现。
       // 分页游标仍沿用未过滤的列表，过滤后的一页可能为空。
       const documentRefs = []
       for (const ref of result.documentRefs) {

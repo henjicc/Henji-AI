@@ -13,13 +13,13 @@ const encoded = value => Buffer.from(JSON.stringify(value))
 if (process.argv.includes('--package')) {
   const { ZipArchive } = require('archiver')
   const { openZip, iterateEntries, readEntryBytes } = loadTypeScript('electron/main/services/zip-archive.ts')
-  const filename = path.join(root, 'project-package/v1.henjipack')
+  const filename = path.join(root, 'project-package/v1.hjpak')
   const rewrite = async () => {
     const input = await openZip(filename); let entries = []
     try { for await (const entry of iterateEntries(input)) if (!entry.fileName.endsWith('/')) entries.push({ name: entry.fileName, bytes: await readEntryBytes(input, entry, entry.fileName) }) } finally { input.close() }
     entries = entries.filter(entry => !['content/素材/golden-motion-page.json', 'content/素材/golden-motion-candidate.json'].includes(entry.name))
     const envelope = JSON.parse(fs.readFileSync(path.join(root, '../video-edit-motion/golden-motion.json'), 'utf8'))
-    const video = entries.find(entry => entry.name.endsWith('.henji-video'))
+    const video = entries.find(entry => entry.name.endsWith('.hjvid'))
     const previous = JSON.parse(video.bytes.toString('utf8'))
     // Preserve package-relative code locations and the package document identity.
     envelope.content.codeMaterials = previous.content.codeMaterials; envelope.id = previous.id

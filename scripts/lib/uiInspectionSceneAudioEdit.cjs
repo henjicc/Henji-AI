@@ -39,7 +39,7 @@ function createAudioEditScene({ setupToolbox, clickNamedButton }) {
       fs.writeFileSync(file, wav)
       let project
       try {
-        // 3.3：口播是 .henji-audio 文档，经正式接口造数据（audioEditDocumentFixture.cjs）
+        // 3.3：口播是 .hjaud 文档，经正式接口造数据（audioEditDocumentFixture.cjs）
         project = await createAudioEditDocument(page, { sourcePath: file, name: '波形交互验收', transcriptRows: [
           ['intro', '开场保留', 0, 2, true], ['removed', '这句已经删除', 2, 4, false],
           ['middle', '跳过后继续播放', 4, 8, true], ['ending', '结尾也应完整播放', 8, 12, true],

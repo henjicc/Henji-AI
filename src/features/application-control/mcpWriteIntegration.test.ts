@@ -314,7 +314,7 @@ it('t82：超长素材名的零提交拒绝不锁文档；丢失回执可只读�
   const files = new Map<string, string>()
   const platform = getPlatform()
   const content = { sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'c'.repeat(64) }
-  vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/t82.henji-video')
+  vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/t82.hjvid')
   vi.spyOn(platform.system.fs, 'writeTextFile').mockImplementation(async (file, text) => { files.set(file, text) })
   vi.spyOn(platform.system.fs, 'readTextFile').mockImplementation(async file => files.get(file)!)
   vi.spyOn(platform.system.fs, 'exists').mockResolvedValue(true)

@@ -321,7 +321,7 @@ async function runCanvasDocumentsRestart({ launch, userDataDir, outDir }) {
     const saved = await documentNamed(page, '画布一号')
     assert.equal(saved.draft, false, '保存后必须去掉草稿标记')
     assert.equal(saved.id, draftOne.id, '草稿转正不换 ID')
-    assert.equal(saved.path, path.join(canvasFolder, '画布一号.henji-canvas'))
+    assert.equal(saved.path, path.join(canvasFolder, '画布一号.hjcvs'))
     const envelope = readEnvelope(saved.path)
     assert.equal(envelope.kind, 'canvas')
     assert.equal(envelope.content.nodes.length, 1, '保存的画布应有上传节点')
@@ -441,10 +441,10 @@ async function runCanvasDocumentsRestart({ launch, userDataDir, outDir }) {
     await button(page, '新建画布').waitFor({ state: 'visible', timeout: 15000 })
     const layeredDocument = await documentNamed(page, '多图层画布')
     const documentId = layered.documentRef.slice('image-edit-v3:'.length)
-    const packagePath = path.join(workRoot, '.henji', 'canvas-layers', `${documentId}.henjilayer`)
+    const packagePath = path.join(workRoot, '.henji', 'canvas-layers', `${documentId}.hjlyr`)
     await waitUntil(async () => fs.existsSync(packagePath), '关闭画布时写出内嵌图片文档包', 20000)
     const layeredEnvelope = readEnvelope(layeredDocument.path)
-    assert.equal(layeredEnvelope.content.layerPackages?.[documentId], `henji:/.henji/canvas-layers/${documentId}.henjilayer`,
+    assert.equal(layeredEnvelope.content.layerPackages?.[documentId], `henji:/.henji/canvas-layers/${documentId}.hjlyr`,
       `画布内容应以相对写法记下内嵌包：${JSON.stringify(layeredEnvelope.content.layerPackages)}`)
     currentRun.layers = { canvasId: layered.canvasId, documentRef: layered.documentRef, edited, packagePath }
 
@@ -492,11 +492,11 @@ async function runCanvasDocumentsRestart({ launch, userDataDir, outDir }) {
     await moveDialog.getByRole('button', { name: '移入', exact: true }).click()
     await waitUntil(async () => (await listCanvases(second)).some((document) => document.id === layered.canvasId && document.projectName === '图层项目'), '移到项目完成')
     const projectFolder = path.join(workRoot, '项目', '图层项目')
-    const movedPath = path.join(projectFolder, '多图层画布.henji-canvas')
-    const movedPackage = path.join(projectFolder, '.henji', 'canvas-layers', `${documentId}.henjilayer`)
+    const movedPath = path.join(projectFolder, '多图层画布.hjcvs')
+    const movedPackage = path.join(projectFolder, '.henji', 'canvas-layers', `${documentId}.hjlyr`)
     assert.ok(fs.existsSync(movedPath), `画布应移进项目文件夹：${movedPath}`)
     assert.ok(fs.existsSync(movedPackage), `内嵌图片文档包应随画布复制进项目：${movedPackage}`)
-    assert.equal(readEnvelope(movedPath).content.layerPackages?.[documentId], `henji:/.henji/canvas-layers/${documentId}.henjilayer`)
+    assert.equal(readEnvelope(movedPath).content.layerPackages?.[documentId], `henji:/.henji/canvas-layers/${documentId}.hjlyr`)
     const movedRef = await openLayerCanvas(second, layered.canvasId, layered.nodeId)
     assert.equal(movedRef, layered.documentRef, '移动不换图层文档')
     assert.deepEqual((await loadLayers(second, movedRef)).layers, edited.layers, '移动后图层与改过的不透明度都在')
@@ -522,7 +522,7 @@ async function runCanvasDocumentsRestart({ launch, userDataDir, outDir }) {
     // 已打开的列表不会因为外部拷贝自动刷新；重新载入界面，相当于用户之后再来到画布页
     await second.reload({ waitUntil: 'domcontentloaded' })
     await openCanvasList(second)
-    const copiedPath = path.join(copiedFolder, '多图层画布.henji-canvas')
+    const copiedPath = path.join(copiedFolder, '多图层画布.hjcvs')
     let copied = null
     await waitUntil(async () => {
       copied = (await listCanvases(second)).find((document) => document.path === copiedPath)

@@ -60,7 +60,7 @@ describe('历史检查点正式发布链', () => {
     expect(fork.historyCheckpoint?.pages).toEqual(checkpoint.pages);
     const forked = await s.documents.load('fork'); expect(forked.history?.documentId).toBe('fork');
     expect(forked.history?.undo).toEqual(snapshot.undo);
-    const archive = path.join(s.directory, 'history.henjiimg');
+    const archive = path.join(s.directory, 'history.hjimg');
     await new HenjiImagePackageCodec(s.resources).export({ targetPath: archive, document: reopened });
     const target = new ContentAddressedResourceStore(path.join(s.directory, 'imported'));
     const putFile = target.putFile.bind(target);

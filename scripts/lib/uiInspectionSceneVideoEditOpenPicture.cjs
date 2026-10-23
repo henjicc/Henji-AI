@@ -236,7 +236,7 @@ function createVideoEditOpenPictureScene() {
         const manifestPath = path.join(copy, '.henji', 'project.json'); const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
         const chosen = process.env.HENJI_OPEN_PICTURE_DOCUMENT
         if (chosen) {
-          for (const file of fs.readdirSync(copy)) if (file.endsWith('.henji-video') && file !== chosen) fs.rmSync(path.join(copy, file))
+          for (const file of fs.readdirSync(copy)) if (file.endsWith('.hjvid') && file !== chosen) fs.rmSync(path.join(copy, file))
           const chosenDocument = JSON.parse(fs.readFileSync(path.join(copy, chosen), 'utf8'))
           // 副本里修正外部工具写成数字的时间字段，原文件不动。
           if (typeof chosenDocument.updatedAt === 'number') { chosenDocument.updatedAt = new Date(chosenDocument.updatedAt).toISOString(); fs.writeFileSync(path.join(copy, chosen), JSON.stringify(chosenDocument)) }

@@ -130,7 +130,7 @@ function buildRealityTestPlan(options, root) {
         'video-edit-layout': '剪辑布局完整退出重启恢复验收',
         'camera-stage-documents': '镜头参考文档（草稿、离开提示、重启、右键操作）真实验收',
         'video-edit-documents': '剪辑项目（草稿项目、离开提示、重启、收集素材、拷贝项目文件夹）真实验收',
-        'image-documents': '图片文档（.henjiimg 草稿、保存、关闭写回、重新打开、意外退出后恢复）真实验收',
+        'image-documents': '图片文档（.hjimg 草稿、保存、关闭写回、重新打开、意外退出后恢复）真实验收',
         'audio-edit-documents': '口播文档（导入即建草稿、离开提示、保存起名、重启后重新打开）真实验收',
         'canvas-documents': '画布文档（草稿三分支、生成落点、重启恢复视口与撤销、多图层随移动 / 副本 / 拷贝文件夹）真实验收',
         'free-composition': '自由组合（剪辑里新建 / 打开各类文档的嵌入模式、片段回到来源、图片文档链接自动重渲染、跨位置收集、单文件包导出导入）真实验收',

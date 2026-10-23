@@ -25,6 +25,6 @@ it('收集素材把引用到的别处文档复制进项目（新 ID），引用�
 
   const again = await service.collectDocumentMedia({ id: edit.meta.id })
   expect(again.copiedDocuments).toBe(0)
-  expect(await listFiles(project.path)).toEqual(['.henji/project.json', '参考画布.henji-canvas', '引用方.henji-canvas'])
+  expect(await listFiles(project.path)).toEqual(['.henji/project.json', '参考画布.hjcvs', '引用方.hjcvs'])
   expect(path.dirname(copies[0].path)).toBe(project.path)
 })

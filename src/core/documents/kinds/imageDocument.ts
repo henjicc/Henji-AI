@@ -1,15 +1,16 @@
 import { z } from 'zod'
 
+import { henjiExtension, henjiLegacyExtensions } from '../../fileExtensions'
 import type { DocumentKindDescriptor } from './registry'
 
 /*
- * 图片文档（`.henjiimg`，3.5 图片文档）：沿用单文件包，一个文件就是全部（像 PSD）。
+ * 图片文档（`.hjimg`，3.5 图片文档）：沿用单文件包，一个文件就是全部（像 PSD）。
  * 可以独立存放（作品目录“图片文档”文件夹），也可以放进项目。
  *
  * 存储方式是单文件包：通用仓库只做文件级操作（改名、移动、副本、回收站、删空草稿），
  * 头信息由主进程包适配器读写；内容的读写走图片编辑器的工作副本：
  * 打开时把包解到程序目录的 V3 文档仓库（资源按哈希去重），编辑时高频自动保存到工作副本，
- * 保存、空闲与关闭时整包原子写回 `.henjiimg`。
+ * 保存、空闲与关闭时整包原子写回 `.hjimg`。
  *
  * 所以会话里的“内容”不是图片本身，而是工作副本的描述：版本、成品尺寸、图层数，
  * 以及“新建空白图片后还没编辑过”的判断依据。图片、图层与历史都在工作副本里，由编辑器实例持有。
@@ -35,7 +36,8 @@ export function isEmptyImageDocumentContent(content: Pick<ImageDocumentContent, 
 
 export const imageDocumentKind: DocumentKindDescriptor<ImageDocumentContent> = {
   id: 'image_document',
-  extension: '.henjiimg',
+  extension: henjiExtension('image_document'),
+  legacyExtensions: henjiLegacyExtensions('image_document'),
   standaloneFolderNames: { zh: '图片文档', en: 'Image Documents' },
   untitledNames: { zh: '未命名图片', en: 'Untitled Image' },
   storage: 'package',

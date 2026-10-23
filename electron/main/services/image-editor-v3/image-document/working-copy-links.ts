@@ -8,7 +8,7 @@ import { isImageDocumentId } from './header'
  * 图片文档与它在程序目录里的工作副本之间的记录（3.5）：`<图片编辑存储>/document-links/<文档ID>.json`。
  *
  * 工作副本就是 V3 文档仓库里同一个 ID 的文档（资源按哈希去重存放）。这份记录说明工作副本
- * 最后一次与 `.henjiimg` 一致是什么时候：
+ * 最后一次与 `.hjimg` 一致是什么时候：
  * - packageRevision / fileSize / fileModifiedAt：那时文件的样子（文件被换掉后需要重新解包）；
  * - committedWorkingRevision：那时工作副本的版本。工作副本版本比它新，说明有没写回的修改
  *   （意外退出），再次打开时提示恢复。

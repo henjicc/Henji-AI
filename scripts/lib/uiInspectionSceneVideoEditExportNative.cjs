@@ -266,7 +266,7 @@ function createVideoEditExportNativeScene() {
         // The default dock layout (project panel visible), as the multitrack scene does; restored afterwards.
         previousLayout = await page.evaluate(() => localStorage.getItem('henji.videoEdit.dockLayout.v1'))
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1'))
-        const importFile = path.join(ROOT, `import-${Date.now()}.henji-video`)
+        const importFile = path.join(ROOT, `import-${Date.now()}.hjvid`)
         await dialogs(app, Object.values(samples).map(sample => sample.path), importFile)
         await button(page, '新建项目').click(); await adoptNewVideoEditProject(page, importFile); await chooseVideoEditImportFiles(page)
         const imported = await saved(page, importFile, value => value.media.length === Object.keys(samples).length, '样本未全部导入')
@@ -298,7 +298,7 @@ function createVideoEditExportNativeScene() {
         const alerts = async () => (await page.getByRole('alert').allTextContents()).map(text => text.trim()).filter(Boolean)
         const open = async (document, output) => {
           if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
-          const file = path.join(ROOT, `${document.id}.henji-video`); fs.writeFileSync(file, JSON.stringify(document))
+          const file = path.join(ROOT, `${document.id}.hjvid`); fs.writeFileSync(file, JSON.stringify(document))
           await dialogs(app, [file], output); await openVideoEditFile(page, file); await presented(page, 0)
           return file
         }

@@ -53,7 +53,7 @@ beforeEach(() => {
   encoder.finalize.mockReset().mockResolvedValue(undefined); encoder.cancel.mockReset().mockResolvedValue(undefined); encoder.render.mockReset().mockResolvedValue({ singleFrameReads: 0 }); encoder.mix.mockReset().mockResolvedValue({}); encoder.dispose.mockReset().mockResolvedValue(undefined)
   vi.stubGlobal('OffscreenCanvas', class { constructor(readonly width: number, readonly height: number) {} getContext() { return { fillRect() {}, drawImage() {}, fillStyle: '' } } })
   const platform = getPlatform()
-  vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/output.henji-video')
+  vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/output.hjvid')
   vi.spyOn(platform.system.fs, 'writeTextFile').mockImplementation(async (path, text) => { files.set(path, text) })
   vi.spyOn(platform.system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
   vi.spyOn(platform.system.fs, 'exists').mockImplementation(async path => media.has(path))

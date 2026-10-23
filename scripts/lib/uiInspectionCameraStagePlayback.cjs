@@ -187,7 +187,7 @@ function assertReadableWebGlFrames(frames, phase) {
 }
 
 /**
- * 造一份镜头参考文档（3.2 起镜头参考是作品目录里的 .henji-stage 文件）：经正式文档接口写文件，不写 SQL。
+ * 造一份镜头参考文档（3.2 起镜头参考是作品目录里的 .hjstg 文件）：经正式文档接口写文件，不写 SQL。
  * 返回文档 ID。同名已存在时（重复运行在同一资料目录）换一个带时间的名字。
  */
 async function seedCameraStageDocument(page, { name, scene }) {

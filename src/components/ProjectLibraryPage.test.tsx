@@ -181,7 +181,7 @@ describe('ProjectLibraryPage', () => {
       <ProjectLibraryPage
         persistKey="test"
         title="剪辑"
-        items={[{ id: 'v1', name: '旅行', metaLine: 'D:/a/旅行.henji-video', status: '文件不存在' }]}
+        items={[{ id: 'v1', name: '旅行', metaLine: 'D:/a/旅行.hjvid', status: '文件不存在' }]}
         labels={labels}
         onOpen={onOpen}
         create={{ kind: 'direct', onCreate: vi.fn() }}
@@ -191,7 +191,7 @@ describe('ProjectLibraryPage', () => {
     fireEvent.contextMenu(document.querySelector('[data-project-id="v1"]')!);
     expect(document.querySelector('[data-context-menu]')).toBeNull();
     expect(screen.getByText('文件不存在')).toBeTruthy();
-    expect(screen.queryByText('D:/a/旅行.henji-video')).toBeNull();
+    expect(screen.queryByText('D:/a/旅行.hjvid')).toBeNull();
     fireEvent.click(document.querySelector('[data-project-id="v1"]')!);
     expect(onOpen).toHaveBeenCalledOnce();
   });

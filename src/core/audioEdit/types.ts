@@ -79,7 +79,7 @@ export interface AudioEditSourceMetadata {
 }
 
 /**
- * 口播在工具内存里的形态（3.3 起存成 `.henji-audio` 文档）：id / name / createdAt / updatedAt / revision 来自文档外壳，
+ * 口播在工具内存里的形态（3.3 起存成 `.hjaud` 文档）：id / name / createdAt / updatedAt / revision 来自文档外壳，
  * 其余字段是文档内容（见 `documentContent.ts`）。
  */
 export interface AudioEditProjectDocument {

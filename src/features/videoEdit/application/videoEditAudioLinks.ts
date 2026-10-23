@@ -9,12 +9,13 @@ import { getPlatform } from '@/platform/runtime'
 import { createAudioEditDraft, editAudioEditProject, flushAudioEditProject, subscribeAudioEditInstances, renderAudioEdit } from '@/features/audioEdit'
 import { editVideoProject, listVideoEditInstances, requireVideoEditInstance, subscribeVideoEditDomain, videoEditDocumentOperations, saveVideoEdit } from './videoEditService'
 import { openDocumentFromVideoEdit } from './videoEditComposition'
+import { matchHenjiExtension } from '@/core/fileExtensions'
 
 const logger = createLogger('features.videoEdit.audioLinks')
 const notices = new Map<string, AudioLinkNotice[]>()
 export function getVideoEditAudioLinkNotices(projectId: string): readonly AudioLinkNotice[] { return notices.get(projectId) ?? [] }
 function links(document: VideoEditDocument, id?: string) {
-  return document.sequences.flatMap(s => s.clips).filter(c => c.kind === 'audio' && c.creativeSource?.type === 'document' && c.creativeSource.docRef.path.toLowerCase().endsWith('.henji-audio') && (!id || c.creativeSource.docRef.docId === id))
+  return document.sequences.flatMap(s => s.clips).filter(c => c.kind === 'audio' && c.creativeSource?.type === 'document' && matchHenjiExtension('audio_edit', c.creativeSource.docRef.path) && (!id || c.creativeSource.docRef.docId === id))
 }
 async function durableAudio(projectId: string, rendered: Awaited<ReturnType<typeof renderAudioEdit>>, name: string): Promise<VideoEditMedia> {
   const container = requireVideoEditInstance(projectId).session.documentMeta.container
@@ -27,7 +28,7 @@ export async function sendVideoEditClipToAudioEdit(projectId: string, clipId: st
   const clip = sequence?.clips.find(c => c.id === clipId)
   if (!sequence || !clip || !['audio', 'video'].includes(clip.kind)) throw new Error('请选择音频片段或带声音的视频片段')
   const linked = clip.kind === 'audio' ? clip : sequence.clips.find(c => c.kind === 'audio' && c.linkId && c.linkId === clip.linkId)
-  if (linked?.creativeSource?.type === 'document' && linked.creativeSource.docRef.path.toLowerCase().endsWith('.henji-audio')) {
+  if (linked?.creativeSource?.type === 'document' && matchHenjiExtension('audio_edit', linked.creativeSource.docRef.path)) {
     const resolved = await videoEditDocumentOperations().resolveDocumentLink(linked.creativeSource.docRef)
     if (resolved.status !== 'found') throw new Error('链接的音频作品找不到，请重新定位')
     const summary = await videoEditDocumentOperations().findDocument(resolved.meta.id)

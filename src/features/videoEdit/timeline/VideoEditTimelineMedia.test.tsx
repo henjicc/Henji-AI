@@ -30,7 +30,7 @@ const onError = vi.fn()
 function View(): React.ReactElement { useSyncExternalStore(subscribeVideoEdit, videoEditRevision); return <VideoEditTimeline instance={owner} onError={onError} /> }
 beforeEach(async () => {
   installHarnessNativeStorage(); onError.mockClear()
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/fixture/speed-media.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/fixture/speed-media.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
   vi.spyOn(getPlatform().video, 'getFilmstripFrame').mockImplementation(async ({ timeUs }) => ({ path: `D:/fixture/frame-${timeUs}.webp` }))
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, right: 900, bottom: 300, width: 900, height: 300, x: 0, y: 0, toJSON: () => ({}) })

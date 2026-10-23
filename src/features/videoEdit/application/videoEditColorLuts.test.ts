@@ -18,7 +18,7 @@ const path = resolve(sep, 'luts', 'look.cube')
 const cube = 'LUT_1D_SIZE 2\n0 0 0\n1 1 1'
 beforeEach(() => {
   installHarnessNativeStorage(); vi.stubGlobal('crypto', webcrypto)
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue(resolve(sep, 'color_grade.henji-video'))
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue(resolve(sep, 'color_grade.hjvid'))
   vi.spyOn(getPlatform().system.dialog, 'open').mockResolvedValue(path)
   vi.spyOn(getPlatform().system.fs, 'readFile').mockResolvedValue(new TextEncoder().encode(cube))
 })

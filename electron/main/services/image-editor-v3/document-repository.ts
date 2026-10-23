@@ -401,7 +401,7 @@ export class ImageEditDocumentRepository {
   }
 
   /**
-   * 整份替换（不存在时新建）：图片文档打开时把 `.henjiimg` 的内容解到工作副本（3.5）。
+   * 整份替换（不存在时新建）：图片文档打开时把 `.hjimg` 的内容解到工作副本（3.5）。
    * 只给图片文档服务用；它保证此时没有编辑中的实例持有这份文档。
    */
   async replace(envelope: ImageEditDocumentEnvelope): Promise<ImageEditDocumentEnvelope> {

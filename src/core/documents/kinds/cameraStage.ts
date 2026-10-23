@@ -1,10 +1,11 @@
 import { persistedStageSettingsSchema } from '../../persistence/businessSchemas'
 import { z } from 'zod'
 
+import { henjiExtension, henjiLegacyExtensions } from '../../fileExtensions'
 import type { DocumentKindDescriptor } from './registry'
 
 /*
- * 镜头参考（`.henji-stage`，3.2 镜头参考接入，工具接入的样板）。
+ * 镜头参考（`.hjstg`，3.2 镜头参考接入，工具接入的样板）。
  * 可以独立存放（作品目录“镜头参考”文件夹），也可以放进项目。
  *
  * 内容 = 三维场景的持久部分（内存形态，位置都是绝对路径）：
@@ -63,7 +64,8 @@ function isEmptyCameraStageContent(content: CameraStageDocumentContent): boolean
 
 export const cameraStageDocumentKind: DocumentKindDescriptor<CameraStageDocumentContent> = {
   id: 'camera_stage',
-  extension: '.henji-stage',
+  extension: henjiExtension('camera_stage'),
+  legacyExtensions: henjiLegacyExtensions('camera_stage'),
   standaloneFolderNames: { zh: '镜头参考', en: 'Camera Stages' },
   untitledNames: { zh: '未命名镜头参考', en: 'Untitled Camera Stage' },
   storage: 'json',

@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { legacyStyleKitSchema, legacyTitleTemplateSchema } from './styles/legacyStyles'
 import { videoEditEffectPresetSchema } from './effectPresets'
 import { videoEditTextPresetSchema } from '../persistence/storedSchemas'
+import { henjiExtension } from '../fileExtensions'
 
 /** Preset kinds the preset panel manages; transitions are built-in only, the rest also have personal libraries. */
 export const VIDEO_EDIT_PRESET_CATEGORIES = ['style', 'title', 'text', 'effect', 'transition'] as const
@@ -45,4 +46,4 @@ export const videoEditPresetPackageSchema = z.object({
   items: z.array(videoEditPresetPackageItemSchema).min(1),
 }).strict()
 export type VideoEditPresetPackage = z.infer<typeof videoEditPresetPackageSchema>
-export const VIDEO_EDIT_PRESET_PACKAGE_EXTENSION = 'henjipreset'
+export const VIDEO_EDIT_PRESET_PACKAGE_EXTENSION = henjiExtension('preset_package').slice(1)

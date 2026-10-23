@@ -9,7 +9,7 @@ import {
 import { canvasDocumentIdSchema } from './canvasDocumentId'
 
 /*
- * 画布内容能力（3.4 起画布是 `.henji-canvas` 文档）：画布的列出、新建、打开、改名、移动、副本、回收站
+ * 画布内容能力（3.4 起画布是 `.hjcvs` 文档）：画布的列出、新建、打开、改名、移动、副本、回收站
  * 都由通用文档能力承担（list_documents / create_document / open_document / documents.document.name …），
  * 这里只留读取画布内容与保存恢复。documentId 一律是画布文档 ID（取自 list_documents，kind=canvas），不是所在项目 ID。
  */

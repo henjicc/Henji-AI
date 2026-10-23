@@ -20,11 +20,11 @@ it('流式导出按位置写入且不会截断前后内容或覆盖已有目标'
 })
 it('工程文本完整原子替换并移除临时文件', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-video-save-')); directories.push(directory)
-  const target = path.join(directory, '工程.henji-video')
+  const target = path.join(directory, '工程.hjvid')
   await writeTextFile(target, '{"name":"old"}')
   await writeTextFile(target, '{"name":"new"}')
   expect(await fs.readFile(target, 'utf8')).toBe('{"name":"new"}')
-  expect(await fs.readdir(directory)).toEqual(['工程.henji-video'])
+  expect(await fs.readdir(directory)).toEqual(['工程.hjvid'])
 })
 
 it.each(['write', 'close'] as const)('排他发布前%s失败清理自身暂存，目标未出现且可重试', async failure => {

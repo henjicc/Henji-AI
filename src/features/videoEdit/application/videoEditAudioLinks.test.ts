@@ -75,7 +75,7 @@ it('saved edits refresh all links, trim tails without ripple, do not extend, and
 it('all linked clips respect speed and reverse boundaries; exhausted clips leave followers unmoved', async () => {
   const { owner, clipId } = await fixture()
   const sequence = owner.document.sequences[0], original = sequence.clips.find(c => c.id === clipId)!
-  const source = { type: 'document' as const, docRef: { docId: 'audio', path: 'audio.henji-audio' }, revision: 1 }
+  const source = { type: 'document' as const, docRef: { docId: 'audio', path: 'audio.hjaud' }, revision: 1 }
   const document: typeof owner.document = { ...owner.document, sequences: [{ ...sequence, clips: [
     { ...original, id: 'fast', sourceInUs: 0, speed: { numerator: 2, denominator: 1 }, creativeSource: source },
     { ...original, id: 'reverse', sourceInUs: 1000000, reverse: true, creativeSource: source },

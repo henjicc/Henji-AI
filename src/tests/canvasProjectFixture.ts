@@ -13,7 +13,7 @@ import { useProjectStore } from '@/stores/projectStore'
 import { harnessDocumentStore, resetHarnessDocumentStore } from '@/tests/harnessNativeStorage'
 
 /*
- * 画布测试夹具（3.4 起画布是 `.henji-canvas` 文档）。
+ * 画布测试夹具（3.4 起画布是 `.hjcvs` 文档）。
  *
  * 每个用例前把画布的文档环境换成内存替身：会话登记表 + 文档命令都落到 harnessDocumentStore()
  * （装了 harness 时与平台桥是同一个仓库，没装时也能用），文档类型用正式登记表（画布真实内容规则）。

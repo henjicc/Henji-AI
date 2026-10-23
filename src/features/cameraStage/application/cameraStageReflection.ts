@@ -400,7 +400,7 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
 }
 
 const ENTITY_META: Record<EntityType, { title: string; description: string; parents: EntityType[]; queryIds: string[] }> = {
-  [ENTITY_TYPES.project]: { title: '镜头参考文档', description: '一份镜头参考文档（.henji-stage）里的三维场景与运镜；id 即文档 ID。', parents: [], queryIds: ['observe_camera_stage_scene'] },
+  [ENTITY_TYPES.project]: { title: '镜头参考文档', description: '一份镜头参考文档（.hjstg）里的三维场景与运镜；id 即文档 ID。', parents: [], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.scene]: { title: '三维场景', description: '镜头参考中的对象、活动摄像机和状态关键帧集合。', parents: [ENTITY_TYPES.project], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.object]: { title: '三维对象', description: '基础几何体或角色对象。', parents: [ENTITY_TYPES.scene], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.camera]: { title: '三维摄像机', description: '具有取景、注视和轨迹控制的摄像机。', parents: [ENTITY_TYPES.scene], queryIds: ['observe_camera_stage_scene'] },

@@ -123,7 +123,7 @@ function createVideoEditMonitorScene() {
   return { id: 'video-edit-monitor', surface: '剪辑', name: '剪辑-源范围音画、波形电平与字幕4K60回环', writesUserData: true,
     setup: async (page, app, { capture }) => {
       const root = path.resolve('node_modules/.cache/video-edit-monitor'); fs.mkdirSync(root, { recursive: true })
-      const file = path.join(root, 'monitor.henji-video'); const pressureFile = path.join(root, 'pressure.henji-video')
+      const file = path.join(root, 'monitor.hjvid'); const pressureFile = path.join(root, 'pressure.hjvid')
       const evidence = { completed: false, phases: [], captures: [], exports: [], originalPaths: [] }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       const shot = async name => { const result = await capture(name); evidence.captures.push({ name, ...(result ? { result } : {}) }); store() }
@@ -133,8 +133,8 @@ function createVideoEditMonitorScene() {
         evidence.currentPhase = '生成并探测独立音视频控制样本'; store()
         const controls = generatedControls(root, ffmpegPath, ffprobePath); evidence.controls = controls
         // Prior scenes are media sources only; their cached document schemas are not monitor fixtures.
-        const previousMedia = readProject(path.resolve('node_modules/.cache/video-edit-code-controls/code-project.henji-video')).media
-        const original = readProject(path.resolve('node_modules/.cache/video-edit-scrub-original/scrub.henji-video')).media.find(media => media.kind === 'video')
+        const previousMedia = readProject(path.resolve('node_modules/.cache/video-edit-code-controls/code-project.hjvid')).media
+        const original = readProject(path.resolve('node_modules/.cache/video-edit-scrub-original/scrub.hjvid')).media.find(media => media.kind === 'video')
         const pressureProbe = mediaProbe(ffprobePath, original.path)
         assert.ok(!pressureProbe.streams.some(stream => stream.codec_type === 'audio'), '原 intro4K60 已确认无音轨，不能伪造 hasAudio')
         const pressureVideo = pressureProbe.streams.find(stream => stream.codec_type === 'video')

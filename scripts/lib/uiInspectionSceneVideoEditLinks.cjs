@@ -69,7 +69,7 @@ function fixture() {
         { ...base, id: 'links-sound-2', name: '声音二', kind: 'audio', track: 8, sourceComponent: 'audio' },
       ], annotations: [] }],
   }
-  const file = path.join(ROOT, 'links.henji-video'); fs.writeFileSync(file, JSON.stringify(project))
+  const file = path.join(ROOT, 'links.hjvid'); fs.writeFileSync(file, JSON.stringify(project))
   return { file, source, project }
 }
 

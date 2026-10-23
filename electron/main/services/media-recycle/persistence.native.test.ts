@@ -89,7 +89,7 @@ describe.skipIf(!process.versions.electron)('SQLite 21 media retirement', () => 
       // A document-only delivery is also handed off durably, without a history row.
       db.prepare("INSERT INTO generation_submissions(request_id,input_digest,response_json,created_at,phase) VALUES ('document-only','digest',?,0,'completed')").run(response)
 
-      const canvas = path.join(state.user, 'canvas.henji-canvas')
+      const canvas = path.join(state.user, 'canvas.hjcvs')
       const savedHistory = path.join(state.program, 'documentStore', 'session-state', 'canvas', 'canvas.history.json')
       await fs.mkdir(path.dirname(savedHistory), { recursive: true })
       await fs.writeFile(canvas, JSON.stringify({ content: { nodes: [{ data: { imageUrl: media } }] } }))

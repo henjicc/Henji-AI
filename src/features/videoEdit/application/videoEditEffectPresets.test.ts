@@ -20,7 +20,7 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
 beforeEach(() => {
   installHarnessNativeStorage()
   useVideoEditEffectLibraryStore.setState({ favorites: [], presets: [] })
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue(path.resolve(path.sep, 'preset-test.henji-video'))
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue(path.resolve(path.sep, 'preset-test.hjvid'))
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
 })
 afterEach(async () => {

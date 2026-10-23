@@ -73,7 +73,7 @@ async function checkNativeBridge(page) {
       name: `smoke-${Date.now()}`,
       content: { nodes: [{ id: 'n1', type: 'exportImageNode', position: { x: 0, y: 0 }, data: { imageUrl: mediaPath } }], edges: [] },
     })
-    const exported = await native.documents.exportDocumentPackage({ target: { id: created.meta.id }, destination: await native.paths.join(workDir, 'package.henjipack') })
+    const exported = await native.documents.exportDocumentPackage({ target: { id: created.meta.id }, destination: await native.paths.join(workDir, 'package.hjpak') })
     const imported = await native.documents.importPackage({ source: exported.path })
     if (imported.type !== 'document' || imported.meta.id === created.meta.id) {
       throw new Error('single-file package import did not create a new document')

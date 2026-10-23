@@ -32,7 +32,7 @@ const PROFESSIONAL = [
 ]
 const CONTROL = path.join(SAMPLES, 'h264_aac.mp4')
 /**
- * Projects saved by the app before 2.1 (local evidence, frozen once): `legacy/<name>.henji-video` with every media
+ * Projects saved by the app before 2.1 (local evidence, frozen once): `legacy/<name>.hjvid` with every media
  * file it references frozen under `legacy/media/<name>/`. Each run opens a copy whose media paths point at the frozen
  * files, so other scenes regenerating their own caches cannot change the outcome.
  * `monitor`: plain references, must present frame 0. `closure`: also holds a fixed asset-library reference whose
@@ -173,7 +173,7 @@ function createVideoEditMediaProbeScene() {
         // 2. 真实导入入口。
         await button(page, '剪辑').first().click()
         if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
-        const projectPath = path.join(ROOT, `import-${forced ?? 'auto'}.henji-video`); fs.rmSync(projectPath, { force: true })
+        const projectPath = path.join(ROOT, `import-${forced ?? 'auto'}.hjvid`); fs.rmSync(projectPath, { force: true })
         await dialogs(app, [CONTROL], projectPath); await button(page, '新建项目').click(); await adoptNewVideoEditProject(page, projectPath)
         const snapshot = () => fs.existsSync(projectPath) ? JSON.stringify(readVideoEditFile(projectPath)) : null
         const project = () => JSON.parse(snapshot() ?? '{"media":[]}')
@@ -242,7 +242,7 @@ function createVideoEditMediaProbeScene() {
 
         // 3. 2.1 改动前由应用保存的旧工程：打开不迁移。
         for (const legacy of LEGACY) {
-          const source = path.join(ROOT, 'legacy', `${legacy.name}.henji-video`); const mediaDir = path.join(ROOT, 'legacy', 'media', legacy.name)
+          const source = path.join(ROOT, 'legacy', `${legacy.name}.hjvid`); const mediaDir = path.join(ROOT, 'legacy', 'media', legacy.name)
           assert.ok(fs.existsSync(source) && fs.existsSync(mediaDir), `缺少旧工程快照 ${source}（本机证据，见 2.1 执行记录）`)
           const document = readVideoEditFile(source)
           for (const media of document.media) {
@@ -250,7 +250,7 @@ function createVideoEditMediaProbeScene() {
             assert.ok(fs.existsSync(frozen), `旧工程快照缺少素材 ${frozen}`)
             media.path = frozen
           }
-          const target = path.join(ROOT, `legacy-open-${forced ?? 'auto'}-${legacy.name}.henji-video`); fs.writeFileSync(target, JSON.stringify(document))
+          const target = path.join(ROOT, `legacy-open-${forced ?? 'auto'}-${legacy.name}.hjvid`); fs.writeFileSync(target, JSON.stringify(document))
           const hash = sha256(target)
           if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
           await dialogs(app, [target], target); await openVideoEditFile(page, target)

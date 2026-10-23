@@ -81,7 +81,7 @@ test('场景只接受稳定 submitted、持久 completed 与活动取消回执',
 
 test('后台新建镜头参考必须按返回引用落成非草稿文档文件', () => {
   const created = { resultRef: { kind: 'documents.document', id: 'doc-1' }, name: '后台镜头', kind: 'camera_stage' }
-  const read = { meta: { id: 'doc-1', kind: 'camera_stage', name: '后台镜头', draft: false, path: 'D:/文档/痕迹AI/镜头参考/后台镜头.henji-stage' } }
+  const read = { meta: { id: 'doc-1', kind: 'camera_stage', name: '后台镜头', draft: false, path: 'D:/文档/痕迹AI/镜头参考/后台镜头.hjstg' } }
   assert.equal(requirePersistedCreatedDocument(created, read), 'doc-1')
   assert.throws(() => requirePersistedCreatedDocument(created, { meta: { ...read.meta, draft: true } }), /没有按返回引用落盘/)
   assert.throws(() => requirePersistedCreatedDocument({ ...created, resultRef: { kind: 'camera_stage.document', id: 'doc-1' } }, read), /文档稳定引用/)

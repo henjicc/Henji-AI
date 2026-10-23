@@ -30,7 +30,7 @@ beforeEach(async () => {
   installHarnessNativeStorage(); files.clear(); vi.clearAllMocks()
   installPaidApprovalTestBridge()
   videoEditTextPresetLibrary.replace([])
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue(path.resolve(path.sep, 'caption-tests.henji-video'))
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue(path.resolve(path.sep, 'caption-tests.hjvid'))
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, text) => { files.set(path, text) })
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
   vi.spyOn(llmConfigService, 'getConfig').mockResolvedValue({

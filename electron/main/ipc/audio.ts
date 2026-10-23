@@ -27,7 +27,7 @@ import type {
 } from '../../../src/core/audioEdit/types'
 
 /*
- * 口播 IPC（3.3 口播接入）：口播是 `.henji-audio` 文档，新建、打开、保存、改名、删除都走通用文档接口；
+ * 口播 IPC（3.3 口播接入）：口播是 `.hjaud` 文档，新建、打开、保存、改名、删除都走通用文档接口；
  * 这里只剩导入时探测素材，以及按文档 ID（参数名沿用 projectId）执行的转写、分析、处理、试听与导出。
  */
 export function registerAudioIpc(): void {

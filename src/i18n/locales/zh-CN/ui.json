@@ -1094,7 +1094,7 @@
         },
         "fileNames": {
           "fallbackStem": "图片",
-          "editable": "{{stem}}-可编辑.henjiimg",
+          "editable": "{{stem}}-可编辑.hjimg",
           "edited": "{{stem}}-已编辑.{{extension}}"
         },
         "backToList": "返回图片文档列表",

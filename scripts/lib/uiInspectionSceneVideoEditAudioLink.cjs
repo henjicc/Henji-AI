@@ -26,7 +26,7 @@ function fixture() {
     tracks: [{ id: 'v1', name: '视频 1', index: 1, kind: 'video', locked: false, enabled: true, muted: false, solo: false }, { id: 'a1', name: '音频 1', index: 0, kind: 'audio', locked: false, enabled: true, muted: false, solo: false }],
     clips: [{ id: 'voice-clip', itemId: 'tone-item', name: '旁白', kind: 'audio', track: 0, start: 0, duration: SECONDS * FPS, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }],
     annotations: [] })
-  const file = path.join(ROOT, 'audio-link.henji-video')
+  const file = path.join(ROOT, 'audio-link.hjvid')
   fs.writeFileSync(file, JSON.stringify(value))
   return file
 }

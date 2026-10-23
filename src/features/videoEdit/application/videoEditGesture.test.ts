@@ -13,7 +13,7 @@ import * as fontValidation from './videoEditFonts'
 const files = new Map<string, string>()
 beforeEach(() => {
   installHarnessNativeStorage(); files.clear()
-  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/gesture.henji-video')
+  vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/gesture.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, value) => { files.set(path, value) })
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
 })

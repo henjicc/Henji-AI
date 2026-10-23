@@ -9,7 +9,7 @@ import { PACKAGE_FORMAT, PACKAGE_VERSION, packageManifestSchema } from '../../..
 
 import { buildDocumentEnvelope, carryDocumentEnvelopeForward, serializeDocumentEnvelope, type DocumentEnvelope } from '../../../../src/core/documents/envelope'
 import { restoreForwardFields } from '../../../../src/core/persistence/forwardCompat'
-import type { DocumentKindRegistry } from '../../../../src/core/documents/kinds'
+import { documentNameForKind, type DocumentKindRegistry } from '../../../../src/core/documents/kinds'
 import { entryNameKey, keepBothEntryName, sameEntryName } from '../../../../src/core/documents/naming'
 import { buildProjectManifest, INTERNAL_FOLDER_NAME, PROJECT_FOLDER_NAMES, type ProjectManifest } from '../../../../src/core/documents/projectManifest'
 import {
@@ -140,7 +140,7 @@ export class DocumentPackageService {
         version: PACKAGE_VERSION,
         minReaderVersion: PACKAGE_VERSION,
         type: 'document',
-        name: path.basename(file.path, file.kind.extension),
+        name: documentNameForKind(file.kind, path.basename(file.path)) ?? path.basename(file.path),
         exportedAt: this.workspace.now().toISOString(),
         folders: this.folderNames(container),
         document: { id: file.header.id, path: documentEntry },

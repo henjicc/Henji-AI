@@ -3,7 +3,7 @@
 const fs = require('node:fs')
 
 /*
- * 真实 Electron 脚本（Reality / 巡检 / 基准）造画布数据的 Node 侧入口（3.4 起画布是 `.henji-canvas` 文档）。
+ * 真实 Electron 脚本（Reality / 巡检 / 基准）造画布数据的 Node 侧入口（3.4 起画布是 `.hjcvs` 文档）。
  *
  * 转给页面里的 window.henjiNative.testFixtures 画布方法（只在自动化 / 隔离测试模式下存在，
  * 实现见 electron/preload/canvas-test-fixtures.ts，全部经正式文档接口，不再直接写数据库）：

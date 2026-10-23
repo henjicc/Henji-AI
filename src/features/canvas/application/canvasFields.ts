@@ -65,7 +65,7 @@ function canvasDescriptor(
 
 /** 写入目标只有画布 id——改名直接落到领域服务，没有需要累积的中间态。 */
 /**
- * 画布名就是 `.henji-canvas` 的文件名（3.4）：只读，改名走通用文档属性 documents.document.name（同一个 ID）。
+ * 画布名就是 `.hjcvs` 的文件名（3.4）：只读，改名走通用文档属性 documents.document.name（同一个 ID）。
  */
 export const PROJECT_FIELDS: ApplicationFieldDefinition<{ name: string }, string>[] = [
   {

@@ -40,7 +40,7 @@ beforeEach(async () => {
   state = { root: '', custom: null }
   const root = path.join(base, '文档', '痕迹AI')
   await fs.mkdir(path.join(root, '项目', '短片'), { recursive: true })
-  await fs.writeFile(path.join(root, '项目', '短片', '短片.henji-video'), '{}')
+  await fs.writeFile(path.join(root, '项目', '短片', '短片.hjvid'), '{}')
 })
 
 afterEach(async () => {
@@ -66,12 +66,12 @@ describe('createWorkRootService', () => {
     expect(changed).toMatchObject({ changed: true, root: target, requiresRestart: true })
     expect(deps.writeCustomRoot).toHaveBeenLastCalledWith(target)
     expect(deps.refreshIndex).toHaveBeenCalledTimes(1)
-    expect(await fs.readFile(path.join(target, '项目', '短片', '短片.henji-video'), 'utf8')).toBe('{}')
+    expect(await fs.readFile(path.join(target, '项目', '短片', '短片.hjvid'), 'utf8')).toBe('{}')
 
     const reset = await service.change({ kind: 'default' })
     expect(reset.root).toBe(path.join(base, '文档', '痕迹AI'))
     expect(deps.writeCustomRoot).toHaveBeenLastCalledWith(null)
-    expect(await fs.readFile(path.join(base, '文档', '痕迹AI', '项目', '短片', '短片.henji-video'), 'utf8')).toBe('{}')
+    expect(await fs.readFile(path.join(base, '文档', '痕迹AI', '项目', '短片', '短片.hjvid'), 'utf8')).toBe('{}')
   })
 
   it('还有长任务（如视频导出）在进行时拒绝并说明原因，不动文件也不切换设置', async () => {
@@ -104,7 +104,7 @@ describe('createWorkRootService', () => {
     expect(((await first) as Error).message).toMatch(/^cancelled:/)
     expect(service.isRunning()).toBe(false)
     expect(deps.writeCustomRoot).not.toHaveBeenCalled()
-    expect(await fs.readFile(path.join(base, '文档', '痕迹AI', '项目', '短片', '短片.henji-video'), 'utf8')).toBe('{}')
+    expect(await fs.readFile(path.join(base, '文档', '痕迹AI', '项目', '短片', '短片.hjvid'), 'utf8')).toBe('{}')
     expect(await fs.access(path.join(base, '新位置')).then(() => true, () => false)).toBe(false)
   })
 })

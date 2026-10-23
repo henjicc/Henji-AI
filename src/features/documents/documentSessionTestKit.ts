@@ -624,7 +624,7 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
   async exportDocumentPackage(request: ExportDocumentPackageRequest): Promise<PackageExportResult> {
     this.calls.push('exportDocumentPackage')
     const stored = this.require(request.target.id)
-    const path = request.destination ?? `${TEST_DOCUMENT_ROOT}/导出/${stored.meta.name}.henjipack`
+    const path = request.destination ?? `${TEST_DOCUMENT_ROOT}/导出/${stored.meta.name}.hjpak`
     this.exportedPackages.push({ target: request.target, path })
     this.packages.set(path, { type: 'document', kind: stored.meta.kind, name: stored.meta.name, content: structuredClone(stored.content) })
     return { path, files: 1, missingPaths: [] }
@@ -634,7 +634,7 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
     this.calls.push('exportProjectPackage')
     const project = this.projects.get(request.projectId)
     if (!project) throw namedError('ProjectNotFoundError')
-    const path = request.destination ?? `${TEST_DOCUMENT_ROOT}/导出/${project.name}.henjipack`
+    const path = request.destination ?? `${TEST_DOCUMENT_ROOT}/导出/${project.name}.hjpak`
     this.exportedPackages.push({ projectId: request.projectId, path })
     this.packages.set(path, { type: 'project', name: project.name })
     return { path, files: 1, missingPaths: [] }

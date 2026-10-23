@@ -113,7 +113,7 @@ function createVideoEditProbeScene() {
       const evidence = { machine: { cpu: os.cpus()[0].model, memoryBytes: os.totalmem(), os: os.version() }, cases: [] }
       evidence.runtime = await app.evaluate(async ({ app }) => ({ versions: process.versions, gpu: await app.getGPUInfo('basic'), memory: app.getAppMetrics() }))
       await button(page, '剪辑').click()
-      const projectPath = path.join(root, 'closure.henji-video')
+      const projectPath = path.join(root, 'closure.hjvid')
       await dialogs(app, [specs[0].source, sound], projectPath)
       // Import only creates project items (original paths); the asset-library image joins by drag.
       await button(page, '新建项目').click(); await adoptNewVideoEditProject(page, projectPath); await chooseVideoEditImportFiles(page)
@@ -222,7 +222,7 @@ function createVideoEditProbeScene() {
           document.id = `reality-${spec.width}-${spec.fps}`; document.sequences[0].width = spec.width; document.sequences[0].height = spec.height; document.sequences[0].frameRate = { numerator: spec.fps, denominator: 1 }; document.name = `剪辑验收 ${spec.width} ${spec.fps}`
           Object.assign(document.media.find(item => item.kind === 'video'), { path: spec.source, width: spec.width, height: spec.height })
           document.sequences[0].clips.forEach(clip => { clip.start *= spec.fps / 30; clip.duration *= spec.fps / 30 }); document.sequences[0].annotations.forEach(mark => { mark.frame *= spec.fps / 30 })
-          const file = path.join(root, `${spec.width}-${spec.fps}.henji-video`); fs.writeFileSync(file, JSON.stringify(document))
+          const file = path.join(root, `${spec.width}-${spec.fps}.hjvid`); fs.writeFileSync(file, JSON.stringify(document))
           await dialogs(app, [file], ''); await openVideoEditFile(page, file); await presented(page, 0)
           const seeks = []; const previewFrames = {}
           const canvas = page.getByLabel('剪辑画面', { exact: true })
@@ -344,7 +344,7 @@ function createVideoEditProbeScene() {
         portrait.annotations.forEach(mark => { mark.id = `portrait-${mark.id}`; mark.clipId = portraitClipIds.get(mark.clipId) })
         multi.sequences.push(portrait)
         // Its own folder: the save-failure ACL must not touch media files (asset identity includes ctime).
-        const multiPath = path.join(root, 'projects', 'multi-sequence.henji-video'); fs.mkdirSync(path.dirname(multiPath), { recursive: true }); fs.writeFileSync(multiPath, JSON.stringify(multi))
+        const multiPath = path.join(root, 'projects', 'multi-sequence.hjvid'); fs.mkdirSync(path.dirname(multiPath), { recursive: true }); fs.writeFileSync(multiPath, JSON.stringify(multi))
         const fractionalOutput = path.join(root, `portrait-2997-mono-${Date.now()}.mp4`)
         await dialogs(app, [multiPath], fractionalOutput); await openVideoEditFile(page, multiPath); await presented(page, 0)
         const portraitRef = { kind: 'video_edit.sequence', id: `${multi.id}:${portrait.id}` }
@@ -373,7 +373,7 @@ function createVideoEditProbeScene() {
         evidence.faults = {}
         // 1) Edits during an export are allowed and never reach the frozen export snapshot; opening another project does not disturb it.
         {
-          const output = path.join(root, `during-export-${Date.now()}.mp4`); await dialogs(app, [path.join(root, `${specs[0].width}-${specs[0].fps}.henji-video`)], output)
+          const output = path.join(root, `during-export-${Date.now()}.mp4`); await dialogs(app, [path.join(root, `${specs[0].width}-${specs[0].fps}.hjvid`)], output)
           const before = JSON.parse(projectText()).sequences[1].clips.length
           await confirmVideoEditExport(page); await page.getByRole('button', { name: /^取消导出/ }).waitFor({ state: 'visible', timeout: 10000 })
           // 3.5: 文字 lives in the timeline toolbar; the project panel also lists a text item named 文字.
@@ -420,7 +420,7 @@ function createVideoEditProbeScene() {
           const missing = structuredClone(saved); missing.id = 'reality-missing-source'; missing.name = '缺失源文件验收'
           const missingPath = path.join(root, 'missing-source-does-not-exist.mp4'); fs.rmSync(missingPath, { force: true })
           missing.media.find(item => item.kind === 'video').path = missingPath
-          const missingProject = path.join(root, 'missing-source.henji-video'); fs.writeFileSync(missingProject, JSON.stringify(missing))
+          const missingProject = path.join(root, 'missing-source.hjvid'); fs.writeFileSync(missingProject, JSON.stringify(missing))
           await dialogs(app, [missingProject], ''); await openVideoEditFile(page, missingProject); await page.waitForTimeout(3000)
           evidence.faults.missingSource = { alerts: await alerts(), canvas: await page.getByLabel('剪辑画面', { exact: true }).evaluate(canvas => ({ ...canvas.dataset })).catch(error => String(error)), body: (await page.locator('body').innerText()).slice(-800) }
           assert.ok(evidence.faults.missingSource.alerts.some(text => text.includes('找不到素材「1920-30.mp4」的源文件') && text.includes('重新定位源文件')), JSON.stringify(evidence.faults.missingSource.alerts))

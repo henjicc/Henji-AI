@@ -140,7 +140,7 @@ describe('图片编辑 V3 IPC 边界', () => {
     })).toThrow('predates expectedRevision')
     expect(() => parseImageEditorV3LoadPayload({
       requestId: 'image-editor-v3:load:path',
-      documentRef: '/Users/test/source.henjiimg',
+      documentRef: '/Users/test/source.hjimg',
     })).toThrow('Invalid image edit document reference')
     expect(() => parseImageEditorV3SavePayload({
       requestId: 'image-editor-v3:save:hash',

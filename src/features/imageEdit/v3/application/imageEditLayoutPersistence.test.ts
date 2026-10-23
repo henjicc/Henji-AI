@@ -58,10 +58,10 @@ it('原稿头与页经真实存储、undo/redo、fork、包复制、移动、导
   expect(canvasDraft.ownerRef.id).toBe(`v3:${canvasCopy.rewrites.fork}`)
   expect(await readImageLayoutResource(resources,canvasDraft.recipeRefs[0].resourceId as ResourceId)).toMatchObject({ownerRef:{id:`v3:${canvasCopy.rewrites.fork}`},entries:[{layerId:'a',localAffine:document.layers[0].transform},{layerId:'b'},{layerId:'c'}]})
   expect(await documents.deleteIfRevision(document.id,saved.revision)).toBe(true)
-  const packagePath=path.join(root,'layout.henjiimg')
+  const packagePath=path.join(root,'layout.hjimg')
   await new HenjiImagePackageCodec(resources).export({targetPath:packagePath,document:fork})
   await rewriteImageDocumentPackageHeader(packagePath,{id:'copy'})
-  const moved=path.join(root,'moved.henjiimg');await fsp.rename(packagePath,moved)
+  const moved=path.join(root,'moved.hjimg');await fsp.rename(packagePath,moved)
   const importedStore=new ContentAddressedResourceStore(path.join(root,'imported-resources')),importedDocuments=new ImageEditDocumentRepository(path.join(root,'imported-documents'),{resources:importedStore})
   const imported=await new HenjiImagePackageCodec(importedStore).import(moved,{restoreHistory:false})
   try {await importedDocuments.replace(imported.manifest.document)}finally{await imported.resourceLease.release()}
