@@ -2,6 +2,7 @@ import { recordingDocumentSchema } from '@/core/screenRecording/document'
 import type { RecordingDocument, RecordingMedia } from '@/core/screenRecording/document'
 import { videoEditComposition, type VideoEditDocument } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
+import { videoEditEmptyTrackIds, videoEditEdgeTracks } from '@/core/videoEdit/tracks'
 import { getPlatform } from '@/platform'
 import { importVideoEditSources, prepareVideoEditRecordingGain } from '@/features/videoEdit'
 import { appendVideoEditSequence, createVideoEditProject, makeRecordingClipEffect, openVideoEditDocument, saveVideoEdit, suggestRecordingClipZoom, switchVideoEditSequence } from '@/features/videoEdit'
@@ -21,10 +22,20 @@ export function placeRecordingMedia(document: VideoEditDocument, recording: Reco
   const fps = videoEditComposition(document, sequence.id).fps
   const origin = recordingRange(recording).startUs
   const trackIndices = new Map<string, number>()
+  const reserved = new Set<number>()
   for (const kind of (['microphone', 'systemAudio', 'screen', 'camera'] as const).filter(kind => media.some(item => item.kind === kind))) {
-    const index = Math.max(-1, ...sequence.tracks.map(track => track.index)) + 1
-    sequence.tracks.push({ id: crypto.randomUUID(), name: { screen: '屏幕', camera: '摄像头', microphone: '麦克风', systemAudio: '系统声音' }[kind], index, kind: kind === 'screen' || kind === 'camera' ? 'video' : 'audio', locked: false, enabled: true, muted: false, solo: false })
-    trackIndices.set(kind, index)
+    const trackKind = kind === 'screen' || kind === 'camera' ? 'video' : 'audio'
+    // 只复用整条为空且未锁定的轨道；先预留，避免同次导入的不同声画共用一轨。
+    let track = videoEditEmptyTrackIds(sequence, trackKind)
+      .map(id => sequence.tracks.find(track => track.id === id)!)
+      .find(track => !track.locked && !reserved.has(track.index))
+    if (!track) {
+      track = videoEditEdgeTracks(sequence, trackKind, 1)[0]
+      sequence.tracks.push(track)
+    }
+    track.name = { screen: '屏幕', camera: '摄像头', microphone: '麦克风', systemAudio: '系统声音' }[kind]
+    reserved.add(track.index)
+    trackIndices.set(kind, track.index)
   }
   const linkId = crypto.randomUUID()
   for (const [index, source] of media.entries()) {

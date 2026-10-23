@@ -130,6 +130,13 @@ function createRecordingSessionScene() {
         }
         const toolbox = await record('工具箱录制验收')
         assert.equal(toolbox.sequence.width, 1920); assert.equal(toolbox.sequence.frameRate.numerator, 60)
+        // 新项目直接占用默认 V1/A1，不能留下空轨把画面推到上层。
+        assert.equal(toolbox.sequence.tracks.length, 2, '录屏导入没有复用默认空轨')
+        for (const [kind, name] of [['video', '屏幕'], ['audio', '麦克风']]) {
+          const track = toolbox.sequence.tracks.filter(track => track.kind === kind).sort((a, b) => a.index - b.index)[0]
+          assert.equal(track.name, name)
+          assert(toolbox.sequence.clips.some(clip => clip.track === track.index), `${name}未进入第一条轨道`)
+        }
         // 录后增益沿现有 G 对话框读回，取消不改变导入结果。
         const microphoneClip = toolbox.sequence.clips.find(clip => clip.kind === 'audio' && clip.gainDb !== undefined)
         assert(microphoneClip, '录后麦克风应保存独立增益')
@@ -146,10 +153,9 @@ function createRecordingSessionScene() {
         // A recording clip is special in the editor: its own panel (pointer, zoom, frame) and the Z1 zoom lane.
         const screenClip = toolbox.sequence.clips.find(clip => clip.effects?.some(effect => effect.builtin?.id === 'recording_cursor'))
         assert.deepEqual(screenClip.effects.map(effect => effect.builtin?.id), ['recording_cursor', 'recording_zoom'], '录屏片段默认应只有光标与缩放（画框默认关闭）')
-        // The small tour window shows the clip partly under the pinned caption and zoom rows: click its visible lower edge.
+        // 画面已在 V1，直接点击片段中心，避免边缘点击掩盖轨道遮挡回归。
         const clipBlock = page.locator(`[data-video-edit-clip="${screenClip.id}"]`).first()
-        const clipBox = await clipBlock.boundingBox()
-        await clipBlock.click({ position: { x: 40, y: Math.max(2, clipBox.height - 4) } })
+        await clipBlock.click()
         const recordingPanel = page.locator(`[data-video-edit-recording-panel="${screenClip.id}"]`)
         await recordingPanel.waitFor({ state: 'visible', timeout: 15000 })
         await page.locator('[data-video-edit-zoom-track]').waitFor({ state: 'visible' })
