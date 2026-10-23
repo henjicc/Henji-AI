@@ -80,7 +80,7 @@ it('默认风格自动套到新建序列（工程里复制一份副本并复用�
   const document = requireVideoEditInstance(projectId).document
   const bound = document.sequences.filter(sequence => [first, second].includes(sequence.id)).map(sequence => sequence.styleId)
   expect(bound).toEqual(['restrained', 'restrained']); expect(document.styles).toHaveLength(1)
-  expect(document.styles![0]).toMatchObject({ name: '克制高级', version: 3 })
+  expect(document.styles![0]).toMatchObject({ name: '克制高级', version: 4 })
   const custom = videoEditTextPresetLibrary.save('大号黄字', videoEditTextStyleSchema.parse({ fontSize: 72, fill: { enabled: true, color: BLACK_HEX } }))
   setVideoEditPresetDefault('text', custom.id)
   const caption = createVideoEditCaption(projectId, first, { start: 0, duration: 30, text: '默认样式' })
