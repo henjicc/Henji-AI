@@ -119,6 +119,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.58.0'] = 'aaf71c5155285652a291b82101e9b92f2c6b5623025d8f8c3e99542da616518a'
     // 网页应用录制的开始、停止、分页读取和重演四个工具并入公共目录。
     fingerprints['2.59.0'] = 'fadadbae632715c224285678dabf03de7eb2b494eae60cc0f565d99966f637c6'
+    // 登记外部项目文件夹（register_external_project）、网页录制放进项目与导入剪辑，以及开始录制回执里的录制位置。
+    fingerprints['2.60.0'] = '376ffc4ac507515307115cd9ed48b51fdb7fafa782677f4c4aeb5ec9d94f6180'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], `工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹：${fingerprint}`).toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {

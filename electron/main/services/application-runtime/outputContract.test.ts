@@ -208,7 +208,9 @@ for (const name of ['organize_assistant_memory', 'revert_assistant_memory']) {
     message: '记忆已更新，可在修改历史中查看并撤回。', verification: { verified: true, condition: '已回读记忆状态，修改写入历史。' } }
 }
 const webRecordingRef = ref('screen_recording.web_recording', '2e811354-8fe6-4fd8-a174-8e0657f5cde8')
-successData.start_web_app_recording = { resultRef: webRecordingRef, verified: true, ...revisions }
+successData.start_web_app_recording = { resultRef: webRecordingRef, directory: 'D:/项目/素材/录屏/网页录制.hjweb', verified: true, ...revisions }
+successData.import_web_recording = { resultRef: ref('video_edit.document'), itemIds: ['item'], clipIds: ['clip'], video: 'replay', cursor: true, warnings: [], verified: true, ...revisions }
+successData.import_web_recording_to_project = { resultRef: webRecordingRef, documentRef: ref('documents.document', webRecordingRef.id), directory: 'D:/项目/素材/录屏/网页录制.hjweb', verified: true, ...revisions }
 successData.stop_web_app_recording = { resultRef: webRecordingRef, status: 'complete', durationMs: 1000, warnings: [], verified: true, ...revisions }
 // 数据轨沿 webReplay/matcher.test.ts 的 HTTP 录制条目结构，保留分页续读。
 successData.read_web_app_recording = { entries: [{ kind: 'http', id: 1, t: 10, via: 'seam', method: 'GET', url: 'https://example.test/data', headers: [], chunks: [] }], total: 2, nextOffset: 1, ...revisions }
