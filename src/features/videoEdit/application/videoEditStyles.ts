@@ -1,3 +1,5 @@
+import { cachedMemory } from '@/features/assistant/memory/memoryState'
+import type { MemoryEntry } from '@/core/assistant/memoryEntries'
 import { createLogger } from '@/core/logging'
 import { styleGuideSummary } from '@/core/videoEdit/styles/styleGuide'
 import { boundVideoEditStyle } from './videoEditStylePrompt'
@@ -51,9 +53,9 @@ export function unbindVideoEditStyle(projectId: string, sequenceId: string): voi
   editVideoProject(projectId, document => ({ ...document, sequences: document.sequences.map(value => value.id === sequenceId ? (({ styleId: _styleId, ...rest }) => rest)(value) : value) }))
 }
 /** 新序列从默认风格开始：复制一份进工程（已有同一版本的副本就复用）。没有默认风格时不绑定。 */
-export function withDefaultVideoEditStyle<D extends Pick<VideoEditDocument, 'styles'>, S extends Pick<VideoEditSequence, 'styleId'>>(document: D, sequence: S): { document: D; sequence: S } {
+export function withDefaultVideoEditStyle<D extends Pick<VideoEditDocument, 'styles'> & { id?: string }, S extends Pick<VideoEditSequence, 'styleId'>>(document: D, sequence: S): { document: D; sequence: S } {
   if (sequence.styleId || !videoEditStyleLibrary.loaded()) return { document, sequence }
-  const id = videoEditStyleLibrary.defaultStyleId(); const source = id ? videoEditStyleLibrary.findStyle(id)?.style : undefined
+  const id = videoEditStyleLibrary.defaultStyleId(document.id); const source = id ? videoEditStyleLibrary.findStyle(id)?.style : undefined
   if (!source) return { document, sequence }
   const existing = document.styles?.find(value => value.id === source.id)
   const styles = existing && existing.version >= source.version ? document.styles! : [...(document.styles ?? []).filter(value => value.id !== source.id), source]
@@ -62,14 +64,14 @@ export function withDefaultVideoEditStyle<D extends Pick<VideoEditDocument, 'sty
 setVideoEditNewSequenceStyle(withDefaultVideoEditStyle)
 
 /** 宿主上下文：绑定的风格说明书全文（样片代码按需读实体），或者可供挑选的风格与默认风格。 */
-export function videoEditStyleHostSummary(projectId: string, sequenceId: string): { ref: string | null; name: string; version: number | null; summary: string } {
+export function videoEditStyleHostSummary(projectId: string, sequenceId: string): { ref: string | null; name: string; version: number | null; summary: string; userPreferences?: MemoryEntry[] } {
   const owner = requireVideoEditInstance(projectId); const sequence = owner.document.sequences.find(value => value.id === sequenceId)
   if (!sequence) return { ref: null, name: '', version: null, summary: '' }
   const style = boundVideoEditStyle(owner.document, sequence)
   if (style) {
     const newer = newerLibraryStyleVersion(style)
     const templates = (owner.document.templates ?? []).filter(template => template.style?.id === style.id).map(template => `“${template.name}”`)
-    return { ref: `video_edit.project_style:${projectId}:${style.id}`, name: style.name, version: style.version, summary: [
+    return { ref: `video_edit.project_style:${projectId}:${style.id}`, name: style.name, version: style.version, ...(cachedMemory()?.settings.enabled ? { userPreferences: style.userPreferences ?? [] } : {}), summary: [
       `本序列按风格预设“${style.name}” v${style.version} 创作：新做的画面、文字、字幕、关键帧和转场都按下面的说明书；不变量与硬约束不可违反，自由度里的部分每次做出变化。需要写代码时读样片（video_edit.project_style.sample）里可以照搬的函数。`,
       newer ? `风格库里的“${style.name}”已更新到 v${newer}，本工程用的是 v${style.version}；告诉用户并问要不要升级（bind_video_edit_style），用户同意再升级。` : '',
       templates.length ? `工程里属于这个风格的模板：${templates.join('、')}；做同类元素先用模板（apply_video_edit_template）。` : '',

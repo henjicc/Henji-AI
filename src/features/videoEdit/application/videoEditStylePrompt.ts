@@ -1,3 +1,4 @@
+import { cachedMemory } from '@/features/assistant/memory/memoryState'
 import { styleGuideGenerationPrompt } from '@/core/videoEdit/styles/styleGuide'
 import type { VideoEditStyle } from '@/core/videoEdit/styles/styleSchemas'
 import type { VideoEditDocument, VideoEditSequence } from '@/core/videoEdit/document'
@@ -12,7 +13,9 @@ export function boundVideoEditStyle(document: Pick<VideoEditDocument, 'styles'>,
 /** 原地生成画面时并入提示词的一两句（说明书的“画面生成提示”栏）；没有时为空。 */
 export function videoEditStyleGenerationPrompt(document: Pick<VideoEditDocument, 'styles'>, sequence: Pick<VideoEditSequence, 'styleId'> | undefined): { name: string; prompt: string } | undefined {
   const style = sequence ? boundVideoEditStyle(document, sequence) : undefined
-  const prompt = style ? styleGuideGenerationPrompt(style.guide) : ''
+  const guide = style ? styleGuideGenerationPrompt(style.guide) : ''
+  const preferences = cachedMemory()?.settings.enabled ? style?.userPreferences?.map(entry => entry.content).join('；') : ''
+  const prompt = [guide, preferences ? `使用者偏好：${preferences}` : ''].filter(Boolean).join('\n')
   return style && prompt ? { name: style.name, prompt } : undefined
 }
 

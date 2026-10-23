@@ -1,4 +1,4 @@
-import { useSettingsStore } from '@/stores/settingsStore'
+import { getVideoEditSequenceDefaults } from './videoEditSequenceDefaults'
 import { createLogger } from '@/core/logging'
 import { HENJI_DRAG_DATA_MIME, readHenjiDragData } from '@/contexts/dragDataTransfer'
 import { getPlatform } from '@/platform/runtime'
@@ -152,7 +152,7 @@ async function applyVideoEditDropInput(projectId: string, input: VideoEditDropIn
     if (!placement || !ids.length) return source
     if (createSequence && !source.sequences.length) {
       const first = source.items.find(item => item.id === ids[0])
-      const defaults = useSettingsStore.getState().videoEditSequenceDefaults
+      const defaults = getVideoEditSequenceDefaults(projectId)
       const settings = first?.kind === 'audio' ? { ...defaults, ...options.sequenceSettings } : { pixelAspectRatio: defaults.pixelAspectRatio, sampleRate: defaults.sampleRate, channels: defaults.channels, ...options.sequenceSettings }
       const sequence = makeVideoEditItemSequence(source, ids, settings, readVideoEditCodeMetadata(owner, source))
       sequenceId = sequence.id; selectedClip = sequence.clips.at(-1)?.id

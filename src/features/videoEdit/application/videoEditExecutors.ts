@@ -1,3 +1,4 @@
+import { getVideoEditSequenceDefaults } from './videoEditSequenceDefaults'
 import { withVideoEditCodeMetadata, ensureVideoEditChangedCodeMetadata, ensureVideoEditCodeParameterMetadata } from './videoEditCodeState'
 import { getVideoEditRenderPreference, setVideoEditRenderPreference, type VideoEditRenderPreference } from './videoEditRenderCache'
 import { discardVideoEditCodeFiles, codePublicationFiles } from './videoEditCodeStorage'
@@ -10,7 +11,6 @@ import { loadFontLibrary } from '@/platform/fonts'
 import { GENERIC_FONT_FACES } from '@/core/fonts/catalog'
 import { changedVideoEditFonts } from './videoEditFonts'
 import { videoEditIntroducesCodeEffects } from '@/core/videoEdit/compositing'
-import { useSettingsStore } from '@/stores/settingsStore'
 import { videoEditSequenceSchema } from '@/core/videoEdit/document'
 import { getVideoEditProxyPreference, setVideoEditProxyPreference } from './videoEditProxy'
 import type { VideoEditProxyPreference } from '@/core/videoEdit/proxy'
@@ -390,14 +390,14 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
             refs.push({ kind: this.entityType, id: `${before.id}:${created}` }); continue
           }
           switch (this.entityType) {
-            case 'video_edit.sequence': { const styled = withDefaultVideoEditStyle(document, { ...createVideoEditSequence(), ...useSettingsStore.getState().videoEditSequenceDefaults, ...values, id } as ReturnType<typeof createVideoEditSequence>); document.styles = styled.document.styles; document.sequences.push(styled.sequence); break }
+            case 'video_edit.sequence': { const styled = withDefaultVideoEditStyle(document, { ...createVideoEditSequence(), ...getVideoEditSequenceDefaults(document.id), ...values, id } as ReturnType<typeof createVideoEditSequence>); document.styles = styled.document.styles; document.sequences.push(styled.sequence); break }
             case 'video_edit.bin': document.bins.push(videoEditBinSchema.parse({ id, ...values })); break
             case 'video_edit.item': {
               if (values.kind === 'graphic') {
                 const kind = values.graphicKind
                 if (!['solid', 'rect', 'ellipse', 'text'].includes(String(kind))) throw new Error('创建图形素材项需要graphic_kind。')
                 const dimensions = document.sequences.find(sequence => sequence.id === instance.activeSequenceId)!
-                const made = makeVideoEditGraphicItem({ kind: kind as 'solid' | 'rect' | 'ellipse' | 'text', name: String(values.name), ...(values.graphicWidth != null ? { width: Number(values.graphicWidth) } : {}), ...(values.graphicHeight != null ? { height: Number(values.graphicHeight) } : {}), ...(values.binId ? { binId: String(values.binId) } : {}) }, dimensions)
+                const made = makeVideoEditGraphicItem({ kind: kind as 'solid' | 'rect' | 'ellipse' | 'text', name: String(values.name), ...(values.graphicWidth != null ? { width: Number(values.graphicWidth) } : {}), ...(values.graphicHeight != null ? { height: Number(values.graphicHeight) } : {}), ...(values.binId ? { binId: String(values.binId) } : {}) }, dimensions, document.id)
                 document.items.push({ ...made, id })
               } else {
                 if (['graphicKind', 'graphicWidth', 'graphicHeight'].some(key => key in values)) throw new Error('图形创建属性只适用于graphic素材项。')
@@ -427,7 +427,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
             }
             case 'video_edit.marker': (sequence!.markers ??= []).push(videoEditMarkerSchema.parse({ id, ...values })); break
             case 'video_edit.caption': {
-              (sequence!.captions ??= []).push(prepareVideoEditCaption(sequence!, { id, ...values })); break
+              (sequence!.captions ??= []).push(prepareVideoEditCaption(sequence!, { id, ...values }, document.id)); break
             }
             case 'video_edit.track': {
               // 新轨道与 PR 拖到轨道外一样：视频轨加在最上面，音频轨加在最下面；编号由序列分配，不接受指定。

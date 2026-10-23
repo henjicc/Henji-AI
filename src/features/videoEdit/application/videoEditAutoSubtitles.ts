@@ -132,7 +132,7 @@ export function appendAutoSubtitles(projectId: string, sequenceId: string, capti
   const sequence = owner.document.sequences.find(value => value.id === sequenceId)
   if (!sequence) throw new Error('原序列已移除，请重新选择。')
   const transcription = textTranscription ? mergeVideoEditTextTranscription(sequence.textTranscription, textTranscription) : sequence.textTranscription
-  const parsed = prepareVideoEditCaptions(sequence, bindVideoEditTranscriptCaptions({ ...videoEditComposition(owner.document, sequenceId), textTranscription: transcription }, captions))
+  const parsed = prepareVideoEditCaptions(sequence, bindVideoEditTranscriptCaptions({ ...videoEditComposition(owner.document, sequenceId), textTranscription: transcription }, captions), projectId)
   if (!parsed.length) throw new Error('没有可用字幕，请检查识别结果。')
   editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, ...(transcription ? { textTranscription: transcription } : {}), captions: [...(sequence.captions ?? []), ...parsed] }))
   return parsed.map(caption => caption.id)
@@ -189,7 +189,7 @@ export async function generateVideoEditSubtitles(projectId: string, sequenceId: 
     const fps = current(projectId, sequenceId).fps
     const pauses = !manifest.captions
       ? (await readSourceEnergyPauses(audio.document.source.sourcePath, signal)).map(pause => ({ startMs: pause.startMs + manifest.startFrame / fps * 1000, endMs: pause.endMs + manifest.startFrame / fps * 1000, evidence: pause.evidence })) : []
-    const captions = manifest.captions ?? prepareVideoEditCaptions(current(projectId, sequenceId), buildAutoSubtitles(audio.document.transcript, audio.document.source.sampleRate, current(projectId, sequenceId).frameRate, manifest, settings, pauses))
+    const captions = manifest.captions ?? prepareVideoEditCaptions(current(projectId, sequenceId), buildAutoSubtitles(audio.document.transcript, audio.document.source.sampleRate, current(projectId, sequenceId).frameRate, manifest, settings, pauses), projectId)
     if (!captions.length) throw new Error('识别结果没有可用字幕。')
     // Record planned IDs before committing, so a lost save acknowledgement cannot create a duplicate batch.
     await platform.system.fs.writeTextFile(path, JSON.stringify({ ...manifest, captions }))

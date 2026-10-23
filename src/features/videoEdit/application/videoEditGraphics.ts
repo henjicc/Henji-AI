@@ -29,7 +29,7 @@ export function updateVideoEditGraphicObject(target: VideoEditGraphicTarget, pat
 }
 export function createVideoEditGraphicObject(target: VideoEditGraphicClipTarget, input: { kind: 'rect' | 'ellipse' | 'text'; name?: string }): string {
   const value = graphic(target)
-  const object = createVideoEditGraphic(input.kind, value.width, value.height).objects[0]
+  const object = createVideoEditGraphic(input.kind, value.width, value.height, target.projectId).objects[0]
   if (input.name !== undefined) object.name = input.name
   edit(target, objects => [...objects, object]); return object.id
 }

@@ -1,4 +1,4 @@
-import { useSettingsStore } from '@/stores/settingsStore'
+import { getVideoEditSequenceDefaults } from './videoEditSequenceDefaults'
 import type { VideoEditLabel } from '@/core/videoEdit/labels'
 import { videoEditBinSchema, videoEditItemSchema, type VideoEditItem } from '@/core/videoEdit/document'
 import { placeVideoEditItems, makeVideoEditItemSequence, removeVideoEditBins, removeVideoEditItems, videoEditItemUsage, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
@@ -12,14 +12,14 @@ import { withDefaultVideoEditStyle } from './videoEditStyles'
 export { videoEditItemUsage }
 export type { VideoEditSequenceSettings }
 export interface VideoEditGraphicItemInput { kind: 'solid' | 'rect' | 'ellipse' | 'text'; width?: number; height?: number; name?: string; binId?: string }
-export function makeVideoEditGraphicItem(input: VideoEditGraphicItemInput, dimensions: { width: number; height: number }): VideoEditItem {
-  const graphic = createVideoEditGraphic(input.kind, input.width ?? dimensions.width, input.height ?? dimensions.height)
+export function makeVideoEditGraphicItem(input: VideoEditGraphicItemInput, dimensions: { width: number; height: number }, documentId?: string): VideoEditItem {
+  const graphic = createVideoEditGraphic(input.kind, input.width ?? dimensions.width, input.height ?? dimensions.height, documentId)
   return videoEditItemSchema.parse({ id: crypto.randomUUID(), kind: 'graphic', name: input.name ?? graphic.objects[0].name, graphic, ...(input.binId ? { binId: input.binId } : {}) })
 }
 export function createVideoEditGraphicItem(projectId: string, input: VideoEditGraphicItemInput): string {
   const owner = requireVideoEditInstance(projectId)
   const sequence = owner.document.sequences.find(sequence => sequence.id === owner.activeSequenceId)!
-  const item = makeVideoEditGraphicItem(input, sequence ?? useSettingsStore.getState().videoEditSequenceDefaults)
+  const item = makeVideoEditGraphicItem(input, sequence ?? getVideoEditSequenceDefaults(projectId), projectId)
   editVideoProject(projectId, document => ({ ...document, items: [...document.items, item] })); return item.id
 }
 export function createVideoEditAdjustmentItem(projectId: string, input: { name?: string; binId?: string } = {}): string {

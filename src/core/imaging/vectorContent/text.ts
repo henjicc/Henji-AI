@@ -33,6 +33,14 @@ export type TextStyle = z.infer<typeof textStyleSchema>
 export function defaultTextStyle(height: number): TextStyle {
   return textStyleSchema.parse({ fontSize: Math.max(1, Math.round(height / 15)) })
 }
+/** 仅新建内容使用宿主提供的默认字体；旧作品布局不得依赖用户当前偏好。 */
+let newTextFont: (text: string, documentId?: string, styleFont?: string) => string | undefined = () => undefined
+export function setNewTextFontResolver(resolve: typeof newTextFont): void { newTextFont = resolve }
+export function newTextStyle(height: number, text = '文字', documentId?: string, styleFont?: string): TextStyle {
+  const style = defaultTextStyle(height)
+  const font = newTextFont(text, documentId, styleFont) ?? styleFont
+  return font ? { ...style, fontFamily: font } : style
+}
 export interface TextLayout { lines: string[]; left: number; top: number; width: number; height: number; lineHeight: number; contentTop: number; style: TextStyle }
 export type TextContent = { text: string; textStyle?: TextStyle }
 /** The same measured layout drives the title texture, hit area, handles and paragraph wrapping. */

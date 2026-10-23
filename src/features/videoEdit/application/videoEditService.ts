@@ -1,3 +1,4 @@
+import { getVideoEditSequenceDefaults } from './videoEditSequenceDefaults'
 import { beginVideoEditFirstFrame, countVideoEditTiming, endVideoEditTiming } from '../engine/videoEditFirstFrameTiming'
 import { videoEditExportHistorySchema, type VideoEditExportHistoryEntry } from '@/core/videoEdit/document'
 import { persistenceMessage } from '@/core/persistence/messages'
@@ -438,7 +439,7 @@ let newSequenceStyle: NewSequenceStyle = (document, sequence) => ({ document, se
 /** The preset layer installs the default-style binding here, so the service does not depend on the preset libraries. */
 export function setVideoEditNewSequenceStyle(apply: NewSequenceStyle): void { newSequenceStyle = apply }
 export function appendVideoEditSequence(projectId: string, settings: Partial<Omit<VideoEditSequence, 'id' | 'clips' | 'annotations' | 'tracks'>> = {}): string {
-  const created = { ...createVideoEditSequence(`序列 ${requireVideoEditInstance(projectId).document.sequences.length + 1}`), ...useSettingsStore.getState().videoEditSequenceDefaults, ...settings }
+  const created = { ...createVideoEditSequence(`序列 ${requireVideoEditInstance(projectId).document.sequences.length + 1}`), ...getVideoEditSequenceDefaults(projectId), ...settings }
   editVideoProject(projectId, document => { const styled = newSequenceStyle(document, created); return { ...styled.document, sequences: [...document.sequences, styled.sequence] } })
   return created.id
 }

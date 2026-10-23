@@ -1,3 +1,4 @@
+import { refreshMemory } from '@/features/assistant/memory/memoryService'
 // @vitest-environment jsdom
 import fs from 'node:fs'
 import path from 'node:path'
@@ -50,8 +51,8 @@ const CARD = `export default { name: "档案人名条", kind: "generator", mode:
   layers(params, width, height) { return [{ id: "card", bounds: [0, 0, width, height], draw(ctx) { ctx.fillStyle = "${BLACK_HEX}"; ctx.fillRect(0, 0, width, height) } }] } }
 `
 let io: ReturnType<typeof createTestStyleLibraryIo>
-beforeEach(() => {
-  installHarnessNativeStorage(); io = createTestStyleLibraryIo(); videoEditStyleLibrary.reset(io, undefined); videoEditPresetPreferences.replace([])
+beforeEach(async () => {
+  installHarnessNativeStorage(); await refreshMemory(); io = createTestStyleLibraryIo(); videoEditStyleLibrary.reset(io, undefined); videoEditPresetPreferences.replace([])
   vi.stubGlobal('OffscreenCanvas', class { width: number; height: number; constructor(width: number, height: number) { this.width = width; this.height = height } getContext() { return { font: '', drawImage() {}, measureText(text: string) { return { width: text.length * 20, actualBoundingBoxLeft: 0, actualBoundingBoxRight: text.length * 20 } } } } async convertToBlob() { return new Blob(['frame']) } })
 })
 afterEach(async () => { await closeAllVideoEdits(); releaseVideoEditCodeCompiler(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage(); io.dispose() })
@@ -118,7 +119,7 @@ it('风格包往返：导出带说明书、样片、成员模板与预览，导�
   await expect(exportVideoEditStylePackage('shared', 'D:/out/分享风格.henjistyle', {}, fileIo)).rejects.toThrow('已存在')
   await expect(exportVideoEditStylePackage('shared', 'D:/out/分享风格.json', {}, fileIo)).rejects.toThrow('.henjistyle')
   const text = files.get('D:/out/分享风格.henjistyle')!
-  expect(JSON.parse(text)).toMatchObject({ version: 1, minReaderVersion: 1, content: { format: 'henji-video-style', style: { id: 'shared', version: 3 } } })
+  expect(JSON.parse(text)).toMatchObject({ version: 2, minReaderVersion: 1, content: { format: 'henji-video-style', style: { id: 'shared', version: 3 } } })
   // 另一台机器：全新风格库。
   const other = createTestStyleLibraryIo(); videoEditStyleLibrary.reset(other, undefined)
   try {
@@ -282,4 +283,21 @@ it('内置样片是本仓库的作者模块：能加载、声明生成器并按�
       for (const layer of layers) if (layer.pose) { expect(layer.bounds, entry.style.id).toBeTruthy(); layer.pose(time) }
     }
   }
+})
+
+
+it('内置风格使用者偏好升版并持久保存，随风格包导出', async () => {
+  await videoEditStyleLibrary.ready()
+  const before = videoEditStyleLibrary.requireStyle('restrained').style
+  const userPreferences = [{ id: 'spacing', content: '这个风格的文字多留一点空白。', source: 'user' as const, revision: 1, updatedAt: new Date().toISOString() }]
+  const saved = await videoEditStyleLibrary.saveStyle({ ...before, version: before.version + 1, userPreferences }, undefined, true)
+  expect(saved.style.version).toBe(before.version + 1)
+  expect(saved.builtin).toBe(true)
+  expect(saved.stale).toBe(false)
+  videoEditStyleLibrary.reset(io, undefined)
+  await videoEditStyleLibrary.ready()
+  expect(videoEditStyleLibrary.requireStyle('restrained').style.userPreferences).toEqual(userPreferences)
+  let text = ''
+  await exportVideoEditStylePackage('restrained', 'D:/out/偏好.henjistyle', {}, { read: async () => text, exists: async () => false, write: async (_file, value) => { text = value } })
+  expect(JSON.parse(text).content.style.userPreferences).toEqual(userPreferences)
 })

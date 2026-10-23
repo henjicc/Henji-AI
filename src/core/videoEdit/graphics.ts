@@ -1,6 +1,7 @@
+import { newTextStyle } from '../imaging/vectorContent/text'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from './time'
 import { z } from 'zod'
-import { defaultVideoEditTextStyle, videoEditTextStyleSchema, type VideoEditTextStyle } from './text'
+import { videoEditTextStyleSchema, type VideoEditTextStyle } from './text'
 import { CodeMaterialError } from './codeMaterial/contract'
 import type { CodeColor, CodeDrawCommand, CodeParameterDeclaration, CodeParameterValues } from './codeMaterial/contract'
 import { codeMaterialCurvesSchema, evaluateCodeMaterialParameters, prepareCodeMaterialParameters } from './codeMaterialAnimation'
@@ -100,9 +101,9 @@ export function evaluateVideoEditGraphic(prepared: PreparedVideoEditGraphic, tim
   })
 }
 
-export function createVideoEditGraphic(kind: 'solid' | 'rect' | 'ellipse' | 'text', width: number, height: number): VideoEditGraphic {
+export function createVideoEditGraphic(kind: 'solid' | 'rect' | 'ellipse' | 'text', width: number, height: number, documentId?: string): VideoEditGraphic {
   const dimensions = dimensionsSchema.parse({ width, height })
-  const object: VideoEditGraphicObject = { id: crypto.randomUUID(), name: { solid: '纯色', rect: '矩形', ellipse: '椭圆', text: '文字' }[kind], kind: kind === 'solid' ? 'rect' : kind, parameters: {}, visible: true, ...(kind === 'text' ? { textStyle: defaultVideoEditTextStyle(height) } : {}) }
+  const object: VideoEditGraphicObject = { id: crypto.randomUUID(), name: { solid: '纯色', rect: '矩形', ellipse: '椭圆', text: '文字' }[kind], kind: kind === 'solid' ? 'rect' : kind, parameters: {}, visible: true, ...(kind === 'text' ? { textStyle: newTextStyle(height, '文字', documentId) } : {}) }
   const graphic: VideoEditGraphic = { ...dimensions, objects: [object] }
   object.parameters = prepareCodeMaterialParameters(videoEditGraphicObjectMetadata(graphic, object), object).values
   if (kind === 'solid') Object.assign(object.parameters, { x: 0, y: 0, width, height, fill: [0, 0, 0, 1] })

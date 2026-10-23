@@ -1,10 +1,11 @@
+import { newTextStyle } from '../../../imaging/vectorContent/text';
 import type { MarkItem } from '../../types';
-import { defaultTextStyle, arrowPath, ellipsePath, rectanglePath, polylinePath, type VectorPath } from '../../../imaging/vectorContent';
+import { arrowPath, ellipsePath, rectanglePath, polylinePath, type VectorPath } from '../../../imaging/vectorContent';
 import { createImageEditTextLayerV3, createImageEditPathLayerV3, type ImageEditVectorLayerV3 } from './vector';
 
 /** Pointer/mark-operation drafts are transient; the document only contains formal content. */
 export function imageEditLayersFromMarkDraftV3(item: MarkItem, number = 1): ImageEditVectorLayerV3[] {
-  const style = defaultTextStyle(720);
+  const style = newTextStyle(720, item.type === 'text' ? item.text : item.type === 'number' ? String(number) : '文字');
   if (item.type === 'text' || item.type === 'number') {
     style.fontSize = item.fontSize; style.fill.color = item.color;
     style.align = 'left'; style.verticalAlign = 'top';

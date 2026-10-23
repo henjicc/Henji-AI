@@ -75,7 +75,7 @@ it('默认排第一，其余按喜爱程度排序；未设默认的类别推荐�
 it('默认风格自动套到新建序列（工程里复制一份副本并复用），默认文字样式用于新字幕', async () => {
   await videoEditStyleLibrary.ready()
   const owner = await createVideoEditTestProject(); const projectId = owner.document.id
-  videoEditStyleLibrary.setDefaultStyle('restrained')
+  await videoEditStyleLibrary.setDefaultStyle('restrained')
   const first = appendVideoEditSequence(projectId); const second = appendVideoEditSequence(projectId)
   const document = requireVideoEditInstance(projectId).document
   const bound = document.sequences.filter(sequence => [first, second].includes(sequence.id)).map(sequence => sequence.styleId)

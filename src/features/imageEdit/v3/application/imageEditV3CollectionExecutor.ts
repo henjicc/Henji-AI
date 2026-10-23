@@ -77,7 +77,7 @@ function createLayer(properties: Record<string, JsonValue>, document: ImageEditD
   if (type === 'text' || type === 'shape' || type === 'path') {
     if (definitionId !== null || params !== null) throw new Error('INVALID_INPUT：标注图层的 definition_id 与 params 必须为 null。')
     const content = fullProperty(properties, entityType, 'content')
-    return type === 'text' ? createImageEditTextLayerV3(id,name,content == null ? undefined : richTextContentSchema.parse(content)) : createImageEditPathLayerV3(id,name,type,content == null ? undefined : vectorPathContentSchema.parse(content))
+    return type === 'text' ? createImageEditTextLayerV3(id,name,content == null ? undefined : richTextContentSchema.parse(content), document.id) : createImageEditPathLayerV3(id,name,type,content == null ? undefined : vectorPathContentSchema.parse(content))
   }
   if (type === 'effect') {
     const EFFECT_IDS = new Set(listCreatableImageEditOperationIdsV3('effect'))

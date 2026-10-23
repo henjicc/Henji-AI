@@ -205,7 +205,7 @@ class LibraryExecutor {
     for (const change of state.templates) {
       if (change.before) await videoEditStyleLibrary.saveTemplate(change.before); else if (videoEditStyleLibrary.findTemplate(change.id)) await videoEditStyleLibrary.removeTemplate(change.id)
     }
-    if (state.defaultBefore !== undefined) videoEditStyleLibrary.setDefaultStyle(state.defaultBefore && videoEditStyleLibrary.findStyle(state.defaultBefore) ? state.defaultBefore : null)
+    if (state.defaultBefore !== undefined) await videoEditStyleLibrary.setDefaultStyle(state.defaultBefore && videoEditStyleLibrary.findStyle(state.defaultBefore) ? state.defaultBefore : null, 'assistant')
     this.undos.delete(token); return done(state.refs, '已恢复风格库写入前的记录。')
   }
   async compensate(_step: unknown, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> { return result.undoToken ? (await this.undo(result.undoToken)).evidence : [] }
@@ -227,7 +227,7 @@ export class VideoEditStyleCollectionExecutor extends LibraryExecutor implements
         const draft: StyleDraft = { entry: undefined as unknown as VideoEditLibraryStyle, style: newStyle(styleShape.name.parse(item.properties[`${STYLE_ENTITY}.name`])), isDefault: false }
         await applyWriterTable(fieldWriterTable(styleFields), draft, Object.entries(item.properties).map(([propertyId, value]) => ({ propertyId, operation: 'set' as const, value: value as JsonValue })))
         const saved = await videoEditStyleLibrary.saveStyle(draft.style)
-        if (draft.isDefault) { state.defaultBefore = videoEditStyleLibrary.defaultStyleId(); videoEditStyleLibrary.setDefaultStyle(saved.style.id) }
+        if (draft.isDefault) { state.defaultBefore = videoEditStyleLibrary.defaultStyleId(); await videoEditStyleLibrary.setDefaultStyle(saved.style.id, 'assistant') }
         state.styles.push({ id: saved.style.id, after: saved.style }); state.refs.push({ kind: STYLE_ENTITY, id: saved.style.id })
       } else {
         const draft = videoEditTemplateSchema.parse({ id: crypto.randomUUID(), name: item.properties[`${TEMPLATE_ENTITY}.name`], description: '', version: 1, contentHash: '', updatedAt: new Date().toISOString(), style: null, body: item.properties[`${TEMPLATE_ENTITY}.body`] })
@@ -265,7 +265,7 @@ export class VideoEditStyleMutationExecutor extends LibraryExecutor implements A
       await applyWriterTable(fieldWriterTable(styleFields), draft, step.mutations)
       context.signal?.throwIfAborted()
       if (contentKeys.length) state.styles.push({ id: before.id, before, after: (await videoEditStyleLibrary.saveStyle(draft.style)).style })
-      if (draft.isDefault !== wasDefault) { state.defaultBefore = videoEditStyleLibrary.defaultStyleId(); videoEditStyleLibrary.setDefaultStyle(draft.isDefault ? before.id : null) }
+      if (draft.isDefault !== wasDefault) { state.defaultBefore = videoEditStyleLibrary.defaultStyleId(); await videoEditStyleLibrary.setDefaultStyle(draft.isDefault ? before.id : null, 'assistant') }
     } else {
       const before = await templateValue(step.target); const draft = structuredClone(before)
       await applyWriterTable(fieldWriterTable(templateFields), draft, step.mutations); context.signal?.throwIfAborted()

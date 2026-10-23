@@ -201,7 +201,7 @@ export function createImageEditLayerFromChoiceV3(
     return createEmptyImageEditSmartLayerV3(document, id, choice.name);
   }
   if (choice.kind === 'raster') return createImageEditRasterLayerV3(id, choice.name)
-  if (choice.kind === 'text') return createImageEditTextLayerV3(id, choice.name)
+  if (choice.kind === 'text') return createImageEditTextLayerV3(id, choice.name, undefined, document?.id)
   if (choice.kind === 'shape' || choice.kind === 'path') return createImageEditPathLayerV3(id, choice.name, choice.kind)
   if (choice.kind === 'group') return createImageEditGroupLayerV3(id, choice.name)
   if (choice.kind === 'effect') {

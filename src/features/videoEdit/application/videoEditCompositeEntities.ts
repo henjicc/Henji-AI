@@ -157,7 +157,7 @@ export function createVideoEditCompositeEntity(document: VideoEditDocument, type
   if (type === 'video_edit.graphic_object') {
     if (!clip.graphic) throw new Error('请选择结构化图形片段。')
     if (!['rect', 'ellipse', 'text'].includes(String(values.kind))) throw new Error('图形对象需要矩形、椭圆或文字类型。')
-    const object = createVideoEditGraphic(values.kind as 'rect' | 'ellipse' | 'text', clip.graphic.width, clip.graphic.height).objects[0]
+    const object = createVideoEditGraphic(values.kind as 'rect' | 'ellipse' | 'text', clip.graphic.width, clip.graphic.height, document.id).objects[0]
     if (values.name !== undefined) object.name = String(values.name)
     if (values.textStyle !== undefined) object.textStyle = values.textStyle === null ? undefined : videoEditTextStyleSchema.parse(values.textStyle)
     if (values.visible !== undefined) { if (typeof values.visible !== 'boolean') throw new Error('visible须为布尔值。'); object.visible = values.visible }

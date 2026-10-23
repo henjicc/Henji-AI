@@ -1,3 +1,5 @@
+import { rememberedDefault } from '@/features/assistant/memory/memoryDefaults'
+import { refreshMemory } from '@/features/assistant/memory/memoryState'
 import { createLogger } from '@/core/logging'
 import { PERSISTENCE_FORMATS } from '@/core/persistence/formats'
 import { parseVersionedPersistenceJson, readLocalPersistenceJson, localLibraryContract } from '@/core/persistence/versionedJson'
@@ -9,7 +11,6 @@ import { convertLegacyStyleKit, convertLegacyTitleTemplate, legacyStyleKitSchema
 import { z } from 'zod'
 import { appLocalDataDir, exists, getBundledResourcePath, join, mkdir, readDir, readFile, readTextFile, remove, writeFile, writeTextFile } from '@/platform/desktopApi'
 import { publishVideoEdit } from './videoEditService'
-import { videoEditPresetPreferences } from './videoEditPresetPreferences'
 
 const logger = createLogger('features.videoEdit.styleLibrary')
 const STYLE_FORMAT = PERSISTENCE_FORMATS.find(format => format.id === 'video-style-library')!
@@ -88,13 +89,14 @@ export class VideoEditStyleLibrary {
   listTemplates(styleId?: string): VideoEditLibraryTemplate[] { return structuredClone([...this.templates.values()].filter(entry => styleId === undefined || entry.template.style?.id === styleId).sort((a, b) => a.template.name.localeCompare(b.template.name, 'zh-Hans-CN'))) }
   findTemplate(id: string): VideoEditLibraryTemplate | undefined { const value = this.templates.get(id); return value && structuredClone(value) }
   requireTemplate(id: string): VideoEditLibraryTemplate { const value = this.findTemplate(id); if (!value) throw new Error(`NOT_FOUND：风格库里没有这个模板（${id}），请重新列出 video_edit.template。`); return value }
-  defaultStyleId(): string | null { const id = videoEditPresetPreferences.defaultId('style'); return id && this.styles.has(id) ? id : null }
+  defaultStyleId(documentId?: string): string | null { const value = rememberedDefault('style', documentId).value; const id = value?.key === 'style' ? value.id : null; return id && this.styles.has(id) ? id : null }
 
   /** 写入或替换一个个人风格（不改版本号：版本只在渲染时随内容变化加 1）；media 给出时整组替换预览文件。 */
-  saveStyle(style: VideoEditStyle, media?: VideoEditStyleMediaBytes): Promise<VideoEditLibraryStyle> {
+  saveStyle(style: VideoEditStyle, media?: VideoEditStyleMediaBytes, preferencesOnly = false): Promise<VideoEditLibraryStyle> {
     return this.write('style.save', async () => {
-      if (this.styles.get(style.id)?.builtin) throw new Error('内置风格只读；要修改请先复制成个人风格。')
-      const value = videoEditStyleSchema.parse({ ...style, updatedAt: new Date().toISOString() })
+      const previous = this.styles.get(style.id)
+      if (previous?.builtin && !preferencesOnly) throw new Error('内置风格只读；要修改请先复制成个人风格。')
+      const value = videoEditStyleSchema.parse({ ...(preferencesOnly && previous ? { ...previous.style, userPreferences: style.userPreferences, version: style.version } : style), updatedAt: new Date().toISOString() })
       const dir = await this.io.join(await this.io.root(), 'styles', value.id); await this.io.mkdir(dir)
       let current = this.styles.get(value.id)?.media ?? { anchors: [] }
       if (media) {
@@ -105,8 +107,9 @@ export class VideoEditStyleLibrary {
         if (media.anchors.length) await this.io.mkdir(await this.io.join(dir, 'anchors'))
         for (const [index, bytes] of media.anchors.entries()) { const file = await this.io.join(dir, 'anchors', `${padded(index)}.jpg`); await this.io.writeBytes(file, bytes); current.anchors.push(file) }
       }
+      if (preferencesOnly && previous && !previous.stale) value.contentHash = await videoEditStyleContentHash(value)
       await this.io.writeText(await this.io.join(dir, 'style.json'), container(STYLE_FORMAT, value))
-      const entry = { style: value, builtin: false, dir, media: current, stale: value.contentHash !== await videoEditStyleContentHash(value) }
+      const entry = { style: value, builtin: previous?.builtin ?? false, dir, media: current, stale: value.contentHash !== await videoEditStyleContentHash(value) }
       this.styles.set(value.id, entry); return structuredClone(entry)
     })
   }
@@ -115,12 +118,20 @@ export class VideoEditStyleLibrary {
       const entry = this.styles.get(id)
       if (!entry || entry.builtin) throw new Error('只能删除风格库里的个人风格，内置风格只读。')
       await this.io.remove(entry.dir); this.styles.delete(id)
-      if (videoEditPresetPreferences.defaultId('style') === id) videoEditPresetPreferences.setDefault('style', null)
+      if (rememberedDefault('style').value?.key === 'style' && (rememberedDefault('style').value as { id: string }).id === id) await this.setDefaultStyle(null)
       // 模板可以单独存在：风格删掉后成员模板保留，只去掉所属关系。
       for (const template of [...this.templates.values()].filter(value => value.template.style?.id === id)) await this.putTemplate({ ...template.template, style: null })
     })
   }
-  setDefaultStyle(id: string | null): void { if (id) this.requireStyle(id); videoEditPresetPreferences.setDefault('style', id); this.publish() }
+  async setDefaultStyle(id: string | null, actor: 'user' | 'assistant' = 'user'): Promise<void> {
+    if (id) this.requireStyle(id)
+    const state = await refreshMemory()
+    const { writeMemory } = await import('@/features/assistant/memory/memoryService')
+    const entries = state.entries.filter(entry => entry.value?.key === 'style').sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    if (id) await writeMemory({ target: { layer: 'global' }, id: entries[0]?.id ?? crypto.randomUUID(), expectedRevision: entries[0]?.revision ?? 0, actor, reason: '在风格库设为默认。', entry: { section: 'creative', content: `新序列默认使用${this.requireStyle(id).style.name}。`, source: actor, value: { key: 'style', id } } })
+    else for (const entry of entries) await writeMemory({ target: { layer: 'global' }, id: entry.id, expectedRevision: entry.revision, actor, reason: '取消默认风格。', entry: null })
+    this.publish()
+  }
 
   /** 写入模板：内容摘要变了版本加 1，只改名称、说明或所属风格不升版本。 */
   saveTemplate(template: VideoEditTemplate): Promise<VideoEditLibraryTemplate> { return this.write('template.save', () => this.putTemplate(template)) }
@@ -173,7 +184,16 @@ export class VideoEditStyleLibrary {
     const stylesDir = await this.io.join(root, 'styles')
     if (await this.io.exists(stylesDir)) for (const entry of await this.io.list(stylesDir)) {
       if (!entry.isDirectory || entry.name.startsWith('.')) continue
-      if (styles.get(entry.name)?.builtin) continue
+      const builtin = styles.get(entry.name)
+      if (builtin?.builtin) {
+        try {
+          const local = decode<VideoEditStyle>(STYLE_FORMAT, await this.io.readText(await this.io.join(stylesDir, entry.name, 'style.json')), entry.name)
+          const style = videoEditStyleSchema.parse({ ...builtin.style, userPreferences: local.userPreferences, version: Math.max(builtin.style.version, local.version), updatedAt: local.updatedAt })
+          style.contentHash = await videoEditStyleContentHash(style)
+          styles.set(entry.name, { ...builtin, style })
+        } catch (error) { problems.push(entry.name); logger.error('load.preferences_failed', '风格使用者偏好读取失败，原文件已保留', { error }) }
+        continue
+      }
       try { await readStyleDir(await this.io.join(stylesDir, entry.name), false) } catch (error) { problems.push(entry.name); logger.error('load.style_failed', '个人风格读取失败，原文件已保留', { error, context: { id: entry.name } }) }
     }
     const templatesDir = await this.io.join(root, 'templates')
