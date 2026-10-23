@@ -27,7 +27,7 @@ const COPY = {
   subtitle: "风格样片 · STYLE SAMPLE",
   list: ["统一的配色", "统一的字体", "统一的节奏"],
   data: { value: 87, unit: "%", label: "一次通过率" },
-  name: { name: "林一", role: "动效设计师" },
+  name: { name: "痕继痕迹", role: "动效设计师" },
   end: "一个风格，处处一致",
 };
 
