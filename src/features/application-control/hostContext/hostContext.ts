@@ -1,3 +1,4 @@
+import { currentDocumentContext } from '@/features/documents/currentDocumentContext'
 import { getAudioEditRevision } from '@/features/audioEdit/application/audioEditProjectInstances'
 import { getDocumentOperations } from '@/features/documents/documentOperations'
 import { activeVideoEditInstance, videoEditDomainRevision, subscribeVideoEdit } from '@/features/videoEdit/application/videoEditService'
@@ -299,6 +300,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
     .reduce((total, capability) => total + capability.version, applicationCapabilities.length)
 
   return hostContextSnapshotSchema.parse({
+    ...currentDocumentContext(),
     schemaVersion: APPLICATION_HOST_CONTRACT_VERSION,
     rendererEpoch,
     revision,

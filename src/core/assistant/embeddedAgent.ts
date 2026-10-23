@@ -6,7 +6,7 @@ import { HOST_ANNOTATION_PREVIEW_CHARACTERS, type HostContextSnapshot } from '..
 export const EMBEDDED_CONTEXT_MAX_CHARACTERS = 16000
 /** 高频宿主摘要只含首段；完整选区随独立快照保存，标注正文通过实体读取。 */
 export function buildEmbeddedPromptContext(snapshot: HostContextSnapshot): string {
-  const context = { workspace: snapshot.workspace, canvas: snapshot.canvas,
+  const context = { documentId: snapshot.documentId, projectId: snapshot.projectId, workspace: snapshot.workspace, canvas: snapshot.canvas,
     surface: snapshot.surface ? { ...snapshot.surface, selectedRefs: [...snapshot.surface.selectedRefs ?? []] } : undefined,
     ...(snapshot.videoEdit ? { videoEdit: { ...snapshot.videoEdit,
       selectedClipRefs: [...snapshot.videoEdit.selectedClipRefs], targetTrackRefs: [...snapshot.videoEdit.targetTrackRefs],
@@ -74,6 +74,7 @@ export interface EmbeddedAgentSnapshot {
   messages: EmbeddedAgentMessage[]
   activity: string | null
   error: string | null
+  memoryNotices?: Array<{ historyId: string; text: string }>
   sendingMessage?: { id: string; text: string; attachments?: AgentAttachment[] }
   pendingMessages?: Array<{ id: string; text: string; attachments?: AgentAttachment[]; error?: string }>
 }

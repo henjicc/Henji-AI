@@ -234,7 +234,10 @@ export class PiEngine implements EmbeddedAgentEngine {
         details: { ...hostContext.details, ...(selectionSnapshot ? { selectionId, selectionSnapshot } : {}) },
       }, { triggerTurn: false })
       const text = await this.attachments.attach(command.input.text, command.input.attachments ?? [])
-      if (!this.cancelled) await this.session.prompt(text)
+      if (!this.cancelled) {
+        if (command.input.background) await this.session.sendCustomMessage({ customType: 'henji-memory-organize', content: text, display: false }, { triggerTurn: true })
+        else await this.session.prompt(text)
+      }
       this.emit({ type: 'log', phase: this.cancelled ? 'cancelled' : this.state.error ? 'failed' : 'completed', requestId: this.requestId,
         durationMs: Date.now() - startedAt, sessionId: this.manager.getSessionId(), message: this.state.error ?? undefined })
     } catch (error) {

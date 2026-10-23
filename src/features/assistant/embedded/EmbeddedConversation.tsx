@@ -1,3 +1,4 @@
+import { revertMemory } from '../memory/memoryService'
 import { UiFieldMessage } from '@/components/ui'
 import { UiSpinner } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
@@ -37,6 +38,7 @@ export function EmbeddedConversation(): JSX.Element {
   const [attachments, setAttachments] = useState<AssistantAttachmentDraft[]>([])
   const [importing, setImporting] = useState(false)
   const scroll = useConversationAutoScroll(state.sessionId)
+  const [revertedMemories, setRevertedMemories] = useState<string[]>([])
   const [optimistic, setOptimistic] = useState<{ id: string; text: string; attachments: AgentAttachment[] } | null>(null)
   const previousSession = useRef(state.sessionId)
   const settingsOpen = useUiStore((store) => store.isSettingsOpen)
@@ -117,6 +119,7 @@ export function EmbeddedConversation(): JSX.Element {
         : <UiEmpty size="sm" icon={<Sparkles aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.lg}`} />} title="从当前工作开始"
           description="可以让我查看项目、调整参数，或帮你安排创作任务。" />)
         : <EmbeddedTranscript messages={state.messages} busy={state.busy} onToggle={scroll.suspendFollowing} />}
+      {state.memoryNotices?.map(notice => <UiFieldMessage key={notice.historyId} tone="hint">{notice.text} · {revertedMemories.includes(notice.historyId) ? '已撤销' : <UiButton size="sm" onClick={() => { void revertMemory(notice.historyId).then(() => setRevertedMemories(values => [...values, notice.historyId]), reportEmbeddedAgentError) }}>撤销</UiButton>}</UiFieldMessage>)}
       {state.sendingMessage ? <EmbeddedUserMessage message={state.sendingMessage} /> : null}
       {optimistic && state.sendingMessage?.id !== optimistic.id && !state.pendingMessages?.some(message => message.id === optimistic.id)
         ? <EmbeddedUserMessage message={optimistic} /> : null}

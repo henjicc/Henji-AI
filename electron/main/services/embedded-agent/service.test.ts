@@ -1,11 +1,12 @@
-vi.mock('../assistant/memory', () => ({ getAgentMemoryStore: () => ({ getSharedMemory: mocks.memory }) }))
+vi.mock('../assistant/memory', () => ({ getAgentMemoryStore: () => ({ read: mocks.memory, onMemoryChange: () => () => undefined }) }))
+vi.mock('../documents/runtime', () => ({ getDocumentService: () => ({ readDocument: mocks.readDocument, readProjectMemory: mocks.projectMemory }) }))
 vi.mock('./skills', () => ({ embeddedSkillCatalog: mocks.skills, callEmbeddedSkill: mocks.loadSkill }))
 import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { EmbeddedAgentPrompt } from '../../../../src/core/assistant/embeddedAgent'
 import type { EngineCommand } from './contracts'
 
-const mocks = vi.hoisted(() => ({ memory: vi.fn(() => ({ content: '', enabled: false, revision: 1 })), skills: vi.fn(), loadSkill: vi.fn(), fork: vi.fn(), resolveModel: vi.fn(), prepare: vi.fn(), close: vi.fn(), call: vi.fn(), info: vi.fn(), error: vi.fn() }))
+const mocks = vi.hoisted(() => ({ readDocument: vi.fn(), projectMemory: vi.fn(), memory: vi.fn(() => ({ entries: [] as Array<{ content: string }>, settings: { enabled: false, autoOrganize: false }, changesSinceOrganization: 0, lastOrganizedAt: null, revision: 1 })), skills: vi.fn(), loadSkill: vi.fn(), fork: vi.fn(), resolveModel: vi.fn(), prepare: vi.fn(), close: vi.fn(), call: vi.fn(), info: vi.fn(), error: vi.fn() }))
 vi.mock('electron', () => ({ utilityProcess: { fork: mocks.fork } }))
 vi.mock('../application-runtime/runtime', () => ({ createEmbeddedApplicationClient: () => ({ catalog: () => [], close: mocks.close, call: mocks.call }) }))
 vi.mock('../system', () => ({ getAppLocalDataDir: () => '/fixture' }))
@@ -125,23 +126,43 @@ describe('内置助手消息调度', () => {
     expect(kill).not.toHaveBeenCalled()
     f.service.dispose()
   })
-  it('每条消息读取最新共享记忆，关闭后不注入正文', async () => {
+  it('每条消息读取最新全局记忆，关闭后不注入正文', async () => {
     const f = setup()
     const calls = vi.spyOn(f.child, 'postMessage')
-    mocks.memory.mockReturnValue({ content: '偏好水墨', enabled: true, revision: 2 })
+    mocks.memory.mockReturnValue({ entries: [{ content: '偏好水墨' }], settings: { enabled: true, autoOrganize: false }, changesSinceOrganization: 0, lastOrganizedAt: null, revision: 2 })
     await f.send('第一条')
     await vi.waitFor(() => expect(f.prompts).toHaveLength(1))
     const prompts = () => calls.mock.calls.flatMap(([value]) => value.command.action === 'prompt' ? [value.command.input.context] : [])
-    expect(JSON.parse(prompts()[0]).sharedMemory.content).toBe('偏好水墨')
+    expect(JSON.parse(prompts()[0]).memory.global[0].content).toBe('偏好水墨')
     f.finish()
     await vi.waitFor(() => expect(f.service.snapshot().busy).toBe(false))
-    mocks.memory.mockReturnValue({ content: '偏好水墨', enabled: false, revision: 3 })
+    mocks.memory.mockReturnValue({ entries: [{ content: '偏好水墨' }], settings: { enabled: false, autoOrganize: false }, changesSinceOrganization: 0, lastOrganizedAt: null, revision: 3 })
     await f.send('第二条')
     await vi.waitFor(() => expect(f.prompts).toHaveLength(2))
-    expect(JSON.parse(prompts()[1]).sharedMemory).toEqual({ enabled: false })
+    expect(JSON.parse(prompts()[1]).memory).toEqual({ enabled: false })
     f.finish()
     await f.service.dispose()
-    mocks.memory.mockReturnValue({ content: '', enabled: false, revision: 1 })
+    mocks.memory.mockReturnValue({ entries: [] as Array<{ content: string }>, settings: { enabled: false, autoOrganize: false }, changesSinceOrganization: 0, lastOrganizedAt: null, revision: 1 })
+  })
+
+  it('当前项目与未保存风格偏好进入上下文，关闭后不读取项目文件', async () => {
+    const f = setup(), calls = vi.spyOn(f.child, 'postMessage')
+    mocks.memory.mockReturnValue({ entries: [], settings: { enabled: true, autoOrganize: false }, changesSinceOrganization: 0, lastOrganizedAt: null, revision: 2 })
+    mocks.readDocument.mockResolvedValue({ meta: { kind: 'video_edit', container: { kind: 'project', projectId: 'project-a' } }, content: { sequences: [{ id: 'main', styleId: 'soft' }], styles: [{ id: 'soft', userPreferences: [{ content: '旧偏好' }] }] } })
+    mocks.projectMemory.mockResolvedValue([{ content: '这期品牌色用红色。' }])
+    const context = JSON.stringify({ documentId: 'document-a', videoEdit: { sequenceRef: 'video_edit.sequence:document-a:main', currentStyle: { userPreferences: [{ content: '当前未保存偏好' }] } } })
+    const prompt = () => f.service.prompt({ text: '开始', access: 'read', model: { providerId: 'test', modelId: 'fixture' }, context })
+    await prompt(); await vi.waitFor(() => expect(f.prompts).toHaveLength(1))
+    const contexts = () => calls.mock.calls.flatMap(([value]) => value.command.action === 'prompt' ? [JSON.parse(value.command.input.context)] : [])
+    expect(contexts()[0].memory).toMatchObject({ projectId: 'project-a', project: [{ content: '这期品牌色用红色。' }], style: [{ content: '当前未保存偏好' }] })
+    f.finish(); await vi.waitFor(() => expect(f.service.snapshot().busy).toBe(false))
+    mocks.readDocument.mockClear(); mocks.projectMemory.mockClear()
+    mocks.memory.mockReturnValue({ entries: [], settings: { enabled: false, autoOrganize: false }, changesSinceOrganization: 0, lastOrganizedAt: null, revision: 3 })
+    await prompt(); await vi.waitFor(() => expect(f.prompts).toHaveLength(2))
+    expect(contexts()[1].memory).toEqual({ enabled: false })
+    expect(JSON.stringify(contexts()[1])).not.toContain('当前未保存偏好')
+    expect(mocks.readDocument).not.toHaveBeenCalled(); expect(mocks.projectMemory).not.toHaveBeenCalled()
+    f.finish(); await f.service.dispose()
   })
 
   it('准备期间停止保留用户气泡，不把尚未发送的消息丢弃', async () => {

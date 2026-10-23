@@ -34,3 +34,12 @@ export async function resolveEmbeddedModel(selection: { providerId: string; mode
   return { providerId: config.providerId, model: entry.model, baseUrl: resolveModelStepBaseUrl(config),
     api: resolveEmbeddedApi(config), apiKey, reasoning: config.reasoning }
 }
+
+/** 整理复用既有摘要模型，未配置时使用当前主模型，不创建额外供应商路径。 */
+export async function resolveMemoryOrganizerModel(fallback: { providerId: string; modelId: string }): Promise<EmbeddedModel> {
+  const config = await createProviderSettingsFileStorage().readConfig()
+  const profile = config?.agentProfiles.find(item => item.id === config.selectedAgentProfileId) ?? config?.agentProfiles[0]
+  const preferred = profile?.summarizer
+  const available = preferred && (await configuredModels()).some(({ model }) => model.providerId === preferred.providerId && model.modelId === preferred.modelId)
+  return resolveEmbeddedModel(available ? preferred : fallback)
+}

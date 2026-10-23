@@ -8,7 +8,7 @@ export interface EngineConfiguration { directory: string; model: EmbeddedModel; 
 export type EngineCommand =
   | { action: 'initialize'; input: string }
   | { action: 'configure'; input: EngineConfiguration }
-  | { action: 'prompt'; input: { text: string; context: string; selectionSnapshot?: EmbeddedSelectionSnapshot; requestId?: string; creativeIntent?: EmbeddedIntentRequest; attachments?: PreparedEmbeddedAttachment[] } }
+  | { action: 'prompt'; input: { text: string; context: string; background?: boolean; selectionSnapshot?: EmbeddedSelectionSnapshot; requestId?: string; creativeIntent?: EmbeddedIntentRequest; attachments?: PreparedEmbeddedAttachment[] } }
   | { action: 'open'; input: string }
   | { action: 'snapshot' | 'cancel' | 'new' | 'sessions'; input?: never }
 export type EngineEvent =
