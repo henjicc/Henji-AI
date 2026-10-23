@@ -1,0 +1,13 @@
+{
+  "version": 15,
+  "state": {
+    "providerKeyStatus": {
+      "kie": false
+    },
+    "uploadProvider": "kie",
+    "uploadFallbackEnabled": false,
+    "experimentalWebAppRecording": true,
+    "videoEditBinsFirst": true,
+    "canvasLodLevel": "balanced"
+  }
+}

@@ -82,6 +82,15 @@ export const SETTINGS_DECLARATION = {
         ],
       }),
       section({
+        id: 'general-experimental', surfaceId: 'settings.general.experimental', componentKeys: ['ExperimentalSection'],
+        surfaceOrder: 4.5, schemaOrder: 4.5,
+        search: [
+          ...searchRows(2.5, [
+            ['sections.experimental.webAppRecordingLabel', ['实验', '网页录制', '重演', '探针', 'experimental', 'web recording', 'replay']],
+          ]),
+        ],
+      }),
+      section({
         id: 'general-about', surfaceId: 'settings.general.about', componentKeys: ['UpdateSection', 'AboutSection', 'HardwareCapabilitiesSection'],
         surfaceOrder: 5, schemaOrder: 5,
         search: [

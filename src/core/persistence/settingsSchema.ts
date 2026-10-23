@@ -2,14 +2,14 @@ import { z } from 'zod'
 import { videoEditSequenceDefaultsSchema } from '../videoEdit/sequenceDefaults'
 import { recordingShortcutsSchema } from '../screenRecording/contracts'
 
-export const SETTINGS_STORAGE_VERSION = 14
+export const SETTINGS_STORAGE_VERSION = 15
 
 // Existing merge normalizes partial settings; this schema describes accepted persisted fields.
 export const rendererSettingsSchema = z.object({
   recordingShortcuts: recordingShortcutsSchema.optional(),
   providerKeyStatus: z.record(z.string(), z.boolean()).optional(), uploadProvider: z.string().optional(), uploadFallbackEnabled: z.boolean().optional(),
   largeUploadStrategy: z.enum(['ask', 'copy', 'reference']).optional(), downloadPresetPaths: z.array(z.string()).optional(),
-  ...Object.fromEntries(['useUploadFilenameAsNodeTitle', 'enableImageViewerInfoPanel', 'imageViewerInfoPanelCollapsed', 'storyboardGenKeepStyleConsistent', 'storyboardGenDisableTextInImage', 'storyboardGenAutoInferEmptyFrame', 'ignoreAtTagWhenCopyingAndGenerating', 'autoInsertTextDisplayNode', 'uiBlurEnabled', 'assetEdgeTriggerEnabled', 'videoEditSelectionFollowsPlayhead', 'videoEditBinsFirst', 'videoEditImportFolderBins'].map(key => [key, z.boolean().optional()])),
+  ...Object.fromEntries(['useUploadFilenameAsNodeTitle', 'enableImageViewerInfoPanel', 'imageViewerInfoPanelCollapsed', 'storyboardGenKeepStyleConsistent', 'storyboardGenDisableTextInImage', 'storyboardGenAutoInferEmptyFrame', 'ignoreAtTagWhenCopyingAndGenerating', 'autoInsertTextDisplayNode', 'uiBlurEnabled', 'experimentalWebAppRecording', 'assetEdgeTriggerEnabled', 'videoEditSelectionFollowsPlayhead', 'videoEditBinsFirst', 'videoEditImportFolderBins'].map(key => [key, z.boolean().optional()])),
   canvasLodLevel: z.enum(['off', 'detail', 'balanced', 'performance']).optional(), uiScaleMode: z.string().optional(), uiRadiusPreset: z.string().optional(),
   themeSelection: z.record(z.string(), z.json()).optional(), themeSeed: z.record(z.string(), z.json()).optional(), themeOverrides: z.record(z.string(), z.json()).optional(),
   startupWorkspace: z.string().optional(), assetTabAction: z.enum(['floating', 'workspace']).optional(), assetPanelPosition: z.enum(['top', 'left', 'right']).optional(),

@@ -11,11 +11,14 @@ import { openApplicationSurface } from '@/features/navigation'
 import { recordingDevices } from './tracks/devices'
 import { controlRecording, recordingView, setRecordingDestination, startRecording, subscribeRecording } from './application/recordingService'
 import { RecordingSourcePicker } from './RecordingSourcePicker'
-import { loadRecordingSetup, orderedScreens, recordingOutput, saveRecordingSetup, type RecordingRangeMode, type RecordingRegion, type RecordingSetup } from './recordingSetupModel'
+import { DEFAULT_WEB_APP_BACKUP, loadRecordingSetup, orderedScreens, recordingOutput, saveRecordingSetup, webAppBackupOptions, type WebAppBackupSetup, type RecordingRangeMode, type RecordingRegion, type RecordingSetup } from './recordingSetupModel'
 import { RecordingSetupPanel } from './RecordingSetupPanel'
 import { RecordingLive } from './RecordingLive'
 import { RecordingDirectorGoal, RecordingDirectorScript } from './RecordingDirectorPanel'
 import { recordingTimeLabel } from './useRecordingControlSnapshot'
+import { WebAppRecordingActions, WebAppRecordingPanel, WebAppRecordingStatus } from './WebAppRecordingPanel'
+import { useWebAppRecording } from './useWebAppRecording'
+import { useSettingsStore } from '@/stores/settingsStore'
 
 /**
  * The recording page only does two things: set up what to record, and show the recording while it runs.
@@ -31,7 +34,12 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
   const [sourceId, setSourceId] = useState(remembered.sourceId)
   const [region, setRegion] = useState<RecordingRegion>(remembered.region)
   const [setup, setSetup] = useState<RecordingSetup>(remembered.setup)
-  const [director, setDirector] = useState(false)
+  const webAppEnabled = useSettingsStore(value => value.experimentalWebAppRecording)
+  const [chosenKind, setKind] = useState<'self' | 'director' | 'webapp'>('self')
+  // Web app recording is experimental: without the setting the mode does not exist on this page.
+  const kind = chosenKind === 'webapp' && !webAppEnabled ? 'self' : chosenKind
+  const director = kind === 'director'
+  const webApp = useWebAppRecording()
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   useEffect(() => { saveRecordingSetup({ range: mode, sourceId, region, setup }) }, [mode, sourceId, region, setup])
@@ -70,6 +78,8 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
     await startRecording(options, { name: setup.name.trim() || `${t('recording.title')} ${new Date().toLocaleString().replace(/[/:]/g, '-')}`, tracks: { systemAudio: setup.systemAudio, ...(setup.microphone ? { microphone: {} } : {}), ...(setup.camera && !quick ? { camera: { ...(setup.cameraId ? { deviceId: setup.cameraId } : {}), width: 1280, height: 720, frameRate: 30 } } : {}) } }, destination, undefined, quick ? { ...(setup.saveDirectory ? { directory: setup.saveDirectory } : {}) } : undefined, true)
     setSetup(value => ({ ...value, name: '' }))
   }
+  const webAppBackup = setup.webAppBackup ?? DEFAULT_WEB_APP_BACKUP
+  const changeWebAppBackup = (patch: Partial<WebAppBackupSetup>): void => setSetup(value => ({ ...value, webAppBackup: { ...(value.webAppBackup ?? DEFAULT_WEB_APP_BACKUP), ...patch } }))
   const back = (): void => { if (state.destination) openApplicationSurface('workspace.video_edit'); else onBack() }
 
   let leading: React.ReactNode = <span className="text-sm font-medium">{t('recording.title')}</span>
@@ -86,8 +96,9 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
       <UiButton variant="primary" disabled={state.busy} disabledReason={t('recording.saving')} onClick={() => run(() => controlRecording(snapshot.sessionId, snapshot.phase === 'failed' ? 'cancel' : 'stop'))}><Square />{t('recording.stop')}</UiButton>
     </>
   } else if (!state.opening) {
-    center = <UiSegmented ariaLabel={t('recording.recordMode')} value={director ? 'director' : 'self'} onChange={value => setDirector(value === 'director')} options={[{ value: 'self', label: t('recording.mode_self') }, { value: 'director', label: t('recording.mode_director') }]} />
-    trailing = director ? null : <UiButton variant="primary" loading={state.busy} disabled={!sourceId} disabledReason={t('recording.selectSource')} onClick={() => run(begin)}><ICON_TOOL_SCREEN_RECORDING />{t('recording.start')}</UiButton>
+    center = <UiSegmented ariaLabel={t('recording.recordMode')} value={kind} onChange={setKind} options={[{ value: 'self', label: t('recording.mode_self') }, { value: 'director', label: t('recording.mode_director') }, ...(webAppEnabled ? [{ value: 'webapp' as const, label: t('recording.mode_webapp') }] : [])]} />
+    if (kind === 'webapp' && webApp.activeId) leading = <span className="flex items-center gap-2 text-sm font-medium">{t('recording.title')}<WebAppRecordingStatus model={webApp} /></span>
+    trailing = director ? null : kind === 'webapp' ? <WebAppRecordingActions model={webApp} setup={webAppBackup} backup={webAppBackupOptions(webAppBackup, sources)} /> : <UiButton variant="primary" loading={state.busy} disabled={!sourceId} disabledReason={t('recording.selectSource')} onClick={() => run(begin)}><ICON_TOOL_SCREEN_RECORDING />{t('recording.start')}</UiButton>
   }
 
   return <div className="flex h-full min-h-0 flex-col" data-application-surface="tool.screen_recording" data-testid="screen-recording-page">
@@ -99,6 +110,7 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
       : snapshot ? <RecordingLive snapshot={snapshot} saving={state.busy} onMark={note => controlRecording(snapshot.sessionId, 'mark', note)} />
       : state.opening ? <div className="flex min-h-0 flex-1 items-center justify-center"><UiLoading message={t('recording.openingEditor')} /></div>
       : director ? <RecordingDirectorGoal />
+      : kind === 'webapp' ? <WebAppRecordingPanel model={webApp} backup={webAppBackup} screens={orderedScreens(sources)} onBackupChange={changeWebAppBackup} />
       : <div className="flex min-h-0 flex-1">
         <RecordingSourcePicker sources={sources} loading={loading} mode={mode} sourceId={sourceId} region={region} onModeChange={changeMode} onSourceChange={setSourceId} onRegionChange={setRegion} onRefresh={() => run(refresh)} />
         <RecordingSetupPanel value={setup} devices={devices} destination={Boolean(state.destination)} onChange={patch => setSetup(value => ({ ...value, ...patch }))} />

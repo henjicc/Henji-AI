@@ -8,6 +8,8 @@ import { registerAudioIpc } from './ipc/audio'
 import { registerAudioCaptureIpc } from './ipc/audio-capture'
 import { registerScreenRecordingIpc } from './ipc/screen-recording'
 import { closeRecordingControl } from './services/screen-recording/runtime'
+import { registerWebReplayIpc } from './ipc/web-replay'
+import { stopWebReplayService } from './services/web-replay/runtime'
 import { registerAssetLibraryIpc } from './ipc/asset-library'
 import { registerAssistantIpc } from './ipc/assistant'
 import { registerCameraStageRenderIpc } from './ipc/camera-stage-render'
@@ -156,6 +158,7 @@ app.whenReady().then(async () => {
   registerMediaCacheIpc()
   registerScreenRecordingIpc()
   registerSceneDetectionHandlers()
+  registerWebReplayIpc()
   registerMusicAnalysisHandlers()
   registerTrackingIpc()
   registerDragIpc()
@@ -252,7 +255,7 @@ app.on('window-all-closed', () => {
   }
 })
 
-bindApplicationShutdown(app, [closeRecordingControl, disposeWorkRootChange, disposeTracking, disposeSmartRegions, disposeLocalModels, disposeEmbeddedAgent, disposeMcp, disposeImageEditorV3Ipc], (error) => {
+bindApplicationShutdown(app, [closeRecordingControl, stopWebReplayService, disposeWorkRootChange, disposeTracking, disposeSmartRegions, disposeLocalModels, disposeEmbeddedAgent, disposeMcp, disposeImageEditorV3Ipc], (error) => {
   createMainLogger('application.shutdown').error('应用服务退出清理失败', { event: 'application.shutdown.failed', error })
 }, async () => {
   try {

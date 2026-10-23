@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "rootDir": "../..",
+    "types": ["electron"]
+  },
+  "include": ["src", "../../electron/preload/web-replay.ts"]
+}

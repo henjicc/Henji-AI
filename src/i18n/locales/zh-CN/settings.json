@@ -16,6 +16,7 @@
     "general-basic": "语言与启动",
     "general-view": "查看与快捷键",
     "general-appearance": "外观",
+    "general-experimental": "实验性功能",
     "general-about": "关于与更新",
     "providers": "供应商与模型",
     "workspace-generation": "生成",
@@ -296,6 +297,7 @@
     }
   },
   "sections": {
+    "experimental": { "webAppRecordingLabel": "网页应用录制", "webAppRecordingHint": "录制接入了痕迹探针的网页应用（自己开发的 Tauri、Electron 或网页工具），录下请求与操作后可离线重演成视频。开启后痕迹会在本机端口 47831 等待应用连接，录屏页出现「网页应用」。" },
     "hardware": {
       "title": "本机硬件能力",
       "gpus": "显卡",

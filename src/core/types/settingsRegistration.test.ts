@@ -17,8 +17,8 @@ it('保留设置导航、Surface 与搜索的现有顺序和内容', () => {
   const value = { navigation: SETTINGS_TAB_SECTIONS, ids: APPLICATION_SURFACE_IDS,
     surfaces: APPLICATION_SURFACE_DEFINITIONS, search: SETTINGS_SEARCH_INDEX }
   const hash = createHash('sha256').update(JSON.stringify(normalize(value))).digest('hex')
-  // ba18f9b88 的正式导出值；只规范对象键，不排序任何数组。
-  expect(hash).toBe('349bfd78e867a0e7bd017c9630a85757e84aa1318816876e040285996d70d014')
+  // 合并网页录制“实验性功能”分区后的导出值（与该分支原登记顺序逐项核对一致）；只规范对象键，不排序任何数组。
+  expect(hash).toBe('4ed8540bba031ff1241f1be657f761d1f5d4c0223f7296482792953abeb9d2a2')
 })
 
 it('只增一条分区声明即可生成导航、组件次序、Surface、标题搜索和属性目标', () => {

@@ -51,7 +51,7 @@ export function quickExportOutputUs(windows: readonly Window[], monoUs: number):
 }
 
 /** Each audio file contributes only the parts that overlap a screen span, placed at that span's output time. */
-export function quickExportAudioGraph(audio: readonly RecordingMedia[], windows: readonly Window[], firstInput: number): { graph: string; label: string } | null {
+export function quickExportAudioGraph(audio: readonly Pick<RecordingMedia, 'monoUs' | 'durationUs'>[], windows: readonly Window[], firstInput: number): { graph: string; label: string } | null {
   const parts: string[] = [], labels: string[] = []
   audio.forEach((item, index) => {
     for (const window of windows) {

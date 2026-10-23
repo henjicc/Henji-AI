@@ -67,7 +67,8 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   format('code-author-api', '代码作者宿主接口', CODE_AUTHOR_API_VERSION, 'CodeMaterialVersion.apiVersion / CodeAsset.sourceVersion.apiVersion', 'src/features/videoEdit/engine/videoEditAuthorRuntime.ts', codeAuthorApiSchema),
   format('code-component', '项目组件说明', CODE_COMPONENT_SCHEMA_VERSION, '组件首行.schemaVersion（作品版本 version 与格式版本不同）', 'src/core/videoEdit/codeMaterial/components.ts::componentSourceMetadata', codeComponentMetadataSchema),
   format('code-asset', '可编辑代码资产', CODE_ASSET_VERSION, 'CodeAsset.version', 'src/core/videoEdit/codeAsset.ts::decodeCodeAsset', codeAssetSchema),
-  format('settings', '界面设置', SETTINGS_STORAGE_VERSION, 'settings-storage.version', 'src/stores/settingsStore.ts::persist', rendererSettingsSchema, 'local-storage'),
+  // v15 只新增可选字段（实验性功能开关），旧版本程序仍能正确读取。
+  { ...format('settings', '界面设置', SETTINGS_STORAGE_VERSION, 'settings-storage.version', 'src/stores/settingsStore.ts::persist', rendererSettingsSchema, 'local-storage'), minReaderVersion: 14 },
   format('theme', '主题选择', THEME_STORAGE_VERSION, 'theme-storage.version', 'src/stores/themeStore.ts::persist', z.object({ theme: z.enum(['dark', 'light']) }), 'local-storage'),
   // 2026-10-22 起停用：只读，风格库首次加载时把其中的个人风格与标题模板转存进新的风格库目录，原键不改写。
   format('style-kits', '本机风格包', LOCAL_LIBRARY_FORMATS['video-edit-style-kits'].version, 'video-edit-style-kits.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::readLegacyLibrary', z.array(legacyStyleKitSchema), 'local-storage'),

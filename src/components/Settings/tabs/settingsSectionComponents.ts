@@ -21,6 +21,7 @@ import UploadSection from '../sections/UploadSection'
 import LocalModelsSection from '../sections/LocalModelsSection'
 import SoundLibrarySection from '../sections/SoundLibrarySection'
 import AgentSkillsSection from '../sections/AgentSkillsSection'
+import ExperimentalSection from '../sections/ExperimentalSection'
 import type React from 'react'
 import type { SettingsComponentKey } from '@/core/types/settingsNavigation'
 import { ThemeSettingsSection, GenerationSettingsSection, DownloadSettingsSection, AssistantModelsSection, ProviderSettingsSection, RecordingSettingsSection, type SettingsSectionContext } from './settingsSectionContent'
@@ -35,6 +36,7 @@ export const SETTINGS_SECTION_COMPONENTS: Record<SettingsComponentKey, React.Com
   RecordingShortcutSettings,
   AudioCaptureSettingsForm: RecordingSettingsSection,
   ThemeSettingsSection,
+  ExperimentalSection,
   UpdateSection,
   AboutSection,
   HardwareCapabilitiesSection,

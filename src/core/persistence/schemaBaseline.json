@@ -198,8 +198,8 @@
       "minReaderVersion": 6
     },
     "settings": {
-      "version": 14,
-      "fingerprint": "7b798aac72c96287eff885080b1f55a1e2ec783061ee35512b696c0234b5cd9a",
+      "version": 15,
+      "fingerprint": "43975a71676eed585cc7cd4bc54d09886f37c1d935067e0b11282d58ae60eba6",
       "supportedFrom": 14,
       "minReaderVersion": 14
     },
@@ -270,8 +270,8 @@
       "minReaderVersion": 1
     },
     "recording-setup": {
-      "version": 3,
-      "fingerprint": "c6dbba8cb11984d672af4236375e001f68af7b71c3d9cead3284bd047ad5ba0f",
+      "version": 5,
+      "fingerprint": "dbc6257d4e7a9fba37783a96ef4561860613f09d6d5dac7b2119960970b38911",
       "supportedFrom": 1,
       "minReaderVersion": 3
     },
@@ -362,6 +362,12 @@
     "assistant-memory": {
       "version": 1,
       "fingerprint": "ef81b17a9ec478acf523f9b2a01e7356886df8662704c89788e3995d8d6c3d34",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "web-recording": {
+      "version": 3,
+      "fingerprint": "ea66782342941daf89b5470958ee9a097e5465fa8a5f356c338cf0c0d41914bc",
       "supportedFrom": 1,
       "minReaderVersion": 1
     }

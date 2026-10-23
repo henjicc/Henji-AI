@@ -10,10 +10,11 @@ const fixture = vi.hoisted(() => ({
   control: vi.fn(), start: vi.fn(async (..._args: unknown[]) => 'session'),
 }))
 vi.mock('./application/recordingService', () => ({ recordingView: () => fixture.view, subscribeRecording: () => () => {}, controlRecording: fixture.control, setRecordingDestination: vi.fn(), startRecording: fixture.start }))
-vi.mock('@/platform', () => ({ getPlatform: () => ({ screenRecording: { sources: async () => [
+vi.mock('@/platform', () => { const platform = { screenRecording: { sources: async () => [
   { id: 'screen:1:0', name: '屏幕 1', kind: 'screen', thumbnailUrl: 'data:image/png;base64,AA==' },
   { id: 'window:2:0', name: '很长的窗口标题 · 痕迹AI', kind: 'window', thumbnailUrl: 'data:image/png;base64,AA==' },
-] , capture: async () => ['auto', 'software'] } }) }))
+] , capture: async () => ['auto', 'software'] },
+  webReplay: { apps: async () => ({ enabled: false, listening: false, port: 0, apps: [] }), recordings: async () => [], onAppsChanged: () => () => undefined, onRenderProgress: () => () => undefined } }; return { getPlatform: () => platform } })
 vi.mock('./RecordingDirectorPanel', () => ({ RecordingDirectorGoal: () => <div />, RecordingDirectorScript: () => <div /> }))
 vi.mock('./tracks/devices', () => ({ recordingDevices: async () => [] }))
 vi.mock('@/features/navigation', () => ({ openApplicationSurface: vi.fn() }))

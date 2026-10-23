@@ -85,6 +85,7 @@ export const SETTINGS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     setUiScaleMode: property('interface.scale'),
     setUiRadiusPreset: property('interface.radius'),
     setUiBlurEnabled: property('interface.blur_enabled'),
+    setExperimentalWebAppRecording: property('experimental.web_app_recording'),
     setThemePreset: property('interface.theme_preset'),
     setThemeAccent: property('interface.accent_color'),
     setThemeContrast: property('interface.theme_contrast'),

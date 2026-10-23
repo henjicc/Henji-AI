@@ -648,13 +648,16 @@
         }
       ],
       "versions": {
-        "14": "7b798aac72c96287eff885080b1f55a1e2ec783061ee35512b696c0234b5cd9a"
+        "14": "7b798aac72c96287eff885080b1f55a1e2ec783061ee35512b696c0234b5cd9a",
+        "15": "43975a71676eed585cc7cd4bc54d09886f37c1d935067e0b11282d58ae60eba6"
       },
       "readers": {
-        "14": 14
+        "14": 14,
+        "15": 14
       },
       "samples": {
-        "v14.json": "b2c3a2708c447039f8f11bd8387991dba48216af6d9b6f89897dab47433c1049"
+        "v14.json": "b2c3a2708c447039f8f11bd8387991dba48216af6d9b6f89897dab47433c1049",
+        "v15.json": "7b638120023cab9e7c636f479ac5f9f5f1666241f2388e05fc1f012e10d33813"
       }
     },
     "theme": {
@@ -857,17 +860,23 @@
       "versions": {
         "1": "7510476937e9eebed84177d8a0b0622e67023fbb988ff929ba79792d22d9caf4",
         "2": "a4970530b9e2157e27dcfbd9719feb2b8d10ba47fa9f6130938f793de49548a2",
-        "3": "c6dbba8cb11984d672af4236375e001f68af7b71c3d9cead3284bd047ad5ba0f"
+        "3": "c6dbba8cb11984d672af4236375e001f68af7b71c3d9cead3284bd047ad5ba0f",
+        "4": "1111704dd1bb08d3b558d9f9109e1eeb2e96cb3f45987749e83c89ff947a7e62",
+        "5": "dbc6257d4e7a9fba37783a96ef4561860613f09d6d5dac7b2119960970b38911"
       },
       "readers": {
         "1": 1,
         "2": 1,
-        "3": 3
+        "3": 3,
+        "4": 3,
+        "5": 3
       },
       "samples": {
         "v1.json": "b330a7f4a400676060f9ae83df635edf4282bbfcdaa7e6e47af024655eaf3ea3",
         "v2.json": "3ba726353dd754e7b5f687475c1a355d007082c366a72ac5c91ef363aaf10a1e",
-        "v3.json": "f83426c88823890c10f00f87889936f9292cb359abf26d5eba996e517bf3a8f5"
+        "v3.json": "f83426c88823890c10f00f87889936f9292cb359abf26d5eba996e517bf3a8f5",
+        "v4.json": "9abbb5c0a6ac6a2c04f962c79620510be8d7c64ee2b4e9877f9fde375c596ab0",
+        "v5.json": "47d8b71012c0509027e36bf38aa17c4e15fdc3c19eb0835f0376ae75de6d14d3"
       }
     },
     "model-defaults": {
@@ -1150,6 +1159,29 @@
       },
       "samples": {
         "v1.json": "0cff1af9e53d246a304b077cd6e85caa38e042b7ccedf0bd5eefd23dc243e892"
+      }
+    },
+    "web-recording": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "cd1de847aec753adec2dfae551f582b1d3bfacd5f28c44861051a46f90ae9a08",
+        "2": "fa344ca37620113320e5adf416c964a35b2bd19c3e864f385f099d5f20768efb",
+        "3": "ea66782342941daf89b5470958ee9a097e5465fa8a5f356c338cf0c0d41914bc"
+      },
+      "readers": {
+        "1": 1,
+        "2": 1,
+        "3": 1
+      },
+      "samples": {
+        "v1.json": "f4aa42fab2560df78d4e618d95317f705e62e2b5f234a1fe8f55c89e8232e58b",
+        "v2.json": "4575040ea7982e57d1d099a7ad944c227c047bf6a1dcedc5008e36106deb56a1",
+        "v3.json": "15e6aca566be29d9d8025d0a350afe46d50e88a3d375bd1c5f0d561800144e0b"
       }
     }
   },

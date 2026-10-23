@@ -121,6 +121,13 @@ export const INTERFACE_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefini
   }, () => useSettingsStore.getState().uiBlurEnabled,
   (value) => useSettingsStore.getState().setUiBlurEnabled(value)),
   storeSetting({
+    id: 'experimental.web_app_recording', title: '网页应用录制（实验）',
+    description: '开启后痕迹在本机端口 47831 等待接入了痕迹探针的网页应用连接，录屏页出现网页应用模式，助手可用 start_web_app_recording 等能力录制并离线重演。默认关闭。',
+    aliases: ['实验性功能', '网页录制', '网页应用录制', '重演', 'experimental', 'web app recording'], schema: z.boolean(), defaultValue: false,
+    target: { tab: 'general', sectionId: 'general-experimental' }, requiresReload: false, requiresRestart: false, sensitive: false,
+  }, () => useSettingsStore.getState().experimentalWebAppRecording,
+  (value) => useSettingsStore.getState().setExperimentalWebAppRecording(value)),
+  storeSetting({
     id: 'interface.radius', title: '界面圆角', description: '设置全局界面圆角的紧凑、默认或宽松档位。',
     aliases: ['圆角', '紧凑', 'radius'], schema: z.enum(['compact', 'default', 'large']), defaultValue: 'default',
     target: settingsTarget('general-appearance'), requiresReload: false, requiresRestart: false, sensitive: false,

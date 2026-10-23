@@ -8,6 +8,7 @@ import { createLogger } from '@/core/logging'
 import { readVideoInfo } from '@/commands/video'
 import { Volume2, VolumeX, X } from 'lucide-react'
 import { VideoViewerControls } from './VideoViewerControls'
+import { useVideoAutoGain } from './useVideoAutoGain'
 import { useVideoViewerTimeline, type VideoViewerTimeline, type VideoViewerSeek } from './useVideoViewerTimeline'
 import { UiViewerShell, useUiViewerShell } from '@/components/ui';
 import { UI_DURATION, uiTransition } from '@/components/ui/motion'
@@ -83,6 +84,18 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
   const displayedDuration = timeline?.duration ?? videoDuration
   const displayedPlaying = timeline ? timelinePlayer.playing : isVideoPlaying
   const controlsHideTimer = useRef<number | null>(null)
+  const autoGain = useVideoAutoGain(videoRef, sourceUrl, t('ui:viewer.autoGainUnavailable'))
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  useEffect(() => {
+    const changed = (): void => setIsFullscreen(document.fullscreenElement !== null && document.fullscreenElement === contentRef.current)
+    document.addEventListener('fullscreenchange', changed)
+    return () => document.removeEventListener('fullscreenchange', changed)
+  }, [])
+  const toggleFullscreen = useCallback((): void => {
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined)
+    else void contentRef.current?.requestFullscreen().catch(() => undefined)
+  }, [])
   const volumeIndicatorTimer = useRef<number | null>(null)
 
   useEffect(() => {
@@ -371,7 +384,8 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
     }
   }, [isVisible, updateRenderedVideoRect])
 
-  const isOverlayControlsVisible = inline || isSpeedMenuOpen || isControlsVisible
+  // Inline hosts hide the controls the same way: when the pointer leaves or rests during playback.
+  const isOverlayControlsVisible = isSpeedMenuOpen || isControlsVisible
 
   // 画面上滚轮调音量并拦住页面滚动：React onWheel 是被动的，走非被动原生监听
   useNonPassiveWheel(videoRef, (e) => {
@@ -384,6 +398,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
   if (!isVisible) return null
 
   const content = <div
+        ref={contentRef}
         className={inline ? "relative isolate aspect-video w-full bg-media flex items-center justify-center" : "relative isolate w-[92vw] h-[90vh] flex items-center justify-center"}
         onMouseEnter={() => {
           setIsControlsVisible(true)
@@ -398,8 +413,9 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
             clearTimeout(controlsHideTimer.current)
             controlsHideTimer.current = null
           }
+          // A short grace period so the controls don't vanish the instant the pointer slips out.
           if (!isSpeedMenuOpen) {
-            setIsControlsVisible(false)
+            controlsHideTimer.current = window.setTimeout(() => setIsControlsVisible(false), 600)
           }
         }}
         style={{ cursor: isVideoPlaying && !isSpeedMenuOpen && !isControlsVisible ? 'none' : 'default' }}
@@ -426,6 +442,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
           <video
             ref={videoRef}
             src={sourceUrl}
+            crossOrigin={autoGain.crossOrigin}
             data-testid={mediaTestId}
             data-viewer-time={timeline ? displayedTime : undefined}
             data-viewer-duration={timeline?.duration}
@@ -435,6 +452,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
             className={`w-full h-full object-contain ${timeline && timelinePlayer.gap ? "invisible" : ""}`}
             style={{ opacity: viewerOpacity * overlayOpacity, transition: uiTransition(['opacity'], UI_DURATION.viewer) }}
             onLoadedMetadata={() => {
+              autoGain.loaded()
               if (timeline) { timelinePlayer.loaded(); updateRenderedVideoRect(); return }
               if (videoRef.current) {
                 setVideoDuration(videoRef.current.duration || 0)
@@ -464,6 +482,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
             }}
             onEnded={() => { if (timeline) timelinePlayer.ended() }}
             onPlaying={() => {
+              autoGain.playing()
               if (timeline) { timelinePlayer.setBuffering(false); return }
               setIsBuffering(false)
               setIsVideoPlaying(true)
@@ -472,6 +491,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
             onWaiting={() => { if (timeline) timelinePlayer.setBuffering(true); else setIsBuffering(true) }}
             onStalled={() => { if (timeline) timelinePlayer.setBuffering(true); else setIsBuffering(true) }}
             onError={() => {
+              if (autoGain.failed()) return
               logger.warn('video_viewer.load_failed', { reason: 'video_load_failed' })
               setIsBuffering(false)
               timelinePlayer.failed()
@@ -531,6 +551,10 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
           setPlaybackRate={setPlaybackRate}
           loop={loop}
           setLoop={setLoop}
+          autoGain={autoGain.enabled}
+          autoGainUnavailable={autoGain.unavailable}
+          onAutoGainChange={autoGain.setEnabled}
+          fullscreen={inline ? { active: isFullscreen, toggle: toggleFullscreen } : undefined}
           onDownload={onDownload}
           filePath={filePath}
           isBuffering={timeline ? timelinePlayer.buffering : isBuffering}

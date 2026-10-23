@@ -1,0 +1,35 @@
+{
+  "version": 4,
+  "content": {
+    "rateControl": "quality",
+    "keyframeFrames": 30,
+    "codec": "hevc",
+    "encoder": "auto",
+    "range": "region",
+    "sourceId": "screen:1:0",
+    "region": {
+      "x": 0.1,
+      "y": 0.1,
+      "width": 0.5,
+      "height": 0.5
+    },
+    "mode": "quick",
+    "saveDirectory": "D:/录屏",
+    "microphone": true,
+    "systemAudio": true,
+    "camera": false,
+    "cameraId": "",
+    "quality": "1440p",
+    "fps": 60,
+    "insert": true,
+    "webAppBackup": {
+      "rateControl": "vbr",
+      "bitrate": 20000000,
+      "enabled": true,
+      "range": "screen",
+      "sourceId": "screen:1:0",
+      "quality": "2160p",
+      "fps": 30
+    }
+  }
+}
