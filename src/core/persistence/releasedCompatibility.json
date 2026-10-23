@@ -851,17 +851,20 @@
       "versions": {
         "1": "7510476937e9eebed84177d8a0b0622e67023fbb988ff929ba79792d22d9caf4",
         "2": "a4970530b9e2157e27dcfbd9719feb2b8d10ba47fa9f6130938f793de49548a2",
-        "3": "c6dbba8cb11984d672af4236375e001f68af7b71c3d9cead3284bd047ad5ba0f"
+        "3": "c6dbba8cb11984d672af4236375e001f68af7b71c3d9cead3284bd047ad5ba0f",
+        "4": "1111704dd1bb08d3b558d9f9109e1eeb2e96cb3f45987749e83c89ff947a7e62"
       },
       "readers": {
         "1": 1,
         "2": 1,
-        "3": 3
+        "3": 3,
+        "4": 3
       },
       "samples": {
         "v1.json": "b330a7f4a400676060f9ae83df635edf4282bbfcdaa7e6e47af024655eaf3ea3",
         "v2.json": "3ba726353dd754e7b5f687475c1a355d007082c366a72ac5c91ef363aaf10a1e",
-        "v3.json": "f83426c88823890c10f00f87889936f9292cb359abf26d5eba996e517bf3a8f5"
+        "v3.json": "f83426c88823890c10f00f87889936f9292cb359abf26d5eba996e517bf3a8f5",
+        "v4.json": "9abbb5c0a6ac6a2c04f962c79620510be8d7c64ee2b4e9877f9fde375c596ab0"
       }
     },
     "model-defaults": {

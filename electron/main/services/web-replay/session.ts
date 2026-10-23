@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import { WebRecordingAssembler } from '../../../../src/core/webReplay/assemble'
+import type { WebRecordingBackupOptions } from '../../../../src/platform/contracts/webReplay'
 import { WEB_RECORDING_MIN_READER_VERSION, WEB_RECORDING_VERSION, type AppInfoValue, type ProbeMessageValue, type WebRecordingEnvironment, type WebRecordingManifest, type WebRecordingResources } from '../../../../src/core/webReplay/schema'
 import { createMainLogger } from '../logging'
 import { WebRecordingStore } from './store'
@@ -9,7 +10,7 @@ const monoUs = (): number => Number(process.hrtime.bigint() / 1000n)
 const EXTERNAL_CONCURRENCY = 4
 
 /** Starts the window backup video; resolves with a stopper, or the reason it could not start. */
-export type StartBackupVideo = (session: WebRecordingSession) => Promise<{ stop(): Promise<string | null> } | { reason: string }>
+export type StartBackupVideo = (session: WebRecordingSession) => Promise<{ stop(): Promise<string | null> } | { reason: string } | null>
 export type FetchExternal = (url: string, userAgent: string) => Promise<{ status: number; contentType: string; bytes: Uint8Array }>
 export interface RecordingTarget { app: AppInfoValue; host: WebRecordingManifest['host']; env: WebRecordingEnvironment; probe: WebRecordingManifest['probe'] }
 
@@ -36,9 +37,9 @@ export class WebRecordingSession {
   /** Wall-clock ms when the probe reported the recording page started. */
   startedAt: number | null = null
 
-  private backup: Promise<{ stop(): Promise<string | null> } | { reason: string }> | null = null
+  private backup: Promise<{ stop(): Promise<string | null> } | { reason: string } | null> | null = null
 
-  constructor(target: RecordingTarget, private readonly fetchExternal: FetchExternal, private readonly startBackup?: StartBackupVideo) {
+  constructor(target: RecordingTarget, private readonly fetchExternal: FetchExternal, private readonly startBackup?: StartBackupVideo, readonly backupOptions: WebRecordingBackupOptions | null = null) {
     this.manifest = {
       version: WEB_RECORDING_VERSION, minReaderVersion: WEB_RECORDING_MIN_READER_VERSION, id: this.id, status: 'recording', createdAt: new Date().toISOString(),
       app: target.app, probe: target.probe, host: target.host, env: target.env, wallAtZeroMs: 0, durationUs: 0, clock: null, fonts: [], warnings: [],

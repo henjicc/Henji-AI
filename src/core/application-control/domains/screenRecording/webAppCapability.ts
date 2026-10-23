@@ -10,7 +10,7 @@ const common = { version: 1, domain: 'screen_recording', readOnly: false, risk: 
 
 export const startWebAppRecordingCapability = defineApplicationCapability({ ...common,
   id: 'start_web_app_recording', title: '开始录制网页应用',
-  description: '实验性功能，需先开启设置属性 experimental.web_app_recording。录制已接入痕迹探针的网页应用（Tauri、Electron 或网页）：应用会重新加载并从启动开始记录网络请求、宿主调用、随机数、页面存储和鼠标键盘操作，请求照常发出。先列出 screen_recording.web_app 选择应用。录制内容原样保存，包括密钥。',
+  description: '实验性功能，需先开启设置属性 experimental.web_app_recording。录制已接入痕迹探针的网页应用（Tauri、Electron 或网页）：应用会重新加载并从启动开始记录网络请求、宿主调用、随机数、页面存储和鼠标键盘操作，请求照常发出。先列出 screen_recording.web_app 选择应用。录制内容原样保存，包括密钥。同时按录屏页「备份录屏」的设置（应用窗口或整个屏幕、帧率、清晰度）录一份普通屏幕视频。',
   aliases: ['录制网页应用', '录制知多少', 'web app recording', '应用重演录制'],
   inputSchema: z.object({ appRef: webAppRefSchema }).strict(),
   outputSchema: capabilityOutputSchema({ resultRef: webRecordingRefSchema, verified: z.boolean() }),

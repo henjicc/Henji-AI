@@ -4,7 +4,7 @@ export function createWebReplayApi(invoke: <T>(channel: string, payload?: unknow
   return {
     setEnabled: enabled => invoke(WEB_REPLAY_CHANNELS.setEnabled, { enabled }),
     apps: () => invoke(WEB_REPLAY_CHANNELS.apps),
-    start: connectionId => invoke(WEB_REPLAY_CHANNELS.start, { connectionId }),
+    start: (connectionId, backup) => invoke(WEB_REPLAY_CHANNELS.start, { connectionId, backup }),
     stop: recordingId => invoke(WEB_REPLAY_CHANNELS.stop, { recordingId }),
     recordings: () => invoke(WEB_REPLAY_CHANNELS.recordings),
     remove: recordingId => invoke(WEB_REPLAY_CHANNELS.remove, { recordingId }),

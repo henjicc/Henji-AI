@@ -4,8 +4,11 @@ import { release } from 'node:os'
 import path from 'node:path'
 import { desktopCapturer } from 'electron'
 import { captureOptionsSchema, type CaptureManifest } from '../../../../src/core/screenRecording/capture'
+import type { WebRecordingBackupOptions } from '../../../../src/platform/contracts/webReplay'
+import { mediaPermissions } from '../media-permissions'
+import { resolveNativeCaptureSource } from '../screen-recording/capture/source'
 import { createMainLogger } from '../logging'
-import { GfxCaptureBackend } from '../screen-recording/capture/gfxcapture'
+import { GfxCaptureBackend, type NativeCaptureSource } from '../screen-recording/capture/gfxcapture'
 import { CaptureStorage } from '../screen-recording/capture/storage'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
 
@@ -15,7 +18,7 @@ const now = (): number => Number(process.hrtime.bigint() / 1000n)
 const even = (value: number, max: number): number => Math.max(2, Math.min(max, Math.floor(value / 2) * 2))
 
 /**
- * A plain screen recording of the recorded app's window, kept beside the recording data in case a
+ * A plain screen recording of the recorded app's window (or a whole monitor), kept beside the recording data in case a
  * replay ever falls short. It reuses the screen recorder's native window capture (with the real
  * pointer) but not its session or control bar, so it never blocks or disturbs ordinary recordings.
  */
@@ -23,25 +26,41 @@ export class WebRecordingBackupVideo {
   private constructor(private readonly backend: GfxCaptureBackend, private readonly storage: CaptureStorage, private readonly directory: string) {}
 
   /** Returns null (with the reason) when the window cannot be found or captured on this system. */
-  static async start(directory: string, recordingId: string, appName: string, viewport: { width: number; height: number; dpr: number }): Promise<{ backup: WebRecordingBackupVideo } | { reason: string }> {
-    if (process.platform !== 'win32' || Number(release().split('.')[2]) < 18362) return { reason: '当前系统不支持窗口录屏，未录制备份视频' }
-    const windows = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 0, height: 0 } })
-    const window = windows.find(item => item.name === appName) ?? windows.find(item => item.name.includes(appName))
-    const hwnd = window?.id.match(/^window:(\d+):/)?.[1]
-    if (!window || !hwnd) return { reason: `没有找到「${appName}」的窗口，未录制备份视频` }
-    const options = captureOptionsSchema.parse({ sourceId: window.id, backend: 'gfxcapture', fps: 30, width: even(viewport.width * viewport.dpr, 3840), height: even(viewport.height * viewport.dpr, 2160) })
+  static async start(directory: string, recordingId: string, appName: string, viewport: { width: number; height: number; dpr: number }, request: WebRecordingBackupOptions): Promise<{ backup: WebRecordingBackupVideo } | { reason: string }> {
+    if (process.platform !== 'win32' || Number(release().split('.')[2]) < 18362) return { reason: '当前系统不支持原生录屏，未录制备份视频' }
+    let sourceId: string
+    let native: NativeCaptureSource
+    let size: { width: number; height: number }
+    if (request.target === 'screen') {
+      const screenSource = (await mediaPermissions.sources([], false, 'screen')).find(item => item.id === request.sourceId)
+      if (!screenSource) return { reason: '所选显示器已断开，未录制备份视频' }
+      sourceId = screenSource.id
+      native = await resolveNativeCaptureSource(screenSource)
+      size = { width: request.width, height: request.height }
+    } else {
+      const windows = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 0, height: 0 } })
+      const window = windows.find(item => item.name === appName) ?? windows.find(item => item.name.includes(appName))
+      const hwnd = window?.id.match(/^window:(\d+):/)?.[1]
+      if (!window || !hwnd) return { reason: `没有找到「${appName}」的窗口，未录制备份视频` }
+      sourceId = window.id
+      native = { selector: 'hwnd', handle: hwnd, width: 0, height: 0 }
+      // A window is recorded at its own size.
+      size = { width: even(viewport.width * viewport.dpr, 3840), height: even(viewport.height * viewport.dpr, 2160) }
+    }
+    const { fps, rateControl, bitrate, keyframeFrames, codec, encoder } = request
+    const options = captureOptionsSchema.parse({ sourceId, backend: 'gfxcapture', fps, rateControl, bitrate, keyframeFrames, codec, encoder, ...size })
     const manifest: CaptureManifest = { version: 2, minReaderVersion: 1, sessionId: recordingId, options, backend: 'gfxcapture', cursorEmbedded: true, status: 'prepared', spans: [] }
     const backupDirectory = path.join(directory, 'backup')
     const storage = new CaptureStorage(backupDirectory, manifest)
     await storage.prepare()
     const origin = now()
-    const backend = new GfxCaptureBackend(options, { selector: 'hwnd', handle: hwnd, width: 0, height: 0 }, storage, {
+    const backend = new GfxCaptureBackend(options, native, storage, {
       nowUs: () => now() - origin,
       failed: error => logger.warn('网页录制的备份录屏中断', { event: 'web_replay.backup.failed', context: { recordingId }, error }),
     }, true)
     await backend.prepare()
     await backend.start(new AbortController().signal)
-    logger.info('网页录制的备份录屏开始', { event: 'web_replay.backup.started', context: { recordingId, window: window.name } })
+    logger.info('网页录制的备份录屏开始', { event: 'web_replay.backup.started', context: { recordingId, target: request.target, ...size, fps: options.fps } })
     return { backup: new WebRecordingBackupVideo(backend, storage, directory) }
   }
 

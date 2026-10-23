@@ -10,7 +10,7 @@ export function createElectronWebReplay(): WebReplayPlatform {
   return {
     setEnabled: enabled => native().setEnabled(enabled),
     apps: () => native().apps(),
-    start: id => native().start(id),
+    start: (id, backup) => native().start(id, backup),
     stop: id => native().stop(id),
     recordings: () => native().recordings(),
     remove: id => native().remove(id),

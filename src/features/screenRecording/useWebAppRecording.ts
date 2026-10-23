@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { WebRecordingSummary, WebReplayRenderResult, WebReplayServerState } from '@/platform/contracts/webReplay'
+import type { WebRecordingBackupOptions, WebRecordingSummary, WebReplayRenderResult, WebReplayServerState } from '@/platform/contracts/webReplay'
 import { getPlatform } from '@/platform'
 
 export interface WebAppRenderState { busy: boolean; progress: number; frame: string | null; result?: WebReplayRenderResult; error?: string }
@@ -14,7 +14,7 @@ export function useWebAppRecording(): {
   server: WebReplayServerState | null; recordings: WebRecordingSummary[]
   selectedApp: string; selectApp(id: string): void; selectedRecording: WebRecordingSummary | null; selectRecording(id: string): void
   activeId: string | null; elapsedMs: number; busy: boolean; error: string; renders: Record<string, WebAppRenderState>
-  start(): Promise<void>; stop(): Promise<void>; render(id: string): Promise<void>; reveal(id: string, file?: string): Promise<void>
+  start(backup: WebRecordingBackupOptions | null): Promise<void>; stop(): Promise<void>; render(id: string): Promise<void>; reveal(id: string, file?: string): Promise<void>
   remove(id: string): Promise<void>; restore(id: string): Promise<void>
 } {
   const [server, setServer] = useState<WebReplayServerState | null>(null)
@@ -43,7 +43,8 @@ export function useWebAppRecording(): {
     const timer = setInterval(() => setNow(Date.now()), 250)
     return () => clearInterval(timer)
   }, [active?.recordingStartedAt])
-  const selectedRecording = recordings.find(r => r.id === selectedRecordingId) ?? recordings[0] ?? null
+  // Nothing is selected until the user picks a recording; then its details and video show.
+  const selectedRecording = recordings.find(r => r.id === selectedRecordingId) ?? null
   const guard = async (work: () => Promise<void>): Promise<void> => {
     setBusy(true); setError('')
     try { await work() } catch (e) { setError(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
@@ -51,7 +52,7 @@ export function useWebAppRecording(): {
   return {
     server, recordings, selectedApp, selectApp, selectedRecording, selectRecording, activeId, busy, error, renders,
     elapsedMs: active?.recordingStartedAt ? Math.max(0, now - active.recordingStartedAt) : 0,
-    start: () => guard(async () => { await platform.start(selectedApp); await reload() }),
+    start: backup => guard(async () => { await platform.start(selectedApp, backup); await reload() }),
     stop: () => guard(async () => {
       if (!activeId) return
       const manifest = await platform.stop(activeId)

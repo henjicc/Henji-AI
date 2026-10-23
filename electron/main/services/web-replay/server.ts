@@ -2,6 +2,7 @@ import crypto from 'node:crypto'
 import http from 'node:http'
 import { EventEmitter } from 'node:events'
 import { WebSocketServer, type WebSocket } from 'ws'
+import type { WebRecordingBackupOptions } from '../../../../src/platform/contracts/webReplay'
 import { probeMessageSchema, type AppInfoValue, type WebRecordingEnvironment, type WebRecordingManifest } from '../../../../src/core/webReplay/schema'
 import { createMainLogger } from '../logging'
 import { WebRecordingSession, type FetchExternal, type StartBackupVideo } from './session'
@@ -66,11 +67,11 @@ export class WebReplayServer extends EventEmitter {
   }
 
   /** Starts recording the app on this connection; the page reloads and records from its first module. */
-  async startRecording(connectionId: string): Promise<WebRecordingManifest> {
+  async startRecording(connectionId: string, backup: WebRecordingBackupOptions | null = null): Promise<WebRecordingManifest> {
     const connection = this.connections.get(connectionId)
     if (!connection?.app) throw new Error('这个网页应用已断开，请确认它仍在运行')
     if (connection.session) throw new Error('这个网页应用正在录制')
-    const session = new WebRecordingSession({ app: connection.app.app, host: connection.app.host, env: connection.app.env, probe: { version: connection.app.probeVersion, protocol: 1 } }, this.fetchExternal, this.startBackup)
+    const session = new WebRecordingSession({ app: connection.app.app, host: connection.app.host, env: connection.app.env, probe: { version: connection.app.probeVersion, protocol: 1 } }, this.fetchExternal, this.startBackup, backup)
     await session.prepare()
     this.sessions.set(session.id, session)
     connection.session = session

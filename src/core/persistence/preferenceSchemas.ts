@@ -6,7 +6,7 @@ export const MODEL_DEFAULTS_VERSION = 2
 export const ONBOARDING_VERSION = 2
 export const SUBTITLE_MANIFEST_VERSION = 16
 export const STORYBOARD_METADATA_VERSION = 1
-export const RECORDING_SETUP_VERSION = 3
+export const RECORDING_SETUP_VERSION = 4
 /** The last screen-recording choices, offered again next time; the session name is per recording and not kept. */
 export const recordingSetupSchema = z.object({
   ...recordingEncodingFields,
@@ -15,6 +15,12 @@ export const recordingSetupSchema = z.object({
   mode: z.enum(['full', 'quick']), saveDirectory: z.string(),
   microphone: z.boolean(), systemAudio: z.boolean(), camera: z.boolean(), cameraId: z.string(),
   quality: z.enum(['1080p', '1440p', '2160p']), fps: z.union([z.literal(30), z.literal(60)]), insert: z.boolean(),
+  /** v4: the backup screen recording kept beside a web app recording; `sourceId` is the monitor for `screen`. */
+  webAppBackup: z.object({
+    ...recordingEncodingFields,
+    enabled: z.boolean(), range: z.enum(['window', 'screen']), sourceId: z.string(),
+    quality: z.enum(['1080p', '1440p', '2160p']), fps: z.union([z.literal(30), z.literal(60)]),
+  }).strict().optional(),
 }).strict()
 export const nodeDefaultsSchema = z.record(z.string(), z.record(z.string(), z.json()))
 export const modelDefaultsSchema = z.object({ version: z.literal(MODEL_DEFAULTS_VERSION), providerId: z.string(), models: z.object({ image: z.string(), video: z.string(), audio: z.string(), transcription: z.string() }) })

@@ -270,8 +270,8 @@
       "minReaderVersion": 1
     },
     "recording-setup": {
-      "version": 3,
-      "fingerprint": "c6dbba8cb11984d672af4236375e001f68af7b71c3d9cead3284bd047ad5ba0f",
+      "version": 4,
+      "fingerprint": "1111704dd1bb08d3b558d9f9109e1eeb2e96cb3f45987749e83c89ff947a7e62",
       "supportedFrom": 1,
       "minReaderVersion": 3
     },

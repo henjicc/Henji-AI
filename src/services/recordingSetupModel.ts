@@ -1,5 +1,6 @@
 import { recordingEncoding, RECORDING_VIDEO_DEFAULTS, type RecordingEncoding, type ResolvedRecordingEncoding } from '@/core/screenRecording/encoding'
 import type { CaptureSource } from '@/core/screenRecording/contracts'
+import type { WebRecordingBackupOptions } from '@/platform/contracts/webReplay'
 import { createLogger } from '@/core/logging'
 import { recordingSetupSchema } from '@/core/persistence/preferenceSchemas'
 import { localLibraryContract, readLocalPersistenceJson, serializeVersionedPersistenceJson } from '@/core/persistence/versionedJson'
@@ -25,7 +26,12 @@ export interface RecordingSetup extends RecordingEncoding {
   camera: boolean; cameraId: string
   quality: RecordingQuality; fps: 30 | 60
   insert: boolean
+  /** Web app recording's backup screen recording; absent until first changed. */
+  webAppBackup?: WebAppBackupSetup
 }
+/** `window` records the recorded app's window at its own size; `screen` records a monitor at `quality`. */
+export interface WebAppBackupSetup extends RecordingEncoding { enabled: boolean; range: 'window' | 'screen'; sourceId: string; quality: RecordingQuality; fps: 30 | 60 }
+export const DEFAULT_WEB_APP_BACKUP: WebAppBackupSetup = { enabled: true, range: 'window', sourceId: '', quality: '1080p', fps: 30 }
 export const DEFAULT_RECORDING_SETUP: RecordingSetup = { mode: 'full', saveDirectory: '', name: '', microphone: true, systemAudio: false, camera: false, cameraId: '', quality: '1080p', fps: 60, insert: true }
 
 /** What the picker and setup panel offer next time, across restarts. */
@@ -59,6 +65,17 @@ export function recordingOutput(setup: Pick<RecordingSetup, 'quality' | 'fps'> &
   return { ...size, ...recordingEncoding({ ...setup, ...size }) }
 }
 
+/** What to ask the web recorder for; a screen that is gone falls back to the primary one. */
+export function webAppBackupOptions(backup: WebAppBackupSetup, sources: readonly CaptureSource[]): WebRecordingBackupOptions | null {
+  if (!backup.enabled) return null
+  const { enabled: _enabled, range, sourceId, quality: _quality, ...encoding } = backup
+  if (range === 'window') return { ...encoding, target: 'window' }
+  const screens = orderedScreens(sources)
+  const screen = screens.find(item => item.id === sourceId) ?? screens.find(item => item.display?.primary) ?? screens[0]
+  if (!screen) return { ...encoding, target: 'window' }
+  const { width, height, fps } = recordingOutput(backup)
+  return { ...encoding, fps, target: 'screen', sourceId: screen.id, width, height }
+}
 
 export function formatRecordingTime(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds))

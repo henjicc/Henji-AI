@@ -4,6 +4,7 @@ import { unrestrictedCollectionAvailability, type ApplicationEntityProvider, typ
 import { readWebAppRecordingCapability, renderWebAppReplayCapability, startWebAppRecordingCapability, stopWebAppRecordingCapability } from '@/core/application-control/domains/screenRecording/webAppCapability'
 import type { CapabilityExecutionContext } from '@/features/application-control'
 import { getPlatform } from '@/platform'
+import { DEFAULT_WEB_APP_BACKUP, loadRecordingSetup, webAppBackupOptions } from '@/services/recordingSetupModel'
 import { WEB_APP_RECORDING_DISABLED_MESSAGE, webAppRecordingEnabled } from '../useWebAppRecordingSwitch'
 
 import { WEB_RECORDING_LIBRARY_TYPE, WEB_RECORDING_TYPE } from './webAppRecordingCollectionExecutor'
@@ -101,7 +102,9 @@ export async function executeWebAppCapability(id: string, input: unknown, contex
   if (id !== readWebAppRecordingCapability.id && !webAppRecordingEnabled()) throw new Error(WEB_APP_RECORDING_DISABLED_MESSAGE)
   if (id === startWebAppRecordingCapability.id) {
     const parsed = startWebAppRecordingCapability.inputSchema.parse(input)
-    const manifest = await platform.start(parsed.appRef.id)
+    // The backup screen recording follows the choices on the recording page.
+    const backup = loadRecordingSetup().setup.webAppBackup ?? DEFAULT_WEB_APP_BACKUP
+    const manifest = await platform.start(parsed.appRef.id, webAppBackupOptions(backup, backup.enabled && backup.range === 'screen' ? await getPlatform().screenRecording.sources() : []))
     return { resultRef: { kind: RECORDING, id: manifest.id }, verified: (await platform.recordings()).some(r => r.id === manifest.id) }
   }
   if (id === stopWebAppRecordingCapability.id) {

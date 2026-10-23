@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { net, shell } from 'electron'
 import type { WebRecordingManifest } from '../../../../src/core/webReplay/schema'
-import type { WebRecordingSummary, WebReplayReadRequest, WebReplayReadResult, WebReplayRenderProgress, WebReplayRenderRequest, WebReplayRenderResult, WebReplayServerState } from '../../../../src/platform/contracts/webReplay'
+import type { WebRecordingBackupOptions, WebRecordingSummary, WebReplayReadRequest, WebReplayReadResult, WebReplayRenderProgress, WebReplayRenderRequest, WebReplayRenderResult, WebReplayServerState } from '../../../../src/platform/contracts/webReplay'
 import { createMainLogger } from '../logging'
 import { BACKUP_VIDEO_FILE, WebRecordingBackupVideo } from './backupVideo'
 import { WebRecordingPlayer } from './player/player'
@@ -30,7 +30,8 @@ function snapshot(): WebReplayServerState { return { ...state, apps: server?.app
 export async function startWebReplayService(port = Number(process.env.HENJI_WEB_REPLAY_PORT) || WEB_REPLAY_PORT): Promise<void> {
   if (server) return
   server = new WebReplayServer(fetchExternal, async session => {
-    const started = await WebRecordingBackupVideo.start(session.store.directory, session.id, session.info.app.name, session.info.env.viewport)
+    if (!session.backupOptions) return null
+    const started = await WebRecordingBackupVideo.start(session.store.directory, session.id, session.info.app.name, session.info.env.viewport, session.backupOptions)
     return 'backup' in started ? started.backup : started
   })
   server.on('changed', () => { const value = snapshot(); listeners.forEach(fn => fn(value)) })
@@ -68,7 +69,7 @@ function requireServer(): WebReplayServer {
   return server
 }
 
-export function startWebRecording(connectionId: string): Promise<WebRecordingManifest> { return requireServer().startRecording(connectionId) }
+export function startWebRecording(connectionId: string, backup: WebRecordingBackupOptions | null): Promise<WebRecordingManifest> { return requireServer().startRecording(connectionId, backup) }
 export function stopWebRecording(recordingId: string): Promise<WebRecordingManifest> { return requireServer().stopRecording(recordingId) }
 
 const TRASH = '.trash'

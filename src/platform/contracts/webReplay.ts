@@ -1,4 +1,5 @@
 import type { AppInfoValue, WebRecordingEnvironment, WebRecordingManifest } from '../../core/webReplay/schema'
+import type { RecordingEncoding } from '../../core/screenRecording/encoding'
 
 export const WEB_REPLAY_CHANNELS = {
   apps: 'webReplay:apps',
@@ -50,11 +51,18 @@ export interface WebReplayRenderResult {
 export interface WebReplayReadRequest { recordingId: string; track: 'data' | 'behavior'; offset: number; limit: number }
 export interface WebReplayReadResult { entries: unknown[]; total: number; nextOffset: number | null }
 
+/**
+ * The plain screen recording kept beside a web recording. `window` records the app's own window at
+ * its size; `screen` records a whole monitor at the chosen resolution. Encoding matches screen recording.
+ */
+export type WebRecordingBackupOptions = RecordingEncoding & { fps: 30 | 60 } & ({ target: 'window' } | { target: 'screen'; sourceId: string; width: number; height: number })
+
 export interface WebReplayPlatform {
   /** Experimental switch: starts or stops listening for probes on the local port. */
   setEnabled(enabled: boolean): Promise<WebReplayServerState>
   apps(): Promise<WebReplayServerState>
-  start(connectionId: string): Promise<WebRecordingManifest>
+  /** `backup` null records data only. */
+  start(connectionId: string, backup: WebRecordingBackupOptions | null): Promise<WebRecordingManifest>
   stop(recordingId: string): Promise<WebRecordingManifest>
   recordings(): Promise<WebRecordingSummary[]>
   /** Moves a recording to the trash folder; `restore` brings it back. */
