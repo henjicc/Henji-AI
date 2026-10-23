@@ -3,7 +3,7 @@ import { getPlatform } from '@/platform/runtime'
 import { createLogger } from '@/core/logging'
 import { videoEditClipMedia, videoEditComposition, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
-import { videoEditGainVolumes, type VideoEditGainMode, type VideoEditLoudnessMeasurement } from '@/core/videoEdit/loudness'
+import { videoEditGainVolumes, videoEditRecordingGainVolume, type VideoEditGainMode, type VideoEditLoudnessMeasurement } from '@/core/videoEdit/loudness'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 import { editVideoProject, requireVideoEditInstance, type VideoEditInstance } from './videoEditService'
 
@@ -64,6 +64,23 @@ export async function measureVideoEditClips(target: VideoEditGainTarget, signal?
     for (const clip of clips) { results.push(await measureClip(composition, clip, signal)); unchanged(owner, contentVersion) }
     logger.info('片段响度测量完成', { event: 'video_edit.loudness.measure.completed', context: { projectId: target.projectId, clips: results.length } }); return results
   } catch (error) { logger.error('片段响度测量失败', error, { event: 'video_edit.loudness.measure.failed' }); throw error }
+}
+
+/** 在录制导入草稿上测量；调用方随导入一次提交并检查文档版本，不另写文件或历史。 */
+export async function prepareVideoEditRecordingGain(composition: VideoEditComposition, clipIds: readonly string[], signal?: AbortSignal): Promise<Map<string, number>> {
+  const ids = new Set(clipIds), volumes = new Map<string, number>()
+  const clips = composition.clips.filter(clip => ids.has(clip.id) && clip.duration / composition.fps >= .4 && videoEditClipHasSound(composition, clip))
+  logger.info('开始匹配录制麦克风音量', { event: 'video_edit.recording_gain.start', context: { clips: clips.length } })
+  try {
+    for (const clip of clips) {
+      signal?.throwIfAborted()
+      const measured = await measureClip(composition, clip, signal)
+      volumes.set(clip.id, videoEditRecordingGainVolume(clip.volume, measured))
+    }
+    signal?.throwIfAborted()
+    logger.info('录制麦克风音量匹配完成', { event: 'video_edit.recording_gain.completed', context: { clips: volumes.size } })
+    return volumes
+  } catch (error) { logger.warn('录制麦克风音量匹配失败，未提交导入草稿', { event: 'video_edit.recording_gain.failed', error }); throw error }
 }
 /** All selected clips commit ONCE after all analyses/checks. No partial writes, no silent clamping. */
 export async function applyVideoEditAudioGain(target: VideoEditGainTarget, mode: VideoEditGainMode, value: number, signal?: AbortSignal): Promise<{ clipId: string; volume: number; measurement?: VideoEditLoudnessMeasurement }[]> {

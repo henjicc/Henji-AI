@@ -23,3 +23,12 @@ export function videoEditGainVolumes(mode: VideoEditGainMode, value: number, vol
   const maximum = Math.max(...levels as number[])
   return volumes.map((volume, index) => videoEditVolumeFromDb(20 * Math.log10(volume) + value - (mode === 'peak_max' ? maximum : levels[index]!)))
 }
+
+/** 录后只改片段增益；优先保护真峰值，遵守现有片段倍率上限，不把静音放大成噪声。 */
+export function videoEditRecordingGainVolume(volume: number, measurement: VideoEditLoudnessMeasurement): number {
+  if (volume <= 0 || measurement.durationSeconds < .4 || measurement.integratedLufs === null || measurement.truePeakDbtp === null) return volume
+  const ceiling = Math.min(20 * Math.log10(2 / volume), 20, -1 - measurement.truePeakDbtp)
+  if (ceiling < -20) return volume
+  const gain = Math.min(ceiling, Math.max(-20, -16 - measurement.integratedLufs))
+  return videoEditGainVolumes('loudness', measurement.integratedLufs + gain, [volume], [measurement])[0]
+}

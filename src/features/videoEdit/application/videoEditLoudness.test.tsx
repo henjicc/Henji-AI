@@ -14,7 +14,7 @@ import { assertVideoEditSequenceGraph } from '@/core/videoEdit/sequenceGraph'
 import type { VideoEditLoudnessMeasurement } from '@/core/videoEdit/loudness'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, videoEditExportRange, requireVideoEditInstance, listVideoEditInstances, undoVideoEdit } from './videoEditService'
-import { applyVideoEditAudioGain, measureVideoEditClips, prepareVideoEditAudioGain } from './videoEditLoudness'
+import { applyVideoEditAudioGain, measureVideoEditClips, prepareVideoEditAudioGain, prepareVideoEditRecordingGain } from './videoEditLoudness'
 import { VideoEditAudioGainDialog } from '../panels/VideoEditAudioGainDialog'
 import { cancelVideoEditExport, exportVideoEdit as exportWithSettings, videoEditExportTask } from './videoEditExport'
 
@@ -71,6 +71,21 @@ async function project() {
   const target = { projectId: id, sequenceId: owner.activeSequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }
   return { owner, id, target }
 }
+it('录后在草稿测量并保留单步撤销，片段音量可经现有属性读回；取消不产生历史', async () => {
+  const { owner, target, id } = await project(), before = owner.past.length
+  const volumes = await prepareVideoEditRecordingGain(videoEditComposition(owner.document, target.sequenceId), target.clipIds)
+  expect(owner.past).toHaveLength(before)
+  expect([...volumes.values()]).toEqual([10 ** (.2), 10 ** (.2)])
+  editVideoSequence(id, target.sequenceId, sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, volume: volumes.get(clip.id) ?? clip.volume })) }))
+  expect(owner.past).toHaveLength(before + 1)
+  const app = createApplicationHarness()
+  try { expect(((await app.read({ kind: 'video_edit.clip', id: `${id}:${target.clipIds[0]}` }, ['video_edit.clip.volume'])).properties as Record<string, unknown>)['video_edit.clip.volume']).toBeCloseTo(10 ** .2) }
+  finally { app.dispose() }
+  undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.volume)).toEqual([1, 1])
+  const controller = new AbortController(); controller.abort()
+  await expect(prepareVideoEditRecordingGain(videoEditComposition(owner.document, target.sequenceId), target.clipIds, controller.signal)).rejects.toThrow()
+  expect(pcm.size).toBe(0)
+})
 it('G 与 PR 核对一致；多选增益对话框确定一次撤销，取消不改音量', async () => {
   expect(matchVideoEditShortcut({ code: 'KeyG', key: 'g', ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, repeat: false, isComposing: false, defaultPrevented: false }, 'timeline', {})).toBe('audio_gain')
   const { owner, target, id } = await project(); const before = owner.past.length

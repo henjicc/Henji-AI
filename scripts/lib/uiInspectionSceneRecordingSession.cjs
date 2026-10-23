@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
+const { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 
 function createRecordingSessionScene() {
   return {
@@ -12,7 +12,7 @@ function createRecordingSessionScene() {
       const button = name => page.getByRole('button', { name, exact: true })
       const list = kind => page.evaluate(kind => window.henjiNative.documents.listDocuments({ kind, includeDrafts: true, includeMissing: false }), kind)
       const read = id => page.evaluate(id => window.henjiNative.documents.readDocument({ id }), id)
-      const previews = []
+      const previews = [], alignments = []
       let client
       try {
         await button('工具').click()
@@ -21,8 +21,10 @@ function createRecordingSessionScene() {
         // Record only this isolated test application's window, never another app or the desktop.
         const sourceId = await app.evaluate(({ BrowserWindow }) => {
           const window = BrowserWindow.getAllWindows().find(window => !window.webContents.getURL().includes('view='))
+          window.setTitle(`录屏验收-${process.pid}`)
           return window.getMediaSourceId()
         })
+        await button('刷新来源').click()
         const source = (await page.evaluate(() => window.henjiNative.screenRecording.sources())).find(source => source.id === sourceId)
         assert(source, '未枚举到隔离测试应用窗口')
         const record = async name => {
@@ -46,6 +48,9 @@ function createRecordingSessionScene() {
             await page.screenshot({ path: path.join(output, 'preparation-microphone-off.png') })
             await capture('recording-session-microphone-off')
             await page.getByRole('switch', { name: '麦克风', exact: true }).click()
+            await button('视频参数').click()
+            await capture('recording-session-video-settings')
+            await button('视频参数').click()
             const captions = await page.evaluate(() => [...document.querySelectorAll('[data-recording-source-caption]')].map(caption => {
               const card = caption.closest('button').getBoundingClientRect(), rect = caption.getBoundingClientRect()
               const image = caption.parentElement.querySelector('[data-recording-source-thumbnail]')?.getBoundingClientRect()
@@ -108,6 +113,10 @@ function createRecordingSessionScene() {
           const span = clips => [Math.min(...clips.map(clip => clip.start)) - first, Math.max(...clips.map(clip => clip.start + clip.duration)) - first]
           // Picture and sound share one start and one end; nothing before the countdown ended, nothing after stop.
           const [pictureSpan, soundSpan] = [span(screenClips), span(micClips)]
+          alignments.push({ name, fps, pictureSpan, soundSpan, startDeltaMs: (soundSpan[0] - pictureSpan[0]) * 1000 / fps, endDeltaMs: (soundSpan[1] - pictureSpan[1]) * 1000 / fps,
+            microphoneVolumes: micClips.map(clip => clip.volume), uncertaintyUs: result.content.tracks.tracks.find(track => track.kind === 'microphone').segments.flatMap(segment => segment.anchors.map(anchor => anchor.uncertaintyUs)) })
+          fs.writeFileSync(path.join(output, 'alignment.json'), JSON.stringify(alignments, null, 2))
+          assert(micClips.every(clip => Number.isFinite(clip.volume) && clip.volume >= .1 && clip.volume <= 2), '麦克风增益超出录后匹配范围')
           // The microphone's last audio block (about a tenth of a second) may still be in flight when stop is pressed.
           assert(pictureSpan[0] === 0 && Math.abs(soundSpan[0]) <= 1 && soundSpan[1] <= pictureSpan[1] + 1 && soundSpan[1] >= pictureSpan[1] - fps * 0.25, `画面与声音起止不一致：${JSON.stringify({ pictureSpan, soundSpan })}`)
           // Pauses cut every track at the same moments: no sound without picture after resuming.
@@ -144,6 +153,7 @@ function createRecordingSessionScene() {
         assert.equal(editing.meta.container.projectId, toolbox.edit.meta.container.projectId)
         assert.equal(editing.edit.meta.id, toolbox.edit.meta.id, '从剪辑发起的录制没有回到原剪辑')
         fs.writeFileSync(path.join(output, 'editing-document.json'), JSON.stringify(editing.edit, null, 2))
+        await assignIsolatedMcpPort(page)
         const identity = await authorizeMcpConnection(page, { name: '录制会话回读', allowWrites: true })
         client = await connectMcpClient(identity.config, 'Henji recording session')
         const events = await callTool(client, 'read_screen_recording_events', { sessionRef: { kind: 'screen_recording.session', id: editing.meta.id }, limit: 2 })
@@ -163,7 +173,7 @@ function createRecordingSessionScene() {
         assert(stopped.result.data.verified, 'MCP 停止没有持久化证据')
         const completed = await callTool(client, 'read_application_entity', { ref: sessionRef })
         assert.equal(completed.data.properties['screen_recording.session.phase'], 'stopped')
-        fs.writeFileSync(path.join(output, 'evidence.json'), JSON.stringify({ toolbox: toolbox.meta, editing: editing.meta, media: editing.content.media, events: editing.content.eventPages.length, previews, mcp: { started, stopped, completed }, devices: 'Chromium virtual default microphone', backend: editing.content.source.cursorEmbedded ? 'chromium' : 'gfxcapture' }, null, 2))
+        fs.writeFileSync(path.join(output, 'evidence.json'), JSON.stringify({ toolbox: toolbox.meta, editing: editing.meta, media: editing.content.media, events: editing.content.eventPages.length, previews, alignments, mcp: { started, stopped, completed }, devices: 'native microphone using effective recording settings', backend: editing.content.source.cursorEmbedded ? 'chromium' : 'gfxcapture' }, null, 2))
       } finally {
         await client?.close().catch(() => {})
         await disableMcp(page).catch(() => {})
