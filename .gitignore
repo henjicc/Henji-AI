@@ -137,3 +137,4 @@ nul
 /.tmp/
 /native/**/target/
 /native/video-decoder/ffmpeg/
+/native/audio-capture/vendor/

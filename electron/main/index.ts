@@ -5,6 +5,7 @@ import path from 'node:path'
 import { warmApiMartEndpointPreference, warmGrsaiEndpointPreference } from '@henjicc/ai-sdk'
 import { registerAiRuntimeIpc } from './ipc/ai-runtime'
 import { registerAudioIpc } from './ipc/audio'
+import { registerAudioCaptureIpc } from './ipc/audio-capture'
 import { registerScreenRecordingIpc } from './ipc/screen-recording'
 import { closeRecordingControl } from './services/screen-recording/runtime'
 import { registerAssetLibraryIpc } from './ipc/asset-library'
@@ -137,6 +138,7 @@ app.whenReady().then(async () => {
   runElectronHostSelfCheck(sdkRuntimeContext)
   registerAiRuntimeIpc()
   registerAudioIpc()
+  registerAudioCaptureIpc()
   registerAssetLibraryIpc()
   registerAssistantIpc()
   registerCameraStageRenderIpc()

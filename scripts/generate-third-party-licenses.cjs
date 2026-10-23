@@ -23,6 +23,8 @@ const crypto = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
 const { spawnSync } = require('node:child_process')
+const { audioCaptureLicenseData, HENJI_AUDIO_CAPTURE_SOURCE_URL } = require('./lib/audioCaptureLicenses.cjs')
+const { SOURCES: AUDIO_CAPTURE_SOURCES } = require('./build-audio-capture.cjs')
 const {
   NATIVE_CRATES,
   RUST_TARGETS,
@@ -81,11 +83,13 @@ function readTextIfExists(file) {
 function inputFingerprint(options) {
   const hash = crypto.createHash('sha256')
   hash.update(`${options.platform}-${options.arch}\n`)
+  hash.update(HENJI_AUDIO_CAPTURE_SOURCE_URL)
   const files = [
     'package.json', 'package-lock.json', 'LICENSE',
     'native/video-decoder/ffmpeg/current.json',
     'scripts/generate-third-party-licenses.cjs', 'scripts/lib/thirdPartyLicenses.cjs',
     'scripts/lib/distributionNotices.cjs', 'scripts/video-decoder-ffmpeg.cjs',
+    'scripts/lib/audioCaptureLicenses.cjs', 'scripts/build-audio-capture.cjs', 'native/audio-capture/target/release/audio-capture-build.json',
     ...NATIVE_CRATES.map((crate) => `${crate.dir}/Cargo.lock`),
   ]
   for (const file of files) hash.update(`${file}\n${readTextIfExists(path.join(root, file)) ?? ''}\n`)
@@ -284,6 +288,9 @@ function generate(options) {
       'https://github.com/GreatV/oar-ocr/blob/main/docs/models.md (tiny detection and dictionary bundled unchanged; tiny int8 recognition bundled, no downloadable OCR models)',
       'pp-ocrv6_tiny_rec_int8.onnx: 由痕迹AI/作者量化修改 (quantized by Henji AI / author from PP-OCRv6 tiny recognition; MatMul/Gemm only, int8). Apache-2.0 Section 4 modification notice; upstream copyright and license retained.'],
     textIds: [textTable.add(ppocrLicense)], textOrigin: 'reference' })
+  const capture = audioCaptureLicenseData(root, options.platform, options.strict)
+  runtime.push({ id: 'runtime:portaudio', name: 'PortAudio', version: AUDIO_CAPTURE_SOURCES.portaudio.version, license: 'MIT', ecosystem: 'runtime', homepage: 'https://portaudio.com', sources: [AUDIO_CAPTURE_SOURCES.portaudio.url], textIds: [textTable.add(capture.portaudio)], textOrigin: 'package' })
+  if (capture.asio) runtime.push({ id: 'runtime:asio-sdk', name: 'Steinberg ASIO SDK', version: AUDIO_CAPTURE_SOURCES.asio.version, license: 'GPL-3.0-only', ecosystem: 'runtime', homepage: 'https://www.steinberg.net/asiosdk', sources: [AUDIO_CAPTURE_SOURCES.asio.url, HENJI_AUDIO_CAPTURE_SOURCE_URL], textIds: [textTable.add(capture.asioLicense), textTable.add(capture.gpl)], textOrigin: 'package' })
   const notices = buildNotices({
     project: {
       name: PRODUCT_NAME,
@@ -332,7 +339,12 @@ async function ffmpegDistributionFiles(options) {
 /** 随包许可说明（README、项目许可、FFmpeg 许可与构建信息、原生服务声明）。 */
 async function writeDistributionFiles(options, notices) {
   const ffmpeg = await ffmpegDistributionFiles(options)
+  const capture = audioCaptureLicenseData(root, options.platform, options.strict)
   const files = {
+    [DISTRIBUTED_LICENSE_FILES.audioCaptureNotice]: capture.notice,
+    [DISTRIBUTED_LICENSE_FILES.audioCaptureLicense]: capture.gpl,
+    [DISTRIBUTED_LICENSE_FILES.portaudioLicense]: capture.portaudio,
+    ...(options.platform === 'win32' ? { [DISTRIBUTED_LICENSE_FILES.asioLicense]: capture.asioLicense } : {}),
     [DISTRIBUTED_LICENSE_FILES.projectLicense]: fs.readFileSync(path.join(root, 'LICENSE'), 'utf8'),
     [DISTRIBUTED_LICENSE_FILES.readme]: renderLicenseReadme({
       productName: PRODUCT_NAME, appVersion: notices.project.version, platform: options.platform, ffmpegBuild: ffmpeg.ffmpegBuild ?? null,
@@ -362,6 +374,8 @@ function distributionFilesPresent(options) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2))
+  // 开发清单可能带来源占位符；严格发布必须先校验，不能因命中旧指纹绕过。
+  audioCaptureLicenseData(root, options.platform, options.strict)
   const fingerprint = inputFingerprint(options)
   if (!options.force && fs.existsSync(JSON_FILE) && fs.existsSync(TEXT_FILE) && distributionFilesPresent(options) && readTextIfExists(STAMP_FILE)?.trim() === fingerprint) {
     log('输入未变化，沿用现有清单。')

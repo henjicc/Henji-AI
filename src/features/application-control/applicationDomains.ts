@@ -1,4 +1,5 @@
 import { workspaceLayoutApplicationDomain } from './workspaceLayoutDomain'
+import { audioCaptureApplicationDomain } from './audioCaptureDomain'
 import { canvasApplicationDomain } from '@/features/canvas/application/applicationDomain'
 import { cameraStageApplicationDomain } from '@/features/cameraStage/application/applicationDomain'
 import { assetsApplicationDomain } from '@/features/assets/application/applicationDomain'
@@ -28,6 +29,7 @@ export function initializeApplicationDomainBindings(): void {
 }
 
 export const APPLICATION_DOMAINS: readonly ApplicationDomainModule[] = [
+  audioCaptureApplicationDomain,
   workspaceLayoutApplicationDomain,
   screenRecordingApplicationDomain,
   canvasApplicationDomain,

@@ -31,6 +31,7 @@ import type { HenjiDocumentsApi } from './api-documents'
 import type { WorkRootPlatform } from '../../src/platform/contracts/workRoot'
 import type { LocalModelsPlatform } from '../../src/platform/contracts/localModels'
 import type { SoundLibraryPlatform } from '../../src/platform/contracts/soundLibrary'
+import type { AudioCapturePlatform } from '../../src/platform/contracts/audioCapture'
 import type { FontsPlatform } from '../../src/platform/contracts/fonts'
 import type { SmartRegionsPlatform } from '../../src/platform/contracts/smartRegions'
 import type { TrackingPlatform } from '../../src/platform/contracts/tracking'
@@ -101,6 +102,7 @@ export interface HenjiNativeApi {
   localModels: LocalModelsPlatform
   /** 音效库（登记音效文件夹、整理与检索），接口与 PAL `SoundLibraryPlatform` 相同。 */
   soundLibrary: SoundLibraryPlatform
+  audioCapture: AudioCapturePlatform
   fonts: FontsPlatform
   /** 剪辑智能区域分析（4.7d），接口与 PAL `SmartRegionsPlatform` 相同。 */
   smartRegions: SmartRegionsPlatform

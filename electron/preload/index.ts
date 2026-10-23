@@ -3,6 +3,7 @@ import type { AudioEditSpectralProgress } from '../../src/core/audioEdit/spectra
 import { createAudioLoudnessApi } from './audio-loudness-api'
 import { createScreenRecordingApi } from './screen-recording-api'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import { createAudioCaptureApi } from './audio-capture-api'
 import type {
   HenjiAudioApi,
   HenjiAssistantApi,
@@ -523,6 +524,7 @@ const api: HenjiNativeApi = {
   workRoot: createWorkRootApi(nativeInvoke, subscribeChannel),
   localModels: createLocalModelsApi(nativeInvoke, subscribeChannel),
   soundLibrary: createSoundLibraryApi(nativeInvoke, subscribeChannel),
+  audioCapture: createAudioCaptureApi(nativeInvoke, subscribeChannel),
   fonts: createFontsApi(nativeInvoke, subscribeChannel),
   smartRegions: createSmartRegionsApi(nativeInvoke, subscribeChannel),
   tracking: createTrackingApi(nativeInvoke, subscribeChannel),

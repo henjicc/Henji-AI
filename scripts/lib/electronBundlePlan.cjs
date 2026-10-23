@@ -7,6 +7,7 @@ function buildElectronBundlePlan(root) {
     { label: '构建原生视频解码服务', command: process.execPath, args: [path.join(root, 'scripts/video-decoder-ffmpeg.cjs'), 'build'] },
     // 音频处理程序（频谱、修复、去爆音）随运行产物一起增量构建：Rust 源码改了而程序没重编时，主进程会用旧程序算出错误结果。
     { label: '构建音频处理程序', command: process.execPath, args: [path.join(root, 'scripts/build-audio-worker.cjs')] },
+    { label: '构建原生录音引擎', command: process.execPath, args: [path.join(root, 'scripts/build-audio-capture.cjs')] },
     // 第三方许可清单在 FFmpeg 就绪后生成（读取包内许可与构建配置）；渲染层“关于”页面与安装包共用这份产物。
     { label: '生成第三方许可清单', command: process.execPath, args: [path.join(root, 'scripts/generate-third-party-licenses.cjs')] },
     { label: '生成进度种子', command: process.execPath, args: [path.join(root, 'scripts/generate-progress-seeds.cjs')] },

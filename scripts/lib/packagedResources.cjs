@@ -63,6 +63,13 @@ function verifyPackagedResources({ appOutDir, platform, productFilename, videoDe
   const problems = []
   const resourcesDir = resourcesDirOf({ appOutDir, platform, productFilename })
   const bundledDir = path.join(resourcesDir, 'resources')
+  const captureName = `henji-audio-capture${platform === 'win32' ? '.exe' : ''}`
+  const audioCapture = path.join(bundledDir, captureName)
+  if (!fs.existsSync(audioCapture)) problems.push(`缺少 ${captureName}`)
+  // 只允许独立程序及许可进入安装包，源码、SDK 与构建目录不得随包。
+  for (const file of listFilesRecursive(bundledDir)) {
+    if (/(^|\/)(ASIOSDK|vendor|audio-capture\/src|portaudio\/src)(\/|$)/i.test(file)) problems.push(`录音第三方源码不应随包：${file}`)
+  }
 
   // OCR must work on the first offline launch on every platform, outside app.asar.
   const modelSource = path.resolve(__dirname, '../../resources/local-models')
@@ -127,7 +134,7 @@ function verifyPackagedResources({ appOutDir, platform, productFilename, videoDe
   const audioWorker = path.join(bundledDir, 'henji-audio-worker.exe')
   if (!fs.existsSync(audioWorker)) problems.push('缺少 henji-audio-worker.exe')
   // 自有原生程序必须静态链接 VC 运行时（干净机器没有 VCRUNTIME140.dll，scripts/lib/nativeCrt.cjs）。
-  for (const program of [path.join(decoderDir, VIDEO_DECODER_EXECUTABLE), audioWorker]) {
+  for (const program of [path.join(decoderDir, VIDEO_DECODER_EXECUTABLE), audioWorker, audioCapture]) {
     if (!fs.existsSync(program)) continue
     const runtime = dynamicMsvcRuntimeOf(fs.readFileSync(program))
     if (runtime) problems.push(`${path.basename(program)} 动态依赖 ${runtime}（干净机器缺 VC++ 运行库会无法启动，应静态链接 CRT）`)

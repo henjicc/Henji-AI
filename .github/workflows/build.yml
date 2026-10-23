@@ -368,10 +368,31 @@ jobs:
           test -f native/video-decoder/target/release/ffmpeg.exe
           test -f native/video-decoder/target/release/ffprobe.exe
 
+  audio-capture-tests:
+    name: 原生录音 ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native/audio-capture -> target
+      - name: 编译原生引擎与文件恢复测试（无麦克风也可运行）
+        run: node scripts/build-audio-capture.cjs --test
+      - name: 构建独立程序
+        run: node scripts/build-audio-capture.cjs
+
   quality-gate:
     name: 质量门禁
     if: always()
-    needs: [checks, unit-tests, gpu-tests, image-export-tests, native-tests, video-decoder-tests]
+    needs: [checks, unit-tests, gpu-tests, image-export-tests, native-tests, video-decoder-tests, audio-capture-tests]
     runs-on: ubuntu-latest
     steps:
       - name: 所有必跑检查成功才允许交付
@@ -382,6 +403,7 @@ jobs:
           IMAGE_EXPORT_RESULT: ${{ needs.image-export-tests.result }}
           NATIVE_RESULT: ${{ needs.native-tests.result }}
           VIDEO_DECODER_RESULT: ${{ needs.video-decoder-tests.result }}
+          AUDIO_CAPTURE_RESULT: ${{ needs.audio-capture-tests.result }}
         run: |
           test "$CHECKS_RESULT" = success
           test "$UNIT_RESULT" = success
@@ -389,6 +411,7 @@ jobs:
           test "$IMAGE_EXPORT_RESULT" = success
           test "$NATIVE_RESULT" = success
           test "$VIDEO_DECODER_RESULT" = success
+          test "$AUDIO_CAPTURE_RESULT" = success
 
   # ---------------------------------------------------------------------------
   # 安装包构建：只在推 v* 标签或手动触发时运行。
@@ -459,6 +482,7 @@ jobs:
         with:
           workspaces: |
             native/audio-worker -> target
+            native/audio-capture -> target
             native/video-decoder -> target
 
       # 与 electron:build 内 prepare:media-binaries / build:video-decoder 同一入口；单独成步便于在日志里看到下载与校验。
@@ -474,6 +498,8 @@ jobs:
       - name: 构建应用
         env:
           CARGO_NET_RETRY: '10'
+          HENJI_AUDIO_CAPTURE_REQUIRE_ASIO: '1'
+          HENJI_AUDIO_CAPTURE_SOURCE_URL: ${{ vars.HENJI_AUDIO_CAPTURE_SOURCE_URL }}
         run: npm run electron:build
 
       # 未配置代码签名证书：显式关闭 macOS 自动签名发现，避免因找不到证书而失败。

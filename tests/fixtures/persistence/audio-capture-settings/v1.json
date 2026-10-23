@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "minReaderVersion": 1,
+  "settings": {
+    "hostApi": "default",
+    "deviceName": "",
+    "deviceOrdinal": 0,
+    "firstChannel": 0,
+    "channels": 1,
+    "sampleRate": 48000,
+    "bitDepth": 24,
+    "bufferFrames": 0,
+    "suggestedLatency": 0,
+    "exclusive": false
+  }
+}

@@ -28,6 +28,7 @@ const FIRST_PARTY_SCOPES = ['@henjicc/']
 
 /** 与 electron-builder.yml 保持一致：原生服务及其随包平台。 */
 const NATIVE_CRATES = Object.freeze([
+  { dir: 'native/audio-capture', platforms: ['win32', 'darwin'] },
   { dir: 'native/audio-worker', platforms: null },
   { dir: 'native/video-decoder', platforms: ['win32'] },
 ])

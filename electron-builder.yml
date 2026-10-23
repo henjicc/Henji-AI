@@ -54,6 +54,8 @@ win:
     # 音频 Worker（频谱、波形、响度等）按平台随包：Windows 带 .exe，macOS 为无扩展名的可执行文件。
     - from: native/audio-worker/target/release/henji-audio-worker.exe
       to: resources/henji-audio-worker.exe
+    - from: native/audio-capture/target/release/henji-audio-capture.exe
+      to: resources/henji-audio-capture.exe
     - from: native/video-decoder/target/release
       to: resources/video-decoder
       filter:
@@ -103,6 +105,8 @@ mac:
   extraResources:
     - from: native/audio-worker/target/release/henji-audio-worker
       to: resources/henji-audio-worker
+    - from: native/audio-capture/target/release/henji-audio-capture
+      to: resources/henji-audio-capture
   target:
     - target: dmg
 dmg:

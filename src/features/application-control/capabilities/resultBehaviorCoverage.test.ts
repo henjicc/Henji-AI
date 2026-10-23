@@ -12,6 +12,10 @@ type Scenario = { file: string; title: string }
 
 /** 每条登记都必须在对应测试里从正式状态源断言结果，不能只看 completed/evidence。 */
 const RESULT_SCENARIOS: Record<string, Scenario[]> = {
+  audio_capture: [
+    { file: 'src/features/application-control/audioCaptureDomain.test.ts', title: '通过 describe 和通用 change 修改录音参数并从领域回读' },
+    { file: 'src/features/application-control/audioCaptureDomain.test.ts', title: '非法位深不写入，录音参数事务可撤销' },
+  ],
   workspace_layout: [
     { file: 'src/features/application-control/workspaceLayoutDomain.test.ts', title: '通过 describe 和通用 change 切换预设，正式状态与读回一致' },
     { file: 'src/features/application-control/workspaceLayoutDomain.test.ts', title: '通过通用集合另存预设并重命名删除，内置预设的写入被拒绝' },
@@ -75,6 +79,7 @@ const RESULT_SCENARIOS: Record<string, Scenario[]> = {
 }
 
 const RESULT_SCENARIO_BASELINE: Record<keyof typeof RESULT_SCENARIOS, number> = {
+  audio_capture: 2,
   workspace_layout: 2,
   screen_recording: 2,
   video_edit: 2,

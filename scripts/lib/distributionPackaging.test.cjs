@@ -42,8 +42,18 @@ test('FFmpeg 构建配置核对：GPLv3 通过，缺 version3 或含 nonfree 报
 })
 
 test('随包许可文件：Windows 含 FFmpeg 与原生服务声明，其他平台不含', () => {
-  assert.equal(expectedLicenseFiles('win32').length, 6)
-  assert.deepEqual(expectedLicenseFiles('darwin'), ['README.txt', 'LICENSE.txt', 'THIRD-PARTY-NOTICES.txt'])
+  assert.equal(expectedLicenseFiles('win32').length, 10)
+  assert.deepEqual(expectedLicenseFiles('darwin'), ['README.txt', 'LICENSE.txt', 'THIRD-PARTY-NOTICES.txt', 'henji-audio-capture/NOTICE.txt', 'henji-audio-capture/COPYING.GPLv3.txt', 'henji-audio-capture/PortAudio-MIT.txt'])
+})
+
+test('录音许可包含官方许可和对应源码地址，未配置来源禁止正式分发', () => {
+  const { audioCaptureLicenseData, HENJI_AUDIO_CAPTURE_SOURCE_URL } = require('./audioCaptureLicenses.cjs')
+  const data = audioCaptureLicenseData(path.resolve(__dirname, '../..'), 'darwin')
+  assert.match(data.portaudio, /Permission is hereby granted/)
+  assert.match(data.gpl, /GNU GENERAL PUBLIC LICENSE/)
+  assert.match(data.asioLicense, /General Public License \(GPL\) Version 3/)
+  assert.ok(data.notice.includes(HENJI_AUDIO_CAPTURE_SOURCE_URL))
+  if (!/^https:\/\//.test(HENJI_AUDIO_CAPTURE_SOURCE_URL)) assert.throws(() => audioCaptureLicenseData(path.resolve(__dirname, '../..'), 'darwin', true), /HENJI_AUDIO_CAPTURE_SOURCE_URL/)
 })
 
 test('README 写明 FFmpeg 源码提交、BtbN 标签、项目仓库与 Release 源码包文件名', () => {
@@ -53,7 +63,8 @@ test('README 写明 FFmpeg 源码提交、BtbN 标签、项目仓库与 Release 
     assert.ok(readme.includes(expected), `README 缺少 ${expected}`)
   }
   const mac = renderLicenseReadme({ productName: '痕迹AI', appVersion: '2.0.0', platform: 'darwin', ffmpegBuild: null })
-  assert.doesNotMatch(mac, /FFmpeg|GPL/)
+  assert.doesNotMatch(mac, /FFmpeg/)
+  assert.match(mac, /henji-audio-capture/)
 })
 
 test('原生服务声明：源码 Apache-2.0，可执行文件整体 GPL-3.0-or-later', () => {
@@ -124,6 +135,7 @@ function windowsLayout() {
     writeFile(path.join(bundled, 'licenses', file), file === DISTRIBUTED_LICENSE_FILES.ffmpegBuildInfo ? `Version: ${FFMPEG_BUILD.version}\n${hashes.join('\n')}` : 'text')
   }
   writeFile(path.join(bundled, 'henji-audio-worker.exe'), 'worker')
+  writeFile(path.join(bundled, 'henji-audio-capture.exe'), 'capture')
   writeFile(path.join(appOutDir, 'LICENSES.chromium.html'), '<html>')
   writeFile(path.join(appOutDir, 'resources', 'app.asar'), 'asar')
   for (const name of ['onnxruntime_binding.node', 'onnxruntime.dll', 'DirectML.dll']) writeFile(path.join(appOutDir, 'resources', 'app.asar.unpacked', 'node_modules', 'onnxruntime-node', 'bin', 'napi-v6', 'win32', 'x64', name), 'native')
@@ -184,6 +196,8 @@ test('打包核对：macOS 同样要求 asar 外内置模型、音频 Worker 及
     for (const file of expectedLicenseFiles('darwin')) writeFile(path.join(licenses, file), 'text')
     assert.match(verifyPackagedResources({ appOutDir: dir, platform: 'darwin', productFilename: '痕迹AI' }).join('\n'), /缺少 henji-audio-worker/)
     writeFile(path.join(path.dirname(licenses), 'henji-audio-worker'), 'worker')
+    assert.match(verifyPackagedResources({ appOutDir: dir, platform: 'darwin', productFilename: '痕迹AI' }).join('\n'), /缺少 henji-audio-capture/)
+    writeFile(path.join(path.dirname(licenses), 'henji-audio-capture'), 'capture')
     assert.deepEqual(verifyPackagedResources({ appOutDir: dir, platform: 'darwin', productFilename: '痕迹AI' }), [])
     fs.unlinkSync(path.join(bundledModels, 'text_detection_ppocr/pp-ocrv6_tiny_det.onnx'))
     assert.match(verifyPackagedResources({ appOutDir: dir, platform: 'darwin', productFilename: '痕迹AI' }).join('\n'), /缺少内置模型/)

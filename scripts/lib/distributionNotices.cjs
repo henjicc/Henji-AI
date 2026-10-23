@@ -22,12 +22,17 @@ const DISTRIBUTED_LICENSE_FILES = Object.freeze({
   readme: 'README.txt',
   projectLicense: 'LICENSE.txt',
   notices: 'THIRD-PARTY-NOTICES.txt',
+  audioCaptureNotice: 'henji-audio-capture/NOTICE.txt',
+  audioCaptureLicense: 'henji-audio-capture/COPYING.GPLv3.txt',
+  portaudioLicense: 'henji-audio-capture/PortAudio-MIT.txt',
+  asioLicense: 'henji-audio-capture/ASIO-SDK-LICENSE.txt',
   ffmpegLicense: 'ffmpeg/COPYING.GPLv3.txt',
   ffmpegBuildInfo: 'ffmpeg/BUILD-INFO.txt',
   videoDecoderNotice: 'henji-video-decoder/NOTICE.txt',
 })
 /** 仅在 Windows 分发（原生解码服务与统一 FFmpeg 只在 Windows，重要记录 005/014）。 */
 const WINDOWS_ONLY_LICENSE_FILES = Object.freeze([
+  DISTRIBUTED_LICENSE_FILES.asioLicense,
   DISTRIBUTED_LICENSE_FILES.ffmpegLicense,
   DISTRIBUTED_LICENSE_FILES.ffmpegBuildInfo,
   DISTRIBUTED_LICENSE_FILES.videoDecoderNotice,
@@ -183,6 +188,8 @@ ${productName}（Henji-AI）以 Apache License 2.0 开源，全文见 LICENSE.tx
 THIRD-PARTY-NOTICES.txt 列出随本软件分发的第三方组件、版本、许可证与许可全文，
 与软件内“设置 → 关于 → 第三方组件”为同一份清单。Chromium 与 Node.js 的许可见安装目录下的
 LICENSES.chromium.html。
+独立录音程序 henji-audio-capture 按 GPL-3.0-only 分发；PortAudio 为 MIT，Windows ASIO SDK 选择 GPLv3。
+对应源码地址与构建说明见 henji-audio-capture/NOTICE.txt；安装包只带许可与地址，不带 SDK 或源码。
 `
   if (!windows) {
     return `${header}

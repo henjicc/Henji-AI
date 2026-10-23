@@ -19,6 +19,7 @@ import type { AssistantPlatform } from './assistant'
 import type { EmbeddedAgentPlatform } from '@/core/assistant/embeddedAgent'
 import type { ApplicationHostPlatform, McpPlatform } from '@/core/application-control/localHostContracts'
 import type { AudioEditPlatform } from './audioEdit'
+import type { AudioCapturePlatform } from './audioCapture'
 import type { VideoFramesPlatform } from './videoFrames'
 import type { VideoDecoderPlatform } from './videoDecoder'
 import type { DocumentsPlatform } from './documents'
@@ -60,6 +61,7 @@ export interface PlatformRuntime {
   assetLibrary: AssetLibraryPlatform
   assistant: AssistantPlatform
   audioEdit: AudioEditPlatform
+  audioCapture: AudioCapturePlatform
   videoFrames: VideoFramesPlatform
   videoDecoder: VideoDecoderPlatform
   documents: DocumentsPlatform
@@ -118,6 +120,7 @@ export * from './updater'
 export * from './assetLibrary'
 export * from './assistant'
 export * from './audioEdit'
+export * from './audioCapture'
 export * from './documents'
 export * from './workRoot'
 export * from './localModels'
