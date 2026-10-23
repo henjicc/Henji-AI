@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import Database from 'better-sqlite3'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -7,7 +7,8 @@ import { randomUUID } from 'node:crypto'
 import { Client } from '@modelcontextprotocol/client'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 
-if (!process.versions.electron) throw new Error('本测试必须由正式 Electron SQLite 原生运行器执行，不能跳过原生边界。')
+// 普通 Node 不具备 Electron SQLite ABI；CI 的原生运行器仍要求全部用例执行、零跳过。
+if (!process.versions.electron) process.stderr.write('[mediaResources.native] 跳过：需要 Electron SQLite 运行环境。请运行 npm run test:assistant-persistence -- electron/main/services/application-runtime/mediaResources.native.test.ts\n')
 const fixture = vi.hoisted(() => ({ root: '', db: undefined as Database.Database | undefined, canvas: null as unknown }))
 vi.mock('electron', () => ({ app: { getPath: (name: string) => path.join(fixture.root, name), isPackaged: false }, protocol: {} }))
 vi.mock('../db', async (importOriginal) => ({ ...await importOriginal<typeof import('../db')>(), getDb: () => {
@@ -28,6 +29,7 @@ import { ApplicationHostBridge } from './applicationHostBridge'
 import { LocalMcpServer } from '../mcp/server'
 import type { LocalHostRequest } from '../../../../src/core/application-control/localHostContracts'
 
+describe.skipIf(!process.versions.electron)('原生媒体资源', () => {
 let parent: string
 let file: string
 const bytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4])
@@ -98,4 +100,5 @@ it('真实SDK客户端读取媒体，缺少凭据和撤销连接后均不能读�
     connections.revoke(connection.id)
     await expect(client.callTool({ name: 'read_application_media', arguments: { ref: { kind: 'asset', id: 'asset-result' } } })).rejects.toThrow()
   } finally { await client.close(); await server.stop() }
+})
 })
