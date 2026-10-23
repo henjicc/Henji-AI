@@ -1089,6 +1089,23 @@
         "v1.json": "a7805d9c6403aaae63e5495dda5c1120cb642ad1f1cfde7ee1cc591efdb9452d",
         "v2.json": "516ec986cd15616c92c47af308c750e393932d22c7494a07de5dec5ac1c71952"
       }
+    },
+    "web-recording": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "cd1de847aec753adec2dfae551f582b1d3bfacd5f28c44861051a46f90ae9a08"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "f4aa42fab2560df78d4e618d95317f705e62e2b5f234a1fe8f55c89e8232e58b"
+      }
     }
   },
   "devBreaks": []

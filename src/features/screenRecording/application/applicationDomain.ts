@@ -13,6 +13,7 @@ import { captureOptionsSchema } from '@/core/screenRecording/capture'
 import { controlRecording, readRecordingDocument, recordingEvents, recordingView, recoverRecording, showRecordingDocument, startRecording } from './recordingService'
 import { importRecordingToVideo } from './recordingVideoImport'
 import { recordingRegistrations } from './recordingReflection'
+import { WEB_APP_CAPABILITY_IDS, executeWebAppCapability, webAppRecordingRegistrations } from './webAppRecording'
 import { recordingUnderstandingRegistration } from './recordingUnderstandingFields'
 import { RecordingUnderstandingMutation } from './recordingUnderstandingMutation'
 import { executeRecordingUnderstanding } from './recordingUnderstandingCapability'
@@ -28,7 +29,7 @@ import { generateSessionScript, replaySession, recordingReplayBusy } from './rec
 import { generateRecordingScriptCapability, replayRecordingCapability, rerecordRecordingCapability } from '@/core/application-control/domains/screenRecording/scriptCapability'
 
 export const screenRecordingApplicationDomain: ApplicationDomainModule = {
-  id: 'screen_recording', entities: () => [...recordingRegistrations(), recordingUnderstandingRegistration()],
+  id: 'screen_recording', entities: () => [...recordingRegistrations(), ...webAppRecordingRegistrations(), recordingUnderstandingRegistration()],
   registerExecutors(engine) { engine.registerMutationExecutor(new RecordingUnderstandingMutation()) },
   registerCapabilities(registrar) {
     registerDocumentOpener('screen_recording', async document => {
@@ -40,6 +41,7 @@ export const screenRecordingApplicationDomain: ApplicationDomainModule = {
     registerDocumentCoverProvider('screen_recording', read => { const first = recordingDocumentSchema.parse(read.content).media.find(media => media.kind === 'screen' && media.durationUs > 0); return first ? [{ source: first.path, sourceKind: 'video', atSeconds: 0 }] : null })
     for (const definition of RECORDING_CAPABILITIES) registrar.registerHandler(definition.id, async (input, context) => {
       context.signal.throwIfAborted()
+      if (WEB_APP_CAPABILITY_IDS.has(definition.id)) return executeWebAppCapability(definition.id, input, context)
       if (definition.id === redubRecordingCapability.id) {
         const parsed = redubRecordingCapability.inputSchema.parse(input)
         for (const permission of ['screen_recording:read', 'video_edit:write', 'generation:create', 'documents:write', ...(parsed.rerecord ? ['application:write', 'settings:write', 'navigation:write'] : [])]) if (context.callerGrant && !context.callerGrant.permissions.includes(permission)) throw new Error(`PERMISSION_DENIED:旁白补录需要 ${permission}。`)

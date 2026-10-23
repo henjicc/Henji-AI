@@ -16,6 +16,8 @@ import { RecordingSetupPanel } from './RecordingSetupPanel'
 import { RecordingLive } from './RecordingLive'
 import { RecordingDirectorGoal, RecordingDirectorScript } from './RecordingDirectorPanel'
 import { recordingTimeLabel } from './useRecordingControlSnapshot'
+import { WebAppRecordingActions, WebAppRecordingPanel } from './WebAppRecordingPanel'
+import { useWebAppRecording } from './useWebAppRecording'
 
 /**
  * The recording page only does two things: set up what to record, and show the recording while it runs.
@@ -31,7 +33,9 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
   const [sourceId, setSourceId] = useState(remembered.sourceId)
   const [region, setRegion] = useState<RecordingRegion>(remembered.region)
   const [setup, setSetup] = useState<RecordingSetup>(remembered.setup)
-  const [director, setDirector] = useState(false)
+  const [kind, setKind] = useState<'self' | 'director' | 'webapp'>('self')
+  const director = kind === 'director'
+  const webApp = useWebAppRecording()
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   useEffect(() => { saveRecordingSetup({ range: mode, sourceId, region, setup }) }, [mode, sourceId, region, setup])
@@ -86,8 +90,8 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
       <UiButton variant="primary" disabled={state.busy} disabledReason={t('recording.saving')} onClick={() => run(() => controlRecording(snapshot.sessionId, snapshot.phase === 'failed' ? 'cancel' : 'stop'))}><Square />{t('recording.stop')}</UiButton>
     </>
   } else if (!state.opening) {
-    center = <UiSegmented ariaLabel={t('recording.recordMode')} value={director ? 'director' : 'self'} onChange={value => setDirector(value === 'director')} options={[{ value: 'self', label: t('recording.mode_self') }, { value: 'director', label: t('recording.mode_director') }]} />
-    trailing = director ? null : <UiButton variant="primary" loading={state.busy} disabled={!sourceId} disabledReason={t('recording.selectSource')} onClick={() => run(begin)}><ICON_TOOL_SCREEN_RECORDING />{t('recording.start')}</UiButton>
+    center = <UiSegmented ariaLabel={t('recording.recordMode')} value={kind} onChange={setKind} options={[{ value: 'self', label: t('recording.mode_self') }, { value: 'director', label: t('recording.mode_director') }, { value: 'webapp', label: t('recording.mode_webapp') }]} />
+    trailing = director ? null : kind === 'webapp' ? <WebAppRecordingActions model={webApp} /> : <UiButton variant="primary" loading={state.busy} disabled={!sourceId} disabledReason={t('recording.selectSource')} onClick={() => run(begin)}><ICON_TOOL_SCREEN_RECORDING />{t('recording.start')}</UiButton>
   }
 
   return <div className="flex h-full min-h-0 flex-col" data-application-surface="tool.screen_recording" data-testid="screen-recording-page">
@@ -99,6 +103,7 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
       : snapshot ? <RecordingLive snapshot={snapshot} saving={state.busy} onMark={note => controlRecording(snapshot.sessionId, 'mark', note)} />
       : state.opening ? <div className="flex min-h-0 flex-1 items-center justify-center"><UiLoading message={t('recording.openingEditor')} /></div>
       : director ? <RecordingDirectorGoal />
+      : kind === 'webapp' ? <WebAppRecordingPanel model={webApp} />
       : <div className="flex min-h-0 flex-1">
         <RecordingSourcePicker sources={sources} loading={loading} mode={mode} sourceId={sourceId} region={region} onModeChange={changeMode} onSourceChange={setSourceId} onRegionChange={setRegion} onRefresh={() => run(refresh)} />
         <RecordingSetupPanel value={setup} devices={devices} destination={Boolean(state.destination)} onChange={patch => setSetup(value => ({ ...value, ...patch }))} />

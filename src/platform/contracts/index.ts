@@ -32,6 +32,7 @@ import type { TrackingPlatform } from './tracking'
 import type { VideoProxyPlatform } from './videoProxy'
 import type { MediaCachePlatform } from './mediaCache'
 import type { SceneDetectionPlatform } from './sceneDetection'
+import type { WebReplayPlatform } from './webReplay'
 import type { MusicAnalysisPlatform } from './musicAnalysis'
 import type { ScreenRecordingPlatform } from './screenRecording'
 
@@ -74,6 +75,7 @@ export interface PlatformRuntime {
   videoProxy: VideoProxyPlatform
   mediaCache: MediaCachePlatform
   sceneDetection: SceneDetectionPlatform
+  webReplay: WebReplayPlatform
   musicAnalysis: MusicAnalysisPlatform
 }
 

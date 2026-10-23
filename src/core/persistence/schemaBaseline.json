@@ -358,6 +358,12 @@
       "fingerprint": "0e60f6f34de0020992b2fedd630ccc44f159d9129215cc465e259a99237e1aae",
       "supportedFrom": 1,
       "minReaderVersion": 1
+    },
+    "web-recording": {
+      "version": 1,
+      "fingerprint": "cd1de847aec753adec2dfae551f582b1d3bfacd5f28c44861051a46f90ae9a08",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
     }
   },
   "devBreaks": []

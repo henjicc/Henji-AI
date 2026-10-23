@@ -8,6 +8,7 @@ import { detectRecordingPrivacyCapability } from './privacyCapability'
 import { exportRecordingProductCapability, cancelRecordingExportCapability } from './productCapability'
 import { recordingScriptCapabilities } from './scriptCapability'
 import { recordingDirectorCapabilities } from './directorCapability'
+import { WEB_APP_RECORDING_CAPABILITIES } from './webAppCapability'
 
 export const RECORDING_DOMAIN = 'screen_recording'
 export const recordingRefSchema = z.object({ kind: z.literal('screen_recording.session'), id: z.string().uuid() }).strict()
@@ -44,7 +45,7 @@ const controls = [
   ['cancel', '中止录制', '释放全部采集设备与输入钩子；已封存片段仍可从会话恢复，不删除原片。'],
   ['recover', '恢复中断的录制', '关闭采集后检查已落盘分片与事件页，恢复可播放片段；不重启设备、不重放操作。'],
 ] as const
-export const RECORDING_CAPABILITIES = [start, ...recordingDirectorCapabilities, ...recordingScriptCapabilities, understandRecordingCapability, generateRecordingMovieCapability, detectRecordingPrivacyCapability, exportRecordingProductCapability, cancelRecordingExportCapability, ...controls.map(([action, title, description]) => defineApplicationCapability({
+export const RECORDING_CAPABILITIES = [start, ...WEB_APP_RECORDING_CAPABILITIES, ...recordingDirectorCapabilities, ...recordingScriptCapabilities, understandRecordingCapability, generateRecordingMovieCapability, detectRecordingPrivacyCapability, exportRecordingProductCapability, cancelRecordingExportCapability, ...controls.map(([action, title, description]) => defineApplicationCapability({
   ...common, id: `${action}_screen_recording`, title, description, aliases: [title], acceptsRefs: ['screen_recording.session'], producesRefs: ['screen_recording.session'],
   inputSchema: z.object({ sessionRef: recordingRefSchema, ...(action === 'mark' ? { note: z.string().max(4000).optional() } : {}) }).strict(),
   resolveOperationTargets: input => [input.sessionRef],

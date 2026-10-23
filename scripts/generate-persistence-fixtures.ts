@@ -256,6 +256,13 @@ const values: Record<string, unknown> = {
   'canvas-layer-package': { format: 'henji-canvas-layer', version: CANVAS_LAYER_PACKAGE_VERSION, documentId: image.id, contentRevision: 0 },
   keystore: { version: 1, keys: {} },
   'media-grants': { version: 1, roots: [{ path: '/persistence-project', grantedAt: 1791504000000 }] },
+  'web-recording': {
+    version: 1, minReaderVersion: 1, id: '00000000-0000-4000-8000-0000000000a1', status: 'complete', createdAt: timestamp,
+    app: { name: '知多少', version: '0.1.0' }, probe: { version: '0.1.0', protocol: 1 }, host: 'tauri',
+    env: { url: 'http://tauri.localhost/', viewport: { width: 1280, height: 820, dpr: 1.5 }, colorScheme: 'light', reducedMotion: false, locale: 'zh-CN', timeZone: 'Asia/Shanghai', userAgent: 'golden' },
+    wallAtZeroMs: 1791504000000, durationUs: 15688200, clock: { monoAtZeroUs: 140618465380, uncertaintyUs: 223 }, fonts: ['Microsoft YaHei'],
+    warnings: [{ t: 7400, kind: 'boundary', message: 'xhr: GET /x' }],
+  },
   'llm-config': llmStoredConfigSchema.parse({ providers: [{ providerId: 'synthetic', displayName: '合成测试供应商', adapter: 'openai', enabled: false }], models: [], promptProfiles: [], textProcessingPromptTemplates: [], agentProfiles: [{ id: 'golden-agent', name: '测试助手', primary: { providerId: 'synthetic', modelId: 'test' }, settings: { timeoutMs: 60000, maxRetries: 0, maxOutputTokens: 4096, contextWindowBudget: 64000 }, verifications: [], createdAt: timestamp, updatedAt: timestamp }], tools: [], policy: { allowedTools: [], requireHumanConfirmation: true }, memory: { longTermNamespace: 'golden' } }),
   'mcp-connections': mcpConnectionStorageSchema.parse({ version: 2, connections: [{ id: '00000000-0000-4000-8000-000000000001', name: '合成测试连接', token: '0'.repeat(64), allowWrites: true, allowPaid: false, allowDestructive: false }] }),
   'document-envelope': buildDocumentEnvelope({ kind: 'canvas', kindVersion: 1, id: 'golden-envelope', name: '外壳样本', createdAt: timestamp, updatedAt: timestamp, revision: 0, draft: false, content: { nodes: [], edges: [] } }),
