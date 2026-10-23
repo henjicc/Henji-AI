@@ -1,10 +1,35 @@
 import { afterEach, expect, it, vi } from 'vitest'
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { encodeRecordingWav } from '../../../../src/core/audioEdit/recordingAudio'
+import { videoEditRecordingGainDb } from '../../../../src/core/videoEdit/loudness'
 
 // 真实 FFmpeg 子进程：CI 冷启动首个用例常超过默认 5 秒，给集成测试留足时间。
 vi.setConfig({ testTimeout: 30_000 })
-import { AudioLoudnessSession } from './loudness'
+import { AudioLoudnessSession, measureAudioFileLoudness } from './loudness'
 
 const sessions: AudioLoudnessSession[] = []
+it.each([44100, 48000])('%i Hz 文件区间测量不包含相邻声音，增益后达到录后目标且原采样未改写', async rate => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-loudness-range-'))
+  try {
+    const file = path.join(directory, 'take.wav'), signal = new AbortController().signal
+    const samples = Float32Array.from({ length: rate * 6 }, (_, frame) => 10 ** ((frame >= rate * 2 && frame < rate * 4 ? -36 : -6) / 20) * Math.sin(frame * 2 * Math.PI * 1000 / rate))
+    const bytes = encodeRecordingWav(samples, rate)
+    await fs.writeFile(file, bytes)
+    const measured = await measureAudioFileLoudness(file, rate * 2, rate * 2, rate, signal)
+    expect(measured.integratedLufs).toBeCloseTo(-39, 0)
+    expect(measured.durationSeconds).toBe(2)
+    expect(await fs.readFile(file)).toEqual(Buffer.from(bytes))
+    const gainDb = videoEditRecordingGainDb(0, measured)
+    const gained = samples.slice(rate * 2, rate * 4).map(value => value * 10 ** (gainDb / 20))
+    const rendered = path.join(directory, 'rendered.wav')
+    await fs.writeFile(rendered, encodeRecordingWav(gained, rate))
+    const actual = await measureAudioFileLoudness(rendered, 0, gained.length, rate, signal)
+    expect(Math.abs(actual.integratedLufs! + 16)).toBeLessThanOrEqual(.5)
+    expect(actual.truePeakDbtp!).toBeLessThanOrEqual(-1)
+  } finally { await fs.rm(directory, { recursive: true, force: true }) }
+})
 afterEach(async () => { await Promise.all(sessions.splice(0).map(session => session.close())) })
 async function signal(rate = 48000, seconds = 4, level = -23, frequency = 1000, phase = 0, quietAfter = false): Promise<AudioLoudnessSession> {
   const session = new AudioLoudnessSession(rate, 2); sessions.push(session); await session.initialize()

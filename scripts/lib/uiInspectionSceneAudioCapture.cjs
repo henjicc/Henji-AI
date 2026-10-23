@@ -1,6 +1,8 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
+const { execFileSync } = require('node:child_process')
+const { ffmpegPath } = require('./mediaBinaries.cjs')
 const { readAudioEditDocument, waitForAudioEditContent } = require('./audioEditDocumentFixture.cjs')
 
 /** 真实默认输入设备；草稿与恢复登记只写 Reality 隔离资料目录。 */
@@ -69,6 +71,13 @@ function createAudioCaptureScene({ setupToolbox, clickNamedButton }) {
       const first = await saved(content => content.source?.durationFrames > 0)
       const rate = first.source.sampleRate
       assert.ok(first.source.durationFrames / rate >= 3)
+      const assertRecordingGain = (content, start, frames) => {
+        const gains = (content.gainRegions ?? []).filter(region => region.startFrame === start && region.endFrame === start + frames)
+        // 真实设备可能静音或刚好无需补偿；有增益时必须只作用于本次录音区间。
+        assert(gains.length <= 1 && gains.every(region => region.enabled && region.gainDb >= -96 && region.gainDb <= 30 && region.fadeInFrames === 0 && region.fadeOutFrames === 0), '录后增益区间或上限不正确')
+        return gains
+      }
+      const firstGains = assertRecordingGain(first, 0, first.source.durationFrames)
       await wave().waitFor({ timeout: 30000 })
       await select(0, rate / 2)
       await page.keyboard.press('Delete')
@@ -87,7 +96,8 @@ function createAudioCaptureScene({ setupToolbox, clickNamedButton }) {
       assert.ok(added / rate >= 2 && added / rate < 3.5, '继续录音约两秒')
       assert.deepEqual(second.cuts, edited.cuts)
       assert.ok(resumeAt > 0 && resumeAt < first.source.durationFrames)
-      const evidence = { firstSeconds: first.source.durationFrames / rate, addedSeconds: added / rate, deletedSeconds: removed / rate, finalSeconds: (second.source.durationFrames - removed) / rate, audit: await page.evaluate(() => window.__captureAudit) }
+      const secondGains = assertRecordingGain(second, resumeAt, added)
+      const evidence = { firstSeconds: first.source.durationFrames / rate, addedSeconds: added / rate, deletedSeconds: removed / rate, finalSeconds: (second.source.durationFrames - removed) / rate, firstGains, secondGains, audit: await page.evaluate(() => window.__captureAudit) }
       assert.ok(evidence.audit.levels > 0 && evidence.audit.samples > 0)
       const peaks = await page.evaluate(async id => {
         const read = await window.henjiNative.documents.readDocument({ id })
@@ -121,7 +131,8 @@ function createAudioCaptureScene({ setupToolbox, clickNamedButton }) {
       const replaced = await saved(content => content.source.sourcePath !== inserted.source.sourcePath)
       assert.equal(replaced.source.durationFrames, inserted.source.durationFrames, '选区末尾自动停止并等长覆盖')
       await page.keyboard.press('Control+z')
-      await saved(content => content.source.sourcePath === inserted.source.sourcePath)
+      const undone = await saved(content => content.source.sourcePath === inserted.source.sourcePath)
+      assert.deepEqual(undone.gainRegions, inserted.gainRegions, '撤销覆盖录音未同时恢复原增益区域')
       await settled()
       await capture('audio-capture-replace-undo')
 
@@ -143,6 +154,46 @@ function createAudioCaptureScene({ setupToolbox, clickNamedButton }) {
       assert.equal((await page.evaluate(() => window.henjiNative.audioCapture.pendingFiles())).length, 0)
       await settled()
       await capture('audio-capture-recovered')
+
+      // 物理麦克风可能低于响度门限；已知电平的恢复录音补证非零增益的真实落盘与撤销。
+      const baseline = await readAudioEditDocument(page, id)
+      const controlled = await page.evaluate(async id => {
+        const read = await window.henjiNative.documents.readDocument({ id })
+        const startFrame = read.content.source.durationFrames
+        const file = await window.henjiNative.audioCapture.prepareFile({ projectId: id, startFrame, endFrame: startFrame, revision: read.meta.revision, spliceId: crypto.randomUUID() })
+        const status = await window.henjiNative.audioCapture.start({ outputPath: file.outputPath, streamSamples: false })
+        return { ...file, sessionId: status.sessionId }
+      }, id)
+      await page.waitForTimeout(300)
+      await page.evaluate(sessionId => window.henjiNative.audioCapture.stop(sessionId), controlled.sessionId)
+      // 保留原生录音服务创建的容器，只替换测试采样；恢复器按物理长度修复未更新的头部。
+      const original = fs.readFileSync(controlled.outputPath)
+      let formatOffset, dataOffset
+      for (let offset = 12; offset + 8 <= original.length; offset += 8 + original.readUInt32LE(offset + 4) + original.readUInt32LE(offset + 4) % 2) {
+        const chunk = original.toString('ascii', offset, offset + 4)
+        if (chunk === 'fmt ') formatOffset = offset + 8
+        if (chunk === 'data') { dataOffset = offset + 8; break }
+      }
+      assert(formatOffset && dataOffset, '原生录音没有完整 WAV 头部')
+      const captureRate = original.readUInt32LE(formatOffset + 4), channels = original.readUInt16LE(formatOffset + 2), bits = original.readUInt16LE(formatOffset + 14)
+      const format = bits === 32 ? 'f32le' : bits === 24 ? 's24le' : 's16le'
+      const pcm = execFileSync(ffmpegPath, ['-v', 'error', '-f', 'lavfi', '-i', `sine=frequency=1000:sample_rate=${captureRate}:duration=2`, '-af', 'volume=0.125', '-ac', String(channels), '-f', format, 'pipe:1'], { windowsHide: true, maxBuffer: 8 * 1024 * 1024 })
+      fs.writeFileSync(controlled.outputPath, Buffer.concat([original.subarray(0, dataOffset), pcm]))
+      await page.reload()
+      await home()
+      await page.getByRole('button', { name: '拼回原位置', exact: true }).click()
+      const matched = await saved(content => content.source.durationFrames === baseline.content.source.durationFrames + rate * 2)
+      const matchedGains = assertRecordingGain(matched, baseline.content.source.durationFrames, rate * 2)
+      assert.equal(matchedGains.length, 1, '已知轻声录音没有获得增益区域')
+      assert(matchedGains[0].gainDb > 15 && matchedGains[0].gainDb < 25, '已知轻声录音未匹配到目标响度')
+      assert.deepEqual(matched.gainRegions.filter(region => region.id !== matchedGains[0].id), baseline.content.gainRegions, '匹配录音改动了已有声音的增益')
+      evidence.controlledGain = matchedGains[0]
+      await settled()
+      await capture('audio-capture-matched')
+      // 恢复后焦点仍在已卸载的首页按钮，用正式工具栏撤销，不依赖编辑器键盘焦点。
+      await page.getByRole('button', { name: '撤销；长按撤销所有修改', exact: true }).click()
+      const matchedUndone = await saved(content => content.source.sourcePath === baseline.content.source.sourcePath)
+      assert.deepEqual(matchedUndone.gainRegions, baseline.content.gainRegions, '撤销录音未同时移除自动增益')
       fs.mkdirSync(path.resolve('.ui-tour'), { recursive: true })
       fs.writeFileSync(path.resolve('.ui-tour/audio-capture-evidence.json'), JSON.stringify(evidence, null, 2))
     },
