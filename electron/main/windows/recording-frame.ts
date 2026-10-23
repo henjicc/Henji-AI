@@ -10,6 +10,22 @@ import { resolveSecondaryWindowLaunchQuery } from '../development-launch'
 const FOLLOW_INTERVAL_MS = 250
 /** Sources smaller than this are minimized or collapsed; hide the frame instead of drawing a dot. */
 const MIN_VISIBLE_SIZE = 48
+/** 与 RecordingFrame 的 border-4 一致。 */
+const BORDER = 4
+type FramePhase = 'countdown' | 'recording' | 'paused' | string | undefined
+
+/**
+ * 窗口只保留真正画出来的部分：四条边框，倒计时加中间数字，暂停加顶部标签；其余区域不属于窗口，鼠标直接穿过。
+ * 不能用 setIgnoreMouseEvents 做穿透：它给窗口加 WS_EX_TRANSPARENT，Windows 的“不被采集”保护随之失效，
+ * 高亮框会被录进画面（2026-10-23 实测：同样设置下只有穿透窗口被 WGC 采到，且 isContentProtected 仍返回 true）。
+ */
+export function recordingFrameShape(width: number, height: number, phase: FramePhase): Electron.Rectangle[] {
+  const w = Math.max(1, Math.round(width)), h = Math.max(1, Math.round(height)), b = Math.min(BORDER, w, h)
+  const rects: Electron.Rectangle[] = [{ x: 0, y: 0, width: w, height: b }, { x: 0, y: h - b, width: w, height: b }, { x: 0, y: 0, width: b, height: h }, { x: w - b, y: 0, width: b, height: h }]
+  if (phase === 'countdown') { const cw = Math.min(w, 220), ch = Math.min(h, 140); rects.push({ x: Math.round((w - cw) / 2), y: Math.round((h - ch) / 2), width: cw, height: ch }) }
+  if (phase === 'paused') { const lw = Math.min(w, 200); rects.push({ x: Math.round((w - lw) / 2), y: 0, width: lw, height: Math.min(h, 32) }) }
+  return rects
+}
 
 /**
  * Only systems that drop protected windows from every capture path may show the frame.
@@ -21,7 +37,7 @@ export function recordingFrameSupported(platform: NodeJS.Platform = process.plat
 }
 
 /** Click-through highlight around the recorded area; follows window sources as they move. */
-export function createRecordingFrameWindow(bounds: () => CaptureRect | undefined): BrowserWindow | null {
+export function createRecordingFrameWindow(bounds: () => CaptureRect | undefined, phase: () => FramePhase = () => 'recording'): BrowserWindow | null {
   if (!recordingFrameSupported()) return null
   const initial = bounds()
   if (!initial) return null
@@ -35,7 +51,13 @@ export function createRecordingFrameWindow(bounds: () => CaptureRect | undefined
   win.setContentProtection(true)
   const unprotectSource = mediaPermissions.protectSource(win.getMediaSourceId())
   win.once('closed', unprotectSource)
-  win.setIgnoreMouseEvents(true)
+  let shape = ''
+  const applyShape = (size: { width: number; height: number }): void => {
+    const current = phase(), key = `${size.width}x${size.height}:${current}`
+    if (key === shape) return
+    shape = key; win.setShape(recordingFrameShape(size.width, size.height, current))
+  }
+  applyShape(rounded(initial))
   win.setAlwaysOnTop(true, 'screen-saver')
   installRendererNavigationGuards(win.webContents, 'recording-frame')
   let last = rounded(initial)
@@ -53,6 +75,7 @@ export function createRecordingFrameWindow(bounds: () => CaptureRect | undefined
     if (!next || next.width < MIN_VISIBLE_SIZE || next.height < MIN_VISIBLE_SIZE) { if (win.isVisible()) win.hide(); return }
     const target = rounded(next)
     if (target.x !== last.x || target.y !== last.y || target.width !== last.width || target.height !== last.height) { win.setBounds(target); last = target }
+    applyShape(target)
     if (!win.isVisible() || !win.isContentProtected()) show()
   }, FOLLOW_INTERVAL_MS)
   follow.unref?.()

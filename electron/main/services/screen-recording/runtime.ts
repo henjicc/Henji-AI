@@ -86,7 +86,7 @@ export function openRecordingControl(ownerContents: WebContents, sessionId: stri
   } catch (error) { void closeRecordingControl().catch(failure => logger.error('录制控制清理失败', { event: 'recording.control.cleanup.failed', error: failure })); throw error }
   if (frameBounds) {
     // A missing frame is only a lost visual cue; recording continues without it.
-    try { frameWindow = createRecordingFrameWindow(frameBounds) } catch (error) { logger.warn('录制范围提示创建失败', { event: 'recording.frame.create.failed', error }) }
+    try { frameWindow = createRecordingFrameWindow(frameBounds, () => recordingControl.snapshot()?.phase) } catch (error) { logger.warn('录制范围提示创建失败', { event: 'recording.frame.create.failed', error }) }
   }
   if (!watched.has(ownerContents)) {
     watched.add(ownerContents)
