@@ -53,6 +53,13 @@ import { openVideoEditClipSource, videoEditClipSource, videoEditEmbedHost } from
 import { executeVideoEditTimelineEdit } from './videoEditTimeline'
 import { videoEditPickRelations } from '@/core/videoEdit/timelineSelection'
 import { splitVideoEditRef } from './videoEditReflection'
+
+/**
+ * 不属于某份剪辑的 video_edit.* 实体：源素材预览、风格库与模板库、各类预设、内置效果目录、风格使用者偏好。
+ * 写它们不经剪辑文件保存；只有其余实体（引用形如“剪辑ID:子ID”）才按所属剪辑登记持久化参与者。
+ */
+const VIDEO_EDIT_LIBRARY_KINDS: ReadonlySet<string> = new Set(['video_edit.source', 'video_edit.export_preset', 'video_edit.text_preset', 'video_edit.template', 'video_edit.style', 'video_edit.style_preference', 'video_edit.preset', 'video_edit.effect_preset', 'video_edit.subtitle_preset', 'video_edit.builtin_effect'])
+const isVideoEditDocumentKind = (kind: string): boolean => kind.startsWith('video_edit.') && !VIDEO_EDIT_LIBRARY_KINDS.has(kind)
 import { VIDEO_EDIT_APPLICATION_CAPABILITIES, collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability, openVideoEditClipSourceCapability, trimVideoEditClipCapability } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
 import { trimVideoEditClip } from './videoEditTrimCapability'
 import { handleVideoEditExportCapability } from './videoEditExportCapability'
@@ -343,7 +350,8 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     }))
   },
   resolvePersistenceParticipants(steps) {
-    const ids = new Set(steps.flatMap(step => step.kind === 'mutation' && step.target.kind.startsWith('video_edit.') && !['video_edit.source', 'video_edit.export_preset', 'video_edit.text_preset', 'video_edit.template', 'video_edit.style', 'video_edit.preset'].includes(step.target.kind) ? [splitVideoEditRef(step.target).projectId] : step.kind === 'collection' && !['video_edit.export_preset', 'video_edit.template', 'video_edit.text_preset', 'video_edit.style'].includes(step.entityType) && step.parent.kind.startsWith('video_edit.') ? [splitVideoEditRef(step.parent).projectId] : []))
+    const ids = new Set(steps.flatMap(step => step.kind === 'mutation' && isVideoEditDocumentKind(step.target.kind) ? [splitVideoEditRef(step.target).projectId]
+      : step.kind === 'collection' && !VIDEO_EDIT_LIBRARY_KINDS.has(step.entityType) && isVideoEditDocumentKind(step.parent.kind) ? [splitVideoEditRef(step.parent).projectId] : []))
     return [...ids].map(id => {
       const owner = requireVideoEditInstance(id)
       const existing = persistenceOwners.get(owner)
