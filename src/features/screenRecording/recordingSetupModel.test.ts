@@ -9,7 +9,7 @@ function memory(): Storage {
 describe('录制设置记忆', () => {
   it('旧版偏好升级备份但不改写原件，新参数使用默认', () => {
     const storage = memory(), { name: _name, ...setup } = DEFAULT_RECORDING_SETUP
-    const raw = JSON.stringify({ version: 1, content: { range: 'screen', sourceId: '', region: { x: 0, y: 0, width: 1, height: 1 }, ...setup } })
+    const raw = JSON.stringify({ version: 1, content: { range: 'screen', sourceId: '', region: { x: 0, y: 0, width: 1, height: 1 }, ...setup, microphoneId: 'obsolete-browser-id' } })
     storage.setItem('henji-recording-setup', raw)
     expect(loadRecordingSetup(storage).setup).toEqual(DEFAULT_RECORDING_SETUP)
     expect(storage.getItem('henji-recording-setup')).toBe(raw)

@@ -156,10 +156,10 @@
       "minReaderVersion": 1
     },
     "document.screen_recording": {
-      "version": 24,
-      "fingerprint": "f24f80ba95bb8eb6cf222a27f228f8618fd08743315555ed6f12292c52e0743d",
+      "version": 25,
+      "fingerprint": "dfc19bc244da303fc3e1dcb730e6cf1daa4358000a97cece13352dd13f8f7a67",
       "supportedFrom": 19,
-      "minReaderVersion": 23
+      "minReaderVersion": 25
     },
     "project": {
       "version": 1,
@@ -270,10 +270,10 @@
       "minReaderVersion": 1
     },
     "recording-setup": {
-      "version": 2,
-      "fingerprint": "a4970530b9e2157e27dcfbd9719feb2b8d10ba47fa9f6130938f793de49548a2",
+      "version": 3,
+      "fingerprint": "c6dbba8cb11984d672af4236375e001f68af7b71c3d9cead3284bd047ad5ba0f",
       "supportedFrom": 1,
-      "minReaderVersion": 1
+      "minReaderVersion": 3
     },
     "model-defaults": {
       "version": 2,

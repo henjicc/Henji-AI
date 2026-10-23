@@ -4,7 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const sharp = require('sharp')
 const { fixture } = require('./uiInspectionSceneVideoEditMotionDraft.cjs')
-const { seedVideoEditProject, openVideoEditProjectCard } = require('./uiInspectionVideoEditDocuments.cjs')
+const { seedVideoEditProject, openVideoEditProjectCard, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 const { createPlaybackFixture, seedCameraStageDocument } = require('./uiInspectionCameraStagePlayback.cjs')
 
 const button = (page, name) => page.getByRole('button', { name, exact: true })
@@ -12,7 +12,7 @@ const button = (page, name) => page.getByRole('button', { name, exact: true })
 /** 仅核对面板布局；真实文档与本地动作整理，不调用模型、不跑性能或付费链路。 */
 function createSuperKeyframePanelScenes(context) {
   return [
-    { id: 'super-keyframe-panel-motion', surface: '剪辑', name: '超级关键帧面板-idle录制候选', writesUserData: true,
+    { id: 'super-keyframe-panel-motion', surface: '剪辑', name: '超级关键帧-原生录音与动作时钟', writesUserData: true,
       setup: async (page, _app, { capture }) => {
         const root = path.resolve('.tmp/u4-super-keyframe'); fs.mkdirSync(root, { recursive: true })
         const source = path.join(root, 'source.png')
@@ -27,19 +27,18 @@ function createSuperKeyframePanelScenes(context) {
         }, { source, projectId: seeded.projectId, id: seeded.documentId })
         await openVideoEditProjectCard(page, seeded.projectId)
         await page.locator('[data-video-edit-clip="motion-clip"] [aria-label^="选择片段"]').click()
-        const controls = page.locator('[data-creative-intent-controls]')
-        const toggle = () => page.getByRole('button', { name: /^(超级关键帧|正在示范)$/ })
-        const open = async () => { if (!await controls.isVisible()) await toggle().click(); await controls.waitFor({ state: 'visible' }) }
-        const close = async () => { if (await controls.isVisible()) await toggle().click(); await controls.waitFor({ state: 'hidden' }) }
+        const microphone = page.getByRole('switch', { name: '麦克风', exact: true })
+        const open = async () => { if (!await microphone.isVisible()) await button(page, '超级关键帧').click(); await microphone.waitFor() }
+        const close = async () => { await page.keyboard.press('Escape'); await microphone.waitFor({ state: 'hidden' }) }
         await open()
-        assert(await page.getByLabel('使用标注', { exact: true }).isDisabled())
-        assert.equal(await controls.getByRole('radio', { name: '分时摆放' }).getAttribute('aria-checked'), 'true')
+        if (await microphone.getAttribute('aria-checked') !== 'true') await microphone.click()
+        await page.getByRole('button', { name: /录音设置/ }).click()
+        await page.locator('[data-audio-capture-settings]').waitFor()
+        await context.settlePage(page, 300); await capture('native-settings')
+        await page.keyboard.press('Escape')
         await context.settlePage(page, 300); await capture('idle')
-        await controls.getByRole('radio', { name: '录制轨迹' }).click()
-        await page.getByLabel('录制速度', { exact: true }).waitFor({ state: 'visible' })
-        await context.settlePage(page, 300); await capture('record-selected')
-        await controls.getByRole('radio', { name: '分时摆放' }).click()
-        await button(page, '开始示范').click(); await close()
+        await button(page, '开始录制').click(); await button(page, '暂停').waitFor(); await close()
+        await page.waitForTimeout(1800)
         const drag = async (dx, dy) => {
           const box = await page.locator('[data-video-edit-program-display]').boundingBox(); assert(box)
           const x = box.x + box.width * .5, y = box.y + box.height * .5
@@ -50,12 +49,24 @@ function createSuperKeyframePanelScenes(context) {
         await drag(-.1, -.05)
         const ruler = page.getByRole('slider', { name: '剪辑时间定位', exact: true })
         await ruler.focus(); for (let frame = 0; frame < 30; frame++) await ruler.press('ArrowRight')
-        await drag(.1, .05); await open(); await button(page, '结束示范').click()
-        await button(page, '整理').click()
-        await button(page, '应用').waitFor({ state: 'visible', timeout: 30000 })
-        await context.settlePage(page, 300); await capture('candidates-top')
-        await button(page, '应用').scrollIntoViewIfNeeded()
-        await context.settlePage(page, 300); await capture('candidates-bottom')
+        await drag(.1, .05); await page.waitForTimeout(500); await open(); await button(page, '暂停').click()
+        await button(page, '继续录制').waitFor(); await page.waitForTimeout(700)
+        await button(page, '继续录制').click(); await button(page, '暂停').waitFor(); await close()
+        await page.waitForTimeout(1200); await drag(-.05, .04); await page.waitForTimeout(500)
+        await open(); await button(page, '暂停').click(); await button(page, '继续录制').waitFor()
+        await context.settlePage(page, 300); await capture('native-audio-paused')
+        let document
+        for (let i = 0; i < 100; i++) { document = readVideoEditFile(seeded.file); if (document.creativeIntents?.sessions[0]?.state === 'paused' && document.creativeIntents.sessions[0].pages.filter(ref => ref.kind === 'audio').length >= 2) break; await page.waitForTimeout(100) }
+        const session = document.creativeIntents?.sessions[0], draft = document.creativeIntents?.drafts[0]
+        assert(session && draft, '动作与讲解原稿必须保存')
+        const events = session.pages.flatMap(ref => JSON.parse(fs.readFileSync(document.creativeIntents.resources.find(value => value.resourceId === ref.resourceId).path, 'utf8')).entries)
+        const audio = events.filter(event => event.kind === 'audio').sort((a, b) => a.monoSpanUs[0] - b.monoSpanUs[0])
+        const pointers = events.filter(event => event.kind === 'pointer' && event.phase === 'down' && event.compositionPoint)
+        const gapUs = audio.length >= 2 ? audio[1].monoSpanUs[0] - audio[0].monoSpanUs[1] : 0
+        const evidence = { audio, pointers, takes: draft.takes, clockSegments: session.clockSegments, gapUs, device: 'native effective recording settings', transcription: 'not requested; paused before paid ASR' }
+        fs.writeFileSync(path.join(root, 'native-alignment.json'), JSON.stringify(evidence, null, 2))
+        assert(audio.length >= 2 && gapUs >= 600000, '原生音频必须保留暂停的真实空隙')
+        assert(pointers.length >= 2 && pointers.every(point => audio.some(block => point.monoUs >= block.monoSpanUs[0] - block.uncertaintyUs && point.monoUs <= block.monoSpanUs[1] + block.uncertaintyUs)), '画面指向必须落在同一单调时钟的音频块内')
       } },
     { id: 'super-keyframe-panel-camera', surface: '镜头参考', name: '超级关键帧面板-镜头参考', writesUserData: true,
       setup: async (page, _app, { capture }) => {

@@ -13,7 +13,7 @@ vi.mock('./application/recordingService', () => ({ recordingView: () => fixture.
 vi.mock('@/platform', () => ({ getPlatform: () => ({ screenRecording: { sources: async () => [
   { id: 'screen:1:0', name: '屏幕 1', kind: 'screen', thumbnailUrl: 'data:image/png;base64,AA==' },
   { id: 'window:2:0', name: '很长的窗口标题 · 痕迹AI', kind: 'window', thumbnailUrl: 'data:image/png;base64,AA==' },
-] } }) }))
+] , capture: async () => ['auto', 'software'] } }) }))
 vi.mock('./RecordingDirectorPanel', () => ({ RecordingDirectorGoal: () => <div />, RecordingDirectorScript: () => <div /> }))
 vi.mock('./tracks/devices', () => ({ recordingDevices: async () => [] }))
 vi.mock('@/features/navigation', () => ({ openApplicationSurface: vi.fn() }))
@@ -42,10 +42,10 @@ it('先选录制范围：屏幕按位置排布、窗口单独成网格，设置�
   expect(title.classList.contains('truncate')).toBe(true)
   const mic = screen.getByRole('switch', { name: '麦克风' })
   expect(mic.closest('[data-ui-form-row]')?.getAttribute('data-ui-form-row')).toBe('panel')
-  expect(mic.closest('[data-ui-form-row]')?.getAttribute('data-label-width')).toBe('72')
-  expect(screen.getByLabelText('麦克风设备')).toBeTruthy()
+  expect(mic.closest('[data-ui-form-row]')?.getAttribute('data-label-width')).toBe('96')
+  expect(screen.getByRole('button', { name: /录音设置/ })).toBeTruthy()
   fireEvent.click(mic)
-  expect(screen.queryByLabelText('麦克风设备')).toBeNull()
+  expect(screen.queryByRole('button', { name: /录音设置/ })).toBeNull()
   expect(screen.queryByLabelText('摄像头设备')).toBeNull()
   fireEvent.click(screen.getByRole('switch', { name: '摄像头' }))
   expect(screen.getByLabelText('摄像头设备')).toBeTruthy()

@@ -29,7 +29,7 @@ export function createTrackOutput(kind: RecordingTrackKind, directory: string, f
     try { previous.audio?.close(); previous.video?.close(); await previous.output.finalize(); await sealed(previous.segment) }
     catch (error) { await previous.output.cancel(); throw error }
   }
-  const open = async (monoUs: number, sampleRate?: number, channels?: number, width?: number, height?: number): Promise<NonNullable<typeof active>> => {
+  const open = async (monoUs: number, sampleRate?: number, channels?: number, width?: number, height?: number, bitDepth: 16 | 24 | 32 = 16): Promise<NonNullable<typeof active>> => {
     let videoOptions: VideoEncodingConfig | undefined
     if (kind === 'camera') {
       const settings = { codec: 'avc' as const, width: width!, height: height!, fps: frameRate, videoBitrateMbps: 4, bitrateMode: 'vbr' as const, encoderPreference: 'hardware' as 'hardware' | 'software', keyframeInterval: 2 as const }
@@ -49,7 +49,7 @@ export function createTrackOutput(kind: RecordingTrackKind, directory: string, f
     const current: NonNullable<typeof active> = { output, segment }
     if (videoOptions) {
       current.video = new VideoSampleSource({ ...videoOptions, latencyMode: 'realtime' }); output.addVideoTrack(current.video)
-    } else { current.audio = new AudioSampleSource({ codec: 'pcm-s16' }); output.addAudioTrack(current.audio) }
+    } else { current.audio = new AudioSampleSource({ codec: bitDepth === 32 ? 'pcm-f32' : bitDepth === 24 ? 'pcm-s24' : 'pcm-s16' }); output.addAudioTrack(current.audio) }
     active = current
     try { await output.start() } catch (error) { active = undefined; await output.cancel(); throw error }
     return current
@@ -59,7 +59,7 @@ export function createTrackOutput(kind: RecordingTrackKind, directory: string, f
       const channels = block.channels ?? 1
       const frames = block.samples.length / channels
       if (active && (block.monoStartUs - active.segment.monoSpanUs[0] >= RECORDING_SEGMENT_US || active.segment.sampleRate !== block.sampleRate || active.segment.channels !== channels)) await close(block.monoStartUs)
-      const current = active ?? await open(block.monoStartUs, block.sampleRate, channels)
+      const current = active ?? await open(block.monoStartUs, block.sampleRate, channels, undefined, undefined, block.bitDepth)
       const segment = current.segment
       if (!segment.units) {
         segment.anchors.push(anchor(block.monoStartUs, block.uncertaintyUs, segment))

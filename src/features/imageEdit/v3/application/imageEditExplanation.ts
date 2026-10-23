@@ -11,7 +11,7 @@ import { clockEventIssue } from '@/core/creativeIntent/contracts'
 import { alignRecordingTranscript } from '@/core/creativeIntent/recordingAlignment'
 import { resolveDeixis, confirmedExplanationBinding, pickedExplanationBinding, type DeicticMention, type ExplanationBinding } from '@/core/creativeIntent/deixis'
 import { buildIntentDifferencePlan, type ReviewedIntentGoal } from '@/core/creativeIntent/intentPlan'
-import { RecordingCollector, captureMicrophone, type CapturedAudioBlock, type MicrophoneCapture } from '@/features/creativeIntent'
+import { RecordingCollector, captureMicrophone, monoCapturedAudioBlock, type CapturedAudioBlock, type MicrophoneCapture } from '@/features/creativeIntent'
 import { getPlatform } from '@/platform/runtime'
 import type { ImageEditCommandBusV3 } from './imageEditCommandBus'
 import { imageLayoutDigest, storeImageLayoutResource, readImageLayoutResource, releaseImageLayoutResources } from './imageEditLayoutResources'
@@ -149,18 +149,16 @@ export class ImageEditExplanation {
   }
   private async openMicrophone(): Promise<void> {
     const collector = this.require()
-    await this.ports.audio.microphone(true, collector.session.consent!.userReceiptRef)
-    try {
-      this.microphone = await this.ports.microphone(this.origin, block => {
-        if (this.disposed || this.collector !== collector || this.erasedSessionId === collector.session.id) return
-        if (this.lastBlock && (this.lastBlock.firstFrame + this.lastBlock.samples.length !== block.firstFrame || this.lastBlock.sampleRate !== block.sampleRate)) {
-          this.sealAudio(); this.publish({ message: '音频出现缺口，录制已暂停；请检查设备后继续。' }); void this.pause().catch(() => {})
-        }
-        this.lastBlock = block; this.partial.push(block); this.samples += block.samples.length
-        if (this.samples >= block.sampleRate * 10) this.sealAudio()
-      }, message => { this.publish({ message }); void this.pause().catch(() => {}) }, this.controller.signal)
-      this.assert(collector)
-    } catch (error) { await this.ports.audio.microphone(false, collector.session.consent!.userReceiptRef); throw error }
+    this.microphone = await this.ports.microphone(this.origin, captured => {
+      const block = monoCapturedAudioBlock(captured)
+      if (this.disposed || this.collector !== collector || this.erasedSessionId === collector.session.id) return
+      if (this.lastBlock && (this.lastBlock.firstFrame + this.lastBlock.samples.length !== block.firstFrame || this.lastBlock.sampleRate !== block.sampleRate)) {
+        this.sealAudio(); this.publish({ message: '音频出现缺口，录制已暂停；请检查设备后继续。' }); void this.pause().catch(() => {})
+      }
+      this.lastBlock = block; this.partial.push(block); this.samples += block.samples.length
+      if (this.samples >= block.sampleRate * 10) this.sealAudio()
+    }, message => { this.publish({ message }); void this.pause().catch(() => {}) }, this.controller.signal)
+    this.assert(collector)
   }
   private sealAudio(): void {
     if (!this.samples) return
@@ -182,7 +180,6 @@ export class ImageEditExplanation {
     this.publish({ busy: true })
     this.ending = (async () => {
       await this.microphone?.stop(); this.microphone = undefined
-      await this.ports.audio.microphone(false, this.require().session.consent!.userReceiptRef)
       this.sealAudio(); this.require().pause(this.now(), focus); await this.save()
     })()
     try { await this.ending } finally { this.ending = undefined; this.publish({ busy: false }) }
@@ -512,7 +509,7 @@ export class ImageEditExplanation {
     this.controller.abort(); clearInterval(this.timer)
     await this.microphone?.stop(); this.microphone = undefined
     const collector = this.collector
-    if (collector) { await this.ports.audio.microphone(false, collector.session.consent!.userReceiptRef); await this.ports.audio.cancel(collector.session.id); await this.writer; await this.ports.audio.release(collector.session.id); await this.ports.release(collector.session.id) }
+    if (collector) { await this.ports.audio.cancel(collector.session.id); await this.writer; await this.ports.audio.release(collector.session.id); await this.ports.release(collector.session.id) }
     this.releaseDocument?.(); this.releaseDocument = undefined; this.releaseBody?.(); this.releaseBody = undefined; this.releaseOwner?.(); this.releaseOwner = undefined; this.disposed = true; this.listeners.clear()
   }
   async detach(): Promise<void> {

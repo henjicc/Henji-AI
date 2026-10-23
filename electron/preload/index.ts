@@ -395,7 +395,6 @@ const cameraStageRenderApi: HenjiCameraStageRenderApi = {
 
 const audioApi: HenjiAudioApi = {
   recording: {
-    microphone: (enabled, userReceipt) => nativeInvoke('audioEdit:explanation', { action: 'microphone', enabled, userReceipt }),
     write: input => nativeInvoke('audioEdit:explanation', input),
     read: (sessionId, chunkId) => nativeInvoke('audioEdit:explanation', { action: 'read', sessionId, chunkId }),
     erase: sessionId => nativeInvoke('audioEdit:explanation', { action: 'erase', sessionId }),

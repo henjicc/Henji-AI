@@ -3,7 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const sharp = require('sharp')
 const { loadTypeScript } = require('../check-persistence-compat.cjs')
-const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
+const { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { seedVideoEditProject, openVideoEditProjectCard, leaveVideoEditProject, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const button = (page, name) => page.getByRole('button', { name, exact: true })
@@ -50,6 +50,7 @@ function createVideoEditMotionDraftScene() {
           await documents.saveDocument({ target: { id }, expectedRevision: read.meta.revision, content: read.content })
         }, { source, projectId: seeded.projectId, id: seeded.documentId })
         await openVideoEditProjectCard(page, seeded.projectId); await presented(0)
+        await assignIsolatedMcpPort(page)
         const identity = await authorizeMcpConnection(page, { name: '超级关键帧验收', allowWrites: true, allowDestructive: true })
         client = await connectMcpClient(identity.config, 'Henji motion Reality')
         const projectRef = { kind: 'video_edit.document', id: seeded.documentId }

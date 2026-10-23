@@ -7,6 +7,7 @@
  */
 const assert = require('node:assert/strict')
 const { randomUUID } = require('node:crypto')
+const net = require('node:net')
 const { Client } = require('@modelcontextprotocol/client')
 const { StreamableHTTPClientTransport } = require('@modelcontextprotocol/client')
 
@@ -28,6 +29,16 @@ async function waitMcpReady(page, timeoutMs = 15000) {
     await page.waitForTimeout(100)
   }
   throw new Error('应用宿主未在限定时间内就绪')
+}
+
+/** 仅由明确使用隔离资料的场景调用，不占用开发实例的默认 MCP 端口。 */
+async function assignIsolatedMcpPort(page) {
+  const probe = net.createServer()
+  await new Promise((resolve, reject) => { probe.once('error', reject); probe.listen(0, '127.0.0.1', resolve) })
+  const port = probe.address().port
+  await new Promise((resolve, reject) => probe.close(error => error ? reject(error) : resolve()))
+  await page.evaluate(port => window.henjiNative.mcp.configure({ enabled: false, port }), port)
+  return port
 }
 
 /** 直接经可信 IPC 开启服务并授权一条连接；权限档位仍然只能由应用侧决定。 */
@@ -120,4 +131,4 @@ function operationEnvelope(baselines, extra = {}) {
   return { operationId: randomUUID(), baselineIds: baselines.map((item) => item.baselineId), ...extra }
 }
 
-module.exports = { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, expectToolRefusal, operationEnvelope, parseMcpConnectionInstructions, readAllMedia, waitMcpReady }
+module.exports = { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClient, disableMcp, expectToolRefusal, operationEnvelope, parseMcpConnectionInstructions, readAllMedia, waitMcpReady }

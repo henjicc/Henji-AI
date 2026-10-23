@@ -1,3 +1,5 @@
+import { AudioCaptureSettingsForm } from '@/features/audioCapture'
+import { PanelTrigger } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import { useEffect, useState } from 'react'
 import { recordingOutput } from '@/services/recordingSetupModel'
@@ -45,7 +47,7 @@ export function RecordingSetupPanel({ value, devices, destination, onChange }: {
     </UiGroup>
     <UiGroup title={t('recording.soundGroup')} titleTone="compact" labelWidth={96}>
       <UiFormRow label={t('recording.microphone')} density="compact"><UiSwitch checked={value.microphone} onCheckedChange={microphone => onChange({ microphone })} /></UiFormRow>
-      {value.microphone && <UiFormRow label={t('recording.microphoneDevice')} density="compact"><Dropdown size="sm" value={value.microphoneId} options={deviceOptions('microphone', t('recording.microphone'))} onSelect={microphoneId => onChange({ microphoneId })} /></UiFormRow>}
+      {value.microphone && <UiFormRow label={t('recording.microphoneDevice')} density="compact"><PanelTrigger display="录音设置" size="sm" panelSize="wide" renderPanel={() => <AudioCaptureSettingsForm />} /></UiFormRow>}
       <UiFormRow label={t('recording.systemAudio')} density="compact"><UiSwitch checked={value.systemAudio} onCheckedChange={systemAudio => onChange({ systemAudio })} /></UiFormRow>
       {!quick && <UiFormRow label={t('recording.camera')} density="compact"><UiSwitch checked={value.camera} onCheckedChange={camera => onChange({ camera })} /></UiFormRow>}
       {!quick && value.camera && <UiFormRow label={t('recording.cameraDevice')} density="compact"><Dropdown size="sm" value={value.cameraId} options={deviceOptions('camera', t('recording.camera'))} onSelect={cameraId => onChange({ cameraId })} /></UiFormRow>}

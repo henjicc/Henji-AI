@@ -9,16 +9,16 @@ import { pauseVideoMotion, resumeVideoMotion, startVideoMotion, stopVideoMotion,
 import { configureVideoExplanationMicrophone, pauseVideoExplanation, preflightVideoExplanation, resumeVideoExplanation, startVideoExplanation, stopVideoExplanation, transcribeVideoExplanation, videoExplanationState, reopenVideoExplanation } from './videoEditExplanation'
 
 const logger = createLogger('features.videoEdit.superKeyframes')
-export function superKeyframeMicrophonePreference(): { enabled: boolean; deviceId: string } {
+export function superKeyframeMicrophonePreference(): { enabled: boolean } {
   const { setup } = loadRecordingSetup()
-  return { enabled: setup.microphone, deviceId: setup.microphoneId }
+  return { enabled: setup.microphone }
 }
 /** 与现有录制共享用户的麦克风偏好，不新增第二份设备设置。 */
-export async function configureSuperKeyframeMicrophone(id: string, enabled: boolean, deviceId: string): Promise<void> {
+export async function configureSuperKeyframeMicrophone(id: string, enabled: boolean): Promise<void> {
   const owner = requireVideoEditInstance(id)
-  if (videoExplanationState(owner)) await configureVideoExplanationMicrophone(id, enabled, deviceId)
+  if (videoExplanationState(owner)) await configureVideoExplanationMicrophone(id, enabled)
   const saved = loadRecordingSetup()
-  saveRecordingSetup({ ...saved, setup: { ...saved.setup, microphone: enabled, microphoneId: deviceId } })
+  saveRecordingSetup({ ...saved, setup: { ...saved.setup, microphone: enabled } })
 }
 export async function startSuperKeyframes(id: string): Promise<void> {
   const owner = requireVideoEditInstance(id), preference = superKeyframeMicrophonePreference()
@@ -30,9 +30,9 @@ export async function startSuperKeyframes(id: string): Promise<void> {
       videoExplanationState(owner)!.originMs = videoMotionOrigin(owner)!
     }
     if (videoExplanationState(owner)?.collector.session.id === superKeyframeSessionId(draft.id)) {
-      await configureVideoExplanationMicrophone(id, preference.enabled, preference.deviceId)
+      await configureVideoExplanationMicrophone(id, preference.enabled)
       await resumeVideoExplanation(id, true)
-    } else await startVideoExplanation(id, `super-keyframes:${draft.id}`, { sessionId: superKeyframeSessionId(draft.id), originMs: videoMotionOrigin(owner), microphone: preference.enabled, deviceId: preference.deviceId })
+    } else await startVideoExplanation(id, `super-keyframes:${draft.id}`, { sessionId: superKeyframeSessionId(draft.id), originMs: videoMotionOrigin(owner), microphone: preference.enabled })
   } catch (error) { pauseVideoMotion(id); throw error }
 }
 export async function pauseSuperKeyframes(id: string): Promise<void> {

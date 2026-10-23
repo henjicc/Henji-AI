@@ -36,19 +36,27 @@ function setup(names: readonly string[] = ['a', 'b', 'c']) {
   let feed: (block: CapturedAudioBlock) => void = () => {}
   const stop = vi.fn(async () => {})
   const audio: RecordingAudioPlatform = {
-    microphone: vi.fn(async () => {}), write: vi.fn(async () => {}), read: vi.fn(async () => new Uint8Array()), erase: vi.fn(async () => {}), release: vi.fn(async () => {}), archive: vi.fn(), restore: vi.fn(async () => {}), cancel: vi.fn(async () => {}),
+    write: vi.fn(async () => {}), read: vi.fn(async () => new Uint8Array()), erase: vi.fn(async () => {}), release: vi.fn(async () => {}), archive: vi.fn(), restore: vi.fn(async () => {}), cancel: vi.fn(async () => {}),
     preflight: vi.fn(async () => {}),
     transcribe: vi.fn(async (): Promise<RecordingAudioResult> => ({ modelId: 'fixture.asr', providerId: 'fixture', requestId: 'fixture', transcript: { unit: 'ms', text: '这几个等距', words: [], granularity: 'word', segments: [{ text: '这几个等距', startMs: 100, endMs: 700, granularity: 'word', timing: 'precise' }] } })),
   }
   const confirm = vi.fn(async () => {})
-  const adapter = new ImageEditExplanation(bus, { eraseResources: async ids => { for (const id of ids) values.delete(id) }, audio, microphone: vi.fn(async (_origin, onBlock) => { feed = onBlock; return { stop } }), model: () => 'fixture.asr', confirm, release: vi.fn(async () => {}),
+  const microphone = vi.fn(async (_origin: number, onBlock: (block: CapturedAudioBlock) => void) => { feed = onBlock; return { stop } })
+  const adapter = new ImageEditExplanation(bus, { eraseResources: async ids => { for (const id of ids) values.delete(id) }, audio, microphone, model: () => 'fixture.asr', confirm, release: vi.fn(async () => {}),
     store: async (value, kind) => { const digest = await imageLayoutDigest(value); values.set(digest, structuredClone(value)); return { resourceId: digest, digest, bytes: new TextEncoder().encode(JSON.stringify(value)).byteLength, path: `resources/${digest.slice(7)}`, kind } },
     read: async resource => values.get(resource.resourceId), readVisual: async () => new Uint8Array([1, 2, 3]) })
   const block = (length = 48000): void => feed({ firstFrame: 0, sampleRate: 48000, samples: new Float32Array(length), monoStartUs: 0, uncertaintyUs: 1000 })
   const point = (position: [number, number] = [.4, .4], refs: ApplicationRef[] = [{ ...imageEditV3LayerRef(doc.id, 'a'), label: 'a' }], at = 300, capture?: Parameters<ImageEditExplanation['recordPointer']>[0]['capture']): void => { wall = at; adapter.recordPointer({ capture, point: position, viewPoint: [position[0] * 600, position[1] * 400], documentPoint: [position[0] * 600, position[1] * 400], refs, selectedRefs: ['a', 'b', 'c'].map(id => ({ ...imageEditV3LayerRef(doc.id, id), label: id })), phase: 'down', geometry: { compositionSize: [600, 400], validViewRect: [0, 0, 600, 400], documentToView: [1, 0, 0, 1, 0, 0], crop: [0, 0, 600, 400], pixelRatio: 1, orientationTurns: 0 } }) }
-  return { adapter, audio, bus, block, point, stop, confirm, values }
+  return { adapter, audio, bus, block, point, stop, confirm, values, microphone, feed: (block: CapturedAudioBlock) => feed(block) }
 }
 describe('图片静态讲解宿主', () => {
+  it('统一原生输入为立体声时，讲解只取起始声道并保留帧时长', async () => {
+    const f = setup(); await f.adapter.start('consent')
+    f.feed({ firstFrame: 0, sampleRate: 48000, channels: 2, samples: new Float32Array([.25, -.5, .25, -.5]), monoStartUs: 0, uncertaintyUs: 1000 })
+    wall = 1200; await f.adapter.stop()
+    expect(f.audio.write).toHaveBeenCalledWith(expect.objectContaining({ samples: new Float32Array([.25, .25]) }))
+    await f.adapter.close()
+  })
   it('确认前逐块预检失败不改变会话、不执行转写', async () => {
     const f = setup(); await f.adapter.start('consent'); f.block(); wall = 1200; await f.adapter.stop()
     vi.mocked(f.audio.preflight).mockRejectedValueOnce(new Error('凭据未配置'))
@@ -110,7 +118,7 @@ describe('图片静态讲解宿主', () => {
     expect(f.audio.write).toHaveBeenCalledTimes(1); await f.adapter.close()
   })
   it('没有人工同意不打开麦克风，转写前不调用供应商', async () => {
-    const f = setup(); await expect(f.adapter.start('')).rejects.toThrow('确认'); expect(f.audio.microphone).not.toHaveBeenCalled()
+    const f = setup(); await expect(f.adapter.start('')).rejects.toThrow('确认'); expect(f.microphone).not.toHaveBeenCalled()
     await f.adapter.start('consent'); f.block(); wall = 1200; await f.adapter.stop()
     expect(f.audio.transcribe).not.toHaveBeenCalled(); await expect(f.adapter.transcribe('')).rejects.toThrow('授权'); await f.adapter.close()
   })

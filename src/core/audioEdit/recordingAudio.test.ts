@@ -1,6 +1,14 @@
 import { expect, it } from 'vitest'
 import { encodeRecordingWav, recordingAudioRequestSchema } from './recordingAudio'
 import { correlateRecordingClock, recordingUncertaintyP95 } from './recordingClock'
+import { superKeyframeSessionId } from '../creativeIntent/captureIntent'
+
+it('超级关键帧会话身份贯穿音频 IPC，仍拒绝路径与非法前缀', () => {
+  const sessionId = superKeyframeSessionId(crypto.randomUUID())
+  for (const action of ['cancel', 'release', 'erase', 'archive']) expect(recordingAudioRequestSchema.safeParse({ action, sessionId }).success).toBe(true)
+  expect(recordingAudioRequestSchema.safeParse({ action: 'write', sessionId, chunkId: crypto.randomUUID(), sampleRate: 48000, samples: new Float32Array([0]) }).success).toBe(true)
+  for (const sessionId of ['super-keyframes:../escape', 'super-keyframes:invalid', '../escape']) expect(recordingAudioRequestSchema.safeParse({ action: 'archive', sessionId }).success).toBe(false)
+})
 
 it('本地合成PCM的容器、裁幅、非法采样及IPC批次预算', () => {
   const wav = encodeRecordingWav(new Float32Array([-2, -.5, 0, .5, 2]), 48000); const v = new DataView(wav.buffer)

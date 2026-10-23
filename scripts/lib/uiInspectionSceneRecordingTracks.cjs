@@ -50,7 +50,7 @@ function createRecordingTracksScene() {
           assert.equal(file.video, file.kind === 'camera'); assert.equal(file.audio, file.kind !== 'camera')
           assert(file.startUs <= evidence.clockUs - evidence.data.originUs, '轨道超出共享主时钟')
         }
-        fs.writeFileSync(path.join(output, 'evidence.json'), JSON.stringify({ ...evidence, eventCount: events.events.count, clipped, mediaBackend: 'real-worklet-webcodecs-mediabunny', devices: 'Chromium-virtual-mic-camera-and-oscillator-system-audio', import: 'placement-mapping-only-1.5-owns-project-import' }, null, 2))
+        fs.writeFileSync(path.join(output, 'evidence.json'), JSON.stringify({ ...evidence, eventCount: events.events.count, clipped, mediaBackend: 'native-microphone-system-worklet-webcodecs-mediabunny', devices: 'native microphone, Chromium virtual camera and oscillator system audio', import: 'placement-mapping-only-1.5-owns-project-import' }, null, 2))
       } finally { await tracks('cleanup').catch(() => {}); await fixture('cleanup') }
     },
   }

@@ -495,7 +495,8 @@
         "21": "dca159941ead85b655fea1701595ed8d07d6a653d0f075464a7cbb5a53b1b0e8",
         "22": "d7ef16c010b1ff7b900e6be8b0f69200f1d97d62bc19ec65f34660f9f0d72b3c",
         "23": "531f214ae7de6df15d07c2590f6b6db15a6dfce9c2b6a6c757fda682781c851b",
-        "24": "f24f80ba95bb8eb6cf222a27f228f8618fd08743315555ed6f12292c52e0743d"
+        "24": "f24f80ba95bb8eb6cf222a27f228f8618fd08743315555ed6f12292c52e0743d",
+        "25": "dfc19bc244da303fc3e1dcb730e6cf1daa4358000a97cece13352dd13f8f7a67"
       },
       "readers": {
         "19": 19,
@@ -503,7 +504,8 @@
         "21": 19,
         "22": 19,
         "23": 23,
-        "24": 23
+        "24": 23,
+        "25": 25
       },
       "samples": {
         "v19.json": "bed3ba5d2510d2fcb6c72a8f0608f39ff45af13e01ff2db2963e4008afd6a5b8",
@@ -511,7 +513,8 @@
         "v21.json": "62a3558820ae2874a0498f6c1dd5017533408a52dde2988ff2faa61ec98480ba",
         "v22.json": "a14fb2c451ed2dfa8db5527abf8e8497bd7dd28105ffadd0206e7a50fb66eed4",
         "v23.json": "d47e66490e6955a22e93087e98bdf3e18b376d893974194c860e5069761873c6",
-        "v24.json": "4d653b0e6425833729124ec61b6d3b94c8ada96a93f1756e5bcda961f3e149db"
+        "v24.json": "4d653b0e6425833729124ec61b6d3b94c8ada96a93f1756e5bcda961f3e149db",
+        "v25.json": "8a0e0af438255f765f1c2e15e3dce550a1955379b04a6acd3728c483023bc4fa"
       }
     },
     "project": {
@@ -838,15 +841,18 @@
       ],
       "versions": {
         "1": "7510476937e9eebed84177d8a0b0622e67023fbb988ff929ba79792d22d9caf4",
-        "2": "a4970530b9e2157e27dcfbd9719feb2b8d10ba47fa9f6130938f793de49548a2"
+        "2": "a4970530b9e2157e27dcfbd9719feb2b8d10ba47fa9f6130938f793de49548a2",
+        "3": "c6dbba8cb11984d672af4236375e001f68af7b71c3d9cead3284bd047ad5ba0f"
       },
       "readers": {
         "1": 1,
-        "2": 1
+        "2": 1,
+        "3": 3
       },
       "samples": {
         "v1.json": "b330a7f4a400676060f9ae83df635edf4282bbfcdaa7e6e47af024655eaf3ea3",
-        "v2.json": "3ba726353dd754e7b5f687475c1a355d007082c366a72ac5c91ef363aaf10a1e"
+        "v2.json": "3ba726353dd754e7b5f687475c1a355d007082c366a72ac5c91ef363aaf10a1e",
+        "v3.json": "f83426c88823890c10f00f87889936f9292cb359abf26d5eba996e517bf3a8f5"
       }
     },
     "model-defaults": {

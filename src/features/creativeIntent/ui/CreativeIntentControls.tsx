@@ -1,3 +1,5 @@
+import { AudioCaptureSettingsForm } from '@/features/audioCapture'
+import { PanelTrigger, UiTooltipText } from '@/components/ui'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { ExplanationSendConfirmation } from './ExplanationSendConfirmation'
 import type { ExplanationSendRequest } from '../application/explanationGeneration'
@@ -9,16 +11,16 @@ import { Check, ChevronDown, PinOff, Play, Square, Pause, Trash2 } from 'lucide-
 /** 剪辑录制面板；图片随手摆与 3D 镜头仍保留各自原有工作流。 */
 export function SuperKeyframeRecordingControls(props: {
   status: 'idle' | 'recording' | 'paused' | 'reviewing' | 'optimizing'; busy: boolean; message?: string
-  microphone: boolean; deviceId: string; devices: { value: string; label: string }[]
+  microphone: boolean
   takes: { id: string; label: string }[]
-  onMicrophone: (enabled: boolean) => void; onDevice: (id: string) => void; onRemove: (id: string) => void
+  onMicrophone: (enabled: boolean) => void; onRemove: (id: string) => void
   onStart: () => void; onPause: () => void; onResume: () => void; onFinish: () => void; onHandoff: () => void
 }): React.ReactElement {
   const recording = props.status === 'recording', paused = props.status === 'paused'
   return <div className="flex flex-col gap-3">
     <UiGroup labelWidth={72}>
       <UiFormRow label="麦克风" density="compact"><UiSwitch aria-label="麦克风" checked={props.microphone} disabled={props.busy} onCheckedChange={props.onMicrophone} /></UiFormRow>
-      <UiFormRow label="输入设备" density="compact"><Dropdown size="sm" appearance="field" className="w-full" buttonClassName="w-full" minWidthStrategy="none" ariaLabel="输入设备" value={props.deviceId} options={props.devices} disabled={props.busy} onSelect={props.onDevice} /></UiFormRow>
+      <UiFormRow label={<UiTooltipText tooltip="与录屏和音频编辑共用录音设置；请暂停录制后修改。">输入设备</UiTooltipText>} density="compact"><PanelTrigger display="录音设置" size="sm" panelSize="wide" disabled={props.busy || recording} renderPanel={() => <AudioCaptureSettingsForm />} /></UiFormRow>
     </UiGroup>
     {!!props.takes.length && <UiGroup title="本组段落" titleTone="compact" labelWidth={72}>
       <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">{props.takes.map(take => <div key={take.id} className="flex items-center justify-between gap-2">

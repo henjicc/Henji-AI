@@ -15,7 +15,7 @@ import { resolveDeixis, confirmedExplanationBinding, pickedExplanationBinding, t
 import { buildIntentDifferencePlan, reviewedMovementChanges, type IntentDifferencePlan, type ReviewedIntentGoal } from '@/core/creativeIntent/intentPlan'
 import { captureExplanationPixels } from './videoEditExplanationVisual'
 import { serializeRecordingInput } from '@/core/creativeIntent/recordingSerializer'
-import { RecordingCollector, captureMicrophone, type CapturedAudioBlock, type MicrophoneCapture } from '@/features/creativeIntent'
+import { RecordingCollector, captureMicrophone, monoCapturedAudioBlock, type CapturedAudioBlock, type MicrophoneCapture } from '@/features/creativeIntent'
 import { modelDefaultsManager } from '@/features/settings'
 import { motionClipPose } from '@/core/videoEdit/motionDraft'
 import { videoEditClipPictureSize, videoEditClipToFrame, videoEditFrameToClip } from '@/core/videoEdit/clipGeometry'
@@ -27,7 +27,7 @@ import { subscribeVideoMotion, videoMotionState, proposeVideoExplanationMotion, 
 import { getActiveVideoEditSequence, requireVideoEditInstance, updateVideoEditCreativeIntents, purgeVideoEditExplanationSession, subscribeVideoEditCommandFacts, subscribeVideoEditView, registerVideoEditClosePreparation, saveVideoEdit, type VideoEditInstance, type VideoEditCommandFact } from './videoEditService'
 
 const logger = createLogger('features.videoEdit.explanation')
-export interface VideoExplanationState { microphoneEnabled?: boolean; microphoneDeviceId?: string; collector: RecordingCollector; originMs: number; elapsedUs: number; message?: string; busy: boolean; erased: boolean; microphone?: MicrophoneCapture; controller: AbortController; picture?: { frame: number; sequenceId: string; revision: number; composition: VideoEditComposition }; reviewComposition?: VideoEditComposition; uncertaintyUs: number[] }
+export interface VideoExplanationState { microphoneEnabled?: boolean; collector: RecordingCollector; originMs: number; elapsedUs: number; message?: string; busy: boolean; erased: boolean; microphone?: MicrophoneCapture; controller: AbortController; picture?: { frame: number; sequenceId: string; revision: number; composition: VideoEditComposition }; reviewComposition?: VideoEditComposition; uncertaintyUs: number[] }
 interface Runtime { transcription?: AbortController; generation?: PreparedExplanationGeneration; releaseBody?: () => void; state: VideoExplanationState; write: Promise<void>; partial: CapturedAudioBlock[]; samples: number; pendingAudio: Map<string, () => Promise<void>>; queued?: number; erasePaths?: Set<string>; lastBlock?: CapturedAudioBlock; pausing?: Promise<void>; installed?: boolean; viewKey?: string; geometry?: { key: string; id: string }; release: () => void; timer?: ReturnType<typeof setInterval> }
 const states = new WeakMap<VideoEditInstance, Runtime>()
 const listeners = new Set<() => void>(); let revision = 0
@@ -97,7 +97,7 @@ function bindCapture(owner: VideoEditInstance, runtime: Runtime): void {
   }, 2000)
   runtime.release = () => { runtime.releaseBody?.(); clearInterval(runtime.timer); commands(); motion(); view(); close(); state.controller.abort() }
 }
-export interface VideoExplanationCaptureOptions { sessionId?: string; originMs?: number; microphone?: boolean; deviceId?: string }
+export interface VideoExplanationCaptureOptions { sessionId?: string; originMs?: number; microphone?: boolean }
 export async function startVideoExplanation(id: string, userReceiptRef: string, options: VideoExplanationCaptureOptions = {}): Promise<void> {
   const owner = requireVideoEditInstance(id); const previous = states.get(owner)
   if (previous?.state.erased || previous?.state.busy) throw new Error('请先完成当前讲解的处理。')
@@ -113,7 +113,7 @@ export async function startVideoExplanation(id: string, userReceiptRef: string, 
     else if (requireVideoEditInstance(id) !== owner || states.has(owner)) throw new Error('录制宿主已关闭或已有讲解。')
   } catch (error) { if (previous && states.get(owner) === previous) { previous.state.busy = false; publish() } throw error }
   previous?.release()
-  const state: VideoExplanationState = { collector: undefined as unknown as RecordingCollector, originMs: options.originMs ?? performance.now(), elapsedUs: 0, busy: true, erased: false, controller: new AbortController(), uncertaintyUs: [], microphoneEnabled: options.microphone ?? true, microphoneDeviceId: options.deviceId }
+  const state: VideoExplanationState = { collector: undefined as unknown as RecordingCollector, originMs: options.originMs ?? performance.now(), elapsedUs: 0, busy: true, erased: false, controller: new AbortController(), uncertaintyUs: [], microphoneEnabled: options.microphone ?? true }
   const runtime: Runtime = { state, write: Promise.resolve(), partial: [], samples: 0, pendingAudio: new Map(), release: () => {} }
   states.set(owner, runtime)
   state.collector = new RecordingCollector(session, async page => {
@@ -130,9 +130,9 @@ export async function startVideoExplanation(id: string, userReceiptRef: string, 
 async function openMicrophone(owner: VideoEditInstance, runtime: Runtime): Promise<void> {
   const state = runtime.state
   if (state.microphoneEnabled === false) return
-  await getPlatform().audioEdit.recording.microphone(true, state.collector.session.consent!.userReceiptRef)
-  try {
-  state.microphone = await captureMicrophone(state.originMs, block => {
+  state.microphone = await captureMicrophone(state.originMs, captured => {
+    // 讲解转写沿用单声道契约，取统一设置的起始输入声道，不把左右声道平均。
+    const block = monoCapturedAudioBlock(captured)
     if (state.erased) return
     const last = runtime.lastBlock
     if (last && (last.firstFrame + last.samples.length !== block.firstFrame || last.sampleRate !== block.sampleRate)) { sealAudio(owner, runtime); state.message = '音频采集存在缺口，已保留前段并暂停；请检查设备后继续。'; void pauseVideoExplanation(owner.document.id).catch(() => publish()) }
@@ -140,8 +140,7 @@ async function openMicrophone(owner: VideoEditInstance, runtime: Runtime): Promi
     runtime.partial.push(block); runtime.samples += block.samples.length
     state.uncertaintyUs.push(block.uncertaintyUs); if (state.uncertaintyUs.length > 2048) state.uncertaintyUs.shift()
     if (runtime.samples >= block.sampleRate * 10) sealAudio(owner, runtime)
-  }, message => { state.message = message; void pauseVideoExplanation(owner.document.id).catch(() => { publish() }) }, state.controller.signal, { deviceId: state.microphoneDeviceId })
-  } catch (error) { await getPlatform().audioEdit.recording.microphone(false, state.collector.session.consent!.userReceiptRef); throw error }
+  }, message => { state.message = message; void pauseVideoExplanation(owner.document.id).catch(() => { publish() }) }, state.controller.signal)
 }
 function sealAudio(owner: VideoEditInstance, runtime: Runtime): void {
   if (!runtime.samples) return
@@ -157,7 +156,7 @@ function sealAudio(owner: VideoEditInstance, runtime: Runtime): void {
   if (runtime.pendingAudio.size >= 4) { state.message = '录音保存较慢，正在暂停采集；保存后可继续。'; void pauseVideoExplanation(owner.document.id).catch(() => publish()) }
 }
 /** 开关或换设备只分割音频采样段，操作与时间轴继续采集。 */
-export async function configureVideoExplanationMicrophone(id: string, enabled: boolean, deviceId?: string): Promise<void> {
+export async function configureVideoExplanationMicrophone(id: string, enabled: boolean): Promise<void> {
   const owner = requireVideoEditInstance(id), runtime = states.get(owner)
   if (!runtime) return
   const state = runtime.state
@@ -165,9 +164,8 @@ export async function configureVideoExplanationMicrophone(id: string, enabled: b
   state.busy = true; publish()
   try {
     await state.microphone?.stop(); state.microphone = undefined
-    await getPlatform().audioEdit.recording.microphone(false, state.collector.session.consent!.userReceiptRef)
     sealAudio(owner, runtime); runtime.lastBlock = undefined
-    state.microphoneEnabled = enabled; state.microphoneDeviceId = deviceId
+    state.microphoneEnabled = enabled
     if (state.collector.session.state === 'recording') await openMicrophone(owner, runtime)
   } finally { state.busy = false; publish() }
 }
@@ -188,7 +186,7 @@ export async function pauseVideoExplanation(id: string, focus = false): Promise<
   const motion = videoMotionState(owner)
   runtime.pausing = Promise.resolve().then(async () => {
     if (motion?.automatic && superKeyframeSessionId(motion.draft.id) === state.collector.session.id && motion.status === 'recording') pauseVideoMotion(id)
- await state.microphone?.stop(); state.microphone = undefined; await getPlatform().audioEdit.recording.microphone(false, state.collector.session.consent!.userReceiptRef); sealAudio(owner, runtime); state.collector.pause(now(state), focus); await flushWrites(runtime); await state.collector.flush(); installHead(owner, state); await saveVideoEdit(id) })
+ await state.microphone?.stop(); state.microphone = undefined; sealAudio(owner, runtime); state.collector.pause(now(state), focus); await flushWrites(runtime); await state.collector.flush(); installHead(owner, state); await saveVideoEdit(id) })
   try { await runtime.pausing }
   finally { runtime.pausing = undefined; state.busy = false; publish() }
 }
@@ -207,7 +205,7 @@ export async function stopVideoExplanation(id: string): Promise<void> {
   if (['reviewing','submitted','cancelled','idle'].includes(state.collector.session.state)) return
   await runtime.pausing
   if (state.collector.session.state === 'transcribing') await getPlatform().audioEdit.recording.cancel(state.collector.session.id)
-  await state.microphone?.stop(); state.microphone = undefined; await getPlatform().audioEdit.recording.microphone(false, state.collector.session.consent!.userReceiptRef); sealAudio(owner, runtime); if (state.collector.session.state === 'recording') state.collector.pause(now(state)); await flushWrites(runtime); state.collector.stop(now(state)); await state.collector.flush(); installHead(owner, state)
+  await state.microphone?.stop(); state.microphone = undefined; sealAudio(owner, runtime); if (state.collector.session.state === 'recording') state.collector.pause(now(state)); await flushWrites(runtime); state.collector.stop(now(state)); await state.collector.flush(); installHead(owner, state)
   await freezeFinalRecordingPoses(owner, state); installHead(owner, state); await saveVideoEdit(id); state.busy = false; publish()
   logger.info('录制讲解结束', { event: 'explanation.capture.completed', context: { documentId: id } })
 }
@@ -587,7 +585,7 @@ export async function retryVideoExplanationSave(id: string): Promise<void> {
 }
 export async function eraseVideoExplanation(id: string): Promise<void> {
   const owner = requireVideoEditInstance(id); const runtime = states.get(owner); if (!runtime) return
-  const state = runtime.state; state.erased = true; state.controller.abort(); await state.microphone?.stop(); await getPlatform().audioEdit.recording.microphone(false, state.collector.session.consent!.userReceiptRef); await getPlatform().audioEdit.recording.cancel(state.collector.session.id); await runtime.write; runtime.pendingAudio.clear(); await state.collector.flush()
+  const state = runtime.state; state.erased = true; state.controller.abort(); await state.microphone?.stop(); await getPlatform().audioEdit.recording.cancel(state.collector.session.id); await runtime.write; runtime.pendingAudio.clear(); await state.collector.flush()
   const sessionId = state.collector.session.id
   const resources = purgeVideoEditExplanationSession(id, sessionId)
   eraseExplanationBody(explanationBodyRef({ kind: 'video_edit.document', id }, sessionId))

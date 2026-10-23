@@ -1,4 +1,4 @@
-import { captureMicrophone, type CapturedAudioBlock } from '@/features/creativeIntent'
+import { captureStreamAudio, captureMicrophone, type CapturedAudioBlock } from '@/features/creativeIntent'
 import { CaptureSourceClock } from '@/core/captureLog/clockSync'
 import type { RecordingTrackKind, RecordingTrackOptions } from '@/core/screenRecording/tracks'
 import type { RecordingTracksClock } from './clock'
@@ -22,11 +22,9 @@ export async function acquireSystemAudio(): Promise<MediaStream> {
 }
 
 export const openTrackDevice: OpenTrackDevice = async (kind, options, clock, callbacks, signal, displayAudio) => {
-  if (kind !== 'camera') return captureMicrophone(clock.originMs, block => callbacks.audio({ ...block, uncertaintyUs: block.uncertaintyUs + clock.uncertaintyUs }), () => callbacks.state('muted'), signal, {
-    deviceId: kind === 'microphone' ? options.microphone?.deviceId : undefined, channels: kind === 'systemAudio' ? 2 : 1,
-    originMs: () => clock.originMs, onDeviceState: callbacks.state,
-    ...(kind === 'systemAudio' ? { acquireStream: displayAudio ?? acquireSystemAudio } : {}),
-  })
+  const audio = (block: CapturedAudioBlock): void => callbacks.audio({ ...block, uncertaintyUs: block.uncertaintyUs + clock.uncertaintyUs })
+  if (kind === 'microphone') return captureMicrophone(clock.originMs, audio, () => callbacks.state('ended'), signal, { originMs: () => clock.originMs, onDeviceState: callbacks.state })
+  if (kind === 'systemAudio') return captureStreamAudio(clock.originMs, audio, () => callbacks.state('muted'), signal, { channels: 2, originMs: () => clock.originMs, onDeviceState: callbacks.state, acquireStream: displayAudio ?? acquireSystemAudio })
   const camera = options.camera!
   let stream: MediaStream | undefined
   let reader: ReadableStreamDefaultReader<VideoFrame> | undefined

@@ -4,7 +4,7 @@ import { clockAnchorSchema, monoSpanSchema, safeClockSchema } from '../captureLo
 export const recordingTrackKindSchema = z.enum(['microphone', 'systemAudio', 'camera'])
 export type RecordingTrackKind = z.infer<typeof recordingTrackKindSchema>
 export const recordingTrackOptionsSchema = z.object({
-  microphone: z.object({ deviceId: z.string().min(1).optional() }).strict().optional(),
+  microphone: z.object({}).strict().optional(),
   systemAudio: z.boolean().default(false),
   camera: z.object({ deviceId: z.string().min(1).optional(), width: z.number().int().min(160).max(3840).default(1280), height: z.number().int().min(120).max(2160).default(720), frameRate: z.number().int().min(1).max(60).default(30) }).strict().optional(),
 }).strict()

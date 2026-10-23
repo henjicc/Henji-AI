@@ -20,13 +20,13 @@ export interface RecordingSetup extends RecordingEncoding {
   /** Quick mode output folder; empty means the app's export folder. */
   saveDirectory: string
   name: string
-  microphone: boolean; microphoneId: string
+  microphone: boolean
   systemAudio: boolean
   camera: boolean; cameraId: string
   quality: RecordingQuality; fps: 30 | 60
   insert: boolean
 }
-export const DEFAULT_RECORDING_SETUP: RecordingSetup = { mode: 'full', saveDirectory: '', name: '', microphone: true, microphoneId: '', systemAudio: false, camera: false, cameraId: '', quality: '1080p', fps: 60, insert: true }
+export const DEFAULT_RECORDING_SETUP: RecordingSetup = { mode: 'full', saveDirectory: '', name: '', microphone: true, systemAudio: false, camera: false, cameraId: '', quality: '1080p', fps: 60, insert: true }
 
 /** What the picker and setup panel offer next time, across restarts. */
 export interface RememberedRecordingSetup { range: RecordingRangeMode; sourceId: string; region: RecordingRegion; setup: RecordingSetup }
