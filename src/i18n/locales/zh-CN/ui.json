@@ -660,7 +660,7 @@
     "failed": "更新失败：{{reason}}",
     "failedUnknown": "未知原因，请稍后重试"
   },
-  "viewer": {
+  "viewer": { "autoGain": "自动增益：小声处提上来，大声处压住", "autoGainUnavailable": "这段视频的来源不允许处理声音", "fullscreen": "全屏", "exitFullscreen": "退出全屏",
     "swapImages": "再次点击交换原图与放大图",
     "original": "原图",
     "upscaled": "放大后",

@@ -660,7 +660,7 @@
     "failed": "Update failed: {{reason}}",
     "failedUnknown": "Unknown error, please try again later"
   },
-  "viewer": {
+  "viewer": { "autoGain": "Auto gain: lift quiet parts, tame loud ones", "autoGainUnavailable": "This video's source doesn't allow sound processing", "fullscreen": "Full screen", "exitFullscreen": "Exit full screen",
     "swapImages": "Click again to swap original and upscaled images",
     "original": "Original",
     "upscaled": "Upscaled",
