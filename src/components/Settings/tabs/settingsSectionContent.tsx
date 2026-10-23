@@ -61,7 +61,7 @@ export function GenerationSettingsSection(): React.ReactElement {
   const { t } = useI18n('settings')
   const { settings, updateSetting } = useSettings()
   return <><DefaultModelsSection />
-        <UiGroup labelWidth={120} title={t('sections.generation.taskGroup')} titleTone="overline">
+        <UiGroup title={t('sections.generation.taskGroup')} titleTone="overline">
           <ConcurrencySection
             maxConcurrentTasks={settings.maxConcurrentTasks}
             onChange={(value) => updateSetting('maxConcurrentTasks', value)}
@@ -75,7 +75,7 @@ export function GenerationSettingsSection(): React.ReactElement {
             onChangeUsdToCnyRate={(value) => updateSetting('usdToCnyRate', value)}
           />
         </UiGroup>
-        <UiGroup labelWidth={120} title={t('sections.generation.inputGroup')} titleTone="overline">
+        <UiGroup title={t('sections.generation.inputGroup')} titleTone="overline">
           <PromptOptimizationSection
             behavior={settings.promptOptimizationButtonBehavior}
             onChangeBehavior={(value) => updateSetting('promptOptimizationButtonBehavior', value)}

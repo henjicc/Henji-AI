@@ -222,7 +222,7 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({ onExportTheme, onImportThem
 
       {/* 预留：将来的“高级 / 主题编辑器”入口放在这里（开放完整种子，见重要记录 002）；本任务不显示入口。 */}
 
-      <UiGroup labelWidth={120}>
+      <UiGroup>
         <UiFormRow label={t('sections.theme.contrast.label')} info={t('sections.theme.contrast.info')} inline>
           <SettingsSegmented<ThemeContrastLevel>
             value={selection.contrast}
@@ -253,8 +253,8 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({ onExportTheme, onImportThem
         </UiFormRow>
       </UiGroup>
 
-      <UiGroup labelWidth={120}>
-        <UiFormRow label={t('sections.theme.portable.label')}>
+      <UiGroup>
+        <UiFormRow label={t('sections.theme.portable.label')} inline>
         <div className="flex flex-wrap items-center gap-2">
           <UiButton variant="secondary" onClick={onExportTheme}>
             {t('sections.theme.portable.export')}
