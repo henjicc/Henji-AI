@@ -58,7 +58,7 @@ export function registerAudioCaptureIpc(): void {
     return service.run(async () => {
       assertTrustedApplicationSender(event)
       switch (request.action) {
-        case 'prepareFile': return files.prepare()
+        case 'prepareFile': return files.prepare(new Date(), request.placement)
         case 'pendingFiles': return files.pending()
         case 'completeFile': return files.complete(request.outputPath)
         case 'trashFile': {

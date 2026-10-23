@@ -1,7 +1,7 @@
 import { assertAudioEditLocks } from '@/core/audioEdit/edits'
 import { restoreAudioEditBaseline } from '@/core/audioEdit/baseline'
 import {
-  AudioEditSourceMissingError,
+  AudioEditSourceMissingError, isEmptyAudioEditSource,
   audioEditProjectFromDocument,
   audioEditProjectToDocumentContent,
   createAudioEditDocumentContent,
@@ -92,6 +92,17 @@ export function getAudioEditProjectInstance(id: string): AudioEditProjectInstanc
   return record && !record.instance.session.isEnded ? record.instance : undefined
 }
 
+/** 原生录音和拼接持有同一实例锁；暂停提交后释放，所有 UI/助手写入口共同受保护。 */
+export function lockAudioEditRecording(id: string, expectedRevision?: number): () => void {
+  const { instance } = requireRecord(id)
+  if (instance.busy) throw new Error('请等待当前处理完成')
+  if (expectedRevision !== undefined && (instance.dirty || instance.persistedRevision !== expectedRevision)) throw new Error('作品已改变，请重新选择录音位置')
+  instance.busy += 1
+  publish(instance)
+  let released = false
+  return () => { if (!released) { released = true; instance.busy -= 1; publish(instance) } }
+}
+
 /** 界面正在显示哪份口播（由界面状态登记）；正在显示的不会被后台释放。 */
 export function markAudioEditDocumentShown(id: string | null): void {
   shownDocumentId = id
@@ -131,7 +142,7 @@ export function bindAudioEditSession(session: DocumentSession): AudioEditProject
   if (existing && existing.instance.session === session && !session.isEnded) return existing.instance
   existing?.dispose()
   const meta = session.documentMeta
-  const { project, extras } = audioEditProjectFromDocument(meta, session.getContent())
+  const { project, extras } = audioEditProjectFromDocument(meta, session.getContent(), true)
   const instance: AudioEditProjectInstance = {
     document: project, past: [], future: [], dirty: session.dirty, error: null, version: 0,
     persistedRevision: meta.revision, batchDepth: 0, busy: 0, session, extras,
@@ -141,7 +152,7 @@ export function bindAudioEditSession(session: DocumentSession): AudioEditProject
     getContent: () => audioEditProjectToDocumentContent(instance.document, instance.extras),
     receiveContent: (content) => {
       // 冲突后“重新载入”、换位置后引用被改写：按新内容重建，撤销历史不跨版本
-      const next = audioEditProjectFromDocument(session.documentMeta, content)
+      const next = audioEditProjectFromDocument(session.documentMeta, content, true)
       instance.document = { ...next.project, revision: instance.document.revision + 1 }
       instance.extras = next.extras
       instance.past = []
@@ -216,11 +227,11 @@ export async function loadAudioEditProject(id: string, path?: string): Promise<A
 }
 
 /** 导入音频或视频即新建草稿（以草稿标记立即写进“口播”文件夹或所在项目），并接成实例。 */
-export async function createAudioEditDraft(source: AudioEditSourceMetadata, container: DocumentContainerRef = { kind: 'user' }): Promise<AudioEditProjectInstance> {
+export async function createAudioEditDraft(source: AudioEditSourceMetadata | null, container: DocumentContainerRef = { kind: 'user' }): Promise<AudioEditProjectInstance> {
   assertApplicationWritesAllowed()
   const session = await documentRegistry().create({ kind: 'audio_edit', container, content: createAudioEditDocumentContent(source) })
   const instance = await bindOrDiscard(session)
-  logger.info('新建口播草稿', { event: 'audio_edit.document.create_draft.completed', context: { docId: session.id, mediaType: source.mediaType } })
+  logger.info('新建口播草稿', { event: 'audio_edit.document.create_draft.completed', context: { docId: session.id, mediaType: source?.mediaType } })
   return instance
 }
 
@@ -228,7 +239,12 @@ export async function createAudioEditDraft(source: AudioEditSourceMetadata, cont
 export async function assignAudioEditSource(id: string, source: AudioEditSourceMetadata): Promise<AudioEditProjectInstance> {
   assertApplicationWritesAllowed()
   const existing = getAudioEditProjectInstance(id)
-  if (existing) throw new Error('这份口播已经有素材，请用“重新定位原素材”。')
+  if (existing) {
+    if (!isEmptyAudioEditSource(existing.document.source)) throw new Error('这份口播已经有素材，请用“重新定位原素材”。')
+    acceptAudioEditNativeResult(id, { ...existing.document, source }, existing.version)
+    await flushAudioEditProject(id)
+    return existing
+  }
   const session = await documentRegistry().open({ id })
   const content = session.getContent()
   const current = content && typeof content === 'object' ? content as Record<string, unknown> : {}
@@ -329,11 +345,13 @@ export function undoAudioEditProject(id: string, redo = false): void {
   if (redo) { instance.future = from.slice(1); instance.past = [...instance.past.slice(-49), instance.document] }
   else { instance.past = from.slice(0, -1); instance.future = [instance.document, ...instance.future.slice(0, 49)] }
   const current = instance.document
-  instance.document = { ...previous, id: current.id, name: current.name, source: current.source, editBaseline: current.editBaseline, viewSettings: current.viewSettings, revision: current.revision + 1 }
+  instance.document = { ...previous, id: current.id, name: current.name, viewSettings: current.viewSettings, revision: current.revision + 1 }
   catalogRevision += 1
   instance.version += 1
   publish(instance)
   notifyContent(record)
+  // 撤销同样立即保存，崩溃后不能重新出现已撤销的录音。
+  void flushAudioEditProject(id).catch(error => logger.warn('撤销保存失败，修改仍保留', { event: 'audio_edit.undo.save.failed', error }))
 }
 
 /** 保存屏障：写完当前全部修改（会话的 flush）。失败时修改保留在实例里，会话按退避自动重试。 */

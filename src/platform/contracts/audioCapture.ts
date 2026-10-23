@@ -2,7 +2,7 @@ import type { AudioCaptureEvent, AudioCaptureInventory, AudioCaptureSettings, Au
 export const AUDIO_CAPTURE_CHANNEL = 'audioCapture:request'
 export const AUDIO_CAPTURE_EVENT_CHANNEL = 'audioCapture:event'
 export interface AudioCapturePlatform {
-  prepareFile(): Promise<import('../../core/audioCapture/contracts').AudioCaptureFile>
+  prepareFile(placement?: import('../../core/audioCapture/contracts').AudioCapturePlacement): Promise<import('../../core/audioCapture/contracts').AudioCaptureFile>
   pendingFiles(): Promise<import('../../core/audioCapture/contracts').AudioCaptureFile[]>
   completeFile(outputPath: string): Promise<void>
   trashFile(outputPath: string): Promise<void>

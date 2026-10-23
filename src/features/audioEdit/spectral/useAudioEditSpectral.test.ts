@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SPECTRAL_HIGH_BINS, SPECTRAL_TILE_COLUMNS, spectralLowBins, type AudioEditSpectralTile, type AudioEditSpectralTileRequest } from '@/core/audioEdit/spectralPyramid'
 import { SpectralTileStore } from '@/core/audio/spectralTiles'
 import { StrictMode, createElement, type ReactNode } from 'react'
-import { renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { SpectralTileScheduler, spectralNeeds, spectralOverviewLevel, useAudioEditSpectral, type SpectralTileClient } from './useAudioEditSpectral'
 
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ warn: vi.fn(), info: vi.fn() }) }))
@@ -102,6 +102,24 @@ describe('频谱取块调度', () => {
 })
 
 describe('频谱取块钩子', () => {
+  it('等长覆盖、重新定位和撤销改变素材身份时丢弃原始频谱，拒绝旧来源迟到块', async () => {
+    const { client, pending } = fakeClient()
+    const hook = renderHook(({ sourceKey }) => useAudioEditSpectral(client, 'p', { start: 0, end: SR * 10 }, 1000, DURATION, 'source', 0, sourceKey), { initialProps: { sourceKey: 'old.wav' } })
+    await act(async () => { pending[0].resolve(tileFor(pending[0].request)); await flush() })
+    await waitFor(() => expect(hook.result.current.status).toBe('ready'))
+    const first = pending.length
+    hook.rerender({ sourceKey: 'new.wav' })
+    expect(hook.result.current.tiles).toBeUndefined()
+    expect(hook.result.current.status).toBe('loading')
+    expect(pending.length).toBeGreaterThan(first)
+    await act(async () => { pending[1].resolve(tileFor(pending[1].request)); await flush() })
+    expect(hook.result.current.tiles).toBeUndefined()
+    await act(async () => { pending[first].resolve(tileFor(pending[first].request)); await flush() })
+    await waitFor(() => expect(hook.result.current.status).toBe('ready'))
+    hook.rerender({ sourceKey: 'old.wav' })
+    expect(hook.result.current.tiles).toBeUndefined()
+    hook.unmount()
+  })
   it('开发模式重复挂载后仍然发出请求，不会一直停在加载中', () => {
     const { client, pending, cancelled } = fakeClient()
     const wrapper = ({ children }: { children: ReactNode }) => createElement(StrictMode, null, children)

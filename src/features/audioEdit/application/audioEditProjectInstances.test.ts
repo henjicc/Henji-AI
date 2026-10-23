@@ -9,7 +9,7 @@ import { AUDIO_EDIT_ENTITY_TYPES } from './audioEditFields'
 import { DocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
 import { createScriptedPrompter, FakeDocumentCommands, type ScriptedPrompter } from '@/features/documents/documentSessionTestKit'
 import {
-  assignAudioEditSource, createAudioEditDraft, editAudioEditProject, flushAudioEditProject, getAudioEditProjectInstance,
+  acceptAudioEditNativeResult, lockAudioEditRecording, assignAudioEditSource, createAudioEditDraft, editAudioEditProject, flushAudioEditProject, getAudioEditProjectInstance,
   leaveAudioEditProject, loadAudioEditProject, markAudioEditDocumentShown, releaseAudioEditProject, resetAudioEditProjectInstancesForTests,
   setAudioEditDocumentRegistryForTests, undoAudioEditProject, withAudioEditProjectOperation,
 } from './audioEditProjectInstances'
@@ -191,9 +191,9 @@ describe('口播草稿', () => {
     expect(getAudioEditProjectInstance(id)).toBeUndefined()
   })
 
-  it('没有素材的空文档：打开时报素材缺失，导入后接成实例并写进文件', async () => {
+  it('没有素材的空文档：进入待录音实例，导入后写进同一文档', async () => {
     commands.seed({ kind: 'audio_edit', id: 'empty', name: '助手新建', content: documentKindRegistry.require('audio_edit').createEmptyContent() })
-    await expect(loadAudioEditProject('empty')).rejects.toMatchObject({ name: 'AudioEditSourceMissingError' })
+    expect((await loadAudioEditProject('empty')).document.source.durationFrames).toBe(0)
     const instance = await assignAudioEditSource('empty', source)
     expect(instance.document.source.sourcePath).toBe(source.sourcePath)
     expect((stored('empty').source as AudioEditSourceMetadata).sourcePath).toBe(source.sourcePath)
@@ -213,4 +213,32 @@ describe('口播草稿', () => {
     expect(instance.session.isEnded).toBe(true)
     expect(getAudioEditProjectInstance('instance-test')).toBeUndefined()
   })
+})
+
+
+it('空草稿首段录音立即持久化、暂停编辑、后续录音一步撤销还原来源和编辑', async () => {
+  const instance = await createAudioEditDraft(null)
+  const id = instance.document.id
+  expect(stored(id).source).toBeNull()
+  const unlock = lockAudioEditRecording(id)
+  expect(() => editAudioEditProject(id, p => ({ ...p, referenceScript: '录音时修改' }))).toThrow('等待')
+  undoAudioEditProject(id)
+  const first = { ...instance.document, source: { ...source, ownership: 'managed' as const } }
+  acceptAudioEditNativeResult(id, first, instance.version)
+  await flushAudioEditProject(id)
+  unlock()
+  expect(stored(id).source).toMatchObject({ ownership: 'managed' })
+  editAudioEditProject(id, p => ({ ...p, cuts: [{ id: 'cut', startFrame: 0, endFrame: 500, enabled: true, reason: 'manual' }] }))
+  const before = instance.document
+  const release = lockAudioEditRecording(id)
+  acceptAudioEditNativeResult(id, { ...before, source: { ...source, sourcePath: 'D:/第二段.wav', audioPath: 'D:/第二段.wav', durationFrames: 6000, ownership: 'managed' } }, instance.version)
+  await flushAudioEditProject(id); release()
+  undoAudioEditProject(id)
+  expect(instance.document.source).toEqual(before.source)
+  expect(instance.document.cuts).toEqual(before.cuts)
+  await flushAudioEditProject(id)
+  expect(stored(id).source).toEqual(before.source)
+  undoAudioEditProject(id); undoAudioEditProject(id)
+  await flushAudioEditProject(id)
+  expect(stored(id).source).toBeNull()
 })

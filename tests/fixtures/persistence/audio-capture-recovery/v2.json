@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "minReaderVersion": 1,
+  "placements": {
+    "录音 2026-10-23 120000.wav": {
+      "projectId": "golden-audio_edit",
+      "startFrame": 48000,
+      "endFrame": 96000,
+      "revision": 1,
+      "spliceId": "eced7817-a431-49e0-8890-5bf4b08ecb44"
+    }
+  },
+  "files": [
+    "录音 2026-10-23 120000.wav"
+  ]
+}

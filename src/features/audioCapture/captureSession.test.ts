@@ -70,3 +70,54 @@ it('本地日期命名、毫秒时间码与有界实时波形', () => {
   expect(result.pyramid.levels[0].peak[0]).toHaveLength(1000)
   expect(result.pyramid.levels[0].peak[0][999]).toBe(32768)
 })
+
+
+it('编辑器暂停结束 take 并提交，释放锁后可编辑，继续使用新播放头位置', async () => {
+  const { api } = captureFixture()
+  const release = vi.fn(), lock = vi.fn(() => release), commit = vi.fn(async (_path: string, _placement: import('@/core/audioCapture/contracts').AudioCapturePlacement) => undefined)
+  const session = new CaptureSession(api, vi.fn(), async () => true, { lock, commit, progress: vi.fn(), rate: () => 48000 })
+  const placement = { projectId: 'p', startFrame: 100, endFrame: 100, revision: 1, spliceId: 'eced7817-a431-49e0-8890-5bf4b08ecb44' }
+  await session.start(placement)
+  expect(api.prepareFile).toHaveBeenCalledWith(placement)
+  await session.togglePause()
+  expect(api.stop).toHaveBeenCalledTimes(1)
+  expect(api.pause).not.toHaveBeenCalled()
+  expect(commit).toHaveBeenCalledTimes(1)
+  expect(release).toHaveBeenCalledTimes(1)
+  expect(session.store.getState()).toMatchObject({ phase: 'paused', outputPath: null })
+  const next = { ...placement, startFrame: 1000, endFrame: 1000, revision: 2 }
+  await session.start(next)
+  await session.stop()
+  expect(api.start).toHaveBeenCalledTimes(2)
+  expect(commit.mock.calls[1][1]).toEqual(next)
+  expect(session.store.getState().phase).toBe('idle')
+})
+
+it('覆盖录音到达末尾自动结束，启动失败释放编辑锁', async () => {
+  const { api, emit, status } = captureFixture()
+  const release = vi.fn(), commit = vi.fn(async () => undefined)
+  const session = new CaptureSession(api, vi.fn(), async () => true, { lock: () => release, commit, progress: vi.fn(), rate: () => 48000 })
+  const placement = { projectId: 'p', startFrame: 0, endFrame: 48000, revision: 1, spliceId: 'eced7817-a431-49e0-8890-5bf4b08ecb44' }
+  vi.mocked(api.getSettings).mockRejectedValueOnce(new Error('设备不可用'))
+  await expect(session.start(placement)).rejects.toThrow('设备不可用')
+  expect(release).toHaveBeenCalledTimes(1)
+  await session.start(placement)
+  emit({ event: 'level', sessionId: status.sessionId, durationSeconds: 1.01, peak: [.2], rms: [.1], clipped: [false], writtenBytes: 144000 })
+  await vi.waitFor(() => expect(session.store.getState().phase).toBe('idle'))
+  expect(commit).toHaveBeenCalledTimes(1)
+})
+
+it('设备中断后离开先修复文件并提交；失败保留会话，不能删掉待恢复的空草稿', async () => {
+  const { api, emit, status } = captureFixture()
+  const release = vi.fn(), commit = vi.fn(async () => undefined)
+  const session = new CaptureSession(api, vi.fn(), async () => true, { lock: () => release, commit, progress: vi.fn(), rate: () => 48000 })
+  await session.start({ projectId: 'p', startFrame: 0, endFrame: 0, revision: 1, spliceId: 'eced7817-a431-49e0-8890-5bf4b08ecb44' })
+  emit({ event: 'interrupted', sessionId: status.sessionId, outputPath: status.outputPath, writtenBytes: 432000, error: { code: 'DISCONNECTED', message: '设备拔出', recoverable: true } })
+  commit.mockRejectedValueOnce(new Error('保存失败'))
+  expect(await session.leave()).toBe(false)
+  expect(session.store.getState().visible).toBe(true)
+  expect(api.completeFile).not.toHaveBeenCalled()
+  expect(await session.leave()).toBe(true)
+  expect(api.recover).toHaveBeenCalledWith(status.outputPath)
+  expect(api.completeFile).toHaveBeenCalledTimes(1)
+})

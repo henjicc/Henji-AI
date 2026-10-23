@@ -42,10 +42,12 @@ export type AudioCaptureEvent = AudioCaptureLevel | AudioCaptureSamples
 export const audioCaptureStartSchema = z.object({ outputPath: z.string().min(1).max(4096), settings: audioCaptureSettingsSchema.optional(), streamSamples: z.boolean().default(false), monitor: z.literal(false).optional() }).strict()
 export type AudioCaptureStart = z.input<typeof audioCaptureStartSchema>
 /** 作品目录内尚未交给编辑器的录音；相对文件名让作品目录迁移后仍可恢复。 */
-export const audioCaptureRecoverySchema = z.object({ version: z.literal(1), minReaderVersion: z.literal(1), files: z.array(z.string().regex(/^录音 \d{4}-\d{2}-\d{2} \d{6}(?: \(\d+\))?\.wav$/)) }).strict()
-export type AudioCaptureFile = { outputPath: string; name: string }
+export const audioCapturePlacementSchema = z.object({ projectId: z.string().regex(/^[\w-]+$/), startFrame: z.number().int().nonnegative(), endFrame: z.number().int().nonnegative(), revision: z.number().int().nonnegative(), spliceId: z.string().uuid() }).strict()
+export type AudioCapturePlacement = z.infer<typeof audioCapturePlacementSchema>
+export const audioCaptureRecoverySchema = z.object({ version: z.literal(2), minReaderVersion: z.literal(1), placements: z.record(z.string(), audioCapturePlacementSchema).optional(), files: z.array(z.string().regex(/^录音 \d{4}-\d{2}-\d{2} \d{6}(?: \(\d+\))?\.wav$/)) }).strict()
+export type AudioCaptureFile = { outputPath: string; name: string; placement?: AudioCapturePlacement; durationSeconds?: number }
 export const audioCaptureRequestSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('prepareFile') }).strict(),
+  z.object({ action: z.literal('prepareFile'), placement: audioCapturePlacementSchema.optional() }).strict(),
   z.object({ action: z.literal('pendingFiles') }).strict(),
   z.object({ action: z.enum(['completeFile', 'trashFile']), outputPath: z.string().min(1).max(4096) }).strict(),
   z.object({ action: z.literal('enumerate') }).strict(),

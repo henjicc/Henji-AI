@@ -1,3 +1,4 @@
+import { insertAudioEditFile } from './audioEditSpliceService'
 import { repairAudioEditRegion } from './audioEditRegions'
 import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 import { applicationPaidRequest, transcriptionEstimatedCny } from '@/services/paidApproval'
@@ -65,6 +66,12 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
     try {
       const result: Record<string, unknown> = { resultRef: { kind: 'audio_edit.document', id }, message: '' }
       switch (definition.id) {
+        case 'insert_audio_edit_file': {
+          if (!input.sourcePath || input.positionSeconds === undefined) throw new Error('请提供音频文件和插入秒数')
+          const rate = instance.document.source.sampleRate
+          await insertAudioEditFile(id, input.sourcePath, Math.round(input.positionSeconds * rate), Math.round((input.replaceUntilSeconds ?? input.positionSeconds) * rate), requestId)
+          result.durationFrames = instance.document.source.durationFrames; result.message = '音频已拼接并保存，可一步撤销。'; break
+        }
         case 'repair_audio_edit_region': {
           if (!input.repair) throw new Error('请提供 repair 修复范围')
           const rendered = await repairAudioEditRegion(id, input.repair, requestId)
@@ -107,7 +114,7 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
         // 从文档文件回读核对（3.3：口播是 .henji-audio 文档）
         const read = await getDocumentOperations().readDocument({ id })
         const persisted = audioEditProjectFromDocument(read.meta, read.content).project
-        if (instance.dirty || audioEditContentKey(persisted) !== audioEditContentKey(instance.document)) throw new Error('修改已提交，但回读时发现口播有新变化。请重新读取口播，不要重复提交原修改。')
+        if (instance.dirty || persisted.source.sourcePath !== instance.document.source.sourcePath || persisted.source.durationFrames !== instance.document.source.durationFrames || audioEditContentKey(persisted) !== audioEditContentKey(instance.document)) throw new Error('修改已提交，但回读时发现口播有新变化。请重新读取口播，不要重复提交原修改。')
         result.verified = true
       }
       return result

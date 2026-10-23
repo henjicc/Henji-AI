@@ -7,6 +7,7 @@ import { migrateColorGradeParamsV1 } from '../imaging/adjustments/colorGradeMigr
  * 2026-10-21 兼容起点：此前的开发期版本不再读取，表从空开始；之后每次升版本必须在这里补对应步骤。
  */
 export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> = {
+  'audio-capture-recovery': { 1: value => ({ ...value as object, version: 2 }) },
   // 全能调色参数格式 v2（2026-10-21）：开尔文白平衡、创意分离色调并入色轮。
   'video-preset-package': { 5: value => ({ ...migrateEmbeddedVideoColorGradesV1(value) as object, version: 6 }) },
   'image-working-copy': { 14: value => migrateImageWorkingCopyColorGrades(value, 15) },

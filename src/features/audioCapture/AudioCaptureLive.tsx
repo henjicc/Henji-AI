@@ -1,22 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import { UiButton } from '@/components/ui'
 import { UI_TEXT_TIMECODE_CLASS } from '@/components/ui/styleTokens'
-import { drawWaveform } from '@/components/waveform/waveformDraw'
 import { getPlatform } from '@/platform/runtime'
 import { useThemeTokens } from '@/hooks/useThemeTokens'
-import { CaptureWaveform, captureLevelRatio, captureTimecode } from './captureLiveModel'
+import { captureLevelRatio, captureTimecode } from './captureLiveModel'
 import type { CaptureSession } from './captureSession'
 
 /** 高频音量和采样只更新 Canvas/读数 DOM；React 仅响应削波标记的变化。 */
 export function AudioCaptureLive({ session, sessionId, channels, summary }: { session: CaptureSession; sessionId?: string; channels: number; summary: string }): JSX.Element {
   const time = useRef<HTMLDivElement>(null)
   const levels = useRef<HTMLCanvasElement>(null)
-  const waveform = useRef<HTMLCanvasElement>(null)
   const [clipped, setClipped] = useState(false)
   const clipping = useRef(false)
   const tokens = useThemeTokens()
   useEffect(() => {
-    let wave = new CaptureWaveform()
     let rms: number[] = [], peaks: number[] = []
     const held = [0, 0], heldAt = [0, 0]
     let frame = 0, lastDraw = 0
@@ -53,11 +50,6 @@ export function AudioCaptureLive({ session, sessionId, channels, summary }: { se
           }
         }
       }
-      const canvas = waveform.current
-      if (canvas) {
-        const ctx = fit(canvas)
-        if (ctx) drawWaveform(ctx, { width: canvas.width, height: canvas.height, pixelRatio: window.devicePixelRatio || 1, data: wave.snapshot(), startFrame: 0, endFrame: 1000, gain: 1, tier: 'standard', tone: 'neutral', palette: { wave: colors.wave, wavePlayed: colors.wavePlayed, waveCut: colors.waveCut, clipWave: colors.clipWave, line: colors.line, lineStrong: colors.lineStrong } })
-      }
     }
     const api = getPlatform().audioCapture
     const releaseLevels = api.onLevel(event => {
@@ -65,20 +57,12 @@ export function AudioCaptureLive({ session, sessionId, channels, summary }: { se
       rms = event.rms; peaks = event.peak
       if (event.clipped.some(Boolean) && !clipping.current) { clipping.current = true; setClipped(true) }
     })
-    const releaseSamples = api.onSamples(event => { if (event.sessionId === sessionId) wave.push(event) })
     frame = requestAnimationFrame(draw)
-    return () => { cancelAnimationFrame(frame); releaseLevels(); releaseSamples(); wave = new CaptureWaveform() }
+    return () => { cancelAnimationFrame(frame); releaseLevels() }
   }, [session, sessionId, channels, tokens])
-  return <div className="w-full space-y-6">
-    <div className="space-y-2">
-      <div ref={time} className={`${UI_TEXT_TIMECODE_CLASS} text-display text-center`} aria-label="已录时长" data-capture-timecode>{captureTimecode(session.durationSeconds)}</div>
-      {summary && <p className="text-center text-xs text-text2">{summary}</p>}
-    </div>
-    <div className="space-y-1">
-      <div className="flex min-h-control-sm items-center justify-between"><span className="text-xs text-text2">输入电平 · dBFS</span>{clipped && <UiButton variant="dangerSolid" size="sm" tooltip="点击清除削波标记" onClick={() => { clipping.current = false; setClipped(false) }}>削波</UiButton>}</div>
-      <canvas ref={levels} className="h-16 w-full" aria-label={`${channels} 声道输入电平`} />
-      <div className="relative h-4 text-2xs text-text3">{[-60, -30, -12, -6, -3, 0].map(db => <span key={db} className="absolute" style={{ left: `${(db + 60) / 60 * 100}%`, transform: db === 0 ? 'translateX(-100%)' : db === -60 ? undefined : 'translateX(-50%)' }}>{db}</span>)}</div>
-    </div>
-    <canvas ref={waveform} className="h-40 w-full" aria-label="最近十秒录音波形" data-capture-waveform />
+  return <div className="flex items-center gap-2" aria-label={summary || '录音电平与时长'}>
+    <canvas ref={levels} className="h-6 w-24" aria-label={`${channels} 声道输入电平`} />
+    <div ref={time} className={`${UI_TEXT_TIMECODE_CLASS} text-xs`} aria-label="已录时长" data-capture-timecode>{captureTimecode(session.durationSeconds)}</div>
+    {clipped && <UiButton variant="danger" size="sm" tooltip="点击清除削波标记" onClick={() => { clipping.current = false; setClipped(false) }}>削波</UiButton>}
   </div>
 }

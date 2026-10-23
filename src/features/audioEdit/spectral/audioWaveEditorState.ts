@@ -29,7 +29,7 @@ export function useAudioWaveEditor(project: AudioEditProjectDocument | undefined
   const [brushPixels, setBrushPixels] = React.useState(12)
   const [view, setView] = React.useState<WaveformViewport>({ start: 0, end: duration })
   const [spectralSelection, setSpectralSelection] = React.useState<AudioSpectralSelection | null>(null)
-  React.useEffect(() => { setView({ start: 0, end: duration }); setSpectralSelection(null) }, [project?.id, duration])
+  React.useEffect(() => { setView({ start: 0, end: duration || (project?.source.sampleRate ?? 48000) * 10 }); setSpectralSelection(null) }, [project?.id, duration, project?.source.sampleRate])
   return { tool, setTool, display, setDisplay, brushPixels, setBrushPixels, view, setView, spectralSelection, setSpectralSelection }
 }
 

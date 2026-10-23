@@ -41,9 +41,9 @@ export interface AudioEditDocumentParts {
 }
 
 /** 文档内容 → 工具内存形态；内容不合法时抛错，没有素材时抛 AudioEditSourceMissingError。 */
-export function audioEditProjectFromDocument(shell: AudioEditDocumentShell, content: unknown): AudioEditDocumentParts {
+export function audioEditProjectFromDocument(shell: AudioEditDocumentShell, content: unknown, allowEmpty = false): AudioEditDocumentParts {
   const parsed = audioEditContentSchema.parse(content)
-  if (!parsed.source) throw new AudioEditSourceMissingError()
+  if (!parsed.source && !allowEmpty) throw new AudioEditSourceMissingError()
   const known: Record<string, unknown> = {}
   const extras: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(parsed)) {
@@ -53,6 +53,7 @@ export function audioEditProjectFromDocument(shell: AudioEditDocumentShell, cont
   }
   const project = audioEditProjectSchema.parse({
     ...known,
+    source: parsed.source ?? emptyAudioEditSource(),
     id: shell.id,
     name: shell.name,
     createdAt: Math.max(0, Math.round(shell.createdAt)),
@@ -69,14 +70,21 @@ export function audioEditProjectToDocumentContent(project: AudioEditProjectDocum
     if (SHELL_KEYS.has(key) || value === undefined) continue
     content[key] = value
   }
+  if (isEmptyAudioEditSource(project.source)) content.source = null
   return content as AudioEditDocumentContent
 }
 
 /** 新导入素材的文档内容（导入即建草稿）。 */
-export function createAudioEditDocumentContent(source: AudioEditSourceMetadata, referenceScript = ''): AudioEditDocumentContent {
+export function createAudioEditDocumentContent(source: AudioEditSourceMetadata | null, referenceScript = ''): AudioEditDocumentContent {
   const content: Record<string, unknown> = {
     source, referenceScript, transcript: [], suggestions: [], vstEnabled: false, cuts: [], processorChain: [],
     batchSettings: { ...DEFAULT_AUDIO_EDIT_SETTINGS, fillers: [...DEFAULT_AUDIO_EDIT_SETTINGS.fillers] },
   }
   return content as AudioEditDocumentContent
 }
+
+/** 空来源只存在于编辑器内存；落盘仍是已有的 source:null，不伪造媒体文件。 */
+export function emptyAudioEditSource(): AudioEditSourceMetadata {
+  return { mediaType: 'audio', sourcePath: 'henji-empty-audio:', audioPath: 'henji-empty-audio:', durationFrames: 0, sampleRate: 48000, channels: 1 }
+}
+export function isEmptyAudioEditSource(source: AudioEditSourceMetadata): boolean { return source.sourcePath === 'henji-empty-audio:' }

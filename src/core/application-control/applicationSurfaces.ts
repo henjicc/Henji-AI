@@ -3,7 +3,7 @@ import { TOOL_DESCRIPTORS } from '../toolbox/toolCatalog'
 export const APPLICATION_SURFACE_IDS = [
   'workspace.generation', 'workspace.canvas', 'workspace.video_edit', 'workspace.tools', 'workspace.assets',
   ...TOOL_DESCRIPTORS.map((tool) => tool.surfaceId),
-  'tool.audio_edit.record', 'settings.general.recording',
+  'settings.general.recording',
   'settings.general', 'settings.general.basic', 'settings.general.view', 'settings.general.appearance', 'settings.general.about',
   'settings.providers_models',
   'settings.workspace', 'settings.workspace.generation', 'settings.workspace.canvas', 'settings.workspace.video_edit', 'settings.workspace.assets',

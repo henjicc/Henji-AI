@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DockviewApi } from 'dockview-react'
 import { ArrowLeft, Download, Mic, Redo2, Search, Upload } from 'lucide-react'
 import { useStore } from 'zustand'
-import { AudioCaptureView, AudioCaptureRecoveryBanner, getAudioCaptureSession } from '@/features/audioCapture'
+import { AudioCaptureRecoveryBanner, getAudioCaptureSession } from '@/features/audioCapture'
 
 import { UiButton, UiIconButton, UiToolbar } from '@/components/ui'
 import type { AudioEditAsrModel } from '@/platform/contracts/audioEdit'
@@ -40,7 +40,7 @@ import { AudioEditWorkspaceContext, type AudioEditDeliveryFormat, type AudioEdit
 
 import { applyAudioEditSuggestion, audioEditSuggestionStates, DEFAULT_AUDIO_EDIT_VIEW_SETTINGS, dismissAudioEditSuggestion, editAudioEditRange, setAudioEditBlocks } from '@/core/audioEdit/edits'
 import { editAudioEditProject, flushAudioEditProject } from './application/audioEditProjectInstances'
-import { AudioEditLeaveCancelledError, importAudioEditMedia, leaveAudioEditEditor, openAudioEditDocument, pickAudioEditMedia, renameAudioEditDocument } from './application/audioEditDocumentService'
+import { AudioEditLeaveCancelledError, createAudioEditRecording, importAudioEditMedia, leaveAudioEditEditor, openAudioEditDocument, pickAudioEditMedia, renameAudioEditDocument } from './application/audioEditDocumentService'
 import { VideoEditSendMenu } from '@/features/videoEdit/panels/VideoEditSendMenu'
 import { videoEditDocumentRef } from '@/features/videoEdit/application/videoEditSourceRefs'
 import { exportAudioEdit, relinkAudioEdit } from './application/audioEditApplicationService'
@@ -65,7 +65,7 @@ export interface AudioEditAppProps { onBack?: () => void }
 
 export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element {
   const capture = getAudioCaptureSession()
-  const recordingView = useStore(capture.store, state => state.visible)
+  const captureLocked = useStore(capture.store, state => state.phase === 'recording' || state.busy)
   const { showNotification } = useNotification()
   const state = useAudioEditStore(useShallow((state) => ({
     project: state.project,
@@ -111,12 +111,12 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   const editorRoot = useRef<HTMLDivElement>(null)
   const [selectionOnly, setSelectionOnly] = useState(false)
   const [sourceError, setSourceError] = useState('')
-  const disabled = busy || state.busy
+  const disabled = busy || state.busy || captureLocked || Boolean(project && !project.source.durationFrames)
   const selectedBlocks = useMemo(() => { const selected = new Set(selectedBlockIds); return project?.transcript.filter((block) => selected.has(block.id)) ?? [] }, [project?.transcript, selectedBlockIds])
   const range = selectionOnly ? waveSelection ?? (selectedBlocks.length ? { startFrame: Math.min(...selectedBlocks.map((block) => block.startFrame)), endFrame: Math.max(...selectedBlocks.map((block) => block.endFrame)) } : undefined) : undefined
   const silencePreview = useAudioEditSilencePreview(project, range, Boolean(project) && !disabled && !sourceError)
   const normalizationGain = useMemo(() => calculatePreviewGain(waveformPeaks), [waveformPeaks])
-  const { togglePlayback, seekSourceFrame } = useAudioEditPreview(project, normalizationGain)
+  const { togglePlayback, seekSourceFrame } = useAudioEditPreview(project ?? null, normalizationGain)
   const notifyError = useCallback((error: unknown) => showNotification(error instanceof Error ? error.message : notificationMessage('operationFailed'), 'error'), [showNotification])
   const run = useCallback(async (operation: () => Promise<unknown>) => {
     setBusy(true)
@@ -168,7 +168,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     element.addEventListener('wheel', wheel, { passive: false })
     return () => element.removeEventListener('wheel', wheel)
   }, [projectId])
-  const waveformPath = project?.source.audioPath
+  const waveformPath = project?.source.durationFrames ? project.source.audioPath : undefined
   const waveformSeconds = project ? project.source.durationFrames / project.source.sampleRate : 0
   useEffect(() => {
     let disposed = false
@@ -193,7 +193,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   // 返回列表：草稿走“保存 / 不保存 / 取消”，取消留在编辑器
   // 从剪辑里打开的音频（嵌入模式）离开后回到剪辑；其余回到列表
   const embeddedHost = useEmbeddedHost(project?.id)
-  const leave = () => run(async () => { if (project) await returnFromEmbedded(project.id, leaveAudioEditEditor); else await leaveAudioEditEditor() })
+  const leave = () => run(async () => { if (capture.store.getState().visible && !await capture.leave()) return; if (project) await returnFromEmbedded(project.id, leaveAudioEditEditor); else await leaveAudioEditEditor() })
   // 新建 = 导入音频或视频，导入即建草稿（离开时起名）
   const importMedia = () => run(async () => {
     const sourcePath = await pickAudioEditMedia()
@@ -209,7 +209,6 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     const result = await exportAudioEdit({ projectId: project.id, targetPath, format, includeProcessing: withRx, ...(withSrt ? { subtitleTargetPath: targetPath.replace(/\.[^.]+$/, '') + '.srt' } : {}) })
     showNotification(notificationMessage('audioExported', { format: format.toUpperCase(), duration: formatTime(result.durationFrames, project.source.sampleRate) }))
   })
-  if (recordingView) return <AudioCaptureView />
   if (!project) {
     // 列表整页是通用文档页（3.3）：取数、筛选、草稿区与右键操作（重命名、移到项目、创建副本、删除等）都由通用组件负责
     return (
@@ -224,7 +223,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
         labels={{ emptyDescription: '导入音频或视频，在波形和频谱上精修、修掉杂音，或压缩停顿、清理语气词，再导出或交给剪辑。直接引用原素材，不改原文件。' }}
         create={{ kind: 'menu', options: [
           { id: 'import', label: '导入', icon: Upload, onSelect: () => void importMedia() },
-          { id: 'record', label: '录音', icon: Mic, onSelect: () => { void capture.open().catch(notifyError) } },
+          { id: 'record', label: '录音', icon: Mic, onSelect: () => { void createAudioEditRecording().catch(notifyError) } },
         ] }}
         banner={<AudioCaptureRecoveryBanner />}
         onOpen={(document) => openDocument({ id: document.id, path: document.path })}
@@ -320,6 +319,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
         : <UiIconButton size="md" onClick={() => void leave()} aria-label="返回音频列表" tooltip="返回音频列表"><ArrowLeft /></UiIconButton>}
       <AudioEditFileMenu key={project.id} name={project.name} disabled={disabled} onRename={(name) => void run(() => renameAudioEditDocument(project.id, name))} onRelink={() => void relinkSource()} />
     </UiToolbar>
+    <AudioCaptureRecoveryBanner projectId={project.id} />
     <AudioEditWorkspaceContext.Provider value={workspace}>
       <AudioEditAppMenus onExport={() => void exportProject()} />
       <div className="min-h-0 flex-1"><AudioEditDock onReady={setDockApi} /></div>

@@ -1078,13 +1078,16 @@
         }
       ],
       "versions": {
-        "1": "3a78ac28056844d1866e996b7110726908e38f5544f58d812c0578cf43d06e33"
+        "1": "3a78ac28056844d1866e996b7110726908e38f5544f58d812c0578cf43d06e33",
+        "2": "0e60f6f34de0020992b2fedd630ccc44f159d9129215cc465e259a99237e1aae"
       },
       "readers": {
-        "1": 1
+        "1": 1,
+        "2": 1
       },
       "samples": {
-        "v1.json": "a7805d9c6403aaae63e5495dda5c1120cb642ad1f1cfde7ee1cc591efdb9452d"
+        "v1.json": "a7805d9c6403aaae63e5495dda5c1120cb642ad1f1cfde7ee1cc591efdb9452d",
+        "v2.json": "516ec986cd15616c92c47af308c750e393932d22c7494a07de5dec5ac1c71952"
       }
     }
   },

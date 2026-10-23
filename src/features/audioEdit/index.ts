@@ -3,3 +3,6 @@ export { createAudioEditDraft, editAudioEditProject, flushAudioEditProject, load
 export { transcribeAudioEdit, preflightAudioEditTranscription } from './application/audioEditApplicationService'
 export { setAudioEditRegions, renderAudioEdit, repairAudioEditRegion } from './application/audioEditRegions'
 export { importAudioEditMedia, openAudioEditDocument } from './application/audioEditDocumentService'
+export { lockAudioEditRecording } from './application/audioEditProjectInstances'
+export { restoreAudioEditTake } from './application/audioEditSpliceService'
+export { useAudioEditPlaybackStore } from './store/audioEditPlaybackStore'

@@ -5,7 +5,7 @@ import { createLocationCodec, type LocationContext } from '../../../../src/core/
 import { DOCUMENT_KINDS } from '../../../../src/core/documents/kinds'
 import { getDb } from '../db'
 import { databaseLocationContext } from '../db-locations'
-import { getProgramDataDir, getProgramStoreDir, getUserModelsLocation } from '../appPaths'
+import { getProgramDataDir, getProgramStoreDir, getUserModelsLocation, getUserRootDir } from '../appPaths'
 import { MEDIA_REFERENCE_TABLES } from './schema'
 import { scanReferenceFiles, type ReferenceScanRoot } from './file-scanner'
 import { canonicalPath, within } from './paths'
@@ -68,6 +68,14 @@ export function recordReferences(source: string, raw: Record<string, unknown>, c
   if (!definition) throw new Error(`Unregistered media storage: ${source}`)
   if (source === 'generation_submissions' && raw.media_released === 1 && raw.phase === 'completed') return []
   const values: unknown[] = []
+  if (source === 'settings' && raw.key === 'audio_capture.pending_files' && typeof raw.value === 'string') {
+    const pending = JSON.parse(raw.value) as { files?: string[]; placements?: Record<string, { spliceId: string }> }
+    for (const name of pending.files ?? []) {
+      values.push(path.join(getUserRootDir(), '录音', path.basename(name)))
+      const id = pending.placements?.[name]?.spliceId
+      if (id && /^[\w-]+$/.test(id)) values.push(path.join(getUserRootDir(), '录音', `${id}.wav`))
+    }
+  }
   for (const key of definition.json) if (raw[key] !== null && raw[key] !== undefined) values.push(JSON.parse(String(raw[key])))
   for (const key of definition.paths) values.push(raw[key])
   if (source === 'settings' && raw.type === 'json' && typeof raw.value === 'string') values.push(JSON.parse(raw.value))

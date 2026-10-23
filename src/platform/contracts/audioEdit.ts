@@ -30,6 +30,7 @@ export interface AudioEditAsrModel {
  * 发起前渲染层先把修改写完；转写与重新定位的结果返回给渲染层实例，由文档会话保存。
  */
 export interface AudioEditPlatform {
+  splice(request: import('@/core/audioEdit/splice').AudioEditSpliceRequest): Promise<{ source: AudioEditSourceMetadata; insertedFrames: number }>
   spectralTile(request: AudioEditSpectralTileRequest): Promise<AudioEditSpectralTile>
   spectralCancel(requestId: string): Promise<void>
   onSpectralProgress(handler: (progress: AudioEditSpectralProgress) => void): () => void

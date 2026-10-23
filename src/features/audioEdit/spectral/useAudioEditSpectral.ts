@@ -149,16 +149,17 @@ export class SpectralTileScheduler {
   }
 }
 
-export function useAudioEditSpectral(client: SpectralTileClient, projectId: string, view: WaveformViewport, columns: number, duration: number, mode: 'source' | 'edited', revision: number): AudioEditSpectralState {
+export function useAudioEditSpectral(client: SpectralTileClient, projectId: string, view: WaveformViewport, columns: number, duration: number, mode: 'source' | 'edited', revision: number, sourceKey = ''): AudioEditSpectralState {
   const [attempt, setAttempt] = useState(0)
   const [version, setVersion] = useState(0)
   const [error, setError] = useState<string | undefined>()
-  // 原始模式与作品版本无关；只有“剪后”模式随版本换一套块，否则每次编辑都会丢掉已到的块重新请求。
+  // 原始模式不随剪切变化，但录音拼接、重新定位或撤销更换素材时必须丢掉旧块。
   const effectiveRevision = mode === 'edited' ? revision : 0
   const target = useMemo(() => ({ projectId, mode, revision: effectiveRevision }), [projectId, mode, effectiveRevision])
-  const shown = useRef<{ store: SpectralTileStore; projectId: string; mode: 'source' | 'edited' } | null>(null)
+  const shown = useRef<{ store: SpectralTileStore; projectId: string; mode: 'source' | 'edited'; sourceKey: string } | null>(null)
   // 调度器随挂载创建、随卸载销毁：开发模式会挂载两次，不能把已销毁的实例留给第二次挂载。
-  const [scheduler, setScheduler] = useState<SpectralTileScheduler | null>(null)
+  const [binding, setBinding] = useState<{ scheduler: SpectralTileScheduler; sourceKey: string } | null>(null)
+  const scheduler = binding?.sourceKey === sourceKey ? binding.scheduler : null
   useEffect(() => {
     let frame = 0
     const next = new SpectralTileScheduler(client, new SpectralTileStore(), target,
@@ -166,9 +167,9 @@ export function useAudioEditSpectral(client: SpectralTileClient, projectId: stri
       message => setError(message))
     const unsubscribe = client.subscribe(progress => next.progress(progress))
     setError(undefined)
-    setScheduler(next)
+    setBinding({ scheduler: next, sourceKey })
     return () => { unsubscribe(); next.dispose(); if (frame) cancelAnimationFrame(frame) }
-  }, [client, target, attempt])
+  }, [client, target, attempt, sourceKey])
 
   useEffect(() => {
     scheduler?.setNeeds(spectralNeeds(view, columns, duration))
@@ -177,8 +178,8 @@ export function useAudioEditSpectral(client: SpectralTileClient, projectId: stri
   // 同一作品同一模式换版本（或重试）时，新块到达前继续显示旧图；换作品或换模式不沿用。
   const current = scheduler?.store
   const held = shown.current
-  const display = current && current.version > 0 ? current : held && held.projectId === projectId && held.mode === mode ? held.store : null
-  if (current && current.version > 0) shown.current = { store: current, projectId, mode }
+  const display = current && current.version > 0 ? current : held && held.projectId === projectId && held.mode === mode && held.sourceKey === sourceKey ? held.store : null
+  if (current && current.version > 0) shown.current = { store: current, projectId, mode, sourceKey }
   const displayVersion = display?.version ?? 0
   const tiles = useMemo<SpectralTileSet | undefined>(() => display && displayVersion > 0 ? {
     sampleRate: display.sampleRate, channels: display.channels, durationFrames: display.durationFrames, lowBins: display.lowBins, highBins: display.highBins,

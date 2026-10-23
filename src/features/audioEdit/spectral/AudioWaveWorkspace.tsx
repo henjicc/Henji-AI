@@ -1,4 +1,7 @@
 import React from 'react'
+import { useStore } from 'zustand'
+import { getAudioCaptureSession } from '@/features/audioCapture'
+import { AudioCapturePreview } from './AudioCapturePreview'
 import { Brush, Hand, MoveLeft, MoveRight, RotateCcw, SquareDashed, TextCursor, Trash2, Volume1, VolumeX, Wand2 } from 'lucide-react'
 import ContextMenu from '@/components/ContextMenu'
 import { PanelTrigger, UiButton, UiFormRow, UiIconButton, UiRangeInput, UiSegmented, UiTextToken } from '@/components/ui'
@@ -22,6 +25,7 @@ import { audioWaveToolForKey, type audioWaveActions, type AudioWaveEditorState }
 import { useAudioEditSpectral } from './useAudioEditSpectral'
 import { audioEditSpectralClient } from '../application/audioEditRegions'
 import { audioEditScrub } from '../preview/audioEditScrub'
+import { spliceAudioRanges } from '@/core/audioEdit/splice'
 
 const TOOLS: Array<{ id: AudioEditorTool; label: string; icon: React.ReactNode }> = [
   { id: 'time', label: '时间选区 · V', icon: <TextCursor /> },
@@ -41,7 +45,7 @@ export function AudioWaveToolbar({ editor, selection, disabled, actions, onEditS
   const [gainOpen, setGainOpen] = React.useState(false)
   return <div className="flex min-w-0 items-center gap-1.5" data-audio-wave-toolbar>
     <div role="group" aria-label="编辑工具" className="flex items-center gap-0.5">
-      {TOOLS.map(tool => <UiIconButton key={tool.id} size="sm" on={editor.tool === tool.id} aria-pressed={editor.tool === tool.id} aria-label={tool.label} tooltip={tool.label} onClick={() => editor.setTool(tool.id)}>{tool.icon}</UiIconButton>)}
+      {TOOLS.map(tool => <UiIconButton key={tool.id} size="sm" on={editor.tool === tool.id} aria-pressed={editor.tool === tool.id} aria-label={tool.label} disabled={disabled && tool.id !== 'hand'} disabledReason="请先录入音频或暂停录音" tooltip={tool.label} onClick={() => editor.setTool(tool.id)}>{tool.icon}</UiIconButton>)}
     </div>
     <UiSegmented ariaLabel="显示" size="sm" value={editor.display} onChange={editor.setDisplay}
       options={[{ value: 'both', label: '都显示' }, { value: 'waveform', label: '波形' }, { value: 'spectrum', label: '频谱' }]} />
@@ -105,18 +109,39 @@ export function AudioWaveWorkspace() {
   const workspace = useAudioEditWorkspace()
   const { project, wave: editor, waveSelection: selection, setWaveSelection: onSelection, seek: onSeek, editSelection: onEditSelection, waveActions: actions, disabled } = workspace
   const { durationFrames: duration, sampleRate: rate } = project.source
+  const capture = getAudioCaptureSession()
+  const recording = useStore(capture.store, state => state.phase === 'recording' && state.placement?.projectId === project.id)
+  const [liveDuration, setLiveDuration] = React.useState(duration)
+  const [liveFrames, setLiveFrames] = React.useState(0)
+  const { view: captureView, setView: setCaptureView } = editor
+  React.useEffect(() => {
+    if (!recording) { setLiveDuration(duration); setLiveFrames(0); return }
+    const update = (): void => {
+      const placement = capture.store.getState().placement
+      if (!placement) return
+      const frames = Math.ceil(capture.durationSeconds * rate)
+      const current = placement.startFrame + frames
+      const length = Math.max(rate * 10, captureView.end - captureView.start)
+      setLiveFrames(frames)
+      setLiveDuration(Math.max(duration + (placement.startFrame === placement.endFrame ? frames : 0), current + rate * 2))
+      if (current >= captureView.end) setCaptureView({ start: Math.max(0, current - length * .8), end: current + length * .2 })
+    }
+    const timer = window.setInterval(update, 100)
+    return () => window.clearInterval(timer)
+  }, [capture, recording, duration, rate, captureView, setCaptureView])
   const autoGain = useAudioEditPlaybackStore(state => state.autoGain && state.mode !== 'delivery')
   const edited = Boolean(project.repairs?.some(repair => repair.enabled) || project.gainRegions?.some(region => region.enabled))
   // 有修复或区间音量时，波形改读“已编辑、未删除”的音频（时间轴同原素材），删除与静音仍用叠加标记表示。
   const [editedPath, setEditedPath] = React.useState<string | null>(null)
   React.useEffect(() => {
+    setEditedPath(null)
     if (!edited) { setEditedPath(null); return }
     let cancelled = false
     const timer = window.setTimeout(() => void getPlatform().audioEdit.editedSource({ projectId: project.id }).then(result => { if (!cancelled) setEditedPath(result.audioPath) }, () => undefined), 150)
     return () => { cancelled = true; window.clearTimeout(timer) }
-  }, [edited, project.id, project.repairs, project.gainRegions])
+  }, [edited, project.id, project.source.audioPath, project.repairs, project.gainRegions])
   const channels: 1 | 2 = project.source.channels > 1 ? 2 : 1
-  const waveformSource = editedPath ?? project.source.audioPath
+  const waveformSource = duration ? editedPath ?? project.source.audioPath : null
   const waveform = useWaveformData(waveformSource ? { source: waveformSource, channels } : null, 'full')
   const [columns, setColumns] = React.useState(0)
   const host = React.useRef<HTMLDivElement | null>(null)
@@ -135,7 +160,10 @@ export function AudioWaveWorkspace() {
     observer.observe(element)
     return () => { observer.disconnect(); window.clearTimeout(timer) }
   }, [])
-  const spectrogram = useAudioEditSpectral(audioEditSpectralClient, project.id, editor.view, columns, duration, edited ? 'edited' : 'source', project.revision)
+  const placement = recording ? capture.store.getState().placement : null
+  const insertion = placement ? { start: placement.startFrame, frames: placement.endFrame > placement.startFrame ? Math.min(liveFrames, placement.endFrame - placement.startFrame) : liveFrames, replace: placement.endFrame > placement.startFrame } : undefined
+  const spectralView = insertion && !insertion.replace ? { start: Math.max(0, editor.view.start - insertion.frames), end: editor.view.end } : editor.view
+  const spectrogram = useAudioEditSpectral(audioEditSpectralClient, project.id, spectralView, columns, duration, edited ? 'edited' : 'source', project.revision, JSON.stringify([project.source.audioPath, project.source.identity]))
   // 标记以剪后时间线为准：文字稿删掉的词和波形上删除的区间都是“删除”，相邻的合并成一段；静音按剪后片段的静音标记；停顿预览是“待处理”。
   const spans = React.useMemo(() => buildProjectAudioEditTimeline(project), [project])
   const pending = workspace.silencePreview.ranges
@@ -151,6 +179,7 @@ export function AudioWaveWorkspace() {
     return [...ranges, ...pending.map(range => ({ start: range.startFrame, end: range.endFrame, mode: 'pending' as const }))]
   }, [spans, duration, pending])
   const repairs = React.useMemo(() => (project.repairs ?? []).filter(repair => repair.enabled && repair.kind === 'spectral_heal').map(repair => ({ id: repair.id, start: repair.startFrame, end: repair.endFrame, lowHz: repair.lowHz, highHz: repair.highHz })), [project.repairs])
+  const visibleCuts = insertion ? spliceAudioRanges(cutRanges.map((range, index) => ({ ...range, id: String(index), startFrame: range.start, endFrame: range.end })), insertion.start, insertion.start + (insertion.replace ? insertion.frames : 0), insertion.frames).map(range => ({ ...range, start: range.startFrame, end: range.endFrame })) : cutRanges
   const menu = useContextMenu()
   // 播放时播放头跑出视野就翻页跟随（订阅播放位置，不让整个面板每帧重新渲染）。
   const viewRef = React.useRef(editor.view)
@@ -168,9 +197,9 @@ export function AudioWaveWorkspace() {
     if (event.target instanceof HTMLElement && event.target.closest('input,textarea,[contenteditable="true"]')) return
     if (event.ctrlKey || event.metaKey || event.altKey) return
     const tool = audioWaveToolForKey(event.key)
-    if (tool) { event.preventDefault(); editor.setTool(tool); return }
+    if (tool && !recording) { event.preventDefault(); editor.setTool(tool); return }
     if (event.key === 'Escape') { onSelection(null); editor.setSpectralSelection(null); return }
-    if (event.key === ' ' && !(event.target instanceof HTMLElement && event.target.closest('button'))) { event.preventDefault(); void workspace.togglePlayback(); return }
+    if (!recording && !disabled && event.key === ' ' && !(event.target instanceof HTMLElement && event.target.closest('button'))) { event.preventDefault(); void workspace.togglePlayback(); return }
     if (selection && !disabled && (event.key === 'Delete' || event.key.toLowerCase() === 'm')) { event.preventDefault(); onEditSelection(event.key === 'Delete' ? 'delete' : 'mute') }
   }} tabIndex={-1}>
     {/* 编辑工具放在“编辑器”标签行右侧；面板组太窄时留在面板顶部这一行。 */}
@@ -178,18 +207,19 @@ export function AudioWaveWorkspace() {
       <AudioWaveToolbar editor={editor} selection={selection} disabled={disabled} actions={workspace.waveActions} onEditSelection={onEditSelection} />
     </DockHeaderPortal>
     <div className="min-h-0 flex-1">
-      <AudioSpectralEditor sampleRate={rate} durationFrames={duration} waveform={waveform}
+      <AudioSpectralEditor sampleRate={rate} durationFrames={recording ? liveDuration : duration || rate * 10} empty={!duration}
+        {...(recording ? { insertion, recordingOverlay: (mode, frequency) => <AudioCapturePreview mode={mode} frequency={frequency} view={editor.view} rate={rate} /> } : {})} waveform={waveform}
         {...(spectrogram.tiles ? { spectrogram: spectrogram.tiles } : {})} spectrogramStatus={spectrogram.status} {...(spectrogram.error ? { spectrogramError: spectrogram.error } : {})} onRetrySpectrogram={spectrogram.retry}
-        view={editor.view} onViewChange={editor.setView} display={editor.display} tool={editor.tool} brushPixels={editor.brushPixels}
-        playhead={playheadSource} onSeek={onSeek} displayGain={autoGain ? workspace.previewGain : 1}
-        onScrubStart={frame => audioEditScrub(project.id)?.start(frame)}
-        onScrubMove={frame => audioEditScrub(project.id)?.move(frame)}
+        view={editor.view} onViewChange={editor.setView} display={editor.display} tool={recording ? 'hand' : editor.tool} brushPixels={editor.brushPixels}
+        playhead={playheadSource} onSeek={frame => { if (!recording) onSeek(frame) }} displayGain={autoGain ? workspace.previewGain : 1}
+        onScrubStart={frame => { if (!recording) audioEditScrub(project.id)?.start(frame) }}
+        onScrubMove={frame => { if (!recording) audioEditScrub(project.id)?.move(frame) }}
         onScrubEnd={() => audioEditScrub(project.id)?.end()}
-        onScrubStep={frame => audioEditScrub(project.id)?.step(frame)}
+        onScrubStep={frame => { if (!recording) audioEditScrub(project.id)?.step(frame) }}
         selection={selection ? { start: selection.startFrame, end: selection.endFrame } : null}
-        onSelectionChange={(next) => onSelection(next && next.end > next.start ? { startFrame: next.start, endFrame: next.end } : null)}
+        onSelectionChange={(next) => { if (!recording) onSelection(next && next.end > next.start ? { startFrame: next.start, endFrame: next.end } : null) }}
         spectralSelection={editor.spectralSelection} onSpectralSelectionChange={editor.setSpectralSelection}
-        onBrushStroke={actions.healStroke} cutRanges={cutRanges} repairs={repairs}
+        onBrushStroke={stroke => { if (!disabled) actions.healStroke(stroke) }} cutRanges={visibleCuts} repairs={recording ? [] : repairs}
         {...(project.transcript.length && (project.viewSettings?.timelineCaptions ?? true) ? { captionLane: <CaptionLane view={editor.view} /> } : {})}
         onContextMenu={(event) => menu.showMenu(event, [
           { id: 'heal', label: '修复框选区域', icon: <Wand2 size={iconSize} />, disabled: !editor.spectralSelection || disabled, onClick: () => { actions.healArea(editor.spectralSelection!); editor.setSpectralSelection(null) } },
@@ -201,7 +231,7 @@ export function AudioWaveWorkspace() {
           { id: 'restore', label: '恢复选区', icon: <RotateCcw size={iconSize} />, disabled: !selection || disabled, onClick: () => onEditSelection('restore') },
         ])} />
     </div>
-    <AudioEditTransport />
+    <AudioEditTransport viewDuration={recording ? liveDuration : duration || rate * 10} />
     <ContextMenu visible={menu.menuVisible} position={menu.menuPosition} items={menu.menuItems} onClose={menu.hideMenu} />
   </div>
 }

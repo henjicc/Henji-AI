@@ -13,5 +13,5 @@ export async function importCapturedAudio(outputPath: string): Promise<void> {
     await openAudioEditDocument({ id: draft.id })
     return
   }
-  await importAudioEditMedia(outputPath)
+  await importAudioEditMedia(outputPath, { kind: 'user' }, 'managed')
 }

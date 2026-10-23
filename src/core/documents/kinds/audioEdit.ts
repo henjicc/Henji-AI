@@ -50,6 +50,7 @@ export type AudioEditDocumentContent = z.infer<typeof audioEditContentSchema>
  */
 function isEmptyAudioEditContent(content: AudioEditDocumentContent): boolean {
   if (!content.source) return true
+  if (content.source.ownership === 'managed') return false
   return content.transcript.length === 0
     && !(content.cuts?.length)
     && !(content.gainRegions?.length) && !(content.repairs?.length)

@@ -56,6 +56,9 @@ export interface AudioSpectralEditorProps {
   onContextMenu?: (event: React.MouseEvent) => void
   /** 刻度下方的字幕条（宿主按可见区间排好），没有转写稿时不传。 */
   captionLane?: React.ReactNode
+  empty?: boolean
+  recordingOverlay?: (mode: Pane, frequency: FrequencyView) => React.ReactNode
+  insertion?: { start: number; frames: number; replace: boolean }
 }
 
 const RULER_WIDTH = 'w-11'
@@ -383,10 +386,19 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
   const total = Math.max(1, durationFrames)
   const selectionStyle = { background: AUDIO_SCOPE_COLORS.selection, borderColor: AUDIO_SCOPE_COLORS.selectionEdge }
 
-  const spectrumBody = props.spectrogramStatus === 'error'
+  const spectrumBody = (range: WaveformViewport) => props.spectrogramStatus === 'error'
     ? <UiError message={props.spectrogramError ?? '频谱图没有生成出来。'} {...(props.onRetrySpectrogram ? { onRetry: props.onRetrySpectrogram } : {})} />
     : props.spectrogramStatus === 'loading' && !props.spectrogram ? <UiLoading message="正在生成频谱图…" />
-      : <SpectrogramView {...(props.spectrogram ? { tiles: props.spectrogram } : {})} lanes={lanes} startFrame={view.start} endFrame={view.end} minHz={frequency.minHz} maxHz={frequency.maxHz} scale={frequency.scale} label="频谱图" />
+      : <SpectrogramView {...(props.spectrogram ? { tiles: props.spectrogram } : {})} lanes={lanes} startFrame={range.start} endFrame={range.end} minHz={frequency.minHz} maxHz={frequency.maxHz} scale={frequency.scale} label="频谱图" />
+  const waveBody = (range: WaveformViewport) => <WaveformView waveform={props.waveform} startSeconds={range.start / sampleRate} endSeconds={range.end / sampleRate} lanes={lanes} gain={amplitudeZoom * displayGain} palette={SCOPE_WAVE_PALETTE} layers="single" label="音频波形" />
+  // 原素材在插入点之后向右移动；仅绘制视口内的两段，复用既有波形与频谱数据。
+  const sourceBody = (render: (range: WaveformViewport) => React.ReactNode): React.ReactNode => {
+    const insertion = props.insertion
+    if (!insertion) return render(view)
+    const right = insertion.start + insertion.frames
+    const delta = insertion.replace ? 0 : insertion.frames
+    return [{ start: view.start, end: Math.min(view.end, insertion.start), delta: 0 }, { start: Math.max(view.start, right), end: view.end, delta }].filter(part => part.end > part.start).map((part, index) => <div key={index} className="absolute inset-y-0 overflow-hidden" style={spanStyle(part.start, part.end)}>{render({ start: part.start - part.delta, end: part.end - part.delta })}</div>)
+  }
 
   return <div className="grid h-full min-h-0 select-none grid-cols-[minmax(0,1fr)_auto] grid-rows-[20px_22px_auto_minmax(0,1fr)] bg-panel" data-audio-spectral-editor data-tool={tool} data-display={display} data-spectrogram-status={props.spectrogramStatus}
     data-view-start={Math.round(view.start)} data-view-end={Math.round(view.end)}>
@@ -427,14 +439,16 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
       {showWave && <div className="relative min-h-0" style={{ height: showSpectrum ? `${split * 100}%` : '100%' }}>
         {lanes.map(lane => <div key={lane} className="pointer-events-none absolute inset-x-0 h-px" style={{ top: `${(lane + 0.5) * laneFraction}%`, background: AUDIO_SCOPE_COLORS.grid }} />)}
         {props.waveform.data
-          ? <WaveformView waveform={props.waveform} startSeconds={view.start / sampleRate} endSeconds={view.end / sampleRate} lanes={lanes} gain={amplitudeZoom * displayGain} palette={SCOPE_WAVE_PALETTE} layers="single" label="音频波形" />
-          : props.waveform.status === 'error' ? <UiError message={props.waveform.error ?? '波形没有读出来。'} /> : <UiLoading message="正在读取波形…" />}
+          ? sourceBody(waveBody)
+          : props.waveform.status === 'error' ? <UiError message={props.waveform.error ?? '波形没有读出来。'} /> : props.empty ? !props.recordingOverlay && <UiEmpty title="按 Shift+空格 开始录音" /> : <UiLoading message="正在读取波形…" />}
+        {props.recordingOverlay?.('waveform', frequency)}
         {lanes.slice(1).map(lane => <div key={lane} className="pointer-events-none absolute inset-x-0 h-px bg-line" style={{ top: `${lane * laneFraction}%` }} />)}
       </div>}
       {showWave && showSpectrum && <div className="relative h-1.5 shrink-0 cursor-row-resize bg-gap hover:bg-hover" role="separator" aria-orientation="horizontal" aria-label="调整波形与频谱的高度"
         onPointerDown={onSplitDown} onPointerMove={onSplitMove} onPointerUp={onSplitUp} />}
       {showSpectrum && <div ref={spectrumPane} className="relative min-h-0 flex-1">
-        {spectrumBody}
+        {sourceBody(spectrumBody)}
+        {props.recordingOverlay?.('spectrum', frequency)}
         {lanes.slice(1).map(lane => <div key={lane} className="pointer-events-none absolute inset-x-0 h-px bg-gap" style={{ top: `${lane * laneFraction}%` }} />)}
         {/* 修复记录与框选只在频谱上有频率维度 */}
         {lanes.map(lane => <React.Fragment key={lane}>

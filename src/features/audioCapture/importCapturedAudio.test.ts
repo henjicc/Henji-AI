@@ -7,7 +7,7 @@ vi.mock('@/features/audioEdit', () => ({ importAudioEditMedia: mocks.import, ope
 beforeEach(() => { vi.clearAllMocks(); mocks.list.mockResolvedValue([]) })
 it('新录音复用导入入口，跨重启恢复打开同源草稿，不重复创建', async () => {
   await importCapturedAudio('D:/作品/录音/录音.wav')
-  expect(mocks.import).toHaveBeenCalledWith('D:/作品/录音/录音.wav')
+  expect(mocks.import).toHaveBeenCalledWith('D:/作品/录音/录音.wav', { kind: 'user' }, 'managed')
   mocks.list.mockResolvedValue([{ id: 'draft', draft: true }])
   mocks.read.mockResolvedValue({ content: { source: { mediaType: 'audio', sourcePath: 'D:\\作品\\录音\\录音.wav', audioPath: 'audio.wav', durationFrames: 144000, sampleRate: 48000, channels: 1 }, referenceScript: '', transcript: [], suggestions: [], vstEnabled: false } })
   await importCapturedAudio('D:/作品/录音/录音.wav')

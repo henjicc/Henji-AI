@@ -156,9 +156,12 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
   const projectId = project?.id
   const sampleRate = project?.source.sampleRate
   const channelCount = project?.source.channels
+  const openedProject = useRef<string>()
 
   useEffect(() => {
     if (!projectId || !sampleRate || !channelCount) return
+    if (openedProject.current !== projectId) useAudioEditPlaybackStore.getState().updatePosition(0, 0, null)
+    openedProject.current = projectId
     let disposed = false
     useAudioEditPlaybackStore.getState().setMode('edited')
     useAudioEditPlaybackStore.getState().setReady(false)
@@ -191,7 +194,7 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
           if (message.type === 'need-data' || message.type === 'starved') void fillBufferRef.current()
         }
         useAudioEditPlaybackStore.getState().setReady(true)
-        resetAtRef.current(0)
+        resetAtRef.current(useAudioEditPlaybackStore.getState().sourceFrame)
       } catch (error) {
         logger.error('audio_edit.preview.initialize.failed', error)
         useAudioEditPlaybackStore.getState().setError(error instanceof Error ? error.message : '预览引擎初始化失败')

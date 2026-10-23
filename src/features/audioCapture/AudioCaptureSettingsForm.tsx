@@ -13,7 +13,7 @@ const logger = createLogger('features.audioCapture.settings')
 export function AudioCaptureSettingsForm({ disabled = false, disabledReason = '录音中不能修改', onSettings }: {
   disabled?: boolean; disabledReason?: string; onSettings?: (state: AudioCaptureSettingsState) => void
 }): JSX.Element {
-  const sessionLocked = useStore(getAudioCaptureSession().store, current => current.busy || current.phase === 'recording' || current.phase === 'paused')
+  const sessionLocked = useStore(getAudioCaptureSession().store, current => current.busy || current.phase === 'recording')
   disabled = disabled || sessionLocked
   const [state, setState] = useState<AudioCaptureSettingsState>()
   const [inventory, setInventory] = useState<AudioCaptureInventory>()

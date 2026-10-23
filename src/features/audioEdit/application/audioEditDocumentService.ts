@@ -56,10 +56,17 @@ function show(id: string): void {
  * 导入音频或视频即新建草稿（默认在作品目录“口播”文件夹，也可指定所在项目），并进入编辑器。
  * 素材默认引用原文件（重要记录 006）；名称是“未命名口播 N”，离开时起名。
  */
-export async function importAudioEditMedia(sourcePath: string, container: DocumentContainerRef = { kind: 'user' }): Promise<string> {
+export async function createAudioEditRecording(): Promise<string> {
+  await leaveShownBefore(null)
+  const instance = await createAudioEditDraft(null)
+  show(instance.document.id)
+  return instance.document.id
+}
+
+export async function importAudioEditMedia(sourcePath: string, container: DocumentContainerRef = { kind: 'user' }, ownership: 'external' | 'managed' = 'external'): Promise<string> {
   await leaveShownBefore(null)
   const source = await getPlatform().audioEdit.probeSource(sourcePath)
-  const instance = await createAudioEditDraft(source, container)
+  const instance = await createAudioEditDraft({ ...source, ownership }, container)
   show(instance.document.id)
   return instance.document.id
 }

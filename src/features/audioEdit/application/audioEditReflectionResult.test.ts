@@ -32,6 +32,24 @@ beforeEach(() => {
 
 afterEach(async () => { await resetAudioEditProjectInstancesForTests(); uninstallHarnessNativeStorage() })
 
+it('已有文件拼接由正式能力提交、回读素材和词时间，并可一步撤销', async () => {
+  const source = fixture().source
+  const splice = vi.spyOn(getPlatform().audioEdit, 'splice').mockResolvedValue({ source: { ...source, sourcePath: 'inserted.wav', audioPath: 'inserted.wav', durationFrames: 120000, ownership: 'managed' }, insertedFrames: 24000 })
+  const app = createApplicationHarness()
+  try {
+    const result = await app.requireResult('insert_audio_edit_file', { documentRef: { kind: 'audio_edit.document', id: 'audio-result' }, sourcePath: 'take.wav', positionSeconds: 1 })
+    expect(result.verified).toBe(true)
+    expect(splice).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'audio-result', startFrame: 48000, endFrame: 48000 }))
+    const instance = await loadAudioEditProject('audio-result')
+    expect(instance.document.source.sourcePath).toBe('inserted.wav')
+    expect(instance.document.transcript.find(block => block.id === 'second')?.startFrame).toBe(72000)
+    undoAudioEditProject('audio-result')
+    await flushAudioEditProject('audio-result')
+    expect(instance.document.source).toEqual(source)
+    expect(instance.document.transcript).toEqual(fixture().transcript)
+  } finally { splice.mockRestore(); app.dispose() }
+})
+
 it('未打开口播草稿可按document_id后台读取词块，返回采样率而不导航', async () => {
   const app = createApplicationHarness()
   try {

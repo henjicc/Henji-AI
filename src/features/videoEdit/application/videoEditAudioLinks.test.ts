@@ -8,7 +8,8 @@ import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { createVideoEditTestProject, closeAllVideoEdits, reopenVideoEdit } from './videoEditDocumentTestKit'
 import { editVideoProject, undoVideoEdit, videoEditDocumentOperations, closeVideoEditProject } from './videoEditService'
 import { getVideoEditAudioLinkNotices, refreshVideoEditAudioDocumentClips, sendVideoEditClipToAudioEdit } from './videoEditAudioLinks'
-import { editAudioEditProject, flushAudioEditProject, loadAudioEditProject, resetAudioEditProjectInstancesForTests } from '@/features/audioEdit/application/audioEditProjectInstances'
+import { editAudioEditProject, flushAudioEditProject, loadAudioEditProject, resetAudioEditProjectInstancesForTests, undoAudioEditProject } from '@/features/audioEdit/application/audioEditProjectInstances'
+import { insertAudioEditFile } from '@/features/audioEdit/application/audioEditSpliceService'
 import { editedDurationFrames, buildProjectAudioEditTimeline } from '@/core/audioEdit/timeline'
 import { audioEditProjectFromDocument } from '@/core/audioEdit/documentContent'
 import { videoEditFps } from '@/core/videoEdit/time'
@@ -88,4 +89,25 @@ it('all linked clips respect speed and reverse boundaries; exhausted clips leave
   ])
   expect(result.notices).toHaveLength(3)
   expect(result.document.sequences[0].clips[0].creativeSource).toMatchObject({ revision: 2 })
+})
+
+it('拼接替换素材后刷新动态链接，撤销恢复来源也刷新，剪辑时长不自动延长', async () => {
+  const { owner, clipId } = await fixture()
+  const sent = await sendVideoEditClipToAudioEdit(owner.document.id, clipId, false)
+  const audio = await loadAudioEditProject(sent.documentId)
+  const source = audio.document.source
+  const original = owner.document.sequences[0].clips.find(clip => clip.id === clipId)!
+  vi.spyOn(getPlatform().audioEdit, 'splice').mockResolvedValue({ source: { ...source, sourcePath: path.resolve(path.sep, 'take-spliced.wav'), audioPath: path.resolve(path.sep, 'take-spliced.wav'), durationFrames: source.durationFrames + 48000, ownership: 'managed' }, insertedFrames: 48000 })
+  await insertAudioEditFile(sent.documentId, path.resolve(path.sep, 'take.wav'), 96000)
+  await refreshVideoEditAudioDocumentClips(owner.document.id, sent.documentId)
+  const updated = owner.document.sequences[0].clips.find(clip => clip.id === clipId)!
+  expect(updated.creativeSource).toMatchObject({ revision: audio.persistedRevision })
+  expect(updated.duration).toBe(original.duration)
+  expect(updated.start).toBe(original.start)
+  expect(updated.itemId).not.toBe(original.itemId)
+  undoAudioEditProject(sent.documentId)
+  await flushAudioEditProject(sent.documentId)
+  await refreshVideoEditAudioDocumentClips(owner.document.id, sent.documentId)
+  expect(audio.document.source).toEqual(source)
+  expect(owner.document.sequences[0].clips.find(clip => clip.id === clipId)?.creativeSource).toMatchObject({ revision: audio.persistedRevision })
 })

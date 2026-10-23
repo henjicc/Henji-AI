@@ -1,3 +1,5 @@
+import { audioEditSpliceSchema } from '../../../src/core/audioEdit/splice'
+import { spliceAudioFile } from '../services/audio-edit/splice'
 import { z } from 'zod'
 import { BrowserWindow } from 'electron'
 import { audioEditSpectralTileRequestSchema } from '../../../src/core/audioEdit/spectralPyramid'
@@ -29,6 +31,7 @@ import type {
  * 这里只剩导入时探测素材，以及按文档 ID（参数名沿用 projectId）执行的转写、分析、处理、试听与导出。
  */
 export function registerAudioIpc(): void {
+  registerIpcHandler('audioEdit:splice', input => audioEditSpliceSchema.parse(input), spliceAudioFile)
   registerIpcHandler('audioEdit:spectralTile', input => audioEditSpectralTileRequestSchema.parse(input), getAudioEditSpectralTile)
   registerIpcHandler('audioEdit:spectralCancel', input => z.object({ requestId: z.string().min(1).max(200) }).strict().parse(input), ({ requestId }) => cancelAudioEditSpectralTile(requestId))
   subscribeAudioEditSpectralProgress(progress => {

@@ -5,7 +5,7 @@ function native(): AudioCapturePlatform {
 }
 export function createElectronAudioCapture(): AudioCapturePlatform {
   return {
-    prepareFile: () => native().prepareFile(), pendingFiles: () => native().pendingFiles(), completeFile: path => native().completeFile(path), trashFile: path => native().trashFile(path),
+    prepareFile: placement => native().prepareFile(placement), pendingFiles: () => native().pendingFiles(), completeFile: path => native().completeFile(path), trashFile: path => native().trashFile(path),
     enumerate: () => native().enumerate(), probe: settings => native().probe(settings),
     getSettings: () => native().getSettings(), setSettings: (settings, revision) => native().setSettings(settings, revision),
     start: request => native().start(request), pause: id => native().pause(id), resume: id => native().resume(id), stop: id => native().stop(id), status: id => native().status(id),

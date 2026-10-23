@@ -411,6 +411,7 @@ const audioApi: HenjiAudioApi = {
   extractRangeSamples: (payload) => nativeInvoke('audio:extractSamples', { ...payload, mode: 'range' }),
   extractWaveformPyramid: (payload) => nativeInvoke('audio:extractSamples', { ...payload, mode: 'pyramid' }),
   cancelExtractSamples: (requestId) => nativeInvoke('audio:cancelExtractSamples', { requestId }),
+  spliceEditAudio: request => nativeInvoke('audioEdit:splice', request),
   probeEditSource: (sourcePath, requestId) => nativeInvoke('audioEdit:source:probe', { sourcePath, requestId }),
   verifyEditSource: (projectId) => nativeInvoke('audioEdit:source:verify', { projectId }),
   relinkEditSource: (projectId, sourcePath) => nativeInvoke('audioEdit:source:relink', { projectId, sourcePath }),

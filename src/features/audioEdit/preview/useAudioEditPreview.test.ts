@@ -49,6 +49,17 @@ beforeEach(() => {
 })
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
+it('首段录音替换空素材并改变采样率时保留录音末尾的播放头', async () => {
+  const empty = { ...project(), source: { ...project().source, durationFrames: 0 }, transcript: [] }
+  const hook = renderHook(({ value }) => useAudioEditPreview(value), { initialProps: { value: empty } })
+  await waitFor(() => expect(useAudioEditPlaybackStore.getState().ready).toBe(true))
+  act(() => useAudioEditPlaybackStore.getState().updatePosition(44100, 44100, null))
+  hook.rerender({ value: { ...empty, source: { ...empty.source, sampleRate: 44100, durationFrames: 88200 } } })
+  await waitFor(() => expect(useAudioEditPlaybackStore.getState().ready).toBe(true))
+  expect(useAudioEditPlaybackStore.getState().sourceFrame).toBe(44100)
+  hook.unmount()
+})
+
 it('emits zero PCM for muted spans and restores original audio in source mode', async () => {
   const fixture = project()
   fixture.cuts = [{ id: 'mute', reason: 'manual', enabled: true, mode: 'mute', startFrame: 0, endFrame: 48000 }]

@@ -59,6 +59,7 @@ export function createElectronAudioEdit(): AudioEditPlatform {
       read: (...args) => api().loudness.read(...args),
       close: (...args) => api().loudness.close(...args),
     },
+    splice: request => api().spliceEditAudio(request),
     probeSource: (sourcePath, requestId) => api().probeEditSource(sourcePath, requestId),
     verifySource: (projectId) => api().verifyEditSource(projectId),
     relinkSource: (projectId, sourcePath) => api().relinkEditSource(projectId, sourcePath),
