@@ -49,7 +49,11 @@ async function main() {
     '-DCMAKE_POLICY_VERSION_MINIMUM=3.5', '-DCMAKE_BUILD_TYPE=Release', '-DPA_BUILD_SHARED=OFF', '-DPA_BUILD_STATIC=ON', '-DPA_BUILD_TESTS=OFF', '-DPA_BUILD_EXAMPLES=OFF', '-DPA_DLL_LINK_WITH_STATIC_RUNTIME=ON',
     `-DPA_USE_ASIO=${asio ? 'ON' : 'OFF'}`, ...(asio ? [`-DASIOSDK_ROOT_DIR=${path.join(vendor, 'asio/ASIOSDK')}`] : [])])
   run('cmake', ['--build', path.join(vendor, 'build'), '--config', 'Release', '--target', 'portaudio_static', '--parallel', '4'])
-  run('cargo', [process.argv.includes('--test') ? 'test' : 'build', '--locked', '--release', '--manifest-path', path.join(crate, 'Cargo.toml')], withStaticMsvcCrt(process.env))
+  const cargoEnv = { ...withStaticMsvcCrt(process.env) }
+  // 本机 .cargo/config.toml 的 [env] 可能写着 CC = "cl.exe"（只在开发者命令行里可用），会让 cc 跳过 MSVC 自动定位；
+  // 环境里没有显式指定时传空值（cargo 的 [env] 不覆盖已有变量），交给 cc 自己找编译器。
+  if (win) { cargoEnv.CC ??= ''; cargoEnv.CXX ??= '' }
+  run('cargo', [process.argv.includes('--test') ? 'test' : 'build', '--locked', '--release', '--manifest-path', path.join(crate, 'Cargo.toml')], cargoEnv)
   fs.writeFileSync(path.join(crate, 'target/release/audio-capture-build.json'), JSON.stringify({ asio, sources: SOURCES }, null, 2))
   console.log(`[audio-capture] 构建完成；ASIO=${asio}`)
 }
