@@ -83,3 +83,10 @@ it('60 分钟、432000 光标样本与 18000 词的真实规模下生成有界�
   expect(result.steps).toHaveLength(720)
   expect(performance.now() - start).toBeLessThan(2000)
 })
+it('开录后第一次看到的窗口不算切换，之后换窗口才算', () => {
+  const input = narratedRecordingFixture()
+  input.events = [event(3, { kind: 'control', action: 'start' }), event(4.2, { kind: 'window', available: true, windowId: 'main', bounds: null }),
+    event(6, { kind: 'capability', callId: 'call', capability: 'create_canvas_node', targets: [], phase: 'started' }),
+    event(15, { kind: 'window', available: true, windowId: 'editor', bounds: null }), event(23, { kind: 'control', action: 'stop' })]
+  expect(segmentRecording(input).steps.filter(step => step.signal === 'window').map(step => step.startUs)).toEqual([15000000])
+})

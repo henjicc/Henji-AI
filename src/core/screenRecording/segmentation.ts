@@ -86,7 +86,8 @@ export function segmentRecording(input: RecordingAnalysisInput): RecordingUnders
       if (event.phase === 'started') boundaries.push({ time: at, priority: 5, signal: 'capability', title: '执行操作', eventIds: [event.eventId] })
       if (event.phase === 'failed') candidate({ startUs: Math.max(0, at - 1000000), endUs: at + 1000000 }, 'mistake', '操作返回失败，请检查是否保留这一段', [event.eventId])
     } else if (event.kind === 'window' && event.available && event.windowId) {
-      if (event.windowId !== previousWindow) boundaries.push({ time: at, priority: 4, signal: 'window', title: '切换窗口', eventIds: [event.eventId] })
+      // 开录后第一次看到的窗口只是起点，不算切换（否则每次录制开头都多一个“切换窗口”步骤）。
+      if (previousWindow !== null && event.windowId !== previousWindow) boundaries.push({ time: at, priority: 4, signal: 'window', title: '切换窗口', eventIds: [event.eventId] })
       previousWindow = event.windowId
     } else if (event.kind === 'click' && event.phase === 'down') {
       if (at - previousClick > 1200000) boundaries.push({ time: at, priority: 3, signal: 'click', title: '点击操作', eventIds: [event.eventId] })
