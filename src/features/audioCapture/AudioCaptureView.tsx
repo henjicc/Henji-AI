@@ -31,7 +31,7 @@ export function AudioCaptureView(): JSX.Element {
     return () => window.removeEventListener('keydown', keydown)
   }, [session, settingsOpen])
   return <div className="flex h-full min-h-0 flex-col bg-window" data-application-surface-id="tool.audio_edit.record" data-capture-phase={state.phase}>
-    <UiToolbar variant="command" trailing={<PanelTrigger open={settingsOpen} onOpenChange={setSettingsOpen} panelSize="content" panelPadding="content" alignment="bottomRight" renderPanel={() => <AudioCaptureSettingsForm disabled={active || state.busy} onSettings={settings => session.store.setState({ settings })} />}>
+    <UiToolbar variant="command" trailing={<PanelTrigger open={settingsOpen} onOpenChange={setSettingsOpen} panelSize="compact" panelPadding="content" alignment="bottomRight" renderPanel={() => <AudioCaptureSettingsForm disabled={active || state.busy} onSettings={settings => session.store.setState({ settings })} />}>
       {({ togglePanel, open }) => <UiIconButton size="md" label="录音设置" tooltip="录音设置" on={open} onClick={togglePanel}><Settings2 /></UiIconButton>}
     </PanelTrigger>}>
       <UiIconButton size="md" label="返回音频列表" tooltip="返回音频列表" onClick={() => act(session.leave())}><ArrowLeft /></UiIconButton>
@@ -44,7 +44,8 @@ export function AudioCaptureView(): JSX.Element {
         <div className="flex items-center justify-center gap-3">
           <UiButton variant="primary" disabled={state.busy} disabledReason="正在处理录音" aria-keyshortcuts="Shift+Space R" onClick={() => act(active ? session.stop() : session.start())}>{active ? <Square /> : <Mic />}{active ? '停止' : '开始录音'}</UiButton>
           {active && <UiButton variant="secondary" disabled={state.busy} disabledReason="正在处理录音" onClick={() => act(session.togglePause())}>{state.phase === 'paused' ? <Play /> : <Pause />}{state.phase === 'paused' ? '继续' : '暂停'}</UiButton>}
-          <UiButton variant="danger" disabled={state.busy || !state.outputPath} disabledReason={state.busy ? '正在处理录音' : '尚未开始录音'} onClick={() => act(session.discard())}>放弃</UiButton>
+          {/* 还没开始录音时没有可放弃的内容，不出现。 */}
+          {state.outputPath && <UiButton variant="danger" disabled={state.busy} disabledReason="正在处理录音" onClick={() => act(session.discard())}>放弃</UiButton>}
         </div>
         {state.error && <UiError message={state.error} onRetry={() => act(session.start())} />}
         {(state.phase === 'interrupted' || state.phase === 'stopped') && state.outputPath && <div className="flex justify-center"><UiButton variant="secondary" disabled={state.busy} disabledReason="正在处理录音" onClick={() => act(session.recover())}>打开已录部分</UiButton></div>}

@@ -75,7 +75,7 @@ export function AudioCaptureLive({ session, sessionId, channels, summary }: { se
       {summary && <p className="text-center text-xs text-text2">{summary}</p>}
     </div>
     <div className="space-y-1">
-      <div className="flex items-center justify-between"><span className="text-xs text-text2">输入电平 · dBFS</span><UiButton variant={clipped ? 'dangerSolid' : 'quiet'} size="sm" disabled={!clipped} disabledReason="尚未检测到削波" tooltip="点击清除削波标记" onClick={() => { clipping.current = false; setClipped(false) }}>削波</UiButton></div>
+      <div className="flex min-h-control-sm items-center justify-between"><span className="text-xs text-text2">输入电平 · dBFS</span>{clipped && <UiButton variant="dangerSolid" size="sm" tooltip="点击清除削波标记" onClick={() => { clipping.current = false; setClipped(false) }}>削波</UiButton>}</div>
       <canvas ref={levels} className="h-16 w-full" aria-label={`${channels} 声道输入电平`} />
       <div className="relative h-4 text-2xs text-text3">{[-60, -30, -12, -6, -3, 0].map(db => <span key={db} className="absolute" style={{ left: `${(db + 60) / 60 * 100}%`, transform: db === 0 ? 'translateX(-100%)' : db === -60 ? undefined : 'translateX(-50%)' }}>{db}</span>)}</div>
     </div>
