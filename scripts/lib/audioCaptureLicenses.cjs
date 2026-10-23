@@ -1,8 +1,8 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { SOURCES } = require('../build-audio-capture.cjs')
-// 发布前填写可下载完整对应源码（本程序、构建脚本、锁文件与依赖源码）的公开地址。
-const HENJI_AUDIO_CAPTURE_SOURCE_URL = process.env.HENJI_AUDIO_CAPTURE_SOURCE_URL || 'HENJI_AUDIO_CAPTURE_SOURCE_URL（发布前填写）'
+// 完整对应源码（本程序、构建脚本、锁文件与依赖源码压缩包）的公开仓库；发版前用 npm run publish:audio-capture-source 同步并打版本标签。
+const HENJI_AUDIO_CAPTURE_SOURCE_URL = process.env.HENJI_AUDIO_CAPTURE_SOURCE_URL || 'https://github.com/henjicc/henji-audio-capture'
 function audioCaptureLicenseData(root, platform, strict = false) {
   const read = name => fs.readFileSync(path.join(root, 'scripts/third-party-licenses', name), 'utf8')
   const metadataPath = path.join(root, 'native/audio-capture/target/release/audio-capture-build.json')
