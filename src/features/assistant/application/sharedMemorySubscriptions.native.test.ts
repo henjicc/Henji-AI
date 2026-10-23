@@ -8,7 +8,7 @@ import type { MemoryWrite } from '@/core/assistant/memoryOperations'
 import type { LocalHostRequest } from '@/core/application-control/localHostContracts'
 import type { MemoryEntryStore } from '../../../../electron/main/services/assistant/entry-store'
 
-if (!process.versions.electron) throw new Error('三层记忆订阅测试必须使用 Electron 原生 SQLite 运行器。')
+if (!process.versions.electron) process.stderr.write('[sharedMemorySubscriptions.native] 跳过：需要 Electron SQLite 运行环境。请运行 npm run test:assistant-persistence -- src/features/assistant/application/sharedMemorySubscriptions.native.test.ts\n')
 
 type IpcReply = { ok: true; data: MemorySnapshot } | { ok: false; error: { message: string } }
 const boundary = vi.hoisted(() => ({ store: undefined as MemoryEntryStore | undefined,
@@ -58,7 +58,7 @@ async function invoke(channel: string, input?: unknown): Promise<MemorySnapshot>
   return reply.data
 }
 
-describe('三层记忆权威事件与现代 MCP 订阅', () => {
+describe.skipIf(!process.versions.electron)('三层记忆权威事件与现代 MCP 订阅', () => {
   let database: Database.Database
   let store: MemoryStore
   const closers: Array<() => Promise<void>> = []
