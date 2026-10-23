@@ -111,6 +111,7 @@ const surfaceDefinitions = [
   { id: 'settings.assistant', kind: 'settings', settingsTarget: { tab: 'assistant' }, ...immediate },
   { id: 'settings.assistant.models', kind: 'settings', settingsTarget: { tab: 'assistant', sectionId: 'assistant-models' }, ...immediate },
   { id: 'settings.assistant_preferences', kind: 'settings', settingsTarget: { tab: 'assistant', sectionId: 'assistant-preferences' }, ...immediate },
+  { id: 'settings.assistant.memory', kind: 'settings', settingsTarget: { tab: 'assistant', sectionId: 'assistant-memory' }, ...immediate },
   { id: 'settings.assistant.mcp', kind: 'settings', settingsTarget: { tab: 'assistant', sectionId: 'assistant-mcp' }, ...immediate },
   { id: 'settings.assistant_skills', kind: 'settings', settingsTarget: { tab: 'skills', sectionId: 'assistant-skills' }, ...immediate },
   {

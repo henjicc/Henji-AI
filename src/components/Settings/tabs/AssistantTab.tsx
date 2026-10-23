@@ -1,3 +1,4 @@
+import { AssistantMemorySection } from '@/features/assistant/memory/AssistantMemorySection'
 import React from 'react'
 import { UiLoading, UiRegion } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
@@ -28,6 +29,7 @@ const AssistantTab: React.FC = () => {
         <AgentUserInstructionsSection />
         <PaidApprovalSection />
       </SettingsSection>
+      <SettingsSection id="assistant-memory"><AssistantMemorySection /></SettingsSection>
       <SettingsSection id="assistant-mcp">
         <McpSection />
       </SettingsSection>

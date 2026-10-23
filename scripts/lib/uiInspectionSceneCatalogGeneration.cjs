@@ -415,6 +415,16 @@ function createGenerationSettingsScenes(context) {
       },
     },
     {
+      id: 'settings-assistant-memory', surface: '设置', name: '设置-三层记忆',
+      setup: async page => {
+        await setupSettings(page)
+        await clickNamedButton(page, /^(记忆|Memory)$/i)
+        await page.locator('#assistant-memory').waitFor({ state: 'visible' })
+        await page.locator('#assistant-memory').getByRole('switch').first().waitFor({ state: 'visible' })
+        await settlePage(page)
+      },
+    },
+    {
       id: 'settings-assistant-models',
       surface: '设置',
       name: '设置-助手模型',

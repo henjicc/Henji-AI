@@ -1,5 +1,5 @@
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
-import { AssistantMemoryPanel } from './memory/AssistantMemoryPanel'
+import { openSettingsPanel } from '@/stores/uiStore'
 import { BrainCircuit, GripHorizontal, History, MessageSquarePlus, Sparkles, X } from 'lucide-react'
 import { useState, type CSSProperties, type KeyboardEvent, type RefObject } from 'react'
 
@@ -32,7 +32,6 @@ const GAP_BY_MODE = { floating: '', left: 'ui-dock-gap-surface pr-1', right: 'ui
 const contentViewTitles = {
   conversation: '智能助手',
   history: '对话历史',
-  memory: '助手记忆',
 } as const
 
 const dockModeLabels: Record<AssistantDockMode, string> = {
@@ -53,7 +52,7 @@ interface AssistantSidebarProps {
 }
 
 export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.Element {
-  const [contentView, setContentView] = useState<'conversation' | 'history' | 'memory'>('conversation')
+  const [contentView, setContentView] = useState<'conversation' | 'history'>('conversation')
   const embedded = useEmbeddedAgent()
   const open = useAssistantUiStore((state) => state.open)
   const mode = useAssistantUiStore((state) => state.mode)
@@ -163,9 +162,8 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
               </UiIconButton>
               <UiIconButton
                 type="button"
-                on={contentView === 'memory'}
-                onClick={() => setContentView(view => view === 'memory' ? 'conversation' : 'memory')}
-                tooltip={contentView === 'memory' ? '返回当前对话' : '助手记忆'}
+                onClick={() => openSettingsPanel({ tab: 'assistant', sectionId: 'assistant-memory' })}
+                tooltip="助手记忆"
                 aria-label="助手记忆"
               >
                 <BrainCircuit  />
@@ -206,7 +204,6 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
  }`}
           />
         </UiToolbar>
-        {contentView === 'memory' ? <AssistantMemoryPanel /> : null}
         <div
           aria-hidden={contentView !== 'conversation'}
           className={contentView === 'conversation' ? 'flex min-h-0 min-w-0 flex-1 overflow-hidden' : 'hidden'}

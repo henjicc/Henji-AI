@@ -144,6 +144,7 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
     'paidApproval.daily',
     ['agentInstructions.label', ['指令', '偏好', '提示词', 'instructions']],
   ]),
+  ...rows('assistant-memory', ['memory.enabled', 'memory.autoOrganize', ['memory.title', ['记忆', '偏好', 'memory', 'preferences']], 'memory.history']),
   ...rows('assistant-mcp', [
     ['mcp.enable', ['MCP', 'Codex', 'Claude', '外部', '连接']],
     ['mcp.port', ['端口', 'port']],

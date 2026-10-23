@@ -59,7 +59,7 @@ function attachUiInspectionSupport(context) {
 
   async function setupAssistant(page) {
     await setupGeneration(page)
-    await page.locator('[title="智能助手"]').first().click({ timeout: 8000 })
+    await page.getByRole('button', { name: '智能助手', exact: true }).first().click({ timeout: 8000 })
     await page.locator('aside[aria-label="智能助手"]:visible').waitFor({ state: 'visible', timeout: 8000 })
     await settlePage(page)
   }

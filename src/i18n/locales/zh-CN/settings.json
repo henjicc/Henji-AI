@@ -30,6 +30,7 @@
     "files-models": "本地模型",
     "assistant-models": "助手模型",
     "assistant-preferences": "用户指令",
+    "assistant-memory": "记忆",
     "assistant-mcp": "外部智能体连接",
     "assistant-skills": "助手技能"
   },
@@ -968,5 +969,40 @@
       "title": "标题",
       "explanation": "讲解外发"
     }
+  },
+  "memory": {
+    "disabledHint": "记忆已关闭，可在设置中开启",
+    "title": "记忆",
+    "enabled": "使用与更新记忆",
+    "autoOrganize": "自动整理",
+    "empty": "和助手聊天时说出你的偏好，助手会自动记住",
+    "about": "关于我",
+    "creative": "创作偏好",
+    "habits": "工作习惯",
+    "sourceUser": "你写的",
+    "sourceAssistant": "助手记的",
+    "content": "内容",
+    "edit": "编辑",
+    "delete": "删除",
+    "save": "保存",
+    "add": "新增记忆",
+    "section": "分区",
+    "conflict": "冲突时",
+    "styleFirst": "风格优先",
+    "preferenceFirst": "偏好优先",
+    "manualReason": "你手动编辑了这条记忆。",
+    "deleteReason": "你删除了这条记忆。",
+    "precedenceReason": "你选择了冲突时的优先级。",
+    "layer": "记忆范围",
+    "global": "全局",
+    "project": "本项目",
+    "style": "风格",
+    "history": "修改历史",
+    "undo": "撤销",
+    "cancel": "取消",
+    "askFirst": "先询问",
+    "before": "修改前",
+    "after": "修改后",
+    "none": "无"
   }
 }

@@ -82,6 +82,7 @@ function createSupportScenes(context) {
       setup: async (page) => {
         await setupAssistant(page)
         await page.locator('[aria-label="助手记忆"]').click()
+        await page.locator('#assistant-memory').waitFor({ state: 'visible' })
         await settlePage(page)
       },
     },

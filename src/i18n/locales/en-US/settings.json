@@ -30,6 +30,7 @@
     "files-models": "Local models",
     "assistant-models": "Assistant Models",
     "assistant-preferences": "User Instructions",
+    "assistant-memory": "Memory",
     "assistant-mcp": "External Agents",
     "assistant-skills": "Assistant Skills"
   },
@@ -970,5 +971,40 @@
       "title": "Titles",
       "explanation": "Send explanation"
     }
+  },
+  "memory": {
+    "disabledHint": "Memory is off. Turn it on in Settings.",
+    "title": "Memory",
+    "enabled": "Use and update memory",
+    "autoOrganize": "Organize automatically",
+    "empty": "Tell the assistant your preferences in chat and it will remember them",
+    "about": "About me",
+    "creative": "Creative preferences",
+    "habits": "Work habits",
+    "sourceUser": "Written by you",
+    "sourceAssistant": "Remembered by assistant",
+    "content": "Content",
+    "edit": "Edit",
+    "delete": "Delete",
+    "save": "Save",
+    "add": "Add memory",
+    "section": "Section",
+    "conflict": "On conflict",
+    "styleFirst": "Style first",
+    "preferenceFirst": "Preference first",
+    "manualReason": "You edited this memory.",
+    "deleteReason": "You deleted this memory.",
+    "precedenceReason": "You chose the conflict priority.",
+    "layer": "Scope",
+    "global": "Global",
+    "project": "This project",
+    "style": "Style",
+    "history": "Change history",
+    "undo": "Undo",
+    "cancel": "Cancel",
+    "askFirst": "Ask me",
+    "before": "Before",
+    "after": "After",
+    "none": "None"
   }
 }

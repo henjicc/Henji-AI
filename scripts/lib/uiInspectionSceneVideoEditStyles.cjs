@@ -179,4 +179,35 @@ function createVideoEditStylesScene() {
     },
   }
 }
-module.exports = { createVideoEditStylesScene }
+/** 仅验收使用者偏好栏，不依赖外部分享包或付费生成。 */
+function createVideoEditStyleMemoryScene() {
+  return { id: 'video-edit-style-memory', surface: '剪辑', name: '剪辑-风格使用者偏好', writesUserData: true,
+    setup: async (page, app, { capture }) => {
+      const root = path.resolve('.reality/memory-style-input')
+      fs.mkdirSync(root, { recursive: true })
+      const file = path.join(root, 'memory-style.henji-video')
+      fs.writeFileSync(file, JSON.stringify(fixture()))
+      await button(page, '剪辑').first().click()
+      if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
+      await dialogs(app, [file], file)
+      await openVideoEditFile(page, file)
+      await presented(page, 0)
+      const tab = page.locator('.dv-tab').filter({ has: page.getByText('风格', { exact: true }) }).first()
+      if (await tab.isVisible()) await tab.click()
+      else {
+        const overflow = page.locator('.dv-tabs-overflow-dropdown-default, .dv-tabs-overflow-dropdown-root').first()
+        await overflow.click()
+        await page.locator('.dv-tabs-overflow-container .dv-tab').filter({ hasText: '风格' }).first().click()
+      }
+      await capture('style-memory-before-detail')
+      await page.locator('[data-video-edit-style="restrained"]').click()
+      const detail = page.locator('[data-video-edit-style-detail="restrained"]')
+      await detail.getByText('使用者偏好', { exact: true }).waitFor({ state: 'visible' })
+      await detail.getByRole('textbox').first().fill('这个风格的文字多留一点空白。')
+      await detail.getByRole('button', { name: '新增记忆', exact: true }).click()
+      await detail.getByText('这个风格的文字多留一点空白。', { exact: true }).waitFor({ state: 'visible' })
+      await capture('style-user-preferences')
+    },
+  }
+}
+module.exports = { createVideoEditStylesScene, createVideoEditStyleMemoryScene }

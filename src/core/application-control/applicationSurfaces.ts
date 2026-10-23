@@ -8,7 +8,7 @@ export const APPLICATION_SURFACE_IDS = [
   'settings.providers_models',
   'settings.workspace', 'settings.workspace.generation', 'settings.workspace.canvas', 'settings.workspace.video_edit', 'settings.workspace.assets',
   'settings.files', 'settings.storage', 'settings.files.cache', 'settings.upload', 'settings.files.download', 'settings.files.sounds', 'settings.files.models',
-  'settings.assistant', 'settings.assistant.models', 'settings.assistant_preferences', 'settings.assistant.mcp',
+  'settings.assistant', 'settings.assistant.models', 'settings.assistant.memory', 'settings.assistant_preferences', 'settings.assistant.mcp',
   'settings.assistant_skills', 'overlay.assets', 'overlay.assistant',
 ] as const
 
@@ -63,7 +63,7 @@ const SPECIALIZED_REGION_SURFACES: readonly string[] = [
 const SENSITIVE_SURFACES: readonly string[] = [
   'tool.screen_recording',
   'overlay.assistant',
-  'settings.providers_models', 'settings.storage', 'settings.assistant_preferences',
+  'settings.providers_models', 'settings.storage', 'settings.assistant_preferences', 'settings.assistant.memory',
 ]
 
 const SPECIALIZED_PROVIDER_IDS: Readonly<Record<string, string>> = {

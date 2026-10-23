@@ -49,7 +49,7 @@ function attachUiInspectionCommon(context) {
 
     const assistant = page.locator('aside[aria-label="智能助手"]:visible')
     if (await assistant.count()) {
-      const toggleAssistant = page.locator('[title="智能助手"]').first()
+      const toggleAssistant = page.getByRole('button', { name: '智能助手', exact: true }).first()
       if (await toggleAssistant.count()) {
         await toggleAssistant.click()
         await page.waitForTimeout(240)
