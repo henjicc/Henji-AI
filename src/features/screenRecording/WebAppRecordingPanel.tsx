@@ -16,10 +16,10 @@ import type { WebAppRecordingModel } from './useWebAppRecording'
 import { WebAppRecordingList } from './WebAppRecordingList'
 
 /** Command band: the one primary action (start or stop) of the web app mode. */
-export function WebAppRecordingActions({ model, setup, backup }: { model: WebAppRecordingModel; setup: WebAppBackupSetup; backup: WebRecordingBackupOptions | null }): React.ReactElement {
+export function WebAppRecordingActions({ model, setup, backup, projectId }: { model: WebAppRecordingModel; setup: WebAppBackupSetup; backup: WebRecordingBackupOptions | null; projectId?: string | null }): React.ReactElement {
   const { t } = useTranslation('ui')
   if (model.activeId) return <UiButton variant="primary" loading={model.busy} onClick={() => void model.stop()}><Square />{t('recording.stop')}</UiButton>
-  return <UiButton variant="primary" loading={model.busy} disabled={!model.selectedApp} disabledReason={t('recording.webapp_selectApp')} onClick={() => void model.start(setup, backup)}><ICON_TOOL_SCREEN_RECORDING />{t('recording.start')}</UiButton>
+  return <UiButton variant="primary" loading={model.busy} disabled={!model.selectedApp} disabledReason={t('recording.webapp_selectApp')} onClick={() => void model.start(setup, backup, projectId)}><ICON_TOOL_SCREEN_RECORDING />{t('recording.start')}</UiButton>
 }
 
 /** Command band text while recording: the same elapsed-time label as screen recording. */

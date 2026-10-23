@@ -17,6 +17,7 @@ import { importRecordingToVideo } from './recordingVideoImport'
 import { recordingRegistrations } from './recordingReflection'
 import { WEB_APP_CAPABILITY_IDS, executeWebAppCapability, webAppRecordingRegistrations } from './webAppRecording'
 import { WebRecordingCollectionExecutor } from './webAppRecordingCollectionExecutor'
+import { requestWebRecordingFocus } from './webAppRecordingFocus'
 import { WebRecordingMutation } from './webAppRecordingMutation'
 import { recordingUnderstandingRegistration } from './recordingUnderstandingFields'
 import { RecordingUnderstandingMutation } from './recordingUnderstandingMutation'
@@ -41,6 +42,8 @@ export const screenRecordingApplicationDomain: ApplicationDomainModule = {
       if ((await readRecordingDocument(document.id)).sessionId) { await (await import('./recordingVideoImport')).openRecordingInEditor(document.id); return }
       await showRecordingDocument(document.id); openApplicationSurface('tool.screen_recording')
     })
+    // 项目里的网页录制（.hjweb）在录制页的“网页应用”里看、重演、导出。
+    registerDocumentOpener('web_recording', async document => { requestWebRecordingFocus(document.id); openApplicationSurface('tool.screen_recording') })
     registerDocumentBusyCheck('screen_recording', id => recordingDirectorBusy(id) ? '请先等待导演录制完成或取消' : recordingReplayBusy() ? '请先等待重放完成或取消' : recordingProductBusy(id) ? '请先等待产物导出完成或取消' : recordingPrivacyBusy(id) ? '请先等待敏感信息识别完成或取消' : recordingView().snapshot?.sessionId === id || recordingView().busy && recordingView().documentId === id ? '请先停止录制并等待保存' : null)
     registerDocumentCoverProvider('screen_recording', read => { const first = recordingDocumentSchema.parse(read.content).media.find(media => media.kind === 'screen' && media.durationUs > 0); return first ? [{ source: first.path, sourceKind: 'video', atSeconds: 0 }] : null })
     for (const definition of RECORDING_CAPABILITIES) registrar.registerHandler(definition.id, async (input, context) => {

@@ -16,7 +16,7 @@ export function useWebAppRecording(): {
   server: WebReplayServerState | null; recordings: WebRecordingSummary[]
   selectedApp: string; selectApp(id: string): void; selectedRecording: WebRecordingSummary | null; selectRecording(id: string): void
   activeId: string | null; elapsedMs: number; busy: boolean; error: string; renders: Record<string, WebAppRenderState>
-  start(setup: WebAppBackupSetup, backup: WebRecordingBackupOptions | null): Promise<void>; stop(): Promise<void>; render(id: string): Promise<void>; reveal(id: string, file?: string): Promise<void>
+  start(setup: WebAppBackupSetup, backup: WebRecordingBackupOptions | null, projectId?: string | null): Promise<void>; stop(): Promise<void>; render(id: string): Promise<void>; reveal(id: string, file?: string): Promise<void>
   removeMany(ids: string[]): Promise<string[]>; restoreMany(ids: string[]): Promise<void>
   rename(items: Array<{ recordingId: string; title: string | null }>): Promise<void>; exportVideos(ids: string[], directory: string): Promise<WebRecordingExportResult | null>
 } {
@@ -55,8 +55,9 @@ export function useWebAppRecording(): {
   return {
     server, recordings, selectedApp, selectApp, selectedRecording, selectRecording, activeId, busy, error, renders,
     elapsedMs: active?.recordingStartedAt ? Math.max(0, now - active.recordingStartedAt) : 0,
-    start: (setup, backup) => guard(async () => {
-      const manifest = await platform.start(selectedApp, backup)
+    // With a project (the page was opened from an edit in a project) the recording is saved into it as .hjweb.
+    start: (setup, backup, projectId) => guard(async () => {
+      const manifest = await platform.start(selectedApp, backup, projectId ? { projectId } : null)
       await reload()
       // Sound for the backup is recorded on this page, like screen recording; a failure keeps the picture going.
       if (backup) await startWebAppBackupAudio(manifest.id, setup).catch(e => setError(e instanceof Error ? e.message : String(e)))

@@ -18,6 +18,7 @@ import { RecordingDirectorGoal, RecordingDirectorScript } from './RecordingDirec
 import { recordingTimeLabel } from './useRecordingControlSnapshot'
 import { WebAppRecordingActions, WebAppRecordingPanel, WebAppRecordingStatus } from './WebAppRecordingPanel'
 import { useWebAppRecording } from './useWebAppRecording'
+import { subscribeWebRecordingFocus, takeWebRecordingFocus } from './application/webAppRecordingFocus'
 import { useSettingsStore } from '@/stores/settingsStore'
 
 /**
@@ -40,6 +41,26 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
   const kind = chosenKind === 'webapp' && !webAppEnabled ? 'self' : chosenKind
   const director = kind === 'director'
   const webApp = useWebAppRecording()
+  // Opened from an edit in a project: web recordings go into that project (素材/录屏/<名称>.hjweb).
+  const destinationDocumentId = state.destination?.documentId
+  const [webAppProjectId, setWebAppProjectId] = useState<string | null>(null)
+  useEffect(() => {
+    setWebAppProjectId(null)
+    if (!destinationDocumentId) return
+    let current = true
+    void getPlatform().documents.listDocuments({ kind: 'video_edit', includeMissing: false }).then(documents => {
+      const container = documents.find(document => document.id === destinationDocumentId)?.container
+      if (current) setWebAppProjectId(container?.kind === 'project' ? container.projectId : null)
+    }).catch(() => undefined)
+    return () => { current = false }
+  }, [destinationDocumentId])
+  // A web recording opened from the work list shows here, selected.
+  const { selectRecording } = webApp
+  useEffect(() => {
+    const focus = (): void => { const id = takeWebRecordingFocus(); if (id) { setKind('webapp'); selectRecording(id) } }
+    focus()
+    return subscribeWebRecordingFocus(focus)
+  }, [selectRecording])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   useEffect(() => { saveRecordingSetup({ range: mode, sourceId, region, setup }) }, [mode, sourceId, region, setup])
@@ -98,7 +119,7 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
   } else if (!state.opening) {
     center = <UiSegmented ariaLabel={t('recording.recordMode')} value={kind} onChange={setKind} options={[{ value: 'self', label: t('recording.mode_self') }, { value: 'director', label: t('recording.mode_director') }, ...(webAppEnabled ? [{ value: 'webapp' as const, label: t('recording.mode_webapp') }] : [])]} />
     if (kind === 'webapp' && webApp.activeId) leading = <span className="flex items-center gap-2 text-sm font-medium">{t('recording.title')}<WebAppRecordingStatus model={webApp} /></span>
-    trailing = director ? null : kind === 'webapp' ? <WebAppRecordingActions model={webApp} setup={webAppBackup} backup={webAppBackupOptions(webAppBackup, sources)} /> : <UiButton variant="primary" loading={state.busy} disabled={!sourceId} disabledReason={t('recording.selectSource')} onClick={() => run(begin)}><ICON_TOOL_SCREEN_RECORDING />{t('recording.start')}</UiButton>
+    trailing = director ? null : kind === 'webapp' ? <WebAppRecordingActions model={webApp} setup={webAppBackup} backup={webAppBackupOptions(webAppBackup, sources)} projectId={webAppProjectId} /> : <UiButton variant="primary" loading={state.busy} disabled={!sourceId} disabledReason={t('recording.selectSource')} onClick={() => run(begin)}><ICON_TOOL_SCREEN_RECORDING />{t('recording.start')}</UiButton>
   }
 
   return <div className="flex h-full min-h-0 flex-col" data-application-surface="tool.screen_recording" data-testid="screen-recording-page">
