@@ -110,11 +110,23 @@ export async function createDirectoryExclusively(target: string): Promise<void> 
   }
 }
 
+/**
+ * 把文件夹里的内容逐项复制进一个已建好的空文件夹，不覆盖任何已有条目。
+ * 不能直接对整个文件夹调用 fs.cp：目标文件夹已存在（刚独占建好占住名字）时，errorOnExist 会让它整体报 EEXIST。
+ */
+export async function copyDirectoryContentsNoOverwrite(source: string, target: string, filter?: (from: string) => boolean): Promise<void> {
+  for (const entry of await fsp.readdir(source)) {
+    const from = path.join(source, entry)
+    if (filter && !filter(from)) continue
+    await fsp.cp(from, path.join(target, entry), { recursive: true, errorOnExist: true, force: false, ...(filter ? { filter } : {}) })
+  }
+}
+
 /** 不覆盖地复制文件夹（目标已存在则失败）；复制不完整时删除残留。 */
 export async function copyDirectoryNoOverwrite(source: string, target: string): Promise<void> {
   await createDirectoryExclusively(target)
   try {
-    await fsp.cp(source, target, { recursive: true, errorOnExist: true, force: false })
+    await copyDirectoryContentsNoOverwrite(source, target)
   } catch (error) {
     await fsp.rm(target, { recursive: true, force: true }).catch(() => undefined)
     throw error

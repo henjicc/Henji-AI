@@ -12,6 +12,7 @@ import { webRecordingsRoot, WebRecordingStore } from './store'
 import { forgetActiveWebRecording, listWebRecordingLocations, rememberActiveWebRecording, resolveWebRecordingDirectory, resolveWebRecordingLocation, webRecordingIdTaken } from './locations'
 import { getDocumentService } from '../documents/runtime'
 import { stripHenjiExtension } from '../../../../src/core/fileExtensions'
+import { copyDirectoryContentsNoOverwrite } from '../fs/no-overwrite'
 
 const logger = createMainLogger('main.web_replay')
 const MAX_EXTERNAL_BYTES = 32 * 1024 * 1024
@@ -75,6 +76,7 @@ function requireServer(): WebReplayServer {
 
 /** File names cannot carry these characters; the title keeps the user's words otherwise. */
 export function webRecordingFileName(title: string): string {
+  // eslint-disable-next-line no-control-regex -- 文件名里不能有控制字符
   return title.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-').replace(/[. ]+$/, '').trim().slice(0, 120) || '网页录制'
 }
 
@@ -129,7 +131,7 @@ export async function importWebRecordingToProject(request: WebRecordingImportReq
   const title = request.name?.trim() || manifest.title || (stripHenjiExtension('web_recording', path.basename(source)) ?? path.basename(source)) || defaultProjectRecordingTitle(manifest.app.name, new Date(manifest.createdAt))
   const created = await documents.createFolderDocumentLocation({ kind: 'web_recording', container: { kind: 'project', projectId: request.projectId }, name: webRecordingFileName(title) })
   try {
-    await fs.cp(source, created.path, { recursive: true, errorOnExist: true, force: false, filter: from => path.basename(from) !== 'edit-events' })
+    await copyDirectoryContentsNoOverwrite(source, created.path, from => path.basename(from) !== 'edit-events')
     const id = await webRecordingIdTaken(manifest.id) ? crypto.randomUUID() : manifest.id
     const store = new WebRecordingStore(created.path)
     const { title: _old, ...rest } = await store.readManifest()

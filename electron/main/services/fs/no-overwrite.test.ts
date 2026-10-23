@@ -7,6 +7,7 @@ vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), warn: v
 
 import { withFileLock } from './file-lock'
 import {
+  copyDirectoryNoOverwrite,
   copyFileNoOverwrite,
   createDirectoryExclusively,
   createFileExclusively,
@@ -83,6 +84,21 @@ describe('不覆盖的文件操作', () => {
     await moveDirectoryNoOverwrite(first, target)
     expect(fs.existsSync(first)).toBe(false)
     expect(fs.readFileSync(path.join(target, 'doc.txt'), 'utf8')).toBe('x')
+  })
+})
+
+describe('不覆盖地复制文件夹', () => {
+  it('复制进刚独占建好的空文件夹：内容与子文件夹完整，目标已存在时报错且原样', async () => {
+    const source = path.join(root, '素材', '录制')
+    fs.mkdirSync(path.join(source, 'blobs'), { recursive: true })
+    fs.writeFileSync(path.join(source, 'recording.json'), '{}')
+    fs.writeFileSync(path.join(source, 'blobs', 'a.bin'), 'b')
+    const target = path.join(root, '项目', '录制.hjweb')
+    await copyDirectoryNoOverwrite(source, target)
+    expect(fs.readdirSync(target).sort()).toEqual(['blobs', 'recording.json'])
+    expect(fs.readFileSync(path.join(target, 'blobs', 'a.bin'), 'utf8')).toBe('b')
+    await expect(copyDirectoryNoOverwrite(source, target)).rejects.toBeInstanceOf(EntryExistsError)
+    expect(fs.readdirSync(target).sort()).toEqual(['blobs', 'recording.json'])
   })
 })
 
