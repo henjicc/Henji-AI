@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { Circle } from 'lucide-react'
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { UiButton } from '@/components/ui'
 import { UI_TEXT_TIMECODE_CLASS } from '@/components/ui/styleTokens'
 import { getPlatform } from '@/platform/runtime'
@@ -62,7 +64,7 @@ export function AudioCaptureLive({ session, sessionId, channels, summary }: { se
   }, [session, sessionId, channels, tokens])
   return <div className="flex items-center gap-2" aria-label={summary || '录音电平与时长'}>
     <canvas ref={levels} className="h-6 w-24" aria-label={`${channels} 声道输入电平`} />
-    <div ref={time} className={`${UI_TEXT_TIMECODE_CLASS} text-xs`} aria-label="已录时长" data-capture-timecode>{captureTimecode(session.durationSeconds)}</div>
+    <span className="flex shrink-0 items-center gap-1.5"><Circle size={UI_ICON_SIZE.xs} fill="currentColor" className="text-danger-text" aria-hidden="true" /><span ref={time} className={`${UI_TEXT_TIMECODE_CLASS} text-sm`} aria-label="已录时长" data-capture-timecode>{captureTimecode(session.durationSeconds)}</span></span>
     {clipped && <UiButton variant="danger" size="sm" tooltip="点击清除削波标记" onClick={() => { clipping.current = false; setClipped(false) }}>削波</UiButton>}
   </div>
 }

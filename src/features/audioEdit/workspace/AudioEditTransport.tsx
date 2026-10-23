@@ -1,5 +1,7 @@
 import { AudioEditRecordingControls } from './AudioEditRecordingControls'
 import { useMemo } from 'react'
+import { useStore } from 'zustand'
+import { getAudioCaptureSession } from '@/features/audioCapture'
 import { Expand, Keyboard, MoreHorizontal, Pause, Play, SkipBack, Volume2, ZoomIn, ZoomOut } from 'lucide-react'
 import { PanelTrigger, UiIconButton, UiInlineStatus, UiOverflowRow, UiRangeInput, UiSwitch, type UiOverflowRowItem } from '@/components/ui'
 import { UI_TEXT_TIMECODE_CLASS } from '@/components/ui/styleTokens'
@@ -52,6 +54,8 @@ export function AudioEditTransport({ viewDuration }: { viewDuration?: number } =
   const mode = useAudioEditPlaybackStore((state) => state.mode)
   const setAutoGain = useAudioEditPlaybackStore((state) => state.setAutoGain)
   const setVolume = useAudioEditPlaybackStore((state) => state.setVolume)
+  const capture = useStore(getAudioCaptureSession().store)
+  const recording = capture.placement?.projectId === project.id && (capture.phase === 'recording' || capture.phase === 'paused')
   const spans = useMemo(() => buildProjectAudioEditTimeline(project), [project])
   const editedDuration = useMemo(() => editedDurationFrames(spans), [spans])
   const playDuration = mode === 'source' ? duration : mode === 'delivery' ? editedDurationFrames(delivery.timeline?.spans ?? []) : editedDuration
@@ -96,7 +100,8 @@ export function AudioEditTransport({ viewDuration }: { viewDuration?: number } =
     <UiIconButton size="md" disabled={workspace.disabled || !ready} disabledReason="请先录入音频或暂停录音" onClick={() => workspace.seek(0)} tooltip="回到开头" aria-label="回到开头"><SkipBack /></UiIconButton>
     <UiIconButton size="md" disabled={workspace.disabled || !ready || playDuration === 0} disabledReason={!duration ? '请先录入音频' : workspace.disabled ? '请先暂停录音或等待处理完成' : '正在准备试听'} onClick={() => void workspace.togglePlayback()} tooltip={playing ? '暂停 · 空格' : '播放 · 空格'} aria-label={playing ? '暂停' : '播放'}>{playing ? <Pause /> : <Play />}</UiIconButton>
     <AudioEditRecordingControls />
-    <Timecode rate={rate} total={playDuration} />
+    {/* 录音中走带只显示录音计时与电平（录音控件里），播放时间码此时没有意义，第一段录音时总长还是 0。 */}
+    {!recording && <Timecode rate={rate} total={playDuration} />}
     <UiOverflowRow className="flex-1 justify-end gap-1" items={items} renderOverflow={(hiddenIds) => (
       <PanelTrigger panelSize="compact" panelPadding="content" renderPanel={() => (
         <div className="flex flex-col items-start gap-3">{items.filter((item) => hiddenIds.includes(item.id)).map((item) => <div key={item.id} className="flex flex-wrap items-center gap-1.5">{item.node}</div>)}</div>
