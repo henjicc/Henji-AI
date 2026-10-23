@@ -219,7 +219,7 @@ export async function recordingEncoderChoices(codec: RecordingCodec): Promise<Re
   }
   return [...choices, 'software']
 }
-/** sceneCut 只在 x264/x265 与 NVENC（需预读）上生效；QSV/AMF/VideoToolbox 未实测，保持固定间隔。 */
+/** sceneCut 只在 x264/x265 与 NVENC 上生效。NVENC 需要预读才会补关键帧；预读 20 帧实测让画面晚出约 60ms、录制起点估算随之后移，4 帧检出效果相同且无可测延迟。QSV/AMF/VideoToolbox 未实测，保持固定间隔。 */
 export function recordingEncoderProfile(codec: RecordingCodec, encoder: Exclude<RecordingEncoder, 'auto'>, rateControl: NonNullable<RecordingEncoding['rateControl']>, sceneCut = false): VideoEncoderProfile<HwEncoderId | 'cpu'> {
   const id = encoder === 'software' ? 'cpu' : `${codec}_${recordingVendors[encoder]}` as HwEncoderId
   return { id, label: encoder, buildEncodeArgs: (v, maxr, buf) => {
@@ -227,7 +227,7 @@ export function recordingEncoderProfile(codec: RecordingCodec, encoder: Exclude<
     const codecName = id === 'cpu' ? codec === 'hevc' ? 'libx265' : 'libx264' : id
     const base = ['-c:v', codecName]
     if (encoder === 'software') base.push('-preset', 'superfast', '-tune', 'zerolatency', ...(quality ? ['-crf', '26'] : []), ...(codec === 'h264' ? ['-sc_threshold', sceneCut ? '40' : '0'] : []), ...(cbr && codec === 'h264' ? ['-x264-params', 'nal-hrd=cbr:force-cfr=1'] : []), ...(codec === 'hevc' ? ['-x265-params', `bframes=0:scenecut=${sceneCut ? 40 : 0}${cbr ? ':strict-cbr=1' : ''}`] : []))
-    if (encoder === 'nvidia') base.push('-preset', 'p4', '-tune', 'll', '-rc', cbr ? 'cbr' : 'vbr', ...(quality ? ['-cq', '26'] : []), '-rc-lookahead', sceneCut ? '20' : '0', ...(sceneCut ? [] : ['-no-scenecut', '1']), '-forced-idr', '1')
+    if (encoder === 'nvidia') base.push('-preset', 'p4', '-tune', 'll', '-rc', cbr ? 'cbr' : 'vbr', ...(quality ? ['-cq', '26'] : []), '-rc-lookahead', sceneCut ? '4' : '0', ...(sceneCut ? [] : ['-no-scenecut', '1']), '-forced-idr', '1')
     if (encoder === 'intel') base.push('-preset', 'veryfast', ...(quality ? ['-global_quality', '26'] : []), '-look_ahead', '0')
     if (encoder === 'amd') base.push('-quality', 'speed', '-rc', cbr ? 'cbr' : 'vbr_peak', ...(quality ? ['-qp_i', '26', '-qp_p', '26'] : []))
     if (encoder === 'apple') base.push('-allow_sw', '0', '-realtime', '1', ...(quality ? ['-q:v', '65'] : []))
