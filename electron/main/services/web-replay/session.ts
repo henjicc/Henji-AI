@@ -8,6 +8,8 @@ const logger = createMainLogger('main.web_replay.recording')
 const monoUs = (): number => Number(process.hrtime.bigint() / 1000n)
 const EXTERNAL_CONCURRENCY = 4
 
+/** Starts the window backup video; resolves with a stopper, or the reason it could not start. */
+export type StartBackupVideo = (session: WebRecordingSession) => Promise<{ stop(): Promise<string | null> } | { reason: string }>
 export type FetchExternal = (url: string, userAgent: string) => Promise<{ status: number; contentType: string; bytes: Uint8Array }>
 export interface RecordingTarget { app: AppInfoValue; host: WebRecordingManifest['host']; env: WebRecordingEnvironment; probe: WebRecordingManifest['probe'] }
 
@@ -34,7 +36,9 @@ export class WebRecordingSession {
   /** Wall-clock ms when the probe reported the recording page started. */
   startedAt: number | null = null
 
-  constructor(target: RecordingTarget, private readonly fetchExternal: FetchExternal) {
+  private backup: Promise<{ stop(): Promise<string | null> } | { reason: string }> | null = null
+
+  constructor(target: RecordingTarget, private readonly fetchExternal: FetchExternal, private readonly startBackup?: StartBackupVideo) {
     this.manifest = {
       version: WEB_RECORDING_VERSION, minReaderVersion: WEB_RECORDING_MIN_READER_VERSION, id: this.id, status: 'recording', createdAt: new Date().toISOString(),
       app: target.app, probe: target.probe, host: target.host, env: target.env, wallAtZeroMs: 0, durationUs: 0, clock: null, fonts: [], warnings: [],
@@ -60,6 +64,8 @@ export class WebRecordingSession {
       case 'started':
         this.state = 'recording'
         this.startedAt = Date.now()
+        // The backup video starts with the recording page, so both cover the same span.
+        this.backup ??= this.startBackup?.(this).catch(error => ({ reason: `备份录屏没有启动：${String((error as Error)?.message ?? error)}` })) ?? null
         this.manifest = { ...this.manifest, wallAtZeroMs: message.wallAtZeroMs, env: message.env }
         logger.info('网页录制开始', { event: 'web_replay.recording.started', context: { recordingId: this.id, app: this.manifest.app.name, url: message.env.url } })
         return
@@ -144,6 +150,9 @@ export class WebRecordingSession {
     this.state = status
     try {
       if (this.externalActive || this.externalQueue.length) await new Promise<void>(resolve => this.externalIdle.push(resolve))
+      const backup = await this.backup
+      if (backup && 'reason' in backup) this.assembler.warn({ t: this.assembler.durationUs, kind: 'error', message: backup.reason })
+      else if (backup && !(await backup.stop())) this.assembler.warn({ t: this.assembler.durationUs, kind: 'error', message: '备份录屏没有保存成功，原始片段在录制目录的 backup 文件夹' })
       await this.journal
       await Promise.all(this.pendingWrites)
       await this.store.writeData(this.assembler.data())

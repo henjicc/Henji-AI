@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { probeMessageSchema, type AppInfoValue, type WebRecordingEnvironment, type WebRecordingManifest } from '../../../../src/core/webReplay/schema'
 import { createMainLogger } from '../logging'
-import { WebRecordingSession, type FetchExternal } from './session'
+import { WebRecordingSession, type FetchExternal, type StartBackupVideo } from './session'
 
 const logger = createMainLogger('main.web_replay.server')
 export const WEB_REPLAY_PORT = 47831
@@ -34,7 +34,7 @@ export class WebReplayServer extends EventEmitter {
   private connections = new Map<string, Connection>()
   private sessions = new Map<string, WebRecordingSession>()
 
-  constructor(private readonly fetchExternal: FetchExternal) { super() }
+  constructor(private readonly fetchExternal: FetchExternal, private readonly startBackup?: StartBackupVideo) { super() }
 
   async start(port = WEB_REPLAY_PORT): Promise<void> {
     if (this.http) return
@@ -70,7 +70,7 @@ export class WebReplayServer extends EventEmitter {
     const connection = this.connections.get(connectionId)
     if (!connection?.app) throw new Error('这个网页应用已断开，请确认它仍在运行')
     if (connection.session) throw new Error('这个网页应用正在录制')
-    const session = new WebRecordingSession({ app: connection.app.app, host: connection.app.host, env: connection.app.env, probe: { version: connection.app.probeVersion, protocol: 1 } }, this.fetchExternal)
+    const session = new WebRecordingSession({ app: connection.app.app, host: connection.app.host, env: connection.app.env, probe: { version: connection.app.probeVersion, protocol: 1 } }, this.fetchExternal, this.startBackup)
     await session.prepare()
     this.sessions.set(session.id, session)
     connection.session = session

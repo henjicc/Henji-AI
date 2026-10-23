@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { FolderOpen, MonitorPlay, Square, Trash2 } from 'lucide-react'
+import { FolderOpen, MonitorPlay, Square, SquarePlay, Trash2 } from 'lucide-react'
 import { Dropdown, UiButton, UiEmpty, UiError, UiFormRow, UiGroup, UiInlineStatus, UiOptionButton } from '@/components/ui'
 import { UI_TEXT_TIMECODE_CLASS } from '@/components/ui/styleTokens'
 import { ICON_TOOL_SCREEN_RECORDING } from '@/core/theme/icons'
@@ -72,6 +72,7 @@ export function WebAppRecordingPanel({ model }: { model: WebAppRecordingModel })
         </span>
         <UiButton variant="secondary" loading={render?.busy} onClick={() => void model.render(recording.id)}><MonitorPlay />{recording.video ? t('recording.webapp_rerender') : t('recording.webapp_render')}</UiButton>
         <UiButton onClick={() => void model.reveal(recording.id, recording.video ?? undefined)}><FolderOpen />{t('recording.webapp_reveal')}</UiButton>
+        {recording.backupVideo && <UiButton onClick={() => void model.reveal(recording.id, recording.backupVideo ?? undefined)}><SquarePlay />{t('recording.webapp_backup')}</UiButton>}
         <UiButton variant="danger" disabled={render?.busy} disabledReason={t('recording.webapp_busyRendering')} onClick={() => void remove(recording.id)}><Trash2 />{t('recording.webapp_delete')}</UiButton>
       </div>}
     </div>
@@ -90,7 +91,7 @@ export function WebAppRecordingPanel({ model }: { model: WebAppRecordingModel })
           {model.recordings.map(item => <UiOptionButton key={item.id} variant="menu" active={item.id === recording?.id} onClick={() => model.selectRecording(item.id)}>
             <span className="flex min-w-0 flex-col items-start gap-0.5">
               <span className="truncate">{item.app.name} · {new Date(item.createdAt).toLocaleString()}</span>
-              <span className={`${UI_TEXT_TIMECODE_CLASS} text-xs text-text3`}>{recordingTimeLabel(item.durationUs / 1000)}{item.status === 'complete' ? '' : ` · ${t(`recording.webapp_status_${item.status}`)}`}{item.video ? ` · ${t('recording.webapp_hasVideo')}` : ''}</span>
+              <span className={`${UI_TEXT_TIMECODE_CLASS} text-xs text-text3`}>{recordingTimeLabel(item.durationUs / 1000)}{item.status === 'complete' ? '' : ` · ${t(`recording.webapp_status_${item.status}`)}`}{item.video ? ` · ${t('recording.webapp_hasVideo')}` : ''}{item.backupVideo ? ` · ${t('recording.webapp_hasBackup')}` : ''}</span>
             </span>
           </UiOptionButton>)}
         </div> : <p className="text-xs text-text3">{t('recording.webapp_noRecordings')}</p>}

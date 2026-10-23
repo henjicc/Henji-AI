@@ -27,8 +27,8 @@ export interface WebReplayConnectedApp {
   recordingStartedAt: number | null
 }
 
-/** A saved recording plus its most recent replay video, if one was rendered. */
-export type WebRecordingSummary = WebRecordingManifest & { video: string | null }
+/** A saved recording plus its most recent replay video and the window backup video, when they exist. */
+export type WebRecordingSummary = WebRecordingManifest & { video: string | null; backupVideo: string | null }
 export interface WebReplayRenderProgress { recordingId: string; progress: number; frame: string }
 
 export interface WebReplayServerState { enabled: boolean; listening: boolean; port: number; error?: string; apps: WebReplayConnectedApp[] }

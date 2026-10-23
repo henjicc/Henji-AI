@@ -4,6 +4,7 @@ import { net, shell } from 'electron'
 import type { WebRecordingManifest } from '../../../../src/core/webReplay/schema'
 import type { WebRecordingSummary, WebReplayReadRequest, WebReplayReadResult, WebReplayRenderProgress, WebReplayRenderRequest, WebReplayRenderResult, WebReplayServerState } from '../../../../src/platform/contracts/webReplay'
 import { createMainLogger } from '../logging'
+import { BACKUP_VIDEO_FILE, WebRecordingBackupVideo } from './backupVideo'
 import { WebRecordingPlayer } from './player/player'
 import { WEB_REPLAY_PORT, WebReplayServer } from './server'
 import { webRecordingDirectory, webRecordingsRoot, WebRecordingStore } from './store'
@@ -28,7 +29,10 @@ function snapshot(): WebReplayServerState { return { ...state, apps: server?.app
 /** Starts the local probe hub. A busy port is reported in the state, not thrown at startup. */
 export async function startWebReplayService(port = Number(process.env.HENJI_WEB_REPLAY_PORT) || WEB_REPLAY_PORT): Promise<void> {
   if (server) return
-  server = new WebReplayServer(fetchExternal)
+  server = new WebReplayServer(fetchExternal, async session => {
+    const started = await WebRecordingBackupVideo.start(session.store.directory, session.id, session.info.app.name, session.info.env.viewport)
+    return 'backup' in started ? started.backup : started
+  })
   server.on('changed', () => { const value = snapshot(); listeners.forEach(fn => fn(value)) })
   try {
     await server.start(port)
@@ -82,7 +86,10 @@ export async function listWebRecordings(): Promise<WebRecordingSummary[]> {
   const names = (await fs.readdir(root).catch(() => [] as string[])).filter(name => UUID_NAME.test(name))
   const manifests = await Promise.all(names.map(async name => {
     const directory = path.join(root, name)
-    try { return { ...await new WebRecordingStore(directory).readManifest(), video: await latestVideo(directory) } } catch (error) {
+    try {
+      const backup = path.join(directory, BACKUP_VIDEO_FILE)
+      return { ...await new WebRecordingStore(directory).readManifest(), video: await latestVideo(directory), backupVideo: await fs.access(backup).then(() => backup, () => null) }
+    } catch (error) {
       logger.warn('网页录制无法读取', { event: 'web_replay.recording.unreadable', context: { name }, error: String(error) })
       return null
     }
