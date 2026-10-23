@@ -9,6 +9,7 @@ vi.mock('@/i18n', () => ({
   },
 }))
 
+import { APPLICATION_DOMAINS } from '@/features/application-control/applicationDomains'
 import { catalog } from '@henjicc/ai-sdk'
 import { applicationControlCoverageManifestSchema, applicationPublicControlCoverageSchema } from '.'
 import { canvasNodeDefinitions } from '@/features/canvas/domain/nodeRegistry'
@@ -27,7 +28,7 @@ import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from './builtinApplicationCap
 import { projectExternalCapabilities } from '@/core/application-control/externalCapabilityPolicy'
 import { APPLICATION_MEDIA_REFERENCE_KINDS } from '@/core/application-control/mediaReferenceKinds'
 
-function createManifest() {
+function createManifest(extraEntities: Array<{ id: string; domain: string }> = [], capabilities = BUILTIN_APPLICATION_CAPABILITIES) {
   return createApplicationControlCoverageManifest({
     settings: listApplicationSettingIds(),
     surfaces: listApplicationSurfaces().map((surface) => surface.id),
@@ -35,10 +36,20 @@ function createManifest() {
     imageEditTools: getImageEditorTools().map((tool) => tool.id),
     cameraStageProperties: listAnimatablePropertyPaths(),
     canvasNodes: Object.keys(canvasNodeDefinitions),
-  })
+    entities: [...APPLICATION_DOMAINS.flatMap(domain => domain.entities().map(registration => registration.entity)), ...extraEntities],
+  }, capabilities)
 }
 
 describe('application control coverage', () => {
+  it('新增实体和能力直接进入覆盖结果，不在覆盖清单再次登记同名条目', () => {
+    const capability = { ...BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('get_current_application_context')!,
+      id: 'new_memory_read', domain: 'memory' }
+    const manifest = createManifest([{ id: 'assistant.memory_example', domain: 'memory' }],
+      [...BUILTIN_APPLICATION_CAPABILITIES, capability])
+    expect(manifest.domains.find(domain => domain.domain === 'memory')?.entityTypes).toContain('assistant.memory_example')
+    expect(manifest.capabilityMigrations.find(item => item.capabilityId === capability.id)?.targetIds).toEqual([capability.id])
+    expect(projectExternalCapabilities([capability]).read.map(item => item.id)).toEqual([capability.id])
+  })
   it('全部非只读能力包括内部恢复只能走统一写通道，未包装反例失败', () => {
     expect(() => assertRendererApplicationWriteChannels()).not.toThrow()
     expect(() => assertApplicationWriteChannel('unwrapped_write', () => ({}))).toThrow('WRITE_EXECUTION_REQUIRED:unwrapped_write')

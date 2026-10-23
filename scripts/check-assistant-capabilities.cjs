@@ -351,10 +351,9 @@ for (const id of migratedBackendCapabilityIds) {
 
 }
 
-const settingsNavigationSource = fs.readFileSync(
-  path.join(root, 'src', 'core', 'types', 'settingsNavigation.ts'),
-  'utf8'
-)
+const { loadTypeScript } = require('./check-persistence-compat.cjs')
+const { SETTINGS_REGISTRATION } = loadTypeScript('src/core/types/settingsNavigation.ts')
+const { APPLICATION_SURFACE_DEFINITIONS } = loadTypeScript('src/features/navigation/application/surfaceCatalog.ts')
 const surfaceRegistrySource = fs.readFileSync(
   path.join(root, 'src', 'features', 'navigation', 'application', 'surfaceCatalog.ts'),
   'utf8'
@@ -365,15 +364,12 @@ for (const field of [
 ]) {
   if (!surfaceRegistrySource.includes(field)) failures.push(`Surface 观察契约缺少字段：${field}`)
 }
-// 分区唯一来源是按大类分组的 SETTINGS_TAB_SECTIONS（SETTINGS_SECTION_IDS 由它展开），按对象字面量解析
-const settingsSectionBlock = settingsNavigationSource
-  .split('export const SETTINGS_TAB_SECTIONS = {')[1]
-  ?.split('} as const')[0] ?? ''
-const settingsSectionIds = [...settingsSectionBlock.matchAll(/'([^']+)'/g)].map((match) => match[1])
-if (settingsSectionIds.length === 0) failures.push('未能解析设置分区清单 SETTINGS_SECTION_IDS')
-for (const sectionId of settingsSectionIds) {
-  if (!surfaceRegistrySource.includes(`sectionId: '${sectionId}'`)) {
-    failures.push(`设置分区缺少 Surface：${sectionId}`)
+// 执行正式派生入口，不能再从源码字面量猜分区和 Surface。
+if (SETTINGS_REGISTRATION.sectionIds.length === 0) failures.push('设置分区声明为空')
+for (const section of SETTINGS_REGISTRATION.sections) {
+  const surfaces = APPLICATION_SURFACE_DEFINITIONS.filter(surface => surface.settingsTarget?.sectionId === section.id)
+  if (surfaces.length !== 1 || surfaces[0].settingsTarget.tab !== section.tab) {
+    failures.push('设置分区缺少唯一且同大类的 Surface：' + section.id)
   }
 }
 

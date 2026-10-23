@@ -1,3 +1,4 @@
+import { settingsSectionTitleKey } from '@/core/types/settingsNavigation'
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   UI_GLASS_ADAPTIVE_DIVIDER_CLASS,
@@ -261,7 +262,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
                           size="md"
                           className="pl-11"
                         >
-                          {t(`navSections.${sectionId}`)}
+                          {t(settingsSectionTitleKey(sectionId))}
                         </UiNavButton>
                       ))}
                     </div>

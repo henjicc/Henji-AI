@@ -3,7 +3,6 @@ import {
   applicationControlCoverageManifestSchema,
   type ApplicationCapabilityMigration,
   type ApplicationControlCoverageManifest,
-  type ApplicationDomainCoverage,
   type ApplicationPublicControlCoverage,
   type ApplicationSurfaceObservationCoverage,
 } from '.'
@@ -12,7 +11,7 @@ import {
   APPLICATION_CAPABILITY_CATALOG_VERSION,
   type ApplicationCapabilityDefinition,
 } from './applicationCapabilities'
-import { BUILTIN_APPLICATION_CAPABILITIES } from './builtinApplicationCapabilityRegistry'
+import { BUILTIN_APPLICATION_CAPABILITIES, BUILTIN_APPLICATION_DOMAIN_METADATA } from './builtinApplicationCapabilityRegistry'
 
 type PublicControlInputs = Readonly<{
   settings: readonly string[]
@@ -21,94 +20,19 @@ type PublicControlInputs = Readonly<{
   imageEditTools: readonly string[]
   cameraStageProperties: readonly string[]
   canvasNodes: readonly string[]
+  /** 来自正式反射注册结果；不能在覆盖清单重写实体名单。 */
+  entities: readonly { id: string; domain: string }[]
 }>
-
-interface DomainPlan extends ApplicationDomainCoverage {
-  source: string
-  readTargetId: string
-  writeTargetIds: string[]
-  targetKind: ApplicationCapabilityMigration['targetKind']
-}
-
-const domainPlans: Readonly<Record<string, DomainPlan>> = {
-  memory: domainPlan('memory', '3.4', 'src/features/assistant/memory/memoryService.ts', ['assistant.memory', 'assistant.memory_settings', 'document.project_memory', 'video_edit.style_preference'], ['src/features/assistant/application/memoryReflection.ts'], 'src/core/application-control/domains/assistantMemory/memoryCapabilities.ts', 'read_application_entity', ['change_application_entities', 'revert_assistant_memory', 'organize_assistant_memory'], 'operation'),
-  screen_recording: domainPlan('screen_recording', '1.5', 'src/features/screenRecording/application/recordingService.ts', ['screen_recording.session', 'screen_recording.source', 'screen_recording.device'], ['src/features/screenRecording/application/recordingReflection.ts'], 'src/core/application-control/domains/screenRecording/recordingCapabilities.ts', 'read_application_entity', ['start_screen_recording', 'pause_screen_recording', 'resume_screen_recording', 'mark_screen_recording', 'stop_screen_recording', 'cancel_screen_recording', 'recover_screen_recording', 'import_screen_recording'], 'operation'),
-  video_edit: domainPlan('video_edit', '7.2', 'src/features/videoEdit/application/videoEditService.ts', ['video_edit.document', 'video_edit.clip', 'video_edit.annotation', 'video_edit.media', 'video_edit.code_material', 'video_edit.code_version'], ['src/features/videoEdit/application/videoEditFields.ts'], 'videoEditApplicationCapabilities.ts', 'read_application_entity', ['change_application_entities', 'split_video_edit', 'export_video_edit'], 'operation'),
-  application: domainPlan('application', '2.2', 'src/core/application-control/', ['application.context'], ['src/core/application-control/reflection.ts'], 'src/core/application-control/builtinApplicationCapabilities.ts', 'application.observe', ['application.observe'], 'query'),
-  navigation: domainPlan('navigation', '5.1', 'src/features/navigation/application/', ['application.surface'], ['surfaceCatalog.ts'], 'src/core/application-control/builtinApplicationCapabilities.ts', 'surface.observe', ['surface.open', 'surface.close', 'surface.focus'], 'operation'),
-  settings: domainPlan('settings', '5.1', 'src/features/settings/application-control/', ['settings.entry'], ['generalSettingDefinitions.ts', 'interfaceSettingDefinitions.ts'], 'src/core/application-control/builtinApplicationCapabilities.ts', 'application.observe', ['application.plan', 'application.commit'], 'property'),
-  local_models: domainPlan('local_models', '4.11', 'electron/main/services/local-models/service.ts', ['local_model.item', 'local_model.settings'], ['src/features/localModels/application/localModelsReflection.ts'], 'src/core/application-control/domains/localModels/localModelCapabilities.ts', 'read_application_entity', ['change_application_entities', 'cancel_local_model_download'], 'operation'),
-  sound_library: domainPlan('sound_library', '7.2', 'electron/main/services/sound-library/service.ts', ['sound_library.library', 'sound_library.folder', 'sound_library.sound'], ['src/features/soundLibrary/application/soundLibraryReflection.ts'], 'src/core/application-control/domains/soundLibrary/soundLibraryCapabilities.ts', 'read_application_entity', ['change_application_entities', 'add_sound_library_folder', 'search_sound_effects'], 'operation'),
-  generation: domainPlan('generation', '5.4', 'src/features/generation/application/', ['generation.task', 'generation.result', 'generation.record'], ['packages/ai-sdk/src/catalog/**.model.ts', 'src/models/presentation/**.presentation.ts'], 'generationApplicationService.ts 与 generationApplicationCapabilities.ts', 'application.observe', ['generation.prepare', 'generation.submit', 'generation.cancel'], 'operation'),
-  models: domainPlan('models', '5.4', 'src/features/generation/application/generationPreparationService.ts', ['generation.model'], ['packages/ai-sdk/src/catalog/**.model.ts', 'src/models/presentation/**.presentation.ts'], 'generationApplicationCapabilities.ts', 'application.describe', ['model.select'], 'query'),
-  image_edit: domainPlan('image_edit', '5.3', 'src/features/imageEdit/application/', ['image_edit.preview', 'image_edit.document', 'image_edit.layer', 'image_edit.group', 'image_edit.mask', 'image_edit.resource'], ['src/features/imageEdit/tools/registry.ts'], 'toolboxApplicationCapabilities.ts 与 builtinApplicationCapabilities.ts', 'application.observe', ['image_edit.preview', 'image_edit.commit'], 'operation'),
-  assets: domainPlan('assets', '5.3', 'src/features/assets/application/', ['asset', 'asset.library'], ['src/features/assets/application/assetReflection.ts'], 'assetApplicationCapabilities.ts', 'application.observe', ['asset.update', 'asset.delete'], 'operation'),
-  canvas: domainPlan('canvas', '5.2', 'src/features/canvas/application/', ['canvas.document', 'canvas.node', 'canvas.edge'], ['src/features/canvas/domain/nodeRegistry.ts'], 'canvas*ApplicationCapabilities.ts', 'application.observe', ['application.plan', 'application.commit'], 'property'),
-  camera_stage: domainPlan('camera_stage', '5.1', 'src/features/cameraStage/application/ 与 projects/cameraStageProjectService.ts', ['camera_stage.document', 'camera_stage.scene', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.state_keyframe', 'camera_stage.trajectory'], ['src/features/cameraStage/application/cameraStageReflection.ts', 'src/features/cameraStage/domain/animatableProps.ts'], 'cameraStage*ApplicationCapabilities.ts', 'observe_camera_stage_scene', ['application.plan', 'application.commit', 'place_camera_stage_object', 'apply_camera_stage_camera_move'], 'operation'),
-  audio_edit: domainPlan('audio_edit', '7.1', 'src/features/audioEdit/application/ 与 electron/main/services/audio-edit/', ['audio_edit.document', 'audio_edit.transcript_block', 'audio_edit.suggestion', 'audio_edit.processor_chain', 'audio_edit.render'], ['src/features/audioEdit/application/audioEditReflection.ts'], '通用实体读改与 audioEdit 平台服务', 'application.observe', ['application.plan', 'application.commit'], 'property'),
-  toolbox: domainPlan('toolbox', '5.3', 'src/features/toolbox/application/', ['toolbox.tool'], ['src/features/imageEdit/tools/registry.ts'], 'toolboxApplicationCapabilities.ts', 'application.observe', ['toolbox.select'], 'operation'),
-  documents: domainPlan('documents', '2.5', 'src/features/documents/documentOperations.ts', ['documents.document', 'documents.project'], ['src/features/documents/application/documentsFields.ts'], 'documentsApplicationCapabilities.ts', 'application.observe', ['change_application_entities', 'create_document', 'move_document', 'duplicate_document', 'collect_document_media', 'trash_document', 'create_project'], 'operation'),
-  storyboard: domainPlan('storyboard', '5.3', 'src/features/canvas/application/storyboardProjectService.ts', ['storyboard.document', 'storyboard.card'], ['src/features/canvas/application/storyboardReflection.ts'], 'toolboxApplicationCapabilities.ts', 'application.observe', ['storyboard.update'], 'operation'),
-}
-
-function domainPlan(
-  domain: string,
-  migrationTask: string,
-  formalService: string,
-  entityTypes: string[],
-  propertySources: string[],
-  operationSource: string,
-  readTargetId: string,
-  writeTargetIds: string[],
-  targetKind: ApplicationCapabilityMigration['targetKind']
-): DomainPlan {
-  return {
-    domain,
-    migrationTask,
-    formalService,
-    entityTypes,
-    propertySources,
-    operationSource,
-    querySource: operationSource,
-    observationSource: 'observe_application_surface 受控观察提供者；结构化状态仍由正式服务读取',
-    verificationSource: 'ApplicationCapabilityDefinition.successEvidence 与后续事务证据',
-    surfaceIds: surfacesForDomain(domain),
-    source: operationSource,
-    readTargetId,
-    writeTargetIds,
-    targetKind,
-  }
-}
-
-function surfacesForDomain(domain: string): string[] {
-  const mappings: Readonly<Record<string, string[]>> = {
-    navigation: [...APPLICATION_SURFACE_IDS],
-    settings: APPLICATION_SURFACE_IDS.filter((id) => id.startsWith('settings.')),
-    local_models: ['settings.files.models'],
-    sound_library: ['settings.files.sounds'],
-    generation: ['workspace.generation'],
-    models: ['workspace.generation', 'settings.providers_models'],
-    image_edit: ['tool.image_edit'],
-    assets: ['workspace.assets', 'overlay.assets'],
-    canvas: ['workspace.canvas'],
-    camera_stage: ['tool.camera_stage'],
-    audio_edit: ['tool.audio_edit'],
-    video_edit: ['workspace.video_edit'],
-    toolbox: ['workspace.tools'],
-    screen_recording: ['tool.screen_recording'],
-  }
-  return mappings[domain] ?? []
-}
 
 function capabilityMigration(
   capability: ApplicationCapabilityDefinition
 ): ApplicationCapabilityMigration {
-  const plan = domainPlans[capability.domain]
+  const plan = BUILTIN_APPLICATION_DOMAIN_METADATA[capability.domain]
   if (!plan) throw new Error(`应用控制覆盖缺少领域计划：${capability.domain}`)
   return {
     capabilityId: capability.id,
     domain: capability.domain,
-    source: plan.source,
+    source: plan.operationSource,
     disposition: 'retain',
     targetIds: [capability.id],
     targetKind: plan.targetKind,
@@ -177,7 +101,18 @@ export function createApplicationControlCoverageManifest(
   return applicationControlCoverageManifestSchema.parse({
     version: APPLICATION_CONTROL_COVERAGE_VERSION,
     catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION,
-    domains: Object.values(domainPlans).map(({ source: _source, readTargetId: _readTargetId, writeTargetIds: _writeTargetIds, targetKind: _targetKind, ...plan }) => plan),
+    domains: Object.entries(BUILTIN_APPLICATION_DOMAIN_METADATA).map(([domain, metadata]) => ({
+      domain, migrationTask: metadata.migrationTask, formalService: metadata.formalService,
+      entityTypes: [...new Set([
+        ...inputs.entities.filter(entity => entity.domain === domain).map(entity => entity.id),
+        ...capabilities.filter(capability => capability.domain === domain)
+          .flatMap(capability => capability.control.impacts.flatMap(impact => impact.entityTypes)),
+      ])],
+      propertySources: metadata.propertySources, operationSource: metadata.operationSource, querySource: metadata.operationSource,
+      observationSource: 'observe_application_surface 受控观察提供者；结构化状态仍由正式服务读取',
+      verificationSource: 'ApplicationCapabilityDefinition.successEvidence 与后续事务证据',
+      surfaceIds: metadata.surfaceIds,
+    })),
     capabilityMigrations: capabilities.map(capabilityMigration),
     surfaceObservations: APPLICATION_SURFACE_IDS.map(surfaceObservation),
     publicControls: publicControls(inputs),

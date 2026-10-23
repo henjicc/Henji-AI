@@ -1,3 +1,4 @@
+import { settingsSectionTitleKey } from '@/core/types/settingsNavigation'
 import React from 'react'
 import {
   UI_FORM_ROW_GAP_CLASS,
@@ -51,7 +52,7 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({ id, description, fill
        */
       className={`mt-8 border-t ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS} pt-8 first:mt-0 first:border-t-0 first:pt-0 ${fill ? 'flex min-h-0 flex-1 flex-col' : ''}`}
     >
-      <h3 className={UI_TEXT_TITLE_CLASS}>{t(`navSections.${id}`)}</h3>
+      <h3 className={UI_TEXT_TITLE_CLASS}>{t(settingsSectionTitleKey(id))}</h3>
       {description ? <p className="mt-1 text-xs text-text2">{description}</p> : null}
       <div className={fill ? 'mt-5 flex min-h-0 flex-1 flex-col' : `mt-5 ${UI_FORM_ROW_GAP_CLASS}`}>{children}</div>
     </section>

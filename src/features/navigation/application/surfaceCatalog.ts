@@ -1,4 +1,4 @@
-import type { SettingsNavigationTarget, SettingsTabId } from '@/core/types/settingsNavigation'
+import { SETTINGS_REGISTRATION, type SettingsNavigationTarget, type SettingsTabId } from '@/core/types/settingsNavigation'
 import { TOOL_DESCRIPTORS, type ToolDescriptor } from '@/core/toolbox/toolCatalog'
 import type { ToolboxToolId } from '@/core/types/workspace'
 import type { WorkspaceId } from '@/core/types/workspace'
@@ -89,31 +89,7 @@ const surfaceDefinitions = [
     acceptedRefKinds: ['asset', 'asset.library'],
   },
   ...createToolboxSurfaces(TOOL_DESCRIPTORS),
-  { id: 'settings.general.recording', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-recording' }, ...immediate, acceptedRefKinds: ['audio_capture.settings'] },
-  { id: 'settings.general', kind: 'settings', settingsTarget: { tab: 'general' }, ...immediate },
-  { id: 'settings.general.basic', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-basic' }, ...immediate },
-  { id: 'settings.general.view', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-view' }, ...immediate },
-  { id: 'settings.general.appearance', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-appearance' }, ...immediate },
-  { id: 'settings.general.about', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-about' }, ...immediate },
-  { id: 'settings.providers_models', kind: 'settings', settingsTarget: { tab: 'providers', sectionId: 'providers' }, ...immediate },
-  { id: 'settings.workspace', kind: 'settings', settingsTarget: { tab: 'workspace' }, ...immediate },
-  { id: 'settings.workspace.generation', kind: 'settings', settingsTarget: { tab: 'workspace', sectionId: 'workspace-generation' }, ...immediate },
-  { id: 'settings.workspace.canvas', kind: 'settings', settingsTarget: { tab: 'workspace', sectionId: 'workspace-canvas' }, ...immediate },
-  { id: 'settings.workspace.video_edit', kind: 'settings', settingsTarget: { tab: 'workspace', sectionId: 'workspace-video-edit' }, ...immediate },
-  { id: 'settings.workspace.assets', kind: 'settings', settingsTarget: { tab: 'workspace', sectionId: 'workspace-assets' }, ...immediate },
-  { id: 'settings.files', kind: 'settings', settingsTarget: { tab: 'files' }, ...immediate },
-  { id: 'settings.storage', kind: 'settings', settingsTarget: { tab: 'files', sectionId: 'files-storage' }, ...immediate },
-  { id: 'settings.files.cache', kind: 'settings', settingsTarget: { tab: 'files', sectionId: 'files-cache' }, ...immediate },
-  { id: 'settings.upload', kind: 'settings', settingsTarget: { tab: 'files', sectionId: 'files-upload' }, ...immediate },
-  { id: 'settings.files.download', kind: 'settings', settingsTarget: { tab: 'files', sectionId: 'files-download' }, ...immediate },
-  { id: 'settings.files.sounds', kind: 'settings', settingsTarget: { tab: 'files', sectionId: 'files-sounds' }, ...immediate },
-  { id: 'settings.files.models', kind: 'settings', settingsTarget: { tab: 'files', sectionId: 'files-models' }, ...immediate },
-  { id: 'settings.assistant', kind: 'settings', settingsTarget: { tab: 'assistant' }, ...immediate },
-  { id: 'settings.assistant.models', kind: 'settings', settingsTarget: { tab: 'assistant', sectionId: 'assistant-models' }, ...immediate },
-  { id: 'settings.assistant_preferences', kind: 'settings', settingsTarget: { tab: 'assistant', sectionId: 'assistant-preferences' }, ...immediate },
-  { id: 'settings.assistant.memory', kind: 'settings', settingsTarget: { tab: 'assistant', sectionId: 'assistant-memory' }, ...immediate },
-  { id: 'settings.assistant.mcp', kind: 'settings', settingsTarget: { tab: 'assistant', sectionId: 'assistant-mcp' }, ...immediate },
-  { id: 'settings.assistant_skills', kind: 'settings', settingsTarget: { tab: 'skills', sectionId: 'assistant-skills' }, ...immediate },
+  ...SETTINGS_REGISTRATION.surfaces.map(surface => ({ ...immediate, ...surface, kind: 'settings' as const })),
   {
     id: 'overlay.assets', kind: 'overlay', ...immediate,
     acceptedRefKinds: ['asset'],

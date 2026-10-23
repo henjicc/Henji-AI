@@ -435,7 +435,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 ## 设置页：新增或调整一项设置时
 
 设置项按**用户要做的事**归类，不按程序模块归类。大类与分区的唯一清单是
-`src/core/types/settingsNavigation.ts` 的 `SETTINGS_TAB_SECTIONS`：
+`src/core/types/settingsDeclaration.ts` 的 `SETTINGS_DECLARATION`（`SETTINGS_TAB_SECTIONS` 从它派生）：
 
 | 大类 | 放什么 |
 |---|---|
@@ -447,8 +447,8 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 助手技能 | 技能列表（单独成页） |
 
 新增设置先问"用户会在哪个页面遇到这件事"，放进对应分区；同一件事不得拆在两个大类。
-新增分区要同时登记 `SETTINGS_TAB_SECTIONS`、`surfaceCatalog.ts` 的 Surface、文案 `navSections`，
-助手可写属性的 `target` 指向新分区。新增一行设置还要在 `src/components/Settings/settingsSearchIndex.ts` 登记一条，设置搜索才搜得到。
+新增分区只在 `SETTINGS_DECLARATION` 所属大类添加一条：分区 ID、Surface ID、组件键、搜索标签/关键词与观察敏感度；标题默认引用 `navSections.<id>`。导航、Tab 内容次序、两份 Surface 目录和搜索索引自动派生，不在消费方重复登记。`surfaceOrder` / `schemaOrder` 保留已发布的两个目录顺序；搜索行顺序同样在声明中维护。
+中文、英文翻译和实际组件是独立内容：新增组件只在 `settingsSectionComponents.tsx` 绑定实现；复用已有组件时无需改 Tab。助手属性用 `settingsTarget(sectionId)` 取得导航目标，禁止再复制大类。新增设置行的搜索文案放进所属分区的 `search`。
 
 页内写法统一：
 

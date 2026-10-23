@@ -30,7 +30,7 @@ AI 输入 schema 顶层必须设置 `additionalProperties: false`。禁止 `patc
 
 **一次声明、多入口投影。** 同一份领域声明同时服务界面、内置 Pi 与外部智能体（MCP）：工具参数由能力定义的 Zod 输入投影，域与实体的可读可写面由反射注册表的 `exposures`／`requiredPermissions.write`／`collectionWrite`／`writeExclusion.reason` 派生。**禁止在 `electron/main/services/mcp/**` 维护任何业务字段表、实体类型清单或前缀白名单**；那里只允许协议层自身的参数与信封。新增一个已登记的业务实体或属性后，外部调用方应立刻可用，不需要回到协议层登记。对外工具名、必填参数与错误码的变化必须同步正式消费者和契约测试；本轮以新格式验收，不保留旧客户端调用样本或兼容解码分支。展开做法见 skill `henji-application-capability` 第 0.5 节。
 
-MCP 工具集合与基础权限由正式前端能力声明自动派生，不再维护独立 ID 白名单。属性权限由反射注册表派生。普通操作复用通用实体；专用操作必须有正式执行器与目标绑定；内部或委托路径在原声明的 `external` 字段说明。`check:application-control-coverage` 从全部软件能力反向核对 MCP 路由，缺执行器、缺目标、失效委托均失败；与现有属性、集合及 store 动作门禁共同阻止新增功能遗漏。检查通过代表已登记能力的路径完整，不等于每个界面行为都已实测。
+MCP 工具集合与基础权限由正式前端能力声明自动派生，不再维护独立 ID 白名单。覆盖清单从领域实体注册结果和能力影响声明生成实体名单；独立的审计来源在注册入口 `BUILTIN_APPLICATION_DOMAIN_METADATA` 声明，不再抄写实体或操作 ID。设置分区在 `SETTINGS_DECLARATION` 声明，导航、Surface、Tab 内容次序与搜索派生；属性用 `settingsTarget(sectionId)` 引用，文案和组件实现单独维护。属性权限由反射注册表派生。普通操作复用通用实体；专用操作必须有正式执行器与目标绑定；内部或委托路径在原声明的 `external` 字段说明。`check:application-control-coverage` 从全部软件能力反向核对 MCP 路由，缺执行器、缺目标、失效委托均失败；与现有属性、集合及 store 动作门禁共同阻止新增功能遗漏。检查通过代表已登记能力的路径完整，不等于每个界面行为都已实测。
 
 ## 覆盖判断不可跳过
 

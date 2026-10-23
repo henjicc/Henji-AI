@@ -148,6 +148,12 @@ sceneField('sky_color', '天空颜色', COLOR, {
 - **拒绝必须能被自我修正**：实体类型写错就列出该域注册了哪些，属性写错就列出这个实体有哪些，参数被静默丢弃就说清丢了哪些键与可用的是哪些。只给错误码等于逼模型继续猜，而它猜不中就是死循环。
 - AI 可见输入 schema 不暴露 `baseRevision` / `expectedRevisions`。并发基线只由 Gateway expected-revision 信封传入，不得形成第二条 revision 路径。
 
+能力 ID、读写权限、MCP 工具目录、宿主信封枚举与排除理由已经从 `BUILTIN_APPLICATION_CAPABILITY_REGISTRY` 和原能力声明派生；新增能力不改 `toolCatalog.ts` 或 `localHostContracts.ts` 的业务名单。覆盖清单的实体类型从正式领域注册结果及能力影响声明派生，禁止抄写实体/操作 ID 列表。领域独立的审计来源、历史迁移归属和 Surface 关系在注册入口的 `BUILTIN_APPLICATION_DOMAIN_METADATA` 声明一次；新增已有领域的实体或能力不改这张领域元数据表。执行器、权限、风险、排除理由仍须在各自正式声明中真实实现。
+
+### 设置分区的声明与派生
+
+设置分区只在 `src/core/types/settingsDeclaration.ts` 的 `SETTINGS_DECLARATION` 声明。导航、Surface、搜索条目和 Tab 的组件次序从它派生；标题文案与组件实现仍需独立编写。属性导航用 `settingsTarget(sectionId)`，不得在属性上重复维护大类；组件实现绑定在 `settingsSectionComponents.tsx`，详见 `henji-ui-surface` 的设置页章节。
+
 ### 5. 覆盖新功能
 
 优先用通用动词覆盖（见第 0 节）；只有算法型语义操作才注册专用能力。

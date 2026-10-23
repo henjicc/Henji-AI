@@ -1,10 +1,9 @@
 import React from 'react'
 import { UiLoading } from '@/components/ui'
-import SettingsSection from '../components/SettingsSection'
+import { SettingsTabSections } from '../components/SettingsTabSections'
 import { SETTINGS_CONTENT_CLASS } from '../settingsLayout'
 import { useI18n } from '@/hooks/useI18n'
 import { useLlmSettings } from '../hooks/useLlmSettings'
-import ProviderCenterSection from '../sections/ProviderCenterSection'
 
 /**
  * 供应商与模型：两栏控制台（供应商列表 + 密钥与模型列表），单独成页并铺满内容区；
@@ -17,9 +16,7 @@ const ProvidersTab: React.FC = () => {
   if (llm.loading) return <UiLoading message={t('providerCenter.loading')} />
   return (
     <div className={`flex h-full min-h-0 flex-col ${SETTINGS_CONTENT_CLASS}`}>
-      <SettingsSection id="providers" fill>
-        <ProviderCenterSection llm={llm} />
-      </SettingsSection>
+      <SettingsTabSections tab="providers" fill context={{ llm }} />
     </div>
   )
 }
