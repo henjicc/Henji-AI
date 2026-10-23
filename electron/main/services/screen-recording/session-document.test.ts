@@ -22,7 +22,7 @@ import { RecordingSessionDocument, readRecordingEvents, recoverRecordingSession 
 let directory: string, id: string, manifest: CaptureManifest
 beforeEach(async () => {
   vi.clearAllMocks(); id = randomUUID(); directory = await mkdtemp(path.join(tmpdir(), 'recording-document-'))
-  manifest = { version: 1, sessionId: id, backend: 'chromium', cursorEmbedded: true, status: 'prepared', options: captureOptionsSchema.parse({ sourceId: 'screen:1:0', width: 1920, height: 1080, fps: 30, bitrate: 12000000 }), spans: [] }
+  manifest = { version: 2, sessionId: id, backend: 'chromium', cursorEmbedded: true, status: 'prepared', options: captureOptionsSchema.parse({ sourceId: 'screen:1:0', width: 1920, height: 1080, fps: 30, bitrate: 12000000 }), spans: [] }
   state.save.mockImplementation(async ({ expectedRevision, content }: { expectedRevision: number; content: RecordingDocument }) => {
     expect(expectedRevision).toBe(state.saved!.meta.revision)
     await new Promise(resolve => setTimeout(resolve, 1))

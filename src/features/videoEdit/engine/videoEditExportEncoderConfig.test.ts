@@ -122,3 +122,10 @@ it.each([[44100, 1], [44100, 2], [48000, 1], [48000, 2]] as const)('AAC %iHz/%i�
     expect(configure.mock.calls[0][0]).toStrictEqual(probed)
   } finally { sample.close(); await output.cancel() }
 })
+
+it('录制关键帧支持正数小数秒，实时模式在最终编码配置中保持', () => {
+  const options = videoEditExportVideoOptions({ codec: 'avc', width: 1920, height: 1080, fps: 60, videoBitrateMbps: 18, bitrateMode: 'vbr', encoderPreference: 'hardware', keyframeInterval: 10 / 60, latencyMode: 'realtime' })
+  expect(options.keyFrameInterval).toBe(1 / 6)
+  expect(options.latencyMode).toBe('realtime')
+  expect(() => videoEditExportVideoOptions({ codec: 'avc', width: 1920, height: 1080, fps: 60, videoBitrateMbps: 18, bitrateMode: 'vbr', encoderPreference: 'hardware', keyframeInterval: 0 })).toThrow('正数')
+})

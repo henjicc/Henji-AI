@@ -1,0 +1,26 @@
+{
+  "version": 2,
+  "minReaderVersion": 1,
+  "sessionId": "00000000-0000-4000-8000-000000000001",
+  "options": {
+    "rateControl": "quality",
+    "bitrate": 18000000,
+    "keyframeFrames": 30,
+    "codec": "hevc",
+    "encoder": "nvidia",
+    "sourceId": "screen:0:0",
+    "backend": "auto",
+    "width": 1920,
+    "height": 1080,
+    "fps": 60
+  },
+  "backend": "gfxcapture",
+  "cursorEmbedded": false,
+  "status": "stopped",
+  "spans": [],
+  "encoding": {
+    "codec": "hevc",
+    "encoder": "hevc_nvenc",
+    "softwareFallback": false
+  }
+}

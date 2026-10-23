@@ -16,7 +16,7 @@ function file(id: string, name: string, version: number, versionSource: string, 
 
 /** A light registry partition: runtime file readers must not load video/compiler or the whole inventory. */
 export const FILE_PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
-  file('screen-capture', '屏幕采集恢复清单', 1, 'capture.json.version', 'electron/main/services/screen-recording/capture/storage.ts::readCaptureManifest', captureManifestSchema),
+  { ...file('screen-capture', '屏幕采集恢复清单', 2, 'capture.json.version', 'electron/main/services/screen-recording/capture/storage.ts::readCaptureManifest', captureManifestSchema), minReaderVersion: 1 },
   file('mcp-connections', 'MCP 连接授权存储', MCP_CONNECTION_STORAGE_VERSION, 'keystore MCP plaintext.version', 'electron/main/services/mcp/connections.ts::load', mcpConnectionStorageSchema),
   file('image-history-checkpoint', '图片历史检查点', IMAGE_EDIT_HISTORY_CHECKPOINT_VERSION_V3, 'ImageEditHistoryCheckpointV3.version', 'electron/main/services/image-editor-v3/history-pages/store.ts::readPage', imageEditHistoryCheckpointSchemaV3),
   file('image-header', '图片文档头', IMAGE_HEADER_VERSION, 'henji-document.json.version', 'electron/main/services/image-editor-v3/image-document/header.ts::parseImageDocumentHeader', imageDocumentHeaderSchema),

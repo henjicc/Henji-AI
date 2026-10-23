@@ -37,7 +37,7 @@ const hevcLevels = [
 export interface VideoEditExportEncoderSpec {
   width: number; height: number; frameRate: number; bitrate: number; codec?: 'avc' | 'hevc'
   bitrateMode?: 'vbr' | 'cbr'; encoderPreference?: 'hardware' | 'software'
-  keyframeInterval?: VideoEditExportSettings['keyframeInterval']
+  keyframeInterval?: number | 'auto'
 }
 export interface VideoEditExportAudioEncoderSpec {
   codec: 'aac' | 'pcm-s24'; sampleRate: number; numberOfChannels: number; bitrate?: number
@@ -65,9 +65,11 @@ export function videoEditExportAudioEncoderConfig(spec: VideoEditExportAudioEnco
   return { codec: 'mp4a.40.2', numberOfChannels: spec.numberOfChannels, sampleRate: spec.sampleRate,
     bitrate: spec.bitrate, bitrateMode: undefined, aac: { format: 'aac' } }
 }
-export function videoEditExportVideoOptions(settings: Pick<VideoEditExportSettings, 'codec' | 'width' | 'height' | 'fps' | 'videoBitrateMbps' | 'bitrateMode' | 'encoderPreference' | 'keyframeInterval'>): VideoEncodingConfig {
+export function videoEditExportVideoOptions(settings: Pick<VideoEditExportSettings, 'codec' | 'width' | 'height' | 'fps' | 'videoBitrateMbps' | 'bitrateMode' | 'encoderPreference'> & { keyframeInterval: number | 'auto'; latencyMode?: 'realtime' | 'quality' }): VideoEncodingConfig {
   if (settings.fps === null) throw new Error('请先解析序列帧率。')
+  if (settings.keyframeInterval !== 'auto' && !(Number.isFinite(settings.keyframeInterval) && settings.keyframeInterval > 0)) throw new Error('关键帧间隔必须为正数秒')
   const config = videoEditExportVideoEncoderConfig({ ...settings, frameRate: settings.fps, bitrate: Math.round(settings.videoBitrateMbps * 1_000_000) })
+  if (settings.latencyMode) config.latencyMode = settings.latencyMode
   return { codec: settings.codec, bitrate: config.bitrate, bitrateMode: config.bitrateMode as 'constant' | 'variable',
     fullCodecString: config.codec, hardwareAcceleration: config.hardwareAcceleration, latencyMode: config.latencyMode, alpha: config.alpha,
     ...(settings.codec === 'avc' ? { onEncodedPacket: videoEditExportAvcLevel(Number.parseInt(config.codec.slice(-2), 16)) } : {}),

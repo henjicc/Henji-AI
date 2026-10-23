@@ -3,9 +3,10 @@ import { migrateEmbeddedVideoEditStyles } from '../../videoEdit/styles/legacySty
 import { createRecordingDocument, recordingDocumentSchema, type RecordingDocument } from '../../screenRecording/document'
 
 export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocument> = {
-  id: 'screen_recording', extension: '.henji-recording', storage: 'json', version: 23, minReaderVersion: 23,
+  id: 'screen_recording', extension: '.henji-recording', storage: 'json', version: 24, minReaderVersion: 23,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    23: content => content,
     // 19 → 20：嵌入的剪辑片段新增可选的速度曲线、补帧与变调字段；旧内容原样有效。
     19: content => content,
     // 20 → 21：嵌入的剪辑片段新增可选字段（跟随 motion、跟踪器 recording、防抖 stabilization），原内容不变。

@@ -1,15 +1,16 @@
+import { recordingEncodingFields } from './encoding'
 import { z } from 'zod'
 import { recordingSessionOptionsSchema } from './sessionOptions'
 import { recordingTracksSchema } from './tracks'
 import { recordingBaselineSchema, recordingCallSchema } from './script'
 
 export const captureOptionsSchema = z.object({
+  ...recordingEncodingFields,
   sourceId: z.string().regex(/^(screen|window):\d+:\d+$/),
   backend: z.enum(['auto', 'gfxcapture', 'chromium']).default('auto'),
   width: z.number().int().min(2).max(3840).multipleOf(2),
   height: z.number().int().min(2).max(2160).multipleOf(2),
   fps: z.union([z.literal(30), z.literal(60)]),
-  bitrate: z.number().int().min(1_000_000).max(100_000_000),
   /** Normalized coordinates in the selected display; independent of desktop DIP and monitor order. */
   region: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }).strict().optional(),
 }).strict().superRefine((value, ctx) => {
@@ -33,10 +34,11 @@ export const captureSpanSchema = z.object({
   finalized: z.boolean(),
 }).strict()
 export const captureManifestSchema = z.object({
-  version: z.literal(1), sessionId: z.string().uuid(), options: captureOptionsSchema,
+  version: z.literal(2), minReaderVersion: z.number().int().positive().optional(), sessionId: z.string().uuid(), options: captureOptionsSchema,
   backend: z.enum(['gfxcapture', 'chromium']), cursorEmbedded: z.boolean(),
   status: z.enum(['prepared', 'recording', 'paused', 'stopped', 'failed']),
   spans: z.array(captureSpanSchema),
+  encoding: z.object({ codec: z.enum(['h264', 'hevc']), encoder: z.string(), softwareFallback: z.boolean(), reason: z.string().optional() }).strict().optional(),
 }).strict()
 export type CaptureManifest = z.infer<typeof captureManifestSchema>
 export type CaptureSpan = z.infer<typeof captureSpanSchema>
@@ -45,6 +47,8 @@ export interface CapturePrepared { sessionId: string; originUs: number; backend:
 const sessionId = z.string().uuid()
 export const captureRequestSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('application-source'), sessionId }).strict(),
+  z.object({ operation: z.literal('encoders'), codec: z.enum(['h264', 'hevc']) }).strict(),
+  z.object({ operation: z.literal('encoding'), sessionId, encoding: captureManifestSchema.shape.encoding.unwrap() }).strict(),
   z.object({ operation: z.literal('script-call'), sessionId, call: recordingCallSchema, baselines: z.array(recordingBaselineSchema).max(16) }).strict(),
   /** `cursor: 'embed'` records the system pointer into the picture (quick mode); the outcome is kept as manifest.cursorEmbedded. */
   z.object({ operation: z.literal('prepare'), sessionId, options: captureOptionsSchema, session: recordingSessionOptionsSchema.optional(), cursor: z.enum(['redraw', 'embed']).optional() }).strict(),

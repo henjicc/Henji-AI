@@ -1,3 +1,4 @@
+import { loadRecordingSetup, recordingOutput } from '@/services/recordingSetupModel'
 import { z } from 'zod'
 import { getPlatform } from '@/platform'
 import { createLogger } from '@/core/logging'
@@ -112,7 +113,7 @@ export async function startRecordingDirector(id: string, documentId: string, con
         beforeStep: async step => {
           currentStep = step
           if (!active) {
-            active = await startRecording({ sourceId, backend: 'auto', width: 1920, height: 1080, fps: 30, bitrate: 12_000_000 }, { name: `导演-${crypto.randomUUID().slice(0, 8)}`, tracks: { systemAudio: false } }, null, signal)
+            active = await startRecording({ ...recordingOutput(loadRecordingSetup().setup), sourceId, backend: 'auto' }, { name: `导演-${crypto.randomUUID().slice(0, 8)}`, tracks: { systemAudio: false } }, null, signal)
             const deadline = performance.now() + 30000
             while (recordingView().snapshot?.phase !== 'recording') {
               if (performance.now() > deadline || !recordingView().snapshot || recordingView().snapshot?.phase === 'failed') throw new Error('导演录制未能开始。')

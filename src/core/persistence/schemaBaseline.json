@@ -54,8 +54,8 @@
       "minReaderVersion": 1
     },
     "screen-capture": {
-      "version": 1,
-      "fingerprint": "4e9e82dfecd4a349f4b2409ab6351352e72cf633f109280a060fdafac86ee8b2",
+      "version": 2,
+      "fingerprint": "024790862f8b1f1435cde1b1a82d674ece62cad72bf60c939fc9c6e0090d9462",
       "supportedFrom": 1,
       "minReaderVersion": 1
     },
@@ -156,8 +156,8 @@
       "minReaderVersion": 1
     },
     "document.screen_recording": {
-      "version": 23,
-      "fingerprint": "531f214ae7de6df15d07c2590f6b6db15a6dfce9c2b6a6c757fda682781c851b",
+      "version": 24,
+      "fingerprint": "f24f80ba95bb8eb6cf222a27f228f8618fd08743315555ed6f12292c52e0743d",
       "supportedFrom": 19,
       "minReaderVersion": 23
     },
@@ -270,8 +270,8 @@
       "minReaderVersion": 1
     },
     "recording-setup": {
-      "version": 1,
-      "fingerprint": "7510476937e9eebed84177d8a0b0622e67023fbb988ff929ba79792d22d9caf4",
+      "version": 2,
+      "fingerprint": "a4970530b9e2157e27dcfbd9719feb2b8d10ba47fa9f6130938f793de49548a2",
       "supportedFrom": 1,
       "minReaderVersion": 1
     },
