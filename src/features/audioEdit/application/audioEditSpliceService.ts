@@ -7,7 +7,7 @@ import { acceptAudioEditNativeResult, flushAudioEditProject, loadAudioEditProjec
 const logger = createLogger('features.audioEdit.splice')
 
 /** 人和助手共享的拼接入口；来源与所有帧编辑一次提交、一次撤销，并立即保存。 */
-export async function insertAudioEditFile(projectId: string, sourcePath: string, startFrame: number, endFrame = startFrame, requestId: string = crypto.randomUUID(), alreadyLocked = false, resultId?: string): Promise<number> {
+export async function insertAudioEditFile(projectId: string, sourcePath: string, startFrame: number, endFrame = startFrame, requestId: string = crypto.randomUUID(), alreadyLocked = false, resultId?: string, matchRecordingLoudness = false): Promise<number> {
   const instance = await loadAudioEditProject(projectId)
   assertAudioEditSplicePosition(instance.document, startFrame, endFrame)
   const release = alreadyLocked ? () => undefined : lockAudioEditRecording(projectId)
@@ -15,11 +15,14 @@ export async function insertAudioEditFile(projectId: string, sourcePath: string,
   logger.info('开始拼接音频', { event: 'audio_edit.splice.start', requestId, context: { projectId, startFrame, endFrame } })
   try {
     await flushAudioEditProject(projectId)
-    const result = await getPlatform().audioEdit.splice({ projectId, sourcePath, startFrame, endFrame, requestId, resultId })
+    const result = await getPlatform().audioEdit.splice({ projectId, sourcePath, startFrame, endFrame, requestId, resultId, matchRecordingLoudness })
     const next = spliceAudioEditProject(instance.document, result.source, startFrame, endFrame, result.insertedFrames)
+    if (matchRecordingLoudness && result.recordingGainDb !== undefined) {
+      next.gainRegions = [...(next.gainRegions ?? []), { id: crypto.randomUUID(), startFrame, endFrame: startFrame + result.insertedFrames, enabled: true, gainDb: result.recordingGainDb, fadeInFrames: 0, fadeOutFrames: 0 }]
+    }
     acceptAudioEditNativeResult(projectId, next, version)
     await flushAudioEditProject(projectId)
-    logger.info('音频拼接已保存', { event: 'audio_edit.splice.completed', requestId, context: { projectId } })
+    logger.info('音频拼接已保存', { event: 'audio_edit.splice.completed', requestId, context: { projectId, recordingGainDb: result.recordingGainDb } })
     return result.insertedFrames
   } catch (error) { logger.warn('音频拼接未完成，原录音保留', { event: 'audio_edit.splice.failed', requestId, error }); throw error }
   finally { release() }
@@ -33,7 +36,7 @@ export async function restoreAudioEditTake(file: AudioCaptureFile, alreadyLocked
   const current = instance.document.source.sourcePath.replaceAll('\\', '/')
   if (current.endsWith(`/${placement.spliceId}.wav`)) { await flushAudioEditProject(placement.projectId); return 0 }
   if (instance.persistedRevision !== placement.revision) throw new Error('原作品已发生后续编辑，请将这段录音另存为新草稿，避免覆盖修改')
-  return insertAudioEditFile(placement.projectId, file.outputPath, placement.startFrame, placement.endFrame, crypto.randomUUID(), alreadyLocked, placement.spliceId)
+  return insertAudioEditFile(placement.projectId, file.outputPath, placement.startFrame, placement.endFrame, crypto.randomUUID(), alreadyLocked, placement.spliceId, true)
 }
 
 export async function prepareAudioEditTake(projectId: string, startFrame: number, endFrame: number): Promise<AudioCapturePlacement> {

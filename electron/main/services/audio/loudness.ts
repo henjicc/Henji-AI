@@ -48,6 +48,12 @@ export async function runLoudnessFfmpeg(args: string[], signal: AbortSignal, bin
   })
 }
 
+/** 按素材采样帧测量原声区间，后台进程流式读取；不烘焙增益、不把整段 PCM 搬到渲染层。 */
+export async function measureAudioFileLoudness(file: string, startFrame: number, frameCount: number, sampleRate: number, signal: AbortSignal): Promise<VideoEditLoudnessMeasurement> {
+  const log = await runLoudnessFfmpeg(['-i', file, '-map', '0:a:0', '-vn', '-af', `atrim=start_sample=${startFrame}:end_sample=${startFrame + frameCount},asetpts=PTS-STARTPTS,aresample=${sampleRate * 4},ebur128=peak=sample:framelog=info`, '-f', 'null', '-'], signal)
+  return parseLoudnessLog(log, frameCount / sampleRate, null)
+}
+
 /** Sequential disk spool keeps memory bounded by two-second PCM blocks, independent of duration. */
 export class AudioLoudnessSession {
   private frames = 0

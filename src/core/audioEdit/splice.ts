@@ -5,8 +5,10 @@ export const audioEditSpliceSchema = z.object({
   projectId: z.string().regex(/^[\w-]+$/), sourcePath: z.string().min(1).max(4096),
   startFrame: z.number().int().nonnegative(), endFrame: z.number().int().nonnegative(),
   requestId: z.string().uuid(), resultId: z.string().uuid().optional(),
+  matchRecordingLoudness: z.boolean().optional(),
 }).strict().refine(value => value.endFrame >= value.startFrame, '覆盖终点不能早于起点')
 export type AudioEditSpliceRequest = z.infer<typeof audioEditSpliceSchema>
+export interface AudioEditSpliceResult { source: AudioEditSourceMetadata; insertedFrames: number; recordingGainDb?: number }
 
 /** 半开区间：插入点左右分开保留，避免旧静音、删除和音量覆盖新录音。 */
 export function spliceAudioRanges<T extends AudioEditRange & { id: string }>(ranges: readonly T[], start: number, end: number, inserted: number): T[] {
