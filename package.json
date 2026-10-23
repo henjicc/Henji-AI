@@ -110,7 +110,8 @@
     "check:skill-symbols": "node scripts/check-skill-symbols.cjs",
     "check:ui-findings": "node scripts/check-ui-findings.cjs",
     "gen:token-docs": "node scripts/gen-token-docs.cjs",
-    "build:audio-capture": "node scripts/build-audio-capture.cjs"
+    "build:audio-capture": "node scripts/build-audio-capture.cjs",
+    "publish:audio-capture-source": "node scripts/publish-audio-capture-source.cjs"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "1.4.0",
