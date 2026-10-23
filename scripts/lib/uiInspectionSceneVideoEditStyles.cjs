@@ -203,8 +203,9 @@ function createVideoEditStyleMemoryScene() {
       await page.locator('[data-video-edit-style="restrained"]').click()
       const detail = page.locator('[data-video-edit-style-detail="restrained"]')
       await detail.getByText('使用者偏好', { exact: true }).waitFor({ state: 'visible' })
-      await detail.getByRole('textbox').first().fill('这个风格的文字多留一点空白。')
       await detail.getByRole('button', { name: '新增记忆', exact: true }).click()
+      await detail.getByRole('textbox').first().fill('这个风格的文字多留一点空白。')
+      await detail.getByRole('textbox').first().press('Enter')
       await detail.getByText('这个风格的文字多留一点空白。', { exact: true }).waitFor({ state: 'visible' })
       await capture('style-user-preferences')
     },

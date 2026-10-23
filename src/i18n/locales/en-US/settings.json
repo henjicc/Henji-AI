@@ -973,11 +973,22 @@
     }
   },
   "memory": {
+    "finishEditing": "Finish the entry you are editing first",
+    "placeholder": "One sentence, e.g. use Source Han Sans for Chinese captions",
+    "precedence_ask": "On conflict: ask me",
+    "precedence_style": "On conflict: follow style",
+    "precedence_preference": "On conflict: follow preference",
+    "noneYet": "None",
+    "localEmpty": "Nothing recorded yet",
+    "autoOrganizeInfo": "After a task the assistant merges duplicates and removes outdated entries, at most once a day.",
+    "added": "Added",
+    "changed": "Changed",
+    "removed": "Removed",
     "disabledHint": "Memory is off. Turn it on in Settings.",
     "title": "Memory",
     "enabled": "Use and update memory",
     "autoOrganize": "Organize automatically",
-    "empty": "Tell the assistant your preferences in chat and it will remember them",
+    "empty": "Tell the assistant your preferences while chatting and it will remember them, or add one with +.",
     "about": "About me",
     "creative": "Creative preferences",
     "habits": "Work habits",
@@ -986,12 +997,8 @@
     "content": "Content",
     "edit": "Edit",
     "delete": "Delete",
-    "save": "Save",
     "add": "Add memory",
-    "section": "Section",
     "conflict": "On conflict",
-    "styleFirst": "Style first",
-    "preferenceFirst": "Preference first",
     "manualReason": "You edited this memory.",
     "deleteReason": "You deleted this memory.",
     "precedenceReason": "You chose the conflict priority.",
@@ -1001,10 +1008,6 @@
     "style": "Style",
     "history": "Change history",
     "undo": "Undo",
-    "cancel": "Cancel",
-    "askFirst": "Ask me",
-    "before": "Before",
-    "after": "After",
-    "none": "None"
+    "before": "Before"
   }
 }

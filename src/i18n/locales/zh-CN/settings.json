@@ -971,11 +971,22 @@
     }
   },
   "memory": {
+    "finishEditing": "请先完成正在编辑的条目",
+    "placeholder": "一句话，例如：中文字幕默认用思源黑体",
+    "precedence_ask": "冲突时先问我",
+    "precedence_style": "冲突时听风格",
+    "precedence_preference": "冲突时听偏好",
+    "noneYet": "暂无",
+    "localEmpty": "还没有记录",
+    "autoOrganizeInfo": "助手在任务结束后顺带合并重复、删掉过时的条目，每天最多一次。",
+    "added": "新增",
+    "changed": "修改",
+    "removed": "删除",
     "disabledHint": "记忆已关闭，可在设置中开启",
     "title": "记忆",
     "enabled": "使用与更新记忆",
     "autoOrganize": "自动整理",
-    "empty": "和助手聊天时说出你的偏好，助手会自动记住",
+    "empty": "和助手聊天时说出你的偏好，助手会自动记住；也可以点 ＋ 手动添加。",
     "about": "关于我",
     "creative": "创作偏好",
     "habits": "工作习惯",
@@ -984,12 +995,8 @@
     "content": "内容",
     "edit": "编辑",
     "delete": "删除",
-    "save": "保存",
     "add": "新增记忆",
-    "section": "分区",
     "conflict": "冲突时",
-    "styleFirst": "风格优先",
-    "preferenceFirst": "偏好优先",
     "manualReason": "你手动编辑了这条记忆。",
     "deleteReason": "你删除了这条记忆。",
     "precedenceReason": "你选择了冲突时的优先级。",
@@ -999,10 +1006,6 @@
     "style": "风格",
     "history": "修改历史",
     "undo": "撤销",
-    "cancel": "取消",
-    "askFirst": "先询问",
-    "before": "修改前",
-    "after": "修改后",
-    "none": "无"
+    "before": "修改前"
   }
 }

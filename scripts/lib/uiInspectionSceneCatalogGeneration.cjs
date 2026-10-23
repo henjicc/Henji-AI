@@ -425,6 +425,24 @@ function createGenerationSettingsScenes(context) {
       },
     },
     {
+      id: 'settings-assistant-memory-entries', surface: '设置', name: '设置-记忆条目与历史', writesUserData: true,
+      setup: async page => {
+        await setupSettings(page)
+        await clickNamedButton(page, /^(记忆|Memory)$/i)
+        const memory = page.locator('#assistant-memory')
+        await memory.getByRole('switch').first().waitFor({ state: 'visible' })
+        for (const [index, text] of [[0, '做 AI 工具测评视频，主要发 B 站'], [1, '中文字幕默认用思源黑体，不用宋体']]) {
+          await memory.getByRole('button', { name: '新增记忆', exact: true }).nth(index).click()
+          const input = memory.getByRole('textbox').first()
+          await input.fill(text); await input.press('Enter')
+          await memory.getByRole('listitem').getByText(text, { exact: true }).first().waitFor({ state: 'visible' })
+        }
+        await memory.getByRole('button', { name: /^修改历史/ }).click()
+        await memory.getByText('中文字幕默认用思源黑体，不用宋体', { exact: true }).last().hover()
+        await settlePage(page)
+      },
+    },
+    {
       id: 'settings-assistant-models',
       surface: '设置',
       name: '设置-助手模型',
