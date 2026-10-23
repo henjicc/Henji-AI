@@ -413,8 +413,9 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
             clearTimeout(controlsHideTimer.current)
             controlsHideTimer.current = null
           }
+          // A short grace period so the controls don't vanish the instant the pointer slips out.
           if (!isSpeedMenuOpen) {
-            setIsControlsVisible(false)
+            controlsHideTimer.current = window.setTimeout(() => setIsControlsVisible(false), 600)
           }
         }}
         style={{ cursor: isVideoPlaying && !isSpeedMenuOpen && !isControlsVisible ? 'none' : 'default' }}

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useNonPassiveWheel } from '@/hooks/useNonPassiveWheel'
 import { Dropdown, UI_TEXT_TIMECODE_CLASS, UiIconButton, UiPanel } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
@@ -145,6 +145,13 @@ export function VideoViewerControls({
     if (closeVolume.current) window.clearTimeout(closeVolume.current)
     closeVolume.current = window.setTimeout(() => setVolumeOpen(false), 200)
   }
+  // Seeking buffers for a moment almost every time; only a wait the user would notice gets a word.
+  const [bufferingShown, setBufferingShown] = useState(false)
+  useEffect(() => {
+    if (!isBuffering) { setBufferingShown(false); return }
+    const timer = window.setTimeout(() => setBufferingShown(true), 1000)
+    return () => window.clearTimeout(timer)
+  }, [isBuffering])
   const VolumeIcon = muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2
 
   return (
@@ -217,7 +224,7 @@ export function VideoViewerControls({
           <div className={`ml-1 text-xs text-text1 ${UI_TEXT_TIMECODE_CLASS}`}>
             {formatTime(currentTime)} <span className="text-text3">/ {formatTime(videoDuration)}</span>
           </div>
-          {isBuffering && (
+          {bufferingShown && (
             <div className="ml-2 text-xs text-text2">{t('ui:workspace.status.buffering')}</div>
           )}
           <div className="ml-auto flex items-center gap-0.5">

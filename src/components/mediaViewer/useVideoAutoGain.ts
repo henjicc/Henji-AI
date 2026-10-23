@@ -39,9 +39,9 @@ export function useVideoAutoGain(videoRef: React.RefObject<HTMLVideoElement>, so
     try {
       const context = new AudioContext()
       const source = context.createMediaElementSource(video)
-      const compressor = new DynamicsCompressorNode(context, { threshold: -36, knee: 24, ratio: 4, attack: 0.005, release: 0.3 })
-      const makeup = new GainNode(context, { gain: 2.5 })
-      const limiter = new DynamicsCompressorNode(context, { threshold: -3, knee: 0, ratio: 20, attack: 0.001, release: 0.1 })
+      const compressor = new DynamicsCompressorNode(context, { threshold: -42, knee: 24, ratio: 5, attack: 0.005, release: 0.3 })
+      const makeup = new GainNode(context, { gain: 4 })
+      const limiter = new DynamicsCompressorNode(context, { threshold: -2, knee: 0, ratio: 20, attack: 0.001, release: 0.1 })
       compressor.connect(makeup).connect(limiter).connect(context.destination)
       chain.current = { context, source, input: compressor, output: limiter }
       setWired(true)
