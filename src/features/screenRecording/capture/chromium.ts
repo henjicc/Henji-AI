@@ -1,4 +1,4 @@
-import { recordingEncoding } from '@/core/screenRecording/encoding'
+import { recordingEncoding, recordingKeyframes } from '@/core/screenRecording/encoding'
 import type { CaptureManifest } from '@/core/screenRecording/capture'
 import { Mp4OutputFormat, Output, StreamTarget, VideoSample, VideoSampleSource } from 'mediabunny'
 import { captureCrop, type CaptureSpan, type ScreenCaptureBackend, type ScreenCaptureOptions } from '@/core/screenRecording/capture'
@@ -44,7 +44,7 @@ async function createMux(options: ScreenCaptureOptions, span: CaptureSpan, sink:
   }
   if (encoding.rateControl === 'quality' || !['auto', 'software'].includes(encoding.encoder)) logger.info('兼容路径按 WebCodecs 可用码率与硬件选择能力录制', { event: 'recording.capture.encoding.adapted', context: { rateControl: encoding.rateControl, encoder: encoding.encoder, bitrateMode } })
   await sink.encoding?.({ codec: codec === 'avc' ? 'h264' : 'hevc', encoder: encoderPreference, softwareFallback: encoderPreference === 'software' && encoding.encoder !== 'software' })
-  const source = new VideoSampleSource(videoEditExportVideoOptions({ codec, width: options.width, height: options.height, fps: options.fps, videoBitrateMbps: encoding.bitrate / 1_000_000, bitrateMode, encoderPreference, keyframeInterval: encoding.keyframeFrames / options.fps, latencyMode: 'realtime' }))
+  const source = new VideoSampleSource(videoEditExportVideoOptions({ codec, width: options.width, height: options.height, fps: options.fps, videoBitrateMbps: encoding.bitrate / 1_000_000, bitrateMode, encoderPreference, keyframeInterval: recordingKeyframes(encoding.keyframeFrames).gop / options.fps, latencyMode: 'realtime' }))
   const output = new Output({ format: new Mp4OutputFormat({ fastStart: 'fragmented', minimumFragmentDuration: 1 }), target: new StreamTarget(new WritableStream({ write: chunk => sink.write(span.index, chunk.position, chunk.data) }), { chunked: true, chunkSize: 1024 * 1024 }) })
   output.addVideoTrack(source, { frameRate: options.fps })
   await output.start()

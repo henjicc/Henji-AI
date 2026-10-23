@@ -1,4 +1,4 @@
-import type { RecordingCodec, RecordingEncoder, RecordingEncoding } from '../../../../src/core/screenRecording/encoding'
+import { recordingKeyframes, type RecordingCodec, type RecordingEncoder, type RecordingEncoding, type ResolvedRecordingEncoding } from '../../../../src/core/screenRecording/encoding'
 import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 
@@ -219,26 +219,27 @@ export async function recordingEncoderChoices(codec: RecordingCodec): Promise<Re
   }
   return [...choices, 'software']
 }
-export function recordingEncoderProfile(codec: RecordingCodec, encoder: Exclude<RecordingEncoder, 'auto'>, rateControl: NonNullable<RecordingEncoding['rateControl']>): VideoEncoderProfile<HwEncoderId | 'cpu'> {
+/** sceneCut 只在 x264/x265 与 NVENC（需预读）上生效；QSV/AMF/VideoToolbox 未实测，保持固定间隔。 */
+export function recordingEncoderProfile(codec: RecordingCodec, encoder: Exclude<RecordingEncoder, 'auto'>, rateControl: NonNullable<RecordingEncoding['rateControl']>, sceneCut = false): VideoEncoderProfile<HwEncoderId | 'cpu'> {
   const id = encoder === 'software' ? 'cpu' : `${codec}_${recordingVendors[encoder]}` as HwEncoderId
   return { id, label: encoder, buildEncodeArgs: (v, maxr, buf) => {
     const quality = rateControl === 'quality', cbr = rateControl === 'cbr'
     const codecName = id === 'cpu' ? codec === 'hevc' ? 'libx265' : 'libx264' : id
     const base = ['-c:v', codecName]
-    if (encoder === 'software') base.push('-preset', 'superfast', '-tune', 'zerolatency', ...(quality ? ['-crf', '26'] : []), ...(cbr && codec === 'h264' ? ['-x264-params', 'nal-hrd=cbr:force-cfr=1'] : []), ...(codec === 'hevc' ? ['-x265-params', `bframes=0:scenecut=0${cbr ? ':strict-cbr=1' : ''}`] : []))
-    if (encoder === 'nvidia') base.push('-preset', 'p4', '-tune', 'll', '-rc', cbr ? 'cbr' : 'vbr', ...(quality ? ['-cq', '26'] : []), '-rc-lookahead', '0', '-forced-idr', '1')
+    if (encoder === 'software') base.push('-preset', 'superfast', '-tune', 'zerolatency', ...(quality ? ['-crf', '26'] : []), ...(codec === 'h264' ? ['-sc_threshold', sceneCut ? '40' : '0'] : []), ...(cbr && codec === 'h264' ? ['-x264-params', 'nal-hrd=cbr:force-cfr=1'] : []), ...(codec === 'hevc' ? ['-x265-params', `bframes=0:scenecut=${sceneCut ? 40 : 0}${cbr ? ':strict-cbr=1' : ''}`] : []))
+    if (encoder === 'nvidia') base.push('-preset', 'p4', '-tune', 'll', '-rc', cbr ? 'cbr' : 'vbr', ...(quality ? ['-cq', '26'] : []), '-rc-lookahead', sceneCut ? '20' : '0', ...(sceneCut ? [] : ['-no-scenecut', '1']), '-forced-idr', '1')
     if (encoder === 'intel') base.push('-preset', 'veryfast', ...(quality ? ['-global_quality', '26'] : []), '-look_ahead', '0')
     if (encoder === 'amd') base.push('-quality', 'speed', '-rc', cbr ? 'cbr' : 'vbr_peak', ...(quality ? ['-qp_i', '26', '-qp_p', '26'] : []))
     if (encoder === 'apple') base.push('-allow_sw', '0', '-realtime', '1', ...(quality ? ['-q:v', '65'] : []))
     return [...base, '-b:v', `${quality && encoder === 'nvidia' ? 0 : v}k`, '-maxrate', `${maxr}k`, '-bufsize', `${buf}k`, ...(cbr ? ['-minrate', `${v}k`] : [])]
   } }
 }
-export async function getRecordingEncoder(options: Required<RecordingEncoding>): Promise<VideoEncoderProfile<HwEncoderId | 'cpu'>> {
+export async function getRecordingEncoder(options: ResolvedRecordingEncoding): Promise<VideoEncoderProfile<HwEncoderId | 'cpu'>> {
   let vendor = options.encoder
   if (vendor === 'auto') {
     const preferred = await getPreferredEncoder()
     vendor = preferred.id === 'cpu' ? 'software' : Object.entries(recordingVendors).find(([, suffix]) => preferred.id.endsWith(suffix))?.[0] as Exclude<RecordingEncoder, 'auto'> ?? 'software'
   }
   if (vendor !== 'software' && !await probeRecordingEncoder(`${options.codec}_${recordingVendors[vendor]}` as HwEncoderId)) vendor = 'software'
-  return recordingEncoderProfile(options.codec, vendor, options.rateControl)
+  return recordingEncoderProfile(options.codec, vendor, options.rateControl, recordingKeyframes(options.keyframeFrames).sceneCut)
 }

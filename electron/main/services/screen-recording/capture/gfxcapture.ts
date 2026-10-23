@@ -1,4 +1,4 @@
-import { recordingEncoding } from '../../../../../src/core/screenRecording/encoding'
+import { recordingEncoding, recordingKeyframes } from '../../../../../src/core/screenRecording/encoding'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import type { ScreenCaptureBackend, ScreenCaptureOptions, CaptureSpan } from '../../../../../src/core/screenRecording/capture'
 import { captureCrop } from '../../../../../src/core/screenRecording/capture'
@@ -19,7 +19,7 @@ export function buildGfxCaptureArgs(options: ScreenCaptureOptions, source: Nativ
   const encoding = recordingEncoding(options)
   const kbps = Math.round(encoding.bitrate / 1000)
   return ['-hide_banner', '-loglevel', 'warning', '-stats_period', '0.25', '-filter_complex', `${filter}[screen]`, '-map', '[screen]', '-an',
-    ...encoder.buildEncodeArgs(kbps, kbps * (encoding.rateControl === 'vbr' ? 1.5 : 1), kbps * 2), '-g', String(encoding.keyframeFrames), '-bf', '0', '-sc_threshold', '0',
+    ...encoder.buildEncodeArgs(kbps, kbps * (encoding.rateControl === 'vbr' ? 1.5 : 1), kbps * 2), '-g', String(recordingKeyframes(encoding.keyframeFrames).gop), '-bf', '0',
     '-r', String(options.fps), '-fps_mode', 'cfr', '-movflags', '+frag_keyframe+empty_moov+default_base_moof', '-flush_packets', '1', '-progress', 'pipe:1', '-n', output]
 }
 interface GfxDependencies {
@@ -56,14 +56,14 @@ export class GfxCaptureBackend implements ScreenCaptureBackend {
         if (signal.aborted || this.cancelled || encoder.id === 'cpu' && this.options.codec !== 'hevc') throw error
         logger.warn('硬件录制未能启动，改用软件编码', { event: 'recording.capture.encoder.fallback', error, context: { encoder: encoder.id } })
         void invalidateEncoderCache().catch(failure => logger.warn('编码器重新探测失败', { event: 'recording.capture.encoder.probe_failed', error: failure }))
-        this.encoder = recordingEncoderProfile(this.options.codec ?? 'h264', 'software', this.options.rateControl ?? 'quality')
+        this.encoder = recordingEncoderProfile(this.options.codec ?? 'h264', 'software', this.options.rateControl ?? 'quality', recordingKeyframes(recordingEncoding(this.options).keyframeFrames).sceneCut)
         this.storage.manifest.encoding = { codec: this.options.codec ?? 'h264', encoder: 'software', softwareFallback: true, reason: '硬件编码未能启动，已改用软件编码' }
         try { await this.launch(this.encoder, signal) }
         catch (failure) {
           await this.end(false)
           if (signal.aborted || this.cancelled || this.options.codec !== 'hevc') throw failure
           logger.warn('H.265 编码不可用，改用 H.264 软件编码', { event: 'recording.capture.codec.fallback', error: failure })
-          this.encoder = recordingEncoderProfile('h264', 'software', this.options.rateControl ?? 'quality')
+          this.encoder = recordingEncoderProfile('h264', 'software', this.options.rateControl ?? 'quality', recordingKeyframes(recordingEncoding(this.options).keyframeFrames).sceneCut)
           this.storage.manifest.encoding = { codec: 'h264', encoder: 'software', softwareFallback: this.options.encoder !== 'software', reason: 'H.265 编码不可用，已改用 H.264 软件编码' }
           await this.launch(this.encoder, signal)
         }

@@ -1,4 +1,4 @@
-import { recordingEncoding, RECORDING_VIDEO_DEFAULTS, type RecordingEncoding } from '@/core/screenRecording/encoding'
+import { recordingEncoding, RECORDING_VIDEO_DEFAULTS, type RecordingEncoding, type ResolvedRecordingEncoding } from '@/core/screenRecording/encoding'
 import type { CaptureSource } from '@/core/screenRecording/contracts'
 import { createLogger } from '@/core/logging'
 import { recordingSetupSchema } from '@/core/persistence/preferenceSchemas'
@@ -52,8 +52,8 @@ export function saveRecordingSetup(value: RememberedRecordingSetup, storage: Sto
   try { storage.setItem(SETUP_KEY, serializeVersionedPersistenceJson(setupContract(), { range: value.range, sourceId: value.sourceId, region: value.region, ...setup })) }
   catch (error) { logger.warn('录制设置保存失败', { event: 'recording.setup.save.failed', error: String(error) }) }
 }
-/** 分辨率、帧率和编码设置在所有录制入口使用同一默认表。 */
-export function recordingOutput(setup: Pick<RecordingSetup, 'quality' | 'fps'> & RecordingEncoding): { width: number; height: number; fps: 30 | 60 } & Required<RecordingEncoding> {
+/** 分辨率、帧率和编码设置在所有录制入口使用同一默认表；结果可直接作为采集选项，自动关键帧以省略表示。 */
+export function recordingOutput(setup: Pick<RecordingSetup, 'quality' | 'fps'> & RecordingEncoding): { width: number; height: number; fps: 30 | 60 } & ResolvedRecordingEncoding {
   const row = RECORDING_VIDEO_DEFAULTS[{ '1080p': 0, '1440p': 1, '2160p': 2 }[setup.quality]]
   const size = { width: row.width, height: row.height, fps: setup.fps }
   return { ...size, ...recordingEncoding({ ...setup, ...size }) }

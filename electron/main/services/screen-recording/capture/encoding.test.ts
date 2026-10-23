@@ -23,4 +23,16 @@ describe('录制编码参数契约', () => {
       expect(args[args.indexOf('-g') + 1]).toBe(String(keyframeFrames))
     }
   })
+  it('自动关键帧：最长 30 帧并开启突变补帧；固定间隔严格关闭突变补帧', () => {
+    for (const [keyframeFrames, sceneCut] of [[undefined, true], [60, false]] as const) {
+      const options = captureOptionsSchema.parse({ sourceId: 'screen:0:0', width: 1920, height: 1080, fps: 60, ...(keyframeFrames ? { keyframeFrames } : {}) })
+      const nvenc = buildGfxCaptureArgs(options, source, recordingEncoderProfile('h264', 'nvidia', 'quality', sceneCut), 'screen.mp4')
+      expect(nvenc[nvenc.indexOf('-g') + 1]).toBe(sceneCut ? '30' : '60')
+      expect(nvenc[nvenc.indexOf('-rc-lookahead') + 1]).toBe(sceneCut ? '20' : '0')
+      expect(nvenc.includes('-no-scenecut')).toBe(!sceneCut)
+      const x264 = recordingEncoderProfile('h264', 'software', 'quality', sceneCut).buildEncodeArgs(1, 1, 1)
+      expect(x264[x264.indexOf('-sc_threshold') + 1]).toBe(sceneCut ? '40' : '0')
+      expect(recordingEncoderProfile('hevc', 'software', 'quality', sceneCut).buildEncodeArgs(1, 1, 1).join(' ')).toContain(`scenecut=${sceneCut ? 40 : 0}`)
+    }
+  })
 })
