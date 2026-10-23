@@ -3,11 +3,10 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
-const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
+const { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
+const { prepareStylePackage } = require('./uiInspectionStylePackage.cjs')
 
 const PROJECT_ID = 'video-edit-styles'
-/** 待验收的风格包：默认是本任务生成的“节点光迹”，可用 HENJI_STYLE_PACKAGE 换成别的 .henjistyle。 */
-const PACKAGE = process.env.HENJI_STYLE_PACKAGE || path.resolve('node_modules/.cache/video-edit-styles-input/节点光迹.henjistyle')
 const BUILTIN = ['restrained', 'tech-info', 'explainer', 'variety', 'promo', 'warm-documentary']
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 
@@ -26,10 +25,12 @@ function fixture() {
 function createVideoEditStylesScene() {
   return { id: 'video-edit-styles', surface: '剪辑', name: '剪辑-风格卡片导入渲染与模板应用', writesUserData: true,
     setup: async (page, app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/video-edit-styles'); fs.rmSync(root, { recursive: true, force: true }); fs.mkdirSync(path.join(root, 'rendered'), { recursive: true })
-      assert.ok(fs.existsSync(PACKAGE), `缺少风格包：${PACKAGE}`)
+      const outputRoot = path.resolve('.reality/video-edit-styles'); fs.mkdirSync(outputRoot, { recursive: true })
+      const root = fs.mkdtempSync(path.join(outputRoot, 'run-')); fs.mkdirSync(path.join(root, 'rendered'))
+      const packagePath = process.env.HENJI_STYLE_PACKAGE || path.join(root, '内置风格验收.henjistyle')
+      if (process.env.HENJI_STYLE_PACKAGE) assert.ok(fs.existsSync(packagePath), `缺少风格包：${packagePath}`)
       const file = path.join(root, 'styles.henji-video'); fs.writeFileSync(file, JSON.stringify(fixture()))
-      const evidence = { completed: false, startedAt: new Date().toISOString(), package: PACKAGE, steps: {} }
+      const evidence = { completed: false, startedAt: new Date().toISOString(), package: packagePath, steps: {} }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       const documentRef = { kind: 'video_edit.document', id: PROJECT_ID }; const sequenceRef = { kind: 'video_edit.sequence', id: `${PROJECT_ID}:main` }
       let client
@@ -53,6 +54,7 @@ function createVideoEditStylesScene() {
         // 默认布局：风格与模板面板在右侧标签组里（溢出时从组下拉切换），不受上一轮巡检留下的布局影响。
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1'))
         await dialogs(app, [file], file); await openVideoEditFile(page, file); await presented(page, 0)
+        await assignIsolatedMcpPort(page)
         const identity = await authorizeMcpConnection(page, { name: '风格与模板', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji styles Reality')
 
         // 1. 风格面板：六张内置卡片都显示渲染好的缩略图。
@@ -71,11 +73,17 @@ function createVideoEditStylesScene() {
         assert.equal(evidence.steps.detail.anchors, 5)
         await page.keyboard.press('Escape'); await detail.waitFor({ state: 'hidden' })
 
+        // 内置风格自带已渲染样片；先通过正式能力导出，再补齐仓库内的最小参数模板。
+        if (!process.env.HENJI_STYLE_PACKAGE) evidence.steps.prepare = await prepareStylePackage(packagePath, async output => {
+          const result = await tool('export_video_edit_style_package', { styleRef: { kind: 'video_edit.style', id: 'restrained' }, path: output })
+          assert.equal(result.verificationState, 'verified', JSON.stringify(result))
+        })
+
         // 3. 从界面导入风格包（系统对话框替换为固定路径）：只解析和保存，新卡片出现在个人风格最前面。
         const exported = path.join(root, '导出往返.henjistyle')
-        await dialogs(app, [PACKAGE], exported)
+        await dialogs(app, [packagePath], exported)
         await button(page, '导入风格包').click()
-        const source = JSON.parse(fs.readFileSync(PACKAGE, 'utf8')).content
+        const source = JSON.parse(fs.readFileSync(packagePath, 'utf8')).content
         const imported = page.locator(`[data-video-edit-style="${source.style.id}"]`)
         await page.locator(`[data-video-edit-style-detail="${source.style.id}"]`).waitFor({ state: 'visible', timeout: 30000 })
         evidence.steps.import = { capture: await capture('styles-03-imported-detail') }
