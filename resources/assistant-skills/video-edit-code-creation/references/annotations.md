@@ -30,7 +30,7 @@ element 目标先按 clip_id 回读片段固定源码版本，再读 video_edit.
 
 ## 修改、回复与待审查
 
-内容修改、追加 thread 与 status=addressed 放在同一次 change_application_entities。若先创建新源码版本获取引用，最终实例绑定/参数修改和标注回复仍合并一事务。thread 支持 mutate_properties 的 append，value 为新消息数组，保留全部既有讨论：
+内容修改、追加 thread 与 status=addressed 放在同一次 change_application_entities。若先创建新源码版本获取引用，最终实例绑定/参数修改和标注回复仍合并一事务。thread 用 mutate_properties 的 append 追加，value 是一条消息对象（不是数组；同一事务里同一属性只能追加一次），保留全部既有讨论：
 
 ```json
 {
@@ -40,12 +40,12 @@ element 目标先按 clip_id 回读片段固定源码版本，再读 video_edit.
     "entityType":"video_edit.annotation",
     "target":{"kind":"video_edit.annotation","id":"实际返回的标注引用id"},
     "mutations":[
-      {"propertyId":"video_edit.annotation.thread","operation":"append","value":[{
+      {"propertyId":"video_edit.annotation.thread","operation":"append","value":{
         "id":"本次生成的唯一消息id",
         "author":{"kind":"assistant","name":"助手"},
         "createdAt":"2026-10-08T00:00:00.000Z",
         "text":"已调整标题留白并核对进场、停留、退场；可撤销此次处理。"
-      }]},
+      }},
       {"propertyId":"video_edit.annotation.status","operation":"set","value":"addressed"}
     ]
   }]

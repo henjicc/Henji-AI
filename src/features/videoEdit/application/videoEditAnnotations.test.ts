@@ -13,6 +13,22 @@ import { appendVideoEditClip, closeVideoEditProject, getActiveVideoEditSequence,
 
 beforeEach(() => { installHarnessNativeStorage(); vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/annotations.hjvid'); vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined) })
 afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); useAssistantUiStore.getState().setPendingGoal(null); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
+it('外部 Agent 用 mutate append 追加一条回复，保留已有讨论', async () => {
+  const owner = await createVideoEditTestProject(); const id = owner.document.id
+  const markId = createVideoEditAnnotation(id, owner.activeSequenceId, { frame: 0, target: { kind: 'arrow', from: { x: .2, y: .2 }, to: { x: .6, y: .5 } }, text: '沿箭头移动', status: 'open' })
+  updateVideoEditAnnotation(id, markId, mark => ({ ...mark, thread: [{ id: 'user-note', author: { kind: 'user', name: '我' }, createdAt: '2026-10-24T00:00:00.000Z', text: '慢一点' }] }))
+  useNavigationStore.getState().setActiveWorkspace('videoEdit')
+  const app = createApplicationHarness(); const ref = { kind: 'video_edit.annotation', id: `${id}:${markId}` }
+  try {
+    const message = (text: string) => ({ id: `reply-${text.length}`, author: { kind: 'external', name: 'Codex' }, createdAt: '2026-10-24T00:00:01.000Z', text })
+    const response = await app.call('change_application_entities', { summary: '回复标注', changes: [{ kind: 'mutate_properties', entityType: 'video_edit.annotation', target: ref, mutations: [
+      { propertyId: 'video_edit.annotation.thread', operation: 'append', value: message('已沿箭头移动，可一次撤销') },
+      { propertyId: 'video_edit.annotation.status', operation: 'set', value: 'addressed' },
+    ] }] }, (await app.read(ref)).revisions as Record<string, number>)
+    expect(response, JSON.stringify(response)).toMatchObject({ ok: true })
+    expect(getActiveVideoEditSequence(owner).annotations[0].thread.map(item => item.text)).toEqual(['慢一点', '已沿箭头移动，可一次撤销'])
+  } finally { app.dispose() }
+})
 it('外部公共入口发现/回读标注与thread，拒绝越权通过；内容+回复+addressed原子一步撤销回open', async () => {
   const owner = await createVideoEditTestProject(); const id = owner.document.id; appendVideoEditClip(id)
   const clip = getActiveVideoEditSequence(owner).clips[0]
