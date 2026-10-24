@@ -50,11 +50,18 @@ export class DocumentCodeFiles {
       else if (Array.isArray(value)) value.forEach(visit)
       else if (value && typeof value === 'object') Object.values(value).forEach(visit)
     }
-    // Fail closed if any saved document cannot be inspected, including documents in other projects.
+    // Fail closed if any saved document cannot be inspected, including documents in other projects: keep every file
+    // (an orphan costs disk space, deleting a referenced file loses work) instead of failing the compensation itself,
+    // which would hide the original failure behind an unrelated old or missing document.
     // Folder documents (web recordings) have no envelope content and never reference code files.
     for (const row of this.workspace.catalog.listDocuments({ includeDrafts: true, includeMissing: true })) {
       if (this.kinds.get(row.kind)?.storage === 'folder') continue
-      visit((await this.repository.read({ id: row.id, path: row.path })).content)
+      const read = await this.repository.read({ id: row.id, path: row.path }).catch((error: unknown) => {
+        this.logger.warn('有文档无法检查代码引用，本次不回收代码文件', { event: 'documents.code.discard_kept', context: { documentId: row.id, files: request.files.length }, error })
+        return null
+      })
+      if (!read) return
+      visit(read.content)
     }
     for (const root of new Set(groups.map(group => group.root))) await this.exclusive(root, async () => {
       const requested = new Set(request.files.map(file => file.location))

@@ -60,6 +60,17 @@ describe('文件夹类型文档（.hjweb）', () => {
     await expect(fsp.stat(written.files[0].location)).rejects.toThrow()
   })
 
+  it('有文档读不了（旧格式、文件丢失）时补偿不失败，也不删任何代码文件', async () => {
+    const { service, workspace } = env.services
+    const project = await service.createProject({ name: '元宝搜索' })
+    const edit = await service.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: project.id }, name: '剪辑' })
+    const other = await service.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: project.id }, name: '旧剪辑' })
+    await fsp.writeFile(workspace.catalog.getDocument(other.meta.id)!.path, '{"broken":')
+    const written = await service.writeCodeVersion({ target: { id: edit.meta.id }, definitionId: 'card', name: '花字卡片', contents: { entry: 'main.ts', files: { 'main.ts': 'export default {}' } } })
+    await expect(service.discardCodeFiles({ files: written.files, retainedLocations: [] })).resolves.toBeUndefined()
+    await expect(fsp.stat(written.files[0].location)).resolves.toBeTruthy()
+  })
+
   it('新建位置落在 素材/录屏/ 并按“保留两者”起名；写完头信息后登记进索引', async () => {
     const { service, workspace } = env.services
     const project = await service.createProject({ name: '元宝搜索' })
