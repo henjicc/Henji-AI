@@ -10,6 +10,7 @@ import { VideoEditTimecode } from './timeline/VideoEditTimelineTransport'
 import { timelineCommandPresentation } from './timeline/timelineCommandPresentation'
 import { VideoEditSequenceTabs } from './panels/VideoEditSequenceTabs'
 import { VideoEditTimelineTools } from './timeline/VideoEditTimelineTools'
+import { chooseVideoEditAnnotationShape } from './application/videoEditAnnotations'
 
 const ZOOM_MIN = 0.1
 const ZOOM_MAX = 20
@@ -36,7 +37,7 @@ function VideoEditTimelineContent({ instance, onError, visible = true }: { insta
       {/* 时间码放在最左（Premiere 时间线左上角的播放指示器位置），可拖动、单击输入、Ctrl+单击切换帧号 */}
       <VideoEditTimecode instance={instance} label="当前时间码" className="px-1.5 text-13" />
       <VideoEditSequenceTabs instance={instance} onError={onError} />
-      <VideoEditTimelineTools presentation={presentation} execute={execute} />
+      <VideoEditTimelineTools presentation={presentation} execute={execute} annotation={{ projectId: instance.document.id, choose: shape => run(() => chooseVideoEditAnnotationShape(instance.document.id, shape)) }} />
       <span aria-hidden="true" className="mx-1.5 h-4 w-px shrink-0 bg-line" />
       <UiIconButton on={linkedSelection.checked} disabled={!linkedSelection.enabled} aria-label={linkedSelection.title} tooltip={`${linkedSelection.tooltip}（按住 Alt 临时切换）`} onClick={() => execute('toggle_linked_selection')}><Link  /></UiIconButton>
       <UiIconButton on={snapping.checked} disabled={!snapping.enabled} aria-label={snapping.title} tooltip={snapping.tooltip} onClick={() => execute('toggle_snapping')}><Magnet  /></UiIconButton>

@@ -13,11 +13,17 @@ const playbackScopes: VideoEditCommandScope[] = [...monitorScopes, 'global', 'pr
  */
 function command<const T extends string>(id: T, title: string, scopes: VideoEditCommandScope[], shortcut?: VideoEditShortcut, repeat = false, alternates: readonly VideoEditShortcut[] = []) { return { id, title, scopes, shortcut, repeat, alternates } }
 export const VIDEO_EDIT_COMMANDS = [
-  command('annotation_stroke', '画笔标注', ['program'], key('KeyD', false, false, true)),
-  command('annotation_point', '评论钉', ['program'], key('KeyC')),
-  command('annotation_region', '矩形标注', ['program'], key('KeyR', false, false, true)),
-  command('annotation_ask', '让助手改这里', ['program'], key('KeyA')),
-  command('annotation_select', '退出标注', ['program'], key('Escape')),
+  // 批注工具（时间线工具栏里的一个工具）：Alt+C 进入，进入后 1–7 换形状，Esc 回到选择工具；C、A 仍是剃刀与轨道选择。
+  command('annotate_tool', '批注工具', editScopes, key('KeyC', false, false, true)),
+  command('annotation_arrow', '箭头', editScopes, key('Digit1')),
+  command('annotation_ellipse', '圈', editScopes, key('Digit2')),
+  command('annotation_region', '框', editScopes, key('Digit3')),
+  command('annotation_stroke', '画笔', editScopes, key('Digit4')),
+  command('annotation_text', '文字', editScopes, key('Digit5')),
+  command('annotation_marker', '编号', editScopes, key('Digit6')),
+  command('annotation_point', '评论钉', editScopes, key('Digit7')),
+  command('annotation_select', '退出批注', editScopes, key('Escape')),
+  command('annotation_ask', '让助手改这里', ['program']),
   command('mask_transform', '变换选中遮罩', ['mask'], key('KeyT', true)),
   command('new_project', '新建项目', ['global'], key('KeyN', true, false, true)),
   command('new_sequence', '新建序列', ['global'], key('KeyN', true)),
@@ -135,7 +141,7 @@ export const VIDEO_EDIT_COMMANDS = [
 ] as const
 export type VideoEditCommandId = typeof VIDEO_EDIT_COMMANDS[number]['id']
 /** 工具命令 → 时间线工具（模式）。 */
-export const VIDEO_EDIT_TOOL_COMMANDS = { select_tool: 'select', track_tool: 'track', track_backward_tool: 'track_backward', ripple_tool: 'ripple', roll_tool: 'roll', rate_stretch_tool: 'rate_stretch', razor_tool: 'razor', slip_tool: 'slip', slide_tool: 'slide', pen_tool: 'pen', hand_tool: 'hand', zoom_tool: 'zoom', type_tool: 'type' } as const satisfies Partial<Record<VideoEditCommandId, string>>
+export const VIDEO_EDIT_TOOL_COMMANDS = { select_tool: 'select', track_tool: 'track', track_backward_tool: 'track_backward', ripple_tool: 'ripple', roll_tool: 'roll', rate_stretch_tool: 'rate_stretch', razor_tool: 'razor', slip_tool: 'slip', slide_tool: 'slide', pen_tool: 'pen', hand_tool: 'hand', zoom_tool: 'zoom', type_tool: 'type', annotate_tool: 'annotate' } as const satisfies Partial<Record<VideoEditCommandId, string>>
 export type VideoEditToolCommandId = keyof typeof VIDEO_EDIT_TOOL_COMMANDS
 export function isVideoEditToolCommand(id: VideoEditCommandId): id is VideoEditToolCommandId { return Object.hasOwn(VIDEO_EDIT_TOOL_COMMANDS, id) }
 export type VideoEditShortcutOverrides = Partial<Record<VideoEditCommandId, VideoEditShortcut | null>>

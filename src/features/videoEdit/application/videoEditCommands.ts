@@ -1,4 +1,4 @@
-import { requestVideoEditAnnotationMonitor, askAssistantAtVideoEditFrame } from './videoEditAnnotations'
+import { askAssistantAtVideoEditFrame, chooseVideoEditAnnotationShape, requestVideoEditAnnotationMonitor, videoEditAnnotationBrush, VIDEO_EDIT_ANNOTATION_SHAPE_COMMANDS, VIDEO_EDIT_ANNOTATION_SHAPES } from './videoEditAnnotations'
 import { requestVideoEditScrub } from '../engine/videoEditAudioScrub'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { VIDEO_EDIT_COMMANDS, VIDEO_EDIT_TOOL_COMMANDS, isVideoEditToolCommand, type VideoEditCommandId, type VideoEditCommandScope } from '@/core/videoEdit/commands'
@@ -180,7 +180,13 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
     if (id === 'deselect_all' && context.scope === 'project') return { enabled: true }
     const sequence = findActiveVideoEditSequence(owner)
     if (!sequence) return { enabled: false, reason: '没有序列，请先新建序列。' }
-    if (id.startsWith('annotation_')) return { enabled: id !== 'annotation_ask' || !owner.playing, reason: '请暂停后再让助手改这里。' }
+    if (id === 'annotation_ask') return { enabled: !owner.playing, reason: '请暂停后再让助手改这里。' }
+    // 形状键 1–7 与 Esc 只在批注工具里生效，其余时候留给别的用途。
+    if (id.startsWith('annotation_')) {
+      if (owner.tool !== 'annotate') return { enabled: false, reason: '请先选批注工具（Alt+C）。' }
+      const shape = VIDEO_EDIT_ANNOTATION_SHAPES.find(item => VIDEO_EDIT_ANNOTATION_SHAPE_COMMANDS[item] === id)
+      return { enabled: true, ...(shape ? { checked: videoEditAnnotationBrush(owner.document.id).shape === shape } : {}) }
+    }
     if (isVideoEditToolCommand(id)) return { enabled: true, checked: owner.tool === VIDEO_EDIT_TOOL_COMMANDS[id] }
     if (id === 'match_frame' || id === 'reverse_match_frame') { const reason = videoEditMatchFrameUnavailable(owner, id, context.clipIds, context.frame, context.scope); return { enabled: !reason, ...(reason ? { reason } : {}) } }
     if (id === 'toggle_snapping') return { enabled: true, checked: owner.snapping }
@@ -271,7 +277,9 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
   if (id === 'new_project') { await createVideoEditProject(); return }
   const projectId = owner!.document.id
   if (id === 'annotation_ask') { await askAssistantAtVideoEditFrame(projectId); return }
-  if (id === 'annotation_stroke' || id === 'annotation_point' || id === 'annotation_region' || id === 'annotation_select') { requestVideoEditAnnotationMonitor(projectId, id === 'annotation_select' ? 'select' : id === 'annotation_stroke' ? 'stroke' : id === 'annotation_point' ? 'point' : 'region'); return }
+  if (id === 'annotation_select') { setVideoEditTimelineView(projectId, { tool: 'select' }); return }
+  const shape = VIDEO_EDIT_ANNOTATION_SHAPES.find(item => VIDEO_EDIT_ANNOTATION_SHAPE_COMMANDS[item] === id)
+  if (shape) { chooseVideoEditAnnotationShape(projectId, shape); return }
   if (id === 'select_tool' && context.scope === 'program') requestVideoEditAnnotationMonitor(projectId, 'select')
   // 项目级命令在零时间线时仍可用，先于所有时间线计算执行。
   if (id === 'undo' || id === 'redo') { undoVideoEdit(projectId, id === 'redo'); return }
@@ -295,7 +303,7 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
   if (intent) { await withVideoEditCodeMetadata(() => executeVideoEditTimelineEdit(projectId, sequenceId, intent)); if (intent.kind === 'place') focusVideoEditPanel(projectId, 'timeline'); return }
   switch (id) {
     case 'export': openVideoEditExportDialog(projectId); return
-    case 'select_tool': case 'track_tool': case 'track_backward_tool': case 'ripple_tool': case 'roll_tool': case 'rate_stretch_tool': case 'razor_tool': case 'slip_tool': case 'slide_tool': case 'pen_tool': case 'hand_tool': case 'zoom_tool': case 'type_tool': setVideoEditTimelineView(projectId, { tool: VIDEO_EDIT_TOOL_COMMANDS[id] }); return
+    case 'select_tool': case 'track_tool': case 'track_backward_tool': case 'ripple_tool': case 'roll_tool': case 'rate_stretch_tool': case 'razor_tool': case 'slip_tool': case 'slide_tool': case 'pen_tool': case 'hand_tool': case 'zoom_tool': case 'type_tool': case 'annotate_tool': setVideoEditTimelineView(projectId, { tool: VIDEO_EDIT_TOOL_COMMANDS[id] }); return
     case 'match_frame': await matchVideoEditFrame(projectId, [...context.clipIds], context.frame); return
     case 'reverse_match_frame': reverseMatchVideoEditFrame(projectId); return
     case 'toggle_snapping': setVideoEditTimelineView(projectId, { snapping: !owner!.snapping }); return

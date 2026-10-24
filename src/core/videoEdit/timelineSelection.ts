@@ -5,8 +5,9 @@ import { z } from 'zod'
 /**
  * 时间线工具（模式），与 Premiere 工具面板一致（剪辑对齐 PR 4.6）：选择、向前／向后选择轨道、波纹编辑、滚动编辑、剃刀、
  * 外滑、内滑、手形、缩放、文字；比率拉伸（4.13）拖片段一端改变速度而不是源范围。钢笔 P 编辑片段不透明度／音量关键帧。
+ * 批注：在节目画面上画箭头、圈、框等给助手看；时间线上按选择工具处理。
  */
-export const VIDEO_EDIT_TIMELINE_TOOLS = ['select', 'track', 'track_backward', 'ripple', 'roll', 'rate_stretch', 'razor', 'slip', 'slide', 'pen', 'hand', 'zoom', 'type'] as const
+export const VIDEO_EDIT_TIMELINE_TOOLS = ['select', 'track', 'track_backward', 'ripple', 'roll', 'rate_stretch', 'razor', 'slip', 'slide', 'pen', 'hand', 'zoom', 'type', 'annotate'] as const
 export type VideoEditTimelineTool = typeof VIDEO_EDIT_TIMELINE_TOOLS[number]
 export const videoEditTimelineViewSchema = z.object({
   selectedClipIds: z.array(z.string().min(1).max(100)), targetTrackIds: z.array(z.string().min(1).max(100)),

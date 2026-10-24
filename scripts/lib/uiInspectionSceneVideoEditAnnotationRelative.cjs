@@ -21,8 +21,13 @@ function createVideoEditAnnotationRelativeScene() {
       const panel = async () => { if (!await controls.isVisible()) await trigger().click(); await controls.waitFor({ state: 'visible' }) }
       const close = async () => { if (await controls.isVisible()) await trigger().click() }
       const mode = async name => {
-        await page.getByRole('toolbar', { name: '节目监视器控制', exact: true }).getByRole('button', { name: /^(选择|移动画面|点标注|区域标注|画笔标注)$/ }).first().click()
-        await page.getByRole('group', { name: '标注工具', exact: true }).getByRole('button', { name, exact: true }).click()
+        // 批注是时间线工具栏里的工具：右键选形状；节目画面自己的下拉只剩选择与移动画面。
+        if (name === '画笔标注') {
+          await page.getByRole('toolbar', { name: '时间线工具栏', exact: true }).getByRole('button', { name: '批注工具', exact: true }).click({ button: 'right' })
+          await page.getByRole('menuitem', { name: /^画笔/ }).click(); return
+        }
+        await page.getByRole('toolbar', { name: '节目监视器控制', exact: true }).getByRole('button', { name: /^(选择|移动画面|批注)$/ }).first().click()
+        await page.getByRole('group', { name: '节目画面模式', exact: true }).getByRole('button', { name, exact: true }).click()
       }
       const shot = async name => { await page.waitForTimeout(160); evidence.shots.push(name); await capture('step-' + String(evidence.shots.length).padStart(3, '0')) }
       const saved = async test => { for (let i = 0; i < 200; i++) { const doc = readVideoEditFile(seeded.file); if (test(doc)) return doc; await page.waitForTimeout(50) } assert.fail('文档没有保存预期动作') }
@@ -61,7 +66,7 @@ function createVideoEditAnnotationRelativeScene() {
           for (const p of points.slice(1)) await page.mouse.move(rect.x + p[0] * rect.width, rect.y + p[1] * rect.height, { steps: 3 })
           await page.mouse.up()
           if (text === '沿箭头方向移动') {
-            await page.keyboard.press('Escape')
+            // 再画一笔：点画面会收起输入框，画笔草稿保留并合并成同一条（Esc 在输入框里是放弃）。
             await page.mouse.move(rect.x + .69 * rect.width, rect.y + .57 * rect.height); await page.mouse.down()
             await page.mouse.move(rect.x + .75 * rect.width, rect.y + .65 * rect.height, { steps: 3 })
             await page.mouse.move(rect.x + .65 * rect.width, rect.y + .65 * rect.height, { steps: 3 }); await page.mouse.up()

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
 import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, deleteVideoEditSequence, switchVideoEditSequence, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, setVideoEditTimelineView, undoVideoEdit, beginVideoEditGesture, finishVideoEditGesture, updateVideoEditCreativeIntents } from './application/videoEditService'
+import { setVideoEditAnnotationBrush } from './application/videoEditAnnotations'
 import { applyVideoEditBuiltinEffect, updateVideoEditBuiltinEffect } from './application/videoEditCompositing'
 import { VideoEditPreview } from './VideoEditPreview'
 import { VideoEditGpuDeviceLostError } from './engine/videoEditGpuFailure'
@@ -106,11 +107,11 @@ it('半速示范重画当前时刻且取消旧姿态，覆盖已有曲线不会�
   expect(pixel.sessions).toBe(1)
   act(() => { setVideoMotionPointer(owner.document.id, false); setVideoEditView(owner.document.id, { playing: false }) })
 })
-it('文字工具接管原标注模式，退出文字后节目工具可继续切换', async () => {
+it('文字工具接管批注工具，退出文字后节目工具可继续切换', async () => {
   const instance = await createVideoEditProject(); const view = render(<VideoEditPreview instance={instance} onError={vi.fn()} />)
   await act(async () => { await Promise.resolve() })
   const openMenu = (): void => { const button = view.getByRole('button', { name: '更多节目操作' }); if (button.getAttribute('aria-expanded') !== 'true') fireEvent.click(button) }
-  openMenu(); fireEvent.click(view.getByRole('button', { name: '点标注' }))
+  act(() => setVideoEditTimelineView(instance.document.id, { tool: 'annotate' }))
   expect(view.getByLabelText('画面标注层').className).toContain('cursor-crosshair')
   act(() => setVideoEditTimelineView(instance.document.id, { tool: 'type' }))
   expect(view.getByLabelText('节目文字工具')).toBeTruthy(); expect(view.queryByLabelText('这里要改什么？')).toBeNull()
@@ -126,7 +127,7 @@ it('画面标注捕获原选区和时间，后续定位及指针取消不标注�
   const host = view.getByLabelText('画面标注层'); const canvas = host
   Object.defineProperty(host, 'setPointerCapture', { value: vi.fn() })
   vi.spyOn(host, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, top: 0, left: 0, bottom: 180, right: 320, width: 320, height: 180, toJSON: () => ({}) })
-  fireEvent.click(view.getByRole('button', { name: '更多节目操作' })); fireEvent.click(view.getByRole('button', { name: '点标注' }))
+  act(() => { setVideoEditAnnotationBrush(instance.document.id, { shape: 'point' }); setVideoEditTimelineView(instance.document.id, { tool: 'annotate' }) })
   const down = () => fireEvent(canvas, new MouseEvent('pointerdown', { clientX: 32, clientY: 36, bubbles: true }))
   const up = () => fireEvent(canvas, new MouseEvent('pointerup', { clientX: 64, clientY: 72, bubbles: true }))
   down(); act(() => { setVideoEditView(instance.document.id, { frame: 5 }); setVideoEditView(instance.document.id, { frame: 0 }) }); up()

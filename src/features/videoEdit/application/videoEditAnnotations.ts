@@ -1,28 +1,52 @@
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { createLogger } from '@/core/logging'
-import { assertVideoEditAnnotationTransition, videoEditAnnotationSchema, type VideoEditAnnotation, type VideoEditAnnotationTarget } from '@/core/videoEdit/annotations'
+import { assertVideoEditAnnotationTransition, VIDEO_EDIT_ANNOTATION_COLOR_NAMES, videoEditAnnotationSchema, type VideoEditAnnotation, type VideoEditAnnotationColor, type VideoEditAnnotationTarget } from '@/core/videoEdit/annotations'
+import type { VideoEditCommandId } from '@/core/videoEdit/commands'
 import { openAssistant } from '@/features/assistant/store/assistantUiStore'
 import { assetToAgentAttachment } from '@/features/assistant/conversation/assistantAttachments'
 import { getPlatform } from '@/platform/runtime'
 import { createHostContextSnapshot } from '@/features/application-control/hostContext/hostContext'
 import { observeVideoEditFrame } from './videoEditFrameObservation'
-import { editVideoSequence, focusVideoEditPanel, requireVideoEditInstance, restoreVideoEditSnapshot, setVideoEditView, switchVideoEditSequence } from './videoEditService'
+import { editVideoSequence, focusVideoEditPanel, requireVideoEditInstance, restoreVideoEditSnapshot, setVideoEditTimelineView, setVideoEditView, switchVideoEditSequence } from './videoEditService'
 
 const logger = createLogger('features.videoEdit.annotations')
-type MonitorAction = 'select' | 'point' | 'region' | 'stroke' | 'ask'
+/** 节目画面只剩“回到选择”这一个外部请求：在节目画面里按选择工具时退出“移动画面”。 */
+type MonitorAction = 'select'
 const monitors = new Map<string, (action: MonitorAction) => void>()
 const selected = new Map<string, string>()
 export function registerVideoEditAnnotationMonitor(id: string, handler: (action: MonitorAction) => void): () => void {
   monitors.set(id, handler)
   return () => { if (monitors.get(id) === handler) monitors.delete(id) }
 }
-export function requestVideoEditAnnotationMonitor(id: string, action: MonitorAction): void {
-  const handler = monitors.get(id)
-  if (!handler) throw new Error('请打开节目画面，再使用标注工具。')
-  handler(action)
+export function requestVideoEditAnnotationMonitor(id: string, action: MonitorAction): void { monitors.get(id)?.(action) }
+
+/** 批注工具的子形状（工具栏弹出菜单与 1–7 的顺序）。 */
+export const VIDEO_EDIT_ANNOTATION_SHAPES = ['arrow', 'ellipse', 'region', 'stroke', 'text', 'marker', 'point'] as const
+export type VideoEditAnnotationShape = typeof VIDEO_EDIT_ANNOTATION_SHAPES[number]
+export const VIDEO_EDIT_ANNOTATION_SHAPE_COMMANDS = { arrow: 'annotation_arrow', ellipse: 'annotation_ellipse', region: 'annotation_region', stroke: 'annotation_stroke', text: 'annotation_text', marker: 'annotation_marker', point: 'annotation_point' } as const satisfies Record<VideoEditAnnotationShape, VideoEditCommandId>
+export interface VideoEditAnnotationBrush { shape: VideoEditAnnotationShape; color: VideoEditAnnotationColor }
+/** 当前画什么、用什么颜色：只是界面状态，不进文档；每个剪辑各记一份，默认红色箭头。 */
+const brushes = new Map<string, VideoEditAnnotationBrush>()
+const brushListeners = new Set<() => void>()
+let brushRevision = 0
+export function subscribeVideoEditAnnotationBrush(listener: () => void): () => void { brushListeners.add(listener); return () => { brushListeners.delete(listener) } }
+export function videoEditAnnotationBrushRevision(): number { return brushRevision }
+export function videoEditAnnotationBrush(projectId: string): VideoEditAnnotationBrush { return brushes.get(projectId) ?? { shape: 'arrow', color: VIDEO_EDIT_ANNOTATION_COLOR_NAMES[0] } }
+export function setVideoEditAnnotationBrush(projectId: string, patch: Partial<VideoEditAnnotationBrush>): void {
+  const current = videoEditAnnotationBrush(projectId); const next = { ...current, ...patch }
+  if (next.shape === current.shape && next.color === current.color) return
+  brushes.set(projectId, next); brushRevision++
+  for (const listener of brushListeners) listener()
+}
+/** 选一个形状即进入批注工具（工具栏弹出菜单）；画画时先暂停播放。 */
+export function chooseVideoEditAnnotationShape(projectId: string, shape: VideoEditAnnotationShape): void {
+  setVideoEditAnnotationBrush(projectId, { shape })
+  if (requireVideoEditInstance(projectId).tool !== 'annotate') setVideoEditTimelineView(projectId, { tool: 'annotate' })
 }
 export function selectedVideoEditAnnotation(id: string): string | undefined { return selected.get(id) }
-export function createVideoEditAnnotation(projectId: string, sequenceId: string, input: { frame: number; endFrame?: number; clipId?: string; target: VideoEditAnnotationTarget; text: string; status?: 'draft' | 'open' }): string {
+/** 在节目画面上点选一条标注（不跳转、不切面板）；“让助手改这里”会带上它。 */
+export function selectVideoEditAnnotation(projectId: string, id: string): void { selected.set(projectId, id) }
+export function createVideoEditAnnotation(projectId: string, sequenceId: string, input: { frame: number; endFrame?: number; clipId?: string; target: VideoEditAnnotationTarget; text: string; status?: 'draft' | 'open'; style?: VideoEditAnnotation['style'] }): string {
   const id = crypto.randomUUID()
   const mark = videoEditAnnotationSchema.parse({ id, ...input, status: input.status ?? 'draft', space: 'composition-normalized', author: { kind: 'user', name: '我' }, createdAt: new Date().toISOString(), thread: [] })
   editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, annotations: [...sequence.annotations, mark] }))
@@ -95,7 +119,7 @@ export async function askAssistantAtVideoEditFrame(projectId: string, point?: { 
   const chosen = point ? undefined : before.sequences.find(sequence => sequence.id === sequenceId)?.annotations.find(mark => mark.id === selected.get(projectId) && mark.frame === at && mark.status !== 'resolved')
   const frame = await observeVideoEditFrame(projectId, { kind: 'program', sequenceId, frame: at }, 1920, undefined, undefined, { overlayAnnotations: true })
   const attachments = [{ attachment: assetToAgentAttachment(frame.asset), previewSrc: frame.asset.displayUrl }]
-  if (chosen && ['region', 'stroke'].includes(chosen.target.kind)) {
+  if (chosen && ['region', 'ellipse', 'arrow', 'stroke'].includes(chosen.target.kind)) {
     const crop = await observeVideoEditFrame(projectId, { kind: 'program', sequenceId, frame: at }, 1920, undefined, undefined, { annotationIds: [chosen.id], cropAnnotationId: chosen.id }); attachments.push({ attachment: assetToAgentAttachment(crop.asset), previewSrc: crop.asset.displayUrl })
   }
   if (!isVideoEditContentCurrent(owner, contentVersion) || owner.activeSequenceId !== sequenceId || owner.frame !== at || owner.playing || owner.selection !== selection || owner.selectedClipIds !== selectedClips) throw new Error('原画面已改变，请暂停后重新发送。')
