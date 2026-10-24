@@ -166,6 +166,7 @@ macOS 用同一份菜单模型生成**系统菜单栏**，窗口内不画菜单�
 裁切和遮挡几乎都出在“面板被挤窄、压矮”或“内容比预想的长”时，组件本身没错。所以布局要**先写清楚放不下时怎么变**，再画默认样子：
 - **停靠面板声明最小宽高**：写在工作区面板定义里（`VIDEO_EDIT_PANELS` 这类，类型 `WorkspacePanelDefinition`），停靠布局强制执行，保存过的旧布局按当前定义改写；同一组标签取一致的值，默认布局在 960×640 窗口里同时放得下各面板的最小值。新增面板不声明就是缺陷。
 - **放不下只有三种对策**：收进“更多”（`UiOverflowRow`、命令带收纳）、截断后悬停看全（`truncate` + tooltip / 可访问名称）、滚动（`overflow-auto`）。不允许让 `overflow-hidden` 把控件或文字硬裁掉一截，也不允许定位层盖住可点的控件。
+- **收起后要能放回**：收纳行收起几项后宽度只剩内容宽度，单看自己测不到窗口又变宽了。行后面还有控件、行自己不能拉宽时（命令带左端的快速添加），给 `UiOverflowRow growIntoParent`，命令带配 `leadingLayout="share"`（左端与中间区按内容起算、平分剩余宽度，中间区内容靠左排）。`UiSegmented` 实际放不下时自动换成同一组选项的下拉，宽度够了换回，调用点不用判断。
 - **自绘滚动与有意例外要标出来**：自己实现滚动的区域（如时间线轨道区）标 `data-layout-scroll-region`；确属设计的裁切或覆盖（跑马灯、拖动中的虚影）在最近的容器上写 `data-layout-allow="clip|occlude"` 和 `data-layout-allow-reason="理由"`，没有理由不生效。
 - **设计稿写缩放规则**：除了默认尺寸，还要写最小多大、窄了先收什么、矮了先藏什么；没写的设计稿不算完成。
 - 判定只有一份实现 `src/core/uiAudit/layoutAudit.ts`：巡检规则 `controlClipped` / `controlOccluded` 与运行时布局守卫共用。开发运行时问题元素会被描红边，正式构建测试时记进日志（`ui.layout_issue.detected`）。验收方法见 `references/review.md` 第 9 节。
@@ -556,6 +557,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
   分段是“当前值”，一页常有多个，强调色实底只留给唯一主动作（记录 017，依据缺陷修复记录 014 修订 012）。禁止把几个
   `UiOptionButton variant="segment"` 并排放在 `flex` 里冒充分段控件。
 - 超过 5 项，或单项超过 4 个汉字（英文超过 12 字符） → 用 `Dropdown`（全应用统一口径，设置页不例外）。
+- 窄面板里各段实际放不下时，`UiSegmented` 自己换成下拉（文字不会挤出分段、叠到旁边一段上）；不要为窄宽度在调用点另写一份下拉。
 - 设置页的 `SettingsSegmented` 是同一语义，必须合并为同一个实现，不得两套并存。
 
 ### 3. 记录列表（历史、任务、批注、版本等同质记录）
@@ -663,7 +665,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 下拉 / 面板触发器 | `Dropdown` / `PanelTrigger`（按钮是 `UiFieldTrigger`：`appearance` field/quiet、`size`；浮层 `surface` solid/glass、`panelPadding`、`panelSize` menu/compact/wide/workspace）；一行参数条用 `UiFieldLayoutContext` = `toolbar` | 自己写触发器按钮或浮层外壳；`buttonClassName` 里改外观 |
 | 浮层归属（点外关闭、Escape） | `useUiOverlayLayer` + `UiOverlayLayerProvider` + `resolveUiOverlayTarget` / `isTopmostUiOverlay`（`@/components/ui/overlayOwnership`，语义同 Floating UI FloatingTree）：子浮层里的点击不关父层，Escape 只关最上层，模态层（查看器、弹窗）打开期间祖先层不响应点外；不在同一 React 树的浮层根节点写 `data-ui-overlay-detached` | 每个浮层各写一份 portal 选择器白名单或只认自身 refs |
 | 右键菜单、按钮弹出的动作菜单、锚定外部元素或指针的浮层 | 动作列表用 `ContextMenu` + `useContextMenu`（`showMenu` 跟随指针，`showMenuAt` 贴按钮右缘；压在画布/媒体上传 `surface="glass"`；菜单项是 `UiOptionButton variant="menu"`，方向键与 Enter 可用，宽度按内容）；需要表单内容的锚定浮层用 `PanelTrigger` 的 `anchor`（元素或矩形）+ `open` / `onOpenChange`，自定义触发器用 children 渲染函数（任务 5.9） | 自己 `createPortal` 画菜单或面板、手算视口夹取、各写一份点外关闭与 Escape、用私有 CSS 画菜单项 |
-| 一行放不下就收进“更多” | `UiOverflowRow`（`items` 带 `priority`/`pinned`，`renderOverflow`，`alwaysShowOverflow`；收起项不挂载）；生成底栏由 `ParameterPanel` 在 `toolbar` 排布下接入 | 让参数条 `flex-wrap` 换成两行；收起项留在 DOM 里只隐藏 |
+| 一行放不下就收进“更多” | `UiOverflowRow`（`items` 带 `priority`/`pinned`，`renderOverflow`，`alwaysShowOverflow`，`growIntoParent` 借父级空余宽度；收起项不挂载）；生成底栏由 `ParameterPanel` 在 `toolbar` 排布下接入 | 让参数条 `flex-wrap` 换成两行；收起项留在 DOM 里只隐藏 |
 | 统一分段单选（设置页 `SettingsSegmented` 仅重导出同一实现） | `UiSegmented ariaLabel options value onChange size="sm" / "md" / "lg" fullWidth disabled onPreview`；选项支持 `disabled/title/ariaLabel`；内部复用唯一内嵌 `UiOptionButton variant="segment"`，等宽分段、radiogroup/radio、单一 Tab 停靠点、左右方向键循环切换；中性抬起底 `bg-segment-selected` 与强文字选中态由 primitive 维护；≤5 项且每项 ≤4 个汉字（英文 ≤12 字符）；含汉字的混合标签按四个 Unicode 字符计，否则转完整下拉 | 调用点手写并排选项与轨道间距；新增分段优先复用统一容器 |
 | 内容格适配 | `UiOptionButton variant="card"`（现有内容选项格，静息 raised、选中中性选中底）；新二维选项优先 `grid` | 把 card 当成面板外壳或新增卡片套卡片 |
 | 分段 / 网格 / 小样 / 色样选择 | `UiSegmented` / `UiOptionButton variant="grid"` / `tile` / `swatch`；网格格子要等大时用 `gridCell`（`ratio` 78×92、`tier` 78×42、`tier-detail` 78×52、`preset` 120×52） | 手写 `bg-veil-faint` 格子、强调色实底的分段；用内联 `style={{ height }}` 定格子高度 |

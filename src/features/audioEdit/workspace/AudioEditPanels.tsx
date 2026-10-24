@@ -210,7 +210,7 @@ export function AudioEditEffectsPanel() {
   </PanelScroll>
 }
 
-/** 交付：导出格式与附带内容（导出按钮在命令带）。 */
+/** 交付：导出格式与附带内容（导出按钮在命令带）。面板最窄约 220px，导出格式的触发器只写格式名，用途写在菜单选项里。 */
 export function AudioEditDeliveryPanel() {
   const workspace = useAudioEditWorkspace()
   const { project, update, deliveryFormat: format } = workspace
@@ -218,7 +218,7 @@ export function AudioEditDeliveryPanel() {
   return <PanelScroll label="交付">
     <UiGroup titleTone="compact" labelWidth={96}>
       <UiFormRow label="导出格式" density="compact">
-        <Dropdown<'xml' | 'wav'> ariaLabel="导出格式" size="sm" className="w-full" minWidthStrategy="none" value={format} display={format === 'xml' ? 'XML · 继续剪辑' : 'WAV · 剪后音频'}
+        <Dropdown<'xml' | 'wav'> ariaLabel="导出格式" size="sm" className="w-full" minWidthStrategy="none" value={format} display={format === 'xml' ? 'XML' : 'WAV'}
           options={[{ label: 'XML · 继续剪辑', value: 'xml' }, { label: 'WAV · 剪后音频', value: 'wav' }]} onSelect={workspace.setDeliveryFormat} />
       </UiFormRow>
       {project.source.mediaType === 'audio' && format === 'xml' && <UiFormRow label="XML 帧率" density="compact">

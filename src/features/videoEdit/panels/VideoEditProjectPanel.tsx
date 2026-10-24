@@ -7,7 +7,7 @@ import { Virtuoso, VirtuosoGrid, type VirtuosoGridHandle, type VirtuosoHandle } 
 import { ArrowUp, ChevronDown, ChevronRight, ChevronUp, FolderInput, FolderOpen, FolderPlus, Import, List, Grid2X2, Plus, Pencil, Trash2, RefreshCw, Play, Settings2, Code2, AudioLines, Tag } from 'lucide-react'
 import { ICON_WORKSPACE_VIDEO_EDIT as SequenceIcon, ICON_ASSET_LIBRARY as AssetLibraryIcon, ICON_VIDEO_EDIT_GRAPHIC as GraphicIcon, ICON_VIDEO_EDIT_PROXY as ProxyIcon } from '@/core/theme/icons'
 import ContextMenu from '@/components/ContextMenu'
-import { PanelTrigger, UiButton, UiEmpty, UiFormRow, UiIconButton, UiSearchInput, UiOptionButton, UiSwitch, UiToolbar } from '@/components/ui'
+import { PanelTrigger, UiButton, UiEmpty, UiFormRow, UiIconButton, UiSearchInput, UiOptionButton, UiOverflowRow, UiSwitch, UiToolbar } from '@/components/ui'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { matchVideoEditShortcut } from '@/core/videoEdit/commands'
 import { chooseVideoEditFolders } from '../application/videoEditFolderImport'
@@ -130,7 +130,14 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   const media = useMemo(() => new Map(instance.document.media.map(value => [value.id, value])), [instance.document.media])
   const selectedIds = new Set(instance.selectedItemIds)
   const selectedItems = instance.document.items.filter(item => selectedIds.has(item.id))
-  const footerStatus = `${entries.length} 项${selectedItems.length ? ` · 已选 ${selectedItems.length}` : ''}`
+  // 面板压到最窄（960 宽窗口约 216px）时底栏放不下“7 项 · 已选 1”：先让出“已选”，只留项数，不截成“7 项 · …”
+  const footerStatus = <UiOverflowRow
+    items={[
+      { id: 'count', priority: 2, pinned: true, node: <span>{entries.length} 项</span> },
+      ...(selectedItems.length ? [{ id: 'selection', priority: 1, node: <span>&nbsp;· 已选 {selectedItems.length}</span> }] : []),
+    ]}
+    renderOverflow={() => null}
+  />
   const run = (operation: () => unknown | Promise<unknown>): void => { void withVideoEditCodeMetadata(operation).catch(error => {
     if (error instanceof Error && /源预览请求已被更新|源预览已关闭/.test(error.message)) return
     onError(error)

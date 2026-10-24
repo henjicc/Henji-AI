@@ -57,7 +57,7 @@
 | 表单行 | `UI_FORM_ROW_MIN_HEIGHT_CLASS` 与 sm28/md32/lg36 控件对齐；行的排布行为由 UiFormRow 管理 |
 | 多行文本 | `UI_TEXT_AREA_HEIGHT_CLASS`；UiTextArea、PromptEditor 的 `height` short92/medium120/tall240，填充滚动布局不传 height 时跟随容器 |
 | 浮层 | `UI_TRIGGER_PANEL_SIZE_CLASS`；PanelTrigger/Dropdown 的 `panelSize` menu/compact/content/workspace，用 min/clamp 约束视口；内容测量菜单继续按测得宽度定位 |
-| 面板正文 | `UI_PANEL_BODY_HEIGHT_CLASS` compact/content/workspace，按视口和内容上限双重约束；浮动输入区用 `UI_INPUT_PANEL_MAX_HEIGHT_CLASS` |
+| 面板正文 | `UI_PANEL_BODY_HEIGHT_CLASS` compact/content/workspace，按视口和内容上限双重约束；放在 `PanelTrigger` 浮层里时再封顶到浮层实际能给的高度（浮层设 `--ui-panel-body-max-height`），矮窗口下不会和浮层外壳各滚一层；上方筛选、下方虚拟网格的面板（模型选择）整块用它定高；浮动输入区用 `UI_INPUT_PANEL_MAX_HEIGHT_CLASS` |
 | 拖动面板 | `UI_PANEL_WIDTH`（core/theme/panelSizes.ts）：rail52、sidebar184/232/360、inspector248/320/460、assistant 最小320默认420；拖动由宿主夹取视口 |
 | 弹窗正文 | `UI_MODAL_CONTENT_PADDING_CLASS` / `contentPadding` default16、none0、spacious横24纵20；`contentScroll` auto/none 与留白分离，contentClassName 只补布局 |
 | 浮层投影 | `--shadow-overlay` 唯一几何，实底与玻璃共用；玻璃内侧亮边仍属于材质 |

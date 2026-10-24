@@ -29,7 +29,9 @@ describe('共享控件同名档同高', () => {
       <UiSwitch appearance="segmented" size={size} checked offLabel="关" onLabel="开" />
       <UiSegmented ariaLabel="分段" size={size} options={[{ label: '一', value: 'one' }, { label: '二', value: 'two' }]} value="one" onChange={() => {}} />
     </>)
-    for (const child of view.container.children) expect((child.matches('div') && child.querySelector('select') || child).classList.contains(`h-control-${size}`), child.outerHTML).toBe(true)
+    // 原生 select 包在字段外壳里；分段外面有一层只测可用宽度的外壳（放不下时换成下拉），量里面的分段本体
+    const control = (child: Element): Element => (child.matches('[data-ui-segmented-fit]') && child.firstElementChild) || (child.matches('div') && child.querySelector('select')) || child
+    for (const child of view.container.children) expect(control(child).classList.contains(`h-control-${size}`), child.outerHTML).toBe(true)
   })
 
   it('默认图标按钮与文字按钮都为 md；按钮自动决定子图标尺寸', () => {

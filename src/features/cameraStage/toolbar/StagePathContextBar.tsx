@@ -201,7 +201,7 @@ const StagePathContextBar: React.FC = () => {
 
   return (
     <UiOverflowRow
-      className="pointer-events-auto w-full justify-center gap-1.5 whitespace-nowrap"
+      className="pointer-events-auto w-full justify-start gap-1.5 whitespace-nowrap"
       items={items}
       alwaysShowOverflow
       renderOverflow={(hiddenIds) => (

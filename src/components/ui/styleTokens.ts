@@ -365,6 +365,9 @@ export const UI_TRIGGER_PANEL_PADDING_CLASS = {
 
 export type UiTriggerPanelPadding = keyof typeof UI_TRIGGER_PANEL_PADDING_CLASS;
 
+/** 浮层上下内边距与描边合计（px），与上面的档位一一对应：算浮层里内容实际能用的高度 */
+export const UI_TRIGGER_PANEL_CHROME_Y_PX: Record<UiTriggerPanelPadding, number> = { none: 2, menu: 10, content: 26 };
+
 /** 锚定浮层按内容选档；定位器进一步收紧到宿主边界和可用高度。 */
 export const UI_TRIGGER_PANEL_SIZE_CLASS = {
   // 菜单按选项内容定宽（至少 8rem，上限 22.5rem 再截断），不随窗口宽度变宽
@@ -519,10 +522,15 @@ export const UI_SEGMENT_SELECTED_CLASS = 'bg-segment-selected text-text1';
  * workspace 取 70vh：从底栏向上弹出时可用高度约为窗口的 75–80%，78vh 会超出浮层上限，
  * 浮层外层与面板自己的滚动区叠成两层滚动（音色克隆面板，重要记录 020）。
  */
+/**
+ * 定高的面板正文。放在 PanelTrigger 浮层里时再封顶到浮层实际能给的高度（`--ui-panel-body-max-height`，
+ * 由 PanelTrigger 按可用空间与档位上限算出）：窗口矮时（960×640）正文比浮层高，浮层外壳与正文自己的滚动区
+ * 叠成两层滚动（重要记录 020）。不在浮层里时变量不存在，按原值。
+ */
 export const UI_PANEL_BODY_HEIGHT_CLASS = {
-  compact: 'h-[min(50vh,20rem)]',
-  content: 'h-[min(65vh,30rem)]',
-  workspace: 'h-[min(70vh,48rem)]',
+  compact: 'h-[min(50vh,20rem,var(--ui-panel-body-max-height,100vh))]',
+  content: 'h-[min(65vh,30rem,var(--ui-panel-body-max-height,100vh))]',
+  workspace: 'h-[min(70vh,48rem,var(--ui-panel-body-max-height,100vh))]',
 } as const;
 
 export const UI_INPUT_PANEL_MAX_HEIGHT_CLASS = 'max-h-[min(70vh,40rem)]';

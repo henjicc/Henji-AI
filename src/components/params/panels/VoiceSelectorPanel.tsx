@@ -501,15 +501,16 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                     active={active}
                     disabled={training || failed || expired}
                     onClick={() => onChange(voice.id)}
-                    tooltip={voice.description || voice.name}
+                    // 名称和说明在格子里都可能被截断：悬停看全名与说明
+                    tooltip={hasDescription ? `${voice.name}：${voice.description}` : voice.name}
                     className={`w-full flex-col items-start justify-center ${
                       hasDescription ? 'min-h-[58px] gap-1' : 'min-h-[52px]'
                     }`}
                   >
-                    <span className="w-full truncate text-left text-sm leading-tight">{voice.name}</span>
+                    <span className="w-full truncate text-left text-sm leading-tight" data-user-content>{voice.name}</span>
                     {(training || failed || expired) && <span className="text-xs text-text2">{failed ? '训练失败或音色已失效' : expired ? '有效期已过，请刷新确认' : '等待训练结果'}</span>}
                     {hasDescription && (
-                      <span className="w-full truncate text-left text-xs text-text2">{voice.description}</span>
+                      <span className="w-full truncate text-left text-xs text-text2" data-user-content>{voice.description}</span>
                     )}
                   </UiOptionButton>
                   {canDelete && (

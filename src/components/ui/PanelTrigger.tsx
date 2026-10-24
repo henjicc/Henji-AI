@@ -14,7 +14,7 @@ import {
   type FloatingPanelAnchorRect,
   type FloatingPanelPosition,
 } from './floatingPanelPosition'
-import { UI_TRIGGER_PANEL_SIZE_CLASS, type UiTriggerPanelSize, UI_FIELD_INLINE_ROW_CLASS, UI_FIELD_LABEL_CLASS, UI_FIELD_LABEL_INLINE_CLASS, UI_TRIGGER_PANEL_PADDING_CLASS, UI_TRIGGER_PANEL_SURFACE_CLASS, type UiFieldSize, type UiTriggerPanelPadding, type UiTriggerPanelSurface } from './styleTokens'
+import { UI_TRIGGER_PANEL_SIZE_CLASS, type UiTriggerPanelSize, UI_FIELD_INLINE_ROW_CLASS, UI_FIELD_LABEL_CLASS, UI_FIELD_LABEL_INLINE_CLASS, UI_TRIGGER_PANEL_CHROME_Y_PX, UI_TRIGGER_PANEL_PADDING_CLASS, UI_TRIGGER_PANEL_SURFACE_CLASS, type UiFieldSize, type UiTriggerPanelPadding, type UiTriggerPanelSurface } from './styleTokens'
 import { UiFieldLayoutContext, useUiFieldLayout } from './fieldLayout'
 import { useUiFormRowLabelling } from './formRowLabel'
 import { measureElementTextWidth } from './textMeasurement'
@@ -480,6 +480,8 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
             width: contentWidth ? undefined : pos.width,
             maxWidth: contentWidth ? panelMaxWidth : undefined,
             maxHeight: panelSize ? `min(${pos.maxHeight}px, var(--trigger-panel-max-height))` : pos.maxHeight,
+            // 内容实际能用的高度：定高正文（UI_PANEL_BODY_HEIGHT_CLASS）据此封顶，浮层外壳不再和正文各滚一层
+            ['--ui-panel-body-max-height' as string]: `calc(${panelSize ? `min(${pos.maxHeight}px, var(--trigger-panel-max-height))` : `${pos.maxHeight}px`} - ${UI_TRIGGER_PANEL_CHROME_Y_PX[panelPadding]}px)`,
             minHeight: stableHeight && maxHeightRef.current
               ? panelSize ? `min(${Math.min(maxHeightRef.current, pos.maxHeight)}px, var(--trigger-panel-max-height))` : Math.min(maxHeightRef.current, pos.maxHeight)
               : undefined,

@@ -11,7 +11,7 @@ export const VIDEO_EDIT_LAYOUT_STORAGE_KEY = 'henji.videoEdit.dockLayout.v1'
  * 面板与它们的最小尺寸（重要记录 020）：右侧检查器一组标签取同一档，切标签时组宽不跳；
  * 默认布局在 960×640 窗口里同时放得下这些最小值（素材 220 + 时间线 400 + 检查器 320 = 940 宽，节目 + 时间线 = 400 高）。
  * 检查器 320：效果控件最宽的一行（缩放：数值 ⛓ 数值 + 单位道）连同名称后的关键帧导航放得下，名称列不被数值盖住；
- * 素材 220：底栏的项目计数（如“17 项 · 已选 1”）与右侧五个工具按钮同排放得下。
+ * 素材 220：底栏的项目计数（“17 项”）与右侧五个工具按钮同排放得下；“· 已选 N”放不下时先让出。
  * 数值由 ui:tour 的尺寸扫描（scripts/ui-review/layout-sweep.json）核对：拖到这里内容不裁切、不遮挡。
  */
 const INSPECTOR_MIN = { minimumWidth: 320, minimumHeight: 180 } as const
@@ -83,6 +83,24 @@ export const videoEditLayoutPresets = registerWorkspaceLayout({
   readLegacy: () => { const raw = localStorage.getItem(VIDEO_EDIT_LAYOUT_STORAGE_KEY); return raw ? parseVideoEditLayout(raw) : undefined },
 })
 
+/** 主区域各组比自己的最小宽度（组内面板最小宽度的最大值）窄了多少，合计 */
+function widthShortfall(api: DockviewApi): number {
+  return api.groups.filter(group => group.api.location.type === 'grid').reduce((sum, group) => {
+    const minimum = Math.max(0, ...group.panels.map(panel => VIDEO_EDIT_PANELS.find(definition => definition.id === panel.id)?.minimumWidth ?? 0))
+    return sum + Math.max(0, minimum - group.api.width)
+  }, 0)
+}
+
+/**
+ * 新开的一列（左右方向）让这一排放不下各组的最小宽度时，改为参考组里的一个标签。960 窗口下各列最小宽度之和
+ * 已经放不下第四列：源监视器在素材与节目画面之间只剩约 97px，连自己的标签都被挤进溢出（重要记录 020）。
+ */
+function tabIntoReferenceWhenTooNarrow(api: DockviewApi, panel: IDockviewPanel, referenceGroup: DockviewGroupPanel | undefined, shortfallBefore: number): IDockviewPanel {
+  if (!referenceGroup || referenceGroup === panel.group || widthShortfall(api) <= shortfallBefore + 1) return panel
+  panel.api.moveTo({ group: referenceGroup, position: 'center' })
+  return panel
+}
+
 export function showVideoEditPanel(api: DockviewApi, id: VideoEditPanelId): IDockviewPanel {
   const existing = api.getPanel(id)
   if (existing) { existing.api.setActive(); return existing }
@@ -101,10 +119,12 @@ export function showVideoEditPanel(api: DockviewApi, id: VideoEditPanelId): IDoc
     return api.addPanel({ id, component: id, title: definition.title, renderer: 'always', ...constraints, position: { referencePanel: timeline, direction: 'above' } })
   }
   const reference = api.getPanel('program') ?? api.panels.find(panel => panel.api.location.type === 'grid')
-  return api.addPanel({ id, component: id, title: definition.title, renderer: 'always', ...constraints,
+  const shortfallBefore = widthShortfall(api)
+  const added = api.addPanel({ id, component: id, title: definition.title, renderer: 'always', ...constraints,
     ...(reference ? { position: { referencePanel: reference, direction: id === 'timeline' ? 'below' : id === 'project' || id === 'source' ? 'left' : 'right' } } : {}),
     ...(id === 'timeline' ? { initialHeight: 320 } : id === 'program' ? {} : { initialWidth: 320 }),
   })
+  return id === 'timeline' ? added : tabIntoReferenceWhenTooNarrow(api, added, reference?.group, shortfallBefore)
 }
 
 /**
@@ -125,7 +145,9 @@ function defaultDockTarget(api: DockviewApi, id: string, own: DockviewGroupPanel
 export function dockVideoEditPanel(api: DockviewApi, panel: IDockviewPanel): void {
   const target = defaultDockTarget(api, panel.id, panel.group)
   if (target) {
+    const shortfallBefore = widthShortfall(api)
     panel.api.moveTo(target)
+    if (target.position === 'left' || target.position === 'right') tabIntoReferenceWhenTooNarrow(api, panel, target.group, shortfallBefore)
     return
   }
   const group = api.addGroup({ direction: 'right' })

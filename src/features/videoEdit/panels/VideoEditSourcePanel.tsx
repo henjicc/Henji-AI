@@ -2,8 +2,10 @@ import { getVideoEditProxyPreference, setVideoEditProxyPreference, videoEditProx
 import { ICON_VIDEO_EDIT_PROXY } from '@/core/theme/icons'
 import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { UiEmpty, UiError, UiIconButton, UiInput, UiRangeInput } from '@/components/ui'
-import { ArrowRightFromLine, ArrowRightToLine, AudioLines, BetweenVerticalStart, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser, FastForward, Film, Link2, Pause, Play, Replace, Rewind, Square, X, type LucideIcon } from 'lucide-react'
+import { PanelTrigger, UiEmpty, UiError, UiIconButton, UiInput, UiOptionButton, UiOverflowRow, UiRangeInput } from '@/components/ui'
+import { UI_ICON_SIZE } from '@/core/theme/icons'
+import { Z_LAYERS } from '@/core/theme/zLayers'
+import { ArrowRightFromLine, ArrowRightToLine, AudioLines, BetweenVerticalStart, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser, FastForward, Film, Link2, MoreHorizontal, Pause, Play, Replace, Rewind, Square, X, type LucideIcon } from 'lucide-react'
 import AudioPlayer from '@/components/AudioPlayer'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
 import type { VideoEditInstance } from '../application/videoEditService'
@@ -34,6 +36,9 @@ const SOURCE_COMMAND_BUTTONS: Array<{ id: 'mark_in' | 'mark_out' | 'clear_in_out
   { id: 'insert', Icon: BetweenVerticalStart }, { id: 'overwrite', Icon: Replace },
 ]
 const SOURCE_PLAYBACK_BUTTONS = new Set(['mark_in', 'mark_out', 'clear_in_out', 'step_back_five', 'step_back', 'play_reverse', 'play_stop', 'play_pause', 'play_forward', 'step_forward', 'step_forward_five'])
+
+/** 显示比例收进“更多”时菜单里给的两档（与节目监视器一致；其余比例用滚轮缩放） */
+const SOURCE_DISPLAY_OPTIONS = [{ value: 'fit' as const, label: '适合' }, { value: 1, label: '100%' }]
 
 export function VideoEditSourcePanel({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (error: unknown) => void; visible?: boolean }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditSource, videoEditSourceRevision)
@@ -148,10 +153,13 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
       {state.itemId && (state.status === 'loading' || state.playing && state.playbackDirection === -1) && <span className="pointer-events-none absolute left-2 top-2 rounded-md bg-media-scrim px-2 py-1 text-xs text-on-media">{state.status === 'loading' ? '正在打开源素材…' : '正在反向静音浏览'}</span>}
     </div>
     {state.itemId && <div className="flex shrink-0 flex-col gap-1 px-3 py-2">
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="min-w-0 flex-1 truncate text-xs text-text2" title={item?.name}>{item?.name}</span>
-        {media?.kind !== 'image' && <div className="w-28 shrink-0"><UiInput aria-label="源素材定位秒" type="number" size="sm" min={0} max={media?.durationSeconds ?? 0} step={0.000001} className="tabular-nums" value={draftTime} onFocus={() => { editingTime.current = true }} onChange={event => setDraftTime(event.target.value)} onBlur={() => { editingTime.current = false; run({ timeUs: Math.round(Number(draftTime) * 1e6), playing: false }) }} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur() } }} /></div>}
+      {/* 面板窄时名称留在第一行，定位秒与时间码整组换到下一行（再窄两者各占一行），读数不被挤出面板 */}
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="min-w-24 flex-1 basis-24 truncate text-xs text-text2" title={item?.name}>{item?.name}</span>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        {media?.kind !== 'image' && <div className="w-24 shrink-0"><UiInput aria-label="源素材定位秒" type="number" size="sm" min={0} max={media?.durationSeconds ?? 0} step={0.000001} className="tabular-nums" value={draftTime} onFocus={() => { editingTime.current = true }} onChange={event => setDraftTime(event.target.value)} onBlur={() => { editingTime.current = false; run({ timeUs: Math.round(Number(draftTime) * 1e6), playing: false }) }} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur() } }} /></div>}
         <span aria-label="源实际时间码" className="shrink-0 px-1 font-mono text-xs tabular-nums text-text3">{videoEditSourceTimecode(media?.kind === 'video' ? state.presentedTimeUs : state.timeUs)}</span>
+        </div>
       </div>
       {media?.kind === 'video' && <div className="relative pb-1.5" data-video-edit-source-progress>
         <UiRangeInput aria-label="源素材进度" min={0} max={sourceDurationUs} step={1} value={state.timeUs} onChange={event => seek(Number(event.target.value) / 1e6)} />
@@ -164,13 +172,24 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
       {hasWave && waveform.status === 'error' && <UiError size="xs" align="start" title={t('surfaceGrammar.waveformFailed')} message={t('surfaceGrammar.waveformRetryHint')} onRetry={() => { if (waveRef) retryWaveform(waveRef, 'full') }} />}
       {media?.kind !== 'image' && <span className="font-mono text-2xs tabular-nums text-text3">入点 {state.inUs === null ? '未设置' : videoEditSourceTimecode(state.inUs)} · 出点 {state.outUs === null ? '未设置' : videoEditSourceTimecode(state.outUs)}</span>}
     </div>}
-    {state.itemId && <div className="flex min-h-10 shrink-0 flex-wrap items-center justify-center gap-x-1 gap-y-0.5 border-t border-line px-2 py-1" role="toolbar" aria-label="源监视器控制">
-      <div className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-0.5" role="group" aria-label="源监视器按钮">
-        {barButtons.map(spec => <VideoEditMonitorButton key={spec.id} spec={spec} />)}
-        <VideoEditMonitorButtonEditor kind="source" specs={sourceButtons} />
-      </div>
-      {pictured && zoom.dropdown}
-      <UiIconButton aria-label="关闭源素材" tooltip="关闭源素材" onClick={() => run({ itemId: '', timeUs: 0, playing: false })}><X /></UiIconButton>
+    {/* 与节目监视器同一种单行控制条：窄面板下按钮从后往前收进“更多”，不再折成多行压掉画面（重要记录 020，960 宽尺寸扫描发现） */}
+    {state.itemId && <div className="flex min-h-10 shrink-0 items-center gap-x-1 whitespace-nowrap border-t border-line px-2 py-1" role="toolbar" aria-label="源监视器控制">
+      <UiOverflowRow
+        className="flex-1 justify-center gap-0.5"
+        items={[
+          ...barButtons.map((spec, index) => ({ id: spec.id, priority: barButtons.length - index, node: <VideoEditMonitorButton spec={spec} /> })),
+          { id: 'button_editor', priority: 0, pinned: true, node: <VideoEditMonitorButtonEditor kind="source" specs={sourceButtons} /> },
+          // 显示比例与节目监视器一样可收起：最窄时只留按钮编辑与“更多”，比例选项进菜单
+          ...(pictured ? [{ id: 'display', priority: 0, node: <div className="ml-1">{zoom.dropdown}</div> }] : []),
+        ]}
+        renderOverflow={hiddenIds => <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1" role="group" aria-label="收起的按钮">
+          {barButtons.filter(spec => hiddenIds.includes(spec.id)).map(spec => <UiOptionButton key={spec.id} variant="menu" size="sm" className="gap-2" disabled={spec.enabled === false} tooltip={spec.tooltip} onClick={spec.onClick}><spec.Icon size={UI_ICON_SIZE.sm} />{spec.title}</UiOptionButton>)}
+          {hiddenIds.includes('display') && SOURCE_DISPLAY_OPTIONS.map(option => <UiOptionButton key={option.label} variant="menu" size="sm" active={zoom.display === option.value} onClick={() => zoom.setDisplay(option.value)}>显示 {option.label}</UiOptionButton>)}
+        </div>}>
+          {({ open, togglePanel }) => <UiIconButton size="sm" aria-label="更多源监视器按钮" tooltip="更多源监视器按钮" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><MoreHorizontal /></UiIconButton>}
+        </PanelTrigger>}
+      />
+      <UiIconButton size="sm" aria-label="关闭源素材" tooltip="关闭源素材" onClick={() => run({ itemId: '', timeUs: 0, playing: false })}><X /></UiIconButton>
     </div>}
     {state.error && <UiError size="sm" title={state.error} message="" />}
   </div>

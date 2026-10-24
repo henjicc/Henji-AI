@@ -1,4 +1,4 @@
-import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
+import { UI_ICON_SIZE_CLASS, UI_PANEL_BODY_HEIGHT_CLASS } from '@/components/ui/styleTokens'
 import React, { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FILTERABLE_TAGS } from '@/core/types/ModelTags'
@@ -243,7 +243,8 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
       onKeyDown={handleKeyDown}
       // 表面由 PanelTrigger 的外壳统一提供，这里不再叠自己的底色
       // ——此前的 bg-panel/40 + /45 是让本面板比比例/分辨率面板整体偏暗的原因
-      className="flex h-full min-h-0 flex-col outline-none"
+      // 整块定高（封顶到浮层能给的高度）：网格在筛选区下方的剩余高度里滚动，矮窗口下浮层外壳不再另滚一层
+      className={`flex ${UI_PANEL_BODY_HEIGHT_CLASS.workspace} min-h-0 flex-col outline-none`}
     >
       {/* 筛选区域 - 固定在顶部 */}
       <div className="flex-shrink-0 p-4 pb-2">

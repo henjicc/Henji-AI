@@ -159,6 +159,13 @@ interface UiToolbarProps extends HTMLAttributes<HTMLDivElement> {
    * `fit` 中间区保持内容宽度（如分段视图切换），窄窗口时由左端的文件名先截断。
    */
   centerLayout?: 'fill' | 'fit';
+  /**
+   * 仅 command：左端让位策略。`content`（默认）左端只占内容宽度，剩余宽度全给中间区；
+   * `share` 左端与中间区都按内容起算、平分剩余宽度，窄窗口时两边按内容比例一起收窄——
+   * 左端有收纳行（`UiOverflowRow growIntoParent`）时用它，收纳行才测得到放回所需的空间。
+   * 此时中间区内容应靠左排（`justify-start`），视觉上仍落在左端内容与右端之间的正中。
+   */
+  leadingLayout?: 'content' | 'share';
   /** 右侧内容（command：次要动作 + 唯一主动作） */
   trailing?: ReactNode;
   /**
@@ -490,6 +497,7 @@ export function UiToolbar({
   children,
   center,
   centerLayout = 'fill',
+  leadingLayout = 'content',
   trailing,
   subordinate,
   barProps,
@@ -512,8 +520,8 @@ export function UiToolbar({
           className={`flex ${UI_BAND_HEIGHT_CLASS.command} min-w-0 items-center ${gapClass} ${UI_BAND_PADDING_CLASS} ${barClassName}`}
           {...barRest}
         >
-          <div data-command-bar-leading className={`flex min-w-0 shrink items-center ${gapClass}`}>{children}</div>
-          <div data-command-bar-center className={`flex flex-1 items-center justify-center ${centerLayout === 'fit' ? 'min-w-fit' : 'min-w-0'}`}>{center}</div>
+          <div data-command-bar-leading className={`flex min-w-0 items-center ${leadingLayout === 'share' ? 'flex-auto' : 'shrink'} ${gapClass}`}>{children}</div>
+          <div data-command-bar-center className={`flex ${leadingLayout === 'share' ? 'flex-auto' : 'flex-1'} items-center justify-center ${centerLayout === 'fit' ? 'min-w-fit' : 'min-w-0'}`}>{center}</div>
           {trailing ? <div data-command-bar-trailing className={`flex shrink-0 items-center ${gapClass}`}>{trailing}</div> : null}
         </div>
         {subordinate ? (

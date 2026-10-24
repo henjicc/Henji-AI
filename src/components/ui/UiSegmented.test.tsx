@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { useState } from 'react'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { UiSegmented } from './UiSegmented'
 
@@ -22,24 +22,35 @@ it('英文十二字符以内保持分段，中文超过四字或英文超过十�
   expect(screen.queryByRole('radiogroup')).toBeNull()
 })
 
-it('开发态测到选项实际溢出时告警，卸载清理观察器', () => {
-  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+it('选项实际放不下时改用同一组选项的下拉，宽度够了换回分段，卸载清理观察器', () => {
+  let available = 40
+  let notify: ResizeObserverCallback | undefined
   const disconnect = vi.fn()
   vi.stubGlobal('ResizeObserver', class {
-    constructor(private callback: ResizeObserverCallback) {}
-    observe(element: HTMLElement): void {
-      Object.defineProperties(element, { scrollWidth: { value: 120, configurable: true }, clientWidth: { value: 40, configurable: true } })
-      this.callback([], this as unknown as ResizeObserver)
-    }
+    constructor(callback: ResizeObserverCallback) { notify = callback }
+    observe(): void {}
     disconnect = disconnect
     unobserve(): void {}
   })
+  const scroll = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.getAttribute('role') === 'radio' ? 60 : 0
+  })
+  const client = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+    if (this.getAttribute('role') === 'radio') return available >= 200 ? 60 : 20
+    return this.hasAttribute('data-ui-segmented-fit') ? available : 0
+  })
   try {
-    const view = render(<UiSegmented ariaLabel="方式" options={[{ value: 'a', label: '方式' }]} value="a" onChange={() => undefined} />)
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('UiSegmented'), expect.objectContaining({ ariaLabel: '方式' }))
+    const props = { ariaLabel: '体型', value: 'a', onChange: () => undefined, options: [{ value: 'a', label: '标准' }, { value: 'b', label: '健壮' }] }
+    const view = render(<UiSegmented {...props} />)
+    expect(screen.queryByRole('radiogroup')).toBeNull()
+    expect(screen.getByRole('button', { name: '体型' })).toBeDefined()
+    // 两段各需 60，加上段间距与内边距约 126：给到 200 后换回分段
+    available = 200
+    act(() => notify?.([], {} as ResizeObserver))
+    expect(screen.getByRole('radiogroup', { name: '体型' })).toBeDefined()
     view.unmount()
     expect(disconnect).toHaveBeenCalled()
-  } finally { warn.mockRestore(); vi.unstubAllGlobals() }
+  } finally { scroll.mockRestore(); client.mockRestore(); vi.unstubAllGlobals() }
 })
 it('分段单选方向键跳过禁用项并循环，选择与焦点同步，整体禁用后不可操作', () => {
   const preview = vi.fn()

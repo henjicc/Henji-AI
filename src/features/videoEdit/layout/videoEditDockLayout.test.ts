@@ -127,6 +127,18 @@ describe('剪辑面板布局', () => {
     expect(timeline.api.width).toBe(timelineWidth)
   })
 
+  it('960 窗口放不下新开一列的最小宽度时，源监视器作为标签并入节目画面那一组；宽窗口仍另开一列（重要记录 020）', () => {
+    api.layout(940, 560)
+    resetVideoEditLayout(api)
+    const narrow = showVideoEditPanel(api, 'source')
+    expect(narrow.group).toBe(api.getPanel('program')!.group)
+    narrow.api.close()
+    api.layout(1440, 860)
+    const wide = showVideoEditPanel(api, 'source')
+    expect(wide.group).not.toBe(api.getPanel('program')!.group)
+    expect(wide.api.width).toBeGreaterThanOrEqual(280)
+  })
+
   it('只有浮动分组时仍可将面板和整组贴回主区域', () => {
     const program = showVideoEditPanel(api, 'program')
     api.addFloatingGroup(program)

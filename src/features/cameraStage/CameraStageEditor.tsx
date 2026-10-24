@@ -494,6 +494,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
       <UiToolbar
         variant="command"
         center={<StagePathContextBar />}
+        leadingLayout="share"
         trailing={(
           <>
             <WorkspaceLayoutMenu workspaceId="camera_stage" />

@@ -172,14 +172,24 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
           )}
         </div>
 
+        {/* 预览框是尺寸查询容器：图片按框的宽高等比缩进框内（不放大），切线叠层跟着图片走。
+            此前叠层外壳没有确定高度，图片的 max-h-full 不生效，大图按原尺寸撑出框、框里出滚动条，
+            窄窗口下弹窗正文再滚一层（重要记录 020）。 */}
         <div
-          className={`flex ${PREVIEW_VIEWPORT_HEIGHT} items-center justify-center overflow-auto rounded-lg bg-gap p-3`}
+          className={`flex ${PREVIEW_VIEWPORT_HEIGHT} items-center justify-center overflow-hidden rounded-lg bg-gap p-3`}
+          style={{ containerType: 'size' }}
         >
-          <div className="relative inline-flex items-center justify-center">
+          <div
+            className="relative inline-flex items-center justify-center"
+            style={naturalSize ? {
+              aspectRatio: `${naturalSize.width} / ${naturalSize.height}`,
+              width: `min(100cqw, ${(naturalSize.width / naturalSize.height) * 100}cqh, ${naturalSize.width}px)`,
+            } : undefined}
+          >
             <img
               src={displaySourceImageUrl}
               alt={t('toolDialog.split.preview')}
-              className="max-h-full w-auto max-w-full object-contain"
+              className={naturalSize ? 'h-full w-full' : 'max-h-full w-auto max-w-full object-contain'}
               onLoad={(event) => {
                 const target = event.currentTarget;
                 setNaturalSize({

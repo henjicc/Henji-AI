@@ -99,7 +99,7 @@ const AboutSection: React.FC = () => {
               >
                 <span className="flex min-w-0 items-baseline gap-2">
                   <span className="truncate text-sm text-text1">{component.name}</span>
-                  <span className={`truncate ${UI_TEXT_META_CLASS}`}>{readableThirdPartyVersion(component.version) ?? t('sections.about.unversioned')}</span>
+                  <span className={`shrink-0 ${UI_TEXT_META_CLASS}`}>{readableThirdPartyVersion(component.version) ?? t('sections.about.unversioned')}</span>
                 </span>
                 <span className="flex shrink-0 items-center gap-1.5">
                   <span className={UI_TEXT_META_CLASS}>{component.license}</span>

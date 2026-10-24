@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 
 import { ownerWindowOf } from '@/utils/crossRealmDom'
+import { measureParentSlack } from './measureParentSlack'
 import { resolveOverflowHiddenIds, UI_OVERFLOW_TRIGGER_FALLBACK_WIDTH, type OverflowLayoutItem } from './overflowLayout'
 
 /**
@@ -14,6 +15,8 @@ import { resolveOverflowHiddenIds, UI_OVERFLOW_TRIGGER_FALLBACK_WIDTH, type Over
  * - 收起的项不渲染；放回判定用它最后一次可见时测得的宽度。
  * - pinned 项永不收起；当只剩 pinned 项仍放不下时，pinned 项允许收缩（由其内部截断），而不是换行。
  * - `alwaysShowOverflow`：即使没有项被收起也显示溢出入口（例如浮层里有固定收纳的大块控件）。
+ * - `growIntoParent`：行后面还有别的控件、行自己不能拉宽（拉宽会把后面的控件推开）时，把父级 flex 行里没用掉的
+ *   宽度也算作可用宽度。否则行收起几项后宽度就等于内容宽度，窗口再放宽也测不到空间，收起的项永远放不回来。
  */
 
 export interface UiOverflowRowItem extends OverflowLayoutItem {
@@ -25,6 +28,8 @@ export interface UiOverflowRowProps {
   /** 行末溢出入口；`hiddenIds` 按文档顺序 */
   renderOverflow: (hiddenIds: readonly string[]) => ReactNode
   alwaysShowOverflow?: boolean
+  /** 可用宽度加上父级 flex 行的空余宽度（父级需能分到剩余空间，如命令带 `leadingLayout="share"`） */
+  growIntoParent?: boolean
   /** 布局类（外观不在此覆盖） */
   className?: string
 }
@@ -37,6 +42,7 @@ export function UiOverflowRow({
   items,
   renderOverflow,
   alwaysShowOverflow = false,
+  growIntoParent = false,
   className = '',
 }: UiOverflowRowProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -68,7 +74,7 @@ export function UiOverflowRow({
     if (overflowRef.current) overflowWidth.current = overflowRef.current.getBoundingClientRect().width
     const style = ownerWindowOf(container).getComputedStyle(container)
     const gap = Number.parseFloat(style.columnGap || '0') || 0
-    const available = container.clientWidth
+    const available = container.clientWidth + (growIntoParent ? measureParentSlack(container) : 0)
     const next = resolveOverflowHiddenIds({
       items,
       widths: widths.current,
@@ -89,7 +95,7 @@ export function UiOverflowRow({
     const shouldCompress = pinnedWidth + reserve > available
     if (shouldCompress !== compressPinned) setCompressPinned(shouldCompress)
     // measureTick：尺寸观察器触发的重测
-  }, [alwaysShowOverflow, compressPinned, hiddenIds, layoutKey, measureTick])
+  }, [alwaysShowOverflow, compressPinned, growIntoParent, hiddenIds, layoutKey, measureTick])
 
   // 容器、任一项或溢出入口尺寸变化（窗口缩放、参数值改变了触发器文字、“更多参数 1”变成“已调整 1”）时重算。
   // 溢出入口也要观察：此前只观察容器与各项，入口文字变长后不重算，入口被行尾裁掉一截（重要记录 020）
@@ -104,6 +110,8 @@ export function UiOverflowRow({
       frame = ownerWindowOf(container).requestAnimationFrame(() => setMeasureTick((tick) => tick + 1))
     })
     observer.observe(container)
+    // 借用父级空余宽度时，父级变宽（窗口放宽、旁边的项变窄）也要重算
+    if (growIntoParent && container.parentElement) observer.observe(container.parentElement)
     for (const element of itemElements.current.values()) observer.observe(element)
     if (overflowRef.current) observer.observe(overflowRef.current)
     return () => {
@@ -111,7 +119,7 @@ export function UiOverflowRow({
       observer.disconnect()
     }
     // 只在挂载的项集合（含溢出入口是否显示）变化时重建观察器（观察器建立时会回调一次，依赖不能含它触发的状态）
-  }, [mountedKey, alwaysShowOverflow])
+  }, [mountedKey, alwaysShowOverflow, growIntoParent])
 
   const hidden = new Set(hiddenIds)
   const showOverflow = hiddenIds.length > 0 || alwaysShowOverflow
