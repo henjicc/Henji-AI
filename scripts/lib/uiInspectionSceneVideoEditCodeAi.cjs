@@ -202,13 +202,12 @@ function createVideoEditCodeAiScene() {
         })
         await step('04-annotations', '批注草稿、外部处理和用户审查', async item => {
           if (await button('收起源码编辑').isVisible()) await button('收起源码编辑').click()
-          // C 在 program 是评论钉，在 timeline 是剃刀；聚焦真实节目宿主保证作用域。
+          // 批注是时间线工具：Alt+C 进入，7 选评论钉；聚焦真实节目宿主保证作用域。
           await page.locator('[data-video-edit-panel="program"]').evaluate(node => { node.tabIndex = -1; node.focus() })
-          await page.keyboard.press('c')
-          const mode = page.getByRole('toolbar', { name: '节目监视器控制', exact: true }).locator('label', { hasText: '标注' }).locator('..').getByRole('button')
-          await page.waitForFunction(() => [...document.querySelectorAll('[aria-label="节目监视器控制"] label')]
-            .find(label => label.textContent === '标注')?.parentElement?.querySelector('button')?.textContent.includes('点标注'), null, { timeout: 5000 })
-          item.shortcut = { key: 'C', scope: 'program', mode: await mode.innerText() }
+          await page.keyboard.press('Alt+c'); await page.keyboard.press('7')
+          const tool = page.getByRole('toolbar', { name: '时间线工具栏', exact: true }).getByRole('button', { name: '批注工具', exact: true })
+          await page.waitForFunction(() => document.querySelector('[aria-label="画面标注层"]')?.classList.contains('cursor-crosshair'), null, { timeout: 5000 })
+          item.shortcut = { key: 'Alt+C 7', scope: 'program', mode: await tool.getAttribute('aria-pressed') }
           const point = authorPointToMonitor(await canvas.boundingBox(), { x: 960, y: 540 })
           await page.mouse.click(point.x, point.y)
           const input = page.getByRole('textbox', { name: '这里要改什么？', exact: true })
