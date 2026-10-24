@@ -22,14 +22,14 @@ export class PresetService {
    * 创建预设
    */
   async createPreset(input: CreatePresetInput): Promise<Preset> {
-    const preset: Omit<Preset, 'createdAt' | 'updatedAt'> = {
+    // 新建时不带 useCount：使用次数由主进程仓库建记录时置 0。写库请求按严格结构校验，多带一个字段整次保存都会被拒（此前新建预设一直失败）
+    const preset: Omit<Preset, 'createdAt' | 'updatedAt' | 'useCount'> = {
       id: nanoid(),
       name: input.name,
       description: input.description || null,
       modelId: input.modelId || null,
       params: input.params,
       isFavorite: input.isFavorite || false,
-      useCount: 0
     }
 
     await databaseService.insertPreset(preset)

@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import { PresetService } from './PresetService'
+import { presetInsertSchema } from '@/core/localRecords/requests'
 
 const database = vi.hoisted(() => ({ insertPreset: vi.fn(), getPresetById: vi.fn() }))
 vi.mock('@/services/database/DatabaseService', () => ({ databaseService: database }))
@@ -21,4 +22,11 @@ it('正式导入黄金预设保留内容；更新版本、无版本、截断和�
     ['{', 'corrupt'],
   ]) await expect(service.importPreset(json)).rejects.toMatchObject({ code, formatId: 'preset-export' })
   expect(database.insertPreset).not.toHaveBeenCalled()
+})
+
+it('新建预设发给写库通道的内容符合主进程的严格写入结构（不带 useCount 等仓库字段）', async () => {
+  database.getPresetById.mockImplementation(async (id: string) => ({ id, name: '海边日落', params: { prompt: '日落' }, useCount: 0 }))
+  await new PresetService().createPreset({ name: '海边日落', params: { prompt: '日落' } })
+  const sent = database.insertPreset.mock.calls[0][0]
+  expect(presetInsertSchema.safeParse(sent).success).toBe(true)
 })
