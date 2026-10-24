@@ -35,7 +35,9 @@ describe('正式读入口打开黄金归档与源码', () => {
     environment = createTestEnvironment()
     const codec = new HenjiImagePackageCodec(new ContentAddressedResourceStore(path.join(environment.outside, 'resources')))
 
-      const source = fixture(id, file)
+      // 旧版归档导入时会在原件旁写迁移备份（.henji/backups）；在临时副本上导入，样本目录不被写入。
+      const source = path.join(environment.outside, file)
+      await fsp.copyFile(fixture(id, file), source)
       const original = await fsp.readFile(source)
       const imported = await codec.import(source)
       try {
