@@ -145,6 +145,9 @@ export const videoEditSequenceSchema = z.object({
   markers: z.array(videoEditMarkerSchema).optional(), captions: z.array(videoEditCaptionSchema).optional(),
   captionTrackEnabled: z.boolean().optional().describe('字幕轨道是否输出到节目画面，省略时显示。'),
   captionTrackLocked: z.boolean().optional().describe('锁定字幕轨道后禁止修改、添加或删除字幕，省略时未锁定。'),
+  /** 时间线统一开关（重要记录 019）：运动模糊与帧混合作用于整条序列，预览与导出一致。 */
+  motionBlur: z.boolean().optional().describe('运动模糊：开启后，位置、缩放、旋转、锚点有动画的片段按 180° 快门（前后各四分之一帧）沿运动方向模糊；预览与导出一致。省略为关闭。'),
+  frameBlend: z.boolean().optional().describe('帧混合：慢放片段没有单独设补帧方式时，默认把相邻两帧按位置混合；片段自己的 frame_interpolation 优先。省略为关闭（帧采样）。'),
   transitions: z.array(videoEditTransitionSchema).optional(),
 }).strict().refine(isVideoEditSequenceSize, '超过 8K 上限。')
 export const videoEditExportHistorySchema = z.array(z.object({

@@ -126,6 +126,9 @@ export class VideoEditGpuCompositor {
   private presentReady?: Promise<GpuRenderPipeline>
   /** The `rgba16float` composition target of high-precision frames, canvas-sized, kept until size change or dispose. */
   private precise?: { texture: GpuTexture; width: number; height: number }
+  /** 运动模糊的累积图与相加混合管线（第一次用到运动模糊时才建）。 */
+  private motionTarget?: { texture: GpuTexture; width: number; height: number }
+  private motionAdditive?: Promise<LayerPipelines>
   private readonly precision = { snapshots: 0, frames: 0 }
   private sampler: unknown
   private readonly uniforms = new Map<string, GpuBuffer>()
@@ -194,10 +197,12 @@ export class VideoEditGpuCompositor {
   }
   /** Nested layers must belong to this device so the parent can sample them without readback or 8-bit quantization. */
   fork(canvas: OffscreenCanvas, capturePresentation?: () => VideoEditPresentationCapture | undefined): VideoEditGpuCompositor { return new VideoEditGpuCompositor(canvas, this, capturePresentation) }
-  private layerPipelines(format: string): LayerPipelines
+  private layerPipelines(format: string, create?: undefined, mode?: 'over' | 'add'): LayerPipelines
   private layerPipelines(format: string, create: (descriptor: unknown) => Promise<GpuRenderPipeline>): { [K in keyof LayerPipelines]: Promise<GpuRenderPipeline> }
-  private layerPipelines(format: string, create: (descriptor: unknown) => GpuRenderPipeline | Promise<GpuRenderPipeline> = descriptor => this.device.createRenderPipeline(descriptor)): { [K in keyof LayerPipelines]: GpuRenderPipeline | Promise<GpuRenderPipeline> } {
-    const blend = { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } }
+  private layerPipelines(format: string, create: (descriptor: unknown) => GpuRenderPipeline | Promise<GpuRenderPipeline> = descriptor => this.device.createRenderPipeline(descriptor), mode: 'over' | 'add' = 'over'): { [K in keyof LayerPipelines]: GpuRenderPipeline | Promise<GpuRenderPipeline> } {
+    // over：预乘 alpha 的“盖在上面”；add：运动模糊累积时把各次取样直接相加。
+    const factor = mode === 'add' ? 'one' : 'one-minus-src-alpha'
+    const blend = { color: { srcFactor: 'one', dstFactor: factor }, alpha: { srcFactor: 'one', dstFactor: factor } }
     const pipeline = (code: string): GpuRenderPipeline | Promise<GpuRenderPipeline> => {
       const shader = this.device.createShaderModule({ code })
       return create({ layout: 'auto', vertex: { module: shader, entryPoint: 'vs' }, fragment: { module: shader, entryPoint: 'fs', targets: [{ format, blend }] }, primitive: { topology: 'triangle-list' } })
@@ -218,6 +223,20 @@ export class VideoEditGpuCompositor {
     this.assertDevice()
     if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用。')
     return result
+  }
+  /**
+   * 运动模糊的累积：rgba16float 离屏图（按序列尺寸复用）与相加混合的图层管线。多次取样按 1/N 不透明度相加，
+   * 半浮点精度下平均不会出现 8 位量化的色带。
+   */
+  private motionResources(width: number, height: number): Promise<{ target: GpuTexture; additive: LayerPipelines }> {
+    this.motionAdditive ??= this.compiled(() => this.layerPipelines(VIDEO_EDIT_PRECISE_FORMAT, undefined, 'add'), '运动模糊合成管线初始化失败')
+    return this.motionAdditive.then(additive => {
+      if (!this.motionTarget || this.motionTarget.width !== width || this.motionTarget.height !== height) {
+        this.motionTarget?.texture.destroy()
+        this.motionTarget = { texture: this.device.createTexture({ size: [width, height], format: VIDEO_EDIT_PRECISE_FORMAT, usage: 0x10 | 0x04 }), width, height }
+      }
+      return { target: this.motionTarget.texture, additive }
+    })
   }
   /** Layer pipelines writing an owned target of `format` (offscreen code surfaces and the high-precision target). */
   private offscreenPipelines(format: VideoEditGpuColorFormat): Promise<LayerPipelines> {
@@ -484,6 +503,8 @@ export class VideoEditGpuCompositor {
       this.codeRuntime?.assertPictureLive(target)
       if (target.owner !== this.device || pictures.some(picture => picture instanceof VideoEditCodePicture && picture.texture === target.texture)) throw new Error('离屏合成输入输出不能跨设备或引用同一纹理。')
     }
+    const motion = clips.some(clip => (clip as VideoEditMotionSampledClip).motionSamples?.length) ? await this.motionResources(document.width, document.height) : undefined
+    if (this.disposed || !shouldPresent()) return { presented: false, completion: Promise.resolve() }
     const device = this.device
     const frames: VideoFrame[] = []
     device.pushErrorScope('validation')
@@ -493,7 +514,9 @@ export class VideoEditGpuCompositor {
       const encoder = device.createCommandEncoder()
       const canvas = target ? undefined : this.context.getCurrentTexture()
       const composed = present ? this.preciseTarget() : undefined
-      const pass = encoder.beginRenderPass({ colorAttachments: [{ view: (target?.texture ?? composed ?? canvas!).createView(), clearValue: { r: 0, g: 0, b: 0, a: target && !target.opaqueBackground ? 0 : 1 }, loadOp: 'clear', storeOp: 'store' }] })
+      const main = target?.texture ?? composed ?? canvas!
+      let pass = encoder.beginRenderPass({ colorAttachments: [{ view: main.createView(), clearValue: { r: 0, g: 0, b: 0, a: target && !target.opaqueBackground ? 0 : 1 }, loadOp: 'clear', storeOp: 'store' }] })
+      const retained = new Set<string>()
       clips.forEach((clip, index) => {
         const picture = pictures[index]
         let resource: unknown
@@ -531,18 +554,31 @@ export class VideoEditGpuCompositor {
           textRaster = cached.textRaster
           if (picture) { width = picture.width; height = picture.height }
         }
-        let uniform = this.uniforms.get(clip.id)
-        if (!uniform) { uniform = device.createBuffer({ size: 96, usage: 0x08 | 0x40 }); this.uniforms.set(clip.id, uniform) }
-        const fit = Math.min(document.width / width, document.height / height) * clip.scale
-        const aspect = videoEditClipScaleAspect(clip)
-        const rotation = clip.rotation * Math.PI / 180
-        const center = videoEditClipCenterPosition(clip, { width, height }, document)
-        if (textRaster) {
-          const dx = (textRaster.x + textRaster.width / 2) * fit; const dy = (textRaster.y + textRaster.height / 2) * fit * aspect
-          center.x += (dx * Math.cos(rotation) - dy * Math.sin(rotation)) / document.width
-          center.y += (dx * Math.sin(rotation) + dy * Math.cos(rotation)) / document.height
-          width = textRaster.width; height = textRaster.height
+        const pictureWidth = width, pictureHeight = height
+        const uniformFor = (key: string): GpuBuffer => {
+          retained.add(key)
+          let buffer = this.uniforms.get(key)
+          if (!buffer) { buffer = device.createBuffer({ size: 96, usage: 0x08 | 0x40 }); this.uniforms.set(key, buffer) }
+          return buffer
         }
+        /** 一个变换（片段当前的，或运动模糊快门内的一次取样）对应的图层几何。 */
+        const geometry = (placement: VideoEditClipPlacement) => {
+          const fit = Math.min(document.width / pictureWidth, document.height / pictureHeight) * placement.scale
+          const aspect = videoEditClipScaleAspect(placement)
+          const rotation = placement.rotation * Math.PI / 180
+          const center = videoEditClipCenterPosition(placement, { width: pictureWidth, height: pictureHeight }, document)
+          let layerWidth = pictureWidth, layerHeight = pictureHeight
+          if (textRaster) {
+            const dx = (textRaster.x + textRaster.width / 2) * fit; const dy = (textRaster.y + textRaster.height / 2) * fit * aspect
+            center.x += (dx * Math.cos(rotation) - dy * Math.sin(rotation)) / document.width
+            center.y += (dx * Math.sin(rotation) + dy * Math.cos(rotation)) / document.height
+            layerWidth = textRaster.width; layerHeight = textRaster.height
+          }
+          return { fit, aspect, rotation, center, layerWidth, layerHeight }
+        }
+        const { fit, aspect, rotation, center } = geometry(clip)
+        if (textRaster) { width = textRaster.width; height = textRaster.height }
+        const uniform = uniformFor(clip.id)
         const quad=videoEditClipTrackingQuad(clip); let h=quad ? videoEditCornerPinMatrix(quad) : undefined
         if (h && textRaster) {
           // Corner pin is defined on the entire source frame, while UVs now cover only the text's local rectangle.
@@ -553,10 +589,35 @@ export class VideoEditGpuCompositor {
           h = [h[0] * sx, h[1] * sy, h[0] * u + h[1] * v + h[2], h[3] * sx, h[4] * sy, h[3] * u + h[4] * v + h[5], h[6] * sx, h[7] * sy, denominator].map(value => value / denominator) as typeof h
         }
         const warp=h ? [h[0],h[1],h[2],0,h[3],h[4],h[5],0,h[6],h[7],h[8],0] : new Array<number>(12).fill(0)
-        device.queue.writeBuffer(uniform, 0, new Float32Array([width * fit / document.width, height * fit * aspect / document.height, Math.cos(rotation), Math.sin(rotation), center.x * 2, center.y * 2, clip.opacity, 0, document.height / document.width, document.width / document.height, external || cachedVideo ? picture.rotation : 0, (external || cachedVideo) && picture.flip ? 1 : 0, ...warp]))
-        const pipeline = code || (!external && !cachedVideo) ? pipelines?.codeImage ?? this.codeImage : external ? pipelines?.video ?? this.video : cachedVideo && picture.chroma ? pipelines?.cachedVideo ?? this.cachedVideo : pipelines?.image ?? this.image
+        const orientation = [external || cachedVideo ? picture.rotation : 0, (external || cachedVideo) && picture.flip ? 1 : 0]
+        const uniformData = (layout: ReturnType<typeof geometry>, opacity: number): Float32Array => new Float32Array([layout.layerWidth * layout.fit / document.width, layout.layerHeight * layout.fit * layout.aspect / document.height, Math.cos(layout.rotation), Math.sin(layout.rotation), layout.center.x * 2, layout.center.y * 2, opacity, 0, document.height / document.width, document.width / document.height, ...orientation, ...warp])
+        const choose = (set: LayerPipelines | undefined): GpuRenderPipeline => code || (!external && !cachedVideo) ? set?.codeImage ?? this.codeImage : external ? set?.video ?? this.video : cachedVideo && picture.chroma ? set?.cachedVideo ?? this.cachedVideo : set?.image ?? this.image
+        const bind = (pipeline: GpuRenderPipeline, buffer: GpuBuffer) => device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer } }, ...(cachedVideo && picture.chroma ? [{ binding: 3, resource: picture.chroma.createView() }] : [])] })
+        const samples = !h ? (clip as VideoEditMotionSampledClip).motionSamples : undefined
+        if (samples?.length && motion) {
+          // 运动模糊：快门内各次取样按 1/N 不透明度相加到离屏累积图（预乘），再把累积图整幅叠到画面上；等于这些姿态的平均。
+          pass.end()
+          const accumulate = encoder.beginRenderPass({ colorAttachments: [{ view: motion.target.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: 'clear', storeOp: 'store' }] })
+          const additive = choose(motion.additive)
+          samples.forEach((sample, sampleIndex) => {
+            const buffer = uniformFor(`${clip.id}:motion:${sampleIndex}`)
+            device.queue.writeBuffer(buffer, 0, uniformData(geometry({ ...sample, ...(sample.scaleAspect === undefined && clip.scaleAspect !== undefined ? { scaleAspect: clip.scaleAspect } : {}) }), clip.opacity / samples.length))
+            accumulate.setPipeline(additive); accumulate.setBindGroup(0, bind(additive, buffer)); accumulate.draw(6)
+          })
+          accumulate.end()
+          pass = encoder.beginRenderPass({ colorAttachments: [{ view: main.createView(), loadOp: 'load', storeOp: 'store' }] })
+          const over = pipelines?.codeImage ?? this.codeImage
+          const buffer = uniformFor(`${clip.id}:motion:result`)
+          device.queue.writeBuffer(buffer, 0, new Float32Array([1, 1, 1, 0, 0, 0, 1, 0, document.height / document.width, document.width / document.height, 0, 0, ...new Array<number>(12).fill(0)]))
+          pass.setPipeline(over)
+          pass.setBindGroup(0, device.createBindGroup({ layout: over.getBindGroupLayout(0), entries: [{ binding: 0, resource: motion.target.createView() }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer } }] }))
+          pass.draw(6)
+          return
+        }
+        device.queue.writeBuffer(uniform, 0, uniformData({ fit, aspect, rotation, center, layerWidth: width, layerHeight: height }, clip.opacity))
+        const pipeline = choose(pipelines)
         pass.setPipeline(pipeline)
-        pass.setBindGroup(0, device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer: uniform } }, ...(cachedVideo && picture.chroma ? [{ binding: 3, resource: picture.chroma.createView() }] : [])] }))
+        pass.setBindGroup(0, bind(pipeline, uniform))
         pass.draw(6)
       })
       pass.end()
@@ -606,7 +667,7 @@ export class VideoEditGpuCompositor {
       this.uploads.add(completion)
       const ids = new Set(clips.map(clip => clip.id))
       this.retainTextures(new Set([...this.protectedImages, ...pictures.flatMap((picture, index) => picture instanceof VideoSample || picture instanceof VideoEditGpuFrame || picture instanceof VideoEditCodePicture ? [] : [picture ? this.imageKey(picture) : `text:${clips[index].id}`])]))
-      for (const [id, value] of this.uniforms) if (!ids.has(id) && !this.protectedUniforms.has(id)) { value.destroy(); this.uniforms.delete(id) }
+      for (const [id, value] of this.uniforms) if (!ids.has(id) && !retained.has(id) && !this.protectedUniforms.has(id)) { value.destroy(); this.uniforms.delete(id) }
       return { presented: true, completion }
     } catch (error) { historyBuffer?.destroy(); if (scopeOpen) await device.popErrorScope(); frames.forEach(frame => frame.close()); throw error }
   }
@@ -631,6 +692,7 @@ export class VideoEditGpuCompositor {
     for (const value of this.pool) { value.texture.destroy(); value.chroma?.destroy() }
     this.pool.length = 0; this.blankTexture?.destroy(); this.blankTexture = undefined
     this.precise?.texture.destroy(); this.precise = undefined
+    this.motionTarget?.texture.destroy(); this.motionTarget = undefined
     this.textures.clear(); this.uniforms.clear(); if (!this.shared) this.manager.destroy()
     if (failures.length) throw new AggregateError(failures, '剪辑渲染资源释放失败。')
   }
@@ -644,4 +706,5 @@ export class VideoEditGpuCompositor {
     }
   }
 }
-import { videoEditClipCenterPosition, videoEditClipScaleAspect } from '@/core/videoEdit/clipGeometry'
+import { videoEditClipCenterPosition, videoEditClipScaleAspect, type VideoEditClipPlacement } from '@/core/videoEdit/clipGeometry'
+import type { VideoEditMotionSampledClip } from '@/core/videoEdit/motionBlur'

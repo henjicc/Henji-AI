@@ -79,7 +79,8 @@ export function applyVideoEditSpeedChange(document: VideoEditDocument, sequenceI
     if (change.duration !== undefined) next = stretchVideoEditClip(next, Math.min(change.duration, room))
     else if (change.speed) next = changeVideoEditClipSpeed(next, change.speed, fps, { sourceDurationSeconds: sourceDuration(document, sequence, clip, metadata), maxDuration: room })
     else if (change.timeRemap !== undefined) next = setVideoEditClipTimeRemap(next, change.timeRemap, fps, room)
-    if (change.frameInterpolation !== undefined) { next = { ...next }; if (change.frameInterpolation === 'nearest') delete next.frameInterpolation; else next.frameInterpolation = change.frameInterpolation }
+    // 省略表示跟随序列的“帧混合”开关：序列默认帧采样时选帧采样就不写出来，其余选择都明确记在片段上。
+    if (change.frameInterpolation !== undefined) { next = { ...next }; if (change.frameInterpolation === 'nearest' && !sequence.frameBlend) delete next.frameInterpolation; else next.frameInterpolation = change.frameInterpolation }
     if (change.pitchSemitones !== undefined) { next = { ...next }; if (change.pitchSemitones) next.pitchSemitones = change.pitchSemitones; else delete next.pitchSemitones }
     // 曲线变化时片段内关键帧跟着内容走（同一源时刻落在新时间线位置）；常数速度按比例缩放。
     const followsContent = (clip.timeRemap || next.timeRemap) && Boolean(clip.reverse) === Boolean(next.reverse)

@@ -122,7 +122,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   // 25：批注新增箭头、椭圆、文字、编号圆点形状。旧程序的批注目标是封闭联合，读不懂这些分支，
   // 按“改变已有字段（target）可取值”处理，提高到 25，让旧程序明确提示升级而不是报内容损坏。
   // 26：片段新增非等比缩放 scaleAspect，旧程序忽略它会按等比渲染与导出（画面变形不同），提高到 26。
-  minReaderVersion: 26,
+  // 27：序列新增运动模糊与帧混合开关，旧程序忽略它们会渲染出不同的画面，提高到 27。
+  minReaderVersion: 27,
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
@@ -145,6 +146,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
     24: content => content,
     // 25 → 26：片段新增可选 scaleAspect（非等比缩放），批注样式新增可选 weight（线条粗细）；旧内容原样有效。
     25: content => content,
+    // 26 → 27：序列新增可选 motionBlur（运动模糊）与 frameBlend（帧混合默认补帧）；旧内容原样有效。
+    26: content => content,
   },
   dependencyContent: ({ exportHistory: _exportHistory, ...dependencies }) => dependencies,
   createEmptyContent: createEmptyVideoEditContent,

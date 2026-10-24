@@ -79,3 +79,14 @@ it('通用属性写曲线与 null：时长随曲线变化、与常数速度互�
     expect(JSON.stringify(refused)).toContain('analyze_video_edit_beats')
   } finally { app.dispose() }
 })
+
+it('序列开着帧混合时，片段选帧采样会明确记下；序列默认帧采样时选帧采样不写出（省略即跟随序列）', async () => {
+  const owner = await fixture(); const id = owner.document.id
+  const clip = () => owner.document.sequences[0].clips.find(value => value.id === 'a')!
+  const { executeVideoEditTimelineEdit } = await import('./videoEditTimeline')
+  const setInterpolation = (frameInterpolation: 'nearest' | 'blend'): void => { executeVideoEditTimelineEdit(id, owner.document.sequences[0].id, { kind: 'speed', clipIds: ['a'], linked: { links: false, groups: false }, change: { frameInterpolation } }) }
+  setInterpolation('blend'); expect(clip().frameInterpolation).toBe('blend')
+  setInterpolation('nearest'); expect(clip().frameInterpolation).toBeUndefined()
+  editVideoProject(id, document => ({ ...document, sequences: document.sequences.map((sequence, index) => index ? sequence : { ...sequence, frameBlend: true }) }))
+  setInterpolation('nearest'); expect(clip().frameInterpolation).toBe('nearest')
+})

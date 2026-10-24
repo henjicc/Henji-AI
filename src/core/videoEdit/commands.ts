@@ -102,6 +102,9 @@ export const VIDEO_EDIT_COMMANDS = [
   command('nudge_down', '片段下移一轨', ['timeline'], key('ArrowDown', false, false, true), true),
   command('toggle_snapping', '吸附', ['timeline'], key('KeyS')),
   command('toggle_linked_selection', '链接选择', ['timeline']),
+  // 时间线统一开关（重要记录 019）：作用于整条序列，写进序列、可撤销；预览与导出一致。
+  command('toggle_motion_blur', '运动模糊', ['timeline']),
+  command('toggle_frame_blend', '帧混合', ['timeline']),
   command('cut', '剪切片段', editScopes, key('KeyX', true)),
   command('copy', '复制片段', editScopes, key('KeyC', true)),
   command('paste', '粘贴片段', editScopes, key('KeyV', true)),

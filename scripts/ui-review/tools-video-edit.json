@@ -58,7 +58,8 @@
         "seedVideoEdit": {
           "name": "核对-剪辑",
           "captions": 6,
-          "effects": true
+          "effects": true,
+          "motion": true
         }
       },
       {
@@ -416,6 +417,22 @@
       },
       {
         "capture": "effects-chain"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "运动模糊",
+          "within": {
+            "role": "toolbar",
+            "name": "时间线开关"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "motion-blur"
       },
       {
         "open": {

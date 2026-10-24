@@ -1,3 +1,4 @@
+import type { VideoEditMotionSampledClip } from '@/core/videoEdit/motionBlur'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/document'
 import type { VideoEditCompositeNode } from '@/core/videoEdit/compositing'
@@ -46,7 +47,7 @@ export function videoEditCompositeSurfaceKeys(nodes: readonly VideoEditComposite
   nodes.forEach(visit); return keys
 }
 /** Render-only full-canvas layer; original persisted geometry and clocks stay unchanged. */
-function identity(clip: VideoEditClip): VideoEditClip { const result: VideoEditTrackedClip = { ...clip, x: 0, y: 0, anchorX: 0.5, anchorY: 0.5, scale: 1, rotation: 0, opacity: 1 }; delete result.trackingQuad; return result }
+function identity(clip: VideoEditClip): VideoEditClip { const result: VideoEditTrackedClip & VideoEditMotionSampledClip = { ...clip, x: 0, y: 0, anchorX: 0.5, anchorY: 0.5, scale: 1, rotation: 0, opacity: 1 }; delete result.scaleAspect; delete result.trackingQuad; delete result.motionSamples; return result }
 
 /**
  * `document` carries the size the frame is drawn at; `logical` is the sequence's own size. They differ only at a reduced

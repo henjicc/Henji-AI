@@ -1,0 +1,335 @@
+{
+  "format": "henji-document",
+  "envelopeVersion": 1,
+  "minReaderVersion": 1,
+  "kind": "screen_recording",
+  "kindVersion": 30,
+  "kindMinReaderVersion": 30,
+  "id": "golden-screen_recording",
+  "name": "录制",
+  "createdAt": "2026-10-09T00:00:00.000Z",
+  "updatedAt": "2026-10-09T00:00:00.000Z",
+  "revision": 0,
+  "content": {
+    "directorRun": {
+      "takes": [
+        {
+          "stepId": "step",
+          "identity": "golden",
+          "path": "/persistence-project/素材/voice.wav",
+          "durationUs": 1000000
+        }
+      ],
+      "redubs": [
+        {
+          "clipId": "clip",
+          "documentId": "video",
+          "identity": "redub",
+          "taskId": "task"
+        }
+      ]
+    },
+    "sessionId": "00000000-0000-4000-8000-000000000005",
+    "originUs": 1000000,
+    "startUs": 3000000,
+    "endUs": 13000000,
+    "pauses": [
+      {
+        "startUs": 6000000,
+        "endUs": 7000000
+      }
+    ],
+    "status": "stopped",
+    "source": {
+      "name": "合成显示器",
+      "options": {
+        "bitrate": 12000000,
+        "sourceId": "screen:1:0",
+        "backend": "auto",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30
+      },
+      "cursorEmbedded": false,
+      "cursor": {
+        "size": 1.4,
+        "style": "light"
+      }
+    },
+    "devices": {
+      "systemAudio": false
+    },
+    "media": [
+      {
+        "id": "screen-0",
+        "kind": "screen",
+        "path": "/persistence-project/素材/screen.mp4",
+        "monoUs": 3000000,
+        "durationUs": 10000000
+      }
+    ],
+    "tracks": null,
+    "eventPages": [
+      {
+        "path": "/persistence-project/素材/0000000000000000-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.capture.json",
+        "firstSequence": 0,
+        "lastSequence": 2
+      }
+    ],
+    "markers": [
+      {
+        "id": "golden-mark",
+        "monoUs": 4000000,
+        "note": "重点"
+      }
+    ],
+    "understanding": {
+      "director": {
+        "goal": "演示编辑器",
+        "narration": [
+          {
+            "stepId": "step",
+            "text": "打开编辑器",
+            "picture": "剪辑工作区"
+          }
+        ],
+        "voice": {
+          "modelId": "golden-tts",
+          "options": {
+            "voice_id": "speaker"
+          }
+        },
+        "confirmed": true
+      },
+      "operationScript": {
+        "steps": [
+          {
+            "id": "step",
+            "title": "打开编辑器",
+            "startUs": 3000000,
+            "endUs": 13000000,
+            "operations": [
+              {
+                "target": {
+                  "kind": "video_edit.sequence",
+                  "id": "golden-replay:golden-replay-sequence"
+                },
+                "properties": {
+                  "video_edit.sequence.name": "演示序列"
+                }
+              }
+            ],
+            "narrationIds": [
+              "word"
+            ],
+            "wait": {
+              "kind": "capability_completed",
+              "settleMs": 700
+            },
+            "blockedReason": null
+          }
+        ]
+      },
+      "privacy": {
+        "candidates": [
+          {
+            "id": "privacy",
+            "mediaId": "screen-0",
+            "kind": "email",
+            "hint": "••••",
+            "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "startUs": 3000000,
+            "endUs": 5000000,
+            "status": "accepted",
+            "samples": [
+              {
+                "monoUs": 3000000,
+                "box": [
+                  0.1,
+                  0.2,
+                  0.4,
+                  0.1
+                ],
+                "confidence": 0.99
+              },
+              {
+                "monoUs": 4000000,
+                "box": [
+                  0.1,
+                  0.3,
+                  0.4,
+                  0.1
+                ],
+                "confidence": 0.98
+              }
+            ]
+          }
+        ],
+        "warnings": []
+      },
+      "transcript": [
+        {
+          "id": "word",
+          "startUs": 3000000,
+          "endUs": 4000000,
+          "text": "打开编辑器",
+          "granularity": "word",
+          "audioDocumentId": "audio",
+          "mediaId": "mic",
+          "protected": false
+        }
+      ],
+      "steps": [
+        {
+          "id": "step",
+          "startUs": 3000000,
+          "endUs": 13000000,
+          "title": "打开编辑器",
+          "description": "进入编辑器",
+          "signal": "capability",
+          "eventIds": [
+            "event"
+          ]
+        }
+      ],
+      "candidates": [
+        {
+          "id": "wait",
+          "startUs": 5000000,
+          "endUs": 9000000,
+          "kind": "wait",
+          "reason": "画面静止、无输入、无旁白",
+          "status": "pending",
+          "eventIds": []
+        }
+      ],
+      "chapters": [
+        {
+          "id": "chapter",
+          "title": "编辑",
+          "stepIds": [
+            "step"
+          ]
+        }
+      ],
+      "warnings": []
+    },
+    "scriptCapture": {
+      "baselines": [
+        {
+          "documentId": "golden-replay",
+          "content": {
+            "styles": [
+              {
+                "id": "golden-style",
+                "name": "黄金风格",
+                "description": "用于持久格式样本的风格。",
+                "version": 2,
+                "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "updatedAt": "2026-10-09T00:00:00.000Z",
+                "guide": "# 黄金风格\n\n> 冷静的科技讲解\n\n## 定位\n\n<!-- 2–4 句：给谁看、什么场合、要什么感觉、不要什么感觉。可附风格坐标（克制↔张扬、精密↔手作、平面↔立体、冷静↔热闹、严肃↔好玩，各 1–5）。 -->\n\n## 不变量与自由度\n\n<!-- 不变量 3–5 条：一眼能认出这个风格、任何画面都不能丢的东西。自由度：哪些地方鼓励发挥。 -->\n\n## 色彩\n\n<!-- 按角色写：底色、主文字、次要文字、强调色、语义色、压在实拍上的处理；写清比例与用法。 -->\n\n## 字体与排版\n\n<!-- 标题、正文、数字各一条字体优先级链；层级比例以画面高度为参照；字距、行距与中英混排。 -->\n\n## 版式与构图\n\n<!-- 网格与对齐、留白、视觉焦点、信息密度、形状语言（圆角/直角、线条粗细）。 -->\n\n## 动效\n\n<!-- 运动性格一句话；入场、换位、离场的曲线；快中慢三档时长；谁先动、错峰规律。 -->\n\n## 镜头与转场\n\n<!-- 一镜到底还是分镜头；转场方式；镜头时长；景深、视差、摄像机运动。 -->\n\n## 质感\n\n<!-- 颗粒、阴影、辉光、描边、圆角、材质；哪些绝对不用。 -->\n\n## 声音\n\n<!-- 音效性格、动作和音效对点的规则、音乐类型与节奏；没有要求写“不限”。 -->\n\n## 组件\n\n<!-- 标题卡、要点、数据、人名条、字幕、强调花字、片尾各写一两句做法，以及它们共用的底板和入场。 -->\n\n## 画幅适配\n\n<!-- 横屏 16:9 与竖屏 9:16 怎么变：字号参照哪条边、版式怎么重排、竖屏避开的平台遮挡区。 -->\n\n## 设计原则\n\n<!-- 硬约束：不能违反的结构性原则。倾向：默认这样做，有理由可以不这样。 -->\n\n## 正反例\n\n<!-- 做：2–4 条典型的好做法。不做：2–4 条最容易犯、最伤风格的做法。 -->\n\n## 样片与代码\n\n<!-- 样片按标准分镜演示本风格；写明哪些函数可以照搬（缓动、排版、组件绘制），哪些只是样片内容。 -->\n",
+                "userPreferences": [
+                  {
+                    "id": "golden-style-memory",
+                    "content": "标题少用装饰线。",
+                    "source": "user",
+                    "updatedAt": "2026-10-09T00:00:00.000Z",
+                    "revision": 1
+                  }
+                ],
+                "sample": {
+                  "code": {
+                    "entry": "index.js",
+                    "files": {
+                      "index.js": "// 风格样片：按标准分镜演示本风格。整段时长、尺寸、锚点帧在风格的 sample 设置里。\n// 改风格时先改 STYLE 里的取值和下面各层的画法；分镜与文案保持标准，方便不同风格并排比较。\n// 只能用相对导入（同目录内的文件），不访问网络、文件或 DOM；量字用 OffscreenCanvas。\n//\n// 分层写法（运行时据此做运动模糊，默认 180° 快门）：\n// - layers() 从后到前返回若干层；没有 pose 的层是静止层，按当前时刻 t 在画面坐标里画。\n// - 会动的元素各成一层：在本地坐标里画内容，bounds 给出本地内容范围，pose(t) 给出\n//   { x, y, rotation, scale / scaleX / scaleY, opacity }，不可见时返回 null。内容随时间变的（计数、逐字）照常在 draw 里按 t 画。\n// - 文字从遮罩里升起这类效果：加 clip（画面坐标里固定的矩形），内容随 pose 移动，遮罩不动。\n\nconst STYLE = {\n  color: {\"bg\":\"#F4F2EE\", \"text\":\"#16181D\", \"muted\":\"#6B6F78\", \"accent\":\"#2F5BFF\", \"line\":\"#D9D6CF\"},\n  font: {\n    title: '\"HarmonyOS Sans SC\", \"Source Han Sans SC\", \"Microsoft YaHei\", sans-serif',\n    body: '\"HarmonyOS Sans SC\", \"Source Han Sans SC\", \"Microsoft YaHei\", sans-serif',\n    number: '\"DIN Alternate\", \"Bahnschrift\", \"Segoe UI\", sans-serif',\n  },\n};\n\n// 标准分镜（秒）与标准文案。\nconst SCENES = { title: [0, 1.8], list: [1.8, 3.8], data: [3.8, 5.6], name: [5.6, 6.9], end: [6.9, 8] };\nconst COPY = {\n  title: \"把想法变成画面\",\n  subtitle: \"风格样片 · STYLE SAMPLE\",\n  list: [\"统一的配色\", \"统一的字体\", \"统一的节奏\"],\n  data: { value: 87, unit: \"%\", label: \"一次通过率\" },\n  name: { name: \"痕继痕迹\", role: \"动效设计师\" },\n  end: \"一个风格，处处一致\",\n};\n\nconst clamp = (v) => Math.max(0, Math.min(1, v));\nconst expoOut = (v) => (v >= 1 ? 1 : 1 - Math.pow(2, -10 * clamp(v)));\nconst cubicIn = (v) => clamp(v) ** 3;\nconst within = (t, [a, b]) => t >= a && t < b;\n// 场景内进度：入场 [a, a+inDur]，离场 [b-outDur, b]。\nfunction phase(t, [a, b], delay = 0, inDur = 0.6, outDur = 0.3) {\n  return { enter: expoOut((t - a - delay) / inDur), leave: cubicIn((t - (b - outDur)) / outDur) };\n}\nconst font = (weight, size, family) => `${weight} ${Math.round(size)}px ${family}`;\n\nfunction layers(_params, w, h) {\n  // u：以 720 高为基准的长度单位，竖屏和其他尺寸按画面高度等比缩放。\n  const u = h / 720, x = w * 0.1, C = STYLE.color, F = STYLE.font, out = [];\n  out.push({ draw: (ctx) => { ctx.fillStyle = C.bg; ctx.fillRect(0, 0, w, h); } });\n\n  // 标题：强调短线向右展开，标题与副标题上浮淡入。\n  const title = SCENES.title, ty = h * 0.5;\n  out.push({\n    bounds: [0, 0, 48 * u, 6 * u],\n    pose: (t) => {\n      const p = phase(t, title);\n      return within(t, title) && p.enter > 0.002 ? { x, y: ty - 96 * u, scaleX: p.enter, scaleY: 1, opacity: 1 - p.leave } : null;\n    },\n    draw: (ctx) => { ctx.fillStyle = C.accent; ctx.fillRect(0, 0, 48 * u, 6 * u); },\n  });\n  out.push({\n    bounds: [-10 * u, -70 * u, 520 * u, 60 * u],\n    pose: (t) => {\n      const p = phase(t, title);\n      return within(t, title) ? { x, y: ty + (1 - p.enter) * 24 * u - p.leave * 16 * u, opacity: p.enter * (1 - p.leave) } : null;\n    },\n    draw: (ctx) => {\n      ctx.fillStyle = C.text; ctx.font = font(700, 64 * u, F.title); ctx.fillText(COPY.title, 0, 0);\n      ctx.fillStyle = C.muted; ctx.font = font(400, 22 * u, F.body); ctx.fillText(COPY.subtitle, 0, 48 * u);\n    },\n  });\n\n  // 要点：每条从左侧滑入。\n  const list = SCENES.list;\n  COPY.list.forEach((item, i) => {\n    out.push({\n      bounds: [-4 * u, -40 * u, 320 * u, 14 * u],\n      pose: (t) => {\n        const p = phase(t, [list[0] + i * 0.12, list[1]], 0, 0.5, 0.3);\n        return within(t, list) && p.enter > 0 ? { x: x + (1 - p.enter) * 20 * u, y: h * 0.36 + i * 72 * u, opacity: p.enter * (1 - p.leave) } : null;\n      },\n      draw: (ctx) => {\n        ctx.fillStyle = C.accent; ctx.fillRect(0, -14 * u, 8 * u, 8 * u);\n        ctx.fillStyle = C.text; ctx.font = font(500, 36 * u, F.body); ctx.fillText(item, 28 * u, 0);\n      },\n    });\n  });\n\n  // 数据：数字计数（内容变化，静止层），进度条向右展开。\n  const data = SCENES.data, count = (t) => Math.round(COPY.data.value * expoOut((t - data[0]) / 1.2));\n  out.push({\n    draw: (ctx, t) => {\n      if (!within(t, data)) return;\n      const p = phase(t, data);\n      ctx.globalAlpha = p.enter * (1 - p.leave);\n      ctx.fillStyle = C.text; ctx.font = font(700, 140 * u, F.number); ctx.fillText(`${count(t)}${COPY.data.unit}`, x, h * 0.56);\n      ctx.fillStyle = C.muted; ctx.font = font(400, 24 * u, F.body); ctx.fillText(COPY.data.label, x, h * 0.56 + 44 * u);\n      ctx.fillStyle = C.line; ctx.fillRect(x, h * 0.72, w * 0.8, 4 * u);\n      ctx.globalAlpha = 1;\n    },\n  });\n  out.push({\n    bounds: [0, 0, 100, 4 * u],\n    pose: (t) => {\n      const p = phase(t, data), len = w * 0.8 * (count(t) / 100);\n      return within(t, data) && len > 0.5 ? { x, y: h * 0.72, scaleX: len / 100, scaleY: 1, opacity: p.enter * (1 - p.leave) } : null;\n    },\n    draw: (ctx) => { ctx.fillStyle = C.accent; ctx.fillRect(0, 0, 100, 4 * u); },\n  });\n\n  // 人名条：竖线向下长出，名字与职位淡入。\n  const name = SCENES.name, ny = h * 0.78;\n  out.push({\n    bounds: [0, 0, 6 * u, 64 * u],\n    pose: (t) => {\n      const p = phase(t, name, 0, 0.5, 0.3);\n      return within(t, name) && p.enter > 0.002 ? { x, y: ny - 40 * u, scaleX: 1, scaleY: p.enter, opacity: 1 - p.leave } : null;\n    },\n    draw: (ctx) => { ctx.fillStyle = C.accent; ctx.fillRect(0, 0, 6 * u, 64 * u); },\n  });\n  out.push({\n    draw: (ctx, t) => {\n      if (!within(t, name)) return;\n      const p = phase(t, name, 0, 0.5, 0.3);\n      ctx.globalAlpha = p.enter * (1 - p.leave);\n      ctx.fillStyle = C.text; ctx.font = font(700, 34 * u, F.title); ctx.fillText(COPY.name.name, x + 24 * u, ny - 4 * u);\n      ctx.fillStyle = C.muted; ctx.font = font(400, 20 * u, F.body); ctx.fillText(COPY.name.role, x + 24 * u, ny + 24 * u);\n      ctx.globalAlpha = 1;\n    },\n  });\n\n  // 收尾：一句话居中淡入。\n  const end = SCENES.end;\n  out.push({\n    draw: (ctx, t) => {\n      if (t < end[0]) return;\n      ctx.globalAlpha = phase(t, [end[0], 99]).enter;\n      ctx.fillStyle = C.text; ctx.font = font(700, 48 * u, F.title); ctx.textAlign = \"center\";\n      ctx.fillText(COPY.end, w / 2, h / 2 + 16 * u);\n      ctx.textAlign = \"left\"; ctx.globalAlpha = 1;\n    },\n  });\n  return out;\n}\n\nexport default {\n  name: \"风格样片\", kind: \"generator\", mode: \"dynamic\",\n  nameEnglish: \"Style sample\",\n  params: [],\n  motionBlur: { shutter: 180 },\n  layers,\n};\n"
+                    }
+                  },
+                  "width": 1280,
+                  "height": 720,
+                  "durationSeconds": 8,
+                  "fps": 24,
+                  "thumbnail": 1.2,
+                  "anchors": [
+                    1.2,
+                    3.2,
+                    5.2,
+                    6.4,
+                    7.8
+                  ]
+                }
+              }
+            ],
+            "format": "henji-video-project",
+            "version": 10,
+            "id": "golden-replay",
+            "name": "重放起点",
+            "revision": 0,
+            "media": [],
+            "bins": [],
+            "items": [],
+            "sequences": [
+              {
+                "styleId": "golden-style",
+                "id": "golden-replay-sequence",
+                "name": "原始序列",
+                "width": 1920,
+                "height": 1080,
+                "frameRate": {
+                  "numerator": 30,
+                  "denominator": 1
+                },
+                "pixelAspectRatio": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "sampleRate": 48000,
+                "channels": 2,
+                "tracks": [
+                  {
+                    "id": "9f6d02d3-b711-46cc-9577-c89431741ed3",
+                    "name": "音频 1",
+                    "index": 0,
+                    "kind": "audio",
+                    "locked": false,
+                    "enabled": true,
+                    "muted": false,
+                    "solo": false
+                  },
+                  {
+                    "id": "ec4be458-62db-44e6-bd4b-49dcf75bfefd",
+                    "name": "视频 1",
+                    "index": 1,
+                    "kind": "video",
+                    "locked": false,
+                    "enabled": true,
+                    "muted": false,
+                    "solo": false
+                  }
+                ],
+                "clips": [],
+                "annotations": []
+              }
+            ]
+          }
+        }
+      ],
+      "calls": [
+        {
+          "callId": "00000000-0000-4000-8000-000000000006",
+          "operations": [
+            {
+              "target": {
+                "kind": "video_edit.sequence",
+                "id": "golden-replay:golden-replay-sequence"
+              },
+              "properties": {
+                "video_edit.sequence.name": "演示序列"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "compositions": []
+  }
+}

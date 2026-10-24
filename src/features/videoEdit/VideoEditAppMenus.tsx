@@ -8,7 +8,7 @@ import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditComma
 const groups: readonly { menu: string; label?: string; ids: readonly VideoEditCommandId[] }[] = [
   { menu: 'file', ids: ['new_project', 'import', 'save', 'export'] },
   { menu: 'edit', ids: ['undo', 'redo', 'cut', 'copy', 'paste', 'delete', 'select_all'] },
-  { menu: 'sequence', label: '序列', ids: ['new_sequence', 'match_frame', 'reverse_match_frame', 'apply_video_transition', 'apply_audio_transition'] },
+  { menu: 'sequence', label: '序列', ids: ['new_sequence', 'match_frame', 'reverse_match_frame', 'apply_video_transition', 'apply_audio_transition', 'toggle_motion_blur', 'toggle_frame_blend'] },
   { menu: 'clip', label: '剪辑', ids: ['split', 'split_tracks', 'ripple_delete', 'link', 'unlink', 'group', 'ungroup', 'clip_speed', 'audio_gain', 'separate_audio'] },
   { menu: 'marker', label: '标记', ids: ['add_marker', 'prev_marker', 'next_marker', 'mark_in', 'mark_out', 'clear_in_out'] },
 ]

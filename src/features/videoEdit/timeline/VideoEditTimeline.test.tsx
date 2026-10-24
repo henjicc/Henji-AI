@@ -994,3 +994,20 @@ it('拖动吸上时轨道上显示吸附提示线：片段移动、过渡块与 
   fireEvent.pointerUp(host, event(header + 41, 14)); expect(line()).toBeNull()
   expect(onError).not.toHaveBeenCalled()
 })
+
+it('时间线统一开关：运动模糊与帧混合写进序列、各一步撤销，开着时图标亮起（重要记录 019）', async () => {
+  const view = render(<View />)
+  const corner = within(view.getByRole('toolbar', { name: '时间线开关' }))
+  const history = owner.past.length
+  fireEvent.click(corner.getByRole('button', { name: '运动模糊' }))
+  await waitFor(() => expect(getActiveVideoEditSequence(owner).motionBlur).toBe(true))
+  expect(corner.getByRole('button', { name: '运动模糊' }).getAttribute('aria-pressed')).toBe('true')
+  fireEvent.click(corner.getByRole('button', { name: '帧混合' }))
+  await waitFor(() => expect(getActiveVideoEditSequence(owner).frameBlend).toBe(true))
+  expect(owner.past).toHaveLength(history + 2)
+  act(() => undoVideoEdit(owner.document.id))
+  expect(getActiveVideoEditSequence(owner).frameBlend).toBeUndefined(); expect(getActiveVideoEditSequence(owner).motionBlur).toBe(true)
+  fireEvent.click(corner.getByRole('button', { name: '运动模糊' }))
+  await waitFor(() => expect(getActiveVideoEditSequence(owner).motionBlur).toBeUndefined())
+  expect(onError).not.toHaveBeenCalled()
+})

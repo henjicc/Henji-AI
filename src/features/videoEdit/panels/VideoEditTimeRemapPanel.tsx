@@ -66,7 +66,7 @@ export function VideoEditTimeRemapPanel({ instance, sequence, clip, onError }: {
     </>}
     <UiFormRow label="补帧" density="compact" info="慢放时相邻两帧怎样过渡：采样取最近的一帧；混合把相邻两帧按位置混合，慢放更顺但有重影。">
       {/* 光流补帧尚未实现，不出现在界面上；旧数据里的 optical_flow 按帧混合渲染，这里也显示为“混合”。 */}
-      <UiSegmented<VideoEditFrameInterpolation> ariaLabel="补帧方式" size="sm" value={clip.frameInterpolation === 'nearest' || !clip.frameInterpolation ? 'nearest' : 'blend'} onChange={value => apply({ frameInterpolation: value })}
+      <UiSegmented<VideoEditFrameInterpolation> ariaLabel="补帧方式" size="sm" value={(clip.frameInterpolation ?? (sequence.frameBlend ? 'blend' : 'nearest')) === 'nearest' ? 'nearest' : 'blend'} onChange={value => apply({ frameInterpolation: value })}
         options={[{ value: 'nearest', label: '采样' }, { value: 'blend', label: '混合' }]} />
     </UiFormRow>
     <UiFormRow label="变调" density="compact" info="升降音调，不改变速度与时长；+12 高一个八度。">

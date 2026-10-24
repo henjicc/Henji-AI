@@ -114,6 +114,9 @@ const FX_GLYPH: IconNode = [
 ]
 export const ICON_EFFECT_ENABLED: LucideIcon = createLucideIcon('effect-enabled', [...FX_GLYPH])
 export const ICON_EFFECT_DISABLED: LucideIcon = createLucideIcon('effect-disabled', [...FX_GLYPH, ['path', { d: 'M3 21L21 3', key: 'slash' }]])
+/** 时间线统一开关：运动模糊（拖着残影的圆）与帧混合（两帧叠在一起）。lucide 没有这两个字形，按 24 网格自绘。 */
+export const ICON_MOTION_BLUR: LucideIcon = createLucideIcon('motion-blur', [['path', { d: 'M2 9h6M3 12h5M2 15h6', key: 'trail' }], ['circle', { cx: '15', cy: '12', r: '6', key: 'body' }]])
+export const ICON_FRAME_BLEND: LucideIcon = createLucideIcon('frame-blend', [['rect', { x: '3', y: '4', width: '12', height: '10', rx: '1', key: 'back' }], ['rect', { x: '9', y: '10', width: '12', height: '10', rx: '1', key: 'front' }]])
 
 /* 其他跨界面概念 ----------------------------------------------------------- */
 

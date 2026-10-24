@@ -15,6 +15,7 @@ import { createLogger } from '@/core/logging'
 import { videoEditShaderGraphWarmSpecs } from '@/core/videoEdit/shaderGraph/effects'
 import { isShaderGraphTransition, shaderGraphTransitionSpec } from '@/core/videoEdit/shaderGraph/transitions'
 import type { VideoEditEffect } from '@/core/videoEdit/compositing'
+import { videoEditMotionBlurSamples, type VideoEditMotionSampledClip } from '@/core/videoEdit/motionBlur'
 import { evaluateVideoEditClip, evaluateVideoEditBuiltinParameters, videoEditClipValue } from '@/core/videoEdit/keyframes'
 import { videoEditClipMedia, videoEditNestedComposition, videoEditDuration, activeVideoEditClips, audibleVideoEditClips, clipSourceSeconds, videoEditVisibleTracks, type VideoEditClip, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
 import { videoEditNestedFrame, videoEditNestedPictureFrame, videoEditNestedPictureKey } from '@/core/videoEdit/nestedSequences'
@@ -38,7 +39,7 @@ import { VideoEditBrowserFrames } from './videoEditBrowserFrames'
 import { videoEditSourceReadError } from './videoEditSourceErrors'
 import { videoEditAudioTransitionClipGain, videoEditHandleFrame, videoEditTransitionMedium, videoEditTransitionWindow, videoEditTransitionsAt, type VideoEditTransitionWindow } from '@/core/videoEdit/transitions'
 import { videoEditClipFades, videoEditFadeGain, videoEditFadeOpacity } from '@/core/videoEdit/fades'
-import { applyVideoEditClipFollow, applyVideoEditStabilization } from './videoEditTrackResults'
+import { applyVideoEditClipFollow, applyVideoEditStabilization, videoEditClipTrackingQuad } from './videoEditTrackResults'
 import { activeVideoEditAudioEffects, activeVideoEditEffects, buildVideoEditCompositePlan } from '@/core/videoEdit/compositing'
 import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys } from './videoEditCompositeScene'
 import { videoEditAudioMixReads, videoEditDefaultAudioGains } from '@/core/videoEdit/audioChannels'
@@ -840,6 +841,13 @@ export class VideoEditRenderer {
       const evaluated = evaluateVideoEditClip(clip, frame)
       return videoEditClipFades(clip) ? { ...evaluated, opacity: evaluated.opacity * videoEditFadeOpacity(clip, frame) } : evaluated
     }), frame)).filter(clip => !['code', 'graphic'].includes(clip.kind) || clip.opacity > 0 || activeVideoEditEffects(clip).length || transitionIds.has(clip.id))
+    // 运动模糊（序列开关）：有变换动画的画面片段带上快门内的取样变换，合成器平均后叠到画面上（预览与导出同一份）。
+    if (document.motionBlur) for (const [index, clip] of active.entries()) {
+      const source = candidates.get(clip.id)
+      if (!source || clip.kind === 'adjustment' || videoEditClipTrackingQuad(clip)) continue
+      const motionSamples = videoEditMotionBlurSamples(document, source, clip, frame)
+      if (motionSamples) active[index] = { ...clip, motionSamples } as VideoEditMotionSampledClip
+    }
     const byId = new Map(active.map(clip => [clip.id, clip]))
     const transitions = rawTransitions.map(window => ({ ...window, left: byId.get(window.left.id)!, right: byId.get(window.right.id)! }))
     if (!cachedWindow) active.push(...videoEditCaptionClips(document, frame))
@@ -1040,7 +1048,9 @@ export class VideoEditRenderer {
       // 帧混合（时间重映射补帧）：源位置落在两幅源画面之间时，按位置把下一幅混合进来。
       // 只在慢于原速处混合：原速或加速时两幅源画面的间隔不超过一帧，混合只增加解码量（如 59.94 素材放在 60 序列）。
       const slowed = () => Math.abs(clipSourceSeconds(clip, frame + 1, document.fps) - clipSourceSeconds(clip, frame, document.fps)) * document.fps < .995
-      if (clip.frameInterpolation && videoEditRenderedFrameInterpolation(clip.frameInterpolation) === 'blend' && !clip.frameHold && slowed()) {
+      // 片段没设补帧方式时跟随序列的“帧混合”开关（重要记录 019）。
+      const interpolation = clip.frameInterpolation ?? (document.frameBlend ? 'blend' : undefined)
+      if (interpolation && videoEditRenderedFrameInterpolation(interpolation) === 'blend' && !clip.frameHold && slowed()) {
         const current = source.current
         const weight = (originalTime - current.timestamp) / current.duration
         const partnerTime = videoEditPictureSeconds(current.timestamp + current.duration)

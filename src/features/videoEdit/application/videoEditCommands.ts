@@ -9,7 +9,7 @@ import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { expandVideoEditSelection, videoEditPickRelations, type VideoEditRelations } from '@/core/videoEdit/timelineSelection'
 import { applyVideoEditTimelineEdit, type VideoEditClipboard, type VideoEditTimelineEdit } from '@/core/videoEdit/timelineEdits'
 import { videoEditSyncCorrections } from '@/core/videoEdit/linkSync'
-import { appendVideoEditSequence, createVideoEditProject, focusVideoEditPanel, findActiveVideoEditSequence, getActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, saveVideoEdit, setVideoEditProjectView, setVideoEditTimelineView, setVideoEditView, videoEditProgramCommandIdentity, switchVideoEditSequence, undoVideoEdit, type VideoEditInstance } from './videoEditService'
+import { appendVideoEditSequence, createVideoEditProject, editVideoSequence, focusVideoEditPanel, findActiveVideoEditSequence, getActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, saveVideoEdit, setVideoEditProjectView, setVideoEditTimelineView, setVideoEditView, videoEditProgramCommandIdentity, switchVideoEditSequence, undoVideoEdit, type VideoEditInstance } from './videoEditService'
 import { chooseVideoEditMedia } from './videoEditMedia'
 import { openVideoEditAudioGainDialog, openVideoEditExportDialog } from './videoEditAudioDialogs'
 import { videoEditClipHasSound } from './videoEditLoudness'
@@ -191,6 +191,8 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
     if (id === 'match_frame' || id === 'reverse_match_frame') { const reason = videoEditMatchFrameUnavailable(owner, id, context.clipIds, context.frame, context.scope); return { enabled: !reason, ...(reason ? { reason } : {}) } }
     if (id === 'toggle_snapping') return { enabled: true, checked: owner.snapping }
     if (id === 'toggle_linked_selection') return { enabled: true, checked: owner.linkedSelection !== false }
+    if (id === 'toggle_motion_blur') return { enabled: true, checked: Boolean(sequence.motionBlur) }
+    if (id === 'toggle_frame_blend') return { enabled: true, checked: Boolean(sequence.frameBlend) }
     if (id === 'export') return { enabled: sequence.clips.length > 0, reason: '序列没有可导出的片段。' }
     if (id === 'deselect_all') return { enabled: true }
     if (PROJECT_PANEL_COMMANDS.has(id)) return { enabled: false, reason: '请在素材面板中使用。' }
@@ -307,6 +309,8 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
     case 'reverse_match_frame': reverseMatchVideoEditFrame(projectId); return
     case 'toggle_snapping': setVideoEditTimelineView(projectId, { snapping: !owner!.snapping }); return
     case 'toggle_linked_selection': setVideoEditTimelineView(projectId, { linkedSelection: owner!.linkedSelection === false }); return
+    case 'toggle_motion_blur': editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, motionBlur: sequence.motionBlur ? undefined : true })); return
+    case 'toggle_frame_blend': editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, frameBlend: sequence.frameBlend ? undefined : true })); return
     // 面板组最大化属于布局，由剪辑页拿着停靠区执行；素材视图属于素材面板。命令层无事可做。
     case 'project_list_view': case 'project_icon_view': case 'project_toggle_view': return
     case 'go_prev_edit': case 'go_next_edit': case 'go_prev_edit_any': case 'go_next_edit_any': case 'go_start': case 'go_end': case 'go_in': case 'go_out': case 'next_marker': case 'prev_marker':

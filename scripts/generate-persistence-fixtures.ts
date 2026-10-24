@@ -68,6 +68,9 @@ document.codeMaterials = [{ id: 'code-definition', name: '代码标题', default
 document.items.push({ id: 'code-item', name: '代码标题', kind: 'code', code: { definitionId: 'code-definition', versionId: 'code-version', parameters: { label: '黄金样本', size: 24, titleStyle: videoEditTextStyleSchema.parse({ fontSize: 64 }), nodes: [{ id: 'node-0', label: '首项' }] }, curves: { size: [{ id: 'source-key', sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, value: 24, interpolation: 'linear' }] } } })
 const sequence = createVideoEditSequence()
 sequence.id = 'golden-sequence'
+// 27：时间线统一开关。
+sequence.motionBlur = true
+sequence.frameBlend = true
 document.sequences.push(sequence)
 const clip = makeVideoEditItemClip(document, 'code-item', sequence.id, { frame: 0, duration: 90 }, () => program)
 clip.id = 'golden-clip'

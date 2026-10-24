@@ -105,6 +105,8 @@ export function readVideoEditData(ref: ApplicationRef, codeMetadata = false, pro
   if (ref.kind === 'video_edit.sequence') {
     data.captionTrackEnabled ??= true
     data.captionTrackLocked ??= false
+    data.motionBlur ??= false
+    data.frameBlend ??= false
     data.multicam ??= null
     const transcript = !propertyIds?.length || propertyIds.includes('video_edit.sequence.transcript')
     const silences = !propertyIds?.length || propertyIds.includes('video_edit.sequence.text_silences')

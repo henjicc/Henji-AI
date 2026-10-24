@@ -126,8 +126,8 @@ describe('所有登记格式的黄金样本', () => {
     const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.screen_recording')!
     const previous = JSON.parse(fs.readFileSync('tests/fixtures/persistence/document.screen_recording/v26.json', 'utf8'))
     const original = JSON.stringify(previous)
-    expect(format.version).toBe(29)
-    expect(format.minReaderVersion).toBe(29)
+    expect(format.version).toBe(30)
+    expect(format.minReaderVersion).toBe(30)
     expect(upgradePersistenceContent(format, previous.content, 26)).toEqual(previous.content)
     expect(JSON.stringify(previous)).toBe(original)
     const current = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.screen_recording/v27.json', 'utf8'))
@@ -143,6 +143,14 @@ describe('所有登记格式的黄金样本', () => {
     const marks = (current.content as { sequences: Array<{ annotations: Array<{ target: { kind: string }; style?: { color: string } }> }> }).sequences[0].annotations
     expect(marks.map(mark => mark.target.kind)).toEqual(['region', 'arrow', 'ellipse', 'text', 'marker'])
     expect(marks.map(mark => mark.style?.color ?? 'red')).toEqual(['red', 'orange', 'blue', 'red', 'green'])
+  })
+
+  it('剪辑 v26 原样升到 v27；v27 样本序列开着运动模糊与帧混合', () => {
+    const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
+    const previous = JSON.parse(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v26.json', 'utf8'))
+    expect(upgradePersistenceContent(format, previous.content, 26)).toEqual(previous.content)
+    const current = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v27.json', 'utf8'))
+    expect(current).toMatchObject({ kindVersion: 27, kindMinReaderVersion: 27, content: { sequences: [{ motionBlur: true, frameBlend: true }] } })
   })
 
   it('剪辑 v25 原样升到 v26；v26 样本带非等比缩放与粗线批注；字幕回填记录 v16 只改版本号升到 v17', () => {
