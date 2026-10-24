@@ -2,7 +2,9 @@ import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from '@/core/videoEdit/time'
 import { memo, useSyncExternalStore } from 'react'
 import { Trash2 } from 'lucide-react'
-import { UiButton, UiFormRow, UiGroup } from '@/components/ui'
+import { UiButton, UiFormRow } from '@/components/ui'
+import { UI_PROPERTY_INSET_CLASS } from '@/components/ui/styleTokens'
+import { VideoEditEffectSection } from './VideoEditEffectSection'
 import Dropdown from '@/components/ui/Dropdown'
 import NumberInput from '@/components/ui/NumberInput'
 import { ICON_VIDEO_EDIT_TRANSITION } from '@/core/theme/icons'
@@ -45,8 +47,8 @@ export const VideoEditTransitionPanel = memo(function VideoEditTransitionPanel({
   const before = videoEditTransitionFramesBeforeCut(transition)
   const update = (changes: Parameters<typeof updateVideoEditTransition>[3]): void => { void action.run(signal => updateVideoEditTransition(projectId, sequence.id, transition.id, changes, signal), undefined, false) }
   const Icon = ICON_VIDEO_EDIT_TRANSITION
-  return <UiGroup title="过渡" titleTone="compact" divided data-video-edit-transition-panel={transition.id}>
-    <div className="flex min-w-0 items-center gap-2 px-1">
+  return <VideoEditEffectSection id="transition" title="过渡"><div className="flex flex-col" data-video-edit-transition-panel={transition.id}>
+    <div className={`flex min-w-0 items-center gap-2 py-1 ${UI_PROPERTY_INSET_CLASS}`}>
       <Icon size={UI_ICON_SIZE.sm} aria-hidden="true" className="shrink-0 text-text3" />
       <span className="min-w-0 flex-1 truncate text-xs text-text1">{preset.name}</span>
       {window && <span className="shrink-0 truncate text-2xs text-text3" data-user-content>{window.side ? `${window.left.name} ${window.side === 'in' ? '开头' : '结尾'}` : `${window.left.name} → ${window.right.name}`}</span>}
@@ -57,7 +59,7 @@ export const VideoEditTransitionPanel = memo(function VideoEditTransitionPanel({
         onSelect={kind => { if (kind !== transition.kind) update({ kind }) }} />
     </UiFormRow>
     <UiFormRow density="compact" label="持续时间（帧）" hint={`${timelineTimecode(transition.durationFrames, fps)}`}>
-      <NumberInput ariaLabel="过渡持续时间帧" size="sm" min={2} max={VIDEO_EDIT_MAX_SEQUENCE_FRAMES} step={1} precision={0} value={transition.durationFrames} disabled={action.busy}
+      <NumberInput ariaLabel="过渡持续时间帧" size="sm" widthClassName="w-14" align="right" min={2} max={VIDEO_EDIT_MAX_SEQUENCE_FRAMES} step={1} precision={0} value={transition.durationFrames} disabled={action.busy}
         onChange={durationFrames => { if (durationFrames !== transition.durationFrames) update(transition.alignment === 'custom' ? { durationFrames, framesBeforeCut: Math.min(durationFrames, before) } : { durationFrames }) }} />
     </UiFormRow>
     {/* 单侧过渡整段在片段内，没有对齐可选（PR 只列出它所在的一端） */}
@@ -73,8 +75,8 @@ export const VideoEditTransitionPanel = memo(function VideoEditTransitionPanel({
     {params.length > 0 && <div className="flex flex-col" data-video-edit-transition-params={transition.kind}>
       <VideoEditBuiltinParamRows params={params} values={evaluateVideoEditTransitionParams(transition, instance.frame - (window?.start ?? 0))} gesture={gesture} animation={window ? { projectId, curves: transition.frameCurves, start: window.start, duration: transition.durationFrames, frame: instance.frame } : undefined} />
     </div>}
-    <div className="flex items-center gap-2">
+    <div className={`flex items-center gap-2 pt-1 ${UI_PROPERTY_INSET_CLASS}`}>
       <UiButton variant="danger" size="sm" disabled={action.busy} onClick={() => { void action.run(signal => deleteVideoEditTransition(projectId, sequence.id, transition.id, signal), () => selectVideoEditTransition(projectId, null), false) }}><Trash2  aria-hidden="true" />删除过渡</UiButton>
     </div>
-  </UiGroup>
+  </div></VideoEditEffectSection>
 })

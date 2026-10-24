@@ -1,6 +1,8 @@
 import { useState, useSyncExternalStore } from 'react'
-import { RotateCcw, Scan } from 'lucide-react'
-import { Dropdown, UiButton, UiError, UiIconButton, UiSwitch, UiTooltipText } from '@/components/ui'
+import { Scan } from 'lucide-react'
+import { Dropdown, UiButton, UiError, UiIconButton, UiSwitch } from '@/components/ui'
+import { UI_PROPERTY_INSET_CLASS } from '@/components/ui/styleTokens'
+import { VideoEditPropertyRow } from './VideoEditPropertyRow'
 import NumberInput from '@/components/ui/NumberInput'
 import type { VideoEditBuiltinEffect } from '@/core/videoEdit/compositing'
 import { isVideoEditSmartRegionId, SMART_REGION_EXPAND_RANGE, SMART_REGION_FEATHER_RANGE, SMART_REGIONS, VIDEO_EDIT_SMART_REGION_IDS } from '@/core/videoEdit/smartRegions'
@@ -22,12 +24,8 @@ const logger = createLogger('features.videoEdit.tracking')
 /** 去掉一项设置（回到区域默认值），不留 undefined 键。 */
 function without<T extends object, K extends keyof T>(value: T, key: K): T { const { [key]: _removed, ...rest } = value; return rest as T }
 
-function Row({ label, tooltip, children, reset }: { label: string; tooltip: string; children: React.ReactNode; reset?: { label: string; disabled: boolean; onReset: () => void } }): React.ReactElement {
-  return <div className="flex min-h-8 items-center gap-1.5" data-video-edit-smart-region-row={label}>
-    <span className="min-w-0 flex-1 truncate text-xs text-text2"><UiTooltipText tooltip={tooltip}>{label}</UiTooltipText></span>
-    {children}
-    {reset ? <UiIconButton size="2xs" aria-label={reset.label} tooltip={reset.label} disabled={reset.disabled} onClick={reset.onReset}><RotateCcw  /></UiIconButton> : <span className="w-5 shrink-0" aria-hidden="true" />}
-  </div>
+function Row({ label, ...props }: Omit<React.ComponentProps<typeof VideoEditPropertyRow>, 'label'> & { label: string }): React.ReactElement {
+  return <VideoEditPropertyRow label={label} data-video-edit-smart-region-row={label} {...props} />
 }
 
 /**
@@ -53,10 +51,9 @@ export function VideoEditSmartRegionControls({ target, effect, gesture }: { targ
   const trackingRequest = tracker && videoEditTrackingRequest(document, sequence.frameRate, clip, tracker)
   const trackingStatus = videoEditTrackingStatus(trackingRequest?.definition)
   const scrub = (label: string, value: number, range: { min: number; max: number }, apply: (next: number) => void): React.ReactElement => <span className="flex shrink-0 items-center gap-1">
-    <NumberInput ariaLabel={label} increaseLabel={`增加${label}`} decreaseLabel={`减少${label}`} size="sm" value={value} min={range.min} max={range.max} step={1} precision={0} widthClassName="w-20" align="right"
+    <NumberInput ariaLabel={label} increaseLabel={`增加${label}`} decreaseLabel={`减少${label}`} size="sm" value={value} min={range.min} max={range.max} step={1} precision={0} widthClassName="w-14" align="right"
       onScrubStart={gesture.begin} onScrubEnd={cancelled => { if (cancelled) gesture.cancel(); else gesture.finish() }}
       onChange={next => { if (gesture.active() || Math.round(next) !== Math.round(value)) apply(Math.round(next)) }} />
-    <span className="w-6" aria-hidden="true" />
   </span>
   const selectRegion = (value: string): void => {
     if (value.startsWith('tracker:')) { gesture.commit({ mask: { regionId: 'tracker', trackerId: value.slice(8) } }); return }
@@ -71,17 +68,17 @@ export function VideoEditSmartRegionControls({ target, effect, gesture }: { targ
   }
   return <div className="flex flex-col" data-video-edit-smart-region={effect.mask?.regionId ?? WHOLE}>
     <Row label="作用区域" tooltip={analyzable ? '效果只作用在一部分画面里：手绘遮罩在节目画面上画；人脸逐帧跟随，人物与背景按抠像，文字找字幕与标牌（第一次使用会在后台分析素材）。' : '效果只作用在手绘遮罩里：在节目画面上画矩形、椭圆或钢笔路径。'}>
-      <span className="w-32 shrink-0"><Dropdown ariaLabel="作用区域" value={effect.mask?.regionId === 'tracker' ? `tracker:${effect.mask.trackerId}` : effect.mask?.regionId ?? WHOLE} buttonClassName="w-full"
+      <Dropdown ariaLabel="作用区域" value={effect.mask?.regionId === 'tracker' ? `tracker:${effect.mask.trackerId}` : effect.mask?.regionId ?? WHOLE} buttonClassName="w-full"
         options={[{ value: WHOLE, label: '整个画面' }, { value: SHAPES, label: '手绘遮罩' }, ...(clip.trackers ?? []).map(tracker => ({ value: `tracker:${tracker.id}`, label: `跟踪 · ${tracker.name}` })), ...(analyzable ? VIDEO_EDIT_SMART_REGION_IDS.map(id => ({ value: id, label: SMART_REGIONS[id].label })) : [])]}
-        onSelect={selectRegion} /></span>
+        onSelect={selectRegion} />
     </Row>
     <Row label="遮罩" tooltip="在节目画面上画遮罩，效果只作用在遮罩里（可以有多个，按模式相加、相减、交叉）">
       <VideoEditMaskCreateButtons target={target} effect={effect} gesture={gesture} />
     </Row>
     <VideoEditMaskShapeControls target={target} effect={effect} gesture={gesture} trackAction={analyzable ? shape => <UiIconButton size="2xs" aria-label={shape.follow ? '取消遮罩跟踪' : '跟踪遮罩'} tooltip={shape.follow ? '取消遮罩跟踪' : '跟踪遮罩'} on={Boolean(shape.follow)} onClick={() => { try { trackVideoEditMask(target, effect.id, shape.id); setTrackingError(null) } catch (error) { logger.warn('遮罩跟踪绑定失败', { event: 'video_edit.tracking.bind_failed', error }); setTrackingError(error instanceof Error ? error.message : '遮罩跟踪失败，请重试。') } }}><Scan  /></UiIconButton> : undefined} />
-    {trackingError && <UiError size="sm" title="遮罩跟踪失败" message={trackingError} />}
-    {trackingStatus?.state === 'tracking' && <p className="text-xs text-text2" role="status">正在跟踪 {Math.round(trackingStatus.progress * 100)}%</p>}
-    {trackingStatus?.state === 'failed' && <UiError size="sm" title="跟踪失败" message={videoEditTrackingFailureText(trackingStatus.reason)} actions={<UiButton size="sm" onClick={() => { if (trackingRequest) runVideoEditTracking(trackingRequest.definition, trackingRequest.range, { direction: 'both' }) }}>重试</UiButton>} />}
+    {trackingError && <div className={UI_PROPERTY_INSET_CLASS}><UiError size="sm" title="遮罩跟踪失败" message={trackingError} /></div>}
+    {trackingStatus?.state === 'tracking' && <p className={`text-xs text-text2 ${UI_PROPERTY_INSET_CLASS}`} role="status">正在跟踪 {Math.round(trackingStatus.progress * 100)}%</p>}
+    {trackingStatus?.state === 'failed' && <div className={UI_PROPERTY_INSET_CLASS}><UiError size="sm" title="跟踪失败" message={videoEditTrackingFailureText(trackingStatus.reason)} actions={<UiButton size="sm" onClick={() => { if (trackingRequest) runVideoEditTracking(trackingRequest.definition, trackingRequest.range, { direction: 'both' }) }}>重试</UiButton>} /></div>}
     {mask && region && <>
       <Row label="羽化" tooltip="区域边缘的柔和过渡，100 约为画面高度的 10%" reset={{ label: '重置羽化', disabled: mask.feather === undefined, onReset: () => gesture.commit({ mask: without(mask, 'feather') }) }}>
         {scrub('羽化', mask.feather ?? region.defaults.feather, SMART_REGION_FEATHER_RANGE, next => gesture.commit({ mask: { ...mask, feather: next } }))}
@@ -92,10 +89,10 @@ export function VideoEditSmartRegionControls({ target, effect, gesture }: { targ
       <Row label="反转" tooltip="作用到区域以外的部分">
         <span className="flex shrink-0 items-center"><UiSwitch aria-label="反转作用区域" checked={Boolean(mask.invert)} onCheckedChange={checked => gesture.commit({ mask: checked ? { ...mask, invert: true } : without(mask, 'invert') })} /></span>
       </Row>
-      {status?.state === 'analyzing' && <p className="py-1 text-2xs text-text3" role="status" data-video-edit-smart-region-status="analyzing">
+      {status?.state === 'analyzing' && <p className={`py-1 text-2xs text-text3 ${UI_PROPERTY_INSET_CLASS}`} role="status" data-video-edit-smart-region-status="analyzing">
         正在分析画面{status.progress > 0 ? ` ${Math.round(status.progress * 100)}%` : ''}，完成后效果自动出现
       </p>}
-      {status?.state === 'failed' && <div data-video-edit-smart-region-status="failed">
+      {status?.state === 'failed' && <div className={UI_PROPERTY_INSET_CLASS} data-video-edit-smart-region-status="failed">
         <UiError size="sm" align="start" title="作用区域分析失败" message={videoEditSmartRegionFailureText(status.reason)}
           actions={<span className="flex gap-1">
             {request && <UiButton size="sm" onClick={() => retryVideoEditSmartRegion(request)}>重试</UiButton>}

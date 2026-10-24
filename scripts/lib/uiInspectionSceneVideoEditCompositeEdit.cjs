@@ -153,12 +153,13 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         await shot('composite-native-objects-agent-loop')
         phase('任意新滤镜源码、效果链与固定版本候选真实试渲染')
         await selected(baseVideo)
-        await button(page, '编写新滤镜源码').click(); await page.getByLabel('作者源码', { exact: true }).fill(filterSource)
+        // 添加、复制效果在效果控件右下角底栏（重要记录 019）。
+        await button(page, '添加效果').click(); await page.getByRole('menuitem', { name: '编写新滤镜源码', exact: true }).click(); await page.getByLabel('作者源码', { exact: true }).fill(filterSource)
         await button(page, '检查并创建滤镜源码').click(); await page.getByRole('dialog', { name: '编写新滤镜源码', exact: true }).waitFor({ state: 'hidden', timeout: 45000 })
         document = await saved(page, file, value => value.codeMaterials.some(definition => definition.name === '原创红色处理'))
         const definition = document.codeMaterials.find(definition => definition.name === '原创红色处理')
         assert.equal(document.items.filter(item => item.code?.definitionId === definition.id).length, 0)
-        await button(page, '添加到片段').click()
+        await button(page, '添加效果').click(); await page.getByRole('menuitem', { name: definition.name, exact: true }).click()
         document = await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === baseVideo.id).effects?.length === 1)
         const effect = document.sequences[0].clips.find(clip => clip.id === baseVideo.id).effects[0]; const effectRef = ref('video_edit.effect', mixed.id, effect.id)
         await seek(projectRef, 60)
@@ -195,8 +196,7 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         // with the original source effect retained and disabled in its chain.
         await set(effectRef, { 'video_edit.effect.enabled': false })
         await selected(graphicClip)
-        await page.getByLabel('复制效果的来源片段', { exact: true }).click(); await page.getByRole('option', { name: `${sequence.name} · ${baseVideo.name}`, exact: true }).click()
-        await button(page, '复制并替换当前效果链').click()
+        await button(page, '复制其他片段的效果').click(); await page.getByRole('menuitem', { name: `${sequence.name} · ${baseVideo.name}`, exact: true }).click()
         document = await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === graphicClip.id).effects?.length === 1)
         assert.notEqual(document.sequences[0].clips.find(clip => clip.id === graphicClip.id).effects[0].id, effect.id)
         await create('video_edit.effect', graphicRef, [{ 'video_edit.effect.definition_id': definition.id, 'video_edit.effect.version_id': fixed.versionId, 'video_edit.effect.name': '第二真实处理', 'video_edit.effect.amount': .25 }])
@@ -204,7 +204,7 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         const secondId = document.sequences[0].clips.find(clip => clip.id === graphicClip.id).effects[1].id
         // 效果控件：按住头部拖动排序、头部开关 / 重置、点头部选中后 Delete 删除（都不再“检查混合画面”）。
         const firstEffect = document.sequences[0].clips.find(clip => clip.id === graphicClip.id).effects[0]
-        const header = id => page.locator(`[data-video-edit-effect="${id}"] > [role="group"]`)
+        const header = id => page.locator(`[data-video-edit-effect="${id}"] [role="group"]`)
         // 展开的效果参数很长，先收起两项（PR 里也是收起后拖），保证两个头部都在视口内
         for (const name of [firstEffect.name, '第二真实处理']) await button(page, `收起效果${name}`).click()
         await header(firstEffect.id).scrollIntoViewIfNeeded()

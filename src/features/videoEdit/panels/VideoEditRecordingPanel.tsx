@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, Plus, RefreshCw, Trash2 } from 'lucide-react'
-import { Dropdown, UiButton, UiDisclosurePanel, UiFormRow, UiGroup, UiIconButton, UiSegmented, UiSwitch } from '@/components/ui'
+import { Dropdown, UiButton, UiDisclosurePanel, UiFormRow, UiIconButton, UiPropertyUnit, UiSegmented, UiSwitch } from '@/components/ui'
+import { UI_PROPERTY_INSET_CLASS } from '@/components/ui/styleTokens'
 import NumberInput from '@/components/ui/NumberInput'
 import type { VideoEditClip, VideoEditSequence } from '@/core/videoEdit/document'
 import { videoEditClipMedia } from '@/core/videoEdit/document'
@@ -14,6 +15,7 @@ import { RECORDING_ZOOM_DEPTH_LABELS, recordingClipEffect, recordingClipSource, 
 import type { VideoEditInstance } from '../application/videoEditService'
 import { useVideoEditBuiltinParamGesture } from './useVideoEditBuiltinParamGesture'
 import { VideoEditBuiltinParamRows } from './VideoEditBuiltinEffectControls'
+import { VideoEditEffectSection } from './VideoEditEffectSection'
 
 const ADD_ZOOM_US = 3_000_000
 
@@ -30,7 +32,7 @@ function EffectRows({ target, effect, keys, more, onError }: { target: VideoEdit
     <VideoEditBuiltinParamRows params={pick(shown)} values={values} gesture={gesture} />
     {/* One block, so a folded "更多" adds no row gap of its own. */}
     {more?.length ? <div>
-      <UiButton size="sm" aria-expanded={open} onClick={() => setOpen(value => !value)}>{open ? <ChevronDown /> : <ChevronRight />}更多</UiButton>
+      <div className={UI_PROPERTY_INSET_CLASS}><UiButton size="sm" aria-expanded={open} onClick={() => setOpen(value => !value)}>{open ? <ChevronDown /> : <ChevronRight />}更多</UiButton></div>
       <UiDisclosurePanel open={open}><VideoEditBuiltinParamRows params={pick(more)} values={values} gesture={gesture} /></UiDisclosurePanel>
     </div> : null}
   </>
@@ -52,10 +54,11 @@ function ZoomAtPlayhead({ instance, sequence, clip, target, regions, onError }: 
       if (endUs - startUs < 200_000) { onError(new Error('播放头离下一段缩放太近，没有空间再加一段。')); return }
       write([...regions, { id: crypto.randomUUID(), startUs, endUs, depth: 3, focus: 'cursor', origin: 'manual' }])
     }
-    return <div><UiButton size="sm" variant="secondary" onClick={add}><Plus />在播放头处添加缩放</UiButton></div>
+    return <div className={`py-1 ${UI_PROPERTY_INSET_CLASS}`}><UiButton size="sm" variant="secondary" onClick={add}><Plus />在播放头处添加缩放</UiButton></div>
   }
   const fixed = current.focus !== 'cursor' ? current.focus : null
-  return <UiGroup title="播放头所在的缩放" titleTone="compact" labelWidth={72}>
+  return <div className="flex flex-col">
+    <div className={`pt-1 text-xs font-semibold text-text3 ${UI_PROPERTY_INSET_CLASS}`}>播放头所在的缩放</div>
     <UiFormRow label="程度" density="compact" trailing={<UiIconButton size="sm" tone="danger" aria-label="删除这段缩放" tooltip="删除这段缩放" onClick={() => write(regions.filter(region => region !== current))}><Trash2 /></UiIconButton>}>
       <Dropdown size="sm" ariaLabel="缩放程度" value={current.depth} options={RECORDING_ZOOM_DEPTH_LABELS.map((label, index) => ({ value: index + 1, label }))} onSelect={depth => change({ depth: Number(depth) })} />
     </UiFormRow>
@@ -63,12 +66,12 @@ function ZoomAtPlayhead({ instance, sequence, clip, target, regions, onError }: 
       <UiSegmented ariaLabel="缩放对准" size="sm" value={fixed ? 'fixed' : 'cursor'} onChange={value => change({ focus: value === 'cursor' ? 'cursor' : { x: 0.5, y: 0.5 } })} options={[{ value: 'cursor', label: '跟随鼠标' }, { value: 'fixed', label: '固定位置' }]} />
     </UiFormRow>
     {fixed && <UiFormRow label="位置" density="compact" trailing={null} info="缩放对准的点：左右、上下，占画面的百分比。">
-      <div className="flex gap-2">
-        <NumberInput size="sm" ariaLabel="缩放对准左右" value={Math.round(fixed.x * 100)} min={0} max={100} step={1} onChange={x => change({ focus: { ...fixed, x: x / 100 } })} />
-        <NumberInput size="sm" ariaLabel="缩放对准上下" value={Math.round(fixed.y * 100)} min={0} max={100} step={1} onChange={y => change({ focus: { ...fixed, y: y / 100 } })} />
+      <div className="flex items-center">
+        <NumberInput size="sm" widthClassName="w-14" align="right" ariaLabel="缩放对准左右" value={Math.round(fixed.x * 100)} min={0} max={100} step={1} onChange={x => change({ focus: { ...fixed, x: x / 100 } })} /><UiPropertyUnit hanging={false}>%</UiPropertyUnit>
+        <NumberInput size="sm" widthClassName="w-14" align="right" ariaLabel="缩放对准上下" value={Math.round(fixed.y * 100)} min={0} max={100} step={1} onChange={y => change({ focus: { ...fixed, y: y / 100 } })} /><UiPropertyUnit>%</UiPropertyUnit>
       </div>
     </UiFormRow>}
-  </UiGroup>
+  </div>
 }
 
 /**
@@ -115,27 +118,27 @@ export function VideoEditRecordingPanel({ instance, sequence, clip, onError }: {
     finally { if (controller.current === current) { controller.current = undefined; setBusy(false) } }
   }
   return <div className="flex flex-col" data-video-edit-recording-panel={clip.id}>
-    <UiGroup title="鼠标" titleTone="compact" labelWidth={72} divided>
+    <VideoEditEffectSection id="recording-cursor" title="鼠标">
       <UiFormRow label="显示" density="compact"><UiSwitch aria-label="显示鼠标" checked={Boolean(cursor)} onClickCapture={pin} onCheckedChange={on => toggle(RECORDING_CURSOR_EFFECT, on)} /></UiFormRow>
       {cursor && (source.cursorBakedIn
         ? <EffectRows target={target} effect={cursor} keys={['click_style', 'size']} onError={onError} />
         : <EffectRows target={target} effect={cursor} keys={['style', 'size', 'click_style']} more={['smoothing', 'hide_after', 'distinguish_buttons']} onError={onError} />)}
-    </UiGroup>
-    <UiGroup title="缩放" titleTone="compact" labelWidth={72} divided>
+    </VideoEditEffectSection>
+    <VideoEditEffectSection id="recording-zoom" title="缩放">
       <UiFormRow label="自动缩放" density="compact" info="按录制时的点击放大到正在操作的地方，可在时间线的缩放轨上拖动调整。"><UiSwitch aria-label="自动缩放" checked={Boolean(zoom)} disabled={busy} onClickCapture={pin} onCheckedChange={on => { if (on) void regenerate(); else toggle(RECORDING_ZOOM_EFFECT, false) }} /></UiFormRow>
       {zoom && <>
-        <div className="flex items-center gap-2">
+        <div className={`flex items-center gap-2 py-1 ${UI_PROPERTY_INSET_CLASS}`}>
           <span className="min-w-0 flex-1 text-xs text-text2" data-video-edit-recording-zoom-count={regions.length}>{regions.length ? `${regions.length} 段缩放` : '还没有缩放段'}</span>
           <UiButton size="sm" loading={busy} tooltip="按点击重新生成自动缩放段，手动调过的保留" onClick={() => void regenerate()}><RefreshCw />重新生成</UiButton>
         </div>
         <ZoomAtPlayhead instance={instance} sequence={sequence} clip={clip} target={target} regions={regions} onError={onError} />
         <EffectRows target={target} effect={zoom} keys={['transition']} more={['connect']} onError={onError} />
       </>}
-    </UiGroup>
-    <UiGroup title="画框" titleTone="compact" labelWidth={72} divided>
+    </VideoEditEffectSection>
+    <VideoEditEffectSection id="recording-frame" title="画框">
       <UiFormRow label="显示" density="compact"><UiSwitch aria-label="显示画框" checked={Boolean(frame)} onClickCapture={pin} onCheckedChange={on => toggle(RECORDING_FRAME_EFFECT, on)} /></UiFormRow>
       {frame && <EffectRows target={target} effect={frame} keys={['background', 'color', 'padding']} more={['radius', 'shadow']} onError={onError} />}
-    </UiGroup>
+    </VideoEditEffectSection>
     {spacer > 0 && <div aria-hidden="true" style={{ height: spacer }} />}
   </div>
 }

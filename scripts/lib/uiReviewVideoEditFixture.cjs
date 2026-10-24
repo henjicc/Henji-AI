@@ -18,10 +18,11 @@ function normalizeSeedVideoEdit(value) {
   if (!name) throw new Error('seedVideoEdit 需要 name')
   const captions = value?.captions === undefined ? 6 : Number(value.captions)
   if (!Number.isInteger(captions) || captions < 0 || captions > 200) throw new Error('seedVideoEdit.captions 只能是 0–200 的整数')
-  return { name, captions }
+  // effects：给“核对画面”挂两个内置效果（模糊与全能调色），核对效果控件里的效果链与底栏。
+  return { name, captions, effects: value?.effects === true }
 }
 
-function buildProject({ id, name, source, captions }) {
+function buildProject({ id, name, source, captions, effects }) {
   const base = { sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }
   const tracks = (prefix) => [...Array.from({ length: 4 }, (_, index) => ({ id: `${prefix}-track-${index}`, name: index ? `视频 ${index}` : '音频 1', index, kind: index ? 'video' : 'audio', locked: false, enabled: true, muted: false, solo: false })),
     { id: `${prefix}-track-4`, name: '音频 2', index: 4, kind: 'audio', locked: false, enabled: true, muted: false, solo: false }]
@@ -41,7 +42,11 @@ function buildProject({ id, name, source, captions }) {
         id: `${id}-seq`, name: '主序列', width: 1280, height: 720, frameRate: { numerator: FPS, denominator: 1 }, pixelAspectRatio: { numerator: 1, denominator: 1 }, sampleRate: 48000, channels: 2,
         tracks: tracks(`${id}-a`),
         clips: [
-          { ...base, id: `${id}-picture`, name: '核对画面', kind: 'video', track: 1, start: 0, duration: 150, itemId: `${id}-item`, sourceComponent: 'video', linkId: `${id}-take` },
+          { ...base, id: `${id}-picture`, name: '核对画面', kind: 'video', track: 1, start: 0, duration: 150, itemId: `${id}-item`, sourceComponent: 'video', linkId: `${id}-take`,
+            ...(effects ? { effects: [
+              { id: `${id}-blur`, name: '高斯模糊', enabled: true, amount: 0.5, builtin: { id: 'gaussian_blur', params: { sigma_fraction_height: 0.003, axis: 'both', edge_mode: 'clamp' } } },
+              { id: `${id}-grade`, name: '全能调色', enabled: false, amount: 1, builtin: { id: 'color_grade', params: { exposure: 0.25, temperature_kelvin: 5600, tint: 4 } } },
+            ] } : {}) },
           { ...base, id: `${id}-sound`, name: '核对声音', kind: 'audio', track: 0, start: 0, duration: 150, itemId: `${id}-item`, sourceComponent: 'audio', linkId: `${id}-take` },
           { ...base, id: `${id}-title`, name: '标题文字', kind: 'text', track: 2, start: 30, duration: 90, itemId: `${id}-title-item`, text: '核对标题', scale: 0.6, volume: 0 },
         ],
@@ -65,7 +70,7 @@ async function seedVideoEditFixture(runtime, step) {
     execFileSync(ffmpegPath, ['-v', 'error', '-y', '-f', 'lavfi', '-i', `testsrc2=size=1280x720:rate=${FPS}`, '-f', 'lavfi', '-i', 'sine=frequency=330:sample_rate=48000',
       '-t', '6', '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', source], { windowsHide: true, timeout: 60000 })
     const id = `review-${runtime.sceneId || 'video'}`.replace(/[^a-z0-9-]/gi, '-')
-    const project = buildProject({ id, name: step.name, source, captions: step.captions })
+    const project = buildProject({ id, name: step.name, source, captions: step.captions, effects: step.effects })
     await openVideoEditFixture(runtime.activePage ?? runtime.mainPage, project)
   } catch (error) {
     fs.rmSync(root, { recursive: true, force: true })

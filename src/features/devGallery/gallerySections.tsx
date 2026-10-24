@@ -7,7 +7,7 @@ import { useI18n } from '@/hooks/useI18n'
  * 不在这里改任何外观；新增共享组件时在这里补一个样本（uiGalleryCoverage.test 会提醒）。
  */
 import { useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
-import { Bold, Check, Image as ImageIcon, Italic, Link, List, Pause, Play, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { Bold, Check, Image as ImageIcon, Italic, Link, List, Pause, Play, Plus, Sparkles, Timer, Trash2 } from 'lucide-react'
 
 import {
   AlertDialog,
@@ -30,6 +30,7 @@ import {
   UiError,
   UiErrorBoundary,
   UiFieldLayoutContext,
+  UiPropertyUnit,
   UiFieldTrigger,
   UiFontPicker,
   UiFormRow,
@@ -386,6 +387,15 @@ export function FormSection(): JSX.Element {
           <UiSwitch checked />
         </UiFormRow>
       </UiGroup></div>
+      {/* 属性面板（重要记录 019）：四列 箭头 / 秒表 / 名称 / 右对齐数值；单位挂进右侧单位道，下拉与勾选右缘对齐到道边。 */}
+      <UiPanel variant="bare" className="w-80"><UiFieldLayoutContext.Provider value="property">
+        <UiFormRow label="位置" leading={<UiIconButton size="2xs" on aria-label="关闭位置关键帧"><Timer /></UiIconButton>}>
+          <NumberInput size="sm" widthClassName="w-14" align="right" value={960} onChange={noop} /><UiPropertyUnit hanging={false} />
+          <NumberInput size="sm" widthClassName="w-14" align="right" value={540} onChange={noop} />
+        </UiFormRow>
+        <UiFormRow label="缩放"><NumberInput size="sm" widthClassName="w-14" align="right" value={100} onChange={noop} /><UiPropertyUnit>%</UiPropertyUnit></UiFormRow>
+        <UiFormRow label="重复边缘像素"><UiCheckbox checked onCheckedChange={noop} aria-label="重复边缘像素" /></UiFormRow>
+      </UiFieldLayoutContext.Provider></UiPanel>
       <div><UiGroup divided titleTone="compact" title="紧凑分组" labelWidth={96}>
         <UiFormRow label="不透明度" density="compact">
           <UiRangeInput defaultValue={40} />

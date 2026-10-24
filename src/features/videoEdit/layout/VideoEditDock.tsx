@@ -102,8 +102,7 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
     if (!addedEffects.length) return
     // 等面板激活与领域更新提交到 DOM；只滚动内容，不改变已可见面板的焦点或停靠位置。
     // 面板（含浮窗）、效果分组与新效果都可能晚于前几帧才提交到 DOM（机器繁忙、浮窗刚打开）；
-    // 逐帧重新查找：分组出现时展开一次，新效果出现时滚动，最多约 1 秒。
-    let expanded = false
+    // 逐帧重新查找：新效果出现时滚动到它，最多约 1 秒（附加效果直接一节一节列出，没有要先展开的大分组）。
     const effectRoot = (): HTMLElement | null => listVideoEditPopouts().find(entry => entry.panels.includes('effects'))?.popout.container ?? hostRef.current
     let ownerWindow = ownerWindowOf(effectRoot())
     let animation: RafScheduler<[number]>
@@ -119,12 +118,7 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
     const scrollToAdded = (remaining: number): void => {
       const root = effectRoot()
       const panel = root?.querySelector('[data-video-edit-panel="effects"]')
-      if (!expanded) {
-        const section = panel?.querySelector('[data-video-edit-effect-section="effects"]')
-        const collapsedSection = Array.from(section?.querySelectorAll<HTMLElement>('button[aria-expanded="false"]') ?? []).find(item => !item.closest('[data-video-edit-effect-chain]'))
-        if (section) { collapsedSection?.click(); expanded = true }
-      }
-      const effect = expanded ? Array.from(panel?.querySelectorAll<HTMLElement>('[data-video-edit-effect]') ?? []).find(item => addedEffects.includes(item.dataset.videoEditEffect ?? '')) : undefined
+      const effect = Array.from(panel?.querySelectorAll<HTMLElement>('[data-video-edit-effect]') ?? []).find(item => addedEffects.includes(item.dataset.videoEditEffect ?? ''))
       if (effect) effect.scrollIntoView({ block: 'nearest' })
       else if (remaining > 0) schedule(remaining - 1)
     }

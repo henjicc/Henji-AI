@@ -116,7 +116,7 @@ function createVideoEditPopoutScene() {
         await effects.getByLabel('不透明度', { exact: true }).fill('50'); await effects.getByLabel('不透明度', { exact: true }).press('Enter')
         const edited = await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === 'a').opacity === 0.5, '浮窗修改没有经主窗口工程静默保存')
         assert.equal(edited.sequences[0].clips.length, 2, '在浮窗输入框中打字不得触发剪辑快捷键')
-        await button(effects, '重命名片段').click(); await effects.getByLabel('片段名称', { exact: true }).fill('片头A浮窗改名'); await effects.getByLabel('片段名称', { exact: true }).press('Enter')
+        await button(effects, '更多片段操作').click(); await effects.getByRole('menuitem', { name: '重命名片段', exact: true }).click(); await effects.getByLabel('片段名称', { exact: true }).fill('片头A浮窗改名'); await effects.getByLabel('片段名称', { exact: true }).press('Enter')
         await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === 'a').name === '片头A浮窗改名', '浮窗文字修改没有保存')
         // Keyboard undo from inside the popout runs once, on the same shared history.
         // Enter already left the rename field: Ctrl+Z inside an input is the field's own text undo, as in the main window.

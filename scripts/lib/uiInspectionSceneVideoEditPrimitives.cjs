@@ -75,8 +75,9 @@ function createVideoEditPrimitivesScene() {
         const applied = await saved(doc => doc.creativeIntents?.drafts[0].applications.at(-1)?.saved && doc.sequences[0].clips[0].curves?.x?.length)
         evidence.applied = applied.sequences[0].clips[0].curves
         await close(); await shot('应用后普通关键帧属性单行')
-        const geometry = await page.locator('[data-video-edit-property-row="水平位置"]').evaluate(row => {
-          const input = row.querySelector('input'); const name = [...row.querySelectorAll('span')].find(s => s.textContent === '水平位置')
+        // 位置的 X、Y 合成一行（重要记录 019）：一个秒表管整行，名称与两个读数同一行。
+        const geometry = await page.locator('[data-video-edit-property-row="位置"]').evaluate(row => {
+          const input = row.querySelector('input'); const name = [...row.querySelectorAll('span,div')].find(s => s.textContent === '位置')
           const rect = row.getBoundingClientRect(); const nr = name?.getBoundingClientRect(); const ir = input?.getBoundingClientRect()
           return { width: rect.width, scrollWidth: row.scrollWidth, height: rect.height, nameY: nr?.y, inputY: ir?.y }
         })
@@ -92,9 +93,10 @@ function createVideoEditPrimitivesScene() {
         }
         await playback(60)
         const before = JSON.stringify((await saved(doc => !!doc.sequences[0].clips[0].curves)).sequences[0].clips[0].curves)
-        await button(page, '水平位置关键帧轨与插值').click()
-        await page.getByLabel('水平位置插值', { exact: true }).click(); await page.getByRole('option', { name: '自定义贝塞尔', exact: true }).click()
-        await page.getByRole('slider', { name: '水平位置缓动手柄1', exact: true }).press('ArrowRight')
+        await page.locator('[data-video-edit-property-row="位置"]').hover()
+        await button(page, '位置关键帧轨与插值').click()
+        await page.getByLabel('位置插值', { exact: true }).click(); await page.getByRole('option', { name: '自定义贝塞尔', exact: true }).click()
+        await page.getByRole('slider', { name: '位置缓动手柄1', exact: true }).press('ArrowRight')
         await saved(doc => JSON.stringify(doc.sequences[0].clips[0].curves) !== before)
         await shot('普通贝塞尔手动编辑')
         await page.keyboard.press('Escape')

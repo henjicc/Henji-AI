@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
-import { Dropdown, UiCurveEditor, UiFormRow, UiGroup, UiInlineStatus, UiSegmented, UiSwitch, type UiCurvePoint } from '@/components/ui'
+import { Dropdown, UiCurveEditor, UiFormRow, UiInlineStatus, UiSegmented, UiSwitch, type UiCurvePoint } from '@/components/ui'
+import { UI_PROPERTY_INSET_CLASS } from '@/components/ui/styleTokens'
+import { VideoEditEffectSection } from './VideoEditEffectSection'
 import NumberInput from '@/components/ui/NumberInput'
 import type { VideoEditClip, VideoEditSequence } from '@/core/videoEdit/document'
 import { videoEditClipAudioMode, videoEditClipPitchStretchOutOfRange, videoEditClipSourceSpanSeconds, videoEditClipSpeedSupported, videoEditClipSpeedValue } from '@/core/videoEdit/clipSpeed'
@@ -50,10 +52,10 @@ export function VideoEditTimeRemapPanel({ instance, sequence, clip, onError }: {
   }
   const outOfRange = clip.preservePitch && videoEditClipPitchStretchOutOfRange(clip)
   const stretched = videoEditClipAudioMode(clip) === 'stretch'
-  return <UiGroup title="时间重映射" titleTone="compact" labelWidth={72} divided data-video-edit-time-remap-panel="">
+  return <VideoEditEffectSection id="time-remap" title="时间重映射"><div className="flex flex-col" data-video-edit-time-remap-panel="">
     <UiFormRow label="速度曲线" density="compact" inline><UiSwitch aria-label="速度曲线" checked={Boolean(remap)} onCheckedChange={enable} /></UiFormRow>
     {remap && <>
-      <UiFormRow label="曲线" density="compact" info="横向是片段用到的素材，纵向是速度（中线 100%，上 1000%，下 10%）。点击加点，拖动调整，双击删除；时长随曲线变化。">
+      <UiFormRow label="曲线" density="compact" wide info="横向是片段用到的素材，纵向是速度（中线 100%，上 1000%，下 10%）。点击加点，拖动调整，双击删除；时长随曲线变化。">
         <UiCurveEditor label="速度曲线" value={points} defaultValue={committed} sample={preview ? x => toY(videoEditTimeRemapSpeedAtSource(preview, x * span)) : undefined}
           onChange={setDraft} onBegin={() => setDraft(committed)} onCancel={() => setDraft(null)}
           onFinish={() => { setDraft(current => { if (current && JSON.stringify(current) !== JSON.stringify(committed)) apply({ timeRemap: curveFromPoints(current, span) }); return null }) }} />
@@ -68,8 +70,8 @@ export function VideoEditTimeRemapPanel({ instance, sequence, clip, onError }: {
         options={[{ value: 'nearest', label: '采样' }, { value: 'blend', label: '混合' }]} />
     </UiFormRow>
     <UiFormRow label="变调" density="compact" info="升降音调，不改变速度与时长；+12 高一个八度。">
-      <NumberInput ariaLabel="变调半音" value={clip.pitchSemitones ?? 0} min={-24} max={24} step={1} precision={0} onChange={value => apply({ pitchSemitones: value })} />
+      <NumberInput ariaLabel="变调半音" size="sm" widthClassName="w-14" align="right" value={clip.pitchSemitones ?? 0} min={-24} max={24} step={1} precision={0} onChange={value => apply({ pitchSemitones: value })} />
     </UiFormRow>
-    {outOfRange && !stretched && <UiInlineStatus tone="warning">速度超出 25%–400%，这段声音不保持音调。</UiInlineStatus>}
-  </UiGroup>
+    {outOfRange && !stretched && <div className={UI_PROPERTY_INSET_CLASS}><UiInlineStatus tone="warning">速度超出 25%–400%，这段声音不保持音调。</UiInlineStatus></div>}
+  </div></VideoEditEffectSection>
 }

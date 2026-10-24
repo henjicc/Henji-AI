@@ -137,7 +137,7 @@ it('固有效果不展示颜色和亮度', async () => {
   expect(ui.queryByRole('button', { name: '启用亮度关键帧' })).toBeNull()
 })
 
-it('从附加效果标题打开预设面板，默认全选，按链顺序只保存勾选子集', async () => {
+it('从效果控件底栏打开预设面板，默认全选，按链顺序只保存勾选子集', async () => {
   const { owner, id, sequenceId, clipId } = await project()
   const panel = render(<Panel owner={owner} />); const ui = within(panel.container)
   expectButtonDisabled(ui.getByRole('button', { name: '保存为预设' }))
@@ -146,11 +146,11 @@ it('从附加效果标题打开预设面板，默认全选，按链顺序只保�
     applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'brightness_contrast')
     applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'color_grade')
   })
-  const effects = within(panel.container.querySelector<HTMLElement>('[data-video-edit-effect-section="effects"]')!)
+  const effects = within(panel.container.querySelector<HTMLElement>('[data-video-edit-effect-chain]')!)
   expect(effects.queryByRole('checkbox')).toBeNull()
   expect(ui.queryByText('保存所选效果为预设…')).toBeNull()
   const save = ui.getByRole('button', { name: '保存为预设' })
-  expect(save.closest('[data-video-edit-effect-section="effects"]')).toBeTruthy()
+  expect(save.closest('[data-video-edit-effects-footer]')).toBeTruthy()
   fireEvent.click(save)
   const modal = within(within(document.body).getByRole('dialog', { name: '保存为预设' }))
   const checkboxes = modal.getAllByRole('checkbox')
@@ -349,10 +349,10 @@ it('分区开关保留效果状态和固有参数关键帧；助手通用读写�
   const original = structuredClone(clip())
   const panel = render(<Panel owner={owner} />); const ui = within(panel.container)
   const count = owner.past.length
-  fireEvent.click(ui.getByRole('button', { name: '停用附加效果分区' }))
+  fireEvent.click(ui.getByRole('button', { name: '停用所有附加效果' }))
   expect(clip().effectsEnabled).toBe(false); expect(clip().effects).toEqual(original.effects)
   expect(owner.past).toHaveLength(count + 1)
-  fireEvent.click(ui.getByRole('button', { name: '启用附加效果分区' }))
+  fireEvent.click(ui.getByRole('button', { name: '启用所有附加效果' }))
   expect(clip().effects).toEqual(original.effects)
   fireEvent.click(ui.getByRole('button', { name: '停用运动分区' }))
   expect(videoEditClipValue(clip(), 'x', clip().start)).toBe(0)

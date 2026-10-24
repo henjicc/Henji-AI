@@ -25,6 +25,7 @@ import type { UiControlSize } from './primitiveInternals';
 import {
   UI_DIVIDER_CLASS,
   UI_FORM_ROW_MIN_HEIGHT_CLASS,
+  UI_PROPERTY_ROW_CLASS,
   UI_GROUP_SIBLING_GAP_CLASS,
   UI_GROUP_SIBLING_GAP_COMPACT_CLASS,
   UI_SECTION_STACK_CLASS,
@@ -122,6 +123,12 @@ interface UiFormRowProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
   labelWidth?: 72 | 96 | 120;
   /** 面板控件列后的动作槽；传 null 仍保留一个 sm 控件宽度以对齐同组各行。 */
   trailing?: ReactNode;
+  /** 属性面板排布（`UiFieldLayoutContext` = `property`）的秒表列：动画开关一类，一行至多一个。 */
+  leading?: ReactNode;
+  /** 属性面板排布里紧跟名称的悬停内容（关键帧导航）；用 `UI_PROPERTY_REVEAL_CLASS` 默认藏起。 */
+  labelTrailing?: ReactNode;
+  /** 属性面板排布里控件需要整行宽度（曲线、色轮、点位板、多行文本）：名称一行，控件在下一行占满名称列与数值列。 */
+  wide?: boolean;
   children: ReactNode;
 }
 
@@ -332,6 +339,9 @@ export function UiFormRow({
   labelWidth,
   children,
   trailing,
+  leading,
+  labelTrailing,
+  wide = false,
   ...props
 }: UiFormRowProps): JSX.Element {
   const panelLabelWidth = useContext(FormLabelWidthContext);
@@ -345,7 +355,23 @@ export function UiFormRow({
   const labelNode = <UiTooltipText tooltip={info}>{label}</UiTooltipText>;
   const labelClass = density === 'compact' ? 'text-xs text-text2' : UI_TEXT_PANEL_TITLE_CLASS;
   // 行内控件没有自己的名称时，用 aria-labelledby 指向这行标签（B-50）
-  const labelling = { labelId, hintId, errorId, fillControl: fixedColumn };
+  const labelling = { labelId, hintId, errorId, fillControl: fixedColumn || fieldLayout === 'property' };
+
+  if (fieldLayout === 'property') {
+    const control = <UiFormRowLabelContext.Provider value={labelling}>{children}</UiFormRowLabelContext.Provider>;
+    const notes = hint || errorNode ? <div className="col-span-2 col-start-3 pb-1">{hint ? <p id={hintId} className={UI_TEXT_META_CLASS}>{hint}</p> : null}{errorNode}</div> : null;
+    return <div data-ui-form-row="property" className={`${UI_PROPERTY_ROW_CLASS} ${className}`} {...props}>
+      <span aria-hidden="true" />
+      <span className="flex items-center justify-center">{leading}</span>
+      <div className="flex min-w-0 items-center gap-1">
+        <div id={labelId} className="min-w-0 truncate text-xs text-text2">{labelNode}</div>
+        {labelTrailing}
+      </div>
+      {wide ? <span aria-hidden="true" /> : <div data-ui-form-control className="flex min-w-0 items-center justify-end gap-1 pr-4">{control}{trailing}</div>}
+      {wide ? <div data-ui-form-control className="col-span-2 col-start-3 min-w-0 pb-2 pr-4">{control}{trailing}</div> : null}
+      {notes}
+    </div>;
+  }
 
   if (fixedColumn) {
     const width = labelWidth ?? panelLabelWidth ?? 72;
@@ -385,6 +411,17 @@ export function UiFormRow({
       {errorNode}
     </div>
   );
+}
+
+/**
+ * 属性面板里数值后的单位（%、°、px）。数值列右侧留一条 16px 的单位道：所有控件右缘对齐到道边，
+ * 行末的单位挂进道里（`hanging`，默认）；成对数值中间的那个单位照常占位（`hanging={false}`），两个读数之间也就留出同样的距离。
+ */
+export function UiPropertyUnit({ children, hanging = true }: { children?: ReactNode; hanging?: boolean }): JSX.Element {
+  // 放不进 16px 的单位（中文“画面高度”、三个字母以上）照常占位，读数跟着左移，不挂进道里被截断。
+  const long = typeof children === 'string' && (children.length > 2 || [...children].some(char => char.charCodeAt(0) >= 0x3000));
+  if (long) return <span className="shrink-0 whitespace-nowrap pl-1 text-2xs text-text3">{children}</span>;
+  return <span aria-hidden={children ? undefined : true} className={`w-4 shrink-0 whitespace-nowrap pl-1 text-2xs text-text3 ${hanging ? '-mr-4' : ''}`}>{children}</span>;
 }
 
 interface UiDisclosurePanelProps {

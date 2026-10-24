@@ -176,6 +176,15 @@ export const UI_FORM_ROW_MIN_HEIGHT_CLASS: Record<UiControlSize, string> = {
   sm: 'min-h-control-sm', md: 'min-h-control-md', lg: 'min-h-control-lg',
 };
 
+/**
+ * 属性面板（重要记录 019）：一行四列（`grid-cols-property-row`），行左右各留 4px 给悬停底的圆角，悬停只铺中性底。
+ * 名称从 48px 处起笔；行以外的内容（按钮组、列表、说明）用 `UI_PROPERTY_INSET_CLASS` 对齐到名称列。
+ * 默认藏着、悬停或聚焦本行才出现的东西（没开动画的秒表、关键帧导航、整块重置）用 `UI_PROPERTY_REVEAL_CLASS`。
+ */
+export const UI_PROPERTY_ROW_CLASS = 'group/property mx-1 grid min-h-control-sm grid-cols-property-row items-center gap-x-1 rounded-control pr-2 transition-colors duration-120 hover:bg-hover'
+export const UI_PROPERTY_INSET_CLASS = 'pl-12 pr-3'
+export const UI_PROPERTY_REVEAL_CLASS = 'opacity-0 transition-opacity duration-120 focus-within:opacity-100 group-hover/property:opacity-100 group-focus-within/property:opacity-100'
+
 /** 多行文本只约束最小编辑面积，rows 仍作为原生 DOM 属性。 */
 export const UI_TEXT_AREA_HEIGHT_CLASS = {
   short: 'min-h-textarea-short', medium: 'min-h-textarea-medium', tall: 'min-h-textarea-tall',
@@ -260,6 +269,8 @@ export const UI_GLASS_ADAPTIVE_CONTROL_CLASS = 'ui-glass-adaptive-control';
  * 玻璃内由 `ui-glass-adaptive-control` 换成控件纱。
  */
 export const UI_FIELD_SURFACE_CLASS = `bg-raised text-text1 shadow-field ${UI_GLASS_ADAPTIVE_CONTROL_CLASS}`;
+/** 属性面板里的读数框（重要记录 019）：静息不铺底，悬停或聚焦才显出字段表面，一屏读数不各自成框。 */
+export const UI_FIELD_SURFACE_QUIET_CLASS = 'bg-transparent text-text1 transition-colors duration-120 hover:bg-raised hover:shadow-field focus-within:bg-raised';
 
 /**
  * 字段尺寸档位（重要记录 004）：高度 28/32/36，字号 12/13/13，圆角 sm 用控件档 6、md/lg 用输入档 8。

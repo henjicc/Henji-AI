@@ -43,17 +43,10 @@ vi.mock('../panels/VideoEditStylesPanel', () => ({ VideoEditStylesPanel: () => <
 vi.mock('../panels/VideoEditAnnotationsPanel', () => ({ VideoEditAnnotationsPanel: () => <div>批注面板</div> }))
 vi.mock('../panels/VideoEditTemplatesPanel', () => ({ VideoEditTemplatesPanel: () => <div>模板面板</div> }))
 vi.mock('../panels/VideoEditTimedContentPanel', () => ({ VideoEditTimedContentPanel: () => <div>字幕与标记面板</div> }))
-vi.mock('../panels/VideoEditEffectsPanel', async () => {
-  const { useState } = await import('react')
-  const { UiButton } = await import('@/components/ui')
-  return { VideoEditEffectsPanel: function EffectsPanel(): React.ReactElement {
-    const [open, setOpen] = useState(true)
-    return <div data-video-edit-panel="effects">效果控件<div data-video-edit-effect-section="effects">
-      <UiButton aria-label="折叠附加效果" aria-expanded={open} onClick={() => setOpen(!open)}>附加效果</UiButton>
-      {open && <div data-video-edit-effect-chain="clip"><div data-video-edit-effect="added-effect" ref={element => { if (element) element.scrollIntoView = effectScroll }}>新效果</div></div>}
-    </div></div>
-  } }
-})
+// 附加效果直接一节一节列出（重要记录 019），新效果出现在效果链里即可滚动到它。
+vi.mock('../panels/VideoEditEffectsPanel', () => ({ VideoEditEffectsPanel: function EffectsPanel(): React.ReactElement {
+  return <div data-video-edit-panel="effects">效果控件<div data-video-edit-effect-chain="clip"><div data-video-edit-effect="added-effect" ref={element => { if (element) element.scrollIntoView = effectScroll }}>新效果</div></div></div>
+} }))
 vi.mock('../VideoEditTimeline', () => ({ VideoEditTimeline: () => <div>时间线</div> }))
 vi.mock('../VideoEditPreview', async () => {
   const { useEffect } = await import('react')
@@ -284,7 +277,7 @@ it.each(['style_kits', 'title_templates', 'annotations', 'effects_library', 'pre
   }
 })
 
-it.each(['closed', 'stacked', 'visible', 'collapsed', 'popout_stacked', 'popout_visible'] as const)('双击添加后恢复效果控件（%s），已可见时保留原焦点与布局，滚动到新效果', async state => {
+it.each(['closed', 'stacked', 'visible', 'popout_stacked', 'popout_visible'] as const)('双击添加后恢复效果控件（%s），已可见时保留原焦点与布局，滚动到新效果', async state => {
   // 不依赖 0ms 定时器与 React 提交的竞争；逐帧 act 让折叠展开/浮窗 portal 在帧间提交。
   const frames = new Map<number, FrameRequestCallback>(); let frameId = 0
   const popoutFrames = new Map<number, FrameRequestCallback>()
@@ -318,7 +311,6 @@ it.each(['closed', 'stacked', 'visible', 'collapsed', 'popout_stacked', 'popout_
     } else dock.getPanel('effects')!.api.setActive()
     dock.getPanel('program')!.api.setActive()
   })
-  if (state === 'collapsed') fireEvent.click(view.container.querySelector('[data-video-edit-effect-section="effects"] button')!)
   const groups = dock.groups.map(group => group.id)
   if (opened.length) opened[0].child.focus.mockClear()
   fireEvent.doubleClick(view.container.querySelector('[data-video-edit-effects-entry="effect:gaussian_blur"]')!)
@@ -333,7 +325,7 @@ it.each(['closed', 'stacked', 'visible', 'collapsed', 'popout_stacked', 'popout_
     expect(panel.group.activePanel?.id).toBe('effects')
   }
   if (state !== 'closed') expect(dock.groups.map(group => group.id)).toEqual(groups)
-  if (state === 'visible' || state === 'collapsed') expect(dock.activePanel?.id).toBe('program')
+  if (state === 'visible') expect(dock.activePanel?.id).toBe('program')
   for (let frame = 0; frame <= 60 && !effectScroll.mock.calls.length; frame++) {
     const pending = [...frames.values(), ...popoutFrames.values()]; frames.clear(); popoutFrames.clear()
     await act(async () => pending.forEach(callback => callback(frame * 16)))

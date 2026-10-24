@@ -131,6 +131,12 @@ export default {
       borderWidth: {
         1.5: '1.5px',
       },
+      // 属性面板的四列（重要记录 019，效果控件）：展开箭头 / 秒表或 fx 开关 / 名称 / 数值列（右对齐，最宽 156）。
+      // 名称从 48px 处起笔（行外边距 4 + 14 + 4 + 22 + 4），非行内容用 UI_PROPERTY_INSET_CLASS 对齐到同一处；
+      // 面板窄时名称列至少留 64px，数值列跟着收窄。
+      gridTemplateColumns: {
+        'property-row': '0.875rem 1.375rem minmax(4rem, 1fr) minmax(0, 9.75rem)',
+      },
       // 控件高度令牌（重要记录 004）：28 紧凑 / 32 默认 / 36 醒目，由 CSS 变量驱动。
       // 新控件用 h-control-sm/md/lg（或 styleTokens 的 UI_CONTROL_HEIGHT_CLASS），不写 h-7/h-8/h-9。
       width: {

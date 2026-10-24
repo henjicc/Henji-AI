@@ -1,7 +1,9 @@
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { ArrowDown, ArrowUp, Trash2, Eye, EyeOff, Type } from 'lucide-react'
-import { Dropdown, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton, UiInput, UiOptionButton } from '@/components/ui'
+import { Dropdown, UiEmpty, UiError, UiFormRow, UiIconButton, UiInput, UiOptionButton } from '@/components/ui'
+import { UI_PROPERTY_INSET_CLASS } from '@/components/ui/styleTokens'
+import { VideoEditEffectSection } from './VideoEditEffectSection'
 import type { VideoEditGraphic } from '@/core/videoEdit/graphics'
 import { readVideoEditGraphicEditor, type VideoEditGraphicEditorState, type VideoEditGraphicTarget } from '../application/videoEditCodeParameters'
 import { createVideoEditGraphicObject, deleteVideoEditGraphicObjects, renameVideoEditGraphicObject, reorderVideoEditGraphicObjects, updateVideoEditGraphicObject, type VideoEditGraphicClipTarget } from '../application/videoEditGraphics'
@@ -57,18 +59,19 @@ function GraphicObjects({ owner, target, graphic, onError }: { owner: VideoEditI
     try { editor = readVideoEditGraphicEditor(target.projectId, target.sequenceId, target.clipId, selected.id) } catch (reason) { error = reason }
   }
   return <>
-    <UiGroup title="图形对象" titleTone="compact" divided data-video-edit-graphic-objects={target.clipId} actions={<Dropdown<'rect' | 'ellipse' | 'text'> ariaLabel="添加图形对象" display="添加对象" options={[...objectOptions]} onSelect={kind => run(() => setSelectedId(createVideoEditGraphicObject(target, { kind })))} />}>
-      {rows.length ? <div className="flex flex-col gap-1" aria-label="图形对象层级">{rows.map(object => <div key={object.id} className="flex items-center gap-1"><UiIconButton size="xs" aria-label={`${object.visible === false ? '显示' : '隐藏'}图层${object.name}`} onClick={() => run(() => updateVideoEditGraphicObject({ ...target, objectId: object.id }, { visible: object.visible === false }))}>{object.visible === false ? <EyeOff  /> : <Eye  />}</UiIconButton><UiOptionButton key={object.id} variant="menu" active={object.id === selected?.id} aria-label={`选择图形对象${object.name}`} aria-pressed={object.id === selected?.id} data-video-edit-graphic-object={object.id} size="sm" className="w-full min-w-0 justify-between gap-2" onPointerDown={event => { if (event.button === 0) setSelectedId(object.id) }} onClick={() => setSelectedId(object.id)}><span className="flex min-w-0 items-center gap-2">{object.kind === 'text' && <Type size={UI_ICON_SIZE.sm} />}<span className="truncate">{object.name}</span></span><span className="shrink-0 text-2xs text-text3">{objectKinds[object.kind]}</span></UiOptionButton></div>)}</div> : <UiEmpty size="xs" title="此图形暂无对象" description="添加矩形、椭圆或文字以创作画面。" />}
+    <VideoEditEffectSection id="graphic-objects" title="图形对象"><div className="flex flex-col" data-video-edit-graphic-objects={target.clipId}>
+      {rows.length ? <div className={`flex flex-col gap-1 ${UI_PROPERTY_INSET_CLASS}`} aria-label="图形对象层级">{rows.map(object => <div key={object.id} className="flex items-center gap-1"><UiIconButton size="xs" aria-label={`${object.visible === false ? '显示' : '隐藏'}图层${object.name}`} onClick={() => run(() => updateVideoEditGraphicObject({ ...target, objectId: object.id }, { visible: object.visible === false }))}>{object.visible === false ? <EyeOff  /> : <Eye  />}</UiIconButton><UiOptionButton key={object.id} variant="menu" active={object.id === selected?.id} aria-label={`选择图形对象${object.name}`} aria-pressed={object.id === selected?.id} data-video-edit-graphic-object={object.id} size="sm" className="w-full min-w-0 justify-between gap-2" onPointerDown={event => { if (event.button === 0) setSelectedId(object.id) }} onClick={() => setSelectedId(object.id)}><span className="flex min-w-0 items-center gap-2">{object.kind === 'text' && <Type size={UI_ICON_SIZE.sm} />}<span className="truncate">{object.name}</span></span><span className="shrink-0 text-2xs text-text3">{objectKinds[object.kind]}</span></UiOptionButton></div>)}</div> : <UiEmpty size="xs" title="此图形暂无对象" description="添加矩形、椭圆或文字以创作画面。" />}
+      <div className={`flex pt-1 ${UI_PROPERTY_INSET_CLASS}`}><Dropdown<'rect' | 'ellipse' | 'text'> ariaLabel="添加图形对象" display="添加对象" options={[...objectOptions]} onSelect={kind => run(() => setSelectedId(createVideoEditGraphicObject(target, { kind })))} /></div>
       {selected && <>
         <UiFormRow density="compact" label="对象名称"><GraphicObjectName key={videoEditParameterTargetIdentity({ ...target, objectId: selected.id })} owner={owner} target={{ ...target, objectId: selected.id }} name={selected.name} onError={onError} /></UiFormRow>
-        <div className="flex items-center gap-1">
+        <div className={`flex items-center gap-1 ${UI_PROPERTY_INSET_CLASS}`}>
           <UiIconButton tooltip="上移对象" aria-label="上移图形对象" disabled={selectedIndex >= objects.length - 1} onClick={() => move(1)}><ArrowUp  /></UiIconButton>
           <UiIconButton tooltip="下移对象" aria-label="下移图形对象" disabled={selectedIndex <= 0} onClick={() => move(-1)}><ArrowDown  /></UiIconButton>
           <UiIconButton tone="danger" tooltip="删除对象" aria-label="删除图形对象" onClick={() => run(() => { deleteVideoEditGraphicObjects(target, [selected.id]); setSelectedId(objects[selectedIndex - 1]?.id ?? objects[selectedIndex + 1]?.id ?? '') })}><Trash2  /></UiIconButton>
         </div>
       </>}
-    </UiGroup>
-    {editor ? selected?.kind === 'text' && selected.textStyle ? <VideoEditGraphicTextStylePanel key={videoEditParameterTargetIdentity(editor.target)} target={editor.target} style={selected.textStyle} onError={onError} transform={<VideoEditParameterFields editor={editor} onError={onError} />} /> : <VideoEditParameterFields key={videoEditParameterTargetIdentity(editor.target)} editor={editor} onError={onError} /> : error ? <UiError title="对象参数暂不可用" message={error instanceof Error ? error.message : '请重新选择图形对象。'} /> : null}
+    </div></VideoEditEffectSection>
+    {editor ? selected?.kind === 'text' && selected.textStyle ? <VideoEditGraphicTextStylePanel key={videoEditParameterTargetIdentity(editor.target)} target={editor.target} style={selected.textStyle} onError={onError} transform={<VideoEditParameterFields editor={editor} onError={onError} bare />} /> : <VideoEditParameterFields key={videoEditParameterTargetIdentity(editor.target)} editor={editor} onError={onError} /> : error ? <div className={UI_PROPERTY_INSET_CLASS}><UiError title="对象参数暂不可用" message={error instanceof Error ? error.message : '请重新选择图形对象。'} /></div> : null}
   </>
 }
 

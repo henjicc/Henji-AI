@@ -8,7 +8,7 @@ import { useVideoEditBuiltinParamGesture, type VideoEditBuiltinParamGesture } fr
 import { VideoEditSmartRegionControls } from './VideoEditSmartRegionControls'
 import { evaluateVideoEditEffect } from '@/core/videoEdit/keyframes'
 import { requireVideoEditInstance, setVideoEditView } from '../application/videoEditService'
-import { VideoEditKeyframeControls } from './VideoEditKeyframeControls'
+import { VideoEditKeyframeNavigator, VideoEditKeyframeStopwatch, type VideoEditKeyframeControlProps } from './VideoEditKeyframeControls'
 import type { CodeParameterValue } from '@/core/videoEdit/codeMaterial/contract'
 import { builtinParameterFields, readBuiltinField, writeBuiltinField, type ParamFieldSpec } from './params/fieldSpec'
 import { ParamField, type ParamGesture } from './params/ParamField'
@@ -55,11 +55,18 @@ export function VideoEditBuiltinParamRows({ params, values, gesture, animation }
     renderControl={(field, value) => <BuiltinField field={field} value={value} gesture={gesture} />}
     onReset={field => gesture.commit({ params: Object.fromEntries(field.bindingKeys.map(key => [key, params.find(param => param.key === key)!.default])) })}
     resetDisabled={field => field.bindingKeys.every(key => values[key] === params.find(param => param.key === key)!.default)}
-    renderAnimation={animation && ((field) => <div className="flex flex-wrap gap-1">{field.bindingKeys.map((key, index) => <VideoEditKeyframeControls key={key} label={field.bindingKeys.length > 1 ? field.type === 'point' ? `${field.title}${index === 0 ? '水平' : '垂直'}` : params.find(param => param.key === key)!.name : field.title} value={values[key] as number | string | boolean} points={curves?.[key]} time={animation.frame - animation.start} duration={animation.duration} discrete={['boolean', 'choice', 'curve', 'lut'].includes(field.type)}
-      onBegin={gesture.begin} onFinish={gesture.finish} onCancel={gesture.cancel}
-      onChange={points => { const next = { ...curves }; if (points.length) next[key] = points; else delete next[key]; gesture.commit({ curves: next }) }}
-      onSeek={time => setVideoEditView(projectId!, { frame: animation.start + time, playing: false })}
-      onDisable={() => { gesture.begin(); const next = { ...curves }; delete next[key]; gesture.commit({ curves: next }); gesture.commit({ params: { [key]: values[key] } }); gesture.finish() }} />)}</div>)} />
+    renderAnimation={animation && ((field) => {
+      // 一个秒表管整行：点位的水平、垂直一起开动画、一起打关键帧（重要记录 019）。
+      const keyframes: VideoEditKeyframeControlProps = {
+        label: field.title, channels: field.bindingKeys.map(key => ({ key, points: curves?.[key], value: values[key] as number | string | boolean })),
+        time: animation.frame - animation.start, duration: animation.duration, discrete: ['boolean', 'choice', 'curve', 'lut'].includes(field.type),
+        onBegin: gesture.begin, onFinish: gesture.finish, onCancel: gesture.cancel,
+        onChange: changes => { const next = { ...curves }; for (const [key, points] of Object.entries(changes)) { if (points.length) next[key] = points; else delete next[key] } gesture.commit({ curves: next }) },
+        onSeek: time => setVideoEditView(projectId!, { frame: animation.start + time, playing: false }),
+        onDisable: () => { gesture.begin(); const next = { ...curves }; for (const key of field.bindingKeys) delete next[key]; gesture.commit({ curves: next }); gesture.commit({ params: Object.fromEntries(field.bindingKeys.map(key => [key, values[key]])) }); gesture.finish() },
+      }
+      return { leading: <VideoEditKeyframeStopwatch {...keyframes} />, labelTrailing: <VideoEditKeyframeNavigator {...keyframes} /> }
+    })} />
 }
 
 function BuiltinField({ field, value, gesture }: { field: ParamFieldSpec; value: CodeParameterValue; gesture: VideoEditBuiltinParamGesture }): React.ReactElement {

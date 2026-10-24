@@ -3,11 +3,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import { SCRUB_PIXELS_PER_STEP, SCRUB_START_THRESHOLD_PX, resolveScrubFactor } from './numberScrub'
 import { UiInput, UiNumberStepper } from './primitives'
 import { useUiFormRowLabelling } from './formRowLabel'
+import { useUiFieldLayout } from './fieldLayout'
 import {
   UI_FIELD_FOCUS_WITHIN_CLASS,
   UI_FIELD_LABEL_CLASS,
   UI_FIELD_SIZE_CLASS,
   UI_FIELD_SURFACE_CLASS,
+  UI_FIELD_SURFACE_QUIET_CLASS,
   type UiFieldSize,
 } from './styleTokens'
 import type { ScopedTextHistoryBinding } from './useScopedTextHistory'
@@ -119,7 +121,9 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
     onScrubStart,
     onScrubEnd,
   } = props
-  const fillControl = useUiFormRowLabelling()?.fillControl === true
+  // 属性面板（重要记录 019）：读数是紧凑的拖动框——静息不铺底、悬停或聚焦才显出字段表面，步进列只留给读屏与测试，不占宽度。
+  const propertyLayout = useUiFieldLayout() === 'property'
+  const fillControl = useUiFormRowLabelling()?.fillControl === true && !propertyLayout
   const widthClassName = fillControl ? 'w-full' : widthClassNameOverride
   const widthStrategy = fillControl ? 'fixed' : widthStrategyOverride
 
@@ -315,7 +319,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
 
   const alignClass = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
   const contentWidthCharacterCount = Math.max(inputValue.length, placeholder?.length ?? 0, 2)
-  const minContentWidth = `calc(${contentWidthCharacterCount}ch + ${NUMBER_FIELD_CHROME_PX[size]}px)`
+  const minContentWidth = `calc(${contentWidthCharacterCount}ch + ${propertyLayout ? 12 : NUMBER_FIELD_CHROME_PX[size]}px)`
   const scrubCursorClass = disabled ? '' : isFocused ? 'cursor-text' : 'cursor-ew-resize'
 
   return (
@@ -332,7 +336,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
       <div
         data-ui-field-control
         data-scrubbing={isScrubbing ? 'true' : undefined}
-        className={`inline-flex overflow-hidden ${UI_FIELD_SIZE_CLASS[size]} ${widthStrategy === 'fixed' ? widthClassName : ''} ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_WITHIN_CLASS}`}
+        className={`inline-flex overflow-hidden ${UI_FIELD_SIZE_CLASS[size]} ${widthStrategy === 'fixed' ? widthClassName : ''} ${propertyLayout ? UI_FIELD_SURFACE_QUIET_CLASS : UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_WITHIN_CLASS}`}
         style={widthStrategy === 'content' ? { width: minContentWidth } : { minWidth: minContentWidth }}
       >
         <UiInput
@@ -384,7 +388,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
           step={step}
           disabled={disabled}
         />
-        <UiNumberStepper
+        <div className={propertyLayout ? 'sr-only' : 'contents'}><UiNumberStepper
           size={size}
           increaseLabel={increaseLabel}
           decreaseLabel={decreaseLabel}
@@ -392,7 +396,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
           canIncrease={!(typeof max === 'number' && safeValue >= max)}
           canDecrease={!(typeof min === 'number' && safeValue <= min)}
           onStep={(direction) => stepBy(direction)}
-        />
+        /></div>
       </div>
     </div>
   )

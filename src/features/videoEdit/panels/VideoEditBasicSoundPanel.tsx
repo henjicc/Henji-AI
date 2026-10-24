@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Dropdown, UiButton, UiFormRow, UiGroup, UiLoading } from '@/components/ui'
+import { Dropdown, UiButton, UiFormRow, UiLoading } from '@/components/ui'
+import { UI_PROPERTY_INSET_CLASS } from '@/components/ui/styleTokens'
+import { VideoEditEffectSection } from './VideoEditEffectSection'
 import NumberInput from '@/components/ui/NumberInput'
 import { videoEditDuckingSettingsSchema, type VideoEditAudioRole } from '@/core/videoEdit/audioDucking'
 import { videoEditComposition } from '@/core/videoEdit/document'
@@ -33,17 +35,18 @@ function VideoEditBasicSoundPanelContent({ instance, onError }: { instance: Vide
     catch (error) { if (!current.signal.aborted) onError(error) }
     finally { if (controller.current === current) { controller.current = undefined; setBusy(false) } }
   }
-  return <UiGroup title="基本声音" titleTone="compact" divided>
+  return <VideoEditEffectSection id="basic-sound" title="基本声音">
     <UiFormRow label="声音类型" inline density="compact"><Dropdown size="sm" ariaLabel="声音类型" value={sameRole ?? ''} options={[{ value: '', label: sameRole ? '声音类型' : sounds.some(clip => clip.audioRole) ? '混合类型' : '未标注', disabled: true }, ...roles]} disabled={busy} onSelect={role => { try { setVideoEditAudioRoles(target, role as VideoEditAudioRole) } catch (error) { onError(error) } }} /></UiFormRow>
-    {music.length > 0 && <UiGroup title="回避" titleTone="compact">
+    {music.length > 0 && <>
+      <div className={`pt-1 text-xs font-semibold text-text3 ${UI_PROPERTY_INSET_CLASS}`}>回避</div>
       <UiFormRow label="目标" inline density="compact"><Dropdown size="sm" ariaLabel="回避目标" value={settings.targetRole} options={roles.filter(role => role.value === 'dialogue' || role.value === 'sound_effect')} disabled={busy} onSelect={role => setSettings(value => ({ ...value, targetRole: role as 'dialogue' | 'sound_effect' }))} /></UiFormRow>
-      <UiFormRow label="降低量（dB）" inline density="compact"><NumberInput size="sm" ariaLabel="回避降低量" value={settings.reductionDb} min={0} max={60} step={1} widthClassName="w-24" disabled={busy} onChange={reductionDb => setSettings(value => ({ ...value, reductionDb }))} /></UiFormRow>
-      <UiFormRow label="敏感度" inline density="compact"><NumberInput size="sm" ariaLabel="回避敏感度" value={settings.sensitivity} min={0} max={100} step={1} widthClassName="w-24" disabled={busy} onChange={sensitivity => setSettings(value => ({ ...value, sensitivity }))} /></UiFormRow>
-      <UiFormRow label="淡化（秒）" inline density="compact"><NumberInput size="sm" ariaLabel="回避淡化时长" value={settings.fadeSeconds} min={0.01} max={5} step={0.05} precision={2} widthClassName="w-24" disabled={busy} onChange={fadeSeconds => setSettings(value => ({ ...value, fadeSeconds }))} /></UiFormRow>
-      <div className="flex flex-wrap items-center gap-2"><UiButton size="sm" variant="secondary" disabled={busy} onClick={() => void run()}>{music.some(clip => clip.curves?.volume?.some(isVideoEditDuckingKeyframe)) ? '重新生成回避' : '生成回避'}</UiButton>{busy && <UiButton size="sm" onClick={() => controller.current?.abort()}>取消</UiButton>}</div>
-      {busy && <UiLoading size="xs" message="正在分析目标声音…" />}
-    </UiGroup>}
-  </UiGroup>
+      <UiFormRow label="降低量（dB）" inline density="compact"><NumberInput size="sm" ariaLabel="回避降低量" value={settings.reductionDb} min={0} max={60} step={1} widthClassName="w-14" align="right" disabled={busy} onChange={reductionDb => setSettings(value => ({ ...value, reductionDb }))} /></UiFormRow>
+      <UiFormRow label="敏感度" inline density="compact"><NumberInput size="sm" ariaLabel="回避敏感度" value={settings.sensitivity} min={0} max={100} step={1} widthClassName="w-14" align="right" disabled={busy} onChange={sensitivity => setSettings(value => ({ ...value, sensitivity }))} /></UiFormRow>
+      <UiFormRow label="淡化（秒）" inline density="compact"><NumberInput size="sm" ariaLabel="回避淡化时长" value={settings.fadeSeconds} min={0.01} max={5} step={0.05} precision={2} widthClassName="w-14" align="right" disabled={busy} onChange={fadeSeconds => setSettings(value => ({ ...value, fadeSeconds }))} /></UiFormRow>
+      <div className={`flex flex-wrap items-center gap-2 pt-1 ${UI_PROPERTY_INSET_CLASS}`}><UiButton size="sm" variant="secondary" disabled={busy} onClick={() => void run()}>{music.some(clip => clip.curves?.volume?.some(isVideoEditDuckingKeyframe)) ? '重新生成回避' : '生成回避'}</UiButton>{busy && <UiButton size="sm" onClick={() => controller.current?.abort()}>取消</UiButton>}</div>
+      {busy && <div className={UI_PROPERTY_INSET_CLASS}><UiLoading size="xs" message="正在分析目标声音…" /></div>}
+    </>}
+  </VideoEditEffectSection>
 }
 
 export function VideoEditBasicSoundPanel(props: Parameters<typeof VideoEditBasicSoundPanelContent>[0]): React.ReactElement | null {

@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from 'react'
-import { Circle, PenTool, RotateCcw, Square, Trash2 } from 'lucide-react'
-import { Dropdown, UiIconButton, UiOptionButton, UiSwitch, UiTooltipText } from '@/components/ui'
+import { Circle, PenTool, Square, Trash2 } from 'lucide-react'
+import { Dropdown, UiIconButton, UiOptionButton, UiSwitch } from '@/components/ui'
+import { UI_PROPERTY_INSET_CLASS } from '@/components/ui/styleTokens'
+import { VideoEditPropertyRow } from './VideoEditPropertyRow'
 import NumberInput from '@/components/ui/NumberInput'
 import type { VideoEditBuiltinEffect } from '@/core/videoEdit/compositing'
 import {
@@ -19,12 +21,8 @@ import type { VideoEditBuiltinParamGesture } from './useVideoEditBuiltinParamGes
 
 function without<T extends object, K extends keyof T>(value: T, key: K): Omit<T, K> { const { [key]: _removed, ...rest } = value; return rest }
 
-function Row({ label, tooltip, children, reset }: { label: string; tooltip: string; children: React.ReactNode; reset?: { label: string; disabled: boolean; onReset: () => void } }): React.ReactElement {
-  return <div className="flex min-h-8 items-center gap-1.5 pl-3" data-video-edit-mask-row={label}>
-    <span className="min-w-0 flex-1 truncate text-xs text-text2"><UiTooltipText tooltip={tooltip}>{label}</UiTooltipText></span>
-    {children}
-    {reset ? <UiIconButton size="2xs" aria-label={reset.label} tooltip={reset.label} disabled={reset.disabled} onClick={reset.onReset}><RotateCcw  /></UiIconButton> : <span className="w-5 shrink-0" aria-hidden="true" />}
-  </div>
+function Row({ label, ...props }: Omit<React.ComponentProps<typeof VideoEditPropertyRow>, 'label'> & { label: string }): React.ReactElement {
+  return <VideoEditPropertyRow label={label} data-video-edit-mask-row={label} {...props} />
 }
 
 /** 创建遮罩的三个按钮（PR：椭圆、矩形、钢笔）。 */
@@ -59,17 +57,16 @@ export function VideoEditMaskShapeControls({ target, effect, gesture, trackActio
     if (editing?.shapeId === shape.id) setVideoEditMaskEditing({ ...target, effectId: effect.id })
   }
   const scrub = (label: string, value: number, range: { min: number; max: number }, apply: (next: number) => void): React.ReactElement => <span className="flex shrink-0 items-center gap-1">
-    <NumberInput ariaLabel={label} increaseLabel={`增加${label}`} decreaseLabel={`减少${label}`} size="sm" value={value} min={range.min} max={range.max} step={1} precision={0} widthClassName="w-20" align="right"
+    <NumberInput ariaLabel={label} increaseLabel={`增加${label}`} decreaseLabel={`减少${label}`} size="sm" value={value} min={range.min} max={range.max} step={1} precision={0} widthClassName="w-14" align="right"
       onScrubStart={gesture.begin} onScrubEnd={cancelled => { if (cancelled) gesture.cancel(); else gesture.finish() }}
       onChange={next => { if (gesture.active() || Math.round(next) !== Math.round(value)) apply(Math.round(next)) }} />
-    <span className="w-6" aria-hidden="true" />
   </span>
   return <div className="flex flex-col" data-video-edit-mask-shapes={shapes.length}>
     {shapes.map(shape => {
       const name = videoEditMaskShapeName(shapes, shape)
       const selected = editing?.effectId === effect.id && editing.clipId === target.clipId && editing.shapeId === shape.id
       return <div key={shape.id} className="flex flex-col" data-video-edit-mask-shape-controls={shape.id}>
-        <div className="flex min-h-8 items-center gap-1.5">
+        <div className={`flex min-h-control-sm items-center gap-1.5 ${UI_PROPERTY_INSET_CLASS}`}>
           <span className="min-w-0 flex-1">
             <UiOptionButton variant="menu" size="sm" className="w-full" active={selected} aria-pressed={selected} tooltip="在节目画面上显示控制柄，拖动顶点或整体移动"
               onClick={() => setVideoEditMaskEditing({ ...target, effectId: effect.id, shapeId: shape.id })}>

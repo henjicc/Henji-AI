@@ -10,7 +10,7 @@ const SPACING_EXCEPTIONS = {
   'src/components/TabContainer.tsx': { 'pt-10': '应用标题栏四十像素覆盖区的布局预留' },
   'src/components/ui/primitives.tsx': { 'pl-7': '字段前导图标占位', 'pr-7': '字段尾部图标占位', 'px-[0.1em]': '逐字稿行内词块的相对字宽命中区' },
   'src/components/ui/states.tsx': { 'py-16': '空态在空工作面中的垂直留白' },
-  'src/components/ui/styleTokens.ts': { 'mt-[-3px]': '滑块拇指相对轨道居中的光学校正' },
+  'src/components/ui/styleTokens.ts': { 'mt-[-3px]': '滑块拇指相对轨道居中的光学校正', 'pl-12': '属性面板行外内容对齐到名称列起笔处（行外边距、箭头列、秒表列之和）' },
   'src/features/assets/components/AssetLibrarySidebar.tsx': { 'pr-16': '列表尾部操作按钮预留两按钮宽度' },
   'src/features/canvas/nodes/assetGroup/AssetGroupPreview.tsx': { 'gap-px': '联系表缩略图的一像素图像分界' },
   'src/features/canvas/nodes/video/CanvasVideoPlayer.tsx': { 'pt-9': '媒体顶栏三十六像素覆盖区预留' },

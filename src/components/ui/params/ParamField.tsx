@@ -2,7 +2,8 @@ import { UiSegmented } from '../UiSegmented'
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Dropdown from '../Dropdown'
 import { UiColorInput, UiRangeInput, UiSwitch, UiTextArea } from '../primitives'
-import { UiTooltipText } from '../layout'
+import { UiPropertyUnit, UiTooltipText } from '../layout'
+import { useUiFieldLayout } from '../fieldLayout'
 import { UiAngleDial } from '../UiAngleDial'
 import { UiCurveEditor } from '../UiCurveEditor'
 import { UiEasingEditor } from '../UiEasingEditor'
@@ -51,14 +52,16 @@ function TextStyleField({ value, gesture, font, onError }: ParamFieldProps): Rea
 
 function Numeric({ value, min, max, step = 1, label, gesture, unit }: { value: number; min?: number; max?: number; step?: number; label: string; gesture: ParamGesture; unit?: string }) {
   const touched = useRef(false)
-  return <div className="flex items-center gap-1" onFocusCapture={() => { touched.current = false; gesture.begin() }} onChangeCapture={() => { touched.current = true }}
+  // 属性面板：紧凑读数框右对齐，单位固定占一格，同面板各行的数字右缘对齐（重要记录 019）。
+  const compact = useUiFieldLayout() === 'property'
+  return <div className={compact ? 'flex items-center justify-end' : 'flex items-center gap-1'} onFocusCapture={() => { touched.current = false; gesture.begin() }} onChangeCapture={() => { touched.current = true }}
     onClickCapture={event => { if (elementOfEventTarget(event.target)?.closest('[data-ui-compact-stepper-button]')) touched.current = true }}
     onKeyDownCapture={event => { if (['ArrowUp', 'ArrowDown'].includes(event.key)) touched.current = true }}
     onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) gesture.finish() }}>
-    <NumberInput key={gesture.epoch} className="min-w-0 flex-1" size="sm" value={value} min={min} max={max} step={step} ariaLabel={label} increaseLabel={`增加${label}`} decreaseLabel={`减少${label}`} widthClassName="w-full" commitOnChange
+    <NumberInput key={gesture.epoch} className={compact ? 'shrink-0' : 'min-w-0 flex-1'} size="sm" value={value} min={min} max={max} step={step} ariaLabel={label} increaseLabel={`增加${label}`} decreaseLabel={`减少${label}`} widthClassName={compact ? 'w-14' : 'w-full'} align={compact ? 'right' : undefined} commitOnChange
       onScrubStart={() => { touched.current = true; gesture.begin() }} onScrubEnd={cancelled => { if (cancelled) { touched.current = false; gesture.cancel() } else gesture.finish() }}
       onChange={next => { if (touched.current) { if (gesture.active()) gesture.write(next); else gesture.atomic(next) } }} />
-    {unit && <span className="shrink-0 whitespace-nowrap text-2xs text-text3">{unit}</span>}
+    {compact ? unit && <UiPropertyUnit>{unit}</UiPropertyUnit> : unit && <span className="shrink-0 whitespace-nowrap text-2xs text-text3">{unit}</span>}
   </div>
 }
 function Color({ field, value, label, gesture }: { field: ParamFieldSpec & { type: 'color' }; value: CodeColor; label: string; gesture: ParamGesture }) {
@@ -126,15 +129,22 @@ function Table({ field, value, gesture, font, onError }: ParamFieldProps & { fie
 
 /** A single controlled renderer for instance and keyframe values, from either source. */
 export const ParamField = memo(function ParamField({ field, value, gesture, label = field.title, font, image, resource, disabled, onError }: ParamFieldProps): React.ReactElement {
+  const property = useUiFieldLayout() === 'property'
   const [cancelEpoch, setCancelEpoch] = useState(0)
   const cancel = (): void => { gesture.cancel(); setCancelEpoch(epoch => epoch + 1) }
   const shared = { 'aria-label': label, size: 'sm' as const, onBegin: gesture.begin, onFinish: gesture.finish, onCancel: cancel }
   const curveSample = useMemo(() => field.type === 'curve' && field.curveFormat === 'color_grade' ? colorGradeSpline(value as CodePoint[]) : undefined, [field, value])
   let control: ReactNode
   switch (field.type) {
-    case 'number': control = <div className="flex flex-col gap-1"><Numeric label={label} value={value as number} min={field.min} max={field.max} step={field.step} unit={field.unit} gesture={gesture} />{field.control !== 'input' && field.control !== 'knob' && <UiRangeInput aria-label={`${label}滑杆`} min={field.min} max={field.max} step={field.step} value={value as number} onFocus={gesture.begin} onBlur={gesture.finish}
+    case 'number': {
+      const slider = field.control !== 'input' && field.control !== 'knob' && <UiRangeInput aria-label={`${label}滑杆`} min={field.min} max={field.max} step={field.step} value={value as number} onFocus={gesture.begin} onBlur={gesture.finish}
       onPointerDown={event => { gesture.begin(); event.currentTarget.setPointerCapture?.(event.pointerId) }} onPointerUp={gesture.finish} onPointerCancel={cancel} onLostPointerCapture={() => { if (gesture.active()) cancel() }}
-      onKeyDown={event => { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) gesture.begin() }} onKeyUp={event => { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) gesture.finish() }} onChange={event => gesture.write(Number(event.target.value))} />}{field.control === 'knob' && <UiAngleDial {...shared} min={field.min} max={field.max} step={field.step} wrap={false} value={value as number} defaultValue={field.default} onChange={gesture.write} />}</div>; break
+      onKeyDown={event => { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) gesture.begin() }} onKeyUp={event => { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) gesture.finish() }} onChange={event => gesture.write(Number(event.target.value))} />
+      const knob = field.control === 'knob' && <UiAngleDial {...shared} min={field.min} max={field.max} step={field.step} wrap={false} value={value as number} defaultValue={field.default} onChange={gesture.write} />
+      // 属性面板：作者声明的滑杆或旋钮与读数同在数值列一行（滑杆在左、读数靠右），不再另起一行。
+      control = property ? <div className="flex min-w-0 items-center justify-end gap-2">{slider && <div className="min-w-0 flex-1">{slider}</div>}{knob}<Numeric label={label} value={value as number} min={field.min} max={field.max} step={field.step} unit={field.unit} gesture={gesture} /></div>
+        : <div className="flex flex-col gap-1"><Numeric label={label} value={value as number} min={field.min} max={field.max} step={field.step} unit={field.unit} gesture={gesture} />{slider}{knob}</div>; break
+    }
     case 'angle': control = <UiAngleDial {...shared} min={field.min} max={field.max} step={field.step} wrap={false} value={value as number} defaultValue={field.default} onChange={gesture.write} />; break
     case 'point': control = <Point field={field} label={label} value={value} gesture={gesture} />; break
     case 'range': control = <div className="flex items-center gap-1"><UiRangeSlider {...shared} min={field.min} max={field.max} step={field.step} track={field.rangeTrack} wrap={field.rangeWrap} value={value as CodeRange} defaultValue={field.default} onChange={gesture.write} />{field.unit && <span className="text-2xs text-text3">{field.unit}</span>}</div>; break
@@ -154,5 +164,5 @@ export const ParamField = memo(function ParamField({ field, value, gesture, labe
     case 'custom': control = <Custom field={field} value={value} gesture={gesture} font={font} />; break
     case 'lut': control = resource ?? <span className="text-xs text-text3">在 全能调色面板选择</span>; break
   }
-  return <fieldset disabled={disabled} className="min-w-0" onPointerDownCapture={event => { if (disabled) { event.preventDefault(); event.stopPropagation() } }}><div key={`${gesture.epoch ?? 0}:${cancelEpoch}`} className="min-w-0" data-param-control={field.type} onKeyDownCapture={event => { if (event.key === 'Escape' && gesture.active()) { event.preventDefault(); event.stopPropagation(); cancel() } }}>{control}</div></fieldset>
+  return <fieldset disabled={disabled} className={property ? 'min-w-0 flex-1' : 'min-w-0'} onPointerDownCapture={event => { if (disabled) { event.preventDefault(); event.stopPropagation() } }}><div key={`${gesture.epoch ?? 0}:${cancelEpoch}`} className="min-w-0" data-param-control={field.type} onKeyDownCapture={event => { if (event.key === 'Escape' && gesture.active()) { event.preventDefault(); event.stopPropagation(); cancel() } }}>{control}</div></fieldset>
 })

@@ -29,6 +29,7 @@ const NON_VISUAL: Record<string, string> = {
   TemplateVariableNodeView: 'TipTap 内部节点视图，需要编辑器 NodeView 上下文，由 PromptEditor 的模板变量宿主创建',
   PromptEditorResourceRegistry: '提示词资源解析服务类，不是 React 可见组件，媒体与变量解析由正式编辑器维护',
   UiFormRowLabelContext: '表单行内部标签关联上下文，没有独立视觉，样张使用 UiFormRow 驱动正式消费组件',
+  UiPropertyMenuContext: '属性面板的面板级右键菜单上下文，没有独立视觉；菜单外观就是已上样张的 ContextMenu，属性行外观由样张里的 property 排布 UiFormRow 展示',
   UiPrimaryActionContext: '主动作权限上下文，没有独立视觉；样张按钮的正式优先级规则由 UiToolbar 管理',
 }
 

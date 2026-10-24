@@ -39,6 +39,8 @@ import {
   Video,
   WandSparkles,
   Wrench,
+  createLucideIcon,
+  type IconNode,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -101,6 +103,17 @@ export const ICON_VIDEO_EDIT_ADJUSTMENT: LucideIcon = SlidersHorizontal
 export const ICON_VIDEO_EDIT_TRANSITION: LucideIcon = Blend
 /** 剪辑代理：两个监视器的切换按钮与素材创建入口共用。 */
 export const ICON_VIDEO_EDIT_PROXY: LucideIcon = Gauge
+/**
+ * 效果控件里每节前的效果开关（对齐 AE 的 fx，重要记录 019）：开着是 fx，关掉是同一个 fx 加一道斜杠。
+ * lucide 没有这个字形，按 lucide 的 24 网格与线宽自绘。
+ */
+const FX_GLYPH: IconNode = [
+  ['path', { d: 'M5 21c2 0 2.8-1.5 3.3-4.2l1.8-10C10.6 4.2 11.6 3 13.8 3', key: 'f' }],
+  ['path', { d: 'M5 10h8', key: 'bar' }],
+  ['path', { d: 'M13 13l7 8M20 13l-7 8', key: 'x' }],
+]
+export const ICON_EFFECT_ENABLED: LucideIcon = createLucideIcon('effect-enabled', [...FX_GLYPH])
+export const ICON_EFFECT_DISABLED: LucideIcon = createLucideIcon('effect-disabled', [...FX_GLYPH, ['path', { d: 'M3 21L21 3', key: 'slash' }]])
 
 /* 其他跨界面概念 ----------------------------------------------------------- */
 

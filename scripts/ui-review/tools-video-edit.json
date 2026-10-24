@@ -57,7 +57,8 @@
       {
         "seedVideoEdit": {
           "name": "核对-剪辑",
-          "captions": 6
+          "captions": 6,
+          "effects": true
         }
       },
       {
@@ -245,11 +246,13 @@
       {
         "click": {
           "role": "button",
-          "name": "/^确定$/",
+          "name": "/^(确定|新建)$/",
           "within": {
             "role": "dialog"
           }
-        }
+        },
+        "optional": true,
+        "timeout": 3000
       },
       {
         "waitStable": {}
@@ -403,6 +406,18 @@
         "capture": "effects-panel"
       },
       {
+        "focus": {
+          "selector": "[data-video-edit-effect-chain] [role=\"group\"]"
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "effects-chain"
+      },
+      {
         "open": {
           "trigger": {
             "role": "button",
@@ -415,7 +430,7 @@
       },
       {
         "click": {
-          "role": "button",
+          "role": "menuitem",
           "name": "/重置布局/"
         }
       },
@@ -423,19 +438,14 @@
         "waitStable": {}
       },
       {
-        "open": {
-          "trigger": {
-            "role": "button",
-            "name": "面板"
-          },
-          "expect": {
-            "selector": "[data-panel-scroll-region]"
-          }
+        "click": {
+          "role": "menuitem",
+          "name": "窗口"
         }
       },
       {
         "click": {
-          "role": "button",
+          "role": "menuitemcheckbox",
           "name": "/字幕与标记/"
         }
       },

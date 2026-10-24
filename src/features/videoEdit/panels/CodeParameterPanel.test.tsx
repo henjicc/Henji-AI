@@ -32,6 +32,9 @@ let sequenceId: string
 let clipIds: string[]
 function View({ visible = true }: { visible?: boolean }): React.ReactElement { useSyncExternalStore(subscribeVideoEdit, videoEditRevision); return <VideoEditEffectsPanel instance={owner} onError={onError} visible={visible} /> }
 const editor = (index = 0) => readVideoEditCodeEditor(owner.document.id, sequenceId, clipIds[index])
+/** 属性面板没有行尾重置：右键这一行，点菜单里的“重置…”。 */
+const resetFromMenu = async (row: Element | null, name: string): Promise<void> => { fireEvent.contextMenu(row!); fireEvent.click(within(document.body).getByRole('menuitem', { name })); await act(() => new Promise(resolve => setTimeout(resolve, 30))) }
+const paramRow = (view: ReturnType<typeof render>, key: string) => view.container.querySelector(`[data-video-edit-code-parameter="${key}"] [data-ui-form-row]`)
 const time = (sourceInUs: number) => ({ sourceInUs, sourceRemainder: { numerator: 0, denominator: 1 } })
 it('基本图形文字对象用统一字体选择器预览、提交和撤销', async () => {
   const id = owner.document.id; const item = createVideoEditGraphicItem(id, { kind: 'text' }); const [clipId] = appendVideoEditItems(id, [item], sequenceId, { frame: 0 })
@@ -64,7 +67,7 @@ it('原生对象切换取消参数草稿，层序与删除空态消费同一对�
   fireEvent.click(view.getByRole('button', { name: '删除图形对象' })); fireEvent.click(view.getByRole('button', { name: '删除图形对象' }))
   expect(clip().graphic!.objects).toEqual([]); expect(view.getByText('此图形暂无对象')).toBeTruthy(); expect(view.queryByRole('button', { name: '为水平位置添加关键帧' })).toBeNull(); expect(onError).not.toHaveBeenCalled()
 })
-it('效果控件拖动数值只记一步撤销，Esc 回到拖动前，读数夹在合法范围内', () => {
+it('效果控件拖动数值只记一步撤销，Esc 回到拖动前，读数夹在合法范围内', async () => {
   const id = owner.document.id; const item = createVideoEditGraphicItem(id, { kind: 'rect' }); const [clipId] = appendVideoEditItems(id, [item], sequenceId, { frame: 0 })
   setVideoEditView(id, { selection: clipId })
   const view = render(<View />); const clip = () => getActiveVideoEditSequence(owner).clips.find(clip => clip.id === clipId)!
@@ -84,7 +87,7 @@ it('效果控件拖动数值只记一步撤销，Esc 回到拖动前，读数夹
   expect(clip().scale).toBe(1); expect(videoEditGestureActive(id)).toBe(false); expect(owner.past).toHaveLength(history)
 
   fireEvent.click(view.getByRole('button', { name: '增加缩放' })); expect(clip().scale).toBeCloseTo(1.01); expect(owner.past).toHaveLength(history + 1)
-  fireEvent.click(view.getByRole('button', { name: '重置缩放' })); expect(clip().scale).toBe(1)
+  await resetFromMenu(view.container.querySelector('[data-video-edit-property-row="缩放"]'), '重置缩放'); expect(clip().scale).toBe(1)
   expect(view.queryByRole('spinbutton', { name: '开始帧' })).toBeNull()
 
   const objectX = within(view.container.querySelector('[data-video-edit-code-parameter="x"]') as HTMLElement).getByRole('spinbutton', { name: '水平位置' })
@@ -130,7 +133,7 @@ beforeEach(async () => {
 })
 afterEach(async () => { cleanup(); for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
 
-it('五种标量控件消费源码声明，并按原实例写入、重置，保留通用片段属性', () => {
+it('五种标量控件消费源码声明，并按原实例写入、重置，保留通用片段属性', async () => {
   const view = render(<View />)
   const number = view.getByRole('spinbutton', { name: '强度' })
   expect(number.getAttribute('min')).toBe('0'); expect(number.getAttribute('max')).toBe('10'); expect(number.getAttribute('step')).toBe('0.25')
@@ -146,10 +149,10 @@ it('五种标量控件消费源码声明，并按原实例写入、重置，保�
   const color = view.getByLabelText('颜色颜色')
   fireEvent.focus(color); fireEvent.change(color, { target: { value: `#${[32, 64, 96].map(channel => channel.toString(16).padStart(2, '0')).join('')}` } }); fireEvent.blur(color)
   expect(editor().parameters.ink).toEqual([32 / 255, 64 / 255, 96 / 255, 0.4])
-  fireEvent.click(view.getByRole('button', { name: '重置强度' })); expect(editor().parameters.amount).toBe(5)
+  await resetFromMenu(paramRow(view, 'amount'), '重置强度'); expect(editor().parameters.amount).toBe(5)
   expect(owner.document.items[0].code!.parameters.amount).toBe(5)
   const renameHistory = owner.past.length
-  fireEvent.click(view.getByRole('button', { name: '重命名片段' })); const name = view.getByRole('textbox', { name: '片段名称' })
+  fireEvent.click(view.getByRole('button', { name: '更多片段操作' })); fireEvent.click(view.getByRole('menuitem', { name: '重命名片段' })); const name = view.getByRole('textbox', { name: '片段名称' })
   fireEvent.change(name, { target: { value: '我的片段' } }); expect(owner.past).toHaveLength(renameHistory); fireEvent.blur(name)
   expect(editor().name).toBe('我的片段'); expect(owner.past).toHaveLength(renameHistory + 1)
   expect(onError).not.toHaveBeenCalled()
@@ -220,7 +223,7 @@ it('序列切换取消调整，原控件的失焦不能修改空序列或原片�
   expect(view.queryByRole('spinbutton', { name: '强度' })).toBeNull(); expect(onError).not.toHaveBeenCalled()
 })
 
-it('关键帧使用精确源时刻，未编辑 NTSC 余量不变，移动/值/插值/删除与重置真实写入', () => {
+it('关键帧使用精确源时刻，未编辑 NTSC 余量不变，移动/值/插值/删除与重置真实写入', async () => {
   editVideoProject(owner.document.id, document => { document.sequences[0].frameRate = { numerator: 30000, denominator: 1001 }; return document })
   setVideoEditView(owner.document.id, { frame: 1 })
   const expected = editor().sourceTime; const view = render(<View />)
@@ -238,7 +241,7 @@ it('关键帧使用精确源时刻，未编辑 NTSC 余量不变，移动/值/�
   expect(editor().curves.amount[0].interpolation).toBe('ease')
   fireEvent.click(view.getByRole('button', { name: '删除强度关键帧1' })); expect(editor().curves.amount).toBeUndefined()
   fireEvent.click(view.getByRole('button', { name: '为强度添加关键帧' })); const beforeReset = owner.past.length
-  fireEvent.click(view.getByRole('button', { name: '重置强度' })); expect(editor().curves.amount).toBeUndefined(); expect(owner.past).toHaveLength(beforeReset + 1)
+  await resetFromMenu(paramRow(view, 'amount'), '重置强度'); expect(editor().curves.amount).toBeUndefined(); expect(owner.past).toHaveLength(beforeReset + 1)
   act(() => undoVideoEdit(owner.document.id)); expect(editor().curves.amount).toHaveLength(1)
   expect(onError).not.toHaveBeenCalled()
 })
