@@ -89,7 +89,9 @@ function handlesOf(target: VideoEditAnnotationTarget): Array<{ handle: Handle; a
   return []
 }
 function labelPosition(target: VideoEditAnnotationTarget): Point {
-  if (target.kind === 'point' || target.kind === 'region' || target.kind === 'ellipse') return target
+  if (target.kind === 'point' || target.kind === 'region') return target
+  // 圈的外接框左上角落在圈外很远，徽标放在圈顶部正中。
+  if (target.kind === 'ellipse') return { x: target.x + target.width / 2, y: target.y }
   if (target.kind === 'arrow') return target.from
   if (target.kind === 'stroke') return target.strokes[0][0]
   if (target.kind === 'element' && target.region) return target.region
