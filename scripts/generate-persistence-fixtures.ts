@@ -78,6 +78,15 @@ sequence.clips.push(clip)
 sequence.captions = [{ id: 'golden-caption', start: 5, duration: 40, text: '字幕原文', sourceText: '字幕原文、', translation: 'Golden caption' }]
 sequence.transitions = [{ id: 'golden-transition', kind: 'cross_dissolve', rightClipId: clip.id, durationFrames: 10 }]
 sequence.markers = [{ id: 'golden-marker', frame: 20, name: '审查点' }, { id: 'golden-beat', frame: 30, name: '重音', type: 'beat', strength: .9 }]
+const goldenAuthor = { kind: 'user' as const, name: '我' }
+const goldenMark = (id: string, target: Record<string, unknown>, text: string, style?: { color: string }) => ({ id, frame: 12, space: 'composition-normalized', target, text, status: 'draft', author: goldenAuthor, createdAt: '2026-10-24T00:00:00.000Z', thread: [], ...(style ? { style } : {}) })
+sequence.annotations = [
+  goldenMark('golden-annotation-region', { kind: 'region', x: .1, y: .1, width: .2, height: .1 }, '这里换成产品图'),
+  goldenMark('golden-annotation-arrow', { kind: 'arrow', from: { x: .2, y: .6 }, to: { x: .45, y: .4 } }, '指向这个按钮', { color: 'orange' }),
+  goldenMark('golden-annotation-ellipse', { kind: 'ellipse', x: .5, y: .5, width: .2, height: .15 }, '圈出的数字放大', { color: 'blue' }),
+  goldenMark('golden-annotation-text', { kind: 'text', x: .6, y: .1 }, '标题改短一点'),
+  goldenMark('golden-annotation-marker', { kind: 'marker', x: .8, y: .8, number: 2 }, '第二步在这里停顿', { color: 'green' }),
+] as typeof sequence.annotations
 document.exportHistory = [{ id: 'golden-export', taskId: 'golden-render', sequenceId: sequence.id, name: '黄金导出', presetName: '自定义导出', rangeSource: 'explicit',
   path: '/persistence-project/导出/黄金.mp4', completedAt: Date.parse(timestamp), settings: VIDEO_EDIT_EXPORT_PRESETS[0].settings,
   range: { startFrame: 0, endFrame: 30 }, assetRef: { kind: 'asset', id: 'golden-export-asset' } }]

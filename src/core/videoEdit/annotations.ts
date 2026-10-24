@@ -14,7 +14,16 @@ export const videoEditAnnotationTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('stroke'), strokes: z.array(z.array(point).min(1)).min(1) }).strict(),
   z.object({ kind: z.literal('element'), elementId: z.string().min(1), sourceSpan: z.object({ file: z.string().min(1), start: z.number().int().nonnegative(), end: z.number().int().positive() }).strict().refine(span => span.end > span.start).optional(), region: region.optional() }).strict(),
   z.object({ kind: z.literal('range'), startFrame: frame, endFrame: frame, trackIds: z.array(identifier).optional(), clipIds: z.array(identifier).optional() }).strict(),
+  // 截图式标注：箭头从 from 指向 to；椭圆按外接框；文字以锚点为左上角显示 annotation.text；编号圆点显示 number。
+  z.object({ kind: z.literal('arrow'), from: point, to: point }).strict(),
+  region.extend({ kind: z.literal('ellipse') }).strict(),
+  point.extend({ kind: z.literal('text') }).strict(),
+  point.extend({ kind: z.literal('marker'), number: z.number().int().positive().max(999) }).strict(),
 ])
+/** 标注颜色用命名色板，真实色值在 colorTokens 的 VIDEO_EDIT_ANNOTATION_COLORS；省略为 red。 */
+export const VIDEO_EDIT_ANNOTATION_COLOR_NAMES = ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'white', 'black'] as const
+export const videoEditAnnotationStyleSchema = z.object({ color: z.enum(VIDEO_EDIT_ANNOTATION_COLOR_NAMES) }).strict()
+export type VideoEditAnnotationColor = typeof VIDEO_EDIT_ANNOTATION_COLOR_NAMES[number]
 export const videoEditAnnotationAuthorSchema = z.object({ kind: z.enum(['user', 'assistant', 'external']), name: z.string().trim().min(1) }).strict()
 export const videoEditAnnotationMessageSchema = z.object({ id: identifier, author: videoEditAnnotationAuthorSchema, createdAt: z.string().datetime(), text: z.string().trim().min(1) }).strict()
 export const videoEditAnnotationSchema = z.object({
@@ -23,19 +32,23 @@ export const videoEditAnnotationSchema = z.object({
   text: z.string().trim().min(1), status: z.enum(['draft', 'open', 'addressed', 'resolved']),
   author: videoEditAnnotationAuthorSchema, createdAt: z.string().datetime(), thread: z.array(videoEditAnnotationMessageSchema),
   addressedBy: z.object({ transactionId: identifier.optional(), revision: z.number().int().nonnegative() }).strict().optional(),
+  style: videoEditAnnotationStyleSchema.optional(),
 }).strict().superRefine((value, ctx) => {
   const issue = (message: string): void => { ctx.addIssue({ code: 'custom', message }) }
   if (value.endFrame !== undefined && value.endFrame < value.frame) issue('标注结束帧不能早于开始帧。')
   const target = value.target
   if (target.kind === 'range' && (target.startFrame !== value.frame || target.endFrame < target.startFrame || target.endFrame !== value.endFrame)) issue('时间段标注的定位帧、结束帧必须与目标范围一致（含两端）。')
   if (target.kind === 'element' && !value.clipId) issue('元素标注必须指定代码片段。')
-  const box = target.kind === 'region' ? target : target.kind === 'element' ? target.region : undefined
+  const box = target.kind === 'region' || target.kind === 'ellipse' ? target : target.kind === 'element' ? target.region : undefined
   if (box && (box.x + box.width > 1.000001 || box.y + box.height > 1.000001)) issue('标注区域必须在画幅内。')
+  if (target.kind === 'arrow' && Math.hypot(target.to.x - target.from.x, target.to.y - target.from.y) < 0.002) issue('箭头起点和终点不能重合。')
   if (new Set(value.thread.map(message => message.id)).size !== value.thread.length) issue('标注回复不能有重复标识。')
   if (value.status === 'addressed' && (!value.addressedBy || !value.thread.length)) issue('待审查标注需要修改关联和处理回复。')
 })
 export type VideoEditAnnotation = z.infer<typeof videoEditAnnotationSchema>
 export type VideoEditAnnotationTarget = z.infer<typeof videoEditAnnotationTargetSchema>
+export type VideoEditAnnotationStyle = z.infer<typeof videoEditAnnotationStyleSchema>
+export function videoEditAnnotationColor(mark: Pick<VideoEditAnnotation, 'style'>): VideoEditAnnotationColor { return mark.style?.color ?? 'red' }
 export const VIDEO_EDIT_ANNOTATION_STATUS_LABELS = { draft: '待发送', open: '待处理', addressed: '待审查', resolved: '已通过' } as const
 
 /** Review is a user action. Neither the built-in assistant nor an external caller can approve it. */
@@ -79,9 +92,11 @@ export function retimeVideoEditAnnotation(mark: VideoEditAnnotation, before: Vid
 }
 export function videoEditAnnotationBounds(mark: VideoEditAnnotation): { x: number; y: number; width: number; height: number } | undefined {
   const target = mark.target
-  if (target.kind === 'region') return target
+  if (target.kind === 'region' || target.kind === 'ellipse') return { x: target.x, y: target.y, width: target.width, height: target.height }
   if (target.kind === 'element') return target.region
-  const points = target.kind === 'point' ? [target] : target.kind === 'stroke' ? target.strokes.flat() : []
+  const points = target.kind === 'point' || target.kind === 'marker' ? [target] : target.kind === 'stroke' ? target.strokes.flat() : target.kind === 'arrow' ? [target.from, target.to]
+    // 文字没有固定尺寸：按锚点向右下估一块常见说明的区域，裁切时把文字一起带上。
+    : target.kind === 'text' ? [target, { x: Math.min(1, target.x + 0.22), y: Math.min(1, target.y + 0.06) }] : []
   if (!points.length) return undefined
   let x = 1; let y = 1; let right = 0; let bottom = 0
   for (const point of points) { x = Math.min(x, point.x); y = Math.min(y, point.y); right = Math.max(right, point.x); bottom = Math.max(bottom, point.y) }

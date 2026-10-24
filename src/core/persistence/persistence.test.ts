@@ -122,16 +122,27 @@ describe('Schema结构指纹', () => {
 })
 
 describe('所有登记格式的黄金样本', () => {
-  it('录屏 v26 升级保持内容，v27 的内嵌风格偏好不提高最低可读版本', () => {
+  it('录屏 v26/v27 升级保持内容；v27 的内嵌风格偏好不提高最低可读版本，v28 的新批注形状提高到 28', () => {
     const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.screen_recording')!
     const previous = JSON.parse(fs.readFileSync('tests/fixtures/persistence/document.screen_recording/v26.json', 'utf8'))
     const original = JSON.stringify(previous)
-    expect(format.version).toBe(27)
-    expect(format.minReaderVersion).toBe(26)
+    expect(format.version).toBe(28)
+    expect(format.minReaderVersion).toBe(28)
     expect(upgradePersistenceContent(format, previous.content, 26)).toEqual(previous.content)
     expect(JSON.stringify(previous)).toBe(original)
     const current = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.screen_recording/v27.json', 'utf8'))
     expect(current).toMatchObject({ kindVersion: 27, kindMinReaderVersion: 26, content: { scriptCapture: { baselines: [{ content: { styles: [{ userPreferences: [{ content: '标题少用装饰线。' }] }] } }] } } })
+  })
+
+  it('剪辑 v24 原样升到 v25；v25 样本带箭头、椭圆、文字、编号圆点批注与颜色', () => {
+    const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
+    const previous = JSON.parse(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v24.json', 'utf8'))
+    expect(upgradePersistenceContent(format, previous.content, 24)).toEqual(previous.content)
+    const current = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v25.json', 'utf8'))
+    expect(current).toMatchObject({ kindVersion: 25, kindMinReaderVersion: 25 })
+    const marks = (current.content as { sequences: Array<{ annotations: Array<{ target: { kind: string }; style?: { color: string } }> }> }).sequences[0].annotations
+    expect(marks.map(mark => mark.target.kind)).toEqual(['region', 'arrow', 'ellipse', 'text', 'marker'])
+    expect(marks.map(mark => mark.style?.color ?? 'red')).toEqual(['red', 'orange', 'blue', 'red', 'green'])
   })
 
   for (const format of PERSISTENCE_FORMATS) {

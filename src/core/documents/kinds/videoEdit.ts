@@ -119,8 +119,9 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   storage: 'json',
   // 版本 1 = 旧剪辑文件第 2 版的持久字段（去掉 format / version / id / name / revision，由外壳表达）。
   version: VIDEO_EDIT_CONTENT_VERSION,
-  // 源增益改变片段的实际声音；旧程序忽略它会错误播放与导出，拒绝静默降级。
-  minReaderVersion: 23,
+  // 25：批注新增箭头、椭圆、文字、编号圆点形状。旧程序的批注目标是封闭联合，读不懂这些分支，
+  // 按“改变已有字段（target）可取值”处理，提高到 25，让旧程序明确提示升级而不是报内容损坏。
+  minReaderVersion: 25,
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
@@ -139,6 +140,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
     22: content => content,
     // 23 → 24：工程风格副本新增可选使用者偏好。
     23: content => content,
+    // 24 → 25：批注新增箭头/椭圆/文字/编号圆点目标与可选 style.color；旧批注原样有效。
+    24: content => content,
   },
   dependencyContent: ({ exportHistory: _exportHistory, ...dependencies }) => dependencies,
   createEmptyContent: createEmptyVideoEditContent,

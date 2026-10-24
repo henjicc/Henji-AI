@@ -4,9 +4,11 @@ import { migrateEmbeddedVideoEditStyles } from '../../videoEdit/styles/legacySty
 import { createRecordingDocument, recordingDocumentSchema, type RecordingDocument } from '../../screenRecording/document'
 
 export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocument> = {
-  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 27, minReaderVersion: 26,
+  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 28, minReaderVersion: 28,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 嵌入剪辑快照的批注新增箭头、椭圆、文字、编号圆点与可选颜色；旧程序读不懂新形状，最低可读版本同步提高到 28。
+    27: content => content,
     // 嵌入剪辑风格新增可选的使用者偏好；旧内容保持原样，最低可读版本不变。
     26: content => content,
     // 嵌入剪辑快照新增源增益；旧程序忽略后重放声音不同，最低可读版本同步提高。
