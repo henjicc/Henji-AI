@@ -29,8 +29,8 @@ export function WorkspaceLayoutMenu({ workspaceId, dockApi }: { workspaceId: str
     void action().then(() => { setEditing(null); close?.() }, reason => setError(reason instanceof Error ? reason.message : '布局操作没有完成')).finally(() => setBusy(false))
   }
   const iconSize = UI_ICON_SIZE.sm
-  // 同一份预设也进标题栏“视图”菜单（这个按钮所在的工作区显示时才声明）。
-  useEffect(() => visible ? contributeAppMenus(`layout.${workspaceId}`, [{ menu: 'view', order: 10, items: [{
+  // 同一份预设也进标题栏“窗口”菜单最上方（参照 Adobe；这个按钮所在的工作区显示时才声明）。
+  useEffect(() => visible ? contributeAppMenus(`layout.${workspaceId}`, [{ menu: 'window', order: 100, items: [{
     kind: 'submenu', id: `layout.${workspaceId}.presets`, label: '工作区布局', ...(layouts.ready ? {} : { disabledReason: '布局还在读取' }),
     items: [
       ...layouts.presets.map(preset => ({ kind: 'action' as const, id: `layout.${workspaceId}.apply.${preset.id}`, label: preset.name, checked: preset.id === layouts.activeId, run: () => layouts.apply(preset.id) })),

@@ -21,7 +21,7 @@ import { activeVideoEditInstance, collectVideoEditMedia, createVideoEditProject,
 import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { cancelVideoEditExport, videoEditExportTask } from './application/videoEditExport'
 import { VideoEditDock } from './layout/VideoEditDock'
-import { VideoEditLayoutMenu } from './layout/VideoEditDockChrome'
+import { VideoEditWindowMenu } from './layout/VideoEditDockChrome'
 import { isUiInspectionActive } from '@/platform/runtime'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from './application/videoEditCommands'
@@ -55,7 +55,7 @@ function toggleMaximizedGroup(api: DockviewApi | null, hovered: Element | null):
 
 /**
  * 剪辑命令带（界面重设计 3.5，设计稿 VideoEdit）：一条带。左端关闭项目、项目名菜单与序列规格；右端撤销/重做、
- * 面板布局，唯一一条分隔线后是成片收录与唯一主动作“导出”。拆分、删除、文字移入时间线工具栏。
+ * 布局预设（面板开关在标题栏“窗口”菜单），唯一一条分隔线后是成片收录与唯一主动作“导出”。拆分、删除、文字移入时间线工具栏。
  */
 function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEditInstance; api: DockviewApi | null; run: (operation: () => unknown | Promise<unknown>) => void; onNotice: (message: string) => void }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
@@ -79,7 +79,7 @@ function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEdi
     {marked && <span className="mr-1 text-xs tabular-nums text-text3" data-video-edit-export-range>导出范围 {videoEditFrameTimecode(marked.startFrame, sequence!.fps)}–{videoEditFrameTimecode(marked.endFrame - 1, sequence!.fps)}</span>}
     <UiIconButton aria-label="撤销" tooltip={undo.tooltip} disabledReason={undo.tooltip} disabled={!undo.enabled} onClick={() => command('undo')}><Undo2  /></UiIconButton>
     <UiIconButton aria-label="重做" tooltip={redo.tooltip} disabledReason={redo.tooltip} disabled={!redo.enabled} onClick={() => command('redo')}><Redo2  /></UiIconButton>
-    <VideoEditLayoutMenu api={api} /><WorkspaceLayoutMenu workspaceId="video_edit" />
+    <VideoEditWindowMenu api={api} /><WorkspaceLayoutMenu workspaceId="video_edit" />
     <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-line" />
     <UiButton onClick={() => run(async () => {
       const { setRecordingDestination } = await import('@/features/screenRecording')

@@ -15,7 +15,10 @@ interface GlobalAppMenuOptions {
   onToggleAssets: () => void
 }
 
-/** 应用层公共菜单：文件（设置、退出）、窗口（工作区、助手、资产库、日志）、帮助。工作区的命令由各工作区自己声明。 */
+/**
+ * 应用层公共菜单：文件（设置、退出）、视图（前往各工作区）、窗口（助手、资产库、最小化）、帮助（含日志与诊断）。
+ * 窗口菜单的上半部分留给当前工作区（布局与面板开关），公共分组排在它们之后；工作区的命令由各工作区自己声明。
+ */
 export function useGlobalAppMenus({ activeWorkspace, workspaces, onWorkspaceChange, assistantOpen, onToggleAssistant, assetFloating, onToggleAssets }: GlobalAppMenuOptions): void {
   useEffect(() => {
     const openSettings = useUiStore.getState().openSettings
@@ -28,18 +31,20 @@ export function useGlobalAppMenus({ activeWorkspace, workspaces, onWorkspaceChan
         { kind: 'separator' },
         { kind: 'action', id: 'app.quit', label: '退出', run: () => getPlatform().window.close() },
       ] },
-      { menu: 'window', order: 0, items: workspaceItems },
-      { menu: 'window', order: 10, items: [
+      { menu: 'view', order: 0, items: [{ kind: 'submenu', id: 'app.workspaces', label: '前往', items: workspaceItems }] },
+      { menu: 'window', order: 900, items: [
         { kind: 'action', id: 'app.assistant', label: '智能助手', checked: assistantOpen, run: onToggleAssistant },
         { kind: 'action', id: 'app.assets', label: '资产库浮动面板', checked: assetFloating, run: onToggleAssets },
       ] },
-      { menu: 'window', order: 20, items: [
-        { kind: 'action', id: 'app.logs', label: '日志与诊断', run: () => openLogWindow() },
+      { menu: 'window', order: 910, items: [
         { kind: 'action', id: 'app.minimize', label: '最小化', run: () => getPlatform().window.minimize() },
       ] },
       { menu: 'help', order: 0, items: [
         { kind: 'action', id: 'app.shortcuts', label: '查看与快捷键设置', run: () => openSettings({ tab: 'general', sectionId: 'general-view' }) },
         { kind: 'action', id: 'app.about', label: '关于痕迹AI与检查更新', run: () => openSettings({ tab: 'general', sectionId: 'general-about' }) },
+      ] },
+      { menu: 'help', order: 10, items: [
+        { kind: 'action', id: 'app.logs', label: '日志与诊断', run: () => openLogWindow() },
       ] },
     ])
   }, [activeWorkspace, workspaces, onWorkspaceChange, assistantOpen, onToggleAssistant, assetFloating, onToggleAssets])

@@ -39,7 +39,7 @@ export interface AppMenuSection {
   menu: AppMenuId
   /** 顶层菜单名（第一次出现时生效；公共菜单的名字由应用层定）。 */
   label?: string
-  /** 同一顶层菜单内的分组顺序，小的在前；公共分组用 0–99，工作区分组用 100 以上。 */
+  /** 同一顶层菜单内的分组顺序，小的在前；公共分组用 0–99，工作区分组用 100 以上（窗口菜单的公共分组例外，用 900 以上排在工作区面板之后）。 */
   order?: number
   items: readonly AppMenuEntry[]
 }

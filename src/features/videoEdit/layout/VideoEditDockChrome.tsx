@@ -1,12 +1,13 @@
-import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useEffect, useState, useSyncExternalStore } from 'react'
-import { Check, LayoutGrid, Maximize2, Menu, Minimize2, RotateCcw } from 'lucide-react'
+import { Maximize2, Menu, Minimize2 } from 'lucide-react'
 import type { DockviewApi, DockviewGroupPanel, IDockviewHeaderActionsProps, IDockviewPanelHeaderProps } from 'dockview-react'
 import { PanelTrigger, UiIconButton, UiOptionButton } from '@/components/ui'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { toggleDockGroupMaximized } from '@/components/dockviewDocking'
 import { setDockHeaderSlot } from '@/components/dockLayouts/dockHeaderSlots'
-import { showVideoEditPanel, VIDEO_EDIT_PANELS } from './videoEditDockLayout'
+import { showVideoEditPanel, VIDEO_EDIT_PANELS, type VideoEditPanelId } from './videoEditDockLayout'
+import { contributeAppMenus } from '@/core/appMenu/appMenu'
+import { useAppMenuVisibility } from '@/components/appMenu/appMenuVisibility'
 import { dockVideoEditPopout, isVideoEditPanelPoppedOut, isVideoEditPopoutPanel, popOutVideoEditGroup, popOutVideoEditPanel, resetVideoEditWorkspaceLayout, subscribeVideoEditPopouts, videoEditPopoutRevision } from './popout/videoEditPopouts'
 
 function useDockGroupMaximized(containerApi: DockviewApi, group: DockviewGroupPanel): boolean {
@@ -90,26 +91,33 @@ export function VideoEditDockHeaderActions({ api, containerApi, group }: IDockvi
   </div>
 }
 
-/** Lives in the workspace's existing command strip, so closed panels remain reachable. */
-export function VideoEditLayoutMenu({ api }: { api: DockviewApi | null }): React.ReactElement {
-  const [, refresh] = useState(0)
-  useSyncExternalStore(subscribeVideoEditPopouts, videoEditPopoutRevision)
+/**
+ * 标题栏“窗口”菜单里的面板开关（参照 PR）：列出剪辑的全部面板，打开的打勾；再点一次关闭，浮出的面板贴回主窗口。
+ * 只在剪辑显示时声明；重置在上方“工作区布局”子菜单里。
+ */
+export function VideoEditWindowMenu({ api }: { api: DockviewApi | null }): null {
+  const visible = useAppMenuVisibility()
+  const [revision, refresh] = useState(0)
+  const popouts = useSyncExternalStore(subscribeVideoEditPopouts, videoEditPopoutRevision)
   useEffect(() => {
     if (!api) return
     const events = [api.onDidAddPanel(() => refresh(value => value + 1)), api.onDidRemovePanel(() => refresh(value => value + 1))]
     return () => events.forEach(event => event.dispose())
   }, [api])
-  return <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu"
-    renderPanel={() => <div className="flex flex-col gap-1">
-      {VIDEO_EDIT_PANELS.map(panel => <UiOptionButton key={panel.id} variant="menu" size="sm" className="flex items-center justify-between" onClick={() => {
-        if (!api) return
-        // 浮出的面板再点一次即贴回主窗口，不会在 Dock 中再建第二份。
-        if (isVideoEditPanelPoppedOut(panel.id)) { dockVideoEditPopout(panel.id); return }
-        const existing = api.getPanel(panel.id)
-        if (existing) existing.api.close(); else showVideoEditPanel(api, panel.id)
-      }}><span>{panel.title}</span>{(api?.getPanel(panel.id) || isVideoEditPanelPoppedOut(panel.id)) && <Check size={UI_ICON_SIZE.xs} />}</UiOptionButton>)}
-      <UiOptionButton variant="menu" size="sm" className="flex items-center gap-2" disabled={!api} onClick={() => { if (api) resetVideoEditWorkspaceLayout(api) }}><RotateCcw size={UI_ICON_SIZE.xs} />重置布局</UiOptionButton>
-    </div>}>
-    {({ open, togglePanel }) => <UiIconButton disabled={!api} aria-label="面板" tooltip="面板与布局" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><LayoutGrid  /></UiIconButton>}
-  </PanelTrigger>
+  useEffect(() => {
+    if (!visible || !api) return undefined
+    const toggle = (id: VideoEditPanelId): void => {
+      // 浮出的面板再点一次即贴回主窗口，不会在 Dock 中再建第二份。
+      if (isVideoEditPanelPoppedOut(id)) { dockVideoEditPopout(id); return }
+      const existing = api.getPanel(id)
+      if (existing) existing.api.close(); else showVideoEditPanel(api, id)
+    }
+    const panels = [...VIDEO_EDIT_PANELS].sort((a, b) => WINDOW_MENU_ORDER.indexOf(a.id) - WINDOW_MENU_ORDER.indexOf(b.id))
+    return contributeAppMenus('videoEdit.panels', [
+      { menu: 'window', order: 110, items: panels.map(panel => ({ kind: 'action' as const, id: `videoEdit.panel.${panel.id}`, label: panel.title, checked: Boolean(api.getPanel(panel.id)) || isVideoEditPanelPoppedOut(panel.id), run: () => toggle(panel.id) })) },
+    ])
+  }, [visible, api, revision, popouts])
+  return null
 }
+/** 窗口菜单里按“看画面、剪、找素材、调参数、做包装、审片”排，和 PR 窗口菜单的分组习惯接近。 */
+const WINDOW_MENU_ORDER: readonly VideoEditPanelId[] = ['program', 'source', 'timeline', 'project', 'effects', 'effects_library', 'title_templates', 'presets', 'style_kits', 'annotations', 'content', 'tracking', 'color_grade']
