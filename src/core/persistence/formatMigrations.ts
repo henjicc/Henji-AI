@@ -15,7 +15,8 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   'screen-capture': { 1: value => ({ ...value as object, version: 2, minReaderVersion: 1 }) },
   'audio-capture-recovery': { 1: value => ({ ...value as object, version: 2 }) },
   // 实验性功能开关 experimentalWebAppRecording（2026-10-23）：只新增可选字段，缺省即关闭。
-  settings: { 14: value => value },
+  // 剪辑片段缩略图模式 videoEditClipThumbnails（2026-10-24）：只新增可选字段，缺省即“只在开头”。
+  settings: { 14: value => value, 15: value => value },
   // 网页录制：步骤与 `.hjweb` 文档类型共用（同一份 recording.json）。
   'web-recording': WEB_RECORDING_MIGRATIONS,
   // 全能调色参数格式 v2（2026-10-21）：开尔文白平衡、创意分离色调并入色轮。

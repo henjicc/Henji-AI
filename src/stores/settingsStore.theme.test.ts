@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { SETTINGS_STORAGE_VERSION } from '@/core/persistence/settingsSchema'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { SETTINGS_ACCENT_HEX, THEME_PALETTE_PRESET_HEX, THEME_SEED_ACCENT_HEX } from '@/core/theme/colorTokens'
@@ -24,7 +25,7 @@ describe('settingsStore 外观选择（v14）', () => {
   beforeEach(resetTheme)
 
   it('默认是石墨预设、跟随预设强调色、标准对比度；派生种子即石墨种子', () => {
-    expect(useSettingsStore.persist.getOptions().version).toBe(14)
+    expect(useSettingsStore.persist.getOptions().version).toBe(SETTINGS_STORAGE_VERSION)
     const state = useSettingsStore.getInitialState()
     expect(state.themeSelection).toEqual(DEFAULT_THEME_SELECTION)
     expect(state.themeSeed).toEqual(DEFAULT_THEME_SEED)

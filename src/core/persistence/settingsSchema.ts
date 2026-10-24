@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { videoEditSequenceDefaultsSchema } from '../videoEdit/sequenceDefaults'
 import { recordingShortcutsSchema } from '../screenRecording/contracts'
 
-export const SETTINGS_STORAGE_VERSION = 15
+export const SETTINGS_STORAGE_VERSION = 16
 
 // Existing merge normalizes partial settings; this schema describes accepted persisted fields.
 export const rendererSettingsSchema = z.object({
@@ -17,4 +17,5 @@ export const rendererSettingsSchema = z.object({
   videoEditSequenceDefaults: videoEditSequenceDefaultsSchema.optional(), videoEditShortcuts: z.record(z.string(), z.json()).optional(),
   videoEditMonitorButtons: z.record(z.string(), z.json()).optional(), videoEditTrackHeaderButtons: z.record(z.string(), z.json()).optional(),
   videoEditDefaultTransitions: z.record(z.string(), z.json()).optional(), videoEditDuplicatePolicy: z.enum(['skip', 'import']).optional(),
+  videoEditClipThumbnails: z.enum(['head', 'head_tail', 'continuous']).optional(),
 }).passthrough()

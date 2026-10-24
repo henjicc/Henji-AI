@@ -210,7 +210,7 @@ beforeEach(async () => {
   ids = current().clips.map(clip => clip.id)
   setVideoEditTimelineView(owner.document.id, { selectedClipIds: [], snapping: false })
 })
-afterEach(async () => { cleanup(); closeVideoEditSpeedDialog(); for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage(); resetFilmstripFramesForTests() })
+afterEach(async () => { cleanup(); closeVideoEditSpeedDialog(); for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage(); resetFilmstripFramesForTests(); useSettingsStore.setState({ videoEditClipThumbnails: 'head' }) })
 
 it('普通视频与代码多选，连续拖动仅本地预览，释放一次历史且一次撤销', () => {
   const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })
@@ -816,6 +816,7 @@ it('声道映射片段按每个片段声道各画一条波形并按声音流与�
 })
 
 it('视频片段显示缩略图条：首格取入点画面，只铺可见范围，滚动换批后复用已取的帧；代码片段不取帧（2.4）', async () => {
+  useSettingsStore.setState({ videoEditClipThumbnails: 'continuous' })
   const requests: Array<{ timeUs: number; height: number }> = []
   vi.spyOn(getPlatform().video, 'getFilmstripFrame').mockImplementation(async ({ source, timeUs, height }) => {
     requests.push({ timeUs, height })
@@ -1010,4 +1011,23 @@ it('时间线统一开关：运动模糊与帧混合写进序列、各一步撤�
   fireEvent.click(corner.getByRole('button', { name: '运动模糊' }))
   await waitFor(() => expect(getActiveVideoEditSequence(owner).motionBlur).toBeUndefined())
   expect(onError).not.toHaveBeenCalled()
+})
+
+it('片段缩略图默认只在开头一张（入点那一帧）；改成首尾时出点帧贴右（重要记录 019）', async () => {
+  const requests: number[] = []
+  vi.spyOn(getPlatform().video, 'getFilmstripFrame').mockImplementation(async ({ source, timeUs, height }) => { requests.push(timeUs); return { path: `${source}.${timeUs}.${height}.webp` } })
+  editVideoProject(owner.document.id, document => {
+    const sequence = document.sequences[0]
+    sequence.clips = sequence.clips.map((clip, index) => index === 0 ? { ...clip, duration: 30 * 20, sourceInUs: 2_500_000 } : { ...clip, start: 30 * 20 + 10 })
+    document.media[0].durationSeconds = 4000
+    return document
+  })
+  const view = render(<View />)
+  const strip = (): HTMLElement => view.container.querySelector<HTMLElement>(`[data-video-edit-filmstrip="${ids[0]}"]`)!
+  await waitFor(() => expect(strip().getAttribute('data-filmstrip-ready')).toBe('1'))
+  expect(strip().getAttribute('data-filmstrip-tiles')).toBe('1'); expect(requests).toEqual([2_500_000])
+  act(() => useSettingsStore.setState({ videoEditClipThumbnails: 'head_tail' }))
+  await waitFor(() => expect(strip().getAttribute('data-filmstrip-ready')).toBe('2'))
+  const images = [...strip().querySelectorAll('img')]
+  expect(images).toHaveLength(2); expect(Number(images[1].style.left.replace('px', ''))).toBeGreaterThan(0)
 })

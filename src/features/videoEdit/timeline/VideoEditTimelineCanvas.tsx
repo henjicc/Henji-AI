@@ -1,3 +1,6 @@
+import { useSettingsStore } from '@/stores/settingsStore'
+import { videoEditClipLabelSurface } from './clipLabelSurface'
+import { videoEditClipLabel } from '@/core/videoEdit/labels'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { VideoEditAnnotationMarks } from './VideoEditAnnotationMarks'
 import { useVideoEditAnnotationRange } from './useVideoEditAnnotationRange'
@@ -68,8 +71,6 @@ import { openVideoEditNestedClip, type VideoEditNestTarget } from '../applicatio
 /** corner：轨道头上方、标尺左端的角落格（时间码与这条时间线的统一开关，重要记录 019）。 */
 interface Props { instance: VideoEditInstance; sequence: VideoEditSequence; pixels: number; onError: (error: unknown) => void; visible?: boolean; corner?: React.ReactNode }
 const dropLogger = createLogger('features.videoEdit.timeline.drop')
-/** 片段底色与描边（设计稿素材片段令牌）：画面、声音、文字/代码/图形/调整各一组；选中改强调描边。 */
-const CLIP_SURFACE = { video: { fill: 'bg-clip-video', line: 'border-clip-video-line' }, audio: { fill: 'bg-clip-audio', line: 'border-clip-audio-line' }, title: { fill: 'bg-clip-title', line: 'border-clip-title-line' } } as const
 const CLIP_SELECTED_LINE = 'border-accent-ring ring-1 ring-accent-ring'
 /**
  * 缩略图条的可见范围按 64px 取整并限制在片段两侧各 64px 内：完全可见的片段滚动时属性不变、整段跳过重绘，
@@ -88,6 +89,7 @@ const TRANSITION_DROP_CENTER = 8
 const FADE_HANDLE_MIN_WIDTH = 28
 interface TransitionDropHint { kind: VideoEditTransitionKind; pair: VideoEditTransitionPair; alignment: VideoEditTransitionAlignment; track: number; start: number; duration: number }
 export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, visible = true, corner }: Props): React.ReactElement {
+  const thumbnails = useSettingsStore(state => state.videoEditClipThumbnails)
   const annotationRange = useVideoEditAnnotationRange(instance, pixels, TIMELINE_HEADER_WIDTH, onError)
   const projectId = instance.document.id
   const [nestTarget, setNestTarget] = useState<VideoEditNestTarget | null>(null)
@@ -347,15 +349,16 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         // Picture clips show a filmstrip of their media (task 2.4); sound clips their waveform (task 2.3).
         const sound = clip.kind === 'audio' || clip.kind === 'video' && clip.sourceComponent === 'audio'
         const picture = !sound && (clip.kind === 'video' && media?.kind === 'video' || clip.kind === 'image' && media?.kind === 'image')
-        const surface = sound ? CLIP_SURFACE.audio : clip.kind === 'video' || clip.kind === 'image' ? CLIP_SURFACE.video : CLIP_SURFACE.title
+        // 片段底色按标签色（重要记录 019）：给素材改标签，时间线上的片段跟着变。
+        const surface = videoEditClipLabelSurface(videoEditClipLabel(instance.document, clip), selected)
         // Hidden picture tracks and muted sound tracks dim their clips (content only, see the overlay below), as in Premiere.
         const dimmed = !row.track.enabled || row.track.kind === 'audio' && row.track.muted
         const clipLeft = TIMELINE_HEADER_WIDTH + clip.start * pixels
         const clipWidth = Math.max(3, clip.duration * pixels)
         const fadeIn = (clip.fadeInFrames ?? 0) * pixels; const fadeOut = (clip.fadeOutFrames ?? 0) * pixels
         const fadable = clip.kind !== 'adjustment' && clipWidth >= FADE_HANDLE_MIN_WIDTH
-        return <div key={clip.id} data-video-edit-clip={clip.id} data-clip-start={clip.start} data-clip-duration={clip.duration} className={`group absolute overflow-hidden rounded-md border ${surface.fill} ${selected ? CLIP_SELECTED_LINE : surface.line}`} data-clip-dimmed={dimmed || undefined} style={{ top: row.top - region.top + 2, height: row.height - 4, left: clipLeft, width: clipWidth }}>
-          {picture && media && <VideoEditClipFilmstrip clipId={clip.id} source={media.path} sourceRevision={media.sourceRevision} still={media.kind === 'image'} aspect={media.width > 0 && media.height > 0 ? media.width / media.height : 16 / 9}
+        return <div key={clip.id} data-video-edit-clip={clip.id} data-clip-start={clip.start} data-clip-duration={clip.duration} className={`group absolute overflow-hidden rounded-md border ${selected ? CLIP_SELECTED_LINE : ''}`} data-clip-dimmed={dimmed || undefined} style={{ top: row.top - region.top + 2, height: row.height - 4, left: clipLeft, width: clipWidth, ...surface }}>
+          {picture && media && <VideoEditClipFilmstrip mode={thumbnails} clipId={clip.id} source={media.path} sourceRevision={media.sourceRevision} still={media.kind === 'image'} aspect={media.width > 0 && media.height > 0 ? media.width / media.height : 16 / 9}
             mediaEndSeconds={media.durationSeconds} frameSeconds={media.frameRate ? media.frameRate.denominator / media.frameRate.numerator : 1 / 30} clip={clip} fps={fps} pixels={pixels} clipWidth={clipWidth} height={row.height - 6}
             visibleFrom={stripEdge(view.left + TIMELINE_HEADER_WIDTH - clipLeft, clipWidth, Math.floor)} visibleTo={stripEdge(view.left + view.width - clipLeft, clipWidth, Math.ceil)} devicePixelRatio={devicePixelRatio} active={visible} />}
           {range && <VideoEditClipWaveform clipId={clip.id} gainDb={clip.gainDb} sources={range.sources} startSeconds={range.startSeconds} endSeconds={range.endSeconds} reverse={clip.reverse} left={(range.from - clip.start) * pixels} width={(range.to - range.from) * pixels} visible={visible} lane={picture ? 'lower' : 'full'} />}

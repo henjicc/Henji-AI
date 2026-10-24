@@ -176,6 +176,7 @@ export const SETTINGS_DECLARATION = {
             ['sections.videoEdit.binsFirstLabel', ['素材箱', 'bin']],
             ['sections.videoEdit.folderBinsLabel', ['素材箱', 'folder bin']],
             ['sections.videoEdit.duplicatePolicyLabel', ['重复文件', 'duplicate']],
+            ['sections.videoEdit.clipThumbnailsLabel', ['缩略图', '时间线', '片段', 'filmstrip', 'thumbnail']],
             ['sections.videoEdit.renderFormatLabel', ['预渲染', 'HEVC', 'H.264', '编码', 'render format']],
             ['sections.videoEdit.renderQualityLabel', ['预渲染画质', 'render quality']],
           ]),

@@ -15,6 +15,8 @@ const VideoEditSection: React.FC = () => {
   const setBinsFirst = useSettingsStore(state => state.setVideoEditBinsFirst)
   const setFolderBins = useSettingsStore(state => state.setVideoEditImportFolderBins)
   const setDuplicatePolicy = useSettingsStore(state => state.setVideoEditDuplicatePolicy)
+  const thumbnails = useSettingsStore(state => state.videoEditClipThumbnails)
+  const setThumbnails = useSettingsStore(state => state.setVideoEditClipThumbnails)
   const enabled = useSettingsStore(state => state.videoEditSelectionFollowsPlayhead)
   const setEnabled = useSettingsStore(state => state.setVideoEditSelectionFollowsPlayhead)
   const cache = useSyncExternalStore(subscribeMediaCacheSettings, getMediaCacheSettings)
@@ -31,6 +33,10 @@ const VideoEditSection: React.FC = () => {
     </UiFormRow>
     <UiFormRow label={t('sections.videoEdit.duplicatePolicyLabel')} inline>
       <Dropdown value={duplicatePolicy} onSelect={setDuplicatePolicy} options={[{ value: 'skip', label: t('sections.videoEdit.duplicateSkip') }, { value: 'import', label: t('sections.videoEdit.duplicateImport') }]} />
+    </UiFormRow>
+    <UiFormRow label={t('sections.videoEdit.clipThumbnailsLabel')} info={t('sections.videoEdit.clipThumbnailsInfo')} inline>
+      <SettingsSegmented<'head' | 'head_tail' | 'continuous'> ariaLabel={t('sections.videoEdit.clipThumbnailsLabel')} value={thumbnails} onChange={setThumbnails}
+        options={[{ value: 'head', label: t('sections.videoEdit.clipThumbnailsHead') }, { value: 'head_tail', label: t('sections.videoEdit.clipThumbnailsHeadTail') }, { value: 'continuous', label: t('sections.videoEdit.clipThumbnailsContinuous') }]} />
     </UiFormRow>
     <UiFormRow label={t('sections.videoEdit.renderFormatLabel')} info={t('sections.videoEdit.renderFormatInfo')} inline>
       <SettingsSegmented<VideoRenderCacheFormat> ariaLabel={t('sections.videoEdit.renderFormatLabel')} value={cache.renderFormat} onChange={renderFormat => { void updateMediaCacheSettings({ renderFormat }).catch(() => undefined) }}

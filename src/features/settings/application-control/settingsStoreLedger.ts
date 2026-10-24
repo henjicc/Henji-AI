@@ -117,6 +117,7 @@ export const SETTINGS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     setVideoEditBinsFirst: property('video_edit.bins_first'),
     setVideoEditImportFolderBins: property('video_edit.import_folder_bins'),
     setVideoEditDuplicatePolicy: property('video_edit.duplicate_policy'),
+    setVideoEditClipThumbnails: property('video_edit.clip_thumbnails'),
     setVideoEditSelectionFollowsPlayhead: property('video_edit.selection_follows_playhead'),
   },
 }

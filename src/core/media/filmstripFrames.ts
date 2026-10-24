@@ -67,6 +67,24 @@ export interface FilmstripPlanInput {
   frameSeconds: number
 }
 
+/** 时间线缩略图的铺法（重要记录 019）：只在开头一张（默认）、开头和结尾各一张、连续铺满。 */
+export type FilmstripMode = 'head' | 'head_tail' | 'continuous'
+
+/**
+ * 片段两端的缩略图：入点那一帧贴左，出点那一帧贴右（与连续铺法第一格取同一帧）；片段放不下两张时只留开头。
+ * 不按可见范围裁剪——最多两张，滚动时无需重新铺格。
+ */
+export function planFilmstripEndTiles(input: FilmstripPlanInput, tail: boolean): FilmstripTile[] {
+  const { clipWidth, tileWidth } = input
+  if (!(clipWidth > 0) || !(tileWidth > 0) || !(input.secondsPerPixel > 0)) return []
+  const lastUs = Math.max(0, Math.floor((input.mediaEndSeconds - Math.max(input.frameSeconds, 0.001)) * 1_000_000))
+  const at = (pixel: number): number => input.sourceSecondsAtPixel ? input.sourceSecondsAtPixel(pixel) : input.sourceInSeconds + pixel * input.secondsPerPixel
+  const time = (seconds: number): number => Math.min(lastUs, Math.max(0, Math.floor(seconds * 1_000_000)))
+  const tiles: FilmstripTile[] = [{ index: 0, left: 0, width: Math.min(tileWidth, clipWidth), timeUs: time(at(0)) }]
+  if (tail && clipWidth >= tileWidth * 2) tiles.push({ index: 1, left: clipWidth - tileWidth, width: tileWidth, timeUs: time(at(clipWidth - 1)) })
+  return tiles
+}
+
 export function planFilmstripTiles(input: FilmstripPlanInput): FilmstripTile[] {
   const { clipWidth, tileWidth, secondsPerPixel } = input
   if (!(clipWidth > 0) || !(tileWidth > 0) || !(secondsPerPixel > 0) || !(input.visibleTo > input.visibleFrom)) return []

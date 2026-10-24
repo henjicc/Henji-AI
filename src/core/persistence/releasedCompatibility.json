@@ -667,15 +667,18 @@
       ],
       "versions": {
         "14": "7b798aac72c96287eff885080b1f55a1e2ec783061ee35512b696c0234b5cd9a",
-        "15": "43975a71676eed585cc7cd4bc54d09886f37c1d935067e0b11282d58ae60eba6"
+        "15": "43975a71676eed585cc7cd4bc54d09886f37c1d935067e0b11282d58ae60eba6",
+        "16": "4f8f138d9c948baa0eab9ecc91a24bd2ca7af3d2f78253c476b0f7eb4a781589"
       },
       "readers": {
         "14": 14,
-        "15": 14
+        "15": 14,
+        "16": 14
       },
       "samples": {
         "v14.json": "b2c3a2708c447039f8f11bd8387991dba48216af6d9b6f89897dab47433c1049",
-        "v15.json": "7b638120023cab9e7c636f479ac5f9f5f1666241f2388e05fc1f012e10d33813"
+        "v15.json": "7b638120023cab9e7c636f479ac5f9f5f1666241f2388e05fc1f012e10d33813",
+        "v16.json": "2f9bc54aa4b5a33f86733ede6076df0d07f34036f1455ca08fe7d98a14d30d3d"
       }
     },
     "theme": {

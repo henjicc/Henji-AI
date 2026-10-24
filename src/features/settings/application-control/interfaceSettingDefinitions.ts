@@ -58,6 +58,11 @@ export const INTERFACE_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefini
     target: settingsTarget('workspace-video-edit'), requiresReload: false, requiresRestart: false, sensitive: false,
   }, () => useSettingsStore.getState().videoEditDuplicatePolicy, value => useSettingsStore.getState().setVideoEditDuplicatePolicy(value)),
   storeSetting({
+    id: 'video_edit.clip_thumbnails', title: '片段缩略图', description: '时间线上画面片段怎样显示缩略图：head 只在开头一张（默认，最安静）、head_tail 开头和结尾各一张、continuous 沿片段连续铺满。只影响显示，不改作品。',
+    aliases: ['片段缩略图', '时间线缩略图', '缩略图条', 'filmstrip'], schema: z.enum(['head', 'head_tail', 'continuous']), defaultValue: 'head',
+    target: settingsTarget('workspace-video-edit'), requiresReload: false, requiresRestart: false, sensitive: false,
+  }, () => useSettingsStore.getState().videoEditClipThumbnails, value => useSettingsStore.getState().setVideoEditClipThumbnails(value)),
+  storeSetting({
     id: 'video_edit.sequence_defaults', title: '新建序列默认规格', description: '手动新建序列与仅拖入音频时使用的宽高、帧率、像素长宽比、音频采样率和声道。初始为1920×1080、60帧；图片按原尺寸和60帧，可靠视频按原尺寸和帧率。',
     aliases: ['序列默认值', '序列默认规格', '默认分辨率', '默认帧率'], schema: videoEditSequenceDefaultsSchema, defaultValue: VIDEO_EDIT_SEQUENCE_DEFAULTS,
     target: settingsTarget('workspace-video-edit'), requiresReload: false, requiresRestart: false, sensitive: false,

@@ -1,3 +1,4 @@
+import { useSettingsStore } from '@/stores/settingsStore'
 import { createVideoEditTestProject as createVideoEditProject } from '../application/videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import React, { useSyncExternalStore } from 'react'
@@ -30,6 +31,8 @@ const onError = vi.fn()
 function View(): React.ReactElement { useSyncExternalStore(subscribeVideoEdit, videoEditRevision); return <VideoEditTimeline instance={owner} onError={onError} /> }
 beforeEach(async () => {
   installHarnessNativeStorage(); onError.mockClear()
+  // 这里核对连续铺满的缩略图条映射源范围；默认只在开头一张（重要记录 019）。
+  useSettingsStore.setState({ videoEditClipThumbnails: 'continuous' })
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/fixture/speed-media.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
   vi.spyOn(getPlatform().video, 'getFilmstripFrame').mockImplementation(async ({ timeUs }) => ({ path: `D:/fixture/frame-${timeUs}.webp` }))

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FILMSTRIP_GRID_US, filmstripGridStepUs, filmstripHeightBucket, filmstripTileWidth, isFilmstripHeight, planFilmstripTiles, type FilmstripPlanInput } from './filmstripFrames'
+import { FILMSTRIP_GRID_US, filmstripGridStepUs, filmstripHeightBucket, filmstripTileWidth, isFilmstripHeight, planFilmstripEndTiles, planFilmstripTiles, type FilmstripPlanInput } from './filmstripFrames'
 import { videoEditClipSourceSecondsAt, type VideoEditClipTiming } from '../videoEdit/clipSpeed'
 
 const base: FilmstripPlanInput = { clipWidth: 1000, tileWidth: 100, visibleFrom: 0, visibleTo: 1000, sourceInSeconds: 2, secondsPerPixel: 0.01, mediaEndSeconds: 60, frameSeconds: 1 / 30 }
@@ -68,5 +68,22 @@ describe('filmstrip frame planning', () => {
     expect(planFilmstripTiles({ ...base, sourceInSeconds: 1 / 3 })[0].timeUs).toBe(333_333)
     expect(planFilmstripTiles({ ...base, visibleFrom: 2000, visibleTo: 2100 })).toEqual([])
     expect(planFilmstripTiles({ ...base, clipWidth: 0 })).toEqual([])
+  })
+})
+
+describe('片段两端的缩略图（重要记录 019）', () => {
+  const input = { clipWidth: 400, tileWidth: 80, visibleFrom: 0, visibleTo: 400, sourceInSeconds: 2, secondsPerPixel: 0.01, mediaEndSeconds: 20, frameSeconds: 1 / 30 }
+  it('只在开头：一张入点帧，与连续铺法第一格同一帧', () => {
+    const [head] = planFilmstripEndTiles(input, false)
+    expect(planFilmstripEndTiles(input, false)).toHaveLength(1)
+    expect(head).toEqual({ index: 0, left: 0, width: 80, timeUs: 2_000_000 })
+    expect(planFilmstripTiles(input)[0].timeUs).toBe(head.timeUs)
+  })
+  it('首尾：出点帧贴右；片段放不下两张时只留开头，比一格还窄时开头按片段宽度', () => {
+    const tiles = planFilmstripEndTiles(input, true)
+    expect(tiles.map(tile => tile.left)).toEqual([0, 320])
+    expect(tiles[1].timeUs).toBe(Math.floor((2 + 399 * 0.01) * 1_000_000))
+    expect(planFilmstripEndTiles({ ...input, clipWidth: 120 }, true)).toHaveLength(1)
+    expect(planFilmstripEndTiles({ ...input, clipWidth: 50 }, true)[0].width).toBe(50)
   })
 })

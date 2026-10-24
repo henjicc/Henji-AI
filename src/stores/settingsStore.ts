@@ -114,9 +114,12 @@ interface SettingsState {
   videoEditBinsFirst: boolean;
   videoEditImportFolderBins: boolean;
   videoEditDuplicatePolicy: 'skip' | 'import';
+  /** 时间线画面片段的缩略图（重要记录 019）：只在开头（默认）、开头和结尾、连续铺满。 */
+  videoEditClipThumbnails: 'head' | 'head_tail' | 'continuous';
   setVideoEditBinsFirst: (enabled: boolean) => void;
   setVideoEditImportFolderBins: (enabled: boolean) => void;
   setVideoEditDuplicatePolicy: (policy: 'skip' | 'import') => void;
+  setVideoEditClipThumbnails: (mode: 'head' | 'head_tail' | 'continuous') => void;
   setProviderApiKey: (providerId: string, key: string) => void;
   setProviderKeyStatus: (providerId: string, configured: boolean) => void;
   setProviderKeyStatuses: (status: ProviderKeyStatusMap) => void;
@@ -234,6 +237,7 @@ export const useSettingsStore = create<SettingsState>()(
       videoEditBinsFirst: true,
       videoEditImportFolderBins: true,
       videoEditDuplicatePolicy: 'skip',
+      videoEditClipThumbnails: 'head',
       setProviderApiKey: (providerId, key) => {
         const normalizedKey = normalizeApiKey(key);
         set((state) => ({
@@ -325,6 +329,7 @@ export const useSettingsStore = create<SettingsState>()(
       setVideoEditBinsFirst: (videoEditBinsFirst) => set({ videoEditBinsFirst }),
       setVideoEditImportFolderBins: (videoEditImportFolderBins) => set({ videoEditImportFolderBins }),
       setVideoEditDuplicatePolicy: (videoEditDuplicatePolicy) => set({ videoEditDuplicatePolicy }),
+      setVideoEditClipThumbnails: (videoEditClipThumbnails) => set({ videoEditClipThumbnails }),
       setVideoEditSelectionFollowsPlayhead: (videoEditSelectionFollowsPlayhead) => set({ videoEditSelectionFollowsPlayhead }),
     }),
     {
