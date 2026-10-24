@@ -120,7 +120,7 @@ export function createDocumentServices(environment: DocumentEnvironment): Docume
     stagingDirectory: path.join(environment.storeDirectory, 'package-staging'),
     hideDirectory: environment.hideDirectory,
   })
-  const codeFiles = new DocumentCodeFiles(workspace, repository, environment.logger('main.documents.code'))
+  const codeFiles = new DocumentCodeFiles(workspace, repository, environment.logger('main.documents.code'), kinds)
   const service = new DocumentService({ codeFiles, workspace, repository, projects, scanner, covers, sessionState, packages, kinds })
   return { service, workspace, repository, projects, scanner, covers, sessionState, packages }
 }

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import type { DocumentTarget } from '../../../../src/core/documents/types'
+import type { DocumentKindRegistry } from '../../../../src/core/documents/kinds'
 import { CODE_AUTHOR_SOURCE_MAX_BYTES, codeFilePathSchema, componentFileReferences, type CodeComponentPin, type CodeFileReference } from '../../../../src/core/videoEdit/codeMaterial/sources'
 import { componentSourceMetadata, packageComponentSource, type CodeComponent, type CodeComponentVersion } from '../../../../src/core/videoEdit/codeMaterial/components'
 import type { DiscardCodeFilesRequest, PublishCodeComponentRequest, WriteCodeVersionRequest, WithdrawCodeComponentRequest } from '../../../../src/core/videoEdit/codeMaterial/storageContract'
@@ -50,7 +51,11 @@ export class DocumentCodeFiles {
       else if (value && typeof value === 'object') Object.values(value).forEach(visit)
     }
     // Fail closed if any saved document cannot be inspected, including documents in other projects.
-    for (const row of this.workspace.catalog.listDocuments({ includeDrafts: true, includeMissing: true })) visit((await this.repository.read({ id: row.id, path: row.path })).content)
+    // Folder documents (web recordings) have no envelope content and never reference code files.
+    for (const row of this.workspace.catalog.listDocuments({ includeDrafts: true, includeMissing: true })) {
+      if (this.kinds.get(row.kind)?.storage === 'folder') continue
+      visit((await this.repository.read({ id: row.id, path: row.path })).content)
+    }
     for (const root of new Set(groups.map(group => group.root))) await this.exclusive(root, async () => {
       const requested = new Set(request.files.map(file => file.location))
       const libraryRoot = path.join(root, '代码', '组件库')
@@ -107,7 +112,8 @@ export class DocumentCodeFiles {
       await fsp.rmdir(directory).catch(error => { if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(error.code)) throw error })
     }
   }
-  constructor(private readonly workspace: DocumentWorkspace, private readonly repository: DocumentRepository, private readonly logger: MainLogger) {}
+  constructor(private readonly workspace: DocumentWorkspace, private readonly repository: DocumentRepository, private readonly logger: MainLogger,
+    private readonly kinds: Pick<DocumentKindRegistry, 'get'>) {}
   private async root(target: DocumentTarget): Promise<string> {
     const read = await this.repository.read(target)
     return (await this.workspace.resolveContainer(read.meta.container)).root

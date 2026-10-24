@@ -48,6 +48,18 @@ describe('文件夹类型文档（.hjweb）', () => {
     expect((await service.listDocuments({ kind: 'canvas' })).length).toBe(0)
   })
 
+  it('项目里有网页录制时，代码素材写入失败后的补偿照常回收源码（文件夹文档不参与引用检查）', async () => {
+    const { service, workspace } = env.services
+    const project = await service.createProject({ name: '元宝搜索' })
+    const root = workspace.catalog.getProject(project.id)!.path
+    await writeRecording(path.join(root, '素材', '录屏', '08-生成总结.hjweb'))
+    await service.refreshIndex()
+    const edit = await service.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: project.id }, name: '剪辑' })
+    const written = await service.writeCodeVersion({ target: { id: edit.meta.id }, definitionId: 'card', name: '花字卡片', contents: { entry: 'main.ts', files: { 'main.ts': 'export default {}' } } })
+    await expect(service.discardCodeFiles({ files: written.files, retainedLocations: [] })).resolves.toBeUndefined()
+    await expect(fsp.stat(written.files[0].location)).rejects.toThrow()
+  })
+
   it('新建位置落在 素材/录屏/ 并按“保留两者”起名；写完头信息后登记进索引', async () => {
     const { service, workspace } = env.services
     const project = await service.createProject({ name: '元宝搜索' })
