@@ -130,7 +130,7 @@ function createSurfaceGrammarScenes(context) {
           await openVideoEditProjectCard(page, seeded.projectId)
           await page.locator('[data-video-edit-clip="motion-clip"] [aria-label^="选择片段"]').click()
           await page.getByRole('button', { name: '批注', exact: true }).click()
-          await page.getByLabel('筛选批注', { exact: true }).waitFor()
+          await page.getByLabel('批注面板', { exact: true }).waitFor()
           await context.settlePage(page, 300); await assertFormColumns(page.getByLabel('批注面板', { exact: true })); await capture('annotation-rows')
           await page.getByRole('button', { name: '面板', exact: true }).click()
           await page.getByRole('button', { name: '全能调色', exact: true }).click()

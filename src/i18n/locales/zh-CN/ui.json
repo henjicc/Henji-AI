@@ -246,7 +246,6 @@
     "anchor": "编辑锚点",
     "maskTarget": "蒙版目标图层",
     "noAvailableLayers": "没有可用图层",
-    "annotationFilter": "筛选批注",
     "trackingTarget": "跟踪应用目标",
     "stylePreset": "风格组件"
   },

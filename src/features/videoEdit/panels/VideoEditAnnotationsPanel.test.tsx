@@ -10,10 +10,6 @@ import { closeVideoEditProject, getActiveVideoEditSequence, listVideoEditInstanc
 import { createVideoEditAnnotation } from '../application/videoEditAnnotations'
 import { VideoEditAnnotationsPanel } from './VideoEditAnnotationsPanel'
 
-vi.mock('./VideoEditAnnotationThumbnail', async () => {
-  const { UiButton } = await import('@/components/ui')
-  return { VideoEditAnnotationThumbnail: ({ label, onJump }: { label: string; onJump: () => void }) => <UiButton aria-label={label} onClick={onJump}>标注画面</UiButton> }
-})
 vi.mock('react-virtuoso', () => ({ Virtuoso: ({ data, itemContent }: { data: unknown[]; itemContent: (index: number, entry: unknown) => React.ReactNode }) => <div>{data.map((entry, index) => <div key={index}>{itemContent(index, entry)}</div>)}</div> }))
 beforeEach(() => { installHarnessNativeStorage(); vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/notes.hjvid'); vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined); vi.spyOn(getPlatform().clipboard, 'writeText').mockResolvedValue(undefined) })
 afterEach(async () => { cleanup(); for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
@@ -23,10 +19,13 @@ it('完整流转：草稿编辑→批量发送→open→Agent处理→待审查�
   const errors = vi.fn(); const view = render(<VideoEditAnnotationsPanel instance={owner} onError={errors} />); const app = createApplicationHarness()
   try {
     expect(view.getByText('1 条待发送')).toBeTruthy()
+    // 选中不铺底色、展开即选中：刚画的那条已选中并展开；点一条就跳到它的画面
+    expect(view.getByRole('button', { name: '跳到标注 1' }).getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(view.getByRole('button', { name: '跳到标注 1' })); expect(owner.frame).toBe(12); expect(owner.activePanel).toBe('annotations')
     fireEvent.change(view.getByLabelText('标注 1 说明'), { target: { value: '标题缩小' } }); fireEvent.blur(view.getByLabelText('标注 1 说明'))
     expect(getActiveVideoEditSequence(owner).annotations[0].text).toBe('标题缩小')
     fireEvent.click(view.getByRole('button', { name: '复制给外部 Agent' })); await waitFor(() => expect(getActiveVideoEditSequence(owner).annotations[0].status).toBe('open'))
-    fireEvent.click(view.getByRole('button', { name: '跳到标注 1' })); expect(owner.frame).toBe(12); expect(owner.activePanel).toBe('annotations')
+    expect(view.queryByText('1 条待发送')).toBeNull()
     await act(async () => {
       const result = await app.change({ kind: 'video_edit.annotation', id: `${id}:${markId}` }, { 'video_edit.annotation.thread': [{ id: 'r', author: { kind: 'external', name: 'Claude Code' }, createdAt: '2026-10-08T00:00:00.000Z', text: '已缩小；撤销这次修改可恢复。' }], 'video_edit.annotation.status': 'addressed' }); expect(result).toMatchObject({ ok: true })
     })
@@ -45,6 +44,7 @@ it('审查重开附意见，补充讨论；删除草稿保留其它标注', asyn
   const app = createApplicationHarness(); const view = render(<VideoEditAnnotationsPanel instance={owner} onError={vi.fn()} />)
   try {
     await act(async () => { await app.change({ kind: 'video_edit.annotation', id: `${id}:${markId}` }, { 'video_edit.annotation.thread': [{ id: 'r', author: { kind: 'assistant', name: '助手' }, createdAt: '2026-10-08T00:00:00.000Z', text: '已修改。' }], 'video_edit.annotation.status': 'addressed' }) })
+    fireEvent.click(view.getByRole('button', { name: '跳到标注 2' })); expect(view.queryByLabelText('标注 1 说明')).toBeNull()
     fireEvent.change(view.getByLabelText('标注 2 审查意见'), { target: { value: '亮度再减一点' } }); fireEvent.click(view.getByRole('button', { name: '重开' }))
     const mark: VideoEditAnnotation = getActiveVideoEditSequence(owner).annotations[1]; expect(mark.status).toBe('open'); expect(mark.thread.at(-1)?.text).toBe('亮度再减一点')
     fireEvent.click(view.getByRole('button', { name: '删除标注 1' })); expect(getActiveVideoEditSequence(owner).annotations).toHaveLength(1)

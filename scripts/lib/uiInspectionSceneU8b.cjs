@@ -79,7 +79,7 @@ function createU8bUiScenes(context) {
       await openVideoEditProjectCard(page, seeded.projectId)
       const shot = async suffix => { await context.settlePage(page, 500); await capture(suffix) }
       await page.locator('[data-video-edit-clip="motion-clip"] [aria-label^="选择片段"]').click()
-      await button(page, '批注').click(); await page.getByLabel('筛选批注', { exact: true }).waitFor(); await shot('annotation-tabs')
+      await button(page, '批注').click(); await page.getByLabel('批注面板', { exact: true }).waitFor(); await shot('annotation-tabs')
       const truncated = await page.locator('.dv-tabs-container .dv-active-tab').evaluateAll(tabs => tabs.filter(tab => tab.hasAttribute('data-dock-tab-clipped')).map(tab => tab.textContent))
       assert.deepEqual(truncated, [], '当前标签必须完整可见')
       await page.locator('.dv-groupview').filter({ has: page.locator('[data-dock-tab="annotations"]') }).locator('.dv-tabs-overflow-dropdown-root').click()

@@ -15,7 +15,6 @@ import * as fonts from '../application/videoEditFonts'
 import * as elements from '../application/videoEditCodeElements'
 import { VideoEditCodeElementOverlay } from '../VideoEditCodeElementOverlay'
 
-vi.mock('./VideoEditAnnotationThumbnail', () => ({ VideoEditAnnotationThumbnail: () => <div /> }))
 vi.mock('react-virtuoso', () => ({ Virtuoso: () => <div /> }))
 afterEach(async () => { cleanup(); await closeAllVideoEdits(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 
