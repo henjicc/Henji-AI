@@ -59,6 +59,30 @@ describe('起名对话框', () => {
     expect(info.submit).toHaveBeenCalledWith('新海报', null)
   })
 
+  it('重名检查还没回来时按回车，检查一结束且名称可用就保存；检查结果重名则不保存', async () => {
+    const info = nameInfo()
+    const onDone = vi.fn()
+    render(<DocumentSaveNameDialog info={info} onDone={onDone} />)
+    fireEvent.change(nameInput(), { target: { value: '雨夜海报' } })
+    // 检查有防抖，此刻还在“检查中”：按钮不可用，回车也不能直接提交
+    expect(saveButton().disabled).toBe(true)
+    fireEvent.submit(nameInput().closest('form')!)
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith(true))
+    expect(info.submit).toHaveBeenCalledWith('雨夜海报', null)
+  })
+
+  it('回车后检查结果是重名：不保存，改名后要重新确认', async () => {
+    const info = nameInfo()
+    const onDone = vi.fn()
+    render(<DocumentSaveNameDialog info={info} onDone={onDone} />)
+    fireEvent.change(nameInput(), { target: { value: '已有作品' } })
+    fireEvent.submit(nameInput().closest('form')!)
+    expect(await screen.findByRole('alert')).toBeTruthy()
+    fireEvent.change(nameInput(), { target: { value: '另一个名字' } })
+    await waitFor(() => expect(saveButton().disabled).toBe(false))
+    expect(info.submit).not.toHaveBeenCalled()
+  })
+
   it('非法名称立即提示，不请求检查', async () => {
     const info = nameInfo()
     render(<DocumentSaveNameDialog info={info} onDone={vi.fn()} />)

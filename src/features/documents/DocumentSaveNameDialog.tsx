@@ -48,8 +48,11 @@ export function DocumentSaveNameDialog({ info, onDone, pickFolder = pickFolderWi
 
   const local = normalizeEntryName(name)
 
+  // 重名检查还没回来时按了回车：记下来，检查一结束且名称可用就提交（此前回车被静默忽略，要再按一次）
+  const submitWhenReady = useRef(false)
   useEffect(() => {
     const seq = ++checkSeq.current
+    submitWhenReady.current = false
     setSubmitError(null)
     if (!local.ok) {
       setCheck({ status: 'idle' })
@@ -87,7 +90,11 @@ export function DocumentSaveNameDialog({ info, onDone, pickFolder = pickFolderWi
 
   const submit = async (event?: FormEvent): Promise<void> => {
     event?.preventDefault()
-    if (!canSubmit || check.status !== 'done' || check.result.status !== 'available') return
+    if (!canSubmit || check.status !== 'done' || check.result.status !== 'available') {
+      if (local.ok && !submitting && (check.status === 'checking' || (check.status === 'done' && (check.name !== local.name || check.folder !== folder)))) submitWhenReady.current = true
+      return
+    }
+    submitWhenReady.current = false
     setSubmitting(true)
     setSubmitError(null)
     try {
@@ -98,6 +105,12 @@ export function DocumentSaveNameDialog({ info, onDone, pickFolder = pickFolderWi
       setSubmitting(false)
     }
   }
+
+  useEffect(() => {
+    if (submitWhenReady.current && canSubmit) void submit()
+    // submit 每次渲染都会重建；只在“可提交”变化时补交那一次回车
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canSubmit])
 
   const changeLocation = async (): Promise<void> => {
     const selected = await pickFolder(folder ?? info.defaultFolder)
