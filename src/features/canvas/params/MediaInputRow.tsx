@@ -347,8 +347,9 @@ export function MediaInputRow({
                 draggable={false}
               />
             ) : mediaKind === 'video' ? (
+              // 素材小块在有描边的参数行里：只用更暗的底，不再描边（同一层纵深只画一次边框，重要记录 020）
               <span
-                className="flex h-7 cursor-pointer items-center gap-1 rounded-md border border-line bg-gap/60 px-1.5 text-2xs text-text2"
+                className="flex h-7 cursor-pointer items-center gap-1 rounded-md bg-gap/60 px-1.5 text-2xs text-text2"
                 onDoubleClick={(event) => {
                   event.stopPropagation();
                   setViewerVideoUrl(resolveImageDisplayUrl(url));
@@ -358,7 +359,7 @@ export function MediaInputRow({
                 {t('node.mediaRow.itemLabel', { kind: t(`node.mediaRow.${mediaKind}`), index: index + 1 })}
               </span>
             ) : (
-              <span className="flex h-7 items-center gap-1 rounded-md border border-line bg-gap/60 px-1.5 text-2xs text-text2">
+              <span className="flex h-7 items-center gap-1 rounded-md bg-gap/60 px-1.5 text-2xs text-text2">
                 <Icon className={`${UI_ICON_SIZE_CLASS.xs} shrink-0`} />
                 {t('node.mediaRow.itemLabel', { kind: t(`node.mediaRow.${mediaKind}`), index: index + 1 })}
               </span>

@@ -91,7 +91,8 @@ export function UiOverflowRow({
     // measureTick：尺寸观察器触发的重测
   }, [alwaysShowOverflow, compressPinned, hiddenIds, layoutKey, measureTick])
 
-  // 容器或任一项尺寸变化（窗口缩放、参数值改变了触发器文字）时重算
+  // 容器、任一项或溢出入口尺寸变化（窗口缩放、参数值改变了触发器文字、“更多参数 1”变成“已调整 1”）时重算。
+  // 溢出入口也要观察：此前只观察容器与各项，入口文字变长后不重算，入口被行尾裁掉一截（重要记录 020）
   useLayoutEffect(() => {
     const container = containerRef.current
     if (!container) return
@@ -104,12 +105,13 @@ export function UiOverflowRow({
     })
     observer.observe(container)
     for (const element of itemElements.current.values()) observer.observe(element)
+    if (overflowRef.current) observer.observe(overflowRef.current)
     return () => {
       ownerWindowOf(container).cancelAnimationFrame(frame)
       observer.disconnect()
     }
-    // 只在挂载的项集合变化时重建观察器（观察器建立时会回调一次，依赖不能含它触发的状态）
-  }, [mountedKey])
+    // 只在挂载的项集合（含溢出入口是否显示）变化时重建观察器（观察器建立时会回调一次，依赖不能含它触发的状态）
+  }, [mountedKey, alwaysShowOverflow])
 
   const hidden = new Set(hiddenIds)
   const showOverflow = hiddenIds.length > 0 || alwaysShowOverflow

@@ -514,11 +514,15 @@ export function uiParameterHex(color: readonly number[]): string {
 /** 分段选中：中性抬起底 + 强文字，与其他单选的淡强调底区分。 */
 export const UI_SEGMENT_SELECTED_CLASS = 'bg-segment-selected text-text1';
 
-/** 面板正文占用可用视口的高度；宽度由宿主 panelSize 决定。 */
+/**
+ * 面板正文占用可用视口的高度；宽度由宿主 panelSize 决定。
+ * workspace 取 70vh：从底栏向上弹出时可用高度约为窗口的 75–80%，78vh 会超出浮层上限，
+ * 浮层外层与面板自己的滚动区叠成两层滚动（音色克隆面板，重要记录 020）。
+ */
 export const UI_PANEL_BODY_HEIGHT_CLASS = {
   compact: 'h-[min(50vh,20rem)]',
   content: 'h-[min(65vh,30rem)]',
-  workspace: 'h-[min(78vh,48rem)]',
+  workspace: 'h-[min(70vh,48rem)]',
 } as const;
 
 export const UI_INPUT_PANEL_MAX_HEIGHT_CLASS = 'max-h-[min(70vh,40rem)]';
