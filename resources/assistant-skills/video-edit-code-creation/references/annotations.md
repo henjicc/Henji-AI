@@ -6,7 +6,7 @@
 
 先读宿主 videoEdit.openAnnotations 摘要，取稳定 ref、所属 document/sequence 和帧。摘要只给前若干条；总数更多时用 list_application_entities 列举 video_edit.annotation，按 sequence parent、where 的 video_edit.annotation.status:"open" 和 limit/cursor 分页，不把摘要条数当产品上限。
 
-用 read_application_entity 的 propertyIds 读取 video_edit.annotation.status/text/frame/end_frame/target/clip_id/thread。提交前重读当前状态、完整讨论和修订。目标为 point/region/stroke/element/range；画面坐标为合成画幅归一化坐标。range 的起止帧含两端，画面目标也可能覆盖连续时间范围。
+用 read_application_entity 的 propertyIds 读取 video_edit.annotation.status/text/frame/end_frame/target/clip_id/thread/style。提交前重读当前状态、完整讨论和修订。目标为 arrow/ellipse/region/text/marker/stroke/point/element/range；画面坐标为合成画幅归一化坐标。arrow 的 to 端是箭头所指处，可表示方向；ellipse 圈住主体；text 是写在画面上的说明（内容即 text）；marker 带 number，表示多个位置或步骤顺序。style.color 只区分对象，不代表优先级或状态。range 的起止帧含两端，画面目标也可能覆盖连续时间范围。
 
 ## 取叠加帧与局部帧
 
@@ -14,7 +14,7 @@ observe_video_edit_frame：documentRef 为实际剪辑引用；target.kind:"prog
 
 - overlayAnnotations:true 显示当前帧未关闭项及原编号。
 - annotationIds 指定原始 annotation.id，可包括已通过项；不要传完整实体引用字符串。
-- cropAnnotationId 使用同一原始 id，放大点、矩形、笔迹或元素 region。
+- cropAnnotationId 使用同一原始 id，放大该标注覆盖的画面范围（点、箭头、椭圆、矩形、文字、编号、笔迹或元素 region）。
 - range 无画面区域，观察起止、中间与相邻接缝，不裁切。
 - 可用 highlightElement:{clipRef,elementId} 核对当前帧元素。
 

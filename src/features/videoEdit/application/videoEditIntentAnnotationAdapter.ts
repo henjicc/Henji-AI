@@ -21,13 +21,18 @@ export function readVideoIntentAnnotation(projectId: string, sequence: VideoEdit
   if (!clip || range[0] < clip.start || range[1] >= clip.start + clip.duration) throw new Error('标注动作超出片段区间，请调整开始和结束时间')
   const target = annotation.target
   let geometry: IntentAnnotation['geometry']
-  if (role === 'text') geometry = { kind: 'text', at: target.kind === 'point' ? [target.x, target.y] : [.5, .5] }
+  if (role === 'text') geometry = { kind: 'text', at: target.kind === 'point' || target.kind === 'marker' || target.kind === 'text' ? [target.x, target.y] : [.5, .5] }
+  else if (role === 'path' && target.kind === 'arrow') geometry = { kind: 'path', points: [[target.from.x, target.from.y], [target.to.x, target.to.y]] }
   else if (role === 'path') {
-    if (target.kind !== 'stroke' || target.strokes[0].length < 2) throw new Error('请用笔画标出从起点到终点的方向')
+    if (target.kind !== 'stroke' || target.strokes[0].length < 2) throw new Error('请用箭头或笔画标出从起点到终点的方向')
     // The first stroke is the explicitly chosen shaft. Later strokes can be arrowheads.
     geometry = { kind: 'path', points: target.strokes[0].map(p => [p.x, p.y]) }
   } else {
-    if (target.kind === 'region') geometry = { kind: 'region', role, outline: [[target.x, target.y], [target.x + target.width, target.y], [target.x + target.width, target.y + target.height], [target.x, target.y + target.height]] }
+    if (target.kind === 'ellipse') {
+      // 椭圆按 32 段多边形投影，包含判断与手画闭合圈走同一条路径。
+      const cx = target.x + target.width / 2; const cy = target.y + target.height / 2
+      geometry = { kind: 'region', role, outline: Array.from({ length: 32 }, (_, index): [number, number] => [cx + Math.cos(index / 16 * Math.PI) * target.width / 2, cy + Math.sin(index / 16 * Math.PI) * target.height / 2]) }
+    } else if (target.kind === 'region') geometry = { kind: 'region', role, outline: [[target.x, target.y], [target.x + target.width, target.y], [target.x + target.width, target.y + target.height], [target.x, target.y + target.height]] }
     else if (target.kind === 'stroke' && target.strokes.length === 1 && target.strokes[0].length >= 3) {
       const points = target.strokes[0]; const first = points[0]; const last = points.at(-1)!
       if (Math.hypot(first.x - last.x, first.y - last.y) > .02) throw new Error('停留区域需要闭合的圈，请补齐圈线')

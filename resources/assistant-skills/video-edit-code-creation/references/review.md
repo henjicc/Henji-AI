@@ -29,7 +29,7 @@ resultRef 交给 `read_application_media(mode="image")`，直接查看返回的�
 
 例：标题／2.3 秒｜副标题抢先出现｜视线分裂｜延后 4 帧、幅度减半｜复查进场到落地。
 
-每轮先修最影响核心理解的 1–3 处，再看邻接缝，不限制批注总量。批注留当前对话或 video_edit.annotation：按 annotations 查 frame/end_frame、target、text/thread；时间范围用 range，局部问题用 region 或稳定 element。不要把正文塞进素材名字。用户 open 批注的内容修改、thread 回复与 addressed 同事务提交，resolved 只由用户确认。
+每轮先修最影响核心理解的 1–3 处，再看邻接缝，不限制批注总量。批注留当前对话或 video_edit.annotation：按 annotations 查 frame/end_frame、target、text/thread；时间范围用 range，局部问题按意图用 ellipse 圈主体、region 框区域、arrow 指位置或方向、marker 标多处顺序，或用稳定 element；多条同帧批注用 style.color 区分。不要把正文塞进素材名字。用户 open 批注的内容修改、thread 回复与 addressed 同事务提交，resolved 只由用户确认。
 
 单变量 A/B（只比一个排版或参数）在同文案、同背景、同画幅、同语义时刻取帧；比较不同概念方向时背景、材质都可以不同，比较尺度、可读性和概念。改前先保留实际参数／版本引用；不要为比较删除旧素材。结构不同就按落地时刻对齐，不能只取同秒数。选一版写出依据，未获授权不清理落选内容。
 
@@ -77,6 +77,6 @@ resultRef 交给 `read_application_media(mode="image")`，直接查看返回的�
 
 ## 怎样看得更准
 
-眯眼看缩略帧辨焦点，再想象灰度检查明暗层级；小于约40px的字／线和玻璃边缘不要凭缩图判断。先全帧再局部：已有关联标注时用 cropAnnotationId，没有则先按正式字段创建有意义的 region 标注，不能伪造任意 crop 输入。原宽超过3840时诚实说明观察分辨率限制。
+眯眼看缩略帧辨焦点，再想象灰度检查明暗层级；小于约40px的字／线和玻璃边缘不要凭缩图判断。先全帧再局部：已有关联标注时用 cropAnnotationId，没有则先按正式字段创建有意义的 region 或 ellipse 标注，不能伪造任意 crop 输入。原宽超过3840时诚实说明观察分辨率限制。
 
 参考 source 与成片 program 分别取帧后读图，按相同语义节点比较；工具没有 compareWith；看一段节奏用联系表，接缝与细节再逐帧取。落地位置对了还要看动作中间和相邻接缝；循环须查接缝两侧的方向与速度，不只首尾颜色。

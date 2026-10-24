@@ -32,3 +32,14 @@ it('跨帧标注的文字和来源身份保留，错误目标与开放圈拒绝�
   expect(() => readVideoIntentAnnotation('p', sequence, mark, 'wrong', 'path')).toThrow('另一个')
   expect(() => readVideoIntentAnnotation('p', sequence, mark, clip.id, 'dwell')).toThrow('圈定')
 })
+it('箭头读成路径，椭圆读成闭合区域，编号圆点与文字批注读成文字位置', () => {
+  const sequence = setup(); const clip = sequence.clips[0]
+  const mark = (target: unknown) => videoEditAnnotationSchema.parse({ id: 'mark', clipId: clip.id, frame: 30, endFrame: 90, space: 'composition-normalized', target, text: '这里', status: 'open', author: { kind: 'user', name: '作者' }, createdAt: '2026-10-11T00:00:00.000Z', thread: [] })
+  expect(readVideoIntentAnnotation('p', sequence, mark({ kind: 'arrow', from: { x: .1, y: .2 }, to: { x: .7, y: .6 } }), clip.id, 'path').geometry).toEqual({ kind: 'path', points: [[.1, .2], [.7, .6]] })
+  const ellipse = readVideoIntentAnnotation('p', sequence, mark({ kind: 'ellipse', x: .2, y: .2, width: .4, height: .2 }), clip.id, 'dwell').geometry
+  expect(ellipse.kind === 'region' && ellipse.outline.length).toBe(32)
+  expect(ellipse.kind === 'region' && ellipse.outline[0][0]).toBeCloseTo(.6)
+  expect(readVideoIntentAnnotation('p', sequence, mark({ kind: 'marker', x: .3, y: .4, number: 2 }), clip.id, 'text').geometry).toEqual({ kind: 'text', at: [.3, .4] })
+  expect(readVideoIntentAnnotation('p', sequence, mark({ kind: 'text', x: .5, y: .1 }), clip.id, 'text').geometry).toEqual({ kind: 'text', at: [.5, .1] })
+  expect(() => readVideoIntentAnnotation('p', sequence, mark({ kind: 'marker', x: .3, y: .4, number: 2 }), clip.id, 'path')).toThrow('箭头')
+})

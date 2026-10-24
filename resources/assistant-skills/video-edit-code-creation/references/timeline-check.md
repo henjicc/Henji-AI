@@ -29,7 +29,7 @@
 - `target`：合成帧 `{kind:"program", sequenceRef, frame}`（frame 是序列整数帧）；源画面 `{kind:"source", itemRef, timeUs}`（timeUs 是素材项源素材的微秒时间）
 - `maxWidth` 可选，256–3840，默认 1920；常规核对用 960 左右即可。
 - `overlayAnnotations:true` 叠加当前帧未关闭标注和原始列表编号；`annotationIds:["原始标注id"]` 指定标注（可包含已通过项），不是完整实体 ref.id。
-- `cropAnnotationId:"原始标注id"` 按 point/region/stroke/element.region 裁切放大。range 无画面区域不能裁切；目标须属于此序列且覆盖此帧，元素不可定位时先核对源码版本。
+- `cropAnnotationId:"原始标注id"` 按标注覆盖的画面范围裁切放大（point/arrow/ellipse/region/text/marker/stroke/element.region）。range 无画面区域不能裁切；目标须属于此序列且覆盖此帧，元素不可定位时先核对源码版本。
 - `highlightElement:{clipRef,elementId}` 高亮当前帧可见代码元素。以上标注/高亮选项只支持 program，不用于 source。
 
 它按当前剪辑版本离屏渲染，不改用户的播放头、选区和画面。返回的 `resultRef` 交给 `read_application_media(mode="image")` 查看图像，读到像素后再评价。动画至少看开始、关键帧附近和结束三处；只看一帧不能证明动画正确。
