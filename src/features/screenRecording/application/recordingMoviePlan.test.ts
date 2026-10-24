@@ -25,7 +25,7 @@ function fixture() {
 }
 it('配方映射多轨、加速、删停顿、字幕/章节/标题、画框及多画幅，正式文档校验可保存', () => {
   const { recording, document } = fixture()
-  const result = buildRecordingMoviePlan(document, recording, recording.understanding, { ...RECORDING_MOVIE_RECIPES.tutorial, formats: ['landscape', 'portrait', 'square'] }, '成片')
+  const result = buildRecordingMoviePlan(document, recording, recording.understanding, { ...RECORDING_MOVIE_RECIPES.tutorial, frame: true, formats: ['landscape', 'portrait', 'square'] }, '成片')
   expect(result.sequenceIds).toHaveLength(3)
   expect(document.media).toHaveLength(3)
   const sequence = document.sequences.find(v => v.id === result.sequenceIds[0])!
@@ -41,6 +41,8 @@ it('配方映射多轨、加速、删停顿、字幕/章节/标题、画框及�
   const picture = sequence.clips.find(v => v.kind === 'sequence')!
   expect(picture.scale).toBe(1)
   expect(picture.effects?.map(v => v.builtin?.id)).toEqual(['recording_frame'])
+  // 录屏默认不加画框，要明确选上才加
+  expect(RECORDING_MOVIE_RECIPES.tutorial.frame).toBe(false)
   expect(sequence.clips.some(v => v.kind === 'graphic' && v.name === '背景')).toBe(false)
   expect(videoEditDocumentSchema.safeParse(document)).toMatchObject({ success: true })
 })

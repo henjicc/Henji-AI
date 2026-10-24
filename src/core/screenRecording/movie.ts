@@ -8,7 +8,9 @@ export const recordingMovieRecipeSchema = z.object({
   waitSpeed: z.union([z.literal(1), z.literal(4), z.literal(8)]).default(4),
   attention: z.enum(['off', 'light', 'medium', 'strong']).default('medium'),
   cursor: z.boolean().default(true), captions: z.boolean().default(true), steps: z.boolean().default(true),
-  camera: z.enum(['off', 'circle', 'person']).default('circle'), frame: z.boolean().default(true),
+  camera: z.enum(['off', 'circle', 'person']).default('circle'),
+  // 录屏默认不加画框（用户 2026-10-24：只录了一个窗口时缩小放在背景上即可，画框要明确要求才加）
+  frame: z.boolean().default(false),
   normalizeAudio: z.boolean().default(true),
   formats: z.array(z.enum(['landscape', 'portrait', 'square'])).min(1).max(3).default(['landscape']).refine(v => new Set(v).size === v.length, '画幅不能重复'),
 }).strict()

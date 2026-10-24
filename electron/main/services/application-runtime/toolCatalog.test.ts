@@ -123,6 +123,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.60.0'] = '376ffc4ac507515307115cd9ed48b51fdb7fafa782677f4c4aeb5ec9d94f6180'
     // 网页重演默认出不画鼠标的干净画面（pointer 参数），回执带 pointer。
     fingerprints['2.61.0'] = '38e74a8a7f22b73df80ef86b502915bd9ba6099371ba7c065d4166369911d266'
+    // 录屏成片配方的画框默认改为关闭。
+    fingerprints['2.62.0'] = 'e7eb9bad43a98b24787e03ac390b1d3c6989df004e7f7273d32a94e0d54e4036'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], `工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹：${fingerprint}`).toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {
