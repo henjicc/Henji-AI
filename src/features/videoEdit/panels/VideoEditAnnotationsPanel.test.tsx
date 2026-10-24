@@ -7,7 +7,7 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import type { VideoEditAnnotation } from '@/core/videoEdit/annotations'
 import { createVideoEditTestProject } from '../application/videoEditDocumentTestKit'
 import { closeVideoEditProject, getActiveVideoEditSequence, listVideoEditInstances } from '../application/videoEditService'
-import { createVideoEditAnnotation } from '../application/videoEditAnnotations'
+import { createVideoEditAnnotation, selectVideoEditAnnotation } from '../application/videoEditAnnotations'
 import { VideoEditAnnotationsPanel } from './VideoEditAnnotationsPanel'
 
 vi.mock('react-virtuoso', () => ({ Virtuoso: ({ data, itemContent }: { data: unknown[]; itemContent: (index: number, entry: unknown) => React.ReactNode }) => <div>{data.map((entry, index) => <div key={index}>{itemContent(index, entry)}</div>)}</div> }))
@@ -50,4 +50,16 @@ it('审查重开附意见，补充讨论；删除草稿保留其它标注', asyn
     fireEvent.click(view.getByRole('button', { name: '删除标注 1' })); expect(getActiveVideoEditSequence(owner).annotations).toHaveLength(1)
     fireEvent.change(view.getByLabelText('标注 1 补充说明'), { target: { value: '也保留字幕' } }); fireEvent.click(view.getByRole('button', { name: '补充' })); expect(getActiveVideoEditSequence(owner).annotations[0].thread.at(-1)?.text).toBe('也保留字幕')
   } finally { app.dispose() }
+})
+it('同一帧上的两条批注：点另一条就展开它（选中变化本身要刷新面板，不靠播放头移动）', async () => {
+  const owner = await createVideoEditTestProject(); const id = owner.document.id
+  createVideoEditAnnotation(id, owner.activeSequenceId, { frame: 0, target: { kind: 'point', x: .1, y: .1 }, text: '第一条' })
+  createVideoEditAnnotation(id, owner.activeSequenceId, { frame: 0, target: { kind: 'point', x: .3, y: .3 }, text: '第二条' })
+  const view = render(<VideoEditAnnotationsPanel instance={owner} onError={vi.fn()} />)
+  expect(view.getByRole('button', { name: '跳到标注 2' }).getAttribute('aria-expanded')).toBe('true')
+  fireEvent.click(view.getByRole('button', { name: '跳到标注 1' }))
+  expect(view.getByRole('button', { name: '跳到标注 1' }).getAttribute('aria-expanded')).toBe('true')
+  expect(view.getByRole('button', { name: '跳到标注 2' }).getAttribute('aria-expanded')).toBe('false')
+  act(() => selectVideoEditAnnotation(id, getActiveVideoEditSequence(owner).annotations[1].id))
+  expect(view.getByRole('button', { name: '跳到标注 2' }).getAttribute('aria-expanded')).toBe('true')
 })

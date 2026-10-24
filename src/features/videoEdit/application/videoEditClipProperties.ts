@@ -5,7 +5,7 @@ import { demonstrateVideoMotion, videoMotionState } from './videoEditMotionDraft
 
 /** 效果控件里可直接调的片段固有属性（PR 的“运动 / 不透明度 / 音量”等固定效果）。 */
 export type VideoEditClipPropertyKey = VideoEditAnimatableKey
-export type VideoEditClipPropertyPatch = Partial<Pick<VideoEditClip, VideoEditClipPropertyKey | 'name' | 'text' | 'textStyle' | 'effectsEnabled' | 'disabledIntrinsicSections' | 'snapToBeat'>>
+export type VideoEditClipPropertyPatch = Partial<Pick<VideoEditClip, VideoEditClipPropertyKey | 'scaleAspect' | 'name' | 'text' | 'textStyle' | 'effectsEnabled' | 'disabledIntrinsicSections' | 'snapToBeat'>>
 
 const PROPERTY_KEYS: readonly VideoEditClipPropertyKey[] = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY', 'opacity', 'volume']
 const DEFAULTS: Record<VideoEditClipPropertyKey, number> = { x: 0, y: 0, scale: 1, rotation: 0, anchorX: 0.5, anchorY: 0.5, opacity: 1, volume: 1 }
@@ -32,6 +32,12 @@ function normalizePatch(patch: VideoEditClipPropertyPatch): VideoEditClipPropert
   const next: VideoEditClipPropertyPatch = { ...patch }
   for (const key of PROPERTY_KEYS) { const value = next[key]; if (value !== undefined) next[key] = clampVideoEditClipProperty(key, value) }
   if (next.name !== undefined) { next.name = next.name.trim(); if (!next.name) throw new Error('片段名称不能为空。') }
+  // 非等比缩放：按 schema 边界夹取；回到 1 即等比，写回时去掉这个字段。
+  if (next.scaleAspect !== undefined) {
+    if (!Number.isFinite(next.scaleAspect)) throw new Error('数值无效。')
+    const field = videoEditClipSchema.shape.scaleAspect.unwrap()
+    next.scaleAspect = Math.min(field.maxValue ?? 100, Math.max(field.minValue ?? 0.01, next.scaleAspect))
+  }
   return next
 }
 
@@ -45,6 +51,7 @@ function patchDocument(sequenceId: string, clipId: string, patch: VideoEditClipP
     const next: VideoEditSequence = { ...sequence, clips: sequence.clips.map(clip => {
       if (clip.id !== clipId) return clip
       const result = { ...clip, ...patch }
+      if (result.scaleAspect !== undefined && Math.abs(result.scaleAspect - 1) < 1e-6) delete result.scaleAspect
       for (const key of PROPERTY_KEYS) if (patch[key] !== undefined && clip.curves?.[key]?.length) {
         const time = frame - clip.start
         if (time < 0 || time >= clip.duration) throw new Error(`请将播放头放在片段内（${clip.start}–${clip.start + clip.duration - 1} 帧）再编辑关键帧。`)

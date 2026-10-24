@@ -10,6 +10,7 @@ import {
   UI_FIELD_SIZE_CLASS,
   UI_FIELD_SURFACE_CLASS,
   UI_FIELD_SURFACE_QUIET_CLASS,
+  UI_PROPERTY_NUMBER_WIDTH_CLASS,
   type UiFieldSize,
 } from './styleTokens'
 import type { ScopedTextHistoryBinding } from './useScopedTextHistory'
@@ -105,7 +106,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
     min,
     max,
     step = 1,
-    widthClassName: widthClassNameOverride = 'w-24',
+    widthClassName: widthClassNameProp,
     className,
     precision,
     disabled = false,
@@ -124,6 +125,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
   // 属性面板（重要记录 019）：读数是紧凑的拖动框——静息不铺底、悬停或聚焦才显出字段表面，步进列只留给读屏与测试，不占宽度。
   const propertyLayout = useUiFieldLayout() === 'property'
   const fillControl = useUiFormRowLabelling()?.fillControl === true && !propertyLayout
+  const widthClassNameOverride = widthClassNameProp ?? (propertyLayout ? UI_PROPERTY_NUMBER_WIDTH_CLASS : 'w-24')
   const widthClassName = fillControl ? 'w-full' : widthClassNameOverride
   const widthStrategy = fillControl ? 'fixed' : widthStrategyOverride
 

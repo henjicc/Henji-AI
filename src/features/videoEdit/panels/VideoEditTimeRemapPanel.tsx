@@ -70,7 +70,7 @@ export function VideoEditTimeRemapPanel({ instance, sequence, clip, onError }: {
         options={[{ value: 'nearest', label: '采样' }, { value: 'blend', label: '混合' }]} />
     </UiFormRow>
     <UiFormRow label="变调" density="compact" info="升降音调，不改变速度与时长；+12 高一个八度。">
-      <NumberInput ariaLabel="变调半音" size="sm" widthClassName="w-14" align="right" value={clip.pitchSemitones ?? 0} min={-24} max={24} step={1} precision={0} onChange={value => apply({ pitchSemitones: value })} />
+      <NumberInput ariaLabel="变调半音" size="sm" align="right" value={clip.pitchSemitones ?? 0} min={-24} max={24} step={1} precision={0} onChange={value => apply({ pitchSemitones: value })} />
     </UiFormRow>
     {outOfRange && !stretched && <div className={UI_PROPERTY_INSET_CLASS}><UiInlineStatus tone="warning">速度超出 25%–400%，这段声音不保持音调。</UiInlineStatus></div>}
   </div></VideoEditEffectSection>

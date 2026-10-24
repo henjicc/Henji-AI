@@ -6,7 +6,7 @@ import { VIDEO_EDIT_ANNOTATION_COLORS } from '@/core/theme/colorTokens'
 import { VIDEO_EDIT_ANNOTATION_STATUS_LABELS, videoEditAnnotationColor, type VideoEditAnnotation } from '@/core/videoEdit/annotations'
 import { videoEditFps } from '@/core/videoEdit/time'
 import { resolveVideoEditElementAnnotation } from '../application/videoEditCodeElements'
-import { createVideoEditAnnotation, deleteVideoEditAnnotation, jumpToVideoEditAnnotation, reviewVideoEditAnnotation, selectedVideoEditAnnotation, selectVideoEditAnnotation, sendVideoEditAnnotations, undoVideoEditAnnotationChange, updateVideoEditAnnotation } from '../application/videoEditAnnotations'
+import { createVideoEditAnnotation, deleteVideoEditAnnotation, jumpToVideoEditAnnotation, reviewVideoEditAnnotation, selectedVideoEditAnnotation, selectVideoEditAnnotation, sendVideoEditAnnotations, subscribeVideoEditAnnotationSelection, videoEditAnnotationSelectionRevision, undoVideoEditAnnotationChange, updateVideoEditAnnotation } from '../application/videoEditAnnotations'
 import { subscribeVideoEdit, videoEditCommittedDocument, type VideoEditInstance } from '../application/videoEditService'
 import { timelineTimecode } from '../timeline/timelineGeometry'
 
@@ -72,6 +72,7 @@ const FILTERS = [{ value: 'all', label: '全部' }, { value: 'draft', label: '�
  */
 export const VideoEditAnnotationsPanel = memo(function VideoEditAnnotationsPanel({ instance, visible = true, onError }: Props): React.ReactElement {
   const snapshot = useRef<{ document: VideoEditInstance['document']; view: string }>()
+  useSyncExternalStore(subscribeVideoEditAnnotationSelection, videoEditAnnotationSelectionRevision)
   useSyncExternalStore(subscribeVideoEdit, () => {
     const document = videoEditCommittedDocument(instance)
     const view = JSON.stringify([instance.activeSequenceId, instance.inFrame, instance.outFrame, instance.targetTrackIds, instance.selectedClipIds, selectedVideoEditAnnotation(instance.document.id)])

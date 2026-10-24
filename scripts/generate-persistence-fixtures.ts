@@ -72,6 +72,8 @@ document.sequences.push(sequence)
 const clip = makeVideoEditItemClip(document, 'code-item', sequence.id, { frame: 0, duration: 90 }, () => program)
 clip.id = 'golden-clip'
 clip.snapToBeat = true
+// 26：非等比缩放（解开缩放链条，垂直比水平多 20%）。
+clip.scaleAspect = 1.2
 clip.curves = { opacity: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 20, value: 1, interpolation: 'ease' }] }
 clip.effects = [{ id: 'golden-grade', name: '全能调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params: { exposure: 0.25, temperature_kelvin: 5600, tint: 4, tone_lights: 12, mixer_orange_saturation: -10, wheel_mode: 'primary', global_hue: 200, global_strength: 6 }, curves: { temperature_kelvin: [{ time: 0, value: 5600, interpolation: 'linear' }, { time: 30, value: 6200, interpolation: 'linear' }] } } }, { id: 'golden-blur', name: '高斯模糊', enabled: true, amount: 0.5, builtin: { id: 'gaussian_blur', params: { sigma_fraction_height: 0.003, axis: 'both', edge_mode: 'clamp' } } }]
 sequence.clips.push(clip)
@@ -79,10 +81,10 @@ sequence.captions = [{ id: 'golden-caption', start: 5, duration: 40, text: '字�
 sequence.transitions = [{ id: 'golden-transition', kind: 'cross_dissolve', rightClipId: clip.id, durationFrames: 10 }]
 sequence.markers = [{ id: 'golden-marker', frame: 20, name: '审查点' }, { id: 'golden-beat', frame: 30, name: '重音', type: 'beat', strength: .9 }]
 const goldenAuthor = { kind: 'user' as const, name: '我' }
-const goldenMark = (id: string, target: Record<string, unknown>, text: string, style?: { color: string }) => ({ id, frame: 12, space: 'composition-normalized', target, text, status: 'draft', author: goldenAuthor, createdAt: '2026-10-24T00:00:00.000Z', thread: [], ...(style ? { style } : {}) })
+const goldenMark = (id: string, target: Record<string, unknown>, text: string, style?: { color: string; weight?: string }) => ({ id, frame: 12, space: 'composition-normalized', target, text, status: 'draft', author: goldenAuthor, createdAt: '2026-10-24T00:00:00.000Z', thread: [], ...(style ? { style } : {}) })
 sequence.annotations = [
   goldenMark('golden-annotation-region', { kind: 'region', x: .1, y: .1, width: .2, height: .1 }, '这里换成产品图'),
-  goldenMark('golden-annotation-arrow', { kind: 'arrow', from: { x: .2, y: .6 }, to: { x: .45, y: .4 } }, '指向这个按钮', { color: 'orange' }),
+  goldenMark('golden-annotation-arrow', { kind: 'arrow', from: { x: .2, y: .6 }, to: { x: .45, y: .4 } }, '指向这个按钮', { color: 'orange', weight: 'bold' }),
   goldenMark('golden-annotation-ellipse', { kind: 'ellipse', x: .5, y: .5, width: .2, height: .15 }, '圈出的数字放大', { color: 'blue' }),
   goldenMark('golden-annotation-text', { kind: 'text', x: .6, y: .1 }, '标题改短一点'),
   goldenMark('golden-annotation-marker', { kind: 'marker', x: .8, y: .8, number: 2 }, '第二步在这里停顿', { color: 'green' }),

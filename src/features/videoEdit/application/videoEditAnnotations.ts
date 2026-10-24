@@ -1,6 +1,6 @@
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { createLogger } from '@/core/logging'
-import { assertVideoEditAnnotationTransition, VIDEO_EDIT_ANNOTATION_COLOR_NAMES, videoEditAnnotationSchema, type VideoEditAnnotation, type VideoEditAnnotationColor, type VideoEditAnnotationTarget } from '@/core/videoEdit/annotations'
+import { assertVideoEditAnnotationTransition, VIDEO_EDIT_ANNOTATION_COLOR_NAMES, videoEditAnnotationSchema, type VideoEditAnnotation, type VideoEditAnnotationColor, type VideoEditAnnotationTarget, type VideoEditAnnotationWeight } from '@/core/videoEdit/annotations'
 import type { VideoEditCommandId } from '@/core/videoEdit/commands'
 import { openAssistant } from '@/features/assistant/store/assistantUiStore'
 import { assetToAgentAttachment } from '@/features/assistant/conversation/assistantAttachments'
@@ -16,17 +16,17 @@ const selected = new Map<string, string>()
 export const VIDEO_EDIT_ANNOTATION_SHAPES = ['arrow', 'ellipse', 'region', 'stroke', 'text', 'marker', 'point'] as const
 export type VideoEditAnnotationShape = typeof VIDEO_EDIT_ANNOTATION_SHAPES[number]
 export const VIDEO_EDIT_ANNOTATION_SHAPE_COMMANDS = { arrow: 'annotation_arrow', ellipse: 'annotation_ellipse', region: 'annotation_region', stroke: 'annotation_stroke', text: 'annotation_text', marker: 'annotation_marker', point: 'annotation_point' } as const satisfies Record<VideoEditAnnotationShape, VideoEditCommandId>
-export interface VideoEditAnnotationBrush { shape: VideoEditAnnotationShape; color: VideoEditAnnotationColor }
+export interface VideoEditAnnotationBrush { shape: VideoEditAnnotationShape; color: VideoEditAnnotationColor; weight: VideoEditAnnotationWeight }
 /** 当前画什么、用什么颜色：只是界面状态，不进文档；每个剪辑各记一份，默认红色箭头。 */
 const brushes = new Map<string, VideoEditAnnotationBrush>()
 const brushListeners = new Set<() => void>()
 let brushRevision = 0
 export function subscribeVideoEditAnnotationBrush(listener: () => void): () => void { brushListeners.add(listener); return () => { brushListeners.delete(listener) } }
 export function videoEditAnnotationBrushRevision(): number { return brushRevision }
-export function videoEditAnnotationBrush(projectId: string): VideoEditAnnotationBrush { return brushes.get(projectId) ?? { shape: 'arrow', color: VIDEO_EDIT_ANNOTATION_COLOR_NAMES[0] } }
+export function videoEditAnnotationBrush(projectId: string): VideoEditAnnotationBrush { return brushes.get(projectId) ?? { shape: 'arrow', color: VIDEO_EDIT_ANNOTATION_COLOR_NAMES[0], weight: 'regular' } }
 export function setVideoEditAnnotationBrush(projectId: string, patch: Partial<VideoEditAnnotationBrush>): void {
   const current = videoEditAnnotationBrush(projectId); const next = { ...current, ...patch }
-  if (next.shape === current.shape && next.color === current.color) return
+  if (next.shape === current.shape && next.color === current.color && next.weight === current.weight) return
   brushes.set(projectId, next); brushRevision++
   for (const listener of brushListeners) listener()
 }
@@ -36,13 +36,23 @@ export function chooseVideoEditAnnotationShape(projectId: string, shape: VideoEd
   if (requireVideoEditInstance(projectId).tool !== 'annotate') setVideoEditTimelineView(projectId, { tool: 'annotate' })
 }
 export function selectedVideoEditAnnotation(id: string): string | undefined { return selected.get(id) }
+/** 选中哪条批注是会话状态：批注面板据它展开那一条、画面上据它高亮编号，改了要通知它们（播放头没动时没有别的刷新）。 */
+const selectionListeners = new Set<() => void>()
+let selectionRevision = 0
+export function subscribeVideoEditAnnotationSelection(listener: () => void): () => void { selectionListeners.add(listener); return () => { selectionListeners.delete(listener) } }
+export function videoEditAnnotationSelectionRevision(): number { return selectionRevision }
+function setSelectedAnnotation(projectId: string, id: string): void {
+  if (selected.get(projectId) === id) return
+  selected.set(projectId, id); selectionRevision++
+  for (const listener of selectionListeners) listener()
+}
 /** 在节目画面上点选一条标注（不跳转、不切面板）；“让助手改这里”会带上它。 */
-export function selectVideoEditAnnotation(projectId: string, id: string): void { selected.set(projectId, id) }
+export function selectVideoEditAnnotation(projectId: string, id: string): void { setSelectedAnnotation(projectId, id) }
 export function createVideoEditAnnotation(projectId: string, sequenceId: string, input: { frame: number; endFrame?: number; clipId?: string; target: VideoEditAnnotationTarget; text: string; status?: 'draft' | 'open'; style?: VideoEditAnnotation['style'] }): string {
   const id = crypto.randomUUID()
   const mark = videoEditAnnotationSchema.parse({ id, ...input, status: input.status ?? 'draft', space: 'composition-normalized', author: { kind: 'user', name: '我' }, createdAt: new Date().toISOString(), thread: [] })
   editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, annotations: [...sequence.annotations, mark] }))
-  selected.set(projectId, id)
+  setSelectedAnnotation(projectId, id)
   logger.info('创建剪辑标注', { event: 'video_edit.annotation.created', context: { projectId, sequenceId, annotationId: id, target: mark.target.kind } })
   return id
 }
@@ -67,7 +77,7 @@ export function reviewVideoEditAnnotation(projectId: string, id: string, pass: b
 export function jumpToVideoEditAnnotation(projectId: string, id: string): void {
   const owner = requireVideoEditInstance(projectId); const sequence = owner.document.sequences.find(sequence => sequence.annotations.some(mark => mark.id === id)); const mark = sequence?.annotations.find(mark => mark.id === id)
   if (!sequence || !mark) throw new Error('标注已删除。')
-  selected.set(projectId, id); switchVideoEditSequence(projectId, sequence.id); setVideoEditView(projectId, { playing: false, frame: mark.frame, ...(mark.clipId ? { selection: mark.clipId } : {}) }); focusVideoEditPanel(projectId, 'annotations')
+  setSelectedAnnotation(projectId, id); switchVideoEditSequence(projectId, sequence.id); setVideoEditView(projectId, { playing: false, frame: mark.frame, ...(mark.clipId ? { selection: mark.clipId } : {}) }); focusVideoEditPanel(projectId, 'annotations')
 }
 /** The normal transaction participant coalesces content edits and addressed into one history boundary. */
 export function undoVideoEditAnnotationChange(projectId: string, id: string): void {

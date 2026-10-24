@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { videoEditClipPictureSize, videoEditClipToFrame, videoEditFrameToClip } from './clipGeometry'
+import { videoEditClipCenterPosition, videoEditClipPictureSize, videoEditClipPixelScaleY, videoEditClipToFrame, videoEditFrameToClip } from './clipGeometry'
 
 const frame = { width: 1920, height: 1080 }
 
@@ -21,6 +21,24 @@ describe('片段画面坐标 ↔ 序列画面坐标', () => {
     for (const [u, v] of [[0.1, 0.9], [0.7, 0.2], [1.3, -0.4]]) {
       const point = videoEditClipToFrame({ ...placement, rotation: 33 }, { width: 1280, height: 720 }, frame, u, v)
       const back = videoEditFrameToClip({ ...placement, rotation: 33 }, { width: 1280, height: 720 }, frame, point.x, point.y)
+      expect(back.u).toBeCloseTo(u); expect(back.v).toBeCloseTo(v)
+    }
+  })
+
+  it('非等比缩放：垂直方向按 scale × scaleAspect，锚点偏移与纵向像素比例跟着变，往返一致', () => {
+    const placement = { x: 0, y: 0, scale: 0.5, rotation: 0, scaleAspect: 2 }
+    // 宽缩到一半、高保持原样：左上角在 (0.25, 0)，右下角在 (0.75, 1)
+    const corner = videoEditClipToFrame(placement, frame, frame, 0, 0)
+    expect(corner.x).toBeCloseTo(0.25); expect(corner.y).toBeCloseTo(0)
+    const opposite = videoEditClipToFrame(placement, frame, frame, 1, 1)
+    expect(opposite.x).toBeCloseTo(0.75); expect(opposite.y).toBeCloseTo(1)
+    // 锚点在画面顶边：纵向偏移按放大后的高度算
+    const center = videoEditClipCenterPosition({ ...placement, anchorX: 0.5, anchorY: 0 }, frame, frame)
+    expect(center.x).toBeCloseTo(0); expect(center.y).toBeCloseTo(0.5)
+    expect(videoEditClipPixelScaleY(placement, frame, frame)).toBeCloseTo(1)
+    for (const [u, v] of [[0.2, 0.8], [0.9, 0.1]]) {
+      const point = videoEditClipToFrame({ ...placement, rotation: 27 }, { width: 1280, height: 720 }, frame, u, v)
+      const back = videoEditFrameToClip({ ...placement, rotation: 27 }, { width: 1280, height: 720 }, frame, point.x, point.y)
       expect(back.u).toBeCloseTo(u); expect(back.v).toBeCloseTo(v)
     }
   })

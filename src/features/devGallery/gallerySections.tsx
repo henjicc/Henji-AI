@@ -390,10 +390,10 @@ export function FormSection(): JSX.Element {
       {/* 属性面板（重要记录 019）：四列 箭头 / 秒表 / 名称 / 右对齐数值；单位挂进右侧单位道，下拉与勾选右缘对齐到道边。 */}
       <UiPanel variant="bare" className="w-80"><UiFieldLayoutContext.Provider value="property">
         <UiFormRow label="位置" leading={<UiIconButton size="2xs" on aria-label="关闭位置关键帧"><Timer /></UiIconButton>}>
-          <NumberInput size="sm" widthClassName="w-14" align="right" value={960} onChange={noop} /><UiPropertyUnit hanging={false} />
-          <NumberInput size="sm" widthClassName="w-14" align="right" value={540} onChange={noop} />
+          <NumberInput size="sm" align="right" value={960} onChange={noop} /><UiPropertyUnit hanging={false} />
+          <NumberInput size="sm" align="right" value={540} onChange={noop} />
         </UiFormRow>
-        <UiFormRow label="缩放"><NumberInput size="sm" widthClassName="w-14" align="right" value={100} onChange={noop} /><UiPropertyUnit>%</UiPropertyUnit></UiFormRow>
+        <UiFormRow label="缩放"><NumberInput size="sm" align="right" value={100} onChange={noop} /><UiPropertyUnit>%</UiPropertyUnit></UiFormRow>
         <UiFormRow label="重复边缘像素"><UiCheckbox checked onCheckedChange={noop} aria-label="重复边缘像素" /></UiFormRow>
       </UiFieldLayoutContext.Provider></UiPanel>
       <div><UiGroup divided titleTone="compact" title="紧凑分组" labelWidth={96}>

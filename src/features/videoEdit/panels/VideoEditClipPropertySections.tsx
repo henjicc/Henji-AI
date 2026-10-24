@@ -1,4 +1,5 @@
-import { RotateCcw, AlignHorizontalJustifyStart, AlignHorizontalJustifyCenter, AlignHorizontalJustifyEnd, AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd } from 'lucide-react'
+import { useReducer } from 'react'
+import { Link2, Link2Off, RotateCcw, AlignHorizontalJustifyStart, AlignHorizontalJustifyCenter, AlignHorizontalJustifyEnd, AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd } from 'lucide-react'
 import { UiIconButton, UiInput, UiPropertyUnit } from '@/components/ui'
 import { UI_PROPERTY_INSET_CLASS } from '@/components/ui/styleTokens'
 import NumberInput from '@/components/ui/NumberInput'
@@ -10,7 +11,7 @@ import type { useVideoEditClipPropertyGesture } from './useVideoEditClipProperty
 import { videoEditClipValue } from '@/core/videoEdit/keyframes'
 import { VideoEditKeyframeNavigator, VideoEditKeyframeStopwatch, type VideoEditKeyframeControlProps } from './VideoEditKeyframeControls'
 import { layoutVideoEditText } from '@/core/videoEdit/text'
-import { videoEditClipToFrame } from '@/core/videoEdit/clipGeometry'
+import { videoEditClipScaleAspect, videoEditClipToFrame } from '@/core/videoEdit/clipGeometry'
 
 type Gesture = ReturnType<typeof useVideoEditClipPropertyGesture>
 type Frame = Pick<VideoEditComposition, 'width' | 'height'> & { playhead: number }
@@ -36,7 +37,7 @@ const VIEWS: Record<VideoEditClipPropertyKey, PropertyView> = {
 interface PropertyRowView { label: string; tooltip: string; keys: readonly VideoEditClipPropertyKey[] }
 const ROWS = {
   position: { label: '位置', tooltip: '运动锚点在序列里的像素位置，宽高的一半是居中。', keys: ['x', 'y'] },
-  scale: { label: '缩放', tooltip: '画面大小，100% 为原始适配大小。', keys: ['scale'] },
+  scale: { label: '缩放', tooltip: '画面大小，100% 为原始适配大小；解开中间的链条可以水平、垂直分别缩放。', keys: ['scale'] },
   rotation: { label: '旋转', tooltip: '画面绕运动锚点旋转的角度。', keys: ['rotation'] },
   anchor: { label: '锚点', tooltip: '旋转和缩放的支点，50% 为画面中心。', keys: ['anchorX', 'anchorY'] },
   opacity: { label: '不透明度', tooltip: '0% 完全透明，100% 完全不透明。', keys: ['opacity'] },
@@ -51,22 +52,48 @@ function PropertyNumber({ view, clip, frame, gesture, last }: { view: PropertyVi
   const bounds = videoEditClipPropertyBounds(view.key)
   const factor = 10 ** view.precision
   return <span className="flex shrink-0 items-center">
-    <NumberInput ariaLabel={view.label} increaseLabel={`增加${view.label}`} decreaseLabel={`减少${view.label}`} size="sm" value={value} min={view.toDisplay(bounds.min, frame)} max={view.toDisplay(bounds.max, frame)} step={view.step} precision={view.precision} widthClassName="w-14" align="right"
+    <NumberInput ariaLabel={view.label} increaseLabel={`增加${view.label}`} decreaseLabel={`减少${view.label}`} size="sm" value={value} min={view.toDisplay(bounds.min, frame)} max={view.toDisplay(bounds.max, frame)} step={view.step} precision={view.precision} align="right"
       onScrubStart={gesture.begin} onScrubEnd={cancelled => { if (cancelled) gesture.cancel(); else gesture.finish() }}
       onChange={next => { if (gesture.active() || Math.round(next * factor) !== Math.round(value * factor)) gesture.commit({ [view.key]: view.fromDisplay(next, frame) }) }} />
     <UiPropertyUnit hanging={last}>{view.unit}</UiPropertyUnit>
   </span>
 }
 
-function resetPatch(clip: VideoEditClip, keys: readonly VideoEditClipPropertyKey[]): Partial<Record<VideoEditClipPropertyKey, number>> {
-  return Object.fromEntries(keys.map(key => [key, videoEditClipPropertyDefault(clip, key)]))
+/** 重置一组属性；含缩放时同时回到等比（纵横比 1）。 */
+function resetPatch(clip: VideoEditClip, keys: readonly VideoEditClipPropertyKey[]): Partial<Record<VideoEditClipPropertyKey | 'scaleAspect', number>> {
+  return { ...Object.fromEntries(keys.map(key => [key, videoEditClipPropertyDefault(clip, key)])), ...(keys.includes('scale') ? { scaleAspect: 1 } : {}) }
 }
-const isDefault = (clip: VideoEditClip, keys: readonly VideoEditClipPropertyKey[]): boolean => keys.every(key => (clip[key] ?? 0.5) === videoEditClipPropertyDefault(clip, key) && !clip.curves?.[key]?.length)
+const isDefault = (clip: VideoEditClip, keys: readonly VideoEditClipPropertyKey[]): boolean => keys.every(key => (clip[key] ?? 0.5) === videoEditClipPropertyDefault(clip, key) && !clip.curves?.[key]?.length) && (!keys.includes('scale') || videoEditClipScaleAspect(clip) === 1)
+
+/** 本次运行里解开了缩放链条的片段（AE“约束比例”关掉）；链条状态不进文档，重开默认扣上。 */
+const unlinkedScale = new Set<string>()
+
+/**
+ * 缩放一行（重要记录 019，对齐 AE）：水平 ⛓ 垂直。扣上时改任意一个数，两个按当时的比例一起变；
+ * 解开后各改各的（垂直 = 水平 × 纵横比）。缩放的关键帧只记水平缩放，纵横比是静态的。
+ */
+function ScaleValues({ clip, frame, gesture }: { clip: VideoEditClip; frame: Frame; gesture: Gesture }): React.ReactElement {
+  const [, refresh] = useReducer((value: number) => value + 1, 0)
+  const unlinked = unlinkedScale.has(clip.id)
+  const scale = videoEditClipValue({ ...clip, disabledIntrinsicSections: [] }, 'scale', frame.playhead)
+  const aspect = videoEditClipScaleAspect(clip)
+  const bounds = videoEditClipPropertyBounds('scale')
+  const number = (label: string, value: number, apply: (next: number) => void): React.ReactElement => <NumberInput ariaLabel={label} increaseLabel={`增加${label}`} decreaseLabel={`减少${label}`} size="sm" value={value} min={bounds.min * 100} max={bounds.max * 100} step={1} precision={1} align="right"
+    onScrubStart={gesture.begin} onScrubEnd={cancelled => { if (cancelled) gesture.cancel(); else gesture.finish() }}
+    onChange={next => { if (gesture.active() || Math.round(next * 10) !== Math.round(value * 10)) apply(next / 100) }} />
+  const toggle = (): void => { if (unlinked) unlinkedScale.delete(clip.id); else unlinkedScale.add(clip.id); refresh() }
+  const chainLabel = unlinked ? '链接缩放比例' : '解开缩放比例'
+  return <span className="flex shrink-0 items-center gap-1">
+    {number('缩放', scale * 100, next => gesture.commit(unlinked ? { scale: next, scaleAspect: scale * aspect / next } : { scale: next }))}
+    <UiIconButton size="2xs" aria-pressed={!unlinked} aria-label={chainLabel} tooltip={unlinked ? '链接缩放比例：之后两个数按当前比例一起变' : '解开缩放比例：水平、垂直各自缩放'} onClick={toggle}>{unlinked ? <Link2Off /> : <Link2 />}</UiIconButton>
+    <span className="flex items-center">{number('垂直缩放', scale * aspect * 100, next => gesture.commit(unlinked ? { scaleAspect: next / scale } : { scale: next / aspect }))}<UiPropertyUnit>%</UiPropertyUnit></span>
+  </span>
+}
 
 /** 一行属性：秒表列、名称（开了动画后悬停出关键帧导航）、右对齐的读数；重置在名称上的右键菜单。 */
 function PropertyRow({ row, clip, frame, gesture }: { row: PropertyRowView; clip: VideoEditClip; frame: Frame; gesture: Gesture }): React.ReactElement {
   const values = row.keys.map(key => videoEditClipValue({ ...clip, disabledIntrinsicSections: [] }, key, frame.playhead))
-  const changed = row.keys.some((key, index) => values[index] !== videoEditClipPropertyDefault(clip, key))
+  const changed = row.keys.some((key, index) => values[index] !== videoEditClipPropertyDefault(clip, key)) || (row.keys.includes('scale') && videoEditClipScaleAspect(clip) !== 1)
   const reset = (): void => gesture.commit(resetPatch(clip, row.keys))
   const keyframes: VideoEditKeyframeControlProps = {
     label: row.label, channels: row.keys.map((key, index) => ({ key, points: clip.curves?.[key], value: values[index] })), time: frame.playhead - clip.start, duration: clip.duration,
@@ -80,7 +107,7 @@ function PropertyRow({ row, clip, frame, gesture }: { row: PropertyRowView; clip
   }
   return <VideoEditPropertyRow label={row.label} tooltip={row.tooltip} data-video-edit-property-row={row.label} reset={{ label: `重置${row.label}`, disabled: !changed, onReset: reset }}
     leading={<VideoEditKeyframeStopwatch {...keyframes} />} labelTrailing={<VideoEditKeyframeNavigator {...keyframes} />}>
-    {row.keys.map((key, index) => <PropertyNumber key={key} view={VIEWS[key]} clip={clip} frame={frame} gesture={gesture} last={index === row.keys.length - 1} />)}
+    {row === ROWS.scale ? <ScaleValues clip={clip} frame={frame} gesture={gesture} /> : row.keys.map((key, index) => <PropertyNumber key={key} view={VIEWS[key]} clip={clip} frame={frame} gesture={gesture} last={index === row.keys.length - 1} />)}
   </VideoEditPropertyRow>
 }
 

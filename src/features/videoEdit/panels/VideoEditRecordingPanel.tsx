@@ -67,8 +67,8 @@ function ZoomAtPlayhead({ instance, sequence, clip, target, regions, onError }: 
     </UiFormRow>
     {fixed && <UiFormRow label="位置" density="compact" trailing={null} info="缩放对准的点：左右、上下，占画面的百分比。">
       <div className="flex items-center">
-        <NumberInput size="sm" widthClassName="w-14" align="right" ariaLabel="缩放对准左右" value={Math.round(fixed.x * 100)} min={0} max={100} step={1} onChange={x => change({ focus: { ...fixed, x: x / 100 } })} /><UiPropertyUnit hanging={false}>%</UiPropertyUnit>
-        <NumberInput size="sm" widthClassName="w-14" align="right" ariaLabel="缩放对准上下" value={Math.round(fixed.y * 100)} min={0} max={100} step={1} onChange={y => change({ focus: { ...fixed, y: y / 100 } })} /><UiPropertyUnit>%</UiPropertyUnit>
+        <NumberInput size="sm" align="right" ariaLabel="缩放对准左右" value={Math.round(fixed.x * 100)} min={0} max={100} step={1} onChange={x => change({ focus: { ...fixed, x: x / 100 } })} /><UiPropertyUnit hanging={false}>%</UiPropertyUnit>
+        <NumberInput size="sm" align="right" ariaLabel="缩放对准上下" value={Math.round(fixed.y * 100)} min={0} max={100} step={1} onChange={y => change({ focus: { ...fixed, y: y / 100 } })} /><UiPropertyUnit>%</UiPropertyUnit>
       </div>
     </UiFormRow>}
   </div>

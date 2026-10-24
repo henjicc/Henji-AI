@@ -58,7 +58,7 @@ function Numeric({ value, min, max, step = 1, label, gesture, unit }: { value: n
     onClickCapture={event => { if (elementOfEventTarget(event.target)?.closest('[data-ui-compact-stepper-button]')) touched.current = true }}
     onKeyDownCapture={event => { if (['ArrowUp', 'ArrowDown'].includes(event.key)) touched.current = true }}
     onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) gesture.finish() }}>
-    <NumberInput key={gesture.epoch} className={compact ? 'shrink-0' : 'min-w-0 flex-1'} size="sm" value={value} min={min} max={max} step={step} ariaLabel={label} increaseLabel={`增加${label}`} decreaseLabel={`减少${label}`} widthClassName={compact ? 'w-14' : 'w-full'} align={compact ? 'right' : undefined} commitOnChange
+    <NumberInput key={gesture.epoch} className={compact ? 'shrink-0' : 'min-w-0 flex-1'} size="sm" value={value} min={min} max={max} step={step} ariaLabel={label} increaseLabel={`增加${label}`} decreaseLabel={`减少${label}`} widthClassName={compact ? undefined : 'w-full'} align={compact ? 'right' : undefined} commitOnChange
       onScrubStart={() => { touched.current = true; gesture.begin() }} onScrubEnd={cancelled => { if (cancelled) { touched.current = false; gesture.cancel() } else gesture.finish() }}
       onChange={next => { if (touched.current) { if (gesture.active()) gesture.write(next); else gesture.atomic(next) } }} />
     {compact ? unit && <UiPropertyUnit>{unit}</UiPropertyUnit> : unit && <span className="shrink-0 whitespace-nowrap text-2xs text-text3">{unit}</span>}

@@ -1,5 +1,5 @@
 import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/document'
-import { videoEditClipToFrame, videoEditClipPixelScale } from '@/core/videoEdit/clipGeometry'
+import { videoEditClipToFrame, videoEditClipPixelScaleY } from '@/core/videoEdit/clipGeometry'
 import { cursorShapes } from '@/core/captureLog/events'
 import type { RecordingCursorFrame, RecordingCursorSource } from '@/core/videoEdit/recordingCursor'
 import type { VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
@@ -10,7 +10,7 @@ export interface RecordingCursorDraw { point: [number, number]; size: number; sh
 export interface RecordingCursorRenderInput { cursorDraws?: RecordingCursorDraw[] }
 export function recordingCursorDraws(sample: RecordingCursorFrame, source: RecordingCursorSource, clip: VideoEditClip, document: Pick<VideoEditComposition, 'width' | 'height'>, params: VideoEditBuiltinParams): RecordingCursorDraw[] {
   const result: RecordingCursorDraw[] = []
-  const size = source.height * Number(params.size) / 100 * videoEditClipPixelScale(clip, source, document) / document.height
+  const size = source.height * Number(params.size) / 100 * videoEditClipPixelScaleY(clip, source, document) / document.height
   const point = (p: [number, number]): [number, number] => { const v = videoEditClipToFrame(clip, source, document, p[0] / source.width, p[1] / source.height); return [v.x, v.y] }
   if (params.click_style !== 'none') for (const click of sample.clicks) {
     result.push({ point: point(click.point), size: size * (params.click_style === 'ripple' ? 0.3 + click.progress : 0.7), shape: -1, rotation: 0, opacity: (1 - click.progress) * 0.85, style: params.click_style === 'ripple' ? 0 : 1, button: params.distinguish_buttons ? click.button === 'right' ? 1 : click.button === 'middle' ? 2 : 0 : 0 })

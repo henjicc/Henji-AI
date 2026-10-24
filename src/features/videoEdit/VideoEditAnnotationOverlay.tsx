@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ArrowUp, X } from 'lucide-react'
 import { UiButton, UiIconButton, UiInput } from '@/components/ui'
 import { VIDEO_EDIT_ANNOTATION_COLORS } from '@/core/theme/colorTokens'
-import { videoEditAnnotationAt, videoEditAnnotationColor, type VideoEditAnnotation, type VideoEditAnnotationColor, type VideoEditAnnotationTarget } from '@/core/videoEdit/annotations'
-import { createVideoEditAnnotation, deleteVideoEditAnnotation, jumpToVideoEditAnnotation, selectedVideoEditAnnotation, selectVideoEditAnnotation, subscribeVideoEditAnnotationBrush, updateVideoEditAnnotation, videoEditAnnotationBrush, videoEditAnnotationBrushRevision, type VideoEditAnnotationShape } from './application/videoEditAnnotations'
+import { VIDEO_EDIT_ANNOTATION_STATUS_LABELS, videoEditAnnotationAt, videoEditAnnotationColor, videoEditAnnotationStyle, videoEditAnnotationWeight, type VideoEditAnnotation, type VideoEditAnnotationColor, type VideoEditAnnotationTarget, type VideoEditAnnotationWeight } from '@/core/videoEdit/annotations'
+import { createVideoEditAnnotation, deleteVideoEditAnnotation, jumpToVideoEditAnnotation, selectedVideoEditAnnotation, selectVideoEditAnnotation, subscribeVideoEditAnnotationBrush, subscribeVideoEditAnnotationSelection, updateVideoEditAnnotation, videoEditAnnotationSelectionRevision, videoEditAnnotationBrush, videoEditAnnotationBrushRevision, type VideoEditAnnotationShape } from './application/videoEditAnnotations'
 import { getActiveVideoEditSequence, setVideoEditView, videoEditProgramCommandIdentity, type VideoEditInstance } from './application/videoEditService'
 import { codeElementAnnotationTarget, resolveVideoEditElementAnnotation, selectVideoEditCodeElement } from './application/videoEditCodeElements'
 
@@ -11,7 +11,7 @@ type Point = { x: number; y: number }
 type Size = { width: number; height: number }
 interface Capture { document: VideoEditInstance['document']; sequenceId: string; clipId: string | null; frame: number; command: object; selection: string[]; elementTarget?: VideoEditAnnotationTarget }
 /** 松手后等待输入的一笔：新建（capture）或改已有标注的文字（editingId）。 */
-interface Draft { capture: Capture; target: VideoEditAnnotationTarget; color: VideoEditAnnotationColor; anchor: DOMRect; editingId?: string }
+interface Draft { capture: Capture; target: VideoEditAnnotationTarget; color: VideoEditAnnotationColor; weight: VideoEditAnnotationWeight; anchor: DOMRect; editingId?: string }
 type Handle = 'move' | 'from' | 'to' | 'nw' | 'ne' | 'sw' | 'se'
 type Drag =
   | { kind: 'draw'; shape: VideoEditAnnotationShape; capture: Capture; points: Point[] }
@@ -19,7 +19,8 @@ type Drag =
 /** 编号与文字压在浅色上时用深色描边，其余用白色。 */
 const contrastOf = (color: VideoEditAnnotationColor): string => ['white', 'yellow'].includes(color) ? VIDEO_EDIT_ANNOTATION_COLORS.black : VIDEO_EDIT_ANNOTATION_COLORS.white
 const clamp = (value: number): number => Math.max(0, Math.min(1, value))
-const STROKE = 3
+/** 线宽（屏幕像素）：细 / 中 / 粗。 */
+const STROKE: Record<VideoEditAnnotationWeight, number> = { thin: 2, regular: 3, bold: 5 }
 const HIT = 14
 
 /** Shift：箭头按 45° 吸附，圈与框画成正圆、正方形（按屏幕像素算）。 */
@@ -58,19 +59,19 @@ function editedTarget(original: VideoEditAnnotationTarget, handle: Handle, delta
   return original
 }
 
-function Arrow({ from, to, color, size }: { from: Point; to: Point; color: string; size: Size }): React.ReactElement {
+function Arrow({ from, to, color, size, stroke }: { from: Point; to: Point; color: string; size: Size; stroke: number }): React.ReactElement {
   const a = { x: from.x * size.width, y: from.y * size.height }; const b = { x: to.x * size.width, y: to.y * size.height }
   const angle = Math.atan2(b.y - a.y, b.x - a.x); const head = Math.min(18, Math.hypot(b.x - a.x, b.y - a.y) * .6); const base = { x: b.x - Math.cos(angle) * head * .8, y: b.y - Math.sin(angle) * head * .8 }
   const wing = (side: number) => `${b.x - Math.cos(angle) * head + Math.cos(angle + side * Math.PI / 2) * head * .5},${b.y - Math.sin(angle) * head + Math.sin(angle + side * Math.PI / 2) * head * .5}`
-  return <><line x1={a.x} y1={a.y} x2={base.x} y2={base.y} stroke={color} strokeWidth={STROKE + 1} strokeLinecap="round" /><polygon points={`${b.x},${b.y} ${wing(1)} ${wing(-1)}`} fill={color} stroke={color} strokeWidth={1} strokeLinejoin="round" /></>
+  return <><line x1={a.x} y1={a.y} x2={base.x} y2={base.y} stroke={color} strokeWidth={stroke + 1} strokeLinecap="round" /><polygon points={`${b.x},${b.y} ${wing(1)} ${wing(-1)}`} fill={color} stroke={color} strokeWidth={1} strokeLinejoin="round" /></>
 }
 
 /** 一条标注的图形（像素坐标）；hit 时画一层透明粗线供点选。 */
-function TargetShape({ target, text, color, size, hit }: { target: VideoEditAnnotationTarget; text?: string; color: VideoEditAnnotationColor; size: Size; hit?: boolean }): React.ReactElement | null {
+function TargetShape({ target, text, color, weight = 'regular', size, hit }: { target: VideoEditAnnotationTarget; text?: string; color: VideoEditAnnotationColor; weight?: VideoEditAnnotationWeight; size: Size; hit?: boolean }): React.ReactElement | null {
   const fill = VIDEO_EDIT_ANNOTATION_COLORS[color]; const contrast = contrastOf(color)
   const X = (value: number): number => value * size.width; const Y = (value: number): number => value * size.height
-  const line = hit ? { stroke: 'transparent', strokeWidth: HIT, fill: 'none' } : { stroke: fill, strokeWidth: STROKE, fill: 'none' }
-  if (target.kind === 'arrow') return hit ? <line x1={X(target.from.x)} y1={Y(target.from.y)} x2={X(target.to.x)} y2={Y(target.to.y)} {...line} /> : <Arrow from={target.from} to={target.to} color={fill} size={size} />
+  const line = hit ? { stroke: 'transparent', strokeWidth: HIT, fill: 'none' } : { stroke: fill, strokeWidth: STROKE[weight], fill: 'none' }
+  if (target.kind === 'arrow') return hit ? <line x1={X(target.from.x)} y1={Y(target.from.y)} x2={X(target.to.x)} y2={Y(target.to.y)} {...line} /> : <Arrow from={target.from} to={target.to} color={fill} size={size} stroke={STROKE[weight]} />
   const region = target.kind === 'region' ? target : target.kind === 'element' ? target.region : undefined
   if (region) return <rect x={X(region.x)} y={Y(region.y)} width={X(region.width)} height={Y(region.height)} rx={4} {...line} {...(hit ? { fill: 'transparent' } : {})} />
   if (target.kind === 'ellipse') return <ellipse cx={X(target.x + target.width / 2)} cy={Y(target.y + target.height / 2)} rx={X(target.width / 2)} ry={Y(target.height / 2)} {...line} {...(hit ? { fill: 'transparent' } : {})} />
@@ -106,6 +107,7 @@ function labelPosition(target: VideoEditAnnotationTarget): Point {
  */
 export function VideoEditAnnotationOverlay({ instance, active, onError }: { instance: VideoEditInstance; active: boolean; onError: (error: unknown) => void }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditAnnotationBrush, videoEditAnnotationBrushRevision)
+  useSyncExternalStore(subscribeVideoEditAnnotationSelection, videoEditAnnotationSelectionRevision)
   const brush = videoEditAnnotationBrush(instance.document.id)
   const root = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState<Size>({ width: 1, height: 1 })
@@ -152,23 +154,27 @@ export function VideoEditAnnotationOverlay({ instance, active, onError }: { inst
       if (draft.editingId) updateVideoEditAnnotation(instance.document.id, draft.editingId, mark => ({ ...mark, text: text.trim() }))
       else {
         if (!valid(draft.capture)) throw new Error('画面已改变，请在当前帧重新标注。')
-        const id = createVideoEditAnnotation(instance.document.id, draft.capture.sequenceId, { frame: draft.capture.frame, ...(draft.capture.clipId ? { clipId: draft.capture.clipId } : {}), target: draft.target, text, style: { color: draft.color } })
+        const id = createVideoEditAnnotation(instance.document.id, draft.capture.sequenceId, { frame: draft.capture.frame, ...(draft.capture.clipId ? { clipId: draft.capture.clipId } : {}), target: draft.target, text, style: videoEditAnnotationStyle(draft.color, draft.weight) })
         setSelectedId(id)
       }
       discard()
     } catch (error) { onError(error) }
   }
   const editText = (mark: VideoEditAnnotation, anchor: DOMRect): void => {
-    setDraft({ capture: { document: instance.document, sequenceId: instance.activeSequenceId, clipId: instance.selection, frame: instance.frame, command: videoEditProgramCommandIdentity(instance.document.id), selection: instance.selectedClipIds }, target: mark.target, color: videoEditAnnotationColor(mark), anchor, editingId: mark.id })
+    setDraft({ capture: { document: instance.document, sequenceId: instance.activeSequenceId, clipId: instance.selection, frame: instance.frame, command: videoEditProgramCommandIdentity(instance.document.id), selection: instance.selectedClipIds }, target: mark.target, color: videoEditAnnotationColor(mark), weight: videoEditAnnotationWeight(mark), anchor, editingId: mark.id })
     setText(mark.text); setInputOpen(true)
   }
-  // 参数条换颜色：选中的那条跟着改（只响应颜色的变化，选中别的批注不会反过来改它）。
-  const brushColor = useRef(brush.color)
+  // 参数条换颜色或粗细：选中的那条跟着改（只响应画笔的变化，选中别的批注不会反过来改它）。
+  const brushStyle = useRef({ color: brush.color, weight: brush.weight })
   useEffect(() => {
-    if (brushColor.current === brush.color) return
-    brushColor.current = brush.color
-    if (selected && videoEditAnnotationColor(selected) !== brush.color) try { updateVideoEditAnnotation(instance.document.id, selected.id, mark => ({ ...mark, style: { color: brush.color } })) } catch (error) { onError(error) }
-  }, [brush.color, selected, instance.document.id, onError])
+    const previous = brushStyle.current
+    if (previous.color === brush.color && previous.weight === brush.weight) return
+    brushStyle.current = { color: brush.color, weight: brush.weight }
+    if (!selected) return
+    const color = previous.color !== brush.color ? brush.color : videoEditAnnotationColor(selected)
+    const weight = previous.weight !== brush.weight ? brush.weight : videoEditAnnotationWeight(selected)
+    if (color !== videoEditAnnotationColor(selected) || weight !== videoEditAnnotationWeight(selected)) try { updateVideoEditAnnotation(instance.document.id, selected.id, mark => ({ ...mark, style: videoEditAnnotationStyle(color, weight) })) } catch (error) { onError(error) }
+  }, [brush.color, brush.weight, selected, instance.document.id, onError])
   /** 气泡贴着松手处，放在画面里面：右边不够就往左挪，下面不够就放到上方。 */
   const bubblePosition = (anchor: DOMRect): React.CSSProperties => {
     const rect = root.current?.getBoundingClientRect(); const width = 288; const height = 36
@@ -233,14 +239,14 @@ export function VideoEditAnnotationOverlay({ instance, active, onError }: { inst
       const points = current.shape === 'stroke' ? [...current.points, pointAt(event)] : [current.points[0], pointAt(event)]
       const target = drawTarget(current.shape, points, current.capture, event.shiftKey)
       if (tooSmall(target)) return
-      setDraft({ capture: current.capture, target, color: brush.color, anchor: new DOMRect(event.clientX, event.clientY, 1, 1) }); setText(''); setInputOpen(true)
+      setDraft({ capture: current.capture, target, color: brush.color, weight: brush.weight, anchor: new DOMRect(event.clientX, event.clientY, 1, 1) }); setText(''); setInputOpen(true)
     }}>
     {/* icon-token-allow: 标注坐标与笔迹来自用户归一化数据，属于画面图形而非图标。 */}
     <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${size.width} ${size.height}`} aria-hidden>
-      {visibleMarks.map(({ mark }) => <g key={mark.id}><TargetShape target={targetOf(mark)} text={mark.text} color={videoEditAnnotationColor(mark)} size={size} />
+      {visibleMarks.map(({ mark }) => <g key={mark.id}><TargetShape target={targetOf(mark)} text={mark.text} color={videoEditAnnotationColor(mark)} weight={videoEditAnnotationWeight(mark)} size={size} />
         {active && <g data-annotation-id={mark.id} className="pointer-events-auto cursor-move"><TargetShape target={targetOf(mark)} text={mark.text} color={videoEditAnnotationColor(mark)} size={size} hit /></g>}</g>)}
-      {drag?.kind === 'draw' && <TargetShape target={drawTarget(drag.shape, drag.points, drag.capture, false)} color={brush.color} size={size} />}
-      {draft && !draft.editingId && <TargetShape target={draft.target} text={draft.target.kind === 'text' ? text : undefined} color={draft.color} size={size} />}
+      {drag?.kind === 'draw' && <TargetShape target={drawTarget(drag.shape, drag.points, drag.capture, false)} color={brush.color} weight={brush.weight} size={size} />}
+      {draft && !draft.editingId && <TargetShape target={draft.target} text={draft.target.kind === 'text' ? text : undefined} color={draft.color} weight={draft.weight} size={size} />}
       {selected && <g>
         {(() => { const box = editing?.id === selected.id ? editing.target : selected.target; return handlesOf(box).map(({ handle, at }) => <rect key={handle} data-annotation-handle={handle} className="pointer-events-auto cursor-nwse-resize" x={at.x * size.width - 5} y={at.y * size.height - 5} width={10} height={10} rx={2} fill="rgb(var(--on-media-rgb))" stroke="rgb(var(--accent-rgb))" strokeWidth={2} />) })()}
       </g>}
@@ -250,7 +256,7 @@ export function VideoEditAnnotationOverlay({ instance, active, onError }: { inst
       if (mark.target.kind === 'marker') return []
       const at = labelPosition(targetOf(mark))
       return [<div key={mark.id} className={`pointer-events-auto absolute -translate-x-1/2 -translate-y-full ui-glass rounded-control ${selectedVideoEditAnnotation(instance.document.id) === mark.id || selectedId === mark.id ? 'ring-2 ring-accent-ring' : ''}`} style={{ left: `${Math.max(.03, Math.min(.92, at.x)) * 100}%`, top: `${Math.max(.08, Math.min(.98, at.y)) * 100}%` }}>
-        <UiButton variant="media" size="sm" onPointerDown={event => event.stopPropagation()} onClick={() => { try { jumpToVideoEditAnnotation(instance.document.id, mark.id) } catch (error) { onError(error) } }} tooltip={mark.text}>{index + 1}{missing ? ' · 元素已不存在' : mark.status === 'open' ? ' · 已发送' : mark.status === 'addressed' ? ' · 待审查' : label ? ` · ${label}` : ''}</UiButton>
+        <UiButton variant="media" size="sm" onPointerDown={event => event.stopPropagation()} onClick={() => { try { jumpToVideoEditAnnotation(instance.document.id, mark.id) } catch (error) { onError(error) } }} tooltip={mark.text}>{index + 1}{missing ? ' · 元素已不存在' : mark.status === 'open' || mark.status === 'addressed' ? ` · ${VIDEO_EDIT_ANNOTATION_STATUS_LABELS[mark.status]}` : label ? ` · ${label}` : ''}</UiButton>
       </div>]
     })}
     {draft && inputOpen && <div role="dialog" aria-label="这里要改什么" className="pointer-events-auto absolute z-raised flex h-9 w-72 items-center gap-2 rounded-full pl-3 pr-1 shadow-panel ui-glass" style={bubblePosition(draft.anchor)} onPointerDown={event => event.stopPropagation()}>

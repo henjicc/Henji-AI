@@ -8,7 +8,10 @@ import type { VideoEditClip, VideoEditComposition } from './document'
  */
 
 export interface VideoEditSize { width: number; height: number }
-export type VideoEditClipPlacement = Pick<VideoEditClip, 'x' | 'y' | 'scale' | 'rotation' | 'anchorX' | 'anchorY'>
+export type VideoEditClipPlacement = Pick<VideoEditClip, 'x' | 'y' | 'scale' | 'rotation' | 'anchorX' | 'anchorY'> & Partial<Pick<VideoEditClip, 'scaleAspect'>>
+
+/** 垂直缩放与水平缩放之比（非等比缩放），缺省 1。 */
+export function videoEditClipScaleAspect(placement: Partial<Pick<VideoEditClip, 'scaleAspect'>>): number { return placement.scaleAspect ?? 1 }
 
 /**
  * 片段画面的尺寸（遮罩、跟踪结果的宽高比以它为准）：视频与图片按素材显示尺寸，图形片段按图形画布，
@@ -34,13 +37,13 @@ function mapping(placement: VideoEditClipPlacement, picture: VideoEditSize, fram
   const fit = Math.min(frame.width / Math.max(1, picture.width), frame.height / Math.max(1, picture.height)) * placement.scale
   const angle = placement.rotation * Math.PI / 180
   const center = videoEditClipCenterPosition(placement, picture, frame)
-  return { halfWidth: picture.width * fit / 2, halfHeight: picture.height * fit / 2, cos: Math.cos(angle), sin: Math.sin(angle), offsetX: center.x * frame.width, offsetY: center.y * frame.height, frame }
+  return { halfWidth: picture.width * fit / 2, halfHeight: picture.height * fit * videoEditClipScaleAspect(placement) / 2, cos: Math.cos(angle), sin: Math.sin(angle), offsetX: center.x * frame.width, offsetY: center.y * frame.height, frame }
 }
 /** Anchor is normalized in the source picture; x/y locate that anchor in the sequence. */
 export function videoEditClipCenterPosition(placement: VideoEditClipPlacement, picture: VideoEditSize, frame: VideoEditSize): { x: number; y: number } {
   const fit = Math.min(frame.width / Math.max(1, picture.width), frame.height / Math.max(1, picture.height)) * placement.scale
   const angle = placement.rotation * Math.PI / 180
-  const dx = (0.5 - (placement.anchorX ?? 0.5)) * picture.width * fit; const dy = (0.5 - (placement.anchorY ?? 0.5)) * picture.height * fit
+  const dx = (0.5 - (placement.anchorX ?? 0.5)) * picture.width * fit; const dy = (0.5 - (placement.anchorY ?? 0.5)) * picture.height * fit * videoEditClipScaleAspect(placement)
   return { x: placement.x + (dx * Math.cos(angle) - dy * Math.sin(angle)) / frame.width, y: placement.y + (dx * Math.sin(angle) + dy * Math.cos(angle)) / frame.height }
 }
 
@@ -63,4 +66,8 @@ export function videoEditFrameToClip(placement: VideoEditClipPlacement, picture:
 /** 片段画面上一段归一化长度（横向）对应序列画面的像素比例：拖动控制柄时把序列上的位移换回片段坐标。 */
 export function videoEditClipPixelScale(placement: VideoEditClipPlacement, picture: VideoEditSize, frame: VideoEditSize): number {
   return Math.min(frame.width / Math.max(1, picture.width), frame.height / Math.max(1, picture.height)) * placement.scale
+}
+/** 纵向的同一比例：非等比缩放时与横向不同（跟踪框、光标这类按画面高度定大小的量用它）。 */
+export function videoEditClipPixelScaleY(placement: VideoEditClipPlacement, picture: VideoEditSize, frame: VideoEditSize): number {
+  return videoEditClipPixelScale(placement, picture, frame) * videoEditClipScaleAspect(placement)
 }

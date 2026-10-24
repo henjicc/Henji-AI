@@ -122,12 +122,12 @@ describe('Schema结构指纹', () => {
 })
 
 describe('所有登记格式的黄金样本', () => {
-  it('录屏 v26/v27 升级保持内容；v27 的内嵌风格偏好不提高最低可读版本，v28 的新批注形状提高到 28', () => {
+  it('录屏 v26/v27 升级保持内容；v27 的内嵌风格偏好不提高最低可读版本，v28 的新批注形状、v29 的非等比缩放提高最低可读版本', () => {
     const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.screen_recording')!
     const previous = JSON.parse(fs.readFileSync('tests/fixtures/persistence/document.screen_recording/v26.json', 'utf8'))
     const original = JSON.stringify(previous)
-    expect(format.version).toBe(28)
-    expect(format.minReaderVersion).toBe(28)
+    expect(format.version).toBe(29)
+    expect(format.minReaderVersion).toBe(29)
     expect(upgradePersistenceContent(format, previous.content, 26)).toEqual(previous.content)
     expect(JSON.stringify(previous)).toBe(original)
     const current = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.screen_recording/v27.json', 'utf8'))
@@ -143,6 +143,20 @@ describe('所有登记格式的黄金样本', () => {
     const marks = (current.content as { sequences: Array<{ annotations: Array<{ target: { kind: string }; style?: { color: string } }> }> }).sequences[0].annotations
     expect(marks.map(mark => mark.target.kind)).toEqual(['region', 'arrow', 'ellipse', 'text', 'marker'])
     expect(marks.map(mark => mark.style?.color ?? 'red')).toEqual(['red', 'orange', 'blue', 'red', 'green'])
+  })
+
+  it('剪辑 v25 原样升到 v26；v26 样本带非等比缩放与粗线批注；字幕回填记录 v16 只改版本号升到 v17', () => {
+    const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
+    const previous = JSON.parse(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v25.json', 'utf8'))
+    expect(upgradePersistenceContent(format, previous.content, 25)).toEqual(previous.content)
+    const current = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v26.json', 'utf8'))
+    expect(current).toMatchObject({ kindVersion: 26, kindMinReaderVersion: 26 })
+    const sequence = (current.content as { sequences: Array<{ clips: Array<{ id: string; scaleAspect?: number }>; annotations: Array<{ style?: { weight?: string } }> }> }).sequences[0]
+    expect(sequence.clips.find(clip => clip.id === 'golden-clip')?.scaleAspect).toBe(1.2)
+    expect(sequence.annotations.map(mark => mark.style?.weight ?? 'regular')).toEqual(['regular', 'bold', 'regular', 'regular', 'regular'])
+    const manifest = PERSISTENCE_FORMATS.find(value => value.id === 'subtitle-manifest')!
+    const v16 = JSON.parse(fs.readFileSync('tests/fixtures/persistence/subtitle-manifest/v16.json', 'utf8'))
+    expect(upgradePersistenceContent(manifest, v16, 16)).toEqual({ ...v16, version: 17 })
   })
 
   for (const format of PERSISTENCE_FORMATS) {

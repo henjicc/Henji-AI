@@ -87,6 +87,8 @@ const videoEditClipStateSchema = z.object({
   start: frame, duration: frame.min(1), sourceInUs: z.number().int().nonnegative(), sourceRemainder,
   x: videoEditClipAnimatedValueSchemas.x, y: videoEditClipAnimatedValueSchemas.y,
   scale: videoEditClipAnimatedValueSchemas.scale, rotation: videoEditClipAnimatedValueSchemas.rotation,
+  /** 非等比缩放（重要记录 019，AE 缩放链条解开）：垂直缩放与水平缩放之比。scale 是水平缩放，垂直缩放 = scale × scaleAspect；缺省为 1（等比）。 */
+  scaleAspect: z.number().min(0.01).max(100).optional().describe('非等比缩放：垂直缩放与水平缩放之比，缺省 1 为等比。scale 是水平缩放，垂直缩放 = scale × scale_aspect；scale 的关键帧按这个比例同时缩放两个方向。'),
   anchorX: videoEditClipAnimatedValueSchemas.anchorX.optional(), anchorY: videoEditClipAnimatedValueSchemas.anchorY.optional(), curves: videoEditClipCurvesSchema.optional(),
   opacity: videoEditClipAnimatedValueSchemas.opacity, volume: videoEditClipAnimatedValueSchemas.volume, gainDb: videoEditGainDbSchema.optional(), audioRole: videoEditAudioRoleSchema.optional(), text: z.string().max(2000),
   textStyle: videoEditTextStyleSchema.optional(),

@@ -31,7 +31,7 @@ function EffectStrength({ effect, action, target, owner }: { effect: VideoEditEf
   const valid = draft.trim() !== '' && Number.isFinite(amount) && amount >= 0 && amount <= 1
   return <UiFormRow label="效果强度" info="与原画面混合的比例，0 到 1。"><div className="flex items-center gap-1" onKeyDownCapture={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setDraft(String(effect.amount)) } }}>
     {amount !== effect.amount && <UiButton size="sm" variant="secondary" className="shrink-0" disabled={action.busy || !valid} onClick={() => { void action.run(signal => updateVideoEditEffect(target, effect.id, { amount }, signal), undefined, false) }}>应用强度</UiButton>}
-    <NumberInput ariaLabel="效果强度" size="sm" min={0} max={1} step={0.05} precision={4} widthClassName="w-14" align="right" value={Number.isFinite(amount) ? amount : effect.amount} disabled={action.busy} commitOnChange onChange={next => setDraft(String(next))} />
+    <NumberInput ariaLabel="效果强度" size="sm" min={0} max={1} step={0.05} precision={4} align="right" value={Number.isFinite(amount) ? amount : effect.amount} disabled={action.busy} commitOnChange onChange={next => setDraft(String(next))} />
   </div></UiFormRow>
 }
 

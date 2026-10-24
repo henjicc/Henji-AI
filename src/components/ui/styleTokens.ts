@@ -183,6 +183,8 @@ export const UI_FORM_ROW_MIN_HEIGHT_CLASS: Record<UiControlSize, string> = {
  */
 export const UI_PROPERTY_ROW_CLASS = 'group/property mx-1 grid min-h-control-sm grid-cols-property-row items-center gap-x-1 rounded-control pr-2 transition-colors duration-120 hover:bg-hover'
 export const UI_PROPERTY_INSET_CLASS = 'pl-12 pr-3'
+/** 属性面板读数框的宽度：成对读数（位置、锚点、缩放链条）放得进最窄的数值列；值更长时按内容撑宽。 */
+export const UI_PROPERTY_NUMBER_WIDTH_CLASS = 'w-12'
 export const UI_PROPERTY_REVEAL_CLASS = 'opacity-0 transition-opacity duration-120 focus-within:opacity-100 group-hover/property:opacity-100 group-focus-within/property:opacity-100'
 
 /** 多行文本只约束最小编辑面积，rows 仍作为原生 DOM 属性。 */

@@ -534,10 +534,11 @@ export class VideoEditGpuCompositor {
         let uniform = this.uniforms.get(clip.id)
         if (!uniform) { uniform = device.createBuffer({ size: 96, usage: 0x08 | 0x40 }); this.uniforms.set(clip.id, uniform) }
         const fit = Math.min(document.width / width, document.height / height) * clip.scale
+        const aspect = videoEditClipScaleAspect(clip)
         const rotation = clip.rotation * Math.PI / 180
         const center = videoEditClipCenterPosition(clip, { width, height }, document)
         if (textRaster) {
-          const dx = (textRaster.x + textRaster.width / 2) * fit; const dy = (textRaster.y + textRaster.height / 2) * fit
+          const dx = (textRaster.x + textRaster.width / 2) * fit; const dy = (textRaster.y + textRaster.height / 2) * fit * aspect
           center.x += (dx * Math.cos(rotation) - dy * Math.sin(rotation)) / document.width
           center.y += (dx * Math.sin(rotation) + dy * Math.cos(rotation)) / document.height
           width = textRaster.width; height = textRaster.height
@@ -552,7 +553,7 @@ export class VideoEditGpuCompositor {
           h = [h[0] * sx, h[1] * sy, h[0] * u + h[1] * v + h[2], h[3] * sx, h[4] * sy, h[3] * u + h[4] * v + h[5], h[6] * sx, h[7] * sy, denominator].map(value => value / denominator) as typeof h
         }
         const warp=h ? [h[0],h[1],h[2],0,h[3],h[4],h[5],0,h[6],h[7],h[8],0] : new Array<number>(12).fill(0)
-        device.queue.writeBuffer(uniform, 0, new Float32Array([width * fit / document.width, height * fit / document.height, Math.cos(rotation), Math.sin(rotation), center.x * 2, center.y * 2, clip.opacity, 0, document.height / document.width, document.width / document.height, external || cachedVideo ? picture.rotation : 0, (external || cachedVideo) && picture.flip ? 1 : 0, ...warp]))
+        device.queue.writeBuffer(uniform, 0, new Float32Array([width * fit / document.width, height * fit * aspect / document.height, Math.cos(rotation), Math.sin(rotation), center.x * 2, center.y * 2, clip.opacity, 0, document.height / document.width, document.width / document.height, external || cachedVideo ? picture.rotation : 0, (external || cachedVideo) && picture.flip ? 1 : 0, ...warp]))
         const pipeline = code || (!external && !cachedVideo) ? pipelines?.codeImage ?? this.codeImage : external ? pipelines?.video ?? this.video : cachedVideo && picture.chroma ? pipelines?.cachedVideo ?? this.cachedVideo : pipelines?.image ?? this.image
         pass.setPipeline(pipeline)
         pass.setBindGroup(0, device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer: uniform } }, ...(cachedVideo && picture.chroma ? [{ binding: 3, resource: picture.chroma.createView() }] : [])] }))
@@ -643,4 +644,4 @@ export class VideoEditGpuCompositor {
     }
   }
 }
-import { videoEditClipCenterPosition } from '@/core/videoEdit/clipGeometry'
+import { videoEditClipCenterPosition, videoEditClipScaleAspect } from '@/core/videoEdit/clipGeometry'

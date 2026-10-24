@@ -1,4 +1,4 @@
-import { videoEditClipPixelScale, videoEditClipToFrame, type VideoEditClipPlacement, type VideoEditSize } from './clipGeometry'
+import { videoEditClipPixelScaleY, videoEditClipToFrame, type VideoEditClipPlacement, type VideoEditSize } from './clipGeometry'
 
 /*
  * 跟踪变换（对标 AE 跟踪器的“变换”）：从点、平面跟踪的逐帧几何求出位置、缩放与旋转。
@@ -159,7 +159,7 @@ export function videoEditQuadPose(reference: readonly VideoEditPoint[], current:
 export function videoEditTrackPoseOnFrame(target: VideoEditClipPlacement, picture: VideoEditSize, frame: VideoEditSize, pose: VideoEditTrackPose): { x: number; y: number; size?: number; angle?: number } {
   const center = videoEditClipToFrame(target, picture, frame, pose.anchor[0], pose.anchor[1])
   const result: { x: number; y: number; size?: number; angle?: number } = { x: center.x, y: center.y }
-  if (pose.size !== undefined) result.size = pose.size * picture.height * videoEditClipPixelScale(target, picture, frame) / frame.height
+  if (pose.size !== undefined) result.size = pose.size * picture.height * videoEditClipPixelScaleY(target, picture, frame) / frame.height
   if (pose.angle !== undefined) {
     const step = 0.01; const aspect = picture.width / Math.max(1, picture.height)
     const tip = videoEditClipToFrame(target, picture, frame, pose.anchor[0] + Math.cos(pose.angle) * step / aspect, pose.anchor[1] + Math.sin(pose.angle) * step)

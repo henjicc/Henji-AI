@@ -80,7 +80,7 @@ export function resolveVideoEditDropMode(sequence: VideoEditSequence, clips: rea
     const moved = { ...clip, track: map.get(clip.track) ?? clip.track, duration }
     // 新片段沿用被替换片段的画面属性与效果（Premiere“替换”保留原片段的调整）。
     return clip === replacing && target.kind !== 'audio' && clip.kind !== 'audio'
-      ? [{ ...moved, x: target.x, y: target.y, scale: target.scale, rotation: target.rotation, opacity: target.opacity, ...(target.effects ? { effects: structuredClone(target.effects) } : {}) }]
+      ? [{ ...moved, x: target.x, y: target.y, scale: target.scale, ...(target.scaleAspect !== undefined ? { scaleAspect: target.scaleAspect } : {}), rotation: target.rotation, opacity: target.opacity, ...(target.effects ? { effects: structuredClone(target.effects) } : {}) }]
       : [moved]
   })
   return { frame: target.start, mode: 'overwrite', clips: result, newTracks: [] }

@@ -22,7 +22,11 @@ export const videoEditAnnotationTargetSchema = z.discriminatedUnion('kind', [
 ])
 /** 标注颜色用命名色板，真实色值在 colorTokens 的 VIDEO_EDIT_ANNOTATION_COLORS；省略为 red。 */
 export const VIDEO_EDIT_ANNOTATION_COLOR_NAMES = ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'white', 'black'] as const
-export const videoEditAnnotationStyleSchema = z.object({ color: z.enum(VIDEO_EDIT_ANNOTATION_COLOR_NAMES) }).strict()
+/** 线条粗细（重要记录 019 统一批注工具的“粗细”）：细 / 中 / 粗，省略为中。 */
+export const VIDEO_EDIT_ANNOTATION_WEIGHTS = ['thin', 'regular', 'bold'] as const
+export type VideoEditAnnotationWeight = typeof VIDEO_EDIT_ANNOTATION_WEIGHTS[number]
+export const VIDEO_EDIT_ANNOTATION_WEIGHT_LABELS: Record<VideoEditAnnotationWeight, string> = { thin: '细', regular: '中', bold: '粗' }
+export const videoEditAnnotationStyleSchema = z.object({ color: z.enum(VIDEO_EDIT_ANNOTATION_COLOR_NAMES), weight: z.enum(VIDEO_EDIT_ANNOTATION_WEIGHTS).optional().describe('线条粗细：thin 细、regular 中（省略即中）、bold 粗。') }).strict()
 export type VideoEditAnnotationColor = typeof VIDEO_EDIT_ANNOTATION_COLOR_NAMES[number]
 /** 颜色的中文名（参数条的色样与读屏名称用）。 */
 export const VIDEO_EDIT_ANNOTATION_COLOR_LABELS: Record<VideoEditAnnotationColor, string> = { red: '红', orange: '橙', yellow: '黄', green: '绿', blue: '蓝', purple: '紫', white: '白', black: '黑' }
@@ -51,6 +55,9 @@ export type VideoEditAnnotation = z.infer<typeof videoEditAnnotationSchema>
 export type VideoEditAnnotationTarget = z.infer<typeof videoEditAnnotationTargetSchema>
 export type VideoEditAnnotationStyle = z.infer<typeof videoEditAnnotationStyleSchema>
 export function videoEditAnnotationColor(mark: Pick<VideoEditAnnotation, 'style'>): VideoEditAnnotationColor { return mark.style?.color ?? 'red' }
+export function videoEditAnnotationWeight(mark: Pick<VideoEditAnnotation, 'style'>): VideoEditAnnotationWeight { return mark.style?.weight ?? 'regular' }
+/** 写进批注的样式：中等粗细不写出来，文件里只记偏离默认的值。 */
+export function videoEditAnnotationStyle(color: VideoEditAnnotationColor, weight: VideoEditAnnotationWeight): NonNullable<VideoEditAnnotation['style']> { return { color, ...(weight === 'regular' ? {} : { weight }) } }
 export const VIDEO_EDIT_ANNOTATION_STATUS_LABELS = { draft: '待发送', open: '待处理', addressed: '待审查', resolved: '已通过' } as const
 
 /** Review is a user action. Neither the built-in assistant nor an external caller can approve it. */

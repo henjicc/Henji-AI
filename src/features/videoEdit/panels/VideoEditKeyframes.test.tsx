@@ -129,6 +129,25 @@ it('贝塞尔属性手柄与时间线切线拖动共享曲线，一次撤销、�
   expect(owner.past).toHaveLength(before + 1)
   act(() => undoVideoEdit(id)); expect(clip().curves!.opacity![0].bezier).toEqual([.2, .3, .8, .9])
 })
+it('缩放链条：扣上时两个数按比例一起变，解开后各改各的，重置回到等比', async () => {
+  const { owner, clip } = await project()
+  const panel = render(<Panel owner={owner} />); const ui = within(panel.container)
+  const set = (name: string, value: string): void => { const field = ui.getByRole('spinbutton', { name }); fireEvent.focus(field); fireEvent.change(field, { target: { value } }); fireEvent.blur(field) }
+  set('垂直缩放', '50')
+  expect(clip().scale).toBeCloseTo(.5); expect(clip().scaleAspect).toBeUndefined()
+  fireEvent.click(ui.getByRole('button', { name: '解开缩放比例' }))
+  set('垂直缩放', '60')
+  expect(clip().scale).toBeCloseTo(.5); expect(clip().scaleAspect).toBeCloseTo(1.2)
+  set('缩放', '100')
+  expect(clip().scale).toBeCloseTo(1); expect(clip().scaleAspect).toBeCloseTo(.6)
+  fireEvent.click(ui.getByRole('button', { name: '链接缩放比例' }))
+  set('缩放', '50')
+  expect(clip().scale).toBeCloseTo(.5); expect(clip().scaleAspect).toBeCloseTo(.6)
+  fireEvent.contextMenu(panel.container.querySelector('[data-video-edit-property-row="缩放"]')!)
+  fireEvent.click(within(document.body).getByRole('menuitem', { name: '重置缩放' }))
+  await waitFor(() => expect(clip().scaleAspect).toBeUndefined()); expect(clip().scale).toBe(1)
+})
+
 it('固有效果不展示颜色和亮度', async () => {
   const { owner } = await project()
   const panel = render(<Panel owner={owner} />); const ui = within(panel.container)
