@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pageTimeToVideoUs, pageToVideoScale, projectWebRecordingEvents, webKeyCategory } from './videoEvents'
+import { pageTimeToVideoUs, pageToVideoScale, projectWebRecordingEvents, WEB_CURSOR_HOLD_INTERVAL_US, webKeyCategory } from './videoEvents'
 import type { WebRecordingBehaviorEvent } from './schema'
 
 const env = { env: { url: 'http://tauri.localhost/', viewport: { width: 1280, height: 821, dpr: 1.75 }, colorScheme: 'light' as const, reducedMotion: false, locale: 'zh-CN', timeZone: 'Asia/Shanghai', userAgent: 'test' } }
@@ -44,12 +44,22 @@ describe('行为轨投影成采集事件', () => {
     { kind: 'pointer', t: 99_000_000, type: 'move', x: 1, y: 1, button: -1, buttons: 0, clickCount: 0, pointerType: 'mouse', mods: 0 },
   ]
   it('重演视频：位置按设备像素放大，点击先光标后按下、先抬起后光标，超出视频时长的丢弃', () => {
-    const projected = projectWebRecordingEvents(env, events, { kind: 'replay' }, { width: 2240, height: 1437, durationUs: 10_000_000 })
+    const recorded = new Set([1_000_000, 1_200_000, 1_250_000, 1_300_000, 1_400_000])
+    const projected = projectWebRecordingEvents(env, events, { kind: 'replay' }, { width: 2240, height: 1437, durationUs: 10_000_000 }).filter(event => recorded.has(event.videoUs))
     expect(projected.map(event => event.payload.kind)).toEqual(['cursor', 'cursor', 'click', 'click', 'cursor', 'scroll', 'key'])
     expect(projected[1]).toEqual({ videoUs: 1_200_000, payload: { kind: 'cursor', point: [700, 525.09], shape: 'text' } })
     expect(projected[2].payload).toMatchObject({ kind: 'click', phase: 'down', button: 'left' })
     expect(projected[5].payload).toMatchObject({ kind: 'scroll', axis: 'vertical', amount: 120 })
     expect(projected[6].payload).toEqual({ kind: 'key', category: 'paste' })
+  })
+  it('鼠标停着时按固定间隔补上同一位置，直到下一次移动或视频结束（点击后不会因为没有新位置而消失）', () => {
+    const projected = projectWebRecordingEvents(env, events, { kind: 'replay' }, { width: 2240, height: 1437, durationUs: 10_000_000 })
+    const cursors = projected.filter(event => event.payload.kind === 'cursor')
+    for (let i = 1; i < cursors.length; i++) expect(cursors[i].videoUs - cursors[i - 1].videoUs).toBeLessThanOrEqual(WEB_CURSOR_HOLD_INTERVAL_US)
+    expect(10_000_000 - cursors.at(-1)!.videoUs).toBeLessThanOrEqual(WEB_CURSOR_HOLD_INTERVAL_US)
+    // 抬起之后停在原处：补上的都是抬起时的位置与形状
+    expect(cursors.filter(event => event.videoUs > 1_250_000).every(event => JSON.stringify(event.payload) === JSON.stringify(cursors.find(c => c.videoUs === 1_250_000)!.payload))).toBe(true)
+    expect(projected.map(event => event.videoUs)).toEqual([...projected.map(event => event.videoUs)].sort((a, b) => a - b))
   })
   it('画面对不上时只留按键', () => {
     const projected = projectWebRecordingEvents(env, events, { kind: 'replay' }, { width: 3840, height: 2160, durationUs: 10_000_000 })

@@ -19,6 +19,8 @@ import { isCleanReplayName, newestReplayName } from '../../../../src/core/webRep
 const logger = createMainLogger('main.web_replay.edit_source')
 /** Pages projected for one video live beside it: `edit-events/<video name>/`. Pages are immutable and reused. */
 const EDIT_EVENTS_DIRECTORY = 'edit-events'
+/** Bumped when the projection itself changes (v2: a still pointer is held between moves), so cached pages are rebuilt. */
+const PROJECTION_VERSION = 2
 
 async function probeVideo(file: string): Promise<{ width: number; height: number; durationUs: number }> {
   const ffprobe = await loadFfprobePath()
@@ -76,7 +78,7 @@ export async function webRecordingEditSource(recordingId: string, prefer: 'repla
   if (!projected.some(event => event.payload.kind === 'cursor' || event.payload.kind === 'click')) return { ...base, cursor: null, events: [] }
 
   const behaviorBytes = await fs.readFile(path.join(directory, WEB_RECORDING_FILES.behavior))
-  const digest = crypto.createHash('sha256').update(behaviorBytes).update(`\0${path.basename(video)}\0${frame.width}x${frame.height}\0${JSON.stringify(clock)}`).digest('hex')
+  const digest = crypto.createHash('sha256').update(behaviorBytes).update(`\0${path.basename(video)}\0${frame.width}x${frame.height}\0${JSON.stringify(clock)}\0projection-v${PROJECTION_VERSION}`).digest('hex')
   const ownerRef = { kind: 'screen_recording.web_recording', id: manifest.id }
   const sourceDigest = `sha256:${digest}`
   const pagesDirectory = path.join(directory, EDIT_EVENTS_DIRECTORY, `${path.basename(video, '.mp4')}-${digest.slice(0, 12)}`)

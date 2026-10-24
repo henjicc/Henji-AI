@@ -92,6 +92,27 @@ const BUTTONS = ['left', 'middle', 'right'] as const
 export interface ProjectedVideoEvent { videoUs: number; payload: CapturePayload }
 
 /**
+ * 网页行为只在鼠标移动时记位置；剪辑的光标把“超过 0.1 秒没有新位置”当作没有数据而隐藏（屏幕录制是连续采样）。
+ * 所以鼠标停着的时候按固定间隔补上同一位置，直到下一次移动或视频结束；静止后隐藏仍按光标效果的设置走。
+ */
+export const WEB_CURSOR_HOLD_INTERVAL_US = 80_000
+function holdStillCursor(events: readonly ProjectedVideoEvent[], durationUs: number): ProjectedVideoEvent[] {
+  const result: ProjectedVideoEvent[] = []
+  let held: CapturePayload | null = null; let heldUs = 0
+  const fill = (untilUs: number): void => {
+    if (!held) return
+    while (heldUs + WEB_CURSOR_HOLD_INTERVAL_US < untilUs) { heldUs += WEB_CURSOR_HOLD_INTERVAL_US; result.push({ videoUs: heldUs, payload: held }) }
+  }
+  for (const event of events) {
+    fill(event.videoUs)
+    result.push(event)
+    if (event.payload.kind === 'cursor') { held = event.payload; heldUs = event.videoUs }
+  }
+  fill(durationUs)
+  return result
+}
+
+/**
  * 行为轨 → 视频时间上的采集事件（按时间排序）。缩放为 null 时只投影按键（位置无从换算）。
  * 页面尺寸变化（resize）后按新尺寸换算。
  */
@@ -120,5 +141,5 @@ export function projectWebRecordingEvents(manifest: Pick<WebRecordingManifest, '
       result.push({ videoUs, payload: { kind: 'scroll', point: point(event.x, event.y), axis: vertical ? 'vertical' : 'horizontal', amount: vertical ? event.dy : event.dx } })
     }
   }
-  return result
+  return holdStillCursor(result, video.durationUs)
 }
