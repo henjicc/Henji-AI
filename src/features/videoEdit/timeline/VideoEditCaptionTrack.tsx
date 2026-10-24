@@ -86,14 +86,14 @@ export function VideoEditCaptionTrack({ instance, sequence, geometry, pixels, vi
     animation.schedule()
   }
   const row = { track: { id: `${sequence.id}:captions`, name: t('captionTrack.name'), index: -1, kind: 'video' as const, enabled: sequence.captionTrackEnabled !== false, locked: sequence.captionTrackLocked === true, muted: false, solo: false }, ...geometry, region: 'video' as const }
-  return <div className="absolute left-0 right-0 z-sticky border-b border-gap bg-window" style={{ top: row.top - row.clipTop, height: row.height }} data-video-edit-caption-track data-track-kind="caption" onPointerDown={event => { if (event.button === 0) event.stopPropagation() }}>
+  return <div className="absolute left-0 right-0 z-sticky border-b border-gap bg-window" style={{ top: row.top - row.clipTop, height: row.height }} data-video-edit-caption-track data-track-kind="caption" data-layout-pinned onPointerDown={event => { if (event.button === 0) event.stopPropagation() }}>
     <VideoEditTrackHeader caption row={row} code="C1" targeted={false} onTarget={() => focusVideoEditPanel(projectId, 'content')} onResize={() => {}} onPatch={patch => run(() => updateVideoEditCaptionTrack(projectId, sequence.id, { ...(patch.enabled === undefined ? {} : { captionTrackEnabled: patch.enabled }), ...(patch.locked === undefined ? {} : { captionTrackLocked: patch.locked }) }))} />
     {/* The pinned row covers the tracks scrolled under it, not the playhead. */}
     <VideoEditTimelinePlayhead instance={instance} pixels={pixels} />
     {(sequence.captions ?? []).filter(caption => caption.id === preview?.id || (caption.start + caption.duration) * pixels >= view.left - 32 && caption.start * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH + 32).map(original => {
       const caption = preview?.id === original.id ? preview : original
       return <UiIconButton key={caption.id} type="button" tone="bare" aria-label={t('captionTrack.select', { text: caption.text })} aria-pressed={selected === caption.id} aria-disabled={locked(caption) || undefined} tooltip={caption.reviewReasons?.length ? `${caption.text}\n${t('captionTrack.reviewHint')}` : caption.text}
-        data-video-edit-caption-range={caption.id} data-caption-start={caption.start} data-caption-duration={caption.duration}
+        data-ui-timeline-item data-video-edit-caption-range={caption.id} data-caption-start={caption.start} data-caption-duration={caption.duration}
         className={`absolute top-0.5 ${locked(caption) ? 'cursor-default' : 'cursor-grab'}`}
         style={{ height: row.height - 4, left: TIMELINE_HEADER_WIDTH + caption.start * pixels, width: Math.max(3, caption.duration * pixels) }}
         onPointerDown={event => down(event, original, 'move')} onClick={event => { if (event.detail === 0) run(() => select(caption.id)) }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); run(() => select(caption.id)) } }}>

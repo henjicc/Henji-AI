@@ -252,7 +252,13 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
     const x = event.clientX - rect.left
     // 悬停竖线与时间读数：直接改样式，不触发渲染。
     if (hoverLine.current) { hoverLine.current.style.display = ''; hoverLine.current.style.left = `${x}px` }
-    if (hoverLabel.current) { hoverLabel.current.style.display = ''; hoverLabel.current.style.left = `${x}px`; hoverLabel.current.textContent = formatTimecode(frameAtX(x, rect.width, view), sampleRate) }
+    if (hoverLabel.current) {
+      const label = hoverLabel.current
+      label.style.display = ''; label.textContent = formatTimecode(frameAtX(x, rect.width, view), sampleRate)
+      // 靠近右缘时读数翻到竖线左边，不被编辑区裁掉（重要记录 020，尺寸扫描发现）
+      const width = label.offsetWidth
+      label.style.left = `${x + 4 + width > rect.width ? Math.max(0, x - 4 - width) : x + 4}px`
+    }
     if (tool === 'brush') setBrushHover(paneAt(event.clientY) === 'spectrum' ? { x, y: event.clientY - rect.top } : null)
     const current = drag.current
     if (!current || current.pointer !== event.pointerId) return
@@ -421,9 +427,9 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
         <span className={`${UI_TEXT_TIMECODE_CLASS} absolute bottom-1 left-1 whitespace-nowrap text-2xs text-text3`}>{formatTimecode(frame, sampleRate, step)}</span>
       </div>)}
       {selection && visible(selection.start, selection.end) && <div className="pointer-events-none absolute inset-y-0" style={{ ...spanStyle(selection.start, selection.end), background: AUDIO_SCOPE_COLORS.selection }} />}
-      <span ref={hoverLabel} className={`${UI_TEXT_TIMECODE_CLASS} pointer-events-none absolute top-0.5 z-raised ml-1 whitespace-nowrap rounded-hairline bg-panel px-0.5 text-2xs text-text1`} style={{ display: 'none' }} />
+      <span ref={hoverLabel} className={`${UI_TEXT_TIMECODE_CLASS} pointer-events-none absolute top-0.5 z-raised whitespace-nowrap rounded-hairline bg-panel px-0.5 text-2xs text-text1`} style={{ display: 'none' }} />
       <div ref={playheadRef('handle')} role="slider" tabIndex={0} aria-label="播放位置" aria-valuemin={0} aria-valuemax={durationFrames} onKeyDown={onHandleKey}
-        className="absolute bottom-0 h-full w-3 -translate-x-1/2 cursor-ew-resize outline-none focus-visible:ring-2 focus-visible:ring-accent-ring" data-audio-playhead-handle>
+        className="absolute bottom-0 h-full w-3 -translate-x-1/2 cursor-ew-resize outline-none focus-visible:ring-2 focus-visible:ring-accent-ring" data-audio-playhead-handle data-ui-manipulator>
         {/* 播放头把手：倒三角，与 Audition 一致画在刻度底部 */}
         <svg viewBox="0 0 12 9" className="absolute bottom-0 left-0 h-[9px] w-3" aria-hidden>{/* icon-token-allow: 播放头把手是定位图形，不是图标 */}<path d="M0 0h12L6 9z" fill={AUDIO_SCOPE_COLORS.playheadHandle} /></svg>
       </div>

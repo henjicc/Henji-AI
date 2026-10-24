@@ -2,6 +2,7 @@ import React, { useRef, useState, useSyncExternalStore, type KeyboardEvent } fro
 import { Check, ChevronRight } from 'lucide-react'
 import PanelTrigger from '@/components/ui/PanelTrigger'
 import { UiButton, UiOptionButton } from '@/components/ui'
+import { UiOverflowRow } from '@/components/ui/UiOverflowRow'
 import { UI_GLASS_ADAPTIVE_DIVIDER_CLASS } from '@/components/ui/styleTokens'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { Z_LAYERS } from '@/core/theme/zLayers'
@@ -16,6 +17,7 @@ const noDrag: React.CSSProperties & { WebkitAppRegion: 'no-drag' } = { WebkitApp
  * 标题栏菜单栏（Windows；macOS 用同一份模型生成系统菜单栏，见 core/appMenu）。
  * 行为按桌面惯例：点开一个菜单后，指针移到其他菜单名上直接切换；左右方向键在菜单之间切换，上下键在菜单项之间移动；
  * 菜单项右侧显示快捷键，不可用时灰显并在悬停说明里写原因。菜单项执行的都是工作区登记的正式操作。
+ * 窗口窄、放不下全部菜单名时，从后往前收进行末的“更多”（重要记录 020），不让菜单名滑到居中的工作区导航下面。
  */
 export function AppMenuBar(): React.ReactElement | null {
   const menus = useSyncExternalStore(subscribeAppMenus, getAppMenus)
@@ -25,15 +27,17 @@ export function AppMenuBar(): React.ReactElement | null {
     const index = menus.findIndex(menu => menu.id === openId)
     setOpenId(String(menus[(index + step + menus.length) % menus.length].id))
   }
-  return <nav aria-label="菜单栏" role="menubar" className="flex min-w-0 items-center" style={noDrag} data-window-nodrag data-app-menubar>
-    {menus.map(menu => <AppMenuButton key={menu.id} menu={menu} open={openId === menu.id}
+  return <nav aria-label="菜单栏" role="menubar" className="flex min-w-0 flex-1 items-center" style={noDrag} data-window-nodrag data-app-menubar>
+    <UiOverflowRow className="min-w-0 flex-1" items={menus.map((menu, index) => ({ id: String(menu.id), priority: menus.length - index, node: <AppMenuButton menu={menu} open={openId === menu.id}
       onOpenChange={open => setOpenId(open ? String(menu.id) : current => current === menu.id ? null : current)}
       onHover={() => { if (openId && openId !== menu.id) setOpenId(String(menu.id)) }}
-      onMove={move} />)}
+      onMove={move} /> }))}
+      renderOverflow={hiddenIds => <AppMenuButton menu={{ id: 'more', label: '更多', items: menus.filter(menu => hiddenIds.includes(String(menu.id))).map(menu => ({ kind: 'submenu', id: `more.${menu.id}`, label: menu.label, items: menu.items })) }}
+        open={openId === 'more'} onOpenChange={open => setOpenId(open ? 'more' : current => current === 'more' ? null : current)} onHover={() => { if (openId && openId !== 'more') setOpenId('more') }} onMove={() => undefined} />} />
   </nav>
 }
 
-function AppMenuButton({ menu, open, onOpenChange, onHover, onMove }: { menu: AppMenu; open: boolean; onOpenChange: (open: boolean) => void; onHover: () => void; onMove: (step: number) => void }): React.ReactElement {
+function AppMenuButton({ menu, open, onOpenChange, onHover, onMove }: { menu: Pick<AppMenu, 'label' | 'items'> & { id: string }; open: boolean; onOpenChange: (open: boolean) => void; onHover: () => void; onMove: (step: number) => void }): React.ReactElement {
   return <PanelTrigger open={open} onOpenChange={onOpenChange} panelSize="menu" panelPadding="menu" zIndex={Z_LAYERS.dropdown}
     renderPanel={() => <AppMenuList items={menu.items} label={menu.label} onClose={() => onOpenChange(false)} onMove={onMove} />}>
     {({ togglePanel }) => <UiButton size="sm" role="menuitem" aria-haspopup="menu" aria-expanded={open} data-panel-trigger-button data-app-menu={menu.id}

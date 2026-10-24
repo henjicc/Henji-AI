@@ -5,7 +5,10 @@ import type { ColorStatistics } from '@/core/imaging/adjustments/colorStatistics
 import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { RotateCcw, SquareSplitHorizontal, WandSparkles, Upload } from 'lucide-react'
-import { Dropdown, UiButton, UiEmpty, UiGroup, UiIconButton, UiLoading } from '@/components/ui'
+import { Dropdown, UiButton, UiEmpty, UiFieldLayoutContext, UiGroup, UiIconButton, UiLoading, UiPropertyMenuContext } from '@/components/ui'
+import { UI_PROPERTY_INSET_CLASS } from '@/components/ui/styleTokens'
+import ContextMenu from '@/components/ContextMenu'
+import { useContextMenu } from '@/hooks/useContextMenu'
 
 import { resolveVideoEditBuiltinParams, videoEditBuiltinDefaults } from '@/core/videoEdit/builtinEffects'
 import { VIDEO_EDIT_COLOR_GRADE } from '@/core/videoEdit/colorGrade'
@@ -52,7 +55,7 @@ function ColorGradeEditor({ target, clip, selectedId, onError }: { target: Video
     finally { if (!controller.signal.aborted) setBusy(false) }
   }
   return <UiGroup labelWidth={96} className="flex flex-col" gap="row">
-    <div className="flex flex-wrap items-center justify-end gap-1">
+    <div className={`flex flex-wrap items-center justify-end gap-1 ${UI_PROPERTY_INSET_CLASS}`}>
       <UiButton size="sm" disabled={busy} onClick={() => { void automatic() }} tooltip="在片段内均匀采样，分析白平衡与明暗；选择参考后匹配其颜色"><WandSparkles  />{busy ? '分析中…' : reference ? '匹配颜色' : '自动'}</UiButton>
       <VideoEditGradeCompare target={target} effectId={effect?.id} disabled={busy || !effect?.enabled} />
       <UiIconButton size="xs" tooltip="重置全能调色" aria-label="重置全能调色" disabled={busy || !effect} onClick={() => gesture.commit({ curves: {}, params: videoEditBuiltinDefaults(VIDEO_EDIT_COLOR_GRADE) })}><RotateCcw  /></UiIconButton>
@@ -116,12 +119,17 @@ function VideoEditColorGradePanelContent({ instance, onError, visible = true }: 
   const [choice, setChoice] = useState<{ clipId: string; effectId: string }>()
   const effects = clip?.effects?.filter(effect => effect.builtin?.id === VIDEO_EDIT_COLOR_GRADE.id) ?? []
   const selectedId = choice && choice.clipId === clip?.id && effects.some(effect => effect.id === choice.effectId) ? choice.effectId : ''
+  const menu = useContextMenu()
   if (!clip || clip.kind === 'audio') return <UiEmpty size="sm" title="选择画面片段以调色" />
-  return <div className="flex h-full min-h-0 flex-col gap-2 overflow-auto px-3 py-3" aria-label="全能调色">
-    <span className="truncate text-xs font-semibold text-text1" title={clip.name}>{clip.name}</span>
-    {effects.length > 1 && <Dropdown ariaLabel="编辑全能调色效果" value={selectedId || effects[0].id} options={effects.map((effect, i) => ({ value: effect.id, label: `${effect.name} ${i + 1}` }))} onSelect={effectId => setChoice({ clipId: clip.id, effectId })} />}
-    {visible && <ColorGradeEditor key={`${instance.document.id}:${sequence.id}:${clip.id}:${selectedId}`} target={{ projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }} clip={clip} selectedId={selectedId} onError={onError} />}
-  </div>
+  // 与效果控件同一套属性排布（重要记录 019 / 020）：四列属性行、秒表一列、重置在右键菜单
+  return <UiFieldLayoutContext.Provider value="property"><UiPropertyMenuContext.Provider value={menu.showMenu}>
+    <div className="flex h-full min-h-0 flex-col gap-2 overflow-auto py-3" aria-label="全能调色">
+      <span className={`truncate text-xs font-semibold text-text1 ${UI_PROPERTY_INSET_CLASS}`} data-user-content>{clip.name}</span>
+      {effects.length > 1 && <div className={UI_PROPERTY_INSET_CLASS}><Dropdown ariaLabel="编辑全能调色效果" value={selectedId || effects[0].id} options={effects.map((effect, i) => ({ value: effect.id, label: `${effect.name} ${i + 1}` }))} onSelect={effectId => setChoice({ clipId: clip.id, effectId })} /></div>}
+      {visible && <ColorGradeEditor key={`${instance.document.id}:${sequence.id}:${clip.id}:${selectedId}`} target={{ projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }} clip={clip} selectedId={selectedId} onError={onError} />}
+    </div>
+    <ContextMenu items={menu.menuItems} position={menu.menuPosition} onClose={menu.hideMenu} visible={menu.menuVisible} />
+  </UiPropertyMenuContext.Provider></UiFieldLayoutContext.Provider>
 }
 
 export function VideoEditColorGradePanel(props: Parameters<typeof VideoEditColorGradePanelContent>[0]): React.ReactElement {

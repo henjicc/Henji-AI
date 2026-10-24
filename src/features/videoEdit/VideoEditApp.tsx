@@ -125,7 +125,7 @@ function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEdi
       <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => setShortcutsOpen(true)}><Keyboard size={UI_ICON_SIZE.sm} />{t('videoEditProject.shortcuts')}</UiOptionButton>
       {others.map(item => <UiOptionButton key={item.document.id} variant="menu" size="sm" className="min-w-0" onClick={() => focusVideoEdit(item.document.id)}><span className="truncate">{t('videoEditProject.switchTo', { name: item.document.name })}</span></UiOptionButton>)}
     </div>}>
-      {({ open, togglePanel }) => <UiButton size="sm" className="min-w-0 max-w-56" aria-label={t('videoEditProject.menu', { name: instance.document.name })} aria-expanded={open} data-panel-trigger-button onClick={togglePanel}>
+      {({ open, togglePanel }) => <UiButton className="min-w-0 max-w-56" aria-label={t('videoEditProject.menu', { name: instance.document.name })} aria-expanded={open} data-panel-trigger-button onClick={togglePanel}>
         <span className="truncate">{instance.document.name}</span><ChevronDown  className="shrink-0 text-text3" />
       </UiButton>}
     </PanelTrigger>

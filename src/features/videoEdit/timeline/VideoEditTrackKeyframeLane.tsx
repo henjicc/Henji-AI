@@ -170,7 +170,7 @@ export function VideoEditTrackKeyframeLane({ instance, sequence, trackName, lock
         const shape = shapeAt(entry, time)
         return <span key={`${entry.clip.id}:${time}`} className="pointer-events-auto">
           {/* ui-surface-allow 关键帧记号：16px 命中区 + 形状图形，是时间轴记号不是按钮档位（同标尺标记） */}
-          <UiButton aria-label={`${lane.label}关键帧 ${timelineTimecode(entry.clip.start + time, fps)} ${SHAPE_LABELS[shape]}`} aria-pressed={on} data-video-edit-keyframe={`${entry.clip.id}:${time}`}
+          <UiButton data-ui-timeline-item aria-label={`${lane.label}关键帧 ${timelineTimecode(entry.clip.start + time, fps)} ${SHAPE_LABELS[shape]}`} aria-pressed={on} data-video-edit-keyframe={`${entry.clip.id}:${time}`}
             className={`absolute top-1/2 -ml-2 -mt-2 !h-4 !w-4 !p-0 ${on ? 'text-accent-text' : 'text-text2'} ${locked ? '' : 'cursor-ew-resize'}`} style={{ left: TIMELINE_HEADER_WIDTH + (entry.clip.start + time) * pixels }}
             onPointerDown={event => {
               event.stopPropagation()

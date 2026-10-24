@@ -3,25 +3,34 @@ import { parseWorkspaceDockLayout } from '@/core/workspaceLayouts/validation'
 import { Orientation, positionToDirection, type DockviewApi, type DockviewGroupPanel, type IDockviewPanel, type SerializedDockview } from 'dockview-react'
 import { createLogger } from '@/core/logging'
 import { toggleDockGroupMaximized, type DockDropZone } from '@/components/dockviewDocking'
+import { workspacePanelConstraints } from '@/core/workspaceLayouts/validation'
 
 const logger = createLogger('features.videoEdit.layout')
 export const VIDEO_EDIT_LAYOUT_STORAGE_KEY = 'henji.videoEdit.dockLayout.v1'
+/**
+ * 面板与它们的最小尺寸（重要记录 020）：右侧检查器一组标签取同一档，切标签时组宽不跳；
+ * 默认布局在 960×640 窗口里同时放得下这些最小值（素材 220 + 时间线 400 + 检查器 320 = 940 宽，节目 + 时间线 = 400 高）。
+ * 检查器 320：效果控件最宽的一行（缩放：数值 ⛓ 数值 + 单位道）连同名称后的关键帧导航放得下，名称列不被数值盖住；
+ * 素材 220：底栏的项目计数（如“17 项 · 已选 1”）与右侧五个工具按钮同排放得下。
+ * 数值由 ui:tour 的尺寸扫描（scripts/ui-review/layout-sweep.json）核对：拖到这里内容不裁切、不遮挡。
+ */
+const INSPECTOR_MIN = { minimumWidth: 320, minimumHeight: 180 } as const
 export const VIDEO_EDIT_PANELS = [
-  { id: 'style_kits', title: '风格' },
-  { id: 'project', title: '素材' },
-  { id: 'program', title: '节目画面' },
-  { id: 'effects', title: '效果控件' },
-  { id: 'timeline', title: '时间线' },
-  { id: 'source', title: '源监视器' },
-  { id: 'annotations', title: '批注' },
-  { id: 'content', title: '字幕与标记' },
-  { id: 'tracking', title: '跟踪' },
-  { id: 'color_grade', title: '全能调色' },
+  { id: 'style_kits', title: '风格', ...INSPECTOR_MIN },
+  { id: 'project', title: '素材', minimumWidth: 220, minimumHeight: 180 },
+  { id: 'program', title: '节目画面', minimumWidth: 320, minimumHeight: 200 },
+  { id: 'effects', title: '效果控件', ...INSPECTOR_MIN },
+  { id: 'timeline', title: '时间线', minimumWidth: 400, minimumHeight: 200 },
+  { id: 'source', title: '源监视器', minimumWidth: 280, minimumHeight: 200 },
+  { id: 'annotations', title: '批注', ...INSPECTOR_MIN },
+  { id: 'content', title: '字幕与标记', ...INSPECTOR_MIN },
+  { id: 'tracking', title: '跟踪', ...INSPECTOR_MIN },
+  { id: 'color_grade', title: '全能调色', ...INSPECTOR_MIN },
   // PR“效果”面板：视频／音频过渡与效果的预设库，拖到时间线编辑点或片段上（4.3）。
-  { id: 'effects_library', title: '效果' },
-  { id: 'title_templates', title: '模板' },
+  { id: 'effects_library', title: '效果', ...INSPECTOR_MIN },
+  { id: 'title_templates', title: '模板', ...INSPECTOR_MIN },
   // 预设：风格、标题、文字、效果、转场预设的动态预览与管理（评分、默认、导入导出）。
-  { id: 'presets', title: '预设' },
+  { id: 'presets', title: '预设', ...INSPECTOR_MIN },
 ] as const
 export type VideoEditPanelId = typeof VIDEO_EDIT_PANELS[number]['id']
 const INSPECTOR_PANELS: readonly string[] = ['effects', 'title_templates', 'effects_library', 'presets', 'style_kits', 'annotations', 'content', 'tracking', 'color_grade']
@@ -39,11 +48,11 @@ export function defaultVideoEditLayout(): SerializedDockview {
       width: 1440, height: 860, orientation: Orientation.HORIZONTAL,
       root: { type: 'branch', data: [
         { type: 'leaf', size: 240, data: { id: 'project-group', views: ['project'], activeView: 'project' } },
-        { type: 'branch', size: 920, data: [
+        { type: 'branch', size: 880, data: [
           { type: 'leaf', size: 540, data: { id: 'program-group', views: ['program'], activeView: 'program' } },
           { type: 'leaf', size: 320, data: { id: 'timeline-group', views: ['timeline'], activeView: 'timeline' } },
         ] },
-        { type: 'leaf', size: 280, data: { id: 'effects-group', views: ['effects', 'presets', 'effects_library', 'title_templates', 'style_kits'], activeView: 'effects' } },
+        { type: 'leaf', size: 320, data: { id: 'effects-group', views: ['effects', 'presets', 'effects_library', 'title_templates', 'style_kits'], activeView: 'effects' } },
       ] },
     }, panels, activeGroup: 'program-group',
   }
@@ -78,22 +87,23 @@ export function showVideoEditPanel(api: DockviewApi, id: VideoEditPanelId): IDoc
   const existing = api.getPanel(id)
   if (existing) { existing.api.setActive(); return existing }
   const definition = VIDEO_EDIT_PANELS.find(panel => panel.id === id)!
+  const constraints = workspacePanelConstraints(VIDEO_EDIT_PANELS, id)
   // 字幕与标记是和效果控件同类的侧栏检查器：作为标签并入效果控件那一组，不再在节目画面右侧另开一列——
   // 960 窗口下另开的一列只剩约 120px，标签与列表都被挤成竖排（界面重设计 5.5 第三批）。
   const inspector = inspectorReference(api, id)
   if (inspector && inspector.api.location.type === 'grid') {
-    return api.addPanel({ id, component: id, title: definition.title, renderer: 'always', position: { referencePanel: inspector, direction: 'within' } })
+    return api.addPanel({ id, component: id, title: definition.title, renderer: 'always', ...constraints, position: { referencePanel: inspector, direction: 'within' } })
   }
   // 节目画面（关闭或从独立浮窗贴回）回到时间线上方：原来按“程序面板不存在 → 第一个面板右侧”新开一列，
   // 时间线被挤成整高的窄竖列，标尺只剩不到 300px（5.8 全量回归：性能场景弹出节目浮窗再关闭后，后续剪辑场景全部点不到标尺）。
   const timeline = id === 'program' ? api.getPanel('timeline') : undefined
   if (timeline && timeline.api.location.type === 'grid') {
-    return api.addPanel({ id, component: id, title: definition.title, renderer: 'always', position: { referencePanel: timeline, direction: 'above' } })
+    return api.addPanel({ id, component: id, title: definition.title, renderer: 'always', ...constraints, position: { referencePanel: timeline, direction: 'above' } })
   }
   const reference = api.getPanel('program') ?? api.panels.find(panel => panel.api.location.type === 'grid')
-  return api.addPanel({ id, component: id, title: definition.title, renderer: 'always',
+  return api.addPanel({ id, component: id, title: definition.title, renderer: 'always', ...constraints,
     ...(reference ? { position: { referencePanel: reference, direction: id === 'timeline' ? 'below' : id === 'project' || id === 'source' ? 'left' : 'right' } } : {}),
-    ...(id === 'timeline' ? { initialHeight: 320 } : id === 'program' ? {} : { initialWidth: 280 }),
+    ...(id === 'timeline' ? { initialHeight: 320 } : id === 'program' ? {} : { initialWidth: 320 }),
   })
 }
 
@@ -135,7 +145,7 @@ export function addVideoEditPanelAt(api: DockviewApi, id: VideoEditPanelId, zone
   const existing = api.getPanel(id)
   if (existing) { existing.api.setActive(); return existing }
   const definition = VIDEO_EDIT_PANELS.find(panel => panel.id === id)!
-  const base = { id, component: id, title: definition.title, renderer: 'always' as const }
+  const base = { id, component: id, title: definition.title, renderer: 'always' as const, ...workspacePanelConstraints(VIDEO_EDIT_PANELS, id) }
   if (zone.kind === 'root') return api.addPanel({ ...base, position: { direction: positionToDirection(zone.side) } })
   if (!api.groups.includes(zone.group)) return showVideoEditPanel(api, id)
   return api.addPanel({ ...base, position: { referenceGroup: zone.group, direction: positionToDirection(zone.position) } })

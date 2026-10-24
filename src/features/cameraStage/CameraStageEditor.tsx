@@ -581,7 +581,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
             <ArrowLeft  />
           </UiIconButton>
         )}
-        <span className="min-w-0 max-w-40 truncate text-13 font-medium text-text1" title={projectName}>
+        <span className="min-w-0 max-w-40 truncate text-13 font-medium text-text1" title={projectName} data-user-content>
           {projectName}
         </span>
         <UiIconButton

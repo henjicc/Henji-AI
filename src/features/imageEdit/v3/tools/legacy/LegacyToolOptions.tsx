@@ -2,7 +2,8 @@ import { UiSegmented } from '@/components/ui'
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { UiSwitch } from '@/components/ui'
+import { UiIconButton } from '@/components/ui'
+import { Magnet } from 'lucide-react'
 import type { ImageEditCommandBusV3 } from '../../application/imageEditCommandBus'
 import { useImageEditorSessionStoreV3 } from '../../store'
 import { findImageEditLayerLocationV3 } from '../../editor/layerTreeV3'
@@ -43,18 +44,14 @@ export function LegacyToolOptions({
   return (
     <div data-tool-parameters className="flex h-full min-w-max items-center gap-4">
       {moveLike ? (
-        <label className="flex shrink-0 items-center gap-2 text-xs text-text2">
-          <span>{t('imageEditor.v3.toolSettings.snapping')}</span>
-          <UiSwitch
-            aria-label={t('imageEditor.v3.toolSettings.snapping')}
-            checked={session.toolSettings.snappingEnabled}
-            onCheckedChange={(enabled) => setToolSetting(
-              controller.sessionId,
-              'snappingEnabled',
-              enabled,
-            )}
-          />
-        </label>
+        // 工具条里的开关用图标开关（开着图标染强调色），与剪辑时间线的“吸附”同一写法（重要记录 019 / 020）
+        <UiIconButton
+          on={session.toolSettings.snappingEnabled}
+          aria-pressed={session.toolSettings.snappingEnabled}
+          aria-label={t('imageEditor.v3.toolSettings.snapping')}
+          tooltip={t('imageEditor.v3.toolSettings.snapping')}
+          onClick={() => setToolSetting(controller.sessionId, 'snappingEnabled', !session.toolSettings.snappingEnabled)}
+        ><Magnet /></UiIconButton>
       ) : null}
       {selectionLike ? (
         <UiSegmented ariaLabel={t('imageEditor.v3.selection.combineMode')} value={session.toolSettings.selectionCombineMode} onChange={mode => setToolSetting(controller.sessionId, 'selectionCombineMode', mode)} options={(['replace', 'add', 'subtract', 'intersect'] as const).map(value => ({ value, label: t(`imageEditor.v3.selection.${value}`), disabled: !allowedSelectionModes.includes(value), title: !allowedSelectionModes.includes(value) ? t('imageEditor.v3.selection.replaceOnly') : undefined }))} />

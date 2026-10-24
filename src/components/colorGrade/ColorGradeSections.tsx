@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight, RotateCcw } from 'lucide-react'
-import { Dropdown, UiButton, UiFormRow, UiGroup, UiIconButton, UiSegmented } from '@/components/ui'
+import { Dropdown, UiButton, UiFormRow, UiGroup, UiIconButton, UiSegmented, useUiFieldLayout, useUiPropertyMenu } from '@/components/ui'
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import type { ImagingParam } from '@/core/imaging/parameterDefinition'
 import {
   COLOR_GRADE_BASIC_PARAMS, COLOR_GRADE_CREATIVE_PARAMS, COLOR_GRADE_CURVE_CHANNELS, COLOR_GRADE_HSL_PARAMS, COLOR_GRADE_HUE_CURVES, COLOR_GRADE_HUE_CURVE_NAMES,
@@ -43,6 +44,17 @@ const MIXER_CHANNELS = [{ value: 'hue', label: '色相' }, { value: 'saturation'
 function Section({ title, params, host, open: initiallyOpen = false, children }: { title: string; params: readonly ImagingParam[]; host: ColorGradeSectionsHost; open?: boolean; children: () => ReactNode }): React.ReactElement {
   const [open, setOpen] = useState(initiallyOpen)
   const modified = params.length > 0 && isColorGradeSectionModified(params, host.values)
+  const layout = useUiFieldLayout(); const menu = useUiPropertyMenu()
+  // 属性排布（剪辑效果控件与全能调色面板，重要记录 019 / 020）：区块头与属性行同一网格，箭头在第一列、名称对齐属性名，
+  // 重置进名称上的右键菜单；其余宿主（图片调整层）仍用分组标题 + 行尾重置。
+  if (layout === 'property') return <section className="border-t border-line pb-1.5 pt-1 first:border-t-0" data-color-grade-section={title}>
+    <div className="mx-1 grid min-h-control-sm grid-cols-property-row items-center gap-x-1 pr-2"
+      onContextMenu={menu && params.length ? event => menu(event, [{ id: 'reset', label: `重置${title}`, icon: <RotateCcw size={UI_ICON_SIZE.sm} />, disabled: host.disabled || !modified, onClick: () => host.resetParams(params) }]) : undefined}>
+      <UiIconButton size="2xs" tone="bare" aria-expanded={open} aria-label={`${open ? '收起' : '展开'}${title}`} tooltip={`${open ? '收起' : '展开'}${title}`} onClick={() => setOpen(!open)}>{open ? <ChevronDown /> : <ChevronRight />}</UiIconButton>
+      <span className="col-span-3 truncate text-xs font-semibold text-text1">{title}</span>
+    </div>
+    {open && children()}
+  </section>
   return <UiGroup titleTone="compact" gap="none"
     title={<UiButton size="sm" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? <ChevronDown /> : <ChevronRight />}{title}</UiButton>}
     actions={modified ? <UiIconButton size="xs" tooltip={`重置${title}`} aria-label={`重置${title}`} disabled={host.disabled} disabledReason="当前不可编辑" onClick={() => host.resetParams(params)}><RotateCcw /></UiIconButton> : undefined}>

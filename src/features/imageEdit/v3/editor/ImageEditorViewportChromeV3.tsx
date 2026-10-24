@@ -37,8 +37,10 @@ export function ImageEditorViewportChromeV3({
         style={{ visibility: 'hidden' }}
  />
       {/* 压在画面上的缩放条：媒体叠层固定令牌（不随主题），三段同高 28 */}
+      {/* data-layout-pinned：固定在画面上的缩放条，平移、缩放的画面与控制点滑到它下面属于正常（重要记录 020） */}
       <div
         data-viewport-control
+        data-layout-pinned
         className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1"
  >
         <UiIconButton size="sm" tone="media"

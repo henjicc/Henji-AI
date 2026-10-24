@@ -119,7 +119,8 @@ export function ImageEditorCommandBarV3({
       )}
     >
       {toolbarLeading}
-      <span className="truncate text-13 font-medium text-text1">
+      {/* 窄窗口（< 1024）先让出标题：它是固定文案，截成“图片…”不如不显示（重要记录 020，尺寸扫描发现） */}
+      <span className="hidden truncate text-13 font-medium text-text1 lg:inline">
         {t('imageEditor.v3.title')}
       </span>
       <UiIconButton size="md"

@@ -78,7 +78,7 @@ export function VideoEditZoomTrack({ instance, sequence, geometry, pixels, view,
     return frames && frames.endFrame * pixels >= left && frames.startFrame * pixels <= right ? [{ clip, original, region, frames }] : []
   }))
   const playhead = instance.frame
-  return <div className="absolute left-0 right-0 z-sticky border-b border-gap bg-window" style={{ top: geometry.top - geometry.clipTop, height: geometry.height }} data-video-edit-zoom-track onPointerDown={event => { if (event.button === 0) event.stopPropagation() }}>
+  return <div className="absolute left-0 right-0 z-sticky border-b border-gap bg-window" style={{ top: geometry.top - geometry.clipTop, height: geometry.height }} data-video-edit-zoom-track data-layout-pinned onPointerDown={event => { if (event.button === 0) event.stopPropagation() }}>
     <div className="sticky left-0 z-sticky flex h-full items-center border-r border-gap bg-panel pl-1 pr-1.5" style={{ width: TIMELINE_HEADER_WIDTH }}>
       <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1"><span className="w-5 shrink-0 text-left font-mono text-2xs font-semibold">Z1</span><span className="truncate text-2xs">缩放</span></div>
     </div>
@@ -87,7 +87,7 @@ export function VideoEditZoomTrack({ instance, sequence, geometry, pixels, view,
       const label = `${RECORDING_ZOOM_DEPTH_LABELS[region.depth - 1]}${region.focus === 'cursor' ? ' · 跟随鼠标' : ' · 固定位置'}`
       const current = clip.id === instance.selection && playhead >= frames.startFrame && playhead < frames.endFrame
       return <UiIconButton key={`${clip.id}:${original.id}`} type="button" tone="bare" aria-label={`缩放 ${label}`} aria-pressed={current} tooltip={label}
-        data-video-edit-zoom-region={original.id} data-zoom-start={frames.startFrame} data-zoom-end={frames.endFrame}
+        data-ui-timeline-item data-video-edit-zoom-region={original.id} data-zoom-start={frames.startFrame} data-zoom-end={frames.endFrame}
         className={`absolute top-0.5 ${locked(clip) ? 'cursor-default' : 'cursor-grab'}`}
         style={{ height: geometry.height - 4, left: TIMELINE_HEADER_WIDTH + frames.startFrame * pixels, width: Math.max(3, (frames.endFrame - frames.startFrame) * pixels) }}
         onPointerDown={event => down(event, clip, original, frames, 'move')} onClick={event => { if (event.detail === 0) focus(clip, frames.startFrame) }}

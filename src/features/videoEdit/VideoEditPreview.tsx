@@ -716,7 +716,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     { id: 'toggle_proxies', title: '切换代理', Icon: ICON_VIDEO_EDIT_PROXY, on: getVideoEditProxyPreference(instance.document.id).enabled, tooltip: '切换代理：看片使用已有代理；导出默认用原片（可在导出设置中选代理）；分析使用原片', onClick: () => { try { setVideoEditProxyPreference(instance.document.id, { enabled: !getVideoEditProxyPreference(instance.document.id).enabled }) } catch (error) { onError(error) } } },
     ...PROGRAM_COMMAND_BUTTONS.map((id): VideoEditMonitorButtonSpec => {
       const command = id === 'lift' || id === 'extract' ? rangeEdits[id] : timelineCommandPresentation(commandContext, id, shortcuts)
-      if (id === 'play_pause') return { id, title: command.title, tooltip: command.tooltip, Icon: instance.playing ? Pause : Play, size: 'md', enabled: command.enabled, onClick: () => runCommand(id) }
+      if (id === 'play_pause') return { id, title: command.title, tooltip: command.tooltip, Icon: instance.playing ? Pause : Play, enabled: command.enabled, onClick: () => runCommand(id) }
       return { id, title: command.title, tooltip: command.tooltip, Icon: PROGRAM_COMMAND_ICONS[id], enabled: command.enabled, onClick: () => runCommand(id) }
     }),
     { id: 'export_frame', title: '导出帧', tooltip: '导出帧：把当前画面加入资产库', Icon: Camera, enabled: !busy, onClick: captureFrame },
@@ -834,7 +834,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         {instance.document.posterFrame && <UiOptionButton variant="menu" size="sm" className="gap-2" tooltip="不再固定封面，保存时按剪辑内容自动更新" onClick={() => { try { clearVideoEditPosterFrame(instance.document.id) } catch (error) { onError(error) } }}><RotateCcw size={UI_ICON_SIZE.sm} />恢复自动封面</UiOptionButton>}
         <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} tooltip="在图片编辑中修改当前帧，完成后可替换回原时刻的一帧" onClick={editFrame}><PenLine size={UI_ICON_SIZE.sm} />编辑当前帧</UiOptionButton>
       </div>}>
-        {({ open, togglePanel }) => <UiIconButton aria-label="更多节目操作" tooltip="更多：重新加载预览、选帧加入资产库、编辑当前帧" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><MoreHorizontal /></UiIconButton>}
+        {({ open, togglePanel }) => <UiIconButton size="sm" aria-label="更多节目操作" tooltip="更多：重新加载预览、选帧加入资产库、编辑当前帧" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><MoreHorizontal /></UiIconButton>}
       </PanelTrigger>}
  />
     </div>

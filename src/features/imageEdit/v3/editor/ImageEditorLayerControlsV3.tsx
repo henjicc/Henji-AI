@@ -30,7 +30,8 @@ export function ImageEditorLayerControlsV3({ presentation, document, layerId, bo
   useLayoutEffect(() => () => presentation.sync(null, null), [presentation])
   if (!visible) return null
   return (
-    <div ref={rootRef} data-layer-transform-controls={layerId} className="pointer-events-none absolute inset-0">
+    // data-ui-manipulator：画面上的变换控制点按操纵件习惯判命中区，随画面缩放互相靠近、伸出画布不算问题（重要记录 020）
+    <div ref={rootRef} data-layer-transform-controls={layerId} data-ui-manipulator className="pointer-events-none absolute inset-0">
       {[0, 1, 2, 3, 4].map((edge) => (
         <div key={edge} data-layer-transform-edge={edge} className="absolute h-px origin-left bg-accent" />
       ))}

@@ -549,8 +549,8 @@ describe('ImageEditorV3 professional shell', () => {
     const moveParameters = rendered.container.querySelector('[data-tool-parameters]')
     expect(moveParameters?.closest('[data-command-bar]')).toBe(commandBar)
     expect(rendered.container.querySelector('[data-context-bar]')).toBeNull()
-    const snappingSwitch = screen.getByRole('switch', { name: '吸附' })
-    expect(snappingSwitch.getAttribute('aria-checked')).toBe('true')
+    const snappingSwitch = screen.getByRole('button', { name: '吸附' })
+    expect(snappingSwitch.getAttribute('aria-pressed')).toBe('true')
     fireEvent.click(snappingSwitch)
     expect(Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]
       ?.toolSettings.snappingEnabled).toBe(false)

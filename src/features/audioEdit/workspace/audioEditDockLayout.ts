@@ -8,14 +8,16 @@ export const AUDIO_EDIT_WORKSPACE_ID = 'audio_edit'
 /** 接入共享布局服务之前的本机布局，首次加载时只读迁入。 */
 const AUDIO_EDIT_LAYOUT_STORAGE_KEY = 'henji.audioEdit.dockLayout.v1'
 
+/** 面板与最小尺寸（重要记录 020）：三栏布局在 960×640 下放得下（240 + 440 + 240），由尺寸扫描核对；编辑器 440 时播放条连同“更多”放得下。 */
+const SIDE_MIN = { minimumWidth: 240, minimumHeight: 120 } as const
 export const AUDIO_EDIT_PANELS = [
-  { id: 'editor', title: '编辑器' },
-  { id: 'transcript', title: '文字稿' },
-  { id: 'process', title: '处理' },
-  { id: 'effects', title: '效果组' },
-  { id: 'selection', title: '选区' },
-  { id: 'history', title: '历史记录' },
-  { id: 'delivery', title: '交付' },
+  { id: 'editor', title: '编辑器', minimumWidth: 440, minimumHeight: 200 },
+  { id: 'transcript', title: '文字稿', minimumWidth: 240, minimumHeight: 160 },
+  { id: 'process', title: '处理', ...SIDE_MIN },
+  { id: 'effects', title: '效果组', ...SIDE_MIN },
+  { id: 'selection', title: '选区', ...SIDE_MIN },
+  { id: 'history', title: '历史记录', ...SIDE_MIN },
+  { id: 'delivery', title: '交付', ...SIDE_MIN },
 ] as const
 export type AudioEditPanelId = typeof AUDIO_EDIT_PANELS[number]['id']
 const TITLES = Object.fromEntries(AUDIO_EDIT_PANELS.map(panel => [panel.id, panel.title])) as Record<AudioEditPanelId, string>

@@ -35,7 +35,7 @@ function preciseTime(frame: number, rate: number) {
 function Timecode({ rate, total }: { rate: number; total: number }) {
   const outputFrame = useAudioEditPlaybackStore((state) => state.outputFrame)
   return <span className={`${UI_TEXT_TIMECODE_CLASS} shrink-0 whitespace-nowrap`} data-audio-edit-time>
-    <span className="text-base text-accent">{preciseTime(outputFrame, rate)}</span><span className="text-xs text-text3"> / {preciseTime(total, rate)}</span>
+    <span className="text-base text-accent-text">{preciseTime(outputFrame, rate)}</span><span className="text-xs text-text3"> / {preciseTime(total, rate)}</span>
   </span>
 }
 

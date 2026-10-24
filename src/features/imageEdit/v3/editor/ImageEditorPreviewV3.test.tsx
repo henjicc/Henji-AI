@@ -444,7 +444,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     expect(horizontalSnapGuide.style.visibility).toBe('hidden')
     expect(changes).not.toHaveBeenCalled()
 
-    const snappingSwitch = screen.getByRole('switch', { name: '吸附' })
+    const snappingSwitch = screen.getByRole('button', { name: '吸附' })
     fireEvent.click(snappingSwitch)
     fireEvent.pointerDown(surface, {
       pointerId: 39, isPrimary: true, button: 0, clientX: 10, clientY: 10,

@@ -362,7 +362,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     const Icon = ICON_VIDEO_EDIT_TRANSITION
     // 单侧过渡（4.4）贴着片段一端：只有离开那一端的边缘能拖。
     const fixed = window.side === 'in' ? 'in' : window.side === 'out' ? 'out' : undefined
-    return <div key={window.transition.id} data-video-edit-transition={window.transition.id} data-video-edit-transition-side={window.side} data-selected={selected || undefined} title={window.side ? `${preset.name}：拖${window.side === 'in' ? '右' : '左'}缘改时长` : `${preset.name}：拖两端改时长，拖中间沿切点移动`}
+    return <div key={window.transition.id} data-ui-timeline-item data-video-edit-transition={window.transition.id} data-video-edit-transition-side={window.side} data-selected={selected || undefined} title={window.side ? `${preset.name}：拖${window.side === 'in' ? '右' : '左'}缘改时长` : `${preset.name}：拖两端改时长，拖中间沿切点移动`}
       className={`absolute z-raised flex overflow-hidden rounded-md border bg-raised text-text1 ${selected ? CLIP_SELECTED_LINE : 'border-line-strong'}`}
       style={{ top: row.top - region.top + 2, height: Math.max(12, Math.min(row.height - 4, 28)), left: TIMELINE_HEADER_WIDTH + window.start * pixels, width }}>
       <div data-video-edit-transition-edge={fixed === 'in' ? undefined : 'in'} aria-hidden="true" className={`h-full w-1.5 shrink-0 ${fixed === 'in' ? '' : 'cursor-ew-resize'}`} />
@@ -393,7 +393,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         const clipWidth = Math.max(3, clip.duration * pixels)
         const fadeIn = (clip.fadeInFrames ?? 0) * pixels; const fadeOut = (clip.fadeOutFrames ?? 0) * pixels
         const fadable = clip.kind !== 'adjustment' && clipWidth >= FADE_HANDLE_MIN_WIDTH
-        return <div key={clip.id} data-video-edit-clip={clip.id} data-clip-start={clip.start} data-clip-duration={clip.duration} className={`group absolute overflow-hidden rounded-md border ${selected ? CLIP_SELECTED_LINE : ''}`} data-clip-dimmed={dimmed || undefined} style={{ top: row.top - region.top + 2, height: row.height - 4, left: clipLeft, width: clipWidth, ...surface }}>
+        return <div key={clip.id} data-ui-timeline-item data-video-edit-clip={clip.id} data-clip-start={clip.start} data-clip-duration={clip.duration} className={`group absolute overflow-hidden rounded-md border ${selected ? CLIP_SELECTED_LINE : ''}`} data-clip-dimmed={dimmed || undefined} style={{ top: row.top - region.top + 2, height: row.height - 4, left: clipLeft, width: clipWidth, ...surface }}>
           {picture && media && <VideoEditClipFilmstrip mode={thumbnails} clipId={clip.id} source={media.path} sourceRevision={media.sourceRevision} still={media.kind === 'image'} aspect={media.width > 0 && media.height > 0 ? media.width / media.height : 16 / 9}
             mediaEndSeconds={media.durationSeconds} frameSeconds={media.frameRate ? media.frameRate.denominator / media.frameRate.numerator : 1 / 30} clip={clip} fps={fps} pixels={pixels} clipWidth={clipWidth} height={row.height - 6}
             visibleFrom={stripEdge(view.left + TIMELINE_HEADER_WIDTH - clipLeft, clipWidth, Math.floor)} visibleTo={stripEdge(view.left + view.width - clipLeft, clipWidth, Math.ceil)} devicePixelRatio={devicePixelRatio} active={visible} />}
@@ -544,7 +544,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
             {minorPerMajor > 1 && Array.from({ length: Math.max(0, tickEnd - tickStart) * minorPerMajor }, (_, index) => tickStart * minorPerMajor + index).filter(index => index % minorPerMajor !== 0).map(index => <span key={`m${index}`} aria-hidden="true" className="pointer-events-none absolute bottom-0 h-1.5 border-l border-line" style={{ left: index * ruler.minor * pixels }} />)}
             <VideoEditTimelinePlayheadHead instance={instance} pixels={pixels} />
             {/* ui-surface-allow 标尺上的标记与字幕区间条是时间轴记号（12px 命中区 + 菱形图形），不是按钮档位（3.5 确认保留） */}
-            {(sequence.markers ?? []).filter(mark => mark.frame * pixels >= view.left - 8 && mark.frame * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH + 8).map(mark => <UiButton key={mark.id} data-video-edit-marker={mark.id} aria-label={`定位标记 ${mark.name}`} className="absolute top-3 z-raised -ml-1.5 !h-3 !w-3 !p-0 text-accent-text" tooltip={mark.name} style={{ left: mark.frame * pixels }} onPointerDown={event => event.stopPropagation()} onClick={() => run(() => { selectVideoEditSubtitle(projectId, sequence.id, null); setVideoEditView(projectId, { frame: mark.frame, playing: false, selection: mark.clipId ?? null }); focusVideoEditPanel(projectId, 'content') })}><Diamond  fill="currentColor"  aria-hidden="true" /></UiButton>)}
+            {(sequence.markers ?? []).filter(mark => mark.frame * pixels >= view.left - 8 && mark.frame * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH + 8).map(mark => <UiButton key={mark.id} data-ui-timeline-item data-video-edit-marker={mark.id} aria-label={`定位标记 ${mark.name}`} className="absolute top-3 z-raised -ml-1.5 !h-3 !w-3 !p-0 text-accent-text" tooltip={mark.name} style={{ left: mark.frame * pixels }} onPointerDown={event => event.stopPropagation()} onClick={() => run(() => { selectVideoEditSubtitle(projectId, sequence.id, null); setVideoEditView(projectId, { frame: mark.frame, playing: false, selection: mark.clipId ?? null }); focusVideoEditPanel(projectId, 'content') })}><Diamond  fill="currentColor"  aria-hidden="true" /></UiButton>)}
             <VideoEditRenderBar instance={instance} pixels={pixels} />
             <VideoEditTimelineInOut instance={instance} sequence={sequence} fps={fps} duration={duration} pixels={pixels} onError={onError} />
           </VideoEditTimelinePosition>
@@ -552,7 +552,8 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         {(['video', 'audio'] as const).map(kind => {
           const region = layout.regions[kind]
           // 每一区单独裁切：滚出本区的轨道与片段不显示（overflow-y: clip 不建立滚动容器，轨道头仍能横向吸附在左侧）。
-          return <div key={kind} className="absolute left-0 right-0 overflow-y-clip" style={{ top: region.top, height: region.height }} data-video-edit-track-region={kind}>
+          // data-layout-scroll-region：本区自绘纵向滚动，滚出本区的轨道是滚动，不是裁切（重要记录 020）
+          return <div key={kind} className="absolute left-0 right-0 overflow-y-clip" style={{ top: region.top, height: region.height }} data-video-edit-track-region={kind} data-layout-scroll-region>
             {headerRows.filter(row => row.region === kind).map(row => <div key={row.track.id} className="absolute left-0 right-0 border-b border-gap bg-window" style={{ top: row.top - region.top, height: row.height }} data-video-edit-track={row.track.id} data-track-index={row.track.index} data-track-kind={row.track.kind}>
               <VideoEditTrackHeader row={row} code={trackCodes.get(row.track.id) ?? ''} targeted={instance.targetTrackIds.includes(row.track.id)} renaming={trackMenu.renaming === row.track.id} onRename={name => trackMenu.rename(row.track.id, name)} onStartRename={() => trackMenu.startRename(row.track.id)}
                 onContextMenu={event => trackMenu.show(event, row.track.id)}

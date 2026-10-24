@@ -1,8 +1,8 @@
-import { parseWorkspaceDockLayout } from '@/core/workspaceLayouts/validation'
+import { parseWorkspaceDockLayout, workspacePanelConstraints } from '@/core/workspaceLayouts/validation'
 import { Orientation, type DockviewApi, type SerializedDockview } from 'dockview-react'
 
 import type { ImageEditorHostProfileIdV3 } from '../application/imageEditorHostProfiles'
-import type { ImageEditorPanelDefinitionV3 } from './panelRegistry'
+import { imageEditorDockPanelsV3, type ImageEditorPanelDefinitionV3 } from './panelRegistry'
 
 export const IMAGE_EDITOR_PREVIEW_PANEL_V3 = 'preview'
 
@@ -55,7 +55,7 @@ export function validateImageEditorDockLayoutV3(
   const allowed = new Set(definitions.map(({ id }) => id))
   if (value.collapsed.some(id => typeof id !== 'string' || !allowed.has(id))
     || new Set(value.collapsed).size !== value.collapsed.length) throw new Error('折叠面板无效')
-  const dock = parseWorkspaceDockLayout(JSON.stringify(value.dock), [{ id: 'preview' }, ...definitions])
+  const dock = parseWorkspaceDockLayout(JSON.stringify(value.dock), imageEditorDockPanelsV3(definitions))
   if (!dock.panels.preview) throw new Error('缺少图片预览')
   let previewFound = false
   const inspect = (node: unknown, floating: boolean): void => {
@@ -92,6 +92,7 @@ export function showImageEditorPanelV3(
       ? { referencePanel: sibling, direction: definition.defaultPlacement === 'tab' ? 'within' : 'below' }
       : { referencePanel: IMAGE_EDITOR_PREVIEW_PANEL_V3, direction: 'right' },
     initialWidth: api.width > 0 ? Math.min(400, api.width * 0.42) : 400,
+    ...workspacePanelConstraints(imageEditorDockPanelsV3([definition]), definition.id),
   })
 }
 

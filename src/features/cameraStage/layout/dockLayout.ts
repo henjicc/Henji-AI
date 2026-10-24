@@ -34,8 +34,15 @@ export function defaultCameraStageLayout(focus = false): SerializedDockview {
     panels: Object.fromEntries(Object.entries(CAMERA_STAGE_PANEL_TITLES).map(([id, title]) => [id, { id, contentComponent: id, title, renderer: 'always' as const }])), activeGroup: 'viewport-group',
   }
 }
+/** 面板最小尺寸（重要记录 020）：960×640 下视口列与右侧检查器同时放得下（360 + 240），由尺寸扫描核对。 */
+const CAMERA_STAGE_PANEL_MINIMUMS: Record<keyof typeof CAMERA_STAGE_PANEL_TITLES, { minimumWidth: number; minimumHeight: number }> = {
+  viewport: { minimumWidth: 360, minimumHeight: 240 },
+  timeline: { minimumWidth: 360, minimumHeight: 120 },
+  objects: { minimumWidth: 240, minimumHeight: 140 },
+  properties: { minimumWidth: 240, minimumHeight: 160 },
+}
 export const cameraStageLayoutPresets = registerWorkspaceLayout({
-  workspaceId: 'camera_stage', panels: Object.entries(CAMERA_STAGE_PANEL_TITLES).map(([id, title]) => ({ id, title })),
+  workspaceId: 'camera_stage', panels: Object.entries(CAMERA_STAGE_PANEL_TITLES).map(([id, title]) => ({ id, title, ...CAMERA_STAGE_PANEL_MINIMUMS[id as keyof typeof CAMERA_STAGE_PANEL_TITLES] })),
   builtinPresets: [{ id: 'default', name: '默认', layout: defaultCameraStageLayout() }, { id: 'viewport', name: '专注视口', layout: defaultCameraStageLayout(true) }],
   readLegacy: () => { const raw = localStorage.getItem(LAYOUT_STORAGE_KEY); return raw ? JSON.parse(raw) as SerializedDockview : undefined },
 })

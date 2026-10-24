@@ -24,7 +24,7 @@ export function CameraMotionControls(): React.ReactElement {
     try { void Promise.resolve(action()).catch(fail) } catch (error) { fail(error) }
   }
   const fail = (error: unknown): void => { logger.error('机位示范操作失败', error, { event: 'camera_stage.motion.controls.failed', context: { projectId } }); setMessage(error instanceof Error ? error.message : '请重试。') }
-  return <PanelTrigger display={draft?.status === 'recording' ? '正在示范' : '超级关键帧'} appearance="quiet" size="sm" buttonClassName="w-auto" alignment="aboveCenter" gap={8} panelPadding="content" panelWidth="content"
+  return <PanelTrigger display={draft?.status === 'recording' ? '正在示范' : '超级关键帧'} appearance="quiet" buttonClassName="w-auto" alignment="aboveCenter" gap={8} panelPadding="content" panelWidth="content"
     onOpenChange={open => { if (!open && projectId) clearCameraMotionPreview(projectId) }}
     renderPanel={() => <CreativeIntentControls profile="camera" property={draft?.property ?? property} status={draft?.status ?? 'idle'} candidates={draft?.review?.candidates.map(candidate => ({ ...candidate, label: candidate.id === 'dolly-hold' ? '推近停顿' : candidate.label })) ?? []} selected={draft?.selected ?? 'original'} fidelity={.5}
       pins={draft?.pinnedIds.map(id => ({ id, label: '机位' })) ?? []} canPin={Boolean(draft?.frames.some(frame => Math.abs(frame.time - time) < .5 / useCameraStageStore.getState().animation.fps))} needsSave={draft?.needsSave} message={message ?? draft?.message}

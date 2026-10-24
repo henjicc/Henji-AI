@@ -110,7 +110,7 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
       const presentation = timelineCommandPresentation(availability, id, shortcuts)
       return { id, title: title ?? presentation.title, tooltip: presentation.tooltip, Icon, enabled: presentation.enabled, hidden: media?.kind === 'image' && SOURCE_PLAYBACK_BUTTONS.has(id), onClick: () => command(id) }
     }),
-    { id: 'play_pause', title: state.playing ? '暂停源素材' : '播放源素材', tooltip: timelineCommandPresentation(availability, 'play_pause', shortcuts).tooltip, Icon: state.playing ? Pause : Play, size: 'md', enabled: enabled('play_pause'), hidden: media?.kind !== 'video', onClick: () => command('play_pause') },
+    { id: 'play_pause', title: state.playing ? '暂停源素材' : '播放源素材', tooltip: timelineCommandPresentation(availability, 'play_pause', shortcuts).tooltip, Icon: state.playing ? Pause : Play, enabled: enabled('play_pause'), hidden: media?.kind !== 'video', onClick: () => command('play_pause') },
     ...(['video', 'audio', 'linked'] as const).map((component): VideoEditMonitorButtonSpec => {
       const name = component === 'video' ? '拖入画面' : component === 'audio' ? '拖入声音' : '拖入链接音画'
       return {

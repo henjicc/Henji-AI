@@ -74,7 +74,7 @@ function ScaleValues({ clip, frame, gesture }: { clip: VideoEditClip; frame: Fra
   const chainLabel = unlinked ? '链接缩放比例' : '解开缩放比例'
   return <span className="flex shrink-0 items-center gap-1">
     {number('缩放', scale * 100, next => gesture.commit(unlinked ? { scale: next, scaleAspect: scale * aspect / next } : { scale: next }))}
-    <UiIconButton size="2xs" aria-pressed={!unlinked} aria-label={chainLabel} tooltip={unlinked ? '链接缩放比例：之后两个数按当前比例一起变' : '解开缩放比例：水平、垂直各自缩放'} onClick={toggle}>{unlinked ? <Link2Off /> : <Link2 />}</UiIconButton>
+    <UiIconButton size="sm" aria-pressed={!unlinked} aria-label={chainLabel} tooltip={unlinked ? '链接缩放比例：之后两个数按当前比例一起变' : '解开缩放比例：水平、垂直各自缩放'} onClick={toggle}>{unlinked ? <Link2Off /> : <Link2 />}</UiIconButton>
     <span className="flex items-center">{number('垂直缩放', scale * aspect * 100, next => gesture.commit(unlinked ? { scaleAspect: next / scale } : { scale: next / aspect }))}<UiPropertyUnit>%</UiPropertyUnit></span>
   </span>
 }

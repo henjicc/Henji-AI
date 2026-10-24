@@ -181,7 +181,8 @@ export const UI_FORM_ROW_MIN_HEIGHT_CLASS: Record<UiControlSize, string> = {
  * 名称从 48px 处起笔；行以外的内容（按钮组、列表、说明）用 `UI_PROPERTY_INSET_CLASS` 对齐到名称列。
  * 默认藏着、悬停或聚焦本行才出现的东西（没开动画的秒表、关键帧导航、整块重置）用 `UI_PROPERTY_REVEAL_CLASS`。
  */
-export const UI_PROPERTY_ROW_CLASS = 'group/property mx-1 grid min-h-control-sm grid-cols-property-row items-center gap-x-1 rounded-control pr-2 transition-colors duration-120 hover:bg-hover'
+// 行悬停不铺底（重要记录 020）：行里的下拉、读数自己有底，整行再铺悬停底就和它们同色（nestedSameBackground）；悬停只用于露出秒表与关键帧导航。
+export const UI_PROPERTY_ROW_CLASS = 'group/property mx-1 grid min-h-control-sm grid-cols-property-row items-center gap-x-1 rounded-control pr-2'
 export const UI_PROPERTY_INSET_CLASS = 'pl-12 pr-3'
 /** 属性面板读数框的宽度：成对读数（位置、锚点、缩放链条）放得进最窄的数值列；值更长时按内容撑宽。 */
 export const UI_PROPERTY_NUMBER_WIDTH_CLASS = 'w-12'

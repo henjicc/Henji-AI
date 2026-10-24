@@ -131,7 +131,8 @@ export function ImageEditorDockV3({
         if (previous?.collapsed === isCollapsed && previous.maximumHeight === maximumHeight) continue
         const expandedHeight = previous?.expandedHeight ?? group.api.height
         groupSizesRef.current.set(group, { collapsed: isCollapsed, expandedHeight, maximumHeight })
-        group.api.setConstraints({ minimumHeight: isCollapsed ? headerHeight : 0, maximumHeight })
+        // 展开的面板组至少留出标签行和两行内容：拖到 0 会把标签行裁掉（重要记录 020，尺寸扫描发现）
+        group.api.setConstraints({ minimumHeight: isCollapsed ? headerHeight : headerHeight + 64, maximumHeight })
         if (isCollapsed) group.api.setSize({ height: headerHeight })
         else if (previous?.collapsed) group.api.setSize({ height: Math.min(maximumHeight, Math.max(headerHeight * 2, expandedHeight)) })
       }

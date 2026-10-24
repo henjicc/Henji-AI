@@ -16,7 +16,20 @@ export interface ImageEditorPanelDefinitionV3 {
   order: number
   component: ComponentType<ImageEditorPanelContextV3>
   defaultPlacement?: 'below' | 'tab'
+  /** 停靠时的最小宽高（重要记录 020）；不写时取右侧面板的默认值 IMAGE_EDITOR_PANEL_MIN_WIDTH_V3 */
+  minimumWidth?: number
+  minimumHeight?: number
   onVisibilityChange?: (context: ImageEditorPanelContextV3) => void
+}
+
+/** 右侧面板的默认最小宽度：图层行（缩略图、名称、显隐与操作按钮）在这个宽度下不裁切。 */
+export const IMAGE_EDITOR_PANEL_MIN_WIDTH_V3 = 260
+/** 画布的最小宽度。 */
+export const IMAGE_EDITOR_PREVIEW_MIN_WIDTH_V3 = 320
+
+/** 停靠布局用的面板定义：画布在前，各面板没写最小宽度时取默认值（布局解析与预设登记共用这一份）。 */
+export function imageEditorDockPanelsV3(definitions: readonly ImageEditorPanelDefinitionV3[]): Array<{ id: string; title?: string; minimumWidth?: number; minimumHeight?: number }> {
+  return [{ id: 'preview', title: '画布', minimumWidth: IMAGE_EDITOR_PREVIEW_MIN_WIDTH_V3 }, ...definitions.map(definition => ({ id: definition.id, title: definition.title, minimumWidth: definition.minimumWidth ?? IMAGE_EDITOR_PANEL_MIN_WIDTH_V3, minimumHeight: definition.minimumHeight }))]
 }
 
 export class ImageEditorPanelRegistryV3 {

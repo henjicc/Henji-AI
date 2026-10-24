@@ -86,7 +86,7 @@ function CaptionLane({ view }: { view: WaveformViewport }) {
   const length = Math.max(1, view.end - view.start)
   const position = (frame: number) => (frame - view.start) / length * 100
   return <div className="absolute inset-x-0 inset-y-0.5" data-audio-captions>
-    {groups.filter(group => group.endFrame > view.start && group.startFrame < view.end).slice(0, 400).map(group => <div key={group.id} className="absolute flex h-6 gap-0.5 overflow-hidden whitespace-nowrap pr-0.5"
+    {groups.filter(group => group.endFrame > view.start && group.startFrame < view.end).slice(0, 400).map(group => <div key={group.id} data-ui-timeline-item className="absolute flex h-6 gap-0.5 overflow-hidden whitespace-nowrap pr-0.5"
       style={{ left: `${position(Math.max(view.start, group.startFrame))}%`, width: `${(Math.min(view.end, group.endFrame) - Math.max(view.start, group.startFrame)) / length * 100}%` }}>
       {group.blocks.map(block => <UiTextToken appearance="chip" key={block.id} disabled={workspace.disabled} selected={workspace.selectedBlockIds.includes(block.id)} excluded={!block.included}
         title={`${block.text} · 单击选中，双击编辑，右键删除`}
