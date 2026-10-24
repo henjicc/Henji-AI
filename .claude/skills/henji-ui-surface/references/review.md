@@ -263,3 +263,44 @@ npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --matrix review --a
 需要完整内容截图的任意步骤场景声明 `scrollCoverage: "<滚动容器 selector>"`，动态分区用 data-ui-scroll-key 或 data-gallery-section 作为身份。执行器记录真实 scrollHeight/clientHeight/scrollTop，按捕获区间并集检查顶部、中段、尾部；只截 top/bottom 不能通过。不要求局部交互场景遍历无关列表。中心页已经启用，分区增高时补中段步骤，禁止放宽 1px 容差。
 
 像素基线复用正式捕获与彩色 pixelmatch，固定 Windows 石墨与纸白两预设 1440×900（其余预设的颜色差异由对比度审计覆盖），基线存本机忽略目录不入库；`check:ui-gallery-diff` 不进 CI。基线目录、环境约束和更新命令见 docs/rules/testing.md 的“中心页像素基线”。未创建基线、缺图、尺寸/DPI/zoom 不符、DOM/对比度审计未通过一律失败。不能把 jsdom 通过写成像素或 Electron 通过。
+
+## 9. 防裁切与遮挡：三层防线与快速检查（重要记录 020）
+
+裁切（控件或文字被不滚动的容器裁掉一截）、遮挡（控件被别的元素盖住点不到）和“窄了就乱”，靠逐张看截图总会漏：
+它们只在面板被挤窄、压矮或内容变长时出现，而截图通常只拍默认尺寸。做法是预防在先、机器报警、扫描兜底，人只看机器挑出来的那几张。
+
+### 9.1 预防（写代码时）
+
+- 停靠面板在工作区面板定义里声明 `minimumWidth` / `minimumHeight`（`WorkspacePanelDefinition`），由 `parseWorkspaceDockLayout` 写进布局、`workspacePanelConstraints` 用于 `addPanel`；同组标签取一致的值；默认布局在 960×640 下要放得下各面板最小值。
+- 放不下只用三种对策：收进“更多”、截断后悬停看全、滚动。主 SKILL.md“放不下怎么办”一节是唯一口径。
+- 自绘滚动区标 `data-layout-scroll-region`；有意的裁切或覆盖写 `data-layout-allow="clip|occlude"` + `data-layout-allow-reason`（≥ 4 字理由）。不要为了让规则通过而加声明：声明只用于确属设计的效果（跑马灯、拖动虚影、媒体画面里的裁切框）。
+- 设计稿写缩放规则（最小尺寸、窄了先收什么、矮了先藏什么）。
+
+### 9.2 判定（一份实现，两处使用）
+
+`src/core/uiAudit/layoutAudit.ts` 的 `auditLayoutIssues` 自包含、可序列化：
+
+| 规则 | 判据 | 不算问题 |
+|---|---|---|
+| `controlClipped` | 控件或带文字的元素外框超出某个 `overflow: hidden / clip` 祖先（或窗口）> 1.5px，且仍有一部分可见 | 整块看不见（折叠、移出）；被滚动容器（含 `data-layout-scroll-region`）滚出去；绝对定位元素越过的中间祖先不是它的包含块；有理由的 `clip` 声明 |
+| `controlOccluded` | 控件可见范围的中心，或五个取样点中 ≥ 2 个，命中的最上层元素不是它自己、子元素或祖先 | 盖在上面的是浮层（菜单、弹窗、提示、`z-index ≥ 30` 的定位层）、吸顶行、分隔条；同一字段控件的组成部分；有理由的 `occlude` 声明 |
+
+- 巡检：`scripts/lib/uiLayoutAudit.cjs` 用 Node 类型剥离加载同一份源码，序列化进渲染进程执行，与 `auditUiDom` 合并成同一份规则结果（`check:ui-visual`、`ui:tour --audit`、`test:ui-visual-rules`）。断牙：`test:ui-dom-rules` 的 jsdom 夹具 + 中心页规范区 Do/Don't（真实 Electron 22 个样例）。
+- 运行时布局守卫（`src/core/uiAudit/layoutGuard.ts`）：界面安静 0.7 秒后在空闲时检查（按住鼠标、窗口隐藏时不查），同一问题每次运行只记一次。开发运行默认描边 + 日志；`electron:prod` 自动带 `--dev-layout-guard=log` 只记日志；安装包不运行。用户测试后查 `npm run logs:query -- --event ui.layout_issue.detected`（或按时间段查 `app.ui.layoutGuard` 域）。
+
+### 9.3 快速检查（改完停靠面板或做全面检查时）
+
+1. `npm run electron:bundle`，然后跑该工作区的尺寸扫描清单（压力数据 + 每个面板与检查器标签逐档压到最小 + 窗口逐档缩小）：
+   `npm run ui:tour -- --steps scripts/ui-review/layout-sweep-video-edit.json --theme-preset graphite --size 1440x900 --audit`
+2. 只看 `index.md` 顶部的“DOM 规则命中”表，按截图后缀打开出问题的那几张（`<名称>-NN` 是扫描档位，表里写明是哪条分隔条、拖了几档、还是哪个窗口尺寸）。
+3. 按根因修：面板最小值不够就调定义；内容没有放不下对策就补对策；确属设计才写声明。修完同一清单复跑，直到命中表为空。
+4. 全应用快速检查：全部巡检清单加 `--rules --no-screenshots` 跑一遍（每张截图只跑 DOM 规则，不做像素对比度，只把有命中的截图落盘），同样只看命中表：
+   `npm run ui:tour -- --steps scripts/ui-review/<清单>.json --theme-preset graphite --size 1440x900 --rules --no-screenshots`
+   清空机器命中之后，再按需加 `--audit`（含像素对比度）与第 2 节的人工目视。
+
+`sweepLayout` 步骤：`{ "sweepLayout": { "name": "dock", "maxSteps": 8, "step": 80, "windows": ["1280x800", "960x640"], "within": 定位? , "sashes": true } }`。逐条拖动 `within`（默认当前可见的停靠区）里的分隔条，每档后只跑 DOM 规则，新问题出现的那档截图并写入规则结果；分隔条拖不动（两侧到最小值）就换方向，扫完拖回原处；`windows` 逐档改窗口尺寸只记规则不截图，最后恢复本次巡检的尺寸。
+
+### 9.4 新增面板或工作区时
+
+- 面板定义写最小宽高；工作区加进 `scripts/ui-review/layout-sweep-<工作区>.json`（需要的夹具数据加压力档，如剪辑 `seedVideoEdit` 的 `stress: true`）。
+- 新加的检查器标签、浮层或展开区，在扫描清单里加“打开它 → `sweepLayout`”。

@@ -9,7 +9,7 @@ import { installForcedPseudoStates } from './forcedPseudoStates'
 import { previewGalleryTheme, searchGallery } from './galleryIndex'
 import { ButtonSection, ContentSection, DialogSection, FieldSection, FilterSection, FormSection, MediaSection, MenuSection, NavigationSection, OptionSection, StateSection, ToggleSection, ToolbarSection, SizeLadderSection, VariantSection, ModalSizeSection, StaticOverlaySection, ParameterSizeSection, SharedDomainSection } from './gallerySections'
 import { ColorTokensSection, TypeTokensSection, SpacingTokensSection, RadiusTokensSection, ShadowTokensSection, LayerTokensSection, HeightTokensSection, IconTokensSection, MotionTokensSection, SourceTokensSection } from './tokenSections'
-import { PatternSection, RulesSection, LongListSection } from './patternSections'
+import { PatternSection, RulesSection, LongListSection, ResizeSection } from './patternSections'
 
 const SECTIONS: Record<string, ComponentType> = {
   colors: ColorTokensSection, type: TypeTokensSection, spacing: SpacingTokensSection,
@@ -20,7 +20,7 @@ const SECTIONS: Record<string, ComponentType> = {
   forms: FormSection, toolbar: ToolbarSection, states: StateSection, dialogs: DialogSection,
   media: MediaSection, content: ContentSection, filters: FilterSection, sizes: SizeLadderSection,
   variants: VariantSection, 'static-overlays': StaticOverlaySection, patterns: PatternSection,
-  'modal-sizes': ModalSizeSection, 'long-list': LongListSection, rules: RulesSection,
+  'modal-sizes': ModalSizeSection, 'long-list': LongListSection, resize: ResizeSection, rules: RulesSection,
   parameters: ParameterSizeSection,
   'shared-domain': SharedDomainSection,
 }

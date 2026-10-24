@@ -4,7 +4,18 @@ export const DEVELOPMENT_LAUNCH_QUERY_KEYS = {
   media: 'henjiDevMedia',
   themePreset: 'henjiDevThemePreset',
   updatePreview: 'henjiDevUpdatePreview',
+  layoutGuard: 'henjiDevLayoutGuard',
 } as const
+
+/**
+ * 运行时布局守卫（重要记录 020）：`--dev-layout-guard`（描边 + 日志）或 `--dev-layout-guard=log`（只记日志）。
+ * 开发运行默认描边；本机正式构建由 electron:prod 带 `log`；安装包不带，不运行。
+ */
+export const DEVELOPMENT_LAYOUT_GUARD_MODES = ['outline', 'log'] as const
+export type DevelopmentLayoutGuardMode = (typeof DEVELOPMENT_LAYOUT_GUARD_MODES)[number]
+export function isDevelopmentLayoutGuardMode(value: unknown): value is DevelopmentLayoutGuardMode {
+  return typeof value === 'string' && (DEVELOPMENT_LAYOUT_GUARD_MODES as readonly string[]).includes(value)
+}
 
 /**
  * 只供开发与界面核对的页面（任务 5.11）：经 `--dev-surface=dev.*` 进入，不登记为应用 Surface，
@@ -45,4 +56,6 @@ export interface DevelopmentLaunchOptions {
   themePresetId: string | null
   /** 本次启动直接打开更新提示弹窗的预览状态（不访问更新服务器） */
   updatePreview: DevelopmentUpdatePreviewState | null
+  /** 本次启动的运行时布局守卫模式；null 时开发运行仍默认描边 */
+  layoutGuard: DevelopmentLayoutGuardMode | null
 }

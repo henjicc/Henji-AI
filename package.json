@@ -33,7 +33,7 @@
     "check:surface:report": "node scripts/check-surface-tokens.cjs --report",
     "check:ui-design": "node scripts/check-ui-design.cjs",
     "check:ui-gallery-diff": "node scripts/check-ui-gallery-diff.cjs",
-    "test:ui-dom-rules": "node --test scripts/lib/uiAuditDom.test.cjs",
+    "test:ui-dom-rules": "node --test scripts/lib/uiAuditDom.test.cjs scripts/lib/uiLayoutAudit.test.cjs",
     "check:surface:strict": "node scripts/check-surface-tokens.cjs --strict",
     "check:ui-residue": "node scripts/ui-residue-scan.cjs --strict --no-report",
     "check:model-i18n": "node scripts/check-model-i18n.cjs",

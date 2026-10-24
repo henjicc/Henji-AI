@@ -1,11 +1,11 @@
 import { UiRecordList, UiRecordItem, UiViewerShell, useUiViewerShell } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useStore } from 'zustand'
 import { createStore, type StoreApi } from 'zustand/vanilla'
 import { useRafCallback } from '@/hooks/useRafCallback'
-import { TriangleAlert } from 'lucide-react'
-import { UiButton, UiEmpty, UiFormRow, UiGroup, UiInput, UiLoading, UiError, UiPanel, UiSegmented, UiSwitch, UiToolbar, UiVirtualList, UiVirtualGrid, UI_TEXT_META_CLASS } from '@/components/ui'
+import { MoreHorizontal, TriangleAlert } from 'lucide-react'
+import { UiButton, UiEmpty, UiFormRow, UiGroup, UiIconButton, UiInput, UiLoading, UiError, UiOverflowRow, UiPanel, UiSegmented, UiSwitch, UiToolbar, UiVirtualList, UiVirtualGrid, UI_TEXT_META_CLASS } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import { GALLERY_SKILL_SOURCE } from './galleryIndex'
 import { GalleryRuleSamples } from './ruleSamples'
@@ -41,6 +41,41 @@ export function PatternSection(): JSX.Element {
     <UiGroup title="G5 不可用动作不出现；设置行保持横排" titleTone="overline" labelWidth={96}><UiFormRow label="启用预览" inline><UiSwitch checked /></UiFormRow><UiFormRow label="文件名称" inline><UiInput defaultValue="镜头 01" /></UiFormRow><Antipattern>没有对象时仍常驻整排灰色动作；只读内部状态进入正式界面。</Antipattern></UiGroup>
     <UiGroup title="命令带与从属带共享表面" titleTone="compact"><UiToolbar variant="command" trailing={<UiButton variant="primary">导出</UiButton>} subordinate={<UiFormRow label="强度" inline><NumberInput value={50} onChange={noop} /></UiFormRow>}><span className="text-13 text-text1">当前作品</span><UiButton>撤销</UiButton></UiToolbar><Antipattern>返回、标题、工具、参数分别长出一条头带。</Antipattern></UiGroup>
     <UiGroup title="浮层面板：内部留白分组" titleTone="compact"><UiPanel className="p-4"><UiGroup title="预览设置" titleTone="compact" labelWidth={96}><UiFormRow label="名称" density="compact"><UiInput defaultValue="当前作品" /></UiFormRow><UiPanel variant="inset" className="p-3">只读预览</UiPanel></UiGroup></UiPanel><Antipattern>浮层内部分组继续使用 border + bg-panel + rounded。</Antipattern></UiGroup>
+  </div>
+}
+
+/** 同一块内容在宽、中、窄三档宽度下并排：一张截图看清它放不下时怎么变（重要记录 020）。 */
+const RESIZE_WIDTHS = [360, 240, 160] as const
+function WidthStrip({ title, description, children }: { title: string; description: string; children: () => ReactNode }): JSX.Element {
+  return <UiGroup title={title} description={description} titleTone="compact">
+    <div className="flex items-start gap-6">{RESIZE_WIDTHS.map(width => <div key={width} className="flex shrink-0 flex-col gap-1">
+      <span className={UI_TEXT_META_CLASS}>{width}px</span>
+      <div data-gallery-resize-frame={width} className="border-r border-dashed border-line-strong pr-1" style={{ width }}>{children()}</div>
+    </div>)}</div>
+  </UiGroup>
+}
+const RESIZE_TOOLS = ['复制', '粘贴', '分割', '对齐', '导出']
+const RESIZE_NAMES = ['镜头箱', '素材箱 1（第二机位·采访·调色前·用来看截断的超长名称）', '配乐与音效', '采访原片（未剪）', '空镜']
+
+/**
+ * 缩放与放不下（重要记录 020）：放不下只有三种对策，停靠面板另外声明最小宽高。
+ * 开发运行时布局守卫会给硬裁、遮挡的元素描红边，这一页三档宽度都不应出现红边。
+ */
+export function ResizeSection(): JSX.Element {
+  return <div className="flex flex-col gap-8">
+    <WidthStrip title="对策一：收进“更多”" description="工具条、底栏、命令带按优先级把放不下的项收进行末的“更多”，不折行、不硬裁。">
+      {() => <UiOverflowRow items={RESIZE_TOOLS.map((label, index) => ({ id: label, priority: RESIZE_TOOLS.length - index, node: <UiButton size="sm">{label}</UiButton> }))}
+        renderOverflow={hidden => <UiIconButton size="sm" aria-label={`更多（${hidden.length} 项）`} tooltip={`更多：${hidden.join('、')}`}><MoreHorizontal /></UiIconButton>} />}
+    </WidthStrip>
+    <WidthStrip title="对策二：截断后悬停看全" description="名称、标签放不下时用省略号截断，悬停或聚焦能看到全称；不折成两行，也不靠加宽容器硬塞。">
+      {() => <div className="flex flex-col">{RESIZE_NAMES.slice(0, 3).map(name => <UiButton key={name} size="sm" className="w-full !justify-start" tooltip={name}><span className="truncate" data-user-content>{name}</span></UiButton>)}</div>}
+    </WidthStrip>
+    <WidthStrip title="对策三：滚动" description="列表与表格在自己的区域里滚动；面板只剩一屏时整列滚动，不把下面的内容裁掉。">
+      {() => <div className="h-24 overflow-y-auto" data-gallery-ignore-rules="nestedScroll" data-gallery-ignore-reason="三档宽度的滚动样本嵌在中心页目录滚动区内">{RESIZE_NAMES.map(name => <div key={name} className="truncate py-1 text-xs text-text1" data-user-content>{name}</div>)}</div>}
+    </WidthStrip>
+    <UiGroup title="停靠面板：声明最小宽高" titleTone="compact" description="面板定义里写 minimumWidth / minimumHeight，停靠布局拖不到更小；同组标签取一致的值，默认布局在 960×640 下放得下各面板的最小值。">
+      <Antipattern>容器 overflow-hidden 把按钮或文字裁掉一截；透明定位层压在可点的控件上；面板被拖到内容放不下。</Antipattern>
+    </UiGroup>
   </div>
 }
 

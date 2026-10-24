@@ -120,6 +120,7 @@ export const GALLERY_INDEX: readonly GalleryEntry[] = [
   { id: 'patterns', group: '界面模式', title: '界面语法', keywords: 'G1 G2 G3 G4 G5 表单 成对网格 记录列表 UiRecordList UiRecordItem UiViewerShell 查看器 设置分区 命令带 从属带 正例 禁止写法' },
   { id: 'modal-sizes', group: '界面模式', title: '弹窗尺寸', keywords: 'UiModal compact form editor settings workspace headerActions footer glass' },
   { id: 'long-list', group: '界面模式', title: '长列表', keywords: 'react-virtuoso 1000 滚动 帧率' },
+  { id: 'resize', group: '界面模式', title: '缩放与放不下', keywords: '最小尺寸 minimumWidth 收进更多 UiOverflowRow 截断 悬停看全 滚动 裁切 遮挡 布局守卫 尺寸扫描' },
   { id: 'rules', group: '规范速查', title: '规范速查', keywords: '三条铁律 五级容器 动作层级 选中态 skill henji-ui-surface' },
 ]
 

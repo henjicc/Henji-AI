@@ -93,6 +93,7 @@ function parseUiInspectionArgs(argv, defaultOutDir) {
   let matrix = null
   let contrast = false
   let audit = false
+  let rulesOnly = false
   let screenshots = true
   let displayPointValue
   let help = false
@@ -176,6 +177,8 @@ function parseUiInspectionArgs(argv, defaultOutDir) {
       continue
     }
     if (token === '--audit') { audit = true; continue }
+    // --rules：只跑 DOM 规则（每张截图都跑），不做像素对比度——全应用快速检查用（重要记录 020）
+    if (token === '--rules') { audit = true; rulesOnly = true; continue }
     if (token === '--no-screenshots') { screenshots = false; continue }
     if (token === '--contrast') {
       contrast = true
@@ -215,7 +218,7 @@ function parseUiInspectionArgs(argv, defaultOutDir) {
   const steps = stepValues.flatMap((value) => value.split(',')).map((value) => value.trim()).filter(Boolean)
   const displayPoint = resolveDisplayPoint(displayPointValue)
   if (!screenshots && !audit) throw new Error('--no-screenshots 只能与 --audit 同用：不审计又不存图，这次巡检没有产出')
-  return { allowWrites, audit, contrast, displayPoint, help, matrix, only, outDir, profile, screenshots, sizes, steps, themePresets }
+  return { allowWrites, audit, contrast, displayPoint, help, matrix, only, outDir, profile, rulesOnly, screenshots, sizes, steps, themePresets }
 }
 
 /** `--theme-preset` 可重复或逗号分隔，`all` 表示四个预设；按登记顺序去重。 */

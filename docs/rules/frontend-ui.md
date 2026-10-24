@@ -18,6 +18,7 @@
 | skill 同步、目录、源码符号、令牌表 | check:skill-sync 聚合 check:ui-catalog、check:skill-symbols、gen:token-docs --check | 必跑 |
 | 巡检遗留有去向、关闭项有真实 guard | check:ui-findings 与 Node 回归测试 | 随 skill-sync / Node 必跑 |
 | DOM 结构、选中差异、真实对比度 | ui:tour --audit 或 check:ui-visual 共用循环；图形单独由场景像素断言 | jsdom/纯函数测试必跑；真实 Electron ui-rule-audit 仅手动试运行 |
+| 控件与文字被裁切、被遮挡；停靠面板最小尺寸 | `controlClipped` / `controlOccluded`（`src/core/uiAudit/layoutAudit.ts`，巡检与运行时布局守卫共用）；尺寸扫描 `sweepLayout` 逐档压面板与窗口；面板定义的最小宽高由停靠布局强制；守卫只报告不拦截 | jsdom 夹具（test:ui-dom-rules、vitest）必跑；真实 Electron 扫描手动 |
 | Windows 像素基线 | check:ui-gallery-diff；固定本机环境 | 不进 CI |
 | 信息准入、材质使用语义、转换确认、截图目视 | skill/review 人工核对；已有场景只证明被覆盖状态 | 不宣称自动覆盖 |
 

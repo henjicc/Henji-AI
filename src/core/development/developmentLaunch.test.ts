@@ -10,7 +10,14 @@ describe('readDevelopmentLaunchOptions', () => {
       mediaPath: null,
       themePresetId: null,
       updatePreview: null,
+      layoutGuard: null,
     })
+  })
+
+  it('读取布局守卫模式，无效值忽略（重要记录 020）', () => {
+    expect(readDevelopmentLaunchOptions('?henjiDevLayoutGuard=log').layoutGuard).toBe('log')
+    expect(readDevelopmentLaunchOptions('?henjiDevLayoutGuard=outline').layoutGuard).toBe('outline')
+    expect(readDevelopmentLaunchOptions('?henjiDevLayoutGuard=on').layoutGuard).toBeNull()
   })
 
   it('读取更新提示弹窗预览状态，无效值忽略', () => {
@@ -27,6 +34,7 @@ describe('readDevelopmentLaunchOptions', () => {
       mediaPath: '/tmp/test.jpg',
       themePresetId: 'paper',
       updatePreview: null,
+      layoutGuard: null,
     })
   })
 })

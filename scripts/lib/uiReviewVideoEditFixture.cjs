@@ -21,7 +21,37 @@ function normalizeSeedVideoEdit(value) {
   // effects：给“核对画面”挂两个内置效果（模糊与全能调色），核对效果控件里的效果链与底栏。
   // motion：“核对画面”缩小后整段持续旋转（每帧约 4.8°，画面四角每帧移动数十像素），核对时间线的运动模糊开关；
   // 另带缓动的水平位置与定格的不透明度关键帧，核对展开轨道后的关键帧行与速度曲线（三种形状都有）。
-  return { name, captions, effects: value?.effects === true, motion: value?.motion === true }
+  // stress：压力数据（重要记录 020）——超长的序列、轨道、片段、素材箱与标记名称，十条轨道，四个效果，三十条字幕；
+  // 尺寸扫描用它把面板压到最小时看文字截断、裁切与遮挡。
+  return { name, captions, effects: value?.effects === true, motion: value?.motion === true, stress: value?.stress === true }
+}
+
+const LONG = '（第二机位·采访·调色前·用来看截断的超长名称）'
+/** 在基础夹具上叠加压力数据：只加内容与名称，不改基础夹具已有的片段位置与关键帧。 */
+function applyStress(project, id) {
+  const sequence = project.sequences[0]
+  sequence.name = `主序列${LONG}`
+  const extraVideo = [4, 5, 6].map((index, order) => ({ id: `${id}-stress-v${index}`, name: `视频轨道${LONG}${order + 4}`, index: 5 + order, kind: 'video', locked: false, enabled: true, muted: false, solo: false }))
+  const extraAudio = [3, 4].map((number, order) => ({ id: `${id}-stress-a${number}`, name: `音频轨道${LONG}${number}`, index: 8 + order, kind: 'audio', locked: false, enabled: true, muted: false, solo: false }))
+  sequence.tracks.push(...extraVideo, ...extraAudio)
+  for (const clip of sequence.clips) clip.name = `${clip.name}${LONG}`
+  const picture = sequence.clips.find(clip => clip.id === `${id}-picture`)
+  if (picture) {
+    picture.effects = [
+      ...(picture.effects ?? []),
+      { id: `${id}-stress-blur`, name: `背景虚化${LONG}`, enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: { sigma_fraction_height: 0.01, axis: 'horizontal', edge_mode: 'clamp' } } },
+      { id: `${id}-stress-grade`, name: `夜景调色${LONG}`, enabled: true, amount: 0.8, builtin: { id: 'color_grade', params: { exposure: -0.5, temperature_kelvin: 4200, tint: -6 } } },
+    ]
+  }
+  sequence.clips.push(
+    { ...picture, id: `${id}-stress-copy-a`, name: `副本 A${LONG}`, track: 5, start: 10, duration: 60, effects: [], curves: undefined, linkId: undefined },
+    { ...picture, id: `${id}-stress-copy-b`, name: `副本 B${LONG}`, track: 6, start: 40, duration: 80, effects: [], curves: undefined, linkId: undefined },
+  )
+  sequence.captions = Array.from({ length: 30 }, (_, index) => ({ id: `${id}-stress-caption-${index}`, start: index * 5, duration: 4, text: index % 3 === 0 ? `第 ${index + 1} 条：这一条字幕特别长，用来看字幕列表、时间线字幕块和样式面板里的截断与折行是否正常` : `第 ${index + 1} 条字幕` }))
+  sequence.markers = Array.from({ length: 8 }, (_, index) => ({ id: `${id}-stress-marker-${index}`, frame: 8 + index * 17, name: index % 2 ? `标记 ${index + 1}` : `标记 ${index + 1}${LONG}` }))
+  project.bins.push(...Array.from({ length: 4 }, (_, index) => ({ id: `${id}-stress-bin-${index}`, name: `素材箱 ${index + 1}${LONG}` })))
+  project.items.push(...Array.from({ length: 10 }, (_, index) => ({ id: `${id}-stress-item-${index}`, name: `素材 ${index + 1}${index % 2 ? '' : LONG}`, kind: 'video', mediaId: `${id}-media`, ...(index < 4 ? { binId: `${id}-stress-bin-${index}` } : {}), tags: index % 3 ? [] : ['机位二', '待选', '需要调色的长标签'] })))
+  return project
 }
 
 function buildProject({ id, name, source, captions, effects, motion }) {
@@ -73,7 +103,8 @@ async function seedVideoEditFixture(runtime, step) {
     execFileSync(ffmpegPath, ['-v', 'error', '-y', '-f', 'lavfi', '-i', `testsrc2=size=1280x720:rate=${FPS}`, '-f', 'lavfi', '-i', 'sine=frequency=330:sample_rate=48000',
       '-t', '6', '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', source], { windowsHide: true, timeout: 60000 })
     const id = `review-${runtime.sceneId || 'video'}`.replace(/[^a-z0-9-]/gi, '-')
-    const project = buildProject({ id, name: step.name, source, captions: step.captions, effects: step.effects, motion: step.motion })
+    const built = buildProject({ id, name: step.name, source, captions: step.captions, effects: step.effects, motion: step.motion })
+    const project = step.stress ? applyStress(built, id) : built
     await openVideoEditFixture(runtime.activePage ?? runtime.mainPage, project)
   } catch (error) {
     fs.rmSync(root, { recursive: true, force: true })

@@ -1,7 +1,7 @@
 import { UiActionGroup, UiButton, UiFormRow, UiGroup, UiInput, UiPanel, UiToolbar } from '@/components/ui'
 import type { ReactNode } from 'react'
 
-const RULES = ['multiplePrimary', 'rowHeightMismatch', 'formControlMisaligned', 'actionStartsAtLabelColumn', 'toolbarWrap', 'shortTextTruncated', 'selectedStateWeak', 'overlayClipped', 'stackedBands'] as const
+const RULES = ['multiplePrimary', 'rowHeightMismatch', 'formControlMisaligned', 'actionStartsAtLabelColumn', 'toolbarWrap', 'shortTextTruncated', 'selectedStateWeak', 'overlayClipped', 'stackedBands', 'controlClipped', 'controlOccluded'] as const
 
 function Example({ rule, bad }: { rule: typeof RULES[number]; bad: boolean }): JSX.Element {
   let content: ReactNode
@@ -15,6 +15,10 @@ function Example({ rule, bad }: { rule: typeof RULES[number]; bad: boolean }): J
     case 'selectedStateWeak': content = <div role="tablist" className="flex gap-2"><UiButton role="tab" aria-selected="true" variant={bad ? 'quiet' : 'secondary'}>图片</UiButton><UiButton role="tab" aria-selected="false">视频</UiButton></div>; break
     case 'overlayClipped': content = <div className={`relative h-24 ${bad ? 'overflow-hidden' : ''}`}><UiPanel role="menu" className="absolute left-0 top-8 z-panel h-24 w-40"><UiButton>打开</UiButton></UiPanel></div>; break
     case 'stackedBands': content = <div>{Array.from({ length: bad ? 3 : 2 }, (_, i) => <UiToolbar key={i} variant="command"><UiButton>操作 {i + 1}</UiButton></UiToolbar>)}</div>; break
+    // 放不下时要有对策（收进“更多”、截断后悬停看全、滚动）：不能让容器把第二个按钮硬裁掉一半
+    case 'controlClipped': content = <div className={bad ? 'w-28 overflow-hidden' : 'w-28 overflow-x-auto'}><div className="flex w-max gap-2"><UiButton>复制内容</UiButton><UiButton>打开内容</UiButton></div></div>; break
+    // 透明的定位层压在按钮上，看得见点不到；装饰层要 pointer-events-none
+    case 'controlOccluded': content = <div className="relative w-fit"><UiButton>打开内容</UiButton><div className={`absolute inset-0 ${bad ? '' : 'pointer-events-none'}`} /></div>; break
   }
   const id = `gallery-rule-${rule}-${bad ? 'bad' : 'good'}`
   return <section id={id} data-gallery-rule-sample={rule} data-gallery-expect-hit={bad ? rule : undefined} data-gallery-expect-clean={bad ? undefined : rule} className="flex flex-col gap-3">

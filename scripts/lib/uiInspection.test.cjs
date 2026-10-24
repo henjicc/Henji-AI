@@ -205,6 +205,9 @@ test('不存图模式只能与审计同用，默认仍保存截图', () => {
   assert.equal(parseUiInspectionArgs([], '.ui-tour').screenshots, true)
   assert.equal(parseUiInspectionArgs(['--audit', '--no-screenshots'], '.ui-tour').screenshots, false)
   assert.throws(() => parseUiInspectionArgs(['--no-screenshots'], '.ui-tour'), /--audit/)
+  // --rules：快速检查只跑 DOM 规则，不做像素对比度（重要记录 020）
+  const quick = parseUiInspectionArgs(['--rules', '--no-screenshots'], '.ui-tour')
+  assert.equal(quick.audit, true); assert.equal(quick.rulesOnly, true); assert.equal(quick.contrast, false); assert.equal(quick.screenshots, false)
 })
 
 test('真实数据模式必须显式开启，写业务数据的场景默认被拦截', () => {
@@ -489,7 +492,7 @@ test('输出目录相对项目根解析且绝对路径保持不变', () => {
   assert.equal(resolveOutputDir(root, absolute), absolute)
 })
 
-test('场景覆盖应用界面和原生窗口且规则数固定为二十二条', () => {
+test('场景覆盖应用界面和原生窗口且规则数固定为二十四条', () => {
   // 界面名是固定词汇表：新增界面要在这里登记，拼错或漏登记必须红。
   assert.deepEqual([...new Set(UI_INSPECTION_SCENES.map((scene) => scene.surface))].sort(), [
     '付费确认',
@@ -509,9 +512,10 @@ test('场景覆盖应用界面和原生窗口且规则数固定为二十二条',
     '资产库',
     '镜头参考',
   ])
-  // 4.3 新增 nestedSameBackground、menuOptionTruncated；5.8 新增 stackedBands、toolbarWrap、shortTextTruncated、selectedStateWeak、overlayClipped
-  assert.equal(UI_AUDIT_RULES.length, 22)
-  assert.equal(new Set(UI_AUDIT_RULES.map((rule) => rule.key)).size, 22)
+  // 4.3 新增 nestedSameBackground、menuOptionTruncated；5.8 新增 stackedBands、toolbarWrap、shortTextTruncated、selectedStateWeak、overlayClipped；
+  // 重要记录 020 新增 controlClipped、controlOccluded（实现在 src/core/uiAudit/layoutAudit.ts）
+  assert.equal(UI_AUDIT_RULES.length, 24)
+  assert.equal(new Set(UI_AUDIT_RULES.map((rule) => rule.key)).size, 24)
   // auditUiDom 序列化进渲染进程，函数内阈值是导出常量的副本：两处必须一致
   const { UI_AUDIT_THRESHOLDS, auditUiDom } = require('./uiAuditDom.cjs')
   const inlineThresholds = /const T = (\{[^}]+\})/.exec(auditUiDom.toString())[1]

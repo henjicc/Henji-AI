@@ -24,6 +24,10 @@ const UI_AUDIT_RULES = Object.freeze([
   Object.freeze({ key: 'shortTextTruncated', label: '常见短文案被截断' }),
   Object.freeze({ key: 'selectedStateWeak', label: '选中态与静息态差异不足' }),
   Object.freeze({ key: 'overlayClipped', label: '浮层被裁切' }),
+  // 重要记录 020：控件与文字被不滚动的容器裁掉一截、被别的元素盖住点不到。实现在 src/core/uiAudit/layoutAudit.ts
+  //（运行时布局守卫共用），由 uiLayoutAudit.cjs 与 auditUiDom 的结果合并。
+  Object.freeze({ key: 'controlClipped', label: '控件或文字被容器裁掉一截' }),
+  Object.freeze({ key: 'controlOccluded', label: '控件被别的元素盖住' }),
 ])
 
 /** 5.8 新规则的判定阈值（auditUiDom 内有同值副本，精确测试比对；改动同步 references/review.md 第 7 节）。 */
@@ -331,6 +335,8 @@ function auditUiDom(context = {}) {
     if (element.matches('[data-variant="link"], [data-text-token="inline"]')) continue
     // 画布视口里的控件会随缩放矩阵一起缩放，getBoundingClientRect 不是其 CSS 命中区尺寸。
     if (element.closest('.react-flow__viewport')) continue
+    // 时间轴上的片段、字幕块、标记、关键帧（data-ui-timeline-item）：宽度随缩放变化或是点状记号，按时间轴习惯（PR）不按 24px 判
+    if (element.closest('[data-ui-timeline-item], [data-ui-manipulator]')) continue
     const rect = element.getBoundingClientRect()
     // Chromium 在分数像素布局中会把 24px 报成 23.999…，留半像素只用于消除舍入误报。
     const minimum = element.matches('button.ui-btn[data-tone][data-size="2xs"]') ? T.compactIconMin : T.smallTargetMin
@@ -465,7 +471,11 @@ function auditUiDom(context = {}) {
     const heights = rects.map(rect => rect.height)
     const centers = rects.map(rect => rect.top + rect.height / 2)
     if (Math.max(...heights) - Math.min(...heights) > T.rowTolerance || Math.max(...centers) - Math.min(...centers) > T.rowTolerance) {
-      out.rowHeightMismatch.push({ element: label(row), heights, centers })
+      // 点名“不合群”的件：高度或中心线偏离同行多数值的那几个（重要记录 020，便于直接定位）
+      const mode = (values) => { const counts = new Map(); for (const value of values) { const key = Math.round(value); counts.set(key, (counts.get(key) || 0) + 1) } return [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0] }
+      const usualHeight = mode(heights); const usualCenter = mode(centers)
+      const outliers = frames.filter((_, index) => Math.abs(heights[index] - usualHeight) > T.rowTolerance || Math.abs(centers[index] - usualCenter) > T.rowTolerance).map(element => label(element)).slice(0, 6)
+      out.rowHeightMismatch.push({ element: label(row), heights, centers, outliers })
     }
   }
   for (const group of all.filter(element => element.matches('[data-ui-group]'))) {

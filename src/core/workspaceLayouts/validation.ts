@@ -5,8 +5,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 function finitePositive(value: unknown): value is number { return typeof value === 'number' && Number.isFinite(value) && value > 0 }
 
+/**
+ * 停靠面板的定义（重要记录 020）：除名称外声明内容需要的最小宽高。停靠布局按它限制拖动，面板不会被挤到内容放不下；
+ * 同组标签按当前标签的值，所以同一组里的面板尽量取一致的最小值。新增面板必须声明，见 henji-ui-surface 的“面板最小尺寸”。
+ */
+export interface WorkspacePanelDefinition { id: string; title?: string; minimumWidth?: number; minimumHeight?: number }
+/** 新增面板时传给 Dockview `addPanel` 的约束（与布局里保存的约束同一来源）。 */
+export function workspacePanelConstraints(definitions: readonly WorkspacePanelDefinition[], id: string): { minimumWidth?: number; minimumHeight?: number } {
+  const definition = definitions.find(panel => panel.id === id)
+  return { ...(definition?.minimumWidth ? { minimumWidth: definition.minimumWidth } : {}), ...(definition?.minimumHeight ? { minimumHeight: definition.minimumHeight } : {}) }
+}
+
 /** 在进入 Dockview 前拒绝未知面板、重复引用和系统浮窗状态。 */
-export function parseWorkspaceDockLayout(raw: string, definitions: readonly { id: string; title?: string }[]): SerializedDockview {
+export function parseWorkspaceDockLayout(raw: string, definitions: readonly WorkspacePanelDefinition[]): SerializedDockview {
   const value: unknown = JSON.parse(raw)
   if (!isRecord(value) || !isRecord(value.grid) || !isRecord(value.panels) || value.popoutGroups !== undefined || value.edgeGroups !== undefined) throw new Error('不支持的工作区布局')
   const { grid, panels } = value
@@ -17,8 +28,12 @@ export function parseWorkspaceDockLayout(raw: string, definitions: readonly { id
     // 非活动标签仍保留唯一挂载实例，避免重建预览会话。
     panel.renderer = 'always'
     // 面板名以当前定义为准：保存过的布局里可能还是旧名称（如“项目素材”改称“素材”之前保存的）。
-    const title = definitions.find(definition => definition.id === id)?.title
-    if (title !== undefined) panel.title = title
+    const definition = definitions.find(item => item.id === id)
+    if (definition?.title !== undefined) panel.title = definition.title
+    // 最小尺寸同样以当前定义为准：旧布局里没有，或保存时的值已经过时
+    const constraints = workspacePanelConstraints(definitions, id)
+    delete panel.minimumWidth; delete panel.minimumHeight
+    Object.assign(panel, constraints)
   }
   const seen = new Set<string>()
   const groups = new Set<string>()

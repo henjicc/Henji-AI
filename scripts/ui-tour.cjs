@@ -10,7 +10,8 @@
  */
 const fs = require('node:fs')
 const path = require('node:path')
-const { UI_AUDIT_RULES, auditUiDom } = require('./lib/uiAuditDom.cjs')
+const { UI_AUDIT_RULES } = require('./lib/uiAuditDom.cjs')
+const { auditPageRules } = require('./lib/uiLayoutAudit.cjs')
 const { missingScrollCoverage } = require('./lib/uiScrollCoverage.cjs')
 const { createPageTitleIssues, countIssues } = require('./lib/uiAuditReport.cjs')
 const { captureInspectionPage } = require('./lib/uiInspectionCapture.cjs')
@@ -63,7 +64,8 @@ function printHelp() {
   --matrix <名>   核对矩阵：review = 石墨 1440+960、深海/胶片/纸白 1440；screen = 石墨 1440+960。
                   与 --size / --theme-preset 互斥
   --audit         同一次巡检产出 audit.json、截图及运行时证据，规则命中时失败
-  --no-screenshots 与 --audit 同用：照常截图做像素与 DOM 审计，但只把有规则命中、对比度问题或场景失败的截图落盘；
+  --rules         快速检查：每张截图只跑 DOM 规则（遮挡、裁切、截断、折行……），不做像素对比度；命中同样让巡检失败
+  --no-screenshots 与 --audit / --rules 同用：照常截图做像素与 DOM 审计，但只把有规则命中、对比度问题或场景失败的截图落盘；
                   日常审计用它，像素基线（check:ui-gallery-diff）与需要目视全量时不加
   --contrast      对每张截图（含场景中途截图）做像素对比度审计，结果写 contrast.json 并汇总进 index.md
   --display-point <x,y|none> 测试窗口放到哪块显示器；默认取 HENJI_DEV_DISPLAY_POINT，未设置时用本机副屏 2561,1
@@ -93,6 +95,17 @@ function createIndex(rows, failures, metadata) {
   ]
   for (const row of rows) {
     lines.push(`| ${markdownEscape(row.surface)} | ${markdownEscape(row.name)} | ${row.size} | [打开截图](${row.file}) |`)
+  }
+  // DOM 规则命中（重要记录 020）：遮挡、裁切、截断、折行等按截图列出，先看这些；完整结果在 audit.json
+  const ruleHits = Object.entries(metadata.rules ?? {}).flatMap(([key, result]) => UI_AUDIT_RULES
+    .filter((rule) => rule.key !== 'lowContrast').flatMap((rule) => (result[rule.key] ?? []).map((item) => ({ key, rule, item }))))
+  if (ruleHits.length > 0) {
+    lines.push('', `## DOM 规则命中（${ruleHits.length} 处，先看这些）`, '', '| 截图 | 规则 | 元素 | 说明 |', '|---|---|---|---|')
+    for (const { key, rule, item } of ruleHits.slice(0, 120)) {
+      const detail = [item.by && `由 ${item.by}`, item.detail, item.text && `“${item.text}”`, item.outliers?.length && `不合群：${item.outliers.join('、')}`].filter(Boolean).join('，')
+      lines.push(`| ${markdownEscape(key)} | ${rule.label} | ${markdownEscape(item.element ?? JSON.stringify(item).slice(0, 80))} | ${markdownEscape(detail)} |`)
+    }
+    if (ruleHits.length > 120) lines.push('', `（其余 ${ruleHits.length - 120} 处见 audit.json）`)
   }
   const suspicious = metadata.metrics.filter((item) => item.metrics.suspicious)
   if (suspicious.length > 0) {
@@ -124,7 +137,7 @@ function createIndex(rows, failures, metadata) {
 
 async function main(argv = process.argv.slice(2), defaultOutDir = '.ui-tour') {
   const options = parseUiInspectionArgs(argv, defaultOutDir)
-  if (options.audit) options.contrast = true
+  if (options.audit && !options.rulesOnly) options.contrast = true
   if (options.help) {
     printHelp()
     return
@@ -198,14 +211,15 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
 
     // 截图已落盘后再审：审计会临时隐藏文字取背景，不能影响截图本身
     const auditContrast = async (key, targetPage, scene, final = false) => {
-      if (!options.contrast) return
-      const result = await auditPageContrast(targetPage, (page) => captureInspectionPage(app.app, page), {
+      if (!options.contrast && !options.audit) return
+      // --rules 时不做像素对比度（慢），只跑 DOM 规则
+      const result = options.contrast ? await auditPageContrast(targetPage, (page) => captureInspectionPage(app.app, page), {
         scene: scene.name, themePreset: run.themePreset, exceptions,
-      })
-      contrastResults[key] = { issues: result.issues, exempted: result.exempted, stats: result.stats }
+      }) : { issues: [], exempted: [], stats: null }
+      if (options.contrast) contrastResults[key] = { issues: result.issues, exempted: result.exempted, stats: result.stats }
+      // DOM 规则对每张截图都审（重要记录 020）：此前只审场景终态，中途打开的面板、浮层与状态从没被 DOM 规则看过。
       if (options.audit) {
-        const rules = final || scene.scrollCoverage ? await targetPage.evaluate(auditUiDom, { scene: scene.name, surface: scene.surface })
-          : { ...Object.fromEntries(UI_AUDIT_RULES.map(rule => [rule.key, []])), pageTitles: [], notes: ['中途状态，只审对比度'] }
+        const rules = await auditPageRules(targetPage, { scene: scene.name, surface: scene.surface })
         ruleResults[key] = { ...rules, lowContrast: result.issues, contrastExempted: result.exempted, contrastStats: result.stats }
       }
       if (result.issues.length) console.error(`  对比度不达标 ${result.issues.length} 处：${key}`)
@@ -255,7 +269,7 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
               await assertInspectionWindowSize(app, size, windowEvidence.baseline)
               windowEvidence.captures.push({ suffix, ...actual, pixels, window: targetPage === app.page ? 'main' : 'secondary' })
               if (scene.scrollCoverage) {
-                const measured = await targetPage.evaluate(auditUiDom)
+                const measured = await auditPageRules(targetPage)
                 const regions = await targetPage.locator(scene.scrollCoverage).evaluateAll(elements => elements.map((element, index) => ({
                   element: element.tagName.toLowerCase() + (element.id ? `#${element.id}` : `:${index}`),
                   id: element.getAttribute('data-ui-scroll-key') || element.querySelector('[data-gallery-section]')?.getAttribute('data-gallery-section') || '',
@@ -278,7 +292,10 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
                 file: `${sizeLabel}-${scene.id}-${suffix}.png`, metrics: value })
               if (value.suspicious) console.log(`  ! ${suffix}：${value.reasons.join('；')}`)
             }
-            await scene.setup(app.page, app.app, { capture, recordMetrics, electronApp: app.app,
+            // 尺寸扫描（sweepLayout）逐档只跑 DOM 规则不截图：命中的档位才截图并计入规则结果
+            const auditRules = async (targetPage = app.page) => auditPageRules(targetPage, { scene: scene.name, surface: scene.surface })
+            const recordRules = (suffix, rules) => { ruleResults[`${evidenceKey} / ${suffix}`] = rules }
+            await scene.setup(app.page, app.app, { capture, recordMetrics, auditRules, recordRules, setWindowSize: async (value) => setInspectionWindowSize(app, value), electronApp: app.app,
               requestedWindowSize: size, windowEvidence: windowEvidence.baseline })
             assertReviewCapture(scene, windowEvidence.captures)
             const missing = missingScrollCoverage(scrollCaptures)
@@ -344,8 +361,8 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
     results: contrastResults,
   } : null
   const metadata = { profile: options.profile, themePreset: run.themePreset, blocked: selection.blocked,
-    displayPoint: options.displayPoint, steps: options.steps, metrics, contrast }
-  fs.writeFileSync(path.join(outDir, 'evidence.json'), JSON.stringify({ metadata: { ...metadata, metrics: undefined, contrast: undefined }, scenes: evidence }, null, 2), 'utf8')
+    displayPoint: options.displayPoint, steps: options.steps, metrics, contrast, rules: options.audit ? ruleResults : null }
+  fs.writeFileSync(path.join(outDir, 'evidence.json'), JSON.stringify({ metadata: { ...metadata, metrics: undefined, contrast: undefined, rules: undefined }, scenes: evidence }, null, 2), 'utf8')
   if (metrics.length) fs.writeFileSync(path.join(outDir, 'metrics.json'), JSON.stringify(metrics, null, 2), 'utf8')
   // 数据变体（如全部模型）：按“变体 × 尺寸”汇总可疑清单
   if (metrics.some((item) => item.variant)) {

@@ -49,6 +49,12 @@ describe('resolveDevelopmentLaunchQuery', () => {
     expect(result.warnings).toHaveLength(4)
   })
 
+  it('布局守卫：不带值是描边，=log 只记日志，无效值忽略（重要记录 020）', () => {
+    expect(resolveDevelopmentLaunchQuery(['electron', '--dev-layout-guard'], '/project').query).toEqual({ henjiDevLayoutGuard: 'outline' })
+    expect(resolveDevelopmentLaunchQuery(['electron', '--dev-layout-guard=log'], '/project').query).toEqual({ henjiDevLayoutGuard: 'log' })
+    expect(resolveDevelopmentLaunchQuery(['electron', '--dev-layout-guard=loud'], '/project')).toEqual({ query: {}, warnings: ['开发启动布局守卫模式无效，已忽略。'] })
+  })
+
   it('接受只供开发的 dev.* 页面（组件样张页，任务 5.11）', () => {
     expect(resolveDevelopmentLaunchQuery(['electron', '--dev-surface=dev.ui_gallery'], '/project')).toEqual({
       query: { henjiDevSurface: 'dev.ui_gallery' },
@@ -67,6 +73,10 @@ describe('resolveSecondaryWindowLaunchQuery', () => {
       '--dev-theme-preset=paper',
       '--dev-update-preview=available',
     ], '/project')).toEqual({ henjiDevThemePreset: 'paper' })
+  })
+
+  it('日志窗口也带布局守卫', () => {
+    expect(resolveSecondaryWindowLaunchQuery(['electron', '--dev-layout-guard=log'], '/project')).toEqual({ henjiDevLayoutGuard: 'log' })
   })
 
   it('没有或无效的主题预设时不附加参数', () => {

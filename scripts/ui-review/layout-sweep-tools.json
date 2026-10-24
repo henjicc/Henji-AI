@@ -1,0 +1,183 @@
+[
+  {
+    "id": "sweep-audio-edit",
+    "surface": "工具",
+    "name": "尺寸扫描-音频编辑（已转写口播；每个面板逐档压到最小，窗口逐档缩小）",
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": "toolbox"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^返回口播列表$/"
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "/^返回口播列表$/"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^返回工具$/"
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "/^返回工具$/"
+        }
+      },
+      {
+        "seedAudioEdit": {
+          "name": "扫描-口播 已转写",
+          "transcript": true
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^音频编辑/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "/扫描-口播 已转写/"
+        },
+        "timeout": 12000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/扫描-口播 已转写/"
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-audio-word=\"middle\"]"
+        },
+        "timeout": 15000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "start"
+      },
+      {
+        "sweepLayout": {
+          "name": "dock",
+          "windows": [
+            "1280x800",
+            "1100x720",
+            "960x640"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "sweep-image-edit",
+    "surface": "工具",
+    "name": "尺寸扫描-图片编辑（每个面板逐档压到最小，窗口逐档缩小）",
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": {
+          "surface": "tool.image_edit",
+          "media": "resources/icons/icon.png"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "/^裁剪$/"
+        },
+        "timeout": 20000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "start"
+      },
+      {
+        "sweepLayout": {
+          "name": "dock",
+          "windows": [
+            "1280x800",
+            "1100x720",
+            "960x640"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "sweep-camera-stage",
+    "surface": "工具",
+    "name": "尺寸扫描-3D 镜头参考（新建空场景；每个面板逐档压到最小，窗口逐档缩小）",
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": {
+          "surface": "tool.camera_stage"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^(返回项目列表|返回列表|返回镜头参考列表)$/"
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "/^(返回项目列表|返回列表|返回镜头参考列表)$/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "/^新建镜头参考$/"
+        },
+        "timeout": 15000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^新建镜头参考$/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "/^添加球体$/"
+        },
+        "timeout": 15000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^添加球体$/"
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "start"
+      },
+      {
+        "sweepLayout": {
+          "name": "dock",
+          "windows": [
+            "1280x800",
+            "1100x720",
+            "960x640"
+          ]
+        }
+      }
+    ]
+  }
+]

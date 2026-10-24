@@ -29,6 +29,7 @@ const { normalizeReleaseIpc, normalizeStubIpc, releaseIpc, restoreIpcStubs, stub
 const { normalizeSeedSettings, seedSettingsFixture } = require('./uiReviewSettingsFixture.cjs')
 const { normalizeSeedAudioEdit, seedAudioEditFixture } = require('./uiReviewAudioEditFixture.cjs')
 const { normalizeSeedVideoEdit, seedVideoEditFixture } = require('./uiReviewVideoEditFixture.cjs')
+const { UI_AUDIT_RULES } = require('./uiAuditDom.cjs')
 
 const ROOT = path.resolve(__dirname, '..', '..')
 const WORKSPACES = Object.freeze(['generation', 'canvas', 'toolbox', 'assets'])
@@ -158,6 +159,20 @@ const STEP_ACTIONS = Object.freeze({
   // 侧栏挂载时才读取模型列表。releaseAssistant 放行 hold 暂停中的那一轮回复。
   seedAssistant: (value) => normalizeSeedAssistant(value),
   releaseAssistant: () => ({}),
+  // 尺寸扫描（重要记录 020）：拖动停靠面板之间的每条分隔条，把两侧面板逐档压到最小，再逐档缩小窗口；
+  // 每一档只跑 DOM 规则（遮挡、裁切、截断、折行……），出现新问题的那一档才截图（窗口档只记规则），扫完复原。
+  sweepLayout: (value) => {
+    const spec = value && typeof value === 'object' ? value : {}
+    const name = spec.name ?? 'sweep'
+    if (!/^[a-z0-9-]+$/.test(name)) throw new Error(`sweepLayout.name 只能是小写字母、数字与连字符：${name}`)
+    const windows = (spec.windows ?? []).map((size) => {
+      const match = /^(\d+)x(\d+)$/.exec(String(size))
+      if (!match) throw new Error(`sweepLayout.windows 需要“宽x高”：${size}`)
+      return { width: Number(match[1]), height: Number(match[2]) }
+    })
+    return { name, within: spec.within ? normalizeTarget(spec.within) : null, step: positiveInteger(spec.step ?? 80, 'sweepLayout.step'),
+      maxSteps: positiveInteger(spec.maxSteps ?? 8, 'sweepLayout.maxSteps'), sashes: spec.sashes !== false, windows }
+  },
   capture: (value) => {
     const spec = typeof value === 'string' ? { name: value } : value
     if (!spec?.name || !/^[a-z0-9-]+$/.test(spec.name)) throw new Error(`capture.name 只能是小写字母、数字与连字符：${spec?.name}`)
@@ -780,6 +795,9 @@ async function runStep(page, step, runtime) {
     case 'mainWindow':
       runtime.activePage = null
       return
+    case 'sweepLayout':
+      await sweepLayout(page, step, runtime)
+      return
     case 'capture':
     case 'metrics': {
       const suffix = prefix ? `${prefix}-${step.name}` : step.name
@@ -793,6 +811,89 @@ async function runStep(page, step, runtime) {
     default:
       throw new Error(`未实现的动作：${step.action}`)
   }
+}
+
+/** 规则结果里每一处命中的去重键（不含像素对比度与跨场景标题，它们不由 DOM 扫描产生）。 */
+function ruleIssueKeys(rules) {
+  return UI_AUDIT_RULES.filter((rule) => rule.key !== 'lowContrast' && rule.key !== 'pageTitleInconsistency')
+    .flatMap((rule) => (rules[rule.key] ?? []).map((item) => `${rule.key}|${item.element ?? JSON.stringify(item)}`))
+}
+function onlyIssues(rules, keys) {
+  const wanted = new Set(keys)
+  const result = { notes: rules.notes ?? [], gallerySamples: [], pageTitles: [] }
+  for (const rule of UI_AUDIT_RULES) result[rule.key] = (rules[rule.key] ?? []).filter((item) => wanted.has(`${rule.key}|${item.element ?? JSON.stringify(item)}`))
+  return result
+}
+
+async function sweepLayout(page, step, runtime) {
+  const { ctx, context } = runtime
+  if (typeof ctx.auditRules !== 'function') throw new Error('sweepLayout 需要巡检执行器提供 auditRules')
+  const seen = new Set(ruleIssueKeys(await ctx.auditRules(page)))
+  const findings = []
+  let shots = 0
+  const check = async (label, captureAllowed) => {
+    await waitForStable(page, context.settlePage, { timeout: 4000 }).catch(() => undefined)
+    const rules = await ctx.auditRules(page)
+    const fresh = ruleIssueKeys(rules).filter((key) => !seen.has(key))
+    if (!fresh.length) return
+    for (const key of fresh) seen.add(key)
+    shots += 1
+    const suffix = `${runtime.prefix ? `${runtime.prefix}-` : ''}${step.name}-${String(shots).padStart(2, '0')}`
+    findings.push({ label, suffix, issues: fresh })
+    console.log(`  ! 尺寸扫描 ${label}：新增 ${fresh.length} 处（${fresh.slice(0, 3).join('；')}）`)
+    ctx.recordRules?.(suffix, { ...onlyIssues(rules, fresh), notes: [`尺寸扫描：${label}`] })
+    if (captureAllowed) await ctx.capture(suffix)
+  }
+  if (step.sashes) {
+    const root = step.within ? resolveTarget(page, step.within) : page.locator('.dv-dockview:visible').first()
+    const sashes = root.locator('.dv-sash:visible')
+    const count = await sashes.count()
+    for (let index = 0; index < count; index += 1) {
+      const sash = sashes.nth(index)
+      const box = await sash.boundingBox().catch(() => null)
+      if (!box || box.width <= 0 || box.height <= 0) continue
+      const vertical = box.height > box.width
+      const origin = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+      for (const direction of [-1, 1]) {
+        let current = origin
+        for (let n = 1; n <= step.maxSteps; n += 1) {
+          const target = vertical ? { x: current.x + direction * step.step, y: current.y } : { x: current.x, y: current.y + direction * step.step }
+          await page.mouse.move(current.x, current.y)
+          await page.mouse.down()
+          await page.mouse.move(target.x, target.y, { steps: 6 })
+          await page.mouse.up()
+          const after = await sash.boundingBox().catch(() => null)
+          if (!after) break
+          const next = { x: after.x + after.width / 2, y: after.y + after.height / 2 }
+          const moved = vertical ? Math.abs(next.x - current.x) : Math.abs(next.y - current.y)
+          current = next
+          await check(`分隔条 ${index + 1}（${vertical ? '左右' : '上下'}）${direction < 0 ? (vertical ? '向左' : '向上') : (vertical ? '向右' : '向下')} ${n} 档`, true)
+          // 两侧面板已到最小尺寸，分隔条拖不动了
+          if (moved < 2) break
+        }
+        // 复原到起点，再扫另一个方向
+        await page.mouse.move(current.x, current.y)
+        await page.mouse.down()
+        await page.mouse.move(origin.x, origin.y, { steps: 6 })
+        await page.mouse.up()
+      }
+    }
+  }
+  if (step.windows.length) {
+    if (typeof ctx.setWindowSize !== 'function' || !ctx.requestedWindowSize) throw new Error('sweepLayout.windows 需要巡检执行器提供窗口尺寸控制')
+    try {
+      for (const size of step.windows) {
+        // 分数 DPI 下小窗口可能差几个像素（窗口最小尺寸、系统取整）：按实际尺寸继续扫，不中断
+        try { await ctx.setWindowSize(size) } catch (error) { console.log(`  尺寸扫描 窗口 ${size.width}×${size.height}：${String(error.message).split(String.fromCharCode(10))[0]}，按实际尺寸继续`) }
+        await check(`窗口 ${size.width}×${size.height}`, false)
+      }
+    } finally {
+      await ctx.setWindowSize(ctx.requestedWindowSize)
+      await waitForStable(page, context.settlePage, { timeout: 4000 }).catch(() => undefined)
+    }
+  }
+  runtime.sweepFindings.push(...findings)
+  console.log(`  尺寸扫描 ${step.name}：${findings.length ? `${findings.length} 档出现新问题` : '没有新问题'}`)
 }
 
 async function runSteps(mainPage, steps, runtime) {
@@ -831,7 +932,7 @@ function compileStepScene(spec, context) {
       if (!electronApp || typeof electronApp.evaluate !== 'function') throw new Error('步骤场景缺少 Electron 应用，无法加付费保护')
       const unblockPaidGeneration = await blockPaidGeneration(electronApp)
       const runtime = { context, ctx, prefix: '', variant: null, skipped: [], mouseDown: false, assistantFixture: null, sceneId: spec.id, dialogsStubbed: false, audioEditFixtures: [],
-        app: electronApp, mainPage: page, activePage: null, logsPage: null, historyFixture: null }
+        app: electronApp, mainPage: page, activePage: null, logsPage: null, historyFixture: null, sweepFindings: [] }
       try {
         await runSteps(page, spec.prepare, runtime)
         if (!spec.variants) {

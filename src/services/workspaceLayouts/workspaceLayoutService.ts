@@ -3,13 +3,13 @@ import { formatMigrations } from '@/core/persistence/formatMigrations'
 import type { SerializedDockview } from 'dockview-react'
 import { getPlatform } from '@/platform'
 import { createLogger } from '@/core/logging'
-import { parseWorkspaceDockLayout } from '@/core/workspaceLayouts/validation'
+import { parseWorkspaceDockLayout, type WorkspacePanelDefinition } from '@/core/workspaceLayouts/validation'
 import { WORKSPACE_LAYOUT_VERSION, workspaceLayoutEnvelopeSchema, createWorkspaceLayoutEnvelope } from '@/core/workspaceLayouts/schema'
 
 export interface WorkspaceLayoutPreset { id: string; name: string; layout: SerializedDockview }
 export interface WorkspaceLayoutRegistration {
   workspaceId: string
-  panels: readonly { id: string; title?: string }[]
+  panels: readonly WorkspacePanelDefinition[]
   builtinPresets: readonly WorkspaceLayoutPreset[]
   validate?: (layout: SerializedDockview) => void
   readLegacy?: () => SerializedDockview | undefined
@@ -51,14 +51,16 @@ export class WorkspaceLayoutController {
   private writes = Promise.resolve()
   private blocked = false
   private envelope: Record<string, unknown> = { version: WORKSPACE_LAYOUT_VERSION, minReaderVersion: WORKSPACE_LAYOUT_VERSION }
+  /** 经过校验的内置预设：面板名称、最小尺寸等以当前定义为准（重要记录 020），初始布局与“是否改动”的比较都用它。 */
+  private readonly builtin: readonly WorkspaceLayoutPreset[]
   private applyLayout?: (layout: SerializedDockview) => void
   private captureLayout?: () => SerializedDockview
   constructor(readonly registration: WorkspaceLayoutRegistration, private readonly persistence: WorkspaceLayoutStorage = storage) {
     if (!registration.builtinPresets.length) throw new Error('工作区至少需要一个内置布局')
     const ids = registration.builtinPresets.map(preset => preset.id)
     if (new Set(ids).size !== ids.length) throw new Error('布局预设标识重复')
-    for (const preset of registration.builtinPresets) this.validate(preset.layout)
-    const first = registration.builtinPresets[0]
+    this.builtin = registration.builtinPresets.map(preset => ({ ...preset, layout: this.validate(preset.layout) }))
+    const first = this.builtin[0]
     this.state = { activeId: first.id, current: clone(first.layout), users: [], presets: [], dirty: false, ready: false, error: null, revision: 0 }
     this.publish({})
   }
@@ -71,7 +73,7 @@ export class WorkspaceLayoutController {
   }
   private publish(patch: Partial<WorkspaceLayoutSnapshot>): void {
     const next = { ...this.state, ...patch }
-    next.presets = [...this.registration.builtinPresets.map(p => ({ ...p, builtin: true })), ...next.users.map(p => ({ ...p, builtin: false }))]
+    next.presets = [...this.builtin.map(p => ({ ...p, builtin: true })), ...next.users.map(p => ({ ...p, builtin: false }))]
     next.dirty = JSON.stringify(next.current) !== JSON.stringify(next.presets.find(p => p.id === next.activeId)?.layout)
     next.revision++
     this.state = next
@@ -89,7 +91,7 @@ export class WorkspaceLayoutController {
           const upgraded = upgradePersistenceContent({ id: 'workspace-layouts', name: '工作区布局预设', version: WORKSPACE_LAYOUT_VERSION, schema: workspaceLayoutEnvelopeSchema, migrations: formatMigrations('workspace-layouts') }, envelope, envelope.version, undefined, envelope.minReaderVersion) as typeof envelope
           const content = upgraded.content
           const users = content.users.map(p => ({ ...p, layout: this.validate(p.layout as unknown as SerializedDockview) }))
-          const ids = [...this.registration.builtinPresets, ...users].map(p => p.id)
+          const ids = [...this.builtin, ...users].map(p => p.id)
           if (new Set(ids).size !== ids.length || !ids.includes(content.activeId)) throw new Error('布局预设引用无效')
           this.envelope = envelope
           this.publish({ ...content, users, current: this.validate(content.current as unknown as SerializedDockview), ready: true })
@@ -186,7 +188,7 @@ export class WorkspaceLayoutController {
   }
   async remove(id: string): Promise<void> {
     this.assertReady(); this.user(id)
-    if (this.state.activeId === id) await this.apply(this.registration.builtinPresets[0].id)
+    if (this.state.activeId === id) await this.apply(this.builtin[0].id)
     this.publish({ users: this.state.users.filter(p => p.id !== id) }); await this.persist()
   }
 }

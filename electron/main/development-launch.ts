@@ -4,6 +4,7 @@ import path from 'node:path'
 import {
   DEVELOPMENT_LAUNCH_QUERY_KEYS,
   DEVELOPMENT_LAUNCH_SURFACE_PATTERN,
+  isDevelopmentLayoutGuardMode,
   isDevelopmentUpdatePreviewState,
 } from '../../src/core/development/developmentLaunchContract'
 import { THEME_PRESET_IDS } from '../../src/core/theme/themeEngine'
@@ -63,6 +64,13 @@ export function resolveDevelopmentLaunchQuery(
     }
   }
 
+  // 运行时布局守卫：`--dev-layout-guard` 描边 + 日志，`--dev-layout-guard=log` 只记日志
+  const layoutGuard = argv.includes('--dev-layout-guard') ? 'outline' : readOption(argv, '--dev-layout-guard')
+  if (layoutGuard) {
+    if (isDevelopmentLayoutGuardMode(layoutGuard)) query[DEVELOPMENT_LAUNCH_QUERY_KEYS.layoutGuard] = layoutGuard
+    else warnings.push('开发启动布局守卫模式无效，已忽略。')
+  }
+
   const mediaArgument = readOption(argv, '--dev-media')
   if (mediaArgument) {
     const mediaPath = path.resolve(workingDirectory, mediaArgument)
@@ -81,7 +89,7 @@ export function resolveDevelopmentLaunchQuery(
 }
 
 /**
- * 附属窗口（日志窗口）沿用的开发启动参数：只带对所有窗口都成立的主题预设，
+ * 附属窗口（日志窗口）沿用的开发启动参数：只带对所有窗口都成立的主题预设与布局守卫，
  * 页面定位、素材与首次引导只属于主窗口。日志窗口与主窗口同源应用主题（重要记录 010），
  * 巡检用 `--dev-theme-preset` 截图时两个窗口必须是同一个预设。
  */
@@ -89,7 +97,9 @@ export function resolveSecondaryWindowLaunchQuery(
   argv: readonly string[] = process.argv,
   workingDirectory = process.cwd()
 ): Record<string, string> {
-  const themePreset = resolveDevelopmentLaunchQuery(argv, workingDirectory)
-    .query[DEVELOPMENT_LAUNCH_QUERY_KEYS.themePreset]
-  return themePreset ? { [DEVELOPMENT_LAUNCH_QUERY_KEYS.themePreset]: themePreset } : {}
+  const { query } = resolveDevelopmentLaunchQuery(argv, workingDirectory)
+  const themePreset = query[DEVELOPMENT_LAUNCH_QUERY_KEYS.themePreset]
+  // 布局守卫对所有窗口都成立（日志窗口一样可能被裁切或遮挡）
+  const layoutGuard = query[DEVELOPMENT_LAUNCH_QUERY_KEYS.layoutGuard]
+  return { ...(themePreset ? { [DEVELOPMENT_LAUNCH_QUERY_KEYS.themePreset]: themePreset } : {}), ...(layoutGuard ? { [DEVELOPMENT_LAUNCH_QUERY_KEYS.layoutGuard]: layoutGuard } : {}) }
 }

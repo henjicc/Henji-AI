@@ -4,7 +4,7 @@
  * Linux 日常规则判据由 test:ui-dom-rules 验证，本命令属于显式窗口验收。
  */
 const path = require('node:path')
-const { auditUiDom } = require('./lib/uiAuditDom.cjs')
+const { auditPageRules } = require('./lib/uiLayoutAudit.cjs')
 const { launchUiInspectionApp, setInspectionWindowSize } = require('./lib/uiInspection.cjs')
 
 const ROOT = path.resolve(__dirname, '..')
@@ -19,13 +19,14 @@ async function main() {
     const samples = app.page.locator('[data-gallery-rule-sample]')
     await samples.first().waitFor({ state: 'attached' })
     const ids = await samples.evaluateAll(elements => elements.map(element => element.id))
-    if (ids.length !== 18) throw new Error(`真实组件样例应为18项，实际${ids.length}`)
+    if (ids.length !== 22) throw new Error(`真实组件样例应为22项，实际${ids.length}`)
     const rows = []
     for (const id of ids) {
-      await app.page.locator(`#${id}`).scrollIntoViewIfNeeded()
+      // 居中滚入：贴着视口底边时分数 DPI 会让外框多出零点几像素，样例被当成没完整进入视口
+      await app.page.locator(`#${id}`).evaluate(element => element.scrollIntoView({ block: 'center' }))
       await app.page.evaluate(async () => { await document.fonts.ready; await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))) })
       await app.page.mouse.move(1, 1)
-      const result = await app.page.evaluate(auditUiDom, { includeGallerySamples: true })
+      const result = await auditPageRules(app.page, { includeGallerySamples: true })
       const sample = result.gallerySamples.find(row => row.id === id)
       if (!sample) throw new Error(`样例未完整进入视口：${id}`)
       rows.push({ ...sample, expect: sample.expectHit ? 'hit' : 'clean', hit: sample.issues.length > 0, note: '中心页正式组件' })

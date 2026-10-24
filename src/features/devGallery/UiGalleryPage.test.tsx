@@ -15,7 +15,7 @@ vi.mock('./tokenSections', () => Object.fromEntries([
   'ShadowTokensSection', 'LayerTokensSection', 'HeightTokensSection', 'IconTokensSection',
   'MotionTokensSection', 'SourceTokensSection',
 ].map(name => [name, () => <div>{name}</div>])))
-vi.mock('./patternSections', () => Object.fromEntries(['PatternSection', 'RulesSection', 'LongListSection'].map(name => [name, () => <div>{name}</div>])))
+vi.mock('./patternSections', () => Object.fromEntries(['PatternSection', 'RulesSection', 'LongListSection', 'ResizeSection'].map(name => [name, () => <div>{name}</div>])))
 
 afterEach(() => { cleanup(); vi.unstubAllEnvs(); window.history.replaceState(null, '', '/') })
 
