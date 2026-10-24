@@ -19,10 +19,11 @@ export type TimelineRegionKind = 'video' | 'audio'
  * 一行轨道：`top` 是在时间线内容里的位置；轨道所在区（视频区或音频区）各自纵向滚动，`clipTop`／`clipBottom`
  * 是这一区的可见范围，滚出可见范围的部分不显示也不命中。
  */
-export interface TimelineTrackRow { track: VideoEditSequence['tracks'][number]; top: number; height: number; region: TimelineRegionKind; clipTop: number; clipBottom: number }
+/** `lane`：轨道展开后片段行下方的关键帧区高度（重要记录 019）；`height` 仍只是片段行，命中与片段都只认它。 */
+export interface TimelineTrackRow { track: VideoEditSequence['tracks'][number]; top: number; height: number; region: TimelineRegionKind; clipTop: number; clipBottom: number; lane?: number }
 /** 一个区：可见范围、内容高度与滚动量。视频区的滚动从底部（V1 贴着分隔条）往上算，音频区从顶部（A1 贴着分隔条）往下算。 */
 export interface TimelineRegion { kind: TimelineRegionKind; top: number; height: number; content: number; scroll: number; maxScroll: number }
-export interface TimelineLayoutInput { viewportHeight: number; split: number; scroll: Record<TimelineRegionKind, number>; zoomRow?: boolean }
+export interface TimelineLayoutInput { viewportHeight: number; split: number; scroll: Record<TimelineRegionKind, number>; zoomRow?: boolean; lanes?: ReadonlyMap<string, number> }
 export interface TimelineLayout { rows: TimelineTrackRow[]; caption: Pick<TimelineTrackRow, 'top' | 'height' | 'clipTop' | 'clipBottom'>; zoom: Pick<TimelineTrackRow, 'top' | 'height' | 'clipTop' | 'clipBottom'> | null; regions: Record<TimelineRegionKind, TimelineRegion>; divider: number }
 export interface TimelineViewport { left: number; top: number; width: number; height: number }
 export const TIMELINE_DEFAULT_SPLIT = 0.5
@@ -39,9 +40,11 @@ export function timelineLayout(sequence: Pick<VideoEditSequence, 'tracks'>, inpu
   const min = Math.min(TIMELINE_REGION_MIN, area / 2)
   const videoHeight = Math.round(Math.max(min, Math.min(area - min, area * input.split)))
   const height = (track: VideoEditSequence['tracks'][number]): number => resized?.trackId === track.id ? resized.height : track.height ?? 32
+  const lane = (track: VideoEditSequence['tracks'][number]): number => input.lanes?.get(track.id) ?? 0
+  const extra = (track: VideoEditSequence['tracks'][number]): { lane?: number } => lane(track) > 0 ? { lane: lane(track) } : {}
   const tracks = { video: sequence.tracks.filter(track => track.kind === 'video').sort((a, b) => a.index - b.index), audio: sequence.tracks.filter(track => track.kind === 'audio').sort((a, b) => a.index - b.index) }
   const region = (kind: TimelineRegionKind, top: number, regionHeight: number): TimelineRegion => {
-    const content = tracks[kind].reduce((sum, track) => sum + height(track), 0) + TIMELINE_NEW_TRACK_ZONE + (kind === 'video' ? sticky : 0)
+    const content = tracks[kind].reduce((sum, track) => sum + height(track) + lane(track), 0) + TIMELINE_NEW_TRACK_ZONE + (kind === 'video' ? sticky : 0)
     const maxScroll = Math.max(0, content - regionHeight)
     return { kind, top, height: regionHeight, content, scroll: Math.max(0, Math.min(maxScroll, input.scroll[kind] || 0)), maxScroll }
   }
@@ -51,12 +54,12 @@ export function timelineLayout(sequence: Pick<VideoEditSequence, 'tracks'>, inpu
   let bottom = video.top + video.height + video.scroll
   const videoClipTop = Math.min(video.top + video.height, video.top + sticky)
   // V1 在最下：从 V1 往上排，显示时最上面的合成层在前。
-  for (const track of tracks.video) { const value = height(track); bottom -= value; rows.push({ track, top: bottom, height: value, region: 'video', clipTop: videoClipTop, clipBottom: video.top + video.height }) }
+  for (const track of tracks.video) { const value = height(track); bottom -= value + lane(track); rows.push({ track, top: bottom, height: value, region: 'video', clipTop: videoClipTop, clipBottom: video.top + video.height, ...extra(track) }) }
   rows.reverse()
   const caption = { top: video.top, height: TIMELINE_CAPTION_HEIGHT, clipTop: video.top, clipBottom: video.top + video.height }
   const zoom = input.zoomRow ? { top: video.top + TIMELINE_CAPTION_HEIGHT, height: TIMELINE_ZOOM_HEIGHT, clipTop: video.top, clipBottom: video.top + video.height } : null
   let top = audio.top - audio.scroll
-  for (const track of tracks.audio) { const value = height(track); rows.push({ track, top, height: value, region: 'audio', clipTop: audio.top, clipBottom: audio.top + audio.height }); top += value }
+  for (const track of tracks.audio) { const value = height(track); rows.push({ track, top, height: value, region: 'audio', clipTop: audio.top, clipBottom: audio.top + audio.height, ...extra(track) }); top += value + lane(track) }
   return { rows, caption, zoom, regions: { video, audio }, divider: video.top + video.height + TIMELINE_TRACK_SECTION_GAP / 2 }
 }
 /** Bottom edge of the rows pinned above the video tracks (captions, and the zoom lane when shown). */
@@ -74,7 +77,7 @@ export function timelineNewTrackZone(layout: TimelineLayout, y: number): Timelin
   const videoTracksTop = firstVideo ? firstVideo.top : video.top + video.height
   if (y >= timelineStickyBottom(layout) && y < video.top + video.height && y < videoTracksTop) return 'video'
   const last = audioRows.at(-1)
-  if (y >= audio.top && y < audio.top + audio.height && y >= (last ? last.top + last.height : audio.top)) return 'audio'
+  if (y >= audio.top && y < audio.top + audio.height && y >= (last ? last.top + last.height + (last.lane ?? 0) : audio.top)) return 'audio'
   return undefined
 }
 export function timelineTrackAt(rows: readonly TimelineTrackRow[], y: number): TimelineTrackRow | undefined {
@@ -82,7 +85,7 @@ export function timelineTrackAt(rows: readonly TimelineTrackRow[], y: number): T
 }
 /** 轨道头与片段共用几何；上下各缓冲约两条默认轨道，正在编辑或聚焦的轨道保留挂载。 */
 export function timelineVisibleTrackRows(rows: readonly TimelineTrackRow[], retained: readonly (string | null | undefined)[] = [], overscan = 64): TimelineTrackRow[] {
-  return rows.filter(row => retained.includes(row.track.id) || row.top + row.height > row.clipTop - overscan && row.top < row.clipBottom + overscan)
+  return rows.filter(row => retained.includes(row.track.id) || row.top + row.height + (row.lane ?? 0) > row.clipTop - overscan && row.top < row.clipBottom + overscan)
 }
 export function timelineVisibleClips(clips: readonly VideoEditClip[], rows: readonly TimelineTrackRow[], viewport: Pick<TimelineViewport, 'left' | 'width'>, pixels: number): VideoEditClip[] {
   const tracks = new Set(timelineVisibleTrackRows(rows, [], 0).map(row => row.track.index))

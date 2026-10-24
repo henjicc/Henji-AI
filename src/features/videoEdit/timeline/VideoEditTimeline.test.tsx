@@ -853,7 +853,8 @@ it('轨道头按 PR 默认只放几个开关，右键“自定义…”用按钮
   const header = view.container.querySelector<HTMLElement>(`[data-video-edit-track-header="${video.id}"]`)!
   expect(header.querySelector('[data-video-edit-track-code]')!.textContent).toBe('V1')
   expect(view.container.querySelector(`[data-video-edit-track-header="${audio.id}"] [data-video-edit-track-code]`)!.textContent).toBe('A1')
-  const order = (id: string): string[] => [...view.container.querySelectorAll(`[data-video-edit-track-header="${id}"] button`)].map(button => button.getAttribute('aria-label')!.replace(/^.*?(设为目标|同步锁定|输出|锁定|静音|独奏)$/, '$1')).slice(1)
+  // 名称前的展开三角（看关键帧，重要记录 019）不属于开关按钮列
+  const order = (id: string): string[] => [...view.container.querySelectorAll(`[data-video-edit-track-header="${id}"] button:not([aria-expanded])`)].map(button => button.getAttribute('aria-label')!.replace(/^.*?(设为目标|同步锁定|输出|锁定|静音|独奏)$/, '$1')).slice(1)
   expect(order(video.id)).toEqual(['锁定', '同步锁定', '输出'])
   expect(order(audio.id)).toEqual(['锁定', '静音', '独奏'])
   for (const label of ['锁定', '同步锁定', '输出']) { const toggle = view.getByRole('button', { name: `${video.name}${label}` }); expect(toggle.querySelector('svg')).not.toBeNull(); expect(toggle.textContent).toBe('') }

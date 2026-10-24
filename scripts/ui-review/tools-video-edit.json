@@ -435,6 +435,40 @@
         "capture": "motion-blur"
       },
       {
+        "click": {
+          "role": "button",
+          "name": "展开视频 1关键帧"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "keyframe-lane"
+      },
+      {
+        "click": {
+          "role": "radio",
+          "name": "速度曲线"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "keyframe-curve"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "收起视频 1关键帧"
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
         "open": {
           "trigger": {
             "role": "button",

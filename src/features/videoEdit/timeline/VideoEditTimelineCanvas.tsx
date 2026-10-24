@@ -7,6 +7,10 @@ import { useVideoEditAnnotationRange } from './useVideoEditAnnotationRange'
 import { VideoEditReframeDialog } from '../panels/VideoEditReframeDialog'
 import { createLogger } from '@/core/logging'
 import { VideoEditTimelineKeyframes } from './VideoEditTimelineKeyframes'
+import { VideoEditTrackKeyframeLane } from './VideoEditTrackKeyframeLane'
+import { KEYFRAME_LANE_HEADER, KEYFRAME_LANE_ROW, keyframeLaneHeight, type VideoEditKeyframeLaneMode } from './keyframeLaneGeometry'
+import { videoEditTrackKeyframeLanes, type VideoEditKeyframeLane } from '@/core/videoEdit/keyframeLanes'
+import { videoEditBuiltinAnimationFields } from '../application/videoEditKeyframeLanes'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { VideoEditDropPlacement } from '../application/videoEditDrop'
 import { placeVideoEditDrop, readActiveVideoEditItemDrag } from '../application/videoEditDrop'
@@ -105,7 +109,18 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   const [focusedTrackId, setFocusedTrackId] = useState<string | null>(null)
   const [wheelHeights, setWheelHeights] = useState<ReadonlyMap<string, number> | null>(null)
   const heightsOf = (value: VideoEditSequence): VideoEditSequence => wheelHeights ? { ...value, tracks: value.tracks.map(track => wheelHeights.has(track.id) ? { ...track, height: wheelHeights.get(track.id)! } : track) } : value
-  const layoutInput = { viewportHeight: view.height, split, scroll: regionScroll, zoomRow: sequenceHasRecordingZoom(sequence) }
+  // 展开看关键帧的轨道（重要记录 019）：只是视图状态，不进文档；每条轨道记着自己是关键帧还是速度曲线视图。
+  const [expanded, setExpanded] = useState<ReadonlyMap<string, VideoEditKeyframeLaneMode>>(new Map())
+  const lanesOf = (value: VideoEditSequence): Map<string, VideoEditKeyframeLane[]> => new Map([...expanded.keys()].flatMap(trackId => {
+    const track = value.tracks.find(item => item.id === trackId)
+    return track ? [[trackId, videoEditTrackKeyframeLanes(value.clips.filter(clip => clip.track === track.index), videoEditBuiltinAnimationFields)] as const] : []
+  }))
+  // 高度按已提交的序列算：拖动片段预览时关键帧区不跟着跳高度。
+  const laneHeights = new Map([...lanesOf(sequence)].map(([trackId, lanes]) => [trackId, keyframeLaneHeight(expanded.get(trackId)!, lanes.length)]))
+  // 展开或换视图后把关键帧区滚进可见范围（下一次布局后执行，见下方 useLayoutEffect）。
+  const revealLane = useRef<{ trackId: string; resized: boolean } | null>(null)
+  const setLaneMode = (trackId: string, mode: VideoEditKeyframeLaneMode | null): void => { revealLane.current = mode ? { trackId, resized: false } : null; setExpanded(previous => { const next = new Map(previous); if (mode) next.set(trackId, mode); else next.delete(trackId); return next }) }
+  const layoutInput = { viewportHeight: view.height, split, scroll: regionScroll, zoomRow: sequenceHasRecordingZoom(sequence), lanes: laneHeights }
   const latestLayout = useRef(timelineLayout(sequence, layoutInput))
   /** 滚动一个区（dy > 0 显示更下面的内容）；视频区的滚动量从底部算起。返回是否滚动了。 */
   const scrollRegion = useCallback((kind: TimelineRegionKind, dy: number): boolean => {
@@ -117,6 +132,26 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     return true
   }, [])
   const pointer = useTimelinePointer({ instance, sequence, layout: latestLayout, pixels, onError, scrollRegion })
+  /**
+   * 展开的轨道露出来：本区放不下而另一区有空余时，先把分界线挪过去一次（只是视图状态）；再滚动本区——
+   * 放得下“轨道行 + 视图切换 + 一行关键帧”时从轨道行开始露出，仍然太矮时让关键帧区顶到可见顶部（底部的 V1 不被字幕轨盖住）。
+   */
+  useLayoutEffect(() => {
+    const request = revealLane.current; if (!request) return
+    const { rows: current, regions } = latestLayout.current
+    const row = current.find(value => value.track.id === request.trackId); if (!row?.lane) { revealLane.current = null; return }
+    const own = regions[row.region]; const other = regions[row.region === 'video' ? 'audio' : 'video']
+    const shortfall = row.height + row.lane - (row.clipBottom - row.clipTop); const slack = Math.floor(other.height - other.content)
+    const area = own.height + other.height
+    const next = Math.max(0.1, Math.min(0.9, (row.region === 'video' ? own.height + Math.min(shortfall, slack) : other.height - Math.min(shortfall, slack)) / Math.max(1, area)))
+    // 分界线已经挪不动（到了上下限）时直接滚动，否则下一次布局后再滚动
+    if (!request.resized && shortfall > 0 && slack > 0 && Math.abs(next - split) > 1e-3) { revealLane.current = { ...request, resized: true }; setSplit(next); return }
+    revealLane.current = null
+    const top = row.clipBottom - row.clipTop >= row.height + KEYFRAME_LANE_HEADER + KEYFRAME_LANE_ROW ? row.top : row.top + row.height
+    const bottom = row.top + row.height + row.lane
+    if (top < row.clipTop) scrollRegion(row.region, top - row.clipTop)
+    else if (bottom > row.clipBottom) scrollRegion(row.region, Math.min(bottom - row.clipBottom, top - row.clipTop))
+  }, [expanded, split, scrollRegion])
   // 不能编辑的原因浮在时间线上方，不占位；消失时淡出（保留最后一条文字直到淡出结束）。
   const [failureText, setFailureText] = useState('')
   useEffect(() => { if (pointer.failure) setFailureText(pointer.failure) }, [pointer.failure])
@@ -135,6 +170,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   const inPlaceFrameAt = (clientX: number): number | null => { const host = pointer.viewport.current; if (!host) return null; const x = clientX - host.getBoundingClientRect().left + host.scrollLeft - TIMELINE_HEADER_WIDTH; return x < 0 ? null : Math.floor(x / pixels) }
   const menu = useTimelineMenu(instance, onError, pointer.cancel, setAudioChannels, clipId => clipSource.open(instance.document.id, clipId), { items: inPlace.items, frameAt: inPlaceFrameAt }, setSceneTarget, setReframeTarget, setNestTarget)
   const displayed = pointer.preview ?? sequence
+  const keyframeLanes = expanded.size ? lanesOf(displayed) : new Map<string, VideoEditKeyframeLane[]>()
   // 拖动预览里新建的轨道也要显示出来（PR：拖到轨道外即出现新轨道）。
   const layout = timelineLayout(heightsOf(displayed), layoutInput, pointer.resized)
   latestLayout.current = layout
@@ -378,7 +414,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
           {/* 淡化（PR 淡化手柄）：淡入／淡出区上方压一块三角暗影，斜边就是音量或不透明度的走向 */}
           {fadeIn > 0 && <div aria-hidden="true" data-video-edit-fade-shape="in" className="pointer-events-none absolute left-0 top-0 h-full bg-window/60" style={{ width: Math.min(clipWidth, fadeIn), clipPath: 'polygon(0 0, 100% 0, 0 100%)' }} />}
           {fadeOut > 0 && <div aria-hidden="true" data-video-edit-fade-shape="out" className="pointer-events-none absolute right-0 top-0 h-full bg-window/60" style={{ width: Math.min(clipWidth, fadeOut), clipPath: 'polygon(0 0, 100% 0, 100% 100%)' }} />}
-          <VideoEditTimelineKeyframes projectId={projectId} sequenceId={sequence.id} clip={clip} pen={instance.tool === 'pen'} width={clipWidth} height={row.height - 4} pixels={pixels} onError={onError} />
+          <VideoEditTimelineKeyframes projectId={projectId} sequenceId={sequence.id} clip={clip} pen={instance.tool === 'pen'} hints={!row.lane} width={clipWidth} height={row.height - 4} pixels={pixels} onError={onError} />
           {fadable && instance.tool !== 'pen' && (['in', 'out'] as const).map(edge => {
             const length = edge === 'in' ? fadeIn : fadeOut
             const offset = Math.max(1, Math.min(clipWidth - 11, length - 5))
@@ -408,7 +444,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   const hintTop = (at: VideoEditDropPlacement): number => {
     const { video, audio } = layout.regions
     if (at.newTrack === 'video') { const first = rows.find(row => row.region === 'video'); return Math.max(timelineStickyBottom(layout) + 2, (first ? first.top : video.top + video.height) - 26) }
-    if (at.newTrack === 'audio') { const last = rows.filter(row => row.region === 'audio').at(-1); return Math.min(audio.top + audio.height - 26, last ? last.top + last.height + 2 : audio.top + 2) }
+    if (at.newTrack === 'audio') { const last = rows.filter(row => row.region === 'audio').at(-1); return Math.min(audio.top + audio.height - 26, last ? last.top + last.height + (last.lane ?? 0) + 2 : audio.top + 2) }
     return (rows.find(row => row.track.index === at.track)?.top ?? 0) + 2
   }
   return <>
@@ -521,8 +557,12 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
               <VideoEditTrackHeader row={row} code={trackCodes.get(row.track.id) ?? ''} targeted={instance.targetTrackIds.includes(row.track.id)} renaming={trackMenu.renaming === row.track.id} onRename={name => trackMenu.rename(row.track.id, name)} onStartRename={() => trackMenu.startRename(row.track.id)}
                 onContextMenu={event => trackMenu.show(event, row.track.id)}
                 onTarget={() => run(() => setVideoEditTimelineView(projectId, { targetTrackIds: instance.targetTrackIds.includes(row.track.id) ? instance.targetTrackIds.filter(id => id !== row.track.id) : [...instance.targetTrackIds, row.track.id] }))}
-                onPatch={patch => run(() => updateVideoEditTrack(projectId, sequence.id, row.track.id, patch))} onResize={event => pointer.resize(event, row)} channelFormat={row.track.kind === 'audio' ? channelFormatOf(row.track.index) : undefined} />
+                onPatch={patch => run(() => updateVideoEditTrack(projectId, sequence.id, row.track.id, patch))} onResize={event => pointer.resize(event, row)} channelFormat={row.track.kind === 'audio' ? channelFormatOf(row.track.index) : undefined}
+                expanded={expanded.has(row.track.id)} onToggleExpanded={() => setLaneMode(row.track.id, expanded.has(row.track.id) ? null : 'keyframes')} />
             </div>)}
+            {headerRows.filter(row => row.region === kind && row.lane).map(row => <VideoEditTrackKeyframeLane key={`lane:${row.track.id}`} instance={instance} sequence={displayed} trackName={row.track.name} locked={row.track.locked}
+              lanes={keyframeLanes.get(row.track.id) ?? []} mode={expanded.get(row.track.id) ?? 'keyframes'} onModeChange={mode => setLaneMode(row.track.id, mode)}
+              top={row.top + row.height - region.top} height={row.lane!} pixels={pixels} fps={fps} view={view} onError={onError} />)}
             {visibleClips.filter(clip => rows.find(row => row.track.index === clip.track)?.region === kind).map(clip => renderClip(clip, region))}
             {transitionWindows.filter(window => rows.find(row => row.track.index === window.left.track)?.region === kind).map(window => renderTransition(window, region))}
             {transitionHint && rows.find(row => row.track.index === transitionHint.track)?.region === kind && <VideoEditTransitionDropBlock hint={transitionHint} row={rows.find(value => value.track.index === transitionHint.track)!} region={region} pixels={pixels} />}

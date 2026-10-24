@@ -19,7 +19,8 @@ function normalizeSeedVideoEdit(value) {
   const captions = value?.captions === undefined ? 6 : Number(value.captions)
   if (!Number.isInteger(captions) || captions < 0 || captions > 200) throw new Error('seedVideoEdit.captions 只能是 0–200 的整数')
   // effects：给“核对画面”挂两个内置效果（模糊与全能调色），核对效果控件里的效果链与底栏。
-  // motion：“核对画面”缩小后整段持续旋转（每帧约 4.8°，画面四角每帧移动数十像素），核对时间线的运动模糊开关。
+  // motion：“核对画面”缩小后整段持续旋转（每帧约 4.8°，画面四角每帧移动数十像素），核对时间线的运动模糊开关；
+  // 另带缓动的水平位置与定格的不透明度关键帧，核对展开轨道后的关键帧行与速度曲线（三种形状都有）。
   return { name, captions, effects: value?.effects === true, motion: value?.motion === true }
 }
 
@@ -48,7 +49,7 @@ function buildProject({ id, name, source, captions, effects, motion }) {
               { id: `${id}-blur`, name: '高斯模糊', enabled: true, amount: 0.5, builtin: { id: 'gaussian_blur', params: { sigma_fraction_height: 0.003, axis: 'both', edge_mode: 'clamp' } } },
               { id: `${id}-grade`, name: '全能调色', enabled: false, amount: 1, builtin: { id: 'color_grade', params: { exposure: 0.25, temperature_kelvin: 5600, tint: 4 } } },
             ] } : {}),
-            ...(motion ? { scale: 0.6, curves: { rotation: [{ time: 0, value: -360, interpolation: 'linear' }, { time: 149, value: 360, interpolation: 'linear' }] } } : {}) },
+            ...(motion ? { scale: 0.6, curves: { rotation: [{ time: 0, value: -360, interpolation: 'linear' }, { time: 149, value: 360, interpolation: 'linear' }], x: [{ time: 0, value: -0.15, interpolation: 'ease' }, { time: 75, value: 0.15, interpolation: 'ease' }, { time: 149, value: 0, interpolation: 'linear' }], opacity: [{ time: 120, value: 1, interpolation: 'hold' }, { time: 140, value: 0.4, interpolation: 'hold' }] } } : {}) },
           { ...base, id: `${id}-sound`, name: '核对声音', kind: 'audio', track: 0, start: 0, duration: 150, itemId: `${id}-item`, sourceComponent: 'audio', linkId: `${id}-take` },
           { ...base, id: `${id}-title`, name: '标题文字', kind: 'text', track: 2, start: 30, duration: 90, itemId: `${id}-title-item`, text: '核对标题', scale: 0.6, volume: 0 },
         ],

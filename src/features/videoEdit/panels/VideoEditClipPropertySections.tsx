@@ -3,46 +3,35 @@ import { Link2, Link2Off, RotateCcw, AlignHorizontalJustifyStart, AlignHorizonta
 import { UiIconButton, UiInput, UiPropertyUnit } from '@/components/ui'
 import { UI_PROPERTY_INSET_CLASS } from '@/components/ui/styleTokens'
 import NumberInput from '@/components/ui/NumberInput'
-import type { VideoEditClip, VideoEditComposition, VideoEditIntrinsicSection } from '@/core/videoEdit/document'
+import type { VideoEditClip, VideoEditIntrinsicSection } from '@/core/videoEdit/document'
 import { videoEditClipPropertyBounds, videoEditClipPropertyDefault, type VideoEditClipPropertyKey } from '../application/videoEditClipProperties'
 import { VideoEditEffectSection } from './VideoEditEffectSection'
 import { VideoEditPropertyRow } from './VideoEditPropertyRow'
 import type { useVideoEditClipPropertyGesture } from './useVideoEditClipPropertyGesture'
 import { videoEditClipValue } from '@/core/videoEdit/keyframes'
+import { VIDEO_EDIT_INTRINSIC_ANIMATION_ROWS } from '@/core/videoEdit/keyframeLanes'
+import { VIDEO_EDIT_PROPERTY_VIEWS, type VideoEditPropertyFrame, type VideoEditPropertyView as PropertyView } from './videoEditPropertyViews'
 import { VideoEditKeyframeNavigator, VideoEditKeyframeStopwatch, type VideoEditKeyframeControlProps } from './VideoEditKeyframeControls'
 import { layoutVideoEditText } from '@/core/videoEdit/text'
 import { videoEditClipScaleAspect, videoEditClipToFrame } from '@/core/videoEdit/clipGeometry'
 
 type Gesture = ReturnType<typeof useVideoEditClipPropertyGesture>
-type Frame = Pick<VideoEditComposition, 'width' | 'height'> & { playhead: number }
+type Frame = VideoEditPropertyFrame & { playhead: number }
+const VIEWS = VIDEO_EDIT_PROPERTY_VIEWS
 
-/**
- * 读数按 PR 的单位显示：位置是序列像素（画面中心为宽高的一半），缩放 / 不透明度 / 音量是百分比，旋转是度。
- * 文档里存的仍是归一化数值，换算只发生在界面上。
- */
-interface PropertyView { key: VideoEditClipPropertyKey; label: string; unit?: string; step: number; precision: number; toDisplay: (value: number, frame: Frame) => number; fromDisplay: (value: number, frame: Frame) => number }
-const percent = { toDisplay: (value: number) => value * 100, fromDisplay: (value: number) => value / 100, unit: '%', step: 1, precision: 1 }
-const VIEWS: Record<VideoEditClipPropertyKey, PropertyView> = {
-  x: { key: 'x', label: '水平位置', step: 1, precision: 1, toDisplay: (value, frame) => frame.width / 2 + value * frame.width, fromDisplay: (value, frame) => (value - frame.width / 2) / frame.width },
-  y: { key: 'y', label: '垂直位置', step: 1, precision: 1, toDisplay: (value, frame) => frame.height / 2 + value * frame.height, fromDisplay: (value, frame) => (value - frame.height / 2) / frame.height },
-  scale: { key: 'scale', label: '缩放', ...percent },
-  rotation: { key: 'rotation', label: '旋转', unit: '°', step: 1, precision: 1, toDisplay: value => value, fromDisplay: value => value },
-  anchorX: { key: 'anchorX', label: '锚点水平', ...percent },
-  anchorY: { key: 'anchorY', label: '锚点垂直', ...percent },
-  opacity: { key: 'opacity', label: '不透明度', ...percent },
-  volume: { key: 'volume', label: '音量', ...percent },
-}
-
-/** 属性行（重要记录 019）：多维属性合成一行（位置的 X、Y，锚点的水平、垂直），一个秒表管整行。 */
+/** 属性行（重要记录 019）：多维属性合成一行（位置的 X、Y，锚点的水平、垂直），一个秒表管整行；分组与时间线关键帧行共用。 */
 interface PropertyRowView { label: string; tooltip: string; keys: readonly VideoEditClipPropertyKey[] }
-const ROWS = {
-  position: { label: '位置', tooltip: '运动锚点在序列里的像素位置，宽高的一半是居中。', keys: ['x', 'y'] },
-  scale: { label: '缩放', tooltip: '画面大小，100% 为原始适配大小；解开中间的链条可以水平、垂直分别缩放。', keys: ['scale'] },
-  rotation: { label: '旋转', tooltip: '画面绕运动锚点旋转的角度。', keys: ['rotation'] },
-  anchor: { label: '锚点', tooltip: '旋转和缩放的支点，50% 为画面中心。', keys: ['anchorX', 'anchorY'] },
-  opacity: { label: '不透明度', tooltip: '0% 完全透明，100% 完全不透明。', keys: ['opacity'] },
-  volume: { label: '音量', tooltip: '片段音量，100% 为原始音量，0% 静音，最高 200%。', keys: ['volume'] },
-} as const satisfies Record<string, PropertyRowView>
+type IntrinsicRowId = typeof VIDEO_EDIT_INTRINSIC_ANIMATION_ROWS[number]['id']
+const TOOLTIPS: Record<IntrinsicRowId, string> = {
+  position: '运动锚点在序列里的像素位置，宽高的一半是居中。',
+  scale: '画面大小，100% 为原始适配大小；解开中间的链条可以水平、垂直分别缩放。',
+  rotation: '画面绕运动锚点旋转的角度。',
+  anchor: '旋转和缩放的支点，50% 为画面中心。',
+  opacity: '0% 完全透明，100% 完全不透明。',
+  volume: '片段音量，100% 为原始音量，0% 静音，最高 200%。',
+}
+const intrinsicRow = (id: IntrinsicRowId): PropertyRowView => { const row = VIDEO_EDIT_INTRINSIC_ANIMATION_ROWS.find(value => value.id === id)!; return { label: row.label, keys: row.keys, tooltip: TOOLTIPS[id] } }
+const ROWS = { position: intrinsicRow('position'), scale: intrinsicRow('scale'), rotation: intrinsicRow('rotation'), anchor: intrinsicRow('anchor'), opacity: intrinsicRow('opacity'), volume: intrinsicRow('volume') }
 const MOTION_ROWS: readonly PropertyRowView[] = [ROWS.position, ROWS.scale, ROWS.rotation, ROWS.anchor]
 const MOTION: readonly VideoEditClipPropertyKey[] = MOTION_ROWS.flatMap(row => row.keys)
 

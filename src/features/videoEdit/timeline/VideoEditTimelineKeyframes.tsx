@@ -8,10 +8,11 @@ import { PanelTrigger } from '@/components/ui'
 import { VideoEditKeyframeInterpolation } from '../panels/VideoEditKeyframeInterpolation'
 import { VIDEO_EDIT_DEFAULT_BEZIER, type VideoEditBezier } from '@/core/videoEdit/keyframeInterpolation'
 
-interface Props { projectId: string; sequenceId: string; clip: VideoEditClip; pen: boolean; width: number; height: number; pixels: number; onError: (reason: unknown) => void }
+/** `hints`：收起的轨道在片段底边用小点提示这里有关键帧（重要记录 019）；轨道展开时关键帧在下方逐行显示，不再提示。 */
+interface Props { projectId: string; sequenceId: string; clip: VideoEditClip; pen: boolean; hints?: boolean; width: number; height: number; pixels: number; onError: (reason: unknown) => void }
 interface Drag { handle: VideoEditGesture; points: VideoEditKeyframes; originalTime?: number; bezierIndex?: 0 | 2; rect: DOMRect; pointerId: number; scope: string }
 /** Time/value rubber band is shared by audio volume and video opacity. Pen owns only this clip's points. */
-export function VideoEditTimelineKeyframes({ projectId, sequenceId, clip, pen, width, height, pixels, onError }: Props): React.ReactElement | null {
+export function VideoEditTimelineKeyframes({ projectId, sequenceId, clip, pen, hints = true, width, height, pixels, onError }: Props): React.ReactElement | null {
   const key = clip.kind === 'audio' ? 'volume' : 'opacity'; const maximum = key === 'volume' ? 2 : 1
   const points = clip.curves?.[key] ?? []
   const all = [...new Set([...Object.values(clip.curves ?? {}).flat().map(point => point.time), ...(clip.effects ?? []).flatMap(effect => Object.values(effect.builtin?.curves ?? {}).flat().map(point => point.time))])]
@@ -28,7 +29,7 @@ export function VideoEditTimelineKeyframes({ projectId, sequenceId, clip, pen, w
     document.addEventListener('keydown', escape, true); window.addEventListener('blur', cancel)
     return () => { cancel(); document.removeEventListener('keydown', escape, true); window.removeEventListener('blur', cancel) }
   }, [scope])
-  if (!pen && !all.length) return null
+  if (!pen && (!all.length || !hints)) return null
   const top = Math.min(18, height / 3); const bottom = Math.max(top + 1, height - 4)
   const y = (value: number): number => bottom - value / maximum * (bottom - top)
   const write = (event: { clientX: number; clientY: number }): void => {
@@ -96,7 +97,7 @@ export function VideoEditTimelineKeyframes({ projectId, sequenceId, clip, pen, w
         </g>
       })
     })}
-    {pen ? points.map(point => <circle key={point.time} data-keyframe-time={point.time} cx={point.time * pixels} cy={y(point.value as number)} r={4} fill="currentColor" />) : all.map(time => <path key={time} d={`M${time * pixels} 2l3 3-3 3-3-3Z`} fill="currentColor" />)}
+    {pen ? points.map(point => <circle key={point.time} data-keyframe-time={point.time} cx={point.time * pixels} cy={y(point.value as number)} r={4} fill="currentColor" />) : all.map(time => <path key={time} d={`M${time * pixels} ${height - 9}l2.5 2.5-2.5 2.5-2.5-2.5Z`} fill="currentColor" />)}
   </svg>
     {editor && selected && <PanelTrigger open anchor={{ left: editor.left, top: editor.top, bottom: editor.top, width: 0 }} panelWidth="content" panelPadding="content"
       onOpenChange={open => { if (!open) { cancel(); setEditor(undefined) } }} renderPanel={() => <div className="w-56">

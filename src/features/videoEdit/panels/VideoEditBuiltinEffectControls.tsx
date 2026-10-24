@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import { requireVideoEditBuiltinEffect, resolveVideoEditBuiltinParams, type VideoEditBuiltinParam } from '@/core/videoEdit/builtinEffects'
 import type { VideoEditBuiltinEffect } from '@/core/videoEdit/compositing'
 import { updateVideoEditBuiltinEffect, type VideoEditCompositeTarget } from '../application/videoEditCompositing'
+import { isVideoEditDiscreteField } from '../application/videoEditKeyframeLanes'
 import { useVideoEditBuiltinParamGesture, type VideoEditBuiltinParamGesture } from './useVideoEditBuiltinParamGesture'
 import { VideoEditSmartRegionControls } from './VideoEditSmartRegionControls'
 import { evaluateVideoEditEffect } from '@/core/videoEdit/keyframes'
@@ -59,7 +60,7 @@ export function VideoEditBuiltinParamRows({ params, values, gesture, animation }
       // 一个秒表管整行：点位的水平、垂直一起开动画、一起打关键帧（重要记录 019）。
       const keyframes: VideoEditKeyframeControlProps = {
         label: field.title, channels: field.bindingKeys.map(key => ({ key, points: curves?.[key], value: values[key] as number | string | boolean })),
-        time: animation.frame - animation.start, duration: animation.duration, discrete: ['boolean', 'choice', 'curve', 'lut'].includes(field.type),
+        time: animation.frame - animation.start, duration: animation.duration, discrete: isVideoEditDiscreteField(field),
         onBegin: gesture.begin, onFinish: gesture.finish, onCancel: gesture.cancel,
         onChange: changes => { const next = { ...curves }; for (const [key, points] of Object.entries(changes)) { if (points.length) next[key] = points; else delete next[key] } gesture.commit({ curves: next }) },
         onSeek: time => setVideoEditView(projectId!, { frame: animation.start + time, playing: false }),
