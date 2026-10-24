@@ -3,13 +3,16 @@ import { useRef } from 'react'
 import { UI_COLOR_WHEEL_BACKGROUND } from './styleTokens'
 
 export interface GestureProps { onBegin: () => void; onFinish: () => void; onCancel: () => void; disabled?: boolean }
+/** 曲线绘图区四周留出控制点半径的边距，端点（0% / 100%）的控制点完整可见、可抓取，不被绘图区边缘裁掉一半（重要记录 020） */
+const CURVE_PAD = 4
+const CURVE_SPAN = 100 + CURVE_PAD * 2
 /** Document/undo independent curve editor; legacy values remain supported by existing consumers. */
 export function UiToneCurve({ label, values, points, onChange, onPointsChange, onBegin, onFinish, onCancel, disabled }: GestureProps & { label: string; values?: readonly number[]; points?: readonly ColorGradeCurvePoint[]; onChange?: (point: number, value: number) => void; onPointsChange?: (points: ColorGradeCurvePoint[]) => void }): React.ReactElement {
   const current = points ?? (values ?? []).map((y, i) => ({ x: i * 25, y }))
   const active = useRef<{ index: number; points: ColorGradeCurvePoint[]; outside: boolean } | null>(null)
   const pointAt = (event: React.PointerEvent<SVGSVGElement>): ColorGradeCurvePoint => {
     const rect = event.currentTarget.getBoundingClientRect()
-    return { x: (event.clientX - rect.left) / rect.width * 100, y: 100 - (event.clientY - rect.top) / rect.height * 100 }
+    return { x: (event.clientX - rect.left) / rect.width * CURVE_SPAN - CURVE_PAD, y: 100 - ((event.clientY - rect.top) / rect.height * CURVE_SPAN - CURVE_PAD) }
   }
   const write = (next: ColorGradeCurvePoint[], index: number): void => { if (onPointsChange) onPointsChange(next); else onChange?.(index, next[index].y) }
   const remove = (index: number): void => { if (!disabled && onPointsChange && current.length > 2) onPointsChange(current.filter((_, i) => i !== index)) }
@@ -22,7 +25,7 @@ export function UiToneCurve({ label, values, points, onChange, onPointsChange, o
     drag.points = next; write(next, index)
   }
   const evaluate = current.length >= 2 ? colorGradeSpline(current) : () => 0
-  return <svg viewBox="0 0 100 100" aria-label={label} tabIndex={disabled ? -1 : 0} className="aspect-square w-full touch-none rounded-control bg-control"
+  return <svg viewBox={`${-CURVE_PAD} ${-CURVE_PAD} ${CURVE_SPAN} ${CURVE_SPAN}`} aria-label={label} tabIndex={disabled ? -1 : 0} className="aspect-square w-full touch-none rounded-control bg-control"
     onPointerDown={event => {
       if (disabled || event.button !== 0 || !onPointsChange || event.target !== event.currentTarget) return
       const point = pointAt(event); point.x = Math.max(0, Math.min(100, point.x)); point.y = Math.max(0, Math.min(100, point.y))

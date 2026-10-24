@@ -50,7 +50,8 @@ export function VideoEditKeyframeNavigator(props: VideoEditKeyframeControlProps)
   if (!animated) return null
   const current = atTime[0]?.point
   const remove = (): void => onChange(Object.fromEntries(channels.filter(channel => channel.points?.length).map(channel => [channel.key, channel.points!.filter(point => point.time !== time)])))
-  return <span className={`flex shrink-0 items-center ${reveal ? UI_PROPERTY_REVEAL_CLASS : ''}`}>
+  // 属性排布里叠在名称右端（UiFormRow 的 labelTrailing 不占宽）：铺面板底盖住名称尾部，随悬停一起淡入
+  return <span className={`flex shrink-0 items-center ${reveal ? `rounded-control bg-panel ${UI_PROPERTY_REVEAL_CLASS}` : ''}`}>
     <UiIconButton size="2xs" tooltip={`上一个${label}关键帧`} aria-label={`上一个${label}关键帧`} disabled={previous === undefined} onClick={() => previous !== undefined && onSeek(previous)}><ChevronLeft /></UiIconButton>
     <UiIconButton size="2xs" on={Boolean(current)} tooltip={`${current ? '删除' : '添加'}${label}关键帧`} aria-label={`${current ? '删除' : '添加'}${label}关键帧`} disabled={!inside} onClick={() => current ? remove() : addKeyframes(props)}><Diamond fill={current ? 'currentColor' : 'none'} /></UiIconButton>
     <UiIconButton size="2xs" tooltip={`下一个${label}关键帧`} aria-label={`下一个${label}关键帧`} disabled={next === undefined} onClick={() => next !== undefined && onSeek(next)}><ChevronRight /></UiIconButton>

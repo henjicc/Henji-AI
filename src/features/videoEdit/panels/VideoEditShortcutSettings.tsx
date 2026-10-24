@@ -49,7 +49,8 @@ export function VideoEditShortcutDialog({ open, onClose }: { open: boolean; onCl
         <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
           {VIDEO_EDIT_COMMANDS.map(command => <div className="flex items-center gap-2 border-b border-line py-1" key={command.id}>
             <span className="min-w-0 flex-1 text-xs">{command.title}</span>
-            <UiButton aria-label={t('videoEditShortcuts.keyLabel', { command: command.title })} aria-pressed={capture === command.id} onClick={() => setCapture(command.id)}>{capture === command.id ? t('videoEditShortcuts.capturing') : videoEditCommandShortcuts(command.id, draft).map(videoEditShortcutLabel).join(' / ') || videoEditShortcutLabel(undefined)}</UiButton>
+            {/* 键位列定宽：单键（如 V）也有足够的点击面积，各行键位左右对齐 */}
+            <UiButton className="min-w-24" aria-label={t('videoEditShortcuts.keyLabel', { command: command.title })} aria-pressed={capture === command.id} onClick={() => setCapture(command.id)}>{capture === command.id ? t('videoEditShortcuts.capturing') : videoEditCommandShortcuts(command.id, draft).map(videoEditShortcutLabel).join(' / ') || videoEditShortcutLabel(undefined)}</UiButton>
             <UiButton aria-label={t('videoEditShortcuts.clearLabel', { command: command.title })} onClick={() => { setCapture(null); change({ ...draft, [command.id]: null }) }}>{t('videoEditShortcuts.clear')}</UiButton>
           </div>)}
         </div>

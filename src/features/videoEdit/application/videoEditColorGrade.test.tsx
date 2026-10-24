@@ -107,10 +107,11 @@ it('独立面板曲线：首次拖动创建、重渲染不断开手势，松手�
   vi.stubGlobal('PointerEvent', MouseEvent)
   Element.prototype.setPointerCapture = vi.fn(); Element.prototype.releasePointerCapture = vi.fn(); Element.prototype.hasPointerCapture = () => true
   const view = render(<VideoEditColorGradePanel instance={owner} onError={onError} />)
-  fireEvent.click(view.getByRole('button', { name: '曲线' }))
+  fireEvent.click(view.getByRole('button', { name: '展开曲线' }))
   // An untouched curve has only its two endpoints; clicking the graph adds a point on the curve.
   const plot = view.getByLabelText('RGB 主控制点'); expect(view.getAllByRole('slider', { name: /^RGB 主控制点点/ })).toHaveLength(2)
-  vi.spyOn(plot, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 100, 100))
+  // 绘图区四周各留 5 的边距（viewBox -5..105）：外框取 -5..105，客户坐标 0–100 仍对应取值 0–1
+  vi.spyOn(plot, 'getBoundingClientRect').mockReturnValue(new DOMRect(-5, -5, 110, 110))
   fireEvent.pointerDown(plot, { button: 0, clientX: 50, clientY: 50 }); fireEvent.pointerMove(plot, { clientX: 50, clientY: 25 })
   // Gesture writes coalesce per display frame.
   await act(() => new Promise<void>(resolve => { requestAnimationFrame(() => resolve()) }))
@@ -156,21 +157,21 @@ it('三色轮及 HSL 区间消费专业原件，键盘一步提交，切换折�
   vi.stubGlobal('PointerEvent', MouseEvent)
   Element.prototype.setPointerCapture = vi.fn(); Element.prototype.releasePointerCapture = vi.fn(); Element.prototype.hasPointerCapture = () => true
   const view = render(<VideoEditColorGradePanel instance={owner} onError={onError} />)
-  fireEvent.click(view.getByRole('button', { name: '色彩分级' }))
+  fireEvent.click(view.getByRole('button', { name: '展开色彩分级' }))
   expect(view.getByRole('slider', { name: '阴影色轮亮度' })).toBeTruthy()
   expect(view.getByRole('slider', { name: '中间调色轮亮度' })).toBeTruthy()
   expect(view.getByRole('slider', { name: '高光色轮亮度' })).toBeTruthy()
   fireEvent.keyDown(view.getByRole('slider', { name: '中间调色轮亮度' }), { key: 'ArrowUp' })
   expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params.midtone_luminance).toBe(1)
   expect(owner.past).toHaveLength(history + 1)
-  fireEvent.click(view.getByRole('button', { name: 'HSL 辅助' }))
+  fireEvent.click(view.getByRole('button', { name: '展开HSL 辅助' }))
   const start = view.getByRole('slider', { name: '色相区间起点' }); const track = start.parentElement!
   vi.spyOn(track, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 360, 100))
   const before = owner.document
   fireEvent.pointerDown(start, { button: 0, clientX: 340, clientY: 50 }); fireEvent.pointerMove(track, { clientX: 350, clientY: 50 })
   await act(() => new Promise<void>(resolve => { requestAnimationFrame(() => resolve()) }))
   expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params.hsl_hue_start).toBe(350)
-  fireEvent.click(view.getByRole('button', { name: 'HSL 辅助' }))
+  fireEvent.click(view.getByRole('button', { name: '收起HSL 辅助' }))
   expect(owner.document).toEqual({ ...before, revision: owner.document.revision }); expect(owner.past).toHaveLength(history + 1); expect(onError).not.toHaveBeenCalled()
 })
 

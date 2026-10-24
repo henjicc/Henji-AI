@@ -25,12 +25,15 @@ export function RecordingShortcutSettings(): React.ReactElement {
     window.addEventListener('keydown', listener, true)
     return () => window.removeEventListener('keydown', listener, true)
   }, [capture, shortcuts, t])
+  // 只显示本机的修饰键：Windows 写 Ctrl，macOS 写 Command，不写“Ctrl / Command”让用户自己挑
+  const commandLabel = /Mac/.test(navigator.userAgent) ? 'Command' : 'Ctrl'
   return <UiGroup title={t('recordingShortcuts.title')} info={t('recordingShortcuts.info')}>
     {recordingActions.map(action => <UiFormRow key={action} label={t(`recordingShortcuts.${action}`)} inline>
-      <UiButton size="sm" aria-pressed={capture === action} aria-label={t('recordingShortcuts.change', { action: t(`recordingShortcuts.${action}`) })} onClick={() => { setCapture(action); setError('') }}>{capture === action ? t('recordingShortcuts.capture') : shortcuts[action]?.replace('CommandOrControl', 'Ctrl / Command') ?? t('recordingShortcuts.unset')}</UiButton>
+      <UiButton size="sm" aria-pressed={capture === action} aria-label={t('recordingShortcuts.change', { action: t(`recordingShortcuts.${action}`) })} onClick={() => { setCapture(action); setError('') }}>{capture === action ? t('recordingShortcuts.capture') : shortcuts[action]?.replace('CommandOrControl', commandLabel) ?? t('recordingShortcuts.unset')}</UiButton>
       <UiButton size="sm" onClick={() => { setCapture(null); useSettingsStore.getState().setRecordingShortcuts({ ...shortcuts, [action]: null }) }}>{t('recordingShortcuts.clear')}</UiButton>
     </UiFormRow>)}
-    <UiButton onClick={() => { setCapture(null); setError(''); useSettingsStore.getState().setRecordingShortcuts({ ...DEFAULT_RECORDING_SHORTCUTS }) }}>{t('recordingShortcuts.reset')}</UiButton>
+    {/* 静默按钮自带左右内边距：-ml-2 让文字与上方行标签对齐 */}
+    <UiButton className="-ml-2 self-start" onClick={() => { setCapture(null); setError(''); useSettingsStore.getState().setRecordingShortcuts({ ...DEFAULT_RECORDING_SHORTCUTS }) }}>{t('recordingShortcuts.reset')}</UiButton>
     {error && <UiError size="xs" align="start" title={error} message="" />}
   </UiGroup>
 }

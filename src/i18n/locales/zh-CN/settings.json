@@ -801,8 +801,8 @@
     },
     "settings": {
       "timeoutMs": {
-        "label": "超时",
-        "info": "单次请求的最长等待时间，单位毫秒。"
+        "label": "超时（秒）",
+        "info": "单次请求最长等多少秒。"
       },
       "maxRetries": {
         "label": "重试次数",

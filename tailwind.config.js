@@ -175,6 +175,10 @@ export default {
         'control-md': 'var(--size-control-md)',
         'control-lg': 'var(--size-control-lg)',
       },
+      maxHeight: {
+        // 共享虚拟列表放在高度随内容的浮层里时（模型、音色选择），按内容自撑到这个高度再在列表里滚动
+        'virtual-list': 'min(60vh, 32rem)',
+      },
       minWidth: {
         'control-sm': 'var(--size-control-sm)',
         'control-md': 'var(--size-control-md)',

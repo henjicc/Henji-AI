@@ -43,11 +43,16 @@ interface JointSlidersProps {
   onChange: (next: StageVec3, changedPath: string) => void
 }
 
-/** 一个关节的三轴欧拉角：每轴一行“轴名 + 滑杆 + 数值框”。 */
+/**
+ * 一个关节的三轴欧拉角：关节名一行，下面每轴一行“轴名 + 滑杆 + 数值框”占满面板宽。
+ * 不放进标签列（重要记录 020）：三行滑杆挤在标签列右侧，面板压到最小宽时滑杆只剩几十像素、数值框被挤出面板。
+ */
 const JointSliders: React.FC<JointSlidersProps> = ({ jointName, value, jointId, onChange }) => {
   const basePath = poseJointPath(jointId)
+  const headingId = `pose-joint-${jointId}`
   return (
-    <UiFormRow label={jointName} density="compact">
+    <div role="group" aria-labelledby={headingId} className="flex flex-col gap-1">
+      <span id={headingId} className="text-xs text-text2">{jointName}</span>
       <div className="flex flex-col gap-1">
         {AXES.map((axis) => {
           const path = `${basePath}.${axis}`
@@ -82,7 +87,7 @@ const JointSliders: React.FC<JointSlidersProps> = ({ jointName, value, jointId, 
           )
         })}
       </div>
-    </UiFormRow>
+    </div>
   )
 }
 

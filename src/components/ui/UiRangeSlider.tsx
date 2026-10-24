@@ -10,6 +10,8 @@ export function UiRangeSlider(props: UiRangeSliderProps) {
   const { value, onChange, defaultValue, min = 0, max = 1, step = .01, track = 'none', wrap = false, disabled, size = 'sm' } = props
   const label = props['aria-label'] ?? props.label ?? '区间'
   const active = useRef<0 | 1>(0)
+  // 两个手柄重合时按下去分不清要拖哪个：等第一次移动，往左拖起点、往右拖终点（否则压在上面的终点被夹在起点上拖不动）
+  const undecided = useRef<number | null>(null)
   const gesture = useParameterGesture(props)
   const snap = (next: number) => clampParameter(step > 0 ? Number((min + Math.round((next - min) / step) * step).toPrecision(12)) : next, min, max)
   const normalize = (next: [number, number]): [number, number] => { const a = snap(next[0]); const b = snap(next[1]); return wrap ? [a, b] : [Math.min(a, b), Math.max(a, b)] }
@@ -17,13 +19,24 @@ export function UiRangeSlider(props: UiRangeSliderProps) {
   const at = (event: React.PointerEvent<HTMLDivElement>) => min + parameterPosition(event).x * (max - min)
   const fraction = (next: number) => (max > min ? clampParameter((next - min) / (max - min)) : 0) * 100
   return <div className="w-full space-y-2">
-    <div className={`${UI_PARAMETER_SURFACE_CLASS} ${UI_CONTROL_HEIGHT_CLASS[size]}`} style={{ background: UI_PARAMETER_TRACK_BACKGROUND[track] }}
+    {/* data-ui-manipulator：同一条区间的两个手柄重合或挨着是正常状态，布局检查不把它们算作互相遮挡 */}
+    <div data-ui-manipulator className={`${UI_PARAMETER_SURFACE_CLASS} ${UI_CONTROL_HEIGHT_CLASS[size]}`} style={{ background: UI_PARAMETER_TRACK_BACKGROUND[track] }}
       {...gesture.handlers} onPointerDown={event => {
         if (disabled || event.button !== 0) return
         const target = event.target as HTMLElement
         const index = target.dataset.rangeHandle === '1' ? 1 : target.dataset.rangeHandle === '0' ? 0 : Math.abs(at(event) - value[0]) <= Math.abs(at(event) - value[1]) ? 0 : 1
-        if (gesture.begin(event)) { active.current = index; write(index, at(event)); event.currentTarget.querySelector<HTMLElement>(`[data-range-handle="${index}"]`)?.focus() }
-      }} onPointerMove={event => { if (gesture.active(event)) write(active.current, at(event)) }}
+        const overlapping = !wrap && value[0] === value[1] && target.dataset.rangeHandle !== undefined
+        if (gesture.begin(event)) {
+          active.current = index; undecided.current = overlapping ? at(event) : null
+          if (!overlapping) write(index, at(event))
+          event.currentTarget.querySelector<HTMLElement>(`[data-range-handle="${index}"]`)?.focus()
+        }
+      }} onPointerMove={event => {
+        if (!gesture.active(event)) return
+        const next = at(event)
+        if (undecided.current !== null) { if (next === undecided.current) return; active.current = next < undecided.current ? 0 : 1; undecided.current = null }
+        write(active.current, next)
+      }}
       onDoubleClick={() => { if (defaultValue) gesture.atomic(() => onChange(normalize(defaultValue))) }}>
       {wrap && value[0] > value[1] ? <><div className="pointer-events-none absolute inset-y-0 bg-accent/20" style={{ left: '0%', width: `${fraction(value[1])}%` }} /><div className="pointer-events-none absolute inset-y-0 bg-accent/20" style={{ left: `${fraction(value[0])}%`, right: '0%' }} /></> : <div className="pointer-events-none absolute inset-y-0 bg-accent/20" style={{ left: `${fraction(value[0])}%`, width: `${fraction(value[1]) - fraction(value[0])}%` }} />}
       {([0, 1] as const).map(index => <div key={index} data-range-handle={index} role="slider" aria-label={`${label}${index === 0 ? '起点' : '终点'}`} aria-valuemin={wrap || index === 0 ? min : value[0]} aria-valuemax={wrap || index === 1 ? max : value[1]} aria-valuenow={value[index]} aria-valuetext={`${value[index]}${wrap && value[0] > value[1] ? '，跨起点回绕' : ''}`} aria-disabled={disabled} tabIndex={disabled ? -1 : 0}

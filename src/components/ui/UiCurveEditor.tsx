@@ -9,6 +9,12 @@ export interface UiCurveEditorProps extends ParameterControlProps<UiCurvePoint[]
 const HIT_RADIUS = .04
 /** Neighboring points keep a strictly increasing input. */
 const GAP = .005
+/**
+ * 绘图区四周留出控制点半径的边距（viewBox 单位）：端点（0 / 1）的控制点完整画在框内、整颗可抓，
+ * 不再伸出图外压到下一行控件上（重要记录 020；与 UiToneCurve 同一做法）。
+ */
+const PAD = 5
+const SPAN = 100 + PAD * 2
 
 /**
  * Curve editing follows Photoshop/Lightroom/Lumetri: clicking the graph adds a point on the curve
@@ -39,7 +45,9 @@ export function UiCurveEditor(props: UiCurveEditorProps) {
     return points.map((entry, i) => i === index ? { x, y } : kind === 'hue' && endpoint && (i === 0 || i === points.length - 1) ? { ...entry, y } : entry)
   }
   const remove = (points: UiCurvePoint[], index: number) => index > 0 && index < points.length - 1 ? points.filter((_, i) => i !== index) : points
-  const pointerPoint = (event: React.PointerEvent<SVGSVGElement> | React.MouseEvent<SVGSVGElement>) => { const point = parameterPosition(event as React.PointerEvent<SVGSVGElement>); return { x: point.x, y: 1 - point.y } }
+  // 去掉边距后按万分之一取整：换算带来的浮点尾差（0.24999999999999997）不写进曲线
+  const inner = (value: number): number => Math.round((value * SPAN - PAD) * 100) / 1e4
+  const pointerPoint = (event: React.PointerEvent<SVGSVGElement> | React.MouseEvent<SVGSVGElement>) => { const point = parameterPosition(event as React.PointerEvent<SVGSVGElement>); return { x: inner(point.x), y: 1 - inner(point.y) } }
   /** The point under the pointer: its own circle, or the nearest one within reach. */
   const pointAt = (event: React.PointerEvent<SVGSVGElement> | React.MouseEvent<SVGSVGElement>): number => {
     const direct = Number((event.target as SVGElement).getAttribute('data-curve-point') ?? -1)
@@ -51,8 +59,9 @@ export function UiCurveEditor(props: UiCurveEditorProps) {
   }
   const reset = () => { if (defaultValue) gesture.atomic(() => onChange(defaultValue.map(point => ({ ...point })))) }
   const removeAt = (index: number) => { const next = remove(value, index); if (next !== value) gesture.atomic(() => onChange(next)) }
+  // 色相底只铺在 0–1 的绘图区里（边距外仍是控件底），与曲线横轴对齐
   // icon-token-allow 用户控制点生成的曲线编辑图形，折线就是线性采样契约。
-  return <svg viewBox="0 0 100 100" className={`${UI_PARAMETER_SURFACE_CLASS} aspect-square overflow-visible`} style={kind === 'hue' ? { background: UI_PARAMETER_TRACK_BACKGROUND.hue } : undefined} role="group" aria-label={label} tabIndex={disabled ? -1 : 0} aria-disabled={disabled}
+  return <svg viewBox={`${-PAD} ${-PAD} ${SPAN} ${SPAN}`} className={`${UI_PARAMETER_SURFACE_CLASS} aspect-square`} style={kind === 'hue' ? { backgroundImage: UI_PARAMETER_TRACK_BACKGROUND.hue, backgroundSize: `${100 / SPAN * 100}% ${100 / SPAN * 100}%`, backgroundPosition: 'center', backgroundRepeat: 'no-repeat' } : undefined} role="group" aria-label={label} tabIndex={disabled ? -1 : 0} aria-disabled={disabled}
     {...gesture.handlers}
     onPointerDown={event => {
       if (disabled || event.button !== 0) return

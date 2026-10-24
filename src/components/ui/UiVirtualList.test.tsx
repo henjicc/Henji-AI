@@ -19,3 +19,19 @@ it('共享列表和可变行高网格只挂载窗口，结果缩减/空态/两�
   view.rerender(<VirtuosoMockContext.Provider value={{ viewportHeight: 240, itemHeight: 60 }}><UiVirtualList data={data} getKey={item => item.id} renderItem={item => <div>{item.label}</div>} /></VirtuosoMockContext.Provider>)
   expect(view.getAllByText(/^record-/).length).toBeLessThan(50)
 })
+
+it('容器高度随内容（浮层）时按列表总高度自撑并封顶；容器有确定高度时铺满', () => {
+  const list = <VirtuosoMockContext.Provider value={{ viewportHeight: 240, itemHeight: 60 }}><UiVirtualList data={data} getKey={item => item.id} renderItem={item => <div>{item.label}</div>} /></VirtuosoMockContext.Provider>
+  // jsdom 没有布局，clientHeight 为 0：等同浮层里高度随内容的容器
+  const auto = render(list)
+  const autoBox = auto.container.firstElementChild as HTMLElement
+  expect(autoBox.className).toContain('max-h-virtual-list')
+  expect(autoBox.style.height).not.toBe('')
+  auto.unmount()
+  const height = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(400)
+  const fixed = render(list)
+  const fixedBox = fixed.container.firstElementChild as HTMLElement
+  expect(fixedBox.className).toContain('h-full')
+  expect(fixedBox.style.height).toBe('')
+  height.mockRestore()
+})

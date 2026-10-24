@@ -499,7 +499,7 @@ export function DialogSection(): JSX.Element {
   return (
     <GallerySection title="弹窗与通知">
       {/* 确认弹窗限定在容器内常开：危险确认按钮、次按钮与正文 */}
-      <div className="relative h-44 overflow-hidden rounded-overlay">
+      <div className="relative h-44 overflow-hidden rounded-overlay" data-gallery-ignore-rules="overlayClipped" data-gallery-ignore-reason="容器内常开的确认弹窗示意随目录滚动，滚到目录边缘被滚动区裁掉是滚动，不是浮层越界">
         <AlertDialog
           isOpen
           scope="container"

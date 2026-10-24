@@ -803,8 +803,8 @@
     },
     "settings": {
       "timeoutMs": {
-        "label": "Timeout",
-        "info": "Longest wait for a single request, in milliseconds."
+        "label": "Timeout (s)",
+        "info": "Longest wait for a single request, in seconds."
       },
       "maxRetries": {
         "label": "Retries",

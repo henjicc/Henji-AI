@@ -47,7 +47,7 @@ const value = progress.useEntry(id)
 
 超过 50 项，或数据规模来自模型目录、账号、日志且可持续增长的通用列表，必须虚拟化。新接入统一用 `@/components/ui` 的 `UiVirtualList` / `UiVirtualGrid`（基于已安装的 react-virtuoso），不要另造窗口计算器。
 
-- `UiVirtualList` 用 `data/getKey/renderItem`，自动测量可变行高；网格用 `UiVirtualGrid columns={2|3|4|5}`，卡片高度随描述、训练状态或动作变化时由正式 Virtuoso 按行测量。VoiceSelectorPanel 与 ModelSelectorPanel 已接入。
+- `UiVirtualList` 用 `data/getKey/renderItem`，自动测量可变行高；网格用 `UiVirtualGrid columns={2|3|4|5}`，卡片高度随描述、训练状态或动作变化时由正式 Virtuoso 按行测量。VoiceSelectorPanel 与 ModelSelectorPanel 已接入。放在有确定高度的容器里时铺满；放在高度随内容的浮层里时按列表总高度自撑、封顶到 `max-h-virtual-list` 后在列表内滚动（Virtuoso 视口是绝对定位的，不给高度时贡献 0，浮层里的模型网格曾因此一个都看不见）。
 - 库的 `VirtuosoGrid` 只适合等尺寸项；共享网格不作此假设，不让首项高度代表不同高度的其他项。
 - 容器提供有限高度和 `min-h-0`，只保留一个滚动所有者；用稳定实体键，搜索/筛选后回到新结果首屏；初始项数不得超过数据条数。
 - 项内关联查询先建 `Map`，禁止在每项渲染里重复 `find` 扫描整个关联列表。

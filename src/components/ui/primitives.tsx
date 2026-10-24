@@ -597,7 +597,7 @@ export const UiRangeInput = forwardRef<HTMLInputElement, UiRangeInputProps>(
     <input
       ref={ref}
       type="range"
-      className={`h-6 w-full cursor-pointer appearance-none bg-transparent focus-visible:outline-none
+      className={`h-6 w-full min-w-0 cursor-pointer appearance-none bg-transparent focus-visible:outline-none
       [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full
       [&::-webkit-slider-thumb]:-mt-1 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-0 [&::-webkit-slider-thumb]:bg-text1 [&::-webkit-slider-thumb]:shadow-thumb-sm
       [&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full

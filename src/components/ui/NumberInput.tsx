@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 
 import { SCRUB_PIXELS_PER_STEP, SCRUB_START_THRESHOLD_PX, resolveScrubFactor } from './numberScrub'
 import { UiInput, UiNumberStepper } from './primitives'
+import { UI_MENU_ITEM_PADDING_X_PX } from './dropdownUtils'
 import { useUiFormRowLabelling } from './formRowLabel'
 import { useUiFieldLayout } from './fieldLayout'
 import {
@@ -54,9 +55,16 @@ type NumberInputProps = {
 /** 键盘 Shift + 上下键一次走十个步长。 */
 const KEYBOARD_COARSE_FACTOR = 10
 
-/** 输入框左右内边距 + 步进列宽 + 余量（px）：外框最小宽度 = 读数字符数 × 1ch + 这个值，保证读数不被裁切。 */
-const NUMBER_FIELD_CHROME_PX: Record<UiFieldSize, number> = { sm: 30, md: 34, lg: 38 }
-const NUMBER_FIELD_INPUT_PADDING_CLASS: Record<UiFieldSize, string> = { sm: 'px-1.5', md: 'px-2', lg: 'px-3' }
+/**
+ * 输入框左右内边距 + 步进列宽（w-4）+ 光标余量（px）：外框最小宽度 = 读数字符数 × 1ch + 这个值，保证读数不被裁切。
+ * 内边距取输入框实际生效的字段内边距（UI_FIELD_PADDING_CLASS，与菜单测宽同一份）：此前这里按 px-1.5 / px-2 估算，
+ * 但它们排在 px-2 / px-3 之前、被覆盖不生效，算出来比实际窄 6–8px，生成页底栏的“1024”“30”末位被裁掉（重要记录 020）。
+ */
+const NUMBER_FIELD_CHROME_PX: Record<UiFieldSize, number> = {
+  sm: UI_MENU_ITEM_PADDING_X_PX.sm + 16 + 2,
+  md: UI_MENU_ITEM_PADDING_X_PX.md + 16 + 2,
+  lg: UI_MENU_ITEM_PADDING_X_PX.lg + 16 + 2,
+}
 
 function resolvePrecision(step: number): number {
   const normalized = String(step).toLowerCase()
@@ -384,7 +392,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
           placeholder={placeholder}
           // 外框已经画了字段表面与焦点环：内层输入框只负责文字，铺满高度
           frame="inner"
-          className={`min-w-0 flex-1 appearance-none tabular-nums ${NUMBER_FIELD_INPUT_PADDING_CLASS[size]} ${alignClass} ${scrubCursorClass}`}
+          className={`min-w-0 flex-1 appearance-none tabular-nums ${alignClass} ${scrubCursorClass}`}
           min={min}
           max={max}
           step={step}

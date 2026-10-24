@@ -1,8 +1,7 @@
 import { UiSpinner } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
-import { UiFormRow } from '@/components/ui'
 import React, { useEffect, useMemo, useState } from 'react'
-import { Tags, Trash2 } from 'lucide-react'
+import { Folder, Tags, Trash2 } from 'lucide-react'
 import { Dropdown, UI_GLASS_ADAPTIVE_DIVIDER_CLASS, UI_TEXT_META_CLASS, UiButton, UiChipButton, UiError, UiGroup, UiInput } from '@/components/ui'
 import type { AssetLibraryRecord } from '@/platform/contracts/assetLibrary'
 import { useI18n } from '@/hooks/useI18n'
@@ -82,8 +81,12 @@ export const AssetBatchManager: React.FC<Props> = ({
           </div>
         </UiGroup>
 
-        <UiGroup labelWidth={96} divided title={t('assetLibrary.batchLibraries')} className="mt-5">
-          <UiFormRow label={t('assetLibrary.batchLibraries')} density="compact" labelColumn="panel"><Dropdown<string> value={libraryId} options={libraries.map((library) => ({ value: library.id, label: library.name }))} onSelect={setLibraryId} className="w-full" buttonClassName="w-full" panelWidthStrategy="button" disabled={busy || libraries.length === 0} /></UiFormRow>
+        {/* 与“批量标签”同一种排布：图标 + 选择框 + 一行等宽动作；不再写一遍与分组标题重复的行标签 */}
+        <UiGroup divided title={t('assetLibrary.batchLibraries')} className="mt-5">
+          <div className="flex items-center gap-2">
+            <Folder aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.md} shrink-0 text-text3`} />
+            <Dropdown<string> ariaLabel={t('assetLibrary.batchLibraries')} value={libraryId} options={libraries.map((library) => ({ value: library.id, label: library.name }))} onSelect={setLibraryId} className="min-w-0 flex-1" buttonClassName="w-full" panelWidthStrategy="button" disabled={busy || libraries.length === 0} />
+          </div>
           <div className="flex gap-2">
             <UiButton variant="secondary" className="flex-1" disabled={disabled || !libraryId} onClick={() => void onUpdateLibrary(libraryId, 'add')}>{t('assetLibrary.batchLibraryAdd')}</UiButton>
             <UiButton variant="secondary" className="flex-1" disabled={disabled || !libraryId} onClick={() => void onUpdateLibrary(libraryId, 'remove')}>{t('assetLibrary.batchLibraryRemove')}</UiButton>

@@ -107,13 +107,13 @@ describe('NumberInput', () => {
     )
 
     const input = screen.getByRole('spinbutton', { name: '时长' })
-    expect(input.parentElement?.style.width).toBe('calc(2ch + 34px)')
+    expect(input.parentElement?.style.width).toBe('calc(2ch + 42px)')
 
     fireEvent.change(input, { target: { value: '12' } })
-    expect(input.parentElement?.style.width).toBe('calc(2ch + 34px)')
+    expect(input.parentElement?.style.width).toBe('calc(2ch + 42px)')
 
     fireEvent.change(input, { target: { value: '123' } })
-    expect(input.parentElement?.style.width).toBe('calc(3ch + 34px)')
+    expect(input.parentElement?.style.width).toBe('calc(3ch + 42px)')
   })
 
   it('固定宽度时外框最小宽度仍容纳读数，步进列不会裁掉数字', () => {
@@ -127,7 +127,7 @@ describe('NumberInput', () => {
     )
     const field = screen.getByRole('spinbutton', { name: '网格密度' }).parentElement as HTMLElement
     expect(field.classList.contains('w-16')).toBe(true)
-    expect(field.style.minWidth).toBe('calc(4ch + 34px)')
+    expect(field.style.minWidth).toBe('calc(4ch + 42px)')
   })
 
   it('在读数上按住左右拖动改值（每 2px 一步），松开后不进入编辑', () => {

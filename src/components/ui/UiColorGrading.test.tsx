@@ -13,7 +13,7 @@ it('曲线连续拖动仅开始/结束一次，Esc 停止后续指针写入；�
   const onBegin = vi.fn(); const onFinish = vi.fn(); const onCancel = vi.fn(); const onChange = vi.fn()
   const view = render(<UiToneCurve label="主曲线" values={[0, 25, 50, 75, 100]} {...{ onBegin, onFinish, onCancel, onChange }} />)
   const plot = view.getByLabelText('主曲线'); const point = view.getByRole('slider', { name: '主曲线 · 输入 50%' })
-  vi.spyOn(plot, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 100, 100))
+  vi.spyOn(plot, 'getBoundingClientRect').mockReturnValue(new DOMRect(-4, -4, 108, 108)) // 绘图区四周各留 4 的边距：取值 0–100 仍对应客户坐标 0–100
   fireEvent.pointerDown(point, { button: 0 }); fireEvent.pointerMove(plot, { clientY: 25 }); fireEvent.pointerMove(plot, { clientY: 20 }); fireEvent.pointerUp(plot)
   expect(onBegin).toHaveBeenCalledOnce(); expect(onFinish).toHaveBeenCalledOnce(); expect(onChange).toHaveBeenLastCalledWith(2, 80)
   fireEvent.pointerDown(point, { button: 0 }); fireEvent.keyDown(point, { key: 'Escape' }); onChange.mockClear(); fireEvent.pointerMove(plot, { clientY: 10 })
@@ -40,7 +40,7 @@ it('自由控制点单击添加、横纵拖动、右键/拖出删除；最少两
     return <UiToneCurve label="自由曲线" points={points} onPointsChange={setPoints} onBegin={begin} onFinish={finish} onCancel={cancel} />
   }
   const view = render(<Curve />); const plot = view.getByLabelText('自由曲线')
-  vi.spyOn(plot, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 100, 100))
+  vi.spyOn(plot, 'getBoundingClientRect').mockReturnValue(new DOMRect(-4, -4, 108, 108)) // 绘图区四周各留 4 的边距：取值 0–100 仍对应客户坐标 0–100
   fireEvent.pointerDown(plot, { button: 0, clientX: 40, clientY: 60 }); fireEvent.pointerUp(plot)
   expect(view.getAllByRole('slider')).toHaveLength(3); expect(begin).toHaveBeenCalledOnce(); expect(finish).toHaveBeenCalledOnce()
   const point = view.getByRole('slider', { name: '自由曲线 · 输入 40%' })

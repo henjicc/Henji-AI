@@ -158,6 +158,15 @@ describe('参数边界与编辑行为', () => {
     fireEvent.keyDown(b, { key: 'ArrowLeft', shiftKey: true }); expect(props.onChange).toHaveBeenLastCalledWith([2, 2])
     fireEvent.pointerDown(a, { button: 0, pointerId: 1, clientX: 20 }); fireEvent.pointerMove(a.parentElement!, { pointerId: 1, clientX: -500 }); expect(props.onChange).toHaveBeenLastCalledWith([0, 8])
   })
+  it('两个手柄重合时按第一次拖动方向决定拖哪个：往左是起点，往右是终点', () => {
+    const props = callbacks(); render(<UiRangeSlider {...props} label="区间" value={[5, 5]} min={0} max={10} step={1} />)
+    const end = screen.getByRole('slider', { name: '区间终点' })
+    // 压在上面的是终点；往左拖时改的是起点（终点被夹在起点上本来拖不动）
+    fireEvent.pointerDown(end, { button: 0, pointerId: 1, clientX: 50 }); expect(props.onChange).not.toHaveBeenCalled()
+    fireEvent.pointerMove(end.parentElement!, { pointerId: 1, clientX: 30 }); expect(props.onChange).toHaveBeenLastCalledWith([3, 5])
+    fireEvent.pointerUp(end.parentElement!, { pointerId: 1 })
+    fireEvent.pointerDown(end, { button: 0, pointerId: 2, clientX: 50 }); fireEvent.pointerMove(end.parentElement!, { pointerId: 2, clientX: 70 }); expect(props.onChange).toHaveBeenLastCalledWith([5, 7])
+  })
   it('渐变点击插值添加、maxStops 由调用方指定、颜色与透明度保持独立', () => {
     const props = callbacks(); const view = render(<UiGradientEditor {...props} label="渐变" value={gradientDefault} maxStops={3} />)
     fireEvent.pointerDown(screen.getByRole('group'), { button: 0, clientX: 25, clientY: 10 })
@@ -204,6 +213,8 @@ describe('参数边界与编辑行为', () => {
   it('曲线可加点、拖出删除内部点，首尾不可删除', () => {
     const props = callbacks(); render(<UiCurveEditor {...props} label="曲线" value={curves} />)
     const surface = screen.getByRole('group')
+    // 绘图区四周各留 5 的边距（viewBox -5..105）：外框取 -5..105，客户坐标 0–100 仍对应取值 0–1
+    vi.spyOn(surface, 'getBoundingClientRect').mockReturnValue({ ...rect, x: -5, y: -5, left: -5, top: -5, right: 105, bottom: 105, width: 110, height: 110 })
     fireEvent.pointerDown(surface, { button: 0, pointerId: 1, clientX: 25, clientY: 75 }); expect(props.onChange).toHaveBeenLastCalledWith([curves[0], { x: .25, y: .25 }, curves[1], curves[2]])
     fireEvent.pointerUp(surface, { pointerId: 1 })
     fireEvent.pointerDown(screen.getByRole('slider', { name: '曲线点2' }), { button: 0, pointerId: 1, clientX: 50, clientY: 50 }); fireEvent.pointerMove(surface, { pointerId: 1, clientX: 50, clientY: -50 }); fireEvent.pointerUp(surface, { pointerId: 1 })
@@ -213,6 +224,8 @@ describe('参数边界与编辑行为', () => {
   it('曲线按成熟软件习惯：单击在曲线上加点不改形状，靠近即抓取已有点，双击或 Ctrl+单击删点，色调端点可向内移', () => {
     const props = callbacks(); render(<UiCurveEditor {...props} label="曲线" value={curves} sample={x => x * x} />)
     const surface = screen.getByRole('group')
+    // 绘图区四周各留 5 的边距（viewBox -5..105）：外框取 -5..105，客户坐标 0–100 仍对应取值 0–1
+    vi.spyOn(surface, 'getBoundingClientRect').mockReturnValue({ ...rect, x: -5, y: -5, left: -5, top: -5, right: 105, bottom: 105, width: 110, height: 110 })
     fireEvent.pointerDown(surface, { button: 0, pointerId: 1, clientX: 30, clientY: 10 })
     expect(props.onChange).toHaveBeenLastCalledWith([curves[0], { x: .3, y: .09 }, curves[1], curves[2]])
     fireEvent.pointerUp(surface, { pointerId: 1 })

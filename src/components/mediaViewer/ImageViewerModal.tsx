@@ -221,6 +221,7 @@ export function ImageViewerModal({
             if (e.target === e.currentTarget) onClose();
           }}
         >
+          {/* 两个对比窗格是平移、缩放的视口（data-layout-scroll-region）：放大后图片伸出窗格属于正常，不算溢出或裁切（重要记录 020） */}
           <div ref={comparisonStageRef} className="absolute inset-4" data-comparison-stage="true">
             <div
               ref={resultPaneRef}
@@ -232,6 +233,7 @@ export function ImageViewerModal({
                 width: mode === 'side-by-side' ? '50%' : '100%',
               }}
               data-comparison-pane="result"
+              data-layout-scroll-region
             >
               <img
                 ref={imageRef}
@@ -265,6 +267,7 @@ export function ImageViewerModal({
                   clipPath: mode === 'overlay' ? comparisonClip(!swapped, dividerPositionRef.current) : undefined,
                 }}
                 data-comparison-pane="original"
+                data-layout-scroll-region
               >
                 <img
                   ref={comparisonImageRef}

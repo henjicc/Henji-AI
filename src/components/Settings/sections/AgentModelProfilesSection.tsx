@@ -48,13 +48,16 @@ const AGENT_MODEL_ROLES: AgentModelRole[] = ['primary', 'router', 'summarizer', 
 
 interface RuntimeSettingField {
   key: keyof AgentModelProfile['settings']
+  /** 界面单位下的范围 */
   min: number
   max?: number
+  /** 存储值 = 界面值 × scale（超时界面用秒、存毫秒：设置里不让用户填毫秒） */
+  scale?: number
 }
 
 // 文案在 settings.agentModels.settings.<key>.label / info
 const RUNTIME_SETTING_FIELDS: RuntimeSettingField[] = [
-  { key: 'timeoutMs', min: 1000 },
+  { key: 'timeoutMs', min: 1, scale: 1000 },
   { key: 'maxRetries', min: 0, max: 5 },
   { key: 'maxOutputTokens', min: 1 },
   { key: 'contextWindowBudget', min: 1 },
@@ -342,20 +345,22 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
         </UiButton>
         <UiDisclosurePanel open={advancedOpen}>
           <div className={`pt-4 ${UI_FORM_ROW_GAP_CLASS}`}>
-            {RUNTIME_SETTING_FIELDS.map(field => (
-              <UiFormRow key={field.key} label={t(`agentModels.settings.${field.key}.label`)} info={t(`agentModels.settings.${field.key}.info`)} inline>
+            {RUNTIME_SETTING_FIELDS.map(field => {
+              const stored = profile.settings[field.key]
+              // labelColumn="auto"：与设置里其他数值项一样标签在左、窄数值框在右，不按上面模型行的标签列把数值框拉满整行
+              return <UiFormRow key={field.key} label={t(`agentModels.settings.${field.key}.label`)} info={t(`agentModels.settings.${field.key}.info`)} inline labelColumn="auto">
                 {/* 与设置里其他数值项同一个控件（NumberInput：拖动改值、步进、范围夹取） */}
                 <NumberInput
-                  value={profile.settings[field.key]}
+                  value={stored === undefined ? undefined : stored / (field.scale ?? 1)}
                   min={field.min}
                   max={field.max}
                   step={1}
                   ariaLabel={t(`agentModels.settings.${field.key}.label`)}
-                  onChange={value => void updateSetting(field.key, value)}
+                  onChange={value => void updateSetting(field.key, Math.round(value * (field.scale ?? 1)))}
                   widthClassName={SETTINGS_INLINE_CONTROL_CLASS}
  />
               </UiFormRow>
-            ))}
+            })}
           </div>
         </UiDisclosurePanel>
       </div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type Key, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type Key, type ReactNode } from 'react'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 
 export interface UiVirtualListProps<T> {
@@ -11,24 +11,39 @@ export interface UiVirtualListProps<T> {
   highlightedIndex?: number
 }
 
+/**
+ * 共享虚拟列表。放在有确定高度的容器里时铺满容器；放在高度随内容的容器里（浮层的模型、音色选择）时，
+ * 按列表总高度自撑并封顶到 `max-h-virtual-list`、超出在列表里滚动。
+ * Virtuoso 的视口是绝对定位的，不给高度时贡献 0：浮层里的网格曾因此高度为 0，一个模型都看不见（重要记录 020）。
+ */
 export function UiVirtualList<T>({ data, getKey, renderItem, emptyState, resetKey = '', highlightedIndex }: UiVirtualListProps<T>): JSX.Element {
   const ref = useRef<VirtuosoHandle>(null)
+  const boxRef = useRef<HTMLDivElement>(null)
+  // null：还没量；true：容器高度随内容，按总高度自撑；false：容器给了确定高度，铺满
+  const [autoHeight, setAutoHeight] = useState<boolean | null>(null)
+  const [listHeight, setListHeight] = useState(0)
+  useLayoutEffect(() => {
+    if (autoHeight === null && boxRef.current) setAutoHeight(boxRef.current.clientHeight < 1)
+  }, [autoHeight, data.length])
   useEffect(() => {
     if (highlightedIndex !== undefined && highlightedIndex >= 0 && highlightedIndex < data.length) {
       ref.current?.scrollIntoView({ index: highlightedIndex, behavior: 'auto' })
     }
   }, [highlightedIndex, data.length, resetKey])
   if (!data.length) return <div className="flex h-full min-h-0 flex-col">{emptyState}</div>
-  return <Virtuoso
-    key={`${resetKey}:${data.length}`}
-    ref={ref}
-    className="h-full min-h-0 overscroll-contain"
-    data={data as T[]}
-    initialItemCount={Math.min(4, data.length)}
-    overscan={120}
-    computeItemKey={(_index, item) => getKey(item)}
-    itemContent={(index, item) => renderItem(item, index)}
-  />
+  return <div ref={boxRef} className={autoHeight ? 'max-h-virtual-list min-h-0' : 'h-full min-h-0'} style={autoHeight ? { height: listHeight } : undefined}>
+    <Virtuoso
+      key={`${resetKey}:${data.length}`}
+      ref={ref}
+      className="h-full min-h-0 overscroll-contain"
+      data={data as T[]}
+      initialItemCount={Math.min(4, data.length)}
+      overscan={120}
+      computeItemKey={(_index, item) => getKey(item)}
+      itemContent={(index, item) => renderItem(item, index)}
+      totalListHeightChanged={setListHeight}
+    />
+  </div>
 }
 
 export interface UiVirtualGridProps<T> extends UiVirtualListProps<T> {
