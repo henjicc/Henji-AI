@@ -13,6 +13,7 @@ import { forgetActiveWebRecording, listWebRecordingLocations, rememberActiveWebR
 import { getDocumentService } from '../documents/runtime'
 import { stripHenjiExtension } from '../../../../src/core/fileExtensions'
 import { copyDirectoryContentsNoOverwrite } from '../fs/no-overwrite'
+import { newestReplayName, REPLAY_CLEAN_SUFFIX } from '../../../../src/core/webReplay/replayVideos'
 
 const logger = createMainLogger('main.web_replay')
 const MAX_EXTERNAL_BYTES = 32 * 1024 * 1024
@@ -171,7 +172,7 @@ const trashOrigin = (id: string): string => path.join(webRecordingsRoot(), TRASH
 
 /** The newest replay video inside a recording directory (names sort by render time). */
 async function latestVideo(directory: string): Promise<string | null> {
-  const newest = (await fs.readdir(directory).catch(() => [] as string[])).filter(name => /^replay-.*\.mp4$/.test(name)).sort().at(-1)
+  const newest = newestReplayName(await fs.readdir(directory).catch(() => [] as string[]))
   return newest ? path.join(directory, newest) : null
 }
 
@@ -317,9 +318,10 @@ export async function renderWebRecording(request: WebReplayRenderRequest, signal
   rendering.add(request.recordingId)
   try {
     const directory = await resolveWebRecordingDirectory(request.recordingId)
-    const output = request.output ?? path.join(directory, `replay-${new Date().toISOString().replace(/[:.]/g, '-')}.mp4`)
+    // 干净画面（不画鼠标）的重演以 .clean.mp4 结尾：导入剪辑据此决定重画整个鼠标，还是只补点击。
+    const output = request.output ?? path.join(directory, `replay-${new Date().toISOString().replace(/[:.]/g, '-')}${request.pointer === false ? REPLAY_CLEAN_SUFFIX : '.mp4'}`)
     await fs.mkdir(path.dirname(output), { recursive: true })
     logger.info('开始网页重演', { event: 'web_replay.replay.start', context: { recordingId: request.recordingId, output } })
-    return await WebRecordingPlayer.open(directory).render({ output, fps: request.fps, signal, onFrame: onProgress ? (progress, frame) => onProgress({ recordingId: request.recordingId, progress, frame }) : undefined })
+    return await WebRecordingPlayer.open(directory).render({ output, fps: request.fps, pointer: request.pointer !== false, signal, onFrame: onProgress ? (progress, frame) => onProgress({ recordingId: request.recordingId, progress, frame }) : undefined })
   } finally { rendering.delete(request.recordingId) }
 }

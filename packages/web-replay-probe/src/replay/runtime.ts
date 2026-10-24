@@ -167,7 +167,7 @@ export function installReplayRuntime(host: ReplayHost): void {
     return { x, y }
   }
   win[REPLAY_CONTROL] = { locate, pointFor: (target: ElementInfo) => locate(target.locator, target.offset) }
-  installCursorOverlay()
+  if (host.boot.pointer !== false) installCursorOverlay()
   host.report({ kind: 'ready', now: performance.now() })
 }
 

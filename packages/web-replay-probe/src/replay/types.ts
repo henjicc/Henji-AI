@@ -11,6 +11,8 @@ export interface ReplayBoot {
   /** Recorded host → page callbacks, keyed by the recorded call that carried them. */
   callbacks: Array<{ call: number; index: number; t: number; payload: Encoded }>
   locator: LocatorOptions
+  /** false: draw no pointer inside the page (a clean picture for editing; the editor redraws the pointer). Omitted means drawn. */
+  pointer?: boolean
 }
 
 export interface ReplayHttpRequest { method: string; url: string; headers: HeaderList; body?: WireBody; via: 'seam' | 'fetch' }

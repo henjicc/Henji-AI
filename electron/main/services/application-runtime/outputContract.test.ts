@@ -214,7 +214,7 @@ successData.import_web_recording_to_project = { resultRef: webRecordingRef, docu
 successData.stop_web_app_recording = { resultRef: webRecordingRef, status: 'complete', durationMs: 1000, warnings: [], verified: true, ...revisions }
 // 数据轨沿 webReplay/matcher.test.ts 的 HTTP 录制条目结构，保留分页续读。
 successData.read_web_app_recording = { entries: [{ kind: 'http', id: 1, t: 10, via: 'seam', method: 'GET', url: 'https://example.test/data', headers: [], chunks: [] }], total: 2, nextOffset: 1, ...revisions }
-successData.render_web_app_replay = { resultRef: webRecordingRef, video: 'replay.mp4', width: 1280, height: 720, frames: 30, conflicts: [], warnings: [], verified: true, ...revisions }
+successData.render_web_app_replay = { resultRef: webRecordingRef, video: 'replay.clean.mp4', pointer: false, width: 1280, height: 720, frames: 30, conflicts: [], warnings: [], verified: true, ...revisions }
 const taskObservation = { taskRef: ref('camera_stage.render_task', 'task'), status: 'completed', revisions: { camera_stage: 1 }, phase: null, progress: 1, outputKind: 'image', message, resultRefs: [nodeRef], recovery: null, ...revisions }
 successData.get_camera_stage_render_task = taskObservation
 successData.wait_camera_stage_render_task = { ...taskObservation, waitReason: 'terminal' }

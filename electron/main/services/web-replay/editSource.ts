@@ -14,6 +14,7 @@ import { loadFfprobePath } from '../video/ffmpeg-loader'
 import { BACKUP_TIMING_FILE, BACKUP_VIDEO_FILE } from './backupVideo'
 import { resolveWebRecordingLocation } from './locations'
 import { WebRecordingStore } from './store'
+import { isCleanReplayName, newestReplayName } from '../../../../src/core/webReplay/replayVideos'
 
 const logger = createMainLogger('main.web_replay.edit_source')
 /** Pages projected for one video live beside it: `edit-events/<video name>/`. Pages are immutable and reused. */
@@ -29,8 +30,10 @@ async function probeVideo(file: string): Promise<{ width: number; height: number
   return { width: stream.width, height: stream.height, durationUs: Math.round(duration * 1e6) }
 }
 
+/** 干净画面的重演优先；只有画了鼠标的重演时用它（鼠标已在画面里，只补点击）。 */
 async function newestReplay(directory: string): Promise<string | null> {
-  const name = (await fs.readdir(directory).catch(() => [] as string[])).filter(value => /^replay-.*\.mp4$/.test(value)).sort().at(-1)
+  const names = await fs.readdir(directory).catch(() => [] as string[])
+  const name = newestReplayName(names, { clean: true }) ?? newestReplayName(names)
   return name ? path.join(directory, name) : null
 }
 
@@ -42,8 +45,9 @@ async function readPages(directory: string): Promise<CaptureLogPage[]> {
 
 /**
  * The video a web recording brings into an edit, with its behavior track projected onto that video's clock and pixels
- * as capture-log pages, so the clip gets the existing redrawn pointer and click zoom. Newest replay first (clean,
- * no pointer in the picture), the backup screen recording otherwise (pointer already in the picture: only clicks are drawn).
+ * as capture-log pages, so the clip gets the existing redrawn pointer and click zoom. Newest clean replay first (no pointer
+ * in the picture: the pointer is redrawn), then a replay rendered with the pointer, then the backup screen recording
+ * (for both of those the pointer is already in the picture: only clicks are drawn).
  */
 export async function webRecordingEditSource(recordingId: string, prefer: 'replay' | 'backup' | 'auto' = 'auto'): Promise<WebRecordingEditSource> {
   const { directory } = await resolveWebRecordingLocation(recordingId)
@@ -58,6 +62,8 @@ export async function webRecordingEditSource(recordingId: string, prefer: 'repla
   const video = kind === 'replay' ? replay! : backup!
   const frame = await probeVideo(video)
   const warnings: string[] = []
+  const pointerInPicture = kind === 'backup' || !isCleanReplayName(path.basename(video))
+  if (kind === 'replay' && pointerInPicture) warnings.push('这段重演视频里已经画了鼠标，只补点击效果；想在剪辑里重画鼠标，先用 render_web_app_replay（pointer=false）重演出干净画面')
   let clock: WebRecordingVideoClock | null = { kind: 'replay' }
   if (kind === 'backup') {
     const timing = await fs.readFile(path.join(directory, BACKUP_TIMING_FILE), 'utf8').then(text => webRecordingBackupTimingSchema.parse(JSON.parse(text)), () => null)
@@ -94,7 +100,7 @@ export async function webRecordingEditSource(recordingId: string, prefer: 'repla
   return {
     ...base,
     cursor: {
-      ownerRef, sourceDigest, cursorBakedIn: kind === 'backup', recordingStartUs: 0, width: frame.width, height: frame.height,
+      ownerRef, sourceDigest, cursorBakedIn: pointerInPicture, recordingStartUs: 0, width: frame.width, height: frame.height,
       pages: pages.map((page, index) => recordingCursorPageReference(page, path.join(pagesDirectory, names[index]), names[index].slice(17, 81))),
     },
     events,

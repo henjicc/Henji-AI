@@ -29,6 +29,8 @@ export interface ReplayResult {
 }
 export interface ReplayOptions {
   output: string; fps?: number; show?: boolean; signal?: AbortSignal
+  /** false renders a clean picture without the pointer (for the editor, which redraws it). Default true. */
+  pointer?: boolean
   /** Live preview: progress 0..1 and a small JPEG data URL, about five times a second. */
   onFrame?: (progress: number, frame: string) => void
 }
@@ -85,6 +87,7 @@ export class WebRecordingPlayer {
       boot: {
         host: this.manifest.host, env: this.manifest.env, wallAtZeroMs: this.manifest.wallAtZeroMs, random: this.data.random,
         clipboard: this.data.clipboard.map(c => c.text), callbacks: this.data.callbacks, locator: DEFAULT_LOCATOR_OPTIONS,
+        ...(this.pointer ? {} : { pointer: false }),
       },
     }
   }
@@ -114,9 +117,11 @@ export class WebRecordingPlayer {
   }
 
   private storage: unknown
+  private pointer = true
 
   async render(options: ReplayOptions): Promise<ReplayResult> {
     installIpc()
+    this.pointer = options.pointer !== false
     this.manifest = await this.store.readManifest()
     if (this.manifest.status === 'recording') throw new Error('这段网页录制尚未结束')
     ;[this.data, this.behavior, this.storage] = await Promise.all([this.store.readData(), this.store.readBehavior(), this.store.readStorage().catch(() => ({ local: [], session: [], indexedDB: [] }))])

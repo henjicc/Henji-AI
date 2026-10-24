@@ -150,9 +150,9 @@ export async function executeWebAppCapability(id: string, input: unknown, contex
   }
   const parsed = renderWebAppReplayCapability.inputSchema.parse(input)
   context.signal.throwIfAborted()
-  const result = await platform.render({ recordingId: parsed.recordingRef.id, fps: parsed.fps })
+  const result = await platform.render({ recordingId: parsed.recordingRef.id, fps: parsed.fps, pointer: parsed.pointer })
   return {
-    resultRef: parsed.recordingRef, video: result.output, width: result.width, height: result.height, frames: result.frames,
+    resultRef: parsed.recordingRef, video: result.output, pointer: parsed.pointer, width: result.width, height: result.height, frames: result.frames,
     conflicts: result.issues.filter(i => i.kind === 'conflict').map(i => i.message), warnings: result.issues.filter(i => i.kind === 'warning').map(i => i.message), verified: result.frames > 0,
   }
 }

@@ -74,7 +74,8 @@ export interface WebReplayRenderProgress { recordingId: string; progress: number
 export interface WebReplayServerState { enabled: boolean; listening: boolean; port: number; error?: string; apps: WebReplayConnectedApp[] }
 
 /** `output` defaults to a new file inside the recording directory. */
-export interface WebReplayRenderRequest { recordingId: string; output?: string; fps?: number }
+/** pointer=false renders a clean picture (no pointer drawn in the page) for the editor; omitted keeps the pointer for viewing. */
+export interface WebReplayRenderRequest { recordingId: string; output?: string; fps?: number; pointer?: boolean }
 export interface WebReplayRenderResult {
   output: string
   frames: number
