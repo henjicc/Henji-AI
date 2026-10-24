@@ -1,4 +1,5 @@
 import { createApplicationControlApi } from './application-control-api'
+import { encodeNativeErrorMessage } from '../../src/core/nativeErrors'
 import type { AudioEditSpectralProgress } from '../../src/core/audioEdit/spectralPyramid'
 import { createAudioLoudnessApi } from './audio-loudness-api'
 import { createScreenRecordingApi } from './screen-recording-api'
@@ -70,7 +71,8 @@ async function nativeInvoke<T>(channel: string, payload?: unknown): Promise<T> {
     return result.data
   }
 
-  const error = new Error(result.error.message)
+  // contextBridge 复制错误时丢掉 name：编进 message，平台层还原（src/core/nativeErrors.ts）
+  const error = new Error(encodeNativeErrorMessage(result.error.name, result.error.message))
   error.name = result.error.name
   throw error
 }

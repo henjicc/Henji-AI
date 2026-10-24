@@ -39,10 +39,16 @@ export function useLoadTaskHistory({
       // 画布结果归原文档；首次历史/实体读取先由正式任务服务对账，再读取同一持久记录。
       for (const record of historyRecords) {
         if (!record.params.__canvasGeneration) continue
-        const { getCanvasGenerationTask } = await import('@/features/canvas/application/canvasGenerationTaskService')
-        await getCanvasGenerationTask(record.id)
-        const reconciled = await databaseService.getHistoryById(record.id)
-        if (reconciled) Object.assign(record, reconciled)
+        // 一条记录对账失败（原画布损坏、读不到）只影响这一条：按已保存的记录显示。
+        // 此前异常冒出循环，整份历史加载失败，生成页一条历史都不显示（重要记录 020）
+        try {
+          const { getCanvasGenerationTask } = await import('@/features/canvas/application/canvasGenerationTaskService')
+          await getCanvasGenerationTask(record.id)
+          const reconciled = await databaseService.getHistoryById(record.id)
+          if (reconciled) Object.assign(record, reconciled)
+        } catch (error) {
+          logger.warn('[Workspace] 画布生成记录对账失败，按已保存的记录显示', { taskId: record.id, error })
+        }
       }
       const resolveMedia = createHistoryMediaResolver(await getThumbnailsPath())
       const loadedTasks = await Promise.all(historyRecords.map((r) => mapHistoryRecordToTask(r, resolveMedia)))

@@ -14,7 +14,8 @@ vi.mock('@/services/database/DatabaseService', () => ({ databaseService: {
 } }))
 vi.mock('@/utils/save', () => ({ isDesktop: () => true }))
 vi.mock('@/utils/dataPath', () => ({ getThumbnailsPath: async () => '/program/Thumbnails' }))
-vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: vi.fn(), error: vi.fn() }) }))
+vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
+vi.mock('@/features/canvas/application/canvasGenerationTaskService', () => ({ getCanvasGenerationTask: vi.fn(async () => null) }))
 vi.mock('@/utils/historyThumbnail', () => ({ prepareHistoryThumbnails: vi.fn(async () => undefined) }))
 import { publishPersistedGenerationTask } from '../application/generationTaskHistory'
 import { replaceGenerationTasks } from '../application/generationTaskProjection'
@@ -63,6 +64,23 @@ it('已停止画布任务加载为非活动历史，保留说明且不重新保�
   await vi.waitFor(() => expect(setTasks).toHaveBeenCalledWith([expect.objectContaining({ id: value.id, status: 'cancelled', error: '本地任务已停止' })]))
   expect(databaseService.updateHistory).not.toHaveBeenCalled()
   expect(databaseService.insertHistory).not.toHaveBeenCalled()
+})
+
+it('一条画布生成记录对账失败只影响这一条，其余历史照常加载（重要记录 020）', async () => {
+  const { getCanvasGenerationTask } = await import('@/features/canvas/application/canvasGenerationTaskService')
+  vi.mocked(getCanvasGenerationTask).mockRejectedValueOnce(new Error('找不到这份文档，它可能已被移动、改名或删除。'))
+  const make = (id: string, params: HistoryRecord['params']): HistoryRecord => ({ id, providerId: 'fixture', modelId: 'm', type: 'image', prompt: id,
+    params, resultPaths: [], taskId: null, status: 'cancelled', errorMessage: null,
+    cost: null, duration: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+  vi.mocked(databaseService.getHistory).mockResolvedValueOnce([
+    make('canvas-orphan', { __canvasGeneration: { projectId: 'gone', nodeId: 'n', version: 2 } }),
+    make('plain', {}),
+  ])
+  const setTasks = vi.fn()
+  renderHook(() => useLoadTaskHistory({ setTasks, setIsTasksLoaded: vi.fn(), isInitialLoadRef: { current: true } }))
+  await vi.waitFor(() => expect(setTasks).toHaveBeenCalledWith(expect.arrayContaining([
+    expect.objectContaining({ id: 'canvas-orphan' }), expect.objectContaining({ id: 'plain' }),
+  ])))
 })
 
 it('跨任务延迟和旧防抖快照不覆盖后来的成功状态，数据库只按主键读取', async () => {

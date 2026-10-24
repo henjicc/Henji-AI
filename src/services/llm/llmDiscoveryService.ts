@@ -1,3 +1,4 @@
+import { restoreNativeErrorName } from '@/core/nativeErrors'
 import { createLogger } from '@/core/logging'
 import type { LlmCapabilities, LlmModelConfig, LlmProviderConfig } from '@henjicc/ai-sdk'
 import { createLlmCapabilitiesForModel } from '@/core/llm/defaults'
@@ -66,7 +67,9 @@ export async function fetchOpenAiCompatibleModels(
   try {
     return await window.henjiNative!.llm.discoverModels({ ...provider, baseUrl })
   } catch (error) {
-    logger.error('[llmDiscoveryService] fetchOpenAiCompatibleModels failed', error)
-    throw error
+    // 直接走桌面桥（不经平台层）：自己还原错误名与原文，界面上不出现编码前缀
+    const restored = restoreNativeErrorName(error)
+    logger.error('[llmDiscoveryService] fetchOpenAiCompatibleModels failed', restored)
+    throw restored
   }
 }

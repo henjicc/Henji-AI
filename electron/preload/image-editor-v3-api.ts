@@ -1,3 +1,4 @@
+import { encodeNativeErrorMessage } from '../../src/core/nativeErrors'
 import type {
   ImageEditorV3Platform,
   ImageEditorV3SourceTile,
@@ -62,7 +63,7 @@ function readSourceTilesStream(
         return
       }
       if (message.type === 'error') {
-        const error = new Error(message.message)
+        const error = new Error(encodeNativeErrorMessage(message.name, message.message))
         error.name = message.name
         finish(() => reject(error))
         return

@@ -37,9 +37,10 @@ import { createElectronSceneDetection } from './sceneDetection'
 import { createElectronWebReplay } from './webReplay'
 import { createElectronMusicAnalysis } from './musicAnalysis'
 import { createElectronScreenRecording } from './screenRecording'
+import { withNativeErrorNames } from './nativeErrors'
 
 export function createElectronPlatform(): PlatformRuntime {
-  return {
+  return withNativeErrorNames({
     appMenu: createElectronAppMenu(),
     screenRecording: createElectronScreenRecording(),
     embeddedAgent: createElectronEmbeddedAgent(),
@@ -80,5 +81,5 @@ export function createElectronPlatform(): PlatformRuntime {
     sceneDetection: createElectronSceneDetection(),
     webReplay: createElectronWebReplay(),
     musicAnalysis: createElectronMusicAnalysis(),
-  }
+  })
 }
