@@ -27,3 +27,9 @@ test('捕获清单来自正式配置，缺图不能比较为零', () => {
   assert.ok(list.includes('paper/1440x900-review-ui-gallery-gallery-one-bottom.png'))
   assert.throws(() => expectedGalleryCaptures({ steps: [] }), /捕获/)
 })
+test('逐屏截图按本次运行实际截到的屏数展开，按序号排序', () => {
+  const config = { steps: [{ capture: 'gallery-one-top' }, { scrollCapture: { name: 'gallery-one' } }] }
+  const list = expectedGalleryCaptures(config, { graphite: ['gallery-one-top', 'gallery-one-10', 'gallery-one-2', 'gallery-one-1', 'gallery-two-1'], paper: ['gallery-one-top', 'gallery-one-1'] })
+  assert.deepEqual(list.filter(file => file.startsWith('graphite/')).map(file => file.replace(/^.*gallery-gallery-/, '')), ['one-top.png', 'one-1.png', 'one-2.png', 'one-10.png'])
+  assert.equal(list.filter(file => file.startsWith('paper/')).length, 2)
+})

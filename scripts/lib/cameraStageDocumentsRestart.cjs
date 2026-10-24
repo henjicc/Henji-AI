@@ -100,10 +100,21 @@ async function openCameraStageList(page) {
   await page.waitForTimeout(500)
 }
 
+/** 编辑器已打开：命令带上的撤销按钮常驻（快速添加按钮窄窗口下会收进“更多添加”） */
+function editorReady(page) {
+  return page.locator('[data-command-bar] [aria-label="撤销"]:visible').first()
+}
+
+/** 点快速添加；被收进“更多添加”时先打开菜单 */
+async function quickAdd(page, label) {
+  if (!(await button(page, label).count())) await button(page, '更多添加').click()
+  await button(page, label).click()
+}
+
 async function createDraftAndAddSphere(page, { edit = true } = {}) {
   await button(page, '新建镜头参考').click()
-  await page.locator('[title="添加球体"]:visible').waitFor({ state: 'visible', timeout: 20000 })
-  if (edit) await page.locator('[title="添加球体"]:visible').click()
+  await editorReady(page).waitFor({ state: 'visible', timeout: 20000 })
+  if (edit) await quickAdd(page, '添加球体')
   await page.waitForTimeout(400)
 }
 
@@ -189,7 +200,7 @@ async function runCameraStageDocumentsRestart({ launch, userDataDir, outDir }) {
     let prompt = await leavePrompt(page)
     await shot('graphite-leave-prompt')
     await prompt.getByRole('button', { name: '取消', exact: true }).click()
-    await page.locator('[title="添加球体"]:visible').waitFor({ state: 'visible', timeout: 5000 })
+    await editorReady(page).waitFor({ state: 'visible', timeout: 5000 })
     assert.equal(fs.existsSync(draftOne.path), true, '取消后草稿文件必须还在')
 
     // 保存：起名查重（同一文件夹已有“镜头查重”），换名后转正

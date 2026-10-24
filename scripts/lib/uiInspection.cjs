@@ -7,7 +7,8 @@ const { createReviewStepContext } = require('./uiReviewContext.cjs')
 const { loadStepScenes } = require('./uiReviewSteps.cjs')
 const { inspectInspectionScreenshot } = require('./uiInspectionCapture.cjs')
 
-const WINDOW_SIZE_TOLERANCE_PX = 2
+// 分数 DPI（150%）下 960×640 稳定回 961–962 × 643：容差 3px；真正没设上的差值是几百像素
+const WINDOW_SIZE_TOLERANCE_PX = 3
 const UI_INSPECTION_CANVAS_PROJECT_ID = '__henji_ui_inspection_canvas_fixture__'
 const UI_INSPECTION_CANVAS_PROJECT_NAME = '__Henji UI Inspection Canvas Fixture__'
 const UI_INSPECTION_QUICK_PROJECT_NAME = '回归-拖放连接与提示词换行'
@@ -394,8 +395,8 @@ async function setInspectionWindowSize(app, size) {
     windowHandle.center()
   }, size)
   const actualSize = await browserWindow.evaluate((windowHandle) => windowHandle.getSize())
-  // 允许 ±2px：Windows 上无边框但保留 thickFrame 的窗口会带一圈不可见的缩放边，
-  // 分数 DPI 缩放（125% / 150%）下 setSize 之后 getSize 稳定回 +1~+2。
+  // 允许 ±3px：Windows 上无边框但保留 thickFrame 的窗口会带一圈不可见的缩放边，
+  // 分数 DPI 缩放（125% / 150%）下 setSize 之后 getSize 稳定回 +1~+3（960×640 → 962×643）。
   // 这是操作系统调整的结果，不是设置失败；严格相等会让整套巡检在这类机器上完全跑不起来。
   // 容差不能再放大：真正的"尺寸没设上"（比如漏了 unmaximize）差值是几百像素级别。
   if (

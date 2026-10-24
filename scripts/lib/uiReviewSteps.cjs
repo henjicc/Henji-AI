@@ -72,7 +72,11 @@ const STEP_ACTIONS = Object.freeze({
   seedAudioEdit: (value) => normalizeSeedAudioEdit(value),
   // 剪辑夹具工程（临时 MP4 + 两序列工程文件，主进程“打开”对话框直接返回它；需 writesUserData: true），见 uiReviewVideoEditFixture.cjs
   seedVideoEdit: (value) => normalizeSeedVideoEdit(value),
-  click: (value) => ({ target: normalizeTarget(value?.target ?? value), button: value?.button ?? 'left' }),
+  // overflow：目标在窄窗口下可能被收进“更多”菜单（收起项不挂载）。找不到可见目标时先点开这个入口，再点菜单里的同名项。
+  click: (value) => {
+    const { overflow, ...rest } = value && typeof value === 'object' ? value : {}
+    return { target: normalizeTarget(rest.target ?? rest), button: rest.button ?? 'left', overflow: overflow ? normalizeTarget(overflow) : null }
+  },
   doubleClick: (value) => ({ target: normalizeTarget(value?.target ?? value) }),
   rightClick: (value) => ({ target: normalizeTarget(value?.target ?? value) }),
   hover: (value) => ({ target: normalizeTarget(value?.target ?? value) }),
@@ -135,6 +139,12 @@ const STEP_ACTIONS = Object.freeze({
     return { target: normalizeTarget({ includeHidden: true, ...value.target }), files: value.files.map(String) }
   },
   scroll: (value) => ({ target: normalizeTarget(value?.target ?? value), dx: Number(value?.dx ?? 0), dy: Number(value?.dy ?? 240) }),
+  // 逐屏滚到底并逐屏截图（name-1、name-2……）：每次滚可见高度的八成，与窗口尺寸无关。
+  // 写死“每次滚 360px”的步骤在 640 高的窗口里一屏装不下，中段漏截（重要记录 020）。
+  scrollCapture: (value) => {
+    if (!value?.name || !/^[a-z0-9-]+$/.test(value.name)) throw new Error(`scrollCapture.name 只能是小写字母、数字与连字符：${value?.name}`)
+    return { target: normalizeTarget(value.target), name: value.name, max: positiveInteger(value.max ?? 80, 'scrollCapture.max') }
+  },
   waitFor: (value) => ({ target: normalizeTarget(value?.target ?? value), state: value?.state ?? 'visible' }),
   wait: (value) => ({ ms: positiveInteger(typeof value === 'number' ? value : value?.ms, 'wait') }),
   waitStable: (value) => ({ target: value?.target ? normalizeTarget(value.target) : null }),
@@ -310,7 +320,10 @@ const TEMPLATE_PROBE = new Proxy({}, { get: (_target, key) => (typeof key === 's
 /** 深拷贝并把字符串里的 {{key}} 换成变体字段；缺字段直接报错，避免截到错模型。 */
 function expandTemplate(value, vars) {
   if (typeof value === 'string') {
-    return value.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (_whole, key) => {
+    return value.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (whole, key) => {
+      // {{size}} 不是变体字段：留到执行时按当前窗口档展开（fill）。结构校验的占位变体对任何字段都返回 probe，
+      // 不能让它把 {{size}} 提前换掉
+      if (key === 'size') return whole
       if (!(key in vars) || vars[key] === undefined) throw new Error(`模板字段 {{${key}}} 在变体里不存在`)
       return String(vars[key])
     })
@@ -380,6 +393,16 @@ function buildDevSurfaceUrl(currentUrl, { surface, media, updatePreview }, root 
   if (updatePreview) url.searchParams.set('henjiDevUpdatePreview', updatePreview)
   else url.searchParams.delete('henjiDevUpdatePreview')
   return url.toString()
+}
+
+async function leaveDevSurface(page, context) {
+  const url = new URL(page.url())
+  if (!url.searchParams.has('henjiDevSurface')) return
+  for (const key of ['henjiDevSurface', 'henjiDevMedia', 'henjiDevUpdatePreview']) url.searchParams.delete(key)
+  await page.goto(url.toString(), { waitUntil: 'domcontentloaded' })
+  await page.waitForFunction(() => Boolean(window.henjiNative), null, { timeout: 30000 })
+  await page.waitForFunction(() => document.documentElement.dataset.uiScale !== undefined, null, { timeout: 15000 })
+  await context.settlePage(page)
 }
 
 /** 定位 → Playwright Locator。默认只取可见元素的第一个；commonAncestorWith / closest 取最深的匹配祖先。 */
@@ -584,6 +607,7 @@ async function runStep(page, step, runtime) {
       if (step.workspace) {
         await context.openWorkspace(page, step.workspace)
       } else {
+        runtime.devSurfaceEntered = true
         await page.goto(buildDevSurfaceUrl(page.url(), step), { waitUntil: 'domcontentloaded' })
         await page.waitForFunction(() => Boolean(window.henjiNative), null, { timeout: 30000 })
         await page.locator(`[data-application-surface-id="${step.surface}"]:visible`).first()
@@ -594,6 +618,7 @@ async function runStep(page, step, runtime) {
       }
       return
     case 'click':
+      if (step.overflow && !(await resolveTarget(page, step.target).count())) await resolveTarget(page, step.overflow).click({ timeout })
       await resolveTarget(page, step.target).click({ timeout, button: step.button, ...pointOption(step.target) })
       return
     case 'doubleClick':
@@ -614,9 +639,12 @@ async function runStep(page, step, runtime) {
       if (step.target) await resolveTarget(page, step.target).press(step.key, { timeout })
       else await page.keyboard.press(step.key)
       return
-    case 'fill':
-      await resolveTarget(page, step.target).fill(step.text, { timeout })
+    case 'fill': {
+      // {{size}}：当前窗口档（如 960x640）。两档尺寸在同一实例里连跑，存盘起名的场景靠它避开上一档留下的同名文件
+      const size = ctx.requestedWindowSize ? `${ctx.requestedWindowSize.width}x${ctx.requestedWindowSize.height}` : ''
+      await resolveTarget(page, step.target).fill(step.text.split('{{size}}').join(size), { timeout })
       return
+    }
     case 'open': {
       await resolveTarget(page, step.trigger).click({ timeout })
       const overlay = step.expect ? resolveTarget(page, step.expect) : page.locator(OVERLAY_SELECTOR).last()
@@ -733,6 +761,25 @@ async function runStep(page, step, runtime) {
       await page.mouse.wheel(step.dx, step.dy)
       return
     }
+    case 'scrollCapture': {
+      const scroller = resolveTarget(page, step.target)
+      for (let index = 1; ; index += 1) {
+        // 直接改 scrollTop：滚轮落点下常有内层列表，会把滚轮吃掉
+        const moved = await scroller.evaluate((node) => {
+          const rect = node.getBoundingClientRect()
+          const visible = Math.max(0, Math.min(rect.bottom, innerHeight) - Math.max(rect.top, 0))
+          const before = node.scrollTop
+          if (before + node.clientHeight >= node.scrollHeight - 1) return false
+          node.scrollTop = before + Math.max(120, Math.floor(Math.min(visible, node.clientHeight) * 0.8))
+          return node.scrollTop !== before
+        }, undefined, { timeout })
+        if (!moved) return
+        if (index > step.max) throw new Error(`scrollCapture 截了 ${step.max} 屏仍未滚到底：${step.name}`)
+        await waitForStable(page, context.settlePage, { timeout })
+        const suffix = prefix ? `${prefix}-${step.name}-${index}` : `${step.name}-${index}`
+        await ctx.capture(suffix, runtime.activePage ? { page: runtime.activePage } : undefined)
+      }
+    }
     case 'waitFor':
       await resolveTarget(page, step.target).waitFor({ state: step.state, timeout })
       return
@@ -764,7 +811,18 @@ async function runStep(page, step, runtime) {
         await page.waitForTimeout(60)
         if (!moved && !(await item.count())) break
       }
-      await item.scrollIntoViewIfNeeded({ timeout })
+      // 挂载了但可能在可视区外：直接把列表滚到它居中。Playwright 的 scrollIntoViewIfNeeded 一滚，虚拟网格就换掉
+      // 这一行的节点，它会一直等元素稳定直到超时（偶发：kie-kling-3-0）
+      await panel.evaluate((root, selector) => {
+        const target = root.querySelector(selector)
+        const scroller = target && [...root.querySelectorAll('*')].find((node) => node.contains(target) && node.scrollHeight > node.clientHeight + 2 && ['auto', 'scroll'].includes(getComputedStyle(node).overflowY))
+        if (!target || !scroller) return
+        const box = target.getBoundingClientRect()
+        const view = scroller.getBoundingClientRect()
+        if (box.top >= view.top && box.bottom <= view.bottom) return
+        scroller.scrollTop += box.top - view.top - (view.height - box.height) / 2
+      }, `[data-model-id="${step.modelId}"][data-provider-id="${step.providerId}"]`)
+      await page.waitForTimeout(80)
       await item.click({ timeout })
       await panel.waitFor({ state: 'hidden', timeout })
       return
@@ -1007,6 +1065,9 @@ function compileStepScene(spec, context) {
             delete globalThis.__henjiUiReviewDialogs
           }).catch(() => undefined)
         }
+        // 开发入口靠地址参数打开：场景结束回到普通地址。设计系统中心这类全窗口入口留着会盖住后面的场景，
+        // 后面场景里的重载也会把它重新打开（重要记录 020：两档尺寸连跑时 960 的头几个场景全部找不到页面）
+        if (runtime.devSurfaceEntered) await leaveDevSurface(page, context).catch(() => undefined)
         // IPC 替身先于付费保护恢复：生成通道替身保存的“替换前处理器”就是付费保护的拒绝处理器
         if (runtime.ipcStubbed) await restoreIpcStubs(electronApp)
         await unblockPaidGeneration()

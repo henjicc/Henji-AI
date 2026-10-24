@@ -36,9 +36,13 @@ function attachUiInspectionSupport(context) {
   async function setupCameraStageStyledEditor(page) {
     await setupCameraStageProjectList(page)
     await page.getByRole('button', { name: /^(新建镜头参考|New Camera Stage)$/i }).first().click()
-    await page.locator('[title="添加球体"]:visible').waitFor({ state: 'visible', timeout: 12000 })
-    await page.locator('[title="添加球体"]:visible').click()
-    await page.locator('[title="添加摄像机"]:visible').click()
+    // 快速添加按钮窄窗口下会收进“更多添加”（收起项不挂载）；编辑器就绪看常驻的撤销按钮
+    await page.locator('[data-command-bar] [aria-label="撤销"]:visible').first().waitFor({ state: 'visible', timeout: 12000 })
+    for (const label of ['添加球体', '添加摄像机']) {
+      const add = () => page.getByRole('button', { name: label, exact: true }).filter({ visible: true }).first()
+      if (!(await add().count())) await page.getByRole('button', { name: '更多添加', exact: true }).filter({ visible: true }).first().click()
+      await add().click()
+    }
     const renderStyle = page.getByRole('button', { name: '渲染方式' }).filter({ visible: true }).first()
     await renderStyle.waitFor({ state: 'visible', timeout: 12000 })
     await renderStyle.click()

@@ -503,7 +503,20 @@
       {
         "click": {
           "role": "menuitem",
-          "name": "窗口"
+          "name": "更多",
+          "exact": true,
+          "within": {
+            "selector": "[data-app-menubar]"
+          }
+        },
+        "ifPresent": {
+          "selector": "[data-app-menu=\"more\"]"
+        }
+      },
+      {
+        "click": {
+          "role": "menuitem",
+          "name": "/^窗口/"
         }
       },
       {

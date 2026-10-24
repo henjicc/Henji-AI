@@ -235,6 +235,8 @@ function auditUiDom(context = {}) {
     if (/rgba?\([^)]*\)\s+0px\s+0px\s+0px\s+0px/.test(style.boxShadow)) continue
     // 键盘焦点环（ring 用 box-shadow 画）不是表面层级阴影；组件样张页的强制聚焦态等同真实聚焦（任务 5.11）
     if (element.matches(':focus-visible, .henji-gallery-force-focus')) continue
+    // 阴影正在过渡（失焦后焦点环淡出那 120ms）截到的是中间值，不是静止的层级阴影
+    if (typeof element.getAnimations === 'function' && element.getAnimations().some((animation) => animation.playState === 'running')) continue
     let node = element
     let floating = false
     while (node && node !== document.body) {
@@ -345,6 +347,35 @@ function auditUiDom(context = {}) {
   for (const element of all.filter((node) => node.matches('input[type="number"], input[inputmode="decimal"], input[inputmode="numeric"]') && isVisible(node))) {
     if (!element.value || element.clientWidth <= 0 || element.scrollWidth <= element.clientWidth + 1) continue
     out.hardTextClip.push({ text: String(element.value).slice(0, 42), scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, element: label(element) })
+  }
+
+  // 文字跑出自己的控件：控件不裁切（overflow 可见）时文字压到旁边的控件上。分段选项在窄面板里每段只剩 22px，
+  // “标准健壮纤细儿童”叠成一串（重要记录 020）。只量文字本身的排版框，被内层截断容器裁住的文字不算。
+  for (const element of all.filter((node) => node.matches('button, [role="button"], [role="radio"], [role="tab"], [role="menuitem"], [role="option"]'))) {
+    if (element.scrollWidth <= element.clientWidth + 1) continue
+    const style = getComputedStyle(element)
+    if (['hidden', 'clip'].includes(style.overflowX)) continue
+    const box = element.getBoundingClientRect()
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+    let spill = 0
+    let spilledText = ''
+    while (walker.nextNode()) {
+      const node = walker.currentNode
+      if (!(node.textContent || '').trim() || !node.parentElement) continue
+      let clipped = false
+      for (let ancestor = node.parentElement; ancestor && ancestor !== element; ancestor = ancestor.parentElement) {
+        if (['hidden', 'clip'].includes(getComputedStyle(ancestor).overflowX)) { clipped = true; break }
+      }
+      if (clipped) continue
+      const range = document.createRange()
+      range.selectNodeContents(node)
+      if (typeof range.getClientRects !== 'function') continue
+      for (const rect of range.getClientRects()) {
+        const outside = Math.max(box.left - rect.left, rect.right - box.right)
+        if (outside > spill) { spill = outside; spilledText = (node.textContent || '').trim() }
+      }
+    }
+    if (spill > 1.5) out.hardTextClip.push({ reason: 'spill', text: spilledText.slice(0, 42), spill: Math.round(spill), element: label(element) })
   }
 
   const targetSelector = 'button, a[href], input, select, textarea, [role="button"], [role="checkbox"], [role="switch"]'

@@ -136,7 +136,10 @@
       {
         "waitFor": {
           "role": "button",
-          "name": "/^添加球体$/"
+          "name": "/^撤销$/",
+          "within": {
+            "selector": "[data-command-bar]"
+          }
         },
         "timeout": 15000
       },
@@ -176,25 +179,41 @@
       {
         "click": {
           "role": "button",
-          "name": "/^添加立方体$/"
+          "name": "/^添加立方体$/",
+          "overflow": {
+            "role": "button",
+            "name": "更多添加"
+          }
         }
       },
       {
         "click": {
           "role": "button",
-          "name": "/^添加球体$/"
+          "name": "/^添加球体$/",
+          "overflow": {
+            "role": "button",
+            "name": "更多添加"
+          }
         }
       },
       {
         "click": {
           "role": "button",
-          "name": "/^添加角色$/"
+          "name": "/^添加角色$/",
+          "overflow": {
+            "role": "button",
+            "name": "更多添加"
+          }
         }
       },
       {
         "click": {
           "role": "button",
-          "name": "/^添加摄像机$/"
+          "name": "/^添加摄像机$/",
+          "overflow": {
+            "role": "button",
+            "name": "更多添加"
+          }
         }
       },
       {
@@ -504,7 +523,8 @@
         "waitFor": {
           "role": "button",
           "name": "/^更多路径参数$/"
-        }
+        },
+        "optional": true
       },
       {
         "waitStable": {}
@@ -527,6 +547,10 @@
             "role": "spinbutton",
             "name": "起步延迟（秒）"
           }
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "/^更多路径参数$/"
         }
       },
       {
@@ -698,7 +722,7 @@
               "role": "dialog"
             }
           },
-          "text": "核对-3D镜头 第一批"
+          "text": "核对-3D镜头 第一批 {{size}}"
         }
       },
       {
@@ -734,14 +758,21 @@
       {
         "waitFor": {
           "role": "button",
-          "name": "/^添加球体$/"
+          "name": "/^撤销$/",
+          "within": {
+            "selector": "[data-command-bar]"
+          }
         },
         "timeout": 15000
       },
       {
         "click": {
           "role": "button",
-          "name": "/^添加球体$/"
+          "name": "/^添加球体$/",
+          "overflow": {
+            "role": "button",
+            "name": "更多添加"
+          }
         }
       },
       {
@@ -780,7 +811,7 @@
               "role": "dialog"
             }
           },
-          "text": "核对-3D镜头 名称很长的第二个工程用来检查卡片标题截断"
+          "text": "核对-3D镜头 名称很长的第二个工程用来检查卡片标题截断 {{size}}"
         }
       },
       {

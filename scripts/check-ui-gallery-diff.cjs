@@ -1,6 +1,6 @@
 const fs = require('node:fs')
 const path = require('node:path')
-const { compareGalleryImages, expectedGalleryCaptures, validateGalleryRun, GALLERY_DIFF_RATIO, GALLERY_PRESETS } = require('./lib/uiGalleryDiff.cjs')
+const { compareGalleryImages, expectedGalleryCaptures, galleryRunSuffixes, validateGalleryRun, GALLERY_DIFF_RATIO, GALLERY_PRESETS } = require('./lib/uiGalleryDiff.cjs')
 
 async function main(argv) {
   const inputIndex = argv.indexOf('--input')
@@ -13,7 +13,11 @@ async function main(argv) {
   // 基线只在本机比较（重要记录 012），放在已忽略的 .ui-tour 下：两预设约 61MB，入库会让每次有意改版都膨胀仓库。
   const baseline = path.resolve('.ui-tour/baselines/ui-gallery')
   const config = JSON.parse(fs.readFileSync('scripts/ui-review/ui-gallery.json', 'utf8'))
-  const expected = expectedGalleryCaptures(config)
+  const runSuffixes = Object.fromEntries(GALLERY_PRESETS.map(preset => {
+    const evidencePath = path.join(input, preset, 'evidence.json')
+    return [preset, fs.existsSync(evidencePath) ? galleryRunSuffixes(JSON.parse(fs.readFileSync(evidencePath, 'utf8'))) : []]
+  }))
+  const expected = expectedGalleryCaptures(config, runSuffixes)
   // 先核全量清单，再写基线；缺一个分区、中段或预设都不能变成成功。
   for (const file of expected) if (!fs.existsSync(path.join(input, file))) throw new Error(`缺少正式捕获：${file}`)
   const manifestPath = path.join(baseline, 'manifest.json')

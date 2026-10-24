@@ -26,6 +26,13 @@ async function audit(html, context = {}) {
     const [clientWidth, scrollWidth] = e.dataset.textWidth.split(',').map(Number)
     Object.defineProperties(e, { clientWidth: { value: clientWidth }, scrollWidth: { value: scrollWidth } })
   }
+  // 文字排版框：data-ink="左,宽"（相对视口），挂在文字的父元素上
+  w.Range.prototype.getClientRects = function () {
+    const ink = this.startContainer?.parentElement?.dataset?.ink
+    if (!ink) return []
+    const [left, width] = ink.split(',').map(Number)
+    return [{ left, right: left + width, top: 0, bottom: 16, width, height: 16 }]
+  }
   try { return w.eval(`(${auditUiDom.toString()})(${JSON.stringify(context)})`) } finally { w.close() }
 }
 
@@ -193,4 +200,13 @@ test('重要记录 020 的判据收窄：圆形与胶囊、滑杆高度、子分
   // 尾部渐隐遮罩的标题不算硬裁
   const faded = await audit('<span style="overflow-x: hidden; white-space: nowrap; mask-image: linear-gradient(to right, black 80%, transparent)" data-text-width="100,168">把输入整理成一句画面描述</span>')
   assert.equal(faded.hardTextClip.length, 0)
+})
+
+test('文字跑出自己的按钮（分段在窄面板里叠字）算硬裁切；内层截断容器裁住的文字和放得下的不算', async () => {
+  const spills = async (html) => (await audit(html)).hardTextClip.filter(item => item.reason === 'spill')
+  const hit = await spills('<div role="radiogroup"><button role="radio" data-rect="0,0,22,28" data-text-width="22,40" data-ink="-9,40">标准</button></div>')
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].spill, 9)
+  assert.equal((await spills('<button data-rect="0,0,22,28" data-text-width="22,40"><span style="overflow-x:hidden" data-ink="0,40">长文字</span></button>')).length, 0)
+  assert.equal((await spills('<button data-rect="0,0,60,28" data-text-width="60,60" data-ink="8,40">标准</button>')).length, 0)
 })

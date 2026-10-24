@@ -71,8 +71,12 @@
     {
       "metrics": {
         "name": "row",
-        "selector": "[data-ui-overflow-row]",
-        "maxRows": 1
+        "maxRows": 1,
+        "target": {
+          "role": "button",
+          "name": "/^模型：/",
+          "closest": "[data-ui-overflow-row]"
+        }
       }
     },
     {

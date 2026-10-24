@@ -107,13 +107,14 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 | 动作 | 参数 | 说明 |
 |---|---|---|
 | `enter` | `"generation"`/`"canvas"`/`"toolbox"`/`"assets"`，或 `{ "surface": "tool.image_edit", "media": "docs/ref/test01.jpg" }`，或 `{ "surface": "workspace.generation", "updatePreview": "available" }` | 工作区标签页；surface 走开发导航参数重载渲染层；`updatePreview`（`available`/`downloading`/`failed`）直接打开更新提示弹窗的预览状态（与 `--dev-update-preview` 同一入口，不访问更新服务器） |
-| `click` / `doubleClick` / `rightClick` / `hover` | 定位 | |
+| `click` / `doubleClick` / `rightClick` / `hover` | 定位 | `click` 可带 `"overflow": 定位`：目标在窄窗口下被收进“更多”菜单（收起项不挂载）时先点开这个入口，再点菜单里的同名项 |
 | `focus` | 定位，或 `{ "target": 定位, "keyboard": false }` | 默认先按一次 Shift，让 `:focus-visible` 生效 |
 | `press` | `"Escape"` 或 `{ "key", "target"? }` | |
-| `fill` | `{ "target": 定位, "text": "…" }` | |
+| `fill` | `{ "target": 定位, "text": "…" }` | 文字里的 `{{size}}` 换成当前窗口档（如 `960x640`）：两档尺寸在同一实例里连跑，存盘起名的场景用它避开上一档留下的同名文件 |
 | `open` | 触发器定位，或 `{ "trigger": 定位, "expect": 定位? }` | 点开浮层并等它出现（默认等任一菜单/列表/面板/对话框） |
 | `drag` | `{ "from": 定位, "to": 定位 或 { "dx", "dy" }, "steps": 8, "release": true, "modifiers": [] }` | `release: false` 时按住不放，可截拖动中状态，再用 `release`；`modifiers`（`Control`/`Shift`/`Alt`/`Meta`）拖动全程按住，如画布框选要按住 `Control`（空白处直接拖是平移） |
 | `scroll` | `{ "target": 定位, "dy": 240 }` | 鼠标滚轮 |
+| `scrollCapture` | `{ "target": 定位, "name": "gallery-colors" }` | 逐屏滚到底并逐屏截图（`name-1`、`name-2`……）：每次滚可见高度的八成，屏数随窗口尺寸变化；整页长内容要截全时用它，不要写死“每次滚 360px” |
 | `waitFor` | 定位，或 `{ "target", "state": "visible"/"hidden" }` | |
 | `waitStable` | `{}` 或 `{ "target": 定位 }` | 字体就绪、图片解码完、有限次动画与过渡结束、目标几何连续两次一致 |
 | `wait` | 毫秒 | 只用于确实没有可等条件的场合 |
@@ -155,8 +156,8 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 |---|---|
 | `surfaceStacks` | 自己画了边框 + 底色的表面嵌套 ≥ 3 层（输入控件不算一层） |
 | `lowContrast` | 通用文字/图标像素审计：正文 ≥4.5、大字/图标 ≥3；交互图形 ≥3:1，由对应场景分别测填充、边界、手柄与邻接背景，不能用图标读数代替（见 testing.md） |
-| `oversizedRadius` / `shadowOutsideOverlay` / `hiddenPositioning` | 内层圆角大于外层（圆形与胶囊按形状算，不判）；非浮层用阴影；定位只写在 CSS 里 |
-| `insetEscape` / `horizontalOverflow` / `nestedScroll` / `hardTextClip` / `smallTargets` | 逃出助手插入量；横向溢出（平移缩放视口 `data-layout-scroll-region` 除外）；双层竖向滚动（限高的多行输入框在框内滚动不算）；无省略号的硬裁切（含数值框读数放不下）；普通命中区 < 24px（0.5px 舍入容差），正式 2xs 图标按钮按 20px 检查，正文里的行内链接按 WCAG 行内例外不判 |
+| `oversizedRadius` / `shadowOutsideOverlay` / `hiddenPositioning` | 内层圆角大于外层（圆形与胶囊按形状算，不判）；非浮层用阴影（正在过渡的阴影，如失焦后焦点环淡出，截到的是中间值，不判）；定位只写在 CSS 里 |
+| `insetEscape` / `horizontalOverflow` / `nestedScroll` / `hardTextClip` / `smallTargets` | 逃出助手插入量；横向溢出（平移缩放视口 `data-layout-scroll-region` 除外）；双层竖向滚动（限高的多行输入框在框内滚动不算）；无省略号的硬裁切（含数值框读数放不下；按钮、分段、标签页等控件不裁切时文字跑出控件压到旁边 > 1.5px 记 `reason: spill`）；普通命中区 < 24px（0.5px 舍入容差），正式 2xs 图标按钮按 20px 检查，正文里的行内链接按 WCAG 行内例外不判 |
 | `pageTitleInconsistency` | 跨界面页面标题字号不一致 |
 | `nestedSameBackground` | 悬停或选中的容器里，行内控件与容器底 OKLab 距离 < 0.02（玻璃上不判） |
 | `menuOptionTruncated` | `role=option` 里的文字被截断（不留容差） |
