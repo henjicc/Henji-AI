@@ -1,4 +1,4 @@
-import { requireVideoEditInstance, setVideoEditView, switchVideoEditSequence, type VideoEditInstance } from './videoEditService'
+import { focusVideoEditPanel, requireVideoEditInstance, setVideoEditView, switchVideoEditSequence, type VideoEditInstance } from './videoEditService'
 
 // View selection follows the same instance-scoped pattern as transition selection, never saved in the edit file.
 const selections = new WeakMap<VideoEditInstance, { sequenceId: string; captionId: string }>()
@@ -18,4 +18,6 @@ export function selectVideoEditSubtitle(projectId: string, sequenceId: string, c
   if (owner.activeSequenceId !== sequenceId) switchVideoEditSequence(projectId, sequenceId)
   setVideoEditView(projectId, { ...(options.preserveFrame ? {} : { frame: caption.start }), playing: false, selection: caption.clipId ?? null })
   selections.set(owner, { sequenceId, captionId }); revision++; listeners.forEach(listener => listener())
+  // 选中字幕时字幕面板到前面（重要记录 019），与点字幕轨头一致；已在前面时不重复激活。
+  if (owner.activePanel !== 'content') focusVideoEditPanel(projectId, 'content')
 }

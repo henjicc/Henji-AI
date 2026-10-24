@@ -2,7 +2,7 @@ import { useVideoEditTypographyGesture } from './useVideoEditTypographyGesture'
 import { VideoEditTypographyPanel } from './VideoEditTypographyPanel'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiFormRow, UiGroup, UiLoading, UI_TEXT_META_CLASS } from '@/components/ui'
+import { Dropdown, PanelTrigger, UiButton, UiCheckbox, UiEmpty, UiError, UiFormRow, UiGroup, UiLoading, UI_TEXT_META_CLASS } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { scaleVideoEditTextStyle } from '@/core/videoEdit/text'
@@ -32,6 +32,10 @@ export function VideoEditSubtitleActions({ instance, sequence, selectedCaptionId
   const [subtitleProfile, setSubtitleProfile] = useState<'netflix_zh_hans' | 'custom'>('netflix_zh_hans')
   const subtitleOptions = subtitleProfile === 'netflix_zh_hans' ? { style: subtitleProfile } : { style: subtitleProfile, maxCharacters, maxLines, pauseSeconds, minDurationSeconds }
   const [presetId, setPresetId] = useState('')
+  // 全局样式（重要记录 019）：默认勾上，改动作用于这条序列的全部字幕；取消后只改选中的那条（没选中时不改）。
+  const [global, setGlobal] = useState(true)
+  const targets: readonly string[] | undefined = global ? undefined : selectedCaptionId ? [selectedCaptionId] : []
+  const applicable = Boolean(sequence.captions?.length) && !sequence.captionTrackLocked && (global || Boolean(selectedCaptionId))
   const [targetLanguage, setTargetLanguage] = useState<SubtitleTranslationLanguage>('en')
   const [translating, setTranslating] = useState(false)
   const [normalizing, setNormalizing] = useState(false)
@@ -47,7 +51,7 @@ export function VideoEditSubtitleActions({ instance, sequence, selectedCaptionId
   const typographyBaseline = useRef<VideoEditSubtitleStyle>()
   const beginTypography = (): void => { typographyBaseline.current ??= style; if (sequence.captions?.length) typographyGesture.begin() }
   const endTypography = (commit: boolean): void => { typographyGesture.end(commit); const baseline = typographyBaseline.current; typographyBaseline.current = undefined; if (!commit && baseline) setStyle(baseline) }
-  const previewFont = useVideoEditFontPreview(instance.document.id, `${sequence.id}:subtitle:${selectedCaptionId ?? ''}`, onError, (fontFamily, gesture) => styleVideoEditSubtitles(instance.document.id, sequence.id, { ...style, fontFamily }, selectedCaptionId ? [selectedCaptionId] : undefined, gesture))
+  const previewFont = useVideoEditFontPreview(instance.document.id, `${sequence.id}:subtitle:${selectedCaptionId ?? ''}`, onError, (fontFamily, gesture) => { if (applicable) styleVideoEditSubtitles(instance.document.id, sequence.id, { ...style, fontFamily }, targets, gesture) })
   const [open, setOpen] = useState(false)
   const [modelAttempt, setModelAttempt] = useState(0)
   const [models, setModels] = useState<'loading' | 'failed' | 'unconfigured' | 'configured'>('loading'); const [recoverable, setRecoverable] = useState<string>()
@@ -71,7 +75,8 @@ export function VideoEditSubtitleActions({ instance, sequence, selectedCaptionId
   const busy = transcribing || translating || normalizing
   const retry = job?.state !== 'completed' ? job?.audioDocumentId ?? recoverable : undefined
   const run = (resume?: string): void => { void runVideoEditSubtitleJob(instance, sequence.id, scope, trackId || undefined, { ...subtitleOptions, language }, resume).catch(error => { if (mounted.current) onError(error) }) }
-  const applyStyle = (selected = false): void => { try { styleVideoEditSubtitles(instance.document.id, sequence.id, style, selected && selectedCaptionId ? [selectedCaptionId] : undefined) } catch (error) { onError(error) } }
+  /** 把一份样式写进字幕：范围由“全局样式”决定，一次修改一步撤销。 */
+  const applyStyle = (value: VideoEditSubtitleStyle): void => { if (!applicable) return; try { styleVideoEditSubtitles(instance.document.id, sequence.id, value, targets) } catch (error) { onError(error) } }
   const changeStyle = (value: VideoEditSubtitleStyle): void => { setPresetId(''); setStyle(value) }
   const normalize = (): void => {
     const controller = new AbortController(); normalization.current = controller; setNormalizing(true)
@@ -104,14 +109,14 @@ export function VideoEditSubtitleActions({ instance, sequence, selectedCaptionId
       {normalizing && <UiLoading size="xs" message="正在整理字幕"><UiButton size="sm" onClick={() => normalization.current?.abort()}>取消</UiButton></UiLoading>}
       {transcribing && <UiLoading size="xs" message={job?.state === 'preparing' ? `准备声音 ${Math.round(job.progress * 100)}%` : job?.state === 'confirming' ? '等待费用确认' : '正在识别声音'}><UiButton size="sm" onClick={() => cancelSubtitleJob(instance, sequence.id)}>取消</UiButton></UiLoading>}
     </UiGroup>
-    <UiGroup title="统一字幕样式" titleTone="compact" divided>
-      <UiFormRow label="样式预设" density="compact"><Dropdown ariaLabel="字幕样式预设" size="sm" value={presetId} options={[{ value: '', label: '自定义样式' }, ...presets.map(preset => ({ value: preset.id, label: preset.name }))]} onSelect={id => { setPresetId(id); const preset = presets.find(preset => preset.id === id); if (preset) setStyle(preset.style) }} /></UiFormRow>
+    <UiGroup title="字幕样式" titleTone="compact" divided>
+      <UiFormRow label="全局样式" info="勾上时改动作用于这条序列的全部字幕；取消后只改选中的字幕。" density="compact" inline><UiCheckbox aria-label="全局样式" checked={global} onCheckedChange={setGlobal} /></UiFormRow>
+      <UiFormRow label="样式预设" density="compact"><Dropdown ariaLabel="字幕样式预设" size="sm" value={presetId} options={[{ value: '', label: '自定义样式' }, ...presets.map(preset => ({ value: preset.id, label: preset.name }))]} onSelect={id => { setPresetId(id); const preset = presets.find(preset => preset.id === id); if (preset) { setStyle(preset.style); applyStyle(preset.style) } }} /></UiFormRow>
       <VideoEditTypographyPanel key={`${instance.document.id}:${sequence.id}:${selectedCaptionId ?? ''}`} onBegin={beginTypography} onEnd={endTypography} style={scaleVideoEditTextStyle(typography, sequence.height / 1080)} fontLabel="字幕字体" onError={onError} onFontPreview={previewFont} projectFonts={collectVideoEditFonts(instance.document).map(use => use.font)} onChange={typography => {
         const next = videoEditSubtitleStyleSchema.parse({ ...scaleVideoEditTextStyle(typography, 1080 / sequence.height), bottomMargin: style.bottomMargin })
-        if (sequence.captions?.length) styleVideoEditSubtitles(instance.document.id, sequence.id, next, selectedCaptionId ? [selectedCaptionId] : undefined, typographyGesture.handle.current); changeStyle(next)
+        if (applicable) styleVideoEditSubtitles(instance.document.id, sequence.id, next, targets, typographyGesture.handle.current); changeStyle(next)
       }} />
-      <UiFormRow label="底部安全区（%）" density="compact"><NumberInput ariaLabel="字幕底部安全区百分比" size="sm" value={style.bottomMargin * 100} min={0} max={100} step={1} onChange={value => changeStyle({ ...style, bottomMargin: value / 100 })} /></UiFormRow>
-      <div className="flex flex-wrap items-center gap-2"><UiButton size="sm" disabled={sequence.captionTrackLocked || busy || !sequence.captions?.length} onClick={() => applyStyle()}>应用全部</UiButton><UiButton size="sm" disabled={sequence.captionTrackLocked || busy || !selectedCaptionId} onClick={() => applyStyle(true)}>应用选中</UiButton></div>
+      <UiFormRow label="底部安全区（%）" density="compact"><NumberInput ariaLabel="字幕底部安全区百分比" size="sm" value={style.bottomMargin * 100} min={0} max={100} step={1} onChange={value => { const next = { ...style, bottomMargin: value / 100 }; changeStyle(next); applyStyle(next) }} /></UiFormRow>
     </UiGroup>
     <UiGroup title="双语字幕" titleTone="compact" divided>
       <UiFormRow label="第二语言" density="compact"><Dropdown ariaLabel="字幕第二语言" size="sm" value={targetLanguage} onSelect={setTargetLanguage} disabled={sequence.captionTrackLocked || busy} options={[{ value: 'en', label: '英语' }, { value: 'zh', label: '中文' }, { value: 'ja', label: '日语' }, { value: 'ko', label: '韩语' }, { value: 'fr', label: '法语' }, { value: 'es', label: '西班牙语' }, { value: 'de', label: '德语' }]} /></UiFormRow>
