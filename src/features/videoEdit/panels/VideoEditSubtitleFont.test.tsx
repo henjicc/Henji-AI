@@ -34,6 +34,6 @@ it('“全局样式”默认勾上：选中一条字幕时改字体也作用于�
   fireEvent.click(await view.findByLabelText('字幕字体'))
   const option = await view.findByRole('option', { name: /系统衬线/ }); fireEvent.click(option)
   const cues = () => getActiveVideoEditSequence(instance).captions!
-  await waitFor(() => expect(cues().map(cue => cue.style?.fontFamily)).toEqual(['serif', 'serif']))
+  await waitFor(() => expect(cues().map(cue => cue.style ? cue.style.fontFamily : undefined)).toEqual(['serif', 'serif']))
   expect(instance.past).toHaveLength(history + 1); expect(onError).not.toHaveBeenCalled()
 })
