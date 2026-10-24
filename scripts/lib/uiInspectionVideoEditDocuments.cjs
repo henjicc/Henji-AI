@@ -62,6 +62,13 @@ function readVideoEditFile(file) {
   return { format: 'henji-video-project', version: videoEditDocumentVersion(), id: raw.id, name: raw.name, revision: raw.revision, ...decode(raw.content) }
 }
 
+/** 代码版本的源码按文件存在项目的 代码/ 目录里；读回入口文件（readVideoEditFile 已把位置换成绝对路径）。 */
+function codeVersionSource(version) {
+  const entry = version.files.find((file) => file.path === version.entry)
+  if (!entry) throw new Error(`代码版本缺少入口文件：${version.entry}`)
+  return fs.readFileSync(entry.location, 'utf8')
+}
+
 /**
  * 经正式文档接口建一个项目并放进一份剪辑（已命名、非草稿，登记为主剪辑），沿用夹具的剪辑 ID。
  * fixture 是旧剪辑工程形状（format / version / name / revision 由文档外壳表达，这里只取内容）。
@@ -176,7 +183,8 @@ async function adoptNewVideoEditProject(page, fixtureFile) {
   // 这些既有剪辑场景需要时间线；通过正式界面显式建立，并维持夹具约定的30帧。
   await button(page, '新建序列').click()
   await page.getByRole('dialog').waitFor({ state: 'visible' })
-  await page.getByLabel('帧率', { exact: true }).selectOption('30/1')
+  await page.getByRole('dialog').getByRole('button', { name: '帧率', exact: true }).click()
+  await page.getByRole('option', { name: '30 帧', exact: true }).click()
   await button(page, '确定').click()
   await page.getByRole('dialog').waitFor({ state: 'hidden' })
   const latest = await latestVideoEditDocument(page)
@@ -214,6 +222,7 @@ async function closeVideoEditDockPanel(page, title) {
 }
 
 module.exports = {
+  codeVersionSource,
   closeVideoEditDockPanel,
   videoEditDockTab,
   adoptNewVideoEditProject,

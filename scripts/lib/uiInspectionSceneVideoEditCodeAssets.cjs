@@ -6,7 +6,7 @@ const { execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { clickOutsideFloatingAssets, observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, saved, presented, png, pixelDifference, mediaProbe, trackBanks } = require('./uiInspectionSceneVideoEditMonitor.cjs')
-const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, codeVersionSource, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 const authorSources = require('./uiInspectionAuthorSources.cjs')
 
 const source = authorSources.ASSET_SOURCE
@@ -111,7 +111,7 @@ function createVideoEditCodeAssetsScene() {
         const reopened = await png(page, path.join(root, 'after-reopen.png')); evidence.reopen = await pixelDifference(beforeReopen.file, reopened.file); assert.ok(evidence.reopen.equal)
         // A filter asset uses the public original clipRef even when another clip is selected.
         await change([{ kind: 'create_items', entityType: 'video_edit.code_material', parent: project(target.id), items: [{ properties: { 'video_edit.code_material.source': filterSource } }] }])
-        document = await saved(page, targetFile, value => value.codeMaterials.length === 2); const filter = document.codeMaterials.find(definition => definition.versions[0].source === filterSource)
+        document = await saved(page, targetFile, value => value.codeMaterials.length === 2); const filter = document.codeMaterials.find(definition => codeVersionSource(definition.versions[0]) === filterSource)
         await dialogs(app, [targetFile], filterPath); const filterRead = await callTool(client, 'read_application_entity', { ref: project(target.id) })
         const definitionRef = { kind: 'video_edit.code_material', id: `${target.id}:${filter.id}` }; const definitionRead = await callTool(client, 'read_application_entity', { ref: definitionRef })
         const filterCollection = checked(await callTool(client, 'collect_video_edit_code_asset', operationEnvelope([filterRead, definitionRead], { documentRef: project(target.id), targetRef: definitionRef })))

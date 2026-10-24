@@ -102,7 +102,11 @@ const OBSERVATION_SOURCES = {
   flash: `export default {
   name: "单帧观察验收", kind: "generator", mode: "dynamic", width: 640, height: 360, durationSeconds: 2,
   layers(params, width, height) {
-    return [{ id: "背景", draw(ctx, time) { ctx.fillStyle = time >= .5 && time < .51 ? "#ff0000" : "#0000ff"; ctx.fillRect(0, 0, 640, 360) } }]
+    // The one-frame flash is its own layer so the structural observer can measure its appearance.
+    return [
+      { id: "背景", draw(ctx) { ctx.fillStyle = "#0000ff"; ctx.fillRect(0, 0, 640, 360) } },
+      { id: "闪动", bounds: [0, 0, 640, 360], pose: t => t >= .5 && t < .51 ? {} : null, draw(ctx) { ctx.fillStyle = "#ff0000"; ctx.fillRect(0, 0, 640, 360) } },
+    ]
   }
 }`,
   sound: `export default {
