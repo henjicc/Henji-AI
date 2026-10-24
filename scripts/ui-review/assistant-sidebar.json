@@ -2,7 +2,7 @@
   {
     "id": "review-assistant-empty",
     "surface": "助手",
-    "name": "核对-助手侧栏空态、聚焦、命令带、历史与记忆空态、悬浮",
+    "name": "核对-助手侧栏空态、聚焦、命令带、历史空态、设置里的记忆、悬浮",
     "checklist": [
       "A21.1",
       "A21.8",
@@ -121,7 +121,7 @@
       },
       {
         "waitFor": {
-          "text": "/暂无记忆|已保存/"
+          "text": "使用与更新记忆"
         }
       },
       {
@@ -133,8 +133,42 @@
       {
         "click": {
           "role": "button",
-          "name": "助手记忆",
+          "name": "关闭",
+          "exact": true,
+          "within": {
+            "role": "dialog",
+            "name": "设置"
+          }
+        },
+        "ifPresent": {
+          "role": "dialog",
+          "name": "设置"
+        }
+      },
+      {
+        "waitFor": {
+          "target": {
+            "text": "使用与更新记忆"
+          },
+          "state": "hidden"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "返回当前对话",
           "exact": true
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "返回当前对话",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "role": "textbox",
+          "name": "向智能助手描述任务"
         }
       },
       {
@@ -244,6 +278,27 @@
         "click": {
           "role": "button",
           "name": "发送",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "optional": true,
+        "timeout": 3000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "允许本次",
           "exact": true
         }
       },
@@ -375,6 +430,27 @@
       {
         "waitFor": {
           "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "optional": true,
+        "timeout": 3000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
           "name": "正在思考",
           "exact": true
         },
@@ -490,6 +566,27 @@
       {
         "waitFor": {
           "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "optional": true,
+        "timeout": 3000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
           "name": "停止",
           "exact": true
         },
@@ -525,6 +622,27 @@
       },
       {
         "waitFor": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "optional": true,
+        "timeout": 3000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
           "text": "等待发送",
           "exact": true
         }
@@ -554,6 +672,27 @@
       },
       {
         "releaseAssistant": {}
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "optional": true,
+        "timeout": 3000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        }
       },
       {
         "waitFor": {
@@ -596,7 +735,7 @@
   {
     "id": "review-assistant-history-memory",
     "surface": "助手",
-    "name": "核对-助手对话历史多条与当前项、记忆已保存与编辑、清空确认",
+    "name": "核对-助手对话历史多条与当前项、设置里的记忆已保存与编辑",
     "checklist": [
       "A23.2",
       "A23.3"
@@ -646,6 +785,27 @@
       },
       {
         "waitFor": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "optional": true,
+        "timeout": 3000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
           "text": "好的，已按水墨质感整理。",
           "exact": true
         },
@@ -685,6 +845,27 @@
         "click": {
           "role": "button",
           "name": "发送",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "optional": true,
+        "timeout": 3000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "允许本次",
           "exact": true
         }
       },
@@ -755,8 +936,11 @@
       {
         "click": {
           "role": "button",
-          "name": "编辑记忆",
-          "exact": true
+          "name": "编辑",
+          "exact": true,
+          "within": {
+            "role": "dialog"
+          }
         }
       },
       {
@@ -766,38 +950,43 @@
         "capture": "memory-edit"
       },
       {
-        "click": {
-          "role": "button",
-          "name": "清空全部记忆"
-        }
-      },
-      {
-        "waitStable": {}
-      },
-      {
-        "capture": "memory-clear-armed"
-      },
-      {
-        "open": {
-          "trigger": {
-            "role": "button",
-            "name": "历史条目默认保留时间"
-          }
-        }
-      },
-      {
-        "waitStable": {}
-      },
-      {
-        "capture": "memory-ttl-menu"
-      },
-      {
         "press": "Escape"
       },
       {
+        "wait": 300
+      },
+      {
         "click": {
           "role": "button",
-          "name": "助手记忆",
+          "name": "关闭",
+          "exact": true,
+          "within": {
+            "role": "dialog",
+            "name": "设置"
+          }
+        },
+        "ifPresent": {
+          "role": "dialog",
+          "name": "设置"
+        }
+      },
+      {
+        "waitFor": {
+          "target": {
+            "text": "使用与更新记忆"
+          },
+          "state": "hidden"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "返回当前对话",
+          "exact": true
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "返回当前对话",
           "exact": true
         }
       },
@@ -895,6 +1084,27 @@
         "click": {
           "role": "button",
           "name": "发送",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "optional": true,
+        "timeout": 3000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "允许本次",
           "exact": true
         }
       },

@@ -52,49 +52,6 @@
         "waitStable": {}
       },
       {
-        "stubIpc": {
-          "channel": "media:importFromPath",
-          "mode": "hold"
-        }
-      },
-      {
-        "stubIpc": {
-          "channel": "media:importFromBytes",
-          "mode": "hold"
-        }
-      },
-      {
-        "setFiles": {
-          "target": {
-            "selector": "input[type=\"file\"][accept*=\"video\"]"
-          },
-          "files": [
-            "scripts/fixtures/plain_video.mp4"
-          ]
-        }
-      },
-      {
-        "wait": 600
-      },
-      {
-        "capture": "video-processing"
-      },
-      {
-        "releaseIpc": {
-          "channel": "media:importFromPath",
-          "release": "original"
-        }
-      },
-      {
-        "releaseIpc": {
-          "channel": "media:importFromBytes",
-          "release": "original"
-        }
-      },
-      {
-        "waitStable": {}
-      },
-      {
         "setFiles": {
           "target": {
             "selector": "input[type=\"file\"][accept*=\"image\"]"
@@ -147,6 +104,49 @@
       },
       {
         "capture": "reorder-done"
+      },
+      {
+        "stubIpc": {
+          "channel": "media:importFromPath",
+          "mode": "hold"
+        }
+      },
+      {
+        "stubIpc": {
+          "channel": "media:importFromBytes",
+          "mode": "hold"
+        }
+      },
+      {
+        "setFiles": {
+          "target": {
+            "selector": "input[type=\"file\"][accept*=\"video\"]"
+          },
+          "files": [
+            "scripts/fixtures/plain_video.mp4"
+          ]
+        }
+      },
+      {
+        "wait": 600
+      },
+      {
+        "capture": "video-processing"
+      },
+      {
+        "releaseIpc": {
+          "channel": "media:importFromPath",
+          "release": "original"
+        }
+      },
+      {
+        "releaseIpc": {
+          "channel": "media:importFromBytes",
+          "release": "original"
+        }
+      },
+      {
+        "waitStable": {}
       }
     ]
   },
@@ -173,10 +173,7 @@
       },
       {
         "hover": {
-          "text": "/^(版本|Version)$/",
-          "within": {
-            "selector": "[data-ui-overflow-row]"
-          }
+          "text": "/^(版本|Version)$/"
         }
       },
       {
@@ -292,7 +289,7 @@
       },
       {
         "click": {
-          "selector": "button[title=\"裁剪\"]"
+          "selector": "button[aria-label=\"裁剪\"]"
         },
         "optional": true
       },
@@ -490,19 +487,22 @@
       {
         "seedSettings": {
           "values": {
-            "voice_library_records": [
-              {
-                "voiceId": "review-cloned-voice",
-                "voiceName": "核对-我的解说声音",
-                "description": "夹具：已训练完成的克隆音色",
-                "providerId": "ppio",
-                "modelId": "ppio-minimax-speech",
-                "createdAt": "2026-10-01T08:00:00.000Z",
-                "updatedAt": "2026-10-01T08:00:00.000Z",
-                "previewPath": "{{file:audio}}",
-                "status": "ready"
-              }
-            ]
+            "voice_library_records": {
+              "version": 1,
+              "content": [
+                {
+                  "voiceId": "review-cloned-voice",
+                  "voiceName": "核对-我的解说声音",
+                  "description": "夹具：已训练完成的克隆音色",
+                  "providerId": "ppio",
+                  "modelId": "ppio-minimax-speech",
+                  "createdAt": "2026-10-01T08:00:00.000Z",
+                  "updatedAt": "2026-10-01T08:00:00.000Z",
+                  "previewPath": "{{file:audio}}",
+                  "status": "ready"
+                }
+              ]
+            }
           },
           "clearLocalStorage": [
             "voice_library_records_cache_v1"
@@ -521,6 +521,14 @@
           "trigger": {
             "selector": "[data-param-id=\"minimaxVoiceId\"] [data-panel-trigger-button]"
           }
+        }
+      },
+      {
+        "fill": {
+          "target": {
+            "placeholder": "搜索音色名称或描述"
+          },
+          "text": "核对-我的解说声音"
         }
       },
       {
@@ -611,6 +619,27 @@
         "click": {
           "role": "button",
           "name": "开始克隆"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "optional": true,
+        "timeout": 3000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
         }
       },
       {

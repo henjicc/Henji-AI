@@ -17,7 +17,7 @@
  * }
  */
 const fs = require('node:fs')
-const { writeCanvasDocument } = require('./canvasDocumentFixture.cjs')
+const { createCanvasDocument, writeCanvasDocument } = require('./canvasDocumentFixture.cjs')
 const os = require('node:os')
 const path = require('node:path')
 const { analyzeLayoutMetrics, collectLayoutMeasurements } = require('./uiReviewMetrics.cjs')
@@ -557,7 +557,19 @@ async function seedCanvasFixture(page, context, { nodes: rawNodes, edges, viewpo
     await context.settlePage(page)
   }
   const projectId = context.canvasFixtureProjectId
-  await page.locator(`[data-project-id="${projectId}"]:visible`).waitFor({ state: 'visible', timeout: 12000 })
+  const card = page.locator(`[data-project-id="${projectId}"]:visible`)
+  // 巡检专用画布在启动时建好；前面的场景（工程列表多选删除）可能把它移到了回收站：按同一个 ID 重建
+  if (!(await card.isVisible().catch(() => false)) && context.canvasFixtureProjectName) {
+    await card.waitFor({ state: 'visible', timeout: 3000 }).catch(async () => {
+      await createCanvasDocument(page, { id: projectId, name: context.canvasFixtureProjectName, viewport: viewport ?? { x: 120, y: 80, zoom: 0.85 } })
+      // 列表不一定订阅了索引变化：重载界面再回到画布列表，按新索引重新读
+      await page.reload({ waitUntil: 'domcontentloaded' })
+      await page.waitForFunction(() => Boolean(window.henjiNative), null, { timeout: 30000 })
+      await context.setupCanvas(page)
+      await context.settlePage(page)
+    })
+  }
+  await card.waitFor({ state: 'visible', timeout: 12000 })
   await writeCanvasDocument(page, projectId, { nodes, edges, viewport })
   await context.reopenCanvasProjectFromStorage(page, projectId)
   await page.locator('[data-application-observation-region="canvas.viewport_observer"]:visible')
@@ -740,6 +752,18 @@ async function runStep(page, step, runtime) {
       if (step.search) await search.fill(step.search)
       const panel = page.locator('[data-model-selector-panel]:visible')
       const item = panel.locator(`[data-model-id="${step.modelId}"][data-provider-id="${step.providerId}"]`).first()
+      // 模型列表是虚拟网格，只挂载可见的几行：目标没挂载时逐屏向下滚动列表，直到它出现或滚到底
+      for (let screen = 0; screen < 80 && !(await item.count()); screen += 1) {
+        const moved = await panel.evaluate((root) => {
+          const scroller = [...root.querySelectorAll('*')].find((node) => node.scrollHeight > node.clientHeight + 2 && ['auto', 'scroll'].includes(getComputedStyle(node).overflowY))
+          if (!scroller) return false
+          const before = scroller.scrollTop
+          scroller.scrollTop += Math.max(1, scroller.clientHeight * 0.8)
+          return scroller.scrollTop !== before
+        })
+        await page.waitForTimeout(60)
+        if (!moved && !(await item.count())) break
+      }
       await item.scrollIntoViewIfNeeded({ timeout })
       await item.click({ timeout })
       await panel.waitFor({ state: 'hidden', timeout })
@@ -772,11 +796,14 @@ async function runStep(page, step, runtime) {
     }
     case 'logsWindow': {
       if (!runtime.logsPage || runtime.logsPage.isClosed()) {
-        const opened = runtime.app.waitForEvent('window', {
-          predicate: (candidate) => candidate.url().includes('view=logs'), timeout: 15000,
-        })
         await runtime.mainPage.evaluate(() => window.henjiNative.logging.openLogWindow())
-        runtime.logsPage = await opened
+        // 日志窗口可能是前面场景打开过、现在只被聚焦的那一个；新建时页面先是 about:blank 再载入 ?view=logs，
+        // 所以按地址轮询已有窗口，而不是只等一次 window 事件
+        const findLogs = () => runtime.app.windows().find((candidate) => !candidate.isClosed() && candidate.url().includes('view=logs'))
+        const deadline = Date.now() + 15000
+        while (!findLogs() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100))
+        runtime.logsPage = findLogs()
+        if (!runtime.logsPage) throw new Error('日志窗口 15 秒内没有打开')
         await runtime.logsPage.waitForLoadState('domcontentloaded')
         await runtime.logsPage.locator('header').first().waitFor({ state: 'visible', timeout: 15000 })
         // 与主窗口同尺寸（窗口内容区），960 / 1440 两档截图都落在日志窗口自己的布局上

@@ -222,8 +222,11 @@
       {
         "click": {
           "role": "button",
-          "name": "删除所选",
-          "exact": true
+          "name": "删除",
+          "exact": true,
+          "within": {
+            "selector": "[data-ui-page-header]"
+          }
         }
       },
       {
@@ -240,7 +243,7 @@
       {
         "click": {
           "role": "button",
-          "name": "删除",
+          "name": "移到回收站",
           "exact": true,
           "within": {
             "role": "dialog",
@@ -250,8 +253,7 @@
       },
       {
         "waitFor": {
-          "text": "暂无项目",
-          "exact": true
+          "text": "/^(还没有画布|暂无项目)$/"
         },
         "timeout": 10000
       },
@@ -1554,7 +1556,7 @@
       {
         "click": {
           "role": "button",
-          "name": "查看与快捷键",
+          "name": "剪辑",
           "exact": true,
           "within": {
             "role": "navigation",
@@ -1600,7 +1602,7 @@
       {
         "click": {
           "role": "button",
-          "name": "资产库",
+          "name": "资产",
           "exact": true,
           "within": {
             "role": "navigation",

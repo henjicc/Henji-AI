@@ -410,7 +410,11 @@
         "click": {
           "role": "button",
           "name": "删除",
-          "exact": true
+          "exact": true,
+          "within": {
+            "selector": "[data-panel-scroll-region]",
+            "nth": "last"
+          }
         }
       },
       {
@@ -446,7 +450,11 @@
         "click": {
           "role": "button",
           "name": "删除",
-          "exact": true
+          "exact": true,
+          "within": {
+            "selector": "[data-panel-scroll-region]",
+            "nth": "last"
+          }
         }
       },
       {
@@ -519,7 +527,7 @@
   {
     "id": "review-remaining-data-path",
     "surface": "设置",
-    "name": "核对-数据目录迁移进度与失败（5.8 补截，复制文件通道挂起后拒绝）",
+    "name": "核对-更换作品目录：确认、移动中与失败（5.8 补截；移动通道替身挂起后拒绝，不真的移动、不重启）",
     "checklist": [
       "A09.2",
       "A09.3",
@@ -547,20 +555,39 @@
       },
       {
         "stubIpc": {
-          "channel": "fs:copyFile",
+          "channel": "workRoot:change",
           "mode": "hold"
         }
       },
       {
         "click": {
           "role": "button",
-          "name": "选择",
+          "name": "/^更(换|改)位置/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "移动并重新启动",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "migration-confirm"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "移动并重新启动",
           "exact": true
         }
       },
       {
         "waitFor": {
-          "text": "正在迁移数据..."
+          "text": "正在移动作品目录"
         }
       },
       {
@@ -570,28 +597,21 @@
         "capture": "migration-progress"
       },
       {
-        "stubIpc": {
-          "channel": "fs:copyFile",
-          "mode": "reject",
-          "message": "目标磁盘空间不足"
-        }
-      },
-      {
         "releaseIpc": {
-          "channel": "fs:copyFile",
+          "channel": "workRoot:change",
           "release": "reject",
           "message": "目标磁盘空间不足"
         }
       },
       {
         "waitFor": {
-          "text": "/数据迁移失败/"
+          "text": "/更换没有完成|空间不足/"
         }
       },
       {
         "waitFor": {
           "target": {
-            "text": "正在迁移数据..."
+            "text": "正在移动作品目录"
           },
           "state": "hidden"
         }
@@ -604,6 +624,11 @@
           "role": "button",
           "name": "确定",
           "exact": true
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "确定",
+          "exact": true
         }
       }
     ]
@@ -611,7 +636,7 @@
   {
     "id": "review-remaining-image-editor-panel-drag",
     "surface": "工具箱",
-    "name": "核对-图片编辑浮动面板拖动中（5.8 补截）",
+    "name": "核对-图片编辑停靠面板标签拖动中（5.8 补截；V3 改为停靠面板后拖标签）",
     "checklist": [
       "T07.5"
     ],
@@ -625,17 +650,15 @@
       },
       {
         "waitFor": {
-          "selector": "[data-editor-panel-handle]"
+          "selector": ".dv-tab",
+          "hasText": "/^图层$/"
         }
       },
       {
         "drag": {
           "from": {
-            "selector": "[data-editor-panel-handle]",
-            "at": {
-              "x": 60,
-              "y": 12
-            }
+            "selector": ".dv-tab",
+            "hasText": "/^图层$/"
           },
           "to": {
             "dx": -320,
@@ -646,13 +669,19 @@
         }
       },
       {
-        "capture": "floating-panel-dragging"
+        "capture": "dock-tab-dragging"
+      },
+      {
+        "press": "Escape"
       },
       {
         "release": {}
       },
       {
-        "capture": "floating-panel-dropped"
+        "waitStable": {}
+      },
+      {
+        "capture": "dock-tab-cancelled"
       }
     ]
   }

@@ -708,13 +708,13 @@
         "capture": "save-name-dialog"
       },
       {
-        "press": {
-          "key": "Enter",
-          "target": {
-            "role": "textbox",
-            "within": {
-              "role": "dialog"
-            }
+        "click": {
+          "role": "button",
+          "name": "保存",
+          "exact": true,
+          "within": {
+            "role": "dialog",
+            "nth": "last"
           }
         }
       },
@@ -784,13 +784,13 @@
         }
       },
       {
-        "press": {
-          "key": "Enter",
-          "target": {
-            "role": "textbox",
-            "within": {
-              "role": "dialog"
-            }
+        "click": {
+          "role": "button",
+          "name": "保存",
+          "exact": true,
+          "within": {
+            "role": "dialog",
+            "nth": "last"
           }
         }
       },

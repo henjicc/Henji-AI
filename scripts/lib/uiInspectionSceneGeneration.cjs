@@ -20,6 +20,13 @@ function attachUiInspectionGeneration(context) {
     await modelPanel.waitFor({ state: 'visible', timeout: 8000 })
     const searchInput = modelPanel.locator('input[placeholder*="模型"], input[placeholder*="model" i]').first()
     await searchInput.waitFor({ state: 'visible', timeout: 8000 })
+    // 供应商 / 类型 / 功能筛选会记住上一次的选择（场景之间共享同一份界面状态）：先全部恢复成“全部”，再按名称搜
+    for (const name of [/^(供应商|Provider)$/, /^(类型|Type)$/, /^(功能|Function|Capability)$/]) {
+      const filter = modelPanel.getByRole('button', { name }).first()
+      if (!(await filter.count()) || /^(全部|All)$/.test(((await filter.textContent()) || '').trim())) continue
+      await filter.click()
+      await page.getByRole('option', { name: /^(全部|All)$/ }).filter({ visible: true }).first().click({ timeout: 5000 })
+    }
     return searchInput
   }
 

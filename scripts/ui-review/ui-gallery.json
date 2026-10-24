@@ -33,7 +33,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -47,7 +51,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -61,7 +69,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -75,7 +87,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -89,7 +105,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -103,7 +123,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -117,7 +141,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -131,7 +159,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -145,7 +177,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -159,7 +195,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -173,7 +213,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -187,7 +231,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -201,7 +249,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -215,7 +267,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -229,7 +285,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -243,7 +303,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -257,7 +321,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -271,7 +339,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -285,7 +357,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -299,7 +375,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -313,7 +393,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -327,7 +411,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -341,7 +429,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -355,7 +447,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -369,7 +465,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -399,7 +499,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -413,7 +517,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -427,7 +535,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -457,7 +569,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -471,7 +587,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -485,7 +605,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -515,7 +639,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -529,7 +657,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -543,7 +675,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -573,7 +709,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -587,7 +727,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -601,7 +745,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -631,7 +779,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -645,7 +797,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -659,7 +815,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -689,7 +849,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -703,7 +867,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -717,7 +885,29 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-height-extra"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -747,7 +937,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -761,7 +955,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -775,7 +973,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -789,7 +991,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -803,7 +1009,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -817,7 +1027,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -831,7 +1045,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -845,7 +1063,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -859,7 +1081,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -873,7 +1099,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -887,7 +1117,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -901,7 +1135,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -915,7 +1153,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -945,7 +1187,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -959,7 +1205,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -973,7 +1223,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -987,7 +1241,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1001,7 +1259,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1015,7 +1277,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1029,7 +1295,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1043,7 +1313,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1057,7 +1331,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -1087,7 +1365,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1101,7 +1383,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1115,7 +1401,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1129,7 +1419,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1143,7 +1437,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1157,7 +1455,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1171,7 +1473,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1185,7 +1491,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1199,7 +1509,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1213,7 +1527,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1227,7 +1545,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1241,7 +1563,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1255,7 +1581,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1269,7 +1599,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1283,7 +1617,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1297,7 +1635,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1311,7 +1653,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1325,7 +1671,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1339,7 +1689,29 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-source-tokens-extra"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -1369,7 +1741,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1383,7 +1759,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1397,7 +1777,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -1427,7 +1811,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1441,7 +1829,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1455,7 +1847,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -1485,7 +1881,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1499,7 +1899,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1513,7 +1917,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -1543,7 +1951,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1557,7 +1969,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1571,7 +1987,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -1601,7 +2021,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1615,7 +2039,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1629,7 +2057,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -1659,7 +2091,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1673,7 +2109,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1687,7 +2127,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -1717,7 +2161,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1731,7 +2179,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1745,7 +2197,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1759,7 +2215,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1773,7 +2233,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1787,7 +2251,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -1817,7 +2285,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1831,7 +2303,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1845,7 +2321,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -1875,7 +2355,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1889,7 +2373,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1903,7 +2391,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -1933,7 +2425,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1947,7 +2443,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -1961,7 +2461,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -1991,7 +2495,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2005,7 +2513,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2019,7 +2531,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -2049,7 +2565,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2063,7 +2583,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2077,7 +2601,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -2107,7 +2635,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2121,7 +2653,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2135,7 +2671,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -2165,7 +2705,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2179,7 +2723,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2193,7 +2741,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2207,7 +2759,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2221,7 +2777,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2235,7 +2795,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -2265,7 +2829,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2279,7 +2847,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2293,7 +2865,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2307,7 +2883,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2321,7 +2901,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2335,7 +2919,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2349,7 +2937,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2363,7 +2955,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2377,7 +2973,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -2407,7 +3007,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2421,7 +3025,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2435,7 +3043,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -2465,7 +3077,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2479,7 +3095,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2493,7 +3113,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2507,7 +3131,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2521,7 +3149,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2535,7 +3167,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 600
       }
@@ -2549,7 +3185,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 600
       }
@@ -2563,7 +3203,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 600
       }
@@ -2577,7 +3221,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 600
       }
@@ -2591,7 +3239,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 600
       }
@@ -2605,7 +3257,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 600
       }
@@ -2619,7 +3275,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -2649,7 +3309,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2663,7 +3327,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2677,7 +3345,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2691,7 +3363,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -2721,7 +3397,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2735,7 +3415,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2749,7 +3433,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2763,7 +3451,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2777,7 +3469,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2791,7 +3487,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2805,7 +3505,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2819,7 +3523,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2833,7 +3541,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -2863,7 +3575,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2877,7 +3593,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2891,7 +3611,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2905,7 +3629,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2919,7 +3647,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2933,7 +3665,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2947,7 +3683,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2961,7 +3701,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -2975,7 +3719,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -3005,7 +3753,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3035,7 +3787,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3049,7 +3805,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3063,7 +3823,29 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-long-list-extra"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }
@@ -3093,7 +3875,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3107,7 +3893,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3121,7 +3911,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3135,7 +3929,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3149,7 +3947,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3163,7 +3965,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3177,7 +3983,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3191,7 +4001,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3205,7 +4019,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3219,7 +4037,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3233,7 +4055,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3247,7 +4073,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3261,7 +4091,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3275,7 +4109,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3289,7 +4127,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3303,7 +4145,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3317,7 +4163,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3331,7 +4181,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3345,7 +4199,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3359,7 +4217,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3373,7 +4235,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3387,7 +4253,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3401,7 +4271,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3415,7 +4289,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3429,7 +4307,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3443,7 +4325,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3457,7 +4343,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3471,7 +4361,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3485,7 +4379,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3499,7 +4397,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 360
       }
@@ -3513,7 +4415,11 @@
     {
       "scroll": {
         "target": {
-          "selector": "[data-gallery-scroll]"
+          "selector": "[data-gallery-scroll]",
+          "at": {
+            "x": 10,
+            "y": 200
+          }
         },
         "dy": 100000
       }

@@ -155,14 +155,14 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 |---|---|
 | `surfaceStacks` | 自己画了边框 + 底色的表面嵌套 ≥ 3 层（输入控件不算一层） |
 | `lowContrast` | 通用文字/图标像素审计：正文 ≥4.5、大字/图标 ≥3；交互图形 ≥3:1，由对应场景分别测填充、边界、手柄与邻接背景，不能用图标读数代替（见 testing.md） |
-| `oversizedRadius` / `shadowOutsideOverlay` / `hiddenPositioning` | 内层圆角大于外层；非浮层用阴影；定位只写在 CSS 里 |
-| `insetEscape` / `horizontalOverflow` / `nestedScroll` / `hardTextClip` / `smallTargets` | 逃出助手插入量；横向溢出；双层竖向滚动；无省略号的硬裁切；普通命中区 < 24px（0.5px 舍入容差），正式 2xs 图标按钮按 20px 检查 |
+| `oversizedRadius` / `shadowOutsideOverlay` / `hiddenPositioning` | 内层圆角大于外层（圆形与胶囊按形状算，不判）；非浮层用阴影；定位只写在 CSS 里 |
+| `insetEscape` / `horizontalOverflow` / `nestedScroll` / `hardTextClip` / `smallTargets` | 逃出助手插入量；横向溢出（平移缩放视口 `data-layout-scroll-region` 除外）；双层竖向滚动（限高的多行输入框在框内滚动不算）；无省略号的硬裁切（含数值框读数放不下）；普通命中区 < 24px（0.5px 舍入容差），正式 2xs 图标按钮按 20px 检查，正文里的行内链接按 WCAG 行内例外不判 |
 | `pageTitleInconsistency` | 跨界面页面标题字号不一致 |
 | `nestedSameBackground` | 悬停或选中的容器里，行内控件与容器底 OKLab 距离 < 0.02（玻璃上不判） |
 | `menuOptionTruncated` | `role=option` 里的文字被截断（不留容差） |
-| `stackedBands` | **条带数 > 2**：不在滚动区里、高 24–64、占父容器宽 ≥ 90%、自己画了上/下边线或不同底色（或是命令带 / 从属带 / 工具条 / 页头）的块，上下相接（缝 ≤ 2px）连成一串超过 2 条。画布视口内不判 |
+| `stackedBands` | **条带数 > 2**：不在滚动区里、高 24–64、占父容器宽 ≥ 90%、自己画了上/下边线或不同底色（或是命令带 / 从属带 / 工具条 / 页头）的块，上下相接（缝 ≤ 2px）连成一串超过 2 条。画布视口内、无边框窗口标题栏（`data-window-titlebar`）不判 |
 | `toolbarWrap` | 工具条（`data-command-bar`、`data-command-subordinate`、`role=toolbar`、`UiToolbar`、`UiOverflowRow`）的直接子项排成多行（竖排工具条看是否排成多列），或其中文字折成两行 |
-| `shortTextTruncated` | 全文 ≤ 16 字的文字被省略号截断（按钮、标签、标题、芯片这类界面文案放不下）。用户内容（`data-observation-sensitive` / `data-user-content`）与菜单选项不在此判 |
+| `shortTextTruncated` | 全文 ≤ 16 字的文字被省略号截断（按钮、标签、标题、芯片这类界面文案放不下）。用户内容（`data-observation-sensitive` / `data-user-content`）、菜单选项与时间轴件（`data-ui-timeline-item`）不在此判 |
 | `selectedStateWeak` | 同组兄弟选项（`aria-selected` / `aria-current` / `data-selected` / 单选 `aria-checked`；`aria-pressed` 只在 group / toolbar / radiogroup / tablist 里算多选一）里，选中项与静息项的底色、文字色、描边 OKLab 距离都 < 0.03，且勾、阴影、轮廓、字重、伪元素都相同、按结构序号比较的后代也没有差异（选中态画在行内按钮上的图层行不误报）；悬停中的项不参与比较 |
 | `overlayClipped` | 浮层（对话框、菜单、列表框、提示，或 z-index ≥ 30 的绝对/固定定位块，不含满屏层与画布视口内）框内 5 × 5 取点（内缩到圆角弧线以内）：点在窗口外，或该点的命中栈里没有这个浮层（被祖先 `overflow` 裁掉）。被别的浮层压住不算 |
 
@@ -172,8 +172,8 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 
 | 新 DOM 规则 | 判据 |
 |---|---|
-| rowHeightMismatch | toolbar/命令带/表单控件列/动作组中，真实外框高度或中心线相差 >1px；分段、字段、读数按外壳，不重复计内部按钮；竖排、xl 查看器及步进附属按钮除外 |
-| actionStartsAtLabelColumn | 有 panel 行的同一 UiGroup 内，行外动作左缘比控件列左缘小 >1px |
+| rowHeightMismatch | toolbar/命令带/表单控件列/动作组中，真实外框高度或中心线相差 >1px；分段、字段、读数按外壳，不重复计内部按钮；竖排、xl 查看器及步进附属按钮除外；滑杆、复选框、开关只比中心线不比高度 |
+| actionStartsAtLabelColumn | 有 panel 行的同一 UiGroup 内，行外动作左缘比控件列左缘小 >1px；展开 / 收起子分组的开关（`aria-expanded` 且不弹菜单）是分组标题，不算 |
 | formControlMisaligned | 同一 UiGroup 的 panel 行控件列左缘差 >1px；独立嵌套组和 auto 行不混算 |
 | multiplePrimary | 最近 dialog/toolbar/工作区表面拥有的可见 primary 按钮与 accent 图标按钮之和 >1；隐藏分支、嵌套表面不混算 |
 
@@ -283,7 +283,7 @@ npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --matrix review --a
 | 规则 | 判据 | 不算问题 |
 |---|---|---|
 | `controlClipped` | 控件或带文字的元素外框超出某个 `overflow: hidden / clip` 祖先（或窗口）> 1.5px，且仍有一部分可见 | 整块看不见（折叠、移出）；被滚动容器（含 `data-layout-scroll-region`）滚出去；绝对定位元素越过的中间祖先不是它的包含块；有理由的 `clip` 声明 |
-| `controlOccluded` | 控件可见范围的中心，或五个取样点中 ≥ 2 个，命中的最上层元素不是它自己、子元素或祖先 | 盖在上面的是浮层（菜单、弹窗、提示、`z-index ≥ 30` 的定位层）、吸顶行、分隔条；同一字段控件的组成部分；有理由的 `occlude` 声明 |
+| `controlOccluded` | 控件可见范围的中心，或五个取样点中 ≥ 3 个，命中的最上层元素不是它自己、子元素或祖先；圆形、胶囊控件的角点按圆角内缩取样 | 盖在上面的是在它之上打开的另一层浮层（菜单、弹窗及其遮罩、查看器、提示、`z-index ≥ 30` 的定位层；同一个浮层内部互相压着仍算）、吸顶行、分隔条；同一字段控件的组成部分；有理由的 `occlude` 声明 |
 
 - 巡检：`scripts/lib/uiLayoutAudit.cjs` 用 Node 类型剥离加载同一份源码，序列化进渲染进程执行，与 `auditUiDom` 合并成同一份规则结果（`check:ui-visual`、`ui:tour --audit`、`test:ui-visual-rules`）。断牙：`test:ui-dom-rules` 的 jsdom 夹具 + 中心页规范区 Do/Don't（真实 Electron 22 个样例）。
 - 运行时布局守卫（`src/core/uiAudit/layoutGuard.ts`）：界面安静 0.7 秒后在空闲时检查（按住鼠标、窗口隐藏时不查），同一问题每次运行只记一次。开发运行默认描边 + 日志；`electron:prod` 自动带 `--dev-layout-guard=log` 只记日志；安装包不运行。用户测试后查 `npm run logs:query -- --event ui.layout_issue.detected`（或按时间段查 `app.ui.layoutGuard` 域）。

@@ -19,6 +19,8 @@
     { "click": { "selector": "[data-node-header-drag-surface=\"__run_text\"]" } },
     { "waitFor": { "selector": "[data-node-toolbar-panel]" } },
     { "click": { "role": "button", "name": "/^(生成|Generate)$/", "within": { "selector": "[data-node-toolbar-panel]" } } },
+    { "waitFor": { "role": "button", "name": "允许本次", "exact": true }, "optional": true, "timeout": 3000 },
+    { "click": { "role": "button", "name": "允许本次", "exact": true }, "ifPresent": { "role": "button", "name": "允许本次", "exact": true } },
     { "waitFor": { "selector": "[data-node-executing=\"true\"]" }, "timeout": 15000 },
     { "wait": 400 },
     { "capture": "running-selected" },

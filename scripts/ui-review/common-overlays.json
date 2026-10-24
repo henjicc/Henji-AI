@@ -625,7 +625,7 @@
       {
         "click": {
           "role": "button",
-          "name": "知道了"
+          "name": "/^(跳过应用内引导|知道了)$/"
         },
         "optional": true
       },
@@ -845,7 +845,7 @@
       },
       {
         "click": {
-          "role": "button",
+          "role": "radio",
           "name": "助手追踪"
         }
       },
@@ -869,7 +869,7 @@
   {
     "id": "review-common-name-dialogs",
     "surface": "通用",
-    "name": "核对-新建/重命名弹窗与删除确认（画布工程列表）",
+    "name": "核对-重命名弹窗与删除确认（画布工程列表）",
     "checklist": [
       "U07.1",
       "U07.2",
@@ -916,9 +916,19 @@
         }
       },
       {
+        "rightClick": {
+          "selector": "[data-project-id]"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "menu"
+        }
+      },
+      {
         "click": {
-          "role": "button",
-          "name": "/^新建/"
+          "role": "menuitem",
+          "name": "/^重命名/"
         }
       },
       {
@@ -930,7 +940,7 @@
         "waitStable": {}
       },
       {
-        "capture": "create-open"
+        "capture": "rename-open"
       },
       {
         "fill": {
@@ -947,7 +957,7 @@
         "waitStable": {}
       },
       {
-        "capture": "create-empty"
+        "capture": "rename-empty"
       },
       {
         "fill": {
@@ -964,7 +974,7 @@
         "waitStable": {}
       },
       {
-        "capture": "create-long"
+        "capture": "rename-long"
       },
       {
         "press": "Escape"
@@ -1001,7 +1011,7 @@
       {
         "hover": {
           "role": "button",
-          "name": "/删除/",
+          "name": "/删除|移到回收站/",
           "within": {
             "role": "dialog"
           }

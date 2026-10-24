@@ -8,6 +8,27 @@
  * 放行暂停中的回复、停止助手、关闭替身、恢复进场时的模型配置，不污染同一次启动里的后续场景。
  */
 const { createServer } = require('node:http')
+const path = require('node:path')
+
+let defaultLlmConfigCache = null
+/**
+ * 应用在没有配置文件时实际用的默认配置（含内置供应商与模型）：直接打包 src/core/llm/defaults.ts 取 createDefaultLlmConfig()。
+ * 隔离数据首次进场时 readConfig 是 null；若拿空数组当基线写回，内置供应商（如 DeepSeek）会从后面的场景里消失。
+ */
+function defaultLlmConfig() {
+  if (defaultLlmConfigCache) return structuredClone(defaultLlmConfigCache)
+  const root = path.resolve(__dirname, '../..')
+  const esbuild = require(path.join(root, 'node_modules/esbuild'))
+  const result = esbuild.buildSync({
+    stdin: { contents: "export { createDefaultLlmConfig } from './src/core/llm/defaults'", resolveDir: root, loader: 'ts' },
+    bundle: true, platform: 'node', format: 'cjs', write: false, logLevel: 'silent',
+    alias: { '@': path.join(root, 'src') }, define: { 'import.meta.env': '{"DEV":false,"PROD":true,"MODE":"production"}' },
+  })
+  const loaded = { exports: {} }
+  new Function('module', 'exports', 'require', result.outputFiles[0].text)(loaded, loaded.exports, require)
+  defaultLlmConfigCache = loaded.exports.createDefaultLlmConfig()
+  return structuredClone(defaultLlmConfigCache)
+}
 
 const REPLY_KEYS = Object.freeze(['thinking', 'partial', 'content', 'tool', 'error', 'hold'])
 const CAPABILITY_KEYS = Object.freeze(['image', 'video', 'audio'])
@@ -39,7 +60,7 @@ function normalizeReply(raw, index) {
  *   `tool`（{ name, arguments }，工具调用；只用只读工具）、`error`（{ status, message }，HTTP 错误）、
  *   `hold`（true：流出 thinking/partial 后暂停，直到 `releaseAssistant`）。
  * - `capabilities`：模型额外的输入模态（image/video/audio），决定输入框是否出现附件入口。
- * - `memory`：写入共享记忆摘要（记忆面板的“已保存”状态）。
+ * - `memory`：写入一条全局“创作偏好”记忆（设置 → 智能助手 → 记忆里显示为已保存的条目）。
  * - `newConversation`：默认 true，先起一段干净对话，不接着前一个场景的会话。
  */
 function normalizeSeedAssistant(value) {
@@ -115,8 +136,9 @@ async function seedAssistantFixture(page, spec) {
   })
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   const baseUrl = `http://127.0.0.1:${server.address().port}/v1`
-  const baselineConfig = await page.evaluate(async ({ baseUrl, capabilities }) => {
-    const baseline = await window.henjiNative.llm.readConfig() ?? { providers: [], models: [], promptProfiles: [], agentProfiles: [] }
+  const baselineConfig = await page.evaluate(async ({ baseUrl, capabilities, defaults }) => {
+    // 隔离数据里还没有配置文件：用应用的默认配置当基线（缺字段时主进程的配置校验会拒绝整次提交）
+    const baseline = { ...defaults, ...(await window.henjiNative.llm.readConfig() ?? {}) }
     const provider = { providerId: 'ui-review', displayName: '核对替身', adapter: 'openai-compatible', baseUrl, enabled: true, setup: { kind: 'custom' } }
     const model = { providerId: provider.providerId, modelId: `fixture-${capabilities.join('-') || 'text'}`, displayName: '核对替身模型', adapter: provider.adapter, baseUrl, enabled: true,
       capabilities: { text: true, image: capabilities.includes('image'), video: capabilities.includes('video'), audio: capabilities.includes('audio'),
@@ -133,11 +155,15 @@ async function seedAssistantFixture(page, spec) {
     config.selectedAgentProfileId = 'ui-review-profile'
     await window.henjiNative.llm.writeConfig(config)
     return baseline
-  }, { baseUrl, capabilities: spec.capabilities })
+  }, { baseUrl, capabilities: spec.capabilities, defaults: defaultLlmConfig() })
   if (spec.memory !== null) {
+    // 三层记忆（全局 / 风格 / 项目）：写成全局“创作偏好”里的一条用户记忆，同一条 id 重复写入时按已有 revision 覆盖
     await page.evaluate(async (content) => {
-      const current = await window.henjiNative.assistant.getSharedMemory()
-      await window.henjiNative.assistant.updateSharedMemory({ content, expectedRevision: current.revision })
+      const state = await window.henjiNative.assistant.getMemoryState()
+      const id = 'ui-review-memory'
+      const existing = state.entries.find((entry) => entry.id === id)
+      await window.henjiNative.assistant.writeMemory({ target: { layer: 'global' }, id, expectedRevision: existing?.revision ?? 0,
+        entry: { section: 'creative', content, source: 'user' }, actor: 'user', reason: '界面核对夹具' })
     }, spec.memory)
   }
   if (spec.newConversation) {

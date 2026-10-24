@@ -143,7 +143,11 @@
       },
       {
         "rightClick": {
-          "selector": "[data-video-edit-project-entry][aria-label=\"核对素材\"]"
+          "selector": "[data-video-edit-project-entry][aria-label=\"核对素材\"]",
+          "at": {
+            "x": 60,
+            "y": 10
+          }
         }
       },
       {
@@ -266,7 +270,11 @@
       },
       {
         "click": {
-          "selector": "[data-video-edit-project-entry][aria-label=\"核对素材\"]"
+          "selector": "[data-video-edit-project-entry][aria-label=\"核对素材\"]",
+          "at": {
+            "x": 60,
+            "y": 10
+          }
         }
       },
       {
@@ -294,7 +302,11 @@
       },
       {
         "doubleClick": {
-          "selector": "[data-video-edit-project-entry][aria-label=\"核对素材\"]"
+          "selector": "[data-video-edit-project-entry][aria-label=\"核对素材\"]",
+          "at": {
+            "x": 60,
+            "y": 10
+          }
         }
       },
       {

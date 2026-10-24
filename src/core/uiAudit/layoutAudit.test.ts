@@ -56,6 +56,36 @@ it('控件中心被别的元素盖住算遮挡；盖在上面的是浮层、吸�
   expect(result.controlClipped).toEqual([])
 })
 
+it('弹窗打开时底下的控件不算被盖住（两个都在浮层里也一样）；同一个弹窗内部互相压着仍算', () => {
+  document.body.innerHTML = `
+    <div style="position: absolute; z-index: 40" data-rect="0 0 600 600">
+      <button aria-label="侧栏里的" data-rect="0 0 100 30"></button>
+    </div>
+    <div role="dialog" data-rect="0 0 1440 900">
+      <div class="scrim" data-rect="0 0 1440 900"></div>
+      <button aria-label="弹窗里被盖的" data-rect="700 700 800 730"></button><div class="badge" data-rect="700 700 800 730"></div>
+    </div>`
+  const result = auditLayoutIssues()
+  expect(result.controlOccluded.map(issue => [issue.element, issue.by])).toEqual([['button「弹窗里被盖的」', 'div.badge']])
+})
+
+it('圆形按钮的四角落在圆外：按圆角内缩取样，底下的图不算盖住它', () => {
+  document.body.innerHTML = `
+    <img class="cover" data-rect="0 0 200 200" />
+    <button aria-label="播放" style="border-top-left-radius: 9999px; position: absolute" data-rect="80 80 120 120"></button>
+    <img class="cover-2" data-rect="0 300 200 500" />
+    <button aria-label="方形" style="position: absolute" data-rect="80 380 120 420"></button><div class="corner" data-rect="80 380 84 384"></div><div class="corner" data-rect="116 380 120 384"></div><div class="corner" data-rect="80 416 84 420"></div>`
+  // 圆形按钮的命中范围按圆走：四角那几个像素点到的是底下的图
+  const hitTest = document.elementFromPoint
+  document.elementFromPoint = (x: number, y: number) => {
+    const round = document.querySelector('[aria-label="播放"]') as Element
+    const inside = Math.hypot(x - 100, y - 100) <= 20
+    return x >= 80 && x <= 120 && y >= 80 && y <= 120 && !inside ? document.querySelector('img.cover') : hitTest.call(document, x, y) ?? round
+  }
+  const result = auditLayoutIssues()
+  expect(result.controlOccluded.map(issue => issue.element)).toEqual(['button「方形」'])
+})
+
 it('运行时守卫可取回问题对应的元素', () => {
   document.body.innerHTML = `<div style="overflow-x: hidden; overflow-y: hidden" data-rect="0 0 100 40"><button aria-label="被裁的按钮" data-rect="80 10 140 30"></button></div>`
   const result = auditLayoutIssues({ collectElements: true })

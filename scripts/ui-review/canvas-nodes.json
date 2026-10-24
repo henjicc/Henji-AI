@@ -799,7 +799,7 @@
     },
     {
       "waitFor": {
-        "selector": ".react-flow__node[data-id=\"__n_trim\"] button[title=\"裁剪\"]",
+        "selector": ".react-flow__node[data-id=\"__n_trim\"] button[aria-label=\"裁剪\"]",
         "includeHidden": true
       },
       "timeout": 20000
@@ -812,7 +812,7 @@
     },
     {
       "click": {
-        "selector": "button[title=\"裁剪\"]",
+        "selector": "button[aria-label=\"裁剪\"]",
         "includeHidden": true,
         "within": {
           "selector": ".react-flow__node[data-id=\"__n_trim\"]"

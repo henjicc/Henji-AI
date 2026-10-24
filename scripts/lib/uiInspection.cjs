@@ -260,7 +260,7 @@ function resolveInspectionRuns(options, outDir) {
 /** 场景来源：--steps 时只跑步骤描述编译出的场景（同样受 --only 过滤），否则是登记的全部场景。 */
 function resolveInspectionScenePool(options, root) {
   if (options.steps.length === 0) return UI_INSPECTION_SCENES
-  const context = createReviewStepContext({ canvasFixtureProjectId: UI_INSPECTION_CANVAS_PROJECT_ID, settlePage })
+  const context = createReviewStepContext({ canvasFixtureProjectId: UI_INSPECTION_CANVAS_PROJECT_ID, canvasFixtureProjectName: UI_INSPECTION_CANVAS_PROJECT_NAME, settlePage })
   return loadStepScenes(options.steps, context, root)
 }
 

@@ -4,7 +4,8 @@
  * - `controlClipped`：控件或文字被不滚动的祖先（`overflow: hidden / clip`，或窗口边缘）裁掉一部分。
  *   整块看不见（折叠、移出可视区）不算；被滚动容器滚出去也不算——那是滚动，不是裁切。
  * - `controlOccluded`：控件可见范围的中心或两处以上取样点被别的元素盖住，点不到。
- *   盖在上面的是浮层（菜单、弹窗、提示、z-index ≥ 30 的定位层）或吸顶行时不算：前者是打开的浮层，后者是滚动内容滑到吸顶行下面。
+ *   盖在上面的是另一层浮层（菜单、弹窗及其遮罩、提示、z-index ≥ 30 的定位层）或吸顶行时不算：前者是在它上面打开的浮层，
+ *   后者是滚动内容滑到吸顶行下面；同一个浮层内部互相压着仍算。圆形、胶囊控件的四角按圆角内缩取样。
  *
  * 有意的裁切 / 覆盖在最近的容器上写 `data-layout-allow="clip"` / `"occlude"`（空格分隔）并在
  * `data-layout-allow-reason` 写明理由；没有理由的声明不生效。自绘滚动的区域（如时间线轨道区）标 `data-layout-scroll-region`。
@@ -134,15 +135,16 @@ export function auditLayoutIssues(options: { collectElements?: boolean; root?: s
   }
   const surface = (element: Element): string => element.closest('[data-application-surface-id]')?.getAttribute('data-application-surface-id') ?? ''
   const bounds = (rect: DOMRect): [number, number, number, number] => [Math.round(rect.left), Math.round(rect.top), Math.round(rect.right), Math.round(rect.bottom)]
-  const isOverlay = (element: Element): boolean => {
+  /** 最近的浮层（菜单、弹窗、提示、z-index ≥ 30 的定位层）；不在浮层里返回 null */
+  const overlayLayer = (element: Element): Element | null => {
     let node: Element | null = element
     while (node && node !== document.body) {
-      if (node.matches(OVERLAY)) return true
+      if (node.matches(OVERLAY)) return node
       const value = style(node)
-      if ((value.position === 'fixed' || value.position === 'absolute') && Number.parseInt(value.zIndex, 10) >= 30) return true
+      if ((value.position === 'fixed' || value.position === 'absolute') && Number.parseInt(value.zIndex, 10) >= 30) return node
       node = node.parentElement
     }
-    return false
+    return null
   }
   /** 最近的吸顶容器；data-layout-pinned：自绘的吸顶行（如时间线顶部固定的字幕轨），与 position: sticky 同等对待 */
   const stickyContainer = (element: Element): Element | null => {
@@ -178,7 +180,9 @@ export function auditLayoutIssues(options: { collectElements?: boolean; root?: s
     }
     if (!control || allowed(element, 'occlude')) continue
     // 遮挡：可见范围的中心与四个内点取样，看命中的最上层元素是不是它自己（或它的子元素 / 祖先）。
-    const inset = Math.min(3, width / 4, height / 4)
+    // 圆角外的角落不属于控件（命中测试按圆角走，圆形按钮的四角会落到底下的图上）：角点内缩到圆弧以内（r × 0.3）
+    const radius = Math.min(Number.parseFloat(style(element).borderTopLeftRadius) || 0, own.width / 2, own.height / 2)
+    const inset = Math.min(Math.max(3, radius * 0.3 + 1), width / 4, height / 4)
     const points: Array<[number, number]> = [[(visible.left + visible.right) / 2, (visible.top + visible.bottom) / 2],
       [visible.left + inset, visible.top + inset], [visible.right - inset, visible.top + inset], [visible.left + inset, visible.bottom - inset], [visible.right - inset, visible.bottom - inset]]
     let blocked = 0; let centerBlocked = false; let occluder: Element | null = null
@@ -190,7 +194,9 @@ export function auditLayoutIssues(options: { collectElements?: boolean; root?: s
       // 同一个字段控件的组成部分（读数盖在输入框上、标签与控件）不算遮挡
       const field = element.closest('[data-ui-field-control], label')
       if (field && field.contains(hit)) return
-      if (isOverlay(hit) && !isOverlay(element)) return
+      // 盖住它的是在它上面打开的浮层（弹窗连同遮罩、菜单、查看器）：浮层不包含它就不算；同一个浮层内部互相压着才算
+      const layer = overlayLayer(hit)
+      if (layer && !layer.contains(element)) return
       // 内容滑到吸顶 / 固定行下面：盖住它的吸顶容器不包含它（横向吸附的轨道头被纵向固定的字幕轨盖住也算这种）
       const pinned = stickyContainer(hit)
       if (pinned && !pinned.contains(element)) return

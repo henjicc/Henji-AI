@@ -109,6 +109,16 @@ function auditUiDom(context = {}) {
     }
     return false
   }
+  /** 中心页样张（连同里面定位出去的浮层）整块落在目录滚动区的可见范围内：半截滚出时不对账，也不报滚动造成的浮层裁切 */
+  const sampleFullyInView = (sample) => {
+    let scroller = sample.parentElement
+    while (scroller && scroller !== document.body && !['auto', 'scroll'].includes(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement
+    const area = scroller && scroller !== document.body ? scroller.getBoundingClientRect() : { top: 0, bottom: window.innerHeight }
+    const own = sample.getBoundingClientRect()
+    let top = own.top; let bottom = own.bottom
+    for (const child of sample.querySelectorAll('*')) { const box = child.getBoundingClientRect(); if (box.width > 0 && box.height > 0) { top = Math.min(top, box.top); bottom = Math.max(bottom, box.bottom) } }
+    return top >= Math.max(0, area.top) && bottom <= Math.min(window.innerHeight, area.bottom)
+  }
   const isVisible = (element) => {
     if (hasHiddenAncestor(element)) return false
     const rect = element.getBoundingClientRect()
@@ -209,6 +219,9 @@ function auditUiDom(context = {}) {
     const radius = Number.parseFloat(getComputedStyle(element).borderTopLeftRadius) || 0
     const parent = element.parentElement
     if (radius <= 0 || !parent) continue
+    // 圆形与胶囊（圆角 ≥ 半高）是形状不是容器转角：封面正中的播放键、角上的徽标不按同心圆角判
+    const own = element.getBoundingClientRect()
+    if (own.height > 0 && radius >= Math.min(own.width, own.height) / 2 - 0.5) continue
     const parentStyle = getComputedStyle(parent)
     const parentRadius = Number.parseFloat(parentStyle.borderTopLeftRadius) || 0
     if (parentRadius > 0 && radius > parentRadius + 1 && parentStyle.overflow !== 'visible') {
@@ -286,7 +299,7 @@ function auditUiDom(context = {}) {
       && element.clientWidth > 32
       && element.scrollWidth > element.clientWidth + 2
       && ['hidden', 'clip'].includes(style.overflowX)
-      && !element.matches('.react-flow')
+      && !element.matches('.react-flow, [data-layout-scroll-region]')
     if ((outsideViewport || clippedContainer) && !ignoresGalleryRule(element, 'horizontalOverflow')) {
       out.horizontalOverflow.push({
         reason: outsideViewport ? 'viewport' : 'clipped-container',
@@ -300,6 +313,8 @@ function auditUiDom(context = {}) {
 
   for (const element of all.filter(isScrollableY)) {
     if (ignoresGalleryRule(element, 'nestedScroll')) continue
+    // 多行输入框（textarea、富文本编辑器）限高后在框内滚动是输入框自身的行为，不是页面布局套了两层滚动
+    if (element.matches('textarea, [contenteditable="true"]') || element.closest('[data-ui-field-control]')) continue
     let ancestor = element.parentElement
     while (ancestor && ancestor !== document.body) {
       if (isScrollableY(ancestor)) {
@@ -315,12 +330,21 @@ function auditUiDom(context = {}) {
     if (!text || element.clientWidth <= 0 || element.scrollWidth <= element.clientWidth + 1) continue
     const style = getComputedStyle(element)
     if (!['hidden', 'clip'].includes(style.overflowX) || style.textOverflow === 'ellipsis') continue
+    // 渐隐遮罩（mask-image，画布节点标题）是另一种截断提示：尾部淡出，不算硬裁
+    const mask = style.maskImage || style.webkitMaskImage || ''
+    if (mask && mask !== 'none') continue
     out.hardTextClip.push({
       text: text.slice(0, 42),
       scrollWidth: element.scrollWidth,
       clientWidth: element.clientWidth,
       element: label(element),
     })
+  }
+
+  // 数值框的读数放不下：输入框内文字被裁掉（生成页底栏“1024”显示成“102”）。文本框里长内容横向滚动是常态，只查数值框。
+  for (const element of all.filter((node) => node.matches('input[type="number"], input[inputmode="decimal"], input[inputmode="numeric"]') && isVisible(node))) {
+    if (!element.value || element.clientWidth <= 0 || element.scrollWidth <= element.clientWidth + 1) continue
+    out.hardTextClip.push({ text: String(element.value).slice(0, 42), scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, element: label(element) })
   }
 
   const targetSelector = 'button, a[href], input, select, textarea, [role="button"], [role="checkbox"], [role="switch"]'
@@ -333,6 +357,8 @@ function auditUiDom(context = {}) {
     if (element.matches('[data-ui-compact-stepper-button]')) continue
     // WCAG 2.5.8 行内例外：句子里的链接档按钮与逐字稿行内词块，高度受行高约束（任务 5.11 样张页首次覆盖到）
     if (element.matches('[data-variant="link"], [data-text-token="inline"]')) continue
+    // 正文里的行内链接（助手回答、说明文字的 Markdown 链接）同属 WCAG 行内例外：display 为 inline 的 a 不按 24px 判
+    if (element.matches('a[href]') && style.display === 'inline') continue
     // 画布视口里的控件会随缩放矩阵一起缩放，getBoundingClientRect 不是其 CSS 命中区尺寸。
     if (element.closest('.react-flow__viewport')) continue
     // 时间轴上的片段、字幕块、标记、关键帧（data-ui-timeline-item）：宽度随缩放变化或是点状记号，按时间轴习惯（PR）不按 24px 判
@@ -468,13 +494,16 @@ function auditUiDom(context = {}) {
     const rects = frames.map(element => element.getBoundingClientRect())
     // 包含多排字段的容器由 toolbarWrap 处理；这里比较同一水平带的外框。
     if (Math.max(...rects.map(rect => rect.top)) >= Math.min(...rects.map(rect => rect.bottom))) continue
+    // 滑杆、复选框、开关的外框只是命中区（看得见的是细轨道或小方框）：只比中心线，不比高度（与 28 / 32 高的字段同行是常态）
+    const sized = frames.map(element => !element.matches('input[type="range"], [role="checkbox"], [role="switch"]'))
     const heights = rects.map(rect => rect.height)
+    const comparedHeights = heights.filter((_, index) => sized[index])
     const centers = rects.map(rect => rect.top + rect.height / 2)
-    if (Math.max(...heights) - Math.min(...heights) > T.rowTolerance || Math.max(...centers) - Math.min(...centers) > T.rowTolerance) {
+    if ((comparedHeights.length > 1 && Math.max(...comparedHeights) - Math.min(...comparedHeights) > T.rowTolerance) || Math.max(...centers) - Math.min(...centers) > T.rowTolerance) {
       // 点名“不合群”的件：高度或中心线偏离同行多数值的那几个（重要记录 020，便于直接定位）
       const mode = (values) => { const counts = new Map(); for (const value of values) { const key = Math.round(value); counts.set(key, (counts.get(key) || 0) + 1) } return [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0] }
-      const usualHeight = mode(heights); const usualCenter = mode(centers)
-      const outliers = frames.filter((_, index) => Math.abs(heights[index] - usualHeight) > T.rowTolerance || Math.abs(centers[index] - usualCenter) > T.rowTolerance).map(element => label(element)).slice(0, 6)
+      const usualHeight = comparedHeights.length ? mode(comparedHeights) : 0; const usualCenter = mode(centers)
+      const outliers = frames.filter((_, index) => (sized[index] && Math.abs(heights[index] - usualHeight) > T.rowTolerance) || Math.abs(centers[index] - usualCenter) > T.rowTolerance).map(element => label(element)).slice(0, 6)
       out.rowHeightMismatch.push({ element: label(row), heights, centers, outliers })
     }
   }
@@ -485,7 +514,8 @@ function auditUiDom(context = {}) {
     const lefts = controls.map(element => element.getBoundingClientRect().left)
     if (Math.max(...lefts) - Math.min(...lefts) > T.rowTolerance) out.formControlMisaligned.push({ element: label(group), lefts })
     for (const button of group.querySelectorAll('button, a[href], [role="button"]')) {
-      if (!isVisible(button) || button.closest('[data-ui-group]') !== group || button.closest('[data-ui-form-row], [data-ui-field-control]') || button.matches('[data-ui-compact-stepper-button]')) continue
+      // 展开 / 收起子分组的开关（aria-expanded，不弹菜单）是分组标题，不是行外动作，从标签列起头是对的
+      if (!isVisible(button) || button.closest('[data-ui-group]') !== group || button.closest('[data-ui-form-row], [data-ui-field-control]') || button.matches('[data-ui-compact-stepper-button], [aria-expanded]:not([aria-haspopup])')) continue
       if (button.getBoundingClientRect().left < Math.min(...lefts) - T.rowTolerance) out.actionStartsAtLabelColumn.push({ element: label(button), controlLeft: Math.min(...lefts) })
     }
   }
@@ -517,7 +547,8 @@ function auditUiDom(context = {}) {
   const bandSelector = '[data-command-bar], [data-command-subordinate], [role="toolbar"], [data-ui-toolbar], [data-ui-page-header]'
   const bands = []
   for (const element of all) {
-    if (element.closest('.react-flow')) continue
+    // 无边框窗口的标题栏（日志窗口等独立窗口）是窗口外壳，不是视图里的操作条带
+    if (element.closest('.react-flow, [data-window-titlebar]')) continue
     const rect = element.getBoundingClientRect()
     if (rect.height < T.bandMinHeight || rect.height > T.bandMaxHeight) continue
     const parent = element.parentElement
@@ -604,12 +635,14 @@ function auditUiDom(context = {}) {
   // 省略号截断本身是长内容（文件名、提示词、用户命名）的设计；全文不超过 16 字的界面文案被截断才算缺陷。
   // 用户内容（data-observation-sensitive / data-user-content）与菜单选项（menuOptionTruncated 单独判）除外。
   for (const element of all) {
-    const text = directText(element)
+    // 截断容器里文字常包在一层提示 / 标签元素里（属性行名称的 UiTooltipText）：只有一个子元素时按整段文字算
+    const text = directText(element) || (element.childElementCount === 1 ? (element.textContent || '').trim() : '')
     if (!text || text.length > T.shortTextMaxLength) continue
     const style = getComputedStyle(element)
     if (style.textOverflow !== 'ellipsis' || !['hidden', 'clip'].includes(style.overflowX)) continue
     if (element.scrollWidth <= element.clientWidth) continue
-    if (element.closest('[data-observation-sensitive], [data-user-content], [role="option"]')) continue
+    // 时间轴件（片段名、字幕块）的宽度随缩放变化，截断是常态（重要记录 020）
+    if (element.closest('[data-observation-sensitive], [data-user-content], [role="option"], [data-ui-timeline-item]')) continue
     out.shortTextTruncated.push({ text, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, element: label(element) })
   }
 
@@ -691,6 +724,9 @@ function auditUiDom(context = {}) {
   })
   const outermostOverlays = overlays.filter((overlay) => !overlays.some((other) => other !== overlay && other.contains(overlay)))
   for (const overlay of outermostOverlays) {
+    // 中心页样张半截滚出目录滚动区：浮层被滚动区裁掉是滚动，不是浮层越界
+    const ownerSample = overlay.closest('[data-gallery-rule-sample]')
+    if (ownerSample && !sampleFullyInView(ownerSample)) continue
     if (ignoresGalleryRule(overlay, 'overlayClipped')) continue
     const rect = overlay.getBoundingClientRect()
     // 圆角外的角点本来就不属于浮层：取点内缩到圆弧以内（r × 0.3 + 2）
@@ -752,11 +788,11 @@ function auditUiDom(context = {}) {
   out.gallerySamples = []
   for (const sample of document.querySelectorAll('[data-gallery-rule-sample]')) {
     if (!isVisible(sample)) continue
-    const rect = sample.getBoundingClientRect()
     const rule = sample.getAttribute('data-gallery-rule-sample')
     const issues = (out[rule] || []).filter(issue => JSON.stringify(issue).includes(`#${sample.id} / `))
     const expectHit = sample.hasAttribute('data-gallery-expect-hit')
-    if (rect.top >= 0 && rect.bottom <= window.innerHeight) out.gallerySamples.push({ id: sample.id, rule, expectHit, passed: expectHit === (issues.length > 0), issues })
+    // 只对账整块可见的样张（含定位出去的浮层，且在目录滚动区的可见范围内）
+    if (sampleFullyInView(sample)) out.gallerySamples.push({ id: sample.id, rule, expectHit, passed: expectHit === (issues.length > 0), issues })
     if (!context.includeGallerySamples && expectHit) out[rule] = (out[rule] || []).filter(issue => !JSON.stringify(issue).includes(`#${sample.id} / `))
   }
   out.galleryExemptions = [...galleryExemptions.values()].map(entry => ({ ...entry, rules: [...entry.rules] }))

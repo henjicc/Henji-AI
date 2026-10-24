@@ -23,9 +23,10 @@ const REQUIRED_REVIEW_HELPERS = Object.freeze([
   'setupGeneration',
 ])
 
-function createReviewStepContext({ canvasFixtureProjectId, settlePage }) {
+function createReviewStepContext({ canvasFixtureProjectId, canvasFixtureProjectName, settlePage }) {
   const context = {
     canvasFixtureProjectId,
+    canvasFixtureProjectName,
     settlePage,
     TAB_NAMES,
     REFERENCE_FIXTURE_IMAGE: `${process.cwd()}/resources/icons/icon.png`,

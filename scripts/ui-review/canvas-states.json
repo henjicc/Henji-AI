@@ -665,6 +665,27 @@
         }
       },
       {
+        "waitFor": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "optional": true,
+        "timeout": 3000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        }
+      },
+      {
         "wait": 800
       },
       {
@@ -690,6 +711,27 @@
         }
       },
       {
+        "waitFor": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "optional": true,
+        "timeout": 3000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        }
+      },
+      {
         "wait": 800
       },
       {
@@ -712,6 +754,27 @@
           "within": {
             "selector": "[data-node-toolbar-panel]"
           }
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "optional": true,
+        "timeout": 3000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
         }
       },
       {
@@ -762,6 +825,27 @@
           "within": {
             "selector": "[data-node-toolbar-panel]"
           }
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "optional": true,
+        "timeout": 3000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
         }
       },
       {

@@ -319,6 +319,11 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
             sceneError = error
             for (const item of pending) persist(item)
             pending = []
+            // 失败那一刻的画面：步骤找不到目标时，一眼看出界面停在哪里（定位过期步骤还是真缺陷）
+            try {
+              const bytes = await captureInspectionPage(app.app, app.page, {})
+              persist({ key: `${evidenceKey} / failed`, bytes, row: { ...scene, name: `${scene.name}（失败时画面）`, size: sizeLabel, file: `${sizeLabel}-${scene.id}-failed.png` } })
+            } catch { /* 窗口已关闭等情况：只记文字原因 */ }
             const message = error instanceof Error ? error.message : String(error)
             failures.push({ name: scene.name, size: sizeLabel, message })
             console.error(`✗ ${sizeLabel} / ${scene.name}：${message}`)

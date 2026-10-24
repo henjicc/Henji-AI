@@ -20,38 +20,14 @@
     "writesUserData": true,
     "steps": [
       {
-        "enter": "toolbox"
-      },
-      {
-        "click": {
-          "role": "button",
-          "name": "/^返回口播列表$/"
-        },
-        "ifPresent": {
-          "role": "button",
-          "name": "/^返回口播列表$/"
-        }
-      },
-      {
-        "click": {
-          "role": "button",
-          "name": "/^返回工具$/"
-        },
-        "ifPresent": {
-          "role": "button",
-          "name": "/^返回工具$/"
-        }
-      },
-      {
-        "click": {
-          "role": "button",
-          "name": "/^音频编辑/"
+        "enter": {
+          "surface": "tool.audio_edit"
         }
       },
       {
         "waitFor": {
           "role": "button",
-          "name": "/^新建口播$/"
+          "name": "/^(导入|新建口播)$/"
         },
         "timeout": 12000
       },
@@ -118,8 +94,8 @@
       },
       {
         "waitFor": {
-          "role": "slider",
-          "name": "口播波形定位"
+          "selector": ".dv-tab",
+          "hasText": "编辑器"
         },
         "timeout": 15000
       },
@@ -137,7 +113,7 @@
       {
         "click": {
           "role": "button",
-          "name": "/^返回口播列表$/"
+          "name": "/^返回(口播|音频)列表$/"
         }
       },
       {
@@ -173,7 +149,7 @@
       {
         "metrics": {
           "name": "audio-transport",
-          "selector": "[data-audio-timeline] [data-ui-overflow-row]"
+          "selector": "[data-audio-transport]"
         }
       },
       {
@@ -190,8 +166,7 @@
       {
         "drag": {
           "from": {
-            "role": "slider",
-            "name": "口播波形定位",
+            "selector": "[data-audio-spectral-editor]",
             "at": {
               "x": 160,
               "y": 90
@@ -210,34 +185,21 @@
         "capture": {
           "name": "audio-wave-selection",
           "metrics": {
-            "selector": "[data-audio-timeline] [data-ui-overflow-row]"
+            "selector": "[data-audio-transport]"
           }
         }
       },
       {
         "click": {
-          "text": "自定义处理参数"
+          "selector": ".dv-tab",
+          "hasText": "交付"
         }
       },
       {
         "waitStable": {}
       },
       {
-        "capture": "audio-disclosure-open"
-      },
-      {
-        "click": {
-          "text": "交付设置"
-        }
-      },
-      {
-        "scroll": {
-          "target": {
-            "role": "complementary",
-            "name": "处理"
-          },
-          "dy": 600
-        }
+        "capture": "audio-delivery-panel"
       },
       {
         "open": {
@@ -248,6 +210,10 @@
           "expect": {
             "role": "listbox"
           }
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "导出格式"
         }
       },
       {
@@ -261,9 +227,26 @@
       },
       {
         "click": {
+          "selector": ".dv-tab",
+          "hasText": "历史记录"
+        },
+        "ifPresent": {
+          "selector": ".dv-tab",
+          "hasText": "历史记录"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "audio-history-panel"
+      },
+      {
+        "click": {
           "role": "button",
           "name": "查找与替换"
-        }
+        },
+        "optional": true
       },
       {
         "waitStable": {}
@@ -288,13 +271,15 @@
         "click": {
           "role": "button",
           "name": "关闭查找替换"
-        }
+        },
+        "optional": true
       },
       {
         "rightClick": {
           "role": "button",
           "name": "/^撤销/"
-        }
+        },
+        "optional": true
       },
       {
         "waitFor": {
@@ -389,8 +374,7 @@
             }
           },
           "expect": {
-            "role": "menu",
-            "name": "项目"
+            "role": "menu"
           }
         }
       },
@@ -443,32 +427,8 @@
     "writesUserData": true,
     "steps": [
       {
-        "enter": "toolbox"
-      },
-      {
-        "click": {
-          "role": "button",
-          "name": "/^返回口播列表$/"
-        },
-        "ifPresent": {
-          "role": "button",
-          "name": "/^返回口播列表$/"
-        }
-      },
-      {
-        "click": {
-          "role": "button",
-          "name": "/^返回工具$/"
-        },
-        "ifPresent": {
-          "role": "button",
-          "name": "/^返回工具$/"
-        }
-      },
-      {
-        "click": {
-          "role": "button",
-          "name": "/^图片编辑/"
+        "enter": {
+          "surface": "tool.image_edit"
         }
       },
       {

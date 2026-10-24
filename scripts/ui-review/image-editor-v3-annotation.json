@@ -1,7 +1,7 @@
 {
   "id": "review-image-editor-v3-annotation",
   "surface": "工具箱",
-  "name": "核对-图片编辑 V3 标注：箭头弯曲手柄与文字原位输入（共享图元迁到 imageMark/shared 后回归）",
+  "name": "核对-图片编辑 V3 标注：矢量箭头与文字（工具组浮层、绘制、文字输入面板）",
   "checklist": [
     "T08"
   ],
@@ -29,27 +29,32 @@
       "capture": "rest"
     },
     {
-      "click": {
-        "selector": "[data-tool-id=\"annotation\"]"
+      "open": {
+        "trigger": {
+          "selector": "[data-tool-id=\"vector\"]"
+        },
+        "expect": {
+          "role": "menuitem",
+          "name": "/^(箭头|Arrow)$/i"
+        }
       }
     },
     {
-      "waitFor": {
-        "role": "button",
-        "name": "/^(箭头标注|Arrow annotation)$/i"
-      },
-      "timeout": 5000
+      "waitStable": {}
+    },
+    {
+      "capture": "vector-group"
     },
     {
       "click": {
-        "role": "button",
-        "name": "/^(箭头标注|Arrow annotation)$/i"
+        "role": "menuitem",
+        "name": "/^(箭头|Arrow)$/i"
       }
     },
     {
       "drag": {
         "from": {
-          "selector": "[data-document-transparency-grid]",
+          "selector": "[data-vector-overlay]",
           "at": {
             "x": 80,
             "y": 100
@@ -63,71 +68,49 @@
       }
     },
     {
-      "waitFor": {
-        "selector": "[data-annotation-editor-overlay][data-selected-annotation-type=\"arrow\"]"
-      },
-      "timeout": 5000
-    },
-    {
       "waitStable": {}
     },
     {
-      "capture": "arrow-selected"
+      "capture": "arrow-drawn"
     },
     {
-      "drag": {
-        "from": {
-          "selector": "[data-document-transparency-grid]",
-          "at": {
-            "x": 190,
-            "y": 100
-          }
+      "open": {
+        "trigger": {
+          "selector": "[data-tool-id=\"vector\"]"
         },
-        "to": {
-          "dx": 0,
-          "dy": -70
-        },
-        "steps": 12
+        "expect": {
+          "role": "menuitem",
+          "name": "/^(文字|Text)$/i"
+        }
       }
-    },
-    {
-      "waitStable": {}
-    },
-    {
-      "capture": "arrow-curved"
     },
     {
       "click": {
-        "role": "button",
-        "name": "/^(文字标注|Text annotation)$/i"
+        "role": "menuitem",
+        "name": "/^(文字|Text)$/i"
       }
     },
     {
-      "drag": {
-        "from": {
-          "selector": "[data-document-transparency-grid]",
-          "at": {
-            "x": 100,
-            "y": 330
-          }
-        },
-        "to": {
-          "dx": 0,
-          "dy": 0
-        },
-        "steps": 1
+      "click": {
+        "selector": "[data-vector-overlay]",
+        "at": {
+          "x": 100,
+          "y": 330
+        }
       }
     },
     {
       "waitFor": {
-        "selector": "[data-annotation-editor-overlay] textarea"
+        "role": "textbox",
+        "name": "文字内容"
       },
       "timeout": 5000
     },
     {
       "fill": {
         "target": {
-          "selector": "[data-annotation-editor-overlay] textarea"
+          "role": "textbox",
+          "name": "文字内容"
         },
         "text": "V3 原位文字"
       }
@@ -137,6 +120,9 @@
     },
     {
       "capture": "text-inline"
+    },
+    {
+      "escape": {}
     }
   ]
 }

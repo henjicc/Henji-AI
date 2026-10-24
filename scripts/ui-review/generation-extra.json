@@ -126,7 +126,7 @@
     },
     {
       "hover": {
-        "selector": "button[title=\"裁剪\"]",
+        "selector": "button[aria-label=\"裁剪\"]",
         "includeHidden": true,
         "closest": "div.shrink-0"
       }
@@ -136,7 +136,7 @@
     },
     {
       "click": {
-        "selector": "button[title=\"裁剪\"]"
+        "selector": "button[aria-label=\"裁剪\"]"
       }
     },
     {

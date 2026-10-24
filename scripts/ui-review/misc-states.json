@@ -39,9 +39,8 @@
         }
       },
       {
-        "click": {
-          "role": "button",
-          "name": "/^音频编辑/"
+        "enter": {
+          "surface": "tool.audio_edit"
         }
       },
       {
@@ -53,8 +52,8 @@
       },
       {
         "waitFor": {
-          "role": "slider",
-          "name": "口播波形定位"
+          "selector": ".dv-tab",
+          "hasText": "编辑器"
         },
         "timeout": 15000
       },
@@ -62,6 +61,27 @@
         "click": {
           "role": "button",
           "name": "开始转写"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "optional": true,
+        "timeout": 3000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "允许本次",
+          "exact": true
         }
       },
       {
