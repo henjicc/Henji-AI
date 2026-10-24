@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Crosshair, Eye, EyeOff, Headphones, Link2, LockKeyhole, UnlockKeyhole, Volume2, VolumeX, type LucideIcon } from 'lucide-react'
+import { Crosshair, Eye, EyeOff, Headphones, Link2, LockKeyhole, Unlink2, UnlockKeyhole, Volume2, VolumeX, type LucideIcon } from 'lucide-react'
 import { UiButton, UiIconButton, UiInput } from '@/components/ui'
 import { videoEditTrackHeaderButtons, type VideoEditTrackHeaderButtonId } from '@/core/videoEdit/trackHeaderButtons'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -43,13 +43,15 @@ export function videoEditTrackHeaderButtonSpecs(track: Track, targeted: boolean,
   const spec = (id: VideoEditTrackHeaderButtonId, title: string, tooltip: string, Icon: LucideIcon, on: boolean, onClick: () => void): VideoEditBarButtonSpec<VideoEditTrackHeaderButtonId> => ({ id, title, tooltip, Icon, on, onClick })
   return [
     spec('locked', '锁定轨道', track.locked ? '解锁轨道' : '锁定轨道', track.locked ? LockKeyhole : UnlockKeyhole, track.locked, () => onPatch({ locked: !track.locked })),
-    spec('sync', '同步锁定', track.syncLocked !== false ? '同步锁定：波纹编辑时随之移动' : '波纹编辑时不随之移动', Link2, track.syncLocked !== false, () => onPatch({ syncLocked: track.syncLocked === false })),
+    spec('sync', '同步锁定', track.syncLocked !== false ? '同步锁定：波纹编辑时随之移动' : '波纹编辑时不随之移动', track.syncLocked !== false ? Link2 : Unlink2, track.syncLocked !== false, () => onPatch({ syncLocked: track.syncLocked === false })),
     spec('enabled', video ? '切换轨道输出' : '轨道输出', track.enabled ? (video ? '隐藏轨道' : '关闭轨道输出') : (video ? '显示轨道' : '开启轨道输出'), track.enabled ? Eye : EyeOff, track.enabled, () => onPatch({ enabled: !track.enabled })),
     spec('muted', '静音', track.muted ? '取消静音' : '静音', track.muted ? VolumeX : Volume2, track.muted, () => onPatch({ muted: !track.muted })),
     spec('solo', '独奏', video ? (track.solo ? '取消独奏' : '独奏：只显示独奏的画面轨道') : (track.solo ? '取消独奏' : '独奏'), Headphones, track.solo, () => onPatch({ solo: !track.solo })),
     spec('target', '设为目标', targeted ? '取消目标轨道' : '设为目标轨道', Crosshair, targeted, onTarget),
   ]
 }
+
+const DEFAULT_ON: ReadonlySet<VideoEditTrackHeaderButtonId> = new Set(['enabled', 'sync'])
 
 /**
  * 轨道头（PR）：编号与名称（点击设为目标）+ 按钮编辑器里选的开关按钮。默认按 PR 只放几个——视频轨：锁定、同步锁定、
@@ -76,7 +78,8 @@ export function VideoEditTrackHeader({ row, code, targeted, onTarget, onPatch, o
     {ids.map(id => {
       if (caption && id !== 'locked' && id !== 'enabled') return <span key={id} aria-hidden="true" className="h-6 w-6 shrink-0" />
       const spec = specs.get(id)!; const label = caption ? t(`captionTrack.${id === 'enabled' ? track.enabled ? 'hide' : 'show' : track.locked ? 'unlock' : 'lock'}`) : `${name}${SHORT_LABELS[id]}`
-      return <UiIconButton key={id} size="xs" on={spec.on} aria-label={label} aria-pressed={spec.on} tooltip={caption ? label : spec.tooltip} onClick={spec.onClick}><spec.Icon /></UiIconButton>
+      // 默认状态不高亮（注意力优先，重要记录 019）：显示与同步锁定默认开着，关掉才着色；其余开着才着色。
+      return <UiIconButton key={id} size="xs" on={DEFAULT_ON.has(id) ? !spec.on : spec.on} aria-label={label} aria-pressed={spec.on} tooltip={caption ? label : spec.tooltip} onClick={spec.onClick}><spec.Icon /></UiIconButton>
     })}
     {!caption && <div role="separator" tabIndex={0} aria-label={`调整${name}高度`} aria-orientation="horizontal" aria-valuemin={24} aria-valuemax={160} aria-valuenow={row.height} className="absolute bottom-0 left-0 right-0 h-1 cursor-row-resize focus-visible:bg-accent" onPointerDown={onResize}
       onKeyDown={event => { if (event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); event.stopPropagation(); onPatch({ height: Math.max(24, Math.min(160, row.height + (event.key === 'ArrowUp' ? -4 : 4))) }) } }} />}

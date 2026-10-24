@@ -7,12 +7,15 @@ import { sanitizeVideoEditButtonBars, withVideoEditButtonBar } from './buttonBar
  */
 export type VideoEditMonitorKind = 'program' | 'source'
 
-/** 节目监视器可用按钮（编辑器网格按此顺序）。命令按钮的 id 与剪辑命令同名；`export_frame`、`mode_*` 是监视器自己的动作。 */
+/**
+ * 节目监视器可用按钮（编辑器网格按此顺序）。命令按钮的 id 与剪辑命令同名；`export_frame` 是监视器自己的动作。
+ * 旧版的 `mode_*`（选择、移动画面、批注）已随节目画面模式一起去掉（重要记录 019），读设置时按未知按钮清掉。
+ */
 export const VIDEO_EDIT_PROGRAM_BUTTONS = [
   'add_marker', 'mark_in', 'mark_out', 'clear_in_out', 'go_in', 'go_out',
   'go_start', 'step_back_five', 'step_back', 'play_reverse', 'play_stop', 'play_pause', 'play_forward', 'step_forward', 'step_forward_five', 'go_end',
   'go_prev_edit', 'go_next_edit', 'lift', 'extract', 'export_frame',
-  'toggle_proxies', 'mode_select', 'mode_move', 'mode_annotate',
+  'toggle_proxies',
 ] as const
 /** 源监视器可用按钮；`drag_*` 是只能拖动的“拖入画面／声音／链接音画”。 */
 export const VIDEO_EDIT_SOURCE_BUTTONS = [

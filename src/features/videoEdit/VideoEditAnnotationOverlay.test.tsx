@@ -20,7 +20,7 @@ it('多条笔迹合成一个草稿，确认前不写入；取消不产生历史'
   send('pointerdown', 50, 60); send('pointermove', 60, 70); send('pointerup', 70, 80)
   fireEvent.change(view.getByLabelText('这里要改什么？'), { target: { value: '移动这两处' } }); fireEvent.keyDown(view.getByLabelText('这里要改什么？'), { key: 'Enter' })
   const mark = getActiveVideoEditSequence(owner).annotations[0]; expect(mark).toMatchObject({ status: 'draft', target: { kind: 'stroke', strokes: [[{ x: .1, y: .2 }, { x: .2, y: .3 }, { x: .3, y: .4 }], [{ x: .5, y: .6 }, { x: .6, y: .7 }, { x: .7, y: .8 }]] } }); expect(owner.past.length).toBe(before + 1)
-  send('pointerdown', 10, 10); send('pointerup', 20, 20); fireEvent.click(view.getByRole('button', { name: '取消' })); expect(owner.past.length).toBe(before + 1); expect(errors).not.toHaveBeenCalled()
+  send('pointerdown', 10, 10); send('pointerup', 20, 20); fireEvent.click(view.getByRole('button', { name: '放弃（Esc）' })); expect(owner.past.length).toBe(before + 1); expect(errors).not.toHaveBeenCalled()
 })
 it('箭头按住 Shift 吸附 45°，带所选颜色；编号自动递增；Esc 放弃', async () => {
   const owner = await createVideoEditTestProject(); const errors = vi.fn()

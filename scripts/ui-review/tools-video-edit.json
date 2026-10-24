@@ -346,7 +346,7 @@
           "name": "timeline-clip-selected",
           "metrics": {
             "role": "toolbar",
-            "name": "时间线工具栏"
+            "name": "时间线开关"
           }
         }
       },

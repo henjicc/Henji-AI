@@ -98,16 +98,21 @@ describe('UiIconButton 默认静默、on 与 tone', () => {
     expect(button.hasAttribute('aria-pressed')).toBe(false);
   });
 
-  it('on 表示开关开启：选中底 + 强调图标，并写出 aria-pressed；显式 aria-pressed 优先', () => {
+  it('on 表示开关开启：不铺底只染强调图标（mode 是当前工具：中性抬起底），并写出 aria-pressed；显式 aria-pressed 优先', () => {
     const view = render(
       <>
         <UiIconButton on aria-label="吸附" />
         <UiIconButton on={false} aria-label="链接" />
         <UiIconButton on aria-pressed={false} aria-label="输出" />
+        <UiIconButton on selection="mode" aria-label="选择工具" />
       </>,
     );
     const snap = view.getByRole('button', { name: '吸附' });
     expect(snap.classList.contains('ui-btn-on')).toBe(true);
+    const tool = view.getByRole('button', { name: '选择工具' });
+    expect(tool.classList.contains('ui-btn-mode-on')).toBe(true);
+    expect(tool.classList.contains('ui-btn-on')).toBe(false);
+    expect(tool.getAttribute('aria-pressed')).toBe('true');
     expect(snap.getAttribute('aria-pressed')).toBe('true');
     expect(view.getByRole('button', { name: '链接' }).getAttribute('aria-pressed')).toBe('false');
     expect(view.getByRole('button', { name: '输出' }).getAttribute('aria-pressed')).toBe('false');

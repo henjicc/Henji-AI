@@ -7,7 +7,7 @@ import { Virtuoso, VirtuosoGrid, type VirtuosoGridHandle, type VirtuosoHandle } 
 import { ArrowUp, ChevronDown, ChevronRight, ChevronUp, FolderInput, FolderOpen, FolderPlus, Import, List, Grid2X2, Plus, Pencil, Trash2, RefreshCw, Play, Settings2, Code2, AudioLines, Tag } from 'lucide-react'
 import { ICON_WORKSPACE_VIDEO_EDIT as SequenceIcon, ICON_ASSET_LIBRARY as AssetLibraryIcon, ICON_VIDEO_EDIT_GRAPHIC as GraphicIcon, ICON_VIDEO_EDIT_PROXY as ProxyIcon } from '@/core/theme/icons'
 import ContextMenu from '@/components/ContextMenu'
-import { PanelTrigger, UiButton, UiEmpty, UiFormRow, UiIconButton, UiSearchInput, UiOptionButton, UiSwitch } from '@/components/ui'
+import { PanelTrigger, UiButton, UiEmpty, UiFormRow, UiIconButton, UiSearchInput, UiOptionButton, UiSwitch, UiToolbar } from '@/components/ui'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { matchVideoEditShortcut } from '@/core/videoEdit/commands'
 import { chooseVideoEditFolders } from '../application/videoEditFolderImport'
@@ -32,7 +32,6 @@ import { VideoEditProjectEditDialog, type ProjectEditDialog } from './VideoEditP
 import { VideoEditProjectThumbnail } from './VideoEditProjectThumbnail'
 import { VideoEditCodeCreateDialog } from './VideoEditCodeCreateDialog'
 import { VideoEditAudioChannelsDialog, type VideoEditAudioChannelsTarget } from './VideoEditAudioChannelsDialog'
-import { DockHeaderPortal } from '@/components/dockLayouts/DockHeaderPortal'
 import { VideoEditProjectDocumentsButton } from './VideoEditProjectDocuments'
 import { withVideoEditCodeMetadata, readVideoEditCodeMetadata } from '../application/videoEditCodeState'
 import { selectVideoEditProjectItems, videoEditBinPath, videoEditProjectColumns, videoEditProjectRows, type VideoEditProjectEntry, type VideoEditProjectRow, type VideoEditProjectSort, type VideoEditProjectSortKey } from './videoEditProjectModel'
@@ -131,6 +130,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   const media = useMemo(() => new Map(instance.document.media.map(value => [value.id, value])), [instance.document.media])
   const selectedIds = new Set(instance.selectedItemIds)
   const selectedItems = instance.document.items.filter(item => selectedIds.has(item.id))
+  const footerStatus = `${entries.length} 项${selectedItems.length ? ` · 已选 ${selectedItems.length}` : ''}`
   const run = (operation: () => unknown | Promise<unknown>): void => { void withVideoEditCodeMetadata(operation).catch(error => {
     if (error instanceof Error && /源预览请求已被更新|源预览已关闭/.test(error.message)) return
     onError(error)
@@ -340,44 +340,14 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') { event.preventDefault(); event.stopPropagation(); run(() => setVideoEditProjectView(projectId, { selectedItemIds: entries.filter(value => value.kind === 'item').map(value => value.value.id) })) }
     }}>
     {followLabel}
-    {/* 一行：搜索 + 视图与排序 + 资产库 + 新建 + 导入（设计稿 VideoEdit 素材面板；新建类入口收进“新建”菜单） */}
-    {/* 窄面板（960 窗口下约 160px）时图标组整体换到第二行，不被裁掉。 */}
-    <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-0.5 px-2 py-1">
+    {/* 顶部一行只有当前素材箱与搜索；视图、资产库、文档、新建、导入在右下角底栏。 */}
+    <div className="flex min-h-10 shrink-0 items-center gap-0.5 px-2 py-1">
       {/* 当前所在素材箱（双击素材箱进入）：上一级 + 名称，悬停看完整位置 */}
       {binId && <div className="mr-1 flex min-w-0 max-w-[40%] shrink items-center gap-0.5" title={['素材', ...binPath.map(bin => bin.name)].join(' / ')}>
         <UiIconButton size="xs" aria-label="返回上一级素材箱" tooltip="返回上一级素材箱" onClick={() => selectBin(binPath.at(-2)?.id ?? '')} onDragOver={event => { if (acceptsVideoEditDrop(event.dataTransfer)) event.preventDefault() }} onDrop={event => drop(event, binPath.at(-2)?.id ?? '')}><ArrowUp /></UiIconButton>
         <span className="min-w-0 truncate text-xs text-text2" data-user-content data-video-edit-current-bin>{binPath.at(-1)?.name}</span>
       </div>}
       <UiSearchInput className="mr-1 min-w-28 flex-1" aria-label="搜索素材" placeholder="搜索素材" size="sm" value={keyword} onChange={event => setKeyword(event.target.value)} />
-      {/* 视图、资产库、文档、新建、导入放到“素材”标签行右侧；浮出为独立窗口时留在这一行。 */}
-      <DockHeaderPortal panelId="video_edit:project" fallback={tools => <div className="ml-auto flex shrink-0 items-center gap-0.5">{tools}</div>}><>
-      <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
-        <UiOptionButton variant="menu" size="sm" className="gap-2" active={view === 'list'} onClick={() => setView('list')}><List size={UI_ICON_SIZE.sm} />列表视图</UiOptionButton>
-        <UiOptionButton variant="menu" size="sm" className="gap-2" active={view === 'grid'} onClick={() => setView('grid')}><Grid2X2 size={UI_ICON_SIZE.sm} />缩略图视图</UiOptionButton>
-        <div className={`my-1 ${UI_DIVIDER_CLASS}`} />
-        {SORT_OPTIONS.map(option => <UiOptionButton key={option.value} variant="menu" size="sm" active={sort.key === option.value} onClick={() => setSort({ key: option.value, direction: 'asc' })}>按{option.label}排序</UiOptionButton>)}
-      </div>}>
-        {({ open, togglePanel }) => <UiIconButton aria-label="视图与排序" tooltip="视图与排序" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}>{view === 'grid' ? <Grid2X2 /> : <List />}</UiIconButton>}
-      </PanelTrigger>
-      <UiIconButton aria-label="资产库" tooltip="资产库：拖入素材" onClick={() => openAssetLibrary('floating')}><AssetLibraryIcon /></UiIconButton>
-      <VideoEditProjectDocumentsButton instance={instance} onError={onError} />
-      <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
-        <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => setEdit({ kind: 'createBin', parentId: binId })}><FolderPlus size={UI_ICON_SIZE.sm} />新建素材箱</UiOptionButton>
-        <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={newSequence}><SequenceIcon size={UI_ICON_SIZE.sm} />新建序列</UiOptionButton>
-        <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => setCreatingCode(true)}><Code2 size={UI_ICON_SIZE.sm} />新建代码素材</UiOptionButton>
-        <div className={`my-1 ${UI_DIVIDER_CLASS}`} />
-        {graphicMenu().map(item => <UiOptionButton key={item.id} variant="menu" size="sm" className="gap-2" onClick={item.onClick}><GraphicIcon size={UI_ICON_SIZE.sm} />{item.label}</UiOptionButton>)}
-      </div>}>
-        {({ open, togglePanel }) => <UiIconButton aria-label="新建素材项" tooltip="新建素材箱、序列、代码素材、图形与调整图层" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Plus /></UiIconButton>}
-      </PanelTrigger>
-      <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
-        <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={choose}><Import size={UI_ICON_SIZE.sm} />导入文件</UiOptionButton>
-        <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={chooseFolders}><FolderInput size={UI_ICON_SIZE.sm} />导入文件夹</UiOptionButton>
-        <UiFormRow label="自动创建代理" info="导入高于 1080p 的视频时，自动创建用于流畅预览的代理。" inline density="compact"><UiSwitch checked={getVideoEditProxyPreference(projectId).autoCreate} onCheckedChange={autoCreate => setVideoEditProxyPreference(projectId, { autoCreate })} /></UiFormRow>
-      </div>}>
-        {({ open, togglePanel }) => <UiIconButton aria-label="导入" tooltip="导入文件或文件夹" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Import /></UiIconButton>}
-      </PanelTrigger>
-      </></DockHeaderPortal>
     </div>
     <div className="min-h-0 flex-1 overflow-x-auto" aria-label="素材项列表" onDoubleClick={event => { if (!(event.target as HTMLElement).closest('[data-video-edit-project-entry]')) choose() }} onContextMenu={event => { pointerAt.current = { left: event.clientX, top: event.clientY, bottom: event.clientY, width: 0 }; menu.showMenu(event, blankMenu()) }}>
       {!entries.length ? <UiEmpty className="h-full" title={keyword ? '没有匹配的素材项' : '此素材箱为空'} description={keyword ? '尝试其他名称或标签。' : '双击空白导入文件，或从资产库拖入素材。'} />
@@ -394,6 +364,35 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
             <Virtuoso ref={listRef} className="min-h-0 flex-1" key={`${binId}:list`} data={rows} computeItemKey={(_index, row) => row.entry.value.id} itemContent={renderRow} role="tree" aria-label="素材与素材箱" />
           </div>}
     </div>
+    {/* 面板工具在右下角底栏（重要记录 018/019）：标签行只放标签，左端是数量 */}
+    <UiToolbar variant="footer" aria-label="素材工具" trailing={<>
+      <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
+        <UiOptionButton variant="menu" size="sm" className="gap-2" active={view === 'list'} onClick={() => setView('list')}><List size={UI_ICON_SIZE.sm} />列表视图</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" active={view === 'grid'} onClick={() => setView('grid')}><Grid2X2 size={UI_ICON_SIZE.sm} />缩略图视图</UiOptionButton>
+        <div className={`my-1 ${UI_DIVIDER_CLASS}`} />
+        {SORT_OPTIONS.map(option => <UiOptionButton key={option.value} variant="menu" size="sm" active={sort.key === option.value} onClick={() => setSort({ key: option.value, direction: 'asc' })}>按{option.label}排序</UiOptionButton>)}
+      </div>}>
+        {({ open, togglePanel }) => <UiIconButton size="sm" aria-label="视图与排序" tooltip="视图与排序" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}>{view === 'grid' ? <Grid2X2 /> : <List />}</UiIconButton>}
+      </PanelTrigger>
+      <UiIconButton size="sm" aria-label="资产库" tooltip="资产库：拖入素材" onClick={() => openAssetLibrary('floating')}><AssetLibraryIcon /></UiIconButton>
+      <VideoEditProjectDocumentsButton instance={instance} onError={onError} />
+      <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
+        <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => setEdit({ kind: 'createBin', parentId: binId })}><FolderPlus size={UI_ICON_SIZE.sm} />新建素材箱</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={newSequence}><SequenceIcon size={UI_ICON_SIZE.sm} />新建序列</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => setCreatingCode(true)}><Code2 size={UI_ICON_SIZE.sm} />新建代码素材</UiOptionButton>
+        <div className={`my-1 ${UI_DIVIDER_CLASS}`} />
+        {graphicMenu().map(item => <UiOptionButton key={item.id} variant="menu" size="sm" className="gap-2" onClick={item.onClick}><GraphicIcon size={UI_ICON_SIZE.sm} />{item.label}</UiOptionButton>)}
+      </div>}>
+        {({ open, togglePanel }) => <UiIconButton size="sm" aria-label="新建素材项" tooltip="新建素材箱、序列、代码素材、图形与调整图层" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Plus /></UiIconButton>}
+      </PanelTrigger>
+      <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
+        <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={choose}><Import size={UI_ICON_SIZE.sm} />导入文件</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={chooseFolders}><FolderInput size={UI_ICON_SIZE.sm} />导入文件夹</UiOptionButton>
+        <UiFormRow label="自动创建代理" info="导入高于 1080p 的视频时，自动创建用于流畅预览的代理。" inline density="compact"><UiSwitch checked={getVideoEditProxyPreference(projectId).autoCreate} onCheckedChange={autoCreate => setVideoEditProxyPreference(projectId, { autoCreate })} /></UiFormRow>
+      </div>}>
+        {({ open, togglePanel }) => <UiIconButton size="sm" aria-label="导入" tooltip="导入文件或文件夹" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Import /></UiIconButton>}
+      </PanelTrigger>
+          </>}>{footerStatus}</UiToolbar>
     <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />
     {labelPicker && <PanelTrigger anchor={labelPicker.anchor} open onOpenChange={open => { if (!open) setLabelPicker(null) }} panelSize="menu" zIndex={Z_LAYERS.dropdown} panelPadding="content" closeOnPanelClick
       renderPanel={() => <div className="flex flex-col gap-2" aria-label="颜色标签">

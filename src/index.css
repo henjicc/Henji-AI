@@ -156,7 +156,6 @@
   --ui-glass-hover: var(--glass-hover);
   --ui-glass-press: var(--glass-pressed);
   --ui-glass-selected: var(--glass-selected);
-  --ui-glass-selected-accent: var(--glass-selected-accent);
   --ui-glass-divider: var(--glass-divider);
   --ui-glass-control-tint: var(--glass-control-tint);
   --ui-glass-region-tint: var(--glass-region-tint);
@@ -428,22 +427,20 @@
   }
 
   /*
-   * 单选选中底（UiOptionButton menu/grid/tile、下拉当前项）：淡强调底（重要记录 012，任务 4.3）。
-   * 分段 UiSegmented 与 UiSwitch 双段滑块例外：用 --segment-selected 中性抬起底 + 强文字
-   * （UI_SEGMENT_SELECTED_CLASS；界面重设计重要记录 017，缺陷修复计划记录 014），不走这里。
-   * 选中项悬停再加一档淡强调，不回落中性悬停；玻璃里用 --ui-glass-selected-accent，同样不盖实心色。
-   * 类名沿用 adaptive-selected（styleTokens 的令牌名与注释随 4.3 第二批改动一并更新）。
+   * 单选选中底（UiOptionButton menu/grid/tile、下拉当前项、列表行）：中性选中底（重要记录 019 修订 012：
+   * 强调色只给主动作、播放头、焦点与当前标签细线）。菜单当前项靠强调色勾、格子靠强调文字区分。
+   * 选中项悬停再抬一档到分段选中底，不回落中性悬停；玻璃里用 --ui-glass-selected，不盖实心色。
    */
   .ui-glass-adaptive-selected {
-    background-color: var(--selected-accent);
+    background-color: rgb(var(--selected-rgb));
   }
 
   .ui-glass-adaptive-selected:hover:not(:disabled):not([aria-disabled='true']) {
-    background-color: var(--selected-accent-hover);
+    background-color: rgb(var(--segment-selected-rgb));
   }
 
   :is(.ui-glass, :where(:root:not([data-ui-blur='off'])) .ui-overlay-surface) .ui-glass-adaptive-selected {
-    background-color: var(--ui-glass-selected-accent);
+    background-color: var(--ui-glass-selected);
   }
 
   .ui-glass-adaptive-tile {
@@ -582,21 +579,34 @@
     color: rgb(var(--text-disabled-rgb));
   }
 
-  /* 图标按钮 on（开关开启）：淡强调底 + 强调文字（重要记录 012，任务 4.3）；悬停再加一档淡强调。 */
+  /*
+   * 图标按钮 on（重要记录 019）：开关开着不铺底，只把图标染成强调色，悬停照常出中性底；
+   * mode-on 是一组里当前的工具或视图：中性抬起底 + 主要文字（与 quiet 按下同一档），不用强调色。
+   */
   .ui-btn-on {
-    background-color: var(--selected-accent);
+    background-color: transparent;
     color: rgb(var(--accent-text-rgb));
   }
 
   .ui-btn-on:hover:not(:disabled):not([aria-disabled='true']) {
-    background-color: var(--selected-accent-hover);
+    background-color: rgb(var(--hover-rgb));
   }
 
-  :is(.ui-glass, :where(:root:not([data-ui-blur='off'])) .ui-overlay-surface) .ui-btn-on {
-    background-color: var(--ui-glass-selected-accent);
+  :is(.ui-glass, :where(:root:not([data-ui-blur='off'])) .ui-overlay-surface) .ui-btn-on:hover:not(:disabled):not([aria-disabled='true']) {
+    background-color: var(--ui-glass-hover);
   }
 
-  .ui-btn-on:is(:disabled, [aria-disabled='true']) {
+  .ui-btn-mode-on {
+    background-color: rgb(var(--selected-rgb));
+    color: rgb(var(--text1-rgb));
+  }
+
+  :is(.ui-glass, :where(:root:not([data-ui-blur='off'])) .ui-overlay-surface) .ui-btn-mode-on {
+    background-color: var(--ui-glass-selected);
+  }
+
+  .ui-btn-on:is(:disabled, [aria-disabled='true']),
+  .ui-btn-mode-on:is(:disabled, [aria-disabled='true']) {
     color: rgb(var(--text-disabled-rgb));
   }
 
@@ -1016,6 +1026,11 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   font-weight: 500;
 }
 
+/* 面板标签不折行（重要记录 018）：放不下的整枚标签进「+N」，不在标签里换行。 */
+.dockview-host .dv-tab {
+  white-space: nowrap;
+}
+
 /* 部分可见标签交给 dockview 原生溢出菜单；菜单里的副本仍正常显示。 */
 .dockview-host .dv-tabs-container > .dv-tab[data-dock-tab-clipped] {
   visibility: hidden;
@@ -1073,6 +1088,12 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
  * 面板组放不下的标签：dockview 默认画“> 3”（箭头加数字），看不出含义。改成常见的“+3”（还有 3 个面板），
  * 辅助文字色，悬停提亮并出中性底；点开仍是隐藏面板的列表。组件不开放自定义，只能在这里改样式。
  */
+/* 外层容器默认是块级，22 高的「+N」会贴在标签行顶上：容器铺满行高并居中，与标签文字同一条中线。 */
+.henji-cameraStage-dock .dv-tabs-overflow-dropdown-root {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+}
 .henji-cameraStage-dock .dv-tabs-overflow-dropdown-default {
   display: flex;
   align-items: center;
@@ -1082,7 +1103,9 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   border-radius: var(--radius-control);
   color: rgb(var(--text3-rgb));
   font-size: 12px;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   cursor: pointer;
 }
 .henji-cameraStage-dock .dv-tabs-overflow-dropdown-default > svg { display: none; }

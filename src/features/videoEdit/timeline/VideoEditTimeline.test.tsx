@@ -21,6 +21,8 @@ import { closeVideoEditSpeedDialog } from '../application/videoEditSpeedDialog'
 import { videoEditClipSourceRange, videoEditClipSpeedPercent } from '@/core/videoEdit/clipSpeed'
 import { VIDEO_EDIT_ITEM_DRAG_MIME } from '../application/videoEditDrop'
 import { VideoEditTimeline } from '../VideoEditTimeline'
+import { VideoEditTimelineTools } from './VideoEditTimelineTools'
+import { timelineCommandPresentation } from './timelineCommandPresentation'
 import { VideoEditInOutDuration } from './VideoEditTimelineTransport'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { TIMELINE_HEADER_WIDTH as header, TIMELINE_DEFAULT_SPLIT, timelineLayout } from './timelineGeometry'
@@ -36,7 +38,16 @@ const source = "export default {name:\"代码\",kind:\"generator\",mode:\"dynami
 let owner: VideoEditInstance
 let ids: string[]
 let onError: ReturnType<typeof vi.fn>
-function View({ visible = true }: { visible?: boolean }): React.ReactElement { useSyncExternalStore(subscribeVideoEdit, videoEditRevision); return <VideoEditTimeline instance={owner} onError={onError} visible={visible} /> }
+/** 编辑工具在剪辑命令带（重要记录 019）：这里与正式命令带一样，用同一份命令上下文渲染工具组，再放时间线。 */
+function View({ visible = true }: { visible?: boolean }): React.ReactElement {
+  useSyncExternalStore(subscribeVideoEdit, videoEditRevision)
+  const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
+  const context = captureVideoEditCommandContext(owner.document.id, 'timeline', { includeClipboard: false })
+  return <>
+    <VideoEditTimelineTools presentation={id => timelineCommandPresentation(context, id, shortcuts)} execute={id => { void executeVideoEditCommand(captureVideoEditCommandContext(owner.document.id, 'timeline'), id).catch(onError) }} />
+    <VideoEditTimeline instance={owner} onError={onError} visible={visible} />
+  </>
+}
 /** 复用工作区根部的正式键盘路由与命令执行器，叶子时间线不另注册快捷键。 */
 function SpeedKeyboardView(): React.ReactElement {
   return <div onKeyDown={event => {

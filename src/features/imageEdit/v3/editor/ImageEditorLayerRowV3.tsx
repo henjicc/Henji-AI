@@ -275,7 +275,7 @@ export function ImageEditorLayerRowV3({
           onClick={() => controller.updateLayerCommon(row.layer.id, { maskAttachment: { ...row.layer.maskAttachment, linked: !row.layer.maskAttachment.linked } })}>
           {row.layer.maskAttachment.linked ? <Link  /> : <Unlink  />}
         </UiIconButton>
-        <UiIconButton data-layer-mask-target size="xs" on={selected && target === 'mask'}
+        <UiIconButton data-layer-mask-target size="xs" selection="mode" on={selected && target === 'mask'}
           aria-label={t('imageEditor.v3.workflow.maskTarget', { name: row.layer.name })} tooltip={t('imageEditor.v3.workflow.maskTarget', { name: row.layer.name })}
           onClick={() => selectImageEditTargetV3(controller, row.layer.id, 'mask')}>
           <CircleDashed  />

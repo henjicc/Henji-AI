@@ -1,4 +1,4 @@
-import { askAssistantAtVideoEditFrame, chooseVideoEditAnnotationShape, requestVideoEditAnnotationMonitor, videoEditAnnotationBrush, VIDEO_EDIT_ANNOTATION_SHAPE_COMMANDS, VIDEO_EDIT_ANNOTATION_SHAPES } from './videoEditAnnotations'
+import { askAssistantAtVideoEditFrame, chooseVideoEditAnnotationShape, videoEditAnnotationBrush, VIDEO_EDIT_ANNOTATION_SHAPE_COMMANDS, VIDEO_EDIT_ANNOTATION_SHAPES } from './videoEditAnnotations'
 import { requestVideoEditScrub } from '../engine/videoEditAudioScrub'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { VIDEO_EDIT_COMMANDS, VIDEO_EDIT_TOOL_COMMANDS, isVideoEditToolCommand, type VideoEditCommandId, type VideoEditCommandScope } from '@/core/videoEdit/commands'
@@ -280,7 +280,6 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
   if (id === 'annotation_select') { setVideoEditTimelineView(projectId, { tool: 'select' }); return }
   const shape = VIDEO_EDIT_ANNOTATION_SHAPES.find(item => VIDEO_EDIT_ANNOTATION_SHAPE_COMMANDS[item] === id)
   if (shape) { chooseVideoEditAnnotationShape(projectId, shape); return }
-  if (id === 'select_tool' && context.scope === 'program') requestVideoEditAnnotationMonitor(projectId, 'select')
   // 项目级命令在零时间线时仍可用，先于所有时间线计算执行。
   if (id === 'undo' || id === 'redo') { undoVideoEdit(projectId, id === 'redo'); return }
   if (id === 'save') { await saveVideoEdit(projectId); return }

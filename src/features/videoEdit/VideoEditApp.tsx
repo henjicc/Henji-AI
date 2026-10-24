@@ -29,6 +29,8 @@ import { videoEditKeyboardCommand } from './application/videoEditKeyboard'
 import { focusVideoEditPanelElement } from './layout/videoEditPanelFocus'
 import { VideoEditShortcutDialog } from './panels/VideoEditShortcutSettings'
 import { timelineCommandPresentation } from './timeline/timelineCommandPresentation'
+import { VideoEditTimelineTools } from './timeline/VideoEditTimelineTools'
+import { VideoEditAnnotationToolOptions } from './VideoEditAnnotationToolOptions'
 import type { VideoEditCommandId } from '@/core/videoEdit/commands'
 import { collectVideoEditOutput } from './application/videoEditOutputs'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
@@ -43,6 +45,10 @@ import { VideoEditFontWarnings } from './panels/VideoEditFontWarnings'
 import { videoEditCommittedDocument } from './application/videoEditService'
 import { cancelVideoEditBeatAnalysis, subscribeVideoEditBeats, videoEditBeatRevision, videoEditBeatTask } from './application/videoEditBeatAnalysis'
 
+/** 命令带放得下“工具组 + 批注参数条”的窗口宽度（px）；更窄时参数条落到从属参数带。 */
+const COMMAND_BAND_INLINE_OPTIONS_MIN_WIDTH = 1480
+const subscribeWindowResize = (listener: () => void): (() => void) => { window.addEventListener('resize', listener); return () => window.removeEventListener('resize', listener) }
+const wideCommandBand = (): boolean => window.innerWidth >= COMMAND_BAND_INLINE_OPTIONS_MIN_WIDTH
 /** Shift+1…5（Premiere 默认）切到的面板；切换后键盘焦点也进入该面板，后续快捷键按它的作用域生效。 */
 const FOCUS_COMMANDS: Partial<Record<VideoEditCommandId, 'project' | 'source' | 'timeline' | 'program' | 'effects'>> = { focus_project: 'project', focus_source: 'source', focus_timeline: 'timeline', focus_program: 'program', focus_effects: 'effects' }
 /** `（Premiere 默认）：最大化光标下的面板组，已有最大化时还原。 */
@@ -54,8 +60,9 @@ function toggleMaximizedGroup(api: DockviewApi | null, hovered: Element | null):
 }
 
 /**
- * 剪辑命令带（界面重设计 3.5，设计稿 VideoEdit）：一条带。左端关闭项目、项目名菜单与序列规格；右端撤销/重做、
- * 布局预设（面板开关在标题栏“窗口”菜单），唯一一条分隔线后是成片收录与唯一主动作“导出”。拆分、删除、文字移入时间线工具栏。
+ * 剪辑命令带（界面重设计 3.5，重要记录 019）：一条带。左端关闭项目、项目名菜单，紧跟编辑工具（模式，按 PR 工具面板分组）；
+ * 右端撤销/重做、布局预设（面板开关在标题栏“窗口”菜单），唯一一条分隔线后是成片收录与唯一主动作“导出”。
+ * 拆分、删除在“剪辑”“编辑”菜单与快捷键里。
  */
 function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEditInstance; api: DockviewApi | null; run: (operation: () => unknown | Promise<unknown>) => void; onNotice: (message: string) => void }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
@@ -74,7 +81,17 @@ function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEdi
   const command = (id: VideoEditCommandId): void => { const current = captureVideoEditCommandContext(projectId, 'timeline'); run(() => executeVideoEditCommand(current, id)) }
   const undo = presentation('undo'); const redo = presentation('redo'); const exporting = presentation('export')
   const others = listVideoEditInstances().filter(item => item !== instance)
-  return <UiToolbar variant="command" trailing={<>
+  // 编辑工具在命令带（重要记录 019）：紧跟项目名，左对齐；窄窗口时项目名先截断，工具保持完整。序列尺寸与帧率由序列决定，不在这里显示。
+  // 批注工具的参数条紧跟工具组；窗口放不下时落到命令带下的从属参数带（两条共用一块底色）。
+  const annotating = instance.tool === 'annotate'
+  const fail = (error: unknown): void => run(() => { throw error })
+  const wide = useSyncExternalStore(subscribeWindowResize, wideCommandBand)
+  const tools = <div className="mr-auto flex shrink-0 items-center" data-video-edit-command-tools>
+    <span aria-hidden="true" className="mx-1.5 h-4 w-px shrink-0 bg-line" />
+    <VideoEditTimelineTools presentation={presentation} execute={id => command(id)} />
+    {annotating && wide && <><span aria-hidden="true" className="mx-1.5 h-4 w-px shrink-0 bg-line" /><VideoEditAnnotationToolOptions instance={instance} presentation={presentation} onError={fail} /></>}
+  </div>
+  return <UiToolbar variant="command" center={tools} centerLayout="fit" subordinate={annotating && !wide ? <VideoEditAnnotationToolOptions instance={instance} presentation={presentation} onError={fail} /> : undefined} trailing={<>
     {beatTask && <UiButton disabled={beatTask.controller.signal.aborted} onClick={() => cancelVideoEditBeatAnalysis(projectId)}>取消分析 {Math.round(beatTask.progress * 100)}%</UiButton>}
     {marked && <span className="mr-1 text-xs tabular-nums text-text3" data-video-edit-export-range>导出范围 {videoEditFrameTimecode(marked.startFrame, sequence!.fps)}–{videoEditFrameTimecode(marked.endFrame - 1, sequence!.fps)}</span>}
     <UiIconButton aria-label="撤销" tooltip={undo.tooltip} disabledReason={undo.tooltip} disabled={!undo.enabled} onClick={() => command('undo')}><Undo2  /></UiIconButton>
@@ -112,7 +129,6 @@ function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEdi
         <span className="truncate">{instance.document.name}</span><ChevronDown  className="shrink-0 text-text3" />
       </UiButton>}
     </PanelTrigger>
-    {sequence && <span className="shrink-0 truncate text-xs tabular-nums text-text3">{sequence.width} × {sequence.height} · {Number(sequence.fps.toFixed(3))} fps</span>}
     <VideoEditShortcutDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
   </UiToolbar>
 }

@@ -5,17 +5,16 @@ import { recordVideoEditFirstFrame } from './engine/videoEditFirstFrameTiming'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import ContextMenu from '@/components/ContextMenu'
 import { useContextMenu } from '@/hooks/useContextMenu'
-import { VideoEditAnnotationQueueButton } from './panels/VideoEditAnnotationsPanel'
 import { VideoEditAnnotationOverlay } from './VideoEditAnnotationOverlay'
 import { VideoEditCodeElementOverlay } from './VideoEditCodeElementOverlay'
-import { registerVideoEditAnnotationMonitor, askAssistantAtVideoEditFrame } from './application/videoEditAnnotations'
+import { askAssistantAtVideoEditFrame } from './application/videoEditAnnotations'
 import { VideoEditMulticamView } from './panels/VideoEditMulticamView'
 import { ICON_VIDEO_EDIT_PROXY } from '@/core/theme/icons'
 import { autoSwitchVideoEditMulticam, switchVideoEditMulticam, videoEditProgramMulticam } from './application/videoEditMulticam'
 import { getVideoEditProxyPreference, setVideoEditProxyPreference, videoEditProxySignature } from './application/videoEditProxy'
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton, UiLoading, UiOptionButton, UiOverflowRow, UiPanel } from '@/components/ui'
-import { ArrowRightFromLine, ArrowRightToLine, ArrowUpFromLine, BookmarkPlus, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser, FastForward, Gauge, FoldHorizontal, ImagePlus, ImageUp, MoreHorizontal, MousePointer2, Move, MoveUpRight, Pause, PenLine, Play, Rewind, RotateCcw, SkipBack, SkipForward, Square, StepBack, StepForward, type LucideIcon } from 'lucide-react'
+import { ArrowRightFromLine, ArrowRightToLine, ArrowUpFromLine, BookmarkPlus, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser, FastForward, Gauge, FoldHorizontal, ImagePlus, ImageUp, MoreHorizontal, Pause, PenLine, Play, Rewind, RotateCcw, SkipBack, SkipForward, Square, StepBack, StepForward, type LucideIcon } from 'lucide-react'
 import Tooltip from '@/components/ui/Tooltip'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { audibleVideoEditClips, videoEditDuration } from '@/core/videoEdit/document'
@@ -25,7 +24,7 @@ import { videoEditParameterUpdate, videoEditParameterAffectsAudio } from './engi
 import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop } from './application/videoEditDrop'
 import { findVideoEditReplaceTarget, type VideoEditDropMode } from '@/core/videoEdit/dropPlacement'
 import { isDomNode } from '@/utils/crossRealmDom'
-import { activeVideoEditInstance, getActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, setVideoEditView, setVideoEditTimelineView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditViewRevision, videoEditProgramCommandIdentity, type VideoEditInstance } from './application/videoEditService'
+import { activeVideoEditInstance, getActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, setVideoEditView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditViewRevision, videoEditProgramCommandIdentity, type VideoEditInstance } from './application/videoEditService'
 import { yieldVideoEditSource } from './application/videoEditSource'
 import { subscribeVideoEditTracking, videoEditTrackResults } from './application/videoEditTracking'
 import { subscribeVideoEditSmartRegions, videoEditSmartRegionSegments } from './application/videoEditSmartRegions'
@@ -70,10 +69,6 @@ const logger = createLogger('features.videoEdit.preview')
 const PROGRAM_TOOLBAR_TIMECODE_MIN_WIDTH = 656
 /** 收进“更多”时的常用显示比例（完整等级在显示比例下拉里）。 */
 const PROGRAM_DISPLAY_OPTIONS = [{ value: 'fit' as const, label: '适合' }, { value: 'actual' as const, label: '100%' }]
-/** 节目监视器的工具模式：选中态开关（不是动作按钮），名称与标注逻辑不变；默认不在按钮栏，不在栏里时从“更多”切换。 */
-/** 节目画面自己的模式只剩选择与移动画面；批注是时间线工具栏里的工具（tool = annotate），在这里只是一个可选按钮。 */
-const PROGRAM_MODES = [{ id: 'select', title: '选择', Icon: MousePointer2 }, { id: 'move', title: '移动画面', Icon: Move }] as const
-type ProgramMode = typeof PROGRAM_MODES[number]['id']
 /** 节目按钮栏里走剪辑命令的按钮（名称、快捷键与启用状态来自正式命令）。 */
 const PROGRAM_COMMAND_BUTTONS = ['add_marker', 'mark_in', 'mark_out', 'clear_in_out', 'go_in', 'go_out', 'go_start', 'step_back_five', 'step_back', 'play_reverse', 'play_stop', 'play_pause', 'play_forward', 'step_forward', 'step_forward_five', 'go_end', 'go_prev_edit', 'go_next_edit', 'lift', 'extract'] as const satisfies readonly (VideoEditProgramButtonId & VideoEditCommandId)[]
 const PROGRAM_COMMAND_ICONS: Record<Exclude<typeof PROGRAM_COMMAND_BUTTONS[number], 'play_pause'>, LucideIcon> = {
@@ -128,7 +123,6 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   const host = useRef<HTMLDivElement>(null)
   const canvas = useRef<HTMLCanvasElement | null>(null)
-  const [mode, setMode] = useState<ProgramMode>('select')
   const programToolbarRef = useRef<HTMLDivElement>(null)
   const [compactProgramToolbar, setCompactProgramToolbar] = useState(false)
   useEffect(() => {
@@ -141,7 +135,9 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     return () => observer.disconnect()
   }, [])
   const [levels, setLevels] = useState<VideoEditAudioLevel[]>([])
-  const picture = useVideoEditPictureGesture(instance, visible && mode === 'move', onError)
+  // 节目画面不再分“选择 / 移动画面”模式（重要记录 019）：命令带选着选择工具时，直接拖画面移动选中的片段。
+  const selecting = instance.tool === 'select'
+  const picture = useVideoEditPictureGesture(instance, visible && selecting, onError)
   const motionGesture = useVideoEditMotionGesture(instance, onError)
   const temporaryMotionMode = useRef<'navigate' | 'demonstrate'>()
   const motionRecording = useSyncExternalStore(subscribeVideoMotion, () => videoMotionState(instance)?.status === 'recording')
@@ -170,12 +166,6 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     target.addEventListener('keydown', down, true); target.addEventListener('keyup', up, true); target.addEventListener('blur', blur)
     return () => { target.removeEventListener('keydown', down, true); target.removeEventListener('keyup', up, true); target.removeEventListener('blur', blur); restore() }
   }, [instance])
-  useEffect(() => { if (instance.tool === 'type' || instance.tool === 'annotate') setMode('select') }, [instance.tool])
-  const changeMode = useCallback((next: ProgramMode): void => {
-    if (instance.tool === 'type' || instance.tool === 'annotate') setVideoEditTimelineView(instance.document.id, { tool: 'select' })
-    setVideoEditView(instance.document.id, { playing: false }); setMode(next)
-  }, [instance])
-  useEffect(() => visible ? registerVideoEditAnnotationMonitor(instance.document.id, () => changeMode('select')) : undefined, [instance, visible, changeMode])
   const [preparing, setPreparing] = useState(false)
   /** 本次挂载的渲染器是否已有画面上屏；之前显示“正在准备画面”，避免打开工程时只看到一块黑。 */
   const [pictureReady, setPictureReady] = useState(false)
@@ -730,13 +720,10 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       return { id, title: command.title, tooltip: command.tooltip, Icon: PROGRAM_COMMAND_ICONS[id], enabled: command.enabled, onClick: () => runCommand(id) }
     }),
     { id: 'export_frame', title: '导出帧', tooltip: '导出帧：把当前画面加入资产库', Icon: Camera, enabled: !busy, onClick: captureFrame },
-    ...PROGRAM_MODES.map(({ id, title, Icon }): VideoEditMonitorButtonSpec => ({ id: `mode_${id}`, title, Icon, on: mode === id && instance.tool !== 'annotate', onClick: () => changeMode(id) })),
-    { id: 'mode_annotate', title: '批注', tooltip: timelineCommandPresentation(commandContext, 'annotate_tool', shortcuts).tooltip, Icon: MoveUpRight, on: instance.tool === 'annotate', onClick: () => { try { setVideoEditTimelineView(instance.document.id, { tool: instance.tool === 'annotate' ? 'select' : 'annotate' }) } catch (error) { onError(error) } } },
   ]
   const programButtonOf = new Map(programButtons.map(spec => [spec.id, spec]))
   const barButtons = buttonIds.flatMap(id => { const spec = programButtonOf.get(id); return spec ? [spec] : [] })
-  const menuModes = (hiddenIds: readonly string[]) => PROGRAM_MODES.filter(({ id }) => !buttonIds.includes(`mode_${id}`) || hiddenIds.includes(`mode_${id}`))
-  const menuButtons = (hiddenIds: readonly string[]) => barButtons.filter(spec => hiddenIds.includes(spec.id) && !PROGRAM_MODES.some(({ id }) => spec.id === `mode_${id}`))
+  const menuButtons = (hiddenIds: readonly string[]) => barButtons.filter(spec => hiddenIds.includes(spec.id))
   // 节目监视器（界面重设计 3.5，设计稿 VideoEdit；剪辑对齐 PR 2.5）：画面区（媒体底 + 右侧纵向电平）+ 唯一一条控制带：
   // 时间码 ｜ 自定义按钮栏（默认同 PR 节目监视器）+“+”按钮编辑器、适应 ｜ 更多（放不下的按钮、不在栏里的工具模式、重新加载、选帧加入资产库、编辑当前帧）。
   // 压在画面上的状态与标注输入用玻璃 / 媒体叠层令牌。
@@ -775,14 +762,14 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           const rect = event.currentTarget.getBoundingClientRect(); const point = { x: Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width))), y: Math.max(0, Math.min(1, (event.clientY - rect.top) / Math.max(1, rect.height))) }
           annotationMenu.showMenu(event, [{ id: 'ask', label: '让助手改这里', icon: <PenLine size={UI_ICON_SIZE.sm} />, disabled: instance.playing, onClick: () => { void askAssistantAtVideoEditFrame(instance.document.id, point).catch(onError) } }])
         }}
-          onPointerDown={event => { if (videoMotionState(instance)?.status === 'recording') motionGesture.down(event); else if (mode === 'move') picture.down(event) }} onPointerMove={event => { motionGesture.move(event); picture.move(event) }}
-          onPointerCancel={() => { motionGesture.cancel(); picture.cancel() }} onLostPointerCapture={() => { motionGesture.cancel(); picture.cancel() }} onPointerUp={event => { motionGesture.up(event); if (mode === 'move') picture.up(event) }} />
+          onPointerDown={event => { if (videoMotionState(instance)?.status === 'recording') motionGesture.down(event); else if (selecting) picture.down(event) }} onPointerMove={event => { motionGesture.move(event); picture.move(event) }}
+          onPointerCancel={() => { motionGesture.cancel(); picture.cancel() }} onLostPointerCapture={() => { motionGesture.cancel(); picture.cancel() }} onPointerUp={event => { motionGesture.up(event); if (selecting) picture.up(event) }} />
         <VideoEditMotionOverlay owner={instance} />
         {!motionRecording && <><VideoEditMaskOverlay instance={instance} onError={onError} />
         <VideoEditTrackingOverlay instance={instance} onError={onError} />
-        <VideoEditTextOverlay instance={instance} onError={onError} enabled={visible && mode === 'select'} />
-        <VideoEditAnnotationOverlay instance={instance} active={visible && instance.tool === 'annotate' && mode === 'select'} onError={onError} />
-        <VideoEditCodeElementOverlay instance={instance} enabled={visible && mode === 'select'} onError={onError} /></>}
+        <VideoEditTextOverlay instance={instance} onError={onError} enabled={visible} />
+        <VideoEditAnnotationOverlay instance={instance} active={visible && instance.tool === 'annotate'} onError={onError} />
+        <VideoEditCodeElementOverlay instance={instance} enabled={visible} onError={onError} /></>}
       </div>
       <VideoEditLevelMeter className="absolute bottom-3 right-2 top-3" levels={levels.length ? levels : Array.from({ length: document.channels }, () => ({ peak: 0, rms: 0 }))} title="节目播放电平" />
       {!pictureReady && !renderFailure && <div className="pointer-events-none absolute inset-0 flex items-center justify-center" data-video-edit-program-preparing>
@@ -793,9 +780,9 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         {preparing && <><span className="whitespace-nowrap px-1">正在准备流畅预览…</span><UiButton variant="media" size="sm" onClick={() => { stopPreview.current(); setPreparing(false) }}>取消准备</UiButton></>}
         {collecting && !preparing && <span className="whitespace-nowrap px-1">正在处理当前帧…</span>}
       </div>}
-      {(renderFailure || effectFailure || (mode === 'move' && !instance.selection)) && <div className="pointer-events-none absolute inset-x-6 bottom-3 flex justify-center">
+      {(renderFailure || effectFailure) && <div className="pointer-events-none absolute inset-x-6 bottom-3 flex justify-center">
         <UiPanel className="pointer-events-auto max-w-md px-3 py-2">
-          {renderFailure ? <UiError title="节目画面无法显示" message={renderFailure} /> : effectFailure ? <UiError title="部分效果已跳过" message={effectFailure} /> : <UiEmpty size="xs" title="请先选择要编辑的片段" />}
+          {renderFailure ? <UiError title="节目画面无法显示" message={renderFailure} /> : <UiError title="部分效果已跳过" message={effectFailure ?? ''} />}
         </UiPanel>
       </div>}
       {dropZone && <div className="pointer-events-none absolute grid grid-cols-4 grid-rows-5 bg-media-scrim" style={dropZone.frame} aria-hidden>
@@ -810,14 +797,12 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       </div>}
     </div>
     </div>
-    {/* 节目监视器控制条单行（5.8 toolbarWrap）：窄面板下先让出时间码（时间线工具栏有同一读数），
+    {/* 节目监视器控制条单行（5.8 toolbarWrap）：窄面板下先让出时间码（时间线左上角有同一读数），
         再把显示比例与节目工具按优先级收进“更多”，不再折成多行 */}
     <div ref={programToolbarRef} className="flex min-h-10 shrink-0 items-center gap-x-1 whitespace-nowrap border-t border-line px-2 py-1" role="toolbar" aria-label="节目监视器控制">
-      <VideoEditAnnotationQueueButton instance={instance} />
       <VideoEditMotionControls owner={instance} onError={onError} />
       <VideoEditExplanationControls owner={instance} onError={onError} />
       <ContextMenu surface="glass" visible={annotationMenu.menuVisible} items={annotationMenu.menuItems} position={annotationMenu.menuPosition} onClose={annotationMenu.hideMenu} />
-      <PanelTrigger display={PROGRAM_MODES.find(item => item.id === mode)?.title ?? '选择'} size="sm" buttonClassName="w-auto" appearance="quiet" panelWidth="content" closeOnPanelClick renderPanel={() => <div role="group" aria-label="节目画面模式">{PROGRAM_MODES.map(({ id, title, Icon }) => <UiOptionButton key={id} variant="menu" active={mode === id && instance.tool !== 'annotate'} onClick={() => changeMode(id)}><Icon size={UI_ICON_SIZE.sm} />{title}</UiOptionButton>)}<UiOptionButton variant="menu" onClick={() => { void askAssistantAtVideoEditFrame(instance.document.id).catch(onError) }}>让助手改这里</UiOptionButton></div>} />
       {compactProgramToolbar ? null : <VideoEditTimecode instance={instance} label="节目时间码" className="w-28 px-1.5 text-13" />}
       {compactProgramToolbar ? null : <VideoEditInOutDuration instance={instance} className="px-1.5 text-xs" />}
       <UiOverflowRow
@@ -832,9 +817,6 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         renderOverflow={hiddenIds => <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
         {menuButtons(hiddenIds).length > 0 && <div className="flex flex-col gap-1" role="group" aria-label="收起的按钮">
           {menuButtons(hiddenIds).map(spec => <UiOptionButton key={spec.id} variant="menu" size="sm" className="gap-2" disabled={spec.enabled === false} tooltip={spec.tooltip} onClick={spec.onClick}><spec.Icon size={UI_ICON_SIZE.sm} />{spec.title}</UiOptionButton>)}
-        </div>}
-        {menuModes(hiddenIds).length > 0 && <div className="flex flex-col gap-1" role="group" aria-label="节目工具">
-          {menuModes(hiddenIds).map(({ id, title, Icon }) => <UiOptionButton key={id} variant="menu" size="sm" className="gap-2" active={mode === id && instance.tool !== 'annotate'} onClick={() => changeMode(id)}><Icon size={UI_ICON_SIZE.sm} />{title}</UiOptionButton>)}
         </div>}
         {hiddenIds.includes('display') && <div className="flex flex-col gap-1" role="group" aria-label="节目显示比例">
           {PROGRAM_DISPLAY_OPTIONS.map(option => <UiOptionButton key={option.value} variant="menu" size="sm" active={option.value === 'fit' ? display === 'fit' : display === 1} onClick={() => zoom.setDisplay(option.value === 'fit' ? 'fit' : 1)}>显示 {option.label}</UiOptionButton>)}

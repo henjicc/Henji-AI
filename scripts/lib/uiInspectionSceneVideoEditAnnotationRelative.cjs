@@ -25,11 +25,11 @@ function createVideoEditAnnotationRelativeScene() {
       const saved = async test => { for (let i = 0; i < 200; i++) { const doc = readVideoEditFile(seeded.file); if (test(doc)) return doc; await page.waitForTimeout(50) } assert.fail('文档没有保存预期动作') }
       const presented = async frame => page.waitForFunction(frame => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === String(frame), frame)
       const layer = () => page.getByLabel('画面标注层', { exact: true })
+      // 批注是命令带里的工具（重要记录 019）：先进入批注工具，形状与颜色在紧跟其后的批注参数条里选。
+      const options = () => page.locator('[data-video-edit-annotation-options]').first()
       const shape = async name => {
-        await page.getByRole('toolbar', { name: '时间线工具栏', exact: true }).getByRole('button', { name: '批注工具', exact: true }).click({ button: 'right' })
-        await page.getByRole('menuitem', { name: new RegExp('^' + name) }).click()
-        // 右键菜单关闭后才执行所选项（约 16ms），等菜单消失再画，否则还是上一个形状。
-        await page.getByRole('menu').waitFor({ state: 'hidden' }); await page.waitForTimeout(80)
+        if (!await options().isVisible()) await page.getByRole('group', { name: '时间线工具', exact: true }).getByRole('button', { name: '批注工具', exact: true }).click()
+        await options().getByRole('radiogroup', { name: '批注形状', exact: true }).getByRole('radio', { name, exact: true }).click()
         await page.waitForFunction(() => document.querySelector('[aria-label="画面标注层"]')?.classList.contains('cursor-crosshair'))
       }
       const at = async (x, y) => { const rect = await layer().boundingBox(); assert(rect); return [rect.x + x * rect.width, rect.y + y * rect.height] }
@@ -75,7 +75,7 @@ function createVideoEditAnnotationRelativeScene() {
         const dx = (arrow.target.to.x - arrow.target.from.x) * 1280; const dy = (arrow.target.to.y - arrow.target.from.y) * 720
         assert.ok(Math.abs(Math.abs(dx) - Math.abs(dy)) < 4, `Shift 应把箭头吸附到 45°：${dx} × ${dy}`)
         await shape('圈'); await drag([.6, .55], [.78, .8]); await answer('最后停在圈里')
-        await page.getByRole('radio', { name: '黄色', exact: true }).click()
+        await options().getByRole('radio', { name: '黄色', exact: true }).click()
         current = await saved(doc => doc.sequences[0].annotations[1]?.style?.color === 'yellow'); const before = current.sequences[0].annotations[1].target
         assert.equal(before.kind, 'ellipse')
         await drag([before.x + .02, before.y + before.height / 2], [before.x + .06, before.y + before.height / 2 + .03])
@@ -83,8 +83,9 @@ function createVideoEditAnnotationRelativeScene() {
         await shot('画箭头和圈')
 
         // 2. 复制给外部 Agent：两条一起从待发送变成待处理。
-        await page.getByRole('button', { name: /条待发送$/ }).click()
-        await button(page, '复制给外部 Agent').click(); await saved(doc => doc.sequences[0].annotations.every(mark => mark.status === 'open'))
+        await options().getByRole('button', { name: '发送给助手 · 2', exact: true }).waitFor({ state: 'visible' })
+        await options().getByRole('button', { name: '更多批注操作', exact: true }).click()
+        await page.getByRole('menuitem', { name: '复制给外部 Agent', exact: true }).click(); await saved(doc => doc.sequences[0].annotations.every(mark => mark.status === 'open'))
         await shot('复制给外部助手')
 
         // 3. 外部 Agent：读批注，沿箭头把片段从起点移到圈中心，同一事务回复并标为待审查。
@@ -110,12 +111,17 @@ function createVideoEditAnnotationRelativeScene() {
 
         // 4. 用户审查：先通过圈那条（状态变“已通过”），再“重开”；然后对箭头“撤销这次修改”，
         //    同一次处理的关键帧一步撤掉，两条都回到待处理，讨论记录保留。
-        const panel = page.getByLabel('批注面板', { exact: true })
-        await panel.getByRole('button', { name: '通过', exact: true }).last().click()
+        // 参数条上的“待审查 · 2”把批注面板带到前面；选中（展开）一条才出现它的审查按钮。
+        await options().getByRole('button', { name: '待审查 · 2', exact: true }).click()
+        const panel = page.getByLabel('批注面板', { exact: true }); await panel.waitFor({ state: 'visible' })
+        const row = number => panel.locator('[data-video-edit-annotation]').nth(number - 1)
+        await panel.getByRole('button', { name: '跳到标注 2', exact: true }).click()
+        await row(2).getByRole('button', { name: '通过', exact: true }).click()
         await saved(doc => doc.sequences[0].annotations[1].status === 'resolved'); await shot('审查通过一条')
-        await panel.getByRole('button', { name: '重开', exact: true }).last().click()
+        await row(2).getByRole('button', { name: '重开', exact: true }).click()
         await saved(doc => doc.sequences[0].annotations[1].status === 'open')
-        await panel.getByRole('button', { name: '撤销这次修改', exact: true }).first().click()
+        await panel.getByRole('button', { name: '跳到标注 1', exact: true }).click()
+        await row(1).getByRole('button', { name: '撤销这次修改', exact: true }).click()
         current = await saved(doc => !doc.sequences[0].clips[0].curves?.x && doc.sequences[0].annotations.every(mark => mark.status === 'open'))
         assert.ok(current.sequences[0].annotations[0].thread.length >= 1, '撤销处理不应抹掉讨论记录')
         await playback(0); await shot('撤销这次修改')

@@ -174,7 +174,7 @@ export function VideoEditProjectDocumentsButton({ instance, onError, onNotice }:
   }
   return <>
     <PanelTrigger panelSize="compact" zIndex={Z_LAYERS.dropdown} panelPadding="menu" closeOnPanelClick renderPanel={() => <ProjectDocumentsPanel instance={instance} onError={onError} onOpenElsewhere={() => setElsewhereOpen(true)} onImport={importIntoProject} />}>
-      {({ open, togglePanel }) => <UiIconButton aria-label={t('videoEditProject.documents.title')} tooltip={t('videoEditProject.documents.title')} aria-expanded={open} data-panel-trigger-button data-video-edit-project-documents onClick={togglePanel}><Files  /></UiIconButton>}
+      {({ open, togglePanel }) => <UiIconButton size="sm" aria-label={t('videoEditProject.documents.title')} tooltip={t('videoEditProject.documents.title')} aria-expanded={open} data-panel-trigger-button data-video-edit-project-documents onClick={togglePanel}><Files  /></UiIconButton>}
     </PanelTrigger>
     {elsewhereOpen ? <OtherLocationDocumentsDialog instance={instance} onClose={() => setElsewhereOpen(false)} onError={onError} onNotice={notice} /> : null}
   </>

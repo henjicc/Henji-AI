@@ -61,6 +61,10 @@ export default {
       // 不随主题，纯白滑块停在白端时只靠这圈深线与白边的双色轮廓辨认（4.1：纸白下白端几乎不可见）。
       'thumb-ring': `0 0 0 1px var(--media-scrim), 0 8px 16px ${shade(90)}`,
       'thumb-sm': `0 6px 14px ${shade(84)}`,
+      // 字段的发丝边与聚焦淡光（重要记录 019）：静息一道 --edge 内描边让边缘清楚；聚焦时外加一圈淡强调光，
+      // 与 ring-1 的强调细边叠加（ring 与 shadow 在 Tailwind 里组合，不互相覆盖）。
+      field: 'inset 0 0 0 1px var(--edge)',
+      'field-focus': '0 0 0 3px rgb(var(--accent-rgb) / 0.22)',
     },
     // 圆角令牌（重要记录 004）：控件 6 / 输入与菜单 8 / 浮层 12，全部由 CSS 变量驱动，
     // 「设置 → 界面 → 圆角」通过 data-ui-radius 一处改值，界面控件与画布节点一起生效。
@@ -76,6 +80,8 @@ export default {
       xl: 'var(--radius-overlay)',
       // 时间轴关键帧菱形标记的极小圆角
       hairline: '1px',
+      // 复选框 16px 方框：比控件档小 2px，随“圆角”设置一起变
+      check: 'calc(var(--radius-control) - 2px)',
     },
     extend: {
       // 字体：拉丁字母与数字 Geist / Geist Mono（@fontsource-variable，随包、离线可用，SIL OFL 1.1），

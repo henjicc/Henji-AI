@@ -45,7 +45,7 @@ export function AudioWaveToolbar({ editor, selection, disabled, actions, onEditS
   const [gainOpen, setGainOpen] = React.useState(false)
   return <div className="flex min-w-0 items-center gap-1.5" data-audio-wave-toolbar>
     <div role="group" aria-label="编辑工具" className="flex items-center gap-0.5">
-      {TOOLS.map(tool => <UiIconButton key={tool.id} size="sm" on={editor.tool === tool.id} aria-pressed={editor.tool === tool.id} aria-label={tool.label} disabled={disabled && tool.id !== 'hand'} disabledReason="请先录入音频或暂停录音" tooltip={tool.label} onClick={() => editor.setTool(tool.id)}>{tool.icon}</UiIconButton>)}
+      {TOOLS.map(tool => <UiIconButton key={tool.id} size="sm" selection="mode" on={editor.tool === tool.id} aria-pressed={editor.tool === tool.id} aria-label={tool.label} disabled={disabled && tool.id !== 'hand'} disabledReason="请先录入音频或暂停录音" tooltip={tool.label} onClick={() => editor.setTool(tool.id)}>{tool.icon}</UiIconButton>)}
     </div>
     <UiSegmented ariaLabel="显示" size="sm" value={editor.display} onChange={editor.setDisplay}
       options={[{ value: 'both', label: '都显示' }, { value: 'waveform', label: '波形' }, { value: 'spectrum', label: '频谱' }]} />

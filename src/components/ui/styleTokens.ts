@@ -31,19 +31,25 @@ export const UI_WHITE_HEX = WHITE_HEX;
 /* ---------------------------------------------------------------------------
  * 选中态词汇表（重要记录 001/012，任务 2.2 → 4.3）
  *
- * 选中必须一眼可辨：淡强调底（`selected-accent`，强调色低透明度）+ 强调文字/勾/指示条；
- * 强调色实底只给唯一主动作；悬停只用中性抬升，悬停与选中不得同色（012 修订 003 的中性抬升）。
- * 1. 导航“正在看哪里”：淡强调底 + 主要文字（图标强调色）+ 强调色方向指示条（面板标签：主要文字 + 强调色底部细线）
- * 2. 单选“值是什么”：淡强调底；格子用强调文字，分段用中性抬起底 + 强文字（记录 017），菜单项保持主要文字 + 强调色勾
- * 3. 多选“集合里哪些已选”：强调描边 + 淡强调底 + 强调文字
- * 4. 布尔“是否开启”：强调色只进入开关轨道或复选框本体，整行保持静息
+ * 注意力优先（重要记录 018/019，修订 012）：强调色只给唯一主动作、播放头与时间码、键盘焦点、当前标签与工作区细线；
+ * 选中用中性底 + 主要文字，靠指示条、勾或强调文字区分；悬停只用中性抬升，悬停与选中不得同色。
+ * 1. 导航“正在看哪里”：中性选中底 + 主要文字 + 强调色方向指示条（面板标签、工作区导航：只有文字加亮 + 强调色细线）
+ * 2. 单选“值是什么”：中性选中底；格子用强调文字，分段用中性抬起底 + 强文字（记录 017），菜单项保持主要文字 + 强调色勾
+ * 3. 多选“集合里哪些已选”：强调描边 + 淡强调底 + 强调文字（保留：多选标签必须一眼看出集合）
+ * 4. 布尔“是否开启”：复选框中性框 + 主要文字色勾（开关外观相同），不用强调色实底
  *
  * 令牌只负责状态，不和静息态类叠加同一 CSS 属性。调用组件必须用互斥分支，
  * 否则 Tailwind 产物顺序会让选中态静默失效。业务调用点只传 active / checked，不直接拼这些类。
  * ------------------------------------------------------------------------- */
 
-/** 导航选中：淡强调底 + 主要文字，图标取强调文字色。指示条由导航组件按方向补充（重要记录 012）。 */
-export const UI_NAV_ITEM_ACTIVE_CLASS = 'bg-selected-accent text-text1 [&_svg]:text-accent-text';
+/** 导航选中：中性选中底 + 主要文字。强调色只在导航组件按方向补的指示条上（重要记录 019）。 */
+export const UI_NAV_ITEM_ACTIVE_CLASS = 'bg-selected text-text1';
+
+/** 标题栏工作区导航选中：只有文字加亮，底下短指示条由组件补充，不铺底（重要记录 019）。 */
+export const UI_NAV_ITEM_ACTIVE_WORKSPACE_CLASS = 'text-text1';
+
+/** 标题栏导航里的浮层开关开着（如助手面板）：不铺底，文字与图标取强调文字色。 */
+export const UI_NAV_TOGGLE_ON_CLASS = 'text-accent-text';
 
 /** 面板标签（设计稿面板头）：选中只换成主要文字 + 底部细线，背景保持透明。 */
 export const UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS = 'text-text1';
@@ -67,8 +73,15 @@ export const UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS =
 /** 多选/标签选中：强调描边 + 淡强调底 + 强调文字。 */
 export const UI_MULTISELECT_ITEM_ACTIVE_CLASS = 'border-accent bg-selected-accent text-accent-text';
 
-/** 布尔控件开态：强调色只用于开关轨道或复选框本体；其上的勾/滑块用 on-accent。 */
-export const UI_BOOLEAN_CONTROL_ACTIVE_CLASS = 'border-accent bg-accent text-on-accent';
+/**
+ * 布尔控件（复选框；开关已改成同一外观，重要记录 018/019）：16px 中性方框，勾选只多一枚主要文字色的勾，
+ * 不铺强调色。方框画在 24px 命中区里；悬停整个命中区时方框描边加亮（`group/boolean`）。
+ */
+export const UI_BOOLEAN_BOX_CLASS = 'pointer-events-none inline-flex h-4 w-4 items-center justify-center rounded-check border transition-colors duration-120';
+export const UI_BOOLEAN_BOX_STATE_CLASS = {
+  on: 'border-text3 text-text1',
+  off: 'border-text3/60 text-transparent group-hover/boolean:border-text3',
+} as const;
 
 /* ---------------------------------------------------------------------------
  * 排版层级令牌（重要记录 004）
@@ -242,10 +255,11 @@ export const UI_META_BADGE_ACCENT_CLASS =
 export const UI_GLASS_ADAPTIVE_CONTROL_CLASS = 'ui-glass-adaptive-control';
 
 /**
- * 字段表面（输入、文本域、原生选择、字段触发器、数值框）：设计稿“输入 / 浮层”档 `raised`，**无边框**——
- * 层次靠明暗，聚焦时一圈强调色焦点环（`UI_FIELD_FOCUS_CLASS`）。玻璃内由 `ui-glass-adaptive-control` 换成控件纱。
+ * 字段表面（输入、文本域、原生选择、字段触发器、数值框）：设计稿“输入 / 浮层”档 `raised`，外加一道 `--edge`
+ * 发丝内描边（`shadow-field`，重要记录 019）让边缘清楚；不用实线边框。聚焦见 `UI_FIELD_FOCUS_CLASS`。
+ * 玻璃内由 `ui-glass-adaptive-control` 换成控件纱。
  */
-export const UI_FIELD_SURFACE_CLASS = `bg-raised text-text1 ${UI_GLASS_ADAPTIVE_CONTROL_CLASS}`;
+export const UI_FIELD_SURFACE_CLASS = `bg-raised text-text1 shadow-field ${UI_GLASS_ADAPTIVE_CONTROL_CLASS}`;
 
 /**
  * 字段尺寸档位（重要记录 004）：高度 28/32/36，字号 12/13/13，圆角 sm 用控件档 6、md/lg 用输入档 8。
@@ -278,13 +292,16 @@ export const UI_FIELD_LABEL_INLINE_CLASS = 'shrink-0 whitespace-nowrap text-xs t
 /** 工具条排布下“标签 + 控件”的行内容器。 */
 export const UI_FIELD_INLINE_ROW_CLASS = 'inline-flex min-h-control-md min-w-0 items-center gap-1.5';
 
-/** 字段聚焦：一圈 2px 强调色焦点环（内收，避免被滚动容器或 overflow-hidden 裁掉）。 */
+/**
+ * 字段聚焦（重要记录 019）：一道 1px 内收的强调色细边，外加一圈淡强调光（`shadow-field-focus`）。
+ * 细边内收，被滚动容器或 overflow-hidden 裁掉的只会是外圈淡光。
+ */
 export const UI_FIELD_FOCUS_CLASS =
-  'outline-none focus:outline-none focus-visible:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-ring transition-shadow duration-120';
+  'outline-none focus:outline-none focus-visible:outline-none focus:ring-1 focus:ring-inset focus:ring-accent focus:shadow-field-focus transition-shadow duration-120';
 
 /** 复合字段（数值框、带按钮的输入）把表面画在外壳上时使用，焦点由内部输入框传给整块控件。 */
 export const UI_FIELD_FOCUS_WITHIN_CLASS =
-  'outline-none focus-within:ring-2 focus-within:ring-inset focus-within:ring-accent-ring transition-shadow duration-120';
+  'outline-none focus-within:ring-1 focus-within:ring-inset focus-within:ring-accent focus-within:shadow-field-focus transition-shadow duration-120';
 
 /** 占位文字：辅助文字档（保证 ≥ 4.5:1）。 */
 export const UI_FIELD_PLACEHOLDER_CLASS = 'placeholder:text-text3';
@@ -382,8 +399,8 @@ export const UI_GLASS_ADAPTIVE_NAV_CLASS = 'ui-glass-adaptive-nav'
 export const UI_GLASS_ADAPTIVE_OPTION_CLASS = 'ui-glass-adaptive-option';
 
 /**
- * 单选选中底（菜单、网格、主题预设格、下拉当前项；分段与双段开关用 UI_SEGMENT_SELECTED_CLASS）：淡强调底 `--selected-accent`
- * （选中项悬停再加一档），玻璃里换成 `--ui-glass-selected-accent`。重要记录 012：选中用强调色指示，不用实底。
+ * 单选选中底（菜单、网格、主题预设格、下拉当前项、列表行；分段与双段开关用 UI_SEGMENT_SELECTED_CLASS）：中性选中底
+ * `--selected`（选中项悬停再抬一档），玻璃里换成 `--ui-glass-selected`。重要记录 019 修订 012：强调色不再铺在选中底上。
  */
 export const UI_GLASS_ADAPTIVE_SELECTED_CLASS = 'ui-glass-adaptive-selected';
 

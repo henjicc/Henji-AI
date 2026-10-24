@@ -5,7 +5,8 @@ import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  UI_BOOLEAN_CONTROL_ACTIVE_CLASS,
+  UI_BOOLEAN_BOX_CLASS,
+  UI_BOOLEAN_BOX_STATE_CLASS,
   UI_COVER_GROUP_CLASS,
   UI_GLASS_ADAPTIVE_CONTROL_CLASS,
   UI_GLASS_ADAPTIVE_OPTION_CLASS,
@@ -18,6 +19,8 @@ import {
   UI_NAV_INDICATOR_END_CLASS,
   UI_NAV_ITEM_ACTIVE_CLASS,
   UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS,
+  UI_NAV_ITEM_ACTIVE_WORKSPACE_CLASS,
+  UI_NAV_TOGGLE_ON_CLASS,
   UI_OPTION_ITEM_ACTIVE_CLASS,
 } from './styleTokens';
 import {
@@ -78,7 +81,7 @@ describe('Ui primitives 选中态词汇表', () => {
     expect(subtleNavigation.className).not.toMatch(/(?:^|\s)bg-/);
   });
 
-  it('标题栏工作区导航：28 高 13/500，选中中性底 + 主要文字 + 短指示条，静息无底', () => {
+  it('标题栏工作区导航：28 高 13/500，选中只有主要文字 + 短指示条，静息与选中都不铺底', () => {
     const view = render(
       <>
         <UiChipButton active selectionRole="navigation" selectionAppearance="workspace" size="lg">生成</UiChipButton>
@@ -88,15 +91,16 @@ describe('Ui primitives 选中态词汇表', () => {
     const active = view.getByRole('button', { name: '生成' });
     const rest = view.getByRole('button', { name: '画布' });
 
-    expectClasses(active, UI_NAV_ITEM_ACTIVE_CLASS);
+    expectClasses(active, UI_NAV_ITEM_ACTIVE_WORKSPACE_CLASS);
     expectClasses(active, UI_NAV_INDICATOR_BOTTOM_SHORT_CLASS);
+    expect(active.className).not.toMatch(/(?:^|\s)bg-/);
     expectClasses(active, 'h-control-sm text-13 font-medium');
     expect(active.classList.contains('h-control-lg')).toBe(false);
     expectClasses(rest, `text-text2 ${UI_GLASS_ADAPTIVE_OPTION_CLASS}`);
     expect(rest.className).not.toMatch(/(?:^|\s)bg-|after:/);
   });
 
-  it('工作区导航里的开关项：开启为中性选中底且无指示条，只写 aria-pressed；是当前页时不再是开关', () => {
+  it('工作区导航里的开关项：开启只染强调文字、不铺底、无指示条，只写 aria-pressed；是当前页时不再是开关', () => {
     const view = render(
       <>
         <UiChipButton selectionRole="navigation" selectionAppearance="workspace" on>资产</UiChipButton>
@@ -105,8 +109,8 @@ describe('Ui primitives 选中态词汇表', () => {
       </>,
     );
     const pressed = view.getByRole('button', { name: '资产' });
-    expectClasses(pressed, UI_NAV_ITEM_ACTIVE_CLASS);
-    expect(pressed.className).not.toMatch(/after:/);
+    expectClasses(pressed, UI_NAV_TOGGLE_ON_CLASS);
+    expect(pressed.className).not.toMatch(/after:|(?:^|\s)bg-/);
     expect(pressed.getAttribute('aria-pressed')).toBe('true');
     expect(view.getByRole('button', { name: '素材' }).getAttribute('aria-pressed')).toBe('false');
     const current = view.getByRole('button', { name: '当前' });
@@ -214,22 +218,26 @@ describe('Ui primitives 选中态词汇表', () => {
     expect(view.getByRole('button', { name: '选中标签' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(false);
   });
 
-  it('布尔态只强调开关与复选框控件本体', () => {
+  it('布尔态是中性方框：开关与复选框同一外观，勾选不铺强调色（重要记录 019）', () => {
     const view = render(
       <>
         <UiSwitch checked aria-label="已开启" />
         <UiCheckbox checked aria-label="已勾选" />
+        <UiCheckbox checked={false} aria-label="未勾选" />
       </>,
     );
 
-    // 开关按钮本身是 24 高的透明命中区，强调色画在内层 20 高的轨道上
-    const switchButton = view.getByRole('switch', { name: '已开启' });
-    expectClasses(switchButton, 'h-6');
-    expectClasses(switchButton.firstElementChild as HTMLElement, `${UI_BOOLEAN_CONTROL_ACTIVE_CLASS} h-5`);
-    expectClasses(view.getByRole('checkbox', { name: '已勾选' }), UI_BOOLEAN_CONTROL_ACTIVE_CLASS);
+    // 按钮本身是 24 高的透明命中区，看得见的是里面 16px 的方框
+    for (const control of [view.getByRole('switch', { name: '已开启' }), view.getByRole('checkbox', { name: '已勾选' })]) {
+      expectClasses(control, 'h-6 w-6 bg-transparent');
+      const box = control.firstElementChild as HTMLElement;
+      expectClasses(box, `${UI_BOOLEAN_BOX_CLASS} ${UI_BOOLEAN_BOX_STATE_CLASS.on}`);
+      expect(`${control.className} ${box.className}`).not.toMatch(/(?:^|\s)(bg-accent|border-accent)(?:\s|$)/);
+    }
+    expectClasses(view.getByRole('checkbox', { name: '未勾选' }).firstElementChild as HTMLElement, UI_BOOLEAN_BOX_STATE_CLASS.off);
   });
 
-  it('开关保留圆润默认外观，并支持带显式文案的双段外观', () => {
+  it('开关默认是复选框外观，并支持带显式文案的双段外观', () => {
     const onCheckedChange = vi.fn();
     const view = render(
       <>
@@ -257,8 +265,7 @@ describe('Ui primitives 选中态词汇表', () => {
     const segmentedOff = view.getByRole('switch', { name: '关闭的双段开关' });
     const segmentedOn = view.getByRole('switch', { name: '开启的双段开关' });
 
-    expect(pill.classList.contains('rounded-full')).toBe(true);
-    expect((pill.firstElementChild as HTMLElement).classList.contains('bg-control-pressed')).toBe(true);
+    expectClasses(pill.firstElementChild as HTMLElement, `${UI_BOOLEAN_BOX_CLASS} ${UI_BOOLEAN_BOX_STATE_CLASS.off}`);
     // 双段外观与分段选择共用中性选中：轨道更暗、滑块抬起、当前侧文字更强。
     expect(segmentedOff.classList.contains('rounded-lg')).toBe(true);
     expect(segmentedOff.classList.contains('bg-gap/60')).toBe(true);

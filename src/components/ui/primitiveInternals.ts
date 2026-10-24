@@ -65,9 +65,14 @@ export type IconButtonSize = '2xs' | 'xs' | UiControlSize | 'xl'
 export type IconButtonTone = 'default' | 'media' | 'accent' | 'danger' | 'bare'
 
 export interface UiIconButtonProps extends UiButtonFeedbackProps {
-  /** 开关开启（选中底 + 强调色图标），同时写出 `aria-pressed`。只表达“功能是否开启”，不是动作层级。 */
   label?: string
+  /** 开启或选中，同时写出 `aria-pressed`。只表达状态，不是动作层级；外观由 `selection` 决定。 */
   on?: boolean
+  /**
+   * `toggle`（默认）：开关，开着不铺底、只把图标染成强调色；`mode`：一组里当前的工具或视图，
+   * 中性抬起底 + 主要文字（重要记录 019）。默认状态本身不该用 `on` 高亮，偏离默认才着色。
+   */
+  selection?: 'toggle' | 'mode'
   tone?: IconButtonTone
   size?: IconButtonSize
   /** 圆形外框；`tone="accent"` 恒为圆形。 */
@@ -315,11 +320,13 @@ export function resolveIconButtonClass({
   size,
   shape,
   on,
+  selection = 'toggle',
 }: {
   tone: IconButtonTone
   size: IconButtonSize
   shape: 'square' | 'circle'
   on: boolean
+  selection?: 'toggle' | 'mode'
 }): string {
   const entry = UI_ICON_BUTTON_SIZE_CLASS[size]
   const radius = tone === 'accent' || shape === 'circle' ? 'rounded-full' : entry.radius
@@ -330,7 +337,7 @@ export function resolveIconButtonClass({
     : tone === 'media'
       ? `${UI_BUTTON_VARIANT_CLASS.media}${on ? ' ui-btn-media-on' : ''}`
       : on
-        ? 'ui-btn-on'
+        ? selection === 'mode' ? 'ui-btn-mode-on' : 'ui-btn-on'
         : tone === 'danger'
           ? UI_BUTTON_VARIANT_CLASS.danger
           : UI_BUTTON_VARIANT_CLASS.quiet

@@ -128,7 +128,8 @@ function createVideoEditExplanationScene() {
         await playback(20, true)
         for (let i = 0; i < 3; i++) { await page.waitForTimeout(200); await shot('04-播放-' + i) }
         await playback(80)
-        await button(page, '选择').last().click(); await button(page, '移动画面').click()
+        // 节目画面不再分模式（重要记录 019）：命令带选着选择工具时直接拖画面。
+        await page.getByRole('group', { name: '时间线工具', exact: true }).getByRole('button', { name: '选择工具', exact: true }).click()
         const box = await page.locator('[data-video-edit-program-display]').boundingBox(); assert(box)
         await page.mouse.move(box.x + box.width * .5, box.y + box.height * .5); await page.mouse.down()
         for (let i = 1; i <= 3; i++) { await page.mouse.move(box.x + box.width * (.5 + i * .02), box.y + box.height * .5); await page.waitForTimeout(100); await shot('05-暂停讲话操作-' + i) }

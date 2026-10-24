@@ -202,10 +202,10 @@ function createVideoEditCodeAiScene() {
         })
         await step('04-annotations', '批注草稿、外部处理和用户审查', async item => {
           if (await button('收起源码编辑').isVisible()) await button('收起源码编辑').click()
-          // 批注是时间线工具：Alt+C 进入，7 选评论钉；聚焦真实节目宿主保证作用域。
+          // 批注是命令带里的工具：Alt+C 进入，7 选评论钉；聚焦真实节目宿主保证作用域。
           await page.locator('[data-video-edit-panel="program"]').evaluate(node => { node.tabIndex = -1; node.focus() })
           await page.keyboard.press('Alt+c'); await page.keyboard.press('7')
-          const tool = page.getByRole('toolbar', { name: '时间线工具栏', exact: true }).getByRole('button', { name: '批注工具', exact: true })
+          const tool = page.getByRole('group', { name: '时间线工具', exact: true }).getByRole('button', { name: '批注工具', exact: true })
           await page.waitForFunction(() => document.querySelector('[aria-label="画面标注层"]')?.classList.contains('cursor-crosshair'), null, { timeout: 5000 })
           item.shortcut = { key: 'Alt+C 7', scope: 'program', mode: await tool.getAttribute('aria-pressed') }
           const point = authorPointToMonitor(await canvas.boundingBox(), { x: 960, y: 540 })

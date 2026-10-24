@@ -166,7 +166,8 @@ function createVideoEditPictureGestureScene() {
         assert.equal(selection.data.properties['video_edit.document.selection'], target.id)
         assert.deepEqual(selection.data.properties['video_edit.document.timeline_view'].selectedClipIds, [target.id])
         const program = page.locator('[data-video-edit-panel="program"]').first()
-        await button(program, '更多节目操作').click(); await button(page, '移动画面').click(); await presented(page, 0)
+        // 节目画面不再分模式（重要记录 019）：命令带选着选择工具时直接拖画面。
+        await page.getByRole('group', { name: '时间线工具', exact: true }).getByRole('button', { name: '选择工具', exact: true }).click(); await presented(page, 0)
         const beforeFile = JSON.stringify(readVideoEditFile(file)); const before = readProject(file)
         evidence.before = await png(page, path.join(root, 'before.png')); await shot('picture-gesture-before')
         evidence.surface = await canvas.evaluate(canvas => {

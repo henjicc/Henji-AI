@@ -2,13 +2,13 @@ import { useTranslation } from 'react-i18next'
 import { UiFormRow } from '@/components/ui'
 import { memo, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Virtuoso } from 'react-virtuoso'
-import { Check, Copy, MessageSquare, Send, Trash2, Undo2 } from 'lucide-react'
+import { Check, Copy, Send, Trash2, Undo2 } from 'lucide-react'
 import { Dropdown, UiButton, UiEmpty, UiGroup, UiInput, UiTextArea } from '@/components/ui'
 import { VIDEO_EDIT_ANNOTATION_STATUS_LABELS, type VideoEditAnnotation } from '@/core/videoEdit/annotations'
 import { resolveVideoEditElementAnnotation } from '../application/videoEditCodeElements'
 import { videoEditFps } from '@/core/videoEdit/time'
 import { createVideoEditAnnotation, deleteVideoEditAnnotation, jumpToVideoEditAnnotation, reviewVideoEditAnnotation, selectedVideoEditAnnotation, sendVideoEditAnnotations, undoVideoEditAnnotationChange, updateVideoEditAnnotation } from '../application/videoEditAnnotations'
-import { focusVideoEditPanel, subscribeVideoEdit, videoEditCommittedDocument, type VideoEditInstance } from '../application/videoEditService'
+import { subscribeVideoEdit, videoEditCommittedDocument, type VideoEditInstance } from '../application/videoEditService'
 import { timelineTimecode } from '../timeline/timelineGeometry'
 import { VideoEditAnnotationThumbnail } from './VideoEditAnnotationThumbnail'
 
@@ -69,7 +69,3 @@ export const VideoEditAnnotationsPanel = memo(function VideoEditAnnotationsPanel
     {entries.length ? <Virtuoso className="min-h-0 flex-1" data={entries} computeItemKey={(_index, entry) => entry.mark.id} itemContent={(_index, entry) => <AnnotationRow instance={instance} onError={onError} {...entry} />} /> : <UiEmpty size="xs" title="暂无批注" description="在节目画面上标注，或圈出时间段。" />}
   </div>
 })
-export function VideoEditAnnotationQueueButton({ instance }: { instance: VideoEditInstance }): React.ReactElement {
-  const count = instance.document.sequences.find(sequence => sequence.id === instance.activeSequenceId)?.annotations.filter(mark => mark.status === 'draft').length ?? 0
-  return <UiButton size="sm" onClick={() => focusVideoEditPanel(instance.document.id, 'annotations')}><MessageSquare />{count ? `${count} 条待发送` : '批注'}</UiButton>
-}

@@ -14,7 +14,8 @@ import {
   UI_ICON_SIZE_CLASS,
   UI_TEXT_AREA_HEIGHT_CLASS,
   UI_SEGMENT_SELECTED_CLASS,
-  UI_BOOLEAN_CONTROL_ACTIVE_CLASS,
+  UI_BOOLEAN_BOX_CLASS,
+  UI_BOOLEAN_BOX_STATE_CLASS,
   UI_BUTTON_RESET_CLASS,
   UI_FIELD_DISABLED_CLASS,
   UI_FIELD_FOCUS_CLASS,
@@ -35,6 +36,8 @@ import {
   UI_NAV_INDICATOR_END_CLASS,
   UI_NAV_ITEM_ACTIVE_CLASS,
   UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS,
+  UI_NAV_ITEM_ACTIVE_WORKSPACE_CLASS,
+  UI_NAV_TOGGLE_ON_CLASS,
   UI_OPTION_ITEM_ACTIVE_CLASS,
   UI_OPTION_ITEM_CLASS,
   UI_RADIUS_CLASS,
@@ -178,6 +181,7 @@ export const UiIconButton = forwardRef<HTMLButtonElement, UiIconButtonProps>(
   ({
     className = '',
     on,
+    selection = 'toggle',
     tone = 'default',
     size = 'md',
     shape = 'square',
@@ -191,7 +195,7 @@ export const UiIconButton = forwardRef<HTMLButtonElement, UiIconButtonProps>(
       data-size={size}
       aria-label={props['aria-label'] ?? label ?? props.tooltip ?? props.title}
       aria-pressed={props['aria-pressed'] ?? on}
-      className={`ui-btn inline-flex shrink-0 select-none items-center justify-center ${resolveIconButtonClass({ tone, size, shape, on: on === true })} ${className}`}
+      className={`ui-btn inline-flex shrink-0 select-none items-center justify-center ${resolveIconButtonClass({ tone, size, shape, on: on === true, selection })} ${className}`}
  />
   )
 );
@@ -227,7 +231,7 @@ export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
     const navigationActiveClass = subtle
       ? `${UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS} ${UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS}`
       : workspace
-        ? `${UI_NAV_ITEM_ACTIVE_CLASS} ${UI_NAV_INDICATOR_BOTTOM_SHORT_CLASS}`
+        ? `${UI_NAV_ITEM_ACTIVE_WORKSPACE_CLASS} ${UI_NAV_INDICATOR_BOTTOM_SHORT_CLASS}`
         : `${UI_NAV_ITEM_ACTIVE_CLASS} ${UI_NAV_INDICATOR_BOTTOM_CLASS}`;
     const layoutClass = subtle
       ? `${UI_CHIP_SIZE_CLASS[size]} rounded-none font-medium`
@@ -238,7 +242,7 @@ export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
       ? active
         ? `border-transparent ${navigationActiveClass}`
         : toggle && on
-          ? `border-transparent ${UI_NAV_ITEM_ACTIVE_CLASS}`
+          ? `border-transparent ${UI_NAV_TOGGLE_ON_CLASS} ${UI_GLASS_ADAPTIVE_OPTION_CLASS}`
           : subtle
           ? 'border-transparent text-text3 hover:text-text2'
           : `border-transparent text-text2 hover:text-text1 ${UI_GLASS_ADAPTIVE_OPTION_CLASS}`
@@ -623,7 +627,17 @@ export const UiColorInput = forwardRef<HTMLInputElement, Omit<InputHTMLAttribute
 
 UiColorInput.displayName = 'UiColorInput';
 
-/** 复选框：强调色只进入框体本身（开态强调实底 + on-accent 勾），整行保持静息。 */
+/** 布尔命中区（24px，命中区下限）：透明按钮，看得见的是里面 16px 的中性方框。 */
+const UI_BOOLEAN_HIT_CLASS = `group/boolean inline-flex h-6 w-6 shrink-0 items-center justify-center border-0 bg-transparent ${UI_RADIUS_CLASS.control} ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring`;
+
+/** 复选框与开关共用的方框（重要记录 019）：中性描边，勾选只多一枚主要文字色的勾。 */
+function UiBooleanBox({ checked }: { checked: boolean | undefined }): JSX.Element {
+  return <span aria-hidden="true" className={`${UI_BOOLEAN_BOX_CLASS} ${checked ? UI_BOOLEAN_BOX_STATE_CLASS.on : UI_BOOLEAN_BOX_STATE_CLASS.off}`}>
+    <Check className={UI_ICON_SIZE_CLASS.xs} />
+  </span>;
+}
+
+/** 复选框：16px 中性方框，勾选不铺强调色，整行保持静息（注意力优先，重要记录 018/019）。 */
 export const UiCheckbox = forwardRef<HTMLButtonElement, UiCheckboxProps>(
   ({ className = '', checked, onCheckedChange, onClick, ...props }, ref) => {
     const rowLabelling = resolveFormRowLabelling(useUiFormRowLabelling(), props);
@@ -633,11 +647,7 @@ export const UiCheckbox = forwardRef<HTMLButtonElement, UiCheckboxProps>(
       type="button"
       role="checkbox"
       aria-checked={checked}
-      className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-colors duration-120 ${UI_FIELD_DISABLED_CLASS} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring ${
-        checked
-          ? UI_BOOLEAN_CONTROL_ACTIVE_CLASS
-          : 'border-line-strong bg-raised text-transparent hover:border-text3'
-      } ${className}`}
+      className={`${UI_BOOLEAN_HIT_CLASS} ${className}`}
       onClick={(event) => {
         onClick?.(event);
         if (!event.defaultPrevented) {
@@ -647,7 +657,7 @@ export const UiCheckbox = forwardRef<HTMLButtonElement, UiCheckboxProps>(
       {...props}
       {...rowLabelling}
  >
-      <Check className={`${UI_ICON_SIZE_CLASS.sm}`} />
+      <UiBooleanBox checked={checked} />
     </button>
     );
   }
@@ -656,8 +666,9 @@ export const UiCheckbox = forwardRef<HTMLButtonElement, UiCheckboxProps>(
 UiCheckbox.displayName = 'UiCheckbox';
 
 /**
- * 开关。`pill`：强调色只进入开态轨道（滑块取 on-accent）；`segmented`：两段文字的分段外观，
- * 与 `UiOptionButton variant="segment"` 同一套中性抬起底（重要记录 017），仍是 role=switch。
+ * 开关（role=switch）。`pill`（默认）现在画成与复选框同一个中性方框（重要记录 018/019：开关轨道自带色块太抢眼），
+ * 新代码优先用 `UiCheckbox`；`segmented`：两段文字的分段外观，与 `UiOptionButton variant="segment"`
+ * 同一套中性抬起底（重要记录 017）。
  */
 export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
   ({ className = '', checked, onCheckedChange, onClick, appearance = 'pill', offLabel, onLabel, size = 'md', ...props }, ref) => {
@@ -714,27 +725,12 @@ export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
         type="button"
         role="switch"
         aria-checked={checked}
-
-        // 命中区 24 高（命中区下限），看得见的轨道仍是 20 高的胶囊：轨道画在内层，按钮本身透明（任务 5.8，smallTargets）
-        className={`group/switch relative inline-flex h-6 w-9 shrink-0 items-center rounded-full border-0 bg-transparent ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} focus-visible:!ring-2 focus-visible:!ring-accent-ring ${className}`}
+        className={`${UI_BOOLEAN_HIT_CLASS} ${className}`}
         onClick={handleClick}
         {...props}
         {...rowLabelling}
  >
-        <span
-          aria-hidden="true"
-          className={`pointer-events-none absolute inset-x-0 top-0.5 h-5 rounded-full border-0 transition-colors duration-120 ${
-            checked
-              ? UI_BOOLEAN_CONTROL_ACTIVE_CLASS
-              : 'bg-control-pressed group-hover/switch:bg-line-strong'
-          }`}
- />
-        {/* 开态滑块取 on-accent（与强调色对比 ≥ 4.5 的黑或白），关态取主要文字色：深浅主题都清楚 */}
-        <span
-          className={`pointer-events-none relative ml-0.5 h-4 w-4 rounded-full shadow-thumb-sm transition-transform duration-120 ${
-            checked ? 'translate-x-4 bg-on-accent' : 'translate-x-0 bg-text1'
-          }`}
- />
+        <UiBooleanBox checked={checked} />
       </button>
     );
   }

@@ -65,7 +65,8 @@ import { VideoEditInPlacePlaceholders } from './VideoEditInPlacePlaceholders'
 import { VideoEditNestDialog } from '../panels/VideoEditNestDialog'
 import { openVideoEditNestedClip, type VideoEditNestTarget } from '../application/videoEditNesting'
 
-interface Props { instance: VideoEditInstance; sequence: VideoEditSequence; pixels: number; onError: (error: unknown) => void; visible?: boolean }
+/** corner：轨道头上方、标尺左端的角落格（时间码与这条时间线的统一开关，重要记录 019）。 */
+interface Props { instance: VideoEditInstance; sequence: VideoEditSequence; pixels: number; onError: (error: unknown) => void; visible?: boolean; corner?: React.ReactNode }
 const dropLogger = createLogger('features.videoEdit.timeline.drop')
 /** 片段底色与描边（设计稿素材片段令牌）：画面、声音、文字/代码/图形/调整各一组；选中改强调描边。 */
 const CLIP_SURFACE = { video: { fill: 'bg-clip-video', line: 'border-clip-video-line' }, audio: { fill: 'bg-clip-audio', line: 'border-clip-audio-line' }, title: { fill: 'bg-clip-title', line: 'border-clip-title-line' } } as const
@@ -86,7 +87,7 @@ const TRANSITION_DROP_CENTER = 8
 /** 片段宽度够放淡化手柄（两角各一个）时才显示手柄。 */
 const FADE_HANDLE_MIN_WIDTH = 28
 interface TransitionDropHint { kind: VideoEditTransitionKind; pair: VideoEditTransitionPair; alignment: VideoEditTransitionAlignment; track: number; start: number; duration: number }
-export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, visible = true }: Props): React.ReactElement {
+export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, visible = true, corner }: Props): React.ReactElement {
   const annotationRange = useVideoEditAnnotationRange(instance, pixels, TIMELINE_HEADER_WIDTH, onError)
   const projectId = instance.document.id
   const [nestTarget, setNestTarget] = useState<VideoEditNestTarget | null>(null)
@@ -496,7 +497,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
       }}>
       <div className="relative" style={{ width, height: Math.max(view.height, TIMELINE_RULER_HEIGHT) }} data-video-edit-timeline-content>
         <div className="sticky top-0 z-sticky flex h-band-row border-b border-line bg-panel" data-video-edit-ruler onPointerDownCapture={annotationRange.onPointerDownCapture} onPointerMove={annotationRange.onPointerMove} onPointerUp={annotationRange.onPointerUp} onPointerCancel={annotationRange.onPointerCancel}>
-          <div className="sticky left-0 z-sticky flex shrink-0 items-center border-r border-gap bg-panel px-3 text-2xs text-text3" style={{ width: TIMELINE_HEADER_WIDTH }} data-video-edit-track-header>轨道</div>
+          <div className={`sticky left-0 z-sticky flex shrink-0 items-center border-r border-gap bg-panel ${corner ? 'pl-1 pr-1.5' : 'px-3 text-2xs text-text3'}`} style={{ width: TIMELINE_HEADER_WIDTH }} data-video-edit-track-header data-video-edit-timeline-corner>{corner ?? '轨道'}</div>
           <VideoEditTimelinePosition instance={instance}>
             <VideoEditAnnotationMarks instance={instance} sequence={sequence} pixels={pixels} left={view.left} width={view.width} onError={onError} />
             {annotationRange.range && <div className="pointer-events-none absolute inset-y-0 bg-selected-accent ring-1 ring-accent-ring" style={{ left: Math.min(annotationRange.range.from, annotationRange.range.to) * pixels, width: Math.max(1, Math.abs(annotationRange.range.to - annotationRange.range.from) * pixels) }} />}

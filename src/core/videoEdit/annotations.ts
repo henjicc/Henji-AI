@@ -24,6 +24,8 @@ export const videoEditAnnotationTargetSchema = z.discriminatedUnion('kind', [
 export const VIDEO_EDIT_ANNOTATION_COLOR_NAMES = ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'white', 'black'] as const
 export const videoEditAnnotationStyleSchema = z.object({ color: z.enum(VIDEO_EDIT_ANNOTATION_COLOR_NAMES) }).strict()
 export type VideoEditAnnotationColor = typeof VIDEO_EDIT_ANNOTATION_COLOR_NAMES[number]
+/** 颜色的中文名（参数条的色样与读屏名称用）。 */
+export const VIDEO_EDIT_ANNOTATION_COLOR_LABELS: Record<VideoEditAnnotationColor, string> = { red: '红', orange: '橙', yellow: '黄', green: '绿', blue: '蓝', purple: '紫', white: '白', black: '黑' }
 export const videoEditAnnotationAuthorSchema = z.object({ kind: z.enum(['user', 'assistant', 'external']), name: z.string().trim().min(1) }).strict()
 export const videoEditAnnotationMessageSchema = z.object({ id: identifier, author: videoEditAnnotationAuthorSchema, createdAt: z.string().datetime(), text: z.string().trim().min(1) }).strict()
 export const videoEditAnnotationSchema = z.object({

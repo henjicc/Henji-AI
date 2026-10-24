@@ -13,7 +13,7 @@ const playbackScopes: VideoEditCommandScope[] = [...monitorScopes, 'global', 'pr
  */
 function command<const T extends string>(id: T, title: string, scopes: VideoEditCommandScope[], shortcut?: VideoEditShortcut, repeat = false, alternates: readonly VideoEditShortcut[] = []) { return { id, title, scopes, shortcut, repeat, alternates } }
 export const VIDEO_EDIT_COMMANDS = [
-  // 批注工具（时间线工具栏里的一个工具）：Alt+C 进入，进入后 1–7 换形状，Esc 回到选择工具；C、A 仍是剃刀与轨道选择。
+  // 批注工具（剪辑命令带里的一个工具）：Alt+C 进入，进入后 1–7 换形状，Esc 回到选择工具；C、A 仍是剃刀与轨道选择。
   command('annotate_tool', '批注工具', editScopes, key('KeyC', false, false, true)),
   command('annotation_arrow', '箭头', editScopes, key('Digit1')),
   command('annotation_ellipse', '圈', editScopes, key('Digit2')),

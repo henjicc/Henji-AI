@@ -11,7 +11,7 @@ import { VideoEditSequenceDialog } from './VideoEditSequenceDialog'
 
 /**
  * 已打开的序列标签。`dock`：放在时间线面板的标签上（面板名即序列名，PR 的做法），只有名称和悬停出现的关闭；
- * `toolbar`：只剩“序列设置”按钮，放在时间线工具栏里。两处共用右键菜单与对话框。
+ * `toolbar`：只剩“序列设置”按钮，放在时间线左上角的开关格里。两处共用右键菜单与对话框。
  */
 export function VideoEditSequenceTabs({ instance, onError, placement = 'toolbar' }: { instance: VideoEditInstance; onError: (error: unknown) => void; placement?: 'dock' | 'toolbar' }): React.ReactElement {
   const [settings, setSettings] = useState<VideoEditSequence | null>(null)

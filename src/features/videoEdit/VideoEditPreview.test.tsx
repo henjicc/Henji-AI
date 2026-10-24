@@ -107,18 +107,17 @@ it('半速示范重画当前时刻且取消旧姿态，覆盖已有曲线不会�
   expect(pixel.sessions).toBe(1)
   act(() => { setVideoMotionPointer(owner.document.id, false); setVideoEditView(owner.document.id, { playing: false }) })
 })
-it('文字工具接管批注工具，退出文字后节目工具可继续切换', async () => {
+it('节目画面跟着命令带的工具走：文字工具接管批注工具，回到选择工具后两者都退出，节目底栏不再有模式下拉', async () => {
   const instance = await createVideoEditProject(); const view = render(<VideoEditPreview instance={instance} onError={vi.fn()} />)
   await act(async () => { await Promise.resolve() })
-  const openMenu = (): void => { const button = view.getByRole('button', { name: '更多节目操作' }); if (button.getAttribute('aria-expanded') !== 'true') fireEvent.click(button) }
   act(() => setVideoEditTimelineView(instance.document.id, { tool: 'annotate' }))
   expect(view.getByLabelText('画面标注层').className).toContain('cursor-crosshair')
   act(() => setVideoEditTimelineView(instance.document.id, { tool: 'type' }))
   expect(view.getByLabelText('节目文字工具')).toBeTruthy(); expect(view.queryByLabelText('这里要改什么？')).toBeNull()
-  openMenu(); fireEvent.click(view.getByRole('button', { name: '移动画面' }))
-  expect(instance.tool).toBe('select'); expect(view.queryByLabelText('节目文字工具')).toBeNull()
-  act(() => setVideoEditTimelineView(instance.document.id, { tool: 'type' }))
-  expect(view.getByLabelText('节目文字工具')).toBeTruthy(); view.unmount()
+  act(() => setVideoEditTimelineView(instance.document.id, { tool: 'select' }))
+  expect(view.getByLabelText('节目文字工具').className).toContain('pointer-events-none'); expect(view.getByLabelText('画面标注层').className).not.toContain('cursor-crosshair')
+  expect(view.queryByRole('group', { name: '节目画面模式' })).toBeNull(); expect(view.queryByRole('button', { name: '移动画面' })).toBeNull()
+  view.unmount()
 })
 it('画面标注捕获原选区和时间，后续定位及指针取消不标注新目标', async () => {
   const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
@@ -134,7 +133,7 @@ it('画面标注捕获原选区和时间，后续定位及指针取消不标注�
   expect(getActiveVideoEditSequence(instance).annotations).toHaveLength(0)
   down(); fireEvent.pointerCancel(host); up(); expect(getActiveVideoEditSequence(instance).annotations).toHaveLength(0)
   down(); up(); expect(getActiveVideoEditSequence(instance).annotations).toHaveLength(0)
-  fireEvent.change(view.getByLabelText('这里要改什么？'), { target: { value: '改这里' } }); fireEvent.click(view.getByRole('button', { name: '加入待发送' }))
+  fireEvent.change(view.getByLabelText('这里要改什么？'), { target: { value: '改这里' } }); fireEvent.click(view.getByRole('button', { name: '加入待发送（回车）' }))
   expect(getActiveVideoEditSequence(instance).annotations).toMatchObject([{ clipId: instance.selection, frame: 0, status: 'draft', target: { x: .1, y: .2 } }])
   expect(onError).not.toHaveBeenCalled(); view.unmount()
 })
@@ -343,13 +342,15 @@ it('隐藏节目停止取帧并释放会话，显示后等待退休完成且迟�
   await act(async () => { retire() }); expect(pixel.sessions).toBe(2); expect(onError).not.toHaveBeenCalled()
 })
 
-it('真实画面移动连续更新只写一次历史，改选区和Escape取消原手势', async () => {
-  const owner = (await createVideoEditProject())!; appendVideoEditClip(owner.document.id); const clipId = owner.selection!; const onError = vi.fn()
+it('选择工具下直接拖画面：连续更新只写一次历史，改选区和Escape取消原手势，其他工具不拖动', async () => {
+  // 选择工具下单击画面会先选中指针下的画面片段（代码元素层），再拖动它；用铺满画面的图片片段。
+  const owner = (await createVideoEditProject())!
+  appendVideoEditMedia(owner.document.id, { id: 'still', name: '图片', path: 'D:/still.png', kind: 'image', width: 320, height: 180, durationSeconds: 3 }); appendVideoEditClip(owner.document.id, 'still')
+  const clipId = owner.selection!; const onError = vi.fn()
   const view = render(<VideoEditPreview instance={owner} onError={onError} />)
   await act(async () => { await Promise.resolve() }); const host = view.getByLabelText('剪辑画面').parentElement!
   Object.defineProperty(host, 'setPointerCapture', { value: vi.fn() })
-  vi.spyOn(host, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 320, 180))
-  fireEvent.click(view.getByRole('button', { name: '更多节目操作' })); fireEvent.click(view.getByRole('button', { name: '移动画面' }))
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 320, 180))
   const send = (type: string, x: number, y: number) => fireEvent(host, new MouseEvent(type, { clientX: x, clientY: y, button: 0, bubbles: true }))
   const history = owner.past.length
   send('pointerdown', 32, 18); send('pointermove', 64, 36); send('pointermove', 96, 54)
@@ -358,7 +359,10 @@ it('真实画面移动连续更新只写一次历史，改选区和Escape取消�
   act(() => undoVideoEdit(owner.document.id)); expect(getActiveVideoEditSequence(owner).clips[0].x).toBe(0)
   send('pointerdown', 0, 0); send('pointermove', 32, 18); fireEvent.keyDown(window, { key: 'Escape' }); expect(getActiveVideoEditSequence(owner).clips[0].x).toBe(0)
   send('pointerdown', 0, 0); send('pointermove', 32, 18); act(() => setVideoEditTimelineView(owner.document.id, { selectedClipIds: [] })); send('pointerup', 32, 18)
-  expect(getActiveVideoEditSequence(owner).clips[0].x).toBe(0); expect(owner.selection).not.toBe(clipId); expect(onError).not.toHaveBeenCalled()
+  expect(getActiveVideoEditSequence(owner).clips[0].x).toBe(0); expect(owner.selection).not.toBe(clipId)
+  act(() => setVideoEditTimelineView(owner.document.id, { tool: 'razor', selectedClipIds: [clipId] }))
+  send('pointerdown', 32, 18); send('pointermove', 96, 54); send('pointerup', 96, 54)
+  expect(getActiveVideoEditSequence(owner).clips[0].x).toBe(0); expect(onError).not.toHaveBeenCalled()
 })
 
 function installAudioGraph(resume: () => Promise<void> = async () => {}) {

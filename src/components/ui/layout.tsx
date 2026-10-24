@@ -134,8 +134,10 @@ interface UiToolbarProps extends HTMLAttributes<HTMLDivElement> {
    * - `command`：工具页骨架的**命令带**（skill `henji-ui-surface`「页面骨架：横向条带」A 类）：
    *   44 高、面板底、下边一条间隙色发丝线。一个视图只有一条；返回、标题/文件上下文、主工具组、
    *   导出/保存全部进这一条，内层功能组件不得再长自己的头带（用 props 注入）。
+   * - `footer`：停靠面板的**底栏**（重要记录 018/019）：32 高、上边一条发丝线；`children` 是左端只读计数或状态
+   *   （辅助文字，放不下就截断），`trailing` 是这个面板自己的工具（静默图标按钮）。标签行不放面板工具。
    */
-  variant?: 'plain' | 'command';
+  variant?: 'plain' | 'command' | 'footer';
   /** 行内动作的间距；默认 command 用 control，plain 用 group。 */
   gap?: UiInlineGap;
   /** 左侧内容（command：返回、文件上下文、主工具组） */
@@ -482,6 +484,14 @@ export function UiToolbar({
           </div>
         ) : null}
       </header>
+    );
+  }
+  if (variant === 'footer') {
+    return (
+      <div ref={budgetRef} role="toolbar" data-panel-footer className={`flex ${UI_BAND_HEIGHT_CLASS.tab} shrink-0 items-center ${UI_INLINE_GAP_CLASS.control} whitespace-nowrap border-t border-line pl-3 pr-1.5 ${className}`} {...props}>
+        <div data-panel-footer-status className="min-w-0 flex-1 truncate text-xs text-text3">{children}</div>
+        {trailing ? <div data-panel-footer-tools className={`flex shrink-0 items-center ${UI_INLINE_GAP_CLASS.micro}`}>{trailing}</div> : null}
+      </div>
     );
   }
   return (

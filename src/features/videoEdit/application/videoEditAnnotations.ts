@@ -10,15 +10,7 @@ import { observeVideoEditFrame } from './videoEditFrameObservation'
 import { editVideoSequence, focusVideoEditPanel, requireVideoEditInstance, restoreVideoEditSnapshot, setVideoEditTimelineView, setVideoEditView, switchVideoEditSequence } from './videoEditService'
 
 const logger = createLogger('features.videoEdit.annotations')
-/** 节目画面只剩“回到选择”这一个外部请求：在节目画面里按选择工具时退出“移动画面”。 */
-type MonitorAction = 'select'
-const monitors = new Map<string, (action: MonitorAction) => void>()
 const selected = new Map<string, string>()
-export function registerVideoEditAnnotationMonitor(id: string, handler: (action: MonitorAction) => void): () => void {
-  monitors.set(id, handler)
-  return () => { if (monitors.get(id) === handler) monitors.delete(id) }
-}
-export function requestVideoEditAnnotationMonitor(id: string, action: MonitorAction): void { monitors.get(id)?.(action) }
 
 /** 批注工具的子形状（工具栏弹出菜单与 1–7 的顺序）。 */
 export const VIDEO_EDIT_ANNOTATION_SHAPES = ['arrow', 'ellipse', 'region', 'stroke', 'text', 'marker', 'point'] as const

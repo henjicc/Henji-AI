@@ -7,7 +7,7 @@ import { useI18n } from '@/hooks/useI18n'
  * 不在这里改任何外观；新增共享组件时在这里补一个样本（uiGalleryCoverage.test 会提醒）。
  */
 import { useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
-import { Bold, Check, Image as ImageIcon, Italic, Link, Pause, Play, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { Bold, Check, Image as ImageIcon, Italic, Link, List, Pause, Play, Plus, Sparkles, Trash2 } from 'lucide-react'
 
 import {
   AlertDialog,
@@ -252,7 +252,7 @@ export function OptionSection(): JSX.Element {
       <GalleryRow label="统一分段">
         <UiSegmented ariaLabel="示范方式样张" size="sm" value={segment} onChange={setSegment} options={[{ value: 'place', label: '分时摆放' }, { value: 'record', label: '录制轨迹' }, { value: 'disabled', label: '禁用', disabled: true }]} />
       </GalleryRow>
-      <p className="text-xs text-text2">分段选中：中性抬起底 + 强文字，最多 5 项；其他单选：淡强调底。</p>
+      <p className="text-xs text-text2">分段选中：中性抬起底 + 强文字，最多 5 项；其他单选：中性选中底，靠强调文字或勾区分。</p>
       <GalleryRow label="网格">
         <UiOptionButton variant="grid" gridCell="tier" active aria-pressed className="justify-center">1K</UiOptionButton>
         <GalleryForce state="hover"><UiOptionButton variant="grid" gridCell="tier" aria-pressed={false} className="justify-center">2K</UiOptionButton></GalleryForce>
@@ -442,6 +442,9 @@ export function ToolbarSection(): JSX.Element {
           <UiIconButton aria-label="添加"><Plus /></UiIconButton>
           <span data-user-content className="w-24 text-13 text-text1"><UiMarqueeText text="很长的文件名会滚动显示.mp4" className="w-full" /></span>
         </UiToolbar>
+      </UiPanel>
+      <UiPanel variant="bare" className="w-80 overflow-hidden">
+        <UiToolbar variant="footer" aria-label="面板底栏" trailing={<><UiIconButton size="sm" aria-label="视图与排序"><List /></UiIconButton><UiIconButton size="sm" aria-label="新建"><Plus /></UiIconButton></>}>8 项 · 已选 1</UiToolbar>
       </UiPanel>
       <UiOverflowRow
         items={OVERFLOW_ITEMS}

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { PanelTrigger, UiButton, UiInput, UiOptionButton } from '@/components/ui'
+import { ArrowUp, X } from 'lucide-react'
+import { UiButton, UiIconButton, UiInput } from '@/components/ui'
 import { VIDEO_EDIT_ANNOTATION_COLORS } from '@/core/theme/colorTokens'
-import { VIDEO_EDIT_ANNOTATION_COLOR_NAMES, videoEditAnnotationAt, videoEditAnnotationColor, type VideoEditAnnotation, type VideoEditAnnotationColor, type VideoEditAnnotationTarget } from '@/core/videoEdit/annotations'
-import { createVideoEditAnnotation, deleteVideoEditAnnotation, jumpToVideoEditAnnotation, selectedVideoEditAnnotation, selectVideoEditAnnotation, setVideoEditAnnotationBrush, subscribeVideoEditAnnotationBrush, updateVideoEditAnnotation, videoEditAnnotationBrush, videoEditAnnotationBrushRevision, type VideoEditAnnotationShape } from './application/videoEditAnnotations'
+import { videoEditAnnotationAt, videoEditAnnotationColor, type VideoEditAnnotation, type VideoEditAnnotationColor, type VideoEditAnnotationTarget } from '@/core/videoEdit/annotations'
+import { createVideoEditAnnotation, deleteVideoEditAnnotation, jumpToVideoEditAnnotation, selectedVideoEditAnnotation, selectVideoEditAnnotation, subscribeVideoEditAnnotationBrush, updateVideoEditAnnotation, videoEditAnnotationBrush, videoEditAnnotationBrushRevision, type VideoEditAnnotationShape } from './application/videoEditAnnotations'
 import { getActiveVideoEditSequence, setVideoEditView, videoEditProgramCommandIdentity, type VideoEditInstance } from './application/videoEditService'
 import { codeElementAnnotationTarget, resolveVideoEditElementAnnotation, selectVideoEditCodeElement } from './application/videoEditCodeElements'
 
@@ -15,7 +16,6 @@ type Handle = 'move' | 'from' | 'to' | 'nw' | 'ne' | 'sw' | 'se'
 type Drag =
   | { kind: 'draw'; shape: VideoEditAnnotationShape; capture: Capture; points: Point[] }
   | { kind: 'edit'; id: string; handle: Handle; start: Point; original: VideoEditAnnotationTarget; target: VideoEditAnnotationTarget }
-const COLOR_LABELS: Record<VideoEditAnnotationColor, string> = { red: '红', orange: '橙', yellow: '黄', green: '绿', blue: '蓝', purple: '紫', white: '白', black: '黑' }
 /** 编号与文字压在浅色上时用深色描边，其余用白色。 */
 const contrastOf = (color: VideoEditAnnotationColor): string => ['white', 'yellow'].includes(color) ? VIDEO_EDIT_ANNOTATION_COLORS.black : VIDEO_EDIT_ANNOTATION_COLORS.white
 const clamp = (value: number): number => Math.max(0, Math.min(1, value))
@@ -101,8 +101,8 @@ function labelPosition(target: VideoEditAnnotationTarget): Point {
 
 /**
  * 节目画面上的批注层（像截图标注）：批注工具下拖拽画箭头、圈、框、画笔，单击放文字、编号、评论钉；Shift 约束；
- * 松手就地问“这里要改什么？”，回车加入待发送、Esc 放弃。点已有标注可选中、拖动、拖角改大小，双击改文字，Delete 删除。
- * 状态看编号徽标，形状只用所选颜色。
+ * 松手在旁边弹出一个输入气泡问“这里要改什么？”，回车加入待发送、Esc 放弃。点已有标注可选中、拖动、拖角改大小，双击改文字，Delete 删除。
+ * 形状与颜色在命令带的批注参数条里选（重要记录 019）；选中一条时在参数条换颜色也改它。状态看编号徽标，形状只用所选颜色。
  */
 export function VideoEditAnnotationOverlay({ instance, active, onError }: { instance: VideoEditInstance; active: boolean; onError: (error: unknown) => void }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditAnnotationBrush, videoEditAnnotationBrushRevision)
@@ -162,9 +162,19 @@ export function VideoEditAnnotationOverlay({ instance, active, onError }: { inst
     setDraft({ capture: { document: instance.document, sequenceId: instance.activeSequenceId, clipId: instance.selection, frame: instance.frame, command: videoEditProgramCommandIdentity(instance.document.id), selection: instance.selectedClipIds }, target: mark.target, color: videoEditAnnotationColor(mark), anchor, editingId: mark.id })
     setText(mark.text); setInputOpen(true)
   }
-  const chooseColor = (color: VideoEditAnnotationColor): void => {
-    setVideoEditAnnotationBrush(instance.document.id, { color })
-    if (selected) try { updateVideoEditAnnotation(instance.document.id, selected.id, mark => ({ ...mark, style: { color } })) } catch (error) { onError(error) }
+  // 参数条换颜色：选中的那条跟着改（只响应颜色的变化，选中别的批注不会反过来改它）。
+  const brushColor = useRef(brush.color)
+  useEffect(() => {
+    if (brushColor.current === brush.color) return
+    brushColor.current = brush.color
+    if (selected && videoEditAnnotationColor(selected) !== brush.color) try { updateVideoEditAnnotation(instance.document.id, selected.id, mark => ({ ...mark, style: { color: brush.color } })) } catch (error) { onError(error) }
+  }, [brush.color, selected, instance.document.id, onError])
+  /** 气泡贴着松手处，放在画面里面：右边不够就往左挪，下面不够就放到上方。 */
+  const bubblePosition = (anchor: DOMRect): React.CSSProperties => {
+    const rect = root.current?.getBoundingClientRect(); const width = 288; const height = 36
+    const x = rect ? anchor.left - rect.left : 0; const y = rect ? anchor.top - rect.top : 0
+    const left = Math.max(8, Math.min(size.width - width - 8, x + 12)); const top = y + 14 + height > size.height - 8 ? Math.max(8, y - height - 14) : y + 14
+    return { left, top }
   }
   const editing = drag?.kind === 'edit' ? drag : undefined
   const targetOf = (mark: VideoEditAnnotation): VideoEditAnnotationTarget => editing?.id === mark.id ? editing.target : mark.target
@@ -189,6 +199,8 @@ export function VideoEditAnnotationOverlay({ instance, active, onError }: { inst
         const mark = id ? visibleMarks.find(item => item.mark.id === id)?.mark : undefined
         root.current?.focus({ preventScroll: true })
         if (instance.playing) setVideoEditView(instance.document.id, { playing: false })
+        // 气泡还开着时点画面：画笔接着画下一笔，其余形状先放弃没写完的那条
+        if (draft && (draft.editingId || draft.target.kind !== 'stroke')) discard()
         if (mark) {
           setSelectedId(mark.id); selectVideoEditAnnotation(instance.document.id, mark.id)
           if (mark.target.kind !== 'element') { pointer.current = { kind: 'edit', id: mark.id, handle: handle ?? 'move', start: at, original: mark.target, target: mark.target }; event.currentTarget.setPointerCapture(event.pointerId) }
@@ -241,15 +253,14 @@ export function VideoEditAnnotationOverlay({ instance, active, onError }: { inst
         <UiButton variant="media" size="sm" onPointerDown={event => event.stopPropagation()} onClick={() => { try { jumpToVideoEditAnnotation(instance.document.id, mark.id) } catch (error) { onError(error) } }} tooltip={mark.text}>{index + 1}{missing ? ' · 元素已不存在' : mark.status === 'open' ? ' · 已发送' : mark.status === 'addressed' ? ' · 待审查' : label ? ` · ${label}` : ''}</UiButton>
       </div>]
     })}
-    {active && <div className="pointer-events-auto absolute left-1/2 top-2 flex -translate-x-1/2 items-center gap-1.5 rounded-control px-2 py-1.5 ui-glass" role="radiogroup" aria-label="批注颜色" onPointerDown={event => event.stopPropagation()}>
-      {VIDEO_EDIT_ANNOTATION_COLOR_NAMES.map(color => <UiOptionButton key={color} variant="swatch" role="radio" aria-checked={brush.color === color} aria-label={`${COLOR_LABELS[color]}色`} tooltip={`${COLOR_LABELS[color]}色`} active={brush.color === color} onClick={() => chooseColor(color)} style={{ backgroundColor: VIDEO_EDIT_ANNOTATION_COLORS[color] }} />)}
-    </div>}
-    {draft && <PanelTrigger surface="glass" anchor={draft.anchor} open={inputOpen} panelSize="compact" onOpenChange={open => { setInputOpen(open); if (!open && (draft.editingId || draft.target.kind !== 'stroke')) discard() }} renderPanel={() => <div className="space-y-2" onPointerDown={event => event.stopPropagation()}>
-      <UiInput autoFocus aria-label="这里要改什么？" placeholder={placeholder} value={text} onChange={event => setText(event.target.value)} onKeyDown={event => {
+    {draft && inputOpen && <div role="dialog" aria-label="这里要改什么" className="pointer-events-auto absolute z-raised flex h-9 w-72 items-center gap-2 rounded-full pl-3 pr-1 shadow-panel ui-glass" style={bubblePosition(draft.anchor)} onPointerDown={event => event.stopPropagation()}>
+      <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: VIDEO_EDIT_ANNOTATION_COLORS[draft.color] }} />
+      <UiInput frame="inner" size="sm" autoFocus aria-label="这里要改什么？" placeholder={placeholder} className="min-w-0 flex-1" value={text} onChange={event => setText(event.target.value)} onKeyDown={event => {
         if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); confirm() }
         else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); discard() }
       }} />
-      <div className="flex justify-end gap-2"><UiButton size="sm" onClick={discard}>取消</UiButton><UiButton size="sm" variant="primary" disabled={!text.trim()} onClick={confirm}>{draft.editingId ? '保存' : '加入待发送'}</UiButton></div>
-    </div>} />}
+      <UiIconButton size="sm" shape="circle" aria-label="放弃（Esc）" tooltip="放弃（Esc）" onClick={discard}><X /></UiIconButton>
+      <UiIconButton size="sm" tone="accent" aria-label={draft.editingId ? '保存（回车）' : '加入待发送（回车）'} tooltip={draft.editingId ? '保存（回车）' : '加入待发送（回车）'} disabled={!text.trim()} onClick={confirm}><ArrowUp /></UiIconButton>
+    </div>}
   </div>
 }

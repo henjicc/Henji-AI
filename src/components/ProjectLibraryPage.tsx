@@ -508,10 +508,10 @@ export function ProjectLibraryPage({
         />
       ) : null}
       <div role="group" aria-label={`${labels.view.grid} / ${labels.view.list}`} className="flex items-center">
-        <UiIconButton size="md" on={view === 'grid'} tooltip={labels.view.grid} aria-label={labels.view.grid} onClick={() => changeView('grid')}>
+        <UiIconButton size="md" selection="mode" on={view === 'grid'} tooltip={labels.view.grid} aria-label={labels.view.grid} onClick={() => changeView('grid')}>
           <LayoutGrid  />
         </UiIconButton>
-        <UiIconButton size="md" on={view === 'list'} tooltip={labels.view.list} aria-label={labels.view.list} onClick={() => changeView('list')}>
+        <UiIconButton size="md" selection="mode" on={view === 'list'} tooltip={labels.view.list} aria-label={labels.view.list} onClick={() => changeView('list')}>
           <List  />
         </UiIconButton>
       </div>
