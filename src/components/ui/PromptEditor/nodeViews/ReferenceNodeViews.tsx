@@ -1,9 +1,14 @@
 import { useSyncExternalStore } from 'react'
 import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react'
+import { FileAudio, Film, Image as ImageIcon } from 'lucide-react'
 
 import type { PromptMediaType } from '@/core/inputs/promptDocument'
 import type { PromptEditorResourceRegistry } from '../resourceRegistry'
 import { PROMPT_ATOM_CLASS, PROMPT_MEDIA_ATOM_CLASS } from '../promptEditorStyles'
+import { UI_ICON_SIZE_CLASS } from '../../styleTokens'
+
+/** 没有缩略图（引用失效、音频）时按媒体类型画图标；不显示 image / video 这类内部类型值 */
+const MEDIA_TYPE_ICON = { image: ImageIcon, video: Film, audio: FileAudio } as const
 
 interface ReferenceExtensionOptions {
   registry: PromptEditorResourceRegistry
@@ -87,8 +92,8 @@ export function MediaReferenceNodeView({
           draggable={false}
         />
       ) : (
-        <span className="inline-flex h-[1.25em] min-w-[1.25em] items-center justify-center rounded-control bg-raised px-1 text-[0.65em] text-text2">
-          {attrs.mediaType}
+        <span className="inline-flex h-[1.25em] w-[1.25em] shrink-0 items-center justify-center rounded-control bg-raised text-text2">
+          {(() => { const Icon = MEDIA_TYPE_ICON[attrs.mediaType] ?? ImageIcon; return <Icon aria-hidden="true" className={UI_ICON_SIZE_CLASS.xs} /> })()}
         </span>
       )}
       <span className="truncate">@{label}</span>

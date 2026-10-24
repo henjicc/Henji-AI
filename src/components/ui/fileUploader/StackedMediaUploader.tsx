@@ -324,7 +324,8 @@ export const StackedMediaUploader = forwardRef<StackedMediaUploaderHandle, Stack
           两个 bg 同属性打架，而前者在 Tailwind 产物里排在后者之后，
           所以底色永远赢——拖拽高亮其实一直没显示出来 */}
       <div className={`relative min-h-[82px] rounded-overlay p-1.5 transition-colors ${isDragging ? 'bg-raised/55' : 'bg-panel/30'}`}>
-        <div className="relative h-[66px] overflow-visible">
+        {/* 参考素材收起时叠成一摞、展开时角上压着移除 / 替换小按钮：卡片互相压着是这个控件的设计，布局检查不按遮挡报 */}
+        <div className="relative h-[66px] overflow-visible" data-layout-allow="occlude" data-layout-allow-reason="参考素材叠成一摞、角上压着移除与替换按钮">
           {files.map((file, index) => {
             const isVideo = fileTypes ? fileTypes[index] === 'video' : false
             const isAudio = fileTypes ? fileTypes[index] === 'audio' : accept === 'audio/*'

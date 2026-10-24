@@ -275,7 +275,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
     return (
       <PanelTrigger
         controlsRef={moreControlsRef}
-        panelSize={resolveMorePanelWidth(entries) > 720 ? 'workspace' : 'wide'}
+        // 按内容选档：只有普通参数行（数量、种子等，估算 360）用 compact，不被 wide 拉到半屏宽、数值框拉成长条；
+        // 有整块控件（遮罩、上传）或分组时才 wide / workspace
+        panelSize={resolveMorePanelWidth(entries) > 720 ? 'workspace' : resolveMorePanelWidth(entries) > 384 ? 'wide' : 'compact'}
         alignment="aboveCenter"
         closeOnPanelClick={false}
         renderPanel={() => renderOverflowPanel(entries)}

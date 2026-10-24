@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Paintbrush } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { UI_FIELD_INLINE_ROW_CLASS, UiButton, UiFieldLayoutContext, useUiFieldLayout } from '@/components/ui'
+import { UiButton, UiFieldLayoutContext, useUiFieldLayout } from '@/components/ui'
 import type { ImageUploadParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
 import {
@@ -19,6 +19,7 @@ import { isUiInspectionReadOnly } from '@/platform/runtime'
 import { importLocalMedia } from '@/services/localMediaImport'
 import { dataUrlToFile } from '@/utils/imageConversion'
 import { ParamLabel } from './ParamLabel'
+import { ParamField } from './ParamField'
 
 const logger = createLogger('components.params.DerivedMediaParamControl')
 
@@ -150,11 +151,12 @@ export function DerivedMediaParamControl({
 
   return (
     <>
+      {/* 与其他参数同一个外壳（ParamField）：在“更多参数”面板里是标签在左、按钮在控件列的面板行，不再标签一行、按钮从标签列起头 */}
       {renderTrigger ? (compact ? action : (
-        <div className={toolbar ? UI_FIELD_INLINE_ROW_CLASS : 'flex min-w-0 flex-col'}>
+        <ParamField className="flex min-w-0 flex-col">
           <ParamLabel param={param} language={i18n.language} />
           {action}
-        </div>
+        </ParamField>
       )) : null}
       {sourceImage ? (
         // 编辑器是弹窗：里面的字段不继承底栏的工具条排布。
