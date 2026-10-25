@@ -96,7 +96,7 @@ export function AudioEditTranscriptPanel() {
     {search.isOpen && <div className="shrink-0 border-b border-gap px-3 py-2"><AudioEditFindReplace search={search} disabled={disabled} /></div>}
     {/* 文字稿自己的显示设置（字号、留白、波形上方字幕）就放在文字稿面板里 */}
     {!search.isOpen && <div className="absolute right-2 top-2 z-raised flex items-center gap-1">
-      {corrected && <UiSegmented ariaLabel="文字稿显示" size="sm" value={textView} onChange={setTextView} options={[{ value: 'original', label: '原稿' }, { value: 'corrected', label: '校对后' }]} />}
+      {corrected && <UiSwitch appearance="segmented" size="sm" aria-label="文字稿显示校对后" offLabel="原稿" onLabel="校对后" checked={textView === 'corrected'} onCheckedChange={(checked) => setTextView(checked ? 'corrected' : 'original')} />}
       <UiIconButton size="sm" tooltip="文字稿显示设置" aria-label="文字稿显示设置" onClick={workspace.openViewSettings}><SettingsIcon /></UiIconButton>
     </div>}
     <div ref={containerRef} className="min-h-0 flex-1" style={{ paddingLeft: viewSettings.sidePadding, paddingRight: viewSettings.sidePadding, fontSize: viewSettings.textSize }}

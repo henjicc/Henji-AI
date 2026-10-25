@@ -52,6 +52,22 @@ it('选项实际放不下时改用同一组选项的下拉，宽度够了换回�
     expect(disconnect).toHaveBeenCalled()
   } finally { scroll.mockRestore(); client.mockRestore(); vi.unstubAllGlobals() }
 })
+it('父级宽度跟着内容走、下拉自己比分段还宽时停在下拉，不在两者间来回切', () => {
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} unobserve(): void {} })
+  const scroll = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.getAttribute('role') === 'radio' ? 60 : 0
+  })
+  const client = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+    if (this.getAttribute('role') === 'radio') return 20
+    if (!this.hasAttribute('data-ui-segmented-fit')) return 0
+    return this.querySelector('[role="radiogroup"]') ? 40 : 300
+  })
+  try {
+    render(<UiSegmented ariaLabel="文字稿显示" value="a" onChange={() => undefined} options={[{ value: 'a', label: '原稿' }, { value: 'b', label: '校对后' }]} />)
+    expect(screen.queryByRole('radiogroup')).toBeNull()
+    expect(screen.getByRole('button', { name: '文字稿显示' })).toBeDefined()
+  } finally { scroll.mockRestore(); client.mockRestore(); vi.unstubAllGlobals() }
+})
 it('分段单选方向键跳过禁用项并循环，选择与焦点同步，整体禁用后不可操作', () => {
   const preview = vi.fn()
   function Example({ disabled = false }: { disabled?: boolean }): JSX.Element {

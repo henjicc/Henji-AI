@@ -46,6 +46,9 @@ export function UiSegmented<T extends string | number>({ ariaLabel, options, val
   const [narrow, setNarrow] = useState(false)
   // 收成下拉前分段需要的宽度：等宽分段 = 最宽一段 × 段数 + 段间距 + 外框内边距
   const naturalWidth = useRef(0)
+  // 收成下拉后第一次测到的可用宽度：之后真的变宽了（窗口、面板放宽）才换回分段。
+  // 父级宽度跟着内容走（如绝对定位的角落按钮组）时，下拉自己就可能比分段宽，不设基准会在两者间来回切、一次提交里无限重渲染。
+  const narrowBaseline = useRef<number | null>(null)
   // 调用方每次渲染都会新建 options 数组：只随选项文字变化重测，尺寸变化交给 ResizeObserver
   const optionsKey = options.map(option => option.label).join('|')
   useLayoutEffect(() => {
@@ -55,7 +58,8 @@ export function UiSegmented<T extends string | number>({ ariaLabel, options, val
     const check = (): void => {
       const available = wrapper.clientWidth + measureParentSlack(wrapper)
       if (narrow) {
-        if (naturalWidth.current > 0 && available >= naturalWidth.current) setNarrow(false)
+        if (narrowBaseline.current === null) { narrowBaseline.current = available; return }
+        if (naturalWidth.current > 0 && available >= naturalWidth.current && available > narrowBaseline.current) { narrowBaseline.current = null; setNarrow(false) }
         return
       }
       const group = wrapper.firstElementChild
