@@ -21,19 +21,23 @@ const breaths = [
 ]
 
 describe('呼吸声按上下文处理', () => {
-  it('句与句之间删掉、句中逗号处减弱、压着字的不动刀；两侧原有的安静保留', () => {
+  it('快节奏：句间与句中的呼吸都删掉、两侧原有的安静保留；压着字的不动刀', () => {
     const document = documentOf(words)
     const views = describeAudioEditBreaths(document, breaths)
     expect(views.map((view) => view.context)).toEqual(['sentence', 'clause', 'touching'])
     expect(views[0]).toMatchObject({ before: expect.stringContaining('一件事。'), after: expect.stringContaining('每个'), gapMs: 1000, handling: 'kept' })
     const { document: next, counts } = applyAudioEditBreathPolicy(document, breaths, 'delete')
-    expect(counts).toEqual({ deleted: 1, attenuated: 1, muted: 0, kept: 1 })
-    expect(next.cuts).toEqual([{ id: 'breath:1300', startFrame: 1300, endFrame: 1700, reason: 'silence', enabled: true }])
-    expect(next.gainRegions).toEqual([expect.objectContaining({ id: 'breath:3150', startFrame: 3150, endFrame: 3400, gainDb: AUDIO_EDIT_BREATH_ATTENUATION_DB, enabled: true })])
-    expect(describeAudioEditBreaths(next, breaths).map((view) => view.handling)).toEqual(['deleted', 'attenuated', 'kept'])
+    expect(counts).toEqual({ deleted: 2, attenuated: 0, muted: 0, kept: 1 })
+    expect(next.cuts).toEqual([
+      { id: 'breath:1300', startFrame: 1300, endFrame: 1700, reason: 'silence', enabled: true },
+      { id: 'breath:3150', startFrame: 3150, endFrame: 3400, reason: 'silence', enabled: true },
+    ])
+    expect(describeAudioEditBreaths(next, breaths).map((view) => view.handling)).toEqual(['deleted', 'deleted', 'kept'])
+    // 全部减弱时用 -18 dB 的音量区域
+    expect(applyAudioEditBreathPolicy(document, breaths, 'attenuate').document.gainRegions?.[0]).toMatchObject({ id: 'breath:1300', gainDb: AUDIO_EDIT_BREATH_ATTENUATION_DB })
   })
 
-  it('删了会让两句之间少于约 0.12 秒气口时改为减弱', () => {
+  it('删了会让前后的字之间少于约 0.12 秒气口时改为减弱', () => {
     const tight = documentOf([['一件事。', 0, 1000], ['每个', 1350, 1800]])
     const { counts } = applyAudioEditBreathPolicy(tight, [{ startMs: 1020, endMs: 1300, peak: 1 }], 'delete')
     expect(counts).toMatchObject({ deleted: 0, attenuated: 1 })
@@ -59,7 +63,7 @@ describe('呼吸声按上下文处理', () => {
     expect(kept.gainRegions).toEqual([])
     const userRestored = { ...deleted, cuts: deleted.cuts!.map((cut) => ({ ...cut, enabled: false })) }
     const again = applyAudioEditBreathPolicy(userRestored, breaths, 'delete').document
-    expect(again.cuts).toEqual([expect.objectContaining({ id: 'breath:1300', enabled: false })])
+    expect(again.cuts?.map((cut) => [cut.id, cut.enabled])).toEqual([['breath:1300', false], ['breath:3150', false]])
   })
 })
 

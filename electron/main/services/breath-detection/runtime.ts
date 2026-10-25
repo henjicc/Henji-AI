@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { createMainLogger } from '../logging'
-import { executionProviderOrder } from '../local-inference/providers'
+import type { LocalExecutionProvider } from '../local-inference/providers'
 import { ensureLocalModel } from '../local-models/runtime'
 import { identifyMediaContent } from '../media/content-identity'
 import { getMediaCacheManager } from '../media/media-cache-runtime'
@@ -16,7 +16,9 @@ let service: BreathDetectionService | undefined
 export function getBreathDetectionService(): BreathDetectionService {
   if (service) return service
   const host = getLocalInferenceHost()
-  const providers = executionProviderOrder(process.platform)
+  // 只用 CPU：DirectML 跑这个模型（卷积 STFT + 双向 LSTM）输出全低于阈值、一口气也找不到（2026-10-26 真实口播实测 23 窗 0 处），
+  // CPU 与官方实现逐帧一致；模型很小，CPU 约 0.1 秒一窗（10 分钟录音约 2 秒）
+  const providers: LocalExecutionProvider[] = ['cpu']
   service = new BreathDetectionService({
     cache: getMediaCacheManager().createCache('analysis', 'breath', { extension: '.json', budgetBytes: 32 * 1024 ** 2, onError: (event, error) => logger.warn('呼吸声检测缓存操作失败', { event: `breath_detection.cache.${event}`, error }) }),
     identify: identifyMediaContent,

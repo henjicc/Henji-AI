@@ -167,7 +167,7 @@ export function AudioEditProcessPanel() {
           <p className={UI_TEXT_META_CLASS}>选择需要清理的词类；可能有语义的词默认保留。</p>
           <div role="group" aria-label="语气词" className="flex flex-wrap gap-1">{['嗯', '呃', '额', '那个', '就是', '啊'].map((word) => <UiChipButton key={word} size="sm" active={settings.fillers.includes(word)} aria-pressed={settings.fillers.includes(word)} onClick={() => update({ batchSettings: { ...settings, fillers: settings.fillers.includes(word) ? settings.fillers.filter((value) => value !== word) : [...settings.fillers, word] } })}>{word}</UiChipButton>)}</div>
           <UiButton variant="secondary" className="w-full" onClick={() => void run(async () => notify(notificationMessage('audioFillersCleaned', { count: await cleanProjectAudioEditFillers(project.id, range) })))}>清理语气词</UiButton>
-          <p className={UI_TEXT_META_CLASS}>呼吸声：删除时句与句之间删掉、留一点气口，句中只减弱；第一次使用会下载约 13 MB 的本地模型。</p>
+          <p className={UI_TEXT_META_CLASS}>呼吸声：删除时去掉呼吸、保留两侧原有的安静并留一点气口，和字连着的只减弱；第一次使用会下载约 13 MB 的本地模型。</p>
           <UiSegmented ariaLabel="呼吸声" size="sm" fullWidth value={breathPolicy} onChange={setBreathPolicy}
             options={[{ value: 'delete', label: '删除' }, { value: 'attenuate', label: '减弱' }, { value: 'mute', label: '静音' }, { value: 'keep', label: '保留' }]} />
           <UiButton variant="secondary" className="w-full" disabled={blocked} disabledReason="找不到原始素材" onClick={() => void run(async () => { const { counts } = await processProjectAudioEditBreaths(project.id, breathPolicy, range); notify(notificationMessage('audioBreathsProcessed', counts)) })}>处理呼吸声</UiButton>

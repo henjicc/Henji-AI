@@ -17,7 +17,8 @@ export const RESPIRO_STEP_SAMPLES = 25 * RESPIRO_SAMPLE_RATE
 /** 官方在验证集上调出的阈值与最短长度（超过 20 帧，即 200 ms 以上） */
 export const RESPIRO_THRESHOLD = 0.064
 export const RESPIRO_MIN_FRAMES = 20
-export const BREATH_DETECTION_VERSION = 1
+/** 2：改为只用 CPU 推理（DirectML 结果不可用），作废此前的检测缓存 */
+export const BREATH_DETECTION_VERSION = 2
 
 export const audioBreathSchema = z.object({
   startMs: z.number().nonnegative(),

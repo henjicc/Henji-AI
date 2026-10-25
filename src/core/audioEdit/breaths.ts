@@ -7,11 +7,10 @@ import type { AudioEditCut, AudioEditProjectDocument, AudioEditRange, AudioEditT
  * 呼吸声的处理：按上下文逐处决定删、减弱、静音还是保留，落成普通的剪切与音量区域（标识以 breath: 开头），
  * 和其他剪辑一样可逐处恢复、一步撤销，不改口播文档格式。
  *
- * 默认“删除”策略按位置细分：
- * - 句与句之间、开头结尾：删掉这口气，但两侧原有的安静保留，至少留 MIN_GAP_MS 的气口，不让两句粘在一起；
- *   删了会少于这个气口时改为减弱；
- * - 句中（逗号处、没有标点）：减弱 18 dB，保持语气连贯；
+ * 默认“删除”（快节奏）：去掉这口气，但两侧原有的安静保留，至少留 MIN_GAP_MS 的气口，不让前后的字粘在一起；
+ * - 删了会少于这个气口时改为减弱；
  * - 和字连在一起（识别的词时间盖住了大半口气）：只减弱不在词里下刀。
+ * 位置（句间 / 句中 / 开头结尾）照样标出来，供助手逐处取舍：想保留句中换气的语气时改成减弱。
  * 已被重念、停顿处理剪掉的呼吸不再处理。
  */
 
@@ -115,7 +114,7 @@ export function decideAudioEditBreath(context: AudioEditBreathContext, policy: A
   if (context === 'removed' || policy === 'keep') return 'keep'
   if (policy === 'attenuate') return 'attenuate'
   if (policy === 'mute') return context === 'touching' ? 'attenuate' : 'mute'
-  if ((context === 'sentence' || context === 'edge') && remainingGapMs >= MIN_GAP_MS) return 'delete'
+  if (context !== 'touching' && remainingGapMs >= MIN_GAP_MS) return 'delete'
   return 'attenuate'
 }
 
