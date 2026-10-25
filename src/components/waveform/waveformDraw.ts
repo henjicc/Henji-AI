@@ -39,6 +39,12 @@ export interface WaveformDrawOptions {
   layers?: 'layered' | 'single'
 }
 
+/**
+ * 每列至少跨这么多个桶。桶比列粗时，列边界压住的半个桶会让包络时胖时瘦：缩放跨级时整段波形一跳、平移时闪。
+ * 让每列跨 8 个以上的桶，误差小于一列的 1/8，看起来就是同一条波形在伸缩。
+ */
+export const WAVEFORM_BUCKETS_PER_COLUMN = 8
+
 /** single 档：每列不超过这么多采样时改画采样曲线，不再画包络。 */
 const TRACE_FRAMES_PER_COLUMN = 24
 
@@ -80,13 +86,14 @@ function colorOf(kind: Kind, tone: WaveformTone, palette: WaveformPalette): stri
   return kind === 'played' ? palette.wavePlayed : palette.wave
 }
 
-function traceArea(ctx: CanvasRenderingContext2D, values: Float32Array, gain: number, mid: number, amplitude: number): void {
-  const width = values.length
+/** values[i] 是第 i 列；offset 是列网格相对画布左边缘的小数列偏移（列落在固定网格上，见 drawWaveform）。 */
+function traceArea(ctx: CanvasRenderingContext2D, values: Float32Array, gain: number, mid: number, amplitude: number, offset = 0): void {
+  const count = values.length
   ctx.beginPath()
-  ctx.moveTo(0, mid)
-  for (let x = 0; x < width; x++) ctx.lineTo(x + 0.5, mid - Math.min(1, values[x] * gain) * amplitude)
-  ctx.lineTo(width, mid)
-  for (let x = width - 1; x >= 0; x--) ctx.lineTo(x + 0.5, mid + Math.min(1, values[x] * gain) * amplitude)
+  ctx.moveTo(-offset, mid)
+  for (let x = 0; x < count; x++) ctx.lineTo(x - offset + 0.5, mid - Math.min(1, values[x] * gain) * amplitude)
+  ctx.lineTo(count - offset, mid)
+  for (let x = count - 1; x >= 0; x--) ctx.lineTo(x - offset + 0.5, mid + Math.min(1, values[x] * gain) * amplitude)
   ctx.closePath()
 }
 
@@ -119,15 +126,20 @@ export function drawWaveform(ctx: CanvasRenderingContext2D, options: WaveformDra
   const framesPerColumn = span / columns
   const baseSamples = pyramid.levels[0].samplesPerBucket
   const detail = options.detail
-  const detailCovers = tier === 'standard' && !!detail && framesPerColumn < baseSamples && detail.firstFrame <= startFrame && detail.firstFrame + detail.frameCount >= Math.min(endFrame, pyramid.frameCount)
+  const detailCovers = tier === 'standard' && !!detail && framesPerColumn < baseSamples * WAVEFORM_BUCKETS_PER_COLUMN && detail.firstFrame <= startFrame && detail.firstFrame + detail.frameCount >= Math.min(endFrame, pyramid.frameCount)
   const sampleSpacingCss = columns / span / pixelRatio
   const mode: WaveformRenderMode = detailCovers ? (sampleSpacingCss >= POINT_SPACING_CSS ? 'points' : 'samples') : 'peaks'
   const single = options.layers === 'single'
   const segments = waveformSegments(width, startFrame, endFrame, tone === 'clip' ? undefined : options.playedFrame, options.cutRanges)
   const opacity = OPACITY[tone]
-  const peak = new Float32Array(columns)
-  const rms = new Float32Array(columns)
-  const level = selectWaveformLevel(pyramid.levels, framesPerColumn)
+  // 列落在以素材起点为原点的固定网格上（按小数列偏移画）：平移时同一列总取同一段数据，波形不闪。
+  const phase = startFrame / framesPerColumn - Math.floor(startFrame / framesPerColumn)
+  const gridStart = startFrame - phase * framesPerColumn
+  const gridColumns = columns + 1
+  const gridEnd = gridStart + gridColumns * framesPerColumn
+  const peak = new Float32Array(gridColumns)
+  const rms = new Float32Array(gridColumns)
+  const level = selectWaveformLevel(pyramid.levels, framesPerColumn / WAVEFORM_BUCKETS_PER_COLUMN)
   const gain = options.gain ?? data.gain
   lanes.forEach((channel, lane) => {
     const top = lane * laneHeight
@@ -137,18 +149,18 @@ export function drawWaveform(ctx: CanvasRenderingContext2D, options: WaveformDra
       drawPoints(ctx, options, detail!.channels[channel] ?? detail!.channels[0], detail!.firstFrame, gain, top, laneHeight, mid, amplitude, segments, sampleSpacingCss)
       return
     }
-    if (mode === 'samples') aggregateWaveformSamples(detail!.channels[channel] ?? detail!.channels[0], detail!.firstFrame, startFrame, endFrame, columns, peak, rms)
-    else aggregateWaveformLevel(level, channel, pyramid.amplitudeScale, startFrame, endFrame, columns, peak, rms)
+    if (mode === 'samples') aggregateWaveformSamples(detail!.channels[channel] ?? detail!.channels[0], detail!.firstFrame, gridStart, gridEnd, gridColumns, peak, rms)
+    else aggregateWaveformLevel(level, channel, pyramid.amplitudeScale, gridStart, gridEnd, gridColumns, peak, rms)
     for (const [kind, parts] of groups(segments)) {
       ctx.save()
       clipTo(ctx, parts, top, laneHeight)
       ctx.fillStyle = colorOf(kind, tone, palette)
       ctx.globalAlpha = single ? 1 : opacity.peak
-      traceArea(ctx, peak, gain, mid, amplitude)
+      traceArea(ctx, peak, gain, mid, amplitude, phase)
       ctx.fill()
       if (tier === 'standard' && !single) {
         ctx.globalAlpha = opacity.rms
-        traceArea(ctx, rms, gain, mid, amplitude)
+        traceArea(ctx, rms, gain, mid, amplitude, phase)
         ctx.fill()
       }
       ctx.restore()

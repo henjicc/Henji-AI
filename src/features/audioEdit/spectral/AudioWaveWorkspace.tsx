@@ -14,7 +14,8 @@ import { buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
 import { buildProjectAudioEditTimeline } from '@/core/audioEdit/timeline'
 import { DEFAULT_AUDIO_EDIT_SETTINGS } from '@/core/audioEdit/edits'
 import { audioEditSpeechEdges } from '@/core/audioEdit/gaps'
-import { useWaveformData } from '@/hooks/useWaveformData'
+import { audioEditSoundRecipe } from '@/core/audioEdit/regions'
+import { useWaveformData, type WaveformState } from '@/hooks/useWaveformData'
 import { getPlatform } from '@/platform/runtime'
 import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
 import { AudioEditMatchedText } from '../AudioEditTextTools'
@@ -134,18 +135,25 @@ export function AudioWaveWorkspace() {
   }, [capture, recording, duration, rate, captureView, setCaptureView])
   const autoGain = useAudioEditPlaybackStore(state => state.autoGain && state.mode !== 'delivery')
   const edited = Boolean(project.repairs?.some(repair => repair.enabled) || project.gainRegions?.some(region => region.enabled))
+  // 声音内容：只有修复、区间音量真正变了才算。删除、静音不改声音；呼吸、气口转成手动剪辑只换 id，也不算。
+  const soundKey = React.useMemo(() => JSON.stringify(audioEditSoundRecipe(project.repairs, project.gainRegions)), [project.repairs, project.gainRegions])
   // 有修复或区间音量时，波形改读“已编辑、未删除”的音频（时间轴同原素材），删除与静音仍用叠加标记表示。
+  // 声音变了才重新生成；新的出来之前继续显示上一份，不先退回原素材再跳回来。
   const [editedPath, setEditedPath] = React.useState<string | null>(null)
   React.useEffect(() => {
-    setEditedPath(null)
     if (!edited) { setEditedPath(null); return }
     let cancelled = false
     const timer = window.setTimeout(() => void getPlatform().audioEdit.editedSource({ projectId: project.id }).then(result => { if (!cancelled) setEditedPath(result.audioPath) }, () => undefined), 150)
     return () => { cancelled = true; window.clearTimeout(timer) }
-  }, [edited, project.id, project.source.audioPath, project.repairs, project.gainRegions])
+  }, [edited, project.id, project.source.audioPath, soundKey])
   const channels: 1 | 2 = project.source.channels > 1 ? 2 : 1
   const waveformSource = duration ? editedPath ?? project.source.audioPath : null
-  const waveform = useWaveformData(waveformSource ? { source: waveformSource, channels } : null, 'full')
+  const loadedWaveform = useWaveformData(waveformSource ? { source: waveformSource, channels } : null, 'full')
+  // 换成另一份音频（声音改过后重新生成）时，新波形读出来之前沿用同一工程上一份已读出的波形，不闪“正在读取”。
+  const shownWaveform = React.useRef<{ projectId: string; state: WaveformState } | null>(null)
+  if (loadedWaveform.data) shownWaveform.current = { projectId: project.id, state: loadedWaveform }
+  const held = shownWaveform.current?.projectId === project.id && waveformSource ? shownWaveform.current.state : null
+  const waveform = loadedWaveform.data || loadedWaveform.status === 'error' || !held ? loadedWaveform : held
   const [columns, setColumns] = React.useState(0)
   const host = React.useRef<HTMLDivElement | null>(null)
   React.useLayoutEffect(() => {
@@ -167,7 +175,7 @@ export function AudioWaveWorkspace() {
   const insertion = placement ? { start: placement.startFrame, frames: placement.endFrame > placement.startFrame ? Math.min(liveFrames, placement.endFrame - placement.startFrame) : liveFrames, replace: placement.endFrame > placement.startFrame } : undefined
   const spectralView = insertion && !insertion.replace ? { start: Math.max(0, editor.view.start - insertion.frames), end: editor.view.end } : editor.view
   // 频谱只跟声音内容走：删除、静音不改声音，作品版本变了也沿用已算好的频谱
-  const audioContentKey = JSON.stringify([project.repairs?.filter(repair => repair.enabled), project.gainRegions?.filter(region => region.enabled), project.vstEnabled, project.processorChain])
+  const audioContentKey = JSON.stringify([soundKey, project.vstEnabled, project.processorChain])
   const audioRevision = React.useRef({ key: audioContentKey, revision: project.revision })
   if (audioRevision.current.key !== audioContentKey) audioRevision.current = { key: audioContentKey, revision: project.revision }
   const spectrogram = useAudioEditSpectral(audioEditSpectralClient, project.id, spectralView, columns, duration, edited ? 'edited' : 'source', audioRevision.current.revision, JSON.stringify([project.source.audioPath, project.source.identity]))

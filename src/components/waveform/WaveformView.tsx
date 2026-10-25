@@ -2,7 +2,7 @@ import React from 'react'
 import { TooltipContent } from '@/components/ui/Tooltip'
 import { useThemeTokens } from '@/hooks/useThemeTokens'
 import { useWaveformDetail, type WaveformState } from '@/hooks/useWaveformData'
-import { drawWaveform, type WaveformPalette, type WaveformTier, type WaveformTone } from './waveformDraw'
+import { drawWaveform, WAVEFORM_BUCKETS_PER_COLUMN, type WaveformPalette, type WaveformTier, type WaveformTone } from './waveformDraw'
 
 /**
  * 统一波形组件（任务 2.3，重要记录 005）。数据来自 `useWaveformData`，视图用素材绝对时钟的秒数表达；
@@ -64,7 +64,7 @@ export const WaveformView = React.memo(function WaveformView({ waveform, startSe
   const endFrame = viewEnd * rate
   const pixelRatio = typeof window === 'undefined' ? 1 : Math.max(1, window.devicePixelRatio || 1)
   const columns = Math.max(1, Math.round(size.width * pixelRatio))
-  const wantsDetail = tier === 'standard' && !!pyramid && (endFrame - startFrame) / columns < pyramid.levels[0].samplesPerBucket
+  const wantsDetail = tier === 'standard' && !!pyramid && (endFrame - startFrame) / columns < pyramid.levels[0].samplesPerBucket * WAVEFORM_BUCKETS_PER_COLUMN
   const detail = useWaveformDetail(data, Math.max(0, Math.floor(startFrame)), Math.min(pyramid?.frameCount ?? 0, Math.ceil(endFrame)), wantsDetail && size.width > 0)
   const cutKey = cutRanges?.map(range => `${range.start}:${range.end}`).join(',') ?? ''
   const laneKey = lanes?.join(',') ?? ''
@@ -84,27 +84,26 @@ export const WaveformView = React.memo(function WaveformView({ waveform, startSe
     return () => { observer.disconnect(); cancelAnimationFrame(frame) }
   }, [])
 
+  // 在同一次提交里画完，不推到下一帧：波形和叠在上面的选区、刻度、播放头同帧更新，缩放平移时不会先错开一帧再跳回来。
+  // 数据（峰值金字塔）每份音频只算一次并缓存，这里只是按当前视图从缓存取数重画。
   React.useLayoutEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      const element = canvas.current
-      if (!element || size.width <= 0 || size.height <= 0) return
-      const width = Math.max(1, Math.round(size.width * pixelRatio))
-      const heightPx = Math.max(1, Math.round(size.height * pixelRatio))
-      if (element.width !== width) element.width = width
-      if (element.height !== heightPx) element.height = heightPx
-      const context = element.getContext('2d')
-      if (!context) return
-      const mode = drawWaveform(context, {
-        width, height: heightPx, pixelRatio, data, ...(lanes ? { lanes } : {}), startFrame, endFrame, tier, tone, palette,
-        ...(playedSeconds !== undefined ? { playedFrame: playedSeconds * rate } : {}),
-        ...(cutRanges?.length ? { cutRanges: cutRanges.map(range => [range.start * rate, range.end * rate] as const) } : {}),
-        ...(detail ? { detail } : {}),
-        ...(gain !== undefined ? { gain } : {}),
+    const element = canvas.current
+    if (!element || size.width <= 0 || size.height <= 0) return
+    const width = Math.max(1, Math.round(size.width * pixelRatio))
+    const heightPx = Math.max(1, Math.round(size.height * pixelRatio))
+    if (element.width !== width) element.width = width
+    if (element.height !== heightPx) element.height = heightPx
+    const context = element.getContext('2d')
+    if (!context) return
+    const mode = drawWaveform(context, {
+      width, height: heightPx, pixelRatio, data, ...(lanes ? { lanes } : {}), startFrame, endFrame, tier, tone, palette,
+      ...(playedSeconds !== undefined ? { playedFrame: playedSeconds * rate } : {}),
+      ...(cutRanges?.length ? { cutRanges: cutRanges.map(range => [range.start * rate, range.end * rate] as const) } : {}),
+      ...(detail ? { detail } : {}),
+      ...(gain !== undefined ? { gain } : {}),
       ...(layers ? { layers } : {}),
-      })
-      element.dataset.waveformMode = mode
     })
-    return () => cancelAnimationFrame(frame)
+    element.dataset.waveformMode = mode
   // eslint-disable-next-line react-hooks/exhaustive-deps -- cutKey / laneKey stand for the arrays' contents
   }, [size, pixelRatio, data, laneKey, startFrame, endFrame, tier, tone, palette, playedSeconds, rate, cutKey, detail, gain, layers])
 

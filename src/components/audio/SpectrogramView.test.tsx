@@ -8,7 +8,7 @@ vi.mock('./spectrogramGl', () => ({ createSpectrogramGl: () => mocks }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ warn: vi.fn() }) }))
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.clearAllMocks() })
 
-it('同帧多次更新只绘制一次，空数据清屏，尺寸变化不重新创建 GPU，卸载取消待绘制', () => {
+it('每次换视图当场绘制（与叠加层同帧），空数据清屏，尺寸变化不重新创建 GPU，尺寸通知按帧合并', () => {
   const queue = new Map<number, FrameRequestCallback>()
   let next = 1
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { const id = next++; queue.set(id, callback); return id })
@@ -23,9 +23,8 @@ it('同帧多次更新只绘制一次，空数据清屏，尺寸变化不重新�
   const view = render(<SpectrogramView {...props} />)
   view.rerender(<SpectrogramView {...props} startFrame={1} />)
   view.rerender(<SpectrogramView {...props} startFrame={2} />)
-  flush()
-  expect(mocks.draw).toHaveBeenCalledTimes(2)
-  expect(mocks.draw.mock.calls[0][1].startFrame).toBe(2)
+  const drawn = mocks.draw.mock.calls.length
+  expect(mocks.draw.mock.calls.at(-1)?.[1].startFrame).toBe(2)
   expect(view.container.querySelectorAll('[data-spectrogram-state="ready"]')).toHaveLength(1)
   resize?.(); resize?.(); resize?.()
   expect(queue.size).toBe(1)
@@ -34,8 +33,8 @@ it('同帧多次更新只绘制一次，空数据清屏，尺寸变化不重新�
   view.rerender(<SpectrogramView {...props} tiles={undefined} />); flush()
   expect(mocks.clear).toHaveBeenCalledOnce()
   expect(view.container.querySelector('[data-spectrogram-state="empty"]')).not.toBeNull()
-  view.rerender(<SpectrogramView {...props} />)
+  expect(mocks.draw).toHaveBeenCalledTimes(drawn)
   view.unmount(); flush()
-  expect(mocks.draw).toHaveBeenCalledTimes(2)
+  expect(mocks.draw).toHaveBeenCalledTimes(drawn)
   expect(mocks.dispose).toHaveBeenCalledOnce()
 })

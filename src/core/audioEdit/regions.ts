@@ -26,6 +26,18 @@ export type AudioEditGainRegion = z.infer<typeof audioEditGainRegionSchema>
 export type AudioEditRepair = z.infer<typeof audioEditRepairSchema>
 
 /**
+ * 决定声音的那部分修复与区间音量：只取已生效的，去掉 id 与开关，区间音量按时间排序（重叠相乘，与顺序无关）。
+ * 呼吸、气口被改成手动剪辑时只换 id、不改声音；编辑后的波形、频谱和渲染缓存都按它判断要不要重算。
+ */
+export function audioEditSoundRecipe(repairs: readonly AudioEditRepair[] | undefined, gains: readonly AudioEditGainRegion[] | undefined) {
+  return {
+    repairs: (repairs ?? []).filter(repair => repair.enabled && repair.strength > 0).map(({ id: _id, enabled: _enabled, ...recipe }) => recipe),
+    gains: (gains ?? []).filter(region => region.enabled).map(({ id: _id, enabled: _enabled, ...recipe }) => recipe)
+      .sort((a, b) => a.startFrame - b.startFrame || a.endFrame - b.endFrame || a.gainDb - b.gainDb),
+  }
+}
+
+/**
  * 把音量区域乘到一段交错 PCM 上（startFrame 是这段在源里的起点帧）。区域内为 gainDb；淡入从静音渐入到该音量、
  * 淡出从该音量渐出到静音（与“淡入 / 淡出”的含义一致）；重叠的区域相乘。区域再多也是逐帧一次乘法。
  */

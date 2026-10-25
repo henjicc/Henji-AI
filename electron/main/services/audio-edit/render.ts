@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { Worker } from 'node:worker_threads'
 import type { AudioEditProjectDocument } from '../../../../src/core/audioEdit/types'
-import { applyAudioEditGainRegions, type AudioEditGainRegion, type AudioEditRenderedAudio, type AudioEditRepair } from '../../../../src/core/audioEdit/regions'
+import { applyAudioEditGainRegions, audioEditSoundRecipe, type AudioEditGainRegion, type AudioEditRenderedAudio, type AudioEditRepair } from '../../../../src/core/audioEdit/regions'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '../../../../src/core/audioEdit/timeline'
 import { audioEditProjectSchema } from '../../../../src/core/audioEdit/schema'
 import { createMainLogger } from '../logging'
@@ -75,7 +75,8 @@ export async function prepareAudioEditRenderSource(project: AudioEditProjectDocu
   }
   const gains = (project.gainRegions ?? []).filter(r => r.enabled)
   if (gains.length) {
-    key = audioRenderKey([key, gains])
+    // 只按声音算键：呼吸、气口转成手动剪辑只换 id，不重新生成整段音频
+    key = audioRenderKey([key, audioEditSoundRecipe(undefined, gains).gains])
     const source = input
     input = await cachedAudioFile(directory, `gain-${key}`, 'wav', async output => {
       await renderAudioEditGains(project, await openRenderSource(project, source, signal), gains, output, signal)

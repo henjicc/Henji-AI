@@ -80,37 +80,35 @@ export const SpectrogramView = React.memo(function SpectrogramView({ tiles, lane
     return () => { observer.disconnect(); cancelAnimationFrame(frame) }
   }, [])
 
+  // 和波形一样在同一次提交里画完：缩放平移时频谱与选区、刻度同帧更新，不先错开一帧。
   React.useLayoutEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      const element = cpu ? fallback.current : canvas.current
-      if (!element || size.width <= 0 || size.height <= 0) return
-      const width = Math.max(1, Math.round(size.width * pixelRatio))
-      const height = Math.max(1, Math.round(size.height * pixelRatio))
-      if (element.width !== width) element.width = width
-      if (element.height !== height) element.height = height
-      const context = cpu ? element.getContext('2d') : null
-      const gpu = cpu ? null : renderer.current
-      if (!context && !gpu) return
-      if (!tiles || !tiles.version || !(endFrame > startFrame)) { context?.clearRect(0, 0, width, height); gpu?.clear(); element.dataset.spectrogramState = 'empty'; delete element.dataset.spectrogramDetail; return }
-      const channels = lanes ?? Array.from({ length: tiles.channels }, (_, index) => index)
-      const laneHeight = Math.max(1, Math.floor(height / Math.max(1, channels.length)))
-      const lut = spectrogramLut()
-      try {
-        channels.forEach((channel, lane) => {
-          const rows = lane === channels.length - 1 ? height - laneHeight * lane : laneHeight
-          if (rows <= 0) return
-          if (gpu) { gpu.draw(tiles, { channel, startFrame, endFrame, width, height: rows, minHz, maxHz, scale, boost }, height - laneHeight * lane - rows); return }
-          const pixels = rasterizeSpectralTiles(tiles, { channel, startFrame, endFrame, width, height: rows, minHz, maxHz, scale, boost }, lut,
-            channels.length === 1 ? buffer.current : undefined)
-          if (channels.length === 1) buffer.current = pixels
-          context?.putImageData(new ImageData(pixels as Uint8ClampedArray<ArrayBuffer>, width, rows), 0, laneHeight * lane)
-        })
-      } catch (error) { logger.warn('频谱显卡绘制失败', { event: 'spectrogram.gpu.draw_failed', error }); gpu?.dispose(); renderer.current = null; setCpu(true); return }
-      element.dataset.spectrogramState = 'ready'
-      // 供验收与诊断：视口是否已全部用目标精度画出（其余为借用相邻精度的过渡画面）。
-      element.dataset.spectrogramDetail = spectralCoverage(tiles, { startFrame, endFrame, width })
-    })
-    return () => cancelAnimationFrame(frame)
+    const element = cpu ? fallback.current : canvas.current
+    if (!element || size.width <= 0 || size.height <= 0) return
+    const width = Math.max(1, Math.round(size.width * pixelRatio))
+    const height = Math.max(1, Math.round(size.height * pixelRatio))
+    if (element.width !== width) element.width = width
+    if (element.height !== height) element.height = height
+    const context = cpu ? element.getContext('2d') : null
+    const gpu = cpu ? null : renderer.current
+    if (!context && !gpu) return
+    if (!tiles || !tiles.version || !(endFrame > startFrame)) { context?.clearRect(0, 0, width, height); gpu?.clear(); element.dataset.spectrogramState = 'empty'; delete element.dataset.spectrogramDetail; return }
+    const channels = lanes ?? Array.from({ length: tiles.channels }, (_, index) => index)
+    const laneHeight = Math.max(1, Math.floor(height / Math.max(1, channels.length)))
+    const lut = spectrogramLut()
+    try {
+      channels.forEach((channel, lane) => {
+        const rows = lane === channels.length - 1 ? height - laneHeight * lane : laneHeight
+        if (rows <= 0) return
+        if (gpu) { gpu.draw(tiles, { channel, startFrame, endFrame, width, height: rows, minHz, maxHz, scale, boost }, height - laneHeight * lane - rows); return }
+        const pixels = rasterizeSpectralTiles(tiles, { channel, startFrame, endFrame, width, height: rows, minHz, maxHz, scale, boost }, lut,
+          channels.length === 1 ? buffer.current : undefined)
+        if (channels.length === 1) buffer.current = pixels
+        context?.putImageData(new ImageData(pixels as Uint8ClampedArray<ArrayBuffer>, width, rows), 0, laneHeight * lane)
+      })
+    } catch (error) { logger.warn('频谱显卡绘制失败', { event: 'spectrogram.gpu.draw_failed', error }); gpu?.dispose(); renderer.current = null; setCpu(true); return }
+    element.dataset.spectrogramState = 'ready'
+    // 供验收与诊断：视口是否已全部用目标精度画出（其余为借用相邻精度的过渡画面）。
+    element.dataset.spectrogramDetail = spectralCoverage(tiles, { startFrame, endFrame, width })
   // eslint-disable-next-line react-hooks/exhaustive-deps -- laneKey stands for the lanes array
   }, [size, pixelRatio, tiles, tiles?.version, laneKey, startFrame, endFrame, minHz, maxHz, scale, boost, cpu, generation])
 
