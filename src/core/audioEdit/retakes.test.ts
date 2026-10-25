@@ -75,6 +75,37 @@ describe('口播重念检测', () => {
     expect(retakes[0].confidence).toBe('low')
   })
 
+  it('引子后 8 字以上原样重现时，前后只有一般的停顿也删除；更短的仍要求明显停顿', () => {
+    const spoken = speak('也都 说 清楚 了。', { pause: 100 }, '如果 查到了 能 对比 的。', { pause: 230 }, '那 这里 呢，你 会 发现，', { pause: 150 }, '如果 查到了 能 对比 的 数据 啊')
+    expect(keptText(spoken, detect(spoken))).toBe('也都说清楚了。那这里呢，你会发现，如果查到了能对比的数据啊')
+    const short = speak('也都 说 清楚 了。', { pause: 100 }, '能 对比 的。', { pause: 230 }, '那 这里 呢，你 会 发现，', { pause: 150 }, '能 对比 的 数据 啊')
+    expect(detect(short)).toEqual([])
+  })
+
+  it('同一个英文名一遍识别成字母、一遍识别成同音汉字，照样按重念处理', () => {
+    const spoken = speak('像是 元宝 的 app，', { pause: 120 }, '还有 ima， work8。', { pause: 400 }, '还有 艾 玛， workbody 用的 都是 它')
+    expect(keptText(spoken, detect(spoken))).toBe('像是元宝的app，还有艾玛，workbody用的都是它')
+  })
+
+  it('紧贴在念坏那遍开头的“那个”一起删，和那遍之间有停顿时保留', () => {
+    const attached = speak('一大 原因，', { pause: 300 }, '那个 说实话。', { pause: 1500 }, '说实话， 接入 元宝 搜索 这 一步 呢')
+    expect(keptText(attached, detect(attached))).toBe('一大原因，说实话，接入元宝搜索这一步呢')
+    const separate = speak('一大 原因，', { pause: 300 }, '那个，', { pause: 300 }, '说实话。', { pause: 1500 }, '说实话， 接入 元宝 搜索 这 一步 呢')
+    expect(keptText(separate, detect(separate))).toBe('一大原因，那个，说实话，接入元宝搜索这一步呢')
+  })
+
+  it('接缝连读时把删除窗口平移到两遍相同的内容里，让两头都落在停顿上；整遍相同时仍留最后一遍', () => {
+    const spoken = speak('比我 想象 的 简单 太多 了一个 API KEY。', { pause: 800 }, '一个 API KEY 发个 HTTPS 请求，', { pause: 300 }, '发个 HTTP 请求， 结果 就 回来了')
+    const retakes = detect(spoken)
+    expect(keptText(spoken, retakes)).toBe('比我想象的简单太多了一个APIKEY。发个HTTP请求，结果就回来了')
+    expect(retakes.every((retake) => !retake.joined)).toBe(true)
+    expect(textOf(spoken, retakes.flatMap((retake) => retake.blockIds))).toBe('一个APIKEY发个HTTPS请求，')
+    const repeated = speak('思路 清晰，并且 可以 随时 调整。', { pause: 500 }, '思路 清晰，并且 可以 随时 调整，', { pause: 200 }, '并且 你 肯定 也 看到了')
+    const kept = detect(repeated)
+    expect(kept).toHaveLength(1)
+    expect(textOf(repeated, kept[0].blockIds)).toBe('思路清晰，并且可以随时调整。')
+  })
+
   it('紧挨在重念前的半截起头一并删除', () => {
     const spoken = speak('我 还以为 搜不到 呢，', { pause: 300 }, '但这个', { pause: 300 }, '但 结果 说的 还是 挺准，', { pause: 500 }, '但 结果 说的 还是 挺对 的')
     expect(keptText(spoken, detect(spoken))).toBe('我还以为搜不到呢，但结果说的还是挺对的')

@@ -1,7 +1,8 @@
 import type { AudioEditSuggestion, AudioEditTranscriptBlock } from './types'
 
 const HIGH_CONFIDENCE_FILLERS = new Set(['嗯', '呃', '额'])
-const LOW_CONFIDENCE_FILLERS = new Set(['那个', '就是', '啊'])
+/** 要看位置与上下文：句尾连着念的“啊”带语气，句首单独的“哎”多是起头习惯 */
+const LOW_CONFIDENCE_FILLERS = new Set(['那个', '就是', '啊', '哎', '诶', '欸', '唉'])
 
 export function normalizeAudioEditFiller(text: string): string {
   return text.replace(/[\s\p{P}]/gu, '')
