@@ -52,7 +52,7 @@ export function GeneratorConfigurationBar({
       <label className="sr-only">{t('title')}</label>
       <PanelTrigger
         className="min-w-0"
-        panelSize="workspace"
+        panelSize="special"
         alignment="aboveCenter"
         stableHeight
         closeOnPanelClick={(target) => {

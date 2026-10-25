@@ -11,7 +11,8 @@
   },
   "search": {
     "label": "搜索",
-    "clear": "清除搜索"
+    "clear": "清除搜索",
+    "placeholder": "搜索模型，拼音也行"
   },
   "filters": {
     "type": "类型",

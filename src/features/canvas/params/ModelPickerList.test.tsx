@@ -1,115 +1,73 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getProviderDisplayName } from '@/utils/modelHelpers';
 import { ModelPickerList } from './ModelPickerList';
+import type { ModelPickerOption } from './useModelPickerList';
 
 const providerOptions = [
-  { id: 'apimart', label: 'APIMART', count: 9 },
-  { id: 'bailian', label: 'BAILIAN', count: 2 },
-  { id: 'fal', label: 'Fal', count: 12 },
-  { id: 'kie', label: 'KIE', count: 12 },
-  { id: 'modelscope', label: 'ModelScope', count: 7 },
+  { id: 'kie', label: 'KIE', count: 14 },
+  { id: 'fal', label: 'Fal', count: 20 },
 ];
 
-function renderPicker(providerFilter: string) {
+const models: ModelPickerOption[] = [
+  { key: 'kie:nano-banana-2', displayName: 'Nano Banana 2', providerId: 'kie', providerName: 'KIE', detailLabels: ['图片生成', '图片编辑'] },
+  { key: 'kie:z-image', displayName: 'Z-Image Turbo', providerId: 'kie', providerName: 'KIE', detailLabels: ['图片生成'] },
+];
+
+function renderPicker(providerFilter: string, variant: 'floating' | 'inline' = 'floating') {
   return render(
     <ModelPickerList
+      variant={variant}
       modelSearchQuery=""
       onSearchChange={vi.fn()}
       providerFilter={providerFilter}
       onProviderFilterChange={vi.fn()}
       providerOptions={providerOptions}
-      filteredModels={[]}
-      selectedModel={undefined}
+      filteredModels={models}
+      selectedModel={models[0]}
       onModelChange={vi.fn()}
     />
   );
 }
 
-afterEach(cleanup);
+beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+});
 
-describe('ModelPickerList 供应商横向导航', () => {
-  it('浮层只让模型列表纵向滚动，搜索与供应商区域保持固定', () => {
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+describe('画布节点模型选择（特殊面板）', () => {
+  it('浮层头部只占一行：搜索与供应商下拉；正文是唯一滚动区，宽度按最长模型名量', () => {
     const view = renderPicker('all');
-    const staticHeader = view.container.querySelector('[data-model-picker-static-header]');
-    const modelList = view.container.querySelector('[data-model-list-scroll-region]');
-
-    expect(staticHeader).not.toBeNull();
-    expect(staticHeader?.classList.contains('shrink-0')).toBe(true);
-    expect(staticHeader?.classList.contains('overflow-y-auto')).toBe(false);
-    expect(modelList).not.toBeNull();
-    expect(modelList?.classList.contains('overflow-y-auto')).toBe(true);
-    expect(modelList?.classList.contains('overscroll-contain')).toBe(true);
+    const header = view.container.querySelector('[data-special-panel-header]');
+    expect(header?.querySelector('input')).not.toBeNull();
+    expect(header?.querySelectorAll('button').length).toBeGreaterThan(0);
+    expect(view.container.querySelector('[role="scrollbar"]')).toBeNull();
+    const body = view.container.querySelector('[data-special-panel-body]') as HTMLElement;
+    expect(body.classList.contains('overflow-y-auto')).toBe(true);
+    expect(body.style.width).not.toBe('');
   });
 
-  it('当前供应商使用单选项语义并同步强调数量', () => {
-    const view = renderPicker('bailian');
-    const activeProvider = view.getByRole('button', { name: /BAILIAN\s*2/ });
-    const inactiveProvider = view.getByRole('button', { name: /APIMART\s*9/ });
-
-    expect(activeProvider.getAttribute('aria-pressed')).toBe('true');
-    expect(inactiveProvider.getAttribute('aria-pressed')).toBe('false');
-    expect(activeProvider.lastElementChild?.classList.contains('text-text2')).toBe(true);
-    expect(inactiveProvider.lastElementChild?.classList.contains('text-text2')).toBe(false);
+  it('全部供应商时说明里带供应商，选定供应商后不再重复写它', () => {
+    // 量宽用的隐藏副本与列表写同一段说明
+    expect(renderPicker('all').getAllByText('KIE · 图片生成 · 图片编辑').length).toBeGreaterThan(0);
+    cleanup();
+    const view = renderPicker('kie');
+    expect(view.getAllByText('图片生成 · 图片编辑').length).toBeGreaterThan(0);
+    expect(view.queryAllByText('KIE · 图片生成 · 图片编辑')).toHaveLength(0);
   });
 
-  it('供应商切换后把当前项带入可视区域中央', () => {
-    const view = renderPicker('all');
-    const allButton = view.getByRole('button', { name: /^(All|全部)$/ }).closest('button');
-    const providerList = allButton?.parentElement;
-    const kieButton = view.getByText('KIE').closest('button');
-
-    expect(providerList).not.toBeNull();
-    expect(kieButton).not.toBeNull();
-    Object.defineProperties(providerList!, {
-      clientWidth: { configurable: true, value: 180 },
-      scrollWidth: { configurable: true, value: 520 },
-      scrollLeft: { configurable: true, value: 0, writable: true },
-    });
-    Object.defineProperties(kieButton!, {
-      offsetLeft: { configurable: true, value: 300 },
-      offsetWidth: { configurable: true, value: 72 },
-    });
-
-    view.rerender(
-      <ModelPickerList
-        modelSearchQuery=""
-        onSearchChange={vi.fn()}
-        providerFilter="kie"
-        onProviderFilterChange={vi.fn()}
-        providerOptions={providerOptions}
-        filteredModels={[]}
-        selectedModel={undefined}
-        onModelChange={vi.fn()}
-      />
-    );
-
-    expect(providerList!.scrollLeft).toBe(246);
-    const scrollbar = view.getByRole('scrollbar');
-    expect(scrollbar).toBeTruthy();
-
-    fireEvent.keyDown(scrollbar, { key: 'End' });
-
-    expect(providerList!.scrollLeft).toBe(340);
-  });
-
-  it('鼠标纵向滚轮可直接驱动横向供应商列表', () => {
-    const view = renderPicker('all');
-    const providerList = view.getByRole('button', { name: /^(All|全部)$/ }).parentElement;
-
-    expect(providerList).not.toBeNull();
-    Object.defineProperties(providerList!, {
-      clientWidth: { configurable: true, value: 180 },
-      scrollWidth: { configurable: true, value: 520 },
-      scrollLeft: { configurable: true, value: 0, writable: true },
-    });
-
-    fireEvent.wheel(providerList!, { deltaX: 0, deltaY: 48 });
-
-    expect(providerList!.scrollLeft).toBe(48);
+  it('节点内嵌正文沿用同一个头部与列表，不套特殊面板外壳', () => {
+    const view = renderPicker('all', 'inline');
+    expect(view.container.querySelector('[data-special-panel]')).toBeNull();
+    expect(view.container.querySelector('[data-model-picker-static-header] input')).not.toBeNull();
+    expect(view.container.querySelector('[data-model-list-scroll-region]')?.classList.contains('overflow-y-auto')).toBe(true);
   });
 
   it('画布与生成页共用同一套供应商显示名', () => {

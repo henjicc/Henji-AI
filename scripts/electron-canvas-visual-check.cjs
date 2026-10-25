@@ -138,25 +138,6 @@ async function lowerSyntheticFixtureViewport(page, fixture) {
   return { ...fixture, viewport }
 }
 
-async function captureModelPickerScrollbarSpacing(page) {
-  return page.evaluate(() => {
-    const providerList = document.querySelector('.model-provider-scroll-viewport')
-    const thumb = document.querySelector('[data-provider-scroll-thumb]')
-    const dividedSection = providerList?.parentElement?.parentElement
-    if (!providerList || !thumb || !dividedSection) return null
-    const providerRect = providerList.getBoundingClientRect()
-    const thumbRect = thumb.getBoundingClientRect()
-    const sectionRect = dividedSection.getBoundingClientRect()
-    const abovePx = Number((thumbRect.top - providerRect.bottom).toFixed(3))
-    const belowPx = Number((sectionRect.bottom - thumbRect.bottom).toFixed(3))
-    return {
-      abovePx,
-      belowPx,
-      differencePx: Number(Math.abs(abovePx - belowPx).toFixed(3)),
-    }
-  })
-}
-
 async function captureGeometry(page) {
   return page.evaluate((registeredTypes) => {
     const rounded = (value) => Number(value.toFixed(3))
@@ -410,9 +391,6 @@ async function main() {
     if (source.created) fixture = await lowerSyntheticFixtureViewport(page, fixture)
     await openFixtureProject(page, fixture.projectName, fixture.nodeCount)
     if (source.created) await openSyntheticModelPicker(page)
-    const modelPickerScrollbarSpacing = source.created
-      ? await captureModelPickerScrollbarSpacing(page)
-      : null
     if (source.created) await closeSyntheticModelPicker(page)
 
     const startViewport = { x: fixture.viewport.x, y: fixture.viewport.y }
@@ -443,13 +421,10 @@ async function main() {
     ]))
     const gestureExpectationPassed = passesRasterControl(gesture, negativeControl)
     const coverageOk = process.env.VISUAL_REQUIRE_ALL_TYPES !== '1' || missingTypes.length === 0
-    const modelPickerSpacingOk = !modelPickerScrollbarSpacing
-      || modelPickerScrollbarSpacing.differencePx <= 1
     const ok = Object.values(expectationResults).every(Boolean)
       && (!layoutRestoration || layoutRestoration.passed)
       && gestureExpectationPassed
       && coverageOk
-      && modelPickerSpacingOk
     const output = {
       ok,
       generatedAt: new Date().toISOString(),
@@ -487,8 +462,6 @@ async function main() {
           ? round(gesture.pixels.changedPct / negativeControl.pixels.changedPct)
           : null,
       },
-      modelPickerScrollbarSpacing,
-      modelPickerSpacingOk,
       expectationResults,
     }
     const outFile = path.join(runDir, 'result.json')
@@ -506,8 +479,6 @@ async function main() {
         geometry: gesture.geometry,
       },
       rasterCalibration: output.rasterCalibration,
-      modelPickerScrollbarSpacing,
-      modelPickerSpacingOk,
       expectationResults,
       result: path.relative(ROOT, outFile),
     }, null, 2))

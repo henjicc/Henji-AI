@@ -43,35 +43,35 @@ it('首次挂到其他窗口时立即按所属窗口宽度选择列数', () => {
   const iframe = document.createElement('iframe')
   document.body.append(iframe)
   const owner = iframe.contentWindow!
-  Object.defineProperty(owner, 'innerWidth', { configurable: true, value: 700 })
+  Object.defineProperty(owner, 'innerWidth', { configurable: true, value: 600 })
   const view = render(<ModelSelectorPanel selectedProvider="" selectedModel=""
     modelFilterProvider="all" modelFilterType="all" modelFilterFunction="all" favoriteModels={new Set()}
     onModelSelect={() => undefined} onFilterProviderChange={() => undefined} onFilterTypeChange={() => undefined}
     onFilterFunctionChange={() => undefined} onToggleFavorite={() => undefined} />, { container: owner.document.body })
   try {
-    expect(view.container.querySelector('.grid-cols-3')).not.toBeNull()
-    expect(view.container.querySelector('.grid-cols-4')).toBeNull()
+    // 600 宽的浮窗：特殊面板上限收到 568，左栏之外只放得下两列 190 宽的格子
+    const body = view.container.querySelector('[data-special-panel-body]') as HTMLElement
+    expect(body.style.width).toBe('410px')
   } finally {
     view.unmount()
     iframe.remove()
   }
 })
 
-it('三组筛选共用表单行，键盘选择筛选不会误选模型', async () => {
+it('筛选都在头部一行与左栏：点类型与供应商不会误选模型，收藏走左栏', async () => {
   await i18n.changeLanguage('zh-CN')
-  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() })
-  const selectModel = vi.fn(), selectType = vi.fn()
+  const selectModel = vi.fn(), selectType = vi.fn(), selectProvider = vi.fn()
   const view = render(<ModelSelectorPanel selectedProvider="test-provider" selectedModel="test-image"
     modelFilterProvider="all" modelFilterType="all" modelFilterFunction="all" favoriteModels={new Set()}
-    onModelSelect={selectModel} onFilterProviderChange={() => undefined} onFilterTypeChange={selectType}
+    onModelSelect={selectModel} onFilterProviderChange={selectProvider} onFilterTypeChange={selectType}
     onFilterFunctionChange={() => undefined} onToggleFavorite={() => undefined} />)
-  expect(view.container.querySelectorAll('[data-ui-form-row="panel"]')).toHaveLength(3)
-  const filter = screen.getByRole('button', { name: '类型' })
-  fireEvent.keyDown(filter, { key: 'Enter' })
-  fireEvent.keyDown(filter, { key: 'ArrowDown' })
-  fireEvent.keyDown(filter, { key: 'ArrowDown' })
-  fireEvent.keyDown(filter, { key: 'Enter' })
+  expect(view.container.querySelectorAll('[data-ui-form-row]')).toHaveLength(0)
+  fireEvent.click(screen.getByRole('button', { name: '图片' }))
   expect(selectType).toHaveBeenCalledWith('image')
+  fireEvent.click(view.container.querySelector('[data-model-filter-provider="test-provider"]')!)
+  expect(selectProvider).toHaveBeenCalledWith('test-provider')
+  fireEvent.click(view.container.querySelector('[data-model-filter-provider="favorite"]')!)
+  expect(selectType).toHaveBeenLastCalledWith('favorite')
   expect(selectModel).not.toHaveBeenCalled()
 })

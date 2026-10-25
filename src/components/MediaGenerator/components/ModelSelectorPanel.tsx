@@ -1,22 +1,22 @@
-import { UI_ICON_SIZE_CLASS, UI_PANEL_BODY_HEIGHT_CLASS } from '@/components/ui/styleTokens'
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React, { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Check, LayoutGrid } from 'lucide-react'
 import { FILTERABLE_TAGS } from '@/core/types/ModelTags'
 import { getAvailableProviders } from '@/utils/modelHelpers'
 import { providerBrandId } from '@/core/config/providerBrands'
 import { getHiddenProviders, getHiddenTypes, getHiddenModels, getVisibleProviders } from '@/config/providers'
 import {
   Dropdown,
-  UiFormRow,
-  UiGroup,
+  UiFieldLayoutContext,
+  UiNavButton,
   UiSearchInput,
-  UiMarqueeText,
   UiOptionButton,
-  UiVirtualGrid,
+  UiSpecialPanel,
+  UiVirtualList,
   UiEmpty,
-  UI_TEXT_BODY_CLASS,
-  UI_TEXT_LABEL_CLASS,
-  UI_TEXT_META_CLASS,
+  specialPanelGridWidth,
+  useSpecialPanelColumns,
 } from '@/components/ui'
 import PinyinMatch from 'pinyin-match'
 import { PROVIDER_ORDER, compareModelsBySeries, getModelTypeGroup, getModelTypeOrder } from '@/core/modelSortOrder'
@@ -53,20 +53,20 @@ function calculateMatchScore(modelName: string, query: string): number {
   if (pinyinResult) return 40
   return 0
 }
-const GRID_COLUMNS = {
-  default: 2,
-  sm: 3,
-  lg: 4,
-  xl: 5
-} as const
-const MODEL_CARD_COLUMN_GAP_CLASS = 'gap-x-2'
-const MODEL_CARD_ROW_GAP_CLASS = 'gap-y-1.5'
-const MODEL_CARD_META_TEXT_CLASS = `${UI_TEXT_META_CLASS} leading-4`
 
-function compareModelItems(
-  a: { p: { id: string; name: string }; m: { id: string; type: ModelType; name: string; seriesId?: string; seriesRank?: number } },
-  b: { p: { id: string; name: string }; m: { id: string; type: ModelType; name: string; seriesId?: string; seriesRank?: number } }
-): number {
+// 特殊面板（重要记录 021）：左栏 144 + 三列网格，单元 190 × 32；整块不超过 760
+const CELL_WIDTH = 190
+const CELL_GAP = 6
+const GRID_CHROME = 144 + 1 + 24 + 2
+const TYPE_FILTERS: Array<Exclude<GenerationModelFilterType, 'favorite'>> = ['all', 'image', 'video', 'audio', 'other']
+const TYPE_GROUPS = ['image', 'video', 'audio', 'other'] as const
+
+type ModelEntry = { p: { id: string; name: string }; m: { id: string; type: ModelType; name: string; functions: string[]; seriesId?: string; seriesRank?: number } }
+type GridRow =
+  | { kind: 'header'; key: string; label: string; count: number }
+  | { kind: 'cards'; key: string; start: number; items: ModelEntry[] }
+
+function compareModelItems(a: ModelEntry, b: ModelEntry): number {
   const providerDiff = (PROVIDER_ORDER[a.p.id] ?? Number.MAX_SAFE_INTEGER) - (PROVIDER_ORDER[b.p.id] ?? Number.MAX_SAFE_INTEGER)
   if (providerDiff !== 0) return providerDiff
 
@@ -76,9 +76,47 @@ function compareModelItems(
   return compareModelsBySeries(a.m, b.m)
 }
 
+/** 按网格排成行：不搜索且类型为“全部”时按类型分段（每段一个标题行），其余直接排。 */
+function buildGridRows(items: ModelEntry[], columns: number, sectioned: boolean, typeLabel: (group: string) => string): GridRow[] {
+  const rows: GridRow[] = []
+  const pushCards = (entries: ModelEntry[], offset: number, prefix: string): void => {
+    for (let index = 0; index < entries.length; index += columns) {
+      rows.push({ kind: 'cards', key: `${prefix}:${index}`, start: offset + index, items: entries.slice(index, index + columns) })
+    }
+  }
+  if (!sectioned) {
+    pushCards(items, 0, 'all')
+    return rows
+  }
+  let offset = 0
+  for (const group of TYPE_GROUPS) {
+    const entries = items.filter(item => getModelTypeGroup(item.m.type) === group)
+    if (entries.length === 0) continue
+    rows.push({ kind: 'header', key: `header:${group}`, label: typeLabel(group), count: entries.length })
+    pushCards(entries, offset, group)
+    offset += entries.length
+  }
+  return rows
+}
+
+/** 方向键在分段网格里移动：左右按顺序，上下到相邻的卡片行、同一列（那行不够长就取末项）。 */
+function moveHighlight(rows: GridRow[], current: number, key: string): number {
+  const cardRows = rows.filter((row): row is Extract<GridRow, { kind: 'cards' }> => row.kind === 'cards')
+  const total = cardRows.reduce((sum, row) => sum + row.items.length, 0)
+  if (total === 0) return current
+  if (key === 'ArrowLeft') return Math.max(0, current - 1)
+  if (key === 'ArrowRight') return Math.min(total - 1, current + 1)
+  const rowIndex = cardRows.findIndex(row => current >= row.start && current < row.start + row.items.length)
+  if (rowIndex < 0) return 0
+  const column = current - cardRows[rowIndex].start
+  const target = cardRows[rowIndex + (key === 'ArrowDown' ? 1 : -1)]
+  if (!target) return current
+  return target.start + Math.min(column, target.items.length - 1)
+}
+
 /**
- * 模型选择面板
- * 从 MediaGenerator 中提取的模型选择UI
+ * 模型选择面板（特殊面板，重要记录 021）：左栏“全部 / 收藏 / 各供应商”，右边头部一行搜索、类型与功能，
+ * 正文三列网格、不搜索时按类型分段；生成页底栏、图片编辑扩图、剪辑里的生成共用。
  */
 const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
   selectedProvider,
@@ -102,22 +140,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
   const searchInputRef = useRef<HTMLInputElement>(null)
   const highlightedItemRef = useRef<HTMLButtonElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
-  const getColumnsCount = useCallback(() => {
-    if (typeof window === 'undefined') return GRID_COLUMNS.default
-    const width = wrapperRef.current?.ownerDocument.defaultView?.innerWidth ?? window.innerWidth
-    if (width >= 1280) return GRID_COLUMNS.xl
-    if (width >= 1024) return GRID_COLUMNS.lg
-    if (width >= 640) return GRID_COLUMNS.sm
-    return GRID_COLUMNS.default
-  }, [])
-  const [columns, setColumns] = useState<2 | 3 | 4 | 5>(getColumnsCount)
-  useEffect(() => {
-    const owner = wrapperRef.current?.ownerDocument.defaultView ?? window
-    const update = (): void => setColumns(getColumnsCount())
-    update()
-    owner.addEventListener('resize', update)
-    return () => owner.removeEventListener('resize', update)
-  }, [getColumnsCount])
+  const columns = useSpecialPanelColumns({ cellWidth: CELL_WIDTH, gap: CELL_GAP, chrome: GRID_CHROME, maxColumns: 3 }, wrapperRef)
   useEffect(() => {
     setHiddenProviders(getHiddenProviders())
     setHiddenTypes(getHiddenTypes())
@@ -148,202 +171,196 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
   const visibleProviders = useMemo(() => {
     return getVisibleProviders(hiddenProviders, hiddenTypes, hiddenModels, allProviders)
   }, [hiddenProviders, hiddenTypes, hiddenModels, allProviders])
+  const allEntries = useMemo<ModelEntry[]>(() => visibleProviders.flatMap(p => p.models.map(m => ({ p, m }))), [visibleProviders])
+
+  const matchesType = useCallback((item: ModelEntry): boolean => {
+    if (modelFilterType === 'favorite') return favoriteModels.has(`${item.p.id}-${item.m.id}`)
+    return modelFilterType === 'all' || getModelTypeGroup(item.m.type) === modelFilterType
+  }, [favoriteModels, modelFilterType])
+  const matchesProvider = useCallback((item: ModelEntry): boolean => modelFilterProvider === 'all'
+    || providerBrandId(item.p.id) === providerBrandId(modelFilterProvider), [modelFilterProvider])
+  const matchesFunction = useCallback((item: ModelEntry): boolean => modelFilterFunction === 'all'
+    || item.m.functions.includes(modelFilterFunction), [modelFilterFunction])
+
+  // 左栏数量：按当前类型与功能算各供应商的模型数，收藏按功能算
+  const providerCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const item of allEntries) {
+      if (!matchesType(item) || !matchesFunction(item)) continue
+      const brand = providerBrandId(item.p.id)
+      counts.set(brand, (counts.get(brand) ?? 0) + 1)
+    }
+    return counts
+  }, [allEntries, matchesFunction, matchesType])
+  const allCount = [...providerCounts.values()].reduce((sum, count) => sum + count, 0)
+  const favoriteCount = allEntries.filter(item => matchesFunction(item) && favoriteModels.has(`${item.p.id}-${item.m.id}`)).length
+
   const filteredAndSortedModels = useMemo(() => {
-    const items = visibleProviders
-      .flatMap(p => p.models.map(m => ({ p, m })))
-      .filter(item => modelFilterProvider === 'all' || providerBrandId(item.p.id) === providerBrandId(modelFilterProvider))
-      .filter(item => {
-        if (modelFilterType === 'favorite') {
-          return favoriteModels.has(`${item.p.id}-${item.m.id}`)
-        }
-        if (modelFilterType === 'all') return true
-        return getModelTypeGroup(item.m.type) === modelFilterType
-      })
-      .filter(item => (modelFilterFunction === 'all' ? true : item.m.functions.includes(modelFilterFunction)))
+    const items = allEntries.filter(item => matchesProvider(item) && matchesType(item) && matchesFunction(item))
     if (searchQuery.trim()) {
       return items
-        .map(item => ({
-          ...item,
-          score: calculateMatchScore(item.m.name, searchQuery.trim())
-        }))
+        .map(item => ({ ...item, score: calculateMatchScore(item.m.name, searchQuery.trim()) }))
         .filter(item => item.score > 0)
-        .sort((a, b) => {
-          if (b.score !== a.score) return b.score - a.score
-          return compareModelItems(a, b)
-        })
+        .sort((a, b) => (b.score !== a.score ? b.score - a.score : compareModelItems(a, b)))
     }
-    return items.map(item => ({ ...item, score: 100 }))
-  }, [visibleProviders, modelFilterProvider, modelFilterType, modelFilterFunction, favoriteModels, searchQuery])
-  const selectedIndex = filteredAndSortedModels.findIndex(
-      item => item.p.id === selectedProvider && item.m.id === selectedModel
-    )
+    return items
+  }, [allEntries, matchesFunction, matchesProvider, matchesType, searchQuery])
+
+  const sectioned = !searchQuery.trim() && modelFilterType === 'all'
+  const rows = useMemo(
+    () => buildGridRows(filteredAndSortedModels, columns, sectioned, group => t(`types.${group}`)),
+    [columns, filteredAndSortedModels, sectioned, t]
+  )
+  // 网格里的显示顺序（分段后与原排序不同），方向键与回车按它走
+  const orderedModels = useMemo(() => rows.flatMap(row => (row.kind === 'cards' ? row.items : [])), [rows])
+  const selectedIndex = orderedModels.findIndex(item => item.p.id === selectedProvider && item.m.id === selectedModel)
   useLayoutEffect(() => {
     setHighlightedIndex(selectedIndex >= 0 ? selectedIndex : 0)
   }, [searchQuery, modelFilterProvider, modelFilterType, modelFilterFunction, selectedIndex, selectedProvider, selectedModel])
   useEffect(() => {
-    if (highlightedIndex >= filteredAndSortedModels.length && filteredAndSortedModels.length > 0) {
-      setHighlightedIndex(filteredAndSortedModels.length - 1)
+    if (highlightedIndex >= orderedModels.length && orderedModels.length > 0) {
+      setHighlightedIndex(orderedModels.length - 1)
     }
-  }, [filteredAndSortedModels.length, highlightedIndex])
+  }, [orderedModels.length, highlightedIndex])
+  const highlightedRow = rows.findIndex(row => row.kind === 'cards' && highlightedIndex >= row.start && highlightedIndex < row.start + row.items.length)
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.defaultPrevented) return
-    const totalItems = filteredAndSortedModels.length
-    if (totalItems === 0) return
-    switch (e.key) {
-      case 'ArrowUp': {
-        e.preventDefault()
-        setHighlightedIndex(prev => {
-          const newIndex = prev - columns
-          return newIndex >= 0 ? newIndex : prev
-        })
-        break
-      }
-      case 'ArrowDown': {
-        e.preventDefault()
-        setHighlightedIndex(prev => {
-          const newIndex = prev + columns
-          return newIndex < totalItems ? newIndex : prev
-        })
-        break
-      }
-      case 'ArrowLeft': {
-        e.preventDefault()
-        setHighlightedIndex(prev => (prev > 0 ? prev - 1 : prev))
-        break
-      }
-      case 'ArrowRight': {
-        e.preventDefault()
-        setHighlightedIndex(prev => (prev < totalItems - 1 ? prev + 1 : prev))
-        break
-      }
-      case 'Enter': {
-        e.preventDefault()
-        if (highlightedItemRef.current) {
-          highlightedItemRef.current.dispatchEvent(new MouseEvent('mousedown', {
-            bubbles: true,
-            cancelable: true,
-            view: window
-          }))
-          highlightedItemRef.current.click()
-        } else {
-          const highlightedItem = filteredAndSortedModels[highlightedIndex]
-          if (highlightedItem) {
-            onModelSelect(highlightedItem.p.id, highlightedItem.m.id)
-          }
-        }
-        break
-      }
+    if (orderedModels.length === 0) return
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault()
+      setHighlightedIndex(prev => moveHighlight(rows, prev, e.key))
+      return
     }
-  }, [filteredAndSortedModels, highlightedIndex, columns, onModelSelect])
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (highlightedItemRef.current) {
+        highlightedItemRef.current.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }))
+        highlightedItemRef.current.click()
+        return
+      }
+      const highlightedItem = orderedModels[highlightedIndex]
+      if (highlightedItem) onModelSelect(highlightedItem.p.id, highlightedItem.m.id)
+    }
+  }, [highlightedIndex, onModelSelect, orderedModels, rows])
+
+  // 左栏：全部 / 收藏 / 各供应商。收藏沿用“类型 = 收藏”的筛选，选供应商时回到全部类型
+  const selectRail = (provider: string, favorite = false): void => {
+    onFilterProviderChange(provider)
+    if (favorite) onFilterTypeChange('favorite')
+    else if (modelFilterType === 'favorite') onFilterTypeChange('all')
+  }
+  const railItem = (key: string, label: string, count: number, active: boolean, onClick: () => void, icon?: React.ReactNode): React.ReactNode => (
+    <UiNavButton key={key} type="button" size="sm" active={active} onClick={onClick} className="w-full" data-model-filter-provider={key}>
+      <span className="flex min-w-0 flex-1 items-center gap-2">
+        {icon}
+        <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+        <span className="font-mono text-2xs text-text3">{count}</span>
+      </span>
+    </UiNavButton>
+  )
+  const showProvider = modelFilterProvider === 'all'
+
   return (
-    <div
-      data-model-selector-panel
+    <UiSpecialPanel
       ref={wrapperRef}
+      data-model-selector-panel
       tabIndex={-1}
       onKeyDown={handleKeyDown}
-      // 表面由 PanelTrigger 的外壳统一提供，这里不再叠自己的底色
-      // ——此前的 bg-panel/40 + /45 是让本面板比比例/分辨率面板整体偏暗的原因
-      // 整块定高（封顶到浮层能给的高度）：网格在筛选区下方的剩余高度里滚动，矮窗口下浮层外壳不再另滚一层
-      className={`flex ${UI_PANEL_BODY_HEIGHT_CLASS.workspace} min-h-0 flex-col outline-none`}
-    >
-      {/* 筛选区域 - 固定在顶部 */}
-      <div className="flex-shrink-0 p-4 pb-2">
-        {/* 搜索框 */}
-        <div className="mb-3">
-          <div className={`mb-2 ${UI_TEXT_LABEL_CLASS}`}>{t('search.label')}</div>
+      height="fill"
+      bodyWidth={specialPanelGridWidth(columns, CELL_WIDTH, CELL_GAP)}
+      header={(
+        <UiFieldLayoutContext.Provider value="toolbar">
           <UiSearchInput
             ref={searchInputRef}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t('selectModel')}
+            placeholder={t('search.placeholder')}
             aria-label={t('search.label')}
             clearLabel={t('search.clear')}
             onClear={() => setSearchQuery('')}
+            className="min-w-40 flex-1"
           />
+          <div role="group" aria-label={t('filters.type')} className="flex shrink-0 items-center gap-0.5">
+            {TYPE_FILTERS.map(type => (
+              <UiOptionButton key={type} type="button" variant="menu" size="sm" active={modelFilterType === type} aria-pressed={modelFilterType === type}
+                onClick={() => onFilterTypeChange(type)}>
+                {type === 'all' ? t('all') : t(`types.${type}`)}
+              </UiOptionButton>
+            ))}
+          </div>
+          <Dropdown size="sm" label={t('filters.function')} value={modelFilterFunction} ariaLabel={t('filters.function')}
+            options={[{ label: t('all'), value: 'all' }, ...FILTERABLE_TAGS.map(tag => ({ label: t(`tags.${tag}`), value: tag }))]}
+            onSelect={onFilterFunctionChange} />
+        </UiFieldLayoutContext.Provider>
+      )}
+      aside={(
+        <div className="flex flex-col gap-0.5">
+          {railItem('all', t('all'), allCount, modelFilterProvider === 'all' && modelFilterType !== 'favorite', () => selectRail('all'), <LayoutGrid className={UI_ICON_SIZE_CLASS.sm} />)}
+          {railItem('favorite', t('favorites'), favoriteCount, modelFilterType === 'favorite', () => selectRail('all', true), <ICON_PRESET className={`${UI_ICON_SIZE_CLASS.sm} fill-warning-text text-warning-text`} />)}
+          <span className="mx-2 my-1.5 h-px bg-line" aria-hidden />
+          <span className="px-2 pb-0.5 text-2xs text-text3">{t('filters.provider')}</span>
+          {providerBrands.map(provider => railItem(
+            provider.id,
+            provider.name,
+            providerCounts.get(provider.id) ?? 0,
+            modelFilterType !== 'favorite' && providerBrandId(modelFilterProvider) === provider.id,
+            () => selectRail(provider.id),
+          ))}
         </div>
-        <UiGroup labelWidth={96}>
-          <UiFormRow label={t('filters.provider')} density="compact">
-            <Dropdown value={modelFilterProvider} ariaLabel={t('filters.provider')}
-              options={[{ label: t('all'), value: 'all' }, ...providerBrands.map(p => ({ label: p.name, value: p.id }))]}
-              onSelect={onFilterProviderChange} />
-          </UiFormRow>
-          <UiFormRow label={t('filters.type')} density="compact">
-            <Dropdown<GenerationModelFilterType> value={modelFilterType} ariaLabel={t('filters.type')}
-              options={[
-                { label: t('all'), value: 'all' }, { label: t('favorites'), value: 'favorite' },
-                { label: t('types.image'), value: 'image' }, { label: t('types.video'), value: 'video' },
-                { label: t('types.audio'), value: 'audio' }, { label: t('types.other'), value: 'other' },
-              ]} onSelect={onFilterTypeChange} />
-          </UiFormRow>
-          <UiFormRow label={t('filters.function')} density="compact">
-            <Dropdown value={modelFilterFunction} ariaLabel={t('filters.function')}
-              options={[{ label: t('all'), value: 'all' }, ...FILTERABLE_TAGS.map(tag => ({ label: t(`tags.${tag}`), value: tag }))]}
-              onSelect={onFilterFunctionChange} />
-          </UiFormRow>
-        </UiGroup>
-      </div>
-      {/* 模型列表 - 可滚动区域 */}
-      <div className="flex-1 min-h-0 overflow-hidden px-4 pb-4 pt-1">
-        <UiVirtualGrid
-          data={filteredAndSortedModels}
-          columns={columns}
-          getKey={({ p, m }) => `${p.id}-${m.id}`}
-          highlightedIndex={highlightedIndex}
-          resetKey={`${searchQuery}:${modelFilterProvider}:${modelFilterType}:${modelFilterFunction}`}
-          emptyState={<UiEmpty size="xs" title={t('ui:workspaceFilters.emptyFiltered')} />}
-          renderItem={({ p, m }, index) => {
-            const isHighlighted = index === highlightedIndex
-            const isSelected = p.id === selectedProvider && m.id === selectedModel
-            return (
-              <UiOptionButton
-                type="button"
-                key={`${p.id}-${m.id}`}
-                data-provider-id={p.id}
-                data-model-id={m.id}
-                ref={isHighlighted ? highlightedItemRef : null}
-                data-close-on-select
-                onClick={() => onModelSelect(p.id, m.id)}
-                active={isSelected}
-                // 网格是二维的：grid 变体静息铺一层 raised 撑出格子形状（否则列边界会糊），
-                // 但不描边——底色已经表达过一次边界；方向键当前项用悬停底表达。
-                variant="grid"
-                highlighted={isHighlighted}
-                className="relative w-full flex-col items-start"
-              >
-                {/* 两列两行（表格式）: 左列=名称/供应商，右列=收藏/类型 */}
-                <div className={`grid w-full grid-cols-[minmax(0,1fr)_auto] ${MODEL_CARD_COLUMN_GAP_CLASS} ${MODEL_CARD_ROW_GAP_CLASS}`}>
-                  <UiMarqueeText
-                    text={m.name}
-                    className={`col-start-1 row-start-1 min-w-0 text-left leading-5 ${UI_TEXT_BODY_CLASS}`}
-                  />
-                  <div className="col-start-2 row-start-1 justify-self-end self-start">
+      )}
+    >
+      <UiVirtualList
+        data={rows}
+        getKey={row => row.key}
+        resetKey={`${searchQuery}:${modelFilterProvider}:${modelFilterType}:${modelFilterFunction}:${columns}`}
+        highlightedIndex={highlightedRow >= 0 ? highlightedRow : undefined}
+        emptyState={<UiEmpty size="xs" title={t('ui:workspaceFilters.emptyFiltered')} />}
+        renderItem={(row) => row.kind === 'header' ? (
+          <div className="flex h-7 items-end gap-1.5 pb-1.5 text-2xs text-text3">{row.label}<span className="font-mono">{row.count}</span></div>
+        ) : (
+          <div className="grid pb-1.5" style={{ gridTemplateColumns: `repeat(${columns}, ${CELL_WIDTH}px)`, columnGap: CELL_GAP }}>
+            {row.items.map(({ p, m }, column) => {
+              const index = row.start + column
+              const isHighlighted = index === highlightedIndex
+              const isSelected = p.id === selectedProvider && m.id === selectedModel
+              const isFavorite = favoriteModels.has(`${p.id}-${m.id}`)
+              return (
+                <UiOptionButton
+                  type="button"
+                  key={`${p.id}-${m.id}`}
+                  data-provider-id={p.id}
+                  data-model-id={m.id}
+                  ref={isHighlighted ? highlightedItemRef : null}
+                  data-close-on-select
+                  onClick={() => onModelSelect(p.id, m.id)}
+                  active={isSelected}
+                  // 二维网格：grid 变体静息铺一层极淡底撑出格子形状，不描边；方向键当前项用悬停底
+                  variant="grid"
+                  size="md"
+                  highlighted={isHighlighted}
+                  className="group w-full gap-1.5"
+                >
+                  <span className="min-w-0 flex-1 truncate text-left">{m.name}</span>
+                  {showProvider ? <span className="shrink-0 text-2xs text-text3">{p.name}</span> : null}
+                  {isSelected ? <Check className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 text-accent-text`} aria-hidden /> : (
                     <span
                       data-prevent-close
                       onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(e, p.id, m.id) }}
-                      className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-transparent text-text2 transition-colors hover:bg-hover"
-                      title={favoriteModels.has(`${p.id}-${m.id}`) ? t('favorite.remove') : t('favorite.add')}
+                      className={`inline-flex shrink-0 cursor-pointer ${isFavorite ? '' : 'opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100'}`}
+                      aria-label={isFavorite ? t('favorite.remove') : t('favorite.add')}
                     >
-                      <ICON_PRESET
-                        className={`${UI_ICON_SIZE_CLASS.sm} transition-colors ${favoriteModels.has(`${p.id}-${m.id}`) ? 'fill-warning-text text-warning-text' : 'fill-none text-text2'}`}
-                      />
+                      <ICON_PRESET className={`${UI_ICON_SIZE_CLASS.sm} ${isFavorite ? 'fill-warning-text text-warning-text' : 'fill-none text-text3'}`} />
                     </span>
-                  </div>
-                  <span className={`col-start-1 row-start-2 block min-w-0 self-end truncate text-left ${MODEL_CARD_META_TEXT_CLASS}`}>
-                    {p.name}
-                  </span>
-                  <span className={`col-start-2 row-start-2 justify-self-end self-end text-right ${MODEL_CARD_META_TEXT_CLASS}`}>
-                    {getModelTypeGroup(m.type) === 'other'
-                      ? `${t('types.other')} · ${m.type}`
-                      : t(`types.${m.type}`)}
-                  </span>
-                </div>
-              </UiOptionButton>
-            )
-          }}
-        />
-      </div>
-    </div>
+                  )}
+                </UiOptionButton>
+              )
+            })}
+          </div>
+        )}
+      />
+    </UiSpecialPanel>
   )
 }
 export default ModelSelectorPanel

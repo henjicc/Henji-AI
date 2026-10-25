@@ -129,7 +129,7 @@ export function VideoEditInPlaceDialog({ projectId, sequenceId, intent, initial,
     setRoles(on ? [...current, role] : current.filter(value => value !== role))
   }
 
-  const modelTrigger = <PanelTrigger className="min-w-0" panelSize="workspace" alignment="aboveCenter" stableHeight
+  const modelTrigger = <PanelTrigger className="min-w-0" panelSize="special" alignment="aboveCenter" stableHeight
     closeOnPanelClick={target => { if ((target as HTMLElement).closest('[data-prevent-close]')) return false; return Boolean((target as HTMLElement).closest('[data-close-on-select]')) }}
     renderPanel={() => <ModelSelectorPanel selectedProvider={providerId} selectedModel={modelId ?? ''} modelFilterProvider={filterProvider} modelFilterType={filterType} modelFilterFunction={filterFunction} favoriteModels={favorites}
       onModelSelect={(_, id) => setModelId(id)} onFilterProviderChange={setFilterProvider} onFilterTypeChange={setFilterType} onFilterFunctionChange={setFilterFunction}

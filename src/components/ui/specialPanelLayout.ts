@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useLayoutEffect, useState, type RefObject } from 'react'
 import { UI_SPECIAL_PANEL_BUDGET } from './styleTokens'
 
 /** 特殊面板网格的列数与正文宽度（重要记录 021），配合 UiSpecialPanel 的 bodyWidth 使用。 */
@@ -25,15 +25,16 @@ export function specialPanelGridWidth(columns: number, cellWidth: number, gap: n
   return columns * cellWidth + Math.max(0, columns - 1) * gap
 }
 
-/** 随窗口宽度更新的网格列数。 */
-export function useSpecialPanelColumns(options: SpecialPanelColumnsOptions): number {
+/** 随所在窗口宽度更新的网格列数；传 ownerRef 时按它所在的窗口算（剪辑的系统浮窗里也对）。 */
+export function useSpecialPanelColumns(options: SpecialPanelColumnsOptions, ownerRef?: RefObject<Element>): number {
   const { cellWidth, gap, chrome, maxColumns, minColumns } = options
   const [columns, setColumns] = useState(() => resolveSpecialPanelColumns(window.innerWidth, options))
-  useEffect(() => {
-    const update = (): void => setColumns(resolveSpecialPanelColumns(window.innerWidth, { cellWidth, gap, chrome, maxColumns, minColumns }))
+  useLayoutEffect(() => {
+    const owner = ownerRef?.current?.ownerDocument.defaultView ?? window
+    const update = (): void => setColumns(resolveSpecialPanelColumns(owner.innerWidth, { cellWidth, gap, chrome, maxColumns, minColumns }))
     update()
-    window.addEventListener('resize', update)
-    return () => window.removeEventListener('resize', update)
-  }, [cellWidth, chrome, gap, maxColumns, minColumns])
+    owner.addEventListener('resize', update)
+    return () => owner.removeEventListener('resize', update)
+  }, [cellWidth, chrome, gap, maxColumns, minColumns, ownerRef])
   return columns
 }

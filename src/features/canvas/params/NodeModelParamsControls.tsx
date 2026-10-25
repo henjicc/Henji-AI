@@ -23,10 +23,7 @@ interface NodeModelParamsControlsProps {
   onModelChipContentWidthChange?: (width: number) => void;
 }
 
-const MODEL_PANEL_FALLBACK_CONTENT_WIDTH = 302;
 // 浮层 panelPadding="content"（左右各 12）+ 边框 2
-const MODEL_PANEL_HORIZONTAL_CHROME = 26;
-const MODEL_PANEL_GAP = 8;
 // 芯片 sm 档左右内边距 8 + 8、边框 1 + 1，名称与渠道之间 gap 6（测量层用的是 gap 8，多出的 2 留作余量）
 const MODEL_CHIP_HORIZONTAL_CHROME = 18;
 
@@ -64,7 +61,6 @@ export const NodeModelParamsControls = memo(({
   const modelSearchInputRef = useRef<HTMLInputElement>(null);
   // 模型面板走共享浮层 PanelTrigger（任务 5.9）：定位、玻璃表面、点外与 Escape 关闭、子浮层归属都由它处理
   const [panelOpen, setPanelOpen] = useState(false);
-  const [modelPanelContentWidth, setModelPanelContentWidth] = useState(0);
   const {
     modelSearchQuery,
     setModelSearchQuery,
@@ -78,8 +74,6 @@ export const NodeModelParamsControls = memo(({
     selectedModelName,
     hasCompatibleModels,
   } = useModelPickerList({ mediaType, modelId, requiredTags, modelPolicy });
-
-  const modelPanelWidth = (modelPanelContentWidth || MODEL_PANEL_FALLBACK_CONTENT_WIDTH) + MODEL_PANEL_HORIZONTAL_CHROME;
 
   useLayoutEffect(() => {
     const measureEl = modelChipMeasureRef.current;
@@ -125,13 +119,11 @@ export const NodeModelParamsControls = memo(({
         open={panelOpen}
         onOpenChange={setPanelOpen}
         surface="glass"
-        panelPadding="content"
-        panelSize={modelPanelWidth > 720 ? 'workspace' : 'wide'}
-        alignment="aboveCenter"
-        gap={MODEL_PANEL_GAP}
+        // 特殊面板（重要记录 021）：宽度量最长的模型名，在模型这一行下面展开、不盖住它
+        panelSize="special"
+        alignment="bottomLeft"
         renderPanel={() => (
-          <div className="nodrag nowheel flex min-h-0 flex-col">
-            <ModelPickerList
+          <ModelPickerList
               variant="floating"
               modelSearchQuery={modelSearchQuery}
               onSearchChange={setModelSearchQuery}
@@ -140,7 +132,6 @@ export const NodeModelParamsControls = memo(({
               onProviderFilterChange={setProviderFilter}
               providerOptions={providerOptions}
               modelsForWidthMeasurement={providerModels}
-              onPreferredWidthChange={setModelPanelContentWidth}
               filteredModels={filteredModels}
               selectedModel={selectedModelOption}
               emptyMessage={!hasCompatibleModels && modelPolicy
@@ -154,7 +145,6 @@ export const NodeModelParamsControls = memo(({
                 setPanelOpen(false);
               }}
             />
-          </div>
         )}
       >
         {() => (

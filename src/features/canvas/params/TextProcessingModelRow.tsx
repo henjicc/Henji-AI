@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -26,8 +26,6 @@ interface TextProcessingModelRowProps {
   onSelect: (key: string) => void
 }
 
-const MODEL_PANEL_FALLBACK_CONTENT_WIDTH = 302
-const MODEL_PANEL_HORIZONTAL_CHROME = 18
 
 export function TextProcessingModelRow({
   choices,
@@ -37,7 +35,6 @@ export function TextProcessingModelRow({
   const { t } = useTranslation()
   const closePanelRef = useRef<() => void>(() => undefined)
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const [modelPanelContentWidth, setModelPanelContentWidth] = useState(0)
   const modelOptions = useMemo<ModelPickerOption[]>(() => choices.map((choice) => ({
     key: choice.key,
     displayName: choice.model.displayName,
@@ -59,9 +56,6 @@ export function TextProcessingModelRow({
     filteredModels,
     selectedModelOption,
   } = useModelPickerOptions({ options: modelOptions, selectedKey })
-  const panelWidth = (
-    modelPanelContentWidth || MODEL_PANEL_FALLBACK_CONTENT_WIDTH
-  ) + MODEL_PANEL_HORIZONTAL_CHROME
 
   const selectModel = (key: string): void => {
     onSelect(key)
@@ -75,13 +69,11 @@ export function TextProcessingModelRow({
         <PanelTrigger
           display={selectedModelOption?.displayName ?? t('node.textProcessing.noModel')}
           disabled={choices.length === 0}
-          panelSize={panelWidth > 720 ? 'workspace' : panelWidth > 384 ? 'wide' : 'compact'}
-          alignment="aboveCenter"
-          gap={8}
+          panelSize="special"
+          alignment="bottomLeft"
           closeOnPanelClick={false}
           className="min-w-0"
           renderPanel={() => (
-            <div className="p-2">
               <ModelPickerList
                 variant="floating"
                 modelSearchQuery={modelSearchQuery}
@@ -91,13 +83,11 @@ export function TextProcessingModelRow({
                 onProviderFilterChange={setProviderFilter}
                 providerOptions={providerOptions}
                 modelsForWidthMeasurement={providerModels}
-                onPreferredWidthChange={setModelPanelContentWidth}
                 filteredModels={filteredModels}
                 selectedModel={selectedModelOption}
                 revealSelectedModel
                 onModelChange={selectModel}
               />
-            </div>
           )}
         >
           {({ open, togglePanel, closePanel }) => {

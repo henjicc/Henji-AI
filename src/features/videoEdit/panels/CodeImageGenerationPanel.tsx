@@ -64,7 +64,7 @@ export function CodeImageGenerationPanel({ target, parameterKey, title, onClose 
     catch (reason) { if (alive.current) setError(reason instanceof Error ? reason.message : String(reason)) }
     finally { submitting.current = false; if (alive.current) setBusy(false) }
   }
-  const modelTrigger = <PanelTrigger panelSize="workspace" alignment="aboveCenter" stableHeight closeOnPanelClick={node => Boolean((node as Element).closest('[data-close-on-select]'))}
+  const modelTrigger = <PanelTrigger panelSize="special" alignment="aboveCenter" stableHeight closeOnPanelClick={node => Boolean((node as Element).closest('[data-close-on-select]'))}
     renderPanel={() => <ModelSelectorPanel selectedProvider={providerId} selectedModel={modelId} modelFilterProvider={filterProvider} modelFilterType={filterType} modelFilterFunction={filterFunction} favoriteModels={favorites}
       onModelSelect={(_, id) => setModelId(id)} onFilterProviderChange={setFilterProvider} onFilterTypeChange={setFilterType} onFilterFunctionChange={setFilterFunction}
       onToggleFavorite={(event, provider, id) => { event.stopPropagation(); const key = `${provider}-${id}`; patchDraftField('favoriteModels', current => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next }) }} />}>
