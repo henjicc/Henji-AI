@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { AudioEditProjectDocument, AudioEditTranscriptBlock } from './types'
 import { cleanAudioEditGaps, clearAudioEditGaps } from './gaps'
 import { buildProjectAudioEditTimeline } from './timeline'
+import { applyAudioEditBreathPolicy } from './breaths'
 
 /** 采样率 1000：帧即毫秒；电平每 10 ms 一格 */
 function documentOf(words: Array<[string, number, number]>, extra: Partial<AudioEditProjectDocument> = {}): AudioEditProjectDocument {
@@ -77,6 +78,17 @@ describe('字间气口清理', () => {
     })
     const loudTail = levelsOf([[0, 1000], [1400, 3000]], [[1320, 1400, -40]])
     expect(heardBetween(cleanAudioEditGaps(tail, [], loudTail).document, 1000, 1400)).toEqual({ heard: 120, silent: 100 })
+  })
+
+  it('与删呼吸连用时先撤上一次的清理再判断呼吸：重跑结果不变', () => {
+    const document = documentOf([['一件事。', 0, 1000], ['每个', 1600, 3000]])
+    const breaths = [{ startMs: 1150, endMs: 1450, peak: 1 }]
+    const levels = levelsOf([[0, 1020], [1600, 3000]], [[1150, 1450, -45]])
+    const pipeline = (current: AudioEditProjectDocument): AudioEditProjectDocument =>
+      cleanAudioEditGaps(applyAudioEditBreathPolicy(clearAudioEditGaps(current), breaths, 'delete').document, breaths, levels).document
+    const once = pipeline(document)
+    expect(heardBetween(once, 1020, 1600)).toMatchObject({ heard: 200 })
+    expect(pipeline(once).cuts).toEqual(once.cuts)
   })
 
   it('夹在残留里的几十毫秒声响一并静音；重跑替换上一次；逐处恢复过的不动；锁定的不动', () => {
