@@ -20,7 +20,7 @@ import {
 } from '@/components/params/paramVisibility'
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution'
 import { ParamGroupSections, ParamGroupTrigger } from '@/components/params/ParamGroupTrigger'
-import { UiFieldTrigger, UiGroup, UiOverflowRow, useUiFieldLayout, type UiOverflowRowItem } from '@/components/ui'
+import { UiFieldTrigger, UiGroup, UiOverflowRow, UiSpecialPanel, useUiFieldLayout, type UiOverflowRowItem } from '@/components/ui'
 import PanelTrigger, { type PanelTriggerControls } from '@/components/ui/PanelTrigger'
 import Tooltip from '@/components/ui/Tooltip'
 import AspectResolutionPanel from './AspectResolutionPanel'
@@ -54,14 +54,20 @@ type OverflowEntry =
   | { id: string; kind: 'group'; item: Extract<ReturnType<typeof resolveParameterPanelLayout>['items'][number], { kind: 'group' }> }
 
 /**
- * “更多参数”浮层宽度：含展示分组时按分组声明的宽度，含大块控件（多行文本、上传等）时 440；
- * 只有零散参数时按内容（列网格的自然宽度），不再固定 360 留出大片空白（任务 5.3）。
+ * “更多参数”特殊面板（重要记录 021）的正文宽度：宽度量内容，只有展示分组声明了宽度、或有多行文本与上传这类
+ * 自身没有固有宽度的大块控件时，才给一个最小正文宽（分组声明的宽度，大块控件 440）。
  */
-function resolveMorePanelWidth(entries: OverflowEntry[]): number {
-  const groupWidths = entries.flatMap((entry) => entry.kind === 'group' ? [entry.item.group.panelWidth ?? 440] : [])
-  const hasBlock = entries.some((entry) => entry.kind === 'param' && isToolbarBlockParam(entry.param))
+function resolveMorePanelBodyWidth(entries: OverflowEntry[]): number | undefined {
+  const groupWidths = entries.flatMap((entry) => entry.kind === 'group' && entry.item.group.panelWidth ? [entry.item.group.panelWidth] : [])
   if (groupWidths.length > 0) return Math.max(...groupWidths)
-  return hasBlock ? 440 : 360
+  if (entries.some((entry) => entry.kind === 'group')) return 440
+  return entries.some((entry) => entry.kind === 'param' && isToolbarBlockParam(entry.param)) ? 440 : undefined
+}
+
+/** 四项以上的普通参数排两列，一行跨度仍在 720 以内；有大块控件或分组时一列 */
+function resolveMorePanelColumns(entries: OverflowEntry[]): 1 | 2 {
+  const simple = entries.every((entry) => entry.kind === 'param' && !isToolbarBlockParam(entry.param))
+  return simple && entries.length >= 4 ? 2 : 1
 }
 
 function focusFirstControl(root: ParentNode | null | undefined, paramId: string): void {
@@ -213,9 +219,11 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   }, [overflowEntries, panelOnlyIds])
 
   const renderOverflowPanel = (entries: OverflowEntry[]): React.ReactNode => {
+    const twoColumns = resolveMorePanelColumns(entries) === 2
     return (
+    <UiSpecialPanel bodyWidth={resolveMorePanelBodyWidth(entries)}>
     <ParamPanelRowsContext.Provider value>
-    <UiGroup labelWidth={120} className="p-3">
+    <UiGroup labelWidth={96} className={twoColumns ? 'grid grid-cols-[repeat(2,max-content)] gap-x-6' : undefined}>
       {entries.map((entry, index) => {
         if (entry.kind === 'param') {
           return (
@@ -255,6 +263,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
       })}
     </UiGroup>
     </ParamPanelRowsContext.Provider>
+    </UiSpecialPanel>
     )
   }
 
@@ -275,9 +284,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
     return (
       <PanelTrigger
         controlsRef={moreControlsRef}
-        // 按内容选档：只有普通参数行（数量、种子等，估算 360）用 compact，不被 wide 拉到半屏宽、数值框拉成长条；
-        // 有整块控件（遮罩、上传）或分组时才 wide / workspace
-        panelSize={resolveMorePanelWidth(entries) > 720 ? 'workspace' : resolveMorePanelWidth(entries) > 384 ? 'wide' : 'compact'}
+        // 特殊面板：宽度量内容，一项时就只有那一行宽（重要记录 021）
+        panelSize="special"
         alignment="aboveCenter"
         closeOnPanelClick={false}
         renderPanel={() => renderOverflowPanel(entries)}

@@ -5,7 +5,7 @@ import { getI18nText, type ParamDef, type ParamPresentationGroup } from '@/core/
 import { resolveParamPresentationSections } from '@/core/params/paramPresentation'
 import { LinkageEngine } from '@/core/linkage'
 import PanelTrigger from '@/components/ui/PanelTrigger'
-import { UiGroup } from '@/components/ui'
+import { UiGroup, UiSpecialPanel } from '@/components/ui'
 import { ParamRenderer } from './ParamRenderer'
 import { ParamPanelRowsContext } from './paramPanelRows'
 import { countChangedParams, isParamDisabled } from './paramVisibility'
@@ -69,7 +69,7 @@ export function ParamGroupSections({
           titleTone={sectionTitleTone}
           divided={index > 0}
           gap="none"
-          labelWidth={120}
+          labelWidth={96}
           className={index > 0 ? 'mt-4' : ''}
         >
           <div className="space-y-3">
@@ -129,13 +129,14 @@ export function ParamGroupTrigger({
         size={compact ? 'sm' : 'md'}
         surface={compact ? 'glass' : 'solid'}
         buttonClassName={compact ? 'w-auto max-w-[116px]' : 'w-auto min-w-[108px]'}
-        panelSize={(group.panelWidth ?? 440) > 720 ? 'workspace' : 'wide'}
+        // 特殊面板（重要记录 021）：宽度量内容，分组声明了宽度时作为正文最小宽
+        panelSize="special"
         alignment="aboveCenter"
         gap={compact ? 8 : 45}
         freezePositionOnOpen
         closeOnPanelClick={false}
         renderPanel={() => (
-          <div className="p-3">
+          <UiSpecialPanel bodyWidth={group.panelWidth}>
             <ParamGroupSections
               group={group}
               params={params}
@@ -147,7 +148,7 @@ export function ParamGroupTrigger({
               uploadedVideos={uploadedVideos}
               disabledParamIds={disabledParamIds}
             />
-          </div>
+          </UiSpecialPanel>
         )}
       />
     </div>
