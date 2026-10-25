@@ -1,8 +1,8 @@
-import { Fragment, useEffect, useMemo, useRef } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import { FileAudio, History, Lock, LockOpen, RotateCcw, Sparkles, Trash2 } from 'lucide-react'
 import {
-  Dropdown, UiButton, UiChipButton, UiEmpty, UiFormRow, UiGroup, UiIconButton, UiOptionButton, UiRangeInput, UiSwitch, UiTextArea, UiTextToken,
+  Dropdown, UiButton, UiChipButton, UiEmpty, UiFormRow, UiGroup, UiIconButton, UiOptionButton, UiRangeInput, UiSegmented, UiSwitch, UiTextArea, UiTextToken,
   UI_TEXT_META_CLASS, UI_TEXT_SECONDARY_CLASS,
 } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
@@ -16,7 +16,8 @@ import { openDialog, readTextFile } from '@/platform/desktopApi'
 import { AudioEditDisclosure } from '../AudioEditDisclosure'
 import { AudioEditSuggestions } from '../AudioEditSuggestions'
 import { AudioEditFindReplace, AudioEditMatchedText } from '../AudioEditTextTools'
-import { cleanProjectAudioEditFillers, compressAudioEditSilence, prepareAudioEditProcessing, quickProcessAudioEdit, transcribeAudioEdit } from '../application/audioEditApplicationService'
+import { cleanProjectAudioEditFillers, compressAudioEditSilence, prepareAudioEditProcessing, processProjectAudioEditBreaths, quickProcessAudioEdit, transcribeAudioEdit } from '../application/audioEditApplicationService'
+import type { AudioEditBreathPolicy } from '@/core/audioEdit/breaths'
 import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
 import { audioEditHistoryEntries } from './audioEditHistory'
 import { useAudioEditWorkspace } from './audioEditWorkspaceContext'
@@ -148,10 +149,11 @@ export function AudioEditProcessPanel() {
   const selectedSeconds = selectedBlocks.reduce((total, block) => total + Math.max(0, block.endFrame - block.startFrame), 0) / project.source.sampleRate
   const allLocked = selectedBlocks.length > 0 && selectedBlocks.every((block) => block.locked)
   const blocked = Boolean(workspace.sourceError)
+  const [breathPolicy, setBreathPolicy] = useState<AudioEditBreathPolicy>('delete')
   return <PanelScroll label="处理">
     <fieldset disabled={workspace.disabled} className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <p className={`m-0 leading-normal ${UI_TEXT_SECONDARY_CLASS}`}>去掉重念、压缩停顿、清理语气词。波形上的黄色区域是将要删除的声音，处理后仍可逐段调整。</p>
+        <p className={`m-0 leading-normal ${UI_TEXT_SECONDARY_CLASS}`}>去掉重念、压缩停顿、清理语气词、处理呼吸声。波形上的黄色区域是将要删除的声音，处理后仍可逐段调整。</p>
         <UiButton variant="secondary" className="w-full" disabled={blocked} disabledReason="找不到原始素材" onClick={() => void run(async () => { const result = await quickProcessAudioEdit(project.id, range); notify(notificationMessage('audioQuickProcessed', { seconds: (result.shortenedMs / 1000).toFixed(2) })) })}><Sparkles />快速处理</UiButton>
       </div>
       <UiGroup divided titleTone="compact" gap="none">
@@ -165,6 +167,10 @@ export function AudioEditProcessPanel() {
           <p className={UI_TEXT_META_CLASS}>选择需要清理的词类；可能有语义的词默认保留。</p>
           <div role="group" aria-label="语气词" className="flex flex-wrap gap-1">{['嗯', '呃', '额', '那个', '就是', '啊'].map((word) => <UiChipButton key={word} size="sm" active={settings.fillers.includes(word)} aria-pressed={settings.fillers.includes(word)} onClick={() => update({ batchSettings: { ...settings, fillers: settings.fillers.includes(word) ? settings.fillers.filter((value) => value !== word) : [...settings.fillers, word] } })}>{word}</UiChipButton>)}</div>
           <UiButton variant="secondary" className="w-full" onClick={() => void run(async () => notify(notificationMessage('audioFillersCleaned', { count: await cleanProjectAudioEditFillers(project.id, range) })))}>清理语气词</UiButton>
+          <p className={UI_TEXT_META_CLASS}>呼吸声：删除时句与句之间删掉、留一点气口，句中只减弱；第一次使用会下载约 13 MB 的本地模型。</p>
+          <UiSegmented ariaLabel="呼吸声" size="sm" fullWidth value={breathPolicy} onChange={setBreathPolicy}
+            options={[{ value: 'delete', label: '删除' }, { value: 'attenuate', label: '减弱' }, { value: 'mute', label: '静音' }, { value: 'keep', label: '保留' }]} />
+          <UiButton variant="secondary" className="w-full" disabled={blocked} disabledReason="找不到原始素材" onClick={() => void run(async () => { const { counts } = await processProjectAudioEditBreaths(project.id, breathPolicy, range); notify(notificationMessage('audioBreathsProcessed', counts)) })}>处理呼吸声</UiButton>
         </AudioEditDisclosure>
         {enabledCuts.length > 0 && <AudioEditDisclosure title="已处理区间" value={`${enabledCuts.length} 处`}>
           <div className="flex flex-col">{enabledCuts.map((cut) => <div key={cut.id} className="flex items-center justify-between gap-2">

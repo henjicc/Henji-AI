@@ -11,9 +11,11 @@ import { applyWriterTable, writableProperties, propertyOperations } from '@/core
 import { audioEditWriterTable } from './audioEditFields'
 import { loadAudioEditProject, editAudioEditProject, flushAudioEditProject, getAudioEditRevision, restoreAudioEditProjectSnapshot, audioEditProjectContent, subscribeAudioEditProjectDisposal } from './audioEditProjectInstances'
 import { AUDIO_EDIT_ENTITY_TYPES } from './audioEditReflection'
+import { loadAudioEditBreaths } from './audioEditBreaths'
+import { describeAudioEditBreaths } from '@/core/audioEdit/breaths'
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
-type MutableEntityType = typeof AUDIO_EDIT_ENTITY_TYPES.project | typeof AUDIO_EDIT_ENTITY_TYPES.transcriptBlock | typeof AUDIO_EDIT_ENTITY_TYPES.suggestion | typeof AUDIO_EDIT_ENTITY_TYPES.processorChain
+type MutableEntityType = typeof AUDIO_EDIT_ENTITY_TYPES.project | typeof AUDIO_EDIT_ENTITY_TYPES.transcriptBlock | typeof AUDIO_EDIT_ENTITY_TYPES.suggestion | typeof AUDIO_EDIT_ENTITY_TYPES.breath | typeof AUDIO_EDIT_ENTITY_TYPES.processorChain
 
 const MAX_UNDO_RECORDS = 50
 const undoRecords = new Map<string, { previous: AudioEditProjectDocument; afterContent: string; target: { kind: MutableEntityType; id: string } }>()
@@ -45,7 +47,8 @@ export class AudioEditMutationExecutor implements ApplicationMutationExecutor {
   async apply(step: MutationStep, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const ids = splitTarget(this.entityType, step.target.id)
     const current = (await loadAudioEditProject(ids.projectId)).document
-    const draft = { document: structuredClone(current), childId: ids.childId }
+    const raw = this.entityType === AUDIO_EDIT_ENTITY_TYPES.breath ? await loadAudioEditBreaths(current) : undefined
+    const draft = { document: structuredClone(current), childId: ids.childId, ...(raw ? { breaths: { raw, views: describeAudioEditBreaths(current, raw) } } : {}) }
     await applyWriterTable(audioEditWriterTable(this.entityType), draft, step.mutations)
     const saved = editAudioEditProject(ids.projectId, () => draft.document)
     if (!context?.persistenceScopes?.has(`audio_edit:${ids.projectId}`)) await flushAudioEditProject(ids.projectId)

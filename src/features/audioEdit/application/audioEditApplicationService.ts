@@ -8,8 +8,11 @@ import { createLogger } from '@/core/logging'
 import { formatAudioEditCaptions, buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
 import { hasAudioEditModifications } from '@/core/audioEdit/baseline'
 import { audioEditRetakeSuggestion } from '@/core/audioEdit/retakes'
+import { applyAudioEditBreathPolicy, type AudioEditBreathPolicy } from '@/core/audioEdit/breaths'
+import type { AudioBreath } from '@/core/audioAnalysis/breath/respiro'
 import { acceptAudioEditNativeResult, editAudioEditProject, flushAudioEditProject, loadAudioEditProject, resetAudioEditProject, withAudioEditProjectOperation, type AudioEditProjectInstance } from './audioEditProjectInstances'
 import { detectAudioEditRetakesOffThread } from './audioEditRetakeDetection'
+import { loadAudioEditBreaths } from './audioEditBreaths'
 
 const logger = createLogger('features.audioEdit.operations')
 
@@ -50,6 +53,19 @@ function hasWordTranscript(document: AudioEditProjectDocument): boolean {
 const RETAKE_MIN_WORDS = 4
 
 /**
+ * 呼吸声（本地模型，第一次用到时下载）。required=false 时取不到就返回空：去重念、快速处理照常进行，只是不拿呼吸当气口。
+ */
+async function detectProjectBreaths(document: AudioEditProjectDocument, required: boolean, requestId: string): Promise<AudioBreath[] | undefined> {
+  try {
+    return await loadAudioEditBreaths(document)
+  } catch (error) {
+    if (required) throw error instanceof Error && /下载|download|网络|network/i.test(error.message) ? new Error(`呼吸声模型还没有准备好：${error.message}`) : error
+    logger.warn('audio_edit.breaths.unavailable', { requestId, context: { projectId: document.id }, error })
+    return undefined
+  }
+}
+
+/**
  * 检测重念：读取实际声音的停顿证据（与停顿图、字幕断句共用的全频/高频能量分析），在 Worker 里比对转写，
  * 返回待应用的“重念”剪辑线索。参考稿只用来排除稿子里本来就有的重复。
  */
@@ -60,8 +76,10 @@ async function detectRetakeSuggestions(instance: AudioEditProjectInstance, range
   const detected = await getPlatform().audioEdit.detectSilence({ projectId: document.id, settings: document.batchSettings ?? DEFAULT_AUDIO_EDIT_SETTINGS, requestId, energy: {} })
   if (detected.revision !== instance.persistedRevision) throw new Error('口播已更新，请重新检测重念。')
   if (!detected.energy) throw new Error('没有取得声音停顿证据，请重试。')
+  // 呼吸也是气口：换遍拼接、碎字判断都把它与停顿同等看待
+  const breaths = await detectProjectBreaths(document, false, requestId)
   const retakes = await detectAudioEditRetakesOffThread(document.transcript, {
-    sampleRate: document.source.sampleRate, pauses: detected.energy.pauses, referenceScript: document.referenceScript, ...(range ? { range } : {}),
+    sampleRate: document.source.sampleRate, pauses: detected.energy.pauses, referenceScript: document.referenceScript, ...(range ? { range } : {}), ...(breaths ? { breaths } : {}),
   })
   return retakes.map(audioEditRetakeSuggestion)
 }
@@ -99,12 +117,14 @@ export async function cleanProjectAudioEditRetakes(projectId: string, range?: Au
   }
 }
 
-export async function compressAudioEditSilence(projectId: string, range?: AudioEditRange, requestId: string = crypto.randomUUID(), includeFillers = false): Promise<{ count: number; shortenedMs: number; retakeCount: number }> {
+export async function compressAudioEditSilence(projectId: string, range?: AudioEditRange, requestId: string = crypto.randomUUID(), includeFillers = false): Promise<{ count: number; shortenedMs: number; retakeCount: number; breaths?: Record<'deleted' | 'attenuated' | 'muted' | 'kept', number> }> {
   return withAudioEditProjectOperation(projectId, async (instance, commit) => {
     const settings = instance.document.batchSettings ?? DEFAULT_AUDIO_EDIT_SETTINGS
     const before = editedDurationFrames(buildProjectAudioEditTimeline(instance.document))
-    // 快速处理（连带语气词）在有逐词转写时先去掉重念，再压缩停顿，整批一个撤销步骤
+    // 快速处理（连带语气词）在有逐词转写时先去掉重念，再压缩停顿、清理语气词、处理呼吸声，整批一个撤销步骤
     const retakes = includeFillers && hasWordTranscript(instance.document) && instance.document.transcript.length >= RETAKE_MIN_WORDS ? await detectRetakeSuggestions(instance, range, requestId) : []
+    const breaths = includeFillers && instance.document.transcript.length ? await detectProjectBreaths(instance.document, false, requestId) : undefined
+    let breathCounts: Record<'deleted' | 'attenuated' | 'muted' | 'kept', number> | undefined
     const detected = await getPlatform().audioEdit.detectSilence({ projectId, settings, range, requestId })
     if (detected.revision !== instance.persistedRevision) throw new Error('口播已更新，请重新分析停顿。')
     const appliedIds = new Set(instance.document.suggestions.filter((item) => item.status === 'applied').map((item) => item.id))
@@ -115,13 +135,35 @@ export async function compressAudioEditSilence(projectId: string, range?: AudioE
       draft = { ...draft, batchSettings: settings, suggestions: [...draft.suggestions.filter((item) => item.kind !== 'long_silence' || item.status !== 'pending'), ...suggestions] }
       for (const suggestion of suggestions) draft = applyAudioEditSuggestion(draft, suggestion.id)
       if (includeFillers) draft = cleanAudioEditFillers(draft, settings.fillers, range)
+      if (breaths) { const processed = applyAudioEditBreathPolicy(draft, breaths, 'delete', range); draft = processed.document; breathCounts = processed.counts }
       return draft
     })
     await flushAudioEditProject(projectId)
     return { count: detected.suggestions.filter((item) => !appliedIds.has(item.id) && next.suggestions.some((entry) => entry.id === item.id && entry.status === 'applied')).length,
       shortenedMs: Math.round((before - editedDurationFrames(buildProjectAudioEditTimeline(next))) * 1000 / next.source.sampleRate),
-      retakeCount: retakes.filter((item) => !appliedIds.has(item.id) && next.suggestions.some((entry) => entry.id === item.id && entry.status === 'applied')).length }
+      retakeCount: retakes.filter((item) => !appliedIds.has(item.id) && next.suggestions.some((entry) => entry.id === item.id && entry.status === 'applied')).length,
+      ...(breathCounts ? { breaths: breathCounts } : {}) }
   })
+}
+
+/** 按策略处理呼吸声（删除 / 减弱 / 静音 / 保留），默认删除时按上下文细分；替换此前的呼吸处理，用户逐处恢复过的不动。 */
+export async function processProjectAudioEditBreaths(projectId: string, policy: AudioEditBreathPolicy = 'delete', range?: AudioEditRange, requestId: string = crypto.randomUUID()): Promise<{ counts: Record<'deleted' | 'attenuated' | 'muted' | 'kept', number>; shortenedMs: number }> {
+  logger.info('audio_edit.breaths.start', { requestId, context: { projectId, policy, range: Boolean(range) } })
+  try {
+    const result = await withAudioEditProjectOperation(projectId, async (instance, commit) => {
+      const breaths = (await detectProjectBreaths(instance.document, true, requestId))!
+      const before = editedDurationFrames(buildProjectAudioEditTimeline(instance.document))
+      let counts = { deleted: 0, attenuated: 0, muted: 0, kept: 0 }
+      const next = commit((document) => { const processed = applyAudioEditBreathPolicy(document, breaths, policy, range); counts = processed.counts; return processed.document })
+      await flushAudioEditProject(projectId)
+      return { counts, shortenedMs: Math.round((before - editedDurationFrames(buildProjectAudioEditTimeline(next))) * 1000 / next.source.sampleRate) }
+    })
+    logger.info('audio_edit.breaths.completed', { requestId, context: { projectId, ...result.counts, shortenedMs: result.shortenedMs } })
+    return result
+  } catch (error) {
+    logger.error('audio_edit.breaths.failed', { requestId, context: { projectId }, error })
+    throw error
+  }
 }
 
 export async function quickProcessAudioEdit(projectId: string, range?: AudioEditRange, requestId: string = crypto.randomUUID()) {

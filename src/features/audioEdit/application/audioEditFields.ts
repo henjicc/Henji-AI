@@ -8,10 +8,12 @@ import { audioEditCutsSchema, audioEditSettingsSchema, audioEditFrameRateSchema,
 import { DEFAULT_AUDIO_EDIT_VIEW_SETTINGS } from '@/core/audioEdit/edits'
 import { hasAudioEditModifications } from '@/core/audioEdit/baseline'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
+import { setAudioEditBreathHandling, type AudioEditBreathView } from '@/core/audioEdit/breaths'
+import type { AudioBreath } from '@/core/audioAnalysis/breath/respiro'
 
-export const AUDIO_EDIT_ENTITY_TYPES = { project: 'audio_edit.document', transcriptBlock: 'audio_edit.transcript_block', suggestion: 'audio_edit.suggestion', processorChain: 'audio_edit.processor_chain', render: 'audio_edit.render' } as const
+export const AUDIO_EDIT_ENTITY_TYPES = { project: 'audio_edit.document', transcriptBlock: 'audio_edit.transcript_block', suggestion: 'audio_edit.suggestion', breath: 'audio_edit.breath', processorChain: 'audio_edit.processor_chain', render: 'audio_edit.render' } as const
 export type AudioEditEntityType = typeof AUDIO_EDIT_ENTITY_TYPES[keyof typeof AUDIO_EDIT_ENTITY_TYPES]
-export interface AudioEditFieldSource { document: AudioEditProjectDocument; childId: string; availableProcessors?: AudioEditProcessorDescriptor[] }
+export interface AudioEditFieldSource { document: AudioEditProjectDocument; childId: string; availableProcessors?: AudioEditProcessorDescriptor[]; breaths?: { views: AudioEditBreathView[]; raw: AudioBreath[] } }
 export function audioEditSchemaRef(kind: 'entity' | 'property', id: string) {
   const version = id === AUDIO_EDIT_ENTITY_TYPES.transcriptBlock || id.startsWith(`${AUDIO_EDIT_ENTITY_TYPES.transcriptBlock}.`) ? 2 : 1
   const value = [...(version === 1 ? id : `${id}:v${version}`)].reduce((total, char) => (total * 33 + char.charCodeAt(0)) >>> 0, 5381).toString(16)
@@ -21,6 +23,7 @@ function json(value: unknown): JsonValue { return JSON.parse(JSON.stringify(valu
 function string(value: unknown): string { if (typeof value !== 'string') throw new Error('INVALID_VALUE'); return value }
 function boolean(value: unknown): boolean { if (typeof value !== 'boolean') throw new Error('INVALID_VALUE'); return value }
 function block(source: AudioEditFieldSource) { const found = source.document.transcript.find((item) => item.id === source.childId); if (!found) throw new Error('NOT_FOUND'); return found }
+function breath(source: AudioEditFieldSource) { const found = source.breaths?.views.find((item) => item.id === source.childId); if (!found) throw new Error('NOT_FOUND'); return found }
 function suggestion(source: AudioEditFieldSource) { const found = source.document.suggestions.find((item) => item.id === source.childId); if (!found) throw new Error('NOT_FOUND'); return found }
 function field(entityType: AudioEditEntityType, suffix: string, title: string, value: ApplicationPropertyDescriptor['value'], read: (source: AudioEditFieldSource) => JsonValue, write?: (source: AudioEditFieldSource, value: JsonValue | undefined) => void, storeActions: string[] = []): ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource> {
   const id = `${entityType}.${suffix}`
@@ -74,6 +77,21 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
       else if (v === 'dismissed') { const next = dismissAudioEditSuggestion(s.document, item.id); if (next === s.document) throw new Error('这条线索已处理、隐藏、失效或受锁定保护'); s.document = next }
       else throw new Error('该建议不能重复应用或直接恢复状态，请撤销剪辑。')
     }, ['applySuggestion', 'dismissSuggestion']),
+  ],
+  [E.breath]: [
+    field(E.breath, 'document_id', '所属口播（口播文档 ID，分页读取时可按此筛选）', TEXT, (s) => s.document.id),
+    field(E.breath, 'start_frame', '开始采样帧（原素材时间，除以 sample_rate 得秒）', INT, (s) => breath(s).startFrame),
+    field(E.breath, 'end_frame', '结束采样帧（原素材时间）', INT, (s) => breath(s).endFrame),
+    field(E.breath, 'sample_rate', '时间戳采样率（每秒采样帧数）', INT, (s) => s.document.source.sampleRate),
+    field(E.breath, 'confidence', '检测置信度（0–100，模型给出的最高呼吸概率）', INT, (s) => Math.round(breath(s).peak * 100)),
+    field(E.breath, 'context', '所在位置', { kind: 'enum', values: [['sentence', '句与句之间'], ['clause', '句中（逗号处或没有标点）'], ['edge', '开头或结尾'], ['touching', '和字连在一起（识别的词时间盖住了大半口气）'], ['removed', '所在声音已被剪掉']].map(([value, label]) => ({ value, label })) }, (s) => breath(s).context),
+    field(E.breath, 'before', '前面保留的文字（最多 8 字）', TEXT, (s) => breath(s).before),
+    field(E.breath, 'after', '后面保留的文字（最多 8 字）', TEXT, (s) => breath(s).after),
+    field(E.breath, 'gap_ms', '前后两个词之间的空当（毫秒，含这口气）', INT, (s) => breath(s).gapMs),
+    field(E.breath, 'handling', '当前处理：deleted 删掉（两侧原有的安静保留）、attenuated 减弱 18 dB、muted 静音（保留时长）、kept 保留（之后批量处理也不再动）；removed 表示所在声音已被剪掉，不能写', { kind: 'enum', values: [['deleted', '删掉'], ['attenuated', '减弱'], ['muted', '静音'], ['kept', '保留'], ['removed', '已随剪辑去掉']].map(([value, label]) => ({ value, label })) }, (s) => breath(s).handling, (s, v) => {
+      if (v !== 'deleted' && v !== 'attenuated' && v !== 'muted' && v !== 'kept') throw new Error('handling 只能写 deleted、attenuated、muted 或 kept。')
+      s.document = setAudioEditBreathHandling(s.document, s.breaths?.raw ?? [], breath(s).id, v)
+    }),
   ],
   [E.processorChain]: [
     field(E.processorChain, 'vst_enabled', '声音处理试听', BOOL, (s) => s.document.vstEnabled, (s, v) => { s.document.vstEnabled = boolean(v) }, ['setVstEnabled']),

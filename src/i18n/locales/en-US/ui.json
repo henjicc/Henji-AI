@@ -182,6 +182,7 @@
     "audioQuickProcessed": "Processed pauses and selected filler words, shortening by {{seconds}} seconds. You can undo the batch.",
     "audioSilenceCompressed": "Processed {{count}} pauses, shortening by {{seconds}} seconds",
     "audioFillersCleaned": "Removed {{count}} filler words. You can undo or restore each one.",
+    "audioBreathsProcessed": "Breaths: removed {{deleted}}, softened {{attenuated}}, muted {{muted}}. You can undo or restore each one.",
     "selectTimelineClip": "Select a clip on the timeline first.",
     "effectUnavailable": "This effect cannot be added to the selected clips. Check clip types and track locks.",
     "canvasSaved": "Canvas saved. Check the existing nodes. You can undo in the canvas.",

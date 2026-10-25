@@ -14,6 +14,8 @@ import { getDocumentOperations } from '@/features/documents/documentOperations'
 import { AUDIO_EDIT_ENTITY_TYPES, AUDIO_EDIT_FIELDS, audioEditSchemaDocuments, audioEditSchemaRef as schemaRef, type AudioEditEntityType as EntityType } from './audioEditFields'
 import { fieldDescriptors, fieldReadValues } from '@/core/application-control'
 import { loadAudioEditProject, getAudioEditProjectInstance, getAudioEditRevision } from './audioEditProjectInstances'
+import { loadAudioEditBreaths } from './audioEditBreaths'
+import { describeAudioEditBreaths } from '@/core/audioEdit/breaths'
 export { AUDIO_EDIT_ENTITY_TYPES } from './audioEditFields'
 const propertiesByEntity = Object.fromEntries(Object.entries(AUDIO_EDIT_FIELDS).map(([key, fields]) => [key, fieldDescriptors(fields)])) as Record<EntityType, ApplicationPropertyDescriptor[]>
 
@@ -51,8 +53,13 @@ class AudioEditReflectionProvider implements ApplicationEntityProvider {
     // 口播级实体只要名称，不为列出而打开每一份口播；词块与线索才需要读内容
     const loaded: AudioEditProjectDocument[] = []
     if (!projectScoped) for (const summary of summaries) loaded.push(await project(summary.id))
-    const refs = projectScoped ? summaries.map((summary) => ({ kind: this.entityType, id: summary.id, label: summary.name })) : loaded.flatMap((document) => {
+    // 呼吸声在本机检测（按素材内容缓存）；没有转写的口播没有上下文，不列
+    const breathViews = this.entityType === AUDIO_EDIT_ENTITY_TYPES.breath
+      ? await Promise.all(loaded.map(async (document) => document.transcript.length ? describeAudioEditBreaths(document, await loadAudioEditBreaths(document)) : []))
+      : []
+    const refs = projectScoped ? summaries.map((summary) => ({ kind: this.entityType, id: summary.id, label: summary.name })) : loaded.flatMap((document, index) => {
       if (this.entityType === AUDIO_EDIT_ENTITY_TYPES.transcriptBlock) return document.transcript.map((block) => childRef(this.entityType, document.id, block.id, block.text))
+      if (this.entityType === AUDIO_EDIT_ENTITY_TYPES.breath) return breathViews[index].map((view) => childRef(this.entityType, document.id, view.id, `${view.before}｜${view.after}`))
       return document.suggestions.map((suggestion) => childRef(this.entityType, document.id, suggestion.id, suggestion.title))
     })
     const offset = Math.max(0, Number.parseInt(request.cursor ?? '0', 10) || 0)
@@ -96,7 +103,8 @@ class AudioEditReflectionProvider implements ApplicationEntityProvider {
     const ids = isProjectScoped ? { projectId: ref.id, childId: '' } : splitChild(ref)
     const document = await project(ids.projectId)
     const availableProcessors = this.entityType === AUDIO_EDIT_ENTITY_TYPES.processorChain ? await getPlatform().audioEdit.listProcessors() : undefined
-    return { document, values: fieldReadValues(AUDIO_EDIT_FIELDS[this.entityType], { document, childId: ids.childId, availableProcessors }) }
+    const breaths = this.entityType === AUDIO_EDIT_ENTITY_TYPES.breath ? await loadAudioEditBreaths(document) : undefined
+    return { document, values: fieldReadValues(AUDIO_EDIT_FIELDS[this.entityType], { document, childId: ids.childId, availableProcessors, ...(breaths ? { breaths: { raw: breaths, views: describeAudioEditBreaths(document, breaths) } } : {}) }) }
   }
 }
 
@@ -104,6 +112,7 @@ const entityMeta: Record<EntityType, { title: string; parents: EntityType[] }> =
   [AUDIO_EDIT_ENTITY_TYPES.project]: { title: '口播（文档内容根，id 即口播文档 ID）', parents: [] },
   [AUDIO_EDIT_ENTITY_TYPES.transcriptBlock]: { title: '转写词块', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
   [AUDIO_EDIT_ENTITY_TYPES.suggestion]: { title: '剪辑线索（辅助定位，非审批队列）', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
+  [AUDIO_EDIT_ENTITY_TYPES.breath]: { title: '呼吸声（本机模型检测，第一次读取时检测并可能下载约 13 MB 模型；逐处可改处理）', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
   [AUDIO_EDIT_ENTITY_TYPES.processorChain]: { title: '声音处理链', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
   [AUDIO_EDIT_ENTITY_TYPES.render]: { title: '成片映射', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
 }
