@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
 import { audioEditHistoryEntries, describeAudioEditStep } from './audioEditHistory'
+import { markAgentAuthoredStep } from '@/features/application-control/agentEditing'
 import { AUDIO_EDIT_LAYOUT_PRESETS, AUDIO_EDIT_PANELS, parseAudioEditLayout } from './audioEditDockLayout'
 
 const base: AudioEditProjectDocument = {
@@ -25,6 +26,12 @@ describe('音频编辑历史记录', () => {
     expect(entries.map(entry => [entry.label, entry.state, entry.steps])).toEqual([
       ['起点', 'done', 2], ['重命名', 'done', 1], ['重命名', 'current', 0], ['重命名', 'undone', -1],
     ])
+  })
+
+  it('助手做的步骤在名字前标出“助手”，撤销时知道撤的是谁的', () => {
+    const byAgent = { ...base, name: '助手改' }
+    markAgentAuthoredStep(byAgent)
+    expect(audioEditHistoryEntries([base], byAgent, []).map(entry => entry.label)).toEqual(['起点', '助手：重命名'])
   })
 })
 

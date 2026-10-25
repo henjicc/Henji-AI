@@ -25,7 +25,7 @@ function status(): McpStatus { return { enabled: server.listening, ready: host.r
 export function registerMcpIpc(): void {
   const { host: applicationHost, operations } = getApplicationRuntime()
   host = applicationHost
-  registerExternalApplicationAuthority((id) => connections.assertActive(id))
+  registerExternalApplicationAuthority((id) => connections.assertActive(id), (id) => connections.list().find(item => item.id === id)?.name)
   server = new LocalMcpServer(connections, host, (error) => logger.error('外部连接请求失败', { event: 'mcp.request.failed', error }), operations,
     (info) => logger.info('外部请求已通过授权', { event: 'mcp.request.authorized', context: { callerId: info.callerId } }),
     (info) => logger.warn('外部连接认证失败', { event: 'mcp.request.rejected', context: info }), getAgentMemoryStore())

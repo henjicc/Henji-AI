@@ -15,6 +15,7 @@ const embeddedCallers = new Map<string, ApplicationAccess>()
 const attachedEmbeddedCallers = new Set<string>()
 const retainedCallers = new Map<string, () => void>()
 let externalAuthority: ((id: string) => void) | undefined
+let externalName: ((id: string) => string | undefined) | undefined
 let runtime: { host: ApplicationHostBridge; operations: ApplicationOperationCoordinator; embedded: ApplicationToolDispatcher; reviewOperation(record: OperationRecord, open?: boolean): Promise<void> } | undefined
 
 /** 应用生命周期持有账本和宿主；协议适配器只提供调用者授权。 */
@@ -31,7 +32,7 @@ export function initializeApplicationRuntime() {
     if (embeddedCallers.has(id)) return
     if (!externalAuthority) throw new Error('调用者未获授权。')
     externalAuthority(id)
-  }, operations)
+  }, operations, id => embeddedCallers.has(id) ? { kind: 'embedded' } : { kind: 'external', ...(externalName?.(id) ? { name: externalName(id)!.slice(0, 80) } : {}) })
   const embedded = new ApplicationToolDispatcher({
     assertActive: id => { if (!embeddedCallers.has(id)) throw new Error('助手操作授权已结束。') },
     access: id => { const access = embeddedCallers.get(id); if (!access) throw new Error('助手操作授权已结束。'); return access },
@@ -61,7 +62,7 @@ export function getApplicationRuntime() {
   return runtime
 }
 
-export function registerExternalApplicationAuthority(authorize: (id: string) => void): void { externalAuthority = authorize }
+export function registerExternalApplicationAuthority(authorize: (id: string) => void, name?: (id: string) => string | undefined): void { externalAuthority = authorize; externalName = name }
 
 export function createEmbeddedApplicationClient(callerId: string, access: ApplicationAccess) {
   const { host, embedded, operations } = getApplicationRuntime()

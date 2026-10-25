@@ -8,6 +8,7 @@ import { useUiPrimaryBudget } from '@/components/ui/actionPriority'
 import { prefetchWhenIdle } from '@/utils/idlePrefetch'
 import { listPrefetchOrder, workspaceLoaders } from '../workspaces/workspaceLoaders'
 import { AppMenuVisibilityContext } from './appMenu/appMenuVisibility'
+import { AgentEditingGuard } from '@/features/application-control/AgentEditingGuard'
 
 // 懒加载工作区组件（loader 复用 workspaceLoaders，保证与空闲预取命中同一份模块缓存）
 const GenerationWorkspace = lazy(workspaceLoaders.generation)
@@ -37,6 +38,7 @@ const LoadingPlaceholder: React.FC = () => {
 const TabContainer: React.FC<TabContainerProps> = ({ containerRef, activeTab, insetLeft = 0, insetRight = 0 }) => {
     const [visitedTabs, setVisitedTabs] = useState<Set<WorkspaceId>>(() => new Set([activeTab]))
     const initialTabRef = useRef(activeTab)
+    const workspaceRef = useRef<HTMLDivElement>(null)
     useUiPrimaryBudget(containerRef)
 
     useEffect(() => {
@@ -63,39 +65,42 @@ const TabContainer: React.FC<TabContainerProps> = ({ containerRef, activeTab, in
                 transitionDuration: `var(--assistant-layout-transition-duration, ${UI_DURATION.base}ms)`,
             }}
         >
-            {visitedTabs.has('generation') && (
-                <div data-application-surface-id="workspace.generation" className={activeTab === 'generation' ? 'h-full' : 'hidden'}>
-                    <Suspense fallback={<LoadingPlaceholder />}>
-                        <AppMenuVisibilityContext.Provider value={activeTab === 'generation'}><GenerationWorkspace /></AppMenuVisibilityContext.Provider>
-                    </Suspense>
-                </div>
-            )}
-            {visitedTabs.has('nodes') && (
-                <div data-application-surface-id="workspace.canvas" className={activeTab === 'nodes' ? 'h-full' : 'hidden'}>
-                    <Suspense fallback={<LoadingPlaceholder />}>
-                        <AppMenuVisibilityContext.Provider value={activeTab === 'nodes'}><CanvasWorkspace /></AppMenuVisibilityContext.Provider>
-                    </Suspense>
-                </div>
-            )}
-            {visitedTabs.has('tools') && (
-                <div data-application-surface-id="workspace.tools" className={activeTab === 'tools' ? 'h-full' : 'hidden'}>
-                    <Suspense fallback={<LoadingPlaceholder />}>
-                        <AppMenuVisibilityContext.Provider value={activeTab === 'tools'}><ToolboxWorkspace /></AppMenuVisibilityContext.Provider>
-                    </Suspense>
-                </div>
-            )}
-            {activeTab === 'videoEdit' && (
-                <div data-application-surface-id="workspace.video_edit" className="h-full">
-                    <Suspense fallback={<LoadingPlaceholder />}><VideoEditWorkspace /></Suspense>
-                </div>
-            )}
-            {visitedTabs.has('assets') && (
-                <div data-application-surface-id="workspace.assets" className={activeTab === 'assets' ? 'h-full' : 'hidden'}>
-                    <Suspense fallback={<LoadingPlaceholder />}>
-                        <AppMenuVisibilityContext.Provider value={activeTab === 'assets'}><AssetLibraryWorkspace /></AppMenuVisibilityContext.Provider>
-                    </Suspense>
-                </div>
-            )}
+            <div ref={workspaceRef} className="relative h-full">
+                {visitedTabs.has('generation') && (
+                    <div data-application-surface-id="workspace.generation" className={activeTab === 'generation' ? 'h-full' : 'hidden'}>
+                        <Suspense fallback={<LoadingPlaceholder />}>
+                            <AppMenuVisibilityContext.Provider value={activeTab === 'generation'}><GenerationWorkspace /></AppMenuVisibilityContext.Provider>
+                        </Suspense>
+                    </div>
+                )}
+                {visitedTabs.has('nodes') && (
+                    <div data-application-surface-id="workspace.canvas" className={activeTab === 'nodes' ? 'h-full' : 'hidden'}>
+                        <Suspense fallback={<LoadingPlaceholder />}>
+                            <AppMenuVisibilityContext.Provider value={activeTab === 'nodes'}><CanvasWorkspace /></AppMenuVisibilityContext.Provider>
+                        </Suspense>
+                    </div>
+                )}
+                {visitedTabs.has('tools') && (
+                    <div data-application-surface-id="workspace.tools" className={activeTab === 'tools' ? 'h-full' : 'hidden'}>
+                        <Suspense fallback={<LoadingPlaceholder />}>
+                            <AppMenuVisibilityContext.Provider value={activeTab === 'tools'}><ToolboxWorkspace /></AppMenuVisibilityContext.Provider>
+                        </Suspense>
+                    </div>
+                )}
+                {activeTab === 'videoEdit' && (
+                    <div data-application-surface-id="workspace.video_edit" className="h-full">
+                        <Suspense fallback={<LoadingPlaceholder />}><VideoEditWorkspace /></Suspense>
+                    </div>
+                )}
+                {visitedTabs.has('assets') && (
+                    <div data-application-surface-id="workspace.assets" className={activeTab === 'assets' ? 'h-full' : 'hidden'}>
+                        <Suspense fallback={<LoadingPlaceholder />}>
+                            <AppMenuVisibilityContext.Provider value={activeTab === 'assets'}><AssetLibraryWorkspace /></AppMenuVisibilityContext.Provider>
+                        </Suspense>
+                    </div>
+                )}
+                <AgentEditingGuard containerRef={workspaceRef} />
+            </div>
         </div>
     )
 }

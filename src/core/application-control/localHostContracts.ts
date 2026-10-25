@@ -17,6 +17,8 @@ export const localHostRequestSchema = z.object({
   allowWrites: z.boolean().optional(), allowDestructive: z.boolean().optional(), allowPaid: z.boolean().optional(), operationId: z.string().uuid().optional(),
   expectedRevisions: z.record(z.string(), z.number()).optional(),
   reviewTarget: z.boolean().optional(),
+  /** 谁在操作：供界面标出“助手正在编辑”；内置助手只有类型，外部连接带用户起的名字。不参与授权。 */
+  caller: z.object({ kind: z.enum(['embedded', 'external']), name: z.string().min(1).max(80).optional() }).strict().optional(),
   paidGenerationEstimate: z.number().nonnegative().nullable().optional(),
   recoveryVerification: z.object({ conditions: z.array(applicationVerificationConditionSchema).max(256), evidence: z.array(applicationEvidenceSchema).max(256) }).optional(),
   /** 可信宿主只读核对：取回原执行回执，不重放业务。 */

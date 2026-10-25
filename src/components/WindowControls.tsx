@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import { AgentEditingStatus } from '@/features/application-control/AgentEditingGuard'
 import React from 'react'
 import { useI18n } from '@/hooks/useI18n'
 import { UiChipButton, UiIconButton, UiWindowControl } from '@/components/ui'
@@ -203,8 +204,9 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
         })}
       </nav>
 
-      <div className="flex flex-1 items-center justify-end">
-        <div className="flex items-center gap-0.5" style={noDragRegionStyle} data-window-nodrag>
+      <div className="flex min-w-0 flex-1 items-center justify-end">
+        <div className="flex min-w-0 items-center gap-0.5" style={noDragRegionStyle} data-window-nodrag>
+          <AgentEditingStatus />
           {onAssistantClick && (
             <UiIconButton
               type="button"

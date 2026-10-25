@@ -645,6 +645,18 @@
     "assistant": "Assistant",
     "workspaceNav": "Workspaces"
   },
+  "agentEditing": {
+    "embedded": "Built-in assistant",
+    "external": "External assistant",
+    "externalNamed": "External assistant “{{name}}”",
+    "editing": "{{who}} is editing “{{document}}”",
+    "asking": "{{who}} is editing this document. Take over? It will stop changing it until you hand it back.",
+    "takeOver": "Take over",
+    "wait": "Wait",
+    "takenOver": "You took over “{{document}}”",
+    "release": "Hand back",
+    "releaseHint": "Let the assistant continue editing this document"
+  },
   "updateDialog": {
     "title": "New Version Available",
     "noNotes": "No release notes available",

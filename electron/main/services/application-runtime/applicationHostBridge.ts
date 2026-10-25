@@ -46,7 +46,8 @@ export class ApplicationHostBridge {
       else check()
     })
   }
-  constructor(private readonly assertAuthorized: (callerId: string) => void, private readonly operations?: ApplicationOperationCoordinator) {}
+  constructor(private readonly assertAuthorized: (callerId: string) => void, private readonly operations?: ApplicationOperationCoordinator,
+    private readonly describeCaller?: (callerId: string) => LocalHostRequest['caller']) {}
   get rendererEpoch(): string { return this.host?.registration.rendererEpoch ?? '' }
   get ready(): boolean { return this.host?.registration.ready === true }
   publishReviews(open?: { operationId: string; callerId: string }): void {
@@ -208,7 +209,7 @@ export class ApplicationHostBridge {
           allowWrites: options.allowWrites, allowDestructive: options.allowDestructive, allowPaid: options.allowPaid,
           operationId: options.operation ? applicationInvocationId(callerId, options.operation.operationId) : undefined, expectedRevisions: options.operation?.expectedRevisions,
           paidGenerationEstimate: options.operation?.paidGenerationEstimate,
-          reviewTarget: options.reviewTarget, recoveryVerification: options.operation?.recoveryVerification ?? options.recoveryVerification, recoveryOperation: options.operation?.recoveryOperation ?? options.recoveryOperation } satisfies LocalHostRequest)
+          reviewTarget: options.reviewTarget, caller: this.describeCaller?.(callerId), recoveryVerification: options.operation?.recoveryVerification ?? options.recoveryVerification, recoveryOperation: options.operation?.recoveryOperation ?? options.recoveryOperation } satisfies LocalHostRequest)
       } catch (error) {
         this.operations?.interrupted(requestId, host.registration.rendererEpoch)
         this.pending.get(requestId)?.cleanup()

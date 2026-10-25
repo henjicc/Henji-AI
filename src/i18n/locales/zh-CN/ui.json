@@ -645,6 +645,18 @@
     "assistant": "智能助手",
     "workspaceNav": "工作区"
   },
+  "agentEditing": {
+    "embedded": "内置助手",
+    "external": "外部助手",
+    "externalNamed": "外部助手「{{name}}」",
+    "editing": "{{who}}正在编辑「{{document}}」",
+    "asking": "{{who}}正在编辑这份文档。要接管吗？接管后它会停止修改，交还后才能继续。",
+    "takeOver": "接管",
+    "wait": "先等等",
+    "takenOver": "你已接管「{{document}}」",
+    "release": "交还助手",
+    "releaseHint": "交还后助手可以继续修改这份文档"
+  },
   "updateDialog": {
     "title": "发现新版本",
     "noNotes": "暂无更新说明",

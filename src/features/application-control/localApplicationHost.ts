@@ -14,6 +14,7 @@ import { APPLICATION_DOMAINS } from './applicationDomains'
 import { creativeIntentPrivateAccess } from './creativeIntentAuthorization'
 import { bindApplicationConfirmation } from '@/core/application-control/userConfirmation'
 import { assertApplicationCallerGrant } from '@/core/application-control/callerContext'
+import { agentEditDocumentIds, beginAgentEdit } from './agentEditing'
 
 const logger = createLogger('features.application_control.host')
 // 与宿主附件生命周期分开；发送回执失败或同一渲染器重新连接后，核对仍读原执行事实。
@@ -74,8 +75,13 @@ export function attachLocalApplicationHost(platform: ApplicationHostPlatform, re
           await requestAlertConfirmation({ title: definition.title, message: '将使用已配置的模型生成内容。', confirmLabel: '允许本次',
             paid: await applicationPaidRequest('generation', documentId, controller.signal, request.data.paidGenerationEstimate ?? null) }, controller.signal)
         }
+        // 助手动手的那份文档在界面上标出并暂时锁住；用户已接管时直接拒绝，不进入执行
+        const endAgentEdit = !readOnly && request.data.caller
+          ? beginAgentEdit(agentEditDocumentIds(definition, input, request.data.operationId ?? requestId), request.data.caller) : undefined
         dispatched = true
-        result = await createApplicationCapabilitySession(grant).execute({ id: capabilityId, version: definition.version, input, expectedRevisions }, { requestId: request.data.operationId ?? requestId, signal: controller.signal })
+        try {
+          result = await createApplicationCapabilitySession(grant).execute({ id: capabilityId, version: definition.version, input, expectedRevisions }, { requestId: request.data.operationId ?? requestId, signal: controller.signal })
+        } finally { endAgentEdit?.() }
         if (result.ok === true && request.data.reviewTarget && capabilityId === 'read_application_entity') {
           const ref = input.ref as ApplicationRef
           const summary = APPLICATION_DOMAINS.map(domain => domain.reviewTarget?.(ref)).find(Boolean)

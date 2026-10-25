@@ -1,4 +1,5 @@
 import { assertAudioEditLocks } from '@/core/audioEdit/edits'
+import { isAgentWritingDocument, markAgentAuthoredStep } from '@/features/application-control/agentEditing'
 import { restoreAudioEditBaseline } from '@/core/audioEdit/baseline'
 import {
   AudioEditSourceMissingError, isEmptyAudioEditSource,
@@ -314,6 +315,7 @@ function commitEdit(record: InstanceRecord, next: AudioEditProjectDocument): Aud
     instance.future = []
   }
   instance.document = { ...next, revision: instance.document.revision + 1 }
+  if (isAgentWritingDocument(instance.document.id)) markAgentAuthoredStep(instance.document)
   catalogRevision += 1
   instance.version += 1
   publish(instance)
@@ -373,6 +375,7 @@ export function acceptAudioEditNativeResult(id: string, document: AudioEditProje
   instance.past = [...instance.past.slice(-49), instance.document]
   instance.future = []
   instance.document = { ...document, id: instance.document.id, name: instance.document.name, revision: instance.document.revision + 1 }
+  if (isAgentWritingDocument(instance.document.id)) markAgentAuthoredStep(instance.document)
   catalogRevision += 1
   instance.version += 1
   publish(instance)

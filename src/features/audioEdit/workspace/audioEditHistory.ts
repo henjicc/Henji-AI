@@ -1,4 +1,5 @@
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
+import { isAgentAuthoredStep } from '@/features/application-control/agentEditing'
 
 /*
  * 历史记录面板的步骤名：撤销栈只存作品快照，这里比较相邻两份快照，说出这一步改了什么。
@@ -47,7 +48,8 @@ export function audioEditHistoryEntries(past: readonly AudioEditProjectDocument[
   const timeline = [...past, current, ...future]
   const currentIndex = past.length
   return timeline.map((document, index) => ({
-    label: index === 0 ? '起点' : describeAudioEditStep(timeline[index - 1], document),
+    // 人和助手在同一个撤销栈里：助手做的步骤标出来，撤销时知道撤的是谁的
+    label: index === 0 ? '起点' : `${isAgentAuthoredStep(document) ? '助手：' : ''}${describeAudioEditStep(timeline[index - 1], document)}`,
     state: index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'undone',
     steps: currentIndex - index,
   }))
