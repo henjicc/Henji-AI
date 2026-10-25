@@ -1,12 +1,13 @@
 import { videoEditFft } from '@/core/videoEdit/fft'
-export { videoEditFft } from '@/core/videoEdit/fft'
 import { resolveVideoEditBuiltinParams, type VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
-import type { VideoEditBuiltinEffect } from '@/core/videoEdit/compositing'
 // 静态引入：剪辑渲染工作线程按 IIFE 打包，不能拆出动态分块。模块求值只定义函数，模型与 WebAssembly 到第一次用降噪时才解码。
 import { Rnnoise } from '@shiguredo/rnnoise-wasm'
 
+/** 效果链里的一个效果：内置效果 id 与参数、效果强度（干湿比 0–1）。剪辑片段的效果与音频编辑的效果组都是这个形状。 */
+export interface AudioEffectInstance { readonly id: string; readonly builtin: { readonly id: string; readonly params: Readonly<Record<string, unknown>> }; readonly amount: number }
+
 /**
- * 音频内置效果的处理（任务 4.7c）：剪辑混音里逐片段、按效果链顺序处理声音，预览与导出是同一份代码（同一个混音函数）。
+ * 音频内置效果的处理（任务 4.7c）：剪辑混音逐片段、音频编辑的效果组都按效果链顺序处理声音，预览与导出是同一份代码。
  * - 全部是确定性的逐样本运算（不经 WebAudio 节点，避免不同设备的实现差异与离线/实时两套路径）：同一输入在任何分块下结果逐样本一致。
  * - 每个处理器声明固定延迟（样本数，降噪、音调变换、限幅器的预判），效果链把延迟累加，由混音多读后面的素材抵消，输出与画面对齐；
  *   效果强度（干湿比）与“降噪强度”混入的原声也按同样延迟对齐，不会梳状失真。
@@ -34,7 +35,7 @@ const smoothing = (seconds: number, rate: number): number => Math.exp(-1 / Math.
 type BiquadKind = 'lowpass' | 'highpass' | 'peaking' | 'lowshelf' | 'highshelf' | 'notch'
 interface BiquadSpec { kind: BiquadKind; frequency: number; q: number; gain?: number }
 interface Coefficients { b0: number; b1: number; b2: number; a1: number; a2: number }
-export function videoEditBiquadCoefficients(spec: BiquadSpec, rate: number): Coefficients {
+export function audioBiquadCoefficients(spec: BiquadSpec, rate: number): Coefficients {
   const frequency = Math.min(Math.max(spec.frequency, 10), rate * 0.45)
   const w0 = 2 * Math.PI * frequency / rate; const cos = Math.cos(w0); const sin = Math.sin(w0)
   const A = 10 ** ((spec.gain ?? 0) / 40)
@@ -66,7 +67,7 @@ class FilterCascade implements AudioProcessor {
   private state: Float64Array[] = []
   constructor(private readonly rate: number, private readonly channels: number, private readonly specs: (params: VideoEditBuiltinParams, rate: number) => BiquadSpec[]) {}
   update(params: VideoEditBuiltinParams): void {
-    const next = this.specs(params, this.rate).map(spec => videoEditBiquadCoefficients(spec, this.rate))
+    const next = this.specs(params, this.rate).map(spec => audioBiquadCoefficients(spec, this.rate))
     // 滤波器个数变了（换预设、换坡度）才清空状态；只改增益或频率时保留状态，拖动参数不爆音。
     if (next.length !== this.coefficients.length) this.state = Array.from({ length: this.channels }, () => new Float64Array(next.length * 2))
     this.coefficients = next
@@ -120,7 +121,7 @@ class GainBalance implements AudioProcessor {
 
 // —— 压缩器：前馈、声道联动峰值检测、6 dB 软拐点，增益在 dB 域平滑 ——
 const COMPRESSOR_SPEEDS: Record<string, [number, number]> = { fast: [0.002, 0.06], normal: [0.01, 0.15], slow: [0.03, 0.4] }
-export function videoEditCompressorCurve(amount: number): { threshold: number; ratio: number; makeup: number } {
+export function audioCompressorCurve(amount: number): { threshold: number; ratio: number; makeup: number } {
   const threshold = -0.4 * amount; const ratio = 1 + 0.07 * amount
   return { threshold, ratio, makeup: -threshold * (1 - 1 / ratio) / 2 }
 }
@@ -130,7 +131,7 @@ class Compressor implements AudioProcessor {
   private envelope = 0
   constructor(private readonly rate: number) {}
   update(params: VideoEditBuiltinParams): void {
-    const curve = videoEditCompressorCurve(params.amount as number)
+    const curve = audioCompressorCurve(params.amount as number)
     this.threshold = curve.threshold; this.ratio = curve.ratio; this.makeup = params.makeup ? curve.makeup : 0
     const [attack, release] = COMPRESSOR_SPEEDS[params.speed as string] ?? COMPRESSOR_SPEEDS.normal
     this.attack = smoothing(attack, this.rate); this.release = smoothing(release, this.rate)
@@ -210,7 +211,7 @@ class DeEsser implements AudioProcessor {
   update(params: VideoEditBuiltinParams): void {
     const amount = (params.amount as number) / 100
     const frequency = Math.min(params.frequency as number, this.rate * 0.45)
-    this.detector = videoEditBiquadCoefficients({ kind: 'highpass', frequency, q: Math.SQRT1_2 }, this.rate)
+    this.detector = audioBiquadCoefficients({ kind: 'highpass', frequency, q: Math.SQRT1_2 }, this.rate)
     const w0 = 2 * Math.PI * frequency / this.rate; this.cos = Math.cos(w0); this.alpha = Math.sin(w0) / 2 * Math.SQRT2
     this.threshold = -6 - amount * 14; this.maxCut = amount * 18
   }
@@ -365,10 +366,10 @@ function loadRnnoise(): Promise<RnnoiseModule> {
   return rnnoise
 }
 /** RNNoise 自身输出比输入晚两帧（960 样本，实测）；再加上凑满一帧的缓冲（480）。 */
-export const VIDEO_EDIT_RNNOISE_LATENCY = 1440
+export const AUDIO_RNNOISE_LATENCY = 1440
 const PCM_SCALE = 32768
 class NoiseReduction implements AudioProcessor {
-  readonly latency = VIDEO_EDIT_RNNOISE_LATENCY
+  readonly latency = AUDIO_RNNOISE_LATENCY
   private strength = 0.8
   private readonly lanes: Array<{ state: RnnoiseState; input: Float32Array; output: Float32Array }>
   private position = 0
@@ -434,7 +435,7 @@ const PREROLL_SECONDS: Record<string, number> = { reverb: 2, noise_reduction: 0.
  * 一个声音片段的音频效果链：按效果顺序串联处理，声明总延迟与预读长度；`nextSample` 记下一块应从序列哪个样本开始，
  * 混音据此判断是否连续（连续时延续状态，否则由调用方 `reset` 并预读）。
  */
-export class VideoEditAudioEffectChain {
+export class AudioEffectChain {
   private stages: Stage[] = []
   private signature = ''
   /** 下一块连续输出应从这个序列样本开始；未开始或已重置时为 undefined。 */
@@ -446,7 +447,7 @@ export class VideoEditAudioEffectChain {
    * 对齐到当前效果链：效果的增删、换序或启停（结构变化）时重建并清空状态；只改参数与强度时原地更新，播放中拖动参数不中断。
    * 返回是否重建。（变速保持音调不在这里：由拉伸器在读源时完成，见 videoEditTimeStretch.ts。）
    */
-  async sync(effects: readonly VideoEditBuiltinEffect[]): Promise<boolean> {
+  async sync(effects: readonly AudioEffectInstance[]): Promise<boolean> {
     const signature = effects.map(effect => `${effect.id}:${effect.builtin.id}`).join('|')
     let rebuilt = false
     if (signature !== this.signature) {
@@ -462,9 +463,9 @@ export class VideoEditAudioEffectChain {
     return rebuilt
   }
   /** 清空状态（重建全部处理器，参数保留）。 */
-  async reset(effects: readonly VideoEditBuiltinEffect[]): Promise<void> { this.signature = ''; await this.sync(effects) }
+  async reset(effects: readonly AudioEffectInstance[]): Promise<void> { this.signature = ''; await this.sync(effects) }
   /** 原地处理；输出比输入晚 `latency` 个样本。 */
-  process(channels: Float32Array[], length: number, automation?: (sample: number) => readonly VideoEditBuiltinEffect[]): void {
+  process(channels: Float32Array[], length: number, automation?: (sample: number) => readonly AudioEffectInstance[]): void {
     if (automation) {
       // Reuse single-sample buffers; state and delay lines persist between samples and blocks.
       const one = channels.map(() => new Float32Array(1))
@@ -473,7 +474,7 @@ export class VideoEditAudioEffectChain {
         const effects = automation(sample)
         for (const stage of this.stages) {
           const effect = effects.find(effect => effect.id === stage.effectId)
-          if (effect) { stage.processor.update(effect.builtin.params); stage.amount = effect.amount }
+          if (effect) { stage.processor.update(effect.builtin.params as VideoEditBuiltinParams); stage.amount = effect.amount }
         }
         one.forEach((data, channel) => { data[0] = channels[channel][sample] })
         for (const stage of this.stages) {
@@ -505,7 +506,7 @@ export class VideoEditAudioEffectChain {
  * 一个混音块要喂给效果链的输入范围：输出要覆盖序列样本 [first, first+length)。连续时只读 [first+L, first+length+L)；
  * 不连续时从 first-预读 开始读，丢掉前面 预读+L 个输出。L 为效果链延迟。
  */
-export function planVideoEditAudioEffectBlock(chain: Pick<VideoEditAudioEffectChain, 'nextSample' | 'latency' | 'preroll'>, first: number, length: number): { contiguous: boolean; inputStart: number; inputLength: number; discard: number } {
+export function planAudioEffectBlock(chain: Pick<AudioEffectChain, 'nextSample' | 'latency' | 'preroll'>, first: number, length: number): { contiguous: boolean; inputStart: number; inputLength: number; discard: number } {
   const latency = chain.latency
   if (chain.nextSample === first) return { contiguous: true, inputStart: first + latency, inputLength: length, discard: 0 }
   const preroll = chain.preroll

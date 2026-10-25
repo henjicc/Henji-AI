@@ -6,14 +6,14 @@
  * - 实现只有一份：剪辑混音里的确定性处理（`features/videoEdit/engine/videoEditAudioEffects.ts`），预览与导出同一路径。
  * 只用类型引用 `builtinEffects.ts`，避免两个登记文件互相引用值。
  */
-import type { VideoEditBuiltinEffectDefinition, VideoEditBuiltinParam } from './builtinEffects'
+import type { VideoEditBuiltinEffectDefinition, VideoEditBuiltinParam } from '@/core/videoEdit/builtinEffects'
 
 const number = (key: string, name: string, unit: 'strength' | 'decibels' | 'hertz' | 'semitones', range: [number, number, number], fallback: number, tooltip: string, description: string): VideoEditBuiltinParam => ({ key, name, type: 'number', unit, min: range[0], max: range[1], step: range[2], default: fallback, tooltip, description })
 const strength = (key: string, name: string, fallback: number, tooltip: string, description: string): VideoEditBuiltinParam => number(key, name, 'strength', [0, 100, 1], fallback, tooltip, description)
 const band = (key: string, name: string, tooltip: string, description: string): VideoEditBuiltinParam => number(key, name, 'decibels', [-12, 12, 0.5], 0, tooltip, description)
 const slope: VideoEditBuiltinParam = { key: 'slope', name: '坡度', type: 'enum', default: 'gentle', options: [{ value: 'gentle', label: '平缓' }, { value: 'steep', label: '陡峭' }], tooltip: '陡峭时截止频率外的声音去得更干净，平缓时过渡更自然', description: 'gentle（默认）每倍频程衰减 12 dB，过渡自然；steep 每倍频程 24 dB，截止频率外的声音去得更彻底。' }
 
-export const VIDEO_EDIT_AUDIO_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [
+export const AUDIO_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [
   { id: 'parametric_eq', name: '参数均衡', group: 'audio_eq', media: 'audio', tooltip: '调整低、中、高频的强弱，或一键套用“人声更清楚”“去低频嗡声”等预设', description: '三段均衡加常用预设：让人声更清楚、去掉电源嗡声、让声音更温暖或更明亮。预设与三段增益叠加；全部为 0 且无预设时声音不变。',
     params: [
       { key: 'preset', name: '预设', type: 'enum', default: 'none', options: [{ value: 'none', label: '无' }, { value: 'voice_clarity', label: '人声更清楚' }, { value: 'remove_hum', label: '去低频嗡声' }, { value: 'warm', label: '更温暖' }, { value: 'bright', label: '更明亮' }], tooltip: '一键套用常用的均衡曲线，下面三段可在此基础上再调', description: 'none（默认）只用下面三段；voice_clarity 切掉 80 Hz 以下低频、削弱 250 Hz 附近的浑浊感、提升 3 kHz 清晰度，适合对白与旁白；remove_hum 去掉 50/60 Hz 电源嗡声及其倍频并切掉 40 Hz 以下的低频隆隆声；warm 提升低频、略降高频，声音更厚更柔；bright 提升高频，声音更通透。' },

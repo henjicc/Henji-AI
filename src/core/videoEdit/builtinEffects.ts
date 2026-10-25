@@ -7,7 +7,7 @@
  * 存入片段效果链 `clip.effects` 时只记 `{ id, params }`；缺的参数按默认值，旧文件没有这个字段不受影响。
  */
 import { VIDEO_EDIT_CHROMA_KEY_DEFAULT_HEX } from '../theme/colorTokens'
-import { VIDEO_EDIT_AUDIO_EFFECT_DEFINITIONS } from './audioEffectDefinitions'
+import { AUDIO_EFFECT_DEFINITIONS } from '@/core/audio/effects/audioEffectDefinitions'
 import { VIDEO_EDIT_COLOR_GRADE } from './colorGrade'
 import { parseColorGradeCurve } from './colorGradeCurves'
 import { GLOW_PRO_EFFECT_DEFINITION } from './glowPro'
@@ -129,7 +129,7 @@ const VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefini
   RECORDING_FRAME_DEFINITION,
 ]
 /** 全部内置效果：画面效果在前，音频效果（4.7c）在后。 */
-export const VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [...VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS, GLOW_PRO_EFFECT_DEFINITION, ...SHADER_GRAPH_EFFECT_DEFINITIONS, ...VIDEO_EDIT_AUDIO_EFFECT_DEFINITIONS]
+export const VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [...VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS, GLOW_PRO_EFFECT_DEFINITION, ...SHADER_GRAPH_EFFECT_DEFINITIONS, ...AUDIO_EFFECT_DEFINITIONS]
 
 const definitions = new Map(VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => [definition.id, definition]))
 export function videoEditBuiltinEffect(id: string): VideoEditBuiltinEffectDefinition | undefined { return definitions.get(id) }

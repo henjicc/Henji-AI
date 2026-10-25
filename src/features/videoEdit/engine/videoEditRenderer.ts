@@ -30,7 +30,7 @@ import { videoEditRenderedFrameInterpolation } from '@/core/videoEdit/timeRemap'
 import { videoEditCaptionClips } from '@/core/videoEdit/timedContent'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import { VideoEditFrameCache } from './videoEditFrameCache'
-import { planVideoEditAudioEffectBlock, VideoEditAudioEffectChain } from './videoEditAudioEffects'
+import { planAudioEffectBlock, AudioEffectChain } from '@/core/audio/effects/audioEffectChain'
 import { VideoEditGpuFrame, videoEditGpuFrameUsesChroma } from './videoEditGpuFrame'
 import type { VideoEditCodeSources } from './videoEditCodeSources'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
@@ -1121,7 +1121,7 @@ export class VideoEditRenderer {
     return { canvas: this.canvas, ...(nestedPicture ? { nestedPicture } : {}), sourceTimestamps: timestamps, blankPictures, singleFrameReads, cacheHits, cacheBytes: this.frameCache.bytes, presented, renderCached: !!cachedWindow, decodeMs, gpuMs, effectErrors, ...(approximatePictures ? { approximate: true } : {}), completion }
   }
   /** 声音片段的音频效果链（4.7c），按片段 ID；状态跨混音块延续，本块没用到的片段释放。 */
-  private readonly audioChains = new Map<string, VideoEditAudioEffectChain>()
+  private readonly audioChains = new Map<string, AudioEffectChain>()
   /** 帧混合的结果画面，按片段 ID（下一帧替换时释放）。 */
   private readonly blendedPictures = new Map<string, VideoEditGpuFrame>()
   /**
@@ -1294,10 +1294,10 @@ export class VideoEditRenderer {
       // 音频效果（4.7c）：片段音量在效果之前（限幅器的上限不被音量推高），淡化与过渡在效果之后；效果链有延迟时多读后面的素材抵消，
       // 块不连续时从前面预读一段让状态稳定。预览与导出都走这里，连续播放时与分块方式无关、逐样本一致。
       let chain = this.audioChains.get(clip.id)
-      if (!chain || chain.rate !== rate || chain.channels !== this.document.channels) { chain?.dispose(); chain = new VideoEditAudioEffectChain(rate, this.document.channels); this.audioChains.set(clip.id, chain) }
+      if (!chain || chain.rate !== rate || chain.channels !== this.document.channels) { chain?.dispose(); chain = new AudioEffectChain(rate, this.document.channels); this.audioChains.set(clip.id, chain) }
       activeChains.add(clip.id)
       const rebuilt = await chain.sync(effects)
-      const plan = planVideoEditAudioEffectBlock(chain, firstSample, length)
+      const plan = planAudioEffectBlock(chain, firstSample, length)
       if (!plan.contiguous && !rebuilt) await chain.reset(effects)
       const input = Array.from({ length: this.document.channels }, () => new Float32Array(plan.inputLength))
       const readFrom = Math.max(plan.inputStart / rate, playStart, headRoom); const readTo = Math.min((plan.inputStart + plan.inputLength) / rate, playEnd)

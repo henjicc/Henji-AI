@@ -2,7 +2,8 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { sampleDifference } from '../../../../scripts/lib/sampleDifference'
 import type { VideoEditBuiltinEffect } from '@/core/videoEdit/compositing'
 import { normalizeVideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
-import { planVideoEditAudioEffectBlock, VideoEditAudioEffectChain, videoEditCompressorCurve, videoEditFft, VIDEO_EDIT_RNNOISE_LATENCY } from './videoEditAudioEffects'
+import { videoEditFft } from '@/core/videoEdit/fft'
+import { planAudioEffectBlock, AudioEffectChain, audioCompressorCurve, AUDIO_RNNOISE_LATENCY } from './audioEffectChain'
 
 const RATE = 48000
 function expectSamples(actual: ArrayLike<number>, expected: ArrayLike<number> | ((index: number) => number), precision?: number): void {
@@ -18,7 +19,7 @@ const sine = (frequency: number, amplitude: number, length: number, phase = 0): 
 const stereo = (left: Float32Array, right = left): Float32Array[] => [Float32Array.from(left), Float32Array.from(right)]
 /** 跑一条效果链（一次处理全部样本）。 */
 async function run(effects: VideoEditBuiltinEffect[], input: Float32Array[]): Promise<{ output: Float32Array[]; latency: number }> {
-  const chain = new VideoEditAudioEffectChain(RATE, input.length)
+  const chain = new AudioEffectChain(RATE, input.length)
   await chain.sync(effects)
   const output = input.map(channel => Float32Array.from(channel))
   chain.process(output, output[0].length)
@@ -66,7 +67,7 @@ describe('音频内置效果的逐样本处理（4.7c）', () => {
     expectSamples(half[0], index => left[index] * 1.5, 6)
   })
   it('压缩器：按压缩量的阈值与比率压低大声并自动补偿；小声只被补偿抬高', async () => {
-    const curve = videoEditCompressorCurve(40)
+    const curve = audioCompressorCurve(40)
     expect(curve.threshold).toBe(-16); expect(curve.ratio).toBeCloseTo(3.8)
     const loud = sine(200, 1, RATE); const quiet = sine(200, .01, RATE)
     const out = await run([effect('compressor')], stereo(loud, quiet))
@@ -125,7 +126,7 @@ describe('音频内置效果的逐样本处理（4.7c）', () => {
     let seed = 7; const random = (): number => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648 - .5 }
     const noise = Float32Array.from({ length: RATE * 2 }, () => random() * .1)
     const off = await run([effect('noise_reduction', { strength: 0 })], stereo(noise))
-    expect(off.latency).toBe(VIDEO_EDIT_RNNOISE_LATENCY)
+    expect(off.latency).toBe(AUDIO_RNNOISE_LATENCY)
     expectSamples(off.output[0].subarray(off.latency), noise.subarray(0, noise.length - off.latency))
     const cleaned = await run([effect('noise_reduction', { strength: 100 })], stereo(noise))
     expect(db(rms(cleaned.output[0], RATE) / rms(noise, RATE))).toBeLessThan(-10)
@@ -134,14 +135,14 @@ describe('音频内置效果的逐样本处理（4.7c）', () => {
     const denoised = (await run([effect('noise_reduction', { strength: 100 })], stereo(voice))).output[0]
     const correlation = (lag: number): number => { let sum = 0; for (let index = RATE / 2; index < RATE * 1.8; index++) sum += denoised[index + lag] * voice[index]; return sum }
     const lags = [0, 480, 960, 1440, 1920]
-    expect(lags.reduce((best, lag) => correlation(lag) > correlation(best) ? lag : best, 0)).toBe(VIDEO_EDIT_RNNOISE_LATENCY)
+    expect(lags.reduce((best, lag) => correlation(lag) > correlation(best) ? lag : best, 0)).toBe(AUDIO_RNNOISE_LATENCY)
   })
   it('效果链按任意分块连续处理，结果与一次处理逐样本一致（预览与导出的分块不同也一样）', async () => {
     let seed = 3; const random = (): number => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648 - .5 }
     const source = Float32Array.from({ length: RATE }, (_, index) => .4 * Math.sin(2 * Math.PI * 220 * index / RATE) + random() * .05)
     const effects = [effect('noise_reduction', {}, 1, 'a'), effect('parametric_eq', { preset: 'voice_clarity', mid: 2 }, 1, 'b'), effect('compressor', {}, .8, 'c'), effect('de_esser', {}, 1, 'd'), effect('pitch_shift', { semitones: 3 }, 1, 'e'), effect('reverb', {}, 1, 'f'), effect('limiter', { boost: 3 }, 1, 'g'), effect('gain_balance', { balance: -20 }, 1, 'h')]
     const whole = await run(effects, stereo(source, Float32Array.from(source, value => -value)))
-    const chain = new VideoEditAudioEffectChain(RATE, 2); await chain.sync(effects)
+    const chain = new AudioEffectChain(RATE, 2); await chain.sync(effects)
     const pieces: Float32Array[][] = []
     for (let start = 0, size = 37; start < RATE; start += size, size = (size * 7 + 101) % 9000 + 1) {
       const block = [Float32Array.from(source.subarray(start, Math.min(RATE, start + size))), Float32Array.from(source.subarray(start, Math.min(RATE, start + size)), value => -value)]
@@ -156,7 +157,7 @@ describe('音频内置效果的逐样本处理（4.7c）', () => {
   })
   it('分块计划：连续时接着上一块读（跳过延迟），不连续时预读一段并丢掉预读与延迟部分', () => {
     const chain = { nextSample: 4800, latency: 100, preroll: 2400 }
-    expect(planVideoEditAudioEffectBlock(chain, 4800, 480)).toEqual({ contiguous: true, inputStart: 4900, inputLength: 480, discard: 0 })
-    expect(planVideoEditAudioEffectBlock(chain, 9600, 480)).toEqual({ contiguous: false, inputStart: 7200, inputLength: 2980, discard: 2500 })
+    expect(planAudioEffectBlock(chain, 4800, 480)).toEqual({ contiguous: true, inputStart: 4900, inputLength: 480, discard: 0 })
+    expect(planAudioEffectBlock(chain, 9600, 480)).toEqual({ contiguous: false, inputStart: 7200, inputLength: 2980, discard: 2500 })
   })
 })
