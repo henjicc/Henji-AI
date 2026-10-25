@@ -35,6 +35,8 @@ import { normalizeApplicationPropertyValue } from './valueValidation'
 import { annotatePropertyValueFormats } from './propertyValidationErrors'
 
 const DATA_CLASS_RANK = { C0: 0, C1: 1, C2: 2, C3: 3 } as const
+/** 带 where 的列表单次最多扫描的实例数（逐条读取属性，受列表能力超时约束） */
+const WHERE_SCAN_LIMIT = 2000
 
 function schemaKey(ref: ApplicationSchemaRef): string {
   return `${ref.catalogVersion}:${ref.kind}:${ref.id}@${ref.version}`
@@ -256,8 +258,10 @@ export class ApplicationReflectionRegistry {
    * 不带 projection 时行为与过去逐字一致（只返回 refs），这是绝大多数调用方的路径。
    * 带 projection 时统一在这里读取并过滤：providers 一行不用改，所有实体类型自动受益。
    *
-   * 过滤发生在**当前这一页之内**——refs 已经被 provider 按 limit/cursor 截过。这是有意的
-   * 简化：等值筛选用于"按名字定位那一个"，不是用于全库扫描；需要翻页的场景照旧用 nextCursor。
+   * provider 只会按 limit/cursor 分页，筛选在这里逐条做。带 where 时一页筛完不够 limit 就接着读
+   * provider 的下一页，直到凑满一页或读完——否则按所属文档筛词块这类请求会在别的文档那几页上
+   * 连续拿到空页、却还有 nextCursor，调用方只能一页页空翻。单次最多扫 WHERE_SCAN_LIMIT 条，
+   * 扫到上限仍不满时照常返回 nextCursor，由调用方继续。
    */
   async listEntities(
     entityType: string,
@@ -266,10 +270,15 @@ export class ApplicationReflectionRegistry {
     projection?: ApplicationEntityListProjection
   ): Promise<ApplicationEntityListResult> {
     const entity = this.requireVisibleEntity(entityType, context)
-    const result = await this.requireProvider(entityType).listEntities(request)
-    for (const ref of result.refs) {
-      if (ref.kind !== entity.refKind) throw new Error(`INVALID_ENTITY_REF:${ref.kind}`)
+    const provider = this.requireProvider(entityType)
+    const listPage = async (pageRequest: ApplicationEntityListRequest): Promise<ApplicationEntityListResult> => {
+      const page = await provider.listEntities(pageRequest)
+      for (const ref of page.refs) {
+        if (ref.kind !== entity.refKind) throw new Error(`INVALID_ENTITY_REF:${ref.kind}`)
+      }
+      return page
     }
+    let result = await listPage(request)
     const whereEntries = Object.entries(projection?.where ?? {})
       .map(([key, value]) => [this.resolvePropertyId(entityType, key), value] as const)
     const projected = (projection?.propertyIds ?? [])
@@ -278,16 +287,21 @@ export class ApplicationReflectionRegistry {
 
     const needed = [...new Set([...projected, ...whereEntries.map(([id]) => id)])]
     const items: ApplicationEntityListItem[] = []
-    for (const ref of result.refs) {
-      const snapshot = await this.readEntity(ref, needed, context)
-      const matches = whereEntries.every(([id, expected]) => (
-        JSON.stringify(snapshot.properties[id] ?? null) === JSON.stringify(expected ?? null)
-      ))
-      if (!matches) continue
-      items.push({
-        ref,
-        properties: Object.fromEntries(projected.map((id) => [id, snapshot.properties[id] ?? null])),
-      })
+    for (let scanned = 0; ;) {
+      for (const ref of result.refs) {
+        const snapshot = await this.readEntity(ref, needed, context)
+        const matches = whereEntries.every(([id, expected]) => (
+          JSON.stringify(snapshot.properties[id] ?? null) === JSON.stringify(expected ?? null)
+        ))
+        if (!matches) continue
+        items.push({
+          ref,
+          properties: Object.fromEntries(projected.map((id) => [id, snapshot.properties[id] ?? null])),
+        })
+      }
+      scanned += result.refs.length
+      if (whereEntries.length === 0 || !result.nextCursor || items.length >= request.limit || scanned >= WHERE_SCAN_LIMIT) break
+      result = await listPage({ cursor: result.nextCursor, limit: request.limit - items.length })
     }
     return { ...result, refs: items.map((item) => item.ref), items }
   }

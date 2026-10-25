@@ -426,6 +426,24 @@ describe('ApplicationReflectionRegistry', () => {
     expect(miss.refs).toEqual([])
   })
 
+  it('带过滤时一页不满就接着读下一页，读完返回空游标，不让调用方空翻', async () => {
+    const registry = new ApplicationReflectionRegistry(catalogVersion)
+    const ids = ['one', 'two', 'three', 'x1', 'x2', 'x3', 'x4']
+    const pages: string[] = []
+    registry.register({ ...registration(), provider: { ...multiProvider, async listEntities(request) {
+      const offset = Number(request.cursor ?? 0)
+      pages.push(`${offset}+${request.limit}`)
+      const next = offset + request.limit
+      return { refs: ids.slice(offset, next).map((id) => ({ kind: 'sample.item', id })), nextCursor: next < ids.length ? String(next) : null, revisions: { 'sample.items': 3 } }
+    } } })
+    const first = await registry.listEntities('sample.item', { limit: 2 }, assistantContext, { where: { 'sample.mode': 'safe' } })
+    expect(first.refs.map((ref) => ref.id)).toEqual(['one', 'three'])
+    expect(first.nextCursor).toBe('3')
+    const rest = await registry.listEntities('sample.item', { cursor: first.nextCursor!, limit: 2 }, assistantContext, { where: { 'sample.mode': 'safe' } })
+    expect(rest).toMatchObject({ refs: [], nextCursor: null })
+    expect(pages).toEqual(['0+2', '2+1', '3+2', '5+2'])
+  })
+
   /*
    * 属性键的解析约定与写入路径逐字相同（applicationReflectionAdapter 的 resolvePropertyId）：
    * 原样命中就用原样，补上 entityType 前缀能命中就补，都不命中就报错——不做任何猜测。
