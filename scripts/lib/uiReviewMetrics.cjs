@@ -82,8 +82,8 @@ function collectLayoutMeasurements(element) {
       const last = lineTops[lineTops.length - 1]
       if (last === undefined || rect.top - last > rect.height / 2) lineTops.push(rect.top)
     }
-    // 悬停可看全：自身或祖先带 title / aria-label（UiMarqueeText 默认把全文写进 title）
-    const titled = node.closest('[title],[aria-label]')
+    // 悬停可看全：自身或祖先带 title / aria-label（UiMarqueeText 默认把全文写进 title），或在带悬停说明的触发器里（Tooltip 标 data-ui-tooltip）
+    const titled = node.closest('[title],[aria-label],[data-ui-tooltip]')
     texts.push({
       text: text.slice(0, 60),
       length: [...text].length,

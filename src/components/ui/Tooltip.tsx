@@ -174,7 +174,8 @@ export default function Tooltip({ children, content, delay = 300, className, con
     }
 
     return <>
-        {asChild ? React.cloneElement(children, { ...composedEvents, ref: setTriggerRef }) : <span ref={triggerRef}
+        {/* data-ui-tooltip：触发器带悬停说明（巡检据此判断截断文字能否悬停看全） */}
+        {asChild ? React.cloneElement(children, { ...composedEvents, ref: setTriggerRef, ...(content ? { 'data-ui-tooltip': '' } : {}) }) : <span ref={triggerRef} data-ui-tooltip={content ? '' : undefined}
             className={`relative ${shouldFlex ? 'flex' : 'inline-block'} ${shouldFlex ? childClassName.match(/flex-\d+|flex-grow/)?.[0] || '' : ''}`}
             onMouseEnter={handleMouseEnter}
             onMouseMove={event => { if (anchor === 'pointer-start') setPointer({ clientX: event.clientX, clientY: event.clientY }) }}
