@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Dropdown from '@/components/ui/Dropdown'
-import { UI_TEXT_BODY_CLASS, UiButton, UiCheckbox, UiFormRow, UiGroup, UiInput, UiSpecialPanel } from '@/components/ui'
+import { UiButton, UiFormRow, UiGroup, UiInput, UiSpecialPanel, UiSwitch } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import { showAlertDialog } from '@/stores/alertDialogStore'
 import { createLogger } from '@/core/logging'
@@ -335,7 +335,8 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
 
   // 特殊面板两栏（重要记录 021）：左边参考音频、提示音频与试听结果，右边各项设置；底部一行放状态与“开始克隆”
   const footerStatus = statusMessage?.type === 'error'
-    ? <span className="text-danger-text">{statusMessage.text}</span>
+    // 失败要被读屏播报（原来的 UiError 自带 role=alert，挪进底部行时不能丢）
+    ? <span role="alert" className="text-danger-text">{statusMessage.text}</span>
     : hasResultPreview
       ? <span className="text-text2">克隆完成，已保存到音色库，可在“音色”里选择使用</span>
       : <span className="text-text3">克隆完成后在左边试听</span>
@@ -345,7 +346,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
       status={footerStatus}
       action={(
         <UiButton type="button" variant="primary" size="sm" disabled={isSubmitting} onClick={() => void runClone()}>
-          {isSubmitting ? '克隆中…' : hasResultPreview ? '重新克隆' : '开始克隆'}
+          {isSubmitting ? '克隆中...' : hasResultPreview ? '重新克隆' : '开始克隆'}
         </UiButton>
       )}
     >
@@ -416,7 +417,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
               size="sm"
               value={panelValue.voiceName}
               onChange={(event) => patchValue({ voiceName: event.target.value })}
-              placeholder="必填，保存到音色库用"
+              placeholder="必填，用于保存到音色库"
               maxLength={40}
             />
           </UiFormRow>
@@ -436,7 +437,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
               size="sm"
               value={panelValue.previewText}
               onChange={(event) => patchValue({ previewText: event.target.value })}
-              placeholder="用于试听合成的文本"
+              placeholder="输入用于试听合成的文本"
             />
           </UiFormRow>
           <UiFormRow label="提示文本" density="compact" info="与提示音频说的内容一致；填写时需同时上传提示音频">
@@ -461,16 +462,13 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
               precision={2}
             />
           </UiFormRow>
-          <div className={`flex items-center gap-4 pt-1 ${UI_TEXT_BODY_CLASS}`}>
-            <label className="inline-flex items-center gap-2">
-              <UiCheckbox checked={panelValue.needNoiseReduction} onCheckedChange={next => patchValue({ needNoiseReduction: next })} />
-              降噪
-            </label>
-            <label className="inline-flex items-center gap-2">
-              <UiCheckbox checked={panelValue.needVolumeNormalization} onCheckedChange={next => patchValue({ needVolumeNormalization: next })} />
-              音量归一化
-            </label>
-          </div>
+          {/* 开关与其他设置同一套行：标签在标签列，开关在控件列 */}
+          <UiFormRow label="降噪" density="compact">
+            <UiSwitch checked={panelValue.needNoiseReduction} onCheckedChange={next => patchValue({ needNoiseReduction: next })} />
+          </UiFormRow>
+          <UiFormRow label="音量归一化" density="compact">
+            <UiSwitch checked={panelValue.needVolumeNormalization} onCheckedChange={next => patchValue({ needVolumeNormalization: next })} />
+          </UiFormRow>
         </UiGroup>
       </div>
     </UiSpecialPanel>

@@ -20,6 +20,7 @@ import {
 } from '@/components/params/paramVisibility'
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution'
 import { ParamGroupSections, ParamGroupTrigger } from '@/components/params/ParamGroupTrigger'
+import { resolveParamGroupBodyWidth } from '@/components/params/paramGroupColumns'
 import { UiFieldTrigger, UiGroup, UiOverflowRow, UiSpecialPanel, useUiFieldLayout, type UiOverflowRowItem } from '@/components/ui'
 import PanelTrigger, { type PanelTriggerControls } from '@/components/ui/PanelTrigger'
 import Tooltip from '@/components/ui/Tooltip'
@@ -58,7 +59,10 @@ type OverflowEntry =
  * 自身没有固有宽度的大块控件时，才给一个最小正文宽（分组声明的宽度，大块控件 440）。
  */
 function resolveMorePanelBodyWidth(entries: OverflowEntry[]): number | undefined {
-  const groupWidths = entries.flatMap((entry) => entry.kind === 'group' && entry.item.group.panelWidth ? [entry.item.group.panelWidth] : [])
+  const groupWidths = entries.flatMap((entry) => {
+    const width = entry.kind === 'group' ? resolveParamGroupBodyWidth(entry.item.group, entry.item.params) : undefined
+    return width ? [width] : []
+  })
   if (groupWidths.length > 0) return Math.max(...groupWidths)
   if (entries.some((entry) => entry.kind === 'group')) return 440
   return entries.some((entry) => entry.kind === 'param' && isToolbarBlockParam(entry.param)) ? 440 : undefined
@@ -223,14 +227,16 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
     return (
     <UiSpecialPanel bodyWidth={resolveMorePanelBodyWidth(entries)}>
     <ParamPanelRowsContext.Provider value>
-    <UiGroup labelWidth={96} className={twoColumns ? 'grid grid-cols-[repeat(2,max-content)] gap-x-6' : undefined}>
+    <UiGroup labelWidth={96}>
+    <div className={twoColumns ? 'grid grid-cols-[repeat(2,max-content)] gap-x-6' : 'contents'}>
       {entries.map((entry, index) => {
         if (entry.kind === 'param') {
           return (
             <div
               key={entry.id}
               data-param-id={entry.param.id}
-              className={isToolbarBlockParam(entry.param) ? 'col-span-full' : 'min-w-0'}
+              // 一列排布时普通参数也只占一列宽（320），不随分组或大块控件撑开的正文拉成长条
+              className={isToolbarBlockParam(entry.param) ? 'col-span-full' : twoColumns ? 'min-w-0' : 'min-w-0 max-w-80'}
             >
               {renderParam(entry.param)}
             </div>
@@ -261,6 +267,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           </UiGroup>
         )
       })}
+    </div>
     </UiGroup>
     </ParamPanelRowsContext.Provider>
     </UiSpecialPanel>

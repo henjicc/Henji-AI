@@ -148,7 +148,8 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                 return !!element.closest('[data-preset-item]')
             }}
             renderPanel={() => (
-                <div className="p-4 h-full flex flex-col max-h-[var(--trigger-panel-max-height)]">
+                // 浮层按内容定宽（重要记录 021）：快速保存区是叠放的绝对定位块、预设说明会截断，没有固有宽度，这里声明 420
+                <div className="p-4 h-full w-[26.25rem] max-w-full flex flex-col max-h-[var(--trigger-panel-max-height)]">
                     {/* 顶部区域：快速保存或输入名称 */}
                     <div className="mb-4 space-y-2">
                         <div className="text-xs text-text2 mb-2">

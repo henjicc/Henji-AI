@@ -75,7 +75,9 @@ function AppMenuList({ items, label, onClose, onMove }: { items: readonly AppMen
       try { void Promise.resolve(item.run()).catch(fail) } catch (error) { fail(error) }
     }, 16)
   }
-  return <div ref={listRef} role="menu" aria-label={label} tabIndex={-1} className="flex min-w-48 flex-col outline-none" onKeyDown={keyDown}>
+  // 菜单按最长一项定宽；有可勾选的项才给每一行留勾的位置（重要记录 021）
+  const checkSlot = items.some(item => item.kind === 'action' && item.checked !== undefined)
+  return <div ref={listRef} role="menu" aria-label={label} tabIndex={-1} className="flex flex-col outline-none" onKeyDown={keyDown}>
     {items.map((item, index) => {
       if (item.kind === 'separator') return <div key={`separator-${index}`} role="separator" className={`my-1 border-t ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`} />
       if (item.kind === 'submenu') {
@@ -84,7 +86,7 @@ function AppMenuList({ items, label, onClose, onMove }: { items: readonly AppMen
           <UiOptionButton role="menuitem" variant="menu" size="sm" aria-haspopup="menu" aria-expanded={opened} aria-disabled={Boolean(item.disabledReason)} tooltip={item.disabledReason}
             className="w-full gap-2" onPointerEnter={event => { if (item.disabledReason) return; const rect = event.currentTarget.getBoundingClientRect(); setSubmenu({ id: item.id, anchor: { left: rect.right, top: rect.top - 4, bottom: rect.top - 4, width: 0 } }) }}
             onClick={event => { if (item.disabledReason) return; const rect = event.currentTarget.getBoundingClientRect(); setSubmenu(opened ? null : { id: item.id, anchor: { left: rect.right, top: rect.top - 4, bottom: rect.top - 4, width: 0 } }) }}>
-            <span aria-hidden="true" className="w-3.5 shrink-0" />
+            {checkSlot ? <span aria-hidden="true" className="w-3.5 shrink-0" /> : null}
             <span className={`min-w-0 flex-1 truncate ${item.disabledReason ? 'text-text3' : ''}`}>{item.label}</span>
             <ChevronRight size={UI_ICON_SIZE.sm} className="shrink-0 text-text3" aria-hidden="true" />
           </UiOptionButton>
@@ -97,7 +99,7 @@ function AppMenuList({ items, label, onClose, onMove }: { items: readonly AppMen
         onPointerEnter={() => setSubmenu(null)}
         onKeyDown={event => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); run(item) }}
         onClick={event => { event.preventDefault(); event.stopPropagation(); run(item) }}>
-        <span aria-hidden="true" className="flex w-3.5 shrink-0 justify-center">{item.checked ? <Check size={UI_ICON_SIZE.sm} /> : null}</span>
+        {checkSlot ? <span aria-hidden="true" className="flex w-3.5 shrink-0 justify-center">{item.checked ? <Check size={UI_ICON_SIZE.sm} /> : null}</span> : null}
         <span className={`min-w-0 flex-1 truncate ${item.disabledReason ? 'text-text3' : item.danger ? 'text-danger-text' : ''}`}>{item.label}</span>
         {item.shortcut && <span className="ml-6 shrink-0 text-xs tabular-nums text-text3">{item.shortcut}</span>}
       </UiOptionButton>

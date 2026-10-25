@@ -433,7 +433,8 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
               />
               )
             : (
-              <div className="flex max-h-[min(760px,calc(100vh-96px))] flex-col p-1">
+              // 配置面板左列表右编辑，编辑区是撑满的文本框，没有固有宽度：声明 820（重要记录 021）
+              <div className="flex w-[51.25rem] max-w-full max-h-[min(760px,calc(100vh-96px))] flex-col p-1">
                 <PromptOptimizationProfilesPanel
                   config={config}
                   configuredProviderIds={configuredProviderIds}

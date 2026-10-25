@@ -49,9 +49,9 @@ it('首次挂到其他窗口时立即按所属窗口宽度选择列数', () => {
     onModelSelect={() => undefined} onFilterProviderChange={() => undefined} onFilterTypeChange={() => undefined}
     onFilterFunctionChange={() => undefined} onToggleFavorite={() => undefined} />, { container: owner.document.body })
   try {
-    // 600 宽的浮窗：特殊面板上限收到 568，左栏之外只放得下两列 190 宽的格子
+    // 600 宽的浮窗：特殊面板上限收到 568，左栏之外只放得下两列 200 宽的格子
     const body = view.container.querySelector('[data-special-panel-body]') as HTMLElement
-    expect(body.style.width).toBe('410px')
+    expect(body.style.width).toBe('422px')
   } finally {
     view.unmount()
     iframe.remove()

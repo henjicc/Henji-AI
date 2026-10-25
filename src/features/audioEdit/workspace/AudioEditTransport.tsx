@@ -103,7 +103,8 @@ export function AudioEditTransport({ viewDuration }: { viewDuration?: number } =
     {/* 录音中走带只显示录音计时与电平（录音控件里），播放时间码此时没有意义，第一段录音时总长还是 0。 */}
     {!recording && <Timecode rate={rate} total={playDuration} />}
     <UiOverflowRow className="flex-1 justify-end gap-1" items={items} renderOverflow={(hiddenIds) => (
-      <PanelTrigger panelSize="compact" panelPadding="content" renderPanel={() => (
+      // 收起的控件只有一两项：浮层按内容定宽（menu 档 128–360），compact 的 288 下限会在右边空出一大块
+      <PanelTrigger panelSize="menu" panelPadding="content" renderPanel={() => (
         <div className="flex flex-col items-start gap-3">{items.filter((item) => hiddenIds.includes(item.id)).map((item) => <div key={item.id} className="flex flex-wrap items-center gap-1.5">{item.node}</div>)}</div>
       )}>
         {({ open, togglePanel }) => <UiIconButton size="sm" aria-label="更多播放控制" tooltip="更多播放控制" on={open} aria-expanded={open} onClick={togglePanel} data-panel-trigger-button><MoreHorizontal /></UiIconButton>}

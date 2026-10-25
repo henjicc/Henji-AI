@@ -29,7 +29,9 @@ it('两个多行原语共享高度枚举，rows 保持 DOM 属性且高度枚举
 it('面板尺寸枚举由 CSS 约束宽高，定位不写固定宽度覆盖响应式档位', () => {
   const { getByText } = render(<PanelTrigger open panelSize="compact" display="面板" renderPanel={() => <span>面板内容</span>} />)
   const panel = getByText('面板内容').closest('[data-panel-placement]') as HTMLElement
-  expect(panel.className).toContain('w-[min(92vw,clamp(16rem,28vw,24rem))]')
+  expect(panel.className).toContain('w-max min-w-[min(calc(100vw-2rem),18rem)] [--trigger-panel-max-width:24rem]')
+  // 档位上限与窗口能给的宽度取较小值：内联 max-width 不能盖掉档位上限
+  expect(panel.style.maxWidth).toContain('var(--trigger-panel-max-width')
   expect(panel.style.width).toBe('')
   expect(panel.style.maxHeight).toContain('var(--trigger-panel-max-height)')
 })
@@ -60,6 +62,6 @@ it('Dropdown 尺寸枚举可覆盖内容测量且不受触发器宽度约束', (
   const { getByRole, getByText } = render(<Dropdown ariaLabel="选项" panelSize="wide" renderPanel={() => <span>自定义内容</span>} />)
   fireEvent.click(getByRole('button', { name: '选项' }))
   const panel = getByText('自定义内容').closest('[data-dropdown-portal]') as HTMLElement
-  expect(panel.className).toContain('w-[min(92vw,clamp(24rem,48vw,45rem))]')
+  expect(panel.className).toContain('w-max min-w-[min(calc(100vw-2rem),26.25rem)] [--trigger-panel-max-width:45rem]')
   expect(panel.style.width).toBe('')
 })

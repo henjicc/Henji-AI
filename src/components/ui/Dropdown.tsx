@@ -472,7 +472,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
                 position: 'fixed',
                 top: fixedPos.top,
                 left: fixedPos.left,
-                maxWidth: 'calc(100vw - 16px)',
+                maxWidth: panelSize ? 'min(calc(100vw - 16px), var(--trigger-panel-max-width, 100vw))' : 'calc(100vw - 16px)',
                 width: panelSize ? undefined : optionsPanelWidth !== null
                   ? Math.max(fixedPos.width, optionsPanelWidth)
                   : fixedPos.width,
@@ -497,7 +497,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
               aria-hidden={closing || undefined}
               {...(closing ? { inert: '' } : {})}
             // 非 portal 面板与触发器同一定位上下文：不窄于触发器（100%），选项更长时按内容加宽
-            style={panelSize ? { maxWidth: 'calc(100vw - 16px)' } : optionsPanelWidth !== null ? { minWidth: `max(100%, ${optionsPanelWidth}px)` } : undefined}
+            style={panelSize ? { maxWidth: 'min(calc(100vw - 16px), var(--trigger-panel-max-width, 100vw))' } : optionsPanelWidth !== null ? { minWidth: `max(100%, ${optionsPanelWidth}px)` } : undefined}
             data-dropdown-portal="true"
             data-dropdown-placement={fixedPos?.placement ?? 'below'}
             {...overlay.layerProps}

@@ -9,6 +9,7 @@ import { UiGroup, UiSpecialPanel } from '@/components/ui'
 import { ParamRenderer } from './ParamRenderer'
 import { ParamPanelRowsContext } from './paramPanelRows'
 import { countChangedParams, isParamDisabled } from './paramVisibility'
+import { resolveParamGroupBodyWidth, splitParamGroupSections } from './paramGroupColumns'
 
 interface ParamGroupTriggerProps {
   group: ParamPresentationGroup
@@ -56,47 +57,55 @@ export function ParamGroupSections({
   sectionTitleTone = 'section',
 }: ParamGroupSectionsProps): JSX.Element {
   const { i18n } = useTranslation()
-  const sections = useMemo(
-    () => resolveParamPresentationSections(group, params),
+  const columns = useMemo(
+    () => splitParamGroupSections(resolveParamPresentationSections(group, params)),
     [group, params]
   )
+  const renderSections = (sections: (typeof columns)[number]) => sections.map(({ section, params: sectionParams }, index) => (
+    <UiGroup
+      key={section.id}
+      title={getI18nText(section.name, i18n.language) || section.id}
+      titleTone={sectionTitleTone}
+      divided={index > 0}
+      gap="none"
+      labelWidth={96}
+      className={index > 0 ? 'mt-4' : ''}
+    >
+      <div className="space-y-3">
+        {sectionParams.map((param) => (
+          <div
+            key={param.id}
+            data-param-id={param.id}
+            className={param.type === 'text' || param.type === 'textarea'
+              ? 'min-w-[180px] flex-1'
+              : ''}
+          >
+            <ParamRenderer
+              param={param}
+              value={values[param.id]}
+              onChange={(value) => onChange(param.id, value)}
+              allValues={values}
+              uploadedImages={uploadedImages}
+              uploadedVideos={uploadedVideos}
+              onParamChange={onChange}
+              onParamChanges={onChanges}
+              disabled={disabledParamIds?.has(param.id) === true || isParamDisabled(param, values, linkageEngine)}
+            />
+          </div>
+        ))}
+      </div>
+    </UiGroup>
+  ))
   return (
     <ParamPanelRowsContext.Provider value>
-      {sections.map(({ section, params: sectionParams }, index) => (
-        <UiGroup
-          key={section.id}
-          title={getI18nText(section.name, i18n.language) || section.id}
-          titleTone={sectionTitleTone}
-          divided={index > 0}
-          gap="none"
-          labelWidth={96}
-          className={index > 0 ? 'mt-4' : ''}
-        >
-          <div className="space-y-3">
-            {sectionParams.map((param) => (
-              <div
-                key={param.id}
-                data-param-id={param.id}
-                className={param.type === 'text' || param.type === 'textarea'
-                  ? 'min-w-[180px] flex-1'
-                  : ''}
-              >
-                <ParamRenderer
-                  param={param}
-                  value={values[param.id]}
-                  onChange={(value) => onChange(param.id, value)}
-                  allValues={values}
-                  uploadedImages={uploadedImages}
-                  uploadedVideos={uploadedVideos}
-                  onParamChange={onChange}
-                  onParamChanges={onChanges}
-                  disabled={disabledParamIds?.has(param.id) === true || isParamDisabled(param, values, linkageEngine)}
-                />
-              </div>
-            ))}
-          </div>
-        </UiGroup>
-      ))}
+      {columns.length === 1 ? renderSections(columns[0]) : (
+        // 分节多时左右两列（各 320 宽）：竖向局促，横向仍在 720 以内
+        <div className="flex items-start gap-6">
+          {columns.map((sections, column) => (
+            <div key={column} className="w-80 shrink-0">{renderSections(sections)}</div>
+          ))}
+        </div>
+      )}
     </ParamPanelRowsContext.Provider>
   )
 }
@@ -136,7 +145,7 @@ export function ParamGroupTrigger({
         freezePositionOnOpen
         closeOnPanelClick={false}
         renderPanel={() => (
-          <UiSpecialPanel bodyWidth={group.panelWidth}>
+          <UiSpecialPanel bodyWidth={resolveParamGroupBodyWidth(group, params)}>
             <ParamGroupSections
               group={group}
               params={params}

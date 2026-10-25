@@ -81,7 +81,8 @@ export function UiSegmented<T extends string | number>({ ariaLabel, options, val
     buttons.current.forEach((button) => observer.observe(button))
     return () => observer.disconnect()
   }, [narrow, optionsKey, useDropdown])
-  const dropdown = <Dropdown ariaLabel={ariaLabel} options={options.map(option => ({ ...option, tooltip: option.disabledReason ?? option.title }))} value={value} onSelect={onChange} onPreview={onPreview} size={size} className={fillControl ? 'w-full' : undefined} disabled={disabled} disabledReason={disabledReason} />
+  // 放不下换成的下拉不按选项定最小宽：否则它会撑出外层格子、压到旁边的按钮上
+  const dropdown = <Dropdown ariaLabel={ariaLabel} options={options.map(option => ({ ...option, tooltip: option.disabledReason ?? option.title }))} value={value} onSelect={onChange} onPreview={onPreview} size={size} className={fillControl ? 'w-full' : undefined} disabled={disabled} disabledReason={disabledReason} minWidthStrategy={useDropdown ? undefined : 'none'} />
   if (useDropdown) return dropdown
   // 外层只用来测“给了多宽”：可收窄（min-w-0），不比父级宽，行内排布与原分段一致
   return <div ref={wrapperRef} data-ui-segmented-fit className={`inline-flex min-w-0 max-w-full ${fillControl ? 'w-full' : ''}`}>{narrow ? dropdown : <div role="radiogroup" aria-label={ariaLabel} aria-disabled={disabled || undefined}

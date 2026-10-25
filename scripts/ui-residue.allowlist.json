@@ -65,6 +65,18 @@
       "reason": "音色克隆样本的拖放区：紧凑 88 / 常规 132 高，与旁边的样本波形卡等高，两档都不在标准间距档上"
     },
     {
+      "file": "src/components/PresetPanel.tsx",
+      "category": "arbitraryValue",
+      "values": ["w-[26.25rem]"],
+      "reason": "预设浮层按内容定宽（重要记录 021）：快速保存区是叠放的绝对定位块、预设说明截断显示，没有固有宽度，声明 420 宽"
+    },
+    {
+      "file": "src/components/MediaGenerator/components/PromptOptimizeButton.tsx",
+      "category": "arbitraryValue",
+      "values": ["w-[51.25rem]"],
+      "reason": "提示词优化配置浮层左列表右编辑，编辑区是撑满的文本框、没有固有宽度，按内容定宽时声明 820 宽（重要记录 021）"
+    },
+    {
       "file": "src/components/MediaGenerator/components/ParameterPanel.tsx",
       "category": "arbitraryValue",
       "values": ["grid-cols-[repeat(2,max-content)]"],

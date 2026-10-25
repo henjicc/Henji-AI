@@ -12,7 +12,7 @@ import { UI_GLASS_ADAPTIVE_DIVIDER_CLASS, UI_SPECIAL_PANEL_HEIGHT_CLASS } from '
 type UiSpecialPanelProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> & {
   /** 头部一行：搜索框、类型标签、紧凑筛选下拉 */
   header?: React.ReactNode
-  /** 左栏（如模型选择的收藏与供应商）；固定 144 宽，自己滚动 */
+  /** 左栏（如模型选择的收藏与供应商）；固定 128 宽，自己滚动 */
   aside?: React.ReactNode
   /** 底部操作行左侧：状态、出错原因 */
   status?: React.ReactNode
@@ -38,7 +38,7 @@ export const UiSpecialPanel = forwardRef<HTMLDivElement, UiSpecialPanelProps>(fu
     <div ref={ref} data-special-panel className={`flex min-h-0 flex-col outline-none ${UI_SPECIAL_PANEL_HEIGHT_CLASS[height]} ${className ?? ''}`} {...rest}>
       {header ? <div data-special-panel-header className={`flex h-11 shrink-0 items-center gap-2 border-b px-3 ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`}>{header}</div> : null}
       <div className="flex min-h-0 flex-1">
-        {aside ? <div data-special-panel-aside className={`w-36 shrink-0 overflow-y-auto overscroll-contain border-r bg-panel p-1.5 ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`}>{aside}</div> : null}
+        {aside ? <div data-special-panel-aside className={`w-32 shrink-0 overflow-y-auto overscroll-contain border-r bg-panel p-1.5 ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`}>{aside}</div> : null}
         <div
           data-special-panel-body
           data-layout-scroll-region

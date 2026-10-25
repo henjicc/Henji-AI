@@ -215,7 +215,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
             <div key={model.id} className="flex items-center gap-2 py-0.5">
               <span className="w-40 min-w-0 truncate text-2xs text-text3">{model.id}</span>
               <UiInput size="sm" value={editName} onChange={event => setEditName(event.target.value)} aria-label={t('modelscopeCustomModel.form.displayName')} className="w-36" />
-              <UiSegmented size="sm" ariaLabel={t('modelscopeCustomModel.form.modelType')} value={editModelType} onChange={setEditModelType} options={typeOptions} />
+              <div className="shrink-0"><UiSegmented size="sm" ariaLabel={t('modelscopeCustomModel.form.modelType')} value={editModelType} onChange={setEditModelType} options={typeOptions} /></div>
               <UiButton type="button" size="sm" variant="secondary" onClick={() => void handleSaveEdit(model.id)}>{t('common:save')}</UiButton>
               <UiButton type="button" size="sm" onClick={handleCancelEdit}>{t('common:cancel')}</UiButton>
             </div>
@@ -248,7 +248,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
         <div className="flex items-center gap-2">
           <UiInput size="sm" value={newModelId} onChange={event => setNewModelId(event.target.value)} placeholder={t('modelscopeCustomModel.form.placeholders.modelId')} aria-label={t('modelscopeCustomModel.form.modelId')} className="w-56" />
           <UiInput size="sm" value={newModelName} onChange={event => setNewModelName(event.target.value)} placeholder={t('modelscopeCustomModel.form.placeholders.displayName')} aria-label={t('modelscopeCustomModel.form.displayName')} className="w-36" />
-          <UiSegmented size="sm" ariaLabel={t('modelscopeCustomModel.form.modelType')} value={newModelType} onChange={setNewModelType} options={typeOptions} />
+          <div className="shrink-0"><UiSegmented size="sm" ariaLabel={t('modelscopeCustomModel.form.modelType')} value={newModelType} onChange={setNewModelType} options={typeOptions} /></div>
           <UiButton type="button" size="sm" variant="secondary" onClick={() => void handleAdd()} disabled={isCheckingAvailability}>
             {isCheckingAvailability ? t('modelscopeCustomModel.actions.checking') : t('modelscopeCustomModel.actions.confirmAdd')}
           </UiButton>

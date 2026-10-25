@@ -370,15 +370,19 @@ export const UI_TRIGGER_PANEL_CHROME_Y_PX: Record<UiTriggerPanelPadding, number>
 
 /** 锚定浮层按内容选档；定位器进一步收紧到宿主边界和可用高度。 */
 export const UI_TRIGGER_PANEL_SIZE_CLASS = {
+  // 宽度上限写成 --trigger-panel-max-width：浮层的内联 max-width 还要按窗口与边界夹取，取两者较小值
+  //（直接写 max-w 类会被内联样式盖掉，按内容定宽的长说明会把菜单撑到整个窗口宽）。
   // 菜单按选项内容定宽（至少 8rem，上限 22.5rem 再截断），不随窗口宽度变宽
-  menu: 'w-max min-w-32 max-w-[min(92vw,22.5rem)] [--trigger-panel-max-height:min(60vh,24rem)]',
-  compact: 'w-[min(92vw,clamp(16rem,28vw,24rem))] [--trigger-panel-max-height:min(70vh,32rem)]',
-  // 宽面板（24–45rem，随窗口变宽）：只给预设列表、生成表单这类自带多列内容的浮层；参数表单一律用 compact。
-  wide: 'w-[min(92vw,clamp(24rem,48vw,45rem))] [--trigger-panel-max-height:min(78vh,40rem)]',
-  workspace: 'w-[min(94vw,clamp(40rem,80vw,60rem))] [--trigger-panel-max-height:min(88vh,52rem)]',
+  menu: 'w-max min-w-32 [--trigger-panel-max-width:22.5rem] [--trigger-panel-max-height:min(60vh,24rem)]',
+  // 以下三档都按内容定宽（重要记录 021）：档位只给下限与上限，不随窗口宽度按百分比变；上限再不超过窗口宽减 32。
+  // 内容没有固有宽度（w-full、minmax(0,1fr) 网格）时取下限；截断的长文字会撑到上限，需要更窄就给内容声明宽度。
+  compact: 'w-max min-w-[min(calc(100vw-2rem),18rem)] [--trigger-panel-max-width:24rem] [--trigger-panel-max-height:min(70vh,32rem)]',
+  // 宽面板（420–720）：只给预设列表、生成表单这类自带多列内容的浮层；参数表单一律用 compact。
+  wide: 'w-max min-w-[min(calc(100vw-2rem),26.25rem)] [--trigger-panel-max-width:45rem] [--trigger-panel-max-height:min(78vh,40rem)]',
+  workspace: 'w-max min-w-[min(calc(100vw-2rem),40rem)] [--trigger-panel-max-width:60rem] [--trigger-panel-max-height:min(88vh,52rem)]',
   // 特殊面板（重要记录 021）：宽度量里面最宽的内容，夹在 240–760、不超过窗口宽减 32；高度上限 440。
   // 正文用 UiSpecialPanel，虚拟列表与网格这类没有固有宽度的正文由它的 bodyWidth 给出宽度。
-  special: 'w-max min-w-60 max-w-[min(calc(100vw-2rem),47.5rem)] [--trigger-panel-max-height:min(calc(100vh-6rem),27.5rem)]',
+  special: 'w-max min-w-60 [--trigger-panel-max-width:47.5rem] [--trigger-panel-max-height:min(calc(100vh-6rem),27.5rem)]',
 } as const;
 export type UiTriggerPanelSize = keyof typeof UI_TRIGGER_PANEL_SIZE_CLASS;
 

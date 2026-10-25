@@ -478,7 +478,8 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
             bottom: pos.bottom,
             left: pos.left,
             width: contentWidth ? undefined : pos.width,
-            maxWidth: contentWidth ? panelMaxWidth : undefined,
+            // 档位上限（--trigger-panel-max-width）与窗口 / 边界能给的宽度取较小值
+            maxWidth: contentWidth ? (panelSize ? `min(${panelMaxWidth}px, var(--trigger-panel-max-width, 100vw))` : panelMaxWidth) : undefined,
             maxHeight: panelSize ? `min(${pos.maxHeight}px, var(--trigger-panel-max-height))` : pos.maxHeight,
             // 内容实际能用的高度：定高正文（UI_PANEL_BODY_HEIGHT_CLASS）据此封顶，浮层外壳不再和正文各滚一层
             ['--ui-panel-body-max-height' as string]: `calc(${panelSize ? `min(${pos.maxHeight}px, var(--trigger-panel-max-height))` : `${pos.maxHeight}px`} - ${UI_TRIGGER_PANEL_CHROME_Y_PX[panelPadding]}px)`,

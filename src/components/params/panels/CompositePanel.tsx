@@ -64,7 +64,7 @@ export const CompositePanel: React.FC<CompositePanelProps> = ({
   }, [value, config.linkages, config.components, onChange])
 
   // 渲染子组件
-  const renderComponent = useCallback((componentConfig: ComponentConfig) => {
+  const renderComponent = useCallback((componentConfig: ComponentConfig, column = 0) => {
     // 检查显示条件
     if (componentConfig.showWhen && !componentConfig.showWhen(value)) {
       return null
@@ -93,15 +93,16 @@ export const CompositePanel: React.FC<CompositePanelProps> = ({
       />
     )
     if (INLINE_COMPONENT_TYPES.has(componentConfig.type)) {
+      // 网格排布时标签与控件各占一格，标签列按这一列最长的标签定宽
       return (
-        <div key={componentConfig.id} className="flex items-center gap-2">
-          {label && <label className="w-14 shrink-0 truncate text-xs text-text2">{label}</label>}
+        <React.Fragment key={componentConfig.id}>
+          <label className={`whitespace-nowrap text-xs text-text2 ${column > 0 ? 'ml-4' : ''}`}>{label}</label>
           <div className="w-36 min-w-0">{control}</div>
-        </div>
+        </React.Fragment>
       )
     }
     return (
-      <div key={componentConfig.id} className="flex flex-col gap-2">
+      <div key={componentConfig.id} className="col-span-full flex flex-col gap-2">
         {label && <label className="text-xs font-medium text-text2">{label}</label>}
         {control}
       </div>
@@ -109,29 +110,34 @@ export const CompositePanel: React.FC<CompositePanelProps> = ({
   }, [value, i18n.language, handleComponentChange])
 
   // 布局样式
+  const gridColumns = config.layout === 'grid' ? (config.gridColumns || 2) : config.layout === 'vertical' ? 1 : config.components.length
+
   const layoutStyle = useMemo(() => {
     const padding = framed ? 0 : (config.padding ?? 16)
-    if (config.layout === 'grid') {
-      // 每格按内容宽（标签 + 控件），多列时一行跨度仍在 720 以内
-      return {
-        display: 'grid',
-        gridTemplateColumns: `repeat(${config.gridColumns || 2}, max-content)`,
-        columnGap: 24,
-        rowGap: 8,
-        padding: `${padding}px`,
-      }
-    }
+    // 标签在左的表单：每对“标签 | 控件”占两格，标签列按内容宽；多列时一行跨度仍在 720 以内
+    const columns = gridColumns
     return {
-      display: 'flex',
-      flexDirection: config.layout === 'vertical' ? 'column' as const : 'row' as const,
-      gap: config.layout === 'vertical' ? 8 : 24,
+      display: 'grid',
+      gridTemplateColumns: `repeat(${columns}, max-content max-content)`,
+      columnGap: 8,
+      rowGap: 8,
+      alignItems: 'center',
       padding: `${padding}px`,
     }
-  }, [config.layout, config.gridColumns, config.padding, framed])
+  }, [gridColumns, config.padding, framed])
 
   return (
     <div style={layoutStyle}>
-      {config.components.map(renderComponent)}
+      {(() => {
+        let pair = 0
+        return config.components.map((componentConfig) => {
+          if (componentConfig.showWhen && !componentConfig.showWhen(value)) return null
+          const inline = INLINE_COMPONENT_TYPES.has(componentConfig.type)
+          const node = renderComponent(componentConfig, inline ? pair % gridColumns : 0)
+          pair = inline ? pair + 1 : 0
+          return node
+        })
+      })()}
     </div>
   )
 }

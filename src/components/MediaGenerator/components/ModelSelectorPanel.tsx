@@ -54,10 +54,10 @@ function calculateMatchScore(modelName: string, query: string): number {
   return 0
 }
 
-// 特殊面板（重要记录 021）：左栏 144 + 三列网格，单元 190 × 32；整块不超过 760
-const CELL_WIDTH = 190
+// 特殊面板（重要记录 021）：左栏 128 + 三列网格，单元 200 × 32；整块不超过 760
+const CELL_WIDTH = 200
 const CELL_GAP = 6
-const GRID_CHROME = 144 + 1 + 24 + 2
+const GRID_CHROME = 128 + 1 + 16 + 2
 const TYPE_FILTERS: Array<Exclude<GenerationModelFilterType, 'favorite'>> = ['all', 'image', 'video', 'audio', 'other']
 const TYPE_GROUPS = ['image', 'video', 'audio', 'other'] as const
 
@@ -268,6 +268,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
       tabIndex={-1}
       onKeyDown={handleKeyDown}
       height="fill"
+      bodyPadding="sm"
       bodyWidth={specialPanelGridWidth(columns, CELL_WIDTH, CELL_GAP)}
       header={(
         <UiFieldLayoutContext.Provider value="toolbar">
@@ -310,6 +311,8 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
         </div>
       )}
     >
+      {/* 列表伸进正文右侧 8 的留白：竖向滚动条落在留白里，三列 200 的格子不被挤出横向滚动条 */}
+      <div className="-mr-2 flex min-h-0 flex-1 flex-col">
       <UiVirtualList
         data={rows}
         getKey={row => row.key}
@@ -339,6 +342,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                   variant="grid"
                   size="md"
                   highlighted={isHighlighted}
+                  tooltip={`${m.name} · ${p.name}`}
                   className="group w-full gap-1.5"
                 >
                   <span className="min-w-0 flex-1 truncate text-left">{m.name}</span>
@@ -348,7 +352,8 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                       data-prevent-close
                       onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(e, p.id, m.id) }}
-                      className={`inline-flex shrink-0 cursor-pointer ${isFavorite ? '' : 'opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100'}`}
+                      // 没收藏时星标平时不占位，悬停或聚焦才出现：名称多出 20px，“Seedream 5.0 Pro · APIMart”放得下
+                      className={`shrink-0 cursor-pointer ${isFavorite ? 'inline-flex' : 'hidden group-hover:inline-flex group-focus-visible:inline-flex'}`}
                       aria-label={isFavorite ? t('favorite.remove') : t('favorite.add')}
                     >
                       <ICON_PRESET className={`${UI_ICON_SIZE_CLASS.sm} ${isFavorite ? 'fill-warning-text text-warning-text' : 'fill-none text-text3'}`} />
@@ -360,6 +365,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
           </div>
         )}
       />
+      </div>
     </UiSpecialPanel>
   )
 }
