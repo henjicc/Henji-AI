@@ -1,4 +1,4 @@
-import type { AudioEditBatchSettings, AudioEditProjectDocument, AudioEditRange, AudioEditSuggestion, AudioEditTranscriptBlock } from './types'
+import type { AudioEditBatchSettings, AudioEditCut, AudioEditProjectDocument, AudioEditRange, AudioEditSuggestion, AudioEditTranscriptBlock } from './types'
 import { normalizeAudioEditFiller } from './analysis'
 
 export const DEFAULT_AUDIO_EDIT_SETTINGS: AudioEditBatchSettings = {
@@ -59,6 +59,24 @@ export function editAudioEditRange(project: AudioEditProjectDocument, range: Aud
   }
   const fresh = subtractRanges(parts, (project.cuts ?? []).filter((cut) => cut.enabled && (cut.mode ?? 'delete') === mode))
   return fresh.length ? { ...project, cuts: [...(project.cuts ?? []), ...fresh.map((part) => ({ ...part, id: crypto.randomUUID(), enabled: true, reason: 'manual' as const, mode }))] } : project
+}
+
+/**
+ * 拖动删除 / 静音区间边缘：只增减这一种处理。add 把它扩到拖过的范围（与另一种重叠就叠加上去）；
+ * remove 只撤掉这一种：静音只撤静音剪切，删除撤删除剪切并恢复整段落在里面的词，另一种处理原样保留。
+ */
+export function adjustAudioEditRangeMode(project: AudioEditProjectDocument, range: AudioEditRange, mode: 'delete' | 'mute', action: 'add' | 'remove'): AudioEditProjectDocument {
+  if (action === 'add') return editAudioEditRange(project, range, mode)
+  const startFrame = Math.max(0, Math.round(Math.min(range.startFrame, range.endFrame)))
+  const endFrame = Math.min(project.source.durationFrames, Math.round(Math.max(range.startFrame, range.endFrame)))
+  if (!Number.isFinite(startFrame + endFrame) || endFrame <= startFrame) return project
+  const parts = subtractRanges([{ startFrame, endFrame }], project.transcript.filter((block) => block.locked))
+  const matches = (cut: AudioEditCut): boolean => cut.enabled && (cut.mode ?? 'delete') === mode
+  return {
+    ...project,
+    cuts: (project.cuts ?? []).flatMap((cut) => !matches(cut) ? [cut] : subtractRanges([cut], parts).map((part, index) => ({ ...cut, ...part, id: index ? `${cut.id}:${part.startFrame}` : cut.id }))),
+    transcript: mode === 'mute' ? project.transcript : project.transcript.map((block) => !block.locked && block.startFrame >= startFrame && block.endFrame <= endFrame ? { ...block, included: true } : block),
+  }
 }
 
 /** All edits, including assistant mutations, respect the same protected ranges. */

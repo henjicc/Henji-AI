@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { applyAudioEditSuggestion, cleanAudioEditFillers, editAudioEditRange, setAudioEditBlocks } from './edits'
+import { adjustAudioEditRangeMode, applyAudioEditSuggestion, cleanAudioEditFillers, editAudioEditRange, setAudioEditBlocks } from './edits'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from './timeline'
 import { buildAudioEditXml, compileAudioEditXmlTimeline } from './xml'
 import type { AudioEditProjectDocument } from './types'
@@ -25,6 +25,25 @@ describe('audio edit shared decisions and interchange', () => {
     expect(new Set(restored.cuts?.map((cut) => cut.id)).size).toBe(2)
     const deleted = editAudioEditRange(restored, { startFrame: 1800, endFrame: 2300 }, 'delete')
     expect(editedDurationFrames(buildProjectAudioEditTimeline(deleted))).toBe(3500)
+  })
+  it('拖动区间边缘只增减这一种处理：静音与删除各管各的，往哪拉就把哪种叠上去', () => {
+    const base = editAudioEditRange(editAudioEditRange(project(), { startFrame: 1000, endFrame: 1600 }, 'mute'), { startFrame: 1600, endFrame: 2400 }, 'delete')
+    // 删除的左边缘往左拉过静音：删除扩上去，静音还在
+    const grown = adjustAudioEditRangeMode(base, { startFrame: 1300, endFrame: 1600 }, 'delete', 'add')
+    expect(buildProjectAudioEditTimeline(grown).filter((span) => span.muted).map((span) => [span.sourceStartFrame, span.sourceEndFrame])).toEqual([[1000, 1300]])
+    expect(grown.cuts?.filter((cut) => cut.mode === 'mute')).toHaveLength(1)
+    // 删除的右边缘往回收：只撤删除，静音不动
+    const shrunk = adjustAudioEditRangeMode(base, { startFrame: 2000, endFrame: 2400 }, 'delete', 'remove')
+    expect(editedDurationFrames(buildProjectAudioEditTimeline(shrunk))).toBe(3600)
+    expect(shrunk.cuts?.find((cut) => cut.mode === 'mute')).toMatchObject({ startFrame: 1000, endFrame: 1600 })
+    // 静音的一边拉到另一边：整段静音取消，删除不动
+    const cancelled = adjustAudioEditRangeMode(base, { startFrame: 1000, endFrame: 1600 }, 'mute', 'remove')
+    expect(buildProjectAudioEditTimeline(cancelled).some((span) => span.muted)).toBe(false)
+    expect(editedDurationFrames(buildProjectAudioEditTimeline(cancelled))).toBe(3200)
+    // 删除区里整段的词随删除一起恢复
+    const words = setAudioEditBlocks(project(), ['b'], false)
+    expect(adjustAudioEditRangeMode(words, { startFrame: 2900, endFrame: 4000 }, 'delete', 'remove').transcript.find((block) => block.id === 'b')?.included).toBe(true)
+    expect(adjustAudioEditRangeMode(words, { startFrame: 2900, endFrame: 4000 }, 'mute', 'remove').transcript.find((block) => block.id === 'b')?.included).toBe(false)
   })
   it('XML mutes only audio tracks and preserves linked video and continuous duration', () => {
     const original = project()

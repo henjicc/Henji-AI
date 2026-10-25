@@ -220,6 +220,7 @@ export function AudioWaveWorkspace() {
         onSelectionChange={(next) => { if (!recording) onSelection(next && next.end > next.start ? { startFrame: next.start, endFrame: next.end } : null) }}
         spectralSelection={editor.spectralSelection} onSpectralSelectionChange={editor.setSpectralSelection}
         onBrushStroke={stroke => { if (!disabled) actions.healStroke(stroke) }} cutRanges={visibleCuts} repairs={recording ? [] : repairs}
+        {...(recording || disabled ? {} : { onCutEdgeEdit: ({ range: edited, mode, action }: { range: { start: number; end: number }; mode: 'delete' | 'mute'; action: 'add' | 'remove' }) => workspace.adjustCutRange({ startFrame: edited.start, endFrame: edited.end }, mode, action) })}
         {...(project.transcript.length && (project.viewSettings?.timelineCaptions ?? true) ? { captionLane: <CaptionLane view={editor.view} /> } : {})}
         onContextMenu={(event) => menu.showMenu(event, [
           { id: 'heal', label: '修复框选区域', icon: <Wand2 size={iconSize} />, disabled: !editor.spectralSelection || disabled, onClick: () => { actions.healArea(editor.spectralSelection!); editor.setSpectralSelection(null) } },

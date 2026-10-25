@@ -38,7 +38,7 @@ import { WorkspaceLayoutMenu } from '@/components/dockLayouts/WorkspaceLayoutMen
 import { AUDIO_EDIT_WORKSPACE_ID } from './workspace/audioEditDockLayout'
 import { AudioEditWorkspaceContext, type AudioEditDeliveryFormat, type AudioEditWorkspace } from './workspace/audioEditWorkspaceContext'
 
-import { applyAudioEditSuggestion, audioEditSuggestionStates, DEFAULT_AUDIO_EDIT_VIEW_SETTINGS, dismissAudioEditSuggestion, editAudioEditRange, setAudioEditBlocks } from '@/core/audioEdit/edits'
+import { adjustAudioEditRangeMode, applyAudioEditSuggestion, audioEditSuggestionStates, DEFAULT_AUDIO_EDIT_VIEW_SETTINGS, dismissAudioEditSuggestion, editAudioEditRange, setAudioEditBlocks } from '@/core/audioEdit/edits'
 import { editAudioEditProject, flushAudioEditProject } from './application/audioEditProjectInstances'
 import { AudioEditLeaveCancelledError, createAudioEditRecording, importAudioEditMedia, leaveAudioEditEditor, openAudioEditDocument, pickAudioEditMedia, renameAudioEditDocument } from './application/audioEditDocumentService'
 import { VideoEditSendMenu } from '@/features/videoEdit/panels/VideoEditSendMenu'
@@ -262,6 +262,10 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
       if (mode === 'delete') { setWaveSelection(null); setSelectedBlockIds([]) }
     } catch (error) { notifyError(error) }
   }
+  const adjustCutRange = (next: AudioEditRange, mode: 'delete' | 'mute', action: 'add' | 'remove') => {
+    if (disabled) return
+    try { editAudioEditProject(project.id, (current) => adjustAudioEditRangeMode(current, next, mode, action)) } catch (error) { notifyError(error) }
+  }
   const waveActions = audioWaveActions(project, (action) => void run(action))
   const relinkSource = () => run(async () => {
     const path = await pickAudioEditMedia('原始素材')
@@ -273,7 +277,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     history: { past: state.past, future: state.future, undo: state.undo, redo: state.redo },
     textSearch, wave: waveEditor, waveActions, waveSelection,
     setWaveSelection: (next) => { setWaveSelection(next); if (selectedBlockIds.length) setSelectedBlockIds([]) },
-    editSelection, seek: seekSourceFrame, navigateToFrame, togglePlayback, previewGain: normalizationGain, delivery,
+    editSelection, adjustCutRange, seek: seekSourceFrame, navigateToFrame, togglePlayback, previewGain: normalizationGain, delivery,
     silencePreview: { ranges: silencePreview.ranges, pending: silencePreview.pending, ...(silencePreview.error ? { error: silencePreview.error } : {}) },
     selectionOnly, setSelectionOnly, processRange: range, selectedBlocks, selectedBlockIds, setSelectedBlockIds,
     setBlocksIncluded: state.setBlocksIncluded, setReferenceScript: state.setReferenceScript, setVstEnabled: state.setVstEnabled,

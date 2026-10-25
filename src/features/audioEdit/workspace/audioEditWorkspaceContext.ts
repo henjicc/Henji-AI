@@ -28,6 +28,8 @@ export interface AudioEditWorkspace {
   waveSelection: AudioEditRange | null
   setWaveSelection: (range: AudioEditRange | null) => void
   editSelection: (mode: 'delete' | 'mute' | 'restore') => void
+  /** 拖动删除 / 静音区间边缘：只增减这一种处理（可撤销）。 */
+  adjustCutRange: (range: AudioEditRange, mode: 'delete' | 'mute', action: 'add' | 'remove') => void
   seek: (frame: number) => void
   navigateToFrame: (frame: number) => void
   togglePlayback: () => Promise<void>

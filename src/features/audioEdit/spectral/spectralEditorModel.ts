@@ -127,3 +127,32 @@ export function formatTimecode(frames: number, sampleRate: number, stepFrames?: 
   const text = rest.toFixed(decimals)
   return `${minutes}:${(decimals ? text.padStart(3 + decimals, '0') : text.padStart(2, '0'))}`
 }
+
+/* 删除 / 静音区间的边缘拖动（波形编辑区） */
+export type CutEdge = { mode: 'delete' | 'mute'; start: number; end: number; side: 'start' | 'end' }
+/** 区间边缘的抓取范围与吸附距离（CSS 像素） */
+export const EDGE_HIT_PX = 6
+const EDGE_SNAP_PX = 8
+
+/** 拖到的位置：靠近别的区间边缘或这一段的另一边时吸附过去。 */
+export function snapCutEdge(frame: number, edge: CutEdge, ranges: ReadonlyArray<{ start: number; end: number; mode: 'delete' | 'mute' | 'pending' }>, framesPerPixel: number): number {
+  const own = edge.side === 'start' ? edge.start : edge.end
+  const candidates = [edge.side === 'start' ? edge.end : edge.start,
+    ...ranges.filter(range => range.mode !== 'pending').flatMap(range => [range.start, range.end]).filter(value => value !== own)]
+  let best = frame, distance = EDGE_SNAP_PX * framesPerPixel
+  for (const candidate of candidates) if (Math.abs(candidate - frame) <= distance) { best = candidate; distance = Math.abs(candidate - frame) }
+  return best
+}
+
+/** 松手后的编辑：外拖扩、内拖撤、拖到另一边撤整段。 */
+export function cutEdgeEdit(edge: CutEdge, frame: number): { range: { start: number; end: number }; mode: 'delete' | 'mute'; action: 'add' | 'remove' } | null {
+  const { mode, start, end } = edge
+  if (edge.side === 'end') {
+    if (frame > end) return { range: { start: end, end: frame }, mode, action: 'add' }
+    if (frame < end) return { range: { start: frame <= start ? start : frame, end }, mode, action: 'remove' }
+  } else {
+    if (frame < start) return { range: { start: frame, end: start }, mode, action: 'add' }
+    if (frame > start) return { range: { start, end: frame >= end ? end : frame }, mode, action: 'remove' }
+  }
+  return null
+}

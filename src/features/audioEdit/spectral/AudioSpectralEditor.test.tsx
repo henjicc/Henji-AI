@@ -96,3 +96,34 @@ it('左右键发单段试听，Home/End 只跳转，边界位置不重复出声'
   expect(view.seek.mock.calls).toEqual([[0], [480000]])
   expect(view.start).not.toHaveBeenCalled()
 })
+
+it('拖动删除 / 静音区间的边缘：从哪种里面抓就改哪种，外拖扩、拖到另一边就取消整段，靠近边缘会吸附', () => {
+  const onCutEdgeEdit = vi.fn()
+  // 1000 像素对应 480000 帧：删除 200–300 像素，静音 300–400 像素，两段相接
+  const cutRanges: AudioSpectralEditorProps['cutRanges'] = [{ start: 96000, end: 144000, mode: 'delete' }, { start: 144000, end: 192000, mode: 'mute' }]
+  const props: AudioSpectralEditorProps = {
+    sampleRate: 48000, durationFrames: 480000, view: { start: 0, end: 480000 }, waveform: { status: 'idle' }, spectrogramStatus: 'idle', display: 'waveform', tool: 'time', brushPixels: 8,
+    playhead: { current: () => 0, subscribe: () => () => undefined }, onViewChange: vi.fn(), onSeek: vi.fn(),
+    selection: null, onSelectionChange: vi.fn(), spectralSelection: null, onSpectralSelectionChange: vi.fn(), onBrushStroke: vi.fn(), cutRanges, repairs: [], onCutEdgeEdit,
+  }
+  const view = render(<AudioSpectralEditor {...props} />)
+  const area = view.getByRole('application', { name: '音频波形与频谱编辑区' })
+  vi.spyOn(area, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 1000, bottom: 300, width: 1000, height: 300, toJSON: () => ({}) })
+  const drag = (from: number, to: number): void => {
+    fireEvent.pointerDown(area, { button: 0, clientX: from, clientY: 50, pointerId: 1 })
+    fireEvent.pointerMove(area, { clientX: to, clientY: 50, pointerId: 1 })
+    fireEvent.pointerUp(area, { clientX: to, clientY: 50, pointerId: 1 })
+  }
+  // 在红色里贴着相接处抓：改删除；往右拉进静音，删除叠上去
+  drag(298, 350)
+  expect(onCutEdgeEdit).toHaveBeenLastCalledWith({ range: { start: 144000, end: 168000 }, mode: 'delete', action: 'add' })
+  // 在蓝色里贴着相接处抓：改静音；拉到另一边附近吸附过去，整段静音取消
+  drag(302, 396)
+  expect(onCutEdgeEdit).toHaveBeenLastCalledWith({ range: { start: 144000, end: 192000 }, mode: 'mute', action: 'remove' })
+  // 删除的左边缘往左拉：扩大删除
+  drag(201, 150)
+  expect(onCutEdgeEdit).toHaveBeenLastCalledWith({ range: { start: 72000, end: 96000 }, mode: 'delete', action: 'add' })
+  // 离边缘远的地方照常是时间选区，不改区间
+  onCutEdgeEdit.mockClear(); drag(600, 700)
+  expect(onCutEdgeEdit).not.toHaveBeenCalled()
+})

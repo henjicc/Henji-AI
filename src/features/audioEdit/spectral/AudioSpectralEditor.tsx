@@ -10,8 +10,8 @@ import { AUDIO_SCOPE_COLORS } from '@/core/theme/colorTokens'
 import type { WaveformState } from '@/hooks/useWaveformData'
 import { AUDIO_EDIT_MIN_VIEW_FRAMES, clampViewport, type WaveformViewport } from '../waveformViewport'
 import {
-  amplitudeTicks, brushRadius, CLICK_SLOP_PX, formatTimecode, frameAtX, hzAtY, normalizeSpectralSelection, normalizeTimeSelection, panTime, timeTickStep, xAtFrame, yAtHz,
-  zoomAmplitude, zoomFrequency, zoomTime,
+  amplitudeTicks, brushRadius, CLICK_SLOP_PX, cutEdgeEdit, EDGE_HIT_PX, formatTimecode, frameAtX, hzAtY, normalizeSpectralSelection, normalizeTimeSelection, panTime, timeTickStep, xAtFrame, yAtHz,
+  snapCutEdge, zoomAmplitude, zoomFrequency, zoomTime, type CutEdge,
   type AudioBrushPoint, type AudioBrushStroke, type AudioEditorTool, type AudioSpectralSelection, type AudioTimeSelection, type FrequencyView,
 } from './spectralEditorModel'
 
@@ -50,6 +50,11 @@ export interface AudioSpectralEditorProps {
   onBrushStroke: (stroke: AudioBrushStroke) => void
   /** 已删除 / 已静音 / 待处理（停顿预览）的区间（源采样帧），在两个视图上叠一层标记。 */
   cutRanges: ReadonlyArray<{ start: number; end: number; mode: 'delete' | 'mute' | 'pending' }>
+  /**
+   * 拖动删除 / 静音区间的边缘：往外拖把这种处理扩到拖过的范围（add），往里拖撤掉拖过的部分（remove），
+   * 拖到和另一边重合就撤掉整段。不传则区间只显示、不能拖。
+   */
+  onCutEdgeEdit?: (edit: { range: { start: number; end: number }; mode: 'delete' | 'mute'; action: 'add' | 'remove' }) => void
   /** 已有的修复记录：频谱上画出轮廓，方便找到改过的地方。 */
   repairs: readonly AudioEditorRegion[]
   /** 右键编辑区：宿主弹出针对选区的菜单。 */
@@ -75,6 +80,7 @@ type Drag =
   | { kind: 'split'; pointer: number; y: number; top: number; height: number }
   | { kind: 'playhead'; pointer: number; x: number; moved: boolean; frame: number }
   | { kind: 'navigator'; pointer: number; x: number; width: number; view: WaveformViewport; edge: 'left' | 'right' | 'move' }
+  | { kind: 'cutEdge'; pointer: number; x: number; moved: boolean; edge: CutEdge; frame: number }
 
 function useNonPassiveWheel(ref: React.RefObject<HTMLElement | null>, handler: (event: WheelEvent) => void): void {
   const latest = React.useRef(handler)
@@ -128,6 +134,8 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
   const [split, setSplit] = React.useState(DEFAULT_SPLIT)
   const [trail, setTrail] = React.useState(0)
   const [brushHover, setBrushHover] = React.useState<{ x: number; y: number } | null>(null)
+  const [edgeHover, setEdgeHover] = React.useState(false)
+  const [edgePreview, setEdgePreview] = React.useState<{ edge: CutEdge; frame: number } | null>(null)
   const [contentWidth, setContentWidth] = React.useState(800)
   const drag = React.useRef<Drag | null>(null)
   const endScrub = React.useRef(props.onScrubEnd)
@@ -224,6 +232,22 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
     const y = (clientY - rect.top) % lane
     return { frame: frameAtX(clientX - rect.left, rect.width, view), hz: hzAtY(y, lane, frequency) }
   }
+  /** 指针附近可以抓的区间边缘：优先从区间里面抓的那一边（红蓝相接处从哪边抓就改哪种），再取最近的。 */
+  const cutEdgeAt = (x: number, width: number): CutEdge | null => {
+    if (!props.onCutEdgeEdit || tool === 'hand' || tool === 'brush') return null
+    let best: (CutEdge & { distance: number; inside: boolean }) | null = null
+    for (const range of props.cutRanges) {
+      if (range.mode === 'pending') continue
+      for (const side of ['start', 'end'] as const) {
+        const edgeX = xAtFrame(side === 'start' ? range.start : range.end, width, view)
+        const distance = Math.abs(x - edgeX)
+        if (distance > EDGE_HIT_PX) continue
+        const inside = side === 'start' ? x >= edgeX : x <= edgeX
+        if (!best || (inside && !best.inside) || (inside === best.inside && distance < best.distance)) best = { mode: range.mode, start: range.start, end: range.end, side, distance, inside }
+      }
+    }
+    return best && { mode: best.mode, start: best.start, end: best.end, side: best.side }
+  }
   const scheduleTrail = () => {
     if (trailFrame.current !== null) return
     trailFrame.current = requestAnimationFrame(() => { trailFrame.current = null; setTrail(value => value + 1) })
@@ -237,6 +261,12 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
     event.currentTarget.setPointerCapture(event.pointerId)
     // 按住滚轮（中键）拖动：任何工具下都是平移。
     if (event.button === 1 || tool === 'hand') { event.preventDefault(); drag.current = { kind: 'pan', pointer: event.pointerId, x: event.clientX, view }; return }
+    const edge = cutEdgeAt(x, rect.width)
+    if (edge) {
+      const frame = edge.side === 'start' ? edge.start : edge.end
+      drag.current = { kind: 'cutEdge', pointer: event.pointerId, x: event.clientX, moved: false, edge, frame }
+      setEdgePreview({ edge, frame }); return
+    }
     if (pane === 'spectrum' && tool === 'brush') {
       const point = spectrumPoint(event.clientX, event.clientY)
       brushPoints.current = [point]
@@ -261,7 +291,15 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
     }
     if (tool === 'brush') setBrushHover(paneAt(event.clientY) === 'spectrum' ? { x, y: event.clientY - rect.top } : null)
     const current = drag.current
+    if (!current) setEdgeHover(Boolean(cutEdgeAt(x, rect.width)))
     if (!current || current.pointer !== event.pointerId) return
+    if (current.kind === 'cutEdge') {
+      current.moved ||= Math.abs(event.clientX - current.x) > CLICK_SLOP_PX
+      if (!current.moved) return
+      const raw = Math.max(0, Math.min(durationFrames, Math.round(frameAtX(x, rect.width, view))))
+      current.frame = snapCutEdge(raw, current.edge, props.cutRanges, (view.end - view.start) / Math.max(1, rect.width))
+      setEdgePreview({ edge: current.edge, frame: current.frame }); return
+    }
     if (current.kind === 'pan') { viewport.request(panTime(current.view, -(event.clientX - current.x) / Math.max(1, rect.width) * (current.view.end - current.view.start), durationFrames)); return }
     if (current.kind === 'brush') { current.points.push(spectrumPoint(event.clientX, event.clientY)); scheduleTrail(); return }
     if (current.kind === 'marquee') {
@@ -280,6 +318,13 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
     drag.current = null
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
     const rect = event.currentTarget.getBoundingClientRect()
+    if (current.kind === 'cutEdge') {
+      setEdgePreview(null)
+      const edit = current.moved ? cutEdgeEdit(current.edge, current.frame) : null
+      if (edit) props.onCutEdgeEdit?.(edit)
+      else props.onSeek(Math.round(frameAtX(event.clientX - rect.left, rect.width, view)))
+      return
+    }
     if (current.kind === 'brush') {
       brushPoints.current = null; setTrail(value => value + 1)
       const pane = spectrumPane.current!.getBoundingClientRect()
@@ -380,7 +425,10 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
   const percentX = (frame: number) => `${xAtFrame(frame, 100, view)}%`
   const spanStyle = (start: number, end: number): React.CSSProperties => ({ left: percentX(Math.max(view.start, start)), width: `${Math.max(0, xAtFrame(Math.min(view.end, end), 100, view) - xAtFrame(Math.max(view.start, start), 100, view))}%` })
   const visible = (start: number, end: number) => end > view.start && start < view.end
-  const cursor = tool === 'hand' ? 'cursor-grab' : tool === 'brush' && brushHover ? 'cursor-none' : tool === 'marquee' ? 'cursor-crosshair' : 'cursor-text'
+  const cursor = edgeHover || edgePreview ? 'cursor-ew-resize' : tool === 'hand' ? 'cursor-grab' : tool === 'brush' && brushHover ? 'cursor-none' : tool === 'marquee' ? 'cursor-crosshair' : 'cursor-text'
+  // 拖动边缘时就地预览：被拖的那一段按新的边界画，外拖越过另一种处理时两种颜色叠在一起
+  const shownCuts = edgePreview ? props.cutRanges.map(range => range.mode === edgePreview.edge.mode && range.start === edgePreview.edge.start && range.end === edgePreview.edge.end
+    ? { ...range, ...(edgePreview.edge.side === 'start' ? { start: Math.min(edgePreview.frame, range.end) } : { end: Math.max(edgePreview.frame, range.start) }) } : range) : props.cutRanges
   const step = timeTickStep(view, contentWidth, sampleRate)
   const ticks: number[] = []
   for (let frame = Math.ceil(view.start / step) * step; frame <= view.end && ticks.length < 200; frame += step) ticks.push(frame)
@@ -440,7 +488,7 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
 
     {/* 内容区：波形在上、频谱在下，共用时间视口 */}
     <div ref={content} className={`relative flex min-h-0 touch-none flex-col overflow-hidden ${cursor}`} style={{ background: AUDIO_SCOPE_COLORS.background }} role="application" aria-label="音频波形与频谱编辑区"
-      onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={finish} onPointerCancel={finish} onLostPointerCapture={() => { if (drag.current?.kind === 'brush') { brushPoints.current = null; setTrail(value => value + 1) } drag.current = null }}
+      onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={finish} onPointerCancel={finish} onLostPointerCapture={() => { if (drag.current?.kind === 'brush') { brushPoints.current = null; setTrail(value => value + 1) } if (drag.current?.kind === 'cutEdge') setEdgePreview(null); drag.current = null }}
       onPointerLeave={leave} onContextMenu={props.onContextMenu} onAuxClick={event => event.preventDefault()}>
       {showWave && <div className="relative min-h-0" style={{ height: showSpectrum ? `${split * 100}%` : '100%' }}>
         {lanes.map(lane => <div key={lane} className="pointer-events-none absolute inset-x-0 h-px" style={{ top: `${(lane + 0.5) * laneFraction}%`, background: AUDIO_SCOPE_COLORS.grid }} />)}
@@ -468,7 +516,7 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
           style={{ left: brushHover.x - props.brushPixels, top: brushHover.y - spectrumPane.current.offsetTop - props.brushPixels, width: props.brushPixels * 2, height: props.brushPixels * 2 }} />}
       </div>}
       {/* 跨两种视图的标记：删除/静音、时间选区、悬停线、播放头 */}
-      {props.cutRanges.filter(range => visible(range.start, range.end)).map(range => <div key={`${range.mode}:${range.start}-${range.end}`} className="pointer-events-none absolute inset-y-0" data-audio-overlay={range.mode === 'pending' ? 'preview' : range.mode === 'delete' ? 'deleted' : 'mute'}
+      {shownCuts.filter(range => range.end > range.start && visible(range.start, range.end)).map(range => <div key={`${range.mode}:${range.start}-${range.end}`} className="pointer-events-none absolute inset-y-0" data-audio-overlay={range.mode === 'pending' ? 'preview' : range.mode === 'delete' ? 'deleted' : 'mute'}
         style={{ ...spanStyle(range.start, range.end), background: AUDIO_SCOPE_COLORS[range.mode === 'delete' ? 'deleted' : range.mode === 'mute' ? 'muted' : 'pending'] }} />)}
       {selection && visible(selection.start, selection.end) && <div className="pointer-events-none absolute inset-y-0 border-x" data-audio-selection style={{ ...spanStyle(selection.start, selection.end), ...selectionStyle }} />}
       <div ref={hoverLine} className="pointer-events-none absolute inset-y-0 w-px" style={{ display: 'none', background: AUDIO_SCOPE_COLORS.hover }} />
