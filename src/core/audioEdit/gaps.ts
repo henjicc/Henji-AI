@@ -1,4 +1,5 @@
 import type { AudioBreath } from '../audioAnalysis/breath/respiro'
+import { isAudioEditBreathEdit } from './breaths'
 import { buildProjectAudioEditTimeline } from './timeline'
 import type { AudioEditCut, AudioEditProjectDocument, AudioEditRange } from './types'
 
@@ -8,8 +9,10 @@ import type { AudioEditCut, AudioEditProjectDocument, AudioEditRange } from './t
  * 只留一小段干净的静音当气口。落成普通的静音与删除剪切（标识以 gap: 开头），可逐处恢复、一步撤销，不改存档格式。
  *
  * - 残留的判断：比口播常见音量（全频电平 80% 分位）低 RESIDUE_BELOW_SPEECH_DB 以上算残留；字头的擦音（s、x）
- *   也比残留高十几 dB，高频电平分不开两者，所以只看全频；检测到的呼吸一律算残留；
- * - 保护：前一个字的余音留 TAIL_GUARD_MS、后一个字之前留 ONSET_GUARD_MS，不切到字；
+ *   也比残留高十几 dB，高频电平分不开两者，所以只看全频；
+ * - 检测到的呼吸算残留，但呼吸起止常与字的余音重叠一两格，其中仍明显偏响的（比常见音量低不到 LOUD_IN_BREATH_DB）
+ *   按有声处理，不切字尾；为凑气口留下的减弱呼吸一律算残留；
+ * - 保护：前一个字的余音留 TAIL_GUARD_MS、后一个字之前留 ONSET_GUARD_MS（另有 5 ms 淡变），不切到字；
  * - 气口长度：句间与重念接缝处 SENTENCE_GAP_MS，句中 CLAUSE_GAP_MS；本来就更短的只静音不删；
  * - 只在两个保留的字之间、识别的字边界附近找，几十毫秒内的口水音、咔哒声并进气口一起静音。
  */
@@ -23,12 +26,12 @@ export interface AudioEditLevels { resolutionMs: number; wideDb: readonly number
 const RESIDUE_BELOW_SPEECH_DB = 16
 const SENTENCE_GAP_MS = 200
 const CLAUSE_GAP_MS = 120
-const TAIL_GUARD_MS = 20
+const TAIL_GUARD_MS = 10
 const ONSET_GUARD_MS = 10
 const MIN_QUIET_MS = 40
 const CLICK_MS = 30
 const EDGE_MS = 150
-const BREATH_MARGIN_MS = 20
+const LOUD_IN_BREATH_DB = 8
 
 type Part = [number, number]
 interface Run { quiet: boolean; parts: Part[]; length: number }
@@ -65,13 +68,17 @@ export function cleanAudioEditGaps(
   const base = clearAudioEditGaps(document, range)
   const frames = (ms: number): number => Math.round(ms * sampleRate / 1000)
   const cellFrames = levels.resolutionMs * sampleRate / 1000
-  const threshold = percentile(levels.wideDb, 0.8) - RESIDUE_BELOW_SPEECH_DB
+  const speech = percentile(levels.wideDb, 0.8)
+  const threshold = speech - RESIDUE_BELOW_SPEECH_DB
   const quietCells = new Uint8Array(levels.wideDb.length)
   levels.wideDb.forEach((db, index) => { quietCells[index] = db < threshold ? 1 : 0 })
+  const cellOf = (ms: number): number => Math.max(0, Math.min(quietCells.length, Math.round(ms / levels.resolutionMs)))
   for (const breath of breaths) {
-    const from = Math.max(0, Math.floor((breath.startMs - BREATH_MARGIN_MS) / levels.resolutionMs))
-    const to = Math.min(quietCells.length, Math.ceil((breath.endMs + BREATH_MARGIN_MS) / levels.resolutionMs))
-    quietCells.fill(1, from, to)
+    for (let cell = cellOf(breath.startMs); cell < cellOf(breath.endMs); cell++) if (levels.wideDb[cell] < speech - LOUD_IN_BREATH_DB) quietCells[cell] = 1
+  }
+  for (const region of base.gainRegions ?? []) {
+    if (!region.enabled || !isAudioEditBreathEdit(region)) continue
+    quietCells.fill(1, cellOf(region.startFrame * 1000 / sampleRate), cellOf(region.endFrame * 1000 / sampleRate))
   }
   const quietAt = (frame: number): boolean => quietCells[Math.min(quietCells.length - 1, Math.floor(frame / cellFrames))] === 1
   const spans = buildProjectAudioEditTimeline(base)
