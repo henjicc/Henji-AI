@@ -104,7 +104,7 @@ it('拖动删除 / 静音区间的边缘：从哪种里面抓就改哪种，外�
   const props: AudioSpectralEditorProps = {
     sampleRate: 48000, durationFrames: 480000, view: { start: 0, end: 480000 }, waveform: { status: 'idle' }, spectrogramStatus: 'idle', display: 'waveform', tool: 'time', brushPixels: 8,
     playhead: { current: () => 0, subscribe: () => () => undefined }, onViewChange: vi.fn(), onSeek: vi.fn(),
-    selection: null, onSelectionChange: vi.fn(), spectralSelection: null, onSpectralSelectionChange: vi.fn(), onBrushStroke: vi.fn(), cutRanges, repairs: [], onCutEdgeEdit,
+    selection: null, onSelectionChange: vi.fn(), spectralSelection: null, onSpectralSelectionChange: vi.fn(), onBrushStroke: vi.fn(), cutRanges, repairs: [], onCutEdgeEdit, snapEnabled: true,
   }
   const view = render(<AudioSpectralEditor {...props} />)
   const area = view.getByRole('application', { name: '音频波形与频谱编辑区' })
@@ -126,4 +126,8 @@ it('拖动删除 / 静音区间的边缘：从哪种里面抓就改哪种，外�
   // 离边缘远的地方照常是时间选区，不改区间
   onCutEdgeEdit.mockClear(); drag(600, 700)
   expect(onCutEdgeEdit).not.toHaveBeenCalled()
+  // 吸附关着：拖到另一边附近也停在指针位置，无极调节
+  view.rerender(<AudioSpectralEditor {...props} snapEnabled={false} />)
+  drag(302, 396)
+  expect(onCutEdgeEdit).toHaveBeenLastCalledWith({ range: { start: 144000, end: 190080 }, mode: 'mute', action: 'remove' })
 })

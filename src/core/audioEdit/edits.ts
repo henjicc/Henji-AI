@@ -73,6 +73,17 @@ export function adoptAudioEditAutomaticEdits(project: AudioEditProjectDocument, 
   }
 }
 
+/**
+ * 恢复一段声音时，已删的词按恢复的位置精确处理：整个落在里面的词恢复；只恢复了一部分的词也恢复，
+ * 没恢复的那部分改用一刀删除表示，边缘停在用户松手的位置，不跳到字的边界。
+ */
+function restoreWordsIn(project: AudioEditProjectDocument, startFrame: number, endFrame: number): Pick<AudioEditProjectDocument, 'transcript'> & { cuts: AudioEditCut[] } {
+  const touched = (block: AudioEditTranscriptBlock): boolean => !block.locked && !block.included && block.startFrame < endFrame && block.endFrame > startFrame
+  const remainder: AudioEditCut[] = project.transcript.filter(touched).flatMap((block) => subtractRanges([block], [{ startFrame, endFrame }])
+    .map((part) => ({ id: `manual:${block.id}:${part.startFrame}`, ...part, reason: 'manual' as const, enabled: true })))
+  return { transcript: project.transcript.map((block) => touched(block) ? { ...block, included: true } : block), cuts: remainder }
+}
+
 export function editAudioEditRange(project: AudioEditProjectDocument, range: AudioEditRange, mode: 'delete' | 'mute' | 'restore'): AudioEditProjectDocument {
   project = adoptAudioEditAutomaticEdits(project, range)
   const startFrame = Math.max(0, Math.round(Math.min(range.startFrame, range.endFrame)))
@@ -80,8 +91,9 @@ export function editAudioEditRange(project: AudioEditProjectDocument, range: Aud
   if (!Number.isFinite(startFrame + endFrame) || endFrame <= startFrame) return project
   const parts = subtractRanges([{ startFrame, endFrame }], project.transcript.filter((block) => block.locked))
   if (mode === 'restore') {
-    return { ...project, cuts: (project.cuts ?? []).flatMap((cut) => !cut.enabled ? [cut] : subtractRanges([cut], parts).map((part, index) => ({ ...cut, ...part, id: index ? `${cut.id}:${part.startFrame}` : cut.id }))),
-      transcript: project.transcript.map((block) => !block.locked && block.startFrame >= startFrame && block.endFrame <= endFrame ? { ...block, included: true } : block) }
+    const words = restoreWordsIn(project, startFrame, endFrame)
+    return { ...project, cuts: [...(project.cuts ?? []).flatMap((cut) => !cut.enabled ? [cut] : subtractRanges([cut], parts).map((part, index) => ({ ...cut, ...part, id: index ? `${cut.id}:${part.startFrame}` : cut.id }))), ...words.cuts],
+      transcript: words.transcript }
   }
   const fresh = subtractRanges(parts, (project.cuts ?? []).filter((cut) => cut.enabled && (cut.mode ?? 'delete') === mode))
   return fresh.length ? { ...project, cuts: [...(project.cuts ?? []), ...fresh.map((part) => ({ ...part, id: crypto.randomUUID(), enabled: true, reason: 'manual' as const, mode }))] } : project
@@ -99,11 +111,10 @@ export function adjustAudioEditRangeMode(project: AudioEditProjectDocument, rang
   if (!Number.isFinite(startFrame + endFrame) || endFrame <= startFrame) return project
   const parts = subtractRanges([{ startFrame, endFrame }], project.transcript.filter((block) => block.locked))
   const matches = (cut: AudioEditCut): boolean => cut.enabled && (cut.mode ?? 'delete') === mode
-  return {
-    ...project,
-    cuts: (project.cuts ?? []).flatMap((cut) => !matches(cut) ? [cut] : subtractRanges([cut], parts).map((part, index) => ({ ...cut, ...part, id: index ? `${cut.id}:${part.startFrame}` : cut.id }))),
-    transcript: mode === 'mute' ? project.transcript : project.transcript.map((block) => !block.locked && block.startFrame >= startFrame && block.endFrame <= endFrame ? { ...block, included: true } : block),
-  }
+  const cuts = (project.cuts ?? []).flatMap((cut) => !matches(cut) ? [cut] : subtractRanges([cut], parts).map((part, index) => ({ ...cut, ...part, id: index ? `${cut.id}:${part.startFrame}` : cut.id })))
+  if (mode === 'mute') return { ...project, cuts }
+  const words = restoreWordsIn(project, startFrame, endFrame)
+  return { ...project, cuts: [...cuts, ...words.cuts], transcript: words.transcript }
 }
 
 /** All edits, including assistant mutations, respect the same protected ranges. */

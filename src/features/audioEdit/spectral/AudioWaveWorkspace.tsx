@@ -51,7 +51,7 @@ export function AudioWaveToolbar({ editor, selection, disabled, actions, onEditS
     </div>
     <UiSegmented ariaLabel="显示" size="sm" value={editor.display} onChange={editor.setDisplay}
       options={[{ value: 'both', label: '都显示' }, { value: 'waveform', label: '波形' }, { value: 'spectrum', label: '频谱' }]} />
-    <UiIconButton size="sm" on={editor.snapToSpeech} aria-pressed={editor.snapToSpeech} aria-label="吸附到字的起止" tooltip="拖删除、静音区间的边缘时，吸附到字声音真正开始、结束的位置" onClick={() => editor.setSnapToSpeech(!editor.snapToSpeech)}><Magnet /></UiIconButton>
+    <UiIconButton size="sm" on={editor.snapToSpeech} aria-pressed={editor.snapToSpeech} aria-label="吸附" tooltip="吸附：拖删除、静音区间的边缘时，吸到字声音真正开始、结束的位置和相邻区间的边缘；关着时随意拖" onClick={() => editor.setSnapToSpeech(!editor.snapToSpeech)}><Magnet /></UiIconButton>
     {editor.tool === 'brush' && <label className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-text2">
       画笔
       <UiRangeInput className="!w-24 shrink-0" aria-label="画笔大小" min={4} max={48} step={1} value={editor.brushPixels} onChange={event => editor.setBrushPixels(Number(event.target.value))} />
@@ -250,7 +250,7 @@ export function AudioWaveWorkspace() {
         onSelectionChange={(next) => { if (!recording) onSelection(next && next.end > next.start ? { startFrame: next.start, endFrame: next.end } : null) }}
         spectralSelection={editor.spectralSelection} onSpectralSelectionChange={editor.setSpectralSelection}
         onBrushStroke={stroke => { if (!disabled) actions.healStroke(stroke) }} cutRanges={visibleCuts} repairs={recording ? [] : repairs}
-        {...(speechEdges.length ? { snapFrames: speechEdges } : {})}
+        snapEnabled={editor.snapToSpeech} {...(speechEdges.length ? { snapFrames: speechEdges } : {})}
         {...(recording || disabled ? {} : { onCutEdgeEdit: ({ range: edited, mode, action }: { range: { start: number; end: number }; mode: 'delete' | 'mute'; action: 'add' | 'remove' }) => workspace.adjustCutRange({ startFrame: edited.start, endFrame: edited.end }, mode, action) })}
         {...(project.transcript.length && (project.viewSettings?.timelineCaptions ?? true) ? { captionLane: <CaptionLane view={editor.view} /> } : {})}
         onContextMenu={(event) => menu.showMenu(event, [

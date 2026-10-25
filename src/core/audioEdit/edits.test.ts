@@ -44,6 +44,10 @@ describe('audio edit shared decisions and interchange', () => {
     const words = setAudioEditBlocks(project(), ['b'], false)
     expect(adjustAudioEditRangeMode(words, { startFrame: 2900, endFrame: 4000 }, 'delete', 'remove').transcript.find((block) => block.id === 'b')?.included).toBe(true)
     expect(adjustAudioEditRangeMode(words, { startFrame: 2900, endFrame: 4000 }, 'mute', 'remove').transcript.find((block) => block.id === 'b')?.included).toBe(false)
+    // 只拖回一个已删词的一部分：边缘停在松手的位置，没恢复的那部分仍删除
+    const partly = adjustAudioEditRangeMode(words, { startFrame: 3400, endFrame: 4000 }, 'delete', 'remove')
+    expect(partly.transcript.find((block) => block.id === 'b')?.included).toBe(true)
+    expect(buildProjectAudioEditTimeline(partly).map((span) => [span.sourceStartFrame, span.sourceEndFrame])).toEqual([[0, 3000], [3400, 4000]])
   })
   it('手动改过的自动剪辑归用户：改成手动剪辑并留停用标记，之后重跑不覆盖', () => {
     const auto = { ...project(), cuts: [
