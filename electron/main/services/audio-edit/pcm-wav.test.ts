@@ -1,10 +1,11 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createF32WavWriter, openF32Wav } from './pcm-wav'
 
-const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-pcm-wav-'))
+let directory = ''
+beforeAll(async () => { directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-pcm-wav-')) })
 afterAll(() => fs.rm(directory, { recursive: true, force: true }))
 
 describe('32 位浮点 WAV 读写', () => {
