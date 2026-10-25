@@ -59,6 +59,13 @@ it('听音模型 CLAP：六个文件各有大小与完整哈希，国内为自�
   }
 })
 
+it('呼吸声检测 Respiro：一个 ONNX 文件，大小与完整哈希写死，只从自有 ModelScope 仓库下载，MIT', () => {
+  const model = LOCAL_MODEL_MANIFEST.find(model => model.id === 'speech_breath_respiro')!
+  expect(model.license.spdx).toBe('MIT'); expect(model.availability).toBe('available')
+  expect(model.files).toEqual([expect.objectContaining({ name: 'respiro-en.onnx', sizeBytes: 12_867_269, sha256: expect.stringMatching(/^[a-f0-9]{64}$/) })])
+  expect(model.files[0].sources).toEqual([{ region: 'domestic', label: 'own-modelscope', url: 'https://www.modelscope.cn/models/henjicc/henji-ai-local-models/resolve/master/speech_breath_respiro/respiro-en.onnx' }])
+})
+
 it('节拍模型 Beat This!：三个文件各有大小与完整哈希，国内为自有 ModelScope 仓库，国外固定 musetric 导出版本，MIT', () => {
   const model = LOCAL_MODEL_MANIFEST.find(model => model.id === 'music_beats_beat_this')!
   expect(model.license.spdx).toBe('MIT'); expect(model.availability).toBe('available')

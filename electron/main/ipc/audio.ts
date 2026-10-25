@@ -9,7 +9,8 @@ import { registerAudioSampleHandlers } from './audio-samples'
 import { registerExplanationAudioHandlers } from './explanation-audio'
 import { registerAudioLoudnessHandlers } from './audio-loudness'
 import { parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
-import { probeAudioEditImport, relinkAudioEditSource, verifyAudioEditSource } from '../services/audio-edit/media'
+import { prepareAudioEditAudio, probeAudioEditImport, relinkAudioEditSource, verifyAudioEditSource } from '../services/audio-edit/media'
+import { getBreathDetectionService } from '../services/breath-detection/runtime'
 import { detectAudioEditSilence } from '../services/audio-edit/silence'
 import { speechEnergyOptionsSchema } from '../../../src/core/audioEdit/speechEnergy'
 import { cancelAudioEditTask, listAudioEditTasks, runAudioEditTask } from '../services/audio-edit/task-store'
@@ -70,6 +71,11 @@ export function registerAudioIpc(): void {
     const target = record.sourcePath === undefined ? { projectId: readString(record, 'projectId') } : { sourcePath: readString(record, 'sourcePath') }
     return { ...target, settings: audioEditSettingsSchema.parse(record.settings), range: record.range === undefined ? undefined : audioEditRangeSchema.parse(record.range), requestId: readOptionalString(record, 'requestId'), energy: record.energy === undefined ? undefined : speechEnergyOptionsSchema.parse(record.energy) }
   }, detectAudioEditSilence)
+  // 呼吸声检测：读口播的原素材声音（不含修复与效果），按内容身份缓存；模型第一次用到时自动下载
+  registerIpcHandler('audioEdit:breaths', (input) => parseStringField(input, 'projectId'), async (projectId: string) => {
+    const project = await requireAudioEditProject(projectId)
+    return (await getBreathDetectionService().detect(await prepareAudioEditAudio(project), new AbortController().signal)).detection
+  })
   registerIpcHandler('audioEdit:tasks:list', (input) => parseStringField(input, 'projectId'), listAudioEditTasks)
   registerIpcHandler('audioEdit:tasks:cancel', (input) => parseStringField(input, 'requestId'), cancelAudioEditTask)
   registerIpcHandler('audioEdit:processing', (input) => {

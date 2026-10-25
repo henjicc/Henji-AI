@@ -1,3 +1,4 @@
+import type { BreathDetection } from '@/core/audioAnalysis/breath/respiro'
 import type { AudioEditRenderedAudio } from '@/core/audioEdit/regions'
 import type { AudioEditSpectralTileRequest, AudioEditSpectralTile, AudioEditSpectralProgress } from '@/core/audioEdit/spectralPyramid'
 import type {
@@ -45,6 +46,8 @@ export interface AudioEditPlatform {
   /** 确认所选文件与原素材内容相同，返回新的素材信息（不写文档）。 */
   relinkSource(projectId: string, sourcePath: string): Promise<AudioEditSourceMetadata>
   detectSilence(request: AudioEditSilenceRequest): Promise<AudioEditSilenceResult>
+  /** 呼吸声检测（本地 Respiro 模型，第一次用到时下载约 13 MB）；区间为原素材时间（毫秒）。 */
+  detectBreaths(projectId: string): Promise<BreathDetection>
   listTasks(projectId: string): Promise<AudioEditTask[]>
   cancelTask(requestId: string): Promise<void>
   prepareProcessing(projectId: string, requestId: string): Promise<void>

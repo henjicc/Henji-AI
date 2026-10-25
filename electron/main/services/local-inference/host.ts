@@ -6,6 +6,7 @@ import { assertTrackingFrames, type TrackingFrameProvider } from '../../../../sr
 import type { ImageInpaintJob, ImageInpaintResult } from './inpainting/protocol'
 import type { SoundAnalysisJob, SoundAnalysisResult, SoundTextEmbeddingJob, SoundTextEmbeddingResult } from './sound/protocol'
 import type { MusicAnalysisJob, MusicAnalysisJobResult } from './music/protocol'
+import type { BreathDetectionJob, BreathDetectionJobResult } from './breath/protocol'
 
 /*
  * 主进程侧的本地推理宿主：按需启动后台进程（utility process），派发分析、转发进度与日志、取消；
@@ -123,6 +124,10 @@ export class LocalInferenceHost {
   /** 音频重构：整曲节拍与结构分析，与其他分析同一个队列。 */
   analyzeMusic(job: MusicAnalysisJob, progress: (done: number, total: number) => void = () => undefined): Promise<MusicAnalysisJobResult> {
     return this.send<MusicAnalysisJobResult>({ type: 'music-analyze', job }, job.id, progress)
+  }
+
+  detectBreaths(job: BreathDetectionJob, progress: (done: number, total: number) => void = () => undefined): Promise<BreathDetectionJobResult> {
+    return this.send<BreathDetectionJobResult>({ type: 'breath-detect', job }, job.id, progress)
   }
 
   private send<T>(request: LocalInferenceRequest, id: string, progress: (done: number, total: number) => void, frames?: TrackingFrameProvider): Promise<T> {

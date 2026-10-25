@@ -63,6 +63,7 @@ export function createElectronAudioEdit(): AudioEditPlatform {
     verifySource: (projectId) => api().verifyEditSource(projectId),
     relinkSource: (projectId, sourcePath) => api().relinkEditSource(projectId, sourcePath),
     detectSilence: (request) => api().detectEditSilence(request),
+    detectBreaths: (projectId) => api().detectEditBreaths(projectId),
     listTasks: (projectId) => api().listEditTasks(projectId),
     cancelTask: (requestId) => api().cancelEditTask(requestId),
     prepareProcessing: (projectId, requestId) => api().prepareEditProcessing(projectId, requestId),

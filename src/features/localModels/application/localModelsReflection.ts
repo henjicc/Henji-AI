@@ -193,7 +193,7 @@ export function createLocalModelRegistrations(): ApplicationEntityRegistration[]
     {
       entity: {
         id: LOCAL_MODEL_ENTITY_TYPE, domain: DOMAIN, version: 1, title: '本地模型',
-        description: '在本机运行的可下载模型（人脸检测、人物抠像、人像分割、物体跟踪、图片修补、听音、节拍），多数第一次用到时自动下载（节拍模型 music_beats_beat_this 在首次音频重构时下载，约 190 MB）；听音模型 audio_understanding_clap 让音效库按声音描述检索，需写 downloaded=true 下载（约 400 MB），'
+        description: '在本机运行的可下载模型（人脸检测、人物抠像、人像分割、物体跟踪、图片修补、听音、节拍、呼吸声），多数第一次用到时自动下载（节拍模型 music_beats_beat_this 在首次音频重构时下载，约 190 MB；呼吸声检测 speech_breath_respiro 在口播首次处理呼吸时下载，约 13 MB）；听音模型 audio_understanding_clap 让音效库按声音描述检索，需写 downloaded=true 下载（约 400 MB），'
           + '也可以提前下载或删除。读 status 看是否可用，写 downloaded 下载或删除；cancel_local_model_download 停止下载并保留部分文件。打开模型文件夹由设置页调用系统资源管理器，只供用户导航，不向助手开放。',
         refKind: LOCAL_MODEL_ENTITY_TYPE, dataClass: 'C0', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: [],
         revisionScopes: [REVISION_SCOPE], queryCapabilityIds: ['read_application_entity'], schemaRef: schemaRef('entity', LOCAL_MODEL_ENTITY_TYPE),

@@ -297,6 +297,22 @@ export const LOCAL_MODEL_MANIFEST: readonly LocalModelSpec[] = [
       beatThisFile('config.json', 'config', 1_012, '966f271e9a44c8f1b9e438622b34165ecdf6df9adedc8a9c0a6f7fd9d3458cc2'),
     ],
   },
+  {
+    id: 'speech_breath_respiro',
+    title: { zh: '呼吸声检测 Respiro', en: 'Breath Detection (Respiro)' },
+    purpose: { zh: '逐帧找出口播里的呼吸声，用于口播剪辑自动删除或减弱呼吸、挑选气口', en: 'Finds breaths frame by frame in voice recordings so talking-head edits can remove or soften them and cut at natural breaths' },
+    folderName: { zh: '呼吸声检测 Respiro', en: 'Breath Detection Respiro' },
+    homepage: 'https://github.com/ydqmkkx/Respiro-en',
+    // 代码与权重均为 MIT（仓库 LICENSE，Copyright 2024 DongYANG）。官方只发布 PyTorch 检查点，
+    // 这里的 ONNX 由我们把特征提取（STFT、梅尔、dB、方差、过零率）与模型一起导出，与官方实现逐帧一致；只有自有仓库可下载。
+    license: { spdx: 'MIT', url: 'https://github.com/ydqmkkx/Respiro-en/blob/main/LICENSE' },
+    availability: 'available',
+    files: [{
+      name: 'respiro-en.onnx', role: 'model', sizeBytes: 12_867_269,
+      sha256: '293b7c60da233256f7aa37e73d058e3f5dd444ba3d242d6909eab2c0d94478a8',
+      sources: [{ region: 'domestic', label: 'own-modelscope', url: ownUrl('speech_breath_respiro/respiro-en.onnx') }],
+    }],
+  },
 ]
 
 export function findLocalModelSpec(id: LocalModelId): LocalModelSpec {

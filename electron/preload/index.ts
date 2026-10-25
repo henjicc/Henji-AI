@@ -417,6 +417,7 @@ const audioApi: HenjiAudioApi = {
   verifyEditSource: (projectId) => nativeInvoke('audioEdit:source:verify', { projectId }),
   relinkEditSource: (projectId, sourcePath) => nativeInvoke('audioEdit:source:relink', { projectId, sourcePath }),
   detectEditSilence: (payload) => nativeInvoke('audioEdit:silence', payload),
+  detectEditBreaths: (projectId) => nativeInvoke('audioEdit:breaths', { projectId }),
   listEditTasks: (projectId) => nativeInvoke('audioEdit:tasks:list', { projectId }),
   cancelEditTask: (requestId) => nativeInvoke('audioEdit:tasks:cancel', { requestId }),
   prepareEditProcessing: (projectId, requestId) => nativeInvoke('audioEdit:processing', { projectId, requestId }),

@@ -356,6 +356,7 @@ export interface HenjiAudioApi {
   verifyEditSource(projectId: string): Promise<void>
   relinkEditSource(projectId: string, sourcePath: string): Promise<AudioEditSourceMetadata>
   detectEditSilence(payload: AudioEditSilenceRequest): Promise<AudioEditSilenceResult>
+  detectEditBreaths(projectId: string): Promise<import('../../src/core/audioAnalysis/breath/respiro').BreathDetection>
   listEditTasks(projectId: string): Promise<AudioEditTask[]>
   cancelEditTask(requestId: string): Promise<void>
   prepareEditProcessing(projectId: string, requestId: string): Promise<void>
