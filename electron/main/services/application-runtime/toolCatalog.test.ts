@@ -137,6 +137,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.67.0'] = '39d77424f8277a2c8d9e4f4ef4838c8f6f2da98c339cceeecd727e1a9fb8575c'
     // 呼吸声的气口按剪完后实际听到的空当算，句间与重念接缝处多留一点，说明与 gap_ms 含义随之更新。
     fingerprints['2.68.0'] = 'c127a600ab9acc8334a5b2596a7f837947f9fe86ab0cb66fcf602c3961a5dba9'
+    // 口播结果的 shortenedMs 允许为负：重新处理呼吸声时比上次删得少，时长变长。
+    fingerprints['2.69.0'] = '7f4a904150c22cc149a7dbf84a87f68617ba5581b50718404113bed31cda6264'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], `工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹：${fingerprint}`).toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {

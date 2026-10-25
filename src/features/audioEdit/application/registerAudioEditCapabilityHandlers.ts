@@ -21,6 +21,9 @@ import { loadAudioEditProject, flushAudioEditProject, releaseAudioEditProject, a
 import { importAudioEditMedia, openAudioEditDocument, pickAudioEditMedia } from './audioEditDocumentService'
 import { compressAudioEditSilence, cleanProjectAudioEditFillers, cleanProjectAudioEditRetakes, processProjectAudioEditBreaths, transcribeAudioEdit, exportAudioEdit, prepareAudioEditProcessing, quickProcessAudioEdit, undoAllAudioEditChanges, formatProjectAudioEditCaptions } from './audioEditApplicationService'
 
+/** 剪后时长的变化：重新处理呼吸声时比上次删得少，时长会变长。 */
+const lengthChange = (shortenedMs: number): string => shortenedMs > 0 ? `缩短 ${(shortenedMs / 1000).toFixed(1)} 秒` : shortenedMs < 0 ? `比处理前加长 ${(-shortenedMs / 1000).toFixed(1)} 秒` : '时长不变'
+
 export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabilityHandlerRegistrar): void {
   // 口播文档的通用打开与后台释放（3.3）：列表、新建、改名、移动、副本、回收站走通用文档能力
   // （list_documents / open_document 等），这里只登记“打开到哪里”和“后台持有的实例怎么释放”。
@@ -97,7 +100,7 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
           const { retakeCount, breaths, ...processed } = await quickProcessAudioEdit(id, input.range, requestId)
           Object.assign(result, processed)
           const breathText = breaths ? `处理呼吸声（删除 ${breaths.deleted}、减弱 ${breaths.attenuated} 处）、` : ''
-          result.message = `已${retakeCount ? `去掉 ${retakeCount} 处重念、` : ''}${breathText}压缩停顿并清理所选语气词，缩短 ${result.shortenedMs} 毫秒，可整批撤销。这只是起点：请逐处复核接缝、呼吸与语气词。`; break
+          result.message = `已${retakeCount ? `去掉 ${retakeCount} 处重念、` : ''}${breathText}压缩停顿并清理所选语气词，${lengthChange(processed.shortenedMs)}，可整批撤销。这只是起点：请逐处复核接缝、呼吸与语气词。`; break
         }
         case 'compress_audio_edit_silence': { const { count, shortenedMs } = await compressAudioEditSilence(id, input.range, requestId); Object.assign(result, { count, shortenedMs }) } result.message = `处理 ${result.count} 处停顿，缩短 ${result.shortenedMs} 毫秒。`; break
         case 'clean_audio_edit_fillers': result.count = await cleanProjectAudioEditFillers(id, input.range); result.message = `清理 ${result.count} 处语气词。`; break
@@ -110,7 +113,7 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
         case 'process_audio_edit_breaths': {
           const { counts, shortenedMs } = await processProjectAudioEditBreaths(id, input.policy ?? 'delete', input.range, requestId)
           Object.assign(result, { count: counts.deleted + counts.attenuated + counts.muted, shortenedMs })
-          result.message = `呼吸声：删除 ${counts.deleted} 处、减弱 ${counts.attenuated} 处、静音 ${counts.muted} 处、保留 ${counts.kept} 处，缩短 ${(shortenedMs / 1000).toFixed(1)} 秒；可在 audio_edit.breath 逐处查看与修改。`
+          result.message = `呼吸声：删除 ${counts.deleted} 处、减弱 ${counts.attenuated} 处、静音 ${counts.muted} 处、保留 ${counts.kept} 处，${lengthChange(shortenedMs)}；可在 audio_edit.breath 逐处查看与修改。`
           break
         }
         case 'transcribe_audio_edit': {

@@ -285,6 +285,10 @@ describe('外部客户端成功输出 JSON Schema 契约', () => {
       expect(result.structuredContent).toMatchObject({ data: { target, comparison, contactSheet: { frames: [29, 30, 31] }, documentVersion: 'host:document:29' } })
     }
   })
+  it('重新处理呼吸声比上次删得少时，口播结果的时长变化可以是负数', () => {
+    const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('process_audio_edit_breaths')!
+    expect(definition.outputSchema.safeParse({ ...successData.process_audio_edit_breaths, shortenedMs: -1200 }).success).toBe(true)
+  })
   it('局部变化区域、复原时间与采样阶段经公共出口完整保留，拒绝未知字段', () => {
     const name = 'query_video_edit_content'; const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(name)!
     const screenChange = { beforeSeconds: 1, atSeconds: 1.2, lastChangeSeconds: 1.4, returnSeconds: 1.4, settledSeconds: 1.6,
