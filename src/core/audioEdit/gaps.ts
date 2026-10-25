@@ -177,27 +177,24 @@ export function cleanAudioEditGaps(
         piece++
       }
     }
-    // 两头留的静音尽量各在一整段里：前一个字后面那段、后一个字前面那段，中间整段删除（含已删的部分），不穿插
-    const first = gap.parts[0], last = gap.parts.at(-1)!
-    const keep = muteLength - deleteLength
-    const firstRoom = Math.max(0, first[1] - first[0] - tail), lastRoom = Math.max(0, last[1] - last[0] - onset)
-    let keepTail = Math.min(lastRoom, keep - Math.min(firstRoom, Math.floor(keep / 2)))
-    const keepHead = Math.min(firstRoom, keep - keepTail)
-    keepTail = keep - keepHead
-    const headEnd = first[0] + tail + keepHead, tailStart = last[1] - onset - keepTail
-    if (deleteLength && keepTail <= lastRoom && headEnd <= tailStart) {
-      add([[first[0] + tail, headEnd]], 'mute')
+    if (gap.parts.length > 1) {
+      // 被已有删除隔成几段：静音只留在紧挨前一个字的那段开头和紧挨后一个字的那段末尾，中间整段删除（含已删的部分），
+      // 不穿插成一条条；两头放不下要留的长度时宁可气口短一点
+      const first = gap.parts[0], last = gap.parts.at(-1)!
+      const keep = Math.max(0, muteLength - deleteLength)
+      const firstRoom = Math.max(0, first[1] - first[0] - tail), lastRoom = Math.max(0, last[1] - last[0] - onset)
+      let keepTail = Math.min(lastRoom, keep - Math.min(firstRoom, Math.floor(keep / 2)))
+      const keepHead = Math.min(firstRoom, keep - keepTail)
+      keepTail = Math.min(lastRoom, keep - keepHead)
+      const muteStart = Math.min(first[1], first[0] + tail), headEnd = Math.min(first[1], muteStart + keepHead)
+      const tailEnd = Math.max(last[0], last[1] - onset), tailStart = Math.max(last[0], tailEnd - keepTail)
+      add([[muteStart, headEnd]], 'mute')
       add([[headEnd, tailStart]], 'delete')
-      add([[tailStart, last[1] - onset]], 'mute')
+      add([[tailStart, tailEnd]], 'mute')
     } else if (deleteLength) {
       add(sliceParts(gap.parts, tail, deleteFrom), 'mute')
       add(sliceParts(gap.parts, deleteFrom, deleteFrom + deleteLength), 'delete')
       add(sliceParts(gap.parts, deleteFrom + deleteLength, gap.length - onset), 'mute')
-    } else if (gap.parts.length > 2 && first[1] - first[0] > tail && last[1] - last[0] > onset) {
-      // 已被删除隔成好几段：只留紧挨两边字的那两段静音，中间零碎的几段并进删除
-      add([[first[0] + tail, first[1]]], 'mute')
-      add([[first[1], last[0]]], 'delete')
-      add([[last[0], last[1] - onset]], 'mute')
     } else add(sliceParts(gap.parts, tail, gap.length - onset), 'mute')
     count++
   }
