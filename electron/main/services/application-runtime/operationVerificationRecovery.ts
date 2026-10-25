@@ -4,11 +4,15 @@ import type { OperationRecord } from './operationStore'
 
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 
-/** 从原交易回执保留执行事实，进入人工核对后也不能把它视为未执行。 */
+/**
+ * 从原交易回执保留执行事实，进入人工核对后也不能把它视为未执行。
+ * 业务已执行完、只是返回结果不符合声明（应用自身的缺陷）同样是已执行：不核对就永远挡住同一目标的后续修改。
+ */
 export function isExecutedVerificationFailure(record: OperationRecord): boolean {
   const details = object(object(record.result?.error).details)
   const transaction = object(details.transaction)
-  return transaction.code === 'VERIFICATION_FAILED' && !transaction.persistence && !details.persistence
+  if (transaction.persistence || details.persistence) return false
+  return transaction.code === 'VERIFICATION_FAILED' || (details.outputContract === true && object(details.execution).targetMutation === 'applied')
 }
 
 export function canReviewOperation(record: OperationRecord): boolean {

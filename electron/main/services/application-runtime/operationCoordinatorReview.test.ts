@@ -38,6 +38,18 @@ it('非 set 的已执行验证失败可在当前宿主核对，稍后保留保�
   expect(f.coordinator.pendingReviews()).toEqual([])
 })
 
+it('已执行但返回结果不符合声明的写操作可以核对解除，不能记成未执行', async () => {
+  const f = fixture()
+  f.set({ ...f.get(), capabilityId: 'process_audio_edit_breaths', input: { documentRef: { kind: 'audio_edit.document', id: 'target-secret' } }, targetRefs: [{ kind: 'audio_edit.document', id: 'target-secret' }],
+    result: { ok: false, error: { code: 'CAPABILITY_REJECTED', message: 'APPLICATION_OUTPUT_CONTRACT:操作已执行，但返回结果不符合声明。', details: { outputContract: true, execution: { billing: 'not_charged', targetMutation: 'applied', notExecuted: false }, replayMutation: false } } } })
+  expect(f.coordinator.pendingReviews()).toHaveLength(1)
+  await f.coordinator.review(f.get(), 'same-epoch', vi.fn().mockResolvedValue({ ok: true, data: { name: '口播' } }), () => {})
+  expect(f.show).toHaveBeenCalledWith(expect.objectContaining({ executed: true }))
+  expect(() => f.coordinator.resolveReview('operation-secret', 'caller-secret', 'not_executed')).toThrow('RECOVERY_ALREADY_EXECUTED')
+  f.coordinator.resolveReview('operation-secret', 'caller-secret', 'completed')
+  expect(f.get()).toMatchObject({ state: 'completed', verificationState: 'verified' })
+})
+
 it('主进程拒绝把已经执行的核对记录改成未执行', () => {
   const f = fixture()
   f.set({ ...f.get(), state: 'awaiting_user_confirmation', confirmation: applicationUserConfirmation({ title: '核对', message: '已执行', confirmLabel: '已核对' }, 'review') })
