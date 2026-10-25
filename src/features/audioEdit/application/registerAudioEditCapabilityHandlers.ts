@@ -97,9 +97,9 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
         case 'reset_audio_edit': await undoAllAudioEditChanges(id); result.message = instance.document.editBaseline?.kind === 'original' ? '已恢复初始剪辑与识别原文，可撤销本次恢复。' : '已恢复全部声音、分段和处理设置。旧口播没有保存最初识别原文，保留已有文字，可撤销本次恢复。'; break
         case 'format_audio_edit_subtitles': result.count = await formatProjectAudioEditCaptions(id); result.message = `已整理 ${result.count} 段字幕，文字区、波形区与 SRT 共用分段。`; break
         case 'quick_process_audio_edit': {
-          const { retakeCount, breaths, ...processed } = await quickProcessAudioEdit(id, input.range, requestId)
+          const { retakeCount, breaths, gaps, ...processed } = await quickProcessAudioEdit(id, input.range, requestId)
           Object.assign(result, processed)
-          const breathText = breaths ? `处理呼吸声（删除 ${breaths.deleted}、减弱 ${breaths.attenuated} 处）、` : ''
+          const breathText = breaths ? `处理呼吸声（删除 ${breaths.deleted}、减弱 ${breaths.attenuated} 处）、${gaps ? `把 ${gaps} 处字间气口清成静音、` : ''}` : ''
           result.message = `已${retakeCount ? `去掉 ${retakeCount} 处重念、` : ''}${breathText}压缩停顿并清理所选语气词，${lengthChange(processed.shortenedMs)}，可整批撤销。这只是起点：请逐处复核接缝、呼吸与语气词。`; break
         }
         case 'compress_audio_edit_silence': { const { count, shortenedMs } = await compressAudioEditSilence(id, input.range, requestId); Object.assign(result, { count, shortenedMs }) } result.message = `处理 ${result.count} 处停顿，缩短 ${result.shortenedMs} 毫秒。`; break
@@ -111,9 +111,9 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
           break
         }
         case 'process_audio_edit_breaths': {
-          const { counts, shortenedMs } = await processProjectAudioEditBreaths(id, input.policy ?? 'delete', input.range, requestId)
+          const { counts, gaps, shortenedMs } = await processProjectAudioEditBreaths(id, input.policy ?? 'delete', input.range, requestId)
           Object.assign(result, { count: counts.deleted + counts.attenuated + counts.muted, shortenedMs })
-          result.message = `呼吸声：删除 ${counts.deleted} 处、减弱 ${counts.attenuated} 处、静音 ${counts.muted} 处、保留 ${counts.kept} 处，${lengthChange(shortenedMs)}；可在 audio_edit.breath 逐处查看与修改。`
+          result.message = `呼吸声：删除 ${counts.deleted} 处、减弱 ${counts.attenuated} 处、静音 ${counts.muted} 处、保留 ${counts.kept} 处${gaps ? `；字间气口清成静音 ${gaps} 处` : ''}，${lengthChange(shortenedMs)}；可在 audio_edit.breath 逐处查看与修改，气口清理是标识以 gap: 开头的静音与删除剪切。`
           break
         }
         case 'transcribe_audio_edit': {

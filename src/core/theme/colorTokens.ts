@@ -47,7 +47,8 @@ export const AUDIO_SCOPE_COLORS = {
   viewWindowEdge: 'rgba(255,255,255,0.75)',
   hover: 'rgba(255,255,255,0.45)',
   deleted: 'rgba(255,74,61,0.22)',
-  muted: 'rgba(0,0,0,0.5)',
+  // 静音与删除分开显示：删除红色，静音（保留时长、声音清零，如字间气口）蓝色
+  muted: 'rgba(76,157,255,0.24)',
   pending: 'rgba(250,199,117,0.22)',
 } as const;
 /** 剪辑预设样片的暗角与代码渲染验收形状颜色，属于画面内容，不随界面主题变化。 */

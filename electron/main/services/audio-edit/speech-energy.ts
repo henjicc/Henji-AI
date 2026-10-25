@@ -66,7 +66,8 @@ export async function decodeSpeechEnergy(source: AudioEditSourceMetadata, raw: S
     valleys.append(index * FRAME_MS, Math.min(durationMs, (index + 1) * FRAME_MS), wide[index], high[index])
   }
   valleys.flush()
-  const result: SpeechEnergyAnalysis = { resolutionMs: FRAME_MS, thresholdDb, highThresholdDb, pauses: valleys.pauses }
+  const result: SpeechEnergyAnalysis = { resolutionMs: FRAME_MS, thresholdDb, highThresholdDb, pauses: valleys.pauses,
+    ...(options.levels ? { levels: { wideDb: wide.map(value => Math.max(-120, Math.min(0, Math.round(value * 10) / 10))) } } : {}) }
   progress(1)
   return result
 }
