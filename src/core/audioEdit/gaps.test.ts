@@ -53,6 +53,17 @@ describe('字间气口清理', () => {
     expect(joined.count).toBe(0)
   })
 
+  it('一口气连着念的词之间的自然间隙不是气口：没有标点、接缝、呼吸，又停得不够久就不动', () => {
+    // 调用 | 60 ms 的间隙 | 大模型：识别的两个词挨着、不带标点
+    const phrase = documentOf([['调用', 0, 1000], ['大模型', 1000, 3000]])
+    expect(cleanAudioEditGaps(phrase, [], levelsOf([[0, 990], [1050, 3000]])).count).toBe(0)
+    // 不带标点但实际停了 0.2 秒以上：照常清理
+    const paused = documentOf([['调用', 0, 1000], ['大模型', 1250, 3000]])
+    expect(cleanAudioEditGaps(paused, [], levelsOf([[0, 1000], [1250, 3000]])).count).toBe(1)
+    // 中间有呼吸也算该停的地方
+    expect(cleanAudioEditGaps(phrase, [{ startMs: 995, endMs: 1045, peak: 1 }], levelsOf([[0, 990], [1050, 3000]])).count).toBe(1)
+  })
+
   it('重念接缝：两侧剩下的残留按成片里的先后连成一段处理，检测到的呼吸算残留', () => {
     // 额度啊， 0–1000 | 残留 1000–1100 | 念坏的“所以” 1100–1500（已删）| 呼吸 1500–1800 | 所以 1900–
     const document = documentOf([['额度啊，', 0, 1000], ['所以', 1100, 1500], ['所以我就', 1900, 3000]], {

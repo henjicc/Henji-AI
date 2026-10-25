@@ -14,6 +14,8 @@ import type { AudioEditCut, AudioEditProjectDocument, AudioEditRange } from './t
  *   按有声处理，不切字尾；为凑气口留下的减弱呼吸一律算残留；
  * - 保护：前一个字的余音留 TAIL_GUARD_MS、后一个字之前留 ONSET_GUARD_MS（另有 5 ms 淡变），不切到字；
  * - 气口长度：句间与重念接缝处 SENTENCE_GAP_MS，句中 CLAUSE_GAP_MS；本来就更短的只静音不删；
+ * - 只在真正该停的地方清：前一个字带标点、两字之间删过字（重念接缝）、中间有呼吸，或实际停了 UNMARKED_PAUSE_MS 以上；
+ *   一口气连着念的词（“调用大模型”）字与字之间本来就有几十毫秒的自然间隙，那不是气口，不动；
  * - 只在两个保留的字之间、识别的字边界附近找，几十毫秒内的口水音、咔哒声并进气口一起静音。
  */
 
@@ -29,6 +31,7 @@ const CLAUSE_GAP_MS = 120
 const TAIL_GUARD_MS = 10
 const ONSET_GUARD_MS = 10
 const MIN_QUIET_MS = 40
+const UNMARKED_PAUSE_MS = 150
 const CLICK_MS = 30
 const EDGE_MS = 150
 const LOUD_IN_BREATH_DB = 8
@@ -128,6 +131,9 @@ export function cleanAudioEditGaps(
     if (muteLength <= 0) continue
     const seam = removedWords.some((word) => word.startFrame >= previous.endFrame && word.endFrame <= next.startFrame)
     const sentence = /[。？！；…!?;]$/.test(previous.text.trim())
+    const marked = sentence || seam || /[，、：,:]$/.test(previous.text.trim())
+      || breaths.some((breath) => breath.startMs * sampleRate / 1000 < next.startFrame && breath.endMs * sampleRate / 1000 > previous.endFrame)
+    if (!marked && gap.length < frames(UNMARKED_PAUSE_MS)) continue
     const target = frames(sentence || seam ? SENTENCE_GAP_MS : CLAUSE_GAP_MS)
     const deleteLength = Math.min(muteLength, Math.max(0, gap.length - target))
     const deleteFrom = tail + Math.floor((muteLength - deleteLength) / 2)
