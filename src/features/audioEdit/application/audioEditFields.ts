@@ -87,7 +87,7 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
     field(E.breath, 'context', '所在位置', { kind: 'enum', values: [['sentence', '句与句之间'], ['clause', '句中（逗号处或没有标点）'], ['edge', '开头或结尾'], ['touching', '和字连在一起（识别的词时间盖住了大半口气）'], ['removed', '所在声音已被剪掉']].map(([value, label]) => ({ value, label })) }, (s) => breath(s).context),
     field(E.breath, 'before', '前面保留的文字（最多 8 字）', TEXT, (s) => breath(s).before),
     field(E.breath, 'after', '后面保留的文字（最多 8 字）', TEXT, (s) => breath(s).after),
-    field(E.breath, 'gap_ms', '前后两个词之间的空当（毫秒，含这口气）', INT, (s) => breath(s).gapMs),
+    field(E.breath, 'gap_ms', '剪完后前后两个词之间实际听到的空当（毫秒，含这口气还保留的部分）', INT, (s) => breath(s).gapMs),
     field(E.breath, 'handling', '当前处理：deleted 删掉（两侧原有的安静保留）、attenuated 减弱 18 dB、muted 静音（保留时长）、kept 保留（之后批量处理也不再动）；removed 表示所在声音已被剪掉，不能写', { kind: 'enum', values: [['deleted', '删掉'], ['attenuated', '减弱'], ['muted', '静音'], ['kept', '保留'], ['removed', '已随剪辑去掉']].map(([value, label]) => ({ value, label })) }, (s) => breath(s).handling, (s, v) => {
       if (v !== 'deleted' && v !== 'attenuated' && v !== 'muted' && v !== 'kept') throw new Error('handling 只能写 deleted、attenuated、muted 或 kept。')
       s.document = setAudioEditBreathHandling(s.document, s.breaths?.raw ?? [], breath(s).id, v)

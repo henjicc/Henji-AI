@@ -50,6 +50,25 @@ describe('呼吸声按上下文处理', () => {
     expect(tiny.counts).toMatchObject({ deleted: 0, attenuated: 1 })
   })
 
+  it('重念接缝处按剪完后听到的空当留气口：同一处的几口气逐口处理，不会把接缝删到字贴字', () => {
+    // 可靠的。| 呼吸 1000–1300 | 念坏的“而且” 1300–1800（已删）+ 重念切掉的停顿 1800–2000 | 呼吸 2000–2300 | 而且正好
+    const seam = documentOf([['可靠的。', 0, 1000], ['而且', 1300, 1800], ['而且正好', 2310, 2800]], {
+      cuts: [{ id: 'retake', startFrame: 1800, endFrame: 2000, reason: 'silence', enabled: true }],
+    })
+    seam.transcript[1] = { ...seam.transcript[1], included: false }
+    const pair = [{ startMs: 1000, endMs: 1300, peak: 1 }, { startMs: 2000, endMs: 2300, peak: 1 }]
+    expect(describeAudioEditBreaths(seam, pair).map((view) => view.gapMs)).toEqual([610, 610])
+    const { document: next, counts } = applyAudioEditBreathPolicy(seam, pair, 'delete')
+    expect(counts).toMatchObject({ deleted: 2, attenuated: 0 })
+    // 第一口整口删；第二口只剩 10 的安静，留最后 140 减弱，接缝听到 150
+    expect(next.cuts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'breath:1000', startFrame: 1000, endFrame: 1300 }),
+      expect.objectContaining({ id: 'breath:2000', startFrame: 2000, endFrame: 2160 }),
+    ]))
+    expect(next.gainRegions).toEqual([expect.objectContaining({ id: 'breath:2000', startFrame: 2160, endFrame: 2300 })])
+    expect(describeAudioEditBreaths(next, pair).map((view) => view.gapMs)).toEqual([150, 150])
+  })
+
   it('已被重念或停顿处理剪掉的呼吸不再处理；下刀范围只在两侧词之间', () => {
     const cut = documentOf(words, { cuts: [{ id: 'retake', startFrame: 1200, endFrame: 1800, reason: 'manual', enabled: true }] })
     expect(describeAudioEditBreaths(cut, breaths)[0]).toMatchObject({ context: 'removed', handling: 'removed' })
@@ -98,6 +117,9 @@ describe('呼吸声的位置判断', () => {
     const partly = documentOf([['一件事，', 0, 1000], ['每个', 1750, 2500]], { cuts: [{ id: 'retake', startFrame: 1000, endFrame: 1500, reason: 'manual', enabled: true }] })
     const view = describeAudioEditBreaths(partly, [{ startMs: 1300, endMs: 1700, peak: 1 }])[0]
     expect(view.context).toBe('clause')
-    expect(applyAudioEditBreathPolicy(partly, [{ startMs: 1300, endMs: 1700, peak: 1 }], 'delete').document.cuts?.find((cut) => cut.id === 'breath:1300')).toMatchObject({ startFrame: 1500, endFrame: 1700 })
+    // 剪完听到的空当只剩 1500–1750：删掉保留的 200 后不到 80，留紧挨“每个”的 30 减弱
+    const partlyDeleted = applyAudioEditBreathPolicy(partly, [{ startMs: 1300, endMs: 1700, peak: 1 }], 'delete').document
+    expect(partlyDeleted.cuts?.find((cut) => cut.id === 'breath:1300')).toMatchObject({ startFrame: 1500, endFrame: 1670 })
+    expect(partlyDeleted.gainRegions).toEqual([expect.objectContaining({ id: 'breath:1300', startFrame: 1670, endFrame: 1700 })])
   })
 })
