@@ -21,7 +21,8 @@ it('口播十一工具与共用剪辑输入只接受自身字段，真实必填�
   const dispatcher = new ApplicationToolDispatcher(connections, host, {} as ApplicationOperationCoordinator)
   const samples: Array<[string, Record<string, unknown>, string[]]> = [
     ...['reset_audio_edit', 'format_audio_edit_subtitles', 'process_audio_edit_sound', 'query_audio_edit_tasks', 'retry_audio_edit_save'].map(id => [id, { documentRef: { kind: 'audio_edit.document', id: 'audio' } }, ['documentRef']] as [string, Record<string, unknown>, string[]]),
-    ...['quick_process_audio_edit', 'compress_audio_edit_silence', 'clean_audio_edit_fillers', 'transcribe_audio_edit'].map(id => [id, { documentRef: { kind: 'audio_edit.document', id: 'audio' } }, ['documentRef']] as [string, Record<string, unknown>, string[]]),
+    ...['quick_process_audio_edit', 'compress_audio_edit_silence', 'clean_audio_edit_fillers', 'clean_audio_edit_retakes', 'transcribe_audio_edit'].map(id => [id, { documentRef: { kind: 'audio_edit.document', id: 'audio' } }, ['documentRef']] as [string, Record<string, unknown>, string[]]),
+    ['import_audio_edit_source', { documentRef: { kind: 'audio_edit.document', id: 'audio' }, sourcePath: 'D:/录音/口播.wav' }, ['documentRef', 'sourcePath']],
     ['cancel_audio_edit_task', { documentRef: { kind: 'audio_edit.document', id: 'audio' }, taskId: 'task' }, ['documentRef', 'taskId']],
     ['export_audio_edit', { documentRef: { kind: 'audio_edit.document', id: 'audio' }, destination: { mode: 'quick' } }, ['documentRef', 'destination']],
     ...['save_video_edit', 'undo_video_edit', 'redo_video_edit', 'import_video_edit_folder'].map(id => [id, { documentRef: { kind: 'video_edit.document', id: 'video' } }, ['documentRef']] as [string, Record<string, unknown>, string[]]),

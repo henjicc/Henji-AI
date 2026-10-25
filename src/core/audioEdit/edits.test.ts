@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { applyAudioEditSuggestion, cleanAudioEditFillers, editAudioEditRange } from './edits'
+import { applyAudioEditSuggestion, cleanAudioEditFillers, editAudioEditRange, setAudioEditBlocks } from './edits'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from './timeline'
 import { buildAudioEditXml, compileAudioEditXmlTimeline } from './xml'
 import type { AudioEditProjectDocument } from './types'
@@ -101,3 +101,27 @@ for (const sampleRate of [44100, 48000]) for (const rate of [{ numerator: 25, de
     expect(xml.querySelectorAll('clipitem')).toHaveLength(timeline.clips.length * 2)
   })
 }
+
+describe('重念剪辑', () => {
+  it('重念删除连同其间停顿一起剪掉，在文字里恢复任一词时停顿也恢复', () => {
+    // 第一遍 [500,1500)，停顿 [1500,2200)，第二遍 [2200,3200)；删除范围从第一遍前的停顿到第二遍开头前留出气口
+    const original: AudioEditProjectDocument = { ...project(), transcript: [
+      { id: 'r1', text: '所以', startFrame: 500, endFrame: 900, included: true, locked: false, granularity: 'word' },
+      { id: 'r2', text: '综合', startFrame: 1000, endFrame: 1500, included: true, locked: false, granularity: 'word' },
+      { id: 't1', text: '所以', startFrame: 2200, endFrame: 2600, included: true, locked: false, granularity: 'word' },
+      { id: 't2', text: '综合来看', startFrame: 2600, endFrame: 3200, included: true, locked: false, granularity: 'word' },
+    ], suggestions: [{ id: 'retake:r1:r2', kind: 'retake', evidence: 'audio', title: '重念', detail: '', startFrame: 400, endFrame: 2080, blockIds: ['r1', 'r2'], confidence: 'high', status: 'pending' }] }
+    const applied = applyAudioEditSuggestion(original, 'retake:r1:r2')
+    expect(applied.transcript.filter((block) => !block.included).map((block) => block.id)).toEqual(['r1', 'r2'])
+    expect(applied.cuts?.map((cut) => [cut.startFrame, cut.endFrame])).toEqual([[400, 500], [900, 1000], [1500, 2080]])
+    expect(editedDurationFrames(buildProjectAudioEditTimeline(applied))).toBe(4000 - 1680)
+    expect(applied.suggestions[0].status).toBe('applied')
+    const restored = setAudioEditBlocks(applied, ['r2'], true)
+    expect(restored.cuts).toEqual([])
+    expect(editedDurationFrames(buildProjectAudioEditTimeline(restored))).toBe(4000 - 400)
+    // 删除普通词不影响重念剪掉的停顿；锁定内容不被剪掉
+    expect(setAudioEditBlocks(applied, ['t2'], false).cuts).toEqual(applied.cuts)
+    const locked = { ...original, transcript: original.transcript.map((block) => block.id === 't1' ? { ...block, locked: true, startFrame: 2000 } : block) }
+    expect(applyAudioEditSuggestion(locked, 'retake:r1:r2').cuts?.map((cut) => [cut.startFrame, cut.endFrame])).toEqual([[400, 500], [900, 1000], [1500, 2000]])
+  })
+})

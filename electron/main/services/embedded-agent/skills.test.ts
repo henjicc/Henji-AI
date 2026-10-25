@@ -16,8 +16,8 @@ const signal = new AbortController().signal
 describe('内置提示词技能使用正式文件注册与读取', () => {
   it('创作索引与每个可路由模块有界，主文件链接都能经正式加载入口读取', async () => {
     const catalog = await embeddedSkillCatalog()
-    // 六个技能仍只披露名称与触发条件，预算与外部 MCP 元数据索引一致。
-    expect(Buffer.byteLength(catalog.instructions, 'utf8')).toBeLessThan(2500)
+    // 技能仍只披露名称与触发条件，预算与外部 MCP 元数据索引一致；2026-10-25 加入口播剪辑技能后八个技能约 2.6k 字节。
+    expect(Buffer.byteLength(catalog.instructions, 'utf8')).toBeLessThan(2700)
     for (const name of ['prompt-optimization', 'cinematic-director', 'short-drama']) {
       const main = (await callEmbeddedSkill({ name, reason: '验证路由' }, signal)).data
       expect(main.bytes).toBeLessThan(4500)
@@ -47,7 +47,7 @@ describe('内置提示词技能使用正式文件注册与读取', () => {
     }
   })
   it('关闭设置后清单消失，旧工具调用也不能读取；恢复立即可用', async () => {
-    state.disabled = ['prompt-optimization', 'cinematic-director', 'short-drama', 'video-edit-code-creation', 'video-edit-workbench', 'image-edit-workbench', 'color-grading']
+    state.disabled = ['prompt-optimization', 'cinematic-director', 'short-drama', 'video-edit-code-creation', 'video-edit-workbench', 'image-edit-workbench', 'color-grading', 'audio-edit-workbench']
     expect(await embeddedSkillCatalog()).toEqual({ tools: [], instructions: '' })
     await expect(callEmbeddedSkill({ name: 'prompt-optimization', reason: '旧调用' }, signal)).rejects.toThrow('停用')
     state.disabled = []

@@ -74,7 +74,23 @@ export function subtractRanges(ranges: readonly AudioEditRange[], protectedRange
 
 export function setAudioEditBlocks(project: AudioEditProjectDocument, ids: readonly string[], included: boolean): AudioEditProjectDocument {
   const selected = new Set(ids)
-  return { ...project, transcript: project.transcript.map((block) => selected.has(block.id) && !block.locked ? { ...block, included } : block) }
+  const transcript = project.transcript.map((block) => selected.has(block.id) && !block.locked ? { ...block, included } : block)
+  // 恢复重念里的词时，这次重念剪掉的停顿一并恢复，否则恢复的那遍会和后一遍紧贴在一起
+  const owners = included && project.cuts?.length
+    ? project.suggestions.filter((suggestion) => suggestion.kind === 'retake' && suggestion.status === 'applied' && suggestion.blockIds.some((id) => selected.has(id)))
+    : []
+  if (!owners.length) return { ...project, transcript }
+  return { ...project, transcript, cuts: project.cuts!.filter((cut) => !owners.some((owner) => isRetakePauseCut(cut.id, owner.id))) }
+}
+
+const isRetakePauseCut = (cutId: string, suggestionId: string): boolean => cutId === suggestionId || cutId.startsWith(`${suggestionId}:`)
+
+/** 重念删除后剪掉其间与前后的停顿：删除范围里除被删词块与锁定内容以外的部分，id 跟随这条重念。 */
+function withRetakePauseCuts(project: AudioEditProjectDocument, suggestion: AudioEditSuggestion, targets: readonly AudioEditTranscriptBlock[]): AudioEditProjectDocument {
+  const cuts = (project.cuts ?? []).filter((cut) => !isRetakePauseCut(cut.id, suggestion.id))
+  const gaps = subtractRanges([{ startFrame: suggestion.startFrame, endFrame: suggestion.endFrame }],
+    [...targets, ...project.transcript.filter((block) => block.locked), ...cuts.filter((cut) => cut.enabled)])
+  return gaps.length ? { ...project, cuts: [...cuts, ...gaps.map((gap, index) => ({ ...gap, id: index ? `${suggestion.id}:${gap.startFrame}` : suggestion.id, reason: 'silence' as const, enabled: true }))] } : { ...project, cuts }
 }
 
 export function applyAudioEditSuggestion(project: AudioEditProjectDocument, id: string): AudioEditProjectDocument {
@@ -99,6 +115,7 @@ export function applyAudioEditSuggestion(project: AudioEditProjectDocument, id: 
     if (suggestion.kind === 'filler' && targets.some((block) => block.granularity !== 'word')) return project
     if (!targets.length || targets.some((block) => block.locked) || targets.every((block) => !block.included)) return project
     next = setAudioEditBlocks(project, suggestion.blockIds, false)
+    if (suggestion.kind === 'retake' && suggestion.evidence === 'audio') next = withRetakePauseCuts(next, suggestion, targets)
   }
   return { ...next, suggestions: next.suggestions.map((item) => item.id === id ? { ...item, status: 'applied' } : item) }
 }

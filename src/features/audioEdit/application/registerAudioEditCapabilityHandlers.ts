@@ -17,9 +17,9 @@ import { getDocumentSessionRegistry } from '@/features/documents/documentSession
 import { registerDocumentCoverProvider, registerDocumentHoverPreview } from '@/features/documents/documentCovers'
 import { audioEditContentSchema } from '@/core/documents/kinds/audioEdit'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
-import { loadAudioEditProject, flushAudioEditProject, releaseAudioEditProject } from './audioEditProjectInstances'
+import { loadAudioEditProject, flushAudioEditProject, releaseAudioEditProject, assignAudioEditSource } from './audioEditProjectInstances'
 import { importAudioEditMedia, openAudioEditDocument, pickAudioEditMedia } from './audioEditDocumentService'
-import { compressAudioEditSilence, cleanProjectAudioEditFillers, transcribeAudioEdit, exportAudioEdit, prepareAudioEditProcessing, quickProcessAudioEdit, undoAllAudioEditChanges, formatProjectAudioEditCaptions } from './audioEditApplicationService'
+import { compressAudioEditSilence, cleanProjectAudioEditFillers, cleanProjectAudioEditRetakes, transcribeAudioEdit, exportAudioEdit, prepareAudioEditProcessing, quickProcessAudioEdit, undoAllAudioEditChanges, formatProjectAudioEditCaptions } from './audioEditApplicationService'
 
 export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabilityHandlerRegistrar): void {
   // 口播文档的通用打开与后台释放（3.3）：列表、新建、改名、移动、副本、回收站走通用文档能力
@@ -53,6 +53,20 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
     const input = audioEditInputSchema(definition.id).parse(raw)
     context.signal.throwIfAborted()
     const id = input.documentRef.id
+    if (definition.id === 'import_audio_edit_source') {
+      // 还没有素材的口播打不开编辑实例，导入走与界面“导入音频或视频”相同的指定素材服务
+      const source = await applicationWritePreflight(context, async () => {
+        const read = await getDocumentOperations().readDocument({ id })
+        if (read.meta.kind !== 'audio_edit') throw new Error('请提供口播文档（list_documents 中 kind=audio_edit 的 id）。')
+        if (audioEditContentSchema.safeParse(read.content).data?.source) throw new Error('这份口播已经有素材。换素材请用重新定位原素材，或用 create_document 新建一份口播再导入。')
+        return getPlatform().audioEdit.probeSource(input.sourcePath!)
+      })
+      await assignAudioEditSource(id, source)
+      context.execution?.report({ targetMutation: 'applied' })
+      const persisted = audioEditContentSchema.safeParse((await getDocumentOperations().readDocument({ id })).content).data?.source
+      return { resultRef: { kind: 'audio_edit.document', id }, durationFrames: source.durationFrames, verified: persisted?.sourcePath === source.sourcePath,
+        message: `已导入${source.mediaType === 'video' ? '视频' : '音频'}素材（${(source.durationFrames / source.sampleRate).toFixed(1)} 秒）并保存，可以转写。` }
+    }
     const instance = await applicationWritePreflight(context, () => loadAudioEditProject(id))
     const requestId = context.requestId ?? crypto.randomUUID()
     const api = getPlatform().audioEdit
@@ -79,9 +93,18 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
         }
         case 'reset_audio_edit': await undoAllAudioEditChanges(id); result.message = instance.document.editBaseline?.kind === 'original' ? '已恢复初始剪辑与识别原文，可撤销本次恢复。' : '已恢复全部声音、分段和处理设置。旧口播没有保存最初识别原文，保留已有文字，可撤销本次恢复。'; break
         case 'format_audio_edit_subtitles': result.count = await formatProjectAudioEditCaptions(id); result.message = `已整理 ${result.count} 段字幕，文字区、波形区与 SRT 共用分段。`; break
-        case 'quick_process_audio_edit': Object.assign(result, await quickProcessAudioEdit(id, input.range, requestId)); result.message = `已压缩停顿并清理所选语气词，缩短 ${result.shortenedMs} 毫秒，可整批撤销。`; break
-        case 'compress_audio_edit_silence': Object.assign(result, await compressAudioEditSilence(id, input.range, requestId)); result.message = `处理 ${result.count} 处停顿，缩短 ${result.shortenedMs} 毫秒。`; break
+        case 'quick_process_audio_edit': {
+          const { retakeCount, ...processed } = await quickProcessAudioEdit(id, input.range, requestId)
+          Object.assign(result, processed); result.message = `已${retakeCount ? `去掉 ${retakeCount} 处重念、` : ''}压缩停顿并清理所选语气词，缩短 ${result.shortenedMs} 毫秒，可整批撤销。`; break
+        }
+        case 'compress_audio_edit_silence': { const { count, shortenedMs } = await compressAudioEditSilence(id, input.range, requestId); Object.assign(result, { count, shortenedMs }) } result.message = `处理 ${result.count} 处停顿，缩短 ${result.shortenedMs} 毫秒。`; break
         case 'clean_audio_edit_fillers': result.count = await cleanProjectAudioEditFillers(id, input.range); result.message = `清理 ${result.count} 处语气词。`; break
+        case 'clean_audio_edit_retakes': {
+          const cleaned = await cleanProjectAudioEditRetakes(id, input.range, requestId)
+          Object.assign(result, cleaned)
+          result.message = cleaned.count ? `去掉 ${cleaned.count} 处重念，缩短 ${(cleaned.shortenedMs / 1000).toFixed(1)} 秒，每处只保留最后一遍；可在剪辑线索与文字里逐处恢复。` : '没有发现重念。'
+          break
+        }
         case 'transcribe_audio_edit': {
           const prepared = await applicationWritePreflight(context, () => preflightAudioEditTranscription(id, input.modelId))
           if (prepared.requiresConfirmation) await requestAlertConfirmation({ title: '识别口播', message: '将使用已配置的语音识别模型转写这段声音。', confirmLabel: '允许本次', paid: await applicationPaidRequest('recognition', id, context.signal, transcriptionEstimatedCny(prepared)) }, context.signal)

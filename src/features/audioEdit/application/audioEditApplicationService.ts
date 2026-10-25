@@ -1,4 +1,4 @@
-import type { AudioEditExportRequest, AudioEditExportResult, AudioEditRange, AudioEditTranscriptionRequest, AudioEditProjectDocument } from '@/core/audioEdit/types'
+import type { AudioEditExportRequest, AudioEditExportResult, AudioEditRange, AudioEditTranscriptionRequest, AudioEditProjectDocument, AudioEditSuggestion } from '@/core/audioEdit/types'
 import { applyAudioEditSuggestion, cleanAudioEditFillers, DEFAULT_AUDIO_EDIT_SETTINGS } from '@/core/audioEdit/edits'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
 import { getPlatform } from '@/platform/runtime'
@@ -7,7 +7,9 @@ import { readTranscriptionFacts, TranscriptionFailure } from '@/core/audioEdit/t
 import { createLogger } from '@/core/logging'
 import { formatAudioEditCaptions, buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
 import { hasAudioEditModifications } from '@/core/audioEdit/baseline'
-import { acceptAudioEditNativeResult, editAudioEditProject, flushAudioEditProject, loadAudioEditProject, resetAudioEditProject, withAudioEditProjectOperation } from './audioEditProjectInstances'
+import { audioEditRetakeSuggestion } from '@/core/audioEdit/retakes'
+import { acceptAudioEditNativeResult, editAudioEditProject, flushAudioEditProject, loadAudioEditProject, resetAudioEditProject, withAudioEditProjectOperation, type AudioEditProjectInstance } from './audioEditProjectInstances'
+import { detectAudioEditRetakesOffThread } from './audioEditRetakeDetection'
 
 const logger = createLogger('features.audioEdit.operations')
 
@@ -40,24 +42,85 @@ export async function formatProjectAudioEditCaptions(projectId: string): Promise
   }
 }
 
-export async function compressAudioEditSilence(projectId: string, range?: AudioEditRange, requestId: string = crypto.randomUUID(), includeFillers = false): Promise<{ count: number; shortenedMs: number }> {
+/** 是否有可以逐词剪辑的转写（去重念、清理语气词都需要）。 */
+function hasWordTranscript(document: AudioEditProjectDocument): boolean {
+  return document.transcript.length > 0 && document.transcript.every((block) => block.granularity === 'word')
+}
+/** 少于几个词不可能有重念，快速处理不必为此读取声音证据 */
+const RETAKE_MIN_WORDS = 4
+
+/**
+ * 检测重念：读取实际声音的停顿证据（与停顿图、字幕断句共用的全频/高频能量分析），在 Worker 里比对转写，
+ * 返回待应用的“重念”剪辑线索。参考稿只用来排除稿子里本来就有的重复。
+ */
+async function detectRetakeSuggestions(instance: AudioEditProjectInstance, range: AudioEditRange | undefined, requestId: string): Promise<AudioEditSuggestion[]> {
+  const document = instance.document
+  if (!document.transcript.length) throw new Error('这份口播还没有转写，请先识别口播。')
+  if (!hasWordTranscript(document)) throw new Error('这份转写只有整句时间，无法逐词去掉重念；请用支持逐词时间的识别模型重新识别。')
+  const detected = await getPlatform().audioEdit.detectSilence({ projectId: document.id, settings: document.batchSettings ?? DEFAULT_AUDIO_EDIT_SETTINGS, requestId, energy: {} })
+  if (detected.revision !== instance.persistedRevision) throw new Error('口播已更新，请重新检测重念。')
+  if (!detected.energy) throw new Error('没有取得声音停顿证据，请重试。')
+  const retakes = await detectAudioEditRetakesOffThread(document.transcript, {
+    sampleRate: document.source.sampleRate, pauses: detected.energy.pauses, referenceScript: document.referenceScript, ...(range ? { range } : {}),
+  })
+  return retakes.map(audioEditRetakeSuggestion)
+}
+
+/** 把检测到的重念并入线索并逐条应用；已处理或已隐藏的同一处不重复提出。 */
+function applyRetakeSuggestions(document: AudioEditProjectDocument, detected: readonly AudioEditSuggestion[]): AudioEditProjectDocument {
+  const existing = new Set(document.suggestions.filter((item) => item.status !== 'pending').map((item) => item.id))
+  const fresh = detected.filter((item) => !existing.has(item.id))
+  let draft: AudioEditProjectDocument = { ...document, suggestions: [...document.suggestions.filter((item) => item.kind !== 'retake' || item.status !== 'pending'), ...fresh] }
+  for (const suggestion of fresh) draft = applyAudioEditSuggestion(draft, suggestion.id)
+  return draft
+}
+
+const appliedCount = (detected: readonly AudioEditSuggestion[], before: AudioEditProjectDocument, after: AudioEditProjectDocument): number => {
+  const applied = new Set(before.suggestions.filter((item) => item.status === 'applied').map((item) => item.id))
+  return detected.filter((item) => !applied.has(item.id) && after.suggestions.some((entry) => entry.id === item.id && entry.status === 'applied')).length
+}
+
+export async function cleanProjectAudioEditRetakes(projectId: string, range?: AudioEditRange, requestId: string = crypto.randomUUID()): Promise<{ count: number; shortenedMs: number }> {
+  logger.info('audio_edit.retakes.start', { requestId, context: { projectId, range: Boolean(range) } })
+  try {
+    const result = await withAudioEditProjectOperation(projectId, async (instance, commit) => {
+      const original = instance.document
+      const before = editedDurationFrames(buildProjectAudioEditTimeline(original))
+      const detected = await detectRetakeSuggestions(instance, range, requestId)
+      const next = commit((document) => applyRetakeSuggestions(document, detected))
+      await flushAudioEditProject(projectId)
+      return { count: appliedCount(detected, original, next), shortenedMs: Math.round((before - editedDurationFrames(buildProjectAudioEditTimeline(next))) * 1000 / next.source.sampleRate) }
+    })
+    logger.info('audio_edit.retakes.completed', { requestId, context: { projectId, ...result } })
+    return result
+  } catch (error) {
+    logger.error('audio_edit.retakes.failed', { requestId, context: { projectId }, error })
+    throw error
+  }
+}
+
+export async function compressAudioEditSilence(projectId: string, range?: AudioEditRange, requestId: string = crypto.randomUUID(), includeFillers = false): Promise<{ count: number; shortenedMs: number; retakeCount: number }> {
   return withAudioEditProjectOperation(projectId, async (instance, commit) => {
     const settings = instance.document.batchSettings ?? DEFAULT_AUDIO_EDIT_SETTINGS
     const before = editedDurationFrames(buildProjectAudioEditTimeline(instance.document))
+    // 快速处理（连带语气词）在有逐词转写时先去掉重念，再压缩停顿，整批一个撤销步骤
+    const retakes = includeFillers && hasWordTranscript(instance.document) && instance.document.transcript.length >= RETAKE_MIN_WORDS ? await detectRetakeSuggestions(instance, range, requestId) : []
     const detected = await getPlatform().audioEdit.detectSilence({ projectId, settings, range, requestId })
     if (detected.revision !== instance.persistedRevision) throw new Error('口播已更新，请重新分析停顿。')
     const appliedIds = new Set(instance.document.suggestions.filter((item) => item.status === 'applied').map((item) => item.id))
     const next = commit((document) => {
-      const existing = new Set(document.suggestions.filter((item) => item.status !== 'pending').map((item) => item.id))
+      let draft = retakes.length ? applyRetakeSuggestions(document, retakes) : document
+      const existing = new Set(draft.suggestions.filter((item) => item.status !== 'pending').map((item) => item.id))
       const suggestions = detected.suggestions.filter((item) => !existing.has(item.id))
-      let draft: AudioEditProjectDocument = { ...document, batchSettings: settings, suggestions: [...document.suggestions.filter((item) => item.kind !== 'long_silence' || item.status !== 'pending'), ...suggestions] }
+      draft = { ...draft, batchSettings: settings, suggestions: [...draft.suggestions.filter((item) => item.kind !== 'long_silence' || item.status !== 'pending'), ...suggestions] }
       for (const suggestion of suggestions) draft = applyAudioEditSuggestion(draft, suggestion.id)
       if (includeFillers) draft = cleanAudioEditFillers(draft, settings.fillers, range)
       return draft
     })
     await flushAudioEditProject(projectId)
     return { count: detected.suggestions.filter((item) => !appliedIds.has(item.id) && next.suggestions.some((entry) => entry.id === item.id && entry.status === 'applied')).length,
-      shortenedMs: Math.round((before - editedDurationFrames(buildProjectAudioEditTimeline(next))) * 1000 / next.source.sampleRate) }
+      shortenedMs: Math.round((before - editedDurationFrames(buildProjectAudioEditTimeline(next))) * 1000 / next.source.sampleRate),
+      retakeCount: retakes.filter((item) => !appliedIds.has(item.id) && next.suggestions.some((entry) => entry.id === item.id && entry.status === 'applied')).length }
   })
 }
 

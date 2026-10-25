@@ -151,7 +151,7 @@ export function AudioEditProcessPanel() {
   return <PanelScroll label="处理">
     <fieldset disabled={workspace.disabled} className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <p className={`m-0 leading-normal ${UI_TEXT_SECONDARY_CLASS}`}>压缩停顿、清理语气词。波形上的黄色区域是将要删除的声音，处理后仍可逐段调整。</p>
+        <p className={`m-0 leading-normal ${UI_TEXT_SECONDARY_CLASS}`}>去掉重念、压缩停顿、清理语气词。波形上的黄色区域是将要删除的声音，处理后仍可逐段调整。</p>
         <UiButton variant="secondary" className="w-full" disabled={blocked} disabledReason="找不到原始素材" onClick={() => void run(async () => { const result = await quickProcessAudioEdit(project.id, range); notify(notificationMessage('audioQuickProcessed', { seconds: (result.shortenedMs / 1000).toFixed(2) })) })}><Sparkles />快速处理</UiButton>
       </div>
       <UiGroup divided titleTone="compact" gap="none">
