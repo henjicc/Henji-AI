@@ -22,7 +22,10 @@ import { importAudioEditMedia, openAudioEditDocument, pickAudioEditMedia } from 
 import { compressAudioEditSilence, cleanProjectAudioEditFillers, cleanProjectAudioEditRetakes, processProjectAudioEditBreaths, transcribeAudioEdit, exportAudioEdit, prepareAudioEditProcessing, quickProcessAudioEdit, undoAllAudioEditChanges, formatProjectAudioEditCaptions } from './audioEditApplicationService'
 
 /** 剪后时长的变化：重新处理呼吸声时比上次删得少，时长会变长。 */
-const lengthChange = (shortenedMs: number): string => shortenedMs > 0 ? `缩短 ${(shortenedMs / 1000).toFixed(1)} 秒` : shortenedMs < 0 ? `比处理前加长 ${(-shortenedMs / 1000).toFixed(1)} 秒` : '时长不变'
+const lengthChange = (shortenedMs: number): string => {
+  const seconds = (Math.abs(shortenedMs) / 1000).toFixed(1)
+  return seconds === '0.0' ? '时长不变' : shortenedMs > 0 ? `缩短 ${seconds} 秒` : `比处理前加长 ${seconds} 秒`
+}
 
 export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabilityHandlerRegistrar): void {
   // 口播文档的通用打开与后台释放（3.3）：列表、新建、改名、移动、副本、回收站走通用文档能力
