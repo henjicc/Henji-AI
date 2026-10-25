@@ -2,12 +2,12 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { Worker } from 'node:worker_threads'
 import type { AudioEditProjectDocument } from '../../../../src/core/audioEdit/types'
-import type { AudioEditGainRegion, AudioEditRenderedAudio, AudioEditRepair } from '../../../../src/core/audioEdit/regions'
+import { applyAudioEditGainRegions, type AudioEditGainRegion, type AudioEditRenderedAudio, type AudioEditRepair } from '../../../../src/core/audioEdit/regions'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '../../../../src/core/audioEdit/timeline'
 import { audioEditProjectSchema } from '../../../../src/core/audioEdit/schema'
 import { createMainLogger } from '../logging'
 import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
-import { loadFfmpegPath, ffmpegFilterComplexFileArgs } from '../video/ffmpeg-loader'
+import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { audioEditCacheDirectory, identifyAudioEditSource, prepareAudioEditAudio, validateAudioEditAudio, verifyAudioEditSource } from './media'
 import { processAudioEditVstChain, audioEditProcessorCacheIdentity } from './processors'
 import { runAudioRepair, audioRepairMaskDimensions, encodeAudioRepairMask } from './dsp-adapter'
@@ -17,12 +17,24 @@ import { AudioEditSpliceRenderer } from '../../../../src/core/audioEdit/spliceCr
 import { createF32WavWriter, openF32Wav, type F32WavReader } from './pcm-wav'
 
 const logger = createMainLogger('main.audio_edit.render')
-export function audioGainExpression(regions: readonly AudioEditGainRegion[]): string {
-  return regions.filter(r => r.enabled).map(r => {
-    const fadeIn = r.fadeInFrames ? `min(1,(n-${r.startFrame})/${r.fadeInFrames})` : '1'
-    const fadeOut = r.fadeOutFrames ? `min(1,(${r.endFrame}-1-n)/${r.fadeOutFrames})` : '1'
-    return `if(gte(n,${r.startFrame})*lt(n,${r.endFrame}),${10 ** (r.gainDb / 20)}*${fadeIn}*${fadeOut},1)`
-  }).join('*') || '1'
+
+/**
+ * 音量区域在主进程按一秒一块直接乘到声音上。不再拼成一条 FFmpeg aeval 表达式：表达式解析器的嵌套深度有限，
+ * 区域到一百个左右（快节奏处理呼吸声常有上百处减弱）就无法配置滤镜，口播一打开就报错；逐采样求值上百项也慢。
+ */
+async function renderAudioEditGains(project: AudioEditProjectDocument, reader: F32WavReader, gains: readonly AudioEditGainRegion[], output: string, signal?: AbortSignal): Promise<void> {
+  const { sampleRate, channels } = project.source
+  const sorted = [...gains].sort((a, b) => a.startFrame - b.startFrame)
+  const writer = await createF32WavWriter(output, sampleRate, channels, reader.frames)
+  try {
+    for (let start = 0; start < reader.frames; start += sampleRate) {
+      signal?.throwIfAborted()
+      const count = Math.min(sampleRate, reader.frames - start)
+      const pcm = (await reader.read(start, count)).slice()
+      applyAudioEditGainRegions(pcm, start, channels, sorted.filter(region => region.startFrame < start + count && region.endFrame > start))
+      await writer.write(pcm)
+    }
+  } finally { await writer.close(); await reader.close() }
 }
 async function repairMask(repair: AudioEditRepair, sampleRate: number, signal?: AbortSignal): Promise<Uint8Array> {
   const { width, height } = audioRepairMaskDimensions(repair, sampleRate)
@@ -66,13 +78,8 @@ export async function prepareAudioEditRenderSource(project: AudioEditProjectDocu
     key = audioRenderKey([key, gains])
     const source = input
     input = await cachedAudioFile(directory, `gain-${key}`, 'wav', async output => {
-      const script = `${output}.filter`
-      try {
-        const ffmpeg = await loadFfmpegPath()
-        await fs.writeFile(script, `[0:a]aeval=exprs='val(ch)*(${audioGainExpression(gains)})':c=same[out]`)
-        await runAudioEditProcess(ffmpeg, ['-v', 'error', '-y', '-i', source, ...await ffmpegFilterComplexFileArgs(ffmpeg, script), '-map', '[out]', '-c:a', 'pcm_f32le', output], signal)
-        await validateAudioEditAudio(output, project.source.sampleRate, project.source.channels, project.source.durationFrames, signal)
-      } finally { await removeUnmanagedCachePath(script, { force: true }) }
+      await renderAudioEditGains(project, await openRenderSource(project, source, signal), gains, output, signal)
+      await validateAudioEditAudio(output, project.source.sampleRate, project.source.channels, project.source.durationFrames, signal)
     }, signal)
   }
   if (processing) {

@@ -25,4 +25,22 @@ export const audioEditRepairsSchema = z.array(audioEditRepairSchema).max(10000)
 export type AudioEditGainRegion = z.infer<typeof audioEditGainRegionSchema>
 export type AudioEditRepair = z.infer<typeof audioEditRepairSchema>
 
+/**
+ * 把音量区域乘到一段交错 PCM 上（startFrame 是这段在源里的起点帧）。区域内为 gainDb；淡入从静音渐入到该音量、
+ * 淡出从该音量渐出到静音（与“淡入 / 淡出”的含义一致）；重叠的区域相乘。区域再多也是逐帧一次乘法。
+ */
+export function applyAudioEditGainRegions(pcm: Float32Array, startFrame: number, channels: number, regions: readonly AudioEditGainRegion[]): void {
+  const end = startFrame + Math.floor(pcm.length / channels)
+  for (const region of regions) {
+    if (!region.enabled || region.endFrame <= startFrame || region.startFrame >= end) continue
+    const gain = 10 ** (region.gainDb / 20)
+    for (let frame = Math.max(startFrame, region.startFrame), last = Math.min(end, region.endFrame); frame < last; frame++) {
+      const fadeIn = region.fadeInFrames ? Math.min(1, (frame - region.startFrame) / region.fadeInFrames) : 1
+      const fadeOut = region.fadeOutFrames ? Math.min(1, (region.endFrame - 1 - frame) / region.fadeOutFrames) : 1
+      const factor = gain * fadeIn * fadeOut
+      for (let channel = 0, at = (frame - startFrame) * channels; channel < channels; channel++) pcm[at + channel] *= factor
+    }
+  }
+}
+
 export interface AudioEditRenderedAudio { audioPath: string; durationFrames: number; sampleRate: number; channels: number; revision: number }

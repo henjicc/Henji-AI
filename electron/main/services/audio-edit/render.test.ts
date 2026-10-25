@@ -7,10 +7,9 @@ const state = vi.hoisted(() => ({ dir: '', calls: [] as string[] }))
 vi.mock('./media', () => ({ audioEditCacheDirectory: () => state.dir, verifyAudioEditSource: vi.fn(), prepareAudioEditAudio: async () => path.join(state.dir, 'source.wav'), identifyAudioEditSource: async () => ({ digest: 'a' }), validateAudioEditAudio: vi.fn() }))
 vi.mock('./dsp-adapter', () => ({ runAudioRepair: async (_input: string, output: string) => { state.calls.push('repair'); await fs.writeFile(output, 'repaired') } }))
 vi.mock('./processors', () => ({ audioEditProcessorCacheIdentity: async () => 'v1', processAudioEditVstChain: async (input: string, dir: string) => { state.calls.push('processor'); expect(path.basename(input)).toMatch(/^gain-/); const outputPath = path.join(dir, 'vst.wav'); await fs.writeFile(outputPath, 'processed'); return { outputPath, temporaryPaths: [outputPath] } } }))
-vi.mock('../video/ffmpeg-loader', () => ({ loadFfmpegPath: async () => 'ffmpeg', ffmpegFilterComplexFileArgs: async (_bin: string, script: string) => ['-filter_complex_script', script] }))
+vi.mock('../video/ffmpeg-loader', () => ({ loadFfmpegPath: async () => 'ffmpeg' }))
 vi.mock('./process', () => ({ runAudioEditProcess: async (_bin: string, args: string[]) => {
-  // 增益阶段走滤镜脚本；不是浮点 WAV 的渲染源先转一份（这里写出一段 48000 帧的真 WAV）
-  if (args.includes('-filter_complex_script')) { state.calls.push('gain'); await fs.writeFile(args.at(-1)!, await fs.readFile(args[args.indexOf('-filter_complex_script') + 1], 'utf8')); return }
+  // 不是浮点 WAV 的渲染源先转一份（这里写出一段 48000 帧的真 WAV）；音量区域在主进程直接乘，不再调用 FFmpeg
   state.calls.push('decode'); await writeWav(args.at(-1)!, new Float32Array(48000).fill(0.25))
 } }))
 import { renderAudioEditProject } from './render'
@@ -34,14 +33,18 @@ afterEach(async () => { await fs.rm(state.dir, { recursive: true, force: true })
 it('orders shared stages and reuses unaffected caches on cut/gain edits; revision-only changes reuse audio', async () => {
   const first = await renderAudioEditProject(project)
   expect(first.durationFrames).toBe(24000)
-  expect(state.calls).toEqual(['repair', 'gain', 'processor', 'decode'])
+  // 修复结果不是浮点 WAV 时先转一份再乘音量；效果链输出同样转一份再拼接
+  expect(state.calls).toEqual(['repair', 'decode', 'processor', 'decode'])
+  const gained = (await openF32Wav(path.join(state.dir, (await fs.readdir(state.dir)).find(name => name.startsWith('gain-'))!)))!
+  const pcm = await gained.read(0, 48000); await gained.close()
+  expect(pcm[0]).toBeCloseTo(0.25 * 10 ** (-6 / 20), 6); expect(pcm[23999]).toBeCloseTo(0.25 * 10 ** (-6 / 20), 6); expect(pcm[24000]).toBe(0.25)
   expect((await renderAudioEditProject({ ...project, revision: 2 })).audioPath).toBe(first.audioPath); expect(state.calls).toHaveLength(4)
   // 只改剪切：上游各阶段与转码缓存都复用，只重新拼接成片
   project.cuts![0].endFrame = 36000
   const recut = await renderAudioEditProject(project)
   expect(state.calls).toHaveLength(4); expect(recut.audioPath).not.toBe(first.audioPath); expect(recut.durationFrames).toBe(36000)
-  state.calls = []; project.gainRegions![0].gainDb = -12; await renderAudioEditProject(project); expect(state.calls).toEqual(['gain', 'processor', 'decode'])
-  state.calls = []; project.repairs![0].strength = .2; await renderAudioEditProject(project); expect(state.calls).toEqual(['repair', 'gain', 'processor', 'decode'])
+  state.calls = []; project.gainRegions![0].gainDb = -12; await renderAudioEditProject(project); expect(state.calls).toEqual(['processor', 'decode'])
+  state.calls = []; project.repairs![0].strength = .2; await renderAudioEditProject(project); expect(state.calls).toEqual(['repair', 'decode', 'processor', 'decode'])
 })
 it('failed and cancelled cache builds never publish, and simultaneous readers share one build', async () => {
   await expect(cachedAudioFile(state.dir, 'bad', 'wav', async p => { await fs.writeFile(p, 'partial'); throw new Error('failed') })).rejects.toThrow('failed')
