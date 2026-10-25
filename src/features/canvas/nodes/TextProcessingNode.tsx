@@ -275,7 +275,8 @@ export const TextProcessingNode = memo(({
           references={promptState.references}
           readOnly={isPromptOverridden}
           invalid={promptInvalid}
-          label={t('node.textProcessing.userPromptLabel')}
+          // 与其他生成节点一样默认不写标题；只有自定义模板下系统提示词也在场时，才标出“用户提示词”区分两者
+          label={isCustomPromptTemplate ? t('node.textProcessing.userPromptLabel') : undefined}
           placeholder={promptInvalid
             ? t('node.textProcessing.promptRequired')
             : t('node.textProcessing.promptPlaceholder')}

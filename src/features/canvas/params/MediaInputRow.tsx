@@ -87,10 +87,14 @@ function moveArrayItem<T>(list: T[], fromIndex: number, toIndex: number): T[] {
   return next;
 }
 
+/** 素材小块上的操作：悬停或键盘聚焦到这一块时显现 */
+const CHIP_ACTION_REVEAL_CLASS = 'opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100'
+
 /**
  * 媒体输入行：缩略图槛（图片）或文件名 chip（视频/音频）+ 类型化端口。
  * 已连线（上游有该媒体类型输出）→ 只读展示上游媒体；未连线 → 槛位可本地上传。
  */
+
 export function MediaInputRow({
   showHandle = true,
   nodeId,
@@ -338,58 +342,72 @@ export function MediaInputRow({
             }
           >
             {mediaKind === 'image' ? (
-              <CanvasNodeImage
-                src={resolveImageDisplayUrl(previewUrlByUrl.get(url) ?? url)}
-                viewerSourceUrl={resolveImageDisplayUrl(url)}
-                viewerImageList={displayUrls.map((item) => resolveImageDisplayUrl(item))}
-                alt=""
-                className="h-7 w-7 rounded-md border border-line object-cover"
-                draggable={false}
-              />
-            ) : mediaKind === 'video' ? (
-              // 素材小块在有描边的参数行里：只用更暗的底，不再描边（同一层纵深只画一次边框，重要记录 020）
+              <>
+                <CanvasNodeImage
+                  src={resolveImageDisplayUrl(previewUrlByUrl.get(url) ?? url)}
+                  viewerSourceUrl={resolveImageDisplayUrl(url)}
+                  viewerImageList={displayUrls.map((item) => resolveImageDisplayUrl(item))}
+                  alt=""
+                  className="h-7 w-7 rounded-md border border-line object-cover"
+                  draggable={false}
+                />
+                {/* 缩略图上是画面：移除按钮按角标叠在角上 */}
+                {!isConnected && (
+                  <UiIconButton size="2xs" tone="media" shape="circle"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleRemove(index);
+                    }}
+                    aria-label={t('node.mediaRow.remove')}
+                    tooltip={t('node.mediaRow.remove')}
+                    className={`absolute -right-1.5 -top-1.5 ${CHIP_ACTION_REVEAL_CLASS}`}
+                    type="button"
+                  >
+                    <X  />
+                  </UiIconButton>
+                )}
+              </>
+            ) : (
+              // 素材小块在有描边的参数行里：只用更暗的底，不再描边（同一层纵深只画一次边框，重要记录 020）。
+              // 文字小块的裁剪、移除放在名称后面、常驻占位（悬停才显现）：此前按角标叠在角上，盖住图标与“视频 1”
               <span
-                className="flex h-7 cursor-pointer items-center gap-1 rounded-md bg-gap/60 px-1.5 text-2xs text-text2"
-                onDoubleClick={(event) => {
+                className={`flex h-7 items-center gap-1 rounded-md bg-gap/60 pl-1.5 text-2xs text-text2 ${isConnected ? 'pr-1.5' : 'pr-0.5'} ${mediaKind === 'video' ? 'cursor-pointer' : ''}`}
+                onDoubleClick={mediaKind === 'video' ? (event) => {
                   event.stopPropagation();
                   setViewerVideoUrl(resolveImageDisplayUrl(url));
-                }}
+                } : undefined}
               >
                 <Icon className={`${UI_ICON_SIZE_CLASS.xs} shrink-0`} />
                 {t('node.mediaRow.itemLabel', { kind: t(`node.mediaRow.${mediaKind}`), index: index + 1 })}
+                {!isConnected && mediaKind === 'video' && videoTrimMaxClipSeconds && (
+                  <UiIconButton size="2xs"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setTrimTargetIndex(index);
+                    }}
+                    aria-label={t('node.mediaRow.videoTrim')}
+                    tooltip={t('node.mediaRow.videoTrim')}
+                    className={CHIP_ACTION_REVEAL_CLASS}
+                    type="button"
+                  >
+                    <Scissors  />
+                  </UiIconButton>
+                )}
+                {!isConnected && (
+                  <UiIconButton size="2xs"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleRemove(index);
+                    }}
+                    aria-label={t('node.mediaRow.remove')}
+                    tooltip={t('node.mediaRow.remove')}
+                    className={CHIP_ACTION_REVEAL_CLASS}
+                    type="button"
+                  >
+                    <X  />
+                  </UiIconButton>
+                )}
               </span>
-            ) : (
-              <span className="flex h-7 items-center gap-1 rounded-md bg-gap/60 px-1.5 text-2xs text-text2">
-                <Icon className={`${UI_ICON_SIZE_CLASS.xs} shrink-0`} />
-                {t('node.mediaRow.itemLabel', { kind: t(`node.mediaRow.${mediaKind}`), index: index + 1 })}
-              </span>
-            )}
-            {!isConnected && mediaKind === 'video' && videoTrimMaxClipSeconds && (
-              <UiIconButton size="2xs" tone="media" shape="circle"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setTrimTargetIndex(index);
-                }}
-                tooltip={t('node.mediaRow.videoTrim')}
-                className="absolute -left-1.5 -top-1.5 opacity-0 transition-opacity group-hover:opacity-100"
-                type="button"
-              >
-                <Scissors  />
-              </UiIconButton>
-            )}
-            {!isConnected && (
-              <UiIconButton size="2xs" tone="media" shape="circle"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  handleRemove(index);
-                }}
-                aria-label={t('node.mediaRow.remove')}
-                tooltip={t('node.mediaRow.remove')}
-                className="absolute -right-1.5 -top-1.5 opacity-0 transition-opacity group-hover:opacity-100"
-                type="button"
-              >
-                <X  />
-              </UiIconButton>
             )}
           </div>
           );

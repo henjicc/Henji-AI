@@ -698,7 +698,7 @@
       "generating": "生成中"
     },
     "textProcessing": {
-      "userPromptLabel": "用户输入",
+      "userPromptLabel": "用户提示词",
       "promptPlaceholder": "输入需要模型处理的内容",
       "promptTemplateLabel": "提示词模板",
       "customTemplate": "自定义",

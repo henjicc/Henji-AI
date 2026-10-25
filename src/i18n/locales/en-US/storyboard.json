@@ -698,7 +698,7 @@
       "generating": "Generating"
     },
     "textProcessing": {
-      "userPromptLabel": "User input",
+      "userPromptLabel": "User prompt",
       "promptPlaceholder": "Enter the content for the model to process",
       "promptTemplateLabel": "Prompt template",
       "customTemplate": "Custom",
