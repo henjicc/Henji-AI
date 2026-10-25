@@ -1799,7 +1799,7 @@
     "card": {
       "open": "Open",
       "rename": "Rename",
-      "delete": "Delete",
+      "delete": "Move to Recycle Bin",
       "more": "More",
       "selectMultiple": "Select multiple",
       "selectItem": "Select",
@@ -1814,7 +1814,7 @@
       "selectedCount": "{{count}} selected",
       "selectAll": "Select all",
       "clearSelection": "Select none",
-      "deleteSelected": "Delete",
+      "deleteSelected": "Move to Recycle Bin",
       "exit": "Done"
     },
     "actions": {

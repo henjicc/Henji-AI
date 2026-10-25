@@ -1799,7 +1799,7 @@
     "card": {
       "open": "打开",
       "rename": "重命名",
-      "delete": "删除",
+      "delete": "移到回收站",
       "more": "更多",
       "selectMultiple": "多选",
       "selectItem": "选择",
@@ -1814,7 +1814,7 @@
       "selectedCount": "已选择 {{count}} 项",
       "selectAll": "全选",
       "clearSelection": "全不选",
-      "deleteSelected": "删除",
+      "deleteSelected": "移到回收站",
       "exit": "完成"
     },
     "actions": {

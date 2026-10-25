@@ -79,7 +79,7 @@ describe('通用数据源', () => {
     expect(card(missing.id).textContent).toContain('文件不存在')
     fireEvent.contextMenu(card(missing.id))
     expect(screen.queryByText('重命名')).toBeNull()
-    expect(screen.queryByText('删除')).toBeNull()
+    expect(screen.queryByText('移到回收站')).toBeNull()
     fireEvent.click(await screen.findByText('从列表移除'))
     await waitFor(() => expect(card(missing.id)).toBeNull())
     expect(kit.commands.calls).toContain('forgetDocument')
@@ -174,7 +174,7 @@ describe('卡片右键', () => {
     await waitFor(() => expect(commands.revealed).toContain(standalone.id))
 
     await openMenu(standalone.id)
-    fireEvent.click(await screen.findByText('删除'))
+    fireEvent.click(await screen.findByText('移到回收站'))
     const dialog = await screen.findByRole('dialog')
     expect(dialog.textContent).toContain('可以从系统回收站找回')
     fireEvent.click(within(dialog).getByRole('button', { name: '移到回收站' }))

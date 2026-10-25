@@ -18,6 +18,16 @@
         "enter": "canvas"
       },
       {
+        "click": {
+          "role": "button",
+          "name": "/^(返回画布列表|Back to Canvases)$/"
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "/^(返回画布列表|Back to Canvases)$/"
+        }
+      },
+      {
         "waitFor": {
           "selector": "[data-ui-page-header]"
         }
@@ -39,6 +49,16 @@
       },
       {
         "enter": "canvas"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^(返回画布列表|Back to Canvases)$/"
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "/^(返回画布列表|Back to Canvases)$/"
+        }
       },
       {
         "waitFor": {
@@ -222,7 +242,7 @@
       {
         "click": {
           "role": "button",
-          "name": "删除",
+          "name": "移到回收站",
           "exact": true,
           "within": {
             "selector": "[data-ui-page-header]"

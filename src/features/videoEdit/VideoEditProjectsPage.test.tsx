@@ -107,13 +107,14 @@ describe('剪辑项目页', () => {
     await waitFor(() => expect(kit.commands.projects.get(project.id)?.name).toBe('正片'))
 
     fireEvent.contextMenu(document.querySelector(`[data-project-id="${project.id}"]`)!)
-    fireEvent.click(await screen.findByText('删除'))
+    fireEvent.click(await screen.findByText('移到回收站'))
     expect(await screen.findByText(/整个文件夹移到回收站/)).toBeTruthy()
     fireEvent.click(screen.getAllByRole('button', { name: '移到回收站' }).at(-1)!)
     await waitFor(() => expect(kit.commands.trashed).toContain(project.id))
 
     fireEvent.contextMenu(document.querySelector(`[data-project-id="${external.id}"]`)!)
-    expect(screen.queryByText('删除')).toBeNull()
+    await screen.findByText('从列表移除')
+    expect(screen.queryByRole('menuitem', { name: '移到回收站' })).toBeNull()
     fireEvent.click(await screen.findByText('从列表移除'))
     await waitFor(() => expect(kit.commands.projects.has(external.id)).toBe(false))
   })

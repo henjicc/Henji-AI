@@ -1000,7 +1000,7 @@
       {
         "click": {
           "role": "menuitem",
-          "name": "/删除/"
+          "name": "/移到回收站/"
         }
       },
       {
