@@ -94,6 +94,23 @@ describe('口播重念检测', () => {
     expect(keptText(separate, detect(separate))).toBe('一大原因，那个，说实话，接入元宝搜索这一步呢')
   })
 
+  it('删除段左边贴着的一两个字（前面有气口）跟着念坏那遍删，不留下去接几秒后的另一遍', () => {
+    const spoken = speak('探索 不同 的 方向。', { pause: 400 }, '那 这个 工具 最 重要 的 部分 呢，', { pause: 900 }, '这 工具 最 重要 的 部分 就是 搜索 api 了')
+    expect(keptText(spoken, detect(spoken))).toBe('探索不同的方向。这工具最重要的部分就是搜索api了')
+    // 后一遍本来就以它开头时，它是重念的一部分，照常留最后一遍
+    const same = speak('探索 不同 的 方向。', { pause: 400 }, '那 这个 工具 最 重要 的 部分 呢，', { pause: 900 }, '那 这 工具 最 重要 的 部分 就是 搜索')
+    expect(keptText(same, detect(same))).toBe('探索不同的方向。那这工具最重要的部分就是搜索')
+  })
+
+  it('呼吸声也算气口：两遍之间没有安静、只有一口气时，切点落在呼吸里而不是硬接', () => {
+    const spoken = speak('从 千兆 交换机 的 重 从 千兆 交换机 的 重点 参数')
+    const restart = spoken.blocks[5].startFrame
+    const retakes = detect(spoken, { breaths: [{ startMs: restart - 260, endMs: restart }] })
+    expect(retakes).toHaveLength(1)
+    expect(retakes[0].joined).toBe(false)
+    expect(retakes[0].endFrame).toBeLessThanOrEqual(restart)
+  })
+
   it('接缝连读时把删除窗口平移到两遍相同的内容里，让两头都落在停顿上；整遍相同时仍留最后一遍', () => {
     const spoken = speak('比我 想象 的 简单 太多 了一个 API KEY。', { pause: 800 }, '一个 API KEY 发个 HTTPS 请求，', { pause: 300 }, '发个 HTTP 请求， 结果 就 回来了')
     const retakes = detect(spoken)

@@ -20,15 +20,17 @@ import type { AudioEditRange, AudioEditSuggestion, AudioEditTranscriptBlock } fr
 const FILLERS = new Set(['哎', '嗯', '呃', '额', '啊', '唉', '诶', '欸', '呀'])
 /** 重念前常带的一个引导字（“那其实这些…”） */
 const LEAD_INS = new Set(['那', '就', '哎', '嗯', '呃', '啊'])
-/** 起头时的犹豫词：紧贴着念坏的那遍、前面有停顿时属于那一遍的起头 */
-const HESITATIONS = new Set(['那个'])
 const MAX_BACK_UNITS = 90
 const MAX_BACK_MS = 30_000
 const MAX_LEAD_UNITS = 10
 /** 引子后整段原样重现的长度：达到它时证据足够强，引子前后只需一般的停顿 */
 const VERBATIM_UNITS = 8
-/** 删除窗口在两遍相同内容里平移的最大字数 */
-const MAX_SHIFT_UNITS = 12
+/** 删除窗口在两遍对应内容里平移的最大字数（足够跨过半句，把前一遍的好开头留下） */
+const MAX_SHIFT_UNITS = 30
+/** 换遍拼接时两头都要有的明显气口（毫秒） */
+const CLEAR_PAUSE_MS = 150
+/** 跟着念坏那遍一起删的碎字上限（字数） */
+const STRANDED_UNITS = 2
 /** 删除一处后需要重算候选的范围（词数，覆盖向前 MAX_BACK_UNITS 与向后对齐窗口） */
 const RECOMPUTE_WORDS = 2 * MAX_BACK_UNITS + 2 * MAX_LEAD_UNITS + 40
 /** 能算作“在停顿处重起”的最短安静（毫秒）；声音低谷本身至少 100 毫秒 */
@@ -60,6 +62,8 @@ export interface AudioEditRetakeOptions {
   sampleRate: number
   /** 声音低谷（毫秒），来自全频与高频能量分析 */
   pauses: readonly SpeechEnergyPause[]
+  /** 呼吸声（毫秒）：比安静响、但同样是气口，判断接缝时与停顿同等看待 */
+  breaths?: readonly { startMs: number; endMs: number }[]
   referenceScript?: string
   range?: AudioEditRange
 }
@@ -206,12 +210,20 @@ class RetakeDetector {
     this.script.forEach((py, index) => { const list = this.scriptIndex.get(py); if (list) list.push(index); else this.scriptIndex.set(py, [index]) })
   }
 
-  /** 区间内被声音低谷覆盖的安静段（毫秒） */
+  /** 区间内的气口（毫秒）：声音低谷与呼吸声 */
   private quietRuns(startMs: number, endMs: number): Array<[number, number]> {
-    return this.options.pauses
+    const runs = [...this.options.pauses, ...(this.options.breaths ?? [])]
       .filter((pause) => pause.endMs > startMs && pause.startMs < endMs)
       .map((pause): [number, number] => [Math.max(startMs, pause.startMs), Math.min(endMs, pause.endMs)])
-      .filter(([start, end]) => end - start >= 40)
+      .sort((x, y) => x[0] - y[0])
+    // 停顿紧接着呼吸（或反过来）是同一个气口，合并后再量长度
+    const merged: Array<[number, number]> = []
+    for (const run of runs) {
+      const last = merged.at(-1)
+      if (last && run[0] <= last[1] + 20) last[1] = Math.max(last[1], run[1])
+      else merged.push([run[0], run[1]])
+    }
+    return merged.filter(([start, end]) => end - start >= 40)
   }
 
   private previousKept(k: number): number {
@@ -339,23 +351,43 @@ class RetakeDetector {
     return Math.max(0, ...this.quietRuns((prev.startMs + prev.endMs) / 2, cur.startMs + 60).map(([start, end]) => end - start))
   }
 
-  /** “那个｜说实话。说实话，接入…”：紧贴在已删那遍开头、自己前面有停顿的犹豫词，是那一遍的起头，一起删。 */
-  private absorbHesitations(): void {
-    for (const candidate of [...this.accepted]) {
-      const k = candidate.first - 1
-      if (k < 0 || !this.kept[k] || !HESITATIONS.has(normalizeAudioEditFiller(this.words[k].block.text))) continue
-      const restart = this.words[candidate.last]
-      if (restart && normalizeAudioEditFiller(restart.block.text).startsWith(normalizeAudioEditFiller(this.words[k].block.text))) continue
-      if (this.seamQuiet(candidate.first) >= BOUNDARY_PAUSE_MS || this.pauseBefore(k) < BOUNDARY_PAUSE_MS || !this.removable(k, k + 1)) continue
-      this.kept[k] = false
-      this.accepted.push({ kind: 'broken_start', first: k, last: candidate.first, restartWord: candidate.last, length: this.words[k].units.length, ratio: 1, total: 0, pauseJ: candidate.pauseJ })
+  /**
+   * “方向。｜那｜这个工具最重要的部分呢…｜这工具最重要的部分”：删除段左边紧贴着（中间没有停顿）、自己前面有气口的
+   * 一两个字，是念坏那一遍的起头。留下它去接几秒后的另一遍，语气接不上，听着突兀——跟着那一遍一起删。
+   * 后一遍本来就以这几个字开头时不算（那是重念的一部分）。
+   */
+  private absorbStrandedLeads(): void {
+    const removed = (k: number): boolean => !this.kept[k] && this.words[k].block.included
+    for (let a = 0; a < this.words.length; a++) {
+      if (this.words[a].filler || !removed(a) || (a > 0 && (removed(a - 1) || this.words[a - 1].filler && a > 1 && removed(a - 2)))) continue
+      if (this.seamQuiet(a) >= BOUNDARY_PAUSE_MS) continue
+      const fragment: number[] = []
+      let size = 0
+      for (let k = a - 1; k >= 0 && this.kept[k]; k--) {
+        if (this.words[k].filler) continue
+        size += this.words[k].units.length
+        if (size > STRANDED_UNITS) { fragment.length = 0; break }
+        fragment.unshift(k)
+        if (this.pauseBefore(k) >= BOUNDARY_PAUSE_MS) break
+        if (k > 0 && this.seamQuiet(k) >= BOUNDARY_PAUSE_MS) break
+      }
+      const head = fragment[0]
+      if (head === undefined || this.pauseBefore(head) < BOUNDARY_PAUSE_MS || !this.removable(head, a)) continue
+      let next = a
+      while (next < this.words.length && (removed(next) || this.words[next].filler)) next++
+      const text = fragment.map((k) => normalizeAudioEditFiller(this.words[k].block.text)).join('')
+      if (next < this.words.length && normalizeAudioEditFiller(this.words[next].block.text).startsWith(text)) continue
+      for (let k = head; k < a; k++) this.kept[k] = false
+      this.accepted.push({ kind: 'broken_start', first: head, last: a, restartWord: next, length: size, ratio: 1, total: 0, pauseJ: this.pauseBefore(head) })
     }
   }
 
   /**
-   * 删掉的内容与保留的那遍有相同的部分时（“…太多了一个API KEY。｜一个API KEY 发个…”），删除窗口可以在相同内容里平移，
-   * 剪后文字一字不差。只修连读的接缝：原切点有一头没有停顿、平移后两头都落在停顿里才移动。
-   * 平移不超过删除段本身的长度——整遍换成前一遍等于改留前一遍，而文字一样不代表念得一样好。
+   * 换遍拼接：原切点有一头没有气口（连读）时，在两遍对应的内容里找另一组切点——前一遍念到某个明显气口为止，
+   * 后一遍从对应位置的气口接上，中间删掉；“…太多了一个API KEY。｜一个API KEY 发个…”、
+   * “这个工具最重要的部分呢，就是这个搜索api了，｜…这工具最重要的部分就是搜索api了，因为它是…”都属于这种。
+   * 两遍的对应按拼音对齐（容忍改词、多少一个字），两头都要有至少 CLEAR_PAUSE_MS 的停顿或呼吸才换；
+   * 平移不跨过整个删除段——整遍换成前一遍等于改留前一遍，而文字一样不代表念得一样好。
    */
   private realignSeams(): void {
     const removed = (k: number): boolean => !this.kept[k] && this.words[k].block.included
@@ -379,10 +411,11 @@ class RetakeDetector {
     const SEAM_CAP = 300
     const present = (k: number): boolean => !this.words[k].filler && (this.kept[k] || (k >= a && k < end))
     const before: number[] = [], after: number[] = []
-    for (let k = a - 1, size = 0; k >= 0 && size < MAX_SHIFT_UNITS; k--) if (present(k)) { before.unshift(k); size += this.words[k].units.length }
-    for (let k = end, size = 0; k < this.words.length && size <= MAX_SHIFT_UNITS; k++) if (present(k)) { after.push(k); size += this.words[k].units.length }
+    for (let k = a - 1, size = 0; k >= 0 && size < MAX_SHIFT_UNITS + 8; k--) if (present(k)) { before.unshift(k); size += this.words[k].units.length }
+    for (let k = end, size = 0; k < this.words.length && size <= MAX_SHIFT_UNITS + 8; k++) if (present(k)) { after.push(k); size += this.words[k].units.length }
     const order = [...before, ...Array.from({ length: end - a }, (_, offset) => a + offset).filter((k) => !this.words[k].filler), ...after]
     const units = order.flatMap((k) => this.words[k].units.map((unit) => ({ py: unit.py, word: k })))
+    const pys = units.map((unit) => unit.py)
     const ua = before.reduce((size, k) => size + this.words[k].units.length, 0)
     const ub = units.findIndex((unit, index) => index >= ua && unit.word >= end)
     const runEnd = ub < 0 ? units.length : ub
@@ -397,21 +430,35 @@ class RetakeDetector {
     }
     const seams = (x: number, y: number): [number, number] => [quietAt(units[x].word), y < units.length ? quietAt(units[y].word) : SEAM_CAP]
     if (Math.min(...seams(ua, runEnd)) >= BOUNDARY_PAUSE_MS) return -1
-    const span = runEnd - ua
-    let best = { shift: 0, score: -1 }
-    for (let shift = -Math.min(MAX_SHIFT_UNITS, span - 1); shift <= Math.min(MAX_SHIFT_UNITS, span - 1); shift++) {
-      const x = ua + shift, y = runEnd + shift
-      if (shift === 0 || x < 0 || y > units.length || !wordStart(x) || !wordStart(y)) continue
-      let same = true
-      if (shift > 0) for (let t = 0; t < shift && same; t++) same = units[ua + t].py === units[runEnd + t].py
-      else for (let t = 1; t <= -shift && same; t++) same = units[ua - t].py === units[runEnd - t].py
-      if (!same) continue
-      const [start, finish] = seams(x, y)
-      if (Math.min(start, finish) < BOUNDARY_PAUSE_MS) continue
-      if (start + finish > best.score || (start + finish === best.score && Math.abs(shift) < Math.abs(best.shift))) best = { shift, score: start + finish }
+    /** r 与 t 的开头对应：短的要逐字相同，长的拼音对齐命中八成以上；返回 t 用掉的字数 */
+    const correspond = (r: readonly string[], t: readonly string[]): number | null => {
+      if (r.length <= 3) return r.every((py, i) => py === t[i]) ? r.length : null
+      const aligned = align(r, t)
+      return aligned.hits / r.length >= 0.8 && aligned.delRun <= 2 ? aligned.used : null
     }
-    if (best.shift === 0) return -1
-    const first = units[ua + best.shift].word, last = units[runEnd + best.shift - 1].word + 1
+    const span = runEnd - ua
+    let best: { x: number; y: number; score: number } | undefined
+    const consider = (x: number, y: number): void => {
+      if (x < 0 || y > units.length || y <= x || !wordStart(x) || !wordStart(y)) return
+      const [start, finish] = seams(x, y)
+      if (Math.min(start, finish) < CLEAR_PAUSE_MS) return
+      const score = start + finish
+      if (!best || score > best.score || (score === best.score && Math.abs(x - ua) < Math.abs(best.x - ua))) best = { x, y, score }
+    }
+    for (let shift = 1; shift <= Math.min(MAX_SHIFT_UNITS, span - 1); shift++) {
+      // 向右：前一遍多留 shift 个字，后一遍从对应位置接
+      if (!wordStart(ua + shift)) continue
+      const used = correspond(pys.slice(ua, ua + shift), pys.slice(runEnd, runEnd + shift + 6))
+      if (used !== null) consider(ua + shift, runEnd + used)
+    }
+    for (let shift = 1; shift <= Math.min(MAX_SHIFT_UNITS, span - 1, ua); shift++) {
+      // 向左：删掉切点前已保留的 shift 个字，改留删除段末尾对应的那几个字
+      if (!wordStart(ua - shift)) continue
+      const used = correspond(pys.slice(ua - shift, ua).reverse(), pys.slice(Math.max(ua, runEnd - shift - 6), runEnd).reverse())
+      if (used !== null) consider(ua - shift, runEnd - used)
+    }
+    if (!best) return -1
+    const first = units[best.x].word, last = units[best.y - 1].word + 1
     if (!this.removable(first, last)) return -1
     for (let k = a; k < end; k++) this.kept[k] = this.words[k].block.included
     for (let k = first; k < last; k++) this.kept[k] = false
@@ -430,8 +477,9 @@ class RetakeDetector {
       pool = [...pool.filter((c) => c.restartWord < from || c.restartWord > to), ...this.candidates(this.sequence(), from, to)]
     }
     this.absorbBrokenStarts()
-    this.absorbHesitations()
+    // 先试换遍拼接（能留下前一遍的好开头）；换不了再把贴着念坏那遍的碎字一起删
     this.realignSeams()
+    this.absorbStrandedLeads()
     return this.accepted
   }
 
