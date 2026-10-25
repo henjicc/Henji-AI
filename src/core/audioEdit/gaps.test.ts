@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AudioEditProjectDocument, AudioEditTranscriptBlock } from './types'
-import { cleanAudioEditGaps, clearAudioEditGaps } from './gaps'
+import { audioEditSpeechEdges, cleanAudioEditGaps, clearAudioEditGaps } from './gaps'
 import { buildProjectAudioEditTimeline } from './timeline'
 import { applyAudioEditBreathPolicy } from './breaths'
 
@@ -13,9 +13,9 @@ function documentOf(words: Array<[string, number, number]>, extra: Partial<Audio
     cuts: [], gainRegions: [], ...extra,
   }
 }
-/** 说话 -30 dB，其余是 -60 dB 的残留气声；sound 里列出有声的毫秒区间 */
+/** 说话 -30 dB，其余是 -75 dB 的房间底噪；sound 里列出有声的毫秒区间，残留气声（约 -60 dB）用 extra 标出 */
 function levelsOf(sound: Array<[number, number]>, extra: Array<[number, number, number]> = []): { resolutionMs: number; wideDb: number[] } {
-  const wideDb: number[] = Array.from({ length: 400 }, (_, cell) => (sound.some(([a, b]) => cell * 10 >= a && cell * 10 < b) ? -30 : -60))
+  const wideDb: number[] = Array.from({ length: 400 }, (_, cell) => (sound.some(([a, b]) => cell * 10 >= a && cell * 10 < b) ? -30 : -75))
   for (const [a, b, db] of extra) for (let cell = a / 10; cell < b / 10; cell++) wideDb[cell] = db
   return { resolutionMs: 10, wideDb }
 }
@@ -47,8 +47,12 @@ describe('字间气口清理', () => {
   it('句间与重念接缝留约 0.2 秒；本来就短的气口只静音不删；连着念的字之间不动', () => {
     const sentence = cleanAudioEditGaps(documentOf([['一件事。', 0, 1000], ['每个', 1400, 3000]]), [], levelsOf([[0, 1020], [1400, 3000]])).document
     expect(heardBetween(sentence, 1020, 1400).heard).toBe(200)
-    const short = cleanAudioEditGaps(documentOf([['一件事，', 0, 1000], ['每个', 1100, 3000]]), [], levelsOf([[0, 1020], [1100, 3000]])).document
-    expect(short.cuts).toEqual([{ id: 'gap:1020', startFrame: 1030, endFrame: 1090, reason: 'silence', enabled: true, mode: 'mute' }])
+    // 0.11 秒、里面是残留气声：只静音不删
+    const short = cleanAudioEditGaps(documentOf([['一件事，', 0, 1000], ['每个', 1130, 3000]]), [], levelsOf([[0, 1020], [1130, 3000]], [[1020, 1080, -60]])).document
+    expect(short.cuts).toEqual([{ id: 'gap:1020', startFrame: 1030, endFrame: 1120, reason: 'silence', enabled: true, mode: 'mute' }])
+    // 不到 0.1 秒的停顿、或里面只有房间底噪：不动（清成纯静音反而像门限切了一刀）
+    expect(cleanAudioEditGaps(documentOf([['一件事，', 0, 1000], ['每个', 1090, 3000]]), [], levelsOf([[0, 1020], [1090, 3000]], [[1020, 1090, -60]])).count).toBe(0)
+    expect(cleanAudioEditGaps(documentOf([['一件事，', 0, 1000], ['每个', 1130, 3000]]), [], levelsOf([[0, 1020], [1130, 3000]], [[1020, 1130, -75]])).count).toBe(0)
     const joined = cleanAudioEditGaps(documentOf([['一件', 0, 1000], ['事', 1000, 3000]]), [], levelsOf([[0, 3000]]))
     expect(joined.count).toBe(0)
   })
@@ -61,7 +65,19 @@ describe('字间气口清理', () => {
     const paused = documentOf([['调用', 0, 1000], ['大模型', 1250, 3000]])
     expect(cleanAudioEditGaps(paused, [], levelsOf([[0, 1000], [1250, 3000]])).count).toBe(1)
     // 中间有呼吸也算该停的地方
-    expect(cleanAudioEditGaps(phrase, [{ startMs: 995, endMs: 1045, peak: 1 }], levelsOf([[0, 990], [1050, 3000]])).count).toBe(1)
+    const breathy = documentOf([['调用', 0, 1000], ['大模型', 1130, 3000]])
+    expect(cleanAudioEditGaps(breathy, [{ startMs: 995, endMs: 1125, peak: 1 }], levelsOf([[0, 990], [1130, 3000]])).count).toBe(1)
+  })
+
+  it('后一个字开头很轻的送气、擦音算作字头，不静音；要删的气口两头留静音、中间整段删除', () => {
+    // 腾讯：1300 才算有声，但 1260–1300 已经是高出底噪的送气（-62 dB）
+    const document = documentOf([['元宝。', 0, 1000], ['腾讯', 1300, 3000]])
+    const levels = levelsOf([[0, 1000], [1300, 3000]], [[1000, 1260, -75], [1260, 1300, -62]])
+    const { document: next } = cleanAudioEditGaps(document, [], levels)
+    const mutes = next.cuts!.filter((cut) => cut.mode === 'mute')
+    expect(Math.max(...mutes.map((cut) => cut.endFrame))).toBe(1250)
+    // 两头各一段静音，中间一段删除
+    expect(next.cuts!.map((cut) => cut.mode ?? 'delete')).toEqual(['mute', 'delete', 'mute'])
   })
 
   it('重念接缝：两侧剩下的残留按成片里的先后连成一段处理，检测到的呼吸算残留', () => {
@@ -70,7 +86,7 @@ describe('字间气口清理', () => {
       cuts: [{ id: 'retake', startFrame: 1500, endFrame: 1700, reason: 'silence', enabled: true }],
     })
     document.transcript[1] = { ...document.transcript[1], included: false }
-    const levels = levelsOf([[0, 1000], [1100, 1500], [1900, 3000]], [[1500, 1800, -45]])
+    const levels = levelsOf([[0, 1000], [1100, 1500], [1900, 3000]], [[1000, 1100, -60], [1500, 1800, -45]])
     const { document: next } = cleanAudioEditGaps(document, [{ startMs: 1500, endMs: 1800, peak: 1 }], levels)
     // 听到的：残留 100 + 呼吸与安静 200 = 300 → 接缝留 200，全是静音（字的保护段之外）
     expect(heardBetween(next, 1000, 1900)).toEqual({ heard: 200, silent: 180 })
@@ -116,4 +132,10 @@ describe('字间气口清理', () => {
     expect(cleanAudioEditGaps(locked, [], levels).count).toBe(0)
     expect(clearAudioEditGaps(first).cuts).toEqual([])
   })
+})
+
+it('字声音的起止点：按同一残留判断找出声音开始、结束的位置，几十毫秒的起伏不算', () => {
+  // 说话 0–1000、1400–3000，1200–1220 有一下 20 ms 的口水音
+  const levels = levelsOf([[0, 1000], [1400, 3000], [1200, 1220]])
+  expect(audioEditSpeechEdges(levels, 1000)).toEqual([1000, 1400, 3000])
 })

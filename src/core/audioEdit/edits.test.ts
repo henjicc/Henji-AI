@@ -45,6 +45,19 @@ describe('audio edit shared decisions and interchange', () => {
     expect(adjustAudioEditRangeMode(words, { startFrame: 2900, endFrame: 4000 }, 'delete', 'remove').transcript.find((block) => block.id === 'b')?.included).toBe(true)
     expect(adjustAudioEditRangeMode(words, { startFrame: 2900, endFrame: 4000 }, 'mute', 'remove').transcript.find((block) => block.id === 'b')?.included).toBe(false)
   })
+  it('手动改过的自动剪辑归用户：改成手动剪辑并留停用标记，之后重跑不覆盖', () => {
+    const auto = { ...project(), cuts: [
+      { id: 'gap:1000', startFrame: 1100, endFrame: 1300, reason: 'silence' as const, enabled: true, mode: 'mute' as const },
+      { id: 'gap:1000:1', startFrame: 1300, endFrame: 2700, reason: 'silence' as const, enabled: true },
+      { id: 'breath:2800', startFrame: 2800, endFrame: 2900, reason: 'silence' as const, enabled: true },
+    ] }
+    const trimmed = adjustAudioEditRangeMode(auto, { startFrame: 1100, endFrame: 1200 }, 'mute', 'remove')
+    expect(trimmed.cuts?.filter((cut) => cut.enabled).map((cut) => [cut.id, cut.startFrame, cut.endFrame])).toEqual([
+      ['manual:gap:1000', 1200, 1300], ['manual:gap:1000:1', 1300, 2700], ['breath:2800', 2800, 2900]])
+    expect(trimmed.cuts?.find((cut) => cut.id === 'gap:1000')).toMatchObject({ enabled: false, startFrame: 1100, endFrame: 2700 })
+    // 没碰到的自动剪辑照旧
+    expect(editAudioEditRange(trimmed, { startFrame: 3200, endFrame: 3300 }, 'mute').cuts?.some((cut) => cut.id === 'breath:2800' && cut.enabled)).toBe(true)
+  })
   it('XML mutes only audio tracks and preserves linked video and continuous duration', () => {
     const original = project()
     original.source.mediaType = 'video'

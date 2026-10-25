@@ -141,6 +141,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.69.0'] = '7f4a904150c22cc149a7dbf84a87f68617ba5581b50718404113bed31cda6264'
     // 快节奏删呼吸时连带把字间残留的气声清成静音、只留短气口（gap: 剪切），说明随之更新。
     fingerprints['2.70.0'] = '095b14a35a110feeaef79a31ffc53dffc778836bed4674f25c54bdf8c8df6b7b'
+    // 字间气口只在真正该停处清理、字头送气算字头、手动改过的不覆盖，说明随之更新。
+    fingerprints['2.71.0'] = 'f423d4c9ba2195ad9135558f76447c0a7a2545ebeb3aceb6065789c0aabf5839'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], `工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹：${fingerprint}`).toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {

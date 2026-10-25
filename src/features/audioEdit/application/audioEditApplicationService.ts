@@ -155,7 +155,7 @@ export async function compressAudioEditSilence(projectId: string, range?: AudioE
 }
 
 const energyLevels = (energy: SpeechEnergyAnalysis | undefined): AudioEditLevels | undefined =>
-  energy?.levels ? { resolutionMs: energy.resolutionMs, wideDb: energy.levels.wideDb } : undefined
+  energy?.levels ? { resolutionMs: energy.resolutionMs, wideDb: energy.levels.wideDb, ...(energy.levels.highDb ? { highDb: energy.levels.highDb } : {}) } : undefined
 
 /**
  * 声音能量低谷与逐帧电平（与停顿压缩、去重念同一分析）；取不到时返回空，

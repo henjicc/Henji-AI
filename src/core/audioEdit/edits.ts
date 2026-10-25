@@ -48,7 +48,33 @@ export function dismissAudioEditSuggestion(project: AudioEditProjectDocument, id
   return { ...project, suggestions: project.suggestions.map((item) => item.id === id ? { ...item, status: 'dismissed' } : item) }
 }
 
+/** 呼吸声处理（breath:）与字间气口清理（gap:）的剪辑标识前缀：重跑时整批替换的自动剪辑 */
+const AUTOMATIC_EDIT = /^(breath|gap):\d+/
+
+/**
+ * 用户手动改了某处自动剪辑（拖边缘、在选区里删、静音、恢复）后，这处就是用户的：同一处的自动剪辑与音量区域改名为手动的，
+ * 原标识留一条停用的标记（与“逐处恢复”相同），之后重跑呼吸声、气口处理都跳过这里，不覆盖用户的改动。
+ */
+export function adoptAudioEditAutomaticEdits(project: AudioEditProjectDocument, range: AudioEditRange): AudioEditProjectDocument {
+  const baseOf = (id: string): string | undefined => AUTOMATIC_EDIT.exec(id)?.[0]
+  const touched = new Set([...(project.cuts ?? []), ...(project.gainRegions ?? [])]
+    .filter((item) => item.enabled && baseOf(item.id) && item.startFrame < range.endFrame && item.endFrame > range.startFrame).map((item) => baseOf(item.id)!))
+  if (!touched.size) return project
+  const owned = <T extends { id: string; enabled: boolean }>(item: T): boolean => item.enabled && touched.has(baseOf(item.id) ?? '')
+  const markers: AudioEditCut[] = [...touched].flatMap((id) => {
+    if ((project.cuts ?? []).some((cut) => cut.id === id && !cut.enabled)) return []
+    const items = [...(project.cuts ?? []), ...(project.gainRegions ?? [])].filter((item) => baseOf(item.id) === id)
+    return [{ id, startFrame: Math.min(...items.map((item) => item.startFrame)), endFrame: Math.max(...items.map((item) => item.endFrame)), reason: 'silence' as const, enabled: false }]
+  })
+  return {
+    ...project,
+    cuts: [...(project.cuts ?? []).map((cut) => owned(cut) ? { ...cut, id: `manual:${cut.id}`, reason: 'manual' as const } : cut), ...markers],
+    gainRegions: (project.gainRegions ?? []).map((region) => owned(region) ? { ...region, id: `manual:${region.id}` } : region),
+  }
+}
+
 export function editAudioEditRange(project: AudioEditProjectDocument, range: AudioEditRange, mode: 'delete' | 'mute' | 'restore'): AudioEditProjectDocument {
+  project = adoptAudioEditAutomaticEdits(project, range)
   const startFrame = Math.max(0, Math.round(Math.min(range.startFrame, range.endFrame)))
   const endFrame = Math.min(project.source.durationFrames, Math.round(Math.max(range.startFrame, range.endFrame)))
   if (!Number.isFinite(startFrame + endFrame) || endFrame <= startFrame) return project
@@ -67,6 +93,7 @@ export function editAudioEditRange(project: AudioEditProjectDocument, range: Aud
  */
 export function adjustAudioEditRangeMode(project: AudioEditProjectDocument, range: AudioEditRange, mode: 'delete' | 'mute', action: 'add' | 'remove'): AudioEditProjectDocument {
   if (action === 'add') return editAudioEditRange(project, range, mode)
+  project = adoptAudioEditAutomaticEdits(project, range)
   const startFrame = Math.max(0, Math.round(Math.min(range.startFrame, range.endFrame)))
   const endFrame = Math.min(project.source.durationFrames, Math.round(Math.max(range.startFrame, range.endFrame)))
   if (!Number.isFinite(startFrame + endFrame) || endFrame <= startFrame) return project

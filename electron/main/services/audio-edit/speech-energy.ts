@@ -5,6 +5,7 @@ import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { runAudioEditProcess } from './process'
 
 const FRAME_MS = 10
+const level = (value: number): number => Math.max(-120, Math.min(0, Math.round(value * 10) / 10))
 const MAX_FRAMES = 2_160_000 // Six hours; about 35 MB of numeric band data at the upper bound.
 
 /** Keep channels separate: downmixing opposite-phase stereo can manufacture silence. */
@@ -67,7 +68,7 @@ export async function decodeSpeechEnergy(source: AudioEditSourceMetadata, raw: S
   }
   valleys.flush()
   const result: SpeechEnergyAnalysis = { resolutionMs: FRAME_MS, thresholdDb, highThresholdDb, pauses: valleys.pauses,
-    ...(options.levels ? { levels: { wideDb: wide.map(value => Math.max(-120, Math.min(0, Math.round(value * 10) / 10))) } } : {}) }
+    ...(options.levels ? { levels: { wideDb: wide.map(level), highDb: high.map(level) } } : {}) }
   progress(1)
   return result
 }
