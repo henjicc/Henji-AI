@@ -1,5 +1,5 @@
 import type { AudioEditPreviewChunk, AudioEditPreviewMode, AudioEditProjectDocument, AudioEditTimelineSpan } from '@/core/audioEdit/types'
-import { applyAudioEditSpliceFade, buildAudioEditSpliceFades, type AudioEditSpliceFade } from '@/core/audioEdit/spliceDeclick'
+import { AudioEditSpliceRenderer } from '@/core/audioEdit/spliceCrossfade'
 import { getPlatform } from '@/platform/runtime'
 import { flushAudioEditProject } from '../application/audioEditProjectInstances'
 
@@ -7,10 +7,25 @@ import { flushAudioEditProject } from '../application/audioEditProjectInstances'
 export class PreviewChunkCache {
   private readonly blocks = new Map<number, Promise<AudioEditPreviewChunk>>()
   private flushed: Promise<void> | undefined
-  private readonly fades: readonly AudioEditSpliceFade[]
+  private readonly splices: AudioEditSpliceRenderer
 
   constructor(private readonly project: AudioEditProjectDocument, private readonly mode: AudioEditPreviewMode, private readonly spans: readonly AudioEditTimelineSpan[]) {
-    this.fades = buildAudioEditSpliceFades(spans, project.source.sampleRate)
+    // 拼接点的交叉淡化借用被删部分紧挨着的声音，和导出调用同一个渲染器
+    this.splices = new AudioEditSpliceRenderer(spans, project.source, { read: (start, count) => this.readSource(start, count) })
+  }
+
+  /** 按源帧读一段声音（可跨一秒块、可落在被删部分），越界补零。 */
+  private async readSource(startFrame: number, frameCount: number): Promise<Float32Array> {
+    const { durationFrames, channels } = this.project.source
+    const output = new Float32Array(Math.max(0, frameCount) * channels)
+    for (let cursor = Math.max(0, startFrame); cursor < Math.min(durationFrames, startFrame + frameCount);) {
+      const block = await this.block(cursor)
+      const end = Math.min(startFrame + frameCount, block.sourceEndFrame)
+      if (end <= cursor) break
+      output.set(new Float32Array(block.pcm, (cursor - block.sourceStartFrame) * channels * 4, (end - cursor) * channels), (cursor - startFrame) * channels)
+      cursor = end
+    }
+    return output
   }
 
   private block(frame: number): Promise<AudioEditPreviewChunk> {
@@ -44,8 +59,9 @@ export class PreviewChunkCache {
     const block = await this.block(start)
     const end = Math.min(start + count, block.sourceEndFrame)
     if (end <= start) throw new Error('此位置无法读取音频，请重新定位后重试')
-    const samples = new Float32Array(block.pcm, (start - block.sourceStartFrame) * block.channels * 4, (end - start) * block.channels)
-    const pcm = this.mode === 'source' ? samples.slice() : applyAudioEditSpliceFade(samples, block.channels, start - span.sourceStartFrame, this.fades[index])
+    const pcm = this.mode === 'source'
+      ? new Float32Array(block.pcm, (start - block.sourceStartFrame) * block.channels * 4, (end - start) * block.channels).slice()
+      : await this.splices.render(index, start - span.sourceStartFrame, end - span.sourceStartFrame)
     return { ...block, sourceStartFrame: start, sourceEndFrame: end, pcm: pcm.buffer as ArrayBuffer }
   }
 

@@ -5,10 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { AudioEditTimelineSpan } from '../../../../src/core/audioEdit/types'
-import { applyAudioEditSpliceFade, buildAudioEditSpliceFades } from '../../../../src/core/audioEdit/spliceDeclick'
-import { buildAudioEditConcatFilter, buildAudioEditRenderArgs } from '../audio-edit/export-render'
-import { ffmpegFilterComplexFileArgs, loadFfmpegPath, loadFfprobePath } from './ffmpeg-loader'
+import { loadFfmpegPath, loadFfprobePath } from './ffmpeg-loader'
 
 /**
  * FFmpeg 命令行兼容层（任务 3.7，`npm run test:ffmpeg-cli`）：用真实随包二进制核对全仓拼接的 FFmpeg/ffprobe 参数。
@@ -145,81 +142,6 @@ describe('FFmpeg 命令行选项兼容（任务 3.7）', () => {
         return [...files].filter((file) => !FILE_EXCEPTIONS[file]?.[name]).map((file) => `-${name} @ ${file}`)
       })
       expect(unknown, `${chain.label} FFmpeg ${chain.major}`).toEqual([])
-    }
-  }, 120_000)
-
-  it('口播剪辑导出：超出命令行长度的滤镜图从文件读取，按样本得到完整输出', async () => {
-    for (const [index, chain] of chains.entries()) {
-      const source = path.join(directory, `source-${index}.wav`)
-      await run(chain.ffmpeg, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=2', '-ac', '2', '-c:a', 'pcm_s16le', source], { windowsHide: true })
-      const spans: AudioEditTimelineSpan[] = Array.from({ length: 400 }, (_item, span) => ({
-        sourceStartFrame: span * 200, sourceEndFrame: span * 200 + 150, outputStartFrame: span * 150, outputEndFrame: span * 150 + 150, muted: span % 7 === 0,
-      }))
-      const graph = buildAudioEditConcatFilter(spans, '0:a:0', 48000)
-      expect(graph.length).toBeGreaterThan(32_767)
-      const script = path.join(directory, `graph-${index}.txt`)
-      await fs.writeFile(script, graph, 'utf8')
-      const output = path.join(directory, `edited-${index}.wav`)
-      const args = await buildAudioEditRenderArgs(chain.ffmpeg, source, script, output)
-      expect(args).toEqual(expect.arrayContaining(await ffmpegFilterComplexFileArgs(chain.ffmpeg, script)))
-      expect(args.includes('-filter_complex_script'), chain.label).toBe(chain.major < 8)
-      await run(chain.ffmpeg, args, { windowsHide: true })
-      const { stdout } = await run(chain.ffprobe, ['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=codec_name,sample_rate,channels,duration_ts', '-of', 'json', output], { windowsHide: true })
-      expect(JSON.parse(stdout).streams[0], chain.label).toMatchObject({ codec_name: 'pcm_s24le', sample_rate: '48000', channels: 2, duration_ts: 400 * 150 })
-    }
-  }, 120_000)
-
-  it('音频删除和静音拼接降低跳变，预览与真实导出逐样本一致且总采样数不变', async () => {
-    for (const [index, chain] of chains.entries()) {
-      for (const sampleRate of [48000, 44100]) {
-        const source = path.join(directory, `splice-source-${index}-${sampleRate}.f32`)
-        const input = Float32Array.from({ length: 6000 }, (_, i) => {
-          const value = Math.floor(i / 2) < 1500 ? 0.75 : -0.5
-          return i % 2 ? -value : value
-        })
-        await fs.writeFile(source, Buffer.from(input.buffer))
-        const spans: AudioEditTimelineSpan[] = [
-          { sourceStartFrame: 0, sourceEndFrame: 700, outputStartFrame: 0, outputEndFrame: 700 },
-          { sourceStartFrame: 1600, sourceEndFrame: 2300, outputStartFrame: 700, outputEndFrame: 1400 },
-          { sourceStartFrame: 2300, sourceEndFrame: 2500, outputStartFrame: 1400, outputEndFrame: 1600, muted: true },
-          { sourceStartFrame: 2500, sourceEndFrame: 2800, outputStartFrame: 1600, outputEndFrame: 1900 },
-          { sourceStartFrame: 2800, sourceEndFrame: 2900, outputStartFrame: 1900, outputEndFrame: 2000 },
-          { sourceStartFrame: 2901, sourceEndFrame: 2902, outputStartFrame: 2000, outputEndFrame: 2001 },
-          { sourceStartFrame: 2903, sourceEndFrame: 2906, outputStartFrame: 2001, outputEndFrame: 2004 },
-        ]
-        const script = path.join(directory, `splice-${index}-${sampleRate}.filter`)
-        await fs.writeFile(script, buildAudioEditConcatFilter(spans, '0:a:0', sampleRate))
-        const output = path.join(directory, `splice-${index}-${sampleRate}.wav`)
-        await run(chain.ffmpeg, ['-v', 'error', '-y', '-f', 'f32le', '-ar', String(sampleRate), '-ac', '2', '-i', source,
-          ...await ffmpegFilterComplexFileArgs(chain.ffmpeg, script), '-map', '[out]', '-c:a', 'pcm_f32le', output], { windowsHide: true })
-        const { stdout } = await run(chain.ffmpeg, ['-v', 'error', '-i', output, '-f', 'f32le', '-c:a', 'pcm_f32le', 'pipe:1'], { windowsHide: true, encoding: 'buffer' })
-        const actual = Float32Array.from({ length: stdout.length / 4 }, (_, i) => stdout.readFloatLE(i * 4))
-        const expected = new Float32Array(2004 * 2)
-        const hardCut = new Float32Array(expected.length)
-        const fades = buildAudioEditSpliceFades(spans, sampleRate)
-        for (const [i, span] of spans.entries()) {
-          const pcm = input.slice(span.sourceStartFrame * 2, span.sourceEndFrame * 2)
-          if (span.muted) pcm.fill(0)
-          hardCut.set(pcm, span.outputStartFrame * 2)
-          expected.set(applyAudioEditSpliceFade(pcm, 2, 0, fades[i]), span.outputStartFrame * 2)
-        }
-        expect(actual.length, `${chain.label} ${sampleRate}Hz 采样数`).toBe(hardCut.length)
-        let maxError = 0
-        for (let i = 0; i < actual.length; i++) maxError = Math.max(maxError, Math.abs(actual[i] - expected[i]))
-        expect(maxError, `${chain.label} ${sampleRate}Hz 预览/导出误差`).toBeLessThan(1e-7)
-        for (const seam of [700, 1400, 1600]) {
-          const maxJump = (pcm: Float32Array): number => {
-            let jump = 0
-            for (let i = (seam - 250) * 2; i < (seam + 250) * 2; i++) jump = Math.max(jump, Math.abs(pcm[i] - pcm[i - 2]))
-            return jump
-          }
-          expect(maxJump(actual)).toBeLessThan(0.004)
-          expect(maxJump(actual)).toBeLessThan(maxJump(hardCut) / 100)
-        }
-        expect(actual.slice(0, 400 * 2)).toEqual(hardCut.slice(0, 400 * 2))
-        expect(actual.slice(1880 * 2, 1920 * 2)).toEqual(hardCut.slice(1880 * 2, 1920 * 2))
-        expect(actual.slice(-2)).toEqual(hardCut.slice(-2))
-      }
     }
   }, 120_000)
 })

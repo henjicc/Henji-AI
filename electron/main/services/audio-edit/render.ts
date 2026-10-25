@@ -13,7 +13,8 @@ import { processAudioEditVstChain, audioEditProcessorCacheIdentity } from './pro
 import { runAudioRepair, audioRepairMaskDimensions, encodeAudioRepairMask } from './dsp-adapter'
 import { audioRenderKey, cachedAudioFile } from './render-cache'
 import { runAudioEditProcess } from './process'
-import { buildAudioEditConcatFilter } from './export-render'
+import { AudioEditSpliceRenderer } from '../../../../src/core/audioEdit/spliceCrossfade'
+import { createF32WavWriter, openF32Wav, type F32WavReader } from './pcm-wav'
 
 const logger = createMainLogger('main.audio_edit.render')
 export function audioGainExpression(regions: readonly AudioEditGainRegion[]): string {
@@ -86,6 +87,35 @@ export async function prepareAudioEditRenderSource(project: AudioEditProjectDocu
   return input
 }
 
+/** 渲染源已是 32 位浮点 WAV 时直接随机读；否则先在缓存里转一份。 */
+async function openRenderSource(project: AudioEditProjectDocument, source: string, signal?: AbortSignal): Promise<F32WavReader> {
+  const direct = await openF32Wav(source)
+  if (direct && direct.sampleRate === project.source.sampleRate && direct.channels === project.source.channels) return direct
+  await direct?.close()
+  const converted = await cachedAudioFile(audioEditCacheDirectory(project.id), `render-f32-${audioRenderKey([source, project.source.sampleRate, project.source.channels])}`, 'wav', async output => {
+    await runAudioEditProcess(await loadFfmpegPath(), ['-v', 'error', '-y', '-i', source, '-map', '0:a:0', '-vn', '-c:a', 'pcm_f32le', '-rf64', 'auto', '-ar', String(project.source.sampleRate), '-ac', String(project.source.channels), output], signal)
+  }, signal)
+  const reader = await openF32Wav(converted)
+  if (!reader) throw new Error('渲染源转码后仍无法读取，请重试。')
+  return reader
+}
+
+/** 逐段拼接成片：每段按一秒分块写出，拼接点由共享的交叉淡化渲染器处理（与试听同一个函数）。 */
+async function renderAudioEditSplices(project: AudioEditProjectDocument, reader: F32WavReader, spans: ReturnType<typeof buildProjectAudioEditTimeline>, durationFrames: number, output: string, signal?: AbortSignal): Promise<void> {
+  const { sampleRate, channels } = project.source
+  const splices = new AudioEditSpliceRenderer(spans, { sampleRate, channels, durationFrames: reader.frames }, reader)
+  const writer = await createF32WavWriter(output, sampleRate, channels, durationFrames)
+  try {
+    for (const [index, span] of spans.entries()) {
+      const length = span.sourceEndFrame - span.sourceStartFrame
+      for (let local = 0; local < length; local += sampleRate) {
+        signal?.throwIfAborted()
+        await writer.write(await splices.render(index, local, Math.min(length, local + sampleRate)))
+      }
+    }
+  } finally { await writer.close(); await reader.close() }
+}
+
 export async function renderAudioEditProject(project: AudioEditProjectDocument, processing = project.vstEnabled, signal?: AbortSignal): Promise<AudioEditRenderedAudio> {
   const started = performance.now()
   logger.info('开始渲染音频', { event: 'audio_edit.render.start', context: { projectId: project.id, revision: project.revision } })
@@ -95,15 +125,10 @@ export async function renderAudioEditProject(project: AudioEditProjectDocument, 
     const durationFrames = editedDurationFrames(spans)
     if (!durationFrames) throw new Error('当前没有可渲染的声音，请保留至少一段音频。')
     // 拼接算法变更只失效成品缓存，源时间上的修复、增益与效果缓存仍可复用。
-    const key = audioRenderKey(['splice-declick-v1', source, spans, project.source.sampleRate])
+    const key = audioRenderKey(['splice-crossfade-v1', source, spans, project.source.sampleRate])
     const audioPath = await cachedAudioFile(audioEditCacheDirectory(project.id), `finished-${key}`, 'wav', async output => {
-      const script = `${output}.filter`
-      try {
-        const ffmpeg = await loadFfmpegPath()
-        await fs.writeFile(script, buildAudioEditConcatFilter(spans, '0:a:0', project.source.sampleRate))
-        await runAudioEditProcess(ffmpeg, ['-v', 'error', '-y', '-i', source, ...await ffmpegFilterComplexFileArgs(ffmpeg, script), '-map', '[out]', '-c:a', 'pcm_f32le', output], signal)
-        await validateAudioEditAudio(output, project.source.sampleRate, project.source.channels, durationFrames, signal)
-      } finally { await removeUnmanagedCachePath(script, { force: true }) }
+      await renderAudioEditSplices(project, await openRenderSource(project, source, signal), spans, durationFrames, output, signal)
+      await validateAudioEditAudio(output, project.source.sampleRate, project.source.channels, durationFrames, signal)
     }, signal)
     await verifyAudioEditSource(project, false, signal)
     logger.info('音频渲染完成', { event: 'audio_edit.render.completed', context: { projectId: project.id, elapsedMs: performance.now() - started } })

@@ -8,52 +8,71 @@ vi.mock('./media', () => ({ audioEditCacheDirectory: () => state.dir, verifyAudi
 vi.mock('./dsp-adapter', () => ({ runAudioRepair: async (_input: string, output: string) => { state.calls.push('repair'); await fs.writeFile(output, 'repaired') } }))
 vi.mock('./processors', () => ({ audioEditProcessorCacheIdentity: async () => 'v1', processAudioEditVstChain: async (input: string, dir: string) => { state.calls.push('processor'); expect(path.basename(input)).toMatch(/^gain-/); const outputPath = path.join(dir, 'vst.wav'); await fs.writeFile(outputPath, 'processed'); return { outputPath, temporaryPaths: [outputPath] } } }))
 vi.mock('../video/ffmpeg-loader', () => ({ loadFfmpegPath: async () => 'ffmpeg', ffmpegFilterComplexFileArgs: async (_bin: string, script: string) => ['-filter_complex_script', script] }))
-vi.mock('./process', () => ({ runAudioEditProcess: async (_bin: string, args: string[]) => { const script = await fs.readFile(args[args.indexOf('-filter_complex_script') + 1], 'utf8'); state.calls.push(script.includes('aeval') ? 'gain' : 'cuts'); await fs.writeFile(args.at(-1)!, script) } }))
+vi.mock('./process', () => ({ runAudioEditProcess: async (_bin: string, args: string[]) => {
+  // 增益阶段走滤镜脚本；不是浮点 WAV 的渲染源先转一份（这里写出一段 48000 帧的真 WAV）
+  if (args.includes('-filter_complex_script')) { state.calls.push('gain'); await fs.writeFile(args.at(-1)!, await fs.readFile(args[args.indexOf('-filter_complex_script') + 1], 'utf8')); return }
+  state.calls.push('decode'); await writeWav(args.at(-1)!, new Float32Array(48000).fill(0.25))
+} }))
 import { renderAudioEditProject } from './render'
+import { createF32WavWriter, openF32Wav } from './pcm-wav'
 import { cachedAudioFile } from './render-cache'
 import { audioRenderKey } from './render-cache'
 import { buildProjectAudioEditTimeline } from '../../../../src/core/audioEdit/timeline'
+async function writeWav(file: string, samples: Float32Array): Promise<void> {
+  const writer = await createF32WavWriter(file, 48000, 1, samples.length)
+  await writer.write(samples); await writer.close()
+}
 let project: AudioEditProjectDocument
 beforeEach(async () => {
   state.dir = await fs.mkdtemp(path.join(os.tmpdir(), 'audio-render-')); state.calls = []
+  await writeWav(path.join(state.dir, 'source.wav'), Float32Array.from({ length: 48000 }, (_, i) => (i < 24000 ? 0.5 : -0.5)))
   project = { id: 'test', name: '声音', source: { mediaType: 'audio', sourcePath: '/source.wav', audioPath: '/source.wav', durationFrames: 48000, sampleRate: 48000, channels: 1 }, referenceScript: '', transcript: [], suggestions: [], revision: 1, createdAt: 1, updatedAt: 1, vstEnabled: true,
     gainRegions: [{ id: 'g', startFrame: 0, endFrame: 24000, gainDb: -6, fadeInFrames: 0, fadeOutFrames: 0, enabled: true }],
     repairs: [{ id: 'r', startFrame: 1000, endFrame: 2000, lowHz: 100, highHz: 1000, kind: 'spectral_heal', strength: 1, enabled: true }], cuts: [{ id: 'c', startFrame: 24000, endFrame: 48000, reason: 'manual', enabled: true }] }
 })
 afterEach(async () => { await fs.rm(state.dir, { recursive: true, force: true }) })
 it('orders shared stages and reuses unaffected caches on cut/gain edits; revision-only changes reuse audio', async () => {
-  expect((await renderAudioEditProject(project)).durationFrames).toBe(24000)
-  expect(state.calls).toEqual(['repair', 'gain', 'processor', 'cuts'])
-  await renderAudioEditProject({ ...project, revision: 2 }); expect(state.calls).toHaveLength(4)
-  project.cuts![0].endFrame = 36000; await renderAudioEditProject(project); expect(state.calls.slice(4)).toEqual(['cuts'])
-  state.calls = []; project.gainRegions![0].gainDb = -12; await renderAudioEditProject(project); expect(state.calls).toEqual(['gain', 'processor', 'cuts'])
-  state.calls = []; project.repairs![0].strength = .2; await renderAudioEditProject(project); expect(state.calls).toEqual(['repair', 'gain', 'processor', 'cuts'])
+  const first = await renderAudioEditProject(project)
+  expect(first.durationFrames).toBe(24000)
+  expect(state.calls).toEqual(['repair', 'gain', 'processor', 'decode'])
+  expect((await renderAudioEditProject({ ...project, revision: 2 })).audioPath).toBe(first.audioPath); expect(state.calls).toHaveLength(4)
+  // 只改剪切：上游各阶段与转码缓存都复用，只重新拼接成片
+  project.cuts![0].endFrame = 36000
+  const recut = await renderAudioEditProject(project)
+  expect(state.calls).toHaveLength(4); expect(recut.audioPath).not.toBe(first.audioPath); expect(recut.durationFrames).toBe(36000)
+  state.calls = []; project.gainRegions![0].gainDb = -12; await renderAudioEditProject(project); expect(state.calls).toEqual(['gain', 'processor', 'decode'])
+  state.calls = []; project.repairs![0].strength = .2; await renderAudioEditProject(project); expect(state.calls).toEqual(['repair', 'gain', 'processor', 'decode'])
 })
 it('failed and cancelled cache builds never publish, and simultaneous readers share one build', async () => {
   await expect(cachedAudioFile(state.dir, 'bad', 'wav', async p => { await fs.writeFile(p, 'partial'); throw new Error('failed') })).rejects.toThrow('failed')
-  expect(await fs.readdir(state.dir)).toEqual([])
+  expect(await fs.readdir(state.dir)).toEqual(['source.wav'])
   const build = vi.fn(async (p: string) => { await fs.writeFile(p, 'done') })
   const values = await Promise.all([cachedAudioFile(state.dir, 'ok', 'wav', build), cachedAudioFile(state.dir, 'ok', 'wav', build)])
   expect(values[0]).toBe(values[1]); expect(build).toHaveBeenCalledTimes(1)
   const controller = new AbortController()
   await expect(cachedAudioFile(state.dir, 'cancel', 'wav', async p => { await fs.writeFile(p, 'partial'); controller.abort() }, controller.signal)).rejects.toThrow()
-  expect((await fs.readdir(state.dir))).toEqual(['ok.wav'])
+  expect((await fs.readdir(state.dir)).sort()).toEqual(['ok.wav', 'source.wav'])
 })
 
-it('剪辑引用和 WAV 共用带微淡变的渲染，旧硬切成品缓存不再命中', async () => {
+it('成品在主进程逐段拼接并交叉淡化：浮点 WAV 渲染源直接读，拼接点不再硬跳，旧成品缓存不再命中', async () => {
   project.vstEnabled = false
   project.repairs = []
   project.gainRegions = []
-  project.cuts![0] = { ...project.cuts![0], startFrame: 12000, endFrame: 24000 }
-  const oldKey = audioRenderKey([path.join(state.dir, 'source.wav'), buildProjectAudioEditTimeline(project)])
-  await fs.writeFile(path.join(state.dir, `finished-${oldKey}.wav`), '旧硬切缓存')
+  project.cuts![0] = { ...project.cuts![0], startFrame: 12000, endFrame: 30000 }
+  const oldKey = audioRenderKey(['splice-declick-v1', path.join(state.dir, 'source.wav'), buildProjectAudioEditTimeline(project), 48000])
+  await fs.writeFile(path.join(state.dir, `finished-${oldKey}.wav`), '旧成品缓存')
   const result = await renderAudioEditProject(project)
-  expect(result.durationFrames).toBe(36000)
-  expect(state.calls).toEqual(['cuts'])
+  expect(result.durationFrames).toBe(30000)
+  expect(state.calls).toEqual([])
   expect(result.audioPath).not.toBe(path.join(state.dir, `finished-${oldKey}.wav`))
-  const graph = await fs.readFile(result.audioPath, 'utf8')
-  expect(graph).toContain('afade=t=out:ss=11760:ns=240:curve=tri')
-  expect(graph).toContain('afade=t=in:ss=0:ns=240:curve=tri')
+  const reader = (await openF32Wav(result.audioPath))!
+  expect(reader.frames).toBe(30000)
+  const samples = await reader.read(0, 30000)
+  await reader.close()
+  let maxJump = 0
+  for (let i = 1; i < samples.length; i++) maxJump = Math.max(maxJump, Math.abs(samples[i] - samples[i - 1]))
+  expect(maxJump).toBeLessThan(0.01)
+  expect(samples[0]).toBe(0.5)
+  expect(samples[29999]).toBe(-0.5)
   expect((await renderAudioEditProject(project)).audioPath).toBe(result.audioPath)
-  expect(state.calls).toEqual(['cuts'])
 })
