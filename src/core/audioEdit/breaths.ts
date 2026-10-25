@@ -11,6 +11,8 @@ import type { AudioEditCut, AudioEditProjectDocument, AudioEditRange, AudioEditT
  * 只删前面大半口气、留紧挨下一个字的一小截并减弱 18 dB 凑够，不让字粘在一起；
  * - 气口按剪完后实际听到的空当算：句中 MIN_GAP_MS；句间和重念接缝处（中间删过字）SENTENCE_GAP_MS，
  *   接缝两侧原本就只剩各自停顿的一半，再把这口气删光，两遍会贴在一起；
+ * - 有声音能量的停顿证据时只把真正安静的部分（能量低谷与呼吸本身）算作气口：识别的词时间常在连读的两个字
+ *   之间留出空当，那段其实有声音，算进去会把气口删光；
  * - 逐口按顺序处理，同一处空当里的几口气共用这点气口；
  * - 和字连在一起（识别的词时间盖住了大半口气）：只减弱不在词里下刀。
  * 位置（句间 / 句中 / 开头结尾）照样标出来，供助手逐处取舍：想保留句中换气的语气时改成减弱。
@@ -61,18 +63,25 @@ interface Placement {
 const breathId = (startFrame: number): string => `${AUDIO_EDIT_BREATH_ID_PREFIX}${startFrame}`
 export const isAudioEditBreathEdit = (item: { id: string }): boolean => item.id.startsWith(AUDIO_EDIT_BREATH_ID_PREFIX)
 
+/** 声音能量检测到的安静区间（毫秒），与停顿压缩、去重念共用 */
+export interface AudioEditQuietRange { startMs: number; endMs: number }
+
+type FrameRange = { startFrame: number; endFrame: number }
+
 interface PlacementState {
   document: AudioEditProjectDocument
   /** 剪完后还能听到的源区间（含静音段，静音也占时间） */
   heard: AudioEditTimelineSpan[]
   words: AudioEditTranscriptBlock[]
   removedWords: AudioEditTranscriptBlock[]
+  /** 真正安静的源区间（能量低谷 ∪ 呼吸），有序不重叠；没有能量证据时为空，按词之间的空当算 */
+  quiet?: FrameRange[]
 }
 
-function placementState(document: AudioEditProjectDocument): PlacementState {
+function placementState(document: AudioEditProjectDocument, quiet?: FrameRange[]): PlacementState {
   const byStart = (a: AudioEditTranscriptBlock, b: AudioEditTranscriptBlock): number => a.startFrame - b.startFrame
   return {
-    document, heard: buildProjectAudioEditTimeline(document),
+    document, heard: buildProjectAudioEditTimeline(document), quiet,
     words: document.transcript.filter((block) => block.included).sort(byStart),
     removedWords: document.transcript.filter((block) => !block.included && !block.locked),
   }
@@ -80,6 +89,32 @@ function placementState(document: AudioEditProjectDocument): PlacementState {
 
 const overlap = (spans: readonly AudioEditTimelineSpan[], start: number, end: number): number =>
   spans.reduce((total, span) => total + Math.max(0, Math.min(end, span.sourceEndFrame) - Math.max(start, span.sourceStartFrame)), 0)
+
+/** 剪完后在 start–end 之间听到的帧数；给了安静区间时只数其中安静的部分。 */
+function heardFrames(state: PlacementState, start: number, end: number): number {
+  if (!state.quiet) return overlap(state.heard, start, end)
+  let total = 0
+  for (const range of state.quiet) {
+    if (range.endFrame <= start) continue
+    if (range.startFrame >= end) break
+    total += overlap(state.heard, Math.max(start, range.startFrame), Math.min(end, range.endFrame))
+  }
+  return total
+}
+
+/** 能量低谷与全部呼吸合并成有序不重叠的安静区间（帧）。 */
+function quietRanges(document: AudioEditProjectDocument, breaths: readonly AudioBreath[], pauses: readonly AudioEditQuietRange[]): FrameRange[] {
+  const { sampleRate } = document.source
+  const frames = [...pauses, ...breaths].map((item) => ({ startFrame: Math.round(item.startMs * sampleRate / 1000), endFrame: Math.round(item.endMs * sampleRate / 1000) }))
+    .filter((item) => item.endFrame > item.startFrame).sort((a, b) => a.startFrame - b.startFrame)
+  const merged: FrameRange[] = []
+  for (const item of frames) {
+    const last = merged.at(-1)
+    if (last && item.startFrame <= last.endFrame) last.endFrame = Math.max(last.endFrame, item.endFrame)
+    else merged.push({ ...item })
+  }
+  return merged
+}
 
 function placeBreath(state: PlacementState, breath: AudioBreath): Placement {
   const { sampleRate, durationFrames } = state.document.source
@@ -99,7 +134,7 @@ function placeBreath(state: PlacementState, breath: AudioBreath): Placement {
     if (to > from && (!region || to - from > region.endFrame - region.startFrame)) region = { startFrame: from, endFrame: to }
   }
   const keptInBreath = overlap(spans, startFrame, endFrame)
-  const gapFrames = overlap(heard, gapStart, gapEnd)
+  const gapFrames = heardFrames(state, gapStart, gapEnd)
   let context: AudioEditBreathContext
   // 和字连在一起看的是与保留的词实际重叠多少：识别的词时间常常多出几十毫秒盖到呼吸上，那不算；
   // 一口气有一部分已被重念剪掉时，剩下能听到的部分照常按位置处理
@@ -177,10 +212,10 @@ function overlapsLocked(document: AudioEditProjectDocument, range: { startFrame:
 
 /**
  * 按策略处理呼吸声：替换此前的呼吸处理（用户逐处恢复过的保留不动），返回新文档与各类计数。
- * range 只处理落在其中的呼吸。
+ * range 只处理落在其中的呼吸；pauses 是声音能量检测到的安静区间，给了就只把真正安静的部分算作气口。
  */
 export function applyAudioEditBreathPolicy(
-  document: AudioEditProjectDocument, breaths: readonly AudioBreath[], policy: AudioEditBreathPolicy, range?: AudioEditRange,
+  document: AudioEditProjectDocument, breaths: readonly AudioBreath[], policy: AudioEditBreathPolicy, range?: AudioEditRange, pauses?: readonly AudioEditQuietRange[],
 ): { document: AudioEditProjectDocument; counts: Record<'deleted' | 'attenuated' | 'muted' | 'kept', number> } {
   const { sampleRate } = document.source
   const inRange = (item: { startFrame: number; endFrame: number }): boolean => !range || (item.startFrame >= range.startFrame && item.endFrame <= range.endFrame)
@@ -193,8 +228,9 @@ export function applyAudioEditBreathPolicy(
   }
   const counts = { deleted: 0, attenuated: 0, muted: 0, kept: 0 }
   // 按时间逐口处理，每删一口就按新的剪辑重算：同一处空当里的后一口气看得到前一口已经删掉
+  const quiet = pauses ? quietRanges(document, breaths, pauses) : undefined
   let working = base
-  let state = placementState(working)
+  let state = placementState(working, quiet)
   for (const breath of [...breaths].sort((a, b) => a.startMs - b.startMs)) {
     const placement = placeBreath(state, breath)
     if (!inRange(placement) || restored.has(placement.id)) continue
@@ -204,7 +240,7 @@ export function applyAudioEditBreathPolicy(
     const edits = breathEdits(placement, decision, sampleRate)
     counts[edits.handling]++
     working = { ...working, cuts: [...(working.cuts ?? []), ...edits.cuts], gainRegions: [...(working.gainRegions ?? []), ...edits.gains] }
-    if (edits.cuts.length) state = placementState(working)
+    if (edits.cuts.length) state = placementState(working, quiet)
   }
   return { document: working, counts }
 }

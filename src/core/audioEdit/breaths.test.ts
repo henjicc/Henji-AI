@@ -69,6 +69,20 @@ describe('呼吸声按上下文处理', () => {
     expect(describeAudioEditBreaths(next, pair).map((view) => view.gapMs)).toEqual([150, 150])
   })
 
+  it('有能量证据时只把真正安静的部分算作气口：识别在连读的字之间留出的空当不算', () => {
+    // 索引，0–1000 | 1000–1100 其实还有声音 | 呼吸 1100–1350 | 1350–1400 | 几十个
+    const document = documentOf([['索引，', 0, 1000], ['几十个', 1400, 1800]])
+    const breath = [{ startMs: 1100, endMs: 1350, peak: 1 }]
+    // 只按词的空当算：以为还剩 150 的气口，整口删掉
+    expect(applyAudioEditBreathPolicy(document, breath, 'delete').document.cuts).toEqual([expect.objectContaining({ startFrame: 1100, endFrame: 1350 })])
+    // 能量证据里那段不安静：删完一点气口都没有，留紧挨下一个字的 80 减弱
+    const strict = applyAudioEditBreathPolicy(document, breath, 'delete', undefined, []).document
+    expect(strict.cuts).toEqual([expect.objectContaining({ startFrame: 1100, endFrame: 1270 })])
+    expect(strict.gainRegions).toEqual([expect.objectContaining({ startFrame: 1270, endFrame: 1350 })])
+    // 前面确有 100 的安静时照常整口删
+    expect(applyAudioEditBreathPolicy(document, breath, 'delete', undefined, [{ startMs: 1000, endMs: 1100 }]).document.cuts).toEqual([expect.objectContaining({ startFrame: 1100, endFrame: 1350 })])
+  })
+
   it('已被重念或停顿处理剪掉的呼吸不再处理；下刀范围只在两侧词之间', () => {
     const cut = documentOf(words, { cuts: [{ id: 'retake', startFrame: 1200, endFrame: 1800, reason: 'manual', enabled: true }] })
     expect(describeAudioEditBreaths(cut, breaths)[0]).toMatchObject({ context: 'removed', handling: 'removed' })

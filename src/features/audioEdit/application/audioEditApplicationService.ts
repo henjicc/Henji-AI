@@ -8,7 +8,7 @@ import { createLogger } from '@/core/logging'
 import { formatAudioEditCaptions, buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
 import { hasAudioEditModifications } from '@/core/audioEdit/baseline'
 import { audioEditRetakeSuggestion } from '@/core/audioEdit/retakes'
-import { applyAudioEditBreathPolicy, type AudioEditBreathPolicy } from '@/core/audioEdit/breaths'
+import { applyAudioEditBreathPolicy, type AudioEditBreathPolicy, type AudioEditQuietRange } from '@/core/audioEdit/breaths'
 import type { AudioBreath } from '@/core/audioAnalysis/breath/respiro'
 import { acceptAudioEditNativeResult, editAudioEditProject, flushAudioEditProject, loadAudioEditProject, resetAudioEditProject, withAudioEditProjectOperation, type AudioEditProjectInstance } from './audioEditProjectInstances'
 import { detectAudioEditRetakesOffThread } from './audioEditRetakeDetection'
@@ -125,7 +125,8 @@ export async function compressAudioEditSilence(projectId: string, range?: AudioE
     const retakes = includeFillers && hasWordTranscript(instance.document) && instance.document.transcript.length >= RETAKE_MIN_WORDS ? await detectRetakeSuggestions(instance, range, requestId) : []
     const breaths = includeFillers && instance.document.transcript.length ? await detectProjectBreaths(instance.document, false, requestId) : undefined
     let breathCounts: Record<'deleted' | 'attenuated' | 'muted' | 'kept', number> | undefined
-    const detected = await getPlatform().audioEdit.detectSilence({ projectId, settings, range, requestId })
+    // 处理呼吸时连同能量低谷一起取：只把真正安静的部分算作气口
+    const detected = await getPlatform().audioEdit.detectSilence({ projectId, settings, range, requestId, ...(breaths ? { energy: {} } : {}) })
     if (detected.revision !== instance.persistedRevision) throw new Error('口播已更新，请重新分析停顿。')
     const appliedIds = new Set(instance.document.suggestions.filter((item) => item.status === 'applied').map((item) => item.id))
     const next = commit((document) => {
@@ -135,7 +136,7 @@ export async function compressAudioEditSilence(projectId: string, range?: AudioE
       draft = { ...draft, batchSettings: settings, suggestions: [...draft.suggestions.filter((item) => item.kind !== 'long_silence' || item.status !== 'pending'), ...suggestions] }
       for (const suggestion of suggestions) draft = applyAudioEditSuggestion(draft, suggestion.id)
       if (includeFillers) draft = cleanAudioEditFillers(draft, settings.fillers, range)
-      if (breaths) { const processed = applyAudioEditBreathPolicy(draft, breaths, 'delete', range); draft = processed.document; breathCounts = processed.counts }
+      if (breaths) { const processed = applyAudioEditBreathPolicy(draft, breaths, 'delete', range, detected.energy?.pauses); draft = processed.document; breathCounts = processed.counts }
       return draft
     })
     await flushAudioEditProject(projectId)
@@ -146,15 +147,27 @@ export async function compressAudioEditSilence(projectId: string, range?: AudioE
   })
 }
 
+/** 声音能量低谷（与停顿压缩、去重念同一分析）；取不到时返回空，呼吸处理退回按词之间的空当判断气口。 */
+async function detectQuietRanges(document: AudioEditProjectDocument, requestId: string): Promise<AudioEditQuietRange[] | undefined> {
+  try {
+    const detected = await getPlatform().audioEdit.detectSilence({ projectId: document.id, settings: document.batchSettings ?? DEFAULT_AUDIO_EDIT_SETTINGS, requestId, energy: {} })
+    return detected.energy?.pauses
+  } catch (error) {
+    logger.warn('audio_edit.breaths.energy_unavailable', { requestId, context: { projectId: document.id }, error })
+    return undefined
+  }
+}
+
 /** 按策略处理呼吸声（删除 / 减弱 / 静音 / 保留），默认删除时按上下文细分；替换此前的呼吸处理，用户逐处恢复过的不动。 */
 export async function processProjectAudioEditBreaths(projectId: string, policy: AudioEditBreathPolicy = 'delete', range?: AudioEditRange, requestId: string = crypto.randomUUID()): Promise<{ counts: Record<'deleted' | 'attenuated' | 'muted' | 'kept', number>; shortenedMs: number }> {
   logger.info('audio_edit.breaths.start', { requestId, context: { projectId, policy, range: Boolean(range) } })
   try {
     const result = await withAudioEditProjectOperation(projectId, async (instance, commit) => {
       const breaths = (await detectProjectBreaths(instance.document, true, requestId))!
+      const pauses = await detectQuietRanges(instance.document, requestId)
       const before = editedDurationFrames(buildProjectAudioEditTimeline(instance.document))
       let counts = { deleted: 0, attenuated: 0, muted: 0, kept: 0 }
-      const next = commit((document) => { const processed = applyAudioEditBreathPolicy(document, breaths, policy, range); counts = processed.counts; return processed.document })
+      const next = commit((document) => { const processed = applyAudioEditBreathPolicy(document, breaths, policy, range, pauses); counts = processed.counts; return processed.document })
       await flushAudioEditProject(projectId)
       return { counts, shortenedMs: Math.round((before - editedDurationFrames(buildProjectAudioEditTimeline(next))) * 1000 / next.source.sampleRate) }
     })
