@@ -1,6 +1,7 @@
 import type { UiControlSize } from './primitiveInternals'
 import { useCallback, useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react'
-import type { GestureProps } from './UiColorGrading'
+/** 参数原件共用的拖动生命周期：开始、结束、取消（撤销栈按一次手势合并） */
+export interface GestureProps { onBegin: () => void; onFinish: () => void; onCancel: () => void; disabled?: boolean }
 
 export interface ParameterControlProps<T> extends GestureProps {
   value: T

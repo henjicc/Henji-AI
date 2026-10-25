@@ -49,8 +49,6 @@ import {
   UiPageHeader,
   UiPanel,
   UiRangeInput,
-  UiColorWheel,
-  UiToneCurve,
   UiAngleDial,
   UiPointPad,
   UiRangeSlider,
@@ -364,8 +362,6 @@ export function NavigationSection(): JSX.Element {
 
 export function FormSection(): JSX.Element {
   const [open, setOpen] = useState(true)
-  const [curve, setCurve] = useState<number[]>([0, 25, 50, 75, 100])
-  const [wheel, setWheel] = useState({ hue: 30, strength: 40 })
   const idle = (): void => undefined
   const gesture = { onBegin: idle, onFinish: idle, onCancel: idle }
   const [angle, setAngle] = useState(30)
@@ -408,12 +404,6 @@ export function FormSection(): JSX.Element {
             </UiDisclosurePanel>
           </div>
         </UiFormRow>
-      </UiGroup></div>
-      <div><UiGroup divided titleTone="compact" title="调色控件">
-        <div className="flex items-center gap-4">
-          <div className="w-40"><UiToneCurve label="RGB 曲线" values={curve} onChange={(point, value) => setCurve(current => current.map((item, index) => index === point ? value : item))} onBegin={idle} onFinish={idle} onCancel={idle} /></div>
-          <div className="w-24"><UiColorWheel label="中间调" hue={wheel.hue} strength={wheel.strength} onChange={(hue, strength) => setWheel({ hue, strength })} onBegin={idle} onFinish={idle} onCancel={idle} /></div>
-        </div>
       </UiGroup></div>
       <div><UiGroup divided titleTone="compact" title="参数控件">
         <div className="grid grid-cols-2 gap-4">

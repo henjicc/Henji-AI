@@ -104,7 +104,7 @@ export const GALLERY_INDEX: readonly GalleryEntry[] = [
     ['options', '选项与分段', 'UiOptionButton UiSegmented 中性抬起底 强文字 最多5项'],
     ['toggles', '开关与复选', 'UiSwitch UiCheckbox'],
     ['navigation', '标签与导航', 'UiChipButton UiNavButton UiTextToken'],
-    ['forms', '表单与分组', 'UiFormRow UiGroup UiTooltipText UiDisclosurePanel UiColorWheel UiToneCurve 参数原件'],
+    ['forms', '表单与分组', 'UiFormRow UiGroup UiTooltipText UiDisclosurePanel UiGradeWheel UiCurveEditor 参数原件'],
     ['toolbar', '命令带与页头', 'UiToolbar UiPageHeader UiRegion UiOverflowRow UiMarqueeText'],
     ['states', '空 / 加载 / 错误', 'UiEmpty UiLoading UiError ProgressBar'],
     ['dialogs', '弹窗与通知', 'AlertDialog UiToast 付费确认测试夹具'],

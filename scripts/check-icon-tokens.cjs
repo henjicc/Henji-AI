@@ -46,7 +46,6 @@ const GLYPH_FILE_EXEMPTIONS = new Map([
 const GRAPHIC_EXEMPTIONS = new Map([
   ['src/features/videoEdit/panels/VideoEditKeyframeControls.tsx', '片段内时间驱动的迷你关键帧轨与播放头，坐标来自关键帧数据'],
   ['src/features/videoEdit/timeline/VideoEditTimelineKeyframes.tsx', '片段音量与不透明度曲线、控制点及时间标记，路径由数据计算'],
-  ['src/components/ui/UiColorGrading.tsx', '调色曲线数据图形与控制点，坐标来自用户曲线参数，不是图标'],
   ['src/features/cameraStage/timeline/EasingCurveEditor.tsx', '缓动曲线编辑器，路径由控制点算出'],
   ['src/features/cameraStage/timeline/GraphEditor.tsx', '关键帧曲线图，路径由数据算出'],
   ['src/features/canvas/ui/CanvasOverlays.tsx', '画布连线预览，路径随指针位置实时计算'],
