@@ -65,6 +65,12 @@
       "reason": "音色克隆样本的拖放区：紧凑 88 / 常规 132 高，与旁边的样本波形卡等高，两档都不在标准间距档上"
     },
     {
+      "file": "src/components/MediaGenerator/components/ParameterPanel.tsx",
+      "category": "arbitraryValue",
+      "values": ["grid-cols-[repeat(2,max-content)]"],
+      "reason": "“更多参数”特殊面板四项以上排两列：每列按参数行自身宽度（max-content），面板宽度跟内容走（重要记录 021），标准 grid-cols-2 会把两列拉成等宽"
+    },
+    {
       "file": "src/components/params/ParamGroupTrigger.tsx",
       "category": "arbitraryValue",
       "values": ["min-w-[180px]", "min-w-[108px]", "max-w-[116px]"],
