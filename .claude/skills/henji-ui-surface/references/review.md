@@ -166,6 +166,8 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 | `shortTextTruncated` | 全文 ≤ 16 字的文字被省略号截断（按钮、标签、标题、芯片这类界面文案放不下）。用户内容（`data-observation-sensitive` / `data-user-content`）、菜单选项与时间轴件（`data-ui-timeline-item`）不在此判 |
 | `selectedStateWeak` | 同组兄弟选项（`aria-selected` / `aria-current` / `data-selected` / 单选 `aria-checked`；`aria-pressed` 只在 group / toolbar / radiogroup / tablist 里算多选一）里，选中项与静息项的底色、文字色、描边 OKLab 距离都 < 0.03，且勾、阴影、轮廓、字重、伪元素都相同、按结构序号比较的后代也没有差异（选中态画在行内按钮上的图层行不误报）；悬停中的项不参与比较 |
 | `overlayClipped` | 浮层（对话框、菜单、列表框、提示，或 z-index ≥ 30 的绝对/固定定位块，不含满屏层与画布视口内）框内 5 × 5 取点（内缩到圆角弧线以内）：点在窗口外，或该点的命中栈里没有这个浮层（被祖先 `overflow` 裁掉）。被别的浮层压住不算 |
+| `overlayHorizontalScroll` | 触发器弹出的浮层（`data-panel-placement`、`role=menu/listbox`，不含对话框与提示）自身或里面的元素出现横向滚动（`overflow-x` 为 auto/scroll 且 scrollWidth 比 clientWidth 宽 2px 以上；输入框、画布与 `data-layout-scroll-axis="x"` 有意横滚区除外）：浮层比内容窄（重要记录 021） |
+| `overlaySlack` | 同一类浮层宽 ≥ 280 时，里面文字排版框、图形（img、svg）与铺了底或描边的块（宽不到浮层 90%）最右边到浮层内边距的空白超过浮层宽的四分之一且大于 80px：浮层比内容宽。按画出来的量：开关轨道、复选框方框、图标带 aria-hidden 也算内容 |
 
 新规则的断牙证据：`npm run test:ui-dom-rules` 在 jsdom 执行序列化的正式 auditUiDom，给外框与滚动尺寸确定性夹具；低层 HTML 夹具仍在 uiVisualRuleSamples.cjs。`npm run test:ui-visual-rules` 在真实 Electron 打开中心页“规范”分区，核对正式组件 9 组 Do/Don't（18 项）。反例标 data-gallery-expect-hit；只扣对应规则的预期命中，正例回归、反例失效与其他规则问题仍失败。目录外壳不属于条带样本的独立工作面。规则自测不能证明真实应用全部无误报。
 
@@ -175,7 +177,7 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 |---|---|
 | rowHeightMismatch | toolbar/命令带/表单控件列/动作组中，真实外框高度或中心线相差 >1px；分段、字段、读数按外壳，不重复计内部按钮；竖排、xl 查看器及步进附属按钮除外；滑杆、复选框、开关只比中心线不比高度 |
 | actionStartsAtLabelColumn | 有 panel 行的同一 UiGroup 内，行外动作左缘比控件列左缘小 >1px；展开 / 收起子分组的开关（`aria-expanded` 且不弹菜单）是分组标题，不算 |
-| formControlMisaligned | 同一 UiGroup 的 panel 行控件列左缘差 >1px；独立嵌套组和 auto 行不混算 |
+| formControlMisaligned | 同一 UiGroup 的 panel 行控件列左缘差 >1px；独立嵌套组和 auto 行不混算；行排在多列网格里（“更多参数”四项以上排两列）时按列分别比 |
 | multiplePrimary | 最近 dialog/toolbar/工作区表面拥有的可见 primary 按钮与 accent 图标按钮之和 >1；隐藏分支、嵌套表面不混算 |
 
 ### 静态界面语法（严格 surface 与 icons）

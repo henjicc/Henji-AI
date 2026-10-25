@@ -118,6 +118,24 @@ test('面板列对齐、动作不得从标签列起头，独立嵌套组不混�
   assert.equal((await audit(`${html}<button data-rect="96,40,32,32"></button></div>`)).actionStartsAtLabelColumn.length, 0)
   assert.equal((await audit(`${html}<div data-ui-form-row="panel"><div data-ui-form-control data-rect="120,40,100,32"></div></div></div>`)).formControlMisaligned.length, 1)
   assert.equal((await audit(`${html}<div data-ui-group><div data-ui-form-row="panel"><div data-ui-form-control data-rect="120,40,100,32"></div></div></div></div>`)).formControlMisaligned.length, 0)
+  // 两列网格（“更多参数”四项以上）：每列各一条控件列，列与列之间不比；同一列里错开仍命中
+  const twoColumns = (left) => `<div data-ui-group><div style="display:grid;grid-template-columns:max-content max-content">
+    <div data-ui-form-row="panel" data-rect="0,0,200,32"><div data-ui-form-control data-rect="96,0,100,32"></div></div>
+    <div data-ui-form-row="panel" data-rect="220,0,200,32"><div data-ui-form-control data-rect="316,0,100,32"></div></div>
+    <div data-ui-form-row="panel" data-rect="0,40,200,32"><div data-ui-form-control data-rect="96,40,100,32"></div></div>
+    <div data-ui-form-row="panel" data-rect="220,40,200,32"><div data-ui-form-control data-rect="${left},40,100,32"></div></div>
+  </div></div>`
+  assert.equal((await audit(twoColumns(316))).formControlMisaligned.length, 0)
+  assert.equal((await audit(twoColumns(330))).formControlMisaligned.length, 1)
+  // 行外再包一层（生成参数的 data-param-id 包裹）时同样按列比；同一列错开仍命中
+  const wrapped = (left) => `<div data-ui-group><div style="display:grid;grid-template-columns:max-content max-content">
+    <div data-rect="0,0,200,32"><div data-ui-form-row="panel" data-rect="0,0,200,32"><div data-ui-form-control data-rect="96,0,100,32"></div></div></div>
+    <div data-rect="220,0,200,32"><div data-ui-form-row="panel" data-rect="220,0,200,32"><div data-ui-form-control data-rect="316,0,100,32"></div></div></div>
+    <div data-rect="0,40,200,32"><div data-ui-form-row="panel" data-rect="0,40,200,32"><div data-ui-form-control data-rect="96,40,100,32"></div></div></div>
+    <div data-rect="220,40,200,32"><div data-ui-form-row="panel" data-rect="220,40,200,32"><div data-ui-form-control data-rect="${left},40,100,32"></div></div></div>
+  </div></div>`
+  assert.equal((await audit(wrapped(316))).formControlMisaligned.length, 0)
+  assert.equal((await audit(wrapped(330))).formControlMisaligned.length, 1)
   assert.equal((await audit(`${html}<div data-ui-form-row="auto"><input data-rect="0,40,100,32"><button data-ui-compact-stepper-button data-rect="0,40,16,16"></button><button data-rect="0,40,32,32"></button></div></div>`)).actionStartsAtLabelColumn.length, 0, 'auto 行是独立排布，不按面板动作检查')
   assert.equal((await audit(`${html}<div data-ui-field-control><input data-rect="0,40,100,32"><button data-ui-compact-stepper-button data-rect="0,40,16,16"></button></div><button data-rect="0,80,32,32"></button></div>`)).actionStartsAtLabelColumn.length, 1, '字段和步进附属按钮不是行外动作，真正的动作仍报错')
 })
@@ -210,3 +228,26 @@ test('文字跑出自己的按钮（分段在窄面板里叠字）算硬裁切�
   assert.equal((await spills('<button data-rect="0,0,22,28" data-text-width="22,40"><span style="overflow-x:hidden" data-ink="0,40">长文字</span></button>')).length, 0)
   assert.equal((await spills('<button data-rect="0,0,60,28" data-text-width="60,60" data-ink="8,40">标准</button>')).length, 0)
 })
+
+test('浮层宽度跟内容走（重要记录 021）：浮层里横向滚动、右侧空出超过四分之一都命中，贴合内容的放行', async () => {
+  const popover = (rect, inner) => `<div data-panel-placement="above" style="position:fixed;z-index:40" data-rect="${rect}">${inner}</div>`
+  const scroll = await audit(popover('0,0,300,200', '<div style="overflow-x:auto" data-text-width="200,400" data-rect="0,0,300,100"><span>比例</span></div>'))
+  assert.equal(scroll.overlayHorizontalScroll.length, 1)
+  const noScroll = await audit(popover('0,0,300,200', '<div style="overflow-x:auto" data-text-width="300,300" data-rect="0,0,300,100"><span>比例</span></div>'))
+  assert.equal(noScroll.overlayHorizontalScroll.length, 0)
+  const slack = await audit(popover('0,0,600,200', '<span data-ink="10,240">Nano Banana 2</span>'))
+  assert.equal(slack.overlaySlack.length, 1)
+  const fit = await audit(popover('0,0,600,200', '<span data-ink="10,560">很长的一行内容</span>'))
+  assert.equal(fit.overlaySlack.length, 0)
+  const filledField = await audit(popover('0,0,600,200', '<span data-ink="10,60">音量</span><div style="background:rgb(40,40,40)" data-rect="80,0,500,32"></div>'))
+  assert.equal(filledField.overlaySlack.length, 0, '铺了底的输入框拉到右边不算空白')
+  const fullWidthRow = await audit(popover('0,0,600,200', '<div style="background:rgb(40,40,40)" data-rect="0,0,590,32"><span data-ink="10,200">Nano Banana 2</span></div>'))
+  assert.equal(fullWidthRow.overlaySlack.length, 1, '横贯整块的行不算内容，只看它里面的文字')
+  const hiddenTrack = await audit(popover('0,0,600,200', '<span data-ink="10,60">生成音频</span><span aria-hidden="true" style="background:rgb(60,90,200)" data-rect="540,0,36,20"></span>'))
+  assert.equal(hiddenTrack.overlaySlack.length, 0, '开关轨道这类 aria-hidden 的图形也是画出来的内容')
+  const narrow = await audit(popover('0,0,260,200', '<span data-ink="10,40">短</span>'))
+  assert.equal(narrow.overlaySlack.length, 0, '窄于 280 的小浮层不判空白')
+  const dialog = await audit('<div role="dialog" style="position:fixed;z-index:40" data-rect="0,0,600,200"><span data-ink="10,100">弹窗</span></div>')
+  assert.equal(dialog.overlaySlack.length, 0, '弹窗不按内容定宽，不判')
+})
+

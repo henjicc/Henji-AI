@@ -27,7 +27,7 @@
       "id": "minimax-voice",
       "modelId": "ppio-minimax-speech",
       "providerId": "ppio",
-      "trig": "[data-param-id=\"minimaxVoiceId\"] [data-panel-trigger-button]",
+      "trig": "[data-param-id=\"minimaxVoiceId\"] [data-panel-trigger-button], [data-more-params-trigger]",
       "pre": "[data-review-none]"
     },
     {

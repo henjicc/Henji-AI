@@ -24,6 +24,9 @@ const UI_AUDIT_RULES = Object.freeze([
   Object.freeze({ key: 'shortTextTruncated', label: '常见短文案被截断' }),
   Object.freeze({ key: 'selectedStateWeak', label: '选中态与静息态差异不足' }),
   Object.freeze({ key: 'overlayClipped', label: '浮层被裁切' }),
+  // 重要记录 021：浮层宽度跟内容走——浮层里出现横向滚动（内容比浮层宽），或右侧空出超过四分之一（浮层比内容宽）
+  Object.freeze({ key: 'overlayHorizontalScroll', label: '浮层里出现横向滚动' }),
+  Object.freeze({ key: 'overlaySlack', label: '浮层右侧空出超过四分之一' }),
   // 重要记录 020：控件与文字被不滚动的容器裁掉一截、被别的元素盖住点不到。实现在 src/core/uiAudit/layoutAudit.ts
   //（运行时布局守卫共用），由 uiLayoutAudit.cjs 与 auditUiDom 的结果合并。
   Object.freeze({ key: 'controlClipped', label: '控件或文字被容器裁掉一截' }),
@@ -76,6 +79,8 @@ function auditUiDom(context = {}) {
     shortTextTruncated: [],
     selectedStateWeak: [],
     overlayClipped: [],
+    overlayHorizontalScroll: [],
+    overlaySlack: [],
     pageTitles: [],
     notes: [],
   }
@@ -543,7 +548,24 @@ function auditUiDom(context = {}) {
       .filter(element => isVisible(element) && element.closest('[data-ui-group]') === group)
     if (!controls.length) continue
     const lefts = controls.map(element => element.getBoundingClientRect().left)
-    if (Math.max(...lefts) - Math.min(...lefts) > T.rowTolerance) out.formControlMisaligned.push({ element: label(group), lefts })
+    // 行排在多列网格里（“更多参数”四项以上排两列）时每列各有一条控件列：按行所在的列分别比；其余整组一条
+    const columns = new Map()
+    for (const control of controls) {
+      // 行与网格之间可能还隔着一层参数包裹：往上找到组内最近的多列网格，按行所在的格子（列）的左边分组
+      let key = 'group'
+      let cell = control.closest('[data-ui-form-row="panel"]')
+      for (let node = cell?.parentElement; cell && node && node !== group; cell = node, node = node.parentElement) {
+        const style = getComputedStyle(node)
+        if (style.display === 'grid' && style.gridTemplateColumns.trim().split(/\s+/).length > 1) {
+          key = `column:${Math.round(cell.getBoundingClientRect().left)}`
+          break
+        }
+      }
+      columns.set(key, [...(columns.get(key) || []), control.getBoundingClientRect().left])
+    }
+    for (const columnLefts of columns.values()) {
+      if (Math.max(...columnLefts) - Math.min(...columnLefts) > T.rowTolerance) out.formControlMisaligned.push({ element: label(group), lefts: columnLefts })
+    }
     for (const button of group.querySelectorAll('button, a[href], [role="button"]')) {
       // 展开 / 收起子分组的开关（aria-expanded，不弹菜单）是分组标题，不是行外动作，从标签列起头是对的
       if (!isVisible(button) || button.closest('[data-ui-group]') !== group || button.closest('[data-ui-form-row], [data-ui-field-control]') || button.matches('[data-ui-compact-stepper-button], [aria-expanded]:not([aria-haspopup])')) continue
@@ -786,6 +808,74 @@ function auditUiDom(context = {}) {
     }
   }
 
+  // —— 浮层宽度跟内容走（重要记录 021）——
+  // 只看触发器弹出的浮层（PanelTrigger / Dropdown 的面板与右键菜单，带 data-panel-placement 或 role=menu/listbox），
+  // 不看弹窗与提示。横向滚动：浮层自身或里面不是有意横向滚动的元素 scrollWidth 比 clientWidth 宽 2px 以上。
+  // 右侧空白：浮层宽 ≥ 280 时，量里面文字与图形（文字排版框、img、svg、input）最右边到浮层内边的距离，
+  // 超过浮层宽的四分之一且大于 80px 即命中；输入框、分隔线这类本来就铺满的元素不算内容。
+  const popovers = outermostOverlays.filter((overlay) => overlay.matches('[data-panel-placement], [role="menu"], [role="listbox"]')
+    && !overlay.matches('[role="dialog"], [role="alertdialog"], [role="tooltip"]'))
+  for (const overlay of popovers) {
+    if (!ignoresGalleryRule(overlay, 'overlayHorizontalScroll')) {
+      const scrollers = [overlay, ...overlay.querySelectorAll('*')].filter((element) => {
+        if (element.closest('[data-layout-scroll-axis="x"]')) return false
+        if (element.matches('input, textarea, [contenteditable="true"], canvas')) return false
+        const style = getComputedStyle(element)
+        return ['auto', 'scroll'].includes(style.overflowX) && element.clientWidth > 32 && element.scrollWidth > element.clientWidth + 2
+      })
+      if (scrollers.length > 0) {
+        out.overlayHorizontalScroll.push({ element: label(overlay), scroller: label(scrollers[0]),
+          scrollWidth: scrollers[0].scrollWidth, clientWidth: scrollers[0].clientWidth })
+      }
+    }
+    if (ignoresGalleryRule(overlay, 'overlaySlack')) continue
+    const rect = overlay.getBoundingClientRect()
+    if (rect.width < 280) continue
+    // 量的是画出来的东西：开关轨道、复选框方框、图标都带 aria-hidden（只对读屏隐藏），不能当成看不见
+    const isPainted = (element) => {
+      for (let node = element; node && node !== document.documentElement; node = node.parentElement) {
+        const style = getComputedStyle(node)
+        if (style.display === 'none' || style.visibility === 'hidden' || Number.parseFloat(style.opacity) <= 0.01) return false
+      }
+      const box = element.getBoundingClientRect()
+      return box.width > 4 && box.height > 4 && box.bottom > 0 && box.right > 0 && box.top < window.innerHeight && box.left < window.innerWidth
+    }
+    let contentRight = rect.left
+    const walker = document.createTreeWalker(overlay, NodeFilter.SHOW_TEXT)
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!(node.textContent || '').trim()) continue
+      const parent = node.parentElement
+      if (!parent || !isPainted(parent)) continue
+      const range = document.createRange()
+      range.selectNodeContents(node)
+      for (const box of Array.from(range.getClientRects())) {
+        if (box.width > 0) contentRight = Math.max(contentRight, Math.min(box.right, rect.right))
+      }
+    }
+    for (const element of overlay.querySelectorAll('img, svg')) {
+      if (!isPainted(element) || element.parentElement?.closest('svg')) continue
+      const box = element.getBoundingClientRect()
+      if (box.width > 0) contentRight = Math.max(contentRight, Math.min(box.right, rect.right))
+    }
+    // 看得见的块也算内容：输入框、字段触发器、铺了底的格子拉到右边，并不是空着；
+    // 横贯整块的头部、分隔线与透明列表行（宽 ≥ 浮层 90%）不算，否则任何浮层都“贴满”
+    for (const element of overlay.querySelectorAll('*')) {
+      if (!isPainted(element)) continue
+      const box = element.getBoundingClientRect()
+      if (box.width <= 0 || box.width >= rect.width * 0.9) continue
+      const style = getComputedStyle(element)
+      const filled = (parseRgb(style.backgroundColor)?.a ?? 0) > 0.02
+        || ['top', 'right', 'bottom', 'left'].some((side) => Number.parseFloat(style[`border-${side}-width`] || style.getPropertyValue(`border-${side}-width`)) > 0
+          && (parseRgb(style.getPropertyValue(`border-${side}-color`))?.a ?? 0) > 0.02)
+      if (filled) contentRight = Math.max(contentRight, Math.min(box.right, rect.right))
+    }
+    const padding = Number.parseFloat(getComputedStyle(overlay).paddingRight) || 0
+    const slack = rect.right - padding - contentRight
+    if (contentRight > rect.left && slack > Math.max(80, rect.width / 4)) {
+      out.overlaySlack.push({ element: label(overlay), width: Math.round(rect.width), slack: Math.round(slack) })
+    }
+  }
+
   for (const element of Array.from(document.querySelectorAll('[data-ui-page-title]')).filter(isVisible)) {
     const style = getComputedStyle(element)
     out.pageTitles.push({
@@ -814,6 +904,8 @@ function auditUiDom(context = {}) {
   out.shortTextTruncated = dedupe(out.shortTextTruncated, (item) => `${item.element}|${item.text}`)
   out.selectedStateWeak = dedupe(out.selectedStateWeak, (item) => item.element)
   out.overlayClipped = dedupe(out.overlayClipped, (item) => item.element)
+  out.overlayHorizontalScroll = dedupe(out.overlayHorizontalScroll, (item) => item.element)
+  out.overlaySlack = dedupe(out.overlaySlack, (item) => item.element)
   out.notes.push(`扫描可见元素 ${all.length}`)
   // 反例只属于开发样张；普通审计先对账再移除预期命中，规则失败不得被样张豁免吞掉。
   out.gallerySamples = []

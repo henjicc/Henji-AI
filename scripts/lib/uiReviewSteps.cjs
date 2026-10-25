@@ -799,24 +799,58 @@ async function runStep(page, step, runtime) {
       if (step.search) await search.fill(step.search)
       const panel = page.locator('[data-model-selector-panel]:visible')
       const item = panel.locator(`[data-model-id="${step.modelId}"][data-provider-id="${step.providerId}"]`).first()
-      // 模型列表是虚拟网格，只挂载可见的几行：目标没挂载时逐屏向下滚动列表，直到它出现或滚到底
+      // 模型列表是虚拟网格，只挂载可见的几行：目标没挂载时逐屏向下滚动列表，直到它出现或滚到底。
+      // 列表打开时会滚到当前选中的模型（可能排在目标后面），所以先回到顶部再往下找
+      if (!(await item.count())) {
+        await panel.evaluate((root) => {
+          const scope = root.querySelector('[data-special-panel-body]') ?? root
+          for (const node of [scope, ...scope.querySelectorAll('*')]) {
+            if (['auto', 'scroll'].includes(getComputedStyle(node).overflowY) && node.scrollTop > 0) node.scrollTop = 0
+          }
+        })
+        await page.waitForTimeout(120)
+      }
       for (let screen = 0; screen < 80 && !(await item.count()); screen += 1) {
         const moved = await panel.evaluate((root) => {
-          const scroller = [...root.querySelectorAll('*')].find((node) => node.scrollHeight > node.clientHeight + 2 && ['auto', 'scroll'].includes(getComputedStyle(node).overflowY))
-          if (!scroller) return false
-          const before = scroller.scrollTop
-          scroller.scrollTop += Math.max(1, scroller.clientHeight * 0.8)
-          return scroller.scrollTop !== before
+          // 特殊面板的左栏在矮窗口里也会滚：只在正文里找。矮窗口下正文与虚拟列表可能各有一层滚动，
+          // 外层滚到底时里层还有没挂载的行：从已挂载的格子往上，先滚最近的一层，滚不动再退到外层
+          const scope = root.querySelector('[data-special-panel-body]') ?? root
+          const scrollable = (node) => node.scrollHeight > node.clientHeight + 2 && ['auto', 'scroll'].includes(getComputedStyle(node).overflowY)
+          const chain = []
+          for (let node = scope.querySelector('[data-model-id]')?.parentElement; node && root.contains(node); node = node.parentElement) {
+            if (scrollable(node)) chain.push(node)
+          }
+          if (!chain.length) chain.push(...[scope, ...scope.querySelectorAll('*')].filter(scrollable))
+          for (const scroller of chain) {
+            const before = scroller.scrollTop
+            scroller.scrollTop += Math.max(1, scroller.clientHeight * 0.8)
+            if (scroller.scrollTop !== before) return true
+          }
+          return false
         })
         await page.waitForTimeout(60)
         if (!moved && !(await item.count())) break
+      }
+      if (!(await item.count())) {
+        // 滚到底仍没挂载：报出列表停在哪里，不让 click 干等超时
+        const state = await panel.evaluate((root) => {
+          const cells = [...root.querySelectorAll('[data-model-id]')]
+          const scrollers = [...root.querySelectorAll('*')].filter((node) => ['auto', 'scroll'].includes(getComputedStyle(node).overflowY) && node.scrollHeight > node.clientHeight + 2)
+            .map((node) => `${node.className.toString().slice(0, 40) || node.tagName}:${Math.round(node.scrollTop)}/${node.scrollHeight - node.clientHeight}`)
+          const filters = [...root.querySelectorAll('[aria-pressed="true"], [aria-current], [aria-checked="true"]')].map((node) => (node.textContent || '').trim().slice(0, 12)).filter(Boolean)
+          const search = root.querySelector('input')?.value || ''
+          return { mounted: cells.length, last: cells.at(-1)?.getAttribute('data-model-id') || '', scrollers, filters, search }
+        })
+        throw new Error(`selectModel 滚到底仍没找到 ${step.providerId}/${step.modelId}：已挂载 ${state.mounted} 个格子（最后一个 ${state.last}），滚动层 ${state.scrollers.join('，') || '无'}，当前筛选 ${state.filters.join('、') || '无'}，搜索「${state.search}」`)
       }
       // 挂载了但可能在可视区外：直接把列表滚到它居中。Playwright 的 scrollIntoViewIfNeeded 一滚，虚拟网格就换掉
       // 这一行的节点，它会一直等元素稳定直到超时（偶发：kie-kling-3-0）
       await panel.evaluate((root, selector) => {
         const target = root.querySelector(selector)
-        const scroller = target && [...root.querySelectorAll('*')].find((node) => node.contains(target) && node.scrollHeight > node.clientHeight + 2 && ['auto', 'scroll'].includes(getComputedStyle(node).overflowY))
-        if (!target || !scroller) return
+        // 离目标最近的滚动层（虚拟列表自己的滚动区），不是最外层
+        let scroller = target?.parentElement
+        while (scroller && root.contains(scroller) && !(scroller.scrollHeight > scroller.clientHeight + 2 && ['auto', 'scroll'].includes(getComputedStyle(scroller).overflowY))) scroller = scroller.parentElement
+        if (!target || !scroller || !root.contains(scroller)) return
         const box = target.getBoundingClientRect()
         const view = scroller.getBoundingClientRect()
         if (box.top >= view.top && box.bottom <= view.bottom) return
@@ -1037,7 +1071,8 @@ function compileStepScene(spec, context) {
             await runSteps(page, steps, runtime)
           } catch (error) {
             failures.push(`${variant.id}：${error.message.split('\n')[0]}`)
-            console.error(`  ✗ 变体 ${variant.id}：${error.message.split('\n')[0]}`)
+            // 控制台多带几行 Playwright 调用记录（等的是哪个元素、被谁挡住），汇总里仍只留第一行
+            console.error(`  ✗ 变体 ${variant.id}：${error.message.split('\n').slice(0, 12).join('\n      ')}`)
           } finally {
             if (runtime.mouseDown) {
               await page.mouse.up().catch(() => undefined)
