@@ -74,8 +74,11 @@ function placeBreaths(document: AudioEditProjectDocument, breaths: readonly Audi
     }
     const keptInBreath = spans.reduce((total, span) => total + Math.max(0, Math.min(endFrame, span.sourceEndFrame) - Math.max(startFrame, span.sourceStartFrame)), 0)
     let context: AudioEditBreathContext
+    // 和字连在一起看的是与保留的词实际重叠多少：识别的词时间常常多出几十毫秒盖到呼吸上，那不算；
+    // 一口气有一部分已被重念剪掉时，剩下能听到的部分照常按位置处理
+    const wordOverlap = words.reduce((total, word) => total + Math.max(0, Math.min(endFrame, word.endFrame) - Math.max(startFrame, word.startFrame)), 0)
     if (ms(keptInBreath) < MIN_REGION_MS) context = 'removed'
-    else if (!region || region.endFrame - region.startFrame < 0.6 * (endFrame - startFrame)) context = 'touching'
+    else if (!region || wordOverlap > 0.3 * (endFrame - startFrame)) context = 'touching'
     else if (!previous || !next) context = 'edge'
     else if (/[。？！；…!?;]$/.test(previous.text.trim()) || ms(gapEnd - gapStart) >= LONG_GAP_MS) context = 'sentence'
     else context = 'clause'

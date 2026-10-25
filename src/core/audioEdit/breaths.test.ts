@@ -90,3 +90,14 @@ describe('逐处改一口气的处理', () => {
     expect(() => setAudioEditBreathHandling(document, breaths, 'breath:9999', 'deleted')).toThrow('NOT_FOUND')
   })
 })
+
+describe('呼吸声的位置判断', () => {
+  it('识别的词时间只多盖了几十毫秒不算和字连在一起；一部分已被剪掉的照常按位置处理', () => {
+    const edge = documentOf([['一件事，', 0, 1340], ['每个', 2000, 2500]])
+    expect(describeAudioEditBreaths(edge, [{ startMs: 1300, endMs: 1700, peak: 1 }])[0].context).toBe('clause')
+    const partly = documentOf([['一件事，', 0, 1000], ['每个', 1750, 2500]], { cuts: [{ id: 'retake', startFrame: 1000, endFrame: 1500, reason: 'manual', enabled: true }] })
+    const view = describeAudioEditBreaths(partly, [{ startMs: 1300, endMs: 1700, peak: 1 }])[0]
+    expect(view.context).toBe('clause')
+    expect(applyAudioEditBreathPolicy(partly, [{ startMs: 1300, endMs: 1700, peak: 1 }], 'delete').document.cuts?.find((cut) => cut.id === 'breath:1300')).toMatchObject({ startFrame: 1500, endFrame: 1700 })
+  })
+})
