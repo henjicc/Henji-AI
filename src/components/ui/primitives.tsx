@@ -16,6 +16,8 @@ import {
   UI_SEGMENT_SELECTED_CLASS,
   UI_BOOLEAN_BOX_CLASS,
   UI_BOOLEAN_BOX_STATE_CLASS,
+  UI_SWITCH_THUMB_CLASS,
+  UI_SWITCH_TRACK_CLASS,
   UI_BUTTON_RESET_CLASS,
   UI_FIELD_DISABLED_CLASS,
   UI_FIELD_FOCUS_CLASS,
@@ -47,6 +49,7 @@ import { useScopedTextHistoryProps } from './useScopedTextHistory';
 import Tooltip from './Tooltip';
 import { UiSpinner } from './UiSpinner';
 import { UiPrimaryActionContext, actionGroupContext } from './actionPriority';
+import { UiBooleanAppearanceContext } from './booleanAppearance';
 import {
   type UiButtonProps,
   type UiButtonFeedbackProps,
@@ -670,12 +673,15 @@ export const UiCheckbox = forwardRef<HTMLButtonElement, UiCheckboxProps>(
 UiCheckbox.displayName = 'UiCheckbox';
 
 /**
- * 开关（role=switch）。`pill`（默认）现在画成与复选框同一个中性方框（重要记录 018/019：开关轨道自带色块太抢眼），
- * 新代码优先用 `UiCheckbox`；`segmented`：两段文字的分段外观，与 `UiOptionButton variant="segment"`
+ * 开关（role=switch），两种外观随所在区域走（重要记录 022）：`pill` 滑块开关是默认；剪辑那类停靠面板里
+ * （`DockviewHost` 提供 `UiBooleanAppearanceContext`）画成与复选框同一个中性方框，属性密的面板不被一排色块抢走注意力。
+ * `segmented`：两段文字的分段外观，只用于“单张 / 批量”这类两个取值，与 `UiOptionButton variant="segment"`
  * 同一套中性抬起底（重要记录 017）。
  */
 export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
-  ({ className = '', checked, onCheckedChange, onClick, appearance = 'pill', offLabel, onLabel, size = 'md', ...props }, ref) => {
+  ({ className = '', checked, onCheckedChange, onClick, appearance: appearanceProp, offLabel, onLabel, size = 'md', ...props }, ref) => {
+    const regionAppearance = useContext(UiBooleanAppearanceContext);
+    const appearance = appearanceProp ?? regionAppearance;
     const formRow = useUiFormRowLabelling();
     const rowLabelling = resolveFormRowLabelling(formRow, props);
     const handleClick: ButtonHTMLAttributes<HTMLButtonElement>['onClick'] = (event) => {
@@ -723,18 +729,37 @@ export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
       );
     }
 
+    if (appearance === 'checkbox') {
+      return (
+        <button
+          ref={ref}
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          className={`${UI_BOOLEAN_HIT_CLASS} ${className}`}
+          onClick={handleClick}
+          {...props}
+          {...rowLabelling}
+ >
+          <UiBooleanBox checked={checked} />
+        </button>
+      );
+    }
+
     return (
       <button
         ref={ref}
         type="button"
         role="switch"
         aria-checked={checked}
-        className={`${UI_BOOLEAN_HIT_CLASS} ${className}`}
+        // 命中区 24 高（命中区下限），看得见的轨道是 20 高的胶囊：轨道画在内层，按钮本身透明
+        className={`group/switch relative inline-flex h-6 w-9 shrink-0 items-center rounded-full border-0 bg-transparent ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} focus-visible:!ring-2 focus-visible:!ring-accent-ring ${className}`}
         onClick={handleClick}
         {...props}
         {...rowLabelling}
  >
-        <UiBooleanBox checked={checked} />
+        <span aria-hidden="true" className={`pointer-events-none absolute inset-x-0 top-0.5 h-5 rounded-full transition-colors duration-120 ${checked ? UI_SWITCH_TRACK_CLASS.on : UI_SWITCH_TRACK_CLASS.off}`} />
+        <span aria-hidden="true" className={`pointer-events-none relative ml-0.5 h-4 w-4 rounded-full transition-transform duration-120 ${checked ? UI_SWITCH_THUMB_CLASS.on : UI_SWITCH_THUMB_CLASS.off}`} />
       </button>
     );
   }

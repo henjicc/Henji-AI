@@ -32,6 +32,7 @@ export * from './UiToast';
 export * from './UiVirtualList';
 export * from './UiSpecialPanel';
 export * from './specialPanelLayout';
+export * from './booleanAppearance';
 export { resolveOverflowHiddenIds, type OverflowLayoutItem } from './overflowLayout';
 export {
   UiOverlayLayerProvider,

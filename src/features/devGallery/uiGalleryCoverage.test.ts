@@ -30,6 +30,7 @@ const NON_VISUAL: Record<string, string> = {
   PromptEditorResourceRegistry: '提示词资源解析服务类，不是 React 可见组件，媒体与变量解析由正式编辑器维护',
   UiFormRowLabelContext: '表单行内部标签关联上下文，没有独立视觉，样张使用 UiFormRow 驱动正式消费组件',
   UiPropertyMenuContext: '属性面板的面板级右键菜单上下文，没有独立视觉；菜单外观就是已上样张的 ContextMenu，属性行外观由样张里的 property 排布 UiFormRow 展示',
+  UiBooleanAppearanceContext: '开关外观的区域上下文（停靠宿主提供复选框外观、弹窗重置回滑块），没有独立视觉；两种外观由样张里的 UiSwitch 展示',
   UiPrimaryActionContext: '主动作权限上下文，没有独立视觉；样张按钮的正式优先级规则由 UiToolbar 管理',
 }
 

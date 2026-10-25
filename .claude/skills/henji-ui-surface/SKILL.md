@@ -354,7 +354,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 导航：正在看哪里 | 中性选中底 + 主要文字 + 强调色方向指示条 | `UiNavButton active`；横向 chip 用 `selectionRole="navigation"`；面板标签用 `selectionAppearance="subtle"`（主要文字 + 底部细线）；应用标题栏的工作区导航用 `selectionAppearance="workspace"`（纯文字 28 高，选中只有文字加亮与底部短指示条、不铺底；`aria-current` 只给当前工作区，同栏里只打开浮层的开关项用 `on`：强调文字、无底无指示条 + `aria-pressed`）；面板标签底线用强调色 |
 | 单选：当前值是什么 | 分段用中性抬起底 + 强文字；菜单项、列表行用中性选中底 + 主要文字（菜单带强调色勾）；格子、小样用中性选中底 + 强调文字；不用强调色实底，也不铺淡强调底 | 分段统一 `UiSegmented`；`UiOptionButton active`：菜单 `menu`、网格 `grid`、带小样的格 `tile`、圆形色样 `swatch`（选中为主要文字色外圈一环——强调色外圈压在强调色样上看不清）、封面内容卡 `cover`（强调描边，只画在 `UI_COVER_FRAME_CLASS` 封面框上）；双段开关 `UiSwitch appearance="segmented"` 同此 |
 | 多选/标签：集合中哪些已选 | 强调描边 + 淡强调底 + 强调文字 | `UiChipButton active`；多选的选项卡用 `UiOptionButton selection="multiple"`；逐字稿词块 `UiTextToken selected` |
-| 布尔：功能是否开启 | 一律用复选框，不用开关（2026-10-24 起；开关轨道自带色块，一打开面板就抢眼）：勾选态是中性框 + 主要文字色勾，不用强调色实底；整行保持静息 | `UiCheckbox checked`（16px 中性方框；`UiSwitch` 默认外观已是同一方框，新代码直接用 `UiCheckbox`）；图标开关 `UiIconButton on`（不铺底，强调色图标，写 `aria-pressed`）；标题栏导航里的浮层开关 `UiChipButton on` |
+| 布尔：功能是否开启 | 两种外观按所在区域分（重要记录 022，修订 018/019“一律复选框”）：设置页、表单、浮层、画布、生成参数用**滑块开关**（开着轨道铺强调色）；剪辑那类停靠工作区的面板（属性一列一列排）用**复选框外观**（中性框 + 主要文字色勾，不铺强调色）。整行保持静息；“关 / 开”双段不用于布尔 | `UiSwitch checked`：不写 `appearance` 时随区域走，`DockviewHost` 里自动是复选框外观、`UiModal` 里重置回滑块，调用点不判断；“勾选哪几项”这类真正的复选用 `UiCheckbox`；图标开关 `UiIconButton on`（不铺底，强调色图标，写 `aria-pressed`）；标题栏导航里的浮层开关 `UiChipButton on` |
 
 默认态不是第五种选中态：它保持当前表面的中性视觉。不要用整行实底表达“已启用”，
 也不要把多选语义画成单选项的样子（或反过来）。下拉当前项 = 中性选中底 + 主要文字 + 强调色勾；菜单宽度按选项内容自适应（含勾槽与竖向滚动条，上限 360 再截断；`Dropdown` 默认 `panelWidthStrategy="options"`，只有菜单必须与触发器等宽时才传 `button`）。
@@ -435,7 +435,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 - **一行从左读到右不超过约 720**：横向空间可以用，但内容多时分左右两栏，每栏一列读完（音色克隆：左素材、右设置）。
 - **高度先省**：头部只占一行（搜索与筛选同一行，筛选组多时用紧凑下拉）；常用内容不滚动就能看完（目标 360），最高 440，窗口矮时降到可用高度。
 - **同一副骨架**：头部一行、正文唯一滚动区、需要提交时才有底部操作行（左状态或出错原因，右主按钮）；从触发器展开，不盖住触发器那一行（画布节点向下展开）。
-- 正文排布四选一：网格、列表、两列表单（标签在左，一项时只有一列）、两栏。布尔参数用复选框。
+- 正文排布四选一：网格、列表、两列表单（标签在左，一项时只有一列）、两栏。布尔参数用开关（`UiSwitch`，浮层里是滑块）。
 - 参数组分节多（≥ 2 节且 ≥ 8 个参数）时把分节分到左右两列，每列定宽 320（`paramGroupColumns.ts`），控件不拉成长条。
 
 ## 布局与表单
@@ -685,7 +685,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 内容格适配 | `UiOptionButton variant="card"`（现有内容选项格，静息 raised、选中中性选中底）；新二维选项优先 `grid` | 把 card 当成面板外壳或新增卡片套卡片 |
 | 分段 / 网格 / 小样 / 色样选择 | `UiSegmented` / `UiOptionButton variant="grid"` / `tile` / `swatch`；网格格子要等大时用 `gridCell`（`ratio` 78×92、`tier` 78×42、`tier-detail` 78×52、`preset` 120×52） | 手写 `bg-veil-faint` 格子、强调色实底的分段；用内联 `style={{ height }}` 定格子高度 |
 | 工具栏只读数值 | `UiReadout size="sm" / "md" / "lg" tone="default" / "media"`；外框与同行控件等高，等宽数字 | 自写 h-7/h-8 读数仿控件 |
-| 开关、复选框、图标开关 | `UiSwitch` / `UiCheckbox` / `UiIconButton on` | 用整行实底或强调色文字表达“已开启” |
+| 开关、复选框、图标开关 | `UiSwitch`（外观随区域：`UiBooleanAppearanceContext`，`DockviewHost` 提供复选框外观、`UiModal` 重置回滑块）/ `UiCheckbox` / `UiIconButton on` | 用整行实底或强调色文字表达“已开启”；调用点按页面自己判断画滑块还是方框 |
 | 带标签字段 | `UiFormRow inline` + `UiSwitch` / `UiInput`；多行表单不传 inline | 重新创建 Toggle / TextInput 平行包装 |
 | 标签栏、导航 | `UiNavButton`（侧栏）/ `UiChipButton selectionRole="navigation"`（`selectionAppearance` default / `subtle` 面板标签 / `workspace` 标题栏工作区，后者同栏浮层开关用 `on`） | 手写指示条、选中底 |
 | 无边框窗口的最小化/最大化/还原/关闭 | `UiWindowControl`（`action`、`platform` windows/mac；主窗口与日志窗口共用） | 用 `UiIconButton` 加覆盖拼交通灯或关闭红底 |

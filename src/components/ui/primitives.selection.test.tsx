@@ -22,7 +22,10 @@ import {
   UI_NAV_ITEM_ACTIVE_WORKSPACE_CLASS,
   UI_NAV_TOGGLE_ON_CLASS,
   UI_OPTION_ITEM_ACTIVE_CLASS,
+  UI_SWITCH_THUMB_CLASS,
+  UI_SWITCH_TRACK_CLASS,
 } from './styleTokens';
+import { UiBooleanAppearanceContext } from './booleanAppearance';
 import {
   UiCheckbox,
   UiChipButton,
@@ -218,10 +221,10 @@ describe('Ui primitives 选中态词汇表', () => {
     expect(view.getByRole('button', { name: '选中标签' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(false);
   });
 
-  it('布尔态是中性方框：开关与复选框同一外观，勾选不铺强调色（重要记录 019）', () => {
+  it('复选框（与停靠面板里的开关）是中性方框，勾选不铺强调色（重要记录 019 / 022）', () => {
     const view = render(
       <>
-        <UiSwitch checked aria-label="已开启" />
+        <UiSwitch appearance="checkbox" checked aria-label="已开启" />
         <UiCheckbox checked aria-label="已勾选" />
         <UiCheckbox checked={false} aria-label="未勾选" />
       </>,
@@ -237,11 +240,16 @@ describe('Ui primitives 选中态词汇表', () => {
     expectClasses(view.getByRole('checkbox', { name: '未勾选' }).firstElementChild as HTMLElement, UI_BOOLEAN_BOX_STATE_CLASS.off);
   });
 
-  it('开关默认是复选框外观，并支持带显式文案的双段外观', () => {
+  it('开关默认是滑块外观，停靠面板里随区域换成复选框外观，并支持带显式文案的双段外观', () => {
     const onCheckedChange = vi.fn();
     const view = render(
       <>
         <UiSwitch checked={false} aria-label="圆润开关" />
+        <UiSwitch checked aria-label="开着的滑块开关" />
+        <UiBooleanAppearanceContext.Provider value="checkbox">
+          <UiSwitch checked={false} aria-label="停靠面板里的开关" />
+          <UiSwitch appearance="pill" checked={false} aria-label="停靠面板里显式滑块" />
+        </UiBooleanAppearanceContext.Provider>
         <UiSwitch
           appearance="segmented"
           checked={false}
@@ -265,7 +273,15 @@ describe('Ui primitives 选中态词汇表', () => {
     const segmentedOff = view.getByRole('switch', { name: '关闭的双段开关' });
     const segmentedOn = view.getByRole('switch', { name: '开启的双段开关' });
 
-    expectClasses(pill.firstElementChild as HTMLElement, `${UI_BOOLEAN_BOX_CLASS} ${UI_BOOLEAN_BOX_STATE_CLASS.off}`);
+    // 滑块：关着轨道中性、滑块主要文字色；开着轨道铺强调色、滑块 on-accent（重要记录 022）
+    expectClasses(pill.firstElementChild as HTMLElement, UI_SWITCH_TRACK_CLASS.off);
+    expectClasses(pill.lastElementChild as HTMLElement, UI_SWITCH_THUMB_CLASS.off);
+    const pillOn = view.getByRole('switch', { name: '开着的滑块开关' });
+    expectClasses(pillOn.firstElementChild as HTMLElement, UI_SWITCH_TRACK_CLASS.on);
+    expectClasses(pillOn.lastElementChild as HTMLElement, UI_SWITCH_THUMB_CLASS.on);
+    // 停靠面板（DockviewHost 提供的区域）里不写 appearance 的开关画成复选框方框；显式写了仍按写的来
+    expectClasses(view.getByRole('switch', { name: '停靠面板里的开关' }).firstElementChild as HTMLElement, `${UI_BOOLEAN_BOX_CLASS} ${UI_BOOLEAN_BOX_STATE_CLASS.off}`);
+    expectClasses(view.getByRole('switch', { name: '停靠面板里显式滑块' }).firstElementChild as HTMLElement, UI_SWITCH_TRACK_CLASS.off);
     // 双段外观与分段选择共用中性选中：轨道更暗、滑块抬起、当前侧文字更强。
     expect(segmentedOff.classList.contains('rounded-lg')).toBe(true);
     expect(segmentedOff.classList.contains('bg-gap/60')).toBe(true);

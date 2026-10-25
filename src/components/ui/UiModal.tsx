@@ -8,6 +8,7 @@ import { useDialogFocusTrap } from './useDialogFocusTrap';
 import { useDialogTransition } from './useDialogTransition';
 import { useUiPrimaryBudget } from './actionPriority';
 import { UiOverlayLayerProvider, useUiOverlayLayer } from './overlayOwnership';
+import { UiBooleanAppearanceContext } from './booleanAppearance';
 import { ownerDocumentOf } from '@/utils/crossRealmDom';
 import {
   UI_MODAL_SIZE_CLASS,
@@ -131,6 +132,8 @@ export function UiModal({
       {...overlay.layerProps}
     >
       <UiOverlayLayerProvider id={overlay.id}>
+      {/* 弹窗是表单：从停靠面板里打开时开关也回到滑块外观（重要记录 022） */}
+      <UiBooleanAppearanceContext.Provider value="pill">
       <div
         className={`ui-glass-scrim ${isGlass ? 'ui-glass-scrim-soft' : ''} absolute inset-0 transition-opacity duration-180 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
         onClick={requestClose}
@@ -163,6 +166,7 @@ export function UiModal({
           </div>
         )}
       </UiPanel>
+      </UiBooleanAppearanceContext.Provider>
       </UiOverlayLayerProvider>
     </div>
   );

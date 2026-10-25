@@ -1,7 +1,7 @@
 /**
  * SwitchInput 组件
  *
- * 布尔参数：复选框外观
+ * 布尔参数：滑块开关（停靠面板里随区域换成复选框外观，重要记录 022）
  * 支持 i18n 显示名称
  * 支持禁用和条件显示
  */
@@ -37,7 +37,7 @@ export const SwitchInput: React.FC<SwitchInputProps> = ({
   const offText = t('common:off', '关')
   const labelId = useId()
   const checked = Boolean(value ?? param.default)
-  // 布尔参数一律用复选框外观（重要记录 018 / 019），工具条与浮层表单相同
+  // 外观随所在区域：生成页工具条与浮层表单里是滑块开关（重要记录 022）
   return (
     <ParamField>
       {displayName ? (

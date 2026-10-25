@@ -53,7 +53,7 @@ it('生成浮层的下拉与开关共用固定标签列，底栏仍保持行内�
   for (const row of rows) expect(row.getAttribute('data-label-width')).toBe('120')
   expect(view.getByRole('button', { name: /时长/ })).toBeTruthy()
   expect(view.getByRole('spinbutton', { name: '强度' }).closest('[data-ui-field-control]')?.parentElement?.className).toContain('flex-1')
-  // 布尔参数一律复选框外观（重要记录 018 / 019 / 021），不再拉满整列
+  // 布尔参数是开关（重要记录 022），不再拉满整列
   expect(view.getByRole('switch', { name: '联网搜索' }).textContent).toBe('')
 })
 
@@ -86,7 +86,7 @@ describe('参数控件的工具条排布（生成输入区底栏）', () => {
     expect(label?.parentElement?.contains(trigger ?? null)).toBe(true)
   })
 
-  it('工具条与浮层表单里的开关都是复选框外观，读屏名称都来自参数名', () => {
+  it('工具条与浮层表单里的开关读屏名称都来自参数名', () => {
     const toolbar = render(inToolbar(<SwitchInput param={extendParam} value onChange={() => undefined} />))
     expect(toolbar.getByRole('switch', { name: '提示词扩展' }).textContent).toBe('')
     toolbar.unmount()

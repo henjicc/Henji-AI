@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useRef, type ReactNode } from 'react'
+import { UiBooleanAppearanceContext } from '@/components/ui/booleanAppearance'
 
 /**
  * dockview 宿主外壳：剪辑工作区与 3D 镜头参考两个停靠布局共用（4.1 定位的两处同源缺陷）。
@@ -17,6 +18,7 @@ import { forwardRef, useEffect, useRef, type ReactNode } from 'react'
  *    `.dv-render-overlay` 按 dockview 每帧缓存的内容区矩形定位，会盖住组自身的边框或组内伪元素，CSS 描边不可靠。
  *    这层框在内容层（z 1）之上、分隔条（z 99）之下，用 z-raised，不接收指针。
  * 6. 顶部留一道与面板间隙同宽同色的空隙（`.dockview-host`，index.css），面板组不贴着上方命令带。
+ * 7. 停靠面板里的开关画成复选框外观（重要记录 022）：属性一列一列排，一排强调色滑块太抢注意力；其他地方仍是滑块开关。
  */
 function ActiveGroupOutline({ host }: { host: React.RefObject<HTMLDivElement> }): React.ReactElement {
   const outline = useRef<HTMLDivElement>(null)
@@ -113,7 +115,7 @@ export const DockviewHost = forwardRef<HTMLDivElement, { className?: string; chi
         if (sashPress.current) event.preventDefault()
       }}
     >
-      {children}
+      <UiBooleanAppearanceContext.Provider value="checkbox">{children}</UiBooleanAppearanceContext.Provider>
       <ActiveGroupOutline host={host} />
     </div>
   )

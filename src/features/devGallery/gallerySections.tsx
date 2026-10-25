@@ -300,6 +300,10 @@ export function ToggleSection(): JSX.Element {
         <GalleryForce state="focus"><UiSwitch aria-label="开（聚焦）" checked /></GalleryForce>
         <UiSwitch aria-label="禁用" checked disabled />
       </GalleryRow>
+      <GalleryRow label="停靠面板里的开关">
+        <UiSwitch appearance="checkbox" aria-label="关（停靠面板）" checked={false} />
+        <UiSwitch appearance="checkbox" aria-label="开（停靠面板）" checked />
+      </GalleryRow>
       <GalleryRow label="双段"><UiSwitch appearance="segmented" size="lg" checked onLabel="打开" offLabel="关闭" />
         <UiSwitch aria-label="模式" appearance="segmented" size="sm" offLabel="单张" onLabel="批量" checked={false} />
         <UiSwitch aria-label="模式（开）" appearance="segmented" size="sm" offLabel="单张" onLabel="批量" checked />

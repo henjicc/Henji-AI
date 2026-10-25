@@ -74,13 +74,26 @@ export const UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS =
 export const UI_MULTISELECT_ITEM_ACTIVE_CLASS = 'border-accent bg-selected-accent text-accent-text';
 
 /**
- * 布尔控件（复选框；开关已改成同一外观，重要记录 018/019）：16px 中性方框，勾选只多一枚主要文字色的勾，
+ * 布尔控件之一：复选框（以及停靠面板里的开关，重要记录 018/019/022）：16px 中性方框，勾选只多一枚主要文字色的勾，
  * 不铺强调色。方框画在 24px 命中区里；悬停整个命中区时方框描边加亮（`group/boolean`）。
  */
 export const UI_BOOLEAN_BOX_CLASS = 'pointer-events-none inline-flex h-4 w-4 items-center justify-center rounded-check border transition-colors duration-120';
 export const UI_BOOLEAN_BOX_STATE_CLASS = {
   on: 'border-text3 text-text1',
   off: 'border-text3/60 text-transparent group-hover/boolean:border-text3',
+} as const;
+
+/**
+ * 布尔控件之二：滑块开关（重要记录 022）。36 × 20 的轨道画在 24 高的命中区里；开着轨道铺强调色、滑块取
+ * on-accent（与强调色对比 ≥ 4.5），关着轨道取 control-pressed、滑块取主要文字色，悬停轨道加深一档。扁平，不加投影。
+ */
+export const UI_SWITCH_TRACK_CLASS = {
+  on: 'bg-accent',
+  off: 'bg-control-pressed group-hover/switch:bg-line-strong',
+} as const;
+export const UI_SWITCH_THUMB_CLASS = {
+  on: 'translate-x-4 bg-on-accent',
+  off: 'translate-x-0 bg-text1',
 } as const;
 
 /* ---------------------------------------------------------------------------

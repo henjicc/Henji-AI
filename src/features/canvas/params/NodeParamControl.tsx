@@ -349,7 +349,7 @@ function CompactUploadControl({
  * 不复用 TextInput/NumberInput/DropdownInput/SwitchInput（它们自带整行标签布局）。
  */
 export function NodeParamControl({ param, value, onChange, allValues, onParamChange, onParamChanges, historyGroup, disabled }: NodeParamControlProps) {
-  const { t } = useTranslation();
+  const { i18n } = useTranslation();
 
   switch (param.type) {
     case 'text':
@@ -374,13 +374,11 @@ export function NodeParamControl({ param, value, onChange, allValues, onParamCha
       );
     case 'switch':
       return (
+        // 布尔参数用开关，不用“关 | 开”双段（重要记录 022），与生成页参数面板相同
         <UiSwitch
-          appearance="segmented"
           checked={Boolean(value ?? (param as SwitchParamDef).default)}
           onCheckedChange={onChange}
-          offLabel={t('common:off', '关')}
-          onLabel={t('common:on', '开')}
-          size="sm"
+          aria-label={getI18nText(param.name, i18n.language)}
           disabled={disabled}
         />
       );

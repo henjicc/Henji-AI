@@ -179,14 +179,8 @@ export const BooleanSourceNode = memo(({ id, data, selected, width, height }: Va
     >
       <div className="flex items-center justify-between">
         <span className="text-xs text-text2">{checked ? onLabel : offLabel}</span>
-        <UiSwitch
-          appearance="segmented"
-          checked={checked}
-          onCheckedChange={setValue}
-          offLabel={offLabel}
-          onLabel={onLabel}
-          size="sm"
-        />
+        {/* 布尔用开关，不用“关 | 开”双段（重要记录 022）；左侧读出当前值 */}
+        <UiSwitch checked={checked} onCheckedChange={setValue} aria-label={onLabel} />
       </div>
     </ValueSourceShell>
   );

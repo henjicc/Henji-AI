@@ -162,7 +162,8 @@ type UiSwitchBaseProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onChange
 
 export type UiSwitchProps = UiSwitchBaseProps & (
   | {
-      appearance?: 'pill'
+      /** 不写时随所在区域（UiBooleanAppearanceContext）：默认滑块，剪辑那类停靠面板里是复选框外观 */
+      appearance?: 'pill' | 'checkbox'
       offLabel?: never
       onLabel?: never
       size?: never
