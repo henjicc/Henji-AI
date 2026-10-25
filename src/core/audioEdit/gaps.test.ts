@@ -118,6 +118,16 @@ describe('字间气口清理', () => {
     expect(pipeline(once).cuts).toEqual(once.cuts)
   })
 
+  it('不用删的气口被已有删除隔成好几段时，中间零碎的几段并进删除，只留紧挨两边字的静音', () => {
+    // 元宝。0–1000 | 残留 1000–1080 | 已删 1080–1170 | 30 ms | 已删 1200–1260 | 1260–1300 | 腾讯
+    const document = documentOf([['元宝。', 0, 1000], ['腾讯', 1300, 3000]], { cuts: [
+      { id: 'breath:1080', startFrame: 1080, endFrame: 1170, reason: 'silence', enabled: true },
+      { id: 'cut', startFrame: 1200, endFrame: 1260, reason: 'manual', enabled: true }] })
+    const { document: next } = cleanAudioEditGaps(document, [], levelsOf([[0, 1000], [1300, 3000]], [[1000, 1080, -60]]))
+    const gaps = next.cuts!.filter((cut) => cut.id.startsWith('gap:')).map((cut) => [cut.mode ?? 'delete', cut.startFrame, cut.endFrame])
+    expect(gaps).toEqual([['mute', 1010, 1080], ['delete', 1080, 1260], ['mute', 1260, 1290]])
+  })
+
   it('夹在残留里的几十毫秒声响一并静音；重跑替换上一次；逐处恢复过的不动；锁定的不动', () => {
     const document = documentOf([['一件事，', 0, 1000], ['每个', 1400, 3000]])
     const levels = levelsOf([[0, 1020], [1400, 3000], [1200, 1220]])

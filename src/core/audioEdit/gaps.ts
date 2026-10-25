@@ -193,6 +193,11 @@ export function cleanAudioEditGaps(
       add(sliceParts(gap.parts, tail, deleteFrom), 'mute')
       add(sliceParts(gap.parts, deleteFrom, deleteFrom + deleteLength), 'delete')
       add(sliceParts(gap.parts, deleteFrom + deleteLength, gap.length - onset), 'mute')
+    } else if (gap.parts.length > 2 && first[1] - first[0] > tail && last[1] - last[0] > onset) {
+      // 已被删除隔成好几段：只留紧挨两边字的那两段静音，中间零碎的几段并进删除
+      add([[first[0] + tail, first[1]]], 'mute')
+      add([[first[1], last[0]]], 'delete')
+      add([[last[0], last[1] - onset]], 'mute')
     } else add(sliceParts(gap.parts, tail, gap.length - onset), 'mute')
     count++
   }
