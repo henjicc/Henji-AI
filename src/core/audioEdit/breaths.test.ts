@@ -37,10 +37,17 @@ describe('呼吸声按上下文处理', () => {
     expect(applyAudioEditBreathPolicy(document, breaths, 'attenuate').document.gainRegions?.[0]).toMatchObject({ id: 'breath:1300', gainDb: AUDIO_EDIT_BREATH_ATTENUATION_DB })
   })
 
-  it('删了会让前后的字之间少于约 0.12 秒气口时改为减弱', () => {
-    const tight = documentOf([['一件事。', 0, 1000], ['每个', 1350, 1800]])
-    const { counts } = applyAudioEditBreathPolicy(tight, [{ startMs: 1020, endMs: 1300, peak: 1 }], 'delete')
-    expect(counts).toMatchObject({ deleted: 0, attenuated: 1 })
+  it('删完前后的字之间不到约 0.08 秒时，只删前面大半口气、留紧挨下一个字的一小截并减弱', () => {
+    const tight = documentOf([['一件事，', 0, 1000], ['每个', 1310, 1800]])
+    const { document: next, counts } = applyAudioEditBreathPolicy(tight, [{ startMs: 1010, endMs: 1300, peak: 1 }], 'delete')
+    expect(counts).toMatchObject({ deleted: 1, attenuated: 0 })
+    // 空当 310，这口气 290，删完只剩 20：留最后 60 凑够 80
+    expect(next.cuts).toEqual([expect.objectContaining({ id: 'breath:1010', startFrame: 1010, endFrame: 1240 })])
+    expect(next.gainRegions).toEqual([expect.objectContaining({ id: 'breath:1010', startFrame: 1240, endFrame: 1300, gainDb: AUDIO_EDIT_BREATH_ATTENUATION_DB })])
+    expect(describeAudioEditBreaths(next, [{ startMs: 1010, endMs: 1300, peak: 1 }])[0].handling).toBe('deleted')
+    // 这口气太短、留不出可删的部分时整口减弱
+    const tiny = applyAudioEditBreathPolicy(documentOf([['一件事，', 0, 1000], ['每个', 1110, 1800]]), [{ startMs: 1005, endMs: 1100, peak: 1 }], 'delete')
+    expect(tiny.counts).toMatchObject({ deleted: 0, attenuated: 1 })
   })
 
   it('已被重念或停顿处理剪掉的呼吸不再处理；下刀范围只在两侧词之间', () => {

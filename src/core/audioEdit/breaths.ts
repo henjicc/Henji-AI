@@ -7,8 +7,8 @@ import type { AudioEditCut, AudioEditProjectDocument, AudioEditRange, AudioEditT
  * 呼吸声的处理：按上下文逐处决定删、减弱、静音还是保留，落成普通的剪切与音量区域（标识以 breath: 开头），
  * 和其他剪辑一样可逐处恢复、一步撤销，不改口播文档格式。
  *
- * 默认“删除”（快节奏）：去掉这口气，但两侧原有的安静保留，至少留 MIN_GAP_MS 的气口，不让前后的字粘在一起；
- * - 删了会少于这个气口时改为减弱；
+ * 默认“删除”（快节奏）：去掉这口气，两侧原有的安静保留；删完前后的字之间不到 MIN_GAP_MS 时，
+ * 只删前面大半口气、留紧挨下一个字的一小截并减弱 18 dB，凑够这点气口，不让字粘在一起；
  * - 和字连在一起（识别的词时间盖住了大半口气）：只减弱不在词里下刀。
  * 位置（句间 / 句中 / 开头结尾）照样标出来，供助手逐处取舍：想保留句中换气的语气时改成减弱。
  * 已被重念、停顿处理剪掉的呼吸不再处理。
@@ -20,7 +20,7 @@ export type AudioEditBreathHandling = 'deleted' | 'attenuated' | 'muted' | 'kept
 
 export const AUDIO_EDIT_BREATH_ID_PREFIX = 'breath:'
 export const AUDIO_EDIT_BREATH_ATTENUATION_DB = -18
-const MIN_GAP_MS = 120
+const MIN_GAP_MS = 80
 const MIN_REGION_MS = 80
 const FADE_MS = 15
 const LONG_GAP_MS = 800
@@ -110,12 +110,28 @@ export function describeAudioEditBreaths(document: AudioEditProjectDocument, bre
 }
 
 /** 按策略与上下文决定一处呼吸怎么处理。 */
-export function decideAudioEditBreath(context: AudioEditBreathContext, policy: AudioEditBreathPolicy, remainingGapMs: number): 'delete' | 'attenuate' | 'mute' | 'keep' {
+export function decideAudioEditBreath(context: AudioEditBreathContext, policy: AudioEditBreathPolicy): 'delete' | 'attenuate' | 'mute' | 'keep' {
   if (context === 'removed' || policy === 'keep') return 'keep'
   if (policy === 'attenuate') return 'attenuate'
   if (policy === 'mute') return context === 'touching' ? 'attenuate' : 'mute'
-  if (context !== 'touching' && remainingGapMs >= MIN_GAP_MS) return 'delete'
-  return 'attenuate'
+  return context === 'touching' ? 'attenuate' : 'delete'
+}
+
+const attenuation = (id: string, range: { startFrame: number; endFrame: number }, sampleRate: number): AudioEditGainRegion => {
+  const fade = Math.min(Math.round(sampleRate * FADE_MS / 1000), Math.floor((range.endFrame - range.startFrame) / 3))
+  return { id, startFrame: range.startFrame, endFrame: range.endFrame, enabled: true, gainDb: AUDIO_EDIT_BREATH_ATTENUATION_DB, fadeInFrames: fade, fadeOutFrames: fade }
+}
+
+/** 一处呼吸的剪辑：删除时保证前后的字之间至少留 MIN_GAP_MS（不够就留下最后一小截减弱）。 */
+function breathEdits(placement: Placement, decision: 'delete' | 'attenuate' | 'mute', sampleRate: number): { cuts: AudioEditCut[]; gains: AudioEditGainRegion[]; handling: 'deleted' | 'attenuated' | 'muted' } {
+  const region = placement.region!
+  if (decision === 'attenuate') return { cuts: [], gains: [attenuation(placement.id, region, sampleRate)], handling: 'attenuated' }
+  if (decision === 'mute') return { cuts: [{ id: placement.id, startFrame: region.startFrame, endFrame: region.endFrame, reason: 'silence', enabled: true, mode: 'mute' }], gains: [], handling: 'muted' }
+  const length = region.endFrame - region.startFrame
+  const need = Math.max(0, Math.round(MIN_GAP_MS * sampleRate / 1000) - (placement.gapFrames - length))
+  if (need >= length - Math.round(MIN_REGION_MS * sampleRate / 1000)) return { cuts: [], gains: [attenuation(placement.id, region, sampleRate)], handling: 'attenuated' }
+  const cut: AudioEditCut = { id: placement.id, startFrame: region.startFrame, endFrame: region.endFrame - need, reason: 'silence', enabled: true }
+  return { cuts: [cut], gains: need > 0 ? [attenuation(placement.id, { startFrame: region.endFrame - need, endFrame: region.endFrame }, sampleRate)] : [], handling: 'deleted' }
 }
 
 function overlapsLocked(document: AudioEditProjectDocument, range: { startFrame: number; endFrame: number }): boolean {
@@ -143,17 +159,10 @@ export function applyAudioEditBreathPolicy(
   for (const placement of placeBreaths(base, breaths)) {
     if (!inRange(placement) || restored.has(placement.id)) continue
     const region = placement.region
-    const regionMs = region ? (region.endFrame - region.startFrame) * 1000 / sampleRate : 0
-    const decision = region && !overlapsLocked(base, region) ? decideAudioEditBreath(placement.context, policy, placement.gapFrames * 1000 / sampleRate - regionMs) : 'keep'
+    const decision = region && !overlapsLocked(base, region) ? decideAudioEditBreath(placement.context, policy) : 'keep'
     if (decision === 'keep' || !region) { if (placement.context !== 'removed') counts.kept++; continue }
-    if (decision === 'attenuate') {
-      const fade = Math.min(Math.round(sampleRate * FADE_MS / 1000), Math.floor((region.endFrame - region.startFrame) / 3))
-      gains.push({ id: placement.id, startFrame: region.startFrame, endFrame: region.endFrame, enabled: true, gainDb: AUDIO_EDIT_BREATH_ATTENUATION_DB, fadeInFrames: fade, fadeOutFrames: fade })
-      counts.attenuated++
-    } else {
-      cuts.push({ id: placement.id, startFrame: region.startFrame, endFrame: region.endFrame, reason: 'silence', enabled: true, ...(decision === 'mute' ? { mode: 'mute' as const } : {}) })
-      if (decision === 'mute') counts.muted++; else counts.deleted++
-    }
+    const edits = breathEdits(placement, decision, sampleRate)
+    cuts.push(...edits.cuts); gains.push(...edits.gains); counts[edits.handling]++
   }
   return { document: { ...base, cuts: [...(base.cuts ?? []), ...cuts], gainRegions: [...(base.gainRegions ?? []), ...gains] }, counts }
 }
@@ -175,9 +184,6 @@ export function setAudioEditBreathHandling(
   if (placement.context === 'removed') throw new Error('这口气所在的声音已经被剪掉，不需要再处理。')
   if (!region) throw new Error('这口气和字连在一起，没有能单独下刀的部分；可以减弱前后的词，或保留。')
   if (overlapsLocked(base, region)) throw new Error('这口气挨着锁定的内容，不能修改。')
-  if (handling === 'attenuated') {
-    const fade = Math.min(Math.round(sampleRate * FADE_MS / 1000), Math.floor((region.endFrame - region.startFrame) / 3))
-    return { ...base, gainRegions: [...(base.gainRegions ?? []), { id, startFrame: region.startFrame, endFrame: region.endFrame, enabled: true, gainDb: AUDIO_EDIT_BREATH_ATTENUATION_DB, fadeInFrames: fade, fadeOutFrames: fade }] }
-  }
-  return { ...base, cuts: [...(base.cuts ?? []), { id, startFrame: region.startFrame, endFrame: region.endFrame, reason: 'silence', enabled: true, ...(handling === 'muted' ? { mode: 'mute' as const } : {}) }] }
+  const edits = breathEdits(placement, handling === 'attenuated' ? 'attenuate' : handling === 'muted' ? 'mute' : 'delete', sampleRate)
+  return { ...base, cuts: [...(base.cuts ?? []), ...edits.cuts], gainRegions: [...(base.gainRegions ?? []), ...edits.gains] }
 }

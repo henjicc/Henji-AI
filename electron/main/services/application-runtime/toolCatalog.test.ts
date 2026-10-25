@@ -133,6 +133,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.65.0'] = 'bc27452cf6addbb45c49dd31b6d8dfcb8e14c205e995a05f4db6851c2c743838'
     // 呼吸声默认策略改为快节奏（句中也删、保留两侧安静与短气口），说明随之更新。
     fingerprints['2.66.0'] = '41136390e0b9d568d41843c757b759f526bcae8974a3d4a72874e0935c47d13f'
+    // 呼吸声删完太挤时留紧挨下一个字的一小截减弱（原为整口减弱），说明随之更新。
+    fingerprints['2.67.0'] = '39d77424f8277a2c8d9e4f4ef4838c8f6f2da98c339cceeecd727e1a9fb8575c'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], `工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹：${fingerprint}`).toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {
