@@ -322,6 +322,6 @@ export async function renderWebRecording(request: WebReplayRenderRequest, signal
     const output = request.output ?? path.join(directory, `replay-${new Date().toISOString().replace(/[:.]/g, '-')}${request.pointer === false ? REPLAY_CLEAN_SUFFIX : '.mp4'}`)
     await fs.mkdir(path.dirname(output), { recursive: true })
     logger.info('开始网页重演', { event: 'web_replay.replay.start', context: { recordingId: request.recordingId, output } })
-    return await WebRecordingPlayer.open(directory).render({ output, fps: request.fps, pointer: request.pointer !== false, signal, onFrame: onProgress ? (progress, frame) => onProgress({ recordingId: request.recordingId, progress, frame }) : undefined })
+    return await WebRecordingPlayer.open(directory).render({ output, fps: request.fps, pointer: request.pointer !== false, longEdge: request.longEdge, signal, onFrame: onProgress ? (progress, frame) => onProgress({ recordingId: request.recordingId, progress, frame }) : undefined })
   } finally { rendering.delete(request.recordingId) }
 }

@@ -14,7 +14,7 @@ const backupSchema = z.union([
   z.object({ ...recordingEncodingFields, fps, target: z.literal('screen'), sourceId: z.string().regex(/^screen:\d+:\d+$/), width: z.number().int().min(2).max(3840).multipleOf(2), height: z.number().int().min(2).max(2160).multipleOf(2) }).strict(),
 ]).nullable()
 const destinationSchema = z.object({ projectId: z.string().min(1).max(200), name: z.string().trim().min(1).max(120).optional() }).strict()
-const renderSchema = z.object({ recordingId: uuid, output: z.string().min(1).optional(), fps: z.number().int().min(1).max(120).optional(), pointer: z.boolean().optional() }).strict()
+const renderSchema = z.object({ recordingId: uuid, output: z.string().min(1).optional(), fps: z.number().int().min(1).max(120).optional(), pointer: z.boolean().optional(), longEdge: z.number().int().min(320).max(7680).optional() }).strict()
 
 export function registerWebReplayIpc(): void {
   registerIpcHandler(WEB_REPLAY_CHANNELS.setEnabled, raw => z.object({ enabled: z.boolean() }).strict().parse(raw), async (input, event) => { assertTrustedApplicationSender(event); return setWebReplayEnabled(input.enabled) })

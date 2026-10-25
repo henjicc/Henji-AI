@@ -73,6 +73,8 @@ export function installReplayRuntime(host: ReplayHost): void {
   const win = window as unknown as Record<string, unknown>
   const conflict = (message: string): void => host.report({ kind: 'conflict', t: nowUs(), message })
 
+  if (boot.timeScale && boot.timeScale !== 1) slowPageClock(boot.timeScale)
+
   // ---- time: wall clock follows the recording; timers stay real in the realtime tier
   const RealDate = Date
   const wallNow = (): number => boot.wallAtZeroMs + performance.now()
@@ -169,6 +171,23 @@ export function installReplayRuntime(host: ReplayHost): void {
   win[REPLAY_CONTROL] = { locate, pointFor: (target: ElementInfo) => locate(target.locator, target.offset) }
   if (host.boot.pointer !== false) installCursorOverlay()
   host.report({ kind: 'ready', now: performance.now() })
+}
+
+/**
+ * Page time runs `scale` times slower than the wall clock. CSS and Web Animations are slowed by the
+ * player through the DevTools Animation domain; requestIdleCallback deadlines and event.timeStamp stay real.
+ */
+function slowPageClock(scale: number): void {
+  const realNow = performance.now.bind(performance)
+  performance.now = () => realNow() / scale
+  const realSetTimeout = window.setTimeout.bind(window)
+  const realSetInterval = window.setInterval.bind(window)
+  window.setTimeout = ((handler: TimerHandler, ms?: number, ...args: unknown[]) => realSetTimeout(handler, (Number(ms) || 0) * scale, ...args)) as typeof window.setTimeout
+  window.setInterval = ((handler: TimerHandler, ms?: number, ...args: unknown[]) => realSetInterval(handler, (Number(ms) || 0) * scale, ...args)) as typeof window.setInterval
+  // Frame times follow the animation clock, which the DevTools playback rate already slows once it
+  // applies; only a frame time still on the wall clock is scaled here.
+  const realRaf = window.requestAnimationFrame.bind(window)
+  window.requestAnimationFrame = callback => realRaf(time => callback(Math.abs(time - realNow()) < Math.abs(time * scale - realNow()) ? time / scale : time))
 }
 
 function installTauriShim(host: ReplayHost, conflict: (message: string) => void): void {

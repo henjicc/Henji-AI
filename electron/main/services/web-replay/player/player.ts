@@ -14,6 +14,8 @@ import { BOOTSTRAP_PATH, installReplaySite } from './site'
 
 const logger = createMainLogger('main.web_replay.player')
 const TAIL_MS = 1500
+/** Device pixels per second the offscreen capture sustains in realtime (the recorded 2240×1437 at 30 fps fits); above it the page runs slower. */
+const REALTIME_PIXEL_RATE = 100_000_000
 
 export interface ReplayIssue { t: number; kind: 'conflict' | 'warning'; message: string }
 export interface ReplayResult {
@@ -31,6 +33,10 @@ export interface ReplayOptions {
   output: string; fps?: number; show?: boolean; signal?: AbortSignal
   /** false renders a clean picture without the pointer (for the editor, which redraws it). Default true. */
   pointer?: boolean
+  /** Output long edge in pixels (e.g. 3840); the page renders at that scale instead of the recorded device pixel ratio. */
+  longEdge?: number
+  /** Page time runs this many times slower than the wall clock; the video keeps the recorded timing. Default 1. */
+  timeScale?: number
   /** Live preview: progress 0..1 and a small JPEG data URL, about five times a second. */
   onFrame?: (progress: number, frame: string) => void
 }
@@ -71,7 +77,7 @@ export class WebRecordingPlayer {
 
   static open(directory: string): WebRecordingPlayer { return new WebRecordingPlayer(new WebRecordingStore(directory)) }
 
-  private pageNowUs(): number { return Math.round((Date.now() - this.startedAtMs) * 1000) }
+  private pageNowUs(): number { return Math.round((Date.now() - this.startedAtMs) * 1000 / this.scale) }
   private issue(kind: ReplayIssue['kind'], message: string, t = this.pageNowUs()): void {
     if (this.issues.length < 500) this.issues.push({ t, kind, message })
     logger.debug('网页重演发现问题', { event: 'web_replay.replay.issue', context: { kind, message: message.slice(0, 300) } })
@@ -88,6 +94,7 @@ export class WebRecordingPlayer {
         host: this.manifest.host, env: this.manifest.env, wallAtZeroMs: this.manifest.wallAtZeroMs, random: this.data.random,
         clipboard: this.data.clipboard.map(c => c.text), callbacks: this.data.callbacks, locator: DEFAULT_LOCATOR_OPTIONS,
         ...(this.pointer ? {} : { pointer: false }),
+        ...(this.scale === 1 ? {} : { timeScale: this.scale }),
       },
     }
   }
@@ -118,6 +125,7 @@ export class WebRecordingPlayer {
 
   private storage: unknown
   private pointer = true
+  private scale = 1
 
   async render(options: ReplayOptions): Promise<ReplayResult> {
     installIpc()
@@ -132,8 +140,11 @@ export class WebRecordingPlayer {
     const partition = `web-replay-${crypto.randomUUID()}`
     const ses = electronSession.fromPartition(partition)
     installReplaySite(ses, { store: this.store, origin, resources, external: this.data.external, onMissing: (url, reason) => this.issue('conflict', `${reason}：${url}`) })
-    const dpr = env.viewport.dpr
+    const dpr = options.longEdge ? options.longEdge / Math.max(env.viewport.width, env.viewport.height) : env.viewport.dpr
     const fps = options.fps ?? 30
+    // Large or fast outputs slow the page down rather than drop frames; the video keeps the recorded timing.
+    this.scale = options.timeScale ?? Math.max(1, Math.ceil((env.viewport.width * dpr) * (env.viewport.height * dpr) * fps / REALTIME_PIXEL_RATE))
+    const scale = this.scale
     const win = new BrowserWindow({
       show: options.show ?? false, width: Math.round(env.viewport.width), height: Math.round(env.viewport.height), useContentSize: true, frame: false, resizable: true,
       webPreferences: {
@@ -149,6 +160,7 @@ export class WebRecordingPlayer {
     const input = new InputDispatcher(contents, cdp, this.store, REPLAY_CONTROL)
     const timers: Array<ReturnType<typeof setTimeout>> = []
     let encoder: FrameEncoder | null = null
+    let lateFrames = 0
     try {
       const stage = (name: string): void => logger.info('网页重演进度', { event: 'web_replay.replay.stage', context: { recordingId: this.manifest.id, stage: name } })
       stage('window')
@@ -159,7 +171,13 @@ export class WebRecordingPlayer {
       await cdp('Emulation.setTimezoneOverride', { timezoneId: env.timeZone }).catch(() => undefined)
       await cdp('Emulation.setLocaleOverride', { locale: env.locale }).catch(() => undefined)
       await cdp('Emulation.setUserAgentOverride', { userAgent: env.userAgent, acceptLanguage: env.locale }).catch(() => undefined)
-      contents.setFrameRate(fps)
+      contents.setFrameRate(Math.max(1, Math.round(fps / scale)))
+      const slowAnimations = async (): Promise<void> => {
+        if (scale === 1) return
+        await cdp('Animation.enable')
+        await cdp('Animation.setPlaybackRate', { playbackRate: 1 / scale })
+      }
+      await slowAnimations()
 
       // 1) restore storage on the recorded origin, 2) load the recorded entry URL
       const bootstrapped = new Promise<void>(resolve => { this.bootstrappedResolve = resolve })
@@ -170,7 +188,8 @@ export class WebRecordingPlayer {
 
       const painted: { latest: Electron.NativeImage | null } = { latest: null }
       let lastGood: Buffer | null = null
-      contents.on('paint', (_event, _dirty, image) => { painted.latest = image })
+      let fresh = false
+      contents.on('paint', (_event, _dirty, image) => { painted.latest = image; fresh = true })
       const readyAt = new Promise<number>(resolve => { this.ready = resolve })
       this.startedAtMs = Date.now()
       const loading = contents.loadURL(env.url)
@@ -178,13 +197,14 @@ export class WebRecordingPlayer {
       const pageNow = await withTimeout(readyAt, 30_000, '重演页面没有加载探针运行时')
       stage('ready')
       // Page zero in Henji's wall clock; behavior times are relative to it.
-      const zeroMs = Date.now() - pageNow
+      await slowAnimations()
+      const zeroMs = Date.now() - pageNow * scale
       this.startedAtMs = zeroMs
       await loading.catch(error => this.issue('warning', `入口页面加载报告：${String(error)}`))
 
       for (const event of this.behavior) {
-        if (event.kind === 'resize') { timers.push(setTimeout(() => win.setContentSize(Math.round(event.width), Math.round(event.height)), Math.max(0, zeroMs + event.t / 1000 - Date.now()))); continue }
-        timers.push(setTimeout(() => { void input.dispatch(event).catch(error => this.issue('warning', `输入派发失败：${String(error)}`, event.t)) }, Math.max(0, zeroMs + event.t / 1000 - Date.now())))
+        if (event.kind === 'resize') { timers.push(setTimeout(() => win.setContentSize(Math.round(event.width), Math.round(event.height)), Math.max(0, zeroMs + event.t / 1000 * scale - Date.now()))); continue }
+        timers.push(setTimeout(() => { void input.dispatch(event).catch(error => this.issue('warning', `输入派发失败：${String(error)}`, event.t)) }, Math.max(0, zeroMs + event.t / 1000 * scale - Date.now())))
       }
 
       // Frame clock: one frame per tick from the most recent paint.
@@ -192,12 +212,15 @@ export class WebRecordingPlayer {
       const frameCount = Math.ceil(totalMs / 1000 * fps)
       for (let i = 0; i < frameCount; i += 1) {
         if (options.signal?.aborted) throw new Error('已取消重演')
-        const due = zeroMs + (i * 1000) / fps
+        const due = zeroMs + (i * 1000 * scale) / fps
         const wait = due - Date.now()
         if (wait > 0) await new Promise(resolve => setTimeout(resolve, wait))
+        else if (wait < -500 * scale / fps) lateFrames += 1
         const frame = painted.latest
         if (!frame) continue
-        const bitmap = frame.toBitmap()
+        // Most frames of an interface repeat the last paint; copying 4K pixels only when the page painted keeps up with realtime.
+        const bitmap: Buffer = fresh || !lastGood ? frame.toBitmap() : lastGood
+        fresh = false
         // The paint image is already in device pixels at the offscreen deviceScaleFactor.
         const width = frame.getSize().width
         const height = Math.floor(bitmap.length / 4 / width)
@@ -206,6 +229,7 @@ export class WebRecordingPlayer {
           encoder = new FrameEncoder(Math.min(width, Math.round(env.viewport.width * dpr)), Math.min(height, Math.round(env.viewport.height * dpr)), fps, options.output)
           await encoder.start(width, height)
           for (let k = 0; k < i; k += 1) await encoder.write(bitmap) // hold the first painted frame for the time before it
+          lateFrames = 0 // catching up after that hold only repeats the still first screen
         }
         // A frame of another size (window resize in flight) repeats the last good one so timing stays exact.
         if (width === encoder.sourceWidth && height === encoder.sourceHeight) lastGood = bitmap
@@ -214,6 +238,7 @@ export class WebRecordingPlayer {
       }
       if (!encoder) throw new Error('重演窗口没有产生任何画面')
       await encoder.finish()
+      if (lateFrames > 0) this.issue('warning', `有 ${lateFrames} 帧没赶上实时，画面可能有轻微卡顿`)
       const unused = this.matcher.unused().length
       logger.info('网页重演完成', { event: 'web_replay.replay.completed', context: { recordingId: this.manifest.id, frames: encoder.frames, issues: this.issues.length, loose: this.loose, unused } })
       return { output: options.output, frames: encoder.frames, width: encoder.width, height: encoder.height, durationMs: totalMs, issues: this.issues, looseMatches: this.loose, unusedCalls: unused, locatorMisses: input.misses }

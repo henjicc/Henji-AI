@@ -150,7 +150,8 @@ export async function executeWebAppCapability(id: string, input: unknown, contex
   }
   const parsed = renderWebAppReplayCapability.inputSchema.parse(input)
   context.signal.throwIfAborted()
-  const result = await platform.render({ recordingId: parsed.recordingRef.id, fps: parsed.fps, pointer: parsed.pointer })
+  const longEdge = { recorded: undefined, '1080p': 1920, '1440p': 2560, '4k': 3840 }[parsed.resolution]
+  const result = await platform.render({ recordingId: parsed.recordingRef.id, fps: parsed.fps, pointer: parsed.pointer, ...(longEdge ? { longEdge } : {}) })
   return {
     resultRef: parsed.recordingRef, video: result.output, pointer: parsed.pointer, width: result.width, height: result.height, frames: result.frames,
     conflicts: result.issues.filter(i => i.kind === 'conflict').map(i => i.message), warnings: result.issues.filter(i => i.kind === 'warning').map(i => i.message), verified: result.frames > 0,

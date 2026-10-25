@@ -1,6 +1,17 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { loadFfmpegPath } from '../../video/ffmpeg-loader'
 
+let nvencProbe: Promise<boolean> | null = null
+/** One tiny NVENC encode decides whether frames go to the GPU encoder; large realtime frames outrun libx264. */
+function probeNvenc(ffmpeg: string): Promise<boolean> {
+  nvencProbe ??= new Promise(resolve => {
+    const child = spawn(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=black:s=256x256:r=30', '-frames:v', '1', '-c:v', 'h264_nvenc', '-f', 'null', '-'])
+    child.on('error', () => resolve(false))
+    child.on('close', code => resolve(code === 0))
+  })
+  return nvencProbe
+}
+
 /** Raw BGRA frames in, H.264 MP4 out. Width and height are rounded down to even numbers. */
 export class FrameEncoder {
   private process: ChildProcessWithoutNullStreams | null = null
@@ -22,10 +33,14 @@ export class FrameEncoder {
     this.sourceHeight = sourceHeight
     const ffmpeg = await loadFfmpegPath()
     const crop = sourceWidth !== this.width || sourceHeight !== this.height ? ['-vf', `crop=${this.width}:${this.height}:0:0`] : []
+    // NVENC takes BGRA as is and converts on the GPU; libx264 needs a CPU conversion first.
+    const codec = await probeNvenc(ffmpeg)
+      ? ['-c:v', 'h264_nvenc', '-preset', 'p5', '-tune', 'hq', '-rc', 'vbr', '-cq', '16', '-b:v', '0']
+      : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '16', '-pix_fmt', 'yuv420p']
     const child = spawn(ffmpeg, [
       '-hide_banner', '-loglevel', 'error', '-y',
       '-f', 'rawvideo', '-pix_fmt', 'bgra', '-s', `${sourceWidth}x${sourceHeight}`, '-r', String(this.fps), '-i', 'pipe:0',
-      ...crop, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '16', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', this.output,
+      ...crop, ...codec, '-movflags', '+faststart', this.output,
     ])
     child.stderr.on('data', chunk => { this.stderr = (this.stderr + String(chunk)).slice(-4000) })
     this.exit = new Promise((resolve, reject) => {

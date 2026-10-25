@@ -13,6 +13,8 @@ export interface ReplayBoot {
   locator: LocatorOptions
   /** false: draw no pointer inside the page (a clean picture for editing; the editor redraws the pointer). Omitted means drawn. */
   pointer?: boolean
+  /** The page lives this many times slower than the wall clock (timers, performance.now, rAF), so a heavy capture keeps every frame on schedule. Omitted means 1. */
+  timeScale?: number
 }
 
 export interface ReplayHttpRequest { method: string; url: string; headers: HeaderList; body?: WireBody; via: 'seam' | 'fetch' }
