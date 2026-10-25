@@ -4,7 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
-const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
+const { dialogs, presented, seekSourceSeconds } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const matrix = require('./videoEditFormatMatrix.cjs')
 const { adoptNewVideoEditProject, chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 
@@ -387,8 +387,7 @@ function createVideoEditFormatMatrixScene() {
             record.source = { openMs: Date.now() - openedAt, mode: (await sourceTime()).mode, seeks: [] }
             const duration = frames / fps
             for (const seconds of [0.5, Math.min(duration - 0.2, 2.25), 0.1].map(value => round(value + sample.video.firstPts, 6))) {
-              const field = page.getByLabel('源素材定位秒', { exact: true })
-              const at = Date.now(); await field.fill(String(seconds)); await field.press('Enter')
+              const at = Date.now(); await seekSourceSeconds(page, seconds)
               await page.waitForFunction(time => {
                 const canvas = document.querySelector('[data-video-edit-source-canvas]'); const video = document.querySelector('[data-video-edit-source-host] video')
                 const presented = canvas ? Number(canvas.dataset.presentedTimeUs) / 1e6 : video?.currentTime
@@ -516,7 +515,7 @@ function createVideoEditFormatMatrixScene() {
             await page.waitForFunction(() => document.querySelector('[data-video-edit-source-status]')?.dataset.videoEditSourceStatus === 'ready' && (document.querySelector('[data-video-edit-source-canvas]')?.dataset.presentedTimeUs !== undefined || document.querySelector('[data-video-edit-source-host] video')?.readyState >= 2), null, { timeout: 60000 })
             const openMs = Date.now() - openedAt
             const middle = round(media.durationSeconds / 2, 3)
-            const field = page.getByLabel('源素材定位秒', { exact: true }); await field.fill(String(middle)); await field.press('Enter')
+            await seekSourceSeconds(page, middle)
             await page.waitForFunction(time => { const canvas = document.querySelector('[data-video-edit-source-canvas]'); const video = document.querySelector('[data-video-edit-source-host] video'); const presented = canvas ? Number(canvas.dataset.presentedTimeUs) / 1e6 : video?.currentTime; return document.querySelector('[data-video-edit-source-status]')?.dataset.videoEditSourceStatus === 'ready' && presented <= time.at + time.tolerance + 1e-6 && presented > time.at - 0.5 }, { at: middle, tolerance: matrix.PICTURE_TOLERANCE_SECONDS }, { timeout: 60000 })
             await page.evaluate(() => {
               window.__tripoSource = []; const read = () => { const canvas = document.querySelector('[data-video-edit-source-canvas]'); const video = document.querySelector('[data-video-edit-source-host] video'); return canvas ? Number(canvas.dataset.presentedTimeUs) : Math.round((video?.currentTime ?? 0) * 1e6) }

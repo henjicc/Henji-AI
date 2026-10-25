@@ -1,5 +1,5 @@
-import { expect, it } from 'vitest'
-import { parseVideoEditTimecodeInput, videoEditFrameTimecode } from './timecode'
+import { describe, expect, it } from 'vitest'
+import { parseVideoEditSecondsInput, parseVideoEditTimecodeInput, videoEditFrameTimecode } from './timecode'
 
 /* 时间码输入（Premiere 习惯）：纯数字从右往左两位一组，超出进位，带 +/− 为相对移动，帧模式下数字就是帧号。 */
 
@@ -34,4 +34,15 @@ it('帧模式下纯数字就是帧号；无效输入为 null', () => {
   expect(parseVideoEditTimecodeInput('', 30, 0)).toBeNull()
   expect(parseVideoEditTimecodeInput('abc', 30, 0)).toBeNull()
   expect(parseVideoEditTimecodeInput('1:2:3:4:5', 30, 0)).toBeNull()
+})
+
+describe('按秒输入', () => {
+  it('写“s”或“秒”时按秒精确定位，纯数字与时间码不当秒数', () => {
+    expect(parseVideoEditSecondsInput('2.25s')).toBe(2.25)
+    expect(parseVideoEditSecondsInput(' 0.533333 秒 ')).toBe(0.533333)
+    expect(parseVideoEditSecondsInput('3S')).toBe(3)
+    expect(parseVideoEditSecondsInput('1230')).toBeNull()
+    expect(parseVideoEditSecondsInput('00:00:01:00')).toBeNull()
+    expect(parseVideoEditSecondsInput('-1s')).toBeNull()
+  })
 })

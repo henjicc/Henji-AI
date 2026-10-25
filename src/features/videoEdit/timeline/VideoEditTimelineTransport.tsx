@@ -1,7 +1,7 @@
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { UiInput } from '@/components/ui'
-import { parseVideoEditTimecodeInput, videoEditFrameCount } from '@/core/videoEdit/timecode'
+import { parseVideoEditSecondsInput, parseVideoEditTimecodeInput, videoEditFrameCount } from '@/core/videoEdit/timecode'
 import { videoEditDuration } from '@/core/videoEdit/document'
 import { getActiveVideoEditSequence, setVideoEditView, subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from '../application/videoEditService'
 import { TIMELINE_HEADER_WIDTH, timelineTimecode } from './timelineGeometry'
@@ -19,23 +19,37 @@ function toggleTimecodeDisplay(): void {
 function subscribeTimecodeDisplay(listener: () => void): () => void { displayListeners.add(listener); return () => { displayListeners.delete(listener) } }
 
 /**
- * 时间码（Premiere 的“播放指示器位置”）：节目监视器与时间线共用。
+ * 时间码读数（Premiere 的“播放指示器位置”）：节目监视器、时间线与源监视器共用。
  * - 左右拖动快速移动播放头（按住 Shift 每像素 10 帧）；
- * - 单击进入输入：纯数字从右往左两位一组（1230 = 12 秒 30 帧），超出自动进位，+/− 为相对移动，回车跳转、Esc 取消；
+ * - 单击进入输入：纯数字从右往左两位一组（1230 = 12 秒 30 帧），超出自动进位，+/− 为相对移动；
+ *   写“2.25s”按秒精确定位；回车跳转、Esc 取消；
  * - Ctrl+单击在时间码与帧号之间切换显示。
  */
-export function VideoEditTimecode({ instance, label, className = '' }: { instance: VideoEditInstance; label: string; className?: string }): React.ReactElement {
-  useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
+export function VideoEditTimecodeReadout({ label, frame, fps, maxFrame, onSeek, onSeekSeconds, className = '' }: {
+  label: string
+  frame: number
+  fps: number
+  maxFrame: number
+  /** 跳到某一帧；scrubbing 为拖动中 */
+  onSeek: (frame: number, scrubbing: boolean) => void
+  /** 按秒输入时精确定位；不给时换算成最近的帧 */
+  onSeekSeconds?: (seconds: number) => void
+  className?: string
+}): React.ReactElement {
   const display = useSyncExternalStore(subscribeTimecodeDisplay, () => timecodeDisplay)
-  const sequence = getActiveVideoEditSequence(instance)
   const [editing, setEditing] = useState<string | null>(null)
   const drag = useRef<{ x: number; frame: number; moved: boolean; pointerId: number } | null>(null)
-  const maxFrame = Math.floor(sequence.fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)
-  const text = display === 'frames' ? videoEditFrameCount(instance.frame) : `${timelineTimecode(instance.frame, sequence.fps)}${Number.isInteger(sequence.fps) ? '' : ' NDF'}`
-  const seek = (frame: number, scrubbing = false): void => { setVideoEditView(instance.document.id, { frame: Math.max(0, Math.min(maxFrame, Math.round(frame))), playing: false, scrubbing }) }
+  const text = display === 'frames' ? videoEditFrameCount(frame) : `${timelineTimecode(frame, fps)}${Number.isInteger(fps) ? '' : ' NDF'}`
+  const seek = (target: number, scrubbing = false): void => { onSeek(Math.max(0, Math.min(maxFrame, Math.round(target))), scrubbing) }
   const commit = (value: string): void => {
-    const frame = parseVideoEditTimecodeInput(value, sequence.fps, instance.frame, display)
-    if (frame !== null) seek(frame)
+    const seconds = parseVideoEditSecondsInput(value)
+    if (seconds !== null) {
+      if (onSeekSeconds) onSeekSeconds(seconds)
+      else seek(seconds * fps)
+    } else {
+      const target = parseVideoEditTimecodeInput(value, fps, frame, display)
+      if (target !== null) seek(target)
+    }
     setEditing(null)
   }
   if (editing !== null) {
@@ -43,14 +57,14 @@ export function VideoEditTimecode({ instance, label, className = '' }: { instanc
       onFocus={event => event.currentTarget.select()} onChange={event => setEditing(event.target.value)} onBlur={() => setEditing(null)}
       onKeyDown={event => { event.stopPropagation(); if (event.key === 'Enter') { event.preventDefault(); commit(editing) } else if (event.key === 'Escape') { event.preventDefault(); setEditing(null) } }} />
   }
-  return <span role="spinbutton" tabIndex={0} aria-label={label} aria-valuenow={instance.frame} aria-valuemin={0} aria-valuemax={maxFrame} aria-valuetext={text}
-    title="拖动快速定位；单击输入时间（如 1230 = 12 秒 30 帧）；Ctrl+单击切换时间码 / 帧号"
+  return <span role="spinbutton" tabIndex={0} aria-label={label} aria-valuenow={frame} aria-valuemin={0} aria-valuemax={maxFrame} aria-valuetext={text}
+    title="拖动快速定位；单击输入时间（如 1230 = 12 秒 30 帧，2.25s = 2.25 秒）；Ctrl+单击切换时间码 / 帧号"
     className={`shrink-0 cursor-ew-resize select-none font-mono tabular-nums text-accent-text ${className}`}
     onPointerDown={event => {
       if (event.button !== 0) return
       if (event.ctrlKey || event.metaKey) { event.preventDefault(); toggleTimecodeDisplay(); return }
       event.currentTarget.setPointerCapture(event.pointerId)
-      drag.current = { x: event.clientX, frame: instance.frame, moved: false, pointerId: event.pointerId }
+      drag.current = { x: event.clientX, frame, moved: false, pointerId: event.pointerId }
     }}
     onPointerMove={event => {
       const state = drag.current; if (!state || state.pointerId !== event.pointerId) return
@@ -62,13 +76,21 @@ export function VideoEditTimecode({ instance, label, className = '' }: { instanc
     onPointerUp={event => {
       const state = drag.current; drag.current = null
       if (!state || state.pointerId !== event.pointerId) return
-      if (state.moved) seek(instance.frame)
-      else setEditing(display === 'frames' ? videoEditFrameCount(instance.frame) : timelineTimecode(instance.frame, sequence.fps))
+      if (state.moved) seek(frame)
+      else setEditing(display === 'frames' ? videoEditFrameCount(frame) : timelineTimecode(frame, fps))
     }}
-    onPointerCancel={() => { if (drag.current?.moved) seek(instance.frame); drag.current = null }}
+    onPointerCancel={() => { if (drag.current?.moved) seek(frame); drag.current = null }}
     onKeyDown={event => {
-      if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); setEditing(display === 'frames' ? videoEditFrameCount(instance.frame) : timelineTimecode(instance.frame, sequence.fps)) }
+      if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); setEditing(display === 'frames' ? videoEditFrameCount(frame) : timelineTimecode(frame, fps)) }
     }}>{text}</span>
+}
+
+/** 节目监视器与时间线的时间码：序列播放头 */
+export function VideoEditTimecode({ instance, label, className = '' }: { instance: VideoEditInstance; label: string; className?: string }): React.ReactElement {
+  useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
+  const sequence = getActiveVideoEditSequence(instance)
+  return <VideoEditTimecodeReadout label={label} frame={instance.frame} fps={sequence.fps} maxFrame={Math.floor(sequence.fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)} className={className}
+    onSeek={(frame, scrubbing) => setVideoEditView(instance.document.id, { frame, playing: false, scrubbing })} />
 }
 
 /**

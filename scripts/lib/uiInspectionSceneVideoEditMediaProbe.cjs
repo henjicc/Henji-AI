@@ -3,7 +3,7 @@ const crypto = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
-const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
+const { dialogs, presented, seekSourceSeconds } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { PICTURE_TOLERANCE_SECONDS } = require('./videoEditFormatMatrix.cjs')
 
 /**
@@ -77,8 +77,7 @@ async function nativeSourceMonitor(page, itemId, fps, durationSeconds, hasAudio)
   assert.equal(await page.locator('[data-video-edit-source-host] video').count(), 0, '只有原生能解的素材不能交给媒体元素')
   const seeks = []
   for (const seconds of [0.5, Math.min(durationSeconds - 0.2, 2.25), 0.1]) {
-    const field = page.getByLabel('源素材定位秒', { exact: true })
-    const at = Date.now(); await field.fill(String(seconds)); await field.press('Enter')
+    const at = Date.now(); await seekSourceSeconds(page, seconds)
     await page.waitForFunction(time => {
       const canvas = document.querySelector('[data-video-edit-source-canvas]')
       const presented = Number(canvas?.dataset.presentedTimeUs) / 1e6

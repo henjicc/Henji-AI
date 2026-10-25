@@ -93,7 +93,7 @@ function createVideoEditTimelineScene() {
         const sourceRead = async () => (await read(sourceRef, ['video_edit.source.time_us', 'video_edit.source.presented_time_us', 'video_edit.source.in_us', 'video_edit.source.out_us', 'video_edit.source.playing', 'video_edit.source.playback_direction', 'video_edit.source.status', 'video_edit.source.error'])).data.properties
         evidence.sourceRange = await sourceRead(); assert.equal(evidence.sourceRange['video_edit.source.in_us'], 1000000); assert.equal(evidence.sourceRange['video_edit.source.out_us'], 2016667)
         const positionBeforeInput = await page.getByRole('slider', { name: '剪辑时间定位' }).getAttribute('aria-valuenow')
-        await page.getByLabel('源素材定位秒', { exact: true }).press('ArrowLeft')
+        await page.getByRole('spinbutton', { name: '源时间码', exact: true }).press('ArrowLeft')
         assert.equal(await page.getByRole('slider', { name: '剪辑时间定位' }).getAttribute('aria-valuenow'), positionBeforeInput)
         await sourceHost.focus(); await page.waitForFunction(() => document.querySelector('[data-video-edit-source-status]')?.dataset.videoEditSourceStatus === 'ready')
         // 2.4 交接（3.5 修正，不放宽）：原生计划 104689d0 起源监视器画面是 canvas，没有 <video muted>。“反向静音”按当前契约证明：

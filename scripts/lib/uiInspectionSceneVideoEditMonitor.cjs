@@ -39,6 +39,16 @@ async function saved(page, file, matches) {
   }
   assert.fail(`工程未静默保存预期监视器内容：${JSON.stringify(current)}`)
 }
+/**
+ * 源监视器按秒精确定位：时间码读数与节目监视器同一种（单击进入输入），写“秒数s”按微秒定位、不按帧取整。
+ * 原来的“源素材定位秒”数字框已并进这个读数。
+ */
+async function seekSourceSeconds(page, seconds) {
+  await page.getByRole('spinbutton', { name: '源时间码', exact: true }).click()
+  const field = page.getByLabel('源时间码（输入时间）', { exact: true })
+  await field.fill(`${seconds}s`); await field.press('Enter')
+}
+
 async function presented(page, frame) {
   await page.waitForFunction(frame => {
     const canvas = document.querySelector('canvas[aria-label="剪辑画面"]')
@@ -574,4 +584,4 @@ function createVideoEditMonitorScene() {
     },
   }
 }
-module.exports = { createVideoEditMonitorScene, dialogs, saved, presented, png, pixelDifference, mediaProbe, trackBanks, quantile }
+module.exports = { createVideoEditMonitorScene, dialogs, saved, presented, png, pixelDifference, mediaProbe, trackBanks, quantile, seekSourceSeconds }

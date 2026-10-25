@@ -3,12 +3,6 @@ export function videoEditFrameTimecode(frame: number, fps: number): string {
   const nominal = Math.round(fps); const seconds = Math.floor(frame / nominal)
   return [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60, frame % nominal].map(value => String(value).padStart(2, '0')).join(':')
 }
-/** Source PTS is not inferred from nominal frame rate, including VFR material. */
-export function videoEditSourceTimecode(timeUs: number): string {
-  const seconds = Math.floor(timeUs / 1e6)
-  return `${[Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60].map(value => String(value).padStart(2, '0')).join(':')}.${String(timeUs % 1e6).padStart(6, '0')}`
-}
-
 /** 帧号读数（时间码显示切到“帧”时用）。 */
 export function videoEditFrameCount(frame: number): string {
   return String(Math.max(0, Math.round(frame)))
@@ -43,4 +37,15 @@ export function parseVideoEditTimecodeInput(text: string, fps: number, current: 
   }
   const target = sign === '+' ? current + frames : sign === '-' ? current - frames : frames
   return Math.max(0, Math.round(target))
+}
+
+/**
+ * 按秒输入（时间码输入框里写“2.25s”或“2.25 秒”）：精确到微秒定位，不按帧取整。源监视器检查解码精度、
+ * 想跳到某个秒数时用；纯数字仍按时间码解释（1230 = 12 秒 30 帧）。不是秒数写法时返回 null。
+ */
+export function parseVideoEditSecondsInput(text: string): number | null {
+  const match = /^(\d+(?:[.。]\d+)?)\s*(?:s|秒)$/i.exec(text.trim())
+  if (!match) return null
+  const seconds = Number(match[1].replace('。', '.'))
+  return Number.isFinite(seconds) ? seconds : null
 }

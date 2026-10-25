@@ -1,3 +1,4 @@
+const { seekSourceSeconds } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const assert = require('node:assert/strict')
 const { VIDEO_EDIT_TRACK_HEADER_WIDTH } = require('./uiInspectionVideoEditGeometry.cjs')
 const fs = require('node:fs')
@@ -47,8 +48,7 @@ async function renameItem(page, id, name, tags, bin) {
  * media elements and their `currentTime`.
  */
 async function sourceSeek(page, seconds, native, frameSeconds = 0) {
-  const field = page.getByLabel('源素材定位秒', { exact: true })
-  await field.fill(String(seconds)); await field.press('Enter')
+  await seekSourceSeconds(page, seconds)
   await page.waitForFunction(({ time, native, frame }) => {
     const media = document.querySelector('[data-video-edit-source-media]')
     if (document.querySelector('[data-video-edit-source-status]')?.dataset.videoEditSourceStatus !== 'ready' || !media) return false

@@ -2,19 +2,21 @@ import { getVideoEditProxyPreference, setVideoEditProxyPreference, videoEditProx
 import { ICON_VIDEO_EDIT_PROXY } from '@/core/theme/icons'
 import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { PanelTrigger, UiEmpty, UiError, UiIconButton, UiInput, UiOptionButton, UiOverflowRow, UiRangeInput } from '@/components/ui'
+import { PanelTrigger, UiEmpty, UiError, UiIconButton, UiOptionButton, UiOverflowRow, UiRangeInput } from '@/components/ui'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { ArrowRightFromLine, ArrowRightToLine, AudioLines, BetweenVerticalStart, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser, FastForward, Film, Link2, MoreHorizontal, Pause, Play, Replace, Rewind, Square, X, type LucideIcon } from 'lucide-react'
 import AudioPlayer from '@/components/AudioPlayer'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
 import type { VideoEditInstance } from '../application/videoEditService'
-import { requireVideoEditInstance } from '../application/videoEditService'
+import { getActiveVideoEditSequence, requireVideoEditInstance } from '../application/videoEditService'
 import { closeVideoEditSource, observeVideoEditSource, readVideoEditSource, registerVideoEditSourcePresenter, subscribeVideoEditSource, updateVideoEditSource, videoEditSourceRevision } from '../application/videoEditSource'
 import { createVideoEditSourcePresenter } from './videoEditSourcePresenter'
 import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from '../application/videoEditCommands'
 import type { VideoEditCommandId } from '@/core/videoEdit/commands'
-import { videoEditSourceTimecode } from '@/core/videoEdit/timecode'
+import { videoEditFps } from '@/core/videoEdit/time'
+import { VideoEditTimecodeReadout } from '../timeline/VideoEditTimelineTransport'
+import { timelineTimecode } from '../timeline/timelineGeometry'
 import { videoEditItemAudioLayout } from '@/core/videoEdit/audioChannels'
 import { writeVideoEditSourceDrag } from '../application/videoEditSourceRange'
 import type { VideoEditAudioLevel } from '../engine/videoEditAudioMeter'
@@ -50,7 +52,6 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
   const state = readVideoEditSource(projectId)
   const item = instance.document.items.find(item => item.id === state.itemId)
   const media = instance.document.media.find(media => media.id === item?.mediaId)
-  const [draftTime, setDraftTime] = useState('0')
   const [levels, setLevels] = useState<VideoEditAudioLevel[]>([])
   const pictured = !!media && media.kind !== 'audio'
   // 显示比例与节目监视器同一套（滚轮无极缩放、中键平移、下拉等级）；换素材回到“适合”
@@ -64,8 +65,10 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
   const hasWave = !!media && (media.kind === 'audio' || media.kind === 'video' && media.hasAudio === true) && waveEndUs > waveStartUs
   const waveRef = hasWave ? { source: media.path, ...(media.sourceRevision ? { sourceRevision: media.sourceRevision } : {}), channels: 2 as const } : null
   const waveform = useWaveformData(waveRef, 'full', visible)
-  const editingTime = useRef(false)
-  useEffect(() => { if (!editingTime.current) setDraftTime((state.timeUs / 1e6).toFixed(6)) }, [state.timeUs])
+  // 读数与节目监视器同一种：按素材自己的帧率显示时间码（没有帧率的音频按当前序列）
+  const sourceFps = media?.frameRate ? videoEditFps(media.frameRate) : getActiveVideoEditSequence(instance).fps
+  const sourceFrame = (timeUs: number): number => Math.max(0, Math.floor(timeUs * sourceFps / 1e6 + 1e-6))
+  const sourceTimecode = (timeUs: number): string => timelineTimecode(sourceFrame(timeUs), sourceFps)
   const run = (values: Parameters<typeof updateVideoEditSource>[1]): void => { void updateVideoEditSource(projectId, values).catch(error => {
     if (error instanceof Error && /请求已被更新|预览已关闭/.test(error.message)) return
     onError(error)
@@ -153,24 +156,25 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
       {state.itemId && (state.status === 'loading' || state.playing && state.playbackDirection === -1) && <span className="pointer-events-none absolute left-2 top-2 rounded-md bg-media-scrim px-2 py-1 text-xs text-on-media">{state.status === 'loading' ? '正在打开源素材…' : '正在反向静音浏览'}</span>}
     </div>
     {state.itemId && <div className="flex shrink-0 flex-col gap-1 px-3 py-2">
-      {/* 面板窄时名称留在第一行，定位秒与时间码整组换到下一行（再窄两者各占一行），读数不被挤出面板 */}
+      {/* 时间码与节目监视器同一种读数：拖动定位，单击输入时间码或“2.25s”。面板窄时名称留在第一行、时间码换到下一行 */}
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
         <span className="min-w-24 flex-1 basis-24 truncate text-xs text-text2" title={item?.name}>{item?.name}</span>
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-        {media?.kind !== 'image' && <div className="w-24 shrink-0"><UiInput aria-label="源素材定位秒" type="number" size="sm" min={0} max={media?.durationSeconds ?? 0} step={0.000001} className="tabular-nums" value={draftTime} onFocus={() => { editingTime.current = true }} onChange={event => setDraftTime(event.target.value)} onBlur={() => { editingTime.current = false; run({ timeUs: Math.round(Number(draftTime) * 1e6), playing: false }) }} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur() } }} /></div>}
-        <span aria-label="源实际时间码" className="shrink-0 px-1 font-mono text-xs tabular-nums text-text3">{videoEditSourceTimecode(media?.kind === 'video' ? state.presentedTimeUs : state.timeUs)}</span>
-        </div>
+        {media?.kind !== 'image' && <VideoEditTimecodeReadout label="源时间码" className="px-1 text-xs"
+          frame={sourceFrame(media?.kind === 'video' ? state.presentedTimeUs : state.timeUs)} fps={sourceFps}
+          maxFrame={sourceFrame(sourceDurationUs)}
+          onSeek={(frame, scrubbing) => seek(frame / sourceFps, scrubbing)}
+          onSeekSeconds={seconds => run({ timeUs: Math.round(seconds * 1e6), playing: false })} />}
       </div>
       {media?.kind === 'video' && <div className="relative pb-1.5" data-video-edit-source-progress>
         <UiRangeInput aria-label="源素材进度" min={0} max={sourceDurationUs} step={1} value={state.timeUs} onChange={event => seek(Number(event.target.value) / 1e6)} />
         <VideoEditSourceInOut inUs={state.inUs} outUs={state.outUs} durationUs={sourceDurationUs} playheadUs={state.timeUs} onChange={run} />
       </div>}
       {hasWave && waveform.data && <div className="pointer-events-none flex w-full flex-col gap-0.5" data-video-edit-source-waveform>
-        <span className="font-mono text-2xs tabular-nums text-text3">{videoEditSourceTimecode(waveStartUs)} — {videoEditSourceTimecode(waveEndUs)}</span>
+        <span className="font-mono text-2xs tabular-nums text-text3">{sourceTimecode(waveStartUs)} — {sourceTimecode(waveEndUs)}</span>
         <WaveformView waveform={waveform} startSeconds={waveStartUs / 1e6} endSeconds={waveEndUs / 1e6} playedSeconds={state.timeUs / 1e6} height={20 * waveform.data.pyramid.channelCount} />
       </div>}
       {hasWave && waveform.status === 'error' && <UiError size="xs" align="start" title={t('surfaceGrammar.waveformFailed')} message={t('surfaceGrammar.waveformRetryHint')} onRetry={() => { if (waveRef) retryWaveform(waveRef, 'full') }} />}
-      {media?.kind !== 'image' && <span className="font-mono text-2xs tabular-nums text-text3">入点 {state.inUs === null ? '未设置' : videoEditSourceTimecode(state.inUs)} · 出点 {state.outUs === null ? '未设置' : videoEditSourceTimecode(state.outUs)}</span>}
+      {media?.kind !== 'image' && <span className="font-mono text-2xs tabular-nums text-text3">入点 {state.inUs === null ? '未设置' : sourceTimecode(state.inUs)} · 出点 {state.outUs === null ? '未设置' : sourceTimecode(state.outUs)}</span>}
     </div>}
     {/* 与节目监视器同一种单行控制条：窄面板下按钮从后往前收进“更多”，不再折成多行压掉画面（重要记录 020，960 宽尺寸扫描发现） */}
     {state.itemId && <div className="flex min-h-10 shrink-0 items-center gap-x-1 whitespace-nowrap border-t border-line px-2 py-1" role="toolbar" aria-label="源监视器控制">
