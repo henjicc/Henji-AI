@@ -135,10 +135,12 @@ export const EDGE_HIT_PX = 6
 const EDGE_SNAP_PX = 8
 
 /** 拖到的位置：靠近别的区间边缘或这一段的另一边时吸附过去。 */
-export function snapCutEdge(frame: number, edge: CutEdge, ranges: ReadonlyArray<{ start: number; end: number; mode: 'delete' | 'mute' | 'pending' }>, framesPerPixel: number): number {
+export function snapCutEdge(frame: number, edge: CutEdge, ranges: ReadonlyArray<{ start: number; end: number; mode: 'delete' | 'mute' | 'pending' }>, framesPerPixel: number, extra: readonly number[] = []): number {
   const own = edge.side === 'start' ? edge.start : edge.end
+  const reach = EDGE_SNAP_PX * framesPerPixel
   const candidates = [edge.side === 'start' ? edge.end : edge.start,
-    ...ranges.filter(range => range.mode !== 'pending').flatMap(range => [range.start, range.end]).filter(value => value !== own)]
+    ...ranges.filter(range => range.mode !== 'pending').flatMap(range => [range.start, range.end]).filter(value => value !== own),
+    ...extra.filter(value => Math.abs(value - frame) <= reach)]
   let best = frame, distance = EDGE_SNAP_PX * framesPerPixel
   for (const candidate of candidates) if (Math.abs(candidate - frame) <= distance) { best = candidate; distance = Math.abs(candidate - frame) }
   return best

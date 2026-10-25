@@ -65,6 +65,11 @@ export function AudioEditTranscriptPanel() {
     return next
   }, [transcript, project.source.sampleRate])
   const rowByBlock = useMemo(() => new Map(rows.flatMap((row, index) => row.map((block) => [block.id, index] as const))), [rows])
+  // 原稿 / 校对后：校对过文字（改过识别出来的字）才出现切换；原稿只换显示的字，操作照常
+  const originals = useMemo(() => new Map((project.editBaseline?.transcript ?? []).map((block) => [block.id, block.text])), [project.editBaseline])
+  const corrected = useMemo(() => transcript.some((block) => originals.has(block.id) && originals.get(block.id) !== block.text), [transcript, originals])
+  const [textView, setTextView] = useState<'original' | 'corrected'>('corrected')
+  const showOriginal = corrected && textView === 'original'
   const activeRow = activeBlockId ? rowByBlock.get(activeBlockId) ?? -1 : -1
 
   useEffect(() => {
@@ -90,7 +95,10 @@ export function AudioEditTranscriptPanel() {
   return <div className="relative flex h-full min-h-0 flex-col bg-panel" data-audio-edit-panel="transcript">
     {search.isOpen && <div className="shrink-0 border-b border-gap px-3 py-2"><AudioEditFindReplace search={search} disabled={disabled} /></div>}
     {/* 文字稿自己的显示设置（字号、留白、波形上方字幕）就放在文字稿面板里 */}
-    {!search.isOpen && <UiIconButton size="sm" className="absolute right-2 top-2 z-raised" tooltip="文字稿显示设置" aria-label="文字稿显示设置" onClick={workspace.openViewSettings}><SettingsIcon /></UiIconButton>}
+    {!search.isOpen && <div className="absolute right-2 top-2 z-raised flex items-center gap-1">
+      {corrected && <UiSegmented ariaLabel="文字稿显示" size="sm" value={textView} onChange={setTextView} options={[{ value: 'original', label: '原稿' }, { value: 'corrected', label: '校对后' }]} />}
+      <UiIconButton size="sm" tooltip="文字稿显示设置" aria-label="文字稿显示设置" onClick={workspace.openViewSettings}><SettingsIcon /></UiIconButton>
+    </div>}
     <div ref={containerRef} className="min-h-0 flex-1" style={{ paddingLeft: viewSettings.sidePadding, paddingRight: viewSettings.sidePadding, fontSize: viewSettings.textSize }}
       onPointerDown={pause} onWheel={pause} onTouchMove={pause}>
       {transcript.length === 0 ? (
@@ -126,7 +134,7 @@ export function AudioEditTranscriptPanel() {
                       }}
                       title="单击选中，双击编辑，右键删除声音">
                       {block.locked ? <Lock role="img" aria-label="已锁定" className={`${UI_ICON_SIZE_CLASS.xs} mr-0.5 inline align-baseline text-text3`} /> : null}
-                      <AudioEditMatchedText block={block} search={search} />
+                      <AudioEditMatchedText block={showOriginal ? { ...block, text: originals.get(block.id) ?? block.text } : block} search={search} />
                     </UiTextToken>
                   </Fragment>
                 })}

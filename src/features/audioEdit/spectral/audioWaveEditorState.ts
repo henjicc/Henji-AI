@@ -3,6 +3,8 @@ import type { AudioEditGainRegion, AudioEditRepair } from '@/core/audioEdit/regi
 import type { AudioEditProjectDocument, AudioEditRange } from '@/core/audioEdit/types'
 import { repairAudioEditRegion, setAudioEditRegions } from '../application/audioEditRegions'
 import type { WaveformViewport } from '../waveformViewport'
+import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
+import { readAudioEditViewMemory, writeAudioEditViewMemory } from '../workspace/audioEditViewMemory'
 import type { AudioEditorDisplay } from './AudioSpectralEditor'
 import { strokeBounds, type AudioBrushStroke, type AudioEditorTool, type AudioSpectralSelection } from './spectralEditorModel'
 
@@ -20,7 +22,13 @@ export interface AudioWaveEditorState {
   setView: (view: WaveformViewport) => void
   spectralSelection: AudioSpectralSelection | null
   setSpectralSelection: (selection: AudioSpectralSelection | null) => void
+  /** 拖区间边缘时吸附到字声音真正的起止（默认关） */
+  snapToSpeech: boolean
+  setSnapToSpeech: (value: boolean) => void
 }
+
+const SNAP_TO_SPEECH_KEY = 'henji.audioEdit.snapToSpeech'
+const readSnapToSpeech = (): boolean => { try { return localStorage.getItem(SNAP_TO_SPEECH_KEY) === '1' } catch { return false } }
 
 export function useAudioWaveEditor(project: AudioEditProjectDocument | undefined): AudioWaveEditorState {
   const duration = project?.source.durationFrames ?? 0
@@ -29,8 +37,32 @@ export function useAudioWaveEditor(project: AudioEditProjectDocument | undefined
   const [brushPixels, setBrushPixels] = React.useState(12)
   const [view, setView] = React.useState<WaveformViewport>({ start: 0, end: duration })
   const [spectralSelection, setSpectralSelection] = React.useState<AudioSpectralSelection | null>(null)
-  React.useEffect(() => { setView({ start: 0, end: duration || (project?.source.sampleRate ?? 48000) * 10 }); setSpectralSelection(null) }, [project?.id, duration, project?.source.sampleRate])
-  return { tool, setTool, display, setDisplay, brushPixels, setBrushPixels, view, setView, spectralSelection, setSpectralSelection }
+  const [snapToSpeech, setSnapToSpeechState] = React.useState(readSnapToSpeech)
+  const setSnapToSpeech = React.useCallback((value: boolean) => {
+    setSnapToSpeechState(value)
+    try { localStorage.setItem(SNAP_TO_SPEECH_KEY, value ? '1' : '0') } catch { /* 记不住时只影响下次打开的默认值 */ }
+  }, [])
+  const projectId = project?.id
+  // 打开时回到上次停的缩放范围（播放头由试听引擎按同一份记录恢复）
+  React.useEffect(() => {
+    const remembered = projectId ? readAudioEditViewMemory(projectId, duration) : null
+    setView(remembered ? { start: remembered.start, end: remembered.end } : { start: 0, end: duration || (project?.source.sampleRate ?? 48000) * 10 })
+    setSpectralSelection(null)
+  }, [projectId, duration, project?.source.sampleRate])
+  // 缩放与播放头一变就记下（停稳后再写），下次打开从这里接着看
+  const viewRef = React.useRef(view)
+  viewRef.current = view
+  const save = React.useRef<() => void>(() => undefined)
+  React.useEffect(() => {
+    if (!projectId) return
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const flush = (): void => { timer = undefined; writeAudioEditViewMemory(projectId, { ...viewRef.current, playhead: useAudioEditPlaybackStore.getState().sourceFrame }) }
+    save.current = () => { if (timer) clearTimeout(timer); timer = setTimeout(flush, 400) }
+    const unsubscribe = useAudioEditPlaybackStore.subscribe((state, previous) => { if (state.sourceFrame !== previous.sourceFrame && !state.playing) save.current() })
+    return () => { unsubscribe(); if (timer) { clearTimeout(timer); flush() } save.current = () => undefined }
+  }, [projectId])
+  React.useEffect(() => { save.current() }, [view])
+  return { tool, setTool, display, setDisplay, brushPixels, setBrushPixels, view, setView, spectralSelection, setSpectralSelection, snapToSpeech, setSnapToSpeech }
 }
 
 /** 选区上的编辑动作：人和助手走同一组应用层函数（修复、区间音量都进同一撤销栈）。 */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { amplitudeTicks, brushRadius, formatTimecode, frameAtX, hzAtY, normalizeSpectralSelection, normalizeTimeSelection, strokeBounds, timeTickStep, xAtFrame, yAtHz, zoomAmplitude, zoomFrequency, zoomTime } from './spectralEditorModel'
+import { amplitudeTicks, brushRadius, cutEdgeEdit, formatTimecode, snapCutEdge, frameAtX, hzAtY, normalizeSpectralSelection, normalizeTimeSelection, strokeBounds, timeTickStep, xAtFrame, yAtHz, zoomAmplitude, zoomFrequency, zoomTime } from './spectralEditorModel'
 
 const view = { start: 1000, end: 3000 }
 const frequency = { minHz: 20, maxHz: 20000, scale: 'log' as const }
@@ -55,5 +55,22 @@ describe('音频编辑区交互模型', () => {
     expect(timeTickStep({ start: 0, end: 48000 * 60 }, 600, 48000)).toBe(48000 * 10)
     expect(formatTimecode(48000 * 61.5, 48000)).toBe('1:01.500')
     expect(formatTimecode(48000 * 61.5, 48000, 48000 * 10)).toBe('1:02')
+  })
+})
+
+describe('区间边缘拖动', () => {
+  const edge = { mode: 'mute' as const, start: 1000, end: 2000, side: 'end' as const }
+  it('吸附到附近的区间边缘、另一边或额外的吸附点（如字声音的起止），太远不吸', () => {
+    const ranges = [{ start: 1000, end: 2000, mode: 'mute' as const }, { start: 2600, end: 3000, mode: 'delete' as const }]
+    expect(snapCutEdge(2590, edge, ranges, 10)).toBe(2600)
+    expect(snapCutEdge(1050, edge, ranges, 10)).toBe(1000)
+    expect(snapCutEdge(2300, edge, ranges, 10, [2340])).toBe(2340)
+    expect(snapCutEdge(2300, edge, ranges, 10, [2500])).toBe(2300)
+  })
+  it('松手：外拖扩、内拖撤、拖到另一边撤整段', () => {
+    expect(cutEdgeEdit(edge, 2500)).toEqual({ range: { start: 2000, end: 2500 }, mode: 'mute', action: 'add' })
+    expect(cutEdgeEdit(edge, 1500)).toEqual({ range: { start: 1500, end: 2000 }, mode: 'mute', action: 'remove' })
+    expect(cutEdgeEdit(edge, 900)).toEqual({ range: { start: 1000, end: 2000 }, mode: 'mute', action: 'remove' })
+    expect(cutEdgeEdit(edge, 2000)).toBeNull()
   })
 })

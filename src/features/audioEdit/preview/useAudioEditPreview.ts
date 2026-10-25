@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { readAudioEditViewMemory } from '../workspace/audioEditViewMemory'
 
 import { buildProjectAudioEditTimeline, editedDurationFrames, findTranscriptBlockForPlayback, nextRetainedSourceFrame, sourceFrameToOutputFrame } from '@/core/audioEdit/timeline'
 import { compileAudioEditXmlTimeline } from '@/core/audioEdit/xml'
@@ -156,11 +157,14 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
   const projectId = project?.id
   const sampleRate = project?.source.sampleRate
   const channelCount = project?.source.channels
+  const durationRef = useRef(project?.source.durationFrames ?? 0)
+  durationRef.current = project?.source.durationFrames ?? 0
   const openedProject = useRef<string>()
 
   useEffect(() => {
     if (!projectId || !sampleRate || !channelCount) return
-    if (openedProject.current !== projectId) useAudioEditPlaybackStore.getState().updatePosition(0, 0, null)
+    // 打开另一份口播时回到它上次停的位置（没有记录就从头）
+    if (openedProject.current !== projectId) useAudioEditPlaybackStore.getState().updatePosition(readAudioEditViewMemory(projectId, durationRef.current)?.playhead ?? 0, 0, null)
     openedProject.current = projectId
     let disposed = false
     useAudioEditPlaybackStore.getState().setMode('edited')

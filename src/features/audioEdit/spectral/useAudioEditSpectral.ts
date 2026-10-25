@@ -77,7 +77,8 @@ export class SpectralTileScheduler {
 
   /** 后台整文件计算推进后，把落后于进度的部分块标为过期，重新取。 */
   progress(progress: AudioEditSpectralProgress): void {
-    if (progress.projectId !== this.target.projectId || progress.mode !== this.target.mode || (progress.mode === 'edited' && progress.revision !== this.target.revision)) return
+    // 只认不早于声音内容变化时的版本：之后只改了删除 / 静音（声音没变）时宿主回的新版本照常用
+    if (progress.projectId !== this.target.projectId || progress.mode !== this.target.mode || (progress.mode === 'edited' && progress.revision < this.target.revision)) return
     this.latest = progress
     for (const need of this.needs) {
       const tile = this.store.get(need.level, need.tile)
@@ -131,7 +132,7 @@ export class SpectralTileScheduler {
     this.stale.delete(key)
     void this.client.fetch({ projectId: this.target.projectId, mode: this.target.mode, level: need.level, tile: need.tile, requestId }).then(tile => {
       if (this.disposed || this.inflight.get(key)?.requestId !== requestId) return
-      if (tile.mode !== this.target.mode || (tile.mode === 'edited' && tile.revision !== this.target.revision)) return
+      if (tile.mode !== this.target.mode || (tile.mode === 'edited' && tile.revision < this.target.revision)) return
       this.failures.delete(key); this.retryAt.delete(key)
       this.store.set(tile)
       this.markIfBehind(tile)
@@ -149,6 +150,7 @@ export class SpectralTileScheduler {
   }
 }
 
+/** revision 是声音内容最后一次改变（修复、区间音量、效果）时的作品版本；只改删除、静音时不变，频谱不重取。 */
 export function useAudioEditSpectral(client: SpectralTileClient, projectId: string, view: WaveformViewport, columns: number, duration: number, mode: 'source' | 'edited', revision: number, sourceKey = ''): AudioEditSpectralState {
   const [attempt, setAttempt] = useState(0)
   const [version, setVersion] = useState(0)

@@ -82,6 +82,16 @@ describe('频谱取块调度', () => {
     scheduler.dispose()
   })
 
+  it('只改删除、静音后宿主回的新版本照常用，频谱不重取', async () => {
+    const { client, pending } = fakeClient()
+    const store = new SpectralTileStore()
+    const scheduler = new SpectralTileScheduler(client, store, { projectId: 'p', mode: 'edited', revision: 2 }, () => {}, () => {})
+    scheduler.setNeeds([{ level: 0, tile: 0 }])
+    pending[0].resolve(tileFor(pending[0].request, { revision: 5 }))
+    await flush()
+    expect(store.version).toBe(1)
+    scheduler.dispose()
+  })
   it('过期版本的结果丢弃，连续失败才报错', async () => {
     const { client, pending } = fakeClient()
     const store = new SpectralTileStore()

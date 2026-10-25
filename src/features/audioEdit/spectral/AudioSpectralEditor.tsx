@@ -55,6 +55,8 @@ export interface AudioSpectralEditorProps {
    * 拖到和另一边重合就撤掉整段。不传则区间只显示、不能拖。
    */
   onCutEdgeEdit?: (edit: { range: { start: number; end: number }; mode: 'delete' | 'mute'; action: 'add' | 'remove' }) => void
+  /** 拖边缘时额外吸附的位置（如字声音的起止），源采样帧 */
+  snapFrames?: readonly number[]
   /** 已有的修复记录：频谱上画出轮廓，方便找到改过的地方。 */
   repairs: readonly AudioEditorRegion[]
   /** 右键编辑区：宿主弹出针对选区的菜单。 */
@@ -297,7 +299,7 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
       current.moved ||= Math.abs(event.clientX - current.x) > CLICK_SLOP_PX
       if (!current.moved) return
       const raw = Math.max(0, Math.min(durationFrames, Math.round(frameAtX(x, rect.width, view))))
-      current.frame = snapCutEdge(raw, current.edge, props.cutRanges, (view.end - view.start) / Math.max(1, rect.width))
+      current.frame = snapCutEdge(raw, current.edge, props.cutRanges, (view.end - view.start) / Math.max(1, rect.width), props.snapFrames)
       setEdgePreview({ edge: current.edge, frame: current.frame }); return
     }
     if (current.kind === 'pan') { viewport.request(panTime(current.view, -(event.clientX - current.x) / Math.max(1, rect.width) * (current.view.end - current.view.start), durationFrames)); return }

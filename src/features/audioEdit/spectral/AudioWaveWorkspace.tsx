@@ -2,7 +2,7 @@ import React from 'react'
 import { useStore } from 'zustand'
 import { getAudioCaptureSession } from '@/features/audioCapture'
 import { AudioCapturePreview } from './AudioCapturePreview'
-import { Brush, Hand, MoveLeft, MoveRight, RotateCcw, SquareDashed, TextCursor, Trash2, Volume1, VolumeX, Wand2 } from 'lucide-react'
+import { Brush, Hand, Magnet, MoveLeft, MoveRight, RotateCcw, SquareDashed, TextCursor, Trash2, Volume1, VolumeX, Wand2 } from 'lucide-react'
 import ContextMenu from '@/components/ContextMenu'
 import { PanelTrigger, UiButton, UiFormRow, UiIconButton, UiRangeInput, UiSegmented, UiTextToken } from '@/components/ui'
 import { useContextMenu } from '@/hooks/useContextMenu'
@@ -12,6 +12,8 @@ import { UI_ICON_SIZE } from '@/core/theme/icons'
 import type { AudioEditRange } from '@/core/audioEdit/types'
 import { buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
 import { buildProjectAudioEditTimeline } from '@/core/audioEdit/timeline'
+import { DEFAULT_AUDIO_EDIT_SETTINGS } from '@/core/audioEdit/edits'
+import { audioEditSpeechEdges } from '@/core/audioEdit/gaps'
 import { useWaveformData } from '@/hooks/useWaveformData'
 import { getPlatform } from '@/platform/runtime'
 import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
@@ -49,6 +51,7 @@ export function AudioWaveToolbar({ editor, selection, disabled, actions, onEditS
     </div>
     <UiSegmented ariaLabel="显示" size="sm" value={editor.display} onChange={editor.setDisplay}
       options={[{ value: 'both', label: '都显示' }, { value: 'waveform', label: '波形' }, { value: 'spectrum', label: '频谱' }]} />
+    <UiIconButton size="sm" on={editor.snapToSpeech} aria-pressed={editor.snapToSpeech} aria-label="吸附到字的起止" tooltip="拖删除、静音区间的边缘时，吸附到字声音真正开始、结束的位置" onClick={() => editor.setSnapToSpeech(!editor.snapToSpeech)}><Magnet /></UiIconButton>
     {editor.tool === 'brush' && <label className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-text2">
       画笔
       <UiRangeInput className="!w-24 shrink-0" aria-label="画笔大小" min={4} max={48} step={1} value={editor.brushPixels} onChange={event => editor.setBrushPixels(Number(event.target.value))} />
@@ -163,7 +166,11 @@ export function AudioWaveWorkspace() {
   const placement = recording ? capture.store.getState().placement : null
   const insertion = placement ? { start: placement.startFrame, frames: placement.endFrame > placement.startFrame ? Math.min(liveFrames, placement.endFrame - placement.startFrame) : liveFrames, replace: placement.endFrame > placement.startFrame } : undefined
   const spectralView = insertion && !insertion.replace ? { start: Math.max(0, editor.view.start - insertion.frames), end: editor.view.end } : editor.view
-  const spectrogram = useAudioEditSpectral(audioEditSpectralClient, project.id, spectralView, columns, duration, edited ? 'edited' : 'source', project.revision, JSON.stringify([project.source.audioPath, project.source.identity]))
+  // 频谱只跟声音内容走：删除、静音不改声音，作品版本变了也沿用已算好的频谱
+  const audioContentKey = JSON.stringify([project.repairs?.filter(repair => repair.enabled), project.gainRegions?.filter(region => region.enabled), project.vstEnabled, project.processorChain])
+  const audioRevision = React.useRef({ key: audioContentKey, revision: project.revision })
+  if (audioRevision.current.key !== audioContentKey) audioRevision.current = { key: audioContentKey, revision: project.revision }
+  const spectrogram = useAudioEditSpectral(audioEditSpectralClient, project.id, spectralView, columns, duration, edited ? 'edited' : 'source', audioRevision.current.revision, JSON.stringify([project.source.audioPath, project.source.identity]))
   // 标记以剪后时间线为准：文字稿删掉的词和波形上删除的区间都是“删除”，相邻的合并成一段；静音按剪后片段的静音标记；停顿预览是“待处理”。
   const spans = React.useMemo(() => buildProjectAudioEditTimeline(project), [project])
   const pending = workspace.silencePreview.ranges
@@ -192,6 +199,29 @@ export function AudioWaveWorkspace() {
     const start = Math.max(0, Math.min(duration - length, frame - length * 0.1))
     setView({ start, end: start + length })
   }), [duration, setView])
+  // 吸附开着时取一次逐帧电平（与停顿压缩同一分析，有缓存），算出字声音的起止点
+  const [speechEdges, setSpeechEdges] = React.useState<number[]>([])
+  const batchSettings = React.useRef(project.batchSettings)
+  batchSettings.current = project.batchSettings
+  React.useEffect(() => {
+    setSpeechEdges([])
+    if (!editor.snapToSpeech || !duration) return
+    let cancelled = false
+    void getPlatform().audioEdit.detectSilence({ projectId: project.id, settings: batchSettings.current ?? DEFAULT_AUDIO_EDIT_SETTINGS, requestId: crypto.randomUUID(), energy: { levels: true } })
+      .then(result => { if (!cancelled && result.energy?.levels) setSpeechEdges(audioEditSpeechEdges({ resolutionMs: result.energy.resolutionMs, wideDb: result.energy.levels.wideDb }, rate)) }, () => undefined)
+    return () => { cancelled = true }
+  }, [editor.snapToSpeech, project.id, duration, rate])
+  // 刚打开、还没点过任何地方时按空格就能播放：焦点还在页面本身时也交给试听
+  const togglePlayback = workspace.togglePlayback
+  React.useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key !== ' ' || event.target !== document.body || recording || disabled || event.ctrlKey || event.metaKey || event.altKey) return
+      event.preventDefault(); void togglePlayback()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [togglePlayback, recording, disabled])
+  React.useEffect(() => { if (!document.activeElement || document.activeElement === document.body) host.current?.focus({ preventScroll: true }) }, [project.id])
   const iconSize = UI_ICON_SIZE.md
   return <div ref={host} className="flex h-full min-h-0 flex-col outline-none" data-spectrogram-mode={edited ? 'edited' : 'source'} data-audio-edit-panel="editor" onKeyDown={(event) => {
     if (event.target instanceof HTMLElement && event.target.closest('input,textarea,[contenteditable="true"]')) return
@@ -220,6 +250,7 @@ export function AudioWaveWorkspace() {
         onSelectionChange={(next) => { if (!recording) onSelection(next && next.end > next.start ? { startFrame: next.start, endFrame: next.end } : null) }}
         spectralSelection={editor.spectralSelection} onSpectralSelectionChange={editor.setSpectralSelection}
         onBrushStroke={stroke => { if (!disabled) actions.healStroke(stroke) }} cutRanges={visibleCuts} repairs={recording ? [] : repairs}
+        {...(speechEdges.length ? { snapFrames: speechEdges } : {})}
         {...(recording || disabled ? {} : { onCutEdgeEdit: ({ range: edited, mode, action }: { range: { start: number; end: number }; mode: 'delete' | 'mute'; action: 'add' | 'remove' }) => workspace.adjustCutRange({ startFrame: edited.start, endFrame: edited.end }, mode, action) })}
         {...(project.transcript.length && (project.viewSettings?.timelineCaptions ?? true) ? { captionLane: <CaptionLane view={editor.view} /> } : {})}
         onContextMenu={(event) => menu.showMenu(event, [
