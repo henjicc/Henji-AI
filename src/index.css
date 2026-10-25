@@ -29,10 +29,10 @@
   --panel-rgb: 33 33 33;
   --raised: #272727;
   --raised-rgb: 39 39 39;
-  --overlay: #272727;
-  --overlay-rgb: 39 39 39;
-  --overlay-hover: #313131;
-  --overlay-hover-rgb: 49 49 49;
+  --overlay: #242424;
+  --overlay-rgb: 36 36 36;
+  --overlay-hover: #2B2B2B;
+  --overlay-hover-rgb: 43 43 43;
   --segment-selected: #393939;
   --segment-selected-rgb: 57 57 57;
   --control: #2B2B2B;
@@ -122,7 +122,7 @@
   --wave-cut: #773733;
   --wave-cut-rgb: 119 55 51;
   --glass-tint: rgba(0,0,0,0.72);
-  --glass-overlay-tint: rgba(39,39,39,0.92);
+  --glass-overlay-tint: rgba(36,36,36,0.92);
   --glass-edge: rgba(255,255,255,0.16);
   --glass-sheen: rgba(255,255,255,0.1);
   --glass-hover: rgba(255,255,255,0.14);
@@ -332,6 +332,25 @@
     /* 浮起来的玻璃用浮层色做底（比面板高一级），不用贴在画面上的黑纱，否则压在黑色画面上就是一块黑。 */
     background-color: var(--ui-glass-overlay-tint);
     box-shadow: inset 0 1px 0 0 var(--ui-glass-sheen), var(--shadow-overlay);
+  }
+
+  /*
+   * 浮起来的浮层（开毛玻璃时的实底浮层、玻璃浮层与玻璃面板）几乎不透明，底色只比面板高半级。
+   * 里面的格子、悬停、按下、选中、控件与分隔线一律换回实色台阶，不再叠给黑玻璃配的白纱——
+   * 8% / 14% / 18% 的白纱叠在灰底上会一层层发亮（重要记录 021）。边改成 8% 发丝线，去掉顶部受光边。
+   * 压在画面上的 .ui-glass（黑纱）不受影响。
+   */
+  :where(:root:not([data-ui-blur='off'])) .ui-overlay-surface,
+  .ui-glass-elevated {
+    --ui-glass-edge: rgb(var(--text1-rgb) / 0.08);
+    --ui-glass-sheen: transparent;
+    --ui-glass-hover: rgb(var(--overlay-hover-rgb));
+    --ui-glass-press: rgb(var(--selected-rgb));
+    --ui-glass-selected: rgb(var(--selected-rgb));
+    --ui-glass-control-tint: rgb(var(--raised-rgb));
+    --ui-glass-control-border: rgb(var(--line-strong-rgb));
+    --ui-glass-control-hover: rgb(var(--overlay-hover-rgb));
+    --ui-glass-surface-divider: rgb(var(--line-strong-rgb));
   }
 
   /*

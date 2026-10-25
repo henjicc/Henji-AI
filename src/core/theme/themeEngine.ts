@@ -114,7 +114,8 @@ export const THEME_COLOR_TOKEN_NAMES = [
   'canvas',
   'panel',
   'raised',
-  // 浮层（菜单、下拉、弹出面板）：比所在面板抬一级，菜单项悬停用 overlayHover 才看得出
+  // 浮层（菜单、下拉、弹出面板）：深色比面板高半级（压在面板上仍分得出两层，又不发灰），靠发丝边与阴影分层；
+  // 里面的格子、悬停、选中走 raised / overlayHover / selected 实色台阶（重要记录 021）
   'overlay',
   'overlayHover',
   'segmentSelected',
@@ -482,8 +483,8 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
       window: N(L0),
       panel: N(L0 + st),
       raised: N(L0 + 2 * st),
-      overlay: N(L0 + 2 * st),
-      overlayHover: N(L0 + 3.8 * st),
+      overlay: N(L0 + 1.5 * st),
+      overlayHover: N(L0 + 2.8 * st),
       control: N(L0 + 2.8 * st),
       controlHover: N(L0 + 3.8 * st),
       controlPressed: N(L0 + 4.8 * st),
