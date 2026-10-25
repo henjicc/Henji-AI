@@ -411,6 +411,10 @@ const UI_OPTION_NEUTRAL_VARIANT_CLASS = {
 /** 选项的高度与字号档（default / card / flat / menu / grid）。不传 size 时高度随内容。 */
 const UI_OPTION_GRID_CELL_CLASS: Record<NonNullable<UiOptionButtonProps['gridCell']>, string> = {
   ratio: 'w-[78px] h-[92px]',
+  // 特殊面板里的比例格（重要记录 021）：一行放得下时 56，按横 / 竖分行时 48；分辨率竖排一列 64 × 28
+  'ratio-md': 'w-14 h-14',
+  'ratio-sm': 'w-12 h-12',
+  'tier-compact': 'w-16 h-7',
   tier: 'w-[78px] h-[42px]',
   'tier-detail': 'w-[78px] h-[52px]',
   preset: 'w-[120px] min-h-[52px]',

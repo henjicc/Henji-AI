@@ -376,8 +376,23 @@ export const UI_TRIGGER_PANEL_SIZE_CLASS = {
   // 宽面板（24–45rem，随窗口变宽）：只给预设列表、生成表单这类自带多列内容的浮层；参数表单一律用 compact。
   wide: 'w-[min(92vw,clamp(24rem,48vw,45rem))] [--trigger-panel-max-height:min(78vh,40rem)]',
   workspace: 'w-[min(94vw,clamp(40rem,80vw,60rem))] [--trigger-panel-max-height:min(88vh,52rem)]',
+  // 特殊面板（重要记录 021）：宽度量里面最宽的内容，夹在 240–760、不超过窗口宽减 32；高度上限 440。
+  // 正文用 UiSpecialPanel，虚拟列表与网格这类没有固有宽度的正文由它的 bodyWidth 给出宽度。
+  special: 'w-max min-w-60 max-w-[min(calc(100vw-2rem),47.5rem)] [--trigger-panel-max-height:min(calc(100vh-6rem),27.5rem)]',
 } as const;
 export type UiTriggerPanelSize = keyof typeof UI_TRIGGER_PANEL_SIZE_CLASS;
+
+/** 特殊面板的宽高预算（px），与 UI_TRIGGER_PANEL_SIZE_CLASS.special 一致；网格据此算能放几列。 */
+export const UI_SPECIAL_PANEL_BUDGET = { minWidth: 240, maxWidth: 760, viewportGutter: 16, maxHeight: 440 } as const;
+
+/**
+ * 特殊面板的高度档：fit 按内容、不超过上限；fill 直接占满上限，长列表搜索或筛选时面板不跳动。
+ * 上限同时封顶到浮层实际能给的高度（--ui-panel-body-max-height），窗口矮时不压住输入框。
+ */
+export const UI_SPECIAL_PANEL_HEIGHT_CLASS = {
+  fit: 'max-h-[min(27.5rem,var(--ui-panel-body-max-height,100vh))]',
+  fill: 'h-[min(27.5rem,var(--ui-panel-body-max-height,100vh))]',
+} as const;
 
 /** 可拖动面板的宽度预算（px）；宿主仍须按当前工作区可用宽度夹取。 */
 export { UI_PANEL_WIDTH } from '@/core/theme/panelSizes';

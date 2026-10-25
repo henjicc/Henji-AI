@@ -30,6 +30,8 @@ export type { GestureProps, ParameterControlProps } from './parameterControl';
 export * from './UiFontPicker';
 export * from './UiToast';
 export * from './UiVirtualList';
+export * from './UiSpecialPanel';
+export * from './specialPanelLayout';
 export { resolveOverflowHiddenIds, type OverflowLayoutItem } from './overflowLayout';
 export {
   UiOverlayLayerProvider,

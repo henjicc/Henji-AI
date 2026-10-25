@@ -1,21 +1,20 @@
-import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 /**
- * AspectRatioSelector - 比例选择器组件
+ * AspectRatioSelector - 组合面板里的比例子组件（componentRegistry 的 `aspect-ratio`）。
+ * 外观与排布全部委托 AspectRatioTiles，与生成页、画布节点的比例面板是同一份实现。
  */
 
-import React from 'react'
+import React, { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatAspectRatioDisplayLabel } from '@/core/params/ratioResolution'
-import type { AspectRatioOption } from './types'
 import { getI18nText } from '@/core/types'
-import { UI_TEXT_LABEL_CLASS, UiOptionButton } from '@/components/ui'
-import { Zap } from 'lucide-react'
+import { parseRatio } from '@/components/MediaGenerator/components/aspectResolutionPanelUtils'
+import { AspectRatioTiles, type AspectRatioTileOption } from './AspectRatioTiles'
+import type { AspectRatioOption } from './types'
 
 export interface AspectRatioSelectorProps {
   value: string
   onChange: (value: string) => void
   options: AspectRatioOption[]
-  visualize?: boolean
   smartMatchEnabled?: boolean
 }
 
@@ -23,83 +22,26 @@ export const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
   value,
   onChange,
   options,
-  visualize = true,
   smartMatchEnabled = false
 }) => {
   const { t, i18n } = useTranslation('ui')
-
-  // 计算图标尺寸
-  const getIconSize = (ratio: string): { width: number; height: number } => {
-    const [w, h] = ratio.split(':').map(Number)
-    const maxSize = 28
-    const scale = Math.min(maxSize / w, maxSize / h)
-    return {
-      width: Math.round(w * scale),
-      height: Math.round(h * scale)
-    }
-  }
+  const tileOptions = useMemo<AspectRatioTileOption[]>(() => {
+    const ratios = options
+      .filter(option => !(smartMatchEnabled && option.value === 'smart'))
+      .map(option => {
+        const label = formatAspectRatioDisplayLabel(String(getI18nText(option.label, i18n.language) || option.value), option.value)
+        return { value: option.value, label, ratio: option.icon ?? parseRatio(option.value) ?? parseRatio(label) }
+      })
+    return smartMatchEnabled
+      ? [{ value: 'smart', label: t('resolutionPanel.smart', { defaultValue: '智能' }), ratio: null, smart: true }, ...ratios]
+      : ratios
+  }, [i18n.language, options, smartMatchEnabled, t])
 
   return (
-    <div className="flex flex-col gap-2">
-      <label className={UI_TEXT_LABEL_CLASS}>
-        {t('resolutionPanel.aspectRatio', { defaultValue: '比例' })}
-      </label>
-      <div className="flex flex-wrap justify-start gap-2">
-        {smartMatchEnabled && (
-          <UiOptionButton
-            type="button"
-            active={value === 'smart'}
-            variant="grid"
-            onClick={() => onChange('smart')}
-            size="sm"
-            gridCell="ratio"
-            className="flex-col justify-center gap-2"
-          >
-            <div className="h-8 flex items-center justify-center">
-              <Zap className={`${UI_ICON_SIZE_CLASS.lg}`} />
-            </div>
-            <span className="font-medium leading-none">
-              {t('resolutionPanel.smart', { defaultValue: '智能' })}
-            </span>
-          </UiOptionButton>
-        )}
-
-        {options
-          .filter(option => !(smartMatchEnabled && option.value === 'smart'))
-          .map((option) => {
-            const iconSize = option.icon || getIconSize(option.value)
-            const label = formatAspectRatioDisplayLabel(
-              String(getI18nText(option.label, i18n.language) || option.value),
-              option.value
-            )
-
-            return (
-              <UiOptionButton
-                type="button"
-                active={value === option.value}
-                variant="grid"
-                key={option.value}
-                onClick={() => onChange(option.value)}
-                size="sm"
-                gridCell="ratio"
-                className="flex-col justify-center gap-2"
-              >
-                {visualize && (
-                  <div className="h-8 flex items-center justify-center">
-                    <div
-                      className="border-2 border-current"
-                      style={{
-                        width: `${iconSize.width}px`,
-                        height: `${iconSize.height}px`
-                      }}
-                    />
-                  </div>
-                )}
-                <span className="font-medium leading-none">{label}</span>
-              </UiOptionButton>
-            )
-          })}
-      </div>
-    </div>
+    <AspectRatioTiles
+      options={tileOptions}
+      isActive={option => String(option.value) === value}
+      onSelect={option => onChange(String(option.value))}
+    />
   )
 }

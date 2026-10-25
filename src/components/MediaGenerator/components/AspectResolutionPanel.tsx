@@ -1,8 +1,8 @@
-import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React, { useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import PanelTrigger from '@/components/ui/PanelTrigger'
-import { UI_TEXT_LABEL_CLASS, UiOptionButton } from '@/components/ui'
+import { UiSpecialPanel } from '@/components/ui'
+import { AspectRatioTiles, type AspectRatioTileOption, type AspectTierOption } from '@/components/params/panels/ResolutionPanel/AspectRatioTiles'
 import { getI18nText } from '@/core/types'
 import {
   formatAspectRatioDisplayLabel,
@@ -12,14 +12,12 @@ import {
 } from '@/core/params/ratioResolution'
 import {
   buildSizeDerivedSpec,
-  getRatioBoxSize,
   parseRatio,
   pickClosestRatioText,
   pickSizeDerivedValue,
   readImageRatio,
   type SizeDerivedSpec,
 } from './aspectResolutionPanelUtils'
-import { Zap } from 'lucide-react'
 
 interface AspectResolutionPanelProps {
   aspectParam?: ChoiceParamDescriptor
@@ -29,40 +27,7 @@ interface AspectResolutionPanelProps {
   onChange: (paramId: string, value: DynamicValue) => void
 }
 
-interface AspectRenderOption {
-  value: string | number
-  label: string
-  ratio: { width: number; height: number } | null
-  smart: boolean
-}
-
-const PANEL_SIDE_PADDING = 16
-const PANEL_MIN_WIDTH = 196
-const PANEL_MAX_WIDTH = 400
-const ROW_GAP = 8
-/** 与 UiOptionButton gridCell 的格宽一致（ratio / tier 都是 78），用于估算面板宽度 */
-const OPTION_ITEM_WIDTH = 78
-const ASPECT_ITEMS_PER_ROW = 4
-const RESOLUTION_ITEMS_PER_ROW = 4
-
-function estimateSectionWidth(
-  itemCount: number,
-  itemWidth: number,
-  maxItemsPerRow: number
-): number {
-  if (itemCount <= 0) {
-    return 0
-  }
-  const columns = Math.min(maxItemsPerRow, itemCount)
-  return columns * itemWidth + ROW_GAP * Math.max(0, columns - 1)
-}
-
-function toSectionWidthStyle(width: number): React.CSSProperties | undefined {
-  if (!Number.isFinite(width) || width <= 0) {
-    return undefined
-  }
-  return { width: `${Math.round(width)}px` }
-}
+type AspectRenderOption = AspectRatioTileOption
 
 function isUnsetValue(value: DynamicValue): boolean {
   return value === undefined || value === null || value === ''
@@ -308,32 +273,6 @@ export const AspectResolutionPanel: React.FC<AspectResolutionPanelProps> = ({
     return '参数'
   })()
 
-  const aspectSectionWidth = useMemo(() => {
-    const itemCount = (sizeDerivedSpec ? derivedAspectOptions : aspectOptions).length
-    return estimateSectionWidth(itemCount, OPTION_ITEM_WIDTH, ASPECT_ITEMS_PER_ROW)
-  }, [aspectOptions, derivedAspectOptions, sizeDerivedSpec])
-
-  const resolutionSectionWidth = useMemo(() => {
-    const itemCount = (sizeDerivedSpec ? derivedResolutionOptions : resolutionOptions).length
-    return estimateSectionWidth(itemCount, OPTION_ITEM_WIDTH, RESOLUTION_ITEMS_PER_ROW)
-  }, [derivedResolutionOptions, resolutionOptions, sizeDerivedSpec])
-
-  const alignedSectionWidth = useMemo(
-    () => Math.max(aspectSectionWidth, resolutionSectionWidth),
-    [aspectSectionWidth, resolutionSectionWidth]
-  )
-
-  const panelWidth = useMemo(() => {
-    const titleWidth = Math.max(aspectLabel.length, resolutionLabel.length) * 14
-    const contentWidth = Math.max(titleWidth, alignedSectionWidth)
-    const estimated = contentWidth + PANEL_SIDE_PADDING * 2
-    return Math.max(PANEL_MIN_WIDTH, Math.min(PANEL_MAX_WIDTH, estimated))
-  }, [
-    alignedSectionWidth,
-    aspectLabel,
-    resolutionLabel,
-  ])
-
   const triggerDisplay = (() => {
     if (aspectDisplay && resolutionDisplay) {
       return `${aspectDisplay} / ${resolutionDisplay}`
@@ -351,164 +290,72 @@ export const AspectResolutionPanel: React.FC<AspectResolutionPanelProps> = ({
     return null
   }
 
+  const tileOptions = sizeDerivedSpec ? derivedAspectOptions : aspectOptions
+  const tierOptions = sizeDerivedSpec ? derivedResolutionOptions : resolutionOptions
+
+  const isAspectActive = (option: AspectRenderOption): boolean => sizeDerivedSpec
+    ? (!option.smart && isChoiceValueMatch(selectedDerived?.ratioText, option.value))
+    : (option.smart ? isSmartAspectValue(aspectValue) : isChoiceValueMatch(aspectValue, option.value))
+
+  const selectAspect = async (option: AspectRenderOption): Promise<void> => {
+    if (sizeDerivedSpec && resolutionParam) {
+      const activeTier = selectedDerived?.tierLabel || sizeDerivedSpec.resolutionOptions[0]?.tierLabel
+      if (!activeTier) return
+      if (option.smart) {
+        const imageRatio = uploadedImages.length > 0 ? await readImageRatio(uploadedImages[0]) : null
+        const targetRatio = imageRatio && Number.isFinite(imageRatio) ? imageRatio : 1
+        const closestRatio = pickClosestRatioText(sizeDerivedSpec, targetRatio)
+        if (!closestRatio) return
+        const nextValue = pickSizeDerivedValue(sizeDerivedSpec, closestRatio, activeTier)
+        if (nextValue !== null) onChange(resolutionParam.id, nextValue)
+        return
+      }
+      const nextValue = pickSizeDerivedValue(sizeDerivedSpec, String(option.value), activeTier)
+      if (nextValue !== null) onChange(resolutionParam.id, nextValue)
+      return
+    }
+    if (!aspectParam) return
+    onChange(aspectParam.id, option.smart ? aspectSmartValue : option.value)
+  }
+
+  const isTierActive = (option: AspectTierOption): boolean => sizeDerivedSpec
+    ? isChoiceValueMatch(selectedDerived?.tierLabel, option.value)
+    : isChoiceValueMatch(resolutionValue, option.value)
+
+  const selectTier = (option: AspectTierOption): void => {
+    if (!resolutionParam || option.disabled) return
+    if (!sizeDerivedSpec) {
+      onChange(resolutionParam.id, option.value)
+      return
+    }
+    const activeRatio = selectedDerived?.ratioText || sizeDerivedSpec.aspectOptions[0]?.ratioText
+    if (!activeRatio) return
+    const nextValue = pickSizeDerivedValue(sizeDerivedSpec, activeRatio, String(option.value))
+    if (nextValue !== null) onChange(resolutionParam.id, nextValue)
+  }
+
   return (
     <PanelTrigger
       label={triggerLabel}
       display={triggerDisplay}
       className="w-auto"
       buttonClassName="w-auto max-w-none"
-      panelSize={panelWidth > 720 ? 'workspace' : panelWidth > 384 ? 'wide' : 'compact'}
+      // 特殊面板：宽度跟格子数走（重要记录 021）
+      panelSize="special"
       alignment="aboveCenter"
       freezePositionOnOpen
       closeOnPanelClick={false}
       renderPanel={() => (
-        <div className="p-4 flex flex-col gap-4">
-          {(aspectParam || sizeDerivedSpec) && (
-            <div className="flex flex-col gap-2">
-              <div className="mx-auto" style={toSectionWidthStyle(alignedSectionWidth)}>
-                <label className={`mb-2 block ${UI_TEXT_LABEL_CLASS}`}>
-                  {aspectLabel}
-                </label>
-                <div className="flex flex-wrap justify-start gap-2">
-                  {(sizeDerivedSpec ? derivedAspectOptions : aspectOptions).map((option) => {
-                    const isActive = sizeDerivedSpec
-                      ? (!option.smart && isChoiceValueMatch(selectedDerived?.ratioText, option.value))
-                      : (option.smart
-                        ? isSmartAspectValue(aspectValue)
-                        : isChoiceValueMatch(aspectValue, option.value))
-
-                    return (
-                      <UiOptionButton
-                        key={String(option.value)}
-                        type="button"
-                        active={isActive}
-                        onClick={async () => {
-                          if (sizeDerivedSpec && resolutionParam) {
-                            const activeTier =
-                              selectedDerived?.tierLabel ||
-                              sizeDerivedSpec.resolutionOptions[0]?.tierLabel
-                            if (!activeTier) {
-                              return
-                            }
-
-                            if (option.smart) {
-                              const imageRatio = uploadedImages.length > 0
-                                ? await readImageRatio(uploadedImages[0])
-                                : null
-                              const targetRatio =
-                                imageRatio && Number.isFinite(imageRatio) ? imageRatio : 1
-                              const closestRatio = pickClosestRatioText(sizeDerivedSpec, targetRatio)
-                              if (!closestRatio) {
-                                return
-                              }
-                              const nextValue = pickSizeDerivedValue(
-                                sizeDerivedSpec,
-                                closestRatio,
-                                activeTier
-                              )
-                              if (nextValue !== null) {
-                                onChange(resolutionParam.id, nextValue)
-                              }
-                              return
-                            }
-
-                            const nextValue = pickSizeDerivedValue(
-                              sizeDerivedSpec,
-                              String(option.value),
-                              activeTier
-                            )
-                            if (nextValue !== null) {
-                              onChange(resolutionParam.id, nextValue)
-                            }
-                            return
-                          }
-
-                          if (!aspectParam) return
-                          if (option.smart) {
-                            onChange(aspectParam.id, aspectSmartValue)
-                            return
-                          }
-                          onChange(aspectParam.id, option.value)
-                        }}
-                        variant="grid"
-                        size="sm"
-                        gridCell="ratio"
-                        className="flex-col justify-center gap-2"
-                      >
-                        <div className="h-8 flex items-center justify-center">
-                          {option.smart ? (
-                            <Zap className={`${UI_ICON_SIZE_CLASS.lg}`} />
-                          ) : option.ratio ? (
-                            <div
-                              className="border-2 border-current"
-                              style={getRatioBoxSize(option.ratio)}
-                            />
-                          ) : null}
-                        </div>
-                        <span className="font-medium leading-none">{option.label}</span>
-                      </UiOptionButton>
-                    )
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {resolutionParam && (
-            <div className="flex flex-col gap-2">
-              <div className="mx-auto" style={toSectionWidthStyle(alignedSectionWidth)}>
-                <label className={`mb-2 block ${UI_TEXT_LABEL_CLASS}`}>
-                  {resolutionLabel}
-                </label>
-                <div className="flex flex-wrap justify-start gap-2">
-                  {(sizeDerivedSpec ? derivedResolutionOptions : resolutionOptions).map((option) => {
-                    const isActive = sizeDerivedSpec
-                      ? isChoiceValueMatch(selectedDerived?.tierLabel, option.value)
-                      : isChoiceValueMatch(resolutionValue, option.value)
-
-                    return (
-                      <UiOptionButton
-                        key={String(option.value)}
-                        type="button"
-                        active={isActive}
-                        disabled={!sizeDerivedSpec && 'disabled' in option && option.disabled}
-                        onClick={() => {
-                          if (!resolutionParam) return
-                          if (!sizeDerivedSpec) {
-                            if ('disabled' in option && option.disabled) return
-                            onChange(resolutionParam.id, option.value)
-                            return
-                          }
-
-                          const activeRatio =
-                            selectedDerived?.ratioText ||
-                            sizeDerivedSpec.aspectOptions[0]?.ratioText
-                          if (!activeRatio) {
-                            return
-                          }
-                          const nextValue = pickSizeDerivedValue(
-                            sizeDerivedSpec,
-                            activeRatio,
-                            String(option.value)
-                          )
-                          if (nextValue !== null) {
-                            onChange(resolutionParam.id, nextValue)
-                          }
-                        }}
-                        variant="grid"
-                        size="lg"
-                        gridCell="tier"
-                        className="justify-center"
-                      >
-                        {option.label}
-                      </UiOptionButton>
-                    )
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        <UiSpecialPanel>
+          <AspectRatioTiles
+            options={aspectParam || sizeDerivedSpec ? tileOptions : []}
+            isActive={isAspectActive}
+            onSelect={(option) => { void selectAspect(option) }}
+            tiers={resolutionParam ? tierOptions : undefined}
+            isTierActive={isTierActive}
+            onTierSelect={selectTier}
+          />
+        </UiSpecialPanel>
       )}
     />
   )
