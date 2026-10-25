@@ -9,7 +9,7 @@ import { UiButton, UiEmpty, UiIconButton, UiInput, UiOptionButton } from '@/comp
 import { showAlertDialog } from '@/stores/alertDialogStore'
 import { useNotification } from '@/contexts/NotificationContext'
 import type { PromptDocumentV1, PromptMediaBinding } from '@/core/inputs/promptDocument'
-import { Images, SlidersHorizontal, Trash2, Type } from 'lucide-react'
+import { BookMarked, Images, SlidersHorizontal, Trash2, Type } from 'lucide-react'
 
 const logger = createLogger('components.PresetPanel')
 
@@ -132,10 +132,8 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
     }
     return (
         <PanelTrigger
-            display={t('ui:presets.label')}
             disabled={disabled}
             className="w-auto"
-            buttonClassName="w-auto"
             panelSize="wide"
             alignment="aboveCenter"
             stableHeight={true}
@@ -339,7 +337,23 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                     </div>
                 </div>
             )}
-        />
+        >
+            {/* 底栏寸土寸金：只放图标，名称在悬停说明里 */}
+            {({ open, togglePanel }) => (
+                <UiIconButton
+                    aria-label={t('ui:presets.label')}
+                    tooltip={t('ui:presets.label')}
+                    aria-haspopup="dialog"
+                    aria-expanded={open}
+                    on={open}
+                    disabled={disabled}
+                    onClick={togglePanel}
+                    data-panel-trigger-button
+                >
+                    <BookMarked />
+                </UiIconButton>
+            )}
+        </PanelTrigger>
     )
 }
 export default PresetPanel

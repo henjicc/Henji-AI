@@ -1,8 +1,8 @@
-import { ChevronDown, Download } from 'lucide-react'
+import { ChevronDown, Download, FilePenLine, Save } from 'lucide-react'
 import { ImageEditorFileAppMenus } from './ImageEditorFileAppMenus'
 import { useTranslation } from 'react-i18next'
 
-import { PanelTrigger, UI_TEXT_META_CLASS, UiButton, UiOptionButton } from '@/components/ui'
+import { PanelTrigger, UI_TEXT_META_CLASS, UiButton, UiIconButton, UiOptionButton } from '@/components/ui'
 import { resolveImageEditorReadinessReasonV3 } from '@/features/imageEdit/v3/editor/readinessPresentationV3'
 import type { ImageEditorV3RasterExportFormat } from '@/platform/contracts/imageEditorV3'
 import { ImageMarkSourceMenu } from './ImageMarkSourceMenu'
@@ -73,21 +73,23 @@ export function ImageMarkToolV3ToolbarActions({
         onPasteFromClipboard={() => void host.runAfterSave(onPasteFromClipboard)}
         onCreateBlank={() => void host.runAfterSave(onCreateBlank)}
       />
-      {/* 保存 / 另存为：写回图片文档（草稿先起名）；与“打开”同属文件类动作，同档 */}
-      <UiButton
-        variant="secondary"
+      {/* 保存 / 另存为：写回图片文档（草稿先起名）；与“打开”同属文件类动作，同为图标按钮，悬停给名称 */}
+      <UiIconButton
+        aria-label={t('imageEditor.v3.host.toolbar.save')}
+        tooltip={t('imageEditor.v3.host.toolbar.save')}
         disabled={host.isHostBusy}
         onClick={() => void onSave()}
       >
-        {t('imageEditor.v3.host.toolbar.save')}
-      </UiButton>
-      <UiButton
-        variant="secondary"
+        <Save />
+      </UiIconButton>
+      <UiIconButton
+        aria-label={t('imageEditor.v3.host.toolbar.saveAs')}
+        tooltip={t('imageEditor.v3.host.toolbar.saveAs')}
         disabled={host.isHostBusy}
         onClick={() => void onSaveAs()}
       >
-        {t('imageEditor.v3.host.toolbar.saveAs')}
-      </UiButton>
+        <FilePenLine />
+      </UiIconButton>
       {saveFailed ? (
         <UiButton
           variant="secondary"

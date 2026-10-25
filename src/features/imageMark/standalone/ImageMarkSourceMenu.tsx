@@ -2,7 +2,7 @@ import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { ClipboardPaste, FilePlus2, FolderOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { PanelTrigger, UiButton, UiOptionButton } from '@/components/ui'
+import { PanelTrigger, UiIconButton, UiOptionButton } from '@/components/ui'
 
 interface ImageMarkSourceMenuProps {
   disabled?: boolean
@@ -58,15 +58,15 @@ export function ImageMarkSourceMenu({
       )}
     >
       {({ togglePanel }) => (
-        <UiButton
-          variant="secondary"
+        <UiIconButton
+          aria-label={t('imageEditor.v3.host.sourceMenu.trigger')}
+          aria-haspopup="menu"
           disabled={disabled}
           onClick={togglePanel}
           tooltip={t('imageEditor.v3.host.sourceMenu.title')}
         >
-          <FolderOpen  className="mr-1.5" />
-          {t('imageEditor.v3.host.sourceMenu.trigger')}
-        </UiButton>
+          <FolderOpen />
+        </UiIconButton>
       )}
     </PanelTrigger>
   )

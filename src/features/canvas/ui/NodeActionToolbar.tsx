@@ -6,7 +6,7 @@ import { reportCanvasOperationFailure } from '@/features/canvas/application/canv
 import { createLogger } from '@/core/logging'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NodeToolbar as ReactFlowNodeToolbar } from '@xyflow/react';
-import { Check, Copy, Crop, Download, FolderCheck, FolderPlus, Image, PenLine, RefreshCw, Scissors, Sparkles, Trash2, Unlink2, Video } from 'lucide-react';
+import { Check, ClipboardCopy, Copy, Crop, Download, FolderCheck, FolderPlus, Image, PenLine, RefreshCw, Scissors, Sparkles, Trash2, Unlink2, Video } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 const logger = createLogger('features.canvas.ui.NodeActionToolbar')
@@ -38,6 +38,7 @@ import type { ToolIconKey } from '@/features/canvas/tools';
 import {
   UI_GLASS_ADAPTIVE_DIVIDER_CLASS,
   UiButton,
+  UiIconButton,
   UiPanel,
 } from '@/components/ui';
 import { copyImageSourceToClipboard } from '@/commands/image';
@@ -355,43 +356,47 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
             </UiButton>
           );
         })}
+        {/* 通用动作（重新上传、复制、收进资产库、下载、解组、删除）只放图标，悬停给名称；
+            生成、能力与工具是这个节点特有的事，保留文字 */}
         {!isImageEdit && canReupload && (
-          <UiButton
+          <UiIconButton
             key="upload-reupload"
+            aria-label={t('nodeToolbar.reupload')}
+            tooltip={t('nodeToolbar.reupload')}
             onClick={() =>
               canvasEventBus.publish('upload-node/reupload', {
                 nodeId: node.id,
               })
             }
           >
-            <RefreshCw  />
-            {t('nodeToolbar.reupload')}
-          </UiButton>
+            <RefreshCw />
+          </UiIconButton>
         )}
         {!isImageEdit && canHandleImage && (
-          <UiButton
+          <UiIconButton
             key="image-copy"
             aria-label={isCopySuccess ? t('ui:workspace.toast.copySuccess') : t('nodeToolbar.copy')}
+            tooltip={isCopySuccess ? t('ui:workspace.toast.copySuccess') : t('nodeToolbar.copy')}
             onClick={() => {
               void handleCopyImage();
             }}
           >
-            {isCopySuccess ? <Check className={`text-success-text`} /> : <Copy  />}
-            {t('nodeToolbar.copy')}
-          </UiButton>
+            {isCopySuccess ? <Check className={`text-success-text`} /> : <Copy />}
+          </UiIconButton>
         )}
         {assetMedia && (
-          <UiButton
+          <UiIconButton
             key="asset-collect"
+            aria-label={t('ui:assetLibrary.assetShort')}
+            tooltip={t('ui:assetLibrary.collect')}
             disabled={collecting}
             onClick={(event) => {
               event.stopPropagation();
               void handleCollectAsset();
             }}
           >
-            {assetCollected ? <FolderCheck className={`text-success-text`} /> : <FolderPlus  />}
-            {t('ui:assetLibrary.assetShort')}
-          </UiButton>
+            {assetCollected ? <FolderCheck className={`text-success-text`} /> : <FolderPlus />}
+          </UiIconButton>
         )}
         {videoEditSource && (
           <VideoEditSendMenu key="video-edit-send" mediaKind={videoEditSource.mediaKind}
@@ -399,29 +404,32 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
             notify={(message, type) => canvasEventBus.publish('canvas/toast', { message, type })} />
         )}
         {!isImageEdit && canCopyStoryboardText && (
-          <UiButton
+          <UiIconButton
             key="storyboard-text-copy"
             aria-label={isCopyTextSuccess ? t('ui:workspace.toast.copySuccess') : t('nodeToolbar.copyText')}
+            tooltip={isCopyTextSuccess ? t('ui:workspace.toast.copySuccess') : t('nodeToolbar.copyText')}
             onClick={() => {
               void handleCopyStoryboardText();
             }}
           >
-            {isCopyTextSuccess ? <Check className={`text-success-text`} /> : <Copy  />}
-            {t('nodeToolbar.copyText')}
-          </UiButton>
+            {isCopyTextSuccess ? <Check className={`text-success-text`} /> : <ClipboardCopy />}
+          </UiIconButton>
         )}
         {canDownload && (
-          <UiButton
+          <UiIconButton
             key="media-download"
+            aria-label={t('nodeToolbar.download')}
+            tooltip={t('nodeToolbar.download')}
             onClick={handleDownloadClick}
           >
-            <Download  />
-            {t('nodeToolbar.download')}
-          </UiButton>
+            <Download />
+          </UiIconButton>
         )}
         {!isImageEdit && (isGroupNode(node) || isAssetGroupNode(node)) && (
-          <UiButton
+          <UiIconButton
             key="group-ungroup"
+            aria-label={t('nodeToolbar.ungroup')}
+            tooltip={t('nodeToolbar.ungroup')}
             onClick={(event) => {
               event.stopPropagation();
               closeDownloadMenu();
@@ -429,22 +437,22 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
               else ungroupNode(node.id);
             }}
           >
-            <Unlink2  />
-            {t('nodeToolbar.ungroup')}
-          </UiButton>
+            <Unlink2 />
+          </UiIconButton>
         )}
-        <UiButton
+        <UiIconButton
           key="node-delete"
-          variant="danger"
+          tone="danger"
+          aria-label={t('common.delete')}
+          tooltip={t('common.delete')}
           onClick={(event) => {
             event.stopPropagation();
             closeDownloadMenu();
             if (projectId) void deleteCanvasNodes(projectId, [node.id]).catch(reportCanvasOperationFailure);
           }}
         >
-          <Trash2  />
-          {t('common.delete')}
-        </UiButton>
+          <Trash2 />
+        </UiIconButton>
       </UiPanel>
 
       {canDownload && (

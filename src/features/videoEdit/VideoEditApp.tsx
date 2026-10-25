@@ -98,12 +98,12 @@ function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEdi
     <UiIconButton aria-label="重做" tooltip={redo.tooltip} disabledReason={redo.tooltip} disabled={!redo.enabled} onClick={() => command('redo')}><Redo2  /></UiIconButton>
     <VideoEditWindowMenu api={api} /><WorkspaceLayoutMenu workspaceId="video_edit" />
     <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-line" />
-    <UiButton onClick={() => run(async () => {
+    <UiIconButton aria-label={t('recording.record')} tooltip={t('recording.record')} onClick={() => run(async () => {
       const { setRecordingDestination } = await import('@/features/screenRecording')
       const { openApplicationSurface } = await import('@/features/navigation')
       setRecordingDestination({ documentId: projectId, ...(sequence ? { sequenceId: sequence.id, frame: instance.frame } : {}) })
       openApplicationSurface('tool.screen_recording')
-    })}><ICON_TOOL_SCREEN_RECORDING />{t('recording.record')}</UiButton>
+    })}><ICON_TOOL_SCREEN_RECORDING /></UiIconButton>
     {task?.state === 'completed' && task.output && <UiButton loading={collecting} disabled={collecting} onClick={() => run(async () => {
       setCollecting(true)
       try {

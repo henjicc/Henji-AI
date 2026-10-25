@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { WandSparkles } from 'lucide-react'
 import PanelTrigger from '@/components/ui/PanelTrigger'
 import { UI_DURATION } from '@/components/ui/motion'
-import { AlertDialog, UI_TEXT_META_CLASS, UiButton, UiPanel } from '@/components/ui'
+import { AlertDialog, UI_TEXT_META_CLASS, UiIconButton, UiPanel } from '@/components/ui'
 import { LLM_CONFIG_CHANGED_EVENT } from '@/core/llm/events'
 import {
   renderPromptOptimizationTemplate,
@@ -456,9 +456,10 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
           openPanelRef.current = openPanel
           return (
             // 与底栏其它动作同档（静默）：生成按钮才是这块输入区唯一的主动作，优化不再带光晕特效
-            <UiButton loading={streaming}
+            // 底栏寸土寸金：只放图标，名称与左右键用法在悬停说明里
+            <UiIconButton loading={streaming}
               type="button"
-              variant="quiet"
+              aria-label="优化"
               onClick={() => {
                 if (streaming) return
                 if (buttonBehavior !== 'select-profile') {
@@ -479,14 +480,13 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
               }}
               disabled={disabled}
               aria-disabled={disabled || streaming}
-              tooltip={buttonBehavior === 'select-profile' ? '左键先选择配置，右键管理配置' : '左键直接优化，右键管理配置'}
+              tooltip={buttonBehavior === 'select-profile' ? '优化提示词 · 左键先选择配置，右键管理配置' : '优化提示词 · 左键直接优化，右键管理配置'}
               aria-busy={streaming || undefined}
               className={` ${streaming ? 'cursor-progress' : ''}`}
               data-panel-trigger-button
             >
               <WandSparkles aria-hidden="true" />
-              <span>{'优化'}</span>
-            </UiButton>
+            </UiIconButton>
           )
         }}
       </PanelTrigger>
