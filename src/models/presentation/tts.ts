@@ -154,5 +154,5 @@ const ttsVoiceFields: Record<keyof typeof TTS_VOICE_SELECTORS, string> = {
 for (const [modelId, config] of Object.entries(TTS_VOICE_SELECTORS)) {
   const voiceParam = ttsPresentation[modelId].params[ttsVoiceFields[modelId]]
   voiceParam.panel = 'voice-selector'
-  voiceParam.config = { ...config, width: 720 }
+  voiceParam.config = config
 }

@@ -1,7 +1,7 @@
-import { UI_PANEL_BODY_HEIGHT_CLASS } from '@/components/ui/styleTokens'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { UiButton, UiEmpty, UiError, UiLoading, UiInput, UiSearchInput, UiOptionButton, UiVirtualGrid } from '@/components/ui'
+import { RefreshCw } from 'lucide-react'
+import { UiButton, UiEmpty, UiError, UiFieldLayoutContext, UiIconButton, UiLoading, UiInput, UiSearchInput, UiOptionButton, UiSpecialPanel, UiVirtualGrid, specialPanelGridWidth, useSpecialPanelColumns } from '@/components/ui'
 import Dropdown from '@/components/ui/Dropdown'
 import AudioPlayer from '@/components/AudioPlayer'
 import { toFetchableMediaUrl, isLikelyLocalImagePath } from '@/services/imageSource'
@@ -21,6 +21,9 @@ import { rememberTtsVoiceNames } from '@/services/voiceLibrary/ttsVoiceNameCache
 import { aiGetCachedTtsVoices, aiListTtsVoices } from '@/commands/aiRuntime'
 
 const logger = createLogger('components.params.panels.VoiceSelectorPanel')
+
+const VOICE_CELL_WIDTH = 200
+const VOICE_CELL_GAP = 8
 
 type VoiceSourceFilter = 'all' | VoiceSourceTag
 type VoiceGenderFilter = 'all' | VoiceGenderTag
@@ -185,15 +188,9 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
   const voiceLibraryScope = config?.voiceLibrary
   const remoteModelId = config?.remoteModelId
   const panelRef = useRef<HTMLDivElement>(null)
-  const [columns, setColumns] = useState<2 | 3>(2)
-  useEffect(() => {
-    const query = panelRef.current?.ownerDocument.defaultView?.matchMedia('(min-width: 768px)')
-    if (!query) return
-    const update = () => setColumns(query.matches ? 3 : 2)
-    update()
-    query.addEventListener('change', update)
-    return () => query.removeEventListener('change', update)
-  }, [])
+  // 特殊面板（重要记录 021）：音色卡 200 宽，按 760 上限与窗口宽度放 2–3 列
+  const measuredColumns = useSpecialPanelColumns({ cellWidth: VOICE_CELL_WIDTH, gap: VOICE_CELL_GAP, chrome: 24 + 2, maxColumns: 3, minColumns: 2 }, panelRef)
+  const columns: 2 | 3 = measuredColumns >= 3 ? 3 : 2
   const recordsByVoiceId = useMemo(() => new Map(libraryRecords.map(record => [record.voiceId, record])), [libraryRecords])
 
   const loadRemoteVoices = useCallback(async (force = false): Promise<void> => {
@@ -437,39 +434,65 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
 
   const preview = previewVoiceId ? recordsByVoiceId.get(previewVoiceId)?.previewPath : undefined
 
+  const clearFilters = (): void => {
+    setSelectedSource('all'); setSelectedGender('all'); setSelectedAge('all'); setSelectedLanguage('all')
+  }
+
+  const customIdFooter = config?.allowCustomId
+    ? customIdOpen
+      ? {
+        status: (
+          <UiInput
+            size="sm"
+            value={customId}
+            onChange={(event) => setCustomId(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && customId.trim()) onChange(customId.trim())
+            }}
+            placeholder="输入列表中没有的音色 ID"
+            aria-label="音色 ID"
+            className="w-full"
+          />
+        ),
+        action: <UiButton type="button" variant="primary" size="sm" disabled={!customId.trim()} onClick={() => onChange(customId.trim())}>使用 ID</UiButton>,
+      }
+      : {
+        status: <UiButton type="button" size="sm" onClick={() => { setCustomId(value); setCustomIdOpen(true) }}>列表里没有？输入音色 ID</UiButton>,
+        action: <span className="shrink-0 text-xs text-text3">共 {filteredVoices.length} 个</span>,
+      }
+    : { status: undefined, action: undefined }
+
   return (
-    <div
+    <UiSpecialPanel
       ref={panelRef}
-      className={`flex w-full min-w-0 ${UI_PANEL_BODY_HEIGHT_CLASS.content} flex-col overflow-hidden overscroll-contain p-4`}
+      height="fill"
+      bodyWidth={specialPanelGridWidth(columns, VOICE_CELL_WIDTH, VOICE_CELL_GAP)}
       data-voice-selector-panel
       onWheelCapture={handleWheelCapture}
-    >
-      <div className="mb-3 shrink-0 space-y-2" data-voice-toolbar>
-        <div className="flex items-center gap-2">
+      header={(
+        <UiFieldLayoutContext.Provider value="toolbar">
           {config?.allowSearch !== false && <UiSearchInput
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
             placeholder="搜索音色名称或描述"
             aria-label="搜索音色"
-            className="flex-1"
+            className="min-w-40 flex-1"
           />}
-          {remoteModelId && <UiButton type="button" variant="secondary" disabled={remoteStatus === 'loading'} onClick={() => void loadRemoteVoices(true)}>
-            刷新音色
-          </UiButton>}
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="grid min-w-0 flex-1 grid-cols-4 gap-2">
-            <Dropdown ariaLabel="音色来源" value={selectedSource} options={sourceFilterOptions} onSelect={setSelectedSource} disabled={sourceFilterOptions.length < 2} minWidthStrategy="none" panelWidthStrategy="options" />
-            <Dropdown ariaLabel="音色性别" value={selectedGender} options={genderFilterOptions} onSelect={setSelectedGender} disabled={genderFilterOptions.length < 2} minWidthStrategy="none" panelWidthStrategy="options" />
-            <Dropdown ariaLabel="音色年龄" value={selectedAge} options={ageFilterOptions} onSelect={setSelectedAge} disabled={ageFilterOptions.length < 2} minWidthStrategy="none" panelWidthStrategy="options" />
-            <Dropdown ariaLabel="音色语言" value={selectedLanguage} options={languageFilterOptions} onSelect={setSelectedLanguage} disabled={languageFilterOptions.length < 2} minWidthStrategy="none" panelWidthStrategy="options" />
+          <div data-voice-toolbar className="flex shrink-0 items-center gap-0.5">
+            <Dropdown size="sm" ariaLabel="音色来源" value={selectedSource} options={sourceFilterOptions} onSelect={setSelectedSource} disabled={sourceFilterOptions.length < 2} minWidthStrategy="none" panelWidthStrategy="options" />
+            <Dropdown size="sm" ariaLabel="音色性别" value={selectedGender} options={genderFilterOptions} onSelect={setSelectedGender} disabled={genderFilterOptions.length < 2} minWidthStrategy="none" panelWidthStrategy="options" />
+            <Dropdown size="sm" ariaLabel="音色年龄" value={selectedAge} options={ageFilterOptions} onSelect={setSelectedAge} disabled={ageFilterOptions.length < 2} minWidthStrategy="none" panelWidthStrategy="options" />
+            <Dropdown size="sm" ariaLabel="音色语言" value={selectedLanguage} options={languageFilterOptions} onSelect={setSelectedLanguage} disabled={languageFilterOptions.length < 2} minWidthStrategy="none" panelWidthStrategy="options" />
+            {hasFilters && <UiButton type="button" size="sm" onClick={clearFilters}>清除筛选</UiButton>}
           </div>
-          {hasFilters && <UiButton type="button" size="lg" onClick={() => {
-            setSelectedSource('all'); setSelectedGender('all'); setSelectedAge('all'); setSelectedLanguage('all')
-          }}>清除筛选</UiButton>}
-        </div>
-      </div>
-
+          {remoteModelId && <UiIconButton type="button" size="sm" label="刷新账号音色" tooltip="刷新账号音色" disabled={remoteStatus === 'loading'} onClick={() => void loadRemoteVoices(true)}>
+            <RefreshCw />
+          </UiIconButton>}
+        </UiFieldLayoutContext.Provider>
+      )}
+      status={customIdFooter.status}
+      action={customIdFooter.action}
+    >
       {showRemoteLoading && remoteStatus === 'loading' && voices.length === 0 && <UiLoading size="xs" message="正在读取账号音色…" />}
       {remoteStatus === 'failed' && <UiError size="xs" message={remoteError} onRetry={() => void loadRemoteVoices(true)} />}
       {libraryError && <UiError size="xs" message={libraryError} />}
@@ -493,34 +516,37 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
               const failed = record?.status === 'failed'
               const expired = !record?.activated && Boolean(record?.expiresAt && Date.parse(record.expiresAt) <= Date.now())
               return (
-                <div key={voice.id} className="relative">
+                <div key={voice.id} className="flex flex-col gap-1">
                   <UiOptionButton
                     type="button"
-                    // 二维网格：grid 变体静息铺一层底撑出格子形状，不叠边框
+                    // 二维网格：grid 变体静息铺一层极淡底撑出格子形状，不叠边框
                     variant="grid"
                     active={active}
                     disabled={training || failed || expired}
                     onClick={() => onChange(voice.id)}
                     // 名称和说明在格子里都可能被截断：悬停看全名与说明
                     tooltip={hasDescription ? `${voice.name}：${voice.description}` : voice.name}
-                    className={`w-full flex-col items-start justify-center ${
-                      hasDescription ? 'min-h-[58px] gap-1' : 'min-h-[52px]'
-                    }`}
+                    className="w-full flex-col items-start justify-center gap-0.5"
                   >
-                    <span className="w-full truncate text-left text-sm leading-tight" data-user-content>{voice.name}</span>
-                    {(training || failed || expired) && <span className="text-xs text-text2">{failed ? '训练失败或音色已失效' : expired ? '有效期已过，请刷新确认' : '等待训练结果'}</span>}
+                    <span className="w-full truncate text-left" data-user-content>{voice.name}</span>
+                    {(training || failed || expired) && <span className="text-2xs text-text3">{failed ? '训练失败或音色已失效' : expired ? '有效期已过，请刷新确认' : '等待训练结果'}</span>}
                     {hasDescription && (
-                      <span className="w-full truncate text-left text-xs text-text2" data-user-content>{voice.description}</span>
+                      <span className="w-full truncate text-left text-2xs text-text3" data-user-content>{voice.description}</span>
                     )}
                   </UiOptionButton>
-                  {canDelete && (
-                    <UiButton
+                  {/* 克隆音色的操作放在卡片下面一行，不压在名称上 */}
+                  {record && <div className="flex flex-wrap gap-1">
+                    {record.previewPath && !training && <UiButton type="button" size="sm" variant="secondary" onClick={() => setPreviewVoiceId(previewVoiceId === voice.id ? null : voice.id)}>试听</UiButton>}
+                    {record.taskId && <UiButton loading={refreshingVoiceId === voice.id} type="button" size="sm" variant="secondary" disabled={refreshingVoiceId !== null} onClick={() => void refreshVoice(record)}>
+                      {training ? '查看训练结果' : '刷新状态'}
+                    </UiButton>}
+                    {refreshingVoiceId === voice.id && <UiButton type="button" size="sm" variant="secondary" onClick={() => refreshController.current?.abort()}>停止等待</UiButton>}
+                    {canDelete && <UiButton
                       type="button"
-                      variant="secondary"
                       size="sm"
+                      variant="danger"
                       disabled={deletingVoiceId === voice.id}
                       tooltip="仅从本地列表移除，不删除供应商音色或取消计费"
-                      className="absolute right-1 top-1 "
                       onClick={(event) => {
                         event.preventDefault()
                         event.stopPropagation()
@@ -528,14 +554,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                       }}
                     >
                       移除
-                    </UiButton>
-                  )}
-                  {record && <div className="flex flex-wrap gap-1">
-                    {record.previewPath && !training && <UiButton type="button" variant="secondary" onClick={() => setPreviewVoiceId(previewVoiceId === voice.id ? null : voice.id)}>试听</UiButton>}
-                    {record.taskId && <UiButton loading={refreshingVoiceId === voice.id} type="button" variant="secondary" disabled={refreshingVoiceId !== null} onClick={() => void refreshVoice(record)}>
-                      {training ? '查看训练结果' : '刷新状态'}
                     </UiButton>}
-                    {refreshingVoiceId === voice.id && <UiButton type="button" variant="secondary" onClick={() => refreshController.current?.abort()}>停止等待</UiButton>}
                   </div>}
                 </div>
               )
@@ -544,32 +563,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
       </div>
 
       {preview && <div className="mt-2 shrink-0"><AudioPlayer compact surface="plain" src={toFetchableMediaUrl(preview)} filePath={isLikelyLocalImagePath(preview) ? preview : undefined} /></div>}
-
-      {config?.allowCustomId && (
-        <div className="mt-3 shrink-0">
-          {customIdOpen ? (
-            <div className="flex items-center gap-2">
-              <UiInput
-                value={customId}
-                onChange={(event) => setCustomId(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && customId.trim()) onChange(customId.trim())
-                }}
-                placeholder="输入列表中没有的音色 ID"
-                className={`min-w-0 flex-1`}
-              />
-              <UiButton type="button" variant="primary" size="md" disabled={!customId.trim()} onClick={() => onChange(customId.trim())}>
-                使用 ID
-              </UiButton>
-            </div>
-          ) : (
-            <UiButton type="button" variant="secondary" onClick={() => { setCustomId(value); setCustomIdOpen(true) }}>
-              使用其他音色 ID
-            </UiButton>
-          )}
-        </div>
-      )}
-    </div>
+    </UiSpecialPanel>
   )
 }
 

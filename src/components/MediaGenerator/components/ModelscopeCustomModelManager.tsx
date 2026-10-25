@@ -1,9 +1,7 @@
-import { UiSegmented } from '@/components/ui'
 import { createLogger } from '@/core/logging'
 import React, { useState, useEffect } from 'react'
-import { UiFormRow, UiInput } from '@/components/ui'
 import { requestAlertConfirmation, showAlertDialog } from '@/stores/alertDialogStore'
-import { UI_TEXT_BODY_CLASS, UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiIconButton, UiPanel } from '@/components/ui'
+import { UI_ICON_SIZE_CLASS, UiButton, UiEmpty, UiIconButton, UiInput, UiOptionButton, UiSegmented } from '@/components/ui'
 import { openExternal as open } from '@/platform/desktopApi'
 import { useI18n } from '@/hooks/useI18n'
 import { checkModelscopeModelAvailability } from '@/services/modelscopeCustomModels/availability'
@@ -11,14 +9,17 @@ import {
   modelscopeCustomModelService,
   type ModelscopeCustomModelEntry,
 } from '@/services/modelscopeCustomModels/ModelscopeCustomModelService'
-import { Plus, X } from 'lucide-react'
+import { Check, Pencil, Plus, Trash2, X } from 'lucide-react'
 
 const logger = createLogger('components.MediaGenerator.components.ModelscopeCustomModelManager')
 
 interface ModelscopeCustomModelManagerProps {
   onModelsChange?: () => void | Promise<void>
+  /** 当前选用的自定义模型；传 onSelect 时列表就是选择 */
+  selectedId?: string
+  onSelect?: (modelId: string) => void
 }
-const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> = ({ onModelsChange }) => {
+const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> = ({ onModelsChange, selectedId, onSelect }) => {
   const { t } = useI18n('ui')
   const [models, setModels] = useState<ModelscopeCustomModelEntry[]>([])
   const [newModelId, setNewModelId] = useState('')
@@ -186,172 +187,81 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
     setEditName('')
     setEditModelType('imageGeneration')
   }
+  const typeOptions = (['imageGeneration', 'imageEditing'] as const).map(value => ({ value, label: t(`modelscopeCustomModel.types.${value}`) }))
+  const typeLabel = (model: ModelscopeCustomModelEntry): string => model.modelType.imageEditing
+    ? t('modelscopeCustomModel.types.imageEditing')
+    : t('modelscopeCustomModel.types.imageGeneration')
+  const cancelAdd = (): void => {
+    setIsAddingNew(false)
+    setNewModelId('')
+    setNewModelName('')
+  }
+
+  // 特殊面板（重要记录 021）：列表就是选择，改名与删除在行尾；添加收成一行，点开才展开成 ID、名称、类型、确认
   return (
-    <div className="flex flex-col h-full">
-      <UiPanel variant="inset" className="mb-3 p-3">
-        <div className="text-xs text-text2">
-          {t('modelscopeCustomModel.tip.prefix')}
-          <UiButton
-            type="button"
-            variant="link"
-            onClick={handleOpenModelLibrary}
-            className="mx-1"
-          >
-            {t('modelscopeCustomModel.tip.library')}
-          </UiButton>
-          {t('modelscopeCustomModel.tip.suffix')}
+    <div className="flex flex-col gap-2">
+      <p className="text-xs text-text3">
+        {t('modelscopeCustomModel.tip.prefix')}
+        <UiButton type="button" variant="link" onClick={handleOpenModelLibrary} className="mx-1">
+          {t('modelscopeCustomModel.tip.library')}
+        </UiButton>
+        {t('modelscopeCustomModel.tip.suffix')}
+      </p>
+      {models.length === 0 ? (
+        isAddingNew ? null : <UiEmpty size="xs" title={t('modelscopeCustomModel.empty')} />
+      ) : (
+        <div className="flex flex-col gap-0.5">
+          {models.map(model => editingId === model.id ? (
+            <div key={model.id} className="flex items-center gap-2 py-0.5">
+              <span className="w-40 min-w-0 truncate text-2xs text-text3">{model.id}</span>
+              <UiInput size="sm" value={editName} onChange={event => setEditName(event.target.value)} aria-label={t('modelscopeCustomModel.form.displayName')} className="w-36" />
+              <UiSegmented size="sm" ariaLabel={t('modelscopeCustomModel.form.modelType')} value={editModelType} onChange={setEditModelType} options={typeOptions} />
+              <UiButton type="button" size="sm" variant="secondary" onClick={() => void handleSaveEdit(model.id)}>{t('common:save')}</UiButton>
+              <UiButton type="button" size="sm" onClick={handleCancelEdit}>{t('common:cancel')}</UiButton>
+            </div>
+          ) : (
+            <div key={model.id} className="flex items-center gap-1">
+              <UiOptionButton
+                type="button"
+                variant="menu"
+                active={selectedId === model.id}
+                aria-pressed={onSelect ? selectedId === model.id : undefined}
+                onClick={() => onSelect?.(model.id)}
+                className="min-w-0 flex-1 gap-3"
+              >
+                <span className="shrink-0">{model.name}</span>
+                <span className="min-w-0 flex-1 truncate text-2xs text-text3">{model.id}</span>
+                <span className="shrink-0 text-2xs text-text3">{typeLabel(model)}</span>
+                {selectedId === model.id ? <Check className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 text-accent-text`} aria-hidden /> : null}
+              </UiOptionButton>
+              <UiIconButton type="button" size="xs" label={t('common:edit')} tooltip={t('common:edit')} onClick={() => handleStartEdit(model)}>
+                <Pencil />
+              </UiIconButton>
+              <UiIconButton type="button" size="xs" tone="danger" label={t('common:delete')} tooltip={t('modelscopeCustomModel.actions.deleteTitle')} onClick={() => void handleDelete(model.id)}>
+                <Trash2 />
+              </UiIconButton>
+            </div>
+          ))}
         </div>
-      </UiPanel>
-      {!isAddingNew ? (
-        <UiButton
-          type="button"
-          variant="primary"
-          onClick={() => setIsAddingNew(true)}
-          className="mb-3"
-        >
-          <Plus  />
+      )}
+      {isAddingNew ? (
+        <div className="flex items-center gap-2">
+          <UiInput size="sm" value={newModelId} onChange={event => setNewModelId(event.target.value)} placeholder={t('modelscopeCustomModel.form.placeholders.modelId')} aria-label={t('modelscopeCustomModel.form.modelId')} className="w-56" />
+          <UiInput size="sm" value={newModelName} onChange={event => setNewModelName(event.target.value)} placeholder={t('modelscopeCustomModel.form.placeholders.displayName')} aria-label={t('modelscopeCustomModel.form.displayName')} className="w-36" />
+          <UiSegmented size="sm" ariaLabel={t('modelscopeCustomModel.form.modelType')} value={newModelType} onChange={setNewModelType} options={typeOptions} />
+          <UiButton type="button" size="sm" variant="secondary" onClick={() => void handleAdd()} disabled={isCheckingAvailability}>
+            {isCheckingAvailability ? t('modelscopeCustomModel.actions.checking') : t('modelscopeCustomModel.actions.confirmAdd')}
+          </UiButton>
+          <UiIconButton type="button" size="sm" label={t('common:close')} onClick={cancelAdd}>
+            <X />
+          </UiIconButton>
+        </div>
+      ) : (
+        <UiButton type="button" size="sm" onClick={() => setIsAddingNew(true)} className="self-start">
+          <Plus />
           {t('modelscopeCustomModel.addNew')}
         </UiButton>
-      ) : (
-        <UiPanel variant="inset" className="mb-3 p-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className={UI_TEXT_LABEL_CLASS}>{t('modelscopeCustomModel.addNew')}</div>
-            <UiIconButton size="md"
-              type="button"
-              onClick={() => {
-                setIsAddingNew(false)
-                setNewModelId('')
-                setNewModelName('')
-              }}
-              aria-label={t('common:close')}
-            >
-              <X  />
-            </UiIconButton>
-          </div>
-          <div className="flex flex-col gap-2">
-            <UiFormRow inline label={t('modelscopeCustomModel.form.modelId')}><UiInput value={newModelId} onChange={event => setNewModelId(event.target.value)} placeholder={t('modelscopeCustomModel.form.placeholders.modelId')} className="w-full" /></UiFormRow>
-            <UiFormRow inline label={t('modelscopeCustomModel.form.displayName')}><UiInput value={newModelName} onChange={event => setNewModelName(event.target.value)} placeholder={t('modelscopeCustomModel.form.placeholders.displayName')} className="w-full" /></UiFormRow>
-            <div className="flex flex-col gap-2">
-              <div className={UI_TEXT_LABEL_CLASS}>{t('modelscopeCustomModel.form.modelType')}</div>
-              <UiSegmented ariaLabel={t('modelscopeCustomModel.form.modelType')} fullWidth value={newModelType} onChange={setNewModelType} options={(['imageGeneration', 'imageEditing'] as const).map(value => ({ value, label: t(`modelscopeCustomModel.types.${value}`) }))} />
-            </div>
-            <div className="flex gap-2">
-              <UiButton
-                type="button"
-                variant="primary"
-                onClick={() => void handleAdd()}
-                disabled={isCheckingAvailability}
-                className="flex-1"
-              >
-                {isCheckingAvailability
-                  ? t('modelscopeCustomModel.actions.checking')
-                  : t('modelscopeCustomModel.actions.confirmAdd')}
-              </UiButton>
-              <UiButton
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  setIsAddingNew(false)
-                  setNewModelId('')
-                  setNewModelName('')
-                  setNewModelType('imageGeneration')
-                }}
-              >
-                {t('common:cancel')}
-              </UiButton>
-            </div>
-          </div>
-        </UiPanel>
       )}
-      <div className="flex-1 overflow-y-auto">
-        {models.length === 0 ? (
-          <UiEmpty size="sm" title={t('modelscopeCustomModel.empty')} />
-        ) : (
-          <div className="space-y-2">
-            {models.map(model => (
-              <UiPanel
-                key={model.id}
-                variant="inset"
-                className="p-3"
-              >
-                {editingId === model.id ? (
-                  <div className="flex flex-col gap-2">
-                  <div className={`break-all ${UI_TEXT_META_CLASS}`}>
-                      {t('modelscopeCustomModel.form.modelId')}: {model.id}
-                    </div>
-                    <UiFormRow inline label={t('modelscopeCustomModel.form.displayName')}><UiInput value={editName} onChange={event => setEditName(event.target.value)} className="w-full" /></UiFormRow>
-                    <div className="flex flex-col gap-2">
-                      <div className={UI_TEXT_LABEL_CLASS}>{t('modelscopeCustomModel.form.modelType')}</div>
-                      <UiSegmented ariaLabel={t('modelscopeCustomModel.form.modelType')} fullWidth value={editModelType} onChange={setEditModelType} options={(['imageGeneration', 'imageEditing'] as const).map(value => ({ value, label: t(`modelscopeCustomModel.types.${value}`) }))} />
-                    </div>
-                    <div className="flex gap-2">
-                      {/* 行内编辑的保存用次级：这块面板的主动作是顶部“添加”，一个表面只留一个实底 */}
-                      <UiButton
-                        type="button"
-                        variant="secondary"
-                        onClick={() => void handleSaveEdit(model.id)}
-                        className="flex-1"
-                      >
-                        {t('common:save')}
-                      </UiButton>
-                      <UiButton
-                        type="button"
-                        variant="secondary"
-                        onClick={handleCancelEdit}
-                        className="flex-1"
-                      >
-                        {t('common:cancel')}
-                      </UiButton>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className={`truncate ${UI_TEXT_BODY_CLASS}`}>
-                        {model.name}
-                      </div>
-                      <div className={`mt-1 break-all ${UI_TEXT_META_CLASS}`}>
-                        {model.id}
-                      </div>
-                      <div className="flex gap-2 mt-1.5">
-                        {model.modelType.imageGeneration && (
-                          <span className="inline-flex items-center rounded-control bg-raised px-2 py-0.5 text-xs text-text2">
-                            {t('modelscopeCustomModel.types.imageGeneration')}
-                          </span>
-                        )}
-                        {model.modelType.imageEditing && (
-                          <span className="inline-flex items-center rounded-control bg-raised px-2 py-0.5 text-xs text-text2">
-                            {t('modelscopeCustomModel.types.imageEditing')}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex gap-1 flex-shrink-0">
-                      <UiButton
-                        type="button"
-                        size="sm"
-                        onClick={() => handleStartEdit(model)}
-                        tooltip={t('common:edit')}
-                      >
-                        {t('common:edit')}
-                      </UiButton>
-                      <UiButton
-                        type="button"
-                        variant="danger"
-                        size="sm"
-                        onClick={() => void handleDelete(model.id)}
-                        tooltip={t('modelscopeCustomModel.actions.deleteTitle')}
-                      >
-                        {t('common:delete')}
-                      </UiButton>
-                    </div>
-                  </div>
-                )}
-              </UiPanel>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   )
 }

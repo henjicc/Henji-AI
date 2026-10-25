@@ -1,8 +1,6 @@
-import { UI_PANEL_BODY_HEIGHT_CLASS } from '@/components/ui/styleTokens'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Dropdown from '@/components/ui/Dropdown'
-import { UiSwitch, UiFormRow } from '@/components/ui'
-import { UI_TEXT_LABEL_CLASS, UiButton, UiError, UiInput } from '@/components/ui'
+import { UI_TEXT_BODY_CLASS, UiButton, UiCheckbox, UiFormRow, UiGroup, UiInput, UiSpecialPanel } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import { showAlertDialog } from '@/stores/alertDialogStore'
 import { createLogger } from '@/core/logging'
@@ -335,170 +333,147 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
     }
   }
 
-  return (
-    <div className={`relative flex w-full min-w-0 ${UI_PANEL_BODY_HEIGHT_CLASS.workspace} flex-col overflow-hidden rounded-[inherit]`}>
-      <div className="flex h-full w-full flex-col p-4">
-        <div className="flex-1 min-h-0 overflow-y-auto pr-1">
-          <div className="space-y-3 pb-2">
-          <div className="grid grid-cols-[minmax(280px,1.45fr)_auto_auto_auto_minmax(240px,1fr)] items-end gap-3">
-            <div className="min-w-0 space-y-2">
-              <label className={UI_TEXT_LABEL_CLASS}>音色名称</label>
-              <UiInput
-                value={panelValue.voiceName}
-                onChange={(event) => patchValue({ voiceName: event.target.value })}
-                placeholder="必填，用于保存到音色库"
-                maxLength={40}
-              />
-            </div>
-            <UiFormRow inline label="降噪"><UiSwitch checked={panelValue.needNoiseReduction} onCheckedChange={next => patchValue({ needNoiseReduction: next })} /></UiFormRow>
-            <UiFormRow inline label="音量归一化"><UiSwitch checked={panelValue.needVolumeNormalization} onCheckedChange={next => patchValue({ needVolumeNormalization: next })} /></UiFormRow>
-            <div className="space-y-2">
-              <label className={UI_TEXT_LABEL_CLASS}>校验阈值</label>
-              <NumberInput
-                value={panelValue.accuracy}
-                onChange={(next) => patchValue({
-                  accuracy: Math.max(0, Math.min(1, normalizeNumber(next, panelValue.accuracy))),
-                })}
-                min={0}
-                max={1}
-                step={0.01}
-                precision={2}
-                widthClassName="w-[92px]"
-              />
-            </div>
-            <div className="min-w-0 space-y-2">
-              <label className={UI_TEXT_LABEL_CLASS}>试听模型</label>
-              <Dropdown
-                value={panelValue.previewModel}
-                display={panelValue.previewModel}
-                options={previewModels}
-                onSelect={(next) => patchValue({ previewModel: String(next) })}
-                buttonClassName="w-full"
-                panelWidthStrategy="options"
-              />
-            </div>
-          </div>
+  // 特殊面板两栏（重要记录 021）：左边参考音频、提示音频与试听结果，右边各项设置；底部一行放状态与“开始克隆”
+  const footerStatus = statusMessage?.type === 'error'
+    ? <span className="text-danger-text">{statusMessage.text}</span>
+    : hasResultPreview
+      ? <span className="text-text2">克隆完成，已保存到音色库，可在“音色”里选择使用</span>
+      : <span className="text-text3">克隆完成后在左边试听</span>
 
-          <UiInput
-            ref={cloneAudioInputRef}
-            type="file"
-            accept={AUDIO_ACCEPT}
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0]
-              if (file) void handleSelectAudioFile(file, 'clone')
-            }}
-          />
+  return (
+    <UiSpecialPanel
+      status={footerStatus}
+      action={(
+        <UiButton type="button" variant="primary" size="sm" disabled={isSubmitting} onClick={() => void runClone()}>
+          {isSubmitting ? '克隆中…' : hasResultPreview ? '重新克隆' : '开始克隆'}
+        </UiButton>
+      )}
+    >
+      <UiInput
+        ref={cloneAudioInputRef}
+        type="file"
+        accept={AUDIO_ACCEPT}
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          if (file) void handleSelectAudioFile(file, 'clone')
+        }}
+      />
+      <UiInput
+        ref={promptAudioInputRef}
+        type="file"
+        accept={AUDIO_ACCEPT}
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          if (file) void handleSelectAudioFile(file, 'prompt')
+        }}
+      />
+      <div className="flex gap-4">
+        <div className="flex w-80 shrink-0 flex-col gap-3">
           <AudioPreviewCard
-            title="复刻音频预览"
+            title="参考音频"
             src={cloneAudioPreviewSrc}
             filePath={panelValue.cloneAudioFilePath || undefined}
-            emptyText="上传后可在此预览复刻音频"
+            emptyText="上传后可在这里试听"
             size="compact"
             playerRightActions={cloneAudioPreviewSrc ? (
-              <UiButton
-                type="button"
-                variant="link"
-                onClick={() => cloneAudioInputRef.current?.click()}
-                tooltip="重新上传音频"
-              >
-                重新上传音频
-              </UiButton>
+              <UiButton type="button" variant="link" onClick={() => cloneAudioInputRef.current?.click()}>重新上传</UiButton>
             ) : undefined}
             uploadButtonText={panelValue.cloneAudioFilePath || panelValue.cloneAudioFileName ? '重新上传音频' : '上传音频'}
             uploadHintText="支持拖放 mp3 / m4a / wav"
             onUploadClick={() => cloneAudioInputRef.current?.click()}
             onFileDrop={(file) => { void handleSelectAudioFile(file, 'clone') }}
           />
-
-          <div className="space-y-2">
-            <label className={UI_TEXT_LABEL_CLASS}>试听文本</label>
-            <UiInput
-              value={panelValue.previewText}
-              onChange={(event) => patchValue({ previewText: event.target.value })}
-              placeholder="输入用于试听合成的文本"
-              className={`w-full`}
-            />
-          </div>
-
-          <UiInput
-            ref={promptAudioInputRef}
-            type="file"
-            accept={AUDIO_ACCEPT}
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0]
-              if (file) void handleSelectAudioFile(file, 'prompt')
-            }}
-          />
           <AudioPreviewCard
-            title="使用音频 Prompt（可选）"
+            title="提示音频（可选）"
             src={promptAudioPreviewSrc}
             filePath={panelValue.promptAudioFilePath || undefined}
-            emptyText="上传示例音频后可启用音频 Prompt（需与下方文本同时填写）"
+            emptyText="上传示例音频并填写对应文本后启用"
             size="compact"
             playerRightActions={promptAudioPreviewSrc ? (
-              <UiButton
-                type="button"
-                variant="link"
-                onClick={() => promptAudioInputRef.current?.click()}
-                tooltip="重新上传示例音频"
-              >
-                重新上传示例音频
-              </UiButton>
+              <UiButton type="button" variant="link" onClick={() => promptAudioInputRef.current?.click()}>重新上传</UiButton>
             ) : undefined}
             uploadButtonText={panelValue.promptAudioFilePath || panelValue.promptAudioFileName ? '重新上传示例音频' : '上传示例音频'}
             uploadHintText="支持拖放 mp3 / m4a / wav"
             onUploadClick={() => promptAudioInputRef.current?.click()}
             onFileDrop={(file) => { void handleSelectAudioFile(file, 'prompt') }}
           />
-            <div className="w-full space-y-2">
-              <label className={UI_TEXT_LABEL_CLASS}>Prompt 对应文本（与示例音频一致）</label>
-              <UiInput
-                value={panelValue.promptText}
-                onChange={(event) => patchValue({ promptText: event.target.value })}
-                placeholder="可选；填写时需同时上传示例音频"
-                maxLength={400}
-                className={`w-full`}
-              />
-            </div>
+          {hasResultPreview ? (
+            <AudioPreviewCard
+              title="试听结果"
+              src={resultPreviewSrc}
+              filePath={resultPreviewFilePath || undefined}
+              emptyText=""
+              size="compact"
+            />
+          ) : null}
+        </div>
+        <span className="w-px shrink-0 bg-line" aria-hidden />
+        <UiGroup labelWidth={72} className="w-80 shrink-0">
+          <UiFormRow label="音色名称" density="compact">
+            <UiInput
+              size="sm"
+              value={panelValue.voiceName}
+              onChange={(event) => patchValue({ voiceName: event.target.value })}
+              placeholder="必填，保存到音色库用"
+              maxLength={40}
+            />
+          </UiFormRow>
+          <UiFormRow label="试听模型" density="compact">
+            <Dropdown
+              size="sm"
+              value={panelValue.previewModel}
+              display={panelValue.previewModel}
+              options={previewModels}
+              onSelect={(next) => patchValue({ previewModel: String(next) })}
+              buttonClassName="w-full"
+              panelWidthStrategy="options"
+            />
+          </UiFormRow>
+          <UiFormRow label="试听文本" density="compact">
+            <UiInput
+              size="sm"
+              value={panelValue.previewText}
+              onChange={(event) => patchValue({ previewText: event.target.value })}
+              placeholder="用于试听合成的文本"
+            />
+          </UiFormRow>
+          <UiFormRow label="提示文本" density="compact" info="与提示音频说的内容一致；填写时需同时上传提示音频">
+            <UiInput
+              size="sm"
+              value={panelValue.promptText}
+              onChange={(event) => patchValue({ promptText: event.target.value })}
+              placeholder="可选"
+              maxLength={400}
+            />
+          </UiFormRow>
+          <UiFormRow label="校验阈值" density="compact">
+            <NumberInput
+              size="sm"
+              value={panelValue.accuracy}
+              onChange={(next) => patchValue({
+                accuracy: Math.max(0, Math.min(1, normalizeNumber(next, panelValue.accuracy))),
+              })}
+              min={0}
+              max={1}
+              step={0.01}
+              precision={2}
+            />
+          </UiFormRow>
+          <div className={`flex items-center gap-4 pt-1 ${UI_TEXT_BODY_CLASS}`}>
+            <label className="inline-flex items-center gap-2">
+              <UiCheckbox checked={panelValue.needNoiseReduction} onCheckedChange={next => patchValue({ needNoiseReduction: next })} />
+              降噪
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <UiCheckbox checked={panelValue.needVolumeNormalization} onCheckedChange={next => patchValue({ needVolumeNormalization: next })} />
+              音量归一化
+            </label>
           </div>
-        </div>
-
-        <div className="mt-3 shrink-0 border-t border-line pt-3">
-          <AudioPreviewCard
-            title="试听结果预览"
-            subtitle={hasResultPreview ? '克隆完成，已保存到音色库，可在“音色 ID”中选择使用' : undefined}
-            src={resultPreviewSrc}
-            filePath={resultPreviewFilePath || undefined}
-            emptyText="克隆完成后会在这里显示试听音频"
-            size="compact"
-            playerRightActions={hasResultPreview ? (
-              <UiButton
-                type="button"
-                variant="link"
-                onClick={() => { void runClone() }}
-                disabled={isSubmitting}
-                tooltip="重新克隆"
-              >
-                重新克隆
-              </UiButton>
-            ) : undefined}
-            contentAction={hasResultPreview ? undefined : (
-              <UiButton type="button" variant="primary" disabled={isSubmitting} onClick={() => void runClone()}>
-                {isSubmitting ? '克隆中...' : '开始克隆'}
-              </UiButton>
-            )}
-          />
-
-          {statusMessage?.type === 'error' && (
-            // 失败统一走 UiError（任务 5.8，G16.4 补截时发现手写的危险底色块）
-            <UiError size="xs" align="start" className="mt-3" message={statusMessage.text} />
-          )}
-        </div>
+        </UiGroup>
       </div>
-
-    </div>
+    </UiSpecialPanel>
   )
 }
 

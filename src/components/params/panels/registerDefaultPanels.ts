@@ -6,7 +6,7 @@
 
 import { panelRegistry } from '@/core/panels/PanelRegistry'
 import ModelSelectorPanel from '@/components/MediaGenerator/components/ModelSelectorPanel'
-import { CompositePanel } from './CompositePanel'
+import { CompositeSpecialPanel } from './CompositePanel'
 import { MinimaxVoiceClonePanel } from './MinimaxVoiceClonePanel'
 import { ModelscopeCustomModelPanel } from './ModelscopeCustomModelPanel'
 import { VoiceSelectorPanel } from './VoiceSelectorPanel'
@@ -16,7 +16,7 @@ export function registerDefaultPanels(): void {
   registerDefaultComponents()
 
   panelRegistry.register('model-selector', ModelSelectorPanel)
-  panelRegistry.register('composite', CompositePanel)
+  panelRegistry.register('composite', CompositeSpecialPanel)
   panelRegistry.register('modelscope-custom-model', ModelscopeCustomModelPanel)
   panelRegistry.register('voice-selector', VoiceSelectorPanel)
   panelRegistry.register('minimax-voice-clone', MinimaxVoiceClonePanel)

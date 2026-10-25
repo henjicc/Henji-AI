@@ -65,18 +65,6 @@
       "reason": "音色克隆样本的拖放区：紧凑 88 / 常规 132 高，与旁边的样本波形卡等高，两档都不在标准间距档上"
     },
     {
-      "file": "src/components/params/panels/MinimaxVoiceClonePanel.tsx",
-      "category": "arbitraryValue",
-      "values": ["w-[92px]"],
-      "reason": "音色克隆弹窗的固定版式：左右两栏同时放样本、参数与试听需要 760–960 宽、660–820 高（max-h-[96vh] 兜底小窗口）；数值框 92 宽容纳 4 位数与单位"
-    },
-    {
-      "file": "src/components/params/panels/VoiceSelectorPanel.tsx",
-      "category": "arbitraryValue",
-      "values": ["min-h-[58px]", "min-h-[52px]"],
-      "reason": "音色选择浮层：固定 460 高让分类切换时浮层不跳，宽 520–720 放两列音色卡；音色卡单行 52 / 带说明 58 高，保证一列里卡片等高"
-    },
-    {
       "file": "src/components/params/ParamGroupTrigger.tsx",
       "category": "arbitraryValue",
       "values": ["min-w-[180px]", "min-w-[108px]", "max-w-[116px]"],

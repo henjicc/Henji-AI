@@ -1,5 +1,5 @@
 /**
- * composite 面板（PanelTrigger）共用的纯展示工具：宽度解析与值格式化。
+ * composite 面板（PanelTrigger）共用的纯展示工具：值格式化（宽度跟内容走，见重要记录 021）。
  * 独立成纯函数模块（非组件文件），供 ParamRenderer（对话模式）与
  * NodeParamControl（画布逐行模式）共同复用，避免同功能多份实现。
  */
@@ -8,18 +8,6 @@ import { getI18nText, type I18nText } from '@/core/types/I18nText'
 import { getModelscopeCustomModel } from '@henjicc/ai-sdk'
 import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
 import { getTtsVoiceName } from '@/services/voiceLibrary/ttsVoiceNameCache'
-
-export function resolvePanelWidth(config: DynamicValue, fallbackWidth: number): number {
-  if (!config || typeof config !== 'object') {
-    return fallbackWidth
-  }
-  const record = config as DynamicValueMap
-  const width = typeof record.panelWidth === 'number' ? record.panelWidth : record.width
-  if (typeof width === 'number' && Number.isFinite(width) && width > 0) {
-    return width
-  }
-  return fallbackWidth
-}
 
 const DISPLAY_TEXT = {
   unset: { zh: '未设置', en: 'Not set' },

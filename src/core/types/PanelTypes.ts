@@ -107,9 +107,6 @@ export interface SpecialPanelConfig {
   /** 面板标签 */
   label: I18nText
 
-  /** 面板宽度（像素） */
-  width?: number
-
   /** 面板对齐方式 */
   alignment?: PanelAlignment
 

@@ -99,7 +99,7 @@ const CLONE_PREVIEW_MODEL_OPTIONS = [
 const ADVANCED_PANEL_CONFIG: CompositePanelConfig = {
   layout: 'grid',
   gap: 12,
-  gridColumns: 3,
+  gridColumns: 2,
   components: [
     { id: 'audioVol', type: 'number-input', label: sharedFieldText('volume'), config: { min: 0.1, max: 10, step: 0.1 } },
     { id: 'audioPitch', type: 'number-input', label: sharedFieldText('pitch'), config: { min: -12, max: 12, step: 1 } },
@@ -264,10 +264,7 @@ export const ppioPresentation: Record<string, ModelPresentation> = {
       minimaxVoiceId: {
         name: sharedFieldText('voiceId'),
         panel: 'voice-selector',
-        config: {
-          ...VOICE_SELECTOR_CONFIG,
-          width: 720,
-        },
+        config: VOICE_SELECTOR_CONFIG,
       },
       minimaxAudioEmotion: {
         name: sharedFieldText('emotion'),
@@ -333,18 +330,12 @@ export const ppioPresentation: Record<string, ModelPresentation> = {
       minimaxAdvancedSettings: {
         name: { zh: '高级选项', en: 'Advanced Options' },
         panel: 'composite',
-        config: {
-          ...ADVANCED_PANEL_CONFIG,
-          width: 576,
-        },
+        config: ADVANCED_PANEL_CONFIG,
       },
       minimaxVoiceClonePanel: {
         name: { zh: '音色克隆', en: 'Voice Clone' },
         panel: 'minimax-voice-clone',
-        config: {
-          ...MINIMAX_VOICE_CLONE_PANEL_CONFIG,
-          width: 860,
-        },
+        config: MINIMAX_VOICE_CLONE_PANEL_CONFIG,
       },
     },
     linkages: [],

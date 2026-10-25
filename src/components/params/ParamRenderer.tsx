@@ -13,7 +13,7 @@ import type { ParamDef, CompositePanelDef } from '@/core/types/ParamDef'
 import { panelRegistry } from '@/core/panels/PanelRegistry'
 import type { CompositePanelConfig } from '@/core/types/CompositePanel'
 import { isParamDisabled, isParamVisible } from './paramVisibility'
-import { formatPanelDisplayValue, resolvePanelWidth } from './panelDisplay'
+import { formatPanelDisplayValue } from './panelDisplay'
 
 // 导入真实的新系统组件
 import { TextInput } from './base/TextInput'
@@ -126,13 +126,6 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
       const PanelComponent = panelRegistry.get(compositeParam.panel as DynamicValue)
 
       if (PanelComponent) {
-        const defaultPanelWidth = (() => {
-          if (compositeParam.panel === 'modelscope-custom-model') {
-            return 520
-          }
-          return 320
-        })()
-        const panelWidth = resolvePanelWidth(compositeParam.config, defaultPanelWidth)
         // 使用 PanelTrigger 包装特殊面板，实现点击展开功能
         return (
           <ParamField className="flex min-w-0 flex-col">
@@ -142,7 +135,8 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
               // 工具条（生成底栏）里触发器宽度随取值：固定最小宽会让“Vivi 2.0”“未设置”后面空出一段才是箭头（任务 5.3）
               className={toolbarLayout ? 'w-auto' : 'w-auto min-w-[100px]'}
               buttonClassName={toolbarLayout ? 'w-auto' : undefined}
-              panelSize={panelWidth > 720 ? 'workspace' : panelWidth > 384 ? 'wide' : 'compact'}
+              // 特殊面板（重要记录 021）：宽度量面板里最宽的内容
+              panelSize="special"
               alignment="aboveCenter"
               closeOnPanelClick={false}
               freezePositionOnOpen={compositeParam.panel === 'voice-selector'}

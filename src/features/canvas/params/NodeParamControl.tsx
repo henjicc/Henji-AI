@@ -26,7 +26,7 @@ import PanelTrigger from '@/components/ui/PanelTrigger';
 import { AspectRatioTiles, type AspectRatioTileOption } from '@/components/params/panels/ResolutionPanel/AspectRatioTiles';
 import { parseRatio } from '@/components/MediaGenerator/components/aspectResolutionPanelUtils';
 import { PromptEditor, UiInput, UiSpecialPanel, UiSwitch } from '@/components/ui';
-import { formatPanelDisplayValue, resolvePanelWidth } from '@/components/params/panelDisplay';
+import { formatPanelDisplayValue } from '@/components/params/panelDisplay';
 import { FileUpload, ImageUpload } from '@/components/params/upload';
 import { DerivedMediaParamControl } from '@/components/params/DerivedMediaParamControl';
 import { useCanvasTextHistory } from '@/features/canvas/hooks/useCanvasTextHistory';
@@ -279,8 +279,6 @@ function CompactPanelControl({
     return <span className="text-xs text-text2">{display}</span>;
   }
 
-  const panelWidth = resolvePanelWidth(param.config, param.panel === 'resolution' ? 400 : 320);
-
   return (
     <PanelTrigger
       display={display}
@@ -288,9 +286,9 @@ function CompactPanelControl({
       size="sm"
       buttonClassName={COMPACT_TRIGGER_CLASS}
       surface="glass"
-      panelSize={panelWidth > 720 ? 'workspace' : panelWidth > 384 ? 'wide' : 'compact'}
-      alignment="aboveCenter"
-      gap={8}
+      // 特殊面板（重要记录 021）：宽度量面板里最宽的内容，在这一行下面展开
+      panelSize="special"
+      alignment="bottomRight"
       closeOnPanelClick={false}
       freezePositionOnOpen={param.panel === 'voice-selector'}
       renderPanel={() => (
