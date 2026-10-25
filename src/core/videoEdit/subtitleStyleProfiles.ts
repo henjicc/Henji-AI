@@ -34,7 +34,8 @@ export function subtitleFrameBoundary(frame: number): number {
 }
 export function normalizeSubtitlePunctuation(text: string, policy: 'netflix_zh_hans' | 'preserve'): string {
   if (policy === 'preserve') return text.trim()
-  return text.replace(/[，。,.;；:：—]+/gu, ' ').replace(/[^\S\n]+/gu, ' ').replace(/[ 、]+(?=\n|$)/gu, '').trim()
+  // 数字里的小数点（0.3）不当标点去掉
+  return text.replace(/(?:[，。,;；:：—]|(?<![0-9])\.|\.(?![0-9]))+/gu, ' ').replace(/[^\S\n]+/gu, ' ').replace(/[ 、]+(?=\n|$)/gu, '').trim()
 }
 
 /** Positive gaps only: zero-gap liaison must not collapse the speaker's pause distribution. */

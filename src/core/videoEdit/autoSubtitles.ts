@@ -1,7 +1,7 @@
 import { subtitleStyleOptionsSchema, resolveSubtitleStyle, subtitleWidth, subtitleFrameBoundary } from './subtitleStyleProfiles'
 import { segmentTimedSubtitles, subtitleTokensFromCharacters, type SubtitlePause } from './subtitleSegmentation'
 import type { AudioEditTranscriptBlock } from '../audioEdit/types'
-import { joinAudioEditText } from '../audioEdit/captions'
+import { isAudioEditDecimalPoint, joinAudioEditText } from '../audioEdit/captions'
 import type { VideoEditRatio } from './time'
 import type { VideoEditCaption } from './timedContent'
 
@@ -140,7 +140,7 @@ export function buildAutoSubtitles(blocks: readonly AudioEditTranscriptBlock[], 
     if (!Number.isFinite(block.startFrame) || !Number.isFinite(block.endFrame) || block.endFrame <= block.startFrame) throw new Error('识别结果包含无效时间戳。')
     const previous = groups.at(-1); const text = block.text.trim()
     const joined = previous ? joinAudioEditText(previous.text, text) : text
-    if (previous?.word && block.granularity === 'word' && !/[。！？.!?；;]$/.test(previous.text) && block.startFrame >= previous.end && block.startFrame - previous.end < sampleRate * legacy.pauseSeconds) {
+    if (previous?.word && block.granularity === 'word' && !(/[。！？.!?；;]$/.test(previous.text) && !isAudioEditDecimalPoint(previous.text, text)) && block.startFrame >= previous.end && block.startFrame - previous.end < sampleRate * legacy.pauseSeconds) {
       previous.text = joined; previous.end = block.endFrame; previous.blocks.push(block)
     } else groups.push({ text, start: block.startFrame, end: block.endFrame, word: block.granularity === 'word', blocks: [block] })
   }

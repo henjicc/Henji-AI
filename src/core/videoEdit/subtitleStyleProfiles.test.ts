@@ -8,6 +8,7 @@ import type { SpeechTimings } from '../media/speechTimings'
 it('统一标点、半字计数与可覆盖规范，顿号不能留在行尾', () => {
   expect(normalizeSubtitlePunctuation('甲，乙。丙；丁：戊——己、', 'netflix_zh_hans')).toBe('甲 乙 丙 丁 戊 己')
   expect(normalizeSubtitlePunctuation('真的？！…', 'netflix_zh_hans')).toBe('真的？！…')
+  expect(normalizeSubtitlePunctuation('0.3秒就返回了.', 'netflix_zh_hans')).toBe('0.3秒就返回了')
   expect(subtitleWidth('AI 12')).toBe(2.5)
   expect(wrapStyledSubtitle('你好、欢迎大家来剪辑字幕', { maxCharacters: 5 })).not.toMatch(/、(?:\n|$)/)
   expect(resolveSubtitleStyle({ maxCharacters: 18 }).maxCharacters).toBe(18)

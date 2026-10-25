@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { AudioEditProjectDocument, AudioEditTranscriptBlock } from '../audioEdit/types'
 import { applyAudioEditSuggestion, audioEditFillerBlockIds, DEFAULT_AUDIO_EDIT_SETTINGS } from '../audioEdit/edits'
 import { findTranscriptSearchRanges } from '../media/transcriptSearch'
+import { isAudioEditDecimalPoint } from '../audioEdit/captions'
 import { videoEditClipSourceRange, videoEditClipFrameBoundaryAtSource, videoEditClipSourceSecondsAtTime } from './clipSpeed'
 import { audibleVideoEditClips, videoEditComposition, videoEditNestedComposition, type VideoEditClip, type VideoEditComposition, type VideoEditDocument } from './document'
 import { videoEditAudioContent } from './audioContent'
@@ -128,7 +129,7 @@ export function groupVideoEditTextWords(words: readonly VideoEditTextWord[], fps
   const groups: VideoEditTextWord[][] = []
   for (const word of words) {
     const previous = groups.at(-1); const last = previous?.at(-1)
-    if (last && (last.sourceVoiceId ?? last.clipId) === (word.sourceVoiceId ?? word.clipId) && word.from - last.to < fps * .6 && !/[。！？.!?]$/.test(last.text)) previous!.push(word)
+    if (last && (last.sourceVoiceId ?? last.clipId) === (word.sourceVoiceId ?? word.clipId) && word.from - last.to < fps * .6 && !(/[。！？.!?]$/.test(last.text) && !isAudioEditDecimalPoint(last.text, word.text))) previous!.push(word)
     else groups.push([word])
   }
   return groups
