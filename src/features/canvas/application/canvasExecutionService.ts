@@ -1,5 +1,6 @@
 import { readGenerationConcurrency, subscribeGenerationConcurrency } from '@/core/settings/generationConcurrency'
 import { isCanvasNodeUnavailable } from '../domain/nodeAvailability'
+import { isUserCancellation } from '@/services/paidApproval'
 import { createLogger } from '@/core/logging'
 import { useCanvasStore } from '@/stores/canvasStore'
 import {
@@ -515,6 +516,14 @@ async function executeCanvasRun(rootNodeId: string, projectId: string, runtime: 
     })
     return { runId, rootNodeId, executedNodeIds, reusedNodeIds, joinedNodeIds, resultNodeIds }
   } catch (error) {
+    // 用户在付费确认里点了取消或中途停止：不是失败，记信息日志
+    if (signal?.aborted || isUserCancellation(error)) {
+      logger.info('画布节点运行已取消', {
+        event: 'canvas.execution.cancelled', requestId: runId, rootNodeId, projectId,
+        completedNodeIds: [...outcomeByNodeId.keys()], durationMs: Date.now() - startedAt,
+      })
+      throw error
+    }
     logger.error('画布节点运行失败', error, {
       event: 'canvas.execution.failed', requestId: runId, rootNodeId, projectId,
       completedNodeIds: [...outcomeByNodeId.keys()], durationMs: Date.now() - startedAt,

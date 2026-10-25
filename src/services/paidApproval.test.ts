@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { applicationPaidRequest, withPaidOperation, prepareExplanationPaidApproval, PaidOperationCancelledError } from './paidApproval'
+import { applicationPaidRequest, withPaidOperation, prepareExplanationPaidApproval, PaidOperationCancelledError, isUserCancellation } from './paidApproval'
 import { bindApplicationConfirmation } from '@/core/application-control/userConfirmation'
 import { useAlertDialogStore } from '@/stores/alertDialogStore'
 import type { LocalHostReply } from '@/core/application-control/localHostContracts'
@@ -107,4 +107,14 @@ it('画布内嵌图片沿正式关联找到项目，不把图片工作副本当�
     ports.findDocument.mockRejectedValue(new Error('读取失败'))
     await expect(applicationPaidRequest('explanation', { kind: 'image_edit.document', id: 'v3:embedded' }, controller.signal)).rejects.toThrow('读取失败')
   } finally { release() }
+})
+
+it('用户取消：付费确认取消、生成提交被拒、中途停止都算，包在 cause 里也认得；普通失败不算', () => {
+  const declined = new Error('已取消提交'); declined.name = 'GenerationSubmissionCancelledError'
+  const aborted = new Error('stopped'); aborted.name = 'AbortError'
+  expect(isUserCancellation(new PaidOperationCancelledError('已取消'))).toBe(true)
+  expect(isUserCancellation(declined)).toBe(true)
+  expect(isUserCancellation(new Error('画布节点失败', { cause: aborted }))).toBe(true)
+  expect(isUserCancellation(new Error('供应商返回 500'))).toBe(false)
+  expect(isUserCancellation('取消')).toBe(false)
 })

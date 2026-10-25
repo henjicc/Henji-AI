@@ -96,6 +96,22 @@ export function isPaidOperationCancelled(error: unknown): boolean {
   return false
 }
 
+/** 生成提交确认被拒（付费确认点了取消、确认过期）与中途停止：名字跨模块、跨桌面桥都可靠（src/core/nativeErrors.ts） */
+const USER_CANCELLATION_NAMES = new Set(['GenerationSubmissionCancelledError', 'AbortError'])
+
+/**
+ * 用户主动取消（付费确认点了取消、生成提交被拒、中途停止），沿 cause 链判断。调用方据此记信息日志、
+ * 不弹错误：此前取消付费确认会记 canvas.execution.failed、embedded_agent.ui.failed 两条错误日志，助手还会显示报错。
+ */
+export function isUserCancellation(error: unknown): boolean {
+  const seen = new Set<Error>()
+  while (error instanceof Error && !seen.has(error)) {
+    if (error instanceof PaidOperationCancelledError || USER_CANCELLATION_NAMES.has(error.name)) return true
+    seen.add(error); error = error.cause
+  }
+  return false
+}
+
 /** Authorize before dispatch; failure after dispatch retains the reservation as an unknown bill. */
 export async function withPaidOperation<T>(options: PaidOperationOptions, work: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> {
   signal?.throwIfAborted()
