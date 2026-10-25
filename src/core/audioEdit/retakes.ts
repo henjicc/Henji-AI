@@ -41,7 +41,10 @@ export interface AudioEditRetake {
   removedText: string
   keptText: string
   confidence: 'high' | 'medium' | 'low'
-  /** 某个切点处没有真实停顿（连读或换气），接缝需要重点听 */
+  /**
+   * 后一遍开头前没有真实停顿（连读），接缝两侧都是语音，需要重点听。
+   * 前一刀没有停顿时落在词边界上、接上的是后一遍前的停顿，听感风险小，不单独提示。
+   */
   joined: boolean
 }
 
@@ -342,7 +345,7 @@ export function detectAudioEditRetakes(blocks: readonly AudioEditTranscriptBlock
       removedText: span.map((word) => word.block.text).join(''),
       keptText: keptAfter.map((word) => word.block.text).join(''),
       confidence: levels.includes('low') ? 'low' : levels.includes('medium') ? 'medium' : 'high',
-      joined: start.joined || end.joined,
+      joined: end.joined,
     })
   }
   return retakes
