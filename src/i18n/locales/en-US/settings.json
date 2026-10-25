@@ -796,10 +796,21 @@
   "agentModels": {
     "roles": {
       "primary": "Main model",
-      "router": "Router model",
+      "router": "Dispatch model",
       "summarizer": "Summary model",
       "fallback": "Fallback model",
       "observer": "Vision model"
+    },
+    "roleInfo": {
+      "primary": "Used for chatting and for operating the app; it must support tool calls.",
+      "router": "Decides which tools and skills each step needs. A fast, cheap model saves time and money; leave it unset to use the main model.",
+      "summarizer": "Condenses earlier messages when a conversation gets long; leave it unset to use the main model.",
+      "fallback": "Takes over when the main model fails or is unavailable.",
+      "observer": "Looks at images, video or audio for a main model that cannot, then reports back."
+    },
+    "groups": {
+      "roles": "Role models",
+      "requests": "Requests and length"
     },
     "settings": {
       "timeoutMs": {
@@ -811,12 +822,12 @@
         "info": "How many times a failed request is retried automatically."
       },
       "maxOutputTokens": {
-        "label": "Expected output tokens",
-        "info": "Tokens expected per response. Configured models use their own limits first."
+        "label": "Reply length limit",
+        "info": "Most tokens generated in one reply. Models with their own registered limit use theirs."
       },
       "contextWindowBudget": {
-        "label": "Fallback context tokens",
-        "info": "Used when a model has no registered context window. Configured models use their own limits first."
+        "label": "Conversation length limit",
+        "info": "Token budget used when a model has not registered how long a conversation it can handle. Models with a registered value use theirs."
       }
     },
     "modality": {
@@ -863,10 +874,10 @@
       "output": "output {{value}}",
       "reasoning": "reasoning {{value}}"
     },
-    "notVerified": "Not verified yet",
+    "notVerified": "Not checked yet for what this model can do",
     "verifying": "Verifying",
     "verify": "Verify this model",
-    "verifyCost": "Sends one minimal real request to this model",
+    "verifyCost": "Sends a few very short test requests to the model, which may cost a little",
     "advanced": "Advanced",
     "checkNames": {
       "text": "Text conversation",

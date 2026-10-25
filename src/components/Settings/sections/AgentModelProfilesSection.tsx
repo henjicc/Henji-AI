@@ -44,7 +44,8 @@ interface ModelOption {
   reference?: AgentModelReference
 }
 
-const AGENT_MODEL_ROLES: AgentModelRole[] = ['primary', 'router', 'summarizer', 'fallback', 'observer']
+/** 分工模型：默认复用主模型或不配置，大多数人不用动，收进高级设置 */
+const SECONDARY_ROLES: AgentModelRole[] = ['router', 'summarizer', 'fallback', 'observer']
 
 interface RuntimeSettingField {
   key: keyof AgentModelProfile['settings']
@@ -249,89 +250,91 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
     })
   }
 
+  const renderRole = (role: AgentModelRole): JSX.Element => {
+    const options = createOptions(models, role, t)
+    const roleLabel = t(`agentModels.roles.${role}`)
+    const configuredReference = getRoleReference(profile, role)
+    const effectiveReference = configuredReference ?? (role === 'router' || role === 'summarizer' ? profile.primary : undefined)
+    const verification = effectiveReference ? findAgentModelVerification(profile, effectiveReference) : undefined
+    const usageItems = verification ? [
+      verification.usage.inputTokens == null ? '' : t('agentModels.usageItems.input', { value: verification.usage.inputTokens }),
+      verification.usage.outputTokens == null ? '' : t('agentModels.usageItems.output', { value: verification.usage.outputTokens }),
+      verification.usage.reasoningTokens == null ? '' : t('agentModels.usageItems.reasoning', { value: verification.usage.reasoningTokens }),
+    ].filter(Boolean) : []
+    const value = getRoleValue(profile, role)
+    const display = options.find(item => item.value === value)?.label ?? t('agentModels.choose')
+    const key = effectiveReference ? modelKey(effectiveReference) : ''
+    const detailsOpen = expandedRoles.has(role)
+    // 复用主模型或未配置的分工角色没有自己的模型，不给“详情”
+    const hasOwnModel = role === 'primary' || Boolean(configuredReference)
+    return (
+      <UiGroup key={role} gap="none">
+        <UiFormRow label={roleLabel} info={t(`agentModels.roleInfo.${role}`)}>
+        <div className="flex items-center gap-2">
+        <Dropdown<string> size="sm"
+          value={value}
+          display={display}
+          ariaLabel={roleLabel}
+          options={options}
+          className="w-full"
+          buttonClassName="w-full"
+          onSelect={selected => void updateRole(role, selected)}
+        />
+          {/* 能力/验证详情过于专业，普通用户选好模型就够了，折叠掉默认不显示 */}
+          {hasOwnModel && <UiButton
+            type="button"
+            size="sm"
+            aria-expanded={detailsOpen}
+            onClick={() => toggleRoleDetails(role)}
+            className="shrink-0"
+          >
+            {t('agentModels.details')}
+            {detailsOpen ? <ChevronUp /> : <ChevronDown />}
+          </UiButton>}
+        </div>
+        <UiDisclosurePanel open={hasOwnModel && detailsOpen}>
+          <div className="space-y-2 pt-2">
+            {verification ? (
+              <div className={`space-y-1 ${UI_TEXT_META_CLASS}`}>
+                {verificationErrors[key] && <p className="text-xs text-text3">{t('agentModels.previousVerification')}</p>}
+                <div>{t('agentModels.verifiedAt', { time: new Date(verification.verifiedAt).toLocaleString(), latency: verification.totalLatencyMs, cost: verification.cost.status === 'known' ? `${verification.cost.amount} ${verification.cost.currency}` : t('agentModels.unknown') })}</div>
+                {verification.checks.map(check => {
+                  const Icon = check.status === 'passed' ? CheckCircle2 : check.status === 'failed' ? XCircle : CircleHelp
+                  const tone = check.status === 'passed' ? 'text-success-text' : check.status === 'failed' ? 'text-danger-text' : 'text-text3'
+                  return <div key={check.id} className="py-1">
+                    <div className="flex items-center justify-between gap-3 text-xs">
+                      <span>{t(`agentModels.checkNames.${check.id}`)}</span>
+                      <span className={`inline-flex shrink-0 items-center gap-1 ${tone}`}><Icon aria-hidden className={`${UI_ICON_SIZE_CLASS.sm}`} />{t(`agentModels.check.${check.status}`)}</span>
+                    </div>
+                    {check.status === 'failed' && <p className="mt-1 text-xs text-text2">{t(`agentModels.checkImpact.${check.id}`)}</p>}
+                  </div>
+                })}
+                {usageItems.length > 0 && <div>{t('agentModels.usage', { items: usageItems.join(t('agentModels.listSeparator')) })}</div>}
+              </div>
+            ) : <div className={UI_TEXT_META_CLASS}>{t('agentModels.notVerified')}</div>}
+            {effectiveReference ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <UiButton loading={verifyingKey === key} type="button" variant="secondary" disabled={verifyingKey !== null} onClick={() => void verify(effectiveReference)}>
+                  <RefreshCw />
+                  {t('agentModels.verify')}
+                </UiButton>
+                <span className="text-xs text-text3">{t('agentModels.verifyCost')}</span>
+              </div>
+            ) : null}
+            {verificationErrors[key] && effectiveReference && <UiError size="xs" align="start" title={t('agentModels.verifyFailedTitle')} message={verificationErrors[key]}
+              onRetry={verifyingKey === null ? () => void verify(effectiveReference) : undefined} retryLabel={t('agentModels.retry')} />}
+          </div>
+        </UiDisclosurePanel>
+        </UiFormRow>
+      </UiGroup>
+    )
+  }
+
   return (
     <UiGroup gap="stack" labelWidth={120}>
-      <div className="space-y-3">
-        {AGENT_MODEL_ROLES.map(role => {
-          const options = createOptions(models, role, t)
-          const roleLabel = t(`agentModels.roles.${role}`)
-          const configuredReference = getRoleReference(profile, role)
-          const effectiveReference = configuredReference ?? (role === 'router' || role === 'summarizer' ? profile.primary : undefined)
-          const verification = effectiveReference ? findAgentModelVerification(profile, effectiveReference) : undefined
-          const usageItems = verification ? [
-            verification.usage.inputTokens == null ? '' : t('agentModels.usageItems.input', { value: verification.usage.inputTokens }),
-            verification.usage.outputTokens == null ? '' : t('agentModels.usageItems.output', { value: verification.usage.outputTokens }),
-            verification.usage.reasoningTokens == null ? '' : t('agentModels.usageItems.reasoning', { value: verification.usage.reasoningTokens }),
-          ].filter(Boolean) : []
-          const value = getRoleValue(profile, role)
-          const display = options.find(item => item.value === value)?.label ?? t('agentModels.choose')
-          const key = effectiveReference ? modelKey(effectiveReference) : ''
-          const detailsOpen = expandedRoles.has(role)
-          return (
-            <UiGroup key={role} gap="none">
-              <UiFormRow label={roleLabel}>
-              <div className="flex items-center gap-2">
-              <Dropdown<string> size="sm"
-                value={value}
-                display={display}
-                ariaLabel={roleLabel}
-                options={options}
-                className="w-full"
-                buttonClassName="w-full"
-                onSelect={selected => void updateRole(role, selected)}
- />
-                {/* 能力/验证详情过于专业，普通用户选好模型就够了，折叠掉默认不显示 */}
-                <UiButton
-                  type="button"
-                  size="sm"
-                  aria-expanded={detailsOpen}
-                  onClick={() => toggleRoleDetails(role)}
-                  className="shrink-0"
- >
-                  {t('agentModels.details')}
-                  {detailsOpen ? <ChevronUp /> : <ChevronDown />}
-                </UiButton>
-              </div>
-              <UiDisclosurePanel open={detailsOpen}>
-                <div className="space-y-2 pt-2">
-                  {verification ? (
-                    <div className={`space-y-1 ${UI_TEXT_META_CLASS}`}>
-                      {verificationErrors[key] && <p className="text-xs text-text3">{t('agentModels.previousVerification')}</p>}
-                      <div>{t('agentModels.verifiedAt', { time: new Date(verification.verifiedAt).toLocaleString(), latency: verification.totalLatencyMs, cost: verification.cost.status === 'known' ? `${verification.cost.amount} ${verification.cost.currency}` : t('agentModels.unknown') })}</div>
-                      {verification.checks.map(check => {
-                        const Icon = check.status === 'passed' ? CheckCircle2 : check.status === 'failed' ? XCircle : CircleHelp
-                        const tone = check.status === 'passed' ? 'text-success-text' : check.status === 'failed' ? 'text-danger-text' : 'text-text3'
-                        return <div key={check.id} className="py-1">
-                          <div className="flex items-center justify-between gap-3 text-xs">
-                            <span>{t(`agentModels.checkNames.${check.id}`)}</span>
-                            <span className={`inline-flex shrink-0 items-center gap-1 ${tone}`}><Icon aria-hidden className={`${UI_ICON_SIZE_CLASS.sm}`} />{t(`agentModels.check.${check.status}`)}</span>
-                          </div>
-                          {check.status === 'failed' && <p className="mt-1 text-xs text-text2">{t(`agentModels.checkImpact.${check.id}`)}</p>}
-                        </div>
-                      })}
-                      {usageItems.length > 0 && <div>{t('agentModels.usage', { items: usageItems.join(t('agentModels.listSeparator')) })}</div>}
-                    </div>
-                  ) : <div className={UI_TEXT_META_CLASS}>{t('agentModels.notVerified')}</div>}
-                  {effectiveReference ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <UiButton loading={verifyingKey === key} type="button" variant="secondary" disabled={verifyingKey !== null} onClick={() => void verify(effectiveReference)}>
-                        <RefreshCw />
-                        {t('agentModels.verify')}
-                      </UiButton>
-                      <span className="text-xs text-text3">{t('agentModels.verifyCost')}</span>
-                    </div>
-                  ) : null}
-                  {verificationErrors[key] && effectiveReference && <UiError size="xs" align="start" title={t('agentModels.verifyFailedTitle')} message={verificationErrors[key]}
-                    onRetry={verifyingKey === null ? () => void verify(effectiveReference) : undefined} retryLabel={t('agentModels.retry')} />}
-                </div>
-              </UiDisclosurePanel>
-              </UiFormRow>
-            </UiGroup>
-          )
-        })}
-      </div>
+      {renderRole('primary')}
 
-      {/* 超时/重试/Token 上限对普通用户没有决策价值，收进高级设置，默认折叠 */}
+      {/* 分工模型与超时、重试、长度上限对大多数人没有决策价值，收进高级设置，默认折叠 */}
       <div>
         <UiButton
           type="button"
@@ -344,23 +347,30 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
           {advancedOpen ? <ChevronUp /> : <ChevronDown />}
         </UiButton>
         <UiDisclosurePanel open={advancedOpen}>
-          <div className={`pt-4 ${UI_FORM_ROW_GAP_CLASS}`}>
-            {RUNTIME_SETTING_FIELDS.map(field => {
-              const stored = profile.settings[field.key]
-              // labelColumn="auto"：与设置里其他数值项一样标签在左、窄数值框在右，不按上面模型行的标签列把数值框拉满整行
-              return <UiFormRow key={field.key} label={t(`agentModels.settings.${field.key}.label`)} info={t(`agentModels.settings.${field.key}.info`)} inline labelColumn="auto">
-                {/* 与设置里其他数值项同一个控件（NumberInput：拖动改值、步进、范围夹取） */}
-                <NumberInput
-                  value={stored === undefined ? undefined : stored / (field.scale ?? 1)}
-                  min={field.min}
-                  max={field.max}
-                  step={1}
-                  ariaLabel={t(`agentModels.settings.${field.key}.label`)}
-                  onChange={value => void updateSetting(field.key, Math.round(value * (field.scale ?? 1)))}
-                  widthClassName={SETTINGS_INLINE_CONTROL_CLASS}
- />
-              </UiFormRow>
-            })}
+          <div className="space-y-6 pt-4">
+            <UiGroup titleTone="overline" title={t('agentModels.groups.roles')} labelWidth={120}>
+              <div className="space-y-3">{SECONDARY_ROLES.map(renderRole)}</div>
+            </UiGroup>
+            <UiGroup titleTone="overline" title={t('agentModels.groups.requests')}>
+              <div className={UI_FORM_ROW_GAP_CLASS}>
+                {RUNTIME_SETTING_FIELDS.map(field => {
+                  const stored = profile.settings[field.key]
+                  // labelColumn="auto"：与设置里其他数值项一样标签在左、窄数值框在右，不按上面模型行的标签列把数值框拉满整行
+                  return <UiFormRow key={field.key} label={t(`agentModels.settings.${field.key}.label`)} info={t(`agentModels.settings.${field.key}.info`)} inline labelColumn="auto">
+                    {/* 与设置里其他数值项同一个控件（NumberInput：拖动改值、步进、范围夹取） */}
+                    <NumberInput
+                      value={stored === undefined ? undefined : stored / (field.scale ?? 1)}
+                      min={field.min}
+                      max={field.max}
+                      step={1}
+                      ariaLabel={t(`agentModels.settings.${field.key}.label`)}
+                      onChange={value => void updateSetting(field.key, Math.round(value * (field.scale ?? 1)))}
+                      widthClassName={SETTINGS_INLINE_CONTROL_CLASS}
+     />
+                  </UiFormRow>
+                })}
+              </div>
+            </UiGroup>
           </div>
         </UiDisclosurePanel>
       </div>

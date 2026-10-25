@@ -794,10 +794,21 @@
   "agentModels": {
     "roles": {
       "primary": "主模型",
-      "router": "路由模型",
+      "router": "分派模型",
       "summarizer": "摘要模型",
       "fallback": "备用模型",
       "observer": "观察模型"
+    },
+    "roleInfo": {
+      "primary": "助手对话和操作应用都用它，需要能调用工具。",
+      "router": "判断这一步要用哪些工具、哪些技能。选一个快而便宜的模型能省时省钱；不选就用主模型。",
+      "summarizer": "对话太长时，把早先的内容压成摘要再接着聊；不选就用主模型。",
+      "fallback": "主模型出错或暂时不可用时，改用这个模型继续。",
+      "observer": "主模型看不了图片、视频或音频时，由它来看画面、听声音，再把结果告诉主模型。"
+    },
+    "groups": {
+      "roles": "分工模型",
+      "requests": "请求与长度"
     },
     "settings": {
       "timeoutMs": {
@@ -809,12 +820,12 @@
         "info": "请求失败后自动重试的次数。"
       },
       "maxOutputTokens": {
-        "label": "期望输出 Token",
-        "info": "单次期望输出的 Token 数。已配置模型优先使用各自的能力上限。"
+        "label": "回复长度上限",
+        "info": "一次回复最多生成多少 Token。模型自己登记了上限的，以模型的为准。"
       },
       "contextWindowBudget": {
-        "label": "上下文回退 Token",
-        "info": "模型没有登记上下文窗口时使用的回退值。已配置模型优先使用各自的能力上限。"
+        "label": "对话长度上限",
+        "info": "模型没有登记能处理多长的对话时，按这个 Token 数处理。登记了的以模型的为准。"
       }
     },
     "modality": {
@@ -861,10 +872,10 @@
       "output": "输出 {{value}}",
       "reasoning": "思考 {{value}}"
     },
-    "notVerified": "尚未进行动态能力验证",
+    "notVerified": "还没验证过这个模型能做哪些事",
     "verifying": "验证中",
     "verify": "验证此模型",
-    "verifyCost": "会向该模型发起一次最小真实请求",
+    "verifyCost": "会向模型发几条很短的测试请求，可能产生少量费用",
     "advanced": "高级设置",
     "checkNames": {
       "text": "文字对话",

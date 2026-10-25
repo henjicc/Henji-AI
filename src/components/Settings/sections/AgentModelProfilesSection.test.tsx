@@ -50,7 +50,7 @@ it('详情去掉重复技术摘要，隐藏未知用量，仅显示上次验证�
   fireEvent.click(screen.getAllByRole('button', { name: '详情' })[0])
   expect(screen.queryByText(/^工具 .*上下文/)).toBeNull()
   expect(screen.queryByText(/^Token：|^上次验证用量：/)).toBeNull()
-  expect(screen.getAllByText('会向该模型发起一次最小真实请求').length).toBeGreaterThan(0)
+  expect(screen.getAllByText('会向模型发几条很短的测试请求，可能产生少量费用').length).toBeGreaterThan(0)
   const known = { ...config, agentProfiles: [{ ...profile, verifications: [{ ...profile.verifications[0], usage: { ...unknownUsage, inputTokens: 120, outputTokens: 30 } }] }] }
   rendered.rerender(<AgentModelProfilesSection config={known} saveConfig={vi.fn()} />)
   expect(screen.getAllByText('上次验证用量：输入 120、输出 30').length).toBeGreaterThan(0)
@@ -58,4 +58,18 @@ it('详情去掉重复技术摘要，隐藏未知用量，仅显示上次验证�
   known.agentProfiles[0].verifications[0].usage.outputTokens = 0
   rendered.rerender(<AgentModelProfilesSection config={{ ...known }} saveConfig={vi.fn()} />)
   expect(screen.getAllByText('上次验证用量：输入 120、输出 0').length).toBeGreaterThan(0)
+})
+
+it('默认只摆主模型；分工模型收在高级设置里，复用主模型的角色没有“详情”', async () => {
+  await i18n.changeLanguage('zh-CN')
+  const config = createDefaultLlmConfig()
+  render(<AgentModelProfilesSection config={config} saveConfig={vi.fn()} />)
+  expect(screen.getByRole('button', { name: '主模型' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: '分派模型' })).toBeNull()
+  expect(screen.getAllByRole('button', { name: '详情' })).toHaveLength(1)
+  fireEvent.click(screen.getByRole('button', { name: '高级设置' }))
+  expect(screen.getByRole('button', { name: '分派模型' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: '观察模型' })).toBeTruthy()
+  // 分派、摘要复用主模型，备用、观察未配置：都没有自己的模型，只有主模型那一行有“详情”
+  expect(screen.getAllByRole('button', { name: '详情' })).toHaveLength(1)
 })
