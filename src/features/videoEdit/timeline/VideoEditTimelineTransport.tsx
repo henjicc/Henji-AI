@@ -114,7 +114,7 @@ const PLAYHEAD_HEAD_SHAPE = { clipPath: 'polygon(0 0, 100% 0, 100% 55%, 50% 100%
 export function VideoEditTimelinePlayheadHead({ instance, pixels }: { instance: VideoEditInstance; pixels: number }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   return <div aria-hidden="true" data-video-edit-playhead-head className="pointer-events-none absolute bottom-0 top-0 z-raised -ml-1.5 flex w-3 flex-col items-center" style={{ left: instance.frame * pixels }}>
-    <div className="mt-auto h-3 w-3 bg-accent-ring" style={PLAYHEAD_HEAD_SHAPE} />
+    <div data-video-edit-playhead-grip className="pointer-events-auto mt-auto h-3 w-3 cursor-ew-resize bg-accent-ring" style={PLAYHEAD_HEAD_SHAPE} />
     <div className="h-1 w-px bg-accent-ring" />
   </div>
 }
