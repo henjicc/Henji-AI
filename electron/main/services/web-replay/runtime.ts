@@ -14,6 +14,7 @@ import { getDocumentService } from '../documents/runtime'
 import { stripHenjiExtension } from '../../../../src/core/fileExtensions'
 import { copyDirectoryContentsNoOverwrite } from '../fs/no-overwrite'
 import { moveWebRecordingDirectory } from './moveDirectory'
+import { forgetWebRecordingTrashMark, markWebRecordingTrashed, purgeExpiredWebRecordingTrash } from './trash'
 import { readTextTrack, searchTextTrack, TEXT_TRACK_FILE } from './textTrack'
 import { newestReplayName, REPLAY_CLEAN_SUFFIX } from '../../../../src/core/webReplay/replayVideos'
 
@@ -204,6 +205,7 @@ export async function removeWebRecording(recordingId: string): Promise<void> {
   // A project recording leaves its project for the app-data trash too, so deleting can be undone the same way.
   if (location.documentId) await fs.writeFile(trashOrigin(recordingId), JSON.stringify({ directory: location.directory }))
   await moveWebRecordingDirectory(location.directory, path.join(trash, recordingId))
+  await markWebRecordingTrashed(trash, recordingId)
   if (location.documentId) await getDocumentService().forgetDocument(location.documentId)
   logger.info('网页录制已移到回收区', { event: 'web_replay.recording.removed', context: { recordingId, projectId: location.projectId } })
 }
@@ -215,8 +217,16 @@ export async function restoreWebRecording(recordingId: string): Promise<void> {
   if (await fs.access(target).then(() => true, () => false)) throw new Error('原位置已有同名的文件夹，没能恢复这段网页录制')
   await fs.mkdir(path.dirname(target), { recursive: true })
   await moveWebRecordingDirectory(trashed, target)
+  await forgetWebRecordingTrashMark(path.dirname(trashed), recordingId)
   if (origin) { await getDocumentService().indexDocumentAt(target); await fs.rm(trashOrigin(recordingId), { force: true }) }
   logger.info('网页录制已恢复', { event: 'web_replay.recording.restored', context: { recordingId } })
+}
+
+/** 启动时在后台清掉回收区里删除满 30 天的网页录制；失败只记日志，录制留到下次再清。 */
+export async function cleanWebRecordingTrash(): Promise<void> {
+  const { purged, failed } = await purgeExpiredWebRecordingTrash(path.join(webRecordingsRoot(), TRASH))
+  if (purged.length) logger.info('回收区里过期的网页录制已清理', { event: 'web_replay.trash.purged', context: { count: purged.length, recordingIds: purged } })
+  for (const item of failed) logger.warn('回收区里过期的网页录制没能清理', { event: 'web_replay.trash.purge_failed', context: { recordingId: item.id }, error: item.error })
 }
 
 /**

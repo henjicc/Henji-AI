@@ -9,7 +9,7 @@ import { registerAudioCaptureIpc } from './ipc/audio-capture'
 import { registerScreenRecordingIpc } from './ipc/screen-recording'
 import { closeRecordingControl } from './services/screen-recording/runtime'
 import { registerWebReplayIpc } from './ipc/web-replay'
-import { stopWebReplayService } from './services/web-replay/runtime'
+import { cleanWebRecordingTrash, stopWebReplayService } from './services/web-replay/runtime'
 import { registerAssetLibraryIpc } from './ipc/asset-library'
 import { registerAssistantIpc } from './ipc/assistant'
 import { registerCameraStageRenderIpc } from './ipc/camera-stage-render'
@@ -237,6 +237,9 @@ app.whenReady().then(async () => {
         // External clients and document indexing share the renderer admission gate.
         registerMcpIpc()
         scheduleStartupDocumentIndexScan()
+        void cleanWebRecordingTrash().catch(error => {
+          createMainLogger('main.web_replay').warn('网页录制回收区清理失败，本次跳过', { event: 'web_replay.trash.purge_failed', error })
+        })
       } finally { releaseStartup() }
     },
   })
