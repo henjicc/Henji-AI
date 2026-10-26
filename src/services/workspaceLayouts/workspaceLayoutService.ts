@@ -12,6 +12,8 @@ export interface WorkspaceLayoutRegistration {
   panels: readonly WorkspacePanelDefinition[]
   builtinPresets: readonly WorkspaceLayoutPreset[]
   validate?: (layout: SerializedDockview) => void
+  /** 保存过的布局先迁到当前面板集合（去掉已取消的面板、补上新面板），再做通用校验；不改用户排好的位置与大小。 */
+  migrate?: (layout: SerializedDockview) => SerializedDockview
   readLegacy?: () => SerializedDockview | undefined
   /** 切换到某个预设后的工作区专属动作（如“口播”布局顺带打开智能助手）；只在主动切换时触发，读取保存的布局不触发。 */
   onApply?: (presetId: string) => void
@@ -67,7 +69,8 @@ export class WorkspaceLayoutController {
   getSnapshot = (): WorkspaceLayoutSnapshot => this.state
   subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
   private validate(layout: SerializedDockview): SerializedDockview {
-    const parsed = parseWorkspaceDockLayout(JSON.stringify(layout), this.registration.panels)
+    const migrated = this.registration.migrate ? this.registration.migrate(structuredClone(layout)) : layout
+    const parsed = parseWorkspaceDockLayout(JSON.stringify(migrated), this.registration.panels)
     this.registration.validate?.(parsed)
     return parsed
   }

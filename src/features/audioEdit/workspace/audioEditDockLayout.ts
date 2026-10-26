@@ -66,7 +66,7 @@ const RETIRED_PANELS = new Set(['selection'])
  * 旧布局迁到当前面板集合：去掉已取消的面板；没有“基本声音”时放进效果组所在的那组标签（排在效果组前面）。
  * 只调整面板集合，用户排好的位置和大小不动。
  */
-function migrateAudioEditLayout(value: SerializedDockview): void {
+export function migrateAudioEditLayout(value: SerializedDockview): SerializedDockview {
   let host: { views: string[]; activeView?: string } | null = null
   let hasEssential = false
   const visit = (node: Node): void => {
@@ -87,6 +87,7 @@ function migrateAudioEditLayout(value: SerializedDockview): void {
     target.views.splice(target.views.indexOf('effects'), 0, 'essential')
     value.panels.essential = { id: 'essential', contentComponent: 'essential', title: TITLES.essential, renderer: 'always' } as SerializedDockview['panels'][string]
   }
+  return value
 }
 
 /** 校验保存过的布局：只认识本工作区的面板，每个面板恰好出现一次；不对就退回默认。 */
@@ -116,6 +117,7 @@ export const audioEditLayoutPresets = registerWorkspaceLayout({
   panels: AUDIO_EDIT_PANELS,
   builtinPresets: AUDIO_EDIT_LAYOUT_PRESETS.map(preset => ({ id: preset.id, name: preset.name, layout: preset.layout() })),
   validate: (layout) => { parseAudioEditLayout(JSON.stringify(layout)) },
+  migrate: migrateAudioEditLayout,
   readLegacy: () => {
     try { const raw = localStorage.getItem(AUDIO_EDIT_LAYOUT_STORAGE_KEY); return raw ? parseAudioEditLayout(raw) : undefined }
     catch (error) { logger.warn('旧的音频编辑布局无效，改用默认布局', { event: 'audio_edit.layout.legacy_invalid', error }); return undefined }
