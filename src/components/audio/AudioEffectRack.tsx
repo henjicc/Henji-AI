@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, MoreHorizontal, Plus, Power, RotateCcw, Trash2 } from 'lucide-react'
-import { PanelTrigger, UiFieldLayoutContext, UiIconButton, UiInput, UiOptionButton, UI_TEXT_META_CLASS } from '@/components/ui'
+import { PanelTrigger, UiFieldLayoutContext, UiIconButton, UiInput, UiOptionButton, UiPropertyMenuContext, UI_TEXT_META_CLASS } from '@/components/ui'
+import ContextMenu from '@/components/ContextMenu'
+import { useContextMenu } from '@/hooks/useContextMenu'
 import { ParamField, type ParamGesture } from '@/components/ui/params/ParamField'
 import { ParamList } from '@/components/ui/params/ParamList'
 import { builtinParameterFields, readBuiltinField, writeBuiltinField, type ParamFieldSpec } from '@/components/ui/params/fieldSpec'
@@ -46,11 +48,12 @@ export function AudioEffectPicker({ onPick, disabled, disabledReason }: { onPick
   </PanelTrigger>
 }
 
-/** 一项效果的参数（名称悬停说明、行尾重置），拖动时实时试听，松手合成一步撤销。 */
+/** 一项效果的参数（名称悬停说明、右键重置，与剪辑“效果控件”一致），拖动时实时试听，松手合成一步撤销。 */
 function EffectParams({ effect, onChange, gesture }: { effect: AudioRackEffect; onChange: (next: AudioRackEffect) => void; gesture: AudioRackGesture }): React.ReactElement {
   const definition = videoEditBuiltinEffect(effect.builtin.id)
   const active = useRef<{ finish: () => void; cancel: () => void } | null>(null)
   const latest = useRef(effect); latest.current = effect
+  const menu = useContextMenu()
   if (!definition) return <p className={`m-0 ${UI_TEXT_META_CLASS}`}>暂不支持此效果，已保留原设置。</p>
   const values = resolveVideoEditBuiltinParams(effect.builtin)
   // 音频参数配滑杆（拖动时实时试听），读数仍可直接输入与左右拖动。
@@ -65,14 +68,15 @@ function EffectParams({ effect, onChange, gesture }: { effect: AudioRackEffect; 
   }
   const gestureFor = (apply: (value: CodeParameterValue) => void): ParamGesture => ({ begin, finish, cancel, active: () => !!active.current, write: apply, atomic: value => { begin(); apply(value); finish() } })
   // 与剪辑“效果控件”同一种属性排布：名称在左，滑杆与读数在右一行。
-  return <UiFieldLayoutContext.Provider value="property"><div className="flex flex-col" data-audio-effect-params={effect.builtin.id}>
+  return <UiFieldLayoutContext.Provider value="property"><UiPropertyMenuContext.Provider value={menu.showMenu}><div className="flex flex-col" data-audio-effect-params={effect.builtin.id}>
     <ParamList fields={fields} values={Object.fromEntries(fields.map(field => [field.key, readBuiltinField(field, values)]))}
       renderControl={(field, value) => <ParamField field={field} value={value} gesture={gestureFor(next => write({ params: writeBuiltinField(field, next) }))} />}
       onReset={field => write({ params: Object.fromEntries(field.bindingKeys.map(key => [key, definition.params.find(param => param.key === key)!.default])) })}
       resetDisabled={field => field.bindingKeys.every(key => values[key] === definition.params.find(param => param.key === key)!.default)} />
     <ParamList fields={[strength]} values={{ amount: Math.round(effect.amount * 100) }} onReset={() => write({ amount: 1 })} resetDisabled={(_, value) => value === 100}
       renderControl={(field, value) => <ParamField field={field} value={value} gesture={gestureFor(next => write({ amount: Number(next) / 100 }))} />} />
-  </div></UiFieldLayoutContext.Provider>
+    <ContextMenu items={menu.menuItems} position={menu.menuPosition} onClose={menu.hideMenu} visible={menu.menuVisible} />
+  </div></UiPropertyMenuContext.Provider></UiFieldLayoutContext.Provider>
 }
 
 

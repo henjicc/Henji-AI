@@ -66,12 +66,12 @@ export function EssentialSoundControls({ value, onChange, gesture, offline = fal
   const dialogue = value.type === 'dialogue'
   return <UiFieldLayoutContext.Provider value="property">
     <div className="flex flex-col" data-essential-sound={value.type}>
-      <UiGroup titleTone="compact" labelWidth={96}>
+      <UiGroup titleTone="compact">
         <UiFormRow label="声音类型" density="compact"><UiSegmented ariaLabel="声音类型" size="sm" fullWidth disabled={disabled} value={value.type} options={TYPES} onChange={type => onChange(type === value.type ? value : { ...defaultEssentialSound(type), volume: value.volume })} /></UiFormRow>
         <div className="flex justify-end"><UiButton size="sm" variant="link" disabled={disabled} onClick={() => onChange(undefined)}>清除声音类型</UiButton></div>
       </UiGroup>
 
-      <UiGroup divided titleTone="compact" title="响度" labelWidth={96}>
+      <UiGroup divided titleTone="compact" title="响度">
         <UiFormRow label="自动匹配" info="测量处理后的整条声音，把平均响度补偿到目标值；末尾自动限幅，峰值不超过 -1 dB。" density="compact"
           leading={<UiSwitch aria-label="自动匹配响度" checked={loudness.enabled} disabled={disabled} onCheckedChange={enabled => patch(current => ({ ...current, loudness: { ...loudness, enabled } }))} />}>
           <Dropdown<number> ariaLabel="目标响度" size="sm" className="w-full" minWidthStrategy="none" disabled={disabled} value={loudness.targetLufs} display={`${loudness.targetLufs} LUFS`} options={TARGETS} onSelect={targetLufs => patch(current => ({ ...current, loudness: { ...loudness, targetLufs } }))} />
@@ -82,7 +82,7 @@ export function EssentialSoundControls({ value, onChange, gesture, offline = fal
         </div>}
       </UiGroup>
 
-      {dialogue && <UiGroup divided titleTone="compact" title="修复" labelWidth={96}>
+      {dialogue && <UiGroup divided titleTone="compact" title="修复">
         {toggleRow('noise', '减少杂色', '去掉风扇、空调、电流等背景噪声（RNNoise 神经网络降噪），量越大越干净，太大人声会变薄。', repair.noise, noise => patch(current => ({ ...current, repair: { ...current.repair, noise } })))}
         {toggleRow('rumble', '降低隆隆声', '切掉人声以下的低频：桌面震动、脚步、喷麦和空调低频，量越大切得越高。', repair.rumble, rumble => patch(current => ({ ...current, repair: { ...current.repair, rumble } })))}
         {toggleRow('hum', '消除嗡嗡声', '滤掉电源干扰的嗡嗡声及其倍频（国内电网 50 Hz）。', repair.hum, hum => patch(current => ({ ...current, repair: { ...current.repair, hum: { mains: current.repair?.hum?.mains ?? 50, ...hum } } })),
@@ -92,7 +92,7 @@ export function EssentialSoundControls({ value, onChange, gesture, offline = fal
         {offline && toggleRow('isolate', '人声分离', '只保留人声，去掉背景音乐和环境声。用本地模型离线处理（第一次使用下载约 67 MB）。', repair.isolate, isolate => patch(current => ({ ...current, repair: { ...current.repair, isolate } })))}
       </UiGroup>}
 
-      {dialogue && <UiGroup divided titleTone="compact" title="透明度" labelWidth={96}>
+      {dialogue && <UiGroup divided titleTone="compact" title="透明度">
         {toggleRow('dynamics', '动态', '压缩音量起伏：小声抬起来、大声压下去，听着更平稳、更靠前。', clarity.dynamics, dynamics => patch(current => ({ ...current, clarity: { ...current.clarity, dynamics } })))}
         {toggleRow('eq', '均衡', '套用常用的人声均衡曲线，量控制曲线的强度。', clarity.eq, eq => patch(current => ({ ...current, clarity: { ...current.clarity, eq: { preset: current.clarity?.eq?.preset ?? 'podcast', ...eq } } })),
           <Dropdown<EssentialSoundEqPreset> ariaLabel="均衡预设" size="sm" className="w-full" minWidthStrategy="none" disabled={disabled} value={clarity.eq?.preset ?? 'podcast'} display={EQ_LABELS[clarity.eq?.preset ?? 'podcast']} options={ESSENTIAL_SOUND_EQ_PRESETS.map(preset => ({ value: preset, label: EQ_LABELS[preset] }))} onSelect={preset => patch(current => ({ ...current, clarity: { ...current.clarity, eq: { enabled: true, amount: current.clarity?.eq?.amount ?? 50, preset } } }))} />)}
@@ -101,12 +101,12 @@ export function EssentialSoundControls({ value, onChange, gesture, offline = fal
         </UiFormRow>
       </UiGroup>}
 
-      <UiGroup divided titleTone="compact" title="创意" labelWidth={96}>
+      <UiGroup divided titleTone="compact" title="创意">
         {toggleRow('reverb_creative', '混响', '加一点空间感，量是混响声的多少。', value.creative?.reverb, reverb => patch(current => ({ ...current, creative: { reverb: { preset: current.creative?.reverb?.preset ?? 'room', ...reverb } } })),
           <Dropdown<EssentialSoundReverbPreset> ariaLabel="混响预设" size="sm" className="w-full" minWidthStrategy="none" disabled={disabled} value={value.creative?.reverb?.preset ?? 'room'} display={REVERB_LABELS[value.creative?.reverb?.preset ?? 'room']} options={ESSENTIAL_SOUND_REVERB_PRESETS.map(preset => ({ value: preset, label: REVERB_LABELS[preset] }))} onSelect={preset => patch(current => ({ ...current, creative: { reverb: { enabled: true, amount: current.creative?.reverb?.amount ?? 20, preset } } }))} />)}
       </UiGroup>
 
-      <UiGroup divided titleTone="compact" title="剪辑音量" labelWidth={96}>
+      <UiGroup divided titleTone="compact" title="剪辑音量">
         <UiFormRow label="级别（dB）" info="整条声音的音量，在其他处理之后生效。" density="compact">
           <NumberInput ariaLabel="剪辑音量级别" size="sm" min={-24} max={24} step={0.5} precision={1} align="right" disabled={disabled} value={value.volume?.gainDb ?? 0}
             onChange={gainDb => patch(current => ({ ...current, volume: { gainDb } }))} />
