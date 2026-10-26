@@ -18,6 +18,8 @@ export default defineConfig({
           'image-color-lut-worker': resolve(__dirname, 'electron/main/image-color-lut-worker.ts'),
           'image-registration-worker': resolve(__dirname, 'electron/main/image-registration-worker.ts'),
           'audio-edit-mask-worker': resolve(__dirname, 'electron/main/services/audio-edit/mask-worker.ts'),
+          // 音频编辑导出时离线跑效果链（与试听同一份实现）。
+          'audio-edit-effects-worker': resolve(__dirname, 'electron/main/services/audio-edit/effects-worker.ts'),
           'audio-waveform-worker': resolve(__dirname, 'electron/main/services/audio/waveform-worker.ts'),
           'video-screen-change-worker': resolve(__dirname, 'electron/main/services/video/screen-change-worker.ts'),
           'font-worker': resolve(__dirname, 'electron/main/services/fonts/worker.ts'),

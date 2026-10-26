@@ -102,6 +102,12 @@ export interface AudioEditProjectDocument {
   xmlFrameRate?: AudioEditFrameRate
   viewSettings?: AudioEditViewSettings
   editBaseline?: AudioEditBaseline
+  /** 效果组（实时处理，导出同一份效果链）；基本声音换算的效果排在它前面。 */
+  effects?: import('./effects').AudioEditEffect[]
+  /** 效果组整体关闭（基本声音不受影响）。 */
+  effectsBypassed?: boolean
+  essentialSound?: import('../audio/essentialSound').EssentialSoundSettings
+  mouthClicks?: import('./regions').AudioEditMouthClicks
 }
 
 export interface AudioEditTranscriptionRequest {

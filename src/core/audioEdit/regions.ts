@@ -21,6 +21,15 @@ export const audioEditRepairSchema = z.object({
   strength: z.number().min(0).max(1), strokes: z.array(audioEditBrushStrokeSchema).max(1000).optional(),
 }).strict().refine(r => r.endFrame > r.startFrame && r.highHz > r.lowHz, '修复时间或频率范围无效')
 export const audioEditGainRegionsSchema = z.array(audioEditGainRegionSchema).max(10000)
+/**
+ * 口水音（口腔咔嗒声）修复：自动检测出的咔嗒位置，整体开关一次修完（LPC 插值，同一遍处理最多 4096 处，超出分批）。
+ * sensitivity 是检测时用的灵敏度（重新检测时沿用）；单处可以删掉不修。
+ */
+export const audioEditMouthClicksSchema = z.object({
+  enabled: z.boolean(), sensitivity: z.number().finite().min(0).max(100),
+  clicks: z.array(z.object({ startFrame: frame, endFrame: frame }).strict().refine(r => r.endFrame > r.startFrame && r.endFrame - r.startFrame <= 48000, '口水音范围无效')).max(20000),
+}).strict()
+export type AudioEditMouthClicks = z.infer<typeof audioEditMouthClicksSchema>
 export const audioEditRepairsSchema = z.array(audioEditRepairSchema).max(10000)
 export type AudioEditGainRegion = z.infer<typeof audioEditGainRegionSchema>
 export type AudioEditRepair = z.infer<typeof audioEditRepairSchema>
@@ -35,6 +44,18 @@ export function audioEditSoundRecipe(repairs: readonly AudioEditRepair[] | undef
     gains: (gains ?? []).filter(region => region.enabled).map(({ id: _id, enabled: _enabled, ...recipe }) => recipe)
       .sort((a, b) => a.startFrame - b.startFrame || a.endFrame - b.endFrame || a.gainDb - b.gainDb),
   }
+}
+
+/**
+ * 编辑后声音（时间轴同原素材）的完整配方：修复、口水音、离线模型处理（减少混响、人声分离）、区间音量。
+ * 为空表示编辑后声音就是原素材；波形、频谱与预览按它判断要不要换成编辑后的声音、要不要重算。
+ */
+export function audioEditSourceRecipe(project: { repairs?: readonly AudioEditRepair[]; gainRegions?: readonly AudioEditGainRegion[]; mouthClicks?: AudioEditMouthClicks; offline?: ReadonlyArray<{ kind: string; amount: number }> }) {
+  const sound = audioEditSoundRecipe(project.repairs, project.gainRegions)
+  return { ...sound, clicks: project.mouthClicks?.enabled ? project.mouthClicks.clicks : [], offline: project.offline ?? [] }
+}
+export function audioEditSourceEdited(recipe: ReturnType<typeof audioEditSourceRecipe>): boolean {
+  return recipe.repairs.length > 0 || recipe.gains.length > 0 || recipe.clicks.length > 0 || recipe.offline.length > 0
 }
 
 /**

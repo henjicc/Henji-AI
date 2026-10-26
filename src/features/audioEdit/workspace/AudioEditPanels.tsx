@@ -5,7 +5,6 @@ import {
   Dropdown, UiButton, UiChipButton, UiEmpty, UiFormRow, UiGroup, UiIconButton, UiOptionButton, UiRangeInput, UiSegmented, UiSwitch, UiTextArea, UiTextToken,
   UI_TEXT_META_CLASS, UI_TEXT_SECONDARY_CLASS,
 } from '@/components/ui'
-import NumberInput from '@/components/ui/NumberInput'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { ICON_SETTINGS as SettingsIcon, UI_ICON_SIZE } from '@/core/theme/icons'
 import { buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
@@ -16,11 +15,17 @@ import { openDialog, readTextFile } from '@/platform/desktopApi'
 import { AudioEditDisclosure } from '../AudioEditDisclosure'
 import { AudioEditSuggestions } from '../AudioEditSuggestions'
 import { AudioEditFindReplace, AudioEditMatchedText } from '../AudioEditTextTools'
-import { cleanProjectAudioEditFillers, compressAudioEditSilence, prepareAudioEditProcessing, processProjectAudioEditBreaths, quickProcessAudioEdit, transcribeAudioEdit } from '../application/audioEditApplicationService'
+import { cleanProjectAudioEditFillers, compressAudioEditSilence, processProjectAudioEditBreaths, quickProcessAudioEdit, transcribeAudioEdit } from '../application/audioEditApplicationService'
 import type { AudioEditBreathPolicy } from '@/core/audioEdit/breaths'
 import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
 import { audioEditHistoryEntries } from './audioEditHistory'
 import { useAudioEditWorkspace } from './audioEditWorkspaceContext'
+import { EssentialSoundControls } from '@/components/audio/EssentialSoundControls'
+import { beginAudioEditGesture, flushAudioEditProject, getAudioEditProjectInstance } from '../application/audioEditProjectInstances'
+import { getPlatform } from '@/platform/runtime'
+
+/** 减少混响、人声分离（本地模型离线处理）接入编辑后声音之前不显示。 */
+const AUDIO_EDIT_OFFLINE_REPAIR = false
 
 function formatTime(frames: number, sampleRate: number): string {
   const seconds = Math.max(0, frames / Math.max(1, sampleRate))
@@ -203,24 +208,29 @@ export function AudioEditProcessPanel() {
   </PanelScroll>
 }
 
-/** 效果组：声音处理插件链（VST 等），试听与导出共用这份配方。 */
-export function AudioEditEffectsPanel() {
+/** 效果组：见 AudioEditEffectRack（Audition 式效果槽，实时试听）。 */
+export { AudioEditEffectRack as AudioEditEffectsPanel } from './AudioEditEffectRack'
+
+/** 基本声音：按声音类型一键处理（修复、透明度、创意、响度），换算成效果链排在效果组前面。 */
+export function AudioEditEssentialSoundPanel() {
   const workspace = useAudioEditWorkspace()
-  const { project, run, update, processors } = workspace
-  const plugins = processors.filter((item) => item.available && item.semanticRole)
-  return <PanelScroll label="效果组">
-    <fieldset disabled={workspace.disabled} className="flex min-w-0 flex-col gap-3">
-      <UiFormRow label="试听时启用" density="compact" inline><UiSwitch aria-label="试听时启用效果" checked={project.vstEnabled} disabled={!plugins.length} onCheckedChange={(value) => void run(async () => { if (value) await prepareAudioEditProcessing(project.id, crypto.randomUUID()); workspace.setVstEnabled(value) })} /></UiFormRow>
-      {!plugins.length && <UiEmpty size="node" title="没有找到可用的插件" description="安装 VST3 插件后会出现在这里。不影响剪辑与修复。" />}
-      {plugins.map((plugin) => {
-        const entry = project.processorChain?.find((item) => item.id === plugin.id)
-        return <UiGroup key={plugin.id} divided titleTone="compact">
-          <UiFormRow label={plugin.name} density="compact" inline><UiSwitch aria-label={plugin.name} checked={Boolean(entry?.enabled)} onCheckedChange={(enabled) => update({ vstEnabled: false, processorChain: [...(project.processorChain ?? []).filter((item) => item.id !== plugin.id).map((item) => processors.find((p) => p.id === item.id)?.semanticRole === plugin.semanticRole ? { ...item, enabled: false } : item), { id: plugin.id, enabled, parameters: entry?.parameters ?? {} }] })} /></UiFormRow>
-          {entry?.enabled && plugin.parameters?.map((parameter) => <UiFormRow key={parameter.id} label={parameter.name} density="compact"><NumberInput ariaLabel={parameter.name} size="sm" min={0} max={1} step={0.01} precision={2} commitOnChange value={entry.parameters[parameter.name] ?? parameter.normalizedValue} onChange={(next) => update({ vstEnabled: false, processorChain: project.processorChain?.map((item) => item.id === plugin.id ? { ...item, parameters: { ...item.parameters, [parameter.name]: next } } : item) })} /></UiFormRow>)}
-        </UiGroup>
-      })}
-      {plugins.length > 0 && <p className={UI_TEXT_META_CLASS}>效果作用于整段音频，随作品保存。改动后重新打开“试听时启用”；试听切到“原始”可以对比。</p>}
-    </fieldset>
+  const { project, update } = workspace
+  const [matching, setMatching] = useState(false)
+  const [measured, setMeasured] = useState<{ projectId: string; lufs: number } | null>(null)
+  const match = (targetLufs: number) => void workspace.run(async () => {
+    setMatching(true)
+    try {
+      await flushAudioEditProject(project.id)
+      const result = await getPlatform().audioEdit.matchLoudness({ projectId: project.id, targetLufs })
+      const current = getAudioEditProjectInstance(project.id)?.document.essentialSound ?? project.essentialSound
+      if (current) update({ essentialSound: { ...current, loudness: { enabled: true, targetLufs, gainDb: result.gainDb } } })
+      setMeasured({ projectId: project.id, lufs: result.integratedLufs })
+    } finally { setMatching(false) }
+  })
+  return <PanelScroll label="基本声音">
+    <EssentialSoundControls value={project.essentialSound} disabled={workspace.disabled} offline={AUDIO_EDIT_OFFLINE_REPAIR}
+      onChange={essentialSound => update({ essentialSound })} gesture={() => beginAudioEditGesture(project.id)}
+      onMatchLoudness={match} matching={matching} {...(measured?.projectId === project.id ? { measuredLufs: measured.lufs } : {})} />
   </PanelScroll>
 }
 
@@ -242,36 +252,6 @@ export function AudioEditDeliveryPanel() {
       <UiFormRow label="附带 SRT 字幕" density="compact" inline><UiSwitch aria-label="附带 SRT 字幕" checked={workspace.withSrt} onCheckedChange={workspace.setWithSrt} /></UiFormRow>
       <UiFormRow label="包含效果" density="compact" inline><UiSwitch aria-label="包含效果" checked={workspace.withProcessing} disabled={!plugins.length} onCheckedChange={workspace.setWithProcessing} /></UiFormRow>
       <p className={UI_TEXT_META_CLASS}>{workspace.withProcessing ? '同时保存全长处理音轨，XML 引用该音轨。' : 'XML 直接引用原文件；切点按视频帧向外对齐。'}</p>
-    </UiGroup>
-  </PanelScroll>
-}
-
-/** 选区：开始、结束、长度可以直接改；频谱框选时显示频率范围。 */
-export function AudioEditSelectionPanel() {
-  const workspace = useAudioEditWorkspace()
-  const { project, waveSelection: selection } = workspace
-  const rate = project.source.sampleRate
-  const duration = project.source.durationFrames
-  const spectral = workspace.wave.spectralSelection
-  const seconds = (frames: number) => frames / rate
-  const set = (start: number, end: number) => {
-    const startFrame = Math.max(0, Math.min(duration, Math.round(start * rate)))
-    const endFrame = Math.max(0, Math.min(duration, Math.round(end * rate)))
-    workspace.setWaveSelection(endFrame > startFrame ? { startFrame, endFrame } : null)
-  }
-  const view = workspace.wave.view
-  return <PanelScroll label="选区">
-    <UiGroup titleTone="compact" labelWidth={72}>
-      {selection ? <>
-        <UiFormRow label="开始（秒）" density="compact"><NumberInput ariaLabel="选区开始（秒）" size="sm" min={0} max={seconds(selection.endFrame)} step={0.01} precision={3} value={seconds(selection.startFrame)} onChange={(value) => set(value, seconds(selection.endFrame))} /></UiFormRow>
-        <UiFormRow label="结束（秒）" density="compact"><NumberInput ariaLabel="选区结束（秒）" size="sm" min={seconds(selection.startFrame)} max={seconds(duration)} step={0.01} precision={3} value={seconds(selection.endFrame)} onChange={(value) => set(seconds(selection.startFrame), value)} /></UiFormRow>
-        <UiFormRow label="长度（秒）" density="compact"><NumberInput ariaLabel="选区长度（秒）" size="sm" min={0.001} max={seconds(duration - selection.startFrame)} step={0.01} precision={3} value={seconds(selection.endFrame - selection.startFrame)} onChange={(value) => set(seconds(selection.startFrame), seconds(selection.startFrame) + value)} /></UiFormRow>
-      </> : <p className={`m-0 ${UI_TEXT_META_CLASS}`}>在波形上拖动选出一段声音，或在文字稿里选中词语。</p>}
-      {spectral && <UiFormRow label="频率" density="compact"><span className="font-mono text-xs tabular-nums text-text2">{Math.round(spectral.lowHz)} – {Math.round(spectral.highHz)} Hz</span></UiFormRow>}
-    </UiGroup>
-    <UiGroup divided titleTone="compact" title="可见范围" labelWidth={72}>
-      <UiFormRow label="开始（秒）" density="compact"><span className="font-mono text-xs tabular-nums text-text2">{seconds(view.start).toFixed(3)}</span></UiFormRow>
-      <UiFormRow label="长度（秒）" density="compact"><span className="font-mono text-xs tabular-nums text-text2">{seconds(view.end - view.start).toFixed(3)}</span></UiFormRow>
     </UiGroup>
   </PanelScroll>
 }

@@ -1,11 +1,13 @@
 import { audioEditSpliceSchema } from '../../../src/core/audioEdit/splice'
-import { audioEditSoundRecipe } from '../../../src/core/audioEdit/regions'
+import { audioEditSourceRecipe } from '../../../src/core/audioEdit/regions'
+import { essentialSoundOfflineStages } from '../../../src/core/audio/essentialSound'
 import { spliceAudioFile } from '../services/audio-edit/splice'
 import { z } from 'zod'
 import { BrowserWindow } from 'electron'
 import { audioEditSpectralTileRequestSchema } from '../../../src/core/audioEdit/spectralPyramid'
 import { getAudioEditSpectralTile, cancelAudioEditSpectralTile, subscribeAudioEditSpectralProgress } from '../services/audio-edit/spectral-pyramid'
 import { renderAudioEditProject, prepareAudioEditRenderSource } from '../services/audio-edit/render'
+import { measureAudioFileLoudness } from '../services/audio/loudness'
 import { registerAudioSampleHandlers } from './audio-samples'
 import { registerExplanationAudioHandlers } from './explanation-audio'
 import { registerAudioLoudnessHandlers } from './audio-loudness'
@@ -48,8 +50,21 @@ export function registerAudioIpc(): void {
   // 修复与区间音量已生效、删除/静音尚未套用的音频：时间轴与原素材一致，波形视图据此显示编辑后的样子。
   registerIpcHandler('audioEdit:editedSource', input => z.object({ projectId: z.string().min(1), requestId: z.string().optional() }).strict().parse(input), async request => {
     const project = await requireAudioEditProject(request.projectId)
-    const audioPath = await runAudioEditTask(project.id, 'render', signal => prepareAudioEditRenderSource(project, false, signal), request.requestId, JSON.stringify(['edited-source', audioEditSoundRecipe(project.repairs, project.gainRegions), project.source]), true)
+    const audioPath = await runAudioEditTask(project.id, 'render', signal => prepareAudioEditRenderSource(project, false, signal), request.requestId, JSON.stringify(['edited-source', audioEditSourceRecipe({ ...project, offline: essentialSoundOfflineStages(project.essentialSound) }), project.source]), true)
     return { audioPath }
+  })
+  // 基本声音“自动匹配响度”：渲染不含响度补偿的成品（含基本声音其他项与效果组），测积分响度，换算到目标需要的增益。
+  registerIpcHandler('audioEdit:matchLoudness', input => z.object({ projectId: z.string().min(1), targetLufs: z.number().finite().min(-40).max(-5), requestId: z.string().optional() }).strict().parse(input), async request => {
+    const project = await requireAudioEditProject(request.projectId)
+    const essential = project.essentialSound
+    const probe = essential ? { ...project, essentialSound: { ...essential, loudness: { enabled: false, targetLufs: request.targetLufs, gainDb: 0 } } } : project
+    return runAudioEditTask(project.id, 'render', async signal => {
+      const rendered = await renderAudioEditProject(probe, project.vstEnabled, signal)
+      const measured = await measureAudioFileLoudness(rendered.audioPath, 0, rendered.durationFrames, rendered.sampleRate, signal)
+      if (measured.integratedLufs === null) throw new Error('声音太短或太轻，测不出响度。')
+      const gainDb = Math.round(Math.max(-40, Math.min(40, request.targetLufs - measured.integratedLufs)) * 10) / 10
+      return { integratedLufs: Math.round(measured.integratedLufs * 10) / 10, gainDb }
+    }, request.requestId, JSON.stringify(['match-loudness', request.targetLufs, project.revision]), true)
   })
   registerAudioSampleHandlers()
   registerExplanationAudioHandlers()

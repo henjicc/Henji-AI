@@ -1,4 +1,6 @@
-import { audioEditGainRegionsSchema, audioEditRepairsSchema } from '@/core/audioEdit/regions'
+import { audioEditGainRegionsSchema, audioEditMouthClicksSchema, audioEditRepairsSchema } from '@/core/audioEdit/regions'
+import { audioEditEffectsSchema } from '@/core/audioEdit/effects'
+import { essentialSoundSettingsSchema } from '@/core/audio/essentialSound'
 import { z } from 'zod'
 import { type ApplicationFieldDefinition, type ApplicationPropertyDescriptor, type JsonValue, fieldWriterTable } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
@@ -25,9 +27,9 @@ function boolean(value: unknown): boolean { if (typeof value !== 'boolean') thro
 function block(source: AudioEditFieldSource) { const found = source.document.transcript.find((item) => item.id === source.childId); if (!found) throw new Error('NOT_FOUND'); return found }
 function breath(source: AudioEditFieldSource) { const found = source.breaths?.views.find((item) => item.id === source.childId); if (!found) throw new Error('NOT_FOUND'); return found }
 function suggestion(source: AudioEditFieldSource) { const found = source.document.suggestions.find((item) => item.id === source.childId); if (!found) throw new Error('NOT_FOUND'); return found }
-function field(entityType: AudioEditEntityType, suffix: string, title: string, value: ApplicationPropertyDescriptor['value'], read: (source: AudioEditFieldSource) => JsonValue, write?: (source: AudioEditFieldSource, value: JsonValue | undefined) => void, storeActions: string[] = []): ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource> {
+function field(entityType: AudioEditEntityType, suffix: string, title: string, value: ApplicationPropertyDescriptor['value'], read: (source: AudioEditFieldSource) => JsonValue, write?: (source: AudioEditFieldSource, value: JsonValue | undefined) => void, storeActions: string[] = [], description = `口播剪辑${title}。`): ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource> {
   const id = `${entityType}.${suffix}`
-  return { propertyId: id, descriptor: { id, entityType, version: audioEditSchemaRef('property', id).version, title, description: `口播剪辑${title}。`, value, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['audio_edit:read'], write: write ? ['audio_edit:write'] : [] }, revisionScopes: ['audio_edit'], schemaRef: audioEditSchemaRef('property', id), ...(!write ? { readOnlyReason: '由源媒体、识别结果或剪辑时间线计算。' } : {}) }, read, ...(write ? { writer: { write: (draft, mutation) => write(draft, mutation.value) } } : {}), storeActions }
+  return { propertyId: id, descriptor: { id, entityType, version: audioEditSchemaRef('property', id).version, title, description, value, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['audio_edit:read'], write: write ? ['audio_edit:write'] : [] }, revisionScopes: ['audio_edit'], schemaRef: audioEditSchemaRef('property', id), ...(!write ? { readOnlyReason: '由源媒体、识别结果或剪辑时间线计算。' } : {}) }, read, ...(write ? { writer: { write: (draft, mutation) => write(draft, mutation.value) } } : {}), storeActions }
 }
 function readOnly(definition: ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource>, reason: string): ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource> {
   return { ...definition, descriptor: { ...definition.descriptor, readOnlyReason: reason } }
@@ -46,6 +48,14 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
     field(E.project, 'cuts', '声音编辑区间（mode 为 delete 删除或 mute 静音，省略时删除）', objectValue('audio_edit.cuts'), (s) => json(s.document.cuts ?? []), (s, v) => { s.document.cuts = audioEditCutsSchema.parse(v) }),
     field(E.project, 'gain_regions', '音量区域（采样帧、分贝与淡入淡出采样帧）', objectValue('audio_edit.gain_regions'), s => json(s.document.gainRegions ?? []), (s, v) => { s.document.gainRegions = audioEditGainRegionsSchema.parse(v) }),
     field(E.project, 'repairs', '声音修复区域（源采样帧、Hz、强度、启用与归一化画笔）', objectValue('audio_edit.repairs'), s => json(s.document.repairs ?? []), (s, v) => { s.document.repairs = audioEditRepairsSchema.parse(v) }),
+    field(E.project, 'effects', '效果组', objectValue('audio_edit.effects'), s => json(s.document.effects ?? []), (s, v) => { s.document.effects = audioEditEffectsSchema.parse(v) }, [],
+      '口播剪辑的效果组：按顺序处理剪好的整条声音，试听实时、导出同一份效果链。builtin.id 用音频内置效果 ID，参数键与范围同剪辑的音频效果；amount 0–1 为效果强度；最多 16 个。'),
+    field(E.project, 'effects_bypassed', '效果组整体关闭', BOOL, s => s.document.effectsBypassed ?? false, (s, v) => { s.document.effectsBypassed = boolean(v) }, [],
+      '为 true 时试听与导出都不经过效果组；基本声音不受影响。'),
+    field(E.project, 'essential_sound', '基本声音', objectValue('audio_edit.essential_sound'), s => json(s.document.essentialSound ?? null), (s, v) => { s.document.essentialSound = v === null ? undefined : essentialSoundSettingsSchema.parse(v) }, [],
+      '基本声音：type 声音类型；repair（noise 减少杂色、rumble 降低隆隆声、hum 消除嗡嗡声含 mains 50/60、deEss 消除齿音）、clarity（dynamics 动态、eq 均衡含 preset、enhance 增强语音 voice low/high）、creative.reverb 混响含 preset、loudness 自动匹配响度（targetLufs 目标；gainDb 为测量后算出的补偿）、volume.gainDb 剪辑音量；各项 enabled 开关与 amount 0–100；写 null 清除。换算成效果链排在效果组前面。'),
+    field(E.project, 'mouth_clicks', '口水音修复', objectValue('audio_edit.mouth_clicks'), s => json(s.document.mouthClicks ?? { enabled: false, sensitivity: 50, clicks: [] }), (s, v) => { s.document.mouthClicks = audioEditMouthClicksSchema.parse(v) }, [],
+      '口水音修复：clicks 为检测出的咔嗒范围（源采样帧，单处不超过 1 秒）；enabled 打开时编辑后的声音、试听与导出都修掉；sensitivity 为检测灵敏度 0–100。'),
     field(E.project, 'view_settings', '文字大小、左右留白与时间轴字幕', objectValue('audio_edit.view_settings'), (s) => json(s.document.viewSettings ?? DEFAULT_AUDIO_EDIT_VIEW_SETTINGS), (s, v) => { s.document.viewSettings = audioEditViewSettingsSchema.parse(v) }),
     field(E.project, 'xml_frame_rate', '音频 XML 帧率', objectValue('audio_edit.frame_rate'), (s) => json(s.document.xmlFrameRate ?? { numerator: 25, denominator: 1 }), (s, v) => { s.document.xmlFrameRate = audioEditFrameRateSchema.parse(v) }),
     field(E.project, 'selected_asr_model_id', '语音识别模型', TEXT, (s) => s.document.selectedAsrModelId ?? ''),
@@ -113,6 +123,9 @@ const audioEditValueSchemas: Record<string, z.ZodType> = {
   'audio_edit.view_settings': audioEditViewSettingsSchema,
   'audio_edit.frame_rate': audioEditFrameRateSchema,
   'audio_edit.recipe': audioEditProcessorChainSchema,
+  'audio_edit.effects': audioEditEffectsSchema,
+  'audio_edit.essential_sound': essentialSoundSettingsSchema.nullable(),
+  'audio_edit.mouth_clicks': audioEditMouthClicksSchema,
   // 只读描述来自宿主处理器目录，形状与 AudioEditProcessorDescriptor 一致。
   'audio_edit.processors': z.array(z.object({
     id: z.string(), name: z.string(), vendor: z.string(), version: z.string(), available: z.boolean(),

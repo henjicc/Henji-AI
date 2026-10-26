@@ -15,9 +15,13 @@ class HenjiAudioEditPreviewProcessor extends AudioWorkletProcessor {
     this.pending = null
     this.grains = []
     this.nextGrain = null
+    // 队列低于这么多帧就要数据；有实时效果时渲染层只提前处理很短一段（拧旋钮很快听到），把门槛调低。
+    this.lowWaterFrames = sampleRate * 1.5
     this.port.onmessage = (event) => {
       const message = event.data
-      if (message.type === 'reset') {
+      if (message.type === 'config') {
+        if (Number.isFinite(message.lowWaterFrames) && message.lowWaterFrames > 0) this.lowWaterFrames = message.lowWaterFrames
+      } else if (message.type === 'reset') {
         // 旧队列继续淡出；新代次独立接收，连续跳转只保留最后一次目标。
         this.generation = message.generation
         this.pending = { queue: [], queuedFrames: 0 }
@@ -107,7 +111,7 @@ class HenjiAudioEditPreviewProcessor extends AudioWorkletProcessor {
       if (this.queue.length === 0 && !this.starved) {
         this.starved = true
         this.port.postMessage({ type: 'starved', generation: this.generation, consumedFrames: this.consumedFrames })
-      } else if (this.queuedFrames < sampleRate * 1.5 && !this.requestedData) {
+      } else if (this.queuedFrames < this.lowWaterFrames && !this.requestedData) {
         this.requestedData = true
         this.port.postMessage({ type: 'need-data', generation: this.generation, consumedFrames: this.consumedFrames })
       }

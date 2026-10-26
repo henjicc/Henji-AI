@@ -14,7 +14,8 @@ import { buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
 import { buildProjectAudioEditTimeline } from '@/core/audioEdit/timeline'
 import { DEFAULT_AUDIO_EDIT_SETTINGS } from '@/core/audioEdit/edits'
 import { audioEditSpeechEdges } from '@/core/audioEdit/gaps'
-import { audioEditSoundRecipe } from '@/core/audioEdit/regions'
+import { audioEditSourceEdited, audioEditSourceRecipe } from '@/core/audioEdit/regions'
+import { essentialSoundOfflineStages } from '@/core/audio/essentialSound'
 import { useWaveformData, type WaveformState } from '@/hooks/useWaveformData'
 import { getPlatform } from '@/platform/runtime'
 import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
@@ -134,9 +135,12 @@ export function AudioWaveWorkspace() {
     return () => window.clearInterval(timer)
   }, [capture, recording, duration, rate, captureView, setCaptureView])
   const autoGain = useAudioEditPlaybackStore(state => state.autoGain && state.mode !== 'delivery')
-  const edited = Boolean(project.repairs?.some(repair => repair.enabled) || project.gainRegions?.some(region => region.enabled))
-  // 声音内容：只有修复、区间音量真正变了才算。删除、静音不改声音；呼吸、气口转成手动剪辑只换 id，也不算。
-  const soundKey = React.useMemo(() => JSON.stringify(audioEditSoundRecipe(project.repairs, project.gainRegions)), [project.repairs, project.gainRegions])
+  // 声音内容：只有修复、口水音、离线模型处理、区间音量真正变了才算。删除、静音不改声音；呼吸、气口转成手动剪辑只换 id，也不算。
+  // 基本声音与效果组是试听时实时处理的，不改波形（与 Audition 一样，波形显示进效果组之前的声音）。
+  const offline = React.useMemo(() => essentialSoundOfflineStages(project.essentialSound), [project.essentialSound])
+  const recipe = React.useMemo(() => audioEditSourceRecipe({ ...project, offline }), [project.repairs, project.gainRegions, project.mouthClicks, offline]) // eslint-disable-line react-hooks/exhaustive-deps
+  const edited = audioEditSourceEdited(recipe)
+  const soundKey = React.useMemo(() => JSON.stringify(recipe), [recipe])
   // 有修复或区间音量时，波形改读“已编辑、未删除”的音频（时间轴同原素材），删除与静音仍用叠加标记表示。
   // 声音变了才重新生成；新的出来之前继续显示上一份，不先退回原素材再跳回来。
   const [editedPath, setEditedPath] = React.useState<string | null>(null)

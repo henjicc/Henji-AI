@@ -367,6 +367,7 @@ export interface HenjiAudioApi {
   onSpectralProgress(handler: (progress: AudioEditSpectralProgress) => void): () => void
   renderEditAudio(request: { projectId: string; requestId?: string; includeProcessing?: boolean }): Promise<AudioEditRenderedAudio>
   editedSourceAudio(request: { projectId: string; requestId?: string }): Promise<{ audioPath: string }>
+  matchAudioEditLoudness(request: { projectId: string; targetLufs: number; requestId?: string }): Promise<{ integratedLufs: number; gainDb: number }>
   prepareEditPreviewChunk(payload: AudioEditPreviewChunkRequest): Promise<AudioEditPreviewChunk>
 }
 import type {

@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import { audioEditGainRegionsSchema, audioEditRepairsSchema } from '../../audioEdit/regions'
+import { audioEditGainRegionsSchema, audioEditMouthClicksSchema, audioEditRepairsSchema } from '../../audioEdit/regions'
+import { essentialSoundSettingsSchema } from '../../audio/essentialSound'
 
 import { henjiExtension, henjiLegacyExtensions } from '../../fileExtensions'
 import type { DocumentKindDescriptor } from './registry'
@@ -41,6 +42,10 @@ export const audioEditContentSchema = z.looseObject({
   cuts: z.array(itemSchema).optional(),
   gainRegions: audioEditGainRegionsSchema.optional(), repairs: audioEditRepairsSchema.optional(),
   processorChain: z.array(itemSchema).optional(),
+  effects: z.array(itemSchema).optional(),
+  effectsBypassed: z.boolean().optional(),
+  essentialSound: essentialSoundSettingsSchema.optional(),
+  mouthClicks: audioEditMouthClicksSchema.optional(),
 })
 
 export type AudioEditDocumentContent = z.infer<typeof audioEditContentSchema>
@@ -57,6 +62,7 @@ function isEmptyAudioEditContent(content: AudioEditDocumentContent): boolean {
     && !(content.gainRegions?.length) && !(content.repairs?.length)
     && content.referenceScript.trim().length === 0
     && !(content.processorChain?.length)
+    && !(content.effects?.length) && !content.essentialSound && !(content.mouthClicks?.clicks.length)
 }
 
 export const audioEditDocumentKind: DocumentKindDescriptor<AudioEditDocumentContent> = {
@@ -67,11 +73,12 @@ export const audioEditDocumentKind: DocumentKindDescriptor<AudioEditDocumentCont
   untitledNames: { zh: '未命名音频', en: 'Untitled Audio' },
   storage: 'json',
   // 版本 1 = 旧口播工程（audio_edit_projects.document_json）去掉 id / name / createdAt / updatedAt / revision。
-  // 版本 2 = 新增可选的音量区域与修复记录；版本 3 = 修复画笔笔画新增可选的纵向半径 radiusY。都只加可选字段，旧文件原样可读。
-  version: 3,
+  // 版本 2 = 新增可选的音量区域与修复记录；版本 3 = 修复画笔笔画新增可选的纵向半径 radiusY；
+  // 版本 4 = 新增可选的效果组（effects / effectsBypassed）、基本声音（essentialSound）与口水音修复（mouthClicks）。都只加可选字段，旧文件原样可读。
+  version: 4,
   minReaderVersion: 1,
   contentSchema: audioEditContentSchema,
-  migrations: { 1: (content) => structuredClone(content), 2: (content) => structuredClone(content) },
+  migrations: { 1: (content) => structuredClone(content), 2: (content) => structuredClone(content), 3: (content) => structuredClone(content) },
   createEmptyContent: () => ({ source: null, referenceScript: '', transcript: [], suggestions: [], vstEnabled: false }),
   isEmptyContent: isEmptyAudioEditContent,
   summarize: (content) => ({

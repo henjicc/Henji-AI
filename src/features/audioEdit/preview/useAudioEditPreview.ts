@@ -3,6 +3,10 @@ import { readAudioEditViewMemory } from '../workspace/audioEditViewMemory'
 
 import { buildProjectAudioEditTimeline, editedDurationFrames, findTranscriptBlockForPlayback, nextRetainedSourceFrame, sourceFrameToOutputFrame } from '@/core/audioEdit/timeline'
 import { compileAudioEditXmlTimeline } from '@/core/audioEdit/xml'
+import { audioEditRealtimeEffects } from '@/core/audioEdit/effects'
+import { audioEditSourceRecipe } from '@/core/audioEdit/regions'
+import { essentialSoundOfflineStages } from '@/core/audio/essentialSound'
+import { AudioEffectChain, type AudioEffectInstance } from '@/core/audio/effects/audioEffectChain'
 import type { AudioEditPreviewMode, AudioEditProjectDocument, AudioEditTimelineSpan } from '@/core/audioEdit/types'
 import { createLogger } from '@/core/logging'
 import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
@@ -12,6 +16,10 @@ import { bindAudioEditScrub, createScrubScheduler } from './audioEditScrub'
 
 const CHUNK_SECONDS = 1
 const BUFFER_SECONDS = 3
+/** 有实时效果（基本声音、效果组）时只提前处理很短一段：拖动效果参数约 0.3 秒内就能听到。 */
+const EFFECT_CHUNK_SECONDS = 0.1
+const EFFECT_BUFFER_SECONDS = 0.35
+const EFFECT_LOW_WATER_SECONDS = 0.22
 const logger = createLogger('features.audioEdit.preview')
 
 interface WorkletMessage {
@@ -28,6 +36,14 @@ function playbackSpans(project: AudioEditProjectDocument, mode: AudioEditPreview
   return mode === 'source'
     ? [{ sourceStartFrame: 0, sourceEndFrame: project.source.durationFrames, outputStartFrame: 0, outputEndFrame: project.source.durationFrames }]
     : buildProjectAudioEditTimeline(project)
+}
+
+/** 交错 PCM 原地过效果链（拆成逐声道处理再交错回去）。 */
+function processInterleaved(chain: AudioEffectChain, pcm: Float32Array, channels: number, frames: number): void {
+  const planar = Array.from({ length: channels }, () => new Float32Array(frames))
+  for (let frame = 0; frame < frames; frame++) for (let channel = 0; channel < channels; channel++) planar[channel][frame] = pcm[frame * channels + channel]
+  chain.process(planar, frames)
+  for (let frame = 0; frame < frames; frame++) for (let channel = 0; channel < channels; channel++) pcm[frame * channels + channel] = planar[channel][frame]
 }
 
 export function useAudioEditPreview(project: AudioEditProjectDocument | null, normalizationGain = 1) {
@@ -55,10 +71,20 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
   const resumeRef = useRef<Promise<void> | null>(null)
   const activeSpans = useMemo(() => project ? playbackSpans(project, mode) : [], [mode, project])
   const timeline = activeSpans
-  const planKey = JSON.stringify([project?.id, project?.source, mode, project?.vstEnabled, project?.processorChain, mode !== 'source' ? project?.gainRegions : undefined, mode !== 'source' ? project?.repairs : undefined, activeSpans])
+  // 编辑后声音变了（修复、口水音、离线模型处理、区间音量；只换 id 不算）才换缓存从当前位置重来。
+  const planKey = JSON.stringify([project?.id, project?.source, mode, project?.vstEnabled, project?.processorChain, project && mode !== 'source' ? audioEditSourceRecipe({ ...project, offline: essentialSoundOfflineStages(project.essentialSound) }) : undefined, activeSpans])
   const cacheRef = useRef<{ key: string; value: PreviewChunkCache } | null>(null)
   if (project && cacheRef.current?.key !== planKey) cacheRef.current = { key: planKey, value: new PreviewChunkCache(project, mode, activeSpans) }
   const cache = project ? cacheRef.current!.value : null
+  // 实时效果链：“原始”试听不加效果（用来对比）；结构变了（增删、换序、开关）就清空排队的声音从当前位置重来，只改参数时原地生效。
+  const effects = useMemo<AudioEffectInstance[]>(() => project && mode !== 'source' ? audioEditRealtimeEffects(project) : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only the effect-related fields matter
+    [project?.effects, project?.effectsBypassed, project?.essentialSound, mode])
+  const effectsRef = useRef(effects)
+  effectsRef.current = effects
+  const chainRef = useRef<AudioEffectChain | null>(null)
+  const chainResetRef = useRef(true)
+  const effectStructure = effects.map(effect => `${effect.id}:${effect.builtin.id}`).join('|')
 
   const resolveFrame = useCallback((requestedFrame: number) => {
     if (!project) return 0
@@ -97,9 +123,10 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
     const generation = generationRef.current
     const filling = (async () => {
       try {
-        while (queuedFramesRef.current < project.source.sampleRate * BUFFER_SECONDS && generation === generationRef.current) {
+        const realtime = effectsRef.current.length > 0
+        while (queuedFramesRef.current < project.source.sampleRate * (realtime ? EFFECT_BUFFER_SECONDS : BUFFER_SECONDS) && generation === generationRef.current) {
           const cursor = nextSourceFrameRef.current
-          const chunk = await cache.read(cursor, project.source.sampleRate * CHUNK_SECONDS)
+          const chunk = await cache.read(cursor, Math.round(project.source.sampleRate * (realtime ? EFFECT_CHUNK_SECONDS : CHUNK_SECONDS)))
           if (generation !== generationRef.current) break
           if (!chunk) {
             endedRef.current = true
@@ -112,6 +139,13 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
           }
           const decodedFrames = chunk.sourceEndFrame - chunk.sourceStartFrame
           if (decodedFrames <= 0) throw new Error('此位置无法读取音频，请重新定位后重试')
+          const live = effectsRef.current
+          if (live.length && chainRef.current) {
+            const chain = chainRef.current
+            if (chainResetRef.current) { await chain.reset(live); chainResetRef.current = false } else await chain.sync(live)
+            if (generation !== generationRef.current) break
+            processInterleaved(chain, new Float32Array(chunk.pcm), chunk.channels, decodedFrames)
+          }
           queuedFramesRef.current += decodedFrames
           enqueuedFramesRef.current += decodedFrames
           nextSourceFrameRef.current = chunk.sourceEndFrame
@@ -145,6 +179,7 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
     queuedFramesRef.current = 0
     enqueuedFramesRef.current = 0
     endedRef.current = false
+    chainResetRef.current = true
     nextSourceFrameRef.current = target
     nodeRef.current.port.postMessage({ type: 'reset', generation: generationRef.current })
     publishPosition(target)
@@ -177,6 +212,9 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
         await context.audioWorklet.addModule(new URL('./audio-edit-preview-worklet.js', window.location.href).href)
         if (disposed) return void context.close()
         const node = new AudioWorkletNode(context, 'henji-audio-edit-preview', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [Math.min(2, channelCount)] })
+        chainRef.current?.dispose()
+        chainRef.current = new AudioEffectChain(sampleRate, channelCount)
+        chainResetRef.current = true
         const output = createPreviewOutput(context)
         output.setLevels(levelsRef.current.gain, levelsRef.current.volume, levelsRef.current.bypass)
         node.connect(output.input)
@@ -212,6 +250,8 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
       resumeRef.current = null
       generationRef.current += 1
       nodeRef.current?.disconnect()
+      chainRef.current?.dispose()
+      chainRef.current = null
       outputRef.current?.dispose()
       outputRef.current = null
       void contextRef.current?.close()
@@ -227,6 +267,19 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
     resetAtRef.current(useAudioEditPlaybackStore.getState().sourceFrame)
     // 仅保存版本或选区变化不使音频缓存失效。
   }, [planKey])
+
+  // 有无实时效果决定工作线程多早要数据；效果结构变了，丢掉已按旧效果处理好的排队声音，从当前位置重新处理。
+  const realtime = effects.length > 0
+  useEffect(() => {
+    nodeRef.current?.port.postMessage({ type: 'config', lowWaterFrames: Math.round((sampleRate ?? 48000) * (realtime ? EFFECT_LOW_WATER_SECONDS : 1.5)) })
+  }, [realtime, sampleRate])
+  const appliedStructure = useRef(effectStructure)
+  useEffect(() => {
+    if (appliedStructure.current === effectStructure) return
+    appliedStructure.current = effectStructure
+    if (nodeRef.current && playingRef.current) resetAtRef.current(useAudioEditPlaybackStore.getState().sourceFrame)
+    else chainResetRef.current = true
+  }, [effectStructure])
 
   const togglePlayback = useCallback(async () => {
     const context = contextRef.current

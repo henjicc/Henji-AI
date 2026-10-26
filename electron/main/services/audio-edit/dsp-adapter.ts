@@ -1,3 +1,4 @@
+import fs from 'node:fs/promises'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { runAudioEditProcess } from './process'
 import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
@@ -15,6 +16,34 @@ export function encodeAudioRepairMask(bytes: Uint8Array, width: number, height: 
   view.setUint32(8, width, true); view.setUint32(12, height, true); output.set(bytes, 16)
   return output
 }
+/**
+ * 口水音批量修复：同一遍 LPC 插值修多处（原生工作进程一次最多 4096 段，超出分批接力）。
+ * 范围先排序、合并重叠，夹到离首尾至少 32 个样本（插值需要两侧干净的上下文）。
+ */
+export async function runAudioMouthDeclick(input: string, output: string, clicks: ReadonlyArray<{ startFrame: number; endFrame: number }>, frames: number, signal?: AbortSignal): Promise<void> {
+  const ranges: Array<{ start_frame: number; end_frame: number }> = []
+  for (const click of [...clicks].sort((a, b) => a.startFrame - b.startFrame)) {
+    const start = Math.max(32, click.startFrame), end = Math.min(frames - 32, click.endFrame)
+    if (end <= start) continue
+    const last = ranges.at(-1)
+    if (last && start <= last.end_frame) last.end_frame = Math.max(last.end_frame, end)
+    else ranges.push({ start_frame: start, end_frame: end })
+  }
+  if (!ranges.length) { await fs.copyFile(input, output); return }
+  const batches = Array.from({ length: Math.ceil(ranges.length / 4096) }, (_, index) => ranges.slice(index * 4096, (index + 1) * 4096))
+  let current = input
+  const temporary: string[] = []
+  try {
+    for (const [index, batch] of batches.entries()) {
+      signal?.throwIfAborted()
+      const target = index === batches.length - 1 ? output : `${output}.part${index}.wav`
+      if (target !== output) temporary.push(target)
+      await invokeAudioWorker({ type: 'declick', input_path: current, output_path: target, ranges: batch }, 10 * 60_000, signal)
+      current = target
+    }
+  } finally { await Promise.all(temporary.map(file => removeUnmanagedCachePath(file, { force: true }))) }
+}
+
 export async function runAudioRepair(input: string, output: string, repair: AudioEditRepair, maskPath?: string, signal?: AbortSignal): Promise<void> {
   if (repair.kind === 'declick') {
     const repaired = repair.strength < 1 ? `${output}.declick.wav` : output

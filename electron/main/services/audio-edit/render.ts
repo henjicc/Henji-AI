@@ -10,8 +10,9 @@ import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { audioEditCacheDirectory, identifyAudioEditSource, prepareAudioEditAudio, validateAudioEditAudio, verifyAudioEditSource } from './media'
 import { processAudioEditVstChain, audioEditProcessorCacheIdentity } from './processors'
-import { runAudioRepair, audioRepairMaskDimensions, encodeAudioRepairMask } from './dsp-adapter'
+import { runAudioRepair, runAudioMouthDeclick, audioRepairMaskDimensions, encodeAudioRepairMask } from './dsp-adapter'
 import { audioRenderKey, cachedAudioFile } from './render-cache'
+import { applyAudioEditRealtimeEffects } from './effects-render'
 import { runAudioEditProcess } from './process'
 import { AudioEditSpliceRenderer } from '../../../../src/core/audioEdit/spliceCrossfade'
 import { createF32WavWriter, openF32Wav, type F32WavReader } from './pcm-wav'
@@ -71,6 +72,16 @@ export async function prepareAudioEditRenderSource(project: AudioEditProjectDocu
         await runAudioRepair(source, output, repair, mask, signal)
         await validateAudioEditAudio(output, project.source.sampleRate, project.source.channels, project.source.durationFrames, signal)
       } finally { if (mask) await removeUnmanagedCachePath(mask, { force: true }) }
+    }, signal)
+  }
+  // 口水音：检测出的咔嗒位置一遍修完（排在其他修复之后、区间音量之前）。
+  const clicks = project.mouthClicks?.enabled ? project.mouthClicks.clicks : []
+  if (clicks.length) {
+    key = audioRenderKey([key, 'mouth-declick-v1', clicks])
+    const source = input
+    input = await cachedAudioFile(directory, `declick-${key}`, 'wav', async output => {
+      await runAudioMouthDeclick(source, output, clicks, project.source.durationFrames, signal)
+      await validateAudioEditAudio(output, project.source.sampleRate, project.source.channels, project.source.durationFrames, signal)
     }, signal)
   }
   const gains = (project.gainRegions ?? []).filter(r => r.enabled)
@@ -134,10 +145,12 @@ export async function renderAudioEditProject(project: AudioEditProjectDocument, 
     if (!durationFrames) throw new Error('当前没有可渲染的声音，请保留至少一段音频。')
     // 拼接算法变更只失效成品缓存，源时间上的修复、增益与效果缓存仍可复用。
     const key = audioRenderKey(['splice-crossfade-v1', source, spans, project.source.sampleRate])
-    const audioPath = await cachedAudioFile(audioEditCacheDirectory(project.id), `finished-${key}`, 'wav', async output => {
+    const spliced = await cachedAudioFile(audioEditCacheDirectory(project.id), `finished-${key}`, 'wav', async output => {
       await renderAudioEditSplices(project, await openRenderSource(project, source, signal), spans, durationFrames, output, signal)
       await validateAudioEditAudio(output, project.source.sampleRate, project.source.channels, durationFrames, signal)
     }, signal)
+    // 基本声音与效果组作用在剪好的整条声音上（与试听一致）。
+    const audioPath = await applyAudioEditRealtimeEffects(project, spliced, signal)
     await verifyAudioEditSource(project, false, signal)
     logger.info('音频渲染完成', { event: 'audio_edit.render.completed', context: { projectId: project.id, elapsedMs: performance.now() - started } })
     return { audioPath, durationFrames, sampleRate: project.source.sampleRate, channels: project.source.channels, revision: project.revision }

@@ -9,6 +9,8 @@ import { buildAudioEditXml, compileAudioEditXmlTimeline } from '../../../../src/
 import type { AudioEditExportRequest, AudioEditExportResult } from '../../../../src/core/audioEdit/types'
 import { requireAudioEditProject } from './project-store'
 import { prepareAudioEditRenderSource, renderAudioEditProject } from './render'
+import { applyAudioEditRealtimeEffects } from './effects-render'
+import { audioEditRealtimeEffects } from '../../../../src/core/audioEdit/effects'
 import { verifyAudioEditSource } from './media'
 import { runAudioEditTask } from './task-store'
 
@@ -64,7 +66,8 @@ export async function exportAudioEditProject(request: AudioEditExportRequest): P
     try {
       const processing = request.includeProcessing ?? (format === 'wav' && project.vstEnabled)
       let processedPath: string | undefined
-      if (format === 'xml' && (processing || project.gainRegions?.some(r => r.enabled) || project.repairs?.some(r => r.enabled))) processedPath = await prepareAudioEditRenderSource(project, processing, signal)
+      // XML 引用全长处理音轨：修复、区间音量、插件与基本声音、效果组都算进去（时间轴同原素材，剪辑点由 XML 表达）。
+      if (format === 'xml' && (processing || project.gainRegions?.some(r => r.enabled) || project.repairs?.some(r => r.enabled) || project.mouthClicks?.enabled || audioEditRealtimeEffects(project).length)) processedPath = await applyAudioEditRealtimeEffects(project, await prepareAudioEditRenderSource(project, processing, signal), signal)
       let exportedAudioPath = ''
       if (format === 'xml' && processedPath) {
         exportedAudioPath = path.join(path.dirname(target), `${path.basename(target, path.extname(target))}-RX-${randomUUID().slice(0, 8)}.wav`)

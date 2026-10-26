@@ -23,6 +23,7 @@ export interface AudioEditDocumentShell {
 const KNOWN_KEYS = new Set([
   'source', 'referenceScript', 'transcript', 'suggestions', 'vstEnabled', 'selectedAsrModelId', 'cuts',
   'gainRegions', 'repairs', 'batchSettings', 'processorChain', 'xmlFrameRate', 'viewSettings', 'editBaseline',
+  'effects', 'effectsBypassed', 'essentialSound', 'mouthClicks',
 ])
 const SHELL_KEYS = new Set(['id', 'name', 'createdAt', 'updatedAt', 'revision'])
 

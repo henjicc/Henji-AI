@@ -281,6 +281,27 @@ export function editAudioEditProject(id: string, update: (document: AudioEditPro
   return updateAudioEditProject(id, update, false)
 }
 
+/**
+ * 连续拖动（效果参数、滑杆）：期间每次修改照常生效、试听实时跟着变，结束时合成一步撤销；取消则回到拖动前。
+ * 返回的 finish / cancel 只生效一次。
+ */
+export function beginAudioEditGesture(id: string): { finish: () => void; cancel: () => void } {
+  const record = requireRecord(id)
+  const { instance } = record
+  const initial = instance.document, initialVersion = instance.version
+  instance.batchDepth += 1
+  let ended = false
+  const end = (restore: boolean): void => {
+    if (ended) return
+    ended = true
+    if (records.get(id) !== record) return
+    if (restore && instance.version !== initialVersion) commitEdit(record, { ...initial, revision: instance.document.revision })
+    instance.batchDepth -= 1
+    if (!restore && instance.version !== initialVersion && !instance.batchDepth && hasUndoableChanges(initial, instance.document)) { instance.past = [...instance.past.slice(-49), initial]; instance.future = []; publish(instance) }
+  }
+  return { finish: () => end(false), cancel: () => end(true) }
+}
+
 /** 撤销/补偿恢复内容和锁；其余写屏障、来源不变、schema、批次和历史语义与编辑一致。 */
 export function restoreAudioEditProjectSnapshot(id: string, snapshot: AudioEditProjectDocument, expectedContent: string): AudioEditProjectDocument {
   return updateAudioEditProject(id, current => {

@@ -3,7 +3,8 @@ import { useMemo } from 'react'
 import { useStore } from 'zustand'
 import { getAudioCaptureSession } from '@/features/audioCapture'
 import { Expand, Keyboard, MoreHorizontal, Pause, Play, SkipBack, Volume2, ZoomIn, ZoomOut } from 'lucide-react'
-import { PanelTrigger, UiIconButton, UiInlineStatus, UiOverflowRow, UiRangeInput, UiSwitch, type UiOverflowRowItem } from '@/components/ui'
+import { PanelTrigger, UiButton, UiFormRow, UiGroup, UiIconButton, UiInlineStatus, UiOverflowRow, UiRangeInput, UiSwitch, type UiOverflowRowItem } from '@/components/ui'
+import NumberInput from '@/components/ui/NumberInput'
 import { UI_TEXT_TIMECODE_CLASS } from '@/components/ui/styleTokens'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
@@ -39,7 +40,41 @@ function Timecode({ rate, total }: { rate: number; total: number }) {
   </span>
 }
 
-/** 编辑器底部的走带：播放、时间码、缩放与试听设置。 */
+function shortTime(frame: number, rate: number): string {
+  const seconds = Math.max(0, frame / rate)
+  return `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(3).padStart(6, '0')}`
+}
+
+/**
+ * 选区读数（原“选区”面板并进走带）：有选区时显示起止与长度，点开可以精确输入开始、结束、长度；
+ * 频谱框选时附带频率范围。没有选区时不占位置。
+ */
+function SelectionReadout() {
+  const workspace = useAudioEditWorkspace()
+  const { project, waveSelection: selection } = workspace
+  const rate = project.source.sampleRate
+  const duration = project.source.durationFrames
+  const spectral = workspace.wave.spectralSelection
+  if (!selection) return null
+  const seconds = (frames: number) => frames / rate
+  const set = (start: number, end: number) => {
+    const startFrame = Math.max(0, Math.min(duration, Math.round(start * rate)))
+    const endFrame = Math.max(0, Math.min(duration, Math.round(end * rate)))
+    workspace.setWaveSelection(endFrame > startFrame ? { startFrame, endFrame } : null)
+  }
+  return <PanelTrigger panelSize="compact" panelPadding="content" alignment="aboveCenter" renderPanel={() => <UiGroup titleTone="compact" title="选区" labelWidth={72}>
+    <UiFormRow label="开始（秒）" density="compact"><NumberInput ariaLabel="选区开始（秒）" size="sm" min={0} max={seconds(selection.endFrame)} step={0.01} precision={3} value={seconds(selection.startFrame)} onChange={(value) => set(value, seconds(selection.endFrame))} /></UiFormRow>
+    <UiFormRow label="结束（秒）" density="compact"><NumberInput ariaLabel="选区结束（秒）" size="sm" min={seconds(selection.startFrame)} max={seconds(duration)} step={0.01} precision={3} value={seconds(selection.endFrame)} onChange={(value) => set(seconds(selection.startFrame), value)} /></UiFormRow>
+    <UiFormRow label="长度（秒）" density="compact"><NumberInput ariaLabel="选区长度（秒）" size="sm" min={0.001} max={seconds(duration - selection.startFrame)} step={0.01} precision={3} value={seconds(selection.endFrame - selection.startFrame)} onChange={(value) => set(seconds(selection.startFrame), seconds(selection.startFrame) + value)} /></UiFormRow>
+    {spectral && <UiFormRow label="频率" density="compact"><span className={`${UI_TEXT_TIMECODE_CLASS} text-xs text-text2`}>{Math.round(spectral.lowHz)} – {Math.round(spectral.highHz)} Hz</span></UiFormRow>}
+  </UiGroup>}>
+    {({ open, togglePanel }) => <UiButton size="sm" aria-label="选区起止与长度" aria-expanded={open} tooltip="精确输入选区的开始、结束与长度" onClick={togglePanel} data-panel-trigger-button>
+      <span className={`${UI_TEXT_TIMECODE_CLASS} whitespace-nowrap text-xs`}><span className="text-text3">选区 </span>{shortTime(selection.startFrame, rate)} – {shortTime(selection.endFrame, rate)}<span className="text-text3"> · {seconds(selection.endFrame - selection.startFrame).toFixed(2)} 秒</span></span>
+    </UiButton>}
+  </PanelTrigger>
+}
+
+/** 编辑器底部的走带：播放、时间码、选区读数、缩放与试听设置。 */
 export function AudioEditTransport({ viewDuration }: { viewDuration?: number } = {}) {
   const workspace = useAudioEditWorkspace()
   const { project, delivery, wave } = workspace
@@ -74,6 +109,7 @@ export function AudioEditTransport({ viewDuration }: { viewDuration?: number } =
   }
   const fullView = wave.view.start <= 0 && wave.view.end >= zoomDuration
   const items: UiOverflowRowItem[] = [
+    ...(workspace.waveSelection ? [{ id: 'selection', priority: 70, node: <SelectionReadout /> }] : []),
     ...(readouts.length ? [{ id: 'readouts', priority: 10, node: <span className="max-w-56 truncate whitespace-nowrap text-xs text-text3" aria-live="polite" title={readouts.join(' · ')}>{readouts.join(' · ')}</span> }] : []),
     ...(error ? [{ id: 'error', priority: 100, pinned: true, node: <UiInlineStatus role="alert" className="min-w-0 truncate" tooltip={error}>{error}</UiInlineStatus> }] : []),
     { id: 'zoom', priority: 80, node: <div className="flex items-center" role="group" aria-label="缩放">

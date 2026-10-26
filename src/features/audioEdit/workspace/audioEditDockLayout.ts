@@ -14,8 +14,8 @@ export const AUDIO_EDIT_PANELS = [
   { id: 'editor', title: '编辑器', minimumWidth: 440, minimumHeight: 200 },
   { id: 'transcript', title: '文字稿', minimumWidth: 240, minimumHeight: 160 },
   { id: 'process', title: '处理', ...SIDE_MIN },
+  { id: 'essential', title: '基本声音', ...SIDE_MIN },
   { id: 'effects', title: '效果组', ...SIDE_MIN },
-  { id: 'selection', title: '选区', ...SIDE_MIN },
   { id: 'history', title: '历史记录', ...SIDE_MIN },
   { id: 'delivery', title: '交付', ...SIDE_MIN },
 ] as const
@@ -34,7 +34,7 @@ function layout(root: Node): SerializedDockview {
 
 /**
  * 内置布局预设（参照 Audition 的“工作区”）：
- * - 经典：左边文字稿与处理，中间编辑器，右边效果组、交付在上，选区、历史在下；
+ * - 经典：左边文字稿与处理，中间编辑器，右边基本声音、效果组在上，历史、交付在下；
  * - 口播：文字稿占左边一大栏，用文字剪、右边同步看波形；
  * - 专注：编辑器最大，次要面板收进右侧和底部标签页。
  */
@@ -42,27 +42,58 @@ export const AUDIO_EDIT_LAYOUT_PRESETS = [
   { id: 'classic', name: '经典', layout: () => layout(branch(1440,
     leaf({ id: 'left-group', size: 280, views: ['transcript', 'process'] }),
     leaf({ id: 'editor-group', size: 880, views: ['editor'] }),
-    branch(280,
-      leaf({ id: 'effects-group', size: 480, views: ['effects', 'delivery'] }),
-      leaf({ id: 'info-group', size: 380, views: ['selection', 'history'] })),
+    branch(300,
+      leaf({ id: 'effects-group', size: 560, views: ['essential', 'effects'] }),
+      leaf({ id: 'info-group', size: 300, views: ['history', 'delivery'] })),
   )) },
   { id: 'voice', name: '口播', layout: () => layout(branch(1440,
     leaf({ id: 'left-group', size: 460, views: ['transcript'] }),
     leaf({ id: 'editor-group', size: 700, views: ['editor'] }),
-    leaf({ id: 'right-group', size: 280, views: ['process', 'effects', 'delivery', 'selection', 'history'] }),
+    leaf({ id: 'right-group', size: 300, views: ['process', 'essential', 'effects', 'delivery', 'history'] }),
   )) },
   { id: 'focus', name: '专注', layout: () => layout(branch(1440,
     branch(1160,
       leaf({ id: 'editor-group', size: 640, views: ['editor'] }),
-      leaf({ id: 'bottom-group', size: 220, views: ['transcript', 'history', 'selection'] })),
-    leaf({ id: 'right-group', size: 280, views: ['effects', 'process', 'delivery'] }),
+      leaf({ id: 'bottom-group', size: 220, views: ['transcript', 'history'] })),
+    leaf({ id: 'right-group', size: 300, views: ['essential', 'effects', 'process', 'delivery'] }),
   )) },
 ] as const
+
+/** 已取消的面板：旧布局里出现时去掉（选区读数并进了编辑器底部的走带）。 */
+const RETIRED_PANELS = new Set(['selection'])
+
+/**
+ * 旧布局迁到当前面板集合：去掉已取消的面板；没有“基本声音”时放进效果组所在的那组标签（排在效果组前面）。
+ * 只调整面板集合，用户排好的位置和大小不动。
+ */
+function migrateAudioEditLayout(value: SerializedDockview): void {
+  let host: { views: string[]; activeView?: string } | null = null
+  let hasEssential = false
+  const visit = (node: Node): void => {
+    if (node.type === 'leaf') {
+      node.data.views = node.data.views.filter(id => !RETIRED_PANELS.has(id))
+      if (!node.data.views.includes(node.data.activeView)) node.data.activeView = node.data.views[0]
+      if (node.data.views.includes('essential')) hasEssential = true
+      if (node.data.views.includes('effects')) host = node.data
+      return
+    }
+    node.data.forEach(visit)
+    node.data = node.data.filter(child => child.type !== 'leaf' || child.data.views.length > 0)
+  }
+  visit(value.grid.root as Node)
+  for (const id of RETIRED_PANELS) delete value.panels[id]
+  const target = host as { views: string[]; activeView?: string } | null
+  if (!hasEssential && target) {
+    target.views.splice(target.views.indexOf('effects'), 0, 'essential')
+    value.panels.essential = { id: 'essential', contentComponent: 'essential', title: TITLES.essential, renderer: 'always' } as SerializedDockview['panels'][string]
+  }
+}
 
 /** 校验保存过的布局：只认识本工作区的面板，每个面板恰好出现一次；不对就退回默认。 */
 export function parseAudioEditLayout(raw: string): SerializedDockview {
   const value = JSON.parse(raw) as SerializedDockview
   if (!value?.grid?.root || !value.panels || value.popoutGroups?.length || value.floatingGroups?.length) throw new Error('不支持的音频编辑布局')
+  migrateAudioEditLayout(value)
   const seen = new Set<string>()
   const visit = (node: Node): void => {
     if (node.type === 'leaf') { for (const id of node.data.views) { if (!(id in TITLES) || seen.has(id)) throw new Error('无效的音频编辑面板'); seen.add(id) } return }
