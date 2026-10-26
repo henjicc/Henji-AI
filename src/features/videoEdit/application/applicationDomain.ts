@@ -32,7 +32,11 @@ import { queryVideoEditReview } from './videoEditReview'
 import { readVideoEditContentIndex } from './videoEditContentIndex'
 import { executeVideoEditReframeCapability } from './videoEditReframeCapability'
 import type { ApplicationDomainModule } from '@/features/application-control/domainModule'
-import { analyzeVideoEditColorGradeCapability, observeVideoEditColorCapability } from '@/core/application-control/domains/videoEdit/videoEditColorGradeCapability'
+import { analyzeVideoEditColorGradeCapability, exportVideoEditColorLutCapability, observeVideoEditColorCapability } from '@/core/application-control/domains/videoEdit/videoEditColorGradeCapability'
+import { ColorGradeExportRejection } from '@/core/imaging/lut/colorGradeExport'
+import { notExecutedFailure } from '@/core/application-control/execution/writeExecution'
+import { colorGradeExportReceipt } from '@/services/colorGradeExport'
+import { exportVideoEditColorGrade } from './videoEditColorGradeExport'
 import { analyzeVideoEditColorGrade, observeVideoEditColor } from './videoEditColorGrade'
 import { handleVideoEditSubtitleCapability } from './videoEditSubtitleCapability'
 import { ApplicationPersistenceFailure, type ApplicationPersistenceParticipant } from '@/core/application-control/execution/persistence'
@@ -203,6 +207,15 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
         if (reference && (reference.projectId !== input.documentRef.id || !reference.childId)) throw new Error('参考片段必须属于目标剪辑。')
         const result = await analyzeVideoEditColorGrade({ projectId: input.documentRef.id, sequenceId: sequence.childId, clipId: clip.childId }, input.frame, context.signal, undefined, { sampleCount: input.sampleCount, referenceClipId: reference?.childId, matchMethod: input.matchMethod })
         return { ...result, resultRef: input.clipRef, message: '已分析自动校色建议，可写入全能调色参数后观察并微调。' }
+      }
+      if (definition.id === exportVideoEditColorLutCapability.id) {
+        const input = exportVideoEditColorLutCapability.inputSchema.parse(raw)
+        const effect = splitVideoEditRef(input.effectRef)
+        if (effect.projectId !== input.documentRef.id || !effect.childId) throw notExecutedFailure(new Error('effectRef 必须属于目标剪辑，请使用目录返回的完整引用。'))
+        try {
+          const result = await exportVideoEditColorGrade({ projectId: input.documentRef.id, effectId: effect.childId, frame: input.frame, format: input.format, lutSize: input.lutSize, path: input.path, overwrite: input.overwrite, signal: context.signal })
+          return { ...colorGradeExportReceipt(result), resultRef: input.effectRef, clipRef: { kind: 'video_edit.clip', id: `${input.documentRef.id}:${result.clipId}` }, frame: result.frame }
+        } catch (error) { throw error instanceof ColorGradeExportRejection ? notExecutedFailure(error) : error }
       }
       if (definition.id === observeVideoEditColorCapability.id) {
         const input = observeVideoEditColorCapability.inputSchema.parse(raw)

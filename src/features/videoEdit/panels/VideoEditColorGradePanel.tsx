@@ -1,6 +1,10 @@
 import { UiFormRow } from '@/components/ui'
 import { ColorGradeSections } from '@/components/colorGrade/ColorGradeSections'
 import { ColorGradeScopes } from '@/components/colorGrade/ColorGradeScopes'
+import { ColorGradeExportButton } from '@/components/colorGrade/ColorGradeExportButton'
+import { notifyUser } from '@/contexts/NotificationContext'
+import type { ColorGradeExportFormat, ColorGradeLutSize } from '@/core/imaging/lut/colorGradeExport'
+import { chooseColorGradeExportPath, describeColorGradeExport } from '@/services/colorGradeExport'
 import type { ColorStatistics } from '@/core/imaging/adjustments/colorStatistics'
 import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
@@ -22,6 +26,7 @@ import { useVideoEditBuiltinParamGesture } from './useVideoEditBuiltinParamGestu
 import { VideoEditBuiltinParamRows } from './VideoEditBuiltinEffectControls'
 
 import { importVideoEditColorLut } from '../application/videoEditColorLuts'
+import { exportVideoEditColorGrade } from '../application/videoEditColorGradeExport'
 
 function ColorGradeEditor({ target, clip, selectedId, onError }: { target: VideoEditCompositeTarget; clip: VideoEditClip; selectedId: string; onError: (reason: unknown) => void }): React.ReactElement {
   const { t } = useTranslation('ui')
@@ -44,6 +49,17 @@ function ColorGradeEditor({ target, clip, selectedId, onError }: { target: Video
     finally { if (!controller.signal.aborted) setBusy(false) }
   }
   const lutControl = (stage: 'input' | 'look'): ReactNode => <UiFormRow label={t(stage === 'input' ? 'surfaceGrammar.inputLut' : 'surfaceGrammar.creativeLook')} density="compact"><div className="flex items-center gap-1"><div className="min-w-0 flex-1"><Dropdown size="sm" ariaLabel={stage === 'input' ? '输入 LUT' : '创意 Look'} value={values[`${stage}_lut`] as string} options={[{ value: '', label: '无' }, ...luts.map(asset => ({ value: asset.id, label: asset.name }))]} onSelect={id => gesture.commit({ params: { [`${stage}_lut`]: id } })} /></div><UiIconButton size="xs" aria-label="导入 LUT" tooltip="导入 .cube 颜色查找表" disabled={busy} onClick={() => { void upload(stage) }}><Upload  /></UiIconButton></div></UiFormRow>
+  const [exporting, setExporting] = useState(false)
+  const exportGrade = async (format: ColorGradeExportFormat, lutSize?: ColorGradeLutSize): Promise<void> => {
+    if (!effect || exporting) return
+    try {
+      const path = await chooseColorGradeExportPath(format, `${clip.name} 调色`); if (!path) return
+      setExporting(true)
+      // The save dialog already confirmed replacing an existing file.
+      notifyUser(describeColorGradeExport(await exportVideoEditColorGrade({ projectId: target.projectId, effectId: effect.id, format, lutSize, path, overwrite: true })))
+    } catch (error) { onError(error) }
+    finally { setExporting(false) }
+  }
   const automatic = async (): Promise<void> => {
     if (busy || gesture.active()) return
     const controller = new AbortController(); request.current = controller; setBusy(true)
@@ -58,6 +74,7 @@ function ColorGradeEditor({ target, clip, selectedId, onError }: { target: Video
     <div className={`flex flex-wrap items-center justify-end gap-1 ${UI_PROPERTY_INSET_CLASS}`}>
       <UiButton size="sm" disabled={busy} onClick={() => { void automatic() }} tooltip="在片段内均匀采样，分析白平衡与明暗；选择参考后匹配其颜色"><WandSparkles  />{busy ? '分析中…' : reference ? '匹配颜色' : '自动'}</UiButton>
       <VideoEditGradeCompare target={target} effectId={effect?.id} disabled={busy || !effect?.enabled} />
+      <ColorGradeExportButton busy={exporting} disabled={!effect?.builtin} disabledReason="片段还没有全能调色" onExport={(format, lutSize) => { void exportGrade(format, lutSize) }} />
       <UiIconButton size="xs" tooltip="重置全能调色" aria-label="重置全能调色" disabled={busy || !effect} onClick={() => gesture.commit({ curves: {}, params: videoEditBuiltinDefaults(VIDEO_EDIT_COLOR_GRADE) })}><RotateCcw  /></UiIconButton>
     </div>
     <UiFormRow label="校色参考片段" density="compact"><Dropdown ariaLabel="校色参考片段" value={reference} options={[{ value: '', label: '自动校色' }, ...getActiveVideoEditSequence(requireVideoEditInstance(target.projectId)).clips.filter(value => value.id !== clip.id && value.kind !== 'audio' && value.kind !== 'adjustment').map(value => ({ value: value.id, label: value.name }))]} onSelect={setReference} /></UiFormRow>

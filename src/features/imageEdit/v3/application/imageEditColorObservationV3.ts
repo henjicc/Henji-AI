@@ -1,6 +1,6 @@
 import { imageEditOutputSizeV3, createImageEditIdV3, type ImageEditDocumentV3, type ImageEditLayerV3 } from '@/core/imageEdit/v3'
 import { computeColorStatistics, type ColorStatistics } from '@/core/imaging/adjustments/colorStatistics'
-import { suggestColorGradeAutoColor } from '@/core/imaging/adjustments/autoGrade'
+import { suggestColorGradeAutoColor, suggestColorGradeMklMatch } from '@/core/imaging/adjustments/autoGrade'
 import { createLogger } from '@/core/logging'
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
 import { ImageEditorViewportCompositeClientV3 } from '../execution/viewportCompositeClientV3'
@@ -73,17 +73,31 @@ export async function observeImageEditColorV3(documentId: string, options: { lay
   } catch (error) { logger.warn('图片颜色读数失败', { event: 'image_edit.color.observe.failed', error, context: { documentId } }); throw error }
 }
 
+/** Slider keys the shared MKL back-fit writes (same algorithm and fit as analyze_video_edit_color with referenceClipRef). */
+export const IMAGE_EDIT_COLOR_MATCH_KEYS = ['temperature_kelvin', 'tint', 'exposure', 'contrast', 'saturation', 'highlights', 'shadows'] as const
+export interface ImageEditColorSuggestion {
+  parameters: Record<string, number>
+  /** `merge`: automatic correction, merge into the layer's params. `replace`: a match starts from a neutral grade, so the
+   *  returned keys become the layer's whole params (unlisted keys back to defaults) — otherwise the old look grades twice. */
+  apply: 'merge' | 'replace'
+}
+
 /**
  * Automatic correction for one color grade layer: analyzes the picture beneath that layer (the layer hidden) and returns
- * absolute slider values for white balance and exposure. The caller merges them into the layer's params in one write.
+ * absolute slider values for white balance and exposure. With `reference` pixels (≤256 px RGBA8 of another image) it
+ * matches that image instead: OkLab MKL transfer fitted back to editable sliders, the shared video shot-match algorithm.
  */
-export async function suggestImageEditColorV3(document: ImageEditDocumentV3, layerId: string, resources: readonly ImageEditorV3ResourceDescriptor[], signal: AbortSignal, reader: ImageEditColorPixelReader = readImageEditColorPixelsV3): Promise<Record<string, number>> {
+export async function suggestImageEditColorV3(document: ImageEditDocumentV3, layerId: string, resources: readonly ImageEditorV3ResourceDescriptor[], signal: AbortSignal, reader: ImageEditColorPixelReader = readImageEditColorPixelsV3, reference?: Uint8ClampedArray): Promise<ImageEditColorSuggestion> {
   const projected = projectImageEditColorObservationDocumentV3(document, layerId, 'before_grade')
-  logger.info('图片自动校色开始', { event: 'image_edit.color.auto.start', context: { documentId: document.id, layerId } })
+  const kind = reference ? 'match' : 'auto'
+  logger.info('图片自动校色开始', { event: `image_edit.color.${kind}.start`, context: { documentId: document.id, layerId } })
   try {
     const sampled = await reader(projected, resources, signal)
-    const parameters = suggestColorGradeAutoColor(sampled.pixels, 255, sampled.width)
-    logger.info('图片自动校色完成', { event: 'image_edit.color.auto.completed', context: { documentId: document.id, layerId } })
-    return parameters
-  } catch (error) { logger.warn('图片自动校色失败', { event: 'image_edit.color.auto.failed', error, context: { documentId: document.id } }); throw error }
+    signal.throwIfAborted()
+    const suggestion: ImageEditColorSuggestion = reference
+      ? (() => { const matched = suggestColorGradeMklMatch(sampled.pixels, reference, 255); return { parameters: Object.fromEntries(IMAGE_EDIT_COLOR_MATCH_KEYS.map(key => [key, Number(matched[key])])), apply: 'replace' as const } })()
+      : { parameters: suggestColorGradeAutoColor(sampled.pixels, 255, sampled.width), apply: 'merge' }
+    logger.info('图片自动校色完成', { event: `image_edit.color.${kind}.completed`, context: { documentId: document.id, layerId } })
+    return suggestion
+  } catch (error) { logger.warn('图片自动校色失败', { event: `image_edit.color.${kind}.failed`, error, context: { documentId: document.id } }); throw error }
 }

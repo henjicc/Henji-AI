@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { SquareSplitHorizontal, Upload, Wand } from 'lucide-react'
-import { ParamField, ParamList, UiButton, UiGroup, UiError, UiCheckbox, UiIconButton, type ParamFieldSpec, type ParamGesture } from '@/components/ui'
+import { Image as ImageIcon, SquareSplitHorizontal, Upload, Wand, X } from 'lucide-react'
+import { ParamField, ParamList, UiButton, UiFormRow, UiGroup, UiError, UiCheckbox, UiIconButton, type ParamFieldSpec, type ParamGesture } from '@/components/ui'
 import { builtinParameterFields, readBuiltinField, writeBuiltinField } from '@/components/ui/params/fieldSpec'
 import { ColorGradeSections } from '@/components/colorGrade/ColorGradeSections'
 import { ColorGradeScopes } from '@/components/colorGrade/ColorGradeScopes'
+import { ColorGradeExportButton } from '@/components/colorGrade/ColorGradeExportButton'
+import { notifyUser } from '@/contexts/NotificationContext'
+import type { ColorGradeExportFormat, ColorGradeLutSize } from '@/core/imaging/lut/colorGradeExport'
+import { chooseColorGradeExportPath, describeColorGradeExport } from '@/services/colorGradeExport'
+import { openDialog } from '@/platform/desktopApi'
 import type { CodeParameterValue, CodePoint } from '@/core/imaging/parameterTypes'
 import type { ImagingParam } from '@/core/imaging/parameterDefinition'
 import { COLOR_GRADE_PARAMETERS, parseImageColorGradeParams } from '@/core/imaging/adjustments/schema'
@@ -14,6 +19,8 @@ import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
 import { importImageEditorColorLutV3 } from '@/commands/imageEditorV3'
 import { readImageEditColorPixelsV3, suggestImageEditColorV3 } from '../application/imageEditColorObservationV3'
+import { readImageEditColorReferencePixelsV3 } from '../application/imageEditColorReferenceV3'
+import { exportImageEditColorGradeV3 } from '../application/imageEditColorGradeExportV3'
 import type { ImageEditorV3Controller } from './types'
 
 const IMAGE_KEYS = new Set(COLOR_GRADE_PARAMETERS.map(param => param.key))
@@ -96,26 +103,55 @@ export function ImageEditorColorGradeParametersV3({ controller, layer, disabled 
     else controllerRef.current.clearParameterPreview(previewId)
   }
   const [analyzing, setAnalyzing] = useState(false)
+  const [reference, setReference] = useState<{ path: string; name: string } | null>(null)
+  const chooseReference = async (): Promise<void> => {
+    try {
+      const selected = await openDialog({ multiple: false, filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'avif', 'tif', 'tiff'] }] })
+      const path = Array.isArray(selected) ? selected[0] : selected
+      if (path && live.current) setReference({ path, name: path.split(/[\\/]/).at(-1) ?? path })
+    } catch (reason) { if (live.current) setError(reason instanceof Error ? reason.message : String(reason)) }
+  }
   const automatic = async (): Promise<void> => {
     if (disabled || analyzing || active.current) return
     const startParams = paramsRef.current
     setAnalyzing(true); setError('')
     try {
-      const suggestion = await suggestImageEditColorV3(controllerRef.current.document, layer.id, controllerRef.current.historyResourceDescriptors ?? [], new AbortController().signal)
+      const signal = new AbortController().signal
+      const referencePixels = reference ? await readImageEditColorReferencePixelsV3({ kind: 'file', path: reference.path }, signal) : undefined
+      const suggestion = await suggestImageEditColorV3(controllerRef.current.document, layer.id, controllerRef.current.historyResourceDescriptors ?? [], signal, undefined, referencePixels)
       if (!live.current || paramsRef.current !== startParams || disabledRef.current) return
-      latest.current = { ...latest.current, ...suggestion }; setDraft(latest.current)
+      // A match starts from a neutral grade (same as the video shot match); automatic correction merges.
+      latest.current = suggestion.apply === 'replace' ? parseImageColorGradeParams(suggestion.parameters) : { ...latest.current, ...suggestion.parameters }; setDraft(latest.current)
       controllerRef.current.commitLayerParamsPreview(previewId, layer.id, latest.current)
     } catch (reason) { if (live.current) setError(reason instanceof Error ? reason.message : String(reason)) }
     finally { if (live.current) setAnalyzing(false) }
   }
+  const [exporting, setExporting] = useState(false)
+  const exportGrade = async (format: ColorGradeExportFormat, lutSize?: ColorGradeLutSize): Promise<void> => {
+    if (exporting) return
+    setError('')
+    try {
+      const path = await chooseColorGradeExportPath(format, layer.name); if (!path) return
+      setExporting(true)
+      // The save dialog already confirmed replacing an existing file.
+      const result = await exportImageEditColorGradeV3(controllerRef.current.document, layer.id, { format, lutSize, path, overwrite: true })
+      notifyUser(describeColorGradeExport(result))
+    } catch (reason) { if (live.current) setError(reason instanceof Error ? reason.message : String(reason)) }
+    finally { if (live.current) setExporting(false) }
+  }
   return <UiGroup gap="stack" titleTone="compact">
     {error && <UiError message={error} size="xs" align="start" />}
     <div className="flex flex-wrap items-center justify-end gap-1">
-      <UiButton size="sm" loading={analyzing} disabled={disabled} disabledReason="当前图层不可编辑" tooltip="分析调整层下方的画面，自动校正白平衡与曝光" onClick={() => { void automatic() }}><Wand />自动</UiButton>
+      <UiButton size="sm" loading={analyzing} disabled={disabled} disabledReason="当前图层不可编辑" tooltip={reference ? '让调整层下方的画面匹配参考图片的颜色，结果是可继续微调的滑块' : '分析调整层下方的画面，自动校正白平衡与曝光'} onClick={() => { void automatic() }}><Wand />{reference ? '匹配颜色' : '自动'}</UiButton>
       <UiIconButton size="xs" tooltip="按住查看调色前" aria-label="按住查看调色前" disabled={disabled} disabledReason="当前图层不可编辑"
         onPointerDown={() => compare(true)} onPointerUp={() => compare(false)} onPointerLeave={() => compare(false)} onPointerCancel={() => compare(false)}
         onKeyDown={event => { if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); compare(true) } }} onKeyUp={() => compare(false)} onBlur={() => compare(false)}><SquareSplitHorizontal /></UiIconButton>
+      <ColorGradeExportButton busy={exporting} onExport={(format, lutSize) => { void exportGrade(format, lutSize) }} />
     </div>
+    <UiFormRow label="校色参考" density="compact"><div className="flex min-w-0 items-center gap-1">
+      <UiButton size="sm" className="min-w-0" disabled={disabled} disabledReason="当前图层不可编辑" tooltip={reference ? reference.path : '选另一张图片，让这张图的颜色向它靠拢'} onClick={() => { void chooseReference() }}><ImageIcon /><span className="truncate">{reference ? reference.name : '选择参考图片'}</span></UiButton>
+      {reference && <UiIconButton size="xs" tooltip="不用参考，改回自动校色" aria-label="清除校色参考" onClick={() => setReference(null)}><X /></UiIconButton>}
+    </div></UiFormRow>
     <ColorGradeSections host={{
       values: draft, disabled, renderRows, resetParams,
       previewParams: values => { if (disabled || active.current) return; if (values) controllerRef.current.setParameterPreview(previewId, layer.id, { ...latest.current, ...values }); else controllerRef.current.clearParameterPreview(previewId) },

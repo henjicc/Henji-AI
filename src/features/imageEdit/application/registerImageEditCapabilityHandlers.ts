@@ -11,8 +11,13 @@ import { previewImageEditSelectionIntentV3, applyImageEditSelectionPreviewV3 } f
 import { snapshotImageEditFilterSelectionV3 } from '../v3/filterWorkspace/service'
 import { splitImageEditV3FilterRef, imageEditV3FilterRef } from '../v3/application/imageEditDocumentRefs'
 import { selectImageEditRegionCapability } from '@/core/application-control/domains/imageEdit/imageEditSubjectCapabilities'
-import { analyzeImageEditColorCapability, observeImageEditColorCapability } from '@/core/application-control/domains/imageEdit/imageEditColorCapabilities'
+import { analyzeImageEditColorCapability, exportImageEditColorLutCapability, observeImageEditColorCapability } from '@/core/application-control/domains/imageEdit/imageEditColorCapabilities'
 import { observeImageEditColorV3, suggestImageEditColorV3 } from '../v3/application/imageEditColorObservationV3'
+import { readImageEditColorReferencePixelsV3 } from '../v3/application/imageEditColorReferenceV3'
+import { exportImageEditColorGradeV3 } from '../v3/application/imageEditColorGradeExportV3'
+import { ColorGradeExportRejection } from '@/core/imaging/lut/colorGradeExport'
+import { notExecutedFailure } from '@/core/application-control/execution/writeExecution'
+import { colorGradeExportReceipt } from '@/services/colorGradeExport'
 import { readImageEditDocumentInstanceV3 } from '../v3/application/imageEditDocumentInstances'
 import { selectImageEditRegionV3 } from '../v3/application/imageEditSubjectSelectionServiceV3'
 import { retryImageEditDocumentSaveV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOperations'
@@ -146,10 +151,24 @@ export function registerImageEditCapabilityHandlers(registrar: ApplicationCapabi
     const { documentId, layerId } = splitImageEditV3LayerRef(parsed.layerRef)
     const { bus } = requireImageEditDocumentInstanceV3(documentId)
     const document = bus.getSnapshot().document
-    const parameters = await suggestImageEditColorV3(document, layerId, readImageEditDocumentInstanceV3(documentId)?.resourceDescriptors ?? [], context.signal ?? new AbortController().signal)
+    const signal = context.signal ?? new AbortController().signal
+    const reference = parsed.referenceRef ? await readImageEditColorReferencePixelsV3({ kind: 'ref', ref: parsed.referenceRef }, signal) : undefined
+    const { parameters, apply } = await suggestImageEditColorV3(document, layerId, readImageEditDocumentInstanceV3(documentId)?.resourceDescriptors ?? [], signal, undefined, reference)
     if (bus.getSnapshot().document.revision !== document.revision) throw new Error('图片已变化，请重新分析')
-    return { resultRef: parsed.layerRef, parameters: { temperature_kelvin: parameters.temperature_kelvin, tint: parameters.tint, exposure: parameters.exposure }, revision: document.revision,
-      message: `建议光源 ${Math.round(parameters.temperature_kelvin)} K、色调 ${parameters.tint}、曝光 ${parameters.exposure} EV；合并到调整层参数后写入。` }
+    const summary = `建议光源 ${Math.round(parameters.temperature_kelvin)} K、色调 ${parameters.tint}、曝光 ${parameters.exposure} EV`
+    return { resultRef: parsed.layerRef, apply, parameters, revision: document.revision,
+      message: apply === 'replace' ? `已按参考匹配：${summary}、对比度 ${parameters.contrast}、饱和度 ${parameters.saturation}；用这组值整体写成调整层参数。` : `${summary}；合并到调整层参数后写入。` }
+  })
+  registrar.registerHandler(exportImageEditColorLutCapability.id, async (input, context) => {
+    const parsed = exportImageEditColorLutCapability.inputSchema.parse(input)
+    // A color grade is either an adjustment layer or an adjustment filter; both are addressed by their own id.
+    const filter = parsed.layerRef.kind === 'image_edit.layer_filter' ? splitImageEditV3FilterRef(parsed.layerRef) : undefined
+    const { documentId, layerId } = filter ? { documentId: filter.documentId, layerId: filter.filterId } : splitImageEditV3LayerRef(parsed.layerRef)
+    try {
+      const { bus } = requireImageEditDocumentInstanceV3(documentId)
+      const result = await exportImageEditColorGradeV3(bus.getSnapshot().document, layerId, { format: parsed.format, lutSize: parsed.lutSize, path: parsed.path, overwrite: parsed.overwrite, signal: context.signal })
+      return { ...colorGradeExportReceipt(result), resultRef: parsed.layerRef }
+    } catch (error) { throw error instanceof ColorGradeExportRejection ? notExecutedFailure(error) : error }
   })
   for (const capability of IMAGE_EDIT_REPAIR_CAPABILITIES) registrar.registerHandler(capability.id, async (input, context) => {
     const parsed = capability.inputSchema.parse(input)

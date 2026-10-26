@@ -4,6 +4,7 @@ import { createImageEditAdjustmentLayerV3, createImageEditDocumentV3, createImag
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { registerPersistedImageEditTestSession } from '@/tests/imageEditPersistenceTestSession'
 import { ImageEditCommandBusV3 } from './imageEditCommandBus'
+import { parseImageColorGradeParams } from '@/core/imaging/adjustments/schema'
 import { observeImageEditColorV3, projectImageEditColorObservationDocumentV3, suggestImageEditColorV3 } from './imageEditColorObservationV3'
 
 const disposers: Array<() => void> = []
@@ -51,9 +52,24 @@ it('自动校色只分析隐藏该调整层后的画面，返回白平衡与曝�
   // A warm, dark grey card: the suggestion must cool it down (kelvin below 6500) and brighten it.
   const warm = Uint8ClampedArray.from(Array.from({ length: 256 }, (_, i) => { const v = 40 + (i % 16) * 3; return [Math.min(255, v * 1.25), v, Math.round(v * .7), 255] }).flat())
   const reader = vi.fn(async () => ({ pixels: warm, width: 16, height: 16 }))
-  const suggestion = await suggestImageEditColorV3(document, 'grade', [], new AbortController().signal, reader)
+  const { parameters: suggestion, apply } = await suggestImageEditColorV3(document, 'grade', [], new AbortController().signal, reader)
+  expect(apply).toBe('merge')
   expect(Object.keys(suggestion).sort()).toEqual(['exposure', 'temperature_kelvin', 'tint'])
   expect(suggestion.temperature_kelvin).toBeLessThan(5000); expect(suggestion.exposure).toBeGreaterThan(0)
+  const rendered = (reader.mock.calls[0] as unknown[])[0] as typeof document
+  expect(rendered.layers[1].type === 'group' && rendered.layers[1].children[0].visible).toBe(false)
+})
+
+it('拿另一张图做参考：与剪辑镜头匹配同一套 MKL 反拟合，返回整体替换的滑块值，可直接写成合法调整层参数', async () => {
+  const { document } = setup()
+  const card = (gain: readonly number[]) => Uint8ClampedArray.from(Array.from({ length: 256 }, (_, i) => { const v = 30 + (i % 16) * 12; const hue = Math.floor(i / 16); return [v * gain[0] * (1 + .03 * (hue % 3)), v * gain[1] * (1 + .03 * (hue % 5) / 2), v * gain[2], 255].map(x => Math.min(255, Math.round(x))) }).flat())
+  const warm = card([1.15, 1, .75]); const neutral = card([1, 1, 1])
+  const reader = vi.fn(async () => ({ pixels: warm, width: 16, height: 16 }))
+  const { parameters, apply } = await suggestImageEditColorV3(document, 'grade', [], new AbortController().signal, reader, neutral)
+  expect(apply).toBe('replace')
+  expect(Object.keys(parameters).sort()).toEqual(['contrast', 'exposure', 'highlights', 'saturation', 'shadows', 'temperature_kelvin', 'tint'])
+  expect(parameters.temperature_kelvin).toBeLessThan(6000) // 偏暖的画面向中性参考匹配 → 写低于 6500 的光源值
+  expect(() => parseImageColorGradeParams(parameters)).not.toThrow()
   const rendered = (reader.mock.calls[0] as unknown[])[0] as typeof document
   expect(rendered.layers[1].type === 'group' && rendered.layers[1].children[0].visible).toBe(false)
 })

@@ -3,6 +3,7 @@ import { applicationRefSchema } from '../../applicationCapabilities'
 import { capabilityControl, defineApplicationCapability } from '../shared/defineApplicationCapability'
 import { VIDEO_EDIT_COLOR_GRADE } from '../../../videoEdit/colorGrade'
 import { colorReadoutSchema, colorScopesSchema } from '../shared/colorReadoutSchema'
+import { COLOR_GRADE_EXPORT_DESCRIPTION, colorGradeExportInputShape, colorGradeExportOutputShape } from '../shared/colorGradeExportSchema'
 
 const suggestedParameters = z.object(Object.fromEntries(VIDEO_EDIT_COLOR_GRADE.params.map(param => [param.key, param.type === 'number' ? z.number().min(param.min).max(param.max).optional() : param.type === 'boolean' ? z.boolean().optional() : z.string().max(4096).optional()]))).strict()
 
@@ -29,4 +30,20 @@ export const observeVideoEditColorCapability = defineApplicationCapability({
   concurrencyKey: 'video_edit_color_observe', resolveConcurrencyKey: input => `video_edit_color_observe:${input.documentRef.id}`,
   resolveOperationTargets: input => [input.documentRef], resolveOperationWriteTargets: () => [],
   control: capabilityControl('observe', ['video_edit.sequence'], { cancelable: true, revisionScopes: ['video_edit'] }), summarize: result => result.message,
+})
+
+export const exportVideoEditColorLutCapability = defineApplicationCapability({
+  id: 'export_video_edit_color_lut', title: '导出片段调色为 LUT 或 CDL',
+  description: `把片段上一个全能调色效果（effectRef 取 video_edit.effect，definition_id=effect:color_grade）导出成 .cube 3D LUT 或 ASC CDL 文件，带到 Resolve、Premiere、相机监看等其他软件里复用。调色带关键帧时按 frame（序列帧，须在片段内）求值，省略时取播放头所在帧（播放头不在片段内则取片段首帧），回执 frame 为实际使用的帧。${COLOR_GRADE_EXPORT_DESCRIPTION}效果强度与作用区域属于合成，不进文件。`,
+  version: 1, domain: 'video_edit', aliases: ['导出 LUT', '导出调色', '导出 cube', '导出 CDL', 'export LUT', 'export cube', 'export CDL'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write', idempotent: false, destructive: false, timeoutMs: 120000, supportsPreview: false, supportsUndo: false,
+  requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.effect'], producesRefs: [],
+  successEvidence: ['文件写出后用正式解析器读回，测试色与正式调色的色差作为证据。'], failureRecovery: ['目标已存在时确认后传 overwrite=true；CDL 被拒绝时改导出 cube；LUT 文件丢失时恢复或重新导入。'],
+  inputSchema: z.object({ documentRef: ref('video_edit.document'), effectRef: ref('video_edit.effect'), frame: z.number().int().nonnegative().optional(), ...colorGradeExportInputShape }).strict(),
+  outputSchema: z.object({ resultRef: ref('video_edit.effect'), clipRef: ref('video_edit.clip'), frame: z.number().int().nonnegative(), ...colorGradeExportOutputShape }).strict(),
+  concurrencyKey: 'video_edit_color_export', resolveConcurrencyKey: input => `video_edit_color_export:${input.documentRef.id}`,
+  resolveOperationTargets: input => [input.documentRef, input.effectRef], resolveOperationWriteTargets: () => [],
+  control: capabilityControl('execute', ['video_edit.effect'], { cancelable: true, revisionScopes: ['video_edit'] }),
+  verificationContract: { kind: 'effect_receipt', requireEffects: true, requireVerifiedEffects: true },
+  resolveObservedEffects: (_input, output) => [{ effect: 'execute', entityTypes: ['video_edit.effect'], propertyIds: [], targetRefs: [output.resultRef], count: 1, verified: output.verification.verified, evidence: output.verification.verified ? [output.verification.condition] : [] }],
+  summarize: result => result.message,
 })
