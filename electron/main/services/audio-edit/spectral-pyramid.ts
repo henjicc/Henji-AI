@@ -10,6 +10,7 @@ import { prepareAudioEditRenderSource } from './render'
 import { audioRenderKey, cachedAudioFile } from './render-cache'
 import { spectralWorker } from './spectral-worker-client'
 import { readSpectralManifest, readSpectralRange, type SpectralMetadata } from './spectral-storage'
+import { touchSpectralTile, trimSpectralTiles } from './spectral-tile-budget'
 import { registerAudioEditTaskController } from './task-store'
 
 const logger = createMainLogger('main.audio_edit.spectral')
@@ -125,6 +126,16 @@ async function immediateFile(cache: string, key: string, input: string, request:
   finally { if (--job.users === 0) job.controller.abort() }
 }
 
+let trimming = false, lastTrim = 0
+/** 细层块读写后按节流检查限额；一次只清一遍。 */
+function scheduleTileTrim(cache: string): void {
+  if (trimming || Date.now() - lastTrim < 30_000) return
+  trimming = true; lastTrim = Date.now()
+  void trimSpectralTiles(cache).then(({ removedFiles, removedBytes }) => {
+    if (removedFiles) logger.info('频谱细层块超过限额，已清掉最久没用的', { event: 'audio_edit.spectral.tiles_trimmed', context: { removedFiles, removedBytes } })
+  }).catch(() => undefined).finally(() => { trimming = false })
+}
+
 /** 高频读路径没有任务表、逐块 info 日志或单次子进程。 */
 export async function getAudioEditSpectralTile(raw: AudioEditSpectralTileRequest): Promise<AudioEditSpectralTile> {
   const request = audioEditSpectralTileRequestSchema.parse(raw)
@@ -156,6 +167,8 @@ export async function getAudioEditSpectralTile(raw: AudioEditSpectralTileRequest
     if (!columnCount) return { ...base, columnStart, columnCount, values: new Uint8Array(), complete: true }
     const file = await immediateFile(cache, audioRenderKey([key, request.level, request.tile]), input, request, metadata, signal)
     const bytes = await wait(fs.readFile(file), signal)
+    void touchSpectralTile(file)
+    scheduleTileTrim(cache)
     if (bytes.length !== metadata.channels * columnCount * (metadata.lowBins + metadata.highBins) * 2) throw new Error('频谱块缓存长度不匹配')
     return { ...base, columnStart, columnCount, complete: true, values: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength) }
   } finally { requests.delete(request.requestId); release() }
