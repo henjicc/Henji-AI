@@ -1,5 +1,5 @@
 import type { VideoEditBin, VideoEditDocument, VideoEditItem, VideoEditSequence, VideoEditMedia } from '@/core/videoEdit/document'
-import { videoEditLabelOf, type VideoEditLabel } from '@/core/videoEdit/labels'
+import { videoEditBinLabel, videoEditLabelOf, type VideoEditLabel } from '@/core/videoEdit/labels'
 import { videoEditFps } from '@/core/videoEdit/time'
 import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { videoEditDuration } from '@/core/videoEdit/document'
@@ -19,17 +19,17 @@ const kindOf = (entry: VideoEditProjectEntry): string => entry.kind === 'item' ?
  * 图片、文字、图形等没有媒体时长的项留空。子剪辑按源范围显示开始、结束与持续时间。
  */
 export function videoEditProjectColumns(document: VideoEditDocument, entry: VideoEditProjectEntry, fallbackFps: number, mediaById?: ReadonlyMap<string, VideoEditMedia>): VideoEditProjectColumns {
-  if (entry.kind === 'bin') return { label: videoEditLabelOf('bin', entry.value.label), frameRateText: '', mediaStart: '', mediaEnd: '', durationText: '' }
+  if (entry.kind === 'bin') return { label: videoEditLabelOf('bin', entry.value.label ?? videoEditBinLabel(document.bins, entry.value.parentId)), frameRateText: '', mediaStart: '', mediaEnd: '', durationText: '' }
   const timed = (fps: number, frames: number, frameRateText: string, frameRate: number | undefined, label: VideoEditLabel, start = 0): VideoEditProjectColumns => ({
     label, frameRateText, frameRate, mediaStart: videoEditFrameTimecode(start, fps), mediaEnd: videoEditFrameTimecode(start + Math.max(0, frames - 1), fps), mediaStartSeconds: start / fps, mediaEndSeconds: (start + Math.max(0, frames - 1)) / fps, durationText: videoEditFrameTimecode(frames, fps), duration: frames / fps,
   })
   const rateText = (fps: number): string => `${Number(fps.toFixed(3))} fps`
   if (entry.kind === 'sequence') {
     const fps = videoEditFps(entry.value.frameRate)
-    return timed(fps, entry.value.clips.length || entry.value.captions?.length || entry.value.markers?.length ? videoEditDuration(entry.value) : 0, rateText(fps), fps, videoEditLabelOf('sequence', entry.value.label))
+    return timed(fps, entry.value.clips.length || entry.value.captions?.length || entry.value.markers?.length ? videoEditDuration(entry.value) : 0, rateText(fps), fps, videoEditLabelOf('sequence', entry.value.label ?? videoEditBinLabel(document.bins, entry.value.binId)))
   }
   const item = entry.value
-  const label = videoEditLabelOf(item.kind, item.label)
+  const label = videoEditLabelOf(item.kind, item.label ?? videoEditBinLabel(document.bins, item.binId))
   const media = mediaById ? mediaById.get(item.mediaId ?? '') : document.media.find(value => value.id === item.mediaId)
   if (!media || media.kind === 'image' || !media.durationSeconds) return { label, frameRateText: '', mediaStart: '', mediaEnd: '', durationText: '' }
   const startSeconds = (item.sourceRange?.inUs ?? 0) / 1e6

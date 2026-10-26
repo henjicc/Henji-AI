@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { videoEditClipLabel, videoEditLabelOf } from './labels'
+import { videoEditBinLabel, videoEditClipLabel, videoEditLabelOf } from './labels'
 
 describe('片段标签色（重要记录 019）', () => {
   const document = {
@@ -20,5 +20,15 @@ describe('片段标签色（重要记录 019）', () => {
     expect(videoEditClipLabel(document, { itemId: 'labelled', kind: 'video' })).toBe('rose')
     expect(videoEditClipLabel(document, { itemId: 'labelled', kind: 'audio', sourceComponent: 'audio' })).toBe('rose')
     expect(videoEditClipLabel(document, { itemId: 'nest', kind: 'sequence' })).toBe('yellow')
+  })
+  it('没单独设标签时跟随所在素材箱（含上级箱）的标签，自己设的优先', () => {
+    const bins = [{ id: 'styles' }, { id: 'dot', parentId: 'styles', label: 'teal' as const }, { id: 'dot-tests', parentId: 'dot' }, { id: 'loop-a', parentId: 'loop-b' }, { id: 'loop-b', parentId: 'loop-a' }]
+    expect(videoEditBinLabel(bins, 'dot-tests')).toBe('teal')
+    expect(videoEditBinLabel(bins, 'styles')).toBeUndefined()
+    expect(videoEditBinLabel(bins, 'loop-a')).toBeUndefined()
+    const binned = { bins, items: [{ id: 'c', kind: 'code', binId: 'dot-tests' }, { id: 'own', kind: 'code', binId: 'dot', label: 'rose' as const }, { id: 'n', kind: 'sequence', sequenceId: 'sq' }], sequences: [{ id: 'sq', binId: 'dot' }] }
+    expect(videoEditClipLabel(binned, { itemId: 'c', kind: 'code' })).toBe('teal')
+    expect(videoEditClipLabel(binned, { itemId: 'own', kind: 'code' })).toBe('rose')
+    expect(videoEditClipLabel(binned, { itemId: 'n', kind: 'sequence' })).toBe('teal')
   })
 })
