@@ -52,7 +52,7 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
       items: [{ properties: { 'asset.library.name': '公共素材回环' } }],
     }] })
     registerHarnessAudioEditProject({
-      id: 'audio-loop', name: '公共口播回环', referenceScript: '', transcript: [], suggestions: [], vstEnabled: false,
+      id: 'audio-loop', name: '公共口播回环', referenceScript: '', transcript: [], suggestions: [],
       source: { mediaType: 'audio', sourcePath: 'fixture.wav', audioPath: 'fixture.wav', durationFrames: 48_000, sampleRate: 48_000, channels: 1 },
       createdAt: 1, updatedAt: 1, revision: 1,
     })
@@ -84,6 +84,8 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
       { domain: 'video_edit', ref: { kind: 'video_edit.sequence', id: `${video.document.id}:${video.activeSequenceId}` }, property: 'video_edit.sequence.name', value: '公共剪辑已改名' },
       { domain: 'documents', ref: { kind: 'documents.document', id: documentMeta.id }, property: 'documents.document.name', value: '公共文档已改名' },
       { domain: 'screen_recording', ref: { kind: 'screen_recording.understanding', id: recordingId }, property: UNDERSTANDING_PROPERTY, value: understanding },
+      // 录音参数写域以打开 WASAPI 独占验证（偏好存主进程，读回走同一录音设置服务）
+      { domain: 'audio_capture', ref: { kind: 'audio_capture.settings', id: 'singleton' }, property: 'audio_capture.settings.exclusive', value: true },
       // 工作区布局写域以切换剪辑的当前预设验证（布局存配置数据库，读回走同一布局服务）
       { domain: 'workspace_layout', ref: { kind: 'workspace_layout.workspace', id: 'video_edit' }, property: 'workspace_layout.workspace.active_id', value: 'grading' },
     ]

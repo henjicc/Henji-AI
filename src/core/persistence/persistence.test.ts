@@ -126,8 +126,8 @@ describe('所有登记格式的黄金样本', () => {
     const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.screen_recording')!
     const previous = JSON.parse(fs.readFileSync('tests/fixtures/persistence/document.screen_recording/v26.json', 'utf8'))
     const original = JSON.stringify(previous)
-    expect(format.version).toBe(30)
-    expect(format.minReaderVersion).toBe(30)
+    expect(format.version).toBe(31)
+    expect(format.minReaderVersion).toBe(31)
     expect(upgradePersistenceContent(format, previous.content, 26)).toEqual(previous.content)
     expect(JSON.stringify(previous)).toBe(original)
     const current = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.screen_recording/v27.json', 'utf8'))
@@ -164,7 +164,7 @@ describe('所有登记格式的黄金样本', () => {
     expect(sequence.annotations.map(mark => mark.style?.weight ?? 'regular')).toEqual(['regular', 'bold', 'regular', 'regular', 'regular'])
     const manifest = PERSISTENCE_FORMATS.find(value => value.id === 'subtitle-manifest')!
     const v16 = JSON.parse(fs.readFileSync('tests/fixtures/persistence/subtitle-manifest/v16.json', 'utf8'))
-    expect(upgradePersistenceContent(manifest, v16, 16)).toEqual({ ...v16, version: 17 })
+    expect(upgradePersistenceContent(manifest, v16, 16)).toEqual({ ...v16, version: 18 })
   })
 
   for (const format of PERSISTENCE_FORMATS) {

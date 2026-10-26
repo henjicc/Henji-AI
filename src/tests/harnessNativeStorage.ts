@@ -42,6 +42,7 @@ import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
 import type { RecordingControlSnapshot } from '@/core/screenRecording/contracts'
 import type { CapabilityCapture } from '@/core/captureLog/events'
 import { audioEditProjectToDocumentContent } from '@/core/audioEdit/documentContent'
+import { DEFAULT_AUDIO_CAPTURE_SETTINGS, type AudioCaptureSettings } from '@/core/audioCapture/contracts'
 
 const FIX_HINT = '替身只负责存储：要用到新方法，就在 src/tests/harnessNativeStorage.ts 里补一段'
   + '**只存不判断**的实现，不要返回空值糊过去——那等于伪造业务结果。'
@@ -236,7 +237,19 @@ export function seedHarnessFonts(value: FontCatalog): void { fontCatalog = wire(
 
 let memoryState = emptyMemorySnapshot()
 const memoryListeners = new Set<() => void>()
+/** 录音偏好只按版本号存取（与主进程同样的乐观并发）；设备列表是本机没有录音设备时的真实空清单，不模拟设备回退。 */
+let captureSettings: { settings: AudioCaptureSettings; revision: number } = { settings: { ...DEFAULT_AUDIO_CAPTURE_SETTINGS }, revision: 0 }
+const captureState = () => wire({ settings: captureSettings.settings, effectiveSettings: captureSettings.settings, notice: null, revision: captureSettings.revision })
 const NAMESPACES: Record<string, object> = {
+  audioCapture: {
+    async enumerate() { return { hostApis: [], devices: [] } },
+    async getSettings() { return captureState() },
+    async setSettings(next: AudioCaptureSettings, expectedRevision: number) {
+      if (expectedRevision !== captureSettings.revision) throw new Error('录音参数已被修改，请重新读取后再保存。')
+      captureSettings = { settings: wire(next), revision: captureSettings.revision + 1 }
+      return captureState()
+    },
+  },
   assistant: {
     async markMemoryOrganized(changes: number) {
       memoryState.changesSinceOrganization = Math.max(0, memoryState.changesSinceOrganization - changes)
@@ -391,6 +404,7 @@ export function resetHarnessNativeStorage(): void {
   publishHarnessRecordingControl(null); recordedCapabilities.splice(0)
   fontCatalog = { faces: [], revision: 0 }
   settings.clear()
+  captureSettings = { settings: { ...DEFAULT_AUDIO_CAPTURE_SETTINGS }, revision: 0 }
   imageDocuments.clear()
   imageLayoutResources.clear(); imageLayoutLeases.clear()
   libraries.clear()
