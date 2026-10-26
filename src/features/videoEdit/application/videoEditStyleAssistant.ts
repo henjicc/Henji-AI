@@ -15,7 +15,7 @@ export function askAssistantToCreateStyle(projectId: string): void {
 export function askAssistantForStyleTemplates(projectId: string, styleId: string, styleName: string): void {
   requireVideoEditInstance(projectId)
   openAssistant(`按风格“${styleName}”说明书的“组件”一栏生成模板。`, { context: [
-    `读 video_edit.style（id ${styleId}）的说明书与样片，按“组件”一栏挑出会反复用到的元素（标题卡、人名条、要点、数据、字幕、片尾等），逐个写成带参数的作者代码放到当前序列，取帧确认像这个风格。`,
+    `读 video_edit.style（id ${styleId}）的说明书与样片，按“组件”一栏挑出会反复用到的元素（标题、花字与关键词、图片或录屏容器、高亮、数据、人名条、片尾等），逐个写成带参数的作者代码放到当前序列，取帧确认像这个风格。`,
     '每个都按 templates 参考整理：该改的做成参数、尺寸跟着内容走、极端内容兜住、时间跟着片段走，并用最短、最长、中英混排、空字符串四组内容压力测试。',
     `整理好后用 create_video_edit_template 登记（styleId 写 ${styleId}，global=true 存进风格库），名称说清是什么、说明写用途。交付时列出生成了哪些模板。`,
   ].join('\n') })

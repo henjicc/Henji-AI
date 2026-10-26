@@ -20,8 +20,11 @@ export const videoEditContentHashSchema = z.string().regex(/^(?:[a-f0-9]{64})?$/
 const dimension = z.number().int().min(320).max(3840).multipleOf(2)
 /** 解析缺省值：旧文件里缺的字段按当时的标准样片补，保持原含义。 */
 export const STANDARD_STYLE_SAMPLE = { width: 1280, height: 720, durationSeconds: 8, fps: 24, thumbnail: 1.2, anchors: [1.2, 3.2, 5.2, 6.4, 7.8] } as const
-/** 新建风格的样片设置：1080P、30 帧；用户偏好更高规格（如 4K60）时由作者按偏好改写。 */
-export const NEW_STYLE_SAMPLE = { ...STANDARD_STYLE_SAMPLE, width: 1920, height: 1080, fps: 30 } as const
+/**
+ * 新建风格的样片设置：1080P、30 帧，11 秒标准分镜（标题 → 花字 → 图片容器与高亮 → 数据 → 人名条 → 收尾），
+ * 锚点落在六段各自的停留处；用户偏好更高规格（如 4K60）时由作者按偏好改写。
+ */
+export const NEW_STYLE_SAMPLE = { width: 1920, height: 1080, durationSeconds: 11, fps: 30, thumbnail: 1.5, anchors: [1.5, 3.2, 5.8, 7.8, 9.2, 10.6] } as const
 export const videoEditStyleSampleSchema = z.object({
   code: codeMaterialFilesSchema.describe('样片作者代码 { entry, files }：标准 ES 模块，默认导出带 layers(params, width, height, assets, info) 的生成器，按标准分镜演示风格。'),
   width: dimension.default(STANDARD_STYLE_SAMPLE.width), height: dimension.default(STANDARD_STYLE_SAMPLE.height),

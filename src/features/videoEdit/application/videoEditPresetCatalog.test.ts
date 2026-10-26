@@ -80,7 +80,7 @@ it('默认风格自动套到新建序列（工程里复制一份副本并复用�
   const document = requireVideoEditInstance(projectId).document
   const bound = document.sequences.filter(sequence => [first, second].includes(sequence.id)).map(sequence => sequence.styleId)
   expect(bound).toEqual(['restrained', 'restrained']); expect(document.styles).toHaveLength(1)
-  expect(document.styles![0]).toMatchObject({ name: '克制高级', version: 4 })
+  expect(document.styles![0]).toMatchObject({ name: '克制高级', version: videoEditStyleLibrary.requireStyle('restrained').style.version })
   const custom = videoEditTextPresetLibrary.save('大号黄字', videoEditTextStyleSchema.parse({ fontSize: 72, fill: { enabled: true, color: BLACK_HEX } }))
   setVideoEditPresetDefault('text', custom.id)
   const caption = createVideoEditCaption(projectId, first, { start: 0, duration: 30, text: '默认样式' })
@@ -133,7 +133,7 @@ it('预设预览时间线：风格只放样片代码，转场两段相接', asyn
   await videoEditStyleLibrary.ready()
   const sample = videoEditStyleLibrary.requireStyle('restrained').style.sample
   const style = await presetPreviewTimeline({ category: 'style', sample }, { width: 320, height: 180 })
-  expect(style.composition.clips.filter(clip => clip.code).length).toBe(1); expect(style.frames).toBe(240); expect(style.poster).toBe(36)
+  expect(style.composition.clips.filter(clip => clip.code).length).toBe(1); expect(style.frames).toBe(Math.round(sample.durationSeconds * 30)); expect(style.poster).toBe(Math.round(sample.thumbnail * 30))
   const transition = await presetPreviewTimeline(videoEditPresetSource('transition', 'push'), { width: 320, height: 180 })
   expect(transition.composition.transitions?.[0]).toMatchObject({ kind: 'push' })
 })

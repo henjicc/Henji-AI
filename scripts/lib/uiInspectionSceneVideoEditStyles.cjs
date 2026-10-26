@@ -70,7 +70,8 @@ function createVideoEditStylesScene() {
         const detail = page.locator('[data-video-edit-style-detail="variety"]'); await detail.waitFor({ state: 'visible' })
         await page.waitForFunction(() => { const video = document.querySelector('[data-video-edit-style-detail] video'); return video && video.readyState >= 2 && video.currentTime > 0.3 }, null, { timeout: 30000 })
         evidence.steps.detail = { anchors: await detail.getByRole('button', { name: /^锚点帧 \d/ }).count(), sections: await detail.getByText('不变量与自由度', { exact: true }).count(), capture: await capture('styles-02-detail') }
-        assert.equal(evidence.steps.detail.anchors, 5)
+        // 锚点帧张数跟随内置风格自己的样片设置（标准分镜每段一张）。
+        assert.equal(evidence.steps.detail.anchors, JSON.parse(fs.readFileSync(path.resolve('resources/video-edit-styles/variety/style.json'), 'utf8')).content.sample.anchors.length)
         await page.keyboard.press('Escape'); await detail.waitFor({ state: 'hidden' })
 
         // 内置风格自带已渲染样片；先通过正式能力导出，再补齐仓库内的最小参数模板。

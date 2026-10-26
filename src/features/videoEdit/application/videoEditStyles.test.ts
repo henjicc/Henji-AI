@@ -7,7 +7,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { testCodeSource } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { STYLE_GUIDE_SECTIONS } from '@/core/videoEdit/styles/styleGuide'
-import { videoEditStyleContentHash } from '@/core/videoEdit/styles/styleSchemas'
+import { NEW_STYLE_SAMPLE, videoEditStyleContentHash } from '@/core/videoEdit/styles/styleSchemas'
+import { BLANK_STYLE_SAMPLE_SOURCE } from '@/core/videoEdit/styles/blankSample'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createVideoEditTestProject, closeAllVideoEdits, savedVideoEdit } from './videoEditDocumentTestKit'
@@ -112,7 +113,8 @@ it('风格包往返：导出带说明书、样片、成员模板与预览，导�
   await videoEditStyleLibrary.ready()
   const source = videoEditStyleLibrary.requireStyle('restrained')
   await videoEditStyleLibrary.saveStyle({ ...source.style, id: 'shared', name: '分享风格' }, await videoEditStyleLibrary.readStyleMedia('restrained'))
-  await videoEditStyleLibrary.saveTemplate({ id: 'shared-card', name: '人名条', description: '', version: 1, contentHash: '', updatedAt: new Date().toISOString(), style: { id: 'shared', version: 4 }, body: { kind: 'code', code: { entry: 'index.js', files: { 'index.js': CARD } } } })
+  const version = source.style.version
+  await videoEditStyleLibrary.saveTemplate({ id: 'shared-card', name: '人名条', description: '', version: 1, contentHash: '', updatedAt: new Date().toISOString(), style: { id: 'shared', version }, body: { kind: 'code', code: { entry: 'index.js', files: { 'index.js': CARD } } } })
   const files = new Map<string, string>()
   const fileIo: VideoEditStylePackageIo = { read: async file => files.get(file)!, write: async (file, text) => { files.set(file, text) }, exists: async file => files.has(file) }
   const exported = await exportVideoEditStylePackage('shared', 'D:/out/分享风格.hjsty', {}, fileIo)
@@ -120,14 +122,14 @@ it('风格包往返：导出带说明书、样片、成员模板与预览，导�
   await expect(exportVideoEditStylePackage('shared', 'D:/out/分享风格.hjsty', {}, fileIo)).rejects.toThrow('已存在')
   await expect(exportVideoEditStylePackage('shared', 'D:/out/分享风格.json', {}, fileIo)).rejects.toThrow('.hjsty')
   const text = files.get('D:/out/分享风格.hjsty')!
-  expect(JSON.parse(text)).toMatchObject({ version: 3, minReaderVersion: 1, content: { format: 'henji-video-style', style: { id: 'shared', version: 4 } } })
+  expect(JSON.parse(text)).toMatchObject({ version: 3, minReaderVersion: 1, content: { format: 'henji-video-style', style: { id: 'shared', version } } })
   // 另一台机器：全新风格库。
   const other = createTestStyleLibraryIo(); videoEditStyleLibrary.reset(other, undefined)
   try {
     const imported = await importVideoEditStylePackage('D:/out/分享风格.hjsty', {}, fileIo)
-    expect(imported.style).toMatchObject({ id: 'shared', version: 4, imported: true, contentHash: source.style.contentHash })
+    expect(imported.style).toMatchObject({ id: 'shared', version, imported: true, contentHash: source.style.contentHash })
     const entry = videoEditStyleLibrary.requireStyle('shared')
-    expect(entry.stale).toBe(false); expect(entry.media.anchors).toHaveLength(5)
+    expect(entry.stale).toBe(false); expect(entry.media.anchors).toHaveLength(source.style.sample.anchors.length)
     expect(fs.readFileSync(entry.media.preview!).equals(fs.readFileSync(source.media.preview!))).toBe(true)
     expect(videoEditStyleLibrary.requireTemplate('shared-card').template).toMatchObject({ imported: true, style: { id: 'shared' } })
     await expect(importVideoEditStylePackage('D:/out/分享风格.hjsty', {}, fileIo)).rejects.toThrow('replace')
@@ -149,24 +151,25 @@ it('绑定风格：复制进工程并绑定，换风格与降级要确认，库�
   await videoEditStyleLibrary.ready()
   const owner = await createVideoEditTestProject(); const projectId = owner.document.id; const app = createApplicationHarness()
   const documentRef = { kind: 'video_edit.document', id: projectId }; const sequenceRef = { kind: 'video_edit.sequence', id: `${projectId}:${owner.activeSequenceId}` }
+  const version = videoEditStyleLibrary.requireStyle('restrained').style.version
   try {
     expect(videoEditStyleHostSummary(projectId, owner.activeSequenceId).summary).toContain('没有默认风格')
     const bound = await app.requireResult('bind_video_edit_style', { documentRef, sequenceRef, styleRef: { kind: 'video_edit.style', id: 'restrained' } }) as { version: number; verification: { verified: boolean } }
-    expect(bound).toMatchObject({ version: 4, verification: { verified: true } })
-    expect(savedVideoEdit(owner)).toMatchObject({ styles: [{ id: 'restrained', version: 4 }], sequences: [{ styleId: 'restrained' }] })
+    expect(bound).toMatchObject({ version, verification: { verified: true } })
+    expect(savedVideoEdit(owner)).toMatchObject({ styles: [{ id: 'restrained', version }], sequences: [{ styleId: 'restrained' }] })
     const summary = videoEditStyleHostSummary(projectId, owner.activeSequenceId)
-    expect(summary).toMatchObject({ ref: `video_edit.project_style:${projectId}:restrained`, version: 4 }); expect(summary.summary).toContain('## 不变量与自由度')
+    expect(summary).toMatchObject({ ref: `video_edit.project_style:${projectId}:restrained`, version }); expect(summary.summary).toContain('## 不变量与自由度')
     const conflict = await app.call('bind_video_edit_style', { documentRef, sequenceRef, styleRef: { kind: 'video_edit.style', id: 'variety' } })
     expect(JSON.stringify(conflict)).toContain('replace:true')
-    // 风格库里同一风格更新到 v5：工程副本只提示，绑定同一风格即升级。
+    // 风格库里同一风格更新一版：工程副本只提示，绑定同一风格即升级。
     const personal = await videoEditStyleLibrary.saveStyle({ ...videoEditStyleLibrary.requireStyle('restrained').style, id: 'restrained-plus', name: '克制增强' })
     await app.requireResult('bind_video_edit_style', { documentRef, sequenceRef, styleRef: { kind: 'video_edit.style', id: 'restrained-plus' }, replace: true })
-    await videoEditStyleLibrary.saveStyle({ ...personal.style, version: 5 })
+    await videoEditStyleLibrary.saveStyle({ ...personal.style, version: version + 1 })
     const copy = await app.read({ kind: 'video_edit.project_style', id: `${projectId}:restrained-plus` }, ['video_edit.project_style.version', 'video_edit.project_style.library_version'])
-    expect(copy.properties).toEqual({ 'video_edit.project_style.version': 4, 'video_edit.project_style.library_version': 5 })
-    expect(videoEditStyleHostSummary(projectId, owner.activeSequenceId).summary).toContain('已更新到 v5')
+    expect(copy.properties).toEqual({ 'video_edit.project_style.version': version, 'video_edit.project_style.library_version': version + 1 })
+    expect(videoEditStyleHostSummary(projectId, owner.activeSequenceId).summary).toContain(`已更新到 v${version + 1}`)
     const upgraded = await app.requireResult('bind_video_edit_style', { documentRef, sequenceRef, styleRef: { kind: 'video_edit.style', id: 'restrained-plus' } }) as { upgraded: boolean; version: number }
-    expect(upgraded).toMatchObject({ upgraded: true, version: 5 })
+    expect(upgraded).toMatchObject({ upgraded: true, version: version + 1 })
     // 取消绑定走通用属性。
     expect((await app.change(sequenceRef, { 'video_edit.sequence.style_id': '' })).ok).toBe(true)
     expect(requireVideoEditInstance(projectId).document.sequences[0].styleId).toBeUndefined()
@@ -217,7 +220,7 @@ it('代码模板：固化代码片段并设为全局；别的工程第一次应�
   const placed = makeVideoEditItemClip(requireVideoEditInstance(projectId).document, itemId, sequenceId, { frame: 0 }, readVideoEditCodeMetadata(requireVideoEditInstance(projectId), requireVideoEditInstance(projectId).document))
   editVideoProject(projectId, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, clips: [...sequence.clips, placed] })) }))
   const created = await createVideoEditTemplate(projectId, sequenceId, [placed.id], { name: '档案人名条', description: '人物首次出场介绍姓名', styleId: 'restrained', global: true })
-  expect(created.template).toMatchObject({ body: { kind: 'code' }, style: { id: 'restrained', version: 4 }, origin: { id: created.library!.id, version: 1 } })
+  expect(created.template).toMatchObject({ body: { kind: 'code' }, style: { id: 'restrained', version: videoEditStyleLibrary.requireStyle('restrained').style.version }, origin: { id: created.library!.id, version: 1 } })
   expect(created.library!.body.kind).toBe('code'); expect(JSON.stringify(created.library!.body)).toContain('档案人名条')
   // 另一个工程：第一次应用复制登记，第二次复用同一份，实例联动同一个代码定义。
   const other = await createVideoEditTestProject(); const otherId = other.document.id
@@ -271,17 +274,23 @@ it('旧本机风格库与标题模板第一次加载时转存进风格库，原�
   expect(await videoEditStyleContentHash(style)).toMatch(/^[a-f0-9]{64}$/)
 })
 
-it('内置样片是本仓库的作者模块：能加载、声明生成器并按标准分镜返回图层', async () => {
+it('内置样片与新建风格的空白样片是本仓库的作者模块：能加载、声明生成器并在每个锚点返回图层', async () => {
   const { testAuthorModule } = await import('../engine/videoEditAuthorTestFixtures')
   const { authorEffectMetadata } = await import('../engine/videoEditAuthorParameters')
   await videoEditStyleLibrary.ready()
-  for (const entry of videoEditStyleLibrary.listStyles().filter(value => value.builtin)) {
-    const effect = testAuthorModule(entry.style.sample.code.files[entry.style.sample.code.entry])
-    expect(authorEffectMetadata(effect), entry.style.id).toMatchObject({ kind: 'generator', mode: 'dynamic' })
-    for (const time of entry.style.sample.anchors) {
-      const layers = effect.layers!({}, 1280, 720, {}, { time, frameDuration: 1 / 24, clip: { time, duration: 8 } } as never)
-      expect(layers.length, `${entry.style.id}@${time}`).toBeGreaterThan(3)
-      for (const layer of layers) if (layer.pose) { expect(layer.bounds, entry.style.id).toBeTruthy(); layer.pose(time) }
+  const samples = [
+    ...videoEditStyleLibrary.listStyles().filter(value => value.builtin).map(entry => ({ id: entry.style.id, sample: entry.style.sample, source: entry.style.sample.code.files[entry.style.sample.code.entry] })),
+    { id: 'blank', sample: NEW_STYLE_SAMPLE, source: BLANK_STYLE_SAMPLE_SOURCE },
+  ]
+  for (const { id, sample, source } of samples) {
+    // 标准分镜六段，每段一张锚点帧，都落在样片时长之内。
+    expect(sample.anchors, id).toHaveLength(6); expect(Math.max(...sample.anchors), id).toBeLessThan(sample.durationSeconds)
+    const effect = testAuthorModule(source)
+    expect(authorEffectMetadata(effect), id).toMatchObject({ kind: 'generator', mode: 'dynamic' })
+    for (const time of sample.anchors) {
+      const layers = effect.layers!({}, sample.width, sample.height, {}, { time, frameDuration: 1 / sample.fps, clip: { time, duration: sample.durationSeconds } } as never)
+      expect(layers.length, `${id}@${time}`).toBeGreaterThan(3)
+      for (const layer of layers) if (layer.pose) { expect(layer.bounds, id).toBeTruthy(); layer.pose(time) }
     }
   }
 })
