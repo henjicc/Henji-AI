@@ -64,6 +64,8 @@ export interface AudioSpectralEditorProps {
   /** 时间刻度上的小标记（检测到的口水音），源采样帧 */
   /** 口水音位置（选中“去除口水音”时才给）：off 为关掉不处理的位置。 */
   marks?: ReadonlyArray<{ start: number; end: number; off?: boolean }>
+  /** 中键点口水音位置：在处理与不处理之间切换。 */
+  onMarkToggle?: (mark: { start: number; end: number; off?: boolean }) => void
   /** 右键编辑区：宿主弹出针对选区的菜单。 */
   onContextMenu?: (event: React.MouseEvent) => void
   /** 刻度下方的字幕条（宿主按可见区间排好），没有转写稿时不传。 */
@@ -83,7 +85,7 @@ type Drag =
   | { kind: 'time'; pointer: number; origin: number; x: number; moved: boolean }
   | { kind: 'marquee'; pointer: number; origin: AudioBrushPoint; x: number; y: number; moved: boolean }
   | { kind: 'brush'; pointer: number; points: AudioBrushPoint[] }
-  | { kind: 'pan'; pointer: number; x: number; view: WaveformViewport }
+  | { kind: 'pan'; pointer: number; x: number; view: WaveformViewport; middle?: boolean }
   | { kind: 'split'; pointer: number; y: number; top: number; height: number }
   | { kind: 'playhead'; pointer: number; x: number; moved: boolean; frame: number }
   | { kind: 'navigator'; pointer: number; x: number; width: number; view: WaveformViewport; edge: 'left' | 'right' | 'move' }
@@ -104,6 +106,9 @@ function useNonPassiveWheel(ref: React.RefObject<HTMLElement | null>, handler: (
 /**
  * 视口变化按帧合并：一帧里的多次滚轮或拖动只提交最后一次，连续操作时以待提交的视口为准继续累加。
  */
+/** 中键点击的判定宽度（左右各多少像素）。 */
+const MIDDLE_HIT_PX = 6
+
 function useFrameViewport(view: WaveformViewport, onViewChange: (view: WaveformViewport) => void): { latest: () => WaveformViewport; request: (next: WaveformViewport) => void } {
   const pending = React.useRef<WaveformViewport | null>(null)
   const frame = React.useRef<number | null>(null)
@@ -268,7 +273,7 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
     const pane = paneAt(event.clientY)
     event.currentTarget.setPointerCapture(event.pointerId)
     // 按住滚轮（中键）拖动：任何工具下都是平移。
-    if (event.button === 1 || tool === 'hand') { event.preventDefault(); drag.current = { kind: 'pan', pointer: event.pointerId, x: event.clientX, view }; return }
+    if (event.button === 1 || tool === 'hand') { event.preventDefault(); drag.current = { kind: 'pan', pointer: event.pointerId, x: event.clientX, view, middle: event.button === 1 }; return }
     const edge = cutEdgeAt(x, rect.width)
     if (edge) {
       const frame = edge.side === 'start' ? edge.start : edge.end
@@ -326,6 +331,11 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
     drag.current = null
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
     const rect = event.currentTarget.getBoundingClientRect()
+    if (current.kind === 'pan') {
+      // 中键按下没拖动就是“点”：点口水音位置切换处理 / 不处理，点删除或静音区间就取消它；拖动照常平移
+      if (current.middle && Math.abs(event.clientX - current.x) <= CLICK_SLOP_PX) middleClick(event.clientX - rect.left, rect.width)
+      return
+    }
     if (current.kind === 'cutEdge') {
       setEdgePreview(null)
       const edit = current.moved ? cutEdgeEdit(current.edge, current.frame) : null
@@ -345,6 +355,23 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
       return
     }
     if (current.kind === 'time') props.onSpectralSelectionChange(null)
+  }
+  /**
+   * 中键点击：判定放宽到左右各 MIDDLE_HIT_PX 像素（口水音位置往往只有一两像素宽）。先找最近的口水音位置（只有选中“去除口水音”
+   * 时才有），再找点到的删除 / 静音区间（取最窄的那段）并取消它。
+   */
+  const middleClick = (x: number, width: number): void => {
+    const frame = frameAtX(x, width, view)
+    const tolerance = MIDDLE_HIT_PX * (view.end - view.start) / Math.max(1, width)
+    const distance = (start: number, end: number): number => frame < start ? start - frame : frame > end ? frame - end : 0
+    let mark: typeof visibleMarks[number] | null = null
+    for (const candidate of visibleMarks) if (distance(candidate.start, candidate.end) <= tolerance && (!mark || distance(candidate.start, candidate.end) < distance(mark.start, mark.end))) mark = candidate
+    if (mark) { props.onMarkToggle?.(mark); return }
+    if (!props.onCutEdgeEdit) return
+    const hits = props.cutRanges.filter(range => range.mode !== 'pending' && distance(range.start, range.end) <= tolerance)
+      .sort((a, b) => (a.end - a.start) - (b.end - b.start))
+    const range = hits[0]
+    if (range && range.mode !== 'pending') props.onCutEdgeEdit({ range: { start: range.start, end: range.end }, mode: range.mode, action: 'remove' })
   }
   const leave = () => {
     if (hoverLine.current) hoverLine.current.style.display = 'none'

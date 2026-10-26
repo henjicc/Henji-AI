@@ -24,6 +24,7 @@ import { AudioEditTransport } from '../workspace/AudioEditTransport'
 import { useAudioEditWorkspace } from '../workspace/audioEditWorkspaceContext'
 import { AudioSpectralEditor, type AudioPlayheadSource } from './AudioSpectralEditor'
 import { useAudioEditEffectSelection } from '../workspace/audioEditEffectInsert'
+import { setAudioEditMouthClicksSkipped } from '@/core/audioEdit/effects'
 import type { AudioEditorTool } from './spectralEditorModel'
 import { audioWaveToolForKey, type audioWaveActions, type AudioWaveEditorState } from './audioWaveEditorState'
 import { useAudioEditSpectral } from './useAudioEditSpectral'
@@ -204,6 +205,10 @@ export function AudioWaveWorkspace() {
     if (item?.kind !== 'mouth_declick') return undefined
     return [...item.clicks.map(click => ({ start: click.startFrame, end: click.endFrame })), ...(item.skipped ?? []).map(click => ({ start: click.startFrame, end: click.endFrame, off: true }))]
   }, [project.effectChain, selectedEffectId])
+  const toggleMark = (mark: { start: number; end: number; off?: boolean }): void => {
+    workspace.update({ effectChain: (project.effectChain ?? []).map(item => item.id === selectedEffectId && item.kind === 'mouth_declick'
+      ? setAudioEditMouthClicksSkipped(item, { startFrame: mark.start, endFrame: mark.end }, !mark.off) : item) })
+  }
   const repairs = React.useMemo(() => (project.repairs ?? []).filter(repair => repair.enabled && repair.kind === 'spectral_heal').map(repair => ({ id: repair.id, start: repair.startFrame, end: repair.endFrame, lowHz: repair.lowHz, highHz: repair.highHz })), [project.repairs])
   const visibleCuts = insertion ? spliceAudioRanges(cutRanges.map((range, index) => ({ ...range, id: String(index), startFrame: range.start, endFrame: range.end })), insertion.start, insertion.start + (insertion.replace ? insertion.frames : 0), insertion.frames).map(range => ({ ...range, start: range.startFrame, end: range.endFrame })) : cutRanges
   const menu = useContextMenu()
@@ -269,7 +274,7 @@ export function AudioWaveWorkspace() {
         onSelectionChange={(next) => { if (!recording) onSelection(next && next.end > next.start ? { startFrame: next.start, endFrame: next.end } : null) }}
         spectralSelection={editor.spectralSelection} onSpectralSelectionChange={editor.setSpectralSelection}
         onBrushStroke={stroke => { if (!disabled) actions.healStroke(stroke) }} cutRanges={visibleCuts} repairs={recording ? [] : repairs}
-        snapEnabled={editor.snapToSpeech} {...(marks ? { marks } : {})} {...(speechEdges.length ? { snapFrames: speechEdges } : {})}
+        snapEnabled={editor.snapToSpeech} {...(marks ? { marks, ...(disabled ? {} : { onMarkToggle: toggleMark }) } : {})} {...(speechEdges.length ? { snapFrames: speechEdges } : {})}
         {...(recording || disabled ? {} : { onCutEdgeEdit: ({ range: edited, mode, action }: { range: { start: number; end: number }; mode: 'delete' | 'mute'; action: 'add' | 'remove' }) => workspace.adjustCutRange({ startFrame: edited.start, endFrame: edited.end }, mode, action) })}
         {...(project.transcript.length && (project.viewSettings?.timelineCaptions ?? true) ? { captionLane: <CaptionLane view={editor.view} /> } : {})}
         onContextMenu={(event) => menu.showMenu(event, [

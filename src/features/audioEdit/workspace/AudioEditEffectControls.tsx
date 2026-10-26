@@ -216,7 +216,7 @@ function MouthDeclickBody({ item, workspace, onChange }: { item: Extract<AudioEd
         <UiIconButton size="sm" aria-label="上一处口水音" tooltip="上一处（跳到它前一秒，按空格播放）" disabled={index === 0} onClick={goPrevious}><ChevronLeft /></UiIconButton>
         <UiIconButton size="sm" aria-label="下一处口水音" tooltip="下一处（跳到它前一秒，按空格播放）" disabled={index === positions.length - 1} onClick={goNext}><ChevronRight /></UiIconButton>
         <span className="min-w-0 flex-1 truncate text-xs tabular-nums text-text2">{here ? `第 ${index + 1} / ${positions.length} 处 · ${clockTime(here.startFrame, rate)}${here.off ? ' · 不处理' : ''}` : '从播放位置往后检查'}</span>
-        <UiButton size="sm" disabled={!here} disabledReason="先用左边的箭头跳到一处" onClick={() => here && onChange(setAudioEditMouthClicksSkipped(item, here, !here.off))}>{here?.off ? '恢复这处' : '这处不处理'}</UiButton>
+        <UiButton size="sm" tooltip="也可以在波形上用鼠标中键点那条线：点一下不处理（变灰），再点一下恢复" disabled={!here} disabledReason="先用左边的箭头跳到一处，或在波形上用中键点那条线" onClick={() => here && onChange(setAudioEditMouthClicksSkipped(item, here, !here.off))}>{here?.off ? '恢复这处' : '这处不处理'}</UiButton>
       </div>
       <div className="flex items-center gap-1">
         <UiButton size="sm" disabled={!range} disabledReason={rangeReason} onClick={() => range && onChange(setAudioEditMouthClicksSkipped(item, range, true))}>选区内不处理</UiButton>

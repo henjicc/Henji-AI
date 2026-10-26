@@ -131,3 +131,32 @@ it('拖动删除 / 静音区间的边缘：从哪种里面抓就改哪种，外�
   drag(302, 396)
   expect(onCutEdgeEdit).toHaveBeenLastCalledWith({ range: { start: 144000, end: 190080 }, mode: 'mute', action: 'remove' })
 })
+
+it('中键点口水音位置切换处理，点删除区间取消它；中键拖动照常平移', () => {
+  const onMarkToggle = vi.fn(), onCutEdgeEdit = vi.fn(), onViewChange = vi.fn()
+  const props: AudioSpectralEditorProps = {
+    sampleRate: 48000, durationFrames: 480000, view: { start: 0, end: 480000 },
+    waveform: { status: 'idle' }, spectrogramStatus: 'idle', display: 'waveform', tool: 'time', brushPixels: 8,
+    playhead: { current: () => 0, subscribe: () => () => undefined },
+    onViewChange, onSeek: vi.fn(), selection: null, onSelectionChange: vi.fn(), spectralSelection: null, onSpectralSelectionChange: vi.fn(), onBrushStroke: vi.fn(), repairs: [],
+    cutRanges: [{ start: 240000, end: 288000, mode: 'delete' }], marks: [{ start: 48000, end: 48100 }], onMarkToggle, onCutEdgeEdit,
+  }
+  const view = render(<AudioSpectralEditor {...props} />)
+  const content = view.getByRole('application', { name: '音频波形与频谱编辑区' })
+  vi.spyOn(content, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 1000, bottom: 300, width: 1000, height: 300, toJSON: () => ({}) })
+  const click = (clientX: number, upX = clientX) => {
+    fireEvent.pointerDown(content, { button: 1, clientX, clientY: 50, pointerId: 3 })
+    fireEvent.pointerUp(content, { button: 1, clientX: upX, clientY: 50, pointerId: 3 })
+  }
+  // 口水音只有 0.2 像素宽，点在旁边 4 像素也算
+  click(104)
+  expect(onMarkToggle).toHaveBeenCalledWith({ start: 48000, end: 48100 })
+  click(550)
+  expect(onCutEdgeEdit).toHaveBeenCalledWith({ range: { start: 240000, end: 288000 }, mode: 'delete', action: 'remove' })
+  onMarkToggle.mockClear(); onCutEdgeEdit.mockClear()
+  fireEvent.pointerDown(content, { button: 1, clientX: 550, clientY: 50, pointerId: 4 })
+  fireEvent.pointerMove(content, { clientX: 650, clientY: 50, pointerId: 4 })
+  fireEvent.pointerUp(content, { button: 1, clientX: 650, clientY: 50, pointerId: 4 })
+  expect(onCutEdgeEdit).not.toHaveBeenCalled()
+  expect(onMarkToggle).not.toHaveBeenCalled()
+})
