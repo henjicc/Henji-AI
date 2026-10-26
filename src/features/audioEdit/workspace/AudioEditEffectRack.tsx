@@ -5,7 +5,8 @@ import NumberInput from '@/components/ui/NumberInput'
 import { AudioEffectPicker, AudioEffectSlots } from '@/components/audio/AudioEffectRack'
 import { createAudioRackEffect } from '@/core/audio/effects/rackEffect'
 import { AUDIO_EDIT_MAX_EFFECTS, type AudioEditEffect } from '@/core/audioEdit/effects'
-import { prepareAudioEditProcessing } from '../application/audioEditApplicationService'
+import { detectProjectAudioEditMouthClicks, prepareAudioEditProcessing } from '../application/audioEditApplicationService'
+import { notificationMessage } from '@/i18n/notifications'
 import { beginAudioEditGesture } from '../application/audioEditProjectInstances'
 import { useAudioEditWorkspace } from './audioEditWorkspaceContext'
 
@@ -15,14 +16,20 @@ import { useAudioEditWorkspace } from './audioEditWorkspaceContext'
  */
 export function AudioEditEffectRack(): React.ReactElement {
   const workspace = useAudioEditWorkspace()
-  const { project, update, processors, run } = workspace
+  const { project, update, processors, run, notify } = workspace
   const effects = project.effects ?? []
   const bypassed = project.effectsBypassed === true
   const disabled = workspace.disabled
   const plugins = processors.filter(item => item.available && item.semanticRole)
+  // 口水音是整段预先检测再修的修复，不是效果组里的实时效果；放进菜单方便找到，点了直接检测并打开修复，灵敏度与结果在“处理”页的“口水音”里调。
+  const mouthClicks = { id: 'mouth_declick', name: '去除口水音', group: 'audio_repair' as const, tooltip: '检测说话时口水带出的“咔啦”声并修掉，不改变时长；灵敏度与检测结果在“处理”页的“口水音”里调整。',
+    onPick: () => void run(async () => {
+      const { count, perMinute } = await detectProjectAudioEditMouthClicks(project.id, project.mouthClicks?.sensitivity ?? 50, workspace.processRange)
+      notify(notificationMessage(count ? 'audioMouthClicksDetected' : 'audioMouthClicksNone', { count, perMinute }))
+    }) }
   const tools = <div className="flex items-center gap-0.5">
     <UiIconButton size="sm" on={!bypassed && effects.length > 0} aria-pressed={!bypassed} disabled={disabled || !effects.length} tooltip={bypassed ? '效果组已关闭：试听与导出都不经过效果组（基本声音照常）' : '关闭整个效果组，对比处理前后的声音'} aria-label="效果组开关" onClick={() => update({ effectsBypassed: !bypassed })}><Power /></UiIconButton>
-    <AudioEffectPicker disabled={disabled || effects.length >= AUDIO_EDIT_MAX_EFFECTS} disabledReason={`效果组最多放 ${AUDIO_EDIT_MAX_EFFECTS} 个效果`} onPick={definition => update({ effects: [...effects, createAudioRackEffect(definition) as AudioEditEffect] })} />
+    <AudioEffectPicker extras={workspace.sourceError ? [] : [mouthClicks]} disabled={disabled || effects.length >= AUDIO_EDIT_MAX_EFFECTS} disabledReason={`效果组最多放 ${AUDIO_EDIT_MAX_EFFECTS} 个效果`} onPick={definition => update({ effects: [...effects, createAudioRackEffect(definition) as AudioEditEffect] })} />
   </div>
   return <div className="flex h-full min-h-0 flex-col" data-audio-edit-panel="effects">
     <DockHeaderPortal panelId="audio_edit:effects" fallback={children => <div className="flex shrink-0 justify-end px-2 pt-1">{children}</div>}>{tools}</DockHeaderPortal>

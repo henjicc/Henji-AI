@@ -7,6 +7,7 @@ import { ParamField, type ParamGesture } from '@/components/ui/params/ParamField
 import { ParamList } from '@/components/ui/params/ParamList'
 import { builtinParameterFields, readBuiltinField, writeBuiltinField, type ParamFieldSpec } from '@/components/ui/params/fieldSpec'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
+import { UI_DIVIDER_CLASS, UI_PANEL_BODY_HEIGHT_CLASS } from '@/components/ui/styleTokens'
 import { AUDIO_EFFECT_DEFINITIONS } from '@/core/audio/effects/audioEffectDefinitions'
 import { normalizeVideoEditBuiltinParams, resolveVideoEditBuiltinParams, videoEditBuiltinDefaults, videoEditBuiltinEffect, VIDEO_EDIT_BUILTIN_GROUP_NAMES, type VideoEditBuiltinEffectDefinition, type VideoEditBuiltinGroup } from '@/core/videoEdit/builtinEffects'
 import type { CodeParameterValue } from '@/core/imaging/parameterTypes'
@@ -30,17 +31,31 @@ function groupedDefinitions(query: string): Array<[VideoEditBuiltinGroup, VideoE
   return order.map(group => [group, matches.filter(definition => definition.group === group)] as [VideoEditBuiltinGroup, VideoEditBuiltinEffectDefinition[]]).filter(([, items]) => items.length)
 }
 
+/** 效果菜单里的宿主专属项（如音频编辑的“去除口水音”）：列在对应分类末尾，点了交给宿主执行，不进效果组。 */
+export interface AudioEffectPickerExtra { id: string; name: string; tooltip: string; group: VideoEditBuiltinGroup; onPick: () => void }
+
 /** 添加效果：按 Audition 的分类列出全部内置音频效果，可搜索；悬停显示用途。 */
-export function AudioEffectPicker({ onPick, disabled, disabledReason }: { onPick: (definition: VideoEditBuiltinEffectDefinition) => void; disabled: boolean; disabledReason?: string }): React.ReactElement {
+export function AudioEffectPicker({ onPick, disabled, disabledReason, extras = [] }: { onPick: (definition: VideoEditBuiltinEffectDefinition) => void; disabled: boolean; disabledReason?: string; extras?: readonly AudioEffectPickerExtra[] }): React.ReactElement {
   const [query, setQuery] = useState('')
   const groups = useMemo(() => groupedDefinitions(query), [query])
+  const needle = query.trim().toLowerCase()
+  const extraIn = (group: VideoEditBuiltinGroup) => extras.filter(extra => extra.group === group && (!needle || extra.name.toLowerCase().includes(needle) || extra.tooltip.toLowerCase().includes(needle)))
+  const shown = [...groups.map(([group, items]) => [group, items, extraIn(group)] as const),
+    ...[...new Set(extras.map(extra => extra.group))].filter(group => !groups.some(([listed]) => listed === group)).map(group => [group, [] as VideoEditBuiltinEffectDefinition[], extraIn(group)] as const)]
+    .filter(([, items, more]) => items.length + more.length > 0)
+  const option = (key: string, name: string, tooltip: string, pick: () => void) => <UiOptionButton key={key} variant="menu" size="sm" data-effect-pick className="w-full" tooltip={tooltip} onClick={pick}>{name}</UiOptionButton>
+  // 只有列表一层滚动：高度按浮层实际能给的封顶（UI_PANEL_BODY_HEIGHT_CLASS），浮层外壳不再另滚一层。
+  // 分类标题用主文字加粗、上方一条分隔线，效果项缩进在标题下面，分类一眼能分开。
   return <PanelTrigger panelSize="compact" panelPadding="menu" alignment="bottomRight" closeOnPanelClick={target => target instanceof Element && !!target.closest('[data-effect-pick]')}
-    renderPanel={() => <div className="flex max-h-[min(70vh,520px)] w-64 flex-col">
-      <div className="p-1"><UiInput size="sm" autoFocus aria-label="搜索效果" placeholder="搜索效果" value={query} onChange={event => setQuery(event.target.value)} /></div>
-      <div className="min-h-0 flex-1 overflow-y-auto pb-1">
-        {groups.length ? groups.map(([group, items]) => <div key={group} role="group" aria-label={VIDEO_EDIT_BUILTIN_GROUP_NAMES[group]} className="pt-1">
-          <div className="px-2 pb-0.5 pt-1 text-2xs font-semibold text-text3">{VIDEO_EDIT_BUILTIN_GROUP_NAMES[group]}</div>
-          {items.map(definition => <UiOptionButton key={definition.id} variant="menu" size="sm" data-effect-pick className="w-full" tooltip={definition.tooltip} onClick={() => onPick(definition)}>{definition.name}</UiOptionButton>)}
+    renderPanel={() => <div className={`flex w-64 flex-col ${UI_PANEL_BODY_HEIGHT_CLASS.content}`}>
+      <div className="shrink-0 p-1"><UiInput size="sm" autoFocus aria-label="搜索效果" placeholder="搜索效果" value={query} onChange={event => setQuery(event.target.value)} /></div>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-1">
+        {shown.length ? shown.map(([group, items, more], index) => <div key={group} role="group" aria-label={VIDEO_EDIT_BUILTIN_GROUP_NAMES[group]} className={index ? `mt-1 pt-1 ${UI_DIVIDER_CLASS}` : ''}>
+          <div className="px-2 pb-0.5 pt-1.5 text-xs font-semibold text-text1">{VIDEO_EDIT_BUILTIN_GROUP_NAMES[group]}</div>
+          <div className="pl-2">
+            {items.map(definition => option(definition.id, definition.name, definition.tooltip, () => onPick(definition)))}
+            {more.map(extra => option(extra.id, extra.name, extra.tooltip, extra.onPick))}
+          </div>
         </div>) : <p className={`m-0 px-2 py-3 ${UI_TEXT_META_CLASS}`}>没有找到“{query}”相关的效果</p>}
       </div>
     </div>}>
