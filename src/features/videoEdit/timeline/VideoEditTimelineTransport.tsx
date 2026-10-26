@@ -111,9 +111,11 @@ export function VideoEditTimelinePlayhead({ instance, pixels }: { instance: Vide
 }
 /** 播放头在标尺上的“头”（Premiere 的蓝色指示器）：标尺压在轨道之上，竖线画不进标尺，头放在标尺里，下端接竖线。 */
 const PLAYHEAD_HEAD_SHAPE = { clipPath: 'polygon(0 0, 100% 0, 100% 55%, 50% 100%, 0 55%)' }
+/** 头宽 12（w-3）。轨道里的竖线从帧位置起向右 1 像素，头的中线要对准这 1 像素的中间，不能对准帧位置，否则高分屏上两段竖线错开一个物理像素，看着像断开。 */
+const PLAYHEAD_HEAD_OFFSET = 6 - 0.5
 export function VideoEditTimelinePlayheadHead({ instance, pixels }: { instance: VideoEditInstance; pixels: number }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
-  return <div aria-hidden="true" data-video-edit-playhead-head className="pointer-events-none absolute bottom-0 top-0 z-raised -ml-1.5 flex w-3 flex-col items-center" style={{ left: instance.frame * pixels }}>
+  return <div aria-hidden="true" data-video-edit-playhead-head className="pointer-events-none absolute bottom-0 top-0 z-raised flex w-3 flex-col items-center" style={{ left: instance.frame * pixels - PLAYHEAD_HEAD_OFFSET }}>
     <div data-video-edit-playhead-grip className="pointer-events-auto mt-auto h-3 w-3 cursor-ew-resize bg-accent-ring" style={PLAYHEAD_HEAD_SHAPE} />
     <div className="h-1 w-px bg-accent-ring" />
   </div>
