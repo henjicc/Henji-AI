@@ -53,7 +53,8 @@ export interface AudioEditSubtitleCue { id: string; startFrame: number; endFrame
 export function buildAudioEditSubtitleCues(blocks: readonly AudioEditTranscriptBlock[], spans: readonly AudioEditTimelineSpan[], sampleRate: number): AudioEditSubtitleCue[] {
   const cues = buildAudioEditSubtitleGroups(blocks, sampleRate).flatMap((group): AudioEditSubtitleCue[] => {
     const words = group.blocks.flatMap((block): AudioEditSubtitleWord[] => {
-      if (isAudioEditSubtitleFiller(block.text)) return []
+      // 校对时改空的词块、单独的叹词不上字幕
+      if (!block.text.trim() || isAudioEditSubtitleFiller(block.text)) return []
       const range = outputRange(block.startFrame, block.endFrame, spans, sampleRate)
       return range ? [{ blockId: block.id, text: block.text.trim(), startFrame: range.start, endFrame: Math.max(range.start + 1, range.end) }] : []
     })
