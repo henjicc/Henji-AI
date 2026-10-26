@@ -26,6 +26,8 @@ export interface AudioSpectralEditorProps {
   waveform: WaveformState
   spectrogram?: SpectralTileSet
   spectrogramStatus: 'idle' | 'loading' | 'ready' | 'error'
+  /** 加载中且宿主正在整段计算频谱（否则只是读已算好的）。 */
+  spectrogramComputing?: boolean
   spectrogramError?: string
   onRetrySpectrogram?: () => void
   view: WaveformViewport
@@ -477,7 +479,7 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
 
   const spectrumBody = (range: WaveformViewport) => props.spectrogramStatus === 'error'
     ? <UiError message={props.spectrogramError ?? '频谱图没有生成出来。'} {...(props.onRetrySpectrogram ? { onRetry: props.onRetrySpectrogram } : {})} />
-    : props.spectrogramStatus === 'loading' && !props.spectrogram ? <UiLoading message="正在生成频谱图…" />
+    : props.spectrogramStatus === 'loading' && !props.spectrogram ? <UiLoading message={props.spectrogramComputing ? '正在生成频谱图…' : '正在读取频谱图…'} />
       : <SpectrogramView {...(props.spectrogram ? { tiles: props.spectrogram } : {})} lanes={lanes} startFrame={range.start} endFrame={range.end} minHz={frequency.minHz} maxHz={frequency.maxHz} scale={frequency.scale} label="频谱图" />
   const waveBody = (range: WaveformViewport) => <WaveformView waveform={props.waveform} startSeconds={range.start / sampleRate} endSeconds={range.end / sampleRate} lanes={lanes} gain={amplitudeZoom * displayGain} palette={SCOPE_WAVE_PALETTE} layers="single" label="音频波形" />
   // 原素材在插入点之后向右移动；仅绘制视口内的两段，复用既有波形与频谱数据。

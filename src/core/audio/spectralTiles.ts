@@ -49,6 +49,11 @@ export class SpectralTileStore implements SpectralTileSet {
       this.entries.delete(oldest); this.bytes -= tileBytes(value)
     }
   }
+  get size(): number { return this.entries.size }
+  /** 只留完整的块：交给新的调度器接着用时，后台还没算完的部分块得重新取。 */
+  dropIncomplete(): void {
+    for (const [key, value] of this.entries) if (!value.complete) { this.entries.delete(key); this.bytes -= tileBytes(value) }
+  }
   /** 触碰一次，表示刚被用到（LRU 顺序后移）。 */
   touch(level: number, tile: number): void {
     const key = spectralTileKey(level, tile), value = this.entries.get(key)

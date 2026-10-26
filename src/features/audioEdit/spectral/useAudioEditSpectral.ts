@@ -15,7 +15,8 @@ export interface SpectralTileClient {
   subscribe(listener: (progress: AudioEditSpectralProgress) => void): () => void
 }
 export interface SpectralNeed { level: number; tile: number }
-export interface AudioEditSpectralState { tiles?: SpectralTileSet; status: 'idle' | 'loading' | 'ready' | 'error'; error?: string; retry: () => void }
+/** computing：加载中且宿主正在整段计算（第一次打开或声音改过）；只是从磁盘读已算好的块时不置。 */
+export interface AudioEditSpectralState { tiles?: SpectralTileSet; status: 'idle' | 'loading' | 'ready' | 'error'; computing?: boolean; error?: string; retry: () => void }
 
 /** 整段放进一块的最细落盘层：总览永远有图可垫。 */
 export function spectralOverviewLevel(durationFrames: number): number {
@@ -75,16 +76,17 @@ export class SpectralTileScheduler {
     this.pump()
   }
 
-  /** 后台整文件计算推进后，把落后于进度的部分块标为过期，重新取。 */
-  progress(progress: AudioEditSpectralProgress): void {
+  /** 后台整文件计算推进后，把落后于进度的部分块标为过期，重新取。返回这条进度是不是本调度器的。 */
+  progress(progress: AudioEditSpectralProgress): boolean {
     // 只认不早于声音内容变化时的版本：之后只改了删除 / 静音（声音没变）时宿主回的新版本照常用
-    if (progress.projectId !== this.target.projectId || progress.mode !== this.target.mode || (progress.mode === 'edited' && progress.revision < this.target.revision)) return
+    if (progress.projectId !== this.target.projectId || progress.mode !== this.target.mode || (progress.mode === 'edited' && progress.revision < this.target.revision)) return false
     this.latest = progress
     for (const need of this.needs) {
       const tile = this.store.get(need.level, need.tile)
       if (tile) this.markIfBehind(tile)
     }
     this.pump()
+    return true
   }
 
   private markIfBehind(tile: AudioEditSpectralTile): void {
@@ -150,28 +152,58 @@ export class SpectralTileScheduler {
   }
 }
 
-/** revision 是声音内容最后一次改变（修复、区间音量、效果）时的作品版本；只改删除、静音时不变，频谱不重取。 */
-export function useAudioEditSpectral(client: SpectralTileClient, projectId: string, view: WaveformViewport, columns: number, duration: number, mode: 'source' | 'edited', revision: number, sourceKey = ''): AudioEditSpectralState {
+/**
+ * 最近关掉的那个频谱编辑器读出的块：同一作品、同一份声音重新打开时直接接着用，不再逐块从主进程读一遍、
+ * 也不先显示“正在读取”。只留一份（与打开时同一个内存上限）；没算完的部分块不留。
+ */
+let retainedTiles: { key: string; store: SpectralTileStore } | null = null
+function reusableTiles(key: string): SpectralTileStore | undefined {
+  const store = retainedTiles?.key === key ? retainedTiles.store : undefined
+  store?.dropIncomplete()
+  return store?.size ? store : undefined
+}
+
+/**
+ * revision 是声音内容最后一次改变（修复、区间音量、效果）时的作品版本；只改删除、静音时不变，频谱不重取。
+ * contentKey 是剪后声音的内容键（与宿主处理配方同源）：给了才能在重新打开时认出“声音没变”，沿用关掉前读出的块。
+ */
+export function useAudioEditSpectral(client: SpectralTileClient, projectId: string, view: WaveformViewport, columns: number, duration: number, mode: 'source' | 'edited', revision: number, sourceKey = '', contentKey = ''): AudioEditSpectralState {
   const [attempt, setAttempt] = useState(0)
   const [version, setVersion] = useState(0)
   const [error, setError] = useState<string | undefined>()
+  const [computing, setComputing] = useState(false)
   // 原始模式不随剪切变化，但录音拼接、重新定位或撤销更换素材时必须丢掉旧块。
   const effectiveRevision = mode === 'edited' ? revision : 0
   const target = useMemo(() => ({ projectId, mode, revision: effectiveRevision }), [projectId, mode, effectiveRevision])
+  const retainKey = JSON.stringify([projectId, mode, sourceKey, mode === 'edited' ? contentKey || `revision:${effectiveRevision}` : ''])
   const shown = useRef<{ store: SpectralTileStore; projectId: string; mode: 'source' | 'edited'; sourceKey: string } | null>(null)
   // 调度器随挂载创建、随卸载销毁：开发模式会挂载两次，不能把已销毁的实例留给第二次挂载。
-  const [binding, setBinding] = useState<{ scheduler: SpectralTileScheduler; sourceKey: string } | null>(null)
+  const [binding, setBinding] = useState<{ scheduler: SpectralTileScheduler; sourceKey: string; retainKey: string } | null>(null)
+  // 重新打开时第一帧（调度器还没接上）就画留下的块，不闪一下“正在读取”。
+  if (!binding && !shown.current && retainedTiles?.key === retainKey) shown.current = { store: retainedTiles.store, projectId, mode, sourceKey }
   const scheduler = binding?.sourceKey === sourceKey ? binding.scheduler : null
   useEffect(() => {
     let frame = 0
-    const next = new SpectralTileScheduler(client, new SpectralTileStore(), target,
+    // 这次打开的第一个调度器才接着用留下的块（开发模式重复挂载时 binding 仍为空，同样接上）；
+    // 之后换声音、换素材按上面的规则丢弃，也不再替关掉的作品留着块占内存。
+    const reused = binding ? undefined : reusableTiles(retainKey)
+    if (binding) retainedTiles = null
+    const next = new SpectralTileScheduler(client, reused ?? new SpectralTileStore(), target,
       () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; setVersion(value => value + 1) }) },
       message => setError(message))
-    const unsubscribe = client.subscribe(progress => next.progress(progress))
+    const unsubscribe = client.subscribe(progress => { if (next.progress(progress)) setComputing(!progress.done) })
     setError(undefined)
-    setBinding({ scheduler: next, sourceKey })
+    setComputing(false)
+    setBinding({ scheduler: next, sourceKey, retainKey })
     return () => { unsubscribe(); next.dispose(); if (frame) cancelAnimationFrame(frame) }
-  }, [client, target, attempt, sourceKey])
+  }, [client, target, attempt, sourceKey]) // eslint-disable-line react-hooks/exhaustive-deps -- binding、retainKey 只在新建调度器时取用
+  // 只在编辑器卸载（关掉作品）时留下当前的块；同一次打开里换声音、换素材仍按上面的规则丢弃。
+  const latest = useRef(binding)
+  latest.current = binding
+  useEffect(() => () => {
+    const last = latest.current
+    if (last && last.scheduler.store.version > 0) retainedTiles = { key: last.retainKey, store: last.scheduler.store }
+  }, [])
 
   useEffect(() => {
     scheduler?.setNeeds(spectralNeeds(view, columns, duration))
@@ -191,6 +223,7 @@ export function useAudioEditSpectral(client: SpectralTileClient, projectId: stri
   return {
     ...(tiles ? { tiles } : {}),
     status: tiles ? 'ready' : error ? 'error' : duration > 0 ? 'loading' : 'idle',
+    ...(computing && !tiles && !error ? { computing: true } : {}),
     ...(error && !tiles ? { error } : {}),
     retry: () => { setError(undefined); setAttempt(value => value + 1) },
   }

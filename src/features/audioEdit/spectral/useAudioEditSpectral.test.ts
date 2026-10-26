@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { SPECTRAL_HIGH_BINS, SPECTRAL_TILE_COLUMNS, spectralLowBins, type AudioEditSpectralTile, type AudioEditSpectralTileRequest } from '@/core/audioEdit/spectralPyramid'
+import { SPECTRAL_HIGH_BINS, SPECTRAL_TILE_COLUMNS, spectralLowBins, type AudioEditSpectralProgress, type AudioEditSpectralTile, type AudioEditSpectralTileRequest } from '@/core/audioEdit/spectralPyramid'
 import { SpectralTileStore } from '@/core/audio/spectralTiles'
 import { StrictMode, createElement, type ReactNode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
@@ -136,6 +136,46 @@ describe('频谱取块钩子', () => {
     renderHook(() => useAudioEditSpectral(client, 'p', { start: 0, end: SR * 10 }, 1000, DURATION, 'source', 0), { wrapper })
     // 第一次挂载的请求会在卸载时取消；第二次挂载必须重新发出仍然有效的请求。
     expect(pending.filter(item => !cancelled.includes(item.request.requestId)).length).toBeGreaterThan(0)
+  })
+
+  it('关掉再打开同一份声音：直接沿用关掉前读出的块，不再请求；声音变了就重新取', async () => {
+    const { client, pending } = fakeClient()
+    const view = { start: 0, end: SR * 10 }
+    const open = (contentKey: string) => renderHook(() => useAudioEditSpectral(client, 'reopen', view, 1000, DURATION, 'edited', 7, 'a.wav', contentKey))
+    const first = open('sound-1')
+    await act(async () => { for (const item of [...pending]) item.resolve(tileFor(item.request, { revision: 7 })); await flush() })
+    await waitFor(() => expect(first.result.current.status).toBe('ready'))
+    first.unmount()
+    const asked = pending.length
+    const again = open('sound-1')
+    expect(again.result.current.status).toBe('ready')
+    expect(pending).toHaveLength(asked)
+    again.unmount()
+    const changed = open('sound-2')
+    expect(changed.result.current.tiles).toBeUndefined()
+    expect(pending.length).toBeGreaterThan(asked)
+    changed.unmount()
+    // 开发模式重复挂载也接得上
+    const wrapper = ({ children }: { children: ReactNode }) => createElement(StrictMode, null, children)
+    const strict = renderHook(() => useAudioEditSpectral(client, 'reopen', view, 1000, DURATION, 'edited', 7, 'a.wav', 'sound-1'), { wrapper })
+    expect(strict.result.current.status).toBe('ready')
+    strict.unmount()
+  })
+
+  it('加载中只有宿主报来整段计算进度时才算“正在生成”', async () => {
+    const { client } = fakeClient()
+    let emit: (progress: AudioEditSpectralProgress) => void = () => {}
+    client.subscribe = listener => { emit = listener; return () => {} }
+    const hook = renderHook(() => useAudioEditSpectral(client, 'computing', { start: 0, end: SR * 10 }, 1000, DURATION, 'source', 0))
+    expect(hook.result.current).toMatchObject({ status: 'loading' })
+    expect(hook.result.current.computing).toBeUndefined()
+    act(() => emit({ projectId: 'computing', mode: 'source', revision: 0, coveredFrames: SR, durationFrames: DURATION, done: false }))
+    expect(hook.result.current.computing).toBe(true)
+    act(() => emit({ projectId: 'other', mode: 'source', revision: 0, coveredFrames: DURATION, durationFrames: DURATION, done: true }))
+    expect(hook.result.current.computing).toBe(true)
+    act(() => emit({ projectId: 'computing', mode: 'source', revision: 0, coveredFrames: DURATION, durationFrames: DURATION, done: true }))
+    expect(hook.result.current.computing).toBeUndefined()
+    hook.unmount()
   })
 
   it('原始模式下作品版本变化不重新请求；剪后模式换版本才换一套块', () => {

@@ -110,6 +110,17 @@ const playheadSource: AudioPlayheadSource = {
   subscribe: (listener) => useAudioEditPlaybackStore.subscribe((state, previous) => { if (state.sourceFrame !== previous.sourceFrame) listener(state.sourceFrame) }),
 }
 
+/**
+ * 各作品最近一次读出的“已编辑”音频：声音没变时重新打开直接沿用（它的波形还在内存里），
+ * 不先闪一下原素材的波形再跳成处理后的。仍会照常向主进程确认一次。
+ */
+const lastEditedSources = new Map<string, { soundKey: string; path: string }>()
+function rememberEditedSource(projectId: string, soundKey: string, path: string): void {
+  lastEditedSources.delete(projectId)
+  lastEditedSources.set(projectId, { soundKey, path })
+  for (const key of lastEditedSources.keys()) { if (lastEditedSources.size <= 8) break; lastEditedSources.delete(key) }
+}
+
 /** 编辑器面板：导航条、刻度、波形与频谱，底部是走带。 */
 export function AudioWaveWorkspace() {
   const workspace = useAudioEditWorkspace()
@@ -143,11 +154,18 @@ export function AudioWaveWorkspace() {
   const soundKey = React.useMemo(() => JSON.stringify(recipe), [recipe])
   // 有修复或区间音量时，波形改读“已编辑、未删除”的音频（时间轴同原素材），删除与静音仍用叠加标记表示。
   // 声音变了才重新生成；新的出来之前继续显示上一份，不先退回原素材再跳回来。
-  const [editedPath, setEditedPath] = React.useState<string | null>(null)
+  const [editedPath, setEditedPath] = React.useState<string | null>(() => {
+    const last = lastEditedSources.get(project.id)
+    return edited && last?.soundKey === soundKey ? last.path : null
+  })
   React.useEffect(() => {
     if (!edited) { setEditedPath(null); return }
     let cancelled = false
-    const timer = window.setTimeout(() => void getPlatform().audioEdit.editedSource({ projectId: project.id }).then(result => { if (!cancelled) setEditedPath(result.audioPath) }, () => undefined), 150)
+    const timer = window.setTimeout(() => void getPlatform().audioEdit.editedSource({ projectId: project.id }).then(result => {
+      if (cancelled) return
+      setEditedPath(result.audioPath)
+      rememberEditedSource(project.id, soundKey, result.audioPath)
+    }, () => undefined), 150)
     return () => { cancelled = true; window.clearTimeout(timer) }
   }, [edited, project.id, project.source.audioPath, soundKey])
   const channels: 1 | 2 = project.source.channels > 1 ? 2 : 1
@@ -182,7 +200,7 @@ export function AudioWaveWorkspace() {
   const audioContentKey = soundKey
   const audioRevision = React.useRef({ key: audioContentKey, revision: project.revision })
   if (audioRevision.current.key !== audioContentKey) audioRevision.current = { key: audioContentKey, revision: project.revision }
-  const spectrogram = useAudioEditSpectral(audioEditSpectralClient, project.id, spectralView, columns, duration, edited ? 'edited' : 'source', audioRevision.current.revision, JSON.stringify([project.source.audioPath, project.source.identity]))
+  const spectrogram = useAudioEditSpectral(audioEditSpectralClient, project.id, spectralView, columns, duration, edited ? 'edited' : 'source', audioRevision.current.revision, JSON.stringify([project.source.audioPath, project.source.identity]), soundKey)
   // 标记以剪后时间线为准：文字稿删掉的词和波形上删除的区间都是“删除”，相邻的合并成一段；静音按剪后片段的静音标记；停顿预览是“待处理”。
   const spans = React.useMemo(() => buildProjectAudioEditTimeline(project), [project])
   const pending = workspace.silencePreview.ranges
@@ -263,7 +281,7 @@ export function AudioWaveWorkspace() {
     <div className="min-h-0 flex-1">
       <AudioSpectralEditor sampleRate={rate} durationFrames={recording ? liveDuration : duration || rate * 10} empty={!duration}
         {...(recording ? { insertion, recordingOverlay: (mode, frequency) => <AudioCapturePreview mode={mode} frequency={frequency} view={editor.view} rate={rate} /> } : {})} waveform={waveform}
-        {...(spectrogram.tiles ? { spectrogram: spectrogram.tiles } : {})} spectrogramStatus={spectrogram.status} {...(spectrogram.error ? { spectrogramError: spectrogram.error } : {})} onRetrySpectrogram={spectrogram.retry}
+        {...(spectrogram.tiles ? { spectrogram: spectrogram.tiles } : {})} spectrogramStatus={spectrogram.status} {...(spectrogram.computing ? { spectrogramComputing: true } : {})} {...(spectrogram.error ? { spectrogramError: spectrogram.error } : {})} onRetrySpectrogram={spectrogram.retry}
         view={editor.view} onViewChange={editor.setView} display={editor.display} tool={recording ? 'hand' : editor.tool} brushPixels={editor.brushPixels}
         playhead={playheadSource} onSeek={frame => { if (!recording) onSeek(frame) }} displayGain={autoGain ? workspace.previewGain : 1}
         onScrubStart={frame => { if (!recording) audioEditScrub(project.id)?.start(frame) }}
