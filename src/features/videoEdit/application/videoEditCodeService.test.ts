@@ -535,6 +535,32 @@ it('MCP只追加检查后的不可变版本，显式版本/参数/曲线事务�
   } finally { app.dispose() }
 })
 
+it('同一事务先换源码版本再改时长：时长按新版本声明的长度校验', async () => {
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const app = createApplicationHarness()
+  try {
+    const [item] = await createVideoEditCodeItems(id, [{ source }]); appendVideoEditItems(id, [item], owner.activeSequenceId)
+    const definition = owner.document.codeMaterials![0]; const clip = getActiveVideoEditSequence(owner).clips[0]
+    const ref = { kind: 'video_edit.clip', id: `${id}:${clip.id}` }; const parent = { kind: 'video_edit.document', id }
+    const created = await app.call('change_application_entities', { summary: '更长的新源码版本', changes: [{ kind: 'create_items', entityType: 'video_edit.code_version', parent, items: [{ properties: { 'video_edit.code_version.source': source.replace('durationSeconds:4', 'durationSeconds:10'), 'video_edit.code_version.definition_id': definition.id } }] }] }, (await app.read(parent)).revisions as Record<string, number>)
+    expect(created, JSON.stringify(created)).toMatchObject({ ok: true })
+    const version = owner.document.codeMaterials![0].versions[1].id
+    const longer = clip.duration * 2
+    const changed = await app.call('change_application_entities', { summary: '换版本并拉长', changes: [
+      { kind: 'set_properties', entityType: ref.kind, target: ref, properties: { 'video_edit.clip.code_version_id': version } },
+      { kind: 'set_properties', entityType: ref.kind, target: ref, properties: { 'video_edit.clip.duration': longer } },
+    ] }, (await app.read(ref)).revisions as Record<string, number>)
+    expect(changed, JSON.stringify(changed)).toMatchObject({ ok: true })
+    expect(getActiveVideoEditSequence(owner).clips[0]).toMatchObject({ duration: longer, code: { versionId: version } })
+    // 新建片段时同时指定版本与时长：时长上限同样按指定版本，而不是素材项停留的旧版本。
+    const sequenceRef = { kind: 'video_edit.sequence', id: `${id}:${owner.activeSequenceId}` }
+    const start = clip.start + longer + 10
+    const placed = await app.call('change_application_entities', { summary: '用新版本新建更长片段', changes: [{ kind: 'create_items', entityType: 'video_edit.clip', parent: sequenceRef, items: [{ properties: { 'video_edit.clip.item_id': clip.itemId, 'video_edit.clip.kind': 'code', 'video_edit.clip.name': clip.name, 'video_edit.clip.start': start, 'video_edit.clip.track': clip.track, 'video_edit.clip.duration': longer, 'video_edit.clip.code_version_id': version } }] }] }, (await app.read(sequenceRef)).revisions as Record<string, number>)
+    expect(placed, JSON.stringify(placed)).toMatchObject({ ok: true })
+    expect(getActiveVideoEditSequence(owner).clips.find(value => value.start === start)).toMatchObject({ duration: longer, code: { versionId: version } })
+    expect(owner.document.items.find(value => value.id === clip.itemId)!.code!.versionId).toBe(clip.code!.versionId)
+  } finally { app.dispose() }
+})
+
 it('图片参数引用原媒体，经同一候选检查后写入；失败无半导入，MCP回读与手动一致', async () => {
   const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const app = createApplicationHarness()
   const imageSource = "export default {name:\"透明图片\",kind:\"generator\",mode:\"static\",width:3840,height:2160,durationSeconds:4,params:[{key:\"logo\",type:\"image\",title:\"徽标\",default:null,animatable:false}],draw(ctx,t,p){ctx.fillRect(100+t*20,100,500,500)}}"

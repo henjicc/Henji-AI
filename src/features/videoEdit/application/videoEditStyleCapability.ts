@@ -1,4 +1,5 @@
 import { applyVideoEditTemplateCapability, bindVideoEditStyleCapability, createVideoEditTemplateCapability, detachVideoEditTemplateInstanceCapability, exportVideoEditStylePackageCapability, importVideoEditStylePackageCapability, promoteVideoEditTemplateCapability, renderVideoEditStyleCapability, updateVideoEditTemplateCapability } from '@/core/application-control/domains/videoEdit/videoEditStyleCapabilities'
+import { notExecutedFailure } from '@/core/application-control/execution/writeExecution'
 import { requireVideoEditInstance, saveVideoEdit, verifyVideoEditSaved } from './videoEditService'
 import { splitVideoEditRef } from './videoEditReflection'
 import { renderVideoEditStyle } from './videoEditStyleRender'
@@ -7,10 +8,16 @@ import { videoEditStyleLibrary } from './videoEditStyleLibrary'
 import { bindVideoEditStyle } from './videoEditStyles'
 import { applyVideoEditTemplate, createVideoEditTemplate, detachVideoEditTemplateInstances, newerLibraryTemplateVersion, promoteVideoEditTemplate, updateVideoEditTemplate, videoEditTemplateInstances } from './videoEditTemplates'
 
+/** 引用解析与核对只读不写：失败时明确告诉执行层这次没有改动任何东西，修正引用后直接重试。 */
+function resolved<T>(read: () => T): T {
+  try { return read() } catch (error) { throw notExecutedFailure(error) }
+}
 function child(projectId: string, ref: { kind: string; id: string }): string {
-  const value = splitVideoEditRef(ref)
-  if (value.projectId !== projectId || !value.childId) throw new Error(`${ref.kind} 必须属于目标剪辑，请使用目录返回的完整引用。`)
-  return value.childId
+  return resolved(() => {
+    const value = splitVideoEditRef(ref)
+    if (value.projectId !== projectId || !value.childId) throw new Error(`${ref.kind} 必须属于目标剪辑，请使用目录返回的完整引用。`)
+    return value.childId
+  })
 }
 async function saved(projectId: string): Promise<boolean> {
   const owner = requireVideoEditInstance(projectId); await saveVideoEdit(projectId)
@@ -56,9 +63,13 @@ export async function handleVideoEditStyleCapability(id: string, raw: unknown, s
     case applyVideoEditTemplateCapability.id: {
       const input = applyVideoEditTemplateCapability.inputSchema.parse(raw); const projectId = input.documentRef.id
       const sequenceId = child(projectId, input.sequenceRef)
-      const sequence = requireVideoEditInstance(projectId).document.sequences.find(value => value.id === sequenceId)!
-      const track = input.trackRef ? sequence.tracks.find(value => value.id === child(projectId, input.trackRef!))?.index : undefined
-      if (input.trackRef && track === undefined) throw new Error('trackRef 必须属于目标序列。')
+      const track = resolved(() => {
+        const sequence = requireVideoEditInstance(projectId).document.sequences.find(value => value.id === sequenceId)
+        if (!sequence) throw new Error('目标剪辑里没有这个序列，请重新列出 video_edit.sequence。')
+        const index = input.trackRef ? sequence.tracks.find(value => value.id === child(projectId, input.trackRef!))?.index : undefined
+        if (input.trackRef && index === undefined) throw new Error('trackRef 必须属于目标序列，请重新列出 video_edit.track。')
+        return index
+      })
       const scope = input.templateRef.kind === 'video_edit.project_template' ? 'project' as const : 'library' as const
       const templateId = scope === 'project' ? child(projectId, input.templateRef) : input.templateRef.id
       const result = await applyVideoEditTemplate(projectId, sequenceId, scope, templateId, { placement: { frame: input.frame, ...(track !== undefined ? { track, mode: 'overwrite' as const } : { mode: 'top' as const }) }, parameters: input.parameters, texts: input.texts, durationSeconds: input.durationSeconds }, signal)
@@ -78,13 +89,13 @@ export async function handleVideoEditStyleCapability(id: string, raw: unknown, s
         message: `已登记模板“${result.template.name}”${result.library ? '，并存进风格库' : ''}；之后同类元素用 apply_video_edit_template 直接换内容。` }
     }
     case promoteVideoEditTemplateCapability.id: {
-      const input = promoteVideoEditTemplateCapability.inputSchema.parse(raw); const { projectId, childId } = splitVideoEditRef(input.templateRef)
+      const input = promoteVideoEditTemplateCapability.inputSchema.parse(raw); const { projectId, childId } = resolved(() => splitVideoEditRef(input.templateRef))
       const result = await promoteVideoEditTemplate(projectId, childId, input.mode)
       const ok = await saved(projectId) && Boolean(videoEditStyleLibrary.findTemplate(result.library.id))
       return { resultRef: { kind: 'video_edit.template', id: result.library.id }, templateRef: input.templateRef, version: result.library.version, verification: { verified: ok, condition: '已从风格库回读库模板并保存工程来源。' }, message: `“${result.library.name}”已存进风格库（v${result.library.version}），别的工程也能用。` }
     }
     case updateVideoEditTemplateCapability.id: {
-      const input = updateVideoEditTemplateCapability.inputSchema.parse(raw); const { projectId, childId } = splitVideoEditRef(input.templateRef)
+      const input = updateVideoEditTemplateCapability.inputSchema.parse(raw); const { projectId, childId } = resolved(() => splitVideoEditRef(input.templateRef))
       const source = input.content.kind === 'clips' ? { kind: 'clips' as const, sequenceId: child(projectId, input.content.sequenceRef), clipIds: input.content.clipRefs.map(ref => child(projectId, ref)) } : input.content.kind === 'version' ? { kind: 'version' as const, versionId: input.content.versionId } : { kind: 'library' as const }
       const result = await updateVideoEditTemplate(projectId, childId, source, signal)
       const ok = await saved(projectId)

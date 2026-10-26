@@ -15,7 +15,8 @@ import { videoEditTemplateContentHash, videoEditStyleIdSchema, type VideoEditSty
 import { videoEditTemplateSchema, type VideoEditTemplate } from '@/core/videoEdit/styles/templateSchemas'
 import type { CodeMaterialVersion } from '@/core/videoEdit/codeMaterialPersistence'
 import { videoEditFps } from '@/core/videoEdit/time'
-import { editVideoProject, requireVideoEditInstance, setVideoEditView, type VideoEditInstance } from './videoEditService'
+import { notExecutedFailure } from '@/core/application-control/execution/writeExecution'
+import { editVideoProject, listVideoEditInstances, requireVideoEditInstance, setVideoEditView, type VideoEditInstance } from './videoEditService'
 import { withVideoEditCodeMetadata, readVideoEditCodeMetadata } from './videoEditCodeState'
 import { createVideoEditCodeVersions, createVideoEditPlacedCodeItems } from './videoEditCodeService'
 import { videoEditStyleLibrary } from './videoEditStyleLibrary'
@@ -35,6 +36,22 @@ export function writeVideoEditTemplateDrag(transfer: DataTransfer, scope: VideoE
   transfer.setData(VIDEO_EDIT_TEMPLATE_DRAG_MIME, JSON.stringify({ kind: 'template', scope, templateId })); transfer.effectAllowed = 'copy'
 }
 const newId = (): string => crypto.randomUUID()
+
+/**
+ * 模板操作的执行事实：剪辑内容还没变、也没开始写风格库或代码文件时的失败（片段、风格、模板找不到，类型不对，轨道锁定……）
+ * 标成未执行，调用方修正后直接重试，不把剪辑锁进“结果未知”；剪辑内容已变或已开始写外部存储时按原样抛出，交执行层核对。
+ * 剪辑内容只经 editVideoProject 原子提交，内容版本没变就是零修改；风格库与代码文件不在内容版本里，写之前先调 external()。
+ */
+async function templateOperation<T>(projectId: string, work: (external: () => void) => Promise<T>): Promise<T> {
+  let owner: VideoEditInstance | undefined; let contentVersion = 0; let external = false
+  try {
+    owner = requireVideoEditInstance(projectId); contentVersion = owner.contentVersion
+    return await work(() => { external = true })
+  } catch (error) {
+    const unchanged = !external && (!owner || listVideoEditInstances().includes(owner) && owner.contentVersion === contentVersion)
+    throw unchanged ? notExecutedFailure(error) : error
+  }
+}
 
 export function requireProjectTemplate(document: Pick<VideoEditDocument, 'templates'>, id: string): VideoEditProjectTemplate {
   const template = document.templates?.find(value => value.id === id)
@@ -113,7 +130,8 @@ function codeClip(owner: VideoEditInstance, document: VideoEditDocument, sequenc
   const itemId = existing?.id ?? item!.id
   const scratch = { ...document, items: item ? [...document.items, item] : document.items }
   const video = sequence.tracks.find(value => value.kind === 'video' && !value.locked)?.index
-  const clip = makeVideoEditItemClip(scratch, itemId, sequence.id, { frame: 0, ...(video !== undefined ? { track: video } : {}) }, read)
+  // 已有素材项可能停在旧版本：默认时长按模板当前使用的版本计算。
+  const clip = makeVideoEditItemClip(scratch, itemId, sequence.id, { frame: 0, ...(video !== undefined ? { track: video } : {}) }, code => read({ ...code, versionId: version }))
   const program = read({ definitionId, versionId: version, parameters: {} })
   clip.code = { ...clip.code!, versionId: version, parameters: validateCodeMaterialParameters(program, { ...(existing?.code?.versionId === version ? existing.code.parameters : {}), ...options.parameters }) }
   if (options.durationSeconds) clip.duration = Math.max(1, Math.round(options.durationSeconds * videoEditFps(sequence.frameRate)))
@@ -124,7 +142,7 @@ export interface VideoEditTemplateApplyOptions { placement?: VideoEditDropPlacem
 /** 应用模板：工程模板直接加实例（联动）；库模板第一次用进这个工程时先复制登记，之后复用同一份。整组一步撤销。 */
 export async function applyVideoEditTemplate(projectId: string, sequenceId: string, scope: VideoEditTemplateScope, templateId: string, options: VideoEditTemplateApplyOptions = {}, signal?: AbortSignal): Promise<{ template: VideoEditProjectTemplate; clipIds: string[]; copied: boolean }> {
   logger.info('template.apply.start', '应用模板', { context: { projectId, sequenceId, scope } })
-  try {
+  try { return await templateOperation(projectId, async external => {
     const owner = requireVideoEditInstance(projectId)
     let template = scope === 'project' ? requireProjectTemplate(owner.document, templateId) : owner.document.templates?.find(value => value.origin?.id === templateId)
     let copied = false; let clipIds: string[] = []
@@ -143,6 +161,7 @@ export async function applyVideoEditTemplate(projectId: string, sequenceId: stri
       } else {
         const body = library.body; let registered: VideoEditProjectTemplate | undefined
         const placement = { frame: owner.activeSequenceId === sequenceId ? owner.frame : 0, ...options.placement }
+        external()
         await createVideoEditPlacedCodeItems(projectId, [{ files: body.code.files, entry: body.code.entry, name: library.name }], (document, itemIds) => {
           const item = document.items.find(value => value.id === itemIds[0])!
           registered = videoEditProjectTemplateSchema.parse({ ...meta, contentHash: '', body: { kind: 'code', definitionId: item.code!.definitionId } })
@@ -166,7 +185,7 @@ export async function applyVideoEditTemplate(projectId: string, sequenceId: stri
     if (owner.activeSequenceId === sequenceId) setVideoEditView(projectId, { selection: clipIds[0] ?? null })
     logger.info('template.apply.completed', '模板已加到时间线', { context: { projectId, sequenceId, copied, count: clipIds.length } })
     return { template, clipIds, copied }
-  } catch (error) { logger.error('template.apply.failed', '模板应用失败', { error, context: { projectId, sequenceId } }); throw error }
+  }) } catch (error) { logger.error('template.apply.failed', '模板应用失败', { error, context: { projectId, sequenceId } }); throw error }
 }
 
 export interface VideoEditTemplateCreateOptions { name: string; description?: string; styleId?: string | null; global?: boolean }
@@ -174,40 +193,50 @@ export interface VideoEditTemplateCreateOptions { name: string; description?: st
  * 把实战里做好的元素固化成模板：一个代码片段登记它的代码定义（源码不另存一份），一组文字图形片段登记成原生模板，
  * 原片段即成为第一个实例。global 时同时存进风格库，以后别的工程也能用。
  */
-export async function createVideoEditTemplate(projectId: string, sequenceId: string, clipIds: readonly string[], options: VideoEditTemplateCreateOptions): Promise<{ template: VideoEditProjectTemplate; library?: VideoEditTemplate }> {
-  const owner = requireVideoEditInstance(projectId); const document = owner.document
-  const sequence = document.sequences.find(value => value.id === sequenceId)
-  const clips = sequence?.clips.filter(clip => clipIds.includes(clip.id)) ?? []
-  if (!sequence || !clips.length || clips.length !== new Set(clipIds).size) throw new Error('请选择原序列里要登记为模板的片段。')
-  const code = clips.filter(clip => clip.code)
-  if (code.length && clips.length > 1) throw new Error('代码模板一次只登记一个代码片段；文字与图形可以多个一起登记。')
-  const existing = clips.map(clip => videoEditClipTemplate(document, clip)).find(Boolean)
-  if (existing) throw new Error(`所选片段已经是模板“${existing.name}”的实例；要改它请用 update_video_edit_template，或先分离。`)
-  const style = styleRef(document, options.styleId === undefined ? sequence.styleId : options.styleId)
-  const meta = { id: newId(), name: options.name, description: options.description ?? '', version: 1, updatedAt: new Date().toISOString(), style, origin: null }
-  let template: VideoEditProjectTemplate
-  if (code.length) {
-    const definitionId = code[0].code!.definitionId
-    template = videoEditProjectTemplateSchema.parse({ ...meta, contentHash: await codeVersionHash(defaultVersion(document, definitionId)), body: { kind: 'code', definitionId } })
-    editVideoProject(projectId, current => ({ ...current, templates: [...(current.templates ?? []), template] }))
-  } else {
-    const content = captureNativeTemplateContent(sequence, clips)
-    template = videoEditProjectTemplateSchema.parse({ ...meta, contentHash: await videoEditTemplateContentHash({ kind: 'native', content }), body: { kind: 'native', content } })
-    editVideoProject(projectId, current => ({ ...current, templates: [...(current.templates ?? []), template], sequences: current.sequences.map(value => value.id === sequenceId ? { ...value, clips: value.clips.map(clip => clipIds.includes(clip.id) ? { ...clip, templateId: template.id } : clip) } : value) }))
-  }
-  logger.info('template.create.completed', '已登记工程模板', { context: { projectId, kind: template.body.kind } })
-  if (!options.global) return { template }
-  const promoted = await promoteVideoEditTemplate(projectId, template.id, 'new')
-  return { template: promoted.template, library: promoted.library }
+export function createVideoEditTemplate(projectId: string, sequenceId: string, clipIds: readonly string[], options: VideoEditTemplateCreateOptions): Promise<{ template: VideoEditProjectTemplate; library?: VideoEditTemplate }> {
+  return templateOperation(projectId, async external => {
+    const owner = requireVideoEditInstance(projectId); const document = owner.document
+    const sequence = document.sequences.find(value => value.id === sequenceId)
+    const clips = sequence?.clips.filter(clip => clipIds.includes(clip.id)) ?? []
+    if (!sequence || !clips.length || clips.length !== new Set(clipIds).size) throw new Error('请选择原序列里要登记为模板的片段。')
+    const code = clips.filter(clip => clip.code)
+    if (code.length && clips.length > 1) throw new Error('代码模板一次只登记一个代码片段；文字与图形可以多个一起登记。')
+    const existing = clips.map(clip => videoEditClipTemplate(document, clip)).find(Boolean)
+    if (existing) throw new Error(`所选片段已经是模板“${existing.name}”的实例；要改它请用 update_video_edit_template，或先分离。`)
+    const styleId = options.styleId === undefined ? sequence.styleId : options.styleId
+    // 风格库按需读取：引用库里的风格或要存进风格库时先读完，任何写入之前就能判断风格在不在。
+    if (options.global || styleId && !document.styles?.some(value => value.id === styleId)) await videoEditStyleLibrary.ready()
+    const style = styleRef(document, styleId)
+    const meta = { id: newId(), name: options.name, description: options.description ?? '', version: 1, updatedAt: new Date().toISOString(), style, origin: null }
+    let template: VideoEditProjectTemplate
+    if (code.length) {
+      const definitionId = code[0].code!.definitionId
+      template = videoEditProjectTemplateSchema.parse({ ...meta, contentHash: await codeVersionHash(defaultVersion(document, definitionId)), body: { kind: 'code', definitionId } })
+      editVideoProject(projectId, current => ({ ...current, templates: [...(current.templates ?? []), template] }))
+    } else {
+      const content = captureNativeTemplateContent(sequence, clips)
+      template = videoEditProjectTemplateSchema.parse({ ...meta, contentHash: await videoEditTemplateContentHash({ kind: 'native', content }), body: { kind: 'native', content } })
+      editVideoProject(projectId, current => ({ ...current, templates: [...(current.templates ?? []), template], sequences: current.sequences.map(value => value.id === sequenceId ? { ...value, clips: value.clips.map(clip => clipIds.includes(clip.id) ? { ...clip, templateId: template.id } : clip) } : value) }))
+    }
+    logger.info('template.create.completed', '已登记工程模板', { context: { projectId, kind: template.body.kind } })
+    if (!options.global) return { template }
+    const promoted = await promoteTemplate(projectId, template.id, 'new', external)
+    return { template: promoted.template, library: promoted.library }
+  })
 }
 
 /** 工程模板设为全局：默认更新它的来源库模板，mode=new 另存为新的库模板。 */
-export async function promoteVideoEditTemplate(projectId: string, templateId: string, mode: 'update' | 'new' = 'update'): Promise<{ template: VideoEditProjectTemplate; library: VideoEditTemplate }> {
+export function promoteVideoEditTemplate(projectId: string, templateId: string, mode: 'update' | 'new' = 'update'): Promise<{ template: VideoEditProjectTemplate; library: VideoEditTemplate }> {
+  return templateOperation(projectId, external => promoteTemplate(projectId, templateId, mode, external))
+}
+async function promoteTemplate(projectId: string, templateId: string, mode: 'update' | 'new', external: () => void): Promise<{ template: VideoEditProjectTemplate; library: VideoEditTemplate }> {
   await videoEditStyleLibrary.ready()
   const document = requireVideoEditInstance(projectId).document; const template = requireProjectTemplate(document, templateId)
   const body = template.body.kind === 'native' ? template.body : { kind: 'code' as const, code: portableCodeComponentFiles(codeMaterialSource(document, { definitionId: template.body.definitionId, versionId: defaultVersion(document, template.body.definitionId).id, parameters: {} }).compilation) }
   const target = mode === 'update' && template.origin ? videoEditStyleLibrary.findTemplate(template.origin.id)?.template : undefined
-  const saved = (await videoEditStyleLibrary.saveTemplate(videoEditTemplateSchema.parse({ id: target?.id ?? newId(), name: template.name, description: template.description, version: target?.version ?? 1, contentHash: target?.contentHash ?? '', updatedAt: new Date().toISOString(), style: template.style, body }))).template
+  const draft = videoEditTemplateSchema.parse({ id: target?.id ?? newId(), name: template.name, description: template.description, version: target?.version ?? 1, contentHash: target?.contentHash ?? '', updatedAt: new Date().toISOString(), style: template.style, body })
+  external()
+  const saved = (await videoEditStyleLibrary.saveTemplate(draft)).template
   const next = { ...template, origin: { id: saved.id, version: saved.version } }
   editVideoProject(projectId, current => ({ ...current, templates: current.templates!.map(value => value.id === templateId ? next : value) }))
   logger.info('template.promote.completed', '工程模板已存进风格库', { context: { projectId, mode } })
@@ -253,52 +282,57 @@ export type VideoEditTemplateUpdateSource = { kind: 'version'; versionId: string
  * 改模板内容并刷新全部联动实例（先说影响范围再调用）：代码模板换成该定义的另一个源码版本；原生模板按一组实例片段重新登记；
  * library 用库里的更新版本覆盖工程副本。内容变了版本加 1。
  */
-export async function updateVideoEditTemplate(projectId: string, templateId: string, source: VideoEditTemplateUpdateSource, signal?: AbortSignal): Promise<{ template: VideoEditProjectTemplate; instances: number }> {
-  const owner = requireVideoEditInstance(projectId); let template = requireProjectTemplate(owner.document, templateId)
-  logger.info('template.update.start', '更新模板并刷新实例', { context: { projectId, source: source.kind } })
-  let origin = template.origin
-  if (source.kind === 'library') {
-    await videoEditStyleLibrary.ready()
-    if (!template.origin) throw new Error('这个模板不是从风格库复制来的，没有可升级的来源。')
-    const library = videoEditStyleLibrary.requireTemplate(template.origin.id).template
-    if (library.body.kind !== template.body.kind) throw new Error('库模板与工程副本的类型不同，不能直接升级；请重新应用库模板。')
-    origin = { id: library.id, version: library.version }
-    if (library.body.kind === 'code') {
-      const [versionId] = await createVideoEditCodeVersions(projectId, [{ definitionId: (template.body as { definitionId: string }).definitionId, files: library.body.code.files, entry: library.body.code.entry }], signal).catch(async (error: unknown) => {
-        // 源码与工程里已有的某个版本完全相同：直接改用那个版本。
-        const match = await findSameVersion(requireVideoEditInstance(projectId).document, (template.body as { definitionId: string }).definitionId, library.body.kind === 'code' ? library.body.code : undefined)
-        if (match) return [match]; throw error
-      })
-      source = { kind: 'version', versionId }
-    } else template = { ...template, body: library.body }
-  }
-  if (source.kind === 'clips') {
-    if (template.body.kind !== 'native') throw new Error('代码模板的内容就是它的代码定义：请创建新的源码版本，再用 source.kind=version 更新。')
-    const sequence = owner.document.sequences.find(value => value.id === source.sequenceId); const clips = sequence?.clips.filter(clip => source.clipIds.includes(clip.id)) ?? []
-    if (!sequence || clips.length !== source.clipIds.length || clips.some(clip => clip.templateId !== template.id)) throw new Error('请选择这个模板的一组实例片段作为新内容。')
-    template = { ...template, body: { kind: 'native', content: captureNativeTemplateContent(sequence, clips) } }
-  }
-  const document = requireVideoEditInstance(projectId).document
-  if (source.kind === 'version') {
-    if (template.body.kind !== 'code') throw new Error('原生模板没有源码版本。')
-    const definition = document.codeMaterials?.find(value => value.id === (template.body as { definitionId: string }).definitionId)
-    const version = definition?.versions.find(value => value.id === source.versionId)
-    if (!definition || !version) throw new Error('源码版本不属于这个模板的代码定义；先在这个定义下创建新版本。')
-  }
-  const body = template.body
-  const hash = body.kind === 'code' && source.kind === 'version' ? await codeVersionHash(document.codeMaterials!.find(value => value.id === body.definitionId)!.versions.find(value => value.id === source.versionId)!) : await videoEditTemplateContentHash(body)
-  const changed = hash !== template.contentHash
-  const next = videoEditProjectTemplateSchema.parse({ ...template, origin, contentHash: hash, version: template.version + (changed ? 1 : 0), updatedAt: new Date().toISOString() })
-  let instances = 0
-  editVideoProject(projectId, current => {
-    let value: VideoEditDocument = { ...current, templates: current.templates!.map(item => item.id === templateId ? next : item) }
-    if (next.body.kind === 'code' && source.kind === 'version') value = rebindCode(value, next.body.definitionId, source.versionId)
-    if (next.body.kind === 'native') value = syncNativeItems(refreshNativeInstances(value, next), next.id)
-    instances = videoEditTemplateInstances(value, next).length
-    return videoEditDocumentSchema.parse(value)
+export function updateVideoEditTemplate(projectId: string, templateId: string, source: VideoEditTemplateUpdateSource, signal?: AbortSignal): Promise<{ template: VideoEditProjectTemplate; instances: number }> {
+  return templateOperation(projectId, async external => {
+    // 局部副本：在本函数里重新赋值，类型收窄才能跟到后面的回调里。
+    let content = source
+    const owner = requireVideoEditInstance(projectId); let template = requireProjectTemplate(owner.document, templateId)
+    logger.info('template.update.start', '更新模板并刷新实例', { context: { projectId, source: content.kind } })
+    let origin = template.origin
+    if (content.kind === 'library') {
+      await videoEditStyleLibrary.ready()
+      if (!template.origin) throw new Error('这个模板不是从风格库复制来的，没有可升级的来源。')
+      const library = videoEditStyleLibrary.requireTemplate(template.origin.id).template
+      if (library.body.kind !== template.body.kind) throw new Error('库模板与工程副本的类型不同，不能直接升级；请重新应用库模板。')
+      origin = { id: library.id, version: library.version }
+      if (library.body.kind === 'code') {
+        external()
+        const [versionId] = await createVideoEditCodeVersions(projectId, [{ definitionId: (template.body as { definitionId: string }).definitionId, files: library.body.code.files, entry: library.body.code.entry }], signal).catch(async (error: unknown) => {
+          // 源码与工程里已有的某个版本完全相同：直接改用那个版本。
+          const match = await findSameVersion(requireVideoEditInstance(projectId).document, (template.body as { definitionId: string }).definitionId, library.body.kind === 'code' ? library.body.code : undefined)
+          if (match) return [match]; throw error
+        })
+        content = { kind: 'version', versionId }
+      } else template = { ...template, body: library.body }
+    }
+    if (content.kind === 'clips') {
+      if (template.body.kind !== 'native') throw new Error('代码模板的内容就是它的代码定义：请创建新的源码版本，再用 source.kind=version 更新。')
+      const sequence = owner.document.sequences.find(value => value.id === content.sequenceId); const clips = sequence?.clips.filter(clip => content.clipIds.includes(clip.id)) ?? []
+      if (!sequence || clips.length !== content.clipIds.length || clips.some(clip => clip.templateId !== template.id)) throw new Error('请选择这个模板的一组实例片段作为新内容。')
+      template = { ...template, body: { kind: 'native', content: captureNativeTemplateContent(sequence, clips) } }
+    }
+    const document = requireVideoEditInstance(projectId).document
+    if (content.kind === 'version') {
+      if (template.body.kind !== 'code') throw new Error('原生模板没有源码版本。')
+      const definition = document.codeMaterials?.find(value => value.id === (template.body as { definitionId: string }).definitionId)
+      const version = definition?.versions.find(value => value.id === content.versionId)
+      if (!definition || !version) throw new Error('源码版本不属于这个模板的代码定义；先在这个定义下创建新版本。')
+    }
+    const body = template.body
+    const hash = body.kind === 'code' && content.kind === 'version' ? await codeVersionHash(document.codeMaterials!.find(value => value.id === body.definitionId)!.versions.find(value => value.id === content.versionId)!) : await videoEditTemplateContentHash(body)
+    const changed = hash !== template.contentHash
+    const next = videoEditProjectTemplateSchema.parse({ ...template, origin, contentHash: hash, version: template.version + (changed ? 1 : 0), updatedAt: new Date().toISOString() })
+    let instances = 0
+    editVideoProject(projectId, current => {
+      let value: VideoEditDocument = { ...current, templates: current.templates!.map(item => item.id === templateId ? next : item) }
+      if (next.body.kind === 'code' && content.kind === 'version') value = rebindCode(value, next.body.definitionId, content.versionId)
+      if (next.body.kind === 'native') value = syncNativeItems(refreshNativeInstances(value, next), next.id)
+      instances = videoEditTemplateInstances(value, next).length
+      return videoEditDocumentSchema.parse(value)
   })
   logger.info('template.update.completed', '模板与联动实例已更新', { context: { projectId, instances, changed } })
   return { template: next, instances }
+  })
 }
 async function findSameVersion(document: VideoEditDocument, definitionId: string, code: { entry: string; files: Record<string, string> } | undefined): Promise<string | undefined> {
   if (!code) return undefined
@@ -311,25 +345,28 @@ async function findSameVersion(document: VideoEditDocument, definitionId: string
 }
 
 /** 分离：这些片段不再跟着模板变。原生片段去掉标记；代码片段复制成独立的代码定义并保留参数与关键帧。 */
-export async function detachVideoEditTemplateInstances(projectId: string, sequenceId: string, clipIds: readonly string[], signal?: AbortSignal): Promise<string[]> {
-  const owner = requireVideoEditInstance(projectId); const sequence = owner.document.sequences.find(value => value.id === sequenceId)
-  const clips = sequence?.clips.filter(clip => clipIds.includes(clip.id)) ?? []
-  if (!sequence || !clips.length || clips.length !== new Set(clipIds).size) throw new Error('请选择原序列里的模板实例。')
-  assertVideoEditClipsEditable(sequence, [...clipIds])
-  const linked = clips.map(clip => ({ clip, template: videoEditClipTemplate(owner.document, clip) }))
-  if (linked.some(entry => !entry.template)) throw new Error('所选片段里有不属于任何模板的片段。')
-  logger.info('template.detach.start', '分离模板实例', { context: { projectId, count: clips.length } })
-  const native = linked.filter(entry => entry.template!.body.kind === 'native').map(entry => entry.clip.id)
-  if (native.length) editVideoProject(projectId, document => ({ ...document, sequences: document.sequences.map(value => value.id === sequenceId ? { ...value, clips: value.clips.map(clip => native.includes(clip.id) ? (({ templateId: _templateId, ...rest }) => rest)(clip) : clip) } : value) }))
-  for (const { clip } of linked.filter(entry => entry.template!.body.kind === 'code')) {
-    const files = portableCodeComponentFiles(codeMaterialSource(requireVideoEditInstance(projectId).document, clip.code!).compilation)
-    await createVideoEditPlacedCodeItems(projectId, [{ files: files.files, entry: files.entry, name: `${clip.name}（已分离）` }], (document, itemIds) => {
-      const item = document.items.find(value => value.id === itemIds[0])!
-      return { ...document, sequences: document.sequences.map(value => value.id === sequenceId ? { ...value, clips: value.clips.map(current => current.id === clip.id ? { ...current, itemId: item.id, name: item.name, code: { ...item.code!, parameters: current.code!.parameters, ...(current.code!.curves ? { curves: current.code!.curves } : {}) } } : current) } : value) }
-    }, signal)
-  }
-  logger.info('template.detach.completed', '模板实例已分离', { context: { projectId, count: clips.length } })
-  return [...clipIds]
+export function detachVideoEditTemplateInstances(projectId: string, sequenceId: string, clipIds: readonly string[], signal?: AbortSignal): Promise<string[]> {
+  return templateOperation(projectId, async external => {
+    const owner = requireVideoEditInstance(projectId); const sequence = owner.document.sequences.find(value => value.id === sequenceId)
+    const clips = sequence?.clips.filter(clip => clipIds.includes(clip.id)) ?? []
+    if (!sequence || !clips.length || clips.length !== new Set(clipIds).size) throw new Error('请选择原序列里的模板实例。')
+    assertVideoEditClipsEditable(sequence, [...clipIds])
+    const linked = clips.map(clip => ({ clip, template: videoEditClipTemplate(owner.document, clip) }))
+    if (linked.some(entry => !entry.template)) throw new Error('所选片段里有不属于任何模板的片段。')
+    logger.info('template.detach.start', '分离模板实例', { context: { projectId, count: clips.length } })
+    const native = linked.filter(entry => entry.template!.body.kind === 'native').map(entry => entry.clip.id)
+    if (native.length) editVideoProject(projectId, document => ({ ...document, sequences: document.sequences.map(value => value.id === sequenceId ? { ...value, clips: value.clips.map(clip => native.includes(clip.id) ? (({ templateId: _templateId, ...rest }) => rest)(clip) : clip) } : value) }))
+    for (const { clip } of linked.filter(entry => entry.template!.body.kind === 'code')) {
+      const files = portableCodeComponentFiles(codeMaterialSource(requireVideoEditInstance(projectId).document, clip.code!).compilation)
+      external()
+      await createVideoEditPlacedCodeItems(projectId, [{ files: files.files, entry: files.entry, name: `${clip.name}（已分离）` }], (document, itemIds) => {
+        const item = document.items.find(value => value.id === itemIds[0])!
+        return { ...document, sequences: document.sequences.map(value => value.id === sequenceId ? { ...value, clips: value.clips.map(current => current.id === clip.id ? { ...current, itemId: item.id, name: item.name, code: { ...item.code!, parameters: current.code!.parameters, ...(current.code!.curves ? { curves: current.code!.curves } : {}) } } : current) } : value) }
+      }, signal)
+    }
+    logger.info('template.detach.completed', '模板实例已分离', { context: { projectId, count: clips.length } })
+    return [...clipIds]
+  })
 }
 
 /** 取消登记：模板从工程里移除，代码与实例都保留（原生片段去掉联动标记）。 */

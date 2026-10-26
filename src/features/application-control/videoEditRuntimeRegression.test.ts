@@ -12,7 +12,9 @@ import { createVideoEditTestProject, closeAllVideoEdits, failVideoEditSaves, sav
 import { attachLocalApplicationHost } from './localApplicationHost'
 import { getPlatform } from '@/platform/runtime'
 import { titleGraphic } from '@/core/videoEdit/titleGraphics'
-import { editVideoProject } from '@/features/videoEdit/application/videoEditService'
+import { editVideoProject, requireVideoEditInstance } from '@/features/videoEdit/application/videoEditService'
+import { videoEditStyleLibrary } from '@/features/videoEdit/application/videoEditStyleLibrary'
+import { addTestTitleTemplate, createTestStyleLibraryIo } from '@/features/videoEdit/application/videoEditStyleTestKit'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 
 // 只替换持久账本、IPC/媒体解码边界；公共 dispatcher、宿主、能力、文档 schema 与验证走正式实现。
@@ -129,4 +131,56 @@ it('t95 D4：保存失败后只重试原操作保存，核对 item/clip/文件�
     expect(reopened.document.items).toHaveLength(1)
     expect(await host.call('save_video_edit', { operationId: crypto.randomUUID(), documentRef })).toMatchObject({ ok: true })
   } finally { failVideoEditSaves(false); host.dispose() }
+})
+
+it('风格与模板能力：写入前的拒绝记为未执行、不留锁；风格库没读过时也认风格库风格的 id', async () => {
+  const owner = await createVideoEditTestProject(); const projectId = owner.document.id; const documentRef = { kind: 'video_edit.document', id: projectId }
+  const sequenceRef = { kind: 'video_edit.sequence', id: `${projectId}:${owner.activeSequenceId}` }
+  const io = createTestStyleLibraryIo({ builtin: false }); videoEditStyleLibrary.reset(io, undefined)
+  const host = runtime()
+  const call = (name: string, input: Record<string, unknown>) => host.call(name, { operationId: crypto.randomUUID(), ...input })
+  const expectNotExecuted = async (name: string, input: Record<string, unknown>, reason: string): Promise<void> => {
+    const before = requireVideoEditInstance(projectId).document
+    const result = await call(name, input)
+    expect(result, `${name} ${JSON.stringify(result)}`).toMatchObject({ ok: false, executionState: 'not_executed' })
+    expect(JSON.stringify(result), JSON.stringify(result)).toContain(reason)
+    expect(host.store.unresolved(), name).toEqual([])
+    expect(requireVideoEditInstance(projectId).document, name).toBe(before)
+  }
+  try {
+    const created = await call('change_application_entities', { summary: '新建风格', changes: [{ kind: 'create_items', entityType: 'video_edit.style', parent: { kind: 'video_edit.style_library', id: 'singleton' }, items: [{ properties: { 'video_edit.style.name': '节点光迹' } }, { properties: { 'video_edit.style.name': '克制' } }] }] })
+    expect(created, JSON.stringify(created)).toMatchObject({ ok: true })
+    const [styleId, otherId] = videoEditStyleLibrary.listStyles().map(entry => entry.style.id)
+    const first = await addTestTitleTemplate(projectId, owner.activeSequenceId)
+    const templateRef = { kind: 'video_edit.project_template', id: `${projectId}:${requireVideoEditInstance(projectId).document.templates![0].id}` }
+    const clip = (id: string) => ({ kind: 'video_edit.clip', id: `${projectId}:${id}` })
+    const audio = requireVideoEditInstance(projectId).document.sequences[0].tracks.find(track => track.kind === 'audio')!
+    // 每一条都在写入之前就被拒绝：结果是“未执行”，账本里不留待核对的操作，剪辑一点没变。
+    await expectNotExecuted('create_video_edit_template', { documentRef, sequenceRef, clipRefs: [clip(first)], name: '重复登记' }, '已经是模板')
+    await expectNotExecuted('apply_video_edit_template', { documentRef, sequenceRef, frame: 0, templateRef, trackRef: { kind: 'video_edit.track', id: `${projectId}:${audio.id}` } }, '视频轨')
+    await expectNotExecuted('update_video_edit_template', { templateRef, content: { kind: 'library', confirmed: true } }, '没有可升级的来源')
+    await expectNotExecuted('export_video_edit_style_package', { styleRef: { kind: 'video_edit.style', id: styleId }, path: 'D:/风格.txt' }, '.hjsty')
+    expect((await call('bind_video_edit_style', { documentRef, sequenceRef, styleRef: { kind: 'video_edit.style', id: styleId } })).ok).toBe(true)
+    await expectNotExecuted('bind_video_edit_style', { documentRef, sequenceRef, styleRef: { kind: 'video_edit.style', id: otherId } }, 'replace:true')
+    expect((await call('detach_video_edit_template_instance', { documentRef, sequenceRef, clipRefs: [clip(first)] })).ok).toBe(true)
+    await expectNotExecuted('detach_video_edit_template_instance', { documentRef, sequenceRef, clipRefs: [clip(first)] }, '不属于任何模板')
+    await expectNotExecuted('update_video_edit_template', { templateRef, content: { kind: 'clips', sequenceRef, clipRefs: [clip(first)] } }, '实例片段')
+    // 风格库读不出来时，设为全局在写入前失败。
+    videoEditStyleLibrary.reset({ ...io, root: async () => { throw new Error('风格库目录不可读') } }, undefined)
+    await expectNotExecuted('promote_video_edit_template', { templateRef }, '风格库目录不可读')
+    // 原复现：风格不存在被拒绝后，同一剪辑接着写入照常成功。
+    videoEditStyleLibrary.reset(io, undefined)
+    await expectNotExecuted('create_video_edit_template', { documentRef, sequenceRef, clipRefs: [clip(first)], name: '人名条', styleId: 'missing-style' }, '没有这个风格')
+    // 应用重新加载后风格库还没读过：风格库风格的 id 照样认（与工具说明一致），模板记下风格与版本。
+    videoEditStyleLibrary.reset(io, undefined); expect(videoEditStyleLibrary.loaded()).toBe(false)
+    const registered = await call('create_video_edit_template', { documentRef, sequenceRef, clipRefs: [clip(first)], name: '出场人名条', styleId: otherId })
+    expect(registered, JSON.stringify(registered)).toMatchObject({ ok: true, executionState: 'completed', verificationState: 'verified' })
+    expect(savedVideoEdit(owner).templates?.find(value => value.name === '出场人名条')?.style).toMatchObject({ id: otherId, version: videoEditStyleLibrary.requireStyle(otherId).style.version })
+    // 通用属性 project_template.style_id 同一语义：风格库没读过时写库风格 id 也能找到。
+    videoEditStyleLibrary.reset(io, undefined)
+    const restyled = await call('change_application_entities', { summary: '改所属风格', changes: [{ kind: 'set_properties', entityType: 'video_edit.project_template', target: templateRef, properties: { 'video_edit.project_template.style_id': styleId } }] })
+    expect(restyled, JSON.stringify(restyled)).toMatchObject({ ok: true })
+    expect(requireVideoEditInstance(projectId).document.templates![0].style?.id).toBe(styleId)
+    expect(host.store.unresolved()).toEqual([])
+  } finally { host.dispose(); videoEditStyleLibrary.reset(); io.dispose() }
 })

@@ -328,6 +328,8 @@ export class VideoEditProjectTemplateMutationExecutor extends ProjectTemplateExe
   readonly propertyOperations = propertyOperations(fieldWriterTable(projectTemplateFields))
   async apply(step: Extract<ApplicationPlannedStep, { kind: 'mutation' }>, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     context.signal?.throwIfAborted(); const draft = projectTemplateDraft(step.target)
+    // style_id 可以写风格库风格的 id：风格库按需读取，没读过时先读完再找。
+    if (step.mutations.some(mutation => mutation.propertyId === `${PROJECT_TEMPLATE_ENTITY}.style_id` && mutation.value !== null)) await videoEditStyleLibrary.ready()
     await applyWriterTable(fieldWriterTable(projectTemplateFields), draft, step.mutations)
     return this.commit(draft.projectId, [step.target], document => ({ ...document, templates: document.templates!.map(value => value.id === draft.template.id ? draft.template : value) }))
   }

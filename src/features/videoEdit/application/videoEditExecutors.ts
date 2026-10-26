@@ -411,7 +411,9 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
               if (component !== undefined && component !== 'video' && component !== 'audio') throw new Error('source_component 必须为 all、video 或 audio。')
               const sourceItem = document.items.find(item => item.id === values.itemId)
               const sourceMedia = document.media.find(media => media.id === sourceItem?.mediaId)
-              const clip = makeVideoEditItemClip(document, String(values.itemId), sequence!.id, { frame: Number(values.start ?? 0), ...(values.track !== undefined ? { track: Number(values.track) } : {}), ...(values.duration !== undefined ? { duration: Number(values.duration) } : {}), ...(sourceMedia && sourceMedia.kind !== 'image' && values.sourceInUs !== undefined ? { sourceInUs: Number(values.sourceInUs) } : {}), ...(component ? { sourceComponent: component } : {}) }, readVideoEditCodeMetadata(instance, document))
+              // 同时指定源码版本时，默认时长与时长上限按这个版本的声明计算，不按素材项当前的版本。
+              const readCode = readVideoEditCodeMetadata(instance, document); const requestedVersion = typeof values.codeVersionId === 'string' ? values.codeVersionId : undefined
+              const clip = makeVideoEditItemClip(document, String(values.itemId), sequence!.id, { frame: Number(values.start ?? 0), ...(values.track !== undefined ? { track: Number(values.track) } : {}), ...(values.duration !== undefined ? { duration: Number(values.duration) } : {}), ...(sourceMedia && sourceMedia.kind !== 'image' && values.sourceInUs !== undefined ? { sourceInUs: Number(values.sourceInUs) } : {}), ...(component ? { sourceComponent: component } : {}) }, requestedVersion ? code => readCode({ ...code, versionId: requestedVersion }) : readCode)
               const parameters = values.codeParameters; const curves = values.codeCurves; const versionId = values.codeVersionId
               delete values.codeParameters; delete values.codeCurves; delete values.codeVersionId
               if (parameters !== undefined || curves !== undefined || versionId !== undefined) {
