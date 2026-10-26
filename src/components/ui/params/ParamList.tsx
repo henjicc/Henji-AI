@@ -104,8 +104,8 @@ function FieldGroup({ title, fields, store }: { title: string; fields: readonly 
   return useUiFieldLayout() === 'property' ? <PropertyFieldGroup title={title} fields={fields} store={store} /> : <FormFieldGroup title={title} fields={fields} store={store} />
 }
 
-/** 属性面板里的一行可折叠小标题，与参数行同一套四列（箭头在秒表列）。 */
-function PropertyHeading({ label, name, open, onToggle }: { label: string; name: string; open: boolean; onToggle: () => void }) {
+/** 属性面板里的一行可折叠小标题，与参数行同一套四列（箭头在秒表列）；属性排布里的其他分组（如基本声音）也用它。 */
+export function PropertyHeading({ label, name, open, onToggle }: { label: string; name: string; open: boolean; onToggle: () => void }) {
   const Chevron = open ? ChevronDown : ChevronRight
   return <div className="relative mx-1 grid h-control-sm grid-cols-property-row items-center gap-x-1 pr-2">
     <UiButton size="sm" className="absolute inset-0 w-full" aria-expanded={open} aria-label={name} onClick={onToggle} />
