@@ -169,7 +169,7 @@ macOS 用同一份菜单模型生成**系统菜单栏**，窗口内不画菜单�
 - **收起后要能放回**：收纳行收起几项后宽度只剩内容宽度，单看自己测不到窗口又变宽了。行后面还有控件、行自己不能拉宽时（命令带左端的快速添加），给 `UiOverflowRow growIntoParent`，命令带配 `leadingLayout="share"`（左端与中间区按内容起算、平分剩余宽度，中间区内容靠左排）。`UiSegmented` 实际放不下时自动换成同一组选项的下拉，宽度够了换回，调用点不用判断。
 - **自绘滚动与有意例外要标出来**：自己实现滚动的区域（如时间线轨道区）标 `data-layout-scroll-region`；确属设计的裁切或覆盖（跑马灯、拖动中的虚影）在最近的容器上写 `data-layout-allow="clip|occlude"` 和 `data-layout-allow-reason="理由"`，没有理由不生效。
 - **设计稿写缩放规则**：除了默认尺寸，还要写最小多大、窄了先收什么、矮了先藏什么；没写的设计稿不算完成。
-- 判定只有一份实现 `src/core/uiAudit/layoutAudit.ts`：巡检规则 `controlClipped` / `controlOccluded` 与运行时布局守卫共用。开发运行时问题元素会被描红边，正式构建测试时记进日志（`ui.layout_issue.detected`）。验收方法见 `references/review.md` 第 9 节。
+- 判定只有一份实现 `src/core/uiAudit/layoutAudit.ts`：巡检规则 `controlClipped` / `controlOccluded` 与运行时布局守卫共用。开了 `--dev-checks` 或 `--dev-layout-guard` 时问题元素会被描红边并记进日志（`ui.layout_issue.detected`），默认不运行；界面改动收尾前至少开一次。验收方法见 `references/review.md` 第 9 节。
 
 ### 外层壳已有命令带时：注入，不要再嵌一层壳
 

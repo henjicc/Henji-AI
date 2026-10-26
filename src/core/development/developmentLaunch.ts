@@ -18,5 +18,11 @@ export function readDevelopmentLaunchOptions(
     themePresetId: params.get(DEVELOPMENT_LAUNCH_QUERY_KEYS.themePreset) || null,
     updatePreview: isDevelopmentUpdatePreviewState(updatePreview) ? updatePreview : null,
     layoutGuard: isDevelopmentLayoutGuardMode(layoutGuard) ? layoutGuard : null,
+    checks: params.get(DEVELOPMENT_LAUNCH_QUERY_KEYS.checks) === '1',
   }
+}
+
+/** 界面开发检查（布局守卫、主动作预算）是否开启：`--dev-checks` 或单独的 `--dev-layout-guard`。 */
+export function isDevelopmentUiCheckEnabled(options = readDevelopmentLaunchOptions()): boolean {
+  return options.checks || options.layoutGuard !== null
 }

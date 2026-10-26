@@ -79,6 +79,11 @@ describe('resolveSecondaryWindowLaunchQuery', () => {
     expect(resolveSecondaryWindowLaunchQuery(['electron', '--dev-layout-guard=log'], '/project')).toEqual({ henjiDevLayoutGuard: 'log' })
   })
 
+  it('开发检查传给主窗口与日志窗口', () => {
+    expect(resolveDevelopmentLaunchQuery(['electron', '--dev-checks'], '/project').query).toEqual({ henjiDevChecks: '1' })
+    expect(resolveSecondaryWindowLaunchQuery(['electron', '--dev-checks'], '/project')).toEqual({ henjiDevChecks: '1' })
+  })
+
   it('没有或无效的主题预设时不附加参数', () => {
     expect(resolveSecondaryWindowLaunchQuery(['electron'], '/project')).toEqual({})
     expect(resolveSecondaryWindowLaunchQuery(['electron', '--dev-theme-preset=sepia'], '/project')).toEqual({})

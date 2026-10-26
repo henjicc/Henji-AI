@@ -1,16 +1,20 @@
 import { createContext, useEffect, type RefObject } from 'react'
 import type { UiControlSize } from './primitiveInternals'
+import { isDevelopmentUiCheckEnabled } from '@/core/development/developmentLaunch'
 
 /** 命令带组合处决定宿主主动作是否让位；默认保持调用方声明的层级。 */
 export const UiPrimaryActionContext = createContext(true)
 
 export const actionGroupContext = createContext<{ tier: 'secondary' | 'quiet'; size: UiControlSize } | null>(null)
 
-/** 以实际 DOM 可见性计预算，避免隐藏工作区、互斥分支和 portal 弹窗被重复计数。仅开发构建订阅。 */
+/**
+ * 以实际 DOM 可见性计预算，避免隐藏工作区、互斥分支和 portal 弹窗被重复计数。
+ * 仅开发构建且开了界面开发检查时订阅：它监听整棵子树的样式变化，播放时每帧都要重算，默认开发运行不跑。
+ */
 export function useUiPrimaryBudget(root: RefObject<HTMLElement>, enabled = true): void {
   useEffect(() => {
     const host = root.current
-    if (!import.meta.env.DEV || !enabled || !host) return
+    if (!import.meta.env.DEV || !enabled || !host || !isDevelopmentUiCheckEnabled()) return
     const boundary = '[role="dialog"], [data-command-bar], [data-ui-toolbar], [data-application-surface-id]'
     const view = host.ownerDocument.defaultView
     if (!view) return

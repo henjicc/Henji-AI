@@ -5,11 +5,17 @@ export const DEVELOPMENT_LAUNCH_QUERY_KEYS = {
   themePreset: 'henjiDevThemePreset',
   updatePreview: 'henjiDevUpdatePreview',
   layoutGuard: 'henjiDevLayoutGuard',
+  checks: 'henjiDevChecks',
 } as const
 
 /**
+ * 开发检查 `--dev-checks`：React 严格模式（组件挂载两次、副作用跑两遍）、布局守卫描边、主动作预算检查、debug 日志与翻译调试输出一起打开。
+ * 默认不开，开发运行的行为与性能贴近正式版，日常改动与用户查看都用热更新开发版（2026-10-26 用户确认）；查组件副作用或界面层级问题时显式打开。
+ */
+
+/**
  * 运行时布局守卫（重要记录 020）：`--dev-layout-guard`（描边 + 日志）或 `--dev-layout-guard=log`（只记日志）。
- * 开发运行默认描边；本机正式构建由 electron:prod 带 `log`；安装包不带，不运行。
+ * 默认不运行（开发运行与正式版一致，2026-10-26 起）；`--dev-checks` 时描边；安装包不运行。
  */
 export const DEVELOPMENT_LAYOUT_GUARD_MODES = ['outline', 'log'] as const
 export type DevelopmentLayoutGuardMode = (typeof DEVELOPMENT_LAYOUT_GUARD_MODES)[number]
@@ -56,6 +62,8 @@ export interface DevelopmentLaunchOptions {
   themePresetId: string | null
   /** 本次启动直接打开更新提示弹窗的预览状态（不访问更新服务器） */
   updatePreview: DevelopmentUpdatePreviewState | null
-  /** 本次启动的运行时布局守卫模式；null 时开发运行仍默认描边 */
+  /** 本次启动的运行时布局守卫模式；null 时只在开了开发检查时描边 */
   layoutGuard: DevelopmentLayoutGuardMode | null
+  /** 本次启动是否打开开发检查（严格模式、布局守卫、主动作预算、debug 日志） */
+  checks: boolean
 }

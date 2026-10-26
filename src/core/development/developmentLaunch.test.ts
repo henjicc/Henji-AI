@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { readDevelopmentLaunchOptions } from './developmentLaunch'
+import { isDevelopmentUiCheckEnabled, readDevelopmentLaunchOptions } from './developmentLaunch'
 
 describe('readDevelopmentLaunchOptions', () => {
   it('默认不改变正常启动行为', () => {
@@ -11,6 +11,7 @@ describe('readDevelopmentLaunchOptions', () => {
       themePresetId: null,
       updatePreview: null,
       layoutGuard: null,
+      checks: false,
     })
   })
 
@@ -18,6 +19,13 @@ describe('readDevelopmentLaunchOptions', () => {
     expect(readDevelopmentLaunchOptions('?henjiDevLayoutGuard=log').layoutGuard).toBe('log')
     expect(readDevelopmentLaunchOptions('?henjiDevLayoutGuard=outline').layoutGuard).toBe('outline')
     expect(readDevelopmentLaunchOptions('?henjiDevLayoutGuard=on').layoutGuard).toBeNull()
+  })
+
+  it('开发检查默认关，--dev-checks 或单独的布局守卫打开界面检查', () => {
+    expect(readDevelopmentLaunchOptions('?henjiDevChecks=1').checks).toBe(true)
+    expect(isDevelopmentUiCheckEnabled(readDevelopmentLaunchOptions(''))).toBe(false)
+    expect(isDevelopmentUiCheckEnabled(readDevelopmentLaunchOptions('?henjiDevChecks=1'))).toBe(true)
+    expect(isDevelopmentUiCheckEnabled(readDevelopmentLaunchOptions('?henjiDevLayoutGuard=log'))).toBe(true)
   })
 
   it('读取更新提示弹窗预览状态，无效值忽略', () => {
@@ -35,6 +43,7 @@ describe('readDevelopmentLaunchOptions', () => {
       themePresetId: 'paper',
       updatePreview: null,
       layoutGuard: null,
+      checks: false,
     })
   })
 })

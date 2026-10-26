@@ -1,6 +1,8 @@
-import { resolve } from 'path'
+import { relative, resolve } from 'path'
 import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
+
+const RENDERER_UNWATCHED_ROOTS = new Set(['docs', 'dist', 'out', 'native', 'release', 'tests', 'dev-data', 'patches', '.claude', '.tmp', '.reality', '.ui-tour'])
 
 // 根 package.json 是 "type": "module"，但 sandbox:true 的 preload 只支持 CJS，
 // 所以 main/preload 显式输出 .cjs（不受根 package.json ESM 默认值影响，与
@@ -60,45 +62,17 @@ export default defineConfig({
       },
     },
     plugins: [react()],
-    // 渲染层根目录是仓库根：并行任务的 worktree、原生构建产物与临时目录不属于渲染层源码，监听它们只会被
-    // 编译中被锁住的文件（EBUSY）弄崩 dev server，也白白耗费文件句柄。
-    server: { watch: { ignored: ['**/.claude/**', '**/native/**/target/**', '**/.tmp/**', '**/release/**', '**/.reality/**', '**/.ui-tour/**'] } },
+    // 渲染层根目录是仓库根：文档、构建产物、原生工程、测试夹具、并行任务的 worktree 与临时目录不属于渲染层源码，
+    // 按顶层目录整个不监听。docs 一项就有上万个文件夹，全量监听让开发服务器启动多花一分多钟（2026-10-26 实测 66 秒降到 10 秒），
+    // 还会被编译中被锁住的文件（EBUSY）弄崩 dev server。
+    server: { watch: { ignored: [(file: string) => RENDERER_UNWATCHED_ROOTS.has(relative(__dirname, file).split(/[\\/]/)[0])] } },
     // 所有 Worker 都以 { type: 'module' } 创建；ES 格式才允许 Worker 内按需 import（着色器组件逐个懒加载）。
     worker: { format: 'es' },
     optimizeDeps: {
-      // 这些三方库只出现在懒加载子树里（工具箱 3D/图片编辑、画布、提示词编辑器等）。
-      // 不显式登记时 Vite 会等用户第一次切到对应 Tab 才现场预构建依赖，
-      // 表现就是「切个 Tab 卡十几秒、还可能整页刷新」。登记后在 dev server 起来时一次性预构建。
-      include: [
-        // 剪辑降噪只在拖动/播放带声音的片段时才加载；不登记会在第一次用到时整页刷新。
-        '@shiguredo/rnnoise-wasm',
-        // 代码素材的打包器只在第一次打开含代码素材的剪辑时加载；不登记会在打开项目途中整页刷新。
-        'esbuild-wasm',
-        '@tiptap/core',
-        '@tiptap/extension-document',
-        '@tiptap/extension-hard-break',
-        '@tiptap/extension-paragraph',
-        '@tiptap/extension-text',
-        '@tiptap/extensions/character-count',
-        '@tiptap/extensions/placeholder',
-        '@tiptap/extensions/undo-redo',
-        '@tiptap/pm/model',
-        '@tiptap/pm/state',
-        '@tiptap/pm/view',
-        '@tiptap/react',
-        '@tiptap/suggestion',
-        '@react-three/drei',
-        '@react-three/fiber',
-        'dockview-react',
-        'konva',
-        'konva/lib/Node',
-        'pica',
-        'react-konva',
-        'react-virtuoso',
-        'three',
-        'three-stdlib',
-        'vgpu',
-      ],
+      // 启动时扫描全部渲染层源码（含懒加载子树与 Worker），三方库一次预构建完。只扫入口时，
+      // Vite 会等第一次用到某个库才现场预构建并整页刷新，开发运行就和正式版不一样（2026-10-26）。
+      // 测试与测试夹具引用 vitest 等只在 Node 里跑的库，不扫。
+      entries: ['index.html', 'src/**/*.{ts,tsx}', '!src/tests/**', '!src/**/*.test.{ts,tsx}', '!src/**/*.testSupport.ts', '!src/**/*TestKit.ts', '!src/**/*TestUtils.ts', '!src/**/*TestFixture*.ts'],
     },
     build: {
       outDir: 'out/renderer',

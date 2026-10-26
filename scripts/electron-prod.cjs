@@ -1,6 +1,6 @@
 /**
  * 本机正式构建：用与安装包相同的生产产物（out/，非开发服务器、无 StrictMode 双挂载、无按需依赖预构建）
- * 启动应用并使用真实资料目录。交给用户测试、或结论依赖“与正式安装版一致”时用它，而不是 electron:dev。
+ * 启动应用并使用真实资料目录。验收性能结论、发版前，或结论依赖“与正式安装版一致”时用它；日常查看用热更新的 electron:dev。
  *
  *   npm run electron:prod                 先 electron:bundle 再启动
  *   npm run electron:prod -- --skip-build 产物已是最新时直接启动
@@ -15,7 +15,7 @@ const { clearElectronDevState, writeElectronDevState } = require('./lib/electron
 const root = path.resolve(__dirname, '..')
 const args = process.argv.slice(2)
 const skipBuild = args.includes('--skip-build')
-// 不默认开布局守卫：交给用户测试的构建行为要与安装包一致（守卫的整页扫描会打断跟手交互）。需要时显式传 --dev-layout-guard=log。
+// 不默认开布局守卫：正式构建行为要与安装包一致（守卫的整页扫描会打断跟手交互）。需要时显式传 --dev-layout-guard=log。
 const appArgs = args.filter(arg => arg !== '--skip-build')
 
 if (!skipBuild) {

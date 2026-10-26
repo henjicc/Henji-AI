@@ -64,6 +64,9 @@ export function resolveDevelopmentLaunchQuery(
     }
   }
 
+  // 开发检查：严格模式、布局守卫、主动作预算与 debug 日志一起打开；默认关，开发运行与正式版一致
+  if (argv.includes('--dev-checks')) query[DEVELOPMENT_LAUNCH_QUERY_KEYS.checks] = '1'
+
   // 运行时布局守卫：`--dev-layout-guard` 描边 + 日志，`--dev-layout-guard=log` 只记日志
   const layoutGuard = argv.includes('--dev-layout-guard') ? 'outline' : readOption(argv, '--dev-layout-guard')
   if (layoutGuard) {
@@ -89,7 +92,7 @@ export function resolveDevelopmentLaunchQuery(
 }
 
 /**
- * 附属窗口（日志窗口）沿用的开发启动参数：只带对所有窗口都成立的主题预设与布局守卫，
+ * 附属窗口（日志窗口）沿用的开发启动参数：只带对所有窗口都成立的主题预设、开发检查与布局守卫，
  * 页面定位、素材与首次引导只属于主窗口。日志窗口与主窗口同源应用主题（重要记录 010），
  * 巡检用 `--dev-theme-preset` 截图时两个窗口必须是同一个预设。
  */
@@ -101,5 +104,6 @@ export function resolveSecondaryWindowLaunchQuery(
   const themePreset = query[DEVELOPMENT_LAUNCH_QUERY_KEYS.themePreset]
   // 布局守卫对所有窗口都成立（日志窗口一样可能被裁切或遮挡）
   const layoutGuard = query[DEVELOPMENT_LAUNCH_QUERY_KEYS.layoutGuard]
-  return { ...(themePreset ? { [DEVELOPMENT_LAUNCH_QUERY_KEYS.themePreset]: themePreset } : {}), ...(layoutGuard ? { [DEVELOPMENT_LAUNCH_QUERY_KEYS.layoutGuard]: layoutGuard } : {}) }
+  const checks = query[DEVELOPMENT_LAUNCH_QUERY_KEYS.checks]
+  return { ...(themePreset ? { [DEVELOPMENT_LAUNCH_QUERY_KEYS.themePreset]: themePreset } : {}), ...(checks ? { [DEVELOPMENT_LAUNCH_QUERY_KEYS.checks]: checks } : {}), ...(layoutGuard ? { [DEVELOPMENT_LAUNCH_QUERY_KEYS.layoutGuard]: layoutGuard } : {}) }
 }

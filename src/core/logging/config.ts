@@ -1,4 +1,5 @@
 import type { LogConfig, LogLevel } from './types'
+import { readDevelopmentLaunchOptions } from '@/core/development/developmentLaunch'
 
 const TEST_MODE_STORAGE_KEY = 'henji_test_mode'
 
@@ -20,7 +21,8 @@ let logConfig: LogConfig = {
 }
 
 function resolveDefaultLevel(): LogLevel {
-  if (import.meta.env.DEV) {
+  // 开发运行与正式版同一默认级别；debug 日志用测试模式或 `--dev-checks` 打开
+  if (import.meta.env.DEV && readDevelopmentLaunchOptions().checks) {
     return 'debug'
   }
   return isTestModeEnabledFromStorage() ? 'debug' : 'info'

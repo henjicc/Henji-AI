@@ -5,6 +5,7 @@
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
+import { readDevelopmentLaunchOptions } from '@/core/development/developmentLaunch'
 
 // 导入翻译资源
 import zhCN_common from './locales/zh-CN/common.json'
@@ -125,7 +126,7 @@ i18n
       convertDetectedLanguage: normalizeLanguage,
     },
 
-    debug: import.meta.env.DEV,
+    debug: import.meta.env.DEV && readDevelopmentLaunchOptions().checks,
   })
 
 export default i18n
