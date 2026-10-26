@@ -13,6 +13,7 @@ import { forgetActiveWebRecording, listWebRecordingLocations, rememberActiveWebR
 import { getDocumentService } from '../documents/runtime'
 import { stripHenjiExtension } from '../../../../src/core/fileExtensions'
 import { copyDirectoryContentsNoOverwrite } from '../fs/no-overwrite'
+import { moveWebRecordingDirectory } from './moveDirectory'
 import { newestReplayName, REPLAY_CLEAN_SUFFIX } from '../../../../src/core/webReplay/replayVideos'
 
 const logger = createMainLogger('main.web_replay')
@@ -190,23 +191,6 @@ export async function listWebRecordings(): Promise<WebRecordingSummary[]> {
   return manifests.filter((m): m is WebRecordingSummary => m !== null).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 }
 
-/**
- * Windows refuses to move a folder while any file in it is open (a video still closing in the preview,
- * the indexer, antivirus); those locks clear within moments, so the move is retried briefly.
- */
-async function moveDirectory(from: string, to: string): Promise<void> {
-  for (let attempt = 0; ; attempt++) {
-    try { await fs.rename(from, to); return } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code
-      if ((code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES') || attempt >= 15) {
-        if (code === 'EPERM' || code === 'EBUSY' || code === 'EACCES') throw new Error('这段录制的文件正被其他程序占用，请关闭正在播放或打开它的程序后再删除')
-        throw error
-      }
-      await new Promise(resolve => setTimeout(resolve, 200))
-    }
-  }
-}
-
 /** Deleting moves the directory to a trash folder beside it, so the operation can be undone. */
 export async function removeWebRecording(recordingId: string): Promise<void> {
   if ((server?.apps() ?? []).some(app => app.recordingId === recordingId)) throw new Error('这段网页录制还在进行，请先停止')
@@ -218,7 +202,7 @@ export async function removeWebRecording(recordingId: string): Promise<void> {
   await fs.rm(trashOrigin(recordingId), { force: true })
   // A project recording leaves its project for the app-data trash too, so deleting can be undone the same way.
   if (location.documentId) await fs.writeFile(trashOrigin(recordingId), JSON.stringify({ directory: location.directory }))
-  await moveDirectory(location.directory, path.join(trash, recordingId))
+  await moveWebRecordingDirectory(location.directory, path.join(trash, recordingId))
   if (location.documentId) await getDocumentService().forgetDocument(location.documentId)
   logger.info('网页录制已移到回收区', { event: 'web_replay.recording.removed', context: { recordingId, projectId: location.projectId } })
 }
@@ -229,7 +213,7 @@ export async function restoreWebRecording(recordingId: string): Promise<void> {
   const target = origin ?? path.join(webRecordingsRoot(), (await new WebRecordingStore(trashed).readManifest()).id)
   if (await fs.access(target).then(() => true, () => false)) throw new Error('原位置已有同名的文件夹，没能恢复这段网页录制')
   await fs.mkdir(path.dirname(target), { recursive: true })
-  await moveDirectory(trashed, target)
+  await moveWebRecordingDirectory(trashed, target)
   if (origin) { await getDocumentService().indexDocumentAt(target); await fs.rm(trashOrigin(recordingId), { force: true }) }
   logger.info('网页录制已恢复', { event: 'web_replay.recording.restored', context: { recordingId } })
 }
