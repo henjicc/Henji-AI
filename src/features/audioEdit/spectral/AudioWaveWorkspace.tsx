@@ -23,6 +23,7 @@ import type { WaveformViewport } from '../waveformViewport'
 import { AudioEditTransport } from '../workspace/AudioEditTransport'
 import { useAudioEditWorkspace } from '../workspace/audioEditWorkspaceContext'
 import { AudioSpectralEditor, type AudioPlayheadSource } from './AudioSpectralEditor'
+import { useAudioEditEffectSelection } from '../workspace/audioEditEffectInsert'
 import type { AudioEditorTool } from './spectralEditorModel'
 import { audioWaveToolForKey, type audioWaveActions, type AudioWaveEditorState } from './audioWaveEditorState'
 import { useAudioEditSpectral } from './useAudioEditSpectral'
@@ -195,11 +196,14 @@ export function AudioWaveWorkspace() {
     if (cursor < duration) ranges.push({ start: cursor, end: duration, mode: 'delete' })
     return [...ranges, ...pending.map(range => ({ start: range.startFrame, end: range.endFrame, mode: 'pending' as const }))]
   }, [spans, duration, pending])
-  // 时间刻度上的小标记：效果控件里开着的“去除口水音”检测到的位置
+  // 口水音位置：只在效果控件里选中“去除口水音”时标出来（处理的橙色、关掉不处理的灰色），平时不占画面
+  const effectSelection = useAudioEditEffectSelection()
+  const selectedEffectId = effectSelection.projectId === project.id ? effectSelection.selectedId : ''
   const marks = React.useMemo(() => {
-    const clicks = (project.chainBypassed ? [] : project.effectChain ?? []).flatMap(item => item.kind === 'mouth_declick' && item.enabled ? item.clicks : [])
-    return clicks.length ? clicks.map(click => ({ start: click.startFrame, end: click.endFrame })) : undefined
-  }, [project.effectChain, project.chainBypassed])
+    const item = project.effectChain?.find(candidate => candidate.id === selectedEffectId)
+    if (item?.kind !== 'mouth_declick') return undefined
+    return [...item.clicks.map(click => ({ start: click.startFrame, end: click.endFrame })), ...(item.skipped ?? []).map(click => ({ start: click.startFrame, end: click.endFrame, off: true }))]
+  }, [project.effectChain, selectedEffectId])
   const repairs = React.useMemo(() => (project.repairs ?? []).filter(repair => repair.enabled && repair.kind === 'spectral_heal').map(repair => ({ id: repair.id, start: repair.startFrame, end: repair.endFrame, lowHz: repair.lowHz, highHz: repair.highHz })), [project.repairs])
   const visibleCuts = insertion ? spliceAudioRanges(cutRanges.map((range, index) => ({ ...range, id: String(index), startFrame: range.start, endFrame: range.end })), insertion.start, insertion.start + (insertion.replace ? insertion.frames : 0), insertion.frames).map(range => ({ ...range, start: range.startFrame, end: range.endFrame })) : cutRanges
   const menu = useContextMenu()

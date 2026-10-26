@@ -41,8 +41,10 @@ export const AUDIO_SCOPE_COLORS = {
   navigatorWave: '#2e9e6c',
   playhead: '#ff4a3d',
   playheadHandle: '#4c9dff',
-  /** 时间刻度上的口水音标记 */
+  /** 口水音标记（选中“去除口水音”时显示）：刻度上的短线与波形、频谱上的竖线；关掉不处理的位置用灰色 */
   mouthClick: '#f5b83d',
+  mouthClickLine: 'rgba(245,184,61,0.55)',
+  mouthClickOff: 'rgba(255,255,255,0.4)',
   selection: 'rgba(255,255,255,0.2)',
   selectionEdge: 'rgba(255,255,255,0.6)',
   viewWindow: 'rgba(255,255,255,0.1)',

@@ -250,7 +250,7 @@ const values: Record<string, unknown> = {
   'document.canvas': { nodes: [{ id: 'golden-node', type: 'textDisplay', position: { x: 0, y: 0 }, data: { text: '黄金样本' } }], edges: [] },
   'document.audio_edit': { gainRegions: [{ id: 'gain', startFrame: 0, endFrame: 24000, gainDb: -6, fadeInFrames: 100, fadeOutFrames: 100, enabled: true }], repairs: [{ id: 'repair', kind: 'spectral_heal', startFrame: 1000, endFrame: 2000, lowHz: 100, highHz: 1000, strength: .5, enabled: true, strokes: [{ radius: .1, radiusY: .2, points: [{ x: .5, y: .5 }] }] }], source: { mediaType: 'audio', sourcePath: '/persistence-project/素材/voice.wav', audioPath: '/persistence-project/素材/voice.wav', durationFrames: 48000, sampleRate: 48000, channels: 1 }, referenceScript: '参考稿', transcript: [{ id: 'word', text: '你好', startFrame: 0, endFrame: 24000, included: true, locked: false, granularity: 'word' }], suggestions: [], cuts: [{ id: 'cut', startFrame: 24000, endFrame: 48000, reason: 'manual', enabled: true }],
     effectChain: [
-      { id: 'fx-declick', kind: 'mouth_declick', enabled: true, sensitivity: 50, analyzed: true, clicks: [{ startFrame: 3000, endFrame: 3120 }] },
+      { id: 'fx-declick', kind: 'mouth_declick', enabled: true, sensitivity: 50, analyzed: true, clicks: [{ startFrame: 3000, endFrame: 3120 }], skipped: [{ startFrame: 9000, endFrame: 9080 }] },
       { id: 'fx-breath', kind: 'breath', enabled: true, mode: 'attenuate', reductionDb: -12, analyzed: true, breaths: [{ startFrame: 12000, endFrame: 14400 }] },
       { id: 'fx-dereverb', kind: 'separation', enabled: false, mode: 'dereverb', amount: .8 },
       { id: 'fx-plugin', kind: 'plugin', name: 'RX 10 Voice De-noise', enabled: false, pluginId: 'rx-golden', parameters: { Threshold: .4 } },

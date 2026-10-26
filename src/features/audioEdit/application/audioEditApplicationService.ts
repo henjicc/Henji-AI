@@ -316,10 +316,13 @@ export async function detectProjectAudioEditMouthClicks(projectId: string, optio
     total = 0
     const effectChain = (document.effectChain ?? []).map(item => {
       if (item.id !== itemId || item.kind !== 'mouth_declick') return item
-      const kept = range ? item.clicks.filter(click => click.endFrame <= range.startFrame || click.startFrame >= range.endFrame) : []
+      const outside = (click: { startFrame: number; endFrame: number }) => !range || click.endFrame <= range.startFrame || click.startFrame >= range.endFrame
+      const kept = range ? item.clicks.filter(outside) : []
       const next = [...kept, ...clicks.map(({ startFrame, endFrame }) => ({ startFrame, endFrame }))].sort((a, b) => a.startFrame - b.startFrame).slice(0, 20000)
+      // 重新检测的范围里，之前关掉的位置一并清掉（按新结果重来）；范围外的保持关掉
+      const skipped = range ? (item.skipped ?? []).filter(outside) : []
       total = next.length
-      return { ...item, sensitivity, analyzed: true, clicks: next }
+      return { ...item, sensitivity, analyzed: true, clicks: next, skipped: skipped.length ? skipped : undefined }
     })
     durationFrames = range ? range.endFrame - range.startFrame : document.source.durationFrames; sampleRate = document.source.sampleRate
     return { ...document, effectChain }

@@ -1,0 +1,182 @@
+{
+  "format": "henji-document",
+  "envelopeVersion": 1,
+  "minReaderVersion": 1,
+  "kind": "audio_edit",
+  "kindVersion": 6,
+  "kindMinReaderVersion": 5,
+  "id": "golden-audio_edit",
+  "name": "音频",
+  "createdAt": "2026-10-09T00:00:00.000Z",
+  "updatedAt": "2026-10-09T00:00:00.000Z",
+  "revision": 0,
+  "content": {
+    "source": {
+      "mediaType": "audio",
+      "sourcePath": "/persistence-project/素材/voice.wav",
+      "audioPath": "/persistence-project/素材/voice.wav",
+      "durationFrames": 48000,
+      "sampleRate": 48000,
+      "channels": 1
+    },
+    "referenceScript": "参考稿",
+    "transcript": [
+      {
+        "id": "word",
+        "text": "你好",
+        "startFrame": 0,
+        "endFrame": 24000,
+        "included": true,
+        "locked": false,
+        "granularity": "word"
+      }
+    ],
+    "suggestions": [],
+    "cuts": [
+      {
+        "id": "cut",
+        "startFrame": 24000,
+        "endFrame": 48000,
+        "reason": "manual",
+        "enabled": true
+      }
+    ],
+    "gainRegions": [
+      {
+        "id": "gain",
+        "startFrame": 0,
+        "endFrame": 24000,
+        "enabled": true,
+        "gainDb": -6,
+        "fadeInFrames": 100,
+        "fadeOutFrames": 100
+      }
+    ],
+    "repairs": [
+      {
+        "id": "repair",
+        "startFrame": 1000,
+        "endFrame": 2000,
+        "enabled": true,
+        "kind": "spectral_heal",
+        "lowHz": 100,
+        "highHz": 1000,
+        "strength": 0.5,
+        "strokes": [
+          {
+            "radius": 0.1,
+            "radiusY": 0.2,
+            "points": [
+              {
+                "x": 0.5,
+                "y": 0.5
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "effectChain": [
+      {
+        "id": "fx-declick",
+        "kind": "mouth_declick",
+        "enabled": true,
+        "sensitivity": 50,
+        "analyzed": true,
+        "clicks": [
+          {
+            "startFrame": 3000,
+            "endFrame": 3120
+          }
+        ],
+        "skipped": [
+          {
+            "startFrame": 9000,
+            "endFrame": 9080
+          }
+        ]
+      },
+      {
+        "id": "fx-breath",
+        "kind": "breath",
+        "enabled": true,
+        "mode": "attenuate",
+        "reductionDb": -12,
+        "analyzed": true,
+        "breaths": [
+          {
+            "startFrame": 12000,
+            "endFrame": 14400
+          }
+        ]
+      },
+      {
+        "id": "fx-dereverb",
+        "kind": "separation",
+        "enabled": false,
+        "mode": "dereverb",
+        "amount": 0.8
+      },
+      {
+        "id": "fx-plugin",
+        "kind": "plugin",
+        "name": "RX 10 Voice De-noise",
+        "enabled": false,
+        "pluginId": "rx-golden",
+        "parameters": {
+          "Threshold": 0.4
+        }
+      },
+      {
+        "id": "fx-essential",
+        "kind": "essential",
+        "enabled": true,
+        "settings": {
+          "type": "dialogue",
+          "repair": {
+            "noise": {
+              "enabled": true,
+              "amount": 50
+            },
+            "hum": {
+              "enabled": false,
+              "amount": 60,
+              "mains": 50
+            }
+          },
+          "clarity": {
+            "eq": {
+              "enabled": true,
+              "amount": 50,
+              "preset": "podcast"
+            }
+          }
+        }
+      },
+      {
+        "id": "fx-comp",
+        "kind": "builtin",
+        "name": "压缩器",
+        "enabled": true,
+        "amount": 1,
+        "builtin": {
+          "id": "compressor",
+          "params": {
+            "amount": 40,
+            "speed": "normal",
+            "makeup": true
+          }
+        }
+      }
+    ],
+    "chainBypassed": false,
+    "output": {
+      "volumeDb": -1.5,
+      "loudness": {
+        "enabled": true,
+        "targetLufs": -16,
+        "gainDb": 3.5
+      }
+    }
+  }
+}

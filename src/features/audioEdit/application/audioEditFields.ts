@@ -50,7 +50,7 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
     field(E.project, 'effect_chain', '效果控件（有顺序的效果链）', objectValue('audio_edit.effect_chain'), s => json(s.document.effectChain ?? []), (s, v) => { s.document.effectChain = audioEditEffectChainSchema.parse(v) }, [],
       '效果控件：从上到下依次处理录音本身（源时间，剪辑区间只决定播放哪些部分；效果从不改变时长）。每项 { id, kind, enabled, … }：'
       + 'builtin（name、amount 0–1 效果强度、builtin { id 音频内置效果 ID, params 参数同剪辑的音频效果 }）；essential 基本声音（settings 同剪辑片段的基本声音，不含 loudness / volume）；'
-      + 'mouth_declick 去除口水音（sensitivity 0–100、analyzed、clicks 源采样帧范围；检测用 detect_audio_edit_mouth_clicks）；breath 呼吸声（mode attenuate 减弱 / mute 静音、reductionDb、breaths 源采样帧范围）；'
+      + 'mouth_declick 去除口水音（sensitivity 0–100、analyzed、clicks 要修掉的源采样帧范围、skipped 用户关掉不处理的范围；检测用 detect_audio_edit_mouth_clicks，某处听着不对就把它从 clicks 挪到 skipped）；breath 呼吸声（mode attenuate 减弱 / mute 静音、reductionDb、breaths 源采样帧范围）；'
       + 'separation（mode isolate 人声分离 / dereverb 去混响、amount 0–1）；plugin 第三方插件（name、pluginId 取自 audio_edit.processor_chain 的 available_processors、parameters 参数名到 0–1）。最多 32 项。'),
     field(E.project, 'chain_bypassed', '效果控件整体关闭', BOOL, s => s.document.chainBypassed ?? false, (s, v) => { s.document.chainBypassed = boolean(v) }, [],
       '为 true 时试听与导出都不经过效果链（对比处理前后）；输出一节照常。'),

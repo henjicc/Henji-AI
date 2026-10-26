@@ -31,8 +31,11 @@ const builtinItemSchema = z.object({
   builtin: z.object({ id: z.string().min(1).max(64), params: z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), z.union([z.number().finite(), z.boolean(), z.string().max(4096)])) }).strict(),
 }).strict()
 const essentialItemSchema = z.object({ id, kind: z.literal('essential'), enabled: z.boolean(), settings: essentialSoundSettingsSchema }).strict()
-/** 去除口水音：analyzed 为是否已按当前位置之前的声音检测过；clicks 为检测出的咔嗒范围（源采样帧，单处不超过 1 秒）。 */
-const mouthDeclickItemSchema = z.object({ id, kind: z.literal('mouth_declick'), enabled: z.boolean(), sensitivity: z.number().finite().min(0).max(100), analyzed: z.boolean(), clicks: rangeList(48000) }).strict()
+/**
+ * 去除口水音：analyzed 为是否已按当前位置之前的声音检测过；clicks 为要修掉的咔嗒范围（源采样帧，单处不超过 1 秒）；
+ * skipped 为检测到但用户关掉、不处理的位置（留着以便再打开；重新检测时清掉）。
+ */
+const mouthDeclickItemSchema = z.object({ id, kind: z.literal('mouth_declick'), enabled: z.boolean(), sensitivity: z.number().finite().min(0).max(100), analyzed: z.boolean(), clicks: rangeList(48000), skipped: rangeList(48000).optional() }).strict()
 /** 呼吸声：把检测到的全部呼吸统一减弱或静音（不改时长；删掉呼吸属于粗剪）。 */
 const breathItemSchema = z.object({ id, kind: z.literal('breath'), enabled: z.boolean(), mode: z.enum(['attenuate', 'mute']), reductionDb: z.number().finite().min(-40).max(0), analyzed: z.boolean(), breaths: rangeList(48000 * 10) }).strict()
 /** 人声分离 / 去混响：本地模型处理，按 amount（0–1）与处理前的声音混合。 */
@@ -133,6 +136,21 @@ export function audioEditOutputEffects(output: AudioEditOutput | undefined): Aud
 /** 边播边算的部分（试听与导出共用）：链末尾的实时效果，再接输出一节。 */
 export function audioEditRealtimeEffects(project: ChainOwner): AudioEffectInstance[] {
   return [...splitAudioEditChain(project).live.flatMap(audioEditChainItemEffects), ...audioEditOutputEffects(project.output)]
+}
+
+/**
+ * 口水音逐处或按范围开关：与 range 重叠的位置在“处理（clicks）”与“不处理（skipped）”之间挪动，两边都按时间排好。
+ * 只有 clicks 进处理配方，关掉的位置不再修，改动只重算口水音这一项往后。
+ */
+export function setAudioEditMouthClicksSkipped(item: AudioEditMouthDeclickItem, range: { startFrame: number; endFrame: number }, skipped: boolean): AudioEditMouthDeclickItem {
+  const overlaps = (click: { startFrame: number; endFrame: number }) => click.startFrame < range.endFrame && click.endFrame > range.startFrame
+  const from = skipped ? item.clicks : item.skipped ?? []
+  const moving = from.filter(overlaps)
+  if (!moving.length) return item
+  const sort = (list: Array<{ startFrame: number; endFrame: number }>) => [...list].sort((a, b) => a.startFrame - b.startFrame)
+  const clicks = skipped ? item.clicks.filter(click => !overlaps(click)) : sort([...item.clicks, ...moving])
+  const rest = skipped ? sort([...(item.skipped ?? []), ...moving]) : (item.skipped ?? []).filter(click => !overlaps(click))
+  return { ...item, clicks, ...(rest.length ? { skipped: rest } : { skipped: undefined }) }
 }
 
 /** 新建效果项的默认值。 */

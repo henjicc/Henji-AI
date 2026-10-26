@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { audioEditDocumentKind } from '../documents/kinds/audioEdit'
-import { audioEditEffectChainSchema, audioEditRealtimeEffects, migrateAudioEditEffectsToChain, splitAudioEditChain, type AudioEditChainItem } from './effects'
+import { audioEditEffectChainSchema, audioEditRealtimeEffects, migrateAudioEditEffectsToChain, setAudioEditMouthClicksSkipped, splitAudioEditChain, type AudioEditChainItem, type AudioEditMouthDeclickItem } from './effects'
 import { audioEditSourceRecipe } from './regions'
 
 /*
@@ -61,5 +61,19 @@ describe('音频编辑效果链', () => {
   it('输出：音量与响度补偿合成一个增益，开了自动匹配时末尾限幅', () => {
     expect(audioEditRealtimeEffects({ output: { volumeDb: -2, loudness: { enabled: true, targetLufs: -16, gainDb: 3.5 } } }).map(effect => [effect.builtin.id, effect.builtin.params.gain])).toEqual([['gain_balance', 1.5], ['limiter', undefined]])
     expect(audioEditRealtimeEffects({ output: { volumeDb: 0 } })).toEqual([])
+  })
+  it('口水音逐处或按选区关掉、再恢复：只有处理的位置进配方，关掉的留着可以再打开', () => {
+    const item: AudioEditMouthDeclickItem = { id: 'd', kind: 'mouth_declick', enabled: true, sensitivity: 50, analyzed: true, clicks: [{ startFrame: 10, endFrame: 20 }, { startFrame: 100, endFrame: 110 }, { startFrame: 500, endFrame: 510 }] }
+    const one = setAudioEditMouthClicksSkipped(item, { startFrame: 100, endFrame: 110 }, true)
+    expect(one.clicks).toEqual([{ startFrame: 10, endFrame: 20 }, { startFrame: 500, endFrame: 510 }])
+    expect(one.skipped).toEqual([{ startFrame: 100, endFrame: 110 }])
+    expect(audioEditSourceRecipe({ effectChain: [one] })).not.toEqual(audioEditSourceRecipe({ effectChain: [item] }))
+    const range = setAudioEditMouthClicksSkipped(one, { startFrame: 0, endFrame: 200 }, true)
+    expect(range.clicks).toEqual([{ startFrame: 500, endFrame: 510 }])
+    expect(range.skipped).toEqual([{ startFrame: 10, endFrame: 20 }, { startFrame: 100, endFrame: 110 }])
+    const back = setAudioEditMouthClicksSkipped(range, { startFrame: 0, endFrame: 1000 }, false)
+    expect(back.clicks).toEqual(item.clicks)
+    expect(back.skipped).toBeUndefined()
+    expect(audioEditEffectChainSchema.parse([range])).toEqual([range])
   })
 })

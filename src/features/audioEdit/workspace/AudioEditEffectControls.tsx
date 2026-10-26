@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { RotateCcw, Trash2 } from 'lucide-react'
-import { UiEmpty, UiFieldLayoutContext, UiFormRow, UiIconButton, UiOptionButton, UiSearchInput, UiSegmented, UI_TEXT_META_CLASS } from '@/components/ui'
+import { ChevronLeft, ChevronRight, RotateCcw, Trash2 } from 'lucide-react'
+import { UiButton, UiEmpty, UiFieldLayoutContext, UiFormRow, UiIconButton, UiOptionButton, UiSearchInput, UiSegmented, UI_TEXT_META_CLASS } from '@/components/ui'
 import { DockHeaderPortal } from '@/components/dockLayouts/DockHeaderPortal'
 import { EffectSection, EffectToggle } from '@/components/effects/EffectSection'
 import { AudioEffectParams } from '@/components/audio/AudioEffectRack'
@@ -11,7 +11,8 @@ import type { ParamFieldSpec } from '@/components/ui/params/fieldSpec'
 import { useReorderDrag } from '@/components/ui/fileUploader/useReorderDrag'
 import { UI_PROPERTY_INSET_CLASS, UI_TRIGGER_PANEL_CLASS } from '@/components/ui/styleTokens'
 import { videoEditBuiltinDefaults, videoEditBuiltinEffect } from '@/core/videoEdit/builtinEffects'
-import { audioEditEssentialItemSettings, type AudioEditChainItem, type AudioEditOutput } from '@/core/audioEdit/effects'
+import { audioEditEssentialItemSettings, setAudioEditMouthClicksSkipped, type AudioEditChainItem, type AudioEditOutput } from '@/core/audioEdit/effects'
+import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
 import { audioEditChainItemName, audioEditEffectCatalog, filterAudioEditEffectCatalog, AUDIO_EDIT_EFFECT_FOLDER_NAMES, type AudioEditEffectCatalogEntry } from '@/core/audioEdit/effectCatalog'
 import type { AudioEditProcessorDescriptor } from '@/core/audioEdit/types'
 import { beginAudioEditGesture } from '../application/audioEditProjectInstances'
@@ -166,7 +167,7 @@ function EffectItemBody({ item, workspace, onChange }: { item: AudioEditChainIte
   if (item.kind === 'builtin') return <AudioEffectParams effect={item} gesture={() => beginAudioEditGesture(projectId)} onChange={next => onChange({ ...next, kind: 'builtin' })} />
   if (item.kind === 'essential') return <EssentialSoundControls scope="chain" value={item.settings} disabled={workspace.disabled} gesture={() => beginAudioEditGesture(projectId)}
     onChange={next => { if (next) onChange({ ...item, settings: audioEditEssentialItemSettings(next) }) }} />
-  if (item.kind === 'mouth_declick') return <MouthDeclickBody item={item} workspace={workspace} />
+  if (item.kind === 'mouth_declick') return <MouthDeclickBody item={item} workspace={workspace} onChange={onChange} />
   if (item.kind === 'breath') return <BreathBody item={item} workspace={workspace} onChange={onChange} />
   if (item.kind === 'separation') return <SeparationBody item={item} projectId={projectId} onChange={onChange} />
   return <PluginBody item={item} plugin={workspace.processors.find(plugin => plugin.id === item.pluginId)} projectId={projectId} onChange={onChange} />
@@ -176,13 +177,52 @@ function Readout({ label, value }: { label: string; value: string }): React.Reac
   return <UiFormRow label={label} density="compact"><span className="text-xs tabular-nums text-text1">{value}</span></UiFormRow>
 }
 
-function MouthDeclickBody({ item, workspace }: { item: Extract<AudioEditChainItem, { kind: 'mouth_declick' }>; workspace: AudioEditWorkspace }): React.ReactElement {
+function clockTime(frames: number, sampleRate: number): string {
+  const seconds = Math.max(0, frames / Math.max(1, sampleRate))
+  return `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(1).padStart(4, '0')}`
+}
+
+/**
+ * 去除口水音：灵敏度（松手后重新检测）、处理与不处理的数量；逐处检查（跳到这一处前一秒、这处不处理 / 恢复）
+ * 与按波形选区整段关掉或恢复。选中这一项时波形和频谱上会标出每一处（橙色处理、灰色不处理）。
+ */
+function MouthDeclickBody({ item, workspace, onChange }: { item: Extract<AudioEditChainItem, { kind: 'mouth_declick' }>; workspace: AudioEditWorkspace; onChange: (next: AudioEditChainItem) => void }): React.ReactElement {
   const [sensitivity, setSensitivity] = useState(item.sensitivity)
   const gesture = useValueGesture(workspace.project.id, setSensitivity, value => analyzeAudioEditEffect(workspace, item, value))
-  const field = slider('sensitivity', '灵敏度', '越高检出越多，也越容易把正常的辅音当成口水音；松手后按新灵敏度重新检测。', 0, 100, 5, '', 50)
+  const field = slider('sensitivity', '灵敏度', '越高检出越多，也越容易把正常的辅音当成口水音；松手后按新灵敏度重新检测（之前关掉的位置也会清掉）。', 0, 100, 5, '', 50)
+  const rate = workspace.project.source.sampleRate
+  const positions = useMemo(() => [...item.clicks.map(click => ({ ...click, off: false })), ...(item.skipped ?? []).map(click => ({ ...click, off: true }))]
+    .sort((a, b) => a.startFrame - b.startFrame), [item.clicks, item.skipped])
+  const [current, setCurrent] = useState<number | null>(null)
+  const index = current === null ? -1 : positions.findIndex(position => position.startFrame === current)
+  const here = index >= 0 ? positions[index] : undefined
+  const go = (next: number): void => {
+    const position = positions[next]
+    if (!position) return
+    setCurrent(position.startFrame)
+    workspace.seek(Math.max(0, position.startFrame - rate))
+  }
+  const playhead = (): number => useAudioEditPlaybackStore.getState().sourceFrame
+  const goNext = (): void => go(index >= 0 ? index + 1 : positions.findIndex(position => position.startFrame > playhead()))
+  const goPrevious = (): void => { if (index >= 0) go(index - 1); else go(positions.filter(position => position.startFrame < playhead()).length - 1) }
+  const range = workspace.waveSelection
+  const skippedCount = item.skipped?.length ?? 0
+  const rangeReason = '先在波形上拖出一段选区'
   return <UiFieldLayoutContext.Provider value="property"><div className="flex flex-col">
     <ParamList fields={[field]} values={{ sensitivity }} renderControl={(spec, value) => <ParamField field={spec} value={value} gesture={gesture} />} />
-    <Readout label="检测到" value={!item.analyzed ? '正在检测…' : item.clicks.length ? `${item.clicks.length} 处` : '没有找到'} />
+    <Readout label="检测到" value={!item.analyzed ? '正在检测…' : positions.length ? `处理 ${item.clicks.length} 处${skippedCount ? ` · 不处理 ${skippedCount} 处` : ''}` : '没有找到'} />
+    {positions.length > 0 && <div className={`flex flex-col gap-1 py-1 ${UI_PROPERTY_INSET_CLASS}`} data-audio-edit-mouth-review>
+      <div className="flex items-center gap-1">
+        <UiIconButton size="sm" aria-label="上一处口水音" tooltip="上一处（跳到它前一秒，按空格播放）" disabled={index === 0} onClick={goPrevious}><ChevronLeft /></UiIconButton>
+        <UiIconButton size="sm" aria-label="下一处口水音" tooltip="下一处（跳到它前一秒，按空格播放）" disabled={index === positions.length - 1} onClick={goNext}><ChevronRight /></UiIconButton>
+        <span className="min-w-0 flex-1 truncate text-xs tabular-nums text-text2">{here ? `第 ${index + 1} / ${positions.length} 处 · ${clockTime(here.startFrame, rate)}${here.off ? ' · 不处理' : ''}` : '从播放位置往后检查'}</span>
+        <UiButton size="sm" disabled={!here} disabledReason="先用左边的箭头跳到一处" onClick={() => here && onChange(setAudioEditMouthClicksSkipped(item, here, !here.off))}>{here?.off ? '恢复这处' : '这处不处理'}</UiButton>
+      </div>
+      <div className="flex items-center gap-1">
+        <UiButton size="sm" disabled={!range} disabledReason={rangeReason} onClick={() => range && onChange(setAudioEditMouthClicksSkipped(item, range, true))}>选区内不处理</UiButton>
+        <UiButton size="sm" disabled={!range || !skippedCount} disabledReason={range ? '选区里没有关掉的位置' : rangeReason} onClick={() => range && onChange(setAudioEditMouthClicksSkipped(item, range, false))}>选区内恢复</UiButton>
+      </div>
+    </div>}
   </div></UiFieldLayoutContext.Provider>
 }
 

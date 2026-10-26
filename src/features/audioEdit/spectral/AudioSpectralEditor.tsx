@@ -62,7 +62,8 @@ export interface AudioSpectralEditorProps {
   /** 已有的修复记录：频谱上画出轮廓，方便找到改过的地方。 */
   repairs: readonly AudioEditorRegion[]
   /** 时间刻度上的小标记（检测到的口水音），源采样帧 */
-  marks?: ReadonlyArray<{ start: number; end: number }>
+  /** 口水音位置（选中“去除口水音”时才给）：off 为关掉不处理的位置。 */
+  marks?: ReadonlyArray<{ start: number; end: number; off?: boolean }>
   /** 右键编辑区：宿主弹出针对选区的菜单。 */
   onContextMenu?: (event: React.MouseEvent) => void
   /** 刻度下方的字幕条（宿主按可见区间排好），没有转写稿时不传。 */
@@ -197,6 +198,7 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
   React.useLayoutEffect(() => { placePlayhead(playhead.current()) }, [view, playhead, placePlayhead, display, split])
   const playheadRef = (key: string) => (node: HTMLElement | null) => { if (node) playheadNodes.current.set(key, node); else playheadNodes.current.delete(key) }
 
+  const visibleMarks = React.useMemo(() => (props.marks ?? []).filter(mark => mark.end > view.start && mark.start < view.end).slice(0, 4000), [props.marks, view.start, view.end])
   const showWave = display !== 'spectrum'
   const showSpectrum = display !== 'waveform'
   const minimumView = Math.min(durationFrames, AUDIO_EDIT_MIN_VIEW_FRAMES)
@@ -481,7 +483,7 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
         <span className={`${UI_TEXT_TIMECODE_CLASS} absolute bottom-1 left-1 whitespace-nowrap text-2xs text-text3`}>{formatTimecode(frame, sampleRate, step)}</span>
       </div>)}
       {selection && visible(selection.start, selection.end) && <div className="pointer-events-none absolute inset-y-0" style={{ ...spanStyle(selection.start, selection.end), background: AUDIO_SCOPE_COLORS.selection }} />}
-      {props.marks?.filter(mark => visible(mark.start, mark.end)).slice(0, 4000).map(mark => <span key={mark.start} className="pointer-events-none absolute bottom-0 h-2 w-px" style={{ left: percentX(mark.start), background: AUDIO_SCOPE_COLORS.mouthClick }} data-audio-edit-mark />)}
+      {visibleMarks.map(mark => <span key={mark.start} className="pointer-events-none absolute bottom-0 h-2 w-px" style={{ left: percentX(mark.start), background: mark.off ? AUDIO_SCOPE_COLORS.mouthClickOff : AUDIO_SCOPE_COLORS.mouthClick }} data-audio-edit-mark={mark.off ? 'off' : 'on'} />)}
       <span ref={hoverLabel} className={`${UI_TEXT_TIMECODE_CLASS} pointer-events-none absolute top-0.5 z-raised whitespace-nowrap rounded-hairline bg-panel px-0.5 text-2xs text-text1`} style={{ display: 'none' }} />
       <div ref={playheadRef('handle')} role="slider" tabIndex={0} aria-label="播放位置" aria-valuemin={0} aria-valuemax={durationFrames} onKeyDown={onHandleKey}
         className="absolute bottom-0 h-full w-3 -translate-x-1/2 cursor-ew-resize outline-none focus-visible:ring-2 focus-visible:ring-accent-ring" data-audio-playhead-handle data-ui-manipulator>
@@ -522,7 +524,9 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
         {tool === 'brush' && brushHover && !brushPoints.current && spectrumPane.current && <div className="pointer-events-none absolute rounded-full border border-on-media"
           style={{ left: brushHover.x - props.brushPixels, top: brushHover.y - spectrumPane.current.offsetTop - props.brushPixels, width: props.brushPixels * 2, height: props.brushPixels * 2 }} />}
       </div>}
-      {/* 跨两种视图的标记：删除/静音、时间选区、悬停线、播放头 */}
+      {/* 跨两种视图的标记：口水音位置（选中该效果时）、删除/静音、时间选区、悬停线、播放头 */}
+      {visibleMarks.map(mark => <div key={mark.start} className="pointer-events-none absolute inset-y-0" data-audio-overlay={mark.off ? 'mouth-click-off' : 'mouth-click'}
+        style={{ left: percentX(mark.start), width: `max(1px, ${(mark.end - mark.start) / Math.max(1, view.end - view.start) * 100}%)`, background: mark.off ? AUDIO_SCOPE_COLORS.mouthClickOff : AUDIO_SCOPE_COLORS.mouthClickLine }} />)}
       {shownCuts.filter(range => range.end > range.start && visible(range.start, range.end)).map(range => <div key={`${range.mode}:${range.start}-${range.end}`} className="pointer-events-none absolute inset-y-0" data-audio-overlay={range.mode === 'pending' ? 'preview' : range.mode === 'delete' ? 'deleted' : 'mute'}
         style={{ ...spanStyle(range.start, range.end), background: AUDIO_SCOPE_COLORS[range.mode === 'delete' ? 'deleted' : range.mode === 'mute' ? 'muted' : 'pending'] }} />)}
       {selection && visible(selection.start, selection.end) && <div className="pointer-events-none absolute inset-y-0 border-x" data-audio-selection style={{ ...spanStyle(selection.start, selection.end), ...selectionStyle }} />}

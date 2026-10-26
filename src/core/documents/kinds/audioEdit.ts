@@ -74,10 +74,11 @@ export const audioEditDocumentKind: DocumentKindDescriptor<AudioEditDocumentCont
   // 版本 4 = 新增可选的效果组（effects / effectsBypassed）、基本声音（essentialSound）与口水音修复（mouthClicks）。都只加可选字段，旧文件原样可读。
   // 版本 5（2026-10-26 效果控件重构）= 效果组、基本声音、口水音修复、VST3 插件链合成一条有序效果链（effectChain），
   // 音量与自动匹配响度移到 output；去掉了旧程序必填的 vstEnabled，所以旧程序不能再读（minReaderVersion 5，用户已确认）。
-  version: 5,
+  // 版本 6 = 去除口水音新增可选的 skipped（用户关掉、不处理的位置），只加可选字段，最低可读版本不变。
+  version: 6,
   minReaderVersion: 5,
   contentSchema: audioEditContentSchema,
-  migrations: { 1: (content) => structuredClone(content), 2: (content) => structuredClone(content), 3: (content) => structuredClone(content), 4: (content) => migrateAudioEditEffectsToChain(content as Record<string, unknown>) as AudioEditDocumentContent },
+  migrations: { 1: (content) => structuredClone(content), 2: (content) => structuredClone(content), 3: (content) => structuredClone(content), 4: (content) => migrateAudioEditEffectsToChain(content as Record<string, unknown>) as AudioEditDocumentContent, 5: (content) => structuredClone(content) },
   createEmptyContent: () => ({ source: null, referenceScript: '', transcript: [], suggestions: [] }),
   isEmptyContent: isEmptyAudioEditContent,
   summarize: (content) => ({
