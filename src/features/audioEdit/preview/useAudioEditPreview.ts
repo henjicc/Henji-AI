@@ -171,7 +171,7 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
       if (fillingPromiseRef.current === filling) fillingPromiseRef.current = null
       if (generation !== generationRef.current && nodeRef.current) void fillBufferRef.current()
     })
-  }, [project, cache])
+  }, [project, cache, timeline])
   fillBufferRef.current = fillBuffer
 
   const resetAt = useCallback((requestedFrame: number) => {
