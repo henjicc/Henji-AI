@@ -220,3 +220,129 @@ it('records one author draw per frame and uploads the original Canvas filter res
     expect(contexts[2].filter).toBe('none')
   } finally { await runtime.dispose() }
 })
+
+/** Canvas 替身：每张画布各一个上下文，记下真实画布上的每个调用（第几张画布、方法、参数）。 */
+function canvasHarness() {
+  const calls: Array<{ canvas: number; name: string; args: unknown[] }> = []
+  const methods = new Set(['reset', 'save', 'restore', 'setTransform', 'beginPath', 'rect', 'clip', 'fillRect', 'fillText', 'drawImage', 'measureText', 'createPattern'])
+  let count = 0
+  class Canvas {
+    readonly id = count++
+    readonly context: OffscreenCanvasRenderingContext2D
+    constructor(public width: number, public height: number) {
+      const id = this.id, state: Record<string, unknown> = { globalCompositeOperation: 'source-over', globalAlpha: 1, fillStyle: 'black', font: '10px sans-serif' }
+      this.context = new Proxy(state, {
+        has: (target, name) => name in target || methods.has(name as string),
+        get: (target, name: string) => name === 'canvas' ? this : name in target ? target[name] : methods.has(name) ? (...args: unknown[]) => { calls.push({ canvas: id, name, args }); return name === 'measureText' ? { width: 10 } : undefined } : undefined,
+        set: (target, name: string, value) => { target[name] = value; calls.push({ canvas: id, name: `=${name}`, args: [value] }); return true },
+      }) as unknown as OffscreenCanvasRenderingContext2D
+    }
+    getContext(): OffscreenCanvasRenderingContext2D { return this.context }
+  }
+  vi.stubGlobal('OffscreenCanvas', Canvas)
+  const upload = vi.fn()
+  const device = {
+    createTexture: (descriptor: unknown) => ({ descriptor, destroy: vi.fn(), createView: () => ({}) }),
+    queue: { copyExternalImageToTexture: upload },
+  } as unknown as GpuDevice
+  const text = (from: number, value: string): number => calls.slice(from).filter(call => call.name === 'fillText' && call.args[0] === value).length
+  return { calls, upload, device, text }
+}
+const frameInfo = (frame: number) => ({ time: frame / 60, frameDuration: 1 / 60, clip: { time: frame / 60, duration: 5 } })
+const output = { createView: () => ({}), destroy() {} }
+
+it('静止层与在变的层拆成几张栅格：停稳后静止部分不再重画、不再上传，GPU 按原图层顺序叠', async () => {
+  const { calls, upload, device, text } = canvasHarness()
+  // 章节标题的样子：定位框里有沿连线跑的信号点，答案节点停留时轻微明暗起伏，标题与章节名停稳不动
+  const runtime = new VideoEditAuthorRuntime(device, { name: '章节标题', layers: () => [
+    { id: 'frame', draw(ctx, t) { ctx.fillRect(0, 0, 100, 4); ctx.fillText('pulse', t * 600, 2) } },
+    { id: 'title', draw(ctx) { ctx.font = '40px sans-serif'; ctx.fillText('标题', 10, 30) } },
+    { id: 'chapter', draw(ctx) { ctx.fillText('章节', 10, 10) } },
+    { id: 'answer', draw(ctx, t) { ctx.globalAlpha = .85 + .15 * Math.sin(t * 2.4); ctx.fillText('答案', 60, 30) } },
+  ] })
+  const frames: Array<Record<string, unknown>> = []
+  const drawn: unknown[][] = []
+  for (let frame = 0; frame < 6; frame++) {
+    const before = calls.length, uploads = upload.mock.calls.length, draws = layerDraw.mock.calls.length
+    const statistics = await runtime.render(output, 100, 50, {}, {}, frameInfo(frame))
+    frames.push({ ...statistics, title: text(before, '标题'), uploaded: upload.mock.calls.length - uploads })
+    drawn.push(layerDraw.mock.calls.slice(draws).map(call => call[3].texture))
+  }
+  // 第一帧还不知道谁在变：整组一起画；第二帧拆成三组，静止组画这一次，之后沿用
+  expect(frames.map(value => [value.title, value.uploaded])).toEqual([[1, 1], [1, 3], [0, 2], [0, 2], [0, 2], [0, 2]])
+  expect(frames[5]).toMatchObject({ reused: 2, redrawn: 2, direct: 0, video: 0, uploads: 2, uploadBytes: 2 * 100 * 50 * 4 })
+  // 每帧三张纹理按定位框、标题与章节名、答案的顺序叠；静止组的纹理跨帧是同一张
+  expect(drawn[5]).toHaveLength(3)
+  expect(drawn[4][1]).toBe(drawn[5][1])
+  expect(new Set(drawn[5]).size).toBe(3)
+  await runtime.dispose()
+})
+
+it('混合模式不是 source-over 的层与前面的层留在同一张画布，后面只用 source-over 的层照样拆出', async () => {
+  const { calls, device, text } = canvasHarness()
+  const runtime = new VideoEditAuthorRuntime(device, { name: '挖洞', layers: () => [
+    { id: 'card', draw(ctx) { ctx.fillText('卡片', 0, 0) } },
+    { id: 'hole', draw(ctx, t) { ctx.globalCompositeOperation = 'destination-out'; ctx.fillRect(t * 600, 0, 10, 10) } },
+    { id: 'label', draw(ctx) { ctx.fillText('说明', 0, 20) } },
+  ] })
+  const counts: number[][] = []
+  for (let frame = 0; frame < 5; frame++) {
+    const before = calls.length
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(frame))
+    counts.push([text(before, '卡片'), text(before, '说明')])
+  }
+  // 挖洞要作用在卡片上：卡片随它每帧重画；说明停稳后单独沿用
+  expect(counts).toEqual([[1, 1], [1, 1], [1, 0], [1, 0], [1, 0]])
+  await runtime.dispose()
+})
+
+it('隔几帧才变一次的层一直单独成组：静止部分不随分组来回切换而反复重画', async () => {
+  const { calls, device, text } = canvasHarness()
+  const runtime = new VideoEditAuthorRuntime(device, { name: '计数', layers: () => [
+    { id: 'card', draw(ctx) { ctx.fillText('卡片', 0, 0) } },
+    { id: 'count', draw(ctx, t) { ctx.fillText(String(Math.floor(t * 15)), 0, 20) } },
+  ] })
+  const card: number[] = []
+  for (let frame = 0; frame < 24; frame++) { const before = calls.length; await runtime.render(output, 100, 50, {}, {}, frameInfo(frame)); card.push(text(before, '卡片')) }
+  // 计数每 4 帧变一次：第一次变时拆开（卡片画这一次），之后卡片一直沿用
+  expect(card.slice(0, 5)).toEqual([1, 0, 0, 0, 1])
+  expect(card.slice(5).every(count => count === 0)).toBe(true)
+  await runtime.dispose()
+})
+
+it('带 clip 的静止层组只栅格、上传 clip 的范围，并按该位置叠回画面', async () => {
+  const { upload, device } = canvasHarness()
+  const runtime = new VideoEditAuthorRuntime(device, { name: '闪烁', layers: () => [
+    { id: 'card', draw(ctx) { ctx.fillText('卡片', 0, 0) } },
+    { id: 'blink', clip: [10.5, 20, 30, 50], draw(ctx, t) { ctx.globalAlpha = .5 + .5 * Math.sin(t * 9); ctx.fillRect(10, 20, 20, 30) } },
+  ] })
+  for (let frame = 0; frame < 4; frame++) await runtime.render(output, 100, 50, {}, {}, frameInfo(frame))
+  const last = upload.mock.calls.at(-1)!
+  expect(last[0].origin).toEqual([10, 20]); expect(last[2]).toEqual([20, 30])
+  const draw = layerDraw.mock.calls.at(-1)!
+  expect(draw[3]).toMatchObject({ x: 0, y: 0, width: 20, height: 30 })
+  expect(draw[4][0].pose.matrix).toEqual([1, 0, 0, 1, 10, 20])
+  await runtime.dispose()
+})
+
+it('作者缓存的 ImageBitmap 按身份沿用：停稳的帧不重画、不上传；save/restore 不成对的层整段照旧画在一张画布', async () => {
+  class Bitmap { width = 8; height = 8; close = vi.fn() }
+  vi.stubGlobal('ImageBitmap', Bitmap)
+  const { calls, upload, device } = canvasHarness()
+  const patch = new Bitmap()
+  const runtime = new VideoEditAuthorRuntime(device, { name: '退开', layers: () => [{ id: 'knock', draw(ctx) { ctx.save(); ctx.globalAlpha = .9; ctx.drawImage(patch as unknown as ImageBitmap, 4, 4); ctx.restore() } }] })
+  for (let frame = 0; frame < 3; frame++) await runtime.render(output, 100, 50, {}, {}, frameInfo(frame))
+  expect(calls.filter(call => call.name === 'drawImage').map(call => call.args[0])).toEqual([patch])
+  expect(upload).toHaveBeenCalledOnce()
+  await runtime.dispose()
+  // 多出一次 restore：状态与裁剪会漏给后面的层，不拆开
+  const leaky = canvasHarness()
+  const unbalanced = new VideoEditAuthorRuntime(leaky.device, { name: '漏状态', layers: () => [
+    { id: 'a', draw(ctx) { ctx.restore(); ctx.fillText('甲', 0, 0) } },
+    { id: 'b', draw(ctx, t) { ctx.fillText(`乙${t}`, 0, 0) } },
+  ] })
+  for (let frame = 0; frame < 4; frame++) await unbalanced.render(output, 100, 50, {}, {}, frameInfo(frame))
+  expect(leaky.text(0, '甲')).toBe(4)
+  expect(leaky.upload).toHaveBeenCalledTimes(4)
+  await unbalanced.dispose()
+})

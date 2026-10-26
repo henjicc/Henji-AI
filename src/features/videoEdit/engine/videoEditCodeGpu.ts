@@ -1,7 +1,7 @@
 import { VideoEditGpuBitmapBridge } from './videoEditGpuBitmapBridge'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
-import { codeStructureCosts } from '@/core/videoEdit/codeMaterial/performance'
+import { codeLayerTotals, codeStructureCosts } from '@/core/videoEdit/codeMaterial/performance'
 import { VideoEditCodePicture } from './videoEditCodePicture'
 export { VideoEditCodePicture } from './videoEditCodePicture'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
@@ -108,8 +108,8 @@ export class VideoEditCodeGpu {
     this.assertLive()
     const target = this.surface(key, size.width, size.height)
     const started = performance.now()
-    await runtime.render(target.picture.texture, size.width, size.height, parameters, assets, info, overrides, undefined, motionBlur)
-    const completed = this.trackPerformance(key, { frame: Math.floor(info.time / info.frameDuration), cpuMs: performance.now() - started, gpuMs: 0, budgetMs: info.frameDuration * 1000 }, started, started, performance.now())
+    const layers = await runtime.render(target.picture.texture, size.width, size.height, parameters, assets, info, overrides, undefined, motionBlur)
+    const completed = this.trackPerformance(key, { frame: Math.floor(info.time / info.frameDuration), cpuMs: performance.now() - started, gpuMs: 0, budgetMs: info.frameDuration * 1000, ...(layers ? { layers } : {}) }, started, started, performance.now())
     this.pending = this.device.queue.onSubmittedWorkDone().then(completed); this.counts.generatorFrames++
     return target.picture
   }
@@ -126,8 +126,8 @@ export class VideoEditCodeGpu {
     const target = this.surface(key, input.width, input.height, input.textureFormat)
     if (target.picture.texture === input.texture) throw new Error('作者滤镜输入输出不能使用同一纹理。')
     const started = performance.now()
-    await runtime.render(target.picture.texture, input.width, input.height, parameters, {}, info, undefined, { current: input.texture, frames })
-    const completed = this.trackPerformance(key, { frame: Math.floor(info.time / info.frameDuration), cpuMs: performance.now() - started, gpuMs: 0, budgetMs: info.frameDuration * 1000 }, started, started, performance.now())
+    const layers = await runtime.render(target.picture.texture, input.width, input.height, parameters, {}, info, undefined, { current: input.texture, frames })
+    const completed = this.trackPerformance(key, { frame: Math.floor(info.time / info.frameDuration), cpuMs: performance.now() - started, gpuMs: 0, budgetMs: info.frameDuration * 1000, ...(layers ? { layers } : {}) }, started, started, performance.now())
     this.pending = this.device.queue.onSubmittedWorkDone().then(completed); this.counts.filterFrames++
     return target.picture
   }
@@ -573,7 +573,8 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     }, { cpuMs: 0, gpuMs: 0 })
     const structures = codeStructureCosts(details.flatMap(frame => (frame.structures ?? []).map(value => ({ ...value, gpuMs: 0 }))), details.flatMap(frame => (frame.structures ?? []).map(value => ({ ...value, cpuMs: 0 }))), totals)
     const reuse = details.reduce((sum, frame) => { for (const key of Object.keys(sum) as Array<keyof typeof sum>) sum[key] += frame.reuse?.[key] ?? 0; return sum }, { culledGroups: 0, culledDraws: 0, frameHits: 0, subtreeHits: 0, subtreeMisses: 0, operations: 0 })
-    return [{ frame: frames.at(-1)!.frame, cpuMs: frames.reduce((sum, value) => sum + value.cpuMs, 0), gpuMs, budgetMs: frames.at(-1)!.budgetMs, ...(heaviest ? { heaviest } : {}), ...(details.length ? { structures, reuse, attribution: 'draw-preparation-wall' as const } : {}) }]
+    const layers = codeLayerTotals(frames)
+    return [{ frame: frames.at(-1)!.frame, cpuMs: frames.reduce((sum, value) => sum + value.cpuMs, 0), gpuMs, budgetMs: frames.at(-1)!.budgetMs, ...(heaviest ? { heaviest } : {}), ...(details.length ? { structures, reuse, attribution: 'draw-preparation-wall' as const } : {}), ...(layers ? { layers } : {}) }]
   }
   releaseUnused(keys: ReadonlySet<string>): void { for (const key of this.surfaces.keys()) if (!keys.has(key)) this.releaseSurface(key); this.builtinRuntime?.releaseIdle(); this.graphCache?.releaseIdle() }
   /** WebGPU exposes no available-VRAM query. Use the owned texture-byte budget,

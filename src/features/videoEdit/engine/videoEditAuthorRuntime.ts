@@ -1,16 +1,38 @@
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import type { CodeMatrix } from '@/core/videoEdit/codeMaterial/contract'
+import type { CodeLayerStatistics } from '@/core/videoEdit/codeMaterial/performance'
 import { VideoEditAuthorGpu } from './videoEditAuthorGpu'
-import { authorLayerBlur, authorLayerSamples, authorPoseMatrix, authorRasterScale } from './videoEditAuthorLayers'
+import { authorLayerBlur, authorLayerSamples, authorPoseMatrix, authorRasterScale, authorStillCrop, authorStillGroups } from './videoEditAuthorLayers'
 import { AUTHOR_WHOLE_EFFECT_ID, authorLayerId, authorOverrideMatrix, observeAuthorElement, type AuthorElementObservation, type AuthorElementOverrides } from './videoEditAuthorElements'
 import type { AuthorAssets, AuthorFrameInfo, AuthorGpuInputs, AuthorLayer, AuthorModule, AuthorParameters, AuthorWebGL, AuthorWebGPU } from './videoEditAuthorModule'
 import type { AuthorSourceLocations } from './videoEditAuthorBundle'
 import { authorEffectMetadata, authorParameterValues, type AuthorEffectMetadata } from './videoEditAuthorParameters'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
-import { AuthorCanvasAsset, AuthorCanvasUnrecordable, authorCanvasContext, recordAuthorCanvas, replayAuthorCanvas, type AuthorCanvasRecording } from './videoEditAuthorCanvasRecorder'
+import { AuthorCanvasAsset, AuthorCanvasUnrecordable, authorCanvasContext, recordAuthorCanvas, replayAuthorCanvas, sameAuthorCanvasRecording, type AuthorCanvasRecording } from './videoEditAuthorCanvasRecorder'
 
-interface Surface { canvas: OffscreenCanvas; texture: GpuTexture; /** Recorded commands whose raster the texture holds. */ signature?: string }
+/** One recorded layer. The same object is kept across frames while its commands and image versions stay equal. */
+interface Painted { recording: AuthorCanvasRecording; assets: string }
+/** What a texture holds: the recorded layers painted into it (compared by reference) and where. */
+interface SurfaceContent { key: string; parts: Painted[] }
+/**
+ * Motion layers own a raster canvas and a mipmapped texture. Still groups paint on the shared scratch canvas and keep
+ * only their texture: a canvas is needed only while painting, before the upload.
+ */
+interface Surface { texture: GpuTexture; width: number; height: number; canvas?: OffscreenCanvas; content?: SurfaceContent }
+/** `quiet`: frames since the layer last changed; Infinity while it has not changed since it first appeared. */
+interface LayerHistory { painted?: Painted; quiet: number }
+interface Part { painted?: Painted; draw(ctx: OffscreenCanvasRenderingContext2D): void }
 type Matrix = [number, number, number, number, number, number]
+const IDENTITY: Matrix = [1, 0, 0, 1, 0, 0]
+/** 一段相邻无位姿图层最多拆成几张栅格；每张一份不超过整帧的纹理。 */
+const MAX_STILL_GROUPS = 4
+/**
+ * 变过的层要连续这么多帧不变才算静止。初次出现的层先算静止（第二帧就能把在变的层拆出去）；变过一次的层隔几帧又变
+ * （低帧率计数、间歇闪烁）时一直留在“在变”组里，分组不来回切换，静止组不被反复重画。
+ */
+const QUIET_FRAMES = 12
+const sameContent = (held: SurfaceContent | undefined, next: SurfaceContent): boolean =>
+  !!held && held.key === next.key && held.parts.length === next.parts.length && held.parts.every((part, index) => part === next.parts[index])
 /** An image read outside a recorded draw before its bitmap of this frame exists. */
 class AuthorAssetPending extends Error { constructor(readonly key: string) { super(`作者图片 ${key} 尚未准备`) } }
 
@@ -18,6 +40,8 @@ class AuthorAssetPending extends Error { constructor(readonly key: string) { sup
 export class VideoEditAuthorRuntime {
   private readonly surfaces: Surface[] = []
   private readonly textures = new Set<GpuTexture>()
+  /** 静止层组共用的整帧画布：只在重画时用，画完立刻拷进该组的纹理。 */
+  private scratchCanvas?: OffscreenCanvas
   /** `pixels` 缺省表示逐帧换图的输入（视频）：每张只画一次，直接用，不读回像素。 */
   private readonly canvasImages = new Map<string, { source: ImageBitmap; pixels?: ImageData; version: number }>()
   /** 每个输入连续换图的帧数；连续两次换图（视频帧）后改为直接画。 */
@@ -29,6 +53,10 @@ export class VideoEditAuthorRuntime {
   private readonly eagerAssets = new Set<string>()
   /** Layers whose drawing cannot be recorded; they draw directly every frame. */
   private readonly directLayers = new Set<string>()
+  /** Last successful frame's recording of every layer slot, with how recently it changed. */
+  private history = new Map<string, LayerHistory>()
+  /** Still runs with a layer that cannot be recorded or leaks canvas state: painted as one group, as Frameflow does. */
+  private readonly combinedRuns = new Set<string>()
   private measureContext?: OffscreenCanvasRenderingContext2D
   private layerGpu?: VideoEditAuthorGpu
   private get layers(): VideoEditAuthorGpu { return this.layerGpu ??= new VideoEditAuthorGpu(this.device) }
@@ -42,18 +70,29 @@ export class VideoEditAuthorRuntime {
   constructor(private readonly device: GpuDevice, private readonly effect: AuthorModule, private readonly locations?: AuthorSourceLocations, private readonly ownsModule = true) {
     this.parameterMetadata = authorEffectMetadata(effect)
   }
-  private texture(width: number, height: number): GpuTexture {
-    const texture = this.device.createTexture({ size: [width, height], mipLevelCount: 1 + Math.floor(Math.log2(Math.max(width, height))), format: 'rgba8unorm', usage: 0x01 | 0x02 | 0x04 | 0x10 })
+  private texture(width: number, height: number, mips: boolean): GpuTexture {
+    const texture = this.device.createTexture({ size: [width, height], mipLevelCount: mips ? 1 + Math.floor(Math.log2(Math.max(width, height))) : 1, format: 'rgba8unorm', usage: 0x01 | 0x02 | 0x04 | 0x10 })
     this.textures.add(texture)
     return texture
   }
-  private surface(index: number, width: number, height: number): Surface {
+  private release(surface: Surface): void {
+    surface.texture.destroy(); this.textures.delete(surface.texture)
+    if (surface.canvas) surface.canvas.width = surface.canvas.height = 1
+  }
+  /** `canvas`: a motion layer's own raster canvas with a mipmapped texture; otherwise a texture for a still group. */
+  private surface(index: number, width: number, height: number, canvas: boolean): Surface {
     const previous = this.surfaces[index]
-    if (previous?.canvas.width === width && previous.canvas.height === height) return previous
-    if (previous) { previous.texture.destroy(); this.textures.delete(previous.texture); previous.canvas.width = previous.canvas.height = 1 }
-    const surface = { canvas: new OffscreenCanvas(width, height), texture: this.texture(width, height) }
+    if (previous && previous.width === width && previous.height === height && !!previous.canvas === canvas) return previous
+    if (previous) this.release(previous)
+    const surface: Surface = { texture: this.texture(width, height, canvas), width, height, ...(canvas ? { canvas: new OffscreenCanvas(width, height) } : {}) }
     this.surfaces[index] = surface
     return surface
+  }
+  private scratch(width: number, height: number): OffscreenCanvas {
+    const canvas = this.scratchCanvas ??= new OffscreenCanvas(width, height)
+    if (canvas.width !== width) canvas.width = width
+    if (canvas.height !== height) canvas.height = height
+    return canvas
   }
   /** Selection reads the last successful frame; normal playback builds no hit graph. */
   observeElements(): AuthorElementObservation[] {
@@ -71,13 +110,13 @@ export class VideoEditAuthorRuntime {
   }
   private renders: Promise<unknown> = Promise.resolve()
   /** One frame at a time per instance: a warm-up ahead of the playhead and a visible frame never share surfaces. */
-  /** `motionBlur`：序列的运动模糊总开关，管带位姿图层的快门取样。 */
-  render(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs, motionBlur = true): Promise<void> {
+  /** `motionBlur`：序列的运动模糊总开关，管带位姿图层的快门取样。返回 Canvas 图层这一帧的沿用与上传统计（原生 GPU 入口没有）。 */
+  render(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs, motionBlur = true): Promise<CodeLayerStatistics | undefined> {
     const result = this.renders.then(() => this.renderFrame(target, width, height, params, assets, info, overrides, inputs, motionBlur))
     this.renders = result.catch(() => undefined)
     return result
   }
-  private async renderFrame(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs, motionBlur = true): Promise<void> {
+  private async renderFrame(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs, motionBlur = true): Promise<CodeLayerStatistics | undefined> {
     if (this.closed) throw new Error('代码效果会话已关闭。')
     const frameImages: ImageBitmap[] = []
     try {
@@ -91,19 +130,19 @@ export class VideoEditAuthorRuntime {
           this.textures.add(texture); this.nativeOverrideTarget = { texture, width, height }
         }
         const picture = this.nativeOverrideTarget.texture
-        await this.renderFrame(picture, width, height, params, assets, info, undefined, inputs, motionBlur)
+        const statistics = await this.renderFrame(picture, width, height, params, assets, info, undefined, inputs, motionBlur)
         await this.layers.begin(target)
         const samples = authorLayerSamples(whole, this.effect, info, { x: 0, y: 0, width, height }, overrides[AUTHOR_WHOLE_EFFECT_ID], motionBlur)
         this.layers.draw(target, width, height, { texture: picture, x: 0, y: 0, width, height }, samples)
         this.layers.finish()
         this.lastFrame = { layers: [whole], width, height, time: info.time, parameters: params, overrides }
-        return
+        return statistics
       }
       if (this.effect.createWebGPU) {
         this.webgpu ??= await this.effect.createWebGPU(this.device)
         await this.webgpu.draw(target, info.time, params, width, height, assets, info, inputs)
         this.lastFrame = { layers: [whole], width, height, time: info.time, parameters: params }
-        return
+        return undefined
       }
       if (this.effect.createWebGL) {
         // Preserve the context when dimensions change; recreate only the upload texture.
@@ -121,7 +160,7 @@ export class VideoEditAuthorRuntime {
         this.webgl!.draw(info.time, params, width, height, assets, info)
         this.device.queue.copyExternalImageToTexture({ source: canvas }, { texture: target, premultipliedAlpha: true }, [width, height])
         this.lastFrame = { layers: [whole], width, height, time: info.time, parameters: params }
-        return
+        return { reused: 0, redrawn: 0, direct: 0, video: 0, uploads: 1, uploadBytes: width * height * 4 }
       }
       // 连续两帧都换了图的输入是逐帧变化的视频帧：之后直接画；某帧没换就回到静态图片的像素缓存。
       for (const [key, cached] of this.canvasImages) {
@@ -170,39 +209,118 @@ export class VideoEditAuthorRuntime {
       assets = canvasAssets
       const assetSignature = (keys: Iterable<string>): string => JSON.stringify([...keys].sort().map(key => [key, this.canvasImages.get(key)?.version]))
       const measure = this.measureContext ??= new OffscreenCanvas(1, 1).getContext('2d') ?? undefined
-      /** Draws into a surface unless the recorded commands equal the ones its texture already holds. */
-      const paint = async (surface: Surface, slot: string, setup: Matrix, draw: (ctx: OffscreenCanvasRenderingContext2D) => void): Promise<boolean> => {
-        let recorded: AuthorCanvasRecording | undefined
-        if (measure && !this.directLayers.has(slot)) {
-          recording = true
-          try { recorded = recordAuthorCanvas(surface.canvas, measure, setup, draw) } catch (error) {
-            if (!(error instanceof AuthorCanvasUnrecordable) && !(error instanceof TypeError)) throw error
-            // Images handed outside the canvas, pixel reads, unknown APIs: this layer draws directly from now on.
-            this.directLayers.add(slot)
-          } finally { recording = false }
-        }
-        const signature = recorded?.comparable ? `${slot}\u0000${surface.canvas.width}x${surface.canvas.height}\u0000${setup.join(',')}\u0000${assetSignature(recorded.assets)}\u0000${recorded.signature}` : undefined
-        if ([...recorded?.assets ?? []].some(key => (this.assetChanges.get(key) ?? 0) >= 2)) this.liveLayers.add(slot); else this.liveLayers.delete(slot)
-        if (signature && surface.signature === signature) { recordVideoEditPreparation('authorRasterReused', 0); return false }
-        for (const key of recorded?.assets ?? []) await freshAsset(key)
-        const ctx = surface.canvas.getContext('2d')
-        if (!ctx) throw new Error('Canvas2D 不可用。')
-        ctx.reset(); ctx.setTransform(...setup)
-        const rasterStarted = performance.now()
-        surface.signature = undefined
-        if (recorded) replayAuthorCanvas(recorded, ctx, key => fresh.get(key)!, setup)
-        else draw(authorCanvasContext(ctx, setup))
-        recordVideoEditPreparation('authorRaster', performance.now() - rasterStarted)
-        surface.signature = signature
-        return true
-      }
       for (let attempt = 0; ; attempt++) {
         for (const key of this.eagerAssets) await freshAsset(key)
+        const statistics: CodeLayerStatistics = { reused: 0, redrawn: 0, direct: 0, video: 0, uploads: 0, uploadBytes: 0 }
+        const history = new Map<string, LayerHistory>()
+        const used = new Set<number>()
+        /**
+         * Records one layer slot. A recording equal to the previous frame's (same commands, same image versions) is
+         * replaced by that previous object, so a texture's content is compared by reference. Unrecordable: undefined.
+         */
+        const record = (slot: string, size: { width: number; height: number }, setup: Matrix, draw: (ctx: OffscreenCanvasRenderingContext2D) => void): { painted?: Painted; volatile: boolean; video: boolean } => {
+          const previous = this.history.get(slot)
+          let painted: Painted | undefined
+          if (measure && !this.directLayers.has(slot)) {
+            recording = true
+            try {
+              const recorded = recordAuthorCanvas(size, measure, setup, draw)
+              const assetVersions = assetSignature(recorded.assets), held = previous?.painted
+              painted = held && held.assets === assetVersions && sameAuthorCanvasRecording(held.recording, recorded) ? held : { recording: recorded, assets: assetVersions }
+            } catch (error) {
+              if (!(error instanceof AuthorCanvasUnrecordable) && !(error instanceof TypeError)) throw error
+              // Images handed outside the canvas, pixel reads, unknown APIs: this layer draws directly from now on.
+              this.directLayers.add(slot)
+            } finally { recording = false }
+          }
+          const quiet = !previous ? (painted ? Infinity : 0) : painted && painted === previous.painted ? previous.quiet + 1 : 0
+          history.set(slot, { painted, quiet })
+          return { painted, volatile: quiet < QUIET_FRAMES, video: [...painted?.recording.assets ?? []].some(key => (this.assetChanges.get(key) ?? 0) >= 2) }
+        }
+        const paint = async (canvas: OffscreenCanvas, setup: Matrix, parts: Part[]): Promise<void> => {
+          for (const part of parts) for (const key of part.painted?.recording.assets ?? []) await freshAsset(key)
+          const ctx = canvas.getContext('2d')
+          if (!ctx) throw new Error('Canvas2D 不可用。')
+          ctx.reset(); ctx.setTransform(...setup)
+          const rasterStarted = performance.now()
+          for (const part of parts) {
+            if (part.painted) replayAuthorCanvas(part.painted.recording, ctx, key => fresh.get(key)!, setup)
+            else part.draw(authorCanvasContext(ctx, setup))
+          }
+          recordVideoEditPreparation('authorRaster', performance.now() - rasterStarted)
+        }
+        const upload = (source: OffscreenCanvas, texture: GpuTexture, region: { x: number; y: number; width: number; height: number }): void => {
+          this.device.queue.copyExternalImageToTexture(region.x || region.y ? { source, origin: [region.x, region.y] } : { source }, { texture, premultipliedAlpha: true }, [region.width, region.height])
+          statistics.uploads++; statistics.uploadBytes += region.width * region.height * 4
+        }
+        /**
+         * Still layers drawn in sequence on one transparent canvas, as Frameflow does; the raster is cropped to `crop`.
+         * `layers`/`video`: how many author layers the parts stand for, and how many of them draw a video input.
+         */
+        const stillGroup = async (slot: string, surfaceIndex: number, parts: Part[], crop: { x: number; y: number; width: number; height: number }, layers: number, video: number): Promise<void> => {
+          const surface = this.surface(surfaceIndex, crop.width, crop.height, false)
+          used.add(surfaceIndex)
+          const recorded = parts.every(part => part.painted) ? parts.map(part => part.painted!) : undefined
+          const content = recorded && { key: `${slot}\u0000${width}x${height}\u0000${crop.x},${crop.y}`, parts: recorded }
+          if (content && sameContent(surface.content, content)) { statistics.reused += layers; recordVideoEditPreparation('authorRasterReused', 0) }
+          else {
+            surface.content = undefined
+            const canvas = this.scratch(width, height)
+            await paint(canvas, IDENTITY, parts)
+            const uploadStarted = performance.now()
+            upload(canvas, surface.texture, crop)
+            recordVideoEditPreparation('authorUpload', performance.now() - uploadStarted)
+            surface.content = content && recorded!.every(part => part.recording.comparable) ? content : undefined
+            if (recorded) statistics.redrawn += layers; else statistics.direct += layers
+          }
+          statistics.video += video
+          this.layers.draw(target, width, height, { texture: surface.texture, x: 0, y: 0, width: crop.width, height: crop.height }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, crop.x, crop.y], opacity: 1 } }])
+        }
         try {
       const listStarted = performance.now()
       const list = this.effect.layers ? this.effect.layers(params, width, height, assets, info) : [{ ...whole, draw: (ctx: OffscreenCanvasRenderingContext2D, time: number): void => this.effect.draw!(ctx, time, params, width, height, assets, info) }]
       recordVideoEditPreparation('authorLayerList', performance.now() - listStarted)
       if (!Array.isArray(list)) throw new Error('layers() 必须返回图层数组。')
+      const drawStill = (ctx: OffscreenCanvasRenderingContext2D, still: AuthorLayer, position: number): void => {
+        ctx.save()
+        try {
+          if (still.clip) { const [x0, y0, x1, y1] = still.clip; ctx.beginPath(); ctx.rect(x0, y0, x1 - x0, y1 - y0); ctx.clip() }
+          still.draw(ctx, info.time)
+        } catch (cause) { throw cause instanceof AuthorCanvasUnrecordable || cause instanceof AuthorAssetPending || cause instanceof TypeError ? cause : new Error(`静态层 ${position + 1}：${cause instanceof Error ? cause.message : String(cause)}`, { cause }) }
+        finally { ctx.restore() }
+      }
+      /**
+       * Adjacent untransformed layers [start, end). Each is recorded on its own; layers that changed recently (QUIET_FRAMES)
+       * are split from the still ones (see authorStillGroups), so a pulse or a video redraws without the static part.
+       */
+      const stillRun = async (start: number, end: number): Promise<void> => {
+        const run = `flat:${start}:${end}`, frame = { width, height }, full = { x: 0, y: 0, width, height }
+        const stills: Array<{ position: number; layer: AuthorLayer; painted: Painted; volatile: boolean; video: boolean }> = []
+        if (!this.combinedRuns.has(run)) {
+          for (let position = start; position < end; position++) {
+            const still = list[position]
+            const recorded = record(`still:${position}:${authorLayerId(still, position)}`, frame, IDENTITY, ctx => drawStill(ctx, still, position))
+            const painted = recorded.painted
+            // 录制不了，或 save/restore 不成对（状态与裁剪会漏给后面的层）：这一段整组画在一张画布上。
+            if (!painted?.recording.balanced) { this.combinedRuns.add(run); break }
+            stills.push({ position, layer: still, painted, volatile: recorded.volatile, video: recorded.video })
+          }
+        }
+        if (this.combinedRuns.has(run)) {
+          const layers = list.slice(start, end)
+          const draw = (ctx: OffscreenCanvasRenderingContext2D): void => layers.forEach((still, offset) => drawStill(ctx, still, start + offset))
+          const recorded = record(run, frame, IDENTITY, draw)
+          await stillGroup(run, start * 2, [{ painted: recorded.painted, draw }], full, layers.length, recorded.video ? 1 : 0)
+          return
+        }
+        for (const group of authorStillGroups(stills.map(still => ({ volatile: still.volatile, isolated: still.painted.recording.isolated })), MAX_STILL_GROUPS)) {
+          const members = stills.slice(group.start, group.end)
+          const crop = authorStillCrop(members.map(member => member.layer.clip), width, height)
+          const video = members.filter(member => member.video).length
+          if (!crop) { statistics.reused += members.length; statistics.video += video; continue }
+          await stillGroup(`flat:${members[0].position}:${members.at(-1)!.position + 1}`, members[0].position * 2, members.map(member => ({ painted: member.painted, draw: ctx => drawStill(ctx, member.layer, member.position) })), crop, members.length, video)
+        }
+      }
       await this.layers.begin(target)
       for (let index = 0; index < list.length; index++) {
         const id = authorLayerId(list[index], index), override = overrides && Object.hasOwn(overrides, id) ? overrides[id] : undefined
@@ -212,26 +330,9 @@ export class VideoEditAuthorRuntime {
           // Frameflow batches adjacent untransformed layers onto one canvas.
           // This also preserves Canvas compositing between those layers.
           if (!layer.pose) {
-            const flat = this.surface(index * 2, width, height)
             let end = index
             while (end < list.length && !list[end].pose && !(overrides && Object.hasOwn(overrides, authorLayerId(list[end], end)))) end++
-            const stills = list.slice(index, end), first = index
-            const changed = await paint(flat, `flat:${index}:${end}`, [1, 0, 0, 1, 0, 0], ctx => {
-              stills.forEach((still, offset) => {
-                ctx.save()
-                try {
-                  if (still.clip) { const [x0, y0, x1, y1] = still.clip; ctx.beginPath(); ctx.rect(x0, y0, x1 - x0, y1 - y0); ctx.clip() }
-                  still.draw(ctx, info.time)
-                } catch (cause) { throw cause instanceof AuthorCanvasUnrecordable || cause instanceof AuthorAssetPending || cause instanceof TypeError ? cause : new Error(`静态层 ${first + offset + 1}：${cause instanceof Error ? cause.message : String(cause)}`, { cause }) }
-                finally { ctx.restore() }
-              })
-            })
-            if (changed) {
-              const flatUpload = performance.now()
-              this.device.queue.copyExternalImageToTexture({ source: flat.canvas }, { texture: flat.texture, premultipliedAlpha: true }, [width, height])
-              recordVideoEditPreparation('authorUpload', performance.now() - flatUpload)
-            }
-            this.layers.draw(target, width, height, { texture: flat.texture, x: 0, y: 0, width, height }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, 0, 0], opacity: 1 } }])
+            await stillRun(index, end)
             index = end - 1
             continue
           }
@@ -246,37 +347,50 @@ export class VideoEditAuthorRuntime {
           const unitPad = authorLayerBlur(center, 1, layer.blurShape).pad
           const textureLimit = (this.device as GpuDevice & { limits?: Record<string, number> }).limits?.maxTextureDimension2D ?? 8192
           const limit = Math.min((textureLimit - 2 * unitPad) / Math.max(bounds.width, bounds.height), Math.sqrt(16e6 / Math.max(1, bounds.width * bounds.height)))
-          const resolution = authorRasterScale(need, limit, this.liveLayers.has(`layer:${index}:${id}`))
+          const slot = `layer:${index}:${id}`
+          const resolution = authorRasterScale(need, limit, this.liveLayers.has(slot))
           const { radius, pad } = authorLayerBlur(center, resolution, layer.blurShape)
-          const surface = this.surface(index * 2, Math.ceil(bounds.width * resolution) + pad * 2, Math.ceil(bounds.height * resolution) + pad * 2)
-          const changed = await paint(surface, `layer:${index}:${id}`, [resolution, 0, 0, resolution, pad - x * resolution, pad - y * resolution], ctx => layer.draw(ctx, info.time))
+          const surface = this.surface(index * 2, Math.ceil(bounds.width * resolution) + pad * 2, Math.ceil(bounds.height * resolution) + pad * 2, true)
+          const canvas = surface.canvas!, region = { x: 0, y: 0, width: canvas.width, height: canvas.height }
+          const setup: Matrix = [resolution, 0, 0, resolution, pad - x * resolution, pad - y * resolution]
+          const draw = (ctx: OffscreenCanvasRenderingContext2D): void => layer.draw(ctx, info.time)
+          const recorded = record(slot, canvas, setup, draw)
+          if (recorded.video) { this.liveLayers.add(slot); statistics.video++ } else this.liveLayers.delete(slot)
+          const content = recorded.painted && { key: `${slot}\u0000${canvas.width}x${canvas.height}\u0000${setup.join(',')}`, parts: [recorded.painted] }
+          const changed = !content || !sameContent(surface.content, content)
+          if (changed) {
+            surface.content = undefined
+            await paint(canvas, setup, [{ painted: recorded.painted, draw }])
+            surface.content = content && recorded.painted!.recording.comparable ? content : undefined
+            if (recorded.painted) statistics.redrawn++; else statistics.direct++
+          } else { statistics.reused++; recordVideoEditPreparation('authorRasterReused', 0) }
           const uploadStarted = performance.now()
           let picture = surface.texture
           if (radius > 0 && layer.blurShape !== 'lens') {
             // Use the original Canvas/Skia blur operator, without pixel readback
             // or a second author draw. Do not substitute a different blur kernel.
-            const blurred = this.surface(index * 2 + 1, surface.canvas.width, surface.canvas.height)
-            const blurSignature = surface.signature && `${surface.signature}\u0000blur:${radius}`
-            if (changed || !blurSignature || blurred.signature !== blurSignature) {
-              const blurContext = blurred.canvas.getContext('2d')
+            const blurred = this.surface(index * 2 + 1, canvas.width, canvas.height, true)
+            const blurContent = surface.content && { key: `${surface.content.key}\u0000blur:${radius}`, parts: surface.content.parts }
+            if (changed || !blurContent || !sameContent(blurred.content, blurContent)) {
+              const blurContext = blurred.canvas!.getContext('2d')
               if (!blurContext) throw new Error('Canvas2D 不可用。')
               blurContext.reset(); blurContext.filter = `blur(${radius}px)`
-              blurContext.drawImage(surface.canvas, 0, 0); blurContext.filter = 'none'
-              this.device.queue.copyExternalImageToTexture({ source: blurred.canvas }, { texture: blurred.texture, premultipliedAlpha: true }, [surface.canvas.width, surface.canvas.height])
-              this.layers.mipmaps(blurred.texture, surface.canvas.width, surface.canvas.height)
-              blurred.signature = blurSignature
+              blurContext.drawImage(canvas, 0, 0); blurContext.filter = 'none'
+              upload(blurred.canvas!, blurred.texture, region)
+              this.layers.mipmaps(blurred.texture, canvas.width, canvas.height)
+              blurred.content = blurContent
             }
             picture = blurred.texture
           } else if (changed) {
-            this.device.queue.copyExternalImageToTexture({ source: surface.canvas }, { texture: surface.texture, premultipliedAlpha: true }, [surface.canvas.width, surface.canvas.height])
-            this.layers.mipmaps(surface.texture, surface.canvas.width, surface.canvas.height)
+            upload(canvas, surface.texture, region)
+            this.layers.mipmaps(surface.texture, canvas.width, canvas.height)
           }
           recordVideoEditPreparation('authorUpload', performance.now() - uploadStarted)
           if (radius > 0 && layer.blurShape === 'lens') {
-            const blurred = this.surface(index * 2 + 1, surface.canvas.width, surface.canvas.height)
-            this.layers.lens(surface.texture, blurred.texture, surface.canvas.width, surface.canvas.height, radius)
-            this.layers.mipmaps(blurred.texture, surface.canvas.width, surface.canvas.height)
-            blurred.signature = undefined
+            const blurred = this.surface(index * 2 + 1, canvas.width, canvas.height, true)
+            this.layers.lens(surface.texture, blurred.texture, canvas.width, canvas.height, radius)
+            this.layers.mipmaps(blurred.texture, canvas.width, canvas.height)
+            blurred.content = undefined
             picture = blurred.texture
           }
           const poses = samples.map(sample => {
@@ -285,20 +399,22 @@ export class VideoEditAuthorRuntime {
             const matrix: CodeMatrix = [m[0] / resolution, m[1] / resolution, m[2] / resolution, m[3] / resolution, m[4] + m[0] * ox + m[2] * oy, m[5] + m[1] * ox + m[3] * oy]
             return { ...sample, pose: { ...sample.pose, matrix } }
           })
-          this.layers.draw(target, width, height, { texture: picture, x: 0, y: 0, width: surface.canvas.width, height: surface.canvas.height }, poses, layer.clip)
+          this.layers.draw(target, width, height, { texture: picture, x: 0, y: 0, width: canvas.width, height: canvas.height }, poses, layer.clip)
         } catch (cause) {
           if (cause instanceof AuthorAssetPending) throw cause
           throw new Error(`第 ${index + 1} 层${layer.name ? `「${layer.name}」` : ''}：${cause instanceof Error ? cause.message : String(cause)}`, { cause })
         }
       }
       this.layers.finish()
+      this.history = history
       this.lastFrame = { layers: list, width, height, time: info.time, parameters: params, overrides }
+      // Still-group textures follow the grouping: drop the ones no group used this frame.
+      this.surfaces.forEach((surface, index) => { if (surface && !surface.canvas && !used.has(index)) { this.release(surface); delete this.surfaces[index] } })
       while (this.surfaces.length > list.length * 2) {
-        const surface = this.surfaces.pop()!
-        if (!surface) continue
-        surface.texture.destroy(); this.textures.delete(surface.texture); surface.canvas.width = surface.canvas.height = 1
+        const surface = this.surfaces.pop()
+        if (surface) this.release(surface)
       }
-      break
+      return statistics
         } catch (error) {
           // An image read outside a recorded canvas draw needs its bitmap before the author code runs: draw the frame again.
           if (!(error instanceof AuthorAssetPending) || attempt > Object.keys(assets).length) throw error
@@ -325,9 +441,11 @@ export class VideoEditAuthorRuntime {
     await release(() => this.layerGpu?.dispose())
     for (const texture of this.textures) await release(() => texture.destroy())
     this.textures.clear()
-    this.canvasImages.clear(); this.assetChanges.clear(); this.liveLayers.clear()
-    for (const surface of this.surfaces) if (surface) await release(() => { surface.canvas.width = surface.canvas.height = 1 })
+    this.canvasImages.clear(); this.assetChanges.clear(); this.liveLayers.clear(); this.history.clear(); this.combinedRuns.clear()
+    for (const surface of this.surfaces) if (surface?.canvas) { const canvas = surface.canvas; await release(() => { canvas.width = canvas.height = 1 }) }
     this.surfaces.length = 0
+    if (this.scratchCanvas) { const canvas = this.scratchCanvas; await release(() => { canvas.width = canvas.height = 1 }) }
+    this.scratchCanvas = undefined
     await release(() => this.gl?.getExtension('WEBGL_lose_context')?.loseContext())
     if (errors.length) throw new AggregateError(errors, '代码效果资源释放失败。')
   }

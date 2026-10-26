@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { authorLayerBlur, authorLayerSamples, authorPoseMatrix, authorRasterScale } from './videoEditAuthorLayers'
+import { authorLayerBlur, authorLayerSamples, authorPoseMatrix, authorRasterScale, authorStillCrop, authorStillGroups } from './videoEditAuthorLayers'
 import type { AuthorLayer, AuthorModule } from './videoEditAuthorModule'
 
 const effect: AuthorModule = { name: '运动层' }
@@ -59,4 +59,28 @@ it('运动层栅格：静态内容至少 2 倍；每帧重画的图层（画着�
   expect(authorRasterScale(1, 4, true)).toBe(1)
   expect(authorRasterScale(3, 4, true)).toBe(4)
   expect(authorRasterScale(1, 1.5)).toBe(1)
+})
+
+describe('相邻无位姿图层的分组', () => {
+  const S = { volatile: false, isolated: true }, V = { volatile: true, isolated: true }
+  it('按最近是否在变把静止层与在变的层分开，同类相邻的合在一起', () => {
+    expect(authorStillGroups([V, S, S, V], 4)).toEqual([{ start: 0, end: 1, volatile: true }, { start: 1, end: 3, volatile: false }, { start: 3, end: 4, volatile: true }])
+    expect(authorStillGroups([S, S, S], 4)).toEqual([{ start: 0, end: 3, volatile: false }])
+    expect(authorStillGroups([V, V], 4)).toEqual([{ start: 0, end: 2, volatile: true }])
+  })
+  it('不是 source-over 的层与前面所有层留在同一张画布；后面只用 source-over 的层仍可拆出', () => {
+    expect(authorStillGroups([V, S, { volatile: false, isolated: false }, S], 4)).toEqual([{ start: 0, end: 3, volatile: true }, { start: 3, end: 4, volatile: false }])
+    expect(authorStillGroups([S, { volatile: false, isolated: false }, V], 4)).toEqual([{ start: 0, end: 2, volatile: false }, { start: 2, end: 3, volatile: true }])
+    expect(authorStillGroups([S, V, { volatile: false, isolated: false }], 4)).toEqual([{ start: 0, end: 3, volatile: true }])
+  })
+  it('栅格数超过上限时，把层数最少的静止组并进两侧在变的组', () => {
+    const groups = authorStillGroups([V, S, S, V, S, V, S, S, S], 4)
+    expect(groups).toEqual([{ start: 0, end: 1, volatile: true }, { start: 1, end: 3, volatile: false }, { start: 3, end: 6, volatile: true }, { start: 6, end: 9, volatile: false }])
+  })
+  it('每层都有 clip 时只栅格各 clip 的并集（取整、限在画幅内）；有层没有 clip 就是整帧；全被裁掉为 null', () => {
+    expect(authorStillCrop([[10.5, 20, 30, 40.2], [25, 5, 35, 30]], 100, 50)).toEqual({ x: 10, y: 5, width: 25, height: 36 })
+    expect(authorStillCrop([[10, 20, 30, 40], undefined], 100, 50)).toEqual({ x: 0, y: 0, width: 100, height: 50 })
+    expect(authorStillCrop([[-10, -10, 200, 30]], 100, 50)).toEqual({ x: 0, y: 0, width: 100, height: 30 })
+    expect(authorStillCrop([[120, 0, 140, 10]], 100, 50)).toBeNull()
+  })
 })

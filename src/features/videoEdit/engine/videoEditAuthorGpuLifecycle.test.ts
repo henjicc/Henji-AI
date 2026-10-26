@@ -142,3 +142,20 @@ it('每次作者绘制只登记一次GPU完成，后续帧不改写已捕获的�
     expect(captured()[0]).toEqual(first)
   } finally { await runtime.dispose(); clock.mockRestore() }
 })
+
+it('成本报告带上各片段图层的沿用与上传统计，同一序列帧的片段相加；原生 GPU 入口不报', async () => {
+  const { runtime, program } = fixture()
+  try {
+    author.render.mockResolvedValueOnce({ reused: 3, redrawn: 1, direct: 0, video: 0, uploads: 1, uploadBytes: 1024 })
+    await runtime.authorGenerator('a', 'clip-a', program, { width: 16, height: 16 }, {}, {}, info)
+    author.render.mockResolvedValueOnce({ reused: 0, redrawn: 1, direct: 1, video: 1, uploads: 2, uploadBytes: 2048 })
+    await runtime.authorGenerator('b', 'clip-b', program, { width: 16, height: 16 }, {}, {}, info)
+    author.render.mockResolvedValueOnce(undefined)
+    await runtime.authorGenerator('c', 'clip-c', program, { width: 16, height: 16 }, {}, {}, info)
+    expect(runtime.captureFramePerformance()()[0].layers).toEqual({ reused: 3, redrawn: 2, direct: 1, video: 1, uploads: 3, uploadBytes: 3072 })
+    runtime.resetFramePerformance()
+    author.render.mockResolvedValueOnce(undefined)
+    await runtime.authorGenerator('c', 'clip-c', program, { width: 16, height: 16 }, {}, {}, info)
+    expect(runtime.captureFramePerformance()()[0]).not.toHaveProperty('layers')
+  } finally { await runtime.dispose() }
+})

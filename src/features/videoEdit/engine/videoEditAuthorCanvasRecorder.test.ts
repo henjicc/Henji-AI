@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest'
-import { AuthorCanvasAsset, AuthorCanvasUnrecordable, authorCanvasContext, recordAuthorCanvas, replayAuthorCanvas } from './videoEditAuthorCanvasRecorder'
+import { AuthorCanvasAsset, AuthorCanvasUnrecordable, authorCanvasContext, recordAuthorCanvas, replayAuthorCanvas, sameAuthorCanvasRecording } from './videoEditAuthorCanvasRecorder'
 
 function measuring(): OffscreenCanvasRenderingContext2D {
   return { reset: vi.fn(), font: '10px sans-serif', fillStyle: 'black', globalAlpha: 1, getImageData: vi.fn(), measureText: vi.fn(function (this: { font: string }, text: string) { return { width: text.length * Number.parseFloat(this.font) } }) } as unknown as OffscreenCanvasRenderingContext2D
@@ -19,7 +19,8 @@ it('同样的绘制录成同样的指令；重放按原顺序作用在真实画�
   const a = recordAuthorCanvas(size, measuring(), [2, 0, 0, 2, 0, 0], ctx => scene(ctx, 'AB', asset as unknown as CanvasImageSource))
   const b = recordAuthorCanvas(size, measuring(), [2, 0, 0, 2, 0, 0], ctx => scene(ctx, 'AB', asset as unknown as CanvasImageSource))
   const c = recordAuthorCanvas(size, measuring(), [2, 0, 0, 2, 0, 0], ctx => scene(ctx, 'ABC', asset as unknown as CanvasImageSource))
-  expect(a.comparable).toBe(true); expect(a.signature).toBe(b.signature); expect(c.signature).not.toBe(a.signature)
+  expect(a.comparable).toBe(true); expect(sameAuthorCanvasRecording(a, b)).toBe(true); expect(sameAuthorCanvasRecording(a, c)).toBe(false)
+  expect(a).toMatchObject({ isolated: true, balanced: true })
   expect([...a.assets]).toEqual(['logo'])
   const calls: unknown[][] = []
   const gradient = { addColorStop: vi.fn((...args: unknown[]) => calls.push(['stop', ...args])) }
@@ -87,7 +88,7 @@ it('作者缓存到模块变量的渐变与图案，下一帧照样画对：录�
   }
   const first = recordAuthorCanvas(size, measuring(), [1, 0, 0, 1, 0, 0], draw)
   const second = recordAuthorCanvas(size, measuring(), [1, 0, 0, 1, 0, 0], draw)
-  expect(second.comparable).toBe(true); expect(second.signature).toBe(first.signature)
+  expect(second.comparable).toBe(true); expect(sameAuthorCanvasRecording(first, second)).toBe(true)
   const calls: unknown[][] = []
   const gradient = { addColorStop: (...args: unknown[]) => calls.push(['stop', ...args]) }
   const real = new Proxy({} as Record<string, unknown>, {
@@ -105,4 +106,86 @@ it('作者缓存到模块变量的渐变与图案，下一帧照样画对：录�
   wrapped.fillStyle = cached.gradient!; wrapped.strokeStyle = cached.pattern!
   expect(set.fillStyle).toEqual({ stops: [[0, 'red'], [1, 'blue']], addColorStop: expect.any(Function) })
   expect(set.strokeStyle).toEqual({ pattern: [tile, 'repeat'] })
+})
+
+it('作者自己的 ImageBitmap 按对象身份比对：同一张位图可沿用，换一张就重画；重放画的是这张位图本身', () => {
+  class Bitmap { width = 4; height = 4 }
+  vi.stubGlobal('ImageBitmap', Bitmap)
+  try {
+    const tile = new Bitmap() as unknown as ImageBitmap, other = new Bitmap() as unknown as ImageBitmap
+    const draw = (image: ImageBitmap) => (ctx: OffscreenCanvasRenderingContext2D): void => { ctx.drawImage(image, 2, 3); ctx.fillStyle = ctx.createPattern(image, 'repeat')!; ctx.fillRect(0, 0, 8, 8) }
+    const first = recordAuthorCanvas(size, measuring(), [1, 0, 0, 1, 0, 0], draw(tile))
+    const again = recordAuthorCanvas(size, measuring(), [1, 0, 0, 1, 0, 0], draw(tile))
+    const changed = recordAuthorCanvas(size, measuring(), [1, 0, 0, 1, 0, 0], draw(other))
+    expect(first.comparable).toBe(true)
+    expect(sameAuthorCanvasRecording(first, again)).toBe(true)
+    expect(sameAuthorCanvasRecording(first, changed)).toBe(false)
+    const calls: unknown[][] = []
+    const pattern = { tag: 'pattern' }
+    const real = new Proxy({} as Record<string, unknown>, {
+      get: (_, name: string) => name === 'createPattern' ? (...args: unknown[]) => { calls.push([name, ...args]); return pattern } : (...args: unknown[]) => calls.push([name, ...args]),
+      set: (_, name: string, value) => { calls.push(['set', name, value]); return true },
+    }) as unknown as OffscreenCanvasRenderingContext2D
+    replayAuthorCanvas(again, real, () => { throw new Error('no asset') })
+    expect(calls).toEqual([['drawImage', tile, 2, 3], ['createPattern', tile, 'repeat'], ['set', 'fillStyle', pattern], ['fillRect', 0, 0, 8, 8]])
+  } finally { vi.unstubAllGlobals() }
+})
+
+it('图案 setTransform 录成指令：同一变换可沿用，重放时设到图案上；缓存的图案在后续帧、直接绘制时也带着变换', () => {
+  class Bitmap { width = 4; height = 4 }
+  vi.stubGlobal('ImageBitmap', Bitmap)
+  try {
+    const tile = new Bitmap() as unknown as ImageBitmap
+    let cached: CanvasPattern | undefined
+    const draw = (shift: number) => (ctx: OffscreenCanvasRenderingContext2D): void => {
+      cached ??= ctx.createPattern(tile, 'repeat')!
+      cached.setTransform({ a: 2, b: 0, c: 0, d: 2, e: shift, f: 0 })
+      ctx.fillStyle = cached; ctx.fillRect(0, 0, 10, 10)
+    }
+    const first = recordAuthorCanvas(size, measuring(), [1, 0, 0, 1, 0, 0], draw(3))
+    const second = recordAuthorCanvas(size, measuring(), [1, 0, 0, 1, 0, 0], draw(3))
+    const moved = recordAuthorCanvas(size, measuring(), [1, 0, 0, 1, 0, 0], draw(5))
+    expect(first.comparable).toBe(true)
+    expect(sameAuthorCanvasRecording(first, second)).toBe(true)
+    expect(sameAuthorCanvasRecording(second, moved)).toBe(false)
+    // 第一帧的录制不会被后面几帧对缓存图案的修改改写
+    expect(first.ops.filter(op => op[0] === 'patternTransform')).toEqual([['patternTransform', 1, 2, 0, 0, 2, 3, 0]])
+    const transforms: unknown[] = []
+    const pattern = { setTransform: (m: unknown) => transforms.push(m) }
+    const real = new Proxy({} as Record<string, unknown>, {
+      get: (_, name: string) => name === 'createPattern' ? () => pattern : () => undefined,
+      set: () => true,
+    }) as unknown as OffscreenCanvasRenderingContext2D
+    replayAuthorCanvas(moved, real, () => { throw new Error('no asset') })
+    expect(transforms).toEqual([{ a: 2, b: 0, c: 0, d: 2, e: 5, f: 0 }])
+    // 直接绘制的图层拿到录制期缓存的图案：换成真实图案并设上最后的变换
+    const set: Record<string, unknown> = {}
+    const direct = { setTransform: vi.fn() }
+    const wrapped = authorCanvasContext(new Proxy({ createPattern: () => direct }, { set: (_, name: string, value) => { set[name] = value; return true } }) as unknown as OffscreenCanvasRenderingContext2D, [1, 0, 0, 1, 0, 0])
+    wrapped.fillStyle = cached!
+    expect(set.fillStyle).toBe(direct)
+    expect(direct.setTransform).toHaveBeenCalledWith({ a: 2, b: 0, c: 0, d: 2, e: 5, f: 0 })
+  } finally { vi.unstubAllGlobals() }
+})
+
+it('标出能否单独栅格后叠加（只用 source-over）与 save/restore 是否成对；reset 可录制，重放回到宿主变换', () => {
+  const record = (draw: (ctx: OffscreenCanvasRenderingContext2D) => void) => recordAuthorCanvas(size, measuring(), [1, 0, 0, 1, 0, 0], draw)
+  expect(record(ctx => { ctx.beginPath(); ctx.arc(5, 5, 2, 0, 6); ctx.fill(); ctx.fillText('A', 0, 0) })).toMatchObject({ isolated: true, balanced: true })
+  // 别的混合模式、清除、读画布本身、接着前一层留下的路径画：要作用在前面已画的内容上
+  expect(record(ctx => { ctx.globalCompositeOperation = 'destination-out'; ctx.fillRect(0, 0, 1, 1) }).isolated).toBe(false)
+  expect(record(ctx => { ctx.globalCompositeOperation = 'multiply'; ctx.globalCompositeOperation = 'source-over'; ctx.fillRect(0, 0, 1, 1) }).isolated).toBe(true)
+  expect(record(ctx => ctx.clearRect(0, 0, 1, 1)).isolated).toBe(false)
+  expect(record(ctx => ctx.drawImage(ctx.canvas, 0, 0)).isolated).toBe(false)
+  expect(record(ctx => { ctx.lineTo(4, 4); ctx.stroke() }).isolated).toBe(false)
+  expect(record(ctx => ctx.fill()).isolated).toBe(false)
+  const path = { tag: 'path' } as unknown as Path2D
+  expect(record(ctx => ctx.fill(path))).toMatchObject({ isolated: true, comparable: false })
+  expect(record(ctx => { ctx.save(); ctx.restore(); ctx.restore() }).balanced).toBe(false)
+  expect(record(ctx => { ctx.save(); ctx.save(); ctx.restore() }).balanced).toBe(false)
+  const reset = record(ctx => { ctx.fillStyle = 'red'; ctx.reset(); ctx.fillRect(0, 0, 1, 1) })
+  expect(reset).toMatchObject({ comparable: true, isolated: false, balanced: false })
+  const calls: unknown[][] = []
+  const real = new Proxy({} as Record<string, unknown>, { get: (_, name: string) => (...args: unknown[]) => calls.push([name, ...args]), set: (_, name: string, value) => { calls.push(['set', name, value]); return true } }) as unknown as OffscreenCanvasRenderingContext2D
+  replayAuthorCanvas(reset, real, () => { throw new Error('no asset') }, [2, 0, 0, 2, 4, 4])
+  expect(calls).toEqual([['set', 'fillStyle', 'red'], ['reset'], ['setTransform', 2, 0, 0, 2, 4, 4], ['fillRect', 0, 0, 1, 1]])
 })

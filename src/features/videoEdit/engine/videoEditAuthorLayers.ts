@@ -22,6 +22,50 @@ export function authorRasterScale(need: number, limit: number, redrawnEveryFrame
   return scale > ceiling ? scale / 2 : scale
 }
 
+export interface AuthorStillGroup { start: number; end: number; volatile: boolean }
+/**
+ * 相邻无位姿图层怎样分成几张整帧栅格，返回下标区间 [start, end)。Frameflow 把它们画在同一张画布上，其中一层在动
+ * （脉冲、闪烁、视频）就得整张连同静止部分一起重画。只用 source-over 往上叠的层（`isolated`）单独栅格后在 GPU 上按
+ * 顺序叠，结果与画在同一张画布上相同；所以最近在变的层（`volatile`）与静止的层分开，在变的层重画时静止部分沿用。
+ * 不是 source-over 的层（清除、别的混合模式、读画布、接着前一层的路径画）要作用在前面已画的内容上：与前面所有层
+ * 留在同一张画布。栅格数超过 `limit` 时，把层数最少的静止组并进两侧在变的组。
+ */
+export function authorStillGroups(stills: ReadonlyArray<{ volatile: boolean; isolated: boolean }>, limit: number): AuthorStillGroup[] {
+  let groups: AuthorStillGroup[] = []
+  stills.forEach((still, index) => {
+    const last = groups.at(-1)
+    if (!still.isolated) groups = [{ start: 0, end: index + 1, volatile: still.volatile || groups.some(group => group.volatile) }]
+    else if (last && last.volatile === still.volatile) last.end = index + 1
+    else groups.push({ start: index, end: index + 1, volatile: still.volatile })
+  })
+  while (groups.length > Math.max(1, limit)) {
+    let fewest = 0
+    groups.forEach((group, index) => {
+      const best = groups[fewest]
+      if (!group.volatile && (best.volatile || group.end - group.start < best.end - best.start)) fewest = index
+    })
+    const from = Math.max(0, fewest - 1), to = Math.min(groups.length - 1, fewest + 1)
+    groups.splice(from, to - from + 1, { start: groups[from].start, end: groups[to].end, volatile: true })
+  }
+  return groups
+}
+
+/**
+ * 一组无位姿图层要栅格、上传的范围（画布像素，整数，限在画幅内）。每层都有 `clip` 时画面出不了各 clip 的并集，只取这块；
+ * 有一层没有 clip 就是整帧。并集为空（全被裁掉）返回 null。
+ */
+export function authorStillCrop(clips: ReadonlyArray<readonly [number, number, number, number] | undefined>, width: number, height: number): { x: number; y: number; width: number; height: number } | null {
+  let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity
+  for (const clip of clips) {
+    if (!clip || !clip.every(Number.isFinite)) return { x: 0, y: 0, width, height }
+    left = Math.min(left, clip[0], clip[2]); top = Math.min(top, clip[1], clip[3])
+    right = Math.max(right, clip[0], clip[2]); bottom = Math.max(bottom, clip[1], clip[3])
+  }
+  const x = Math.max(0, Math.floor(left)), y = Math.max(0, Math.floor(top))
+  const cropWidth = Math.min(width, Math.ceil(right)) - x, cropHeight = Math.min(height, Math.ceil(bottom)) - y
+  return cropWidth > 0 && cropHeight > 0 ? { x, y, width: cropWidth, height: cropHeight } : null
+}
+
 export function authorPoseMatrix(pose: AuthorPose): CodeMatrix {
   // Frameflow rotation is in radians, matching Canvas2D.
   const c = Math.cos(pose.rotation ?? 0), s = Math.sin(pose.rotation ?? 0)
