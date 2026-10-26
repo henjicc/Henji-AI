@@ -1,6 +1,7 @@
 import { finalizeDocument } from '@/commands/documents'
 import { createLogger } from '@/core/logging'
 import { videoEditClipMedia, type VideoEditDocument, type VideoEditMedia } from '@/core/videoEdit/document'
+import type { DocumentSummary } from '@/core/documents/types'
 import { videoEditClipSourceRange } from '@/core/videoEdit/clipSpeed'
 import { videoEditFps, videoEditSourceSeconds } from '@/core/videoEdit/time'
 import { applyVideoEditTimelineEdit } from '@/core/videoEdit/timelineEdits'
@@ -138,21 +139,30 @@ async function applyVideoEditAudioLayout(): Promise<void> {
  */
 export async function openAudioDocumentInMultitrack(audioDocumentId: string): Promise<void> {
   const operations = videoEditDocumentOperations()
-  for (const video of listVideoEditInstances()) {
-    const clip = links(video.document, audioDocumentId)[0]
-    const summary = clip && await operations.findDocument(video.document.id)
-    if (!clip || !summary) continue
+  /** 打开剪辑、切到音频布局，并选中链接着这份作品的片段。 */
+  const reveal = async (summary: DocumentSummary): Promise<void> => {
     await operations.openDocument(summary)
     await applyVideoEditAudioLayout()
-    const sequence = video.document.sequences.find(s => s.clips.some(c => c.id === clip.id))
-    if (sequence) { switchVideoEditSequence(video.document.id, sequence.id); setVideoEditView(video.document.id, { selection: clip.id }) }
-    logger.info('回到多轨', { event: 'video_edit.audio_link.multitrack.opened', context: { projectId: video.document.id, documentId: audioDocumentId } })
-    return
+    const video = listVideoEditInstances().find(instance => instance.document.id === summary.id)
+    const clip = video && links(video.document, audioDocumentId)[0]
+    const sequence = clip && video.document.sequences.find(s => s.clips.some(c => c.id === clip.id))
+    if (video && clip && sequence) { switchVideoEditSequence(video.document.id, sequence.id); setVideoEditView(video.document.id, { selection: clip.id }) }
+    logger.info('回到多轨', { event: 'video_edit.audio_link.multitrack.opened', context: { projectId: summary.id, documentId: audioDocumentId } })
+  }
+  for (const video of listVideoEditInstances()) {
+    const summary = links(video.document, audioDocumentId).length ? await operations.findDocument(video.document.id) : undefined
+    if (summary) return await reveal(summary)
   }
   const audio = getAudioEditProjectInstance(audioDocumentId)
   if (!audio) throw new Error('请先打开这份音频作品。')
   const container = audio.session.documentMeta.container
   if (container.kind !== 'project') throw new Error('多轨剪辑只能放在项目里：请先把这份音频作品移到一个项目中再打开多轨。')
+  // 多轨剪辑没打开（例如重启之后）：在同一项目里找链接着这份作品的剪辑，找到就打开它，不重复新建。
+  for (const summary of await operations.listDocuments({ kind: 'video_edit', container, includeDrafts: false, includeMissing: false })) {
+    const read = await operations.readDocument({ id: summary.id, path: summary.path }).catch(() => undefined)
+    const content = read?.content as Partial<VideoEditDocument> | undefined
+    if (content?.sequences && links({ sequences: content.sequences } as VideoEditDocument, audioDocumentId).length) return await reveal(summary)
+  }
   await flushAudioEditProject(audioDocumentId)
   const rendered = await renderAudioEdit(audioDocumentId)
   const name = audio.session.documentMeta.name
