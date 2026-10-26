@@ -47,7 +47,7 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 | 任务 | 参考 |
 | --- | --- |
 | 简报、概念、拆参考 | [简报与概念](references/brief-concept.md) |
-| 风格预设（读、选、建、改、分享）、风格／构图／字体／颜色 | [风格预设](references/style-kit.md)、[风格](references/styles.md)、[版式](references/layout.md)、[文字](references/type.md)、[色彩质感](references/color-texture.md) |
+| 风格预设（读、选、建、改、分享）、风格／构图／字体／颜色 | [风格预设](references/style-kit.md)、[标准样片](references/style-sample.md)、[风格](references/styles.md)、[版式](references/layout.md)、[文字](references/type.md)、[色彩质感](references/color-texture.md) |
 | 质感选型、实现边界、试一帧 | [定做法](references/approach.md) |
 | 时长曲线、错峰、因果、转场 | [运动](references/motion.md) |
 | 动多少、何时静止、太忙或僵住、删减与密度 | [注意力与克制](references/attention.md) |

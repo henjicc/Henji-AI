@@ -76,7 +76,7 @@ describe('外部 MCP 通过普通工具发现并读取运行时技能', () => {
       'references/review-ai.md', 'references/review.md',
       'references/shader-components-filters.md', 'references/shader-components-shapes-2.md', 'references/shader-components-shapes.md',
       'references/shader-components-stylize.md', 'references/shader-components-textures-2.md', 'references/shader-components-textures.md',
-      'references/structure.md', 'references/style-kit.md', 'references/styles.md', 'references/templates.md',
+      'references/structure.md', 'references/style-kit.md', 'references/style-sample.md', 'references/styles.md', 'references/templates.md',
       'references/timeline-check.md', 'references/type.md',
     ]
     expect(main.body.data!.referencePaths).toEqual(referencePaths)
