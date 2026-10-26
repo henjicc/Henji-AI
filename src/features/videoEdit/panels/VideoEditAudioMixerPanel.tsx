@@ -30,11 +30,12 @@ function useDrag(gesture: AudioRackGesture) {
 function Fader({ label, value, disabled, onChange, gesture }: { label: string; value: number; disabled: boolean; onChange: (volumeDb: number) => void; gesture: AudioRackGesture }): React.ReactElement {
   const drag = useDrag(gesture)
   return <div className="relative mx-auto h-36 w-7" data-video-edit-mixer-fader>
-    {/* 纵向推子：把同一个滑杆转 90 度，上大下小。 */}
-    <UiRangeInput aria-label={`${label}音量推子`} min={MIN_DB} max={MAX_DB} step={0.5} value={value} disabled={disabled}
-      className="absolute left-1/2 top-1/2 w-36 -translate-x-1/2 -translate-y-1/2 -rotate-90"
-      onPointerDown={() => drag.begin()} onPointerUp={() => drag.end()} onPointerCancel={() => drag.end(true)}
-      onDoubleClick={() => onChange(0)} onChange={event => onChange(Number(event.target.value))} />
+    {/* 纵向推子：把同一个滑杆连同 144 宽的外框转 90 度，上大下小（宽度给外框，滑杆自身保持铺满）。 */}
+    <div className="absolute left-1/2 top-1/2 flex w-36 -translate-x-1/2 -translate-y-1/2 -rotate-90 items-center">
+      <UiRangeInput aria-label={`${label}音量推子`} min={MIN_DB} max={MAX_DB} step={0.5} value={value} disabled={disabled}
+        onPointerDown={() => drag.begin()} onPointerUp={() => drag.end()} onPointerCancel={() => drag.end(true)}
+        onDoubleClick={() => onChange(0)} onChange={event => onChange(Number(event.target.value))} />
+    </div>
   </div>
 }
 

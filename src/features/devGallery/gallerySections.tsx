@@ -176,7 +176,7 @@ export function FieldSection(): JSX.Element {
         <span className="inline-flex h-control-sm items-stretch overflow-hidden rounded-field bg-raised">
           <UiNumberStepper size="sm" increaseLabel="增加" decreaseLabel="减少" canIncrease canDecrease={false} onStep={noop} />
         </span>
-        <UiRangeInput aria-label="强度" defaultValue={60} className="w-24" />
+        <UiRangeInput aria-label="强度" defaultValue={60} className="!w-24" />
         <UiColorInput aria-label="颜色" defaultValue={THEME_SEED_ACCENT_HEX.blue.toLowerCase()} />
       </GalleryRow>
       <GalleryRow label="日期">
