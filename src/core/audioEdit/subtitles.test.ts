@@ -112,5 +112,6 @@ describe('逐段核对与改字', () => {
     const emptied = setAudioEditCaptionText(fixed, view.id, '想象的简单多了')
     expect(emptied.transcript.map(block => block.text)).toEqual(['比我', '', '想象的', '简单多了'])
     expect(describeAudioEditCaptions(emptied).map(item => [item.id, item.text])).toEqual([[view.id, '想象的简单多了']])
+    expect(buildProjectAudioEditSubtitleCues(emptied)[0].words.map(word => word.text)).toEqual(['想象的', '简单多了'])
   })
 })
