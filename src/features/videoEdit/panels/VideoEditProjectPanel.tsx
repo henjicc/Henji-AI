@@ -27,6 +27,8 @@ import { focusVideoEditPanelElement } from '../layout/videoEditPanelFocus'
 import { chooseVideoEditMedia, relinkVideoEditMedia } from '../application/videoEditMedia'
 import { appendVideoEditItems, createVideoEditAdjustmentItem, createVideoEditBin, createVideoEditGraphicItem, createVideoEditSequenceFromItem, deleteVideoEditBins, deleteVideoEditItems, setVideoEditLabels, updateVideoEditBin, updateVideoEditItems, type VideoEditGraphicItemInput } from '../application/videoEditProjectItems'
 import { updateVideoEditSource } from '../application/videoEditSource'
+import { activateVideoEditProjectItem } from '../application/videoEditItemActivation'
+import { isVideoEditSourcePreviewItem } from '../application/videoEditSourcePreview'
 import { VideoEditSequenceDialog } from './VideoEditSequenceDialog'
 import { VideoEditProjectEditDialog, type ProjectEditDialog } from './VideoEditProjectEditDialog'
 import { VideoEditProjectThumbnail } from './VideoEditProjectThumbnail'
@@ -216,7 +218,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       { id: 'create_multicam', label: '创建多机位源序列…', icon: <SequenceIcon size={UI_ICON_SIZE.md} />, disabled: items.length < 2 || items.some(item => item.kind !== 'video'), onClick: () => setMulticamItemIds(ids) },
       { id: 'create_proxy', label: '为选中素材生成代理', icon: <ProxyIcon size={UI_ICON_SIZE.md} />, disabled: !proxyIds.length || proxyIds.some(id => readVideoEditProxyState(projectId, id).status === 'generating'), onClick: () => { void createVideoEditProxies(projectId, proxyIds).catch(onError) } },
       { id: 'cancel_proxy', label: '取消创建代理', icon: <RefreshCw size={UI_ICON_SIZE.md} />, disabled: !proxyIds.some(id => readVideoEditProxyState(projectId, id).status === 'generating'), onClick: () => proxyIds.forEach(id => cancelVideoEditProxy(projectId, id)) },
-      { id: 'preview', label: '打开源素材', icon: <Play size={UI_ICON_SIZE.md} />, disabled: !item.mediaId, onClick: () => run(() => updateVideoEditSource(projectId, { itemId: item.id })) },
+      { id: 'preview', label: '打开源素材', icon: <Play size={UI_ICON_SIZE.md} />, disabled: !item.mediaId && !isVideoEditSourcePreviewItem(instance.document, item.id), onClick: () => run(() => updateVideoEditSource(projectId, { itemId: item.id })) },
       { id: 'append', label: `添加${ids.length > 1 ? ` ${ids.length} 项` : ''}到当前序列`, disabled: !activeSequence, icon: <Plus size={UI_ICON_SIZE.md} />, onClick: () => run(() => appendVideoEditItems(projectId, ids, instance.activeSequenceId)) },
       { id: 'sequence', label: item.kind === 'adjustment' ? '调整图层请添加到现有序列' : '按此素材新建序列', icon: <SequenceIcon size={UI_ICON_SIZE.md} />, disabled: ids.length !== 1 || item.kind === 'adjustment', onClick: () => createFromItem(item.id) },
       { id: 'edit', label: '重命名、标签与移动', icon: <Pencil size={UI_ICON_SIZE.md} />, onClick: () => setEdit({ kind: 'items', items }) },
@@ -267,7 +269,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       if (!event.shiftKey) anchor.current = entry.value.id
       run(() => setVideoEditProjectView(projectId, { selectedItemIds: selection }))
     },
-    onDoubleClick: (event: React.MouseEvent) => { event.stopPropagation(); if (entry.kind === 'bin') { selectBin(entry.value.id); return } run(() => entry.kind === 'sequence' ? openSequence(entry.value.id) : entry.value.mediaId ? updateVideoEditSource(projectId, { itemId: entry.value.id }) : appendVideoEditItems(projectId, [entry.value.id], instance.activeSequenceId)) },
+    onDoubleClick: (event: React.MouseEvent) => { event.stopPropagation(); if (entry.kind === 'bin') { selectBin(entry.value.id); return } run(() => entry.kind === 'sequence' ? openSequence(entry.value.id) : activateVideoEditProjectItem(projectId, entry.value.id)) },
     onContextMenu: (event: React.MouseEvent) => {
       event.stopPropagation(); pointerAt.current = { left: event.clientX, top: event.clientY, bottom: event.clientY, width: 0 }
       if (entry.kind === 'item' && !selected) run(() => setVideoEditProjectView(projectId, { selectedItemIds: [entry.value.id] }))

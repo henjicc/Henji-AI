@@ -302,6 +302,7 @@ labels.remix = '音频重构'
 labels.musicStructure = '音乐结构'
 descriptions['video_edit.clip.frame_hold'] = '是否为帧定格；定格引用源入点处的同一帧，可调整持续时间、修剪和移动。用 add_video_edit_frame_hold 在播放头切出定格，整个操作可撤销。'
 Object.assign(labels, { contentAnchor: '关联内容' })
+descriptions['video_edit.source.item_id'] = '源监视器打开的素材项，空字符串为关闭。视频、图片、音频按原文件播放；代码画面、图形、文字没有源文件，按只放这一项的临时序列预览（画幅与帧率跟当前序列，时长为放进时间线时的默认时长，没有声音，不设入出点）。打开不改作品，也不往时间线里放东西。'
 Object.assign(labels, { contentQueries: '素材内容查询进度' })
 schemas['video_edit.item'].contentQueries = z.array(mediaContentQueryProgressSchema).max(8)
 descriptions['video_edit.item.content_queries'] = '当前剪辑实例中此素材项最近的内容查询，最多八项；只读运行状态，不保存到作品、不进入撤销。phaseProgress 只代表当前阶段的实测进度，null 表示尚无可计数进度，不是整项任务百分比。completedUnits/totalUnits 表示本阶段已检查文档或已分析声道路数；无可靠总量时 totalUnits 为 null。取消原读取请求会取消实际分析；失败后可重新 query_video_edit_content，不识别、不计费。关闭重开剪辑后清空。'

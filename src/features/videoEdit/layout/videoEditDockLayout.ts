@@ -142,6 +142,11 @@ export function showVideoEditPanel(api: DockviewApi, id: VideoEditPanelId): IDoc
   }
   // 节目画面（关闭或从独立浮窗贴回）回到时间线上方：原来按“程序面板不存在 → 第一个面板右侧”新开一列，
   // 时间线被挤成整高的窄竖列，标尺只剩不到 300px（5.8 全量回归：性能场景弹出节目浮窗再关闭后，后续剪辑场景全部点不到标尺）。
+  // 源监视器默认和节目画面在同一组、同一大小（达芬奇单监视器的做法，2026-10-26 用户要求）：双击素材时切到它，拖出标签可并排
+  const program = id === 'source' ? api.getPanel('program') : undefined
+  if (program && program.api.location.type === 'grid') {
+    return api.addPanel({ id, component: id, title: definition.title, renderer: 'always', ...constraints, position: { referencePanel: program, direction: 'within' } })
+  }
   const timeline = id === 'program' ? api.getPanel('timeline') : undefined
   if (timeline && timeline.api.location.type === 'grid') {
     return api.addPanel({ id, component: id, title: definition.title, renderer: 'always', ...constraints, position: { referencePanel: timeline, direction: 'above' } })
@@ -156,7 +161,7 @@ export function showVideoEditPanel(api: DockviewApi, id: VideoEditPanelId): IDoc
 }
 
 /**
- * 浮动面板贴回主区域时落到它的默认方位（与 showVideoEditPanel 一致）：时间线在节目画面下方，项目与源监视器在左，
+ * 浮动面板贴回主区域时落到它的默认方位（与 showVideoEditPanel 一致）：时间线在节目画面下方，项目在左、源监视器并入节目画面那一组，
  * 其余在右，字幕与标记并入效果控件那一组。此前一律贴到右边，时间线贴回后成了一条窄竖列（960 窗口下只剩约 360px，
  * 标尺可见部分不到 130px），后续剪辑沿用这份布局（5.8 全量回归发现）。
  */
@@ -167,7 +172,7 @@ function defaultDockTarget(api: DockviewApi, id: string, own: DockviewGroupPanel
   const program = api.getPanel('program')?.group
   const reference = isGridGroup(program) ? program : api.groups.find(isGridGroup)
   if (!reference) return null
-  return { group: reference, position: id === 'timeline' ? 'bottom' : id === 'project' || id === 'source' ? 'left' : 'right' }
+  return { group: reference, position: id === 'timeline' ? 'bottom' : id === 'source' && reference === program ? 'center' : id === 'project' || id === 'source' ? 'left' : 'right' }
 }
 
 export function dockVideoEditPanel(api: DockviewApi, panel: IDockviewPanel): void {

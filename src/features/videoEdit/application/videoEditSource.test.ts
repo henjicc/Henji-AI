@@ -10,6 +10,9 @@ import { VideoEditSourceExecutor } from './videoEditSourceExecutor'
 import { VideoEditMutationExecutor } from './videoEditExecutors'
 import type { ApplicationExecutionContext, ApplicationPlannedStep } from '@/core/application-control'
 import { reopenVideoEdit } from './videoEditDocumentTestKit'
+import { createVideoEditGraphicItem } from './videoEditProjectItems'
+import { videoEditSourceTiming } from './videoEditSourcePreview'
+import { activateVideoEditProjectItem } from './videoEditItemActivation'
 const files = new Map<string, string>()
 it('失败发布中的立即重试先退役旧请求，不被旧catch释放新宿主', async () => {
   const owner = await fixture(); const id = owner.document.id; const events: string[] = []; let attempt = 0
@@ -371,4 +374,23 @@ it('补偿已确认但尚未完成时的新手动定位保持自己的身份，�
     await expect(executor.undo(second.undoToken!)).rejects.toThrow('后续操作')
     expect(requests).toHaveLength(5); expect(instance.past).toHaveLength(history)
   } finally { unsubscribe(); off() }
+})
+it('没有源文件的图形、代码画面在源监视器预览：命令标识同步登记，时长按放进时间线的默认时长；双击不往时间线放东西', async () => {
+  const owner = await fixture(); const id = owner.document.id
+  const graphic = createVideoEditGraphicItem(id, { kind: 'rect' }); const clips = owner.document.sequences.map(sequence => sequence.clips.length)
+  const requests: string[] = []
+  const off = registerVideoEditSourcePresenter(id, async request => { requests.push(request.itemId); return { ...request, presentedTimeUs: request.timeUs } })
+  try {
+    const pending = updateVideoEditSource(id, { itemId: graphic })
+    const after = videoEditSourceCommandIdentity(id)
+    await pending
+    expect(matchesVideoEditSourceCommand(id, after)).toBe(true)
+    expect(readVideoEditSource(id)).toMatchObject({ itemId: graphic, status: 'ready' })
+    const timing = videoEditSourceTiming(id, graphic, 30)!
+    expect(timing.kind).toBe('video'); expect(timing.durationSeconds).toBeGreaterThan(0)
+    await expect(updateVideoEditSource(id, { timeUs: Math.round(timing.durationSeconds * 1e6) + 1_000_000 })).rejects.toThrow('超出素材预览时长')
+    await activateVideoEditProjectItem(id, graphic)
+    expect(requests.at(-1)).toBe(graphic)
+    expect(owner.document.sequences.map(sequence => sequence.clips.length)).toEqual(clips)
+  } finally { off() }
 })

@@ -12,6 +12,9 @@ import type { VideoEditInstance } from '../application/videoEditService'
 import { getActiveVideoEditSequence, requireVideoEditInstance } from '../application/videoEditService'
 import { closeVideoEditSource, observeVideoEditSource, readVideoEditSource, registerVideoEditSourcePresenter, subscribeVideoEditSource, updateVideoEditSource, videoEditSourceRevision } from '../application/videoEditSource'
 import { createVideoEditSourcePresenter } from './videoEditSourcePresenter'
+import { createVideoEditSourcePreviewPresenter } from './videoEditSourcePreviewPresenter'
+import { isVideoEditSourcePreviewItem, videoEditSourceTiming } from '../application/videoEditSourcePreview'
+import type { VideoEditSourcePresenter } from '../application/videoEditSource'
 import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from '../application/videoEditCommands'
 import type { VideoEditCommandId } from '@/core/videoEdit/commands'
 import { videoEditFps } from '@/core/videoEdit/time'
@@ -52,13 +55,17 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
   const state = readVideoEditSource(projectId)
   const item = instance.document.items.find(item => item.id === state.itemId)
   const media = instance.document.media.find(media => media.id === item?.mediaId)
+  // 代码画面、图形与文字没有源文件：用剪辑渲染器预览，按画面处理（没有声音、入出点与插入）
+  const previewed = !media && !!item && isVideoEditSourcePreviewItem(instance.document, item.id)
+  const activeSequence = getActiveVideoEditSequence(instance)
+  const timing = state.itemId && (media || previewed) ? videoEditSourceTiming(projectId, state.itemId, activeSequence.fps) : undefined
   const [levels, setLevels] = useState<VideoEditAudioLevel[]>([])
-  const pictured = !!media && media.kind !== 'audio'
+  const pictured = !!media && media.kind !== 'audio' || previewed
   // 显示比例与节目监视器同一套（滚轮无极缩放、中键平移、下拉等级）；换素材回到“适合”
-  const zoom = useMonitorZoom({ width: media?.width || 1920, height: media?.height || 1080, label: '源显示比例' })
+  const zoom = useMonitorZoom({ width: media?.width || (previewed ? activeSequence.width : 1920), height: media?.height || (previewed ? activeSequence.height : 1080), label: '源显示比例' })
   const { setDisplay: setZoomDisplay } = zoom
   useEffect(() => { setZoomDisplay('fit') }, [state.itemId, setZoomDisplay])
-  const sourceDurationUs = Math.round((media?.durationSeconds ?? 0) * 1e6)
+  const sourceDurationUs = Math.round((timing?.durationSeconds ?? 0) * 1e6)
   // 多级波形覆盖整段素材：显示入出点之间，未设时显示整段（不再按 30 分钟分块解码）。
   const waveStartUs = state.inUs ?? 0
   const waveEndUs = Math.min(sourceDurationUs, state.outUs ?? sourceDurationUs)
@@ -66,7 +73,7 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
   const waveRef = hasWave ? { source: media.path, ...(media.sourceRevision ? { sourceRevision: media.sourceRevision } : {}), channels: 2 as const } : null
   const waveform = useWaveformData(waveRef, 'full', visible)
   // 读数与节目监视器同一种：按素材自己的帧率显示时间码（没有帧率的音频按当前序列）
-  const sourceFps = media?.frameRate ? videoEditFps(media.frameRate) : getActiveVideoEditSequence(instance).fps
+  const sourceFps = media?.frameRate ? videoEditFps(media.frameRate) : timing?.fps ?? activeSequence.fps
   const sourceFrame = (timeUs: number): number => Math.max(0, Math.floor(timeUs * sourceFps / 1e6 + 1e-6))
   const sourceTimecode = (timeUs: number): string => timelineTimecode(sourceFrame(timeUs), sourceFps)
   const run = (values: Parameters<typeof updateVideoEditSource>[1]): void => { void updateVideoEditSource(projectId, values).catch(error => {
@@ -94,9 +101,16 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
       return item ? videoEditItemAudioLayout(item, document.media.find(media => media.id === item.mediaId)) : undefined
     }, projectId)
     presenterRef.current = presenter
+    const preview = createVideoEditSourcePreviewPresenter(host.current, projectId, (itemId, observation) => observeVideoEditSource(projectId, itemId, observation))
+    // 同一个源监视器：有源文件的走文件播放，代码画面、图形与文字走预览渲染；换类型时先收起另一路
+    const present: VideoEditSourcePresenter = (request, signal) => {
+      if (request.itemId && isVideoEditSourcePreviewItem(requireVideoEditInstance(projectId).document, request.itemId)) { void presenter.release(); return preview.present(request, signal) }
+      void preview.release(); return presenter.present(request, signal)
+    }
+    const release = async (): Promise<void> => { await Promise.all([presenter.release(), preview.release()]) }
     const unsubscribeScrub = subscribeVideoEditScrub(projectId, intent => { if (intent.scope === 'source') presenter.scrub(intent.seconds, readVideoEditSource(projectId).volume) })
-    const unregister = registerVideoEditSourcePresenter(projectId, presenter.present, presenter.release)
-    return () => { unsubscribeScrub(); presenterRef.current = null; presenter.dispose(); unregister() }
+    const unregister = registerVideoEditSourcePresenter(projectId, present, release)
+    return () => { unsubscribeScrub(); presenterRef.current = null; void presenter.dispose(); void preview.dispose(); unregister() }
   }, [projectId, visible])
   useEffect(() => { if (state.status === 'closed') presenterRef.current?.release() }, [state.status, state.itemId])
   const meterLevels = levels.length ? levels : [{ peak: 0, rms: 0 }, { peak: 0, rms: 0 }]
@@ -116,14 +130,15 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
     { id: 'toggle_proxies', title: '切换代理', Icon: ICON_VIDEO_EDIT_PROXY, on: getVideoEditProxyPreference(projectId).enabled, tooltip: '切换代理：看片使用已有代理；导出默认用原片（可在导出设置中选代理）；分析使用原片', onClick: () => { try { setVideoEditProxyPreference(projectId, { enabled: !getVideoEditProxyPreference(projectId).enabled }) } catch (error) { onError(error) } } },
     ...SOURCE_COMMAND_BUTTONS.map(({ id, Icon, title }): VideoEditMonitorButtonSpec => {
       const presentation = timelineCommandPresentation(availability, id, shortcuts)
-      return { id, title: title ?? presentation.title, tooltip: presentation.tooltip, Icon, enabled: presentation.enabled, hidden: media?.kind === 'image' && SOURCE_PLAYBACK_BUTTONS.has(id), onClick: () => command(id) }
+      // 预览项没有源范围：不设入出点、不从源插入覆盖（放进时间线用拖动）
+      return { id, title: title ?? presentation.title, tooltip: presentation.tooltip, Icon, enabled: presentation.enabled, hidden: media?.kind === 'image' && SOURCE_PLAYBACK_BUTTONS.has(id) || previewed && ['mark_in', 'mark_out', 'clear_in_out', 'insert', 'overwrite'].includes(id), onClick: () => command(id) }
     }),
-    { id: 'play_pause', title: state.playing ? '暂停源素材' : '播放源素材', tooltip: timelineCommandPresentation(availability, 'play_pause', shortcuts).tooltip, Icon: state.playing ? Pause : Play, enabled: enabled('play_pause'), hidden: media?.kind !== 'video', onClick: () => command('play_pause') },
+    { id: 'play_pause', title: state.playing ? '暂停源素材' : '播放源素材', tooltip: timelineCommandPresentation(availability, 'play_pause', shortcuts).tooltip, Icon: state.playing ? Pause : Play, enabled: enabled('play_pause'), hidden: media?.kind !== 'video' && !previewed, onClick: () => command('play_pause') },
     ...(['video', 'audio', 'linked'] as const).map((component): VideoEditMonitorButtonSpec => {
       const name = component === 'video' ? '拖入画面' : component === 'audio' ? '拖入声音' : '拖入链接音画'
       return {
         id: `drag_${component}`, title: name, tooltip: `${name}：拖入对应时间线轨道，使用当前源入出点`, Icon: component === 'video' ? Film : component === 'audio' ? AudioLines : Link2,
-        enabled: state.status === 'ready', hidden: media?.kind === 'image' || !(dragComponents as readonly string[]).includes(component),
+        enabled: state.status === 'ready', hidden: media?.kind === 'image' || previewed || !(dragComponents as readonly string[]).includes(component),
         onDragStart: event => { try { writeVideoEditSourceDrag(event.dataTransfer, projectId, component); event.dataTransfer.effectAllowed = 'copy' } catch (error) { event.preventDefault(); onError(error) } },
       }
     }),
@@ -143,15 +158,15 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
       const target = event.target as HTMLElement
       if (!['ArrowLeft', 'ArrowRight'].includes(event.key) || !target.matches('input[aria-label="源素材进度"],input[aria-label="音频播放位置"]')) return
       event.preventDefault(); event.stopPropagation()
-      const fps = media?.frameRate ? media.frameRate.numerator / media.frameRate.denominator : 30
-      seek(Math.max(0, Math.min((media?.durationSeconds ?? 0) - 1 / fps, state.timeUs / 1e6 + (event.key === 'ArrowLeft' ? -1 : 1) / fps)), true)
+      const fps = timing?.fps ?? 30
+      seek(Math.max(0, Math.min((timing?.durationSeconds ?? 0) - 1 / fps, state.timeUs / 1e6 + (event.key === 'ArrowLeft' ? -1 : 1) / fps)), true)
     }}>
     {/* 媒体底只给画面（视频/图片）；音频源是随主题的迷你播放器，压在固定深色媒体底上纸白下读不清（4.1） */}
     <div className={`relative min-h-0 flex-1 ${state.itemId && media?.kind !== 'audio' ? 'bg-media' : ''}`}><div ref={pictured ? zoom.containerRef : undefined} {...(pictured ? zoom.containerProps : {})} className={`absolute bottom-3 left-3 right-6 top-3 flex ${zoom.containerClass}`}>
         <div className={`relative ${zoom.boxClass}`} style={zoom.boxStyle} data-monitor-zoom-box><div ref={host} className="absolute inset-0" data-video-edit-source-host data-video-edit-source-display={zoom.display === 'fit' ? 'fit' : 'zoom'} /></div>
       </div>
       {media?.kind === 'audio' && <div className="relative flex h-full items-center px-3 pr-6"><AudioPlayer src={resolveImageDisplayUrl(media.path)} filePath={media.path} compact surface="plain" active={visible} controlledPlayback={{ currentTime: state.timeUs / 1e6, duration: media.durationSeconds, playing: state.playing, volume: state.volume, disabled: state.status !== 'ready', onTogglePlay: () => command('play_pause'), onSeek: seconds => seek(seconds), onVolume: volume => run({ volume }) }} /></div>}
-      {!state.itemId && <UiEmpty size="sm" className="h-full" title="选择源素材" description="在素材面板中双击视频、图片或音频，独立预览原文件。" />}
+      {!state.itemId && <UiEmpty size="sm" className="h-full" title="选择源素材" description="在素材面板中双击素材，在这里预览。" />}
       {state.itemId && sounding && <VideoEditLevelMeter className="absolute bottom-3 right-2 top-3" levels={meterLevels} title="源播放电平" />}
       {state.itemId && (state.status === 'loading' || state.playing && state.playbackDirection === -1) && <span className="pointer-events-none absolute left-2 top-2 rounded-md bg-media-scrim px-2 py-1 text-xs text-on-media">{state.status === 'loading' ? '正在打开源素材…' : '正在反向静音浏览'}</span>}
     </div>
@@ -160,21 +175,21 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
         <span className="min-w-24 flex-1 basis-24 truncate text-xs text-text2" title={item?.name}>{item?.name}</span>
         {media?.kind !== 'image' && <VideoEditTimecodeReadout label="源时间码" className="px-1 text-xs"
-          frame={sourceFrame(media?.kind === 'video' ? state.presentedTimeUs : state.timeUs)} fps={sourceFps}
+          frame={sourceFrame(media?.kind === 'video' || previewed ? state.presentedTimeUs : state.timeUs)} fps={sourceFps}
           maxFrame={sourceFrame(sourceDurationUs)}
           onSeek={(frame, scrubbing) => seek(frame / sourceFps, scrubbing)}
           onSeekSeconds={seconds => run({ timeUs: Math.round(seconds * 1e6), playing: false })} />}
       </div>
-      {media?.kind === 'video' && <div className="relative pb-1.5" data-video-edit-source-progress>
+      {(media?.kind === 'video' || previewed) && <div className="relative pb-1.5" data-video-edit-source-progress>
         <UiRangeInput aria-label="源素材进度" min={0} max={sourceDurationUs} step={1} value={state.timeUs} onChange={event => seek(Number(event.target.value) / 1e6)} />
-        <VideoEditSourceInOut inUs={state.inUs} outUs={state.outUs} durationUs={sourceDurationUs} playheadUs={state.timeUs} onChange={run} />
+        {!previewed && <VideoEditSourceInOut inUs={state.inUs} outUs={state.outUs} durationUs={sourceDurationUs} playheadUs={state.timeUs} onChange={run} />}
       </div>}
       {hasWave && waveform.data && <div className="pointer-events-none flex w-full flex-col gap-0.5" data-video-edit-source-waveform>
         <span className="font-mono text-2xs tabular-nums text-text3">{sourceTimecode(waveStartUs)} — {sourceTimecode(waveEndUs)}</span>
         <WaveformView waveform={waveform} startSeconds={waveStartUs / 1e6} endSeconds={waveEndUs / 1e6} playedSeconds={state.timeUs / 1e6} height={20 * waveform.data.pyramid.channelCount} />
       </div>}
       {hasWave && waveform.status === 'error' && <UiError size="xs" align="start" title={t('surfaceGrammar.waveformFailed')} message={t('surfaceGrammar.waveformRetryHint')} onRetry={() => { if (waveRef) retryWaveform(waveRef, 'full') }} />}
-      {media?.kind !== 'image' && <span className="font-mono text-2xs tabular-nums text-text3">入点 {state.inUs === null ? '未设置' : sourceTimecode(state.inUs)} · 出点 {state.outUs === null ? '未设置' : sourceTimecode(state.outUs)}</span>}
+      {media && media.kind !== 'image' && <span className="font-mono text-2xs tabular-nums text-text3">入点 {state.inUs === null ? '未设置' : sourceTimecode(state.inUs)} · 出点 {state.outUs === null ? '未设置' : sourceTimecode(state.outUs)}</span>}
     </div>}
     {/* 与节目监视器同一种单行控制条：窄面板下按钮从后往前收进“更多”，不再折成多行压掉画面（重要记录 020，960 宽尺寸扫描发现） */}
     {state.itemId && <div className="flex min-h-10 shrink-0 items-center gap-x-1 whitespace-nowrap border-t border-line px-2 py-1" role="toolbar" aria-label="源监视器控制">

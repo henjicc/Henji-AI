@@ -14,6 +14,7 @@ import { chooseVideoEditMedia } from './videoEditMedia'
 import { openVideoEditAudioGainDialog, openVideoEditExportDialog } from './videoEditAudioDialogs'
 import { videoEditClipHasSound } from './videoEditLoudness'
 import { readVideoEditSource, updateVideoEditSource, pauseVideoEditSourceForProgram, restoreVideoEditSourcePause, videoEditSourceCommandIdentity, matchesVideoEditSourceCommand, type VideoEditSourceCommandIdentity, type VideoEditSourceState } from './videoEditSource'
+import { videoEditSourceTiming } from './videoEditSourcePreview'
 import { withVideoEditCodeMetadata, readVideoEditCodeMetadata } from './videoEditCodeState'
 import { copyVideoEditTimeline, executeVideoEditTimelineEdit, readVideoEditClipboard, resizeVideoEditTracks, separateVideoEditAudio } from './videoEditTimeline'
 import { videoEditTimelineViewport } from './videoEditTimelineViewport'
@@ -211,8 +212,8 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
     }
     if (id === 'zoom_to_sequence' || id === 'previous_screen' || id === 'next_screen') return { enabled: Boolean(videoEditTimelineViewport(owner.document.id, sequence.id)), reason: '请先显示时间线面板。' }
     if (['play_pause', 'play_forward', 'play_reverse', 'play_stop', 'step_back', 'step_forward', 'step_back_five', 'step_forward_five', 'mark_in', 'mark_out'].includes(id) && context.scope === 'source') {
-      const item = owner.document.items.find(item => item.id === source?.itemId); const media = owner.document.media.find(media => media.id === item?.mediaId)
-      return { enabled: Boolean(media && media.kind !== 'image' && (source?.status === 'ready' || id === 'play_stop' && source?.status === 'loading')), reason: '请先打开可以播放的源素材。' }
+      const timing = source?.itemId ? videoEditSourceTiming(owner.document.id, source.itemId, sequence.fps) : undefined
+      return { enabled: Boolean(timing && timing.kind !== 'image' && (source?.status === 'ready' || id === 'play_stop' && source?.status === 'loading')), reason: '请先打开可以播放的源素材。' }
     }
     const transitionRequest = TRANSITION_COMMANDS[id]
     if (transitionRequest) {
@@ -341,8 +342,8 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
     case 'locate_effects': setVideoEditTimelineView(projectId, { selectedClipIds: [...context.clipIds] }, context.clipIds[0]); focusVideoEditPanel(projectId, 'effects'); return
     case 'mark_in': case 'mark_out': {
       if (context.scope === 'source') {
-        const media = owner!.document.media.find(media => media.id === owner!.document.items.find(item => item.id === source!.itemId)?.mediaId)!
-        const fps = media.frameRate ? media.frameRate.numerator / media.frameRate.denominator : sequence.fps
+        const media = videoEditSourceTiming(projectId, source!.itemId, sequence.fps)!
+        const fps = media.fps
         const timeUs = media.kind === 'video' ? source!.presentedTimeUs : source!.timeUs
         if (id === 'mark_in') await updateVideoEditSource(projectId, { inUs: timeUs, ...(source!.outUs !== null && source!.outUs <= timeUs ? { outUs: null } : {}) })
         else { const outUs = Math.min(Math.round(media.durationSeconds * 1e6), media.kind === 'video' ? Math.round((Math.round(timeUs / 1e6 * fps) + 1) / fps * 1e6) : Math.round(timeUs + 1e6 / fps)); await updateVideoEditSource(projectId, { outUs, ...(source!.inUs !== null && source!.inUs >= outUs ? { inUs: null } : {}) }) }
@@ -372,8 +373,8 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
     case 'step_back': case 'step_forward': case 'step_back_five': case 'step_forward_five': {
       const direction = STEP_DISTANCE[id]
       if (context.scope === 'source') {
-        const media = owner!.document.media.find(media => media.id === owner!.document.items.find(item => item.id === source!.itemId)?.mediaId)!
-        const fps = media.frameRate ? media.frameRate.numerator / media.frameRate.denominator : sequence.fps
+        const media = videoEditSourceTiming(projectId, source!.itemId, sequence.fps)!
+        const fps = media.fps
         const frame = Math.max(0, Math.min(Math.ceil(media.durationSeconds * fps - 1e-6) - 1, Math.round((media.kind === 'video' ? source!.presentedTimeUs : source!.timeUs) / 1e6 * fps) + direction))
         const timeUs = Math.min(Math.round(media.durationSeconds * 1e6), Math.round((frame + (media.kind === 'video' ? .5 : 0)) / fps * 1e6))
         requestVideoEditScrub(projectId, { scope: 'source', seconds: timeUs / 1e6 })

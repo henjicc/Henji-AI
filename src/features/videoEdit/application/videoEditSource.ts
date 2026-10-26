@@ -1,6 +1,7 @@
 import { createLogger } from '@/core/logging'
 import { requireVideoEditInstance, listVideoEditInstances, subscribeVideoEdit, subscribeVideoEditView, publishVideoEdit, setVideoEditView, videoEditProgramCommandIdentity, restoreVideoEditProgramCommandIdentity, type VideoEditInstance } from './videoEditService'
 import { verifyVideoEditMediaContent, videoEditMediaContentKey } from '../videoEditMediaContent'
+import { isVideoEditSourcePreviewItem, settledVideoEditSourcePreview, videoEditSourcePreview } from './videoEditSourcePreview'
 
 const logger = createLogger('features.videoEdit.source')
 export interface VideoEditSourceState {
@@ -46,7 +47,8 @@ export function registerVideoEditSourcePresenter(projectId: string, presenter: V
   current.presenter = presenter; current.retire = retire; current.wake?.()
   return () => { if (sessions.get(projectId) !== current || current.presenter !== presenter) return; closeVideoEditSource(projectId); current.presenter = undefined; current.retire = undefined }
 }
-function validateRequest(projectId: string, request: VideoEditSourceRequest): void {
+/** `previewDurationUs`：没有源文件、按预览渲染的素材项（代码画面、图形、文字）的时长。 */
+function validateRequest(projectId: string, request: VideoEditSourceRequest, previewDurationUs?: number): void {
   if (!Number.isSafeInteger(request.timeUs) || request.timeUs < 0) throw new Error('源定位必须使用非负整数微秒。')
   if (!Number.isFinite(request.volume) || request.volume < 0 || request.volume > 1) throw new Error('源预览音量必须在 0 到 1 之间。')
   if (request.playbackDirection !== undefined && request.playbackDirection !== 1 && request.playbackDirection !== -1) throw new Error('源预览播放方向无效。')
@@ -54,7 +56,13 @@ function validateRequest(projectId: string, request: VideoEditSourceRequest): vo
   const document = requireVideoEditInstance(projectId).document
   const item = document.items.find(item => item.id === request.itemId)
   const media = document.media.find(media => media.id === item?.mediaId)
-  if (!item || !media) throw new Error('请打开一个有效的视频、图片或音频素材项。')
+  if (item && !media && previewDurationUs !== undefined) {
+    if (request.timeUs > previewDurationUs) throw new Error('定位超出素材预览时长。')
+    for (const time of [request.inUs, request.outUs]) if (time !== null && time !== undefined && (!Number.isSafeInteger(time) || time < 0 || time > previewDurationUs)) throw new Error('源入出点超出素材范围。')
+    if (request.inUs != null && request.outUs != null && request.outUs <= request.inUs) throw new Error('源出点必须晚于入点。')
+    return
+  }
+  if (!item || !media) throw new Error('请打开一个有效的视频、图片或音频素材项，或可以预览的代码画面、图形与文字。')
   if (media.kind === 'image' && (request.timeUs || request.playing)) throw new Error('静态图片不支持源播放或定位。')
   if (media.kind !== 'image' && request.timeUs > Math.round(media.durationSeconds * 1e6)) throw new Error('定位超出源素材时长。')
   for (const time of [request.inUs, request.outUs]) if (time !== null && time !== undefined && (!Number.isSafeInteger(time) || time < 0 || time > Math.round(media.durationSeconds * 1e6))) throw new Error('源入出点超出素材范围。')
@@ -69,7 +77,11 @@ export async function updateVideoEditSource(projectId: string, values: Partial<V
     const range = requireVideoEditInstance(projectId).document.items.find(item => item.id === values.itemId)?.sourceRange
     request.timeUs = values.timeUs ?? range?.inUs ?? 0; request.playing = values.playing ?? false; request.inUs = values.inUs ?? range?.inUs ?? null; request.outUs = values.outUs ?? range?.outUs ?? null; request.playbackDirection = values.playbackDirection ?? 1
   }
-  validateRequest(projectId, request)
+  // 代码画面、图形与文字没有源文件：按只放这一项的临时序列预览，时长取它放进时间线时的默认时长。
+  // 调用方在调用后立即记下命令标识，开头这段必须同步：还没算过预览时先不查时长，算好后在下面再查一次
+  const previewed = Boolean(request.itemId && isVideoEditSourcePreviewItem(requireVideoEditInstance(projectId).document, request.itemId))
+  let previewDurationUs = previewed ? settledVideoEditSourcePreview(projectId, request.itemId)?.durationUs ?? Infinity : undefined
+  validateRequest(projectId, request, previewDurationUs)
   const owner = requireVideoEditInstance(projectId)
   const inheritedPause = current.pendingProgramPause
   let programPause = inheritedPause?.owner === owner && inheritedPause.sequenceId === owner.activeSequenceId && inheritedPause.afterCommand === videoEditProgramCommandIdentity(projectId) ? inheritedPause : undefined
@@ -95,6 +107,11 @@ export async function updateVideoEditSource(projectId: string, values: Partial<V
   publish()
   logger.debug('源预览请求开始', { event: 'video_edit.source.request.start', context: { projectId, itemId: request.itemId } })
   try {
+    if (previewed) {
+      previewDurationUs = (await videoEditSourcePreview(projectId, request.itemId)).durationUs
+      controller.signal.throwIfAborted()
+      validateRequest(projectId, request, previewDurationUs)
+    }
     const item = owner.document.items.find(item => item.id === request.itemId)
     const media = owner.document.media.find(media => media.id === item?.mediaId)
     const contentKey = media ? videoEditMediaContentKey(media) : undefined
@@ -117,7 +134,7 @@ export async function updateVideoEditSource(projectId: string, values: Partial<V
     ])
     controller.signal.throwIfAborted()
     if (epoch !== current.epoch) throw new Error('源预览请求已被更新。')
-    validateRequest(projectId, { ...request, timeUs: observation.timeUs, playing: observation.playing, volume: observation.volume })
+    validateRequest(projectId, { ...request, timeUs: observation.timeUs, playing: observation.playing, volume: observation.volume }, previewDurationUs)
     if ((!request.playing && Math.abs(request.timeUs - observation.timeUs) > 1000) || request.playing !== observation.playing) throw new Error('源预览未能确认所请求的播放或定位状态。')
     if ((observation.playbackDirection ?? 1) !== request.playbackDirection && request.playing) throw new Error('源预览未能确认所请求的播放方向。')
     if (!Number.isSafeInteger(observation.presentedTimeUs) || observation.presentedTimeUs < 0) throw new Error('源预览未返回有效画面位置。')

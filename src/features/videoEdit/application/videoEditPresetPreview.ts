@@ -184,14 +184,14 @@ class PresetRenderer {
     let succeeded = false; let expired = false
     let abort!: () => void; let timer: ReturnType<typeof setTimeout> | undefined
     const deadline = new Promise<never>((_, reject) => {
-      abort = () => { expired = true; reject(signal.reason ?? new DOMException('预设预览已取消。', 'AbortError')) }
+      abort = () => { expired = true; reject(signal.reason ?? new DOMException('预览已取消。', 'AbortError')) }
       signal.addEventListener('abort', abort, { once: true })
-      timer = setTimeout(() => { expired = true; reject(new Error('预设单帧渲染超过30秒，请重试。')) }, 30_000)
+      timer = setTimeout(() => { expired = true; reject(new Error('预览单帧渲染超过30秒，请重试。')) }, 30_000)
       if (signal.aborted) abort()
     })
     try {
       const result = await Promise.race([lease.session.present(frame).then(result => {
-        if (expired || signal.aborted) { result.bitmap?.close(); throw signal.reason ?? new Error('预设预览已失效。') }
+        if (expired || signal.aborted) { result.bitmap?.close(); throw signal.reason ?? new Error('预览已失效。') }
         return result
       }), deadline])
       if (signal.aborted) { result.bitmap?.close(); signal.throwIfAborted() }
