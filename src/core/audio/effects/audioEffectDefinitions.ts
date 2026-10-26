@@ -37,6 +37,8 @@ export const AUDIO_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition
       { key: 'balance', name: '声道平衡', type: 'number', unit: 'strength', min: -100, max: 100, step: 1, default: 0, tooltip: '负值偏左，正值偏右', description: '-100 只剩左声道，0（默认）不变，+100 只剩右声道；序列为单声道时不起作用。' },
       { key: 'mono', name: '合成单声道', type: 'boolean', default: false, tooltip: '把左右声道混在一起，两边听到相同的声音', description: 'true 把左右声道平均成同一个声音（修正只有一边有声音的录音）；false（默认）保持立体声。' },
     ] },
+  { id: 'polarity_invert', name: '反相', group: 'audio_level', media: 'audio', tooltip: '把波形上下翻转（极性取反），修正接反的麦克风', description: '极性反转：把选定声道的波形上下翻转。单独听没有区别，用于修正两支麦克风或左右声道极性相反造成的抵消、发空（反相的声音与原声叠加会相互抵消）。',
+    params: [choice('channels', '声道', 'both', [['both', '左右声道'], ['left', '仅左声道'], ['right', '仅右声道']], '翻转哪个声道', 'both（默认）两个声道都翻转；left 只翻转左声道；right 只翻转右声道（左右一正一反、合成单声道时声音消失的录音用它修正）。序列为单声道时总是翻转唯一的声道。')] },
   // —— 动态与压限 ——
   { id: 'compressor', name: '压缩器', group: 'audio_dynamics', media: 'audio', tooltip: '压低大声、相对抬高小声，让音量更平稳', description: '动态压缩：把超过阈值的大声压下来并自动补回整体音量，让对白忽大忽小变得平稳、更“靠前”。',
     params: [
@@ -176,6 +178,25 @@ export const AUDIO_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition
       strength('room_size', '空间大小', 50, '房间有多大，越大余音越长', '0 很小的房间（余音很短）；50（默认）中等房间；80 大厅；100 非常长的余音。'),
       strength('damping', '高频衰减', 50, '余音里高频消失得多快，越大越闷', '0 余音明亮（瓷砖浴室）；50（默认）自然；100 很闷（铺满软装的房间）。'),
       strength('mix', '混响量', 25, '混响声相对原声的多少', '0 只有原声；15 ≈ 轻微空间感；25（默认）≈ 明显房间感；60 以上原声被淹没，像在远处。'),
+    ] },
+  // —— 特殊效果 ——
+  { id: 'distortion', name: '扭曲', group: 'audio_special', media: 'audio', tooltip: '让声音失真、发毛，像过载的音箱、对讲机或老收音机', description: '波形整形失真：先按驱动放大再削平波形，加上谐波让声音发毛、变脏；失真后低通控制刺耳程度。输出按驱动自动补偿，加大驱动只增加失真、不会越来越响。用于对讲机、喊话、电吉他、故障感。',
+    params: [
+      number('drive', '驱动', 'decibels', [0, 40, 0.5], 12, '失真程度，越大越脏', '失真前的增益 dB：6 轻微温暖的饱和；12（默认）明显失真；24 以上很重的过载；40 接近方波。'),
+      number('tone', '音色', 'hertz', [500, 20000, 10], 8000, '失真后保留多少高频，越低越闷', '失真后低通的截止频率 Hz：8000（默认）去掉最刺耳的毛刺；3000 像对讲机、电话；20000 保留全部高频（最刺）。'),
+      mix(100, '失真声相对原声的比例', '100（默认）只有失真声；30–50 原声与失真声混合（并联失真，保留清晰度）。'),
+      choice('character', '类型', 'soft', [['soft', '柔和'], ['hard', '硬削波'], ['tube', '电子管']], '失真的质感', 'soft（默认）圆润的软削波，像过载的磁带；hard 硬削波，刺耳，像数字过载与对讲机；tube 不对称的电子管饱和，带偶次谐波，更温暖。'),
+    ] },
+  { id: 'vocal_enhancer', name: '人声增强', group: 'audio_special', media: 'audio', tooltip: '一键让人声更清楚、更有存在感', description: '按嗓音类型套用固定的均衡曲线并乘以强度：去浑浊（中低频衰减）+ 提升存在感（中高频提升）+ 柔和高频（高频搁架略降）。强度 100 时：low 为 220 Hz -5 dB、3.2 kHz +4 dB、9 kHz 以上 -2 dB；high 为 350 Hz -3 dB、2.5 kHz +3 dB、7 kHz 以上 -4 dB（同时减轻刺耳与齿音）；music 为 300 Hz -3 dB、2 kHz +4 dB、10 kHz 以上 -1.5 dB（让人声从配乐里突出）。强度 0 时声音不变。',
+    params: [
+      choice('voice', '嗓音类型', 'low', [['low', '低沉嗓音'], ['high', '高亮嗓音'], ['music', '人声配乐']], '按录音选择对应的曲线', 'low（默认）偏低沉的嗓音（多为男声），去掉轰鸣与浑浊；high 偏高亮的嗓音（多为女声、童声），减轻刺耳与齿音；music 人声与配乐混在一起时，让人声更突出。'),
+      strength('amount', '强度', 60, '增强程度，0 不处理', '曲线增益的比例：0 不变；60（默认）≈ 明显更清楚而不夸张；100 为曲线的完整增益。'),
+    ] },
+  // —— 立体声 ——
+  { id: 'stereo_width', name: '立体声扩展', group: 'audio_stereo', media: 'audio', tooltip: '让立体声更宽或更窄，调整中间声音的大小', description: '中侧（M/S）处理：宽度调侧声道（左右的差异），中置调中声道（左右共有的部分，通常是人声与主奏）。宽度 100、中置 0 时声音不变；序列为单声道时不起作用。',
+    params: [
+      number('width', '宽度', 'strength', [0, 200, 1], 100, '0 变成单声道，100 不变，200 最宽', '侧声道比例：0 完全单声道；50 收窄一半；100（默认）不变；150 明显加宽；200 侧声道加倍（可能显得空，单声道播放时会丢失部分声音）。'),
+      number('center', '中置', 'decibels', [-12, 12, 0.5], 0, '左右共有的声音（通常是人声）提升或衰减', '中声道增益 dB：+3 人声更突出；-6 人声后退（做伴奏感）；0（默认）不变。'),
     ] },
   // —— 时间与变调 ——
   { id: 'pitch_shift', name: '音调变换', group: 'audio_pitch', media: 'audio', tooltip: '升高或降低音调，速度不变', description: '在不改变速度与时长的情况下升降音调（相位声码器）：+12 高一个八度（卡通、小黄人感），-5 声音低沉，-12 低一个八度（怪物感）；±1 以内可微调人声。',

@@ -7,6 +7,8 @@ import { dehumDesign, eqBandsDesign, FilterCascade, graphicEqDesign, notchDesign
 import { MultibandCompressor, NoiseGate, SpeechLeveler } from './processors/dynamics'
 import { Echo, StereoDelay } from './processors/delay'
 import { Chorus, Flanger, Phaser } from './processors/modulation'
+import { PolarityInvert, StereoWidth } from './processors/stereo'
+import { Distortion, vocalEnhancerDesign } from './processors/special'
 
 /** 兼容旧引用：双二阶系数与压缩曲线在处理器公共模块。 */
 export { audioBiquadCoefficients, audioCompressorCurve } from './processors/shared'
@@ -339,6 +341,7 @@ function createProcessor(id: string, rate: number, channels: number, denoiser?: 
     case 'eq_bands': return new FilterCascade(rate, channels, eqBandsDesign)
     case 'notch': return new FilterCascade(rate, channels, notchDesign)
     case 'dehum': return new FilterCascade(rate, channels, dehumDesign)
+    case 'vocal_enhancer': return new FilterCascade(rate, channels, vocalEnhancerDesign)
     case 'noise_gate': return new NoiseGate(rate, channels)
     case 'speech_leveler': return new SpeechLeveler(rate)
     case 'multiband_compressor': return new MultibandCompressor(rate, channels)
@@ -347,6 +350,9 @@ function createProcessor(id: string, rate: number, channels: number, denoiser?: 
     case 'chorus': return new Chorus(rate, channels)
     case 'flanger': return new Flanger(rate, channels)
     case 'phaser': return new Phaser(rate, channels)
+    case 'stereo_width': return new StereoWidth(rate)
+    case 'polarity_invert': return new PolarityInvert()
+    case 'distortion': return new Distortion(rate, channels)
     default: throw new Error(`没有音频效果“${id}”。`)
   }
 }
@@ -374,7 +380,7 @@ interface Stage { effectId: string; builtinId: string; processor: AudioProcessor
  */
 const PREROLL_SECONDS: Record<string, number> = {
   reverb: 2, noise_reduction: 0.5, compressor: 0.5, de_esser: 0.2, limiter: 0.2,
-  echo: 4, delay: 1.05, flanger: 1, phaser: 0.5, chorus: 0.2, speech_leveler: 2, noise_gate: 1, multiband_compressor: 0.5, dehum: 1, notch: 1, eq_bands: 0.3, graphic_eq: 0.1,
+  echo: 4, delay: 1.05, flanger: 1, phaser: 0.5, chorus: 0.2, speech_leveler: 2, noise_gate: 1, multiband_compressor: 0.5, dehum: 1, notch: 1, eq_bands: 0.3, graphic_eq: 0.1, vocal_enhancer: 0.1,
 }
 
 /**
