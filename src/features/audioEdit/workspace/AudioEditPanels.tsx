@@ -15,7 +15,7 @@ import { openDialog, readTextFile } from '@/platform/desktopApi'
 import { AudioEditDisclosure } from '../AudioEditDisclosure'
 import { AudioEditSuggestions } from '../AudioEditSuggestions'
 import { AudioEditFindReplace, AudioEditMatchedText } from '../AudioEditTextTools'
-import { cleanProjectAudioEditFillers, compressAudioEditSilence, detectProjectAudioEditMouthClicks, matchProjectAudioEditLoudness, processProjectAudioEditBreaths, quickProcessAudioEdit, transcribeAudioEdit } from '../application/audioEditApplicationService'
+import { cleanProjectAudioEditFillers, compressAudioEditSilence, matchProjectAudioEditLoudness, processProjectAudioEditBreaths, quickProcessAudioEdit, transcribeAudioEdit } from '../application/audioEditApplicationService'
 import type { AudioEditBreathPolicy } from '@/core/audioEdit/breaths'
 import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
 import { audioEditHistoryEntries } from './audioEditHistory'
@@ -150,30 +150,6 @@ export function AudioEditTranscriptPanel() {
   </div>
 }
 
-/**
- * 口水音：在编辑后的声音里检测口腔咔嗒声（时间刻度上以小标记显示），一遍修完；灵敏度越高检出越多。
- * 修复可整体开关对比；重新检测会替换结果（有选区且“仅处理选区”时只替换这一段）。
- */
-function AudioEditMouthClicks() {
-  const workspace = useAudioEditWorkspace()
-  const { project, run, notify, update, processRange: range } = workspace
-  const clicks = project.mouthClicks
-  const [sensitivity, setSensitivity] = useState(clicks?.sensitivity ?? 50)
-  const blocked = Boolean(workspace.sourceError)
-  return <AudioEditDisclosure title="口水音" value={clicks?.clicks.length ? `${clicks.clicks.length} 处` : '未检测'}>
-    <p className={UI_TEXT_META_CLASS}>找出说话时口水带出的“咔啦”声，按声音前后插值修掉，不改变时长。</p>
-    <UiFormRow label={<RangeLabel name="灵敏度" value={String(sensitivity)} />} density="compact"><UiRangeInput aria-label="口水音检测灵敏度" min={0} max={100} step={5} value={sensitivity} onChange={(event) => setSensitivity(Number(event.target.value))} /></UiFormRow>
-    <UiButton variant="secondary" className="w-full" disabled={blocked} disabledReason="找不到原始素材" onClick={() => void run(async () => {
-      const { count, perMinute } = await detectProjectAudioEditMouthClicks(project.id, sensitivity, range)
-      notify(notificationMessage(count ? 'audioMouthClicksDetected' : 'audioMouthClicksNone', { count, perMinute }))
-    })}>{clicks?.clicks.length ? '重新检测' : '检测口水音'}</UiButton>
-    {!!clicks?.clicks.length && <>
-      <UiFormRow label="修复口水音" density="compact" inline><UiSwitch aria-label="修复口水音" checked={clicks.enabled} onCheckedChange={(enabled) => update({ mouthClicks: { ...clicks, enabled } })} /></UiFormRow>
-      <UiButton size="sm" className="self-start" onClick={() => update({ mouthClicks: undefined })}>清除检测结果</UiButton>
-    </>}
-  </AudioEditDisclosure>
-}
-
 /** 处理：一键处理、停顿与语气词参数、已处理区间、处理建议、参考逐字稿；选中文字时的删除 / 恢复 / 锁定。 */
 export function AudioEditProcessPanel() {
   const workspace = useAudioEditWorkspace()
@@ -189,7 +165,7 @@ export function AudioEditProcessPanel() {
   return <PanelScroll label="处理">
     <fieldset disabled={workspace.disabled} className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <p className={`m-0 leading-normal ${UI_TEXT_SECONDARY_CLASS}`}>去掉重念、压缩停顿、清理语气词、处理呼吸声与口水音。波形上的黄色区域是将要删除的声音，处理后仍可逐段调整。</p>
+        <p className={`m-0 leading-normal ${UI_TEXT_SECONDARY_CLASS}`}>去掉重念、压缩停顿、清理语气词、处理呼吸声（去除口水音在效果组里）。波形上的黄色区域是将要删除的声音，处理后仍可逐段调整。</p>
         <UiButton variant="secondary" className="w-full" disabled={blocked} disabledReason="找不到原始素材" onClick={() => void run(async () => { const result = await quickProcessAudioEdit(project.id, range); notify(notificationMessage('audioQuickProcessed', { seconds: (result.shortenedMs / 1000).toFixed(2) })) })}><Sparkles />快速处理</UiButton>
       </div>
       <UiGroup divided titleTone="compact" gap="none">
@@ -208,7 +184,6 @@ export function AudioEditProcessPanel() {
             options={[{ value: 'delete', label: '删除' }, { value: 'attenuate', label: '减弱' }, { value: 'mute', label: '静音' }, { value: 'keep', label: '保留' }]} />
           <UiButton variant="secondary" className="w-full" disabled={blocked} disabledReason="找不到原始素材" onClick={() => void run(async () => { const { counts } = await processProjectAudioEditBreaths(project.id, breathPolicy, range); notify(notificationMessage('audioBreathsProcessed', counts)) })}>处理呼吸声</UiButton>
         </AudioEditDisclosure>
-        <AudioEditMouthClicks />
         {enabledCuts.length > 0 && <AudioEditDisclosure title="已处理区间" value={`${enabledCuts.length} 处`}>
           <div className="flex flex-col">{enabledCuts.map((cut) => <div key={cut.id} className="flex items-center justify-between gap-2">
             <UiButton size="sm" className="font-mono tabular-nums" onClick={() => workspace.seek(Math.max(0, cut.startFrame - project.source.sampleRate))}>{formatTime(cut.startFrame, project.source.sampleRate)} · {cut.mode === 'mute' ? '静音' : '删除'}</UiButton>

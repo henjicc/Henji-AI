@@ -96,15 +96,22 @@ function EffectParams({ effect, onChange, gesture }: { effect: AudioRackEffect; 
 
 
 /**
- * 效果槽列表：每槽开关、序号与名称、更多菜单（上移 / 下移 / 恢复默认参数 / 移除），点名称展开参数。
- * effects 为空时显示 empty（宿主给出的空状态）。
+ * 排在效果组最前面的固定槽：要先对整段声音分析再处理的修复（如去除口水音），和其他效果一样有开关、参数和移除，
+ * 但总在其他效果之前处理，不能上下移动。参数由宿主给出。
  */
-export function AudioEffectSlots({ effects, onChange, gesture, disabled, bypassed = false, empty }: { effects: readonly AudioRackEffect[]; onChange: (next: AudioRackEffect[]) => void; gesture: AudioRackGesture; disabled: boolean; bypassed?: boolean; empty: React.ReactNode }): React.ReactElement {
-  const [openId, setOpenId] = useState<string | null>(effects[0]?.id ?? null)
+export interface AudioRackFixedSlot { id: string; name: string; tooltip: string; enabled: boolean; onToggle: (enabled: boolean) => void; onRemove: () => void; params: React.ReactNode }
+
+/**
+ * 效果槽列表：每槽开关、序号与名称、更多菜单（上移 / 下移 / 恢复默认参数 / 移除），点名称展开参数。
+ * fixed 是排在最前的固定槽；两者都为空时显示 empty（宿主给出的空状态）。
+ */
+export function AudioEffectSlots({ effects, onChange, gesture, disabled, bypassed = false, empty, fixed = [] }: { effects: readonly AudioRackEffect[]; onChange: (next: AudioRackEffect[]) => void; gesture: AudioRackGesture; disabled: boolean; bypassed?: boolean; empty: React.ReactNode; fixed?: readonly AudioRackFixedSlot[] }): React.ReactElement {
+  const ids = [...fixed.map(slot => slot.id), ...effects.map(effect => effect.id)]
+  const [openId, setOpenId] = useState<string | null>(ids[0] ?? null)
   // 新加的效果自动展开参数（与 Audition 加效果后弹出参数一样）。
-  const known = useRef(new Set(effects.map(effect => effect.id)))
-  const added = effects.find(effect => !known.current.has(effect.id))
-  if (added) { known.current = new Set(effects.map(effect => effect.id)); if (openId !== added.id) setOpenId(added.id) }
+  const known = useRef(new Set(ids))
+  const added = ids.find(id => !known.current.has(id))
+  if (added) { known.current = new Set(ids); if (openId !== added) setOpenId(added) }
   const setEffects = (next: AudioRackEffect[]): void => onChange(next)
   const replace = (id: string, next: AudioRackEffect): void => setEffects(effects.map(effect => effect.id === id ? next : effect))
   const move = (index: number, delta: number): void => {
@@ -112,21 +119,40 @@ export function AudioEffectSlots({ effects, onChange, gesture, disabled, bypasse
     if (target < 0 || target >= effects.length) return
     const next = [...effects]; const [item] = next.splice(index, 1); next.splice(target, 0, item); setEffects(next)
   }
+  const toggleRow = (id: string, open: boolean, name: string, number: number, enabled: boolean, tooltip: string | undefined) => <UiOptionButton variant="menu" size="sm" active={open} className="min-w-0 flex-1" aria-expanded={open} tooltip={tooltip} onClick={() => setOpenId(open ? null : id)}>
+    <span className="flex min-w-0 items-center gap-1.5">
+      {open ? <ChevronDown size={UI_ICON_SIZE.xs} className="shrink-0 text-text3" /> : <ChevronRight size={UI_ICON_SIZE.xs} className="shrink-0 text-text3" />}
+      <span className="w-4 shrink-0 text-right font-mono text-2xs tabular-nums text-text3">{number}</span>
+      <span className={`truncate ${enabled ? '' : 'text-text3'}`}>{name}</span>
+    </span>
+  </UiOptionButton>
   return <>
-      {!effects.length ? empty : <div role="list" aria-label="效果组" className={`flex flex-col ${bypassed ? 'opacity-60' : ''}`}>
+      {!effects.length && !fixed.length ? empty : <div role="list" aria-label="效果组" className={`flex flex-col ${bypassed ? 'opacity-60' : ''}`}>
+        {fixed.map((slot, index) => {
+          const open = openId === slot.id
+          return <div key={slot.id} role="listitem" className="flex flex-col" data-audio-effect-slot={slot.id}>
+            <div className="group flex h-8 min-w-0 items-center gap-1">
+              <UiIconButton size="xs" on={slot.enabled} aria-pressed={slot.enabled} tooltip={slot.enabled ? '关闭这个效果' : '打开这个效果'} aria-label={`${slot.name}开关`} disabled={disabled} onClick={() => slot.onToggle(!slot.enabled)}><Power /></UiIconButton>
+              {toggleRow(slot.id, open, slot.name, index + 1, slot.enabled, slot.tooltip)}
+              <PanelTrigger panelSize="menu" panelPadding="menu" alignment="bottomRight" closeOnPanelClick
+                renderPanel={() => <div className="flex flex-col">
+                  <UiOptionButton variant="menu" size="sm" disabled disabledReason="整段预先处理，总在其他效果之前">上移</UiOptionButton>
+                  <UiOptionButton variant="menu" size="sm" disabled disabledReason="整段预先处理，总在其他效果之前">下移</UiOptionButton>
+                  <UiOptionButton variant="menu" size="sm" onClick={slot.onRemove}><span className="flex items-center gap-2 text-danger-text"><Trash2 size={UI_ICON_SIZE.xs} />移除</span></UiOptionButton>
+                </div>}>
+                {({ togglePanel }) => <UiIconButton size="xs" aria-label={`${slot.name}更多操作`} tooltip="更多" disabled={disabled} onClick={togglePanel}><MoreHorizontal /></UiIconButton>}
+              </PanelTrigger>
+            </div>
+            {open && <div className="pb-2 pl-6"><fieldset disabled={disabled} className="m-0 min-w-0 border-0 p-0">{slot.params}</fieldset></div>}
+          </div>
+        })}
         {effects.map((effect, index) => {
           const open = openId === effect.id
           const definition = videoEditBuiltinEffect(effect.builtin.id)
           return <div key={effect.id} role="listitem" className="flex flex-col" data-audio-effect-slot={effect.builtin.id}>
             <div className="group flex h-8 min-w-0 items-center gap-1">
               <UiIconButton size="xs" on={effect.enabled} aria-pressed={effect.enabled} tooltip={effect.enabled ? '关闭这个效果' : '打开这个效果'} aria-label={`${effect.name}开关`} disabled={disabled} onClick={() => replace(effect.id, { ...effect, enabled: !effect.enabled })}><Power /></UiIconButton>
-              <UiOptionButton variant="menu" size="sm" active={open} className="min-w-0 flex-1" aria-expanded={open} tooltip={definition?.tooltip} onClick={() => setOpenId(open ? null : effect.id)}>
-                <span className="flex min-w-0 items-center gap-1.5">
-                  {open ? <ChevronDown size={UI_ICON_SIZE.xs} className="shrink-0 text-text3" /> : <ChevronRight size={UI_ICON_SIZE.xs} className="shrink-0 text-text3" />}
-                  <span className="w-4 shrink-0 text-right font-mono text-2xs tabular-nums text-text3">{index + 1}</span>
-                  <span className={`truncate ${effect.enabled ? '' : 'text-text3'}`}>{effect.name}</span>
-                </span>
-              </UiOptionButton>
+              {toggleRow(effect.id, open, effect.name, fixed.length + index + 1, effect.enabled, definition?.tooltip)}
               <PanelTrigger panelSize="menu" panelPadding="menu" alignment="bottomRight" closeOnPanelClick
                 renderPanel={() => <div className="flex flex-col">
                   <UiOptionButton variant="menu" size="sm" disabled={index === 0} onClick={() => move(index, -1)}>上移</UiOptionButton>
