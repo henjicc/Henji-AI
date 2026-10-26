@@ -19,18 +19,21 @@ interface ReloadResumeState { workspace: string; documentId: string | null }
 export function installDevelopmentReloadResume(): void {
   const hot = import.meta.hot
   if (!hot) return
-  hot.on('vite:beforeFullReload', () => {
-    const state: ReloadResumeState = { workspace: useNavigationStore.getState().activeWorkspace, documentId: currentDocumentContext().documentId ?? null }
-    try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state)) } catch { /* 存不下就不恢复，不影响重新加载 */ }
-  })
   let saved: ReloadResumeState | null = null
   try {
     saved = JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? 'null') as ReloadResumeState | null
     sessionStorage.removeItem(STORAGE_KEY)
   } catch { saved = null }
+  // 连着改几个文件会连着重新加载：上一次的恢复还没做完时，留着原来记下的，不拿半途的空状态覆盖
+  let resuming = saved
+  hot.on('vite:beforeFullReload', () => {
+    const state: ReloadResumeState = resuming ?? { workspace: useNavigationStore.getState().activeWorkspace, documentId: currentDocumentContext().documentId ?? null }
+    try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state)) } catch { /* 存不下就不恢复，不影响重新加载 */ }
+  })
   if (!saved) return
   if (isStartupWorkspaceId(saved.workspace) && saved.workspace !== 'assets') useNavigationStore.getState().setActiveWorkspace(saved.workspace)
-  if (saved.documentId) void reopen(saved.documentId)
+  if (saved.documentId) void reopen(saved.documentId).finally(() => { resuming = null })
+  else resuming = null
 }
 
 // 工作区是懒加载的，打开方式在它载入后才登记（此前打开会被写入预检拒绝）：稍后再试，文档已不存在时不再试
