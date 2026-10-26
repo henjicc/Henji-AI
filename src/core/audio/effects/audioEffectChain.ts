@@ -298,6 +298,10 @@ function loadRnnoise(): Promise<RnnoiseModule> {
 /** RNNoise 自身输出比输入晚两帧（960 样本，实测）；再加上凑满一帧的缓冲（480）。 */
 export const AUDIO_RNNOISE_LATENCY = 1440
 const PCM_SCALE = 32768
+function sameFrame(a: Float32Array, b: Float32Array): boolean {
+  for (let index = 0; index < a.length; index++) if (a[index] !== b[index]) return false
+  return true
+}
 class NoiseReduction implements AudioProcessor {
   readonly latency = AUDIO_RNNOISE_LATENCY
   private strength = 0.8
@@ -318,7 +322,12 @@ class NoiseReduction implements AudioProcessor {
       }
       if (++this.position === 480) {
         this.position = 0
-        for (const lane of this.lanes) { lane.output.set(lane.input); lane.state.processFrame(lane.output) }
+        // 单声道录成的“立体声”（左右逐样本相同）只算一遍：状态一直相同时结果本来就逐位相同，降噪耗时减半。
+        const first = this.lanes[0]
+        for (const [index, lane] of this.lanes.entries()) {
+          if (index > 0 && sameFrame(lane.input, first.input)) { lane.output.set(first.output); continue }
+          lane.output.set(lane.input); lane.state.processFrame(lane.output)
+        }
       }
     }
   }
