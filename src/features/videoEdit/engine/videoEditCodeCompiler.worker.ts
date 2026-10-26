@@ -3,10 +3,23 @@ import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeCompilerResponse } from './videoEditCodeCompiler'
 import { bundleVideoEditAuthorModule } from './videoEditAuthorBundler'
 import type { AuthorBundle } from './videoEditAuthorBundle'
+import { createAuthorTypeChecker, type AuthorTypeChecker } from './videoEditAuthorTypeCheck'
+import { AUTHOR_TYPE_ENVIRONMENT } from './videoEditAuthorTypeEnvironment'
+import type { AuthorTypeCheckRequest, AuthorTypeCheckResponse } from './videoEditAuthorTypeChecker'
 
 const bundles = new Map<string, { bundle: AuthorBundle; bytes: number }>()
 let bundleBytes = 0
-self.onmessage = async (event: MessageEvent<{ id: number; files: CodeMaterialFiles; kind: 'author.bundle' }>): Promise<void> => {
+// 类型检查由单独的 Worker 实例承担（见 videoEditAuthorTypeChecker），打包实例不会创建检查器。
+let typeChecker: AuthorTypeChecker | undefined
+self.onmessage = async (event: MessageEvent<{ id: number; files: CodeMaterialFiles; kind: 'author.bundle' } | AuthorTypeCheckRequest>): Promise<void> => {
+  if (event.data.kind === 'author.typecheck') {
+    const { id, files, report } = event.data
+    try {
+      typeChecker ??= createAuthorTypeChecker(AUTHOR_TYPE_ENVIRONMENT)
+      self.postMessage({ id, typeCheck: typeChecker.check(files, report) } satisfies AuthorTypeCheckResponse)
+    } catch (error) { self.postMessage({ id, error: error instanceof Error ? error.message : String(error) } satisfies AuthorTypeCheckResponse) }
+    return
+  }
   const { id, files } = event.data
   const source = codeMaterialFilesKey(files)
   try {

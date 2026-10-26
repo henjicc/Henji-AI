@@ -28,6 +28,8 @@ import { prepareCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnim
 import type { CodeAsset } from '@/core/videoEdit/codeAsset'
 import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { codeMaterialSize } from '@/core/videoEdit/codeMaterialTiming'
+import type { CodeTypeCheckReport } from '@/core/videoEdit/codeMaterial/typeDiagnostics'
+import { settleVideoEditCodeTypeChecks, startVideoEditCodeTypeCheck, withVideoEditCodeTypeContext } from './videoEditCodeTypeCheck'
 
 const logger = createLogger('features.videoEdit.code')
 export interface VideoEditCodeInput { source?: string; files?: Record<string, string>; entry?: string; name?: string; binId?: string }
@@ -81,8 +83,10 @@ export async function trialVideoEditAuthorSource(source: Parameters<typeof addre
   await trialVideoEditCodeFrames(samples, signal)
 }
 /** Creation is an algorithmic collection operation: raw source is checked,
- * executed in the render worker, trial-rendered, then becomes one atomic domain edit. */
-async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeInput[], expectedKind: 'generator' | 'filter' | undefined, signal?: AbortSignal, publication?: CodeAssetPublication, afterCreate?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument, measurements?: CodeFramePerformance[]): Promise<Candidate[]> {
+ * executed in the render worker, trial-rendered, then becomes one atomic domain edit.
+ * `typeReports` opts into author type checking: it runs beside bundling and the trial,
+ * never blocks publication, and receives one report per input after the edit is committed. */
+async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeInput[], expectedKind: 'generator' | 'filter' | undefined, signal?: AbortSignal, publication?: CodeAssetPublication, afterCreate?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument, measurements?: CodeFramePerformance[], typeReports?: CodeTypeCheckReport[]): Promise<Candidate[]> {
   signal?.throwIfAborted()
   if (!inputs.length) throw new Error('请提供要创建的代码素材。')
   const owner = requireVideoEditInstance(projectId)
@@ -95,12 +99,16 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
     else if (!isVideoEditContentCurrent(owner, contentVersion)) controller.abort(new Error('检查期间剪辑已修改，候选已取消。'))
   })
   const candidates: Candidate[] = []; const createdFiles: CodeFileReference[] = []
+  // 类型检查不随创建取消信号结束：提交本身会改变剪辑内容并触发上面的取消订阅。
+  const typeAbort = new AbortController(); const typeChecks: Array<Promise<CodeTypeCheckReport>> = []
   logger.info('检查代码素材', { event: 'video_edit.code.create.start', context: { projectId, count: inputs.length } })
   try {
     for (const input of inputs) {
       const contents = codeFilesFromInput(input)
       const publicationState = await prepareCodeVersionPublication(projectId, contents, input.name, publication?.asset.sourceVersion.imports, createdFiles)
-      const { definition, program } = await makeCodeMaterialDefinition(contents, source => compileVideoEditCode(source, controller.signal), publicationState)
+      const typeCheck = typeReports ? startVideoEditCodeTypeCheck(contents, publicationState.imports, typeAbort.signal) : undefined
+      if (typeCheck) typeChecks.push(typeCheck)
+      const { definition, program } = await withVideoEditCodeTypeContext(() => makeCodeMaterialDefinition(contents, source => compileVideoEditCode(source, controller.signal), publicationState), typeCheck ? [typeCheck] : [], controller.signal)
       controller.signal.throwIfAborted()
       if (expectedKind === 'generator' && program.kind !== 'generator') throw new Error('输入滤镜应添加为效果，不能直接创建生成素材。')
       if (expectedKind === 'filter' && program.kind !== 'filter') throw new Error('效果源码需要声明为输入滤镜。')
@@ -151,20 +159,23 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
     validateCodeMaterialDocument(candidateDocument, read, changedCodeMaterialVersions(baseline, candidateDocument))
     const placements = publication || afterCreate ? candidateDocument.sequences.flatMap(sequence => sequence.clips.filter(clip => items.some(item => item.id === clip.itemId)).map(clip => ({ sequenceId: sequence.id, clipId: clip.id }))) : []
     const frames = placements.length ? videoEditCodeValidationFrames(candidateDocument, placements, { sequenceId: placements[0].sequenceId, frame: candidateDocument.sequences.find(sequence => sequence.id === placements[0].sequenceId)!.clips.find(clip => clip.id === placements[0].clipId)!.start }) : candidateFrames(candidates, read, candidateDocument.media, Boolean(publication), owner.document.sequences.find(sequence => sequence.id === owner.activeSequenceId))
-    await trialVideoEditCodeFrames(filterTrial ?? frames, controller.signal, false, undefined, measurements)
+    await withVideoEditCodeTypeContext(() => trialVideoEditCodeFrames(filterTrial ?? frames, controller.signal, false, undefined, measurements), typeChecks, controller.signal)
     if (publication) await publication.beforePublish()
     controller.signal.throwIfAborted()
     if (requireVideoEditInstance(projectId) !== owner) throw new Error('原剪辑已关闭，候选不会写入新会话。')
     if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('试渲染期间剪辑已修改，请重新检查候选。')
     editVideoProject(projectId, current => withVideoEditCurrentMetadata(candidateDocument, current))
     logger.info('代码素材已创建', { event: 'video_edit.code.create.completed', context: { projectId, count: candidates.length } })
-    return candidates
   } catch (error) {
+    typeAbort.abort()
     await discardVideoEditCodeFiles(createdFiles)
     for (const candidate of candidates) forgetVideoEditCodeMetadata(owner, candidate.definition.defaultVersionId)
     logger.debug('代码素材检查未完成', { event: 'video_edit.code.create.failed', error, context: { projectId } })
     throw error
   } finally { unsubscribe(); signal?.removeEventListener('abort', cancel) }
+  // 已提交：类型结论只作诊断，等不到也不改变创建结果。
+  if (typeReports) typeReports.push(...await settleVideoEditCodeTypeChecks(typeChecks))
+  return candidates
 }
 export async function createVideoEditCodeItems(projectId: string, inputs: VideoEditCodeInput[], signal?: AbortSignal): Promise<string[]> {
   return (await createCheckedMaterials(projectId, inputs, 'generator', signal)).map(candidate => candidate.item.id)
@@ -174,8 +185,8 @@ export async function createVideoEditPlacedCodeItems(projectId: string, inputs: 
   return (await createCheckedMaterials(projectId, inputs, 'generator', signal, undefined, afterCreate)).map(candidate => candidate.item.id)
 }
 /** General source creation publishes trusted generator or filter definitions. */
-export async function createVideoEditCodeMaterials(projectId: string, inputs: VideoEditCodeInput[], signal?: AbortSignal, measurements?: CodeFramePerformance[]): Promise<string[]> {
-  return (await createCheckedMaterials(projectId, inputs, undefined, signal, undefined, undefined, measurements)).map(candidate => candidate.definition.id)
+export async function createVideoEditCodeMaterials(projectId: string, inputs: VideoEditCodeInput[], signal?: AbortSignal, measurements?: CodeFramePerformance[], typeReports?: CodeTypeCheckReport[]): Promise<string[]> {
+  return (await createCheckedMaterials(projectId, inputs, undefined, signal, undefined, undefined, measurements, typeReports)).map(candidate => candidate.definition.id)
 }
 /** Effect authoring refuses a generator before any project publication. */
 export async function createVideoEditFilterMaterials(projectId: string, inputs: VideoEditCodeInput[], signal?: AbortSignal): Promise<string[]> {
@@ -201,7 +212,7 @@ export async function createVideoEditCodeAssetInstance(projectId: string, public
 
 /** Append checked immutable versions. Existing defaults, items and clips keep
  * their fixed bindings; an explicit domain property edit binds a new version. */
-export async function createVideoEditCodeVersions(projectId: string, inputs: VideoEditCodeVersionInput[], signal?: AbortSignal, measurements?: CodeFramePerformance[]): Promise<string[]> {
+export async function createVideoEditCodeVersions(projectId: string, inputs: VideoEditCodeVersionInput[], signal?: AbortSignal, measurements?: CodeFramePerformance[], typeReports?: CodeTypeCheckReport[]): Promise<string[]> {
   signal?.throwIfAborted()
   if (!inputs.length) throw new Error('请提供要创建的源码版本。')
   const owner = requireVideoEditInstance(projectId); const baseline = owner.document; const contentVersion = owner.contentVersion
@@ -209,13 +220,18 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
   signal?.addEventListener('abort', cancel, { once: true })
   const off = subscribeVideoEditDomain(() => { if (!isVideoEditContentCurrent(owner, contentVersion)) controller.abort(new Error('原剪辑已关闭或内容已改变，候选已取消。')) })
   const definitions = new Map((baseline.codeMaterials ?? []).map(definition => [definition.id, definition])); const added: string[] = []; const trials: Candidate[] = []; const createdFiles: CodeFileReference[] = []
+  // 同 createCheckedMaterials：类型检查与打包、试渲染并行，提交后才收结果。
+  const typeAbort = new AbortController(); const typeChecks: Array<Promise<CodeTypeCheckReport>> = []
   try {
     for (const input of inputs) {
       const definition = definitions.get(input.definitionId)
       if (!definition) throw new Error('代码素材定义不属于此剪辑。')
       await loadCodeSourceReferences(definition.versions.find(version => version.id === definition.defaultVersionId)!)
       const contents = codeFilesFromInput(input)
-      const result = await appendCodeMaterialVersion(definition, contents, source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver(), await prepareCodeVersionPublication(projectId, contents, undefined, undefined, createdFiles))
+      const publicationState = await prepareCodeVersionPublication(projectId, contents, undefined, undefined, createdFiles)
+      const typeCheck = typeReports ? startVideoEditCodeTypeCheck(contents, publicationState.imports, typeAbort.signal) : undefined
+      if (typeCheck) typeChecks.push(typeCheck)
+      const result = await withVideoEditCodeTypeContext(() => appendCodeMaterialVersion(definition, contents, source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver(), publicationState), typeCheck ? [typeCheck] : [], controller.signal)
       controller.signal.throwIfAborted()
       if (definition.versions.some(version => version.id === result.versionId)) throw new Error('相同源码版本已存在，请直接使用原版本。')
       definitions.set(definition.id, result.definition); added.push(result.versionId)
@@ -227,11 +243,12 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
     const read = readVideoEditCodeMetadata(owner, document)
     // Separate candidates may append to the same definition; each isolated
     // source trial avoids duplicate definitions while retaining one queue.
-    await trialVideoEditCodeFrames(trials.flatMap(trial => candidateFrames([trial], read, [], false, owner.document.sequences.find(sequence => sequence.id === owner.activeSequenceId))), controller.signal, false, undefined, measurements)
+    await withVideoEditCodeTypeContext(() => trialVideoEditCodeFrames(trials.flatMap(trial => candidateFrames([trial], read, [], false, owner.document.sequences.find(sequence => sequence.id === owner.activeSequenceId))), controller.signal, false, undefined, measurements), typeChecks, controller.signal)
     controller.signal.throwIfAborted()
     if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('源码版本检查期间原剪辑已改变。')
     editVideoProject(projectId, current => withVideoEditCurrentMetadata(document, current))
-    return added
-  } catch (error) { await discardVideoEditCodeFiles(createdFiles); added.forEach(version => forgetVideoEditCodeMetadata(owner, version)); throw error }
+  } catch (error) { typeAbort.abort(); await discardVideoEditCodeFiles(createdFiles); added.forEach(version => forgetVideoEditCodeMetadata(owner, version)); throw error }
   finally { off(); signal?.removeEventListener('abort', cancel) }
+  if (typeReports) typeReports.push(...await settleVideoEditCodeTypeChecks(typeChecks))
+  return added
 }

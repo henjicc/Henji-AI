@@ -40,6 +40,9 @@ import * as mediaService from './videoEditMedia'
 import * as projectService from './videoEditService'
 import { openSeededVideoEdit, replaceSavedVideoEdit, savedVideoEdit, reopenVideoEdit, createLegacyTrackVideoEditProject } from './videoEditDocumentTestKit'
 import { videoEditOffscreenPool } from '../engine/videoEditOffscreenPool'
+import * as sharedCompiler from '../engine/videoEditSharedCompiler'
+import { createAuthorTypeChecker } from '../engine/videoEditAuthorTypeCheck'
+import { AUTHOR_TYPE_ENVIRONMENT } from '../engine/videoEditAuthorTypeEnvironment'
 
 /** 短活共用的离屏会话按设计常驻；回收它之后不应再有任何渲染器存活。 */
 async function expectRenderersReleased(): Promise<void> { await videoEditOffscreenPool.dispose(); expect(boundary.activeRenderers).toBe(0) }
@@ -987,6 +990,33 @@ it('代码创建回报真实试渲染超预算与源码行列，保留正常提�
     expect(data.evidence.find(value=>value.fact.includes('CPU 求值'))).toMatchObject({kind:'observation',data:expect.arrayContaining([expect.objectContaining({cpuMs:25,gpuMs:15,heaviest,structures,reuse,attribution:'draw-preparation-wall'})])})
     expect(owner.document.codeMaterials).toHaveLength(1)
   }finally{app.dispose()}
+})
+
+it('公共入口创建 TS 代码素材附带类型检查结论，加载或试渲染失败时类型错误并入错误信息', async () => {
+  const owner = await createLegacyTrackVideoEditProject(); const app = createApplicationHarness()
+  // 只替换线程边界：同一检查器在测试进程里直接运行。
+  const checker = createAuthorTypeChecker(AUTHOR_TYPE_ENVIRONMENT)
+  const typeCheck = vi.spyOn(sharedCompiler, 'checkVideoEditAuthorTypes').mockImplementation(async (input, report) => checker.check(input, report))
+  type Result = { ok: boolean; data?: { evidence: Array<{ kind: string; fact: string; data?: unknown }> } }
+  const parent = { kind: 'video_edit.document', id: owner.document.id }
+  const create = async (code: string): Promise<Result> => await app.call('change_application_entities', { summary: '创建代码', changes: [{ kind: 'create_items', entityType: 'video_edit.code_material', parent, items: [{ properties: { 'video_edit.code_material.source': code } }] }] }, (await app.read(parent)).revisions as Record<string, number>) as unknown as Result
+  try {
+    const typo = source.replace('ctx.fillRect(', 'ctx.fillStlye="red";ctx.fillRect(')
+    const result = await create(typo)
+    expect(result).toMatchObject({ ok: true })
+    expect(result.data!.evidence.find(value => value.fact.startsWith('类型检查发现 1 处问题'))).toMatchObject({ kind: 'observation', data: { status: 'checked', checkedFiles: ['main.ts'], total: 1, diagnostics: [expect.objectContaining({ file: 'main.ts', line: 1, column: typo.indexOf('fillStlye') + 1, code: 2551 })] } })
+    expect(typeCheck).toHaveBeenCalledWith(expect.objectContaining({ entry: 'main.ts' }), ['main.ts'], expect.any(AbortSignal))
+    expect((await create(source)).data!.evidence.find(value => value.fact.startsWith('类型检查'))?.fact).toBe('类型检查通过：main.ts。')
+    // 读取声明失败（拼错 name）：原错误信息保留在前，类型检查指出拼错的字段。
+    const missingName = await create(source.replace('name:', 'nmae:'))
+    expect(missingName).toMatchObject({ ok: false })
+    expect(JSON.stringify(missingName)).toMatch(/expected string, received undefined[\s\S]*类型检查同时发现 1 处问题[\s\S]*TS2353 [^\n]*'nmae'/)
+    boundary.failTrial = true
+    const failed = await create(typo.replace('原创移动圆', '失败圆'))
+    expect(failed).toMatchObject({ ok: false })
+    expect(JSON.stringify(failed)).toMatch(/GPU trial rejected[\s\S]*类型检查同时发现 1 处问题[\s\S]*TS2551/)
+    expect(owner.document.codeMaterials).toHaveLength(2)
+  } finally { boundary.failTrial = false; typeCheck.mockRestore(); app.dispose() }
 })
 
 it('真实源码目录：试渲染失败、取消、提交失败和公共事务补偿零残留，成功及撤销重做保留源码', async () => {

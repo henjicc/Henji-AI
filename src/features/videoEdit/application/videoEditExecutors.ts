@@ -28,6 +28,7 @@ import { removeVideoEditItems, removeVideoEditBins, makeVideoEditItemClip } from
 import { createVideoEditCodeMaterials, createVideoEditCodeVersions } from './videoEditCodeService'
 import { peekVideoEditCodeProgram, readVideoEditCodeMetadata } from './videoEditCodeState'
 import { codeMaterialAuthoringHints } from '@/core/videoEdit/codeMaterial/authoringHints'
+import { codeTypeCheckData, codeTypeCheckFact, type CodeTypeCheckReport } from '@/core/videoEdit/codeMaterial/typeDiagnostics'
 import { trialVideoEditCodeDocument } from './videoEditCodeTrial'
 import { codeMaterialMediaIds } from '@/core/videoEdit/codeMaterialResources'
 import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
@@ -128,13 +129,15 @@ function completed(before: VideoEditDocument, after: VideoEditDocument, refs: Ap
   while (undo.size > 100) undo.delete(undo.keys().next().value!)
   return { status: 'completed', resultingRevisions: { video_edit: videoEditRevision() }, directRefs: refs, undoToken, cascadeEffects: [...cascades(before, after), ...(sourcePause ? [sourcePauseEffect(before.id)] : [])], evidence: [{ kind: 'entity_state', fact: '剪辑已修改，可由同一剪辑历史撤销。', capturedAt: new Date().toISOString() }] }
 }
-/** 参数化体检只作提示附在结果证据里，不阻止提交；界面不展示。 */
-function withAuthoringHints(result: ApplicationCompletedStepResult, versions: Array<{ ref: ApplicationRef; versionId?: string }>, measurements: CodeFramePerformance[] = []): ApplicationCompletedStepResult {
+/** 参数化体检与类型检查只作提示附在结果证据里，不阻止提交；界面不展示。typeReports 与 versions 一一对应。 */
+function withAuthoringHints(result: ApplicationCompletedStepResult, versions: Array<{ ref: ApplicationRef; versionId?: string }>, measurements: CodeFramePerformance[] = [], typeReports: CodeTypeCheckReport[] = []): ApplicationCompletedStepResult {
   const capturedAt = new Date().toISOString(); const evidence = [...result.evidence]
-  for (const { ref, versionId } of versions) {
+  for (const [index, { ref, versionId }] of versions.entries()) {
     const program = versionId ? peekVideoEditCodeProgram(requireVideoEditInstance(ref.id.split(':')[0]), versionId) : undefined
     const hints = program ? codeMaterialAuthoringHints(program) : []
     if (hints.length) evidence.push({ kind: 'observation', target: ref, fact: `参数化体检（不阻止提交，建议改进后再交付）：${hints.map(hint => hint.message).join(' ')}`.slice(0, 1000), data: hints.map(hint => ({ code: hint.code, message: hint.message, ...(hint.line === undefined ? {} : { line: hint.line }) })), capturedAt })
+    const typeReport = typeReports[index], typeFact = typeReport && codeTypeCheckFact(typeReport)
+    if (typeFact) evidence.push({ kind: 'observation', target: ref, fact: typeFact, data: codeTypeCheckData(typeReport), capturedAt })
   }
   if (measurements.length) evidence.push({ kind: 'observation', fact: measurements.map(codePerformanceMessage).join('\n'), data: measurements.map(value => ({ frame: value.frame, cpuMs: value.cpuMs, gpuMs: value.gpuMs, budgetMs: value.budgetMs, ...(value.structures ? { structures: value.structures.map(item => ({ ...item, sourceSpan: { ...item.sourceSpan } })) } : {}), ...(value.reuse ? { reuse: { ...value.reuse } } : {}), ...(value.attribution ? { attribution: value.attribution } : {}), ...(value.heaviest ? { heaviest: { kind: value.heaviest.kind, cpuMs: value.heaviest.cpuMs, sourceSpan: { ...value.heaviest.sourceSpan } } } : {}) })), capturedAt })
   return { ...result, evidence }
@@ -358,9 +361,10 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
         if (Object.keys(values).some(key => !['video_edit.code_version.source', 'video_edit.code_version.files', 'video_edit.code_version.entry', 'video_edit.code_version.definition_id'].includes(key)) || typeof values['video_edit.code_version.definition_id'] !== 'string') throw new Error('创建源码版本只接受作者源码和所属素材定义。')
         return { ...codeFilesFromInput({ source: values['video_edit.code_version.source'] as string | undefined, files: values['video_edit.code_version.files'] as Record<string, string> | undefined, entry: values['video_edit.code_version.entry'] as string | undefined }), definitionId: values['video_edit.code_version.definition_id'] }
       })
-      const ids = await createVideoEditCodeVersions(before.id, inputs, context?.signal, measurements)
+      const typeReports: CodeTypeCheckReport[] = []
+      const ids = await createVideoEditCodeVersions(before.id, inputs, context?.signal, measurements, typeReports)
       const result = completed(before, requireVideoEditInstance(before.id).document, ids.map(id => ({ kind: this.entityType, id: `${before.id}:${id}` })))
-      return withAuthoringHints(result, ids.map(id => ({ ref: { kind: this.entityType, id: `${before.id}:${id}` }, versionId: id })), measurements)
+      return withAuthoringHints(result, ids.map(id => ({ ref: { kind: this.entityType, id: `${before.id}:${id}` }, versionId: id })), measurements, typeReports)
     }
     if (this.entityType === 'video_edit.code_material' && step.operation.kind === 'create') {
       const inputs = step.operation.items.map(item => {
@@ -370,11 +374,12 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
         if (name !== undefined && typeof name !== 'string' || binId !== undefined && typeof binId !== 'string') throw new Error('名称和素材箱引用必须为字符串。')
         return { ...codeFilesFromInput({ source: values['video_edit.code_material.source'] as string | undefined, files: values['video_edit.code_material.files'] as Record<string, string> | undefined, entry: values['video_edit.code_material.entry'] as string | undefined }), ...(name !== undefined ? { name } : {}), ...(binId ? { binId } : {}) }
       })
-      const ids = await createVideoEditCodeMaterials(before.id, inputs, context?.signal, measurements)
+      const typeReports: CodeTypeCheckReport[] = []
+      const ids = await createVideoEditCodeMaterials(before.id, inputs, context?.signal, measurements, typeReports)
       const after = requireVideoEditInstance(before.id).document
       for (const id of ids) refs.push({ kind: this.entityType, id: `${before.id}:${id}` })
       const versions = ids.map(id => ({ ref: { kind: this.entityType, id: `${before.id}:${id}` }, versionId: after.codeMaterials?.find(definition => definition.id === id)?.defaultVersionId }))
-      return withAuthoringHints(completed(before, after, refs), versions, measurements)
+      return withAuthoringHints(completed(before, after, refs), versions, measurements, typeReports)
     }
     const update = (document: VideoEditDocument): VideoEditDocument => {
       const sequence = document.sequences.find(sequence => sequence.id === parsed.childId)
