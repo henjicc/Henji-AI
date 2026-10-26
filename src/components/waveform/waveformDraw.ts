@@ -1,4 +1,4 @@
-import { aggregateWaveformLevel, aggregateWaveformSamples, selectWaveformLevel } from '@/core/media/waveformPyramid'
+import { aggregateWaveformLevel, aggregateWaveformSampleRange, aggregateWaveformSamples, selectWaveformLevel } from '@/core/media/waveformPyramid'
 import type { WaveformData, WaveformDetailWindow } from '@/services/waveform/waveformDataService'
 
 /**
@@ -33,8 +33,8 @@ export interface WaveformDrawOptions {
   /** 振幅倍数，覆盖数据自带的显示增益；音频编辑按真实电平（1 = 0 dBFS 顶到行高）再乘纵向缩放。超出行高的部分被裁掉。 */
   gain?: number
   /**
-   * 层次：`layered`（默认）峰值层半透明 + 响度层实色；`single` 只画一层实色峰值包络，
-   * 放大到每列只有几十个采样时直接画采样曲线（参照 Audition 的波形编辑器）。
+   * 层次：`layered`（默认）峰值层半透明 + 响度层实色；`single` 只画一层实色包络，回读到原始采样后按带符号的
+   * 最低、最高值画，放大到每列只有一两个采样时画采样曲线（参照 Audition 的波形编辑器）。
    */
   layers?: 'layered' | 'single'
 }
@@ -45,8 +45,13 @@ export interface WaveformDrawOptions {
  */
 export const WAVEFORM_BUCKETS_PER_COLUMN = 8
 
-/** single 档：每列不超过这么多采样时改画采样曲线，不再画包络。 */
-const TRACE_FRAMES_PER_COLUMN = 24
+/**
+ * single 档：每列不超过这么多采样时改画采样曲线。在此之前画带符号的包络（每列连线经过的最低到最高值），
+ * 它随放大逐渐收窄成连线的样子，到这里两者覆盖的范围相同，换画法时看不出跳变。
+ */
+const TRACE_FRAMES_PER_COLUMN = 2
+/** 采样曲线的线宽（设备像素 / 像素比）；带符号包络至少这么厚，换画法时粗细一致。 */
+const TRACE_LINE_WIDTH = 1.5
 
 const OPACITY = { neutral: { peak: 0.45, rms: 1 }, clip: { peak: 0.38, rms: 0.85 } } as const
 /** 采样间距达到这么多 CSS 像素时画采样点曲线。 */
@@ -94,6 +99,25 @@ function traceArea(ctx: CanvasRenderingContext2D, values: Float32Array, gain: nu
   for (let x = 0; x < count; x++) ctx.lineTo(x - offset + 0.5, mid - Math.min(1, values[x] * gain) * amplitude)
   ctx.lineTo(count - offset, mid)
   for (let x = count - 1; x >= 0; x--) ctx.lineTo(x - offset + 0.5, mid + Math.min(1, values[x] * gain) * amplitude)
+  ctx.closePath()
+}
+
+/** 带符号包络：上沿按每列最高值、下沿按最低值；太薄处以中线为准撑到线宽，平的地方也看得见。 */
+function traceBand(ctx: CanvasRenderingContext2D, low: Float32Array, high: Float32Array, gain: number, mid: number, amplitude: number, thickness: number, offset = 0): void {
+  const count = low.length
+  const y = (value: number): number => mid - Math.max(-1, Math.min(1, value * gain)) * amplitude
+  const edge = (x: number, upper: boolean): number => {
+    const top = y(high[x]), bottom = y(low[x])
+    const spread = Math.max(0, thickness - (bottom - top)) / 2
+    return upper ? top - spread : bottom + spread
+  }
+  ctx.beginPath()
+  ctx.moveTo(-offset, edge(0, true))
+  for (let x = 0; x < count; x++) ctx.lineTo(x - offset + 0.5, edge(x, true))
+  ctx.lineTo(count - offset, edge(count - 1, true))
+  ctx.lineTo(count - offset, edge(count - 1, false))
+  for (let x = count - 1; x >= 0; x--) ctx.lineTo(x - offset + 0.5, edge(x, false))
+  ctx.lineTo(-offset, edge(0, false))
   ctx.closePath()
 }
 
@@ -149,14 +173,18 @@ export function drawWaveform(ctx: CanvasRenderingContext2D, options: WaveformDra
       drawPoints(ctx, options, detail!.channels[channel] ?? detail!.channels[0], detail!.firstFrame, gain, top, laneHeight, mid, amplitude, segments, sampleSpacingCss)
       return
     }
-    if (mode === 'samples') aggregateWaveformSamples(detail!.channels[channel] ?? detail!.channels[0], detail!.firstFrame, gridStart, gridEnd, gridColumns, peak, rms)
+    // single 档用带符号的范围（peak 存最高、rms 存最低）；layered 档仍是对称峰值 + 响度。
+    const signed = single && mode === 'samples'
+    if (signed) aggregateWaveformSampleRange(detail!.channels[channel] ?? detail!.channels[0], detail!.firstFrame, gridStart, gridEnd, gridColumns, rms, peak)
+    else if (mode === 'samples') aggregateWaveformSamples(detail!.channels[channel] ?? detail!.channels[0], detail!.firstFrame, gridStart, gridEnd, gridColumns, peak, rms)
     else aggregateWaveformLevel(level, channel, pyramid.amplitudeScale, gridStart, gridEnd, gridColumns, peak, rms)
     for (const [kind, parts] of groups(segments)) {
       ctx.save()
       clipTo(ctx, parts, top, laneHeight)
       ctx.fillStyle = colorOf(kind, tone, palette)
       ctx.globalAlpha = single ? 1 : opacity.peak
-      traceArea(ctx, peak, gain, mid, amplitude, phase)
+      if (signed) traceBand(ctx, rms, peak, gain, mid, amplitude, TRACE_LINE_WIDTH * pixelRatio, phase)
+      else traceArea(ctx, peak, gain, mid, amplitude, phase)
       ctx.fill()
       if (tier === 'standard' && !single) {
         ctx.globalAlpha = opacity.rms
@@ -196,7 +224,7 @@ function drawPoints(ctx: CanvasRenderingContext2D, options: WaveformDrawOptions,
     clipTo(ctx, parts, top, laneHeight)
     const color = kind === 'cut' ? palette.waveCut : palette.wavePlayed
     ctx.strokeStyle = color
-    ctx.lineWidth = 1.5 * pixelRatio
+    ctx.lineWidth = TRACE_LINE_WIDTH * pixelRatio
     ctx.lineJoin = 'round'
     ctx.beginPath()
     for (let index = first; index <= last; index++) { if (index === first) ctx.moveTo(x(index), y(index)); else ctx.lineTo(x(index), y(index)) }

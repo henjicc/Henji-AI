@@ -211,6 +211,36 @@ export function aggregateWaveformSamples(samples: Float32Array, firstFrame: numb
   }
 }
 
+/**
+ * 带符号的逐列范围：相邻采样用直线相连时，这条连线在该列内经过的最低、最高值（含列两端的插值点）。
+ * 每列采样多时就是该列的最小、最大采样；放大到每列只剩一两个采样时与逐点连线覆盖的范围完全相同，
+ * 所以从包络换到连线时看不出跳变。范围以外的列按最近的采样延伸。
+ */
+export function aggregateWaveformSampleRange(samples: Float32Array, firstFrame: number, startFrame: number, endFrame: number, count: number, outMin: Float32Array, outMax: Float32Array): void {
+  const width = (endFrame - startFrame) / count
+  const lastIndex = samples.length - 1
+  const at = (position: number): number => {
+    if (position <= 0) return samples[0]
+    if (position >= lastIndex) return samples[lastIndex]
+    const index = Math.floor(position)
+    return samples[index] + (samples[index + 1] - samples[index]) * (position - index)
+  }
+  for (let column = 0; column < count; column++) {
+    if (lastIndex < 0) { outMin[column] = 0; outMax[column] = 0; continue }
+    const from = startFrame + column * width - firstFrame
+    const to = from + width
+    const left = at(from), right = at(to)
+    let low = Math.min(left, right), high = Math.max(left, right)
+    for (let index = Math.max(0, Math.ceil(from)), end = Math.min(lastIndex, to); index <= end; index++) {
+      const value = samples[index]
+      if (value < low) low = value
+      if (value > high) high = value
+    }
+    outMin[column] = low
+    outMax[column] = high
+  }
+}
+
 /** 选中声道的最大线性峰值：最粗一级的峰值即全段峰值。 */
 export function waveformPyramidPeakMax(data: WaveformPyramidData, channels: readonly number[]): number {
   const top = data.levels.at(-1)!

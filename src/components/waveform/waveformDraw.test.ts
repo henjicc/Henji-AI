@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { aggregateWaveformSampleRange } from '@/core/media/waveformPyramid'
 import { drawWaveform, waveformSegments, type WaveformPalette } from './waveformDraw'
 import type { WaveformData } from '@/services/waveform/waveformDataService'
 
@@ -73,6 +74,27 @@ describe('waveform drawing', () => {
     // A detail window that does not cover the view keeps the pyramid drawing.
     expect(drawWaveform(recorder().context, { width: 200, height: 40, pixelRatio: 1, data: data(), startFrame: 6000, endFrame: 6100, tier: 'standard', tone: 'neutral', palette, detail })).toBe('peaks')
     expect(drawWaveform(recorder().context, { width: 200, height: 40, pixelRatio: 1, startFrame: 0, endFrame: 10, tier: 'standard', tone: 'neutral', palette })).toBe('empty')
+  })
+
+  it('single layer zooms continuously: a signed min/max band that matches the sample trace where the trace takes over', () => {
+    // 一个慢周期的正弦：对称峰值包络会画成上下对称的一团，带符号范围则沿着波形走。
+    const wave = Float32Array.from({ length: 4096 }, (_, index) => Math.sin(index / 40) * 0.5)
+    const detail = { key: 'd', firstFrame: 1000, frameCount: 4096, channels: [wave, wave] }
+    const base = { height: 100, pixelRatio: 1, data: data(), lanes: [0], tier: 'standard' as const, tone: 'neutral' as const, palette, detail, layers: 'single' as const }
+    const band = recorder()
+    expect(drawWaveform(band.context, { ...base, width: 200, startFrame: 1000, endFrame: 3000 })).toBe('samples')
+    expect(band.fills).toHaveLength(1); expect(band.strokes).toHaveLength(0)
+    // 每列两个采样以内换成采样曲线。
+    const trace = recorder()
+    drawWaveform(trace.context, { ...base, width: 200, startFrame: 1000, endFrame: 1400 })
+    expect(trace.strokes).toEqual(['#played'])
+
+    const low = new Float32Array(4), high = new Float32Array(4)
+    aggregateWaveformSampleRange(Float32Array.of(0, 1, -1, 0.5, 0), 0, 0.5, 4.5, 4, low, high)
+    // 每列是连线在列内经过的范围：两端取插值，中间取采样。
+    expect([...low]).toEqual([0, -1, -0.25, 0]); expect([...high]).toEqual([1, 0, 0.5, 0.25])
+    aggregateWaveformSampleRange(new Float32Array(), 0, 0, 10, 2, low, high)
+    expect([...low.slice(0, 2), ...high.slice(0, 2)]).toEqual([0, 0, 0, 0])
   })
 
   it('single layer draws one opaque envelope per lane instead of peak + loudness', () => {
