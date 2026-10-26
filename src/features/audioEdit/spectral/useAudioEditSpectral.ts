@@ -134,7 +134,12 @@ export class SpectralTileScheduler {
     this.stale.delete(key)
     void this.client.fetch({ projectId: this.target.projectId, mode: this.target.mode, level: need.level, tile: need.tile, requestId }).then(tile => {
       if (this.disposed || this.inflight.get(key)?.requestId !== requestId) return
-      if (tile.mode !== this.target.mode || (tile.mode === 'edited' && tile.revision < this.target.revision)) return
+      if (tile.mode !== this.target.mode || (tile.mode === 'edited' && tile.revision < this.target.revision)) {
+        // 宿主读到的还是改声音之前的作品：隔一会儿再取，不连着重发（每次都是整块数据过一遍进程间通信）。
+        this.retryAt.set(key, this.now() + RETRY_DELAY_MS)
+        logger.debug('频谱块早于当前声音，稍后重取', { event: 'audio_edit.spectral.tile_stale', context: { level: need.level, tile: need.tile, revision: tile.revision, expected: this.target.revision } })
+        return
+      }
       this.failures.delete(key); this.retryAt.delete(key)
       this.store.set(tile)
       this.markIfBehind(tile)
@@ -164,7 +169,8 @@ function reusableTiles(key: string): SpectralTileStore | undefined {
 }
 
 /**
- * revision 是声音内容最后一次改变（修复、区间音量、效果）时的作品版本；只改删除、静音时不变，频谱不重取。
+ * revision 是声音内容最后一次改变（修复、区间音量、效果）时内存里的作品版本（每改一次加一）；只改删除、静音时不变，频谱不重取。
+ * 宿主回来的块和进度标的是文件版本，由取块入口（audioEditSpectralClient）换算成内存版本后再交给这里比较。
  * contentKey 是剪后声音的内容键（与宿主处理配方同源）：给了才能在重新打开时认出“声音没变”，沿用关掉前读出的块。
  */
 export function useAudioEditSpectral(client: SpectralTileClient, projectId: string, view: WaveformViewport, columns: number, duration: number, mode: 'source' | 'edited', revision: number, sourceKey = '', contentKey = ''): AudioEditSpectralState {

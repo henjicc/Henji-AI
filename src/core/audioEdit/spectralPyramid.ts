@@ -76,7 +76,10 @@ export type AudioEditSpectralTileRequest = z.infer<typeof audioEditSpectralTileR
 
 export interface AudioEditSpectralTile {
   mode: 'source' | 'edited'
-  /** 生成该块所用的作品版本（source 模式恒为 0）；渲染层据此丢弃过期结果。 */
+  /**
+   * 生成该块所用的作品版本（source 模式恒为 0）；渲染层据此丢弃过期结果。宿主填的是文件版本（每保存一次加一），
+   * 与内存里的作品版本（每改一次加一）不是同一个数，渲染层取块入口先换算再比较。
+   */
   revision: number
   level: number; tile: number
   sampleRate: number; channels: number; durationFrames: number
@@ -94,6 +97,7 @@ export interface AudioEditSpectralTile {
 
 /** 主进程广播：后台整文件计算的进度，渲染层据此重取 complete = false 的块。 */
 export interface AudioEditSpectralProgress {
+  /** revision 与块的 revision 同义（宿主填文件版本，渲染层换算）。 */
   projectId: string; mode: 'source' | 'edited'; revision: number
   /** 已算到的源采样帧（落盘层第 c 列在 origin + (c + 1) * hop <= coveredFrames 时已完整）。 */
   coveredFrames: number; durationFrames: number; done: boolean

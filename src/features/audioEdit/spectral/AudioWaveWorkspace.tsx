@@ -28,7 +28,7 @@ import { setAudioEditMouthClicksSkipped } from '@/core/audioEdit/effects'
 import type { AudioEditorTool } from './spectralEditorModel'
 import { audioWaveToolForKey, type audioWaveActions, type AudioWaveEditorState } from './audioWaveEditorState'
 import { useAudioEditSpectral } from './useAudioEditSpectral'
-import { audioEditSpectralClient } from '../application/audioEditRegions'
+import { audioEditSpectralClient, getAudioEditEditedSource } from '../application/audioEditRegions'
 import { audioEditScrub } from '../preview/audioEditScrub'
 import { spliceAudioRanges } from '@/core/audioEdit/splice'
 
@@ -161,7 +161,8 @@ export function AudioWaveWorkspace() {
   React.useEffect(() => {
     if (!edited) { setEditedPath(null); return }
     let cancelled = false
-    const timer = window.setTimeout(() => void getPlatform().audioEdit.editedSource({ projectId: project.id }).then(result => {
+    // 先保存再问主进程：主进程按文件里的作品处理，没保存就会拿回上一份声音，还被记在这次的声音名下。
+    const timer = window.setTimeout(() => void getAudioEditEditedSource(project.id).then(result => {
       if (cancelled) return
       setEditedPath(result.audioPath)
       rememberEditedSource(project.id, soundKey, result.audioPath)

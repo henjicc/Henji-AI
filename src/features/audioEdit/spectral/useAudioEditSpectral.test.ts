@@ -6,7 +6,7 @@ import { StrictMode, createElement, type ReactNode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { SpectralTileScheduler, spectralNeeds, spectralOverviewLevel, useAudioEditSpectral, type SpectralTileClient } from './useAudioEditSpectral'
 
-vi.mock('@/core/logging', () => ({ createLogger: () => ({ warn: vi.fn(), info: vi.fn() }) }))
+vi.mock('@/core/logging', () => ({ createLogger: () => ({ warn: vi.fn(), info: vi.fn(), debug: vi.fn() }) }))
 
 const SR = 48000, DURATION = SR * 600
 function tileFor(request: AudioEditSpectralTileRequest, overrides: Partial<AudioEditSpectralTile> = {}): AudioEditSpectralTile {
@@ -101,6 +101,10 @@ describe('频谱取块调度', () => {
     pending[0].resolve(tileFor(pending[0].request, { revision: 1 }))
     await flush()
     expect(store.version).toBe(0)
+    // 过期结果隔一会儿再取，不连着重发
+    expect(pending).toHaveLength(1)
+    vi.advanceTimersByTime(600)
+    expect(pending).toHaveLength(2)
     for (let attempt = 0; attempt < 3; attempt++) {
       vi.advanceTimersByTime(5000)
       pending.at(-1)!.reject(new Error('读不到'))
