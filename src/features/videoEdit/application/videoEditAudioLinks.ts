@@ -126,6 +126,12 @@ export async function refreshVideoEditAudioDocumentClips(projectId: string, docu
   queues.set(key, run)
   try { return await run } finally { if (queues.get(key) === run) queues.delete(key) }
 }
+/** 切到“音频”布局：剪辑工作区的布局配置读完之后再切，否则读到的旧配置会把它覆盖。 */
+async function applyVideoEditAudioLayout(): Promise<void> {
+  await videoEditLayoutPresets.load().catch(() => undefined)
+  await videoEditLayoutPresets.apply(VIDEO_EDIT_AUDIO_LAYOUT_PRESET).catch(error => logger.warn('切换音频布局失败', { event: 'video_edit.audio_link.multitrack.layout_failed', error }))
+}
+
 /**
  * 音频编辑的“多轨”（参照 Audition 的“波形 | 多轨”）：多轨就是剪辑的序列，用“音频”布局打开（时间线 + 音轨混合器）。
  * 已打开的剪辑里有片段链接着这份音频作品时回到那里；否则新建一份多轨剪辑，把这份作品渲染的声音以动态链接放在第一条音频轨上。
@@ -136,8 +142,8 @@ export async function openAudioDocumentInMultitrack(audioDocumentId: string): Pr
     const clip = links(video.document, audioDocumentId)[0]
     const summary = clip && await operations.findDocument(video.document.id)
     if (!clip || !summary) continue
-    await videoEditLayoutPresets.apply(VIDEO_EDIT_AUDIO_LAYOUT_PRESET).catch(error => logger.warn('切换音频布局失败', { event: 'video_edit.audio_link.multitrack.layout_failed', error }))
     await operations.openDocument(summary)
+    await applyVideoEditAudioLayout()
     const sequence = video.document.sequences.find(s => s.clips.some(c => c.id === clip.id))
     if (sequence) { switchVideoEditSequence(video.document.id, sequence.id); setVideoEditView(video.document.id, { selection: clip.id }) }
     logger.info('回到多轨', { event: 'video_edit.audio_link.multitrack.opened', context: { projectId: video.document.id, documentId: audioDocumentId } })
@@ -145,11 +151,12 @@ export async function openAudioDocumentInMultitrack(audioDocumentId: string): Pr
   }
   const audio = getAudioEditProjectInstance(audioDocumentId)
   if (!audio) throw new Error('请先打开这份音频作品。')
-  await flushAudioEditProject(audioDocumentId)
   const container = audio.session.documentMeta.container
+  if (container.kind !== 'project') throw new Error('多轨剪辑只能放在项目里：请先把这份音频作品移到一个项目中再打开多轨。')
+  await flushAudioEditProject(audioDocumentId)
   const rendered = await renderAudioEdit(audioDocumentId)
   const name = audio.session.documentMeta.name
-  const path = container.kind === 'project' ? (await operations.importFile({ container, sourcePath: rendered.audioPath, folder: 'generated' })).path : rendered.audioPath
+  const path = (await operations.importFile({ container, sourcePath: rendered.audioPath, folder: 'generated' })).path
   const document = createVideoEditDocument(`${name} · 多轨`)
   const sequence = createVideoEditSequence('多轨混音')
   sequence.sampleRate = rendered.sampleRate === 44100 ? 44100 : 48000
@@ -169,8 +176,8 @@ export async function openAudioDocumentInMultitrack(audioDocumentId: string): Pr
   const meta = await operations.createDocument({ kind: 'video_edit', container, name: document.name, content, onConflict: 'keepBoth' })
   const summary = await operations.findDocument(meta.id)
   if (!summary) throw new Error('多轨剪辑已建好，但没找到文件，请在项目里打开。')
-  await videoEditLayoutPresets.apply(VIDEO_EDIT_AUDIO_LAYOUT_PRESET).catch(error => logger.warn('切换音频布局失败', { event: 'video_edit.audio_link.multitrack.layout_failed', error }))
   await operations.openDocument(summary)
+  await applyVideoEditAudioLayout()
   logger.info('新建多轨', { event: 'video_edit.audio_link.multitrack.created', context: { projectId: meta.id, documentId: audioDocumentId } })
 }
 

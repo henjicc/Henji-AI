@@ -40,7 +40,7 @@ import { AUDIO_EDIT_WORKSPACE_ID } from './workspace/audioEditDockLayout'
 import { AudioEditWorkspaceContext, type AudioEditDeliveryFormat, type AudioEditWorkspace } from './workspace/audioEditWorkspaceContext'
 
 import { adjustAudioEditRangeMode, applyAudioEditSuggestion, audioEditSuggestionStates, DEFAULT_AUDIO_EDIT_VIEW_SETTINGS, dismissAudioEditSuggestion, editAudioEditRange, setAudioEditBlocks } from '@/core/audioEdit/edits'
-import { editAudioEditProject, flushAudioEditProject } from './application/audioEditProjectInstances'
+import { editAudioEditProject, flushAudioEditProject, getAudioEditProjectInstance } from './application/audioEditProjectInstances'
 import { AudioEditLeaveCancelledError, createAudioEditRecording, importAudioEditMedia, leaveAudioEditEditor, openAudioEditDocument, pickAudioEditMedia, renameAudioEditDocument } from './application/audioEditDocumentService'
 import { VideoEditSendMenu } from '@/features/videoEdit/panels/VideoEditSendMenu'
 import { videoEditDocumentRef } from '@/features/videoEdit/application/videoEditSourceRefs'
@@ -325,7 +325,8 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
       <AudioEditFileMenu key={project.id} name={project.name} disabled={disabled} onRename={(name) => void run(() => renameAudioEditDocument(project.id, name))} onRelink={() => void relinkSource()} />
       {/* 参照 Audition 的“波形 | 多轨”：多轨就是剪辑的序列（音频布局），这份作品以动态链接放在里面；从剪辑进来时直接回去。 */}
       <UiSegmented ariaLabel="编辑视图" size="sm" value="waveform" disabled={disabled || Boolean(sourceError) || (!embeddedHost && !audioEditMultitrackAvailable())}
-        options={[{ value: 'waveform', label: '波形', title: '编辑这一份声音' }, { value: 'multitrack', label: '多轨', title: embeddedHost ? `回到${embeddedHost.label}` : '放进多轨混音：多条音轨、音轨混合器、轨道效果' }]}
+        options={[{ value: 'waveform', label: '波形', title: '编辑这一份声音' }, { value: 'multitrack', label: '多轨', title: embeddedHost ? `回到${embeddedHost.label}` : '放进多轨混音：多条音轨、音轨混合器、轨道效果',
+          ...(!embeddedHost && getAudioEditProjectInstance(project.id)?.session.documentMeta.container.kind !== 'project' ? { disabled: true, disabledReason: '多轨剪辑只能放在项目里，先把这份作品移到项目中' } : {}) }]}
         onChange={(view) => { if (view === 'multitrack') void (embeddedHost ? leave() : run(() => openAudioEditMultitrack(project.id))) }} />
     </UiToolbar>
     <AudioCaptureRecoveryBanner projectId={project.id} />
