@@ -11,27 +11,34 @@ const HAN_TO_ASCII = /(\p{Script=Han})[ \u3000]*([A-Za-z0-9])/gu
 const ASCII_TO_HAN = /([A-Za-z0-9])[ \u3000]*(\p{Script=Han})/gu
 
 /**
- * 成片字幕的排版：中文与英文、数字之间留一个半角空格；去掉句首标点和行尾的逗号、句号、顿号、分号、冒号
- * （问号、感叹号、省略号保留）。只改显示，不改词块文字。
+ * 成片字幕的排版：中文与英文、数字之间留一个半角空格；去掉句首标点和行尾的逗号、句号、顿号、分号、冒号，
+ * 句中的逗号、句号改为空格（问号、感叹号、省略号保留）。只改显示，不改词块文字。
  */
 export function formatAudioEditSubtitleText(text: string): string {
   return text.trim()
     .replace(/^[\s，。！？；：、,.!?;:]+/u, '')
     .replace(HAN_TO_ASCII, '$1 $2').replace(ASCII_TO_HAN, '$1 $2')
     .replace(/[，。；：、,.;:]+$/u, '')
+    // 句中的逗号、句号、分号改为一个空格（问号、感叹号、顿号、省略号照常）；英文的 “, ” “. ” 同样处理，php.net、0.3 不动
+    .replace(/[，。；]+/gu, ' ').replace(/[,.;](?=\s)/gu, ' ')
     .replace(/[ \u3000]{2,}/gu, ' ')
     .trim()
 }
 
-/** 词在剪后成品里的时间：头尾被剪掉一点（气口清理常切到字尾）时取留下的部分，整个被剪掉才算没有。 */
-function outputRange(startFrame: number, endFrame: number, spans: readonly AudioEditTimelineSpan[]): { start: number; end: number } | null {
+/**
+ * 词在剪后成品里的时间：头尾被剪掉一点（气口清理常切到字尾）时取留下的部分；只剩一丝（换遍拼接时贴着切点的那点字头）
+ * 不算念到了。留下不到四成、又不到 0.15 秒的词不上字幕。
+ */
+function outputRange(startFrame: number, endFrame: number, spans: readonly AudioEditTimelineSpan[], sampleRate: number): { start: number; end: number } | null {
   let first: AudioEditTimelineSpan | undefined, last: AudioEditTimelineSpan | undefined
+  let retained = 0
   for (const span of spans) {
     if (span.sourceEndFrame <= startFrame) continue
     if (span.sourceStartFrame >= endFrame) break
     first ??= span; last = span
+    retained += Math.min(endFrame, span.sourceEndFrame) - Math.max(startFrame, span.sourceStartFrame)
   }
-  if (!first || !last) return null
+  if (!first || !last || (retained < (endFrame - startFrame) * 0.4 && retained < sampleRate * 0.15)) return null
   return { start: first.outputStartFrame + Math.max(0, startFrame - first.sourceStartFrame), end: last.outputStartFrame + Math.min(endFrame, last.sourceEndFrame) - last.sourceStartFrame }
 }
 
@@ -47,7 +54,7 @@ export function buildAudioEditSubtitleCues(blocks: readonly AudioEditTranscriptB
   const cues = buildAudioEditSubtitleGroups(blocks, sampleRate).flatMap((group): AudioEditSubtitleCue[] => {
     const words = group.blocks.flatMap((block): AudioEditSubtitleWord[] => {
       if (isAudioEditSubtitleFiller(block.text)) return []
-      const range = outputRange(block.startFrame, block.endFrame, spans)
+      const range = outputRange(block.startFrame, block.endFrame, spans, sampleRate)
       return range ? [{ blockId: block.id, text: block.text.trim(), startFrame: range.start, endFrame: Math.max(range.start + 1, range.end) }] : []
     })
     const text = formatAudioEditSubtitleText(words.reduce((value, word) => joinAudioEditText(value, word.text), ''))

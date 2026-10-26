@@ -59,7 +59,8 @@ export function alignAudioEditToScript(blocks: readonly AudioEditTranscriptBlock
     while (next < scriptChars.length && SKIP.test(scriptChars[next]) && scriptChars[next] !== '\n') next++
     const following = scriptChars[next] ?? '\n'
     const decimal = following === '.' && /[0-9]/.test(char) && /[0-9]/.test(scriptChars[next + 1] ?? '')
-    written.push({ at, breakAfter: !decimal && (BREAK.test(following) || (following === '.' && !/[0-9]/.test(scriptChars[next + 1] ?? ''))) })
+    // 英文句点只在后面不紧跟字母、数字时算断句（php.net、0.3、v2.5 都不断）
+    written.push({ at, breakAfter: !decimal && (BREAK.test(following) || (following === '.' && !/[\p{L}\p{N}]/u.test(scriptChars[next + 1] ?? ''))) })
   })
   const spokenUnits = units(spokenChars)
   const writtenUnits = units(written.map(item => scriptChars[item.at]))

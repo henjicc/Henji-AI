@@ -52,6 +52,16 @@ describe('成片字幕排版与时间', () => {
     expect(formatAudioEditSubtitleText('，比如最近php那个漏洞，')).toBe('比如最近 php 那个漏洞')
     expect(formatAudioEditSubtitleText('0.3秒就返回了20条结果。')).toBe('0.3 秒就返回了 20 条结果')
     expect(formatAudioEditSubtitleText('为什么还非得接个搜索呢？')).toBe('为什么还非得接个搜索呢？')
+    expect(formatAudioEditSubtitleText('关键是呢，它还会搜 php.net。也就 0.3 秒')).toBe('关键是呢 它还会搜 php.net 也就 0.3 秒')
+  })
+
+  it('换遍拼接时只剩一丝的字头不上字幕；稿子里 php.net 的点不算断句', () => {
+    const blocks = blocksOf(['但', '结果', '说的', '还挺对的'])
+    // “但”只留下 10 毫秒（拼接点贴着字头）
+    const cuts = [{ id: 'c', startFrame: blocks[0].startFrame + 10, endFrame: blocks[1].startFrame, reason: 'manual' as const, enabled: true }]
+    expect(buildProjectAudioEditSubtitleCues(projectOf(blocks, '', cuts)).map(cue => cue.text)).toEqual(['结果说的还挺对的'])
+    const project = formatAudioEditCaptions(projectOf(blocksOf(['只搜', 'php', '点', 'net', '那些', '文章', '都避开了']), '只搜 php.net，那些文章都避开了'))
+    expect(lines(project)).toEqual(['只搜php点net', '那些文章都避开了'])
   })
 
   it('单独的叹词不上字幕；间隔短于 0.5 秒接到下一条开始，更长的留空；字尾被剪掉一点的词仍在', () => {
@@ -79,7 +89,7 @@ describe('逐段核对与改字', () => {
   it('列出每段的稿子原文与是否一致；改字逐字写回原词块，时间不变', () => {
     const project = formatAudioEditCaptions(projectOf(blocksOf(['还有', '艾玛，', 'work', 'body', '用的', '都是它']), '还有 ima、WorkBuddy，用的都是它。'))
     const views = describeAudioEditCaptions(project)
-    expect(views.map(view => [view.text, view.scriptMatch])).toEqual([['还有艾玛，work body', 'different'], ['用的都是它', 'same']])
+    expect(views.map(view => [view.text, view.scriptMatch])).toEqual([['还有艾玛 work body', 'different'], ['用的都是它', 'same']])
     expect(views[0].scriptText).toBe('还有 ima、WorkBuddy，')
     const fixed = setAudioEditCaptionText(project, views[0].id, '还有 ima、WorkBuddy')
     expect(fixed.transcript.slice(0, 4).map(block => block.text)).toEqual(['还有', 'ima、', 'WorkBuddy', ''])

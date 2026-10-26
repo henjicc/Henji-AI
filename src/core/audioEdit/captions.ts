@@ -1,5 +1,5 @@
 import type { AudioEditProjectDocument, AudioEditTranscriptBlock } from './types'
-import { alignAudioEditToScript, audioEditSubtitleWidth } from './scriptCaptions'
+import { alignAudioEditToScript, audioEditSubtitleWidth, isAudioEditSubtitleFiller } from './scriptCaptions'
 
 export interface AudioEditCaptionGroup {
   id: string
@@ -74,8 +74,9 @@ function formatAudioEditCaptionsByScript(project: AudioEditProjectDocument): Aud
   for (let round = 0; round < 4; round++) {
     let changed = false
     for (const group of buildAudioEditSubtitleGroups(transcript, project.source.sampleRate)) {
-      if (audioEditSubtitleWidth(group.text) <= LONG_SUBTITLE_WIDTH || group.blocks.some((block) => block.locked)) continue
-      const widths = group.blocks.map((block) => audioEditSubtitleWidth(block.text.trim()))
+      // 按显示出来的字算宽度：叹词不上字幕，标点在行尾会去掉
+      const widths = group.blocks.map((block) => isAudioEditSubtitleFiller(block.text) ? 0 : audioEditSubtitleWidth(block.text.replace(/[\s\p{P}]/gu, '')))
+      if (widths.reduce((sum, width) => sum + width, 0) <= LONG_SUBTITLE_WIDTH || group.blocks.some((block) => block.locked)) continue
       const total = widths.reduce((sum, width) => sum + width, 0)
       let best: { index: number; score: number } | undefined
       let left = 0
