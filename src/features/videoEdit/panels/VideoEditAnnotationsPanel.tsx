@@ -45,8 +45,8 @@ function AnnotationRow({ instance, sequenceId, mark, number, fps, expanded, onEr
       </span>
     </UiOptionButton>
     <UiIconButton size="xs" tone="danger" aria-label={`删除标注 ${number}`} tooltip="删除这条批注" className={`absolute right-2 top-1.5 ${expanded ? '' : 'opacity-0 focus-visible:opacity-100 group-hover/annotation:opacity-100'}`} onClick={() => run(() => deleteVideoEditAnnotation(projectId, mark.id))}><Trash2 /></UiIconButton>
-    {/* 已改完的不用展开也能驳回：悬停这一条就出现 */}
-    {mark.status === 'addressed' && !expanded && <UiIconButton size="xs" aria-label={`驳回标注 ${number}`} tooltip="驳回：没改好，退回给助手重改" className="absolute right-9 top-1.5 opacity-0 focus-visible:opacity-100 group-hover/annotation:opacity-100" onClick={reject}><Undo2 /></UiIconButton>}
+    {/* 已改完的不用展开也能驳回：悬停这一条就在右下（状态行那一侧）出现文字按钮，不压正文 */}
+    {mark.status === 'addressed' && !expanded && <UiButton size="sm" aria-label={`驳回标注 ${number}`} tooltip="没改好，退回给助手重改" className="absolute bottom-0.5 right-2 opacity-0 focus-visible:opacity-100 group-hover/annotation:opacity-100" onClick={reject}>驳回</UiButton>}
     {expanded && <div className="flex gap-2 px-3 pb-3" data-video-edit-annotation-details><span aria-hidden="true" className="w-5 shrink-0" /><div className="flex min-w-0 flex-1 flex-col gap-2">
       {mark.status === 'draft' && <UiTextArea aria-label={`标注 ${number} 说明`} rows={2} value={text} onChange={event => setText(event.target.value)} onBlur={commitText} />}
       {mark.thread.map(message => <div key={message.id} className="flex flex-col gap-0.5">
