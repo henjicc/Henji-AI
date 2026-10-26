@@ -97,16 +97,16 @@ export class VideoEditCodeGpu {
   }
   private authors(): VideoEditAuthorPrograms { return this.authorPrograms ??= new VideoEditAuthorPrograms(this.device) }
   async inspectAuthor(bundle: CodeAuthorBundle): Promise<CodeAuthorProgram> { return this.trackAuthor(async () => { await this.ready; this.assertLive(); return this.authors().inspect(bundle) }) }
-  async authorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides): Promise<VideoEditCodePicture> {
-    return this.trackAuthor(() => this.renderAuthorGenerator(key, instanceKey, program, size, parameters, assets, info, overrides))
+  async authorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, motionBlur = true): Promise<VideoEditCodePicture> {
+    return this.trackAuthor(() => this.renderAuthorGenerator(key, instanceKey, program, size, parameters, assets, info, overrides, motionBlur))
   }
-  private async renderAuthorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides): Promise<VideoEditCodePicture> {
+  private async renderAuthorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, motionBlur = true): Promise<VideoEditCodePicture> {
     await this.ready; this.assertLive()
     const runtime = await this.authors().instance(instanceKey, program)
     this.assertLive()
     const target = this.surface(key, size.width, size.height)
     const started = performance.now()
-    await runtime.render(target.picture.texture, size.width, size.height, parameters, assets, info, overrides)
+    await runtime.render(target.picture.texture, size.width, size.height, parameters, assets, info, overrides, undefined, motionBlur)
     const completed = this.trackPerformance(key, { frame: Math.floor(info.time / info.frameDuration), cpuMs: performance.now() - started, gpuMs: 0, budgetMs: info.frameDuration * 1000 }, started, started, performance.now())
     this.pending = this.device.queue.onSubmittedWorkDone().then(completed); this.counts.generatorFrames++
     return target.picture

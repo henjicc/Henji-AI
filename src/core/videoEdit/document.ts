@@ -105,6 +105,8 @@ const videoEditClipStateSchema = z.object({
   /** 非等比缩放（重要记录 019，AE 缩放链条解开）：垂直缩放与水平缩放之比。scale 是水平缩放，垂直缩放 = scale × scaleAspect；缺省为 1（等比）。 */
   scaleAspect: z.number().min(0.01).max(100).optional().describe('非等比缩放：垂直缩放与水平缩放之比，缺省 1 为等比。scale 是水平缩放，垂直缩放 = scale × scale_aspect；scale 的关键帧按这个比例同时缩放两个方向。'),
   anchorX: videoEditClipAnimatedValueSchemas.anchorX.optional(), anchorY: videoEditClipAnimatedValueSchemas.anchorY.optional(), curves: videoEditClipCurvesSchema.optional(),
+  /** 片段自身变换动画的运动模糊（2026-10-27，只给助手调，界面不提供）：省略跟随序列总开关，false 只关这个片段。 */
+  motionBlur: z.literal(false).optional().describe('片段自身动画（位置、缩放、旋转、锚点关键帧）的运动模糊：省略时跟随序列总开关，false 只关掉这个片段。代码素材里各图层的模糊由源码图层的 motionBlur 控制；序列总开关关掉时一律不模糊。'),
   opacity: videoEditClipAnimatedValueSchemas.opacity, volume: videoEditClipAnimatedValueSchemas.volume, gainDb: videoEditGainDbSchema.optional(), audioRole: videoEditAudioRoleSchema.optional(), essentialSound: essentialSoundSettingsSchema.optional(), text: z.string().max(2000),
   textStyle: videoEditTextStyleSchema.optional(),
   /** PR 淡化手柄：片段开头淡入、结尾淡出的帧数（画面从透明渐显，声音按恒定功率渐强）；没有就是不淡化。 */
@@ -161,7 +163,7 @@ export const videoEditSequenceSchema = z.object({
   captionTrackEnabled: z.boolean().optional().describe('字幕轨道是否输出到节目画面，省略时显示。'),
   captionTrackLocked: z.boolean().optional().describe('锁定字幕轨道后禁止修改、添加或删除字幕，省略时未锁定。'),
   /** 时间线统一开关（重要记录 019）：运动模糊与帧混合作用于整条序列，预览与导出一致。 */
-  motionBlur: z.boolean().optional().describe('运动模糊：开启后，位置、缩放、旋转、锚点有动画的片段按 180° 快门（前后各四分之一帧）沿运动方向模糊；预览与导出一致。省略为关闭。'),
+  motionBlur: z.boolean().optional().describe('运动模糊总开关：开启后，位置、缩放、旋转、锚点有动画的片段与代码素材里带位姿的图层按 180° 快门（前后各四分之一帧）沿运动方向模糊；关闭时整条序列一律不模糊。单个片段用片段的 motion_blur 关，单个代码图层在源码里关。预览与导出一致。新建序列默认开启，省略为关闭。'),
   frameBlend: z.boolean().optional().describe('帧混合：慢放片段没有单独设补帧方式时，默认把相邻两帧按位置混合；片段自己的 frame_interpolation 优先。省略为关闭（帧采样）。'),
   transitions: z.array(videoEditTransitionSchema).optional(),
   master: videoEditMasterSchema.optional().describe('主轨：序列总输出的音量 dB 与主轨效果（音频内置效果），作用在所有轨道混好之后。'),
@@ -343,6 +345,8 @@ export type VideoEditAnnotation = z.infer<typeof videoEditAnnotationSchema>
 export type VideoEditComposition = VideoEditSequence & Pick<VideoEditDocument, 'media' | 'items' | 'revision' | 'codeMaterials' | 'colorLuts' | 'styles'> & { fps: number; sequences?: VideoEditSequence[] }
 export function createVideoEditSequence(name = '序列 1'): VideoEditSequence {
   return { id: crypto.randomUUID(), name, width: 1920, height: 1080, frameRate: { numerator: 30, denominator: 1 }, pixelAspectRatio: { numerator: 1, denominator: 1 }, sampleRate: 48000, channels: 2,
+    // 运动模糊总开关新建即开（2026-10-27 用户要求）；只模糊在动的片段与图层，不动的不花时间
+    motionBlur: true,
     // 新序列与 PR 一样只有一条视频轨（V1）和一条音频轨（A1）；需要更多轨道时拖到轨道外或用轨道头菜单添加。
     tracks: Array.from({ length: 2 }, (_, index) => ({ id: crypto.randomUUID(), name: index === 0 ? '音频 1' : '视频 1', index, kind: index === 0 ? 'audio' : 'video', locked: false, enabled: true, muted: false, solo: false })), clips: [], annotations: [] }
 }

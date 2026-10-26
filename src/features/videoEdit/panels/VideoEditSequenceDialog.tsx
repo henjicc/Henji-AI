@@ -8,7 +8,7 @@ import {
   videoEditSequenceRatioLabel, videoEditSequenceRatioValue, videoEditSequenceSizeForPixels,
   videoEditSequenceTierSize, type VideoEditSequencePreset,
 } from '@/core/videoEdit/sequencePresets'
-import { Dropdown, UiButton, UiError, UiFormRow, UiGroup, UiIconButton, UiInput, UiModal, UiPanel, UiSelect } from '@/components/ui'
+import { Dropdown, UiButton, UiError, UiFormRow, UiGroup, UiIconButton, UiInput, UiModal, UiPanel, UiSelect, UiSwitch } from '@/components/ui'
 import type { VideoEditBin } from '@/core/videoEdit/document'
 import { VIDEO_EDIT_FRAME_RATES, videoEditFps } from '@/core/videoEdit/time'
 import type { VideoEditSequenceSettings } from '../application/videoEditProjectItems'
@@ -31,7 +31,9 @@ export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate
 }): React.ReactElement {
   const defaults = useSettingsStore(state => state.videoEditSequenceDefaults)
   const [values, updateValues] = useState(() => ({ name: initial.name ?? '新序列', binId: initial.binId ?? '', width: String(initial.width ?? defaults.width), height: String(initial.height ?? defaults.height),
-    frameRate: requireFrameRate ? { numerator: 60, denominator: 1 } : initial.frameRate ?? defaults.frameRate, pixelAspectRatio: initial.pixelAspectRatio ?? defaults.pixelAspectRatio, sampleRate: initial.sampleRate ?? defaults.sampleRate, channels: initial.channels ?? defaults.channels }))
+    frameRate: requireFrameRate ? { numerator: 60, denominator: 1 } : initial.frameRate ?? defaults.frameRate, pixelAspectRatio: initial.pixelAspectRatio ?? defaults.pixelAspectRatio, sampleRate: initial.sampleRate ?? defaults.sampleRate, channels: initial.channels ?? defaults.channels,
+    // 运动模糊总开关不进“默认值”：新建序列一律先开着
+    motionBlur: initial.motionBlur ?? true }))
   const size = { width: Number(values.width), height: Number(values.height) }
   const [preset, setPreset] = useState(() => inferVideoEditSequencePreset(size))
   const [locked, setLocked] = useState(true)
@@ -52,7 +54,7 @@ export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate
   }
   const specification = (): ReturnType<typeof videoEditSequenceDefaultsSchema.parse> => {
     if (sizeError) throw new Error(sizeError)
-    const { name: _name, binId: _binId, ...settings } = values
+    const { name: _name, binId: _binId, motionBlur: _motionBlur, ...settings } = values
     return videoEditSequenceDefaultsSchema.parse({ ...settings, ...size })
   }
   const saveAsDefaults = (): void => {
@@ -62,7 +64,7 @@ export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate
   const submit = async (): Promise<void> => {
     if (!values.name.trim()) { setError('请输入序列名称。'); return }
     setBusy(true); setError('')
-    try { const settings = specification(); await onSubmit({ ...settings, name: values.name.trim(), binId: values.binId || null }); onClose() }
+    try { const settings = specification(); await onSubmit({ ...settings, name: values.name.trim(), binId: values.binId || null, motionBlur: values.motionBlur }); onClose() }
     catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
     finally { setBusy(false) }
   }
@@ -140,6 +142,7 @@ export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate
             const fps = videoEditFps(rate)
             return { label: `${Number(fps.toFixed(3))} 帧`, value: `${rate.numerator}/${rate.denominator}`, tooltip: fps > 60 ? PREVIEW_HINT : undefined }
           })} onSelect={value => { const [numerator, denominator] = value.split('/').map(Number); setValues({ ...values, frameRate: { numerator, denominator } }) }} /></UiFormRow>
+          <UiFormRow label="运动模糊" inline info="整条序列的总开关：在动的片段与图层沿运动方向模糊。关掉后整条序列都不模糊。"><UiSwitch aria-label="运动模糊" disabled={busy} checked={values.motionBlur} onCheckedChange={checked => setValues({ ...values, motionBlur: checked })} /></UiFormRow>
         </UiGroup>
       <div>
         <UiButton aria-expanded={advanced} disabled={busy} onClick={() => setAdvanced(value => !value)}>{advanced ? <ChevronDown /> : <ChevronRight />}更多设置</UiButton>

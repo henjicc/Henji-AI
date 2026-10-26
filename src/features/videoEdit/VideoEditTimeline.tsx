@@ -35,7 +35,7 @@ function VideoEditTimelineContent({ instance, onError, visible = true }: { insta
     <VideoEditTimecode instance={instance} label="当前时间码" className="min-w-0 flex-1 px-1.5 text-13" />
     <UiIconButton size="xs" on={linkedSelection.checked} disabled={!linkedSelection.enabled} aria-label={linkedSelection.title} tooltip={`${linkedSelection.tooltip}（按住 Alt 临时切换）`} onClick={() => execute('toggle_linked_selection')}><Link /></UiIconButton>
     <UiIconButton size="xs" on={snapping.checked} disabled={!snapping.enabled} aria-label={snapping.title} tooltip={snapping.tooltip} onClick={() => execute('toggle_snapping')}><Magnet /></UiIconButton>
-    <UiIconButton size="xs" on={motionBlur.checked} disabled={!motionBlur.enabled} aria-label={motionBlur.title} tooltip={`${motionBlur.tooltip}：有位置、缩放、旋转动画的片段沿运动方向模糊`} onClick={() => execute('toggle_motion_blur')}><MotionBlurIcon /></UiIconButton>
+    <UiIconButton size="xs" on={motionBlur.checked} disabled={!motionBlur.enabled} aria-label={motionBlur.title} tooltip={`${motionBlur.tooltip}：整条序列的总开关，运动的片段与图层沿运动方向模糊`} onClick={() => execute('toggle_motion_blur')}><MotionBlurIcon /></UiIconButton>
     <UiIconButton size="xs" on={frameBlend.checked} disabled={!frameBlend.enabled} aria-label={frameBlend.title} tooltip={`${frameBlend.tooltip}：慢放片段默认把相邻两帧混合`} onClick={() => execute('toggle_frame_blend')}><FrameBlendIcon /></UiIconButton>
     <VideoEditSequenceTabs instance={instance} onError={onError} />
   </div>

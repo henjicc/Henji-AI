@@ -126,10 +126,10 @@
       "minReaderVersion": 1
     },
     "document.video_edit": {
-      "version": 30,
-      "fingerprint": "c7166bf1cfa90a0ad42c5dfdd17e9475621624baab4b50d9c60f286920b6923d",
+      "version": 31,
+      "fingerprint": "54126ed4934ca154c41025bbc9d7d1acd7bb3ef52e2714e38a565387c7e5a0ae",
       "supportedFrom": 17,
-      "minReaderVersion": 28
+      "minReaderVersion": 31
     },
     "document.canvas": {
       "version": 1,
@@ -156,10 +156,10 @@
       "minReaderVersion": 1
     },
     "document.screen_recording": {
-      "version": 33,
-      "fingerprint": "efab1c2c8f988ec7c0a1c99e36698e43a11ff288d5fc3cc7289edfb68b15738d",
+      "version": 34,
+      "fingerprint": "386ee236dbe851177692a3f1d53268dac5f03cac9694ef422c2a7ec0abd96663",
       "supportedFrom": 19,
-      "minReaderVersion": 31
+      "minReaderVersion": 34
     },
     "project": {
       "version": 2,
@@ -288,10 +288,10 @@
       "minReaderVersion": 2
     },
     "subtitle-manifest": {
-      "version": 19,
-      "fingerprint": "10bea9818db50be2eec869ba1bf9d9fceb5a4f3b78b378ef17f016ca5af144b2",
+      "version": 20,
+      "fingerprint": "d04cb339bc86a2ddbe4c55069ca44854bfa437fa736997f15100ac089c615e48",
       "supportedFrom": 11,
-      "minReaderVersion": 19
+      "minReaderVersion": 20
     },
     "setting-records": {
       "version": 21,

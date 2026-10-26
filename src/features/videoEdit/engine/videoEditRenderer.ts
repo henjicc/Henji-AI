@@ -15,7 +15,7 @@ import { createLogger } from '@/core/logging'
 import { videoEditShaderGraphWarmSpecs } from '@/core/videoEdit/shaderGraph/effects'
 import { isShaderGraphTransition, shaderGraphTransitionSpec } from '@/core/videoEdit/shaderGraph/transitions'
 import type { VideoEditEffect } from '@/core/videoEdit/compositing'
-import { videoEditMotionBlurSamples, type VideoEditMotionSampledClip } from '@/core/videoEdit/motionBlur'
+import { VIDEO_EDIT_MOTION_BLUR_MAX_SAMPLES, VIDEO_EDIT_MOTION_BLUR_PLAYBACK_SAMPLES, videoEditMotionBlurSamples, videoEditMotionBounds, type VideoEditMotionSampledClip } from '@/core/videoEdit/motionBlur'
 import { evaluateVideoEditClip, evaluateVideoEditBuiltinParameters, videoEditClipValue } from '@/core/videoEdit/keyframes'
 import { videoEditClipMedia, videoEditNestedComposition, videoEditDuration, activeVideoEditClips, audibleVideoEditClips, clipSourceSeconds, videoEditVisibleTracks, type VideoEditClip, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
 import { videoEditNestedFrame, videoEditNestedPictureFrame, videoEditNestedPictureKey } from '@/core/videoEdit/nestedSequences'
@@ -848,9 +848,10 @@ export class VideoEditRenderer {
     // 运动模糊（序列开关）：有变换动画的画面片段带上快门内的取样变换，合成器平均后叠到画面上（预览与导出同一份）。
     if (document.motionBlur) for (const [index, clip] of active.entries()) {
       const source = candidates.get(clip.id)
-      if (!source || clip.kind === 'adjustment' || videoEditClipTrackingQuad(clip)) continue
-      const motionSamples = videoEditMotionBlurSamples(document, source, clip, frame)
-      if (motionSamples) active[index] = { ...clip, motionSamples } as VideoEditMotionSampledClip
+      if (!source || source.motionBlur === false || clip.kind === 'adjustment' || videoEditClipTrackingQuad(clip)) continue
+      // 播放预览时取样减半；停下来看与导出用满
+      const motionSamples = videoEditMotionBlurSamples(document, source, clip, frame, sequential && quality !== 'final' ? VIDEO_EDIT_MOTION_BLUR_PLAYBACK_SAMPLES : VIDEO_EDIT_MOTION_BLUR_MAX_SAMPLES)
+      if (motionSamples) active[index] = { ...clip, motionSamples, motionBounds: videoEditMotionBounds(document, source, motionSamples) } as VideoEditMotionSampledClip
     }
     const byId = new Map(active.map(clip => [clip.id, clip]))
     const transitions = rawTransitions.map(window => ({ ...window, left: byId.get(window.left.id)!, right: byId.get(window.right.id)! }))

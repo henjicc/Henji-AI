@@ -1,12 +1,16 @@
 import { henjiExtension, henjiLegacyExtensions } from '../../fileExtensions'
 import type { DocumentKindDescriptor } from './registry'
 import { migrateEmbeddedVideoEditStyles } from '../../videoEdit/styles/legacyStyles'
+import { migrateEmbeddedVideoEditMotionBlurMaster } from '../../videoEdit/motionBlurMigration'
 import { createRecordingDocument, recordingDocumentSchema, type RecordingDocument } from '../../screenRecording/document'
 
 export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocument> = {
-  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 33, minReaderVersion: 31,
+  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 34, minReaderVersion: 34,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 嵌入剪辑快照的序列运动模糊改为总开关（同时管代码图层），片段新增 motionBlur:false；按剪辑内容 30 → 31 的同一规则迁移，
+    // 旧程序会把关掉的总开关当成代码图层照常模糊，最低可读版本同步提高到 34。
+    33: content => migrateEmbeddedVideoEditMotionBlurMaster(content),
     // 嵌入剪辑快照的字幕新增可选 linkedCaptionId、素材新增可选 linkedTimeline（音频编辑动态链接）；旧程序忽略也不会误解其余内容，最低可读版本不变。
     // 嵌入剪辑快照的风格副本样片画布放宽到 3840×2160、60 帧；旧内容原样有效，最低可读版本不变。
     32: content => content,

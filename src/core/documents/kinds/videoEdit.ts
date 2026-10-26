@@ -6,6 +6,7 @@ import type { DocumentKindDescriptor } from './registry'
 import { videoEditInPlaceRecordsSchema } from '../../videoEdit/inPlacePersistence'
 import { colorLutAssetSchema } from '../../videoEdit/colorLutAsset'
 import { migrateVideoEditStyles } from '../../videoEdit/styles/legacyStyles'
+import { migrateVideoEditMotionBlurMaster } from '../../videoEdit/motionBlurMigration'
 import { videoEditDocumentSchema } from '../../videoEdit/document'
 import { creativeIntentsSchema } from '../../creativeIntent/persistence'
 import { VIDEO_EDIT_CONTENT_VERSION } from '../../persistence/schemaVersions'
@@ -124,7 +125,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   // 26：片段新增非等比缩放 scaleAspect，旧程序忽略它会按等比渲染与导出（画面变形不同），提高到 26。
   // 27：序列新增运动模糊与帧混合开关，旧程序忽略它们会渲染出不同的画面，提高到 27。
   // 28：音轨混音（轨道音量、声像、轨道效果）、主轨与片段基本声音，旧程序忽略它们会混出不同的声音，提高到 28。
-  minReaderVersion: 28,
+  // 31：序列 motionBlur 改为总开关（同时管代码图层的位姿模糊），片段新增 motionBlur:false；旧程序会把关掉的总开关当成代码图层照常模糊，提高到 31。
+  minReaderVersion: 31,
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
@@ -155,6 +157,9 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
     28: content => content,
     // 29 → 30：工程风格副本的样片画布放宽到 3840×2160、60 帧；旧内容原样有效，旧程序只在副本确实超出旧上限时拒绝打开。
     29: content => content,
+    // 30 → 31：序列运动模糊改为总开关。此前关着的序列里代码图层照常模糊、片段变换不模糊：
+    // 改为打开总开关，并给有变换动画的片段写 motionBlur:false，画面与旧版一致。
+    30: content => migrateVideoEditMotionBlurMaster(content),
   },
   dependencyContent: ({ exportHistory: _exportHistory, ...dependencies }) => dependencies,
   createEmptyContent: createEmptyVideoEditContent,

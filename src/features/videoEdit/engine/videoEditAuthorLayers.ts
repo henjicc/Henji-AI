@@ -26,11 +26,13 @@ export function authorPoseMatrix(pose: AuthorPose): CodeMatrix {
   return [c * sx, s * sx, -s * sy, c * sy, pose.x ?? 0, pose.y ?? 0]
 }
 
-export function authorLayerSamples(layer: AuthorLayer, effect: AuthorModule, info: AuthorFrameInfo, bounds: { x: number; y: number; width: number; height: number }, override?: AuthorElementOverride): CodeMotionSample[] {
+/** `enabled`：序列的运动模糊总开关；关掉时带位姿的图层只取当前时刻一个姿态。 */
+export function authorLayerSamples(layer: AuthorLayer, effect: AuthorModule, info: AuthorFrameInfo, bounds: { x: number; y: number; width: number; height: number }, override?: AuthorElementOverride, enabled = true): CodeMotionSample[] {
   const shutter = effect.motionBlur?.shutter ?? 180, phase = effect.motionBlur?.phase ?? -shutter / 2
-  const max = effect.motionBlur?.maxSamples ?? 64
+  // 每次取样沿运动方向拉长到相邻样本间距（见 videoEditAuthorGpu），约每 4 像素一个样本、默认最多 16 个就平滑
+  const max = effect.motionBlur?.maxSamples ?? 16
   if (!Number.isFinite(shutter) || shutter < 0 || !Number.isFinite(phase) || !Number.isInteger(max) || max < 1 || max > 64) throw new Error('运动模糊需要非负有限快门和 1–64 个样本。')
-  const moving = !!layer.pose && layer.motionBlur !== false && shutter > 0
+  const moving = enabled && !!layer.pose && layer.motionBlur !== false && shutter > 0
   const offset = (i: number, count: number): number => moving ? (phase + (i + .5) / count * shutter) / 360 : 0
   const poseAt = (delta: number): { matrix: CodeMatrix; opacity: number } | null => {
     const pose = layer.pose ? layer.pose(info.time + delta * info.frameDuration) : {}
@@ -55,7 +57,7 @@ export function authorLayerSamples(layer: AuthorLayer, effect: AuthorModule, inf
     longest = Math.max(longest, length)
   }
   const visibility = probes.some(Boolean) && probes.some(p => !p) ? 4 : 1
-  const count = moving ? Math.max(visibility, Math.min(max, Math.ceil(longest))) : 1
+  const count = moving ? Math.max(visibility, Math.min(max, Math.ceil(longest / 4))) : 1
   return Array.from({ length: count }, (_, i) => {
     const delta = offset(i, count)
     return { offset: { numerator: delta, denominator: 1 }, pose: poseAt(delta), weight: 1 / count }

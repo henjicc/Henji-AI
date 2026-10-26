@@ -77,6 +77,8 @@ schemas['video_edit.clip'].multicamCameraId = z.string().max(100)
 schemas['video_edit.sequence'].styleId = z.string().max(64)
 schemas['video_edit.sequence'].captionTrackEnabled = videoEditSequenceSchema.shape.captionTrackEnabled.unwrap()
 schemas['video_edit.sequence'].motionBlur = videoEditSequenceSchema.shape.motionBlur.unwrap()
+// 片段只存“关掉”：true 表示跟随序列总开关（存储时省略），false 只关这个片段
+schemas['video_edit.clip'].motionBlur = z.boolean()
 schemas['video_edit.sequence'].frameBlend = videoEditSequenceSchema.shape.frameBlend.unwrap()
 schemas['video_edit.sequence'].captionTrackLocked = videoEditSequenceSchema.shape.captionTrackLocked.unwrap()
 schemas['video_edit.sequence'].multicam = videoEditSequenceSchema.shape.multicam.unwrap().nullable()
@@ -302,6 +304,8 @@ labels.remix = '音频重构'
 labels.musicStructure = '音乐结构'
 descriptions['video_edit.clip.frame_hold'] = '是否为帧定格；定格引用源入点处的同一帧，可调整持续时间、修剪和移动。用 add_video_edit_frame_hold 在播放头切出定格，整个操作可撤销。'
 Object.assign(labels, { contentAnchor: '关联内容' })
+descriptions['video_edit.sequence.motion_blur'] = '整条序列的运动模糊总开关（新建序列默认开）：开着时有位置、缩放、旋转、锚点动画的片段，以及代码素材里声明了 motionBlur 的会动图层沿运动方向模糊；关掉则全部不模糊。单个片段用 video_edit.clip.motion_blur 关掉。'
+descriptions['video_edit.clip.motion_blur'] = '这个片段自身动画（位置、缩放、旋转、锚点关键帧）的运动模糊：true 跟随序列总开关（默认），false 只关掉这个片段。序列总开关 video_edit.sequence.motion_blur 关掉时一律不模糊。代码素材里单个图层的模糊在源码图层的 motionBlur 里控制。界面不提供这一项，由助手按画面需要调整。'
 descriptions['video_edit.source.item_id'] = '源监视器打开的素材项，空字符串为关闭。视频、图片、音频按原文件播放；代码画面、图形、文字没有源文件，按只放这一项的临时序列预览（画幅与帧率跟当前序列，时长为放进时间线时的默认时长，没有声音，不设入出点）。打开不改作品，也不往时间线里放东西。'
 Object.assign(labels, { contentQueries: '素材内容查询进度' })
 schemas['video_edit.item'].contentQueries = z.array(mediaContentQueryProgressSchema).max(8)

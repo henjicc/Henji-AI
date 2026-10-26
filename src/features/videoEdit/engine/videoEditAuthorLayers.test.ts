@@ -22,10 +22,16 @@ describe('direct author layer GPU bridge', () => {
   })
   it('matches the reference 16 midpoint probes and shutter samples', () => {
     const samples = authorLayerSamples(layer, effect, info, bounds)
-    expect(samples).toHaveLength(8) // 1000 px/s * 1/120 s * 15/16, rounded up.
-    expect(samples[0].pose!.matrix[4]).toBeCloseTo(1096.3541666667)
-    expect(samples.at(-1)!.pose!.matrix[4]).toBeCloseTo(1103.6458333333)
+    // 1000 px/s * 1/120 s * 15/16 ≈ 7.3 px；每次取样沿运动方向拉长到间距，约每 4 像素一个样本
+    expect(samples).toHaveLength(2)
+    expect(samples[0].pose!.matrix[4]).toBeCloseTo(1097.9166666667)
+    expect(samples.at(-1)!.pose!.matrix[4]).toBeCloseTo(1102.0833333333)
     expect(samples.reduce((sum, sample) => sum + sample.weight, 0)).toBeCloseTo(1)
+  })
+  it('序列运动模糊总开关关掉时，带位姿的图层只取当前时刻一个姿态', () => {
+    const samples = authorLayerSamples(layer, effect, info, bounds, undefined, false)
+    expect(samples).toHaveLength(1)
+    expect(samples[0].pose!.matrix[4]).toBeCloseTo(1100)
   })
   it.each([{ motionBlur: { shutter: 0 } }, { motionBlur: { shutter: 180 } }])('honors the layer switch with %j', settings => {
     const samples = authorLayerSamples({ ...layer, motionBlur: false }, { ...effect, ...settings }, info, bounds)

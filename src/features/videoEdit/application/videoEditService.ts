@@ -452,9 +452,9 @@ export function duplicateVideoEditSequence(projectId: string, sequenceId: string
 export function deleteVideoEditSequence(projectId: string, sequenceId: string): void {
   editVideoProject(projectId, document => { const sequence = document.sequences.find(sequence => sequence.id === sequenceId); if (!sequence) throw new Error('目标序列不存在。'); if (sequence.clips.length || sequence.annotations.length || sequence.markers?.length || sequence.captions?.length || sequence.transitions?.length) throw new Error('请先移除序列内的片段和标注，再移除序列。'); return { ...document, sequences: document.sequences.filter(sequence => sequence.id !== sequenceId) } })
 }
-export function updateVideoEditSequenceSettings(projectId: string, sequenceId: string, settings: Parameters<typeof changeVideoEditSequenceSettings>[1] & { name?: string; binId?: string | null }): void {
-  const { name, binId, ...timing } = settings
-  editVideoSequence(projectId, sequenceId, sequence => ({ ...changeVideoEditSequenceSettings(sequence, timing), ...(name !== undefined ? { name } : {}), ...(binId !== undefined ? { binId: binId || undefined } : {}) }))
+export function updateVideoEditSequenceSettings(projectId: string, sequenceId: string, settings: Parameters<typeof changeVideoEditSequenceSettings>[1] & { name?: string; binId?: string | null; motionBlur?: boolean }): void {
+  const { name, binId, motionBlur, ...timing } = settings
+  editVideoSequence(projectId, sequenceId, sequence => ({ ...changeVideoEditSequenceSettings(sequence, timing), ...(name !== undefined ? { name } : {}), ...(motionBlur !== undefined ? { motionBlur } : {}), ...(binId !== undefined ? { binId: binId || undefined } : {}) }))
 }
 export function editVideoProject(id: string, update: (document: VideoEditDocument) => VideoEditDocument, preserveProgramAnchors: readonly string[] = []): VideoEditDocument {
   assertApplicationWritesAllowed()

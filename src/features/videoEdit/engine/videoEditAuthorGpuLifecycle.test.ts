@@ -72,7 +72,7 @@ it('参数与时间变化复用目标，完整参数、素材和覆盖直接传�
     const nextInfo = { ...info, time: 2 }
     const second = await runtime.authorGenerator('frame', 'clip', program, size, { title: 'B' }, assets, nextInfo, overrides)
     expect(second).toBe(first)
-    expect(author.render).toHaveBeenLastCalledWith(first.texture, 16, 16, { title: 'B' }, assets, nextInfo, overrides)
+    expect(author.render).toHaveBeenLastCalledWith(first.texture, 16, 16, { title: 'B' }, assets, nextInfo, overrides, undefined, true)
     expect(runtime.diagnostics()).toMatchObject({ surfaces: 1, textureAllocations: 1, generatorFrames: 2 })
   } finally { await runtime.dispose() }
   expect(runtime.diagnostics()).toMatchObject({ surfaces: 0, residentBytes: 0 })

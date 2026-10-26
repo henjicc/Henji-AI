@@ -57,7 +57,7 @@
 
 ## 拖影与核对
 
-一帧位移超过约 20px（1080p）时检查是否过于生硬。作者接口没有运动模糊开关、快门角度或自动跨帧积累：图形 blur 只是空间柔化。沿运动方向的拖影优先用内置 effect:directional_blur（direction 为度，length 0–100，30 约为画高 3%）；用 video_edit.effect.frame_curves 在快段增强、落地归零，参数键不等于像素。
+一帧位移超过约 20px（1080p）时检查是否过于生硬。序列运动模糊总开关打开时，带 pose 的图层自动按快门曝光；在 draw 里按 time 改坐标的元素拿不到运动模糊，pose 的 blur 也只是空间柔化。要更夸张的风格化拖影再用内置 effect:directional_blur（direction 为度，length 0–100，30 约为画高 3%）；用 video_edit.effect.frame_curves 在快段增强、落地归零，参数键不等于像素。
 
 运动元素写成带 pose 的图层即获得快门曝光（模块 `motionBlur` 设快门与采样上限）；需要沿方向的局部拖影可在代码滤镜里沿方向多点采样，或用内置方向模糊。增加采样／绘制成本，静字不必糊，先试一帧。没有合适方案就缩短快段或改清晰切换。
 

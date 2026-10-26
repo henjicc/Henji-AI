@@ -77,6 +77,8 @@ clip.id = 'golden-clip'
 clip.snapToBeat = true
 // 26：非等比缩放（解开缩放链条，垂直比水平多 20%）。
 clip.scaleAspect = 1.2
+// 31：序列运动模糊改为总开关，片段可单独关掉自身变换动画的模糊。
+clip.motionBlur = false
 clip.curves = { opacity: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 20, value: 1, interpolation: 'ease' }] }
 clip.effects = [{ id: 'golden-grade', name: '全能调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params: { exposure: 0.25, temperature_kelvin: 5600, tint: 4, tone_lights: 12, mixer_orange_saturation: -10, wheel_mode: 'primary', global_hue: 200, global_strength: 6 }, curves: { temperature_kelvin: [{ time: 0, value: 5600, interpolation: 'linear' }, { time: 30, value: 6200, interpolation: 'linear' }] } } }, { id: 'golden-blur', name: '高斯模糊', enabled: true, amount: 0.5, builtin: { id: 'gaussian_blur', params: { sigma_fraction_height: 0.003, axis: 'both', edge_mode: 'clamp' } } }]
 sequence.clips.push(clip)

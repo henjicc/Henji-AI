@@ -75,7 +75,7 @@ it('t102 静态声明读取音频元数据仍随来源更新，视频参数按�
     const next = { ...document, clips: document.clips.map(clip => ({ ...clip, code: { ...clip.code!, parameters: { picture: { kind: 'video' as const, mediaId: 'video' } } } })) }
     boundary.sources.updateParameters(next)
     await boundary.sources.prepare(next, next.clips, 15, () => true, imageInputs('code-input:["clip","picture"]'), options)
-    expect(boundary.generator).toHaveBeenLastCalledWith(expect.any(String), 'clip', expect.anything(), expect.objectContaining({ audio, audioTime: .5 }), expect.objectContaining({ picture: { kind: 'image', mediaId: 'code-input:["clip","picture"]' } }), expect.any(Object), expect.objectContaining({ audio, audioTime: .5 }), undefined)
+    expect(boundary.generator).toHaveBeenLastCalledWith(expect.any(String), 'clip', expect.anything(), expect.objectContaining({ audio, audioTime: .5 }), expect.objectContaining({ picture: { kind: 'image', mediaId: 'code-input:["clip","picture"]' } }), expect.any(Object), expect.objectContaining({ audio, audioTime: .5 }), undefined, true)
   } finally { await boundary.sources.dispose() }
 })
 

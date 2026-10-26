@@ -310,7 +310,7 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
     case 'reverse_match_frame': reverseMatchVideoEditFrame(projectId); return
     case 'toggle_snapping': setVideoEditTimelineView(projectId, { snapping: !owner!.snapping }); return
     case 'toggle_linked_selection': setVideoEditTimelineView(projectId, { linkedSelection: owner!.linkedSelection === false }); return
-    case 'toggle_motion_blur': editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, motionBlur: sequence.motionBlur ? undefined : true })); return
+    case 'toggle_motion_blur': editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, motionBlur: !sequence.motionBlur })); return
     case 'toggle_frame_blend': editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, frameBlend: sequence.frameBlend ? undefined : true })); return
     // 面板组最大化属于布局，由剪辑页拿着停靠区执行；素材视图属于素材面板。命令层无事可做。
     case 'project_list_view': case 'project_icon_view': case 'project_toggle_view': return

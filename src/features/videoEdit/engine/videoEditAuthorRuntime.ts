@@ -66,12 +66,13 @@ export class VideoEditAuthorRuntime {
   }
   private renders: Promise<unknown> = Promise.resolve()
   /** One frame at a time per instance: a warm-up ahead of the playhead and a visible frame never share surfaces. */
-  render(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs): Promise<void> {
-    const result = this.renders.then(() => this.renderFrame(target, width, height, params, assets, info, overrides, inputs))
+  /** `motionBlur`：序列的运动模糊总开关，管带位姿图层的快门取样。 */
+  render(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs, motionBlur = true): Promise<void> {
+    const result = this.renders.then(() => this.renderFrame(target, width, height, params, assets, info, overrides, inputs, motionBlur))
     this.renders = result.catch(() => undefined)
     return result
   }
-  private async renderFrame(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs): Promise<void> {
+  private async renderFrame(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs, motionBlur = true): Promise<void> {
     if (this.closed) throw new Error('代码效果会话已关闭。')
     const frameImages: ImageBitmap[] = []
     try {
@@ -85,9 +86,9 @@ export class VideoEditAuthorRuntime {
           this.textures.add(texture); this.nativeOverrideTarget = { texture, width, height }
         }
         const picture = this.nativeOverrideTarget.texture
-        await this.renderFrame(picture, width, height, params, assets, info, undefined, inputs)
+        await this.renderFrame(picture, width, height, params, assets, info, undefined, inputs, motionBlur)
         await this.layers.begin(target)
-        const samples = authorLayerSamples(whole, this.effect, info, { x: 0, y: 0, width, height }, overrides[AUTHOR_WHOLE_EFFECT_ID])
+        const samples = authorLayerSamples(whole, this.effect, info, { x: 0, y: 0, width, height }, overrides[AUTHOR_WHOLE_EFFECT_ID], motionBlur)
         this.layers.draw(target, width, height, { texture: picture, x: 0, y: 0, width, height }, samples)
         this.layers.finish()
         this.lastFrame = { layers: [whole], width, height, time: info.time, parameters: params, overrides }
@@ -227,7 +228,7 @@ export class VideoEditAuthorRuntime {
           const [x, y, right, bottom] = layer.bounds ?? [0, 0, width, height]
           if (![x, y, right, bottom].every(Number.isFinite) || right <= x || bottom <= y) throw new Error('图层范围无效。')
           const bounds = { x, y, width: right - x, height: bottom - y }
-          const samples = authorLayerSamples(layer, this.effect, info, bounds, override)
+          const samples = authorLayerSamples(layer, this.effect, info, bounds, override, motionBlur)
           if (!samples.some(sample => sample.pose)) continue
           const center = layer.pose?.(info.time) ?? samples.map(sample => layer.pose?.(info.time + sample.offset.numerator * info.frameDuration)).find(Boolean)
           const need = Math.max(1, ...samples.flatMap(sample => sample.pose ? [Math.hypot(sample.pose.matrix[0], sample.pose.matrix[1]), Math.hypot(sample.pose.matrix[2], sample.pose.matrix[3])] : []))

@@ -23,7 +23,25 @@ struct P { extent:vec4f, options:vec4f }
  }
  return sum/total;
 }`
-const motion = CODE_MOTION_WGSL.replace('textureSampleLevel(image,sampler0,uv,0.0)', 'textureSampleGrad(image,sampler0,uv,vec2f(pose.row0.x,pose.row1.x)/p.source.zw,vec2f(pose.row0.y,pose.row1.y)/p.source.zw)')
+/**
+ * 运动曝光的每次取样沿运动方向拉长到相邻样本的间距（各向异性过滤），样本之间不留缝：
+ * 约每 4 像素一个样本就够平滑，不必每像素一个。没在动或位移小于一个像素时照常按缩放取样。
+ */
+const motionSample = `
+fn localAt(pose:Pose,q:vec2f)->vec2f { return vec2f(dot(pose.row0.xyz,vec3f(q,1)),dot(pose.row1.xyz,vec3f(q,1))); }
+fn motionSample(i:u32,q:vec2f,uv:vec2f,pose:Pose)->vec4f {
+ let n=u32(p.info.x);
+ let gx=vec2f(pose.row0.x,pose.row1.x)/p.source.zw; let gy=vec2f(pose.row0.y,pose.row1.y)/p.source.zw;
+ let b=max(i,1u)-1u; let a=min(i+1u,n-1u);
+ if(a<=b || p.poses[b].row0.w<=0.0 || p.poses[a].row0.w<=0.0) { return textureSampleGrad(image,sampler0,uv,gx,gy); }
+ let step=(localAt(p.poses[a],q)-localAt(p.poses[b],q))/(p.source.zw*f32(a-b));
+ let s=length(step);
+ if(s<=max(length(gx),length(gy))) { return textureSampleGrad(image,sampler0,uv,gx,gy); }
+ let along=step/s;
+ let side=select(gy,gx,abs(dot(normalize(gx),along))<abs(dot(normalize(gy),along)));
+ return textureSampleGrad(image,sampler0,uv,step,side);
+}`
+const motion = CODE_MOTION_WGSL.replace('textureSampleLevel(image,sampler0,uv,0.0)', 'motionSample(i,q,uv,pose)') + motionSample
 const view = (texture: GpuTexture, level?: number): unknown => level === undefined ? texture.createView() : (texture as GpuTexture & { createView(descriptor: unknown): unknown }).createView({ baseMipLevel: level, mipLevelCount: 1 })
 
 /** GPU passes ported from Frameflow, sharing the compositor device and exposure shader. */
@@ -35,7 +53,8 @@ export class VideoEditAuthorGpu {
   private encoder?: ReturnType<GpuDevice['createCommandEncoder']>
   private readonly ready: Promise<void>
   constructor(private readonly device: GpuDevice) {
-    this.sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear' })
+    // 各向异性过滤：运动曝光沿运动方向拉长取样时用（显式指定层级的取样不受影响）
+    this.sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear', maxAnisotropy: 16 })
     this.ready = this.prepare()
   }
   private async prepare(): Promise<void> {

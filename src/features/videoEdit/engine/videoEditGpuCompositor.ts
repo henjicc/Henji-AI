@@ -595,9 +595,22 @@ export class VideoEditGpuCompositor {
         const bind = (pipeline: GpuRenderPipeline, buffer: GpuBuffer) => device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer } }, ...(cachedVideo && picture.chroma ? [{ binding: 3, resource: picture.chroma.createView() }] : [])] })
         const samples = !h ? (clip as VideoEditMotionSampledClip).motionSamples : undefined
         if (samples?.length && motion) {
-          // 运动模糊：快门内各次取样按 1/N 不透明度相加到离屏累积图（预乘），再把累积图整幅叠到画面上；等于这些姿态的平均。
+          // 运动模糊：快门内各次取样按 1/N 不透明度相加到离屏累积图（预乘），再把累积图叠到画面上；等于这些姿态的平均。
+          // 累积与叠回都只在这一层扫过的范围里做，小画面、局部运动不必动整幅画面。
+          const bounds = (clip as VideoEditMotionSampledClip).motionBounds ?? [0, 0, 1, 1]
+          // 范围是画面比例坐标：累积图按序列尺寸、叠回按实际输出尺寸各自换算，都夹在目标之内
+          const rect = (width: number, height: number): [number, number, number, number] => {
+            const x = Math.max(0, Math.floor(bounds[0] * width)), y = Math.max(0, Math.floor(bounds[1] * height))
+            return [x, y, Math.min(width, Math.ceil(bounds[2] * width)) - x, Math.min(height, Math.ceil(bounds[3] * height)) - y]
+          }
+          const mainSize = main as { width?: number; height?: number }
+          const outputWidth = mainSize.width ?? document.width, outputHeight = mainSize.height ?? document.height
+          const [sx, sy, sw, sh] = rect(document.width, document.height), [ox, oy, ow, oh] = rect(outputWidth, outputHeight)
+          if (sw <= 0 || sh <= 0 || ow <= 0 || oh <= 0) return
+          type Scissored = { setScissorRect(x: number, y: number, width: number, height: number): void }
           pass.end()
           const accumulate = encoder.beginRenderPass({ colorAttachments: [{ view: motion.target.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: 'clear', storeOp: 'store' }] })
+          ;(accumulate as typeof accumulate & Scissored).setScissorRect(sx, sy, sw, sh)
           const additive = choose(motion.additive)
           samples.forEach((sample, sampleIndex) => {
             const buffer = uniformFor(`${clip.id}:motion:${sampleIndex}`)
@@ -606,12 +619,14 @@ export class VideoEditGpuCompositor {
           })
           accumulate.end()
           pass = encoder.beginRenderPass({ colorAttachments: [{ view: main.createView(), loadOp: 'load', storeOp: 'store' }] })
+          ;(pass as typeof pass & Scissored).setScissorRect(ox, oy, ow, oh)
           const over = pipelines?.codeImage ?? this.codeImage
           const buffer = uniformFor(`${clip.id}:motion:result`)
           device.queue.writeBuffer(buffer, 0, new Float32Array([1, 1, 1, 0, 0, 0, 1, 0, document.height / document.width, document.width / document.height, 0, 0, ...new Array<number>(12).fill(0)]))
           pass.setPipeline(over)
           pass.setBindGroup(0, device.createBindGroup({ layout: over.getBindGroupLayout(0), entries: [{ binding: 0, resource: motion.target.createView() }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer } }] }))
           pass.draw(6)
+          ;(pass as typeof pass & Scissored).setScissorRect(0, 0, outputWidth, outputHeight)
           return
         }
         device.queue.writeBuffer(uniform, 0, uniformData({ fit, aspect, rotation, center, layerWidth: width, layerHeight: height }, clip.opacity))
