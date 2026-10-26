@@ -85,8 +85,12 @@ export class AudioEditSpliceRenderer {
     const count = Math.max(0, localEnd - localStart)
     const output = span.muted ? new Float32Array(count * channels) : (await this.reader.read(span.sourceStartFrame + localStart, count)).slice()
     const spanLength = length(span)
+    // 淡化最长不超过安静拼接点的一侧长度：这一段碰不到片段首尾的这么多帧，就不用等那个拼接点的判断。
+    // 从片段中间开始试听（剪切后马上播放）时第一段不再先去读远处拼接点两侧的声音；结尾的判断在后台提前做好，播到那里时已经就绪。
+    const reach = Math.max(Math.round(this.source.sampleRate * AUDIO_EDIT_SPLICE_QUIET_HALF_SECONDS), Math.round(this.source.sampleRate * AUDIO_EDIT_SPLICE_SPEECH_HALF_SECONDS))
     // 结尾：与下一个片段的拼接
-    if (index + 1 < this.spans.length) {
+    if (index + 1 < this.spans.length && localEnd <= spanLength - reach) void this.plan(index).catch(() => undefined)
+    else if (index + 1 < this.spans.length) {
       const plan = await this.plan(index)
       const from = Math.max(localStart, spanLength - plan.halfFrames)
       if (plan.kind !== 'none' && from < localEnd) {
@@ -103,7 +107,7 @@ export class AudioEditSpliceRenderer {
       }
     }
     // 开头：与上一个片段的拼接
-    if (index > 0) {
+    if (index > 0 && localStart < reach) {
       const plan = await this.plan(index - 1)
       const to = Math.min(localEnd, plan.halfFrames)
       if (plan.kind !== 'none' && localStart < to) {

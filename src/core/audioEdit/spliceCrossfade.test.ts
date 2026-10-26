@@ -88,6 +88,31 @@ describe('剪切点交叉淡化', () => {
     expect(await rendererOf(source, 1, spansOf([0, 10000, true], [10000, 20000, true])).plan(0)).toEqual({ kind: 'none', halfFrames: 0 })
   })
 
+  it('从片段中间开始读：不等远处拼接点两侧的声音，结尾的判断在后台提前开始', async () => {
+    const source = sine(RATE * 2, 0.5)
+    const spans = spansOf([0, 12000], [30000, 60000], [70000, 90000])
+    const reads: number[] = []
+    let releaseFar!: () => void
+    const far = new Promise<void>(resolve => { releaseFar = resolve })
+    const renderer = new AudioEditSpliceRenderer(spans, { sampleRate: RATE, channels: 1, durationFrames: source.length }, {
+      async read(start, count) {
+        reads.push(start)
+        // 远处两个拼接点（12000/30000、60000/70000）附近的声音迟迟读不回来
+        if (Math.abs(start - 12000) < 2000 || Math.abs(start - 30000) < 2000 || Math.abs(start - 60000) < 2000 || Math.abs(start - 70000) < 2000) await far
+        return source.slice(Math.max(0, start), start + count)
+      },
+    })
+    const middle = await renderer.render(1, 10000, 11000)
+    expect(middle).toEqual(source.slice(40000, 41000))
+    // 结尾拼接点的判断已在后台发起，开头拼接点不在这一段的范围里，不读
+    expect(reads.some(start => Math.abs(start - 60000) < 2000)).toBe(true)
+    expect(reads.some(start => Math.abs(start - 12000) < 2000)).toBe(false)
+    releaseFar()
+    const whole = await renderAll(rendererOf(source, 1, spans), spans, 1)
+    const tail = await renderer.render(1, 29000, 30000)
+    expect(tail).toEqual(whole.slice(12000 + 29000, 12000 + 30000))
+  })
+
   it('短片段与文件边界：淡化不超过片段一半，也不借文件以外的声音', async () => {
     const source = sine(RATE, 0.5)
     const spans = spansOf([100, 104], [30000, 30003], [47990, 48000])

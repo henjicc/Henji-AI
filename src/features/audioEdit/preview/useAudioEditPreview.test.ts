@@ -6,10 +6,10 @@ import { useAudioEditPreview } from './useAudioEditPreview'
 import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
 import { audioEditScrub } from './audioEditScrub'
 
-const { prepare } = vi.hoisted(() => ({ prepare: vi.fn() }))
+const { prepare, flushProject } = vi.hoisted(() => ({ prepare: vi.fn(), flushProject: vi.fn(async () => undefined) }))
 vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ audioEdit: { preparePreviewChunk: prepare } }) }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ error: vi.fn(), debug: vi.fn() }) }))
-vi.mock('../application/audioEditProjectInstances', () => ({ flushAudioEditProject: vi.fn(async () => undefined) }))
+vi.mock('../application/audioEditProjectInstances', () => ({ flushAudioEditProject: flushProject }))
 let node: FakeNode
 function captureNode(value: FakeNode) { node = value }
 class FakeContext {
@@ -45,6 +45,7 @@ beforeEach(() => {
   vi.stubGlobal('AudioContext', FakeContext)
   vi.stubGlobal('AudioWorkletNode', FakeNode)
   prepare.mockReset().mockImplementation(async (request) => chunk(request))
+  flushProject.mockClear()
   useAudioEditPlaybackStore.setState({ ready: false, preparing: false, playing: false, mode: 'edited', sourceFrame: 0, outputFrame: 0, activeBlockId: null, error: null })
 })
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
@@ -131,6 +132,29 @@ it('keeps audio on save-only revisions and jumps to the next retained range afte
   await waitFor(() => expect(useAudioEditPlaybackStore.getState().sourceFrame).toBe(96000))
   act(() => hook.result.current.seekSourceFrame(24000))
   expect(useAudioEditPlaybackStore.getState().sourceFrame).toBe(96000)
+  hook.unmount()
+})
+
+it.each([
+  ['删除', { id: 'cut', reason: 'manual', enabled: true, mode: 'delete', startFrame: 60000, endFrame: 90000 }],
+  ['静音', { id: 'cut', reason: 'manual', enabled: true, mode: 'mute', startFrame: 60000, endFrame: 90000 }],
+] as const)('%s只改拼接表：沿用已读出的声音从当前位置重来，不再重新要声音、也不再先保存', async (_label, cut) => {
+  const fixture = { ...project(), gainRegions: [{ id: 'gain', startFrame: 0, endFrame: 48000, gainDb: -6, fadeInFrames: 0, fadeOutFrames: 0, enabled: true }] }
+  const hook = renderHook(({ value }) => useAudioEditPreview(value), { initialProps: { value: fixture } })
+  await waitFor(() => expect(useAudioEditPlaybackStore.getState().preparing).toBe(false))
+  const requested = prepare.mock.calls.length
+  expect(requested).toBeGreaterThan(0)
+  expect(flushProject).toHaveBeenCalledTimes(1)
+  const before = generation()
+  hook.rerender({ value: { ...fixture, cuts: [cut] } })
+  await waitFor(() => expect(generation()).toBeGreaterThan(before))
+  await waitFor(() => expect(useAudioEditPlaybackStore.getState().preparing).toBe(false))
+  // 新拼接表从当前位置重新排队，排进来的就是剪后的声音
+  expect(node.port.postMessage.mock.calls.some(([message]) => message.type === 'chunk' && message.generation === generation())).toBe(true)
+  // 剪掉一段后缓冲往后多排了一点，可能要新的一秒；但已经读出的每一秒都不再要第二遍
+  const fetched = new Set(prepare.mock.calls.slice(0, requested).map(([request]) => request.sourceStartFrame))
+  expect(prepare.mock.calls.slice(requested).filter(([request]) => fetched.has(request.sourceStartFrame))).toEqual([])
+  expect(flushProject).toHaveBeenCalledTimes(1)
   hook.unmount()
 })
 
