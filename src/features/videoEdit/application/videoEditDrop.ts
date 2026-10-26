@@ -20,8 +20,35 @@ import { ensureVideoEditSequenceItem } from '@/core/videoEdit/nestedSequences'
 import { assertVideoEditSequenceGraph } from '@/core/videoEdit/sequenceGraph'
 import { applyVideoEditTemplate, VIDEO_EDIT_TEMPLATE_DRAG_MIME, videoEditTemplateDragSchema } from './videoEditTemplates'
 import { withDefaultVideoEditStyle } from './videoEditStyles'
+import { matchHenjiExtension } from '@/core/fileExtensions'
+import { getDocumentOperations } from '@/features/documents/documentOperations'
+import type { VideoEditResultPlacement } from '@/core/videoEdit/creativeResult'
+import { captureVideoEditResultTarget } from './videoEditResultTarget'
+import { createVideoEditCreativeTransfer, runVideoEditCreativeTransfer } from './videoEditCreativeTransfer'
 
 export const VIDEO_EDIT_ITEM_DRAG_MIME = 'application/x-henji-video-edit-items'
+
+/**
+ * 拖进来的音频编辑作品：落在音频轨上就覆盖（按住 Ctrl 插入）到那里；落在画面轨、轨道外或空白处时放到目标音频轨，
+ * 没有可用音频轨就新建一条；拖进素材面板只进素材面板。返回片段 ID（只进素材面板时为素材项 ID）。
+ */
+async function dropVideoEditAudioDocument(projectId: string, sequenceId: string, path: string, placement: VideoEditDropPlacement | undefined, targetTrackIds: readonly string[], signal?: AbortSignal): Promise<string> {
+  const summary = await getDocumentOperations().registerExternalDocument(path)
+  if (summary.kind !== 'audio_edit') throw new Error('这个文件不是音频编辑作品。')
+  const sequence = requireVideoEditInstance(projectId).document.sequences.find(value => value.id === sequenceId)
+  if (placement && !sequence) throw new Error('请先打开一条序列，再把音频编辑作品拖进时间线。')
+  const result = ((): VideoEditResultPlacement => {
+    if (!placement || !sequence) return { mode: 'library' }
+    const dropped = placement.track === undefined ? undefined : sequence.tracks.find(track => track.index === placement.track)
+    const audio = dropped?.kind === 'audio' && !dropped.locked ? dropped : sequence.tracks.filter(track => track.kind === 'audio' && !track.locked).sort((a, b) => Number(targetTrackIds.includes(b.id)) - Number(targetTrackIds.includes(a.id)) || a.index - b.index)[0]
+    if (!audio || placement.newTrack === 'audio') return { mode: 'add', frame: placement.frame, newTrack: 'audio' }
+    return { mode: placement.mode === 'insert' ? 'insert' : 'overwrite', frame: placement.frame, trackId: audio.id }
+  })()
+  const target = captureVideoEditResultTarget(projectId, sequenceId, result)
+  const receipt = await runVideoEditCreativeTransfer(createVideoEditCreativeTransfer(target, { type: 'document', docRef: { docId: summary.id, path: summary.path } }), signal)
+  logger.info('音频编辑作品已拖入剪辑', { event: 'video_edit.drop.audio_document.completed', context: { projectId, sequenceId, documentId: summary.id, mode: result.mode } })
+  return receipt.clipId || receipt.itemId || ''
+}
 const logger = createLogger('features.videoEdit.drop')
 export type VideoEditDropInput = { kind: 'template'; scope: 'project' | 'library'; templateId: string } | { kind: 'items'; projectId: string; itemIds: string[] } | { kind: 'sources'; sources: VideoEditImportSource[] } | { kind: 'code_asset'; assetId: string } | VideoEditSourceRange
 /**
@@ -168,6 +195,13 @@ async function applyVideoEditDropInput(projectId: string, input: VideoEditDropIn
   let ids: string[]
   if (input.kind === 'items') ids = input.itemIds
   else if (input.kind === 'code_asset') { const result = await importVideoEditCodeAsset(projectId, input.assetId, { binId, filterTarget, afterImport: apply }); ids = result.itemId ? [result.itemId] : [] }
+  else if (input.sources.some(source => source.path && matchHenjiExtension('audio_edit', source.path))) {
+    // 音频编辑作品（.hjaud）：和“加入剪辑”一样以动态链接放进来，剪后的声音与链接字幕一起
+    if (!input.sources.every(source => source.path && matchHenjiExtension('audio_edit', source.path))) throw new Error('音频编辑作品请单独拖入，不要和其他文件一起拖。')
+    ids = []
+    for (const source of input.sources) ids.push(await dropVideoEditAudioDocument(projectId, sequenceId, source.path!, placement, targetTrackIds, options.signal))
+    return ids
+  }
   else if (input.sources.every(source => source.path && !source.assetId)) {
     // 本地路径可能是文件夹（Premiere：拖入文件夹即按层级建素材箱）。
     const result = await importVideoEditPathsAndFolders(projectId, input.sources.map(source => source.path!), binId, placement ? apply : undefined, { signal: options.signal })
