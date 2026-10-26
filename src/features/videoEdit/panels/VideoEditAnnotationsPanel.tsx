@@ -67,7 +67,8 @@ function AnnotationRow({ instance, sequenceId, mark, number, fps, expanded, onEr
   </div>
 }
 
-const FILTERS = [{ value: 'all', label: '全部' }, { value: 'draft', label: '待发送' }, { value: 'open', label: '待处理' }, { value: 'addressed', label: '已改完' }, { value: 'resolved', label: '已确认' }]
+// 默认只列还没确认的；已确认的收进“已确认”筛选，算是清掉了
+const FILTERS = [{ value: 'active', label: '未确认' }, { value: 'all', label: '全部' }, { value: 'draft', label: '待发送' }, { value: 'open', label: '待处理' }, { value: 'addressed', label: '已改完' }, { value: 'resolved', label: '已确认' }]
 
 /**
  * 批注面板（重要记录 019）：有待发送时顶部才出现发送区；入出点设好时可以批注这一段；下面是“N 条 · 筛选”和批注列表。
@@ -82,12 +83,12 @@ export const VideoEditAnnotationsPanel = memo(function VideoEditAnnotationsPanel
     if (!snapshot.current || snapshot.current.document !== document || snapshot.current.view !== view) snapshot.current = { document, view }
     return snapshot.current
   })
-  const [filter, setFilter] = useState('all'); const [note, setNote] = useState(''); const [sending, setSending] = useState(false); const [rangeNote, setRangeNote] = useState('')
+  const [filter, setFilter] = useState('active'); const [note, setNote] = useState(''); const [sending, setSending] = useState(false); const [rangeNote, setRangeNote] = useState('')
   const projectId = instance.document.id
   const sequence = instance.document.sequences.find(sequence => sequence.id === instance.activeSequenceId)
   const drafts = sequence?.annotations.filter(mark => mark.status === 'draft') ?? []
   const all = instance.document.sequences.flatMap(sequence => sequence.annotations.map((mark, index) => ({ mark, sequenceId: sequence.id, number: index + 1, fps: videoEditFps(sequence.frameRate) })))
-  const entries = all.filter(entry => filter === 'all' || entry.mark.status === filter)
+  const entries = all.filter(entry => filter === 'all' || (filter === 'active' ? entry.mark.status !== 'resolved' : entry.mark.status === filter))
   const selected = selectedVideoEditAnnotation(projectId)
   const send = async (external: boolean): Promise<void> => { if (!sequence) return; setSending(true); try { await sendVideoEditAnnotations(projectId, sequence.id, note, external); setNote('') } catch (error) { onError(error) } finally { setSending(false) } }
   const addRange = (): void => {
@@ -114,7 +115,7 @@ export const VideoEditAnnotationsPanel = memo(function VideoEditAnnotationsPanel
       <Dropdown ariaLabel="筛选批注" appearance="text" size="sm" value={filter} onSelect={setFilter} options={FILTERS} />
     </div>}
     {entries.length ? <Virtuoso className="min-h-0 flex-1" data={entries} computeItemKey={(_index, entry) => entry.mark.id} itemContent={(_index, entry) => <AnnotationRow instance={instance} onError={onError} expanded={selected === entry.mark.id} {...entry} />} />
-      : all.length ? <UiEmpty size="xs" title="暂无批注" description="换一个筛选看看。" />
+      : all.length ? <UiEmpty size="xs" title="暂无批注" description={filter === 'active' ? '都确认过了，已确认的在“已确认”筛选里。' : '换一个筛选看看。'} />
         : <UiEmpty size="xs" title="还没有批注" description="在命令带选批注工具，直接在画面上画。" />}
   </div>
 })

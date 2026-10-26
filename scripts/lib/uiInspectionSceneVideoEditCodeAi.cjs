@@ -230,20 +230,20 @@ function createVideoEditCodeAiScene() {
           item.agentParameters = (await read(ref('video_edit.clip', codeClip.id), ['video_edit.clip.code_parameters'])).data.properties['video_edit.clip.code_parameters']
           assert.equal(item.agentParameters.size, 112, '外部 Agent 的字号修改没有读回')
           const row = panel.locator(`[data-video-edit-annotation="${mark.id}"]`)
-          await row.getByText('待审查', { exact: true }).waitFor({ state: 'visible' })
+          await row.getByText('已改完', { exact: true }).waitFor({ state: 'visible' })
           item.addressed = (await read(markRef, ['video_edit.annotation.status', 'video_edit.annotation.thread'])).data.properties
-          assert.equal(item.addressed['video_edit.annotation.status'], 'addressed', '外部 Agent 处理后状态不是待审查')
+          assert.equal(item.addressed['video_edit.annotation.status'], 'addressed', '外部 Agent 处理后状态不是已改完')
           assert.ok(item.addressed['video_edit.annotation.thread'].some(message => message.id === reply.id), '外部 Agent 处理回复未保存')
           item.reviewCapture = await capture('code-ai-04-addressed')
-          await row.getByRole('button', { name: '通过', exact: true }).click()
-          item.resolved = await waitRead(markRef, 'video_edit.annotation.status', value => value === 'resolved', '用户通过后状态没有变为已通过')
-          await row.getByText('已通过', { exact: true }).waitFor({ state: 'visible' })
+          await row.getByRole('button', { name: '确认', exact: true }).click()
+          item.resolved = await waitRead(markRef, 'video_edit.annotation.status', value => value === 'resolved', '用户确认后状态没有变为已确认')
+          await row.getByText('已确认', { exact: true }).waitFor({ state: 'visible' })
           // 先重开再尝试，防止“resolved -> resolved”无操作捷径掩盖权限漏洞。
           await row.getByRole('button', { name: '重开', exact: true }).click()
           await waitRead(markRef, 'video_edit.annotation.status', value => value === 'open', '用户重开后状态未恢复待处理')
           item.agentResolveRefusal = await expectToolRefusal(client, 'change_application_entities', operationEnvelope([await read(markRef)],
-            { summary: '验证 Agent 不能代替用户通过', changes: [setChange(markRef, { 'video_edit.annotation.status': 'resolved' })] }))
-          assert.match(item.agentResolveRefusal, /只有用户能审查通过标注/, '拒绝原因没有指向用户审查权限，可能是其他调用错误')
+            { summary: '验证 Agent 不能确认没改完的批注', changes: [setChange(markRef, { 'video_edit.annotation.status': 'resolved' })] }))
+          assert.match(item.agentResolveRefusal, /只有已改完/, '拒绝原因没有指向“只有已改完才能确认”，可能是其他调用错误')
           assert.equal((await read(markRef, ['video_edit.annotation.status'])).data.properties['video_edit.annotation.status'], 'open', '越权调用改变了批注状态')
         })
         await step('05-observe', '观察批注叠加与局部裁切媒体', async item => {

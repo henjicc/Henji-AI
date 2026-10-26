@@ -14,7 +14,7 @@ export type VideoMotionConstraintOptions = z.infer<typeof videoMotionConstraintO
 
 /** Read-only projection. Never changes authors, discussion history, artwork, or review state. */
 export function readVideoIntentAnnotation(projectId: string, sequence: VideoEditComposition, annotation: VideoEditAnnotation, targetId: string, role: VideoMotionConstraintOptions['annotations'][number]['role'], span?: [number, number]): IntentAnnotation {
-  if (annotation.status === 'resolved') throw new Error('该标注已审查通过，请重新打开后使用')
+  if (annotation.status === 'resolved') throw new Error('该标注已确认，请重开后使用')
   if (annotation.clipId && annotation.clipId !== targetId) throw new Error('标注属于另一个片段，请选择对应目标')
   const clip = sequence.clips.find(c => c.id === targetId)
   const range = span ?? [annotation.frame, annotation.endFrame ?? annotation.frame]

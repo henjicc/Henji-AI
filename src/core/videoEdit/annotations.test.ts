@@ -30,14 +30,17 @@ describe('标注状态与目标', () => {
     expect(() => annotation({ target: { kind: 'element', elementId: 'headline' } })).toThrow('片段')
     expect(() => annotation({ target: { kind: 'range', startFrame: 20, endFrame: 30 }, endFrame: 40 })).toThrow('一致')
   })
-  it('草稿→待处理→已改完→用户确认；草稿也能直接改完；拒绝Agent确认、回退草稿和覆盖讨论', () => {
+  it('草稿→待处理→已改完→用户确认；草稿也能直接改完；助手只能按用户确认代写已确认；拒绝回退草稿和覆盖讨论', () => {
     const draft = annotation({ status: 'draft' }); const open = { ...draft, status: 'open' as const }
     const addressed = annotation({ status: 'addressed', addressedBy: { revision: 2 }, thread: [reply] }); const resolved = { ...addressed, status: 'resolved' as const }
     expect(() => assertVideoEditAnnotationTransition(draft, open, 'user')).not.toThrow()
     expect(() => assertVideoEditAnnotationTransition(open, addressed, 'agent')).not.toThrow()
     // 用户在对话里让助手改的草稿，可以直接改完
     expect(() => assertVideoEditAnnotationTransition(draft, { ...addressed, thread: [reply] }, 'agent')).not.toThrow()
-    expect(() => assertVideoEditAnnotationTransition(addressed, resolved, 'agent')).toThrow('只有用户')
+    // 用户在对话里说通过，助手代写已确认，要追加回复；没改完的不能直接确认
+    expect(() => assertVideoEditAnnotationTransition(addressed, resolved, 'agent')).toThrow('回复')
+    expect(() => assertVideoEditAnnotationTransition(addressed, { ...resolved, thread: [reply, { ...reply, id: 'confirm' }] }, 'agent')).not.toThrow()
+    expect(() => assertVideoEditAnnotationTransition(open, { ...resolved, thread: [reply] }, 'agent')).toThrow('已改完')
     expect(() => assertVideoEditAnnotationTransition(addressed, resolved, 'user')).not.toThrow()
     expect(() => assertVideoEditAnnotationTransition(resolved, open, 'user')).not.toThrow()
     expect(() => assertVideoEditAnnotationTransition(open, draft, 'agent')).toThrow('转换')

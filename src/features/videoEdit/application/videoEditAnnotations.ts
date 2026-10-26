@@ -71,7 +71,7 @@ export function deleteVideoEditAnnotation(projectId: string, id: string): void {
   editVideoSequence(projectId, sequence.id, sequence => ({ ...sequence, annotations: sequence.annotations.filter(mark => mark.id !== id) }))
 }
 export function reviewVideoEditAnnotation(projectId: string, id: string, pass: boolean, opinion = ''): void {
-  updateVideoEditAnnotation(projectId, id, mark => ({ ...mark, status: pass ? 'resolved' : 'open', ...(pass ? {} : { addressedBy: undefined }), thread: [...mark.thread, { id: crypto.randomUUID(), author: { kind: 'user', name: '我' }, createdAt: new Date().toISOString(), text: pass ? '审查通过。' : opinion.trim() || '请重新处理。' }] }))
+  updateVideoEditAnnotation(projectId, id, mark => ({ ...mark, status: pass ? 'resolved' : 'open', ...(pass ? {} : { addressedBy: undefined }), thread: [...mark.thread, { id: crypto.randomUUID(), author: { kind: 'user', name: '我' }, createdAt: new Date().toISOString(), text: pass ? '确认改好了。' : opinion.trim() || '请重新处理。' }] }))
   logger.info('审查剪辑标注', { event: 'video_edit.annotation.reviewed', context: { projectId, annotationId: id, passed: pass } })
 }
 export function jumpToVideoEditAnnotation(projectId: string, id: string): void {

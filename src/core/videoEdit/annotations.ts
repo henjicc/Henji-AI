@@ -61,9 +61,12 @@ export function videoEditAnnotationStyle(color: VideoEditAnnotationColor, weight
 /** 助手改完（addressed）即视为完成，画面上不再显示；用户觉得不行就驳回，回到待处理。用户也可以确认（resolved）。 */
 export const VIDEO_EDIT_ANNOTATION_STATUS_LABELS = { draft: '待发送', open: '待处理', addressed: '已改完', resolved: '已确认' } as const
 
-/** Review is a user action. Neither the built-in assistant nor an external caller can approve it. */
+/** 确认是用户的决定：助手只能在用户于对话里明确说通过后，把已改完的批注代写成已确认，并追加一条回复留下记录。 */
 export function assertVideoEditAnnotationTransition(before: VideoEditAnnotation | undefined, after: VideoEditAnnotation, source: 'user' | 'agent'): void {
-  if (source === 'agent' && after.status === 'resolved') throw new Error('只有用户能审查通过标注；处理完成请写 addressed 并追加回复。')
+  if (source === 'agent' && after.status === 'resolved' && before?.status !== 'resolved') {
+    if (before?.status !== 'addressed') throw new Error('只有已改完（addressed）的标注能写成已确认，而且要用户在对话里明确确认；处理完成请写 addressed 并追加回复。')
+    if (after.thread.length <= before.thread.length || after.thread.at(-1)?.author.kind === 'user') throw new Error('代用户确认时要追加一条助手回复，写明是用户在对话里确认的。')
+  }
   if (!before) {
     if (!['draft', 'open'].includes(after.status)) throw new Error('新标注只能是 draft 或 open。')
     return

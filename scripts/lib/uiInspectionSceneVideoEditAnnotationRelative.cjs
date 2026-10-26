@@ -12,7 +12,7 @@ const button = (page, name) => page.getByRole('button', { name, exact: true })
 
 /**
  * 批注闭环（2026-10-24 按现行流程重写）：用户用时间线里的批注工具在节目画面上画箭头和圈、改颜色、拖动，
- * 复制给外部 Agent；外部 Agent 读批注后在同一个事务里写关键帧、追加回复、标为待审查；用户在批注面板逐条通过，
+ * 复制给外部 Agent；外部 Agent 读批注后在同一个事务里写关键帧、追加回复、标为已改完；用户在批注面板逐条确认，
  * 或“撤销这次修改”一步回到处理前。录制 → 交给 AI → 整理的超级关键帧流程由 video-edit-motion-draft 场景覆盖。
  */
 function createVideoEditAnnotationRelativeScene() {
@@ -88,7 +88,7 @@ function createVideoEditAnnotationRelativeScene() {
         await page.getByRole('menuitem', { name: '复制给外部 Agent', exact: true }).click(); await saved(doc => doc.sequences[0].annotations.every(mark => mark.status === 'open'))
         await shot('复制给外部助手')
 
-        // 3. 外部 Agent：读批注，沿箭头把片段从起点移到圈中心，同一事务回复并标为待审查。
+        // 3. 外部 Agent：读批注，沿箭头把片段从起点移到圈中心，同一事务回复并标为已改完。
         const listed = await callTool(client, 'list_application_entities', { entityType: 'video_edit.annotation', propertyIds: ['video_edit.annotation.target', 'video_edit.annotation.text', 'video_edit.annotation.status'] })
         assert.equal(listed.data.refs.length, 2); const [arrowRef, circleRef] = listed.data.refs
         const read = await callTool(client, 'read_application_entity', { ref: clipRef })
@@ -107,17 +107,18 @@ function createVideoEditAnnotationRelativeScene() {
         assert.equal(addressed.executionState, 'completed', JSON.stringify(addressed))
         current = await saved(doc => doc.sequences[0].annotations.every(mark => mark.status === 'addressed') && doc.sequences[0].clips[0].curves?.x)
         for (const frame of [0, 12, 24]) { await playback(frame); await capture('loop-frame-' + String(frame).padStart(3, '0')); evidence.frames.push(frame) }
-        await shot('助手处理后待审查')
+        await shot('助手处理后已改完')
 
-        // 4. 用户审查：先通过圈那条（状态变“已通过”），再“重开”；然后对箭头“撤销这次修改”，
-        //    同一次处理的关键帧一步撤掉，两条都回到待处理，讨论记录保留。
-        // 参数条上的“待审查 · 2”把批注面板带到前面；选中（展开）一条才出现它的审查按钮。
-        await options().getByRole('button', { name: '待审查 · 2', exact: true }).click()
+        // 4. 用户审查：先确认圈那条（状态变“已确认”，默认的“未确认”筛选里收起），切到“全部”再“重开”；
+        //    然后对箭头“撤销这次修改”，同一次处理的关键帧一步撤掉，两条都回到待处理，讨论记录保留。
+        // 参数条上的“已改完 · 2”把批注面板带到前面；选中（展开）一条才出现它的确认、驳回按钮。
+        await options().getByRole('button', { name: '已改完 · 2', exact: true }).click()
         const panel = page.getByLabel('批注面板', { exact: true }); await panel.waitFor({ state: 'visible' })
         const row = number => panel.locator('[data-video-edit-annotation]').nth(number - 1)
         await panel.getByRole('button', { name: '跳到标注 2', exact: true }).click()
-        await row(2).getByRole('button', { name: '通过', exact: true }).click()
-        await saved(doc => doc.sequences[0].annotations[1].status === 'resolved'); await shot('审查通过一条')
+        await row(2).getByRole('button', { name: '确认', exact: true }).click()
+        await saved(doc => doc.sequences[0].annotations[1].status === 'resolved'); await shot('确认一条')
+        await panel.getByRole('button', { name: '筛选批注', exact: true }).click(); await page.getByRole('option', { name: '全部', exact: true }).click()
         await row(2).getByRole('button', { name: '重开', exact: true }).click()
         await saved(doc => doc.sequences[0].annotations[1].status === 'open')
         await panel.getByRole('button', { name: '跳到标注 1', exact: true }).click()
