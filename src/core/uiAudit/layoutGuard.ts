@@ -8,7 +8,7 @@ import { auditLayoutIssues, type LayoutAuditIssue } from './layoutAudit'
  *
  * - 开发运行（electron:dev）默认 `outline`；本机正式构建（electron:prod）由启动参数 `--dev-layout-guard=log` 只记日志；
  *   安装包不带参数，不运行。
- * - 不在拖动、按住鼠标或窗口不可见时检查；同一问题每次运行只记一次，日志总数有上限。
+ * - 不在拖动、按住鼠标、指针移动中或窗口不可见时检查；定时补查只在界面变过之后才跑；同一问题每次运行只记一次，日志总数有上限。
  */
 export type LayoutGuardMode = 'outline' | 'log'
 
@@ -52,6 +52,7 @@ export function startLayoutGuard(mode: LayoutGuardMode, target: Window = window)
   const run = (): void => {
     idle = undefined
     if (document.hidden || pressed > 0) { schedule(); return }
+    changed = false
     let result: ReturnType<typeof auditLayoutIssues>
     try { result = auditLayoutIssues({ collectElements: true }) } catch (error) { logger.warn('布局守卫检查失败', { event: 'ui.layout_guard.failed', error }); return }
     const targets = result.targets ?? []
@@ -78,12 +79,32 @@ export function startLayoutGuard(mode: LayoutGuardMode, target: Window = window)
   }
   const down = (): void => { pressed += 1 }
   const up = (): void => { pressed = Math.max(0, pressed - 1); schedule() }
+  // 检查是整页同步扫描，跑在鼠标移动中间会让跟手的东西（悬停竖线、拖动预览）卡一下：
+  // 指针移动只推迟检查（停稳 SETTLE_MS 后才跑）；定时补查只在界面结构或状态真的变过时才跑，静止的界面不反复扫。
+  let changed = true
+  const mutations = typeof MutationObserver === 'undefined' ? null : new MutationObserver(records => {
+    // 守卫自己描的边框不算界面变化，否则 outline 模式会一直自己触发自己
+    const own = (node: Node): boolean => node.nodeType === Node.ELEMENT_NODE && (node as Element).hasAttribute('data-layout-guard-layer')
+    const ownRecord = (record: MutationRecord): boolean => (layer?.contains(record.target) ?? false)
+      || (record.type === 'childList' && [...record.addedNodes, ...record.removedNodes].every(own) && record.addedNodes.length + record.removedNodes.length > 0)
+    if (records.some(record => !ownRecord(record))) changed = true
+  })
+  mutations?.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class', 'hidden', 'open', 'aria-hidden', 'aria-expanded', 'data-state'] })
+  const idleSchedule = (): void => { if (changed) schedule() }
   const events: Array<[string, EventListener]> = [['resize', schedule], ['pointerdown', down], ['pointerup', up], ['pointercancel', up], ['keyup', schedule], ['wheel', schedule]]
   for (const [name, listener] of events) target.addEventListener(name, listener, { passive: true, capture: true })
-  const interval = target.setInterval(schedule, PERIOD_MS)
+  const moved = (): void => {
+    if (timer === undefined && idle === undefined) return
+    idle?.cancel(); idle = undefined
+    schedule()
+  }
+  target.addEventListener('pointermove', moved, { passive: true, capture: true })
+  const interval = target.setInterval(idleSchedule, PERIOD_MS)
   schedule()
   return () => {
     for (const [name, listener] of events) target.removeEventListener(name, listener, { capture: true })
+    target.removeEventListener('pointermove', moved, { capture: true })
+    mutations?.disconnect()
     target.clearInterval(interval)
     if (timer !== undefined) clearTimeout(timer)
     idle?.cancel()
