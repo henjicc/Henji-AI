@@ -4,6 +4,7 @@ import { resolveVideoEditBuiltinParams, type VideoEditBuiltinParams } from '../.
 import { Rnnoise } from '@shiguredo/rnnoise-wasm'
 import { audioBiquadCoefficients, audioCompressorCurve, audioCompressorReduction, BUTTERWORTH_4, dbToGain, gainToDb, smoothing, type AudioProcessor, type BiquadSpec, type Coefficients } from './processors/shared'
 import { dehumDesign, eqBandsDesign, FilterCascade, graphicEqDesign, notchDesign } from './processors/filters'
+import { MultibandCompressor, NoiseGate, SpeechLeveler } from './processors/dynamics'
 
 /** 兼容旧引用：双二阶系数与压缩曲线在处理器公共模块。 */
 export { audioBiquadCoefficients, audioCompressorCurve } from './processors/shared'
@@ -21,7 +22,7 @@ export interface AudioEffectInstance { readonly id: string; readonly builtin: { 
  * - 本文件只负责登记与调度（处理器的创建、延迟补偿、干湿比、分块计划）；新效果的处理器在 `processors/` 按类别分文件，
  *   共用的接口与小工具在 `processors/shared.ts`。
  * 成熟开源：降噪用 RNNoise（`@shiguredo/rnnoise-wasm`，Apache-2.0）；滤波器系数按 RBJ Audio EQ Cookbook；混响移植 Freeverb（公有领域）；
- * 音调变换移植 smbPitchShift（相位声码器，WOL 许可）。
+ * 音调变换移植 smbPitchShift（相位声码器，WOL 许可）；多段压缩的分频用 Linkwitz-Riley 4 阶（两级巴特沃斯串联，低段补全通相位）。
  */
 
 /** 参数均衡的预设曲线（与三段增益叠加）。 */
@@ -336,6 +337,9 @@ function createProcessor(id: string, rate: number, channels: number, denoiser?: 
     case 'eq_bands': return new FilterCascade(rate, channels, eqBandsDesign)
     case 'notch': return new FilterCascade(rate, channels, notchDesign)
     case 'dehum': return new FilterCascade(rate, channels, dehumDesign)
+    case 'noise_gate': return new NoiseGate(rate, channels)
+    case 'speech_leveler': return new SpeechLeveler(rate)
+    case 'multiband_compressor': return new MultibandCompressor(rate, channels)
     default: throw new Error(`没有音频效果“${id}”。`)
   }
 }
@@ -363,7 +367,7 @@ interface Stage { effectId: string; builtinId: string; processor: AudioProcessor
  */
 const PREROLL_SECONDS: Record<string, number> = {
   reverb: 2, noise_reduction: 0.5, compressor: 0.5, de_esser: 0.2, limiter: 0.2,
-  dehum: 1, notch: 1, eq_bands: 0.3, graphic_eq: 0.1,
+  speech_leveler: 2, noise_gate: 1, multiband_compressor: 0.5, dehum: 1, notch: 1, eq_bands: 0.3, graphic_eq: 0.1,
 }
 
 /**
