@@ -1,12 +1,11 @@
-import { audioEditGainRegionsSchema, audioEditMouthClicksSchema, audioEditRepairsSchema } from '@/core/audioEdit/regions'
-import { audioEditEffectsSchema } from '@/core/audioEdit/effects'
-import { essentialSoundSettingsSchema } from '@/core/audio/essentialSound'
+import { audioEditGainRegionsSchema, audioEditRepairsSchema } from '@/core/audioEdit/regions'
+import { audioEditEffectChainSchema, audioEditOutputSchema } from '@/core/audioEdit/effects'
 import { z } from 'zod'
 import { type ApplicationFieldDefinition, type ApplicationPropertyDescriptor, type JsonValue, fieldWriterTable } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import type { AudioEditProjectDocument, AudioEditProcessorDescriptor } from '@/core/audioEdit/types'
 import { applyAudioEditSuggestion, audioEditSuggestionState, dismissAudioEditSuggestion, setAudioEditBlocks } from '@/core/audioEdit/edits'
-import { audioEditCutsSchema, audioEditSettingsSchema, audioEditFrameRateSchema, audioEditProcessorChainSchema, audioEditViewSettingsSchema } from '@/core/audioEdit/schema'
+import { audioEditCutsSchema, audioEditSettingsSchema, audioEditFrameRateSchema, audioEditViewSettingsSchema } from '@/core/audioEdit/schema'
 import { DEFAULT_AUDIO_EDIT_VIEW_SETTINGS } from '@/core/audioEdit/edits'
 import { hasAudioEditModifications } from '@/core/audioEdit/baseline'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
@@ -48,14 +47,15 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
     field(E.project, 'cuts', '声音编辑区间（mode 为 delete 删除或 mute 静音，省略时删除）', objectValue('audio_edit.cuts'), (s) => json(s.document.cuts ?? []), (s, v) => { s.document.cuts = audioEditCutsSchema.parse(v) }),
     field(E.project, 'gain_regions', '音量区域（采样帧、分贝与淡入淡出采样帧）', objectValue('audio_edit.gain_regions'), s => json(s.document.gainRegions ?? []), (s, v) => { s.document.gainRegions = audioEditGainRegionsSchema.parse(v) }),
     field(E.project, 'repairs', '声音修复区域（源采样帧、Hz、强度、启用与归一化画笔）', objectValue('audio_edit.repairs'), s => json(s.document.repairs ?? []), (s, v) => { s.document.repairs = audioEditRepairsSchema.parse(v) }),
-    field(E.project, 'effects', '效果组', objectValue('audio_edit.effects'), s => json(s.document.effects ?? []), (s, v) => { s.document.effects = audioEditEffectsSchema.parse(v) }, [],
-      '口播剪辑的效果组：按顺序处理剪好的整条声音，试听实时、导出同一份效果链。builtin.id 用音频内置效果 ID，参数键与范围同剪辑的音频效果；amount 0–1 为效果强度；最多 16 个。'),
-    field(E.project, 'effects_bypassed', '效果组整体关闭', BOOL, s => s.document.effectsBypassed ?? false, (s, v) => { s.document.effectsBypassed = boolean(v) }, [],
-      '为 true 时试听与导出都不经过效果组；基本声音不受影响。'),
-    field(E.project, 'essential_sound', '基本声音', objectValue('audio_edit.essential_sound'), s => json(s.document.essentialSound ?? null), (s, v) => { s.document.essentialSound = v === null ? undefined : essentialSoundSettingsSchema.parse(v) }, [],
-      '基本声音：type 声音类型；repair（noise 减少杂色、rumble 降低隆隆声、hum 消除嗡嗡声含 mains 50/60、deEss 消除齿音）、clarity（dynamics 动态、eq 均衡含 preset、enhance 增强语音 voice low/high）、creative.reverb 混响含 preset、loudness 自动匹配响度（targetLufs 目标；gainDb 为测量后算出的补偿）、volume.gainDb 剪辑音量；各项 enabled 开关与 amount 0–100；写 null 清除。换算成效果链排在效果组前面。'),
-    field(E.project, 'mouth_clicks', '口水音修复', objectValue('audio_edit.mouth_clicks'), s => json(s.document.mouthClicks ?? { enabled: false, sensitivity: 50, clicks: [] }), (s, v) => { s.document.mouthClicks = audioEditMouthClicksSchema.parse(v) }, [],
-      '口水音修复：clicks 为检测出的咔嗒范围（源采样帧，单处不超过 1 秒）；enabled 打开时编辑后的声音、试听与导出都修掉；sensitivity 为检测灵敏度 0–100。'),
+    field(E.project, 'effect_chain', '效果控件（有顺序的效果链）', objectValue('audio_edit.effect_chain'), s => json(s.document.effectChain ?? []), (s, v) => { s.document.effectChain = audioEditEffectChainSchema.parse(v) }, [],
+      '效果控件：从上到下依次处理录音本身（源时间，剪辑区间只决定播放哪些部分；效果从不改变时长）。每项 { id, kind, enabled, … }：'
+      + 'builtin（name、amount 0–1 效果强度、builtin { id 音频内置效果 ID, params 参数同剪辑的音频效果 }）；essential 基本声音（settings 同剪辑片段的基本声音，不含 loudness / volume）；'
+      + 'mouth_declick 去除口水音（sensitivity 0–100、analyzed、clicks 源采样帧范围；检测用 detect_audio_edit_mouth_clicks）；breath 呼吸声（mode attenuate 减弱 / mute 静音、reductionDb、breaths 源采样帧范围）；'
+      + 'separation（mode isolate 人声分离 / dereverb 去混响、amount 0–1）；plugin 第三方插件（name、pluginId 取自 audio_edit.processor_chain 的 available_processors、parameters 参数名到 0–1）。最多 32 项。'),
+    field(E.project, 'chain_bypassed', '效果控件整体关闭', BOOL, s => s.document.chainBypassed ?? false, (s, v) => { s.document.chainBypassed = boolean(v) }, [],
+      '为 true 时试听与导出都不经过效果链（对比处理前后）；输出一节照常。'),
+    field(E.project, 'output', '输出（作用在剪好的整条声音上）', objectValue('audio_edit.output'), s => json(s.document.output ?? { volumeDb: 0 }), (s, v) => { s.document.output = audioEditOutputSchema.parse(v) }, [],
+      '输出：volumeDb 音量 -24–24 dB；loudness 自动匹配响度 { enabled, targetLufs 目标积分响度, gainDb 补偿 }，打开时末尾限幅 -1 dB；gainDb 由 match_audio_edit_loudness 测量后写入。'),
     field(E.project, 'view_settings', '文字大小、左右留白与时间轴字幕', objectValue('audio_edit.view_settings'), (s) => json(s.document.viewSettings ?? DEFAULT_AUDIO_EDIT_VIEW_SETTINGS), (s, v) => { s.document.viewSettings = audioEditViewSettingsSchema.parse(v) }),
     field(E.project, 'xml_frame_rate', '音频 XML 帧率', objectValue('audio_edit.frame_rate'), (s) => json(s.document.xmlFrameRate ?? { numerator: 25, denominator: 1 }), (s, v) => { s.document.xmlFrameRate = audioEditFrameRateSchema.parse(v) }),
     field(E.project, 'selected_asr_model_id', '语音识别模型', TEXT, (s) => s.document.selectedAsrModelId ?? ''),
@@ -104,9 +104,7 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
     }),
   ],
   [E.processorChain]: [
-    field(E.processorChain, 'vst_enabled', '声音处理试听', BOOL, (s) => s.document.vstEnabled, (s, v) => { s.document.vstEnabled = boolean(v) }, ['setVstEnabled']),
-    field(E.processorChain, 'available_processors', '可用声音处理器及参数', objectValue('audio_edit.processors'), (s) => json(s.availableProcessors ?? [])),
-    field(E.processorChain, 'recipe', '声音处理配方', objectValue('audio_edit.recipe'), (s) => json(s.document.processorChain ?? []), (s, v) => { s.document.processorChain = audioEditProcessorChainSchema.parse(v); s.document.vstEnabled = false }),
+    field(E.processorChain, 'available_processors', '可用的第三方插件及参数', objectValue('audio_edit.processors'), (s) => json(s.availableProcessors ?? [])),
   ],
   [E.render]: [
     field(E.render, 'output_duration_frames', '剪后时长帧数', INT, (s) => editedDurationFrames(buildProjectAudioEditTimeline(s.document))),
@@ -122,10 +120,8 @@ const audioEditValueSchemas: Record<string, z.ZodType> = {
   'audio_edit.repairs': audioEditRepairsSchema,
   'audio_edit.view_settings': audioEditViewSettingsSchema,
   'audio_edit.frame_rate': audioEditFrameRateSchema,
-  'audio_edit.recipe': audioEditProcessorChainSchema,
-  'audio_edit.effects': audioEditEffectsSchema,
-  'audio_edit.essential_sound': essentialSoundSettingsSchema.nullable(),
-  'audio_edit.mouth_clicks': audioEditMouthClicksSchema,
+  'audio_edit.effect_chain': audioEditEffectChainSchema,
+  'audio_edit.output': audioEditOutputSchema,
   // 只读描述来自宿主处理器目录，形状与 AudioEditProcessorDescriptor 一致。
   'audio_edit.processors': z.array(z.object({
     id: z.string(), name: z.string(), vendor: z.string(), version: z.string(), available: z.boolean(),

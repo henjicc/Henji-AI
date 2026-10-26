@@ -14,7 +14,7 @@ it('debounces changes, cancels outdated work and never applies edits during prev
   vi.useFakeTimers()
   let finishOld!: (result: { suggestions: AudioEditSuggestion[] }) => void
   native.detectSilence.mockImplementationOnce(() => new Promise((resolve) => { finishOld = resolve })).mockResolvedValue({ suggestions: [] })
-  const project: AudioEditProjectDocument = { id: 'p', name: '录音', source: { mediaType: 'audio', sourcePath: 'a.wav', audioPath: 'a.wav', sampleRate: 1000, durationFrames: 4000, channels: 1 }, transcript: [], suggestions: [], referenceScript: '', vstEnabled: false, revision: 1, createdAt: 1, updatedAt: 1 }
+  const project: AudioEditProjectDocument = { id: 'p', name: '录音', source: { mediaType: 'audio', sourcePath: 'a.wav', audioPath: 'a.wav', sampleRate: 1000, durationFrames: 4000, channels: 1 }, transcript: [], suggestions: [], referenceScript: '', revision: 1, createdAt: 1, updatedAt: 1 }
   const hook = renderHook(({ value }) => useAudioEditSilencePreview(value, undefined, true), { initialProps: { value: project } })
   await act(() => vi.advanceTimersByTimeAsync(450))
   expect(native.detectSilence).toHaveBeenCalledOnce()

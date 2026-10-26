@@ -8,7 +8,7 @@ import { applyAudioEditBreathPolicy } from './breaths'
 function documentOf(words: Array<[string, number, number]>, extra: Partial<AudioEditProjectDocument> = {}): AudioEditProjectDocument {
   const transcript: AudioEditTranscriptBlock[] = words.map(([text, startFrame, endFrame], index) => ({ id: `w${index}`, text, startFrame, endFrame, included: true, locked: false, granularity: 'word' }))
   return {
-    id: 'gaps', name: '气口', referenceScript: '', suggestions: [], vstEnabled: false, transcript, createdAt: 1, updatedAt: 1, revision: 1,
+    id: 'gaps', name: '气口', referenceScript: '', suggestions: [], transcript, createdAt: 1, updatedAt: 1, revision: 1,
     source: { mediaType: 'audio', sourcePath: 'a.wav', audioPath: 'a.wav', durationFrames: 4000, sampleRate: 1000, channels: 1 },
     cuts: [], gainRegions: [], ...extra,
   }

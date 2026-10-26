@@ -365,10 +365,10 @@ export interface HenjiAudioApi {
   spectralTile(request: AudioEditSpectralTileRequest): Promise<AudioEditSpectralTile>
   spectralCancel(requestId: string): Promise<void>
   onSpectralProgress(handler: (progress: AudioEditSpectralProgress) => void): () => void
-  renderEditAudio(request: { projectId: string; requestId?: string; includeProcessing?: boolean }): Promise<AudioEditRenderedAudio>
+  renderEditAudio(request: { projectId: string; requestId?: string }): Promise<AudioEditRenderedAudio>
   editedSourceAudio(request: { projectId: string; requestId?: string }): Promise<{ audioPath: string }>
   matchAudioEditLoudness(request: { projectId: string; targetLufs: number; requestId?: string }): Promise<{ integratedLufs: number; gainDb: number }>
-  detectAudioEditMouthClicks(request: { projectId: string; sensitivity: number; range?: { startFrame: number; endFrame: number }; requestId?: string }): Promise<{ clicks: Array<{ startFrame: number; endFrame: number; score: number }> }>
+  detectAudioEditMouthClicks(request: { projectId: string; itemId: string; sensitivity: number; range?: { startFrame: number; endFrame: number }; requestId?: string }): Promise<{ clicks: Array<{ startFrame: number; endFrame: number; score: number }> }>
   prepareEditPreviewChunk(payload: AudioEditPreviewChunkRequest): Promise<AudioEditPreviewChunk>
 }
 import type {

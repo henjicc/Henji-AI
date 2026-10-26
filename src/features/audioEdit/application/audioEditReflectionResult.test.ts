@@ -15,7 +15,7 @@ import {
 
 function fixture(): AudioEditProjectDocument {
   return {
-    id: 'audio-result', name: '原口播', referenceScript: '', suggestions: [], vstEnabled: false,
+    id: 'audio-result', name: '原口播', referenceScript: '', suggestions: [],
     source: { mediaType: 'audio', sourcePath: 'fixture.wav', audioPath: 'fixture.wav', durationFrames: 96_000, sampleRate: 48_000, channels: 1 },
     transcript: [
       { id: 'first', text: '第一句', startFrame: 0, endFrame: 48_000, included: true, locked: false, granularity: 'word' },

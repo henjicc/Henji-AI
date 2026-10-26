@@ -10,19 +10,19 @@ const documentRef = applicationRefSchema.extend({
   kind: z.literal('audio_edit.document'),
   id: z.string().min(1).max(500).describe('口播文档 ID：取自 list_documents（kind=audio_edit）返回的 id，不是文档所在项目的 ID'),
 }).strict()
-export const audioEditOperationInput = z.object({ documentRef, targetLufs: z.number().finite().min(-40).max(-5).optional().describe('目标积分响度 LUFS：短视频平台 -14，播客 -16（默认），广播电视 -23'), sensitivity: z.number().finite().min(0).max(100).optional().describe('口水音检测灵敏度 0–100，默认 50；越高检出越多，误检也越多'), policy: z.enum(['delete', 'attenuate', 'mute', 'keep']).optional().describe('呼吸声处理：delete 默认（快节奏），去掉呼吸并把字间残留的气声清成静音、只留短气口，和字连着的只减弱；attenuate 全部减弱 18 dB；mute 全部静音（保留时长）；keep 撤掉此前的呼吸处理'), sourcePath: z.string().min(1).max(4096).optional(), positionSeconds: z.number().nonnegative().optional(), replaceUntilSeconds: z.number().nonnegative().optional(), repair: audioEditRepairSchema.optional(), range: audioEditRangeSchema.optional(), modelId: z.string().optional(), taskId: z.string().optional(), format: z.enum(['xml', 'wav']).optional(), includeProcessing: z.boolean().optional(), includeSrt: z.boolean().optional(), destination: canvasDownloadDestinationSchema.optional() }).strict()
+export const audioEditOperationInput = z.object({ documentRef, targetLufs: z.number().finite().min(-40).max(-5).optional().describe('目标积分响度 LUFS：短视频平台 -14，播客 -16（默认），广播电视 -23'), sensitivity: z.number().finite().min(0).max(100).optional().describe('口水音检测灵敏度 0–100，默认 50；越高检出越多，误检也越多'), policy: z.enum(['delete', 'attenuate', 'mute', 'keep']).optional().describe('呼吸声处理：delete 默认（快节奏），去掉呼吸并把字间残留的气声清成静音、只留短气口，和字连着的只减弱；attenuate 全部减弱 18 dB；mute 全部静音（保留时长）；keep 撤掉此前的呼吸处理'), sourcePath: z.string().min(1).max(4096).optional(), positionSeconds: z.number().nonnegative().optional(), replaceUntilSeconds: z.number().nonnegative().optional(), repair: audioEditRepairSchema.optional(), range: audioEditRangeSchema.optional(), modelId: z.string().optional(), taskId: z.string().optional(), format: z.enum(['xml', 'wav']).optional(), itemId: z.string().min(1).max(100).optional().describe('效果控件里要检测的“去除口水音”那一项的 id（读 audio_edit.document.effect_chain 得到）；不给时用第一项，链里没有就加到末尾'), includeSrt: z.boolean().optional(), destination: canvasDownloadDestinationSchema.optional() }).strict()
 export function audioEditInputSchema(id: string): z.ZodType<z.infer<typeof audioEditOperationInput>> {
   const base = audioEditOperationInput.pick({ documentRef: true })
   if (id === 'insert_audio_edit_file') return audioEditOperationInput.pick({ documentRef: true, sourcePath: true, positionSeconds: true, replaceUntilSeconds: true }).required({ sourcePath: true, positionSeconds: true })
   if (id === 'repair_audio_edit_region') return audioEditOperationInput.pick({ documentRef: true, repair: true }).required({ repair: true })
   if (id === 'cancel_audio_edit_task') return base.extend({ taskId: z.string().min(1) })
-  if (id === 'export_audio_edit') return audioEditOperationInput.pick({ documentRef: true, format: true, includeProcessing: true, includeSrt: true, destination: true }).required({ destination: true })
+  if (id === 'export_audio_edit') return audioEditOperationInput.pick({ documentRef: true, format: true, includeSrt: true, destination: true }).required({ destination: true })
   if (id === 'transcribe_audio_edit') return audioEditOperationInput.pick({ documentRef: true, modelId: true })
   if (id === 'import_audio_edit_source') return audioEditOperationInput.pick({ documentRef: true, sourcePath: true }).required({ sourcePath: true })
   if (['quick_process_audio_edit', 'compress_audio_edit_silence', 'clean_audio_edit_fillers', 'clean_audio_edit_retakes'].includes(id)) return audioEditOperationInput.pick({ documentRef: true, range: true })
   if (id === 'process_audio_edit_breaths') return audioEditOperationInput.pick({ documentRef: true, range: true, policy: true })
   if (id === 'match_audio_edit_loudness') return audioEditOperationInput.pick({ documentRef: true, targetLufs: true })
-  if (id === 'detect_audio_edit_mouth_clicks') return audioEditOperationInput.pick({ documentRef: true, range: true, sensitivity: true })
+  if (id === 'detect_audio_edit_mouth_clicks') return audioEditOperationInput.pick({ documentRef: true, itemId: true, range: true, sensitivity: true })
   return base
 }
 const output = z.object({ resultRef: documentRef, message: z.string(), verified: z.boolean().optional(), count: z.number().nonnegative().optional(), shortenedMs: z.number().optional().describe('剪后时长的变化（毫秒）：正数为缩短；重新处理呼吸声时比上次删得少会是负数，表示变长'), durationFrames: z.number().nonnegative().optional(), tasks: z.array(z.object({ requestId: z.string(), documentId: z.string(), kind: z.string(), state: z.enum(['queued', 'running', 'completed', 'failed', 'cancelled']), progress: z.number().optional(), errorMessage: z.string().optional() })).optional() }).strict()
@@ -35,13 +35,13 @@ export const AUDIO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinitio
   ['import_audio_edit_source', '给口播导入素材', '给还没有素材的口播（如 create_document 新建的 audio_edit 文档）导入本机音频或视频文件，默认引用原文件、不复制；之后即可转写与剪辑。已有素材的口播不能再导入。', 'R1'],
   ['clean_audio_edit_retakes', '去掉口播重念', '照稿录口播时念坏了会马上重念：口误、没念好、在不该断的地方断开后重新起句。按逐词转写找出同一内容念了几遍的地方，只保留最后一遍；容忍同音字和改词，连续多遍、交错重念都收敛到最后一遍。切点落在实际声音的停顿里，被删的词和其间停顿一起去掉，在文字里恢复任一词时停顿也一并恢复。有参考稿时不删稿子里本来就有的重复。呼吸也算气口：原切点连读时，会在两遍对应位置的明显停顿或呼吸处换遍拼接（留下前一遍念好的开头），贴着念坏那遍的一两个字一起删。结果是确定性的起点，不是终点：之后逐处复核每一刀（为什么重念、接缝两侧的停顿与语气、能否在更好的气口换遍），用 audio_edit.transcript_block.included 调整。需逐词时间的转写，免费，一步撤销。', 'R1'],
   ['process_audio_edit_breaths', '处理口播呼吸声', '在本机用 Respiro 模型逐帧找出呼吸声（第一次用时下载约 13 MB），按策略处理：delete（默认，快节奏）去掉呼吸，再清理字间气口：按逐帧声音电平找出前一个字真正结束、后一个字真正开始的位置（前一字留 0.02 秒余音、后一字前留 0.01 秒），中间残留的气声、呼吸尾巴整段静音，超出的部分从中间删去，句间与重念接缝处留约 0.2 秒、句中约 0.12 秒，只在标点、接缝、呼吸或明显停顿处清，连着念的词之间、不到 0.1 秒或只有底噪的短停顿不动，后一个字开头很轻的送气、擦音算作字头；用户手动改过的地方之后重跑不覆盖；落成标识以 gap: 开头的静音与删除剪切，想要更长的停顿或保留语气时直接改 audio_edit.document.cuts 里对应的 gap: 剪切；和字连着的呼吸只减弱；attenuate 全部减弱；mute 全部静音；keep 撤掉此前的呼吸处理；非 delete 时同时撤掉此前的气口清理。已被重念、停顿剪掉的不再处理，用户逐处恢复过的不动。逐处判断与修改用 audio_edit.breath 实体（context、前后文字、handling）。免费，一步撤销。', 'R1'],
-  ['match_audio_edit_loudness', '自动匹配口播响度', '按当前全部声音处理（基本声音其他项、效果组、修复）渲染剪好的成品，测量积分响度，把到目标响度需要的补偿写进基本声音的 loudness（同时打开自动匹配，末尾限幅 -1 dB）。改了其他处理后响度会变，需要重新匹配。', 'R1'],
-  ['detect_audio_edit_mouth_clicks', '检测口水音', '在编辑后的声音里找出说话时口水带出的短促咔嗒声（约 0.3–10 毫秒的宽频瞬态），写进 audio_edit.document.mouth_clicks 并打开修复；修复用 LPC 插值一遍修完，可撤销。只在选区内检测时传 range（源采样帧），会替换这段原有的检测结果。', 'R1'],
+  ['match_audio_edit_loudness', '自动匹配口播响度', '按当前全部声音处理（修复、效果控件里的全部效果、区间音量、输出音量）渲染剪好的成品，测量积分响度，把到目标响度需要的补偿写进 audio_edit.document.output 的 loudness（同时打开自动匹配，末尾限幅 -1 dB）。改了其他处理后响度会变，需要重新匹配。', 'R1'],
+  ['detect_audio_edit_mouth_clicks', '检测口水音', '找出说话时口水带出的短促咔嗒声（约 0.3–10 毫秒的宽频瞬态），写进效果控件里“去除口水音”那一项（audio_edit.document.effect_chain，kind=mouth_declick）并打开它；检测听的是这一项之前的声音，修复用 LPC 插值一遍修完，可撤销。只在选区内检测时传 range（源采样帧），会替换这段原有的检测结果。', 'R1'],
   ['quick_process_audio_edit', '快速处理口播', '一次完成：有逐词转写时先去掉重念，再压缩实际音频停顿、清理已选语气词、按默认策略处理呼吸声，形成一个撤销步骤；不提交付费转写。没有接入助手时它就是全部；有助手时只是起点，助手要在此基础上逐处复核。', 'R1'],
   ['compress_audio_edit_silence', '压缩口播停顿', '本地检测实际音频，将合格停顿压缩为口播设置的保留长度，尊重锁定与选区。', 'R1'],
   ['clean_audio_edit_fillers', '清理口播语气词', '按口播中选择的词类清理有逐词时间戳的语气词，不删除锁定内容。', 'R1'],
   ['transcribe_audio_edit', '转写口播素材', '通过已配置语音模型识别原素材，可能计费；参考稿仅辅助内容对齐。', 'R2'],
-  ['process_audio_edit_sound', '准备口播声音处理', '依照口播配方处理全长音轨，试听与可选 XML 声音交付共用处理结果。', 'R1'],
+  ['process_audio_edit_sound', '准备口播声音处理', '按效果控件里要整段处理的效果（去除口水音、呼吸声、人声分离、去混响、插件）把全长录音先处理好并缓存，试听、XML 与成品共用处理结果。', 'R1'],
   ['export_audio_edit', '导出口播剪辑', '导出 FCP7 XML 或 WAV 到已配置下载目录，可附带 SRT；返回实际交付时长。', 'R2'],
   ['query_audio_edit_tasks', '查询口播处理任务', '读取该口播的分析、转写、处理和导出状态。', 'R0'],
   ['cancel_audio_edit_task', '取消口播处理任务', '取消明确口播下正在进行的指定任务。', 'R1'],

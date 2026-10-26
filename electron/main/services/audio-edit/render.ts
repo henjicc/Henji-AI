@@ -9,12 +9,13 @@ import { createMainLogger } from '../logging'
 import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { audioEditCacheDirectory, identifyAudioEditSource, prepareAudioEditAudio, validateAudioEditAudio, verifyAudioEditSource } from './media'
-import { processAudioEditVstChain, audioEditProcessorCacheIdentity } from './processors'
+import { listAudioEditProcessors, processAudioEditVstChain, audioEditProcessorCacheIdentity } from './processors'
 import { runAudioRepair, runAudioMouthDeclick, mixAudioEditProcessed, audioRepairMaskDimensions, encodeAudioRepairMask } from './dsp-adapter'
 import { separateAudioFile } from '../audio-separation/runtime'
 import { essentialSoundOfflineStages } from '../../../../src/core/audio/essentialSound'
+import { audioEditChainItemEffects, audioEditChainItemRecipe, splitAudioEditChain, type AudioEditBreathItem } from '../../../../src/core/audioEdit/effects'
 import { audioRenderKey, cachedAudioFile } from './render-cache'
-import { applyAudioEditRealtimeEffects } from './effects-render'
+import { applyAudioEditRealtimeEffects, applyAudioEffectInstancesToFile } from './effects-render'
 import { runAudioEditProcess } from './process'
 import { AudioEditSpliceRenderer } from '../../../../src/core/audioEdit/spliceCrossfade'
 import { createF32WavWriter, openF32Wav, type F32WavReader } from './pcm-wav'
@@ -55,67 +56,99 @@ async function repairMask(repair: AudioEditRepair, sampleRate: number, signal?: 
   } finally { await worker.terminate() }
 }
 
-/** Source-time stages shared by preview, XML, finished WAV and dynamic links. Cuts never enter this cache key. */
-export async function prepareAudioEditRenderSource(project: AudioEditProjectDocument, processing = project.vstEnabled, signal?: AbortSignal): Promise<string> {
+/**
+ * 编辑后声音（时间轴同原素材，剪辑区间从不进这里的缓存键）：试听、XML、成品 WAV 与动态链接共用。
+ * 顺序：修复（录音上的局部修补）→ 效果控件里要整段处理的那一段效果链（从上到下，逐项按内容缓存，改第 k 项只重算 k 往后）
+ * → 区间音量。效果链末尾的实时效果与输出不在这里（试听边播边算，导出用同一份代码离线处理）。
+ * beforeItemId：只处理到这一项之前、且不加区间音量（检测口水音等分析要听的是这一项之前的声音）。
+ */
+export async function prepareAudioEditRenderSource(project: AudioEditProjectDocument, signal?: AbortSignal, options: { beforeItemId?: string } = {}): Promise<string> {
   audioEditProjectSchema.parse(project)
   await verifyAudioEditSource(project, false, signal)
   const identity = project.source.identity ?? await identifyAudioEditSource(project.source.sourcePath, signal)
   const directory = audioEditCacheDirectory(project.id)
-  let key = audioRenderKey(['audio-render-v1', identity.digest, project.source.sampleRate, project.source.channels, project.source.audioStreamIndex])
+  const { sampleRate, channels, durationFrames } = project.source
+  let key = audioRenderKey(['audio-render-v1', identity.digest, sampleRate, channels, project.source.audioStreamIndex])
   let input = await prepareAudioEditAudio(project, signal)
-  // 基本声音里的人声分离、减少混响：本地模型离线处理原素材（原素材很少变，放在最前面缓存命中率最高），按量与原声混合。
-  for (const stage of essentialSoundOfflineStages(project.essentialSound)) {
-    key = audioRenderKey([key, 'offline-v1', stage])
+  const stage = async (recipe: unknown, prefix: string, produce: (source: string, output: string) => Promise<void>): Promise<void> => {
+    key = audioRenderKey([key, recipe])
     const source = input
-    input = await cachedAudioFile(directory, `${stage.kind}-${key}`, 'wav', async output => {
-      const separated = await separateAudioFile({ source, mode: stage.kind === 'isolate' ? 'vocals' : 'dereverb', signal })
-      await mixAudioEditProcessed(source, separated.primaryPath, stage.amount, output, signal)
-      await validateAudioEditAudio(output, project.source.sampleRate, project.source.channels, project.source.durationFrames, signal)
+    input = await cachedAudioFile(directory, `${prefix}-${key}`, 'wav', async output => {
+      await produce(source, output)
+      await validateAudioEditAudio(output, sampleRate, channels, durationFrames, signal)
     }, signal)
   }
   for (const repair of (project.repairs ?? []).filter(r => r.enabled && r.strength > 0)) {
     const { id: _id, enabled: _enabled, ...recipe } = repair
-    key = audioRenderKey([key, recipe])
-    const source = input
-    input = await cachedAudioFile(directory, `repair-${key}`, 'wav', async output => {
+    await stage(recipe, 'repair', async (source, output) => {
       const mask = repair.strokes?.length ? `${output}.mask` : undefined
       try {
-        if (mask) await fs.writeFile(mask, await repairMask(repair, project.source.sampleRate, signal))
+        if (mask) await fs.writeFile(mask, await repairMask(repair, sampleRate, signal))
         await runAudioRepair(source, output, repair, mask, signal)
-        await validateAudioEditAudio(output, project.source.sampleRate, project.source.channels, project.source.durationFrames, signal)
       } finally { if (mask) await removeUnmanagedCachePath(mask, { force: true }) }
-    }, signal)
+    })
   }
-  // 口水音：检测出的咔嗒位置一遍修完（排在其他修复之后、区间音量之前）。
-  const clicks = project.mouthClicks?.enabled ? project.mouthClicks.clicks : []
-  if (clicks.length) {
-    key = audioRenderKey([key, 'mouth-declick-v1', clicks])
-    const source = input
-    input = await cachedAudioFile(directory, `declick-${key}`, 'wav', async output => {
-      await runAudioMouthDeclick(source, output, clicks, project.source.durationFrames, signal)
-      await validateAudioEditAudio(output, project.source.sampleRate, project.source.channels, project.source.durationFrames, signal)
-    }, signal)
+  const rendered = splitAudioEditChain(project).rendered
+  const cut = options.beforeItemId ? rendered.findIndex(item => item.id === options.beforeItemId) : -1
+  const items = cut >= 0 ? rendered.slice(0, cut) : rendered
+  // 连续的实时效果攒成一遍处理；遇到整段处理的效果先把攒下的跑完。
+  let pending: ReturnType<typeof audioEditChainItemEffects> = []
+  const flush = async (): Promise<void> => {
+    if (!pending.length) return
+    const effects = pending; pending = []
+    key = audioRenderKey([key, 'realtime', effects.map(({ builtin, amount }) => ({ builtin, amount }))])
+    input = await applyAudioEffectInstancesToFile(project.id, await audioEditF32Source(project, input, signal), effects, signal)
   }
+  for (const item of items) {
+    if (item.kind === 'builtin' || (item.kind === 'essential' && !essentialSoundOfflineStages(item.settings).length)) { pending.push(...audioEditChainItemEffects(item)); continue }
+    await flush()
+    if (item.kind === 'essential') {
+      for (const offline of essentialSoundOfflineStages(item.settings)) await stage(['offline-v1', offline], offline.kind, (source, output) => separateAndMix(source, output, offline.kind, offline.amount, signal))
+      pending.push(...audioEditChainItemEffects(item))
+    } else if (item.kind === 'separation') {
+      await stage(audioEditChainItemRecipe(item), item.mode, (source, output) => separateAndMix(source, output, item.mode, item.amount, signal))
+    } else if (item.kind === 'mouth_declick') {
+      await stage(audioEditChainItemRecipe(item), 'declick', (source, output) => runAudioMouthDeclick(source, output, item.clicks, durationFrames, signal))
+    } else if (item.kind === 'breath') {
+      const regions = breathGainRegions(item, sampleRate)
+      await stage(audioEditChainItemRecipe(item), 'breath', async (source, output) => renderAudioEditGains(project, await openRenderSource(project, source, signal), regions, output, signal))
+    } else if (item.kind === 'plugin') {
+      // 这台电脑上找不到或加载不了的插件先跳过（设置保留），整条声音照常出来。
+      if (!(await listAudioEditProcessors()).some(processor => processor.id === item.pluginId && processor.available)) {
+        logger.warn('插件不可用，处理时跳过', { event: 'audio_edit.render.plugin_skipped', context: { projectId: project.id, pluginId: item.pluginId } })
+        continue
+      }
+      const settings = [{ id: item.pluginId, enabled: true, parameters: item.parameters }]
+      await stage([audioEditChainItemRecipe(item), await audioEditProcessorCacheIdentity(settings)], 'plugin', async (source, output) => {
+        const processed = await processAudioEditVstChain(source, directory, settings, signal)
+        try { await fs.copyFile(processed.outputPath, output) }
+        finally { await Promise.all(processed.temporaryPaths.map(file => removeUnmanagedCachePath(file, { force: true }))) }
+      })
+    }
+  }
+  await flush()
+  if (options.beforeItemId) return input
   const gains = (project.gainRegions ?? []).filter(r => r.enabled)
   if (gains.length) {
     // 只按声音算键：呼吸、气口转成手动剪辑只换 id，不重新生成整段音频
-    key = audioRenderKey([key, audioEditSoundRecipe(undefined, gains).gains])
-    const source = input
-    input = await cachedAudioFile(directory, `gain-${key}`, 'wav', async output => {
-      await renderAudioEditGains(project, await openRenderSource(project, source, signal), gains, output, signal)
-      await validateAudioEditAudio(output, project.source.sampleRate, project.source.channels, project.source.durationFrames, signal)
-    }, signal)
-  }
-  if (processing) {
-    key = audioRenderKey([key, project.processorChain ?? [], await audioEditProcessorCacheIdentity(project.processorChain)])
-    const source = input
-    input = await cachedAudioFile(directory, `effects-${key}`, 'wav', async output => {
-      const processed = await processAudioEditVstChain(source, directory, project.processorChain, signal)
-      try { await validateAudioEditAudio(processed.outputPath, project.source.sampleRate, project.source.channels, project.source.durationFrames, signal); await fs.copyFile(processed.outputPath, output) }
-      finally { await Promise.all(processed.temporaryPaths.map(file => removeUnmanagedCachePath(file, { force: true }))) }
-    }, signal)
+    await stage(audioEditSoundRecipe(undefined, gains).gains, 'gain', async (source, output) => renderAudioEditGains(project, await openRenderSource(project, source, signal), gains, output, signal))
   }
   return input
+}
+
+/** 人声分离 / 去混响：本地模型处理后按 amount 与处理前的声音混合。 */
+async function separateAndMix(source: string, output: string, mode: 'isolate' | 'dereverb', amount: number, signal?: AbortSignal): Promise<void> {
+  const separated = await separateAudioFile({ source, mode: mode === 'isolate' ? 'vocals' : 'dereverb', signal })
+  await mixAudioEditProcessed(source, separated.primaryPath, amount, output, signal)
+}
+
+/** 呼吸声效果换算成音量区域：每处呼吸统一减弱（静音为 -120 dB），两端各留最多 20 毫秒的淡变，不出咔嗒声。 */
+function breathGainRegions(item: AudioEditBreathItem, sampleRate: number): AudioEditGainRegion[] {
+  const fade = Math.round(sampleRate * 0.02)
+  return item.breaths.map((breath, index) => {
+    const length = breath.endFrame - breath.startFrame, edge = Math.min(fade, Math.floor(length / 2))
+    return { id: `breath-${index}`, startFrame: breath.startFrame, endFrame: breath.endFrame, gainDb: item.mode === 'mute' ? -120 : item.reductionDb, fadeInFrames: edge, fadeOutFrames: edge, enabled: true }
+  })
 }
 
 /** 渲染源已是同采样率、同声道的 32 位浮点 WAV 时原样返回；否则在缓存里转一份，返回转好的文件。 */
@@ -152,11 +185,11 @@ async function renderAudioEditSplices(project: AudioEditProjectDocument, reader:
   } finally { await writer.close(); await reader.close() }
 }
 
-export async function renderAudioEditProject(project: AudioEditProjectDocument, processing = project.vstEnabled, signal?: AbortSignal): Promise<AudioEditRenderedAudio> {
+export async function renderAudioEditProject(project: AudioEditProjectDocument, signal?: AbortSignal): Promise<AudioEditRenderedAudio> {
   const started = performance.now()
   logger.info('开始渲染音频', { event: 'audio_edit.render.start', context: { projectId: project.id, revision: project.revision } })
   try {
-    const source = await prepareAudioEditRenderSource(project, processing, signal)
+    const source = await prepareAudioEditRenderSource(project, signal)
     const spans = buildProjectAudioEditTimeline(project)
     const durationFrames = editedDurationFrames(spans)
     if (!durationFrames) throw new Error('当前没有可渲染的声音，请保留至少一段音频。')
@@ -166,7 +199,7 @@ export async function renderAudioEditProject(project: AudioEditProjectDocument, 
       await renderAudioEditSplices(project, await openRenderSource(project, source, signal), spans, durationFrames, output, signal)
       await validateAudioEditAudio(output, project.source.sampleRate, project.source.channels, durationFrames, signal)
     }, signal)
-    // 基本声音与效果组作用在剪好的整条声音上（与试听一致）。
+    // 效果链末尾的实时效果与输出作用在剪好的整条声音上（与试听一致）。
     const audioPath = await applyAudioEditRealtimeEffects(project, spliced, signal)
     await verifyAudioEditSource(project, false, signal)
     logger.info('音频渲染完成', { event: 'audio_edit.render.completed', context: { projectId: project.id, elapsedMs: performance.now() - started } })
@@ -175,12 +208,16 @@ export async function renderAudioEditProject(project: AudioEditProjectDocument, 
 }
 
 /**
- * 口水音检测：在“编辑后声音”（修复、本地模型处理、区间音量都已生效，口水音修复本身除外）里找咔嗒声，返回源采样帧范围。
+ * 口水音检测：听的是效果链里这一项之前的声音（修复与之前各项都已生效，区间音量不算），返回源采样帧范围。
+ * itemId 不在整段处理的那段链里（例如刚加的项还没检测、尚未生效）时，按它在链里的位置取之前各项。
  * 计算在工作线程里分块进行，不阻塞主进程。
  */
-export async function detectAudioEditMouthClicksInProject(project: AudioEditProjectDocument, sensitivity: number, range: { startFrame: number; endFrame: number } | undefined, signal?: AbortSignal, onProgress?: (value: number) => void): Promise<Array<{ startFrame: number; endFrame: number; score: number }>> {
-  const { mouthClicks: _clicks, ...withoutClicks } = project
-  const input = await audioEditF32Source(project, await prepareAudioEditRenderSource(withoutClicks, false, signal), signal)
+export async function detectAudioEditMouthClicksInProject(project: AudioEditProjectDocument, itemId: string, sensitivity: number, range: { startFrame: number; endFrame: number } | undefined, signal?: AbortSignal, onProgress?: (value: number) => void): Promise<Array<{ startFrame: number; endFrame: number; score: number }>> {
+  const chain = project.effectChain ?? []
+  const index = chain.findIndex(item => item.id === itemId)
+  // 这一项之后的效果不影响检测：只保留它之前的各项，再把它自己换成占位（开着、未检测）当作截止位置。
+  const probe: AudioEditProjectDocument = { ...project, effectChain: [...chain.slice(0, Math.max(0, index)), { id: itemId, kind: 'mouth_declick', enabled: true, sensitivity, analyzed: false, clicks: [{ startFrame: 0, endFrame: 1 }] }] }
+  const input = await audioEditF32Source(project, await prepareAudioEditRenderSource(probe, signal, { beforeItemId: itemId }), signal)
   signal?.throwIfAborted()
   const worker = new Worker(path.join(__dirname, 'audio-edit-mouth-click-worker.cjs'), { workerData: { input, sensitivity, startFrame: range?.startFrame ?? 0, endFrame: range?.endFrame ?? project.source.durationFrames } })
   try {

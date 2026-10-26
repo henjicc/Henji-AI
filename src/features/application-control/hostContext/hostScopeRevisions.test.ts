@@ -64,7 +64,7 @@ describe('宿主作用域 revision', () => {
 
   it('口播剪辑页面向助手暴露当前口播和选中的词块', async () => {
     const project: AudioEditProjectDocument = {
-      id: 'audio-project', name: '测试口播', referenceScript: '', vstEnabled: false,
+      id: 'audio-project', name: '测试口播', referenceScript: '',
       source: { mediaType: 'audio', sourcePath: 'C:/source.wav', audioPath: 'C:/source.wav', durationFrames: 48_000, sampleRate: 48_000, channels: 1 },
       transcript: Array.from({ length: 80 }, (_, i) => ({ id: `word-${i + 1}`, text: '测试', startFrame: i * 100, endFrame: (i + 1) * 100, included: true, locked: false, granularity: 'word' as const })),
       suggestions: [], createdAt: 1, updatedAt: 1, revision: 7,

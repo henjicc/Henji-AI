@@ -15,7 +15,7 @@ import { RECORDING_ZOOM_DEPTH_LABELS, recordingClipEffect, recordingClipSource, 
 import type { VideoEditInstance } from '../application/videoEditService'
 import { useVideoEditBuiltinParamGesture } from './useVideoEditBuiltinParamGesture'
 import { VideoEditBuiltinParamRows } from './VideoEditBuiltinEffectControls'
-import { VideoEditEffectSection } from './VideoEditEffectSection'
+import { EffectSection } from '@/components/effects/EffectSection'
 
 const ADD_ZOOM_US = 3_000_000
 
@@ -118,13 +118,13 @@ export function VideoEditRecordingPanel({ instance, sequence, clip, onError }: {
     finally { if (controller.current === current) { controller.current = undefined; setBusy(false) } }
   }
   return <div className="flex flex-col" data-video-edit-recording-panel={clip.id}>
-    <VideoEditEffectSection id="recording-cursor" title="鼠标">
+    <EffectSection id="recording-cursor" title="鼠标">
       <UiFormRow label="显示" density="compact"><UiSwitch aria-label="显示鼠标" checked={Boolean(cursor)} onClickCapture={pin} onCheckedChange={on => toggle(RECORDING_CURSOR_EFFECT, on)} /></UiFormRow>
       {cursor && (source.cursorBakedIn
         ? <EffectRows target={target} effect={cursor} keys={['click_style', 'size']} onError={onError} />
         : <EffectRows target={target} effect={cursor} keys={['style', 'size', 'click_style']} more={['smoothing', 'hide_after', 'distinguish_buttons']} onError={onError} />)}
-    </VideoEditEffectSection>
-    <VideoEditEffectSection id="recording-zoom" title="缩放">
+    </EffectSection>
+    <EffectSection id="recording-zoom" title="缩放">
       <UiFormRow label="自动缩放" density="compact" info="按录制时的点击放大到正在操作的地方，可在时间线的缩放轨上拖动调整。"><UiSwitch aria-label="自动缩放" checked={Boolean(zoom)} disabled={busy} onClickCapture={pin} onCheckedChange={on => { if (on) void regenerate(); else toggle(RECORDING_ZOOM_EFFECT, false) }} /></UiFormRow>
       {zoom && <>
         <div className={`flex items-center gap-2 py-1 ${UI_PROPERTY_INSET_CLASS}`}>
@@ -134,11 +134,11 @@ export function VideoEditRecordingPanel({ instance, sequence, clip, onError }: {
         <ZoomAtPlayhead instance={instance} sequence={sequence} clip={clip} target={target} regions={regions} onError={onError} />
         <EffectRows target={target} effect={zoom} keys={['transition']} more={['connect']} onError={onError} />
       </>}
-    </VideoEditEffectSection>
-    <VideoEditEffectSection id="recording-frame" title="画框">
+    </EffectSection>
+    <EffectSection id="recording-frame" title="画框">
       <UiFormRow label="显示" density="compact"><UiSwitch aria-label="显示画框" checked={Boolean(frame)} onClickCapture={pin} onCheckedChange={on => toggle(RECORDING_FRAME_EFFECT, on)} /></UiFormRow>
       {frame && <EffectRows target={target} effect={frame} keys={['background', 'color', 'padding']} more={['radius', 'shadow']} onError={onError} />}
-    </VideoEditEffectSection>
+    </EffectSection>
     {spacer > 0 && <div aria-hidden="true" style={{ height: spacer }} />}
   </div>
 }

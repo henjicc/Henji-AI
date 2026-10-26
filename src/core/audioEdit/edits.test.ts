@@ -6,7 +6,7 @@ import { buildAudioEditXml, compileAudioEditXmlTimeline } from './xml'
 import type { AudioEditProjectDocument } from './types'
 
 function project(): AudioEditProjectDocument {
-  return { id: 'p', name: '口播 & 测试', source: { mediaType: 'audio', sourcePath: 'D:/原片.wav', audioPath: 'D:/原片.wav', durationFrames: 4000, sampleRate: 1000, channels: 2 }, referenceScript: '', vstEnabled: false, createdAt: 0, updatedAt: 0, revision: 1,
+  return { id: 'p', name: '口播 & 测试', source: { mediaType: 'audio', sourcePath: 'D:/原片.wav', audioPath: 'D:/原片.wav', durationFrames: 4000, sampleRate: 1000, channels: 2 }, referenceScript: '', createdAt: 0, updatedAt: 0, revision: 1,
     transcript: [{ id: 'a', text: '嗯', startFrame: 0, endFrame: 1000, included: true, locked: false, granularity: 'word' }, { id: 'b', text: '继续', startFrame: 3000, endFrame: 4000, included: true, locked: false, granularity: 'word' }],
     suggestions: [{ id: 'silence', kind: 'long_silence', evidence: 'audio', title: '停顿', detail: '', startFrame: 1000, endFrame: 3000, blockIds: [], confidence: 'high', status: 'pending' }] }
 }

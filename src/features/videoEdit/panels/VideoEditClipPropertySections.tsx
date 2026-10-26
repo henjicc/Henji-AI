@@ -5,7 +5,7 @@ import { UI_PROPERTY_INSET_CLASS } from '@/components/ui/styleTokens'
 import NumberInput from '@/components/ui/NumberInput'
 import type { VideoEditClip, VideoEditIntrinsicSection } from '@/core/videoEdit/document'
 import { videoEditClipPropertyBounds, videoEditClipPropertyDefault, type VideoEditClipPropertyKey } from '../application/videoEditClipProperties'
-import { VideoEditEffectSection } from './VideoEditEffectSection'
+import { EffectSection } from '@/components/effects/EffectSection'
 import { VideoEditPropertyRow } from './VideoEditPropertyRow'
 import type { useVideoEditClipPropertyGesture } from './useVideoEditClipPropertyGesture'
 import { videoEditClipValue } from '@/core/videoEdit/keyframes'
@@ -119,13 +119,13 @@ export function VideoEditTextTransformControls({ clip, frame, gesture }: { clip:
     gesture.commit({ [axis]: videoEditClipValue(clip, axis, frame.playhead) + target - edge })
   }
   return <>
-    <VideoEditEffectSection id="motion" title="运动" {...switchProps(clip, gesture, 'motion')} actions={<MotionReset clip={clip} gesture={gesture} />}>
+    <EffectSection id="motion" title="运动" {...switchProps(clip, gesture, 'motion')} actions={<MotionReset clip={clip} gesture={gesture} />}>
       <div className={`flex gap-0.5 pb-1 ${UI_PROPERTY_INSET_CLASS}`}>{TEXT_ALIGNMENTS.map(([axis, value, label, Icon]) => <UiIconButton key={label} size="xs" aria-label={label} tooltip={label} onClick={() => align(axis, value)}><Icon /></UiIconButton>)}</div>
       {MOTION_ROWS.map(row => <PropertyRow key={row.label} row={row} clip={clip} frame={frame} gesture={gesture} />)}
-    </VideoEditEffectSection>
-    <VideoEditEffectSection id="opacity" title="不透明度" {...switchProps(clip, gesture, 'opacity')}>
+    </EffectSection>
+    <EffectSection id="opacity" title="不透明度" {...switchProps(clip, gesture, 'opacity')}>
       <PropertyRow row={ROWS.opacity} clip={clip} frame={frame} gesture={gesture} />
-    </VideoEditEffectSection>
+    </EffectSection>
   </>
 }
 
@@ -135,22 +135,22 @@ export function VideoEditClipPropertySections({ clip, frame, gesture }: { clip: 
   const motion = picture && clip.kind !== 'adjustment' && clip.kind !== 'text'
   const sound = clip.kind === 'video' || clip.kind === 'audio'
   return <>
-    {clip.kind === 'text' && <VideoEditEffectSection id="text" title="文字" {...switchProps(clip, gesture, 'text')}>
+    {clip.kind === 'text' && <EffectSection id="text" title="文字" {...switchProps(clip, gesture, 'text')}>
       <div className={`py-1 ${UI_PROPERTY_INSET_CLASS}`}>
         <UiInput aria-label="画面文字" size="sm" value={clip.text}
           onChange={event => { gesture.begin(); gesture.commit({ text: event.target.value }) }}
           onBlur={() => gesture.finish()}
           onKeyDown={event => { if (event.key === 'Escape' && gesture.active()) { event.preventDefault(); event.stopPropagation(); gesture.cancel(); event.currentTarget.blur() } else if (event.key === 'Enter') event.currentTarget.blur() }} />
       </div>
-    </VideoEditEffectSection>}
-    {motion && <VideoEditEffectSection id="motion" title="运动" {...switchProps(clip, gesture, 'motion')} info="画面的位置、大小与旋转。也可以在节目监视器里直接拖动画面。" actions={<MotionReset clip={clip} gesture={gesture} />}>
+    </EffectSection>}
+    {motion && <EffectSection id="motion" title="运动" {...switchProps(clip, gesture, 'motion')} info="画面的位置、大小与旋转。也可以在节目监视器里直接拖动画面。" actions={<MotionReset clip={clip} gesture={gesture} />}>
       {MOTION_ROWS.map(row => <PropertyRow key={row.label} row={row} clip={clip} frame={frame} gesture={gesture} />)}
-    </VideoEditEffectSection>}
-    {picture && clip.kind !== 'text' && <VideoEditEffectSection id="opacity" title="不透明度" {...switchProps(clip, gesture, 'opacity')} info="片段与下方画面叠加时的透明程度。">
+    </EffectSection>}
+    {picture && clip.kind !== 'text' && <EffectSection id="opacity" title="不透明度" {...switchProps(clip, gesture, 'opacity')} info="片段与下方画面叠加时的透明程度。">
       <PropertyRow row={ROWS.opacity} clip={clip} frame={frame} gesture={gesture} />
-    </VideoEditEffectSection>}
-    {sound && <VideoEditEffectSection id="audio" title="音频" {...switchProps(clip, gesture, 'audio')} info="片段的音量。">
+    </EffectSection>}
+    {sound && <EffectSection id="audio" title="音频" {...switchProps(clip, gesture, 'audio')} info="片段的音量。">
       <PropertyRow row={ROWS.volume} clip={clip} frame={frame} gesture={gesture} />
-    </VideoEditEffectSection>}
+    </EffectSection>}
   </>
 }

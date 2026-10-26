@@ -4,7 +4,7 @@ import { memo, useSyncExternalStore } from 'react'
 import { Trash2 } from 'lucide-react'
 import { UiButton, UiFormRow } from '@/components/ui'
 import { UI_PROPERTY_INSET_CLASS } from '@/components/ui/styleTokens'
-import { VideoEditEffectSection } from './VideoEditEffectSection'
+import { EffectSection } from '@/components/effects/EffectSection'
 import Dropdown from '@/components/ui/Dropdown'
 import NumberInput from '@/components/ui/NumberInput'
 import { ICON_VIDEO_EDIT_TRANSITION } from '@/core/theme/icons'
@@ -47,7 +47,7 @@ export const VideoEditTransitionPanel = memo(function VideoEditTransitionPanel({
   const before = videoEditTransitionFramesBeforeCut(transition)
   const update = (changes: Parameters<typeof updateVideoEditTransition>[3]): void => { void action.run(signal => updateVideoEditTransition(projectId, sequence.id, transition.id, changes, signal), undefined, false) }
   const Icon = ICON_VIDEO_EDIT_TRANSITION
-  return <VideoEditEffectSection id="transition" title="过渡"><div className="flex flex-col" data-video-edit-transition-panel={transition.id}>
+  return <EffectSection id="transition" title="过渡"><div className="flex flex-col" data-video-edit-transition-panel={transition.id}>
     <div className={`flex min-w-0 items-center gap-2 py-1 ${UI_PROPERTY_INSET_CLASS}`}>
       <Icon size={UI_ICON_SIZE.sm} aria-hidden="true" className="shrink-0 text-text3" />
       <span className="min-w-0 flex-1 truncate text-xs text-text1">{preset.name}</span>
@@ -78,5 +78,5 @@ export const VideoEditTransitionPanel = memo(function VideoEditTransitionPanel({
     <div className={`flex items-center gap-2 pt-1 ${UI_PROPERTY_INSET_CLASS}`}>
       <UiButton variant="danger" size="sm" disabled={action.busy} onClick={() => { void action.run(signal => deleteVideoEditTransition(projectId, sequence.id, transition.id, signal), () => selectVideoEditTransition(projectId, null), false) }}><Trash2  aria-hidden="true" />删除过渡</UiButton>
     </div>
-  </div></VideoEditEffectSection>
+  </div></EffectSection>
 })

@@ -1,30 +1,23 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
-import { FileAudio, History, Lock, LockOpen, RotateCcw, Sparkles, Trash2 } from 'lucide-react'
+import { FileAudio, History, Lock, LockOpen, RotateCcw, Trash2 } from 'lucide-react'
 import {
-  Dropdown, UiButton, UiChipButton, UiEmpty, UiFormRow, UiGroup, UiIconButton, UiOptionButton, UiRangeInput, UiSegmented, UiSwitch, UiTextArea, UiTextToken,
-  UI_TEXT_META_CLASS, UI_TEXT_SECONDARY_CLASS,
+  Dropdown, UiButton, UiEmpty, UiFormRow, UiGroup, UiIconButton, UiOptionButton, UiSwitch, UiTextToken, UiToolbar,
+  UI_TEXT_META_CLASS,
 } from '@/components/ui'
+import { DockHeaderPortal } from '@/components/dockLayouts/DockHeaderPortal'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { ICON_SETTINGS as SettingsIcon, UI_ICON_SIZE } from '@/core/theme/icons'
 import { buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
 import { normalizeAudioEditFiller } from '@/core/audioEdit/analysis'
 import { DEFAULT_AUDIO_EDIT_SETTINGS, DEFAULT_AUDIO_EDIT_VIEW_SETTINGS } from '@/core/audioEdit/edits'
 import { notificationMessage } from '@/i18n/notifications'
-import { openDialog, readTextFile } from '@/platform/desktopApi'
-import { AudioEditDisclosure } from '../AudioEditDisclosure'
-import { AudioEditSuggestions } from '../AudioEditSuggestions'
 import { AudioEditFindReplace, AudioEditMatchedText } from '../AudioEditTextTools'
-import { cleanProjectAudioEditFillers, compressAudioEditSilence, matchProjectAudioEditLoudness, processProjectAudioEditBreaths, quickProcessAudioEdit, transcribeAudioEdit } from '../application/audioEditApplicationService'
-import type { AudioEditBreathPolicy } from '@/core/audioEdit/breaths'
+import { transcribeAudioEdit } from '../application/audioEditApplicationService'
+import { AudioEditRoughCutMenu } from './AudioEditRoughCut'
 import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
 import { audioEditHistoryEntries } from './audioEditHistory'
 import { useAudioEditWorkspace } from './audioEditWorkspaceContext'
-import { EssentialSoundControls } from '@/components/audio/EssentialSoundControls'
-import { beginAudioEditGesture } from '../application/audioEditProjectInstances'
-
-/** 减少混响、人声分离用本地模型离线处理进“编辑后声音”（主进程 prepareAudioEditRenderSource）。 */
-const AUDIO_EDIT_OFFLINE_REPAIR = true
 
 function formatTime(frames: number, sampleRate: number): string {
   const seconds = Math.max(0, frames / Math.max(1, sampleRate))
@@ -35,11 +28,6 @@ function formatTime(frames: number, sampleRate: number): string {
 /** 停靠面板的滚动内容区：统一内边距，面板之间读起来是同一套排版。 */
 function PanelScroll({ children, label }: { children: React.ReactNode; label: string }) {
   return <section aria-label={label} className="h-full min-h-0 overflow-y-auto bg-panel p-3">{children}</section>
-}
-
-/** 滑杆行标签：名称 + 当前读数（读数用等宽数字，拖动时不跳宽）。 */
-function RangeLabel({ name, value }: { name: string; value: string }): JSX.Element {
-  return <span className="flex items-baseline justify-between gap-2"><span>{name}</span><span className="tabular-nums text-text3">{value}</span></span>
 }
 
 /** 逐字稿首尾留白（虚拟列表内部，避免外层 padding 把滚动条也推进来）。 */
@@ -97,12 +85,15 @@ export function AudioEditTranscriptPanel() {
   const pause = () => { followPausedUntilRef.current = Date.now() + 2500 }
 
   return <div className="relative flex h-full min-h-0 flex-col bg-panel" data-audio-edit-panel="transcript">
+    {/* 文字稿自己的工具（自动粗剪、原稿 / 校对后、显示设置）放在它的标签行；面板组太窄时回到面板顶部一行 */}
+    <DockHeaderPortal panelId="audio_edit:transcript" fallback={children => <div className="flex shrink-0 justify-end gap-1 px-2 pt-1">{children}</div>}>
+      <div className="flex items-center gap-1">
+        {transcript.length > 0 && <AudioEditRoughCutMenu />}
+        {corrected && <UiSwitch appearance="segmented" size="sm" aria-label="文字稿显示校对后" offLabel="原稿" onLabel="校对后" checked={textView === 'corrected'} onCheckedChange={(checked) => setTextView(checked ? 'corrected' : 'original')} />}
+        <UiIconButton size="sm" tooltip="文字稿显示设置" aria-label="文字稿显示设置" onClick={workspace.openViewSettings}><SettingsIcon /></UiIconButton>
+      </div>
+    </DockHeaderPortal>
     {search.isOpen && <div className="shrink-0 border-b border-gap px-3 py-2"><AudioEditFindReplace search={search} disabled={disabled} /></div>}
-    {/* 文字稿自己的显示设置（字号、留白、波形上方字幕）就放在文字稿面板里 */}
-    {!search.isOpen && <div className="absolute right-2 top-2 z-raised flex items-center gap-1">
-      {corrected && <UiSwitch appearance="segmented" size="sm" aria-label="文字稿显示校对后" offLabel="原稿" onLabel="校对后" checked={textView === 'corrected'} onCheckedChange={(checked) => setTextView(checked ? 'corrected' : 'original')} />}
-      <UiIconButton size="sm" tooltip="文字稿显示设置" aria-label="文字稿显示设置" onClick={workspace.openViewSettings}><SettingsIcon /></UiIconButton>
-    </div>}
     <div ref={containerRef} className="min-h-0 flex-1" style={{ paddingLeft: viewSettings.sidePadding, paddingRight: viewSettings.sidePadding, fontSize: viewSettings.textSize }}
       onPointerDown={pause} onWheel={pause} onTouchMove={pause}>
       {transcript.length === 0 ? (
@@ -147,91 +138,30 @@ export function AudioEditTranscriptPanel() {
           )} />
       )}
     </div>
+    <TranscriptSelectionBar />
   </div>
 }
 
-/** 处理：一键处理、停顿与语气词参数、已处理区间、处理建议、参考逐字稿；选中文字时的删除 / 恢复 / 锁定。 */
-export function AudioEditProcessPanel() {
-  const workspace = useAudioEditWorkspace()
-  const { project, run, notify, update, processRange: range } = workspace
-  const settings = project.batchSettings ?? DEFAULT_AUDIO_EDIT_SETTINGS
-  const enabledCuts = (project.cuts ?? []).filter((cut) => cut.enabled)
-  const selectedBlocks = workspace.selectedBlocks
-  const selectedIds = [...workspace.selectedBlockIds]
-  const selectedSeconds = selectedBlocks.reduce((total, block) => total + Math.max(0, block.endFrame - block.startFrame), 0) / project.source.sampleRate
-  const allLocked = selectedBlocks.length > 0 && selectedBlocks.every((block) => block.locked)
-  const blocked = Boolean(workspace.sourceError)
-  const [breathPolicy, setBreathPolicy] = useState<AudioEditBreathPolicy>('delete')
-  return <PanelScroll label="处理">
-    <fieldset disabled={workspace.disabled} className="flex min-w-0 flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        <p className={`m-0 leading-normal ${UI_TEXT_SECONDARY_CLASS}`}>去掉重念、压缩停顿、清理语气词、处理呼吸声（去除口水音在效果组里）。波形上的黄色区域是将要删除的声音，处理后仍可逐段调整。</p>
-        <UiButton variant="secondary" className="w-full" disabled={blocked} disabledReason="找不到原始素材" onClick={() => void run(async () => { const result = await quickProcessAudioEdit(project.id, range); notify(notificationMessage('audioQuickProcessed', { seconds: (result.shortenedMs / 1000).toFixed(2) })) })}><Sparkles />快速处理</UiButton>
-      </div>
-      <UiGroup divided titleTone="compact" gap="none">
-        <AudioEditDisclosure title="自定义处理参数" value={`停顿 ≥ ${settings.silenceThresholdMs} 毫秒`}>
-          <UiFormRow label="仅处理选区" density="compact" inline><UiSwitch aria-label="仅处理选区" checked={workspace.selectionOnly} disabled={!selectedBlocks.length && !workspace.waveSelection} onCheckedChange={workspace.setSelectionOnly} /></UiFormRow>
-          <UiFormRow label={<RangeLabel name="最短停顿" value={`${settings.silenceThresholdMs} 毫秒`} />} density="compact"><UiRangeInput aria-label="最短停顿" min={100} max={3000} step={50} value={settings.silenceThresholdMs} onChange={(event) => { const value = Number(event.target.value); update({ batchSettings: { ...settings, silenceThresholdMs: value, retainedSilenceMs: Math.min(settings.retainedSilenceMs, value - 50) } }) }} /></UiFormRow>
-          <UiFormRow label={<RangeLabel name="保留时长" value={`${settings.retainedSilenceMs} 毫秒`} />} density="compact"><UiRangeInput aria-label="保留时长" min={0} max={settings.silenceThresholdMs - 50} step={50} value={settings.retainedSilenceMs} onChange={(event) => update({ batchSettings: { ...settings, retainedSilenceMs: Number(event.target.value) } })} /></UiFormRow>
-          <UiFormRow label={<RangeLabel name="静音阈值" value={`${settings.noiseDb} dB`} />} density="compact"><UiRangeInput aria-label="静音阈值" min={-80} max={-10} step={1} value={settings.noiseDb} onChange={(event) => update({ batchSettings: { ...settings, noiseDb: Number(event.target.value) } })} /></UiFormRow>
-          <UiFormRow label="包括片头片尾" density="compact" inline><UiSwitch aria-label="包括片头片尾" checked={settings.trimEdges} onCheckedChange={(value) => update({ batchSettings: { ...settings, trimEdges: value } })} /></UiFormRow>
-          <UiButton variant="secondary" className="w-full" disabled={blocked} disabledReason="找不到原始素材" onClick={() => void run(async () => { const result = await compressAudioEditSilence(project.id, range); notify(notificationMessage('audioSilenceCompressed', { count: result.count, seconds: (result.shortenedMs / 1000).toFixed(2) })) })}>压缩停顿</UiButton>
-          <p className={UI_TEXT_META_CLASS}>选择需要清理的词类；可能有语义的词默认保留。</p>
-          <div role="group" aria-label="语气词" className="flex flex-wrap gap-1">{['嗯', '呃', '额', '那个', '就是', '啊'].map((word) => <UiChipButton key={word} size="sm" active={settings.fillers.includes(word)} aria-pressed={settings.fillers.includes(word)} onClick={() => update({ batchSettings: { ...settings, fillers: settings.fillers.includes(word) ? settings.fillers.filter((value) => value !== word) : [...settings.fillers, word] } })}>{word}</UiChipButton>)}</div>
-          <UiButton variant="secondary" className="w-full" onClick={() => void run(async () => notify(notificationMessage('audioFillersCleaned', { count: await cleanProjectAudioEditFillers(project.id, range) })))}>清理语气词</UiButton>
-          <p className={UI_TEXT_META_CLASS}>呼吸声：删除时去掉呼吸，并把字与字之间残留的气声清成静音、只留短气口；和字连着的只减弱。第一次使用会下载约 13 MB 的本地模型。</p>
-          <UiSegmented ariaLabel="呼吸声" size="sm" fullWidth value={breathPolicy} onChange={setBreathPolicy}
-            options={[{ value: 'delete', label: '删除' }, { value: 'attenuate', label: '减弱' }, { value: 'mute', label: '静音' }, { value: 'keep', label: '保留' }]} />
-          <UiButton variant="secondary" className="w-full" disabled={blocked} disabledReason="找不到原始素材" onClick={() => void run(async () => { const { counts } = await processProjectAudioEditBreaths(project.id, breathPolicy, range); notify(notificationMessage('audioBreathsProcessed', counts)) })}>处理呼吸声</UiButton>
-        </AudioEditDisclosure>
-        {enabledCuts.length > 0 && <AudioEditDisclosure title="已处理区间" value={`${enabledCuts.length} 处`}>
-          <div className="flex flex-col">{enabledCuts.map((cut) => <div key={cut.id} className="flex items-center justify-between gap-2">
-            <UiButton size="sm" className="font-mono tabular-nums" onClick={() => workspace.seek(Math.max(0, cut.startFrame - project.source.sampleRate))}>{formatTime(cut.startFrame, project.source.sampleRate)} · {cut.mode === 'mute' ? '静音' : '删除'}</UiButton>
-            <UiButton size="sm" onClick={() => update({ cuts: project.cuts?.map((item) => item.id === cut.id ? { ...item, enabled: false } : item) })}>恢复</UiButton>
-          </div>)}</div>
-        </AudioEditDisclosure>}
-        <AudioEditSuggestions project={project} onSeek={workspace.navigateToFrame} onResolve={workspace.resolveSuggestions} />
-        <AudioEditDisclosure title="参考逐字稿" value={project.referenceScript?.trim() ? '已填写' : '未使用'}>
-          <UiTextArea rows={4} placeholder="用于对齐内容，不替代真实识别文本" value={project.referenceScript} onChange={(event) => workspace.setReferenceScript(event.target.value)} />
-          <UiButton className="self-start" onClick={() => void run(async () => { const value = await openDialog({ multiple: false, filters: [{ name: '文本', extensions: ['txt', 'md'] }] }); const path = Array.isArray(value) ? value[0] : value; if (path) workspace.setReferenceScript(await readTextFile(path)) })}>导入参考稿</UiButton>
-        </AudioEditDisclosure>
-      </UiGroup>
-      {selectedBlocks.length > 0 && <UiGroup divided titleTone="compact" title={`已选 ${selectedBlocks.length} 个词 · ${selectedSeconds.toFixed(1)} 秒`}>
-        <div className="-mx-2 flex flex-wrap gap-0.5">
-          <UiButton size="sm" variant="danger" onClick={() => workspace.setBlocksIncluded(selectedIds, false)}><Trash2 className="mr-1" />删除声音</UiButton>
-          <UiButton size="sm" onClick={() => workspace.setBlocksIncluded(selectedIds, true)}><RotateCcw className="mr-1" />恢复</UiButton>
-          <UiButton size="sm" onClick={() => update({ transcript: project.transcript.map((block) => selectedIds.includes(block.id) ? { ...block, locked: !allLocked } : block) })}>{allLocked ? <LockOpen className="mr-1" /> : <Lock className="mr-1" />}{allLocked ? '解锁' : '锁定'}</UiButton>
-        </div>
-      </UiGroup>}
-    </fieldset>
-  </PanelScroll>
-}
-
-/** 效果组：见 AudioEditEffectRack（Audition 式效果槽，实时试听）。 */
-export { AudioEditEffectRack as AudioEditEffectsPanel } from './AudioEditEffectRack'
-
-/** 基本声音：按声音类型一键处理（修复、透明度、创意、响度），换算成效果链排在效果组前面。 */
-export function AudioEditEssentialSoundPanel() {
+/** 文字稿底栏：选中词时显示数量与时长，以及删除声音 / 恢复 / 锁定（原来在“处理”面板里）。 */
+function TranscriptSelectionBar(): React.ReactElement | null {
   const workspace = useAudioEditWorkspace()
   const { project, update } = workspace
-  const [matching, setMatching] = useState(false)
-  const [measured, setMeasured] = useState<{ projectId: string; lufs: number } | null>(null)
-  const match = (targetLufs: number) => void workspace.run(async () => {
-    setMatching(true)
-    try { setMeasured({ projectId: project.id, lufs: (await matchProjectAudioEditLoudness(project.id, targetLufs)).integratedLufs }) } finally { setMatching(false) }
-  })
-  return <PanelScroll label="基本声音">
-    <EssentialSoundControls value={project.essentialSound} disabled={workspace.disabled} offline={AUDIO_EDIT_OFFLINE_REPAIR}
-      onChange={essentialSound => update({ essentialSound })} gesture={() => beginAudioEditGesture(project.id)}
-      onMatchLoudness={match} matching={matching} {...(measured?.projectId === project.id ? { measuredLufs: measured.lufs } : {})} />
-  </PanelScroll>
+  const selectedBlocks = workspace.selectedBlocks
+  if (!selectedBlocks.length) return null
+  const selectedIds = [...workspace.selectedBlockIds]
+  const seconds = selectedBlocks.reduce((total, block) => total + Math.max(0, block.endFrame - block.startFrame), 0) / project.source.sampleRate
+  const allLocked = selectedBlocks.every((block) => block.locked)
+  return <UiToolbar variant="footer" aria-label="所选文字" trailing={<>
+    <UiButton size="sm" variant="danger" disabled={workspace.disabled} onClick={() => workspace.setBlocksIncluded(selectedIds, false)}><Trash2 />删除声音</UiButton>
+    <UiButton size="sm" disabled={workspace.disabled} onClick={() => workspace.setBlocksIncluded(selectedIds, true)}><RotateCcw />恢复</UiButton>
+    <UiButton size="sm" disabled={workspace.disabled} onClick={() => update({ transcript: project.transcript.map((block) => selectedIds.includes(block.id) ? { ...block, locked: !allLocked } : block) })}>{allLocked ? <LockOpen /> : <Lock />}{allLocked ? '解锁' : '锁定'}</UiButton>
+  </>}>{`已选 ${selectedBlocks.length} 个词 · ${seconds.toFixed(1)} 秒`}</UiToolbar>
 }
 
 /** 交付：导出格式与附带内容（导出按钮在命令带）。面板最窄约 220px，导出格式的触发器只写格式名，用途写在菜单选项里。 */
 export function AudioEditDeliveryPanel() {
   const workspace = useAudioEditWorkspace()
   const { project, update, deliveryFormat: format } = workspace
-  const plugins = workspace.processors.filter((item) => item.available && item.semanticRole)
   return <PanelScroll label="交付">
     <UiGroup titleTone="compact" labelWidth={96}>
       <UiFormRow label="导出格式" density="compact">
@@ -243,8 +173,7 @@ export function AudioEditDeliveryPanel() {
           options={[24, 25, 30, 50, 60].map((fps) => ({ label: `${fps} fps`, value: fps }))} onSelect={(fps) => update({ xmlFrameRate: { numerator: fps, denominator: 1 } })} />
       </UiFormRow>}
       <UiFormRow label="附带 SRT 字幕" density="compact" inline><UiSwitch aria-label="附带 SRT 字幕" checked={workspace.withSrt} onCheckedChange={workspace.setWithSrt} /></UiFormRow>
-      {plugins.length > 0 && <UiFormRow label="包含 VST3 插件" info="基本声音、效果组、修复与口水音总会算进导出；这一项只管 VST3 插件的处理。" density="compact" inline><UiSwitch aria-label="包含 VST3 插件" checked={workspace.withProcessing} onCheckedChange={workspace.setWithProcessing} /></UiFormRow>}
-      <p className={UI_TEXT_META_CLASS}>{format === 'xml' ? '有声音处理时同时保存全长处理音轨，XML 引用该音轨；否则直接引用原文件。切点按视频帧向外对齐。' : '导出剪好的声音，基本声音与效果组都已算进去。'}</p>
+      <p className={UI_TEXT_META_CLASS}>{format === 'xml' ? '有声音处理时同时保存全长处理音轨，XML 引用该音轨；否则直接引用原文件。切点按视频帧向外对齐。' : '导出剪好的声音，效果控件里的效果与输出都已算进去。'}</p>
     </UiGroup>
   </PanelScroll>
 }

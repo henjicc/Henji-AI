@@ -3,7 +3,10 @@ import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import type { AudioEditProcessorDescriptor, AudioEditProcessorSetting } from '../../../../src/core/audioEdit/types'
+import type { AudioEditProcessorDescriptor } from '../../../../src/core/audioEdit/types'
+
+/** 交给插件宿主的一个插件：参数名到 0–1 归一化值。 */
+type AudioEditProcessorSetting = { id: string; enabled: boolean; parameters: Record<string, number> }
 import { invokeAudioWorker } from './audio-worker-client'
 
 const KNOWN_RX_PROCESSORS = [

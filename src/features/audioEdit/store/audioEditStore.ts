@@ -15,7 +15,6 @@ interface AudioEditState {
   toggleBlock: (blockId: string) => void
   setBlocksIncluded: (blockIds: string[], included: boolean) => void
   setReferenceScript: (referenceScript: string) => void
-  setVstEnabled: (vstEnabled: boolean) => void
   applySuggestion: (suggestionId: string) => void
   dismissSuggestion: (suggestionId: string) => void
   setSelectedBlockIds: (ids: string[]) => void
@@ -40,7 +39,6 @@ export const useAudioEditStore = create<AudioEditState>((set, get) => {
     toggleBlock: (id) => mutate((project) => setAudioEditBlocks(project, [id], !project.transcript.find((block) => block.id === id)?.included)),
     setBlocksIncluded: (ids, included) => mutate((project) => setAudioEditBlocks(project, ids, included)),
     setReferenceScript: (referenceScript) => mutate((project) => ({ ...project, referenceScript })),
-    setVstEnabled: (vstEnabled) => mutate((project) => ({ ...project, vstEnabled })),
     applySuggestion: (id) => mutate((project) => applyAudioEditSuggestion(project, id)),
     dismissSuggestion: (id) => mutate((project) => dismissAudioEditSuggestion(project, id)),
     setSelectedBlockIds: (selectedBlockIds) => set({ selectedBlockIds }),

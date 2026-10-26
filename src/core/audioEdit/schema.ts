@@ -1,12 +1,11 @@
 import { z } from 'zod'
-import { audioEditGainRegionsSchema, audioEditMouthClicksSchema, audioEditRepairsSchema } from './regions'
-import { audioEditEffectsSchema, audioEditEssentialSoundSchema } from './effects'
+import { audioEditGainRegionsSchema, audioEditRepairsSchema } from './regions'
+import { audioEditEffectChainSchema, audioEditOutputSchema } from './effects'
 
 const frame = z.number().int().nonnegative()
 export const audioEditFrameRateSchema = z.object({ numerator: z.number().int().positive(), denominator: z.number().int().positive() }).strict()
 export const audioEditRangeSchema = z.object({ startFrame: frame, endFrame: frame }).strict().refine((range) => range.endFrame > range.startFrame, '结束位置必须晚于开始位置')
 export const audioEditSettingsSchema = z.object({ silenceThresholdMs: z.number().min(100).max(10000), retainedSilenceMs: z.number().min(0).max(10000), noiseDb: z.number().min(-80).max(-10), trimEdges: z.boolean(), fillers: z.array(z.string().min(1).max(30)).max(100) }).strict().refine((value) => value.retainedSilenceMs < value.silenceThresholdMs, '保留时长必须小于检测时长')
-export const audioEditProcessorChainSchema = z.array(z.object({ id: z.string().min(1), enabled: z.boolean(), parameters: z.record(z.string(), z.number().min(0).max(1)) }).strict()).max(20)
 export const audioEditCutsSchema = z.array(z.object({ id: z.string().min(1), startFrame: frame, endFrame: frame, reason: z.enum(['silence', 'manual']), enabled: z.boolean(), mode: z.enum(['delete', 'mute']).optional() }).strict()).max(100000)
 export const audioEditViewSettingsSchema = z.object({ textSize: z.number().int().min(14).max(36), sidePadding: z.number().int().min(16).max(240), timelineCaptions: z.boolean() }).strict()
 const transcriptSchema = z.array(z.object({ id: z.string().min(1), text: z.string().max(20000), startFrame: frame, endFrame: frame, confidence: z.number().finite().optional(), included: z.boolean(), locked: z.boolean(), granularity: z.enum(['word', 'segment']), captionBreakAfter: z.boolean().optional() }).strict())
@@ -24,15 +23,17 @@ export const audioEditProjectSchema = z.object({
   cuts: audioEditCutsSchema.optional(),
   gainRegions: audioEditGainRegionsSchema.optional(), repairs: audioEditRepairsSchema.optional(),
   viewSettings: audioEditViewSettingsSchema.optional(),
-  batchSettings: audioEditSettingsSchema.optional(), processorChain: audioEditProcessorChainSchema.optional(), xmlFrameRate: audioEditFrameRateSchema.optional(),
-  effects: audioEditEffectsSchema.optional(), effectsBypassed: z.boolean().optional(), essentialSound: audioEditEssentialSoundSchema.optional(), mouthClicks: audioEditMouthClicksSchema.optional(),
-  vstEnabled: z.boolean(), selectedAsrModelId: z.string().optional(), createdAt: frame, updatedAt: frame, revision: frame,
+  batchSettings: audioEditSettingsSchema.optional(), xmlFrameRate: audioEditFrameRateSchema.optional(),
+  effectChain: audioEditEffectChainSchema.optional(), chainBypassed: z.boolean().optional(), output: audioEditOutputSchema.optional(),
+  selectedAsrModelId: z.string().optional(), createdAt: frame, updatedAt: frame, revision: frame,
 }).strict().superRefine((project, context) => {
   for (const range of [...project.transcript, ...(project.editBaseline?.transcript ?? []), ...(project.cuts ?? []), ...(project.gainRegions ?? []), ...(project.repairs ?? [])]) {
     if (range.endFrame <= range.startFrame || range.endFrame > project.source.durationFrames) context.addIssue({ code: 'custom', message: '剪辑范围超出音频或时长为零' })
   }
-  for (const click of project.mouthClicks?.clicks ?? []) if (click.endFrame > project.source.durationFrames) context.addIssue({ code: 'custom', message: '口水音范围超出音频' })
-  if (new Set((project.effects ?? []).map(effect => effect.id)).size !== (project.effects ?? []).length) context.addIssue({ code: 'custom', message: '效果引用重复' })
+  for (const item of project.effectChain ?? []) {
+    const ranges = item.kind === 'mouth_declick' ? item.clicks : item.kind === 'breath' ? item.breaths : []
+    if (ranges.some(range => range.endFrame > project.source.durationFrames)) context.addIssue({ code: 'custom', message: '效果里的检测范围超出音频' })
+  }
   for (const regions of [project.gainRegions ?? [], project.repairs ?? []]) {
     if (new Set(regions.map(r => r.id)).size !== regions.length) context.addIssue({ code: 'custom', message: '区域引用重复' })
   }

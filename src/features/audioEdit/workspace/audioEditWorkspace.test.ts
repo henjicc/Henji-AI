@@ -5,7 +5,7 @@ import { markAgentAuthoredStep } from '@/features/application-control/agentEditi
 import { AUDIO_EDIT_LAYOUT_PRESETS, AUDIO_EDIT_PANELS, parseAudioEditLayout } from './audioEditDockLayout'
 
 const base: AudioEditProjectDocument = {
-  id: 'history', name: '音频', referenceScript: '', suggestions: [], vstEnabled: false,
+  id: 'history', name: '音频', referenceScript: '', suggestions: [],
   source: { mediaType: 'audio', sourcePath: 'a.wav', audioPath: 'a.wav', durationFrames: 480000, sampleRate: 48000, channels: 1 },
   transcript: [], createdAt: 1, updatedAt: 1, revision: 1,
 }
@@ -52,21 +52,21 @@ describe('音频编辑布局预设', () => {
   })
 })
 
-it('旧布局里的“选区”面板迁走、“基本声音”补进效果组那一组，通用校验通过且其余位置不变', async () => {
+it('旧布局里的“选区”“处理”“基本声音”面板迁走、“效果”补进文字稿那一组，通用校验通过且其余位置不变', async () => {
   const { migrateAudioEditLayout: migrate } = await import('./audioEditDockLayout')
   const { parseWorkspaceDockLayout } = await import('@/core/workspaceLayouts/validation')
   const old = {
     grid: { width: 1440, height: 860, orientation: 'HORIZONTAL', root: { type: 'branch', data: [
       { type: 'leaf', size: 300, data: { id: 'left', views: ['transcript', 'selection'], activeView: 'selection' } },
       { type: 'leaf', size: 840, data: { id: 'editor-group', views: ['editor'], activeView: 'editor' } },
-      { type: 'leaf', size: 300, data: { id: 'right', views: ['process', 'effects', 'history', 'delivery'], activeView: 'effects' } },
+      { type: 'leaf', size: 300, data: { id: 'right', views: ['process', 'essential', 'effects', 'history', 'delivery'], activeView: 'essential' } },
     ] } },
-    panels: Object.fromEntries(['transcript', 'selection', 'editor', 'process', 'effects', 'history', 'delivery'].map(id => [id, { id, contentComponent: id, title: id }])),
+    panels: Object.fromEntries(['transcript', 'selection', 'editor', 'process', 'essential', 'effects', 'history', 'delivery'].map(id => [id, { id, contentComponent: id, title: id }])),
     activeGroup: 'editor-group',
   } as unknown as Parameters<typeof migrate>[0]
   const migrated = parseWorkspaceDockLayout(JSON.stringify(migrate(structuredClone(old))), AUDIO_EDIT_PANELS)
   const leaves = (migrated.grid.root as unknown as { data: Array<{ data: { views: string[]; activeView: string } }> }).data.map(node => node.data)
-  expect(leaves[0]).toEqual({ id: 'left', views: ['transcript'], activeView: 'transcript' })
-  expect(leaves[2].views).toEqual(['process', 'essential', 'effects', 'history', 'delivery'])
-  expect(Object.keys(migrated.panels).sort()).toEqual(['delivery', 'editor', 'effects', 'essential', 'history', 'process', 'transcript'])
+  expect(leaves[0]).toEqual({ id: 'left', views: ['transcript', 'library'], activeView: 'transcript' })
+  expect(leaves[2]).toEqual({ id: 'right', views: ['effects', 'history', 'delivery'], activeView: 'effects' })
+  expect(Object.keys(migrated.panels).sort()).toEqual(['delivery', 'editor', 'effects', 'history', 'library', 'transcript'])
 })

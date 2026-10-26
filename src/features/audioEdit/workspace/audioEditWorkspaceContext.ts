@@ -46,7 +46,6 @@ export interface AudioEditWorkspace {
   setSelectedBlockIds: (ids: string[]) => void
   setBlocksIncluded: (ids: string[], included: boolean) => void
   setReferenceScript: (text: string) => void
-  setVstEnabled: (enabled: boolean) => void
   editBlock: (id: string) => void
   deleteBlock: (id: string) => void
   resolveSuggestions: (ids: string[], apply: boolean) => void
@@ -57,8 +56,6 @@ export interface AudioEditWorkspace {
   setDeliveryFormat: (format: AudioEditDeliveryFormat) => void
   withSrt: boolean
   setWithSrt: (value: boolean) => void
-  withProcessing: boolean
-  setWithProcessing: (value: boolean) => void
   openViewSettings: () => void
 }
 

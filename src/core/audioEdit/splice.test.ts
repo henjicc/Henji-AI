@@ -5,7 +5,7 @@ import { emptyAudioEditSource } from './documentContent'
 import type { AudioEditProjectDocument } from './types'
 
 const source = { mediaType: 'audio' as const, sourcePath: '/old.wav', audioPath: '/old.wav', durationFrames: 1000, sampleRate: 1000, channels: 1 }
-const project = (): AudioEditProjectDocument => ({ id: 'p', name: '录音', source, transcript: [], suggestions: [], referenceScript: '', vstEnabled: false, createdAt: 1, updatedAt: 1, revision: 0 })
+const project = (): AudioEditProjectDocument => ({ id: 'p', name: '录音', source, transcript: [], suggestions: [], referenceScript: '', createdAt: 1, updatedAt: 1, revision: 0 })
 const resultSource = (durationFrames: number) => ({ ...source, durationFrames, sourcePath: '/new.wav', audioPath: '/new.wav', ownership: 'managed' as const })
 describe('录音素材拼接坐标', () => {
   it('插入点的半开边界、跨切点拆分与后续整体平移，不让旧编辑套到新声音', () => {

@@ -13,9 +13,8 @@ const SIDE_MIN = { minimumWidth: 240, minimumHeight: 120 } as const
 export const AUDIO_EDIT_PANELS = [
   { id: 'editor', title: '编辑器', minimumWidth: 440, minimumHeight: 200 },
   { id: 'transcript', title: '文字稿', minimumWidth: 240, minimumHeight: 160 },
-  { id: 'process', title: '处理', ...SIDE_MIN },
-  { id: 'essential', title: '基本声音', ...SIDE_MIN },
-  { id: 'effects', title: '效果组', ...SIDE_MIN },
+  { id: 'library', title: '效果', ...SIDE_MIN },
+  { id: 'effects', title: '效果控件', ...SIDE_MIN },
   { id: 'history', title: '历史记录', ...SIDE_MIN },
   { id: 'delivery', title: '交付', ...SIDE_MIN },
 ] as const
@@ -34,47 +33,50 @@ function layout(root: Node): SerializedDockview {
 
 /**
  * 内置布局预设（参照 Audition 的“工作区”）：
- * - 经典：左边文字稿与处理，中间编辑器，右边基本声音、效果组在上，历史、交付在下；
+ * - 经典：左边文字稿与效果（可搜索的效果目录），中间编辑器，右边效果控件在上，历史、交付在下；
  * - 口播：文字稿占左边一大栏，用文字剪、右边同步看波形；
  * - 专注：编辑器最大，次要面板收进右侧和底部标签页。
  */
 export const AUDIO_EDIT_LAYOUT_PRESETS = [
   { id: 'classic', name: '经典', layout: () => layout(branch(1440,
-    leaf({ id: 'left-group', size: 280, views: ['transcript', 'process'] }),
+    leaf({ id: 'left-group', size: 280, views: ['transcript', 'library'] }),
     leaf({ id: 'editor-group', size: 880, views: ['editor'] }),
     branch(300,
-      leaf({ id: 'effects-group', size: 560, views: ['essential', 'effects'] }),
+      leaf({ id: 'effects-group', size: 560, views: ['effects'] }),
       leaf({ id: 'info-group', size: 300, views: ['history', 'delivery'] })),
   )) },
   { id: 'voice', name: '口播', layout: () => layout(branch(1440,
-    leaf({ id: 'left-group', size: 460, views: ['transcript'] }),
+    leaf({ id: 'left-group', size: 460, views: ['transcript', 'library'] }),
     leaf({ id: 'editor-group', size: 700, views: ['editor'] }),
-    leaf({ id: 'right-group', size: 300, views: ['process', 'essential', 'effects', 'delivery', 'history'] }),
+    leaf({ id: 'right-group', size: 300, views: ['effects', 'delivery', 'history'] }),
   )) },
   { id: 'focus', name: '专注', layout: () => layout(branch(1440,
     branch(1160,
       leaf({ id: 'editor-group', size: 640, views: ['editor'] }),
       leaf({ id: 'bottom-group', size: 220, views: ['transcript', 'history'] })),
-    leaf({ id: 'right-group', size: 300, views: ['essential', 'effects', 'process', 'delivery'] }),
+    leaf({ id: 'right-group', size: 300, views: ['effects', 'library', 'delivery'] }),
   )) },
 ] as const
 
-/** 已取消的面板：旧布局里出现时去掉（选区读数并进了编辑器底部的走带）。 */
-const RETIRED_PANELS = new Set(['selection'])
+/**
+ * 已取消的面板：旧布局里出现时去掉。选区读数并进了编辑器底部的走带；“处理”与“基本声音”在效果控件重构（2026-10-26）后取消：
+ * 改时长的粗剪进了文字稿，基本声音成了效果控件里的一个效果。
+ */
+const RETIRED_PANELS = new Set(['selection', 'process', 'essential'])
 
 /**
- * 旧布局迁到当前面板集合：去掉已取消的面板；没有“基本声音”时放进效果组所在的那组标签（排在效果组前面）。
+ * 旧布局迁到当前面板集合：去掉已取消的面板；没有“效果”（效果目录）时放进文字稿所在的那组标签（排在文字稿后面）。
  * 只调整面板集合，用户排好的位置和大小不动。
  */
 export function migrateAudioEditLayout(value: SerializedDockview): SerializedDockview {
   let host: { views: string[]; activeView?: string } | null = null
-  let hasEssential = false
+  let hasLibrary = false
   const visit = (node: Node): void => {
     if (node.type === 'leaf') {
       node.data.views = node.data.views.filter(id => !RETIRED_PANELS.has(id))
       if (!node.data.views.includes(node.data.activeView)) node.data.activeView = node.data.views[0]
-      if (node.data.views.includes('essential')) hasEssential = true
-      if (node.data.views.includes('effects')) host = node.data
+      if (node.data.views.includes('library')) hasLibrary = true
+      if (node.data.views.includes('transcript')) host = node.data
       return
     }
     node.data.forEach(visit)
@@ -83,9 +85,9 @@ export function migrateAudioEditLayout(value: SerializedDockview): SerializedDoc
   visit(value.grid.root as Node)
   for (const id of RETIRED_PANELS) delete value.panels[id]
   const target = host as { views: string[]; activeView?: string } | null
-  if (!hasEssential && target) {
-    target.views.splice(target.views.indexOf('effects'), 0, 'essential')
-    value.panels.essential = { id: 'essential', contentComponent: 'essential', title: TITLES.essential, renderer: 'always' } as SerializedDockview['panels'][string]
+  if (!hasLibrary && target) {
+    target.views.splice(target.views.indexOf('transcript') + 1, 0, 'library')
+    value.panels.library = { id: 'library', contentComponent: 'library', title: TITLES.library, renderer: 'always' } as SerializedDockview['panels'][string]
   }
   return value
 }

@@ -43,7 +43,8 @@ describe('口播文档内容', () => {
     expect(empty({ ...imported, referenceScript: '稿子' })).toBe(false)
     expect(empty({ ...imported, cuts: [{ id: 'c', startFrame: 0, endFrame: 10, reason: 'manual', enabled: true }] })).toBe(false)
     expect(empty({ ...imported, transcript: [{ id: 'w', text: '你好', startFrame: 0, endFrame: 10, included: true, locked: false, granularity: 'word' }] })).toBe(false)
-    expect(empty({ ...imported, processorChain: [{ id: 'rx', enabled: true, parameters: {} }] })).toBe(false)
+    expect(empty({ ...imported, effectChain: [{ id: 'fx', kind: 'mouth_declick', enabled: true, sensitivity: 50, analyzed: false, clicks: [] }] })).toBe(false)
+    expect(empty({ ...imported, output: { volumeDb: -2 } })).toBe(false)
   })
 
   it('列表摘要：素材类型与时长（秒），没有素材时为空', () => {

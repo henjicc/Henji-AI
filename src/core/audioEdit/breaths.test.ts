@@ -6,7 +6,7 @@ import { applyAudioEditBreathPolicy, AUDIO_EDIT_BREATH_ATTENUATION_DB, describeA
 function documentOf(words: Array<[string, number, number]>, extra: Partial<AudioEditProjectDocument> = {}): AudioEditProjectDocument {
   const transcript: AudioEditTranscriptBlock[] = words.map(([text, startFrame, endFrame], index) => ({ id: `w${index}`, text, startFrame, endFrame, included: true, locked: false, granularity: 'word' }))
   return {
-    id: 'breaths', name: '呼吸', referenceScript: '', suggestions: [], vstEnabled: false, transcript, createdAt: 1, updatedAt: 1, revision: 1,
+    id: 'breaths', name: '呼吸', referenceScript: '', suggestions: [], transcript, createdAt: 1, updatedAt: 1, revision: 1,
     source: { mediaType: 'audio', sourcePath: 'a.wav', audioPath: 'a.wav', durationFrames: 20000, sampleRate: 1000, channels: 1 },
     cuts: [], gainRegions: [], ...extra,
   }

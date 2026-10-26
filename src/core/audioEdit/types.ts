@@ -7,7 +7,6 @@ export interface AudioEditCut extends AudioEditRange { id: string; reason: 'sile
 export interface AudioEditViewSettings { textSize: number; sidePadding: number; timelineCaptions: boolean }
 export interface AudioEditFrameRate { numerator: number; denominator: number }
 export interface AudioEditSourceIdentity { size: number; mtimeMs: number; digest: string }
-export interface AudioEditProcessorSetting { id: string; enabled: boolean; parameters: Record<string, number> }
 export interface AudioEditBatchSettings {
   silenceThresholdMs: number
   retainedSilenceMs: number
@@ -89,7 +88,6 @@ export interface AudioEditProjectDocument {
   referenceScript: string
   transcript: AudioEditTranscriptBlock[]
   suggestions: AudioEditSuggestion[]
-  vstEnabled: boolean
   selectedAsrModelId?: string
   createdAt: number
   updatedAt: number
@@ -98,16 +96,15 @@ export interface AudioEditProjectDocument {
   repairs?: import('./regions').AudioEditRepair[]
   cuts?: AudioEditCut[]
   batchSettings?: AudioEditBatchSettings
-  processorChain?: AudioEditProcessorSetting[]
   xmlFrameRate?: AudioEditFrameRate
   viewSettings?: AudioEditViewSettings
   editBaseline?: AudioEditBaseline
-  /** 效果组（实时处理，导出同一份效果链）；基本声音换算的效果排在它前面。 */
-  effects?: import('./effects').AudioEditEffect[]
-  /** 效果组整体关闭（基本声音不受影响）。 */
-  effectsBypassed?: boolean
-  essentialSound?: import('../audio/essentialSound').EssentialSoundSettings
-  mouthClicks?: import('./regions').AudioEditMouthClicks
+  /** 效果控件：有顺序的效果链，从上到下处理录音本身（见 `./effects`）。 */
+  effectChain?: import('./effects').AudioEditChainItem[]
+  /** 效果控件整体关闭（对比处理前后；输出一节照常）。 */
+  chainBypassed?: boolean
+  /** 输出：作用在剪好的整条声音上的音量与自动匹配响度。 */
+  output?: import('./effects').AudioEditOutput
 }
 
 export interface AudioEditTranscriptionRequest {
@@ -128,7 +125,6 @@ export interface AudioEditExportRequest {
   audioTargetPath?: string
   targetPath?: string
   format?: 'xml' | 'wav'
-  includeProcessing?: boolean
   frameRate?: AudioEditFrameRate
   subtitleTargetPath?: string
   requestId?: string
@@ -163,7 +159,6 @@ export interface AudioEditPreviewChunkRequest {
   projectId: string
   sourceStartFrame: number
   frameCount: number
-  processing?: boolean
 }
 
 export type AudioEditSilenceRequest = ({ projectId: string; sourcePath?: never } | { sourcePath: string; projectId?: never }) & {

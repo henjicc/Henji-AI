@@ -33,8 +33,8 @@ export function cancelAudioEditSpectralTile(requestId: string): Promise<void> {
 export function subscribeAudioEditSpectralProgress(handler: (progress: AudioEditSpectralProgress) => void): () => void {
   return getPlatform().audioEdit.onSpectralProgress(handler)
 }
-export async function renderAudioEdit(projectId: string, requestId: string = crypto.randomUUID(), includeProcessing?: boolean): Promise<AudioEditRenderedAudio> {
-  return withAudioEditProjectOperation(projectId, () => getPlatform().audioEdit.render({ projectId, requestId, includeProcessing }))
+export async function renderAudioEdit(projectId: string, requestId: string = crypto.randomUUID()): Promise<AudioEditRenderedAudio> {
+  return withAudioEditProjectOperation(projectId, () => getPlatform().audioEdit.render({ projectId, requestId }))
 }
 /** Algorithm action. The persisted record remains undoable even if rendering fails; retry does not recreate it. */
 export async function repairAudioEditRegion(projectId: string, repair: AudioEditRepair, requestId: string = crypto.randomUUID()): Promise<AudioEditRenderedAudio> {

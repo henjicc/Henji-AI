@@ -80,7 +80,6 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     setBlocksIncluded: state.setBlocksIncluded,
     setReferenceScript: state.setReferenceScript,
     setSelectedBlockIds: state.setSelectedBlockIds,
-    setVstEnabled: state.setVstEnabled,
   })))
   const { project, selectedBlockIds } = state
   const [asrModels, setAsrModels] = useState<AudioEditAsrModel[]>([])
@@ -104,7 +103,6 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   const [waveformPeaks, setWaveformPeaks] = useState<number[]>([])
   const [format, setFormat] = useState<AudioEditDeliveryFormat>('xml')
   const [withSrt, setWithSrt] = useState(false)
-  const [withRx, setWithRx] = useState(false)
   const [waveSelection, setWaveSelection] = useState<AudioEditRange | null>(null)
   const waveEditor = useAudioWaveEditor(project ?? undefined)
   const [viewSettingsOpen, setViewSettingsOpen] = useState(false)
@@ -207,7 +205,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     if (!project) return
     const targetPath = await saveDialog({ defaultPath: `${project.name.replace(/\.[^.]+$/, '')}-剪辑.${format}`, filters: [{ name: format === 'xml' ? 'Final Cut Pro 7 XML' : 'WAV 音频', extensions: [format] }] })
     if (!targetPath) return
-    const result = await exportAudioEdit({ projectId: project.id, targetPath, format, includeProcessing: withRx, ...(withSrt ? { subtitleTargetPath: targetPath.replace(/\.[^.]+$/, '') + '.srt' } : {}) })
+    const result = await exportAudioEdit({ projectId: project.id, targetPath, format, ...(withSrt ? { subtitleTargetPath: targetPath.replace(/\.[^.]+$/, '') + '.srt' } : {}) })
     showNotification(notificationMessage('audioExported', { format: format.toUpperCase(), duration: formatTime(result.durationFrames, project.source.sampleRate) }))
   })
   if (!project) {
@@ -281,9 +279,9 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     editSelection, adjustCutRange, seek: seekSourceFrame, navigateToFrame, togglePlayback, previewGain: normalizationGain, delivery,
     silencePreview: { ranges: silencePreview.ranges, pending: silencePreview.pending, ...(silencePreview.error ? { error: silencePreview.error } : {}) },
     selectionOnly, setSelectionOnly, processRange: range, selectedBlocks, selectedBlockIds, setSelectedBlockIds,
-    setBlocksIncluded: state.setBlocksIncluded, setReferenceScript: state.setReferenceScript, setVstEnabled: state.setVstEnabled,
+    setBlocksIncluded: state.setBlocksIncluded, setReferenceScript: state.setReferenceScript,
     editBlock: setEditingBlockId, deleteBlock, resolveSuggestions, asrModels, processors, tasks,
-    deliveryFormat: format, setDeliveryFormat: setFormat, withSrt, setWithSrt, withProcessing: withRx, setWithProcessing: setWithRx,
+    deliveryFormat: format, setDeliveryFormat: setFormat, withSrt, setWithSrt,
     openViewSettings: () => setViewSettingsOpen(true),
   }
   return <div ref={editorRoot} className="flex h-full min-h-0 flex-col bg-window" onKeyDown={(event) => {
@@ -315,7 +313,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
         <WorkspaceLayoutMenu workspaceId={AUDIO_EDIT_WORKSPACE_ID} />
         {/* 一条带只有这一条分隔线：左侧是编辑工具，右侧是交付动作 */}
         <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-line" />
-        <VideoEditSendMenu mediaKind="audio" disabled={disabled || Boolean(sourceError)} notify={showNotification} resolveSource={async () => ({ type: 'document', docRef: await videoEditDocumentRef(project.id), includeProcessing: withRx })} />
+        <VideoEditSendMenu mediaKind="audio" disabled={disabled || Boolean(sourceError)} notify={showNotification} resolveSource={async () => ({ type: 'document', docRef: await videoEditDocumentRef(project.id) })} />
         <UiButton variant="primary" disabled={disabled || Boolean(sourceError)} onClick={() => void exportProject()}><Download className="mr-1.5" />导出</UiButton>
       </>}
     >

@@ -15,7 +15,7 @@ import type { AudioRackEffect } from '@/core/audio/effects/rackEffect'
 
 /*
  * 效果组的通用部分（参照 Audition 的效果组）：选效果菜单、效果槽列表与每个效果的参数。
- * 音频编辑的效果组、剪辑音轨混合器里每条轨道与主轨的效果都用它；写入交给宿主。
+ * 剪辑音轨混合器里每条轨道与主轨的效果用它；音频编辑的效果控件复用其中的参数编辑（AudioEffectParams）。写入交给宿主。
  */
 
 export type AudioRackGesture = () => { finish: () => void; cancel: () => void }
@@ -31,18 +31,10 @@ function groupedDefinitions(query: string): Array<[VideoEditBuiltinGroup, VideoE
   return order.map(group => [group, matches.filter(definition => definition.group === group)] as [VideoEditBuiltinGroup, VideoEditBuiltinEffectDefinition[]]).filter(([, items]) => items.length)
 }
 
-/** 效果菜单里的宿主专属项（如音频编辑的“去除口水音”）：列在对应分类末尾，点了交给宿主执行，不进效果组。 */
-export interface AudioEffectPickerExtra { id: string; name: string; tooltip: string; group: VideoEditBuiltinGroup; onPick: () => void }
-
 /** 添加效果：按 Audition 的分类列出全部内置音频效果，可搜索；悬停显示用途。 */
-export function AudioEffectPicker({ onPick, disabled, disabledReason, extras = [] }: { onPick: (definition: VideoEditBuiltinEffectDefinition) => void; disabled: boolean; disabledReason?: string; extras?: readonly AudioEffectPickerExtra[] }): React.ReactElement {
+export function AudioEffectPicker({ onPick, disabled, disabledReason }: { onPick: (definition: VideoEditBuiltinEffectDefinition) => void; disabled: boolean; disabledReason?: string }): React.ReactElement {
   const [query, setQuery] = useState('')
-  const groups = useMemo(() => groupedDefinitions(query), [query])
-  const needle = query.trim().toLowerCase()
-  const extraIn = (group: VideoEditBuiltinGroup) => extras.filter(extra => extra.group === group && (!needle || extra.name.toLowerCase().includes(needle) || extra.tooltip.toLowerCase().includes(needle)))
-  const shown = [...groups.map(([group, items]) => [group, items, extraIn(group)] as const),
-    ...[...new Set(extras.map(extra => extra.group))].filter(group => !groups.some(([listed]) => listed === group)).map(group => [group, [] as VideoEditBuiltinEffectDefinition[], extraIn(group)] as const)]
-    .filter(([, items, more]) => items.length + more.length > 0)
+  const shown = useMemo(() => groupedDefinitions(query), [query])
   const option = (key: string, name: string, tooltip: string, pick: () => void) => <UiOptionButton key={key} variant="menu" size="sm" data-effect-pick className="w-full" tooltip={tooltip} onClick={pick}>{name}</UiOptionButton>
   // 只有列表一层滚动：高度按浮层实际能给的封顶（UI_PANEL_BODY_HEIGHT_CLASS），浮层外壳不再另滚一层。
   // 分类标题用主文字加粗、上方一条分隔线，效果项缩进在标题下面，分类一眼能分开。
@@ -50,11 +42,10 @@ export function AudioEffectPicker({ onPick, disabled, disabledReason, extras = [
     renderPanel={() => <div className={`flex w-64 flex-col ${UI_PANEL_BODY_HEIGHT_CLASS.content}`}>
       <div className="shrink-0 p-1"><UiInput size="sm" autoFocus aria-label="搜索效果" placeholder="搜索效果" value={query} onChange={event => setQuery(event.target.value)} /></div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-1">
-        {shown.length ? shown.map(([group, items, more], index) => <div key={group} role="group" aria-label={VIDEO_EDIT_BUILTIN_GROUP_NAMES[group]} className={index ? `mt-1 pt-1 ${UI_DIVIDER_CLASS}` : ''}>
+        {shown.length ? shown.map(([group, items], index) => <div key={group} role="group" aria-label={VIDEO_EDIT_BUILTIN_GROUP_NAMES[group]} className={index ? `mt-1 pt-1 ${UI_DIVIDER_CLASS}` : ''}>
           <div className="px-2 pb-0.5 pt-1.5 text-xs font-semibold text-text1">{VIDEO_EDIT_BUILTIN_GROUP_NAMES[group]}</div>
           <div className="pl-2">
             {items.map(definition => option(definition.id, definition.name, definition.tooltip, () => onPick(definition)))}
-            {more.map(extra => option(extra.id, extra.name, extra.tooltip, extra.onPick))}
           </div>
         </div>) : <p className={`m-0 px-2 py-3 ${UI_TEXT_META_CLASS}`}>没有找到“{query}”相关的效果</p>}
       </div>
@@ -64,7 +55,7 @@ export function AudioEffectPicker({ onPick, disabled, disabledReason, extras = [
 }
 
 /** 一项效果的参数（名称悬停说明、右键重置，与剪辑“效果控件”一致），拖动时实时试听，松手合成一步撤销。 */
-function EffectParams({ effect, onChange, gesture }: { effect: AudioRackEffect; onChange: (next: AudioRackEffect) => void; gesture: AudioRackGesture }): React.ReactElement {
+export function AudioEffectParams({ effect, onChange, gesture }: { effect: AudioRackEffect; onChange: (next: AudioRackEffect) => void; gesture: AudioRackGesture }): React.ReactElement {
   const definition = videoEditBuiltinEffect(effect.builtin.id)
   const active = useRef<{ finish: () => void; cancel: () => void } | null>(null)
   const latest = useRef(effect); latest.current = effect
@@ -96,17 +87,11 @@ function EffectParams({ effect, onChange, gesture }: { effect: AudioRackEffect; 
 
 
 /**
- * 排在效果组最前面的固定槽：要先对整段声音分析再处理的修复（如去除口水音），和其他效果一样有开关、参数和移除，
- * 但总在其他效果之前处理，不能上下移动。参数由宿主给出。
- */
-export interface AudioRackFixedSlot { id: string; name: string; tooltip: string; enabled: boolean; onToggle: (enabled: boolean) => void; onRemove: () => void; params: React.ReactNode }
-
-/**
  * 效果槽列表：每槽开关、序号与名称、更多菜单（上移 / 下移 / 恢复默认参数 / 移除），点名称展开参数。
- * fixed 是排在最前的固定槽；两者都为空时显示 empty（宿主给出的空状态）。
+ * effects 为空时显示 empty（宿主给出的空状态）。
  */
-export function AudioEffectSlots({ effects, onChange, gesture, disabled, bypassed = false, empty, fixed = [] }: { effects: readonly AudioRackEffect[]; onChange: (next: AudioRackEffect[]) => void; gesture: AudioRackGesture; disabled: boolean; bypassed?: boolean; empty: React.ReactNode; fixed?: readonly AudioRackFixedSlot[] }): React.ReactElement {
-  const ids = [...fixed.map(slot => slot.id), ...effects.map(effect => effect.id)]
+export function AudioEffectSlots({ effects, onChange, gesture, disabled, bypassed = false, empty }: { effects: readonly AudioRackEffect[]; onChange: (next: AudioRackEffect[]) => void; gesture: AudioRackGesture; disabled: boolean; bypassed?: boolean; empty: React.ReactNode }): React.ReactElement {
+  const ids = effects.map(effect => effect.id)
   const [openId, setOpenId] = useState<string | null>(ids[0] ?? null)
   // 新加的效果自动展开参数（与 Audition 加效果后弹出参数一样）。
   const known = useRef(new Set(ids))
@@ -127,32 +112,14 @@ export function AudioEffectSlots({ effects, onChange, gesture, disabled, bypasse
     </span>
   </UiOptionButton>
   return <>
-      {!effects.length && !fixed.length ? empty : <div role="list" aria-label="效果组" className={`flex flex-col ${bypassed ? 'opacity-60' : ''}`}>
-        {fixed.map((slot, index) => {
-          const open = openId === slot.id
-          return <div key={slot.id} role="listitem" className="flex flex-col" data-audio-effect-slot={slot.id}>
-            <div className="group flex h-8 min-w-0 items-center gap-1">
-              <UiIconButton size="xs" on={slot.enabled} aria-pressed={slot.enabled} tooltip={slot.enabled ? '关闭这个效果' : '打开这个效果'} aria-label={`${slot.name}开关`} disabled={disabled} onClick={() => slot.onToggle(!slot.enabled)}><Power /></UiIconButton>
-              {toggleRow(slot.id, open, slot.name, index + 1, slot.enabled, slot.tooltip)}
-              <PanelTrigger panelSize="menu" panelPadding="menu" alignment="bottomRight" closeOnPanelClick
-                renderPanel={() => <div className="flex flex-col">
-                  <UiOptionButton variant="menu" size="sm" disabled disabledReason="整段预先处理，总在其他效果之前">上移</UiOptionButton>
-                  <UiOptionButton variant="menu" size="sm" disabled disabledReason="整段预先处理，总在其他效果之前">下移</UiOptionButton>
-                  <UiOptionButton variant="menu" size="sm" onClick={slot.onRemove}><span className="flex items-center gap-2 text-danger-text"><Trash2 size={UI_ICON_SIZE.xs} />移除</span></UiOptionButton>
-                </div>}>
-                {({ togglePanel }) => <UiIconButton size="xs" aria-label={`${slot.name}更多操作`} tooltip="更多" disabled={disabled} onClick={togglePanel}><MoreHorizontal /></UiIconButton>}
-              </PanelTrigger>
-            </div>
-            {open && <div className="pb-2 pl-6"><fieldset disabled={disabled} className="m-0 min-w-0 border-0 p-0">{slot.params}</fieldset></div>}
-          </div>
-        })}
+      {!effects.length ? empty : <div role="list" aria-label="效果组" className={`flex flex-col ${bypassed ? 'opacity-60' : ''}`}>
         {effects.map((effect, index) => {
           const open = openId === effect.id
           const definition = videoEditBuiltinEffect(effect.builtin.id)
           return <div key={effect.id} role="listitem" className="flex flex-col" data-audio-effect-slot={effect.builtin.id}>
             <div className="group flex h-8 min-w-0 items-center gap-1">
               <UiIconButton size="xs" on={effect.enabled} aria-pressed={effect.enabled} tooltip={effect.enabled ? '关闭这个效果' : '打开这个效果'} aria-label={`${effect.name}开关`} disabled={disabled} onClick={() => replace(effect.id, { ...effect, enabled: !effect.enabled })}><Power /></UiIconButton>
-              {toggleRow(effect.id, open, effect.name, fixed.length + index + 1, effect.enabled, definition?.tooltip)}
+              {toggleRow(effect.id, open, effect.name, index + 1, effect.enabled, definition?.tooltip)}
               <PanelTrigger panelSize="menu" panelPadding="menu" alignment="bottomRight" closeOnPanelClick
                 renderPanel={() => <div className="flex flex-col">
                   <UiOptionButton variant="menu" size="sm" disabled={index === 0} onClick={() => move(index, -1)}>上移</UiOptionButton>
@@ -163,7 +130,7 @@ export function AudioEffectSlots({ effects, onChange, gesture, disabled, bypasse
                 {({ togglePanel }) => <UiIconButton size="xs" aria-label={`${effect.name}更多操作`} tooltip="更多" disabled={disabled} onClick={togglePanel}><MoreHorizontal /></UiIconButton>}
               </PanelTrigger>
             </div>
-            {open && <div className="pb-2 pl-6"><fieldset disabled={disabled} className="m-0 min-w-0 border-0 p-0"><EffectParams effect={effect} gesture={gesture} onChange={next => replace(effect.id, next)} /></fieldset></div>}
+            {open && <div className="pb-2 pl-6"><fieldset disabled={disabled} className="m-0 min-w-0 border-0 p-0"><AudioEffectParams effect={effect} gesture={gesture} onChange={next => replace(effect.id, next)} /></fieldset></div>}
           </div>
         })}
       </div>}

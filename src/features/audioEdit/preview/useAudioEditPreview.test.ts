@@ -31,7 +31,7 @@ class FakeNode {
 }
 function project(): AudioEditProjectDocument {
   return {
-    id: 'preview', name: '口播', referenceScript: '', suggestions: [], vstEnabled: false,
+    id: 'preview', name: '口播', referenceScript: '', suggestions: [],
     source: { mediaType: 'audio', sourcePath: 'fixture.wav', audioPath: 'fixture.wav', durationFrames: 480000, sampleRate: 48000, channels: 1 },
     transcript: [{ id: 'word', text: '句子', startFrame: 0, endFrame: 480000, included: true, locked: false, granularity: 'segment' }],
     createdAt: 1, updatedAt: 1, revision: 1,
@@ -230,7 +230,6 @@ it('挂起设备恢复中快速连点只发起一次恢复，暂停不挂起且�
 
 it.each(['source', 'edited', 'delivery'] as const)('擦洗沿 %s 正常试听的取样模式和处理参数读取', async mode => {
   const fixture = project()
-  fixture.vstEnabled = true
   const hook = renderHook(() => useAudioEditPreview(fixture, 4))
   await waitFor(() => expect(useAudioEditPlaybackStore.getState().preparing).toBe(false))
   act(() => useAudioEditPlaybackStore.getState().setMode(mode))
@@ -238,7 +237,7 @@ it.each(['source', 'edited', 'delivery'] as const)('擦洗沿 %s 正常试听的
   prepare.mockClear()
   await act(async () => audioEditScrub('preview')!.step(240000))
   expect(scrubMessages()).toHaveLength(1)
-  expect(prepare.mock.calls[0][0]).toMatchObject({ mode: mode === 'source' ? 'source' : 'edited', processing: mode === 'edited' })
+  expect(prepare.mock.calls[0][0]).toMatchObject({ mode: mode === 'source' ? 'source' : 'edited' })
   hook.unmount()
 })
 
@@ -266,7 +265,6 @@ it('设备恢复途中换模式，旧播放回调只能填充当前模式的数�
     return new Promise<void>(resolve => { done = () => { this.state = 'running'; resolve() } })
   })
   const fixture = project()
-  fixture.vstEnabled = true
   const hook = renderHook(() => useAudioEditPreview(fixture))
   await waitFor(() => expect(useAudioEditPlaybackStore.getState().preparing).toBe(false))
   let playing!: Promise<void>
@@ -277,6 +275,6 @@ it('设备恢复途中换模式，旧播放回调只能填充当前模式的数�
   act(() => node.port.onmessage({ data: { type: 'position', generation: generation(), sourceFrame: 96000, consumedFrames: 96000 } }))
   await act(async () => { done(); await playing })
   expect(prepare.mock.calls.length).toBeGreaterThan(0)
-  expect(prepare.mock.calls.every(([request]) => request.mode === 'source' && request.processing === false)).toBe(true)
+  expect(prepare.mock.calls.every(([request]) => request.mode === 'source' && request.processing === undefined)).toBe(true)
   hook.unmount()
 })

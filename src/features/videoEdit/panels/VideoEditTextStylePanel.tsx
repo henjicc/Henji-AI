@@ -4,7 +4,7 @@ import { VideoEditTextTransformControls } from './VideoEditClipPropertySections'
 import { useVideoEditClipPropertyGesture } from './useVideoEditClipPropertyGesture'
 import { defaultVideoEditTextStyle, type VideoEditTextStyle } from '@/core/videoEdit/text'
 import type { VideoEditClip } from '@/core/videoEdit/document'
-import { VideoEditEffectSection } from './VideoEditEffectSection'
+import { EffectSection } from '@/components/effects/EffectSection'
 import { updateVideoEditClipProperties } from '../application/videoEditClipProperties'
 import { beginVideoEditGesture, finishVideoEditGesture, type VideoEditGesture } from '../application/videoEditService'
 import { useVideoEditFontPreview } from './useVideoEditFontPreview'
@@ -33,9 +33,9 @@ export function VideoEditTextStylePanel({ projectId, sequenceId, clip, height, o
   const write = (patch: Partial<VideoEditTextStyle>): void => {
     try { updateVideoEditClipProperties(projectId, sequenceId, clip.id, { textStyle: { ...style, ...patch } }, gesture.current) } catch (error) { end(false); onError(error) }
   }
-  return <VideoEditEffectSection id="text-style" title="文字样式" enabled={!clip.disabledIntrinsicSections?.includes('textStyle')} onEnabledChange={enabled => { end(); try { updateVideoEditClipProperties(projectId, sequenceId, clip.id, { disabledIntrinsicSections: enabled ? (clip.disabledIntrinsicSections ?? []).filter(value => value !== 'textStyle') : [...(clip.disabledIntrinsicSections ?? []), 'textStyle'] }) } catch (error) { onError(error) } }}>
+  return <EffectSection id="text-style" title="文字样式" enabled={!clip.disabledIntrinsicSections?.includes('textStyle')} onEnabledChange={enabled => { end(); try { updateVideoEditClipProperties(projectId, sequenceId, clip.id, { disabledIntrinsicSections: enabled ? (clip.disabledIntrinsicSections ?? []).filter(value => value !== 'textStyle') : [...(clip.disabledIntrinsicSections ?? []), 'textStyle'] }) } catch (error) { onError(error) } }}>
     <div ref={fields} className="flex flex-col gap-2 pl-5">
       <VideoEditTypographyPanel key={`${projectId}:${sequenceId}:${clip.id}`} style={style} onChange={value => write(value)} onError={onError} onBegin={begin} onEnd={end} onFontPreview={fontPreview} projectFonts={collectVideoEditFonts(owner.document).map(use => use.font)} transform={<VideoEditTextTransformControls clip={clip} frame={{ width: sequence.width, height: sequence.height, playhead: owner.frame }} gesture={motionGesture} />} />
     </div>
-  </VideoEditEffectSection>
+  </EffectSection>
 }

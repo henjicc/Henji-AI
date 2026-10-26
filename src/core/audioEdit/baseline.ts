@@ -17,7 +17,7 @@ export function restoreAudioEditBaseline(project: AudioEditProjectDocument): Aud
     transcript: baseline.transcript.map((block) => ({ ...block })),
     suggestions: baseline.suggestions.map((item) => ({ ...item, blockIds: [...item.blockIds] })),
     cuts: [], gainRegions: [], repairs: [], batchSettings: { ...DEFAULT_AUDIO_EDIT_SETTINGS, fillers: [...DEFAULT_AUDIO_EDIT_SETTINGS.fillers] },
-    vstEnabled: false, processorChain: [],
+    effectChain: [], chainBypassed: false, output: undefined,
   }
 }
 
@@ -27,7 +27,7 @@ export function audioEditContentKey(value: AudioEditProjectDocument): string {
     gainRegions: value.gainRegions ?? [], repairs: value.repairs ?? [],
     transcript: value.transcript, suggestions: value.suggestions, cuts: value.cuts ?? [],
     batchSettings: value.batchSettings ?? DEFAULT_AUDIO_EDIT_SETTINGS,
-    vstEnabled: value.vstEnabled, processorChain: value.processorChain ?? [],
+    effectChain: value.effectChain ?? [], chainBypassed: value.chainBypassed === true, output: value.output ?? null,
   }, (_key: string, item: unknown) => item && typeof item === 'object' && !Array.isArray(item)
     ? Object.fromEntries(Object.entries(item).sort(([left], [right]) => left.localeCompare(right)))
     : item)

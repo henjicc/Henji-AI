@@ -34,7 +34,7 @@ async function fixture() {
     const sequence = document.sequences[0]
     const base = makeVideoEditItemClip(document, 'item', sequence.id, { frame: 0, duration: 150 })
     sequence.clips = [{ ...base, id: 'v', sourceComponent: 'video', linkId: 'link' }, { ...base, id: 'a', kind: 'audio', track: sequence.tracks.find(track => track.kind === 'audio')!.index, sourceComponent: 'audio', linkId: 'link' }]
-    sequence.textTranscription = buildVideoEditTextTranscription(videoEditComposition(document, sequence.id), [sequence.clips[1]], { id: 'audio', name: '口播', source: { mediaType: 'audio', sourcePath: 'D:/mix.wav', audioPath: 'D:/mix.wav', durationFrames: 5000, sampleRate: 1000, channels: 1 }, revision: 1, createdAt: 1, updatedAt: 1, vstEnabled: false, referenceScript: '', suggestions: [], transcript: [
+    sequence.textTranscription = buildVideoEditTextTranscription(videoEditComposition(document, sequence.id), [sequence.clips[1]], { id: 'audio', name: '口播', source: { mediaType: 'audio', sourcePath: 'D:/mix.wav', audioPath: 'D:/mix.wav', durationFrames: 5000, sampleRate: 1000, channels: 1 }, revision: 1, createdAt: 1, updatedAt: 1, referenceScript: '', suggestions: [], transcript: [
       { id: 'f1', text: '嗯', startFrame: 0, endFrame: 500, granularity: 'word', included: true, locked: false },
       { id: 'price', text: '价格九元。', startFrame: 1000, endFrame: 2000, granularity: 'word', included: true, locked: false },
       { id: 'f2', text: '那个', startFrame: 3000, endFrame: 3500, granularity: 'word', included: true, locked: false },

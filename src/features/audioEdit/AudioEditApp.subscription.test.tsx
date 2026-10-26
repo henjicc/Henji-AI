@@ -34,7 +34,7 @@ afterEach(() => { cleanup(); useAudioEditStore.setState({ project: null }); vi.c
 
 it('无关动作不重绘，名称或视图更新不重编交付，剪切更新仍重编', async () => {
   const project: AudioEditProjectDocument = {
-    id: 'subscription', name: '口播', referenceScript: '', suggestions: [], vstEnabled: false,
+    id: 'subscription', name: '口播', referenceScript: '', suggestions: [],
     source: { mediaType: 'audio', sourcePath: 'fixture.wav', audioPath: 'fixture.wav', durationFrames: 480000, sampleRate: 48000, channels: 1 },
     transcript: [], createdAt: 1, updatedAt: 1, revision: 1,
   }

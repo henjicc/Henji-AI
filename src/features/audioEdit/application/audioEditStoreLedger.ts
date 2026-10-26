@@ -23,7 +23,6 @@ export const AUDIO_EDIT_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> =
     toggleBlock: bindings.toggleBlock,
     setBlocksIncluded: bindings.setBlocksIncluded,
     setReferenceScript: bindings.setReferenceScript,
-    setVstEnabled: bindings.setVstEnabled,
     applySuggestion: bindings.applySuggestion,
     dismissSuggestion: bindings.dismissSuggestion,
     setSelectedBlockIds: {

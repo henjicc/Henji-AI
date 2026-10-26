@@ -11,6 +11,7 @@ import { requireAudioEditProject } from './project-store'
 import { prepareAudioEditRenderSource, renderAudioEditProject } from './render'
 import { applyAudioEditRealtimeEffects } from './effects-render'
 import { audioEditRealtimeEffects } from '../../../../src/core/audioEdit/effects'
+import { audioEditSourceEdited, audioEditSourceRecipe } from '../../../../src/core/audioEdit/regions'
 import { verifyAudioEditSource } from './media'
 import { runAudioEditTask } from './task-store'
 
@@ -64,10 +65,9 @@ export async function exportAudioEditProject(request: AudioEditExportRequest): P
       return temporary
     }
     try {
-      const processing = request.includeProcessing ?? (format === 'wav' && project.vstEnabled)
       let processedPath: string | undefined
-      // XML 引用全长处理音轨：修复、区间音量、插件与基本声音、效果组都算进去（时间轴同原素材，剪辑点由 XML 表达）。
-      if (format === 'xml' && (processing || project.gainRegions?.some(r => r.enabled) || project.repairs?.some(r => r.enabled) || project.mouthClicks?.enabled || audioEditRealtimeEffects(project).length)) processedPath = await applyAudioEditRealtimeEffects(project, await prepareAudioEditRenderSource(project, processing, signal), signal)
+      // XML 引用全长处理音轨：修复、效果控件里的全部效果、区间音量、输出都算进去（时间轴同原素材，剪辑点由 XML 表达）。
+      if (format === 'xml' && (audioEditSourceEdited(audioEditSourceRecipe(project)) || audioEditRealtimeEffects(project).length > 0)) processedPath = await applyAudioEditRealtimeEffects(project, await prepareAudioEditRenderSource(project, signal), signal)
       let exportedAudioPath = ''
       if (format === 'xml' && processedPath) {
         exportedAudioPath = path.join(path.dirname(target), `${path.basename(target, path.extname(target))}-RX-${randomUUID().slice(0, 8)}.wav`)
@@ -79,7 +79,7 @@ export async function exportAudioEditProject(request: AudioEditExportRequest): P
       if (format === 'xml' && timeline) {
         await fs.writeFile(temporary, buildAudioEditXml(project, timeline, pathToFileURL(project.source.sourcePath).href, exportedAudioPath ? pathToFileURL(exportedAudioPath).href : undefined), 'utf8')
       } else {
-        const rendered = await renderAudioEditProject(project, processing, signal)
+        const rendered = await renderAudioEditProject(project, signal)
         await fs.copyFile(rendered.audioPath, temporary)
         exportedAudioPath = target
       }

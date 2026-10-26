@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { UiButton, UiError, UiLoading } from '@/components/ui'
 import { UI_PROPERTY_INSET_CLASS } from '@/components/ui/styleTokens'
-import { VideoEditEffectSection } from './VideoEditEffectSection'
+import { EffectSection } from '@/components/effects/EffectSection'
 import { useVideoEditCodeMetadata } from './useVideoEditCodeMetadata'
 import { ICON_ASSET_LIBRARY } from '@/core/theme/icons'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
@@ -36,7 +36,7 @@ export function VideoEditParameterFields({ editor, onError, bare = false }: { ed
       renderAnimation={field => field.type === 'image' || field.type === 'audio' || field.type === 'lut' ? null : <div className={UI_PROPERTY_INSET_CLASS}><CodeKeyframePanel editor={editor} parameter={editor.metadata.parameters.find(parameter => parameter.key === field.key)! as Exclude<CodeParameterDeclaration, { type: 'image' | 'audio' }>} field={field} onError={onError} /></div>}
     />
   </div>
-  return bare || ('code' in editor && editor.target.effectId) ? content : <VideoEditEffectSection id={`parameters:${title}`} title={title}>{content}</VideoEditEffectSection>
+  return bare || ('code' in editor && editor.target.effectId) ? content : <EffectSection id={`parameters:${title}`} title={title}>{content}</EffectSection>
 }
 
 function CollectCodeAsset({ editor, onError }: { editor: VideoEditCodeEditorState; onError: (reason: unknown) => void }): React.ReactElement {
@@ -73,5 +73,5 @@ export function CodeParameterPanel({ projectId, sequenceId, clipId, effectId, on
   try { editor = readVideoEditCodeEditor(projectId, sequenceId, clipId, effectId) } catch (error) { return <div className={UI_PROPERTY_INSET_CLASS}><UiError title="代码参数暂不可用" message={error instanceof Error ? error.message : '请重新选择代码片段。'} /></div> }
   const source = <div className={`flex flex-col items-start gap-2 pb-1 ${UI_PROPERTY_INSET_CLASS}`}><CodeSourceEditor editor={editor} /><CollectCodeAsset editor={editor} onError={onError} /></div>
   // 片段本身是代码素材时，源码自成一节；效果链里的代码滤镜，源码跟在它的参数后面。
-  return <div key={videoEditParameterTargetIdentity(editor.target)}><VideoEditParameterFields editor={editor} onError={onError} />{effectId ? source : <VideoEditEffectSection id="code-source" title="源码">{source}</VideoEditEffectSection>}</div>
+  return <div key={videoEditParameterTargetIdentity(editor.target)}><VideoEditParameterFields editor={editor} onError={onError} />{effectId ? source : <EffectSection id="code-source" title="源码">{source}</EffectSection>}</div>
 }

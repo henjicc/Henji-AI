@@ -42,7 +42,7 @@ describe('素材内容来源聚合', () => {
     expect(videoEditSavedContentFacts(document, ['item'], media)[0].ranges).toEqual([{ fromUs: 3000000, toUs: 4000000 }])
   })
   it('口播采样帧换算源微秒，排除块不参与短语匹配', () => {
-    const audio = audioEditProjectSchema.parse({ id: 'voice', name: '口播', source: { sourcePath: '/voice.wav', audioPath: '/voice.wav', mediaType: 'audio', sampleRate: 48000, channels: 1, durationFrames: 144000 }, revision: 1, createdAt: 1, updatedAt: 1, referenceScript: '', suggestions: [], vstEnabled: false, transcript: [
+    const audio = audioEditProjectSchema.parse({ id: 'voice', name: '口播', source: { sourcePath: '/voice.wav', audioPath: '/voice.wav', mediaType: 'audio', sampleRate: 48000, channels: 1, durationFrames: 144000 }, revision: 1, createdAt: 1, updatedAt: 1, referenceScript: '', suggestions: [], transcript: [
       { id: 'a', text: '你好', startFrame: 48000, endFrame: 96000, granularity: 'word', included: true, locked: false },
       { id: 'b', text: '不要', startFrame: 96000, endFrame: 120000, granularity: 'word', included: false, locked: false },
       { id: 'c', text: '世界', startFrame: 120000, endFrame: 144000, granularity: 'segment', included: true, locked: false },

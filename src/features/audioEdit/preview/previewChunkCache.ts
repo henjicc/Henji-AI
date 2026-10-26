@@ -38,7 +38,7 @@ export class PreviewChunkCache {
         this.flushed ??= flushAudioEditProject(this.project.id)
         await this.flushed
       }
-      return getPlatform().audioEdit.preparePreviewChunk({ projectId: this.project.id, sourceStartFrame: start, frameCount: Math.min(sampleRate, durationFrames - start), mode: this.mode === 'source' ? 'source' : 'edited', processing: this.mode === 'edited' && this.project.vstEnabled })
+      return getPlatform().audioEdit.preparePreviewChunk({ projectId: this.project.id, sourceStartFrame: start, frameCount: Math.min(sampleRate, durationFrames - start), mode: this.mode === 'source' ? 'source' : 'edited' })
     })()
     this.blocks.set(start, pending)
     if (this.blocks.size > 30) this.blocks.delete(this.blocks.keys().next().value!)

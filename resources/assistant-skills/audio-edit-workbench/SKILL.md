@@ -47,17 +47,23 @@ description: 剪口播时使用：把录音全自动粗剪成可继续修改的�
 
 ## 五、声音处理（用户要求处理声音时）
 
-剪辑与声音处理分开：粗剪交付时不动声音处理；用户说“处理一下声音”“让人声更清楚”“去噪”“去口水音”等再做。
+剪辑与声音处理分开：粗剪交付时不动声音处理；用户说“处理一下声音”“让人声更清楚”“去噪”“去口水音”等再做。改时长的（重念、停顿、语气词、删除呼吸）是剪辑；改声音不改时长的都在效果控件里。
 
-1. **先用基本声音**（`audio_edit.document.essential_sound`，与 Audition 的基本声音同一套思路）：type=dialogue；按听到的问题打开对应项，量 0–100，适中即可——底噪 noise、低频隆隆 rumble、电源嗡声 hum（国内 mains=50）、齿音 deEss、房间回声 reverb、背景音乐或环境声 isolate（后两项是本地模型离线处理，第一次下载约 67 MB，有显卡约 20 秒处理 10 分钟）；透明度 dynamics 让音量平稳、eq 选预设（podcast 播客语音等）、enhance 按嗓音选 low/high。响度用 `match_audio_edit_loudness`（短视频平台 -14、播客 -16 LUFS）测量后补偿，不要自己猜 gainDb。
-2. **效果组**（`audio_edit.document.effects`）只放基本声音覆盖不了的处理（如特定频点的参数均衡、限幅、立体声），按顺序生效；`effects_bypassed` 整组开关。
-3. **口水音**：`detect_audio_edit_mouth_clicks` 检测（灵敏度默认 50），结果写进 `audio_edit.document.mouth_clicks` 并默认打开修复；检测数量明显异常（每分钟上百处）时降低灵敏度重测，在汇报里列几处让用户试听。
-4. **多轨**：口播要和音乐、音效一起混时，多轨就是剪辑的序列：音轨的 `volume_db`、`pan`、`effects` 与序列的 `master`（主轨音量、主轨效果）都是剪辑实体属性；片段的 `essential_sound` 与口播同一套设置。口播放进多轨后是动态链接，口播这里保存后多轨里自动换成新声音。
-5. 处理完回读属性核对，汇报打开了哪些处理、量多少、为什么。
+1. **效果控件**（`audio_edit.document.effect_chain`）是一串有顺序的效果，从上到下依次处理录音本身，顺序就是处理顺序（例如先去除口水音、再压呼吸声，呼吸声处理的就是去掉口水音之后的声音）。写入时整条数组 set，保留用户已有的项与顺序，只在合适的位置插入或修改；每项 `{ id, kind, enabled, … }`，新项的 id 用新的 UUID。
+2. **常用的项**：
+   - `essential` 基本声音（与 Audition 的基本声音同一套思路，settings 同剪辑片段的基本声音，不含 loudness/volume）：type=dialogue；按听到的问题打开 repair 的 noise 底噪、rumble 低频隆隆、hum 电源嗡声（国内 mains=50）、deEss 齿音，clarity 的 dynamics 让音量平稳、eq 选预设（podcast 播客语音等）、enhance 按嗓音选 low/high；量 0–100，适中即可。
+   - `kind=mouth_declick` 去除口水音：先加一项（`analyzed: false, clicks: []`）或直接调 `detect_audio_edit_mouth_clicks`（不给 itemId 时用第一项，没有就加到链末尾），检测听的是这一项之前的声音；数量明显异常（每分钟上百处）时降低灵敏度重测，在汇报里列几处让用户试听。
+   - `breath` 呼吸声：把全部呼吸统一减弱（mode attenuate、reductionDb）或静音，不改时长；要删掉呼吸用 `process_audio_edit_breaths`（剪辑）。
+   - `separation` 去混响（mode dereverb）/ 人声分离（mode isolate）：本地模型整段处理，第一次下载约 67 MB，有显卡约 20 秒处理 10 分钟。
+   - `builtin` 内置效果（参数均衡、限幅、立体声等），builtin.id 与参数同剪辑的音频效果；`plugin` 第三方插件，pluginId 取自 `audio_edit.processor_chain.available_processors`。
+   `audio_edit.document.chain_bypassed` 整体关闭（对比处理前后）。
+3. **输出**（`audio_edit.document.output`）作用在剪好的整条声音上：`volumeDb` 音量；响度用 `match_audio_edit_loudness`（短视频平台 -14、播客 -16 LUFS）测量后补偿，不要自己猜 gainDb。
+4. **多轨**：口播要和音乐、音效一起混时，多轨就是剪辑的序列：音轨的 `video_edit.track.volume_db`、`video_edit.track.pan`、`video_edit.track.effects` 与序列的 `video_edit.sequence.master`（主轨音量、主轨效果）都是剪辑实体属性；片段的 `video_edit.clip.essential_sound` 与口播的基本声音同一套设置。口播放进多轨后是动态链接，口播这里保存后多轨里自动换成新声音。
+5. 处理完回读属性核对，汇报加了哪些效果、顺序、量多少、为什么。
 
 ## 边界
 
 - 不改写原话。校对只改有充分依据的近音错字，绝不改真实人名、地名、产品名和机构名。
-- 不启用或调整 VST3 插件、不导出、不撤销全部修改，除非用户要求；基本声音与效果组只在用户要求处理声音时改。
+- 不加或调整第三方插件、不导出、不撤销全部修改，除非用户要求；效果控件与输出只在用户要求处理声音时改。
 - 已有的手工删除、校正、锁定和字幕分段一律保留，在此基础上追加。
 - 用户在应用里接管了这份口播时，写入会被拒绝（USER_TAKEOVER）：立即停手，告诉用户你做到了哪一步，等用户交还。

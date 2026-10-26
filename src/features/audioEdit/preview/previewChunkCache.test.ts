@@ -6,7 +6,7 @@ const { prepare, flush } = vi.hoisted(() => ({ prepare: vi.fn(), flush: vi.fn(as
 vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ audioEdit: { preparePreviewChunk: prepare } }) }))
 vi.mock('../application/audioEditProjectInstances', () => ({ flushAudioEditProject: flush }))
 const project: AudioEditProjectDocument = {
-  id: 'cache', name: '缓存', referenceScript: '', suggestions: [], vstEnabled: false, transcript: [], createdAt: 1, updatedAt: 1, revision: 1,
+  id: 'cache', name: '缓存', referenceScript: '', suggestions: [], transcript: [], createdAt: 1, updatedAt: 1, revision: 1,
   source: { mediaType: 'audio', sourcePath: 'fixture.wav', audioPath: 'fixture.wav', durationFrames: 48000 * 100, sampleRate: 48000, channels: 2 },
 }
 const span = (start: number, end: number, muted = false) => ({ sourceStartFrame: start, sourceEndFrame: end, outputStartFrame: start, outputEndFrame: end, muted })

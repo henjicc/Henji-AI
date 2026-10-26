@@ -21,9 +21,9 @@ export interface AudioEditDocumentShell {
 }
 
 const KNOWN_KEYS = new Set([
-  'source', 'referenceScript', 'transcript', 'suggestions', 'vstEnabled', 'selectedAsrModelId', 'cuts',
-  'gainRegions', 'repairs', 'batchSettings', 'processorChain', 'xmlFrameRate', 'viewSettings', 'editBaseline',
-  'effects', 'effectsBypassed', 'essentialSound', 'mouthClicks',
+  'source', 'referenceScript', 'transcript', 'suggestions', 'selectedAsrModelId', 'cuts',
+  'gainRegions', 'repairs', 'batchSettings', 'xmlFrameRate', 'viewSettings', 'editBaseline',
+  'effectChain', 'chainBypassed', 'output',
 ])
 const SHELL_KEYS = new Set(['id', 'name', 'createdAt', 'updatedAt', 'revision'])
 
@@ -78,7 +78,7 @@ export function audioEditProjectToDocumentContent(project: AudioEditProjectDocum
 /** 新导入素材的文档内容（导入即建草稿）。 */
 export function createAudioEditDocumentContent(source: AudioEditSourceMetadata | null, referenceScript = ''): AudioEditDocumentContent {
   const content: Record<string, unknown> = {
-    source, referenceScript, transcript: [], suggestions: [], vstEnabled: false, cuts: [], processorChain: [],
+    source, referenceScript, transcript: [], suggestions: [], cuts: [],
     batchSettings: { ...DEFAULT_AUDIO_EDIT_SETTINGS, fillers: [...DEFAULT_AUDIO_EDIT_SETTINGS.fillers] },
   }
   return content as AudioEditDocumentContent

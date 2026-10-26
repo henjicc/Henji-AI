@@ -14,7 +14,7 @@ function fixture() {
   document.items = [{ id: 'item', name: '口播', kind: 'video', mediaId: 'm' }]
   const clip = { ...makeVideoEditItemClip(document, 'item', sequence.id, { frame: 0, track: 1 }), id: 'picture', duration: 300, sourceComponent: 'video' as const, linkId: 'linked' }
   sequence.clips = [clip, { ...clip, id: 'voice', kind: 'audio', track: 0, sourceComponent: 'audio' }]
-  const audio: AudioEditProjectDocument = { id: 'asr', name: '口播', source: { mediaType: 'audio', sourcePath: 'D:/mix.wav', audioPath: 'D:/mix.wav', durationFrames: 10000, sampleRate: 1000, channels: 1 }, revision: 1, createdAt: 1, updatedAt: 1, vstEnabled: false, referenceScript: '', suggestions: [], transcript: [
+  const audio: AudioEditProjectDocument = { id: 'asr', name: '口播', source: { mediaType: 'audio', sourcePath: 'D:/mix.wav', audioPath: 'D:/mix.wav', durationFrames: 10000, sampleRate: 1000, channels: 1 }, revision: 1, createdAt: 1, updatedAt: 1, referenceScript: '', suggestions: [], transcript: [
     { id: 'one', text: '嗯，', startFrame: 0, endFrame: 500, granularity: 'word', included: true, locked: false },
     { id: 'two', text: '价格', startFrame: 1000, endFrame: 1500, granularity: 'word', included: true, locked: false },
     { id: 'three', text: '九元。', startFrame: 1500, endFrame: 2000, granularity: 'word', included: true, locked: false },

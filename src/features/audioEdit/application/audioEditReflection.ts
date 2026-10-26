@@ -113,7 +113,7 @@ const entityMeta: Record<EntityType, { title: string; parents: EntityType[] }> =
   [AUDIO_EDIT_ENTITY_TYPES.transcriptBlock]: { title: '转写词块', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
   [AUDIO_EDIT_ENTITY_TYPES.suggestion]: { title: '剪辑线索（辅助定位，非审批队列）', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
   [AUDIO_EDIT_ENTITY_TYPES.breath]: { title: '呼吸声（本机模型检测，第一次读取时检测并可能下载约 13 MB 模型；逐处可改处理）', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
-  [AUDIO_EDIT_ENTITY_TYPES.processorChain]: { title: '声音处理链', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
+  [AUDIO_EDIT_ENTITY_TYPES.processorChain]: { title: '第三方插件目录', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
   [AUDIO_EDIT_ENTITY_TYPES.render]: { title: '成片映射', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
 }
 
@@ -125,6 +125,7 @@ export function createAudioEditReflectionRegistrations(): ApplicationEntityRegis
       dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: entityMeta[entityType].parents,
       revisionScopes: ['audio_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: schemaRef('entity', entityType),
       ...(entityType === AUDIO_EDIT_ENTITY_TYPES.render ? { writeExclusion: { reason: '成片映射由口播剪辑时间线根据词块保留状态实时计算。' } } : {}),
+      ...(entityType === AUDIO_EDIT_ENTITY_TYPES.processorChain ? { writeExclusion: { reason: '插件目录由宿主扫描本机插件得到；把插件加进声音处理请写 audio_edit.document.effect_chain（kind=plugin，pluginId 取自这里）。' } } : {}),
     },
     properties: propertiesByEntity[entityType],
     schemaDocuments: audioEditSchemaDocuments(entityType),

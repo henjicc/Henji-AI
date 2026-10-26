@@ -7,7 +7,7 @@ const state = vi.hoisted(() => ({ dir: '', calls: [] as string[] }))
 vi.mock('../audio-separation/runtime', () => ({ separateAudioFile: vi.fn() }))
 vi.mock('./media', () => ({ audioEditCacheDirectory: () => state.dir, verifyAudioEditSource: vi.fn(), prepareAudioEditAudio: async () => path.join(state.dir, 'source.wav'), identifyAudioEditSource: async () => ({ digest: 'a' }), validateAudioEditAudio: vi.fn() }))
 vi.mock('./dsp-adapter', () => ({ runAudioRepair: async (_input: string, output: string) => { state.calls.push('repair'); await fs.writeFile(output, 'repaired') } }))
-vi.mock('./processors', () => ({ audioEditProcessorCacheIdentity: async () => 'v1', processAudioEditVstChain: async (input: string, dir: string) => { state.calls.push('processor'); expect(path.basename(input)).toMatch(/^gain-/); const outputPath = path.join(dir, 'vst.wav'); await fs.writeFile(outputPath, 'processed'); return { outputPath, temporaryPaths: [outputPath] } } }))
+vi.mock('./processors', () => ({ listAudioEditProcessors: async () => [{ id: 'rx', available: true }], audioEditProcessorCacheIdentity: async () => 'v1', processAudioEditVstChain: async (input: string, dir: string) => { state.calls.push('processor'); expect(path.basename(input)).toMatch(/^repair-/); const outputPath = path.join(dir, 'vst.wav'); await fs.writeFile(outputPath, 'processed'); return { outputPath, temporaryPaths: [outputPath] } } }))
 vi.mock('../video/ffmpeg-loader', () => ({ loadFfmpegPath: async () => 'ffmpeg' }))
 vi.mock('./process', () => ({ runAudioEditProcess: async (_bin: string, args: string[]) => {
   // 不是浮点 WAV 的渲染源先转一份（这里写出一段 48000 帧的真 WAV）；音量区域在主进程直接乘，不再调用 FFmpeg
@@ -26,26 +26,28 @@ let project: AudioEditProjectDocument
 beforeEach(async () => {
   state.dir = await fs.mkdtemp(path.join(os.tmpdir(), 'audio-render-')); state.calls = []
   await writeWav(path.join(state.dir, 'source.wav'), Float32Array.from({ length: 48000 }, (_, i) => (i < 24000 ? 0.5 : -0.5)))
-  project = { id: 'test', name: '声音', source: { mediaType: 'audio', sourcePath: '/source.wav', audioPath: '/source.wav', durationFrames: 48000, sampleRate: 48000, channels: 1 }, referenceScript: '', transcript: [], suggestions: [], revision: 1, createdAt: 1, updatedAt: 1, vstEnabled: true,
+  project = { id: 'test', name: '声音', source: { mediaType: 'audio', sourcePath: '/source.wav', audioPath: '/source.wav', durationFrames: 48000, sampleRate: 48000, channels: 1 }, referenceScript: '', transcript: [], suggestions: [], revision: 1, createdAt: 1, updatedAt: 1,
     gainRegions: [{ id: 'g', startFrame: 0, endFrame: 24000, gainDb: -6, fadeInFrames: 0, fadeOutFrames: 0, enabled: true }],
-    repairs: [{ id: 'r', startFrame: 1000, endFrame: 2000, lowHz: 100, highHz: 1000, kind: 'spectral_heal', strength: 1, enabled: true }], cuts: [{ id: 'c', startFrame: 24000, endFrame: 48000, reason: 'manual', enabled: true }] }
+    repairs: [{ id: 'r', startFrame: 1000, endFrame: 2000, lowHz: 100, highHz: 1000, kind: 'spectral_heal', strength: 1, enabled: true }], cuts: [{ id: 'c', startFrame: 24000, endFrame: 48000, reason: 'manual', enabled: true }],
+    effectChain: [{ id: 'p', kind: 'plugin', name: 'RX', enabled: true, pluginId: 'rx', parameters: {} }] }
 })
 afterEach(async () => { await fs.rm(state.dir, { recursive: true, force: true }) })
 it('orders shared stages and reuses unaffected caches on cut/gain edits; revision-only changes reuse audio', async () => {
   const first = await renderAudioEditProject(project)
   expect(first.durationFrames).toBe(24000)
-  // 修复结果不是浮点 WAV 时先转一份再乘音量；效果链输出同样转一份再拼接
-  expect(state.calls).toEqual(['repair', 'decode', 'processor', 'decode'])
+  // 顺序：修复 → 效果链（插件）→ 区间音量；插件输出不是浮点 WAV 时先转一份再乘音量
+  expect(state.calls).toEqual(['repair', 'processor', 'decode'])
   const gained = (await openF32Wav(path.join(state.dir, (await fs.readdir(state.dir)).find(name => name.startsWith('gain-'))!)))!
   const pcm = await gained.read(0, 48000); await gained.close()
   expect(pcm[0]).toBeCloseTo(0.25 * 10 ** (-6 / 20), 6); expect(pcm[23999]).toBeCloseTo(0.25 * 10 ** (-6 / 20), 6); expect(pcm[24000]).toBe(0.25)
-  expect((await renderAudioEditProject({ ...project, revision: 2 })).audioPath).toBe(first.audioPath); expect(state.calls).toHaveLength(4)
+  expect((await renderAudioEditProject({ ...project, revision: 2 })).audioPath).toBe(first.audioPath); expect(state.calls).toHaveLength(3)
   // 只改剪切：上游各阶段与转码缓存都复用，只重新拼接成片
   project.cuts![0].endFrame = 36000
   const recut = await renderAudioEditProject(project)
-  expect(state.calls).toHaveLength(4); expect(recut.audioPath).not.toBe(first.audioPath); expect(recut.durationFrames).toBe(36000)
-  state.calls = []; project.gainRegions![0].gainDb = -12; await renderAudioEditProject(project); expect(state.calls).toEqual(['processor', 'decode'])
-  state.calls = []; project.repairs![0].strength = .2; await renderAudioEditProject(project); expect(state.calls).toEqual(['repair', 'decode', 'processor', 'decode'])
+  expect(state.calls).toHaveLength(3); expect(recut.audioPath).not.toBe(first.audioPath); expect(recut.durationFrames).toBe(36000)
+  // 改区间音量不重跑插件（区间音量在效果链之后）；改修复从修复往后重算
+  state.calls = []; project.gainRegions![0].gainDb = -12; await renderAudioEditProject(project); expect(state.calls).toEqual([])
+  state.calls = []; project.repairs![0].strength = .2; await renderAudioEditProject(project); expect(state.calls).toEqual(['repair', 'processor', 'decode'])
 })
 it('failed and cancelled cache builds never publish, and simultaneous readers share one build', async () => {
   await expect(cachedAudioFile(state.dir, 'bad', 'wav', async p => { await fs.writeFile(p, 'partial'); throw new Error('failed') })).rejects.toThrow('failed')
@@ -59,7 +61,7 @@ it('failed and cancelled cache builds never publish, and simultaneous readers sh
 })
 
 it('成品在主进程逐段拼接并交叉淡化：浮点 WAV 渲染源直接读，拼接点不再硬跳，旧成品缓存不再命中', async () => {
-  project.vstEnabled = false
+  project.effectChain = []
   project.repairs = []
   project.gainRegions = []
   project.cuts![0] = { ...project.cuts![0], startFrame: 12000, endFrame: 30000 }

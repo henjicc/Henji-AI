@@ -26,7 +26,7 @@ beforeEach(async () => {
     document.items = [{ id: 'item', name: '口播', kind: 'video', mediaId: 'm' }]
     const sequence = document.sequences[0]; const clip = makeVideoEditItemClip(document, 'item', sequence.id, { frame: 0, duration: 150 })
     sequence.clips = [clip]
-    sequence.textTranscription = buildVideoEditTextTranscription(videoEditComposition(document, sequence.id), [clip], { id: 'audio', name: '口播', source: { mediaType: 'audio', sourcePath: 'D:/mix.wav', audioPath: 'D:/mix.wav', sampleRate: 1000, channels: 1, durationFrames: 5000 }, revision: 1, createdAt: 1, updatedAt: 1, referenceScript: '', vstEnabled: false, suggestions: [], transcript: [
+    sequence.textTranscription = buildVideoEditTextTranscription(videoEditComposition(document, sequence.id), [clip], { id: 'audio', name: '口播', source: { mediaType: 'audio', sourcePath: 'D:/mix.wav', audioPath: 'D:/mix.wav', sampleRate: 1000, channels: 1, durationFrames: 5000 }, revision: 1, createdAt: 1, updatedAt: 1, referenceScript: '', suggestions: [], transcript: [
       { id: 'w1', text: '价格', startFrame: 1000, endFrame: 1500, granularity: 'word', included: true, locked: false },
       { id: 'w2', text: '九元。', startFrame: 1500, endFrame: 2000, granularity: 'word', included: true, locked: false },
     ] }, 0)

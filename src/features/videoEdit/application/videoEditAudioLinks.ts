@@ -179,7 +179,7 @@ export async function openAudioDocumentInMultitrack(audioDocumentId: string): Pr
   document.media = [{ id: mediaId, name, kind: 'audio', path, durationSeconds, width: 0, height: 0, hasAudio: true }]
   document.items = [{ id: itemId, name, kind: 'audio', mediaId }]
   sequence.clips = [{ id: crypto.randomUUID(), itemId, name, kind: 'audio', track: 0, start: 0, duration: Math.max(1, Math.round(durationSeconds * videoEditFps(sequence.frameRate))), sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 },
-    x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '', audioRole: audio.document.essentialSound?.type ?? 'dialogue',
+    x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '', audioRole: audio.document.effectChain?.find(item => item.kind === 'essential')?.settings.type ?? 'dialogue',
     creativeSource: { type: 'document', docRef: { docId: audioDocumentId, path: audio.session.documentMeta.path }, revision: rendered.revision } }]
   document.sequences = [sequence]
   const { format: _format, version: _version, id: _id, name: _name, revision: _revision, ...content } = document

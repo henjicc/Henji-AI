@@ -15,7 +15,6 @@ import { buildProjectAudioEditTimeline } from '@/core/audioEdit/timeline'
 import { DEFAULT_AUDIO_EDIT_SETTINGS } from '@/core/audioEdit/edits'
 import { audioEditSpeechEdges } from '@/core/audioEdit/gaps'
 import { audioEditSourceEdited, audioEditSourceRecipe } from '@/core/audioEdit/regions'
-import { essentialSoundOfflineStages } from '@/core/audio/essentialSound'
 import { useWaveformData, type WaveformState } from '@/hooks/useWaveformData'
 import { getPlatform } from '@/platform/runtime'
 import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
@@ -135,10 +134,9 @@ export function AudioWaveWorkspace() {
     return () => window.clearInterval(timer)
   }, [capture, recording, duration, rate, captureView, setCaptureView])
   const autoGain = useAudioEditPlaybackStore(state => state.autoGain && state.mode !== 'delivery')
-  // 声音内容：只有修复、口水音、离线模型处理、区间音量真正变了才算。删除、静音不改声音；呼吸、气口转成手动剪辑只换 id，也不算。
-  // 基本声音与效果组是试听时实时处理的，不改波形（与 Audition 一样，波形显示进效果组之前的声音）。
-  const offline = React.useMemo(() => essentialSoundOfflineStages(project.essentialSound), [project.essentialSound])
-  const recipe = React.useMemo(() => audioEditSourceRecipe({ ...project, offline }), [project.repairs, project.gainRegions, project.mouthClicks, offline]) // eslint-disable-line react-hooks/exhaustive-deps
+  // 声音内容：只有修复、效果链里整段处理的那一段、区间音量真正变了才算。删除、静音不改声音；呼吸、气口转成手动剪辑只换 id，也不算。
+  // 效果链末尾边播边算的实时效果不改波形（波形显示进这些效果之前的声音）。
+  const recipe = React.useMemo(() => audioEditSourceRecipe(project), [project.repairs, project.gainRegions, project.effectChain, project.chainBypassed]) // eslint-disable-line react-hooks/exhaustive-deps
   const edited = audioEditSourceEdited(recipe)
   const soundKey = React.useMemo(() => JSON.stringify(recipe), [recipe])
   // 有修复或区间音量时，波形改读“已编辑、未删除”的音频（时间轴同原素材），删除与静音仍用叠加标记表示。
@@ -179,7 +177,7 @@ export function AudioWaveWorkspace() {
   const insertion = placement ? { start: placement.startFrame, frames: placement.endFrame > placement.startFrame ? Math.min(liveFrames, placement.endFrame - placement.startFrame) : liveFrames, replace: placement.endFrame > placement.startFrame } : undefined
   const spectralView = insertion && !insertion.replace ? { start: Math.max(0, editor.view.start - insertion.frames), end: editor.view.end } : editor.view
   // 频谱只跟声音内容走：删除、静音不改声音，作品版本变了也沿用已算好的频谱
-  const audioContentKey = JSON.stringify([soundKey, project.vstEnabled, project.processorChain])
+  const audioContentKey = soundKey
   const audioRevision = React.useRef({ key: audioContentKey, revision: project.revision })
   if (audioRevision.current.key !== audioContentKey) audioRevision.current = { key: audioContentKey, revision: project.revision }
   const spectrogram = useAudioEditSpectral(audioEditSpectralClient, project.id, spectralView, columns, duration, edited ? 'edited' : 'source', audioRevision.current.revision, JSON.stringify([project.source.audioPath, project.source.identity]))
@@ -197,7 +195,11 @@ export function AudioWaveWorkspace() {
     if (cursor < duration) ranges.push({ start: cursor, end: duration, mode: 'delete' })
     return [...ranges, ...pending.map(range => ({ start: range.startFrame, end: range.endFrame, mode: 'pending' as const }))]
   }, [spans, duration, pending])
-  const marks = React.useMemo(() => project.mouthClicks?.enabled ? project.mouthClicks.clicks.map(click => ({ start: click.startFrame, end: click.endFrame })) : undefined, [project.mouthClicks])
+  // 时间刻度上的小标记：效果控件里开着的“去除口水音”检测到的位置
+  const marks = React.useMemo(() => {
+    const clicks = (project.chainBypassed ? [] : project.effectChain ?? []).flatMap(item => item.kind === 'mouth_declick' && item.enabled ? item.clicks : [])
+    return clicks.length ? clicks.map(click => ({ start: click.startFrame, end: click.endFrame })) : undefined
+  }, [project.effectChain, project.chainBypassed])
   const repairs = React.useMemo(() => (project.repairs ?? []).filter(repair => repair.enabled && repair.kind === 'spectral_heal').map(repair => ({ id: repair.id, start: repair.startFrame, end: repair.endFrame, lowHz: repair.lowHz, highHz: repair.highHz })), [project.repairs])
   const visibleCuts = insertion ? spliceAudioRanges(cutRanges.map((range, index) => ({ ...range, id: String(index), startFrame: range.start, endFrame: range.end })), insertion.start, insertion.start + (insertion.replace ? insertion.frames : 0), insertion.frames).map(range => ({ ...range, start: range.startFrame, end: range.endFrame })) : cutRanges
   const menu = useContextMenu()

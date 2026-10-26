@@ -3,7 +3,7 @@ import { Virtuoso } from 'react-virtuoso'
 import { Diamond, RotateCcw } from 'lucide-react'
 import { UiButton, UiError, UiLoading, UiFormRow, UiIconButton, UiSwitch } from '@/components/ui'
 import { UI_PROPERTY_INSET_CLASS } from '@/components/ui/styleTokens'
-import { VideoEditEffectSection } from './VideoEditEffectSection'
+import { EffectSection } from '@/components/effects/EffectSection'
 import { useVideoEditCodeMetadata } from './useVideoEditCodeMetadata'
 import NumberInput from '@/components/ui/NumberInput'
 import type { CodeElementOverrideKey, CodeElementOverrideValues } from '@/core/videoEdit/codeElementOverrides'
@@ -32,8 +32,8 @@ export function VideoEditCodeElementsPanel({ instance, clipId, onError }: { inst
   const target = clip?.code ? { projectId: instance.document.id, sequenceId: instance.activeSequenceId, clipId, versionId: clip.code.versionId } : undefined
   const entries = target ? videoEditCodeElementOverrideSummary(target.projectId, target.sequenceId, clipId) : []
   const row = (index: number): React.ReactElement => { const value = entries[index]; return <div className="flex items-center gap-1"><UiButton size="sm" className="min-w-0 flex-1" disabled={!value.visible} onClick={() => selectVideoEditCodeElement(instance, clipId, value.elementId)}>{value.label}</UiButton><UiIconButton size="sm" aria-label={`重置${value.label}`} tooltip="清除该元素的覆盖" onClick={() => { try { resetVideoEditCodeElement({ ...target!, elementId: value.elementId }) } catch (error) { onError(error) } }}><RotateCcw /></UiIconButton></div> }
-  return <VideoEditEffectSection id="code-elements" title="元素">
+  return <EffectSection id="code-elements" title="元素">
     {metadata.error ? <UiError title="代码参数读取失败" message={metadata.error instanceof Error ? metadata.error.message : '请恢复源码文件后重试。'} onRetry={metadata.retry} /> : !metadata.ready ? <UiLoading message="正在读取代码参数…" /> : target && selected?.entry.clip.id === clipId && <CodeElementProperties key={`${target.versionId}:${selected.element.elementId}`} target={{ ...target, elementId: selected.element.elementId }} onError={onError} />}
     {entries.length > 0 && <div className={`h-40 ${UI_PROPERTY_INSET_CLASS}`}><Virtuoso totalCount={entries.length} itemContent={row} /></div>}
-  </VideoEditEffectSection>
+  </EffectSection>
 }

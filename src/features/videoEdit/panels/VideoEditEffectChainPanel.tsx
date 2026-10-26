@@ -13,7 +13,7 @@ import { requireVideoEditInstance, type VideoEditInstance } from '../application
 import { CodeParameterPanel } from './CodeParameterPanel'
 import { VideoEditCodeCreateDialog } from './VideoEditCodeCreateDialog'
 import { useVideoEditCompositeAction } from './useVideoEditCompositeAction'
-import { VideoEditEffectSection, VideoEditEffectToggle } from './VideoEditEffectSection'
+import { EffectSection, EffectToggle } from '@/components/effects/EffectSection'
 import { useReorderDrag } from '@/components/ui/fileUploader/useReorderDrag'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { videoEditKeyboardCommand } from '../application/videoEditKeyboard'
@@ -37,10 +37,10 @@ function EffectStrength({ effect, action, target, owner }: { effect: VideoEditEf
 
 function AdjustmentRange({ target, sequence, clip, action }: { target: { projectId: string; sequenceId: string; clipId: string }; sequence: VideoEditSequence; clip: VideoEditClip; action: CompositeAction }): React.ReactElement {
   const options = useMemo(() => sequence.tracks.filter(track => track.kind === 'video' && track.index < clip.track).sort((a, b) => a.index - b.index).map(track => ({ value: track.index, label: track.name })), [sequence.tracks, clip.track])
-  return <VideoEditEffectSection id="adjustment-range" title="调整作用范围"><div data-video-edit-adjustment-range={clip.id}>
+  return <EffectSection id="adjustment-range" title="调整作用范围"><div data-video-edit-adjustment-range={clip.id}>
     <UiFormRow label="从画面轨道" info="处理此轨道及其上方、调整图层下方的画面。"><Dropdown<number> ariaLabel="调整图层起始画面轨道" value={clip.adjustment?.fromTrack} options={options} disabled={action.busy || !options.length} onSelect={fromTrack => { if (fromTrack !== clip.adjustment?.fromTrack) void action.run(signal => updateVideoEditAdjustmentRange(target, fromTrack, signal), undefined, false) }} /></UiFormRow>
     {!options.length && <div className={UI_PROPERTY_INSET_CLASS}><UiError size="xs" title="此调整图层下方没有可处理的画面轨道" message="" /></div>}
-  </div></VideoEditEffectSection>
+  </div></EffectSection>
 }
 
 /**
@@ -129,7 +129,7 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
       {({ open, togglePanel }) => <UiIconButton size="sm" aria-label="复制其他片段的效果" tooltip={`复制另一个片段的整条效果链（连同关键帧），替换这里已有的${effectsLabel}`} aria-expanded={open} disabled={action.busy} data-panel-trigger-button onClick={togglePanel}><Copy /></UiIconButton>}
     </PanelTrigger>}
     <UiIconButton size="sm" aria-label="保存为预设" tooltip="保存为预设" disabled={action.busy || !savableEffects.length} onClick={() => setSavingPreset(structuredClone(savableEffects))}><Save /></UiIconButton>
-    {effects.length > 0 && <VideoEditEffectToggle size="sm" enabled={master} label={`${master ? '停用' : '启用'}所有${effectsLabel}`} tooltip={master ? `停用所有${effectsLabel}（保留参数与关键帧）` : `启用所有${effectsLabel}`} onChange={setMaster} />}
+    {effects.length > 0 && <EffectToggle size="sm" enabled={master} label={`${master ? '停用' : '启用'}所有${effectsLabel}`} tooltip={master ? `停用所有${effectsLabel}（保留参数与关键帧）` : `启用所有${effectsLabel}`} onChange={setMaster} />}
   </>
   return <div ref={root}>
     {clip.kind === 'adjustment' && <AdjustmentRange target={target} sequence={sequence} clip={clip} action={action} />}
@@ -140,7 +140,7 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
         const chosen = selectedId === effect.id
         return <div key={effect.id} className="relative flex flex-col" data-video-edit-effect={effect.id}>
           {insertion && <span data-video-edit-effect-insertion aria-hidden="true" className={`pointer-events-none absolute inset-x-0 z-raised h-0.5 bg-accent ${dragState.fromIndex! < index ? 'bottom-0' : 'top-0'}`} />}
-          <VideoEditEffectSection id={`effect:${effect.id}`} title={effect.name} open={open} onOpenChange={() => toggle(effect.id)} busy={action.busy}
+          <EffectSection id={`effect:${effect.id}`} title={effect.name} open={open} onOpenChange={() => toggle(effect.id)} busy={action.busy}
             collapseLabel={`${open ? '收起' : '展开'}效果${effect.name}`}
             enabled={effect.enabled} onEnabledChange={enabled => setEnabled(effect, enabled)} toggleLabel={`${effect.enabled ? '停用' : '启用'}效果${effect.name}`} toggleTooltip={effect.enabled ? '停用此效果（保留参数）' : '启用此效果'}
             actions={<>
@@ -158,7 +158,7 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
                 <EffectStrength key={effect.id} effect={effect} action={action} target={target} owner={instance} />
               </>}
             </div>
-          </VideoEditEffectSection>
+          </EffectSection>
         </div>
       })}
     </div>

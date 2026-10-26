@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import { audioEditGainRegionsSchema, audioEditMouthClicksSchema, audioEditRepairsSchema } from '../../audioEdit/regions'
-import { essentialSoundSettingsSchema } from '../../audio/essentialSound'
+import { audioEditGainRegionsSchema, audioEditRepairsSchema } from '../../audioEdit/regions'
+import { audioEditOutputSchema, migrateAudioEditEffectsToChain } from '../../audioEdit/effects'
 
 import { henjiExtension, henjiLegacyExtensions } from '../../fileExtensions'
 import type { DocumentKindDescriptor } from './registry'
@@ -13,7 +13,8 @@ import type { DocumentKindDescriptor } from './registry'
  *   打开时由界面请用户导入；
  * - referenceScript / transcript / suggestions / cuts：参考稿、识别词块、剪辑线索与声音编辑区间；
  * - editBaseline：第一次识别得到的原文（“撤销全部修改”的依据）；
- * - batchSettings / processorChain / vstEnabled / xmlFrameRate / viewSettings / selectedAsrModelId：处理与显示设置。
+ * - effectChain / chainBypassed / output：效果控件（有顺序的效果链，从上到下处理录音本身）与作用在成品上的输出一节；
+ * - batchSettings / xmlFrameRate / viewSettings / selectedAsrModelId：粗剪与显示设置。
  *
  * 这里只校验外层结构；逐字段的严格规则由工具读取时用 `audioEditProjectSchema` 检查。外层与嵌套都保留未知字段：
  * 主进程保存时持久化的是 schema 解析结果，剥掉字段就等于丢数据。
@@ -38,14 +39,11 @@ export const audioEditContentSchema = z.looseObject({
   referenceScript: z.string(),
   transcript: z.array(itemSchema),
   suggestions: z.array(itemSchema),
-  vstEnabled: z.boolean(),
   cuts: z.array(itemSchema).optional(),
   gainRegions: audioEditGainRegionsSchema.optional(), repairs: audioEditRepairsSchema.optional(),
-  processorChain: z.array(itemSchema).optional(),
-  effects: z.array(itemSchema).optional(),
-  effectsBypassed: z.boolean().optional(),
-  essentialSound: essentialSoundSettingsSchema.optional(),
-  mouthClicks: audioEditMouthClicksSchema.optional(),
+  effectChain: z.array(z.looseObject({ id: z.string().min(1), kind: z.string().min(1) })).optional(),
+  chainBypassed: z.boolean().optional(),
+  output: audioEditOutputSchema.optional(),
 })
 
 export type AudioEditDocumentContent = z.infer<typeof audioEditContentSchema>
@@ -61,8 +59,7 @@ function isEmptyAudioEditContent(content: AudioEditDocumentContent): boolean {
     && !(content.cuts?.length)
     && !(content.gainRegions?.length) && !(content.repairs?.length)
     && content.referenceScript.trim().length === 0
-    && !(content.processorChain?.length)
-    && !(content.effects?.length) && !content.essentialSound && !(content.mouthClicks?.clicks.length)
+    && !(content.effectChain?.length) && !content.output
 }
 
 export const audioEditDocumentKind: DocumentKindDescriptor<AudioEditDocumentContent> = {
@@ -75,11 +72,13 @@ export const audioEditDocumentKind: DocumentKindDescriptor<AudioEditDocumentCont
   // 版本 1 = 旧口播工程（audio_edit_projects.document_json）去掉 id / name / createdAt / updatedAt / revision。
   // 版本 2 = 新增可选的音量区域与修复记录；版本 3 = 修复画笔笔画新增可选的纵向半径 radiusY；
   // 版本 4 = 新增可选的效果组（effects / effectsBypassed）、基本声音（essentialSound）与口水音修复（mouthClicks）。都只加可选字段，旧文件原样可读。
-  version: 4,
-  minReaderVersion: 1,
+  // 版本 5（2026-10-26 效果控件重构）= 效果组、基本声音、口水音修复、VST3 插件链合成一条有序效果链（effectChain），
+  // 音量与自动匹配响度移到 output；去掉了旧程序必填的 vstEnabled，所以旧程序不能再读（minReaderVersion 5，用户已确认）。
+  version: 5,
+  minReaderVersion: 5,
   contentSchema: audioEditContentSchema,
-  migrations: { 1: (content) => structuredClone(content), 2: (content) => structuredClone(content), 3: (content) => structuredClone(content) },
-  createEmptyContent: () => ({ source: null, referenceScript: '', transcript: [], suggestions: [], vstEnabled: false }),
+  migrations: { 1: (content) => structuredClone(content), 2: (content) => structuredClone(content), 3: (content) => structuredClone(content), 4: (content) => migrateAudioEditEffectsToChain(content as Record<string, unknown>) as AudioEditDocumentContent },
+  createEmptyContent: () => ({ source: null, referenceScript: '', transcript: [], suggestions: [] }),
   isEmptyContent: isEmptyAudioEditContent,
   summarize: (content) => ({
     mediaType: content.source?.mediaType ?? null,

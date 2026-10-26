@@ -78,7 +78,6 @@ const creativeResult = z.discriminatedUnion('type', [
     type: z.literal('document'),
     documentRef: ref('documents.document').describe('来源文档，取自 list_documents。画布、图片文档、口播可以放进剪辑。'),
     nodeRef: ref('canvas.node').optional().describe('画布来源必填：要放进剪辑的结果节点（三维渲染结果也是画布节点）。'),
-    includeProcessing: z.boolean().optional().describe('口播来源：导出的剪后声音是否带上声音处理。'),
   }).strict(),
   z.object({ type: z.literal('generation'), resultRef: ref('generation.result'), outputIndex: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER) }).strict(),
   z.object({ type: z.literal('asset'), assetRef }).strict(),

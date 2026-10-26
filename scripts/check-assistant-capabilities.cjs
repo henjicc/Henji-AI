@@ -252,6 +252,7 @@ const ASSISTANT_BLIND_STORES = {
   // 任务 4.7 的共享工厂：自身不持有状态，由它创建的 canvasGenerationProgressStore、
   // generationTaskProgressStore、cameraStageRenderProgress 等具体进度 store 仍按各自 storeId 建账。
   'src/stores/createTransientProgressStore.ts': '高频进度 store 的共享工厂函数，本身不保存任何业务状态；具体 store 各自建账。',
+  'src/features/audioEdit/workspace/audioEditEffectInsert.ts': '音频编辑效果控件里当前选中哪一项的界面状态（不持久化、不进撤销），只决定新加的效果插在哪；助手按位置直接写 audio_edit.document.effect_chain，无需读写这份状态。',
   'src/features/application-control/agentEditing.ts': '助手正在编辑哪份文档的运行时提示（不持久化）：由宿主在助手写入时登记；用户接管后助手的写入以 USER_TAKEOVER 明确拒绝并说明原因，助手无需读写这份状态。',
 }
 const ledgerStoreIds = new Set()

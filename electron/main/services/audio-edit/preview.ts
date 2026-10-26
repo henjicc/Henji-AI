@@ -10,7 +10,7 @@ export async function prepareAudioEditPreviewChunk(request: AudioEditPreviewChun
   const sourceStartFrame = Math.max(0, Math.min(project.source.durationFrames, Math.round(request.sourceStartFrame)))
   const frameCount = Math.min(Math.max(1, Math.round(request.frameCount)), project.source.sampleRate * 4, project.source.durationFrames - sourceStartFrame)
   if (frameCount <= 0) return { sourceStartFrame, sourceEndFrame: sourceStartFrame, sampleRate: project.source.sampleRate, channels: project.source.channels, pcm: new ArrayBuffer(0) }
-  const source = request.mode === 'source' ? await prepareAudioEditAudio(project) : await prepareAudioEditRenderSource(project, request.processing ?? project.vstEnabled)
+  const source = request.mode === 'source' ? await prepareAudioEditAudio(project) : await prepareAudioEditRenderSource(project)
   const binary = await loadFfmpegPath()
   const pcm = await new Promise<Buffer>((resolve, reject) => {
     execFile(binary, ['-v', 'error', '-ss', (sourceStartFrame / project.source.sampleRate).toFixed(9), '-i', source, '-t', (frameCount / project.source.sampleRate).toFixed(9),

@@ -28,7 +28,7 @@ async function sourceRequest(source: PlaceInput['result']): Promise<VideoEditCre
     if (!source.nodeRef.id.startsWith(prefix) || source.nodeRef.id.length === prefix.length) throw new Error(`nodeRef 必须是这份画布里的节点，格式为 ${prefix}<节点 ID>。`)
     part = source.nodeRef.id.slice(prefix.length)
   }
-  return { type: 'document', docRef: { docId: document.id, path: document.path }, ...(part ? { part } : {}), ...(source.includeProcessing !== undefined ? { includeProcessing: source.includeProcessing } : {}) }
+  return { type: 'document', docRef: { docId: document.id, path: document.path }, ...(part ? { part } : {}) }
 }
 
 /** Same frozen-target transfer as the UI send menus; the public layer only maps refs. */

@@ -21,7 +21,7 @@ import {
  */
 
 const source: AudioEditSourceMetadata = { mediaType: 'audio', sourcePath: 'D:/外部/录音.wav', audioPath: 'D:/外部/录音.wav', sampleRate: 1000, channels: 1, durationFrames: 4000 }
-const fixture = (): AudioEditProjectDocument => ({ id: 'instance-test', name: '录音', source, transcript: [{ id: 'word', text: '你好', startFrame: 1000, endFrame: 2000, included: true, locked: true, granularity: 'word' }], referenceScript: '', suggestions: [], vstEnabled: false, revision: 1, createdAt: 1, updatedAt: 1 })
+const fixture = (): AudioEditProjectDocument => ({ id: 'instance-test', name: '录音', source, transcript: [{ id: 'word', text: '你好', startFrame: 1000, endFrame: 2000, included: true, locked: true, granularity: 'word' }], referenceScript: '', suggestions: [], revision: 1, createdAt: 1, updatedAt: 1 })
 
 let commands: FakeDocumentCommands
 let prompter: ScriptedPrompter

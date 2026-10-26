@@ -1,3 +1,4 @@
+import { AUDIO_EDIT_MAX_CHAIN_ITEMS } from '@/core/audioEdit/effects'
 import type { AudioEditExportRequest, AudioEditExportResult, AudioEditRange, AudioEditTranscriptionRequest, AudioEditProjectDocument, AudioEditSuggestion } from '@/core/audioEdit/types'
 import { applyAudioEditSuggestion, cleanAudioEditFillers, DEFAULT_AUDIO_EDIT_SETTINGS } from '@/core/audioEdit/edits'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
@@ -200,6 +201,23 @@ export async function processProjectAudioEditBreaths(projectId: string, policy: 
   }
 }
 
+/**
+ * 效果控件里的“呼吸声”：检测整段录音里的呼吸（本地模型，按素材缓存），把范围写进这一项（不改时长；之后减弱或静音按这一项的设置）。
+ * 界面加进这一项时自动调用；助手也用它。
+ */
+export async function analyzeProjectAudioEditBreathItem(projectId: string, itemId: string, requestId: string = crypto.randomUUID()): Promise<{ count: number }> {
+  const instance = await loadAudioEditProject(projectId)
+  if (!(instance.document.effectChain ?? []).some(item => item.id === itemId && item.kind === 'breath')) throw new Error('效果控件里没有这一项呼吸声。')
+  const breaths = (await detectProjectBreaths(instance.document, true, requestId))!
+  const rate = instance.document.source.sampleRate, duration = instance.document.source.durationFrames
+  const ranges = breaths.map(breath => ({ startFrame: Math.max(0, Math.round(breath.startMs * rate / 1000)), endFrame: Math.min(duration, Math.round(breath.endMs * rate / 1000)) }))
+    .filter(range => range.endFrame > range.startFrame && range.endFrame - range.startFrame <= rate * 10).slice(0, 20000)
+  editAudioEditProject(projectId, document => ({ ...document, effectChain: (document.effectChain ?? []).map(item => item.id === itemId && item.kind === 'breath' ? { ...item, analyzed: true, breaths: ranges } : item) }))
+  await flushAudioEditProject(projectId)
+  logger.info('呼吸声检测完成', { event: 'audio_edit.breath_item.analyzed', requestId, context: { projectId, itemId, count: ranges.length } })
+  return { count: ranges.length }
+}
+
 export async function quickProcessAudioEdit(projectId: string, range?: AudioEditRange, requestId: string = crypto.randomUUID()) {
   return compressAudioEditSilence(projectId, range, requestId, true)
 }
@@ -264,33 +282,50 @@ export async function relinkAudioEdit(projectId: string, sourcePath: string): Pr
 }
 
 /**
- * 基本声音“自动匹配响度”：按当前全部处理（不含响度补偿本身）渲染成品、测积分响度，把到目标需要的补偿写进基本声音；
- * 还没有基本声音时按“对话”新建、只打开响度这一项。界面与助手共用。
+ * 输出一节的“自动匹配响度”：按当前全部处理（不含响度补偿本身）渲染成品、测积分响度，把到目标需要的补偿写进 output.loudness
+ * （同时打开自动匹配，末尾限幅 -1 dB）。界面与助手共用。
  */
 export async function matchProjectAudioEditLoudness(projectId: string, targetLufs = -16, requestId: string = crypto.randomUUID()): Promise<{ integratedLufs: number; gainDb: number }> {
   await flushAudioEditProject(projectId)
   const result = await getPlatform().audioEdit.matchLoudness({ projectId, targetLufs, requestId })
-  editAudioEditProject(projectId, document => ({ ...document, essentialSound: { ...(document.essentialSound ?? { type: 'dialogue' as const }), loudness: { enabled: true, targetLufs, gainDb: result.gainDb } } }))
+  editAudioEditProject(projectId, document => ({ ...document, output: { volumeDb: document.output?.volumeDb ?? 0, loudness: { enabled: true, targetLufs, gainDb: result.gainDb } } }))
   await flushAudioEditProject(projectId)
   logger.info('响度已匹配', { event: 'audio_edit.loudness.matched', context: { projectId, targetLufs, ...result } })
   return result
 }
 
 /**
- * 检测口水音并打开修复：结果写进 mouthClicks（传 range 时只替换这段里原有的结果）。界面与助手共用。
+ * 检测口水音并打开修复：写进效果链里的“去除口水音”（itemId 指定哪一项；不给时用链里第一项去除口水音，没有就加到链末尾）。
+ * 检测听的是这一项之前的声音；传 range 时只替换这段里原有的结果。界面与助手共用。
  */
-export async function detectProjectAudioEditMouthClicks(projectId: string, sensitivity = 50, range?: AudioEditRange, requestId: string = crypto.randomUUID()): Promise<{ count: number; perMinute: number }> {
+export async function detectProjectAudioEditMouthClicks(projectId: string, options: { itemId?: string; sensitivity?: number; range?: AudioEditRange } = {}, requestId: string = crypto.randomUUID()): Promise<{ itemId: string; count: number; perMinute: number }> {
+  const instance = await loadAudioEditProject(projectId)
+  const existing = (instance.document.effectChain ?? []).find(item => item.kind === 'mouth_declick' && (!options.itemId || item.id === options.itemId))
+  if (options.itemId && !existing) throw new Error('效果控件里没有这一项去除口水音。')
+  const itemId = existing?.id ?? crypto.randomUUID()
+  const sensitivity = options.sensitivity ?? (existing?.kind === 'mouth_declick' ? existing.sensitivity : 50)
+  if (!existing) {
+    if ((instance.document.effectChain?.length ?? 0) >= AUDIO_EDIT_MAX_CHAIN_ITEMS) throw new Error(`效果控件最多放 ${AUDIO_EDIT_MAX_CHAIN_ITEMS} 个效果。`)
+    editAudioEditProject(projectId, document => ({ ...document, effectChain: [...(document.effectChain ?? []), { id: itemId, kind: 'mouth_declick', enabled: true, sensitivity, analyzed: false, clicks: [] }] }))
+  }
   await flushAudioEditProject(projectId)
-  const { clicks } = await getPlatform().audioEdit.detectMouthClicks({ projectId, sensitivity, ...(range ? { range } : {}), requestId })
+  const range = options.range
+  const { clicks } = await getPlatform().audioEdit.detectMouthClicks({ projectId, itemId, sensitivity, ...(range ? { range } : {}), requestId })
   let total = 0, durationFrames = 1, sampleRate = 48000
   editAudioEditProject(projectId, document => {
-    const kept = range ? (document.mouthClicks?.clicks ?? []).filter(click => click.endFrame <= range.startFrame || click.startFrame >= range.endFrame) : []
-    const next = [...kept, ...clicks.map(({ startFrame, endFrame }) => ({ startFrame, endFrame }))].sort((a, b) => a.startFrame - b.startFrame).slice(0, 20000)
-    total = next.length; durationFrames = range ? range.endFrame - range.startFrame : document.source.durationFrames; sampleRate = document.source.sampleRate
-    return { ...document, mouthClicks: { enabled: true, sensitivity, clicks: next } }
+    total = 0
+    const effectChain = (document.effectChain ?? []).map(item => {
+      if (item.id !== itemId || item.kind !== 'mouth_declick') return item
+      const kept = range ? item.clicks.filter(click => click.endFrame <= range.startFrame || click.startFrame >= range.endFrame) : []
+      const next = [...kept, ...clicks.map(({ startFrame, endFrame }) => ({ startFrame, endFrame }))].sort((a, b) => a.startFrame - b.startFrame).slice(0, 20000)
+      total = next.length
+      return { ...item, sensitivity, analyzed: true, clicks: next }
+    })
+    durationFrames = range ? range.endFrame - range.startFrame : document.source.durationFrames; sampleRate = document.source.sampleRate
+    return { ...document, effectChain }
   })
   await flushAudioEditProject(projectId)
   const count = range ? clicks.length : total
-  logger.info('口水音检测完成', { event: 'audio_edit.mouth_clicks.detected', context: { projectId, sensitivity, count } })
-  return { count, perMinute: Math.round(count / Math.max(1 / 60, durationFrames / sampleRate / 60)) }
+  logger.info('口水音检测完成', { event: 'audio_edit.mouth_clicks.detected', context: { projectId, itemId, sensitivity, count } })
+  return { itemId, count, perMinute: Math.round(count / Math.max(1 / 60, durationFrames / sampleRate / 60)) }
 }

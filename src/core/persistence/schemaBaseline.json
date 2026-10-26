@@ -138,10 +138,10 @@
       "minReaderVersion": 1
     },
     "document.audio_edit": {
-      "version": 4,
-      "fingerprint": "b925c99d2b0dea9003f10b158c569a875c8f5c998359ad3f50763fa70b9a1803",
+      "version": 5,
+      "fingerprint": "0c88fe21cd17d257447ecd90b7499067cdb63d928d8b8377ce026ef57eb2afc1",
       "supportedFrom": 1,
-      "minReaderVersion": 1
+      "minReaderVersion": 5
     },
     "document.camera_stage": {
       "version": 1,

@@ -18,7 +18,7 @@ beforeEach(async () => {
   directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-export-test-'))
   const sourcePath = path.join(directory, '原声 & #.wav')
   await fs.writeFile(sourcePath, 'original file')
-  state.project = { id: 'p', name: '剪辑', source: { mediaType: 'audio', sourcePath, audioPath: sourcePath, sampleRate: 48000, channels: 2, durationFrames: 96000 }, transcript: [], suggestions: [], referenceScript: '', vstEnabled: false, revision: 1, createdAt: 1, updatedAt: 1 }
+  state.project = { id: 'p', name: '剪辑', source: { mediaType: 'audio', sourcePath, audioPath: sourcePath, sampleRate: 48000, channels: 2, durationFrames: 96000 }, transcript: [], suggestions: [], referenceScript: '', revision: 1, createdAt: 1, updatedAt: 1 }
 })
 afterEach(async () => { vi.restoreAllMocks(); await fs.rm(directory, { recursive: true, force: true }) })
 it('exports original file URLs without invoking an encoder and refuses source overwrite', async () => {
@@ -34,7 +34,8 @@ it('exports original file URLs without invoking an encoder and refuses source ov
 it('missing processed audio never publishes a successful XML', async () => {
   state.processed = path.join(directory, 'missing.wav')
   const targetPath = path.join(directory, '剪辑.xml')
-  await expect(exportAudioEditProject({ projectId: 'p', format: 'xml', targetPath, includeProcessing: true })).rejects.toThrow()
+  state.project!.gainRegions = [{ id: 'g', startFrame: 0, endFrame: 4800, gainDb: -6, fadeInFrames: 0, fadeOutFrames: 0, enabled: true }]
+  await expect(exportAudioEditProject({ projectId: 'p', format: 'xml', targetPath })).rejects.toThrow()
   expect(await fs.readdir(directory)).toEqual(['原声 & #.wav'])
 })
 it('rolls back companion files when publishing XML fails', async () => {

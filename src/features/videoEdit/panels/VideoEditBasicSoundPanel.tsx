@@ -4,7 +4,7 @@ import type { EssentialSoundSettings } from '@/core/audio/essentialSound'
 import { createVideoEditMixWriter } from '../application/videoEditAudioMixer'
 import { Dropdown, UiButton, UiFormRow, UiLoading } from '@/components/ui'
 import { UI_PROPERTY_INSET_CLASS } from '@/components/ui/styleTokens'
-import { VideoEditEffectSection } from './VideoEditEffectSection'
+import { EffectSection } from '@/components/effects/EffectSection'
 import NumberInput from '@/components/ui/NumberInput'
 import { videoEditDuckingSettingsSchema, type VideoEditAudioRole } from '@/core/videoEdit/audioDucking'
 import { videoEditComposition } from '@/core/videoEdit/document'
@@ -45,7 +45,7 @@ function VideoEditBasicSoundPanelContent({ instance, onError }: { instance: Vide
   const setEssential = (next: EssentialSoundSettings | undefined): void => {
     try { writer.essentialSound(sequence.id, target.clipIds, next) } catch (error) { onError(error) }
   }
-  return <VideoEditEffectSection id="basic-sound" title="基本声音">
+  return <EffectSection id="basic-sound" title="基本声音">
     {sounds.length > 1 && !sameRole && <UiFormRow label="声音类型" inline density="compact"><Dropdown size="sm" ariaLabel="声音类型" value={''} options={[{ value: '', label: sounds.some(clip => clip.audioRole) ? '混合类型' : '未标注', disabled: true }, ...roles]} disabled={busy} onSelect={role => { try { setVideoEditAudioRoles(target, role as VideoEditAudioRole) } catch (error) { onError(error) } }} /></UiFormRow>}
     {(sounds.length === 1 || sameRole) && <EssentialSoundControls value={essential} disabled={busy} onChange={setEssential} gesture={() => { try { return writer.gesture() } catch (error) { onError(error); return { finish: () => {}, cancel: () => {} } } }} />}
     {music.length > 0 && <>
@@ -57,7 +57,7 @@ function VideoEditBasicSoundPanelContent({ instance, onError }: { instance: Vide
       <div className={`flex flex-wrap items-center gap-2 pt-1 ${UI_PROPERTY_INSET_CLASS}`}><UiButton size="sm" variant="secondary" disabled={busy} onClick={() => void run()}>{music.some(clip => clip.curves?.volume?.some(isVideoEditDuckingKeyframe)) ? '重新生成回避' : '生成回避'}</UiButton>{busy && <UiButton size="sm" onClick={() => controller.current?.abort()}>取消</UiButton>}</div>
       {busy && <div className={UI_PROPERTY_INSET_CLASS}><UiLoading size="xs" message="正在分析目标声音…" /></div>}
     </>}
-  </VideoEditEffectSection>
+  </EffectSection>
 }
 
 export function VideoEditBasicSoundPanel(props: Parameters<typeof VideoEditBasicSoundPanelContent>[0]): React.ReactElement | null {

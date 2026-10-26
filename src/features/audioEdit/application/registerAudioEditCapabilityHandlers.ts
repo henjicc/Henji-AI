@@ -113,9 +113,9 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
           break
         }
         case 'detect_audio_edit_mouth_clicks': {
-          const detected = await detectProjectAudioEditMouthClicks(id, input.sensitivity ?? 50, input.range, requestId)
+          const detected = await detectProjectAudioEditMouthClicks(id, { ...(input.itemId ? { itemId: input.itemId } : {}), ...(input.sensitivity !== undefined ? { sensitivity: input.sensitivity } : {}), ...(input.range ? { range: input.range } : {}) }, requestId)
           result.count = detected.count
-          result.message = detected.count ? `找到 ${detected.count} 处口水音（约每分钟 ${detected.perMinute} 处），已打开修复；可在 audio_edit.document.mouth_clicks 查看、删去不需要修的。` : '没有找到口水音。'
+          result.message = detected.count ? `找到 ${detected.count} 处口水音（约每分钟 ${detected.perMinute} 处），已写进效果控件的“去除口水音”（${detected.itemId}）并打开；可在 audio_edit.document.effect_chain 里查看那一项、删去不需要修的。` : '没有找到口水音。'
           break
         }
         case 'clean_audio_edit_retakes': {
@@ -152,7 +152,7 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
             if (!input.destination) throw new Error('请选择已配置的快速下载或预设目录。')
             return join(resolveConfiguredDestination(input.destination), `${fileName}.${format}`)
           })
-          const exported = await exportAudioEdit({ projectId: id, targetPath, format, includeProcessing: input.includeProcessing ?? false, requestId, ...(input.includeSrt ? { subtitleTargetPath: targetPath.replace(/\.[^.]+$/, '.srt') } : {}) })
+          const exported = await exportAudioEdit({ projectId: id, targetPath, format, requestId, ...(input.includeSrt ? { subtitleTargetPath: targetPath.replace(/\.[^.]+$/, '.srt') } : {}) })
           result.verified = (await Promise.all([exported.xmlPath ?? exported.audioPath, exported.subtitlePath].filter((path): path is string => Boolean(path)).map(exists))).every(Boolean)
           result.durationFrames = exported.durationFrames; result.message = `已导出 ${format.toUpperCase()} 到所选目录。`; break
         }

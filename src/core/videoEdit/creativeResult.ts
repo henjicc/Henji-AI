@@ -36,9 +36,9 @@ export const videoEditCreativeSourceSchema = z.discriminatedUnion('type', [docum
 export type VideoEditCreativeSource = z.infer<typeof videoEditCreativeSourceSchema>
 export type VideoEditDocumentSource = z.infer<typeof documentSource>
 
-/** 放入请求：来源 + 只影响这次产出的选项（口播是否带上声音处理）。 */
+/** 放入请求：来源（口播按它效果控件里的处理出声，不另设选项）。 */
 export const videoEditCreativeSourceRequestSchema = z.discriminatedUnion('type', [
-  documentSource.extend({ includeProcessing: z.boolean().optional() }).strict(),
+  documentSource,
   generationSource,
   z.object({ type: z.literal('asset'), assetId: id }).strict(),
 ])

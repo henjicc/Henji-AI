@@ -15,7 +15,7 @@ it.runIf(Boolean(state.binary))('explicit FFmpeg performance: ten-minute stereo 
   state.dir = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-audio-perf-')); state.source = path.join(state.dir, 'source.wav')
   try {
     await exec(state.binary, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'aevalsrc=0.1|0.2:s=48000:d=600', '-c:a', 'pcm_f32le', state.source], { windowsHide: true })
-    const p: AudioEditProjectDocument = { id: 'performance', name: '测量', source: { mediaType: 'audio', sourcePath: state.source, audioPath: state.source, sampleRate: 48000, channels: 2, durationFrames: 600 * 48000 }, transcript: [], suggestions: [], referenceScript: '', vstEnabled: false, revision: 1, createdAt: 1, updatedAt: 1,
+    const p: AudioEditProjectDocument = { id: 'performance', name: '测量', source: { mediaType: 'audio', sourcePath: state.source, audioPath: state.source, sampleRate: 48000, channels: 2, durationFrames: 600 * 48000 }, transcript: [], suggestions: [], referenceScript: '', revision: 1, createdAt: 1, updatedAt: 1,
       gainRegions: [{ id: 'gain', startFrame: 48000, endFrame: 96000, gainDb: -6.020599913279624, fadeInFrames: 4800, fadeOutFrames: 4800, enabled: true }], cuts: [{ id: 'cut', startFrame: 48000 * 500, endFrame: 48000 * 600, reason: 'manual', enabled: true }] }
     const time = async (): Promise<{ ms: number; result: Awaited<ReturnType<typeof renderAudioEditProject>> }> => { const start = performance.now(); const result = await renderAudioEditProject(p); return { ms: performance.now() - start, result } }
     const cold = await time(), warm = await time()

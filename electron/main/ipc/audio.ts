@@ -1,6 +1,5 @@
 import { audioEditSpliceSchema } from '../../../src/core/audioEdit/splice'
 import { audioEditSourceRecipe } from '../../../src/core/audioEdit/regions'
-import { essentialSoundOfflineStages } from '../../../src/core/audio/essentialSound'
 import { spliceAudioFile } from '../services/audio-edit/splice'
 import { z } from 'zod'
 import { BrowserWindow } from 'electron'
@@ -43,32 +42,31 @@ export function registerAudioIpc(): void {
       if (!window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('audioEdit:spectralProgress', progress)
     }
   })
-  registerIpcHandler('audioEdit:render', input => z.object({ projectId: z.string().min(1), requestId: z.string().optional(), includeProcessing: z.boolean().optional() }).strict().parse(input), async request => {
+  registerIpcHandler('audioEdit:render', input => z.object({ projectId: z.string().min(1), requestId: z.string().optional() }).strict().parse(input), async request => {
     const project = await requireAudioEditProject(request.projectId)
-    return runAudioEditTask(project.id, 'render', signal => renderAudioEditProject(project, request.includeProcessing ?? project.vstEnabled, signal), request.requestId, JSON.stringify([project, request.includeProcessing]), true)
+    return runAudioEditTask(project.id, 'render', signal => renderAudioEditProject(project, signal), request.requestId, JSON.stringify([project]), true)
   })
   // 修复与区间音量已生效、删除/静音尚未套用的音频：时间轴与原素材一致，波形视图据此显示编辑后的样子。
   registerIpcHandler('audioEdit:editedSource', input => z.object({ projectId: z.string().min(1), requestId: z.string().optional() }).strict().parse(input), async request => {
     const project = await requireAudioEditProject(request.projectId)
-    const audioPath = await runAudioEditTask(project.id, 'render', signal => prepareAudioEditRenderSource(project, false, signal), request.requestId, JSON.stringify(['edited-source', audioEditSourceRecipe({ ...project, offline: essentialSoundOfflineStages(project.essentialSound) }), project.source]), true)
+    const audioPath = await runAudioEditTask(project.id, 'render', signal => prepareAudioEditRenderSource(project, signal), request.requestId, JSON.stringify(['edited-source', audioEditSourceRecipe(project), project.source]), true)
     return { audioPath }
   })
-  // 基本声音“自动匹配响度”：渲染不含响度补偿的成品（含基本声音其他项与效果组），测积分响度，换算到目标需要的增益。
+  // 输出一节的“自动匹配响度”：渲染不含响度补偿的成品（效果链全部生效、只去掉响度补偿与末尾限幅），测积分响度，换算到目标需要的增益。
   registerIpcHandler('audioEdit:matchLoudness', input => z.object({ projectId: z.string().min(1), targetLufs: z.number().finite().min(-40).max(-5), requestId: z.string().optional() }).strict().parse(input), async request => {
     const project = await requireAudioEditProject(request.projectId)
-    const essential = project.essentialSound
-    const probe = essential ? { ...project, essentialSound: { ...essential, loudness: { enabled: false, targetLufs: request.targetLufs, gainDb: 0 } } } : project
+    const probe = { ...project, output: { volumeDb: project.output?.volumeDb ?? 0 } }
     return runAudioEditTask(project.id, 'render', async signal => {
-      const rendered = await renderAudioEditProject(probe, project.vstEnabled, signal)
+      const rendered = await renderAudioEditProject(probe, signal)
       const measured = await measureAudioFileLoudness(rendered.audioPath, 0, rendered.durationFrames, rendered.sampleRate, signal)
       if (measured.integratedLufs === null) throw new Error('声音太短或太轻，测不出响度。')
       const gainDb = Math.round(Math.max(-40, Math.min(40, request.targetLufs - measured.integratedLufs)) * 10) / 10
       return { integratedLufs: Math.round(measured.integratedLufs * 10) / 10, gainDb }
     }, request.requestId, JSON.stringify(['match-loudness', request.targetLufs, project.revision]), true)
   })
-  registerIpcHandler('audioEdit:detectMouthClicks', input => z.object({ projectId: z.string().min(1), sensitivity: z.number().finite().min(0).max(100), range: audioEditRangeSchema.optional(), requestId: z.string().optional() }).strict().parse(input), async request => {
+  registerIpcHandler('audioEdit:detectMouthClicks', input => z.object({ projectId: z.string().min(1), itemId: z.string().min(1).max(100), sensitivity: z.number().finite().min(0).max(100), range: audioEditRangeSchema.optional(), requestId: z.string().optional() }).strict().parse(input), async request => {
     const project = await requireAudioEditProject(request.projectId)
-    const clicks = await runAudioEditTask(project.id, 'analysis', (signal, progress) => detectAudioEditMouthClicksInProject(project, request.sensitivity, request.range, signal, progress), request.requestId, JSON.stringify(['mouth-clicks', request.sensitivity, request.range, project.revision]), true)
+    const clicks = await runAudioEditTask(project.id, 'analysis', (signal, progress) => detectAudioEditMouthClicksInProject(project, request.itemId, request.sensitivity, request.range, signal, progress), request.requestId, JSON.stringify(['mouth-clicks', request.sensitivity, request.range, project.revision]), true)
     return { clicks }
   })
   registerAudioSampleHandlers()
@@ -106,9 +104,9 @@ export function registerAudioIpc(): void {
     const project = await requireAudioEditProject(projectId)
     return runAudioEditTask(projectId, 'processing', async (signal, progress) => {
       await verifyAudioEditSource(project)
-      await prepareAudioEditRenderSource(project, true, signal)
+      await prepareAudioEditRenderSource(project, signal)
       progress(1)
-    }, requestId, JSON.stringify([project.source.identity, project.processorChain]))
+    }, requestId, JSON.stringify([project.source.identity, project.effectChain ?? []]))
   })
   registerIpcHandler('audioEdit:asr:transcribe', parseTranscription, transcribeAudioEditProject)
   registerIpcHandler('audioEdit:export', parseExport, exportAudioEditProject)
@@ -125,7 +123,6 @@ function parsePreviewChunk(input: unknown): AudioEditPreviewChunkRequest {
     mode: record.mode === 'source' ? 'source' : 'edited',
     sourceStartFrame: readNumber(record, 'sourceStartFrame'),
     frameCount: readNumber(record, 'frameCount'),
-    processing: record.processing === undefined ? undefined : readBoolean(record, 'processing'),
   }
 }
 
@@ -147,17 +144,10 @@ function parseExport(input: unknown): AudioEditExportRequest {
     audioTargetPath: readOptionalString(record, 'audioTargetPath'),
     targetPath: readOptionalString(record, 'targetPath'),
     format: record.format,
-    includeProcessing: record.includeProcessing === undefined ? undefined : readBoolean(record, 'includeProcessing'),
     frameRate: record.frameRate === undefined ? undefined : audioEditFrameRateSchema.parse(record.frameRate),
     requestId: readOptionalString(record, 'requestId'),
     subtitleTargetPath: readOptionalString(record, 'subtitleTargetPath'),
   }
-}
-
-function readBoolean(record: Record<string, unknown>, field: string): boolean {
-  const value = record[field]
-  if (typeof value !== 'boolean') throw new Error(`Expected boolean field "${field}"`)
-  return value
 }
 
 function readString(record: Record<string, unknown>, field: string): string {

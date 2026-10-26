@@ -6,7 +6,9 @@ import { dockviewHostTheme } from '@/components/dockviewHostTheme'
 import { bindDockDragGestures, dockFloatingGroupsBack, DOCKVIEW_HOST_DND_OPTIONS } from '@/components/dockviewDocking'
 import { AudioWaveWorkspace } from '../spectral/AudioWaveWorkspace'
 import { setDockHeaderSlot } from '@/components/dockLayouts/dockHeaderSlots'
-import { AudioEditDeliveryPanel, AudioEditEffectsPanel, AudioEditEssentialSoundPanel, AudioEditHistoryPanel, AudioEditProcessPanel, AudioEditTranscriptPanel } from './AudioEditPanels'
+import { AudioEditDeliveryPanel, AudioEditHistoryPanel, AudioEditTranscriptPanel } from './AudioEditPanels'
+import { AudioEditEffectControls } from './AudioEditEffectControls'
+import { AudioEditEffectLibrary } from './AudioEditEffectLibrary'
 import { bindWorkspaceLayoutDock } from '@/components/dockLayouts/useWorkspaceLayoutPresets'
 import { createLogger } from '@/core/logging'
 import { AUDIO_EDIT_WORKSPACE_ID } from './audioEditDockLayout'
@@ -22,9 +24,8 @@ const panel = (Body: () => React.ReactElement): React.FC<IDockviewPanelProps> =>
 const COMPONENTS = {
   editor: panel(AudioWaveWorkspace),
   transcript: panel(AudioEditTranscriptPanel),
-  process: panel(AudioEditProcessPanel),
-  essential: panel(AudioEditEssentialSoundPanel),
-  effects: panel(AudioEditEffectsPanel),
+  library: panel(AudioEditEffectLibrary),
+  effects: panel(AudioEditEffectControls),
   history: panel(AudioEditHistoryPanel),
   delivery: panel(AudioEditDeliveryPanel),
 }
@@ -42,8 +43,8 @@ const EDITOR_HEADER_TOOLS_MIN_WIDTH = 600
  * 编辑器面板的工具（编辑工具、显示方式、选区操作）放在它自己的标签行右侧：顶部命令带只剩一行，
  * 标签行也不再空着；工具随编辑器面板走，叠放时只在编辑器是当前标签时出现。
  */
-/** 标签行带工具的面板与它们需要的最小面板组宽度（px）：编辑器工具多；效果组只有开关与添加两个按钮。 */
-const HEADER_TOOLS_MIN_WIDTH: Record<string, number> = { editor: EDITOR_HEADER_TOOLS_MIN_WIDTH, effects: 200 }
+/** 标签行带工具的面板与它们需要的最小面板组宽度（px）：编辑器工具多；效果控件只有整体开关；文字稿有自动粗剪、原稿切换与显示设置。 */
+const HEADER_TOOLS_MIN_WIDTH: Record<string, number> = { editor: EDITOR_HEADER_TOOLS_MIN_WIDTH, effects: 200, transcript: 330 }
 function DockHeaderActions({ group }: IDockviewHeaderActionsProps): React.ReactElement | null {
   const [active, setActive] = useState(group.activePanel?.id ?? '')
   // 面板组窄到放不下“标签 + 工具”时不提供插槽，工具留在面板顶部；否则标签会被挤进溢出列表。

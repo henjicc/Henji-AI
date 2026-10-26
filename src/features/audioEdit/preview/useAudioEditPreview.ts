@@ -5,7 +5,6 @@ import { buildProjectAudioEditTimeline, editedDurationFrames, findTranscriptBloc
 import { compileAudioEditXmlTimeline } from '@/core/audioEdit/xml'
 import { audioEditRealtimeEffects } from '@/core/audioEdit/effects'
 import { audioEditSourceRecipe } from '@/core/audioEdit/regions'
-import { essentialSoundOfflineStages } from '@/core/audio/essentialSound'
 import { AudioEffectChain, type AudioEffectInstance } from '@/core/audio/effects/audioEffectChain'
 import type { AudioEditPreviewMode, AudioEditProjectDocument, AudioEditTimelineSpan } from '@/core/audioEdit/types'
 import { createLogger } from '@/core/logging'
@@ -71,15 +70,16 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
   const resumeRef = useRef<Promise<void> | null>(null)
   const activeSpans = useMemo(() => project ? playbackSpans(project, mode) : [], [mode, project])
   const timeline = activeSpans
-  // 编辑后声音变了（修复、口水音、离线模型处理、区间音量；只换 id 不算）才换缓存从当前位置重来。
-  const planKey = JSON.stringify([project?.id, project?.source, mode, project?.vstEnabled, project?.processorChain, project && mode !== 'source' ? audioEditSourceRecipe({ ...project, offline: essentialSoundOfflineStages(project.essentialSound) }) : undefined, activeSpans])
+  // 编辑后声音变了（修复、效果链里整段处理的那一段、区间音量；只换 id 不算）才换缓存从当前位置重来。
+  const planKey = JSON.stringify([project?.id, project?.source, mode, project && mode !== 'source' ? audioEditSourceRecipe(project) : undefined, activeSpans])
   const cacheRef = useRef<{ key: string; value: PreviewChunkCache } | null>(null)
   if (project && cacheRef.current?.key !== planKey) cacheRef.current = { key: planKey, value: new PreviewChunkCache(project, mode, activeSpans) }
   const cache = project ? cacheRef.current!.value : null
-  // 实时效果链：“原始”试听不加效果（用来对比）；结构变了（增删、换序、开关）就清空排队的声音从当前位置重来，只改参数时原地生效。
+  // 边播边算的部分（效果链末尾的实时效果 + 输出）：“原始”试听不加效果（用来对比）；结构变了（增删、换序、开关）就清空排队的声音
+  // 从当前位置重来，只改参数时原地生效。
   const effects = useMemo<AudioEffectInstance[]>(() => project && mode !== 'source' ? audioEditRealtimeEffects(project) : [],
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only the effect-related fields matter
-    [project?.effects, project?.effectsBypassed, project?.essentialSound, mode])
+    [project?.effectChain, project?.chainBypassed, project?.output, mode])
   const effectsRef = useRef(effects)
   effectsRef.current = effects
   const chainRef = useRef<AudioEffectChain | null>(null)

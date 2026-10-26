@@ -138,7 +138,7 @@ export async function getAudioEditSpectralTile(raw: AudioEditSpectralTileRequest
     const project = await wait(requireAudioEditProject(request.projectId), signal)
     await wait(verifyAudioEditSource(project, false, signal), signal)
     const identity = project.source.identity ?? await wait(identifyAudioEditSource(project.source.sourcePath, signal), signal)
-    const input = await wait(prepareInput(project.id, () => request.mode === 'edited' ? prepareAudioEditRenderSource(project, project.vstEnabled) : prepareAudioEditAudio(project)), signal)
+    const input = await wait(prepareInput(project.id, () => request.mode === 'edited' ? prepareAudioEditRenderSource(project) : prepareAudioEditAudio(project)), signal)
     const cache = audioEditSpectralCacheDirectory()
     const revision = request.mode === 'source' ? 0 : project.revision
     const key = audioRenderKey(['spectral-pyramid-v1', identity, project.source.audioStreamIndex, project.source.sampleRate,

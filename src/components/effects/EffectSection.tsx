@@ -9,7 +9,7 @@ import { ICON_EFFECT_DISABLED, ICON_EFFECT_ENABLED, UI_ICON_SIZE } from '@/core/
 const collapsedSections = new Set<string>()
 
 /** 每节前的 fx 开关（对齐 AE）：开着是 fx，关掉换成带斜杠的 fx；停用只是不生效，参数与关键帧都保留。 */
-export function VideoEditEffectToggle({ enabled, label, tooltip, disabled, size = '2xs', onChange }: { enabled: boolean; label: string; tooltip: string; disabled?: boolean; size?: '2xs' | 'sm'; onChange: (enabled: boolean) => void }): React.ReactElement {
+export function EffectToggle({ enabled, label, tooltip, disabled, size = '2xs', onChange }: { enabled: boolean; label: string; tooltip: string; disabled?: boolean; size?: '2xs' | 'sm'; onChange: (enabled: boolean) => void }): React.ReactElement {
   const Icon = enabled ? ICON_EFFECT_ENABLED : ICON_EFFECT_DISABLED
   return <UiIconButton size={size} aria-pressed={enabled} aria-label={label} tooltip={tooltip} disabled={disabled} onClick={() => onChange(!enabled)}><Icon /></UiIconButton>
 }
@@ -33,7 +33,7 @@ interface SectionProps {
  * 效果控件的一节（重要记录 019，对齐 AE）：标题行是四列里的 箭头 / fx / 名称 / 悬停才出现的整节动作（重置等），
  * 整行可点折叠；节与节之间一条分隔线，不画卡片。停用的一节标题变灰、内容变淡。说明放标题悬停提示。
  */
-export function VideoEditEffectSection({ id, title, info, actions, children, enabled, onEnabledChange, open: controlled, onOpenChange, collapseLabel, toggleLabel, toggleTooltip, busy, headerProps, headerRef }: SectionProps): React.ReactElement {
+export function EffectSection({ id, title, info, actions, children, enabled, onEnabledChange, open: controlled, onOpenChange, collapseLabel, toggleLabel, toggleTooltip, busy, headerProps, headerRef }: SectionProps): React.ReactElement {
   const [remembered, setRemembered] = useState(() => !collapsedSections.has(id))
   const open = controlled ?? remembered
   const toggle = (): void => {
@@ -51,7 +51,7 @@ export function VideoEditEffectSection({ id, title, info, actions, children, ena
         ? <span className="relative flex justify-center"><UiIconButton size="2xs" aria-expanded={open} aria-label={name} tooltip={name} disabled={busy} onClick={toggle}><Chevron /></UiIconButton></span>
         : <>{info ? <Tooltip content={info} delay={200} asChild>{overlay}</Tooltip> : overlay}
           <span aria-hidden="true" className="pointer-events-none relative flex justify-center text-text3"><Chevron size={UI_ICON_SIZE.sm} /></span></>}
-      <span className="relative flex justify-center">{onEnabledChange && <VideoEditEffectToggle enabled={enabled !== false} disabled={busy}
+      <span className="relative flex justify-center">{onEnabledChange && <EffectToggle enabled={enabled !== false} disabled={busy}
         label={toggleLabel ?? `${inactive ? '启用' : '停用'}${title}分区`} tooltip={toggleTooltip ?? (inactive ? `启用${title}` : `停用${title}（保留参数与关键帧）`)} onChange={onEnabledChange} />}</span>
       {/* 名称占名称列与数值列：窄面板里长名称不被数值列挤断；整节动作贴右，悬停才出现。 */}
       <span className="pointer-events-none relative col-span-2 flex min-w-0 items-center gap-1">

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Dropdown, UiCurveEditor, UiFormRow, UiInlineStatus, UiSegmented, UiSwitch, type UiCurvePoint } from '@/components/ui'
 import { UI_PROPERTY_INSET_CLASS } from '@/components/ui/styleTokens'
-import { VideoEditEffectSection } from './VideoEditEffectSection'
+import { EffectSection } from '@/components/effects/EffectSection'
 import NumberInput from '@/components/ui/NumberInput'
 import type { VideoEditClip, VideoEditSequence } from '@/core/videoEdit/document'
 import { videoEditClipAudioMode, videoEditClipPitchStretchOutOfRange, videoEditClipSourceSpanSeconds, videoEditClipSpeedSupported, videoEditClipSpeedValue } from '@/core/videoEdit/clipSpeed'
@@ -52,7 +52,7 @@ export function VideoEditTimeRemapPanel({ instance, sequence, clip, onError }: {
   }
   const outOfRange = clip.preservePitch && videoEditClipPitchStretchOutOfRange(clip)
   const stretched = videoEditClipAudioMode(clip) === 'stretch'
-  return <VideoEditEffectSection id="time-remap" title="时间重映射"><div className="flex flex-col" data-video-edit-time-remap-panel="">
+  return <EffectSection id="time-remap" title="时间重映射"><div className="flex flex-col" data-video-edit-time-remap-panel="">
     <UiFormRow label="速度曲线" density="compact" inline><UiSwitch aria-label="速度曲线" checked={Boolean(remap)} onCheckedChange={enable} /></UiFormRow>
     {remap && <>
       <UiFormRow label="曲线" density="compact" wide info="横向是片段用到的素材，纵向是速度（中线 100%，上 1000%，下 10%）。点击加点，拖动调整，双击删除；时长随曲线变化。">
@@ -73,5 +73,5 @@ export function VideoEditTimeRemapPanel({ instance, sequence, clip, onError }: {
       <NumberInput ariaLabel="变调半音" size="sm" align="right" value={clip.pitchSemitones ?? 0} min={-24} max={24} step={1} precision={0} onChange={value => apply({ pitchSemitones: value })} />
     </UiFormRow>
     {outOfRange && !stretched && <div className={UI_PROPERTY_INSET_CLASS}><UiInlineStatus tone="warning">速度超出 25%–400%，这段声音不保持音调。</UiInlineStatus></div>}
-  </div></VideoEditEffectSection>
+  </div></EffectSection>
 }

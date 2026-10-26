@@ -170,7 +170,7 @@ async function imageSource(meta: DocumentMeta, revision: number | undefined, opt
 }
 
 /** 按保存版本生成声音与字幕，放入剪辑不要求用户导出。 */
-async function audioSource(meta: DocumentMeta, includeProcessing: boolean | undefined, options: VideoEditCreativeSourceOptions): Promise<PublishedSource> {
+async function audioSource(meta: DocumentMeta, options: VideoEditCreativeSourceOptions): Promise<PublishedSource> {
   const projectId = meta.id
   const owner = await guarded(options, () => loadAudioEditProject(projectId, meta.path))
   await guarded(options, () => flushAudioEditProject(projectId))
@@ -180,7 +180,7 @@ async function audioSource(meta: DocumentMeta, includeProcessing: boolean | unde
   const cancel = (): void => { void getPlatform().audioEdit.cancelTask(requestId).catch(error => logger.warn('取消音频渲染失败', { event: 'video_edit.audio_link.cancel.failed', error })) }
   options.signal?.addEventListener('abort', cancel, { once: true })
   let result: Awaited<ReturnType<typeof renderAudioEdit>>
-  try { result = await guarded(options, () => renderAudioEdit(projectId, requestId, includeProcessing)) }
+  try { result = await guarded(options, () => renderAudioEdit(projectId, requestId)) }
   finally { options.signal?.removeEventListener('abort', cancel) }
   assertSource()
   const captions = buildAudioEditSrt(baseline.transcript, buildProjectAudioEditTimeline(baseline), baseline.source.sampleRate)
@@ -199,7 +199,7 @@ async function documentSource(source: Extract<VideoEditCreativeSourceRequest, { 
   switch (meta.kind) {
     case 'canvas': return await canvasSource(meta, source.part, options)
     case 'image_document': return await imageSource(meta, source.revision, options)
-    case 'audio_edit': return await audioSource(meta, source.includeProcessing, options)
+    case 'audio_edit': return await audioSource(meta, options)
     case 'camera_stage': throw new Error('镜头参考本身不是成片：请先在画布里渲染，再把渲染结果加入剪辑。')
     case 'video_edit': throw new Error('剪辑不能作为另一个剪辑的片段来源。')
     case 'screen_recording': throw new Error('录制会话包含多条同步轨道，请使用“将录制导入剪辑”把原片按时间一起放入目标序列。')
