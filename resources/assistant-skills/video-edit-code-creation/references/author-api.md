@@ -74,6 +74,8 @@ layers(params, width, height, assets, info) => Layer[]
 
 相邻、没有 pose 的图层会合并到同一张画布上绘制，保留 Canvas 的混合关系；有 pose 的图层各自栅格化后按位姿合成。
 
+draw 里的坐标始终是画布像素，`setTransform`、`resetTransform`、`getTransform` 也一样（运动层的栅格缩放由宿主叠上）。渐变、图案对象可以缓存到模块变量跨帧复用。
+
 ```ts
 export default {
   name: "分层标题", kind: "generator", mode: "dynamic", width: 1920, height: 1080,

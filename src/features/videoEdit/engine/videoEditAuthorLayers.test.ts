@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { authorLayerBlur, authorLayerSamples, authorPoseMatrix } from './videoEditAuthorLayers'
+import { authorLayerBlur, authorLayerSamples, authorPoseMatrix, authorRasterScale } from './videoEditAuthorLayers'
 import type { AuthorLayer, AuthorModule } from './videoEditAuthorModule'
 
 const effect: AuthorModule = { name: '运动层' }
@@ -52,4 +52,11 @@ describe('direct author layer GPU bridge', () => {
     expect(samples.filter(sample => sample.pose === null)).toHaveLength(2)
     expect(samples.filter(sample => sample.pose).reduce((sum, sample) => sum + sample.weight, 0)).toBe(.5)
   })
+})
+
+it('运动层栅格：静态内容至少 2 倍；每帧重画的图层（画着视频）从 1 倍起步，放大时照样按需升档', () => {
+  expect(authorRasterScale(1, 4)).toBe(2)
+  expect(authorRasterScale(1, 4, true)).toBe(1)
+  expect(authorRasterScale(3, 4, true)).toBe(4)
+  expect(authorRasterScale(1, 1.5)).toBe(1)
 })

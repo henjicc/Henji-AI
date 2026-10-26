@@ -19,17 +19,41 @@ export class AuthorCanvasUnrecordable extends Error {}
 
 type Value = unknown
 interface Gradient { id: number; kind: string; args: number[] }
+// 渐变与图案记下完整定义：作者把它们缓存到模块变量、下一帧再用时，按定义在那一帧的录制或真实画布上重建。
 class GradientRecord {
-  constructor(readonly record: Gradient, private readonly ops: Value[][]) {}
-  addColorStop(offset: number, color: string): void { this.ops.push(['stop', this.record.id, offset, String(color)]) }
+  readonly stops: Array<[number, string]> = []
+  constructor(readonly record: Gradient, readonly owner: Value[][]) {}
+  addColorStop(offset: number, color: string): void { this.stops.push([offset, String(color)]); this.owner.push(['stop', this.record.id, offset, String(color)]) }
 }
-class PatternRecord { constructor(readonly id: number) {} setTransform(): void { throw new AuthorCanvasUnrecordable('图案变换无法录制') } }
+class PatternRecord {
+  constructor(readonly id: number, readonly owner: Value[][], readonly source: Value, readonly repetition: string | null) {}
+  setTransform(): void { throw new AuthorCanvasUnrecordable('图案变换无法录制') }
+}
+const createGradient = (ctx: OffscreenCanvasRenderingContext2D, kind: string, values: number[]): CanvasGradient =>
+  kind === 'linear' ? ctx.createLinearGradient(values[0], values[1], values[2], values[3]) : kind === 'radial' ? ctx.createRadialGradient(values[0], values[1], values[2], values[3], values[4], values[5]) : ctx.createConicGradient(values[0], values[1], values[2])
+/** 把录制期创建、被作者缓存下来的渐变或图案换成真实画布上的对象。 */
+const realize = (ctx: OffscreenCanvasRenderingContext2D, value: Value): Value => {
+  if (value instanceof GradientRecord) { const gradient = createGradient(ctx, value.record.kind, value.record.args); for (const [offset, color] of value.stops) gradient.addColorStop(offset, color); return gradient }
+  if (value instanceof PatternRecord) return ctx.createPattern(value.source as CanvasImageSource, value.repetition)
+  return value
+}
 
 const STATE = ['fillStyle', 'strokeStyle', 'globalAlpha', 'globalCompositeOperation', 'lineWidth', 'lineCap', 'lineJoin', 'miterLimit', 'lineDashOffset', 'shadowBlur', 'shadowColor', 'shadowOffsetX', 'shadowOffsetY', 'font', 'textAlign', 'textBaseline', 'direction', 'filter', 'imageSmoothingEnabled', 'imageSmoothingQuality', 'letterSpacing', 'wordSpacing', 'fontKerning', 'fontStretch', 'fontVariantCaps', 'textRendering', 'lang'] as const
 const TEXT_STATE = ['font', 'letterSpacing', 'wordSpacing', 'fontKerning', 'fontStretch', 'fontVariantCaps', 'textRendering', 'direction', 'lang', 'textAlign', 'textBaseline'] as const
 const DRAW = new Set(['beginPath', 'closePath', 'moveTo', 'lineTo', 'bezierCurveTo', 'quadraticCurveTo', 'arc', 'arcTo', 'ellipse', 'rect', 'roundRect', 'fill', 'stroke', 'clip', 'fillRect', 'strokeRect', 'clearRect', 'fillText', 'strokeText', 'drawImage'])
 type Matrix = [number, number, number, number, number, number]
 const multiply = (m: Matrix, n: Matrix): Matrix => [m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1], m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3], m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]]
+const invert = (m: Matrix): Matrix => {
+  const det = m[0] * m[3] - m[1] * m[2]
+  return [m[3] / det, -m[1] / det, -m[2] / det, m[0] / det, (m[2] * m[5] - m[3] * m[4]) / det, (m[1] * m[4] - m[0] * m[5]) / det]
+}
+/** `setTransform` 的参数（六个数或 DOMMatrix 形状）；不给参数等同单位矩阵。 */
+const matrixOf = (args: Value[]): Matrix => {
+  const value = args[0]
+  if (typeof value === 'object' && value) { const m = value as DOMMatrix2DInit; return [m.a ?? 1, m.b ?? 0, m.c ?? 0, m.d ?? 1, m.e ?? 0, m.f ?? 0] }
+  return args.length ? args.slice(0, 6) as Matrix : [1, 0, 0, 1, 0, 0]
+}
+const isIdentity = (m: Matrix): boolean => m[0] === 1 && m[1] === 0 && m[2] === 0 && m[3] === 1 && m[4] === 0 && m[5] === 0
 
 export interface AuthorCanvasRecording {
   ops: Value[][]
@@ -42,12 +66,14 @@ export interface AuthorCanvasRecording {
 
 /**
  * 录下 `draw` 对画布的全部操作。`measure` 是同一 Worker 里的真实 2D 上下文，只用来量文字；`transform` 是运行时
- * 在作者绘制前设好的变换（`getTransform` 要据此回答）。
+ * 在作者绘制前设好的变换（运动层的栅格缩放与留边）。作者的坐标始终是画布像素：`setTransform`/`resetTransform`
+ * 相对这个变换生效，`getTransform` 也按画布像素回答。
  */
 export function recordAuthorCanvas(size: { width: number; height: number }, measure: OffscreenCanvasRenderingContext2D, transform: Matrix, draw: (ctx: OffscreenCanvasRenderingContext2D) => void): AuthorCanvasRecording {
   measure.reset()
   const ops: Value[][] = []
   let comparable = true, nextId = 0
+  const adopted = new Map<object, number>()
   const assets = new Set<string>()
   const objects = new Map<object, number>()
   const live = (value: object): Value => { comparable = false; let id = objects.get(value); if (id === undefined) { id = ++nextId; objects.set(value, id) } return { live: id, value } }
@@ -58,8 +84,21 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
   const encode = (value: Value): Value => {
     if (value === null || value === undefined || typeof value !== 'object') return value
     if (value instanceof AuthorCanvasAsset) { assets.add(value.key); return { asset: value.key } }
-    if (value instanceof GradientRecord) return { gradient: value.record.id }
-    if (value instanceof PatternRecord) return { pattern: value.id }
+    if (value instanceof GradientRecord) {
+      if (value.owner === ops) return { gradient: value.record.id }
+      let id = adopted.get(value)
+      if (id === undefined) {
+        id = ++nextId; adopted.set(value, id)
+        ops.push(['gradient', id, value.record.kind, ...value.record.args]); for (const [offset, color] of value.stops) ops.push(['stop', id, offset, color])
+      }
+      return { gradient: id }
+    }
+    if (value instanceof PatternRecord) {
+      if (value.owner === ops) return { pattern: value.id }
+      let id = adopted.get(value)
+      if (id === undefined) { id = ++nextId; adopted.set(value, id); ops.push(['pattern', id, encode(value.source), value.repetition]) }
+      return { pattern: id }
+    }
     if (value instanceof CanvasStandIn) return { canvas: true }
     if (Array.isArray(value) && value.every(item => typeof item === 'number')) return [...value]
     if (typeof DOMMatrix !== 'undefined' && value instanceof DOMMatrix) return { matrix: [value.a, value.b, value.c, value.d, value.e, value.f] }
@@ -73,11 +112,8 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
     else if (name === 'scale') matrix = multiply(matrix, [a, 0, 0, b, 0, 0])
     else if (name === 'rotate') matrix = multiply(matrix, [Math.cos(a), Math.sin(a), -Math.sin(a), Math.cos(a), 0, 0])
     else if (name === 'transform') matrix = multiply(matrix, [a, b, c, d, e, f])
-    else if (name === 'setTransform') {
-      const value = args[0]
-      if (typeof value === 'object' && value) { const m = value as DOMMatrix2DInit; matrix = [m.a ?? 1, m.b ?? 0, m.c ?? 0, m.d ?? 1, m.e ?? 0, m.f ?? 0] }
-      else matrix = args.length ? [a, b, c, d, e, f] : [1, 0, 0, 1, 0, 0]
-    } else if (name === 'resetTransform') matrix = [1, 0, 0, 1, 0, 0]
+    else if (name === 'setTransform') matrix = multiply(transform, matrixOf(args))
+    else if (name === 'resetTransform') matrix = [...transform]
     else if (name === 'save') stack.push({ state: { ...state }, matrix: [...matrix], dash: [...dash] })
     else if (name === 'restore') { const top = stack.pop(); if (top) { Object.assign(state, top.state); matrix = top.matrix; dash = top.dash } }
     else if (name === 'setLineDash') dash = [...(args[0] as number[])]
@@ -87,13 +123,13 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
     createLinearGradient: (...args) => { const record = { id: ++nextId, kind: 'linear', args: args as number[] }; ops.push(['gradient', record.id, 'linear', ...args]); return new GradientRecord(record, ops) },
     createRadialGradient: (...args) => { const record = { id: ++nextId, kind: 'radial', args: args as number[] }; ops.push(['gradient', record.id, 'radial', ...args]); return new GradientRecord(record, ops) },
     createConicGradient: (...args) => { const record = { id: ++nextId, kind: 'conic', args: args as number[] }; ops.push(['gradient', record.id, 'conic', ...args]); return new GradientRecord(record, ops) },
-    createPattern: (source, repetition) => { const id = ++nextId; ops.push(['pattern', id, encode(source), repetition ?? null]); return new PatternRecord(id) },
+    createPattern: (source, repetition) => { const id = ++nextId; ops.push(['pattern', id, encode(source), (repetition as string | null) ?? null]); return new PatternRecord(id, ops, source, (repetition as string | null) ?? null) },
     measureText: text => {
       for (const key of TEXT_STATE) (measure as unknown as Record<string, Value>)[key] = state[key]
       return measure.measureText(String(text))
     },
     getLineDash: () => [...dash],
-    getTransform: () => new DOMMatrix(matrix),
+    getTransform: () => new DOMMatrix(multiply(invert(transform), matrix)),
     createImageData: (...args) => (measure.createImageData as (...values: Value[]) => ImageData)(...args),
   }
   const target = {} as Record<string, Value>
@@ -121,8 +157,8 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
   return { ops, comparable, signature, assets }
 }
 
-/** 在真实画布上按录制顺序重放；作者图片在用到时才取本帧的位图。 */
-export function replayAuthorCanvas(recording: AuthorCanvasRecording, ctx: OffscreenCanvasRenderingContext2D, asset: (key: string) => CanvasImageSource): void {
+/** 在真实画布上按录制顺序重放；作者图片在用到时才取本帧的位图。`transform` 与录制时相同，作者的 setTransform 相对它生效。 */
+export function replayAuthorCanvas(recording: AuthorCanvasRecording, ctx: OffscreenCanvasRenderingContext2D, asset: (key: string) => CanvasImageSource, transform: Matrix = [1, 0, 0, 1, 0, 0]): void {
   const gradients = new Map<number, CanvasGradient>(), patterns = new Map<number, CanvasPattern | null>()
   const decode = (value: Value): Value => {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) return value
@@ -140,9 +176,29 @@ export function replayAuthorCanvas(recording: AuthorCanvasRecording, ctx: Offscr
     if (name === 'set') target[args[0] as string] = decode(args[1])
     else if (name === 'gradient') {
       const [id, kind, ...values] = args as [number, string, ...number[]]
-      gradients.set(id, kind === 'linear' ? ctx.createLinearGradient(values[0], values[1], values[2], values[3]) : kind === 'radial' ? ctx.createRadialGradient(values[0], values[1], values[2], values[3], values[4], values[5]) : ctx.createConicGradient(values[0], values[1], values[2]))
+      gradients.set(id, createGradient(ctx, kind, values))
     } else if (name === 'stop') gradients.get(args[0] as number)?.addColorStop(args[1] as number, args[2] as string)
     else if (name === 'pattern') patterns.set(args[0] as number, ctx.createPattern(decode(args[1]) as CanvasImageSource, (args[2] as string | null) ?? null))
+    else if (name === 'setTransform') ctx.setTransform(...multiply(transform, matrixOf(args.map(decode))))
+    else if (name === 'resetTransform') ctx.setTransform(...transform)
     else (target[name] as (...values: Value[]) => void).apply(ctx, args.map(decode))
   }
+}
+
+/**
+ * 直接绘制（录制不了）的图层用：真实画布上同样让作者的 setTransform/resetTransform/getTransform 按画布像素生效，
+ * 录制期创建、被作者缓存的渐变与图案换成真实对象。
+ */
+export function authorCanvasContext(ctx: OffscreenCanvasRenderingContext2D, transform: Matrix): OffscreenCanvasRenderingContext2D {
+  const identity = isIdentity(transform), inverse = invert(transform)
+  return new Proxy(ctx, {
+    get(real, property) {
+      if (!identity && property === 'setTransform') return (...args: Value[]) => real.setTransform(...multiply(transform, matrixOf(args)))
+      if (!identity && property === 'resetTransform') return () => real.setTransform(...transform)
+      if (!identity && property === 'getTransform') return () => { const m = real.getTransform(); return new DOMMatrix(multiply(inverse, [m.a, m.b, m.c, m.d, m.e, m.f])) }
+      const value = Reflect.get(real, property, real)
+      return typeof value === 'function' ? value.bind(real) : value
+    },
+    set(real, property, value) { return Reflect.set(real, property, realize(real, value), real) },
+  })
 }

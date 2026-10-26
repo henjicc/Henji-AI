@@ -11,10 +11,13 @@ export function authorLayerBlur(pose: AuthorPose | null | undefined, rasterScale
   return radius < (lens ? .5 : .25) ? { radius: 0, pad: 2 } : { radius, pad: 2 + Math.ceil(radius * (lens ? 1.15 : 3)) }
 }
 
-/** Frameflow's raster tiers; the limit is a texture-size constraint, not a JS budget. */
-export function authorRasterScale(need: number, limit: number): number {
+/**
+ * Frameflow's raster tiers; the limit is a texture-size constraint, not a JS budget.
+ * 静态内容至少按 2 倍栅格（位姿缩放、旋转时更清楚）；`redrawnEveryFrame` 的图层（画着视频）每帧都要重画，按需要的 1 倍起步。
+ */
+export function authorRasterScale(need: number, limit: number, redrawnEveryFrame = false): number {
   const ceiling = Math.max(Number.MIN_VALUE, Math.min(4, limit))
-  const exponent = Math.min(Math.max(1, Math.ceil(Math.log2(Math.max(1, need)))), Math.floor(Math.log2(ceiling)))
+  const exponent = Math.min(Math.max(redrawnEveryFrame ? 0 : 1, Math.ceil(Math.log2(Math.max(1, need)))), Math.floor(Math.log2(ceiling)))
   const scale = Math.max(Number.MIN_VALUE, 2 ** exponent)
   return scale > ceiling ? scale / 2 : scale
 }

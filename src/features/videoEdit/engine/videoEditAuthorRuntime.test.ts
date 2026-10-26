@@ -52,6 +52,31 @@ it('keeps Canvas image sampling independent of shared GPU uploads: a fresh image
   expect(replacement.close).not.toHaveBeenCalled()
 })
 
+it('draws a video input that changes every frame directly, without reading its pixels back', async () => {
+  class Bitmap { width = 32; height = 16; close = vi.fn() }
+  const context = { reset: vi.fn(), save: vi.fn(), restore: vi.fn(), setTransform: vi.fn(), drawImage: vi.fn(), getImageData: vi.fn(() => ({ width: 32, height: 16 })) }
+  class Canvas { constructor(public width: number, public height: number) {} getContext(): typeof context { return context } }
+  vi.stubGlobal('ImageBitmap', Bitmap); vi.stubGlobal('OffscreenCanvas', Canvas)
+  const createBitmap = vi.fn(async () => new Bitmap())
+  vi.stubGlobal('createImageBitmap', createBitmap)
+  const upload = vi.fn()
+  const draw = vi.fn((ctx: OffscreenCanvasRenderingContext2D, _time: number, _params: unknown, _width: number, _height: number, assets: Record<string, CanvasImageSource>) => ctx.drawImage(assets.video, 0, 0))
+  const runtime = new VideoEditAuthorRuntime({ createTexture: () => ({ destroy: vi.fn() }), queue: { copyExternalImageToTexture: upload } } as unknown as GpuDevice, { name: '录屏', draw })
+  const target = { createView: () => ({}), destroy() {} }
+  const info = { time: 0, frameDuration: 1 / 60, clip: { time: 0, duration: 1 } }
+  const frames = [new Bitmap(), new Bitmap(), new Bitmap(), new Bitmap()]
+  for (const frame of frames) await runtime.render(target, 100, 50, {}, { video: frame as unknown as ImageBitmap }, info)
+  // 前两帧还按静态图片处理；第二次连续换图之后，每帧直接画这一帧，不再读回像素或复制。
+  expect(context.getImageData).toHaveBeenCalledTimes(2); expect(createBitmap).toHaveBeenCalledTimes(2)
+  expect(context.drawImage).toHaveBeenLastCalledWith(frames[3], 0, 0); expect(upload).toHaveBeenCalledTimes(4)
+  // 停在同一帧：回到像素缓存与新副本，画面不受共享图片的采样状态影响。
+  await runtime.render(target, 100, 50, {}, { video: frames[3] as unknown as ImageBitmap }, info)
+  expect(context.getImageData).toHaveBeenCalledTimes(3)
+  expect(context.drawImage).toHaveBeenLastCalledWith(await createBitmap.mock.results[2].value, 0, 0)
+  await runtime.dispose()
+  expect(frames.every(frame => frame.close.mock.calls.length === 0)).toBe(true)
+})
+
 it('gives images read outside a canvas draw a real bitmap every frame and draws unrecordable layers directly', async () => {
   class Bitmap { width = 8; height = 8; close = vi.fn() }
   const context = { reset: vi.fn(), save: vi.fn(), restore: vi.fn(), setTransform: vi.fn(), drawImage: vi.fn(), getImageData: vi.fn(() => ({ width: 8, height: 8 })) }
@@ -73,7 +98,7 @@ it('gives images read outside a canvas draw a real bitmap every frame and draws 
   expect(seen.every(value => value instanceof Bitmap && value !== source)).toBe(true)
   expect(createBitmap).toHaveBeenCalledTimes(2)
   // A pixel read cannot be recorded: the layer draws on the real canvas every frame.
-  expect(readsPixels.mock.calls.filter(([ctx]) => (ctx as unknown) === context)).toHaveLength(2)
+  expect(context.getImageData.mock.calls.filter(args => args.join() === '0,0,1,1')).toHaveLength(2)
   expect(upload).toHaveBeenCalledTimes(2)
   await runtime.dispose()
 })

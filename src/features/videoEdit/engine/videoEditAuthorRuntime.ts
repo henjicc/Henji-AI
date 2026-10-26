@@ -7,7 +7,7 @@ import type { AuthorAssets, AuthorFrameInfo, AuthorGpuInputs, AuthorLayer, Autho
 import type { AuthorSourceLocations } from './videoEditAuthorBundle'
 import { authorEffectMetadata, authorParameterValues, type AuthorEffectMetadata } from './videoEditAuthorParameters'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
-import { AuthorCanvasAsset, AuthorCanvasUnrecordable, recordAuthorCanvas, replayAuthorCanvas, type AuthorCanvasRecording } from './videoEditAuthorCanvasRecorder'
+import { AuthorCanvasAsset, AuthorCanvasUnrecordable, authorCanvasContext, recordAuthorCanvas, replayAuthorCanvas, type AuthorCanvasRecording } from './videoEditAuthorCanvasRecorder'
 
 interface Surface { canvas: OffscreenCanvas; texture: GpuTexture; /** Recorded commands whose raster the texture holds. */ signature?: string }
 type Matrix = [number, number, number, number, number, number]
@@ -18,7 +18,12 @@ class AuthorAssetPending extends Error { constructor(readonly key: string) { sup
 export class VideoEditAuthorRuntime {
   private readonly surfaces: Surface[] = []
   private readonly textures = new Set<GpuTexture>()
-  private readonly canvasImages = new Map<string, { source: ImageBitmap; pixels: ImageData; version: number }>()
+  /** `pixels` 缺省表示逐帧换图的输入（视频）：每张只画一次，直接用，不读回像素。 */
+  private readonly canvasImages = new Map<string, { source: ImageBitmap; pixels?: ImageData; version: number }>()
+  /** 每个输入连续换图的帧数；连续两次换图（视频帧）后改为直接画。 */
+  private readonly assetChanges = new Map<string, number>()
+  /** 上一帧画了逐帧变化输入的运动层：按 1 倍栅格。 */
+  private readonly liveLayers = new Set<string>()
   private assetVersion = 0
   /** Images the author reads outside recorded canvas draws (e.g. for its own WebGL scene): made every frame up front. */
   private readonly eagerAssets = new Set<string>()
@@ -118,11 +123,15 @@ export class VideoEditAuthorRuntime {
         this.lastFrame = { layers: [whole], width, height, time: info.time, parameters: params }
         return
       }
-      for (const [key, cached] of this.canvasImages) if (assets[key] !== cached.source) {
-        this.canvasImages.delete(key); this.eagerAssets.delete(key)
+      // 连续两帧都换了图的输入是逐帧变化的视频帧：之后直接画；某帧没换就回到静态图片的像素缓存。
+      for (const [key, cached] of this.canvasImages) {
+        const changed = assets[key] !== cached.source
+        this.assetChanges.set(key, changed ? (this.assetChanges.get(key) ?? 0) + 1 : 0)
+        if (changed || !cached.pixels) { this.canvasImages.delete(key); this.eagerAssets.delete(key) }
       }
       for (const [key, source] of Object.entries(assets)) {
         if (!(source instanceof ImageBitmap) || this.canvasImages.has(key)) continue
+        if ((this.assetChanges.get(key) ?? 0) >= 2) { this.canvasImages.set(key, { source, version: ++this.assetVersion }); continue }
         const pixelsStarted = performance.now()
         const canvas = new OffscreenCanvas(source.width, source.height)
         const context = canvas.getContext('2d', { willReadFrequently: true })
@@ -139,6 +148,7 @@ export class VideoEditAuthorRuntime {
       const freshAsset = async (key: string): Promise<void> => {
         const cached = this.canvasImages.get(key)
         if (!cached || fresh.has(key)) return
+        if (!cached.pixels) { fresh.set(key, cached.source); return }
         const copyStarted = performance.now()
         const copy = await createImageBitmap(cached.pixels)
         recordVideoEditPreparation('authorAssetCopy', performance.now() - copyStarted)
@@ -149,7 +159,7 @@ export class VideoEditAuthorRuntime {
       for (const [key, source] of Object.entries(assets)) {
         const cached = this.canvasImages.get(key)
         if (!cached) { canvasAssets[key] = source; continue }
-        const standIn = new AuthorCanvasAsset(key, cached.pixels.width, cached.pixels.height)
+        const standIn = new AuthorCanvasAsset(key, cached.source.width, cached.source.height)
         Object.defineProperty(canvasAssets, key, { enumerable: true, get: () => {
           if (recording) return standIn
           const image = fresh.get(key)
@@ -172,6 +182,7 @@ export class VideoEditAuthorRuntime {
           } finally { recording = false }
         }
         const signature = recorded?.comparable ? `${slot}\u0000${surface.canvas.width}x${surface.canvas.height}\u0000${setup.join(',')}\u0000${assetSignature(recorded.assets)}\u0000${recorded.signature}` : undefined
+        if ([...recorded?.assets ?? []].some(key => (this.assetChanges.get(key) ?? 0) >= 2)) this.liveLayers.add(slot); else this.liveLayers.delete(slot)
         if (signature && surface.signature === signature) { recordVideoEditPreparation('authorRasterReused', 0); return false }
         for (const key of recorded?.assets ?? []) await freshAsset(key)
         const ctx = surface.canvas.getContext('2d')
@@ -179,8 +190,8 @@ export class VideoEditAuthorRuntime {
         ctx.reset(); ctx.setTransform(...setup)
         const rasterStarted = performance.now()
         surface.signature = undefined
-        if (recorded) replayAuthorCanvas(recorded, ctx, key => fresh.get(key)!)
-        else draw(ctx)
+        if (recorded) replayAuthorCanvas(recorded, ctx, key => fresh.get(key)!, setup)
+        else draw(authorCanvasContext(ctx, setup))
         recordVideoEditPreparation('authorRaster', performance.now() - rasterStarted)
         surface.signature = signature
         return true
@@ -235,7 +246,7 @@ export class VideoEditAuthorRuntime {
           const unitPad = authorLayerBlur(center, 1, layer.blurShape).pad
           const textureLimit = (this.device as GpuDevice & { limits?: Record<string, number> }).limits?.maxTextureDimension2D ?? 8192
           const limit = Math.min((textureLimit - 2 * unitPad) / Math.max(bounds.width, bounds.height), Math.sqrt(16e6 / Math.max(1, bounds.width * bounds.height)))
-          const resolution = authorRasterScale(need, limit)
+          const resolution = authorRasterScale(need, limit, this.liveLayers.has(`layer:${index}:${id}`))
           const { radius, pad } = authorLayerBlur(center, resolution, layer.blurShape)
           const surface = this.surface(index * 2, Math.ceil(bounds.width * resolution) + pad * 2, Math.ceil(bounds.height * resolution) + pad * 2)
           const changed = await paint(surface, `layer:${index}:${id}`, [resolution, 0, 0, resolution, pad - x * resolution, pad - y * resolution], ctx => layer.draw(ctx, info.time))
@@ -314,7 +325,7 @@ export class VideoEditAuthorRuntime {
     await release(() => this.layerGpu?.dispose())
     for (const texture of this.textures) await release(() => texture.destroy())
     this.textures.clear()
-    this.canvasImages.clear()
+    this.canvasImages.clear(); this.assetChanges.clear(); this.liveLayers.clear()
     for (const surface of this.surfaces) if (surface) await release(() => { surface.canvas.width = surface.canvas.height = 1 })
     this.surfaces.length = 0
     await release(() => this.gl?.getExtension('WEBGL_lose_context')?.loseContext())
