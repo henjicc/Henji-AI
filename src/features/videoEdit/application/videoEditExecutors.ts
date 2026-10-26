@@ -338,7 +338,8 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
   async apply(step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const clipChild = ['video_edit.graphic_object', 'video_edit.effect', 'video_edit.tracker'].includes(this.entityType)
     const nested = ['video_edit.clip', 'video_edit.annotation', 'video_edit.marker', 'video_edit.caption', 'video_edit.transition', 'video_edit.track'].includes(this.entityType)
-    if (step.parent.kind !== (clipChild ? 'video_edit.clip' : nested ? 'video_edit.sequence' : 'video_edit.document')) throw new Error('请使用目录声明的所属父实体。')
+    const parentKind = clipChild ? 'video_edit.clip' : nested ? 'video_edit.sequence' : 'video_edit.document'
+    if (step.parent.kind !== parentKind) throw new Error(`${this.entityType} 的父实体须为 ${parentKind}（收到 ${step.parent.kind}）；请使用目录声明的所属父实体。`)
     const parsed = splitVideoEditRef(step.parent)
     const instance = requireVideoEditInstance(parsed.projectId); const before = instance.document; const contentVersion = instance.contentVersion
     const refs: ApplicationRef[] = []

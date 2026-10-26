@@ -22,6 +22,10 @@ export const STYLE_ENTITY = 'video_edit.style'
 export const TEMPLATE_ENTITY = 'video_edit.template'
 export const PROJECT_STYLE_ENTITY = 'video_edit.project_style'
 export const PROJECT_TEMPLATE_ENTITY = 'video_edit.project_template'
+/** 风格库本身：全局单例，是风格与库模板增删的父对象，不依赖任何打开的剪辑。 */
+export const STYLE_LIBRARY_ENTITY = 'video_edit.style_library'
+export const STYLE_LIBRARY_REF: ApplicationRef = { kind: STYLE_LIBRARY_ENTITY, id: 'singleton' }
+const LIBRARY_PARENT_HINT = `parent 用 ${STYLE_LIBRARY_ENTITY}:singleton（风格库是全局的，不用打开剪辑）`
 const revisions = (): Record<string, number> => ({ video_edit: videoEditDomainRevision() })
 const exposures = ['ui', 'assistant', 'local_adapter'] as const
 type Value = ApplicationFieldDefinition<unknown, unknown>['descriptor']['value']
@@ -33,6 +37,7 @@ const READ_ONLY: Record<string, string> = {
   [TEMPLATE_ENTITY]: '版本号与内容摘要在写入 body 时由风格库按内容自动计算。',
   [PROJECT_STYLE_ENTITY]: '工程风格副本只由 bind_video_edit_style 复制与升级；要改风格请改风格库里的风格，再绑定升级。',
   [PROJECT_TEMPLATE_ENTITY]: '模板内容、版本与来源由 update_video_edit_template、promote_video_edit_template 维护；实例列表从时间线派生。',
+  [STYLE_LIBRARY_ENTITY]: '风格库只是风格与库模板的父对象：成员经 create_items/remove_items 增删，默认风格改 video_edit.style.is_default。',
 }
 const jsonRef = (entityType: string, key: string): Value => ({ kind: 'json', schemaRef: videoEditSchemaRef('property', `${entityType}.${key}.value`) })
 const field = <T>(entityType: string, key: string, title: string, description: string, value: Value, read: (value: T) => JsonValue, write?: (draft: T, value: JsonValue | undefined) => void, nullable = false): ApplicationFieldDefinition<T, T> => ({
@@ -102,6 +107,12 @@ const projectTemplateFields: ApplicationFieldDefinition<ProjectTemplateDraft, Pr
   field(PROJECT_TEMPLATE_ENTITY, 'library_version', '库里的更新版本', '来源库模板版本更高时为那个版本，否则 null：先告诉用户影响几处，用户同意再 update_video_edit_template(content.kind=library)。', { kind: 'integer' }, draft => newerLibraryTemplateVersion(draft.template), undefined, true),
   field(PROJECT_TEMPLATE_ENTITY, 'instance_refs', '联动实例', '跟着这个模板变的片段；改模板前告诉用户会影响几处。', jsonRef(PROJECT_TEMPLATE_ENTITY, 'instance_refs'), draft => videoEditTemplateInstances(draft.document, draft.template).map(instance => ({ kind: 'video_edit.clip', id: `${draft.projectId}:${instance.clipId}` }))),
 ]
+// —— 风格库（父对象） ——
+const libraryFields: ApplicationFieldDefinition<typeof videoEditStyleLibrary, typeof videoEditStyleLibrary>[] = [
+  field(STYLE_LIBRARY_ENTITY, 'default_style_id', '默认风格', '默认风格的 id（video_edit.style），没有默认为 null。', { kind: 'string', maxLength: 64 }, library => library.defaultStyleId() ?? null, undefined, true),
+  field(STYLE_LIBRARY_ENTITY, 'style_count', '风格数', '风格库里的风格数（含内置）。', { kind: 'integer' }, library => library.listStyles().length),
+  field(STYLE_LIBRARY_ENTITY, 'template_count', '库模板数', '风格库里的库模板数。', { kind: 'integer' }, library => library.listTemplates().length),
+]
 const JSON_SCHEMAS: Array<[string, z.ZodType]> = [
   [`${STYLE_ENTITY}.sample`, videoEditStyleSampleSchema], [`${STYLE_ENTITY}.missing_sections`, z.array(z.string())],
   [`${STYLE_ENTITY}.media`, z.object({ preview: z.string().nullable(), thumbnail: z.string().nullable(), anchors: z.array(z.string()) })],
@@ -123,6 +134,16 @@ function documentParent(parent: ApplicationRef, result: ReturnType<typeof unrest
   if (parent.kind !== 'video_edit.document') { const reasons = ['请使用已打开的剪辑 video_edit.document 作为上下文。']; result.create = { ...result.create, available: false, reasons }; result.remove = { ...result.remove, available: false, reasons } }
   else requireVideoEditInstance(parent.id)
   return result
+}
+/** 风格与库模板的增删只写风格库，撤销也只恢复风格库记录；父对象只用来定位，已打开的剪辑作父对象仍然接受。 */
+function libraryParentProblem(parent: ApplicationRef): string | undefined {
+  if (parent.kind === STYLE_LIBRARY_ENTITY) return parent.id === STYLE_LIBRARY_REF.id ? undefined : `风格库引用只有 ${STYLE_LIBRARY_ENTITY}:singleton，收到 ${parent.id}。`
+  if (parent.kind === 'video_edit.document') { try { requireVideoEditInstance(parent.id); return undefined } catch { return `剪辑 ${parent.id} 没有打开；${LIBRARY_PARENT_HINT}。` } }
+  return `${parent.kind} 不能作风格库成员的父对象；${LIBRARY_PARENT_HINT}，或用已打开的剪辑 video_edit.document。`
+}
+function libraryParent(parent: ApplicationRef, result: ReturnType<typeof unrestrictedCollectionAvailability>): ReturnType<typeof unrestrictedCollectionAvailability> {
+  const problem = libraryParentProblem(parent); if (!problem) return result
+  const reasons = [problem]; return { ...result, create: { ...result.create, available: false, reasons }, remove: { ...result.remove, available: false, reasons } }
 }
 async function styleDraft(ref: ApplicationRef): Promise<StyleDraft> {
   if (ref.kind !== STYLE_ENTITY) throw new Error(`请使用 ${STYLE_ENTITY} 引用。`)
@@ -149,25 +170,33 @@ const availability = (properties: ReadonlyArray<{ id: string; readOnlyReason?: s
 
 export function createVideoEditStyleRegistrations(): ApplicationEntityRegistration[] {
   const styleProperties = fieldDescriptors(styleFields); const templateProperties = fieldDescriptors(templateFields)
-  const projectStyleProperties = fieldDescriptors(projectStyleFields); const projectTemplateProperties = fieldDescriptors(projectTemplateFields)
+  const projectStyleProperties = fieldDescriptors(projectStyleFields); const projectTemplateProperties = fieldDescriptors(projectTemplateFields); const libraryProperties = fieldDescriptors(libraryFields)
   const projectStyles = () => listVideoEditInstances().flatMap(owner => (owner.document.styles ?? []).map(style => ({ kind: PROJECT_STYLE_ENTITY, id: `${owner.document.id}:${style.id}`, label: `${style.name} v${style.version}` })))
   const projectTemplates = () => listVideoEditInstances().flatMap(owner => (owner.document.templates ?? []).map(template => ({ kind: PROJECT_TEMPLATE_ENTITY, id: `${owner.document.id}:${template.id}`, label: template.name })))
   return [
-    { entity: { id: STYLE_ENTITY, domain: 'video_edit', version: 1, title: '风格库风格', description: '风格预设：写给 AI 的风格说明书加一段样片代码，让新做的画面长成同一个样子；跨工程复用。内置六套只读（克制高级、科技信息、知识讲解、综艺花字、电商促销、温暖纪实），要改先用它的 guide/sample 创建个人风格。创建只要 name（自带说明书栏目与标准样片），再写 guide/sample，最后 render_video_edit_style。删除只删风格库里的风格，已复制进工程的副本不受影响。', refKind: STYLE_ENTITY, dataClass: 'C1', exposures: [...exposures], parentTypes: ['video_edit.document'], revisionScopes: ['video_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: videoEditSchemaRef('entity', STYLE_ENTITY), collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [`${STYLE_ENTITY}.name`], maxItemsPerChange: 8 } },
+    { entity: { id: STYLE_LIBRARY_ENTITY, domain: 'video_edit', version: 1, title: '风格库', description: '全局风格库，固定引用 video_edit.style_library:singleton：新建或删除风格（video_edit.style）与库模板（video_edit.template）时作 parent，不用打开任何剪辑。成员用 list_application_entities 按实体类型列出。', refKind: STYLE_LIBRARY_ENTITY, dataClass: 'C1', exposures: [...exposures], parentTypes: [], revisionScopes: ['video_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: videoEditSchemaRef('entity', STYLE_LIBRARY_ENTITY), writeExclusion: { reason: READ_ONLY[STYLE_LIBRARY_ENTITY] } },
+      properties: libraryProperties,
+      provider: { entityType: STYLE_LIBRARY_ENTITY,
+        async listEntities(request) { return page([STYLE_LIBRARY_REF], request.cursor, request.limit, ref => ({ ...ref, label: '风格库' })) },
+        async readEntity(ref, request) { if (ref.id !== STYLE_LIBRARY_REF.id) throw new Error(`NOT_FOUND：风格库引用只有 ${STYLE_LIBRARY_ENTITY}:singleton。`); await videoEditStyleLibrary.ready(); return { ref, entityType: STYLE_LIBRARY_ENTITY, properties: pick(fieldReadValues(libraryFields, videoEditStyleLibrary), request.propertyIds), revisions: revisions(), capturedAt: new Date().toISOString() } },
+        async getPropertyAvailability(ref, propertyIds) { if (ref.id !== STYLE_LIBRARY_REF.id) throw new Error(`NOT_FOUND：风格库引用只有 ${STYLE_LIBRARY_ENTITY}:singleton。`); return availability(libraryProperties, propertyIds) },
+        async getCollectionAvailability(parent) { const result = unrestrictedCollectionAvailability(STYLE_LIBRARY_ENTITY, parent, revisions(), ['video_edit:write']); const reasons = [READ_ONLY[STYLE_LIBRARY_ENTITY]]; return { ...result, create: { ...result.create, available: false, reasons }, remove: { ...result.remove, available: false, reasons } } },
+      } },
+    { entity: { id: STYLE_ENTITY, domain: 'video_edit', version: 1, title: '风格库风格', description: '风格预设：写给 AI 的风格说明书加一段样片代码，让新做的画面长成同一个样子；跨工程复用。内置六套只读（克制高级、科技信息、知识讲解、综艺花字、电商促销、温暖纪实），要改先用它的 guide/sample 创建个人风格。创建只要 name（自带说明书栏目与标准样片），再写 guide/sample，最后 render_video_edit_style。增删的 parent 用 video_edit.style_library:singleton，不用打开任何剪辑（已打开的剪辑 video_edit.document 也可以）。删除只删风格库里的风格，已复制进工程的副本不受影响。', refKind: STYLE_ENTITY, dataClass: 'C1', exposures: [...exposures], parentTypes: [STYLE_LIBRARY_ENTITY, 'video_edit.document'], revisionScopes: ['video_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: videoEditSchemaRef('entity', STYLE_ENTITY), collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [`${STYLE_ENTITY}.name`], maxItemsPerChange: 8 } },
       properties: styleProperties, schemaDocuments: schemaDocuments(STYLE_ENTITY),
       provider: { entityType: STYLE_ENTITY,
         async listEntities(request) { await videoEditStyleLibrary.ready(); return page(videoEditStyleLibrary.listStyles(), request.cursor, request.limit, entry => ({ kind: STYLE_ENTITY, id: entry.style.id, label: `${entry.style.name} v${entry.style.version}${entry.builtin ? '（内置）' : ''}` })) },
         async readEntity(ref, request) { return { ref, entityType: STYLE_ENTITY, properties: pick(fieldReadValues(styleFields, await styleDraft(ref)), request.propertyIds), revisions: revisions(), capturedAt: new Date().toISOString() } },
         async getPropertyAvailability(ref, propertyIds) { const draft = await styleDraft(ref); return availability(styleProperties, propertyIds.filter(id => id !== `${STYLE_ENTITY}.is_default`), draft.entry.builtin ? '内置风格只读；要改先以它的内容创建个人风格。' : undefined).concat(propertyIds.includes(`${STYLE_ENTITY}.is_default`) ? availability(styleProperties, [`${STYLE_ENTITY}.is_default`]) : []) },
-        async getCollectionAvailability(parent) { return documentParent(parent, unrestrictedCollectionAvailability(STYLE_ENTITY, parent, revisions(), ['video_edit:write'])) },
+        async getCollectionAvailability(parent) { return libraryParent(parent, unrestrictedCollectionAvailability(STYLE_ENTITY, parent, revisions(), ['video_edit:write'])) },
       } },
-    { entity: { id: TEMPLATE_ENTITY, domain: 'video_edit', version: 1, title: '库模板', description: '全局模板：做好的元素，换内容就能反复使用，长得完全一样；可以属于某个风格（style_id）或单独存在。用进工程时复制成工程模板（apply_video_edit_template），之后库里更新只提示。创建要 name 与 body；固化工程里的元素用 create_video_edit_template。', refKind: TEMPLATE_ENTITY, dataClass: 'C1', exposures: [...exposures], parentTypes: ['video_edit.document'], revisionScopes: ['video_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: videoEditSchemaRef('entity', TEMPLATE_ENTITY), collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [`${TEMPLATE_ENTITY}.name`, `${TEMPLATE_ENTITY}.body`], maxItemsPerChange: 16 } },
+    { entity: { id: TEMPLATE_ENTITY, domain: 'video_edit', version: 1, title: '库模板', description: '全局模板：做好的元素，换内容就能反复使用，长得完全一样；可以属于某个风格（style_id）或单独存在。用进工程时复制成工程模板（apply_video_edit_template），之后库里更新只提示。创建要 name 与 body，增删的 parent 用 video_edit.style_library:singleton，不用打开任何剪辑（已打开的剪辑 video_edit.document 也可以）；固化工程里的元素用 create_video_edit_template。', refKind: TEMPLATE_ENTITY, dataClass: 'C1', exposures: [...exposures], parentTypes: [STYLE_LIBRARY_ENTITY, 'video_edit.document'], revisionScopes: ['video_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: videoEditSchemaRef('entity', TEMPLATE_ENTITY), collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [`${TEMPLATE_ENTITY}.name`, `${TEMPLATE_ENTITY}.body`], maxItemsPerChange: 16 } },
       properties: templateProperties, schemaDocuments: schemaDocuments(TEMPLATE_ENTITY),
       provider: { entityType: TEMPLATE_ENTITY,
         async listEntities(request) { await videoEditStyleLibrary.ready(); return page(videoEditStyleLibrary.listTemplates(), request.cursor, request.limit, entry => ({ kind: TEMPLATE_ENTITY, id: entry.template.id, label: entry.template.name })) },
         async readEntity(ref, request) { return { ref, entityType: TEMPLATE_ENTITY, properties: pick(fieldReadValues(templateFields, await templateValue(ref)), request.propertyIds), revisions: revisions(), capturedAt: new Date().toISOString() } },
         async getPropertyAvailability(ref, propertyIds) { await templateValue(ref); return availability(templateProperties, propertyIds) },
-        async getCollectionAvailability(parent) { return documentParent(parent, unrestrictedCollectionAvailability(TEMPLATE_ENTITY, parent, revisions(), ['video_edit:write'])) },
+        async getCollectionAvailability(parent) { return libraryParent(parent, unrestrictedCollectionAvailability(TEMPLATE_ENTITY, parent, revisions(), ['video_edit:write'])) },
       } },
     { entity: { id: PROJECT_STYLE_ENTITY, domain: 'video_edit', version: 1, title: '工程风格副本', description: '工程用了哪个风格就带一份副本（与风格库同一 id），换电脑或风格库被删也不丢；序列经 video_edit.sequence.style_id 绑定它。改风格请改风格库再 bind_video_edit_style 升级；之前做好的内容不追着改。', refKind: PROJECT_STYLE_ENTITY, dataClass: 'C1', exposures: [...exposures], parentTypes: ['video_edit.document'], revisionScopes: ['video_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: videoEditSchemaRef('entity', PROJECT_STYLE_ENTITY), writeExclusion: { reason: READ_ONLY[PROJECT_STYLE_ENTITY] } },
       properties: projectStyleProperties, schemaDocuments: schemaDocuments(PROJECT_STYLE_ENTITY),
@@ -216,7 +245,7 @@ function newStyle(name: string): VideoEditStyle {
 export class VideoEditStyleCollectionExecutor extends LibraryExecutor implements ApplicationCollectionExecutor {
   constructor(readonly entityType: typeof STYLE_ENTITY | typeof TEMPLATE_ENTITY) { super() }
   async apply(step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
-    context.signal?.throwIfAborted(); if (step.parent.kind !== 'video_edit.document') throw new Error('请使用剪辑 video_edit.document 作为风格库写入上下文。'); requireVideoEditInstance(step.parent.id)
+    context.signal?.throwIfAborted(); const problem = libraryParentProblem(step.parent); if (problem) throw new Error(problem)
     await videoEditStyleLibrary.ready()
     const state: LibraryUndo = { styles: [], templates: [], refs: [] }
     const fields = this.entityType === STYLE_ENTITY ? styleFields : templateFields
