@@ -31,6 +31,10 @@ import { videoEditCaptionClips } from '@/core/videoEdit/timedContent'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import { VideoEditFrameCache } from './videoEditFrameCache'
 import { planAudioEffectBlock, AudioEffectChain } from '@/core/audio/effects/audioEffectChain'
+import { videoEditAudioMixer, videoEditPanGains, type VideoEditAudioMixer } from '@/core/videoEdit/audioMixer'
+
+/** 一次混音里用到的解码源、效果链与拉伸器（用完后据此回收没用到的）。 */
+interface AudioMixSets { activeAudio: Set<string>; activeChains: Set<string>; activeStretchers: Set<string> }
 import { VideoEditGpuFrame, videoEditGpuFrameUsesChroma } from './videoEditGpuFrame'
 import type { VideoEditCodeSources } from './videoEditCodeSources'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
@@ -1172,20 +1176,98 @@ export class VideoEditRenderer {
     await mixVideoEditStretchedSound({ ...request, stretcher: await pending!, semitones: clip.pitchSemitones ?? 0, preservePitch: Boolean(clip.preservePitch) })
   }
   /** Bounded one-second mix. Source timestamp alignment also handles VFR video audio. */
+  /**
+   * 混音（预览与导出同一路径）：有音轨混音或主轨设置时先按轨道分总线（轨道效果、音量、声像），再进主轨（主轨效果、主音量）；
+   * 否则片段直接相加。总线效果链有延迟时多混后面的声音抵消，块不连续时从前面预混一段让状态稳定，与片段效果链同一套规则。
+   */
   async mixAudio(startSeconds: number, durationSeconds: number, retainIdle = false): Promise<Float32Array[]> {
+    const sets: AudioMixSets = { activeAudio: new Set(), activeChains: new Set(), activeStretchers: new Set() }
+    const clips = audibleVideoEditClips(this.document)
+    const mixer = videoEditAudioMixer(this.document)
+    const result = mixer ? await this.mixBuses(startSeconds, durationSeconds, retainIdle, clips, mixer, sets) : await this.mixClips(startSeconds, durationSeconds, retainIdle, clips, sets)
+    const { activeAudio, activeChains, activeStretchers } = sets
+    // 拖动播放头的声音颗粒（retainIdle）每次落在不同位置、用到不同片段：本次没用到的来源不立即关掉，按最近使用保留至多
+    // VIDEO_EDIT_IDLE_AUDIO_SOURCES 个空闲的，否则每个颗粒都要重开解码与声音会话（复杂工程实测一次拖动约 20 次、每次约 100ms，
+    // 与节目取帧争用同一个原生解码服务）。连续播放与导出不保留，用完即关。
+    const idle = [...this.sources.keys()].filter(key => key.startsWith('audio:') && !activeAudio.has(key)).concat([...this.nestedSounds.keys()].filter(id => !activeAudio.has(id)))
+    for (const key of retireIdle(this.idleAudio, idle, retainIdle ? VIDEO_EDIT_IDLE_AUDIO_SOURCES : 0)) {
+      const pending = this.sources.get(key)
+      if (pending) { this.sources.delete(key); this.release(await pending) }
+      const renderer = this.nestedSounds.get(key)
+      if (renderer) { this.nestedSounds.delete(key); await renderer.dispose() }
+    }
+    for (const [id, chain] of this.audioChains) if (!activeChains.has(id) && !this.idleAudio.has(id)) { chain.dispose(); this.audioChains.delete(id) }
+    for (const id of this.stretchers.keys()) if (!activeStretchers.has(id)) this.stretchers.delete(id)
+    return result
+  }
+
+  /** 一条总线（轨道或主轨）的效果链：按键复用，采样率或声道变了重建。 */
+  private busChain(key: string, sets: AudioMixSets): AudioEffectChain {
+    const rate = this.document.sampleRate
+    let chain = this.audioChains.get(key)
+    if (!chain || chain.rate !== rate || chain.channels !== this.document.channels) { chain?.dispose(); chain = new AudioEffectChain(rate, this.document.channels); this.audioChains.set(key, chain) }
+    sets.activeChains.add(key)
+    return chain
+  }
+
+  private async mixBuses(startSeconds: number, durationSeconds: number, retainIdle: boolean, clips: readonly VideoEditClip[], mixer: VideoEditAudioMixer, sets: AudioMixSets): Promise<Float32Array[]> {
+    const rate = this.document.sampleRate, channels = this.document.channels
+    const firstSample = Math.ceil(startSeconds * rate - 1e-7)
+    const length = Math.max(1, Math.ceil((startSeconds + durationSeconds) * rate - 1e-7) - firstSample)
+    // 主轨：有效果时按效果链延迟与连续性决定要混哪一段
+    let master = { inputStart: firstSample, inputLength: length, discard: 0 }
+    let masterChain: AudioEffectChain | undefined
+    if (mixer.master.effects.length) {
+      masterChain = this.busChain('master', sets)
+      const rebuilt = await masterChain.sync(mixer.master.effects)
+      const plan = planAudioEffectBlock(masterChain, firstSample, length)
+      if (!plan.contiguous && !rebuilt) await masterChain.reset(mixer.master.effects)
+      master = plan
+    }
+    const masterInput = Array.from({ length: channels }, () => new Float32Array(master.inputLength))
+    const byTrack = new Map<number, VideoEditClip[]>()
+    for (const clip of clips) byTrack.set(clip.track, [...(byTrack.get(clip.track) ?? []), clip])
+    for (const [index, trackClips] of byTrack) {
+      const bus = mixer.tracks.get(index)
+      let plan = { inputStart: master.inputStart, inputLength: master.inputLength, discard: 0 }
+      let chain: AudioEffectChain | undefined
+      if (bus?.effects.length) {
+        chain = this.busChain(bus.key, sets)
+        const rebuilt = await chain.sync(bus.effects)
+        const planned = planAudioEffectBlock(chain, master.inputStart, master.inputLength)
+        if (!planned.contiguous && !rebuilt) await chain.reset(bus.effects)
+        plan = planned
+      }
+      const mixed = await this.mixClips(plan.inputStart / rate, plan.inputLength / rate, retainIdle, trackClips, sets)
+      if (chain) { chain.process(mixed, plan.inputLength); chain.nextSample = master.inputStart + master.inputLength }
+      const pan = videoEditPanGains(bus?.pan ?? 0, channels), gain = bus?.gain ?? 1
+      for (let channel = 0; channel < channels; channel++) {
+        const factor = gain * pan[channel]
+        if (!factor) continue
+        const source = mixed[channel], target = masterInput[channel]
+        for (let sample = 0; sample < master.inputLength; sample++) target[sample] += source[plan.discard + sample] * factor
+      }
+    }
+    if (masterChain) { masterChain.process(masterInput, master.inputLength); masterChain.nextSample = firstSample + length }
+    return masterInput.map(data => {
+      const output = data.slice(master.discard, master.discard + length)
+      if (mixer.master.gain !== 1) for (let sample = 0; sample < output.length; sample++) output[sample] *= mixer.master.gain
+      return output
+    })
+  }
+
+  private async mixClips(startSeconds: number, durationSeconds: number, retainIdle: boolean, clips: readonly VideoEditClip[], sets: AudioMixSets): Promise<Float32Array[]> {
     const rate = this.document.sampleRate
     const firstSample = Math.ceil(startSeconds * rate - 1e-7)
     const length = Math.max(1, Math.ceil((startSeconds + durationSeconds) * rate - 1e-7) - firstSample)
     const sampleStartSeconds = firstSample / rate
     const result = Array.from({ length: this.document.channels }, () => new Float32Array(length))
     const finish = startSeconds + durationSeconds
-    const activeAudio = new Set<string>()
-    const activeChains = new Set<string>()
-    const activeStretchers = new Set<string>()
+    const { activeAudio, activeChains, activeStretchers } = sets
     const fps = this.document.fps
     // 音频过渡（PR 恒定功率／恒定增益）：左片段越过出点、右片段提前入点，在窗口里按曲线交叉淡化。
     const audioWindows = (this.document.transitions ?? []).filter(transition => videoEditTransitionMedium(transition.kind) === 'audio').flatMap((transition): VideoEditTransitionWindow[] => { try { return [videoEditTransitionWindow(this.document, transition)] } catch { return [] } })
-    for (const clip of audibleVideoEditClips(this.document)) {
+    for (const clip of clips) {
       const outgoing = audioWindows.filter(window => window.left.id === clip.id && window.side !== 'in'); const incoming = audioWindows.filter(window => window.right.id === clip.id && window.side !== 'out')
       const sourceGain = videoEditGainMultiplier(clip.gainDb)
       const clipStart = clip.start / fps
@@ -1324,18 +1406,6 @@ export class VideoEditRenderer {
         for (let channel = 0; channel < result.length; channel++) result[channel][sample] += input[channel][plan.discard + sample] * shape
       }
     }
-    // 拖动播放头的声音颗粒（retainIdle）每次落在不同位置、用到不同片段：本次没用到的来源不立即关掉，按最近使用保留至多
-    // VIDEO_EDIT_IDLE_AUDIO_SOURCES 个空闲的，否则每个颗粒都要重开解码与声音会话（复杂工程实测一次拖动约 20 次、每次约 100ms，
-    // 与节目取帧争用同一个原生解码服务）。连续播放与导出不保留，用完即关。
-    const idle = [...this.sources.keys()].filter(key => key.startsWith('audio:') && !activeAudio.has(key)).concat([...this.nestedSounds.keys()].filter(id => !activeAudio.has(id)))
-    for (const key of retireIdle(this.idleAudio, idle, retainIdle ? VIDEO_EDIT_IDLE_AUDIO_SOURCES : 0)) {
-      const pending = this.sources.get(key)
-      if (pending) { this.sources.delete(key); this.release(await pending) }
-      const renderer = this.nestedSounds.get(key)
-      if (renderer) { this.nestedSounds.delete(key); await renderer.dispose() }
-    }
-    for (const [id, chain] of this.audioChains) if (!activeChains.has(id) && !this.idleAudio.has(id)) { chain.dispose(); this.audioChains.delete(id) }
-    for (const id of this.stretchers.keys()) if (!activeStretchers.has(id)) this.stretchers.delete(id)
     return result
   }
   async dispose(): Promise<void> {

@@ -171,3 +171,26 @@ it('嵌套序列的父子源增益与各层音量相乘，预览和导出相同'
   expect(preview[0][sample]).toBeCloseTo(signal(0, sample) * 10 * .5 * .25, 6)
   vi.unstubAllGlobals()
 })
+
+it('音轨混音：轨道音量与声像、轨道效果、主轨效果与主音量都进混音；带延迟的总线效果已对齐，预览与导出逐样本一致', async () => {
+  const composition = sound()
+  const track = composition.tracks.find(value => value.kind === 'audio')!
+  Object.assign(track, { volumeDb: 20 * Math.log10(.5), pan: 50 })
+  const [left, right] = await mix(composition, [1, 1])
+  // 音量减半；声像偏右 50：左声道再乘 0.5，右声道不变。
+  for (const sample of [RATE * .75 + 13, RATE * 1.5]) {
+    expect(left[sample]).toBeCloseTo(original(0, sample) * .25, 6)
+    expect(right[sample]).toBeCloseTo(original(1, sample) * .5, 6)
+  }
+  // 轨道效果带延迟（音调 0 半音 = 原声延迟 1536）、主轨效果再加一个：输出仍与原声对齐，预览块与导出帧块一致。
+  const delayed = sound()
+  delayed.tracks.find(value => value.kind === 'audio')!.effects = [builtin('pitch_shift')]
+  delayed.master = { volumeDb: 20 * Math.log10(2), effects: [builtin('gain_balance', { gain: 0 })] }
+  const preview = await mix(delayed, [.5, .5, .5, .5])
+  const exported = await mix(delayed, Array.from({ length: 60 }, () => 1 / 30))
+  expect(exported).toEqual(preview)
+  for (const sample of [RATE, RATE + 1, RATE * 1.5]) expect(preview[0][sample]).toBeCloseTo(original(0, sample) * 2, 6)
+  // 推子拉到底（-60 dB）就是静音。
+  const muted = sound(); muted.tracks.find(value => value.kind === 'audio')!.volumeDb = -60
+  expect((await mix(muted, [1]))[0].every(value => value === 0)).toBe(true)
+})

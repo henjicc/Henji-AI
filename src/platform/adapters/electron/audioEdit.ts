@@ -81,6 +81,7 @@ export function createElectronAudioEdit(): AudioEditPlatform {
     render: request => api().renderEditAudio(request),
     editedSource: request => api().editedSourceAudio(request),
     matchLoudness: request => api().matchAudioEditLoudness(request),
+    detectMouthClicks: request => api().detectAudioEditMouthClicks(request),
     preparePreviewChunk: (request) => api().prepareEditPreviewChunk(request),
     extractWaveform: (source, bucketCount) => api().extractSamples({ source, bucketCount }),
     extractWaveformRange: (request, signal) => cancellable((payload) => api().extractRangeSamples(payload), request, signal),

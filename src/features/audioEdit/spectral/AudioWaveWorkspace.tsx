@@ -197,6 +197,7 @@ export function AudioWaveWorkspace() {
     if (cursor < duration) ranges.push({ start: cursor, end: duration, mode: 'delete' })
     return [...ranges, ...pending.map(range => ({ start: range.startFrame, end: range.endFrame, mode: 'pending' as const }))]
   }, [spans, duration, pending])
+  const marks = React.useMemo(() => project.mouthClicks?.enabled ? project.mouthClicks.clicks.map(click => ({ start: click.startFrame, end: click.endFrame })) : undefined, [project.mouthClicks])
   const repairs = React.useMemo(() => (project.repairs ?? []).filter(repair => repair.enabled && repair.kind === 'spectral_heal').map(repair => ({ id: repair.id, start: repair.startFrame, end: repair.endFrame, lowHz: repair.lowHz, highHz: repair.highHz })), [project.repairs])
   const visibleCuts = insertion ? spliceAudioRanges(cutRanges.map((range, index) => ({ ...range, id: String(index), startFrame: range.start, endFrame: range.end })), insertion.start, insertion.start + (insertion.replace ? insertion.frames : 0), insertion.frames).map(range => ({ ...range, start: range.startFrame, end: range.endFrame })) : cutRanges
   const menu = useContextMenu()
@@ -262,7 +263,7 @@ export function AudioWaveWorkspace() {
         onSelectionChange={(next) => { if (!recording) onSelection(next && next.end > next.start ? { startFrame: next.start, endFrame: next.end } : null) }}
         spectralSelection={editor.spectralSelection} onSpectralSelectionChange={editor.setSpectralSelection}
         onBrushStroke={stroke => { if (!disabled) actions.healStroke(stroke) }} cutRanges={visibleCuts} repairs={recording ? [] : repairs}
-        snapEnabled={editor.snapToSpeech} {...(speechEdges.length ? { snapFrames: speechEdges } : {})}
+        snapEnabled={editor.snapToSpeech} {...(marks ? { marks } : {})} {...(speechEdges.length ? { snapFrames: speechEdges } : {})}
         {...(recording || disabled ? {} : { onCutEdgeEdit: ({ range: edited, mode, action }: { range: { start: number; end: number }; mode: 'delete' | 'mute'; action: 'add' | 'remove' }) => workspace.adjustCutRange({ startFrame: edited.start, endFrame: edited.end }, mode, action) })}
         {...(project.transcript.length && (project.viewSettings?.timelineCaptions ?? true) ? { captionLane: <CaptionLane view={editor.view} /> } : {})}
         onContextMenu={(event) => menu.showMenu(event, [

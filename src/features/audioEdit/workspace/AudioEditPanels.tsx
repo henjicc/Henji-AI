@@ -15,17 +15,16 @@ import { openDialog, readTextFile } from '@/platform/desktopApi'
 import { AudioEditDisclosure } from '../AudioEditDisclosure'
 import { AudioEditSuggestions } from '../AudioEditSuggestions'
 import { AudioEditFindReplace, AudioEditMatchedText } from '../AudioEditTextTools'
-import { cleanProjectAudioEditFillers, compressAudioEditSilence, processProjectAudioEditBreaths, quickProcessAudioEdit, transcribeAudioEdit } from '../application/audioEditApplicationService'
+import { cleanProjectAudioEditFillers, compressAudioEditSilence, detectProjectAudioEditMouthClicks, matchProjectAudioEditLoudness, processProjectAudioEditBreaths, quickProcessAudioEdit, transcribeAudioEdit } from '../application/audioEditApplicationService'
 import type { AudioEditBreathPolicy } from '@/core/audioEdit/breaths'
 import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
 import { audioEditHistoryEntries } from './audioEditHistory'
 import { useAudioEditWorkspace } from './audioEditWorkspaceContext'
 import { EssentialSoundControls } from '@/components/audio/EssentialSoundControls'
-import { beginAudioEditGesture, flushAudioEditProject, getAudioEditProjectInstance } from '../application/audioEditProjectInstances'
-import { getPlatform } from '@/platform/runtime'
+import { beginAudioEditGesture } from '../application/audioEditProjectInstances'
 
-/** 减少混响、人声分离（本地模型离线处理）接入编辑后声音之前不显示。 */
-const AUDIO_EDIT_OFFLINE_REPAIR = false
+/** 减少混响、人声分离用本地模型离线处理进“编辑后声音”（主进程 prepareAudioEditRenderSource）。 */
+const AUDIO_EDIT_OFFLINE_REPAIR = true
 
 function formatTime(frames: number, sampleRate: number): string {
   const seconds = Math.max(0, frames / Math.max(1, sampleRate))
@@ -151,6 +150,30 @@ export function AudioEditTranscriptPanel() {
   </div>
 }
 
+/**
+ * 口水音：在编辑后的声音里检测口腔咔嗒声（时间刻度上以小标记显示），一遍修完；灵敏度越高检出越多。
+ * 修复可整体开关对比；重新检测会替换结果（有选区且“仅处理选区”时只替换这一段）。
+ */
+function AudioEditMouthClicks() {
+  const workspace = useAudioEditWorkspace()
+  const { project, run, notify, update, processRange: range } = workspace
+  const clicks = project.mouthClicks
+  const [sensitivity, setSensitivity] = useState(clicks?.sensitivity ?? 50)
+  const blocked = Boolean(workspace.sourceError)
+  return <AudioEditDisclosure title="口水音" value={clicks?.clicks.length ? `${clicks.clicks.length} 处` : '未检测'}>
+    <p className={UI_TEXT_META_CLASS}>找出说话时口水带出的“咔啦”声，按声音前后插值修掉，不改变时长。</p>
+    <UiFormRow label={<RangeLabel name="灵敏度" value={String(sensitivity)} />} density="compact"><UiRangeInput aria-label="口水音检测灵敏度" min={0} max={100} step={5} value={sensitivity} onChange={(event) => setSensitivity(Number(event.target.value))} /></UiFormRow>
+    <UiButton variant="secondary" className="w-full" disabled={blocked} disabledReason="找不到原始素材" onClick={() => void run(async () => {
+      const { count, perMinute } = await detectProjectAudioEditMouthClicks(project.id, sensitivity, range)
+      notify(notificationMessage(count ? 'audioMouthClicksDetected' : 'audioMouthClicksNone', { count, perMinute }))
+    })}>{clicks?.clicks.length ? '重新检测' : '检测口水音'}</UiButton>
+    {!!clicks?.clicks.length && <>
+      <UiFormRow label="修复口水音" density="compact" inline><UiSwitch aria-label="修复口水音" checked={clicks.enabled} onCheckedChange={(enabled) => update({ mouthClicks: { ...clicks, enabled } })} /></UiFormRow>
+      <UiButton size="sm" className="self-start" onClick={() => update({ mouthClicks: undefined })}>清除检测结果</UiButton>
+    </>}
+  </AudioEditDisclosure>
+}
+
 /** 处理：一键处理、停顿与语气词参数、已处理区间、处理建议、参考逐字稿；选中文字时的删除 / 恢复 / 锁定。 */
 export function AudioEditProcessPanel() {
   const workspace = useAudioEditWorkspace()
@@ -166,7 +189,7 @@ export function AudioEditProcessPanel() {
   return <PanelScroll label="处理">
     <fieldset disabled={workspace.disabled} className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <p className={`m-0 leading-normal ${UI_TEXT_SECONDARY_CLASS}`}>去掉重念、压缩停顿、清理语气词、处理呼吸声。波形上的黄色区域是将要删除的声音，处理后仍可逐段调整。</p>
+        <p className={`m-0 leading-normal ${UI_TEXT_SECONDARY_CLASS}`}>去掉重念、压缩停顿、清理语气词、处理呼吸声与口水音。波形上的黄色区域是将要删除的声音，处理后仍可逐段调整。</p>
         <UiButton variant="secondary" className="w-full" disabled={blocked} disabledReason="找不到原始素材" onClick={() => void run(async () => { const result = await quickProcessAudioEdit(project.id, range); notify(notificationMessage('audioQuickProcessed', { seconds: (result.shortenedMs / 1000).toFixed(2) })) })}><Sparkles />快速处理</UiButton>
       </div>
       <UiGroup divided titleTone="compact" gap="none">
@@ -185,6 +208,7 @@ export function AudioEditProcessPanel() {
             options={[{ value: 'delete', label: '删除' }, { value: 'attenuate', label: '减弱' }, { value: 'mute', label: '静音' }, { value: 'keep', label: '保留' }]} />
           <UiButton variant="secondary" className="w-full" disabled={blocked} disabledReason="找不到原始素材" onClick={() => void run(async () => { const { counts } = await processProjectAudioEditBreaths(project.id, breathPolicy, range); notify(notificationMessage('audioBreathsProcessed', counts)) })}>处理呼吸声</UiButton>
         </AudioEditDisclosure>
+        <AudioEditMouthClicks />
         {enabledCuts.length > 0 && <AudioEditDisclosure title="已处理区间" value={`${enabledCuts.length} 处`}>
           <div className="flex flex-col">{enabledCuts.map((cut) => <div key={cut.id} className="flex items-center justify-between gap-2">
             <UiButton size="sm" className="font-mono tabular-nums" onClick={() => workspace.seek(Math.max(0, cut.startFrame - project.source.sampleRate))}>{formatTime(cut.startFrame, project.source.sampleRate)} · {cut.mode === 'mute' ? '静音' : '删除'}</UiButton>
@@ -219,13 +243,7 @@ export function AudioEditEssentialSoundPanel() {
   const [measured, setMeasured] = useState<{ projectId: string; lufs: number } | null>(null)
   const match = (targetLufs: number) => void workspace.run(async () => {
     setMatching(true)
-    try {
-      await flushAudioEditProject(project.id)
-      const result = await getPlatform().audioEdit.matchLoudness({ projectId: project.id, targetLufs })
-      const current = getAudioEditProjectInstance(project.id)?.document.essentialSound ?? project.essentialSound
-      if (current) update({ essentialSound: { ...current, loudness: { enabled: true, targetLufs, gainDb: result.gainDb } } })
-      setMeasured({ projectId: project.id, lufs: result.integratedLufs })
-    } finally { setMatching(false) }
+    try { setMeasured({ projectId: project.id, lufs: (await matchProjectAudioEditLoudness(project.id, targetLufs)).integratedLufs }) } finally { setMatching(false) }
   })
   return <PanelScroll label="基本声音">
     <EssentialSoundControls value={project.essentialSound} disabled={workspace.disabled} offline={AUDIO_EDIT_OFFLINE_REPAIR}
@@ -250,8 +268,8 @@ export function AudioEditDeliveryPanel() {
           options={[24, 25, 30, 50, 60].map((fps) => ({ label: `${fps} fps`, value: fps }))} onSelect={(fps) => update({ xmlFrameRate: { numerator: fps, denominator: 1 } })} />
       </UiFormRow>}
       <UiFormRow label="附带 SRT 字幕" density="compact" inline><UiSwitch aria-label="附带 SRT 字幕" checked={workspace.withSrt} onCheckedChange={workspace.setWithSrt} /></UiFormRow>
-      <UiFormRow label="包含效果" density="compact" inline><UiSwitch aria-label="包含效果" checked={workspace.withProcessing} disabled={!plugins.length} onCheckedChange={workspace.setWithProcessing} /></UiFormRow>
-      <p className={UI_TEXT_META_CLASS}>{workspace.withProcessing ? '同时保存全长处理音轨，XML 引用该音轨。' : 'XML 直接引用原文件；切点按视频帧向外对齐。'}</p>
+      {plugins.length > 0 && <UiFormRow label="包含 VST3 插件" info="基本声音、效果组、修复与口水音总会算进导出；这一项只管 VST3 插件的处理。" density="compact" inline><UiSwitch aria-label="包含 VST3 插件" checked={workspace.withProcessing} onCheckedChange={workspace.setWithProcessing} /></UiFormRow>}
+      <p className={UI_TEXT_META_CLASS}>{format === 'xml' ? '有声音处理时同时保存全长处理音轨，XML 引用该音轨；否则直接引用原文件。切点按视频帧向外对齐。' : '导出剪好的声音，基本声音与效果组都已算进去。'}</p>
     </UiGroup>
   </PanelScroll>
 }

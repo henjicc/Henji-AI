@@ -44,6 +44,12 @@ export async function runAudioMouthDeclick(input: string, output: string, clicks
   } finally { await Promise.all(temporary.map(file => removeUnmanagedCachePath(file, { force: true }))) }
 }
 
+/** 原声与处理结果按比例混合（amount 为处理结果的比例 0–1），两者等长、同采样率与声道。 */
+export async function mixAudioEditProcessed(original: string, processed: string, amount: number, output: string, signal?: AbortSignal): Promise<void> {
+  if (amount >= 0.999) { await fs.copyFile(processed, output); return }
+  await runAudioEditProcess(await loadFfmpegPath(), ['-v', 'error', '-y', '-i', original, '-i', processed, '-filter_complex', `[0:a][1:a]amix=inputs=2:weights='${1 - amount} ${amount}':normalize=0[out]`, '-map', '[out]', '-c:a', 'pcm_f32le', '-rf64', 'auto', output], signal)
+}
+
 export async function runAudioRepair(input: string, output: string, repair: AudioEditRepair, maskPath?: string, signal?: AbortSignal): Promise<void> {
   if (repair.kind === 'declick') {
     const repaired = repair.strength < 1 ? `${output}.declick.wav` : output

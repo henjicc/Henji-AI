@@ -436,6 +436,7 @@ const audioApi: HenjiAudioApi = {
   renderEditAudio: payload => nativeInvoke('audioEdit:render', payload),
   editedSourceAudio: payload => nativeInvoke('audioEdit:editedSource', payload),
   matchAudioEditLoudness: payload => nativeInvoke('audioEdit:matchLoudness', payload),
+  detectAudioEditMouthClicks: payload => nativeInvoke('audioEdit:detectMouthClicks', payload),
   prepareEditPreviewChunk: (payload) => nativeInvoke('audioEdit:preview:chunk', payload),
 }
 

@@ -6,3 +6,4 @@ export { importAudioEditMedia, openAudioEditDocument } from './application/audio
 export { lockAudioEditRecording } from './application/audioEditProjectInstances'
 export { restoreAudioEditTake } from './application/audioEditSpliceService'
 export { useAudioEditPlaybackStore } from './store/audioEditPlaybackStore'
+export { registerAudioEditMultitrackOpener, openAudioEditMultitrack, audioEditMultitrackAvailable } from './application/audioEditMultitrack'

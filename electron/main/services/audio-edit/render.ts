@@ -10,7 +10,9 @@ import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { audioEditCacheDirectory, identifyAudioEditSource, prepareAudioEditAudio, validateAudioEditAudio, verifyAudioEditSource } from './media'
 import { processAudioEditVstChain, audioEditProcessorCacheIdentity } from './processors'
-import { runAudioRepair, runAudioMouthDeclick, audioRepairMaskDimensions, encodeAudioRepairMask } from './dsp-adapter'
+import { runAudioRepair, runAudioMouthDeclick, mixAudioEditProcessed, audioRepairMaskDimensions, encodeAudioRepairMask } from './dsp-adapter'
+import { separateAudioFile } from '../audio-separation/runtime'
+import { essentialSoundOfflineStages } from '../../../../src/core/audio/essentialSound'
 import { audioRenderKey, cachedAudioFile } from './render-cache'
 import { applyAudioEditRealtimeEffects } from './effects-render'
 import { runAudioEditProcess } from './process'
@@ -61,6 +63,16 @@ export async function prepareAudioEditRenderSource(project: AudioEditProjectDocu
   const directory = audioEditCacheDirectory(project.id)
   let key = audioRenderKey(['audio-render-v1', identity.digest, project.source.sampleRate, project.source.channels, project.source.audioStreamIndex])
   let input = await prepareAudioEditAudio(project, signal)
+  // 基本声音里的人声分离、减少混响：本地模型离线处理原素材（原素材很少变，放在最前面缓存命中率最高），按量与原声混合。
+  for (const stage of essentialSoundOfflineStages(project.essentialSound)) {
+    key = audioRenderKey([key, 'offline-v1', stage])
+    const source = input
+    input = await cachedAudioFile(directory, `${stage.kind}-${key}`, 'wav', async output => {
+      const separated = await separateAudioFile({ source, mode: stage.kind === 'isolate' ? 'vocals' : 'dereverb', signal })
+      await mixAudioEditProcessed(source, separated.primaryPath, stage.amount, output, signal)
+      await validateAudioEditAudio(output, project.source.sampleRate, project.source.channels, project.source.durationFrames, signal)
+    }, signal)
+  }
   for (const repair of (project.repairs ?? []).filter(r => r.enabled && r.strength > 0)) {
     const { id: _id, enabled: _enabled, ...recipe } = repair
     key = audioRenderKey([key, recipe])
@@ -106,15 +118,20 @@ export async function prepareAudioEditRenderSource(project: AudioEditProjectDocu
   return input
 }
 
-/** 渲染源已是 32 位浮点 WAV 时直接随机读；否则先在缓存里转一份。 */
-async function openRenderSource(project: AudioEditProjectDocument, source: string, signal?: AbortSignal): Promise<F32WavReader> {
+/** 渲染源已是同采样率、同声道的 32 位浮点 WAV 时原样返回；否则在缓存里转一份，返回转好的文件。 */
+export async function audioEditF32Source(project: AudioEditProjectDocument, source: string, signal?: AbortSignal): Promise<string> {
   const direct = await openF32Wav(source)
-  if (direct && direct.sampleRate === project.source.sampleRate && direct.channels === project.source.channels) return direct
+  const matches = direct && direct.sampleRate === project.source.sampleRate && direct.channels === project.source.channels
   await direct?.close()
-  const converted = await cachedAudioFile(audioEditCacheDirectory(project.id), `render-f32-${audioRenderKey([source, project.source.sampleRate, project.source.channels])}`, 'wav', async output => {
+  if (matches) return source
+  return cachedAudioFile(audioEditCacheDirectory(project.id), `render-f32-${audioRenderKey([source, project.source.sampleRate, project.source.channels])}`, 'wav', async output => {
     await runAudioEditProcess(await loadFfmpegPath(), ['-v', 'error', '-y', '-i', source, '-map', '0:a:0', '-vn', '-c:a', 'pcm_f32le', '-rf64', 'auto', '-ar', String(project.source.sampleRate), '-ac', String(project.source.channels), output], signal)
   }, signal)
-  const reader = await openF32Wav(converted)
+}
+
+/** 渲染源随机读（32 位浮点 WAV，必要时先在缓存里转一份）。 */
+async function openRenderSource(project: AudioEditProjectDocument, source: string, signal?: AbortSignal): Promise<F32WavReader> {
+  const reader = await openF32Wav(await audioEditF32Source(project, source, signal))
   if (!reader) throw new Error('渲染源转码后仍无法读取，请重试。')
   return reader
 }
@@ -155,4 +172,29 @@ export async function renderAudioEditProject(project: AudioEditProjectDocument, 
     logger.info('音频渲染完成', { event: 'audio_edit.render.completed', context: { projectId: project.id, elapsedMs: performance.now() - started } })
     return { audioPath, durationFrames, sampleRate: project.source.sampleRate, channels: project.source.channels, revision: project.revision }
   } catch (error) { logger.error('音频渲染失败', { event: 'audio_edit.render.failed', error, context: { projectId: project.id } }); throw error }
+}
+
+/**
+ * 口水音检测：在“编辑后声音”（修复、本地模型处理、区间音量都已生效，口水音修复本身除外）里找咔嗒声，返回源采样帧范围。
+ * 计算在工作线程里分块进行，不阻塞主进程。
+ */
+export async function detectAudioEditMouthClicksInProject(project: AudioEditProjectDocument, sensitivity: number, range: { startFrame: number; endFrame: number } | undefined, signal?: AbortSignal, onProgress?: (value: number) => void): Promise<Array<{ startFrame: number; endFrame: number; score: number }>> {
+  const { mouthClicks: _clicks, ...withoutClicks } = project
+  const input = await audioEditF32Source(project, await prepareAudioEditRenderSource(withoutClicks, false, signal), signal)
+  signal?.throwIfAborted()
+  const worker = new Worker(path.join(__dirname, 'audio-edit-mouth-click-worker.cjs'), { workerData: { input, sensitivity, startFrame: range?.startFrame ?? 0, endFrame: range?.endFrame ?? project.source.durationFrames } })
+  try {
+    return await new Promise((resolve, reject) => {
+      const abort = (): void => { reject(signal?.reason ?? new Error('口水音检测已取消')); void worker.terminate() }
+      signal?.addEventListener('abort', abort, { once: true })
+      const cleanup = (): void => signal?.removeEventListener('abort', abort)
+      worker.on('message', (message: { type: 'progress'; value: number } | { type: 'done'; clicks: Array<{ startFrame: number; endFrame: number; score: number }> } | { type: 'error'; message: string }) => {
+        if (message.type === 'progress') onProgress?.(message.value)
+        else if (message.type === 'done') { cleanup(); resolve(message.clicks.map(({ startFrame, endFrame, score }) => ({ startFrame, endFrame, score }))) }
+        else { cleanup(); reject(new Error(`口水音检测失败：${message.message}`)) }
+      })
+      worker.once('error', error => { cleanup(); reject(error) })
+      worker.once('exit', code => { cleanup(); if (code !== 0) reject(new Error(`口水音检测未完成：${code}`)) })
+    })
+  } finally { await worker.terminate() }
 }

@@ -7,7 +7,7 @@
  * 存入片段效果链 `clip.effects` 时只记 `{ id, params }`；缺的参数按默认值，旧文件没有这个字段不受影响。
  */
 import { VIDEO_EDIT_CHROMA_KEY_DEFAULT_HEX } from '../theme/colorTokens'
-import { AUDIO_EFFECT_DEFINITIONS } from '@/core/audio/effects/audioEffectDefinitions'
+import { AUDIO_EFFECT_DEFINITIONS } from '../audio/effects/audioEffectDefinitions'
 import { VIDEO_EDIT_COLOR_GRADE } from './colorGrade'
 import { parseColorGradeCurve } from './colorGradeCurves'
 import { GLOW_PRO_EFFECT_DEFINITION } from './glowPro'

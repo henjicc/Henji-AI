@@ -6,7 +6,7 @@
  * - 实现只有一份：剪辑混音里的确定性处理（`features/videoEdit/engine/videoEditAudioEffects.ts`），预览与导出同一路径。
  * 只用类型引用 `builtinEffects.ts`，避免两个登记文件互相引用值。
  */
-import type { VideoEditBuiltinEffectDefinition, VideoEditBuiltinParam } from '@/core/videoEdit/builtinEffects'
+import type { VideoEditBuiltinEffectDefinition, VideoEditBuiltinParam } from '../../videoEdit/builtinEffects'
 
 const number = (key: string, name: string, unit: 'strength' | 'decibels' | 'hertz' | 'semitones', range: [number, number, number], fallback: number, tooltip: string, description: string): VideoEditBuiltinParam => ({ key, name, type: 'number', unit, min: range[0], max: range[1], step: range[2], default: fallback, tooltip, description })
 const strength = (key: string, name: string, fallback: number, tooltip: string, description: string): VideoEditBuiltinParam => number(key, name, 'strength', [0, 100, 1], fallback, tooltip, description)

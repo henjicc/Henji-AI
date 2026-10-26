@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { BrowserWindow } from 'electron'
 import { audioEditSpectralTileRequestSchema } from '../../../src/core/audioEdit/spectralPyramid'
 import { getAudioEditSpectralTile, cancelAudioEditSpectralTile, subscribeAudioEditSpectralProgress } from '../services/audio-edit/spectral-pyramid'
-import { renderAudioEditProject, prepareAudioEditRenderSource } from '../services/audio-edit/render'
+import { renderAudioEditProject, prepareAudioEditRenderSource, detectAudioEditMouthClicksInProject } from '../services/audio-edit/render'
 import { measureAudioFileLoudness } from '../services/audio/loudness'
 import { registerAudioSampleHandlers } from './audio-samples'
 import { registerExplanationAudioHandlers } from './explanation-audio'
@@ -65,6 +65,11 @@ export function registerAudioIpc(): void {
       const gainDb = Math.round(Math.max(-40, Math.min(40, request.targetLufs - measured.integratedLufs)) * 10) / 10
       return { integratedLufs: Math.round(measured.integratedLufs * 10) / 10, gainDb }
     }, request.requestId, JSON.stringify(['match-loudness', request.targetLufs, project.revision]), true)
+  })
+  registerIpcHandler('audioEdit:detectMouthClicks', input => z.object({ projectId: z.string().min(1), sensitivity: z.number().finite().min(0).max(100), range: audioEditRangeSchema.optional(), requestId: z.string().optional() }).strict().parse(input), async request => {
+    const project = await requireAudioEditProject(request.projectId)
+    const clicks = await runAudioEditTask(project.id, 'analysis', (signal, progress) => detectAudioEditMouthClicksInProject(project, request.sensitivity, request.range, signal, progress), request.requestId, JSON.stringify(['mouth-clicks', request.sensitivity, request.range, project.revision]), true)
+    return { clicks }
   })
   registerAudioSampleHandlers()
   registerExplanationAudioHandlers()

@@ -31,6 +31,8 @@ export const VIDEO_EDIT_PANELS = [
   { id: 'title_templates', title: '模板', ...INSPECTOR_MIN },
   // 预设：风格、标题、文字、效果、转场预设的动态预览与管理（评分、默认、导入导出）。
   { id: 'presets', title: '预设', ...INSPECTOR_MIN },
+  // 音轨混合器（参照 Audition / PR）：每条音频轨道的效果、声像、静音独奏、推子，最右边主轨。音频编辑的“多轨”打开的就是这个布局。
+  { id: 'audio_mixer', title: '音轨混合器', minimumWidth: 360, minimumHeight: 260 },
 ] as const
 export type VideoEditPanelId = typeof VIDEO_EDIT_PANELS[number]['id']
 const INSPECTOR_PANELS: readonly string[] = ['effects', 'title_templates', 'effects_library', 'presets', 'style_kits', 'annotations', 'content', 'tracking', 'color_grade']
@@ -42,7 +44,7 @@ function inspectorReference(api: DockviewApi, id: string, own?: DockviewGroupPan
 
 /** A view-only layout: no project content, selection or transport state is serialized. */
 export function defaultVideoEditLayout(): SerializedDockview {
-  const panels = Object.fromEntries(VIDEO_EDIT_PANELS.filter(panel => panel.id !== 'annotations' && panel.id !== 'source' && panel.id !== 'content' && panel.id !== 'tracking' && panel.id !== 'color_grade').map(({ id, title }) => [id, { id, contentComponent: id, title, renderer: 'always' as const }]))
+  const panels = Object.fromEntries(VIDEO_EDIT_PANELS.filter(panel => panel.id !== 'annotations' && panel.id !== 'source' && panel.id !== 'content' && panel.id !== 'tracking' && panel.id !== 'color_grade' && panel.id !== 'audio_mixer').map(({ id, title }) => [id, { id, contentComponent: id, title, renderer: 'always' as const }]))
   return {
     grid: {
       width: 1440, height: 860, orientation: Orientation.HORIZONTAL,
@@ -77,9 +79,35 @@ function colorGradeLayout(): SerializedDockview {
   if (inspector.type === 'leaf' && !Array.isArray(inspector.data)) { inspector.size = 480; inspector.data.views.unshift('color_grade'); inspector.data.activeView = 'color_grade' }
   return layout
 }
+/**
+ * 音频（多轨）布局，参照 Audition 的多轨视图：时间线占主区，下方音轨混合器；右侧上面是小节目画面，下面效果控件（片段效果与基本声音）。
+ * 素材在左。音频编辑点“多轨”打开序列时用它。
+ */
+export function audioVideoEditLayout(): SerializedDockview {
+  const panel = (id: VideoEditPanelId, title: string) => ({ id, contentComponent: id, title, renderer: 'always' as const })
+  return {
+    grid: {
+      width: 1440, height: 860, orientation: Orientation.HORIZONTAL,
+      root: { type: 'branch', data: [
+        { type: 'leaf', size: 240, data: { id: 'project-group', views: ['project', 'effects_library'], activeView: 'project' } },
+        { type: 'branch', size: 860, data: [
+          { type: 'leaf', size: 540, data: { id: 'timeline-group', views: ['timeline'], activeView: 'timeline' } },
+          { type: 'leaf', size: 320, data: { id: 'mixer-group', views: ['audio_mixer'], activeView: 'audio_mixer' } },
+        ] },
+        { type: 'branch', size: 340, data: [
+          { type: 'leaf', size: 260, data: { id: 'program-group', views: ['program'], activeView: 'program' } },
+          { type: 'leaf', size: 600, data: { id: 'effects-group', views: ['effects', 'presets'], activeView: 'effects' } },
+        ] },
+      ] },
+    },
+    panels: Object.fromEntries((['project', 'effects_library', 'timeline', 'audio_mixer', 'program', 'effects', 'presets'] as const).map(id => [id, panel(id, VIDEO_EDIT_PANELS.find(item => item.id === id)!.title)])),
+    activeGroup: 'timeline-group',
+  }
+}
+export const VIDEO_EDIT_AUDIO_LAYOUT_PRESET = 'audio'
 export const videoEditLayoutPresets = registerWorkspaceLayout({
   workspaceId: 'video_edit', panels: VIDEO_EDIT_PANELS,
-  builtinPresets: [{ id: 'editing', name: '编辑', layout: defaultVideoEditLayout() }, { id: 'grading', name: '调色', layout: colorGradeLayout() }],
+  builtinPresets: [{ id: 'editing', name: '编辑', layout: defaultVideoEditLayout() }, { id: 'grading', name: '调色', layout: colorGradeLayout() }, { id: VIDEO_EDIT_AUDIO_LAYOUT_PRESET, name: '音频', layout: audioVideoEditLayout() }],
   readLegacy: () => { const raw = localStorage.getItem(VIDEO_EDIT_LAYOUT_STORAGE_KEY); return raw ? parseVideoEditLayout(raw) : undefined },
 })
 

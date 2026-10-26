@@ -151,6 +151,10 @@ const legacyTitles = legacyFixture('title-templates', 6) as unknown[]
 const legacyPresetItems = (JSON.parse(fs.readFileSync('tests/fixtures/persistence/video-preset-package/v6.json', 'utf8')) as { items: unknown[] }).items
 // v23：源增益独立保存，保留音量与关键帧。
 videoEditDocumentSchema.parse(document)
+// 第 28 版：音轨混音（音量、声像、轨道效果）与主轨。
+const mixedTrack = sequence.tracks.find(track => track.kind === 'audio')!
+Object.assign(mixedTrack, { volumeDb: -3, pan: -20, effects: [{ id: 'golden-track-eq', name: '高通（去低频）', enabled: true, amount: 1, builtin: { id: 'high_pass', params: { frequency: 80, slope: 'gentle' } } }] })
+sequence.master = { volumeDb: -1, effects: [{ id: 'golden-master-limiter', name: '限幅器', enabled: true, amount: 1, builtin: { id: 'limiter', params: { ceiling: -1, boost: 0 } } }] }
 const { format: _format, version: _version, id: _id, name: _name, revision: _revision, ...videoContent } = document
 const soundDocument = createVideoEditDocument('节拍声音样本'), soundSequence = createVideoEditSequence()
 soundSequence.id = 'golden-sound-sequence'; soundDocument.sequences.push(soundSequence)

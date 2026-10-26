@@ -6,7 +6,10 @@ import { videoEditFps, videoEditSourceSeconds } from '@/core/videoEdit/time'
 import { applyVideoEditTimelineEdit } from '@/core/videoEdit/timelineEdits'
 import { updateVideoEditAudioLinks, type AudioLinkNotice } from '@/core/videoEdit/audioLink'
 import { getPlatform } from '@/platform/runtime'
-import { createAudioEditDraft, editAudioEditProject, flushAudioEditProject, subscribeAudioEditInstances, renderAudioEdit } from '@/features/audioEdit'
+import { createAudioEditDraft, editAudioEditProject, flushAudioEditProject, getAudioEditProjectInstance, registerAudioEditMultitrackOpener, subscribeAudioEditInstances, renderAudioEdit } from '@/features/audioEdit'
+import { createVideoEditDocument, createVideoEditSequence } from '@/core/videoEdit/document'
+import { videoEditLayoutPresets, VIDEO_EDIT_AUDIO_LAYOUT_PRESET } from '../layout/videoEditDockLayout'
+import { setVideoEditView, switchVideoEditSequence } from './videoEditService'
 import { editVideoProject, listVideoEditInstances, requireVideoEditInstance, subscribeVideoEditDomain, videoEditDocumentOperations, saveVideoEdit } from './videoEditService'
 import { openDocumentFromVideoEdit } from './videoEditComposition'
 import { matchHenjiExtension } from '@/core/fileExtensions'
@@ -123,7 +126,56 @@ export async function refreshVideoEditAudioDocumentClips(projectId: string, docu
   queues.set(key, run)
   try { return await run } finally { if (queues.get(key) === run) queues.delete(key) }
 }
+/**
+ * 音频编辑的“多轨”（参照 Audition 的“波形 | 多轨”）：多轨就是剪辑的序列，用“音频”布局打开（时间线 + 音轨混合器）。
+ * 已打开的剪辑里有片段链接着这份音频作品时回到那里；否则新建一份多轨剪辑，把这份作品渲染的声音以动态链接放在第一条音频轨上。
+ */
+export async function openAudioDocumentInMultitrack(audioDocumentId: string): Promise<void> {
+  const operations = videoEditDocumentOperations()
+  for (const video of listVideoEditInstances()) {
+    const clip = links(video.document, audioDocumentId)[0]
+    const summary = clip && await operations.findDocument(video.document.id)
+    if (!clip || !summary) continue
+    await videoEditLayoutPresets.apply(VIDEO_EDIT_AUDIO_LAYOUT_PRESET).catch(error => logger.warn('切换音频布局失败', { event: 'video_edit.audio_link.multitrack.layout_failed', error }))
+    await operations.openDocument(summary)
+    const sequence = video.document.sequences.find(s => s.clips.some(c => c.id === clip.id))
+    if (sequence) { switchVideoEditSequence(video.document.id, sequence.id); setVideoEditView(video.document.id, { selection: clip.id }) }
+    logger.info('回到多轨', { event: 'video_edit.audio_link.multitrack.opened', context: { projectId: video.document.id, documentId: audioDocumentId } })
+    return
+  }
+  const audio = getAudioEditProjectInstance(audioDocumentId)
+  if (!audio) throw new Error('请先打开这份音频作品。')
+  await flushAudioEditProject(audioDocumentId)
+  const container = audio.session.documentMeta.container
+  const rendered = await renderAudioEdit(audioDocumentId)
+  const name = audio.session.documentMeta.name
+  const path = container.kind === 'project' ? (await operations.importFile({ container, sourcePath: rendered.audioPath, folder: 'generated' })).path : rendered.audioPath
+  const document = createVideoEditDocument(`${name} · 多轨`)
+  const sequence = createVideoEditSequence('多轨混音')
+  sequence.sampleRate = rendered.sampleRate === 44100 ? 44100 : 48000
+  // Audition 新建多轨会话默认有多条音轨：这里给三条音频轨（第一条放这份作品），画面轨留一条备用。
+  const audioTrack = sequence.tracks.find(track => track.kind === 'audio')!
+  const videoTrack = sequence.tracks.find(track => track.kind === 'video')!
+  sequence.tracks = [{ ...audioTrack, name: '音频 1', index: 0 }, { ...audioTrack, id: crypto.randomUUID(), name: '音频 2', index: 1 }, { ...audioTrack, id: crypto.randomUUID(), name: '音频 3', index: 2 }, { ...videoTrack, index: 3 }]
+  const mediaId = crypto.randomUUID(), itemId = crypto.randomUUID()
+  const durationSeconds = rendered.durationFrames / rendered.sampleRate
+  document.media = [{ id: mediaId, name, kind: 'audio', path, durationSeconds, width: 0, height: 0, hasAudio: true }]
+  document.items = [{ id: itemId, name, kind: 'audio', mediaId }]
+  sequence.clips = [{ id: crypto.randomUUID(), itemId, name, kind: 'audio', track: 0, start: 0, duration: Math.max(1, Math.round(durationSeconds * videoEditFps(sequence.frameRate))), sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 },
+    x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '', audioRole: audio.document.essentialSound?.type ?? 'dialogue',
+    creativeSource: { type: 'document', docRef: { docId: audioDocumentId, path: audio.session.documentMeta.path }, revision: rendered.revision } }]
+  document.sequences = [sequence]
+  const { format: _format, version: _version, id: _id, name: _name, revision: _revision, ...content } = document
+  const meta = await operations.createDocument({ kind: 'video_edit', container, name: document.name, content, onConflict: 'keepBoth' })
+  const summary = await operations.findDocument(meta.id)
+  if (!summary) throw new Error('多轨剪辑已建好，但没找到文件，请在项目里打开。')
+  await videoEditLayoutPresets.apply(VIDEO_EDIT_AUDIO_LAYOUT_PRESET).catch(error => logger.warn('切换音频布局失败', { event: 'video_edit.audio_link.multitrack.layout_failed', error }))
+  await operations.openDocument(summary)
+  logger.info('新建多轨', { event: 'video_edit.audio_link.multitrack.created', context: { projectId: meta.id, documentId: audioDocumentId } })
+}
+
 export function startVideoEditAudioDocumentLinks(): () => void {
+  const stopOpener = registerAudioEditMultitrackOpener(openAudioDocumentInMultitrack)
   const observed = new Map<string, number>()
   const refresh = (projectId: string, id: string): void => { void refreshVideoEditAudioDocumentClips(projectId, id).catch(error => {
     const owner = listVideoEditInstances().find(instance => instance.document.id === projectId)
@@ -143,5 +195,5 @@ export function startVideoEditAudioDocumentLinks(): () => void {
       for (const id of new Set(links(video.document).flatMap(c => c.creativeSource?.type === 'document' ? [c.creativeSource.docRef.docId] : []))) refresh(video.document.id, id)
     }
   })
-  return () => { stopAudio(); stopVideo() }
+  return () => { stopOpener(); stopAudio(); stopVideo() }
 }

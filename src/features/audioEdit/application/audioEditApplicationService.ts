@@ -262,3 +262,35 @@ export async function relinkAudioEdit(projectId: string, sourcePath: string): Pr
     return instance.document
   })
 }
+
+/**
+ * 基本声音“自动匹配响度”：按当前全部处理（不含响度补偿本身）渲染成品、测积分响度，把到目标需要的补偿写进基本声音；
+ * 还没有基本声音时按“对话”新建、只打开响度这一项。界面与助手共用。
+ */
+export async function matchProjectAudioEditLoudness(projectId: string, targetLufs = -16, requestId: string = crypto.randomUUID()): Promise<{ integratedLufs: number; gainDb: number }> {
+  await flushAudioEditProject(projectId)
+  const result = await getPlatform().audioEdit.matchLoudness({ projectId, targetLufs, requestId })
+  editAudioEditProject(projectId, document => ({ ...document, essentialSound: { ...(document.essentialSound ?? { type: 'dialogue' as const }), loudness: { enabled: true, targetLufs, gainDb: result.gainDb } } }))
+  await flushAudioEditProject(projectId)
+  logger.info('响度已匹配', { event: 'audio_edit.loudness.matched', context: { projectId, targetLufs, ...result } })
+  return result
+}
+
+/**
+ * 检测口水音并打开修复：结果写进 mouthClicks（传 range 时只替换这段里原有的结果）。界面与助手共用。
+ */
+export async function detectProjectAudioEditMouthClicks(projectId: string, sensitivity = 50, range?: AudioEditRange, requestId: string = crypto.randomUUID()): Promise<{ count: number; perMinute: number }> {
+  await flushAudioEditProject(projectId)
+  const { clicks } = await getPlatform().audioEdit.detectMouthClicks({ projectId, sensitivity, ...(range ? { range } : {}), requestId })
+  let total = 0, durationFrames = 1, sampleRate = 48000
+  editAudioEditProject(projectId, document => {
+    const kept = range ? (document.mouthClicks?.clicks ?? []).filter(click => click.endFrame <= range.startFrame || click.startFrame >= range.endFrame) : []
+    const next = [...kept, ...clicks.map(({ startFrame, endFrame }) => ({ startFrame, endFrame }))].sort((a, b) => a.startFrame - b.startFrame).slice(0, 20000)
+    total = next.length; durationFrames = range ? range.endFrame - range.startFrame : document.source.durationFrames; sampleRate = document.source.sampleRate
+    return { ...document, mouthClicks: { enabled: true, sensitivity, clicks: next } }
+  })
+  await flushAudioEditProject(projectId)
+  const count = range ? clicks.length : total
+  logger.info('口水音检测完成', { event: 'audio_edit.mouth_clicks.detected', context: { projectId, sensitivity, count } })
+  return { count, perMinute: Math.round(count / Math.max(1 / 60, durationFrames / sampleRate / 60)) }
+}

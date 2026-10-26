@@ -20,6 +20,8 @@ export default defineConfig({
           'audio-edit-mask-worker': resolve(__dirname, 'electron/main/services/audio-edit/mask-worker.ts'),
           // 音频编辑导出时离线跑效果链（与试听同一份实现）。
           'audio-edit-effects-worker': resolve(__dirname, 'electron/main/services/audio-edit/effects-worker.ts'),
+          // 口水音检测（分块，与时长无关的内存）。
+          'audio-edit-mouth-click-worker': resolve(__dirname, 'electron/main/services/audio-edit/mouth-click-worker.ts'),
           'audio-waveform-worker': resolve(__dirname, 'electron/main/services/audio/waveform-worker.ts'),
           'video-screen-change-worker': resolve(__dirname, 'electron/main/services/video/screen-change-worker.ts'),
           'font-worker': resolve(__dirname, 'electron/main/services/fonts/worker.ts'),

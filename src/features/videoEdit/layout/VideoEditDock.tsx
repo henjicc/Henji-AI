@@ -30,6 +30,7 @@ import { VideoEditSequenceTabs } from '../panels/VideoEditSequenceTabs'
 import { dockVideoEditGroup, showVideoEditPanel, VIDEO_EDIT_PANELS, type VideoEditPanelId } from './videoEditDockLayout'
 import { dockVideoEditPopoutWindow, bindVideoEditPopoutDock, canFloatVideoEditDockSource, floatVideoEditDockSource, focusVideoEditPopoutPanel, isVideoEditPanelPoppedOut, listVideoEditPopouts, resetVideoEditWorkspaceLayout, restoreVideoEditPopouts, trackVideoEditDockPanel } from './popout/videoEditPopouts'
 import { VideoEditPopoutPortals } from './popout/VideoEditPopoutPortals'
+import { VideoEditAudioMixerPanel } from '../panels/VideoEditAudioMixerPanel'
 
 interface DockContext { instance: VideoEditInstance; onError: (reason: unknown) => void; onEffectsAdded?: (effectIds: readonly string[]) => void }
 const Context = createContext<DockContext | null>(null)
@@ -67,7 +68,8 @@ function TitleTemplatesBody({ visible }: { visible: boolean }): React.ReactEleme
 function AnnotationsBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="annotations"><VideoEditAnnotationsPanel {...useDock(visible)} visible={visible} /></div> }
 function StyleKitsBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="style_kits"><VideoEditStylesPanel {...useDock(visible)} visible={visible} /></div> }
 function PresetsBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="presets"><VideoEditPresetsPanel {...useDock(visible)} visible={visible} /></div> }
-const BODIES: Record<VideoEditPanelId, PanelBody> = { presets: PresetsBody, style_kits: StyleKitsBody, annotations: AnnotationsBody, title_templates: TitleTemplatesBody, color_grade: ColorGradeBody, tracking: TrackingBody, project: ProjectBody, effects: EffectsBody, program: ProgramBody, timeline: TimelineBody, content: ContentBody, source: SourceBody, effects_library: EffectsLibraryBody }
+function AudioMixerBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0"><VideoEditAudioMixerPanel {...useDock(visible)} visible={visible} /></div> }
+const BODIES: Record<VideoEditPanelId, PanelBody> = { audio_mixer: AudioMixerBody, presets: PresetsBody, style_kits: StyleKitsBody, annotations: AnnotationsBody, title_templates: TitleTemplatesBody, color_grade: ColorGradeBody, tracking: TrackingBody, project: ProjectBody, effects: EffectsBody, program: ProgramBody, timeline: TimelineBody, content: ContentBody, source: SourceBody, effects_library: EffectsLibraryBody }
 function dockPanel(id: VideoEditPanelId, Body: PanelBody): (props: IDockviewPanelProps) => React.ReactElement {
   return function DockPanel({ api }: IDockviewPanelProps): React.ReactElement {
     const [visible, setVisible] = useState(api.isVisible)

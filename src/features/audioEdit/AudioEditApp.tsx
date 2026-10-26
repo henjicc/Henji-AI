@@ -9,7 +9,8 @@ import { ArrowLeft, Download, Mic, Redo2, Search, Upload } from 'lucide-react'
 import { useStore } from 'zustand'
 import { AudioCaptureRecoveryBanner, getAudioCaptureSession } from '@/features/audioCapture'
 
-import { UiButton, UiIconButton, UiToolbar } from '@/components/ui'
+import { UiButton, UiIconButton, UiSegmented, UiToolbar } from '@/components/ui'
+import { audioEditMultitrackAvailable, openAudioEditMultitrack } from './application/audioEditMultitrack'
 import type { AudioEditAsrModel } from '@/platform/contracts/audioEdit'
 import type { AudioEditProcessorDescriptor, AudioEditProjectDocument, AudioEditTask, AudioEditRange } from '@/core/audioEdit/types'
 import type { DocumentSummary } from '@/core/documents/types'
@@ -322,6 +323,10 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
         ? <UiButton onClick={() => void leave()}><ArrowLeft />{`返回剪辑 · ${embeddedHost.label}`}</UiButton>
         : <UiIconButton size="md" onClick={() => void leave()} aria-label="返回音频列表" tooltip="返回音频列表"><ArrowLeft /></UiIconButton>}
       <AudioEditFileMenu key={project.id} name={project.name} disabled={disabled} onRename={(name) => void run(() => renameAudioEditDocument(project.id, name))} onRelink={() => void relinkSource()} />
+      {/* 参照 Audition 的“波形 | 多轨”：多轨就是剪辑的序列（音频布局），这份作品以动态链接放在里面；从剪辑进来时直接回去。 */}
+      <UiSegmented ariaLabel="编辑视图" size="sm" value="waveform" disabled={disabled || Boolean(sourceError) || (!embeddedHost && !audioEditMultitrackAvailable())}
+        options={[{ value: 'waveform', label: '波形', title: '编辑这一份声音' }, { value: 'multitrack', label: '多轨', title: embeddedHost ? `回到${embeddedHost.label}` : '放进多轨混音：多条音轨、音轨混合器、轨道效果' }]}
+        onChange={(view) => { if (view === 'multitrack') void (embeddedHost ? leave() : run(() => openAudioEditMultitrack(project.id))) }} />
     </UiToolbar>
     <AudioCaptureRecoveryBanner projectId={project.id} />
     <AudioEditWorkspaceContext.Provider value={workspace}>

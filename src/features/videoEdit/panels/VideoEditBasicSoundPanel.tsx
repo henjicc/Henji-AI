@@ -1,4 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { EssentialSoundControls } from '@/components/audio/EssentialSoundControls'
+import type { EssentialSoundSettings } from '@/core/audio/essentialSound'
+import { createVideoEditMixWriter } from '../application/videoEditAudioMixer'
 import { Dropdown, UiButton, UiFormRow, UiLoading } from '@/components/ui'
 import { UI_PROPERTY_INSET_CLASS } from '@/components/ui/styleTokens'
 import { VideoEditEffectSection } from './VideoEditEffectSection'
@@ -20,6 +23,7 @@ function VideoEditBasicSoundPanelContent({ instance, onError }: { instance: Vide
   const music = sounds.filter(clip => clip.audioRole === 'music')
   const [settings, setSettings] = useState(() => videoEditDuckingSettingsSchema.parse({}))
   const [busy, setBusy] = useState(false); const controller = useRef<AbortController>()
+  const writer = useMemo(() => createVideoEditMixWriter(projectId), [projectId])
   const scope = `${projectId}:${sequence.id}:${sounds.map(clip => clip.id).join(',')}`
   useEffect(() => {
     setBusy(false)
@@ -35,8 +39,15 @@ function VideoEditBasicSoundPanelContent({ instance, onError }: { instance: Vide
     catch (error) { if (!current.signal.aborted) onError(error) }
     finally { if (controller.current === current) { controller.current = undefined; setBusy(false) } }
   }
+  // 基本声音（与音频编辑同一份换算）：类型即片段的声音类型（回避、助手按类型找片段都读它），各项处理写进片段。
+  const first = sounds[0]
+  const essential: EssentialSoundSettings | undefined = first.essentialSound ?? (sameRole ? { type: sameRole } : undefined)
+  const setEssential = (next: EssentialSoundSettings | undefined): void => {
+    try { writer.essentialSound(sequence.id, target.clipIds, next) } catch (error) { onError(error) }
+  }
   return <VideoEditEffectSection id="basic-sound" title="基本声音">
-    <UiFormRow label="声音类型" inline density="compact"><Dropdown size="sm" ariaLabel="声音类型" value={sameRole ?? ''} options={[{ value: '', label: sameRole ? '声音类型' : sounds.some(clip => clip.audioRole) ? '混合类型' : '未标注', disabled: true }, ...roles]} disabled={busy} onSelect={role => { try { setVideoEditAudioRoles(target, role as VideoEditAudioRole) } catch (error) { onError(error) } }} /></UiFormRow>
+    {sounds.length > 1 && !sameRole && <UiFormRow label="声音类型" inline density="compact"><Dropdown size="sm" ariaLabel="声音类型" value={''} options={[{ value: '', label: sounds.some(clip => clip.audioRole) ? '混合类型' : '未标注', disabled: true }, ...roles]} disabled={busy} onSelect={role => { try { setVideoEditAudioRoles(target, role as VideoEditAudioRole) } catch (error) { onError(error) } }} /></UiFormRow>}
+    {(sounds.length === 1 || sameRole) && <EssentialSoundControls value={essential} disabled={busy} onChange={setEssential} gesture={() => { try { return writer.gesture() } catch (error) { onError(error); return { finish: () => {}, cancel: () => {} } } }} />}
     {music.length > 0 && <>
       <div className={`pt-1 text-xs font-semibold text-text3 ${UI_PROPERTY_INSET_CLASS}`}>回避</div>
       <UiFormRow label="目标" inline density="compact"><Dropdown size="sm" ariaLabel="回避目标" value={settings.targetRole} options={roles.filter(role => role.value === 'dialogue' || role.value === 'sound_effect')} disabled={busy} onSelect={role => setSettings(value => ({ ...value, targetRole: role as 'dialogue' | 'sound_effect' }))} /></UiFormRow>

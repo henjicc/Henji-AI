@@ -1,5 +1,5 @@
-import { videoEditFft } from '@/core/videoEdit/fft'
-import { resolveVideoEditBuiltinParams, type VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
+import { videoEditFft } from '../../videoEdit/fft'
+import { resolveVideoEditBuiltinParams, type VideoEditBuiltinParams } from '../../videoEdit/builtinEffects'
 // 静态引入：剪辑渲染工作线程按 IIFE 打包，不能拆出动态分块。模块求值只定义函数，模型与 WebAssembly 到第一次用降噪时才解码。
 import { Rnnoise } from '@shiguredo/rnnoise-wasm'
 

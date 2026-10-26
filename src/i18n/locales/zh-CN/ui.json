@@ -183,6 +183,8 @@
     "audioSilenceCompressed": "处理 {{count}} 处停顿，缩短 {{seconds}} 秒",
     "audioFillersCleaned": "清理 {{count}} 处语气词，可撤销或逐处恢复",
     "audioBreathsProcessed": "呼吸声：删除 {{deleted}} 处、减弱 {{attenuated}} 处、静音 {{muted}} 处，可撤销或逐处恢复",
+    "audioMouthClicksDetected": "找到 {{count}} 处口水音（约每分钟 {{perMinute}} 处），已修复；可在“口水音”里关掉对比",
+    "audioMouthClicksNone": "没有找到口水音，可以调高灵敏度再试",
     "selectTimelineClip": "请先在时间线上选中片段。",
     "effectUnavailable": "所选片段无法添加此效果，请检查片段类型和轨道锁定。",
     "canvasSaved": "画布已保存，请检查已有节点；可在画布中撤销。",

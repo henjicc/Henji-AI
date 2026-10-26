@@ -37,6 +37,7 @@ import { recordingCursorSourceSchema, RECORDING_CURSOR_EFFECT } from './recordin
 import { RECORDING_ZOOM_EFFECT } from './recordingZoom'
 import { VIDEO_EDIT_DOCUMENT_VERSION } from '../persistence/schemaVersions'
 import { videoEditClipRemixSchema } from './musicRemix'
+import { essentialSoundSettingsSchema } from '../audio/essentialSound'
 
 const frame = z.number().int().min(0).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES)
 const identifier = z.string().min(1).max(100)
@@ -58,7 +59,19 @@ export const videoEditMediaSchema = z.object({
 export const videoEditBinSchema = z.object({ id: identifier, name, parentId: identifier.optional(), label: videoEditLabelSchema.optional(), sourceFolderPath: z.string().min(1).optional() }).strict()
 export const videoEditItemSourceRangeSchema = z.object({ inUs: z.number().int().nonnegative(), outUs: z.number().int().positive() }).strict().refine(value => value.outUs > value.inUs, '子剪辑出点须晚于入点。')
 export const videoEditItemSchema = z.object({ id: identifier, name, binId: identifier.optional(), label: videoEditLabelSchema.optional(), tags: z.array(z.string().trim().min(1).max(80)).optional(), kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment', 'sequence']), sequenceId: identifier.optional(), mediaId: identifier.optional(), code: codeMaterialInstanceSchema.optional(), elementOverrides: codeElementOverridesSchema.optional(), graphic: videoEditGraphicSchema.optional(), audioChannels: videoEditAudioLayoutSchema.optional(), sourceRange: videoEditItemSourceRangeSchema.optional() }).strict()
-export const videoEditTrackSchema = z.object({ id: identifier, name, index: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), kind: z.enum(['video', 'audio']), locked: z.boolean(), enabled: z.boolean(), muted: z.boolean(), solo: z.boolean(), height: z.number().int().min(24).max(160).optional(), syncLocked: z.boolean().optional() }).strict()
+/** 轨道混音（参照 Audition / PR 的音轨混合器）：音量（dB）、声像（-100 左 ~ 100 右）与轨道效果（只放音频内置效果，最多 16 个），作用在这条轨道混好的声音上。 */
+export const VIDEO_EDIT_MAX_BUS_EFFECTS = 16
+const videoEditBusVolumeSchema = z.number().finite().min(-60).max(12)
+const videoEditBusEffectsSchema = z.array(videoEditEffectSchema).max(VIDEO_EDIT_MAX_BUS_EFFECTS).superRefine((effects, ctx) => {
+  for (const [index, effect] of effects.entries()) if (!effect.builtin || videoEditEffectMedia(effect) !== 'audio') ctx.addIssue({ code: 'custom', path: [index], message: '轨道与主轨的效果只能是音频内置效果。' })
+})
+export const videoEditTrackSchema = z.object({ id: identifier, name, index: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), kind: z.enum(['video', 'audio']), locked: z.boolean(), enabled: z.boolean(), muted: z.boolean(), solo: z.boolean(), height: z.number().int().min(24).max(160).optional(), syncLocked: z.boolean().optional(),
+  volumeDb: videoEditBusVolumeSchema.optional().describe('轨道音量 dB，缺省 0；-60 视为静音。'),
+  pan: z.number().finite().min(-100).max(100).optional().describe('轨道声像：-100 只在左声道，0 居中（缺省），100 只在右声道；单声道序列不起作用。'),
+  effects: videoEditBusEffectsSchema.optional().describe('轨道效果：按顺序处理这条轨道混好的声音（音频内置效果）。'),
+}).strict()
+/** 主轨（序列总输出）：音量与主轨效果，作用在所有轨道混好之后。 */
+export const videoEditMasterSchema = z.object({ volumeDb: videoEditBusVolumeSchema.optional(), effects: videoEditBusEffectsSchema.optional() }).strict()
 export { videoEditCreativeSourceSchema, type VideoEditCreativeSource } from './creativeResult'
 /**
  * 被替换下来的镜头版本（4.12 原地生成的“替换镜头”，PR 的替换素材）：片段换成新画面后仍记着原来用的素材与入点，
@@ -90,7 +103,7 @@ const videoEditClipStateSchema = z.object({
   /** 非等比缩放（重要记录 019，AE 缩放链条解开）：垂直缩放与水平缩放之比。scale 是水平缩放，垂直缩放 = scale × scaleAspect；缺省为 1（等比）。 */
   scaleAspect: z.number().min(0.01).max(100).optional().describe('非等比缩放：垂直缩放与水平缩放之比，缺省 1 为等比。scale 是水平缩放，垂直缩放 = scale × scale_aspect；scale 的关键帧按这个比例同时缩放两个方向。'),
   anchorX: videoEditClipAnimatedValueSchemas.anchorX.optional(), anchorY: videoEditClipAnimatedValueSchemas.anchorY.optional(), curves: videoEditClipCurvesSchema.optional(),
-  opacity: videoEditClipAnimatedValueSchemas.opacity, volume: videoEditClipAnimatedValueSchemas.volume, gainDb: videoEditGainDbSchema.optional(), audioRole: videoEditAudioRoleSchema.optional(), text: z.string().max(2000),
+  opacity: videoEditClipAnimatedValueSchemas.opacity, volume: videoEditClipAnimatedValueSchemas.volume, gainDb: videoEditGainDbSchema.optional(), audioRole: videoEditAudioRoleSchema.optional(), essentialSound: essentialSoundSettingsSchema.optional(), text: z.string().max(2000),
   textStyle: videoEditTextStyleSchema.optional(),
   /** PR 淡化手柄：片段开头淡入、结尾淡出的帧数（画面从透明渐显，声音按恒定功率渐强）；没有就是不淡化。 */
   fadeInFrames: z.number().int().min(1).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES).optional(), fadeOutFrames: z.number().int().min(1).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES).optional(),
@@ -149,6 +162,7 @@ export const videoEditSequenceSchema = z.object({
   motionBlur: z.boolean().optional().describe('运动模糊：开启后，位置、缩放、旋转、锚点有动画的片段按 180° 快门（前后各四分之一帧）沿运动方向模糊；预览与导出一致。省略为关闭。'),
   frameBlend: z.boolean().optional().describe('帧混合：慢放片段没有单独设补帧方式时，默认把相邻两帧按位置混合；片段自己的 frame_interpolation 优先。省略为关闭（帧采样）。'),
   transitions: z.array(videoEditTransitionSchema).optional(),
+  master: videoEditMasterSchema.optional().describe('主轨：序列总输出的音量 dB 与主轨效果（音频内置效果），作用在所有轨道混好之后。'),
 }).strict().refine(isVideoEditSequenceSize, '超过 8K 上限。')
 export const videoEditExportHistorySchema = z.array(z.object({
   id: z.string().min(1), taskId: z.string().min(1), sequenceId: z.string().min(1), name: z.string(), presetName: z.string(),

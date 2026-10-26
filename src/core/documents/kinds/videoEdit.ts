@@ -123,7 +123,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   // 按“改变已有字段（target）可取值”处理，提高到 25，让旧程序明确提示升级而不是报内容损坏。
   // 26：片段新增非等比缩放 scaleAspect，旧程序忽略它会按等比渲染与导出（画面变形不同），提高到 26。
   // 27：序列新增运动模糊与帧混合开关，旧程序忽略它们会渲染出不同的画面，提高到 27。
-  minReaderVersion: 27,
+  // 28：音轨混音（轨道音量、声像、轨道效果）、主轨与片段基本声音，旧程序忽略它们会混出不同的声音，提高到 28。
+  minReaderVersion: 28,
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
@@ -148,6 +149,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
     25: content => content,
     // 26 → 27：序列新增可选 motionBlur（运动模糊）与 frameBlend（帧混合默认补帧）；旧内容原样有效。
     26: content => content,
+    // 27 → 28：轨道新增可选 volumeDb / pan / effects，序列新增可选 master，片段新增可选 essentialSound；旧内容原样有效。
+    27: content => content,
   },
   dependencyContent: ({ exportHistory: _exportHistory, ...dependencies }) => dependencies,
   createEmptyContent: createEmptyVideoEditContent,

@@ -61,6 +61,8 @@ export interface AudioSpectralEditorProps {
   snapFrames?: readonly number[]
   /** 已有的修复记录：频谱上画出轮廓，方便找到改过的地方。 */
   repairs: readonly AudioEditorRegion[]
+  /** 时间刻度上的小标记（检测到的口水音），源采样帧 */
+  marks?: ReadonlyArray<{ start: number; end: number }>
   /** 右键编辑区：宿主弹出针对选区的菜单。 */
   onContextMenu?: (event: React.MouseEvent) => void
   /** 刻度下方的字幕条（宿主按可见区间排好），没有转写稿时不传。 */
@@ -479,6 +481,7 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
         <span className={`${UI_TEXT_TIMECODE_CLASS} absolute bottom-1 left-1 whitespace-nowrap text-2xs text-text3`}>{formatTimecode(frame, sampleRate, step)}</span>
       </div>)}
       {selection && visible(selection.start, selection.end) && <div className="pointer-events-none absolute inset-y-0" style={{ ...spanStyle(selection.start, selection.end), background: AUDIO_SCOPE_COLORS.selection }} />}
+      {props.marks?.filter(mark => visible(mark.start, mark.end)).slice(0, 4000).map(mark => <span key={mark.start} className="pointer-events-none absolute bottom-0 h-2 w-px" style={{ left: percentX(mark.start), background: AUDIO_SCOPE_COLORS.mouthClick }} data-audio-edit-mark />)}
       <span ref={hoverLabel} className={`${UI_TEXT_TIMECODE_CLASS} pointer-events-none absolute top-0.5 z-raised whitespace-nowrap rounded-hairline bg-panel px-0.5 text-2xs text-text1`} style={{ display: 'none' }} />
       <div ref={playheadRef('handle')} role="slider" tabIndex={0} aria-label="播放位置" aria-valuemin={0} aria-valuemax={durationFrames} onKeyDown={onHandleKey}
         className="absolute bottom-0 h-full w-3 -translate-x-1/2 cursor-ew-resize outline-none focus-visible:ring-2 focus-visible:ring-accent-ring" data-audio-playhead-handle data-ui-manipulator>

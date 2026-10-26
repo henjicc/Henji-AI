@@ -7,6 +7,7 @@ import type { VideoEditTransitionWindow } from './transitions'
 import { videoEditBuiltinEffectIssue, videoEditBuiltinEffectMedia, type VideoEditBuiltinMedia } from './builtinEffects'
 import { videoEditEffectMaskSchema } from './effectMasks'
 import { videoEditCurvesSchema, assertVideoEditBuiltinCurves } from './keyframes'
+import { essentialSoundEffects } from '../audio/essentialSound'
 
 /** 内置效果实例（4.7a）：内置效果 ID 与参数（键与范围由 `builtinEffects.ts` 登记）。 */
 export const videoEditBuiltinEffectInstanceSchema = z.object({
@@ -64,11 +65,15 @@ export function activeVideoEditEffects(clip: Pick<VideoEditClip, 'effects' | 'ki
   if (clip.kind === 'adjustment' && clip.opacity <= 0 && !clip.disabledIntrinsicSections?.includes('opacity')) return []
   return (clip.effects ?? []).filter(effect => effect.enabled && effect.amount > 0 && videoEditEffectMedia(effect) === 'video')
 }
-/** 声音片段上生效的音频效果（按效果链顺序处理声音）。 */
-export function activeVideoEditAudioEffects(clip: Pick<VideoEditClip, 'effects' | 'kind' | 'effectsEnabled'>): VideoEditBuiltinEffect[] {
+/**
+ * 声音片段上生效的音频效果（按效果链顺序处理声音）：基本声音换算出的效果在前（与音频编辑同一份换算），片段效果在后。
+ * “效果总开关”关闭时两者都不生效。
+ */
+export function activeVideoEditAudioEffects(clip: Pick<VideoEditClip, 'effects' | 'kind' | 'effectsEnabled' | 'essentialSound'>): VideoEditBuiltinEffect[] {
   if (clip.effectsEnabled === false) return []
   if (clip.kind !== 'audio') return []
-  return (clip.effects ?? []).filter((effect): effect is VideoEditBuiltinEffect => effect.enabled && effect.amount > 0 && isVideoEditBuiltinEffect(effect) && videoEditEffectMedia(effect) === 'audio')
+  const essential = essentialSoundEffects(clip.essentialSound).map((effect): VideoEditBuiltinEffect => ({ id: effect.id, name: '基本声音', enabled: true, amount: effect.amount, builtin: { id: effect.builtin.id, params: effect.builtin.params as VideoEditBuiltinEffect['builtin']['params'] } }))
+  return [...essential, ...(clip.effects ?? []).filter((effect): effect is VideoEditBuiltinEffect => effect.enabled && effect.amount > 0 && isVideoEditBuiltinEffect(effect) && videoEditEffectMedia(effect) === 'audio')]
 }
 export type VideoEditCompositeNode = { fromTrack: number; toTrack: number } & (
   | { kind: 'clip'; clip: VideoEditClip }

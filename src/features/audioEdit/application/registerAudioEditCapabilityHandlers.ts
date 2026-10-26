@@ -19,7 +19,7 @@ import { audioEditContentSchema } from '@/core/documents/kinds/audioEdit'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
 import { loadAudioEditProject, flushAudioEditProject, releaseAudioEditProject, assignAudioEditSource } from './audioEditProjectInstances'
 import { importAudioEditMedia, openAudioEditDocument, pickAudioEditMedia } from './audioEditDocumentService'
-import { compressAudioEditSilence, cleanProjectAudioEditFillers, cleanProjectAudioEditRetakes, processProjectAudioEditBreaths, transcribeAudioEdit, exportAudioEdit, prepareAudioEditProcessing, quickProcessAudioEdit, undoAllAudioEditChanges, formatProjectAudioEditCaptions } from './audioEditApplicationService'
+import { compressAudioEditSilence, cleanProjectAudioEditFillers, cleanProjectAudioEditRetakes, detectProjectAudioEditMouthClicks, matchProjectAudioEditLoudness, processProjectAudioEditBreaths, transcribeAudioEdit, exportAudioEdit, prepareAudioEditProcessing, quickProcessAudioEdit, undoAllAudioEditChanges, formatProjectAudioEditCaptions } from './audioEditApplicationService'
 
 /** 剪后时长的变化：重新处理呼吸声时比上次删得少，时长会变长。 */
 const lengthChange = (shortenedMs: number): string => {
@@ -107,6 +107,17 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
         }
         case 'compress_audio_edit_silence': { const { count, shortenedMs } = await compressAudioEditSilence(id, input.range, requestId); Object.assign(result, { count, shortenedMs }) } result.message = `处理 ${result.count} 处停顿，缩短 ${result.shortenedMs} 毫秒。`; break
         case 'clean_audio_edit_fillers': result.count = await cleanProjectAudioEditFillers(id, input.range); result.message = `清理 ${result.count} 处语气词。`; break
+        case 'match_audio_edit_loudness': {
+          const matched = await matchProjectAudioEditLoudness(id, input.targetLufs ?? -16, requestId)
+          result.message = `处理后成品测得 ${matched.integratedLufs} LUFS，已补偿 ${matched.gainDb > 0 ? '+' : ''}${matched.gainDb} dB 到 ${input.targetLufs ?? -16} LUFS（末尾限幅 -1 dB）。`
+          break
+        }
+        case 'detect_audio_edit_mouth_clicks': {
+          const detected = await detectProjectAudioEditMouthClicks(id, input.sensitivity ?? 50, input.range, requestId)
+          result.count = detected.count
+          result.message = detected.count ? `找到 ${detected.count} 处口水音（约每分钟 ${detected.perMinute} 处），已打开修复；可在 audio_edit.document.mouth_clicks 查看、删去不需要修的。` : '没有找到口水音。'
+          break
+        }
         case 'clean_audio_edit_retakes': {
           const cleaned = await cleanProjectAudioEditRetakes(id, input.range, requestId)
           Object.assign(result, cleaned)

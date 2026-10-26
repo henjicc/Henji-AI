@@ -106,4 +106,4 @@ export function VideoEditWindowMenu({ api }: { api: DockviewApi | null }): null 
   return null
 }
 /** 窗口菜单里按“看画面、剪、找素材、调参数、做包装、审片”排，和 PR 窗口菜单的分组习惯接近。 */
-const WINDOW_MENU_ORDER: readonly VideoEditPanelId[] = ['program', 'source', 'timeline', 'project', 'effects', 'effects_library', 'title_templates', 'presets', 'style_kits', 'annotations', 'content', 'tracking', 'color_grade']
+const WINDOW_MENU_ORDER: readonly VideoEditPanelId[] = ['program', 'source', 'timeline', 'audio_mixer', 'project', 'effects', 'effects_library', 'title_templates', 'presets', 'style_kits', 'annotations', 'content', 'tracking', 'color_grade']

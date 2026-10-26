@@ -1,5 +1,6 @@
 import { audibleVideoEditClips, videoEditClipMedia, videoEditDuration, videoEditNestedComposition, type VideoEditComposition } from './document'
 import { activeVideoEditAudioEffects } from './compositing'
+import { videoEditAudioMixer } from './audioMixer'
 import type { VideoEditKeyframe } from './keyframes'
 import { VIDEO_EDIT_MAX_SEQUENCE_DEPTH } from './sequenceGraph'
 import { VIDEO_EDIT_AUDIO_STRETCH_ENGINE } from './clipSpeed'
@@ -28,11 +29,15 @@ export function videoEditAudioContent(snapshot: VideoEditComposition): string {
       // The mixer also ignores windows made invalid by a filtered clip selection.
       try { return [videoEditTransitionWindow(sequence, transition)] } catch { return [] }
     })
+    // 音轨混音（轨道音量、声像、效果与主轨）进入身份；没有时不加字段，已有缓存身份不变。
+    const mixer = videoEditAudioMixer(sequence)
     const result = { fps: sequence.fps, sampleRate: sequence.sampleRate, channels: sequence.channels,
+      ...(mixer ? { mixer: { tracks: [...mixer.tracks.values()].filter(bus => bus.gain !== 1 || bus.pan !== 0 || bus.effects.length).map(({ index, gain, pan, effects }) => ({ index, gain, pan, effects: effects.map(({ builtin, amount }) => ({ builtin, amount })) })), master: { gain: mixer.master.gain, effects: mixer.master.effects.map(({ builtin, amount }) => ({ builtin, amount })) } } } : {}),
       clips: audibleVideoEditClips(sequence).map(clip => {
         const nested = videoEditNestedComposition(sequence, clip)
         const media = nested ? undefined : videoEditClipMedia(sequence, clip)
         return {
+          ...(mixer ? { track: clip.track } : {}),
           start: clip.start, duration: clip.duration, sourceInUs: clip.sourceInUs, sourceRemainder: clip.sourceRemainder,
           speed: clip.speed ?? { numerator: 1, denominator: 1 }, reverse: clip.reverse ?? false, preservePitch: clip.preservePitch ?? false,
           timeRemap: clip.timeRemap ?? null, pitchSemitones: clip.pitchSemitones ?? 0,

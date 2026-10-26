@@ -183,6 +183,8 @@
     "audioSilenceCompressed": "Processed {{count}} pauses, shortening by {{seconds}} seconds",
     "audioFillersCleaned": "Removed {{count}} filler words. You can undo or restore each one.",
     "audioBreathsProcessed": "Breaths: removed {{deleted}}, softened {{attenuated}}, muted {{muted}}. You can undo or restore each one.",
+    "audioMouthClicksDetected": "Found {{count}} mouth clicks (about {{perMinute}} per minute) and repaired them. Turn the repair off under Mouth clicks to compare.",
+    "audioMouthClicksNone": "No mouth clicks found. Try a higher sensitivity.",
     "selectTimelineClip": "Select a clip on the timeline first.",
     "effectUnavailable": "This effect cannot be added to the selected clips. Check clip types and track locks.",
     "canvasSaved": "Canvas saved. Check the existing nodes. You can undo in the canvas.",
