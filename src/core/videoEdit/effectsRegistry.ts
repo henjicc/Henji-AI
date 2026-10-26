@@ -58,7 +58,7 @@ export const VIDEO_EDIT_SMART_EFFECTS: readonly VideoEditEffectsRegistryEntry[] 
 /** 登记表全部条目：过渡在前（按预设顺序），内置效果在后。 */
 export function videoEditEffectsRegistry(): VideoEditEffectsRegistryEntry[] {
   return [
-    ...VIDEO_EDIT_TRANSITION_PRESETS.map((preset): VideoEditEffectsRegistryEntry => ({ id: `transition:${preset.kind}`, name: preset.name, category: preset.medium === 'audio' ? 'audio_transition' : 'video_transition', kind: 'transition', media: preset.medium, description: preset.description, tooltip: preset.tooltip, transitionKind: preset.kind, aliases: [preset.kind, preset.kind.replaceAll('_', ' ')], ...(videoEditTransitionParamDefinitions(preset.kind).length ? { params: videoEditTransitionParamDefinitions(preset.kind) } : {}) })),
+    ...VIDEO_EDIT_TRANSITION_PRESETS.map((preset): VideoEditEffectsRegistryEntry => ({ id: `transition:${preset.kind}`, name: preset.name, category: preset.medium === 'audio' ? 'audio_transition' : 'video_transition', kind: 'transition', media: preset.medium, description: preset.description, tooltip: preset.tooltip, transitionKind: preset.kind, aliases: [preset.kind, preset.kind.replaceAll('_', ' ')], ...('group' in preset ? { group: preset.group } : {}), ...(videoEditTransitionParamDefinitions(preset.kind).length ? { params: videoEditTransitionParamDefinitions(preset.kind) } : {}) })),
     ...VIDEO_EDIT_BUILTIN_EFFECTS,
     ...VIDEO_EDIT_SMART_EFFECTS,
   ]

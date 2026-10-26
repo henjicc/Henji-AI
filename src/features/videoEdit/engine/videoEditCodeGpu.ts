@@ -15,6 +15,8 @@ import { VideoEditBuiltinEffectsGpu } from './videoEditBuiltinEffectsGpu'
 import { ShaderGraphCache } from './shaderEngines/shaderGraphCache'
 import { isShaderGraphEffect, shaderGraphEffectProps, shaderGraphEffectSpec, type VideoEditShaderClock } from '@/core/videoEdit/shaderGraph/effects'
 import { isShaderGraphTransition, shaderGraphTransitionProps, shaderGraphTransitionSpec } from '@/core/videoEdit/shaderGraph/transitions'
+import { isGlTransition } from '@/core/videoEdit/glTransitions/transitions'
+import { VideoEditGlTransitionsGpu } from './glTransitions/videoEditGlTransitionsGpu'
 import { resolveVideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
 import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitions'
 import { invalidateCodeTextMetrics, measureVideoEditGlyph } from '../videoEditGlyphMetrics'
@@ -172,6 +174,7 @@ export class VideoEditCodeGpu {
   private sampler: unknown
   private builtinRuntime?: VideoEditBuiltinEffectsGpu
   private graphCache?: ShaderGraphCache
+  private glTransitionRuntime?: VideoEditGlTransitionsGpu
   private bytes = 0
   /** Part of `bytes` held by `rgba16float` surfaces. */
   private preciseBytes = 0
@@ -533,6 +536,9 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
       // 框架转场：前一段在转场图层里被擦掉，露出下面的后一段；单侧过渡空着的一侧用透明画面。
       const empty = transition.emptyOutgoing || transition.emptyIncoming ? this.transparent() : undefined
       await this.shaderGraphs().render(shaderGraphTransitionSpec(transition.kind), { timeSeconds: 0, width: outgoing.width, height: outgoing.height, input: transition.emptyOutgoing ? empty : outgoing.texture, second: transition.emptyIncoming ? empty : incoming.texture, output: target.picture.texture, outputFormat: format, props: new Map([['fx', shaderGraphTransitionProps(transition.kind, transition.params, transition.progress)]]) })
+    } else if (isGlTransition(transition.kind)) {
+      // gl-transitions：前一段经转场着色器过渡到后一段；单侧过渡空着的一侧用透明画面。
+      await (this.glTransitionRuntime ??= new VideoEditGlTransitionsGpu(this.device, this.sampler)).render({ ...transition, kind: transition.kind }, outgoing.texture, incoming.texture, target.picture.texture, { width: outgoing.width, height: outgoing.height, format }, () => this.transparent())
     } else await this.builtins().renderTransition(transition, outgoing.texture, incoming.texture, target.picture.texture, { width: outgoing.width, height: outgoing.height, format })
     this.assertLive(); this.pending = this.device.queue.onSubmittedWorkDone(); this.counts.builtinFrames++
     return target.picture
@@ -615,7 +621,7 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     this.authorPrograms = undefined
     await this.ready.catch(() => {}); await this.imageReady?.catch(() => {}); await Promise.allSettled([...this.mixReady.values(), ...this.maskedMixPipelines.values()])
     await this.pending.catch(() => {})
-    this.releaseUnused(new Set()); this.builtinRuntime?.dispose(); this.builtinRuntime = undefined; this.graphCache?.dispose(); this.graphCache = undefined; this.transparentPixel?.destroy(); this.transparentPixel = undefined; for (const glyph of this.glyphs.values()) { glyph.texture.destroy(); this.bytes -= glyph.bytes }
+    this.releaseUnused(new Set()); this.builtinRuntime?.dispose(); this.builtinRuntime = undefined; this.graphCache?.dispose(); this.graphCache = undefined; this.glTransitionRuntime?.dispose(); this.glTransitionRuntime = undefined; this.transparentPixel?.destroy(); this.transparentPixel = undefined; for (const glyph of this.glyphs.values()) { glyph.texture.destroy(); this.bytes -= glyph.bytes }
     this.glyphs.clear(); this.image = undefined; this.mixPipelines.clear(); this.maskedMixPipelines.clear()
     if (failures.length) throw new AggregateError(failures, '代码渲染资源释放失败。')
   }

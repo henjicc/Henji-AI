@@ -19,6 +19,7 @@ const GPU_TEST_FILES = [
   'src/features/videoEdit/engine/shaderEngines/shaderGraph.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditColorGrade.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditBuiltinTransitions.gpu.test.ts',
+  'src/features/videoEdit/engine/glTransitions/videoEditGlTransitions.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditPlaybackResolution.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditSmartRegionMask.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditFrameBlend.gpu.test.ts',

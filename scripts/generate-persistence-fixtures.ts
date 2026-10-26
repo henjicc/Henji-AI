@@ -86,6 +86,8 @@ sequence.captions = [{ id: 'golden-caption', start: 5, duration: 40, text: '字�
   // 29：音频编辑动态链接来的字幕，文字与时间由音频编辑维护
   { id: 'golden-linked-caption', clipId: clip.id, linkedCaptionId: 'transcript-0', start: 50, duration: 20, text: '链接字幕', speech: { text: '链接字幕', aligned: true, words: [{ clipId: clip.id, text: '链接字幕', startUs: 0, endUs: 600000, precision: 'word' }] } }]
 sequence.transitions = [{ id: 'golden-transition', kind: 'cross_dissolve', rightClipId: clip.id, durationFrames: 10 }]
+// v33（剪辑）/ v36（录制会话）：过渡种类加入 gl-transitions 转场。
+sequence.transitions.push({ id: 'golden-gl-transition', kind: 'gl.Cube', leftClipId: clip.id, durationFrames: 10 })
 sequence.markers = [{ id: 'golden-marker', frame: 20, name: '审查点' }, { id: 'golden-beat', frame: 30, name: '重音', type: 'beat', strength: .9 }]
 const goldenAuthor = { kind: 'user' as const, name: '我' }
 const goldenMark = (id: string, target: Record<string, unknown>, text: string, style?: { color: string; weight?: string }) => ({ id, frame: 12, space: 'composition-normalized', target, text, status: 'draft', author: goldenAuthor, createdAt: '2026-10-24T00:00:00.000Z', thread: [], ...(style ? { style } : {}) })

@@ -264,6 +264,16 @@ function generate(options) {
     id: 'vendored:shaders', name: 'shaders (trusted shader library)', version: 'dbfd42abe341e7a6ea0b8ea1f5bab018b8e8439a', license: 'MIT', ecosystem: 'runtime',
     homepage: 'https://github.com/shader-effects-inc/shaders', textIds: [textTable.add(shaderLicense)], textOrigin: 'package',
   }] : [])]
+  // gl-transitions shaders are generated into the source tree (scripts/generate-gl-transitions.cjs), so they do not appear in npm ls.
+  // The collection is MIT; StereoViewer carries its own BSD 2-Clause notice. Per-transition authors stay in the shader source headers.
+  const glTransitionsLicense = readTextIfExists(path.join(REFERENCE_DIR, 'gl-transitions-MIT.txt'))
+  const stereoViewerLicense = readTextIfExists(path.join(REFERENCE_DIR, 'gl-transitions-StereoViewer-BSD-2-Clause.txt'))
+  if (!glTransitionsLicense || !stereoViewerLicense) missing.push('gl-transitions：缺少 MIT 许可原文或 StereoViewer 的 BSD 2-Clause 声明')
+  else runtime.push({
+    id: 'vendored:gl-transitions', name: 'gl-transitions (generated video transitions)', version: '2.0.0', license: 'MIT AND BSD-2-Clause', ecosystem: 'runtime',
+    homepage: 'https://github.com/gl-transitions/gl-transitions', sources: ['https://registry.npmjs.org/gl-transitions/-/gl-transitions-2.0.0.tgz (wgsl/*.wgsl, adapted entry points and premultiplied alpha only)'],
+    textIds: [textTable.add(glTransitionsLicense), textTable.add(stereoViewerLicense)], textOrigin: 'package',
+  })
   const ffmpeg = ffmpegRuntime(options, textTable, referenceTexts)
   if (ffmpeg) runtime.push(ffmpeg)
   else if (options.platform === 'win32') missing.push('FFmpeg：未找到已就绪的 FFmpeg 包（先运行 npm run build:video-decoder）')

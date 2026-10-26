@@ -162,6 +162,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
     30: content => migrateVideoEditMotionBlurMaster(content),
     // 31 → 32：工程风格副本的样片时长放宽到 30 秒、锚点 10 张；旧内容原样有效，旧程序只在副本确实超出旧上限时拒绝打开。
     31: content => content,
+    // 32 → 33：过渡种类加入 74 个 gl-transitions 转场（gl.*）；旧内容原样有效，旧程序只在确实用了 gl.* 时拒绝打开。
+    32: content => content,
   },
   dependencyContent: ({ exportHistory: _exportHistory, ...dependencies }) => dependencies,
   createEmptyContent: createEmptyVideoEditContent,
