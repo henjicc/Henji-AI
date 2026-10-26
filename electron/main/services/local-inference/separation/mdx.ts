@@ -41,6 +41,8 @@ export const MDX_SEPARATION_MODELS: Readonly<Record<AudioSeparationMode, MdxSepa
 
 /** UVR 把输入谱前 3 个频点（< 17 Hz）置零。 */
 const ZEROED_BINS = 3
+/** 每次连续处理的帧数：谱按 [频点][帧] 排布，按块转置让读写落在连续的缓存行上。 */
+const FRAME_BLOCK = 16
 
 /** np.hanning：对称 Hann 窗，两端为 0；长度 1 时为 [1]。 */
 export function symmetricHann(length: number): Float64Array {
@@ -61,10 +63,12 @@ export class MdxStft {
   private readonly inverseEnvelope: Float64Array
   private readonly padded: Float64Array
   private readonly frame: Float64Array
-  private readonly re: Float64Array
-  private readonly im: Float64Array
-  private readonly synthRe: Float64Array
-  private readonly synthIm: Float64Array
+  /** 正变换用：FRAME_BLOCK 帧的单边频谱（每帧 n_fft/2+1 个频点）。 */
+  private readonly analyzeRe: Float64Array[]
+  private readonly analyzeIm: Float64Array[]
+  /** 逆变换用：只写前 dim_f 个频点，其余构造后始终为零（补零到 n_fft/2+1）。 */
+  private readonly synthRe: Float64Array[]
+  private readonly synthIm: Float64Array[]
   private readonly overlap: Float64Array
 
   /** `zeroedBins` 只给单测改成 0（核对纯 STFT 往返）；推理一律按 UVR 清零前 3 个频点。 */
@@ -77,8 +81,9 @@ export class MdxStft {
     this.fft = new RealFft(nFft)
     this.window = Float64Array.from({ length: nFft }, (_, index) => 0.5 - 0.5 * Math.cos(2 * Math.PI * index / nFft))
     const bins = nFft / 2 + 1
-    this.re = new Float64Array(bins); this.im = new Float64Array(bins)
-    this.synthRe = new Float64Array(bins); this.synthIm = new Float64Array(bins)
+    const block = (): Float64Array[] => Array.from({ length: FRAME_BLOCK }, () => new Float64Array(bins))
+    this.analyzeRe = block(); this.analyzeIm = block()
+    this.synthRe = block(); this.synthIm = block()
     this.padded = new Float64Array(this.chunkSize + nFft)
     this.frame = new Float64Array(nFft)
     this.overlap = new Float64Array(this.chunkSize + nFft)
@@ -87,24 +92,31 @@ export class MdxStft {
     this.inverseEnvelope = Float64Array.from({ length: this.chunkSize }, (_, index) => 1 / envelope[index + nFft / 2])
   }
 
-  /** 一块双声道波形（各 chunkSize 个样本）→ 模型输入谱。 */
+  /** 一块双声道波形（各 chunkSize 个样本）→ 模型输入谱；左右传同一个数组（单声道复制成立体声）时只算一遍。 */
   analyze(left: Float64Array, right: Float64Array, out: Float32Array): void {
     const { nFft, hop, dimF, dimT } = this.params
     const half = nFft / 2, length = this.chunkSize, plane = dimF * dimT
-    const { padded, frame, window, re, im } = this
-    for (const [channel, samples] of [left, right].entries()) {
+    const { padded, frame, window, analyzeRe: re, analyzeIm: im, zeroedBins } = this
+    for (const [channel, samples] of (right === left ? [left] : [left, right]).entries()) {
       padded.set(samples, half)
       // 反射补边（不重复端点），与 torch.stft 的 pad_mode='reflect' 一致。
       for (let index = 0; index < half; index++) { padded[index] = samples[half - index]; padded[half + length + index] = samples[length - 2 - index] }
       const reBase = 2 * channel * plane, imBase = reBase + plane
-      for (let t = 0; t < dimT; t++) {
-        const origin = t * hop
-        for (let n = 0; n < nFft; n++) frame[n] = padded[origin + n] * window[n]
-        this.fft.forward(frame, re, im)
-        for (let f = 0; f < this.zeroedBins; f++) { out[reBase + f * dimT + t] = 0; out[imBase + f * dimT + t] = 0 }
-        for (let f = this.zeroedBins; f < dimF; f++) { out[reBase + f * dimT + t] = re[f]; out[imBase + f * dimT + t] = im[f] }
+      for (let first = 0; first < dimT; first += FRAME_BLOCK) {
+        const count = Math.min(FRAME_BLOCK, dimT - first)
+        for (let block = 0; block < count; block++) {
+          const origin = (first + block) * hop
+          for (let n = 0; n < nFft; n++) frame[n] = padded[origin + n] * window[n]
+          this.fft.forward(frame, re[block], im[block])
+        }
+        for (let f = 0; f < dimF; f++) {
+          const at = f * dimT + first
+          if (f < zeroedBins) { out.fill(0, reBase + at, reBase + at + count); out.fill(0, imBase + at, imBase + at + count); continue }
+          for (let block = 0; block < count; block++) { out[reBase + at + block] = re[block][f]; out[imBase + at + block] = im[block][f] }
+        }
       }
     }
+    if (right === left) out.copyWithin(2 * plane, 0, 2 * plane)
   }
 
   /** 模型输出谱 → 一块双声道波形（各 chunkSize 个样本，未乘 compensate）。 */
@@ -115,12 +127,17 @@ export class MdxStft {
     for (const [channel, out] of [left, right].entries()) {
       overlap.fill(0)
       const reBase = 2 * channel * plane, imBase = reBase + plane
-      for (let t = 0; t < dimT; t++) {
-        // dim_f 以上的频点保持为零（构造时清零，之后只写前 dim_f 个）。
-        for (let f = 0; f < dimF; f++) { re[f] = spec[reBase + f * dimT + t]; im[f] = spec[imBase + f * dimT + t] }
-        this.fft.inverse(re, im, frame)
-        const origin = t * hop
-        for (let n = 0; n < nFft; n++) overlap[origin + n] += frame[n] * window[n]
+      for (let first = 0; first < dimT; first += FRAME_BLOCK) {
+        const count = Math.min(FRAME_BLOCK, dimT - first)
+        for (let f = 0; f < dimF; f++) {
+          const at = f * dimT + first
+          for (let block = 0; block < count; block++) { re[block][f] = spec[reBase + at + block]; im[block][f] = spec[imBase + at + block] }
+        }
+        for (let block = 0; block < count; block++) {
+          this.fft.inverse(re[block], im[block], frame)
+          const origin = (first + block) * hop
+          for (let n = 0; n < nFft; n++) overlap[origin + n] += frame[n] * window[n]
+        }
       }
       for (let index = 0; index < this.chunkSize; index++) out[index] = overlap[index + half] * inverseEnvelope[index]
     }
@@ -203,8 +220,8 @@ export async function separateMdx(options: MdxSeparationOptions): Promise<void> 
     for (const group of groups) {
       options.signal?.throwIfAborted()
       fill(left, channels[group[0]], start)
-      fill(right, channels[group[1] ?? group[0]], start)
-      stft.analyze(left, right, spec)
+      if (group.length === 2) fill(right, channels[group[1]], start)
+      stft.analyze(left, group.length === 2 ? right : left, spec)
       const predicted = await options.infer(spec)
       if (predicted.length !== stft.specLength) throw new Error('分离模型输出形状不符。')
       stft.synthesize(predicted, outLeft, outRight)

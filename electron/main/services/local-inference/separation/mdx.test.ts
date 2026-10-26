@@ -71,6 +71,15 @@ describe('MDX-Net 频谱', () => {
   })
 })
 
+it('单声道复制成立体声时只算一遍频谱，结果与两路分别计算相同', () => {
+  const stft = new MdxStft(small)
+  const mono = Float64Array.from(tones(stft.chunkSize, [2000, 5000]))
+  const shared = new Float32Array(stft.specLength), separate = new Float32Array(stft.specLength)
+  stft.analyze(mono, mono, shared)
+  stft.analyze(mono, mono.slice(), separate)
+  expect(shared).toEqual(separate)
+})
+
 describe('MDX-Net 分块推理', () => {
   it('UVR 的分块：块长 hop·(dim_t−1)、步长块长 − n_fft、前补 n_fft/2', () => {
     // 10 分钟：UVR 取 106 / 53 块，最后一块整个落在补零区，不推理。

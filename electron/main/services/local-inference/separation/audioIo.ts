@@ -187,6 +187,7 @@ function streamingResampler(ffmpegPath: string, options: { from: number; to: num
   })
   // FFmpeg 提前退出时写端会报 EPIPE，失败原因以退出状态为准。
   stdin.on('error', () => undefined)
+  stdout.on('error', (error) => fail(error))
   child.stderr.on('data', chunk => { stderr = (stderr + String(chunk)).slice(-STDERR_LIMIT) })
   stdout.on('data', (chunk: Buffer) => {
     const frames = assembler.push(chunk)

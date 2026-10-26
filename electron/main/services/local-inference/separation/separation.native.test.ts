@@ -96,7 +96,10 @@ describe.skipIf(!MODELS || !SAMPLE)('人声分离与去混响实跑（onnxruntim
     return { result, original, primary, residual, metrics, finite }
   }
 
-  const providerSets: Array<[string, LocalExecutionProvider[]]> = [['cpu', ['cpu']], ...(process.platform === 'win32' ? [['dml', ['dml', 'cpu']] as [string, LocalExecutionProvider[]]] : [])]
+  // HENJI_SEPARATION_PROVIDERS=dml 只跑 DirectML（整段实测时省去 CPU 的几分钟）。
+  const only = process.env.HENJI_SEPARATION_PROVIDERS?.split(',')
+  const providerSets = ([['cpu', ['cpu']], ...(process.platform === 'win32' ? [['dml', ['dml', 'cpu']]] : [])] as Array<[string, LocalExecutionProvider[]]>)
+    .filter(([label]) => !only || only.includes(label))
 
   for (const mode of ['dereverb', 'vocals'] as const) {
     for (const [label, providers] of providerSets) {
