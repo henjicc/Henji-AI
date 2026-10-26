@@ -6,7 +6,8 @@ import { getPlatform } from '@/platform/runtime'
 import { withPaidOperation, transcriptionEstimatedCny } from '@/services/paidApproval'
 import { readTranscriptionFacts, TranscriptionFailure } from '@/core/audioEdit/transcriptionFailure'
 import { createLogger } from '@/core/logging'
-import { formatAudioEditCaptions, buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
+import { formatAudioEditCaptions } from '@/core/audioEdit/captions'
+import { describeAudioEditCaptions } from '@/core/audioEdit/captionReview'
 import { hasAudioEditModifications } from '@/core/audioEdit/baseline'
 import { audioEditRetakeSuggestion } from '@/core/audioEdit/retakes'
 import { applyAudioEditBreathPolicy, type AudioEditBreathPolicy, type AudioEditQuietRange } from '@/core/audioEdit/breaths'
@@ -33,15 +34,17 @@ export async function undoAllAudioEditChanges(projectId: string, expectedVersion
   }
 }
 
-export async function formatProjectAudioEditCaptions(projectId: string): Promise<number> {
+/** 整理字幕分段；有参考稿时按稿子断句（一行一句）。返回成片字幕段数，以及按稿子时与稿子文字不同、需要逐段核对的段数。 */
+export async function formatProjectAudioEditCaptions(projectId: string): Promise<{ count: number; differing?: number }> {
   const instance = await loadAudioEditProject(projectId)
   logger.info('audio_edit.captions.start', { context: { projectId } })
   try {
     editAudioEditProject(projectId, formatAudioEditCaptions)
     await flushAudioEditProject(projectId)
-    const count = buildAudioEditCaptionGroups(instance.document.transcript, instance.document.source.sampleRate).filter((group) => group.text && group.blocks.some((block) => block.included)).length
-    logger.info('audio_edit.captions.completed', { context: { projectId, count } })
-    return count
+    const views = describeAudioEditCaptions(instance.document)
+    const differing = instance.document.referenceScript.trim() ? views.filter((view) => view.scriptMatch !== 'same').length : undefined
+    logger.info('audio_edit.captions.completed', { context: { projectId, count: views.length, differing } })
+    return { count: views.length, ...(differing === undefined ? {} : { differing }) }
   } catch (error) {
     logger.error('audio_edit.captions.failed', { context: { projectId }, error })
     throw error

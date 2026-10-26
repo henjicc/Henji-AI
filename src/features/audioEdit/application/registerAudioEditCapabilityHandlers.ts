@@ -98,7 +98,14 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
           result.durationFrames = rendered.durationFrames; result.message = '修复已渲染并保存，可在音频编辑中撤销。'; break
         }
         case 'reset_audio_edit': await undoAllAudioEditChanges(id); result.message = instance.document.editBaseline?.kind === 'original' ? '已恢复初始剪辑与识别原文，可撤销本次恢复。' : '已恢复全部声音、分段和处理设置。旧口播没有保存最初识别原文，保留已有文字，可撤销本次恢复。'; break
-        case 'format_audio_edit_subtitles': result.count = await formatProjectAudioEditCaptions(id); result.message = `已整理 ${result.count} 段字幕，文字区、波形区与 SRT 共用分段。`; break
+        case 'format_audio_edit_subtitles': {
+          const { count, differing } = await formatProjectAudioEditCaptions(id)
+          result.count = count
+          result.message = differing === undefined
+            ? `已整理 ${count} 段字幕，文字区、波形区与 SRT 共用分段。`
+            : `已按参考稿整理 ${count} 段字幕（一行一句）。其中 ${differing} 段与稿子文字不同或稿子里没有：用 list_application_entities 读 audio_edit.caption（where script_match=different / not_in_script，带 text、script_text、spoken_text）逐段核对，改字写 text。`
+          break
+        }
         case 'quick_process_audio_edit': {
           const { retakeCount, breaths, gaps, ...processed } = await quickProcessAudioEdit(id, input.range, requestId)
           Object.assign(result, processed)

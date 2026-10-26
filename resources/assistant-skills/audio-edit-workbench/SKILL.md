@@ -30,7 +30,10 @@ description: 剪口播时使用：把录音全自动粗剪成可继续修改的�
 2. **找算法漏掉的重念**：隔得较远的重述、两遍说法完全不同的完整表达、中间插了一句引子的重念、同一个英文名一遍识别成字母一遍识别成汉字、没有重念的明显口误。有把握才删；拿不准就保留并在汇报里点名。
 3. **逐处看呼吸与气口**：按 context 与前后文字判断。去掉一口气后前后挨得太紧、句中这口气承担了强调或停顿的语气、或删掉后前后语速突变时，改成减弱或保留（写 `audio_edit.breath.handling`）。段落转折、需要停一下的地方，把对应 `gap:` 删除剪切缩短或停用（`audio_edit.document.cuts`），让静音停顿长一点；不要恢复成带气声的原声。
 4. **语气词按位置判断**：接在句尾、和前一个字连着念的“啊、呢、吧、哦”带着语气，通常保留（删了还容易切到字尾）；单独成词、在句首或重念前的“哎、诶、嗯、呃、啊”多是起头习惯，没用就删。起作用的“就是、那个”保留。用户说先不删语气词时不删。
-5. **字幕**：`format_audio_edit_subtitles` 整理分段，再按语义用 `audio_edit.transcript_block.caption_break_after` 微调断句；只对有充分依据的近音错字改 `audio_edit.transcript_block.text`。
+5. **字幕**：`format_audio_edit_subtitles` 整理分段（有参考稿时按稿子的逗号、句号等断句，一行一句）。然后逐段核对成片字幕 `audio_edit.caption`：用 list_application_entities 按 document_id 与 script_match=different、not_in_script 筛选，带上 text、script_text、spoken_text、original_text 一起读回。
+   - 校对既不完全照稿也不完全照识别：实际念的与稿子不同（改词、加词、少念）按念的写；同音错字、产品名和专有名词、英文大小写、数字按稿子写；拿不准就保留识别，并在汇报里点名。
+   - 改字写 `audio_edit.caption.text`（会逐字写回词块，词时间与声音不变）；断句不对时改最后一个词块（block_ids 末项）的 `audio_edit.transcript_block.caption_break_after`。
+   - 排版不用手动做：中英文与数字之间的空格、行尾逗号句号、单独的“哎”“嗯”这类叹词都按规则自动处理，间隔短于 0.5 秒的两条字幕自动接上。
 
 ## 三、回读核对再交付
 

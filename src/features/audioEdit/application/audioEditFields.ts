@@ -10,9 +10,10 @@ import { DEFAULT_AUDIO_EDIT_VIEW_SETTINGS } from '@/core/audioEdit/edits'
 import { hasAudioEditModifications } from '@/core/audioEdit/baseline'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
 import { setAudioEditBreathHandling, type AudioEditBreathView } from '@/core/audioEdit/breaths'
+import { describeAudioEditCaptions, setAudioEditCaptionText } from '@/core/audioEdit/captionReview'
 import type { AudioBreath } from '@/core/audioAnalysis/breath/respiro'
 
-export const AUDIO_EDIT_ENTITY_TYPES = { project: 'audio_edit.document', transcriptBlock: 'audio_edit.transcript_block', suggestion: 'audio_edit.suggestion', breath: 'audio_edit.breath', processorChain: 'audio_edit.processor_chain', render: 'audio_edit.render' } as const
+export const AUDIO_EDIT_ENTITY_TYPES = { project: 'audio_edit.document', transcriptBlock: 'audio_edit.transcript_block', caption: 'audio_edit.caption', suggestion: 'audio_edit.suggestion', breath: 'audio_edit.breath', processorChain: 'audio_edit.processor_chain', render: 'audio_edit.render' } as const
 export type AudioEditEntityType = typeof AUDIO_EDIT_ENTITY_TYPES[keyof typeof AUDIO_EDIT_ENTITY_TYPES]
 export interface AudioEditFieldSource { document: AudioEditProjectDocument; childId: string; availableProcessors?: AudioEditProcessorDescriptor[]; breaths?: { views: AudioEditBreathView[]; raw: AudioBreath[] } }
 export function audioEditSchemaRef(kind: 'entity' | 'property', id: string) {
@@ -25,6 +26,7 @@ function string(value: unknown): string { if (typeof value !== 'string') throw n
 function boolean(value: unknown): boolean { if (typeof value !== 'boolean') throw new Error('INVALID_VALUE'); return value }
 function block(source: AudioEditFieldSource) { const found = source.document.transcript.find((item) => item.id === source.childId); if (!found) throw new Error('NOT_FOUND'); return found }
 function breath(source: AudioEditFieldSource) { const found = source.breaths?.views.find((item) => item.id === source.childId); if (!found) throw new Error('NOT_FOUND'); return found }
+function caption(source: AudioEditFieldSource) { const found = describeAudioEditCaptions(source.document).find((item) => item.id === source.childId); if (!found) throw new Error('NOT_FOUND'); return found }
 function suggestion(source: AudioEditFieldSource) { const found = source.document.suggestions.find((item) => item.id === source.childId); if (!found) throw new Error('NOT_FOUND'); return found }
 function field(entityType: AudioEditEntityType, suffix: string, title: string, value: ApplicationPropertyDescriptor['value'], read: (source: AudioEditFieldSource) => JsonValue, write?: (source: AudioEditFieldSource, value: JsonValue | undefined) => void, storeActions: string[] = [], description = `口播剪辑${title}。`): ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource> {
   const id = `${entityType}.${suffix}`
@@ -76,6 +78,20 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
     field(E.transcriptBlock, 'locked', '是否锁定', BOOL, (s) => block(s).locked, (s, v) => { block(s).locked = boolean(v) }),
     field(E.transcriptBlock, 'granularity', '时间戳粒度', { kind: 'enum', values: [{ value: 'word', label: '逐词' }, { value: 'segment', label: '句段' }] }, (s) => block(s).granularity),
   ],
+  [E.caption]: [
+    field(E.caption, 'document_id', '所属音频作品（文档 ID，分页读取时可按此筛选）', TEXT, (s) => s.document.id),
+    field(E.caption, 'text', '成片字幕文字', TEXT, (s) => caption(s).text, (s, v) => { s.document = setAudioEditCaptionText(s.document, s.childId, string(v)) }, [],
+      '成片字幕显示的文字（排版后：中文与英文、数字之间有空格，行尾逗号句号已去掉，单独的“哎”“嗯”等叹词不显示）。'
+      + '改写时逐字比对写回这段的词块文字（保留的字留在原词块，删掉的去掉，新加的归前一个字所在的词块），词时间与声音不变；音频编辑里的文字、导出的 SRT 和放进剪辑的链接字幕是同一份，会一起更新。'
+      + '校对原则：既不完全照稿也不完全照识别——实际念的与稿子不同（改词、加词、少念）按实际念的写；同音错字、专有名词、英文大小写、数字按稿子写；拿不准时保留识别。只改字，分段用 audio_edit.transcript_block.caption_break_after。'),
+    field(E.caption, 'spoken_text', '这段词块文字原样拼接（识别结果加已有校正，未排版）', TEXT, (s) => caption(s).spokenText),
+    field(E.caption, 'original_text', '最初识别的文字（旧作品没有保存时同 spoken_text）', TEXT, (s) => caption(s).originalText),
+    field(E.caption, 'script_text', '参考稿里对应的原文（按读音对齐；稿子里没有这段时为空）', TEXT, (s) => caption(s).scriptText),
+    field(E.caption, 'script_match', '与参考稿是否一致（只比文字，不比标点与空格）', { kind: 'enum', values: [['same', '与稿子一致'], ['different', '与稿子不同'], ['not_in_script', '稿子里没有']].map(([value, label]) => ({ value, label })) }, (s) => caption(s).scriptMatch),
+    field(E.caption, 'start_ms', '在剪后成品里的开始时间（毫秒）', INT, (s) => caption(s).startMs),
+    field(E.caption, 'end_ms', '在剪后成品里的结束时间（毫秒；与下一条间隔短于 0.5 秒时已接到下一条开始）', INT, (s) => caption(s).endMs),
+    field(E.caption, 'block_ids', '组成这段的词块 ID（按顺序；在最后一个的 caption_break_after 上调整分段）', objectValue('audio_edit.caption_blocks'), (s) => json(caption(s).blockIds)),
+  ],
   [E.suggestion]: [
     field(E.suggestion, 'document_id', '所属口播（口播文档 ID）', TEXT, (s) => s.document.id),
     field(E.suggestion, 'title', '线索标题', TEXT, (s) => suggestion(s).title),
@@ -121,6 +137,7 @@ const audioEditValueSchemas: Record<string, z.ZodType> = {
   'audio_edit.view_settings': audioEditViewSettingsSchema,
   'audio_edit.frame_rate': audioEditFrameRateSchema,
   'audio_edit.effect_chain': audioEditEffectChainSchema,
+  'audio_edit.caption_blocks': z.array(z.string()),
   'audio_edit.output': audioEditOutputSchema,
   // 只读描述来自宿主处理器目录，形状与 AudioEditProcessorDescriptor 一致。
   'audio_edit.processors': z.array(z.object({

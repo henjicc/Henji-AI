@@ -15,7 +15,7 @@ import { loadAudioEditBreaths } from './audioEditBreaths'
 import { describeAudioEditBreaths } from '@/core/audioEdit/breaths'
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
-type MutableEntityType = typeof AUDIO_EDIT_ENTITY_TYPES.project | typeof AUDIO_EDIT_ENTITY_TYPES.transcriptBlock | typeof AUDIO_EDIT_ENTITY_TYPES.suggestion | typeof AUDIO_EDIT_ENTITY_TYPES.breath | typeof AUDIO_EDIT_ENTITY_TYPES.processorChain
+type MutableEntityType = typeof AUDIO_EDIT_ENTITY_TYPES.project | typeof AUDIO_EDIT_ENTITY_TYPES.transcriptBlock | typeof AUDIO_EDIT_ENTITY_TYPES.caption | typeof AUDIO_EDIT_ENTITY_TYPES.suggestion | typeof AUDIO_EDIT_ENTITY_TYPES.breath | typeof AUDIO_EDIT_ENTITY_TYPES.processorChain
 
 const MAX_UNDO_RECORDS = 50
 const undoRecords = new Map<string, { previous: AudioEditProjectDocument; afterContent: string; target: { kind: MutableEntityType; id: string } }>()

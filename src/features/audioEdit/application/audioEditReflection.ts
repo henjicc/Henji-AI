@@ -16,6 +16,7 @@ import { fieldDescriptors, fieldReadValues } from '@/core/application-control'
 import { loadAudioEditProject, getAudioEditProjectInstance, getAudioEditRevision } from './audioEditProjectInstances'
 import { loadAudioEditBreaths } from './audioEditBreaths'
 import { describeAudioEditBreaths } from '@/core/audioEdit/breaths'
+import { describeAudioEditCaptions } from '@/core/audioEdit/captionReview'
 export { AUDIO_EDIT_ENTITY_TYPES } from './audioEditFields'
 const propertiesByEntity = Object.fromEntries(Object.entries(AUDIO_EDIT_FIELDS).map(([key, fields]) => [key, fieldDescriptors(fields)])) as Record<EntityType, ApplicationPropertyDescriptor[]>
 
@@ -60,6 +61,7 @@ class AudioEditReflectionProvider implements ApplicationEntityProvider {
     const refs = projectScoped ? summaries.map((summary) => ({ kind: this.entityType, id: summary.id, label: summary.name })) : loaded.flatMap((document, index) => {
       if (this.entityType === AUDIO_EDIT_ENTITY_TYPES.transcriptBlock) return document.transcript.map((block) => childRef(this.entityType, document.id, block.id, block.text))
       if (this.entityType === AUDIO_EDIT_ENTITY_TYPES.breath) return breathViews[index].map((view) => childRef(this.entityType, document.id, view.id, `${view.before}｜${view.after}`))
+      if (this.entityType === AUDIO_EDIT_ENTITY_TYPES.caption) return describeAudioEditCaptions(document).map((view) => childRef(this.entityType, document.id, view.id, view.text.slice(0, 200)))
       return document.suggestions.map((suggestion) => childRef(this.entityType, document.id, suggestion.id, suggestion.title))
     })
     const offset = Math.max(0, Number.parseInt(request.cursor ?? '0', 10) || 0)
@@ -86,6 +88,7 @@ class AudioEditReflectionProvider implements ApplicationEntityProvider {
       const descriptor = descriptors.get(propertyId)
       if (!descriptor) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
       const locked = this.entityType === AUDIO_EDIT_ENTITY_TYPES.transcriptBlock && !propertyId.endsWith('.locked') && document.transcript.find((b) => b.id === splitChild(ref).childId)?.locked
+        || this.entityType === AUDIO_EDIT_ENTITY_TYPES.caption && describeAudioEditCaptions(document).find((view) => view.id === splitChild(ref).childId)?.blockIds.some((id) => document.transcript.find((b) => b.id === id)?.locked)
       const reason = descriptor.readOnlyReason || (locked ? '词块已锁定' : getAudioEditProjectInstance(document.id)?.busy ? '口播正在处理' : clueState && clueState !== 'available' ? '这条线索已处理、隐藏、失效或受锁定保护，请以当前口播内容为准。' : '')
       return { propertyId, readable: true, writable: !reason, reasons: reason ? [reason] : [], requiredPermissions: ['audio_edit:read'], revisions: { audio_edit: getAudioEditRevision() } }
     })
@@ -111,6 +114,7 @@ class AudioEditReflectionProvider implements ApplicationEntityProvider {
 const entityMeta: Record<EntityType, { title: string; parents: EntityType[] }> = {
   [AUDIO_EDIT_ENTITY_TYPES.project]: { title: '口播（文档内容根，id 即口播文档 ID）', parents: [] },
   [AUDIO_EDIT_ENTITY_TYPES.transcriptBlock]: { title: '转写词块', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
+  [AUDIO_EDIT_ENTITY_TYPES.caption]: { title: '成片字幕（按字幕分段，逐段对照参考稿核对、改字）', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
   [AUDIO_EDIT_ENTITY_TYPES.suggestion]: { title: '剪辑线索（辅助定位，非审批队列）', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
   [AUDIO_EDIT_ENTITY_TYPES.breath]: { title: '呼吸声（本机模型检测，第一次读取时检测并可能下载约 13 MB 模型；逐处可改处理）', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
   [AUDIO_EDIT_ENTITY_TYPES.processorChain]: { title: '第三方插件目录', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
