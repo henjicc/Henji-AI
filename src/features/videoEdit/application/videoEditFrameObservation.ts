@@ -7,7 +7,7 @@ import { videoEditFps } from '@/core/videoEdit/time'
 import { clampVideoEditSequenceSize } from '@/core/videoEdit/sequenceSize'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { getPlatform } from '@/platform/runtime'
-import { addMediaReferenceToLibrary } from '@/features/assets/services/assetCollectionService'
+import { collectObservationImage } from '@/features/assets/services/observationAssets'
 import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
 import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
 import { requireVideoEditInstance } from './videoEditService'
@@ -197,7 +197,7 @@ async function publishObservationImage(bytes: Uint8Array, width: number, height:
   assertCurrent()
   await platform.media.allowRoot(await platform.system.paths.dirname(path))
   assertCurrent()
-  const created = await addMediaReferenceToLibrary({ filePath: path, mediaType: 'image', source: 'video-edit', displayName })
+  const created = await collectObservationImage({ filePath: path, source: 'video-edit', displayName })
   const asset = await assetApplicationService.inspect(created.id)
   assertCurrent()
   if (asset.inspectionStatus !== 'ready' || asset.width !== width || asset.height !== height) throw new Error('观察图片没有通过资产检查，请重试。')

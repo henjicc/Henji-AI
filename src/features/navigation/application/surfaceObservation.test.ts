@@ -13,8 +13,8 @@ vi.mock('@/platform/index', () => ({
   getPlatform: () => ({ media: { captureApplicationSurface: mocks.capture } }),
 }))
 vi.mock('@/utils/save/uploads', () => ({ saveBase64ToUploads: mocks.save }))
-vi.mock('@/features/assets/services/assetCollectionService', () => ({
-  addMediaReferenceToLibrary: mocks.collect,
+vi.mock('@/features/assets/services/observationAssets', () => ({
+  collectObservationImage: mocks.collect,
 }))
 vi.mock('@/commands/assetLibrary', () => ({ inspectAsset: mocks.inspect, inspectAssets: vi.fn() }))
 

@@ -55,6 +55,9 @@ beforeEach(() => {
     assets.set(value.id, value); return value
   })
   vi.spyOn(platform.assetLibrary, 'inspectAsset').mockImplementation(async id => structuredClone(assets.get(id)!))
+  // 观察图打“助手观察”标签并在后台按保留规则清理（规则本身见 observationAssets.test）
+  vi.spyOn(platform.assetLibrary, 'setAssetTags').mockImplementation(async (id, tags) => { const value = assets.get(id)!; value.tags = tags; return structuredClone(value) })
+  vi.spyOn(platform.assetLibrary, 'queryAssets').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 })
 })
 afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); useAssistantUiStore.getState().setPendingGoal(null); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
 
