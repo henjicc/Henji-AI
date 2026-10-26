@@ -19,6 +19,8 @@ export const LOCAL_MODEL_IDS = [
   'audio_understanding_clap',
   'music_beats_beat_this',
   'speech_breath_respiro',
+  'audio_separation_kim_vocal_2',
+  'audio_dereverb_foxjoy',
 ] as const
 
 export type LocalModelId = (typeof LOCAL_MODEL_IDS)[number]

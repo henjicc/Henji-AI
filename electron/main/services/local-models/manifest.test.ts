@@ -77,3 +77,18 @@ it('节拍模型 Beat This!：三个文件各有大小与完整哈希，国内�
     expect(file.sources.find(source => source.region === 'global')?.url).toBe(`https://huggingface.co/musetric/beat-this-onnx/resolve/25308706dda545c0d5950065bb0604ad71bcf1f5/${file.name}`)
   }
 })
+
+it.each([
+  ['audio_separation_kim_vocal_2', 'Kim_Vocal_2.onnx', 66_759_214, 'ce74ef3b6a6024ce44211a07be9cf8bc6d87728cc852a68ab34eb8e58cde9c8b'],
+  ['audio_dereverb_foxjoy', 'Reverb_HQ_By_FoxJoy.onnx', 66_780_123, '233bb5c6aaa365e568659a0a81211746fa881f8f47f82d9e864fce1f7692db80'],
+] as const)('UVR MDX-Net %s：一个 ONNX 文件，大小与完整哈希写死，国内自有仓库、国外固定镜像版本，许可证待人工确认', (id, name, size, sha256) => {
+  const model = LOCAL_MODEL_MANIFEST.find(model => model.id === id)!
+  expect(isLocalModelId(id)).toBe(true)
+  expect(model.availability).toBe('available')
+  expect(model.license).toEqual({ spdx: 'NOASSERTION', url: 'https://github.com/TRvlvr/model_repo' })
+  expect(model.files).toEqual([expect.objectContaining({ name, role: 'model', sizeBytes: size, sha256 })])
+  expect(model.files[0].sources).toEqual([
+    { region: 'domestic', label: 'own-modelscope', url: `https://www.modelscope.cn/models/henjicc/henji-ai-local-models/resolve/master/audio_separation_mdx/${name}` },
+    { region: 'global', label: 'huggingface', url: `https://huggingface.co/Politrees/UVR_resources/resolve/929e057b81aa49bc2e6490bef8671f47b2c120f6/models/MDXNet/${name}` },
+  ])
+})

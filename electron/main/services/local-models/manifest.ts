@@ -29,6 +29,21 @@ function huggingFaceUrl(repo: string, file: string): string {
   return `https://huggingface.co/${repo}/resolve/main/${file}`
 }
 
+/**
+ * UVR 的 MDX-Net 模型（人声分离 Kim_Vocal_2、去混响 Reverb_HQ_By_FoxJoy）：UVR 官方模型仓库 TRvlvr/model_repo 只发布文件，
+ * 没有许可证声明；Hugging Face 镜像 Politrees/UVR_resources 卡片写 MIT，但那是镜像仓库的声明，不代表模型作者授权。
+ * 因此许可证记为 NOASSERTION，分发前需要人工向作者确认（2026-10-26 核对）。
+ * 国内为我们的 ModelScope 仓库（上传后生效），国外固定镜像版本（2025-12-23），两个文件的大小与 SHA-256 与镜像一致。
+ */
+const UVR_RESOURCES_REVISION = '929e057b81aa49bc2e6490bef8671f47b2c120f6'
+const UVR_MODEL_LICENSE: LocalModelLicense = { spdx: 'NOASSERTION', url: 'https://github.com/TRvlvr/model_repo' }
+function uvrMdxFile(name: string, sizeBytes: number, sha256: string): LocalModelFileSpec {
+  return { name, role: 'model', sizeBytes, sha256, sources: [
+    { region: 'domestic', label: 'own-modelscope', url: ownUrl(`audio_separation_mdx/${name}`) },
+    { region: 'global', label: 'huggingface', url: `https://huggingface.co/Politrees/UVR_resources/resolve/${UVR_RESOURCES_REVISION}/models/MDXNet/${name}` },
+  ] }
+}
+
 /** Xenova/larger_clap_general 固定版本（2024-10-08），各文件哈希与我们的 ModelScope 仓库一致。 */
 const CLAP_XENOVA_REVISION = 'd78c3994912c441f0151a5cc44d86f6b7bf4c861'
 /** 听音模型 CLAP 的一个文件：国内为我们的 ModelScope 仓库，国外为 Xenova 的 Hugging Face 导出。 */
@@ -312,6 +327,28 @@ export const LOCAL_MODEL_MANIFEST: readonly LocalModelSpec[] = [
       sha256: '293b7c60da233256f7aa37e73d058e3f5dd444ba3d242d6909eab2c0d94478a8',
       sources: [{ region: 'domestic', label: 'own-modelscope', url: ownUrl('speech_breath_respiro/respiro-en.onnx') }],
     }],
+  },
+  {
+    id: 'audio_separation_kim_vocal_2',
+    title: { zh: '人声分离 Kim Vocal 2', en: 'Vocal Separation (Kim Vocal 2)' },
+    purpose: { zh: '把人声与伴奏、背景声分开，用于提取干净人声或去掉人声留下伴奏', en: 'Separates vocals from music and background sound to isolate a clean voice or keep only the accompaniment' },
+    folderName: { zh: '人声分离 Kim Vocal 2', en: 'Vocal Separation Kim Vocal 2' },
+    homepage: 'https://github.com/Anjok07/ultimatevocalremovergui',
+    license: UVR_MODEL_LICENSE,
+    availability: 'available',
+    // MDX-Net（UVR model_data：compensate 1.009、dim_f 3072、dim_t 256、n_fft 7680），输入输出 float32 [batch, 4, 3072, 256]。
+    files: [uvrMdxFile('Kim_Vocal_2.onnx', 66_759_214, 'ce74ef3b6a6024ce44211a07be9cf8bc6d87728cc852a68ab34eb8e58cde9c8b')],
+  },
+  {
+    id: 'audio_dereverb_foxjoy',
+    title: { zh: '去混响 Reverb HQ', en: 'Dereverb (Reverb HQ by FoxJoy)' },
+    purpose: { zh: '去掉录音里的房间混响，让口播声音更干、更近', en: 'Removes room reverb from recordings so speech sounds drier and closer' },
+    folderName: { zh: '去混响 Reverb HQ', en: 'Dereverb Reverb HQ' },
+    homepage: 'https://github.com/Anjok07/ultimatevocalremovergui',
+    license: UVR_MODEL_LICENSE,
+    availability: 'available',
+    // MDX-Net（UVR model_data：compensate 1.035、dim_f 3072、dim_t 512、n_fft 6144），模型预测的是混响分量。
+    files: [uvrMdxFile('Reverb_HQ_By_FoxJoy.onnx', 66_780_123, '233bb5c6aaa365e568659a0a81211746fa881f8f47f82d9e864fce1f7692db80')],
   },
 ]
 
