@@ -99,4 +99,18 @@ describe('逐段核对与改字', () => {
     expect(whole).toEqual(fixed)
     expect(() => setAudioEditCaptionText(project, views[0].id, '  ')).toThrow()
   })
+
+  it('改字只落在听得到的词上：声音被剪掉的重念词块不动，改空的词块留在原段里', () => {
+    const blocks = blocksOf(['比我', '比我', '想象的', '简单'])
+    // 第一个“比我”的声音被剪掉（换遍拼接留后一遍），词块仍是保留状态
+    const cuts = [{ id: 'c', startFrame: blocks[0].startFrame, endFrame: blocks[1].startFrame, reason: 'manual' as const, enabled: true }]
+    const project = projectOf(blocks, '', cuts)
+    const [view] = describeAudioEditCaptions(project)
+    expect(view.text).toBe('比我想象的简单')
+    const fixed = setAudioEditCaptionText(project, view.id, '比我想象的简单多了')
+    expect(fixed.transcript.map(block => block.text)).toEqual(['比我', '比我', '想象的', '简单多了'])
+    const emptied = setAudioEditCaptionText(fixed, view.id, '想象的简单多了')
+    expect(emptied.transcript.map(block => block.text)).toEqual(['比我', '', '想象的', '简单多了'])
+    expect(describeAudioEditCaptions(emptied).map(item => [item.id, item.text])).toEqual([[view.id, '想象的简单多了']])
+  })
 })

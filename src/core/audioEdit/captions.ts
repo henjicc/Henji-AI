@@ -42,9 +42,12 @@ export function buildAudioEditCaptionGroups(blocks: readonly AudioEditTranscript
   return groups
 }
 
-/** 成片字幕的分段：只看保留的词块（删掉的重念、语气词不在字幕里，删掉的那几个字前后仍是同一句）。段 ID 为第一个词块的 ID。 */
+/**
+ * 成片字幕的分段：只看保留的词块（删掉的重念、语气词不在字幕里，删掉的那几个字前后仍是同一句）。段 ID 为第一个词块的 ID。
+ * 校对时改空的词块仍留在段里，分段与段 ID 不因改字而变。
+ */
 export function buildAudioEditSubtitleGroups(blocks: readonly AudioEditTranscriptBlock[], sampleRate: number): AudioEditCaptionGroup[] {
-  return buildAudioEditCaptionGroups(blocks.filter((block) => block.included && block.text.trim()), sampleRate)
+  return buildAudioEditCaptionGroups(blocks.filter((block) => block.included), sampleRate)
 }
 
 /** 一行一句；超过这个宽度（汉字算 1，半角算半个）的长句在中间附近最明显的停顿处拆开。 */
