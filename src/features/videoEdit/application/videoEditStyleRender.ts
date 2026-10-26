@@ -8,13 +8,15 @@ import { videoEditStyleLibrary, type VideoEditLibraryStyle, type VideoEditStyleM
 
 const logger = createLogger('features.videoEdit.styleRender')
 // 样片按自身尺寸（最大 4K60）渲染；存下的预览与锚点帧长边不超过 1920，码率随尺寸与帧率走，
-// 12 秒的预览也放得进风格包的单个媒体上限（12 MB base64）。
+// 再按时长封顶：预览最多约 7.5 MB（12 秒 5 Mbps），30 秒的样片连同 10 张锚点帧也放得进风格包（16 MB）。
 const PREVIEW_LONG_EDGE = 1920
 const THUMBNAIL_WIDTH = 320
 const PREVIEW_BITS_PER_PIXEL = 0.08
 const PREVIEW_BITRATE_RANGE = [1_500_000, 5_000_000] as const
-function previewBitrate(width: number, height: number, fps: number): number {
-  return Math.round(Math.min(PREVIEW_BITRATE_RANGE[1], Math.max(PREVIEW_BITRATE_RANGE[0], width * height * fps * PREVIEW_BITS_PER_PIXEL)))
+const PREVIEW_MAX_BYTES = 7.5 * 1000 * 1000
+function previewBitrate(width: number, height: number, fps: number, durationSeconds: number): number {
+  const budget = PREVIEW_MAX_BYTES * 8 / Math.max(1, durationSeconds)
+  return Math.round(Math.min(PREVIEW_BITRATE_RANGE[1], budget, Math.max(PREVIEW_BITRATE_RANGE[0], width * height * fps * PREVIEW_BITS_PER_PIXEL)))
 }
 
 function fit(width: number, height: number, longEdge: number): { width: number; height: number } {
@@ -45,7 +47,7 @@ export async function renderVideoEditStyle(styleId: string, signal: AbortSignal,
     const thumbnailSize = { width: THUMBNAIL_WIDTH, height: Math.max(2, Math.round(THUMBNAIL_WIDTH * style.sample.height / style.sample.width / 2) * 2) }
     const canvas = new OffscreenCanvas(size.width, size.height); const context = canvas.getContext('2d')!
     const output = new Output({ format: new Mp4OutputFormat({ fastStart: 'in-memory' }), target: new BufferTarget() })
-    const video = new CanvasSource(canvas, { codec: 'avc', bitrate: previewBitrate(size.width, size.height, timeline.fps), bitrateMode: 'constant', keyFrameInterval: 2 })
+    const video = new CanvasSource(canvas, { codec: 'avc', bitrate: previewBitrate(size.width, size.height, timeline.fps, style.sample.durationSeconds), bitrateMode: 'constant', keyFrameInterval: 2 })
     output.addVideoTrack(video, { frameRate: timeline.fps })
     const media: VideoEditStyleMediaBytes = { anchors: [] }
     const anchorFrames = style.sample.anchors.map(seconds => Math.min(timeline.frames - 1, Math.round(seconds * timeline.fps)))

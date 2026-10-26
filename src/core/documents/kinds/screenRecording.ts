@@ -5,9 +5,11 @@ import { migrateEmbeddedVideoEditMotionBlurMaster } from '../../videoEdit/motion
 import { createRecordingDocument, recordingDocumentSchema, type RecordingDocument } from '../../screenRecording/document'
 
 export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocument> = {
-  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 34, minReaderVersion: 34,
+  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 35, minReaderVersion: 34,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 嵌入剪辑快照的风格副本样片时长放宽到 30 秒、锚点 10 张；旧内容原样有效，最低可读版本不变。
+    34: content => content,
     // 嵌入剪辑快照的序列运动模糊改为总开关（同时管代码图层），片段新增 motionBlur:false；按剪辑内容 30 → 31 的同一规则迁移，
     // 旧程序会把关掉的总开关当成代码图层照常模糊，最低可读版本同步提高到 34。
     33: content => migrateEmbeddedVideoEditMotionBlurMaster(content),

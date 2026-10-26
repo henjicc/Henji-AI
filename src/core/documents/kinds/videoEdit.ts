@@ -160,6 +160,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
     // 30 → 31：序列运动模糊改为总开关。此前关着的序列里代码图层照常模糊、片段变换不模糊：
     // 改为打开总开关，并给有变换动画的片段写 motionBlur:false，画面与旧版一致。
     30: content => migrateVideoEditMotionBlurMaster(content),
+    // 31 → 32：工程风格副本的样片时长放宽到 30 秒、锚点 10 张；旧内容原样有效，旧程序只在副本确实超出旧上限时拒绝打开。
+    31: content => content,
   },
   dependencyContent: ({ exportHistory: _exportHistory, ...dependencies }) => dependencies,
   createEmptyContent: createEmptyVideoEditContent,

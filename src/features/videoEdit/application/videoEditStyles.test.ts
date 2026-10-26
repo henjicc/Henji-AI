@@ -9,6 +9,7 @@ import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { STYLE_GUIDE_SECTIONS } from '@/core/videoEdit/styles/styleGuide'
 import { NEW_STYLE_SAMPLE, videoEditStyleContentHash } from '@/core/videoEdit/styles/styleSchemas'
 import { BLANK_STYLE_SAMPLE_SOURCE } from '@/core/videoEdit/styles/blankSample'
+import { VIDEO_EDIT_STYLE_PACKAGE_VERSION } from '@/core/videoEdit/styles/templateSchemas'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createVideoEditTestProject, closeAllVideoEdits, savedVideoEdit } from './videoEditDocumentTestKit'
@@ -122,7 +123,7 @@ it('风格包往返：导出带说明书、样片、成员模板与预览，导�
   await expect(exportVideoEditStylePackage('shared', 'D:/out/分享风格.hjsty', {}, fileIo)).rejects.toThrow('已存在')
   await expect(exportVideoEditStylePackage('shared', 'D:/out/分享风格.json', {}, fileIo)).rejects.toThrow('.hjsty')
   const text = files.get('D:/out/分享风格.hjsty')!
-  expect(JSON.parse(text)).toMatchObject({ version: 3, minReaderVersion: 1, content: { format: 'henji-video-style', style: { id: 'shared', version } } })
+  expect(JSON.parse(text)).toMatchObject({ version: VIDEO_EDIT_STYLE_PACKAGE_VERSION, minReaderVersion: 1, content: { format: 'henji-video-style', style: { id: 'shared', version } } })
   // 另一台机器：全新风格库。
   const other = createTestStyleLibraryIo(); videoEditStyleLibrary.reset(other, undefined)
   try {

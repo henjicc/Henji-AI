@@ -125,8 +125,10 @@ describe('Schema结构指纹', () => {
 describe('所有登记格式的黄金样本', () => {
   it('运动模糊改为序列总开关：剪辑 v31、录制会话 v34 提高最低可读版本；关着的旧序列迁移成打开总开关、有变换动画的片段单独关掉', () => {
     const versioned = (id: string) => PERSISTENCE_FORMATS.find(value => value.id === id)!
-    expect([versioned('document.video_edit').version, versioned('document.video_edit').minReaderVersion]).toEqual([31, 31])
-    expect([versioned('document.screen_recording').version, versioned('document.screen_recording').minReaderVersion]).toEqual([34, 34])
+    expect(versioned('document.video_edit').version).toBeGreaterThanOrEqual(31)
+    expect(versioned('document.video_edit').minReaderVersion).toBe(31)
+    expect(versioned('document.screen_recording').version).toBeGreaterThanOrEqual(34)
+    expect(versioned('document.screen_recording').minReaderVersion).toBe(34)
     const v31 = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v31.json', 'utf8'))
     const sequence = (v31.content as { sequences: Array<{ motionBlur?: boolean; clips: Array<{ id: string; motionBlur?: boolean }> }> }).sequences[0]
     expect(sequence.motionBlur).toBe(true)
@@ -140,7 +142,7 @@ describe('所有登记格式的黄金样本', () => {
     const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.screen_recording')!
     const previous = JSON.parse(fs.readFileSync('tests/fixtures/persistence/document.screen_recording/v26.json', 'utf8'))
     const original = JSON.stringify(previous)
-    expect(format.version).toBe(34)
+    expect(format.version).toBeGreaterThanOrEqual(34)
     expect(format.minReaderVersion).toBe(34)
     expect(upgradePersistenceContent(format, previous.content, 26)).toEqual(migrateEmbeddedVideoEditMotionBlurMaster(previous.content))
     expect(JSON.stringify(previous)).toBe(original)
@@ -202,11 +204,33 @@ describe('所有登记格式的黄金样本', () => {
     expect(upgradePersistenceContent(versioned('document.screen_recording'), recording.content, 32)).toEqual(migrateEmbeddedVideoEditMotionBlurMaster(recording.content))
     for (const id of ['video-style-library', 'video-style-package']) {
       const format = versioned(id)
-      expect([format.version, format.minReaderVersion]).toEqual([3, 1])
+      expect(format.version).toBeGreaterThanOrEqual(3)
+      expect(format.minReaderVersion).toBe(1)
       const previous = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v2.json`, 'utf8')) as { content: unknown }
       expect(upgradePersistenceContent(format, previous.content, 2)).toEqual(previous.content)
       const current = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v3.json`, 'utf8')) as { content: { sample?: unknown; style?: { sample: unknown } } }
       expect(current.content.sample ?? current.content.style?.sample).toMatchObject({ width: 3840, height: 2160, fps: 60 })
+    }
+  })
+
+  it('样片放宽到 30 秒、锚点 10 张：剪辑 v32、录制会话 v35、风格库 v4、风格包 v4 只放宽范围，最低可读版本不变；旧样本原样升上来', () => {
+    const versioned = (id: string) => PERSISTENCE_FORMATS.find(value => value.id === id)!
+    expect([versioned('document.video_edit').version, versioned('document.video_edit').minReaderVersion]).toEqual([32, 31])
+    expect([versioned('document.screen_recording').version, versioned('document.screen_recording').minReaderVersion]).toEqual([35, 34])
+    const v32 = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v32.json', 'utf8'))
+    expect(v32).toMatchObject({ kindVersion: 32, kindMinReaderVersion: 31, content: { styles: [{ sample: { durationSeconds: 24 } }] } })
+    expect((v32.content as { styles: Array<{ sample: { anchors: number[] } }> }).styles[0].sample.anchors).toHaveLength(9)
+    const v31 = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v31.json', 'utf8'))
+    expect(upgradePersistenceContent(versioned('document.video_edit'), v31.content, 31)).toEqual(v31.content)
+    const recording = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.screen_recording/v34.json', 'utf8'))
+    expect(upgradePersistenceContent(versioned('document.screen_recording'), recording.content, 34)).toEqual(recording.content)
+    for (const id of ['video-style-library', 'video-style-package']) {
+      const format = versioned(id)
+      expect([format.version, format.minReaderVersion]).toEqual([4, 1])
+      const previous = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v3.json`, 'utf8')) as { content: unknown }
+      expect(upgradePersistenceContent(format, previous.content, 3)).toEqual(previous.content)
+      const current = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v4.json`, 'utf8')) as { content: { sample?: unknown; style?: { sample: unknown } } }
+      expect(current.content.sample ?? current.content.style?.sample).toMatchObject({ durationSeconds: 24, anchors: [1.2, 3.2, 5.2, 6.4, 7.8, 12.4, 15, 18.2, 23.2] })
     }
   })
 

@@ -138,7 +138,8 @@ remapClip.pitchSemitones = 2
 sequence.clips.push(remapClip)
 // v22：工程风格副本（说明书 + 样片代码）绑定序列；代码模板联动代码定义，原生模板联动带 templateId 的图形片段。
 // v30（剪辑）/ v3（风格库、风格包）/ v33（录制会话）：样片画布放宽到 3840×2160、60 帧，黄金风格按 4K60 写。
-const goldenStyle = { userPreferences: [{ id: 'golden-style-memory', content: '标题少用装饰线。', source: 'user' as const, updatedAt: timestamp, revision: 1 }], id: 'golden-style', name: '黄金风格', description: '用于持久格式样本的风格。', version: 2, contentHash: 'a'.repeat(64), updatedAt: timestamp, guide: styleGuideTemplate('黄金风格', '冷静的科技讲解'), sample: { code: { entry: 'index.js', files: { 'index.js': BLANK_STYLE_SAMPLE_SOURCE } }, width: 3840, height: 2160, durationSeconds: 8, fps: 60, thumbnail: 1.2, anchors: [1.2, 3.2, 5.2, 6.4, 7.8] } }
+// v32（剪辑）/ v4（风格库、风格包）/ v35（录制会话）：样片放宽到 30 秒、锚点 10 张，黄金风格按 24 秒、9 张锚点写。
+const goldenStyle = { userPreferences: [{ id: 'golden-style-memory', content: '标题少用装饰线。', source: 'user' as const, updatedAt: timestamp, revision: 1 }], id: 'golden-style', name: '黄金风格', description: '用于持久格式样本的风格。', version: 2, contentHash: 'a'.repeat(64), updatedAt: timestamp, guide: styleGuideTemplate('黄金风格', '冷静的科技讲解'), sample: { code: { entry: 'index.js', files: { 'index.js': BLANK_STYLE_SAMPLE_SOURCE } }, width: 3840, height: 2160, durationSeconds: 24, fps: 60, thumbnail: 1.2, anchors: [1.2, 3.2, 5.2, 6.4, 7.8, 12.4, 15, 18.2, 23.2] } }
 document.styles = [goldenStyle]
 sequence.styleId = goldenStyle.id
 const nativeGraphic = titleGraphic('lower_third', { text: '姓名', subtitle: '职务' }, 1920, 1080, 119 / 30)

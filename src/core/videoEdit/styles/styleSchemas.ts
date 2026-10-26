@@ -28,10 +28,11 @@ export const NEW_STYLE_SAMPLE = { width: 1920, height: 1080, durationSeconds: 11
 export const videoEditStyleSampleSchema = z.object({
   code: codeMaterialFilesSchema.describe('样片作者代码 { entry, files }：标准 ES 模块，默认导出带 layers(params, width, height, assets, info) 的生成器，按标准分镜演示风格。'),
   width: dimension.default(STANDARD_STYLE_SAMPLE.width), height: dimension.default(STANDARD_STYLE_SAMPLE.height),
-  durationSeconds: z.number().finite().min(1).max(12).default(STANDARD_STYLE_SAMPLE.durationSeconds),
+  // 30 秒、锚点 10 张（剪辑 32 / 录制会话 35 / 风格库 4 / 风格包 4 放宽，2026-10-27 用户要求：样片在标准分镜后多演示几种组件）。
+  durationSeconds: z.number().finite().min(1).max(30).default(STANDARD_STYLE_SAMPLE.durationSeconds),
   fps: z.number().int().min(12).max(60).default(STANDARD_STYLE_SAMPLE.fps),
   thumbnail: z.number().finite().min(0).default(STANDARD_STYLE_SAMPLE.thumbnail).describe('缩略图时刻（秒）。'),
-  anchors: z.array(z.number().finite().min(0)).min(1).max(6).default([...STANDARD_STYLE_SAMPLE.anchors]).describe('锚点帧时刻（秒），标准分镜落在标题、要点、数据、人名条、收尾各自的停留处。'),
+  anchors: z.array(z.number().finite().min(0)).min(1).max(10).default([...STANDARD_STYLE_SAMPLE.anchors]).describe('锚点帧时刻（秒），标准分镜落在标题、要点、数据、人名条、收尾各自的停留处。'),
 }).strict().superRefine((sample, context) => {
   if (sample.thumbnail >= sample.durationSeconds || sample.anchors.some(time => time >= sample.durationSeconds)) context.addIssue({ code: 'custom', message: '缩略图和锚点时刻必须在样片时长之内。' })
 })
