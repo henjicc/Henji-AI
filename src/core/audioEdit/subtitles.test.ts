@@ -113,5 +113,11 @@ describe('逐段核对与改字', () => {
     expect(emptied.transcript.map(block => block.text)).toEqual(['比我', '', '想象的', '简单多了'])
     expect(describeAudioEditCaptions(emptied).map(item => [item.id, item.text])).toEqual([[view.id, '想象的简单多了']])
     expect(buildProjectAudioEditSubtitleCues(emptied)[0].words.map(word => word.text)).toEqual(['想象的', '简单多了'])
+    // 行尾原有的标点留在末尾，新加的字放在它前面
+    const tail = projectOf(blocksOf(['或者', '说，']), '')
+    const [line] = describeAudioEditCaptions(tail)
+    const added = setAudioEditCaptionText(tail, line.id, '或者说呀')
+    expect(added.transcript.map(block => block.text)).toEqual(['或者', '说呀，'])
+    expect(describeAudioEditCaptions(added)[0].text).toBe('或者说呀')
   })
 })
