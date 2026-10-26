@@ -47,6 +47,8 @@ beforeEach(() => {
     assets.set(value.id, value); return value
   })
   vi.spyOn(platform.assetLibrary, 'inspectAsset').mockImplementation(async id => structuredClone(assets.get(id)!))
+  // 取帧出的观察图会打“助手观察”标签
+  vi.spyOn(platform.assetLibrary, 'setAssetTags').mockImplementation(async (id, tags) => { const asset = assets.get(id)!; asset.tags = [...tags]; return structuredClone(asset) })
 })
 afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
 
