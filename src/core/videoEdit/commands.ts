@@ -102,6 +102,8 @@ export const VIDEO_EDIT_COMMANDS = [
   command('nudge_down', '片段下移一轨', ['timeline'], key('ArrowDown', false, false, true), true),
   command('toggle_snapping', '吸附', ['timeline'], key('KeyS')),
   command('toggle_linked_selection', '链接选择', ['timeline']),
+  // 安全框（PR 节目监视器“安全边距”）：动作安全区 93%、字幕与图形安全区 90%，只是看片辅助线。
+  command('toggle_safe_margins', '安全框', ['global']),
   // 时间线统一开关（重要记录 019）：作用于整条序列，写进序列、可撤销；预览与导出一致。
   command('toggle_motion_blur', '运动模糊', ['timeline']),
   command('toggle_frame_blend', '帧混合', ['timeline']),

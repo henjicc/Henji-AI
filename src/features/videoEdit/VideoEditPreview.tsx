@@ -6,6 +6,7 @@ import { UI_ICON_SIZE } from '@/core/theme/icons'
 import ContextMenu from '@/components/ContextMenu'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { VideoEditAnnotationOverlay } from './VideoEditAnnotationOverlay'
+import { VideoEditSafeMarginsOverlay } from './VideoEditSafeMarginsOverlay'
 import { VideoEditCodeElementOverlay } from './VideoEditCodeElementOverlay'
 import { askAssistantAtVideoEditFrame } from './application/videoEditAnnotations'
 import { VideoEditMulticamView } from './panels/VideoEditMulticamView'
@@ -14,7 +15,7 @@ import { autoSwitchVideoEditMulticam, switchVideoEditMulticam, videoEditProgramM
 import { getVideoEditProxyPreference, setVideoEditProxyPreference, videoEditProxySignature } from './application/videoEditProxy'
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton, UiLoading, UiOptionButton, UiOverflowRow, UiPanel } from '@/components/ui'
-import { ArrowRightFromLine, ArrowRightToLine, ArrowUpFromLine, BookmarkPlus, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser, FastForward, Gauge, FoldHorizontal, ImagePlus, ImageUp, MoreHorizontal, Pause, PenLine, Play, Rewind, RotateCcw, SkipBack, SkipForward, Square, StepBack, StepForward, type LucideIcon } from 'lucide-react'
+import { ArrowRightFromLine, ArrowRightToLine, ArrowUpFromLine, BookmarkPlus, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser, FastForward, Gauge, FoldHorizontal, ImagePlus, ImageUp, MoreHorizontal, Pause, PenLine, Play, Rewind, RotateCcw, Scan, SkipBack, SkipForward, Square, StepBack, StepForward, type LucideIcon } from 'lucide-react'
 import Tooltip from '@/components/ui/Tooltip'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { audibleVideoEditClips, videoEditDuration } from '@/core/videoEdit/document'
@@ -70,11 +71,11 @@ const PROGRAM_TOOLBAR_TIMECODE_MIN_WIDTH = 656
 /** 收进“更多”时的常用显示比例（完整等级在显示比例下拉里）。 */
 const PROGRAM_DISPLAY_OPTIONS = [{ value: 'fit' as const, label: '适合' }, { value: 'actual' as const, label: '100%' }]
 /** 节目按钮栏里走剪辑命令的按钮（名称、快捷键与启用状态来自正式命令）。 */
-const PROGRAM_COMMAND_BUTTONS = ['add_marker', 'mark_in', 'mark_out', 'clear_in_out', 'go_in', 'go_out', 'go_start', 'step_back_five', 'step_back', 'play_reverse', 'play_stop', 'play_pause', 'play_forward', 'step_forward', 'step_forward_five', 'go_end', 'go_prev_edit', 'go_next_edit', 'lift', 'extract'] as const satisfies readonly (VideoEditProgramButtonId & VideoEditCommandId)[]
+const PROGRAM_COMMAND_BUTTONS = ['add_marker', 'mark_in', 'mark_out', 'clear_in_out', 'go_in', 'go_out', 'go_start', 'step_back_five', 'step_back', 'play_reverse', 'play_stop', 'play_pause', 'play_forward', 'step_forward', 'step_forward_five', 'go_end', 'go_prev_edit', 'go_next_edit', 'lift', 'extract', 'toggle_safe_margins'] as const satisfies readonly (VideoEditProgramButtonId & VideoEditCommandId)[]
 const PROGRAM_COMMAND_ICONS: Record<Exclude<typeof PROGRAM_COMMAND_BUTTONS[number], 'play_pause'>, LucideIcon> = {
   add_marker: BookmarkPlus, mark_in: ArrowRightFromLine, mark_out: ArrowRightToLine, clear_in_out: Eraser, go_in: ChevronFirst, go_out: ChevronLast,
   go_start: SkipBack, step_back_five: ChevronsLeft, step_back: ChevronLeft, play_reverse: Rewind, play_stop: Square, play_forward: FastForward,
-  step_forward: ChevronRight, step_forward_five: ChevronsRight, go_end: SkipForward, go_prev_edit: StepBack, go_next_edit: StepForward, lift: ArrowUpFromLine, extract: FoldHorizontal,
+  step_forward: ChevronRight, step_forward_five: ChevronsRight, go_end: SkipForward, go_prev_edit: StepBack, go_next_edit: StepForward, lift: ArrowUpFromLine, extract: FoldHorizontal, toggle_safe_margins: Scan,
 }
 /** 窄面板先收起优先级低的：播放、逐帧、入出点留到最后。 */
 const PROGRAM_BUTTON_PRIORITY: Partial<Record<VideoEditProgramButtonId, number>> = { play_pause: 100, step_back: 90, step_forward: 90, mark_in: 80, mark_out: 80 }
@@ -717,7 +718,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     ...PROGRAM_COMMAND_BUTTONS.map((id): VideoEditMonitorButtonSpec => {
       const command = id === 'lift' || id === 'extract' ? rangeEdits[id] : timelineCommandPresentation(commandContext, id, shortcuts)
       if (id === 'play_pause') return { id, title: command.title, tooltip: command.tooltip, Icon: instance.playing ? Pause : Play, enabled: command.enabled, onClick: () => runCommand(id) }
-      return { id, title: command.title, tooltip: command.tooltip, Icon: PROGRAM_COMMAND_ICONS[id], enabled: command.enabled, onClick: () => runCommand(id) }
+      return { id, title: command.title, tooltip: id === 'toggle_safe_margins' ? '安全框：动作安全区（93%）与字幕安全区（90%）' : command.tooltip, Icon: PROGRAM_COMMAND_ICONS[id], enabled: command.enabled, on: command.checked, onClick: () => runCommand(id) }
     }),
     { id: 'export_frame', title: '导出帧', tooltip: '导出帧：把当前画面加入资产库', Icon: Camera, enabled: !busy, onClick: captureFrame },
   ]
@@ -770,6 +771,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         <VideoEditTextOverlay instance={instance} onError={onError} enabled={visible} />
         <VideoEditAnnotationOverlay instance={instance} active={visible && instance.tool === 'annotate'} onError={onError} />
         <VideoEditCodeElementOverlay instance={instance} enabled={visible} onError={onError} /></>}
+        <VideoEditSafeMarginsOverlay />
       </div>
       <VideoEditLevelMeter className="absolute bottom-3 right-2 top-3" levels={levels.length ? levels : Array.from({ length: document.channels }, () => ({ peak: 0, rms: 0 }))} title="节目播放电平" />
       {!pictureReady && !renderFailure && <div className="pointer-events-none absolute inset-0 flex items-center justify-center" data-video-edit-program-preparing>

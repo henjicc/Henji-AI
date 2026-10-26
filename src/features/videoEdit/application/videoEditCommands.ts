@@ -23,6 +23,7 @@ import { videoEditMoveTrackMap } from '@/core/videoEdit/timelineEdits'
 import { createVideoEditMarker, removeVideoEditTimedContent } from './videoEditTimedContent'
 import { selectedVideoEditSubtitleId, selectVideoEditSubtitle } from './videoEditSubtitleSelection'
 import { createVideoEditBin } from './videoEditProjectItems'
+import { setVideoEditSafeMarginsVisible, videoEditSafeMarginsVisible } from './videoEditSafeMargins'
 import { applyVideoEditDefaultTransitions, selectVideoEditTransition, selectedVideoEditTransitionId, videoEditDefaultTransitionTargets, type VideoEditDefaultTransitionRequest } from './videoEditTransitions'
 import { deleteVideoEditTransition } from './videoEditCompositing'
 import { matchVideoEditFrame, reverseMatchVideoEditFrame, videoEditMatchFrameUnavailable } from './videoEditMatchFrame'
@@ -191,6 +192,7 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
     if (isVideoEditToolCommand(id)) return { enabled: true, checked: owner.tool === VIDEO_EDIT_TOOL_COMMANDS[id] }
     if (id === 'match_frame' || id === 'reverse_match_frame') { const reason = videoEditMatchFrameUnavailable(owner, id, context.clipIds, context.frame, context.scope); return { enabled: !reason, ...(reason ? { reason } : {}) } }
     if (id === 'toggle_snapping') return { enabled: true, checked: owner.snapping }
+    if (id === 'toggle_safe_margins') return { enabled: true, checked: videoEditSafeMarginsVisible() }
     if (id === 'toggle_linked_selection') return { enabled: true, checked: owner.linkedSelection !== false }
     if (id === 'toggle_motion_blur') return { enabled: true, checked: Boolean(sequence.motionBlur) }
     if (id === 'toggle_frame_blend') return { enabled: true, checked: Boolean(sequence.frameBlend) }
@@ -309,6 +311,7 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
     case 'match_frame': await matchVideoEditFrame(projectId, [...context.clipIds], context.frame); return
     case 'reverse_match_frame': reverseMatchVideoEditFrame(projectId); return
     case 'toggle_snapping': setVideoEditTimelineView(projectId, { snapping: !owner!.snapping }); return
+    case 'toggle_safe_margins': setVideoEditSafeMarginsVisible(!videoEditSafeMarginsVisible()); return
     case 'toggle_linked_selection': setVideoEditTimelineView(projectId, { linkedSelection: owner!.linkedSelection === false }); return
     case 'toggle_motion_blur': editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, motionBlur: !sequence.motionBlur })); return
     case 'toggle_frame_blend': editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, frameBlend: sequence.frameBlend ? undefined : true })); return

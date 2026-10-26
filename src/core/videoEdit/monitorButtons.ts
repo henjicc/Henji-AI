@@ -15,7 +15,7 @@ export const VIDEO_EDIT_PROGRAM_BUTTONS = [
   'add_marker', 'mark_in', 'mark_out', 'clear_in_out', 'go_in', 'go_out',
   'go_start', 'step_back_five', 'step_back', 'play_reverse', 'play_stop', 'play_pause', 'play_forward', 'step_forward', 'step_forward_five', 'go_end',
   'go_prev_edit', 'go_next_edit', 'lift', 'extract', 'export_frame',
-  'toggle_proxies',
+  'toggle_proxies', 'toggle_safe_margins',
 ] as const
 /** 源监视器可用按钮；`drag_*` 是只能拖动的“拖入画面／声音／链接音画”。 */
 export const VIDEO_EDIT_SOURCE_BUTTONS = [
@@ -28,11 +28,11 @@ export type VideoEditSourceButtonId = typeof VIDEO_EDIT_SOURCE_BUTTONS[number]
 export type VideoEditMonitorButtonId = VideoEditProgramButtonId | VideoEditSourceButtonId
 
 /**
- * 默认按钮：节目按 PR 默认节目监视器（添加标记、入点、出点、转到入点、后退一帧、播放、前进一帧、转到出点、提升、提取、导出帧）；
+ * 默认按钮：节目按 PR 默认节目监视器（添加标记、入点、出点、转到入点、后退一帧、播放、前进一帧、转到出点、提升、提取、导出帧），另加安全框；
  * 源按 PR 默认源监视器的入出点、逐帧、播放、插入、覆盖，另保留原有的 J/K/L 与三个拖入按钮（我们没有 PR 源监视器下方的拖动图标区）。
  */
 export const VIDEO_EDIT_MONITOR_BUTTON_DEFAULTS: { program: readonly VideoEditProgramButtonId[]; source: readonly VideoEditSourceButtonId[] } = {
-  program: ['toggle_proxies', 'add_marker', 'mark_in', 'mark_out', 'go_in', 'step_back', 'play_pause', 'step_forward', 'go_out', 'lift', 'extract', 'export_frame'],
+  program: ['toggle_proxies', 'add_marker', 'mark_in', 'mark_out', 'go_in', 'step_back', 'play_pause', 'step_forward', 'go_out', 'lift', 'extract', 'export_frame', 'toggle_safe_margins'],
   source: ['toggle_proxies', 'mark_in', 'mark_out', 'step_back', 'play_reverse', 'play_stop', 'play_pause', 'play_forward', 'step_forward', 'insert', 'overwrite', 'drag_video', 'drag_audio', 'drag_linked'],
 }
 
