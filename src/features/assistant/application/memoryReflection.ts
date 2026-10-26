@@ -5,7 +5,7 @@ import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-contr
 import { fieldDescriptors, fieldReadValues, fieldWriterTable, writableProperties, propertyOperations, applyWriterTable, unrestrictedCollectionAvailability,
   type ApplicationEntityRegistration, type ApplicationFieldDefinition, type ApplicationMutationExecutor, type ApplicationCollectionExecutor,
   type ApplicationPlannedStep, type ApplicationCompletedStepResult, type ApplicationRef, type JsonValue } from '@/core/application-control'
-import { memoryHistoryEntrySchema, memoryEntryInputSchema, type MemoryEntry, type MemoryEntryInput, type MemoryTarget, type MemoryLayer, type MemorySnapshot } from '@/core/assistant/memoryEntries'
+import { memoryHistoryEntrySchema, memoryEntryInputSchema, memoryEntrySchema, type MemoryEntry, type MemoryEntryInput, type MemoryTarget, type MemoryLayer, type MemorySnapshot } from '@/core/assistant/memoryEntries'
 import { readMemory, writeMemory, refreshMemory, revertMemory } from '@/services/assistantMemory/memoryService'
 import { styleMemoryStorage } from '@/services/assistantMemory/styleMemoryStorage'
 
@@ -15,6 +15,15 @@ const parents = { global: 'assistant.memory_settings', project: 'documents.proje
 const schemaRef = (kind: 'entity' | 'property', id: string) => ({ catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION, kind, id, version: 1, digest: `sha256:${'9'.repeat(64)}` })
 const rootRef = { kind: 'assistant.memory_settings', id: 'singleton' }
 type Draft = { entry: MemoryEntryInput }
+/**
+ * 来源记的是“这条内容是谁写下的”：用户在设置里亲手编辑记 user（界面直接走 writeMemory），
+ * 经应用能力（内置助手与外部助手）写入的一律记 assistant。传入的 source 可以省略，
+ * 先读后改时连同读回的 user 一起写回也照样存为 assistant。计划校验与写后验证共用这个校验器，
+ * 期望值按同一规则归一后再逐字段比较，其余字段不放宽。
+ */
+const WRITER_SOURCE = 'assistant' as const
+const memoryEntryWriteSchema = memoryEntryInputSchema.extend({ source: memoryEntrySchema.shape.source.optional() })
+  .transform((entry): MemoryEntryInput => ({ ...entry, source: WRITER_SOURCE }))
 const scope = async (ref: ApplicationRef): Promise<string> => `memory.${await sha256HexString(`${ref.kind}:${ref.id}`)}`
 function targetOf(layer: MemoryLayer, ref: ApplicationRef): { target: MemoryTarget; id: string } {
   if (layer === 'global') return { target: { layer }, id: ref.id }
@@ -33,10 +42,10 @@ function fields(layer: MemoryLayer): ApplicationFieldDefinition<Draft, Draft>[] 
   const entityType = types[layer]
   const id = `${entityType}.entry`
   return [{ propertyId: id, storeActions: [], descriptor: { id, entityType, version: 1, title: '记忆内容',
-    description: `逐条修改先读 baselineIds；CONFLICT 重读合并。${MEMORY_RULES} content 一句话≤200字，source=assistant。全局 section=about/creative/habits；项目/风格禁止 section、precedence。新增用 create_items，parent 分别为 assistant.memory_settings:singleton、documents.project:项目ID、video_edit.style:风格ID，items=[{properties:{entry:{content,source,...}}}]，ownerId 取 parent.id，条目ID及初始修订0自动生成。value：font.zh/font.latin/font.numeric 的 fonts 优先链、style.id、voice.providerId/voiceId、aspect.width/height。`,
+    description: `逐条修改先读 baselineIds；CONFLICT 重读合并。${MEMORY_RULES} content 一句话≤200字。source 由写入者决定：经助手写入一律存为 assistant，可省略，写回读到的 user 也会存为 assistant（用户在设置里亲手改的才是 user）。全局 section=about/creative/habits；项目/风格禁止 section、precedence。新增用 create_items，parent 分别为 assistant.memory_settings:singleton、documents.project:项目ID、video_edit.style:风格ID，items=[{properties:{entry:{content,source,...}}}]，ownerId 取 parent.id，条目ID及初始修订0自动生成。value：font.zh/font.latin/font.numeric 的 fonts 优先链、style.id、voice.providerId/voiceId、aspect.width/height。`,
     value: { kind: 'json', schemaRef: schemaRef('property', `${id}.value`) }, nullable: false, requiresReadBaseline: true,
     dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['settings:read'], write: ['settings:write'] }, revisionScopes: ['assistant_memory'], schemaRef: schemaRef('property', id) },
-    read: draft => draft.entry as JsonValue, writer: { write: (draft, mutation) => { draft.entry = memoryEntryInputSchema.parse(mutation.value) } } }]
+    read: draft => draft.entry as JsonValue, writer: { write: (draft, mutation) => { draft.entry = memoryEntryWriteSchema.parse(mutation.value) } } }]
 }
 export function createMemoryRegistrations(): ApplicationEntityRegistration[] {
   return [createMemorySettingsRegistration(), ...(Object.keys(types) as MemoryLayer[]).map((layer): ApplicationEntityRegistration => {
@@ -44,7 +53,7 @@ export function createMemoryRegistrations(): ApplicationEntityRegistration[] {
     return { entity: { id: entityType, domain: 'memory', version: 1, title: { global: '全局记忆', project: '项目记忆', style: '风格使用者偏好' }[layer], description: MEMORY_RULES,
       refKind: entityType, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: [parents[layer]], revisionScopes: ['assistant_memory'], queryCapabilityIds: ['read_application_entity'], schemaRef: schemaRef('entity', entityType),
       collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [`${entityType}.entry`], maxItemsPerChange: 10 } },
-    properties: fieldDescriptors(definitions), schemaDocuments: [{ ref: schemaRef('property', `${entityType}.entry.value`), value: z.toJSONSchema(memoryEntryInputSchema) as JsonValue, validator: memoryEntryInputSchema }],
+    properties: fieldDescriptors(definitions), schemaDocuments: [{ ref: schemaRef('property', `${entityType}.entry.value`), value: z.toJSONSchema(memoryEntryWriteSchema, { io: 'input' }) as JsonValue, validator: memoryEntryWriteSchema }],
     provider: { entityType,
       async listEntities(request) {
         if (!(await refreshMemory()).settings.enabled) return { refs: [], nextCursor: null, revisions: { assistant_memory: 1 } }
@@ -84,12 +93,12 @@ export class MemoryExecutor implements ApplicationMutationExecutor, ApplicationC
   private readonly table
   constructor(private readonly layer: MemoryLayer) { this.entityType = types[layer]; this.table = fieldWriterTable(fields(layer)); this.writableProperties = writableProperties(this.table); this.propertyOperations = propertyOperations(this.table) }
   async apply(step: Step): Promise<ApplicationCompletedStepResult> {
-    const changes: string[] = [], refs: ApplicationRef[] = []
+    const changes: string[] = [], refs: ApplicationRef[] = [], facts: string[] = []
     const resultingRevisions: Record<string, number> = { assistant_memory: 0 }
     const write = async (ref: ApplicationRef, target: MemoryTarget, id: string, expectedRevision: number, entry: MemoryEntryInput | null): Promise<void> => {
-      const change = await writeMemory({ target, id, expectedRevision, entry: entry ? { ...entry, source: 'assistant' } : null, actor: 'assistant', reason: entry?.reason ?? '根据用户明确表达的偏好更新记忆。' })
+      const change = await writeMemory({ target, id, expectedRevision, entry: entry ? { ...entry, source: WRITER_SOURCE } : null, actor: WRITER_SOURCE, reason: entry?.reason ?? '根据用户明确表达的偏好更新记忆。' })
       if (change) changes.push(change.id)
-      refs.push(ref)
+      refs.push(ref); facts.push(entry ? `记忆已保存，来源记为 ${WRITER_SOURCE}（经助手写入的记忆来源由写入者决定，用户在设置里亲手改的才记为 user）。` : '记忆已删除。')
       // 集合撤销由历史条目的 CAS 保护；集合回执只报告集合时钟，已删除条目没有可读取的修订。
       if (step.kind === 'mutation') resultingRevisions[await scope(ref)] = change ? change.after?.revision ?? 0 : expectedRevision
     }
@@ -104,7 +113,7 @@ export class MemoryExecutor implements ApplicationMutationExecutor, ApplicationC
       } else if (step.operation.kind === 'create') {
         if (step.parent.kind !== parents[this.layer]) throw new Error(`INVALID_PARENT：请在 ${parents[this.layer]} 下新增。`)
         const target: MemoryTarget = this.layer === 'global' ? { layer: 'global' } : { layer: this.layer, ownerId: step.parent.id }
-        for (const item of step.operation.items) { const id = crypto.randomUUID(); await write(refOf(target, id), target, id, 0, memoryEntryInputSchema.parse(item.properties[`${this.entityType}.entry`])) }
+        for (const item of step.operation.items) { const id = crypto.randomUUID(); await write(refOf(target, id), target, id, 0, memoryEntryWriteSchema.parse(item.properties[`${this.entityType}.entry`])) }
       } else for (const ref of step.operation.targets) {
         const current = await entryState(this.layer, ref)
         const expected = step.expectedRevisions[await scope(ref)]
@@ -112,7 +121,7 @@ export class MemoryExecutor implements ApplicationMutationExecutor, ApplicationC
         await write(ref, current.target, current.entry.id, expected, null)
       }
     } catch (error) { for (const id of changes.reverse()) await revertMemory(id, 'assistant'); throw error }
-    return { status: 'completed', resultingRevisions, directRefs: refs, evidence: refs.map(target => ({ kind: 'entity_state', target, fact: '记忆已保存。', capturedAt: new Date().toISOString() })), undoToken: JSON.stringify(changes) }
+    return { status: 'completed', resultingRevisions, directRefs: refs, evidence: refs.map((target, index) => ({ kind: 'entity_state', target, fact: facts[index], capturedAt: new Date().toISOString() })), undoToken: JSON.stringify(changes) }
   }
   async undo(token: string): Promise<ApplicationCompletedStepResult> {
     const ids = z.array(z.string()).parse(JSON.parse(token)), directRefs: ApplicationRef[] = []

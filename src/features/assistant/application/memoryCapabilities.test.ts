@@ -32,6 +32,31 @@ it('通用集合创建、条目修改、算法撤回经正式权限与验证链�
   } finally { app.dispose() }
 })
 
+it('助手写入时来源按写入者记为 assistant：沿用读回的 source=user 或省略 source 都如实报告成功', async () => {
+  const app = createApplicationHarness()
+  try {
+    const created = await app.call('change_application_entities', { summary: '记录明确偏好', changes: [{ kind: 'create_items', entityType: 'assistant.memory', parent: root, items: [{ properties: { 'assistant.memory.entry': { section: 'creative', content: '中文默认思源黑体。', source: 'assistant' } } }] }] })
+    expect(created.ok, JSON.stringify(created)).toBe(true)
+    if (!created.ok) return
+    const ref = (created.data.resultRefs as Array<{ kind: string; id: string }>).find(value => value.kind === 'assistant.memory')!
+    expect((await refreshMemory()).entries[0].source).toBe('assistant')
+    // 先读后改时模型常把读回的整条连同 source=user 写回；写入成功就必须报告成功，并说明实际存下的来源。
+    const changed = await app.change(ref, { 'assistant.memory.entry': { section: 'creative', content: '以后中文都用无衬线字体。', source: 'user' } })
+    expect(changed.ok, JSON.stringify(changed)).toBe(true)
+    expect(JSON.stringify(changed)).toContain('来源记为 assistant')
+    const saved = await refreshMemory()
+    expect(saved.entries[0]).toMatchObject({ content: '以后中文都用无衬线字体。', source: 'assistant' })
+    // 其他字段仍逐项核对：来源归一不等于放宽验证。
+    expect((await app.read(ref, ['assistant.memory.entry'])).properties).toMatchObject({ 'assistant.memory.entry': { section: 'creative', content: '以后中文都用无衬线字体。', source: 'assistant' } })
+    // source 可以省略：新增与修改都由写入者决定来源。
+    const omitted = await app.change(ref, { 'assistant.memory.entry': { section: 'creative', content: '正文用思源黑体。' } })
+    expect(omitted.ok, JSON.stringify(omitted)).toBe(true)
+    const added = await app.call('change_application_entities', { summary: '省略来源新增', changes: [{ kind: 'create_items', entityType: 'assistant.memory', parent: root, items: [{ properties: { 'assistant.memory.entry': { section: 'habits', content: '先给方案再动手。' } } }] }] })
+    expect(added.ok, JSON.stringify(added)).toBe(true)
+    expect((await refreshMemory()).entries.map(entry => [entry.content, entry.source])).toEqual([['正文用思源黑体。', 'assistant'], ['先给方案再动手。', 'assistant']])
+  } finally { app.dispose() }
+})
+
 it('整理在参数/内容校验失败后可纠正重试，整批预检不留下早先条目的写入', async () => {
   // 此夹具没有风格；只替换风格文件枚举边界，记忆预检、写入和历史使用正式实现。
   vi.spyOn(videoEditStyleLibrary, 'ready').mockResolvedValue()
