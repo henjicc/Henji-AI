@@ -2,6 +2,11 @@ import { videoEditFft } from '../../videoEdit/fft'
 import { resolveVideoEditBuiltinParams, type VideoEditBuiltinParams } from '../../videoEdit/builtinEffects'
 // 静态引入：剪辑渲染工作线程按 IIFE 打包，不能拆出动态分块。模块求值只定义函数，模型与 WebAssembly 到第一次用降噪时才解码。
 import { Rnnoise } from '@shiguredo/rnnoise-wasm'
+import { audioBiquadCoefficients, audioCompressorCurve, audioCompressorReduction, BUTTERWORTH_4, dbToGain, gainToDb, smoothing, type AudioProcessor, type BiquadSpec, type Coefficients } from './processors/shared'
+import { dehumDesign, eqBandsDesign, FilterCascade, graphicEqDesign, notchDesign } from './processors/filters'
+
+/** 兼容旧引用：双二阶系数与压缩曲线在处理器公共模块。 */
+export { audioBiquadCoefficients, audioCompressorCurve } from './processors/shared'
 
 /** 效果链里的一个效果：内置效果 id 与参数、效果强度（干湿比 0–1）。剪辑片段的效果与音频编辑的效果组都是这个形状。 */
 export interface AudioEffectInstance { readonly id: string; readonly builtin: { readonly id: string; readonly params: Readonly<Record<string, unknown>> }; readonly amount: number }
@@ -13,81 +18,12 @@ export interface AudioEffectInstance { readonly id: string; readonly builtin: { 
  *   效果强度（干湿比）与“降噪强度”混入的原声也按同样延迟对齐，不会梳状失真。
  * - 状态跨混音块延续（滤波器、包络、混响尾音）；块不连续（定位、暂停后从别处播放、导出起点）时清空状态并从前面预读一段，
  *   让包络与滤波器先稳定下来。
+ * - 本文件只负责登记与调度（处理器的创建、延迟补偿、干湿比、分块计划）；新效果的处理器在 `processors/` 按类别分文件，
+ *   共用的接口与小工具在 `processors/shared.ts`。
  * 成熟开源：降噪用 RNNoise（`@shiguredo/rnnoise-wasm`，Apache-2.0）；滤波器系数按 RBJ Audio EQ Cookbook；混响移植 Freeverb（公有领域）；
  * 音调变换移植 smbPitchShift（相位声码器，WOL 许可）。
  */
 
-interface AudioProcessor {
-  /** 输出相对输入的固定延迟（样本数）。 */
-  readonly latency: number
-  update(params: VideoEditBuiltinParams): void
-  /** 原地处理 `length` 个样本（每个声道一个数组）。 */
-  process(channels: Float32Array[], length: number): void
-  /** 混入处理结果的比例（降噪强度等），缺省为 1；与效果强度相乘。 */
-  wet?(): number
-  dispose?(): void
-}
-const dbToGain = (db: number): number => 10 ** (db / 20)
-const gainToDb = (gain: number): number => 20 * Math.log10(gain + 1e-12)
-const smoothing = (seconds: number, rate: number): number => Math.exp(-1 / Math.max(1, seconds * rate))
-
-// —— 双二阶滤波器（RBJ Audio EQ Cookbook，转置直接 II 型，双精度状态） ——
-type BiquadKind = 'lowpass' | 'highpass' | 'peaking' | 'lowshelf' | 'highshelf' | 'notch'
-interface BiquadSpec { kind: BiquadKind; frequency: number; q: number; gain?: number }
-interface Coefficients { b0: number; b1: number; b2: number; a1: number; a2: number }
-export function audioBiquadCoefficients(spec: BiquadSpec, rate: number): Coefficients {
-  const frequency = Math.min(Math.max(spec.frequency, 10), rate * 0.45)
-  const w0 = 2 * Math.PI * frequency / rate; const cos = Math.cos(w0); const sin = Math.sin(w0)
-  const A = 10 ** ((spec.gain ?? 0) / 40)
-  let b0: number, b1: number, b2: number, a0: number, a1: number, a2: number
-  if (spec.kind === 'lowshelf' || spec.kind === 'highshelf') {
-    const alpha = sin / 2 * Math.SQRT2; const root = 2 * Math.sqrt(A) * alpha
-    if (spec.kind === 'lowshelf') {
-      b0 = A * ((A + 1) - (A - 1) * cos + root); b1 = 2 * A * ((A - 1) - (A + 1) * cos); b2 = A * ((A + 1) - (A - 1) * cos - root)
-      a0 = (A + 1) + (A - 1) * cos + root; a1 = -2 * ((A - 1) + (A + 1) * cos); a2 = (A + 1) + (A - 1) * cos - root
-    } else {
-      b0 = A * ((A + 1) + (A - 1) * cos + root); b1 = -2 * A * ((A - 1) + (A + 1) * cos); b2 = A * ((A + 1) + (A - 1) * cos - root)
-      a0 = (A + 1) - (A - 1) * cos + root; a1 = 2 * ((A - 1) - (A + 1) * cos); a2 = (A + 1) - (A - 1) * cos - root
-    }
-  } else {
-    const alpha = sin / (2 * spec.q)
-    a0 = 1 + alpha; a1 = -2 * cos; a2 = 1 - alpha
-    switch (spec.kind) {
-      case 'lowpass': b0 = (1 - cos) / 2; b1 = 1 - cos; b2 = b0; break
-      case 'highpass': b0 = (1 + cos) / 2; b1 = -(1 + cos); b2 = b0; break
-      case 'notch': b0 = 1; b1 = -2 * cos; b2 = 1; break
-      default: b0 = 1 + alpha * A; b1 = -2 * cos; b2 = 1 - alpha * A; a0 = 1 + alpha / A; a2 = 1 - alpha / A
-    }
-  }
-  return { b0: b0 / a0, b1: b1 / a0, b2: b2 / a0, a1: a1 / a0, a2: a2 / a0 }
-}
-class FilterCascade implements AudioProcessor {
-  readonly latency = 0
-  private coefficients: Coefficients[] = []
-  private state: Float64Array[] = []
-  constructor(private readonly rate: number, private readonly channels: number, private readonly specs: (params: VideoEditBuiltinParams, rate: number) => BiquadSpec[]) {}
-  update(params: VideoEditBuiltinParams): void {
-    const next = this.specs(params, this.rate).map(spec => audioBiquadCoefficients(spec, this.rate))
-    // 滤波器个数变了（换预设、换坡度）才清空状态；只改增益或频率时保留状态，拖动参数不爆音。
-    if (next.length !== this.coefficients.length) this.state = Array.from({ length: this.channels }, () => new Float64Array(next.length * 2))
-    this.coefficients = next
-  }
-  process(channels: Float32Array[], length: number): void {
-    for (let channel = 0; channel < channels.length; channel++) {
-      const data = channels[channel]; const state = this.state[channel]
-      for (let stage = 0; stage < this.coefficients.length; stage++) {
-        const { b0, b1, b2, a1, a2 } = this.coefficients[stage]
-        let z1 = state[stage * 2]; let z2 = state[stage * 2 + 1]
-        for (let index = 0; index < length; index++) {
-          const x = data[index]; const y = b0 * x + z1
-          z1 = b1 * x - a1 * y + z2; z2 = b2 * x - a2 * y
-          data[index] = y
-        }
-        state[stage * 2] = z1; state[stage * 2 + 1] = z2
-      }
-    }
-  }
-}
 /** 参数均衡的预设曲线（与三段增益叠加）。 */
 const EQ_PRESETS: Record<string, BiquadSpec[]> = {
   none: [],
@@ -96,7 +32,6 @@ const EQ_PRESETS: Record<string, BiquadSpec[]> = {
   warm: [{ kind: 'lowshelf', frequency: 200, q: 1, gain: 3 }, { kind: 'highshelf', frequency: 8000, q: 1, gain: -2 }],
   bright: [{ kind: 'peaking', frequency: 300, q: 1, gain: -1.5 }, { kind: 'highshelf', frequency: 6000, q: 1, gain: 4 }],
 }
-const BUTTERWORTH_4 = [0.5411961, 1.3065630]
 const passFilters = (kind: 'highpass' | 'lowpass') => (params: VideoEditBuiltinParams): BiquadSpec[] => params.slope === 'steep'
   ? BUTTERWORTH_4.map(q => ({ kind, frequency: params.frequency as number, q }))
   : [{ kind, frequency: params.frequency as number, q: Math.SQRT1_2 }]
@@ -121,10 +56,6 @@ class GainBalance implements AudioProcessor {
 
 // —— 压缩器：前馈、声道联动峰值检测、6 dB 软拐点，增益在 dB 域平滑 ——
 const COMPRESSOR_SPEEDS: Record<string, [number, number]> = { fast: [0.002, 0.06], normal: [0.01, 0.15], slow: [0.03, 0.4] }
-export function audioCompressorCurve(amount: number): { threshold: number; ratio: number; makeup: number } {
-  const threshold = -0.4 * amount; const ratio = 1 + 0.07 * amount
-  return { threshold, ratio, makeup: -threshold * (1 - 1 / ratio) / 2 }
-}
 class Compressor implements AudioProcessor {
   readonly latency = 0
   private threshold = 0; private ratio = 1; private makeup = 0; private attack = 0; private release = 0
@@ -136,17 +67,11 @@ class Compressor implements AudioProcessor {
     const [attack, release] = COMPRESSOR_SPEEDS[params.speed as string] ?? COMPRESSOR_SPEEDS.normal
     this.attack = smoothing(attack, this.rate); this.release = smoothing(release, this.rate)
   }
-  private reduction(level: number): number {
-    const knee = 6; const over = level - this.threshold
-    if (2 * over < -knee) return 0
-    if (2 * Math.abs(over) <= knee) return (1 / this.ratio - 1) * (over + knee / 2) ** 2 / (2 * knee)
-    return over / this.ratio - over
-  }
   process(channels: Float32Array[], length: number): void {
     for (let index = 0; index < length; index++) {
       let peak = 0
       for (const data of channels) peak = Math.max(peak, Math.abs(data[index]))
-      const target = this.reduction(gainToDb(peak))
+      const target = audioCompressorReduction(gainToDb(peak), this.threshold, this.ratio)
       const coefficient = target < this.envelope ? this.attack : this.release
       this.envelope = coefficient * this.envelope + (1 - coefficient) * target
       const gain = dbToGain(this.envelope + this.makeup)
@@ -407,6 +332,10 @@ function createProcessor(id: string, rate: number, channels: number, denoiser?: 
     case 'reverb': return new Reverb(rate, channels)
     case 'pitch_shift': return new PitchShift(rate, channels)
     case 'noise_reduction': if (!denoiser) throw new Error('降噪模型尚未加载。'); return new NoiseReduction(denoiser, channels)
+    case 'graphic_eq': return new FilterCascade(rate, channels, graphicEqDesign, params => params.output as number)
+    case 'eq_bands': return new FilterCascade(rate, channels, eqBandsDesign)
+    case 'notch': return new FilterCascade(rate, channels, notchDesign)
+    case 'dehum': return new FilterCascade(rate, channels, dehumDesign)
     default: throw new Error(`没有音频效果“${id}”。`)
   }
 }
@@ -428,8 +357,14 @@ class DelayLine {
   }
 }
 interface Stage { effectId: string; builtinId: string; processor: AudioProcessor; amount: number; dry: DelayLine }
-/** 预读多久让状态稳定下来：混响尾音长，其余效果的包络与滤波器很快稳定。 */
-const PREROLL_SECONDS: Record<string, number> = { reverb: 2, noise_reduction: 0.5, compressor: 0.5, de_esser: 0.2, limiter: 0.2 }
+/**
+ * 预读多久让状态稳定下来：混响、回声尾音长；延迟要先填满延迟线；窄陷波（去嗡声、陷波）与慢包络（语音电平、噪声门）要先收敛；
+ * 其余效果的包络与滤波器很快稳定。
+ */
+const PREROLL_SECONDS: Record<string, number> = {
+  reverb: 2, noise_reduction: 0.5, compressor: 0.5, de_esser: 0.2, limiter: 0.2,
+  dehum: 1, notch: 1, eq_bands: 0.3, graphic_eq: 0.1,
+}
 
 /**
  * 一个声音片段的音频效果链：按效果顺序串联处理，声明总延迟与预读长度；`nextSample` 记下一块应从序列哪个样本开始，
