@@ -151,6 +151,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
     26: content => content,
     // 27 → 28：轨道新增可选 volumeDb / pan / effects，序列新增可选 master，片段新增可选 essentialSound；旧内容原样有效。
     27: content => content,
+    // 28 → 29：字幕新增可选 linkedCaptionId（音频编辑动态链接的字幕段），素材新增可选 linkedTimeline（成品对应的源录音区间）；旧内容原样有效。
+    28: content => content,
   },
   dependencyContent: ({ exportHistory: _exportHistory, ...dependencies }) => dependencies,
   createEmptyContent: createEmptyVideoEditContent,

@@ -2,11 +2,13 @@ import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { ApplicationTransactionFailure } from '@/core/application-control/execution/transactionFailure'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
 import { createLogger } from '@/core/logging'
-import { videoEditClipSchema, videoEditCreativeSourceSchema, type VideoEditCreativeSource, type VideoEditDocument } from '@/core/videoEdit/document'
+import { videoEditClipSchema, videoEditCreativeSourceSchema, type VideoEditClip, type VideoEditCreativeSource, type VideoEditDocument, type VideoEditSequence } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip, placeVideoEditItem } from '@/core/videoEdit/projectItems'
 import { applyVideoEditTimelineEditResult } from '@/core/videoEdit/timelineEdits'
 import { videoEditEdgeTracks } from '@/core/videoEdit/tracks'
-import { importVideoEditCaptions } from '@/core/videoEdit/timedContent'
+import { importVideoEditCaptions, type VideoEditCaption } from '@/core/videoEdit/timedContent'
+import { videoEditLinkedCaptions, type VideoEditLinkedTimeline } from '@/core/videoEdit/audioEditLink'
+import type { AudioEditSubtitleCue } from '@/core/audioEdit/subtitles'
 import { videoEditFps } from '@/core/videoEdit/time'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { getDocumentOperations } from '@/features/documents/documentOperations'
@@ -20,7 +22,9 @@ const logger = createLogger('features.videoEdit.results')
 export type { VideoEditResultPlacement } from '@/core/videoEdit/creativeResult'
 export interface VideoEditResultTarget { readonly projectId: string; readonly sequenceId: string; readonly id: string }
 /** Only formal source adapters may produce a ready asset and fixed completion identity. */
-export interface VideoEditCreativeResult { asset: AssetRecord; origin?: VideoEditCreativeSource; captions?: string }
+/** 音频编辑成品的字幕段（剪后采样帧）与源录音时间线：放进剪辑时生成链接字幕，并记在素材上。 */
+export interface VideoEditLinkedAudio { cues: AudioEditSubtitleCue[]; timeline: VideoEditLinkedTimeline }
+export interface VideoEditCreativeResult { asset: AssetRecord; origin?: VideoEditCreativeSource; captions?: string; linked?: VideoEditLinkedAudio }
 /** library has itemId and an empty clipId; public callers receive the typed item ref. */
 export interface VideoEditResultReceipt { projectId: string; sequenceId: string; clipId: string; itemId?: string; assetId: string; verified: boolean }
 interface TargetState {
@@ -129,6 +133,11 @@ export async function commitVideoEditCreativeResult(target: VideoEditResultTarge
       if (!item) throw new Error('创作结果在引用期间已改变，请重新选择原结果。')
       const media = document.media.find(media => media.id === item.mediaId)
       if (media && origin) media.creativeSource = origin
+      if (media && result.linked) media.linkedTimeline = result.linked.timeline
+      // 音频编辑来的声音带链接字幕（逐词、跟着片段走、随音频编辑更新）；其他来源仍按附带的 SRT 导入
+      const placedCaptions = (sequence: VideoEditSequence, clip: VideoEditClip): VideoEditCaption[] => result.linked
+        ? videoEditLinkedCaptions(clip, videoEditFps(sequence.frameRate), result.linked.cues, result.linked.timeline.sampleRate)
+        : importVideoEditCaptions(result.captions!, sequence.frameRate, { offset: clip.start, clip })
       const placement = state.placement
       itemId = item.id; expectedItem = JSON.stringify(item)
       if (placement.mode === 'library') return document
@@ -142,7 +151,7 @@ export async function commitVideoEditCreativeResult(target: VideoEditResultTarge
         })
         const clip = edited.sequence.clips.find(value => value.id === edited.selectedClipIds?.[0])!
         clipId = clip.id; expectedClip = JSON.stringify(videoEditClipSchema.parse(clip))
-        const captions = result.captions === undefined ? edited.sequence.captions : [...(edited.sequence.captions ?? []), ...importVideoEditCaptions(result.captions, edited.sequence.frameRate, { offset: clip.start, clip })]
+        const captions = result.captions === undefined && !result.linked ? edited.sequence.captions : [...(edited.sequence.captions ?? []), ...placedCaptions(edited.sequence, clip)]
         return { ...document, sequences: document.sequences.map(value => value.id === target.sequenceId ? { ...edited.sequence, ...(captions ? { captions } : {}) } : value) }
       }
       // 没有空余轨道时新建的轨道与片段同一步编辑（一次撤销）。
@@ -159,7 +168,7 @@ export async function commitVideoEditCreativeResult(target: VideoEditResultTarge
       const made = makeVideoEditItemClip(document, item.id, sequence.id, { frame, track, duration, ...component })
       const clip = prior ? { ...made, id: prior.id, x: prior.x, y: prior.y, scale: prior.scale, rotation: prior.rotation, opacity: prior.opacity, volume: prior.volume, ...(prior.linkId ? { linkId: prior.linkId } : {}), ...(prior.groupId ? { groupId: prior.groupId } : {}), ...(prior.effects ? { effects: prior.effects } : {}), ...(origin ? { creativeSource: origin } : {}) } : { ...made, ...(origin ? { creativeSource: origin } : {}) }
       if (!prior && sequence.clips.some(value => value.track === track && value.start < clip.start + clip.duration && value.start + value.duration > clip.start)) throw new Error('原落点已有片段，请选择空余轨道或明确替换原片段。')
-      const captions = result.captions === undefined ? sequence.captions : [...(sequence.captions ?? []).filter(caption => caption.clipId !== clip.id), ...importVideoEditCaptions(result.captions, sequence.frameRate, { offset: clip.start, clip })]
+      const captions = result.captions === undefined && !result.linked ? sequence.captions : [...(sequence.captions ?? []).filter(caption => caption.clipId !== clip.id), ...placedCaptions(sequence, clip)]
       clipId = clip.id
       // Schema parsing orders keys by declaration; compare the normalized published clip.
       expectedClip = JSON.stringify(videoEditClipSchema.parse(clip))

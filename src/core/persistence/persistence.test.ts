@@ -126,7 +126,7 @@ describe('所有登记格式的黄金样本', () => {
     const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.screen_recording')!
     const previous = JSON.parse(fs.readFileSync('tests/fixtures/persistence/document.screen_recording/v26.json', 'utf8'))
     const original = JSON.stringify(previous)
-    expect(format.version).toBe(31)
+    expect(format.version).toBe(32)
     expect(format.minReaderVersion).toBe(31)
     expect(upgradePersistenceContent(format, previous.content, 26)).toEqual(previous.content)
     expect(JSON.stringify(previous)).toBe(original)
@@ -164,7 +164,18 @@ describe('所有登记格式的黄金样本', () => {
     expect(sequence.annotations.map(mark => mark.style?.weight ?? 'regular')).toEqual(['regular', 'bold', 'regular', 'regular', 'regular'])
     const manifest = PERSISTENCE_FORMATS.find(value => value.id === 'subtitle-manifest')!
     const v16 = JSON.parse(fs.readFileSync('tests/fixtures/persistence/subtitle-manifest/v16.json', 'utf8'))
-    expect(upgradePersistenceContent(manifest, v16, 16)).toEqual({ ...v16, version: 18 })
+    expect(upgradePersistenceContent(manifest, v16, 16)).toEqual({ ...v16, version: 19 })
+  })
+
+  it('剪辑 v29：音频编辑动态链接的字幕段与成品时间线是可选字段，最低可读版本不变；v28 原样升上来', () => {
+    const v29 = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v29.json', 'utf8'))
+    expect(v29).toMatchObject({ kindVersion: 29, kindMinReaderVersion: 28 })
+    const content = v29.content as { media: Array<{ id: string; linkedTimeline?: unknown }>; sequences: Array<{ captions: Array<{ id: string; linkedCaptionId?: string }> }> }
+    expect(content.media.find(media => media.id === 'golden-voice')?.linkedTimeline).toEqual({ sampleRate: 48000, spans: [0, 48000, 96000, 192000] })
+    expect(content.sequences[0].captions.find(caption => caption.id === 'golden-linked-caption')?.linkedCaptionId).toBe('transcript-0')
+    const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
+    const v28 = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v28.json', 'utf8'))
+    expect(upgradePersistenceContent(format, v28.content, 28)).toEqual(v28.content)
   })
 
   for (const format of PERSISTENCE_FORMATS) {

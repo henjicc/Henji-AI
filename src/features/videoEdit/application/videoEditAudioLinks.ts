@@ -5,9 +5,14 @@ import type { DocumentSummary } from '@/core/documents/types'
 import { videoEditClipSourceRange } from '@/core/videoEdit/clipSpeed'
 import { videoEditFps, videoEditSourceSeconds } from '@/core/videoEdit/time'
 import { applyVideoEditTimelineEdit } from '@/core/videoEdit/timelineEdits'
-import { updateVideoEditAudioLinks, type AudioLinkNotice } from '@/core/videoEdit/audioLink'
+import { updateVideoEditAudioLinks, type AudioLinkContent, type AudioLinkNotice } from '@/core/videoEdit/audioLink'
+import { videoEditLinkedTimeline, type VideoEditLinkedTimeline } from '@/core/videoEdit/audioEditLink'
+import { buildProjectAudioEditTimeline } from '@/core/audioEdit/timeline'
+import { buildAudioEditSubtitleCues, buildProjectAudioEditSubtitleCues } from '@/core/audioEdit/subtitles'
+import { setAudioEditCaptionText } from '@/core/audioEdit/captionReview'
+import type { VideoEditCaption } from '@/core/videoEdit/timedContent'
 import { getPlatform } from '@/platform/runtime'
-import { createAudioEditDraft, editAudioEditProject, flushAudioEditProject, getAudioEditProjectInstance, registerAudioEditMultitrackOpener, subscribeAudioEditInstances, renderAudioEdit } from '@/features/audioEdit'
+import { createAudioEditDraft, editAudioEditProject, flushAudioEditProject, getAudioEditProjectInstance, loadAudioEditProject, registerAudioEditMultitrackOpener, subscribeAudioEditInstances, renderAudioEdit } from '@/features/audioEdit'
 import { createVideoEditDocument, createVideoEditSequence } from '@/core/videoEdit/document'
 import { videoEditLayoutPresets, VIDEO_EDIT_AUDIO_LAYOUT_PRESET } from '../layout/videoEditDockLayout'
 import { setVideoEditView, switchVideoEditSequence } from './videoEditService'
@@ -21,10 +26,22 @@ export function getVideoEditAudioLinkNotices(projectId: string): readonly AudioL
 function links(document: VideoEditDocument, id?: string) {
   return document.sequences.flatMap(s => s.clips).filter(c => c.kind === 'audio' && c.creativeSource?.type === 'document' && matchHenjiExtension('audio_edit', c.creativeSource.docRef.path) && (!id || c.creativeSource.docRef.docId === id))
 }
-async function durableAudio(projectId: string, rendered: Awaited<ReturnType<typeof renderAudioEdit>>, name: string): Promise<VideoEditMedia> {
+async function durableAudio(projectId: string, rendered: Awaited<ReturnType<typeof renderAudioEdit>>, name: string, linkedTimeline?: VideoEditLinkedTimeline): Promise<VideoEditMedia> {
   const container = requireVideoEditInstance(projectId).session.documentMeta.container
   const path = container.kind === 'project' ? (await videoEditDocumentOperations().importFile({ container, sourcePath: rendered.audioPath, folder: 'generated' })).path : rendered.audioPath
-  return { id: crypto.randomUUID(), name, kind: 'audio', path, durationSeconds: rendered.durationFrames / rendered.sampleRate, width: 0, height: 0, hasAudio: true }
+  return { id: crypto.randomUUID(), name, kind: 'audio', path, durationSeconds: rendered.durationFrames / rendered.sampleRate, width: 0, height: 0, hasAudio: true, ...(linkedTimeline ? { linkedTimeline } : {}) }
+}
+/** 成品文件按内容命名（finished-<内容键>.wav）：剪辑里已有同一份成品（复制进项目时只可能多一个序号后缀）就直接沿用，不再复制一遍。 */
+function sameRender(media: VideoEditMedia, rendered: { audioPath: string }): boolean {
+  const stem = (path: string): string => (path.split(/[\\/]/).pop() ?? '').replace(/\.wav$/i, '').replace(/ \(\d+\)$/, '')
+  return stem(media.path) === stem(rendered.audioPath)
+}
+/** 音频编辑文档当前的字幕段与源录音时间线（与渲染所用的同一版本）。 */
+async function linkedAudioContent(documentId: string, revision: number): Promise<AudioLinkContent> {
+  const audio = await loadAudioEditProject(documentId)
+  if (audio.document.revision !== revision) throw new Error('音频正在更新，将在保存后重试')
+  const spans = buildProjectAudioEditTimeline(audio.document)
+  return { timeline: videoEditLinkedTimeline(spans, audio.document.source.sampleRate), cues: buildAudioEditSubtitleCues(audio.document.transcript, spans, audio.document.source.sampleRate) }
 }
 export async function sendVideoEditClipToAudioEdit(projectId: string, clipId: string, open = true): Promise<{ documentId: string; clipId: string; created: boolean }> {
   const owner = requireVideoEditInstance(projectId), baseline = owner.document
@@ -69,7 +86,7 @@ export async function sendVideoEditClipToAudioEdit(projectId: string, clipId: st
       await audio.session.applyTransfer(result)
     })
     const rendered = await renderAudioEdit(audio.document.id)
-    const output = await durableAudio(projectId, rendered, `${(clip.name || media.name).trim()} · 音频编辑`)
+    const output = await durableAudio(projectId, rendered, `${(clip.name || media.name).trim()} · 音频编辑`, videoEditLinkedTimeline(buildProjectAudioEditTimeline(audio.document), audio.document.source.sampleRate))
     if (requireVideoEditInstance(projectId) !== owner || owner.document !== baseline) throw new Error('准备期间剪辑已改变，请重新选择片段')
     const itemId = crypto.randomUUID()
     let targetId = clipId
@@ -98,6 +115,25 @@ export async function sendVideoEditClipToAudioEdit(projectId: string, clipId: st
 }
 
 const queues = new Map<string, Promise<number>>()
+/** 正在把音频编辑的改动写进剪辑：这期间剪辑里链接字幕的变化来自音频编辑本身，不再写回去。 */
+const applyingLinkRefresh = new Set<string>()
+
+/**
+ * 在剪辑里改了链接字幕的文字：写回音频编辑那一段（逐字落回词块），音频编辑保存后剪辑随之刷新，两边始终是同一份。
+ * 片段只显示了这段字幕的一部分时不写回（会把没显示的词一起改掉），提示去音频编辑里改。
+ */
+async function writeBackLinkedCaption(projectId: string, documentId: string, caption: VideoEditCaption): Promise<void> {
+  const audio = await loadAudioEditProject(documentId)
+  const cue = buildProjectAudioEditSubtitleCues(audio.document).find(item => item.id === caption.linkedCaptionId)
+  if (!cue || cue.text === caption.text) return
+  if ((caption.speech?.words.length ?? 0) !== cue.words.length) {
+    notices.set(projectId, [...(notices.get(projectId) ?? []).filter(item => item.clipId !== caption.clipId), { clipId: caption.clipId ?? '', message: '这条字幕在剪辑里只显示了一部分，改字请到音频编辑里改这一整段。' }])
+    return
+  }
+  editAudioEditProject(documentId, document => setAudioEditCaptionText(document, cue.id, caption.text))
+  await flushAudioEditProject(documentId)
+  logger.info('剪辑里改的字幕已写回音频编辑', { event: 'video_edit.audio_link.caption_written_back', context: { projectId, documentId } })
+}
 export async function refreshVideoEditAudioDocumentClips(projectId: string, documentId: string): Promise<number> {
   const key = `${projectId}:${documentId}`
   const run = (queues.get(key) ?? Promise.resolve()).catch(() => undefined).then(async () => {
@@ -110,17 +146,21 @@ export async function refreshVideoEditAudioDocumentClips(projectId: string, docu
     const revision = resolved.meta.revision
     const rendered = await getPlatform().audioEdit.render({ projectId: resolved.meta.id })
     if (rendered.revision !== revision) throw new Error('音频正在更新，将在保存后重试')
-    const media = await durableAudio(projectId, rendered, resolved.meta.name)
+    const content = await linkedAudioContent(resolved.meta.id, revision)
+    // 只改了字幕文字或分段时成品不变：沿用剪辑里已有的那份声音，只更新字幕
+    const reused = owner.document.media.find(media => sameRender(media, rendered) && linked.some(clip => owner.document.items.find(item => item.id === clip.itemId)?.mediaId === media.id))
+    const media = reused ?? await durableAudio(projectId, rendered, resolved.meta.name, content.timeline)
     const latest = await videoEditDocumentOperations().resolveDocumentLink(origin.docRef)
     if (requireVideoEditInstance(projectId) !== owner || latest.status !== 'found' || latest.meta.revision !== revision) throw new Error('链接来源已变化，未应用过期声音')
-    const itemId = crypto.randomUUID()
+    const itemId = reused ? owner.document.items.find(item => item.mediaId === reused.id)!.id : crypto.randomUUID()
     let changed = 0
-    editVideoProject(projectId, document => {
-      const result = updateVideoEditAudioLinks(document, documentId, itemId, { ...origin, revision }, media.durationSeconds)
+    applyingLinkRefresh.add(projectId)
+    try { editVideoProject(projectId, document => {
+      const result = updateVideoEditAudioLinks(document, documentId, itemId, { ...origin, revision }, media.durationSeconds, content)
       changed = result.changed; notices.set(projectId, result.notices)
       if (!changed) return document
-      return { ...result.document, media: [...document.media, media], items: [...document.items, { id: itemId, name: media.name, kind: 'audio', mediaId: media.id }] }
-    })
+      return reused ? result.document : { ...result.document, media: [...document.media, media], items: [...document.items, { id: itemId, name: media.name, kind: 'audio', mediaId: media.id }] }
+    }) } finally { applyingLinkRefresh.delete(projectId) }
     await saveVideoEdit(projectId)
     return changed
   })
@@ -176,7 +216,7 @@ export async function openAudioDocumentInMultitrack(audioDocumentId: string): Pr
   sequence.tracks = [{ ...audioTrack, name: '音频 1', index: 0 }, { ...audioTrack, id: crypto.randomUUID(), name: '音频 2', index: 1 }, { ...audioTrack, id: crypto.randomUUID(), name: '音频 3', index: 2 }, { ...videoTrack, index: 3 }]
   const mediaId = crypto.randomUUID(), itemId = crypto.randomUUID()
   const durationSeconds = rendered.durationFrames / rendered.sampleRate
-  document.media = [{ id: mediaId, name, kind: 'audio', path, durationSeconds, width: 0, height: 0, hasAudio: true }]
+  document.media = [{ id: mediaId, name, kind: 'audio', path, durationSeconds, width: 0, height: 0, hasAudio: true, linkedTimeline: videoEditLinkedTimeline(buildProjectAudioEditTimeline(audio.document), audio.document.source.sampleRate) }]
   document.items = [{ id: itemId, name, kind: 'audio', mediaId }]
   sequence.clips = [{ id: crypto.randomUUID(), itemId, name, kind: 'audio', track: 0, start: 0, duration: Math.max(1, Math.round(durationSeconds * videoEditFps(sequence.frameRate))), sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 },
     x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '', audioRole: audio.document.effectChain?.find(item => item.kind === 'essential')?.settings.type ?? 'dialogue',
@@ -205,8 +245,22 @@ export function startVideoEditAudioDocumentLinks(): () => void {
     for (const video of listVideoEditInstances()) if (links(video.document, instance.document.id).length) refresh(video.document.id, instance.document.id)
   })
   const checked = new WeakSet<object>()
+  // 每份剪辑上一次看到的链接字幕文字：在剪辑里改了文字就写回音频编辑
+  const captionTexts = new WeakMap<object, Map<string, string>>()
   const stopVideo = subscribeVideoEditDomain(() => {
     for (const video of listVideoEditInstances()) {
+      const current = new Map(video.document.sequences.flatMap(sequence => (sequence.captions ?? []).filter(caption => caption.linkedCaptionId).map(caption => [caption.id, caption.text] as const)))
+      const previous = captionTexts.get(video)
+      captionTexts.set(video, current)
+      if (previous && !applyingLinkRefresh.has(video.document.id)) {
+        for (const sequence of video.document.sequences) for (const caption of sequence.captions ?? []) {
+          const before = previous.get(caption.id)
+          if (!caption.linkedCaptionId || before === undefined || before === caption.text) continue
+          const clip = sequence.clips.find(item => item.id === caption.clipId)
+          const documentId = clip?.creativeSource?.type === 'document' ? clip.creativeSource.docRef.docId : undefined
+          if (documentId) void writeBackLinkedCaption(video.document.id, documentId, caption).catch(error => logger.warn('剪辑里改的字幕没能写回音频编辑', { event: 'video_edit.audio_link.caption_write_back_failed', error, context: { projectId: video.document.id, documentId } }))
+        }
+      }
       if (checked.has(video)) continue
       checked.add(video)
       for (const id of new Set(links(video.document).flatMap(c => c.creativeSource?.type === 'document' ? [c.creativeSource.docRef.docId] : []))) refresh(video.document.id, id)

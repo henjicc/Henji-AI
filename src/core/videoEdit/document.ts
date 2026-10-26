@@ -29,6 +29,7 @@ import { videoEditTextStyleSchema } from './text'
 import { colorLutAssetSchema } from './colorLutAsset'
 import { videoEditAudioRoleSchema } from './audioDucking'
 import { assertVideoEditSequenceGraph } from './sequenceGraph'
+import { videoEditLinkedTimelineSchema } from './linkedTimeline'
 import { videoEditTextTranscriptionSchema } from './textTranscriptionSchema'
 import { videoEditMulticamSchema } from './multicamSchema'
 import { videoEditStyleSchema, videoEditStyleIdSchema, videoEditTemplateMetaShape, videoEditTemplateOriginSchema } from './styles/styleSchemas'
@@ -51,6 +52,7 @@ export const videoEditMediaSchema = z.object({
   kind: z.enum(['video', 'audio', 'image']), durationSeconds: z.number().finite().nonnegative(),
     codeImageGeneration: videoEditCodeImageGenerationSchema.optional(),
     creativeSource: videoEditCreativeSourceSchema.optional(),
+    linkedTimeline: videoEditLinkedTimelineSchema.optional(),
   width: z.number().int().nonnegative(), height: z.number().int().nonnegative(),
   assetId: identifier.optional(), assetContent: z.object({ sizeBytes: z.number().int().nonnegative(), fileModifiedAt: z.number().finite().nonnegative(), contentIdentity: identifier.optional() }).strict().optional(), sourceRevision: identifier.optional(), hasAudio: z.boolean().optional(), frameRate: videoEditRatioSchema.optional(), frameRateMode: z.enum(['sampled-constant', 'variable', 'unknown']).optional(),
   /** Sound streams in file order (task 2.6); absent on media imported before, which plays its first stream. */

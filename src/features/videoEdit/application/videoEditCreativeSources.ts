@@ -1,5 +1,7 @@
 import { renderAudioEdit } from '@/features/audioEdit'
-import { buildAudioEditSrt } from '@/core/audioEdit/subtitles'
+import { buildAudioEditSrt, buildAudioEditSubtitleCues } from '@/core/audioEdit/subtitles'
+import { videoEditLinkedTimeline } from '@/core/videoEdit/audioEditLink'
+import type { VideoEditLinkedAudio } from './videoEditResultTarget'
 import { buildProjectAudioEditTimeline } from '@/core/audioEdit/timeline'
 import { createLogger } from '@/core/logging'
 import { videoEditCreativeSourceRequestSchema, type VideoEditCreativeSource, type VideoEditCreativeSourceRequest } from '@/core/videoEdit/creativeResult'
@@ -49,6 +51,8 @@ interface PublishedSource {
   /** 写进片段的来源（位置按找到的文档更新，图片文档带上渲染所用的版本）。 */
   origin?: VideoEditCreativeSource
   captions?: string
+  /** 音频编辑成品：字幕段与源录音时间线，放进剪辑后生成链接字幕、记在素材上供重新剪辑后对回。 */
+  linked?: VideoEditLinkedAudio
   dimensions?: { width: number; height: number }
   /** Managed files created by this preparation; released only if no library record references them. */
   ownedFiles?: readonly string[]
@@ -183,9 +187,11 @@ async function audioSource(meta: DocumentMeta, options: VideoEditCreativeSourceO
   try { result = await guarded(options, () => renderAudioEdit(projectId, requestId)) }
   finally { options.signal?.removeEventListener('abort', cancel) }
   assertSource()
-  const captions = buildAudioEditSrt(baseline.transcript, buildProjectAudioEditTimeline(baseline), baseline.source.sampleRate)
+  const spans = buildProjectAudioEditTimeline(baseline)
+  const captions = buildAudioEditSrt(baseline.transcript, spans, baseline.source.sampleRate)
+  const linked: VideoEditLinkedAudio = { cues: buildAudioEditSubtitleCues(baseline.transcript, spans, baseline.source.sampleRate), timeline: videoEditLinkedTimeline(spans, baseline.source.sampleRate) }
   return { path: result.audioPath, mediaType: 'audio', name: `${baseline.name} · 剪后声音`, librarySource: 'imported', origin: documentOrigin(meta, { revision: result.revision }),
-    ...(captions.trim() ? { captions } : {}), recheck: async () => { assertSource() } }
+    ...(captions.trim() ? { captions } : {}), linked, recheck: async () => { assertSource() } }
 }
 
 export async function resolveVideoEditSourceDocument(docRef: { docId: string; path: string }): Promise<DocumentMeta> {
@@ -242,7 +248,7 @@ export async function prepareVideoEditCreativeResult(input: VideoEditCreativeSou
     const current = await guarded(options, () => assetApplicationService.inspect(asset.id))
     if (!sameVideoEditAssetContent(asset, current) || current.inspectionStatus !== 'ready') conflict()
     mark('total')
-    const result: VideoEditCreativeResult = { asset: structuredClone(current), origin: output.origin, ...(output.captions !== undefined ? { captions: output.captions } : {}) }
+    const result: VideoEditCreativeResult = { asset: structuredClone(current), origin: output.origin, ...(output.captions !== undefined ? { captions: output.captions } : {}), ...(output.linked ? { linked: output.linked } : {}) }
     logger.info('固定创作结果已准备', { event: 'video_edit.creative_source.prepare.completed', context: { type: source.type, assetId: asset.id, timings } })
     return result
   } catch (error) {

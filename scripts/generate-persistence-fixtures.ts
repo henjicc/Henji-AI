@@ -80,7 +80,9 @@ clip.scaleAspect = 1.2
 clip.curves = { opacity: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 20, value: 1, interpolation: 'ease' }] }
 clip.effects = [{ id: 'golden-grade', name: '全能调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params: { exposure: 0.25, temperature_kelvin: 5600, tint: 4, tone_lights: 12, mixer_orange_saturation: -10, wheel_mode: 'primary', global_hue: 200, global_strength: 6 }, curves: { temperature_kelvin: [{ time: 0, value: 5600, interpolation: 'linear' }, { time: 30, value: 6200, interpolation: 'linear' }] } } }, { id: 'golden-blur', name: '高斯模糊', enabled: true, amount: 0.5, builtin: { id: 'gaussian_blur', params: { sigma_fraction_height: 0.003, axis: 'both', edge_mode: 'clamp' } } }]
 sequence.clips.push(clip)
-sequence.captions = [{ id: 'golden-caption', start: 5, duration: 40, text: '字幕原文', sourceText: '字幕原文、', translation: 'Golden caption' }]
+sequence.captions = [{ id: 'golden-caption', start: 5, duration: 40, text: '字幕原文', sourceText: '字幕原文、', translation: 'Golden caption' },
+  // 29：音频编辑动态链接来的字幕，文字与时间由音频编辑维护
+  { id: 'golden-linked-caption', clipId: clip.id, linkedCaptionId: 'transcript-0', start: 50, duration: 20, text: '链接字幕', speech: { text: '链接字幕', aligned: true, words: [{ clipId: clip.id, text: '链接字幕', startUs: 0, endUs: 600000, precision: 'word' }] } }]
 sequence.transitions = [{ id: 'golden-transition', kind: 'cross_dissolve', rightClipId: clip.id, durationFrames: 10 }]
 sequence.markers = [{ id: 'golden-marker', frame: 20, name: '审查点' }, { id: 'golden-beat', frame: 30, name: '重音', type: 'beat', strength: .9 }]
 const goldenAuthor = { kind: 'user' as const, name: '我' }
@@ -95,6 +97,8 @@ sequence.annotations = [
 document.exportHistory = [{ id: 'golden-export', taskId: 'golden-render', sequenceId: sequence.id, name: '黄金导出', presetName: '自定义导出', rangeSource: 'explicit',
   path: '/persistence-project/导出/黄金.mp4', completedAt: Date.parse(timestamp), settings: VIDEO_EDIT_EXPORT_PRESETS[0].settings,
   range: { startFrame: 0, endFrame: 30 }, assetRef: { kind: 'asset', id: 'golden-export-asset' } }]
+// 29：动态链接的音频编辑成品记着它由源录音的哪些采样帧区间拼成
+document.media.push({ id: 'golden-voice', name: '口播 · 剪后声音', path: '/persistence-project/生成结果/finished-golden.wav', kind: 'audio', width: 0, height: 0, durationSeconds: 3, hasAudio: true, linkedTimeline: { sampleRate: 48000, spans: [0, 48000, 96000, 192000] } })
 document.media.push({ id: 'golden-screen', name: '屏幕原片', path: '/persistence-project/素材/screen.mp4', kind: 'video', width: 1920, height: 1080, durationSeconds: 3, recordingCursor: {
   ownerRef: { kind: 'recording_session', id: 'golden-recording' }, sourceDigest: `sha256:${'a'.repeat(64)}`, cursorBakedIn: false, recordingStartUs: 0, width: 1920, height: 1080,
   pages: [{ path: '/persistence-project/素材/events.capture.json', sha256: 'b'.repeat(64), recordingSpanUs: [0, 3000000], seqSpan: [0, 255] }],
