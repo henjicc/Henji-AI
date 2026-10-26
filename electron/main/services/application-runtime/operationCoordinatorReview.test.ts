@@ -87,6 +87,8 @@ it('写入前就被拒绝却被旧版记成未知的记录自动收回，不再�
     rejected('render_video_edit_style', 'Parse error @:169:3'),
     rejected('import_web_recording_to_project', 'Target already exists: cp returned EEXIST (D:/素材/录屏/a.hjweb already exists) D:/素材/录屏/a.hjweb', {
       state: 'awaiting_user_confirmation', confirmation: applicationUserConfirmation({ title: '核对', message: '?', confirmLabel: '已经生效' }, 'review') }),
+    rejected('render_web_app_replay', '网页应用录制是实验性功能，尚未开启；请先在 设置 → 通用 → 实验性功能 中打开（设置属性 experimental.web_app_recording）。', {
+      state: 'awaiting_user_confirmation', confirmation: applicationUserConfirmation({ title: '核对', message: '?', confirmLabel: '已经生效' }, 'review') }),
   ]) {
     f.set(record)
     expect(f.coordinator.pendingReviews()).toEqual([])

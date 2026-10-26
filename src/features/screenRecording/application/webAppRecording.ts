@@ -111,7 +111,8 @@ export async function executeWebAppCapability(id: string, input: unknown, contex
   const platform = getPlatform().webReplay
   const permissions = context.callerGrant?.permissions
   // Reading saved recordings stays available; recording and replay need the experimental switch.
-  if (!WORKS_WHEN_DISABLED.has(id) && !webAppRecordingEnabled()) throw new Error(WEB_APP_RECORDING_DISABLED_MESSAGE)
+  // 开关没开是执行前的拒绝：明确标成未执行，打开开关后可以直接重试，不必核对
+  if (!WORKS_WHEN_DISABLED.has(id) && !webAppRecordingEnabled()) throw notExecutedFailure(new Error(WEB_APP_RECORDING_DISABLED_MESSAGE))
   if (id === startWebAppRecordingCapability.id) {
     const parsed = startWebAppRecordingCapability.inputSchema.parse(input)
     if (parsed.projectId && permissions && !permissions.includes('documents:write')) throw new Error('PERMISSION_DENIED:存进项目还需要 documents:write 权限')

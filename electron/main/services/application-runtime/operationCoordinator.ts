@@ -125,7 +125,10 @@ export class ApplicationOperationCoordinator {
       (['register_external_project', 'create_document', 'move_document', 'duplicate_document'].includes(record.capabilityId ?? '')
         && ['位置无效，请选择一个文件夹。', '这种文档只能放在项目里。', '请选择一个文件夹。', '不能把作品目录本身作为项目打开。', '这个文件夹在另一个项目里，不能单独作为项目打开。'].includes(message))
       || (record.capabilityId === 'render_video_edit_style' && message.startsWith('Parse error'))
-      || (record.capabilityId === 'import_web_recording_to_project' && message.startsWith('Target already exists: cp returned EEXIST')))
+      || (record.capabilityId === 'import_web_recording_to_project' && message.startsWith('Target already exists: cp returned EEXIST'))
+      // 2026-10-27 前网页录制实验开关没开时的拒绝（入口第一行就拒，未调用宿主）也被记成 unknown。
+      || (['start_web_app_recording', 'stop_web_app_recording', 'render_web_app_replay', 'import_web_recording', 'import_web_recording_to_project'].includes(record.capabilityId ?? '')
+        && message.startsWith('网页应用录制是实验性功能，尚未开启')))
     // t184 统一写包装记录的结构化事实：未改动目标且未计费，即 t188 修复前被误记为 unknown 的执行前拒绝（如打开不支持格式的文档）。
     const execution = object(details.execution)
     const recordedNoEffect = execution.targetMutation === 'none' && execution.billing === 'not_charged'
