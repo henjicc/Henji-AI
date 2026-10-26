@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, MoreHorizontal, Plus, Power, RotateCcw, Trash2 } from 'lucide-react'
-import { PanelTrigger, UiIconButton, UiInput, UiOptionButton, UI_TEXT_META_CLASS } from '@/components/ui'
+import { PanelTrigger, UiFieldLayoutContext, UiIconButton, UiInput, UiOptionButton, UI_TEXT_META_CLASS } from '@/components/ui'
 import { ParamField, type ParamGesture } from '@/components/ui/params/ParamField'
 import { ParamList } from '@/components/ui/params/ParamList'
 import { builtinParameterFields, readBuiltinField, writeBuiltinField, type ParamFieldSpec } from '@/components/ui/params/fieldSpec'
@@ -53,8 +53,9 @@ function EffectParams({ effect, onChange, gesture }: { effect: AudioRackEffect; 
   const latest = useRef(effect); latest.current = effect
   if (!definition) return <p className={`m-0 ${UI_TEXT_META_CLASS}`}>暂不支持此效果，已保留原设置。</p>
   const values = resolveVideoEditBuiltinParams(effect.builtin)
-  const fields = builtinParameterFields(definition.params)
-  const strength: ParamFieldSpec = { source: 'builtin', bindingKeys: ['amount'], key: 'amount', title: '效果强度', tooltip: '与原声混合的比例，100% 为完全应用', type: 'number', min: 0, max: 100, step: 1, unit: '%', control: 'input', default: 100, animatable: false }
+  // 音频参数配滑杆（拖动时实时试听），读数仍可直接输入与左右拖动。
+  const fields = builtinParameterFields(definition.params).map(field => field.type === 'number' ? { ...field, control: 'slider' as const } : field)
+  const strength: ParamFieldSpec = { source: 'builtin', bindingKeys: ['amount'], key: 'amount', title: '效果强度', tooltip: '与原声混合的比例，100% 为完全应用', type: 'number', min: 0, max: 100, step: 1, unit: '%', control: 'slider', default: 100, animatable: false }
   const begin = (): void => { if (!active.current) active.current = gesture() }
   const finish = (): void => { active.current?.finish(); active.current = null }
   const cancel = (): void => { active.current?.cancel(); active.current = null }
@@ -63,14 +64,15 @@ function EffectParams({ effect, onChange, gesture }: { effect: AudioRackEffect; 
     onChange({ ...current, ...(changes.amount !== undefined ? { amount: changes.amount } : {}), ...(changes.params ? { builtin: { ...current.builtin, params: normalizeVideoEditBuiltinParams(current.builtin.id, changes.params, current.builtin.params, true) as AudioRackEffect['builtin']['params'] } } : {}) })
   }
   const gestureFor = (apply: (value: CodeParameterValue) => void): ParamGesture => ({ begin, finish, cancel, active: () => !!active.current, write: apply, atomic: value => { begin(); apply(value); finish() } })
-  return <div className="flex flex-col" data-audio-effect-params={effect.builtin.id}>
+  // 与剪辑“效果控件”同一种属性排布：名称在左，滑杆与读数在右一行。
+  return <UiFieldLayoutContext.Provider value="property"><div className="flex flex-col" data-audio-effect-params={effect.builtin.id}>
     <ParamList fields={fields} values={Object.fromEntries(fields.map(field => [field.key, readBuiltinField(field, values)]))}
       renderControl={(field, value) => <ParamField field={field} value={value} gesture={gestureFor(next => write({ params: writeBuiltinField(field, next) }))} />}
       onReset={field => write({ params: Object.fromEntries(field.bindingKeys.map(key => [key, definition.params.find(param => param.key === key)!.default])) })}
       resetDisabled={field => field.bindingKeys.every(key => values[key] === definition.params.find(param => param.key === key)!.default)} />
     <ParamList fields={[strength]} values={{ amount: Math.round(effect.amount * 100) }} onReset={() => write({ amount: 1 })} resetDisabled={(_, value) => value === 100}
       renderControl={(field, value) => <ParamField field={field} value={value} gesture={gestureFor(next => write({ amount: Number(next) / 100 }))} />} />
-  </div>
+  </div></UiFieldLayoutContext.Provider>
 }
 
 
