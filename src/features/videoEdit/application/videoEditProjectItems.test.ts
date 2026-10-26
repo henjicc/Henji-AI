@@ -6,7 +6,7 @@ import { beforeEach, afterEach, it, expect, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
 import { createApplicationHarness } from '@/tests/applicationHarness'
-import { appendVideoEditMedia, listVideoEditInstances, closeVideoEditProject, getActiveVideoEditSequence, undoVideoEdit, saveVideoEdit, setVideoEditView, getVideoEditProjectView, setVideoEditProjectView, appendVideoEditSequence } from './videoEditService'
+import { appendVideoEditMedia, listVideoEditInstances, closeVideoEditProject, getActiveVideoEditSequence, undoVideoEdit, saveVideoEdit, setVideoEditView, getVideoEditProjectView, setVideoEditProjectView, appendVideoEditSequence, switchVideoEditSequence } from './videoEditService'
 import { createVideoEditBin, updateVideoEditItems, appendVideoEditItems, createVideoEditSequenceFromItem, deleteVideoEditItems, deleteVideoEditBins, createVideoEditGraphicItem, createVideoEditAdjustmentItem } from './videoEditProjectItems'
 import { importVideoEditSources, relinkVideoEditMedia } from './videoEditMedia'
 import { dropVideoEditInput } from './videoEditDrop'
@@ -150,6 +150,15 @@ it('项目会话撤销恢复原活动序列，后续手动选区不被旧撤销�
   const changed = await executor.apply(step); expect(instance.activeSequenceId).toBe(second)
   await executor.undo(changed.undoToken!); expect(instance.activeSequenceId).toBe(first)
   expect(getVideoEditProjectView(id).openSequenceIds).toEqual([first, second])
+  // 直接写当前序列：切换且保留其他标签，没打开的序列补一个标签；撤销回到原序列
+  const third = appendVideoEditSequence(id); switchVideoEditSequence(id, first); setVideoEditProjectView(id, { openSequenceIds: [first, second] })
+  const active = (value: string): typeof step => ({ ...step, mutations: [{ propertyId: 'video_edit.document.active_sequence_id', operation: 'set', value }] })
+  const switched = await executor.apply(active(third)); expect(instance.activeSequenceId).toBe(third)
+  expect(getVideoEditProjectView(id).openSequenceIds).toEqual([first, second, third])
+  await executor.undo(switched.undoToken!); expect(instance.activeSequenceId).toBe(first)
+  await expect(executor.apply(active('不存在'))).rejects.toThrow('只能切换到已有序列'); expect(instance.activeSequenceId).toBe(first)
+  await expect(executor.apply({ ...step, mutations: [...active(second).mutations, { propertyId: 'video_edit.document.program_playback', operation: 'set', value: { frame: 0, playing: false, playbackDirection: 1 } }] })).rejects.toThrow('分成两条'); expect(instance.activeSequenceId).toBe(first)
+  setVideoEditProjectView(id, { openSequenceIds: [first, second] })
   const stale = await executor.apply(step); setVideoEditProjectView(id, { selectedItemIds: [instance.document.items[0].id] })
   await expect(executor.undo(stale.undoToken!)).rejects.toThrow('后续修改')
   expect(instance.activeSequenceId).toBe(second)

@@ -198,7 +198,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
     const { projectId, childId } = splitVideoEditRef(step.target)
     const owner = requireVideoEditInstance(projectId); const before = owner.document; const contentVersion = owner.contentVersion
     const keys = step.mutations.map(mutation => mutation.propertyId)
-    const writesView = this.entityType === 'video_edit.document' && keys.some(key => ['video_edit.document.selected_item_ids', 'video_edit.document.selected_bin_id', 'video_edit.document.open_sequence_ids', 'video_edit.document.timeline_view', 'video_edit.document.program_playback', 'video_edit.document.playback_resolution', 'video_edit.document.proxy_preference', 'video_edit.document.render_preference'].includes(key))
+    const writesView = this.entityType === 'video_edit.document' && keys.some(key => ['video_edit.document.selected_item_ids', 'video_edit.document.selected_bin_id', 'video_edit.document.active_sequence_id', 'video_edit.document.open_sequence_ids', 'video_edit.document.timeline_view', 'video_edit.document.program_playback', 'video_edit.document.playback_resolution', 'video_edit.document.proxy_preference', 'video_edit.document.render_preference'].includes(key))
     const viewBefore = writesView ? projectViewSnapshot(projectId) : undefined
     if (this.entityType === 'video_edit.code_material' || this.entityType === 'video_edit.code_version') {
       const definition = before.codeMaterials?.find(value => value.id === childId || value.versions.some(version => version.id === childId))
@@ -225,6 +225,12 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
       const instance = requireVideoEditInstance(projectId)
       const selectedItemIds = data.selectedItemIds as string[]; const selectedBinId = String(data.selectedBinId); const openSequenceIds = data.openSequenceIds as string[]
       if (selectedItemIds.some(id => !instance.document.items.some(item => item.id === id)) || (selectedBinId && !instance.document.bins.some(bin => bin.id === selectedBinId)) || !openSequenceIds.length || openSequenceIds.some(id => !instance.document.sequences.some(sequence => sequence.id === id))) throw new Error('素材选区、素材箱或序列标签引用无效。')
+      const activeSequenceId = String(data.activeSequenceId)
+      if (activeSequenceId !== instance.activeSequenceId) {
+        if (!instance.document.sequences.some(sequence => sequence.id === activeSequenceId)) throw new Error(`当前序列只能切换到已有序列（video_edit.sequence 的 ID），没有“${activeSequenceId}”。`)
+        // 时间线视图与节目播放都作用于当前序列，和切换写在同一条里分不清改的是哪一个
+        if (keys.includes('video_edit.document.timeline_view') || keys.includes('video_edit.document.program_playback')) throw new Error('切换序列和修改时间线视图或节目播放请分成两条修改：先写 active_sequence_id，下一条再写 timeline_view 或 program_playback。')
+      }
       if (keys.includes('video_edit.document.timeline_view')) {
         if (!openSequenceIds.includes(instance.activeSequenceId)) throw new Error('请先切换序列，再修改该序列时间线视图。')
         validateVideoEditTimelineView(projectId, data.timelineView as unknown as VideoEditTimelineView)
@@ -319,6 +325,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
       }
     }
     if (writesView) setVideoEditProjectView(projectId, { selectedItemIds: data.selectedItemIds as string[], selectedBinId: String(data.selectedBinId), openSequenceIds: data.openSequenceIds as string[] })
+    if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.active_sequence_id')) switchVideoEditSequence(projectId, String(data.activeSequenceId))
     if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.timeline_view')) setVideoEditTimelineView(projectId, data.timelineView as unknown as VideoEditTimelineView)
     if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.proxy_preference')) setVideoEditProxyPreference(projectId, data.proxyPreference as unknown as VideoEditProxyPreference)
     if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.render_preference')) setVideoEditRenderPreference(projectId, data.renderPreference as unknown as VideoEditRenderPreference)
