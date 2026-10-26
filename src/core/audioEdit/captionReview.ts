@@ -84,6 +84,8 @@ export function setAudioEditCaptionText(project: AudioEditProjectDocument, capti
   const table = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1))
   for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) table[i][j] = same(key[i], target[j]) ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1])
   const texts = blocks.map(() => '')
+  // 行尾原有的标点（显示时本来就去掉）留在原词块的末尾，新加的字放在它前面
+  const tails = blocks.map(() => '')
   const first = blocks.map(() => -1), last = blocks.map(() => -1)
   const put = (index: number, char: string, j?: number): void => { texts[index] += char; if (j !== undefined) { if (first[index] < 0) first[index] = j; last[index] = j } }
   const han = (char: string | undefined): boolean => Boolean(char && /\p{Script=Han}/u.test(char))
@@ -91,7 +93,7 @@ export function setAudioEditCaptionText(project: AudioEditProjectDocument, capti
   for (let i = 0, j = 0; i < n || j < m;) {
     if (i < n && j < m && same(key[i], target[j])) { if (owner[i] >= 0) { current = owner[i]; put(current, key[i] === base[i] ? target[j] : base[i], j) } i++; j++ }
     else if (i < n && (j >= m || table[i + 1][j] >= table[i][j + 1])) {
-      if (owner[i] >= 0) { current = owner[i]; if (i > lastUnit) put(current, base[i]) }
+      if (owner[i] >= 0) { current = owner[i]; if (i > lastUnit) tails[current] += base[i] }
       i++
     } else { put(current, target[j] === ' ' && han(target[j - 1]) && han(target[j + 1]) ? '，' : target[j], j); j++ }
   }
@@ -103,6 +105,6 @@ export function setAudioEditCaptionText(project: AudioEditProjectDocument, capti
     texts[index] += texts[next]; last[index] = last[next]; texts[next] = ''
   }
   // 变空的词块仍留在原字幕段里（分段与字幕 ID 不变），只是不再显示
-  const updates = new Map(blocks.map((block, index) => [block.id, texts[index].trim()]))
+  const updates = new Map(blocks.map((block, index) => [block.id, texts[index].trim() ? texts[index].trim() + tails[index] : '']))
   return { ...project, transcript: project.transcript.map(block => updates.has(block.id) && updates.get(block.id) !== block.text.trim() ? { ...block, text: updates.get(block.id)! } : block) }
 }

@@ -134,6 +134,8 @@ export async function commitVideoEditCreativeResult(target: VideoEditResultTarge
       const media = document.media.find(media => media.id === item.mediaId)
       if (media && origin) media.creativeSource = origin
       if (media && result.linked) media.linkedTimeline = result.linked.timeline
+      // 创作结果按来源起的名字显示（“口播 · 剪后声音”），不用缓存里按内容命名的文件名
+      if (media && origin && asset.displayName && media.name !== asset.displayName && item.name === media.name) { media.name = asset.displayName; item.name = asset.displayName }
       // 音频编辑来的声音带链接字幕（逐词、跟着片段走、随音频编辑更新）；其他来源仍按附带的 SRT 导入
       const placedCaptions = (sequence: VideoEditSequence, clip: VideoEditClip): VideoEditCaption[] => result.linked
         ? videoEditLinkedCaptions(clip, videoEditFps(sequence.frameRate), result.linked.cues, result.linked.timeline.sampleRate)
