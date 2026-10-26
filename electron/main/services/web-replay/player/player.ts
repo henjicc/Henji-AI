@@ -11,6 +11,7 @@ import { digestBase64, WebRecordingStore } from '../store'
 import { FrameEncoder } from './encoder'
 import { InputDispatcher } from './input'
 import { BOOTSTRAP_PATH, installReplaySite } from './site'
+import { TEXT_SAMPLE_INTERVAL_US, TEXT_SAMPLE_SCRIPT, TextTrackWriter, type TextSample } from '../textTrack'
 
 const logger = createMainLogger('main.web_replay.player')
 const TAIL_MS = 1500
@@ -39,6 +40,10 @@ export interface ReplayOptions {
   timeScale?: number
   /** Live preview: progress 0..1 and a small JPEG data URL, about five times a second. */
   onFrame?: (progress: number, frame: string) => void
+  /** 同时写文字轨（画面上看得见的文字与位置）到这个文件。 */
+  textTrack?: string
+  /** false 只跑页面、不编码视频（只要文字轨时用）。默认 true。 */
+  video?: boolean
 }
 
 type BootReply = { phase: 'bootstrap'; storage: unknown } | { phase: 'app'; boot: ReplayBoot } | { phase: 'none' }
@@ -161,6 +166,9 @@ export class WebRecordingPlayer {
     const timers: Array<ReturnType<typeof setTimeout>> = []
     let encoder: FrameEncoder | null = null
     let lateFrames = 0
+    const video = options.video !== false
+    const text = options.textTrack ? new TextTrackWriter(options.textTrack) : null
+    let textFailures = 0
     try {
       const stage = (name: string): void => logger.info('网页重演进度', { event: 'web_replay.replay.stage', context: { recordingId: this.manifest.id, stage: name } })
       stage('window')
@@ -210,12 +218,19 @@ export class WebRecordingPlayer {
       // Frame clock: one frame per tick from the most recent paint.
       const totalMs = this.manifest.durationUs / 1000 + TAIL_MS
       const frameCount = Math.ceil(totalMs / 1000 * fps)
+      const sampleEvery = Math.max(1, Math.round(TEXT_SAMPLE_INTERVAL_US / 1e6 * fps))
       for (let i = 0; i < frameCount; i += 1) {
         if (options.signal?.aborted) throw new Error('已取消重演')
         const due = zeroMs + (i * 1000 * scale) / fps
         const wait = due - Date.now()
         if (wait > 0) await new Promise(resolve => setTimeout(resolve, wait))
         else if (wait < -500 * scale / fps) lateFrames += 1
+        if (text && i % sampleEvery === 0) {
+          try { text.write(Math.round(i * 1e6 / fps), await withTimeout(contents.executeJavaScript(TEXT_SAMPLE_SCRIPT, true) as Promise<TextSample>, 2_000, '读取画面文字超时')) } catch (error) {
+            if (textFailures++ === 0) this.issue('warning', `文字轨有时刻没取到：${String(error)}`)
+          }
+        }
+        if (!video) { if (options.onFrame && i % Math.max(1, Math.round(fps / 5)) === 0) options.onFrame(i / frameCount, ''); continue }
         const frame = painted.latest
         if (!frame) continue
         // Most frames of an interface repeat the last paint; copying 4K pixels only when the page painted keeps up with realtime.
@@ -236,6 +251,11 @@ export class WebRecordingPlayer {
         if (lastGood) await encoder.write(lastGood)
         if (options.onFrame && i % Math.max(1, Math.round(fps / 5)) === 0) options.onFrame(i / frameCount, `data:image/jpeg;base64,${frame.resize({ width: Math.min(1280, width) }).toJPEG(80).toString('base64')}`)
       }
+      await text?.close(Math.round(frameCount * 1e6 / fps))
+      if (!video) {
+        logger.info('网页重演文字轨完成', { event: 'web_replay.replay.text_completed', context: { recordingId: this.manifest.id, issues: this.issues.length } })
+        return { output: options.textTrack ?? '', frames: frameCount, width: Math.round(env.viewport.width), height: Math.round(env.viewport.height), durationMs: totalMs, issues: this.issues, looseMatches: this.loose, unusedCalls: this.matcher.unused().length, locatorMisses: input.misses }
+      }
       if (!encoder) throw new Error('重演窗口没有产生任何画面')
       await encoder.finish()
       if (lateFrames > 0) this.issue('warning', `有 ${lateFrames} 帧没赶上实时，画面可能有轻微卡顿`)
@@ -244,6 +264,7 @@ export class WebRecordingPlayer {
       return { output: options.output, frames: encoder.frames, width: encoder.width, height: encoder.height, durationMs: totalMs, issues: this.issues, looseMatches: this.loose, unusedCalls: unused, locatorMisses: input.misses }
     } catch (error) {
       encoder?.abort()
+      text?.abort()
       logger.error('网页重演失败', { event: 'web_replay.replay.failed', context: { recordingId: this.manifest?.id }, error: String(error) })
       throw error
     } finally {

@@ -75,7 +75,7 @@ export interface WebReplayServerState { enabled: boolean; listening: boolean; po
 
 /** `output` defaults to a new file inside the recording directory. */
 /** pointer=false renders a clean picture (no pointer drawn in the page) for the editor; omitted keeps the pointer for viewing. */
-export interface WebReplayRenderRequest { recordingId: string; output?: string; fps?: number; pointer?: boolean; /** 输出长边像素；不给时按录制时的设备像素比 */ longEdge?: number }
+export interface WebReplayRenderRequest { recordingId: string; output?: string; fps?: number; pointer?: boolean; /** 输出长边像素；不给时按录制时的设备像素比 */ longEdge?: number; /** 只重演出文字轨，不出视频 */ textOnly?: boolean }
 export interface WebReplayRenderResult {
   output: string
   frames: number
@@ -88,7 +88,7 @@ export interface WebReplayRenderResult {
   locatorMisses: number
 }
 
-export interface WebReplayReadRequest { recordingId: string; track: 'data' | 'behavior'; offset: number; limit: number }
+export interface WebReplayReadRequest { recordingId: string; track: 'data' | 'behavior' | 'text'; offset: number; limit: number; /** 文字轨按文字搜 */ query?: string }
 export interface WebReplayReadResult { entries: unknown[]; total: number; nextOffset: number | null }
 
 /**

@@ -14,6 +14,7 @@ import { getDocumentService } from '../documents/runtime'
 import { stripHenjiExtension } from '../../../../src/core/fileExtensions'
 import { copyDirectoryContentsNoOverwrite } from '../fs/no-overwrite'
 import { moveWebRecordingDirectory } from './moveDirectory'
+import { readTextTrack, searchTextTrack, TEXT_TRACK_FILE } from './textTrack'
 import { newestReplayName, REPLAY_CLEAN_SUFFIX } from '../../../../src/core/webReplay/replayVideos'
 
 const logger = createMainLogger('main.web_replay')
@@ -282,7 +283,13 @@ export async function getWebRecording(recordingId: string): Promise<WebRecording
 
 /** Full, unredacted track pages (the user chose full assistant visibility); blob bodies stay as references. */
 export async function readWebRecording(request: WebReplayReadRequest): Promise<WebReplayReadResult> {
-  const store = new WebRecordingStore(await resolveWebRecordingDirectory(request.recordingId))
+  const directory = await resolveWebRecordingDirectory(request.recordingId)
+  if (request.track === 'text') {
+    if (request.query) { const { matches, total } = await searchTextTrack(directory, request.query, request.offset + request.limit); const page = matches.slice(request.offset); return { entries: page, total, nextOffset: request.offset + page.length < total ? request.offset + page.length : null } }
+    const { entries, total } = await readTextTrack(directory, request.offset, request.limit)
+    return { entries, total, nextOffset: request.offset + entries.length < total ? request.offset + entries.length : null }
+  }
+  const store = new WebRecordingStore(directory)
   const entries: unknown[] = request.track === 'data' ? await store.readData().then(d => [...d.calls, ...d.external.map(e => ({ kind: 'external', ...e }))]) : await store.readBehavior()
   const page = entries.slice(request.offset, request.offset + request.limit)
   return { entries: page, total: entries.length, nextOffset: request.offset + page.length < entries.length ? request.offset + page.length : null }
@@ -303,9 +310,14 @@ export async function renderWebRecording(request: WebReplayRenderRequest, signal
   try {
     const directory = await resolveWebRecordingDirectory(request.recordingId)
     // 干净画面（不画鼠标）的重演以 .clean.mp4 结尾：导入剪辑据此决定重画整个鼠标，还是只补点击。
+    const textTrack = path.join(directory, TEXT_TRACK_FILE)
+    if (request.textOnly) {
+      logger.info('开始网页重演文字轨', { event: 'web_replay.replay.text_start', context: { recordingId: request.recordingId } })
+      return await WebRecordingPlayer.open(directory).render({ output: textTrack, fps: 30, pointer: false, video: false, textTrack, signal, onFrame: onProgress ? progress => onProgress({ recordingId: request.recordingId, progress, frame: '' }) : undefined })
+    }
     const output = request.output ?? path.join(directory, `replay-${new Date().toISOString().replace(/[:.]/g, '-')}${request.pointer === false ? REPLAY_CLEAN_SUFFIX : '.mp4'}`)
     await fs.mkdir(path.dirname(output), { recursive: true })
     logger.info('开始网页重演', { event: 'web_replay.replay.start', context: { recordingId: request.recordingId, output } })
-    return await WebRecordingPlayer.open(directory).render({ output, fps: request.fps, pointer: request.pointer !== false, longEdge: request.longEdge, signal, onFrame: onProgress ? (progress, frame) => onProgress({ recordingId: request.recordingId, progress, frame }) : undefined })
+    return await WebRecordingPlayer.open(directory).render({ output, fps: request.fps, pointer: request.pointer !== false, longEdge: request.longEdge, textTrack, signal, onFrame: onProgress ? (progress, frame) => onProgress({ recordingId: request.recordingId, progress, frame }) : undefined })
   } finally { rendering.delete(request.recordingId) }
 }

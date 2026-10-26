@@ -147,6 +147,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.72.0'] = 'ff9ca2abca15a544c3273dcc427971927d6eef89a075e8c98b90496134d4220f'
     // 口播效果控件：有顺序的效果链（effect_chain）、输出（output）取代效果组、基本声音、口水音与插件链；去掉导出与放入剪辑的 includeProcessing。
     fingerprints['2.73.0'] = '327d3fda8dc72926cb009c074aa008bfc7314f932e939eab892cfdfcf409a324'
+    // 网页录制文字轨：重演可只出文字轨（textOnly），读取新增 text 轨与按文字搜（query）。
+    fingerprints['2.74.0'] = 'dbc2d8d4ff9b79bcc84137b94862ce87fda04448081887db7c7c1e778c1fe3ff'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], `工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹：${fingerprint}`).toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {
