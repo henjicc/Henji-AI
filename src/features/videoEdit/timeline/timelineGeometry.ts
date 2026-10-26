@@ -4,7 +4,9 @@ import { VIDEO_EDIT_TRACK_HEIGHT_MIN } from '@/core/videoEdit/timelineNavigation
 
 /** 轨道头宽：名称按钮 + 6 个 24 命中区的图标开关（5.8：原 20 的开关低于命中区下限 24，宽度随之 208 → 232） */
 export const TIMELINE_HEADER_WIDTH = 232
-export const TIMELINE_RULER_HEIGHT = 28
+/** 标尺两行（参照 Premiere）：上面一行放标记与批注，下面一行是时间刻度，标记不压时间数字；角落格也正好排两行。 */
+export const TIMELINE_RULER_HEIGHT = 52
+export const TIMELINE_MARK_LANE_HEIGHT = 24
 export const TIMELINE_CAPTION_HEIGHT = VIDEO_EDIT_TRACK_HEIGHT_MIN
 /** 缩放轨 Z1：序列里有录屏片段开启自动缩放时，钉在字幕轨下面。 */
 export const TIMELINE_ZOOM_HEIGHT = 24

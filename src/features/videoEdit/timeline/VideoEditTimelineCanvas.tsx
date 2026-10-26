@@ -56,7 +56,7 @@ import type { VideoEditSceneTarget } from '../application/videoEditSceneDetectio
 import { closeVideoEditSpeedDialog, useVideoEditSpeedDialogRequest } from '../application/videoEditSpeedDialog'
 import { useVideoEditClipSource } from '../panels/useVideoEditClipSource'
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
-import { TIMELINE_DEFAULT_SPLIT, TIMELINE_HEADER_WIDTH, TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_SECTION_GAP, timelineLayout, timelineStickyBottom, timelineNewTrackZone, timelineRegionAt, timelineRulerScale, timelineTimecode, timelineTrackAt, timelineVisibleClips, timelineVisibleTrackRows, timelineWheelAction, type TimelineRegion, type TimelineRegionKind, type TimelineViewport } from './timelineGeometry'
+import { TIMELINE_DEFAULT_SPLIT, TIMELINE_HEADER_WIDTH, TIMELINE_MARK_LANE_HEIGHT, TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_SECTION_GAP, timelineLayout, timelineStickyBottom, timelineNewTrackZone, timelineRegionAt, timelineRulerScale, timelineTimecode, timelineTrackAt, timelineVisibleClips, timelineVisibleTrackRows, timelineWheelAction, type TimelineRegion, type TimelineRegionKind, type TimelineViewport } from './timelineGeometry'
 import { videoEditTrackCodes } from '@/core/videoEdit/tracks'
 import { useTrackHeaderMenu } from './useTrackHeaderMenu'
 import { VideoEditTimelineZoomBar } from './VideoEditTimelineZoomBar'
@@ -536,17 +536,23 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         } catch (error) { fail(error) }
       }}>
       <div className="relative" style={{ width, height: Math.max(view.height, TIMELINE_RULER_HEIGHT) }} data-video-edit-timeline-content>
-        <div className="sticky top-0 z-sticky flex h-band-row border-b border-line bg-panel" data-video-edit-ruler onPointerDownCapture={annotationRange.onPointerDownCapture} onPointerMove={annotationRange.onPointerMove} onPointerUp={annotationRange.onPointerUp} onPointerCancel={annotationRange.onPointerCancel}>
-          <div className={`sticky left-0 z-sticky flex shrink-0 items-center border-r border-gap bg-panel ${corner ? 'pl-1 pr-1.5' : 'px-3 text-2xs text-text3'}`} style={{ width: TIMELINE_HEADER_WIDTH }} data-video-edit-track-header data-video-edit-timeline-corner>{corner ?? '轨道'}</div>
+        <div className="sticky top-0 z-sticky flex border-b border-line bg-panel" style={{ height: TIMELINE_RULER_HEIGHT }} data-video-edit-ruler onPointerDownCapture={annotationRange.onPointerDownCapture} onPointerMove={annotationRange.onPointerMove} onPointerUp={annotationRange.onPointerUp} onPointerCancel={annotationRange.onPointerCancel}>
+          <div className={`sticky left-0 z-sticky flex shrink-0 border-r border-gap bg-panel ${corner ? 'pl-1 pr-1.5' : 'items-center px-3 text-2xs text-text3'}`} style={{ width: TIMELINE_HEADER_WIDTH }} data-video-edit-track-header data-video-edit-timeline-corner>{corner ?? '轨道'}</div>
           <VideoEditTimelinePosition instance={instance}>
-            <VideoEditAnnotationMarks instance={instance} sequence={sequence} pixels={pixels} left={view.left} width={view.width} onError={onError} />
-            {annotationRange.range && <div className="pointer-events-none absolute inset-y-0 bg-selected-accent ring-1 ring-accent-ring" style={{ left: Math.min(annotationRange.range.from, annotationRange.range.to) * pixels, width: Math.max(1, Math.abs(annotationRange.range.to - annotationRange.range.from) * pixels) }} />}
-            {Array.from({ length: Math.max(0, tickEnd - tickStart) }, (_, index) => index + tickStart).map(index => <span key={index} className="pointer-events-none absolute bottom-0 top-1 border-l border-line-strong pl-1 font-mono text-2xs tabular-nums text-text3" style={{ left: index * majorWidth }}>{timelineTimecode(index * ruler.major, fps)}</span>)}
-            {minorPerMajor > 1 && Array.from({ length: Math.max(0, tickEnd - tickStart) * minorPerMajor }, (_, index) => tickStart * minorPerMajor + index).filter(index => index % minorPerMajor !== 0).map(index => <span key={`m${index}`} aria-hidden="true" className="pointer-events-none absolute bottom-0 h-1.5 border-l border-line" style={{ left: index * ruler.minor * pixels }} />)}
-            {/* ui-surface-allow 标尺上的标记与字幕区间条是时间轴记号（12px 命中区 + 书签图形，与关键帧的菱形区分），不是按钮档位（3.5 确认保留） */}
-            {(sequence.markers ?? []).filter(mark => mark.frame * pixels >= view.left - 8 && mark.frame * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH + 8).map(mark => <UiButton key={mark.id} data-ui-timeline-item data-video-edit-marker={mark.id} aria-label={`定位标记 ${mark.name}`} className="absolute top-3 z-raised -ml-1.5 !h-3 !w-3 !p-0 text-text2" tooltip={mark.name} style={{ left: mark.frame * pixels }} onPointerDown={event => event.stopPropagation()} onClick={() => run(() => { selectVideoEditSubtitle(projectId, sequence.id, null); setVideoEditView(projectId, { frame: mark.frame, playing: false, selection: mark.clipId ?? null }); focusVideoEditPanel(projectId, 'content') })}><Bookmark fill="currentColor" aria-hidden="true" /></UiButton>)}
-            <VideoEditRenderBar instance={instance} pixels={pixels} />
-            <VideoEditTimelineInOut instance={instance} sequence={sequence} fps={fps} duration={duration} pixels={pixels} onError={onError} />
+            {/* 上面一行：标记与批注，不压下面的时间数字 */}
+            <div className="absolute inset-x-0 top-0" style={{ height: TIMELINE_MARK_LANE_HEIGHT }} data-video-edit-mark-lane>
+              <VideoEditAnnotationMarks instance={instance} sequence={sequence} pixels={pixels} left={view.left} width={view.width} onError={onError} />
+              {/* ui-surface-allow 标尺上的标记与字幕区间条是时间轴记号（12px 命中区 + 书签图形，与关键帧的菱形区分），不是按钮档位（3.5 确认保留） */}
+              {(sequence.markers ?? []).filter(mark => mark.frame * pixels >= view.left - 8 && mark.frame * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH + 8).map(mark => <UiButton key={mark.id} data-ui-timeline-item data-video-edit-marker={mark.id} aria-label={`定位标记 ${mark.name}`} className="absolute top-1.5 z-raised -ml-1.5 !h-3 !w-3 !p-0 text-text2" tooltip={mark.name} style={{ left: mark.frame * pixels }} onPointerDown={event => event.stopPropagation()} onClick={() => run(() => { selectVideoEditSubtitle(projectId, sequence.id, null); setVideoEditView(projectId, { frame: mark.frame, playing: false, selection: mark.clipId ?? null }); focusVideoEditPanel(projectId, 'content') })}><Bookmark fill="currentColor" aria-hidden="true" /></UiButton>)}
+            </div>
+            {/* 下面一行：时间刻度、渲染状态条与入出点 */}
+            <div className="absolute inset-x-0 bottom-0" style={{ top: TIMELINE_MARK_LANE_HEIGHT }}>
+              {annotationRange.range && <div className="pointer-events-none absolute inset-y-0 bg-selected-accent ring-1 ring-accent-ring" style={{ left: Math.min(annotationRange.range.from, annotationRange.range.to) * pixels, width: Math.max(1, Math.abs(annotationRange.range.to - annotationRange.range.from) * pixels) }} />}
+              {Array.from({ length: Math.max(0, tickEnd - tickStart) }, (_, index) => index + tickStart).map(index => <span key={index} className="pointer-events-none absolute bottom-0 top-1 border-l border-line-strong pl-1 font-mono text-2xs tabular-nums text-text3" style={{ left: index * majorWidth }}>{timelineTimecode(index * ruler.major, fps)}</span>)}
+              {minorPerMajor > 1 && Array.from({ length: Math.max(0, tickEnd - tickStart) * minorPerMajor }, (_, index) => tickStart * minorPerMajor + index).filter(index => index % minorPerMajor !== 0).map(index => <span key={`m${index}`} aria-hidden="true" className="pointer-events-none absolute bottom-0 h-1.5 border-l border-line" style={{ left: index * ruler.minor * pixels }} />)}
+              <VideoEditRenderBar instance={instance} pixels={pixels} />
+              <VideoEditTimelineInOut instance={instance} sequence={sequence} fps={fps} duration={duration} pixels={pixels} onError={onError} />
+            </div>
             {/* 播放头的头部压在标记、批注与入出点之上：停在标记上时按住它仍是拖动播放头 */}
             <VideoEditTimelinePlayheadHead instance={instance} pixels={pixels} />
           </VideoEditTimelinePosition>

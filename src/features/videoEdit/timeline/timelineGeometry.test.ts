@@ -21,7 +21,9 @@ function fixture(): VideoEditSequence {
   return sequence
 }
 
-const input = (scroll: Partial<Record<'video' | 'audio', number>> = {}, viewportHeight = 300) => ({ viewportHeight, split: 0.5, scroll: { video: 0, audio: 0, ...scroll } })
+// 纵坐标都以标尺高度 R 为基准写：视口 = 标尺 + 272，两区各 132 高
+const R = TIMELINE_RULER_HEIGHT
+const input = (scroll: Partial<Record<'video' | 'audio', number>> = {}, viewportHeight = R + 272) => ({ viewportHeight, split: 0.5, scroll: { video: 0, audio: 0, ...scroll } })
 
 it('轨道头裁剪沿用两区可变行高几何，缓冲边界为半开区间，交互中的离屏轨道保留', () => {
   const sequence = fixture()
@@ -42,51 +44,51 @@ it('PR 两区：视频区在上、音频区在下，V1 贴分隔条上方、A1 �
   const original = sequence.tracks.slice()
   const layout = timelineLayout(sequence, input())
   expect(layout.rows.map(row => row.track.index)).toEqual([4, 3, 1, 0, 2])
-  expect(layout.rows.map(row => [row.top, row.height])).toEqual([[-88, 40], [-48, 160], [112, 48], [168, 24], [192, 32]])
-  expect(layout.regions.video).toMatchObject({ top: 28, height: 132, content: 248 + TIMELINE_NEW_TRACK_ZONE + 24, maxScroll: 172 })
-  expect(layout.regions.audio).toMatchObject({ top: 168, height: 132, maxScroll: 0 })
-  expect(layout.divider).toBe(164)
+  expect(layout.rows.map(row => [row.top, row.height])).toEqual([[R - 116, 40], [R - 76, 160], [R + 84, 48], [R + 140, 24], [R + 164, 32]])
+  expect(layout.regions.video).toMatchObject({ top: R, height: 132, content: 248 + TIMELINE_NEW_TRACK_ZONE + 24, maxScroll: 172 })
+  expect(layout.regions.audio).toMatchObject({ top: R + 140, height: 132, maxScroll: 0 })
+  expect(layout.divider).toBe(R + 136)
   for (const row of layout.rows) expect(row.track).toBe(original.find(track => track.id === row.track.id))
   // 高度草稿统一影响该区坐标
-  expect(timelineLayout(sequence, input(), { trackId: 'video-3', height: 24 }).rows.map(row => row.top)).toEqual([48, 88, 112, 168, 192])
+  expect(timelineLayout(sequence, input(), { trackId: 'video-3', height: 24 }).rows.map(row => row.top)).toEqual([R + 20, R + 60, R + 84, R + 140, R + 164])
 })
 
 it('两区各自滚动并夹在范围内：视频区往上滚露出上层轨道，滚出本区的轨道不命中也不算可见', () => {
   const sequence = fixture()
   const scrolled = timelineLayout(sequence, input({ video: 1000, audio: 50 }))
   expect(scrolled.regions.video.scroll).toBe(172); expect(scrolled.regions.audio.scroll).toBe(0)
-  expect(scrolled.rows.map(row => row.top)).toEqual([84, 124, 284, 168, 192])
-  expect(timelineTrackAt(scrolled.rows, 84)?.track.index).toBe(4)
-  expect(timelineTrackAt(scrolled.rows, 159)?.track.index).toBe(3)
+  expect(scrolled.rows.map(row => row.top)).toEqual([R + 56, R + 96, R + 256, R + 140, R + 164])
+  expect(timelineTrackAt(scrolled.rows, R + 56)?.track.index).toBe(4)
+  expect(timelineTrackAt(scrolled.rows, R + 131)?.track.index).toBe(3)
   // V1 已滚到分隔条下方：在音频区坐标里不能命中它
-  expect(timelineTrackAt(scrolled.rows, 270)).toBeUndefined()
+  expect(timelineTrackAt(scrolled.rows, R + 242)).toBeUndefined()
   expect(timelineVisibleClips(sequence.clips, scrolled.rows, { left: 0, width: 900 }, 2).map(clip => clip.track).sort()).toEqual([0, 2, 3, 4])
 })
 
 it('轨道命中采用半开边界，标尺、分隔条与新建轨道空白不伪装成轨道', () => {
   const { rows } = timelineLayout(fixture(), input())
-  expect(timelineTrackAt(rows, TIMELINE_RULER_HEIGHT - 1)).toBeUndefined()
+  expect(timelineTrackAt(rows, R - 1)).toBeUndefined()
   // 置顶的字幕轨盖住其下滚上来的视频轨，那一段不命中视频轨
-  expect(timelineTrackAt(rows, 28)).toBeUndefined()
-  expect(timelineTrackAt(rows, 28 + TIMELINE_CAPTION_HEIGHT)?.track.index).toBe(3)
-  expect(timelineTrackAt(rows, 111.999)?.track.index).toBe(3)
-  expect(timelineTrackAt(rows, 112)?.track.index).toBe(1)
-  expect(timelineTrackAt(rows, 160)).toBeUndefined()
-  expect(timelineTrackAt(rows, 160 + TIMELINE_TRACK_SECTION_GAP - 0.001)).toBeUndefined()
-  expect(timelineTrackAt(rows, 168)?.track.index).toBe(0)
-  expect(timelineTrackAt(rows, 192)?.track.index).toBe(2)
-  expect(timelineTrackAt(rows, 224)).toBeUndefined()
+  expect(timelineTrackAt(rows, R)).toBeUndefined()
+  expect(timelineTrackAt(rows, R + TIMELINE_CAPTION_HEIGHT)?.track.index).toBe(3)
+  expect(timelineTrackAt(rows, R + 83.999)?.track.index).toBe(3)
+  expect(timelineTrackAt(rows, R + 84)?.track.index).toBe(1)
+  expect(timelineTrackAt(rows, R + 132)).toBeUndefined()
+  expect(timelineTrackAt(rows, R + 132 + TIMELINE_TRACK_SECTION_GAP - 0.001)).toBeUndefined()
+  expect(timelineTrackAt(rows, R + 140)?.track.index).toBe(0)
+  expect(timelineTrackAt(rows, R + 164)?.track.index).toBe(2)
+  expect(timelineTrackAt(rows, R + 196)).toBeUndefined()
   expect(timelineVisibleClips(fixture().clips, rows, { left: 0, width: 900 }, 2).map(clip => clip.track).sort()).toEqual([0, 1, 2, 3])
 })
 
 it('新序列 V1/A1 居中：最上视频轨之上、最下音频轨之下是新建轨道的落点，区由分隔条划分', () => {
   const sequence = createVideoEditDocument('新序列').sequences[0]
   const layout = timelineLayout(sequence, input())
-  expect(layout.rows.map(row => [row.track.kind, row.top])).toEqual([['video', 128], ['audio', 168]])
-  expect(timelineNewTrackZone(layout, 100)).toBe('video'); expect(timelineNewTrackZone(layout, 128)).toBeUndefined()
-  expect(timelineNewTrackZone(layout, 222)).toBe('audio'); expect(timelineNewTrackZone(layout, 168)).toBeUndefined()
-  expect(timelineNewTrackZone(layout, 162)).toBeUndefined()
-  expect(timelineRegionAt(layout, 20)).toBeUndefined(); expect(timelineRegionAt(layout, 40)).toBe('video'); expect(timelineRegionAt(layout, 100)).toBe('video'); expect(timelineRegionAt(layout, 170)).toBe('audio')
+  expect(layout.rows.map(row => [row.track.kind, row.top])).toEqual([['video', R + 100], ['audio', R + 140]])
+  expect(timelineNewTrackZone(layout, R + 72)).toBe('video'); expect(timelineNewTrackZone(layout, R + 100)).toBeUndefined()
+  expect(timelineNewTrackZone(layout, R + 194)).toBe('audio'); expect(timelineNewTrackZone(layout, R + 140)).toBeUndefined()
+  expect(timelineNewTrackZone(layout, R + 134)).toBeUndefined()
+  expect(timelineRegionAt(layout, R - 8)).toBeUndefined(); expect(timelineRegionAt(layout, R + 12)).toBe('video'); expect(timelineRegionAt(layout, R + 72)).toBe('video'); expect(timelineRegionAt(layout, R + 142)).toBe('audio')
   // 拖动分隔条改变两区比例，每区至少留 40
   expect(timelineLayout(sequence, { ...input(), split: 0 }).regions.video.height).toBe(40)
 })

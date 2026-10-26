@@ -15,7 +15,7 @@ import { VideoEditTimelineCanvas } from './VideoEditTimelineCanvas'
 import { chooseVideoEditMedia } from '../application/videoEditMedia'
 import { videoEditNativeMediaProbe } from '../application/videoEditMediaProbe'
 import { videoEditImportTask } from '../application/videoEditImportTask'
-import { TIMELINE_DEFAULT_SPLIT, TIMELINE_HEADER_WIDTH, timelineLayout, timelineTrackAt } from './timelineGeometry'
+import { TIMELINE_DEFAULT_SPLIT, TIMELINE_HEADER_WIDTH, TIMELINE_RULER_HEIGHT, timelineLayout, timelineTrackAt } from './timelineGeometry'
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('mediabunny', () => ({
@@ -42,7 +42,7 @@ async function timelineSourceDrop(transfer: DataTransfer, header = false): Promi
   const sequence = getActiveVideoEditSequence(owner); const onError = vi.fn()
   const view = render(<VideoEditTimelineCanvas instance={owner} sequence={sequence} pixels={2} onError={onError} />)
   const host = view.getByRole('region', { name: '时间线编辑区域' })
-  fireEvent.wheel(host, { deltaY: -80, ctrlKey: true, clientX: 500, clientY: 98 })
+  fireEvent.wheel(host, { deltaY: -80, ctrlKey: true, clientX: 500, clientY: 50 + TIMELINE_RULER_HEIGHT + 20 })
   const row = timelineLayout(sequence, { viewportHeight: 300, split: TIMELINE_DEFAULT_SPLIT, scroll: { video: 80, audio: 0 } }).rows.find(value => value.track.index === 6)!
   await act(async () => { fireEvent.drop(host, { clientX: 100 + (header ? 1 : TIMELINE_HEADER_WIDTH + 0.1), clientY: 50 + row.top + row.height / 2, dataTransfer: transfer }) })
   return onError
@@ -129,7 +129,7 @@ for (const component of ['video', 'audio', 'linked'] as const) {
         const view = render(<VideoEditTimelineCanvas instance={owner} sequence={sequence} pixels={2} onError={onError} />)
         const host = view.getByRole('region', { name: '时间线编辑区域' })
         // V5 起初被视频区裁切；通过真实 Ctrl+滚轮滚入，仍以完整几何命中。
-        if (component !== 'audio') fireEvent.wheel(host, { deltaY: -80, ctrlKey: true, clientX: 500, clientY: 98 })
+        if (component !== 'audio') fireEvent.wheel(host, { deltaY: -80, ctrlKey: true, clientX: 500, clientY: 50 + TIMELINE_RULER_HEIGHT + 20 })
         const rows = timelineLayout(sequence, { viewportHeight: 300, split: TIMELINE_DEFAULT_SPLIT, scroll: { video: component === 'audio' ? 0 : 80, audio: 0 } }).rows
         const row = rows.find(value => value.track.index === track)!
         const y = row.top + row.height / 2
