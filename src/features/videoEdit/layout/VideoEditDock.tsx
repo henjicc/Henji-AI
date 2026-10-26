@@ -86,6 +86,12 @@ function EmptyLayout({ containerApi }: IWatermarkPanelProps): React.ReactElement
   return <UiEmpty className="h-full" title="选择需要的面板" description="在“窗口”菜单中打开需要的面板。" action={<UiButton variant="secondary" onClick={() => resetVideoEditWorkspaceLayout(containerApi)}>重置布局</UiButton>} />
 }
 
+/** 源监视器与节目画面在同一组且源监视器在前时，把节目画面换到前面。 */
+function revealProgramOverSource(api: DockviewApi | null | undefined): void {
+  const program = api?.getPanel('program'); const source = api?.getPanel('source')
+  if (program && source && program.group === source.group && source.api.isVisible) program.api.setActive()
+}
+
 export function VideoEditDock({ instance, onError, onApiChange }: DockContext & { onApiChange: (api: DockviewApi | null) => void }): React.ReactElement {
   const apiRef = useRef<DockviewApi | null>(null)
   const hostRef = useRef<HTMLDivElement | null>(null)
@@ -152,7 +158,17 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
     if (!listVideoEditInstances().some(value => value.document.id === instance.document.id)) return
     const source = readVideoEditSource(instance.document.id)
     if (source.status === 'loading' && source.itemId && apiRef.current) showVideoEditPanel(apiRef.current, 'source')
+    // 源监视器与节目画面同组时，关掉源素材就把节目画面换回前面，不留一个空的源监视器挡着
+    if (source.status === 'closed') revealProgramOverSource(apiRef.current)
   }), [instance.document.id])
+  // 同组时节目一开播就换回节目画面：在源监视器那页按空格播时间线，画面不会被挡住
+  useEffect(() => {
+    let playing = instance.playing
+    return subscribeVideoEditView(() => {
+      if (instance.playing && !playing) revealProgramOverSource(apiRef.current)
+      playing = instance.playing
+    })
+  }, [instance])
   const onReady = useCallback(({ api }: DockviewReadyEvent): void => {
     disposeRef.current()
     apiRef.current = api
