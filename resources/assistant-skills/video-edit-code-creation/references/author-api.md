@@ -72,9 +72,9 @@ layers(params, width, height, assets, info) => Layer[]
 | `data` | `{ parameter, index }` 或 `{ parameter, keyField, key }`，把图层绑定到 table 参数的一行 |
 | `factory` | `{ file, name }`，指向生成这类图层的工厂函数，选中后可跳转 |
 
-相邻、没有 pose 的图层会合并到同一张画布上绘制，保留 Canvas 的混合关系；有 pose 的图层各自栅格化后按位姿合成。
+相邻、没有 pose 的图层会合并到同一张画布上绘制，保留 Canvas 的混合关系；其中只用默认叠加、最近在变的层由引擎单独栅格，静止的层沿用（见 performance）。有 pose 的图层各自栅格化后按位姿合成。
 
-draw 里的坐标始终是画布像素，`setTransform`、`resetTransform`、`getTransform` 也一样（运动层的栅格缩放由宿主叠上）。渐变、图案对象可以缓存到模块变量跨帧复用。
+draw 里的坐标始终是画布像素，`setTransform`、`resetTransform`、`getTransform` 也一样（运动层的栅格缩放由宿主叠上）。渐变、图案对象（含图案的 `setTransform`）可以缓存到模块变量跨帧复用；预先画好、反复贴的图块缓存成 `transferToImageBitmap()` 得到的 ImageBitmap，不要缓存 OffscreenCanvas。
 
 ```ts
 export default {
@@ -104,7 +104,7 @@ export default {
 
 - 同一参数、同一 `time` 必须得到同一画面：随机用自己写的种子哈希（见 author-text-motion），不用 `Math.random()`、`Date.now()` 或跨帧累积状态。宿主按帧缓存并可能乱序取帧，跨帧状态会在拖动、导出时出错。
 - 不访问网络、文件或 DOM；外部图片走 image 参数。
-- 宿主不设语言预算或绘制数量上限。试渲染与取帧会返回 `performance`：`cpuMs`、`gpuMs`（提交到队列完成的墙钟）、`budgetMs`（`1000/fps`）。超出预算不拒绝画面，按反馈优化最贵的部分：缓存不随时间变化的路径和渐变、减少逐帧 `getImageData`、把逐像素工作移到 createWebGPU。
+- 宿主不设语言预算或绘制数量上限。试渲染与取帧会返回 `performance`：`cpuMs`、`gpuMs`（提交到队列完成的墙钟）、`budgetMs`（`1000/fps`），Canvas 图层另有 `layers` 沿用与上传统计。超出预算不拒绝画面，按反馈优化最贵的部分：缓存不随时间变化的路径和渐变、减少逐帧 `getImageData`、把逐像素工作移到 createWebGPU。
 
 ## 多文件与元素
 
