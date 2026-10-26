@@ -16,13 +16,17 @@ import { STYLE_GUIDE_MAX_LENGTH } from './styleGuide'
 export const videoEditStyleIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{1,63}$/, '风格与模板标识只能使用小写字母、数字和连字符。')
 /** 64 位十六进制摘要；空串表示旧数据迁移而来、下次写入时补算。 */
 export const videoEditContentHashSchema = z.string().regex(/^(?:[a-f0-9]{64})?$/)
-const dimension = z.number().int().min(320).max(1920).multipleOf(2)
+// 样片画布最大 4K、60 帧（剪辑格式 30 / 风格库 3 / 风格包 3 放宽，2026-10-26 用户要求：偏好 4K60 的用户样片也按 4K60 做）。
+const dimension = z.number().int().min(320).max(3840).multipleOf(2)
+/** 解析缺省值：旧文件里缺的字段按当时的标准样片补，保持原含义。 */
 export const STANDARD_STYLE_SAMPLE = { width: 1280, height: 720, durationSeconds: 8, fps: 24, thumbnail: 1.2, anchors: [1.2, 3.2, 5.2, 6.4, 7.8] } as const
+/** 新建风格的样片设置：1080P、30 帧；用户偏好更高规格（如 4K60）时由作者按偏好改写。 */
+export const NEW_STYLE_SAMPLE = { ...STANDARD_STYLE_SAMPLE, width: 1920, height: 1080, fps: 30 } as const
 export const videoEditStyleSampleSchema = z.object({
   code: codeMaterialFilesSchema.describe('样片作者代码 { entry, files }：标准 ES 模块，默认导出带 layers(params, width, height, assets, info) 的生成器，按标准分镜演示风格。'),
   width: dimension.default(STANDARD_STYLE_SAMPLE.width), height: dimension.default(STANDARD_STYLE_SAMPLE.height),
   durationSeconds: z.number().finite().min(1).max(12).default(STANDARD_STYLE_SAMPLE.durationSeconds),
-  fps: z.number().int().min(12).max(30).default(STANDARD_STYLE_SAMPLE.fps),
+  fps: z.number().int().min(12).max(60).default(STANDARD_STYLE_SAMPLE.fps),
   thumbnail: z.number().finite().min(0).default(STANDARD_STYLE_SAMPLE.thumbnail).describe('缩略图时刻（秒）。'),
   anchors: z.array(z.number().finite().min(0)).min(1).max(6).default([...STANDARD_STYLE_SAMPLE.anchors]).describe('锚点帧时刻（秒），标准分镜落在标题、要点、数据、人名条、收尾各自的停留处。'),
 }).strict().superRefine((sample, context) => {

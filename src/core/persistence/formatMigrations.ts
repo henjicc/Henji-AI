@@ -9,8 +9,9 @@ import { migrateColorGradeParamsV1 } from '../imaging/adjustments/colorGradeMigr
  */
 export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> = {
   project: { 1: value => ({ ...value as object, version: 2, minReaderVersion: 1 }) },
-  'video-style-library': { 1: value => value },
-  'video-style-package': { 1: value => value },
+  // 2 → 3：样片画布放宽到 3840×2160、60 帧，旧内容原样有效。
+  'video-style-library': { 1: value => value, 2: value => value },
+  'video-style-package': { 1: value => value, 2: value => value },
   'recording-setup': { 1: value => value, 2: value => { const { microphoneId: _legacyDevice, ...rest } = value as Record<string, unknown>; return rest }, 3: value => value, 4: value => value },
   'screen-capture': { 1: value => ({ ...value as object, version: 2, minReaderVersion: 1 }) },
   'audio-capture-recovery': { 1: value => ({ ...value as object, version: 2 }) },

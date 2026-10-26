@@ -153,6 +153,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
     27: content => content,
     // 28 → 29：字幕新增可选 linkedCaptionId（音频编辑动态链接的字幕段），素材新增可选 linkedTimeline（成品对应的源录音区间）；旧内容原样有效。
     28: content => content,
+    // 29 → 30：工程风格副本的样片画布放宽到 3840×2160、60 帧；旧内容原样有效，旧程序只在副本确实超出旧上限时拒绝打开。
+    29: content => content,
   },
   dependencyContent: ({ exportHistory: _exportHistory, ...dependencies }) => dependencies,
   createEmptyContent: createEmptyVideoEditContent,

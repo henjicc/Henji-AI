@@ -10,7 +10,7 @@ export const videoEditTemplateSchema = z.object({ ...videoEditTemplateMetaShape,
 export type VideoEditTemplate = z.infer<typeof videoEditTemplateSchema>
 
 /** 风格库目录里每个风格、每个模板各一份版本化 JSON 容器的内容。 */
-export const VIDEO_EDIT_STYLE_LIBRARY_VERSION = 2
+export const VIDEO_EDIT_STYLE_LIBRARY_VERSION = 3
 export const VIDEO_EDIT_TEMPLATE_LIBRARY_VERSION = 1
 
 /**
@@ -18,11 +18,11 @@ export const VIDEO_EDIT_TEMPLATE_LIBRARY_VERSION = 1
  * 导入只解析和保存，不运行任何代码；媒体是 base64 文本，单个文件不超过 16 MB。
  */
 export const VIDEO_EDIT_STYLE_PACKAGE_EXTENSION = henjiExtension('style_package').slice(1)
-export const VIDEO_EDIT_STYLE_PACKAGE_VERSION = 2
+export const VIDEO_EDIT_STYLE_PACKAGE_VERSION = 3
 export const VIDEO_EDIT_STYLE_PACKAGE_MAX_BYTES = 16 * 1024 * 1024
 const base64 = z.string().max(12 * 1024 * 1024).regex(/^[A-Za-z0-9+/]*={0,2}$/, '媒体内容必须是 base64。')
 export const videoEditStylePackageMediaSchema = z.object({
-  preview: base64.optional().describe('预览视频（H.264 MP4，长边不超过 1280）。'),
+  preview: base64.optional().describe('预览视频（H.264 MP4，长边不超过 1920）。'),
   thumbnail: base64.optional().describe('缩略图（JPEG）。'),
   anchors: z.array(base64).max(6).describe('锚点帧（JPEG），顺序对应 sample.anchors。'),
 }).strict()

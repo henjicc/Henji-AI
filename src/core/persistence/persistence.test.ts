@@ -126,7 +126,7 @@ describe('所有登记格式的黄金样本', () => {
     const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.screen_recording')!
     const previous = JSON.parse(fs.readFileSync('tests/fixtures/persistence/document.screen_recording/v26.json', 'utf8'))
     const original = JSON.stringify(previous)
-    expect(format.version).toBe(32)
+    expect(format.version).toBe(33)
     expect(format.minReaderVersion).toBe(31)
     expect(upgradePersistenceContent(format, previous.content, 26)).toEqual(previous.content)
     expect(JSON.stringify(previous)).toBe(original)
@@ -176,6 +176,24 @@ describe('所有登记格式的黄金样本', () => {
     const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
     const v28 = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v28.json', 'utf8'))
     expect(upgradePersistenceContent(format, v28.content, 28)).toEqual(v28.content)
+  })
+
+  it('样片画布放宽到 4K60：剪辑 v30、录制会话 v33、风格库 v3、风格包 v3 只放宽范围，最低可读版本不变；旧样本原样升上来', () => {
+    const versioned = (id: string) => PERSISTENCE_FORMATS.find(value => value.id === id)!
+    const v30 = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v30.json', 'utf8'))
+    expect(v30).toMatchObject({ kindVersion: 30, kindMinReaderVersion: 28, content: { styles: [{ sample: { width: 3840, height: 2160, fps: 60 } }] } })
+    const v29 = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v29.json', 'utf8'))
+    expect(upgradePersistenceContent(versioned('document.video_edit'), v29.content, 29)).toEqual(v29.content)
+    const recording = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.screen_recording/v32.json', 'utf8'))
+    expect(upgradePersistenceContent(versioned('document.screen_recording'), recording.content, 32)).toEqual(recording.content)
+    for (const id of ['video-style-library', 'video-style-package']) {
+      const format = versioned(id)
+      expect([format.version, format.minReaderVersion]).toEqual([3, 1])
+      const previous = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v2.json`, 'utf8')) as { content: unknown }
+      expect(upgradePersistenceContent(format, previous.content, 2)).toEqual(previous.content)
+      const current = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v3.json`, 'utf8')) as { content: { sample?: unknown; style?: { sample: unknown } } }
+      expect(current.content.sample ?? current.content.style?.sample).toMatchObject({ width: 3840, height: 2160, fps: 60 })
+    }
   })
 
   for (const format of PERSISTENCE_FORMATS) {

@@ -4,10 +4,12 @@ import { migrateEmbeddedVideoEditStyles } from '../../videoEdit/styles/legacySty
 import { createRecordingDocument, recordingDocumentSchema, type RecordingDocument } from '../../screenRecording/document'
 
 export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocument> = {
-  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 32, minReaderVersion: 31,
+  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 33, minReaderVersion: 31,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
     // 嵌入剪辑快照的字幕新增可选 linkedCaptionId、素材新增可选 linkedTimeline（音频编辑动态链接）；旧程序忽略也不会误解其余内容，最低可读版本不变。
+    // 嵌入剪辑快照的风格副本样片画布放宽到 3840×2160、60 帧；旧内容原样有效，最低可读版本不变。
+    32: content => content,
     31: content => content,
     // 嵌入剪辑快照的轨道新增音量、声像与轨道效果，序列新增主轨，片段新增基本声音；旧程序忽略后混出的声音不同，最低可读版本同步提高到 31。
     30: content => content,

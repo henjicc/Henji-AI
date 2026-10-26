@@ -7,9 +7,15 @@ import { renderPresetPreviewFrame, styleSampleTimeline } from './videoEditPreset
 import { videoEditStyleLibrary, type VideoEditLibraryStyle, type VideoEditStyleMediaBytes } from './videoEditStyleLibrary'
 
 const logger = createLogger('features.videoEdit.styleRender')
-const PREVIEW_LONG_EDGE = 1280
+// 样片按自身尺寸（最大 4K60）渲染；存下的预览与锚点帧长边不超过 1920，码率随尺寸与帧率走，
+// 12 秒的预览也放得进风格包的单个媒体上限（12 MB base64）。
+const PREVIEW_LONG_EDGE = 1920
 const THUMBNAIL_WIDTH = 320
-const PREVIEW_BITRATE = 450_000
+const PREVIEW_BITS_PER_PIXEL = 0.08
+const PREVIEW_BITRATE_RANGE = [1_500_000, 5_000_000] as const
+function previewBitrate(width: number, height: number, fps: number): number {
+  return Math.round(Math.min(PREVIEW_BITRATE_RANGE[1], Math.max(PREVIEW_BITRATE_RANGE[0], width * height * fps * PREVIEW_BITS_PER_PIXEL)))
+}
 
 function fit(width: number, height: number, longEdge: number): { width: number; height: number } {
   const scale = Math.min(1, longEdge / Math.max(width, height)); const even = (value: number): number => Math.max(2, Math.round(value * scale / 2) * 2)
@@ -22,7 +28,7 @@ async function jpeg(bitmap: ImageBitmap, width: number, height: number): Promise
 
 export interface VideoEditStyleRenderResult { entry: VideoEditLibraryStyle; version: number; changed: boolean; warnings: string[]; frames: number }
 /**
- * 渲染样片（Frameflow render）：用剪辑的正式合成器逐帧渲染样片代码，生成预览视频（H.264，长边不超过 1280）、
+ * 渲染样片（Frameflow render）：用剪辑的正式合成器逐帧渲染样片代码，生成预览视频（H.264，长边不超过 1920）、
  * 缩略图（宽 320）与锚点帧；说明书或样片内容变了（或从未渲染过）版本号加 1。只用本机渲染，不调用付费模型。
  */
 export async function renderVideoEditStyle(styleId: string, signal: AbortSignal, onProgress?: (done: number, total: number) => void): Promise<VideoEditStyleRenderResult> {
@@ -39,7 +45,7 @@ export async function renderVideoEditStyle(styleId: string, signal: AbortSignal,
     const thumbnailSize = { width: THUMBNAIL_WIDTH, height: Math.max(2, Math.round(THUMBNAIL_WIDTH * style.sample.height / style.sample.width / 2) * 2) }
     const canvas = new OffscreenCanvas(size.width, size.height); const context = canvas.getContext('2d')!
     const output = new Output({ format: new Mp4OutputFormat({ fastStart: 'in-memory' }), target: new BufferTarget() })
-    const video = new CanvasSource(canvas, { codec: 'avc', bitrate: PREVIEW_BITRATE, bitrateMode: 'constant', keyFrameInterval: 2 })
+    const video = new CanvasSource(canvas, { codec: 'avc', bitrate: previewBitrate(size.width, size.height, timeline.fps), bitrateMode: 'constant', keyFrameInterval: 2 })
     output.addVideoTrack(video, { frameRate: timeline.fps })
     const media: VideoEditStyleMediaBytes = { anchors: [] }
     const anchorFrames = style.sample.anchors.map(seconds => Math.min(timeline.frames - 1, Math.round(seconds * timeline.fps)))

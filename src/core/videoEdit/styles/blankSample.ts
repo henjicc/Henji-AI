@@ -24,7 +24,7 @@ const STYLE = {
 const SCENES = { title: [0, 1.8], list: [1.8, 3.8], data: [3.8, 5.6], name: [5.6, 6.9], end: [6.9, 8] };
 const COPY = {
   title: "把想法变成画面",
-  subtitle: "风格样片 · STYLE SAMPLE",
+  subtitle: "风格样片",
   list: ["统一的配色", "统一的字体", "统一的节奏"],
   data: { value: 87, unit: "%", label: "一次通过率" },
   name: { name: "痕继痕迹", role: "动效设计师" },
