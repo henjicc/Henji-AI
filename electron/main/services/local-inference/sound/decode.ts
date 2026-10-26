@@ -21,8 +21,8 @@ function containerDuration(stderr: string): number | null {
   return match ? Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]) : null
 }
 
-/** 把用户可理解的失败原因从 FFmpeg 输出里归类出来（不带路径）。 */
-function failureReason(stderr: string): string {
+/** 把用户可理解的失败原因从 FFmpeg 输出里归类出来（不带路径）；人声分离的解码共用。 */
+export function soundDecodeFailureReason(stderr: string): string {
   if (/Invalid data found|could not find codec parameters|moov atom not found|Invalid argument|header|EBML/i.test(stderr)) return '文件已损坏或不是有效的音频'
   if (/does not contain any stream|Stream map '0:a:0' matches no streams|matches no streams/i.test(stderr)) return '文件里没有声音'
   if (/Permission denied/i.test(stderr)) return '没有读取这个文件的权限'
@@ -54,7 +54,7 @@ export function decodePcm(ffmpegPath: string, file: string, options: { sampleRat
       signal.removeEventListener('abort', abort)
       if (signal.aborted) { reject(signal.reason ?? new Error('已取消')); return }
       const frames = Math.floor(bytes / 8)
-      if (code !== 0 || frames === 0) { reject(new SoundDecodeError(code === 0 ? '声音为空' : failureReason(stderr))); return }
+      if (code !== 0 || frames === 0) { reject(new SoundDecodeError(code === 0 ? '声音为空' : soundDecodeFailureReason(stderr))); return }
       // 拼进独立缓冲区：Node 的小块缓冲可能来自共享池，偏移不保证按 4 字节对齐。
       const aligned = new Uint8Array(frames * 8); let offset = 0
       for (const chunk of chunks) { const take = Math.min(chunk.byteLength, aligned.length - offset); aligned.set(chunk.subarray(0, take), offset); offset += take }

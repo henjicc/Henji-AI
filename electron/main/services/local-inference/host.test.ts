@@ -4,6 +4,7 @@ import { LocalInferenceHost, type LocalInferenceChild } from './host'
 import type { LocalInferenceEvent, LocalInferenceRequest, SmartRegionAnalysisJob, SmartRegionAnalysisResult } from './protocol'
 import type { ImageSubjectSelectionJob, ImageSubjectSelectionResult } from './subject-selection/protocol'
 import type { ImageInpaintJob, ImageInpaintResult } from './inpainting/protocol'
+import type { AudioSeparationJob, AudioSeparationJobResult } from './separation/protocol'
 
 class FakeChild extends EventEmitter implements LocalInferenceChild {
   readonly sent: LocalInferenceRequest[] = []
@@ -30,6 +31,19 @@ describe('本地推理宿主', () => {
     child.reply({ type: 'done', id: 'patch', result: patch })
     await expect(pending).resolves.toEqual(patch)
     expect(progress).toHaveBeenCalledWith(1, 4)
+    host.dispose()
+  })
+
+  it('人声分离走同一宿主：消息类型、块进度与结果原样转发', async () => {
+    const child = new FakeChild(), host = new LocalInferenceHost({ fork: () => child, log: vi.fn() })
+    const separation: AudioSeparationJob = { id: 'separate', ffmpegPath: 'ffmpeg', source: 'voice.wav', mode: 'dereverb', modelPath: 'model.onnx', providers: ['dml', 'cpu'], outputDirectory: 'out' }
+    const progress = vi.fn(); const pending = host.separateAudio(separation, progress)
+    expect(child.sent).toEqual([{ type: 'audio-separate', job: separation }])
+    child.reply({ type: 'progress', id: 'separate', done: 3, total: 52 })
+    const separated: AudioSeparationJobResult = { primaryPath: 'out/primary.wav.tmp', residualPath: 'out/residual.wav.tmp', sampleRate: 48_000, channels: 1, provider: 'dml', decodeMs: 1, inferenceMs: 2 }
+    child.reply({ type: 'done', id: 'separate', result: separated })
+    await expect(pending).resolves.toEqual(separated)
+    expect(progress).toHaveBeenCalledWith(3, 52)
     host.dispose()
   })
 

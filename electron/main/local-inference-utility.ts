@@ -24,6 +24,9 @@ import { runMusicAnalysis } from './services/local-inference/music/analyze'
 import type { MusicAnalysisJob } from './services/local-inference/music/protocol'
 import { runBreathDetection } from './services/local-inference/breath/analyze'
 import type { BreathDetectionJob } from './services/local-inference/breath/protocol'
+import { runAudioSeparation } from './services/local-inference/separation/analyze'
+import { ffmpegSeparationAudio } from './services/local-inference/separation/audioIo'
+import type { AudioSeparationJob } from './services/local-inference/separation/protocol'
 
 /*
  * 本地推理后台进程（重要记录 003、任务 4.7d）：onnxruntime-node 原生推理与取帧都在这里，主进程只协调。
@@ -37,7 +40,7 @@ const log = (level: 'info' | 'warn', message: string, event: string, context: Re
 const renderedFrames = new RenderedTrackingFrames((id, requestId, request) => post({ type: 'frames', id, requestId, request }))
 
 let sessions: Promise<LocalModelSessions> | undefined
-type QueuedJob = { type: 'ocr-privacy'; job: OcrPrivacyJob } | { type: 'select-image-region'; job: ImageSubjectSelectionJob } | { type: 'analyze'; job: SmartRegionAnalysisJob } | { type: 'track'; job: TrackingJob } | { type: 'candidates'; job: TrackingCandidatesJob } | { type: 'inpaint'; job: ImageInpaintJob } | { type: 'sound-analyze'; job: SoundAnalysisJob } | { type: 'sound-text'; job: SoundTextEmbeddingJob } | { type: 'music-analyze'; job: MusicAnalysisJob } | { type: 'breath-detect'; job: BreathDetectionJob }
+type QueuedJob = { type: 'ocr-privacy'; job: OcrPrivacyJob } | { type: 'select-image-region'; job: ImageSubjectSelectionJob } | { type: 'analyze'; job: SmartRegionAnalysisJob } | { type: 'track'; job: TrackingJob } | { type: 'candidates'; job: TrackingCandidatesJob } | { type: 'inpaint'; job: ImageInpaintJob } | { type: 'sound-analyze'; job: SoundAnalysisJob } | { type: 'sound-text'; job: SoundTextEmbeddingJob } | { type: 'music-analyze'; job: MusicAnalysisJob } | { type: 'breath-detect'; job: BreathDetectionJob } | { type: 'audio-separate'; job: AudioSeparationJob }
 const queue: QueuedJob[] = []
 const controllers = new Map<string, AbortController>()
 let running = false
@@ -207,6 +210,25 @@ async function runBreath(job: BreathDetectionJob): Promise<void> {
   } finally { controllers.delete(job.id) }
 }
 
+async function runSeparation(job: AudioSeparationJob): Promise<void> {
+  const controller = new AbortController(); controllers.set(job.id, controller)
+  let lastProgress = 0
+  try {
+    const openModel = async (model: Parameters<LocalModelSessions['open']>[0], providers: Parameters<LocalModelSessions['open']>[1], shape: string) => {
+      sessions ??= loadOnnxRuntime().then(runtime => new LocalModelSessions(runtime, log))
+      return (await sessions).open(model, providers, shape)
+    }
+    const result = await runAudioSeparation(job, { openModel, io: ffmpegSeparationAudio(job.ffmpegPath), signal: controller.signal, log, progress: (done, total) => {
+      const now = Date.now()
+      if (done < total && now - lastProgress < 200) return
+      lastProgress = now; post({ type: 'progress', id: job.id, done, total })
+    } })
+    post({ type: 'done', id: job.id, result })
+  } catch (error) {
+    post({ type: 'failed', id: job.id, code: controller.signal.aborted ? 'cancelled' : 'inference', message: error instanceof Error ? error.message.slice(0, 500) : '人声分离失败。' })
+  } finally { controllers.delete(job.id) }
+}
+
 async function drain(): Promise<void> {
   if (running) return
   running = true
@@ -219,6 +241,7 @@ async function drain(): Promise<void> {
       else if (entry.type === 'sound-analyze' || entry.type === 'sound-text') await runSound(entry)
       else if (entry.type === 'music-analyze') await runMusic(entry.job)
       else if (entry.type === 'breath-detect') await runBreath(entry.job)
+      else if (entry.type === 'audio-separate') await runSeparation(entry.job)
       else await runTrack(entry)
     }
   } finally { running = false }
@@ -227,7 +250,7 @@ async function drain(): Promise<void> {
 port.on('message', (event) => {
   const request = event.data as LocalInferenceRequest
   if (request.type === 'frames') { renderedFrames.reply(request.id, request.reply); return }
-  if (request.type === 'ocr-privacy' || request.type === 'select-image-region' || request.type === 'analyze' || request.type === 'track' || request.type === 'candidates' || request.type === 'inpaint' || request.type === 'sound-analyze' || request.type === 'sound-text' || request.type === 'music-analyze' || request.type === 'breath-detect') { queue.push(request); void drain() }
+  if (request.type === 'ocr-privacy' || request.type === 'select-image-region' || request.type === 'analyze' || request.type === 'track' || request.type === 'candidates' || request.type === 'inpaint' || request.type === 'sound-analyze' || request.type === 'sound-text' || request.type === 'music-analyze' || request.type === 'breath-detect' || request.type === 'audio-separate') { queue.push(request); void drain() }
   else if (request.type === 'cancel') {
     const index = queue.findIndex(entry => entry.job.id === request.id)
     if (index >= 0) { const [entry] = queue.splice(index, 1); post({ type: 'failed', id: entry.job.id, code: 'cancelled', message: '分析已取消。' }) }

@@ -9,6 +9,7 @@ import type { ImageInpaintJob, ImageInpaintResult } from './inpainting/protocol'
 import type { SoundAnalysisJob, SoundAnalysisResult, SoundTextEmbeddingJob, SoundTextEmbeddingResult } from './sound/protocol'
 import type { MusicAnalysisJob, MusicAnalysisJobResult } from './music/protocol'
 import type { BreathDetectionJob, BreathDetectionJobResult } from './breath/protocol'
+import type { AudioSeparationJob, AudioSeparationJobResult } from './separation/protocol'
 
 /*
  * 主进程 ↔ 本地推理后台进程（utility process）的消息。主进程负责解析素材、准备模型与缓存位置，
@@ -17,7 +18,7 @@ import type { BreathDetectionJob, BreathDetectionJobResult } from './breath/prot
 
 export type LocalInferenceModelName = 'yunet' | 'rvm' | 'selfie' | 'ppocr' | 'ppocr_rec'
   | 'etam_image_encoder' | 'etam_mask_decoder' | 'etam_memory_encoder' | 'etam_memory_attention' | 'etam_mask_downsample' | 'vittrack'
-  | 'migan' | 'lama' | 'clap_audio' | 'clap_text' | 'beat_this' | 'respiro'
+  | 'migan' | 'lama' | 'clap_audio' | 'clap_text' | 'beat_this' | 'respiro' | 'mdx_kim_vocal_2' | 'mdx_reverb_hq'
 
 export interface LocalInferenceModelFile {
   name: LocalInferenceModelName
@@ -61,6 +62,7 @@ export type LocalInferenceRequest =
   | { type: 'sound-text'; job: SoundTextEmbeddingJob }
   | { type: 'music-analyze'; job: MusicAnalysisJob }
   | { type: 'breath-detect'; job: BreathDetectionJob }
+  | { type: 'audio-separate'; job: AudioSeparationJob }
   | { type: 'cancel'; id: string }
   | { type: 'frames'; id: string; reply: TrackingFrameReply }
 
@@ -78,6 +80,6 @@ export interface SmartRegionAnalysisResult {
 export type LocalInferenceEvent =
   | { type: 'frames'; id: string; requestId: string; request: TrackingFrameRequest }
   | { type: 'progress'; id: string; done: number; total: number }
-  | { type: 'done'; id: string; result: SmartRegionAnalysisResult | TrackingJobResult | TrackingCandidatesResult | ImageInpaintResult | ImageSubjectSelectionResult | OcrPrivacyResult | SoundAnalysisResult | SoundTextEmbeddingResult | MusicAnalysisJobResult | BreathDetectionJobResult }
+  | { type: 'done'; id: string; result: SmartRegionAnalysisResult | TrackingJobResult | TrackingCandidatesResult | ImageInpaintResult | ImageSubjectSelectionResult | OcrPrivacyResult | SoundAnalysisResult | SoundTextEmbeddingResult | MusicAnalysisJobResult | BreathDetectionJobResult | AudioSeparationJobResult }
   | { type: 'failed'; id: string; code: LocalInferenceFailureCode; message: string }
   | { type: 'log'; level: 'info' | 'warn'; message: string; event: string; context: Record<string, unknown> }
