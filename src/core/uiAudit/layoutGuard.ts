@@ -6,7 +6,7 @@ import { auditLayoutIssues, type LayoutAuditIssue } from './layoutAudit'
  * 新出现的问题记一条结构化日志（`ui.layout_issue.detected`，用 `npm run logs:query` 查），
  * `outline` 模式再给出问题的元素描一圈危险色边框。
  *
- * - 开发运行（electron:dev）默认 `outline`；本机正式构建（electron:prod）由启动参数 `--dev-layout-guard=log` 只记日志；
+ * - 开发运行（electron:dev）默认 `outline`；本机正式构建（electron:prod）与安装包一致默认不运行，需要时显式传 `--dev-layout-guard=log` 只记日志；
  *   安装包不带参数，不运行。
  * - 不在拖动、按住鼠标、指针移动中或窗口不可见时检查；定时补查只在界面变过之后才跑；同一问题每次运行只记一次，日志总数有上限。
  */

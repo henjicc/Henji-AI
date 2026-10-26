@@ -15,8 +15,8 @@ const { clearElectronDevState, writeElectronDevState } = require('./lib/electron
 const root = path.resolve(__dirname, '..')
 const args = process.argv.slice(2)
 const skipBuild = args.includes('--skip-build')
-// 交给用户测试的正式构建默认开着布局守卫（只记日志，重要记录 020）：测试中出现的遮挡与裁切进统一日志，用 logs:query 查
-const appArgs = [...args.filter(arg => arg !== '--skip-build'), ...(args.some(arg => arg.startsWith('--dev-layout-guard')) ? [] : ['--dev-layout-guard=log'])]
+// 不默认开布局守卫：交给用户测试的构建行为要与安装包一致（守卫的整页扫描会打断跟手交互）。需要时显式传 --dev-layout-guard=log。
+const appArgs = args.filter(arg => arg !== '--skip-build')
 
 if (!skipBuild) {
   const build = spawnSync(process.execPath, [path.join(root, 'scripts/run-electron-bundle.cjs')], { cwd: root, stdio: 'inherit' })

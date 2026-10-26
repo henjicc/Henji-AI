@@ -59,7 +59,7 @@ const CameraStageRenderWorker = React.lazy(
   () => import('./features/cameraStage/render/CameraStageRenderWorker'),
 )
 
-// 运行时布局守卫（重要记录 020）：开发运行默认描边，本机正式构建由 electron:prod 带 --dev-layout-guard=log 只记日志，
+// 运行时布局守卫（重要记录 020）：开发运行默认描边；本机正式构建与安装包一致默认不运行（需要时显式传 --dev-layout-guard=log），
 // 安装包不运行。按需加载，正式启动路径不含它；录制控制条、录制边框与三维渲染这些辅助窗口不跑。
 const layoutGuardMode = readDevelopmentLaunchOptions().layoutGuard ?? (import.meta.env.DEV ? 'outline' : null)
 if (layoutGuardMode && !isRecordingControlView && !isRecordingFrameView && !isCameraStageRenderView) {

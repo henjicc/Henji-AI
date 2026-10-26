@@ -289,7 +289,7 @@ npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --matrix review --a
 | `controlOccluded` | 控件可见范围的中心，或五个取样点中 ≥ 3 个，命中的最上层元素不是它自己、子元素或祖先；圆形、胶囊控件的角点按圆角内缩取样 | 盖在上面的是在它之上打开的另一层浮层（菜单、弹窗及其遮罩、查看器、提示、`z-index ≥ 30` 的定位层；同一个浮层内部互相压着仍算）、吸顶行、分隔条；同一字段控件的组成部分；有理由的 `occlude` 声明 |
 
 - 巡检：`scripts/lib/uiLayoutAudit.cjs` 用 Node 类型剥离加载同一份源码，序列化进渲染进程执行，与 `auditUiDom` 合并成同一份规则结果（`check:ui-visual`、`ui:tour --audit`、`test:ui-visual-rules`）。断牙：`test:ui-dom-rules` 的 jsdom 夹具 + 中心页规范区 Do/Don't（真实 Electron 22 个样例）。
-- 运行时布局守卫（`src/core/uiAudit/layoutGuard.ts`）：界面安静 0.7 秒后在空闲时检查（按住鼠标、窗口隐藏时不查），同一问题每次运行只记一次。开发运行默认描边 + 日志；`electron:prod` 自动带 `--dev-layout-guard=log` 只记日志；安装包不运行。用户测试后查 `npm run logs:query -- --event ui.layout_issue.detected`（或按时间段查 `app.ui.layoutGuard` 域）。
+- 运行时布局守卫（`src/core/uiAudit/layoutGuard.ts`）：界面安静 0.7 秒后在空闲时检查（按住鼠标、窗口隐藏时不查），同一问题每次运行只记一次。只在开发运行（`electron:dev`）默认描边 + 日志；`electron:prod` 与安装包一致，默认不运行（整页扫描会打断跟手交互，2026-10-26 用户确认），需要时显式传 `--dev-layout-guard=log`。日志用 `npm run logs:query -- --event ui.layout_issue.detected` 查。
 
 ### 9.3 快速检查（改完停靠面板或做全面检查时）
 
