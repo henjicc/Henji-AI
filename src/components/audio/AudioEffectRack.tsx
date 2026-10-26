@@ -80,6 +80,10 @@ function EffectParams({ effect, onChange, gesture }: { effect: AudioRackEffect; 
  */
 export function AudioEffectSlots({ effects, onChange, gesture, disabled, bypassed = false, empty }: { effects: readonly AudioRackEffect[]; onChange: (next: AudioRackEffect[]) => void; gesture: AudioRackGesture; disabled: boolean; bypassed?: boolean; empty: React.ReactNode }): React.ReactElement {
   const [openId, setOpenId] = useState<string | null>(effects[0]?.id ?? null)
+  // 新加的效果自动展开参数（与 Audition 加效果后弹出参数一样）。
+  const known = useRef(new Set(effects.map(effect => effect.id)))
+  const added = effects.find(effect => !known.current.has(effect.id))
+  if (added) { known.current = new Set(effects.map(effect => effect.id)); if (openId !== added.id) setOpenId(added.id) }
   const setEffects = (next: AudioRackEffect[]): void => onChange(next)
   const replace = (id: string, next: AudioRackEffect): void => setEffects(effects.map(effect => effect.id === id ? next : effect))
   const move = (index: number, delta: number): void => {

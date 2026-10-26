@@ -1,4 +1,4 @@
-import type { VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
+import type { VideoEditBuiltinParams } from '../../../videoEdit/builtinEffects'
 import { audioBiquadCoefficients, audioCompressorCurve, audioCompressorReduction, biquadBlock, dbToGain, flushDenormal, SmoothedValue, smoothing, type AudioProcessor, type Coefficients } from './shared'
 
 /**

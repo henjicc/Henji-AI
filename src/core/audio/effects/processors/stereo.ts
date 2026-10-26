@@ -1,4 +1,4 @@
-import type { VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
+import type { VideoEditBuiltinParams } from '../../../videoEdit/builtinEffects'
 import { dbToGain, SmoothedValue, type AudioProcessor } from './shared'
 
 /** 立体声与声道类效果：立体声扩展（中侧处理）、反相。 */

@@ -1,4 +1,4 @@
-import type { VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
+import type { VideoEditBuiltinParams } from '../../../videoEdit/builtinEffects'
 
 /**
  * 音频效果处理器的公共部分：处理器接口与新旧处理器共用的小工具（分贝换算、平滑系数、双二阶滤波、压缩曲线、延迟缓冲、低频振荡）。

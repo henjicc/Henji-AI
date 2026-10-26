@@ -1222,6 +1222,8 @@ export class VideoEditRenderer {
       const rebuilt = await masterChain.sync(mixer.master.effects)
       const plan = planAudioEffectBlock(masterChain, firstSample, length)
       if (!plan.contiguous && !rebuilt) await masterChain.reset(mixer.master.effects)
+      // 调制效果的振荡相位按序列位置对齐：从哪里开始播放、怎样分块，同一位置的调制都相同。
+      if (!plan.contiguous) masterChain.locate(plan.inputStart)
       master = plan
     }
     const masterInput = Array.from({ length: channels }, () => new Float32Array(master.inputLength))
@@ -1236,6 +1238,7 @@ export class VideoEditRenderer {
         const rebuilt = await chain.sync(bus.effects)
         const planned = planAudioEffectBlock(chain, master.inputStart, master.inputLength)
         if (!planned.contiguous && !rebuilt) await chain.reset(bus.effects)
+        if (!planned.contiguous) chain.locate(planned.inputStart)
         plan = planned
       }
       const mixed = await this.mixClips(plan.inputStart / rate, plan.inputLength / rate, retainIdle, trackClips, sets)

@@ -1,4 +1,4 @@
-import type { VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
+import type { VideoEditBuiltinParams } from '../../../videoEdit/builtinEffects'
 import { audioBiquadCoefficients, biquadSample, dbToGain, flushDenormal, SmoothedValue, type AudioProcessor, type BiquadSpec, type Coefficients } from './shared'
 
 /** 特殊效果：扭曲（波形整形失真）、人声增强（固定均衡曲线，处理由 `FilterCascade` 完成）。 */

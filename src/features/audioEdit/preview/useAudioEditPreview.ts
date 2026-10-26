@@ -142,7 +142,11 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
           const live = effectsRef.current
           if (live.length && chainRef.current) {
             const chain = chainRef.current
-            if (chainResetRef.current) { await chain.reset(live); chainResetRef.current = false } else await chain.sync(live)
+            if (chainResetRef.current) {
+              await chain.reset(live); chainResetRef.current = false
+              // 调制效果的振荡相位按剪后时间对齐，与从头导出的同一位置一致。
+              chain.locate(sourceFrameToOutputFrame(chunk.sourceStartFrame, timeline) ?? 0)
+            } else await chain.sync(live)
             if (generation !== generationRef.current) break
             processInterleaved(chain, new Float32Array(chunk.pcm), chunk.channels, decodedFrames)
           }

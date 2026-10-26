@@ -143,6 +143,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.70.0'] = '095b14a35a110feeaef79a31ffc53dffc778836bed4674f25c54bdf8c8df6b7b'
     // 字间气口只在真正该停处清理、字头送气算字头、手动改过的不覆盖，说明随之更新。
     fingerprints['2.71.0'] = 'f423d4c9ba2195ad9135558f76447c0a7a2545ebeb3aceb6065789c0aabf5839'
+    // 口播新增自动匹配响度与口水音检测两项能力。
+    fingerprints['2.72.0'] = 'ff9ca2abca15a544c3273dcc427971927d6eef89a075e8c98b90496134d4220f'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], `工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹：${fingerprint}`).toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {
