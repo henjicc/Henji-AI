@@ -31,7 +31,7 @@ export function videoEditCodeInputMotionPlacements(root: VideoEditComposition, r
         const times: number[] = []
         for (let frame = owner.timeline.from; frame < owner.timeline.to; frame++) {
           charge()
-          const seconds = codeMediaInputSeconds(clip, reference, videoEditSourceMapLocalFrame(owner, frame), local.fps)
+          const seconds = codeMediaInputSeconds(clip, reference, videoEditSourceMapLocalFrame(owner, frame), local.frameRate)
           if (seconds < 0 || seconds >= media.durationSeconds) throw new Error('视频图片参数的取帧时间超出素材范围。')
           times.push(seconds)
         }

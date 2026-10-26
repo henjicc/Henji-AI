@@ -46,4 +46,4 @@ draw(ctx, time, params, width, height, assets) {
 }
 ```
 
-参数值支持 `{kind:"image",mediaId}`、`{kind:"video",mediaId,time?:number}`、`{kind:"sequence",mediaId:"below"}`。视频 `time` 是源素材非负秒数，省略时随片段本地时间；超出视频范围明确失败。`below` 是当前序列帧中更低轨道的合成画面，排除当前及更高轨道与字幕覆盖，避免循环。代码没有路径或 URL 访问权，所有输入走工程媒体引用、正式解码与合成；同一来源与取样时刻复用同一画面。需要逐像素处理下方画面时写滤镜（author-shaders）。
+参数值支持 `{kind:"image",mediaId}`、`{kind:"video",mediaId,time?:number}`、`{kind:"sequence",mediaId:"below"}`。视频 `time` 是源素材非负秒数，省略时从片段入点起随片段本地时间（裁掉开头时视频也跟着往后，不经过代码片段的变速与倒放换算）；超出视频范围明确失败。`below` 是当前序列帧中更低轨道的合成画面，排除当前及更高轨道与字幕覆盖，避免循环。代码没有路径或 URL 访问权，所有输入走工程媒体引用、正式解码与合成；同一来源与取样时刻复用同一画面。需要逐像素处理下方画面时写滤镜（author-shaders）。

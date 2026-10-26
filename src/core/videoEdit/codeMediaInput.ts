@@ -1,13 +1,20 @@
 import { isCodeImageReference, type CodeParameterValues } from './codeMaterial/contract'
 import { type VideoEditComposition, type VideoEditClip } from './document'
 import type { CodeImageReference } from '../imaging/parameterTypes'
+import { videoEditSourceSeconds, type VideoEditRatio } from './time'
 
 export function codeMediaInputKey(clipId: string, parameter: string): string { return `code-input:${JSON.stringify([clipId, parameter])}` }
 export function codeMediaFrameParameters(clip: VideoEditClip, parameters: CodeParameterValues): CodeParameterValues {
   return Object.fromEntries(Object.entries(parameters).map(([key, value]) => [key, isCodeImageReference(value) && value.kind !== 'image' ? { kind: 'image', mediaId: codeMediaInputKey(clip.id, key) } : value]))
 }
 /** Produces a normal composition; the ordinary renderer remains the sole decoder/compositor. */
-export function codeMediaInputSeconds(clip: Pick<VideoEditClip, 'start'>, reference: CodeImageReference, frame: number, fps: number): number { return reference.time ?? (frame - clip.start) / fps }
+/**
+ * 视频参数的取帧时间：从片段入点起随片段本地时间走（裁掉开头时视频也从相应位置开始），不经过代码片段的变速、倒放与时间重映射；
+ * 给了 time 就固定在那一刻。
+ */
+export function codeMediaInputSeconds(clip: Pick<VideoEditClip, 'start' | 'sourceInUs' | 'sourceRemainder'>, reference: CodeImageReference, frame: number, rate: VideoEditRatio): number {
+  return reference.time ?? videoEditSourceSeconds(clip) + (frame - clip.start) * rate.denominator / rate.numerator
+}
 export function codeMediaInputComposition(document: VideoEditComposition, clip: VideoEditClip, reference: CodeImageReference, frame: number): { document: VideoEditComposition; frame: number; sessionKey: string; sampleKey: string } {
   if (reference.kind === 'sequence') {
     const clips = document.clips.filter(candidate => candidate.track < clip.track)
@@ -17,7 +24,7 @@ export function codeMediaInputComposition(document: VideoEditComposition, clip: 
   const media = document.media.find(media => media.id === reference.mediaId && media.kind === 'video')
   const item = document.items.find(item => item.mediaId === media?.id)
   if (!media || !item) throw new Error('视频图片参数引用的素材不存在。')
-  const seconds = codeMediaInputSeconds(clip, reference, frame, document.fps)
+  const seconds = codeMediaInputSeconds(clip, reference, frame, document.frameRate)
   if (seconds < 0 || seconds >= media.durationSeconds) throw new Error('视频图片参数的取帧时间超出素材范围。')
   const sourceUs = seconds * 1e6
   const input: VideoEditClip = { id: `code-video:${media.id}`, itemId: item.id, name: media.name, kind: 'video', start: 0, duration: 1, track: 0, sourceInUs: Math.floor(sourceUs), sourceRemainder: { numerator: Math.floor((sourceUs % 1) * 1e6), denominator: 1e6 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '' }

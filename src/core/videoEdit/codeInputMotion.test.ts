@@ -14,11 +14,11 @@ function fixture() {
   const document = createVideoEditDocument('输入审查'), sequence = createVideoEditSequence('主'); sequence.id = 'root'; addLegacyVideoEditTracks(sequence); document.sequences = [sequence]
   document.media = [{ id: 'raw', name: '未放置原片', kind: 'video', path: path.resolve(path.sep, 'input.mp4'), width: 320, height: 180, durationSeconds: 10 }]
   document.items = [{ id: 'raw-item', name: '原片', kind: 'video', mediaId: 'raw' }]
-  const clip: VideoEditClip = { id: 'code', itemId: 'code-item', name: '代码', kind: 'code', track: 3, start: 0, duration: 120, sourceInUs: 9000000, sourceRemainder: { numerator: 0, denominator: 1 }, speed: { numerator: 2, denominator: 1 }, reverse: true, x: .5, y: .5, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '', code: { definitionId: 'd', versionId: 'v', parameters: { picture: { kind: 'video', mediaId: 'raw' } } } }
+  const clip: VideoEditClip = { id: 'code', itemId: 'code-item', name: '代码', kind: 'code', track: 3, start: 0, duration: 120, sourceInUs: 1000000, sourceRemainder: { numerator: 0, denominator: 1 }, speed: { numerator: 2, denominator: 1 }, reverse: true, x: .5, y: .5, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '', code: { definitionId: 'd', versionId: 'v', parameters: { picture: { kind: 'video', mediaId: 'raw' } } } }
   sequence.clips = [clip]
   return { document, sequence, clip, composition: () => videoEditComposition(document, sequence.id) }
 }
-it('finds an unplaced input and follows the producer playback clock independently of author trim, speed and reverse', () => {
+it('finds an unplaced input and follows the clip in-point at the producer playback clock, independently of author speed and reverse', () => {
   const { clip, composition } = fixture(), local = composition()
   const [input] = videoEditCodeInputMotionPlacements(local, { from: 0, to: 120 })
   expect(input.input).toEqual({ parameter: 'picture', kind: 'video', mediaId: 'raw' })
@@ -28,6 +28,8 @@ it('finds an unplaced input and follows the producer playback clock independentl
     const rendered = codeMediaInputComposition(local, clip, { kind: 'video', mediaId: 'raw' }, frame).document.clips[0]
     expect(input.sourceTimes![frame]).toBeCloseTo((rendered.sourceInUs + rendered.sourceRemainder.numerator / rendered.sourceRemainder.denominator) / 1e6, 10)
   }
+  // 裁掉的开头（入点 1 秒）算进视频时间；2 倍速与倒放不换算视频
+  expect(input.sourceTimes![0]).toBeCloseTo(1, 10); expect(input.sourceTimes![30]).toBeCloseTo(1 + 30 * local.frameRate.denominator / local.frameRate.numerator, 10)
 })
 it.each([undefined, .5])('video input fills its source canvas without a half-frame offset, fixed time=%s', time => {
   const { clip, composition } = fixture()
