@@ -1,6 +1,6 @@
 # 用户标注处理协议
 
-标注与剪辑共用正式实体、事务、撤销和观察能力。只处理用户已发送的 open 标注；draft 待发送，addressed 等用户审查，resolved 已通过。不要自行发送草稿或代替用户通过。
+标注与剪辑共用正式实体、事务、撤销和观察能力。处理用户已发送的 open 标注，以及用户在对话里让你改的 draft 草稿；改完写 addressed（已改完），即视为完成、画面上不再显示，用户不满意会驳回回到 open，再按驳回理由重改。resolved 是用户确认，不要代替用户写。
 
 ## 发现与读取
 
@@ -28,7 +28,7 @@ element 目标先按 clip_id 回读片段固定源码版本，再读 video_edit.
 
 参数修改走片段 code_parameters；结构改动新增 code_version，拿到返回引用后重绑 clip.code_version_id（滤镜重绑 effect.version_id），保留授权范围外实例、其它参数及曲线。必要时检查共享定义的调用方，不删除重建用户满意内容。
 
-## 修改、回复与待审查
+## 修改、回复与标为已改完
 
 内容修改、追加 thread 与 status=addressed 放在同一次 change_application_entities。若先创建新源码版本获取引用，最终实例绑定/参数修改和标注回复仍合并一事务。thread 用 mutate_properties 的 append 追加，value 是一条消息对象（不是数组；同一事务里同一属性只能追加一次），保留全部既有讨论：
 

@@ -121,7 +121,9 @@ export function VideoEditAnnotationOverlay({ instance, active, onError }: { inst
   const gestureSize = useRef<Size>(size)
   const sequence = getActiveVideoEditSequence(instance)
   const displayMarks = sequence.annotations.map(mark => resolveVideoEditElementAnnotation(instance, mark))
-  const visibleMarks = displayMarks.filter(({ mark }) => mark.status !== 'resolved' && videoEditAnnotationAt(mark, instance.frame))
+  // 已改完、已确认的不再画在画面上；在面板里选中已改完的那条（准备看看要不要驳回）时才显示它
+  const reviewing = selectedVideoEditAnnotation(instance.document.id)
+  const visibleMarks = displayMarks.filter(({ mark }) => (mark.status === 'draft' || mark.status === 'open' || (mark.status === 'addressed' && mark.id === reviewing)) && videoEditAnnotationAt(mark, instance.frame))
   const selected = active ? visibleMarks.find(({ mark }) => mark.id === selectedId)?.mark : undefined
   const valid = (capture: Capture): boolean => instance.document === capture.document && instance.activeSequenceId === capture.sequenceId && instance.frame === capture.frame && instance.selection === capture.clipId && instance.selectedClipIds === capture.selection && videoEditProgramCommandIdentity(instance.document.id) === capture.command
   useEffect(() => {

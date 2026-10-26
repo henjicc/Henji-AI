@@ -45,7 +45,7 @@ export function VideoEditAnnotationToolOptions({ instance, presentation, onError
     </div>
     <UiSegmented<VideoEditAnnotationWeight> ariaLabel="批注粗细" size="sm" value={brush.weight} onChange={weight => run(() => setVideoEditAnnotationBrush(projectId, { weight }))}
       options={VIDEO_EDIT_ANNOTATION_WEIGHTS.map(weight => ({ value: weight, label: VIDEO_EDIT_ANNOTATION_WEIGHT_LABELS[weight] }))} />
-    {reviews > 0 && <UiButton size="sm" tooltip="助手改好了，到批注面板里通过或重开" onClick={() => run(() => focusVideoEditPanel(projectId, 'annotations'))}>待审查 · {reviews}</UiButton>}
+    {reviews > 0 && <UiButton size="sm" tooltip="助手改完了；有不满意的到批注面板里驳回" onClick={() => run(() => focusVideoEditPanel(projectId, 'annotations'))}>已改完 · {reviews}</UiButton>}
     {drafts > 0 && <>
       <UiButton size="sm" variant="secondary" loading={sending} disabled={sending} onClick={() => send(false)}><Send />发送给助手 · {drafts}</UiButton>
       <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1" role="menu" aria-label="更多批注操作">

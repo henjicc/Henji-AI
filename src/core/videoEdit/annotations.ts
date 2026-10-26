@@ -49,7 +49,7 @@ export const videoEditAnnotationSchema = z.object({
   if (box && (box.x + box.width > 1.000001 || box.y + box.height > 1.000001)) issue('标注区域必须在画幅内。')
   if (target.kind === 'arrow' && Math.hypot(target.to.x - target.from.x, target.to.y - target.from.y) < 0.002) issue('箭头起点和终点不能重合。')
   if (new Set(value.thread.map(message => message.id)).size !== value.thread.length) issue('标注回复不能有重复标识。')
-  if (value.status === 'addressed' && (!value.addressedBy || !value.thread.length)) issue('待审查标注需要修改关联和处理回复。')
+  if (value.status === 'addressed' && (!value.addressedBy || !value.thread.length)) issue('已改完的标注需要修改关联和处理回复。')
 })
 export type VideoEditAnnotation = z.infer<typeof videoEditAnnotationSchema>
 export type VideoEditAnnotationTarget = z.infer<typeof videoEditAnnotationTargetSchema>
@@ -58,7 +58,8 @@ export function videoEditAnnotationColor(mark: Pick<VideoEditAnnotation, 'style'
 export function videoEditAnnotationWeight(mark: Pick<VideoEditAnnotation, 'style'>): VideoEditAnnotationWeight { return mark.style?.weight ?? 'regular' }
 /** 写进批注的样式：中等粗细不写出来，文件里只记偏离默认的值。 */
 export function videoEditAnnotationStyle(color: VideoEditAnnotationColor, weight: VideoEditAnnotationWeight): NonNullable<VideoEditAnnotation['style']> { return { color, ...(weight === 'regular' ? {} : { weight }) } }
-export const VIDEO_EDIT_ANNOTATION_STATUS_LABELS = { draft: '待发送', open: '待处理', addressed: '待审查', resolved: '已通过' } as const
+/** 助手改完（addressed）即视为完成，画面上不再显示；用户觉得不行就驳回，回到待处理。用户也可以确认（resolved）。 */
+export const VIDEO_EDIT_ANNOTATION_STATUS_LABELS = { draft: '待发送', open: '待处理', addressed: '已改完', resolved: '已确认' } as const
 
 /** Review is a user action. Neither the built-in assistant nor an external caller can approve it. */
 export function assertVideoEditAnnotationTransition(before: VideoEditAnnotation | undefined, after: VideoEditAnnotation, source: 'user' | 'agent'): void {
@@ -67,8 +68,9 @@ export function assertVideoEditAnnotationTransition(before: VideoEditAnnotation 
     if (!['draft', 'open'].includes(after.status)) throw new Error('新标注只能是 draft 或 open。')
     return
   }
-  const transitions = { draft: ['draft', 'open'], open: ['open', 'addressed'], addressed: ['addressed', 'resolved', 'open'], resolved: ['resolved', 'open'] }
-  if (!transitions[before.status].includes(after.status)) throw new Error('标注状态转换无效；处理后待审查，用户可通过或重开。')
+  // 草稿也能直接改完：用户在对话里让助手改，就不必先发送
+  const transitions = { draft: ['draft', 'open', 'addressed'], open: ['open', 'addressed'], addressed: ['addressed', 'resolved', 'open'], resolved: ['resolved', 'open'] }
+  if (!transitions[before.status].includes(after.status)) throw new Error('标注状态转换无效；助手改完标为已改完，用户可确认或驳回。')
   if (source === 'agent' && (before.author.kind !== after.author.kind || before.author.name !== after.author.name || before.createdAt !== after.createdAt)) throw new Error('不能改写标注作者或创建时间。')
   if (source === 'agent' && (after.thread.length < before.thread.length || before.thread.some((message, index) => JSON.stringify(message) !== JSON.stringify(after.thread[index])))) throw new Error('回复只能追加，不能覆盖已有讨论。')
   if (source === 'agent' && before.status !== 'addressed' && after.status === 'addressed' && (after.thread.length <= before.thread.length || after.thread.at(-1)?.author.kind === 'user')) throw new Error('处理完成必须追加助手的处理回复。')

@@ -30,11 +30,13 @@ describe('标注状态与目标', () => {
     expect(() => annotation({ target: { kind: 'element', elementId: 'headline' } })).toThrow('片段')
     expect(() => annotation({ target: { kind: 'range', startFrame: 20, endFrame: 30 }, endFrame: 40 })).toThrow('一致')
   })
-  it('草稿→待处理→待审查→用户通过；拒绝Agent通过、回退草稿和覆盖讨论', () => {
+  it('草稿→待处理→已改完→用户确认；草稿也能直接改完；拒绝Agent确认、回退草稿和覆盖讨论', () => {
     const draft = annotation({ status: 'draft' }); const open = { ...draft, status: 'open' as const }
     const addressed = annotation({ status: 'addressed', addressedBy: { revision: 2 }, thread: [reply] }); const resolved = { ...addressed, status: 'resolved' as const }
     expect(() => assertVideoEditAnnotationTransition(draft, open, 'user')).not.toThrow()
     expect(() => assertVideoEditAnnotationTransition(open, addressed, 'agent')).not.toThrow()
+    // 用户在对话里让助手改的草稿，可以直接改完
+    expect(() => assertVideoEditAnnotationTransition(draft, { ...addressed, thread: [reply] }, 'agent')).not.toThrow()
     expect(() => assertVideoEditAnnotationTransition(addressed, resolved, 'agent')).toThrow('只有用户')
     expect(() => assertVideoEditAnnotationTransition(addressed, resolved, 'user')).not.toThrow()
     expect(() => assertVideoEditAnnotationTransition(resolved, open, 'user')).not.toThrow()

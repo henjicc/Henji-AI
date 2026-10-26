@@ -11,8 +11,8 @@ import { subscribeVideoEdit, videoEditCommittedDocument, type VideoEditInstance 
 import { timelineTimecode } from '../timeline/timelineGeometry'
 
 interface Props { instance: VideoEditInstance; visible?: boolean; onError: (error: unknown) => void }
-/** 状态点：待发送空心、待处理强调色、待审查警示色、已通过成功色（画面、面板、时间线同一套词与颜色）。 */
-const STATUS_DOT: Record<VideoEditAnnotation['status'], string> = { draft: 'border border-text3', open: 'bg-accent', addressed: 'bg-warning-solid', resolved: 'bg-success-solid' }
+/** 状态点：待发送空心、待处理强调色、已改完成功色、已确认灰色（画面、面板、时间线同一套词与颜色）。 */
+const STATUS_DOT: Record<VideoEditAnnotation['status'], string> = { draft: 'border border-text3', open: 'bg-accent', addressed: 'bg-success-solid', resolved: 'bg-text3' }
 const ink = (mark: VideoEditAnnotation): string => ['white', 'yellow'].includes(videoEditAnnotationColor(mark)) ? VIDEO_EDIT_ANNOTATION_COLORS.black : VIDEO_EDIT_ANNOTATION_COLORS.white
 const reply = (text: string) => ({ id: crypto.randomUUID(), author: { kind: 'user' as const, name: '我' }, createdAt: new Date().toISOString(), text })
 const clock = (value: string): string => new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -30,7 +30,8 @@ function AnnotationRow({ instance, sequenceId, mark, number, fps, expanded, onEr
   const commitText = (): void => { if (text.trim() && text !== mark.text) run(() => updateVideoEditAnnotation(projectId, mark.id, current => ({ ...current, text }))) }
   const append = (): void => { if (!note.trim()) return; run(() => { updateVideoEditAnnotation(projectId, mark.id, current => ({ ...current, thread: [...current.thread, reply(note)] })); setNote('') }) }
   const resolved = mark.status === 'resolved'
-  const noteLabel = mark.status === 'addressed' ? `标注 ${number} 审查意见` : `标注 ${number} 补充说明`
+  const noteLabel = mark.status === 'addressed' ? `标注 ${number} 驳回理由` : `标注 ${number} 补充说明`
+  const reject = (): void => run(() => { reviewVideoEditAnnotation(projectId, mark.id, false, note); setNote('') })
   return <div className="group/annotation relative px-1" data-video-edit-annotation={mark.id} data-expanded={expanded || undefined}>
     <UiOptionButton variant="menu" aria-label={`跳到标注 ${number}`} aria-expanded={expanded} className="w-full items-start gap-2" onClick={() => run(() => { selectVideoEditAnnotation(projectId, mark.id); jumpToVideoEditAnnotation(projectId, mark.id) })}>
       <span aria-hidden="true" className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-2xs font-bold ${resolved ? 'opacity-50' : ''}`} style={{ backgroundColor: VIDEO_EDIT_ANNOTATION_COLORS[videoEditAnnotationColor(mark)], color: ink(mark) }}>{number}</span>
@@ -44,6 +45,8 @@ function AnnotationRow({ instance, sequenceId, mark, number, fps, expanded, onEr
       </span>
     </UiOptionButton>
     <UiIconButton size="xs" tone="danger" aria-label={`删除标注 ${number}`} tooltip="删除这条批注" className={`absolute right-2 top-1.5 ${expanded ? '' : 'opacity-0 focus-visible:opacity-100 group-hover/annotation:opacity-100'}`} onClick={() => run(() => deleteVideoEditAnnotation(projectId, mark.id))}><Trash2 /></UiIconButton>
+    {/* 已改完的不用展开也能驳回：悬停这一条就出现 */}
+    {mark.status === 'addressed' && !expanded && <UiIconButton size="xs" aria-label={`驳回标注 ${number}`} tooltip="驳回：没改好，退回给助手重改" className="absolute right-9 top-1.5 opacity-0 focus-visible:opacity-100 group-hover/annotation:opacity-100" onClick={reject}><Undo2 /></UiIconButton>}
     {expanded && <div className="flex gap-2 px-3 pb-3" data-video-edit-annotation-details><span aria-hidden="true" className="w-5 shrink-0" /><div className="flex min-w-0 flex-1 flex-col gap-2">
       {mark.status === 'draft' && <UiTextArea aria-label={`标注 ${number} 说明`} rows={2} value={text} onChange={event => setText(event.target.value)} onBlur={commitText} />}
       {mark.thread.map(message => <div key={message.id} className="flex flex-col gap-0.5">
@@ -51,20 +54,20 @@ function AnnotationRow({ instance, sequenceId, mark, number, fps, expanded, onEr
         <p className="whitespace-pre-wrap break-words text-xs text-text2">{message.text}</p>
       </div>)}
       {mark.status === 'addressed' && <div className="flex flex-wrap items-center gap-1">
-        <UiButton variant="secondary" size="sm" onClick={() => run(() => reviewVideoEditAnnotation(projectId, mark.id, true))}><Check />通过</UiButton>
-        <UiButton size="sm" onClick={() => run(() => { reviewVideoEditAnnotation(projectId, mark.id, false, note); setNote('') })}>重开</UiButton>
+        <UiButton variant="secondary" size="sm" tooltip="没改好，退回给助手重改（下面填的理由会一起带上）" onClick={reject}>驳回</UiButton>
+        <UiButton size="sm" tooltip="确认改好了，这条从列表里收起" onClick={() => run(() => reviewVideoEditAnnotation(projectId, mark.id, true))}><Check />确认</UiButton>
         <UiButton size="sm" onClick={() => run(() => undoVideoEditAnnotationChange(projectId, mark.id))}><Undo2 />撤销这次修改</UiButton>
       </div>}
       {resolved && <div className="flex"><UiButton size="sm" onClick={() => run(() => reviewVideoEditAnnotation(projectId, mark.id, false))}>重开</UiButton></div>}
       {!resolved && mark.status !== 'draft' && <div className="flex items-center gap-1">
-        <UiInput size="sm" className="min-w-0 flex-1" aria-label={noteLabel} placeholder={mark.status === 'addressed' ? '补充说明，重开时一起发给助手' : '补充说明'} value={note} onChange={event => setNote(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); append() } }} />
+        <UiInput size="sm" className="min-w-0 flex-1" aria-label={noteLabel} placeholder={mark.status === 'addressed' ? '驳回理由（可选），驳回时一起发给助手' : '补充说明'} value={note} onChange={event => setNote(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); append() } }} />
         <UiIconButton size="sm" aria-label="补充" tooltip="补充到讨论" disabled={!note.trim()} onClick={append}><Send /></UiIconButton>
       </div>}
     </div></div>}
   </div>
 }
 
-const FILTERS = [{ value: 'all', label: '全部' }, { value: 'draft', label: '待发送' }, { value: 'open', label: '待处理' }, { value: 'addressed', label: '待审查' }, { value: 'resolved', label: '已通过' }]
+const FILTERS = [{ value: 'all', label: '全部' }, { value: 'draft', label: '待发送' }, { value: 'open', label: '待处理' }, { value: 'addressed', label: '已改完' }, { value: 'resolved', label: '已确认' }]
 
 /**
  * 批注面板（重要记录 019）：有待发送时顶部才出现发送区；入出点设好时可以批注这一段；下面是“N 条 · 筛选”和批注列表。

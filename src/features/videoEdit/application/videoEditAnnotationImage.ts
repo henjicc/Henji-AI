@@ -79,7 +79,7 @@ export function paintVideoEditAnnotationObservation(context: Context, width: num
       context.fillStyle = VIDEO_EDIT_ANNOTATION_COLORS.black; context.fillText(text, at[0] + size * 0.6, at[1] + size * 1.15)
       label = [at[0], at[1]]
     }
-    const title = `${number}${mark.status === 'addressed' ? ' 待审查' : ''}${target.kind === 'element' && !target.region ? ' 元素已不存在' : ''}`
+    const title = `${number}${mark.status === 'addressed' ? ' 已改完' : ''}${target.kind === 'element' && !target.region ? ' 元素已不存在' : ''}`
     context.setLineDash([]); context.font = '14px sans-serif'; context.fillStyle = token('media'); const x = Math.max(0, Math.min(width - 24, label[0])); const y = Math.max(20, Math.min(height, label[1]))
     context.fillRect(x, y - 20, Math.min(width - x, context.measureText(title).width + 8), 20)
     context.fillStyle = token('on-media'); context.fillText(title, x + 4, y - 5)
