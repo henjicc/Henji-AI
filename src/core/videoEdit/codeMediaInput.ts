@@ -2,6 +2,7 @@ import { isCodeImageReference, type CodeParameterValues } from './codeMaterial/c
 import { type VideoEditComposition, type VideoEditClip } from './document'
 import type { CodeImageReference } from '../imaging/parameterTypes'
 import { videoEditSourceSeconds, type VideoEditRatio } from './time'
+import { RECORDING_CURSOR_EFFECT } from './recordingCursor'
 
 export function codeMediaInputKey(clipId: string, parameter: string): string { return `code-input:${JSON.stringify([clipId, parameter])}` }
 export function codeMediaFrameParameters(clip: VideoEditClip, parameters: CodeParameterValues): CodeParameterValues {
@@ -27,7 +28,9 @@ export function codeMediaInputComposition(document: VideoEditComposition, clip: 
   const seconds = codeMediaInputSeconds(clip, reference, frame, document.frameRate)
   if (seconds < 0 || seconds >= media.durationSeconds) throw new Error('视频图片参数的取帧时间超出素材范围。')
   const sourceUs = seconds * 1e6
-  const input: VideoEditClip = { id: `code-video:${media.id}`, itemId: item.id, name: media.name, kind: 'video', start: 0, duration: 1, track: 0, sourceInUs: Math.floor(sourceUs), sourceRemainder: { numerator: Math.floor((sourceUs % 1) * 1e6), denominator: 1e6 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '' }
+  const input: VideoEditClip = { id: `code-video:${media.id}`, itemId: item.id, name: media.name, kind: 'video', start: 0, duration: 1, track: 0, sourceInUs: Math.floor(sourceUs), sourceRemainder: { numerator: Math.floor((sourceUs % 1) * 1e6), denominator: 1e6 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '',
+    // 带采集事件的干净录屏（网页重演）：按录制光标重画鼠标与点击，和普通录屏片段一致
+    ...(media.recordingCursor && !media.recordingCursor.cursorBakedIn ? { effects: [{ id: `code-video-cursor:${media.id}`, name: '录制光标', enabled: true, amount: 1, builtin: { id: RECORDING_CURSOR_EFFECT, params: {} } }] } : {}) }
   const sessionKey = JSON.stringify([document.id, 'video', media.id, media.path, media.sourceRevision, media.assetContent, media.width, media.height, media.durationSeconds, media.frameRate, media.frameRateMode])
   return { document: { ...document, width: media.width, height: media.height, pixelAspectRatio: { numerator: 1, denominator: 1 }, clips: [input], tracks: [{ id: 'code-input', name: '画面', kind: 'video', index: 0, locked: false, enabled: true, muted: true, solo: false }], captions: [], transitions: [] }, frame: 0, sessionKey, sampleKey: JSON.stringify([input.sourceInUs, input.sourceRemainder]) }
 }

@@ -95,3 +95,9 @@ it('raw input candidates do not count as extra attention events even when their 
   const candidate: VideoEditReviewRecord = { ...record, timeline: { from: 15, to: 16 }, motionEvidence: { basis: 'code_input_pixels', suggestion: '源候选' } }
   expect(videoEditCrowdedReviewEvents([...base, candidate], 30, 2)).toEqual(videoEditCrowdedReviewEvents(base, 30, 2))
 })
+it.each([false, true])('网页重演录屏作为代码素材的视频参数时按录制光标重画鼠标；画面里已有鼠标（%s）时不重画', baked => {
+  const { clip, composition } = fixture(), local = composition()
+  local.media[0] = { ...local.media[0], recordingCursor: { cursorBakedIn: baked } as never }
+  const input = codeMediaInputComposition(local, clip, { kind: 'video', mediaId: 'raw' }, 0).document.clips[0]
+  expect(input.effects?.map(effect => effect.builtin?.id) ?? []).toEqual(baked ? [] : ['recording_cursor'])
+})
