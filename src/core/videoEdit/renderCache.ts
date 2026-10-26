@@ -15,8 +15,8 @@ import { videoEditDuration, videoEditVisibleTracks, type VideoEditClip, type Vid
  */
 export const VIDEO_EDIT_RENDER_WINDOW_SECONDS = 5
 export const VIDEO_EDIT_RENDER_MIN_SECONDS = 0.5
-/** 渲染管线输出变化（合成、解码、编码设置）时递增，旧预览文件全部失效。 */
-export const VIDEO_EDIT_RENDER_CACHE_VERSION = 2
+/** 渲染管线输出变化（合成、解码、编码设置）时递增，旧预览文件全部失效。3：运动模糊取样与代码图层绘制（2026-10-27）。 */
+export const VIDEO_EDIT_RENDER_CACHE_VERSION = 3
 
 export interface VideoEditRenderWindow { index: number; startFrame: number; endFrame: number; key: string; heavy: boolean }
 
