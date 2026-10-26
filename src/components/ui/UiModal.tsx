@@ -59,6 +59,8 @@ interface UiModalProps {
   appear?: boolean;
 }
 
+const stopAtModal = (event: React.SyntheticEvent): void => { event.stopPropagation(); };
+
 export function UiModal({
   isOpen,
   scope = 'viewport',
@@ -130,6 +132,10 @@ export function UiModal({
       aria-hidden={closing || undefined}
       {...(closing ? { inert: '' } : {})}
       {...overlay.layerProps}
+      // 弹窗挂在 body 上，React 合成事件却仍沿组件树冒泡：从时间线这类按下即捕获指针的区域里打开时，
+      // 弹窗里的按下会被那里抢走，取消、保存都点不动（2026-10-26 序列设置）。指针类事件到弹窗为止；
+      // 全局监听（右键菜单、点外关闭、助手编辑拦截）都在捕获阶段，不受影响。
+      onPointerDown={stopAtModal} onMouseDown={stopAtModal} onClick={stopAtModal} onDoubleClick={stopAtModal} onContextMenu={stopAtModal}
     >
       <UiOverlayLayerProvider id={overlay.id}>
       {/* 弹窗是表单：从停靠面板里打开时开关也回到滑块外观（重要记录 022） */}

@@ -30,6 +30,14 @@ export function elementOfEventTarget(value: unknown): Element | null {
   return isDomNode(value) && isElementNode(value.parentElement) ? value.parentElement : null
 }
 
+/**
+ * React 合成事件沿组件树冒泡，会穿过 portal：从这里打开、挂到 body 的弹窗与菜单里的点击也会到达这里的处理函数。
+ * 只该处理 DOM 上真正落在自身里的事件（按下即捕获指针、弹右键菜单这类）时，用它排除 portal 里冒上来的事件。
+ */
+export function isEventInsideCurrentTarget(event: { currentTarget: unknown; target: unknown }): boolean {
+  return isDomNode(event.currentTarget) && isDomNode(event.target) && event.currentTarget.contains(event.target)
+}
+
 /** 节点所在文档；未挂载或缺省时回落到当前主文档。 */
 export function ownerDocumentOf(node: Node | null | undefined): Document {
   if (!node) return document

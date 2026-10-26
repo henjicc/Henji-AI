@@ -12,7 +12,7 @@ import { setVideoEditTimelineView, type VideoEditInstance } from '../application
 import { timelineCommandPresentation } from './timelineCommandPresentation'
 import { videoEditClipMedia } from '@/core/videoEdit/document'
 import type { VideoEditAudioChannelsTarget } from '../panels/VideoEditAudioChannelsDialog'
-import { elementOfEventTarget } from '@/utils/crossRealmDom'
+import { elementOfEventTarget, isEventInsideCurrentTarget } from '@/utils/crossRealmDom'
 import type { VideoEditInPlaceMenuTarget } from './useVideoEditInPlaceMenu'
 import type { VideoEditSceneTarget } from '../application/videoEditSceneDetection'
 import { useState } from 'react'
@@ -36,7 +36,8 @@ export function useTimelineMenu(instance: VideoEditInstance, onError: (error: un
   const show = (event: React.MouseEvent): void => {
     // 浮窗中的目标属于子窗口 realm，不能用 instanceof Element 判定。
     const target = elementOfEventTarget(event.target)
-    if (!target || target.closest('[data-video-edit-track-header]')) return
+    // 时间线里打开的弹窗、菜单（portal）上的右键不弹时间线菜单
+    if (!target || target.closest('[data-video-edit-track-header]') || !isEventInsideCurrentTarget(event)) return
     cancelPointer()
     try {
       const clipId = target.closest('[data-video-edit-clip]')?.getAttribute('data-video-edit-clip')

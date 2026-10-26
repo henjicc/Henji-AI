@@ -117,6 +117,20 @@ describe('UiModal', () => {
     expect(view.getByRole('button', { name: '简体中文' })).not.toBeNull();
   });
 
+  it('弹窗里的指针事件不再沿组件树冒到打开它的区域（时间线按下即捕获指针，序列设置曾点不动）', () => {
+    const parentDown = vi.fn(); const parentClick = vi.fn(); const onCancel = vi.fn();
+    const view = render(
+      <div onPointerDown={parentDown} onMouseDown={parentDown} onClick={parentClick} onContextMenu={parentClick}>
+        <UiModal isOpen title="序列设置" onClose={() => {}} footer={<UiButton onClick={onCancel}>取消</UiButton>}>正文</UiModal>
+      </div>,
+    );
+    const cancel = view.getByRole('button', { name: '取消' });
+    fireEvent.pointerDown(cancel); fireEvent.mouseDown(cancel); fireEvent.click(cancel); fireEvent.contextMenu(cancel);
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(parentDown).not.toHaveBeenCalled();
+    expect(parentClick).not.toHaveBeenCalled();
+  });
+
   it('所有尺寸档位都使用统一的响应式尺寸令牌', () => {
     const sizes = Object.keys(UI_MODAL_SIZE_CLASS) as UiModalSize[];
     const view = render(

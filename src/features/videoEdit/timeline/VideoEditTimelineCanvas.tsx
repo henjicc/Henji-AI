@@ -40,7 +40,7 @@ import { setVideoEditTrackHeights, updateVideoEditTrack } from '../application/v
 import { registerVideoEditTimelineViewport } from '../application/videoEditTimelineViewport'
 import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from '../application/videoEditCommands'
 import { clampVideoEditTrackHeight, clampVideoEditZoom, videoEditZoomToFit } from '@/core/videoEdit/timelineNavigation'
-import { isDomNode, ownerWindowOf } from '@/utils/crossRealmDom'
+import { isDomNode, isEventInsideCurrentTarget, ownerWindowOf } from '@/utils/crossRealmDom'
 import { VideoEditSequenceDialog } from '../panels/VideoEditSequenceDialog'
 import { VideoEditAudioChannelsDialog, type VideoEditAudioChannelsTarget } from '../panels/VideoEditAudioChannelsDialog'
 import { VideoEditTrackHeader } from './VideoEditTrackHeader'
@@ -467,7 +467,8 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
       onPointerDown={pointer.down} onPointerMove={pointer.move} onPointerUp={pointer.up} onPointerCancel={pointer.cancel} onLostPointerCapture={pointer.cancel} onContextMenu={menu.show}
       onDoubleClick={event => {
         // 双击记着来源的片段：回到来源继续编辑（图片文档片段打开图片编辑，4.1）；其余有源文件的片段按 Premiere 在源监视器打开。
-        // 按下时视口捕获了指针，双击事件的目标是视口本身：按落点找片段
+        // 按下时视口捕获了指针，双击事件的目标是视口本身：按落点找片段；时间线里打开的弹窗（portal）上的双击不算
+        if (!isEventInsideCurrentTarget(event)) return
         const hit = elementOfEventTarget(event.target)?.closest('[data-video-edit-clip]') ?? document.elementFromPoint?.(event.clientX, event.clientY)?.closest('[data-video-edit-clip]')
         const clipId = hit?.getAttribute('data-video-edit-clip')
         if (!clipId) return

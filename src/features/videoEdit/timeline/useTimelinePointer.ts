@@ -13,7 +13,7 @@ import { captureVideoEditCommandContext, executeVideoEditCommand } from '../appl
 import { focusVideoEditPanel, requireVideoEditInstance, setVideoEditTimelineView, setVideoEditView, type VideoEditInstance } from '../application/videoEditService'
 import { videoEditTimelineViewport } from '../application/videoEditTimelineViewport'
 import { isTimelineTrimTool, timelineTrimEdge, timelineTrimNeedsEdge, timelineTrimRequest, timelineTrimSnapExclusions, type TimelineTrimTool } from './timelineTrimGesture'
-import { elementOfEventTarget, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
+import { elementOfEventTarget, isEventInsideCurrentTarget, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
 import { videoEditEdgeTracks } from '@/core/videoEdit/tracks'
 import { videoEditTransitionWindow } from '@/core/videoEdit/transitions'
 import { beginVideoEditFadeDrag, beginVideoEditTransitionDrag, finishVideoEditTimelineHandleDrag, previewVideoEditFadeDrag, previewVideoEditTransitionDrag, selectVideoEditTransition, type VideoEditTimelineHandleDrag } from '../application/videoEditTransitions'
@@ -258,7 +258,8 @@ export function useTimelinePointer(options: Options) {
     // Holding the wheel button drags the timeline like the hand tool (content follows the pointer). Taking the
     // pointer down here also stops the browser's own middle-click autoscroll, which moves the opposite way.
     const middle = event.button === 1
-    if (event.button !== 0 && !middle || !target) return
+    // 时间线里打开的弹窗、菜单挂在 body 上，按下事件仍会沿组件树冒上来；在这里捕获指针会让弹窗按钮收不到点击
+    if (event.button !== 0 && !middle || !target || !isEventInsideCurrentTarget(event)) return
     const { instance, sequence, pixels, onError } = current.current; const layout = current.current.layout.current
     const rows = layout.rows
     if (target.closest('[data-video-edit-track-header]') || target.closest('[data-video-edit-timeline-chrome]')) return
