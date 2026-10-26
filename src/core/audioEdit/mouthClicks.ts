@@ -132,6 +132,23 @@ function levinson(r: Float64Array, a: Float64Array, scratch: Float64Array): void
   }
 }
 
+/** 自相关 r[0..LPC_ORDER]（四路累加） */
+function autocorrelate(values: Float64Array, r: Float64Array): void {
+  const length = values.length
+  for (let k = 0; k <= LPC_ORDER; k++) {
+    let acc0 = 0, acc1 = 0, acc2 = 0, acc3 = 0
+    let j = k
+    for (; j + 3 < length; j += 4) {
+      acc0 += values[j] * values[j - k]
+      acc1 += values[j + 1] * values[j + 1 - k]
+      acc2 += values[j + 2] * values[j + 2 - k]
+      acc3 += values[j + 3] * values[j + 3 - k]
+    }
+    for (; j < length; j++) acc0 += values[j] * values[j - k]
+    r[k] = (acc0 + acc1) + (acc2 + acc3)
+  }
+}
+
 /** 第 k 小（0 起）的值，就地重排 values[0, length) */
 function selectKth(values: Float64Array, length: number, k: number): number {
   let lo = 0
@@ -218,34 +235,27 @@ function scanChannel(signal: Float32Array, channel: number, sampleRate: number, 
       hp.copyWithin(0, lo - hpBase, hpFilled - hpBase)
       hpBase = lo
     }
-    for (let n = hpFilled; n < hi; n++) {
-      const value = signal[n]
-      const x = value - value === 0 ? value : 0
-      const y = p0 * x + m1
-      m1 = p1 * x - q1 * y + m2
-      m2 = p2 * x - q2 * y
-      const w = r0 * y + n1
-      n1 = r1 * y - t1 * w + n2
-      n2 = r2 * y - t2 * w
-      hp[n - hpBase] = w
+    {
+      const target = hp
+      const base = hpBase
+      for (let n = hpFilled; n < hi; n++) {
+        const value = signal[n]
+        const x = value - value === 0 ? value : 0
+        const y = p0 * x + m1
+        m1 = p1 * x - q1 * y + m2
+        m2 = p2 * x - q2 * y
+        const w = r0 * y + n1
+        n1 = r1 * y - t1 * w + n2
+        n2 = r2 * y - t2 * w
+        target[n - base] = w
+      }
     }
     hpFilled = Math.max(hpFilled, hi)
     const hpAt = (n: number): number => (n >= lo && n < hi ? hp[n - hpBase] : 0)
 
     // 逐帧 LPC 残差；帧里有远超本帧尺度的突起时挖掉突起再估一次系数
     const fit = (): void => {
-      for (let k = 0; k <= LPC_ORDER; k++) {
-        let acc0 = 0, acc1 = 0, acc2 = 0, acc3 = 0
-        let j = k
-        for (; j + 3 < window; j += 4) {
-          acc0 += weighted[j] * weighted[j - k]
-          acc1 += weighted[j + 1] * weighted[j + 1 - k]
-          acc2 += weighted[j + 2] * weighted[j + 2 - k]
-          acc3 += weighted[j + 3] * weighted[j + 3 - k]
-        }
-        for (; j < window; j++) acc0 += weighted[j] * weighted[j - k]
-        correlation[k] = (acc0 + acc1) + (acc2 + acc3)
-      }
+      autocorrelate(weighted, correlation)
       correlation[0] *= 1 + 1e-5
       levinson(correlation, a, scratch)
     }
@@ -258,11 +268,13 @@ function scanChannel(signal: Float32Array, channel: number, sampleRate: number, 
         for (let k = 0; k <= LPC_ORDER; k++) acc += a[k] * hpAt(n - k)
         residual[n - bufferStart] = acc
       }
-      for (; n < frameEnd; n++) {
-        const i = n - hpBase
-        residual[n - bufferStart] = c0 * hp[i] + c1 * hp[i - 1] + c2 * hp[i - 2] + c3 * hp[i - 3] + c4 * hp[i - 4] + c5 * hp[i - 5] +
-          c6 * hp[i - 6] + c7 * hp[i - 7] + c8 * hp[i - 8] + c9 * hp[i - 9] + c10 * hp[i - 10] + c11 * hp[i - 11] +
-          c12 * hp[i - 12] + c13 * hp[i - 13] + c14 * hp[i - 14] + c15 * hp[i - 15] + c16 * hp[i - 16]
+      const x = hp
+      const out = residual
+      const shift = bufferStart - hpBase
+      for (let i = n - hpBase; i < frameEnd - hpBase; i++) {
+        out[i - shift] = c0 * x[i] + c1 * x[i - 1] + c2 * x[i - 2] + c3 * x[i - 3] + c4 * x[i - 4] + c5 * x[i - 5] +
+          c6 * x[i - 6] + c7 * x[i - 7] + c8 * x[i - 8] + c9 * x[i - 9] + c10 * x[i - 10] + c11 * x[i - 11] +
+          c12 * x[i - 12] + c13 * x[i - 13] + c14 * x[i - 14] + c15 * x[i - 15] + c16 * x[i - 16]
       }
     }
     for (let frameStart = bufferStart; frameStart < bufferEnd; frameStart += frame) {
@@ -270,7 +282,8 @@ function scanChannel(signal: Float32Array, channel: number, sampleRate: number, 
       const windowStart = frameStart - pad
       if (windowStart >= lo && windowStart + window <= hi) {
         const base = windowStart - hpBase
-        for (let j = 0; j < window; j++) weighted[j] = hp[base + j] * hann[j]
+        const x = hp, out = weighted, taper = hann
+        for (let j = 0; j < window; j++) out[j] = x[base + j] * taper[j]
       } else {
         for (let j = 0; j < window; j++) weighted[j] = hpAt(windowStart + j) * hann[j]
       }
@@ -279,11 +292,11 @@ function scanChannel(signal: Float32Array, channel: number, sampleRate: number, 
       const scale = robustScale(residual, frameStart - bufferStart, frameEnd - bufferStart, magnitudes)
       const limit = OUTLIER_Z * scale
       let masked = false
-      for (let n = frameStart; n < frameEnd; n++) {
-        if (!(Math.abs(residual[n - bufferStart]) > limit)) continue
-        const from = Math.max(0, n - outlierBefore - windowStart)
-        const to = Math.min(window, n + outlierAfter - windowStart)
-        for (let j = from; j < to; j++) weighted[j] = 0
+      const res = residual
+      for (let i = frameStart - bufferStart; i < frameEnd - bufferStart; i++) {
+        if (!(Math.abs(res[i]) > limit)) continue
+        const n = i + bufferStart
+        weighted.fill(0, Math.max(0, n - outlierBefore - windowStart), Math.min(window, n + outlierAfter - windowStart))
         masked = true
       }
       const index = (frameStart - bufferStart) / frame
@@ -308,29 +321,30 @@ function scanChannel(signal: Float32Array, channel: number, sampleRate: number, 
     }
     const frames = Math.ceil(length / frame)
     let found = 0
+    const res = residual, scores = z, found2 = hits, source = hp, coefficients = models, base0 = hpBase
     for (let k = firstWindow + 1; k <= lastWindow; k++) {
       const sigma = Math.max(sigmas[k - firstWindow], sigmas[k - 1 - firstWindow])
       const inverse = 1 / sigma
       const pulseLimit = PULSE_Z * sigma
       const from = Math.max(bufferStart, k * half)
       const to = Math.min(bufferEnd, (k + 1) * half)
-      for (let n = from; n < to; n++) {
-        let value = residual[n - bufferStart]
-        if (Math.abs(value) > pulseLimit && n - LPC_ORDER >= lo) {
-          const own = Math.floor((n - bufferStart) / frame)
-          const base = n - hpBase
+      for (let i = from - bufferStart; i < to - bufferStart; i++) {
+        let value = res[i]
+        if (Math.abs(value) > pulseLimit && i + bufferStart - LPC_ORDER >= lo) {
+          const own = Math.floor(i / frame)
+          const base = i + bufferStart - base0
           for (let other = own - 1; other <= own + 1; other += 2) {
             if (other < 0 || other >= frames) continue
             const offset = other * (LPC_ORDER + 1)
             let acc = 0
-            for (let j = 0; j <= LPC_ORDER; j++) acc += models[offset + j] * hp[base - j]
+            for (let j = 0; j <= LPC_ORDER; j++) acc += coefficients[offset + j] * source[base - j]
             if (Math.abs(acc) < Math.abs(value)) value = acc
           }
-          residual[n - bufferStart] = value
+          res[i] = value
         }
         const score = Math.abs(value) * inverse
-        z[n - bufferStart] = score
-        if (score > CANDIDATE_Z) hits[found++] = n - bufferStart
+        scores[i] = score
+        if (score > CANDIDATE_Z) found2[found++] = i
       }
     }
 
