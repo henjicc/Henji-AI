@@ -1381,6 +1381,8 @@ export class VideoEditRenderer {
       const rebuilt = await chain.sync(effects)
       const plan = planAudioEffectBlock(chain, firstSample, length)
       if (!plan.contiguous && !rebuilt) await chain.reset(effects)
+      // 调制效果的振荡相位按片段内位置对齐：从哪里开始播放、预览块与导出块怎样划分，同一位置的调制都相同。
+      if (!plan.contiguous) chain.locate(Math.round(plan.inputStart - clip.start / fps * rate))
       const input = Array.from({ length: this.document.channels }, () => new Float32Array(plan.inputLength))
       const readFrom = Math.max(plan.inputStart / rate, playStart, headRoom); const readTo = Math.min((plan.inputStart + plan.inputLength) / rate, playEnd)
       if (readFrom < readTo) await readSound(readFrom, readTo, plan.inputStart, input, sample => sourceGain * videoEditClipValue(clip, 'volume', (plan.inputStart + sample) / rate * fps))

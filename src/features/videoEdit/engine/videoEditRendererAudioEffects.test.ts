@@ -127,6 +127,19 @@ it('连续播放时与分块方式无关：0.5 秒块（预览）与按帧长的
   for (const sample of [RATE, RATE + 1, RATE * 1.5]) expect(delayed[0][sample]).toBe(original(0, sample))
 })
 
+it('调制效果的振荡相位按片段内位置对齐：片段不在块边界上开始时预览块与导出块逐样本一致，从中间定位与连续播放相同', async () => {
+  // 片段从第 16 帧开始：预览的 0.5 秒块与导出的帧长块在片段开头之前的起点不同。
+  const composition = sound({ start: 16, effects: [builtin('chorus', { voices: 4, depth: 80 }), builtin('flanger', { feedback: 0 })].map((effect, index) => ({ ...effect, id: `fx-${index}` })) })
+  const preview = await mix(composition, [.5, .5, .5, .5, .5, .5])
+  const exported = await mix(composition, Array.from({ length: 90 }, () => 1 / 30))
+  // 逐样本比较只报不同的个数（整段数组的差异输出很慢）。
+  const differing = (a: Float32Array, b: ArrayLike<number>, tolerance = 0): number => { let count = 0; for (let index = 0; index < a.length; index++) if (!(Math.abs(a[index] - b[index]) <= tolerance)) count++; return count }
+  expect(exported[0].length).toBe(preview[0].length)
+  expect(differing(exported[0], preview[0])).toBe(0); expect(differing(exported[1], preview[1])).toBe(0)
+  const sought = await mix(composition, [.5], 2)
+  expect(differing(sought[0], preview[0].subarray(2 * RATE), 1e-6)).toBe(0)
+})
+
 it('从中间定位开始播放：预读后与从头连续播放的结果几乎相同（滤波器与包络已稳定）', async () => {
   const composition = sound({ effects: [builtin('parametric_eq', { low: 6, high: -3 }), builtin('compressor')] })
   const continuous = await mix(composition, [.5, .5, .5, .5])

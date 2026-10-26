@@ -5,6 +5,8 @@ import { Rnnoise } from '@shiguredo/rnnoise-wasm'
 import { audioBiquadCoefficients, audioCompressorCurve, audioCompressorReduction, BUTTERWORTH_4, dbToGain, gainToDb, smoothing, type AudioProcessor, type BiquadSpec, type Coefficients } from './processors/shared'
 import { dehumDesign, eqBandsDesign, FilterCascade, graphicEqDesign, notchDesign } from './processors/filters'
 import { MultibandCompressor, NoiseGate, SpeechLeveler } from './processors/dynamics'
+import { Echo, StereoDelay } from './processors/delay'
+import { Chorus, Flanger, Phaser } from './processors/modulation'
 
 /** 兼容旧引用：双二阶系数与压缩曲线在处理器公共模块。 */
 export { audioBiquadCoefficients, audioCompressorCurve } from './processors/shared'
@@ -18,7 +20,7 @@ export interface AudioEffectInstance { readonly id: string; readonly builtin: { 
  * - 每个处理器声明固定延迟（样本数，降噪、音调变换、限幅器的预判），效果链把延迟累加，由混音多读后面的素材抵消，输出与画面对齐；
  *   效果强度（干湿比）与“降噪强度”混入的原声也按同样延迟对齐，不会梳状失真。
  * - 状态跨混音块延续（滤波器、包络、混响尾音）；块不连续（定位、暂停后从别处播放、导出起点）时清空状态并从前面预读一段，
- *   让包络与滤波器先稳定下来。
+ *   让包络与滤波器先稳定下来；带低频振荡的调制效果再按片段内位置对齐相位（`locate`）。
  * - 本文件只负责登记与调度（处理器的创建、延迟补偿、干湿比、分块计划）；新效果的处理器在 `processors/` 按类别分文件，
  *   共用的接口与小工具在 `processors/shared.ts`。
  * 成熟开源：降噪用 RNNoise（`@shiguredo/rnnoise-wasm`，Apache-2.0）；滤波器系数按 RBJ Audio EQ Cookbook；混响移植 Freeverb（公有领域）；
@@ -340,6 +342,11 @@ function createProcessor(id: string, rate: number, channels: number, denoiser?: 
     case 'noise_gate': return new NoiseGate(rate, channels)
     case 'speech_leveler': return new SpeechLeveler(rate)
     case 'multiband_compressor': return new MultibandCompressor(rate, channels)
+    case 'echo': return new Echo(rate, channels)
+    case 'delay': return new StereoDelay(rate, channels)
+    case 'chorus': return new Chorus(rate, channels)
+    case 'flanger': return new Flanger(rate, channels)
+    case 'phaser': return new Phaser(rate, channels)
     default: throw new Error(`没有音频效果“${id}”。`)
   }
 }
@@ -363,11 +370,11 @@ class DelayLine {
 interface Stage { effectId: string; builtinId: string; processor: AudioProcessor; amount: number; dry: DelayLine }
 /**
  * 预读多久让状态稳定下来：混响、回声尾音长；延迟要先填满延迟线；窄陷波（去嗡声、陷波）与慢包络（语音电平、噪声门）要先收敛；
- * 其余效果的包络与滤波器很快稳定。
+ * 其余效果的包络与滤波器很快稳定。调制效果的振荡相位按片段位置对齐（`locate`），预读只需填满延迟线、让反馈共振稳定。
  */
 const PREROLL_SECONDS: Record<string, number> = {
   reverb: 2, noise_reduction: 0.5, compressor: 0.5, de_esser: 0.2, limiter: 0.2,
-  speech_leveler: 2, noise_gate: 1, multiband_compressor: 0.5, dehum: 1, notch: 1, eq_bands: 0.3, graphic_eq: 0.1,
+  echo: 4, delay: 1.05, flanger: 1, phaser: 0.5, chorus: 0.2, speech_leveler: 2, noise_gate: 1, multiband_compressor: 0.5, dehum: 1, notch: 1, eq_bands: 0.3, graphic_eq: 0.1,
 }
 
 /**
@@ -403,6 +410,14 @@ export class AudioEffectChain {
   }
   /** 清空状态（重建全部处理器，参数保留）。 */
   async reset(effects: readonly AudioEffectInstance[]): Promise<void> { this.signature = ''; await this.sync(effects) }
+  /**
+   * 告诉效果链下一块第一个输入样本在片段时间上的位置（样本数，片段开头为 0）；块不连续（重建或重置之后）时由混音调用。
+   * 每个效果看到的位置扣除它前面效果的延迟。调制效果据此对齐振荡相位，其余效果忽略。
+   */
+  locate(sample: number): void {
+    let offset = 0
+    for (const stage of this.stages) { stage.processor.locate?.(sample - offset); offset += stage.processor.latency }
+  }
   /** 原地处理；输出比输入晚 `latency` 个样本。 */
   process(channels: Float32Array[], length: number, automation?: (sample: number) => readonly AudioEffectInstance[]): void {
     if (automation) {
