@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AudioEditSubtitleCue } from '../audioEdit/subtitles'
 import type { VideoEditClip, VideoEditDocument, VideoEditSequence } from './document'
+import type { VideoEditCaption } from './timedContent'
 import { remapVideoEditLinkedClip, videoEditLinkedCaptions, videoEditLinkedTimeline } from './audioEditLink'
 import { updateVideoEditAudioLinks } from './audioLink'
 
@@ -28,6 +29,15 @@ describe('链接字幕', () => {
     const kept = new Map([['part|b', { id: 'kept-id', style: '' as const, translation: 'it can' }]])
     const part = videoEditLinkedCaptions(clipOf({ id: 'part', start: 50, sourceInUs: 1600000, duration: 8 }), FPS, cues, 1000, kept)
     expect(part.map(caption => [caption.id, caption.text, caption.start, caption.duration, caption.translation])).toEqual([['kept-id', '工具它能', 50, 8, 'it can']])
+  })
+  it('新出现的字幕段沿用原来的样式：片段切开后新的一侧用同一段的样式，重新分段多出来的沿用前一条', () => {
+    const ink = { fontFamily: 'HarmonyOS Sans SC Medium', fontSize: 48 } as unknown as NonNullable<VideoEditCaption['style']>
+    const cues = [cue('a', 0, 1000, ['这是', '我做的']), cue('b', 1200, 2400, ['一个', '工具', '它能']), cue('c', 2500, 2900, ['新的'])]
+    const kept = new Map([['voice|a', { id: 'a-id', style: ink }], ['voice|b', { id: 'b-id', style: ink }]])
+    const right = videoEditLinkedCaptions(clipOf({ id: 'right', start: 12, sourceInUs: 1200000, duration: 18 }), FPS, cues, 1000, kept)
+    expect(right.map(caption => [caption.linkedCaptionId, caption.style])).toEqual([['b', ink], ['c', ink]])
+    expect(right.map(caption => caption.id)).not.toContain('b-id')
+    expect(videoEditLinkedCaptions(clipOf(), FPS, cues, 1000).every(caption => caption.style === undefined)).toBe(true)
   })
 })
 

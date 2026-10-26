@@ -67,11 +67,14 @@ export function remapVideoEditLinkedClip(clip: VideoEditClip, fps: number, befor
 /**
  * 一段链接声音片段上的字幕：取落在它源范围里的字幕段，时间按片段换算，带着逐词来源（切开、移动片段时字幕按词跟着走）。
  * 片段只盖住一段字幕的一部分时只显示盖住的那几个词。kept 按 `片段|字幕段` 保留剪辑这边的字幕 ID、样式与译文（重新生成后引用不变）。
+ * 新出现的字幕（音频编辑里重新分段，或片段切开后新的一侧）沿用同一字幕段原来的样式，没有就沿用前一条，整条字幕样式保持一致。
  */
 export function videoEditLinkedCaptions(clip: VideoEditClip, fps: number, cues: readonly AudioEditSubtitleCue[], sampleRate: number, kept: ReadonlyMap<string, Partial<Pick<VideoEditCaption, 'id' | 'style' | 'translation'>>> = new Map(), createId: () => string = () => crypto.randomUUID()): VideoEditCaption[] {
   const range = videoEditClipSourceRange(clip, fps)
   const seconds = (frame: number): number => frame / sampleRate
   const captions: VideoEditCaption[] = []
+  const cueStyle = (cueId: string): VideoEditCaption['style'] => [...kept].find(([key, value]) => key.endsWith(`|${cueId}`) && value.style)?.[1].style
+  let previousStyle = [...kept.values()].find(value => value.style)?.style
   for (const cue of cues) {
     if (seconds(cue.endFrame) <= range.from || seconds(cue.startFrame) >= range.to) continue
     const words = cue.words.filter(word => seconds(word.endFrame) > range.from && seconds(word.startFrame) < range.to)
@@ -85,10 +88,12 @@ export function videoEditLinkedCaptions(clip: VideoEditClip, fps: number, cues: 
     const text = whole ? cue.text : formatAudioEditSubtitleText(words.reduce((value, word) => joinAudioEditText(value, word.text), ''))
     if (!text) continue
     const extra = kept.get(`${clip.id}|${cue.id}`)
+    const style = extra?.style || cueStyle(cue.id) || previousStyle
+    if (style) previousStyle = style
     captions.push({
       id: extra?.id ?? createId(), clipId: clip.id, linkedCaptionId: cue.id, start, duration: end - start, text: text.slice(0, 2000),
       speech: { text: text.slice(0, 2000), aligned: true, words: words.map(word => ({ clipId: clip.id, text: word.text, startUs: Math.round(seconds(word.startFrame) * 1e6), endUs: Math.round(seconds(word.endFrame) * 1e6), precision: 'word' as const })) },
-      ...(extra?.style ? { style: extra.style } : {}), ...(extra?.translation ? { translation: extra.translation } : {}),
+      ...(style ? { style } : {}), ...(extra?.translation ? { translation: extra.translation } : {}),
     })
   }
   return captions
