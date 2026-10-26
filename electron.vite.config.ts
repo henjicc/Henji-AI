@@ -1,6 +1,24 @@
 import { relative, resolve } from 'path'
 import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
+import type { Plugin } from 'vite'
+
+/**
+ * 热更新只原地替换界面组件（以及自己声明接受热更新的模块）；改到业务服务、工具函数这类模块时整页重新加载。
+ * Vite 默认沿依赖链重新执行这些模块，新旧两份服务各自持有状态（打开的工程、撤销栈、助手能力注册），
+ * 界面改的和助手改的就不是同一份文档（2026-10-26 实测改通用工具后剪辑回到工程列表，助手仍连着旧的那份）。
+ */
+function reloadOnStatefulModuleUpdate(): Plugin {
+  return {
+    name: 'henji:reload-on-stateful-module-update',
+    apply: 'serve',
+    handleHotUpdate({ modules, server }) {
+      if (modules.every(module => module.type === 'css' || module.isSelfAccepting)) return
+      server.ws.send({ type: 'full-reload' })
+      return []
+    },
+  }
+}
 
 const RENDERER_UNWATCHED_ROOTS = new Set(['docs', 'dist', 'out', 'native', 'release', 'tests', 'dev-data', 'patches', '.claude', '.tmp', '.reality', '.ui-tour'])
 
@@ -61,7 +79,7 @@ export default defineConfig({
         '@': resolve(__dirname, 'src'),
       },
     },
-    plugins: [react()],
+    plugins: [react(), reloadOnStatefulModuleUpdate()],
     // 渲染层根目录是仓库根：文档、构建产物、原生工程、测试夹具、并行任务的 worktree 与临时目录不属于渲染层源码，
     // 按顶层目录整个不监听。docs 一项就有上万个文件夹，全量监听让开发服务器启动多花一分多钟（2026-10-26 实测 66 秒降到 10 秒），
     // 还会被编译中被锁住的文件（EBUSY）弄崩 dev server。
