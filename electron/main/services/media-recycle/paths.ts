@@ -20,9 +20,17 @@ export function within(root: string, target: string): boolean {
   return pathKey(target).startsWith(`${pathKey(root).replace(/\/$/, '')}/`)
 }
 
+/** A Windows network (UNC) path; the `\\?\` and `\\.\` device prefixes name local paths. */
+export function isWindowsNetworkPath(value: string): boolean {
+  return /^[\\/]{2}(?![?.][\\/])[^\\/]/.test(value)
+}
+
 export async function canonicalPath(value: string): Promise<string | null> {
   const local = localMediaPath(value)
   if (!local) return null
+  // Network paths compare as written: resolving one means name resolution and an SMB connection, and text that merely
+  // looks like `//host/...` (base64, protocol-relative URLs) would hold the file thread pool for minutes.
+  if (process.platform === 'win32' && isWindowsNetworkPath(local)) return pathKey(local)
   try { return pathKey(await fs.realpath(local)) }
   catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
