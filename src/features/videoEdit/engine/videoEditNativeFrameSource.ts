@@ -144,12 +144,18 @@ export class VideoEditNativeDecoderSession {
     void arrived.catch(() => undefined)
     this.tickets.set(ticket, ticketEntry)
     let taken = false
+    const started = performance.now()
     try {
       const result = await this.channel.call('frameAt', { streamId: this.info.streamId, time, ticket, ...(keyOnly ? { keyOnly } : {}) }).catch(error => { throw decodeFailure(this.name, error) })
       if (!result.found) return null
       let timer: ReturnType<typeof setTimeout> | undefined
       const frame = await Promise.race([arrived, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(decodeFailure(this.name, new Error('原生帧未送达'))), FRAME_ARRIVAL_TIMEOUT_MS) })]).finally(() => clearTimeout(timer))
       taken = true
+      // Where a slow read spent its time: in the service (decoding, a seek back to a key frame, waiting for a free
+      // pool slot, the copy) or on the way (the request and the frame relayed through the main processes).
+      const service = Number.isFinite(result.decodeMs) ? result.decodeMs : 0
+      recordVideoEditPreparation(result.seeked ? 'nativeFrameAtSeek' : 'nativeFrameAtService', service)
+      recordVideoEditPreparation('nativeFrameAtRelay', Math.max(0, performance.now() - started - service))
       const picture = this.picture(frame)
       if (result.approximate) picture.approximate = true
       return picture
@@ -414,6 +420,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
     }
     const shared = (seconds: number): Promise<VideoEditNativePicture | null> => this.use(() => this.lane.run(async () => (await this.seek()).frameAt(seconds)))
     return {
+      continues: true,
       frames: start => this.frames(start),
       frameAt: (seconds, options) => {
         const speculative = options?.speculative === true
@@ -424,10 +431,10 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
           if (!session && performance.now() < sharingUntil) { if (speculative) throw new VideoEditNativeFailure(videoEditNativeFailureMessage(this.media.name, 'budget'), 'budget', 'BUDGET_EXCEEDED'); return shared(seconds) }
           let pending: Promise<VideoEditNativeDecoderSession> | undefined
           try {
-            if (!session && speculative && !await this.owner.canPreopen()) throw new VideoEditNativeFailure(videoEditNativeFailureMessage(this.media.name, 'budget'), 'budget', 'BUDGET_EXCEEDED')
+            if (!session && speculative && !await this.owner.makeRoomAhead()) throw new VideoEditNativeFailure(videoEditNativeFailureMessage(this.media.name, 'budget'), 'budget', 'BUDGET_EXCEEDED')
             if (closed) throw closedFailure()
             pending = open(speculative)
-            return await (await pending).frameAt(seconds)
+            return await (await pending).frameAt(seconds, options?.keyFrame === true)
           } catch (error) {
             const kind = videoEditNativeFailureKind(error)
             if (kind === 'budget' && !speculative && !closed) {
@@ -447,6 +454,11 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
         if (closed) return
         closed = true
         drop(session)
+      },
+      // After the read in progress (reads are serialized); the next read opens a new session.
+      suspend: () => {
+        const pending = session
+        if (pending) tail = tail.catch(() => undefined).then(() => { if (session === pending) drop(pending) })
       },
     }
   }
@@ -556,6 +568,20 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
       return undefined
     }
   }
+  /**
+   * Room for one decoder needed within seconds (a code video input opened ahead of its clip): with the service's
+   * budget for it plus the foreground's reserve, freeing idle sessions (farthest first) when that is what lacks.
+   * Never more: sessions in use are untouched, and without room the caller gives up instead of taking the last one.
+   */
+  async makeRoomAhead(): Promise<boolean> {
+    for (let attempt = 0; attempt < (this.options.maxSessions ?? VIDEO_EDIT_NATIVE_MAX_SESSIONS); attempt++) {
+      const stats = await this.budgetStats(true)
+      if (this.headroom(stats, 2)) return true
+      if (!stats || !this.options.retainIdle || !await this.evictOne('ahead')) return false
+    }
+    return false
+  }
+
   async canPreopen(): Promise<boolean> {
     const stats = await this.budgetStats()
     this.log('debug', '前瞻预算快照', 'video_edit.decode.lookahead.budget', { budget: stats?.budget, sessions: this.sessions, streams: stats?.streams.length })

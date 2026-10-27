@@ -24,7 +24,7 @@ const boundary = vi.hoisted(() => ({ pendingSchedule: undefined as Promise<void>
 const gridPicture = vi.hoisted(() => (time: number, fps = 60): number => Math.floor(time * fps + 1e-6) / fps)
 /** Source seconds compared at whole microseconds (picture starts computed on the grid vs. expectations summed in seconds). */
 const us = (values: ReadonlyArray<number | undefined>): Array<number | undefined> => values.map(value => value === undefined ? undefined : Math.round(value * 1e6))
-vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), warn: vi.fn() }) }))
+vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn() }) }))
 vi.mock('./videoEditCodeCompiler', async () => {
   const { testAuthorBundle } = await import('./videoEditAuthorTestFixtures')
   return { VideoEditCodeCompiler: class {
@@ -369,7 +369,7 @@ it('新帧提交失败后回到旧帧重新取得输入，不借用可能已退�
 function recordingWindowsFixture(secondStart = 60): ReturnType<typeof fixture> {
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
   document.media = document.media.map(media => ({ ...media, durationSeconds: 20 }))
-  const source = "export default {name:\"录屏窗口\",kind:\"generator\",mode:\"dynamic\",width:3840,height:2160,durationSeconds:20,params:[{key:\"screen\",type:\"image\",title:\"录屏\",default:null}],draw(){}}"
+  const source = "export default {name:\"录屏窗口\",kind:\"generator\",mode:\"dynamic\",width:3840,height:2160,durationSeconds:120,params:[{key:\"screen\",type:\"image\",title:\"录屏\",default:null}],draw(){}}"
   document.codeMaterials = [{ id: 'definition', name: '录屏窗口', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 4, languageVersion: 4, ...testCodeManifest(source, document) }] }]
   const code = { definitionId: 'definition', versionId: 'v', parameters: { screen: { kind: 'video' as const, mediaId: 'A' } } }
   document.items.push({ id: 'window', name: '录屏窗口', kind: 'code', code })
@@ -381,14 +381,14 @@ function recordingWindowsFixture(secondStart = 60): ReturnType<typeof fixture> {
   return document
 }
 /** A frame backend recording every picture reader it hands out and each reader's single-frame reads. */
-function inputReaders(): { backend: VideoEditFrameBackend; readers: Array<{ exclusive: boolean; times: number[]; closed: boolean }> } {
-  const readers: Array<{ exclusive: boolean; times: number[]; closed: boolean }> = []
+function inputReaders(): { backend: VideoEditFrameBackend; readers: Array<{ exclusive: boolean; times: number[]; closed: boolean; suspended: number }> } {
+  const readers: Array<{ exclusive: boolean; times: number[]; closed: boolean; suspended: number }> = []
   const picture = (timestamp: number) => ({ timestamp, duration: 1 / 60, format: 'NV12', close: vi.fn() }) as unknown as VideoSample
   const backend: VideoEditFrameBackend = {
     open: media => ({ key: media.path, ready: Promise.resolve({ codec: 'avc1',
       clipFrames: options => {
-        const reader = { exclusive: options?.exclusive === true, times: [] as number[], closed: false }; readers.push(reader)
-        return { async *frames(start: number) { for (let index = 0; index < 600; index++) yield picture(gridPicture(start) + index / 60) }, async frameAt(time: number) { reader.times.push(time); return picture(gridPicture(time)) }, close: () => { reader.closed = true } }
+        const reader = { exclusive: options?.exclusive === true, times: [] as number[], closed: false, suspended: 0 }; readers.push(reader)
+        return { async *frames(start: number) { for (let index = 0; index < 600; index++) yield picture(gridPicture(start) + index / 60) }, async frameAt(time: number) { reader.times.push(time); return picture(gridPicture(time)) }, close: () => { reader.closed = true }, suspend: () => { reader.suspended++ } }
       },
       clipAudio: () => undefined, async *schedule(timestamps: readonly number[]) { for (const time of timestamps) yield picture(gridPicture(time)) } }) }),
     release: () => {},
@@ -460,6 +460,178 @@ it('窗口切入前才打开并解到入点；停止播放、跳走或离开片�
     await (await renderer.render(600, false)).completion
     expect(renderer.codeDiagnostics().codeInputSessions).toBe(0); expect(readers.every(reader => reader.closed)).toBe(true)
   } finally { await renderer.dispose() }
+})
+interface SteppingRead { time: number; speculative: boolean; keyFrame: boolean; decoded: number }
+/**
+ * Exclusive readers that continue one decoder (60fps, a key frame every 4 seconds, a fresh decoder at the first
+ * picture): each read records how many pictures it decoded. `hold` keeps speculative reads pending until released.
+ */
+function steppingReaders(): { backend: VideoEditFrameBackend; readers: Array<{ reads: SteppingRead[]; suspended: number }>; gate: { hold: boolean; pending: Array<() => void>; release(): void } } {
+  const readers: Array<{ reads: SteppingRead[]; suspended: number }> = []
+  const gate = { hold: false, pending: [] as Array<() => void>, release(): void { gate.pending.shift()?.() } }
+  const picture = (frame: number, approximate = false) => ({ timestamp: frame / 60, duration: 1 / 60, format: 'NV12', approximate, close: vi.fn() }) as unknown as VideoSample
+  const backend: VideoEditFrameBackend = {
+    open: media => ({ key: media.path, ready: Promise.resolve({ codec: 'avc1',
+      clipFrames: options => {
+        if (!options?.exclusive) return { async *frames() {}, frameAt: async () => null }
+        const reader = { reads: [] as SteppingRead[], suspended: 0 }; readers.push(reader)
+        let position = 0
+        return {
+          continues: true,
+          async *frames() {},
+          async frameAt(time: number, read?: { speculative?: boolean; keyFrame?: boolean }) {
+            const entry = { time, speculative: read?.speculative === true, keyFrame: read?.keyFrame === true, decoded: 0 }
+            reader.reads.push(entry)
+            if (read?.speculative && gate.hold) await new Promise<void>(resolve => gate.pending.push(resolve))
+            const target = Math.floor(time * 60 + 1e-6), key = Math.floor(target / 240) * 240
+            const continuing = target >= position && Math.floor(position / 240) === Math.floor(target / 240)
+            if (read?.keyFrame && !continuing) { entry.decoded = 1; position = key; return picture(key, true) }
+            entry.decoded = continuing ? target - position : target - key + 1
+            position = target
+            return picture(target)
+          },
+          close: () => {},
+          suspend: () => { reader.suspended++; position = 0 },
+        }
+      },
+      clipAudio: () => undefined, async *schedule() {} }) }),
+    release: () => {},
+    seeker: () => ({ sample: async () => ({ hit: false }), dispose: async () => {} }),
+  }
+  return { backend, readers, gate }
+}
+/** w1 shows a recording from 0 for ten seconds; w2 (from frame 300) the same recording 30 seconds in. */
+function walkFixture(stillAt?: number): ReturnType<typeof fixture> {
+  const document = recordingWindowsFixture(300)
+  document.media = document.media.map(media => ({ ...media, durationSeconds: 60 }))
+  document.clips = document.clips.map(clip => clip.id === 'w1' ? { ...clip, duration: 600 } : { ...clip, sourceInUs: 30_000_000, ...(stillAt === undefined ? {} : { code: { ...clip.code!, parameters: { screen: { kind: 'video' as const, mediaId: 'A', time: stillAt } } } }) })
+  return document
+}
+/** Whether `promise` settles within a few macrotasks (a frame not held up by a pending background step). */
+async function settlesSoon(promise: Promise<unknown>): Promise<boolean> {
+  let settled = false
+  void promise.then(() => { settled = true }, () => { settled = true })
+  for (let tick = 0; tick < 20 && !settled; tick++) await new Promise(resolve => setTimeout(resolve, 0))
+  return settled
+}
+it('预热分小步走向入点：先只解关键帧，每步不超过 6 幅；后台一步挂起时显示中的输入照常逐帧读取', async () => {
+  const { backend, readers, gate } = steppingReaders()
+  const renderer = new VideoEditRenderer(walkFixture(), 3840, undefined, 8 * 1024 ** 3, backend)
+  try {
+    gate.hold = true
+    for (let frame = 118; frame < 126; frame++) {
+      // w2 starts at 300: its walk begins at 120 and one of its steps stays pending throughout.
+      expect(await settlesSoon(renderer.render(frame, true).then(result => result.completion)), `第 ${frame} 帧`).toBe(true)
+    }
+    const w1 = readers.find(reader => (reader.reads[0]?.time ?? Infinity) < 4)!, w2 = () => readers.find(reader => (reader.reads[0]?.time ?? 0) >= 28)
+    expect(us(w1.reads.map(read => read.time))).toEqual(us(pictureTimes(118, 126)))
+    expect(gate.pending).toHaveLength(1); expect(w2()!.reads).toHaveLength(1)
+    gate.hold = false; while (gate.pending.length) gate.release()
+    await vi.waitFor(() => { const last = w2()!.reads.at(-1)!; expect(last.keyFrame).toBe(false); expect(last.time).toBeCloseTo(videoEditPictureSeconds(30), 6) })
+    const walk = w2()!.reads
+    expect(walk[0]).toMatchObject({ speculative: true, keyFrame: true, decoded: 1 })
+    expect(walk.every(read => read.speculative && read.decoded <= 7)).toBe(true); expect(walk.length).toBeGreaterThan(10)
+    // The walk reached the in-point: entering the clip reads nothing, the next frame one picture.
+    const reads = walk.length
+    await (await renderer.render(300, true)).completion; await (await renderer.render(301, true)).completion
+    const entered = w2()!.reads.slice(reads)
+    expect(entered).toHaveLength(1); expect(entered[0]).toMatchObject({ speculative: false, keyFrame: false, decoded: 1 }); expect(entered[0].time).toBeCloseTo(videoEditPictureSeconds(30 + 1 / 60), 6)
+  } finally { gate.hold = false; while (gate.pending.length) gate.release(); await renderer.dispose() }
+})
+it('连续播放时每个显示帧最多让后台走 3 步，且在本帧输入读完之后；几十帧内仍走到入点', async () => {
+  const { backend, readers } = steppingReaders()
+  const renderer = new VideoEditRenderer(walkFixture(), 3840, undefined, 8 * 1024 ** 3, backend)
+  const w1 = () => readers.find(reader => (reader.reads[0]?.time ?? Infinity) < 4)!
+  const w2 = () => readers.find(reader => (reader.reads[0]?.time ?? 0) >= 28)
+  try {
+    for (let frame = 120; frame < 150; frame++) {
+      const before = w2()?.reads.length ?? 0, shown = w1()?.reads.length ?? 0
+      await (await renderer.render(frame, true)).completion
+      const during = (w2()?.reads.length ?? 0) - before
+      expect(during, `第 ${frame} 帧`).toBeLessThanOrEqual(3)
+      // No step started before this frame's own read of w1.
+      if (during && frame > 120) expect(w1().reads.length).toBe(shown + 1)
+    }
+    const last = w2()!.reads.at(-1)!
+    expect(last.keyFrame).toBe(false); expect(last.time).toBeCloseTo(videoEditPictureSeconds(30), 6)
+  } finally { await renderer.dispose() }
+})
+it('片段在预热途中开始：只等正在进行的那一步，随后停止预热，从走到的位置接着解剩下的部分', async () => {
+  const { backend, readers, gate } = steppingReaders()
+  const renderer = new VideoEditRenderer(walkFixture(), 3840, undefined, 8 * 1024 ** 3, backend)
+  const w2 = () => readers.find(reader => (reader.reads[0]?.time ?? 0) >= 28)!
+  try {
+    gate.hold = true
+    await (await renderer.render(120, true)).completion
+    for (let step = 0; step < 6; step++) { await vi.waitFor(() => expect(gate.pending).toHaveLength(1)); gate.release() }
+    await vi.waitFor(() => expect(gate.pending).toHaveLength(1))
+    const walked = w2().reads.length
+    // Entering now: the frame waits for the one step in flight and no longer.
+    const entering = renderer.render(300, true).then(result => result.completion)
+    expect(await settlesSoon(entering)).toBe(false)
+    gate.release(); await entering
+    expect(gate.pending).toHaveLength(0)
+    // Key frame at 28s, five steps, the step in flight (28.6s) finished; no further step after the clip started.
+    const reads = w2().reads
+    expect(walked).toBe(7); expect(reads).toHaveLength(8)
+    expect(reads[6]).toMatchObject({ speculative: true, keyFrame: false, decoded: 6 }); expect(reads[6].time).toBeCloseTo(28.6, 6)
+    // The foreground read continues the walked decoder: only the remaining pictures, no seek from the key frame.
+    expect(reads[7]).toEqual({ time: videoEditPictureSeconds(30), speculative: false, keyFrame: false, decoded: 1800 - Math.round(28.6 * 60) })
+  } finally { gate.hold = false; while (gate.pending.length) gate.release(); await renderer.dispose() }
+})
+it('定格帧（固定时刻的视频参数）只解一次：解完交回解码器，同一画面的其他片段与片段再次出现都直接取用', async () => {
+  const { backend, readers } = inputReaders()
+  const document = { ...recordingWindowsFixture(120) }
+  document.media = document.media.map(media => ({ ...media, durationSeconds: 60 }))
+  document.clips = document.clips.map(clip => ({ ...clip, duration: 60, code: { ...clip.code!, parameters: { screen: { kind: 'video' as const, mediaId: 'A', time: 40.4 } } } }))
+  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  try {
+    // Frame 80 shows neither clip: the input session closes, and the later frames open new ones.
+    for (const frame of [10, 11, 80, 130, 131, 80, 10]) {
+      contentInputs.borrows = []
+      await (await renderer.render(frame, frame === 11 || frame === 131)).completion
+      expect(Object.values(shownInputs()).map(value => Math.round(value! * 60)), `第 ${frame} 帧`).toEqual(frame === 80 ? [] : [2424])
+      if (frame === 80) expect(renderer.codeDiagnostics().codeInputSessions).toBe(0)
+    }
+    expect(readers.flatMap(reader => reader.times)).toEqual([videoEditPictureSeconds(40.4)])
+    expect(readers.find(reader => reader.times.length)!.suspended).toBe(1)
+  } finally { await renderer.dispose() }
+})
+it('暂停时前瞻提前解好时间线附近的定格帧（播放中不列入）；之后显示它不再读取', async () => {
+  const { backend, readers } = steppingReaders()
+  const document = walkFixture(40.4)
+  document.clips = document.clips.map(clip => clip.id === 'w2' ? { ...clip, start: 600 } : { ...clip, duration: 60 })
+  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  try {
+    expect(videoEditLookaheadTargets(document, 0, true).content.filter(target => target.kind === 'still')).toEqual([])
+    const stills = videoEditLookaheadTargets(document, 0, false).content.filter(target => target.kind === 'still')
+    expect(stills).toHaveLength(1); expect(stills[0].distance).toBe(10)
+    expect(await renderer.prepareLookahead(stills[0], new AbortController().signal)).toBe(true)
+    const walk = readers[0].reads
+    expect(walk[0]).toMatchObject({ speculative: true, keyFrame: true, decoded: 1 }); expect(walk.every(read => read.decoded <= 7)).toBe(true)
+    expect(readers[0].suspended).toBe(1)
+    contentInputs.borrows = []
+    await (await renderer.render(600)).completion
+    expect(Math.round(shownInputs().w2! * 60)).toBe(2424)
+    expect(readers.flatMap(reader => reader.reads)).toHaveLength(walk.length)
+  } finally { await renderer.dispose() }
+})
+it('定格帧在后台解码途中片段开始：显示帧等它解完（剩下的步不再等轮次），不另起一次解码', async () => {
+  const { backend, readers, gate } = steppingReaders()
+  const renderer = new VideoEditRenderer(walkFixture(40.4), 3840, undefined, 8 * 1024 ** 3, backend)
+  try {
+    gate.hold = true
+    await (await renderer.render(120, true)).completion
+    await vi.waitFor(() => expect(gate.pending).toHaveLength(1))
+    const entering = renderer.render(300, true).then(result => result.completion)
+    // Every remaining step goes on at once (released here as soon as it asks), then the frame shows the still.
+    while (!await settlesSoon(entering)) gate.release()
+    await entering
+    const still = readers.filter(reader => (reader.reads[0]?.time ?? 0) >= 40)
+    expect(still).toHaveLength(1); expect(still[0].reads.at(-1)!.time).toBeCloseTo(videoEditPictureSeconds(40.4), 6)
+    // Only the background walk read the still (each step bounded); the showing frame took the kept picture.
+    expect(still[0].reads.every(read => read.speculative && read.decoded <= 7)).toBe(true)
+  } finally { gate.hold = false; while (gate.pending.length) gate.release(); await renderer.dispose() }
 })
 it('导出逐帧：重叠段两个引用每帧各读一次准确画面，不提前打开，读取位置各自只向前', async () => {
   const { backend, readers } = inputReaders()

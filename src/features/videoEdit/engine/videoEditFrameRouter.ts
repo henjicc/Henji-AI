@@ -304,6 +304,9 @@ class RoutedFileSource implements VideoEditFrameSource {
     const { router, decision, media } = this
     return {
       close: () => { closed = true; for (const value of readers.values()) value?.close?.(); readers.clear() },
+      suspend: () => { for (const value of readers.values()) value?.suspend?.() },
+      // Reads start on the file's chosen backend; a fallback reader after a failure only loses the stepping benefit.
+      continues: first.continues === true,
       frameAt: (seconds, options) => router.read(decision, media, async backend => (await reader(backend)).frameAt(seconds, options)),
       async *frames(start: number): AsyncGenerator<VideoEditDecodedPicture, void, unknown> {
         let backend = router.current(decision)

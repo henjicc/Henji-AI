@@ -14,9 +14,16 @@ import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
 // 原片打开约 200ms，加约 1 秒 GOP 定位及调度余量；3 秒覆盖切点，避免预打开整条时间线。
 export const VIDEO_EDIT_DECODE_LOOKAHEAD_SECONDS = 3
 export const VIDEO_EDIT_DECODE_NEIGHBOUR_SECONDS = 2
+/**
+ * Stills (code video inputs fixed at one time) are decoded once and kept for the session, so while paused or idle they
+ * are looked for this far ahead of the playhead (and `VIDEO_EDIT_DECODE_NEIGHBOUR_SECONDS` behind it). Playback then
+ * never seeks far for one on the critical path.
+ */
+export const VIDEO_EDIT_STILL_LOOKAHEAD_SECONDS = 20
 export interface VideoEditLookaheadScope { document: VideoEditComposition; key: string; input?: ReturnType<typeof codeMediaInputComposition>; parent?: VideoEditComposition }
 export interface VideoEditDecodeTarget { media: VideoEditMedia; time: number; purpose: 'playback' | 'seek'; distance: number; clipId?: string }
-export interface VideoEditContentTarget { kind: 'image' | 'code'; key: string; scopes: VideoEditLookaheadScope[]; document: VideoEditComposition; clip: VideoEditClip; frame: number; media?: VideoEditMedia; distance: number }
+/** `still`: a code video input fixed at one time; `input` is its input composition (decoded into the renderer's still store). */
+export interface VideoEditContentTarget { kind: 'image' | 'code' | 'still'; key: string; scopes: VideoEditLookaheadScope[]; document: VideoEditComposition; clip: VideoEditClip; frame: number; media?: VideoEditMedia; distance: number; input?: ReturnType<typeof codeMediaInputComposition> }
 export interface VideoEditLookaheadTargets { video: VideoEditDecodeTarget[]; content: VideoEditContentTarget[] }
 const keyOf = (target: VideoEditDecodeTarget): string => `${target.media.path}\0${target.media.sourceRevision ?? ''}\0${target.purpose}`
 
@@ -74,6 +81,37 @@ export function videoEditLookaheadTargets(document: VideoEditComposition, frame:
       else visit(document, at, distance, playing, [])
     }
   }
+  // Stills: every fixed-time video input of a clip in the wider window, once per picture (nested sequences included).
+  const stills = (doc: VideoEditComposition, from: number, to: number, distanceAt: (at: number) => number, depth: number): void => {
+    if (depth >= VIDEO_EDIT_MAX_SEQUENCE_DEPTH || to <= from) return
+    const visible = videoEditVisibleTracks(doc)
+    for (const clip of doc.clips) {
+      const start = Math.max(from, clip.start), end = Math.min(to, clip.start + clip.duration)
+      if (end <= start || !visible.has(clip.track)) continue
+      if (clip.kind === 'sequence') {
+        const child = videoEditNestedComposition(doc, clip)
+        if (!child) continue
+        const ends = [videoEditNestedPictureFrame(doc, clip, child, start), videoEditNestedPictureFrame(doc, clip, child, end - 1)]
+        stills(child, Math.floor(Math.min(...ends)), Math.ceil(Math.max(...ends)) + 1, () => distanceAt(start), depth + 1)
+        continue
+      }
+      if (!clip.code) continue
+      for (const reference of Object.values(clip.code.parameters)) {
+        if (!isCodeImageReference(reference) || reference.kind !== 'video' || reference.time === undefined) continue
+        try {
+          const input = codeMediaInputComposition(doc, clip, reference, start)
+          const media = input.document.media.find(item => item.id === reference.mediaId)
+          const key = `still:${media?.path}:${media?.sourceRevision ?? ''}:${reference.time}`
+          const distance = distanceAt(start)
+          const existing = content.get(key)
+          if (!existing || existing.distance > distance) content.set(key, { kind: 'still', key, scopes: [], document: doc, clip, frame: start, distance, input })
+        } catch { /* 非法引用由进入片段时的正式渲染报告。 */ }
+      }
+    }
+  }
+  // While playing, the renderer opens stills within its own horizon ahead (stepping between frames); paused or idle, the
+  // lookahead decodes the ones further around the playhead so playing reaches them already kept.
+  if (!playing) stills(document, Math.max(0, frame - before), frame + Math.ceil(document.fps * VIDEO_EDIT_STILL_LOOKAHEAD_SECONDS) + 1, at => Math.max(0, at - frame) / document.fps, 0)
   return { video: [...targets.values()], content: [...content.values()] }
 }
 export function videoEditDecodeTargets(document: VideoEditComposition, frame: number, playing: boolean, windows: readonly VideoEditRenderCacheWindow[] = []): VideoEditDecodeTarget[] {

@@ -22,12 +22,13 @@ export function codeMediaInputSeconds(clip: Pick<VideoEditClip, 'start' | 'sourc
  * - 视频：按素材身份加取帧轨迹——固定时刻按该时刻；跟随片段时按片段入点与起点（两个引用在每一帧取同一时刻才共用）。
  *   只按素材区分会让引用同一段录屏、时刻不同的两个片段（两扇录屏窗口交叉溶解）共用一个解码位置，源时间来回跳，
  *   每帧都从关键帧重解。
+ * `still`：固定时刻的视频参数（定格帧），整段只显示这一幅，解出一次即可。
  */
-export function codeMediaInputComposition(document: VideoEditComposition, clip: VideoEditClip, reference: CodeImageReference, frame: number): { kind: 'video' | 'sequence'; document: VideoEditComposition; frame: number; sessionKey: string; sampleKey: string } {
+export function codeMediaInputComposition(document: VideoEditComposition, clip: VideoEditClip, reference: CodeImageReference, frame: number): { kind: 'video' | 'sequence'; still: boolean; document: VideoEditComposition; frame: number; sessionKey: string; sampleKey: string } {
   if (reference.kind === 'sequence') {
     const clips = document.clips.filter(candidate => candidate.track < clip.track)
     const ids = new Set(clips.map(candidate => candidate.id))
-    return { kind: 'sequence', document: { ...document, clips, captions: [], transitions: document.transitions?.filter(transition => (!transition.leftClipId || ids.has(transition.leftClipId)) && (!transition.rightClipId || ids.has(transition.rightClipId))) }, frame, sessionKey: JSON.stringify([document.id, 'below', clip.track]), sampleKey: String(frame) }
+    return { kind: 'sequence', still: false, document: { ...document, clips, captions: [], transitions: document.transitions?.filter(transition => (!transition.leftClipId || ids.has(transition.leftClipId)) && (!transition.rightClipId || ids.has(transition.rightClipId))) }, frame, sessionKey: JSON.stringify([document.id, 'below', clip.track]), sampleKey: String(frame) }
   }
   const media = document.media.find(media => media.id === reference.mediaId && media.kind === 'video')
   const item = document.items.find(item => item.mediaId === media?.id)
@@ -40,5 +41,5 @@ export function codeMediaInputComposition(document: VideoEditComposition, clip: 
     ...(media.recordingCursor && !media.recordingCursor.cursorBakedIn ? { effects: [{ id: `code-video-cursor:${media.id}`, name: '录制光标', enabled: true, amount: 1, builtin: { id: RECORDING_CURSOR_EFFECT, params: {} } }] } : {}) }
   const trajectory = reference.time !== undefined ? ['at', reference.time] : ['follow', clip.start, clip.sourceInUs, clip.sourceRemainder.numerator, clip.sourceRemainder.denominator]
   const sessionKey = JSON.stringify([document.id, 'video', media.id, media.path, media.sourceRevision, media.assetContent, media.width, media.height, media.durationSeconds, media.frameRate, media.frameRateMode, trajectory])
-  return { kind: 'video', document: { ...document, width: media.width, height: media.height, pixelAspectRatio: { numerator: 1, denominator: 1 }, clips: [input], tracks: [{ id: 'code-input', name: '画面', kind: 'video', index: 0, locked: false, enabled: true, muted: true, solo: false }], captions: [], transitions: [] }, frame: 0, sessionKey, sampleKey: JSON.stringify([input.sourceInUs, input.sourceRemainder]) }
+  return { kind: 'video', still: reference.time !== undefined, document: { ...document, width: media.width, height: media.height, pixelAspectRatio: { numerator: 1, denominator: 1 }, clips: [input], tracks: [{ id: 'code-input', name: '画面', kind: 'video', index: 0, locked: false, enabled: true, muted: true, solo: false }], captions: [], transitions: [] }, frame: 0, sessionKey, sampleKey: JSON.stringify([input.sourceInUs, input.sourceRemainder]) }
 }

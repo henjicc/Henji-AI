@@ -49,6 +49,16 @@ export interface VideoEditClipFrames {
   frameAt(seconds: number, options?: VideoEditFrameReadOptions): Promise<VideoEditDecodedPicture | null>
   /** Releases decoder resources the reader holds itself (an exclusive reader's session); called once when the renderer drops the clip's source. */
   close?(): void
+  /**
+   * Gives back the decoder session the reader holds while keeping the reader usable: the next read opens a new one.
+   * A code video input fixed at one time (a still) needs no decoder once its picture is kept.
+   */
+  suspend?(): void
+  /**
+   * Whether consecutive single-frame reads continue one decoder (an exclusive native reader): a read ahead of need can
+   * then walk to a far picture in small steps. Without it every `frameAt` decodes from the key frame again.
+   */
+  readonly continues?: boolean
 }
 
 /**
@@ -65,7 +75,16 @@ export interface VideoEditClipFramesOptions { exclusive?: boolean }
  * opens a decoder where the budget leaves room for the foreground, never evicts another file's idle session and never
  * falls back to a shared session; it fails instead, and the clip reads normally when it starts.
  */
-export interface VideoEditFrameReadOptions { speculative?: boolean }
+export interface VideoEditFrameReadOptions {
+  speculative?: boolean
+  /**
+   * Only position the decoder: when reaching the picture needs a seek, decode just the key frame of its GOP and return
+   * that (`approximate` on native pictures); otherwise the exact picture as usual. Lets a read ahead of need walk to a
+   * far time in bounded steps instead of decoding a whole GOP (up to 4 seconds of 4K) in one burst. Backends that
+   * cannot position return the exact picture.
+   */
+  keyFrame?: boolean
+}
 
 /** Sound reads of one clip. The renderer never reads one clip's sound concurrently (the render worker serializes). */
 export interface VideoEditClipAudio {

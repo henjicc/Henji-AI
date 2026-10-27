@@ -84,6 +84,27 @@ describe('前瞻与原生预算', () => {
     return { frames, log, setLimit: (bytes: number) => { limit = bytes } }
   }
 
+  it('提前打开代码视频输入时可回收闲置会话腾出余量（远的先回收），正在用的不动；没有可回收的就放弃，不占最后的余量', async () => {
+    const channel = new FakeChannel(), { frames, log, setLimit } = managed(channel)
+    for (let index = 0; index < 3; index++) { const warm = frames.preopen(media({ path: `${index}.mp4` })); await warm.ready; warm.release() }
+    await frames.maintain(new Map([['0.mp4', 0], ['1.mp4', 5], ['2.mp4', 1]]))
+    // Three idle sessions of 1000 bytes under a 4500 limit: the input needs room for itself plus the foreground's reserve,
+    // so exactly the farthest idle session goes.
+    setLimit(4500)
+    const shown = await frames.open(media({ path: 'shown.mp4' })).ready
+    const ahead = shown.clipFrames({ exclusive: true })!
+    await ahead.frameAt(9, { speculative: true })
+    expect(log).toHaveBeenCalledWith('debug', expect.any(String), 'video_edit.decode.idle.evicted', expect.objectContaining({ reason: 'ahead', distanceSeconds: 5 }))
+    expect(channel.calls.filter(call => call.method === 'closeStream')).toHaveLength(1)
+    // Too little even after freeing every idle session: refused rather than taking the last room; the input session in
+    // use stays open.
+    const next = shown.clipFrames({ exclusive: true })!
+    setLimit(2500)
+    await expect(next.frameAt(9, { speculative: true })).rejects.toMatchObject({ kind: 'budget' })
+    expect(channel.calls.filter(call => call.method === 'closeStream')).toHaveLength(3); expect(frames.openSessions).toBe(1)
+    ahead.close?.(); next.close?.(); await frames.settled()
+  })
+
   it('短空档复用预算快照，快照之后预打开的会话仍扣除余量', async () => {
     const channel = new FakeChannel(), { frames, setLimit } = managed(channel)
     setLimit(2500)
@@ -543,6 +564,20 @@ describe('原生帧源：单帧与会话', () => {
     await second.frameAt(5 + 2 / 60); expect(channel.last('frameAt')).toMatchObject({ streamId: 'vf-3' })
     expect(channel.calls.filter(call => call.method === 'openDecoder').map(call => call.params.purpose)).toEqual(['seek', 'seek', 'seek'])
     second.close?.(); third.close?.()
+  })
+
+  it('独占读取器可只定位到关键帧（keyOnly）、交回解码会话后继续可用（下次读取重开），并声明连续读取', async () => {
+    const channel = new FakeChannel(); const frames = backend(channel)
+    channel.answers.stats = () => ({ native: { streams: [], budget: { vramLimitBytes: 1e12, vramReservedBytes: 0, largestSessionBytes: 1, hardwareSessionLimit: 10, hardwareSessions: 0, decoderSessionLimit: 10 } } })
+    const source = await frames.open(media()).ready
+    const reader = source.clipFrames({ exclusive: true })!
+    expect(reader.continues).toBe(true); expect(source.clipFrames()!.continues).toBeUndefined()
+    await reader.frameAt(30, { speculative: true, keyFrame: true }); await reader.frameAt(28.1, { speculative: true })
+    expect(channel.calls.filter(call => call.method === 'frameAt').map(call => call.params.keyOnly)).toEqual([true, undefined])
+    reader.suspend?.(); await reader.frameAt(28.2).catch(() => undefined); await frames.settled()
+    expect(channel.calls.filter(call => call.method === 'closeStream').map(call => call.params.streamId)).toEqual(['vf-1'])
+    expect(channel.last('frameAt')).toMatchObject({ streamId: 'vf-2' })
+    reader.close?.(); await frames.settled(); expect(frames.openSessions).toBe(0)
   })
 
   it('无画面的文件没有画面读取器，计划为空，但有声音读取器（原生声音已接通）', async () => {

@@ -30,7 +30,8 @@ import { mixVideoEditStretchedSound, VideoEditTimeStretcher } from './videoEditT
 import { videoEditRenderedFrameInterpolation } from '@/core/videoEdit/timeRemap'
 import { videoEditCaptionClips } from '@/core/videoEdit/timedContent'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
-import { VideoEditFrameCache } from './videoEditFrameCache'
+import { VideoEditFrameCache, type CachedVideoEditFrame } from './videoEditFrameCache'
+import { videoEditNativeFailureKind } from './videoEditNativeFailure'
 import { planAudioEffectBlock, AudioEffectChain } from '@/core/audio/effects/audioEffectChain'
 import { videoEditAudioMixer, videoEditPanGains, type VideoEditAudioMixer } from '@/core/videoEdit/audioMixer'
 
@@ -96,12 +97,19 @@ export function retireIdle(table: Map<string, true>, idle: readonly string[], li
   return evict
 }
 
+/** The still store's media key: one file and revision (the store then finds the picture showing at a time). */
+function videoEditStillKey(media: Pick<VideoEditMedia, 'path' | 'sourceRevision'>): string { return `${media.path}\u0000${media.sourceRevision ?? ''}` }
+function stillDecodeKey(still: string, time: number): string { return JSON.stringify([still, Math.round(time * 1e6)]) }
 /** Whether `picture` is the one showing at source time `time` (the renderer's start and end tolerances). */
 function videoEditPictureCovers(picture: { timestamp: number; duration: number } | undefined, time: number): boolean {
   return !!picture && picture.timestamp <= time + 1e-6 && time < picture.timestamp + picture.duration - 1e-7
 }
+export interface VideoEditRenderResult { canvas: OffscreenCanvas; nestedPicture?: VideoEditCodePicture; sourceTimestamps: number[]; blankPictures: number; singleFrameReads: number; cacheHits: number; cacheBytes: number; presented: boolean; renderCached: boolean; decodeMs: number; gpuMs: number; effectErrors?: string[]; approximate?: boolean; completion: Promise<void> }
 export interface VideoEditRenderCacheWindow { key: string; startFrame: number; endFrame: number; url: string; width: number; height: number; fps: number }
-interface CodeInputSession { renderer: VideoEditRenderer; tail: Promise<unknown>; document: VideoEditComposition; sourceKey: string; lastKey?: string; lastPicture?: VideoEditCodePicture; ownerKey: string }
+/** `prewarm`: stops the walk of a session opened ahead (the clip starts, playback stops, the session closes). */
+interface CodeInputSession { renderer: VideoEditRenderer; tail: Promise<unknown>; document: VideoEditComposition; sourceKey: string; lastKey?: string; lastPicture?: VideoEditCodePicture; ownerKey: string; prewarm?: AbortController }
+/** A still being decoded in the background (owner only); `urgent` once a showing frame waits for it. */
+interface StillDecode { done: Promise<boolean>; controller: AbortController; urgent: boolean; promote?: () => void }
 /**
  * `completions`: GPU completion of code input pictures anywhere in the frame's tree. Samplers follow them on the same
  * device queue, so nothing waits for them while preparing; the top-level frame's completion includes them.
@@ -148,8 +156,40 @@ const PLAYBACK_MAX_SKIP_SECONDS = 1
  * boundary frame only continues that decoder. The same horizon as the worker's playback lookahead.
  */
 const CODE_INPUT_PREWARM_SECONDS = 3
-/** At most this many upcoming code clips prewarm at once (one decoder session per video reference). */
-const CODE_INPUT_PREWARM_CLIPS = 2
+/**
+ * At most this many upcoming moving video references open ahead at once (one decoder session each, nearest first):
+ * a segment boundary often brings several windows together, and the ones left out opened and sought on the boundary
+ * frame. Stills need no session of their own and do not count.
+ */
+const CODE_INPUT_PREWARM_REFERENCES = 6
+/**
+ * A read ahead of need walks to its picture in steps of this much source time (six pictures at 60fps): first only the
+ * key frame of the target's GOP, then one step per background turn (`backgroundTurn`). Decoding a whole 4K long GOP in
+ * one burst (up to 250 pictures) held the native service's single device lock and video engine and starved the
+ * reference being shown: frames of 0.5–0.8s while a window three seconds ahead was prepared.
+ */
+const CODE_INPUT_PREWARM_STEP_SECONDS = 0.1
+/**
+ * A walk that would not reach its picture by the time its clip starts (one step per shown frame, assumed every second
+ * frame) takes larger steps, up to this much source time (15 pictures at 60fps).
+ */
+const CODE_INPUT_PREWARM_MAX_STEP_SECONDS = 0.25
+/**
+ * A freshly opened decoder stands at the start of the file. A target this close to it lies in the first GOP, where a
+ * key-frame read would not seek but decode up to the target at once; such a walk steps from the start instead.
+ */
+const CODE_INPUT_PREWARM_FROM_START_SECONDS = 5
+/** Decoded stills (code video inputs fixed at one time) kept for a renderer tree, shared by every reference to the picture. */
+const CODE_INPUT_STILL_BYTES = 256 * 1024 ** 2
+/** Stills decoded in the background at once (each borrows a decoder session while it walks to its picture). */
+const CODE_INPUT_STILL_DECODES = 2
+/**
+ * Background steps one shown frame grants (`backgroundTurn`): with six-picture steps about 20 decoded pictures run
+ * while the frame draws, so a few walks still finish within the three-second horizon.
+ */
+const BACKGROUND_STEPS_PER_FRAME = 3
+/** No frame for this long means paused or idle: background walks then run without waiting for frames. */
+const BACKGROUND_IDLE_MS = 60
 /**
  * Played pictures a code video input keeps in preview (bytes per source pixel: two 4-byte pictures, five 8-bit 4:2:0
  * ones): a restarted play command asks for a frame just shown, which would otherwise seek the input's decoder back to
@@ -195,7 +235,19 @@ export class VideoEditRenderer {
    * Set on the renderer of one code video input (a one-clip composition whose in-point moves every frame): its reader
    * is exclusive, so the reference keeps its own decoder position; `history` keeps played pictures for small steps back.
    */
-  private codeInput?: { history: boolean }
+  private codeInput?: { history: boolean; still?: string }
+  /** Top-level frames being prepared (owner only): background decode steps advance between them (`backgroundTurn`). */
+  private foregroundFrames = 0
+  private foregroundEndedAt = -Infinity
+  private frameTurnsGranted = false
+  private idleTurns?: ReturnType<typeof setTimeout>
+  private readonly backgroundWaiters: Array<() => void> = []
+  /** Decoded stills of this renderer tree (owner only), by file and revision; least recently used go first. */
+  private stills?: VideoEditFrameCache
+  private readonly stillDecodes = new Map<string, StillDecode>()
+  private stillSlots = CODE_INPUT_STILL_DECODES
+  private readonly stillQueue: Array<() => void> = []
+  private readonly refusalsLogged = new Set<string>()
   /**
    * Set on the renderer of a lower-tracks code input, which reads every clip by single-frame reads: a clip whose file
    * another clip of this renderer already reads (both sides of a crossfade between two cuts of one recording) gets an
@@ -271,7 +323,7 @@ export class VideoEditRenderer {
     return [...renderers]
   }
   get waitingForPresentation(): boolean { return this.compositor?.waitingForPresentation === true }
-  readonly lookaheadMetrics = { imagePrepared: 0, imageHits: 0, codePrepared: 0, codeHits: 0, budgetSkipped: 0 }
+  readonly lookaheadMetrics = { imagePrepared: 0, imageHits: 0, codePrepared: 0, codeHits: 0, stillPrepared: 0, budgetSkipped: 0 }
   private nestedPicture(child: VideoEditComposition, key: string): { renderer: VideoEditRenderer; tail: Promise<unknown> } {
     const owner = this.nestedOwner ?? this
     let entry = owner.nestedPictures.get(key)
@@ -332,6 +384,13 @@ export class VideoEditRenderer {
   /** 只做模块/元数据和图片准备，不渲染废弃帧，不向节目 GPU 队列插入作者绘制。 */
   async prepareLookahead(target: VideoEditContentTarget, signal: AbortSignal): Promise<boolean> {
     if (this.disposed || signal.aborted) return false
+    // A still near the playhead is decoded once into the tree's still store (in bounded steps that yield to frames).
+    if (target.kind === 'still') {
+      if (!target.input) return false
+      const kept = await this.ensureStill(target.input)
+      if (kept) this.lookaheadMetrics.stillPrepared++
+      return kept
+    }
     if (target.media && this.lookaheadRenderer(target.scopes, false)?.images.has(target.media.id)) return true
     if (target.media && this.speculativeImageLoads > 0) { this.lookaheadMetrics.budgetSkipped++; return false }
     const renderers = this.lookaheadRenderers()
@@ -497,7 +556,7 @@ export class VideoEditRenderer {
   async replaceContent(document: VideoEditComposition): Promise<void> {
     this.cancelPresentation(); await this.disposePlayback()
     await Promise.allSettled([...this.sources.values()].map(async pending => { const source = await pending; source.current?.close(); await source.iterator?.return(); this.release(source) }))
-    this.sources.clear(); this.frameCache.clear(); this.contentAudio.clear()
+    this.sources.clear(); this.frameCache.clear(); this.stills?.clear(); this.contentAudio.clear()
     for (const chain of this.audioChains.values()) chain.dispose()
     this.audioChains.clear(); this.stretchers.clear()
     await this.codeSources?.replaceContent(document)
@@ -529,6 +588,7 @@ export class VideoEditRenderer {
       const seeker = this.seekers.get(media.path)
       if (seeker) { this.seekers.delete(media.path); await seeker.dispose() }
       this.frameCache.deleteMedia(media.path)
+      this.stills?.deleteMedia(videoEditStillKey(media))
     }
     for (const [key, pending] of this.sources) {
       const source = await pending.catch(() => undefined)
@@ -756,29 +816,34 @@ export class VideoEditRenderer {
     await Promise.allSettled([...sessions].filter(([key]) => !keep.has(key)).map(async ([key, entry]) => {
       sessions.delete(key)
       if (sessions === this.codeInputs) this.prewarmedInputs.delete(key)
+      // A walk waiting for a background turn would never get one from a closed session.
+      entry.prewarm?.abort()
       await entry.renderer.dispose()
       await entry.tail.catch(() => undefined)
     }))
   }
   /**
    * The renderer of one code input. A video input reads through an exclusive reader (its own decoder position, see
-   * `VideoEditClipFramesOptions`), and in preview keeps a few played pictures; a lower-tracks input is an ordinary
-   * export-quality composition of those tracks.
+   * `VideoEditClipFramesOptions`), and in preview keeps a few played pictures; a still keeps its one picture in the
+   * tree's still store instead. A lower-tracks input is an ordinary export-quality composition of those tracks.
    */
-  private codeInputRenderer(input: Pick<ReturnType<typeof codeMediaInputComposition>, 'kind' | 'document'>): VideoEditRenderer {
+  private codeInputRenderer(input: Pick<ReturnType<typeof codeMediaInputComposition>, 'kind' | 'document' | 'still'>): VideoEditRenderer {
     if (input.kind !== 'video') {
       const below = new VideoEditRenderer(input.document, undefined, undefined, 1, this.frames, this, this.sequencePath)
       below.exclusiveWhenShared = true
       return below
     }
-    const history = !!this.previewWidth
+    const media = input.document.clips[0] && this.clipMedia(input.document, input.document.clips[0])
+    const still = input.still && media ? videoEditStillKey(media) : undefined
+    const history = !!this.previewWidth && !still
     const renderer = new VideoEditRenderer(input.document, undefined, undefined, history ? Math.max(1, input.document.width * input.document.height * CODE_INPUT_HISTORY_BYTES_PER_PIXEL) : 1, this.frames, this, this.sequencePath)
-    renderer.codeInput = { history }
+    renderer.codeInput = { history, ...(still ? { still } : {}) }
     return renderer
   }
   /**
-   * The code video inputs of clips starting within `CODE_INPUT_PREWARM_SECONDS` of a playing frame (at most
-   * `CODE_INPUT_PREWARM_CLIPS` clips, nearest first), at the frame each clip first shows, excluding inputs already showing.
+   * The code video inputs of clips starting within `CODE_INPUT_PREWARM_SECONDS` of a playing frame, at the frame each
+   * clip first shows, nearest first, excluding inputs already showing: every still, and moving references up to
+   * `CODE_INPUT_PREWARM_REFERENCES`.
    */
   private upcomingCodeInputs(document: VideoEditComposition, frame: number, showing: ReadonlySet<string>): Array<{ clip: VideoEditClip; first: number; source: ReturnType<typeof codeMediaInputComposition> }> {
     const visible = videoEditVisibleTracks(document)
@@ -796,55 +861,195 @@ export class VideoEditRenderer {
       const first = entering(clip)
       // A prerendered window draws its file there; the clip itself never runs.
       return first > frame && first <= horizon && !this.cachedWindow(first) ? [{ clip, first }] : []
-    }).sort((a, b) => a.first - b.first).slice(0, CODE_INPUT_PREWARM_CLIPS)
+    }).sort((a, b) => a.first - b.first)
     const inputs = new Map<string, { clip: VideoEditClip; first: number; source: ReturnType<typeof codeMediaInputComposition> }>()
+    let moving = 0
     for (const { clip, first } of upcoming) for (const reference of Object.values(clip.code!.parameters)) {
       if (!isCodeImageReference(reference) || reference.kind !== 'video') continue
       try {
         const source = codeMediaInputComposition(document, clip, reference, first)
-        if (!showing.has(source.sessionKey) && !inputs.has(source.sessionKey)) inputs.set(source.sessionKey, { clip, first, source })
+        if (showing.has(source.sessionKey) || inputs.has(source.sessionKey) || !source.still && moving >= CODE_INPUT_PREWARM_REFERENCES) continue
+        inputs.set(source.sessionKey, { clip, first, source })
+        if (!source.still) moving++
       } catch { /* 非法引用由进入片段时的正式渲染报告。 */ }
     }
     return [...inputs.values()]
   }
   /**
-   * Opens each upcoming code video input on its own decoder session and decodes the picture at its first frame, so
-   * entering the clip continues that decoder instead of opening and seeking it on the boundary frame. A prewarm runs
-   * on the input session's own queue (the clip's first real frame waits for it rather than racing it) and on a decoder
-   * no showing input uses; it starts after the showing inputs' reads of this frame.
+   * Prepares each upcoming code video input so entering its clip neither opens nor seeks a decoder on the boundary
+   * frame. A moving reference gets its input session now and walks its own decoder to the picture at its first frame
+   * (`prewarmCodeInput`); a still is decoded into the tree's still store and needs no session. Both walk in bounded
+   * steps on background turns, so the inputs being shown keep the decoder whenever they need it. Called after the
+   * showing inputs' reads of this frame were issued.
    */
-  private prewarmCodeInputs(document: VideoEditComposition, upcoming: ReadonlyArray<{ clip: VideoEditClip; first: number; source: ReturnType<typeof codeMediaInputComposition> }>): void {
+  private prewarmCodeInputs(document: VideoEditComposition, frame: number, upcoming: ReadonlyArray<{ clip: VideoEditClip; first: number; source: ReturnType<typeof codeMediaInputComposition> }>): void {
     for (const { clip, first, source } of upcoming) {
       const key = source.sessionKey
+      if (source.still) { void this.ensureStill(source); continue }
       if (this.codeInputs.has(key)) continue
       const renderer = this.codeInputRenderer(source)
-      const entry: CodeInputSession = { renderer, tail: Promise.resolve(), document, sourceKey: source.sampleKey, ownerKey: `code-input:${key}` }
+      const controller = new AbortController()
+      const entry: CodeInputSession = { renderer, tail: Promise.resolve(), document, sourceKey: source.sampleKey, ownerKey: `code-input:${key}`, prewarm: controller }
       this.codeInputs.set(key, entry); this.prewarmedInputs.add(key)
       const started = performance.now()
-      entry.tail = renderer.prewarmCodeInput().then(() => {
+      // Done well before the clip starts: four fifths of the time left until then.
+      const deadline = performance.now() + Math.max(0, first - frame) / document.fps * 800
+      entry.tail = renderer.prewarmCodeInput(controller.signal, deadline).then(() => {
         recordVideoEditPreparation('codeInputPrewarm', performance.now() - started)
         logger.debug('代码视频输入已提前解到入点', { event: 'video_edit.code_input.prewarm.completed', context: { sequenceId: document.id, clipId: clip.id, startFrame: first, durationMs: performance.now() - started } })
-      }, error => {
-        if (!renderer.disposed) logger.debug('代码视频输入预热未完成，进入片段时照常读取', { event: 'video_edit.code_input.prewarm.failed', error, context: { sequenceId: document.id, clipId: clip.id, startFrame: first } })
-      })
+      }, error => this.prewarmFailed(error, controller.signal, renderer, { sequenceId: document.id, clipId: clip.id, startFrame: first }))
     }
   }
-  /** Decodes the picture this input renderer's clip shows first into its owned current picture (see `prewarmCodeInputs`). */
-  private async prewarmCodeInput(): Promise<void> {
+  private prewarmFailed(error: unknown, signal: AbortSignal, renderer: VideoEditRenderer, context: Record<string, unknown>): void {
+    if (signal.aborted || renderer.disposed) return
+    // The budget refusing a decoder ahead of need is the one reason entering the clip still opens and seeks there
+    // (logged once per input: the idle lookahead retries a refused still every half second).
+    const owner = this.lookaheadOwner, logged = JSON.stringify(context)
+    if (videoEditNativeFailureKind(error) === 'budget') { if (!owner.refusalsLogged.has(logged)) { owner.refusalsLogged.add(logged); logger.info('解码会话预算不足，未能提前准备代码视频输入，进入片段时照常读取', { event: 'video_edit.code_input.prewarm.refused', context }) } }
+    else logger.debug('代码视频输入预热未完成，进入片段时照常读取', { event: 'video_edit.code_input.prewarm.failed', error, context })
+  }
+  /**
+   * Decodes the picture this input renderer's clip shows first (see `prewarmCodeInputs`) without a long burst on the
+   * shared decoder: a key-frame-only read positions on the GOP of the target (a fresh decoder near the start of the
+   * file steps from there instead), then the walk advances `CODE_INPUT_PREWARM_STEP_SECONDS` per background turn.
+   * Stopping it (the clip starts, playback stops) leaves the decoder where it got to; the clip's first read continues
+   * from there. A still lands in the tree's still store and gives its decoder back.
+   */
+  private async prewarmCodeInput(signal?: AbortSignal, deadline?: number): Promise<void> {
     const document = this.document, clip = document.clips[0], media = clip && this.clipMedia(document, clip)
     if (!clip || media?.kind !== 'video') return
     const time = videoEditPictureSeconds(clipSourceSeconds(clip, videoEditHandleFrame(clip, clip.start, document.fps, media.durationSeconds), document.fps))
     const pending = this.source(clip.id, media)
     const source = await pending
-    if (!source.video || videoEditPictureCovers(source.current, time)) return
-    // Speculative: it never takes the foreground's last decoder or shares the file's session with a showing reference.
-    const decoded = await source.video.frameAt(time, { speculative: true })
+    const reader = source.video
+    if (!reader || videoEditPictureCovers(source.current, time)) return
+    const still = this.codeInput?.still
+    const kept = still ? this.stillStore.get(still, time) : undefined
+    if (kept instanceof VideoEditGpuFrame) { source.current?.close(); source.current = kept.clone(); source.previousTime = time; return }
+    const stepping = performance.now()
+    // Speculative throughout: it never takes the foreground's last decoder or shares the file's session.
+    let decoded: VideoEditDecodedPicture | null = null
+    try {
+      let reached: number | undefined
+      if (!reader.continues) decoded = await reader.frameAt(time, { speculative: true })
+      else if (time <= CODE_INPUT_PREWARM_FROM_START_SECONDS) reached = 0
+      else {
+        decoded = await reader.frameAt(time, { speculative: true, keyFrame: true })
+        reached = decoded && 'approximate' in decoded && decoded.approximate ? decoded.timestamp : undefined
+      }
+      while (reached !== undefined) {
+        decoded?.close(); decoded = null
+        if (!still || !this.lookaheadOwner.stillDecodes.get(stillDecodeKey(still, time))?.urgent) await this.backgroundTurn(signal)
+        if (this.disposed) return
+        const turnsLeft = deadline === undefined ? Infinity : Math.max(1, Math.floor((deadline - performance.now()) * document.fps / 2000))
+        const step = Math.min(CODE_INPUT_PREWARM_MAX_STEP_SECONDS, Math.max(CODE_INPUT_PREWARM_STEP_SECONDS, (time - reached) / turnsLeft))
+        const at = Math.min(time, reached + step)
+        decoded = await reader.frameAt(at, { speculative: true })
+        reached = at < time ? at : undefined
+      }
+    } catch (error) { decoded?.close(); throw error }
+    recordVideoEditPreparation('codeInputPrewarmDecode', performance.now() - stepping)
     if (!decoded) return
     let normalized: VideoEditGpuFrame
     try { normalized = await this.ensureCompositor().snapshot(decoded, videoEditGpuFrameUsesChroma(decoded, source.codec), true) } finally { decoded.close() }
     if (this.disposed || this.sources.get(clip.id) !== pending || this.document !== document) { normalized.close(); return }
     source.current?.close(); source.current = normalized; source.previousTime = time
-    if (this.codeInput?.history) this.frameCache.put(media.path, normalized.clone(), new Set())
+    if (still) { this.stillStore.put(still, normalized.clone(), new Set()); reader.suspend?.() }
+    else if (this.codeInput?.history) this.frameCache.put(media.path, normalized.clone(), new Set())
+  }
+  /** The still store of this renderer tree (owner's). */
+  private get stillStore(): VideoEditFrameCache {
+    const owner = this.lookaheadOwner
+    return owner.stills ??= new VideoEditFrameCache(CODE_INPUT_STILL_BYTES)
+  }
+  /**
+   * The kept picture of a still, or undefined to decode it here. A still the background is still decoding is waited
+   * for (made urgent: its remaining steps no longer wait for turns) instead of decoded a second time from scratch.
+   */
+  private async keptStill(still: string, time: number): Promise<CachedVideoEditFrame | undefined> {
+    const kept = this.stillStore.get(still, time)
+    if (kept) return kept
+    const decode = this.lookaheadOwner.stillDecodes.get(stillDecodeKey(still, time))
+    if (!decode) return undefined
+    decode.urgent = true; decode.promote?.(); this.grantBackgroundTurns()
+    const waited = performance.now()
+    await decode.done
+    recordVideoEditPreparation('codeInputStillWait', performance.now() - waited)
+    return this.stillStore.get(still, time)
+  }
+  /**
+   * Decodes a still into the tree's still store in the background (at most `CODE_INPUT_STILL_DECODES` at once, each on
+   * a decoder session of its own while it walks), unless it is kept or already being decoded. Resolves whether the
+   * still is kept afterwards. Used ahead of playback and by the idle lookahead (`prepareLookahead`).
+   */
+  private ensureStill(input: ReturnType<typeof codeMediaInputComposition>): Promise<boolean> {
+    const owner = this.lookaheadOwner
+    const clip = input.document.clips[0], media = clip && owner.clipMedia(input.document, clip)
+    if (!input.still || !clip || media?.kind !== 'video' || owner.disposed) return Promise.resolve(false)
+    const still = videoEditStillKey(media)
+    const time = videoEditPictureSeconds(clipSourceSeconds(clip, videoEditHandleFrame(clip, clip.start, input.document.fps, media.durationSeconds), input.document.fps))
+    if (owner.stillStore.get(still, time)) return Promise.resolve(true)
+    const key = stillDecodeKey(still, time)
+    const existing = owner.stillDecodes.get(key)
+    if (existing) return existing.done
+    const controller = new AbortController()
+    const decode: StillDecode = { controller, urgent: false, done: Promise.resolve(false) }
+    owner.stillDecodes.set(key, decode)
+    decode.done = (async () => {
+      await owner.stillSlot(controller.signal, decode)
+      const renderer = owner.codeInputRenderer(input)
+      const started = performance.now()
+      try {
+        await renderer.prewarmCodeInput(controller.signal)
+        recordVideoEditPreparation('codeInputStill', performance.now() - started)
+        logger.debug('定格画面已提前解好', { event: 'video_edit.code_input.still.completed', context: { mediaId: media.id, time, durationMs: performance.now() - started } })
+      } finally { owner.releaseStillSlot(); await renderer.dispose() }
+      return !!owner.stillStore.get(still, time)
+    })().catch(error => { owner.prewarmFailed(error, controller.signal, owner, { mediaId: media.id, time, still: true }); return false })
+      .finally(() => { if (owner.stillDecodes.get(key) === decode) owner.stillDecodes.delete(key) })
+    return decode.done
+  }
+  /** A decode slot for a background still; an urgent one (a showing frame waits for it) starts at once. */
+  private stillSlot(signal: AbortSignal, decode: StillDecode): Promise<void> {
+    if (this.stillSlots > 0 || decode.urgent) { this.stillSlots--; return Promise.resolve() }
+    return new Promise((resolve, reject) => {
+      const leave = (): void => { const index = this.stillQueue.indexOf(next); if (index >= 0) this.stillQueue.splice(index, 1); signal.removeEventListener('abort', cancel); decode.promote = undefined }
+      const next = (): void => { leave(); this.stillSlots--; resolve() }
+      const cancel = (): void => { leave(); reject(new DOMException('定格画面准备已取消。', 'AbortError')) }
+      decode.promote = next
+      this.stillQueue.push(next); signal.addEventListener('abort', cancel, { once: true })
+    })
+  }
+  private releaseStillSlot(): void { this.stillSlots++; this.stillQueue.shift()?.() }
+  /**
+   * A turn for one bounded background decode step (a prewarm or a still walking to its picture). While frames are
+   * being shown, turns come once per frame after the frame's own code inputs have been read (at its end when it has
+   * none), `BACKGROUND_STEPS_PER_FRAME` of them in arrival order, so the steps run while the frame draws and are done
+   * before the next frame reads; pipelined frames leave no real gap in between. Once no frame has been prepared for
+   * `BACKGROUND_IDLE_MS` (paused, idle), every walk runs freely. Foreground reads never wait for a turn.
+   */
+  private backgroundTurn(signal?: AbortSignal): Promise<void> {
+    const owner = this.lookaheadOwner
+    if (signal?.aborted) return Promise.reject(new DOMException('后台解码已取消。', 'AbortError'))
+    if (owner.disposed || owner.foregroundFrames === 0 && performance.now() - owner.foregroundEndedAt >= BACKGROUND_IDLE_MS) return Promise.resolve()
+    return new Promise((resolve, reject) => {
+      const leave = (): void => { const index = owner.backgroundWaiters.indexOf(granted); if (index >= 0) owner.backgroundWaiters.splice(index, 1); signal?.removeEventListener('abort', cancel) }
+      const granted = (): void => { leave(); resolve() }
+      const cancel = (): void => { leave(); reject(new DOMException('后台解码已取消。', 'AbortError')) }
+      owner.backgroundWaiters.push(granted); signal?.addEventListener('abort', cancel, { once: true })
+    })
+  }
+  /** Grants `count` background turns in arrival order (all of them by default). */
+  private grantBackgroundTurns(count = Infinity): void {
+    const owner = this.lookaheadOwner
+    for (const granted of owner.backgroundWaiters.slice(0, count)) granted()
+  }
+  /** The frame's turns, once: after its code inputs were read, or at its end. */
+  private grantFrameTurns(): void {
+    const owner = this.lookaheadOwner
+    if (owner.frameTurnsGranted) return
+    owner.frameTurnsGranted = true
+    owner.grantBackgroundTurns(BACKGROUND_STEPS_PER_FRAME)
   }
   /** Neighbour inputs are prefix renders on this worker/device. Each prefix has
    * its own targets so recursive predecessors cannot overwrite the current input. */
@@ -908,7 +1113,8 @@ export class VideoEditRenderer {
   private async prepareCodeInputs(document: VideoEditComposition, active: VideoEditClip[], frame: number, sequential: boolean, quality: EffectQuality, current: () => boolean, context: NestedFrameContext, path: string[]): Promise<Map<string, VideoEditCodePicture>> {
     const requests = active.flatMap(clip => Object.entries(clip.code?.parameters ?? {}).flatMap(([parameter, reference]) => isCodeImageReference(reference) && reference.kind !== 'image' ? [{ clip, parameter, reference, source: codeMediaInputComposition(document, clip, reference, frame) }] : []))
     const showing = new Set(requests.map(request => request.source.sessionKey))
-    for (const key of showing) this.prewarmedInputs.delete(key)
+    // A walk still under way stops after its current step; this frame's read continues the decoder from where it got.
+    for (const key of showing) if (this.prewarmedInputs.delete(key)) this.codeInputs.get(key)?.prewarm?.abort()
     // Forward preview playback opens the inputs of clips about to start; a paused, scrubbed or exported frame keeps only its own.
     const upcoming = sequential && this.previewWidth ? this.upcomingCodeInputs(document, frame, showing) : []
     const keep = new Set([...showing, ...upcoming.map(input => input.source.sessionKey), ...(this.nestedOwner ?? this).warmScopes])
@@ -942,7 +1148,9 @@ export class VideoEditRenderer {
           const started = performance.now()
           if (reference.kind === 'video' && session.sourceKey !== source.sampleKey || session.document !== document) {
             session.lastKey = undefined; session.lastPicture = undefined
+            const updating = performance.now()
             await session.renderer.updateDocument(source.document)
+            recordVideoEditPreparation('codeInputDocument', performance.now() - updating)
             session.sourceKey = source.sampleKey; session.document = document
           }
           const result = await session.renderer.render(source.frame, false, false, current, undefined, { context, key: targetKey, ownerKey: session.ownerKey, path, opaqueBackground: true }, quality)
@@ -963,9 +1171,11 @@ export class VideoEditRenderer {
       void picture.catch(() => undefined)
       pending.push([codeMediaInputKey(clip.id, parameter), picture])
     }
-    this.prewarmCodeInputs(document, upcoming)
+    this.prewarmCodeInputs(document, frame, upcoming)
     const inputs = new Map<string, VideoEditCodePicture>()
     for (const [key, picture] of pending) inputs.set(key, await picture)
+    // This frame's inputs are read: background walks may take one step while the frame draws.
+    if (pending.length) this.grantFrameTurns()
     for (const entry of this.codeInputs.values()) {
       const keys = context.keys.get(entry.ownerKey)
       // A session kept without a picture this frame (opened ahead, or held by the lookahead) gives its target back.
@@ -981,7 +1191,24 @@ export class VideoEditRenderer {
    * picture at its source time or the frame fails (`videoEditExportPictures.ts`); `singleFrameReads` counts the layers
    * a single-frame read decided because the sequential reader's picture was not exact.
    */
-  async render(frame: number, sequential = false, _scrubbing: VideoEditScrubMode = false, shouldPresent: () => boolean = () => true, deadline?: number, nestedRender?: NestedRender, quality: EffectQuality = 'interactive', capturePresentation?: (pixels: Promise<ImageBitmap>) => void): Promise<{ canvas: OffscreenCanvas; nestedPicture?: VideoEditCodePicture; sourceTimestamps: number[]; blankPictures: number; singleFrameReads: number; cacheHits: number; cacheBytes: number; presented: boolean; renderCached: boolean; decodeMs: number; gpuMs: number; effectErrors?: string[]; approximate?: boolean; completion: Promise<void> }> {
+  async render(frame: number, sequential = false, scrubbing: VideoEditScrubMode = false, shouldPresent: () => boolean = () => true, deadline?: number, nestedRender?: NestedRender, quality: EffectQuality = 'interactive', capturePresentation?: (pixels: Promise<ImageBitmap>) => void): Promise<VideoEditRenderResult> {
+    // A top-level frame is the foreground: background decode steps take their turns between such frames.
+    const foreground = !nestedRender && !this.nestedOwner
+    if (foreground) { this.foregroundFrames++; this.frameTurnsGranted = false; clearTimeout(this.idleTurns) }
+    try { return await this.renderFrame(frame, sequential, scrubbing, shouldPresent, deadline, nestedRender, quality, capturePresentation) }
+    finally {
+      if (foreground) {
+        // A frame without code inputs gives its turns at its end.
+        this.grantFrameTurns()
+        if (--this.foregroundFrames === 0) {
+          this.foregroundEndedAt = performance.now()
+          // No next frame soon (paused, idle): the waiting walks run freely.
+          this.idleTurns = setTimeout(() => { if (this.foregroundFrames === 0) this.grantBackgroundTurns() }, BACKGROUND_IDLE_MS)
+        }
+      }
+    }
+  }
+  private async renderFrame(frame: number, sequential: boolean, _scrubbing: VideoEditScrubMode, shouldPresent: () => boolean, deadline: number | undefined, nestedRender: NestedRender | undefined, quality: EffectQuality, capturePresentation: ((pixels: Promise<ImageBitmap>) => void) | undefined): Promise<VideoEditRenderResult> {
     this.capturePresentation = capturePresentation
     if (this.disposed) throw new Error('预览已关闭。')
     const document = this.document; const epoch = this.presentationEpoch
@@ -1189,12 +1416,18 @@ export class VideoEditRenderer {
         // A code video input reads its reference's own decoder (exclusive reader): consecutive frames continue it, a
         // repeated time keeps the current picture, and in preview a small step back (a restarted play command asks
         // for a frame just shown) takes a kept played picture instead of seeking the decoder back to its key frame.
+        // A still (fixed time) comes from the pictures kept for the whole renderer tree, decoded once.
         if (videoEditPictureCovers(source.current, time)) cacheHits++
         else {
-          const kept = this.frameCache.get(media.path, time)
+          const still = this.codeInput.still
+          const kept = still ? await this.keptStill(still, time) : this.frameCache.get(media.path, time)
           source.current?.close(); source.current = undefined
           if (kept instanceof VideoEditGpuFrame) { source.current = kept.clone(); cacheHits++ }
-          else source.current = await source.video.frameAt(time) ?? undefined
+          else {
+            const reading = performance.now()
+            source.current = await source.video.frameAt(time) ?? undefined
+            recordVideoEditPreparation('codeInputRead', performance.now() - reading)
+          }
         }
       } else if (scheduled) {
         await source.iterator?.return(); source.iterator = undefined
@@ -1244,13 +1477,17 @@ export class VideoEditRenderer {
       }
       if (!(source.current instanceof VideoEditGpuFrame)) {
         const decoded = source.current
+        const copying = performance.now()
         const normalized = await this.compositor!.snapshot(decoded, videoEditGpuFrameUsesChroma(decoded, source.codec), true)
+        if (this.codeInput) recordVideoEditPreparation('codeInputCopy', performance.now() - copying)
         if (this.disposed || this.sources.get(clip.id) !== pendingSource) { normalized.close(); decoded.close(); return null }
         source.current = normalized
         // Forward pictures already have the same owned format as seeks. Retain
         // a reference in the existing bounded cache so reversing a played range
         // never starts competing background GOP decodes for those pictures.
-        if (this.previewWidth && sequential || this.codeInput?.history) this.frameCache.put(media.path, normalized.clone(), new Set())
+        // A still is kept for the whole tree and needs no decoder any more.
+        if (this.codeInput?.still) { this.stillStore.put(this.codeInput.still, normalized.clone(), new Set()); source.video.suspend?.() }
+        else if (this.previewWidth && sequential || this.codeInput?.history) this.frameCache.put(media.path, normalized.clone(), new Set())
         decoded.close()
       }
       timestamps.push(source.current.timestamp)
@@ -1625,6 +1862,9 @@ export class VideoEditRenderer {
   async dispose(): Promise<void> {
     if (this.disposed) return
     this.disposed = true
+    // Background walks stop at their current step; nothing waits for a turn on a closed renderer.
+    for (const decode of this.stillDecodes.values()) decode.controller.abort()
+    clearTimeout(this.idleTurns); this.grantBackgroundTurns()
     await Promise.allSettled([...this.nestedPictures.values()].map(entry => entry.renderer.dispose()))
     await Promise.allSettled([...this.nestedSounds.values()].map(renderer => renderer.dispose()))
     this.nestedPictures.clear(); this.nestedSounds.clear()
@@ -1632,6 +1872,7 @@ export class VideoEditRenderer {
     await this.disposeCodeInputs(new Set(), this.filterInputs)
     this.cancelPresentation(); await Promise.allSettled([this.codeSources?.dispose(), this.disposePlayback()])
     await Promise.allSettled([...this.seekers.values()].map(seeker => seeker.dispose())); this.seekers.clear(); this.frameCache.clear()
+    await Promise.allSettled([...this.stillDecodes.values()].map(decode => decode.done)); this.stills?.clear()
     await Promise.allSettled([...this.sources.values()].map(async pending => { const source = await pending; source.current?.close(); await source.iterator?.return(); this.release(source) }))
     for (const key of this.images.keys()) this.releaseImage(key)
     this.contentAudio.clear(); this.sources.clear(); this.images.clear(); await this.compositor?.dispose(); this.canvas.width = 1; this.canvas.height = 1
