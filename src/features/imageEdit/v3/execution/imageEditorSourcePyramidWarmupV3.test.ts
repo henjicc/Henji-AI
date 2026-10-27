@@ -62,15 +62,14 @@ describe('ImageEditorSourcePyramidWarmupV3', () => {
     warmup.warm(document, [])
 
     await vi.waitFor(() => expect(readFastProxy).toHaveBeenCalledOnce())
-    expect(IMAGE_EDITOR_SOURCE_WARMUP_MAX_DIMENSION_V3).toBe(2_048)
     expect(readFastProxy).toHaveBeenCalledWith(expect.objectContaining({
       resourceRef: RESOURCE,
-      maxDimension: 2_048,
+      maxDimension: IMAGE_EDITOR_SOURCE_WARMUP_MAX_DIMENSION_V3,
     }), expect.any(AbortSignal))
     warmup.dispose()
   })
 
-  it('多图层文档只并发两个后台预热，并在完成后继续排队资源', async () => {
+  it('多图层文档按并发上限后台预热，并在完成后继续排队资源', async () => {
     const releases: Array<() => void> = []
     readFastProxy.mockImplementation((request: { resourceRef: string }) => new Promise((resolve) => {
       releases.push(() => resolve({
@@ -92,15 +91,13 @@ describe('ImageEditorSourcePyramidWarmupV3', () => {
 
     warmup.warm(document, [])
 
-    await vi.waitFor(() => expect(readFastProxy).toHaveBeenCalledTimes(2))
-    expect(IMAGE_EDITOR_SOURCE_WARMUP_CONCURRENCY_V3).toBe(2)
-    releases[0]?.()
-    await vi.waitFor(() => expect(readFastProxy).toHaveBeenCalledTimes(3))
-    releases[1]?.()
-    await vi.waitFor(() => expect(readFastProxy).toHaveBeenCalledTimes(4))
-    releases[2]?.()
-    await vi.waitFor(() => expect(readFastProxy).toHaveBeenCalledTimes(5))
-    releases.slice(3).forEach((release) => release())
+    const limit = IMAGE_EDITOR_SOURCE_WARMUP_CONCURRENCY_V3
+    await vi.waitFor(() => expect(readFastProxy).toHaveBeenCalledTimes(limit))
+    for (let index = 0; index < refs.length - limit; index += 1) {
+      releases[index]?.()
+      await vi.waitFor(() => expect(readFastProxy).toHaveBeenCalledTimes(limit + index + 1))
+    }
+    releases.slice(refs.length - limit).forEach((release) => release())
     warmup.dispose()
   })
 })

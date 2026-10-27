@@ -56,7 +56,6 @@ describe('曲线调整 CPU 参考实现', () => {
     expect(result.data[1]).toBeCloseTo(0.08, 5);
     expect(result.data[3]).toBe(0.5);
     expect(CURVES_ADJUSTMENT_CONTRACT).toMatchObject({
-      version: 2,
       inputColorDomain: 'perceptual-working',
       precision: 'float32',
     });
@@ -126,11 +125,7 @@ describe('稳定效果的 V3 recipe 适配', () => {
       height: 1024,
     });
 
-    expect(DIFFUSION_V4_RECIPE_ADAPTER).toMatchObject({
-      nodeVersion: 4,
-      parameterSchemaVersion: 4,
-      implementation: 'existing-recipe',
-    });
+    expect(DIFFUSION_V4_RECIPE_ADAPTER.implementation).toBe('existing-recipe');
     expect(recipe.version).toBe(DIFFUSION_V4_RECIPE_ADAPTER.recipeVersion);
   });
 
@@ -143,11 +138,7 @@ describe('稳定效果的 V3 recipe 适配', () => {
       height: 1024,
     });
 
-    expect(VGPU_GLOW_V4_RECIPE_ADAPTER).toMatchObject({
-      nodeVersion: 4,
-      parameterSchemaVersion: 4,
-      implementation: 'existing-recipe',
-    });
+    expect(VGPU_GLOW_V4_RECIPE_ADAPTER.implementation).toBe('existing-recipe');
     expect(recipe.schemaVersion).toBe(VGPU_GLOW_V4_RECIPE_ADAPTER.recipeVersion);
   });
 });

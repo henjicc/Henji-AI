@@ -53,14 +53,15 @@ function hdrBigTiffDescription(): TileOutputDescription {
 }
 
 describe('HDR AVIF 编码资源门槛', () => {
-  it('与 renderer 共用 900 万像素契约，并在越界时于编码器启动前拒绝', async () => {
-    expect(IMAGE_EDITOR_V3_HDR_AVIF_MAX_PIXELS).toBe(9_000_000)
-    await expect(prepareExportMetadata(pqDescription(3_000, 3_000), {
+  it('与 renderer 共用像素上限契约，并在越界时于编码器启动前拒绝', async () => {
+    const width = 3_000
+    const maxHeight = Math.floor(IMAGE_EDITOR_V3_HDR_AVIF_MAX_PIXELS / width)
+    await expect(prepareExportMetadata(pqDescription(width, maxHeight), {
       format: 'avif10',
       inputByteOrder: 'little-endian',
     })).resolves.toEqual({})
 
-    await expect(prepareExportMetadata(pqDescription(3_001, 3_000), {
+    await expect(prepareExportMetadata(pqDescription(width, maxHeight + 1), {
       format: 'avif10',
       inputByteOrder: 'little-endian',
     })).rejects.toMatchObject({

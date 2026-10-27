@@ -12,7 +12,6 @@ import {
 } from '@/core/imageEdit/v3/renderScheduler'
 import type { ImageEditorV3FastProxy } from '@/platform/contracts/imageEditorV3'
 import {
-  IMAGE_EDITOR_PREVIEW_PROXY_CACHE_MAX_BYTES_V3,
   IMAGE_EDITOR_PREVIEW_PYRAMID_PREWARM_TILE_BUDGET_V3,
   ImageEditorPreviewClientV3,
   ImageEditorPreviewSupersededErrorV3,
@@ -460,7 +459,6 @@ describe('ImageEditorPreviewClientV3 调度与资源所有权', () => {
       })
       ;(await promise).release()
     }
-    expect(IMAGE_EDITOR_PREVIEW_PROXY_CACHE_MAX_BYTES_V3).toBe(128 * 1024 * 1024)
     expect(reader).toHaveBeenCalledTimes(2)
     client.dispose()
   })

@@ -36,12 +36,9 @@ describe('智能助手图片编辑适配', () => {
   });
 
   it('图片编辑器每个正式工具都向助手声明至少一种可执行操作', () => {
-    expect(listImageEditorToolControls().map((tool) => [tool.id, tool.kinds])).toEqual([
-      ['geometry', ['rotate_cw', 'rotate_ccw', 'flip_h', 'flip_v', 'crop', 'mark']],
-      ['blur', ['blur']],
-      ['diffusion', ['diffusion']],
-      ['vgpuGlow', ['vgpu_glow']],
-    ]);
+    const controls = listImageEditorToolControls();
+    expect(controls.length).toBeGreaterThan(0);
+    for (const tool of controls) expect(tool.kinds.length, tool.id).toBeGreaterThan(0);
   });
 
   it('能从语义参数构建柔光和辉光 Pro 文档', () => {

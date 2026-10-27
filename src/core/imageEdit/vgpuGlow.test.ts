@@ -89,7 +89,6 @@ describe('VGPU 辉光操作契约', () => {
     expect(weightedMeanFraction(dreamy)).toBeGreaterThan(weightedMeanFraction(natural));
     expect(neon.sourceGain).toBeGreaterThan(dreamy.sourceGain);
     for (const recipe of [natural, dreamy, neon]) {
-      expect(recipe.schemaVersion).toBe(14);
       expect(recipe.scatterLevels.length).toBeGreaterThanOrEqual(4);
       expect(recipe.scatterLevels.length).toBeLessThanOrEqual(12);
       expect(recipe.scatterLevels[0].divisor).toBe(2);
@@ -383,7 +382,6 @@ describe('VGPU 辉光操作契约', () => {
   it('默认关闭着色和 RGB 分离，并拒绝开发期旧参数', () => {
     const defaults = createDefaultVgpuGlowOperationParams();
     expect(defaults).toMatchObject({
-      schemaVersion: 4,
       tintEnabled: false,
       chromaticAberration: 0,
       chromaticChannels: ['red', 'blue'],

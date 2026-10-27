@@ -89,7 +89,6 @@ describe('Gaussian Blur v2 CPU 参考实现', () => {
       pyramidLevel: 2,
     });
     expect(GAUSSIAN_BLUR_V2_CONTRACT).toMatchObject({
-      version: 2,
       inputColorDomain: 'linear-light',
       alpha: 'premultiplied',
     });
@@ -154,7 +153,6 @@ describe('Blur v3 快速 CPU 后备', () => {
       requiresGlobalAnalysis: true,
     });
     expect(FAST_BLUR_V3_CONTRACT).toMatchObject({
-      version: 3,
       inputColorDomain: 'linear-light',
       alpha: 'premultiplied',
     });

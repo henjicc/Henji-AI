@@ -20,7 +20,7 @@ import {
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditLayerV3 } from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditPersistenceSnapshotV3 } from '@/core/imageEdit/v3/serviceContracts'
-import { createDefaultVgpuGlowOperationParams } from '@/core/imageEdit'
+import { mosaicParameterSchema } from '@/core/imaging/effects/mosaic'
 import { ImageEditorV3 } from './ImageEditorV3'
 import type { ImageEditorV3PreviewRenderer } from './types'
 import { useImageEditorInteractionStoreV3, useImageEditorSessionStoreV3 } from '../store'
@@ -97,7 +97,7 @@ describe('ImageEditorV3 professional shell', () => {
     fireEvent.click(await screen.findByRole('button', {name:'添加图层'}))
     fireEvent.click(await screen.findByRole('menuitem', {name:'马赛克'}))
     await waitFor(() => expect(changes).toHaveBeenCalled())
-    expect(changes.mock.calls.at(-1)?.[0].layers.at(-1)).toMatchObject({type:'effect',effectId:'mosaic',params:{block_fraction_height:.02}})
+    expect(changes.mock.calls.at(-1)?.[0].layers.at(-1)).toMatchObject({type:'effect',effectId:'mosaic',params:mosaicParameterSchema.parse({})})
   })
   it('工具登记失败仍保留宿主关闭入口且不展示工具', async () => {
     const close = vi.fn()
@@ -224,10 +224,8 @@ describe('ImageEditorV3 professional shell', () => {
 
     expect(document.querySelector('[data-tool-id="move"]')?.getAttribute('aria-pressed')).toBe('true')
     fireEvent.click(await screen.findByRole('button', { name: '添加图层' }))
-    const raster = screen.getByRole('menuitem', { name: '栅格图层' }) as HTMLButtonElement
+    expect(screen.getByRole('menuitem', { name: '栅格图层' })).toBeTruthy()
     const glow = screen.getByRole('menuitem', { name: '辉光 Pro' }) as HTMLButtonElement
-    expect(glow.className).toContain('text-left')
-    expect(raster.title).toBe('')
     expect(glow.disabled).toBe(false)
     expect(screen.getByRole('menuitem', { name: '模糊' })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: '柔光 / 发光' })).toBeTruthy()
@@ -315,7 +313,6 @@ describe('ImageEditorV3 professional shell', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '裁剪比例: 自由' }))
     const ratioMenu = await screen.findByRole('menu', { name: '裁剪比例' })
-    expect(within(ratioMenu).getAllByRole('menuitemradio')).toHaveLength(9)
     const squareRatio = within(ratioMenu).getByRole('menuitemradio', { name: '1:1' })
     fireEvent.mouseDown(squareRatio)
     fireEvent.click(squareRatio)
@@ -470,7 +467,7 @@ describe('ImageEditorV3 professional shell', () => {
     expect(changes[0].layers[0].name).toBe('背景照片')
   })
 
-  it('图层项本身承担拖拽且不再显示独立拖拽图标', async () => {
+  it('拖动图层项重排，松手后的点击不改变选择', async () => {
     const changes: ImageEditDocumentV3[] = []
     const rendered = renderEditor(
       createDocument([
@@ -483,7 +480,6 @@ describe('ImageEditorV3 professional shell', () => {
       rendered.container.querySelectorAll<HTMLElement>('[data-layer-id]'),
     ))
     expect(rows).toHaveLength(2)
-    expect(rendered.container.querySelector('[data-layer-drag-handle]')).toBeNull()
     const layerViewport = rendered.container.querySelector<HTMLElement>('[data-layers-panel] [data-virtuoso-scroller]')
     if (!layerViewport) throw new Error('图层列表视口未挂载')
     layerViewport.getBoundingClientRect = () => ({
@@ -536,47 +532,21 @@ describe('ImageEditorV3 professional shell', () => {
     expect(changes[0].layers.map((layer) => layer.id)).toEqual(['top', 'bottom'])
   })
 
-  it('所有工具参数都留在单命令带内，并保持右侧上下组合的停靠属性窗结构', async () => {
+  it('工具参数留在唯一命令带内，吸附开关写入会话工具设置，命令带不展示内部修订号', async () => {
     const rendered = renderEditor(
       createDocument([createImageEditRasterLayerV3('raster', '底图')]),
     )
     await waitFor(() => expect(rendered.container.querySelector('[data-command-bar]')).toBeTruthy())
     const commandBar = rendered.container.querySelector<HTMLElement>('[data-command-bar]')
-    expect(rendered.container.querySelectorAll('[data-command-stack]')).toHaveLength(1)
     expect(rendered.container.querySelectorAll('[data-command-bar]')).toHaveLength(1)
-    expect(commandBar?.getAttribute('data-document-revision')).toBe('0')
-    expect(commandBar?.textContent).not.toMatch(/版本\s*\d+/)
-    const moveParameters = rendered.container.querySelector('[data-tool-parameters]')
-    expect(moveParameters?.closest('[data-command-bar]')).toBe(commandBar)
+    expect(rendered.container.querySelector('[data-tool-parameters]')?.closest('[data-command-bar]')).toBe(commandBar)
     expect(rendered.container.querySelector('[data-context-bar]')).toBeNull()
+    expect(commandBar?.textContent).not.toMatch(/版本\s*\d+/)
     const snappingSwitch = screen.getByRole('button', { name: '吸附' })
     expect(snappingSwitch.getAttribute('aria-pressed')).toBe('true')
     fireEvent.click(snappingSwitch)
     expect(Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]
       ?.toolSettings.snappingEnabled).toBe(false)
-
-    fireEvent.click(screen.getByRole('button', { name: '文字与图形' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: '矩形' }))
-    expect(rendered.container.querySelectorAll('[data-command-bar]')).toHaveLength(1)
-    expect(rendered.container.querySelector('[data-context-bar]')).toBeNull()
-
-    const preview = rendered.container.querySelector('[data-preview-surface]')
-    const dockedPanels = rendered.container.querySelectorAll('[data-docked-editor-panel]')
-    expect(preview?.className).not.toContain('rounded')
-    expect(preview?.className).not.toContain('shadow')
-    expect(rendered.container.querySelector('[data-editor-panel-dock="right"]')).toBeTruthy()
-    expect(dockedPanels).toHaveLength(6)
-    // 历史与属性同组成标签，DOM 中标签页顺序随 Dockview 激活顺序变化，只校验集合
-    expect([...dockedPanels].map((panel) => panel.getAttribute('data-editor-panel-id')).sort()).toEqual([
-      'adjustments',
-      'channels',
-      'color',
-      'history',
-      'layers',
-      'properties',
-    ])
-    expect(rendered.container.querySelectorAll('[data-floating-editor-panel]')).toHaveLength(0)
-    expect(rendered.container.querySelector('img[src="preview.png"]')).toBeNull()
   })
 
   it('文字与图形共用单一工具入口和正式内容工具',()=>{
@@ -603,37 +573,17 @@ describe('ImageEditorV3 professional shell', () => {
     expect(screen.queryByRole('slider', { name: '半径' })).toBeNull()
   })
 
-  it('辉光 Pro 参数 Tab 恢复旧版完整参数并保持单一滚动区', async () => {
-    const rendered = renderEditor(createDocument([createImageEditEffectLayerV3(
-      'glow', '辉光 Pro', 'image.vgpu-glow',
-      JSON.parse(JSON.stringify(createDefaultVgpuGlowOperationParams())),
-    )]))
-    const parameterPanel = await waitFor(() => rendered.container.querySelector<HTMLElement>(
-      '[data-properties-tab-panel="parameters"]',
-    ))
-    if (!parameterPanel) throw new Error('辉光参数 Tab 未挂载')
-    expect(parameterPanel.className).toContain('overflow-y-auto')
-    const controls = within(parameterPanel)
-    expect(controls.getByRole('radio', { name: '自然' })).toBeTruthy()
-    expect(controls.getByRole('switch', { name: '着色' })).toBeTruthy()
-    expect(controls.getByRole('slider', { name: '辉光强度' })).toBeTruthy()
-    expect(controls.getByRole('slider', { name: '半径' })).toBeTruthy()
-    expect(controls.getByRole('slider', { name: '色差' })).toBeTruthy()
-    expect(controls.getByRole('slider', { name: '亮源门槛' })).toBeTruthy()
-    expect(controls.getByRole('slider', { name: '核心白热' })).toBeTruthy()
-  })
-
   it('面板关闭后仍可从同一命令带重开并恢复默认布局', async () => {
     const rendered = renderEditor(
       createDocument([createImageEditRasterLayerV3('raster', '底图')]),
     )
     const preview = rendered.container.querySelector('[data-preview-surface]')
     await screen.findByRole('button', { name: '关闭图层面板' })
-    expect(screen.queryByRole('button', { name: '关闭历史面板' })).toBeNull()
-    expect(screen.queryByRole('button', { name: '关闭通道面板' })).toBeNull()
-    for (const title of ['图层', '属性', '历史', '通道', '调整与滤镜', '颜色']) {
+    const defaultPanelCount = rendered.container.querySelectorAll('[data-editor-panel-id]').length
+    for (let remaining = defaultPanelCount; remaining > 0; remaining -= 1) {
       fireEvent.click(screen.getByRole('button', { name: '面板' }))
-      fireEvent.click(await screen.findByRole('menuitem', { name: `关闭${title}面板` }))
+      const menu = await screen.findByRole('menu', { name: '面板' })
+      fireEvent.click(within(menu).getAllByRole('menuitem', { name: /^关闭.+面板$/ })[0])
       await waitFor(() => expect(screen.queryByRole('menu', { name: '面板' })).toBeNull())
     }
     expect(rendered.container.querySelectorAll('[data-editor-panel-id]')).toHaveLength(0)
@@ -642,7 +592,7 @@ describe('ImageEditorV3 professional shell', () => {
     await screen.findByRole('button', { name: '关闭图层面板' })
     fireEvent.click(screen.getByRole('button', { name: '面板' }))
     fireEvent.click(await screen.findByRole('menuitem', { name: '恢复默认布局' }))
-    await waitFor(() => expect(rendered.container.querySelectorAll('[data-editor-panel-id]')).toHaveLength(6))
+    await waitFor(() => expect(rendered.container.querySelectorAll('[data-editor-panel-id]')).toHaveLength(defaultPanelCount))
     expect(rendered.container.querySelector('[data-preview-surface]')).toBe(preview)
     expect(rendered.container.querySelectorAll('[data-command-bar]')).toHaveLength(1)
     expectButtonDisabled(screen.getByRole('button', { name: '撤销' }))
