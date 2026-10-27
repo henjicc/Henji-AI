@@ -12,7 +12,7 @@ export interface BoxLine extends BoxSample { t: number }
 /** 与播放器输出帧时钟一致；实时档减少一半跨进程采样。 */
 export function boxSampleEveryFrames(timeScale: number): number { return timeScale >= 2 ? 1 : 2 }
 
-/** 只查询目标元素，不扫描文字。序号从 0 开始，计入隐藏元素，避免显隐导致键漂移。 */
+/** 只查询目标元素，不扫描文字。序号从 0 开始，计入隐藏元素，避免显隐导致键漂移；重复的 data-replay-id 按文档顺序加序号。 */
 export function boxSampleScript(selectors: readonly string[] = []): string {
   const parsed = boxSelectorsSchema.safeParse(selectors)
   if (!parsed.success) throw new Error('boxSelectors 最多 32 个非空 CSS 选择器，每个不超过 1000 字符')
@@ -41,8 +41,10 @@ export function boxSampleScript(selectors: readonly string[] = []): string {
       hidden.set(el, value)
       return value
     }
-    for (const [el, key] of targets) {
-      if (keys.has(key)) throw new Error('界面元素位置轨的键重复：' + key + '；请为元素设置唯一 data-replay-id')
+    for (const [el, base] of targets) {
+      // 同一个 data-replay-id 可能同时出现在几处（如列表与盖在上面的面板用同一个条目组件）：后出现的按文档顺序加序号
+      let key = base, n = 1
+      while (keys.has(key)) key = base + '#' + n++
       keys.add(key)
       const style = styleOf(el)
       if (style.visibility === 'hidden' || style.visibility === 'collapse' || invisible(el)) continue

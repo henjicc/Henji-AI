@@ -173,7 +173,7 @@ export class WebRecordingPlayer {
     const video = options.video !== false
     const text = options.textTrack ? new TextTrackWriter(options.textTrack) : null
     const boxes = new BoxTrackWriter(path.join(this.store.directory, BOX_TRACK_FILE))
-    let boxSamples = 0, boxSampleMs = 0, boxSampleMaxMs = 0
+    let boxSamples = 0, boxSampleMs = 0, boxSampleMaxMs = 0, boxFailures = 0
     let textFailures = 0
     try {
       const stage = (name: string): void => logger.info('网页重演进度', { event: 'web_replay.replay.stage', context: { recordingId: this.manifest.id, stage: name } })
@@ -235,8 +235,10 @@ export class WebRecordingPlayer {
         else if (wait < -500 * scale / fps) lateFrames += 1
         if (i % boxEvery === 0) {
           const started = performance.now()
-          const sample = await withTimeout(contents.executeJavaScript(boxesScript, true) as Promise<BoxSample>, 2_000, '读取界面元素位置超时')
-          await boxes.write(Math.round(i * 1e6 / fps), sample)
+          // 和文字轨一样：某一刻没取到只记一次警告，不让整段重演失败
+          try { await boxes.write(Math.round(i * 1e6 / fps), await withTimeout(contents.executeJavaScript(boxesScript, true) as Promise<BoxSample>, 2_000, '读取界面元素位置超时')) } catch (error) {
+            if (boxFailures++ === 0) this.issue('warning', `界面元素位置轨有时刻没取到：${String(error)}`)
+          }
           const elapsed = performance.now() - started
           boxSamples += 1; boxSampleMs += elapsed; boxSampleMaxMs = Math.max(boxSampleMaxMs, elapsed)
         }
@@ -268,7 +270,7 @@ export class WebRecordingPlayer {
       }
       await text?.close(Math.round(frameCount * 1e6 / fps))
       await boxes.close(Math.round(frameCount * 1e6 / fps))
-      logger.info('界面元素位置轨已保存', { event: 'web_replay.boxes.completed', context: { recordingId: this.manifest.id, everyFrames: boxEvery, samples: boxSamples, sampleMs: boxSampleMs, sampleMaxMs: boxSampleMaxMs, lateFrames } })
+      logger.info('界面元素位置轨已保存', { event: 'web_replay.boxes.completed', context: { recordingId: this.manifest.id, everyFrames: boxEvery, samples: boxSamples, failures: boxFailures, sampleMs: boxSampleMs, sampleMaxMs: boxSampleMaxMs, lateFrames } })
       if (!video) {
         logger.info('网页重演文字轨完成', { event: 'web_replay.replay.text_completed', context: { recordingId: this.manifest.id, issues: this.issues.length } })
         return { output: options.textTrack ?? '', frames: frameCount, width: Math.round(env.viewport.width), height: Math.round(env.viewport.height), durationMs: totalMs, issues: this.issues, looseMatches: this.loose, unusedCalls: this.matcher.unused().length, locatorMisses: input.misses }

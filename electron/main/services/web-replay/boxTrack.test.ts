@@ -54,12 +54,16 @@ it('过滤自身及祖先隐藏、透明、零尺寸、视口外；保留部分�
   expect(sample().items.map(item => item[0])).toEqual(['partial', 'fade'])
 })
 
-it('无效选择器、超额与重复键明确失败，不静默丢轨', () => {
+it('无效选择器与超额明确失败，不静默丢轨', () => {
   expect(() => boxSampleScript(Array.from({ length: 33 }, () => '.ask'))).toThrow('32')
   expect(() => boxSampleScript([' '])).toThrow('非空')
   expect(() => sample(['['])).toThrow('CSS 选择器无效')
-  document.body.innerHTML = '<i data-replay-id="duplicate"></i><i data-replay-id="duplicate"></i>'
-  expect(() => sample()).toThrow('键重复')
+})
+
+it('同一个 data-replay-id 同时出现几处时按文档顺序加序号，不让重演失败', () => {
+  document.body.innerHTML = '<i data-replay-id="history-1"></i><i data-replay-id="history-1"></i><i data-replay-id="history-1"></i>'
+  document.querySelectorAll('i').forEach(el => rect(el))
+  expect(sample().items.map(item => item[0])).toEqual(['history-1', 'history-1#1', 'history-1#2'])
 })
 
 it('每两帧采实时档，timeScale >= 2 每帧采', () => {
