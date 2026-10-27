@@ -57,6 +57,26 @@ it('取消发送目标 id，等待停止回执后才结束，其他请求仍正�
   expect(process.kill).not.toHaveBeenCalled()
   client.dispose()
 })
+it('排队中被取消的请求收到“已取消”回执即按取消结束，不触发宽限终止，其他在途请求不受影响', async () => {
+  vi.useFakeTimers()
+  const process = child(); mocks.spawn.mockReturnValue(process)
+  const client = new SpectralWorkerClient(); const controller = new AbortController()
+  const running = client.request({ type: 'spectral_tile' })
+  const queued = client.request({ type: 'spectral_tile' }, controller.signal)
+  const assertion = expect(queued).rejects.toThrow('频谱读取已取消')
+  const [first, second] = requests(process)
+  controller.abort()
+  expect(requests(process)[0]).toMatchObject({ type: 'cancel', request_id: second.id })
+  // worker 拿闸前发现已取消，立即回执失败“已取消”：主进程按取消处理，而不是计算失败。
+  process.stdout.write(`${JSON.stringify({ version: 1, id: second.id, ok: false, error: '频谱计算已取消' })}
+`)
+  await assertion
+  await vi.advanceTimersByTimeAsync(5000)
+  expect(process.kill).not.toHaveBeenCalled()
+  respond(process, first.id, 'tile')
+  expect(await running).toBe('tile')
+  client.dispose()
+})
 it('请求超时先取消，无回执则关闭进程，所有等待明确失败', async () => {
   vi.useFakeTimers()
   const process = child(); mocks.spawn.mockReturnValue(process)
