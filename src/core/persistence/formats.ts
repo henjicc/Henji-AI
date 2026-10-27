@@ -1,3 +1,4 @@
+import { gitCodeLocationSchema } from '../storage/gitCodeLocation'
 import { memorySnapshotSchema } from '../assistant/memoryEntries'
 import { workspaceLayoutEnvelopeSchema, WORKSPACE_LAYOUT_VERSION } from '../workspaceLayouts/schema'
 import { RESOURCE_PERSISTENCE_FORMATS } from './resourceContracts'
@@ -63,6 +64,7 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
     kind.contentSchema, 'file', { ...(kind.id === 'video_edit' ? { domain: videoEditDocumentSchema } : {}), ...(kind.id === 'audio_edit' ? { domain: audioEditProjectSchema } : {}) }), minReaderVersion: kind.minReaderVersion, migrations: kind.migrations, ...(kind.id === 'image_document' ? { requiredFixtures: [{ extension: 'json' }, { extension: 'henjiimg', versionFormat: 'image-package' }] } : {}), migrationEntry: 'src/core/documents/kinds/对应类型.ts::migrations / src/core/persistence/migrations.ts::upgradePersistenceContent' })),
   { ...format('project', '项目说明', PROJECT_MANIFEST_VERSION, 'ProjectManifest.version', 'electron/main/services/documents/workspace.ts::readManifest', projectManifestSchema), minReaderVersion: 1 },
   { ...format('project-package', '项目和文档包', PACKAGE_VERSION, 'henji-package.json.version', 'electron/main/services/documents/package-service.ts::readManifest', packageManifestSchema), requiredFixtures: [{ extension: 'json' }, { extension: 'henjipack' }] },
+  format('code-git-location', 'Git 源码位置', 1, 'git:<40位提交OID>:<encodeURIComponent(仓库位置)>:<encodeURIComponent(POSIX仓库内路径)>；仓库位置存取时使用既有 henji:/ 编码。轻量版本标签：素材或组件/<转义名>@vN；撤回标签：撤回/<OID>。', 'src/core/storage/gitCodeLocation.ts::parseGitCodeLocation', gitCodeLocationSchema),
   format('code-version', '代码源码版本', CODE_MATERIAL_VERSION_RECORD, '所在剪辑内容版本（记录随剪辑文档的 kindVersion 读写）', 'electron/main/services/documents/code-files.ts::read', codeMaterialVersionSchema, 'file', { source: codeMaterialFilesSchema }),
   // 作者宿主接口：每个代码版本记录 apiVersion；宿主接口变化时升版本并按 apiVersion 保持旧代码的原行为，不迁移源码。
   format('code-author-api', '代码作者宿主接口', CODE_AUTHOR_API_VERSION, 'CodeMaterialVersion.apiVersion / CodeAsset.sourceVersion.apiVersion', 'src/features/videoEdit/engine/videoEditAuthorRuntime.ts', codeAuthorApiSchema),
@@ -105,6 +107,7 @@ export const PERSISTENCE_EXCLUSIONS = [
   { id: 'working-copy-links', readEntry: 'electron/main/services/image-editor-v3/image-document/working-copy-links.ts / canvas-layers/canvas-layer-packages.ts', reason: '可由权威包与工作副本重建的同步投影，业务文档和未保存工作副本在 image-working-copy 中受保护。' },
   { id: 'video-edit-render-cache', readEntry: 'electron/main/services/video/render-cache.ts / src/features/videoEdit/application/videoEditRenderPerformance.ts', reason: '预览文件及按内容指纹保存的本机播放性能样本均可重建；版本变化直接失效并回收，不改变工程文件或用户设置。' },
   { id: 'derived-media', readEntry: 'electron/main/services/audio/ / audio-edit/speech-energy-service.ts / video/ / fonts/scanner.ts / local-inference/', reason: '波形、声音低谷、缩略帧、字体目录缓存、区域检测/跟踪缓存可从原媒体重算；不是独立用户内容，人工校对仍由作品文档保存。' },
+  { id: 'standard-git-object-database', readEntry: 'electron/main/services/documents/code-git.ts', reason: '代码/.git 是 isomorphic-git 读写的标准 Git 对象、索引和引用格式；位置方案由 code-git-location 登记，素材归属 .definition 继续存定义 ID，旧源码备份保留原字节。' },
   { id: 'external-media-and-fonts', readEntry: '项目素材/生成结果/字体目录/代码/*.ts', reason: '图片、视频、音频、字体和作者源码的字节保持原样；来源格式属于外部编码协议，代码的API/语言版本由code-version固定。' },
   { id: 'project-progress-markdown', readEntry: 'src/commands/documents.ts::readProjectProgress', reason: '项目根目录的制作进度是用户与助手共写的自由 Markdown，整份读写、不解析结构；属于外部标准文本，不作为项目数据迁移。' },
   { id: 'sqlite-owned-content', readEntry: 'electron/main/services/db-migrations.ts', reason: '生成历史、自定义模型、素材库/标签/文件夹关系、助手记忆与调用账本统一由既有SQLite账本负责；不另建迁移账本。' },

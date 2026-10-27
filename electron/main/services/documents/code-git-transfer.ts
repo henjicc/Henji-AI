@@ -74,6 +74,7 @@ export async function transferGitCode(locations: readonly string[], destination:
         }
       }
     }
+    await target.restoreLatestLocked()
   })
   return mapping
 }

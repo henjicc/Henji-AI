@@ -1,3 +1,5 @@
+import { ensureCodeLocation } from './code-paths'
+import { migrateProjectCodeStorage } from './code-git-migration'
 import { createHash } from 'node:crypto'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
@@ -6,7 +8,7 @@ import type { DocumentKindRegistry } from '../../../../src/core/documents/kinds'
 import { CODE_AUTHOR_SOURCE_MAX_BYTES, codeFilePathSchema, componentFileReferences, type CodeComponentPin, type CodeFileReference } from '../../../../src/core/videoEdit/codeMaterial/sources'
 import { componentSourceMetadata, packageComponentSource, type CodeComponent, type CodeComponentVersion } from '../../../../src/core/videoEdit/codeMaterial/components'
 import type { DiscardCodeFilesRequest, PublishCodeComponentRequest, WriteCodeVersionRequest, WithdrawCodeComponentRequest } from '../../../../src/core/videoEdit/codeMaterial/storageContract'
-import { isPathInside, type PathStyle } from '../../../../src/core/storage/pathSyntax'
+import { isPathInside } from '../../../../src/core/storage/pathSyntax'
 import { sameEntryName } from '../../../../src/core/documents/naming'
 import { createFileExclusively } from '../fs/no-overwrite'
 import { CodeGitRepository } from './code-git'
@@ -20,22 +22,6 @@ export function codeFolderName(name: string): string {
   const value = [...name].map(character => character.charCodeAt(0) < 32 ? '_' : character).join('').replace(/[<>:"/\\|?*]/g, '_').replace(/[. ]+$/, '').trim() || '代码素材'
   return /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(value) ? `_${value}` : value
 }
-/** Shared code path boundary for publication and container transfers. */
-export async function ensureCodeLocation(root: string, target: string, style: PathStyle, create = false, created?: string[]): Promise<void> {
-  const codeRoot = path.join(root, '代码')
-  if (!isPathInside(style, codeRoot, target) || target === codeRoot) throw new Error('代码文件位置越界，必须位于此文档所在项目的“代码”文件夹内。')
-  // Check each existing ancestor before mkdir/open, including junctions and symbolic links.
-  const relative = path.relative(root, target); let current = root
-  for (const part of relative.split(path.sep)) {
-    current = path.join(current, part)
-    const stat = await fsp.lstat(current).catch(error => { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error })
-    if (stat?.isSymbolicLink()) throw new Error('代码文件位置包含链接，不能写入或读取项目之外的文件。')
-    if (!stat && create && current !== target) { await fsp.mkdir(current); created?.push(current) }
-  }
-  const realRoot = await fsp.realpath(root); const parent = await fsp.realpath(path.dirname(target)).catch(() => null)
-  if (parent && !isPathInside(style, realRoot, parent)) throw new Error('代码文件真实位置越界，请移除指向项目外的链接。')
-}
-
 /** Ordinary visible text files; the existing document container and exclusive-file primitive own I/O. */
 export class DocumentCodeFiles {
   private readonly cache = new Map<string, { source: string; bytes: number }>()
@@ -66,6 +52,7 @@ export class DocumentCodeFiles {
   }
   constructor(private readonly workspace: DocumentWorkspace, private readonly repository: DocumentRepository, private readonly logger: MainLogger,
     private readonly kinds: Pick<DocumentKindRegistry, 'get'>) {}
+  migrate(projectId: string) { return migrateProjectCodeStorage(projectId, this.workspace, this.repository, this.kinds, this.logger) }
   private async root(target: DocumentTarget): Promise<string> {
     const read = await this.repository.read(target)
     return (await this.workspace.resolveContainer(read.meta.container)).root
@@ -173,6 +160,11 @@ export class DocumentCodeFiles {
       const location = gitCodeLocation({ oid: version.oid, repository: repository.dir, filepath: `组件/${version.name}/main.ts` })
       const source = await repository.sourceAt(version.oid, `组件/${version.name}/main.ts`)
       const hash = digest(source)
+      const legacy = records.findIndex(record => record.name === version.name && record.metadata.version === version.version)
+      if (legacy >= 0) {
+        if (records[legacy].hash !== hash) throw new Error(`组件 ${version.name} 的旧版本与 Git 版本不一致，请保留两份文件并恢复正确仓库。`)
+        records.splice(legacy, 1)
+      }
       records.push({ location, source, hash, previousHash: hash, name: version.name, metadata: componentSourceMetadata(source).metadata })
     }
     const recordsByHash = new Map(records.map(record => [record.hash, record]))
@@ -181,10 +173,8 @@ export class DocumentCodeFiles {
       if (chain.includes(record.hash) || chain.length >= 64) throw new Error('项目组件存在循环依赖或超出编译深度，请恢复原组件。')
       const key = `${record.location}:${record.hash}`; const known = pins.get(key); if (known) return known
       const result = { name: record.metadata.name, version: record.metadata.version, location: record.location, hash: record.hash, imports: record.metadata.imports.map(request => {
-        // 依赖文件可以在外部编辑；旧校验文件只用于找到原位置，不作为接受源码的条件。
-        const original = records.filter(value => value.previousHash === request.hash && value.metadata.name === request.name && value.metadata.version === request.version)
-        const named = records.filter(value => value.metadata.name === request.name && value.metadata.version === request.version)
-        const child = recordsByHash.get(request.hash) ?? (original.length === 1 ? original[0] : named.length === 1 ? named[0] : undefined)
+        const child = recordsByHash.get(request.hash)
+        if (child && (child.metadata.name !== request.name || child.metadata.version !== request.version)) throw new Error(`项目组件依赖说明与固定版本不一致：${request.name}。`)
         if (!child) throw new Error(`项目组件 ${record.metadata.name} 引用的 ${request.name}@${request.version} 缺失或无法唯一定位，请恢复原组件文件。`)
         return { ...pin(child, [...chain, record.hash]), name: request.name, version: request.version }
       }) }

@@ -126,10 +126,12 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   // 27：序列新增运动模糊与帧混合开关，旧程序忽略它们会渲染出不同的画面，提高到 27。
   // 28：音轨混音（轨道音量、声像、轨道效果）、主轨与片段基本声音，旧程序忽略它们会混出不同的声音，提高到 28。
   // 31：序列 motionBlur 改为总开关（同时管代码图层的位姿模糊），片段新增 motionBlur:false；旧程序会把关掉的总开关当成代码图层照常模糊，提高到 31。
-  minReaderVersion: 31,
+  minReaderVersion: 34,
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 33 → 34：location 新增 Git 对象引用；普通打开保留旧路径，显式迁移才做 I/O。
+    33: content => structuredClone(content),
     // 17 → 18：全能调色参数格式 v2（开尔文白平衡、创意分离色调并入色轮），含关键帧。
     17: content => migrateEmbeddedVideoColorGradesV1(content),
     // 18 → 19：片段新增可选的速度曲线 timeRemap、补帧 frameInterpolation 与变调 pitchSemitones；旧内容原样有效。

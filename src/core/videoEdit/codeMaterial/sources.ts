@@ -1,3 +1,4 @@
+import { codeLocationSchema } from '../../storage/gitCodeLocation'
 import { z } from 'zod'
 import { sha256HexString } from '../../../utils/save/hash'
 import { mapWithConcurrency } from '../../../utils/mapWithConcurrency'
@@ -8,7 +9,7 @@ export interface CodeSourceResolver { read(hash: string, location?: string, path
 export interface CodeSource { hash: string; source: string }
 export interface CodeFileReference { path: string; location: string; hash: string }
 export interface CodeComponentPin { name: string; version: number; location: string; hash: string; imports: CodeComponentPin[] }
-const rawComponentPinSchema: z.ZodType<CodeComponentPin> = z.lazy(() => z.object({ name: z.string().min(1), version: z.number().int().positive(), location: z.string().min(1), hash: codeSourceHashSchema, imports: z.array(rawComponentPinSchema) }).strict())
+const rawComponentPinSchema: z.ZodType<CodeComponentPin> = z.lazy(() => z.object({ name: z.string().min(1), version: z.number().int().positive(), location: codeLocationSchema, hash: codeSourceHashSchema, imports: z.array(rawComponentPinSchema) }).strict())
 /** Budget the serialized dependency tree before recursive schema parsing can expand a shared DAG. */
 function checkComponentMemory(value: unknown, context: z.RefinementCtx): unknown {
   const stack: Array<{ value: unknown; depth: number; leaving?: boolean }> = [{ value, depth: 0 }]

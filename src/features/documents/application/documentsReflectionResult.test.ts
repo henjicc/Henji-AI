@@ -41,6 +41,7 @@ vi.mock('@/commands/documents', () => {
     trashProject: call('trashProject'),
     revealProject: call('revealProject'),
     collectDocumentMedia: call('collectDocumentMedia'),
+    migrateCodeStorage: call('migrateCodeStorage'),
     importFileToContainer: call('importFile'),
     setProjectMainDocument: call('setProjectMainDocument'),
     registerExternalProject: call('registerExternalProject'),
@@ -68,6 +69,32 @@ beforeEach(() => {
 })
 
 afterEach(() => { holder.fake = null })
+
+it('正式项目迁移能力走临时目录的真实存储服务并可幂等重跑', async () => {
+  const { createTestEnvironment } = await import('../../../../electron/main/services/documents/documents.test-support')
+  const fsp = await import('node:fs/promises'); const path = await import('node:path'); const { createHash } = await import('node:crypto')
+  const env = createTestEnvironment()
+  const app = createApplicationHarness()
+  try {
+    const service = env.services.service
+    const project = await service.createProject({ name: '旧项目' })
+    const document = await service.createDocument({ kind: 'video_edit', name: '旧剪辑', container: { kind: 'project', projectId: project.id } })
+    const location = path.join(project.path, '代码/标题/v1/main.ts'); const source = 'export const title=1'
+    await fsp.mkdir(path.dirname(location), { recursive: true }); await fsp.writeFile(location, source)
+    const hash = createHash('sha256').update(source).digest('hex')
+    await service.saveDocument({ target: { id: document.meta.id }, expectedRevision: 0, content: { media: [], bins: [], items: [], sequences: [], codeMaterials: [{ id: 'def', folder: '标题', versions: [{ files: [{ path: 'main.ts', location, hash }] }] }] } })
+    vi.spyOn(fake, 'listProjects').mockImplementation(() => service.listProjects())
+    vi.spyOn(fake, 'listProjectsPage').mockImplementation((...args) => service.listProjectsPage(...args))
+    vi.spyOn(fake, 'migrateCodeStorage').mockImplementation(id => service.migrateCodeStorage(id))
+    const result = await app.requireResult('migrate_project_code_storage', { projectId: project.id })
+    expect(result).toMatchObject({ importedVersions: 1, archivedFolders: 1, verification: { verified: true } })
+    const read = await service.readDocument({ id: document.meta.id })
+    const content = read.content as { codeMaterials: { versions: { files: { path: string; location: string; hash: string }[] }[] }[] }
+    expect(await service.readCodeFile(content.codeMaterials[0].versions[0].files[0])).toBe(source)
+    expect(await app.requireResult('migrate_project_code_storage', { projectId: project.id })).toMatchObject({ importedVersions: 0 })
+    expect((await app.call('migrate_project_code_storage', { projectId: 'missing' })).ok).toBe(false)
+  } finally { app.dispose(); vi.restoreAllMocks(); await env.cleanup() }
+})
 
 it.each([
   ['PersistenceError', '这份剪辑的格式早于当前版本可读取的最低版本，无法打开；原文件未被修改。'],

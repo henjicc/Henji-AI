@@ -16,6 +16,7 @@ export function createElectronDocuments(): DocumentsPlatform {
     withdrawCodeComponent: request => getNativeDocuments().withdrawCodeComponent(request),
     discardCodeFiles: request => getNativeDocuments().discardCodeFiles(request),
     writeCodeVersion: (request) => getNativeDocuments().writeCodeVersion(request),
+    migrateCodeStorage: (projectId) => getNativeDocuments().migrateCodeStorage(projectId),
     readCodeFile: (file) => getNativeDocuments().readCodeFile(file),
     listCodeComponents: (target) => getNativeDocuments().listCodeComponents(target),
     publishCodeComponent: (request) => getNativeDocuments().publishCodeComponent(request),

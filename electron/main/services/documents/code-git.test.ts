@@ -48,6 +48,24 @@ it('拒绝损坏引用、哈希、缺失对象、越界路径和符号链接', a
   await expect(repository.write({ ...version(1), name: '链接' })).rejects.toThrow('包含链接')
 })
 
+it('已有软件工作区丢失 .git 时拒绝重建，保留文件并给出恢复提示', async () => {
+  await repository.write(version(1))
+  await fsp.rename(path.join(repository.dir, '.git'), path.join(root, 'history-backup'))
+  await expect(repository.write({ ...version(1), name: '另一素材' })).rejects.toThrow('Git 历史缺失')
+  expect(await fsp.readFile(path.join(repository.dir, '素材/开场/main.ts'), 'utf8')).toBe('export default 1')
+  await fsp.rename(path.join(root, 'history-backup'), path.join(repository.dir, '.git'))
+  await expect(repository.write({ ...version(1), name: '另一素材' })).resolves.toBeDefined()
+})
+
+it('用户暂存的新增文件不会被混入自动版本提交', async () => {
+  await repository.write(version(1))
+  await fsp.writeFile(path.join(repository.dir, '用户文件.ts'), 'export const user=1')
+  await git.add({ fs, dir: repository.dir, filepath: '用户文件.ts' })
+  await expect(repository.write(version(2))).rejects.toThrow('未提交')
+  expect(await repository.versions()).toHaveLength(1)
+  expect(await fsp.readFile(path.join(repository.dir, '用户文件.ts'), 'utf8')).toBe('export const user=1')
+})
+
 it('支持中文和需转义的版本标签及 UTF-8 BOM，保留未跟踪旧版本文件', async () => {
   await fsp.mkdir(path.join(repository.dir, '旧素材/v9'), { recursive: true })
   await fsp.writeFile(path.join(repository.dir, '旧素材/v9/main.ts'), 'old')
@@ -56,4 +74,38 @@ it('支持中文和需转义的版本标签及 UTF-8 BOM，保留未跟踪旧版
   expect(await repository.read(result.files[0].location, result.files[0].hash)).toBe('\uFEFF你好')
   expect(await fsp.readFile(path.join(repository.dir, '旧素材/v9/main.ts'), 'utf8')).toBe('old')
   expect(await repository.files(result.oid)).toEqual(['素材/开场 (2)/main.ts'])
+})
+
+it('历史补录后工作区保持最新版本，点开头名称的标签仍合法', async () => {
+  const newest = await repository.write({ ...version(5), name: '.标题' })
+  const old = await repository.write({ ...version(1), name: '.标题' })
+  await repository.exclusive(() => repository.restoreLatestLocked())
+  expect(await fsp.readFile(path.join(repository.dir, '素材/.标题/main.ts'), 'utf8')).toBe('export default 5')
+  expect(await repository.read(old.files[0].location, old.files[0].hash)).toBe('export default 1')
+  expect(await repository.read(newest.files[0].location, newest.files[0].hash)).toBe('export default 5')
+  expect((await repository.versions()).map(version => version.name)).toEqual(['.标题', '.标题'])
+})
+
+it('记录临时目录内的版本写入和冷暖源码读取耗时', async () => {
+  const times: number[] = []
+  const stored = []
+  for (let index = 1; index <= 12; index++) {
+    const begin = performance.now()
+    stored.push(await repository.write({ ...version(index), files: { 'main.ts': `export default ${index};\n${'// source\n'.repeat(200)}`, 'parts/card.ts': 'export const card=1' } }))
+    times.push(performance.now() - begin)
+  }
+  const readTimes: number[] = []
+  for (const item of stored) {
+    const start = performance.now(); await repository.read(item.files[0].location, item.files[0].hash); readTimes.push(performance.now() - start)
+  }
+  const warm = performance.now()
+  for (let i = 0; i < 100; i++) await repository.read(stored[0].files[0].location, stored[0].files[0].hash)
+  const warmAverage = (performance.now() - warm) / 100
+  const legacy = path.join(root, 'legacy.ts'); await fsp.writeFile(legacy, 'export default 1')
+  const disk = performance.now()
+  for (let i = 0; i < 100; i++) codeDigest(await fsp.readFile(legacy))
+  const diskAverage = (performance.now() - disk) / 100
+  const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)].toFixed(2)
+  process.stdout.write(`代码存储基准（2文件/约2KiB,12版本）：写入中位${median(times)}ms，首个${times[0].toFixed(2)}ms，冷读中位${median(readTimes)}ms，缓存读均值${warmAverage.toFixed(3)}ms，裸文件读+SHA均值${diskAverage.toFixed(3)}ms\n`)
+  expect(await repository.versions()).toHaveLength(12)
 })

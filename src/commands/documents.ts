@@ -223,3 +223,6 @@ export async function listDocumentsPage(query?: DocumentListQuery & ListPageRequ
 export async function listProjectsPage(query?: ProjectListQuery & ListPageRequest): Promise<ListPage<ProjectSummary>> {
   return await documents().listProjectsPage(query)
 }
+
+/** 显式迁移项目的旧代码文件夹；普通打开不会执行迁移。 */
+export async function migrateCodeStorage(projectId: string) { return documents().migrateCodeStorage(projectId) }

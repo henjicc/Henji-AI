@@ -46,6 +46,7 @@ function parseWith<T>(schema: z.ZodType<T>, optional = false): (input: unknown) 
 export function registerDocumentsIpc(): void {
   const service = (): DocumentsPlatform => getDocumentService()
   const c = DOCUMENT_IPC_CHANNELS
+  registerIpcHandler(c.migrateCodeStorage, parseWith(projectIdRequestSchema), request => service().migrateCodeStorage(request.projectId))
   registerIpcHandler(c.withdrawCodeComponent, parseWith(withdrawCodeComponentRequestSchema), request => service().withdrawCodeComponent(request))
   registerIpcHandler(c.discardCodeFiles, parseWith(discardCodeFilesRequestSchema), request => service().discardCodeFiles(request))
   registerIpcHandler(c.writeCodeVersion, parseWith(writeCodeVersionRequestSchema), request => service().writeCodeVersion(request))

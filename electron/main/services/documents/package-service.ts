@@ -125,8 +125,8 @@ export class DocumentPackageService {
       const file = await this.options.repository.locateFile(request.target)
       const container = await this.workspace.containerForPath(file.path)
       const codeSnapshot = new GitCodePackageSnapshot(this.options.stagingDirectory, container.root, false)
-      await codeSnapshot.initialize()
       try {
+      await codeSnapshot.initialize()
       const names = new EntryNames()
       const entries: PackageEntry[] = []
       const missingPaths: string[] = []
@@ -173,8 +173,8 @@ export class DocumentPackageService {
         return await this.workspace.resolveContainer({ kind: 'project', projectId: request.projectId })
       })
       const codeSnapshot = new GitCodePackageSnapshot(this.options.stagingDirectory, container.root, true)
-      await codeSnapshot.initialize()
       try {
+      await codeSnapshot.initialize()
       const files = await this.walk(container.root)
       const names = new EntryNames()
       for (const relative of files) names.add(relative)

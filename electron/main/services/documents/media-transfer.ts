@@ -9,7 +9,7 @@ import { mapContentStrings, type LocationReference } from '../../../../src/core/
 import { parseAbsolutePath, pathKey, relativeSegments, type PathStyle } from '../../../../src/core/storage/pathSyntax'
 import { copyFileNoOverwrite, EntryExistsError } from '../fs/no-overwrite'
 import type { ResolvedContainer } from './workspace'
-import { ensureCodeLocation } from './code-files'
+import { ensureCodeLocation } from './code-paths'
 import { parseGitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
 import { transferGitCode } from './code-git-transfer'
 

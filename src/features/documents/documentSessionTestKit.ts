@@ -559,6 +559,8 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
   collectMapping = new Map<string, string>()
   readonly imported: ImportFileRequest[] = []
 
+  async migrateCodeStorage(_projectId: string): Promise<import('@/core/videoEdit/codeMaterial/storageContract').MigrateCodeStorageResult> { throw new Error('迁移测试须注入正式 Git 存储服务。') }
+
   async collectDocumentMedia(target: DocumentTarget): Promise<DocumentTransferResult> {
     this.calls.push('collectDocumentMedia')
     const stored = this.require(target.id)

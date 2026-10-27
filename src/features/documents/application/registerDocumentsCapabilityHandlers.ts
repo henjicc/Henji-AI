@@ -177,6 +177,16 @@ export function registerDocumentsCapabilityHandlers(
     return { resultRef: documentRef(document.id), name: document.name, copiedFiles: result.copiedFiles, copiedDocuments, missingFiles: result.missingPaths.length, message, verification }
   })
 
+  registrar.registerHandler('migrate_project_code_storage', async (raw, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const input = parseCapabilityInput<{ projectId: string }>('migrate_project_code_storage', raw)
+    await operations().findProject(input.projectId)
+    const result = await operations().migrateCodeStorage(input.projectId)
+    const target = { kind: DOCUMENT_PROJECT_ENTITY_TYPE, id: input.projectId }
+    return { resultRef: target, importedVersions: result.importedVersions, archivedFolders: result.archivedFolders, retainedFolders: result.retainedFolders,
+      verification: { verified: true, condition: '迁移服务已保存并读回项目文档，逐项核对版本内容，原文件保留或已归档', target } }
+  })
+
   registrar.registerHandler('trash_document', async (raw, context) => {
     throwIfCapabilityAborted(context.signal)
     const input = parseCapabilityInput<{ documentId: string }>('trash_document', raw)

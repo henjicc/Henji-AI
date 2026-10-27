@@ -126,10 +126,10 @@
       "minReaderVersion": 1
     },
     "document.video_edit": {
-      "version": 33,
-      "fingerprint": "06c0e6974600a38360a73cb28e0e4bdba5f065df4458ea3ef058ebc2ac8c1f2b",
+      "version": 34,
+      "fingerprint": "256322252e3ae780a9ad6561be7b74c6ac58ca0670b022b84acac33c7ad11e74",
       "supportedFrom": 17,
-      "minReaderVersion": 31
+      "minReaderVersion": 34
     },
     "document.canvas": {
       "version": 1,
@@ -156,10 +156,10 @@
       "minReaderVersion": 1
     },
     "document.screen_recording": {
-      "version": 36,
-      "fingerprint": "a53194165bba60e3ff6cff78c13b9dce9b595147bb55070732a677eea16c3771",
+      "version": 37,
+      "fingerprint": "272a2bca498e167f82a6cbda921b9f68299ca74cb4ff745186bd084e0c6b9366",
       "supportedFrom": 19,
-      "minReaderVersion": 34
+      "minReaderVersion": 37
     },
     "project": {
       "version": 2,
@@ -174,10 +174,10 @@
       "minReaderVersion": 1
     },
     "code-version": {
-      "version": 1,
-      "fingerprint": "5b108486ce03383d00a870085c4360caf71afb7fdc8f1e909b23382f4311ab46",
+      "version": 2,
+      "fingerprint": "2367d84fe9864f81581508834754c96be2f55d4e732f817b771be45124c132ad",
       "supportedFrom": 1,
-      "minReaderVersion": 1
+      "minReaderVersion": 2
     },
     "code-author-api": {
       "version": 4,
@@ -192,10 +192,10 @@
       "minReaderVersion": 1
     },
     "code-asset": {
-      "version": 6,
-      "fingerprint": "fb41ed5836b9b0be5a7d2576e30c9532777ca82feae7dbdd34ed35b1d4b951e2",
+      "version": 7,
+      "fingerprint": "dbab223579ec39fdca834ab0b22db31e3965179372a7775f5ba324db06ac7e11",
       "supportedFrom": 6,
-      "minReaderVersion": 6
+      "minReaderVersion": 7
     },
     "settings": {
       "version": 16,
@@ -374,6 +374,12 @@
     "web-recording-backup-timing": {
       "version": 1,
       "fingerprint": "7bcca0584521113b7776f67d59295385928d47d089f5b668c2aa7770a394767a",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "code-git-location": {
+      "version": 1,
+      "fingerprint": "db4339c968d33959303ea4e958ee1659d87bc3165160e37d34f1b63a9f478b57",
       "supportedFrom": 1,
       "minReaderVersion": 1
     }

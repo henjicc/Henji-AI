@@ -8,6 +8,9 @@ import { migrateColorGradeParamsV1 } from '../imaging/adjustments/colorGradeMigr
  * 2026-10-21 兼容起点：此前的开发期版本不再读取，表从空开始；之后每次升版本必须在这里补对应步骤。
  */
 export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> = {
+  // 版本位置支持 git:；纯格式迁移保留已有位置，磁盘导入由显式项目操作执行。
+  'code-version': { 1: value => structuredClone(value) },
+  'code-asset': { 6: value => ({ ...structuredClone(value) as object, version: 7, minReaderVersion: 7 }) },
   project: { 1: value => ({ ...value as object, version: 2, minReaderVersion: 1 }) },
   // 2 → 3：样片画布放宽到 3840×2160、60 帧，旧内容原样有效。
   // 3 → 4：样片时长放宽到 30 秒、锚点 10 张，旧内容原样有效。

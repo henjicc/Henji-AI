@@ -1,3 +1,4 @@
+import { gitCodeLocation } from '../src/core/storage/gitCodeLocation'
 import { emptyMemorySnapshot } from '../src/core/assistant/memoryEntries'
 import { createWorkspaceLayoutEnvelope } from '../src/core/workspaceLayouts/schema'
 import { defaultCameraStageLayout } from '../src/features/cameraStage/layout/dockLayout'
@@ -61,7 +62,7 @@ const source = `export default {
 `
 const program = testCodeMetadata({ name: '黄金代码', width: 1920, height: 1080, durationSeconds: 4, parameters })
 const hash = createHash('sha256').update(source).digest('hex')
-const sourceVersion = { apiVersion: CODE_AUTHOR_API_VERSION, languageVersion: 4 as const, entry: 'main.ts', files: [{ path: 'main.ts', location: '/persistence-project/代码/标题/v1/main.ts', hash }], imports: [] }
+const sourceVersion = { apiVersion: CODE_AUTHOR_API_VERSION, languageVersion: 4 as const, entry: 'main.ts', files: [{ path: 'main.ts', location: gitCodeLocation({ oid: 'a'.repeat(40), repository: 'henji:/代码', filepath: '素材/标题/main.ts' }), hash }], imports: [] }
 const document = createVideoEditDocument('持久格式黄金样本')
 document.id = 'golden-video'
 document.codeMaterials = [{ id: 'code-definition', name: '代码标题', defaultVersionId: 'code-version', versions: [{ id: 'code-version', ...sourceVersion }] }]
@@ -272,6 +273,7 @@ const values: Record<string, unknown> = {
   'document.image_document': { workingRevision: 0, emptyUntilRevision: 0, width: 32, height: 40, layers: image.layers.length },
   project: buildProjectManifest({ id: 'golden-project', createdAt: timestamp, locale: 'zh', draft: false, mainVideoEditId: document.id, memories: [{ id: 'brand', content: '这期品牌色用红色。', source: 'user', revision: 1, updatedAt: timestamp }] }),
   'project-package': { format: 'henji-package', version: 1, type: 'project', name: '黄金项目', exportedAt: timestamp, folders: { generated: '生成结果', materials: '素材' }, documents: [{ id: document.id, path: '黄金剪辑.henji-video' }] },
+  'code-git-location': sourceVersion.files[0].location,
   'code-version': { id: 'code-version', ...sourceVersion },
   'code-author-api': { apiVersion: CODE_AUTHOR_API_VERSION },
   'code-component': { schemaVersion: 1, name: '组件', version: 1, description: '黄金组件', exports: ['value'], imports: [] },

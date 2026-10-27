@@ -94,6 +94,7 @@ export class DocumentService implements DocumentsPlatform {
     })
   }
 
+  migrateCodeStorage: DocumentsPlatform['migrateCodeStorage'] = projectId => this.parts.codeFiles.migrate(projectId)
   withdrawCodeComponent: DocumentsPlatform['withdrawCodeComponent'] = request => this.parts.codeFiles.withdraw(request)
   discardCodeFiles: DocumentsPlatform['discardCodeFiles'] = request => this.parts.codeFiles.discard(request)
   writeCodeVersion: DocumentsPlatform['writeCodeVersion'] = request => this.parts.codeFiles.writeVersion(request)

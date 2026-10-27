@@ -26,6 +26,7 @@ export function createDocumentsApi(invoke: NativeInvoke): DocumentsPlatform {
     forgetDocument: (docId) => invoke(c.forgetDocument, { docId }),
     markDocumentOpened: (docId) => invoke(c.markDocumentOpened, { docId }),
     revealDocument: (target) => invoke(c.revealDocument, target),
+    migrateCodeStorage: (projectId) => invoke(c.migrateCodeStorage, { projectId }),
     collectDocumentMedia: (target) => invoke(c.collectDocumentMedia, target),
     importFile: (request) => invoke(c.importFile, request),
     resolveDocumentLink: (link) => invoke(c.resolveDocumentLink, link),

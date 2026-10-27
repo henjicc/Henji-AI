@@ -1,4 +1,5 @@
 import type { ListPage, ListPageRequest } from '@/core/documents/pagination'
+import type { MigrateCodeStorageResult } from '@/core/videoEdit/codeMaterial/storageContract'
 import * as documentCommands from '@/commands/documents'
 import { documentKindRegistry, type DocumentKindRegistry } from '@/core/documents/kinds'
 import type {
@@ -55,6 +56,7 @@ import { createDocumentOperationChanges, defaultDocumentOperationChanges } from 
 
 /** 通用操作用到的文档命令；正式运行用 `@/commands/documents`，测试换成替身。 */
 export interface DocumentOperationCommands extends DocumentSessionCommands {
+  migrateCodeStorage(projectId: string): Promise<MigrateCodeStorageResult>
   listDocumentsPage(query?: DocumentListQuery & ListPageRequest): Promise<ListPage<DocumentSummary>>
   listProjectsPage(query?: ProjectListQuery & ListPageRequest): Promise<ListPage<ProjectSummary>>
   renameDocument(request: RenameDocumentRequest): Promise<DocumentMeta>
@@ -193,6 +195,7 @@ export const defaultDocumentOperationCommands: DocumentOperationCommands = {
   renameProject: documentCommands.renameProject,
   revealProject: documentCommands.revealProject,
   collectDocumentMedia: documentCommands.collectDocumentMedia,
+  migrateCodeStorage: documentCommands.migrateCodeStorage,
   importFile: documentCommands.importFileToContainer,
   setProjectMainDocument: documentCommands.setProjectMainDocument,
   registerExternalProject: documentCommands.registerExternalProject,
@@ -581,6 +584,33 @@ export class DocumentOperations {
         return result
       }
       return session ? session.withTransfer(transfer) : transfer()
+    })
+  }
+
+  /** Flush and suspend every open project document before changing persisted code references. */
+  async migrateCodeStorage(projectId: string): Promise<MigrateCodeStorageResult> {
+    return this.write('migrate_code_storage', projectId, async () => {
+      const sessions = this.registry().list().filter(session => !session.isEnded && session.documentMeta.container.kind === 'project' && session.documentMeta.container.projectId === projectId)
+      for (const session of sessions) {
+        const busy = this.busyChecks.get(session.documentMeta.kind)?.(session.documentMeta.id)
+        if (busy) throw new Error(busy)
+      }
+      const suspended: typeof sessions = []
+      let migrationStarted = false
+      try {
+        for (const session of sessions) { await session.suspend(); suspended.push(session) }
+        for (const session of sessions) await session.prepareTransfer()
+        migrationStarted = true
+        return await this.commands.migrateCodeStorage(projectId)
+      } finally {
+        // A failed later save may follow successful earlier saves; reload their new references too.
+        try {
+          for (const session of suspended) if (migrationStarted && !session.isEnded) {
+            const read = await this.commands.readDocument(session.target)
+            await session.applyTransfer({ meta: read.meta, copiedFiles: 0, missingPaths: read.missingPaths })
+          }
+        } finally { for (const session of suspended) session.resume() }
+      }
     })
   }
 

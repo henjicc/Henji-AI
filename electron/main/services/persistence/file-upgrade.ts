@@ -9,9 +9,9 @@ import { persistenceBackupLocation } from '../../../../src/core/persistence/back
 
 const logger = createMainLogger('main.persistence')
 /** Immutable, content-addressed original, streamed by copyFile (no whole-file buffering). */
-export async function backupBeforePersistenceUpgrade(filePath: string, contract: Pick<PersistenceContract, 'id' | 'name' | 'version' | 'migrations'>, fromVersion: number, snapshot?: string | Buffer): Promise<string | undefined> {
+export async function backupBeforePersistenceUpgrade(filePath: string, contract: Pick<PersistenceContract, 'id' | 'name' | 'version' | 'migrations'>, fromVersion: number, snapshot?: string | Buffer, forceSnapshot = false): Promise<string | undefined> {
   assertPersistenceVersion(contract, fromVersion)
-  if (fromVersion === contract.version) return undefined
+  if (fromVersion === contract.version && !forceSnapshot) return undefined
   const { directory } = persistenceBackupLocation(path.resolve(filePath), fromVersion, '0'.repeat(64))
   logger.info('升级前备份开始', { event: 'persistence.backup.start', context: { format: contract.id, fromVersion, toVersion: contract.version } })
   const temporary = path.join(directory, `.${randomUUID()}.tmp`)

@@ -1,3 +1,4 @@
+import { codeLocationSchema } from '../storage/gitCodeLocation'
 import { z } from 'zod'
 import { codeFilePathSchema, codeSourceHashSchema, codeComponentPinsSchema } from './codeMaterial/sources'
 import { codeMaterialCurvesSchema } from './codeMaterialAnimation'
@@ -12,8 +13,8 @@ export const CODE_AUTHOR_API_MIN_VERSION = 4
 export const codeAuthorApiVersionSchema = z.number().int().min(CODE_AUTHOR_API_MIN_VERSION).max(CODE_AUTHOR_API_VERSION)
 export const codeAuthorApiSchema = z.object({ apiVersion: codeAuthorApiVersionSchema }).strict()
 /** 代码版本记录的结构版本；记录嵌在剪辑内容里，随剪辑文档版本读写。 */
-export const CODE_MATERIAL_VERSION_RECORD = 1
-export const codeMaterialVersionSchema = z.object({ id, apiVersion: codeAuthorApiVersionSchema, languageVersion: z.literal(4), entry: codeFilePathSchema, files: z.array(z.object({ path: codeFilePathSchema, location: z.string().min(1), hash: codeSourceHashSchema }).strict()).min(1), imports: codeComponentPinsSchema.optional(), assetOrigin: z.object({ assetId: id, contentIdentity: z.string().regex(/^[a-f0-9]{64}$/) }).strict().optional() }).strict().superRefine((value, context) => {
+export const CODE_MATERIAL_VERSION_RECORD = 2
+export const codeMaterialVersionSchema = z.object({ id, apiVersion: codeAuthorApiVersionSchema, languageVersion: z.literal(4), entry: codeFilePathSchema, files: z.array(z.object({ path: codeFilePathSchema, location: codeLocationSchema, hash: codeSourceHashSchema }).strict()).min(1), imports: codeComponentPinsSchema.optional(), assetOrigin: z.object({ assetId: id, contentIdentity: z.string().regex(/^[a-f0-9]{64}$/) }).strict().optional() }).strict().superRefine((value, context) => {
   if (new Set(value.files.map(file => file.path)).size !== value.files.length || !value.files.some(file => file.path === value.entry)) context.addIssue({ code: 'custom', message: '版本文件重复或入口不存在。' })
 })
 export const codeMaterialDefinitionSchema = z.object({ id, name: z.string().trim().min(1).max(200), folder: z.string().min(1).optional(), defaultVersionId: id, versions: z.array(codeMaterialVersionSchema).min(1) }).strict().superRefine((value, context) => {

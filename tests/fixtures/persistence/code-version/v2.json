@@ -1,0 +1,14 @@
+{
+  "id": "code-version",
+  "apiVersion": 4,
+  "languageVersion": 4,
+  "entry": "main.ts",
+  "files": [
+    {
+      "path": "main.ts",
+      "location": "git:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:henji%3A%2F%E4%BB%A3%E7%A0%81:%E7%B4%A0%E6%9D%90%2F%E6%A0%87%E9%A2%98%2Fmain.ts",
+      "hash": "f6f1e9f0ce00e2b293418731dbdcef684c806130256799e4aef48484d0f8f08a"
+    }
+  ],
+  "imports": []
+}

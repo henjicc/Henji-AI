@@ -33,6 +33,38 @@ async function openEdited(kit: ReturnType<typeof setup>, name = '海报') {
 }
 
 describe('与打开的文档会话配合', () => {
+  it('迁移前保存失败不调用磁盘迁移、不重载覆盖尚未保存的编辑', async () => {
+    const kit = setup(); const project = kit.commands.seedProject({ name: '项目' })
+    const meta = kit.commands.seed({ name: '剪辑', projectId: project.id, folder: project.path, content: { items: ['原文'] } })
+    const session = await kit.registry.open({ id: meta.id }); const tool = new TestToolInstance(session.getContent() as TestContent)
+    session.attach(tool); tool.edit('未保存')
+    const save = vi.spyOn(kit.commands, 'saveDocument').mockRejectedValueOnce(new Error('保存失败'))
+    const migration = vi.spyOn(kit.commands, 'migrateCodeStorage')
+    try {
+      await expect(kit.operations.migrateCodeStorage(project.id)).rejects.toThrow('保存失败')
+      expect(migration).not.toHaveBeenCalled(); expect(tool.content.items).toContain('未保存'); expect(session.dirty).toBe(true)
+      save.mockRestore(); await session.flush()
+      expect(kit.commands.stored(meta.id)?.content).toEqual(tool.content)
+    } finally { migration.mockRestore(); save.mockRestore(); await session.discard() }
+  })
+
+  it('迁移部分保存后失败仍读回已改写引用，并恢复会话保存能力', async () => {
+    const kit = setup(); const project = kit.commands.seedProject({ name: '项目' })
+    const meta = kit.commands.seed({ name: '剪辑', projectId: project.id, folder: project.path, content: { items: ['原文'] } })
+    const session = await kit.registry.open({ id: meta.id }); const tool = new TestToolInstance(session.getContent() as TestContent)
+    session.attach(tool)
+    const migration = vi.spyOn(kit.commands, 'migrateCodeStorage').mockImplementation(async () => {
+      await kit.commands.saveDocument({ target: { id: meta.id }, expectedRevision: kit.commands.stored(meta.id)!.meta.revision, content: { items: ['新引用'] } })
+      throw new Error('下一个文档保存失败')
+    })
+    try {
+      await expect(kit.operations.migrateCodeStorage(project.id)).rejects.toThrow('下一个文档保存失败')
+      expect(tool.content.items).toEqual(['新引用'])
+      tool.edit('继续编辑'); await session.flush()
+      expect(kit.commands.stored(meta.id)?.content).toEqual(tool.content)
+    } finally { migration.mockRestore(); await session.discard() }
+  })
+
   it.each([['collect', 0], ['collect', 900], ['move', 0], ['move', 900]] as const)('%s 传输期间编辑并等待 %i ms，保留修改且不发自动保存', async (action, delay) => {
     vi.useFakeTimers()
     const kit = setup()
