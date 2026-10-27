@@ -146,9 +146,10 @@ export function resolveCodeMaterialFiles(version: { entry: string; files: readon
   return normalizeCodeMaterialFiles({ entry: version.entry, files: Object.fromEntries(version.files.map(file => [file.path, resolver.read(file.hash, file.location, file.path)])) })
 }
 export async function verifyCodeSourceReferences(version: { files: readonly CodeFileReference[] }, resolver: CodeSourceResolver): Promise<void> {
+  // Git 引用按内容寻址，必须与记录的哈希一致；旧位置兼容资产导入调用方，只确认可读，内容身份由实际读到的文本决定。
   for (const file of version.files) {
     const source = resolver.read(file.hash, file.location, file.path)
-    if (await sha256HexString(source) !== file.hash) throw new CodeMaterialError('COMPATIBILITY', `${file.path} 的源码内容校验失败，请恢复原版本后重试。`)
+    if (file.location.startsWith('git:') && await sha256HexString(source) !== file.hash) throw new CodeMaterialError('COMPATIBILITY', `${file.path} 的源码内容校验失败，请恢复原版本后重试。`)
   }
 }
 

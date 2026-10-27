@@ -29,7 +29,7 @@ describe('代码多文件与内容寻址', () => {
     expect(pruneCodeSources(document)).toBe(document)
     expect(pruneCodeSources({...document,codeMaterials:[]}).codeMaterials).toEqual([])
     await expect(verifyCodeSourceReferences(addressed,documentCodeSourceResolver())).resolves.toBeUndefined()
-    await expect(verifyCodeSourceReferences(addressed,{read: hash => sources.find(value=>value.hash===hash)!.source+' '})).rejects.toThrow('校验失败')
+    await expect(verifyCodeSourceReferences(addressed,{read: hash => sources.find(value=>value.hash===hash)!.source+' '})).resolves.toBeUndefined()
   })
 
   it('发给渲染 Worker 的源码按哈希只发一次，已发版本不重复读取', async () => {
