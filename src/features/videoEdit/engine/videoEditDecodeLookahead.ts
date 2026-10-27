@@ -174,6 +174,19 @@ export class VideoEditDecodeLookahead {
     this.retryAfter.clear(); this.attempted.clear(); this.prepared.clear(); this.content = []; this.host?.retain([]); this.targets = []; this.last = undefined; this.lastScan = -Infinity
   }
 
+  /**
+   * The ready pre-rendered windows changed: what was prepared around the old ones no longer holds. While paused, the
+   * paused frame is looked around again at once instead of at the next frame: a clip entering where a window no longer
+   * plays its file needs its inputs opened before play (pressing play is often the next thing that happens).
+   */
+  windowsChanged(document: VideoEditComposition, windows: readonly VideoEditRenderCacheWindow[]): void {
+    const last = this.last
+    this.cancel()
+    if (!last || last.playing || last.document !== document) return
+    this.beforeFrame(document, last.frame, false)
+    this.update(document, last.frame, false, windows)
+  }
+
   beforeFrame(document: VideoEditComposition, frame: number, playing: boolean): void {
     clearTimeout(this.timer)
     const last = this.last

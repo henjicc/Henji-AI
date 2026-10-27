@@ -312,7 +312,7 @@ export class VideoEditRenderer {
     this.renderCacheRevision++
   }
   /** The ready window drawing this frame during forward playback of the program, if any. */
-  private cachedWindow(frame: number): { clip: VideoEditClip; media: VideoEditMedia } | undefined {
+  private cachedWindow(frame: number): { startFrame: number; endFrame: number; clip: VideoEditClip; media: VideoEditMedia } | undefined {
     if (!this.previewWidth || this.nestedOwner) return undefined
     let low = 0, high = this.renderCache.length - 1
     while (low <= high) {
@@ -905,7 +905,8 @@ export class VideoEditRenderer {
   /**
    * The code video inputs of clips starting within `CODE_INPUT_PREWARM_SECONDS` of a playing frame, at the frame each
    * clip first shows, nearest first, excluding inputs already showing: every still, and moving references up to
-   * `CODE_INPUT_PREWARM_REFERENCES`.
+   * `CODE_INPUT_PREWARM_REFERENCES`. Where pre-rendered windows draw their files the clip does not run, so it first
+   * shows where the windows covering it end (also for a clip already under way inside the window playing now).
    */
   private upcomingCodeInputs(document: VideoEditComposition, frame: number, showing: ReadonlySet<string>): Array<{ clip: VideoEditClip; first: number; source: ReturnType<typeof codeMediaInputComposition> }> {
     const visible = videoEditVisibleTracks(document)
@@ -920,9 +921,12 @@ export class VideoEditRenderer {
     }
     const upcoming = document.clips.flatMap(clip => {
       if (!clip.code || !visible.has(clip.track) || !Object.values(clip.code.parameters).some(reference => isCodeImageReference(reference) && reference.kind === 'video')) return []
-      const first = entering(clip)
-      // A prerendered window draws its file there; the clip itself never runs.
-      return first > frame && first <= horizon && !this.cachedWindow(first) ? [{ clip, first }] : []
+      const end = clip.start + clip.duration
+      let first = entering(clip)
+      // Under way already: upcoming only while its frames come from the window's file playing now.
+      if (first <= frame) { if (!this.cachedWindow(frame)) return []; first = frame + 1 }
+      for (let window = this.cachedWindow(first); window && first < end; window = this.cachedWindow(first)) first = window.endFrame
+      return first <= horizon && first < end ? [{ clip, first }] : []
     }).sort((a, b) => a.first - b.first)
     const inputs = new Map<string, { clip: VideoEditClip; first: number; source: ReturnType<typeof codeMediaInputComposition> }>()
     let moving = 0
@@ -958,7 +962,14 @@ export class VideoEditRenderer {
   private prewarmInput(document: VideoEditComposition, clip: VideoEditClip, first: number, source: ReturnType<typeof codeMediaInputComposition>, deadline?: number): Promise<boolean> {
     const key = source.sessionKey
     const existing = this.codeInputs.get(key)
-    if (existing) return existing.ahead ?? Promise.resolve(true)
+    // An input opened ahead for another first picture (it was to show live after a pre-rendered window that has gone
+    // since) walks again to this one; reading it there would seek its decoder back to a key frame.
+    const stale = existing && this.prewarmedInputs.has(key) && existing.sourceKey !== source.sampleKey
+    if (existing && !stale) return existing.ahead ?? Promise.resolve(true)
+    if (existing) {
+      this.codeInputs.delete(key); this.prewarmedInputs.delete(key); existing.prewarm?.abort()
+      void existing.renderer.dispose().then(() => existing.tail).catch(() => undefined)
+    }
     const renderer = this.codeInputRenderer(source)
     const controller = new AbortController()
     const entry: CodeInputSession = { renderer, tail: Promise.resolve(), document, sourceKey: source.sampleKey, ownerKey: `code-input:${key}`, prewarm: controller }

@@ -136,3 +136,16 @@ it('逐帧回执携带预览来源与实际耗时，扣除正常呈现等待并�
     expect(result).toMatchObject({ renderCached: true, renderElapsedMs: 8, renderStages: { presentDeadline: 40, codeReady: 8 } })
   } finally { clock.mockRestore() }
 })
+
+it('暂停时预渲染窗口改变：前瞻按新窗口重新看一遍暂停的帧，而不是只取消等下一帧', async () => {
+  await init(true)
+  const { VideoEditDecodeLookahead } = await import('./videoEditDecodeLookahead')
+  const changed = vi.spyOn(VideoEditDecodeLookahead.prototype, 'windowsChanged')
+  render(bitmap())
+  try {
+    await send(request)
+    const windows = [{ key: 'opening', startFrame: 0, endFrame: 86, url: 'henji-media://local/opening.mp4', width: 3840, height: 2160, fps: 60 }]
+    worker.onmessage({ data: { kind: 'renderCache', id: 0, windows, localPaths: {} } })
+    expect(changed).toHaveBeenCalledWith(composition, windows)
+  } finally { changed.mockRestore() }
+})

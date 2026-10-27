@@ -162,14 +162,14 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
   const receivedAt = performance.now()
   let foregroundPending = request.kind === 'render'
   const releaseForeground = (): void => { if (foregroundPending) { foregroundPending = false; foregroundFrames-- } }
-  if (['init', 'update', 'replaceContent', 'parameters', 'dispose', 'invalidate', 'renderCache', 'stopPlayback'].includes(request.kind)) releasePreopened()
+  if (['init', 'update', 'replaceContent', 'parameters', 'dispose', 'invalidate', 'stopPlayback'].includes(request.kind)) releasePreopened()
   if (request.kind === 'render') { latestRender = request; foregroundFrames++; if (renderer) decodeLookahead?.beforeFrame(renderer.document, request.frame, request.sequential === true) }
   if (request.kind === 'init') enableVideoEditFrameTrace(request.traceFrames === true)
 
   if (request.kind === 'preopen') { preopenMedia(request); return }
   if (request.kind === 'tracks') { setVideoEditTrackResults(request.tracks); renderer?.cancelPresentation(); return }
   if (request.kind === 'regions') { setVideoEditSmartRegionSegments(request.regions); renderer?.cancelPresentation(); return }
-  if (request.kind === 'renderCache') { renderCachePaths.clear(); for (const [url, path] of Object.entries(request.localPaths)) renderCachePaths.set(url, path); renderCacheWindows = request.windows; renderer?.setRenderCache(renderCacheWindows); return }
+  if (request.kind === 'renderCache') { renderCachePaths.clear(); for (const [url, path] of Object.entries(request.localPaths)) renderCachePaths.set(url, path); renderCacheWindows = request.windows; renderer?.setRenderCache(renderCacheWindows); if (renderer) decodeLookahead?.windowsChanged(renderer.document, renderCacheWindows); else releasePreopened(); return }
   if (request.kind === 'invalidate') { if (revision !== request.revision) { revision = request.revision; renderer?.cancelPresentation() } return }
   if (request.kind === 'dispose') { revision = Number.MAX_SAFE_INTEGER; renderer?.cancelPresentation() }
   if (request.kind === 'init' || request.kind === 'update' || request.kind === 'replaceContent') { timing = 'timing' in request ? request.timing : undefined; timedStages.clear(); timingEvent(`worker.${request.kind}`); receiveCodeSourceTexts(request.codeSources) }

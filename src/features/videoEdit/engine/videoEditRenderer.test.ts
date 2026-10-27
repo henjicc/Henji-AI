@@ -4,7 +4,7 @@ import { createVideoEditTestDocument as createVideoEditDocument } from '../../..
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createVideoEditSequence, videoEditComposition, type VideoEditClip } from '@/core/videoEdit/document'
 import { videoEditPictureSeconds } from '@/core/videoEdit/time'
-import { VideoEditRenderer } from './videoEditRenderer'
+import { VideoEditRenderer, type VideoEditRenderCacheWindow } from './videoEditRenderer'
 import { VideoEditGpuFrame } from './videoEditGpuFrame'
 import type { VideoEditFrameCache } from './videoEditFrameCache'
 import type { CodeAuthorProgram as CodeMaterialProgram } from '@/core/videoEdit/codeAuthorProgram'
@@ -744,6 +744,90 @@ it('暂停时提前打开并解到 2 秒内要开始的移动视频输入：起�
     renderer.retainLookahead([])
     await (await renderer.render(300)).completion
     expect(reopened.closed).toBe(true); expect(renderer.codeDiagnostics().codeInputsPrewarmed).toBe(0)
+  } finally { await renderer.dispose() }
+})
+it('真机流程：暂停定位到第 1 帧再到第 0 帧，等待后起播；第 6 帧开始的录屏窗口切入帧不再远距离定位', async () => {
+  const { backend, readers } = steppingReaders()
+  // Only w2: a recording window from frame 6, 27.1 seconds into the recording (key frames every 4 seconds).
+  const document = recordingWindowsFixture(6)
+  document.media = document.media.map(media => ({ ...media, durationSeconds: 60 }))
+  document.clips = document.clips.filter(clip => clip.id === 'w2').map(clip => ({ ...clip, sourceInUs: 27_100_000 }))
+  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const { VideoEditDecodeLookahead } = await import('./videoEditDecodeLookahead')
+  // Wired as the program worker wires it: the lookahead around every presented frame, the renderer as its host.
+  const lookahead = new VideoEditDecodeLookahead(undefined, media => media, { idle: () => true, prepare: (target, signal) => renderer.prepareLookahead(target, signal), retain: targets => renderer.retainLookahead(targets) })
+  const frame = async (at: number, sequential: boolean): Promise<void> => {
+    lookahead.beforeFrame(renderer.document, at, sequential)
+    const result = await renderer.render(at, sequential)
+    if (result.presented) lookahead.update(renderer.document, at, sequential, [])
+    await result.completion
+    if (result.presented) lookahead.update(renderer.document, at, sequential, [])
+  }
+  const input = () => readers.find(reader => (reader.reads[0]?.time ?? 0) >= 24)
+  try {
+    await frame(1, false); await frame(0, false)
+    await vi.waitFor(() => expect(input()?.reads.at(-1)?.time).toBeCloseTo(videoEditPictureSeconds(27.1), 6), { timeout: 3000 })
+    const walked = input()!.reads.length
+    for (let at = 0; at < 8; at++) await frame(at, true)
+    const played = input()!.reads.slice(walked)
+    // Entering at frame 6 continued the walked decoder: no key frame read, one picture for frame 7.
+    expect(played).toHaveLength(1); expect(played[0]).toMatchObject({ speculative: false, keyFrame: false, decoded: 1 })
+    expect(readers.filter(reader => reader.reads.length)).toHaveLength(1)
+  } finally { lookahead.cancel(); await renderer.dispose() }
+})
+it('真机流程：暂停在第 0 帧时 0–86 帧有预渲染文件，等待中预渲染被撤下；起播后第 6 帧开始的录屏窗口切入帧仍不再远距离定位', async () => {
+  const { backend, readers } = steppingReaders()
+  const document = recordingWindowsFixture(6)
+  document.media = document.media.map(media => ({ ...media, durationSeconds: 60 }))
+  document.clips = document.clips.filter(clip => clip.id === 'w2').map(clip => ({ ...clip, sourceInUs: 27_100_000 }))
+  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const { VideoEditDecodeLookahead } = await import('./videoEditDecodeLookahead')
+  const lookahead = new VideoEditDecodeLookahead(undefined, media => media, { idle: () => true, prepare: (target, signal) => renderer.prepareLookahead(target, signal), retain: targets => renderer.retainLookahead(targets) })
+  // The program worker: one window list for the renderer and the lookahead, replaced by a `renderCache` message.
+  let windows: VideoEditRenderCacheWindow[] = [{ key: 'opening', startFrame: 0, endFrame: 86, url: 'henji-media://local/opening.mp4', width: 3840, height: 2160, fps: 60 }]
+  const setWindows = (next: VideoEditRenderCacheWindow[]): void => { windows = next; renderer.setRenderCache(windows); lookahead.windowsChanged(renderer.document, windows) }
+  renderer.setRenderCache(windows)
+  const frame = async (at: number, sequential: boolean): Promise<void> => {
+    lookahead.beforeFrame(renderer.document, at, sequential)
+    const result = await renderer.render(at, sequential)
+    if (result.presented) lookahead.update(renderer.document, at, sequential, windows)
+    await result.completion
+    if (result.presented) lookahead.update(renderer.document, at, sequential, windows)
+  }
+  const first = () => readers.find(reader => (reader.reads[0]?.time ?? 0) >= 24)
+  try {
+    await frame(1, false); await frame(0, false)
+    // Playing from here shows the window's file up to frame 86, where w2 goes on live: its input walks to that picture.
+    await vi.waitFor(() => expect(first()?.reads.at(-1)?.time).toBeCloseTo(videoEditPictureSeconds(27.1 + 80 / 60), 6), { timeout: 3000 })
+    // 实测：暂停等待中预渲染窗口被撤下（测量脚本、内容失效）。旧实现撤下时只取消前瞻、不重新扫描，起播前没有为第 6 帧
+    // 准备，第 6 帧在关键路径上从关键帧解到 27.1 秒（858ms）。
+    setWindows([])
+    const current = () => readers.filter(reader => (reader.reads[0]?.time ?? 0) >= 24).at(-1)
+    await vi.waitFor(() => expect(current()?.reads.at(-1)?.time).toBeCloseTo(videoEditPictureSeconds(27.1), 6), { timeout: 3000 })
+    expect(readers.filter(reader => (reader.reads[0]?.time ?? 0) >= 24)).toHaveLength(2)
+    const input = current
+    const walked = input()!.reads.length
+    for (let at = 0; at < 8; at++) await frame(at, true)
+    const played = input()!.reads.slice(walked)
+    expect(played).toHaveLength(1); expect(played[0]).toMatchObject({ speculative: false, keyFrame: false, decoded: 1 })
+  } finally { lookahead.cancel(); await renderer.dispose() }
+})
+it('从预渲染文件接回实时合成：片段在窗口里已经开始、窗口结束后接着实时显示，结束前提前走到接回那一幅', async () => {
+  const { backend, readers } = steppingReaders()
+  const document = recordingWindowsFixture(6)
+  document.media = document.media.map(media => ({ ...media, durationSeconds: 60 }))
+  document.clips = document.clips.filter(clip => clip.id === 'w2').map(clip => ({ ...clip, sourceInUs: 27_100_000 }))
+  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  renderer.setRenderCache([{ key: 'opening', startFrame: 0, endFrame: 86, url: 'henji-media://local/opening.mp4', width: 3840, height: 2160, fps: 60 }])
+  const input = () => readers.find(reader => (reader.reads[0]?.time ?? 0) >= 24)
+  try {
+    // Frames 0–85 come from the window's file; w2 shows live from 86 (27.1 + 80/60 seconds into the recording).
+    for (let at = 0; at < 86; at++) await (await renderer.render(at, true)).completion
+    // 旧实现按片段起点（第 6 帧，落在窗口里）判断，认为片段不会实时出现，不预热；第 86 帧在关键路径上从关键帧解码。
+    expect(input()!.reads.at(-1)!.time).toBeCloseTo(videoEditPictureSeconds(27.1 + 80 / 60), 6)
+    const walked = input()!.reads.length
+    await (await renderer.render(86, true)).completion; await (await renderer.render(87, true)).completion
+    expect(input()!.reads.slice(walked)).toEqual([expect.objectContaining({ speculative: false, keyFrame: false, decoded: 1 })])
   } finally { await renderer.dispose() }
 })
 it('暂停预热因解码预算被拒：交回会话，前瞻重试时重新打开；不动正在显示的输入', async () => {
