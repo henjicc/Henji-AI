@@ -92,6 +92,12 @@ export class VideoEditFrameCache {
       this.entries.delete(victim); this.used -= entry.bytes; entry.frame.close()
     }
   }
+  /** Whether a frame of `bytes` fits beside the `pinned` frames (every other frame may be evicted for it). */
+  fits(bytes: number, pinned: ReadonlySet<CachedVideoEditFrame>): boolean {
+    let kept = 0
+    for (const entry of this.entries.values()) if (pinned.has(entry.frame)) kept += entry.bytes
+    return kept + bytes <= this.budgetBytes
+  }
   deleteMedia(mediaId: string): void {
     for (const [key, entry] of this.entries) if (entry.mediaId === mediaId) {
       this.entries.delete(key); this.used -= entry.bytes; entry.frame.close()

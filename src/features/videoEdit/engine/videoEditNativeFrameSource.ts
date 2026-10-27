@@ -135,8 +135,11 @@ export class VideoEditNativeDecoderSession {
     this.tickets.clear()
   }
 
-  /** The picture showing at `time`, or null when the file has none there. */
-  async frameAt(time: number, keyOnly = false): Promise<VideoEditNativePicture | null> {
+  /**
+   * The picture showing at `time`, or null when the file has none there. `background`: a read ahead of need, timed as
+   * `nativeFrameAtBackground` so a frame's stages tell its own reads from the background steps running beside it.
+   */
+  async frameAt(time: number, keyOnly = false, background = false): Promise<VideoEditNativePicture | null> {
     if (this.closing || this.ended) throw this.ended ?? closedFailure()
     const ticket = `t${++this.next}`
     let ticketEntry!: Ticket
@@ -154,8 +157,11 @@ export class VideoEditNativeDecoderSession {
       // Where a slow read spent its time: in the service (decoding, a seek back to a key frame, waiting for a free
       // pool slot, the copy) or on the way (the request and the frame relayed through the main processes).
       const service = Number.isFinite(result.decodeMs) ? result.decodeMs : 0
-      recordVideoEditPreparation(result.seeked ? 'nativeFrameAtSeek' : 'nativeFrameAtService', service)
-      recordVideoEditPreparation('nativeFrameAtRelay', Math.max(0, performance.now() - started - service))
+      if (background) recordVideoEditPreparation('nativeFrameAtBackground', performance.now() - started)
+      else {
+        recordVideoEditPreparation(result.seeked ? 'nativeFrameAtSeek' : 'nativeFrameAtService', service)
+        recordVideoEditPreparation('nativeFrameAtRelay', Math.max(0, performance.now() - started - service))
+      }
       const picture = this.picture(frame)
       if (result.approximate) picture.approximate = true
       return picture
@@ -434,7 +440,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
             if (!session && speculative && !await this.owner.makeRoomAhead()) throw new VideoEditNativeFailure(videoEditNativeFailureMessage(this.media.name, 'budget'), 'budget', 'BUDGET_EXCEEDED')
             if (closed) throw closedFailure()
             pending = open(speculative)
-            return await (await pending).frameAt(seconds, options?.keyFrame === true)
+            return await (await pending).frameAt(seconds, options?.keyFrame === true, speculative)
           } catch (error) {
             const kind = videoEditNativeFailureKind(error)
             if (kind === 'budget' && !speculative && !closed) {

@@ -16,10 +16,11 @@ export const VIDEO_EDIT_DECODE_LOOKAHEAD_SECONDS = 3
 export const VIDEO_EDIT_DECODE_NEIGHBOUR_SECONDS = 2
 /**
  * Stills (code video inputs fixed at one time) are decoded once and kept for the session, so while paused or idle they
- * are looked for this far ahead of the playhead (and `VIDEO_EDIT_DECODE_NEIGHBOUR_SECONDS` behind it). Playback then
- * never seeks far for one on the critical path.
+ * are looked for this far ahead of the playhead (and `VIDEO_EDIT_DECODE_NEIGHBOUR_SECONDS` behind it), nearest first,
+ * as far as the renderer's still store holds them (`VideoEditRenderer.prepareLookahead`). Playback then rarely decodes
+ * one while playing (each such decode competes with the pictures being shown for the one native decoder).
  */
-export const VIDEO_EDIT_STILL_LOOKAHEAD_SECONDS = 20
+export const VIDEO_EDIT_STILL_LOOKAHEAD_SECONDS = 60
 export interface VideoEditLookaheadScope { document: VideoEditComposition; key: string; input?: ReturnType<typeof codeMediaInputComposition>; parent?: VideoEditComposition }
 export interface VideoEditDecodeTarget { media: VideoEditMedia; time: number; purpose: 'playback' | 'seek'; distance: number; clipId?: string }
 /** `still`: a code video input fixed at one time; `input` is its input composition (decoded into the renderer's still store). */
@@ -82,6 +83,7 @@ export function videoEditLookaheadTargets(document: VideoEditComposition, frame:
     }
   }
   // Stills: every fixed-time video input of a clip in the wider window, once per picture (nested sequences included).
+  const stillTargets = new Map<string, VideoEditContentTarget>()
   const stills = (doc: VideoEditComposition, from: number, to: number, distanceAt: (at: number) => number, depth: number): void => {
     if (depth >= VIDEO_EDIT_MAX_SEQUENCE_DEPTH || to <= from) return
     const visible = videoEditVisibleTracks(doc)
@@ -103,8 +105,8 @@ export function videoEditLookaheadTargets(document: VideoEditComposition, frame:
           const media = input.document.media.find(item => item.id === reference.mediaId)
           const key = `still:${media?.path}:${media?.sourceRevision ?? ''}:${reference.time}`
           const distance = distanceAt(start)
-          const existing = content.get(key)
-          if (!existing || existing.distance > distance) content.set(key, { kind: 'still', key, scopes: [], document: doc, clip, frame: start, distance, input })
+          const existing = stillTargets.get(key)
+          if (!existing || existing.distance > distance) stillTargets.set(key, { kind: 'still', key, scopes: [], document: doc, clip, frame: start, distance, input })
         } catch { /* 非法引用由进入片段时的正式渲染报告。 */ }
       }
     }
@@ -112,7 +114,8 @@ export function videoEditLookaheadTargets(document: VideoEditComposition, frame:
   // While playing, the renderer opens stills within its own horizon ahead (stepping between frames); paused or idle, the
   // lookahead decodes the ones further around the playhead so playing reaches them already kept.
   if (!playing) stills(document, Math.max(0, frame - before), frame + Math.ceil(document.fps * VIDEO_EDIT_STILL_LOOKAHEAD_SECONDS) + 1, at => Math.max(0, at - frame) / document.fps, 0)
-  return { video: [...targets.values()], content: [...content.values()] }
+  // Nearest first: the still store keeps what it can hold from the playhead on.
+  return { video: [...targets.values()], content: [...content.values(), ...[...stillTargets.values()].sort((a, b) => a.distance - b.distance)] }
 }
 export function videoEditDecodeTargets(document: VideoEditComposition, frame: number, playing: boolean, windows: readonly VideoEditRenderCacheWindow[] = []): VideoEditDecodeTarget[] {
   return videoEditLookaheadTargets(document, frame, playing, windows).video

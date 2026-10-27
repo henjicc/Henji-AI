@@ -19,7 +19,7 @@ import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
 import { videoEditParameterUpdate } from './videoEditParameterUpdate'
 
 const contentInputs = vi.hoisted(() => ({ uploads: [] as Array<[string, number | undefined]>, borrows: [] as Array<[string, number | undefined]>, closed: 0 }))
-const boundary = vi.hoisted(() => ({ pendingSchedule: undefined as Promise<void> | undefined, scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, failOffscreenClip: undefined as string | undefined, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean; size?: [number, number] }>, divisors: [] as number[], mixes: [] as Array<number | number[]>, opacities: [] as number[], evaluatedClips: [] as VideoEditClip[], builtinParams: [] as Record<string, unknown>[], warmed: [] as string[], protectedInstances: [] as string[], targetKeys: [] as string[], offscreenCompletion: undefined as Promise<void> | undefined }))
+const boundary = vi.hoisted(() => ({ pendingSchedule: undefined as Promise<void> | undefined, scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, failOffscreenClip: undefined as string | undefined, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, snapshotBytes: 100, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean; size?: [number, number] }>, divisors: [] as number[], mixes: [] as Array<number | number[]>, opacities: [] as number[], evaluatedClips: [] as VideoEditClip[], builtinParams: [] as Record<string, unknown>[], warmed: [] as string[], protectedInstances: [] as string[], targetKeys: [] as string[], offscreenCompletion: undefined as Promise<void> | undefined }))
 /** The start of the 60fps picture showing at `time` (exact grid times stay exact despite floating point). */
 const gridPicture = vi.hoisted(() => (time: number, fps = 60): number => Math.floor(time * fps + 1e-6) / fps)
 /** Source seconds compared at whole microseconds (picture starts computed on the grid vs. expectations summed in seconds). */
@@ -75,7 +75,7 @@ vi.mock('./videoEditGpuCompositor', async () => {
   }
   async snapshot(sample: { timestamp: number; duration: number }, compact: boolean) {
     boundary.snapshotCalls.push(compact); await boundary.pendingSnapshot
-    return new VideoEditGpuFrame({ ...sample, displayWidth: 3840, displayHeight: 2160, rotation: 0, flip: false }, { createView: () => ({}), destroy: vi.fn() }, undefined, 100, () => { boundary.normalizedReleased++ })
+    return new VideoEditGpuFrame({ ...sample, displayWidth: 3840, displayHeight: 2160, rotation: 0, flip: false }, { createView: () => ({}), destroy: vi.fn() }, undefined, boundary.snapshotBytes, () => { boundary.normalizedReleased++ })
   }
   async code() { return { inspectAuthor: async (bundle: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorBundle) => testAuthorProgram(bundle), retainAuthorInstances: async () => undefined, observeAuthor: () => [], authorGenerator: async (_key: string, _instance: string, _program: CodeMaterialProgram, context: { time: number }) => { boundary.generatorCalls++; if (boundary.failGenerator) throw new Error('代码画面失败'); return { timestamp: context.time } }, releaseUnused: (keys: ReadonlySet<string>) => { boundary.released.push([...keys]) }, warmAuthor: async (key: string) => { boundary.warmed.push(key) }, protectAuthorInstances: (keys: ReadonlySet<string>) => { boundary.protectedInstances = [...keys] },
     target: async (key: string, width: number, height: number) => { boundary.targetKeys.push(key); return target(width, height) }, releaseNestedFrames: vi.fn(),
@@ -102,7 +102,7 @@ beforeEach(() => {
   contentInputs.uploads = []; contentInputs.borrows = []; contentInputs.closed = 0
   boundary.pendingSchedule = undefined; boundary.disposed = []; boundary.pictures = []
   boundary.generatorCalls = 0; boundary.compilerCalls = 0; boundary.compilerDisposed = 0; boundary.failGenerator = false; boundary.failOffscreenClip = undefined; boundary.released = []; boundary.pendingCode = undefined
-  boundary.snapshotCalls = []; boundary.normalizedReleased = 0; boundary.pendingSnapshot = undefined
+  boundary.snapshotCalls = []; boundary.normalizedReleased = 0; boundary.pendingSnapshot = undefined; boundary.snapshotBytes = 100
   boundary.draws = []; boundary.mixes = []; boundary.divisors = []; boundary.evaluatedClips = []; boundary.builtinParams = []; boundary.warmed = []; boundary.protectedInstances = []; boundary.targetKeys = []; boundary.offscreenCompletion = undefined
   vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} })
   vi.stubGlobal('VideoDecoder', { isConfigSupported: async () => ({ supported: true }) })
@@ -247,7 +247,7 @@ it('关闭或替换媒体期间晚到GPU复制不能挂回已释放源或遗留�
     else await renderer.updateDocument({ ...document, revision: 1, clips: document.clips.map(clip => ({ ...clip, itemId: 'item-B' })) })
     release(); expect((await rendering).presented).toBe(false)
     expect(boundary.normalizedReleased).toBe(1)
-    await renderer.dispose(); boundary.snapshotCalls = []; boundary.normalizedReleased = 0; boundary.pendingSnapshot = undefined
+    await renderer.dispose(); boundary.snapshotCalls = []; boundary.normalizedReleased = 0; boundary.pendingSnapshot = undefined; boundary.snapshotBytes = 100
   }
 })
 afterEach(() => { vi.unstubAllGlobals() })
@@ -466,7 +466,7 @@ interface SteppingRead { time: number; speculative: boolean; keyFrame: boolean; 
  * Exclusive readers that continue one decoder (60fps, a key frame every 4 seconds, a fresh decoder at the first
  * picture): each read records how many pictures it decoded. `hold` keeps speculative reads pending until released.
  */
-function steppingReaders(): { backend: VideoEditFrameBackend; readers: Array<{ reads: SteppingRead[]; suspended: number }>; gate: { hold: boolean; pending: Array<() => void>; release(): void } } {
+function steppingReaders(clock?: { now: number; stepMs: number }): { backend: VideoEditFrameBackend; readers: Array<{ reads: SteppingRead[]; suspended: number }>; gate: { hold: boolean; pending: Array<() => void>; release(): void } } {
   const readers: Array<{ reads: SteppingRead[]; suspended: number }> = []
   const gate = { hold: false, pending: [] as Array<() => void>, release(): void { gate.pending.shift()?.() } }
   const picture = (frame: number, approximate = false) => ({ timestamp: frame / 60, duration: 1 / 60, format: 'NV12', approximate, close: vi.fn() }) as unknown as VideoSample
@@ -483,6 +483,8 @@ function steppingReaders(): { backend: VideoEditFrameBackend; readers: Array<{ r
             const entry = { time, speculative: read?.speculative === true, keyFrame: read?.keyFrame === true, decoded: 0 }
             reader.reads.push(entry)
             if (read?.speculative && gate.hold) await new Promise<void>(resolve => gate.pending.push(resolve))
+            // A background step that takes `stepMs` (the decoder busy beside the pictures being shown).
+            if (read?.speculative && clock) clock.now += clock.stepMs
             const target = Math.floor(time * 60 + 1e-6), key = Math.floor(target / 240) * 240
             const continuing = target >= position && Math.floor(position / 240) === Math.floor(target / 240)
             if (read?.keyFrame && !continuing) { entry.decoded = 1; position = key; return picture(key, true) }
@@ -538,7 +540,7 @@ it('预热分小步走向入点：先只解关键帧，每步不超过 6 幅；�
     expect(entered).toHaveLength(1); expect(entered[0]).toMatchObject({ speculative: false, keyFrame: false, decoded: 1 }); expect(entered[0].time).toBeCloseTo(videoEditPictureSeconds(30 + 1 / 60), 6)
   } finally { gate.hold = false; while (gate.pending.length) gate.release(); await renderer.dispose() }
 })
-it('连续播放时每个显示帧最多让后台走 3 步，且在本帧输入读完之后；几十帧内仍走到入点', async () => {
+it('连续播放时每个显示帧最多让后台走 1 步，且在本帧输入读完之后；步长随解码余量增大，几十帧内仍走到入点', async () => {
   const { backend, readers } = steppingReaders()
   const renderer = new VideoEditRenderer(walkFixture(), 3840, undefined, 8 * 1024 ** 3, backend)
   const w1 = () => readers.find(reader => (reader.reads[0]?.time ?? Infinity) < 4)!
@@ -548,13 +550,47 @@ it('连续播放时每个显示帧最多让后台走 3 步，且在本帧输入�
       const before = w2()?.reads.length ?? 0, shown = w1()?.reads.length ?? 0
       await (await renderer.render(frame, true)).completion
       const during = (w2()?.reads.length ?? 0) - before
-      expect(during, `第 ${frame} 帧`).toBeLessThanOrEqual(3)
+      // 旧实现每帧放行 3 步、每步 6 幅：后台一帧解 18 幅 4K，紧接着的前台读取排在它后面。
+      expect(during, `第 ${frame} 帧`).toBeLessThanOrEqual(1)
       // No step started before this frame's own read of w1.
       if (during && frame > 120) expect(w1().reads.length).toBe(shown + 1)
     }
-    const last = w2()!.reads.at(-1)!
-    expect(last.keyFrame).toBe(false); expect(last.time).toBeCloseTo(videoEditPictureSeconds(30), 6)
+    const walk = w2()!.reads
+    // Fast steps grow one picture at a time from two, never beyond six.
+    expect(walk.slice(1, 6).map(read => read.decoded)).toEqual([2, 3, 4, 5, 6]); expect(walk.every(read => read.decoded <= 6)).toBe(true)
+    expect(walk.at(-1)!.keyFrame).toBe(false); expect(walk.at(-1)!.time).toBeCloseTo(videoEditPictureSeconds(30), 6)
   } finally { await renderer.dispose() }
+})
+it('播放中后台解定格帧：所有后台解码每个显示帧合计最多一步，一步耗时超过帧间隔三分之一就减半到一幅，前台每帧照常只读一幅', async () => {
+  const clock = { now: 0, stepMs: 12 }
+  const real = performance.now.bind(performance)
+  const now = vi.spyOn(performance, 'now').mockImplementation(() => real() + clock.now)
+  const { backend, readers } = steppingReaders(clock)
+  // From frame 300, w2 shows a still 40.4 seconds into the recording and w3 one 50.4 seconds in; both walks start
+  // three seconds ahead (two stills decode at once).
+  const document = walkFixture(40.4)
+  const w2 = document.clips.find(clip => clip.id === 'w2')!
+  document.clips.push({ ...w2, id: 'w3', track: 4, code: { ...w2.code!, parameters: { screen: { kind: 'video' as const, mediaId: 'A', time: 50.4 } } } })
+  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const w1 = () => readers.find(reader => (reader.reads[0]?.time ?? Infinity) < 4)!
+  const still = (from: number) => readers.find(reader => (reader.reads[0]?.time ?? 0) >= from && (reader.reads[0]?.time ?? 0) < from + 10)
+  const background = () => (still(40)?.reads.length ?? 0) + (still(50)?.reads.length ?? 0)
+  try {
+    for (let frame = 120; frame < 190; frame++) {
+      const before = background(), shown = w1()?.reads.length ?? 0
+      await (await renderer.render(frame, true)).completion
+      // 旧实现每帧放行 3 步：两个定格帧各走一步还有余，后台一帧解码远超解码器的余量。
+      expect(background() - before, `第 ${frame} 帧`).toBeLessThanOrEqual(1)
+      expect(w1().reads.length - shown, `第 ${frame} 帧`).toBe(1)
+    }
+    // The busy decoder keeps the second walk at one picture per step (it finishes before its clip or, urgent, on entry).
+    expect(still(50)!.reads.slice(3).every(read => read.decoded === 1)).toBe(true)
+    const walk = still(40)!.reads
+    // Key frame at 40s, then paced steps: two pictures took 12ms (> 16.7 / 3), so every later step decodes one.
+    expect(walk[0]).toMatchObject({ speculative: true, keyFrame: true, decoded: 1 })
+    expect(walk.slice(1).every(read => read.decoded <= 2)).toBe(true); expect(walk.slice(3).every(read => read.decoded === 1)).toBe(true)
+    expect(walk.at(-1)!.time).toBeCloseTo(videoEditPictureSeconds(40.4), 6)
+  } finally { now.mockRestore(); await renderer.dispose() }
 })
 it('片段在预热途中开始：只等正在进行的那一步，随后停止预热，从走到的位置接着解剩下的部分', async () => {
   const { backend, readers, gate } = steppingReaders()
@@ -614,6 +650,42 @@ it('暂停时前瞻提前解好时间线附近的定格帧（播放中不列入�
     await (await renderer.render(600)).completion
     expect(Math.round(shownInputs().w2! * 60)).toBe(2424)
     expect(readers.flatMap(reader => reader.reads)).toHaveLength(walk.length)
+  } finally { await renderer.dispose() }
+})
+/** Four clips each showing a still of the recording (10.4s, 20.4s, 30.4s, 45.4s in) at 10, 30, 50 and 70 seconds. */
+function stillsFixture(): ReturnType<typeof fixture> {
+  const document = recordingWindowsFixture()
+  document.media = document.media.map(media => ({ ...media, durationSeconds: 60 }))
+  const base = document.clips[0]
+  document.clips = [[600, 10.4], [1800, 20.4], [3000, 30.4], [4200, 45.4]].map(([start, time], index) => ({ ...base, id: `s${index}`, start, duration: 60, code: { ...base.code!, parameters: { screen: { kind: 'video' as const, mediaId: 'A', time } } } }))
+  return document
+}
+it('暂停时前瞻由近到远解好 60 秒内的定格帧；存储放不下时不挤掉更近的，换了位置不再需要的先让位', async () => {
+  const { backend, readers } = steppingReaders()
+  const document = stillsFixture()
+  // Two such pictures fill the 256MB still store.
+  boundary.snapshotBytes = 100 * 1024 ** 2
+  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const decoded = (): number[] => readers.filter(reader => reader.reads.length).map(reader => Math.round(reader.reads.at(-1)!.time * 10) / 10)
+  const reads = (): number => readers.reduce((sum, reader) => sum + reader.reads.length, 0)
+  const prepare = async (frame: number): Promise<number[]> => {
+    const stills = videoEditLookaheadTargets(document, frame, false).content.filter(target => target.kind === 'still')
+    renderer.retainLookahead(stills)
+    for (const target of stills) expect(await renderer.prepareLookahead(target, new AbortController().signal)).toBe(true)
+    return stills.map(target => target.distance)
+  }
+  try {
+    // 旧实现暂停时只看前 20 秒：50 秒处的定格帧要到播放中才解。
+    expect(await prepare(0)).toEqual([10, 30, 50])
+    expect(decoded()).toEqual([10.4, 20.4])
+    // Paused at 30s: the 10s still is no longer wanted and makes room for the one 20 seconds ahead; 40 seconds ahead stays out.
+    expect(await prepare(1800)).toEqual([0, 20, 40])
+    expect(decoded()).toEqual([10.4, 20.4, 30.4])
+    const before = reads()
+    for (const frame of [1800, 3000]) { contentInputs.borrows = []; await (await renderer.render(frame)).completion; expect(Object.keys(shownInputs())).toHaveLength(1) }
+    expect(reads()).toBe(before)
+    await (await renderer.render(600)).completion
+    expect(reads()).toBeGreaterThan(before)
   } finally { await renderer.dispose() }
 })
 it('定格帧在后台解码途中片段开始：显示帧等它解完（剩下的步不再等轮次），不另起一次解码', async () => {
