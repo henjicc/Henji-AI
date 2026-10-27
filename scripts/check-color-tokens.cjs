@@ -22,7 +22,7 @@ const { extractCssClassNames } = require('./lib/uiResidueRules.cjs');
  *   见 tailwind.config.js）；内容色（标注默认色、导出图配色、算法遮罩等）在 colorTokens.ts 登记常量。
  *
  * 三、未定义颜色类（ts/tsx，非测试文件；任务 5.8，不可登记）：
- *   `bg-overlay`、`text-error`、`bg-selected-accent/50`（自带透明度的令牌加透明度修饰）这类 Tailwind 不生成样式的颜色类。
+ *   `bg-popover`、`text-error`、`bg-selected-accent/50`（自带透明度的令牌加透明度修饰）这类 Tailwind 不生成样式的颜色类。
  *   按 tailwind.config.js 实际配置用 Tailwind 自己的生成器判定，样式表里定义的同名类算已定义；
  *   只看类名语境里的字符串（className= / *Class = / 多数词是有效类的类名列表），见 scripts/lib/undefinedColorClasses.cjs。
  *

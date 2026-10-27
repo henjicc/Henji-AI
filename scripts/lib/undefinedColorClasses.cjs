@@ -1,7 +1,7 @@
 /**
  * 未定义颜色类扫描（check:colors 第四类规则，任务 5.8 / 5.4 转交）。
  *
- * `bg-overlay`、`text-error`、`bg-selected-accent/50` 这类类名 Tailwind 不生成任何样式：
+ * `bg-popover`、`text-error`、`bg-selected-accent/50` 这类类名 Tailwind 不生成任何样式：
  * 颜色名不在 tailwind.config.js 里，或令牌是自带透明度的完整颜色（cssVar）却加了 `/50` 透明度修饰。
  * 界面上表现为“没有底色 / 文字是继承色”，静态检查和类型检查都看不见。
  *

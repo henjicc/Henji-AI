@@ -197,7 +197,7 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 E 同时检查 UiModal.contentClassName 的 padding/overflow、PromptEditor.editorClassName 的高度、UiGroup/UiFormRow 私有列宽/间距。控件内部 padding/gap 走枚举；容器外部留白、选项内容排列、记录测量 transform 保留布局语义。高度约束移至 PromptEditor 外层布局，内层用 height。
 
 
-`check:colors` 另有**未定义颜色类**规则（不可登记）：`bg-overlay`、`text-error`、`bg-selected-accent/50`（自带透明度的令牌不能再加 `/透明度`）、`border-current/15` 这类 Tailwind 按实际配置不生成样式的颜色类。用 Tailwind 自己的生成器判定，只看类名语境的字符串（`className=`、`*Class =` 常量、多数词是有效类的类名列表）；样式表里定义的同名类算已定义。
+`check:colors` 另有**未定义颜色类**规则（不可登记）：`bg-popover`、`text-error`、`bg-selected-accent/50`（自带透明度的令牌不能再加 `/透明度`）、`border-current/15` 这类 Tailwind 按实际配置不生成样式的颜色类。用 Tailwind 自己的生成器判定，只看类名语境的字符串（`className=`、`*Class =` 常量、多数词是有效类的类名列表）；样式表里定义的同名类算已定义。
 
 ## 8. 改公共组件或令牌的验收：设计系统中心与定向测试
 
