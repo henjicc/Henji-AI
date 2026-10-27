@@ -58,8 +58,8 @@ fn cgTone(p: f32, tone: vec4f, tone2: vec4f, color: vec4f) -> f32 {
 }
 fn cgHueDistance(a: f32, b: f32) -> f32 { let d = abs(a - b) % 360.0; return select(d, 360.0 - d, d > 180.0); }
 fn cgContrastSlope(p: f32, slope: f32) -> f32 {
- if (slope <= 1.0 || p > 1.0) { return select(slope, 1.0, slope > 1.0); }
- let p0 = ${PERCEPTUAL_MIDDLE_GRAY}; let d = (p - p0) * slope; let limit = select(p0, 1.0 - p0, d > 0.0); let k = 0.8 * limit;
+ if (slope <= 1.0) { return slope; }
+ let p0 = ${PERCEPTUAL_MIDDLE_GRAY}; let d = (min(p, 1.0) - p0) * slope; let limit = select(p0, 1.0 - p0, d > 0.0); let k = 0.8 * limit;
  if (abs(d) <= k) { return slope; }
  return slope * exp(-(abs(d) - k) / (0.2 * limit));
 }

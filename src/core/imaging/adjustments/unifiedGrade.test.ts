@@ -62,6 +62,15 @@ describe('unified color grade', () => {
     expect(lch(grade([.9, .75, .7], { contrast: 60 }))[0]).toBeGreaterThan(lch([.9, .75, .7])[0] + .02)
     expect(lch(grade([.7, .3, .2], { saturation: -100 }))[1]).toBeLessThan(1e-4)
   })
+  it('keeps highlight chroma continuous when contrast pushes luminance past white', () => {
+    const shown = (rgb: readonly number[]): Vec3 => rgb.map(x => srgbToLinear(Math.max(0, Math.min(1, x)))) as Vec3
+    let previous = grade([.9, .83, .18], { exposure: .4, contrast: 20 }); let worst = 0
+    for (let step = 1; step <= 24; step++) {
+      const t = step / 256; const current = grade([.9 + t, .83 + t, .18 + t * .3], { exposure: .4, contrast: 20 })
+      worst = Math.max(worst, deltaE2000(linearSrgbToLab(shown(previous)), linearSrgbToLab(shown(current)))); previous = current
+    }
+    expect(worst).toBeLessThan(2)
+  })
   it('limits mixer changes to the named color and skips greys', () => {
     const red = grade([.85, .15, .12], { mixer_red_saturation: -100 }); const blue = grade([.15, .25, .85], { mixer_red_saturation: -100 })
     expect(lch(red)[1]).toBeLessThan(lch([.85, .15, .12])[1] * .1)

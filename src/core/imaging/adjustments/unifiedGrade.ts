@@ -140,8 +140,9 @@ const decode = (rgb: readonly number[]): Vec3 => rgb.map(srgbToLinear) as Vec3
 
 /** Slope of `gradeContrast` at a perceptual value: the old per-channel contrast scaled chroma by this amount. */
 export function gradeContrastSlope(perceptual: number, slope: number): number {
-  if (slope <= 1 || perceptual > 1) return slope > 1 ? 1 : slope
-  const p0 = PERCEPTUAL_MIDDLE_GRAY; const d = (perceptual - p0) * slope; const limit = d > 0 ? 1 - p0 : p0; const k = .8 * limit
+  if (slope <= 1) return slope
+  // Above white keep the roll-off reached at white: returning to full chroma there bands bright yellows and oranges.
+  const p0 = PERCEPTUAL_MIDDLE_GRAY; const d = (Math.min(perceptual, 1) - p0) * slope; const limit = d > 0 ? 1 - p0 : p0; const k = .8 * limit
   return Math.abs(d) <= k ? slope : slope * Math.exp(-(Math.abs(d) - k) / (.2 * limit))
 }
 
