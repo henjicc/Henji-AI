@@ -90,6 +90,7 @@ const successData: Record<string, Record<string, unknown>> = {
   duplicate_document: { resultRef: ref('documents.document', 'copy'), sourceRef: ref('documents.document'), name: '副本', projectId: null, ...revisions },
   collect_document_media: { resultRef: ref('documents.document'), name: '字幕项目', copiedFiles: 1, copiedDocuments: 0, missingFiles: 0, message, ...revisions },
   create_project: { resultRef: ref('documents.project', 'project'), name: '创作项目', ...revisions },
+  migrate_project_code_storage: { resultRef: ref('documents.project', 'project'), importedVersions: 3, archivedFolders: 2, retainedFolders: 0, ...revisions },
   register_external_project: { resultRef: ref('documents.project', 'project'), name: '元宝搜索', external: true, documentCount: 0, ...revisions },
   trash_document: { resultRef: ref('documents.document'), name: '字幕项目', status: 'trashed', ...revisions },
   trash_project: { resultRef: ref('documents.project', 'project'), name: '创作项目', status: 'trashed', ...revisions },

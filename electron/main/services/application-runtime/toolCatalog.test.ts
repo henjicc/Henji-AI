@@ -159,6 +159,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.78.0'] = '21b1e4bc536890ea82267f262d4de49f509043f66e3557682fc29b345e73718f'
     // 网页重演位置轨：boxSelectors 采样与 boxes 键/时间过滤、变化点分页。
     fingerprints['2.79.0'] = '4bac644e520538caf4a69558b6437f09a232edd6d44601f573b0986c49195e3c'
+    // 项目旧代码迁移到内置 Git；原素材/组件属性与集合接口保持不变。
+    fingerprints['2.80.0'] = '6184f481aea6be50017e4ef5d97f57b78b735b30eb0965a1f389d75274ec3b1b'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], `工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹：${fingerprint}`).toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {
