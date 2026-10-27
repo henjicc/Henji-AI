@@ -184,7 +184,7 @@ it('等待音频启动期间切反向，不排旧方向声音或画面', async (
   expect(pixel.requests[2].frame).toBe(4)
   view.unmount(); expect(close).toHaveBeenCalledOnce()
 })
-it('节目反向按实际完成帧倒序推进，停止后迟到帧不改变播放位置', async () => {
+for (const late of ['cancelled', 'presented'] as const) it(`节目反向按实际完成帧倒序推进；停止后迟到帧${late === 'cancelled' ? '被 Worker 作废时不改变播放位置' : '已上屏时成为暂停位置，不退回'}`, async () => {
   const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
   setVideoEditView(instance.document.id, { frame: 5, playing: true, playbackDirection: -1 })
   const view = render(<VideoEditPreview instance={instance} onError={vi.fn()} />)
@@ -194,9 +194,12 @@ it('节目反向按实际完成帧倒序推进，停止后迟到帧不改变播�
   expect(instance.frame).toBe(4); expect(pixel.requests[2].frame).toBe(3)
   expect(pixel.requests.slice(0, 3).map(request => request.sequential)).toEqual([false, false, false])
   act(() => setVideoEditView(instance.document.id, { playing: false }))
-  await act(async () => { pixel.requests[2].resolve({ sourceTimestamps: [3 / 30] }); await vi.advanceTimersByTimeAsync(2) })
-  expect(instance.frame).toBe(4); expect(pixel.requests[3].frame).toBe(4)
-  view.unmount(); await act(async () => { pixel.requests[3].resolve({ sourceTimestamps: [4 / 30] }) }); expect(pixel.dispose).toHaveBeenCalledOnce()
+  // The paused picture waits for the playback frame still in flight.
+  expect(stopNotification).toHaveBeenCalledWith(4); expect(pixel.requests).toHaveLength(3)
+  const settled = late === 'cancelled' ? 4 : 3
+  await act(async () => { pixel.requests[2].resolve(late === 'cancelled' ? { sourceTimestamps: [], presented: false, skipped: true } : { sourceTimestamps: [3 / 30], presented: true }); await vi.advanceTimersByTimeAsync(2) })
+  expect(instance.frame).toBe(settled); expect(pixel.requests[3]).toMatchObject({ frame: settled, sequential: false, scrubbing: false })
+  view.unmount(); await act(async () => { pixel.requests[3].resolve({ sourceTimestamps: [settled / 30] }) }); expect(pixel.dispose).toHaveBeenCalledOnce()
 })
 it('连续定位呈现已完成帧并只读取最新目标，卸载后迟到响应不呈现', async () => {
   const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
@@ -440,7 +443,8 @@ it('节目首帧已呈现后等待声音启动，立即暂停仍保留真实画�
   await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [0] }) })
   act(() => setVideoEditView(owner.document.id, { frame: 0, playing: false }))
   await act(async () => { resume(); await vi.advanceTimersByTimeAsync(1) })
-  expect(pixel.requests).toHaveLength(1)
+  // The paused picture is the frame on screen, drawn again exactly (a playback frame is never the final paused picture).
+  expect(pixel.requests).toHaveLength(2); expect(pixel.requests[1]).toMatchObject({ frame: 0, sequential: false, scrubbing: false })
   const surface = view.getByLabelText('剪辑画面') as HTMLCanvasElement
   expect(surface.dataset).toMatchObject({ presentedFrame: '0', sourceTimestamps: '0', scrubbing: 'false' })
   expect(owner).toMatchObject({ frame: 0, playing: false }); expect(onError).not.toHaveBeenCalled(); view.unmount()
@@ -749,5 +753,111 @@ it('渲染队列已满是背压：被拒的那帧重新请求，播放不停也�
   expect(pixel.requests.filter(request => request.frame === rejected.frame)).toHaveLength(2)
   act(() => setVideoEditView(instance.document.id, { playing: false }))
   await completeProgramFrames(4)
+  view.unmount()
+})
+
+const realSetTimeout = globalThis.setTimeout
+/** 播放到流水里排着两帧（已发给 Worker、还没上屏）为止：第 9 帧在屏幕上，第 10、11 帧在途。 */
+async function startPipelinedPlayback(onError: (error: unknown) => void = vi.fn()) {
+  const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
+  editVideoSequence(instance.document.id, instance.activeSequenceId, document => ({ ...document, clips: document.clips.map(clip => ({ ...clip, duration: 600 })) }))
+  const view = render(<VideoEditPreview instance={instance} onError={onError} />)
+  await act(async () => {})
+  await completeProgramFrames(2)
+  act(() => setVideoEditView(instance.document.id, { playing: true }))
+  await act(async () => { await vi.advanceTimersByTimeAsync(5) })
+  for (let round = 0; round < 8; round++) await completeProgramFrames(1)
+  await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+  const inFlight = pixel.requests.filter(request => !settledFrames.has(request))
+  expect(instance.frame).toBe(9)
+  expect(inFlight.map(request => ({ frame: request.frame, sequential: request.sequential, playback: request.deadline !== undefined }))).toEqual([{ frame: 10, sequential: true, playback: true }, { frame: 11, sequential: true, playback: true }])
+  return { instance, view, canvas: view.getByLabelText('剪辑画面') as HTMLCanvasElement, inFlight }
+}
+type ProgramRequest = (typeof pixel.requests)[number]
+async function settleRequest(request: ProgramRequest, result: Parameters<ProgramRequest['resolve']>[0]): Promise<void> {
+  settledFrames.add(request)
+  await act(async () => { request.submitted?.(); request.resolve(result); await vi.advanceTimersByTimeAsync(1) })
+}
+const describeRequest = (request: ProgramRequest) => ({ frame: request.frame, sequential: request.sequential, scrubbing: request.scrubbing, playback: request.deadline !== undefined })
+const PAUSE_ENTRIES = [['空格或暂停按钮', { playing: false }], ['停止命令', { playing: false, playbackDirection: 1 }]] as const
+for (const [entry, values] of PAUSE_ENTRIES) it(`播放中${entry}暂停：先停 Worker，排队帧作废不上屏，暂停画面落在实际最后上屏的一帧并写回播放头，只按精确方式重画这一帧`, async () => {
+  const { instance, view, canvas, inFlight } = await startPipelinedPlayback()
+  const count = pixel.requests.length
+  let requestsWhenStopped = -1
+  stopNotification.mockImplementation(() => { requestsWhenStopped = pixel.requests.length })
+  act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' })); setVideoEditView(instance.document.id, values) })
+  // The stop reaches the Worker first; the paused picture waits for the playback frames still in flight.
+  expect(requestsWhenStopped).toBe(count); expect(pixel.requests).toHaveLength(count)
+  // Worker: frame 10 was already on screen, frame 11 was cancelled by the stop.
+  const shown: string[] = []
+  await settleRequest(inFlight[0], { sourceTimestamps: [10 / 30], presented: true }); shown.push(String(canvas.dataset.presentedFrame))
+  await settleRequest(inFlight[1], { sourceTimestamps: [], presented: false, skipped: true }); shown.push(String(canvas.dataset.presentedFrame))
+  await act(async () => { await vi.advanceTimersByTimeAsync(2) })
+  expect(instance.frame).toBe(10)
+  // Exact (not a small step back despite the key press just now), not a playback frame.
+  const paused = pixel.requests.slice(count)
+  expect(paused.map(describeRequest)).toEqual([{ frame: 10, sequential: false, scrubbing: false, playback: false }])
+  await settleRequest(paused[0], { sourceTimestamps: [10 / 30], presented: true }); shown.push(String(canvas.dataset.presentedFrame))
+  expect(shown).toEqual(['10', '10', '10']); expect(canvas.dataset.approximate).toBe('false')
+  // Nothing approximate is waiting to be redrawn once input rests.
+  const settled = pixel.requests.length
+  await new Promise(resolve => realSetTimeout(resolve, 120))
+  await act(async () => { await vi.advanceTimersByTimeAsync(5) })
+  expect(pixel.requests).toHaveLength(settled)
+  view.unmount()
+})
+it('播放中点时间线指定位置暂停：按跳转去那一帧（精确，不当成小步后退），排队的播放帧作废', async () => {
+  const { instance, view, canvas, inFlight } = await startPipelinedPlayback()
+  const count = pixel.requests.length
+  act(() => { window.dispatchEvent(new Event('pointerdown')); setVideoEditView(instance.document.id, { frame: 7, playing: false }) })
+  expect(stopNotification).toHaveBeenCalled()
+  expect(pixel.requests.slice(count).map(describeRequest)).toEqual([{ frame: 7, sequential: false, scrubbing: false, playback: false }])
+  for (const request of inFlight) await settleRequest(request, { sourceTimestamps: [], presented: false, skipped: true })
+  await settleRequest(pixel.requests[count], { sourceTimestamps: [7 / 30], presented: true })
+  expect(instance.frame).toBe(7); expect(canvas.dataset.presentedFrame).toBe('7')
+  view.unmount()
+})
+it('播放到结尾自动停下：停在最后上屏的一帧并按精确方式重画一次，画面不退回', async () => {
+  const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
+  editVideoSequence(instance.document.id, instance.activeSequenceId, document => ({ ...document, clips: document.clips.map(clip => ({ ...clip, start: 0, duration: 4 })) }))
+  const view = render(<VideoEditPreview instance={instance} onError={vi.fn()} />)
+  await act(async () => {})
+  await completeProgramFrames(2)
+  const canvas = view.getByLabelText('剪辑画面') as HTMLCanvasElement
+  act(() => setVideoEditView(instance.document.id, { playing: true }))
+  const shown: number[] = []
+  for (let round = 0; round < 80 && instance.playing; round++) {
+    await completeProgramFrames(1); shown.push(Number(canvas.dataset.presentedFrame))
+    await new Promise(resolve => realSetTimeout(resolve, 10))
+  }
+  expect(instance.playing).toBe(false)
+  await completeProgramFrames(2); shown.push(Number(canvas.dataset.presentedFrame))
+  expect(pixel.requests.at(-1)).toMatchObject({ frame: 3, sequential: false, scrubbing: false, deadline: undefined })
+  expect(instance.frame).toBe(3)
+  expect(shown).toEqual([...shown].sort((a, b) => a - b))
+  view.unmount()
+})
+
+it('播放中点“设为项目封面”：等暂停画面落定在实际上屏的一帧再取图，不报“节目画面已变化”', async () => {
+  const toBlob = vi.fn((callback: BlobCallback) => callback(new Blob(['png'], { type: 'image/png' })))
+  HTMLCanvasElement.prototype.toBlob = toBlob as unknown as HTMLCanvasElement['toBlob']
+  const onError = vi.fn()
+  const { instance, view, inFlight } = await startPipelinedPlayback(onError)
+  const count = pixel.requests.length
+  fireEvent.click(view.getByLabelText('更多节目操作'))
+  fireEvent.click(view.getByText('设为项目封面'))
+  // Frame 10 was already on screen when the pause reached the Worker; frame 11 was cancelled.
+  await settleRequest(inFlight[0], { sourceTimestamps: [10 / 30], presented: true })
+  await settleRequest(inFlight[1], { sourceTimestamps: [], presented: false, skipped: true })
+  await act(async () => { await vi.advanceTimersByTimeAsync(2) })
+  const paused = pixel.requests.slice(count)
+  expect(paused.map(describeRequest)).toEqual([{ frame: 10, sequential: false, scrubbing: false, playback: false }])
+  // The picture is taken from the exact paused frame, not from the playback frame still on screen.
+  await act(async () => { await vi.advanceTimersByTimeAsync(20) })
+  expect(toBlob).not.toHaveBeenCalled()
+  await settleRequest(paused[0], { sourceTimestamps: [10 / 30], presented: true })
+  await act(async () => { await vi.advanceTimersByTimeAsync(20) })
+  expect(onError).not.toHaveBeenCalled(); expect(toBlob).toHaveBeenCalledTimes(1)
+  expect(instance.frame).toBe(10)
   view.unmount()
 })

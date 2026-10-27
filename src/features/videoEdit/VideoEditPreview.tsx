@@ -126,6 +126,8 @@ const PROGRAM_FRAMES_IN_FLIGHT = 3
 const PROGRAM_UNSUBMITTED_FRAMES = 2
 /** 渲染队列排满（背压）后隔这么久按最新状态再请求。 */
 const PROGRAM_BUSY_RETRY_MS = 4
+/** 选帧、设封面、编辑当前帧最多等原地暂停落定这么久（毫秒）；在途播放帧回来通常只要一两次刷新。 */
+const PAUSE_SETTLE_WAIT_MS = 500
 /** The Program GPU surface belongs to the project: a remount (dock ↔ popout window) waits until the previous session actually retired. */
 const programReleases = new WeakMap<VideoEditInstance, Promise<unknown>>()
 function VideoEditProgramPrewarm(): null {
@@ -196,6 +198,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
   const libraryId = useAssetLibraryStore(state => state.libraryId)
   const session = useRef<VideoEditRenderSession | null>(null)
   const stopPreview = useRef<() => void>(() => {})
+  /** 原地暂停落定（播放头落在 Worker 实际最后上屏的一帧）后 resolve；没有正在落定的暂停时立即 resolve。 */
+  const pauseSettled = useRef<() => Promise<void>>(() => Promise.resolve())
   const document = getActiveVideoEditSequence(instance)
   // 显示比例与缩放（Premiere：滚轮缩放、中键平移、下拉选等级或“适合”）
   const zoom = useMonitorZoom({ width: document.width, height: document.height, label: '节目显示比例' })
@@ -247,9 +251,15 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     let wakeForView = (): void => {}
     const unsubscribeView = subscribeVideoEditView(() => {
       if (stopped) return
-      wakeForView()
       const command = videoEditProgramCommandIdentity(instance.document.id)
+      const moved = observedAudioFrame !== instance.frame
+      // 停止先于这次改动的画面请求发给 Worker：还没上屏的播放帧当场作废，预热的视频输入先收起，暂停帧不会排在停止前面。
       if (observedPlaying && (!instance.playing || observedCommand !== command)) renderer.stopPlayback(instance.frame)
+      // 原地暂停（空格、暂停按钮、停止命令、播到结尾、助手暂停）：暂停画面落在 Worker 实际最后上屏的那一帧（见 advance）；
+      // 同时指定了位置（点时间线、跳到标记）的按那个位置跳转。
+      if (observedPlaying && !instance.playing && !moved) settlePause = true
+      else if (instance.playing || moved) { settlePause = false; releaseSettleWaiters() }
+      if (!observedPlaying && instance.playing) playbackShown = -1
       observedPlaying = instance.playing
       observedCommand = command
       const releasedScrub = observedScrubbing && !instance.scrubbing
@@ -262,11 +272,12 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         if (document === appliedDocument) void preparePlayback(document, instance.frame)
       }
       if (!instance.playing || instance.playbackDirection !== direction || activeCommand && videoEditProgramCommandIdentity(instance.document.id) !== activeCommand) { stopAudio(); setLevels([]) }
-      const moved = observedAudioFrame !== instance.frame
       observedAudioFrame = instance.frame
       if (instance.playing || releasedScrub || moved && !instance.scrubbing) scrubber.stop()
       // 拖动出声跟着指针走：播放头一动就把新位置交给擦洗引擎，不等画面呈现。
       if (moved && instance.scrubbing && !instance.playing) { const document = videoMotionComposition(instance); if (document) scrubAudio(instance.frame / document.fps, 'drag') }
+      // 状态都已更新、停止已发出后再推进调度（仍在这次改动的同一个任务里发出画面请求）。
+      wakeForView()
     })
     let audioRenderer: VideoEditRenderSession | undefined
     // No available proxy means the session already plays the originals: both read as 'original', so starting paused does not rebuild.
@@ -285,10 +296,28 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     let meter: ReturnType<typeof createVideoEditAudioMeter> | undefined
     let lastRequested = -1
     let lastFrame = -1
+    /** `lastFrame` on screen is a paused picture (exact, not a playback frame): frame capture waits for one. */
+    let pausedPicture = false
     let appliedFonts = renderer.fontPresentationRevision
     let lastScrubbing = false
     /** Whether the newest frame request sent was a scrub frame: releasing the playhead on the same frame asks for it exactly once. */
     let lastRequestedScrubbing = false
+    /** The newest frame request was a playback frame: the first paused request after it is never a small step back. */
+    let lastRequestedPlaying = false
+    /**
+     * 原地暂停后还没落定暂停画面：等播放中发出的画面回来，按 Worker 实际最后上屏的一帧（`playbackShown`）写回播放头并精确重画。
+     * 暂停时流水里已排好的帧（最多两帧）由 Worker 作废，暂停帧取 `instance.frame`（最后一个处理过回执的帧）会先显示排好的帧、
+     * 再退回去，正是“暂停时画面跳一下”。
+     */
+    let settlePause = false
+    /** 播放中发出、还没回执的画面请求数（含起播帧）。 */
+    let playbackInFlight = 0
+    /** 这一轮播放 Worker 实际上屏的最后一帧（以回执为准；不随换文档、换代理重置）。 */
+    let playbackShown = -1
+    /** 等暂停落定的取图操作（选帧、设封面、编辑当前帧按落定后的播放头取图，见 `pauseSettled`）。 */
+    let settleWaiters: Array<() => void> = []
+    const releaseSettleWaiters = (): void => { const waiters = settleWaiters; settleWaiters = []; for (const resolve of waiters) resolve() }
+    pauseSettled.current = () => settlePause ? Promise.race([new Promise<void>(resolve => { settleWaiters.push(resolve) }), new Promise<void>(resolve => { setTimeout(resolve, PAUSE_SETTLE_WAIT_MS) })]) : Promise.resolve()
     /** 屏幕上是快速拖动时的关键帧近似画面（帧号）；指针停住或松手后按精确方式补这一帧。-1 表示是精确画面。 */
     let approximateFrame = -1
     /** 这幅近似画面来自操作中的小步后退（拖动刚按下、方向键连按）：同拖动一样等指针或按键停住再补精确帧。 */
@@ -444,7 +473,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       // 选帧与封面始终是完整分辨率：降低了回放分辨率时，先按完整尺寸重画这一帧再取图。
       captureFull++
       try {
-        while (appliedProxy !== 'original' || appliedDocument !== picture || lastFrame !== request.frame || surface.dataset.presentedRevision !== String(picture?.revision) || surface.dataset.scrubbing === 'true' || surface.dataset.approximate === 'true' || surface.dataset.renderDivisor !== '1' || surface.width !== request.document.width || surface.height !== request.document.height) {
+        while (appliedProxy !== 'original' || appliedDocument !== picture || lastFrame !== request.frame || !pausedPicture || surface.dataset.presentedRevision !== String(picture?.revision) || surface.dataset.scrubbing === 'true' || surface.dataset.approximate === 'true' || surface.dataset.renderDivisor !== '1' || surface.width !== request.document.width || surface.height !== request.document.height) {
           current()
           if (performance.now() - start > 10000) throw new Error('节目画面尚未就绪，请等待画面更新后重试选帧。')
           await new Promise(resolve => setTimeout(resolve, 5))
@@ -501,9 +530,9 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       }
       try { await advance(turn) } finally { turn.handOff() }
     }
-    const requestFrame = (...args: Parameters<VideoEditRenderSession['present']>): ReturnType<VideoEditRenderSession['present']> => {
-      framesInFlight++
-      return renderer.present(...args).finally(() => { framesInFlight-- })
+    const requestFrame = (playback: boolean, ...args: Parameters<VideoEditRenderSession['present']>): ReturnType<VideoEditRenderSession['present']> => {
+      framesInFlight++; if (playback) playbackInFlight++
+      return renderer.present(...args).finally(() => { framesInFlight--; if (playback) playbackInFlight-- })
     }
     const advance = async (turn: { readonly released: boolean; handOff: () => void }): Promise<void> => {
       let requestCommand: object | undefined
@@ -583,17 +612,18 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
             while (audio.currentTime === before && performance.now() - waiting < 1000 && !stopped) await new Promise(resolve => setTimeout(resolve, 2))
           })() : undefined
           audioReady?.catch(() => undefined)
-          const initialResult = await requestFrame(initialFrame, direction === 1, false, undefined, undefined, undefined, 'interactive', historyEnabled)
+          playbackShown = -1
+          const initialResult = await requestFrame(true, initialFrame, direction === 1, false, undefined, undefined, undefined, 'interactive', historyEnabled)
           if (!stopped) setEffectFailure(initialResult.effectErrors?.join('\n') ?? null)
           if (stopped) { initialResult.history?.close(); return }
           recordVideoEditProgramRender(instance.document.id, document, initialFrame, initialResult, direction === 1)
-          if (initialResult.presented === true) recordPresentation(initialFrame, initialResult, requestedAt, false, document)
+          if (initialResult.presented === true && recordPresentation(initialFrame, initialResult, requestedAt, false, document)) playbackShown = initialFrame
           if (!current.playing || !listVideoEditInstances().includes(instance) || videoMotionComposition(instance) !== document || videoEditProgramCommandIdentity(instance.document.id) !== command) { wasPlaying = false; wake(0); return }
           if (initialResult.presented === false) { lastFrame = -1; lastRequested = -1; wasPlaying = false; wake(0); return }
           if (initialResult.presented !== true) recordPresentation(initialFrame, initialResult, requestedAt, false, document)
           const phaseFirst = performance.now()
-          lastFrame = initialFrame; lastScrubbing = false; submittedFrame = -1; queuedFrame = -1
-          lastRequested = initialFrame; activeCommand = command
+          lastFrame = initialFrame; lastScrubbing = false; pausedPicture = false; submittedFrame = -1; queuedFrame = -1
+          lastRequested = initialFrame; lastRequestedPlaying = true; activeCommand = command
           if (audioReady) {
             await audioReady
             if (stopped) return
@@ -646,6 +676,16 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
             })
           }
         }
+        // 原地暂停：等播放中发出的画面都回来（还没上屏的已被 Worker 作废，它们的回执会唤醒调度），把播放头落在实际最后上屏的
+        // 那一帧，再按精确方式重画它——屏幕最多从预渲染画面换成同一帧的实时画面，不退回、不先闪别的画面。
+        if (!current.playing && settlePause) {
+          if (playbackInFlight > 0) return
+          settlePause = false
+          const shown = playbackShown; playbackShown = -1
+          if (shown >= 0 && shown !== current.frame && !current.scrubbing) setVideoEditView(instance.document.id, { frame: shown }, true)
+          releaseSettleWaiters()
+          lastRequested = -1
+        }
         const playing = current.playing
         const liveRecording = playing && videoMotionState(current)?.status === 'recording'
         const due = playing ? videoEditLiveFrame(startFrame, performance.now() - clockPerformanceStart, document.fps, current.playbackRate ?? 1, direction, videoEditDuration(document)) : current.frame
@@ -668,14 +708,15 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           const fastJump = !scrubbing && captureFull === 0 && lastFrame >= 0 && lastRequested >= 0 && Math.abs(target - lastRequested) >= VIDEO_EDIT_FAST_JUMP_FRAMES
           // 操作中的小步后退（拖动刚按下还没移出 3 像素、方向键连按）：长 GOP 视频退一帧要从关键帧重解（4K 录屏可达半秒），
           // 按慢速拖动处理——先沿用当前画面、后台解精确帧，停住后补精确帧，不让这一步堵住后面的画面。
-          const steppingBack = !scrubbing && !fastJump && captureFull === 0 && lastFrame >= 0 && lastRequested >= 0 && target < lastRequested && performance.now() - lastInteractionAt < VIDEO_EDIT_EXACT_AFTER_REST_MS
+          // 上一个请求是播放帧（流水排在前面）时不算：从播放切到暂停（含暂停时指定位置）不是小步后退。
+          const steppingBack = !scrubbing && !fastJump && captureFull === 0 && lastFrame >= 0 && lastRequested >= 0 && !lastRequestedPlaying && target < lastRequested && performance.now() - lastInteractionAt < VIDEO_EDIT_EXACT_AFTER_REST_MS
           const scrubMode: boolean | 'fast' = playing ? scrubbing : fastScrub || fastJump ? 'fast' : steppingBack || scrubbing
           const requestedAt = performance.now()
           const deadline = playing && !liveRecording ? performance.timeOrigin + clockPerformanceStart + Math.abs(target - startFrame) / document.fps / (current.playbackRate ?? 1) * 1000 : undefined
-          lastRequested = target; lastRequestedScrubbing = scrubbing
+          lastRequested = target; lastRequestedScrubbing = scrubbing; lastRequestedPlaying = playing
           if (pipelined) { unsubmitted++; queuedFrame = Math.max(queuedFrame, target) }
           let submitted = false
-          const presentation = requestFrame(target, pipelined, scrubMode, deadline, scrubbing || pipelined ? () => {
+          const presentation = requestFrame(playing, target, pipelined, scrubMode, deadline, scrubbing || pipelined ? () => {
             if (pipelined) { submitted = true; unsubmitted--; submittedFrame = Math.max(submittedFrame, target) }
             // 这一帧已交给 GPU：调度交还给 wake 去准备下一帧（还能不能再发由上面的在途预算决定）。
             turn.handOff(); wake(0)
@@ -707,17 +748,18 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
             if (videoMotionComposition(current) !== document) {
               // An already submitted draw cannot be undone by a later parameter edit.
               // Report that same-surface fact without advancing the new document's clock.
-              if (result.presented === true) recordPresentation(target, result, requestedAt, scrubbing, document)
+              if (result.presented === true && recordPresentation(target, result, requestedAt, scrubbing, document) && playing) playbackShown = target
               const latest = videoMotionComposition(current)
-              if (result.presented === true && pipelined && current.playing && current.playbackDirection === direction && videoEditProgramCommandIdentity(current.document.id) === command && latest && videoEditParameterUpdate(document, latest)) lastFrame = Math.max(lastFrame, target)
+              if (result.presented === true && pipelined && current.playing && current.playbackDirection === direction && videoEditProgramCommandIdentity(current.document.id) === command && latest && videoEditParameterUpdate(document, latest)) { lastFrame = Math.max(lastFrame, target); pausedPicture = false }
               wake(0); return
             }
             recordVideoEditProgramRender(instance.document.id, document, target, result, playing && direction === 1 && !scrubbing && !liveRecording)
             if (result.presented === false) { if (!liveRecording) lastFrame = -1; lastRequested = -1; wake(0); return }
             if (!recordPresentation(target, result, requestedAt, scrubbing, document)) { wake(0); return }
+            if (playing) playbackShown = target
             approximateFrame = result.approximate ? target : -1; approximateWhileActive = !!result.approximate && steppingBack
             setEffectFailure(result.effectErrors?.join('\n') ?? null)
-            lastFrame = target; lastScrubbing = scrubbing
+            lastFrame = target; lastScrubbing = scrubbing; pausedPicture = !playing && !scrubbing && !result.approximate
             if (playing && current.playing && current.playbackDirection === direction && videoEditProgramCommandIdentity(instance.document.id) === command) setVideoEditView(instance.document.id, { frame: target }, true)
           }
           // 已交出调度的一步只收尾自己这一帧：唤醒调度按新状态推进，预热与下一帧都由那一步决定。
@@ -768,7 +810,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     stopCurrent = (): void => {
       if (retired) return
       void flushVideoEditRenderPerformance()
-      retired = true; for (const event of idleEvents) window.removeEventListener(event, interaction, true); unregisterCapture(); unsubscribe(); unsubscribeView(); unsubscribeScrub(); unsubscribeMotion(); unsubscribeRegions(); unsubscribeTracks(); clearTimeout(timer); immediate.port1.close(); clearInterval(meterTimer); instance.playing = false; stopAudio(); scrubber.stop()
+      retired = true; pauseSettled.current = () => Promise.resolve(); releaseSettleWaiters(); for (const event of idleEvents) window.removeEventListener(event, interaction, true); unregisterCapture(); unsubscribe(); unsubscribeView(); unsubscribeScrub(); unsubscribeMotion(); unsubscribeRegions(); unsubscribeTracks(); clearTimeout(timer); immediate.port1.close(); clearInterval(meterTimer); instance.playing = false; stopAudio(); scrubber.stop()
       const closeAudio = (): Promise<void> | undefined => { meter?.dispose(); return audio?.close() }
       programReleases.set(instance, Promise.allSettled([meter ? finishVideoEditAudioFade().then(closeAudio) : closeAudio(), renderer.dispose(), audioRenderer?.dispose()]))
       retainExplanationPixels(surface, -1)
@@ -781,14 +823,14 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     return stop
   }, [instance, onError, retry, visible])
   const busy = collecting || preparing
+  /** 选帧、设封面、编辑当前帧：先原地暂停，等播放头落在实际上屏的那一帧（见 `settlePause`），再按那一帧取图。 */
+  const pauseForFrame = async (): Promise<void> => { setVideoEditView(instance.document.id, { playing: false }); await pauseSettled.current() }
   const setPosterFrame = (): void => {
-    setVideoEditView(instance.document.id, { playing: false })
-    void setVideoEditPosterFrame(instance.document.id).catch(onError)
+    void pauseForFrame().then(() => setVideoEditPosterFrame(instance.document.id)).catch(onError)
   }
   const captureFrame = (): void => {
     setCollecting(true)
-    setVideoEditView(instance.document.id, { playing: false })
-    void captureVideoEditProgramFrame(instance.document.id).then(async output => {
+    void pauseForFrame().then(() => captureVideoEditProgramFrame(instance.document.id)).then(async output => {
       if (!output) return
       const asset = await collectVideoEditOutput(output, libraryId ? { libraryId } : {})
       if (activeVideoEditInstance() === instance) { useAssetLibraryStore.getState().setSelectedAsset(asset); openAssetLibrary('floating') }
@@ -796,8 +838,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
   }
   const editFrame = (): void => {
     setCollecting(true)
-    setVideoEditView(instance.document.id, { playing: false })
-    void editVideoEditProgramFrame(instance.document.id).catch(onError).finally(() => setCollecting(false))
+    void pauseForFrame().then(() => editVideoEditProgramFrame(instance.document.id)).catch(onError).finally(() => setCollecting(false))
   }
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   const buttonIds = useVideoEditMonitorButtonIds('program')

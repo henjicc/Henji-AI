@@ -256,6 +256,11 @@ interface VideoSource {
   retired?: VideoEditGpuFrame[]
   /** Counts reads that set `current`: a background read installs its picture only when no later read began. */
   readEpoch?: number
+  /**
+   * `current` is the picture a prewarm walk decoded for the clip's first live frame (`prewarmCodeInput`), not one a
+   * frame showed: a scrub or a paused step never holds it (it can be seconds away from the frame asked for).
+   */
+  prewarmed?: boolean
 }
 /** One bounded decoder per visible clip; all inputs close when the view detaches. */
 export class VideoEditRenderer {
@@ -338,7 +343,10 @@ export class VideoEditRenderer {
   private drawLock: Promise<void> = Promise.resolve()
   /** Counts top-level presentations (live, resident key frame, pre-rendered exact picture); see `exclusiveDraw`. */
   private presentations = 0
-  /** Whether the last top-level presentation was a live exact frame. */
+  /**
+   * Whether the last top-level presentation was an exact frame: a live one, or a forward playback frame of a pre-rendered
+   * window (the window's whole-frame picture). A paused frame equal to it never shows the pre-rendered exact picture first.
+   */
   private shownExact = false
   /**
    * Replaces the ready pre-rendered windows. Playback shows a window's file instead of composing its layers;
@@ -1093,7 +1101,7 @@ export class VideoEditRenderer {
     if (!reader || videoEditPictureCovers(source.current, time)) return
     const still = this.codeInput?.still
     const kept = still ? this.stillStore.get(still, time) : undefined
-    if (kept instanceof VideoEditGpuFrame) { source.current?.close(); source.current = kept.clone(); source.previousTime = time; return }
+    if (kept instanceof VideoEditGpuFrame) { source.current?.close(); source.current = kept.clone(); source.previousTime = time; source.prewarmed = true; return }
     const stepping = performance.now()
     // Speculative throughout: it never takes the foreground's last decoder or shares the file's session.
     let decoded: VideoEditDecodedPicture | null = null
@@ -1130,7 +1138,7 @@ export class VideoEditRenderer {
     let normalized: VideoEditGpuFrame
     try { normalized = await this.ensureCompositor().snapshot(decoded, videoEditGpuFrameUsesChroma(decoded, source.codec), true) } finally { decoded.close() }
     if (this.disposed || this.sources.get(clip.id) !== pending || this.document !== document) { normalized.close(); return }
-    source.current?.close(); source.current = normalized; source.previousTime = time
+    source.current?.close(); source.current = normalized; source.previousTime = time; source.prewarmed = true
     if (still) { this.lookaheadOwner.stillBytes.set(still, normalized.allocationSize()); this.stillStore.put(still, normalized.clone(), keepStills?.() ?? new Set()); reader.suspend?.() }
     else if (this.codeInput?.history) this.frameCache.put(media.path, normalized.clone(), new Set())
   }
@@ -1178,7 +1186,7 @@ export class VideoEditRenderer {
           if (this.disposed || this.sources.get(clipId) !== pending || source.readEpoch !== epoch || source.ahead !== ahead) { normalized.close(); return }
           if (source.current instanceof VideoEditGpuFrame) (source.retired ??= []).push(source.current)
           else source.current?.close()
-          source.current = normalized; source.previousTime = target
+          source.current = normalized; source.previousTime = target; source.prewarmed = false
           if (this.codeInput?.history) this.frameCache.put(media.path, normalized.clone(), new Set())
         }
         if (source.ahead !== ahead || ahead.time === target) return
@@ -1531,7 +1539,8 @@ export class VideoEditRenderer {
     const window = this.cachedWindow(frame)
     const preview = this.jumpPreview
     if (!window || !preview || !wanted()) return
-    const picture = await preview.exactPicture(window.key, window.media, clipSourceSeconds(window.clip, frame, document.fps), sample => this.ensureCompositor().snapshot(sample, true), wanted)
+    // Same picture time as the window's playback reads (container timestamp tolerance, `videoEditPictureSeconds`).
+    const picture = await preview.exactPicture(window.key, window.media, videoEditPictureSeconds(clipSourceSeconds(window.clip, frame, document.fps)), sample => this.ensureCompositor().snapshot(sample, true), wanted)
     if (!picture) return
     if (!wanted()) { picture.close(); return }
     let drawn: { presented: boolean; completion: Promise<void> } | undefined
@@ -1767,14 +1776,15 @@ export class VideoEditRenderer {
         // A still (fixed time) comes from the pictures kept for the whole renderer tree, decoded once.
         // Pictures a background read replaced were drawn by earlier frames, all submitted by now.
         for (const picture of source.retired?.splice(0) ?? []) picture.close()
-        if (videoEditPictureCovers(source.current, time)) cacheHits++
+        if (videoEditPictureCovers(source.current, time)) { cacheHits++; source.prewarmed = false }
         else {
           const still = this.codeInput.still
           const kept = still ? await this.keptStill(still, time) : this.frameCache.get(media.path, time)
           // A slow scrub a few pictures forward continues the decoder in a step or two and reads its exact picture right
           // away; going back, or further ahead (after a key frame shown by a fast scrub), needs a walk, so it holds like a
-          // fast scrub (with exact background reads).
-          const shown = source.current instanceof VideoEditGpuFrame ? source.current : undefined
+          // fast scrub (with exact background reads). A picture only a prewarm walk decoded (the clip's first live frame
+          // after a pre-rendered window) was never shown and is never held.
+          const shown = source.current instanceof VideoEditGpuFrame && !source.prewarmed ? source.current : undefined
           const continues = !!shown && time >= shown.timestamp && time - shown.timestamp <= VIDEO_EDIT_SCRUB_CONTINUE_SECONDS
           const holding = !(kept instanceof VideoEditGpuFrame) && !!shown && Math.abs(shown.timestamp - time) <= VIDEO_EDIT_SCRUB_HOLD_SECONDS && (_scrubbing === 'fast' || _scrubbing === true && !continues)
           if (holding) {
@@ -1786,7 +1796,7 @@ export class VideoEditRenderer {
           } else {
             // A read of its own: a background walk still under way must not replace this picture afterwards.
             source.ahead = undefined; source.readEpoch = (source.readEpoch ?? 0) + 1
-            source.current?.close(); source.current = undefined
+            source.current?.close(); source.current = undefined; source.prewarmed = false
             if (kept instanceof VideoEditGpuFrame) { source.current = kept.clone(); cacheHits++ }
             else {
               const reading = performance.now()

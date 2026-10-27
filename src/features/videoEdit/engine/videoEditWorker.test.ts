@@ -19,6 +19,7 @@ vi.mock('./videoEditRenderer', () => ({ VideoEditRenderer: class {
   codePerformance() { return state.performance }
   captureCodePerformance() { const frames = state.performance; return () => frames }
   settled() { return Promise.resolve() }
+  async stopPlayback() {}
   hasJumpPreview() { return state.hasJump }
   presentJumpPreviewNow = state.jump
 } }))
@@ -192,4 +193,31 @@ it('前一次点击的精确画面还在准备时，远距离跳转在队列外�
   expect(state.render).toHaveBeenCalledOnce()
   release()
   await vi.waitFor(() => expect(messages.find(message => message.id === exact && !message.phase)).toMatchObject({ skipped: true }))
+})
+
+it('停止播放当场作废还没上屏的播放帧：排队的答复 skipped 不渲染，正在等刷新的放弃呈现；之后的暂停帧照常画', async () => {
+  await init(true)
+  let release!: () => void
+  const waiting = new Promise<void>(resolve => { release = resolve })
+  const frames: number[] = []
+  state.render.mockImplementation(async (...args: unknown[]) => {
+    const frame = args[0] as number; const shouldPresent = args[3] as () => boolean
+    frames.push(frame)
+    // Frame 10 waits for its refresh while the stop arrives; it presents only if still wanted then.
+    if (frame === 10 && args[1] === true) await waiting
+    return { presented: shouldPresent(), renderCached: true, decodeMs: 0, gpuMs: 0, completion: Promise.resolve(), canvas: {} }
+  })
+  const playback = (frame: number): number => { const id = ++nextId; worker.onmessage({ data: { kind: 'render', id, frame, sequential: true, deadline: performance.timeOrigin + performance.now() + 1000 } }); return id }
+  const [waitingId, queuedId] = [playback(10), playback(11)]
+  await vi.waitFor(() => expect(frames).toEqual([10]))
+  worker.onmessage({ data: { kind: 'stopPlayback', id: 0, frame: 9 } })
+  release()
+  await vi.waitFor(() => expect(messages.some(message => message.id === queuedId && !message.phase)).toBe(true))
+  expect(messages.find(message => message.id === waitingId && !message.phase)).toMatchObject({ presented: false, skipped: true })
+  expect(messages.find(message => message.id === queuedId && !message.phase)).toMatchObject({ presented: false, skipped: true })
+  expect(frames).toEqual([10])
+  // The paused frame (no deadline) and the next play run are never cancelled by the earlier stop.
+  expect(await send({ kind: 'render', frame: 10, sequential: false, scrubbing: false })).toMatchObject({ presented: true })
+  expect(await send({ kind: 'render', frame: 10, sequential: true, deadline: performance.timeOrigin + performance.now() })).toMatchObject({ presented: true })
+  expect(frames).toEqual([10, 10, 10])
 })

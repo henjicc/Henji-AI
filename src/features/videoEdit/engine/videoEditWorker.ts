@@ -105,6 +105,13 @@ let latestRender: { frame: number; sequential: boolean } | undefined
 const queuedFrames = new Map<number, () => void>()
 /** A paused (exact) program frame is being prepared in the queue: far jumps meanwhile are answered outside it. */
 let exactRendering = false
+/**
+ * Counts `stopPlayback` messages, applied the moment one arrives (outside the queue). A playback frame (one with a
+ * presentation deadline) received before the latest stop and not on screen yet never presents: queued ones are answered
+ * skipped without rendering and the one being prepared gives up at its next presentation check, so pausing never shows
+ * the frames the program had queued ahead of the pause.
+ */
+let playbackEpoch = 0
 let summaryAt = performance.now()
 let lookaheadStats = { preopened: 0, hits: 0, misses: 0, budgetSkipped: 0, foregroundSkipped: 0, scans: 0, scanMs: 0, maxScanMs: 0 }
 let lookaheadMisses: Array<Record<string, unknown>> = []
@@ -171,6 +178,10 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
   let foregroundPending = request.kind === 'render'
   const releaseForeground = (): void => { if (foregroundPending) { foregroundPending = false; foregroundFrames-- } }
   if (['init', 'update', 'replaceContent', 'parameters', 'dispose', 'invalidate', 'stopPlayback'].includes(request.kind)) releasePreopened()
+  if (request.kind === 'stopPlayback') playbackEpoch++
+  // A playback frame that a later stop cancelled (see `playbackEpoch`).
+  const epoch = playbackEpoch
+  const cancelledByStop = (): boolean => request.kind === 'render' && request.deadline !== undefined && epoch !== playbackEpoch
   if (request.kind === 'render') { latestRender = request; foregroundFrames++; if (renderer) decodeLookahead?.beforeFrame(renderer.document, request.frame, request.sequential === true) }
   let skipped = false
   if (request.kind === 'render' && !request.sequential) {
@@ -262,6 +273,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
         // 排队期间已被更新的画面请求取代（见 `queuedFrames`），已答复过。
         if (skipped) return
         queuedFrames.delete(request.id)
+        if (cancelledByStop()) { releaseForeground(); self.postMessage({ id: request.id, presented: false, skipped: true } satisfies RenderResponse); return }
         const renderStarted = performance.now()
         const preparationBefore = videoEditPreparationSnapshot()
         traceVideoEditFrame('worker.queue', request.frame, receivedAt, renderStarted)
@@ -275,7 +287,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
           void snapshot.catch(() => {})
         }, { maxPixels: needsPixels ? Infinity : 1280 * 720, gpu: !direct && !request.readRgb && !request.history }) : undefined
         exactRendering = !request.scrubbing && !request.sequential
-        const result = await renderer.render(request.frame, request.sequential, request.scrubbing, () => renderer?.document.revision === revision, request.deadline, undefined, request.quality, capture).catch(error => { if (snapshot) void snapshot.then(bitmap => bitmap.close(), () => {}); throw error }).finally(() => { exactRendering = false })
+        const result = await renderer.render(request.frame, request.sequential, request.scrubbing, () => renderer?.document.revision === revision && !cancelledByStop(), request.deadline, undefined, request.quality, capture).catch(error => { if (snapshot) void snapshot.then(bitmap => bitmap.close(), () => {}); throw error }).finally(() => { exactRendering = false })
         const renderStages = videoEditPreparationDelta(preparationBefore)
         releaseForeground()
         if (result.presented) decodeLookahead?.update(renderer.document, request.frame, request.sequential === true, renderCacheWindows)
@@ -311,7 +323,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
           const bitmap = rgb || direct || !result.presented ? undefined : pixels
           traceVideoEditFrame('bitmap.prepare', request.frame, transferStarted)
           const postedAt = performance.now()
-          self.postMessage({ id: request.id, ...(result.superseded ? { skipped: true } : {}), renderCached: result.renderCached, renderElapsedMs, renderStages, bitmap, history, rgb, authorElements, effectErrors: result.effectErrors, sourceTimestamps: result.sourceTimestamps, blankPictures: result.blankPictures, singleFrameReads: result.singleFrameReads, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, ...(result.approximate ? { approximate: true } : {}), decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics(), codePerformance: readCodePerformance(), preparationStages: videoEditPreparationSnapshot() } satisfies RenderResponse, { transfer: [...(rgb ? [rgb.buffer as ArrayBuffer] : bitmap ? [bitmap] : []), ...(history ? [history] : [])] })
+          self.postMessage({ id: request.id, ...(result.superseded || !result.presented && cancelledByStop() ? { skipped: true } : {}), renderCached: result.renderCached, renderElapsedMs, renderStages, bitmap, history, rgb, authorElements, effectErrors: result.effectErrors, sourceTimestamps: result.sourceTimestamps, blankPictures: result.blankPictures, singleFrameReads: result.singleFrameReads, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, ...(result.approximate ? { approximate: true } : {}), decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics(), codePerformance: readCodePerformance(), preparationStages: videoEditPreparationSnapshot() } satisfies RenderResponse, { transfer: [...(rgb ? [rgb.buffer as ArrayBuffer] : bitmap ? [bitmap] : []), ...(history ? [history] : [])] })
           if (bitmap) owned.delete(bitmap)
           traceVideoEditFrame('worker.post', request.frame, postedAt)
           if (history) owned.delete(history)

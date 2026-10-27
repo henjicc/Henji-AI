@@ -2036,3 +2036,65 @@ it('快速拖动与远距离跳转：代码视频输入先给近似画面（整�
     expect(us([shownInputs().w1])).toEqual(us([95 / 60]))
   } finally { await renderer.dispose() }
 })
+/**
+ * w2 shows a recording from frame 6 (27.1 seconds in); frames 0–85 come from a pre-rendered window and w2 goes live at
+ * 86, so playing the window walks w2's input ahead to the picture at 86 (27.1 + 80/60 seconds). `slowMs` makes the
+ * recording's exact reads as slow as a long-GOP 4K seek.
+ */
+async function playedFromWindow(slowMs = 0) {
+  const { backend, readers } = steppingReaders()
+  if (slowMs) {
+    const open = backend.open.bind(backend)
+    backend.open = media => {
+      const opened = open(media)
+      if (media.path.includes('opening')) return opened
+      return { ...opened, ready: opened.ready.then(source => ({ ...source, clipFrames: options => {
+        const reader = source.clipFrames(options)!
+        return { ...reader, frameAt: async (time: number, read?: { speculative?: boolean; keyFrame?: boolean }) => { if (!read?.speculative) await new Promise(resolve => setTimeout(resolve, slowMs)); return reader.frameAt(time, read) } }
+      } })) }
+    }
+  }
+  const document = recordingWindowsFixture(6)
+  document.media = document.media.map(media => ({ ...media, durationSeconds: 60 }))
+  document.clips = document.clips.filter(clip => clip.id === 'w2').map(clip => ({ ...clip, sourceInUs: 27_100_000 }))
+  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  renderer.setRenderCache([{ key: 'opening', startFrame: 0, endFrame: 86, url: 'henji-media://local/opening.mp4', width: 3840, height: 2160, fps: 60 }])
+  const input = () => readers.find(reader => (reader.reads[0]?.time ?? 0) >= 24)
+  await (await renderer.render(0, false)).completion
+  for (let at = 0; at <= 62; at++) await (await renderer.render(at, true)).completion
+  await vi.waitFor(() => expect(input()?.reads.at(-1)?.time).toBeCloseTo(videoEditPictureSeconds(27.1 + 80 / 60), 6), { timeout: 3000 })
+  // The walk installs its picture after its last read.
+  for (let tick = 0; tick < 30; tick++) await new Promise(resolve => setTimeout(resolve, 0))
+  expect(renderer.codeDiagnostics()).toMatchObject({ codeInputSessions: 1, codeInputsPrewarmed: 1 })
+  return { renderer, readers }
+}
+const topDraws = (from: number) => boundary.draws.slice(from).filter(draw => !draw.offscreen).map(draw => draw.ids)
+it('从预渲染段播到段尾前暂停：预热到段尾的视频输入画面不被沿用（即使按小步后退请求），暂停帧是这一帧的精确画面', async () => {
+  const { renderer } = await playedFromWindow()
+  try {
+    contentInputs.borrows = []
+    // Asked before stopPlayback and as a small step back: the worst order and mode a pause can arrive in.
+    const paused = await renderer.render(60, false, true); await paused.completion
+    expect(paused.approximate).toBeUndefined()
+    expect(us([shownInputs().w2])).toEqual(us([27.1 + 54 / 60]))
+    await renderer.stopPlayback()
+  } finally { await renderer.dispose() }
+})
+it('暂停帧就是最后上屏的预渲染播放帧：只换成同一帧的实时合成，不先画预渲染文件里的精确画面；跳到别的帧时先画的那一幅按容差取时刻', async () => {
+  const { renderer, readers } = await playedFromWindow(150)
+  try {
+    await renderer.stopPlayback()
+    let drawn = boundary.draws.length
+    contentInputs.borrows = []
+    const paused = await renderer.render(62, false, false); await paused.completion
+    expect(topDraws(drawn)).toEqual([['w2']])
+    expect(us([shownInputs().w2])).toEqual(us([27.1 + 56 / 60]))
+    // A jump to another frame (live composition slower than 40ms) still shows that frame's pre-rendered exact picture
+    // first, read at the same picture time as the window's playback (container timestamp tolerance).
+    drawn = boundary.draws.length
+    const jumped = await renderer.render(40, false, false); await jumped.completion
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(topDraws(drawn)).toEqual([['render-cache:opening:0'], ['w2']])
+    expect(readers.flatMap(reader => reader.reads).some(read => read.speculative && Math.abs(read.time - videoEditPictureSeconds(40 / 60)) < 1e-9)).toBe(true)
+  } finally { await renderer.dispose() }
+})

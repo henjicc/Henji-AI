@@ -342,6 +342,11 @@ export class VideoEditRenderTransport {
   async setRenderDivisor(divisor: number): Promise<void> { await this.ready; await this.request({ kind: 'scale', divisor }) }
   /** Paused preview only: positions forward playback at this frame ahead of play, so pressing play starts at once. */
   async armPlayback(frame: number): Promise<void> { await this.ready; await this.request({ kind: 'arm', frame }) }
+  /**
+   * Ends a play run: the Worker cancels at once every playback frame (one with a deadline) sent before this call and not
+   * on screen yet (answered `skipped`), then releases the playback decoders in queue order. Send it before the request of
+   * the frame that follows (the paused frame, a new run).
+   */
   stopPlayback(frame: number): void { if (!this.disposed) this.worker.postMessage({ kind: 'stopPlayback', id: 0, frame } satisfies RenderRequest) }
   /** 智能区域（4.7d）：已分析好的段落交给 Worker，下一次渲染即使用。 */
   setSmartRegions(regions: VideoEditSmartRegionSegments): void { if (!this.disposed) this.worker.postMessage({ kind: 'regions', regions, id: 0 } satisfies RenderRequest) }
