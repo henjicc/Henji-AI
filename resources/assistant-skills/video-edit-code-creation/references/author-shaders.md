@@ -13,7 +13,8 @@ async createWebGPU(device) => {
 
 - `createWebGPU` 每个实例只调用一次：在这里建着色器模块、管线、缓冲；`draw` 每帧调用，只写 uniform、建绑定组、提交命令。
 - `target` 是本帧输出纹理，格式以 `target.format` 为准（可能是 `rgba8unorm` 或 `rgba16float`），按格式缓存管线。输出为预乘 alpha。
-- `inputs` 只有滤镜有：`inputs.current` 是当前输入画面；`inputs.frames` 是模块 `frames` 声明的相邻帧 `{ offset, texture, available }`，顺序与声明一致。输入纹理归时间线所有，只读，不要销毁。
+- `inputs.images[参数名]` 是图片、视频参数的纹理 `{ texture, width, height }`（预乘 alpha，视频每帧是当前帧）。生成器和滤镜都有。**GPU 入口一律直接采样它，不要读 `assets`**：读 `assets` 会把这一帧从 GPU 拷成位图，4K 视频每帧多花好几毫秒；不读就不拷。
+- 滤镜另有 `inputs.current`（当前输入画面）和 `inputs.frames`（模块 `frames` 声明的相邻帧 `{ offset, texture, available }`，顺序与声明一致）。输入纹理归时间线所有，只读，不要销毁，只在这次 `draw` 里有效，不要跨帧缓存纹理对象。
 - 中间纹理由你创建与释放：尺寸变化时等待 `device.queue.onSubmittedWorkDone()` 后销毁旧纹理；`dispose` 里释放缓冲和纹理。
 - 用 `textureLoad` 按像素读输入最稳定；需要插值时自己做双线性。
 

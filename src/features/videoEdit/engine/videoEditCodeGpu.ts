@@ -99,16 +99,17 @@ export class VideoEditCodeGpu {
   }
   private authors(): VideoEditAuthorPrograms { return this.authorPrograms ??= new VideoEditAuthorPrograms(this.device) }
   async inspectAuthor(bundle: CodeAuthorBundle): Promise<CodeAuthorProgram> { return this.trackAuthor(async () => { await this.ready; this.assertLive(); return this.authors().inspect(bundle) }) }
-  async authorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, motionBlur = true): Promise<VideoEditCodePicture> {
-    return this.trackAuthor(() => this.renderAuthorGenerator(key, instanceKey, program, size, parameters, assets, info, overrides, motionBlur))
+  async authorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, motionBlur = true, images: AuthorGpuInputs['images'] = {}): Promise<VideoEditCodePicture> {
+    return this.trackAuthor(() => this.renderAuthorGenerator(key, instanceKey, program, size, parameters, assets, info, overrides, motionBlur, images))
   }
-  private async renderAuthorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, motionBlur = true): Promise<VideoEditCodePicture> {
+  private async renderAuthorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides: AuthorElementOverrides | undefined, motionBlur: boolean, images: AuthorGpuInputs['images']): Promise<VideoEditCodePicture> {
     await this.ready; this.assertLive()
     const runtime = await this.authors().instance(instanceKey, program)
     this.assertLive()
     const target = this.surface(key, size.width, size.height)
     const started = performance.now()
-    const layers = await runtime.render(target.picture.texture, size.width, size.height, parameters, assets, info, overrides, undefined, motionBlur)
+    for (const image of Object.values(images)) this.assertInput(image.texture)
+    const layers = await runtime.render(target.picture.texture, size.width, size.height, parameters, assets, info, overrides, { frames: [], images }, motionBlur)
     const completed = this.trackPerformance(key, { frame: Math.floor(info.time / info.frameDuration), cpuMs: performance.now() - started, gpuMs: 0, budgetMs: info.frameDuration * 1000, ...(layers ? { layers } : {}) }, started, started, performance.now())
     this.pending = this.device.queue.onSubmittedWorkDone().then(completed); this.counts.generatorFrames++
     return target.picture
@@ -126,7 +127,7 @@ export class VideoEditCodeGpu {
     const target = this.surface(key, input.width, input.height, input.textureFormat)
     if (target.picture.texture === input.texture) throw new Error('作者滤镜输入输出不能使用同一纹理。')
     const started = performance.now()
-    const layers = await runtime.render(target.picture.texture, input.width, input.height, parameters, {}, info, undefined, { current: input.texture, frames })
+    const layers = await runtime.render(target.picture.texture, input.width, input.height, parameters, {}, info, undefined, { current: input.texture, frames, images: {} })
     const completed = this.trackPerformance(key, { frame: Math.floor(info.time / info.frameDuration), cpuMs: performance.now() - started, gpuMs: 0, budgetMs: info.frameDuration * 1000, ...(layers ? { layers } : {}) }, started, started, performance.now())
     this.pending = this.device.queue.onSubmittedWorkDone().then(completed); this.counts.filterFrames++
     return target.picture
@@ -143,7 +144,7 @@ export class VideoEditCodeGpu {
       const target = this.surface(`warm:${instanceKey}`, size.width, size.height)
       const input = filter ? this.surface(`warm:input:${instanceKey}`, size.width, size.height) : undefined
       // The picture is discarded: free it at once (destroy waits for the submitted work) instead of holding a full frame per warmed instance.
-      try { await runtime.render(target.picture.texture, size.width, size.height, parameters, assets, info, undefined, input ? { current: input.picture.texture, frames: [] } : undefined) }
+      try { await runtime.render(target.picture.texture, size.width, size.height, parameters, assets, info, undefined, input ? { current: input.picture.texture, frames: [], images: {} } : { frames: [], images: {} }) }
       finally { this.releaseSurface(`warm:${instanceKey}`); if (input) this.releaseSurface(`warm:input:${instanceKey}`) }
     })
   }

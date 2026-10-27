@@ -20,7 +20,7 @@ import { codeMaterialVersion as codeMaterialSource } from '@/core/videoEdit/code
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeParameterValues } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeAuthorProgram as CodeMaterialProgram } from '@/core/videoEdit/codeAuthorProgram'
-import type { AuthorAssets, AuthorFrameInfo } from './videoEditAuthorModule'
+import type { AuthorAssets, AuthorFrameInfo, AuthorGpuImage } from './videoEditAuthorModule'
 import { evaluateCodeMaterialParameters, prepareCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
 import type { PreparedCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
 import type { CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
@@ -325,15 +325,20 @@ export class VideoEditCodeSources {
               if (!this.runtime!.draw) throw new Error('当前GPU会话不支持结构化图形绘制。')
               picture = await this.runtime!.draw(plan.key, plan.context.width, plan.context.height, plan.draws, undefined, Math.min(document.width / plan.context.width, document.height / plan.context.height) * plan.clip.scale)
             } else {
-              const assets: Record<string, CanvasImageSource> = {}
+              // GPU 入口直接采样纹理；位图只在作者代码真读 assets 时才生成。
+              const assets: Record<string, CanvasImageSource> = {}, images: Record<string, AuthorGpuImage> = {}
               for (const [name, value] of Object.entries(plan.parameters)) if (isCodeImageReference(value)) {
                 const input = inputs?.get(value.mediaId)
-                if (!input?.source) throw new Error(`作者图片参数 ${name} 没有可绘制的源画面。`)
-                assets[name] = input.source
+                if (!input) throw new Error(`作者图片参数 ${name} 没有可绘制的源画面。`)
+                images[name] = { texture: input.texture, width: input.width, height: input.height }
+                Object.defineProperty(assets, name, { enumerable: true, get: () => {
+                  if (!input.source) throw new Error(`作者图片参数 ${name} 没有可绘制的源画面。`)
+                  return input.source
+                } })
               }
               const sourceTime = videoEditClipSourceTimeAt(plan.clip, frame - plan.clip.start, document.frameRate, plan.transitionHandles && plan.program!.mode === 'static')
               const overrides = plan.clip.elementOverrides ? Object.fromEntries(Object.entries(plan.clip.elementOverrides).map(([id, value]) => [id, evaluateCodeElementOverride(value, sourceTime)])) : undefined
-              picture = await this.runtime!.authorGenerator(plan.key, plan.clip.id, plan.program!, plan.context, plan.parameters, assets satisfies AuthorAssets, { audio: plan.context.audio, audioTime: plan.context.audioTime, time: plan.context.time, frameDuration: 1 / document.fps, clip: { time: plan.context.localTime, duration: plan.clip.duration / document.fps } }, overrides, document.motionBlur === true)
+              picture = await this.runtime!.authorGenerator(plan.key, plan.clip.id, plan.program!, plan.context, plan.parameters, assets satisfies AuthorAssets, { audio: plan.context.audio, audioTime: plan.context.audioTime, time: plan.context.time, frameDuration: 1 / document.fps, clip: { time: plan.context.localTime, duration: plan.clip.duration / document.fps } }, overrides, document.motionBlur === true, images)
             }
             assertCurrent()
             if (plan.static) this.staticPictures.set(plan.key, picture)

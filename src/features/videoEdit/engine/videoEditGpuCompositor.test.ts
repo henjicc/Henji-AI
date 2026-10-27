@@ -43,7 +43,7 @@ it('设备丢失必须交给会话重建，父设备丢失同样使嵌套画面�
   await expect(child.prepare()).rejects.toBeInstanceOf(VideoEditGpuDeviceLostError)
   await child.dispose(); await compositor.dispose()
 })
-it('代码视频输入借用同设备预乘纹理，不上传、不夺取所有权，跨设备及取消明确拒绝', async () => {
+it('代码视频输入借用同设备预乘纹理，不上传、不夺取所有权，只有读位图才拷贝，跨设备及取消明确拒绝', async () => {
   const { compositor, device } = copyFixture(async () => {})
   const bitmap = { width: 640, height: 360, close: vi.fn() }
   const transfer = vi.fn(() => bitmap)
@@ -58,11 +58,16 @@ it('代码视频输入借用同设备预乘纹理，不上传、不夺取所有�
     const inputs = await compositor.prepareImages(new Map([['one', picture], ['two', picture]]), () => true)
     expect(inputs.get('one')).toMatchObject({ texture, owner: device, premultiplied: true })
     expect(inputs.get('two')!.texture).toBe(inputs.get('one')!.texture)
+    expect(transfer).not.toHaveBeenCalled()
     expect(inputs.get('one')!.source).toBe(bitmap)
     expect(inputs.get('two')!.source).toBe(bitmap)
     expect(transfer).toHaveBeenCalledOnce()
     expect(device.queue.copyExternalImageToTexture).not.toHaveBeenCalled()
     expect(compositor.imageDiagnostics()).toMatchObject({ textures: 0, bytes: 0, uploads: 0 })
+    const stale = inputs.get('one')!
+    await compositor.prepareImages(new Map([['one', picture]]), () => true)
+    expect(bitmap.close).toHaveBeenCalledOnce()
+    expect(() => stale.source).toThrow('过期')
     const foreign = new VideoEditCodePicture(texture, 640, 360, {} as GpuDevice)
     await expect(compositor.prepareImages(new Map([['bad', foreign]]), () => true)).rejects.toThrow('设备')
     await expect(compositor.prepareImages(new Map([['one', picture]]), () => false)).rejects.toThrow('取消')

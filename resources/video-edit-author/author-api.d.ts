@@ -117,10 +117,15 @@ export interface AuthorWebGL<P extends readonly AuthorParamDeclaration[] = reado
   draw(time: number, params: AuthorParamValues<P>, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo): void
   dispose?(): void | Promise<void>
 }
-/** 滤镜输入：纹理归时间线所有，只读，不要销毁。 */
+/** 图片、视频参数在时间线上的纹理，预乘 alpha。 */
+export interface AuthorGpuImage { texture: GPUTexture; width: number; height: number }
+/** GPU 输入：纹理归时间线所有，只读，不要销毁，只在这次 draw 里有效。 */
 export interface AuthorGpuInputs {
-  current: GPUTexture
+  /** 只有滤镜有：正在处理的画面。 */
+  current?: GPUTexture
   frames: ReadonlyArray<{ offset: number; texture: GPUTexture; available: boolean }>
+  /** 图片、视频参数的纹理，键同参数名。直接采样它，不要读 assets：读 assets 会把这一帧拷成位图。 */
+  images: { readonly [key: string]: AuthorGpuImage }
 }
 export interface AuthorWebGPU<P extends readonly AuthorParamDeclaration[] = readonly AuthorParamDeclaration[]> {
   draw(target: GPUTexture, time: number, params: AuthorParamValues<P>, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo, inputs?: AuthorGpuInputs): void | Promise<void>

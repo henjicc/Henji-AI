@@ -72,7 +72,7 @@ it('参数与时间变化复用目标，完整参数、素材和覆盖直接传�
     const nextInfo = { ...info, time: 2 }
     const second = await runtime.authorGenerator('frame', 'clip', program, size, { title: 'B' }, assets, nextInfo, overrides)
     expect(second).toBe(first)
-    expect(author.render).toHaveBeenLastCalledWith(first.texture, 16, 16, { title: 'B' }, assets, nextInfo, overrides, undefined, true)
+    expect(author.render).toHaveBeenLastCalledWith(first.texture, 16, 16, { title: 'B' }, assets, nextInfo, overrides, { frames: [], images: {} }, true)
     expect(runtime.diagnostics()).toMatchObject({ surfaces: 1, textureAllocations: 1, generatorFrames: 2 })
   } finally { await runtime.dispose() }
   expect(runtime.diagnostics()).toMatchObject({ surfaces: 0, residentBytes: 0 })
@@ -86,7 +86,7 @@ it('滤镜保留输入精度与相邻帧，拒绝跨设备、错误顺序和输�
     const frames = [{ offset: -.5, texture: input.texture, available: true }]
     const output = await runtime.authorFilter('filtered', 'effect', filter, { gain: .4 }, input, info, frames)
     expect(output.textureFormat).toBe('rgba16float')
-    expect(author.render).toHaveBeenLastCalledWith(output.texture, 16, 16, { gain: .4 }, {}, info, undefined, { current: input.texture, frames })
+    expect(author.render).toHaveBeenLastCalledWith(output.texture, 16, 16, { gain: .4 }, {}, info, undefined, { current: input.texture, frames, images: {} })
     const calls = author.render.mock.calls.length
     await expect(runtime.authorFilter('bad', 'effect', filter, {}, input, info, [])).rejects.toThrow('匹配输入')
     await expect(runtime.authorFilter('bad', 'effect', filter, {}, { ...input, owner: {} as GpuDevice }, info, frames)).rejects.toThrow('当前渲染设备')

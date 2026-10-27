@@ -49,6 +49,7 @@ export class VideoEditGpuCompositor {
   private readonly authorRuntimes = new Map<string, VideoEditAuthorRuntime>()
   private bitmapBridge?: VideoEditGpuBitmapBridge
   private readonly inputBitmaps = new Set<ImageBitmap>()
+  private inputGeneration = 0
   private readonly authorAssets = new Map<string, Record<string, ImageBitmap>>()
   private authorPresentation?: GpuRenderPipeline
   private authorTarget?: { texture: GpuTexture; width: number; height: number }
@@ -456,16 +457,25 @@ export class VideoEditGpuCompositor {
     this.retainTextures(new Set([...this.protectedImages, ...[...visibleText].map(id => `text:${id}`)]))
     for (const bitmap of this.inputBitmaps) bitmap.close()
     this.inputBitmaps.clear()
+    // GPU consumers sample the texture. The bitmap copy exists only for Canvas-side readers,
+    // made on first read and only within this frame (the texture is the timeline's for this frame).
+    const generation = ++this.inputGeneration
     const sources = new Map<VideoEditCodePicture, ImageBitmap>()
+    const bitmapOf = (picture: VideoEditCodePicture): ImageBitmap => {
+      if (generation !== this.inputGeneration || this.disposed) throw new DOMException('图片画面已过期。', 'AbortError')
+      let source = sources.get(picture)
+      if (!source) {
+        this.bitmapBridge ??= new VideoEditGpuBitmapBridge(this.device)
+        source = this.bitmapBridge.copy(picture.texture, picture.width, picture.height)
+        sources.set(picture, source); this.inputBitmaps.add(source)
+      }
+      return source
+    }
     return new Map<string, VideoEditCodeImageInput>([...pictures].map(([mediaId, picture]): [string, VideoEditCodeImageInput] => {
       if (picture instanceof VideoEditCodePicture) {
-        let source = sources.get(picture)
-        if (!source) {
-          this.bitmapBridge ??= new VideoEditGpuBitmapBridge(this.device)
-          source = this.bitmapBridge.copy(picture.texture, picture.width, picture.height)
-          sources.set(picture, source); this.inputBitmaps.add(source)
-        }
-        return [mediaId, { texture: picture.texture, width: picture.width, height: picture.height, owner: this.device, premultiplied: true, source }]
+        const input: VideoEditCodeImageInput = { texture: picture.texture, width: picture.width, height: picture.height, owner: this.device, premultiplied: true }
+        Object.defineProperty(input, 'source', { enumerable: true, get: () => bitmapOf(picture) })
+        return [mediaId, input]
       }
       const key = this.imageKey(picture)
       return [mediaId, { texture: this.texture(key, key, picture), width: picture.width, height: picture.height, owner: this.device, premultiplied: true, source: picture }]

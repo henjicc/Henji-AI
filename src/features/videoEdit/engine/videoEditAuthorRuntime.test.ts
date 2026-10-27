@@ -124,7 +124,7 @@ it('passes borrowed current and neighbouring GPU textures directly and never des
   const draw = vi.fn()
   const runtime = new VideoEditAuthorRuntime(device, { name: 'GPU 输入', kind: 'filter', frames: [-1, .5], createWebGPU: () => ({ draw }) })
   const info = { time: 1, frameDuration: 1 / 60, clip: { time: .5, duration: 3 } }
-  const inputs = { current, frames: [{ offset: -1, texture: previous, available: true }, { offset: .5, texture: current, available: false }] }
+  const inputs = { current, frames: [{ offset: -1, texture: previous, available: true }, { offset: .5, texture: current, available: false }], images: {} }
   await runtime.render(target, 10, 10, {}, {}, info, undefined, inputs)
   expect(draw.mock.calls[0][0]).toBe(target)
   expect(draw.mock.calls[0][7]).toBe(inputs)

@@ -41,11 +41,16 @@ export interface AuthorWebGPU {
   draw(target: GpuTexture, time: number, params: AuthorParameters, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo, inputs?: AuthorGpuInputs): void | Promise<void>
   dispose?(): void | Promise<void>
 }
+/** An image/video parameter as the timeline's own texture (premultiplied alpha). */
+export interface AuthorGpuImage { texture: GpuTexture; width: number; height: number }
 /** Borrowed for this call on the compositor's device. Authors own their pass
- * targets; current/neighbour textures remain owned by the timeline. */
+ * targets; current/neighbour/image textures remain owned by the timeline. */
 export interface AuthorGpuInputs {
-  current: GpuTexture
+  /** Filters only: the picture being filtered. */
+  current?: GpuTexture
   frames: ReadonlyArray<{ offset: number; texture: GpuTexture; available: boolean }>
+  /** Image and video parameters by key. Reading `assets` instead copies the frame into a bitmap. */
+  images: Readonly<Record<string, AuthorGpuImage>>
 }
 export interface AuthorModule {
   name: string
