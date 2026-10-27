@@ -320,6 +320,33 @@ describe('原生帧源：连续计划', () => {
     await again.return()
   })
 
+  it('同一文件同时有两个播放计划（嵌套序列与节目、同一序列的两个实例）：第二个用独立播放会话，不取消正在运行的计划，结束即关闭；名额不足时退回共享会话', async () => {
+    const channel = new FakeChannel(); const frames = backend(channel)
+    const source = await frames.open(media()).ready
+    const a = new AbortController(), b = new AbortController()
+    const first = source.schedule([0, 1 / 60], a.signal), firstNext = first.next(); await flush()
+    const second = source.schedule([5, 5 + 1 / 60], b.signal), secondNext = second.next(); await flush()
+    expect(channel.calls.filter(call => call.method === 'schedule').map(call => call.params.streamId)).toEqual(['vf-1', 'vf-2'])
+    expect(channel.calls.filter(call => call.method === 'openDecoder').map(call => call.params.purpose)).toEqual(['playback', 'playback'])
+    b.abort(); await secondNext; await second.return(undefined); await frames.settled()
+    expect(channel.calls.filter(call => call.method === 'closeStream').map(call => call.params.streamId)).toEqual(['vf-2'])
+    a.abort(); await firstNext; await first.return(undefined)
+    // A later plan, with nothing else running, takes the shared session again.
+    const third = source.schedule([2]), thirdNext = third.next(); await flush()
+    expect(channel.last('schedule')).toMatchObject({ streamId: 'vf-1' })
+    channel.frame('vf-1', { kind: 'schedule', id: channel.last('schedule').scheduleId as string, index: 0 }, 2_000_000)
+    ;(await thirdNext).value?.close(); await third.return(undefined)
+    const log = vi.fn(), full = new VideoEditNativeFrames({ channel, localPath: () => 'D:/a.mov', maxSessions: 1, log })
+    const only = await full.open(media({ sourceRevision: 'full' })).ready
+    const c = new AbortController(), d = new AbortController()
+    const held = only.schedule([0], c.signal), heldNext = held.next(); await flush()
+    const extra = only.schedule([5], d.signal), extraNext = extra.next(); await flush()
+    expect(log).toHaveBeenCalledWith('info', expect.any(String), 'video_edit.decode.schedule.shared', expect.objectContaining({ mediaId: 'm' }))
+    const streams = channel.calls.filter(call => call.method === 'schedule').slice(-2).map(call => call.params.streamId)
+    expect(streams[0]).toBe(streams[1])
+    c.abort(); d.abort(); await heldNext; await extraNext; await held.return(undefined); await extra.return(undefined)
+  })
+
   it('帧丢失（后面的帧已到）不会卡住播放：宽限期后按缺帧处理；计划失败后剩余各项只等一次宽限', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] })
     const channel = new FakeChannel()

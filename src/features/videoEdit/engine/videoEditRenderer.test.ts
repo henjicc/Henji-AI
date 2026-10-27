@@ -388,9 +388,9 @@ function inputReaders(): { backend: VideoEditFrameBackend; readers: Array<{ excl
     open: media => ({ key: media.path, ready: Promise.resolve({ codec: 'avc1',
       clipFrames: options => {
         const reader = { exclusive: options?.exclusive === true, times: [] as number[], closed: false }; readers.push(reader)
-        return { async *frames() {}, async frameAt(time: number) { reader.times.push(time); return picture(gridPicture(time)) }, close: () => { reader.closed = true } }
+        return { async *frames(start: number) { for (let index = 0; index < 600; index++) yield picture(gridPicture(start) + index / 60) }, async frameAt(time: number) { reader.times.push(time); return picture(gridPicture(time)) }, close: () => { reader.closed = true } }
       },
-      clipAudio: () => undefined, async *schedule() {} }) }),
+      clipAudio: () => undefined, async *schedule(timestamps: readonly number[]) { for (const time of timestamps) yield picture(gridPicture(time)) } }) }),
     release: () => {},
     seeker: () => ({ sample: async () => ({ hit: false }), dispose: async () => {} }),
   }
@@ -605,6 +605,47 @@ it('变速嵌套片段正向播放：子序列只建一条按父片段速度取�
     expect(boundary.scheduled).toHaveLength(2)
     expect(boundary.scheduled[1].timestamps.slice(0, 3)).toEqual([0, 1, 2].map(frame => videoEditPictureSeconds(frame / 60)))
   } finally { await renderer.dispose() }
+})
+it('同一嵌套序列的两个实例同时显示在不同子帧：各用自己的嵌套渲染器与一条计划，不再每帧重建；先后复用同一序列沿用原渲染器', async () => {
+  boundary.scheduled = []
+  const document = { ...nestedFixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
+  const child = document.sequences!.find(sequence => sequence.id !== document.id)!
+  child.clips[0].duration = 600; child.frameRate = { numerator: 60, denominator: 1 }; document.media = document.media.map(media => ({ ...media, durationSeconds: 20 }))
+  // n1 shows child frames f, n2 (another track, starting 60 frames later) child frames f − 60; afterwards n3 reuses the sequence alone.
+  document.clips = [{ ...document.clips[0], id: 'n1', start: 0, duration: 120 }, { ...document.clips[0], id: 'n2', track: 2, start: 60, duration: 120 }, { ...document.clips[0], id: 'n3', start: 180, duration: 60 }]
+  const renderer = new VideoEditRenderer(document, 3840)
+  try {
+    for (let frame = 60; frame < 80; frame++) {
+      const result = await renderer.render(frame, true); await result.completion
+      expect(us([...result.sourceTimestamps].sort((a, b) => a - b)), `第 ${frame} 帧`).toEqual(us([(frame - 60) / 60, frame / 60]))
+    }
+    expect(boundary.scheduled).toHaveLength(2); expect(renderer.codeDiagnostics().nestedRenderers).toBe(2)
+    // n1 ends at 120: n2 keeps its own renderer and plan.
+    for (let frame = 118; frame < 124; frame++) await (await renderer.render(frame, true)).completion
+    expect(boundary.scheduled).toHaveLength(2); expect(renderer.codeDiagnostics().nestedRenderers).toBe(1)
+    // After n2 (ends at 180) the next use of the sequence takes the warm renderer over instead of opening another.
+    for (let frame = 178; frame < 183; frame++) await (await renderer.render(frame, true)).completion
+    expect(renderer.codeDiagnostics().nestedRenderers).toBe(1)
+  } finally { await renderer.dispose() }
+})
+it('下层画面输入覆盖同一文件两段剪辑的交叉溶解：后进入的一段用独占读取位置，两边都只向前续读', async () => {
+  const { backend, readers } = inputReaders()
+  const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
+  document.media = document.media.map(media => ({ ...media, durationSeconds: 30 }))
+  const base = document.clips[0]
+  const source = "export default {name:\"下层\",kind:\"generator\",mode:\"dynamic\",width:3840,height:2160,durationSeconds:20,params:[{key:\"below\",type:\"image\",title:\"下层\",default:null}],draw(){}}"
+  document.codeMaterials = [{ id: 'definition', name: '下层', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 4, languageVersion: 4, ...testCodeManifest(source, document) }] }]
+  const code = { definitionId: 'definition', versionId: 'v', parameters: { below: { kind: 'sequence' as const, mediaId: 'below' as const } } }
+  document.items.push({ id: 'code', name: '下层', kind: 'code', code })
+  document.clips = [{ ...base, id: 'c1', start: 0, duration: 120 }, { ...base, id: 'c2', start: 120, duration: 120, sourceInUs: 10_000_000 }, { ...base, id: 'code', itemId: 'code', kind: 'code', code, track: 3, start: 100, duration: 40 }]
+  document.transitions = [{ id: 'x', kind: 'cross_dissolve', leftClipId: 'c1', rightClipId: 'c2', durationFrames: 20 }]
+  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  try { for (let frame = 104; frame < 136; frame++) await (await renderer.render(frame, true)).completion } finally { await renderer.dispose() }
+  // The lower-tracks input reads c1 on the file's shared reader and c2 (entering at the window, 110) on its own.
+  const single = readers.filter(reader => reader.times.length)
+  expect(single.map(reader => reader.exclusive)).toEqual([false, true])
+  for (const reader of single) expect(reader.times.every((time, index) => index === 0 || time > reader.times[index - 1])).toBe(true)
+  expect(us([single[1].times[0]])).toEqual(us([videoEditPictureSeconds(10 - 10 / 60)]))
 })
 it('正向播放时钟落后时在同一计划内跳帧追上，不重新定位；跳得太远才重建', async () => {
   boundary.scheduled = []

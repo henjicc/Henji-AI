@@ -459,11 +459,29 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
 
   async *schedule(timestamps: readonly number[], signal?: AbortSignal): AsyncGenerator<VideoEditNativePicture | null, void, unknown> {
     if (this.media.kind !== 'video') return
+    // Another plan of this file is running (another renderer: a nested sequence, a second instance of one, the
+    // program beside it): a second plan on the shared session would cancel it (the service runs one plan per
+    // session), so this one runs on a playback session of its own, closed with the plan. Without room for one it
+    // takes the shared session as before.
+    const concurrent = this.activePlayback > 0
     this.active++; this.activePlayback++; this.lastUsed = performance.now(); this.owner.cancelSpeculative()
+    let own: VideoEditNativeDecoderSession | undefined
     try {
       await this.warming?.done.catch(() => undefined)
-      if (!signal?.aborted) yield* (await this.session('playback')).run({ times: timestamps }, signal)
-    } finally { this.active--; this.activePlayback--; this.lastUsed = performance.now() }
+      if (signal?.aborted) return
+      if (concurrent) {
+        own = await this.owner.openSession(this.media, this.path, 'playback').catch(error => {
+          if (videoEditNativeFailureKind(error) !== 'budget') throw error
+          this.owner.log('info', '解码会话已满，同一素材的第二个播放计划改用共享会话', 'video_edit.decode.schedule.shared', { mediaId: this.media.id, sessions: this.owner.openSessions })
+          return undefined
+        })
+        if (own) this.owner.log('debug', '同一素材同时播放，第二个计划使用独立会话', 'video_edit.decode.schedule.concurrent', { mediaId: this.media.id })
+      }
+      if (!signal?.aborted) yield* (own ?? await this.session('playback')).run({ times: timestamps }, signal)
+    } finally {
+      this.active--; this.activePlayback--; this.lastUsed = performance.now()
+      if (own) this.owner.track(own.close())
+    }
   }
 
   private async *frames(start: number): AsyncGenerator<VideoEditNativePicture, void, unknown> {

@@ -106,7 +106,7 @@ interface CodeInputSession { renderer: VideoEditRenderer; tail: Promise<unknown>
  * `completions`: GPU completion of code input pictures anywhere in the frame's tree. Samplers follow them on the same
  * device queue, so nothing waits for them while preparing; the top-level frame's completion includes them.
  */
-interface NestedFrameContext { pictures: Map<string, Promise<VideoEditCodePicture>>; keys: Map<string, Set<string>>; inputs: Map<VideoEditRenderer, Map<string, Promise<VideoEditCodePicture>>>; bytes: number; completions: Array<Promise<void>> }
+interface NestedFrameContext { pictures: Map<string, Promise<VideoEditCodePicture>>; keys: Map<string, Set<string>>; inputs: Map<VideoEditRenderer, Map<string, Promise<VideoEditCodePicture>>>; bytes: number; completions: Array<Promise<void>>; instances: Set<string> }
 /**
  * The render target of a code input session: one per session (each input renderer owns its targets), drawn again
  * every frame. A target per sample allocated and destroyed a 4K rgba16float texture (66MB) per frame and input.
@@ -172,6 +172,15 @@ interface VideoSource {
 /** One bounded decoder per visible clip; all inputs close when the view detaches. */
 export class VideoEditRenderer {
   private readonly nestedPictures = new Map<string, { renderer: VideoEditRenderer; tail: Promise<unknown> }>()
+  /**
+   * The nested renderer each showing instance of a nested sequence draws with (owner only; instance → `nestedPictures`
+   * key). The first instance uses the sequence's own key (the one the lookahead prepares); another instance showing at
+   * the same time gets a renderer of its own and keeps it while it shows. One renderer alternating between two child
+   * frames rebuilt its playback plan and re-positioned its decoders every frame.
+   */
+  private readonly nestedInstances = new Map<string, string>()
+  /** This renderer's key among its owner's nested renderers ('' for the owner itself); scopes the instance IDs of its clips. */
+  private instanceKey = ''
   private readonly nestedSounds = new Map<string, VideoEditRenderer>()
   /** 最近一次混音时仍在用的声音来源与嵌套声音（键：'audio:…' 来源键或嵌套片段 ID）按最近使用排序，空闲超出上限才释放。 */
   private readonly idleAudio = new Map<string, true>()
@@ -187,6 +196,12 @@ export class VideoEditRenderer {
    * is exclusive, so the reference keeps its own decoder position; `history` keeps played pictures for small steps back.
    */
   private codeInput?: { history: boolean }
+  /**
+   * Set on the renderer of a lower-tracks code input, which reads every clip by single-frame reads: a clip whose file
+   * another clip of this renderer already reads (both sides of a crossfade between two cuts of one recording) gets an
+   * exclusive reader, so the two never move one shared decoder back and forth every frame.
+   */
+  private exclusiveWhenShared = false
   private readonly filterInputs = new Map<string, CodeInputSession>()
   private readonly sources = new Map<string, Promise<VideoSource>>()
   private playback?: PlaybackSchedule
@@ -262,10 +277,32 @@ export class VideoEditRenderer {
     let entry = owner.nestedPictures.get(key)
     if (!entry) {
       const renderer = new VideoEditRenderer(child, this.previewWidth, undefined, 64 * 1024 ** 2, this.frames, owner)
-      renderer.setRenderDivisor(this.renderDivisor)
+      renderer.setRenderDivisor(this.renderDivisor); renderer.instanceKey = key
       entry = { renderer, tail: Promise.resolve() }; owner.nestedPictures.set(key, entry)
     }
     return entry
+  }
+  /**
+   * The `nestedPictures` key the instance `clip` of the nested sequence `childKey` draws with this frame (see
+   * `nestedInstances`). `showing`: the clips this renderer draws this frame. The sequence's own key passes on to a new
+   * instance when its holder no longer shows (a cut to the next multicam segment or the next use of the sequence keeps
+   * the warm renderer, as before); only a holder still showing makes the new instance take a renderer of its own.
+   */
+  private nestedInstanceKey(childKey: string, clip: VideoEditClip, context: NestedFrameContext, showing: ReadonlySet<string>): string {
+    const owner = this.nestedOwner ?? this, instance = JSON.stringify([this.instanceKey, clip.id])
+    let key = owner.nestedInstances.get(instance)
+    if (key === undefined) {
+      const holder = [...owner.nestedInstances].find(([other, value]) => value === childKey && other !== instance)?.[0]
+      // A holder of this renderer drawn by this renderer shows iff its clip is among this frame's clips; one drawn
+      // elsewhere in the tree counts as showing unless it is already known to show (conservative: a renderer of its own).
+      const [holderParent, holderClip] = holder === undefined ? ['', ''] : JSON.parse(holder) as [string, string]
+      const holderShows = holder !== undefined && (context.instances.has(holder) || holderParent !== this.instanceKey || showing.has(holderClip))
+      if (holder !== undefined && !holderShows) owner.nestedInstances.delete(holder)
+      key = holderShows ? `${childKey}\u0000${instance}` : childKey
+      owner.nestedInstances.set(instance, key)
+    }
+    context.instances.add(instance)
+    return key
   }
   private lookaheadRenderer(scopes: readonly VideoEditLookaheadScope[], create: boolean): VideoEditRenderer | undefined {
     return scopes.reduce<VideoEditRenderer | undefined>((renderer, scope) => {
@@ -346,7 +383,7 @@ export class VideoEditRenderer {
   observeAuthorElements(frame: number): import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation {
     return this.codeSources?.observeElements(frame) ?? { sequenceId: this.document.id, revision: this.document.revision, frame, clips: [] }
   }
-  codeDiagnostics() { return { sources: this.codeSources?.diagnostics(), gpu: this.compositor?.codeDiagnostics(), images: this.compositor?.imageDiagnostics(), decodedImages: this.images.size, decodedImageBytes: [...this.images.values()].reduce((sum, entry) => sum + entry.bytes, 0), imageDecodes: this.imageLoads, codeInputSessions: this.codeInputs.size, codeInputsPrewarmed: this.prewarmedInputs.size } }
+  codeDiagnostics() { return { sources: this.codeSources?.diagnostics(), gpu: this.compositor?.codeDiagnostics(), images: this.compositor?.imageDiagnostics(), decodedImages: this.images.size, decodedImageBytes: [...this.images.values()].reduce((sum, entry) => sum + entry.bytes, 0), imageDecodes: this.imageLoads, codeInputSessions: this.codeInputs.size, codeInputsPrewarmed: this.prewarmedInputs.size, nestedRenderers: this.nestedPictures.size } }
   /** `frames` is the only decoding dependency; the renderer never touches a decoder implementation. */
   constructor(public document: VideoEditComposition, private readonly previewWidth?: number, surface?: OffscreenCanvas, cacheBudgetBytes = 8 * 1024 ** 3, private readonly frames: VideoEditFrameBackend = new VideoEditBrowserFrames(), private readonly nestedOwner?: VideoEditRenderer, private sequencePath: string[] = [document.id], private readonly timing?: (stage: string, durationMs?: number) => void) {
     if (document.sequences) assertVideoEditSequenceGraph({ items: document.items, sequences: document.sequences })
@@ -383,12 +420,16 @@ export class VideoEditRenderer {
   private source(key: string, media: VideoEditMedia, audioStream?: number): Promise<VideoSource> {
     let source = this.sources.get(key)
     if (!source) {
+      const exclusive = !!this.codeInput || this.exclusiveWhenShared && !key.startsWith('audio:') && [...this.sources.keys()].some(other => {
+        const clip = other.startsWith('audio:') ? undefined : this.document.clips.find(value => value.id === other.split(BLEND_PARTNER_KEY)[0])
+        return clip !== undefined && this.clipMedia(this.document, clip)?.path === media.path
+      })
       const demux = this.frames.open(media)
       source = (async () => {
         try {
           const shared = await demux.ready
           if (this.disposed) throw new Error('预览已关闭。')
-          return { demux: demux.key, media, video: shared.clipFrames(this.codeInput ? { exclusive: true } : undefined), audio: shared.clipAudio(audioStream), previousTime: -1, codec: shared.codec }
+          return { demux: demux.key, media, video: shared.clipFrames(exclusive ? { exclusive: true } : undefined), audio: shared.clipAudio(audioStream), previousTime: -1, codec: shared.codec }
         } catch (error) { this.release({ demux: demux.key }); if (this.sources.get(key) === source) this.sources.delete(key); throw error }
       })()
       this.sources.set(key, source)
@@ -725,7 +766,11 @@ export class VideoEditRenderer {
    * export-quality composition of those tracks.
    */
   private codeInputRenderer(input: Pick<ReturnType<typeof codeMediaInputComposition>, 'kind' | 'document'>): VideoEditRenderer {
-    if (input.kind !== 'video') return new VideoEditRenderer(input.document, undefined, undefined, 1, this.frames, this, this.sequencePath)
+    if (input.kind !== 'video') {
+      const below = new VideoEditRenderer(input.document, undefined, undefined, 1, this.frames, this, this.sequencePath)
+      below.exclusiveWhenShared = true
+      return below
+    }
     const history = !!this.previewWidth
     const renderer = new VideoEditRenderer(input.document, undefined, undefined, history ? Math.max(1, input.document.width * input.document.height * CODE_INPUT_HISTORY_BYTES_PER_PIXEL) : 1, this.frames, this, this.sequencePath)
     renderer.codeInput = { history }
@@ -942,7 +987,7 @@ export class VideoEditRenderer {
     const document = this.document; const epoch = this.presentationEpoch
     // A filter prefix limits visible passes, not audio, tracking or explicit media references.
     const sourceDocument = nestedRender?.sourceDocument ?? document
-    const nestedContext: NestedFrameContext = nestedRender?.context ?? { pictures: new Map(), keys: new Map(), inputs: new Map(), bytes: 0, completions: [] }
+    const nestedContext: NestedFrameContext = nestedRender?.context ?? { pictures: new Map(), keys: new Map(), inputs: new Map(), bytes: 0, completions: [], instances: new Set() }
     const path = nestedRender?.path ?? [document.id]
     const canPresent = (): boolean => !this.disposed && this.document === document && this.presentationEpoch === epoch && shouldPresent()
     const visible = videoEditVisibleTracks(document)
@@ -1055,21 +1100,26 @@ export class VideoEditRenderer {
     /** 快速拖动时以关键帧近似显示的图层数（含嵌套序列里的）；大于 0 时节目在指针停住后补精确帧。 */
     let approximatePictures = 0
     let singleFrameReads = 0
+    const showingIds = new Set(active.map(clip => clip.id))
     const picturesPending = active.map(async clip => {
       if (clip.kind === 'sequence') {
         const child = videoEditNestedComposition(document, clip)!
         if (path.includes(child.id) || path.length >= VIDEO_EDIT_MAX_SEQUENCE_DEPTH) throw new Error('嵌套序列存在循环或超过可渲染层数。')
         const childFrame = videoEditNestedPictureFrame(document, clip, child, frame)
         const childKey = videoEditNestedPictureKey(child, clip)
+        const rendererKey = this.nestedInstanceKey(childKey, clip, nestedContext, showingIds)
         const key = `${quality}:${childKey}:${childFrame}`
         let picture = nestedContext.pictures.get(key)
+        // A renderer whose instance shows a picture another instance already drew this frame stays alive (it holds
+        // that instance's decoders and plan).
+        if (!nestedContext.keys.has(rendererKey)) nestedContext.keys.set(rendererKey, new Set())
         if (!picture) {
           const size = videoEditRenderSize(child.width, child.height, this.renderDivisor)
           nestedContext.bytes += size.width * size.height * 8
           if (nestedContext.bytes > 512 * 1024 ** 2) throw new Error('当前嵌套画面超过显存预算，请降低回放分辨率或减少同时显示的嵌套片段。')
-          const entry = this.nestedPicture(child, childKey)
+          const entry = this.nestedPicture(child, rendererKey)
           const targetKey = `nested:frame:${childFrame}`
-          const keys = nestedContext.keys.get(childKey) ?? new Set<string>(); keys.add(targetKey); nestedContext.keys.set(childKey, keys)
+          nestedContext.keys.get(rendererKey)!.add(targetKey)
           const renderer = entry.renderer
           const playing = sequential && !clip.reverse
           // The parent's upcoming frames mapped through this clip's speed: the child schedules exactly the pictures it will show.
@@ -1086,7 +1136,7 @@ export class VideoEditRenderer {
           } : undefined
           picture = entry.tail.catch(() => undefined).then(async () => {
             const nestedStarted = performance.now()
-            const result = await renderer.render(childFrame, playing, _scrubbing, canPresent, undefined, { context: nestedContext, key: targetKey, path: [...path, child.id], ownerKey: childKey, ...(playbackPlan ? { playbackPlan } : {}) }, quality)
+            const result = await renderer.render(childFrame, playing, _scrubbing, canPresent, undefined, { context: nestedContext, key: targetKey, path: [...path, child.id], ownerKey: rendererKey, ...(playbackPlan ? { playbackPlan } : {}) }, quality)
             if (!result.presented || !result.nestedPicture) throw new DOMException('旧嵌套画面已取消。', 'AbortError')
             effectErrors.push(...(result.effectErrors ?? []))
             if (!nestedRender) recordVideoEditPreparation('nestedRender', performance.now() - nestedStarted)
@@ -1272,6 +1322,8 @@ export class VideoEditRenderer {
       const seeker = this.seekers.get(path); this.seekers.delete(path); await seeker?.dispose()
     }
     if (!nestedRender && !keepLive) {
+      // Instances not showing any more give up their renderer key; the ones still showing keep theirs.
+      for (const instance of [...this.nestedInstances.keys()]) if (!nestedContext.instances.has(instance)) this.nestedInstances.delete(instance)
       for (const [id, entry] of this.nestedPictures) if (nestedContext.keys.has(id)) (await entry.renderer.compositor?.code())?.releaseNestedFrames(nestedContext.keys.get(id)!)
       for (const id of retireIdle(this.idleNested, [...this.nestedPictures.keys()].filter(id => !nestedContext.keys.has(id) && !this.warmScopes.has(id)), scrubLimit)) {
         const entry = this.nestedPictures.get(id); this.nestedPictures.delete(id); await entry?.renderer.dispose()
