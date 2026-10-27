@@ -7,7 +7,7 @@ import { expandPinnedCodeComponents } from './codeMaterial/components'
 
 export type CodeSourceCompiler = (files: CodeMaterialFiles) => Promise<CodeMaterialProgram>
 export interface CodeMaterialDefinitionResult { definition: CodeMaterialDefinition; program: CodeMaterialProgram }
-export interface CodeVersionPublication { imports: CodeComponentPin[]; name?: string; write(definitionId: string, name: string, files: CodeMaterialFiles, folder?: string): Promise<{ folder: string; files: CodeFileReference[] }> }
+export interface CodeVersionPublication { imports: CodeComponentPin[]; name?: string; project?: { commit: string; entry: string }; write(definitionId: string, name: string, files: CodeMaterialFiles, folder?: string): Promise<{ folder?: string; files: CodeFileReference[] }> }
 /** Hash-addressed source is stored separately; IR is rebuildable cache. */
 export async function makeCodeMaterialDefinition(source: string | CodeMaterialFiles, compile: CodeSourceCompiler, publication: CodeVersionPublication, identity?: { id: string; folder?: string }): Promise<CodeMaterialDefinitionResult> {
   const addressed = await addressCodeMaterialFiles(source)
@@ -15,7 +15,7 @@ export async function makeCodeMaterialDefinition(source: string | CodeMaterialFi
   const program = await compile(expandPinnedCodeComponents(contents, publication.imports, documentCodeSourceResolver()))
   const id = identity?.id ?? crypto.randomUUID(); const name = publication.name ?? program.name
   const stored = await publication.write(id, name, contents, identity?.folder)
-  const version = { id: crypto.randomUUID(), apiVersion: program.apiVersion, languageVersion: program.languageVersion, entry: addressed.entry, files: stored.files, ...(publication.imports.length ? { imports: publication.imports } : {}) }
+  const version = { id: crypto.randomUUID(), apiVersion: program.apiVersion, languageVersion: program.languageVersion, entry: addressed.entry, files: stored.files, ...(publication.project ? { project: publication.project } : {}), ...(publication.imports.length ? { imports: publication.imports } : {}) }
   const definition = codeMaterialDefinitionSchema.parse({ id, name, ...(stored.folder ? { folder: stored.folder } : {}), defaultVersionId: version.id, versions: [version] })
   return { definition, program }
 }

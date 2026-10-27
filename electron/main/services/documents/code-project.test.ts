@@ -6,6 +6,8 @@ import git from 'isomorphic-git'
 import { beforeEach, afterEach, it, expect, vi } from 'vitest'
 import { CodeProjectRepository } from './code-project'
 import { codeDigest } from './code-git'
+import { transferGitCode } from './code-git-transfer'
+import { parseGitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
 let root: string
 let repo: CodeProjectRepository
 beforeEach(async () => { root = await fsp.mkdtemp(path.join(os.tmpdir(), 'henji-code-project-')); await fsp.mkdir(path.join(root, '.henji')); repo = new CodeProjectRepository(path.join(root, '代码')) })
@@ -50,4 +52,31 @@ it('提交失败恢复文件与暂存区；拒绝捕获用户暂存区', async (
   await fsp.writeFile(path.join(repo.dir, 'user.ts'), 'user')
   await git.add({ fs, dir: repo.dir, filepath: 'user.ts' })
   await expect(repo.change({ message: '不能混入', changes: [edit('a.ts', 'new', 'a')] })).rejects.toThrow('user.ts')
+})
+it('入口闭包递归相对导入、重导出、循环、着色器，忽略说明和外部模块，按提交缓存', async () => {
+  const first = await repo.change({ message: '源码树', changes: [
+    edit('entries/opening.ts', 'import {x} from "../style"; import shader from "../style/a.wgsl"; import "https://example.test/m.js"; export default {x,shader};'),
+    edit('style/index.ts', 'export {x} from "./tokens"'), edit('style/tokens.ts', 'import "./index"; export const x=1'), edit('style/a.wgsl', 'fn main() {}'), edit('README.md', '说明'), edit('archive/unused.ts', 'unused'),
+  ] })
+  const closure = await repo.resolve('entries/opening.ts')
+  expect(closure.files.map(file => file.path)).toEqual(['entries/opening.ts', 'style/a.wgsl', 'style/index.ts', 'style/tokens.ts'])
+  await repo.change({ message: '更新共享样式', changes: [edit('style/tokens.ts', 'export const x=2', 'import "./index"; export const x=1')] })
+  expect(await repo.resolve('entries/opening.ts', first)).toEqual(closure)
+  expect((await repo.resolve('entries/opening.ts')).commit).not.toBe(first)
+  await expect(repo.resolve('missing.ts')).rejects.toThrow('missing.ts')
+  const broken = await repo.change({ message: '缺失依赖', changes: [edit('broken.ts', 'export * from "../outside"')] })
+  await expect(repo.resolve('broken.ts', broken)).rejects.toThrow('broken.ts 导入 ../outside')
+})
+it('跨项目收集工程闭包保留所有路径与字节，不覆盖目标作者树', async () => {
+  await repo.change({ message: '源码树', changes: [edit('entries/a.ts', 'import "../style/a.wgsl"'), edit('style/a.wgsl', 'shader')] })
+  const closure = await repo.resolve('entries/a.ts')
+  const target = new CodeProjectRepository(path.join(root, 'other', '代码'))
+  await fsp.mkdir(path.join(root, 'other', '.henji'), { recursive: true })
+  const head = await target.change({ message: '目标树', changes: [edit('entries/a.ts', 'keep')] })
+  const mapped = await transferGitCode(closure.files.map(file => file.location), target.dir)
+  for (const file of closure.files) expect(await target.read(mapped.get(file.location)!, file.hash)).toBe(await repo.read(file.location, file.hash))
+  expect(await target.head()).toBe(head)
+  expect(await fsp.readFile(path.join(target.dir, 'entries/a.ts'), 'utf8')).toBe('keep')
+  const snapshot = parseGitCodeLocation(mapped.get(closure.files[0].location)!)!
+  expect((await target.resolve(closure.entry, snapshot.oid)).files).toHaveLength(2)
 })

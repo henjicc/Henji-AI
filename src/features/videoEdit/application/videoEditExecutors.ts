@@ -5,7 +5,6 @@ import { discardVideoEditCodeFiles, codePublicationFiles } from './videoEditCode
 import { codePerformanceMessage, type CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 import { withVideoEditCurrentMetadata, saveVideoEdit, editVideoProject, restoreVideoEditSnapshot, requireVideoEditInstance, listVideoEditInstances, getVideoEditProjectView, setVideoEditProjectView, switchVideoEditSequence, getVideoEditTimelineView, setVideoEditTimelineView, validateVideoEditTimelineView, validateVideoEditProgramControl, setVideoEditView, videoEditProgramCommandIdentity, restoreVideoEditProgramCommandIdentity, subscribeVideoEditView, subscribeVideoEditDomain, videoEditDomainRevision as videoEditRevision, type VideoEditProjectView, type VideoEditTimelineView } from './videoEditService'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
-import { codeFilesFromInput } from '@/core/videoEdit/codeMaterial/sources'
 import { assertVideoEditAnnotationTransition } from '@/core/videoEdit/annotations'
 import { loadFontLibrary } from '@/platform/fonts'
 import { GENERIC_FONT_FACES } from '@/core/fonts/catalog'
@@ -358,8 +357,8 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
       if (step.operation.kind !== 'create') throw new Error('源码版本不可删除或原位改写，请创建新候选。')
       const inputs = step.operation.items.map(item => {
         const values = item.properties
-        if (Object.keys(values).some(key => !['video_edit.code_version.source', 'video_edit.code_version.files', 'video_edit.code_version.entry', 'video_edit.code_version.definition_id'].includes(key)) || typeof values['video_edit.code_version.definition_id'] !== 'string') throw new Error('创建源码版本只接受作者源码和所属素材定义。')
-        return { ...codeFilesFromInput({ source: values['video_edit.code_version.source'] as string | undefined, files: values['video_edit.code_version.files'] as Record<string, string> | undefined, entry: values['video_edit.code_version.entry'] as string | undefined }), definitionId: values['video_edit.code_version.definition_id'] }
+        if (Object.keys(values).some(key => !['video_edit.code_version.source', 'video_edit.code_version.files', 'video_edit.code_version.entry', 'video_edit.code_version.project_commit', 'video_edit.code_version.definition_id'].includes(key)) || typeof values['video_edit.code_version.definition_id'] !== 'string') throw new Error('创建源码版本只接受作者源码和所属素材定义。')
+        return { source: values['video_edit.code_version.source'] as string | undefined, files: values['video_edit.code_version.files'] as Record<string, string> | undefined, entry: values['video_edit.code_version.entry'] as string | undefined, projectCommit: values['video_edit.code_version.project_commit'] as string | undefined, definitionId: values['video_edit.code_version.definition_id'] }
       })
       const typeReports: CodeTypeCheckReport[] = []
       const ids = await createVideoEditCodeVersions(before.id, inputs, context?.signal, measurements, typeReports)
@@ -369,10 +368,10 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
     if (this.entityType === 'video_edit.code_material' && step.operation.kind === 'create') {
       const inputs = step.operation.items.map(item => {
         const values = item.properties
-        if (Object.keys(values).some(key => !['video_edit.code_material.source', 'video_edit.code_material.files', 'video_edit.code_material.entry', 'video_edit.code_material.name', 'video_edit.code_material.bin_id'].includes(key))) throw new Error('创建代码素材仅接受作者源码、名称与素材箱；版本和运行产物由检查服务维护。')
+        if (Object.keys(values).some(key => !['video_edit.code_material.source', 'video_edit.code_material.files', 'video_edit.code_material.entry', 'video_edit.code_material.project_entry', 'video_edit.code_material.name', 'video_edit.code_material.bin_id'].includes(key))) throw new Error('创建代码素材仅接受作者源码、名称与素材箱；版本和运行产物由检查服务维护。')
         const name = values['video_edit.code_material.name']; const binId = values['video_edit.code_material.bin_id']
         if (name !== undefined && typeof name !== 'string' || binId !== undefined && typeof binId !== 'string') throw new Error('名称和素材箱引用必须为字符串。')
-        return { ...codeFilesFromInput({ source: values['video_edit.code_material.source'] as string | undefined, files: values['video_edit.code_material.files'] as Record<string, string> | undefined, entry: values['video_edit.code_material.entry'] as string | undefined }), ...(name !== undefined ? { name } : {}), ...(binId ? { binId } : {}) }
+        return { source: values['video_edit.code_material.source'] as string | undefined, files: values['video_edit.code_material.files'] as Record<string, string> | undefined, entry: values['video_edit.code_material.entry'] as string | undefined, projectEntry: values['video_edit.code_material.project_entry'] as string | undefined, ...(name !== undefined ? { name } : {}), ...(binId ? { binId } : {}) }
       })
       const typeReports: CodeTypeCheckReport[] = []
       const ids = await createVideoEditCodeMaterials(before.id, inputs, context?.signal, measurements, typeReports)

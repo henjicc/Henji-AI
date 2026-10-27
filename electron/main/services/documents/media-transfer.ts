@@ -198,6 +198,20 @@ export function rewriteContentPaths(content: unknown, mapping: ReadonlyMap<strin
     const key = pathKey(style, value)
     return key !== null ? mapping.get(key) ?? value : value
   })
+  // A collected closure has its own immutable snapshot commit, including nested document versions.
+  const updateProject = (value: unknown): void => {
+    if (Array.isArray(value)) { value.forEach(updateProject); return }
+    if (!value || typeof value !== 'object') return
+    const record = value as Record<string, unknown>
+    if (record.project && typeof record.project === 'object' && Array.isArray(record.files)) {
+      const project = record.project as Record<string, unknown>
+      const entry = record.files.find(file => file && typeof file === 'object' && file.path === record.entry) as { location?: unknown } | undefined
+      const git = typeof entry?.location === 'string' ? parseGitCodeLocation(entry.location) : null
+      if (git) { project.commit = git.oid; project.entry = git.filepath }
+    }
+    Object.values(record).forEach(updateProject)
+  }
+  updateProject(rewritten)
   if (rewritten && typeof rewritten === 'object' && 'codeMaterials' in rewritten && Array.isArray(rewritten.codeMaterials)) for (const definition of rewritten.codeMaterials) {
     if (!definition || typeof definition !== 'object' || typeof definition.folder !== 'string' || !Array.isArray(definition.versions)) continue
     const location: unknown = definition.versions[0]?.files?.[0]?.location

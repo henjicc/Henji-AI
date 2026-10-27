@@ -6,7 +6,7 @@ import { withVideoEditCurrentMetadata, editVideoProject, requireVideoEditInstanc
 import { VIDEO_EDIT_DOCUMENT_VERSION } from '@/core/persistence/schemaVersions'
 import { importAssetCodeComponents, discardProjectCodeComponents, discardVideoEditCodeFiles } from './videoEditCodeStorage'
 import { assetCodeSourceResolver, rememberCodeAssetSources } from '@/core/videoEdit/codeAsset'
-import { prepareCodeVersionPublication } from './videoEditCodeStorage'
+import { prepareProjectCodePublication, prepareCodeVersionPublication } from './videoEditCodeStorage'
 import { addressCodeMaterialFiles, loadCodeSourceReferences, codeFilesFromInput, componentFileReferences, verifyCodeSourceReferences, documentCodeSourceResolver, resolveCodeMaterialFiles, type CodeFileReference } from '@/core/videoEdit/codeMaterial/sources'
 import { createLogger } from '@/core/logging'
 import { appendCodeMaterialVersion, makeCodeMaterialDefinition } from '@/core/videoEdit/codeMaterialVersions'
@@ -32,8 +32,8 @@ import type { CodeTypeCheckReport } from '@/core/videoEdit/codeMaterial/typeDiag
 import { settleVideoEditCodeTypeChecks, startVideoEditCodeTypeCheck, withVideoEditCodeTypeContext } from './videoEditCodeTypeCheck'
 
 const logger = createLogger('features.videoEdit.code')
-export interface VideoEditCodeInput { source?: string; files?: Record<string, string>; entry?: string; name?: string; binId?: string }
-export interface VideoEditCodeVersionInput { source?: string; files?: Record<string, string>; entry?: string; definitionId: string }
+export interface VideoEditCodeInput { projectEntry?: string; source?: string; files?: Record<string, string>; entry?: string; name?: string; binId?: string }
+export interface VideoEditCodeVersionInput { projectCommit?: string; source?: string; files?: Record<string, string>; entry?: string; definitionId: string }
 interface Candidate { definition: CodeMaterialDefinition; item: VideoEditItem; filter?: CodeMaterialInstance }
 interface CodeAssetPublication {
   asset: CodeAsset; media: VideoEditMedia[]; mediaIds: ReadonlyMap<string, string>; origin: { assetId: string; contentIdentity: string }
@@ -104,8 +104,10 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
   logger.info('检查代码素材', { event: 'video_edit.code.create.start', context: { projectId, count: inputs.length } })
   try {
     for (const input of inputs) {
-      const contents = codeFilesFromInput(input)
-      const publicationState = await prepareCodeVersionPublication(projectId, contents, input.name, publication?.asset.sourceVersion.imports, createdFiles)
+      if (input.projectEntry && (input.files !== undefined || input.source !== undefined || input.entry !== undefined)) throw new Error('project_entry 不能与 source/files/entry 同时提供。')
+      const project = input.projectEntry ? await prepareProjectCodePublication(projectId, input.projectEntry, undefined, input.name) : undefined
+      const contents = project?.contents ?? codeFilesFromInput(input)
+      const publicationState = project?.publication ?? await prepareCodeVersionPublication(projectId, contents, input.name, publication?.asset.sourceVersion.imports, createdFiles)
       const typeCheck = typeReports ? startVideoEditCodeTypeCheck(contents, publicationState.imports, typeAbort.signal) : undefined
       if (typeCheck) typeChecks.push(typeCheck)
       const { definition, program } = await withVideoEditCodeTypeContext(() => makeCodeMaterialDefinition(contents, source => compileVideoEditCode(source, controller.signal), publicationState), typeCheck ? [typeCheck] : [], controller.signal)
@@ -212,7 +214,7 @@ export async function createVideoEditCodeAssetInstance(projectId: string, public
 
 /** Append checked immutable versions. Existing defaults, items and clips keep
  * their fixed bindings; an explicit domain property edit binds a new version. */
-export async function createVideoEditCodeVersions(projectId: string, inputs: VideoEditCodeVersionInput[], signal?: AbortSignal, measurements?: CodeFramePerformance[], typeReports?: CodeTypeCheckReport[]): Promise<string[]> {
+export async function createVideoEditCodeVersions(projectId: string, inputs: VideoEditCodeVersionInput[], signal?: AbortSignal, measurements?: CodeFramePerformance[], typeReports?: CodeTypeCheckReport[], afterCreate?: (document: VideoEditDocument, versionIds: string[]) => VideoEditDocument): Promise<string[]> {
   signal?.throwIfAborted()
   if (!inputs.length) throw new Error('请提供要创建的源码版本。')
   const owner = requireVideoEditInstance(projectId); const baseline = owner.document; const contentVersion = owner.contentVersion
@@ -227,8 +229,12 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
       const definition = definitions.get(input.definitionId)
       if (!definition) throw new Error('代码素材定义不属于此剪辑。')
       await loadCodeSourceReferences(definition.versions.find(version => version.id === definition.defaultVersionId)!)
-      const contents = codeFilesFromInput(input)
-      const publicationState = await prepareCodeVersionPublication(projectId, contents, undefined, undefined, createdFiles)
+      const entry = definition.versions.find(version => version.id === definition.defaultVersionId)?.project?.entry
+      if (input.projectCommit && !entry) throw new Error('project_commit 只适用于工程型素材。')
+      if (entry && (input.files !== undefined || input.source !== undefined || input.entry !== undefined)) throw new Error('工程型素材从 project_commit（默认 HEAD）解析同一入口，不接受 source/files/entry。')
+      const project = entry ? await prepareProjectCodePublication(projectId, entry, input.projectCommit) : undefined
+      const contents = project?.contents ?? codeFilesFromInput(input)
+      const publicationState = project?.publication ?? await prepareCodeVersionPublication(projectId, contents, undefined, undefined, createdFiles)
       const typeCheck = typeReports ? startVideoEditCodeTypeCheck(contents, publicationState.imports, typeAbort.signal) : undefined
       if (typeCheck) typeChecks.push(typeCheck)
       const result = await withVideoEditCodeTypeContext(() => appendCodeMaterialVersion(definition, contents, source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver(), publicationState), typeCheck ? [typeCheck] : [], controller.signal)
@@ -238,9 +244,11 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
       rememberVideoEditCodeMetadata(owner, definition.id, result.definition.versions.find(version => version.id === result.versionId)!, result.program)
       trials.push(candidate({ ...result.definition, defaultVersionId: result.versionId }, result.program, {}))
     }
-    const document = videoEditDocumentSchema.parse({ ...baseline, codeMaterials: [...definitions.values()] })
+    let document = videoEditDocumentSchema.parse({ ...baseline, codeMaterials: [...definitions.values()] })
+    if (afterCreate) document = videoEditDocumentSchema.parse(afterCreate(document, added))
     await ensureVideoEditChangedCodeMetadata(owner, baseline, document, controller.signal)
     const read = readVideoEditCodeMetadata(owner, document)
+    validateCodeMaterialDocument(document, read, changedCodeMaterialVersions(baseline, document))
     // Separate candidates may append to the same definition; each isolated
     // source trial avoids duplicate definitions while retaining one queue.
     await withVideoEditCodeTypeContext(() => trialVideoEditCodeFrames(trials.flatMap(trial => candidateFrames([trial], read, [], false, owner.document.sequences.find(sequence => sequence.id === owner.activeSequenceId))), controller.signal, false, undefined, measurements), typeChecks, controller.signal)

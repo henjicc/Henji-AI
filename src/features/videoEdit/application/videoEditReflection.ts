@@ -77,14 +77,14 @@ export function readVideoEditData(ref: ApplicationRef, codeMetadata = false, pro
     if (!definition) throw new Error('NOT_FOUND：代码素材定义不存在。')
     const item = instance.document.items.find(item => item.code?.definitionId === childId)
     const contents = codeMaterialSource(instance.document, { definitionId: definition.id, versionId: definition.defaultVersionId, parameters: {} }).contents
-    return { name: definition.name, source: contents.files[contents.entry], ...contents, defaultVersionId: definition.defaultVersionId, versionIds: definition.versions.map(version => version.id), binId: item?.binId ?? '', ...(codeMetadata ? JSON.parse(JSON.stringify(readVideoEditCodeParameterMetadata(instance, instance.document, definition.id, definition.defaultVersionId))) as VideoEditFieldData : {}) }
+    return { projectEntry: definition.versions.find(version => version.id === definition.defaultVersionId)?.project?.entry ?? '', name: definition.name, source: contents.files[contents.entry], ...contents, defaultVersionId: definition.defaultVersionId, versionIds: definition.versions.map(version => version.id), binId: item?.binId ?? '', ...(codeMetadata ? JSON.parse(JSON.stringify(readVideoEditCodeParameterMetadata(instance, instance.document, definition.id, definition.defaultVersionId))) as VideoEditFieldData : {}) }
   }
   if (ref.kind === 'video_edit.code_version') {
     const definition = instance.document.codeMaterials?.find(value => value.versions.some(version => version.id === childId))
     const version = definition?.versions.find(version => version.id === childId)
     if (!definition || !version) throw new Error('NOT_FOUND：固定代码版本不存在。')
     const contents = codeMaterialSource(instance.document, { definitionId: definition.id, versionId: version.id, parameters: {} }).contents
-    return { ...JSON.parse(JSON.stringify(version)) as VideoEditFieldData, ...contents, source: contents.files[contents.entry], definitionId: definition.id, ...(codeMetadata ? JSON.parse(JSON.stringify(readVideoEditCodeParameterMetadata(instance, instance.document, definition.id, version.id))) as VideoEditFieldData : {}) }
+    return { projectCommit: version.project?.commit ?? '', ...JSON.parse(JSON.stringify(version)) as VideoEditFieldData, ...contents, source: contents.files[contents.entry], definitionId: definition.id, ...(codeMetadata ? JSON.parse(JSON.stringify(readVideoEditCodeParameterMetadata(instance, instance.document, definition.id, version.id))) as VideoEditFieldData : {}) }
   }
   if (!VIDEO_EDIT_TYPES.includes(ref.kind as VideoEditEntityType)) throw new Error('未知剪辑实体类型。')
   const found = videoEditEntityItems(instance.document, ref.kind as VideoEditEntityType).find(item => item.id === childId)

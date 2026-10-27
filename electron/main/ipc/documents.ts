@@ -1,4 +1,4 @@
-import { codeProjectChangeSchema, codeProjectCommitSchema } from '../../../src/core/videoEdit/codeMaterial/projectContract'
+import { codeProjectResolveSchema, codeProjectChangeSchema, codeProjectCommitSchema } from '../../../src/core/videoEdit/codeMaterial/projectContract'
 import { discardCodeFilesRequestSchema, withdrawCodeComponentRequestSchema, writeCodeVersionRequestSchema, readCodeFileRequestSchema, publishCodeComponentRequestSchema } from '../../../src/core/videoEdit/codeMaterial/storageContract'
 import type { z } from 'zod'
 
@@ -50,6 +50,7 @@ export function registerDocumentsIpc(): void {
   registerIpcHandler(c.migrateCodeStorage, parseWith(projectIdRequestSchema), request => service().migrateCodeStorage(request.projectId))
   registerIpcHandler(c.withdrawCodeComponent, parseWith(withdrawCodeComponentRequestSchema), request => service().withdrawCodeComponent(request))
   registerIpcHandler(c.discardCodeFiles, parseWith(discardCodeFilesRequestSchema), request => service().discardCodeFiles(request))
+  registerIpcHandler(c.resolveCodeProject, parseWith(codeProjectResolveSchema), request => service().resolveCodeProject(request))
   registerIpcHandler(c.readCodeProject, parseWith(documentTargetSchema), target => service().readCodeProject(target))
   registerIpcHandler(c.changeCodeProject, parseWith(codeProjectChangeSchema), request => service().changeCodeProject(request))
   registerIpcHandler(c.commitCodeProject, parseWith(codeProjectCommitSchema), request => service().commitCodeProject(request))

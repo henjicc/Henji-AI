@@ -37,7 +37,7 @@ async function usedBy(id: string, path: string): Promise<ApplicationRef[]> {
   const open = listVideoEditInstances().filter(owner => JSON.stringify(owner.session.documentMeta.container) === JSON.stringify(container))
   const documents = new Map(open.map(owner => [owner.document.id, owner.document]))
   for (const item of await getPlatform().documents.listDocuments({ container, kind: 'video_edit', includeMissing: false })) if (!documents.has(item.id)) documents.set(item.id, videoEditDocumentSchema.parse((await getPlatform().documents.readDocument({ id: item.id, path: item.path })).content))
-  return [...documents.values()].flatMap(document => (document.codeMaterials ?? []).filter(material => material.versions.find(version => version.id === material.defaultVersionId)?.files.some(file => file.path === path)).map(material => ({ kind: 'video_edit.code_material', id: `${document.id}:${material.id}`, label: material.name })))
+  return [...documents.values()].flatMap(document => (document.codeMaterials ?? []).filter(material => material.versions.some(version => version.id === material.defaultVersionId && version.project && version.files.some(file => file.path === path))).map(material => ({ kind: 'video_edit.code_material', id: `${document.id}:${material.id}`, label: material.name })))
 }
 async function dataOf(ref: ApplicationRef, references = false): Promise<Data> {
   const { id, path } = split(ref); await openVideoEditDocument({ id }, { focus: false })

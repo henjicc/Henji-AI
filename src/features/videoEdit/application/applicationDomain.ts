@@ -1,5 +1,6 @@
+import { upgradeVideoEditCodeMaterials } from './videoEditCodeProjectUpgrade'
 import { getPlatform } from '@/platform/runtime'
-import { commitVideoEditCodeProjectCapability } from '@/core/application-control/domains/videoEdit/videoEditCodeProjectCapabilities'
+import { upgradeVideoEditCodeMaterialsCapability, commitVideoEditCodeProjectCapability } from '@/core/application-control/domains/videoEdit/videoEditCodeProjectCapabilities'
 import { CodeProjectFileMutationExecutor, CodeProjectFileCollectionExecutor } from './videoEditCodeProjectReflection'
 import { codeProjectPersistenceParticipants } from './videoEditCodeProject'
 import { registerCurrentDocumentProvider } from '@/features/documents'
@@ -167,6 +168,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     // 嵌入模式的宿主（4.1）：从剪辑里打开的文档“返回剪辑 · 项目名”，助手 open_document 的 fromDocumentId 也走这里
     getDocumentOperations().registerEmbedHost('video_edit', videoEditEmbedHost)
     for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, guardVideoEditDocumentAlgorithm(definition.id, async (raw, context) => {
+      if (definition.id === upgradeVideoEditCodeMaterialsCapability.id) return upgradeVideoEditCodeMaterials(upgradeVideoEditCodeMaterialsCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === commitVideoEditCodeProjectCapability.id) {
         const input = commitVideoEditCodeProjectCapability.inputSchema.parse(raw)
         await openVideoEditDocument({ id: input.documentRef.id }, { focus: false })

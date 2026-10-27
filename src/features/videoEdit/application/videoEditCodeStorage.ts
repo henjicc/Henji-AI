@@ -129,3 +129,14 @@ export async function importAssetCodeComponents(projectId: string, asset: CodeAs
   return { ...asset, sourceVersion: { ...asset.sourceVersion, entry: addressed.entry, files: addressed.files, imports: imports.map(pin) }, codeSources: [...addressed.codeSources, ...[...imported.values()].map(value => ({ hash: value.hash, source: value.source }))] }
   } catch (error) { await discardProjectCodeComponents([...imported.values()]); throw error }
 }
+
+/** Project publication records existing immutable blobs; creating a material never copies its tree. */
+export async function prepareProjectCodePublication(projectId: string, entry: string, commit?: string, name?: string): Promise<{ contents: CodeMaterialFiles; publication: CodeVersionPublication }> {
+  const owner = requireVideoEditInstance(projectId)
+  const closure = await getPlatform().documents.resolveCodeProject({ target: { id: projectId, path: owner.session.documentMeta.path }, entry, commit })
+  initializeVideoEditCodeSourceRuntime(); await loadCodeSourceReferences(closure)
+  const contents = resolveCodeMaterialFiles(closure, documentCodeSourceResolver())
+  const imports = pinCodeComponentImports(contents, await projectCodeComponents(projectId))
+  await loadCodeSourceReferences({ files: [], imports })
+  return { contents, publication: { name, imports, project: { commit: closure.commit, entry }, async write() { return { files: closure.files } } } }
+}

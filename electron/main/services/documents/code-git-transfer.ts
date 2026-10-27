@@ -10,16 +10,29 @@ interface TransferGroup { repository: CodeGitRepository; prefix: string; referen
 export async function transferGitCode(locations: readonly string[], destination: string): Promise<Map<string, string>> {
   const mapping = new Map<string, string>()
   const groups = new Map<string, TransferGroup>()
+  const projectGroups = new Map<string, { repository: CodeGitRepository; references: Array<{ location: string; parsed: GitCodeLocation }> }>()
   for (const location of locations) {
     const parsed = parseGitCodeLocation(location)
     if (!parsed) continue
     if (!path.isAbsolute(parsed.repository)) throw new Error('代码仓库位置未解析，请重新打开原项目。')
     if (path.resolve(parsed.repository) === path.resolve(destination)) { mapping.set(location, location); continue }
     const [kind, name] = parsed.filepath.split('/')
-    if (!['素材', '组件'].includes(kind) || !name) throw new Error('代码版本模块位置无效。')
+    if (!['素材', '组件'].includes(kind)) {
+      const key = `${parsed.repository}:${parsed.oid}`
+      const group = projectGroups.get(key) ?? { repository: new CodeGitRepository(parsed.repository), references: [] }
+      group.references.push({ location, parsed }); projectGroups.set(key, group); continue
+    }
+    if (!name) throw new Error('代码版本模块位置无效。')
     const prefix = `${kind}/${name}`; const key = `${parsed.repository}:${prefix}`
     const group = groups.get(key) ?? { repository: new CodeGitRepository(parsed.repository), prefix, references: [] }
     group.references.push({ location, parsed }); groups.set(key, group)
+  }
+  for (const group of projectGroups.values()) {
+    const files: Record<string, string> = {}
+    for (const reference of group.references) files[reference.parsed.filepath] = await group.repository.sourceAt(reference.parsed.oid, reference.parsed.filepath)
+    const target = new CodeGitRepository(destination)
+    const oid = await target.exclusive(() => target.importSnapshotLocked(files))
+    for (const reference of group.references) mapping.set(reference.location, gitCodeLocation({ repository: target.dir, oid, filepath: reference.parsed.filepath }))
   }
   if (!groups.size) return mapping
   // Read immutable objects first; never hold two project locks (A -> B and B -> A cannot deadlock).

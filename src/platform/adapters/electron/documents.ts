@@ -15,6 +15,7 @@ export function createElectronDocuments(): DocumentsPlatform {
   return {
     withdrawCodeComponent: request => getNativeDocuments().withdrawCodeComponent(request),
     discardCodeFiles: request => getNativeDocuments().discardCodeFiles(request),
+    resolveCodeProject: (request) => getNativeDocuments().resolveCodeProject(request),
     readCodeProject: (target) => getNativeDocuments().readCodeProject(target),
     changeCodeProject: (request) => getNativeDocuments().changeCodeProject(request),
     commitCodeProject: (request) => getNativeDocuments().commitCodeProject(request),

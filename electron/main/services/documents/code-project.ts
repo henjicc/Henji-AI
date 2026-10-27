@@ -4,12 +4,28 @@ import git from 'isomorphic-git'
 import { CodeGitRepository, codeDigest } from './code-git'
 import { codeProjectPathSchema, type CodeProjectChange, type CodeProjectState } from '../../../../src/core/videoEdit/codeMaterial/projectContract'
 import { CODE_AUTHOR_SOURCE_MAX_BYTES } from '../../../../src/core/videoEdit/codeMaterial/sources'
+import { resolveCodeProjectClosure } from '../../../../src/core/videoEdit/codeMaterial/projectClosure'
+import { gitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
+import type { CodeProjectClosure } from '../../../../src/core/videoEdit/codeMaterial/projectContract'
 
 const trees = new Map<string, Map<string, { oid: string; bytes: number }>>()
+const closures = new Map<string, CodeProjectClosure>()
 const recovery = '代码仓库无法读取，请保留工作区并从备份恢复 .git 后重试。'
 const author = { name: '痕迹AI', email: 'code@henji.local' }
 /** Shared by every document in the same container. Reads never initialize or commit. */
 export class CodeProjectRepository extends CodeGitRepository {
+  async resolve(entry: string, commit?: string): Promise<CodeProjectClosure> {
+    const oid = commit ?? await this.head()
+    if (!oid) throw new Error('代码工程尚无提交；请先创建工程文件或提交外部源码。')
+    if (!/^[a-f0-9]{40}$/.test(oid)) throw new Error('project_commit 必须是完整的40位提交号。')
+    const key = `${this.dir}:${oid}:${entry}`; const known = closures.get(key)
+    if (known) return structuredClone(known)
+    const paths = await resolveCodeProjectClosure(entry, [...(await this.treeAt(oid)).keys()], file => this.sourceAt(oid, file))
+    const files = await Promise.all(paths.map(async filepath => ({ path: filepath, location: gitCodeLocation({ repository: this.dir, oid, filepath }), hash: codeDigest(await this.sourceAt(oid, filepath)) })))
+    const result = { commit: oid, entry, files }; closures.set(key, result)
+    if (closures.size > 256) closures.delete(closures.keys().next().value!)
+    return structuredClone(result)
+  }
   async head(): Promise<string | null> {
     if (!await this.exists()) return null
     try {

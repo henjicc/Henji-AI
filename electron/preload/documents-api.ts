@@ -8,6 +8,7 @@ export function createDocumentsApi(invoke: NativeInvoke): DocumentsPlatform {
   return {
     discardCodeFiles: request => invoke(c.discardCodeFiles, request),
     withdrawCodeComponent: request => invoke(c.withdrawCodeComponent, request),
+    resolveCodeProject: (request) => invoke(c.resolveCodeProject, request),
     readCodeProject: (target) => invoke(c.readCodeProject, target),
     changeCodeProject: (request) => invoke(c.changeCodeProject, request),
     commitCodeProject: (request) => invoke(c.commitCodeProject, request),

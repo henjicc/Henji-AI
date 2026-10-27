@@ -1,4 +1,4 @@
-import type { CodeProjectState, CodeProjectChange } from '../../core/videoEdit/codeMaterial/projectContract'
+import type { CodeProjectResolve, CodeProjectClosure, CodeProjectState, CodeProjectChange } from '../../core/videoEdit/codeMaterial/projectContract'
 import type { ListPage, ListPageRequest } from '../../core/documents/pagination'
 import type { CodeFileReference } from '../../core/videoEdit/codeMaterial/sources'
 import type { CodeComponent, CodeComponentVersion } from '../../core/videoEdit/codeMaterial/components'
@@ -54,6 +54,7 @@ import type {
 export type * from '../../core/documents/types'
 
 export interface DocumentsPlatform {
+  resolveCodeProject(request: CodeProjectResolve): Promise<CodeProjectClosure>
   readCodeProject(target: DocumentTarget): Promise<CodeProjectState>
   changeCodeProject(request: CodeProjectChange): Promise<string>
   commitCodeProject(request: { target: DocumentTarget; message: string }): Promise<string>
@@ -133,6 +134,7 @@ export interface DocumentsPlatform {
 
 /** IPC 通道名与 DocumentsPlatform 方法一一对应（主进程注册与 preload 桥共用）。 */
 export const DOCUMENT_IPC_CHANNELS = {
+  resolveCodeProject: 'documents:code:projectResolve',
   readCodeProject: 'documents:code:projectRead',
   changeCodeProject: 'documents:code:projectChange',
   commitCodeProject: 'documents:code:projectCommit',

@@ -124,6 +124,25 @@ export class CodeGitRepository {
     return this.readObject(gitCodeLocation({ repository: this.dir, oid, filepath }))
   }
 
+  /** Portable closure snapshot. Keep author worktree and HEAD untouched on cross-project collection. */
+  async importSnapshotLocked(files: Record<string, string>): Promise<string> {
+    await this.initialize()
+    const build = async (prefix: string): Promise<string> => {
+      const names = [...new Set(Object.keys(files).filter(file => file.startsWith(prefix)).map(file => file.slice(prefix.length).split('/')[0]))].sort()
+      const tree = await Promise.all(names.map(async name => {
+        const filepath = prefix + name; await this.safePath(filepath)
+        if (Object.hasOwn(files, filepath)) return { mode: '100644', type: 'blob' as const, path: name, oid: await git.writeBlob({ ...this.options, blob: Buffer.from(files[filepath], 'utf8') }) }
+        return { mode: '040000', type: 'tree' as const, path: name, oid: await build(`${filepath}/`) }
+      }))
+      return git.writeTree({ ...this.options, tree })
+    }
+    const tree = await build('')
+    const stamp = { ...author, timestamp: 0, timezoneOffset: 0 }
+    const oid = await git.commit({ ...this.options, author: stamp, committer: stamp, message: '导入工程入口闭包', tree, parent: [], noUpdateBranch: true })
+    if (!(await git.listTags(this.options)).includes(`导入/${oid}`)) await git.tag({ ...this.options, ref: `导入/${oid}`, object: oid })
+    return oid
+  }
+
   async isWithdrawn(location: string): Promise<boolean> {
     const reference = parseGitCodeLocation(location)
     if (!reference || path.resolve(reference.repository) !== this.dir) throw new Error('代码版本不属于此仓库。')

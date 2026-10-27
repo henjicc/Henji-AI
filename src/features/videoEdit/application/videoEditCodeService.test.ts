@@ -1114,3 +1114,49 @@ it('真实 Git 源码：失败补偿不采用版本，撤销重做与资产往�
     await env.cleanup()
   }
 })
+
+
+it('工程入口走真实 Git、正式创建与升级，闭包完整流入资产且一次撤销改指', async () => {
+  const env = createTestEnvironment(); const service = env.services.service
+  const project = await service.createProject({ name: '源码工程' })
+  const disk = await service.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: project.id }, name: '剪辑' }); const target = { id: disk.meta.id }
+  const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id; const api = getPlatform().documents
+  const spies = [
+    vi.spyOn(api, 'resolveCodeProject').mockImplementation(request => service.resolveCodeProject({ ...request, target })),
+    vi.spyOn(api, 'readCodeProject').mockImplementation(() => service.readCodeProject(target)),
+    vi.spyOn(api, 'readCodeFile').mockImplementation(service.readCodeFile),
+    vi.spyOn(api, 'listCodeComponents').mockImplementation(() => service.listCodeComponents(target)),
+  ]
+  const app = createApplicationHarness(); const parent = { kind: 'video_edit.document', id }
+  try {
+    const text = 'import {x} from "../style/tokens"; import shader from "../style/a.wgsl";\n' + source.replace('100+t*20', 'x+t*20')
+    await service.changeCodeProject({ target, message: '工程初稿', changes: [{ path: 'entries/opening.ts', source: text, expectedHash: null }, { path: 'style/tokens.ts', source: 'export const x=100', expectedHash: null }, { path: 'style/a.wgsl', source: 'fn shader() {}', expectedHash: null }, { path: 'README.md', source: '说明', expectedHash: null }] })
+    await app.requireResult('change_application_entities', { summary: '工程入口素材', changes: [{ kind: 'create_items', entityType: 'video_edit.code_material', parent, items: [{ properties: { project_entry: 'entries/opening.ts' } }] }] }, (await app.read(parent)).revisions as Record<string, number>)
+    const definition = owner.document.codeMaterials![0]; const first = definition.versions[0]
+    expect(first.project?.entry).toBe('entries/opening.ts'); expect(first.files.map(file => file.path)).toEqual(['entries/opening.ts', 'style/a.wgsl', 'style/tokens.ts'])
+    expect((await service.readCodeProject(target)).log).toHaveLength(1)
+    await expect(createVideoEditCodeVersions(id, [{ definitionId: definition.id }])).rejects.toThrow('相同源码版本')
+    const item = owner.document.items.find(item => item.code?.definitionId === definition.id)!
+    const [clipId] = appendVideoEditItems(id, [item.id], owner.activeSequenceId)
+    const before = (await service.readCodeProject(target)).files.find(file => file.path === 'style/tokens.ts')!
+    await service.changeCodeProject({ target, message: '修改风格', changes: [{ path: before.path, source: 'export const x=200', expectedHash: before.hash }] })
+    const upgraded = await app.requireResult('upgrade_video_edit_code_materials', { documentRef: parent })
+    expect(upgraded.upgrades).toEqual([expect.objectContaining({ oldVersion: first.id, changedFiles: ['style/tokens.ts'], retargetedClips: 1 })])
+    const current = owner.document.codeMaterials![0].defaultVersionId
+    expect(current).not.toBe(first.id)
+    expect(owner.document.sequences.flatMap(sequence => sequence.clips).find(clip => clip.id === clipId)!.code!.versionId).toBe(current)
+    expect((await service.readCodeProject(target)).log).toHaveLength(2)
+    expect((await app.requireResult('upgrade_video_edit_code_materials', { documentRef: parent })).upgrades).toEqual([])
+    undoVideoEdit(id)
+    expect(owner.document.codeMaterials![0].defaultVersionId).toBe(first.id)
+    expect(owner.document.sequences.flatMap(sequence => sequence.clips).find(clip => clip.id === clipId)!.code!.versionId).toBe(first.id)
+    undoVideoEdit(id, true)
+    const { bytes } = collectionBoundary()
+    const assetPath = path.join(env.base, 'project-code.henji-code')
+    const exported = await collectVideoEditCodeAsset(id, { kind: 'definition', definitionId: definition.id }, { path: assetPath })
+    expect(exported).toBeDefined()
+    const asset = decodeCodeAsset(bytes.get(assetPath)!)
+    expect(asset.sourceVersion.files.map(file => file.path)).toEqual(['entries/opening.ts', 'style/a.wgsl', 'style/tokens.ts'])
+    expect(asset.codeSources).toHaveLength(3)
+  } finally { app.dispose(); spies.forEach(spy => spy.mockRestore()); await env.cleanup() }
+})
