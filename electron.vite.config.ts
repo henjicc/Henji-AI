@@ -20,6 +20,19 @@ function reloadOnStatefulModuleUpdate(): Plugin {
   }
 }
 
+/** 渲染层主包产物：哈希后紧跟唯一扩展名（与 Vite 默认一致，显式写出供门禁比对）。 */
+export const RENDERER_OUTPUT_NAMES = {
+  entryFileNames: 'assets/[name]-[hash].js',
+  chunkFileNames: 'assets/[name]-[hash].js',
+  assetFileNames: 'assets/[name]-[hash][extname]',
+} as const
+/** Worker 子构建产物：哈希后带 .worker，与主包命名结构上不相交。 */
+export const RENDERER_WORKER_OUTPUT_NAMES = {
+  entryFileNames: 'assets/[name]-[hash].worker.js',
+  chunkFileNames: 'assets/[name]-[hash].worker.js',
+  assetFileNames: 'assets/[name]-[hash].worker[extname]',
+} as const
+
 const RENDERER_UNWATCHED_ROOTS = new Set(['docs', 'dist', 'out', 'native', 'release', 'tests', 'dev-data', 'patches', '.claude', '.tmp', '.reality', '.ui-tour'])
 
 // 根 package.json 是 "type": "module"，但 sandbox:true 的 preload 只支持 CJS，
@@ -85,7 +98,11 @@ export default defineConfig({
     // 还会被编译中被锁住的文件（EBUSY）弄崩 dev server。
     server: { watch: { ignored: [(file: string) => RENDERER_UNWATCHED_ROOTS.has(relative(__dirname, file).split(/[\\/]/)[0])] } },
     // 所有 Worker 都以 { type: 'module' } 创建；ES 格式才允许 Worker 内按需 import（着色器组件逐个懒加载）。
-    worker: { format: 'es' },
+    // Worker 是独立的子构建，产物在主包生成阶段以同一 assets 目录的固定文件名并入；同一模块在两边内容相同时
+    // （如只导出数据的 glTransitionShaders.generated）文件名也相同，并入会覆盖主包的同名 chunk，主包随后读不到它的依赖而构建失败
+    // （2026-10-27）。Worker 产物统一在哈希后带 .worker 后缀：主包文件名的哈希后紧跟唯一扩展名，哈希不含点号，两边不可能同名。
+    // 门禁 scripts/check-renderer-output-names.cjs 校验这条约定。
+    worker: { format: 'es', rollupOptions: { output: RENDERER_WORKER_OUTPUT_NAMES } },
     optimizeDeps: {
       // 启动时扫描全部渲染层源码（含懒加载子树与 Worker），三方库一次预构建完。只扫入口时，
       // Vite 会等第一次用到某个库才现场预构建并整页刷新，开发运行就和正式版不一样（2026-10-26）。
@@ -97,6 +114,12 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'index.html'),
+        },
+        output: RENDERER_OUTPUT_NAMES,
+        // 任何产物同名覆盖都直接失败并指明文件，不再留到后续插件读到被覆盖的产物才报含糊的错误。
+        onwarn(warning, warn) {
+          if (warning.code === 'FILE_NAME_CONFLICT') throw new Error(`渲染层产物同名覆盖：${warning.message}。主包与 Worker 子构建的产物命名必须互不相交（见 electron.vite.config.ts 的 RENDERER_WORKER_OUTPUT_NAMES）。`)
+          warn(warning)
         },
       },
     },

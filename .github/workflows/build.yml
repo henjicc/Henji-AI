@@ -105,6 +105,7 @@ jobs:
       - name: 主进程导入与依赖图门禁
         run: |
           npm run check:main-imports
+          npm run check:renderer-output-names
           npm run check:dependency-graph
           npm run check:ipc-contract
           npm run check:media-recycle

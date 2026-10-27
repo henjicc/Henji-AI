@@ -11,6 +11,7 @@
     "scripts/lib/uiScrollCoverage.test.cjs",
     "scripts/check-dead-code.test.cjs",
     "scripts/check-dependency-graph.test.cjs",
+    "scripts/check-renderer-output-names.test.cjs",
     "scripts/check-icon-tokens.test.cjs",
     "scripts/check-ipc-contract.test.cjs",
     "scripts/check-media-recycle.test.cjs",
