@@ -1,7 +1,7 @@
 import type { VideoEditMedia } from '@/core/videoEdit/document'
 import type { VideoEditFrameCache } from './videoEditFrameCache'
-import { resolveVideoEditDecodeBackend, VIDEO_EDIT_NATIVE_PRIMARY, type VideoEditAudioChunk, type VideoEditClipAudio, type VideoEditClipFrames, type VideoEditDecodeBackend, type VideoEditDecodeSupport, type VideoEditDecodedPicture, type VideoEditFrameBackend, type VideoEditFrameSeeker, type VideoEditFrameSource, type VideoEditSnapshot } from './videoEditFrameSource'
-import { videoEditNativeFailureCode, videoEditNativeFailureKind } from './videoEditNativeFailure'
+import { resolveVideoEditDecodeBackend, VIDEO_EDIT_NATIVE_PRIMARY, type VideoEditAudioChunk, type VideoEditClipAudio, type VideoEditClipFrames, type VideoEditClipFramesOptions, type VideoEditDecodeBackend, type VideoEditDecodeSupport, type VideoEditDecodedPicture, type VideoEditFrameBackend, type VideoEditFrameSeeker, type VideoEditFrameSource, type VideoEditSnapshot } from './videoEditFrameSource'
+import { videoEditNativeClosed, videoEditNativeFailureCode, videoEditNativeFailureKind } from './videoEditNativeFailure'
 import { VideoEditGpuDeviceLostError } from './videoEditGpuFailure'
 
 /** What the render worker knows about native decoding when it starts: the service state and the diagnostic setting. */
@@ -285,19 +285,26 @@ class RoutedFileSource implements VideoEditFrameSource {
     this.handles.clear()
   }
 
-  clipFrames(): VideoEditClipFrames | undefined {
-    const first = this.initial.source.clipFrames()
+  clipFrames(options?: VideoEditClipFramesOptions): VideoEditClipFrames | undefined {
+    const first = this.initial.source.clipFrames(options)
     if (!first) return undefined
     const readers = new Map<VideoEditDecodeBackend, VideoEditClipFrames | undefined>([[this.initial.backend, first]])
+    let closed = false
     const reader = async (backend: VideoEditDecodeBackend): Promise<VideoEditClipFrames> => {
-      if (!readers.has(backend)) readers.set(backend, (await this.source(backend)).clipFrames())
+      if (!readers.has(backend)) {
+        const created = (await this.source(backend)).clipFrames(options)
+        // A reader closed while its backend was opening must not keep the new reader's session.
+        if (closed) { created?.close?.(); throw videoEditNativeClosed() }
+        readers.set(backend, created)
+      }
       const value = readers.get(backend)
       if (!value) throw new Error(`素材「${this.media.name}」没有可解码的视频轨。`)
       return value
     }
     const { router, decision, media } = this
     return {
-      frameAt: seconds => router.read(decision, media, async backend => (await reader(backend)).frameAt(seconds)),
+      close: () => { closed = true; for (const value of readers.values()) value?.close?.(); readers.clear() },
+      frameAt: (seconds, options) => router.read(decision, media, async backend => (await reader(backend)).frameAt(seconds, options)),
       async *frames(start: number): AsyncGenerator<VideoEditDecodedPicture, void, unknown> {
         let backend = router.current(decision)
         // Pictures already handed out are skipped when a recovered reader starts again at the last one.

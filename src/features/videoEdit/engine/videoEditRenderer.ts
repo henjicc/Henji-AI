@@ -96,6 +96,10 @@ export function retireIdle(table: Map<string, true>, idle: readonly string[], li
   return evict
 }
 
+/** Whether `picture` is the one showing at source time `time` (the renderer's start and end tolerances). */
+function videoEditPictureCovers(picture: { timestamp: number; duration: number } | undefined, time: number): boolean {
+  return !!picture && picture.timestamp <= time + 1e-6 && time < picture.timestamp + picture.duration - 1e-7
+}
 export interface VideoEditRenderCacheWindow { key: string; startFrame: number; endFrame: number; url: string; width: number; height: number; fps: number }
 interface CodeInputSession { renderer: VideoEditRenderer; tail: Promise<unknown>; document: VideoEditComposition; sourceKey: string; lastKey?: string; lastPicture?: VideoEditCodePicture; ownerKey: string }
 interface NestedFrameContext { pictures: Map<string, Promise<VideoEditCodePicture>>; keys: Map<string, Set<string>>; inputs: Map<VideoEditRenderer, Map<string, Promise<VideoEditCodePicture>>>; bytes: number }
@@ -127,6 +131,20 @@ const PLAYBACK_ARM_IDLE_MS = 2500
 const PLAYBACK_REPEAT_FRAMES = 3
 /** A playback clock that fell behind skips ahead this far at most inside one schedule; the skipped pictures are released unused. */
 const PLAYBACK_MAX_SKIP_SECONDS = 1
+/**
+ * Code video inputs of clips starting this soon open their own decoder session and decode their first picture ahead
+ * (4K long-GOP recordings: opening ~0.2s plus up to a 4s GOP decoded to the in-point, 0.5–1.6s measured), so the
+ * boundary frame only continues that decoder. The same horizon as the worker's playback lookahead.
+ */
+const CODE_INPUT_PREWARM_SECONDS = 3
+/** At most this many upcoming code clips prewarm at once (one decoder session per video reference). */
+const CODE_INPUT_PREWARM_CLIPS = 2
+/**
+ * Played pictures a code video input keeps in preview (bytes per source pixel: two 4-byte pictures, five 8-bit 4:2:0
+ * ones): a restarted play command asks for a frame just shown, which would otherwise seek the input's decoder back to
+ * its key frame. Export never steps back and keeps none.
+ */
+const CODE_INPUT_HISTORY_BYTES_PER_PIXEL = 8
 interface VideoSource {
   /** Key of the shared opened source this clip's own readers read from. */
   demux: string
@@ -151,6 +169,13 @@ export class VideoEditRenderer {
   private readonly idleNested = new Map<string, true>()
   private readonly idleImages = new Map<string, true>()
   private readonly codeInputs = new Map<string, CodeInputSession>()
+  /** Code input sessions opened ahead for clips not showing yet (see `prewarmCodeInputs`); a frame that reads one takes it over. */
+  private readonly prewarmedInputs = new Set<string>()
+  /**
+   * Set on the renderer of one code video input (a one-clip composition whose in-point moves every frame): its reader
+   * is exclusive, so the reference keeps its own decoder position; `history` keeps played pictures for small steps back.
+   */
+  private codeInput?: { history: boolean }
   private readonly filterInputs = new Map<string, CodeInputSession>()
   private readonly sources = new Map<string, Promise<VideoSource>>()
   private playback?: PlaybackSchedule
@@ -237,7 +262,7 @@ export class VideoEditRenderer {
       if (scope.input && scope.parent) {
         let entry = renderer.codeInputs.get(scope.key)
         if (!entry && create) {
-          const child = new VideoEditRenderer(scope.document, undefined, undefined, 1, this.frames, renderer, renderer.sequencePath)
+          const child = renderer.codeInputRenderer(scope.input)
           entry = { renderer: child, tail: Promise.resolve(), document: scope.parent, sourceKey: scope.input.sampleKey, ownerKey: `code-input:${scope.key}` }
           renderer.codeInputs.set(scope.key, entry)
         }
@@ -310,7 +335,7 @@ export class VideoEditRenderer {
   observeAuthorElements(frame: number): import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation {
     return this.codeSources?.observeElements(frame) ?? { sequenceId: this.document.id, revision: this.document.revision, frame, clips: [] }
   }
-  codeDiagnostics() { return { sources: this.codeSources?.diagnostics(), gpu: this.compositor?.codeDiagnostics(), images: this.compositor?.imageDiagnostics(), decodedImages: this.images.size, decodedImageBytes: [...this.images.values()].reduce((sum, entry) => sum + entry.bytes, 0), imageDecodes: this.imageLoads, codeInputSessions: this.codeInputs.size } }
+  codeDiagnostics() { return { sources: this.codeSources?.diagnostics(), gpu: this.compositor?.codeDiagnostics(), images: this.compositor?.imageDiagnostics(), decodedImages: this.images.size, decodedImageBytes: [...this.images.values()].reduce((sum, entry) => sum + entry.bytes, 0), imageDecodes: this.imageLoads, codeInputSessions: this.codeInputs.size, codeInputsPrewarmed: this.prewarmedInputs.size } }
   /** `frames` is the only decoding dependency; the renderer never touches a decoder implementation. */
   constructor(public document: VideoEditComposition, private readonly previewWidth?: number, surface?: OffscreenCanvas, cacheBudgetBytes = 8 * 1024 ** 3, private readonly frames: VideoEditFrameBackend = new VideoEditBrowserFrames(), private readonly nestedOwner?: VideoEditRenderer, private sequencePath: string[] = [document.id], private readonly timing?: (stage: string, durationMs?: number) => void) {
     if (document.sequences) assertVideoEditSequenceGraph({ items: document.items, sequences: document.sequences })
@@ -342,8 +367,8 @@ export class VideoEditRenderer {
     this.resizeCanvas()
     for (const entry of this.nestedPictures.values()) entry.renderer.setRenderDivisor(divisor)
   }
-  /** Drops one user of the shared opened file; a clip's own sound reader closes with its source. */
-  private release(source: Pick<VideoSource, 'demux'> & Partial<Pick<VideoSource, 'audio'>>): void { source.audio?.close?.(); this.frames.release(source.demux) }
+  /** Drops one user of the shared opened file; a clip's own sound reader and exclusive picture reader close with its source. */
+  private release(source: Pick<VideoSource, 'demux'> & Partial<Pick<VideoSource, 'audio' | 'video'>>): void { source.audio?.close?.(); source.video?.close?.(); this.frames.release(source.demux) }
   private source(key: string, media: VideoEditMedia, audioStream?: number): Promise<VideoSource> {
     let source = this.sources.get(key)
     if (!source) {
@@ -352,7 +377,7 @@ export class VideoEditRenderer {
         try {
           const shared = await demux.ready
           if (this.disposed) throw new Error('预览已关闭。')
-          return { demux: demux.key, media, video: shared.clipFrames(), audio: shared.clipAudio(audioStream), previousTime: -1, codec: shared.codec }
+          return { demux: demux.key, media, video: shared.clipFrames(this.codeInput ? { exclusive: true } : undefined), audio: shared.clipAudio(audioStream), previousTime: -1, codec: shared.codec }
         } catch (error) { this.release({ demux: demux.key }); if (this.sources.get(key) === source) this.sources.delete(key); throw error }
       })()
       this.sources.set(key, source)
@@ -612,6 +637,8 @@ export class VideoEditRenderer {
   async stopPlayback(): Promise<void> {
     this.lastForwardFrame = undefined
     await this.disposePlayback()
+    // Inputs opened ahead for clips that never started give their decoder sessions back; showing ones stay positioned.
+    if (this.prewarmedInputs.size) await this.disposeCodeInputs(new Set([...this.codeInputs.keys()].filter(key => !this.prewarmedInputs.has(key))))
     await Promise.all([...this.nestedPictures.values(), ...this.codeInputs.values(), ...this.filterInputs.values()].map(entry => entry.renderer.stopPlayback()))
   }
   /**
@@ -676,9 +703,92 @@ export class VideoEditRenderer {
   private async disposeCodeInputs(keep: ReadonlySet<string> = new Set(), sessions = this.codeInputs): Promise<void> {
     await Promise.allSettled([...sessions].filter(([key]) => !keep.has(key)).map(async ([key, entry]) => {
       sessions.delete(key)
+      if (sessions === this.codeInputs) this.prewarmedInputs.delete(key)
       await entry.renderer.dispose()
       await entry.tail.catch(() => undefined)
     }))
+  }
+  /**
+   * The renderer of one code input. A video input reads through an exclusive reader (its own decoder position, see
+   * `VideoEditClipFramesOptions`), and in preview keeps a few played pictures; a lower-tracks input is an ordinary
+   * export-quality composition of those tracks.
+   */
+  private codeInputRenderer(input: Pick<ReturnType<typeof codeMediaInputComposition>, 'kind' | 'document'>): VideoEditRenderer {
+    if (input.kind !== 'video') return new VideoEditRenderer(input.document, undefined, undefined, 1, this.frames, this, this.sequencePath)
+    const history = !!this.previewWidth
+    const renderer = new VideoEditRenderer(input.document, undefined, undefined, history ? Math.max(1, input.document.width * input.document.height * CODE_INPUT_HISTORY_BYTES_PER_PIXEL) : 1, this.frames, this, this.sequencePath)
+    renderer.codeInput = { history }
+    return renderer
+  }
+  /**
+   * The code video inputs of clips starting within `CODE_INPUT_PREWARM_SECONDS` of a playing frame (at most
+   * `CODE_INPUT_PREWARM_CLIPS` clips, nearest first), at the frame each clip first shows, excluding inputs already showing.
+   */
+  private upcomingCodeInputs(document: VideoEditComposition, frame: number, showing: ReadonlySet<string>): Array<{ clip: VideoEditClip; first: number; source: ReturnType<typeof codeMediaInputComposition> }> {
+    const visible = videoEditVisibleTracks(document)
+    const horizon = frame + Math.ceil(document.fps * CODE_INPUT_PREWARM_SECONDS)
+    const entering = (clip: VideoEditClip): number => {
+      let first = clip.start
+      // The incoming side of a two-sided transition shows from the start of the window.
+      for (const transition of document.transitions ?? []) if (transition.rightClipId === clip.id && transition.leftClipId) {
+        try { first = Math.min(first, videoEditTransitionWindow(document, transition).start) } catch { /* 无效转场由正式渲染报告。 */ }
+      }
+      return first
+    }
+    const upcoming = document.clips.flatMap(clip => {
+      if (!clip.code || !visible.has(clip.track) || !Object.values(clip.code.parameters).some(reference => isCodeImageReference(reference) && reference.kind === 'video')) return []
+      const first = entering(clip)
+      // A prerendered window draws its file there; the clip itself never runs.
+      return first > frame && first <= horizon && !this.cachedWindow(first) ? [{ clip, first }] : []
+    }).sort((a, b) => a.first - b.first).slice(0, CODE_INPUT_PREWARM_CLIPS)
+    const inputs = new Map<string, { clip: VideoEditClip; first: number; source: ReturnType<typeof codeMediaInputComposition> }>()
+    for (const { clip, first } of upcoming) for (const reference of Object.values(clip.code!.parameters)) {
+      if (!isCodeImageReference(reference) || reference.kind !== 'video') continue
+      try {
+        const source = codeMediaInputComposition(document, clip, reference, first)
+        if (!showing.has(source.sessionKey) && !inputs.has(source.sessionKey)) inputs.set(source.sessionKey, { clip, first, source })
+      } catch { /* 非法引用由进入片段时的正式渲染报告。 */ }
+    }
+    return [...inputs.values()]
+  }
+  /**
+   * Opens each upcoming code video input on its own decoder session and decodes the picture at its first frame, so
+   * entering the clip continues that decoder instead of opening and seeking it on the boundary frame. A prewarm runs
+   * on the input session's own queue (the clip's first real frame waits for it rather than racing it) and on a decoder
+   * no showing input uses; it starts after the showing inputs' reads of this frame.
+   */
+  private prewarmCodeInputs(document: VideoEditComposition, upcoming: ReadonlyArray<{ clip: VideoEditClip; first: number; source: ReturnType<typeof codeMediaInputComposition> }>): void {
+    for (const { clip, first, source } of upcoming) {
+      const key = source.sessionKey
+      if (this.codeInputs.has(key)) continue
+      const renderer = this.codeInputRenderer(source)
+      const entry: CodeInputSession = { renderer, tail: Promise.resolve(), document, sourceKey: source.sampleKey, ownerKey: `code-input:${key}` }
+      this.codeInputs.set(key, entry); this.prewarmedInputs.add(key)
+      const started = performance.now()
+      entry.tail = renderer.prewarmCodeInput().then(() => {
+        recordVideoEditPreparation('codeInputPrewarm', performance.now() - started)
+        logger.debug('代码视频输入已提前解到入点', { event: 'video_edit.code_input.prewarm.completed', context: { sequenceId: document.id, clipId: clip.id, startFrame: first, durationMs: performance.now() - started } })
+      }, error => {
+        if (!renderer.disposed) logger.debug('代码视频输入预热未完成，进入片段时照常读取', { event: 'video_edit.code_input.prewarm.failed', error, context: { sequenceId: document.id, clipId: clip.id, startFrame: first } })
+      })
+    }
+  }
+  /** Decodes the picture this input renderer's clip shows first into its owned current picture (see `prewarmCodeInputs`). */
+  private async prewarmCodeInput(): Promise<void> {
+    const document = this.document, clip = document.clips[0], media = clip && this.clipMedia(document, clip)
+    if (!clip || media?.kind !== 'video') return
+    const time = videoEditPictureSeconds(clipSourceSeconds(clip, videoEditHandleFrame(clip, clip.start, document.fps, media.durationSeconds), document.fps))
+    const pending = this.source(clip.id, media)
+    const source = await pending
+    if (!source.video || videoEditPictureCovers(source.current, time)) return
+    // Speculative: it never takes the foreground's last decoder or shares the file's session with a showing reference.
+    const decoded = await source.video.frameAt(time, { speculative: true })
+    if (!decoded) return
+    let normalized: VideoEditGpuFrame
+    try { normalized = await this.ensureCompositor().snapshot(decoded, videoEditGpuFrameUsesChroma(decoded, source.codec), true) } finally { decoded.close() }
+    if (this.disposed || this.sources.get(clip.id) !== pending || this.document !== document) { normalized.close(); return }
+    source.current?.close(); source.current = normalized; source.previousTime = time
+    if (this.codeInput?.history) this.frameCache.put(media.path, normalized.clone(), new Set())
   }
   /** Neighbour inputs are prefix renders on this worker/device. Each prefix has
    * its own targets so recursive predecessors cannot overwrite the current input. */
@@ -741,12 +851,17 @@ export class VideoEditRenderer {
    * no canvas readback, bitmap copy or external upload is required. */
   private async prepareCodeInputs(document: VideoEditComposition, active: VideoEditClip[], frame: number, sequential: boolean, quality: EffectQuality, current: () => boolean, context: NestedFrameContext, path: string[]): Promise<Map<string, VideoEditCodePicture>> {
     const requests = active.flatMap(clip => Object.entries(clip.code?.parameters ?? {}).flatMap(([parameter, reference]) => isCodeImageReference(reference) && reference.kind !== 'image' ? [{ clip, parameter, reference, source: codeMediaInputComposition(document, clip, reference, frame) }] : []))
-    const keep = new Set([...requests.map(request => request.source.sessionKey), ...(this.nestedOwner ?? this).warmScopes])
+    const showing = new Set(requests.map(request => request.source.sessionKey))
+    for (const key of showing) this.prewarmedInputs.delete(key)
+    // Forward preview playback opens the inputs of clips about to start; a paused, scrubbed or exported frame keeps only its own.
+    const upcoming = sequential && this.previewWidth ? this.upcomingCodeInputs(document, frame, showing) : []
+    const keep = new Set([...showing, ...upcoming.map(input => input.source.sessionKey), ...(this.nestedOwner ?? this).warmScopes])
     if (keep.size > 32) throw new Error('同时读取的视频画面超过32份，请减少输入。')
     await this.disposeCodeInputs(keep)
     let shared = context.inputs.get(this)
     if (!shared) { shared = new Map(); context.inputs.set(this, shared) }
-    const inputs = new Map<string, VideoEditCodePicture>()
+    // Inputs are independent sessions (own decoders and targets): prepare them concurrently, not one after another.
+    const pending: Array<[string, Promise<VideoEditCodePicture>]> = []
     for (const { clip, parameter, reference, source } of requests) {
       if (!current()) throw new DOMException('视频取帧已取消。', 'AbortError')
       const sampleKey = JSON.stringify([quality, sequential, source.sampleKey]), key = JSON.stringify([source.sessionKey, sampleKey])
@@ -757,7 +872,7 @@ export class VideoEditRenderer {
         let entry = this.codeInputs.get(source.sessionKey)
         if (!entry) {
           const began = performance.now()
-          const renderer = new VideoEditRenderer(source.document, undefined, undefined, 1, this.frames, this, this.sequencePath)
+          const renderer = this.codeInputRenderer(source)
           entry = { renderer, tail: Promise.resolve(), document, sourceKey: source.sampleKey, ownerKey: `code-input:${source.sessionKey}` }; this.codeInputs.set(source.sessionKey, entry)
           recordVideoEditPreparation('codeInputRenderer', performance.now() - began)
         }
@@ -785,8 +900,13 @@ export class VideoEditRenderer {
         })
         session.tail = picture; shared.set(key, picture)
       } else recordVideoEditPreparation('codeInputFrameHit', 0)
-      inputs.set(codeMediaInputKey(clip.id, parameter), await picture)
+      // Observed here; a rejection still fails the frame through the await below.
+      void picture.catch(() => undefined)
+      pending.push([codeMediaInputKey(clip.id, parameter), picture])
     }
+    this.prewarmCodeInputs(document, upcoming)
+    const inputs = new Map<string, VideoEditCodePicture>()
+    for (const [key, picture] of pending) inputs.set(key, await picture)
     for (const entry of this.codeInputs.values()) (await entry.renderer.compositor?.code())?.releaseNestedFrames(context.keys.get(entry.ownerKey) ?? new Set())
     return inputs
   }
@@ -995,7 +1115,18 @@ export class VideoEditRenderer {
       // the whole GOP for every preceding picture.
       // Which reader served a playback picture: the schedule, or a fallback that decodes on its own (diagnostics).
       if (scheduledStream) recordVideoEditPreparation(scheduled ? 'pictureScheduled' : 'pictureUnscheduled', 0)
-      if (scheduled) {
+      if (this.codeInput) {
+        // A code video input reads its reference's own decoder (exclusive reader): consecutive frames continue it, a
+        // repeated time keeps the current picture, and in preview a small step back (a restarted play command asks
+        // for a frame just shown) takes a kept played picture instead of seeking the decoder back to its key frame.
+        if (videoEditPictureCovers(source.current, time)) cacheHits++
+        else {
+          const kept = this.frameCache.get(media.path, time)
+          source.current?.close(); source.current = undefined
+          if (kept instanceof VideoEditGpuFrame) { source.current = kept.clone(); cacheHits++ }
+          else source.current = await source.video.frameAt(time) ?? undefined
+        }
+      } else if (scheduled) {
         await source.iterator?.return(); source.iterator = undefined
         source.current?.close(); source.current = scheduled
       } else if (scheduledStream && source.current && source.current.timestamp <= time + 1e-6 && time < source.current.timestamp + source.current.duration - 1e-7) {
@@ -1049,7 +1180,7 @@ export class VideoEditRenderer {
         // Forward pictures already have the same owned format as seeks. Retain
         // a reference in the existing bounded cache so reversing a played range
         // never starts competing background GOP decodes for those pictures.
-        if (this.previewWidth && sequential) this.frameCache.put(media.path, normalized.clone(), new Set())
+        if (this.previewWidth && sequential || this.codeInput?.history) this.frameCache.put(media.path, normalized.clone(), new Set())
         decoded.close()
       }
       timestamps.push(source.current.timestamp)

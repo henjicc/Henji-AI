@@ -21,7 +21,7 @@ export class VideoEditProxyFrames implements VideoEditFrameBackend {
     const live = (): void => { if (released || !owned.has(key)) { released = true; throw new Error('代理预览已关闭。') } }
     const ready = video.ready.then(source => { live(); return ({
       codec: source.codec,
-      clipFrames: () => source.clipFrames(),
+      clipFrames: options => source.clipFrames(options),
       schedule: (times: readonly number[], signal?: AbortSignal) => source.schedule(times, signal),
       clipAudio: (stream?: number) => media.hasAudio === false ? undefined : {
         async *chunks(start: number, end: number, sampleRate?: number) {

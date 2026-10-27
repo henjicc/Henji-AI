@@ -469,6 +469,55 @@ describe('原生帧源：单帧与会话', () => {
     expect(other.clipAudio()).toBeDefined()
   })
 
+  it('独占读取器（代码视频输入）各用自己的定位会话：同一文件两个引用交替取帧互不移动对方，共享定位会话不受影响；服务故障丢弃会话、下一次读取重新打开；关闭时关掉自己的会话', async () => {
+    const channel = new FakeChannel(); const frames = backend(channel)
+    const opened = frames.open(media()); const source = await opened.ready
+    const first = source.clipFrames({ exclusive: true })!, second = source.clipFrames({ exclusive: true })!
+    // Two windows of one recording in a crossfade: their times interleave every frame.
+    for (const [reader, time] of [[first, 1], [second, 5], [first, 1 + 1 / 60], [second, 5 + 1 / 60]] as const) await reader.frameAt(time)
+    expect(channel.calls.filter(call => call.method === 'frameAt').map(call => [call.params.streamId, call.params.time])).toEqual([['vf-1', 1], ['vf-2', 5], ['vf-1', 1 + 1 / 60], ['vf-2', 5 + 1 / 60]])
+    expect(channel.calls.filter(call => call.method === 'openDecoder').map(call => call.params)).toEqual([{ path: 'D:/a.mov', purpose: 'seek' }, { path: 'D:/a.mov', purpose: 'seek' }])
+    await source.clipFrames()!.frameAt(0)
+    expect(channel.last('frameAt')).toMatchObject({ streamId: 'vf-3' }); expect(frames.openSessions).toBe(3)
+    // A hung session (service failure) is closed, so the router's retry reads on a fresh one.
+    channel.answers.frameAt = () => { throw new VideoEditNativeCallError('解码器无响应', 'TIMEOUT') }
+    await expect(first.frameAt(2)).rejects.toMatchObject({ kind: 'service' })
+    await frames.settled()
+    expect(channel.calls.filter(call => call.method === 'closeStream').map(call => call.params.streamId)).toEqual(['vf-1'])
+    delete channel.answers.frameAt
+    await first.frameAt(2 + 1 / 60)
+    expect(channel.last('frameAt')).toMatchObject({ streamId: 'vf-4' })
+    first.close?.(); second.close?.(); second.close?.(); await frames.settled()
+    expect(channel.calls.filter(call => call.method === 'closeStream').map(call => call.params.streamId)).toEqual(['vf-1', 'vf-4', 'vf-2'])
+    await expect(first.frameAt(3)).rejects.toMatchObject({ kind: 'closed' })
+    expect(frames.openSessions).toBe(1)
+    frames.release(opened.key); await frames.settled(); expect(frames.openSessions).toBe(0)
+  })
+
+  it('独占会话超出保留额度时前台读取暂时退回素材共享的定位会话，画面不失败，过后再试自己的会话；推测读取只在留有余量时打开、从不借用共享会话', async () => {
+    vi.useFakeTimers({ toFake: ['performance'] })
+    const channel = new FakeChannel(), log = vi.fn()
+    // Four sessions with three reserved for shared ones: one exclusive session at a time.
+    const frames = new VideoEditNativeFrames({ channel, localPath: () => 'D:/a.mov', maxSessions: 4, log })
+    const source = await frames.open(media()).ready
+    const first = source.clipFrames({ exclusive: true })!, second = source.clipFrames({ exclusive: true })!
+    await first.frameAt(1); await second.frameAt(5)
+    expect(channel.calls.filter(call => call.method === 'frameAt').map(call => call.params.streamId)).toEqual(['vf-1', 'vf-2'])
+    expect(log).toHaveBeenCalledWith('info', expect.any(String), 'video_edit.decode.exclusive.shared', expect.objectContaining({ retryInMs: 2000 }))
+    // The speculative read of a third reference neither opens past the reserve nor borrows the shared session.
+    const third = source.clipFrames({ exclusive: true })!
+    channel.answers.stats = () => ({ native: { streams: [], budget: { vramLimitBytes: 1e12, vramReservedBytes: 0, largestSessionBytes: 1, hardwareSessionLimit: 10, hardwareSessions: 0, decoderSessionLimit: 10 } } })
+    await expect(third.frameAt(9, { speculative: true })).rejects.toMatchObject({ kind: 'budget' })
+    expect(channel.calls.filter(call => call.method === 'frameAt')).toHaveLength(2)
+    first.close?.(); await frames.settled()
+    // Within the retry window the second reference stays on the shared session; afterwards it opens its own.
+    await second.frameAt(5 + 1 / 60); expect(channel.last('frameAt')).toMatchObject({ streamId: 'vf-2' })
+    vi.advanceTimersByTime(2001)
+    await second.frameAt(5 + 2 / 60); expect(channel.last('frameAt')).toMatchObject({ streamId: 'vf-3' })
+    expect(channel.calls.filter(call => call.method === 'openDecoder').map(call => call.params.purpose)).toEqual(['seek', 'seek', 'seek'])
+    second.close?.(); third.close?.()
+  })
+
   it('无画面的文件没有画面读取器，计划为空，但有声音读取器（原生声音已接通）', async () => {
     const source = await backend(new FakeChannel()).open(media({ kind: 'audio' })).ready
     expect(source.clipFrames()).toBeUndefined(); expect(source.clipAudio()).toBeDefined()

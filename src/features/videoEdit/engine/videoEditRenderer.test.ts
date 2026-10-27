@@ -365,6 +365,121 @@ it('新帧提交失败后回到旧帧重新取得输入，不借用可能已退�
   } finally { await renderer.dispose() }
 })
 
+/** 两扇录屏窗口：两个代码片段跟随同一段录屏的不同时刻（入点 0 秒与 5 秒），在 60..119 帧重叠（交叉溶解的重叠段）。 */
+function recordingWindowsFixture(secondStart = 60): ReturnType<typeof fixture> {
+  const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
+  document.media = document.media.map(media => ({ ...media, durationSeconds: 20 }))
+  const source = "export default {name:\"录屏窗口\",kind:\"generator\",mode:\"dynamic\",width:3840,height:2160,durationSeconds:20,params:[{key:\"screen\",type:\"image\",title:\"录屏\",default:null}],draw(){}}"
+  document.codeMaterials = [{ id: 'definition', name: '录屏窗口', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 4, languageVersion: 4, ...testCodeManifest(source, document) }] }]
+  const code = { definitionId: 'definition', versionId: 'v', parameters: { screen: { kind: 'video' as const, mediaId: 'A' } } }
+  document.items.push({ id: 'window', name: '录屏窗口', kind: 'code', code })
+  const base = document.clips[0]
+  document.clips = [
+    { ...base, id: 'w1', itemId: 'window', kind: 'code', code, track: 2, start: 0, duration: 120 },
+    { ...base, id: 'w2', itemId: 'window', kind: 'code', code, track: 3, start: secondStart, duration: 120, sourceInUs: 5_000_000 },
+  ]
+  return document
+}
+/** A frame backend recording every picture reader it hands out and each reader's single-frame reads. */
+function inputReaders(): { backend: VideoEditFrameBackend; readers: Array<{ exclusive: boolean; times: number[]; closed: boolean }> } {
+  const readers: Array<{ exclusive: boolean; times: number[]; closed: boolean }> = []
+  const picture = (timestamp: number) => ({ timestamp, duration: 1 / 60, format: 'NV12', close: vi.fn() }) as unknown as VideoSample
+  const backend: VideoEditFrameBackend = {
+    open: media => ({ key: media.path, ready: Promise.resolve({ codec: 'avc1',
+      clipFrames: options => {
+        const reader = { exclusive: options?.exclusive === true, times: [] as number[], closed: false }; readers.push(reader)
+        return { async *frames() {}, async frameAt(time: number) { reader.times.push(time); return picture(gridPicture(time)) }, close: () => { reader.closed = true } }
+      },
+      clipAudio: () => undefined, async *schedule() {} }) }),
+    release: () => {},
+    seeker: () => ({ sample: async () => ({ hit: false }), dispose: async () => {} }),
+  }
+  return { backend, readers }
+}
+/** Source seconds of each code input borrowed by the last rendered frame, by code clip ID. */
+function shownInputs(): Record<string, number | undefined> {
+  return Object.fromEntries(contentInputs.borrows.filter(([key]) => key.startsWith('code-input:')).map(([key, timestamp]) => [JSON.parse(key.slice('code-input:'.length))[0], timestamp]))
+}
+const pictureTimes = (from: number, to: number, offset = 0): number[] => Array.from({ length: to - from }, (_, index) => videoEditPictureSeconds(offset + (from + index) / 60))
+it('两扇录屏窗口同时引用同一段录屏：每个引用独占自己的读取位置，重叠段两边都只向前续读；切入那一帧沿用提前解好的入点', async () => {
+  const { backend, readers } = inputReaders()
+  const renderer = new VideoEditRenderer(recordingWindowsFixture(), 3840, undefined, 8 * 1024 ** 3, backend)
+  try {
+    for (let frame = 50; frame < 130; frame++) {
+      contentInputs.borrows = []
+      await (await renderer.render(frame, true)).completion
+      const shown = shownInputs()
+      expect(us([shown.w1]), `第 ${frame} 帧`).toEqual(us([frame < 120 ? frame / 60 : undefined]))
+      expect(us([shown.w2]), `第 ${frame} 帧`).toEqual(us([frame >= 60 ? 5 + (frame - 60) / 60 : undefined]))
+    }
+    const inputs = readers.filter(reader => reader.exclusive)
+    expect(inputs).toHaveLength(2); expect(readers).toHaveLength(2)
+    const w1 = inputs.find(reader => reader.times[0] < 4)!, w2 = inputs.find(reader => reader.times[0] >= 5)!
+    // One read per shown frame and never a step back: no reference moves the other's decoder.
+    expect(us(w1.times)).toEqual(us(pictureTimes(50, 120)))
+    // w2's in-point was decoded at frame 50 (prewarm), and its first showing frame (60) read nothing new.
+    expect(us(w2.times)).toEqual(us(pictureTimes(0, 70, 5)))
+    expect(w1.closed).toBe(true); expect(w2.closed).toBe(false)
+  } finally { await renderer.dispose() }
+  expect(readers.every(reader => reader.closed)).toBe(true)
+})
+it('重新起播重复请求刚显示过的帧：代码视频输入取回保留的已播画面，不让解码器回到关键帧；导出不保留', async () => {
+  const { backend, readers } = inputReaders()
+  const renderer = new VideoEditRenderer(recordingWindowsFixture(), 3840, undefined, 8 * 1024 ** 3, backend)
+  try {
+    for (let frame = 20; frame <= 30; frame++) await (await renderer.render(frame, true)).completion
+    const w1 = readers.find(reader => reader.exclusive && reader.times[0] < 4)!, reads = w1.times.length
+    for (const frame of [28, 29, 30]) {
+      contentInputs.borrows = []; await (await renderer.render(frame, true)).completion
+      expect(us([shownInputs().w1])).toEqual(us([frame / 60]))
+    }
+    expect(w1.times).toHaveLength(reads)
+    await (await renderer.render(31, true)).completion
+    expect(us(w1.times.slice(reads))).toEqual(us(pictureTimes(31, 32)))
+  } finally { await renderer.dispose() }
+})
+it('窗口切入前才打开并解到入点；停止播放、跳走或离开片段时预热与输入的解码会话立即关闭', async () => {
+  const { backend, readers } = inputReaders()
+  // The second window starts at frame 300, five seconds in: three seconds ahead is frame 120.
+  const renderer = new VideoEditRenderer(recordingWindowsFixture(300), 3840, undefined, 8 * 1024 ** 3, backend)
+  const prewarmed = () => readers.filter(reader => reader.exclusive && reader.times[0] >= 5)
+  try {
+    await (await renderer.render(119, true)).completion
+    expect(renderer.codeDiagnostics()).toMatchObject({ codeInputSessions: 1, codeInputsPrewarmed: 0 }); expect(prewarmed()).toHaveLength(0)
+    await (await renderer.render(120, true)).completion
+    // The first window has ended (its reader closes); the second opens ahead and decodes its in-point.
+    expect(renderer.codeDiagnostics()).toMatchObject({ codeInputSessions: 1, codeInputsPrewarmed: 1 })
+    await vi.waitFor(() => expect(us(prewarmed()[0]?.times ?? [])).toEqual(us([videoEditPictureSeconds(5)])))
+    await renderer.stopPlayback()
+    expect(renderer.codeDiagnostics()).toMatchObject({ codeInputSessions: 0, codeInputsPrewarmed: 0 }); expect(prewarmed()[0].closed).toBe(true)
+    await (await renderer.render(121, true)).completion
+    await vi.waitFor(() => expect(prewarmed()).toHaveLength(2))
+    // A paused frame elsewhere keeps only what it shows.
+    await (await renderer.render(5, false)).completion
+    expect(renderer.codeDiagnostics()).toMatchObject({ codeInputSessions: 1, codeInputsPrewarmed: 0 }); expect(prewarmed().every(reader => reader.closed)).toBe(true)
+    await (await renderer.render(600, false)).completion
+    expect(renderer.codeDiagnostics().codeInputSessions).toBe(0); expect(readers.every(reader => reader.closed)).toBe(true)
+  } finally { await renderer.dispose() }
+})
+it('导出逐帧：重叠段两个引用每帧各读一次准确画面，不提前打开，读取位置各自只向前', async () => {
+  const { backend, readers } = inputReaders()
+  const renderer = new VideoEditRenderer(recordingWindowsFixture(), undefined, undefined, 8 * 1024 ** 3, backend)
+  try {
+    for (let frame = 0; frame < 180; frame++) {
+      contentInputs.borrows = []
+      await (await renderer.render(frame, true)).completion
+      const shown = shownInputs()
+      expect(us([shown.w1, shown.w2]), `第 ${frame} 帧`).toEqual(us([frame < 120 ? frame / 60 : undefined, frame >= 60 ? 5 + (frame - 60) / 60 : undefined]))
+    }
+    expect(renderer.codeDiagnostics().codeInputsPrewarmed).toBe(0)
+    const inputs = readers.filter(reader => reader.exclusive)
+    expect(inputs).toHaveLength(2)
+    expect(us(inputs.find(reader => reader.times[0] < 4)!.times)).toEqual(us(pictureTimes(0, 120)))
+    expect(us(inputs.find(reader => reader.times[0] >= 5)!.times)).toEqual(us(pictureTimes(0, 120, 5)))
+  } finally { await renderer.dispose() }
+  expect(readers.every(reader => reader.closed)).toBe(true)
+})
+
 it('parameter updates keep the running decoder schedule and reuse uploaded paused pictures', async () => {
   const document = fixture()
   document.clips[0].effects = [{ id: 'effect', name: '调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params: { exposure: .2 } } }]

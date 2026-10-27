@@ -52,9 +52,10 @@ export function videoEditLookaheadTargets(document: VideoEditComposition, frame:
         const key = `${scopeKey}:code:${clip.id}:${codes.map(code => `${code.definitionId}:${code.versionId}`).join(',')}`
         if (!content.has(key)) content.set(key, { kind: 'code', key, scopes, document: doc, clip, frame: at, distance })
       }
-      // 代码视频/下层序列输入使用无 previewWidth 的正式输入渲染器，始终读取 seek 会话。
+      // 下层序列输入使用无 previewWidth 的正式输入渲染器，读取共享 seek 会话。视频输入每个引用独占自己的解码会话，
+      // 由渲染器在片段开始前自己打开并解到入点（videoEditRenderer 的 prewarmCodeInputs），这里不再为它预开共享会话。
       for (const code of codes) for (const reference of Object.values(code.parameters)) {
-        if (!isCodeImageReference(reference) || reference.kind === 'image') continue
+        if (!isCodeImageReference(reference) || reference.kind !== 'sequence') continue
         try {
           const input = codeMediaInputComposition(doc, clip, reference, at)
           visit(input.document, input.frame, distance, false, [...scopes, { document: input.document, key: input.sessionKey, input, parent: doc }])

@@ -45,9 +45,27 @@ export interface VideoEditAudioChunk {
 export interface VideoEditClipFrames {
   /** Consecutive pictures, starting with the one showing at `startSeconds`. */
   frames(startSeconds: number): AsyncGenerator<VideoEditDecodedPicture, void, unknown>
-  /** The picture showing at `seconds`, or null when there is none. */
-  frameAt(seconds: number): Promise<VideoEditDecodedPicture | null>
+  /** The picture showing at `seconds`, or null when there is none (options: see `VideoEditFrameReadOptions`). */
+  frameAt(seconds: number, options?: VideoEditFrameReadOptions): Promise<VideoEditDecodedPicture | null>
+  /** Releases decoder resources the reader holds itself (an exclusive reader's session); called once when the renderer drops the clip's source. */
+  close?(): void
 }
+
+/**
+ * `exclusive`: the reader's single-frame reads keep a decoder position of their own instead of sharing the file's
+ * single-frame session. A code video input plays forward through `frameAt` (one exact picture per frame), so with its
+ * own position consecutive reads continue decoding where the previous one stopped, and another reference to the same
+ * file (two windows of one recording in a crossfade), the source monitor's scrub or an export read never move it back
+ * to a key frame (playback stalled 0.5–1.6s per frame on 4K long-GOP recordings). Such a reader is closed with `close()`.
+ */
+export interface VideoEditClipFramesOptions { exclusive?: boolean }
+
+/**
+ * `speculative`: a read ahead of need (a code video input decoding its first picture before its clip starts). It only
+ * opens a decoder where the budget leaves room for the foreground, never evicts another file's idle session and never
+ * falls back to a shared session; it fails instead, and the clip reads normally when it starts.
+ */
+export interface VideoEditFrameReadOptions { speculative?: boolean }
 
 /** Sound reads of one clip. The renderer never reads one clip's sound concurrently (the render worker serializes). */
 export interface VideoEditClipAudio {
@@ -67,8 +85,8 @@ export interface VideoEditClipAudio {
 export interface VideoEditFrameSource {
   /** WebCodecs codec string of the picture stream; selects the owned GPU format of its pictures. */
   readonly codec?: string
-  /** A new picture reader for one clip, or undefined when the file has no picture stream. */
-  clipFrames(): VideoEditClipFrames | undefined
+  /** A new picture reader for one clip, or undefined when the file has no picture stream (options: see `VideoEditClipFramesOptions`). */
+  clipFrames(options?: VideoEditClipFramesOptions): VideoEditClipFrames | undefined
   /**
    * A new sound reader for one clip, or undefined when the file has no sound stream. `audioStream` is the n-th sound
    * stream of the file in file order (task 2.6, both backends number streams alike); without it the reader plays the

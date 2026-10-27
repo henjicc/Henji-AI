@@ -39,7 +39,8 @@ it('变速嵌套中的短片段和代码效果视频参数按正式源时间映�
   }]
   const targets = videoEditDecodeTargets(videoEditComposition(document, document.sequences[0].id), 0, true)
   expect(targets.find(target => target.media.id === 'b')).toMatchObject({ time: videoEditPictureSeconds(3), purpose: 'playback', distance: 1 })
-  expect(targets.find(target => target.media.id === 'c')).toMatchObject({ time: videoEditPictureSeconds(4), purpose: 'seek', distance: 1 })
+  // 视频参数每个引用独占解码会话，由渲染器在片段开始前自己打开并解到入点；前瞻不再为它预开文件共享的 seek 会话。
+  expect(targets.find(target => target.media.id === 'c')).toBeUndefined()
 })
 
 it('已就绪预渲染文件替换覆盖区间，暂停仍读取原片', () => {
@@ -55,7 +56,7 @@ it('效果视频参数与转场两侧余量也进入前瞻，隐藏轨道不打�
   composition.transitions = [{ id: 'cross', kind: 'cross_dissolve', leftClipId: 'a', rightClipId: 'b', durationFrames: 10 }]
   const targets = videoEditDecodeTargets(composition, 55, true)
   expect(targets.find(target => target.media.id === 'b')).toMatchObject({ distance: 0, time: videoEditPictureSeconds(1 - 5 / 30) })
-  expect(targets.find(target => target.media.id === 'c')).toMatchObject({ purpose: 'seek', time: videoEditPictureSeconds(4) })
+  expect(targets.find(target => target.media.id === 'c')).toBeUndefined()
   composition.tracks = composition.tracks.map(track => ({ ...track, enabled: false }))
   expect(videoEditDecodeTargets(composition, 55, true)).toEqual([])
 })

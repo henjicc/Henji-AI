@@ -1,7 +1,7 @@
 import type { VideoEditMedia } from '@/core/videoEdit/document'
 import type { VideoFrameDecoderInfo, VideoFrameNativeStats, VideoFrameScheduleEvent, VideoFrameStreamEndedPayload } from '@/platform/contracts/videoFrames'
 import type { VideoEditFrameCache } from './videoEditFrameCache'
-import { VIDEO_EDIT_NATIVE_SOUND_READY, type VideoEditClipAudio, type VideoEditClipFrames, type VideoEditFrameBackend, type VideoEditFrameSeeker, type VideoEditFrameSource, type VideoEditSnapshot } from './videoEditFrameSource'
+import { VIDEO_EDIT_NATIVE_SOUND_READY, type VideoEditClipAudio, type VideoEditClipFrames, type VideoEditClipFramesOptions, type VideoEditFrameBackend, type VideoEditFrameSeeker, type VideoEditFrameSource, type VideoEditSnapshot } from './videoEditFrameSource'
 import { createVideoEditNativeClipAudio, openVideoEditNativePcm, type VideoEditPcmSession } from './videoEditNativeAudio'
 import { VideoEditGpuFrame, videoEditGpuFrameUsesChroma } from './videoEditGpuFrame'
 import { VideoEditNativePicture, videoEditNativeRotation } from './videoEditNativePicture'
@@ -18,6 +18,8 @@ import { VideoEditNativeFailure, videoEditNativeClosed, videoEditNativeFailureKi
  * - one `playback` session for forward playback schedules (one long-lived decoder, cuts continue without flushing,
  *   exact microsecond timestamps; a new schedule cancels the previous one);
  * - one `seek` session shared by single-frame reads and the seeker, whose operations run one at a time;
+ * - one `seek` session per exclusive reader (`clipFrames({ exclusive: true })`, a code video input), opened on its
+ *   first single-frame read and closed with the reader;
  * - one `playback` session per sequential reader (`frames(start)`), closed with the reader;
  * - one sound session per clip sound reader (`clipAudio()`, task 2.3), opened on its first read at the mix's sample
  *   rate and closed with the reader. Sound sessions carry no textures and do not count against the session limit.
@@ -32,6 +34,12 @@ export type VideoEditNativeChannel = Pick<VideoEditNativeFrameReceiver, 'call' |
  * and hardware decoders across all windows (`native/video-decoder/src/budget.rs`). Beyond it reads fail in place.
  */
 export const VIDEO_EDIT_NATIVE_MAX_SESSIONS = 10
+/**
+ * Exclusive sessions (code video inputs, one per reference) leave this many of the renderer's sessions to shared ones
+ * (playback schedules, the shared single-frame session a reference falls back to); a reference beyond that shares its
+ * file's session as all references did before, slower when they interleave but never a failed frame.
+ */
+export const VIDEO_EDIT_NATIVE_EXCLUSIVE_RESERVE = 3
 /** The native service accepts at most this many times per schedule; later frames use the regular path. */
 const MAX_SCHEDULE_TIMES = 200_000
 /**
@@ -44,6 +52,8 @@ const LOST_FRAME_GRACE_MS = 1000
 const FRAME_ARRIVAL_TIMEOUT_MS = 5000
 /** How long a file failure of a seek window answers further reads before they try the file again (task 3.1). */
 const FILE_FAILURE_HOLD_MS = 2000
+/** How long an exclusive reader the budget refused an own session reads on the file's shared session before trying again. */
+const EXCLUSIVE_RETRY_MS = 2000
 /** Seek windows of long-GOP material: decoded once into the shared frame cache, like the browser's GOP ranges. */
 export const VIDEO_EDIT_NATIVE_SEEK_WINDOW_SECONDS = 1
 
@@ -358,11 +368,86 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
     await Promise.allSettled(sessions.map(async pending => (await pending)?.close()))
   }
 
-  clipFrames(): VideoEditClipFrames | undefined {
+  clipFrames(options?: VideoEditClipFramesOptions): VideoEditClipFrames | undefined {
     if (this.media.kind !== 'video') return undefined
+    if (options?.exclusive) return this.exclusiveFrames()
     return {
       frames: start => this.frames(start),
       frameAt: seconds => this.use(() => this.lane.run(async () => { recordVideoEditPreparation('nativeFrameAt', 0); return (await this.seek()).frameAt(seconds) })),
+    }
+  }
+
+  /**
+   * A reader whose single-frame reads run on a session of its own (opened on first read, closed with the reader), so
+   * consecutive reads continue forward in the native decoder (`frame_at` only seeks backwards or across GOPs) and no
+   * other reader of the file moves its position. Reads run one at a time; a session that ended or failed as a service
+   * is dropped, so the next read (the router's retry) opens a new one. The shared sessions and their speculative
+   * warm-ups are untouched: this session competes with nothing.
+   *
+   * When the renderer's decoder budget has no room left for another session (many references showing at once), a
+   * foreground read falls back to the file's shared single-frame session, as every reference read before: slower when
+   * references interleave, never a failed frame. A speculative read (`VideoEditFrameReadOptions`) opens only with
+   * headroom left for the foreground and otherwise fails.
+   */
+  private exclusiveFrames(): VideoEditClipFrames {
+    let session: Promise<VideoEditNativeDecoderSession> | undefined
+    let tail: Promise<unknown> = Promise.resolve()
+    let closed = false
+    /** Until when reads share the file's session after the budget refused an own one (then an own session is tried again). */
+    let sharingUntil = -Infinity
+    const drop = (pending: Promise<VideoEditNativeDecoderSession> | undefined): void => {
+      if (!pending) return
+      if (session === pending) session = undefined
+      this.owner.track(pending.then(value => value.close(), () => undefined))
+    }
+    /** The reader's session, opened on first use (reads are serialized, so there is never a second open). */
+    const open = (speculative: boolean): Promise<VideoEditNativeDecoderSession> => {
+      if (session) return session
+      const started = performance.now()
+      const opening = this.owner.openSession(this.media, this.path, 'seek', speculative, true)
+      session = opening
+      opening.then(value => {
+        this.owner.log('debug', '独占解码会话已打开', 'video_edit.decode.exclusive.opened', { mediaId: this.media.id, speculative, durationMs: performance.now() - started })
+        value.whenEnded(() => { if (session === opening) session = undefined })
+      }, () => { if (session === opening) session = undefined })
+      return opening
+    }
+    const shared = (seconds: number): Promise<VideoEditNativePicture | null> => this.use(() => this.lane.run(async () => (await this.seek()).frameAt(seconds)))
+    return {
+      frames: start => this.frames(start),
+      frameAt: (seconds, options) => {
+        const speculative = options?.speculative === true
+        const read = tail.catch(() => undefined).then(async () => {
+          if (closed || this.closed) throw closedFailure()
+          this.lastUsed = performance.now()
+          recordVideoEditPreparation('nativeFrameAt', 0)
+          if (!session && performance.now() < sharingUntil) { if (speculative) throw new VideoEditNativeFailure(videoEditNativeFailureMessage(this.media.name, 'budget'), 'budget', 'BUDGET_EXCEEDED'); return shared(seconds) }
+          let pending: Promise<VideoEditNativeDecoderSession> | undefined
+          try {
+            if (!session && speculative && !await this.owner.canPreopen()) throw new VideoEditNativeFailure(videoEditNativeFailureMessage(this.media.name, 'budget'), 'budget', 'BUDGET_EXCEEDED')
+            if (closed) throw closedFailure()
+            pending = open(speculative)
+            return await (await pending).frameAt(seconds)
+          } catch (error) {
+            const kind = videoEditNativeFailureKind(error)
+            if (kind === 'budget' && !speculative && !closed) {
+              sharingUntil = performance.now() + EXCLUSIVE_RETRY_MS
+              this.owner.log('info', '解码会话已满，此视频输入暂时改用素材共享的定位会话', 'video_edit.decode.exclusive.shared', { mediaId: this.media.id, sessions: this.owner.openSessions, retryInMs: EXCLUSIVE_RETRY_MS })
+              return shared(seconds)
+            }
+            // A hung or lost session must not answer the retry: close it so the next read opens a fresh one.
+            if (kind === 'service') drop(pending)
+            throw error
+          }
+        })
+        tail = read
+        return read
+      },
+      close: () => {
+        if (closed) return
+        closed = true
+        drop(session)
+      },
     }
   }
 
@@ -414,6 +499,7 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
   private readonly files = new Map<string, { users: number; source: VideoEditNativeFileSource }>()
   private readonly closing = new Set<Promise<void>>()
   private sessions = 0
+  private exclusiveSessions = 0
   private budgetUnavailable = false
   private budgetSnapshot?: { stats: VideoFrameNativeStats; at: number; sessions: number }
 
@@ -508,13 +594,18 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
     return openVideoEditNativePcm(this.options.channel, path, media.name, { ...(sampleRate !== undefined ? { sampleRate } : {}), ...(audioStream !== undefined ? { audioStream } : {}) })
   }
 
-  /** Opens a native decoder session, counted against the per-renderer limit (an exceeded budget is a `budget` failure). */
-  async openSession(media: VideoEditMedia, path: string, purpose: 'playback' | 'seek', speculative = false): Promise<VideoEditNativeDecoderSession> {
+  /**
+   * Opens a native decoder session, counted against the per-renderer limit (an exceeded budget is a `budget` failure).
+   * `exclusive`: an exclusive reader's own session, also counted against `VIDEO_EDIT_NATIVE_EXCLUSIVE_RESERVE`.
+   */
+  async openSession(media: VideoEditMedia, path: string, purpose: 'playback' | 'seek', speculative = false, exclusive = false): Promise<VideoEditNativeDecoderSession> {
     const limit = this.options.maxSessions ?? VIDEO_EDIT_NATIVE_MAX_SESSIONS
+    if (exclusive && this.exclusiveSessions >= limit - VIDEO_EDIT_NATIVE_EXCLUSIVE_RESERVE) throw new VideoEditNativeFailure(videoEditNativeFailureMessage(media.name, 'budget'), 'budget', 'BUDGET_EXCEEDED')
     if (this.options.retainIdle && !speculative && this.sessions >= limit) { this.cancelSpeculative(); await this.settleSpeculative(); await this.settled() }
     if (this.options.retainIdle && !speculative) while (this.sessions >= limit && await this.evictOne('foreground')) { /* 当前帧优先腾出名额。 */ }
     if (this.sessions >= limit) throw new VideoEditNativeFailure(videoEditNativeFailureMessage(media.name, 'budget'), 'budget', 'BUDGET_EXCEEDED')
     this.sessions++
+    if (exclusive) this.exclusiveSessions++
     try {
       // Pre-rendered preview files (8-bit H.264, NV12 slots) keep a deeper decoded queue: opening the next file's decoder
       // briefly stalls decoding, and 16 ready pictures (267ms at 60fps) cover it without a dropped frame.
@@ -533,8 +624,8 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
       }
       if (speculative) this.log('debug', '前瞻原生会话打开完成', 'video_edit.decode.preopen.opened', { mediaId: media.id, purpose, durationMs: performance.now() - started })
       recordVideoEditPreparation(speculative ? 'lookaheadNativeOpen' : purpose === 'playback' ? 'nativeOpenPlayback' : 'nativeOpenSeek', performance.now() - started)
-      return new VideoEditNativeDecoderSession(this.options.channel, info, media.name, () => { this.sessions--; recordVideoEditPreparation(purpose === 'playback' ? 'nativeClosedPlayback' : 'nativeClosedSeek', 0) })
-    } catch (error) { this.sessions--; throw videoEditNativeOpenFailure(media.name, error) }
+      return new VideoEditNativeDecoderSession(this.options.channel, info, media.name, () => { this.sessions--; if (exclusive) this.exclusiveSessions--; recordVideoEditPreparation(purpose === 'playback' ? 'nativeClosedPlayback' : 'nativeClosedSeek', 0) })
+    } catch (error) { this.sessions--; if (exclusive) this.exclusiveSessions--; throw videoEditNativeOpenFailure(media.name, error) }
   }
 
   /** Drops the shared sessions of a file after a failure so the next read opens new ones (router recovery, 3.1). */
@@ -584,6 +675,12 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
 
   seeker(media: VideoEditMedia, cache: VideoEditFrameCache, snapshot: VideoEditSnapshot): VideoEditFrameSeeker {
     return new VideoEditNativeSeeker(this, media, cache, snapshot)
+  }
+
+  /** Counts a session close (an exclusive reader's) among those `settled()` waits for. */
+  track(closing: Promise<void>): void {
+    const tracked: Promise<void> = closing.then(() => {}, () => {}).finally(() => this.closing.delete(tracked))
+    this.closing.add(tracked)
   }
 
   /** Resolves when every session closed by released sources has stopped (before the frame channel closes). */

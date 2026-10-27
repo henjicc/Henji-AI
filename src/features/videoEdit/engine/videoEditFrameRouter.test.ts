@@ -107,19 +107,25 @@ describe('运行中原生失败的恢复（3.1）', () => {
   }
   function scripted(name: string, script: Script) {
     const calls: string[] = []
+    /** Picture readers handed out (`exclusive`/`shared`) and closed. */
+    const readers: string[] = []
     let resets = 0
     const source: VideoEditFrameSource = {
       codec: name,
-      clipFrames: () => ({
-        frameAt: time => { calls.push(`frameAt ${time}`); return (script.frameAt ?? (async (at: number) => picture(name, at)))(time) as never },
-        frames: start => { calls.push(`frames ${start}`); return (script.frames ?? (async function* () {}))(start) as never },
-      }),
+      clipFrames: options => {
+        readers.push(options?.exclusive ? 'exclusive' : 'shared')
+        return {
+          frameAt: time => { calls.push(`frameAt ${time}`); return (script.frameAt ?? (async (at: number) => picture(name, at)))(time) as never },
+          frames: start => { calls.push(`frames ${start}`); return (script.frames ?? (async function* () {}))(start) as never },
+          close: () => { readers.push('closed') },
+        }
+      },
       clipAudio: () => ({ chunks: () => { calls.push('chunks'); return (script.chunks ?? (async function* () {}))() } }),
       schedule: times => { calls.push(`schedule ${times.length}`); return (script.schedule ?? (async function* () {}))(times) as never },
       decodable: async () => script.decodable ?? true,
     }
-    const backend: VideoEditNativeCapableBackend & { calls: string[]; resets: () => number } = {
-      calls, resets: () => resets,
+    const backend: VideoEditNativeCapableBackend & { calls: string[]; readers: string[]; resets: () => number } = {
+      calls, readers, resets: () => resets,
       reads: () => true,
       reset: () => { resets++ },
       open: () => ({ key: `${name}-key`, ready: Promise.resolve(source) }),
@@ -144,6 +150,20 @@ describe('运行中原生失败的恢复（3.1）', () => {
     failing = false; now = 2001
     expect(await clip.frameAt(3)).toMatchObject({ backend: 'native' })
     expect(log).toHaveBeenLastCalledWith('info', expect.any(String), 'video_edit.decode.native.restored', { mediaId: 'a', failures: 1 })
+  })
+
+  it('独占读取器（代码视频输入）在原生与后备上都按独占打开，关闭时两边的读取器一起关闭', async () => {
+    let failing = true
+    const native = scripted('native', { frameAt: async time => { if (failing) throw serviceFailure(); return picture('native', time) } })
+    const browser = scripted('browser', {})
+    const router = new VideoEditFrameRouter(browser, native, { nativeAvailable: true }, () => {})
+    const clip = (await router.open(media()).ready).clipFrames({ exclusive: true })!
+    expect(await clip.frameAt(1)).toMatchObject({ backend: 'browser' })
+    failing = false
+    expect(native.readers).toEqual(['exclusive']); expect(browser.readers).toEqual(['exclusive'])
+    clip.close?.()
+    expect(native.readers).toEqual(['exclusive', 'closed']); expect(browser.readers).toEqual(['exclusive', 'closed'])
+    await expect(clip.frameAt(2)).rejects.toThrow()
   })
 
   it('只有原生能解的文件：服务故障换新会话重试一次；文件故障与超出预算直接就地报告，不重试', async () => {
