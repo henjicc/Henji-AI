@@ -76,6 +76,25 @@ it('代码视频输入借用同设备预乘纹理，不上传、不夺取所有�
   expect(texture.destroy).not.toHaveBeenCalled()
   expect(bitmap.close).toHaveBeenCalledOnce()
 })
+it('代码视频输入不占上传图片的预算：四扇4K高精度录屏同屏可以合成，视频画面超过2GiB才拒绝', async () => {
+  const { compositor, device } = copyFixture(async () => {})
+  vi.stubGlobal('OffscreenCanvas', class {
+    constructor(public width: number, public height: number) {}
+    getContext() { return { configure: vi.fn(), getCurrentTexture: () => ({ createView: () => ({}) }) } }
+    transferToImageBitmap = () => ({ width: this.width, height: this.height, close: vi.fn() })
+  })
+  const texture = { createView: () => ({}), destroy: vi.fn() }
+  const recordings = Array.from({ length: 4 }, () => new VideoEditCodePicture(texture, 3840, 2462, device, 'rgba16float'))
+  try {
+    const inputs = await compositor.prepareImages(new Map(recordings.map((picture, index) => [`win${index}`, picture])), () => true)
+    expect([...inputs.keys()]).toEqual(['win0', 'win1', 'win2', 'win3'])
+  } finally { await compositor.dispose() }
+  const other = copyFixture(async () => {})
+  const many = Array.from({ length: 29 }, () => new VideoEditCodePicture(texture, 3840, 2462, other.device, 'rgba16float'))
+  try {
+    await expect(other.compositor.prepareImages(new Map(many.map((picture, index) => [`win${index}`, picture])), () => true)).rejects.toThrow('2GiB')
+  } finally { await other.compositor.dispose() }
+})
 it('输入画面保持原节目画布黑底，普通嵌套目标仍保留透明背景', async () => {
   const { compositor, device } = copyFixture(async () => {}), model = createVideoEditDocument('输入黑底')
   model.sequences[0].width = 3840; model.sequences[0].height = 2160

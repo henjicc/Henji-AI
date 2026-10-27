@@ -15,6 +15,7 @@ import { ImageEditWebGpuDeviceManager } from '@/core/imageEdit/webgpu/deviceMana
 import { getWebGpuContext, type GpuDevice, type GpuTexture, type GpuBuffer, type GpuRenderPipeline } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import type { VideoEditCodeGpu } from './videoEditCodeGpu'
 import { VideoEditCodePicture } from './videoEditCodePicture'
+import { VIDEO_EDIT_CODE_PICTURE_BUDGET_BYTES, VIDEO_EDIT_CODE_PICTURE_BUDGET_LABEL, VIDEO_EDIT_IMAGE_BUDGET_BYTES, VIDEO_EDIT_IMAGE_BUDGET_LABEL } from './videoEditGpuBudget'
 import { loadAuthorModule, type AuthorFrameInfo, type AuthorParameters } from './videoEditAuthorModule'
 import { VideoEditAuthorRuntime } from './videoEditAuthorRuntime'
 import type { AuthorSourceLocations } from './videoEditAuthorBundle'
@@ -434,7 +435,7 @@ export class VideoEditGpuCompositor {
     if (cached?.key === key) return cached.texture
     const bytes = source.width * source.height * 4
     const retained = [...this.textures.values()].reduce((total, entry) => total + entry.bytes, 0) - (cached?.bytes ?? 0)
-    if (source.width < 1 || source.height < 1 || source.width > 8192 || source.height > 8192 || retained + bytes > 256 * 1024 ** 2) throw new Error('图片或文字超出 GPU 单张纹理 8192 像素或驻留 256MiB 技术预算。')
+    if (source.width < 1 || source.height < 1 || source.width > 8192 || source.height > 8192 || retained + bytes > VIDEO_EDIT_IMAGE_BUDGET_BYTES) throw new Error(`图片或文字超出 GPU 单张纹理 8192 像素或驻留 ${VIDEO_EDIT_IMAGE_BUDGET_LABEL} 技术预算。`)
     const texture = this.device.createTexture({ size: [source.width, source.height], format: 'rgba8unorm', usage: 0x02 | 0x04 | 0x10 })
     const started = performance.now()
     // Preserve the bitmap's premultiplied pixels. Unpremultiplying on upload and
@@ -452,8 +453,15 @@ export class VideoEditGpuCompositor {
     await this.ready
     if (!shouldPresent() || this.disposed) throw new DOMException('图片画面已取消。', 'AbortError')
     this.assertDevice()
-    const unique = new Set(pictures.values()); const bytes = [...unique].reduce((sum, image) => sum + image.width * image.height * (image instanceof VideoEditCodePicture && image.highPrecision ? 8 : 4), 0)
-    if (unique.size + visibleText.size > 32 || bytes + visibleText.size * this.canvas.width * this.canvas.height * 4 > 256 * 1024 ** 2) throw new Error('可见图片与文字超过32份或256MiB预算，请减少同时显示的素材。')
+    // Uploaded images and text layers share the upload budget. Code video inputs are decoder pictures already resident
+    // on this device (borrowed, never uploaded): they get their own budget, so a collage of several 4K recordings fits.
+    const unique = new Set(pictures.values())
+    let uploadBytes = 0, pictureBytes = 0
+    for (const image of unique) {
+      if (image instanceof VideoEditCodePicture) pictureBytes += image.width * image.height * (image.highPrecision ? 8 : 4)
+      else uploadBytes += image.width * image.height * 4
+    }
+    if (unique.size + visibleText.size > 32 || uploadBytes + visibleText.size * this.canvas.width * this.canvas.height * 4 > VIDEO_EDIT_IMAGE_BUDGET_BYTES || pictureBytes > VIDEO_EDIT_CODE_PICTURE_BUDGET_BYTES) throw new Error(`可见图片与文字超过32份或${VIDEO_EDIT_IMAGE_BUDGET_LABEL}预算（视频画面另有${VIDEO_EDIT_CODE_PICTURE_BUDGET_LABEL}），请减少同时显示的素材。`)
     for (const image of unique) if (image instanceof VideoEditCodePicture && image.owner !== this.device) throw new Error('视频输入画面不属于当前GPU设备。')
     this.protectedImages = new Set([...unique].filter((image): image is ImageBitmap => !(image instanceof VideoEditCodePicture)).map(image => this.imageKey(image)).concat([...visibleText].map(id => `text:${id}`)))
     this.protectedUniforms = new Set(visibleClips)

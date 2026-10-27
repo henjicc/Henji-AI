@@ -53,6 +53,7 @@ import { readVideoEditExportPicture } from './videoEditExportPictures'
 import { isVideoEditRenderDivisor, videoEditRenderSize, type VideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution'
 import { applyVideoEditParameterUpdate, type VideoEditParameterUpdate } from './videoEditParameterUpdate'
 import { VideoEditJumpPreview, VIDEO_EDIT_JUMP_PREVIEW_DIVISOR } from './videoEditJumpPreview'
+import { VIDEO_EDIT_IMAGE_BUDGET_BYTES, VIDEO_EDIT_IMAGE_BUDGET_LABEL } from './videoEditGpuBudget'
 
 interface PlaybackStream {
   demux: string
@@ -90,7 +91,7 @@ export const VIDEO_EDIT_SCRUB_CONTINUE_SECONDS = 0.1
 export const VIDEO_EDIT_IDLE_AUDIO_SOURCES = 8
 /** 浏览器回退路径的闲置读取器上限；原生会话按服务端预算保留，不使用此数量。 */
 export const VIDEO_EDIT_IDLE_SCRUB_RENDERERS = 4
-/** 拖动播放头时保留的空闲已解码图片上限（另受 256MiB 图片预算约束）。 */
+/** 拖动播放头时保留的空闲已解码图片上限（另受图片显存预算约束，见 videoEditGpuBudget.ts）。 */
 export const VIDEO_EDIT_IDLE_SCRUB_IMAGES = 6
 
 /**
@@ -198,7 +199,7 @@ const CODE_INPUT_PREWARM_MAX_STEP_SECONDS = 0.25
  */
 const CODE_INPUT_PREWARM_FROM_START_SECONDS = 5
 /** Decoded stills (code video inputs fixed at one time) kept for a renderer tree, shared by every reference to the picture. */
-const CODE_INPUT_STILL_BYTES = 256 * 1024 ** 2
+const CODE_INPUT_STILL_BYTES = VIDEO_EDIT_IMAGE_BUDGET_BYTES
 /** Stills decoded in the background at once (each borrows a decoder session while it walks to its picture). */
 const CODE_INPUT_STILL_DECODES = 2
 /**
@@ -529,7 +530,7 @@ export class VideoEditRenderer {
     if (target.media && this.speculativeImageLoads > 0) { this.lookaheadMetrics.budgetSkipped++; return false }
     const renderers = this.lookaheadRenderers()
     const bytes = renderers.reduce((sum, renderer) => sum + [...renderer.images.values()].reduce((sum, image) => sum + image.bytes, 0), 0)
-    if (renderers.length >= 12 && !this.lookaheadRenderer(target.scopes, false) || target.media && bytes + target.media.width * target.media.height * 4 > 256 * 1024 ** 2) { this.lookaheadMetrics.budgetSkipped++; return false }
+    if (renderers.length >= 12 && !this.lookaheadRenderer(target.scopes, false) || target.media && bytes + target.media.width * target.media.height * 4 > VIDEO_EDIT_IMAGE_BUDGET_BYTES) { this.lookaheadMetrics.budgetSkipped++; return false }
     const renderer = this.lookaheadRenderer(target.scopes, true)!
     if (target.media) {
       renderer.warmImages.add(target.media.id)
@@ -657,8 +658,8 @@ export class VideoEditRenderer {
         const bytes = bitmap.width * bitmap.height * 4
         const others = (): number => [...this.images].reduce((sum, [id, image]) => sum + (id === media.id ? 0 : image.bytes), 0)
         // 超预算时先释放拖动中暂留的空闲图片（最旧的先），仍放不下才报错。
-        for (const key of [...this.idleImages.keys()]) { if (others() + bytes <= 256 * 1024 ** 2) break; this.idleImages.delete(key); this.releaseImage(key) }
-        if (others() + bytes > 256 * 1024 ** 2) { bitmap.close(); throw new Error('解码图片超过256MiB预算，请减少同时显示的图片。') }
+        for (const key of [...this.idleImages.keys()]) { if (others() + bytes <= VIDEO_EDIT_IMAGE_BUDGET_BYTES) break; this.idleImages.delete(key); this.releaseImage(key) }
+        if (others() + bytes > VIDEO_EDIT_IMAGE_BUDGET_BYTES) { bitmap.close(); throw new Error(`解码图片超过${VIDEO_EDIT_IMAGE_BUDGET_LABEL}预算，请减少同时显示的图片。`) }
         const entry = this.images.get(media.id)!; entry.bytes = bytes; entry.ready = true; entry.predecoded = speculative
         return bitmap
       })
@@ -1647,7 +1648,7 @@ export class VideoEditRenderer {
       if (!media) throw new Error('代码图片引用或图片片段的源素材不存在。')
       return media
     }).filter(media => media.kind === 'image')
-    if (imageMedia.length > 32 || imageMedia.reduce((sum, media) => sum + media.width * media.height * 4, 0) > 256 * 1024 ** 2) throw new Error('可见图片超过32份或256MiB预算，请减少同时显示的图片。')
+    if (imageMedia.length > 32 || imageMedia.reduce((sum, media) => sum + media.width * media.height * 4, 0) > VIDEO_EDIT_IMAGE_BUDGET_BYTES) throw new Error(`可见图片超过32份或${VIDEO_EDIT_IMAGE_BUDGET_LABEL}预算，请减少同时显示的图片。`)
     for (const id of imageIds) {
       this.warmImages.delete(id)
       const image = this.images.get(id)

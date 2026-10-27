@@ -663,8 +663,8 @@ function stillsFixture(): ReturnType<typeof fixture> {
 it('暂停时前瞻由近到远解好 60 秒内的定格帧；存储放不下时不挤掉更近的，换了位置不再需要的先让位', async () => {
   const { backend, readers } = steppingReaders()
   const document = stillsFixture()
-  // Two such pictures fill the 256MB still store.
-  boundary.snapshotBytes = 100 * 1024 ** 2
+  // Two such pictures fill the still store (VIDEO_EDIT_IMAGE_BUDGET_BYTES, 1GiB).
+  boundary.snapshotBytes = 400 * 1024 ** 2
   const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
   const decoded = (): number[] => readers.filter(reader => reader.reads.length).map(reader => Math.round(reader.reads.at(-1)!.time * 10) / 10)
   const reads = (): number => readers.reduce((sum, reader) => sum + reader.reads.length, 0)
@@ -1226,11 +1226,11 @@ it('图片原生解码最多两份，低报元数据仍按实际驻留像素拒�
   finish[0]({ width: 32, height: 32, close }); await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(3))
   finish[1]({ width: 32, height: 32, close }); finish[2]({ width: 32, height: 32, close }); await rendering
   expect(renderer.codeDiagnostics().imageDecodes).toBe(0); await renderer.dispose(); await Promise.resolve(); expect(close).toHaveBeenCalledTimes(3)
-  const sized = new VideoEditRenderer(imageFixture(2)); const oversizeClose = vi.fn()
-  vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 6144, height: 6144, close: oversizeClose })))
-  await expect(sized.render(0)).rejects.toThrow('256MiB')
-  expect(sized.codeDiagnostics().decodedImageBytes).toBeLessThanOrEqual(256 * 1024 ** 2); expect(oversizeClose).toHaveBeenCalledOnce()
-  await sized.dispose(); await Promise.resolve(); expect(oversizeClose).toHaveBeenCalledTimes(2)
+  const sized = new VideoEditRenderer(imageFixture(5)); const oversizeClose = vi.fn()
+  vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 8192, height: 8192, close: oversizeClose })))
+  await expect(sized.render(0)).rejects.toThrow('1GiB')
+  expect(sized.codeDiagnostics().decodedImageBytes).toBeLessThanOrEqual(1024 ** 3); expect(oversizeClose).toHaveBeenCalledOnce()
+  await sized.dispose(); await Promise.resolve(); expect(oversizeClose).toHaveBeenCalledTimes(5)
 })
 it('可见原视频和代码画面走同一合成，静态变换修改复用纹理且离开释放', async () => {
   const document = mixedFixture(); const renderer = new VideoEditRenderer(document)
