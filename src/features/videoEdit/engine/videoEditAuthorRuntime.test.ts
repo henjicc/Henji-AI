@@ -103,6 +103,40 @@ it('gives images read outside a canvas draw a real bitmap every frame and draws 
   await runtime.dispose()
 })
 
+it('只读过一次的图片不再每帧预先拷位图；之后再读照常经重试拿到本帧位图', async () => {
+  class Bitmap { width = 8; height = 8; close = vi.fn() }
+  const context = { reset: vi.fn(), save: vi.fn(), restore: vi.fn(), setTransform: vi.fn(), fillRect: vi.fn(), drawImage: vi.fn(), getImageData: vi.fn(() => ({ width: 8, height: 8 })) }
+  class Canvas { constructor(public width: number, public height: number) {} getContext(): typeof context { return context } }
+  vi.stubGlobal('ImageBitmap', Bitmap); vi.stubGlobal('OffscreenCanvas', Canvas)
+  const createBitmap = vi.fn(async () => new Bitmap())
+  vi.stubGlobal('createImageBitmap', createBitmap)
+  let size: number | undefined, readAgain = false
+  const seen: unknown[] = []
+  const runtime = new VideoEditAuthorRuntime({ createTexture: () => ({ destroy: vi.fn() }), queue: { copyExternalImageToTexture: vi.fn() } } as unknown as GpuDevice, {
+    name: '图标',
+    // 作者第一帧量一次图标尺寸并缓存，之后不再读 assets
+    layers: (_params, _width, _height, assets) => {
+      if (size === undefined || readAgain) { const icon = assets.icon as unknown as Bitmap; seen.push(icon); size = icon.width }
+      return [{ id: 'card', draw(ctx) { ctx.fillRect(0, 0, size!, size!) } }]
+    },
+  })
+  const icon = new Bitmap()
+  const copies: number[] = []
+  try {
+    for (let frame = 0; frame < 16; frame++) {
+      const before = createBitmap.mock.calls.length
+      await runtime.render({ createView: () => ({}), destroy() {} }, 100, 50, {}, { icon: icon as unknown as ImageBitmap }, { time: frame / 60, frameDuration: 1 / 60, clip: { time: frame / 60, duration: 5 } })
+      copies.push(createBitmap.mock.calls.length - before)
+    }
+    expect(copies[0]).toBe(1)
+    // 几帧之后不再为没人读的图片拷位图
+    expect(copies.slice(10)).toEqual([0, 0, 0, 0, 0, 0])
+    readAgain = true
+    await runtime.render({ createView: () => ({}), destroy() {} }, 100, 50, {}, { icon: icon as unknown as ImageBitmap }, { time: 1, frameDuration: 1 / 60, clip: { time: 1, duration: 5 } })
+    expect(seen.at(-1)).toBeInstanceOf(Bitmap); expect(seen.at(-1)).not.toBe(icon)
+  } finally { await runtime.dispose() }
+})
+
 it('releases the module even when an instance disposer fails, without retrying disposal', async () => {
   const dispose = vi.fn(() => { throw new Error('instance cleanup') })
   const moduleDispose = vi.fn()

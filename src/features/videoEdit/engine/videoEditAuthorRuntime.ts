@@ -34,6 +34,8 @@ const SCRATCH_CANVASES = 4
  * （低帧率计数、间歇闪烁）时一直留在“在变”组里，分组不来回切换，静止组不被反复重画。
  */
 const QUIET_FRAMES = 12
+/** 在录制之外读过的图片，这么多帧没再读就不再每帧预先拷位图（再读时经 AuthorAssetPending 重试补上）。 */
+const EAGER_FRAMES = 8
 const sameContent = (held: SurfaceContent | undefined, next: SurfaceContent): boolean =>
   !!held && held.key === next.key && held.parts.length === next.parts.length && held.parts.every((part, index) => part === next.parts[index])
 /** An image read outside a recorded draw before its bitmap of this frame exists. */
@@ -52,8 +54,13 @@ export class VideoEditAuthorRuntime {
   /** 上一帧画了逐帧变化输入的运动层：按 1 倍栅格。 */
   private readonly liveLayers = new Set<string>()
   private assetVersion = 0
-  /** Images the author reads outside recorded canvas draws (e.g. for its own WebGL scene): made every frame up front. */
-  private readonly eagerAssets = new Set<string>()
+  /**
+   * Images the author reads outside recorded canvas draws (e.g. for its own WebGL scene), with the Canvas frame that last
+   * read them: made up front while they were read within EAGER_FRAMES frames. An author that read an image once and then
+   * keeps its own copy stops costing a bitmap copy every frame; a later read gets its bitmap through the existing retry.
+   */
+  private readonly eagerAssets = new Map<string, number>()
+  private canvasFrames = 0
   /** Layers whose drawing cannot be recorded; they draw directly every frame. */
   private readonly directLayers = new Set<string>()
   /** Last successful frame's recording of every layer slot, with how recently it changed. */
@@ -221,6 +228,8 @@ export class VideoEditAuthorRuntime {
         frameImages.push(copy); fresh.set(key, copy)
       }
       let recording = false
+      const canvasFrame = ++this.canvasFrames
+      for (const [key, last] of this.eagerAssets) if (canvasFrame - last > EAGER_FRAMES) this.eagerAssets.delete(key)
       const canvasAssets: Record<string, CanvasImageSource> = {}
       for (const [key, source] of Object.entries(assets)) {
         const cached = this.canvasImages.get(key)
@@ -229,7 +238,8 @@ export class VideoEditAuthorRuntime {
         Object.defineProperty(canvasAssets, key, { enumerable: true, get: () => {
           if (recording) return standIn
           const image = fresh.get(key)
-          if (!image) { this.eagerAssets.add(key); throw new AuthorAssetPending(key) }
+          this.eagerAssets.set(key, canvasFrame)
+          if (!image) throw new AuthorAssetPending(key)
           return image
         } })
       }
@@ -237,7 +247,7 @@ export class VideoEditAuthorRuntime {
       const assetSignature = (keys: Iterable<string>): string => JSON.stringify([...keys].sort().map(key => [key, this.canvasImages.get(key)?.version]))
       const measure = this.measureContext ??= new OffscreenCanvas(1, 1).getContext('2d') ?? undefined
       for (let attempt = 0; ; attempt++) {
-        for (const key of this.eagerAssets) await freshAsset(key)
+        for (const key of this.eagerAssets.keys()) await freshAsset(key)
         const statistics: CodeLayerStatistics = { reused: 0, redrawn: 0, direct: 0, video: 0, uploads: 0, uploadBytes: 0 }
         const history = new Map<string, LayerHistory>()
         const used = new Set<number>()
