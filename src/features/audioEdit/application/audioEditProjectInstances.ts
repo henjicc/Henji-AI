@@ -1,5 +1,5 @@
 import { assertAudioEditLocks } from '@/core/audioEdit/edits'
-import { isAgentWritingDocument, markAgentAuthoredStep } from '@/features/application-control/agentEditing'
+import { isAgentWritingDocument, markAgentAuthoredStep } from '@/features/application-control'
 import { restoreAudioEditBaseline } from '@/core/audioEdit/baseline'
 import {
   AudioEditSourceMissingError, isEmptyAudioEditSource,

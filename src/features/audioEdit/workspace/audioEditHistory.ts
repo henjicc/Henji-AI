@@ -1,5 +1,5 @@
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
-import { isAgentAuthoredStep } from '@/features/application-control/agentEditing'
+import { isAgentAuthoredStep } from '@/features/application-control'
 
 /*
  * 历史记录面板的步骤名：撤销栈只存作品快照，这里比较相邻两份快照，说出这一步改了什么。
