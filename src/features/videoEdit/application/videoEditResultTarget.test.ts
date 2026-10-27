@@ -248,6 +248,16 @@ it('素材面板只新增素材，回执可读回；重复发送与撤销不产�
   expect(owner.document.items).toHaveLength(0); expect(owner.document.media).toHaveLength(0)
 })
 
+it('旧资产以整段提示词为名时，按来源起名仍沿短名预算，不因名称超长整次放入失败', async () => {
+  const { owner, sequence } = await setup()
+  const legacy = asset({ displayName: '长提示词😀'.repeat(80) })
+  vi.mocked(getPlatform().assetLibrary.inspectAsset).mockResolvedValue(legacy)
+  const target = captureVideoEditResultTarget(owner.document.id, sequence.id, { mode: 'library' })
+  await commitVideoEditCreativeResult(target, { asset: legacy, origin })
+  expect(owner.document.media[0].name.length).toBeLessThanOrEqual(80)
+  expect(owner.document.items[0].name).toBe(owner.document.media[0].name)
+})
+
 it.each(['overwrite', 'insert'] as const)('%s 复用时间线裁切/插入，并在同一次撤销恢复媒体和原片段', async mode => {
   const { owner, target, result, sequence } = await setup()
   const first = await commitVideoEditCreativeResult(target, result)
