@@ -39,7 +39,7 @@ export class FrameEncoder {
       : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '16', '-pix_fmt', 'yuv420p']
     const child = spawn(ffmpeg, [
       '-hide_banner', '-loglevel', 'error', '-y',
-      '-f', 'rawvideo', '-pix_fmt', 'bgra', '-s', `${sourceWidth}x${sourceHeight}`, '-r', String(this.fps), '-i', 'pipe:0',
+      '-f', 'rawvideo', '-pix_fmt', 'bgra', '-video_size', `${sourceWidth}x${sourceHeight}`, '-r', String(this.fps), '-i', 'pipe:0',
       ...crop, ...codec, '-movflags', '+faststart', this.output,
     ])
     child.stderr.on('data', chunk => { this.stderr = (this.stderr + String(chunk)).slice(-4000) })
