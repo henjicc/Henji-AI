@@ -32,6 +32,15 @@ it('类型、枚举、范围与格式约束来自 schema，多个问题逐行列
   ].join('\n'))
 })
 
+it('联合类型里的字段按判别值找到所在分支，超出项数时报出上限与实际项数', () => {
+  const schema = z.object({ target: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('frame'), frame: z.number().int().nonnegative() }).strict(),
+    z.object({ kind: z.literal('frames'), frames: z.array(z.number().int().nonnegative()).min(1).max(12).describe('指定1–12个序列帧') }).strict(),
+  ]) }).strict()
+  expect(message(schema, { target: { kind: 'frames', frames: Array.from({ length: 13 }, (_, i) => i) } }, z.toJSONSchema(schema, { io: 'input' })))
+    .toBe('INVALID_INPUT:target.frames 应为 数组（1–12 项）；指定1–12个序列帧，收到 13 项。\n这个工具接受：target（必填）。')
+})
+
 it('不认识的字段保持原说明，并列出必填与通用字段', () => {
   expect(message(clipSchema, { clipRef: { kind: 'video_edit.clip', id: 'clip' }, foo: 1 }, publicClipSchema)).toBe(`INVALID_INPUT:不认识的参数：foo。\n${accepted}`)
 })

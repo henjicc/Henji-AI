@@ -19,11 +19,36 @@ function resolveSchema(value: unknown, root: Record<string, unknown>): Record<st
   return object(schema.$ref.slice(2).split('/').reduce<unknown>((node, key) => object(node)[key.replace(/~1/g, '/').replace(/~0/g, '~')], root))
 }
 
-function schemaAt(root: Record<string, unknown>, path: readonly PropertyKey[]): Record<string, unknown> {
-  return path.reduce((schema, key) => {
-    const current = resolveSchema(schema, root)
-    return resolveSchema(current.type === 'array' ? current.items : object(current.properties)[String(key)], root)
-  }, root)
+/** 联合类型（anyOf/oneOf）里与输入对应的分支：先按 const 判别字段匹配，再取含该字段的第一个分支。 */
+function branchFor(schema: Record<string, unknown>, value: unknown, key: string, root: Record<string, unknown>): Record<string, unknown> {
+  const alternatives = schema.anyOf ?? schema.oneOf
+  if (!Array.isArray(alternatives)) return schema
+  const branches = alternatives.map(item => resolveSchema(item, root))
+  const input = object(value)
+  const discriminated = branches.find(branch => {
+    const consts = Object.entries(object(branch.properties)).filter(([, field]) => 'const' in object(field))
+    return consts.length > 0 && consts.every(([name, field]) => object(field).const === input[name])
+  })
+  return discriminated ?? branches.find(branch => key in object(branch.properties)) ?? schema
+}
+
+function schemaAt(root: Record<string, unknown>, path: readonly PropertyKey[], input?: unknown): Record<string, unknown> {
+  let schema = root, value = input
+  for (const key of path) {
+    const current = branchFor(resolveSchema(schema, root), value, String(key), root)
+    schema = resolveSchema(current.type === 'array' ? current.items : object(current.properties)[String(key)], root)
+    value = value !== null && typeof value === 'object' ? (value as Record<PropertyKey, unknown>)[key] : undefined
+  }
+  return schema
+}
+
+/** 收到的值：数组与字符串的长度错误报出实际项数或字数，其余只报类型。 */
+const receivedDescription = (value: unknown, code: string): string => {
+  if (code === 'too_small' || code === 'too_big') {
+    if (Array.isArray(value)) return ` ${value.length} 项`
+    if (typeof value === 'string') return ` ${[...value].length} 字符`
+  }
+  return receivedType(value)
 }
 
 function constraint(schema: Record<string, unknown>, fallback?: string): string {
@@ -72,12 +97,12 @@ export function describeInputIssues(error: z.ZodError, schema?: InputSchema, inp
   const lines = error.issues.map(issue => {
     const field = issue.path.map(String).join('.') || '参数'
     if (issue.code === 'unrecognized_keys') return `不认识的参数：${issue.keys.map(key => issue.path.length ? `${field}.${key}` : key).join('、')}。`
-    const fieldSchema = schemaAt(root, issue.path)
+    const fieldSchema = schemaAt(root, issue.path, input)
     const received = valueAt(input, issue.path)
     if (['invalid_type', 'invalid_value', 'invalid_union'].includes(issue.code) && input !== undefined && received === undefined) return `缺少必填参数 ${field}（${constraint(fieldSchema, issue.code === 'invalid_type' ? issue.expected : undefined)}）。`
     if (['invalid_type', 'invalid_value', 'invalid_union', 'too_small', 'too_big', 'invalid_format', 'not_multiple_of'].includes(issue.code)) {
       const expected = constraint(fieldSchema, issue.code === 'invalid_type' ? issue.expected : undefined)
-      return `${field} 应为 ${expected}${input !== undefined ? `，收到${receivedType(received)}` : ''}。`
+      return `${field} 应为 ${expected}${input !== undefined ? `，收到${receivedDescription(received, issue.code)}` : ''}。`
     }
     return `${field}：${issue.message}`
   })
