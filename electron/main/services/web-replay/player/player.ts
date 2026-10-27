@@ -12,6 +12,7 @@ import { FrameEncoder } from './encoder'
 import { InputDispatcher } from './input'
 import { BOOTSTRAP_PATH, installReplaySite } from './site'
 import { TEXT_SAMPLE_INTERVAL_US, TEXT_SAMPLE_SCRIPT, TextTrackWriter, type TextSample } from '../textTrack'
+import { BOX_TRACK_FILE, boxSampleEveryFrames, boxSampleScript, BoxTrackWriter, type BoxSample } from '../boxTrack'
 
 const logger = createMainLogger('main.web_replay.player')
 const TAIL_MS = 1500
@@ -42,6 +43,8 @@ export interface ReplayOptions {
   onFrame?: (progress: number, frame: string) => void
   /** 同时写文字轨（画面上看得见的文字与位置）到这个文件。 */
   textTrack?: string
+  /** 除 data-replay-id / data-act 外额外采样的 CSS 选择器。 */
+  boxSelectors?: string[]
   /** false 只跑页面、不编码视频（只要文字轨时用）。默认 true。 */
   video?: boolean
 }
@@ -133,6 +136,7 @@ export class WebRecordingPlayer {
   private scale = 1
 
   async render(options: ReplayOptions): Promise<ReplayResult> {
+    const boxesScript = boxSampleScript(options.boxSelectors)
     installIpc()
     this.pointer = options.pointer !== false
     this.manifest = await this.store.readManifest()
@@ -168,6 +172,8 @@ export class WebRecordingPlayer {
     let lateFrames = 0
     const video = options.video !== false
     const text = options.textTrack ? new TextTrackWriter(options.textTrack) : null
+    const boxes = new BoxTrackWriter(path.join(this.store.directory, BOX_TRACK_FILE))
+    let boxSamples = 0, boxSampleMs = 0, boxSampleMaxMs = 0
     let textFailures = 0
     try {
       const stage = (name: string): void => logger.info('网页重演进度', { event: 'web_replay.replay.stage', context: { recordingId: this.manifest.id, stage: name } })
@@ -219,12 +225,21 @@ export class WebRecordingPlayer {
       const totalMs = this.manifest.durationUs / 1000 + TAIL_MS
       const frameCount = Math.ceil(totalMs / 1000 * fps)
       const sampleEvery = Math.max(1, Math.round(TEXT_SAMPLE_INTERVAL_US / 1e6 * fps))
+      const boxEvery = boxSampleEveryFrames(scale)
+      logger.info('开始采样界面元素位置轨', { event: 'web_replay.boxes.start', context: { recordingId: this.manifest.id, fps, scale, everyFrames: boxEvery, selectors: options.boxSelectors?.length ?? 0 } })
       for (let i = 0; i < frameCount; i += 1) {
         if (options.signal?.aborted) throw new Error('已取消重演')
         const due = zeroMs + (i * 1000 * scale) / fps
         const wait = due - Date.now()
         if (wait > 0) await new Promise(resolve => setTimeout(resolve, wait))
         else if (wait < -500 * scale / fps) lateFrames += 1
+        if (i % boxEvery === 0) {
+          const started = performance.now()
+          const sample = await withTimeout(contents.executeJavaScript(boxesScript, true) as Promise<BoxSample>, 2_000, '读取界面元素位置超时')
+          await boxes.write(Math.round(i * 1e6 / fps), sample)
+          const elapsed = performance.now() - started
+          boxSamples += 1; boxSampleMs += elapsed; boxSampleMaxMs = Math.max(boxSampleMaxMs, elapsed)
+        }
         if (text && i % sampleEvery === 0) {
           try { text.write(Math.round(i * 1e6 / fps), await withTimeout(contents.executeJavaScript(TEXT_SAMPLE_SCRIPT, true) as Promise<TextSample>, 2_000, '读取画面文字超时')) } catch (error) {
             if (textFailures++ === 0) this.issue('warning', `文字轨有时刻没取到：${String(error)}`)
@@ -252,6 +267,8 @@ export class WebRecordingPlayer {
         if (options.onFrame && i % Math.max(1, Math.round(fps / 5)) === 0) options.onFrame(i / frameCount, `data:image/jpeg;base64,${frame.resize({ width: Math.min(1280, width) }).toJPEG(80).toString('base64')}`)
       }
       await text?.close(Math.round(frameCount * 1e6 / fps))
+      await boxes.close(Math.round(frameCount * 1e6 / fps))
+      logger.info('界面元素位置轨已保存', { event: 'web_replay.boxes.completed', context: { recordingId: this.manifest.id, everyFrames: boxEvery, samples: boxSamples, sampleMs: boxSampleMs, sampleMaxMs: boxSampleMaxMs, lateFrames } })
       if (!video) {
         logger.info('网页重演文字轨完成', { event: 'web_replay.replay.text_completed', context: { recordingId: this.manifest.id, issues: this.issues.length } })
         return { output: options.textTrack ?? '', frames: frameCount, width: Math.round(env.viewport.width), height: Math.round(env.viewport.height), durationMs: totalMs, issues: this.issues, looseMatches: this.loose, unusedCalls: this.matcher.unused().length, locatorMisses: input.misses }
@@ -265,6 +282,7 @@ export class WebRecordingPlayer {
     } catch (error) {
       encoder?.abort()
       text?.abort()
+      await boxes.abort().catch(cleanupError => logger.warn('位置轨暂存清理失败', { event: 'web_replay.boxes.cleanup_failed', error: String(cleanupError) }))
       logger.error('网页重演失败', { event: 'web_replay.replay.failed', context: { recordingId: this.manifest?.id }, error: String(error) })
       throw error
     } finally {
