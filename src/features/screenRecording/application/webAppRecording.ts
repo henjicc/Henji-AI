@@ -147,12 +147,13 @@ export async function executeWebAppCapability(id: string, input: unknown, contex
   if (id === readWebAppRecordingCapability.id) {
     if (permissions && !permissions.includes('screen_recording:read')) throw new Error('PERMISSION_DENIED:读取网页录制需要 screen_recording:read 权限')
     const parsed = readWebAppRecordingCapability.inputSchema.parse(input)
-    return { ...await platform.read({ recordingId: parsed.recordingRef.id, track: parsed.track, offset: parsed.offset, limit: parsed.limit, ...(parsed.query ? { query: parsed.query } : {}) }) }
+    const { recordingRef, ...request } = parsed
+    return { ...await platform.read({ recordingId: recordingRef.id, ...request }) }
   }
   const parsed = renderWebAppReplayCapability.inputSchema.parse(input)
   context.signal.throwIfAborted()
   const longEdge = { recorded: undefined, '1080p': 1920, '1440p': 2560, '4k': 3840 }[parsed.resolution]
-  const result = await platform.render({ recordingId: parsed.recordingRef.id, fps: parsed.fps, pointer: parsed.pointer, ...(longEdge ? { longEdge } : {}), ...(parsed.textOnly ? { textOnly: true } : {}) })
+  const result = await platform.render({ recordingId: parsed.recordingRef.id, fps: parsed.fps, pointer: parsed.pointer, ...(longEdge ? { longEdge } : {}), ...(parsed.textOnly ? { textOnly: true } : {}), ...(parsed.boxSelectors ? { boxSelectors: parsed.boxSelectors } : {}) })
   return {
     resultRef: parsed.recordingRef, video: result.output, pointer: parsed.pointer, width: result.width, height: result.height, frames: result.frames,
     conflicts: result.issues.filter(i => i.kind === 'conflict').map(i => i.message), warnings: result.issues.filter(i => i.kind === 'warning').map(i => i.message), verified: result.frames > 0,

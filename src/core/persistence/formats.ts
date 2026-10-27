@@ -99,7 +99,7 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
 
 /** Deliberate scope boundary: rebuildable projections and external formats are not user-project migrations. */
 export const PERSISTENCE_EXCLUSIONS = [
-  { id: 'web-recording-boxes-track', readEntry: 'electron/main/services/web-replay/boxTrack.ts', reason: 'boxes.jsonl 是重演从已登记网页录制的前端资源、数据与行为生成的可选位置投影，可用 render_web_app_replay（含 textOnly）重建；不保存用户编辑，不改变 recording.json 或原始轨道。旧录制缺少此文件仍可读，不提高录制格式版本或最低可读版本。' },
+  { id: 'web-recording-boxes-track', readEntry: 'electron/main/services/web-replay/boxTrackReader.ts', reason: 'boxes.jsonl 是重演从已登记网页录制的前端资源、数据与行为生成的可选位置投影，可用 render_web_app_replay（含 textOnly）重建；不保存用户编辑，不改变 recording.json 或原始轨道。旧录制缺少此文件仍可读，不提高录制格式版本或最低可读版本。' },
   { id: 'screen-recording-standard-exports', readEntry: 'src/features/screenRecording/application/recordingProductService.ts', reason: 'Markdown/HTML 与 PNG/GIF 是面向用户交付的外部标准文件，回读只验证发布字节，不作为项目数据解释；可编辑产物复用已登记的 image-edit-v3 与 image-document-package。运行期导出记录不落盘。' },
   { id: 'session-state', readEntry: 'electron/main/services/documents/session-state.ts', reason: '明示可丢弃的撤销/视口缓存；文档仍能从权威文件完整打开。' },
   { id: 'working-copy-links', readEntry: 'electron/main/services/image-editor-v3/image-document/working-copy-links.ts / canvas-layers/canvas-layer-packages.ts', reason: '可由权威包与工作副本重建的同步投影，业务文档和未保存工作副本在 image-working-copy 中受保护。' },

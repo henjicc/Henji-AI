@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron'
 import { z } from 'zod'
+import { boxSelectorsSchema, boxTrackQueryShape, validBoxTimeRange } from '../../../src/core/webReplay/boxTrackQuery'
 import { WEB_REPLAY_CHANNELS } from '../../../src/platform/contracts/webReplay'
 import { recordingEncodingFields } from '../../../src/core/screenRecording/encoding'
 import { registerIpcHandler, parseVoid } from './registry'
@@ -14,7 +15,7 @@ const backupSchema = z.union([
   z.object({ ...recordingEncodingFields, fps, target: z.literal('screen'), sourceId: z.string().regex(/^screen:\d+:\d+$/), width: z.number().int().min(2).max(3840).multipleOf(2), height: z.number().int().min(2).max(2160).multipleOf(2) }).strict(),
 ]).nullable()
 const destinationSchema = z.object({ projectId: z.string().min(1).max(200), name: z.string().trim().min(1).max(120).optional() }).strict()
-const renderSchema = z.object({ recordingId: uuid, output: z.string().min(1).optional(), fps: z.number().int().min(1).max(120).optional(), pointer: z.boolean().optional(), longEdge: z.number().int().min(320).max(7680).optional(), textOnly: z.boolean().optional() }).strict()
+const renderSchema = z.object({ recordingId: uuid, output: z.string().min(1).optional(), fps: z.number().int().min(1).max(120).optional(), pointer: z.boolean().optional(), longEdge: z.number().int().min(320).max(7680).optional(), textOnly: z.boolean().optional(), boxSelectors: boxSelectorsSchema.optional() }).strict()
 
 export function registerWebReplayIpc(): void {
   registerIpcHandler(WEB_REPLAY_CHANNELS.setEnabled, raw => z.object({ enabled: z.boolean() }).strict().parse(raw), async (input, event) => { assertTrustedApplicationSender(event); return setWebReplayEnabled(input.enabled) })
@@ -29,7 +30,7 @@ export function registerWebReplayIpc(): void {
   })
   registerIpcHandler(WEB_REPLAY_CHANNELS.remove, raw => z.object({ recordingId: uuid }).strict().parse(raw), async (input, event) => { assertTrustedApplicationSender(event); await removeWebRecording(input.recordingId) })
   registerIpcHandler(WEB_REPLAY_CHANNELS.restore, raw => z.object({ recordingId: uuid }).strict().parse(raw), async (input, event) => { assertTrustedApplicationSender(event); await restoreWebRecording(input.recordingId) })
-  registerIpcHandler(WEB_REPLAY_CHANNELS.read, raw => z.object({ recordingId: uuid, track: z.enum(['data', 'behavior', 'text']), offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(500), query: z.string().trim().min(1).max(200).optional() }).strict().parse(raw), async (input, event) => { assertTrustedApplicationSender(event); return readWebRecording(input) })
+  registerIpcHandler(WEB_REPLAY_CHANNELS.read, raw => z.object({ recordingId: uuid, track: z.enum(['data', 'behavior', 'text', 'boxes']), offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(500), query: z.string().trim().min(1).max(200).optional(), ...boxTrackQueryShape }).strict().refine(validBoxTimeRange, { path: ['toSeconds'], message: 'toSeconds 不得小于 fromSeconds' }).refine(value => value.track !== 'boxes' || value.limit <= 200, { path: ['limit'], message: 'boxes 每页最多 200 条' }).parse(raw), async (input, event) => { assertTrustedApplicationSender(event); return readWebRecording(input) })
   registerIpcHandler(WEB_REPLAY_CHANNELS.reveal, raw => z.object({ recordingId: uuid, file: z.string().min(1).optional() }).strict().parse(raw), async (input, event) => { assertTrustedApplicationSender(event); await revealWebRecording(input.recordingId, input.file) })
   registerIpcHandler(WEB_REPLAY_CHANNELS.rename, raw => z.object({ items: z.array(z.object({ recordingId: uuid, title: z.string().trim().min(1).max(120).nullable() }).strict()).min(1).max(500) }).strict().parse(raw), async (input, event) => { assertTrustedApplicationSender(event); await renameWebRecordings(input.items) })
   registerIpcHandler(WEB_REPLAY_CHANNELS.exportVideos, raw => z.object({ recordingIds: z.array(uuid).min(1).max(500), directory: z.string().min(1) }).strict().parse(raw), async (input, event) => { assertTrustedApplicationSender(event); return exportWebRecordingVideos(input.recordingIds, input.directory) })

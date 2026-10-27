@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { boxSelectorsSchema } from '../../../../src/core/webReplay/boxTrackQuery'
 import { replaceFileAtomically } from '../fs/atomic-file'
 
 export const BOX_TRACK_FILE = 'boxes.jsonl'
@@ -13,9 +14,10 @@ export function boxSampleEveryFrames(timeScale: number): number { return timeSca
 
 /** 只查询目标元素，不扫描文字。序号从 0 开始，计入隐藏元素，避免显隐导致键漂移。 */
 export function boxSampleScript(selectors: readonly string[] = []): string {
-  if (selectors.length > 32 || selectors.some(s => typeof s !== 'string' || !s.trim() || s.length > 1000)) throw new Error('boxSelectors 最多 32 个非空 CSS 选择器，每个不超过 1000 字符')
+  const parsed = boxSelectorsSchema.safeParse(selectors)
+  if (!parsed.success) throw new Error('boxSelectors 最多 32 个非空 CSS 选择器，每个不超过 1000 字符')
   return `(() => {
-    const selectors = ${JSON.stringify(selectors)}, targets = new Map(), acts = new Map()
+    const selectors = ${JSON.stringify(parsed.data)}, targets = new Map(), acts = new Map()
     for (const el of document.querySelectorAll('[data-replay-id], [data-act]')) {
       const act = el.getAttribute('data-act'), index = acts.get(act) || 0
       if (act !== null) acts.set(act, index + 1)
