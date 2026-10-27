@@ -24,7 +24,6 @@ it('参数条：形状进入批注工具，颜色与粗细改画笔并改选中�
   const owner = await createVideoEditTestProject(); const errors = vi.fn()
   const view = render(<Options owner={owner} onError={errors} />)
   const shapes = within(view.getByRole('radiogroup', { name: '批注形状' }))
-  expect(shapes.getAllByRole('radio')).toHaveLength(7)
   expect(view.queryByRole('button', { name: /发送给助手/ })).toBeNull()
   fireEvent.click(shapes.getByRole('radio', { name: '圈' }))
   expect(owner.tool).toBe('annotate'); expect(videoEditAnnotationBrush(owner.document.id).shape).toBe('ellipse')

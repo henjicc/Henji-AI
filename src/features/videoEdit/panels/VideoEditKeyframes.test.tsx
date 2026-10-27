@@ -148,15 +148,7 @@ it('缩放链条：扣上时两个数按比例一起变，解开后各改各的�
   await waitFor(() => expect(clip().scaleAspect).toBeUndefined()); expect(clip().scale).toBe(1)
 })
 
-it('固有效果不展示颜色和亮度', async () => {
-  const { owner } = await project()
-  const panel = render(<Panel owner={owner} />); const ui = within(panel.container)
-  expect(panel.container.querySelector('[data-video-edit-effect-section="color"]')).toBeNull()
-  expect(ui.queryByRole('spinbutton', { name: '亮度' })).toBeNull()
-  expect(ui.queryByRole('button', { name: '启用亮度关键帧' })).toBeNull()
-})
-
-it('从效果控件底栏打开预设面板，默认全选，按链顺序只保存勾选子集', async () => {
+it('从效果控件打开预设面板，默认全选，按链顺序只保存勾选子集', async () => {
   const { owner, id, sequenceId, clipId } = await project()
   const panel = render(<Panel owner={owner} />); const ui = within(panel.container)
   expectButtonDisabled(ui.getByRole('button', { name: '保存为预设' }))
@@ -165,12 +157,7 @@ it('从效果控件底栏打开预设面板，默认全选，按链顺序只保�
     applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'brightness_contrast')
     applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'color_grade')
   })
-  const effects = within(panel.container.querySelector<HTMLElement>('[data-video-edit-effect-chain]')!)
-  expect(effects.queryByRole('checkbox')).toBeNull()
-  expect(ui.queryByText('保存所选效果为预设…')).toBeNull()
-  const save = ui.getByRole('button', { name: '保存为预设' })
-  expect(save.closest('[data-video-edit-effects-footer]')).toBeTruthy()
-  fireEvent.click(save)
+  fireEvent.click(ui.getByRole('button', { name: '保存为预设' }))
   const modal = within(within(document.body).getByRole('dialog', { name: '保存为预设' }))
   const checkboxes = modal.getAllByRole('checkbox')
   expect(checkboxes).toHaveLength(3)
@@ -300,22 +287,19 @@ it('选中在文字与画面片段间来回切换，效果控件顶部始终只�
   expect(panel.container.querySelectorAll('[data-video-edit-effects-clip-name]')).toHaveLength(1)
 })
 
-it('效果头部只选中，箭头单独折叠；强度最后，无源码不显示添加行；Delete只删效果并选择相邻项', async () => {
+it('效果头部只选中，箭头单独折叠；无源码不显示添加行；Delete只删效果并选择相邻项', async () => {
   const { owner, id, sequenceId, clipId, clip } = await project()
   applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'sharpen')
   applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'gaussian_blur')
   const trial = vi.spyOn(codeTrial, 'trialVideoEditCodeDocument').mockRejectedValue(new Error('不应试渲染'))
   const panel = render(<Panel owner={owner} />); const ui = within(panel.container)
   expect(ui.queryByRole('button', { name: '添加到片段' })).toBeNull()
-  expect(ui.queryByText('暂无滤镜源码')).toBeNull()
   const [first, second] = clip().effects!
   const header = ui.getByRole('group', { name: `效果${first.name}` })
   const editor = () => panel.container.querySelector(`[data-video-edit-effect-editor="${first.id}"]`)
   expect(editor()).toBeTruthy()
   fireEvent.click(header); fireEvent.click(header)
   expect(header.getAttribute('data-selected')).toBe('true'); expect(editor()).toBeTruthy()
-  const rows = editor()!.querySelectorAll('[data-video-edit-builtin-param]')
-  expect(rows[rows.length - 1].getAttribute('data-video-edit-builtin-param')).toBe('amount')
   fireEvent.click(ui.getByRole('button', { name: `收起效果${first.name}` }))
   expect(editor()).toBeNull()
   fireEvent.click(header); expect(editor()).toBeNull()

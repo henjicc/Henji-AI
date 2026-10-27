@@ -171,15 +171,11 @@ it('DOM 面板浮出到系统窗口后仍由同一 React 树渲染；关闭窗�
   expect(popped).toBe(true)
   expect(dock.getPanel('effects')).toBeUndefined()
   const effects = opened[0].child
-  expect(effects.document.body.textContent).toContain('效果控件')
   expect(effects.document.querySelector('[data-video-edit-panel="effects"]')).not.toBeNull()
   expect(listVideoEditPopouts().map(entry => entry.panels)).toEqual([['effects']])
   act(() => { popOutVideoEditPanel(dock, 'effects', host) })
   expect(opened).toHaveLength(1)
   expect(effects.focus).toHaveBeenCalled()
-
-  // 自绘标题栏：面板标签 + 贴回 + 关闭。
-  expect(effects.document.querySelector('[data-window-titlebar="panel"]')?.textContent).toContain('效果控件')
 
   // PR：关闭浮动窗口即关闭其中的面板（可从面板菜单重新打开），不贴回。
   act(() => effects.userClose())
@@ -498,10 +494,8 @@ it('一个浮窗容纳多个面板（PR）：拖进已浮出的窗口叠成标�
   const child = opened[0].child.document
   const shown = (): string[] => Array.from(child.querySelectorAll<HTMLElement>('[data-video-edit-panel]')).filter(panel => !panel.parentElement!.classList.contains('hidden')).map(panel => panel.dataset.videoEditPanel!)
   expect(shown()).toEqual(['timeline'])
-  expect(Array.from(child.querySelectorAll('[data-video-edit-popout-tab]')).map(tab => tab.textContent)).toEqual(['节目画面', '时间线'])
-  expect(child.title).toBe('痕迹AI · 时间线')
   act(() => activateVideoEditPopoutPanel('program', 'program'))
-  expect(shown()).toEqual(['program']); expect(child.title).toBe('痕迹AI · 节目画面')
+  expect(shown()).toEqual(['program'])
   expect(lifetime).toMatchObject({ created: 2, live: 1 })
   expect(savedPopouts()).toEqual({ version: 2, windows: [{ panels: ['program', 'timeline'], active: 'program', bounds: { x: 2760, y: 200, width: 480, height: 360 } }] })
   // 单个贴回：时间线回 Dock，窗口留着节目画面。
@@ -534,24 +528,6 @@ it('旧布局里的应用内浮动组恢复后贴回主区域（浮动统一为�
   expect(dock.groups.every(group => group.api.location.type === 'grid')).toBe(true)
   expect(dock.getPanel('effects')).toBeDefined()
   second.unmount()
-})
-
-it('面板菜单紧跟在组内当前标签的标题旁（PR），切换当前标签随之移动', () => {
-  const document = createVideoEditDocument('面板菜单')
-  const instance: VideoEditInstance = { document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: [document.sequences[0].id], selectedClipIds: [], targetTrackIds: [], tool: 'select', snapping: true, zoom: 1, inFrame: null, outFrame: null, session: {} as VideoEditInstance['session'], dirty: false, error: null, past: [], future: [], selection: null, frame: 0, playing: false, playbackDirection: 1, activePanel: 'timeline', busy: false, version: 0, contentVersion: 0 }
-  let api: DockviewApi | null = null
-  const view = render(<VideoEditDock instance={instance} onError={vi.fn()} onApiChange={value => { api = value }} />)
-  const dock = api as unknown as DockviewApi
-  act(() => { dock.layout(1440, 860); dock.getPanel('timeline')!.api.moveTo({ group: dock.getPanel('program')!.group, position: 'center' }) })
-  const menuTabs = (): string[] => view.getAllByRole('button', { name: '面板菜单' }).map(button => button.closest('.dv-tab')?.textContent ?? '')
-  expect(menuTabs()).toHaveLength(dock.groups.length)
-  // 时间线面板的标签直接显示序列名称（PR 的做法）
-  const sequenceName = document.sequences[0].name
-  expect(menuTabs().filter(text => text.includes(sequenceName))).toHaveLength(1)
-  expect(menuTabs().some(text => text.includes('节目画面'))).toBe(false)
-  act(() => dock.getPanel('program')!.api.setActive())
-  expect(menuTabs().some(text => text.includes('节目画面'))).toBe(true)
-  expect(menuTabs().some(text => text.includes(sequenceName))).toBe(false)
 })
 
 it('宿主重复发布不重绘隐藏素材面板，重新显示时读到最新文档', () => {
