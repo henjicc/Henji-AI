@@ -4,6 +4,7 @@ import { ParamField, type ParamGesture } from '@/components/ui/params/ParamField
 import { PropertyHeading } from '@/components/ui/params/ParamList'
 import type { ParamFieldSpec } from '@/components/ui/params/fieldSpec'
 import NumberInput from '@/components/ui/NumberInput'
+import { UI_PROPERTY_INSET_CLASS } from '@/components/ui/styleTokens'
 import {
   defaultEssentialSound, ESSENTIAL_SOUND_EQ_PRESETS, ESSENTIAL_SOUND_REVERB_PRESETS,
   type EssentialSoundEqPreset, type EssentialSoundReverbPreset, type EssentialSoundSettings, type EssentialSoundType,
@@ -56,7 +57,7 @@ export function EssentialSoundControls({ value, onChange, gesture, offline = fal
           <ParamField field={{ ...AMOUNT, key, title: label, bindingKeys: [key] } as ParamFieldSpec} value={current.amount} disabled={disabled || !current.enabled} gesture={gestureFor(amount => set({ ...current, amount }))} />
         </div>
       </UiFormRow>
-      {extra && current.enabled && <div className="pb-1 pl-12 pr-4">{extra}</div>}
+      {extra && current.enabled && <div className={`pb-1 ${UI_PROPERTY_INSET_CLASS}`}>{extra}</div>}
     </div>
   }
 
@@ -130,7 +131,7 @@ export function LoudnessMatchRows({ loudness, onChange, onMatch, matching = fals
       leading={<UiSwitch aria-label="自动匹配响度" checked={loudness.enabled} disabled={disabled} onCheckedChange={enabled => onChange({ ...loudness, enabled })} />}>
       <Dropdown<number> ariaLabel="目标响度" size="sm" className="w-full" minWidthStrategy="none" disabled={disabled} value={loudness.targetLufs} display={`${loudness.targetLufs} LUFS`} options={TARGETS} onSelect={targetLufs => onChange({ ...loudness, targetLufs })} />
     </UiFormRow>
-    {loudness.enabled && <div className="flex items-center justify-between gap-2 pl-12 pr-4">
+    {loudness.enabled && <div className={`flex items-center justify-between gap-2 ${UI_PROPERTY_INSET_CLASS}`}>
       <span className={UI_TEXT_META_CLASS}>{measuredLufs !== undefined ? `测得 ${measuredLufs} LUFS，补偿 ${loudness.gainDb > 0 ? '+' : ''}${loudness.gainDb} dB` : loudness.gainDb ? `补偿 ${loudness.gainDb > 0 ? '+' : ''}${loudness.gainDb} dB` : '还没测量'}</span>
       <UiButton size="sm" variant="secondary" disabled={disabled || matching || !onMatch} onClick={() => onMatch?.(loudness.targetLufs)}>{matching ? '正在测量…' : '测量并匹配'}</UiButton>
     </div>}

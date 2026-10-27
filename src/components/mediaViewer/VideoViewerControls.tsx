@@ -193,7 +193,8 @@ export function VideoViewerControls({
               {formatTime(hover.ratio * videoDuration)}
             </span>
           )}
-          <div className="relative h-1 rounded-full bg-text1/20 transition-[height] duration-120 group-hover/progress:h-1.5">
+          {/* 悬停加粗用纵向缩放，不动布局；圆点只在悬停（缩放为 1）时出现，不会被压扁。 */}
+          <div className="relative h-1.5 scale-y-75 rounded-full bg-text1/20 transition-transform duration-120 group-hover/progress:scale-y-100">
             <div ref={progressFillRef} className="relative h-full w-0 rounded-full bg-accent">
               <span
                 aria-hidden="true"
