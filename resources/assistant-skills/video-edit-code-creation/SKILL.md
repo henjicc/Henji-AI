@@ -35,7 +35,7 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 - 动态生成图层用数据键或索引组成稳定 id（如 `node-3`）；驱动数组用 `table` 参数声明 `fields` 与 `default`，建议用 `rowKey` 指定稳定键。图层用 `data:{parameter,keyField,key}`（或 `data:{parameter,index}`）绑定对应项，`factory:{file,name}` 指向工厂函数；选中后改内容直接改数据，改外观改工厂。
 - 拖动、缩放和旋转的覆盖立即生效并长期保存，不等源码写回。已声明参数无需写回；只有用户需要整理源码时才后台或批量创建新版本、验证后合并覆盖，写回前后都进同一撤销栈。
 - 同类元素的规则由说明书定；局部变化要有语义。
-- 视频项目当软件工程写：默认禁止单文件，按风格、片子、段落三层拆开解耦（读多文件组件）；不靠预渲染也要实时播放（读性能）。
+- 一支片子一个代码工程：`代码/` 按 style、film、entries 三层建源码树，素材只是入口（读代码工程）；不靠预渲染也要实时播放（读性能）。
 - 大作品（多镜头或 15 秒以上）先做主停留帧，取帧读图给用户确认方向；短小内容直接做完。用户说过“不用停”“直接做完”就自主选定并说明。改字、换色不重做提案。
 - 绑定了风格：开工前读说明书、看锚点帧，做完逐条对照不变量与硬约束自查。自己选的风格不算用户口味。做标题、人名条这类反复出现的元素先查模板。
 - 改已有作品：先用 `read_application_entity` 读素材、参数、曲线、覆盖与位置，并看原画面。保留满意的内容；源码改动新增版本再重绑；核对共享实例和邻接缝。
@@ -70,7 +70,7 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 | WebGPU、WebGL、滤镜、相邻帧 | [GPU 接口](references/author-shaders.md) |
 | 查内置 shaders 组件名称与角色 | [纹理](references/shader-components-textures.md)／[续](references/shader-components-textures-2.md)、[图形材质](references/shader-components-shapes.md)／[续](references/shader-components-shapes-2.md)、[模糊扭曲调色](references/shader-components-filters.md)、[风格化转场](references/shader-components-stylize.md) |
 | 用户标注发现、定位、回复 | [标注协议](references/annotations.md) |
-| 参数化、拆文件、项目组件库 | [参数化](references/parametric.md)、[多文件组件](references/multifile-components.md) |
+| 代码工程结构、参数化、拆文件 | [代码工程](references/code-project.md)、[参数化](references/parametric.md)、[多文件组件](references/multifile-components.md) |
 | 参数类型、分组、条件、自定义类型 | [参数类型](references/parameter-types.md) |
 | 实例值、曲线、图片参数、版本绑定 | [参数曲线](references/parameters-curves.md) |
 | 定位、插入、时间换算、撤销恢复 | [时间线契约](references/timeline-check.md) |
@@ -89,7 +89,7 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 | 搭骨架 | 能量与节拍表，粗排完整时间线 | structure、timeline-check |
 | 动起来 | 因果主次、曲线错峰、事件预算、文字与质感 | motion、attention、camera、parameters-curves、recipes-* |
 | 看片改 | 看片、删减轮、A/B、可执行批注、局部返修 | review、review-ai、attention、annotations |
-| 交付沉淀 | 回读自检、可编辑模板、明确的长期口味 | review、templates、multifile-components、preferences |
+| 交付沉淀 | 回读自检、可编辑模板、明确的长期口味 | review、templates、code-project、preferences |
 
 ## 执行边界
 
