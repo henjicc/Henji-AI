@@ -251,7 +251,8 @@ mod imp {
             match Session::open(platform, &options, control.clone(), commands, &budget) {
                 Ok((mut session, mut info)) => {
                     info["setupMs"] = json!(started.elapsed().as_secs_f64() * 1000.0);
-                    logging::info("decode.session.opened", "解码会话已打开", json!({ "streamId": options.stream_id, "path": options.path, "purpose": format!("{:?}", options.purpose), "decoder": info["decoder"], "format": info["format"], "color": info["color"], "setupMs": info["setupMs"] }));
+                    let phases = info.as_object_mut().and_then(|fields| fields.remove("openPhasesMs"));
+                    logging::info("decode.session.opened", "解码会话已打开", json!({ "streamId": options.stream_id, "path": options.path, "purpose": format!("{:?}", options.purpose), "decoder": info["decoder"], "format": info["format"], "color": info["color"], "setupMs": info["setupMs"], "openPhasesMs": phases }));
                     crate::respond(&request_id, Ok(info));
                     session.run();
                     let Session { frames, .. } = session;
@@ -273,7 +274,9 @@ mod imp {
 
     impl Session {
         fn open(platform: Arc<dyn VideoPlatform>, options: &DecodeOptions, control: Arc<StreamControl>, commands: Receiver<SessionCommand>, budget: &crate::budget::Budget) -> Result<(Self, Value), ServiceError> {
+            let opening = Instant::now();
             let input = Input::open(&options.path, options.stream_index, control.stop.clone())?;
+            let input_ms = opening.elapsed().as_secs_f64() * 1000.0;
             let stream = input.stream();
             let parameters = input.parameters();
             let has_alpha_tag = crate::probe::stream_has_alpha(stream, parameters);
@@ -307,6 +310,7 @@ mod imp {
             let flush_cuts = matches!(parameters.codec_id, ffmpeg_sys_next::AVCodecID::AV_CODEC_ID_H264 | ffmpeg_sys_next::AVCodecID::AV_CODEC_ID_HEVC);
 
             // 先解出第一帧：确定实际像素格式（硬解或软解）与色彩，再按它建纹理池。
+            let decoder_ms = opening.elapsed().as_secs_f64() * 1000.0;
             let mut session_parts = Primer { input, decoder, tracker: RunTracker::default(), pending: None, last_fed_dts: None, draining: false, drained: false, tracker_key: None, all_key: true };
             let mut first = session_parts.first_frame(&control)?;
             if !first.is_hardware() && session_parts.decoder.single_thread_for_hardware {
@@ -355,7 +359,9 @@ mod imp {
             let surface = hardware_active.then(|| if first.hardware_sw_format().and_then(format_info).is_some_and(|info| info.depth > 8) { SharedFormat::P010le } else { SharedFormat::Nv12 });
             let memory_bytes = crate::budget::session_bytes(output, pool_dimensions, pool_size, path, surface);
             let vram = budget.reserve_vram(&options.stream_id, memory_bytes)?;
+            let first_ms = opening.elapsed().as_secs_f64() * 1000.0;
             let frames = platform.create_frame_output(output, pool_dimensions, (width, height), pool_size).map_err(|message| ServiceError::new("GPU_FAILED", message))?;
+            let output_ms = opening.elapsed().as_secs_f64() * 1000.0;
             control.slots.resize(pool_size as usize);
             control.set_info(output, pool_dimensions.0, pool_dimensions.1);
             let handles: Vec<Value> = frames.remote_handles().iter().enumerate().map(|(slot, handle)| json!({ "slot": slot, "handle": handle.to_string() })).collect();
@@ -393,6 +399,8 @@ mod imp {
                 "rotationDegrees": rotation,
                 "purpose": format!("{:?}", options.purpose).to_lowercase(),
                 "memoryBytes": memory_bytes,
+                // 打开各阶段的累计耗时（诊断）：解封装、建解码器、解出第一帧、建共享纹理池。
+                "openPhasesMs": { "input": input_ms, "decoder": decoder_ms, "firstFrame": first_ms, "output": output_ms },
             });
             let first_key_ts = session_parts.tracker_key;
             let Primer { input, decoder, tracker, pending, last_fed_dts, draining, drained, all_key, .. } = session_parts;

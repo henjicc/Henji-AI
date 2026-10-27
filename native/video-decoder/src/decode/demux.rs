@@ -8,7 +8,7 @@ use std::sync::Arc;
 use ffmpeg_sys_next as ff;
 
 use super::timing::TimeBase;
-use crate::probe::{error_text, open_input, FormatContext};
+use crate::probe::{error_text, open_input, open_input_with, FormatContext};
 use crate::protocol::ServiceError;
 
 /// 拥有所有权的包。
@@ -54,7 +54,7 @@ unsafe impl Send for Input {}
 
 impl Input {
     pub fn open(path: &str, stream_index: Option<i32>, interrupt: Arc<AtomicBool>) -> Result<Self, ServiceError> {
-        let context = open_input(path, &interrupt)?;
+        let context = open_input_with(path, &interrupt, true)?;
         let index = match stream_index {
             Some(index) => index,
             None => unsafe { ff::av_find_best_stream(context.0, ff::AVMediaType::AVMEDIA_TYPE_VIDEO, -1, -1, ptr::null_mut(), 0) },

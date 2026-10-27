@@ -230,6 +230,38 @@ fn audio_details(parameters: &ff::AVCodecParameters) -> Value {
 /// 安全打开本地文件并读取流信息：只允许绝对路径与 `file` 协议；`cancelled` 被置位后阻塞 I/O 经中断回调尽快返回。
 /// `cancelled` 的地址在返回的上下文存续期间必须有效（中断回调持有该指针）。
 pub(crate) fn open_input(path: &str, cancelled: &AtomicBool) -> Result<FormatContext, ServiceError> {
+    open_input_with(path, cancelled, false)
+}
+
+/// MP4/MOV 的视频流在文件头里已有编码、尺寸、帧率、起点与时长时是否齐全（`avformat_find_stream_info` 只会再软解
+/// 一两帧补出像素格式，解码会话自己解出第一帧时就知道）。
+fn container_describes_video(context: *mut ff::AVFormatContext) -> bool {
+    let format = unsafe { &*context };
+    let name = crate::ffmpeg_info::c_text(unsafe { (*format.iformat).name }).unwrap_or_default();
+    if !name.split(',').any(|part| part == "mov" || part == "mp4") || format.nb_streams == 0 {
+        return false;
+    }
+    let streams = unsafe { std::slice::from_raw_parts(format.streams, format.nb_streams as usize) };
+    let mut video = false;
+    for &stream in streams {
+        let stream = unsafe { &*stream };
+        let parameters = unsafe { &*stream.codecpar };
+        if parameters.codec_type != ff::AVMediaType::AVMEDIA_TYPE_VIDEO {
+            continue;
+        }
+        video = true;
+        let rate = stream.avg_frame_rate.num > 0 && stream.avg_frame_rate.den > 0 || stream.r_frame_rate.num > 0 && stream.r_frame_rate.den > 0;
+        if parameters.codec_id == ff::AVCodecID::AV_CODEC_ID_NONE || parameters.width <= 0 || parameters.height <= 0 || !rate || stream.start_time == ff::AV_NOPTS_VALUE || stream.duration <= 0 {
+            return false;
+        }
+    }
+    video
+}
+
+/// 同 `open_input`；`decoding`：为解码会话打开时，MP4/MOV 文件头已经齐全就不再读流信息。`avformat_find_stream_info`
+/// 为补像素格式会在 CPU 上软解开头的帧：4K 录屏约 11ms，预渲染文件（4K、全 P 帧、52Mbps）约 49ms，每次跳到新片段、
+/// 每个预渲染窗口打开会话都要付一次。
+pub(crate) fn open_input_with(path: &str, cancelled: &AtomicBool, decoding: bool) -> Result<FormatContext, ServiceError> {
     if !Path::new(path).is_absolute() {
         return Err(ServiceError::new("INVALID_REQUEST", "探测路径必须是绝对路径"));
     }
@@ -260,6 +292,9 @@ pub(crate) fn open_input(path: &str, cancelled: &AtomicBool) -> Result<FormatCon
     }
     if opened < 0 {
         return Err(ServiceError::new("OPEN_FAILED", format!("无法打开文件：{}", error_text(opened))));
+    }
+    if decoding && container_describes_video(context.0) {
+        return Ok(context);
     }
     let found = unsafe { ff::avformat_find_stream_info(context.0, ptr::null_mut()) };
     if cancelled.load(Ordering::Relaxed) {

@@ -6,7 +6,7 @@ import type { VideoEditPresentationCapture } from './videoEditGpuCompositor'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 
-const state = vi.hoisted(() => ({ render: vi.fn(), readRgb: vi.fn(), performance: [] as CodeFramePerformance[] }))
+const state = vi.hoisted(() => ({ render: vi.fn(), readRgb: vi.fn(), performance: [] as CodeFramePerformance[], jump: vi.fn(), hasJump: false }))
 vi.mock('./videoEditRenderer', () => ({ VideoEditRenderer: class {
   constructor(readonly document: unknown) {}
   render = state.render
@@ -18,6 +18,9 @@ vi.mock('./videoEditRenderer', () => ({ VideoEditRenderer: class {
   codeDiagnostics() { return {} }
   codePerformance() { return state.performance }
   captureCodePerformance() { const frames = state.performance; return () => frames }
+  settled() { return Promise.resolve() }
+  hasJumpPreview() { return state.hasJump }
+  presentJumpPreviewNow = state.jump
 } }))
 vi.mock('./videoEditTrackingPixels', () => ({ readVideoEditTrackingRgb: state.readRgb }))
 
@@ -42,7 +45,7 @@ async function init(direct = false): Promise<void> {
 beforeEach(async () => {
   vi.stubGlobal('self', worker)
   vi.stubGlobal('createImageBitmap', vi.fn(async () => bitmap()))
-  postMessage.mockClear(); state.render.mockReset(); messages.length = 0; state.performance = []
+  postMessage.mockClear(); state.render.mockReset(); state.jump.mockReset(); state.hasJump = false; messages.length = 0; state.performance = []
   state.readRgb.mockReset().mockReturnValue(new Uint8Array([1, 2, 3]))
   await import('./videoEditWorker')
   await init()
@@ -148,4 +151,45 @@ it('暂停时预渲染窗口改变：前瞻按新窗口重新看一遍暂停的�
     worker.onmessage({ data: { kind: 'renderCache', id: 0, windows, localPaths: {} } })
     expect(changed).toHaveBeenCalledWith(composition, windows)
   } finally { changed.mockRestore() }
+})
+
+it('暂停时排队中的旧画面请求在更新的请求到达时当场答复 skipped，Worker 只画最新的位置', async () => {
+  let release!: () => void
+  const blocker = new Promise<void>(resolve => { release = resolve })
+  const frames: number[] = []
+  state.render.mockImplementation(async (...args: unknown[]) => {
+    const frame = args[0] as number; frames.push(frame)
+    if (frame === 1) await blocker
+    ;(args[7] as VideoEditPresentationCapture | undefined)?.(Promise.resolve(bitmap()))
+    return { presented: true, renderCached: false, decodeMs: 0, gpuMs: 0, completion: Promise.resolve(), canvas: {} }
+  })
+  const request = (frame: number): number => { const id = ++nextId; worker.onmessage({ data: { kind: 'render', id, frame, sequential: false, scrubbing: true } }); return id }
+  const ids = [request(1)]
+  await vi.waitFor(() => expect(frames).toEqual([1]))
+  ids.push(request(2), request(3))
+  // The second request is answered while the first is still being prepared, without rendering; the third waits for the first.
+  expect(messages.find(message => message.id === ids[1])?.skipped).toBe(true)
+  expect(frames).toEqual([1])
+  release()
+  await vi.waitFor(() => expect(messages.some(message => message.id === ids[2] && !message.phase && message.presented)).toBe(true))
+  expect(frames).toEqual([1, 3])
+  expect(messages.filter(message => message.id === ids[1])).toHaveLength(1)
+})
+
+it('前一次点击的精确画面还在准备时，远距离跳转在队列外先画常驻关键帧，被取代的精确画面答复 skipped', async () => {
+  await init(true)
+  let release!: () => void
+  const blocker = new Promise<void>(resolve => { release = resolve })
+  state.render.mockImplementation(async () => { await blocker; return { presented: false, superseded: true, renderCached: false, decodeMs: 0, gpuMs: 0, completion: Promise.resolve(), canvas: {} } })
+  state.hasJump = true
+  state.jump.mockResolvedValue({ presented: true, approximate: true, cacheHits: 1, cacheBytes: 0, gpuMs: 1, completion: Promise.resolve() })
+  const exact = ++nextId
+  worker.onmessage({ data: { kind: 'render', id: exact, frame: 10, sequential: false, scrubbing: false } })
+  await vi.waitFor(() => expect(state.render).toHaveBeenCalled())
+  const jump = await send({ kind: 'render', frame: 500, sequential: false, scrubbing: 'fast' })
+  expect(jump).toMatchObject({ presented: true, approximate: true })
+  expect(state.jump).toHaveBeenCalledWith(500, expect.any(Function))
+  expect(state.render).toHaveBeenCalledOnce()
+  release()
+  await vi.waitFor(() => expect(messages.find(message => message.id === exact && !message.phase)).toMatchObject({ skipped: true }))
 })

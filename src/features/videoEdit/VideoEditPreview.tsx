@@ -287,6 +287,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     let lastFrame = -1
     let appliedFonts = renderer.fontPresentationRevision
     let lastScrubbing = false
+    /** Whether the newest frame request sent was a scrub frame: releasing the playhead on the same frame asks for it exactly once. */
+    let lastRequestedScrubbing = false
     /** 屏幕上是快速拖动时的关键帧近似画面（帧号）；指针停住或松手后按精确方式补这一帧。-1 表示是精确画面。 */
     let approximateFrame = -1
     /** 这幅近似画面来自操作中的小步后退（拖动刚按下、方向键连按）：同拖动一样等指针或按键停住再补精确帧。 */
@@ -480,7 +482,9 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       timerAt = at
       timer = setTimeout(() => { timer = undefined; timerAt = Infinity; void step() }, delay)
     }
-    wakeForView = () => { if (!instance.playing) wake(0) }
+    // 暂停或拖动时播放头一动，就在这次改动里直接推进：请求在指针事件的同一个任务里发出，Worker 与这次界面更新（开发版 React
+    // 重绘约 5ms）并行画这一帧；经消息通道再唤醒要排在界面更新与绘制之后（实测播放头变化到发出请求约 12ms）。
+    wakeForView = () => { if (instance.playing) return; if (stepping || immediatePending || stopped) wake(0); else { if (timer !== undefined) { clearTimeout(timer); timer = undefined; timerAt = Infinity } void step() } }
     const step = async (): Promise<void> => {
       if (stopped) return
       if (stepping) { wake(0); return }
@@ -654,7 +658,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         // 否则每帧都赶不上下一次刷新，画面成对出现（一帧晚、下一帧紧跟着补上，前一帧根本没显示）。
         // A history bitmap must finish before another draw can overwrite its surface.
         const pipelined = playing && direction === 1 && !liveRecording && !historyEnabled
-        if (target !== lastRequested || (scrubbing !== lastScrubbing && !scrubbing)) {
+        if (target !== lastRequested || (lastRequestedScrubbing && !scrubbing)) {
           // 在途画面到了预算就先不发（背压，不是错误）：已发出的帧提交或回执时会唤醒调度，按那时的最新目标再请求。
           if (framesInFlight >= PROGRAM_FRAMES_IN_FLIGHT || pipelined && unsubmitted >= PROGRAM_UNSUBMITTED_FRAMES) return
           if (playing && direction === 1 && !liveRecording && target > Math.max(next, startFrame)) { droppedFrames += target - Math.max(next, startFrame); surface.dataset.droppedFrames = String(droppedFrames) }
@@ -668,7 +672,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           const scrubMode: boolean | 'fast' = playing ? scrubbing : fastScrub || fastJump ? 'fast' : steppingBack || scrubbing
           const requestedAt = performance.now()
           const deadline = playing && !liveRecording ? performance.timeOrigin + clockPerformanceStart + Math.abs(target - startFrame) / document.fps / (current.playbackRate ?? 1) * 1000 : undefined
-          lastRequested = target
+          lastRequested = target; lastRequestedScrubbing = scrubbing
           if (pipelined) { unsubmitted++; queuedFrame = Math.max(queuedFrame, target) }
           let submitted = false
           const presentation = requestFrame(target, pipelined, scrubMode, deadline, scrubbing || pipelined ? () => {
@@ -679,6 +683,10 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           // 正向播放不等提交回执：这一帧排进 Worker 就去准备下一帧，让它排在这一帧后面，
           // 主线程的时间线更新、电平刷新不会推迟它的准备。
           if (pipelined) { turn.handOff(); wake(0) }
+          // 暂停时（拖动、跳转、松手后的精确帧）不等这一帧的回执就交出调度（主线程忙于指针事件与界面更新，回执要晚 7–20ms 才
+          // 轮到处理）：指针一动，下一帧直接排在它后面，Worker 轮到一帧时若已有更新的请求就跳过它（答复 skipped）；前一次点击的
+          // 精确画面还在准备（长 GOP 可达一秒）时，新的点击也能马上发出，由 Worker 在队列外先画常驻关键帧。
+          else if (!playing && captureFull === 0 && !historyEnabled) turn.handOff()
           let result: Awaited<typeof presentation>
           try { result = await presentation } catch (error) {
             if (!(error instanceof VideoEditRenderBusyError)) throw error
@@ -688,6 +696,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
             logger.debug('节目渲染队列已满，稍后重新请求', { event: 'video_edit.preview.render_backpressure', context: { projectId: instance.document.id, frame: target, playing } })
             wake(PROGRAM_BUSY_RETRY_MS); return
           }
+          // 拖动中被更新的请求取代、没有画的一帧：后面那一帧会照常回来，这里只唤醒调度。
+          if (result.skipped) { wake(0); return }
           if (submittedFrame === target) submittedFrame = -1
           if (queuedFrame === target && unsubmitted === 0) queuedFrame = -1
           {

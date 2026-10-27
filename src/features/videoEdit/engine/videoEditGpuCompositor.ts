@@ -280,7 +280,7 @@ export class VideoEditGpuCompositor {
    * (closing a shared texture frame in a worker crashes the renderer process, record 002).
    * Owned format: compact 4:2:0 planes when `compact`; otherwise `videoEditGpuFrameFormat()` (`rgb10a2unorm` or
    * `rgba16float` for more than 8 bits, `rgba8unorm` for the rest). */
-  async snapshot(sample: VideoSample | VideoEditNativePicture, compact: boolean, deferCompletion = false): Promise<VideoEditGpuFrame> {
+  async snapshot(sample: VideoSample | VideoEditNativePicture, compact: boolean, deferCompletion = false, pictureDivisor?: VideoEditRenderDivisor): Promise<VideoEditGpuFrame> {
     await this.ready
     if (this.disposed) throw new Error('剪辑预览已关闭。')
     this.assertDevice()
@@ -291,8 +291,9 @@ export class VideoEditGpuCompositor {
     }
     if (this.disposed) throw new Error('剪辑预览已关闭。')
     // A reduced playback resolution copies a box-averaged picture of 1/divisor size (task 4.9); the frame keeps its
-    // display size, so placement, fit and effects are unchanged and only the stored pixels shrink.
-    const divisor = this.pictureDivisor
+    // display size, so placement, fit and effects are unchanged and only the stored pixels shrink. `pictureDivisor`
+    // overrides it for one copy (the program's resident jump pictures, `videoEditJumpPreview.ts`).
+    const divisor = pictureDivisor ?? this.pictureDivisor
     let reduced = divisor === 1 ? undefined : await this.downscalePipelines(divisor)
     if (this.disposed) throw new Error('剪辑预览已关闭。')
     // Copy on the compositor's device; no Skia canvas or cross-context fences.

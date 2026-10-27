@@ -15,7 +15,7 @@ import { resetVideoEditPlaybackResolutionCache, setVideoEditPlaybackResolution }
 import { setVideoEditPosterFrame } from './application/videoEditProgramCapture'
 import { startVideoMotion, setVideoMotionOptions, setVideoMotionPointer, videoMotionState, videoMotionComposition } from './application/videoEditMotionDraft'
 const stopNotification = vi.hoisted(() => vi.fn())
-const pixel = vi.hoisted(() => ({ preopen: vi.fn(), arm: vi.fn(async () => undefined), requests: [] as Array<{ frame: number; sequential?: boolean; scrubbing?: boolean | 'fast'; deadline?: number; submitted?: () => void; resolve: (value: { sourceTimestamps: number[]; presented?: boolean; history?: ImageBitmap; approximate?: boolean }) => void; reject: (error: Error) => void }>, sessions: 0, update: vi.fn(), invalidate: vi.fn(), dispose: vi.fn(), mixAudio: vi.fn(), scale: vi.fn() }))
+const pixel = vi.hoisted(() => ({ preopen: vi.fn(), arm: vi.fn(async () => undefined), requests: [] as Array<{ frame: number; sequential?: boolean; scrubbing?: boolean | 'fast'; deadline?: number; submitted?: () => void; resolve: (value: { sourceTimestamps: number[]; presented?: boolean; history?: ImageBitmap; approximate?: boolean; skipped?: boolean }) => void; reject: (error: Error) => void }>, sessions: 0, update: vi.fn(), invalidate: vi.fn(), dispose: vi.fn(), mixAudio: vi.fn(), scale: vi.fn() }))
 const scrub = vi.hoisted(() => ({ request: vi.fn(), stop: vi.fn() }))
 vi.mock('./engine/videoEditAudioScrub', async importOriginal => ({ ...await importOriginal<typeof import('./engine/videoEditAudioScrub')>(), VideoEditAudioScrubber: class { request = scrub.request; stop = scrub.stop } }))
 vi.mock('./application/videoEditProjectCover', () => ({ saveVideoEditPosterCover: vi.fn(async () => undefined), updateVideoEditProjectCover: vi.fn(async () => undefined) }))
@@ -203,11 +203,15 @@ it('连续定位呈现已完成帧并只读取最新目标，卸载后迟到响�
   const view = render(<VideoEditPreview instance={instance} onError={vi.fn()} />)
   await act(async () => { await Promise.resolve() })
   const canvas = view.getByLabelText('剪辑画面') as HTMLCanvasElement
+  // 播放头一动就在同一次改动里发出请求，不等前一帧回执；排在后面的过时请求由 Worker 跳过（答复 skipped）。
   act(() => { setVideoEditView(instance.document.id, { frame: 7, scrubbing: true }); setVideoEditView(instance.document.id, { frame: 15 }) })
+  expect(pixel.requests.map(request => request.frame)).toEqual([0, 7, 15])
   await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [0] }) })
   expect(canvas.dataset.presentedFrame).toBe('0')
-  await act(async () => { await vi.advanceTimersByTimeAsync(2) }); expect(pixel.requests.map(request => request.frame)).toEqual([0, 15])
-  view.unmount(); await act(async () => { pixel.requests[1].resolve({ sourceTimestamps: [.5] }) })
+  await act(async () => { pixel.requests[1].resolve({ sourceTimestamps: [], presented: false, skipped: true }); await vi.advanceTimersByTimeAsync(2) })
+  // 跳过的一帧不触发重发，屏幕上仍是已完成的那一帧。
+  expect(pixel.requests.map(request => request.frame)).toEqual([0, 7, 15]); expect(canvas.dataset.presentedFrame).toBe('0')
+  view.unmount(); await act(async () => { pixel.requests[2].resolve({ sourceTimestamps: [.5] }) })
   expect(canvas.dataset.presentedFrame).toBe('0'); expect(pixel.dispose).toHaveBeenCalledOnce()
 })
 it('参数修改更新同一渲染会话，旧文档结果不覆盖新内容且能够继续取帧', async () => {

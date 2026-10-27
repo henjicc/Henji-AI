@@ -77,6 +77,10 @@ export class VideoEditRenderTransport {
   private fontIds = new Set<string>()
   private stopFonts?: () => void
   private fontSync = Promise.resolve()
+  /** Font syncs started and not settled yet; none means `fontScope` describes what the Worker holds. */
+  private fontSyncsPending = 0
+  /** `ready` has settled successfully. */
+  private readySettled = false
   private fontRefresh?: Promise<void>
   private frame = -1
   private fontScope = ''
@@ -107,13 +111,18 @@ export class VideoEditRenderTransport {
   /** The view schedules font redraws through its existing frame loop, never an independent request stream. */
   fontPresentationRevision = 0
   private syncFonts(document: VideoEditComposition): Promise<void> {
-    const result = this.fontSync.catch(() => undefined).then(() => this.applyFonts(document))
+    this.fontSyncsPending++
+    const result = this.fontSync.catch(() => undefined).then(() => this.applyFonts(document)).finally(() => { this.fontSyncsPending-- })
     this.fontSync = result
     return result
   }
+  private fontKey(document: VideoEditComposition): string {
+    const scoped = this.fontsDocument(document)
+    return JSON.stringify([scoped.clips.map(clip => clip.id), scoped.sequences?.map(sequence => [sequence.id, sequence.clips.map(clip => clip.id)]), fontLibrarySnapshot().revision])
+  }
   private async applyFonts(document: VideoEditComposition): Promise<void> {
     const scoped = this.fontsDocument(document)
-    const key = JSON.stringify([scoped.clips.map(clip => clip.id), scoped.sequences?.map(sequence => [sequence.id, sequence.clips.map(clip => clip.id)]), fontLibrarySnapshot().revision])
+    const key = this.fontKey(document)
     if (document === this.fontDocument && key === this.fontScope) return
     const fonts = await this.host.fonts(scoped)
     if (this.disposed) return
@@ -234,6 +243,7 @@ export class VideoEditRenderTransport {
     this.worker.onmessageerror = () => this.fail(new Error('剪辑画面结果无法读取，请重新加载预览。'))
     // Verify original media before dependent code/font preparation or opening a decoder channel.
     this.ready = this.timed('content', () => this.content.check(document)).then(() => Promise.all([this.timed('proxies', () => this.selectProxies()), this.connectNative(), this.timed('luts', () => this.authorizeLuts(document)), this.timed('fonts', () => this.syncFonts(document))])).then(async ([, decode]) => { const codeSources = await this.timed('code', () => this.codeSources(document)); return this.timed('init', () => this.request({ kind: 'init', timing: this.timing, document: this.mediaDocument(document), codeSources, previewWidth, surface, cacheBudgetBytes, decode: { ...decode, localPaths: this.localPaths(document), proxies: this.proxySources() } }, surface ? [surface] : [])) })
+    void this.ready.then(() => { this.readySettled = true }, () => undefined)
     this.stopFonts = subscribeFontLibrary(() => {
       if (this.disposed || this.fontRefresh || fontLibrarySnapshot().revision === this.fontsRevision) return
       this.fontRefresh = this.ready.then(async () => {
@@ -343,9 +353,10 @@ export class VideoEditRenderTransport {
   setTracks(tracks: VideoEditTrackResults): void { if (!this.disposed) this.worker.postMessage({ kind: 'tracks', tracks, id: 0 } satisfies RenderRequest) }
   invalidateDocument(revision: number): void { if (!this.disposed) this.worker.postMessage({ kind: 'invalidate', revision, id: 0 } satisfies RenderRequest) }
   async present(frame: number, sequential = false, scrubbing: import('./videoEditRenderer').VideoEditScrubMode = false, deadline?: number, submitted?: () => void, readRgb?: { width: number; height: number }, quality: EffectQuality = 'interactive', history = false, observeElements = false): Promise<RenderResponse> {
-    await this.ready
+    // 会话已就绪、这一帧要的字体也已在 Worker 里时不经任何等待，请求在调用方的同一个任务里发出（拖动时不排到界面更新之后）。
+    if (!this.readySettled) await this.ready
     this.frame = frame
-    await this.syncFonts(this.document)
+    if (this.fontSyncsPending || this.document !== this.fontDocument || this.fontKey(this.document) !== this.fontScope) await this.syncFonts(this.document)
     const document = this.document
     const result = await this.request({ kind: 'render', frame, sequential, scrubbing, deadline, quality, ...(observeElements ? { observeElements: true } : {}), ...(readRgb ? { readRgb } : {}), ...(history ? { history: true } : {}) }, [], submitted)
     const at = result.presented ? this.host.maskUpdateTime(document.id, document.revision) : undefined

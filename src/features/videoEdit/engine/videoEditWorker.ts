@@ -56,7 +56,7 @@ export type RenderRequest = { id: number } & (
   | { kind: 'audio'; start: number; duration: number; retainIdle?: boolean }
   /** Acceptance probes only (task 2.7): high-precision counters and one row of the last high-precision composition. */
   | { kind: 'precision'; row?: number })
-export type RenderResponse = { renderCached?: boolean; renderElapsedMs?: number; renderStages?: Record<string, number>; approximate?: boolean; gpuDeviceLost?: string; authorElements?: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation; authorMetadata?: import('./videoEditAuthorParameters').AuthorEffectMetadata; elements?: import('./videoEditAuthorElements').AuthorElementObservation[]; preparationStages?: ReturnType<typeof videoEditPreparationSnapshot>; codePerformance?: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[]; id: number; phase?: 'submitted'; error?: string; effectErrors?: string[]; bitmap?: ImageBitmap; history?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
+export type RenderResponse = { /** A program scrub frame answered without rendering: a newer frame request had already arrived. */ skipped?: boolean; renderCached?: boolean; renderElapsedMs?: number; renderStages?: Record<string, number>; approximate?: boolean; gpuDeviceLost?: string; authorElements?: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation; authorMetadata?: import('./videoEditAuthorParameters').AuthorEffectMetadata; elements?: import('./videoEditAuthorElements').AuthorElementObservation[]; preparationStages?: ReturnType<typeof videoEditPreparationSnapshot>; codePerformance?: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[]; id: number; phase?: 'submitted'; error?: string; effectErrors?: string[]; bitmap?: ImageBitmap; history?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
 /** Structured log entries the worker cannot write itself; the render session forwards them to the application log. */
 export interface RenderLogMessage { kind: 'log'; level: 'debug' | 'info' | 'warn'; message: string; event: string; context: Record<string, unknown> }
 /** 原生显卡帧通道（preload 交来的端口）。不进入渲染队列；渲染器经它读取原生解码帧，诊断只供真实性测试。 */
@@ -97,6 +97,14 @@ let effectWarnings = new Set<string>()
 // 排队或正在准备的前台帧优先；GPU 呈现回执后仅在 Worker 队列空档发起准备。
 let foregroundFrames = 0
 let latestRender: { frame: number; sequential: boolean } | undefined
+/**
+ * Paused program frames (non-sequential, no pixels read back) queued and not started yet, by request id: a newer frame
+ * request answers them at once as skipped, so the program's in-flight budget frees up and the queue keeps only the
+ * newest position.
+ */
+const queuedFrames = new Map<number, () => void>()
+/** A paused (exact) program frame is being prepared in the queue: far jumps meanwhile are answered outside it. */
+let exactRendering = false
 let summaryAt = performance.now()
 let lookaheadStats = { preopened: 0, hits: 0, misses: 0, budgetSkipped: 0, foregroundSkipped: 0, scans: 0, scanMs: 0, maxScanMs: 0 }
 let lookaheadMisses: Array<Record<string, unknown>> = []
@@ -164,9 +172,31 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
   const releaseForeground = (): void => { if (foregroundPending) { foregroundPending = false; foregroundFrames-- } }
   if (['init', 'update', 'replaceContent', 'parameters', 'dispose', 'invalidate', 'stopPlayback'].includes(request.kind)) releasePreopened()
   if (request.kind === 'render') { latestRender = request; foregroundFrames++; if (renderer) decodeLookahead?.beforeFrame(renderer.document, request.frame, request.sequential === true) }
+  let skipped = false
+  if (request.kind === 'render' && !request.sequential) {
+    // 节目暂停时（拖动、跳转、逐帧）排队还没开始的旧画面请求当场答复 skipped（节目照常等这一帧），Worker 一空下来就画最新的
+    // 位置，不必等主线程收到回执再发下一帧（主线程忙于指针事件与界面更新，回执要晚 7–20ms 才轮到处理）；连按方向键或连续点击
+    // 也不会把一串过时的精确帧（长 GOP 每帧可达一秒）排在后面，节目的在途名额也随即空出来。
+    for (const [id, skip] of queuedFrames) if (id < request.id) { queuedFrames.delete(id); skip() }
+    if (!request.history && !request.readRgb) queuedFrames.set(request.id, () => { skipped = true; releaseForeground(); self.postMessage({ id: request.id, presented: false, skipped: true } satisfies RenderResponse) })
+  }
   if (request.kind === 'init') enableVideoEditFrameTrace(request.traceFrames === true)
 
   if (request.kind === 'preopen') { preopenMedia(request); return }
+  // 连续快速点击：前一次点击的精确画面还在准备（长 GOP 原片可达一秒）时，新的远距离跳转不排在它后面，当场画常驻关键帧并
+  // 开始读预渲染的精确画面；前一帧之后不会再画上去（渲染器按“后来的画面已上屏”放弃它）。
+  if (request.kind === 'render' && exactRendering && renderer && direct && request.scrubbing === 'fast' && !request.sequential && !request.history && !request.readRgb && renderer.hasJumpPreview(request.frame)) {
+    queuedFrames.delete(request.id)
+    const current = renderer
+    const started = performance.now()
+    void current.presentJumpPreviewNow(request.frame, () => current.document.revision === revision).then(async shown => {
+      releaseForeground()
+      if (!shown) { self.postMessage({ id: request.id, presented: false, skipped: true } satisfies RenderResponse); return }
+      await shown.completion.catch(() => undefined)
+      self.postMessage({ id: request.id, presented: shown.presented, approximate: true, renderCached: false, renderElapsedMs: performance.now() - started, renderStages: { jumpPreviewOutsideQueue: performance.now() - started }, sourceTimestamps: [], blankPictures: 0, singleFrameReads: 0, cacheHits: shown.cacheHits, cacheBytes: shown.cacheBytes, decodeMs: 0, gpuMs: shown.gpuMs } satisfies RenderResponse)
+    }, error => { releaseForeground(); self.postMessage({ id: request.id, ...videoEditRenderFailure(error) } satisfies RenderResponse) })
+    return
+  }
   if (request.kind === 'tracks') { setVideoEditTrackResults(request.tracks); renderer?.cancelPresentation(); return }
   if (request.kind === 'regions') { setVideoEditSmartRegionSegments(request.regions); renderer?.cancelPresentation(); return }
   if (request.kind === 'renderCache') { renderCachePaths.clear(); for (const [url, path] of Object.entries(request.localPaths)) renderCachePaths.set(url, path); renderCacheWindows = request.windows; renderer?.setRenderCache(renderCacheWindows); if (renderer) decodeLookahead?.windowsChanged(renderer.document, renderCacheWindows); else releasePreopened(); return }
@@ -178,6 +208,8 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
   if (request.kind === 'parameters') revision = Math.max(revision, request.update.revision)
   queue = queue.then(async () => {
     try {
+      // 快速拖动时一幅实时画面可能在请求交回后继续在后台准备（渲染器先画了常驻关键帧）：改动渲染器的请求等它收尾。
+      if (request.kind !== 'render') await renderer?.settled()
       if (request.kind === 'dispose') {
         fonts?.dispose(); fonts = undefined
         await disposeRenderer(); const codeResources = renderer?.codeDiagnostics(); renderer = undefined
@@ -227,6 +259,9 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
         renderer.updateParameters(request.update); self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'render') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
+        // 排队期间已被更新的画面请求取代（见 `queuedFrames`），已答复过。
+        if (skipped) return
+        queuedFrames.delete(request.id)
         const renderStarted = performance.now()
         const preparationBefore = videoEditPreparationSnapshot()
         traceVideoEditFrame('worker.queue', request.frame, receivedAt, renderStarted)
@@ -239,12 +274,14 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
           snapshot = pixels
           void snapshot.catch(() => {})
         }, { maxPixels: needsPixels ? Infinity : 1280 * 720, gpu: !direct && !request.readRgb && !request.history }) : undefined
-        const result = await renderer.render(request.frame, request.sequential, request.scrubbing, () => renderer?.document.revision === revision, request.deadline, undefined, request.quality, capture).catch(error => { if (snapshot) void snapshot.then(bitmap => bitmap.close(), () => {}); throw error })
+        exactRendering = !request.scrubbing && !request.sequential
+        const result = await renderer.render(request.frame, request.sequential, request.scrubbing, () => renderer?.document.revision === revision, request.deadline, undefined, request.quality, capture).catch(error => { if (snapshot) void snapshot.then(bitmap => bitmap.close(), () => {}); throw error }).finally(() => { exactRendering = false })
         const renderStages = videoEditPreparationDelta(preparationBefore)
         releaseForeground()
         if (result.presented) decodeLookahead?.update(renderer.document, request.frame, request.sequential === true, renderCacheWindows)
         const readCodePerformance = renderer.captureCodePerformance()
-        const authorElements = request.observeElements && result.presented ? renderer.observeAuthorElements(request.frame) : undefined
+        // 跳转先出的近似画面（预渲染的常驻关键帧）没有跑这一帧的代码：作者元素等随后的精确帧再读。
+        const authorElements = request.observeElements && result.presented && !result.approximate ? renderer.observeAuthorElements(request.frame) : undefined
         traceVideoEditFrame('worker.render', request.frame, renderStarted)
         const finish = async (): Promise<void> => {
           const owned = new Set<ImageBitmap>()
@@ -274,7 +311,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
           const bitmap = rgb || direct || !result.presented ? undefined : pixels
           traceVideoEditFrame('bitmap.prepare', request.frame, transferStarted)
           const postedAt = performance.now()
-          self.postMessage({ id: request.id, renderCached: result.renderCached, renderElapsedMs, renderStages, bitmap, history, rgb, authorElements, effectErrors: result.effectErrors, sourceTimestamps: result.sourceTimestamps, blankPictures: result.blankPictures, singleFrameReads: result.singleFrameReads, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, ...(result.approximate ? { approximate: true } : {}), decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics(), codePerformance: readCodePerformance(), preparationStages: videoEditPreparationSnapshot() } satisfies RenderResponse, { transfer: [...(rgb ? [rgb.buffer as ArrayBuffer] : bitmap ? [bitmap] : []), ...(history ? [history] : [])] })
+          self.postMessage({ id: request.id, ...(result.superseded ? { skipped: true } : {}), renderCached: result.renderCached, renderElapsedMs, renderStages, bitmap, history, rgb, authorElements, effectErrors: result.effectErrors, sourceTimestamps: result.sourceTimestamps, blankPictures: result.blankPictures, singleFrameReads: result.singleFrameReads, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, ...(result.approximate ? { approximate: true } : {}), decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics(), codePerformance: readCodePerformance(), preparationStages: videoEditPreparationSnapshot() } satisfies RenderResponse, { transfer: [...(rgb ? [rgb.buffer as ArrayBuffer] : bitmap ? [bitmap] : []), ...(history ? [history] : [])] })
           if (bitmap) owned.delete(bitmap)
           traceVideoEditFrame('worker.post', request.frame, postedAt)
           if (history) owned.delete(history)
