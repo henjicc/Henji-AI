@@ -90,11 +90,11 @@ test('CI 对每层执行明确命令，初始化失败不能自动跳过，发�
   assert.match(workflow, /vgpu install-software-renderer/)
   assert.match(workflow, /vgpu doctor --pretty/)
   assert.match(workflow, /VGPU_ADAPTER: software/)
-  assert.match(workflow, /needs: \[checks, unit-tests, gpu-tests, image-export-tests, native-tests, video-decoder-tests\]/)
+  assert.match(workflow, /needs: \[checks, unit-tests, gpu-tests, image-export-tests, native-tests, video-decoder-tests, audio-capture-tests\]/)
   assert.match(workflow, /needs: quality-gate/)
   const gate = workflowJob('quality-gate')
   assert.ok(gate, '需要聚合质量门禁 job')
-  for (const [result, job] of [['CHECKS_RESULT', 'checks'], ['UNIT_RESULT', 'unit-tests'], ['GPU_RESULT', 'gpu-tests'], ['IMAGE_EXPORT_RESULT', 'image-export-tests'], ['NATIVE_RESULT', 'native-tests'], ['VIDEO_DECODER_RESULT', 'video-decoder-tests']]) {
+  for (const [result, job] of [['CHECKS_RESULT', 'checks'], ['UNIT_RESULT', 'unit-tests'], ['GPU_RESULT', 'gpu-tests'], ['IMAGE_EXPORT_RESULT', 'image-export-tests'], ['NATIVE_RESULT', 'native-tests'], ['VIDEO_DECODER_RESULT', 'video-decoder-tests'], ['AUDIO_CAPTURE_RESULT', 'audio-capture-tests']]) {
     assert.ok(gate.includes(`${result}: \${{ needs.${job}.result }}`), `${result} 必须取自 ${job}`)
     assert.ok(gate.includes(`test "$${result}" = success`), `${result} 必须为 success`)
   }
@@ -125,6 +125,14 @@ test('CI 对每层执行明确命令，初始化失败不能自动跳过，发�
   // FFmpeg CLI 兼容层只在已获取固定版本 FFmpeg 的 Windows job 跑，必须排在 ensure 之后。
   assert.ok(decoderJob.indexOf('npm run test:ffmpeg-cli') > decoderJob.indexOf(steps[0]), 'test:ffmpeg-cli 必须在获取校验 FFmpeg 之后执行')
   assert.ok(decoderJob.indexOf('run: npm ci') > 0 && decoderJob.indexOf('run: npm ci') < decoderJob.indexOf('npm run test:ffmpeg-cli'), 'test:ffmpeg-cli 前需要安装依赖')
+
+  // 原生录音独立程序：Windows 与 macOS 各编译一次，先跑无麦克风的引擎与文件恢复测试，再构建发布程序。
+  const captureJob = workflowJob('audio-capture-tests')
+  assert.ok(captureJob, '原生录音程序需要独立 job')
+  assert.match(captureJob, /os: \[windows-latest, macos-latest\]/)
+  const captureTest = captureJob.indexOf('node scripts/build-audio-capture.cjs --test')
+  const captureBuild = captureJob.search(/node scripts\/build-audio-capture\.cjs\s*$/m)
+  assert.ok(captureTest > 0 && captureBuild > captureTest, 'audio-capture-tests 必须先测试再构建')
 })
 
 test('性能专项显式启用，普通层保留同文件正确性', () => {
