@@ -19,7 +19,7 @@ import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
 import { videoEditParameterUpdate } from './videoEditParameterUpdate'
 
 const contentInputs = vi.hoisted(() => ({ uploads: [] as Array<[string, number | undefined]>, borrows: [] as Array<[string, number | undefined]>, closed: 0 }))
-const boundary = vi.hoisted(() => ({ pendingSchedule: undefined as Promise<void> | undefined, scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, failOffscreenClip: undefined as string | undefined, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean; size?: [number, number] }>, divisors: [] as number[], mixes: [] as Array<number | number[]>, opacities: [] as number[], evaluatedClips: [] as VideoEditClip[], builtinParams: [] as Record<string, unknown>[], warmed: [] as string[], protectedInstances: [] as string[] }))
+const boundary = vi.hoisted(() => ({ pendingSchedule: undefined as Promise<void> | undefined, scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, failOffscreenClip: undefined as string | undefined, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean; size?: [number, number] }>, divisors: [] as number[], mixes: [] as Array<number | number[]>, opacities: [] as number[], evaluatedClips: [] as VideoEditClip[], builtinParams: [] as Record<string, unknown>[], warmed: [] as string[], protectedInstances: [] as string[], targetKeys: [] as string[], offscreenCompletion: undefined as Promise<void> | undefined }))
 /** The start of the 60fps picture showing at `time` (exact grid times stay exact despite floating point). */
 const gridPicture = vi.hoisted(() => (time: number, fps = 60): number => Math.floor(time * fps + 1e-6) / fps)
 /** Source seconds compared at whole microseconds (picture starts computed on the grid vs. expectations summed in seconds). */
@@ -78,14 +78,14 @@ vi.mock('./videoEditGpuCompositor', async () => {
     return new VideoEditGpuFrame({ ...sample, displayWidth: 3840, displayHeight: 2160, rotation: 0, flip: false }, { createView: () => ({}), destroy: vi.fn() }, undefined, 100, () => { boundary.normalizedReleased++ })
   }
   async code() { return { inspectAuthor: async (bundle: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorBundle) => testAuthorProgram(bundle), retainAuthorInstances: async () => undefined, observeAuthor: () => [], authorGenerator: async (_key: string, _instance: string, _program: CodeMaterialProgram, context: { time: number }) => { boundary.generatorCalls++; if (boundary.failGenerator) throw new Error('代码画面失败'); return { timestamp: context.time } }, releaseUnused: (keys: ReadonlySet<string>) => { boundary.released.push([...keys]) }, warmAuthor: async (key: string) => { boundary.warmed.push(key) }, protectAuthorInstances: (keys: ReadonlySet<string>) => { boundary.protectedInstances = [...keys] },
-    target: async (_key: string, width: number, height: number) => target(width, height), releaseNestedFrames: vi.fn(),
+    target: async (key: string, width: number, height: number) => { boundary.targetKeys.push(key); return target(width, height) }, releaseNestedFrames: vi.fn(),
     builtin: async (_key: string, instance: { params: Record<string, unknown> }, input: InstanceType<typeof VideoEditCodePicture>) => { boundary.builtinParams.push({ ...instance.params }); return target(input.width, input.height) },
     mix: async (_key: string, left: InstanceType<typeof VideoEditCodePicture>, _right: InstanceType<typeof VideoEditCodePicture>, amount: number, through?: readonly number[]) => { boundary.mixes.push(through ? [amount, ...through] : amount); return target(left.width, left.height) },
   } }
   async prepareImages(images: ReadonlyMap<string, ImageBitmap | InstanceType<typeof VideoEditCodePicture>>) { for (const [key, image] of images) (image instanceof VideoEditCodePicture ? contentInputs.borrows : contentInputs.uploads).push([key, (image as { timestamp?: number }).timestamp]); return new Map([...images].map(([key, source]) => [key, { source }])) }
   imageDiagnostics() { return { textures: 0, bytes: 0, uploads: 0 } }
   codeDiagnostics() { return undefined }
-  async draw(document: { width: number; height: number }, clips: VideoEditClip[], pictures: Array<{ timestamp?: number } | null>, _shouldPresent: unknown, _deadline: unknown, destination?: unknown) { boundary.pictures = pictures.map(picture => picture?.timestamp as number); boundary.opacities = clips.map(clip => clip.opacity); if (destination) { boundary.evaluatedClips = clips; (destination as { timestamp?: number }).timestamp = pictures[0]?.timestamp } boundary.draws.push({ ids: clips.map(clip => clip.id), timestamps: [...boundary.pictures], offscreen: Boolean(destination), ...(boundary.divisors.length ? { size: [document.width, document.height] as [number, number] } : {}) }); if (destination && clips.some(clip => clip.id === boundary.failOffscreenClip)) throw new Error('离屏提交失败'); if (!destination) this.capture?.()?.(Promise.resolve({ width: document.width, height: document.height, timestamp: pictures[0]?.timestamp, close: () => { contentInputs.closed++ } } as unknown as ImageBitmap)); return { presented: true, completion: Promise.resolve() } }
+  async draw(document: { width: number; height: number }, clips: VideoEditClip[], pictures: Array<{ timestamp?: number } | null>, _shouldPresent: unknown, _deadline: unknown, destination?: unknown) { boundary.pictures = pictures.map(picture => picture?.timestamp as number); boundary.opacities = clips.map(clip => clip.opacity); if (destination) { boundary.evaluatedClips = clips; (destination as { timestamp?: number }).timestamp = pictures[0]?.timestamp } boundary.draws.push({ ids: clips.map(clip => clip.id), timestamps: [...boundary.pictures], offscreen: Boolean(destination), ...(boundary.divisors.length ? { size: [document.width, document.height] as [number, number] } : {}) }); if (destination && clips.some(clip => clip.id === boundary.failOffscreenClip)) throw new Error('离屏提交失败'); if (!destination) this.capture?.()?.(Promise.resolve({ width: document.width, height: document.height, timestamp: pictures[0]?.timestamp, close: () => { contentInputs.closed++ } } as unknown as ImageBitmap)); return { presented: true, completion: destination && boundary.offscreenCompletion ? boundary.offscreenCompletion : Promise.resolve() } }
   setPictureDivisor(divisor: number): void { boundary.divisors.push(divisor) }
   async dispose(): Promise<void> {}
   async invalidateFontResources(): Promise<void> {}
@@ -103,7 +103,7 @@ beforeEach(() => {
   boundary.pendingSchedule = undefined; boundary.disposed = []; boundary.pictures = []
   boundary.generatorCalls = 0; boundary.compilerCalls = 0; boundary.compilerDisposed = 0; boundary.failGenerator = false; boundary.failOffscreenClip = undefined; boundary.released = []; boundary.pendingCode = undefined
   boundary.snapshotCalls = []; boundary.normalizedReleased = 0; boundary.pendingSnapshot = undefined
-  boundary.draws = []; boundary.mixes = []; boundary.divisors = []; boundary.evaluatedClips = []; boundary.builtinParams = []; boundary.warmed = []; boundary.protectedInstances = []
+  boundary.draws = []; boundary.mixes = []; boundary.divisors = []; boundary.evaluatedClips = []; boundary.builtinParams = []; boundary.warmed = []; boundary.protectedInstances = []; boundary.targetKeys = []; boundary.offscreenCompletion = undefined
   vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} })
   vi.stubGlobal('VideoDecoder', { isConfigSupported: async () => ({ supported: true }) })
 })
@@ -478,6 +478,31 @@ it('导出逐帧：重叠段两个引用每帧各读一次准确画面，不提�
     expect(us(inputs.find(reader => reader.times[0] >= 5)!.times)).toEqual(us(pictureTimes(0, 120, 5)))
   } finally { await renderer.dispose() }
   expect(readers.every(reader => reader.closed)).toBe(true)
+})
+
+it('视频输入画面提交后不等 GPU 完成就交给作者，完成并入整帧；每帧重画同一个目标而不逐帧新建；提交失败使该帧失败且不再复用', async () => {
+  const { backend } = inputReaders()
+  const renderer = new VideoEditRenderer(recordingWindowsFixture(300), 3840, undefined, 8 * 1024 ** 3, backend)
+  try {
+    let finish!: () => void
+    boundary.offscreenCompletion = new Promise<void>(resolve => { finish = resolve })
+    contentInputs.borrows = []
+    const first = await renderer.render(10, true)
+    // The author already received the input picture while the input's GPU work is still pending.
+    expect(first.presented).toBe(true); expect(us([shownInputs().w1])).toEqual(us([10 / 60]))
+    let completed = false; void first.completion.then(() => { completed = true })
+    await new Promise(resolve => setTimeout(resolve, 0)); expect(completed).toBe(false)
+    finish(); await first.completion
+    boundary.offscreenCompletion = undefined
+    for (const frame of [11, 12, 13]) await (await renderer.render(frame, true)).completion
+    expect(boundary.targetKeys.filter(key => key.startsWith('nested:frame:input'))).toEqual(Array(4).fill('nested:frame:input'))
+    boundary.offscreenCompletion = Promise.reject(new Error('输入提交失败')); void boundary.offscreenCompletion.catch(() => {})
+    await expect((await renderer.render(14, true)).completion).rejects.toThrow('输入提交失败')
+    boundary.offscreenCompletion = undefined
+    const draws = boundary.draws.filter(draw => draw.offscreen).length
+    await (await renderer.render(14, true)).completion
+    expect(boundary.draws.filter(draw => draw.offscreen)).toHaveLength(draws + 1)
+  } finally { boundary.offscreenCompletion = undefined; await renderer.dispose() }
 })
 
 it('parameter updates keep the running decoder schedule and reuse uploaded paused pictures', async () => {

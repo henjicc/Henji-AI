@@ -102,7 +102,18 @@ function videoEditPictureCovers(picture: { timestamp: number; duration: number }
 }
 export interface VideoEditRenderCacheWindow { key: string; startFrame: number; endFrame: number; url: string; width: number; height: number; fps: number }
 interface CodeInputSession { renderer: VideoEditRenderer; tail: Promise<unknown>; document: VideoEditComposition; sourceKey: string; lastKey?: string; lastPicture?: VideoEditCodePicture; ownerKey: string }
-interface NestedFrameContext { pictures: Map<string, Promise<VideoEditCodePicture>>; keys: Map<string, Set<string>>; inputs: Map<VideoEditRenderer, Map<string, Promise<VideoEditCodePicture>>>; bytes: number }
+/**
+ * `completions`: GPU completion of code input pictures anywhere in the frame's tree. Samplers follow them on the same
+ * device queue, so nothing waits for them while preparing; the top-level frame's completion includes them.
+ */
+interface NestedFrameContext { pictures: Map<string, Promise<VideoEditCodePicture>>; keys: Map<string, Set<string>>; inputs: Map<VideoEditRenderer, Map<string, Promise<VideoEditCodePicture>>>; bytes: number; completions: Array<Promise<void>> }
+/**
+ * The render target of a code input session: one per session (each input renderer owns its targets), drawn again
+ * every frame. A target per sample allocated and destroyed a 4K rgba16float texture (66MB) per frame and input.
+ * Overwriting is safe: a session prepares one sample per frame, and every earlier reader was submitted to the same
+ * device queue before.
+ */
+const CODE_INPUT_TARGET = 'nested:frame:input'
 interface NestedRender {
   context: NestedFrameContext; key: string; path: string[]; ownerKey?: string; opaqueBackground?: boolean; format?: VideoEditCodePicture['textureFormat']; sourceDocument?: VideoEditComposition; filterHandles?: { clipId: string; windows: VideoEditTransitionWindow[] }
   /**
@@ -876,13 +887,12 @@ export class VideoEditRenderer {
           entry = { renderer, tail: Promise.resolve(), document, sourceKey: source.sampleKey, ownerKey: `code-input:${source.sessionKey}` }; this.codeInputs.set(source.sessionKey, entry)
           recordVideoEditPreparation('codeInputRenderer', performance.now() - began)
         }
-        const session = entry, targetKey = `nested:frame:input:${sampleKey}`
+        const session = entry, targetKey = CODE_INPUT_TARGET
         const keys = context.keys.get(session.ownerKey) ?? new Set<string>(); keys.add(targetKey); context.keys.set(session.ownerKey, keys)
         picture = session.tail.catch(() => undefined).then(async () => {
           if (!current()) throw new DOMException('视频取帧已取消。', 'AbortError')
           if (session.lastKey === sampleKey && session.lastPicture && (reference.kind === 'video' || session.document === document)) { recordVideoEditPreparation('codeInputFrameHit', 0); return session.lastPicture }
-          // The next preparation may retire the prior target before submission.
-          // A cancelled or failed new frame must never resurrect that texture.
+          // The target is drawn again below: a cancelled or failed new frame must never resurrect the previous picture.
           session.lastKey = undefined; session.lastPicture = undefined
           const started = performance.now()
           if (reference.kind === 'video' && session.sourceKey !== source.sampleKey || session.document !== document) {
@@ -892,11 +902,15 @@ export class VideoEditRenderer {
           }
           const result = await session.renderer.render(source.frame, false, false, current, undefined, { context, key: targetKey, ownerKey: session.ownerKey, path, opaqueBackground: true }, quality)
           if (!current() || !result.presented || !result.nestedPicture) throw new DOMException('旧视频输入画面已取消。', 'AbortError')
-          await result.completion
-          if (!current()) throw new DOMException('旧视频输入画面已取消。', 'AbortError')
-          session.lastKey = sampleKey; session.lastPicture = result.nestedPicture; session.document = document
+          const nested = result.nestedPicture
+          // Submitted, not awaited: whatever samples the picture runs after it on the same queue (waiting here also
+          // waited for every earlier frame still on the GPU). A failed submission fails the frame through the
+          // top-level completion and is never reused.
+          void result.completion.catch(() => { if (session.lastPicture === nested) { session.lastKey = undefined; session.lastPicture = undefined } })
+          context.completions.push(result.completion)
+          session.lastKey = sampleKey; session.lastPicture = nested; session.document = document
           recordVideoEditPreparation('codeInputRender', performance.now() - started)
-          return result.nestedPicture
+          return nested
         })
         session.tail = picture; shared.set(key, picture)
       } else recordVideoEditPreparation('codeInputFrameHit', 0)
@@ -907,7 +921,13 @@ export class VideoEditRenderer {
     this.prewarmCodeInputs(document, upcoming)
     const inputs = new Map<string, VideoEditCodePicture>()
     for (const [key, picture] of pending) inputs.set(key, await picture)
-    for (const entry of this.codeInputs.values()) (await entry.renderer.compositor?.code())?.releaseNestedFrames(context.keys.get(entry.ownerKey) ?? new Set())
+    for (const entry of this.codeInputs.values()) {
+      const keys = context.keys.get(entry.ownerKey)
+      // A session kept without a picture this frame (opened ahead, or held by the lookahead) gives its target back.
+      if (!keys) { entry.lastKey = undefined; entry.lastPicture = undefined }
+      const code = await entry.renderer.compositor?.code()
+      code?.releaseNestedFrames(keys ?? new Set())
+    }
     return inputs
   }
   /**
@@ -922,7 +942,7 @@ export class VideoEditRenderer {
     const document = this.document; const epoch = this.presentationEpoch
     // A filter prefix limits visible passes, not audio, tracking or explicit media references.
     const sourceDocument = nestedRender?.sourceDocument ?? document
-    const nestedContext: NestedFrameContext = nestedRender?.context ?? { pictures: new Map(), keys: new Map(), inputs: new Map(), bytes: 0 }
+    const nestedContext: NestedFrameContext = nestedRender?.context ?? { pictures: new Map(), keys: new Map(), inputs: new Map(), bytes: 0, completions: [] }
     const path = nestedRender?.path ?? [document.id]
     const canPresent = (): boolean => !this.disposed && this.document === document && this.presentationEpoch === epoch && shouldPresent()
     const visible = videoEditVisibleTracks(document)
@@ -1257,7 +1277,9 @@ export class VideoEditRenderer {
         const entry = this.nestedPictures.get(id); this.nestedPictures.delete(id); await entry?.renderer.dispose()
       }
     }
-    return { canvas: this.canvas, ...(nestedPicture ? { nestedPicture } : {}), sourceTimestamps: timestamps, blankPictures, singleFrameReads, cacheHits, cacheBytes: this.frameCache.bytes, presented, renderCached: !!cachedWindow, decodeMs, gpuMs, effectErrors, ...(approximatePictures ? { approximate: true } : {}), completion }
+    // The frame (the top of the tree) completes after its code input pictures; their failure fails it.
+    const frameCompletion = !nestedRender && nestedContext.completions.length ? Promise.all([completion, ...nestedContext.completions]).then(() => undefined) : completion
+    return { canvas: this.canvas, ...(nestedPicture ? { nestedPicture } : {}), sourceTimestamps: timestamps, blankPictures, singleFrameReads, cacheHits, cacheBytes: this.frameCache.bytes, presented, renderCached: !!cachedWindow, decodeMs, gpuMs, effectErrors, ...(approximatePictures ? { approximate: true } : {}), completion: frameCompletion }
   }
   /** 声音片段的音频效果链（4.7c），按片段 ID；状态跨混音块延续，本块没用到的片段释放。 */
   private readonly audioChains = new Map<string, AudioEffectChain>()
