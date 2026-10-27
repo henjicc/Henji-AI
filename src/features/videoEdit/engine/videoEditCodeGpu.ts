@@ -15,7 +15,7 @@ import { VideoEditBuiltinEffectsGpu } from './videoEditBuiltinEffectsGpu'
 import { ShaderGraphCache } from './shaderEngines/shaderGraphCache'
 import { isShaderGraphEffect, shaderGraphEffectProps, shaderGraphEffectSpec, type VideoEditShaderClock } from '@/core/videoEdit/shaderGraph/effects'
 import { isShaderGraphTransition, shaderGraphTransitionProps, shaderGraphTransitionSpec } from '@/core/videoEdit/shaderGraph/transitions'
-import { isGlTransition } from '@/core/videoEdit/glTransitions/transitions'
+import { isGlTransition, type GlTransitionKind } from '@/core/videoEdit/glTransitions/transitions'
 import { VideoEditGlTransitionsGpu } from './glTransitions/videoEditGlTransitionsGpu'
 import { resolveVideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
 import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitions'
@@ -516,6 +516,13 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
   }
   /** 着色器图（`shaders` 框架）会话缓存：效果、转场与代码素材 shader 图层共用。 */
   shaderGraphs(): ShaderGraphCache { return this.graphCache ??= new ShaderGraphCache(this.device) }
+  private glTransitions(): VideoEditGlTransitionsGpu { return this.glTransitionRuntime ??= new VideoEditGlTransitionsGpu(this.device, this.sampler) }
+  /** 起播前在后台先编译用到的 gl-transitions 管线（8 位输出），第一次播到转场不再等编译。 */
+  async warmGlTransitions(kinds: readonly GlTransitionKind[]): Promise<void> {
+    await this.ready; this.assertLive()
+    const runtime = this.glTransitions()
+    await Promise.all(kinds.map(kind => runtime.prepare(kind, 'rgba8unorm')))
+  }
   private builtins(): VideoEditBuiltinEffectsGpu {
     return this.builtinRuntime ??= new VideoEditBuiltinEffectsGpu(this.device, this.sampler, {
       allocate: (width, height, format) => this.texture(width, height, format as VideoEditGpuColorFormat),
@@ -538,7 +545,7 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
       await this.shaderGraphs().render(shaderGraphTransitionSpec(transition.kind), { timeSeconds: 0, width: outgoing.width, height: outgoing.height, input: transition.emptyOutgoing ? empty : outgoing.texture, second: transition.emptyIncoming ? empty : incoming.texture, output: target.picture.texture, outputFormat: format, props: new Map([['fx', shaderGraphTransitionProps(transition.kind, transition.params, transition.progress)]]) })
     } else if (isGlTransition(transition.kind)) {
       // gl-transitions：前一段经转场着色器过渡到后一段；单侧过渡空着的一侧用透明画面。
-      await (this.glTransitionRuntime ??= new VideoEditGlTransitionsGpu(this.device, this.sampler)).render({ ...transition, kind: transition.kind }, outgoing.texture, incoming.texture, target.picture.texture, { width: outgoing.width, height: outgoing.height, format }, () => this.transparent())
+      await this.glTransitions().render({ ...transition, kind: transition.kind }, outgoing.texture, incoming.texture, target.picture.texture, { width: outgoing.width, height: outgoing.height, format }, () => this.transparent())
     } else await this.builtins().renderTransition(transition, outgoing.texture, incoming.texture, target.picture.texture, { width: outgoing.width, height: outgoing.height, format })
     this.assertLive(); this.pending = this.device.queue.onSubmittedWorkDone(); this.counts.builtinFrames++
     return target.picture

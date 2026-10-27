@@ -14,6 +14,7 @@ import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import { createLogger } from '@/core/logging'
 import { videoEditShaderGraphWarmSpecs } from '@/core/videoEdit/shaderGraph/effects'
 import { isShaderGraphTransition, shaderGraphTransitionSpec } from '@/core/videoEdit/shaderGraph/transitions'
+import { isGlTransition } from '@/core/videoEdit/glTransitions/transitions'
 import type { VideoEditEffect } from '@/core/videoEdit/compositing'
 import { VIDEO_EDIT_MOTION_BLUR_MAX_SAMPLES, VIDEO_EDIT_MOTION_BLUR_PLAYBACK_SAMPLES, videoEditMotionBlurSamples, videoEditMotionBounds, type VideoEditMotionSampledClip } from '@/core/videoEdit/motionBlur'
 import { evaluateVideoEditClip, evaluateVideoEditBuiltinParameters, videoEditClipValue } from '@/core/videoEdit/keyframes'
@@ -478,6 +479,8 @@ export class VideoEditRenderer {
     if (!compositor) return
     const specs = videoEditShaderGraphWarmSpecs([this.document], kind => isShaderGraphTransition(kind) ? shaderGraphTransitionSpec(kind) : undefined)
     if (specs.length) void compositor.code().then(code => code.shaderGraphs().warm(specs)).catch(() => undefined)
+    const glKinds = [...new Set((this.document.transitions ?? []).map(transition => transition.kind).filter(isGlTransition))]
+    if (glKinds.length) void compositor.code().then(code => code.warmGlTransitions(glKinds)).catch(() => undefined)
   }
   /** Newly imported/replaced fonts must rebuild cached glyphs and nested text surfaces. */
   async invalidateFontResources(): Promise<void> {
