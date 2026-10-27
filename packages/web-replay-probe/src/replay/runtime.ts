@@ -3,9 +3,13 @@ import { decodeValue, encodeValue } from '../shared/codec'
 import { pointIn, resolveLocator } from '../shared/locator'
 import { callbackRefs, type TauriInternals } from '../shared/tauriRefs'
 import type { ElementInfo, HeaderList, Locator } from '../protocol'
-import { REPLAY_CONTROL, REPLAY_GLOBAL, type ReplayHost, type ReplayHttpResult } from './types'
+import { REPLAY_CONTROL, REPLAY_GLOBAL, type ReplayControl, type ReplayFrameReport, type ReplayHost, type ReplayHttpResult } from './types'
+import { installCaptureToken } from './captureToken'
 import { installCaretBlink } from './caretBlink'
 import { installCursorOverlay } from './cursorOverlay'
+import { installSmoothScroll } from './smoothScroll'
+import { holdIndexedDb } from './storageHold'
+import { installVirtualClock } from './virtualClock'
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
@@ -65,6 +69,16 @@ function buildResponse(result: Extract<ReplayHttpResult, { ok: true }>, issuedUs
   })
 }
 
+/** Reading a same-origin response body takes real time; page time holds until it is read. */
+function holdBody(response: Response, hold: <T>(work: Promise<T>) => Promise<T>): Response {
+  for (const name of ['arrayBuffer', 'blob', 'formData', 'json', 'text', 'bytes'] as const) {
+    const read = (response as unknown as Record<string, unknown>)[name]
+    if (typeof read !== 'function') continue
+    Object.defineProperty(response, name, { configurable: true, value: (...args: unknown[]) => hold((read as (...a: unknown[]) => Promise<unknown>).apply(response, args)) })
+  }
+  return response
+}
+
 /**
  * Installed by Henji's replay preload before any page script. Every boundary the probe recorded is
  * answered from the recording; anything else is reported as a conflict and fails like it would offline.
@@ -74,9 +88,10 @@ export function installReplayRuntime(host: ReplayHost): void {
   const win = window as unknown as Record<string, unknown>
   const conflict = (message: string): void => host.report({ kind: 'conflict', t: nowUs(), message })
 
-  if (boot.timeScale && boot.timeScale !== 1) slowPageClock(boot.timeScale)
-
-  // ---- time: wall clock follows the recording; timers stay real in the realtime tier
+  // ---- time: page time is driven by the engine (lockstep), the wall clock follows the recording
+  const clock = installVirtualClock(performance.now(), message => host.report({ kind: 'warning', t: nowUs(), message }))
+  holdIndexedDb(work => clock.hold(work))
+  installSmoothScroll()
   const RealDate = Date
   const wallNow = (): number => boot.wallAtZeroMs + performance.now()
   class ReplayDate extends RealDate {
@@ -117,8 +132,11 @@ export function installReplayRuntime(host: ReplayHost): void {
     const request = input instanceof Request ? input : undefined
     const url = typeof input === 'string' ? new URL(input, location.href).href : input instanceof URL ? input.href : input.url
     const method = (init?.method ?? request?.method ?? 'GET').toUpperCase()
-    const bodySource = init?.body !== undefined ? init.body : request && request.body ? await request.clone().arrayBuffer() : undefined
-    const result = await host.http({ method, url, headers: headerList(init?.headers ?? request?.headers), body: await requestBodyToWire(bodySource), via })
+    // Page time holds while the recorded answer is fetched, so its recorded timing starts at the moment of the call.
+    const result = await clock.hold((async () => {
+      const bodySource = init?.body !== undefined ? init.body : request && request.body ? await request.clone().arrayBuffer() : undefined
+      return host.http({ method, url, headers: headerList(init?.headers ?? request?.headers), body: await requestBodyToWire(bodySource), via, t: issued })
+    })())
     if (!result.ok) { conflict(result.conflict); throw new TypeError(`Failed to fetch (痕迹重演：${result.conflict})`) }
     return buildResponse(result, issued, init?.signal ?? request?.signal)
   }
@@ -127,7 +145,7 @@ export function installReplayRuntime(host: ReplayHost): void {
   window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? new URL(input, location.href).href : input instanceof URL ? input.href : input.url
     // Same-origin static files are served by the replay session; everything else is a recorded call.
-    if (new URL(url).origin === location.origin && (init?.method ?? 'GET').toUpperCase() === 'GET' && !TAURI_IPC.test(url)) return originalFetch(input, init)
+    if (new URL(url).origin === location.origin && (init?.method ?? 'GET').toUpperCase() === 'GET' && !TAURI_IPC.test(url)) return clock.hold(originalFetch(input, init).then(response => holdBody(response, clock.hold)))
     return windowFetch(input, init)
   }) as typeof window.fetch
   win[REPLAY_GLOBAL] = { fetch: seamFetch as FetchLike, action: (name: string) => host.report({ kind: 'action', t: nowUs(), name }) }
@@ -160,7 +178,7 @@ export function installReplayRuntime(host: ReplayHost): void {
   XMLHttpRequest.prototype.open = refuse('XMLHttpRequest') as typeof XMLHttpRequest.prototype.open
 
   // ---- Tauri host
-  if (boot.host === 'tauri') installTauriShim(host, conflict)
+  if (boot.host === 'tauri') installTauriShim(host, conflict, clock)
 
   // ---- engine control (called from main through executeJavaScript)
   const locate = (locator: Locator, offset: [number, number]): { x: number; y: number } | null => {
@@ -169,30 +187,37 @@ export function installReplayRuntime(host: ReplayHost): void {
     const { x, y } = pointIn(element, offset)
     return { x, y }
   }
-  win[REPLAY_CONTROL] = { locate, pointFor: (target: ElementInfo) => locate(target.locator, target.offset) }
+  const token = installCaptureToken()
+  const samplers = new Map<string, () => unknown>()
+  const control: ReplayControl = {
+    locate,
+    pointFor: (target: ElementInfo) => locate(target.locator, target.offset),
+    now: clock.now,
+    advance: toMs => clock.advance(toMs),
+    realFrame: clock.realFrame,
+    defineSampler: (name, read) => { samplers.set(name, read) },
+    async frame(toMs, options = {}) {
+      const show = options.token
+      const report = await clock.frame(toMs, show === undefined ? undefined : () => token.show(show), options.allowQuiet)
+      const samples: ReplayFrameReport['samples'] = {}
+      // A quiet frame shows the same state as the last one: nothing new to sample.
+      for (const name of report.quiet ? [] : options.samples ?? []) {
+        const read = samplers.get(name)
+        if (!read) { samples[name] = { ok: false, error: `没有这个采样：${name}` }; continue }
+        try { samples[name] = { ok: true, value: read() } } catch (error) { samples[name] = { ok: false, error: String(error) } }
+      }
+      return { ...report, samples }
+    },
+    viewport: () => ({ width: innerWidth, height: innerHeight }),
+    repaintToken: () => clock.realFrame().then(() => token.repaint()),
+  }
+  win[REPLAY_CONTROL] = control
   if (host.boot.pointer !== false) installCursorOverlay()
   installCaretBlink()
   host.report({ kind: 'ready', now: performance.now() })
 }
 
-/**
- * Page time runs `scale` times slower than the wall clock. CSS and Web Animations are slowed by the
- * player through the DevTools Animation domain; requestIdleCallback deadlines and event.timeStamp stay real.
- */
-function slowPageClock(scale: number): void {
-  const realNow = performance.now.bind(performance)
-  performance.now = () => realNow() / scale
-  const realSetTimeout = window.setTimeout.bind(window)
-  const realSetInterval = window.setInterval.bind(window)
-  window.setTimeout = ((handler: TimerHandler, ms?: number, ...args: unknown[]) => realSetTimeout(handler, (Number(ms) || 0) * scale, ...args)) as typeof window.setTimeout
-  window.setInterval = ((handler: TimerHandler, ms?: number, ...args: unknown[]) => realSetInterval(handler, (Number(ms) || 0) * scale, ...args)) as typeof window.setInterval
-  // Frame times follow the animation clock, which the DevTools playback rate already slows once it
-  // applies; only a frame time still on the wall clock is scaled here.
-  const realRaf = window.requestAnimationFrame.bind(window)
-  window.requestAnimationFrame = callback => realRaf(time => callback(Math.abs(time - realNow()) < Math.abs(time * scale - realNow()) ? time / scale : time))
-}
-
-function installTauriShim(host: ReplayHost, conflict: (message: string) => void): void {
+function installTauriShim(host: ReplayHost, conflict: (message: string) => void, clock: { hold<T>(work: Promise<T>): Promise<T> }): void {
   const boot = host.boot
   const callbacks = new Map<number, (payload: unknown) => void>()
   // Tauri draws callback ids from crypto.getRandomValues (two per invoke, one per transformCallback);
@@ -216,7 +241,7 @@ function installTauriShim(host: ReplayHost, conflict: (message: string) => void)
       const refs = callbackRefs(args, new Set(callbacks.keys()))
       // Same shape the recorder saw: Tauri sends JSON-serialized arguments (channels become `__CHANNEL__:<id>`).
       const wire = args instanceof ArrayBuffer || ArrayBuffer.isView(args) ? args : JSON.parse(JSON.stringify(args ?? {}))
-      const result = await host.invoke(cmd, await encodeValue(wire))
+      const result = await clock.hold((async () => host.invoke(cmd, await encodeValue(wire), issued))())
       if (!result.ok) { conflict(result.conflict); throw new Error(result.conflict) }
       // Schedule the host callbacks this call carried during recording.
       for (const event of boot.callbacks) {

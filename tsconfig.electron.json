@@ -17,5 +17,5 @@
     "types": ["node", "electron"]
   },
   "include": ["electron", "electron.vite.config.ts"],
-  "exclude": ["electron/preload/web-replay.ts"]
+  "exclude": ["electron/preload/web-replay.ts", "electron/preload/web-replay-reader.ts"]
 }

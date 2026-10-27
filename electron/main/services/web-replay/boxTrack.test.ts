@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
-import { BOX_TRACK_FILE, boxSampleEveryFrames, boxSampleScript, BoxTrackWriter, type BoxSample } from './boxTrack'
+import { BOX_TRACK_FILE, boxSampleScript, BoxTrackWriter, type BoxSample } from './boxTrack'
 
 // 主进程工程不引入全局 DOM lib；仅描述这个 jsdom 测试使用的浏览器边界。
 interface TestElement {
@@ -64,10 +64,6 @@ it('同一个 data-replay-id 同时出现几处时按文档顺序加序号，不
   document.body.innerHTML = '<i data-replay-id="history-1"></i><i data-replay-id="history-1"></i><i data-replay-id="history-1"></i>'
   document.querySelectorAll('i').forEach(el => rect(el))
   expect(sample().items.map(item => item[0])).toEqual(['history-1', 'history-1#1', 'history-1#2'])
-})
-
-it('每两帧采实时档，timeScale >= 2 每帧采', () => {
-  expect([1, 1.5, 2, 3].map(boxSampleEveryFrames)).toEqual([2, 2, 1, 1])
 })
 
 it('只在位置或视口变化时写入；结束补空白，完成前保留原轨', async () => {

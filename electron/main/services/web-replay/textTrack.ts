@@ -90,7 +90,7 @@ export interface TextAppearance {
 
 async function readLines(directory: string): Promise<TextLine[]> {
   const text = await fs.readFile(path.join(directory, TEXT_TRACK_FILE), 'utf8').catch(error => {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new Error('这段录制还没有文字轨：先用 render_web_app_replay（textOnly=true）重演一遍，约与录制等长')
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new Error('这段录制还没有文字轨：先用 render_web_app_replay（textOnly=true）重演一遍，通常比录制本身快得多')
     throw error
   })
   return text.split('\n').filter(Boolean).map(line => JSON.parse(line) as TextLine)

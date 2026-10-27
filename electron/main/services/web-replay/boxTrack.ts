@@ -9,9 +9,6 @@ export type BoxItem = [key: string, x: number, y: number, width: number, height:
 export interface BoxSample { width: number; height: number; items: BoxItem[] }
 export interface BoxLine extends BoxSample { t: number }
 
-/** 与播放器输出帧时钟一致；实时档减少一半跨进程采样。 */
-export function boxSampleEveryFrames(timeScale: number): number { return timeScale >= 2 ? 1 : 2 }
-
 /** 只查询目标元素，不扫描文字。序号从 0 开始，计入隐藏元素，避免显隐导致键漂移；重复的 data-replay-id 按文档顺序加序号。 */
 export function boxSampleScript(selectors: readonly string[] = []): string {
   const parsed = boxSelectorsSchema.safeParse(selectors)

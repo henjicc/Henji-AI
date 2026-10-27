@@ -1,4 +1,4 @@
-import type { Encoded, HeaderList, HostKind, ProbeEnvironment, WireBody } from '../protocol'
+import type { ElementInfo, Encoded, HeaderList, HostKind, Locator, ProbeEnvironment, WireBody } from '../protocol'
 import type { LocatorOptions } from '../shared/locatorOptions'
 
 /** Everything the page needs synchronously before its first script runs. */
@@ -13,11 +13,10 @@ export interface ReplayBoot {
   locator: LocatorOptions
   /** false: draw no pointer inside the page (a clean picture for editing; the editor redraws the pointer). Omitted means drawn. */
   pointer?: boolean
-  /** The page lives this many times slower than the wall clock (timers, performance.now, rAF), so a heavy capture keeps every frame on schedule. Omitted means 1. */
-  timeScale?: number
 }
 
-export interface ReplayHttpRequest { method: string; url: string; headers: HeaderList; body?: WireBody; via: 'seam' | 'fetch' }
+/** `t`: page time of the call (µs), to compare with the recorded call time. */
+export interface ReplayHttpRequest { method: string; url: string; headers: HeaderList; body?: WireBody; via: 'seam' | 'fetch'; t?: number }
 export type ReplayHttpResult =
   | {
     ok: true
@@ -45,9 +44,70 @@ export type ReplayReport =
 export interface ReplayHost {
   boot: ReplayBoot
   http(request: ReplayHttpRequest): Promise<ReplayHttpResult>
-  invoke(command: string, args: Encoded): Promise<ReplayHostResult>
+  invoke(command: string, args: Encoded, t?: number): Promise<ReplayHostResult>
   report(report: ReplayReport): void
 }
 
 export const REPLAY_GLOBAL = '__HENJI_WEB_REPLAY__'
 export const REPLAY_CONTROL = '__HENJI_WEB_REPLAY_CONTROL__'
+
+/** Page-side report of one rendered frame. */
+export interface ReplayFrameReport {
+  /** Page time the frame shows (ms). */
+  now: number
+  timers: number
+  frameCallbacks: number
+  animations: number
+  /** Not rendered: nothing could have changed the picture since the last rendered frame. */
+  quiet: boolean
+  samples: Record<string, { ok: true; value: unknown } | { ok: false; error: string }>
+}
+
+/** What the engine calls on the replay page (through executeJavaScript on `window[REPLAY_CONTROL]`). */
+export interface ReplayControl {
+  locate(locator: Locator, offset: [number, number]): { x: number; y: number } | null
+  pointFor(target: ElementInfo): { x: number; y: number } | null
+  /** Page time (ms). */
+  now(): number
+  /** Runs the page's timers up to `toMs` without rendering; page time then rests there. */
+  advance(toMs: number): Promise<{ now: number; timers: number; nextDue: number }>
+  /** Resolves after the next real rendering update (input the browser holds for the frame is delivered). */
+  realFrame(): Promise<void>
+  /**
+   * Renders the page at `toMs`: timers, animations and animation-frame callbacks, the capture token
+   * `token` (if given) in that same frame, then the named samplers read that state.
+   */
+  frame(toMs: number, options?: { token?: number; samples?: string[]; allowQuiet?: boolean }): Promise<ReplayFrameReport>
+  defineSampler(name: string, read: () => unknown): void
+  viewport(): { width: number; height: number }
+  /** Repaints the current capture token (same token) so a dropped capture comes again. */
+  repaintToken(): Promise<void>
+}
+
+/**
+ * The capture token: a CSS-pixel square in the page's top-left corner, painted in one of these colours
+ * (RGB) in the same frame as the state it marks. The engine reads it from the captured picture to know
+ * the picture shows that frame (not an earlier one), then paints the square over from its neighbours.
+ */
+export const CAPTURE_TOKEN_COLORS: ReadonlyArray<readonly [number, number, number]> = [[255, 0, 255], [0, 255, 255], [255, 255, 0], [0, 0, 255]]
+export const CAPTURE_TOKEN_CSS_PX = 2
+
+/** Tile size (device pixels) the frame reader compares and copies back. */
+export const READER_TILE = 64
+
+/**
+ * The engine asks the frame reader window to check one captured frame (a shared texture): does it show
+ * capture token `token` (null: take it whatever it shows)? If so, which tiles changed since the last
+ * accepted frame (`full`: send every tile), copied back; the frame becomes the accepted one. `guard`: the
+ * token square's size, never counted as a change.
+ */
+export interface ReaderRequest { id: number; token: number | null; full: boolean; guard: number }
+/**
+ * `token`: the capture token the frame shows (-1 none). `tiles`: indices (row-major, READER_TILE square)
+ * of the tiles in `pixels`, one after another, each as NV12 (BT.601 limited range): READER_TILE rows of
+ * READER_TILE luma bytes, then READER_TILE / 2 rows of READER_TILE interleaved U, V bytes; null when the
+ * frame was not accepted (an earlier picture).
+ */
+export type ReaderResult =
+  | { id: number; ok: true; token: number; width: number; height: number; tiles: Uint32Array | null; pixels: Uint8Array | null }
+  | { id: number; ok: false; error: string }
