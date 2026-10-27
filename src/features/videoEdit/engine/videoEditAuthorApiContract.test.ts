@@ -40,6 +40,7 @@ export type Layer = [
   Assert<Mutual<Host.AuthorLayer['data'], Author.AuthorStaticLayer['data']>>,
   Assert<Mutual<Host.AuthorLayer['factory'], Author.AuthorStaticLayer['factory']>>,
   Assert<Mutual<Host.AuthorLayer['blurShape'], Author.AuthorStaticLayer['blurShape']>>,
+  Assert<Mutual<Host.AuthorLayer['cacheKey'], Author.AuthorStaticLayer['cacheKey']>>,
 ]
 export type Module = [
   Assert<SameKeys<Host.AuthorModule, Author.AuthorModule>>,

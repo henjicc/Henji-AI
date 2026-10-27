@@ -21,7 +21,8 @@ interface SurfaceContent { key: string; parts: Painted[] }
  */
 interface Surface { texture: GpuTexture; width: number; height: number; mips?: boolean; canvas?: OffscreenCanvas; content?: SurfaceContent }
 /** `quiet`: frames since the layer last changed; Infinity while it has not changed since it first appeared. */
-interface LayerHistory { painted?: Painted; quiet: number }
+/** `cache`：作者给的内容键与 bounds/clip 组成的签名；与上一帧相同就不调用 draw，沿用上一帧的录制。 */
+interface LayerHistory { painted?: Painted; quiet: number; cache?: string }
 interface Part { painted?: Painted; draw(ctx: OffscreenCanvasRenderingContext2D): void }
 type Matrix = [number, number, number, number, number, number]
 const IDENTITY: Matrix = [1, 0, 0, 1, 0, 0]
@@ -38,6 +39,12 @@ const QUIET_FRAMES = 12
 const EAGER_FRAMES = 8
 const sameContent = (held: SurfaceContent | undefined, next: SurfaceContent): boolean =>
   !!held && held.key === next.key && held.parts.length === next.parts.length && held.parts.every((part, index) => part === next.parts[index])
+/** 图层的内容签名：作者给了 cacheKey（字符串或有限数字）才有，连同 bounds、clip 与画布尺寸。 */
+function layerCacheSignature(layer: AuthorLayer, width: number, height: number): string | undefined {
+  const key = layer.cacheKey
+  if (typeof key !== 'string' && !(typeof key === 'number' && Number.isFinite(key))) return undefined
+  return JSON.stringify([typeof key, key, layer.bounds ?? null, layer.clip ?? null, width, height])
+}
 /** An image read outside a recorded draw before its bitmap of this frame exists. */
 class AuthorAssetPending extends Error { constructor(readonly key: string) { super(`作者图片 ${key} 尚未准备`) } }
 
@@ -255,10 +262,16 @@ export class VideoEditAuthorRuntime {
          * Records one layer slot. A recording equal to the previous frame's (same commands, same image versions) is
          * replaced by that previous object, so a texture's content is compared by reference. Unrecordable: undefined.
          */
-        const record = (slot: string, size: { width: number; height: number }, setup: Matrix, draw: (ctx: OffscreenCanvasRenderingContext2D) => void): { painted?: Painted; volatile: boolean; video: boolean } => {
+        /**
+         * `cache`：作者声明的内容签名（见 layerCacheSignature）。与上一帧这一层相同、用到的图片版本也没变时不调用 draw，
+         * 直接沿用上一帧的录制（随后的栅格比对自然沿用纹理）；没有签名时每帧照常录制比对。
+         */
+        const record = (slot: string, size: { width: number; height: number }, setup: Matrix, draw: (ctx: OffscreenCanvasRenderingContext2D) => void, cache?: string): { painted?: Painted; volatile: boolean; video: boolean } => {
           const previous = this.history.get(slot)
           let painted: Painted | undefined
-          if (measure && !this.directLayers.has(slot)) {
+          const held = previous?.painted
+          if (cache !== undefined && held && previous.cache === cache && !this.directLayers.has(slot) && held.assets === assetSignature(held.recording.assets)) painted = held
+          else if (measure && !this.directLayers.has(slot)) {
             recording = true
             try {
               const recorded = recordAuthorCanvas(size, measure, setup, draw)
@@ -271,7 +284,7 @@ export class VideoEditAuthorRuntime {
             } finally { recording = false }
           }
           const quiet = !previous ? (painted ? Infinity : 0) : painted && painted === previous.painted ? previous.quiet + 1 : 0
-          history.set(slot, { painted, quiet })
+          history.set(slot, { painted, quiet, ...(cache !== undefined && painted ? { cache } : {}) })
           return { painted, volatile: quiet < QUIET_FRAMES, video: [...painted?.recording.assets ?? []].some(key => (this.assetChanges.get(key) ?? 0) >= 2) }
         }
         /** `effects`：栅格比画布像素缩小的比例，阴影与滤镜长度按它换算（只给录下的、可换算的图层）。 */
@@ -364,7 +377,7 @@ export class VideoEditAuthorRuntime {
         if (!this.combinedRuns.has(run)) {
           for (let position = start; position < end; position++) {
             const still = list[position]
-            const recorded = record(`still:${position}:${authorLayerId(still, position)}`, frame, IDENTITY, ctx => drawStill(ctx, still, position))
+            const recorded = record(`still:${position}:${authorLayerId(still, position)}`, frame, IDENTITY, ctx => drawStill(ctx, still, position), layerCacheSignature(still, width, height))
             const painted = recorded.painted
             // 录制不了，或 save/restore 不成对（状态与裁剪会漏给后面的层）：这一段整组画在一张画布上。
             if (!painted?.recording.balanced) { this.combinedRuns.add(run); break }
@@ -374,7 +387,8 @@ export class VideoEditAuthorRuntime {
         if (this.combinedRuns.has(run)) {
           const layers = list.slice(start, end)
           const draw = (ctx: OffscreenCanvasRenderingContext2D): void => layers.forEach((still, offset) => drawStill(ctx, still, start + offset))
-          const recorded = record(run, frame, IDENTITY, draw)
+          const signatures = layers.map(still => layerCacheSignature(still, width, height))
+          const recorded = record(run, frame, IDENTITY, draw, signatures.every(value => value !== undefined) ? JSON.stringify(signatures) : undefined)
           await stillGroup(run, start * 2, [{ painted: recorded.painted, draw }], full, layers.length, recorded.video ? 1 : 0)
           return
         }
@@ -416,7 +430,7 @@ export class VideoEditAuthorRuntime {
           const fullResolution = authorRasterScale(need, limit, this.liveLayers.has(slot))
           const fullPad = authorLayerBlur(center, fullResolution, layer.blurShape).pad
           const draw = (ctx: OffscreenCanvasRenderingContext2D): void => layer.draw(ctx, info.time)
-          const recorded = record(slot, { width: Math.ceil(bounds.width * fullResolution) + fullPad * 2, height: Math.ceil(bounds.height * fullResolution) + fullPad * 2 }, [fullResolution, 0, 0, fullResolution, fullPad - x * fullResolution, fullPad - y * fullResolution], draw)
+          const recorded = record(slot, { width: Math.ceil(bounds.width * fullResolution) + fullPad * 2, height: Math.ceil(bounds.height * fullResolution) + fullPad * 2 }, [fullResolution, 0, 0, fullResolution, fullPad - x * fullResolution, fullPad - y * fullResolution], draw, layerCacheSignature(layer, width, height))
           if (recorded.video) { this.liveLayers.add(slot); statistics.video++ } else this.liveLayers.delete(slot)
           // 回放分辨率降低时栅格跟着缩小，阴影与滤镜同比换算；画法换算不了的层（直接绘制、读画布、认不出的滤镜）照原分辨率栅格。
           const shrink = scale ? Math.max(sx, sy) : 1

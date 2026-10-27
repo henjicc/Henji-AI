@@ -157,3 +157,39 @@ it('原生 GPU 入口在 1/2 时拿到缩小后的 target 与像素尺寸，元�
     expect(runtime.observeElements()[0].bounds).toEqual([0, 0, 1920, 1080])
   } finally { await runtime.dispose() }
 })
+
+it('cacheKey 与上一帧相同就不调用 draw、画面不变；换 key 才重画；带 pose 的层位姿照常逐帧更新', async () => {
+  let key: string | number = 'settled', color = 'c6'
+  const still = vi.fn((ctx: OffscreenCanvasRenderingContext2D) => { ctx.fillStyle = color; ctx.fillRect(40, 40, 20, 20) })
+  const moving = vi.fn((ctx: OffscreenCanvasRenderingContext2D) => { ctx.fillStyle = 'c7'; ctx.fillRect(0, 0, 20, 20) })
+  const runtime = new VideoEditAuthorRuntime(device(), { name: '点阵', layers: () => [
+    { id: 'dots', cacheKey: key, draw: still },
+    { id: 'ruler', cacheKey: 'settled', bounds: [0, 0, 20, 20], pose: t => ({ x: 100 + Math.round(t * 60) * 2, y: 10 }), draw: moving },
+  ] })
+  const output = target(200, 100)
+  const scene = (frame: number, dot: number) => reference([[dot, 40, 40, 60, 60], [7, 100 + frame * 2, 10, 120 + frame * 2, 30]], 200, 100, 1)
+  try {
+    for (let frame = 0; frame < 4; frame++) {
+      await runtime.render(output, 200, 100, {}, {}, info(frame), undefined, undefined, false)
+      expect(output.pixels).toEqual(scene(frame, 6))
+    }
+    // 只在第一帧调用 draw；之后画面不变，带 pose 的层照样每帧挪位置
+    expect(still).toHaveBeenCalledOnce(); expect(moving).toHaveBeenCalledOnce()
+    // key 不变时作者改了内容也不会被重画（这是作者的承诺）；换 key 才重画
+    color = 'c8'
+    await runtime.render(output, 200, 100, {}, {}, info(4), undefined, undefined, false)
+    expect(output.pixels).toEqual(scene(4, 6))
+    key = 'settled-2'
+    await runtime.render(output, 200, 100, {}, {}, info(5), undefined, undefined, false)
+    expect(still).toHaveBeenCalledTimes(2); expect(output.pixels).toEqual(scene(5, 8))
+  } finally { await runtime.dispose() }
+})
+
+it('没给 cacheKey 时每帧照常调用 draw 录制比对', async () => {
+  const draw = vi.fn((ctx: OffscreenCanvasRenderingContext2D) => { ctx.fillStyle = 'c1'; ctx.fillRect(0, 0, 20, 20) })
+  const runtime = new VideoEditAuthorRuntime(device(), { name: '无键', layers: () => [{ id: 'plain', draw }] })
+  try {
+    for (let frame = 0; frame < 3; frame++) await runtime.render(target(200, 100), 200, 100, {}, {}, info(frame), undefined, undefined, false)
+    expect(draw).toHaveBeenCalledTimes(3)
+  } finally { await runtime.dispose() }
+})

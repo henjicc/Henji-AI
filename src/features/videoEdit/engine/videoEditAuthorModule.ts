@@ -36,6 +36,11 @@ export interface AuthorLayer {
   pose?: (time: number) => AuthorPose | null
   motionBlur?: boolean
   blurShape?: 'gaussian' | 'lens'
+  /**
+   * Author-declared content key. Equal to the previous frame's (same layer id), with unchanged bounds, clip and image
+   * versions: `draw` is not called and the previous recording and raster are reused; `pose` is still sampled every frame.
+   */
+  cacheKey?: string | number
   draw(ctx: OffscreenCanvasRenderingContext2D, time: number): void
 }
 export interface AuthorWebGL {

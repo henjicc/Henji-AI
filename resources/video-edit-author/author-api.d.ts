@@ -77,6 +77,11 @@ interface AuthorLayerBase {
   clip?: AuthorRect
   motionBlur?: boolean
   blurShape?: 'gaussian' | 'lens'
+  /**
+   * 内容键：与上一帧同一图层（同 id）的值相同、bounds/clip 与用到的图片都没变时，引擎不调用 draw，沿用上一帧的画面；
+   * pose 照常每帧求值。动画落定后给它，例如 'settled'；内容还在变时不要给，或每次变化换一个值。
+   */
+  cacheKey?: string | number
   /** 坐标仍是画布像素。 */
   draw(ctx: OffscreenCanvasRenderingContext2D, time: number): void
 }
