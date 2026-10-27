@@ -155,6 +155,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.76.0'] = '9c3a0a3ea0296d8b11959ee78dbdf5116f8e03854a93ae0dc5b46c55985232f0'
     // App Store 高清图标搜索与保存，共用素材领域声明。
     fingerprints['2.77.0'] = 'd9f825d4a9f7be50758015541a960d2af46addda34bfd5b2e7520bec998d498e'
+    // 引用素材库素材（import_video_edit_asset）的回执带上新素材项 itemRefs。
+    fingerprints['2.78.0'] = '21b1e4bc536890ea82267f262d4de49f509043f66e3557682fc29b345e73718f'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], `工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹：${fingerprint}`).toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {

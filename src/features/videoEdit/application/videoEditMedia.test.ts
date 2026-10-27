@@ -182,6 +182,9 @@ it('公共导入使用同一可信解析与静默保存', async () => {
     const result = await app.call('import_video_edit_asset', { documentRef: { kind: 'video_edit.document', id }, assetRef: { kind: 'asset', id: 'image-asset' } })
     expect(result).toMatchObject({ ok: true }); expect(owner.document.media).toHaveLength(1)
     expect(savedVideoEdit(owner).media[0].assetContent!.contentIdentity).toBe('a'.repeat(64))
+    // 回执带上新素材项的引用，助手不必再列一遍素材找
+    const item = owner.document.items.find(item => item.mediaId === owner.document.media[0].id)!
+    expect(JSON.stringify(result)).toContain(`"itemRefs":[{"kind":"video_edit.item","id":"${id}:${item.id}"}]`)
   } finally { app.dispose() }
 })
 

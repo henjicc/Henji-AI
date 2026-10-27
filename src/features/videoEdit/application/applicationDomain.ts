@@ -301,6 +301,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       }
       const input = definition.inputSchema.parse(raw) as { documentRef: { kind: 'video_edit.document'; id: string }; clipRef?: { id: string }; frame?: number; assetRef?: { id: string } }
       const id = input.documentRef.id; const owner = requireVideoEditInstance(id)
+      let importedItemIds: string[] | undefined
       switch (definition.id) {
         case 'import_video_edit_folder': {
           const contentVersion = owner.contentVersion
@@ -351,14 +352,19 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
               if (ref.projectId !== id || !sequence) throw new Error('代码效果目标必须属于原剪辑。')
               filterTarget = { sequenceId: sequence.id, clipId: ref.childId }
             }
-            await importVideoEditCodeAsset(id, asset.id, { filterTarget }, context.signal)
-          } else await importVideoEditSources(id, [{ assetId: asset.id }], undefined, context.signal)
+            const imported = await importVideoEditCodeAsset(id, asset.id, { filterTarget }, context.signal)
+            importedItemIds = imported.itemId ? [imported.itemId] : []
+          } else importedItemIds = await importVideoEditSources(id, [{ assetId: asset.id }], undefined, context.signal)
           await saveVideoEdit(id); break
         }
       }
       if (requireVideoEditInstance(id) !== owner) throw new Error('原剪辑已关闭，操作回执不会写入重新打开的剪辑。')
       const instance = requireVideoEditInstance(id)
       const verified = await verifyVideoEditSaved(id, instance.document)
+      if (importedItemIds) {
+        const itemRefs = importedItemIds.map(itemId => ({ kind: 'video_edit.item' as const, id: `${id}:${itemId}` }))
+        return { resultRef: input.documentRef, itemRefs, verification: { verified, target: input.documentRef, condition: '已从剪辑文件回读并核对编辑内容。' }, message: itemRefs.length ? `已引用到剪辑，素材项 ${itemRefs.length} 个（itemRefs），可接着设素材箱或放进时间线。` : '代码滤镜已应用到目标片段。' }
+      }
       return { resultRef: input.documentRef, verification: { verified, target: input.documentRef, condition: '已从剪辑文件回读并核对编辑内容。' }, message: '操作已完成，请回读剪辑核对结果。' }
     }))
   },
