@@ -28,8 +28,19 @@ const logger = createLogger('features.videoEdit.renderCache')
 /** 自动预渲染：编辑停下这么久、且没有播放、拖动或导出时才开始。 */
 const AUTO_RENDER_IDLE_MS = 3000
 const AUTO_RENDER_RETRY_MS = 30_000
-/** 起播、拖动、跳转或导出让出后，节目这么久没有新的操作才继续预渲染（与编辑后的空闲等待一致）。 */
+/** 导出等忙碌让出后，节目这么久没有新的操作才继续预渲染（与编辑后的空闲等待一致）。 */
 const RENDER_RESUME_IDLE_MS = AUTO_RENDER_IDLE_MS
+/**
+ * 用户刚操作过节目（播放、暂停、拖动、跳转）时，起播往往紧随其后：这么久没有新的操作才开始或继续预渲染。
+ * 预渲染与节目各用一个渲染 Worker，但共用原生解码服务（一把设备锁、一个硬件解码引擎）与显卡进程；预渲染
+ * 恢复后的第一帧要重开设备、编译源码、远距离定位（实测 0.3–0.4 秒），这段工作不能中途收回，正赶上起播时
+ * 节目第一帧就排在它后面（实测跳转后停 3.2 秒恢复、1.3 秒后起播，起播耗时 0.6 秒）。
+ */
+const RENDER_AFTER_INTERACTION_MS = 10_000
+/** 恢复后不久又被节目操作打断，下一次的等待加倍，最多到这么长；完整渲染完一个窗口后回到起始等待。 */
+const RENDER_AFTER_INTERACTION_MAX_MS = 60_000
+/** 恢复后这么久之内又被节目操作打断，算作恢复得太早。 */
+const RENDER_EARLY_PREEMPT_MS = 30_000
 /** 订阅之外的兜底轮询：不经视图发布的状态变化也能及时让出。 */
 const PROGRAM_ACTIVITY_POLL_MS = 100
 
@@ -70,10 +81,24 @@ interface Job { sequenceId: string; controller: AbortController; total: number; 
 /** Per open project: the content an automatic render belongs to and when it last changed. */
 const autoState = new WeakMap<VideoEditInstance, { content: string; changedAt: number; controller?: AbortController }>()
 let autoTimer: ReturnType<typeof setInterval> | undefined
+let stopViewWatch: (() => void) | undefined
+/** 任一实例最近一次节目操作（播放、拖动、跳转）的时刻：自动预渲染开始前按它等待，任务开始后也接着用。 */
+let programInteractionAt = Number.NEGATIVE_INFINITY
+const viewFrames = new WeakMap<VideoEditInstance, number>()
+function noteProgramInteraction(): void {
+  for (const instance of listVideoEditInstances()) {
+    const seek = viewFrames.has(instance) && viewFrames.get(instance) !== instance.frame
+    viewFrames.set(instance, instance.frame)
+    if (instance.playing || instance.scrubbing || seek) programInteractionAt = performance.now()
+  }
+}
 /** Starts watching open projects for idle time (once, when a program monitor first reads its cache). */
 function ensureAutoRender(): void {
   if (autoTimer) return
+  noteProgramInteraction()
+  stopViewWatch = subscribeVideoEditView(noteProgramInteraction)
   autoTimer = setInterval(() => {
+    noteProgramInteraction()
     const now = performance.now()
     for (const instance of listVideoEditInstances()) {
       const projectId = instance.document.id
@@ -83,7 +108,7 @@ function ensureAutoRender(): void {
       // An edit makes windows rendered from the old content useless: stop the automatic job and wait for quiet again.
       if (state.content !== content) { state.content = content; state.changedAt = now; state.controller?.abort(new DOMException('剪辑内容已改变。', 'AbortError')) }
       if (!getVideoEditRenderPreference(projectId).autoRender || !loaded.has(projectId) || jobs.get(instance) || !instance.activeSequenceId) continue
-      if (instance.playing || instance.scrubbing || instance.busy || now - state.changedAt < AUTO_RENDER_IDLE_MS) continue
+      if (instance.playing || instance.scrubbing || instance.busy || now - state.changedAt < AUTO_RENDER_IDLE_MS || now - programInteractionAt < RENDER_AFTER_INTERACTION_MS) continue
       let view: VideoEditRenderCacheView
       try { view = readVideoEditRenderCache(projectId) } catch { continue }
       if (!view.needsRenderFrames) continue
@@ -96,7 +121,7 @@ function ensureAutoRender(): void {
           logger.warn('自动预渲染未完成，稍后重试', { event: 'video_edit.render_cache.auto_failed', error, context: { projectId } })
         })
     }
-    if (!listVideoEditInstances().length) { clearInterval(autoTimer); autoTimer = undefined }
+    if (!listVideoEditInstances().length) { clearInterval(autoTimer); autoTimer = undefined; stopViewWatch?.(); stopViewWatch = undefined }
   }, 1000)
 }
 const jobs = new WeakMap<VideoEditInstance, Job>()
@@ -259,6 +284,7 @@ export interface VideoEditRenderCacheResult { renderedWindows: number; readyFram
 /**
  * needed 只补实测掉帧和未实测但预计吃力的段；all 是 PR“渲染入点到出点”，包括实时段，已就绪跳过。
  * 节目起播、拖动、跳转或导出时立即取消在途这一帧并释放会话，空闲后从该窗口起点重来，不与播放争抢显卡与解码；
+ * 节目操作之后的空闲要求更长（RENDER_AFTER_INTERACTION_MS，恢复过早被打断时加倍），恢复时节目很少正要起播；
  * 可取消，取消时只保留已完成的窗口。
  */
 export async function renderVideoEditRenderCache(projectId: string, request: VideoEditRenderCacheRequest, signal?: AbortSignal, onStarted?: (plan: { pendingWindows: number; requestedFrames: number; readyFrames: number }) => void): Promise<VideoEditRenderCacheResult> {
@@ -290,15 +316,23 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
   /** 正在渲染的窗口：节目一有操作就取消它并释放会话，空闲后从该窗口起点重来（已完成的窗口不重做）。 */
   let attempt: { controller: AbortController; window: VideoEditRenderWindow; frame: number } | undefined
   let yielded: { at: number; startFrame: number } | undefined
+  /** 节目操作之后要空闲多久才继续；恢复后很快又被打断就加倍（见 RENDER_AFTER_INTERACTION_MS）。 */
+  let interactionIdleMs = RENDER_AFTER_INTERACTION_MS
+  let resumedAt: number | undefined
   const started = performance.now()
+  // 自动任务接着用开始前的节目操作（刚停播就开始也会撞上紧接着的起播）；用户请求从请求时算起。
   const activity = watchProgramActivity(reason => {
     if (!attempt || attempt.controller.signal.aborted) return
     attempt.controller.abort(new DOMException('节目开始播放，预渲染让出。', 'AbortError'))
+    if (reason !== 'busy' && resumedAt !== undefined && performance.now() - resumedAt < RENDER_EARLY_PREEMPT_MS) interactionIdleMs = Math.min(RENDER_AFTER_INTERACTION_MAX_MS, interactionIdleMs * 2)
+    resumedAt = undefined
     yielded = { at: performance.now(), startFrame: attempt.window.startFrame }
     const released = session; session = undefined
     if (released) closing = released.dispose().catch(error => logger.warn('让出播放时预渲染会话未正常关闭', { event: 'video_edit.render_cache.release_failed', error, context: { projectId } }))
-    logger.info('节目有操作，取消正在预渲染的画面并释放会话', { event: 'video_edit.render_cache.preempted', context: { projectId, sequenceId: composition.id, reason, startFrame: attempt.window.startFrame, endFrame: attempt.window.endFrame, frame: attempt.frame, windows: job.done } })
-  })
+    logger.info('节目有操作，取消正在预渲染的画面并释放会话', { event: 'video_edit.render_cache.preempted', context: { projectId, sequenceId: composition.id, reason, startFrame: attempt.window.startFrame, endFrame: attempt.window.endFrame, frame: attempt.frame, windows: job.done, nextIdleMs: reason === 'busy' ? RENDER_RESUME_IDLE_MS : interactionIdleMs } })
+  }, job.auto ? programInteractionAt : Number.NEGATIVE_INFINITY)
+  /** 距最近一次操作够久，且距最近一次节目操作（播放、拖动、跳转）也够久。 */
+  const programIdle = (): boolean => activity.idleFor() >= RENDER_RESUME_IDLE_MS && activity.interactionIdleFor() >= interactionIdleMs
   logger.info('开始预渲染', { event: 'video_edit.render_cache.start', context: { projectId, sequenceId: composition.id, windows: pending.length, auto: job.auto, codec: encoding.codec, bitrateMbps: encoding.bitrateMbps } })
   try {
     await pruneEntries(instance, cache)
@@ -316,10 +350,11 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
         await waitProgramIdle()
         if (closing) { await closing; closing = undefined }
         // 等会话关闭期间又有操作就重新等空闲；从这里到登记 attempt 都是同步的，中途起播不会漏掉。
-        if (activity.idleFor() < RENDER_RESUME_IDLE_MS) continue
+        if (!programIdle()) continue
         if (yielded) {
-          logger.info('节目空闲，继续预渲染', { event: 'video_edit.render_cache.resumed', context: { projectId, sequenceId: composition.id, startFrame: yielded.startFrame, pausedMs: Math.round(performance.now() - yielded.at), windows: job.done } })
+          logger.info('节目空闲，继续预渲染', { event: 'video_edit.render_cache.resumed', context: { projectId, sequenceId: composition.id, startFrame: yielded.startFrame, pausedMs: Math.round(performance.now() - yielded.at), requiredIdleMs: interactionIdleMs, windows: job.done } })
           yielded = undefined
+          resumedAt = performance.now()
         }
         session ??= openSession()
         const controller = new AbortController()
@@ -340,6 +375,8 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
         }
       }
       job.done++; job.current = undefined; publishVideoEdit()
+      // A whole window went through: the next interruption starts from the base wait again.
+      interactionIdleMs = RENDER_AFTER_INTERACTION_MS; resumedAt = undefined
     }
     logger.info('预渲染完成', { event: 'video_edit.render_cache.completed', context: { projectId, sequenceId: composition.id, windows: job.done, elapsedMs: Math.round(performance.now() - started) } })
     return result(false)
@@ -393,8 +430,8 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
   async function waitProgramIdle(): Promise<void> {
     assertOwner()
     activity.check()
-    while (activity.idleFor() < RENDER_RESUME_IDLE_MS) {
-      await new Promise(resolve => setTimeout(resolve, Math.min(PROGRAM_ACTIVITY_POLL_MS, Math.max(1, RENDER_RESUME_IDLE_MS - activity.idleFor()))))
+    while (!programIdle()) {
+      await new Promise(resolve => setTimeout(resolve, Math.min(PROGRAM_ACTIVITY_POLL_MS, Math.max(1, RENDER_RESUME_IDLE_MS - activity.idleFor(), interactionIdleMs - activity.interactionIdleFor()))))
       assertOwner()
       activity.check()
     }
@@ -412,25 +449,27 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
 type ProgramActivity = 'playing' | 'scrubbing' | 'busy' | 'seek'
 /**
  * 节目的播放、拖动、跳转与导出：视图一发布就判断（起播立即让出），另有短轮询兜底。
- * idleFor 是距最近一次操作的时长，从未有操作时为无穷大。
+ * idleFor 是距最近一次操作的时长，interactionIdleFor 只算节目操作（播放、拖动、跳转，不含导出等忙碌），
+ * 从 `interactedAt`（此前已知的最近一次节目操作）起算；从未有操作时为无穷大。
  */
-function watchProgramActivity(onActive: (reason: ProgramActivity) => void): { check: () => ProgramActivity | undefined; idleFor: () => number; dispose: () => void } {
+function watchProgramActivity(onActive: (reason: ProgramActivity) => void, interactedAt: number): { check: () => ProgramActivity | undefined; idleFor: () => number; interactionIdleFor: () => number; dispose: () => void } {
   const frames = new WeakMap<VideoEditInstance, number>()
   for (const instance of listVideoEditInstances()) frames.set(instance, instance.frame)
-  let lastActiveAt = Number.NEGATIVE_INFINITY
+  let lastActiveAt = Number.NEGATIVE_INFINITY, lastInteractionAt = interactedAt
   const check = (): ProgramActivity | undefined => {
-    let reason: ProgramActivity | undefined
+    let reason: ProgramActivity | undefined, interaction = false
     for (const instance of listVideoEditInstances()) {
       const seek = frames.has(instance) && frames.get(instance) !== instance.frame
       frames.set(instance, instance.frame)
       reason ??= instance.playing ? 'playing' : instance.scrubbing ? 'scrubbing' : instance.busy ? 'busy' : seek ? 'seek' : undefined
+      if (instance.playing || instance.scrubbing || seek) interaction = true
     }
-    if (reason) { lastActiveAt = performance.now(); onActive(reason) }
+    if (reason) { lastActiveAt = performance.now(); if (interaction) lastInteractionAt = lastActiveAt; onActive(reason) }
     return reason
   }
   const unsubscribe = subscribeVideoEditView(() => { check() })
   const timer = setInterval(check, PROGRAM_ACTIVITY_POLL_MS)
-  return { check, idleFor: () => performance.now() - lastActiveAt, dispose: () => { unsubscribe(); clearInterval(timer) } }
+  return { check, idleFor: () => performance.now() - lastActiveAt, interactionIdleFor: () => performance.now() - lastInteractionAt, dispose: () => { unsubscribe(); clearInterval(timer) } }
 }
 /** 在途请求随信号立即结束；原请求迟到的结果被吞掉，不成为未处理的拒绝。 */
 function abortable<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
