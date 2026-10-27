@@ -227,6 +227,20 @@ it('诊断变量强制浏览器时不调用原生探测', async () => {
   await importVideoEditSources(owner.document.id, [{ path: 'D:/media/clip.mp4' }])
   expect(native).not.toHaveBeenCalled(); expect(owner.document.media).toHaveLength(1)
 })
+it('快速模式保存的 MP4 带录制事件：导入即绑定为录屏素材（光标已在画面里，只画点击）；读取失败按普通视频导入', async () => {
+  const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id
+  vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
+  const cursor = { ownerRef: { kind: 'screen_recording.video_file', id: 'f'.repeat(32) }, sourceDigest: `sha256:${'f'.repeat(64)}`, cursorBakedIn: true, recordingStartUs: 0, width: 3840, height: 2160, pages: [{ path: 'D:/events/0000000000000000-' + 'a'.repeat(64) + '.capture.json', sha256: 'a'.repeat(64), recordingSpanUs: [0, 3_000_000], seqSpan: [0, 9] }] }
+  const capture = vi.spyOn(getPlatform().screenRecording, 'capture').mockImplementation(async request => request.operation === 'embedded-events' && request.path.endsWith('quick.mp4') ? { cursor, events: [] } : null)
+  await importVideoEditSources(id, [{ path: 'D:/media/quick.mp4' }, { path: 'D:/media/plain.mp4' }])
+  expect(capture).toHaveBeenCalledWith({ operation: 'embedded-events', path: 'D:/media/quick.mp4' })
+  expect(owner.document.media.find(media => media.path.endsWith('quick.mp4'))?.recordingCursor).toEqual(cursor)
+  expect(owner.document.media.find(media => media.path.endsWith('plain.mp4'))?.recordingCursor).toBeUndefined()
+  capture.mockRejectedValue(new Error('文件被占用'))
+  await importVideoEditSources(id, [{ path: 'D:/media/locked.mp4' }])
+  expect(owner.document.media.find(media => media.path.endsWith('locked.mp4'))).toMatchObject({ kind: 'video', durationSeconds: 3 })
+  expect(owner.document.media.find(media => media.path.endsWith('locked.mp4'))?.recordingCursor).toBeUndefined()
+})
 it('剪辑导入对话框的每种格式都能进入素材库，从素材库拖入不会被类型判定拦下', () => {
   for (const extension of VIDEO_EDIT_IMPORT_EXTENSIONS) expect(inferLocalMediaKind({ name: `素材.${extension}`, type: '' }), extension).not.toBeNull()
 })

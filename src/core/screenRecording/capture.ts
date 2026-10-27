@@ -57,6 +57,8 @@ export const captureRequestSchema = z.discriminatedUnion('operation', [
   /** Quick mode: join spans, mix sound and write pointer facts into one MP4 in the chosen folder. */
   z.object({ operation: z.literal('quick-export'), sessionId, directory: z.string().min(1).max(4096).optional() }).strict(),
   z.object({ operation: z.literal('reveal-export'), sessionId }).strict(),
+  /** A video file that may carry quick-mode pointer facts; returns its recording-clip binding or null. */
+  z.object({ operation: z.literal('embedded-events'), path: z.string().min(1).max(32768) }).strict(),
   z.object({ operation: z.literal('events'), sessionId, offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(256), markersOnly: z.boolean().default(false) }).strict(),
   z.object({ operation: z.literal('read'), sessionId }).strict(),
   z.object({ operation: z.literal('clock'), sessionId }).strict(),

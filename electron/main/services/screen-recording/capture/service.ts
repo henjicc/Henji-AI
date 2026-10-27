@@ -15,6 +15,7 @@ import { resolveNativeCaptureSource } from './source'
 import { createCaptureBounds, createCaptureGeometry } from './geometry'
 import { RecordingSessionDocument, readRecordingEvents, recoverRecordingSession } from '../session-document'
 import { exportQuickRecording, quickExportPath } from '../quick-export'
+import { embeddedRecordingEditSource } from '../embedded-import'
 
 const logger = createMainLogger('main.screen_recording.capture')
 interface Active {
@@ -51,6 +52,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
     if (active?.storage.manifest.sessionId === request.sessionId) throw new Error('请先结束当前录制，再保存视频')
     return exportQuickRecording(request.sessionId, request.directory)
   }
+  if (request.operation === 'embedded-events') return embeddedRecordingEditSource(request.path)
   if (request.operation === 'reveal-export') {
     const file = quickExportPath(request.sessionId)
     if (!file) throw new Error('视频文件已移动或删除')

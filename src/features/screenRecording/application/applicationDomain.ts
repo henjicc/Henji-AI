@@ -20,6 +20,7 @@ import { WebRecordingCollectionExecutor } from './webAppRecordingCollectionExecu
 import { requestWebRecordingFocus } from './webAppRecordingFocus'
 import { WebRecordingMutation } from './webAppRecordingMutation'
 import { recordingUnderstandingRegistration } from './recordingUnderstandingFields'
+import { RecordingSetupMutation, recordingSetupRegistration } from './recordingSetupFields'
 import { RecordingUnderstandingMutation } from './recordingUnderstandingMutation'
 import { executeRecordingUnderstanding } from './recordingUnderstandingCapability'
 import { generateRecordingMovieCapability } from '@/core/application-control/domains/screenRecording/movieCapability'
@@ -34,8 +35,8 @@ import { generateSessionScript, replaySession, recordingReplayBusy } from './rec
 import { generateRecordingScriptCapability, replayRecordingCapability, rerecordRecordingCapability } from '@/core/application-control/domains/screenRecording/scriptCapability'
 
 export const screenRecordingApplicationDomain: ApplicationDomainModule = {
-  id: 'screen_recording', entities: () => [...recordingRegistrations(), ...webAppRecordingRegistrations(), recordingUnderstandingRegistration()],
-  registerExecutors(engine) { engine.registerMutationExecutor(new RecordingUnderstandingMutation()); engine.registerCollectionExecutor(new WebRecordingCollectionExecutor()); engine.registerMutationExecutor(new WebRecordingMutation()) },
+  id: 'screen_recording', entities: () => [...recordingRegistrations(), ...webAppRecordingRegistrations(), recordingUnderstandingRegistration(), recordingSetupRegistration()],
+  registerExecutors(engine) { engine.registerMutationExecutor(new RecordingUnderstandingMutation()); engine.registerMutationExecutor(new RecordingSetupMutation()); engine.registerCollectionExecutor(new WebRecordingCollectionExecutor()); engine.registerMutationExecutor(new WebRecordingMutation()) },
   registerCapabilities(registrar) {
     registerDocumentOpener('screen_recording', async document => {
       // A recorded session lives on in its edit; only a planned director script still belongs to the recording page.

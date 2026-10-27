@@ -13,6 +13,7 @@ import { controlRecording, recordingView, setRecordingDestination, startRecordin
 import { RecordingSourcePicker } from './RecordingSourcePicker'
 import { DEFAULT_WEB_APP_BACKUP, loadRecordingSetup, orderedScreens, recordingOutput, saveRecordingSetup, webAppBackupOptions, type WebAppBackupSetup, type RecordingRangeMode, type RecordingRegion, type RecordingSetup } from './recordingSetupModel'
 import { RecordingSetupPanel } from './RecordingSetupPanel'
+import { mergeRecordingVideoSetup, RECORDING_SETUP_CHANGED_EVENT, type RecordingVideoSetup } from './recordingSetupSync'
 import { RecordingLive } from './RecordingLive'
 import { RecordingDirectorGoal, RecordingDirectorScript } from './RecordingDirectorPanel'
 import { recordingTimeLabel } from './useRecordingControlSnapshot'
@@ -64,6 +65,12 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   useEffect(() => { saveRecordingSetup({ range: mode, sourceId, region, setup }) }, [mode, sourceId, region, setup])
+  // Video settings changed by the assistant (or its undo) while the page is open show here at once.
+  useEffect(() => {
+    const take = (event: Event): void => { const written = (event as CustomEvent<RecordingVideoSetup>).detail; setSetup(value => mergeRecordingVideoSetup(value, written)) }
+    window.addEventListener(RECORDING_SETUP_CHANGED_EVENT, take)
+    return () => window.removeEventListener(RECORDING_SETUP_CHANGED_EVENT, take)
+  }, [])
   const run = (work: () => Promise<unknown>): void => { setError(''); void work().catch(error => setError(error instanceof Error ? error.message : String(error))) }
   const refresh = useCallback(async (): Promise<void> => {
     setLoading(true)

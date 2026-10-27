@@ -13,6 +13,7 @@ import { resolveVideoEditAssetReference, sameVideoEditAssetContent, videoEditAss
 import { verifyVideoEditMediaContent } from '../videoEditMediaContent'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { mergeVideoEditImportDocument, waitVideoEditImportEdit } from './videoEditService'
+import { recordingCursorSourceSchema, type RecordingCursorSource } from '@/core/videoEdit/recordingCursor'
 
 export type VideoEditImportSource = { path: string; assetId?: string } | { assetId: string; path?: string }
 const logger = createLogger('features.videoEdit.media')
@@ -85,10 +86,27 @@ async function inspectMedia(path: string, signal?: AbortSignal): Promise<VideoEd
     throw error
   }
   const { backend, nativeDecodes, fields } = resolved
-  const media = await bindContent({ ...base, ...fields })
+  const recordingCursor = fields.kind === 'video' ? await embeddedRecordingCursor(path, signal) : undefined
+  const media = await bindContent({ ...base, ...fields, ...(recordingCursor ? { recordingCursor } : {}) })
   // `backend` is the decoder that plays the file; `nativeDecodes` only reports the native probe's finding.
   logger.info('剪辑素材探测完成', { event: 'video_edit.media.inspect.completed', context: { kind: fields.kind, backend, native: native.status, nativeDecodes, browserDecodes, ...(forced ? { forced } : {}) } })
   return media
+}
+/**
+ * A quick-mode recording saved as MP4 carries its pointer facts inside the file; it imports as a recording clip
+ * (zoom and click effects; the pointer already in the picture is not drawn again). Reading them never blocks the import.
+ */
+async function embeddedRecordingCursor(path: string, signal?: AbortSignal): Promise<RecordingCursorSource | undefined> {
+  if (!/\.(mp4|m4v|mov)$/i.test(path)) return undefined
+  try {
+    const result = await getPlatform().screenRecording.capture({ operation: 'embedded-events', path }) as { cursor: unknown } | null
+    signal?.throwIfAborted()
+    return result ? recordingCursorSourceSchema.parse(result.cursor) : undefined
+  } catch (error) {
+    signal?.throwIfAborted()
+    logger.warn('读取视频内的录制事件失败，按普通视频导入', { event: 'video_edit.media.inspect.recording_events_failed', error })
+    return undefined
+  }
 }
 function sameFileContent(left: AssetFileContent, right: AssetFileContent): boolean {
   return left.contentIdentity === right.contentIdentity && left.sizeBytes === right.sizeBytes && left.fileModifiedAt === right.fileModifiedAt
