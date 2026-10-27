@@ -109,6 +109,8 @@ pub struct Decoder {
     pub intra_only: bool,
     /// 帧内编码且不用帧级多线程：每送一个包就出一帧，没有输出延迟（取帧时可用下一个包的时间判定候选帧）。
     pub immediate_output: bool,
+    /// 按硬解只开了一个解码线程；硬件初始化失败、实际落到软解时，调用方应按软解重新打开（多线程）。
+    pub single_thread_for_hardware: bool,
 }
 
 unsafe impl Send for Decoder {}
@@ -241,13 +243,19 @@ impl Decoder {
                 Purpose::Seek if intra_only => ff::FF_THREAD_SLICE,
                 _ => ff::FF_THREAD_FRAME | ff::FF_THREAD_SLICE,
             };
+            // 硬解只用一个线程：解码在显卡上，帧级多线程不提高吞吐（4K60 H.264 实测 215 与 221 帧/秒），却让每次定位
+            // 多解“线程数 − 1”帧才出第一帧（4 秒 GOP 的 4K 录屏只解关键帧要 63ms、送 14 个包，单线程 13ms、3 个包）。
+            if hardware_requested {
+                (*context).thread_count = 1;
+                (*context).thread_type = ff::FF_THREAD_SLICE;
+            }
         }
         let opened = unsafe { ff::avcodec_open2(context, codec, ptr::null_mut()) };
         if opened < 0 {
             return Err(fail(&mut context, format!("无法打开解码器 {name}：{}", error_text(opened))));
         }
         let immediate_output = intra_only && setup.purpose == Purpose::Seek;
-        Ok(Self { context, name, hardware_requested, intra_only, immediate_output })
+        Ok(Self { context, name, hardware_requested, intra_only, immediate_output, single_thread_for_hardware: hardware_requested })
     }
 
     /// 送入一个包（None 表示开始排空）。返回 false 表示解码器暂不接收（先取帧）。
@@ -286,6 +294,13 @@ impl Decoder {
 
     pub fn flush(&mut self) {
         unsafe { ff::avcodec_flush_buffers(self.context) };
+    }
+
+    /// 之后送入的包是否跳过非参考帧：定位走向目标的途中，这些帧既不显示、也不被别的帧参考（H.264/HEVC 的
+    /// 非参考 B 帧，NVENC 默认码流约占一半），跳过它们不改变目标及之后任何一帧的解码结果。逐包设置即生效
+    /// （帧级多线程按包把用户设置复制给工作线程）。不支持的解码器忽略它。
+    pub fn skip_nonref(&mut self, skip: bool) {
+        unsafe { (*self.context).skip_frame = if skip { ff::AVDiscard::AVDISCARD_NONREF } else { ff::AVDiscard::AVDISCARD_DEFAULT } };
     }
 
 }

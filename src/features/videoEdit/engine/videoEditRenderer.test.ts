@@ -1998,3 +1998,41 @@ it('重复内容预览在不同位置共享文件且每次从段内零点播放�
     expect((await renderer.render(91, false)).renderCached).toBe(false)
   } finally { await renderer.dispose() }
 })
+it('快速拖动与远距离跳转：代码视频输入先给近似画面（整帧标为近似），停住后按精确补帧；拖动中沿用当前画面，后台追向指针', async () => {
+  const { backend, readers } = steppingReaders()
+  const renderer = new VideoEditRenderer(walkFixture(), 3840, undefined, 8 * 1024 ** 3, backend)
+  const reads = () => readers[0]!.reads
+  const settle = async (): Promise<void> => { for (let tick = 0; tick < 20; tick++) await new Promise(resolve => setTimeout(resolve, 0)) }
+  try {
+    const exact = await renderer.render(290, false); await exact.completion
+    expect(exact.approximate).toBeUndefined()
+    // 远距离跳回第 30 帧：只解目标所在关键帧，整帧标为近似
+    const far = await renderer.render(30, false, 'fast'); await far.completion
+    expect(far.approximate).toBe(true)
+    expect(reads().at(-1)).toMatchObject({ keyFrame: true, decoded: 1 })
+    // 停住后的精确补帧从关键帧续解到目标
+    const rested = await renderer.render(30, false); await rested.completion
+    expect(rested.approximate).toBeUndefined()
+    expect(reads().at(-1)).toMatchObject({ keyFrame: false, decoded: 30 })
+    expect(us([shownInputs().w1])).toEqual(us([0.5]))
+    // 拖动到第 60 帧：这一帧沿用第 30 帧的画面、不等解码；后台按近似方式读向目标
+    const count = reads().length
+    const held = await renderer.render(60, false, 'fast'); await held.completion
+    expect(held.approximate).toBe(true)
+    expect(us([shownInputs().w1])).toEqual(us([0.5]))
+    await vi.waitFor(() => expect(reads()).toHaveLength(count + 1))
+    expect(reads().at(-1)).toMatchObject({ keyFrame: true }); expect(reads().at(-1)!.time).toBeCloseTo(videoEditPictureSeconds(1), 6)
+    await settle()
+    // 后台画面已是目标：停住时精确补帧不再读取
+    const caught = await renderer.render(60, false); await caught.completion
+    expect(caught.approximate).toBeUndefined(); expect(reads()).toHaveLength(count + 1)
+    expect(us([shownInputs().w1])).toEqual(us([1]))
+    // 后台读取途中松手：精确读取的画面不会被后到的后台画面盖掉
+    await (await renderer.render(90, false, 'fast')).completion
+    const released = await renderer.render(95, false); await released.completion
+    await settle()
+    const after = await renderer.render(95, false); await after.completion
+    expect(after.approximate).toBeUndefined()
+    expect(us([shownInputs().w1])).toEqual(us([95 / 60]))
+  } finally { await renderer.dispose() }
+})

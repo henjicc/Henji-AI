@@ -74,8 +74,9 @@ pub enum Command {
         #[serde(default)]
         transfer: Option<String>,
     },
-    /// 按时间取单帧：命中时先发 `frame` 事件再响应。`keyOnly`：只解目标所在关键帧（快速拖动时的近似画面），
-    /// 响应带 `approximate`；随后同一时间的精确请求从该关键帧继续向前解，不再重新定位。
+    /// 按时间取单帧：命中时先发 `frame` 事件再响应。`keyOnly`：允许近似画面（快速拖动、远距离跳转先出的画面）——
+    /// 必须重新定位时只解目标所在关键帧，同一 GOP 内向前续解时只解一小段时间，没到目标就交出已解到的最后一帧；
+    /// 近似时响应带 `approximate`。随后同一时间的精确请求从已解到的位置继续向前解，不再重新定位。
     FrameAt {
         stream_id: String,
         time: f64,

@@ -424,7 +424,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
       }, () => { if (session === opening) session = undefined })
       return opening
     }
-    const shared = (seconds: number): Promise<VideoEditNativePicture | null> => this.use(() => this.lane.run(async () => (await this.seek()).frameAt(seconds)))
+    const shared = (seconds: number, keyFrame = false): Promise<VideoEditNativePicture | null> => this.use(() => this.lane.run(async () => (await this.seek()).frameAt(seconds, keyFrame)))
     return {
       continues: true,
       frames: start => this.frames(start),
@@ -434,7 +434,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
           if (closed || this.closed) throw closedFailure()
           this.lastUsed = performance.now()
           recordVideoEditPreparation('nativeFrameAt', 0)
-          if (!session && performance.now() < sharingUntil) { if (speculative) throw new VideoEditNativeFailure(videoEditNativeFailureMessage(this.media.name, 'budget'), 'budget', 'BUDGET_EXCEEDED'); return shared(seconds) }
+          if (!session && performance.now() < sharingUntil) { if (speculative) throw new VideoEditNativeFailure(videoEditNativeFailureMessage(this.media.name, 'budget'), 'budget', 'BUDGET_EXCEEDED'); return shared(seconds, options?.keyFrame === true) }
           let pending: Promise<VideoEditNativeDecoderSession> | undefined
           try {
             if (!session && speculative && !await this.owner.makeRoomAhead()) throw new VideoEditNativeFailure(videoEditNativeFailureMessage(this.media.name, 'budget'), 'budget', 'BUDGET_EXCEEDED')
@@ -446,7 +446,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
             if (kind === 'budget' && !speculative && !closed) {
               sharingUntil = performance.now() + EXCLUSIVE_RETRY_MS
               this.owner.log('info', '解码会话已满，此视频输入暂时改用素材共享的定位会话', 'video_edit.decode.exclusive.shared', { mediaId: this.media.id, sessions: this.owner.openSessions, retryInMs: EXCLUSIVE_RETRY_MS })
-              return shared(seconds)
+              return shared(seconds, options?.keyFrame === true)
             }
             // A hung or lost session must not answer the retry: close it so the next read opens a fresh one.
             if (kind === 'service') drop(pending)

@@ -41,15 +41,21 @@ describe('源码检查线程与有界恢复', () => {
     next.onmessage!({ data: { id: 2, bundle } } as MessageEvent)
     expect(await retry).toBe(bundle); compiler.dispose()
   })
-  it('取消单个观察不影响其他检查；最后请求取消则释放线程', async () => {
-    const runtime = worker(); const compiler = new VideoEditCodeCompiler(() => runtime)
+  it('取消单个观察不影响其他检查；最后的请求取消后线程照常完成并留在缓存里，下一次同一源码命中缓存', async () => {
+    const runtime = worker(); const create = vi.fn(() => runtime); const compiler = new VideoEditCodeCompiler(create)
     const signal = new AbortController(); const first = compiler.bundle(sourceFiles('a'), signal.signal); const failure = expect(first).rejects.toMatchObject({ name: 'AbortError' })
     const second = compiler.bundle(sourceFiles('b')); signal.abort(); await failure
     expect(runtime.terminate).not.toHaveBeenCalled()
     runtime.onmessage!({ data: { id: 2, bundle: output('B') } } as MessageEvent)
     expect((await second).code).toBe('B')
+    // 拖动跨进新段落：每帧取消上一帧的准备。线程不因此重建（重建会丢掉已打包的段落），迟到的回执不完成新请求。
     const finalSignal = new AbortController(); const final = compiler.bundle(sourceFiles('c'), finalSignal.signal); const finalFailure = expect(final).rejects.toMatchObject({ name: 'AbortError' })
-    finalSignal.abort(); await finalFailure; expect(runtime.terminate).toHaveBeenCalledOnce(); compiler.dispose()
+    finalSignal.abort(); await finalFailure; expect(runtime.terminate).not.toHaveBeenCalled()
+    const again = compiler.bundle(sourceFiles('c'))
+    runtime.onmessage!({ data: { id: 3, bundle: output('迟到') } } as MessageEvent)
+    runtime.onmessage!({ data: { id: 4, bundle: output('C'), cacheHit: true } } as MessageEvent)
+    expect((await again).code).toBe('C'); expect(create).toHaveBeenCalledOnce(); expect(compiler.diagnostics().cacheHits).toBe(1)
+    compiler.dispose()
   })
   it('满队列不分配额外Worker，dispose清理全部期限', async () => {
     vi.useFakeTimers()

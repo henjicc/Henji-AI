@@ -91,8 +91,10 @@ export class VideoEditCodeCompiler {
       const abort = (): void => {
         const pending = this.pending.get(id)
         if (!pending) return
+        // Only this observer stops waiting. The worker finishes the build into its cache, so the next request for the
+        // same source (the next frame of a scrub across a new section, a jump back to it) is a cache hit instead of a
+        // cold worker rebuilding every section; the job keeps its queue slot until its receipt arrives.
         this.pending.delete(id); pending.clean(); pending.reject(new DOMException('源码检查已取消。', 'AbortError'))
-        if (!this.pending.size) { this.worker?.terminate(); this.worker = undefined; this.jobs.clear(); this.wakeCapacityWaiters() }
       }
       const timer = setTimeout(() => { if (this.pending.has(id)) this.reset(new Error('源码检查超过时限，已释放线程；最后有效版本保留，请重试。')) }, this.timeoutMs)
       const clean = (): void => { clearTimeout(timer); signal?.removeEventListener('abort', abort) }

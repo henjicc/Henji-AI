@@ -149,12 +149,19 @@ pub enum Decision {
 
 /// 无索引容器向前超过该时长（秒）就定位，而不是一路解过去。
 pub const FORWARD_SEEK_SECONDS: f64 = 3.0;
+/// 目标所在关键帧的包离已送入的包不超过这么久（秒）时续解过去，不定位。
+///
+/// 索引给的是关键帧的解码时间，带 B 帧的码流里它比呈现时间早几帧：目标落在上一个 GOP 末尾几帧时，下一个关键帧的
+/// 解码时间已不晚于目标，按“目标关键帧在已送入的包之后”定位，定位又按呈现时间退回上一个关键帧，整段 GOP 重解
+/// （4 秒 GOP 的 4K 录屏逐帧向前，每到 GOP 末尾停 0.6 秒）。帧级多线程送包超前十几个包时掩盖了这一点。
+pub const NEAR_KEY_SECONDS: f64 = 0.2;
 
 /// 下一个请求（刻度 `ticks`）应续解还是定位。
 ///
 /// - `key_ticks`：容器索引给出的目标所在关键帧时间（解码时间刻度，无索引时为 None）；
-/// - `forward_limit_ticks`：无索引时“向前多远就定位”的刻度量。
-pub fn seek_decision(ticks: i64, position: &Position, key_ticks: Option<i64>, forward_limit_ticks: i64) -> Decision {
+/// - `forward_limit_ticks`：无索引时“向前多远就定位”的刻度量；
+/// - `near_key_ticks`：关键帧的包只在已送入的包之后这么近时照常续解（见 `NEAR_KEY_SECONDS`）。
+pub fn seek_decision(ticks: i64, position: &Position, key_ticks: Option<i64>, forward_limit_ticks: i64, near_key_ticks: i64) -> Decision {
     let Some(last_fed) = position.last_fed_dts else { return Decision::Seek };
     // 候选帧之后没有更早的帧：目标落在候选帧与上一个请求之间时，候选帧就是答案。
     if let Some(candidate) = position.candidate_pts {
@@ -177,7 +184,7 @@ pub fn seek_decision(ticks: i64, position: &Position, key_ticks: Option<i64>, fo
     match key_ticks {
         // 目标关键帧在已送入的包之后：跳过中间的 GOP。
         Some(key) => {
-            if key > last_fed {
+            if key > last_fed.saturating_add(near_key_ticks) {
                 Decision::Seek
             } else {
                 Decision::Continue
@@ -349,18 +356,21 @@ mod tests {
     #[test]
     fn continue_or_seek() {
         let limit = 3 * 15360;
+        let near = 15360 / 5;
         let fresh = Position::default();
-        assert_eq!(seek_decision(0, &fresh, None, limit), Decision::Seek, "没有段先定位");
+        assert_eq!(seek_decision(0, &fresh, None, limit, near), Decision::Seek, "没有段先定位");
         let playing = Position { last_fed_dts: Some(5120), candidate_pts: Some(4096), latest_pts: Some(4352), drained: false };
-        assert_eq!(seek_decision(4352, &playing, Some(0), limit), Decision::Continue, "下一帧");
-        assert_eq!(seek_decision(4200, &playing, Some(0), limit), Decision::Continue, "落在候选与前瞻之间仍是候选");
-        assert_eq!(seek_decision(4000, &playing, Some(0), limit), Decision::Seek, "向后");
-        assert_eq!(seek_decision(20000, &playing, Some(15360), limit), Decision::Seek, "目标关键帧在已送入之后");
-        assert_eq!(seek_decision(20000, &playing, Some(0), limit), Decision::Continue, "同一 GOP 内向前");
-        assert_eq!(seek_decision(20000, &playing, None, limit), Decision::Continue, "无索引且不远");
-        assert_eq!(seek_decision(4352 + limit + 1, &playing, None, limit), Decision::Seek, "无索引且很远");
+        assert_eq!(seek_decision(4352, &playing, Some(0), limit, near), Decision::Continue, "下一帧");
+        assert_eq!(seek_decision(4200, &playing, Some(0), limit, near), Decision::Continue, "落在候选与前瞻之间仍是候选");
+        assert_eq!(seek_decision(4000, &playing, Some(0), limit, near), Decision::Seek, "向后");
+        assert_eq!(seek_decision(20000, &playing, Some(15360), limit, near), Decision::Seek, "目标关键帧在已送入之后");
+        assert_eq!(seek_decision(5400, &playing, Some(5120 + near), limit, near), Decision::Continue, "下一个关键帧的包就在已送入的包之后：续解过去");
+        assert_eq!(seek_decision(5400, &playing, Some(5120 + near + 1), limit, near), Decision::Seek);
+        assert_eq!(seek_decision(20000, &playing, Some(0), limit, near), Decision::Continue, "同一 GOP 内向前");
+        assert_eq!(seek_decision(20000, &playing, None, limit, near), Decision::Continue, "无索引且不远");
+        assert_eq!(seek_decision(4352 + limit + 1, &playing, None, limit, near), Decision::Seek, "无索引且很远");
         let ended = Position { drained: true, ..playing };
-        assert_eq!(seek_decision(99999, &ended, Some(15360), limit), Decision::Continue, "末尾之后仍是最后一帧");
-        assert_eq!(seek_decision(100, &ended, Some(0), limit), Decision::Seek);
+        assert_eq!(seek_decision(99999, &ended, Some(15360), limit, near), Decision::Continue, "末尾之后仍是最后一帧");
+        assert_eq!(seek_decision(100, &ended, Some(0), limit, near), Decision::Seek);
     }
 }

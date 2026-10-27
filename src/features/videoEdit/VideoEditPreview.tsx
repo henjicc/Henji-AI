@@ -108,6 +108,13 @@ const DISPLAY_PERIOD_REFRESH_MS = 5000
 const VIDEO_EDIT_FAST_SCRUB_FRAMES = 4
 /** 近似画面在指针停住这么久后补成精确帧。 */
 const VIDEO_EDIT_EXACT_AFTER_REST_MS = 90
+/**
+ * 暂停时跳转（点击标尺、按时间码、入出点、助手定位）超过这么多帧：先出近似画面（代码层照常精确，长 GOP 视频先给
+ * 解码器最近的一幅），紧接着补精确帧。4K 长 GOP 录屏精确定位要解几十到上百帧（每帧约 4.6ms，最深约半秒），只解关键帧约
+ * 10–25ms（另加新片段打开解码会话的时间）。
+ * 近距离逐帧步进不走近似，避免先闪一下关键帧。
+ */
+const VIDEO_EDIT_FAST_JUMP_FRAMES = 30
 /** 第一块声音已混好时的起播提前量：只够把它排进声音时钟。 */
 const PLAY_PREMIXED_LEAD_SECONDS = 0.03
 /**
@@ -236,8 +243,11 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     let observedPlaying = instance.playing
     let observedCommand = videoEditProgramCommandIdentity(instance.document.id)
     let observedAudioFrame = instance.frame
+    /** 暂停或拖动时播放头一动就推进一次（见下方 wake 的消息通道唤醒），不等轮询计时器。 */
+    let wakeForView = (): void => {}
     const unsubscribeView = subscribeVideoEditView(() => {
       if (stopped) return
+      wakeForView()
       const command = videoEditProgramCommandIdentity(instance.document.id)
       if (observedPlaying && (!instance.playing || observedCommand !== command)) renderer.stopPlayback(instance.frame)
       observedPlaying = instance.playing
@@ -255,7 +265,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       const moved = observedAudioFrame !== instance.frame
       observedAudioFrame = instance.frame
       if (instance.playing || releasedScrub || moved && !instance.scrubbing) scrubber.stop()
-      // 拖动出声跟着节目实际呈现的画面走（见 recordPresentation），声音不会跑到画面前面。
+      // 拖动出声跟着指针走：播放头一动就把新位置交给擦洗引擎，不等画面呈现。
+      if (moved && instance.scrubbing && !instance.playing) { const document = videoMotionComposition(instance); if (document) scrubAudio(instance.frame / document.fps, 'drag') }
     })
     let audioRenderer: VideoEditRenderSession | undefined
     // No available proxy means the session already plays the originals: both read as 'original', so starting paused does not rebuild.
@@ -278,6 +289,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     let lastScrubbing = false
     /** 屏幕上是快速拖动时的关键帧近似画面（帧号）；指针停住或松手后按精确方式补这一帧。-1 表示是精确画面。 */
     let approximateFrame = -1
+    /** 这幅近似画面来自操作中的小步后退（拖动刚按下、方向键连按）：同拖动一样等指针或按键停住再补精确帧。 */
+    let approximateWhileActive = false
     let clockStart = 0
     let clockPerformanceStart = 0
     let startFrame = 0
@@ -313,11 +326,11 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     let captureFull = 0
     const audioScheduler = new VideoEditAudioScheduler()
     const scrubber = new VideoEditAudioScrubber()
-    const scrubAudio = (seconds: number): void => {
+    const scrubAudio = (seconds: number, mode: 'drag' | 'step'): void => {
       const document = videoMotionComposition(instance)
       if (!document || instance.playing || !audibleVideoEditClips(document).length) return
       scrubber.request({
-        seconds, fps: document.fps, endTime: videoEditDuration(document) / document.fps,
+        seconds, fps: document.fps, endTime: videoEditDuration(document) / document.fps, mode,
         prepare: async () => {
           audio ??= new AudioContext({ sampleRate: document.sampleRate })
           const context = audio
@@ -331,7 +344,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         onError,
       })
     }
-    const unsubscribeScrub = subscribeVideoEditScrub(instance.document.id, intent => { if (intent.scope === 'program') scrubAudio(intent.seconds) })
+    const unsubscribeScrub = subscribeVideoEditScrub(instance.document.id, intent => { if (intent.scope === 'program') scrubAudio(intent.seconds, intent.kind ?? 'step') })
     const stopAudio = (): void => audioScheduler.stop()
     const meterTimer = setInterval(() => { if (!stopped && meter) setLevels(meter.read()) }, 50)
     let lastPresentation = -Infinity
@@ -411,11 +424,9 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       surface.dataset.decodeMs = String(result.decodeMs ?? 0); surface.dataset.gpuMs = String(result.gpuMs ?? 0)
       surface.dataset.sourceTimestamps = (result.sourceTimestamps ?? []).join(','); surface.dataset.cacheHits = String(result.cacheHits ?? 0); surface.dataset.cacheBytes = String(result.cacheBytes ?? 0)
       surface.dataset.proxyPreparationMs = String(renderer.previewPreparationMs); surface.dataset.proxyBytes = String(renderer.previewBytes)
-      surface.dataset.scrubbing = String(scrubbing); surface.dataset.presentedFrame = String(target)
+      surface.dataset.scrubbing = String(scrubbing); surface.dataset.approximate = String(!!result.approximate); surface.dataset.presentedFrame = String(target)
       surface.dataset.presentedRevision = String(revision); surface.dataset.renderDivisor = String(appliedDivisor)
       if (result.presented !== false) recordVideoMotionPresentation(instance, { frame: target, revision, sequenceId: composition.id, at: performance.now(), scrubbing })
-      // 拖动播放头时声音颗粒取刚呈现这一帧的时间：画面跟不上指针时声音也等画面，音画始终对齐。
-      if (scrubbing && result.presented !== false && !instance.playing) scrubAudio(target / composition.fps)
       if (result.presented === true) recordVideoExplanationPresentation(instance, { frame: target, revision: composition.revision, sequenceId: composition.id, composition, at: performance.now(), scrubbing })
       if (failedDocument === undefined) { setRenderFailure(null); failedRetryMs = 2000 }
       return true
@@ -431,7 +442,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       // 选帧与封面始终是完整分辨率：降低了回放分辨率时，先按完整尺寸重画这一帧再取图。
       captureFull++
       try {
-        while (appliedProxy !== 'original' || appliedDocument !== picture || lastFrame !== request.frame || surface.dataset.presentedRevision !== String(picture?.revision) || surface.dataset.scrubbing === 'true' || surface.dataset.renderDivisor !== '1' || surface.width !== request.document.width || surface.height !== request.document.height) {
+        while (appliedProxy !== 'original' || appliedDocument !== picture || lastFrame !== request.frame || surface.dataset.presentedRevision !== String(picture?.revision) || surface.dataset.scrubbing === 'true' || surface.dataset.approximate === 'true' || surface.dataset.renderDivisor !== '1' || surface.width !== request.document.width || surface.height !== request.document.height) {
           current()
           if (performance.now() - start > 10000) throw new Error('节目画面尚未就绪，请等待画面更新后重试选帧。')
           await new Promise(resolve => setTimeout(resolve, 5))
@@ -450,14 +461,26 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     let stepping = false
     /** 推进步骤执行期间收到的唤醒：这一步交出调度后按其中最早的一个再排。 */
     let wakeAfterStep: number | undefined
+    // 暂停与拖动时的立即唤醒走消息通道：调度链里的 setTimeout(0) 嵌套几层后被钳到至少 4ms，Windows 上又按约 15.6ms 的
+    // 系统计时器粒度触发，拖动时每次指针移动、每帧提交回执都要平均多等约 10ms 才开始下一帧（实测指针到发出请求 13–15ms）。
+    // 播放循环照旧用计时器：它持续自我唤醒，不能变成忙等。
+    const immediate = new MessageChannel()
+    let immediatePending = false
+    immediate.port1.onmessage = () => { immediatePending = false; if (!stopped) void step() }
     const wake = (delay: number): void => {
       if (stopped) return
       if (stepping) { wakeAfterStep = Math.min(wakeAfterStep ?? delay, delay); return }
+      if (immediatePending) return
+      if (delay === 0 && !instance.playing) {
+        if (timer !== undefined) { clearTimeout(timer); timer = undefined; timerAt = Infinity }
+        immediatePending = true; immediate.port2.postMessage(null); return
+      }
       const at = performance.now() + delay
       if (timer !== undefined) { if (timerAt <= at) return; clearTimeout(timer) }
       timerAt = at
       timer = setTimeout(() => { timer = undefined; timerAt = Infinity; void step() }, delay)
     }
+    wakeForView = () => { if (!instance.playing) wake(0) }
     const step = async (): Promise<void> => {
       if (stopped) return
       if (stepping) { wake(0); return }
@@ -625,7 +648,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         const next = Math.max(lastFrame, submittedFrame, queuedFrame) + 1
         const target = liveRecording ? due : playing ? direction === 1 ? videoEditPlaybackTarget(next, due, startFrame, videoEditDuration(document)) : Math.min(startFrame, Math.max(0, lastFrame - 1)) : current.frame
         // 近似画面停留：指针停住 VIDEO_EDIT_EXACT_AFTER_REST_MS 或已松手，就按精确方式重取这一帧。
-        if (!playing && approximateFrame >= 0 && approximateFrame === target && target === lastRequested && (!current.scrubbing || performance.now() - lastInteractionAt >= VIDEO_EDIT_EXACT_AFTER_REST_MS)) { lastRequested = -1; approximateFrame = -1 }
+        if (!playing && approximateFrame >= 0 && approximateFrame === target && target === lastRequested && (!current.scrubbing && !approximateWhileActive || performance.now() - lastInteractionAt >= VIDEO_EDIT_EXACT_AFTER_REST_MS)) { lastRequested = -1; approximateFrame = -1 }
         const scrubbing = !!current.scrubbing
         // 正向播放与拖动一样两帧流水：这一帧一提交给 GPU 就去准备下一帧，不等它画完再往返一趟，
         // 否则每帧都赶不上下一次刷新，画面成对出现（一帧晚、下一帧紧跟着补上，前一帧根本没显示）。
@@ -635,9 +658,14 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           // 在途画面到了预算就先不发（背压，不是错误）：已发出的帧提交或回执时会唤醒调度，按那时的最新目标再请求。
           if (framesInFlight >= PROGRAM_FRAMES_IN_FLIGHT || pipelined && unsubmitted >= PROGRAM_UNSUBMITTED_FRAMES) return
           if (playing && direction === 1 && !liveRecording && target > Math.max(next, startFrame)) { droppedFrames += target - Math.max(next, startFrame); surface.dataset.droppedFrames = String(droppedFrames) }
-          // 快速拖动（相邻两次请求相差至少 VIDEO_EDIT_FAST_SCRUB_FRAMES 帧）：必须重新定位才到得了的图层先给关键帧，画面跟手；
-          // 慢速拖动始终是精确帧，逐帧找点不受影响。
-          const scrubMode: boolean | 'fast' = scrubbing && !playing && lastRequested >= 0 && Math.abs(target - lastRequested) >= VIDEO_EDIT_FAST_SCRUB_FRAMES ? 'fast' : scrubbing
+          // 快速拖动（相邻两次请求相差至少 VIDEO_EDIT_FAST_SCRUB_FRAMES 帧）与暂停时远距离跳转：要重新定位才到得了的视频先给
+          // 解码器最近的一幅，画面跟手，停住或松手后补精确帧；慢速向前拖动与近距离向前步进直接出精确帧，逐帧找点不受影响。
+          const fastScrub = scrubbing && lastRequested >= 0 && Math.abs(target - lastRequested) >= VIDEO_EDIT_FAST_SCRUB_FRAMES
+          const fastJump = !scrubbing && captureFull === 0 && lastFrame >= 0 && lastRequested >= 0 && Math.abs(target - lastRequested) >= VIDEO_EDIT_FAST_JUMP_FRAMES
+          // 操作中的小步后退（拖动刚按下还没移出 3 像素、方向键连按）：长 GOP 视频退一帧要从关键帧重解（4K 录屏可达半秒），
+          // 按慢速拖动处理——先沿用当前画面、后台解精确帧，停住后补精确帧，不让这一步堵住后面的画面。
+          const steppingBack = !scrubbing && !fastJump && captureFull === 0 && lastFrame >= 0 && lastRequested >= 0 && target < lastRequested && performance.now() - lastInteractionAt < VIDEO_EDIT_EXACT_AFTER_REST_MS
+          const scrubMode: boolean | 'fast' = playing ? scrubbing : fastScrub || fastJump ? 'fast' : steppingBack || scrubbing
           const requestedAt = performance.now()
           const deadline = playing && !liveRecording ? performance.timeOrigin + clockPerformanceStart + Math.abs(target - startFrame) / document.fps / (current.playbackRate ?? 1) * 1000 : undefined
           lastRequested = target
@@ -677,7 +705,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
             recordVideoEditProgramRender(instance.document.id, document, target, result, playing && direction === 1 && !scrubbing && !liveRecording)
             if (result.presented === false) { if (!liveRecording) lastFrame = -1; lastRequested = -1; wake(0); return }
             if (!recordPresentation(target, result, requestedAt, scrubbing, document)) { wake(0); return }
-            approximateFrame = result.approximate ? target : -1
+            approximateFrame = result.approximate ? target : -1; approximateWhileActive = !!result.approximate && steppingBack
             setEffectFailure(result.effectErrors?.join('\n') ?? null)
             lastFrame = target; lastScrubbing = scrubbing
             if (playing && current.playing && current.playbackDirection === direction && videoEditProgramCommandIdentity(instance.document.id) === command) setVideoEditView(instance.document.id, { frame: target }, true)
@@ -688,7 +716,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         // 首帧后的第一秒留给用户操作；停稳且没有输入时再准备声音与前向解码，播放命令仍可按需准备。
         // 按住拖动播放头期间不预热：预热要打开连续解码并预混首段声音（复杂工程约 0.6 秒），循环等它完成期间不再请求新画面，
         // 拖动方向反转、指针短暂停住时就出现半秒以上的停顿；松手时由上面的 releasedScrub 预热一次，起播照样即时。
-        if (!playing && performance.now() - firstPresentationAt >= 1100 && !current.scrubbing && (armedDocument !== undefined || performance.now() - lastInteractionAt >= 180) && lastFrame === current.frame && current.frame === lastRequested && !!current.scrubbing === lastScrubbing && (armedDocument !== document || armedFrame !== current.frame) && captureFull === 0) {
+        if (!playing && approximateFrame < 0 && performance.now() - firstPresentationAt >= 1100 && !current.scrubbing && (armedDocument !== undefined || performance.now() - lastInteractionAt >= 180) && lastFrame === current.frame && current.frame === lastRequested && !!current.scrubbing === lastScrubbing && (armedDocument !== document || armedFrame !== current.frame) && captureFull === 0) {
           await preparePlayback(document, current.frame)
           if (stopped) return
           // 刷新周期在后台量，不挡住紧接着的起播。
@@ -730,7 +758,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     stopCurrent = (): void => {
       if (retired) return
       void flushVideoEditRenderPerformance()
-      retired = true; for (const event of idleEvents) window.removeEventListener(event, interaction, true); unregisterCapture(); unsubscribe(); unsubscribeView(); unsubscribeScrub(); unsubscribeMotion(); unsubscribeRegions(); unsubscribeTracks(); clearTimeout(timer); clearInterval(meterTimer); instance.playing = false; stopAudio(); scrubber.stop()
+      retired = true; for (const event of idleEvents) window.removeEventListener(event, interaction, true); unregisterCapture(); unsubscribe(); unsubscribeView(); unsubscribeScrub(); unsubscribeMotion(); unsubscribeRegions(); unsubscribeTracks(); clearTimeout(timer); immediate.port1.close(); clearInterval(meterTimer); instance.playing = false; stopAudio(); scrubber.stop()
       const closeAudio = (): Promise<void> | undefined => { meter?.dispose(); return audio?.close() }
       programReleases.set(instance, Promise.allSettled([meter ? finishVideoEditAudioFade().then(closeAudio) : closeAudio(), renderer.dispose(), audioRenderer?.dispose()]))
       retainExplanationPixels(surface, -1)

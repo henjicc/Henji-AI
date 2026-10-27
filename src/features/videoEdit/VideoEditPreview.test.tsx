@@ -15,7 +15,9 @@ import { resetVideoEditPlaybackResolutionCache, setVideoEditPlaybackResolution }
 import { setVideoEditPosterFrame } from './application/videoEditProgramCapture'
 import { startVideoMotion, setVideoMotionOptions, setVideoMotionPointer, videoMotionState, videoMotionComposition } from './application/videoEditMotionDraft'
 const stopNotification = vi.hoisted(() => vi.fn())
-const pixel = vi.hoisted(() => ({ preopen: vi.fn(), arm: vi.fn(async () => undefined), requests: [] as Array<{ frame: number; sequential?: boolean; deadline?: number; submitted?: () => void; resolve: (value: { sourceTimestamps: number[]; presented?: boolean; history?: ImageBitmap }) => void; reject: (error: Error) => void }>, sessions: 0, update: vi.fn(), invalidate: vi.fn(), dispose: vi.fn(), mixAudio: vi.fn(), scale: vi.fn() }))
+const pixel = vi.hoisted(() => ({ preopen: vi.fn(), arm: vi.fn(async () => undefined), requests: [] as Array<{ frame: number; sequential?: boolean; scrubbing?: boolean | 'fast'; deadline?: number; submitted?: () => void; resolve: (value: { sourceTimestamps: number[]; presented?: boolean; history?: ImageBitmap; approximate?: boolean }) => void; reject: (error: Error) => void }>, sessions: 0, update: vi.fn(), invalidate: vi.fn(), dispose: vi.fn(), mixAudio: vi.fn(), scale: vi.fn() }))
+const scrub = vi.hoisted(() => ({ request: vi.fn(), stop: vi.fn() }))
+vi.mock('./engine/videoEditAudioScrub', async importOriginal => ({ ...await importOriginal<typeof import('./engine/videoEditAudioScrub')>(), VideoEditAudioScrubber: class { request = scrub.request; stop = scrub.stop } }))
 vi.mock('./application/videoEditProjectCover', () => ({ saveVideoEditPosterCover: vi.fn(async () => undefined), updateVideoEditProjectCover: vi.fn(async () => undefined) }))
 vi.mock('./engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   setTracks() {}
@@ -31,7 +33,7 @@ vi.mock('./engine/videoEditRenderSession', () => ({ VideoEditRenderSession: clas
   armPlayback = pixel.arm
   stopPlayback = stopNotification
   setSmartRegions = vi.fn()
-  present(frame: number, sequential?: boolean, _scrubbing?: boolean, deadline?: number, submitted?: () => void) { return new Promise((resolve, reject) => pixel.requests.push({ frame, sequential, deadline, resolve, reject, submitted })) }
+  present(frame: number, sequential?: boolean, scrubbing?: boolean | 'fast', deadline?: number, submitted?: () => void) { return new Promise((resolve, reject) => pixel.requests.push({ frame, sequential, scrubbing, deadline, resolve, reject, submitted })) }
 } }))
 beforeEach(() => {
   stopNotification.mockClear()
@@ -300,6 +302,28 @@ it('拖动在 GPU 合成期间准备最新帧，完成回执才公布画面，�
   await act(async () => { pixel.requests[3].resolve({ sourceTimestamps: [11 / 30] }) })
   expect(canvas.dataset.presentedFrame).toBe('11'); expect(canvas.dataset.scrubbing).toBe('false')
 })
+it('暂停时远距离跳转先出近似画面并标记，紧接着补精确帧；操作中小步后退先沿用画面（按慢速拖动），不立即逐帧精确重解', async () => {
+  const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
+  const view = render(<VideoEditPreview instance={instance} onError={vi.fn()} />)
+  await act(async () => { await Promise.resolve() })
+  const canvas = view.getByLabelText('剪辑画面') as HTMLCanvasElement
+  await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [0], presented: true }); await vi.advanceTimersByTimeAsync(2) })
+  await act(async () => { setVideoEditView(instance.document.id, { frame: 50 }); await vi.advanceTimersByTimeAsync(2) })
+  expect(pixel.requests.at(-1)).toMatchObject({ frame: 50, scrubbing: 'fast' })
+  await act(async () => { pixel.requests.at(-1)!.resolve({ sourceTimestamps: [50 / 30], presented: true, approximate: true }); await vi.advanceTimersByTimeAsync(2) })
+  // 近似画面已上屏并标记（选帧、封面等它变成精确帧）；没有指针或按键操作时立即补精确帧。
+  expect(canvas.dataset).toMatchObject({ presentedFrame: '50', approximate: 'true' })
+  expect(pixel.requests.at(-1)).toMatchObject({ frame: 50, scrubbing: false })
+  await act(async () => { pixel.requests.at(-1)!.resolve({ sourceTimestamps: [50 / 30], presented: true }); await vi.advanceTimersByTimeAsync(2) })
+  expect(canvas.dataset.approximate).toBe('false')
+  // 方向键连按后退一帧：按慢速拖动请求（视频输入先沿用当前画面），操作还在进行时不马上逐帧精确重解。
+  const before = pixel.requests.length
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); setVideoEditView(instance.document.id, { frame: 49 }); await vi.advanceTimersByTimeAsync(2) })
+  expect(pixel.requests.at(-1)).toMatchObject({ frame: 49, scrubbing: true })
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); pixel.requests.at(-1)!.resolve({ sourceTimestamps: [49 / 30], presented: true, approximate: true }); await vi.advanceTimersByTimeAsync(2) })
+  expect(pixel.requests).toHaveLength(before + 1)
+  view.unmount()
+})
 it('切换序列（含尺寸不同的序列）复用同一渲染会话只换文档，不销毁也不重建', async () => {
   const instance = (await createVideoEditProject())!; const first = instance.activeSequenceId
   const { width, height } = getActiveVideoEditSequence(instance)
@@ -384,26 +408,17 @@ async function audioPreviewFixture() {
   appendVideoEditMedia(owner.document.id, { id: 'audio-actual', name: '音画', path: 'D:/audio.mp4', kind: 'video', width: 320, height: 180, durationSeconds: 3, hasAudio: true }); appendVideoEditClip(owner.document.id, 'audio-actual')
   setVideoEditView(owner.document.id, { frame: 0, playing: true }); return owner
 }
-it('单击节目定位不发声；拖动出声跟着节目实际呈现的画面，画面回来之前不先出声', async () => {
-  const graph = installAudioGraph(); const owner = await audioPreviewFixture(); setVideoEditView(owner.document.id, { playing: false })
-  pixel.mixAudio.mockImplementation(async (_from: number, duration: number) => ({ duration }))
+it('单击节目定位不发声；拖动时播放头一动就把位置交给擦洗声音，不等画面呈现', async () => {
+  installAudioGraph(); const owner = await audioPreviewFixture(); setVideoEditView(owner.document.id, { playing: false })
+  scrub.request.mockClear()
   const onError = vi.fn(); render(<VideoEditPreview instance={owner} onError={onError} />)
   await act(async () => {})
   await act(async () => { setVideoEditView(owner.document.id, { frame: 5 }); await vi.advanceTimersByTimeAsync(5) })
-  expect(graph.nodes).toHaveLength(0)
+  expect(scrub.request).not.toHaveBeenCalled()
   await act(async () => { setVideoEditView(owner.document.id, { frame: 6, scrubbing: true }); await vi.advanceTimersByTimeAsync(5) })
-  // 画面还没回来：不先出声，否则声音会跑到画面前面。
-  expect(graph.nodes).toHaveLength(0)
-  // 依次让节目的取帧回来，直到拖到的第 6 帧呈现。
-  for (let index = 0; index < 4 && !pixel.requests.some(entry => entry.frame === 6); index++) {
-    await act(async () => { pixel.requests.at(-1)!.resolve({ sourceTimestamps: [0], presented: true }); await vi.advanceTimersByTimeAsync(5) })
-  }
-  expect(graph.nodes).toHaveLength(0)
-  const request = pixel.requests.find(entry => entry.frame === 6)!
-  expect(request).toBeDefined()
-  await act(async () => { request.resolve({ sourceTimestamps: [.2], presented: true }); await vi.advanceTimersByTimeAsync(5) })
-  expect(graph.nodes).toHaveLength(1)
-  expect(pixel.mixAudio).toHaveBeenLastCalledWith(.2, .08, true)
+  // 第 6 帧的画面还没回来，声音已经按指针位置交给擦洗引擎（声音跟着指针走，像 Premiere 一样）。
+  const fps = videoMotionComposition(owner)!.fps
+  expect(scrub.request).toHaveBeenLastCalledWith(expect.objectContaining({ seconds: 6 / fps, fps, mode: 'drag' }))
   expect(onError).not.toHaveBeenCalled()
 })
 it('音频启动等待后隐藏，晚到resume不新建退役节点', async () => {
