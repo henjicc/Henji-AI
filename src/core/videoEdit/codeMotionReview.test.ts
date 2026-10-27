@@ -38,3 +38,18 @@ it('keeps source-only content unknown when stationary bounds reveal no pixel cha
 it('propagates real render failures and does not fabricate invisible layers', async () => {
   await expect(fixture().run(async (): Promise<CodeAuthorFrameObservation> => { throw new Error('作者执行失败') })).rejects.toThrow('作者执行失败')
 })
+it('maps observed author layers into output pixels for picture checks: settled text creep and an edge-hugging key element', async () => {
+  const { run, clip } = fixture()
+  clip.x = 0; clip.y = 0
+  const layer = (id: string, name: string, x: number, y: number, width: number, height: number, textParameterKeys: string[] = []) => ({ id, name, bounds: [0, 0, width, height] as [number, number, number, number], matrix: [1, 0, 0, 1, x, y] as [number, number, number, number, number, number], corners: [[x, y], [x + width, y], [x + width, y + height], [x, y + height]] as [number, number][], parameterKeys: textParameterKeys, textParameterKeys })
+  const result = await run(async (local, frame) => ({ sequenceId: local.id, revision: local.revision, frame, clips: [{ clipId: clip.id, versionId: 'version', width: 1000, height: 1000, elements: [
+    layer('headline', '标题', 500 - 400 * .85 ** frame, 450, 300, 70, ['title']),
+    layer('logo', '角标', 10, 880, 80, 80),
+    layer('backdrop', '背景', 0, 0, 1000, 1000),
+  ] }] }))
+  const checks = result.records.filter(record => ['settled_jitter', 'safe_area'].includes(record.kind))
+  expect(checks).toEqual([
+    expect.objectContaining({ kind: 'settled_jitter', elementPath: ['headline'], basis: 'code_structure', label: '代码 · 标题' }),
+    expect.objectContaining({ kind: 'safe_area', elementPath: ['logo'], timeline: { from: 0, to: 120 }, safeArea: { zone: 'action', edges: ['left'], overflowPercent: 2.5 } }),
+  ])
+})

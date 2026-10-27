@@ -143,3 +143,8 @@ export function videoEditCaptionClips(sequence: VideoEditSequence, frame: number
     ...(caption.style ? { kind: 'graphic' as const, graphic: graphicForCaption(caption, sequence) } : {}),
   }))
 }
+/** A rendered caption as the equivalent text clip (graphic text origin folded into x/y), for layout and hit areas. */
+export function videoEditCaptionTextClip(rendered: VideoEditClip, sequence: Pick<VideoEditSequence, 'width' | 'height'>): VideoEditClip {
+  const object = rendered.graphic?.objects[0]
+  return object ? { ...rendered, kind: 'text', graphic: undefined, textStyle: object.textStyle, x: rendered.x + Number(object.parameters.x) / sequence.width - .5, y: rendered.y + Number(object.parameters.y) / sequence.height - .5 } : rendered
+}

@@ -393,6 +393,36 @@ it('public native-motion review returns frame-bound evidence and local suggestio
     await expect(queryVideoEditReview({ ...input, motion: { minGapSeconds: 0 }, cursor: first.nextCursor }, context())).rejects.toThrow('分页已失效')
   } finally { app.dispose() }
 })
+it('public picture checks judge speed by the requested pace and measured caption layout against the title-safe frame', async () => {
+  const { owner, input } = await fixture(); const app = createApplicationHarness()
+  MotionWorker.instances = []; MotionWorker.automatic = true; vi.stubGlobal('Worker', MotionWorker)
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => ({ font: '', measureText: (text: string) => ({ width: text.length * 40 }) }) as unknown as CanvasRenderingContext2D)
+  editVideoProject(owner.document.id, document => {
+    document.sequences[0].clips[0].curves = { x: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 15, value: .5, interpolation: 'linear' }] }
+    document.sequences[0].captions!.push({ id: 'long', text: '这一句字幕太长了，一行放不下，左右两边都会越过标题安全框，需要换行或者缩小字号才能完整看到'.repeat(2), start: 30, duration: 30 })
+    return document
+  })
+  const all = async (pace: 'gentle' | 'brisk') => {
+    const records = []; let cursor: string | null | undefined; let warnings: string[] = []
+    do {
+      const page = parse(await app.requireResult('query_video_edit_review', { ...input, motion: { pace }, limit: 50, ...(cursor ? { cursor } : {}) }))
+      records.push(...page.records); cursor = page.nextCursor; warnings = page.warnings
+    } while (cursor)
+    return { records, warnings }
+  }
+  try {
+    const gentle = await all('gentle')
+    expect(gentle.records).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'motion_too_fast', subjectRef: { kind: 'video_edit.clip', id: `${owner.document.id}:a` }, motionEvidence: expect.objectContaining({ basis: 'clip_transform', speedLimit: 60, peakSpeed: expect.closeTo(100, 0), suggestion: expect.stringContaining('秒') }) }),
+      expect.objectContaining({ kind: 'safe_area', timeline: { fromFrame: 30, toFrame: 60 }, subjectRef: { kind: 'video_edit.caption', id: `${owner.document.id}:long` }, motionEvidence: expect.objectContaining({ basis: 'text_layout', safeArea: { zone: 'title', edges: ['left', 'right'], overflowPercent: expect.any(Number) } }) }),
+    ]))
+    expect(gentle.records.some(record => record.kind === 'safe_area' && record.subjectRef.id.endsWith(':caption'))).toBe(false)
+    expect(gentle.warnings.join('')).toContain('60%画面宽/秒')
+    const brisk = await all('brisk')
+    expect(brisk.records.some(record => record.kind === 'motion_too_fast')).toBe(false)
+    expect(brisk.records.some(record => record.kind === 'safe_area')).toBe(true)
+  } finally { app.dispose() }
+})
 it.each(['changed', 'cancelled'] as const)('a pending native-motion query %s rejects its old plan', async kind => {
   const { owner, input } = await fixture()
   MotionWorker.instances = []; MotionWorker.automatic = false; vi.stubGlobal('Worker', MotionWorker)

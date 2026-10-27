@@ -1,5 +1,5 @@
 import type { VideoEditClip, VideoEditSequence } from '@/core/videoEdit/document'
-import { videoEditCaptionClips, type VideoEditCaption } from '@/core/videoEdit/timedContent'
+import { videoEditCaptionClips, videoEditCaptionTextClip, type VideoEditCaption } from '@/core/videoEdit/timedContent'
 import { layoutVideoEditText, videoEditTextWidth, type VideoEditTextLayout } from '@/core/videoEdit/text'
 
 export interface CaptionTextTarget { captionId: string; field: 'text' | 'translation'; clip: VideoEditClip; layout: VideoEditTextLayout }
@@ -13,8 +13,7 @@ export function videoEditCaptionTextTargets(sequence: VideoEditSequence, frame: 
   return videoEditCaptionClips(sequence, frame).flatMap(rendered => {
     const caption = captions.get(rendered.id)!
     if (captionTextLocked(caption)) return []
-    const object = rendered.graphic?.objects[0]
-    const clip: VideoEditClip = object ? { ...rendered, kind: 'text', graphic: undefined, textStyle: object.textStyle, x: rendered.x + Number(object.parameters.x) / sequence.width - .5, y: rendered.y + Number(object.parameters.y) / sequence.height - .5 } : rendered
+    const clip = videoEditCaptionTextClip(rendered, sequence)
     const full = layoutVideoEditText(clip, sequence, measure)
     const primary = layoutVideoEditText({ ...clip, text: caption.text }, sequence, measure)
     return (['text', 'translation'] as const).flatMap(field => {

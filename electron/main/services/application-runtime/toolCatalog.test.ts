@@ -151,6 +151,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.74.0'] = 'dbc2d8d4ff9b79bcc84137b94862ce87fda04448081887db7c7c1e778c1fe3ff'
     // 全能调色导出：export_video_edit_color_lut / export_image_edit_color_lut（.cube / .cdl）；analyze_image_edit_color 新增 referenceRef 与回执 apply。
     fingerprints['2.75.0'] = 'edca68df0b82021365d99eb4de7be84f8d5a227895f6394cceadde1f0a10a1fc'
+    // 剪辑自动画面检查：query_video_edit_review 的 motion 复核新增 settled_jitter / safe_area / motion_too_fast 与 motion.pace。
+    fingerprints['2.76.0'] = '9c3a0a3ea0296d8b11959ee78dbdf5116f8e03854a93ae0dc5b46c55985232f0'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], `工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹：${fingerprint}`).toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {

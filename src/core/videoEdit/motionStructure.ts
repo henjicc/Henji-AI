@@ -5,16 +5,26 @@ import { videoEditSourceMapLocalFrame, visitVideoEditPictureInstances, type Vide
 import type { VideoEditComposition } from './document'
 
 export const VIDEO_EDIT_MOTION_STRUCTURE_SAMPLE_BUDGET = 60000
-export type VideoEditMotionStructureKind = 'motion' | 'motion_hard_stop' | 'motion_hold' | 'code_change' | 'code_unavailable' | 'pixel_cut' | 'pixel_change' | 'pixel_still' | 'pixel_unknown'
+export type VideoEditMotionStructureKind = 'motion' | 'motion_hard_stop' | 'motion_hold' | 'code_change' | 'code_unavailable' | 'pixel_cut' | 'pixel_change' | 'pixel_still' | 'pixel_unknown' | 'settled_jitter' | 'safe_area' | 'motion_too_fast'
+export type VideoEditSafeAreaEdge = 'left' | 'right' | 'top' | 'bottom'
+/** Safe-area overflow measured as a percentage of the output frame side it crosses. */
+export interface VideoEditSafeAreaEvidence { zone: 'title' | 'action'; edges: VideoEditSafeAreaEdge[]; overflowPercent: number }
 export interface VideoEditMotionStructureFact {
   kind: VideoEditMotionStructureKind
   timeline: VideoEditSourceMapRange
   sequenceId: string
   path: VideoEditSourceMapEntry['path']
   subjectId: string
+  subjectType?: 'video_edit.clip' | 'video_edit.caption'
   peakSpeed?: number
+  /** Picture checks: frame widths % per second, output pixels per frame, safe-area overflow. */
+  speedLimit?: number
+  jitterPixels?: number
+  safeArea?: VideoEditSafeAreaEvidence
+  /** User-facing clip, element or caption name; only words suggestions, never an identity. */
+  label?: string
   elementPath?: string[]
-  basis?: 'clip_transform' | 'code_structure' | 'video_pixels' | 'code_input_pixels'
+  basis?: 'clip_transform' | 'code_structure' | 'video_pixels' | 'code_input_pixels' | 'text_layout'
   input?: { parameter: string; kind: 'video' | 'sequence'; mediaId: string }
   detail?: string
   source?: { fromUs: number; toUs: number }
@@ -22,7 +32,7 @@ export interface VideoEditMotionStructureFact {
 export interface VideoEditMotionStructureResult { records: VideoEditMotionStructureFact[]; sampledFrames: number; sampledInstances: number }
 
 /** Shared event-to-frame conversion; exact structural jumps survive camera filters. */
-export function videoEditMotionSampleFacts(samples: readonly MotionReviewSample[], base: Pick<VideoEditMotionStructureFact, 'sequenceId' | 'path' | 'subjectId' | 'basis' | 'elementPath'>, timeline: VideoEditSourceMapRange, fps: number, policy: MotionReviewPolicy = {}, includeHolds = true): VideoEditMotionStructureFact[] {
+export function videoEditMotionSampleFacts(samples: readonly MotionReviewSample[], base: Pick<VideoEditMotionStructureFact, 'sequenceId' | 'path' | 'subjectId' | 'basis' | 'elementPath' | 'label'>, timeline: VideoEditSourceMapRange, fps: number, policy: MotionReviewPolicy = {}, includeHolds = true): VideoEditMotionStructureFact[] {
   const report = reviewMotionSamples(samples, policy), records: VideoEditMotionStructureFact[] = [], covered = new Set<number>()
   const map = (fromSeconds: number, toSeconds: number): VideoEditSourceMapRange => ({ from: Math.max(timeline.from, Math.round(fromSeconds * fps)), to: Math.min(timeline.to, Math.round(toSeconds * fps)) })
   for (const event of report.events) {
@@ -83,7 +93,7 @@ export function collectVideoEditMotionStructure(root: VideoEditComposition, rang
         change: 0, cut: false, still: speed === null ? null : speed < 1e-8 })
       previous = current; previousScale = current.scale
     }
-    const base = { sequenceId: local.id, path: entry.path, subjectId: step.clipId }
+    const base = { sequenceId: local.id, path: entry.path, subjectId: step.clipId, label: step.clip.name }
     records.push(...videoEditMotionSampleFacts(samples, base, entry.timeline, root.fps, policy))
   }
   return { records, sampledFrames, sampledInstances: jobs.length }
