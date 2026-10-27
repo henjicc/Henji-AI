@@ -2,6 +2,7 @@ import { MAX_DOCUMENT_PAGE_SIZE } from './pagination'
 import { z } from 'zod'
 
 import { documentIdSchema } from './envelope'
+import { normalizeEntryName } from './naming'
 import {
   DOCUMENT_KIND_IDS,
   type CreateDocumentRequest,
@@ -179,6 +180,11 @@ export const importFileRequestSchema: z.ZodType<ImportFileRequest> = z.object({
   container: containerRefSchema,
   sourcePath: pathSchema,
   folder: z.enum(['generated', 'materials']),
+  subfolder: z.string().min(1).max(100).refine(value => {
+    const checked = normalizeEntryName(value)
+    return checked.ok && checked.name === value
+  }, '素材分类必须是单个有效文件夹名。').optional(),
+  reuseIdentical: z.boolean().optional(),
 }).strict()
 
 /** 会话状态的键：小写字母、数字与 . _ - ，由工具自己约定（如 `canvas.history`）。 */

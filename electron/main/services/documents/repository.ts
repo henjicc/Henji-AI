@@ -556,8 +556,26 @@ export class DocumentRepository {
       if (!stat?.isFile()) throw new DocumentLocationError('要放进项目的文件不存在。')
       const container = await this.resolveContainer(request.container)
       if (isPathInside(this.workspace.style, container.root, source)) return { path: source, copied: false }
-      const folder = request.folder === 'generated' ? container.generatedDir : container.materialsDir
-      const result = await copyKeepingBoth(source, path.join(folder, path.basename(source)))
+      const baseFolder = request.folder === 'generated' ? container.generatedDir : container.materialsDir
+      if (request.subfolder !== undefined && requireEntryName(request.subfolder) !== request.subfolder) {
+        throw new DocumentLocationError('素材分类必须是单个有效文件夹名。')
+      }
+      const folder = request.subfolder ? path.join(baseFolder, request.subfolder) : baseFolder
+      // 在创建子目录前检查既有祖先，避免素材目录联接点让 mkdir 写到项目外。
+      for (const ancestor of [baseFolder, folder]) {
+        const resolved = await fsp.realpath(ancestor).catch((error: NodeJS.ErrnoException) => {
+          if (error.code === 'ENOENT') return null
+          throw error
+        })
+        if (resolved && !isPathInside(this.workspace.style, await fsp.realpath(container.root), resolved)) {
+          throw new DocumentLocationError('素材分类文件夹指向项目外部，请移除该目录链接后重试。')
+        }
+      }
+      await fsp.mkdir(folder, { recursive: true })
+      if (!isPathInside(this.workspace.style, await fsp.realpath(container.root), await fsp.realpath(folder))) {
+        throw new DocumentLocationError('素材分类文件夹指向项目外部，请移除该目录链接后重试。')
+      }
+      const result = await copyKeepingBoth(source, path.join(folder, path.basename(source)), request.reuseIdentical)
       if (!isPathInside(this.workspace.style, this.workspace.layout().root, container.root)) this.options.grantMediaRoots([container.root])
       return result
     })

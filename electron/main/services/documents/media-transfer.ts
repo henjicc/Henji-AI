@@ -76,7 +76,7 @@ function targetFor(rest: readonly string[], from: ResolvedContainer, to: Resolve
 }
 
 /** 复制到目标位置；重名且内容不同时依次改用“名称 (2)”。返回最终位置与是否真的复制了。 */
-export async function copyKeepingBoth(source: string, desired: string): Promise<{ path: string; copied: boolean }> {
+export async function copyKeepingBoth(source: string, desired: string, reuseIdentical = true): Promise<{ path: string; copied: boolean }> {
   const directory = path.dirname(desired)
   const extension = path.extname(desired)
   const stem = path.basename(desired, extension)
@@ -87,7 +87,7 @@ export async function copyKeepingBoth(source: string, desired: string): Promise<
       return { path: candidate, copied: true }
     } catch (error) {
       if (!(error instanceof EntryExistsError)) throw error
-      if (await sameFileContent(source, candidate)) return { path: candidate, copied: false }
+      if (reuseIdentical && await sameFileContent(source, candidate)) return { path: candidate, copied: false }
     }
   }
   throw new Error('目标文件夹里同名文件过多，请先整理后重试。')

@@ -248,6 +248,10 @@ export interface ImportFileRequest {
   /** 要复制进来的文件（绝对路径）。已在容器里的文件原样返回、不复制。 */
   sourcePath: string
   folder: ContainerFileFolder
+  /** 固定分类子目录，单个安全文件夹名；不接受相对路径。 */
+  subfolder?: string
+  /** 默认复用同内容文件；false 时同名始终加序号。 */
+  reuseIdentical?: boolean
 }
 
 export interface ImportFileResult {
