@@ -147,8 +147,24 @@ const TIER_REQUIREMENT: Record<Exclude<ToolTier, 'any' | 'read'>, string> = {
   paid: '本连接未获「允许付费生成」授权',
 }
 
+type CapabilityDefinition = ReturnType<typeof BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get>
+
+/**
+ * 同一份工具声明与能力定义的公开投影不变：按两者的对象身份记住，目录与每次调用后的输出核对都复用同一份 schema
+ * （Ajv 也按 schema 对象复用已编译的校验）。定义换了对象就重新计算，目录变更通知照常比对出差异。
+ */
+const capabilityTools = new WeakMap<LocalTool, { definition: CapabilityDefinition; tool: Tool }>()
+
 function capabilityTool(tool: LocalTool): Tool {
   const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(tool.id)
+  const cached = capabilityTools.get(tool)
+  if (cached && cached.definition === definition) return cached.tool
+  const built = buildCapabilityTool(tool, definition)
+  capabilityTools.set(tool, { definition, tool: built })
+  return built
+}
+
+function buildCapabilityTool(tool: LocalTool, definition: CapabilityDefinition): Tool {
   const write = APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === tool.id)
   const schema = definition ? z.toJSONSchema(definition.inputSchema, { io: 'input', reused: 'ref' }) as Record<string, unknown> : { ...tool.inputSchema }
   if (write) {

@@ -15,6 +15,8 @@ type Pending = { callerId: string; rendererEpoch: string; committed: boolean; wa
 
 class ApplicationHostDisconnectedError extends Error {}
 
+let externalTools: LocalTool[] | undefined
+
 export class ApplicationHostNotReadyError extends Error {
   readonly retryAfterMs = 1000
   readonly notExecuted = true
@@ -53,10 +55,11 @@ export class ApplicationHostBridge {
   publishReviews(open?: { operationId: string; callerId: string }): void {
     if (this.ready) this.host?.transport.send('application:host:reviews', { items: this.operations?.pendingReviews() ?? [], ...(open ? { open } : {}) })
   }
-  tools(): LocalTool[] { return EXTERNAL_APPLICATION_CAPABILITIES.all.map(definition => ({
+  /** 公开能力是模块级常量，转换结果只算一次；每次工具调用都要取目录，逐次把全部 schema 转一遍会让主进程每次调用多花上百毫秒。 */
+  tools(): LocalTool[] { return [...(externalTools ??= EXTERNAL_APPLICATION_CAPABILITIES.all.map(definition => ({
     id: definition.id as LocalTool['id'], version: definition.version, title: definition.title, description: definition.description,
     inputSchema: z.toJSONSchema(definition.inputSchema, { io: 'input' }),
-  })) }
+  })))] }
   /** 按域发现的数据面；由渲染宿主从反射注册表派生后随注册送来，主进程不维护第二份。 */
   domains(): LocalDomainSurface[] { return this.ready ? this.host!.registration.domains : [] }
   /**
