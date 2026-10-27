@@ -69,6 +69,20 @@
 - 用户在外部编辑器里改过文件时，先读工程的未提交改动，确认后提交为一个版本再使用。
 - 不要自己建 `v2`、`final`、`new` 之类的文件夹或文件名做版本，历史全在 Git 里；想保留一份旧做法给人看，放进 `archive/` 并在 README 里写一句为什么。
 
+## 怎么读改（通用实体）
+
+| 要做的事 | 写法 |
+| --- | --- |
+| 看工程 | `read_application_entity` 读 `video_edit.code_project`（引用 id 为剪辑文档 id）：`head`、`log`（最近 20 次提交）、`tree`、`changes`（外部编辑器里未提交的改动） |
+| 读文件、看谁在用 | 读 `video_edit.code_project_file`，引用 id 为 `<剪辑文档id>:<工程相对路径>`：`source`、`bytes`、`video_edit.code_project_file.used_by`（默认版本用到它的代码素材） |
+| 新建 / 删除文件 | 在剪辑文档下 `create_items` / `remove_items`，实体 `video_edit.code_project_file`，属性 `path`、`source` |
+| 改文件、改名 | `set_properties` 写 `video_edit.code_project_file.source` 或 `.path`（改名不会自动改 import，要一起改引用它的文件） |
+| 用入口建素材 | `create_items` 实体 `video_edit.code_material`，属性 `name` 与 `video_edit.code_material.project_entry`（如 `entries/01-opening/window.ts`），不给 files/source；用当前 HEAD 解析入口的依赖闭包 |
+| 升级素材 | `upgrade_video_edit_code_materials({ documentRef, materialRefs?, commit? })`：闭包变了的素材建新版本、改指正在用旧版本的片段；默认全部工程型素材、HEAD。只想要某个素材的新版本也可 `create_items` `video_edit.code_version`（`video_edit.code_version.definition_id` + 可选 `video_edit.code_version.project_commit`） |
+| 提交外部改动 | `commit_video_edit_code_project({ documentRef, message })` |
+
+一次 `change_application_entities` 里对工程文件的全部改动只产生一次提交，`summary` 就是提交信息；用回执的 `undoRef` 撤销会追加一次恢复提交，不改写历史。同一事务里先写文件、再用入口建素材即可拿到新 HEAD。写入前发现同一文件有未提交的外部改动会拒绝并点名文件：先读 `changes`，和用户确认后提交，再继续。
+
 ## 开工与接手清单
 
 1. 读 `README.md`、`project.json`，列工程树，看 `film/<film>/film.ts` 里已经有哪些段。
