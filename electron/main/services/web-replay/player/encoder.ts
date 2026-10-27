@@ -12,11 +12,15 @@ function probeNvenc(ffmpeg: string): Promise<boolean> {
   return nvencProbe
 }
 
+/** 先找好 ffmpeg、试过 NVENC：留到第一帧再做会把重演的帧时钟拖后。 */
+export async function prepareFrameEncoder(): Promise<void> { await probeNvenc(await loadFfmpegPath()) }
+
 /** Raw BGRA frames in, H.264 MP4 out. Width and height are rounded down to even numbers. */
 export class FrameEncoder {
   private process: ChildProcessWithoutNullStreams | null = null
   private exit: Promise<void> | null = null
   private stderr = ''
+  private finished = false
   frames = 0
   sourceWidth = 0
   sourceHeight = 0
@@ -43,6 +47,8 @@ export class FrameEncoder {
       ...crop, ...codec, '-movflags', '+faststart', this.output,
     ])
     child.stderr.on('data', chunk => { this.stderr = (this.stderr + String(chunk)).slice(-4000) })
+    // 编码器中途退出（含 abort）后管道写入会报 EPIPE；结果由退出码报告，这里只防止未处理的错误事件。
+    child.stdin.on('error', error => { this.stderr = (this.stderr + String(error)).slice(-4000) })
     this.exit = new Promise((resolve, reject) => {
       child.on('error', reject)
       child.on('close', code => (code === 0 ? resolve() : reject(new Error(`视频编码失败（${code}）：${this.stderr.trim()}`))))
@@ -61,7 +67,17 @@ export class FrameEncoder {
   async finish(): Promise<void> {
     this.process?.stdin.end()
     await this.exit
+    this.finished = true
   }
 
-  abort(): void { this.process?.kill() }
+  /** 停掉编码并等进程放开输出文件。返回 true 表示输出只写了一半，调用方应删掉它。 */
+  async abort(): Promise<boolean> {
+    const child = this.process
+    if (!child || this.finished) return false
+    child.kill()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    await Promise.race([this.exit?.catch(() => undefined), new Promise(resolve => { timer = setTimeout(resolve, 5_000) })])
+    clearTimeout(timer)
+    return true
+  }
 }

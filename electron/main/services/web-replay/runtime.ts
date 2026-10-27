@@ -6,7 +6,9 @@ import type { WebRecordingManifest } from '../../../../src/core/webReplay/schema
 import type { WebRecordingBackupOptions, WebRecordingDestination, WebRecordingImportRequest, WebRecordingSummary, WebReplayReadRequest, WebReplayReadResult, WebReplayRenderProgress, WebReplayRenderRequest, WebReplayRenderResult, WebReplayServerState } from '../../../../src/platform/contracts/webReplay'
 import { createMainLogger } from '../logging'
 import { BACKUP_VIDEO_FILE, WebRecordingBackupVideo, BACKUP_AUDIO_DIRECTORY, mixWebRecordingBackupAudio } from './backupVideo'
-import { WebRecordingPlayer } from './player/player'
+import { WebRecordingPlayer, type ReplayOptions } from './player/player'
+import { renderAligned, WebReplayMisalignedError } from './player/drift'
+import { ReplayRenderQueue } from './renderQueue'
 import { WEB_REPLAY_PORT, WebReplayServer } from './server'
 import { webRecordingsRoot, WebRecordingStore } from './store'
 import { forgetActiveWebRecording, listWebRecordingLocations, rememberActiveWebRecording, resolveWebRecordingDirectory, resolveWebRecordingLocation, webRecordingIdTaken } from './locations'
@@ -319,20 +321,47 @@ export async function revealWebRecording(recordingId: string, file?: string): Pr
 }
 
 const rendering = new Set<string>()
+/** 同一时间只重演一段：几段同时渲染会抢 CPU 与编码器，取帧跟不上，画面就比录制时间超前。 */
+const renderQueue = new ReplayRenderQueue()
 export async function renderWebRecording(request: WebReplayRenderRequest, signal?: AbortSignal, onProgress?: (progress: WebReplayRenderProgress) => void): Promise<WebReplayRenderResult> {
-  if (rendering.has(request.recordingId)) throw new Error('这段网页录制正在重演，请等待完成')
-  rendering.add(request.recordingId)
+  const recordingId = request.recordingId
+  if (rendering.has(recordingId)) throw new Error('这段网页录制正在重演，请等待完成')
+  rendering.add(recordingId)
   try {
-    const directory = await resolveWebRecordingDirectory(request.recordingId)
+    const directory = await resolveWebRecordingDirectory(recordingId)
+    const queuedAt = Date.now()
+    return await renderQueue.run(() => renderAlignedReplay(request, directory, Date.now() - queuedAt, signal, onProgress), {
+      signal,
+      onQueued: ahead => logger.info('网页重演排队，等前面的重演结束', { event: 'web_replay.replay.queued', context: { recordingId, ahead, textOnly: request.textOnly === true } }),
+      onCancelled: () => logger.info('排队中的网页重演已取消', { event: 'web_replay.replay.queue_cancelled', context: { recordingId, waitedMs: Date.now() - queuedAt } }),
+    })
+  } finally { rendering.delete(recordingId) }
+}
+
+/** 画面和录制时间错位时放慢重演（renderAligned），放慢到上限仍错位就报错，不把错位的结果当成功。 */
+async function renderAlignedReplay(request: WebReplayRenderRequest, directory: string, waitedMs: number, signal?: AbortSignal, onProgress?: (progress: WebReplayRenderProgress) => void): Promise<WebReplayRenderResult> {
+  const recordingId = request.recordingId
+  const textTrack = path.join(directory, TEXT_TRACK_FILE)
+  let options: ReplayOptions
+  if (request.textOnly) {
+    logger.info('开始网页重演文字轨', { event: 'web_replay.replay.text_start', context: { recordingId, waitedMs } })
+    options = { output: textTrack, fps: request.fps ?? 30, pointer: false, video: false, textTrack, boxSelectors: request.boxSelectors, signal, onFrame: onProgress ? progress => onProgress({ recordingId, progress, frame: '' }) : undefined }
+  } else {
     // 干净画面（不画鼠标）的重演以 .clean.mp4 结尾：导入剪辑据此决定重画整个鼠标，还是只补点击。
-    const textTrack = path.join(directory, TEXT_TRACK_FILE)
-    if (request.textOnly) {
-      logger.info('开始网页重演文字轨', { event: 'web_replay.replay.text_start', context: { recordingId: request.recordingId } })
-      return await WebRecordingPlayer.open(directory).render({ output: textTrack, fps: request.fps ?? 30, pointer: false, video: false, textTrack, boxSelectors: request.boxSelectors, signal, onFrame: onProgress ? progress => onProgress({ recordingId: request.recordingId, progress, frame: '' }) : undefined })
-    }
     const output = request.output ?? path.join(directory, `replay-${new Date().toISOString().replace(/[:.]/g, '-')}${request.pointer === false ? REPLAY_CLEAN_SUFFIX : '.mp4'}`)
     await fs.mkdir(path.dirname(output), { recursive: true })
-    logger.info('开始网页重演', { event: 'web_replay.replay.start', context: { recordingId: request.recordingId, output } })
-    return await WebRecordingPlayer.open(directory).render({ output, fps: request.fps, pointer: request.pointer !== false, longEdge: request.longEdge, textTrack, boxSelectors: request.boxSelectors, signal, onFrame: onProgress ? (progress, frame) => onProgress({ recordingId: request.recordingId, progress, frame }) : undefined })
-  } finally { rendering.delete(request.recordingId) }
+    logger.info('开始网页重演', { event: 'web_replay.replay.start', context: { recordingId, output, waitedMs } })
+    options = { output, fps: request.fps, pointer: request.pointer !== false, longEdge: request.longEdge, textTrack, boxSelectors: request.boxSelectors, signal, onFrame: onProgress ? (progress, frame) => onProgress({ recordingId, progress, frame }) : undefined }
+  }
+  try {
+    const { result, retries } = await renderAligned(timeScale => WebRecordingPlayer.open(directory).render(timeScale ? { ...options, timeScale } : options), {
+      signal,
+      onRetry: (failure, nextTimeScale, attempt) => logger.warn('网页重演画面和录制时间错位，放慢后重演', { event: 'web_replay.replay.drift_retry', context: { recordingId, attempt, timeScale: failure.timeScale, nextTimeScale, ...failure.drift } }),
+    })
+    if (retries.length) result.issues.push({ t: 0, kind: 'warning', message: `电脑较忙，前 ${retries.length} 遍重演画面跟不上录制的节奏，已自动放慢重演，这次结果和录制时间对得上` })
+    return result
+  } catch (error) {
+    if (error instanceof WebReplayMisalignedError) logger.error('网页重演放慢后仍和录制时间错位，没有保存结果', { event: 'web_replay.replay.drift_failed', context: { recordingId, timeScale: error.timeScale, ...error.drift } })
+    throw error
+  }
 }

@@ -1,6 +1,8 @@
+import crypto from 'node:crypto'
 import { createWriteStream, type WriteStream } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { replaceFileAtomically } from '../fs/atomic-file'
 
 /**
  * 网页录制的文字轨：重演时定时记下画面上看得见的文字与位置（CSS 像素），写在录制文件夹里。
@@ -43,12 +45,21 @@ export type TextItem = [text: string, x: number, y: number, width: number, heigh
 export interface TextSample { width: number; height: number; items: TextItem[] }
 type TextLine = { t: number; width: number; height: number; items: TextItem[] }
 
-/** 只在画面文字有变化时写一行；结束时补一行空白，标出最后一段的结束时间。 */
+/**
+ * 只在画面文字有变化时写一行；结束时补一行空白，标出最后一段的结束时间。
+ * 暂存后原子发布：失败、取消或判定错位时不覆盖上一次完整的文字轨。
+ */
 export class TextTrackWriter {
+  private readonly staged: string
   private readonly stream: WriteStream
+  private failure: Error | null = null
   private previous = ''
   private lastT = 0
-  constructor(readonly file: string) { this.stream = createWriteStream(file, { encoding: 'utf8' }) }
+  constructor(readonly file: string) {
+    this.staged = path.join(path.dirname(file), `.${path.basename(file)}.${crypto.randomUUID()}.tmp`)
+    this.stream = createWriteStream(this.staged, { encoding: 'utf8', flags: 'wx' })
+    this.stream.on('error', error => { this.failure ??= error })
+  }
   write(t: number, sample: TextSample): void {
     this.lastT = t
     const key = JSON.stringify([sample.width, sample.height, sample.items])
@@ -59,8 +70,13 @@ export class TextTrackWriter {
   async close(endT = this.lastT): Promise<void> {
     this.stream.write(`${JSON.stringify({ t: endT, width: 0, height: 0, items: [] } satisfies TextLine)}\n`)
     await new Promise<void>((resolve, reject) => this.stream.end((error?: Error | null) => error ? reject(error) : resolve()))
+    if (this.failure) throw this.failure
+    await replaceFileAtomically(this.staged, this.file)
   }
-  abort(): void { this.stream.destroy() }
+  async abort(): Promise<void> {
+    if (!this.stream.closed) await new Promise<void>(resolve => { this.stream.once('close', () => resolve()); this.stream.destroy() })
+    await fs.rm(this.staged, { force: true })
+  }
 }
 
 export interface TextAppearance {

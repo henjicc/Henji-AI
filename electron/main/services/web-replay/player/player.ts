@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import { BrowserWindow, ipcMain, session as electronSession, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
+import fs from 'node:fs/promises'
 import path from 'node:path'
 import { WebRecordingMatcher } from '../../../../../src/core/webReplay/matcher'
 import type { WebRecordingBehaviorEvent, WebRecordingData, WebRecordingManifest, WireBodyValue } from '../../../../../src/core/webReplay/schema'
@@ -8,8 +9,10 @@ import { REPLAY_CONTROL } from '../../../../../packages/web-replay-probe/src/rep
 import { DEFAULT_LOCATOR_OPTIONS } from '../../../../../packages/web-replay-probe/src/shared/locatorOptions'
 import { createMainLogger } from '../../logging'
 import { digestBase64, WebRecordingStore } from '../store'
-import { FrameEncoder } from './encoder'
+import { FrameEncoder, prepareFrameEncoder } from './encoder'
+import { DRIFT_PEAK_LIMIT_MS, ReplayDriftMeter, replayAligned, SAMPLE_STALE_LIMIT_MS, WebReplayDriftError } from './drift'
 import { InputDispatcher } from './input'
+import { ReplaySampler, timedSampleScript, type TimedSample } from './sampler'
 import { BOOTSTRAP_PATH, installReplaySite } from './site'
 import { TEXT_SAMPLE_INTERVAL_US, TEXT_SAMPLE_SCRIPT, TextTrackWriter, type TextSample } from '../textTrack'
 import { BOX_TRACK_FILE, boxSampleEveryFrames, boxSampleScript, BoxTrackWriter, type BoxSample } from '../boxTrack'
@@ -169,12 +172,29 @@ export class WebRecordingPlayer {
     const input = new InputDispatcher(contents, cdp, this.store, REPLAY_CONTROL)
     const timers: Array<ReturnType<typeof setTimeout>> = []
     let encoder: FrameEncoder | null = null
-    let lateFrames = 0
     const video = options.video !== false
+    const encoderReady = video ? prepareFrameEncoder() : Promise.resolve()
+    encoderReady.catch(() => undefined) // 在帧时钟开始前等它；先挂上处理，免得更早的失败变成未处理的拒绝
     const text = options.textTrack ? new TextTrackWriter(options.textTrack) : null
     const boxes = new BoxTrackWriter(path.join(this.store.directory, BOX_TRACK_FILE))
-    let boxSamples = 0, boxSampleMs = 0, boxSampleMaxMs = 0, boxFailures = 0
-    let textFailures = 0
+    // 采样在页面里同步执行，复杂选择器在 4K 下一次可达几十毫秒：不让它挡住取帧，慢了就跳过、太迟的舍弃。
+    const boxesTimed = timedSampleScript(boxesScript), textTimed = timedSampleScript(TEXT_SAMPLE_SCRIPT)
+    const boxSampler = new ReplaySampler<BoxSample>({
+      read: () => withTimeout(contents.executeJavaScript(boxesTimed, true) as Promise<TimedSample<BoxSample>>, 2_000, '读取界面元素位置超时'),
+      write: (t, sample) => boxes.write(t, sample),
+      staleAfterMs: SAMPLE_STALE_LIMIT_MS,
+      // 和文字轨一样：某一刻没取到只记一次警告，不让整段重演失败
+      onFailure: (error, failures) => { if (failures === 1) this.issue('warning', `界面元素位置轨有时刻没取到：${String(error)}`) },
+    })
+    const textSampler = text ? new ReplaySampler<TextSample>({
+      read: () => withTimeout(contents.executeJavaScript(textTimed, true) as Promise<TimedSample<TextSample>>, 2_000, '读取画面文字超时'),
+      write: (t, sample) => text.write(t, sample),
+      staleAfterMs: SAMPLE_STALE_LIMIT_MS,
+      onFailure: (error, failures) => { if (failures === 1) this.issue('warning', `文字轨有时刻没取到：${String(error)}`) },
+    }) : null
+    const samplers = textSampler ? [boxSampler, textSampler] : [boxSampler]
+    const meter = new ReplayDriftMeter(fps)
+    const drift = () => meter.summary({ samples: samplers.reduce((sum, s) => sum + s.stats.samples, 0), stale: samplers.reduce((sum, s) => sum + s.stats.stale, 0) })
     try {
       const stage = (name: string): void => logger.info('网页重演进度', { event: 'web_replay.replay.stage', context: { recordingId: this.manifest.id, stage: name } })
       stage('window')
@@ -199,6 +219,7 @@ export class WebRecordingPlayer {
       await withTimeout(contents.loadURL(`${origin}${BOOTSTRAP_PATH}`), 30_000, '重演引导页加载超时')
       stage('bootstrap-loaded')
       await withTimeout(bootstrapped, 30_000, '页面存储恢复超时')
+      await encoderReady
 
       const painted: { latest: Electron.NativeImage | null } = { latest: null }
       let lastGood: Buffer | null = null
@@ -229,24 +250,16 @@ export class WebRecordingPlayer {
       logger.info('开始采样界面元素位置轨', { event: 'web_replay.boxes.start', context: { recordingId: this.manifest.id, fps, scale, everyFrames: boxEvery, selectors: options.boxSelectors?.length ?? 0 } })
       for (let i = 0; i < frameCount; i += 1) {
         if (options.signal?.aborted) throw new Error('已取消重演')
+        // 已经明显错位就不必渲完再丢掉，早点让调用方放慢重来
+        if (meter.peakLeadMs > DRIFT_PEAK_LIMIT_MS) throw new WebReplayDriftError(scale, drift())
         const due = zeroMs + (i * 1000 * scale) / fps
         const wait = due - Date.now()
         if (wait > 0) await new Promise(resolve => setTimeout(resolve, wait))
-        else if (wait < -500 * scale / fps) lateFrames += 1
-        if (i % boxEvery === 0) {
-          const started = performance.now()
-          // 和文字轨一样：某一刻没取到只记一次警告，不让整段重演失败
-          try { await boxes.write(Math.round(i * 1e6 / fps), await withTimeout(contents.executeJavaScript(boxesScript, true) as Promise<BoxSample>, 2_000, '读取界面元素位置超时')) } catch (error) {
-            if (boxFailures++ === 0) this.issue('warning', `界面元素位置轨有时刻没取到：${String(error)}`)
-          }
-          const elapsed = performance.now() - started
-          boxSamples += 1; boxSampleMs += elapsed; boxSampleMaxMs = Math.max(boxSampleMaxMs, elapsed)
-        }
-        if (text && i % sampleEvery === 0) {
-          try { text.write(Math.round(i * 1e6 / fps), await withTimeout(contents.executeJavaScript(TEXT_SAMPLE_SCRIPT, true) as Promise<TextSample>, 2_000, '读取画面文字超时')) } catch (error) {
-            if (textFailures++ === 0) this.issue('warning', `文字轨有时刻没取到：${String(error)}`)
-          }
-        }
+        const t = Math.round(i * 1e6 / fps)
+        if (i % boxEvery === 0) boxSampler.request(t)
+        if (textSampler && i % sampleEvery === 0) textSampler.request(t)
+        // 这一帧取到的页面比它应在的录制时刻超前多少（录制时间）；取帧、编码与采样拖慢的都算在里面
+        meter.record((Date.now() - due) / scale)
         if (!video) { if (options.onFrame && i % Math.max(1, Math.round(fps / 5)) === 0) options.onFrame(i / frameCount, ''); continue }
         const frame = painted.latest
         if (!frame) continue
@@ -261,31 +274,42 @@ export class WebRecordingPlayer {
           encoder = new FrameEncoder(Math.min(width, Math.round(env.viewport.width * dpr)), Math.min(height, Math.round(env.viewport.height * dpr)), fps, options.output)
           await encoder.start(width, height)
           for (let k = 0; k < i; k += 1) await encoder.write(bitmap) // hold the first painted frame for the time before it
-          lateFrames = 0 // catching up after that hold only repeats the still first screen
+          meter.reset() // catching up after that hold only repeats the still first screen
         }
         // A frame of another size (window resize in flight) repeats the last good one so timing stays exact.
         if (width === encoder.sourceWidth && height === encoder.sourceHeight) lastGood = bitmap
         if (lastGood) await encoder.write(lastGood)
         if (options.onFrame && i % Math.max(1, Math.round(fps / 5)) === 0) options.onFrame(i / frameCount, `data:image/jpeg;base64,${frame.resize({ width: Math.min(1280, width) }).toJPEG(80).toString('base64')}`)
       }
+      await Promise.all(samplers.map(sampler => sampler.drain()))
+      const summary = drift()
+      // 错位的结果不能当成功：视频、文字轨、位置轨都不发布，交给调用方放慢重演
+      if (!replayAligned(summary)) throw new WebReplayDriftError(scale, summary)
       await text?.close(Math.round(frameCount * 1e6 / fps))
       await boxes.close(Math.round(frameCount * 1e6 / fps))
-      logger.info('界面元素位置轨已保存', { event: 'web_replay.boxes.completed', context: { recordingId: this.manifest.id, everyFrames: boxEvery, samples: boxSamples, failures: boxFailures, sampleMs: boxSampleMs, sampleMaxMs: boxSampleMaxMs, lateFrames } })
+      const box = boxSampler.stats
+      logger.info('界面元素位置轨已保存', { event: 'web_replay.boxes.completed', context: { recordingId: this.manifest.id, everyFrames: boxEvery, scale, requested: box.requested, samples: box.samples, skipped: box.skipped, stale: box.stale, failures: box.failures, sampleMs: Math.round(box.totalMs), sampleMaxMs: box.maxMs, lateFrames: summary.lateFrames, peakLeadMs: summary.peakLeadMs, meanLeadMs: summary.meanLeadMs } })
+      if (summary.staleSamples > 0) this.issue('warning', `界面文字与元素位置有 ${summary.staleSamples} 个时刻取得太慢，已舍弃，那几处的轨会稀一些`)
       if (!video) {
         logger.info('网页重演文字轨完成', { event: 'web_replay.replay.text_completed', context: { recordingId: this.manifest.id, issues: this.issues.length } })
         return { output: options.textTrack ?? '', frames: frameCount, width: Math.round(env.viewport.width), height: Math.round(env.viewport.height), durationMs: totalMs, issues: this.issues, looseMatches: this.loose, unusedCalls: this.matcher.unused().length, locatorMisses: input.misses }
       }
       if (!encoder) throw new Error('重演窗口没有产生任何画面')
       await encoder.finish()
-      if (lateFrames > 0) this.issue('warning', `有 ${lateFrames} 帧没赶上实时，画面可能有轻微卡顿`)
+      if (summary.lateFrames > 0) this.issue('warning', `有 ${summary.lateFrames} 帧没赶上实时（画面最多比录制时间超前约 ${(summary.peakLeadMs / 1000).toFixed(1)} 秒），可能有轻微卡顿`)
       const unused = this.matcher.unused().length
-      logger.info('网页重演完成', { event: 'web_replay.replay.completed', context: { recordingId: this.manifest.id, frames: encoder.frames, issues: this.issues.length, loose: this.loose, unused } })
+      logger.info('网页重演完成', { event: 'web_replay.replay.completed', context: { recordingId: this.manifest.id, frames: encoder.frames, scale, issues: this.issues.length, loose: this.loose, unused, peakLeadMs: summary.peakLeadMs, meanLeadMs: summary.meanLeadMs } })
       return { output: options.output, frames: encoder.frames, width: encoder.width, height: encoder.height, durationMs: totalMs, issues: this.issues, looseMatches: this.loose, unusedCalls: unused, locatorMisses: input.misses }
     } catch (error) {
-      encoder?.abort()
-      text?.abort()
+      // 先让还在跑的采样停下，免得它在暂存轨清掉之后又写进去
+      samplers.forEach(sampler => sampler.close())
+      await Promise.all(samplers.map(sampler => sampler.drain()))
+      // 写了一半的视频会被当成最新的重演视频拿去用，删掉
+      if (await encoder?.abort()) await fs.rm(options.output, { force: true }).catch(cleanupError => logger.warn('写了一半的重演视频没能删除', { event: 'web_replay.replay.cleanup_failed', context: { output: options.output }, error: String(cleanupError) }))
+      await text?.abort().catch(cleanupError => logger.warn('文字轨暂存清理失败', { event: 'web_replay.text.cleanup_failed', error: String(cleanupError) }))
       await boxes.abort().catch(cleanupError => logger.warn('位置轨暂存清理失败', { event: 'web_replay.boxes.cleanup_failed', error: String(cleanupError) }))
-      logger.error('网页重演失败', { event: 'web_replay.replay.failed', context: { recordingId: this.manifest?.id }, error: String(error) })
+      if (error instanceof WebReplayDriftError) logger.warn('网页重演画面和录制时间错位，结果已丢弃', { event: 'web_replay.replay.drift_detected', context: { recordingId: this.manifest?.id, scale, ...error.drift } })
+      else logger.error('网页重演失败', { event: 'web_replay.replay.failed', context: { recordingId: this.manifest?.id }, error: String(error) })
       throw error
     } finally {
       timers.forEach(clearTimeout)
