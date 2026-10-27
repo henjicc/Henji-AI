@@ -7,6 +7,7 @@ import type { DocumentKindRegistry } from '../../../../src/core/documents/kinds'
 import type { DocumentReadResult } from '../../../../src/core/documents/types'
 import { pathKey, isPathInside } from '../../../../src/core/storage/pathSyntax'
 import { parseGitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
+import { PersistenceError } from '../../../../src/core/persistence/migrations'
 import { backupBeforePersistenceUpgrade } from '../persistence/file-upgrade'
 import { moveDirectoryNoOverwrite } from '../fs/no-overwrite'
 import { CodeGitRepository, codeDigest, type GitCodeWrite } from './code-git'
@@ -153,7 +154,11 @@ export async function migrateProjectCodeStorage(projectId: string, workspace: Do
       for (const row of workspace.catalog.listDocuments({ includeDrafts: true, includeMissing: true })) {
         if (kinds.get(row.kind)?.storage !== 'json') continue
         try { for (const file of references((await repository.read({ id: row.id, path: row.path })).content)) { const key = pathKey(workspace.style, file.location); if (key) retained.add(key) } }
-        catch (error) { inspectable = false; logger.warn('其他文档无法检查，保留旧代码文件夹', { event: 'documents.code.migrate.cleanup_deferred', error }) }
+        catch (error) {
+          // 早于最低可读版本的文档任何当前版本都打不开，用不到这些源码；旧文件夹只是移进备份区，仍可找回。
+          if (error instanceof PersistenceError && error.code === 'unsupported-version') { logger.info('跳过无法打开的旧格式文档', { event: 'documents.code.migrate.cleanup_skip_unreadable', context: { documentId: row.id, formatId: error.formatId, fromVersion: error.fromVersion } }); continue }
+          inspectable = false; logger.warn('其他文档无法检查，保留旧代码文件夹', { event: 'documents.code.migrate.cleanup_deferred', error })
+        }
       }
       let archivedFolders = 0
       for (const folder of folders) {

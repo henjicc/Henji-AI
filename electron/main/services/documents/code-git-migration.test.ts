@@ -7,6 +7,7 @@ import { createTestEnvironment, type TestEnvironment } from './documents.test-su
 import { CodeGitRepository, codeDigest } from './code-git'
 import { packageComponentSource } from '../../../../src/core/videoEdit/codeMaterial/components'
 import { parseGitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
+import { PersistenceError } from '../../../../src/core/persistence/migrations'
 
 let env: TestEnvironment
 beforeEach(() => { env = createTestEnvironment() })
@@ -113,4 +114,16 @@ it('提交前进程中断留下部分工作区与索引，重跑恢复；索引�
   await git.add({ fs, dir: root, filepath })
   expect(await service.migrateCodeStorage(project.id)).toMatchObject({ importedVersions: 3, archivedFolders: 2 })
   expect(await fsp.readFile(path.join(root, filepath), 'utf8')).toBe('export const title=3')
+})
+
+it('别处有打不开的旧格式文档时照常归档；读不了的其他原因仍延后归档', async () => {
+  const { service, project } = await legacy()
+  const otherProject = await service.createProject({ name: '旧格式' })
+  const old = await service.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: otherProject.id }, name: '开发期旧剪辑' })
+  const read = env.services.repository.read.bind(env.services.repository)
+  const failure = { error: new PersistenceError('corrupt', 'document.video_edit', '剪辑', 1, 1) }
+  vi.spyOn(env.services.repository, 'read').mockImplementation(async target => { if (target.id === old.meta.id) throw failure.error; return read(target) })
+  expect(await service.migrateCodeStorage(project.id)).toMatchObject({ archivedFolders: 0, retainedFolders: 2 })
+  failure.error = new PersistenceError('unsupported-version', 'document.video_edit', '剪辑', 10, 11)
+  expect(await service.migrateCodeStorage(project.id)).toMatchObject({ importedVersions: 0, archivedFolders: 2 })
 })
