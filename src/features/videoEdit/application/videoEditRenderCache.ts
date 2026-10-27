@@ -11,7 +11,7 @@ import { getPlatform } from '@/platform/runtime'
 import { fontLibrarySnapshot } from '@/platform/fonts'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 import { videoEditExportVideoOptions } from '../engine/videoEditExportEncoder'
-import { findActiveVideoEditSequence, getActiveVideoEditSequence, listVideoEditInstances, publishVideoEdit, requireVideoEditInstance, type VideoEditInstance } from './videoEditService'
+import { findActiveVideoEditSequence, getActiveVideoEditSequence, listVideoEditInstances, publishVideoEdit, requireVideoEditInstance, subscribeVideoEditView, type VideoEditInstance } from './videoEditService'
 import { videoEditTrackResults, waitVideoEditTracking, subscribeVideoEditTracking } from './videoEditTracking'
 import { videoEditSmartRegionSegments, waitVideoEditSmartRegions, subscribeVideoEditSmartRegions } from './videoEditSmartRegions'
 import { videoEditMeasuredRenderState, type VideoEditRenderPerformance } from '@/core/videoEdit/renderPerformance'
@@ -28,6 +28,10 @@ const logger = createLogger('features.videoEdit.renderCache')
 /** 自动预渲染：编辑停下这么久、且没有播放、拖动或导出时才开始。 */
 const AUTO_RENDER_IDLE_MS = 3000
 const AUTO_RENDER_RETRY_MS = 30_000
+/** 起播、拖动、跳转或导出让出后，节目这么久没有新的操作才继续预渲染（与编辑后的空闲等待一致）。 */
+const RENDER_RESUME_IDLE_MS = AUTO_RENDER_IDLE_MS
+/** 订阅之外的兜底轮询：不经视图发布的状态变化也能及时让出。 */
+const PROGRAM_ACTIVITY_POLL_MS = 100
 
 export interface VideoEditRenderPreference { autoRender: boolean }
 const preferenceSchema = z.object({ autoRender: z.boolean() }).strict()
@@ -254,7 +258,8 @@ export interface VideoEditRenderCacheResult { renderedWindows: number; readyFram
 
 /**
  * needed 只补实测掉帧和未实测但预计吃力的段；all 是 PR“渲染入点到出点”，包括实时段，已就绪跳过。
- * 节目播放时暂停渲染，不与播放争抢显卡；可取消，取消时只保留已完成的窗口。
+ * 节目起播、拖动、跳转或导出时立即取消在途这一帧并释放会话，空闲后从该窗口起点重来，不与播放争抢显卡与解码；
+ * 可取消，取消时只保留已完成的窗口。
  */
 export async function renderVideoEditRenderCache(projectId: string, request: VideoEditRenderCacheRequest, signal?: AbortSignal, onStarted?: (plan: { pendingWindows: number; requestedFrames: number; readyFrames: number }) => void): Promise<VideoEditRenderCacheResult> {
   const instance = requireVideoEditInstance(projectId)
@@ -279,50 +284,60 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
   onStarted?.({ pendingWindows: pending.length, requestedFrames: windows.reduce((sum, window) => sum + window.endFrame - window.startFrame, 0), readyFrames: windows.filter(window => readyEntry(cache, window, encoding.profile)).reduce((sum, window) => sum + window.endFrame - window.startFrame, 0) })
   const platform = getPlatform()
   let session: VideoEditRenderSession | undefined
+  /** 让出时释放、尚未关完的会话；重开前等它关闭，新旧会话不同时占用解码。 */
+  let closing: Promise<void> | undefined
+  let smartRegions: Awaited<ReturnType<typeof waitVideoEditSmartRegions>> | undefined
+  /** 正在渲染的窗口：节目一有操作就取消它并释放会话，空闲后从该窗口起点重来（已完成的窗口不重做）。 */
+  let attempt: { controller: AbortController; window: VideoEditRenderWindow; frame: number } | undefined
+  let yielded: { at: number; startFrame: number } | undefined
   const started = performance.now()
+  const activity = watchProgramActivity(reason => {
+    if (!attempt || attempt.controller.signal.aborted) return
+    attempt.controller.abort(new DOMException('节目开始播放，预渲染让出。', 'AbortError'))
+    yielded = { at: performance.now(), startFrame: attempt.window.startFrame }
+    const released = session; session = undefined
+    if (released) closing = released.dispose().catch(error => logger.warn('让出播放时预渲染会话未正常关闭', { event: 'video_edit.render_cache.release_failed', error, context: { projectId } }))
+    logger.info('节目有操作，取消正在预渲染的画面并释放会话', { event: 'video_edit.render_cache.preempted', context: { projectId, sequenceId: composition.id, reason, startFrame: attempt.window.startFrame, endFrame: attempt.window.endFrame, frame: attempt.frame, windows: job.done } })
+  })
   logger.info('开始预渲染', { event: 'video_edit.render_cache.start', context: { projectId, sequenceId: composition.id, windows: pending.length, auto: job.auto, codec: encoding.codec, bitrateMbps: encoding.bitrateMbps } })
   try {
     await pruneEntries(instance, cache)
     if (pending.length) {
-      const smartRegions = await waitVideoEditSmartRegions(composition, composition, job.controller.signal)
+      smartRegions = await waitVideoEditSmartRegions(composition, composition, job.controller.signal)
       await waitVideoEditTracking(composition, composition, job.controller.signal)
       // 分析刚完成会改变指纹；编码必须使用实际交给会话的结果身份，不能把新画面写到旧键。
       const refreshed = new Map(videoEditRenderCacheWindows(composition).map(window => [window.startFrame, window]))
       windows = windows.map(window => refreshed.get(window.startFrame)!)
       pending = [...new Map(pending.map(window => refreshed.get(window.startFrame)!).filter(window => !readyEntry(cache, window, encoding.profile)).map(window => [window.key, window])).values()]
       job.total = pending.length
-      session = new VideoEditRenderSession({ ...composition })
-      session.setSmartRegions(smartRegions); session.setTracks(videoEditTrackResults(composition))
     }
     for (const window of pending) {
-      job.controller.signal.throwIfAborted()
-      assertOwner()
-      job.current = window.key; publishVideoEdit()
-      const path = await platform.mediaCache.renderBegin({ projectId, windowKey: window.key, profile: encoding.profile })
-      const output = new Output({ format: new Mp4OutputFormat(), target: new StreamTarget(new WritableStream({ write: async chunk => { await platform.system.fs.writeFile(path, chunk.data, { position: chunk.position }) } }), { chunked: true, chunkSize: 4 * 1024 * 1024 }) })
-      try {
-        const video = new CanvasSource(session!.canvas, videoEditExportVideoOptions({ codec: encoding.codec, width: composition.width, height: composition.height, fps: composition.fps, videoBitrateMbps: encoding.bitrateMbps, bitrateMode: encoding.bitrateMode, encoderPreference: encoding.encoderPreference, keyframeInterval: encoding.keyframeInterval }))
-        output.addVideoTrack(video, { frameRate: composition.fps })
-        await output.start()
-        for (let frame = window.startFrame; frame < window.endFrame; frame++) {
-          // 每帧核对原实例；重开后的新实例不能让旧任务继续占用同一显卡。
-          assertOwner()
-          while (listVideoEditInstances().some(value => value.playing || value.scrubbing || value.busy)) {
-            await new Promise(resolve => setTimeout(resolve, 100))
-            assertOwner()
-          }
-          job.controller.signal.throwIfAborted()
-          await session!.render(frame, true)
-          await video.add((frame - window.startFrame) / composition.fps, 1 / composition.fps)
+      for (;;) {
+        await waitProgramIdle()
+        if (closing) { await closing; closing = undefined }
+        // 等会话关闭期间又有操作就重新等空闲；从这里到登记 attempt 都是同步的，中途起播不会漏掉。
+        if (activity.idleFor() < RENDER_RESUME_IDLE_MS) continue
+        if (yielded) {
+          logger.info('节目空闲，继续预渲染', { event: 'video_edit.render_cache.resumed', context: { projectId, sequenceId: composition.id, startFrame: yielded.startFrame, pausedMs: Math.round(performance.now() - yielded.at), windows: job.done } })
+          yielded = undefined
         }
-        await output.finalize()
-        assertOwner()
-        const stored = await platform.mediaCache.renderCommit({ temporaryPath: path, entry: { projectId, sequenceId: composition.id, windowKey: window.key, profile: encoding.profile, startFrame: window.startFrame, endFrame: window.endFrame, width: composition.width, height: composition.height, fps: composition.fps } })
-        cache.entries.set(window.key, stored)
-      } catch (error) {
-        await output.cancel().catch(() => undefined)
-        await platform.mediaCache.renderDiscard(path).catch(() => undefined)
-        throw error
+        session ??= openSession()
+        const controller = new AbortController()
+        const follow = (): void => controller.abort(job.controller.signal.reason)
+        job.controller.signal.addEventListener('abort', follow, { once: true })
+        attempt = { controller, window, frame: window.startFrame }
+        try {
+          activity.check()
+          await renderWindow(window, session, controller.signal)
+          break
+        } catch (error) {
+          // 只有让出播放才重来同一窗口；取消、关闭原剪辑和真实失败照常结束任务。
+          if (job.controller.signal.aborted || !controller.signal.aborted) throw error
+          job.current = undefined; publishVideoEdit()
+        } finally {
+          attempt = undefined
+          job.controller.signal.removeEventListener('abort', follow)
+        }
       }
       job.done++; job.current = undefined; publishVideoEdit()
     }
@@ -336,9 +351,53 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
     logger.warn('预渲染失败', { event: 'video_edit.render_cache.failed', error, context: { projectId, sequenceId: composition.id, windows: job.done } })
     throw error
   } finally {
+    activity.dispose()
     signal?.removeEventListener('abort', abort)
     jobs.delete(instance); publishVideoEdit()
+    await closing
     await session?.dispose()
+  }
+  function openSession(): VideoEditRenderSession {
+    const value = new VideoEditRenderSession({ ...composition })
+    value.setSmartRegions(smartRegions!); value.setTracks(videoEditTrackResults(composition))
+    return value
+  }
+  /** 一个窗口完整编码后才登记；中途让出、取消或失败都丢弃临时文件，缓存里不会有半成品。 */
+  async function renderWindow(window: VideoEditRenderWindow, renderer: VideoEditRenderSession, attemptSignal: AbortSignal): Promise<void> {
+    job.current = window.key; publishVideoEdit()
+    const path = await platform.mediaCache.renderBegin({ projectId, windowKey: window.key, profile: encoding.profile })
+    const output = new Output({ format: new Mp4OutputFormat(), target: new StreamTarget(new WritableStream({ write: async chunk => { await platform.system.fs.writeFile(path, chunk.data, { position: chunk.position }) } }), { chunked: true, chunkSize: 4 * 1024 * 1024 }) })
+    try {
+      const video = new CanvasSource(renderer.canvas, videoEditExportVideoOptions({ codec: encoding.codec, width: composition.width, height: composition.height, fps: composition.fps, videoBitrateMbps: encoding.bitrateMbps, bitrateMode: encoding.bitrateMode, encoderPreference: encoding.encoderPreference, keyframeInterval: encoding.keyframeInterval }))
+      output.addVideoTrack(video, { frameRate: composition.fps })
+      await output.start()
+      for (let frame = window.startFrame; frame < window.endFrame; frame++) {
+        // 每帧核对原实例；重开后的新实例不能让旧任务继续占用同一显卡。
+        assertOwner()
+        attemptSignal.throwIfAborted()
+        if (attempt) attempt.frame = frame
+        // 让出时会话随即释放，不再等在途这一帧算完。
+        await abortable(renderer.render(frame, true), attemptSignal)
+        await video.add((frame - window.startFrame) / composition.fps, 1 / composition.fps)
+      }
+      await output.finalize()
+      assertOwner()
+      const stored = await platform.mediaCache.renderCommit({ temporaryPath: path, entry: { projectId, sequenceId: composition.id, windowKey: window.key, profile: encoding.profile, startFrame: window.startFrame, endFrame: window.endFrame, width: composition.width, height: composition.height, fps: composition.fps } })
+      cache.entries.set(window.key, stored)
+    } catch (error) {
+      await output.cancel().catch(() => undefined)
+      await platform.mediaCache.renderDiscard(path).catch(() => undefined)
+      throw error
+    }
+  }
+  async function waitProgramIdle(): Promise<void> {
+    assertOwner()
+    activity.check()
+    while (activity.idleFor() < RENDER_RESUME_IDLE_MS) {
+      await new Promise(resolve => setTimeout(resolve, Math.min(PROGRAM_ACTIVITY_POLL_MS, Math.max(1, RENDER_RESUME_IDLE_MS - activity.idleFor()))))
+      assertOwner()
+      activity.check()
+    }
   }
   function assertOwner(): void {
     if (!listVideoEditInstances().includes(instance)) job.controller.abort(new DOMException('原剪辑已关闭，预渲染已停止。', 'AbortError'))
@@ -348,6 +407,40 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
     return { renderedWindows: job.done, cancelled, requestedFrames: windows.reduce((sum, window) => sum + window.endFrame - window.startFrame, 0),
       readyFrames: windows.filter(window => readyEntry(cache, window, encoding.profile)).reduce((sum, window) => sum + window.endFrame - window.startFrame, 0) }
   }
+}
+
+type ProgramActivity = 'playing' | 'scrubbing' | 'busy' | 'seek'
+/**
+ * 节目的播放、拖动、跳转与导出：视图一发布就判断（起播立即让出），另有短轮询兜底。
+ * idleFor 是距最近一次操作的时长，从未有操作时为无穷大。
+ */
+function watchProgramActivity(onActive: (reason: ProgramActivity) => void): { check: () => ProgramActivity | undefined; idleFor: () => number; dispose: () => void } {
+  const frames = new WeakMap<VideoEditInstance, number>()
+  for (const instance of listVideoEditInstances()) frames.set(instance, instance.frame)
+  let lastActiveAt = Number.NEGATIVE_INFINITY
+  const check = (): ProgramActivity | undefined => {
+    let reason: ProgramActivity | undefined
+    for (const instance of listVideoEditInstances()) {
+      const seek = frames.has(instance) && frames.get(instance) !== instance.frame
+      frames.set(instance, instance.frame)
+      reason ??= instance.playing ? 'playing' : instance.scrubbing ? 'scrubbing' : instance.busy ? 'busy' : seek ? 'seek' : undefined
+    }
+    if (reason) { lastActiveAt = performance.now(); onActive(reason) }
+    return reason
+  }
+  const unsubscribe = subscribeVideoEditView(() => { check() })
+  const timer = setInterval(check, PROGRAM_ACTIVITY_POLL_MS)
+  return { check, idleFor: () => performance.now() - lastActiveAt, dispose: () => { unsubscribe(); clearInterval(timer) } }
+}
+/** 在途请求随信号立即结束；原请求迟到的结果被吞掉，不成为未处理的拒绝。 */
+function abortable<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  work.catch(() => undefined)
+  if (signal.aborted) return Promise.reject(signal.reason)
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(signal.reason)
+    signal.addEventListener('abort', onAbort, { once: true })
+    work.then(value => { signal.removeEventListener('abort', onAbort); resolve(value) }, error => { signal.removeEventListener('abort', onAbort); reject(error) })
+  })
 }
 
 /** 删除该剪辑的全部预览文件（例如磁盘不够时）。 */
