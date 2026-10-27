@@ -1,4 +1,5 @@
 // @vitest-environment node
+import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -17,6 +18,10 @@ vi.mock('../assistant/skills/registry', async importOriginal => {
     loadAssistantSkill: (name: string, relativePath?: string) => actual.loadAssistantSkillFrom(dirs(), name, relativePath),
   }
 })
+
+// 期望的参考清单直接取技能目录：要证明的是“目录里有的都能列出并读到”，增删参考文件不必改测试。
+const builtinReferences = (skill: string) => fs.readdirSync(path.resolve('resources/assistant-skills', skill, 'references'))
+  .filter(name => name.endsWith('.md')).map(name => `references/${name}`).sort((left, right) => left.localeCompare(right))
 
 const closers: Array<() => Promise<void>> = []
 afterEach(async () => { for (const close of closers.reverse()) await close(); closers.length = 0; state.disabled = [] })
@@ -67,18 +72,8 @@ describe('外部 MCP 通过普通工具发现并读取运行时技能', () => {
     const main = await f.call({ name: 'video-edit-code-creation', reason: '为剪辑写新的代码素材' })
     expect(main.isError, main.text).toBe(false)
     expect(main.body.data).toMatchObject({ name: 'video-edit-code-creation', path: null, source: 'builtin' })
-    const referencePaths = [
-      'references/annotations.md', 'references/approach.md', 'references/attention.md', 'references/author-api-media.md', 'references/author-api.md', 'references/author-shaders.md',
-      'references/author-text-motion.md', 'references/brief-concept.md', 'references/camera.md', 'references/color-texture.md',
-      'references/examples.md', 'references/layout.md', 'references/motion.md', 'references/multifile-components.md',
-      'references/parameter-types.md', 'references/parameters-curves.md', 'references/parametric.md', 'references/performance.md', 'references/preferences.md',
-      'references/recipes-3d.md', 'references/recipes-captions.md', 'references/recipes-glass-lines.md', 'references/recipes-particles.md', 'references/recipes-text-data.md', 'references/recipes-text-words.md', 'references/recipes-text.md',
-      'references/review-ai.md', 'references/review.md',
-      'references/shader-components-filters.md', 'references/shader-components-shapes-2.md', 'references/shader-components-shapes.md',
-      'references/shader-components-stylize.md', 'references/shader-components-textures-2.md', 'references/shader-components-textures.md',
-      'references/structure.md', 'references/style-kit.md', 'references/style-sample.md', 'references/styles.md', 'references/templates.md',
-      'references/timeline-check.md', 'references/type.md',
-    ]
+    const referencePaths = builtinReferences('video-edit-code-creation')
+    expect(referencePaths).toContain('references/author-api.md')
     expect(main.body.data!.referencePaths).toEqual(referencePaths)
     expect(main.body.data!.content).toContain('trust=builtin')
     // 主文件只做路由，作者接口细节不随首轮正文下发。
@@ -106,10 +101,8 @@ describe('外部 MCP 通过普通工具发现并读取运行时技能', () => {
     expect(main.body.data).toMatchObject({ name: 'video-edit-workbench', path: null, source: 'builtin' })
     expect(main.body.data!.content).toContain('trust=builtin')
     expect(main.body.data!.bytes).toBeLessThanOrEqual(6144)
-    const references = [
-      'references/captions.md', 'references/color-transitions.md', 'references/cross-workspace.md',
-      'references/deliver.md', 'references/rhythm.md', 'references/sound.md', 'references/timeline.md',
-    ]
+    const references = builtinReferences('video-edit-workbench')
+    expect(references).toContain('references/timeline.md')
     expect(main.body.data!.referencePaths).toEqual(references)
     for (const reference of references) {
       const result = await f.call({ name: 'video-edit-workbench', path: reference, reason: '按需指导' })
@@ -145,7 +138,8 @@ describe('外部 MCP 通过普通工具发现并读取运行时技能', () => {
     expect(main.body.data!.content).toContain('trust=builtin')
     expect(main.body.data!.content).not.toContain('params.exposure')
     expect(main.body.data!.bytes).toBeLessThanOrEqual(6144)
-    const references = ['references/adjust.md', 'references/layers-export.md', 'references/repair.md', 'references/select.md']
+    const references = builtinReferences('image-edit-workbench')
+    expect(references).toContain('references/repair.md')
     expect(main.body.data!.referencePaths).toEqual(references)
     for (const reference of references) {
       const result = await f.call({ name: 'image-edit-workbench', path: reference, reason: '当前步骤' })
