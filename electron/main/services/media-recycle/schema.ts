@@ -21,6 +21,7 @@ const OTHER_STORAGE_PROVIDERS: Readonly<Record<string, string>> = {
   document_index_documents: 'documents-and-saved-history',
   document_external_locations: 'documents-and-saved-history',
   application_model_traces: 'diagnostic-only: records do not restore media',
+  assistant_memory: 'not a media owner: one-sentence entries plus font/style/voice/aspect defaults, no file fields',
   media_recycle_candidates: 'retirement intent, not a media root',
   media_recycle_owned: 'ownership provenance, not a media root',
   media_recycle_retained: 'detached-documents',
