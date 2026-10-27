@@ -65,7 +65,8 @@ it('旧镜头操作的核对面板读取 camera_stage 当前状态，保留待�
   let record: OperationRecord = { operationId: randomUUID(), callerId: caller, inputDigest: 'digest',
     input: { documentId: 'scene', objectId: 'object' }, expectedRevisions: { toolbox: 3 },
     capabilityId: 'duplicate_camera_stage_object', targetRefs: [target], state: 'unknown',
-    verificationState: 'unresolved', rendererEpoch: epoch, requestId: randomUUID() }
+    // 人工核对只保留给涉及付费的操作：这条带一笔付费预估，验证核对面板的内容
+    verificationState: 'unresolved', rendererEpoch: epoch, requestId: randomUUID(), paidGenerationEstimate: 0.5 }
   const store = Object.create(ApplicationOperationStore.prototype) as ApplicationOperationStore
   vi.spyOn(store, 'recoverInterrupted').mockImplementation(() => undefined)
   vi.spyOn(store, 'unresolved').mockReturnValue([])

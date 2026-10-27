@@ -3,7 +3,7 @@ import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/ap
 import { z } from 'zod'
 import { localHostReplySchema, type LocalHostReply } from '../../../../src/core/application-control/localHostContracts'
 import { ApplicationOperationStore, operationDigest, type OperationRecord } from './operationStore'
-import { canReviewOperation, isExecutedVerificationFailure, operationVerificationRecovery } from './operationVerificationRecovery'
+import { canReviewOperation, isExecutedVerificationFailure, operationVerificationRecovery, protectsUnknownOutcome } from './operationVerificationRecovery'
 import { applicationUserConfirmation } from '../../../../src/core/application-control/userConfirmation'
 import { requiresMutationReview } from '../../../../src/core/application-control/applicationCapabilities'
 import type { OperationReviewItem } from '../../../../src/core/application-control/operationReview'
@@ -258,6 +258,8 @@ export class ApplicationOperationCoordinator {
     for (const saved of this.store.unresolved()) {
       const unresolved = this.recoverPreflight(saved)
       if (unresolved.state === 'not_executed') continue
+      // 结果未知的本地修改不挡后续修改（见 protectsUnknownOutcome）；付费与保存失败的仍挡
+      if (['unknown', 'partial', 'awaiting_user_confirmation'].includes(unresolved.state) && (unresolved.state !== 'awaiting_user_confirmation' || unresolved.confirmation?.purpose === 'review') && !protectsUnknownOutcome(unresolved)) continue
       const facts = object(object(object(unresolved.result?.error).details).execution)
       const originalInput = { ...unresolved.input }; delete originalInput.audioDocumentRef
       const resumedInput = { ...input }; delete resumedInput.audioDocumentRef
@@ -414,6 +416,8 @@ export class ApplicationOperationCoordinator {
       verificationState: record.verificationState ?? 'unresolved', result: record.result ?? null, recoveryResult: record.recoveryResult ?? null,
       ...(record.approval ? { approval: record.approval } : {}),
       ...(record.confirmation ? { confirmation: record.confirmation } : {}),
-      recovery: record.state === 'unknown' ? '执行结果尚待核对；禁止重复原修改。先用 get_application_operation 等待原回执；原宿主已结束时调用 review_application_operation，由应用读取目标并请用户核对是否执行，再解除保护。' : undefined }
+      recovery: record.state !== 'unknown' ? undefined : protectsUnknownOutcome(record)
+        ? '执行结果尚待核对；禁止重复原修改。先用 get_application_operation 等待原回执；原宿主已结束时调用 review_application_operation，由应用读取目标并请用户核对是否执行，再解除保护。'
+        : '执行结果没能确认（本地修改，不挡后续修改，也不弹窗请用户核对）：先读取目标看改没改上，没改上就直接重做；改错了可以撤销。' }
   }
 }

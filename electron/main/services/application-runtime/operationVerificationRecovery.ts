@@ -15,7 +15,22 @@ export function isExecutedVerificationFailure(record: OperationRecord): boolean 
   return transaction.code === 'VERIFICATION_FAILED' || (details.outputContract === true && object(details.execution).targetMutation === 'applied')
 }
 
+/**
+ * 结果未知的操作是否还要挡住后续修改、弹窗请用户核对（2026-10-28 用户决定）：本地修改不再挡、不再弹窗，
+ * 读回目标就能核对，误重做也有撤销兜底；涉及付费（预留、批准、已提交或已计费）与保存失败的仍保留保护，
+ * 免得重复计费或丢掉未保存的修改。
+ */
+export function protectsUnknownOutcome(record: OperationRecord): boolean {
+  const details = object(object(record.result?.error).details)
+  const transaction = object(details.transaction)
+  const billing = object(details.execution).billing
+  return Boolean(record.paidReservations?.length || record.approval || (record.paidGenerationEstimate !== undefined && record.paidGenerationEstimate !== null)
+    || object(record.input).paid || transaction.persistence || details.persistence
+    || (typeof billing === 'string' && billing !== 'not_charged'))
+}
+
 export function canReviewOperation(record: OperationRecord): boolean {
+  if (!protectsUnknownOutcome(record)) return false
   return record.state === 'unknown'
     || record.state === 'awaiting_user_confirmation' && record.confirmation?.purpose === 'review'
     || record.state === 'partial' && isExecutedVerificationFailure(record)

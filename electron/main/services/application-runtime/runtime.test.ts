@@ -50,7 +50,9 @@ it('人工核对只通知可信渲染宿主，不调用 Electron 系统对话框
   const rendererEpoch = randomUUID(), send = vi.fn()
   host.register({ rendererEpoch, attachmentSequence: 2, ready: true, tools: [], domains: [] }, { send })
   const record: OperationRecord = { operationId: randomUUID(), callerId: randomUUID(), capabilityId: 'change_application_entities',
-    input: {}, inputDigest: 'review', state: 'unknown', rendererEpoch: randomUUID(), targetRefs: [{ kind: 'video_edit.document', id: 'document' }] }
+    input: {}, inputDigest: 'review', state: 'unknown', rendererEpoch: randomUUID(), targetRefs: [{ kind: 'video_edit.document', id: 'document' }],
+    // 人工核对只保留给涉及付费的操作
+    paidGenerationEstimate: 0.5 }
   operations.store.save(record)
   await operations.review(record, rendererEpoch, async () => ({ ok: true, data: { properties: { 'video_edit.document.name': '主剪辑' } } }), () => undefined)
   expect(send).toHaveBeenLastCalledWith('application:host:reviews', expect.objectContaining({ open: expect.objectContaining({ operationId: record.operationId }), items: expect.arrayContaining([expect.objectContaining({ title: '这次修改生效了吗？', message: expect.stringContaining('主剪辑') })]) }))

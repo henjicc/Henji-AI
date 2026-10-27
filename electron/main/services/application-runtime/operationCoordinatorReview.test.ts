@@ -8,6 +8,8 @@ afterEach(() => { vi.restoreAllMocks() })
 function fixture() {
   let record: OperationRecord = { operationId: 'operation-secret', callerId: 'caller-secret', inputDigest: 'digest',
     state: 'partial', verificationState: 'unresolved', capabilityId: 'change_application_entities', rendererEpoch: 'same-epoch', requestId: 'request',
+    // 人工核对只保留给涉及付费的操作（本地修改结果未知时不挡、不弹窗）：夹具带一笔付费预估
+    paidGenerationEstimate: 0.5,
     input: { changes: [{ kind: 'mutate_properties', entityType: 'asset', target: { kind: 'asset', id: 'target-secret' }, mutations: [{ propertyId: 'asset.library_refs', operation: 'append', value: [{ kind: 'asset.library', id: 'library' }] }] }] },
     targetRefs: [{ kind: 'asset', id: 'target-secret' }],
     result: { ok: false, error: { details: { transaction: { code: 'VERIFICATION_FAILED', effects: [{ kind: 'updated' }] } } } } }
@@ -113,4 +115,19 @@ it('已经结束但不确定改了多少的失败，面板说明出错原因与�
   f.set({ ...f.get(), state: 'unknown', confirmation: undefined, result: { ok: false, error: { code: 'CAPABILITY_REJECTED', message: 'EPERM: operation not permitted', details: {} } } })
   await f.coordinator.review(f.get(), 'new-epoch', vi.fn().mockRejectedValue(new Error('gone')), () => {})
   expect(f.show.mock.calls[0][0].message).not.toContain('EPERM')
+})
+
+it('结果未知的本地修改不挡后续修改，也不弹窗请用户核对；付费的仍然挡', async () => {
+  const f = fixture()
+  const local: OperationRecord = { ...f.get(), state: 'unknown', paidGenerationEstimate: undefined, rendererEpoch: 'old-epoch',
+    result: { ok: false, error: { code: 'HOST_RELOADED', message: '应用重新加载', details: {} } } }
+  f.set(local)
+  await f.coordinator.review(local, 'new-epoch', async () => ({ ok: true, data: {} }), () => undefined)
+  expect(f.show).not.toHaveBeenCalled()
+  expect(f.get().state).toBe('unknown')
+  expect(f.coordinator.pendingReviews()).toEqual([])
+  expect(f.coordinator.result(f.get()).recovery).toContain('不挡后续修改')
+  f.set({ ...local, paidGenerationEstimate: 0.5 })
+  await f.coordinator.review(f.get(), 'new-epoch', async () => ({ ok: true, data: {} }), () => undefined)
+  expect(f.show).toHaveBeenCalledOnce()
 })
