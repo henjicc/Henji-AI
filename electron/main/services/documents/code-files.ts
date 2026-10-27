@@ -1,3 +1,5 @@
+import { CodeProjectRepository } from './code-project'
+import type { CodeProjectChange, CodeProjectState } from '../../../../src/core/videoEdit/codeMaterial/projectContract'
 import { ensureCodeLocation } from './code-paths'
 import { migrateProjectCodeStorage } from './code-git-migration'
 import { createHash } from 'node:crypto'
@@ -53,6 +55,17 @@ export class DocumentCodeFiles {
   constructor(private readonly workspace: DocumentWorkspace, private readonly repository: DocumentRepository, private readonly logger: MainLogger,
     private readonly kinds: Pick<DocumentKindRegistry, 'get'>) {}
   migrate(projectId: string) { return migrateProjectCodeStorage(projectId, this.workspace, this.repository, this.kinds, this.logger) }
+  async readProject(target: DocumentTarget): Promise<CodeProjectState> { return new CodeProjectRepository(path.join(await this.root(target), '代码')).state() }
+  async changeProject(request: CodeProjectChange): Promise<string> {
+    const root = await this.root(request.target); await this.workspace.ensureInternalFolder(root)
+    this.logger.info('工程文件提交开始', { event: 'documents.code.project.start' })
+    try { const oid = await new CodeProjectRepository(path.join(root, '代码')).change(request); this.logger.info('工程文件提交完成', { event: 'documents.code.project.completed' }); return oid }
+    catch (error) { this.logger.warn('工程文件提交失败', { event: 'documents.code.project.failed', error }); throw error }
+  }
+  async commitProject(request: { target: DocumentTarget; message: string }): Promise<string> {
+    const root = await this.root(request.target); await this.workspace.ensureInternalFolder(root)
+    return new CodeProjectRepository(path.join(root, '代码')).commitWorkspace(request.message)
+  }
   private async root(target: DocumentTarget): Promise<string> {
     const read = await this.repository.read(target)
     return (await this.workspace.resolveContainer(read.meta.container)).root

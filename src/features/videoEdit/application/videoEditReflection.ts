@@ -1,3 +1,4 @@
+import { createCodeProjectRegistrations } from './videoEditCodeProjectReflection'
 import { getVideoEditAudioLinkNotices } from './videoEditAudioLinks'
 import { getVideoEditRenderPreference, readVideoEditRenderCache } from './videoEditRenderCache'
 import { videoEditCaptionClipIds } from '@/core/videoEdit/captionSpeech'
@@ -239,5 +240,5 @@ export function createVideoEditRegistrations(): ApplicationEntityRegistration[] 
       ...(entityType === 'video_edit.builtin_effect' ? { writeExclusion: { reason: VIDEO_EDIT_BUILTIN_CATALOG_READ_ONLY } } : {}),
       ...(required[entityType] ? { collectionWrite: { creatable: true, removable: entityType !== 'video_edit.code_version', requiredPropertyIds: required[entityType]!, maxItemsPerChange: 32 } } : {}),
     }, properties: fieldDescriptors(VIDEO_EDIT_FIELDS[entityType]), provider: new VideoEditProvider(entityType), schemaDocuments: videoEditSchemaDocuments(entityType),
-  })), createVideoEditExplanationRegistration(), createCodeComponentRegistration(), createVideoEditTextPresetRegistration(), createVideoEditEffectPresetRegistration(), createVideoEditPresetRegistration(), createVideoEditSubtitlePresetRegistration(), createVideoEditExportPresetRegistration(), createFontRegistration(), ...createVideoEditStyleRegistrations()]
+  })), createVideoEditExplanationRegistration(), createCodeComponentRegistration(), ...createCodeProjectRegistrations(), createVideoEditTextPresetRegistration(), createVideoEditEffectPresetRegistration(), createVideoEditPresetRegistration(), createVideoEditSubtitlePresetRegistration(), createVideoEditExportPresetRegistration(), createFontRegistration(), ...createVideoEditStyleRegistrations()]
 }

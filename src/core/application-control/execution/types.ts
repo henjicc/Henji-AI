@@ -32,6 +32,8 @@ export interface ApplicationExecutionContext extends ApplicationControlAccessCon
   signal?: AbortSignal
   /** 仅由事务引擎创建；领域单步入口据此复用本批次，不逐字段确认。 */
   persistenceScopes?: ReadonlySet<string>
+  /** Trusted transaction label, shared by batched domain persistence. */
+  transactionSummary?: string
 }
 
 export interface ApplicationCompletedStepResult {

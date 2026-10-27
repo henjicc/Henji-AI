@@ -23,7 +23,7 @@ export const codeVersionTag = (kind: GitCodeVersion['kind'], name: string, versi
 export class CodeGitRepository {
   readonly dir: string
   constructor(directory: string) { this.dir = path.resolve(directory) }
-  private get options() { return { fs, dir: this.dir } }
+  protected get options() { return { fs, dir: this.dir } }
 
   async exclusive<T>(operation: () => Promise<T>): Promise<T> {
     const key = process.platform === 'win32' ? this.dir.toLowerCase() : this.dir
@@ -55,7 +55,7 @@ export class CodeGitRepository {
     return stat !== null
   }
 
-  private async initialize(): Promise<void> {
+  protected async initialize(): Promise<void> {
     if (await this.exists()) {
       if ((await fsp.readFile(path.join(this.dir, '.git', 'HEAD'), 'utf8')) !== 'ref: refs/heads/main\n') throw new Error('代码仓库分支已切换，请切回 main 后重试；已有版本仍可读取。')
       return

@@ -1,3 +1,7 @@
+import { getPlatform } from '@/platform/runtime'
+import { commitVideoEditCodeProjectCapability } from '@/core/application-control/domains/videoEdit/videoEditCodeProjectCapabilities'
+import { CodeProjectFileMutationExecutor, CodeProjectFileCollectionExecutor } from './videoEditCodeProjectReflection'
+import { codeProjectPersistenceParticipants } from './videoEditCodeProject'
 import { registerCurrentDocumentProvider } from '@/features/documents'
 import { activeVideoEditInstance } from './videoEditService'
 import '../layout/videoEditDockLayout'
@@ -124,6 +128,8 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
   recoverOperation: recoverVideoEditPlacement,
   id: 'videoEdit', entities: createVideoEditRegistrations,
   registerExecutors(engine) {
+    engine.registerMutationExecutor(new CodeProjectFileMutationExecutor())
+    engine.registerCollectionExecutor(new CodeProjectFileCollectionExecutor())
     engine.registerCollectionExecutor(new CodeComponentCollectionExecutor())
     for (const type of [STYLE_ENTITY, TEMPLATE_ENTITY] as const) { engine.registerCollectionExecutor(new VideoEditStyleCollectionExecutor(type)); engine.registerMutationExecutor(new VideoEditStyleMutationExecutor(type)) }
     engine.registerCollectionExecutor(new VideoEditProjectTemplateCollectionExecutor())
@@ -161,6 +167,13 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     // 嵌入模式的宿主（4.1）：从剪辑里打开的文档“返回剪辑 · 项目名”，助手 open_document 的 fromDocumentId 也走这里
     getDocumentOperations().registerEmbedHost('video_edit', videoEditEmbedHost)
     for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, guardVideoEditDocumentAlgorithm(definition.id, async (raw, context) => {
+      if (definition.id === commitVideoEditCodeProjectCapability.id) {
+        const input = commitVideoEditCodeProjectCapability.inputSchema.parse(raw)
+        await openVideoEditDocument({ id: input.documentRef.id }, { focus: false })
+        const target = { id: input.documentRef.id, path: requireVideoEditInstance(input.documentRef.id).session.documentMeta.path }
+        const commit = await getPlatform().documents.commitCodeProject({ target, message: input.message })
+        return { resultRef: { kind: 'video_edit.code_project', id: input.documentRef.id }, commit, verified: (await getPlatform().documents.readCodeProject(target)).head === commit, message: '已提交工程工作区。' }
+      }
       if (definition.id === sendVideoEditAudioCapability.id) {
         const input = sendVideoEditAudioCapability.inputSchema.parse(raw)
         const target = splitVideoEditRef(input.clipRef)
@@ -371,7 +384,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
   resolvePersistenceParticipants(steps) {
     const ids = new Set(steps.flatMap(step => step.kind === 'mutation' && isVideoEditDocumentKind(step.target.kind) ? [splitVideoEditRef(step.target).projectId]
       : step.kind === 'collection' && !VIDEO_EDIT_LIBRARY_KINDS.has(step.entityType) && isVideoEditDocumentKind(step.parent.kind) ? [splitVideoEditRef(step.parent).projectId] : []))
-    return [...ids].map(id => {
+    return [...codeProjectPersistenceParticipants(steps), ...[...ids].map(id => {
       const owner = requireVideoEditInstance(id)
       const existing = persistenceOwners.get(owner)
       if (existing) return existing
@@ -395,6 +408,6 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       } }
       persistenceOwners.set(owner, participant)
       return participant
-    })
+    })]
   },
 }

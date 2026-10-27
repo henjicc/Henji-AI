@@ -202,7 +202,7 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
       assertOwnership(Object.keys(checked))
       const execution = await withApplicationPersistenceBoundary({
         participants: this.resolvePersistenceParticipants?.(stored.plan.steps, context) ?? [],
-        context,
+        context: { ...context, transactionSummary: stored.plan.summary },
         execute: (batchContext) => { executionStarted = true; return this.executePlan(stored.plan, batchContext) },
         completed: (result) => result.completed,
         onReceipt: (receipt) => persistenceReceipts.push(receipt),
