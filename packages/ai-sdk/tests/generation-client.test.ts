@@ -35,7 +35,7 @@ const model = defineModel({
 })
 
 describe('createGenerationClient', () => {
-  it('在默认 123 模型目录上追加自定义模型并保持生命周期', async () => {
+  it('在默认模型目录上追加自定义模型并保持生命周期', async () => {
     const execute = vi.fn<ProviderAdapter['execute']>(async (input) => ({
       status: 'completed',
       url: 'https://example.com/generated.png',

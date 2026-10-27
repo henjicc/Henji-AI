@@ -27,6 +27,8 @@
   - 若用于上传，更新 `UploadProvider` / `UPLOAD_PROVIDERS`
 - `src/stores/settingsStore.ts`
   - 更新 `KNOWN_PROVIDER_IDS`
+- `src/core/modelCatalog/applicationModelProfile.ts`
+  - 在 `HENJI_GENERATION_PROVIDER_IDS` 与 `HENJI_GENERATION_PROVIDER_PACKS` 登记新供应商及其 provider pack。两处必须同时登记：只登记一处会在模块加载时报错；两处都漏掉，宿主就缺这些模型，目录一致性测试会变红
 - 排序与显示（建议）
   - `src/utils/modelHelpers.ts` 的 `PROVIDER_ORDER`
   - `src/components/MediaGenerator/components/ModelSelectorPanel.tsx` 的 `PROVIDER_ORDER`
