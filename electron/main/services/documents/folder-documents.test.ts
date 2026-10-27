@@ -68,7 +68,8 @@ describe('文件夹类型文档（.hjweb）', () => {
     await fsp.writeFile(workspace.catalog.getDocument(other.meta.id)!.path, '{"broken":')
     const written = await service.writeCodeVersion({ target: { id: edit.meta.id }, definitionId: 'card', name: '花字卡片', contents: { entry: 'main.ts', files: { 'main.ts': 'export default {}' } } })
     await expect(service.discardCodeFiles({ files: written.files, retainedLocations: [] })).resolves.toBeUndefined()
-    await expect(fsp.stat(written.files[0].location)).resolves.toBeTruthy()
+    // 源码在 Git 提交里：仍能按原引用读回原文
+    await expect(service.readCodeFile(written.files[0])).resolves.toBe('export default {}')
   })
 
   it('新建位置落在 素材/录屏/ 并按“保留两者”起名；写完头信息后登记进索引', async () => {
