@@ -5,6 +5,7 @@
     "scripts/lib/premiereMigration.test.cjs",
     "scripts/lib/uiInspectionMcpClient.test.cjs",
     "scripts/lib/uiAuditDom.test.cjs",
+    "scripts/lib/uiLayoutAudit.test.cjs",
     "scripts/lib/uiDesignRules.test.cjs",
     "scripts/lib/uiGalleryDiff.test.cjs",
     "scripts/lib/uiScrollCoverage.test.cjs",
