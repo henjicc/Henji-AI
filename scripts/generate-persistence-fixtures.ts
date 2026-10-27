@@ -12,6 +12,7 @@ import { audioCaptureSettingsEnvelopeSchema, DEFAULT_AUDIO_CAPTURE_SETTINGS } fr
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { PERSISTENCE_FORMATS } from '../src/core/persistence/formats'
+import { parseWebReplayDirector } from '../src/core/webReplay/director'
 import { MODEL_DEFAULTS_VERSION, SUBTITLE_MANIFEST_VERSION, modelDefaultsSchema } from '../src/core/persistence/preferenceSchemas'
 import { createMotionFixture } from '../src/core/creativeIntent/fixtures/motionFixtures'
 import { optimizeMotionDraft } from '../src/core/creativeIntent/candidates'
@@ -309,6 +310,20 @@ const values: Record<string, unknown> = {
     warnings: [{ t: 7400, kind: 'boundary', message: 'xhr: GET /x' }],
   },
   'web-recording-backup-timing': { originUs: 140619097663, spans: [{ monoUs: 666267, durationUs: 15000000 }] },
+  'web-replay-director': parseWebReplayDirector({
+    version: 1,
+    timeline: { segments: [{ from: 0, to: 11.2 }, { from: 35.8, to: 41.4 }, { from: 41.4, to: 52.2, speed: 3 }], ramp: 0.4 },
+    typewriter: [{ at: 36.8, charsPerSecond: 14, jitter: 0.25 }],
+    pointer: [{ mode: 'smooth', from: 37, to: 38, every: 0.3 }, { mode: 'path', from: 2, to: 3, points: [{ at: 2.5, x: 540, y: 260 }, { at: 3, target: { selector: '.ask-input', offset: [0.2, 0.5] } }], easing: 'ease-out' }],
+    clicks: [{ at: 38, target: { text: '发送' }, approach: 0.3 }],
+    actions: [
+      { kind: 'hover', at: 45, target: { selector: '[data-act="cite"]', index: 1 }, duration: 0.8 },
+      { kind: 'scroll', at: 48, target: { selector: '.answer' }, dy: 320 },
+      { kind: 'drag', at: 50, target: { x: 400, y: 300 }, to: { x: 600, y: 300 } },
+      { kind: 'zoom', at: 51, target: { selector: '.canvas' }, steps: 2 },
+      { kind: 'click', at: 52, target: { selector: '.ask-submit' }, button: 'left' },
+    ],
+  }),
   'llm-config': llmStoredConfigSchema.parse({ providers: [{ providerId: 'synthetic', displayName: '合成测试供应商', adapter: 'openai', enabled: false }], models: [], promptProfiles: [], textProcessingPromptTemplates: [], agentProfiles: [{ id: 'golden-agent', name: '测试助手', primary: { providerId: 'synthetic', modelId: 'test' }, settings: { timeoutMs: 60000, maxRetries: 0, maxOutputTokens: 4096, contextWindowBudget: 64000 }, verifications: [], createdAt: timestamp, updatedAt: timestamp }], tools: [], policy: { allowedTools: [], requireHumanConfirmation: true }, memory: { longTermNamespace: 'golden' } }),
   'mcp-connections': mcpConnectionStorageSchema.parse({ version: 2, connections: [{ id: '00000000-0000-4000-8000-000000000001', name: '合成测试连接', token: '0'.repeat(64), allowWrites: true, allowPaid: false, allowDestructive: false }] }),
   'document-envelope': buildDocumentEnvelope({ kind: 'canvas', kindVersion: 1, id: 'golden-envelope', name: '外壳样本', createdAt: timestamp, updatedAt: timestamp, revision: 0, draft: false, content: { nodes: [], edges: [] } }),

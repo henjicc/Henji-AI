@@ -31,6 +31,8 @@ const detailsSchema = z.object({
   directory: z.string().optional(), projectId: z.string().nullable().optional(),
   /** 能直接导入剪辑的视频：最新的重演视频与备份录屏。 */
   replayVideo: z.string().nullable().optional(), backupVideo: z.string().nullable().optional(),
+  /** 按导演稿重演出的版本（takes/<名字>/），新的在前；导入剪辑或读轨道时用 take 指定。 */
+  takes: z.array(z.object({ name: z.string(), video: z.string().nullable(), durationMs: z.number(), frames: z.number(), fps: z.number(), pointer: z.boolean(), createdAt: z.string(), conflicts: z.number() }).strict()).optional(),
 }).strict()
 
 function properties(type: WebType): ApplicationPropertyDescriptor[] {
@@ -62,6 +64,7 @@ async function valuesOf(type: WebType, id: string): Promise<Record<string, JsonV
     app: recording.app.name, version: recording.app.version, host: recording.host, url: recording.env.url, width: recording.env.viewport.width, height: recording.env.viewport.height, dpr: recording.env.viewport.dpr,
     durationMs: Math.round(recording.durationUs / 1000), warnings: recording.warnings.map(w => w.message), createdAt: recording.createdAt,
     directory: recording.directory, projectId: recording.projectId, replayVideo: recording.video, backupVideo: recording.backupVideo,
+    takes: (recording.takes ?? []).map(take => ({ name: take.name, video: take.video, durationMs: take.durationMs, frames: take.frames, fps: take.fps, pointer: take.pointer, createdAt: take.createdAt, conflicts: take.conflicts })),
   } }
 }
 
@@ -126,7 +129,7 @@ export async function executeWebAppCapability(id: string, input: unknown, contex
   if (id === importWebRecordingCapability.id) {
     if (permissions && !permissions.includes('screen_recording:read')) throw new Error('PERMISSION_DENIED:导入剪辑需要 screen_recording:read 权限')
     const parsed = importWebRecordingCapability.inputSchema.parse(input)
-    const result = await importWebRecordingToVideo(parsed.recordingRef.id, parsed.destination, parsed.video, context.signal)
+    const result = await importWebRecordingToVideo(parsed.recordingRef.id, parsed.destination, parsed.video, context.signal, parsed.take)
     return { resultRef: { kind: 'video_edit.document', id: parsed.destination.documentId }, ...result, verified: result.itemIds.length > 0 && (!parsed.destination.sequenceId || result.clipIds.length > 0) }
   }
   if (id === importWebRecordingToProjectCapability.id) {
@@ -153,9 +156,13 @@ export async function executeWebAppCapability(id: string, input: unknown, contex
   const parsed = renderWebAppReplayCapability.inputSchema.parse(input)
   context.signal.throwIfAborted()
   const longEdge = { recorded: undefined, '1080p': 1920, '1440p': 2560, '4k': 3840 }[parsed.resolution]
-  const result = await platform.render({ recordingId: parsed.recordingRef.id, fps: parsed.fps, pointer: parsed.pointer, ...(longEdge ? { longEdge } : {}), ...(parsed.textOnly ? { textOnly: true } : {}), ...(parsed.boxSelectors ? { boxSelectors: parsed.boxSelectors } : {}) })
+  const director = { ...(parsed.director ? { director: parsed.director } : {}), ...(parsed.directorFile ? { directorFile: parsed.directorFile } : {}), ...(parsed.take ? { take: parsed.take } : {}) }
+  // 导演稿校验不通过（逐条点名字段）时一帧也没渲染：标成未执行，改好后可以直接重试
+  const result = await platform.render({ recordingId: parsed.recordingRef.id, fps: parsed.fps, pointer: parsed.pointer, ...(longEdge ? { longEdge } : {}), ...(parsed.textOnly ? { textOnly: true } : {}), ...(parsed.boxSelectors ? { boxSelectors: parsed.boxSelectors } : {}), ...director })
+    .catch((error: unknown) => { throw error instanceof Error && error.name === 'WebReplayDirectorError' ? notExecutedFailure(error) : error })
   return {
     resultRef: parsed.recordingRef, video: result.output, pointer: parsed.pointer, width: result.width, height: result.height, frames: result.frames,
     conflicts: result.issues.filter(i => i.kind === 'conflict').map(i => i.message), warnings: result.issues.filter(i => i.kind === 'warning').map(i => i.message), verified: result.frames > 0,
+    ...(result.take ? { take: { name: result.take.name, directory: result.take.directory, video: result.take.video, durationMs: result.take.durationMs, frames: result.take.frames, steps: result.take.steps } } : {}),
   }
 }

@@ -2,6 +2,7 @@ import { mcpConnectionStorageSchema, MCP_CONNECTION_STORAGE_VERSION } from './mc
 import { captureManifestSchema } from '../screenRecording/capture'
 import { WEB_RECORDING_MIN_READER_VERSION, WEB_RECORDING_VERSION, storageSnapshotSchema, webRecordingBehaviorSchema, webRecordingDataSchema, webRecordingManifestSchema, webRecordingResourcesSchema } from '../webReplay/schema'
 import { WEB_RECORDING_BACKUP_TIMING_VERSION, webRecordingBackupTimingSchema } from '../webReplay/videoEvents'
+import { WEB_REPLAY_DIRECTOR_VERSION, webReplayDirectorSchema } from '../webReplay/director'
 import { STORYBOARD_METADATA_VERSION, storyboardMetadataSchema } from './preferenceSchemas'
 import { z } from 'zod'
 import { IMAGE_EDIT_HISTORY_CHECKPOINT_VERSION_V3, imageEditHistoryCheckpointSchemaV3 } from '../imageEdit/v3/historyPaging/schema'
@@ -22,6 +23,8 @@ export const FILE_PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   { ...file('web-recording', '网页应用录制', WEB_RECORDING_VERSION, 'recording.json.version', 'electron/main/services/web-replay/store.ts::WebRecordingStore.readManifest', webRecordingManifestSchema, { data: webRecordingDataSchema, behavior: webRecordingBehaviorSchema, storage: storageSnapshotSchema, resources: webRecordingResourcesSchema }), minReaderVersion: WEB_RECORDING_MIN_READER_VERSION },
   // backup.json 没有版本字段：按 1 登记，新增字段时须先加版本戳。
   file('web-recording-backup-timing', '网页录制备份录屏时钟', WEB_RECORDING_BACKUP_TIMING_VERSION, 'backup.json（无版本字段，即 1）', 'electron/main/services/web-replay/editSource.ts::webRecordingEditSource / backupVideo.ts::mixNow', webRecordingBackupTimingSchema),
+  // 导演稿：用户或助手写的 JSON 文件，也随版本存成 takes/<名字>/director.json；校验含 superRefine（区间先后），改语义时须升版本。
+  file('web-replay-director', '网页重演导演稿', WEB_REPLAY_DIRECTOR_VERSION, 'director.json.version', 'electron/main/services/web-replay/runtime.ts::directorOf / takes.ts::readWebReplayTakeDirector', webReplayDirectorSchema),
   file('mcp-connections', 'MCP 连接授权存储', MCP_CONNECTION_STORAGE_VERSION, 'keystore MCP plaintext.version', 'electron/main/services/mcp/connections.ts::load', mcpConnectionStorageSchema),
   file('image-history-checkpoint', '图片历史检查点', IMAGE_EDIT_HISTORY_CHECKPOINT_VERSION_V3, 'ImageEditHistoryCheckpointV3.version', 'electron/main/services/image-editor-v3/history-pages/store.ts::readPage', imageEditHistoryCheckpointSchemaV3),
   file('image-header', '图片文档头', IMAGE_HEADER_VERSION, 'henji-document.json.version', 'electron/main/services/image-editor-v3/image-document/header.ts::parseImageDocumentHeader', imageDocumentHeaderSchema),

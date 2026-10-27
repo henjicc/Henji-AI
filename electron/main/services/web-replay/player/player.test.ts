@@ -40,7 +40,7 @@ function evaluate(page: FakePage) {
     }
     if ((m = code.match(/\.frame\(([\d.]+), (\{.*\})\)/))) {
       const t = Number(m[1])
-      const options = JSON.parse(m[2]) as { token?: number; samples: string[] }
+      const options = JSON.parse(m[2]) as { token?: number; samples?: string[] }
       const index = page.frames++
       if (index === fake.failAtFrame) throw new Error('页面崩了')
       page.pageNow = Math.max(page.pageNow, t)
@@ -55,10 +55,11 @@ function evaluate(page: FakePage) {
         }, 1)
       }
       const samples: Record<string, unknown> = {}
-      for (const name of options.samples) samples[name] = { ok: true, value: { width: 10, height: 10, items: [[name === 'boxes' ? 'node-a' : 'hello', page.pageNow, 0, 1, 1]] } }
+      for (const name of options.samples ?? []) samples[name] = { ok: true, value: { width: 10, height: 10, items: [[name === 'boxes' ? 'node-a' : 'hello', page.pageNow, 0, 1, 1]] } }
       return { now: page.pageNow, timers: 0, frameCallbacks: 0, animations: 0, quiet: false, samples }
     }
     if (code.includes('.realFrame()')) return code.includes('viewport') ? { width: 10, height: 10 } : undefined
+    if (code.includes('.resolveTarget(')) return code.includes('missing') ? null : { x: 40, y: 50 }
     return true
   }
 }
@@ -89,8 +90,19 @@ vi.mock('electron', () => ({
 vi.mock('./site', () => ({ BOOTSTRAP_PATH: '/bootstrap', installReplaySite: () => ({ inFlight: () => 0, idle: async () => {} }) }))
 vi.mock('./input', () => ({ InputDispatcher: class {
   misses = 0
-  constructor(private readonly contents: { page: FakePage }) {}
-  async dispatch(event: { kind: string }): Promise<void> { this.contents.page.dispatched.push({ kind: event.kind, at: this.contents.page.pageNow }) }
+  position = { x: 7, y: 8 }
+  pressed = 0
+  constructor(private readonly contents: { page: FakePage; id: number }) {}
+  async dispatch(event: { kind: string; type?: string; x?: number; y?: number }): Promise<{ x: number; y: number } | null> {
+    this.contents.page.dispatched.push({ kind: event.type ? `${event.kind}:${event.type}` : event.kind, at: this.contents.page.pageNow })
+    return event.kind === 'pointer' ? { x: event.x ?? 1, y: event.y ?? 2 } : null
+  }
+  async moveTo(x: number, y: number): Promise<void> { this.position = { x, y }; this.contents.page.dispatched.push({ kind: 'move', at: this.contents.page.pageNow }) }
+  async insertText(text: string): Promise<void> {
+    this.contents.page.dispatched.push({ kind: `text:${text}`, at: this.contents.page.pageNow })
+    // 第二个字让页面发出录制里没有的请求
+    if (text === 'b') fake.handlers.get('web-replay:report')?.({ sender: { id: this.contents.id } }, { kind: 'conflict', t: this.contents.page.pageNow * 1000, message: '这一步会发出录制里没有的请求：POST https://example.test/suggest' })
+  }
   async dispose(): Promise<void> {}
 } }))
 vi.mock('../store', () => ({ WebRecordingStore: class {}, digestBase64: vi.fn() }))
@@ -122,6 +134,7 @@ vi.mock('./encoder', () => ({ prepareFrameEncoder: async () => {}, FrameEncoder:
 } }))
 
 import { WebRecordingPlayer } from './player'
+import { parseWebReplayDirector } from '../../../../../src/core/webReplay/director'
 import { BOX_TRACK_FILE } from '../boxTrack'
 import { TEXT_TRACK_FILE } from '../textTrack'
 
@@ -138,10 +151,10 @@ afterEach(async () => {
   if (root) await fs.rm(root, { recursive: true, force: true })
 })
 
-function recordingStore(directory: string, behavior: unknown[] = []): WebRecordingStore {
+function recordingStore(directory: string, behavior: unknown[] = [], durationUs = 0): WebRecordingStore {
   return {
     directory,
-    readManifest: async () => ({ id: 'recording', status: 'complete', durationUs: 0, env: { url: 'https://example.test/', viewport: { width: 10, height: 10, dpr: 1 } } }),
+    readManifest: async () => ({ id: 'recording', status: 'complete', durationUs, env: { url: 'https://example.test/', viewport: { width: 10, height: 10, dpr: 1 } } }),
     readData: async () => ({ calls: [], external: [], callbacks: [], random: { math: [], uuid: [], bytes: [] }, clipboard: [] }), readBehavior: async () => behavior, readStorage: async () => ({}), readResources: async () => ({ entries: [] }),
   } as unknown as WebRecordingStore
 }
@@ -159,7 +172,7 @@ it('逐帧推进页面时间：输入按录制时刻派发，每帧在它的时�
   const [page] = fake.pages
   // 页面准备好时停在 20ms，之后每帧都正好在自己的录制时刻（第 0 帧画面就是 20ms 那一刻）
   expect(page.log).toEqual(['frame 20 captured', 'frame 250 captured', 'frame 500 captured', 'frame 750 captured', 'frame 1000 captured', 'frame 1250 captured'])
-  expect(page.dispatched).toEqual([{ kind: 'pointer', at: 300 }, { kind: 'key', at: 760 }])
+  expect(page.dispatched).toEqual([{ kind: 'pointer:move', at: 300 }, { kind: 'key:down', at: 760 }])
   // 第 0、2、3 帧画面变了才编码；第 0 帧还代表它之前的时间
   expect(fake.encoders.map(encoder => [encoder.writes, encoder.finished])).toEqual([[[0, 2, 3], [5]]])
   const boxes = await readTrack(path.join(root, BOX_TRACK_FILE))
@@ -211,4 +224,39 @@ it('GPU 取帧中途坏掉：结果不发布，整段改用 CPU 画面重演，�
   // 第一遍（GPU）开了窗口但没出帧；第二遍（CPU）从头重演
   expect(fake.pages).toHaveLength(2)
   expect(fake.encoders.map(encoder => [encoder.writes, encoder.finished])).toEqual([[[0, 3], [5]]])
+})
+
+it('导演稿：剪掉的区间不出帧分小步推过去，打字逐字输入，冲突点名导演稿那一步，版本的行为轨在输出时间上', async () => {
+  root = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-lockstep-director-'))
+  const behavior = [
+    { kind: 'text', t: 500_000, data: 'ab' },
+    { kind: 'pointer', type: 'down', t: 2_000_000, x: 3, y: 3, button: 0, buttons: 1, clickCount: 1, pointerType: 'mouse', mods: 0 },
+    { kind: 'pointer', type: 'move', t: 2_700_000, x: 9, y: 9, button: -1, buttons: 0, clickCount: 0, pointerType: 'mouse', mods: 0 },
+  ]
+  fake.changing = new Set(Array.from({ length: 40 }, (_, i) => i))
+  const director = parseWebReplayDirector({ version: 1, timeline: { segments: [{ from: 0, to: 1 }, { from: 2.5, to: 3.5, speed: 2 }] }, typewriter: [{ at: 0.5, charsPerSecond: 10, jitter: 0 }] })
+  const boxTrack = path.join(root, 'take-boxes.jsonl')
+  const result = await new WebRecordingPlayer(recordingStore(root, behavior, 2_000_000)).render({ output: path.join(root, 'take.mp4'), fps: 10, director, boxTrack })
+  // 留下 1 秒 + 打两个字 0.2 秒 + 1 秒的录制按 2 倍速 0.5 秒
+  expect(result.frames).toBe(17)
+  expect(result.durationMs).toBeCloseTo(1700, 6)
+  const [page] = fake.pages
+  // 打字时页面时间照走（0.5→0.7 秒），之后页面时间比录制多 0.2 秒；剪掉的 1.0–2.5 秒（页面 1.2–2.7 秒）按 50 毫秒一步推，不出画面
+  const cut = page.log.filter(line => !line.endsWith('captured')).map(line => Number(line.split(' ')[1]))
+  expect(cut[0]).toBe(1250)
+  expect(cut.at(-1)).toBe(2700)
+  expect(cut.length).toBe(30)
+  const captured = page.log.filter(line => line.endsWith('captured')).map(line => Number(line.split(' ')[1]))
+  expect(captured.slice(0, 3)).toEqual([20, 100, 200])
+  expect(captured.slice(5, 9)).toEqual([500, 600, 700, 800])
+  expect(captured.slice(12)).toEqual([2700, 2900, 3100, 3300, 3500])
+  expect(page.dispatched).toEqual([{ kind: 'text:a', at: 500 }, { kind: 'text:b', at: 600 }, { kind: 'pointer:down', at: 2200 }, { kind: 'pointer:move', at: 2900 }])
+  expect(result.issues).toEqual([{ t: 500_000, kind: 'conflict', message: '导演稿 typewriter[0]（逐字打字） 引起：这一步会发出录制里没有的请求：POST https://example.test/suggest' }])
+  // 版本自己的行为轨：输出时间上；剪掉区间里的按下不在里面，接缝处补上鼠标所在
+  expect(result.takeTracks!.behavior.map(event => [event.kind, event.t])).toEqual([['text', 500_000], ['text', 600_000], ['pointer', 1_200_000], ['pointer', 1_300_000]])
+  expect(result.takeTracks!.timeMap.frameRecUs.slice(11, 14)).toEqual([900_000, 2_500_000, 2_700_000])
+  expect(result.takeTracks!.timeMap.cuts).toEqual([{ recUs: [1_000_000, 2_500_000], outUs: 1_200_000 }])
+  // 位置轨写在给定的位置，时刻是输出时间
+  expect((await readTrack(boxTrack)).map(line => line.t).slice(-3)).toEqual([1_500_000, 1_600_000, 1_700_000])
+  await expect(fs.access(path.join(root, BOX_TRACK_FILE))).rejects.toThrow()
 })

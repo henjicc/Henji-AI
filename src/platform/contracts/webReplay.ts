@@ -42,7 +42,10 @@ export interface WebReplayConnectedApp {
  * `directory` is the recording folder: `<项目>/素材/录屏/<名称>.hjweb` for project recordings (`projectId` set),
  * the app-data `web-recordings/<id>` folder otherwise.
  */
-export type WebRecordingSummary = WebRecordingManifest & { video: string | null; backupVideo: string | null; directory: string; projectId: string | null }
+export type WebRecordingSummary = WebRecordingManifest & { video: string | null; backupVideo: string | null; directory: string; projectId: string | null; takes: WebRecordingTakeInfo[] }
+
+/** A take: a replay rendered from a director script, in `takes/<name>/` of the recording folder (newest first). */
+export interface WebRecordingTakeInfo { name: string; directory: string; video: string | null; frames: number; durationMs: number; fps: number; pointer: boolean; createdAt: string; conflicts: number }
 
 /** Where a new recording goes: a project (written as `素材/录屏/<名称>.hjweb`). Without one it goes to app data. */
 export interface WebRecordingDestination { projectId: string; name?: string }
@@ -69,6 +72,8 @@ export interface WebRecordingEditSource {
   /** Click and key events on the video clock, for suggesting zoom regions. */
   events: CaptureEvent[]
   warnings: string[]
+  /** The take whose video this is (a replay rendered from a director script). */
+  take?: string
 }
 export interface WebReplayRenderProgress { recordingId: string; progress: number; frame: string }
 
@@ -76,7 +81,15 @@ export interface WebReplayServerState { enabled: boolean; listening: boolean; po
 
 /** `output` defaults to a new file inside the recording directory. */
 /** pointer=false renders a clean picture (no pointer drawn in the page) for the editor; omitted keeps the pointer for viewing. */
-export interface WebReplayRenderRequest { recordingId: string; output?: string; fps?: number; pointer?: boolean; /** 输出长边像素；不给时按录制时的设备像素比 */ longEdge?: number; /** 只重演出文字与位置轨，不出视频 */ textOnly?: boolean; boxSelectors?: string[] }
+export interface WebReplayRenderRequest {
+  recordingId: string; output?: string; fps?: number; pointer?: boolean; /** 输出长边像素；不给时按录制时的设备像素比 */ longEdge?: number; /** 只重演出文字与位置轨，不出视频 */ textOnly?: boolean; boxSelectors?: string[]
+  /** 导演稿（web-replay-director 格式）：给了就按它出一个版本到 takes/<take>/，录制本身不动。与 directorFile 二选一。 */
+  director?: unknown
+  /** 导演稿 JSON 文件的本机路径。 */
+  directorFile?: string
+  /** 版本名（takes/ 下的文件夹名）；给了导演稿而没给名字时按时间起名。同名的旧版本在新版本写完后被替换。 */
+  take?: string
+}
 export interface WebReplayRenderResult {
   output: string
   frames: number
@@ -87,9 +100,12 @@ export interface WebReplayRenderResult {
   looseMatches: number
   unusedCalls: number
   locatorMisses: number
+  /** 按导演稿出的版本。 */
+  take?: WebRecordingTakeInfo & { steps: string[] }
 }
 
-export interface WebReplayReadRequest extends BoxTrackQuery { recordingId: string; track: 'data' | 'behavior' | 'text' | 'boxes'; offset: number; limit: number; /** 文字轨按文字搜 */ query?: string }
+/** `take`：读这个版本自己的轨道（boxes、text、behavior 在版本的输出时间上；timemap 是输出时间与录制时间的对照）。 */
+export interface WebReplayReadRequest extends BoxTrackQuery { recordingId: string; track: 'data' | 'behavior' | 'text' | 'boxes' | 'timemap'; offset: number; limit: number; /** 文字轨按文字搜 */ query?: string; take?: string }
 export interface WebReplayReadResult { entries: unknown[]; total: number; nextOffset: number | null }
 
 /**
@@ -125,8 +141,8 @@ export interface WebReplayPlatform {
   /** Lays that sound into backup.mp4 once the recording is saved; false when there was none. */
   mixBackupAudio(recordingId: string): Promise<boolean>
   importToProject(request: WebRecordingImportRequest): Promise<WebRecordingSummary>
-  /** `prefer` picks the replay or the backup video; `auto` takes the newest replay, else the backup. */
-  editSource(recordingId: string, prefer?: 'replay' | 'backup' | 'auto'): Promise<WebRecordingEditSource>
+  /** `prefer` picks the replay or the backup video; `auto` takes the newest replay, else the backup. `take` uses that take's video and track instead. */
+  editSource(recordingId: string, prefer?: 'replay' | 'backup' | 'auto', take?: string): Promise<WebRecordingEditSource>
 }
 
 export interface WebRecordingExportResult { files: string[]; skipped: number }

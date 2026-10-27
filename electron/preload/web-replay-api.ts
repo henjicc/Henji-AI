@@ -18,7 +18,7 @@ export function createWebReplayApi(invoke: <T>(channel: string, payload?: unknow
     backupAudioDirectory: recordingId => invoke(WEB_REPLAY_CHANNELS.backupAudioDirectory, { recordingId }),
     mixBackupAudio: recordingId => invoke(WEB_REPLAY_CHANNELS.mixBackupAudio, { recordingId }),
     importToProject: request => invoke(WEB_REPLAY_CHANNELS.importToProject, request),
-    editSource: (recordingId, prefer) => invoke(WEB_REPLAY_CHANNELS.editSource, { recordingId, ...(prefer ? { prefer } : {}) }),
+    editSource: (recordingId, prefer, take) => invoke(WEB_REPLAY_CHANNELS.editSource, { recordingId, ...(prefer ? { prefer } : {}), ...(take ? { take } : {}) }),
     onAppsChanged: handler => subscribe(WEB_REPLAY_CHANNELS.appsChanged, value => handler(value as WebReplayServerState)),
   }
 }

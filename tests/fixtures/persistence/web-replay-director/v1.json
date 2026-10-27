@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "timeline": {
+    "segments": [
+      {
+        "from": 0,
+        "to": 11.2,
+        "speed": 1
+      },
+      {
+        "from": 35.8,
+        "to": 41.4,
+        "speed": 1
+      },
+      {
+        "from": 41.4,
+        "to": 52.2,
+        "speed": 3
+      }
+    ],
+    "ramp": 0.4
+  },
+  "typewriter": [
+    {
+      "at": 36.8,
+      "charsPerSecond": 14,
+      "jitter": 0.25
+    }
+  ],
+  "pointer": [
+    {
+      "mode": "smooth",
+      "from": 37,
+      "to": 38,
+      "every": 0.3
+    },
+    {
+      "mode": "path",
+      "from": 2,
+      "to": 3,
+      "points": [
+        {
+          "at": 2.5,
+          "x": 540,
+          "y": 260
+        },
+        {
+          "at": 3,
+          "target": {
+            "selector": ".ask-input",
+            "offset": [
+              0.2,
+              0.5
+            ]
+          }
+        }
+      ],
+      "easing": "ease-out"
+    }
+  ],
+  "clicks": [
+    {
+      "at": 38,
+      "target": {
+        "text": "发送"
+      },
+      "approach": 0.3
+    }
+  ],
+  "actions": [
+    {
+      "kind": "hover",
+      "at": 45,
+      "target": {
+        "selector": "[data-act=\"cite\"]",
+        "index": 1
+      },
+      "approach": 0.35,
+      "duration": 0.8
+    },
+    {
+      "kind": "scroll",
+      "at": 48,
+      "target": {
+        "selector": ".answer"
+      },
+      "approach": 0.35,
+      "dy": 320,
+      "dx": 0,
+      "duration": 0.4
+    },
+    {
+      "kind": "drag",
+      "at": 50,
+      "target": {
+        "x": 400,
+        "y": 300
+      },
+      "approach": 0.35,
+      "to": {
+        "x": 600,
+        "y": 300
+      },
+      "duration": 0.6
+    },
+    {
+      "kind": "zoom",
+      "at": 51,
+      "target": {
+        "selector": ".canvas"
+      },
+      "approach": 0.35,
+      "steps": 2,
+      "duration": 0.4
+    },
+    {
+      "kind": "click",
+      "at": 52,
+      "target": {
+        "selector": ".ask-submit"
+      },
+      "approach": 0.35,
+      "button": "left"
+    }
+  ]
+}

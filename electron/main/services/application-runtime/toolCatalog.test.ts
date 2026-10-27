@@ -163,6 +163,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.80.0'] = '6184f481aea6be50017e4ef5d97f57b78b735b30eb0965a1f389d75274ec3b1b'
     // 共享源码树、工程文件通用实体、入口闭包与批量升级。
     fingerprints['2.81.0'] = '7862b95d8f92c2d53f394433863fcebd1c7903e976e2b362f8e6be7503b2064f'
+    // 网页重演导演稿：render_web_app_replay 新增 director / directorFile / take，读取与导入可指定版本（take），新增 timemap 轨；逐帧重演的说明。
+    fingerprints['2.82.0'] = '6c2cdd346941629b12e81cd81f71e16c5d97ac73f2e16fa18fe334f82e7be95f'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], `工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹：${fingerprint}`).toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {

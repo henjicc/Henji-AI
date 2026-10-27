@@ -19,6 +19,9 @@ import { forgetWebRecordingTrashMark, markWebRecordingTrashed, purgeExpiredWebRe
 import { readTextTrack, searchTextTrack, TEXT_TRACK_FILE } from './textTrack'
 import { readBoxTrack } from './boxTrackReader'
 import { newestReplayName, REPLAY_CLEAN_SUFFIX } from '../../../../src/core/webReplay/replayVideos'
+import { checkDirectorAgainstRecording, parseWebReplayDirector, WebReplayDirectorError, type WebReplayDirector } from '../../../../src/core/webReplay/director'
+import type { WebRecordingTakeInfo } from '../../../../src/platform/contracts/webReplay'
+import { listWebReplayTakes, readWebReplayTake, readWebReplayTakeBehavior, renderWebReplayTake, TAKE_FILES, type WebReplayTakeSummary } from './takes'
 
 const logger = createMainLogger('main.web_replay')
 const MAX_EXTERNAL_BYTES = 32 * 1024 * 1024
@@ -186,7 +189,7 @@ export async function listWebRecordings(): Promise<WebRecordingSummary[]> {
   const manifests = await Promise.all((await listWebRecordingLocations()).map(async ({ directory, projectId }) => {
     try {
       const backup = path.join(directory, BACKUP_VIDEO_FILE)
-      return { ...await new WebRecordingStore(directory).readManifest(), directory, projectId, video: await latestVideo(directory), backupVideo: await fs.access(backup).then(() => backup, () => null) }
+      return { ...await new WebRecordingStore(directory).readManifest(), directory, projectId, video: await latestVideo(directory), backupVideo: await fs.access(backup).then(() => backup, () => null), takes: (await listWebReplayTakes(directory)).map(takeInfo) }
     } catch (error) {
       logger.warn('网页录制无法读取', { event: 'web_replay.recording.unreadable', context: { directory }, error: String(error) })
       return null
@@ -293,9 +296,30 @@ export async function mixWebRecordingAudio(recordingId: string): Promise<boolean
 
 export async function getWebRecording(recordingId: string): Promise<WebRecordingManifest> { return new WebRecordingStore(await resolveWebRecordingDirectory(recordingId)).readManifest() }
 
-/** Full, unredacted track pages (the user chose full assistant visibility); blob bodies stay as references. */
+export function takeInfo(take: WebReplayTakeSummary): WebRecordingTakeInfo {
+  return { name: take.name, directory: take.directory, video: take.videoPath, frames: take.frames, durationMs: Math.round(take.durationUs / 1000), fps: take.fps, pointer: take.pointer, createdAt: take.createdAt, conflicts: take.conflicts }
+}
+
+function pageOf(entries: unknown[], offset: number, limit: number): WebReplayReadResult {
+  const slice = entries.slice(offset, offset + limit)
+  return { entries: slice, total: entries.length, nextOffset: offset + slice.length < entries.length ? offset + slice.length : null }
+}
+
+/**
+ * Full, unredacted track pages (the user chose full assistant visibility); blob bodies stay as references. With `take`,
+ * the boxes, text and behavior tracks are that take's own (on its output clock), and `timemap` pairs output and
+ * recording time; the data track is the recording's in either case.
+ */
 export async function readWebRecording(request: WebReplayReadRequest): Promise<WebReplayReadResult> {
-  const directory = await resolveWebRecordingDirectory(request.recordingId)
+  const recordingDirectory = await resolveWebRecordingDirectory(request.recordingId)
+  const take = request.take ? await readWebReplayTake(recordingDirectory, request.take) : null
+  if (request.track === 'timemap') {
+    if (!take) throw new Error('timemap 只属于按导演稿出的版本，请同时给 take（版本名）')
+    const map = JSON.parse(await fs.readFile(path.join(take.directory, TAKE_FILES.timeMap), 'utf8')) as { pieces: object[]; cuts: object[] }
+    return pageOf([...map.pieces, ...map.cuts.map(cut => ({ kind: 'cut', ...cut }))], request.offset, request.limit)
+  }
+  if (take && request.track === 'behavior') return pageOf(await readWebReplayTakeBehavior(take.directory), request.offset, request.limit)
+  const directory = take && (request.track === 'boxes' || request.track === 'text') ? take.directory : recordingDirectory
   if (request.track === 'boxes') {
     const { key, keyPrefix, fromSeconds, toSeconds } = request
     return readBoxTrack(directory, { key, keyPrefix, fromSeconds, toSeconds }, request.offset, request.limit)
@@ -307,8 +331,7 @@ export async function readWebRecording(request: WebReplayReadRequest): Promise<W
   }
   const store = new WebRecordingStore(directory)
   const entries: unknown[] = request.track === 'data' ? await store.readData().then(d => [...d.calls, ...d.external.map(e => ({ kind: 'external', ...e }))]) : await store.readBehavior()
-  const page = entries.slice(request.offset, request.offset + request.limit)
-  return { entries: page, total: entries.length, nextOffset: request.offset + page.length < entries.length ? request.offset + page.length : null }
+  return pageOf(entries, request.offset, request.limit)
 }
 
 export async function revealWebRecording(recordingId: string, file?: string): Promise<void> {
@@ -337,9 +360,33 @@ export async function renderWebRecording(request: WebReplayRenderRequest, signal
   } finally { rendering.delete(recordingId) }
 }
 
-/** 逐帧重演（页面时间由重演推进，每帧都在录制时刻上），视频或只出文字轨与位置轨。 */
+/** 导演稿：直接给的或从文件读的；校验失败时（逐条点名字段）一帧也不渲染。只给版本名时是照录制原样的版本。 */
+async function directorOf(request: WebReplayRenderRequest, recordingDurationUs: () => Promise<number>): Promise<WebReplayDirector | null> {
+  if (request.director === undefined && !request.directorFile && !request.take) return null
+  let raw: unknown = request.director ?? { version: 1 }
+  if (request.directorFile) {
+    const text = await fs.readFile(request.directorFile, 'utf8').catch(error => { throw new WebReplayDirectorError([`directorFile：读不了（${String((error as Error)?.message ?? error)}）`]) })
+    try { raw = JSON.parse(text) } catch (error) { throw new WebReplayDirectorError([`directorFile：不是合法的 JSON（${String((error as Error)?.message ?? error)}）`]) }
+  }
+  const director = parseWebReplayDirector(raw)
+  checkDirectorAgainstRecording(director, await recordingDurationUs())
+  return director
+}
+
+/** 逐帧重演（页面时间由重演推进，每帧都在录制时刻上），视频或只出文字轨与位置轨；有导演稿时出一个版本。 */
 async function renderReplay(request: WebReplayRenderRequest, directory: string, waitedMs: number, signal?: AbortSignal, onProgress?: (progress: WebReplayRenderProgress) => void): Promise<WebReplayRenderResult> {
   const recordingId = request.recordingId
+  const director = await directorOf(request, async () => (await new WebRecordingStore(directory).readManifest()).durationUs)
+  if (director) {
+    const name = request.take ?? `导演稿 ${new Date().toISOString().replace(/[:.]/g, '-')}`
+    logger.info('开始按导演稿重演版本', { event: 'web_replay.take.start', context: { recordingId, take: name, waitedMs, textOnly: request.textOnly === true } })
+    const { result, take } = await renderWebReplayTake(directory, {
+      recordingId, name, director, fps: request.fps, pointer: request.pointer === true, longEdge: request.longEdge, textOnly: request.textOnly, boxSelectors: request.boxSelectors, signal,
+      onFrame: onProgress ? (progress, frame) => onProgress({ recordingId, progress, frame }) : undefined,
+    })
+    const { takeTracks, ...rest } = result
+    return { ...rest, output: take.videoPath ?? path.join(take.directory, TAKE_FILES.text), take: { ...takeInfo(take), steps: takeTracks?.steps ?? [] } }
+  }
   const textTrack = path.join(directory, TEXT_TRACK_FILE)
   let options: ReplayOptions
   if (request.textOnly) {

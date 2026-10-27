@@ -17,8 +17,8 @@ export interface WebRecordingVideoImportResult { itemIds: string[]; clipIds: str
  * 片段带上现有的鼠标效果（重新画光标与点击）与按点击建议的自动缩放。给 sequenceId 时放到 frame 处的空视频轨，
  * 否则只进素材库。一次保存，可撤销。
  */
-export async function importWebRecordingToVideo(recordingId: string, target: RecordingDestination, prefer: 'replay' | 'backup' | 'auto' = 'auto', signal?: AbortSignal): Promise<WebRecordingVideoImportResult> {
-  const source = await getPlatform().webReplay.editSource(recordingId, prefer)
+export async function importWebRecordingToVideo(recordingId: string, target: RecordingDestination, prefer: 'replay' | 'backup' | 'auto' = 'auto', signal?: AbortSignal, take?: string): Promise<WebRecordingVideoImportResult> {
+  const source = await getPlatform().webReplay.editSource(recordingId, prefer, take)
   signal?.throwIfAborted()
   await openVideoEditDocument({ id: target.documentId }, { focus: false })
   const clipIds: string[] = []
@@ -44,6 +44,6 @@ export async function importWebRecordingToVideo(recordingId: string, target: Rec
     return document
   })
   await saveVideoEdit(target.documentId)
-  logger.info('网页录制已导入剪辑', { event: 'web_replay.import_video.completed', context: { recordingId, documentId: target.documentId, video: source.kind, cursor: Boolean(source.cursor), clips: clipIds.length } })
+  logger.info('网页录制已导入剪辑', { event: 'web_replay.import_video.completed', context: { recordingId, take: source.take ?? null, documentId: target.documentId, video: source.kind, cursor: Boolean(source.cursor), clips: clipIds.length } })
   return { itemIds, clipIds, video: source.kind, cursor: Boolean(source.cursor), warnings: source.warnings }
 }

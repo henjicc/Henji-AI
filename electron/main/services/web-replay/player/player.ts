@@ -4,6 +4,9 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { WebRecordingMatcher } from '../../../../../src/core/webReplay/matcher'
 import type { WebRecordingBehaviorEvent, WebRecordingData, WebRecordingManifest, WireBodyValue } from '../../../../../src/core/webReplay/schema'
+import type { WebReplayDirector } from '../../../../../src/core/webReplay/director'
+import { planWebReplay } from '../../../../../src/core/webReplay/directorPlan'
+import type { DirectorTimeline, WebReplayTimeMapFile } from '../../../../../src/core/webReplay/directorTimeline'
 import type { ReplayBoot, ReplayFrameReport, ReplayHostResult, ReplayHttpRequest, ReplayHttpResult, ReplayReport } from '../../../../../packages/web-replay-probe/src/replay/types'
 import { REPLAY_CONTROL } from '../../../../../packages/web-replay-probe/src/replay/types'
 import { DEFAULT_LOCATOR_OPTIONS } from '../../../../../packages/web-replay-probe/src/shared/locatorOptions'
@@ -13,6 +16,7 @@ import { PaintFrameCapture, tokenIndex, tokenSidePx } from './capture'
 import { FrameEncoder, prepareFrameEncoder } from './encoder'
 import type { FrameSource, TakenFrame } from './frameSource'
 import { GpuCaptureError, GpuFrameCapture, isReplayReader } from './gpuCapture'
+import { DirectorInput, TakeTrack } from './directorInput'
 import { InputDispatcher } from './input'
 import { BOOTSTRAP_PATH, installReplaySite } from './site'
 import { TEXT_SAMPLE_INTERVAL_US, TEXT_SAMPLE_SCRIPT, TextTrackWriter, type TextSample } from '../textTrack'
@@ -34,20 +38,26 @@ const TOKEN_HIDDEN_WAIT_MS = 100
 /** One page step (timers, a frame, sampling) must answer within this. */
 const STEP_TIMEOUT_MS = 30_000
 const PREVIEW_INTERVAL_MS = 200
+/** A conflict this soon (page time) after a director step's input is put down to that step. */
+const STEP_BLAME_US = 3_000_000
 /** Pictures waiting for the encoder pipe at most (a 4K picture is 38 MB). */
 const MAX_QUEUED_WRITES = 6
 
+/** `t`: recording time (µs) the issue came up at. */
 export interface ReplayIssue { t: number; kind: 'conflict' | 'warning'; message: string }
 export interface ReplayResult {
   output: string
   frames: number
   width: number
   height: number
+  /** Output length (with a director script: the take's length, not the recording's). */
   durationMs: number
   issues: ReplayIssue[]
   looseMatches: number
   unusedCalls: number
   locatorMisses: number
+  /** With a director script: the take's pointer and input track on the output clock, and the time map. */
+  takeTracks?: { behavior: WebRecordingBehaviorEvent[]; timeMap: WebReplayTimeMapFile; steps: string[] }
 }
 export interface ReplayOptions {
   output: string; fps?: number; show?: boolean; signal?: AbortSignal
@@ -67,6 +77,10 @@ export interface ReplayOptions {
   quietFrames?: boolean
   /** How pictures are taken: 'gpu' (shared textures read with WebGPU, falls back to CPU when unavailable) or 'cpu' (paint images). Default 'gpu'. */
   capture?: 'gpu' | 'cpu'
+  /** Where the element box track goes; default boxes.jsonl in the recording directory. */
+  boxTrack?: string
+  /** A director script: output time, typing and input follow it instead of the recording (a take). */
+  director?: WebReplayDirector
 }
 
 type BootReply = { phase: 'bootstrap'; storage: unknown } | { phase: 'app'; boot: ReplayBoot } | { phase: 'reader' } | { phase: 'none' }
@@ -136,14 +150,25 @@ export class WebRecordingPlayer {
   /** Page time (ms) the engine last moved the page to. */
   private pageMs = 0
   private readonly skew = new CallSkew()
+  /** Recording ↔ page time (they differ after a director script's typing). */
+  private timeline: DirectorTimeline | null = null
+  /** The director step whose input went in last, for this long of page time after it (a conflict it caused names it). */
+  private activeStep: { label: string; untilPageUs: number } | null = null
 
   constructor(private readonly store: WebRecordingStore) {}
 
   static open(directory: string): WebRecordingPlayer { return new WebRecordingPlayer(new WebRecordingStore(directory)) }
 
-  private issue(kind: ReplayIssue['kind'], message: string, t = Math.round(this.pageMs * 1000)): void {
-    if (this.issues.length < 500) this.issues.push({ t, kind, message })
-    logger.debug('网页重演发现问题', { event: 'web_replay.replay.issue', context: { kind, message: message.slice(0, 300) } })
+  private recOfPage(pageUs: number): number { return this.timeline ? Math.round(this.timeline.recOfPage(pageUs)) : pageUs }
+
+  /**
+   * `pageUs`: page time the issue came up at; kept as recording time. A conflict (a request or host call the recording
+   * does not have) soon after a director step's input names that step; `step` names it outright.
+   */
+  private issue(kind: ReplayIssue['kind'], message: string, pageUs = Math.round(this.pageMs * 1000), step: string | null = kind === 'conflict' && this.activeStep && pageUs <= this.activeStep.untilPageUs ? this.activeStep.label : null): void {
+    const text = step ? `导演稿 ${step}${kind === 'conflict' ? ' 引起' : ''}：${message}` : message
+    if (this.issues.length < 500) this.issues.push({ t: this.recOfPage(pageUs), kind, message: text })
+    logger.debug('网页重演发现问题', { event: 'web_replay.replay.issue', context: { kind, step, message: message.slice(0, 300) } })
   }
 
   // ---- IPC from the replay page
@@ -171,8 +196,9 @@ export class WebRecordingPlayer {
     if (!match) return { ok: false, conflict: `这一步会发出录制里没有的请求：${request.method} ${request.url}` }
     if (match.quality === 'loose') { this.loose += 1; this.issue('warning', `请求内容与录制不同，已按顺序对应：${request.method} ${request.url}`) }
     const call = match.call
-    this.skew.add(request.t, call.t)
-    const shift = anchorShiftUs(request.t, call.t)
+    const recUs = request.t === undefined ? undefined : this.recOfPage(request.t)
+    this.skew.add(recUs, call.t)
+    const shift = anchorShiftUs(recUs, call.t)
     const error = call.error ? { ...call.error, at: call.error.at + shift } : undefined
     const chunks = await Promise.all(call.chunks.map(async c => ({ at: c.at + shift, body: await this.store.readBody(c.body) as WireBodyValue })))
     if (!call.response) return { ok: true, status: 200, statusText: '', url: call.url, headers: [], responseAt: (call.error?.at ?? 0) + shift, chunks: [], error: error ?? { at: shift, phase: 'request', name: 'TypeError', message: 'Failed to fetch' } }
@@ -183,11 +209,14 @@ export class WebRecordingPlayer {
     const match = this.matcher.host(command, args)
     if (!match) return { ok: false, conflict: `这一步会调用录制里没有的宿主命令：${command}` }
     if (match.quality === 'loose') { this.loose += 1; this.issue('warning', `宿主命令参数与录制不同，已按顺序对应：${command}`) }
-    this.skew.add(t, match.call.t)
-    const shift = anchorShiftUs(t, match.call.t)
+    const recUs = t === undefined ? undefined : this.recOfPage(t)
+    this.skew.add(recUs, match.call.t)
+    const shift = anchorShiftUs(recUs, match.call.t)
+    // Recorded callbacks are timed on the recording; page time may be ahead of it after typing.
+    const offset = t !== undefined && recUs !== undefined && t - recUs > 0 ? { pageOffsetUs: Math.round(t - recUs) } : {}
     const result = match.call.result
-    if (!result) return { ok: true, call: match.call.id, resolved: true, value: null, at: shift }
-    return result.ok ? { ok: true, call: match.call.id, resolved: true, value: result.value, at: result.at + shift } : { ok: true, call: match.call.id, resolved: false, error: result.error, at: result.at + shift }
+    if (!result) return { ok: true, call: match.call.id, resolved: true, value: null, at: shift, ...offset }
+    return result.ok ? { ok: true, call: match.call.id, resolved: true, value: result.value, at: result.at + shift, ...offset } : { ok: true, call: match.call.id, resolved: false, error: result.error, at: result.at + shift, ...offset }
   }
 
   private storage: unknown
@@ -256,7 +285,7 @@ export class WebRecordingPlayer {
     const encoderReady = video ? prepareFrameEncoder() : Promise.resolve()
     encoderReady.catch(() => undefined) // 开始出帧前再等它；先挂上处理，免得更早的失败变成未处理的拒绝
     const text = options.textTrack ? new TextTrackWriter(options.textTrack) : null
-    const boxes = new BoxTrackWriter(path.join(this.store.directory, BOX_TRACK_FILE))
+    const boxes = new BoxTrackWriter(options.boxTrack ?? path.join(this.store.directory, BOX_TRACK_FILE))
     const control = `window[${JSON.stringify(REPLAY_CONTROL)}]`
     // The last captured picture is copied and encoded while the page already works on the next step.
     let flushShot: () => Promise<void> = async () => {}
@@ -266,7 +295,7 @@ export class WebRecordingPlayer {
       return flushShot().then(() => call)
     }
     const startedAt = Date.now()
-    const stats = { capture: video ? (gpu ? 'gpu' : 'cpu') : 'none', advances: 0, steps: 0, quiet: 0, captured: 0, unchanged: 0, tokenMisses: 0, tokenRepaints: 0, sampleFailures: 0, pageMs: 0, captureMs: 0, encodeMs: 0, sampleMs: 0 }
+    const stats = { capture: video ? (gpu ? 'gpu' : 'cpu') : 'none', advances: 0, steps: 0, cutSteps: 0, quiet: 0, captured: 0, unchanged: 0, tokenMisses: 0, tokenRepaints: 0, sampleFailures: 0, pageMs: 0, captureMs: 0, encodeMs: 0, sampleMs: 0 }
     try {
       const stage = (name: string): void => logger.info('网页重演进度', { event: 'web_replay.replay.stage', context: { recordingId: this.manifest.id, stage: name } })
       stage('window')
@@ -320,16 +349,22 @@ export class WebRecordingPlayer {
         this.issue('warning', `窗口尺寸没有按录制改到 ${width}×${height}`)
       }
 
-      const totalMs = this.manifest.durationUs / 1000 + TAIL_MS
-      const frameCount = Math.ceil(totalMs / 1000 * fps)
+      // What runs when: the recording as it was, or as the director script retimes and rewrites it.
+      const plan = planWebReplay({ director: options.director ?? null, events: this.behavior, totalRecUs: this.manifest.durationUs + TAIL_MS * 1000, fps, viewport: env.viewport })
+      this.timeline = plan.timeline
+      for (const note of plan.notes) this.issue('warning', `导演稿 ${note}`, 0)
+      const frameCount = plan.timeline.frames
+      const totalMs = plan.timeline.durationUs / 1000
       const textEvery = Math.max(1, Math.round(TEXT_SAMPLE_INTERVAL_US / 1e6 * fps))
-      const events = [...this.behavior].sort((a, b) => a.t - b.t)
-      let nextEvent = 0
+      const director = new DirectorInput(plan, input, target => page<{ x: number; y: number } | null>(`${control}.resolveTarget(${JSON.stringify(target)})`), (message, pageUs, step) => this.issue('warning', message, pageUs, step ?? null))
+      const take = options.director ? new TakeTrack(input) : null
       // Pointer moves and wheel reach the page with its next rendering update; hold timers until then.
       let heldInput = false
       let nextDue = Infinity
       // Input dispatched since the last rendered frame: the next frame must render.
       let inputSinceFrame = true
+      // A cut was rendered through since the last captured picture: the next frame must be captured.
+      let renderedSinceCapture = false
       const quietFrames = options.quietFrames !== false
       let lastGood: Buffer | null = null
       // The pipe drains pictures in order while the replay goes on; a few may wait their turn (each a whole frame in memory).
@@ -371,31 +406,64 @@ export class WebRecordingPlayer {
         }
         stats.encodeMs += Date.now() - encodeStarted
       }
-      logger.info('开始逐帧重演', { event: 'web_replay.replay.lockstep_start', context: { recordingId: this.manifest.id, fps, frames: frameCount, dpr, video, events: events.length, selectors: options.boxSelectors?.length ?? 0 } })
+      logger.info('开始逐帧重演', { event: 'web_replay.replay.lockstep_start', context: { recordingId: this.manifest.id, fps, frames: frameCount, dpr, video, events: this.behavior.length, ops: plan.ops.length, cuts: plan.timeline.cuts.length, director: plan.steps, selectors: options.boxSelectors?.length ?? 0 } })
 
-      for (let i = 0; i < frameCount; i += 1) {
-        if (options.signal?.aborted) throw new Error('已取消重演')
-        const t = i * 1000 / fps
-        const tUs = Math.round(i * 1e6 / fps)
-        while (nextEvent < events.length && events[nextEvent].t / 1000 <= t) {
-          if (options.signal?.aborted) throw new Error('已取消重演')
-          const event = events[nextEvent++]
-          const at = event.t / 1000
-          if (event.kind === 'focus' || event.kind === 'action') continue
-          if (heldInput && nextDue <= at) { await page(`${control}.realFrame()`); heldInput = false }
-          nextDue = (await advance(at)).nextDue
-          if (event.kind === 'resize') { win.setContentSize(Math.round(event.width), Math.round(event.height)); await waitViewport(Math.round(event.width), Math.round(event.height)); continue }
-          await input.dispatch(event).catch(error => this.issue('warning', `输入派发失败：${String(error)}`, event.t))
-          inputSinceFrame = true
-          if ((event.kind === 'pointer' && event.type === 'move') || event.kind === 'wheel') heldInput = true
-        }
-        if (heldInput && nextDue <= t) await page(`${control}.realFrame()`)
+      // Held input reaches the page before a timer due after it (the order it had while recording).
+      const flushHeld = async (atMs: number): Promise<void> => {
+        if (heldInput && nextDue <= atMs) await page(`${control}.realFrame()`)
         heldInput = false
+      }
+      for (const op of plan.ops) {
+        if (options.signal?.aborted) throw new Error('已取消重演')
+        const atMs = op.pageUs / 1000
+        // A conflict soon after a director step's input is put down to it; recorded clicks and keys take that over again.
+        if (op.step) this.activeStep = { label: op.step, untilPageUs: op.pageUs + STEP_BLAME_US }
+        else if (op.kind === 'event' && op.event.kind !== 'resize' && op.event.kind !== 'focus' && op.event.kind !== 'action' && !(op.event.kind === 'pointer' && op.event.type === 'move')) this.activeStep = null
+        if (op.kind === 'advance') {
+          // A cut: the page goes on (its frame callbacks run), nothing is captured.
+          await flushHeld(atMs)
+          if (site.inFlight()) await loaded()
+          const report = await page<ReplayFrameReport>(`${control}.frame(${atMs}, ${JSON.stringify({ allowQuiet: !inputSinceFrame })})`)
+          stats.cutSteps += 1
+          this.pageMs = report.now
+          nextDue = Infinity
+          if (!report.quiet) { inputSinceFrame = false; renderedSinceCapture = true }
+          continue
+        }
+        if (op.kind !== 'frame') {
+          if (op.kind === 'event' && (op.event.kind === 'focus' || op.event.kind === 'action')) { take?.record(op, null); continue }
+          if (heldInput && nextDue <= atMs) { await page(`${control}.realFrame()`); heldInput = false }
+          nextDue = (await advance(atMs)).nextDue
+          if (op.kind === 'event' && op.event.kind === 'resize') {
+            win.setContentSize(Math.round(op.event.width), Math.round(op.event.height))
+            await waitViewport(Math.round(op.event.width), Math.round(op.event.height))
+            take?.record(op, null)
+            continue
+          }
+          let landed: { x: number; y: number } | null | undefined
+          try {
+            landed = await director.dispatch(op)
+          } catch (error) {
+            this.issue('warning', `输入派发失败：${String(error)}`, op.pageUs)
+            inputSinceFrame = true
+            continue
+          }
+          // undefined: an injected step whose target is not in the page (warned once), nothing reached the page
+          if (landed === undefined) continue
+          take?.record(op, landed)
+          inputSinceFrame = true
+          if (op.kind === 'move' || (op.kind === 'event' && ((op.event.kind === 'pointer' && op.event.type === 'move') || op.event.kind === 'wheel'))) heldInput = true
+          continue
+        }
+        const i = op.index
+        const tUs = Math.round(op.outUs)
+        await flushHeld(atMs)
+        take?.frame(op)
 
         const samples = text && i % textEvery === 0 ? ['boxes', 'text'] : ['boxes']
         const frameStarted = Date.now()
         if (site.inFlight()) await loaded()
-        const report = await page<ReplayFrameReport>(`${control}.frame(${t}, ${JSON.stringify({ token: video ? tokenIndex(i) : undefined, samples, allowQuiet: quietFrames && !inputSinceFrame && i > 0 })})`)
+        const report = await page<ReplayFrameReport>(`${control}.frame(${atMs}, ${JSON.stringify({ token: video ? tokenIndex(i) : undefined, samples, allowQuiet: quietFrames && !inputSinceFrame && !renderedSinceCapture && i > 0 })})`)
         stats.steps += 1
         stats.pageMs += Date.now() - frameStarted
         this.pageMs = report.now
@@ -407,6 +475,7 @@ export class WebRecordingPlayer {
           continue
         }
         inputSinceFrame = false
+        renderedSinceCapture = false
         const sampleStarted = Date.now()
         for (const [name, sample] of Object.entries(report.samples)) {
           if (!sample.ok) {
@@ -445,18 +514,19 @@ export class WebRecordingPlayer {
       await text?.close(Math.round(frameCount * 1e6 / fps))
       await boxes.close(Math.round(frameCount * 1e6 / fps))
       const wallMs = Date.now() - startedAt
-      const summary = { recordingId: this.manifest.id, fps, frames: frameCount, video, wallMs, speed: +(totalMs / Math.max(1, wallMs)).toFixed(2), ...stats, ...source?.stats(), skew: this.skew.summary() }
+      const summary = { recordingId: this.manifest.id, fps, frames: frameCount, video, wallMs, speed: +(totalMs / Math.max(1, wallMs)).toFixed(2), ...stats, ...source?.stats(), skew: this.skew.summary(), targetMisses: director.misses }
       logger.info('界面元素位置轨已保存', { event: 'web_replay.boxes.completed', context: { recordingId: this.manifest.id, frames: frameCount, sampleFailures: stats.sampleFailures } })
+      const takeResult = take ? { takeTracks: { behavior: take.events(Math.round(plan.timeline.durationUs)), timeMap: plan.timeline.toFile(plan.ops.flatMap(op => (op.kind === 'frame' ? [op.recUs] : []))), steps: plan.steps } } : {}
       if (!video) {
         logger.info('网页重演文字轨完成', { event: 'web_replay.replay.text_completed', context: { ...summary, issues: this.issues.length } })
-        return { output: options.textTrack ?? '', frames: frameCount, width: Math.round(env.viewport.width), height: Math.round(env.viewport.height), durationMs: totalMs, issues: this.issues, looseMatches: this.loose, unusedCalls: this.matcher.unused().length, locatorMisses: input.misses }
+        return { output: options.textTrack ?? '', frames: frameCount, width: Math.round(env.viewport.width), height: Math.round(env.viewport.height), durationMs: totalMs, issues: this.issues, looseMatches: this.loose, unusedCalls: this.matcher.unused().length, locatorMisses: input.misses, ...takeResult }
       }
       if (!encoder) throw new Error('重演窗口没有产生任何画面')
       await writing
       await encoder.finish(frameCount - 1)
       const unused = this.matcher.unused().length
       logger.info('网页重演完成', { event: 'web_replay.replay.completed', context: { ...summary, sent: encoder.sent, issues: this.issues.length, loose: this.loose, unused } })
-      return { output: options.output, frames: encoder.frames, width: encoder.width, height: encoder.height, durationMs: totalMs, issues: this.issues, looseMatches: this.loose, unusedCalls: unused, locatorMisses: input.misses }
+      return { output: options.output, frames: encoder.frames, width: encoder.width, height: encoder.height, durationMs: totalMs, issues: this.issues, looseMatches: this.loose, unusedCalls: unused, locatorMisses: input.misses, ...takeResult }
     } catch (error) {
       // 写了一半的视频会被当成最新的重演视频拿去用，删掉
       if (await encoder?.abort()) await fs.rm(options.output, { force: true }).catch(cleanupError => logger.warn('写了一半的重演视频没能删除', { event: 'web_replay.replay.cleanup_failed', context: { output: options.output }, error: String(cleanupError) }))

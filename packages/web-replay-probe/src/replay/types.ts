@@ -1,5 +1,18 @@
 import type { ElementInfo, Encoded, HeaderList, HostKind, Locator, ProbeEnvironment, WireBody } from '../protocol'
 import type { LocatorOptions } from '../shared/locatorOptions'
+/**
+ * A place in the page the replay engine was told to act on (a director script's target): an element found by CSS
+ * selector and/or visible text, or a viewport point. Only elements with a box count; `index` picks among the matches
+ * in document order, `offset` the point inside the element (fractions of its width and height, centre by default).
+ */
+export interface ReplayTarget {
+  selector?: string
+  text?: string
+  index?: number
+  offset?: [number, number]
+  x?: number
+  y?: number
+}
 
 /** Everything the page needs synchronously before its first script runs. */
 export interface ReplayBoot {
@@ -29,9 +42,13 @@ export type ReplayHttpResult =
   }
   | { ok: false; conflict: string }
 
+/**
+ * `pageOffsetUs`: page time minus recording time at the call (a director script's typing moved page time ahead of
+ * the recording); the call's recorded host callbacks, timed on the recording, land that much later. Omitted means 0.
+ */
 export type ReplayHostResult =
-  | { ok: true; call: number; resolved: true; value: Encoded; at: number }
-  | { ok: true; call: number; resolved: false; error: Encoded; at: number }
+  | { ok: true; call: number; resolved: true; value: Encoded; at: number; pageOffsetUs?: number }
+  | { ok: true; call: number; resolved: false; error: Encoded; at: number; pageOffsetUs?: number }
   | { ok: false; conflict: string }
 
 export type ReplayReport =
@@ -82,6 +99,8 @@ export interface ReplayControl {
   viewport(): { width: number; height: number }
   /** Repaints the current capture token (same token) so a dropped capture comes again. */
   repaintToken(): Promise<void>
+  /** Where a director script's target is right now (viewport CSS px), or null when it is not in the page. */
+  resolveTarget(target: ReplayTarget): { x: number; y: number } | null
 }
 
 /**

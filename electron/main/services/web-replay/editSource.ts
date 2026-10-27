@@ -15,6 +15,7 @@ import { BACKUP_TIMING_FILE, BACKUP_VIDEO_FILE } from './backupVideo'
 import { resolveWebRecordingLocation } from './locations'
 import { WebRecordingStore } from './store'
 import { isCleanReplayName, newestReplayName } from '../../../../src/core/webReplay/replayVideos'
+import { readWebReplayTake, readWebReplayTakeBehavior, TAKE_FILES } from './takes'
 
 const logger = createMainLogger('main.web_replay.edit_source')
 /** Pages projected for one video live beside it: `edit-events/<video name>/`. Pages are immutable and reused. */
@@ -49,22 +50,27 @@ async function readPages(directory: string): Promise<CaptureLogPage[]> {
  * The video a web recording brings into an edit, with its behavior track projected onto that video's clock and pixels
  * as capture-log pages, so the clip gets the existing redrawn pointer and click zoom. Newest clean replay first (no pointer
  * in the picture: the pointer is redrawn), then a replay rendered with the pointer, then the backup screen recording
- * (for both of those the pointer is already in the picture: only clicks are drawn).
+ * (for both of those the pointer is already in the picture: only clicks are drawn). With `take`, that take's video and its
+ * own behavior track (already on the take's clock) instead.
  */
-export async function webRecordingEditSource(recordingId: string, prefer: 'replay' | 'backup' | 'auto' = 'auto'): Promise<WebRecordingEditSource> {
-  const { directory } = await resolveWebRecordingLocation(recordingId)
-  const store = new WebRecordingStore(directory)
+export async function webRecordingEditSource(recordingId: string, prefer: 'replay' | 'backup' | 'auto' = 'auto', takeName?: string): Promise<WebRecordingEditSource> {
+  const { directory: recordingDirectory } = await resolveWebRecordingLocation(recordingId)
+  const store = new WebRecordingStore(recordingDirectory)
   const manifest = await store.readManifest()
   if (manifest.status === 'recording') throw new Error('这段网页录制还在进行，请先停止')
-  const replay = await newestReplay(directory)
-  const backupPath = path.join(directory, BACKUP_VIDEO_FILE)
-  const backup = await fs.access(backupPath).then(() => backupPath, () => null)
-  const kind = prefer === 'backup' ? (backup ? 'backup' : null) : prefer === 'replay' ? (replay ? 'replay' : null) : replay ? 'replay' : backup ? 'backup' : null
+  const take = takeName ? await readWebReplayTake(recordingDirectory, takeName) : null
+  if (take && !take.videoPath) throw new Error(`版本“${take.name}”只出了轨道没有视频，请不带 textOnly 重新按导演稿重演`)
+  // Pages projected for a take live in the take's own folder.
+  const directory = take?.directory ?? recordingDirectory
+  const replay = take ? take.videoPath : await newestReplay(directory)
+  const backupPath = path.join(recordingDirectory, BACKUP_VIDEO_FILE)
+  const backup = take ? null : await fs.access(backupPath).then(() => backupPath, () => null)
+  const kind = prefer === 'backup' && !take ? (backup ? 'backup' : null) : prefer === 'replay' || take ? (replay ? 'replay' : null) : replay ? 'replay' : backup ? 'backup' : null
   if (!kind) throw new Error(prefer === 'auto' ? '这段网页录制还没有视频：请先重演出视频，或在录制时开启备份录屏' : prefer === 'replay' ? '这段网页录制还没有重演视频，请先重演出视频' : '这段网页录制没有备份录屏')
   const video = kind === 'replay' ? replay! : backup!
   const frame = await probeVideo(video)
   const warnings: string[] = []
-  const pointerInPicture = kind === 'backup' || !isCleanReplayName(path.basename(video))
+  const pointerInPicture = kind === 'backup' || (take ? take.pointer : !isCleanReplayName(path.basename(video)))
   if (kind === 'replay' && pointerInPicture) warnings.push('这段重演视频里已经画了鼠标，只补点击效果；想在剪辑里重画鼠标，先用 render_web_app_replay（pointer=false）重演出干净画面')
   let clock: WebRecordingVideoClock | null = { kind: 'replay' }
   if (kind === 'backup') {
@@ -72,12 +78,13 @@ export async function webRecordingEditSource(recordingId: string, prefer: 'repla
     clock = manifest.clock && timing ? { kind: 'backup', monoAtZeroUs: manifest.clock.monoAtZeroUs, timing } : null
     if (!clock) warnings.push('备份录屏缺少和录制对齐的时钟，鼠标效果与自动缩放没有加上')
   }
-  const projected = clock ? projectWebRecordingEvents(manifest, await store.readBehavior(), clock, frame) : []
+  const behavior = take ? await readWebReplayTakeBehavior(take.directory) : await store.readBehavior()
+  const projected = clock ? projectWebRecordingEvents(manifest, behavior, clock, frame) : []
   if (clock && projected.length && !projected.some(event => event.payload.kind === 'cursor')) warnings.push('视频画面和网页尺寸对不上（可能录的是整个屏幕），没能画回鼠标位置')
-  const base = { video, kind, width: frame.width, height: frame.height, durationUs: frame.durationUs, title: manifest.title ?? null, warnings } as const
+  const base = { video, kind, width: frame.width, height: frame.height, durationUs: frame.durationUs, title: take ? `${manifest.title ?? manifest.app.name} · ${take.name}` : manifest.title ?? null, warnings, ...(take ? { take: take.name } : {}) } as const
   if (!projected.some(event => event.payload.kind === 'cursor' || event.payload.kind === 'click')) return { ...base, cursor: null, events: [] }
 
-  const behaviorBytes = await fs.readFile(path.join(directory, WEB_RECORDING_FILES.behavior))
+  const behaviorBytes = await fs.readFile(path.join(directory, take ? TAKE_FILES.behavior : WEB_RECORDING_FILES.behavior))
   const digest = crypto.createHash('sha256').update(behaviorBytes).update(`\0${path.basename(video)}\0${frame.width}x${frame.height}\0${JSON.stringify(clock)}\0projection-v${PROJECTION_VERSION}`).digest('hex')
   const ownerRef = { kind: 'screen_recording.web_recording', id: manifest.id }
   const sourceDigest = `sha256:${digest}`

@@ -24,7 +24,7 @@ export function createElectronWebReplay(): WebReplayPlatform {
     backupAudioDirectory: id => native().backupAudioDirectory(id),
     mixBackupAudio: id => native().mixBackupAudio(id),
     importToProject: request => native().importToProject(request),
-    editSource: (id, prefer) => native().editSource(id, prefer),
+    editSource: (id, prefer, take) => native().editSource(id, prefer, take),
     onAppsChanged: listener => native().onAppsChanged(listener),
   }
 }

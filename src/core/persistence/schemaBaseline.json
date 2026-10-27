@@ -382,6 +382,12 @@
       "fingerprint": "db4339c968d33959303ea4e958ee1659d87bc3165160e37d34f1b63a9f478b57",
       "supportedFrom": 1,
       "minReaderVersion": 1
+    },
+    "web-replay-director": {
+      "version": 1,
+      "fingerprint": "ae27250452fc95135ee4280f80097a9f7c565c8ce397fb5eb203f5a5449b8aa7",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
     }
   },
   "devBreaks": []

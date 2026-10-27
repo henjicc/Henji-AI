@@ -9,6 +9,7 @@ import { installCaretBlink } from './caretBlink'
 import { installCursorOverlay } from './cursorOverlay'
 import { installSmoothScroll } from './smoothScroll'
 import { holdIndexedDb } from './storageHold'
+import { resolveReplayTarget } from './target'
 import { installVirtualClock } from './virtualClock'
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
@@ -210,6 +211,7 @@ export function installReplayRuntime(host: ReplayHost): void {
     },
     viewport: () => ({ width: innerWidth, height: innerHeight }),
     repaintToken: () => clock.realFrame().then(() => token.repaint()),
+    resolveTarget: target => resolveReplayTarget(target),
   }
   win[REPLAY_CONTROL] = control
   if (host.boot.pointer !== false) installCursorOverlay()
@@ -243,12 +245,13 @@ function installTauriShim(host: ReplayHost, conflict: (message: string) => void,
       const wire = args instanceof ArrayBuffer || ArrayBuffer.isView(args) ? args : JSON.parse(JSON.stringify(args ?? {}))
       const result = await clock.hold((async () => host.invoke(cmd, await encodeValue(wire), issued))())
       if (!result.ok) { conflict(result.conflict); throw new Error(result.conflict) }
-      // Schedule the host callbacks this call carried during recording.
+      // Schedule the host callbacks this call carried during recording (on the recording's clock, shifted to page time).
+      const offsetMs = (result.pageOffsetUs ?? 0) / 1000
       for (const event of boot.callbacks) {
         if (event.call !== result.call) continue
         const id = refs[event.index]
         if (id === undefined) continue
-        setTimeout(() => callbacks.get(id)?.(decodeValue(event.payload)), Math.max(0, event.t / 1000 - performance.now()))
+        setTimeout(() => callbacks.get(id)?.(decodeValue(event.payload)), Math.max(0, event.t / 1000 + offsetMs - performance.now()))
       }
       await new Promise(resolve => setTimeout(resolve, Math.max(0, (issued + result.at - nowUs()) / 1000)))
       if (result.resolved) return decodeValue(result.value)

@@ -40,3 +40,35 @@ it('正式输入拒绝超过 32 个选择器、倒序时间范围与超额分页
   expect(readWebAppRecordingCapability.inputSchema.safeParse({ recordingRef, track: 'boxes', fromSeconds: 3, toSeconds: 1 }).success).toBe(false)
   expect(readWebAppRecordingCapability.inputSchema.safeParse({ recordingRef, track: 'boxes', limit: 201 }).success).toBe(false)
 })
+
+it('导演稿经正式能力 schema 补上默认值后到平台，版本信息原样交回', async () => {
+  boundary.enabled = true
+  const take = { name: '首问', directory: 'D:/x/takes/首问', video: 'D:/x/takes/首问/video.mp4', frames: 1800, durationMs: 30000, fps: 60, pointer: false, createdAt: '2026-10-28T00:00:00.000Z', conflicts: 0, steps: ['typewriter[0]（逐字打字）'] }
+  boundary.render.mockResolvedValue({ output: take.video, width: 3840, height: 2464, frames: 1800, issues: [{ t: 0, kind: 'conflict', message: '导演稿 typewriter[0]（逐字打字） 引起：这一步会发出录制里没有的请求：POST https://x' }], take })
+  const input = { recordingRef, fps: 60, resolution: '4k', take: '首问', director: { version: 1, timeline: { segments: [{ from: 0, to: 11.2 }, { from: 41.4, to: 52.2, speed: 3 }], ramp: 0.4 }, typewriter: [{ at: 36.8 }] } }
+  const output = await executeWebAppCapability('render_web_app_replay', input, { signal: new AbortController().signal } as CapabilityExecutionContext)
+  expect(boundary.render).toHaveBeenCalledWith({ recordingId: recordingRef.id, pointer: false, fps: 60, longEdge: 3840, take: '首问', director: { version: 1, timeline: { segments: [{ from: 0, to: 11.2, speed: 1 }, { from: 41.4, to: 52.2, speed: 3 }], ramp: 0.4 }, typewriter: [{ at: 36.8, charsPerSecond: 12, jitter: 0.3 }] } })
+  expect(output).toMatchObject({ video: take.video, conflicts: [expect.stringContaining('导演稿 typewriter[0]')], take: { name: '首问', durationMs: 30000, steps: take.steps } })
+  expect(renderWebAppReplayCapability.outputSchema.safeParse({ ...output, revision: 0, scopeRevisions: {} }).success).toBe(true)
+})
+
+it('导演稿不对时点名字段，且标成未执行', async () => {
+  boundary.enabled = true
+  const parsed = renderWebAppReplayCapability.inputSchema.safeParse({ recordingRef, director: { version: 1, timeline: { segments: [{ from: 5, to: 2 }] } } })
+  expect(parsed.success).toBe(false)
+  expect(parsed.error!.issues.map(issue => issue.path.join('.'))).toEqual(['director.timeline.segments.0.to'])
+  expect(renderWebAppReplayCapability.inputSchema.safeParse({ recordingRef, director: { version: 1 }, directorFile: 'D:/a.json' }).success).toBe(false)
+  // 文件里的导演稿在主进程校验：那里的拒绝按名字认出来
+  boundary.render.mockRejectedValue(Object.assign(new Error('导演稿有 1 处不对：actions[0].target.selector：目标要给 selector、text 或 x/y 之一'), { name: 'WebReplayDirectorError' }))
+  const error = await executeWebAppCapability('render_web_app_replay', { recordingRef, directorFile: 'D:/a.json' }, { signal: new AbortController().signal } as CapabilityExecutionContext).then(() => null, (value: unknown) => value)
+  expect((error as Error).message).toContain('actions[0].target.selector')
+  expect((error as { details?: { execution?: { notExecuted?: boolean } } }).details?.execution?.notExecuted).toBe(true)
+})
+
+it('读版本的轨道：timemap 只属于版本', async () => {
+  boundary.read.mockResolvedValue({ entries: [], total: 0, nextOffset: null })
+  await executeWebAppCapability('read_web_app_recording', { recordingRef, track: 'behavior', take: '首问' }, {} as CapabilityExecutionContext)
+  expect(boundary.read).toHaveBeenCalledWith({ recordingId: recordingRef.id, track: 'behavior', take: '首问', offset: 0, limit: 50 })
+  expect(readWebAppRecordingCapability.inputSchema.safeParse({ recordingRef, track: 'timemap' }).success).toBe(false)
+  expect(readWebAppRecordingCapability.inputSchema.safeParse({ recordingRef, track: 'timemap', take: '首问' }).success).toBe(true)
+})
