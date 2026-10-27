@@ -5,7 +5,7 @@ type Subscribe = (channel: string, listener: (payload: unknown) => void) => () =
 export function createAudioCaptureApi(invoke: Invoke, subscribe: Subscribe): AudioCapturePlatform {
   let deviceWatchers = 0
   const acknowledged = new Map<string, number>()
-  const listen = (handler: (event: AudioCaptureEvent) => void, acknowledgeSamples: boolean) => subscribe(AUDIO_CAPTURE_EVENT_CHANNEL, payload => {
+  const watch = (handler: (event: AudioCaptureEvent) => void, acknowledgeSamples: boolean) => subscribe(AUDIO_CAPTURE_EVENT_CHANNEL, payload => {
     const event = payload as AudioCaptureEvent
     try { handler(event) } finally {
       if (acknowledgeSamples && event.event === 'samples') {
@@ -33,11 +33,11 @@ export function createAudioCaptureApi(invoke: Invoke, subscribe: Subscribe): Aud
     clock: () => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'clock' }),
     recover: outputPath => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'recover', outputPath }),
     openAsioPanel: settings => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'asioPanel', settings }),
-    onEvent: handler => listen(handler, true),
-    onLevel: handler => listen(event => { if (event.event === 'level') handler(event) }, false),
-    onSamples: handler => listen(event => { if (event.event === 'samples') handler(event) }, true),
+    onEvent: handler => watch(handler, true),
+    onLevel: handler => watch(event => { if (event.event === 'level') handler(event) }, false),
+    onSamples: handler => watch(event => { if (event.event === 'samples') handler(event) }, true),
     onDevicesChanged: handler => {
-      const release = listen(event => { if (event.event === 'devicesChanged') handler(event.inventory) }, false)
+      const release = watch(event => { if (event.event === 'devicesChanged') handler(event.inventory) }, false)
       if (++deviceWatchers === 1) void invoke(AUDIO_CAPTURE_CHANNEL, { action: 'watchDevices', enabled: true }).catch(() => undefined)
       let removed = false
       return () => { if (removed) return; removed = true; release(); if (--deviceWatchers === 0) void invoke(AUDIO_CAPTURE_CHANNEL, { action: 'watchDevices', enabled: false }).catch(() => undefined) }

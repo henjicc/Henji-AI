@@ -35,3 +35,9 @@ test('动态未解析的端点不能静默漏过，事件与请求不混为消�
   assert.ok(errors.some(error => error.startsWith('无法解析 IPC 通道:')))
   assert.ok(errors.includes('事件未发送: fixture:read'))
 })
+test('sendSync 算作消息消费；主进程首参为对象的 send 是子进程消息，不算 IPC 事件', t => {
+  const root = fixture(t)
+  fs.appendFileSync(path.join(root, 'electron/main/ipc/registry.ts'), "\nipcMain.on('fixture:sync', () => undefined)\nworker.send({ action: 'configure', text: 'a:b' })\n")
+  fs.appendFileSync(path.join(root, 'electron/preload/index.ts'), "\nipcRenderer.sendSync('fixture:sync')\n")
+  assert.deepEqual(scanContract(root).errors, [])
+})

@@ -59,11 +59,12 @@ function scanContract(root) {
         else if (isMain && expression === 'ipcMain.handle') table = 'handlers'
         else if (isMain && expression === 'ipcMain.on') table = 'receivers'
         else if (!isMain && ['nativeInvoke', 'invoke', 'ipcRenderer.invoke'].includes(expression)) table = 'invokes'
-        else if (!isMain && ['ipcRenderer.send', 'ipcRenderer.postMessage', 'postMessage'].includes(expression)) table = 'messages'
+        else if (!isMain && ['ipcRenderer.send', 'ipcRenderer.sendSync', 'ipcRenderer.postMessage', 'postMessage'].includes(expression)) table = 'messages'
         else if (!isMain && ['ipcRenderer.on', 'subscribe', 'subscribeChannel', 'listen'].includes(expression)) table = 'subscriptions'
         else if (isMain && ['send', 'postMessage'].includes(method)) table = 'events'
         if (table) {
-          const channels = values(node.arguments[0]).filter(value => value.includes(':'))
+          // 主进程里首参是对象的 send/postMessage 是子进程消息，不是 IPC 事件通道。
+          const channels = table === 'events' && ts.isObjectLiteralExpression(node.arguments[0]) ? [] : values(node.arguments[0]).filter(value => value.includes(':'))
           for (const channel of channels) tables[table].add(channel)
           // 通用转发器的形参由调用点对账；真正的端点不能静默跳过动态值。
           const forwarding = parameter(node.arguments[0]) && (
