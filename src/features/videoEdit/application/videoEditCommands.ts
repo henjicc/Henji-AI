@@ -380,12 +380,12 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
         const fps = media.fps
         const frame = Math.max(0, Math.min(Math.ceil(media.durationSeconds * fps - 1e-6) - 1, Math.round((media.kind === 'video' ? source!.presentedTimeUs : source!.timeUs) / 1e6 * fps) + direction))
         const timeUs = Math.min(Math.round(media.durationSeconds * 1e6), Math.round((frame + (media.kind === 'video' ? .5 : 0)) / fps * 1e6))
-        requestVideoEditScrub(projectId, { scope: 'source', seconds: timeUs / 1e6 })
+        requestVideoEditScrub(projectId, { scope: 'source', seconds: timeUs / 1e6, kind: 'step' })
         await updateVideoEditSource(projectId, { timeUs, playing: false })
       } else {
         const frame = Math.max(0, Math.min(videoEditDuration(sequence) - 1, context.frame + direction))
         setVideoEditView(projectId, { frame, playing: false })
-        if (frame !== context.frame) requestVideoEditScrub(projectId, { scope: 'program', seconds: frame / sequence.fps })
+        if (frame !== context.frame) requestVideoEditScrub(projectId, { scope: 'program', seconds: frame / sequence.fps, kind: 'step' })
       }
       return
     }

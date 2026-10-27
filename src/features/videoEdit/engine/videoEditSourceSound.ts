@@ -1,9 +1,10 @@
 import type { VideoEditComposition, VideoEditMedia } from '@/core/videoEdit/document'
 import type { VideoEditAudioMapping } from '@/core/videoEdit/audioChannels'
 import { videoEditFps } from '@/core/videoEdit/time'
+import { AUDIO_SCRUB_STEP_SECONDS, AudioScrubEngine, type AudioScrubSource } from '@/services/audioScrub/audioScrubEngine'
 import { createVideoEditAudioMeter, type VideoEditAudioLevel } from './videoEditAudioMeter'
 import { finishVideoEditAudioFade, VideoEditAudioScheduler } from './videoEditAudioScheduler'
-import { VideoEditAudioScrubber } from './videoEditAudioScrub'
+import { dispatchingVideoEditScrubKind, videoEditScrubSource } from './videoEditAudioScrub'
 import { VideoEditRenderSession } from './videoEditRenderSession'
 
 /** Source monitor sound runs at this rate (the program default); the native service resamples to it. */
@@ -40,7 +41,10 @@ export class VideoEditSourceSoundPlayer {
   private meter?: ReturnType<typeof createVideoEditAudioMeter>
   private session?: VideoEditRenderSession
   private readonly scheduler = new VideoEditAudioScheduler()
-  private readonly scrubber = new VideoEditAudioScrubber()
+  private readonly scrubber = new AudioScrubEngine({ onError: error => this.scrubFailed?.(error) })
+  private scrubSource?: AudioScrubSource
+  private scrubFailed?: (error: unknown) => void
+  private scrubPreparing?: Promise<void>
   private origin = 0
   private disposed = false
 
@@ -80,16 +84,28 @@ export class VideoEditSourceSoundPlayer {
 
   levels(): VideoEditAudioLevel[] { return this.meter?.read() ?? [] }
 
-  /** 原生与媒体元素源的擦洗均复用正式源混音，音量及电平保持一致。 */
+  /**
+   * 原生与媒体元素源的擦洗均复用正式源混音，音量及电平保持一致；声音由共用擦洗引擎播放（拖动时原速片段跟着指针走，单步一小段原速）。
+   * 单步命令经 requestVideoEditScrub 派发，派发期间到达的请求按单步播放。
+   */
   scrub(seconds: number, volume: number, isCurrent: () => boolean, onError: (error: unknown) => void): void {
+    if (this.disposed) return
     this.scheduler.stop()
+    const step = dispatchingVideoEditScrubKind() === 'step'
     const fps = this.media.frameRate ? videoEditFps(this.media.frameRate) : 30
-    this.scrubber.request({
-      seconds, fps, endTime: this.media.durationSeconds,
-      prepare: async () => { await this.prepare(volume); return { context: this.context!, destination: this.gain! } },
-      mix: (from, duration) => (this.session ??= this.createSession(videoEditSourceSoundComposition(this.media, this.layout))).mixAudio(from, duration),
-      isCurrent: () => !this.disposed && isCurrent(), onError,
-    })
+    const at = performance.now()
+    this.scrubFailed = error => { if (!this.disposed && isCurrent()) onError(error) }
+    const apply = (): void => {
+      if (this.disposed || !this.context || !this.gain) return
+      this.scrubber.attach({ context: this.context, destination: this.gain })
+      this.scrubber.setSource(this.scrubSource ??= videoEditScrubSource(SOURCE_SOUND_RATE, this.media.durationSeconds, (from, duration) => (this.session ??= this.createSession(videoEditSourceSoundComposition(this.media, this.layout))).mixAudio(from, duration)))
+      if (step) this.scrubber.step(seconds, Math.max(AUDIO_SCRUB_STEP_SECONDS, 1 / fps))
+      else this.scrubber.move(seconds, { quantum: 1 / fps, at })
+    }
+    if (this.context?.state === 'running' && this.gain) { this.gain.gain.value = Math.min(1, Math.max(0, volume)); apply(); return }
+    // 第一次（或设备挂起后）先唤醒音频时钟；期间的请求按原顺序、原时刻补上。
+    const preparing = this.scrubPreparing ??= this.prepare(volume).finally(() => { if (this.scrubPreparing === preparing) this.scrubPreparing = undefined })
+    preparing.then(apply, (error: unknown) => { if (!this.disposed && isCurrent()) onError(error) })
   }
 
   /** Silences placed blocks and discards blocks still being mixed. */
@@ -98,9 +114,9 @@ export class VideoEditSourceSoundPlayer {
 
   async dispose(): Promise<void> {
     if (this.disposed) return
-    this.disposed = true
     this.stop()
-    await finishVideoEditAudioFade()
+    this.disposed = true
+    await Promise.all([finishVideoEditAudioFade(), this.scrubber.dispose()])
     this.meter?.dispose(); this.gain?.disconnect()
     await Promise.allSettled([this.context?.close(), this.session?.dispose()])
   }

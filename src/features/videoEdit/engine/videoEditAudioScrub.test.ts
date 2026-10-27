@@ -1,83 +1,100 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { VideoEditAudioScrubber } from './videoEditAudioScrub'
+import { requestVideoEditScrub, subscribeVideoEditScrub, VideoEditAudioScrubber, videoEditScrubSource } from './videoEditAudioScrub'
 
-vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), warn: vi.fn() }) }))
-beforeEach(() => { vi.useFakeTimers(); vi.spyOn(performance, 'now').mockImplementation(() => Date.now()) })
-afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
+const { engines } = vi.hoisted(() => ({ engines: [] as Array<{ calls: Array<[string, ...unknown[]]>; source?: { read(start: number, frames: number): Promise<Float32Array[]>; sampleRate: number; frames: number }; onError?: (error: unknown) => void }> }))
+vi.mock('@/services/audioScrub/audioScrubEngine', () => ({
+  AUDIO_SCRUB_STEP_SECONDS: 0.1,
+  AudioScrubEngine: class {
+    calls: Array<[string, ...unknown[]]> = []
+    source?: { read(start: number, frames: number): Promise<Float32Array[]>; sampleRate: number; frames: number }
+    onError?: (error: unknown) => void
+    constructor(options: { onError?: (error: unknown) => void }) { this.onError = options.onError; engines.push(this) }
+    get currentSource() { return this.source }
+    attach(output: unknown) { this.calls.push(['attach', output]) }
+    setSource(source: this['source']) { this.source = source; this.calls.push(['source']) }
+    move(seconds: number, options: unknown) { this.calls.push(['move', seconds, options]) }
+    step(seconds: number, duration: number) { this.calls.push(['step', seconds, duration]) }
+    stop() { this.calls.push(['stop']) }
+  },
+}))
+
+beforeEach(() => { engines.length = 0; vi.spyOn(performance, 'now').mockReturnValue(1000) })
+afterEach(() => { vi.restoreAllMocks() })
 
 function harness() {
-  const gains: Array<{ gain: { setValueAtTime: ReturnType<typeof vi.fn>; linearRampToValueAtTime: ReturnType<typeof vi.fn>; cancelAndHoldAtTime: ReturnType<typeof vi.fn> }; connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }> = []
-  const nodes: Array<{ start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn>; connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }> = []
-  const context = { sampleRate: 48000, currentTime: 1,
-    createGain: () => { const gain = { gain: { setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), cancelAndHoldAtTime: vi.fn() }, connect: vi.fn(), disconnect: vi.fn() }; gains.push(gain); return gain },
-    createBufferSource: () => { const node = { start: vi.fn(), stop: vi.fn(), connect: vi.fn(), disconnect: vi.fn() }; nodes.push(node); return node },
-  }
-  const pending: Array<{ from: number; duration: number; resolve: (buffer: AudioBuffer) => void }> = []
-  const prepare = vi.fn(async () => ({ context: context as unknown as BaseAudioContext, destination: {} as AudioNode }))
-  const mix = vi.fn((from: number, duration: number) => new Promise<AudioBuffer>(resolve => pending.push({ from, duration, resolve })))
+  const output = { context: { sampleRate: 48000 }, destination: {} }
+  let current = true
+  const prepare = vi.fn(async () => output as never)
+  const mix = vi.fn(async (from: number, duration: number) => ({ sampleRate: 48000, numberOfChannels: 2, getChannelData: () => new Float32Array(Math.round(duration * 48000)).fill(from) }) as unknown as AudioBuffer)
   const onError = vi.fn()
   const scrubber = new VideoEditAudioScrubber()
-  const request = (seconds: number, fps = 30) => scrubber.request({ seconds, fps, endTime: 10, prepare, mix, isCurrent: () => true, onError })
-  const resolve = async (index: number) => { pending[index].resolve({ duration: pending[index].duration } as AudioBuffer); await vi.advanceTimersByTimeAsync(0) }
-  return { scrubber, request, resolve, prepare, pending, nodes, gains, context, onError }
+  const request = (seconds: number, extra: object = {}) => scrubber.request({ seconds, fps: 30, endTime: 10, prepare, mix, isCurrent: () => current, onError, ...extra })
+  const engine = engines.at(-1)!
+  return { scrubber, request, prepare, mix, onError, engine, output, setCurrent: (value: boolean) => { current = value } }
 }
+const flush = () => new Promise(resolve => setTimeout(resolve, 0))
 
-it('每帧一次、至少间隔40ms、只播放最新位置；停住后不循环发声', async () => {
+it('拖动请求转给共用擦洗引擎：等输出就绪后按原时刻送出，按帧取整长度告诉读头；同一位置不重复', async () => {
   const h = harness()
-  h.request(1); await vi.advanceTimersByTimeAsync(0); await h.resolve(0)
-  expect(h.pending[0]).toMatchObject({ from: 1, duration: .08 })
-  h.request(1.001); h.request(2); h.request(3)
-  await vi.advanceTimersByTimeAsync(39); expect(h.pending).toHaveLength(1)
-  await vi.advanceTimersByTimeAsync(1); expect(h.pending[1].from).toBe(3)
-  await h.resolve(1); await vi.advanceTimersByTimeAsync(500)
-  expect(h.nodes).toHaveLength(2); expect(h.pending).toHaveLength(2)
+  h.request(1); h.request(1); h.request(1.0333)
+  expect(h.engine.calls).toEqual([])
+  await flush()
+  expect(h.engine.calls.map(([name]) => name)).toEqual(['attach', 'source', 'move', 'move'])
+  expect(h.engine.calls[2]).toEqual(['move', 1, { quantum: 1 / 30, at: 1000 }])
+  // 声音来源按块调用剪辑混音（秒），返回各声道
+  const planes = await h.engine.source!.read(48000, 4800)
+  expect(h.mix).toHaveBeenCalledWith(1, 0.1)
+  expect(planes).toHaveLength(2)
+  // 已有输出时立即发声，不等设备确认
+  h.scrubber.stop()
+  h.request(2)
+  expect(h.engine.calls.at(-1)).toEqual(['move', 2, expect.anything()])
 })
 
-it('混音在途时合并新位置，过期段不响，往回拖仍从新位置向前播', async () => {
+it('经 requestVideoEditScrub 派发的单步按单步播放一小段原速声音（至少一帧）', async () => {
   const h = harness()
-  h.request(3); await vi.advanceTimersByTimeAsync(0)
-  h.request(2); h.request(1); await h.resolve(0); await vi.advanceTimersByTimeAsync(1)
-  expect(h.nodes).toHaveLength(0); expect(h.pending.map(x => x.from)).toEqual([3, 1])
-  await h.resolve(1)
-  expect(h.nodes[0].start).toHaveBeenCalledWith(1, 0, .08)
+  const off = subscribeVideoEditScrub('p', intent => h.request(intent.seconds))
+  requestVideoEditScrub('p', { scope: 'program', seconds: 3 })
+  await flush()
+  expect(h.engine.calls.find(([name]) => name === 'step')).toEqual(['step', 3, 0.1])
+  h.request(3.5, { mode: 'step', fps: 5 })
+  expect(h.engine.calls.at(-1)).toEqual(['step', 3.5, 0.2])
+  off()
 })
 
-it('两端5ms包络，重叠段保持当前值再交叉淡化；低帧率至少覆盖一帧', async () => {
-  const h = harness(); h.request(1, 10); await vi.advanceTimersByTimeAsync(0); await h.resolve(0)
-  expect(h.pending[0].duration).toBe(.1)
-  const first = h.gains[0].gain
-  expect(first.setValueAtTime).toHaveBeenCalledWith(0, 1)
-  expect(first.linearRampToValueAtTime).toHaveBeenCalledWith(1, 1.005)
-  expect(first.linearRampToValueAtTime).toHaveBeenCalledWith(0, 1.1)
-  await vi.advanceTimersByTimeAsync(40); h.context.currentTime = 1.04
-  h.request(2); await vi.advanceTimersByTimeAsync(0); await h.resolve(1)
-  expect(first.cancelAndHoldAtTime).toHaveBeenCalledWith(1.04)
-  expect(first.linearRampToValueAtTime).toHaveBeenLastCalledWith(0, 1.045)
-  expect(h.nodes[0].stop).toHaveBeenCalledWith(1.045)
-  expect(h.gains[1].gain.setValueAtTime).toHaveBeenCalledWith(0, 1.04)
-  expect(h.gains[1].gain.linearRampToValueAtTime).toHaveBeenCalledWith(1, 1.045)
-})
-
-it('停止或resume迟到不能出声，旧结果不阻止下一次手势', async () => {
-  const h = harness(); let ready!: () => void
-  h.prepare.mockImplementationOnce(() => new Promise(resolve => { ready = () => resolve({ context: h.context as unknown as BaseAudioContext, destination: {} as AudioNode }) }))
-  h.request(1); await vi.advanceTimersByTimeAsync(0); h.scrubber.stop(); ready()
-  await vi.advanceTimersByTimeAsync(0); expect(h.pending).toHaveLength(0)
-  h.request(1); await vi.advanceTimersByTimeAsync(0); h.scrubber.stop(); await h.resolve(0)
-  expect(h.nodes).toHaveLength(0); expect(h.onError).not.toHaveBeenCalled()
-})
-
-it('慢混音扩大为附近500ms缓存，窗口内向前或向后擦洗不再等待混音，停止清空旧内容', async () => {
+it('新手势时上一份声音仍有效就沿用；文档变了（旧请求不再有效）就换来源', async () => {
   const h = harness()
-  h.request(1); await vi.advanceTimersByTimeAsync(0); await vi.advanceTimersByTimeAsync(30); await h.resolve(0)
-  h.request(2); await vi.advanceTimersByTimeAsync(40)
-  expect(h.pending[1]).toMatchObject({ from: 1.85, duration: .5 })
-  await h.resolve(1)
-  h.request(2.1); await vi.advanceTimersByTimeAsync(40)
-  expect(h.pending).toHaveLength(2); expect(h.nodes).toHaveLength(3)
-  expect(h.nodes[2].start).toHaveBeenCalledWith(1, .25, .08)
-  h.request(2.05); await vi.advanceTimersByTimeAsync(40)
-  expect(h.pending).toHaveLength(2)
-  h.scrubber.stop(); h.request(2.1); await vi.advanceTimersByTimeAsync(40)
-  expect(h.pending).toHaveLength(3)
+  h.request(1); await flush()
+  const first = h.engine.source
+  h.scrubber.stop()
+  h.request(2); await flush()
+  expect(h.engine.source).toBe(first)
+  h.scrubber.stop()
+  h.setCurrent(false)
+  h.request(3); await flush()
+  expect(h.engine.source).not.toBe(first)
+})
+
+it('混音失败交给当前请求报错；设备准备被中止不算失败；采样率不同就按混音采样率重取', async () => {
+  const h = harness()
+  h.request(1); await flush()
+  h.engine.onError?.(new Error('混音失败'))
+  expect(h.onError).toHaveBeenCalledWith(new Error('混音失败'))
+  h.mix.mockResolvedValueOnce({ sampleRate: 44100, numberOfChannels: 2, getChannelData: () => new Float32Array(10) } as unknown as AudioBuffer)
+  await h.engine.source!.read(0, 4800).catch(error => h.engine.onError?.(error))
+  expect(h.onError).toHaveBeenCalledTimes(1)
+  h.request(1.5)
+  expect(h.engine.source!.sampleRate).toBe(44100)
+  const aborted = harness()
+  aborted.prepare.mockRejectedValueOnce(new DOMException('已关闭', 'AbortError'))
+  aborted.request(1); await flush()
+  expect(aborted.onError).not.toHaveBeenCalled()
+})
+
+it('剪辑混音来源：总长按采样帧，读取换算成秒', async () => {
+  const mix = vi.fn(async () => ({ sampleRate: 48000, numberOfChannels: 1, getChannelData: () => new Float32Array(3) }) as unknown as AudioBuffer)
+  const source = videoEditScrubSource(48000, 2.5, mix)
+  expect(source.frames).toBe(120000)
+  await source.read(24000, 2400)
+  expect(mix).toHaveBeenCalledWith(0.5, 0.05)
 })

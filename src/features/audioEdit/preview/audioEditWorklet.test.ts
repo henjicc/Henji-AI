@@ -26,8 +26,7 @@ function processor(rate = 48000) {
   }
   const pcm = (generation: number, sourceStartFrame: number, values: Float32Array) => send({ type: 'chunk', generation, sourceStartFrame, channels: 1, frameCount: values.length, pcm: values.buffer })
   const add = (generation: number, sourceStartFrame: number, value: number, frames = 4800) => pcm(generation, sourceStartFrame, new Float32Array(frames).fill(value))
-  const scrub = (value: number, frames = Math.round(rate * 0.08)) => send({ type: 'scrub', generation: 0, channels: 1, pcm: new Float32Array(frames).fill(value).buffer })
-  return { send, render, add, pcm, scrub, messages }
+  return { send, render, add, pcm, messages }
 }
 function maxJump(values: number[]) {
   let maximum = 0
@@ -117,35 +116,4 @@ it('正弦信号切换的跳变低于正常最大斜率的 1.2 倍，稳态样�
   engine.pcm(1, 96000, signal)
   engine.send({ type: 'playing', value: true })
   expect(maxJump([0, ...first, ...tail, ...engine.render(5120)])).toBeLessThan(maxJump(Array.from(signal)) * 1.2)
-})
-
-it('80ms 擦洗段首尾各 5ms，交叉淡化同相信号不增幅、反相信号无突变', () => {
-  const engine = processor()
-  engine.scrub(1)
-  const grain = engine.render(4096)
-  expect(grain.slice(240, 3599)).toEqual(Array(3359).fill(1))
-  expect(grain.slice(3840)).toEqual(Array(256).fill(0))
-  const values = [0, ...grain]
-  for (const value of [1, 1, -1, 1, -1]) {
-    engine.scrub(value)
-    values.push(...engine.render(1920))
-  }
-  engine.send({ type: 'scrub-stop' })
-  values.push(...engine.render(512))
-  // 反相交叉淡化每帧最多从 +1 向 -1 走 2/240。
-  expect(maxJump(values)).toBeLessThanOrEqual(2 / 240 + 1e-6)
-  expect(Math.max(...values.map(Math.abs))).toBeLessThanOrEqual(1)
-  expect(values.slice(-128)).toEqual(Array(128).fill(0))
-})
-
-it('播放中拒绝擦洗，擦洗转播放沿同一输出平滑交接', () => {
-  const engine = processor()
-  engine.scrub(1)
-  const values = engine.render(1000)
-  engine.add(0, 0, -1)
-  engine.send({ type: 'playing', value: true })
-  engine.scrub(20)
-  values.push(...engine.render(1000))
-  expect(maxJump(values)).toBeLessThanOrEqual(2 / 240 + 1e-6)
-  expect(values.at(-1)).toBe(-1)
 })

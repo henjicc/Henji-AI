@@ -81,26 +81,18 @@ export class PreviewChunkCache {
     return { ...block, sourceStartFrame: start, sourceEndFrame: end, pcm: pcm.buffer as ArrayBuffer }
   }
 
-  async grain(frame: number): Promise<{ pcm: ArrayBuffer; channels: number }> {
+  /** 从源帧 cursor 起按拼接表顺序连续读 count 帧成片声音（交错 PCM，与正常播放逐样本一致）；读到结尾后补零。 */
+  async readSequence(cursor: number, count: number): Promise<Float32Array> {
     const channels = this.project.source.channels
-    const count = Math.round(this.project.source.sampleRate * 0.08)
-    const pcm = new Float32Array(count * channels)
+    const pcm = new Float32Array(Math.max(0, count) * channels)
     let written = 0
-    let cursor = frame
     while (written < count) {
       const chunk = await this.read(cursor, count - written)
       if (!chunk) break
-      const frames = chunk.sourceEndFrame - chunk.sourceStartFrame
       pcm.set(new Float32Array(chunk.pcm), written * channels)
-      written += frames
+      written += chunk.sourceEndFrame - chunk.sourceStartFrame
       cursor = chunk.sourceEndFrame
     }
-    return { pcm: pcm.buffer.slice(0, written * channels * 4), channels }
-  }
-
-  async prefetch(frame: number): Promise<void> {
-    // 先读当前位置及两侧一秒；跨删除区间仍通过同一时间线取样。
-    await Promise.all([frame, frame - this.project.source.sampleRate, frame + this.project.source.sampleRate]
-      .map(cursor => this.read(Math.max(0, cursor), 1)))
+    return pcm
   }
 }

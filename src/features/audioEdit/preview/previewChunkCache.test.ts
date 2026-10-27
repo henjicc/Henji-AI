@@ -33,9 +33,9 @@ it('按秒对齐并合并并发读取，transfer 不损坏缓存，LRU 最多保
   expect(prepare).toHaveBeenCalledTimes(32)
 })
 
-it('80ms 试听跨秒边界和删除拼接点，静音及双声道顺序与正常取样一致', async () => {
+it('连续读取跨秒边界和删除拼接点，静音及双声道顺序与正常取样一致', async () => {
   const cache = new PreviewChunkCache(project, 'edited', [span(0, 48000), span(96000, 97000, true), span(144000, 192000)])
-  const grain = new Float32Array((await cache.grain(47000)).pcm)
+  const grain = await cache.readSequence(47000, 3840)
   expect(grain).toHaveLength(3840 * 2)
   expect(Array.from(grain.slice(0, 4))).toEqual([47000, -47000, 47001, -47001])
   expect(Array.from(grain.slice(2000, 4000))).toEqual(Array(2000).fill(0))
@@ -59,7 +59,7 @@ it.each(['edited', 'delivery'] as const)('%s 连续播放与擦洗在跨秒拼�
   }))
   const spans = [span(0, 48100), span(96000, 144000)]
   const cache = new PreviewChunkCache(project, mode, spans)
-  const grain = new Float32Array((await cache.grain(47800)).pcm)
+  const grain = await cache.readSequence(47800, 3840)
   const first = await cache.read(47800, 3840)
   const second = await cache.read(48000, 3840)
   const third = await cache.read(48100, 3540)
@@ -82,7 +82,7 @@ it('静音状态切换降低跳变，连续未静音片段不产生音量凹陷'
     pcm: new Float32Array(frameCount * 2).fill(0.75).buffer,
   }))
   const cache = new PreviewChunkCache(project, 'edited', [span(0, 1000), span(1000, 2000, true), span(2000, 2500), span(2500, 4000)])
-  const samples = new Float32Array((await cache.grain(0)).pcm)
+  const samples = await cache.readSequence(0, 3840)
   let maxJump = 0
   for (let i = 2; i < samples.length; i++) maxJump = Math.max(maxJump, Math.abs(samples[i] - samples[i - 2]))
   // 5 ms 正弦淡变的最大单步约 0.75·(π/2)/240≈0.005，硬切是 0.75
@@ -93,11 +93,12 @@ it('静音状态切换降低跳变，连续未静音片段不产生音量凹陷'
 
 it('交付的前后补静音和尾部短段不越界、不循环，读取失败可重试', async () => {
   const cache = new PreviewChunkCache(project, 'delivery', [span(-1000, 1000), span(project.source.durationFrames, project.source.durationFrames + 1000)])
-  const grain = new Float32Array((await cache.grain(-1000)).pcm)
-  expect(grain).toHaveLength(3000 * 2)
+  const grain = await cache.readSequence(-1000, 3840)
+  // 只有 3000 帧可读：前补静音 1000 帧、末尾短段，之后补零，不越界也不循环
+  expect(grain).toHaveLength(3840 * 2)
   expect(Array.from(grain.slice(0, 2000))).toEqual(Array(2000).fill(0))
-  expect(Array.from(grain.slice(4000))).toEqual(Array(2000).fill(0))
-  expect((await cache.grain(project.source.durationFrames + 1000)).pcm.byteLength).toBe(0)
+  expect(Array.from(grain.slice(4000))).toEqual(Array(3840 * 2 - 4000).fill(0))
+  expect(Array.from(await cache.readSequence(project.source.durationFrames + 1000, 100))).toEqual(Array(200).fill(0))
   const retry = new PreviewChunkCache(project, 'edited', [span(0, 48000)])
   prepare.mockRejectedValueOnce(new Error('读取失败'))
   await expect(retry.read(0, 100)).rejects.toThrow('读取失败')

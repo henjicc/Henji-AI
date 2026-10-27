@@ -8,10 +8,12 @@ import { audioEditSourceRecipe } from '@/core/audioEdit/regions'
 import { AudioEffectChain, type AudioEffectInstance } from '@/core/audio/effects/audioEffectChain'
 import type { AudioEditPreviewMode, AudioEditProjectDocument, AudioEditTimelineSpan } from '@/core/audioEdit/types'
 import { createLogger } from '@/core/logging'
+import { AudioScrubEngine } from '@/services/audioScrub/audioScrubEngine'
 import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
 import { createPreviewOutput } from './previewGain'
 import { PreviewChunkCache, PreviewSoundBlocks } from './previewChunkCache'
-import { bindAudioEditScrub, createScrubScheduler } from './audioEditScrub'
+import { bindAudioEditScrub } from './audioEditScrub'
+import { audioEditScrubSource, type AudioEditScrubSource } from './audioEditScrubSource'
 
 const CHUNK_SECONDS = 1
 const BUFFER_SECONDS = 3
@@ -90,6 +92,24 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
   const chainRef = useRef<AudioEffectChain | null>(null)
   const chainResetRef = useRef(true)
   const effectStructure = effects.map(effect => `${effect.id}:${effect.builtin.id}`).join('|')
+  // 拖动播放头试听：共用擦洗引擎，声音来源按当前试听模式（拼接、静音、实时效果与正常播放一致）。
+  const scrubErrorRef = useRef<string | null>(null)
+  const scrubRef = useRef<AudioScrubEngine | null>(null)
+  scrubRef.current ??= new AudioScrubEngine({ onError: error => {
+    logger.error('audio_edit.preview.scrub.failed', error)
+    scrubErrorRef.current = error instanceof Error ? error.message : '擦洗试听失败，请重试'
+    useAudioEditPlaybackStore.getState().setError(scrubErrorRef.current)
+  } })
+  const scrubSourceRef = useRef<AudioEditScrubSource | null>(null)
+  useEffect(() => {
+    if (!project || !cache) return
+    const source = audioEditScrubSource(project, mode, activeSpans, cache, effects)
+    scrubSourceRef.current = source
+    scrubRef.current!.setSource(source)
+    return () => { if (scrubSourceRef.current === source) scrubSourceRef.current = null; source.dispose() }
+    // 声音（拼接表、模式）或实时效果变了才换来源；只换保存版本不重取。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cache, effects])
 
   const resolveFrame = useCallback((requestedFrame: number) => {
     if (!project) return 0
@@ -230,6 +250,8 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
         outputRef.current = output
         contextRef.current = context
         nodeRef.current = node
+        // 擦洗声音与播放经同一个输出（自动音量、监听音量）。
+        scrubRef.current!.attach({ context, destination: output.input })
         node.port.onmessage = (event: MessageEvent<WorkletMessage>) => {
           const message = event.data
           if (message.generation !== generationRef.current) return
@@ -255,6 +277,7 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
     return () => {
       disposed = true
       cancelScrubRef.current()
+      scrubRef.current?.stop()
       scrubDirtyRef.current = false
       resumeRef.current = null
       generationRef.current += 1
@@ -325,27 +348,15 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
   }, [project, resume])
 
   useEffect(() => {
-    if (!projectId || !cache) return
-    let active = true
-    const failed = (error: unknown) => {
-      logger.error('audio_edit.preview.scrub.failed', error)
-      useAudioEditPlaybackStore.getState().setError(error instanceof Error ? error.message : '擦洗试听失败，请重试')
-    }
-    const scheduler = createScrubScheduler(async frame => {
-      const generation = generationRef.current
-      const [grain] = await Promise.all([cache.grain(frame), resume()])
-      return { ...grain, generation }
-    }, grain => {
-      if (!active || playingRef.current || grain.generation !== generationRef.current) return
-      nodeRef.current?.port.postMessage({ type: 'scrub', ...grain }, [grain.pcm])
-      useAudioEditPlaybackStore.getState().setError(null)
-    }, failed)
-    cancelScrubRef.current = () => { scheduler.cancel(); nodeRef.current?.port.postMessage({ type: 'scrub-stop' }) }
-    const move = (frame: number) => {
+    if (!projectId) return
+    const scrub = scrubRef.current!
+    cancelScrubRef.current = () => scrub.stop()
+    const audition = (frame: number, step: boolean) => {
       if (playingRef.current) { resetAtRef.current(frame); return }
       if (!nodeRef.current) return
       const target = resolveFrameRef.current(frame)
       if (!scrubDirtyRef.current) {
+        // 擦洗期间正常播放的队列作废：松手后从新位置重新排。
         scrubDirtyRef.current = true
         generationRef.current += 1
         nodeRef.current.port.postMessage({ type: 'reset', generation: generationRef.current })
@@ -354,25 +365,31 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
         useAudioEditPlaybackStore.getState().setPreparing(false)
       }
       publishPositionRef.current(target)
-      scheduler.request(target)
+      const source = scrubSourceRef.current
+      if (!source) return
+      if (scrubErrorRef.current !== null && useAudioEditPlaybackStore.getState().error === scrubErrorRef.current) useAudioEditPlaybackStore.getState().setError(null)
+      scrubErrorRef.current = null
+      void resume().catch(() => undefined)
+      if (step) scrub.step(source.seconds(target))
+      else scrub.move(source.seconds(target))
     }
     const unbind = bindAudioEditScrub(projectId, {
       start(frame) {
         logger.debug('audio_edit.preview.scrub.start', { projectId })
-        if (!playingRef.current) void cache.prefetch(resolveFrameRef.current(frame)).catch(error => {
-          // 邻近预取是可选加速；实际试听读取失败才提示用户，不能由过期预取覆盖当前状态。
-          if (active) logger.debug('audio_edit.preview.prefetch.failed', { projectId, message: error instanceof Error ? error.message : String(error) })
-        })
+        // 按下即备好附近的声音，第一下拖动就能出声。
+        const source = scrubSourceRef.current
+        if (!playingRef.current && source) { void resume().catch(() => undefined); scrub.rest(source.seconds(resolveFrameRef.current(frame))) }
       },
-      move,
-      step: move,
+      move: frame => audition(frame, false),
+      step: frame => audition(frame, true),
       end() {
         logger.debug('audio_edit.preview.scrub.completed', { projectId })
+        scrub.stop()
         if (scrubDirtyRef.current) resetAtRef.current(useAudioEditPlaybackStore.getState().sourceFrame)
       },
     })
-    return () => { active = false; scheduler.cancel(); unbind() }
-  }, [cache, projectId, resume])
+    return () => { scrub.stop(); unbind() }
+  }, [projectId, resume])
 
   return { timeline, togglePlayback, seekSourceFrame: resetAt }
 }

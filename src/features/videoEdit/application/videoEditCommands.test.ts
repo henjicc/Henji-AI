@@ -38,9 +38,9 @@ it('逐帧命令发出试听意图，直接定位和跳转命令不发声', asyn
     setVideoEditView(id, { frame: 10 })
     expect(listen).not.toHaveBeenCalled()
     await executeVideoEditCommand(captureVideoEditCommandContext(id, 'timeline'), 'step_forward')
-    expect(listen).toHaveBeenLastCalledWith({ scope: 'program', seconds: 11 / 30 })
+    expect(listen).toHaveBeenLastCalledWith({ scope: 'program', seconds: 11 / 30, kind: 'step' })
     await executeVideoEditCommand(captureVideoEditCommandContext(id, 'program'), 'step_back')
-    expect(listen).toHaveBeenLastCalledWith({ scope: 'program', seconds: 10 / 30 })
+    expect(listen).toHaveBeenLastCalledWith({ scope: 'program', seconds: 10 / 30, kind: 'step' })
     await executeVideoEditCommand(captureVideoEditCommandContext(id, 'timeline'), 'go_start')
     expect(listen).toHaveBeenCalledTimes(2)
   } finally { off() }
@@ -134,7 +134,7 @@ it('源 I/O 为半开范围，插入保留原路径和范围；J/K/L 与步进�
       expect(readVideoEditSource(id)).toMatchObject({ playing, playbackDirection: direction })
     }
     await executeVideoEditCommand(captureVideoEditCommandContext(id, 'source'), 'step_forward')
-    expect(listen).toHaveBeenCalledOnce(); expect(listen).toHaveBeenCalledWith({ scope: 'source', seconds: 2.025 })
+    expect(listen).toHaveBeenCalledOnce(); expect(listen).toHaveBeenCalledWith({ scope: 'source', seconds: 2.025, kind: 'step' })
     expect(readVideoEditSource(id)).toMatchObject({ playing: false, timeUs: 2_025_000 })
     setVideoEditView(id, { frame: 500 })
     await executeVideoEditCommand(captureVideoEditCommandContext(id, 'source'), 'insert')

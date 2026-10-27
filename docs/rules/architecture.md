@@ -116,6 +116,7 @@ packages/ai-sdk/       # 可独立发布的模型 SDK：catalog、provider、协
 | 界面组件与外观枚举 | `src/components/ui/`（`Ui*`、`Dropdown`、`PanelTrigger`、`NumberInput`、`Tooltip`），可复用表见 skill `henji-ui-surface` |
 | 音频波形 | 绘制 `src/components/waveform/WaveformView.tsx`；数据 `src/hooks/useWaveformData.ts` → `src/services/waveform/waveformDataService.ts` → 主进程 `electron/main/services/audio/`（Worker 多精度峰值 + 磁盘缓存） |
 | 剪辑片段缩略帧 | `src/hooks/useFilmstripFrames.ts` → `src/services/videoFilmstrip/filmstripFrameService.ts` → 主进程 `electron/main/services/video/filmstrip.ts`（成批取帧 + 磁盘缓存） |
+| 擦洗音频（拖动播放头试听） | `src/services/audioScrub/`（`AudioScrubEngine` + 音频线程 `audioScrubWorklet.js`；原速原音高的原声片段，不变调、不做时间伸缩）；剪辑节目与源监视器经 `videoEditAudioScrub.ts`、音频编辑经 `audioEditScrubSource.ts` 只提供声音来源 |
 
 PromptEditor 补充：媒体引用、模板变量、兼容字符串解析和模型文本输出统一走结构化文档 parser/serializer；禁止重新引入透明 textarea + 镜像高亮层，禁止在业务组件重复实现引用解析。
 
