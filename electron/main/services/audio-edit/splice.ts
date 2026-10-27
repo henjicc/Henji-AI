@@ -75,6 +75,9 @@ export async function spliceAudioFile(request: AudioEditSpliceRequest): Promise<
       enqueueMediaCandidates([output])
       progress(1)
       return { source: { ...source, sourcePath: output, audioPath: output, ownership: 'managed' as const }, insertedFrames, ...await recordingGain() }
-    } finally { await fs.rm(temporary, { recursive: true, force: true }) }
+    } finally {
+      // media-recycle-allow: this splice's private .splice- staging dir; the published output is a separate hard link.
+      await fs.rm(temporary, { recursive: true, force: true })
+    }
   }, request.requestId, JSON.stringify([project.source, request.startFrame, request.endFrame, request.sourcePath, request.matchRecordingLoudness]))
 }

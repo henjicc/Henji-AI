@@ -35,7 +35,8 @@ function check(root) {
   const startup = fs.readFileSync(path.join(root, 'electron/main/index.ts'), 'utf8')
   if (!startup.includes('configureCacheDeletionBoundary(managedMediaRoots)')) errors.push('Missing managed cache deletion boundary at startup')
   const providers = fs.readFileSync(path.join(root, 'electron/main/services/media-recycle/providers.ts'), 'utf8')
-  if (!providers.includes('DOCUMENT_KINDS.map') || !providers.includes("'session-state'")) errors.push('Missing registered documents/saved-session provider')
+  // The document provider must derive its scan from every registered kind (any readable extension), not a hand list.
+  if (!/DOCUMENT_KINDS\.(?:flatMap|map)\(/.test(providers) || !providers.includes("'session-state'")) errors.push('Missing registered documents/saved-session provider')
   return errors
 }
 if (require.main === module) {
