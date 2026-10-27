@@ -126,8 +126,8 @@
       "minReaderVersion": 1
     },
     "document.video_edit": {
-      "version": 34,
-      "fingerprint": "256322252e3ae780a9ad6561be7b74c6ac58ca0670b022b84acac33c7ad11e74",
+      "version": 35,
+      "fingerprint": "3c64ed50413e846c53b630f75e5c3bc46af08b02d44bc570f950eb1acdf217a4",
       "supportedFrom": 17,
       "minReaderVersion": 34
     },
@@ -156,8 +156,8 @@
       "minReaderVersion": 1
     },
     "document.screen_recording": {
-      "version": 37,
-      "fingerprint": "272a2bca498e167f82a6cbda921b9f68299ca74cb4ff745186bd084e0c6b9366",
+      "version": 38,
+      "fingerprint": "2544b5aa3c6e8357a0227dc0800735b7e9590b8b82e694f5b2d2017ea0d01bb9",
       "supportedFrom": 19,
       "minReaderVersion": 37
     },
@@ -174,8 +174,8 @@
       "minReaderVersion": 1
     },
     "code-version": {
-      "version": 2,
-      "fingerprint": "2367d84fe9864f81581508834754c96be2f55d4e732f817b771be45124c132ad",
+      "version": 3,
+      "fingerprint": "4990f022451d15a20264d249630ac56f043a1aed40207d766a820f4e63249426",
       "supportedFrom": 1,
       "minReaderVersion": 2
     },

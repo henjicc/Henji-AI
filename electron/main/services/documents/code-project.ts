@@ -9,6 +9,10 @@ import { gitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
 import type { CodeProjectClosure } from '../../../../src/core/videoEdit/codeMaterial/projectContract'
 
 const trees = new Map<string, Map<string, { oid: string; bytes: number }>>()
+const blobSizes = new Map<string, number>()
+function rememberBlobSize(oid: string, bytes: number): void {
+  blobSizes.set(oid, bytes); if (blobSizes.size > 10000) blobSizes.delete(blobSizes.keys().next().value!)
+}
 const closures = new Map<string, CodeProjectClosure>()
 const recovery = '代码仓库无法读取，请保留工作区并从备份恢复 .git 后重试。'
 const author = { name: '痕迹AI', email: 'code@henji.local' }
@@ -47,7 +51,10 @@ export class CodeProjectRepository extends CodeGitRepository {
       for (const entry of (await git.readTree({ ...this.options, oid })).tree) {
         const name = prefix + entry.path
         if (entry.type === 'tree') await visit(entry.oid, `${name}/`)
-        else if (entry.type === 'blob') result.set(name, { oid: entry.oid, bytes: (await git.readBlob({ ...this.options, oid: entry.oid })).blob.byteLength })
+        else if (entry.type === 'blob') {
+          const bytes = blobSizes.get(entry.oid) ?? (await git.readBlob({ ...this.options, oid: entry.oid })).blob.byteLength
+          rememberBlobSize(entry.oid, bytes); result.set(name, { oid: entry.oid, bytes })
+        }
       }
     }
     try { await visit(oid, '') } catch (error) { throw new Error(`${recovery} ${String(error)}`, { cause: error }) }
@@ -117,9 +124,16 @@ export class CodeProjectRepository extends CodeGitRepository {
           const location = path.join(this.dir, change.path)
           backups.set(change.path, await fsp.readFile(location).catch(error => { if (error.code === 'ENOENT') return null; throw error }))
           if (change.source === null) { await fsp.unlink(location); await git.remove({ ...this.options, filepath: change.path }) }
-          else { await fsp.mkdir(path.dirname(location), { recursive: true }); await fsp.writeFile(location, change.source, 'utf8'); await git.add({ ...this.options, filepath: change.path }) }
+          else { await fsp.mkdir(path.dirname(location), { recursive: true }); await fsp.writeFile(location, change.source, 'utf8') }
         }
-        const oid = await git.commit({ ...this.options, message: input.message, author }); committed = true; return oid
+        const additions = input.changes.filter(change => change.source !== null).map(change => change.path)
+        if (additions.length) await git.add({ ...this.options, filepath: additions, parallel: true })
+        const oid = await git.commit({ ...this.options, message: input.message, author }); committed = true
+        // Sizes are content addressed; the next tree read need not reread unchanged blobs.
+        for (const change of input.changes) {
+          if (change.source !== null) rememberBlobSize((await git.hashBlob({ object: change.source })).oid, Buffer.byteLength(change.source))
+        }
+        return oid
       } catch (error) {
         if (!committed) for (const [file, bytes] of backups) {
           const location = path.join(this.dir, file)
@@ -138,11 +152,18 @@ export class CodeProjectRepository extends CodeGitRepository {
       await this.initialize()
       const divergent = (await git.statusMatrix(this.options)).filter(([, head, work, stage]) => stage !== head && stage !== work).map(([file]) => file)
       if (divergent.length) throw new Error(`暂存内容与工作区不同：${divergent.join('、')}；请先在外部编辑器中保存或恢复暂存内容，再提交工作区。`)
-      for (const change of state.changes) {
-        if (change.kind === 'deleted') await git.remove({ ...this.options, filepath: change.path })
-        else await git.add({ ...this.options, filepath: change.path })
+      const indexPath = path.join(this.dir, '.git/index')
+      const index = await fsp.readFile(indexPath).catch(error => { if (error.code === 'ENOENT') return null; throw error })
+      try {
+        for (const change of state.changes) if (change.kind === 'deleted') await git.remove({ ...this.options, filepath: change.path })
+        const additions = state.changes.filter(change => change.kind !== 'deleted').map(change => change.path)
+        if (additions.length) await git.add({ ...this.options, filepath: additions, parallel: true })
+        return await git.commit({ ...this.options, author, message })
+      } catch (error) {
+        if (index) await fsp.writeFile(indexPath, index)
+        else await fsp.unlink(indexPath).catch(error => { if (error.code !== 'ENOENT') throw error })
+        throw new Error(`外部修改提交失败，工作区原文保留，暂存区已恢复；请读取 changes 后重试。${String(error)}`, { cause: error })
       }
-      return git.commit({ ...this.options, author, message })
     })
   }
 }

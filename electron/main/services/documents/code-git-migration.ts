@@ -129,6 +129,7 @@ export async function migrateProjectCodeStorage(projectId: string, workspace: Do
         const kind = kinds.get(document.meta.kind)!
         await backupBeforePersistenceUpgrade(document.meta.path, { id: `document.${kind.id}`, name: kind.id, version: kind.version, migrations: kind.migrations }, kind.version, undefined, true)
       }
+      const relocatedFiles = await git.migrateLayoutLocked()
       for (const folder of folders) for (const version of folder.versions) {
         await git.recoverImportLocked(version)
         const stored = await git.writeLocked(version)
@@ -172,7 +173,7 @@ export async function migrateProjectCodeStorage(projectId: string, workspace: Do
         await moveDirectoryNoOverwrite(folder.directory, backup)
         archivedFolders++
       }
-      const result = { documents: transfers, importedVersions: (await git.versions()).filter(version => !priorTags.has(version.tag)).length, archivedFolders, retainedFolders: folders.length - archivedFolders }
+      const result = { documents: transfers, relocatedFiles, importedVersions: (await git.versions()).filter(version => !priorTags.has(version.tag)).length, archivedFolders, retainedFolders: folders.length - archivedFolders }
       logger.info('代码历史迁移完成', { event: 'documents.code.migrate.completed', context: { projectId, importedVersions: result.importedVersions, archivedFolders, retainedFolders: result.retainedFolders } })
       return result
     } catch (error) {

@@ -16,10 +16,49 @@ async function setup() {
   return { service, project, document, target, write }
 }
 const worktreePath = (location: string) => { const reference = parseGitCodeLocation(location)!; return path.join(reference.repository, reference.filepath) }
+it('工程闭包跨项目收集、单文档包和整项目包带齐源码并重写 project 提交', async () => {
+  const { service, target, project } = await setup()
+  const sources = { 'entries/a.ts': 'export { value } from "../style/tokens"; import "../style/desk.wgsl"', 'style/tokens.ts': 'export const value=1', 'style/desk.wgsl': 'fn desk() {}', 'README.md': '不属于闭包的作者说明' }
+  const commit = await service.changeCodeProject({ target, message: '作者源码树', changes: Object.entries(sources).map(([path, source]) => ({ path, source, expectedHash: null })) })
+  const closure = await service.resolveCodeProject({ target, entry: 'entries/a.ts' })
+  const content = { media: [], bins: [], items: [], sequences: [], codeMaterials: [{ id: 'project-material', versions: [{ id: 'v1', entry: closure.entry, files: closure.files, imports: [], project: { commit, entry: closure.entry } }] }] }
+  await service.saveDocument({ target, expectedRevision: 0, content })
+  const verify = async (id: string) => {
+    const read = await service.readDocument({ id }); expect(read.missingPaths).toEqual([])
+    const version = (read.content as typeof content).codeMaterials[0].versions[0]
+    expect(version.files.map(file => file.path)).toEqual(['entries/a.ts', 'style/desk.wgsl', 'style/tokens.ts'])
+    for (const file of version.files) {
+      expect(await service.readCodeFile(file)).toBe(sources[file.path as keyof typeof sources])
+      expect(parseGitCodeLocation(file.location)?.oid).toBe(version.project.commit)
+    }
+    return version
+  }
+  const destination = await service.createProject({ name: '闭包收集' })
+  const other = await service.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: destination.id }, name: '副本' })
+  await service.saveDocument({ target: { id: other.meta.id }, expectedRevision: 0, content })
+  expect((await service.collectDocumentMedia({ id: other.meta.id })).copiedFiles).toBe(3)
+  await verify(other.meta.id)
+  const single = await service.exportDocumentPackage({ target, destination: path.join(env.outside, '入口包') })
+  const imported = await service.importPackage({ source: single.path, container: { kind: 'project', projectId: destination.id } })
+  expect(imported.type).toBe('document')
+  for (const document of await service.listDocuments({ container: { kind: 'project', projectId: destination.id } })) await verify(document.id)
+  const full = await service.exportProjectPackage({ projectId: project.id, destination: path.join(env.outside, '源码工程包') })
+  const importedProject = await service.importPackage({ source: full.path })
+  if (importedProject.type !== 'project') throw new Error('应导入项目')
+  const projects = await service.listProjects({})
+  const copied = projects.find(value => value.id === importedProject.project.id)!
+  expect(await fsp.readFile(path.join(copied.path, '代码/README.md'), 'utf8')).toBe(sources['README.md'])
+  for (const document of await service.listDocuments({ container: { kind: 'project', projectId: copied.id } })) await verify(document.id)
+  const sibling = await service.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: project.id }, name: '空白兄弟文档' })
+  // Simulate a lost repository without deleting any source or Git objects.
+  await fsp.rename(path.join(project.path, '代码/.git'), path.join(env.outside, 'lost-git-backup'))
+  await expect(service.commitCodeProject({ target: { id: sibling.meta.id }, message: '不能重建' })).rejects.toThrow('.git 缺失')
+  expect(await fsp.readFile(path.join(project.path, '代码/README.md'), 'utf8')).toBe(sources['README.md'])
+})
 describe('项目源码 Git 仓库', () => {
   it('替换非法名称，固定素材文件夹，同名定义加后缀，版本只创建不覆盖', async () => {
     const { service, write, target } = await setup(); const first = await write()
-    expect(first.folder).toBe('霓虹_标题'); expect(parseGitCodeLocation(first.files[0].location)?.filepath).toBe('素材/霓虹_标题/main.ts')
+    expect(first.folder).toBe('霓虹_标题'); expect(parseGitCodeLocation(first.files[0].location)?.filepath).toBe('legacy/materials/霓虹_标题/main.ts')
     const next = await service.writeCodeVersion({ target, definitionId: 'definition', name: '已改名', folder: first.folder, contents: { entry: 'main.ts', files: { 'main.ts': '第二版' } } })
     expect(next.folder).toBe(first.folder); expect(next.files[0].location).not.toBe(first.files[0].location)
     expect(await service.readCodeFile(first.files[0])).toBe('export default {}')
@@ -32,8 +71,8 @@ describe('项目源码 Git 仓库', () => {
     const first = await write()
     await expect(service.writeCodeVersion({ target, definitionId: 'other', name: 'x', folder: first.folder, contents })).rejects.toThrow('另一份')
     await expect(service.writeCodeVersion({ target, definitionId: 'x', name: 'x', contents: { entry: 'main.ts', files: { '../outside.ts': 'x' } } })).rejects.toThrow('相对')
-    await fsp.mkdir(path.join(project.path, '代码', '素材', '链接'), { recursive: true }); await fsp.rm(path.join(project.path, '代码', '素材', '链接'), { recursive: true })
-    await fsp.symlink(env.outside, path.join(project.path, '代码', '素材', '链接'), 'junction')
+    await fsp.mkdir(path.join(project.path, '代码', 'legacy', 'materials', '链接'), { recursive: true }); await fsp.rm(path.join(project.path, '代码', 'legacy', 'materials', '链接'), { recursive: true })
+    await fsp.symlink(env.outside, path.join(project.path, '代码', 'legacy', 'materials', '链接'), 'junction')
     await expect(service.writeCodeVersion({ target, definitionId: 'x', name: '链接', contents })).rejects.toThrow('链接')
   })
   it('按提交内容缓存，修改和删除工作区文件不影响固定版本', async () => {
@@ -86,7 +125,7 @@ describe('项目源码 Git 仓库', () => {
     const destination = await service.createProject({ name: '目标' })
     const duplicate = await service.duplicateDocument({ target, container: { kind: 'project', projectId: destination.id }, onConflict: 'keepBoth' })
     expect(duplicate.copiedFiles).toBe(3)
-    expect(await fsp.readFile(path.join(destination.path, '代码', '素材', stored.folder, 'parts', 'card.ts'), 'utf8')).toBe('export const width=20')
+    expect(await fsp.readFile(path.join(destination.path, '代码', 'legacy', 'materials', stored.folder, 'parts', 'card.ts'), 'utf8')).toBe('export const width=20')
     await service.moveDocument({ target, container: { kind: 'project', projectId: destination.id }, onConflict: 'keepBoth' })
     const moved = await service.readDocument(target); expect(moved.missingPaths).toEqual([])
     const documentPackage = await service.exportDocumentPackage({ target, destination: path.join(env.outside, '单剪辑') })
@@ -94,7 +133,7 @@ describe('项目源码 Git 仓库', () => {
     const imported = await service.importPackage({ source: exported.path }); expect(imported.type).toBe('project'); if (imported.type !== 'project') throw new Error('项目包导入结果类型错误')
     const fresh = await service.createProject({ name: '包导入' })
     await service.importPackage({ source: documentPackage.path, container: { kind: 'project', projectId: fresh.id } })
-    expect(await fsp.readFile(path.join(fresh.path, '代码', '组件', '颜色', 'main.ts'), 'utf8')).toContain('export const color=1')
+    expect(await fsp.readFile(path.join(fresh.path, '代码', 'legacy', 'components', '颜色', 'main.ts'), 'utf8')).toContain('export const color=1')
     expect((await service.listCodeComponents({ id: (await service.listDocuments({ container: { kind: 'project', projectId: fresh.id } }))[0].id }))[0].name).toBe('颜色')
     const collectTarget = await service.createProject({name:'收集目标'})
     const external = await service.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: collectTarget.id }, name: '收集' })
@@ -114,15 +153,15 @@ describe('项目源码 Git 仓库', () => {
     const copied = await service.duplicateDocument({ target, container: { kind: 'project', projectId: destination.id }, onConflict: 'keepBoth' })
     const loaded = (await service.readDocument({ id: copied.meta.id })).content as typeof content
     const definition = loaded.codeMaterials[0]; expect(definition.folder).toBe(`${original.folder} (2)`)
-    expect(parseGitCodeLocation(definition.versions[0].imports[0].location)?.filepath).toBe('组件/颜色 (2)/main.ts')
+    expect(parseGitCodeLocation(definition.versions[0].imports[0].location)?.filepath).toBe('legacy/components/颜色 (2)/main.ts')
     expect((await service.listCodeComponents({ id: copied.meta.id })).map(component => component.name)).toEqual(expect.arrayContaining(['颜色', '颜色 (2)']))
     expect(await service.readCodeFile({ ...definition.versions[0].imports[0], path: '颜色' })).toBe(sourceComponent.source)
     expect(await service.readCodeFile({ ...existingComponent, path: '原颜色' })).toContain('fill=2')
     const next = await service.writeCodeVersion({ target: { id: copied.meta.id }, definitionId: definition.id, name: '改名', folder: definition.folder, contents: { entry: 'main.ts', files: { 'main.ts': '新版' } } })
     expect(next.folder).toBe(definition.folder); expect(await service.readCodeFile(existing.files[0])).toBe('另一份源码')
     const unsafeProject = await service.createProject({ name: '链接目标' })
-    await fsp.mkdir(path.join(unsafeProject.path, '代码', '素材'), { recursive: true })
-    await fsp.symlink(env.outside, path.join(unsafeProject.path, '代码', '素材', original.folder), 'junction')
+    await fsp.mkdir(path.join(unsafeProject.path, '代码', 'legacy', 'materials'), { recursive: true })
+    await fsp.symlink(env.outside, path.join(unsafeProject.path, '代码', 'legacy', 'materials', original.folder), 'junction')
     await expect(service.duplicateDocument({ target, container: { kind: 'project', projectId: unsafeProject.id }, onConflict: 'keepBoth' })).rejects.toThrow('链接')
   })
 })

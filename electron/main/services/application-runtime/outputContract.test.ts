@@ -33,6 +33,8 @@ const verification = (target = documentRef) => ({ verified: true, condition: mes
 
 // 来自第四轮外部成功回执及现有领域测试的代表性回执，禁止从待测 outputSchema 反推样本。
 const successData: Record<string, Record<string, unknown>> = {
+  commit_video_edit_code_project: { resultRef: ref('video_edit.code_project', 'document'), commit: 'a'.repeat(40), verified: true, message },
+  upgrade_video_edit_code_materials: { commit: 'a'.repeat(40), upgrades: [{ materialRef: ref('video_edit.code_material', 'document:material'), oldVersion: 'v1', newVersion: 'v2', changedFiles: ['style/tokens.ts'], retargetedClips: 2 }], resultRefs: [ref('video_edit.code_material', 'document:material'), clipRef], verified: true, message },
   search_app_store_icons: { country: 'cn', candidates: [{ appId: '6480446430', name: '元宝', developer: '腾讯', platform: 'iphone', category: '工具' }], ...revisions },
   save_app_store_icon: { assetRef, projectId: 'project', name: '元宝', width: 1024, height: 1024, transparentCorners: true, verification: { verified: true, condition: message }, ...revisions },
   prepare_video_edit_subtitle_audio: { documentRef, audioDocumentRef, ...verified },
@@ -90,7 +92,7 @@ const successData: Record<string, Record<string, unknown>> = {
   duplicate_document: { resultRef: ref('documents.document', 'copy'), sourceRef: ref('documents.document'), name: '副本', projectId: null, ...revisions },
   collect_document_media: { resultRef: ref('documents.document'), name: '字幕项目', copiedFiles: 1, copiedDocuments: 0, missingFiles: 0, message, ...revisions },
   create_project: { resultRef: ref('documents.project', 'project'), name: '创作项目', ...revisions },
-  migrate_project_code_storage: { resultRef: ref('documents.project', 'project'), importedVersions: 3, archivedFolders: 2, retainedFolders: 0, ...revisions },
+  migrate_project_code_storage: { resultRef: ref('documents.project', 'project'), relocatedFiles: 2, importedVersions: 3, archivedFolders: 2, retainedFolders: 0, ...revisions },
   register_external_project: { resultRef: ref('documents.project', 'project'), name: '元宝搜索', external: true, documentCount: 0, ...revisions },
   trash_document: { resultRef: ref('documents.document'), name: '字幕项目', status: 'trashed', ...revisions },
   trash_project: { resultRef: ref('documents.project', 'project'), name: '创作项目', status: 'trashed', ...revisions },

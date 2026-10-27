@@ -1,0 +1,18 @@
+{
+  "id": "code-version",
+  "apiVersion": 4,
+  "languageVersion": 4,
+  "project": {
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "entry": "entries/title.ts"
+  },
+  "entry": "entries/title.ts",
+  "files": [
+    {
+      "path": "entries/title.ts",
+      "location": "git:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:henji%3A%2F%E4%BB%A3%E7%A0%81:entries%2Ftitle.ts",
+      "hash": "f6f1e9f0ce00e2b293418731dbdcef684c806130256799e4aef48484d0f8f08a"
+    }
+  ],
+  "imports": []
+}

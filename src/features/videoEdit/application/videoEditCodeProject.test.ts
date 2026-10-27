@@ -2,12 +2,13 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
-import { beforeEach, afterEach, it, expect } from 'vitest'
+import { beforeEach, afterEach, it, expect, vi } from 'vitest'
 import { CodeProjectRepository } from '../../../../electron/main/services/documents/code-project'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { getPlatform } from '@/platform/runtime'
 import { createVideoEditTestProject, closeAllVideoEdits } from './videoEditDocumentTestKit'
+import { openVideoEditDocument } from './videoEditService'
 import { CODE_PROJECT_FILE, CODE_PROJECT } from './videoEditCodeProjectReflection'
 let root: string
 let repository: CodeProjectRepository
@@ -26,7 +27,10 @@ beforeEach(async () => {
 afterEach(async () => { app.dispose(); await closeAllVideoEdits(); uninstallHarnessNativeStorage(); await fsp.rm(root, { recursive: true, force: true }) })
 it('正式通用事务创建多个文件只提交一次，属性读回且撤销追加提交', async () => {
   const owner = await createVideoEditTestProject(); const parent = { kind: 'video_edit.document', id: owner.document.id }
+  const secondDisk = await getPlatform().documents.createDocument({ kind: 'video_edit', container: owner.session.documentMeta.container, name: '同项目另一剪辑' })
+  const second = await openVideoEditDocument({ id: secondDisk.meta.id }, { focus: false })
   const changes = ['README.md', 'style/tokens.ts'].map(file => ({ kind: 'create_items', entityType: CODE_PROJECT_FILE, parent, items: [{ properties: { path: file, source: file } }] }))
+  changes[1].parent = { kind: 'video_edit.document', id: second.document.id }
   const result = await app.requireResult('change_application_entities', { summary: '创建普通源码树', changes }, (await app.read(parent)).revisions as Record<string, number>)
   expect((await repository.state()).log).toHaveLength(1)
   expect((await repository.state()).log[0].message).toBe('创建普通源码树')
@@ -63,4 +67,11 @@ it('文件路径可改名；经原引用读回新路径，撤销恢复原文件'
   expect((await repository.state()).files.map(file => file.path)).toEqual(['entries/new.ts'])
   await app.requireResult('undo_application_changes', { undoRef: changed.data.undoRef })
   expect((await repository.state()).files.map(file => file.path)).toEqual(['old.ts'])
+  const failure = vi.spyOn(getPlatform().documents, 'changeCodeProject').mockRejectedValueOnce(new Error('磁盘写入失败'))
+  expect((await app.change(ref, { [`${CODE_PROJECT_FILE}.path`]: 'failed.ts' })).ok).toBe(false)
+  failure.mockRestore()
+  expect((await app.read(ref, [`${CODE_PROJECT_FILE}.path`])).properties).toMatchObject({ [`${CODE_PROJECT_FILE}.path`]: 'old.ts' })
+  expect((await app.change(ref, { [`${CODE_PROJECT_FILE}.path`]: 'b.ts' })).ok).toBe(true)
+  expect((await app.change({ kind: CODE_PROJECT_FILE, id: `${parent.id}:b.ts` }, { [`${CODE_PROJECT_FILE}.path`]: 'c.ts' })).ok).toBe(true)
+  expect((await app.read(ref, [`${CODE_PROJECT_FILE}.path`])).properties).toMatchObject({ [`${CODE_PROJECT_FILE}.path`]: 'c.ts' })
 })

@@ -86,7 +86,7 @@ export function externalWritableEntityTypes(domains: readonly LocalDomainSurface
  *
  * 当前只支持新应用契约，不提供旧工具或旧协议兼容入口。
  */
-export const EXTERNAL_CONTRACT_VERSION = '2.80.0' as const
+export const EXTERNAL_CONTRACT_VERSION = '2.81.0' as const
 /** 正式支持的现代协议；旧握手和其他版本拒绝，不降级。 */
 export const EXTERNAL_PROTOCOL_VERSIONS = ['2026-07-28'] as const
 export const EXTERNAL_SDK_VERSION = '2.0.0' as const

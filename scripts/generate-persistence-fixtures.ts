@@ -63,9 +63,10 @@ const source = `export default {
 const program = testCodeMetadata({ name: '黄金代码', width: 1920, height: 1080, durationSeconds: 4, parameters })
 const hash = createHash('sha256').update(source).digest('hex')
 const sourceVersion = { apiVersion: CODE_AUTHOR_API_VERSION, languageVersion: 4 as const, entry: 'main.ts', files: [{ path: 'main.ts', location: gitCodeLocation({ oid: 'a'.repeat(40), repository: 'henji:/代码', filepath: '素材/标题/main.ts' }), hash }], imports: [] }
+const projectSourceVersion = { ...sourceVersion, entry: 'entries/title.ts', files: [{ ...sourceVersion.files[0], path: 'entries/title.ts', location: gitCodeLocation({ oid: 'a'.repeat(40), repository: 'henji:/代码', filepath: 'entries/title.ts' }) }], project: { commit: 'a'.repeat(40), entry: 'entries/title.ts' } }
 const document = createVideoEditDocument('持久格式黄金样本')
 document.id = 'golden-video'
-document.codeMaterials = [{ id: 'code-definition', name: '代码标题', defaultVersionId: 'code-version', versions: [{ id: 'code-version', ...sourceVersion }] }]
+document.codeMaterials = [{ id: 'code-definition', name: '代码标题', defaultVersionId: 'code-version', versions: [{ id: 'code-version', ...projectSourceVersion }] }]
 document.items.push({ id: 'code-item', name: '代码标题', kind: 'code', code: { definitionId: 'code-definition', versionId: 'code-version', parameters: { label: '黄金样本', size: 24, titleStyle: videoEditTextStyleSchema.parse({ fontSize: 64 }), nodes: [{ id: 'node-0', label: '首项' }] }, curves: { size: [{ id: 'source-key', sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, value: 24, interpolation: 'linear' }] } } })
 const sequence = createVideoEditSequence()
 sequence.id = 'golden-sequence'
@@ -238,6 +239,7 @@ const working = { format: 'henji-image-edit', formatVersion: IMAGE_WORKING_VERSI
   historyCheckpoint:{format:'henji-image-history',version:2,documentId:image.id,headRevision:goldenBody.revision,snapshotVersion:2,position:1,total:1,pages:[{resourceId:historyId,byteSize:historyBytes.byteLength,start:0,count:1}],resources:[]},resourceRefs:[...image.creativeIntents.resources.map(r=>r.resourceId),historyId].sort() }
 const replayBaseline = createVideoEditDocument('重放起点')
 replayBaseline.id = 'golden-replay'
+replayBaseline.codeMaterials = structuredClone(document.codeMaterials)
 const replaySequence = createVideoEditSequence('原始序列')
 replaySequence.id = 'golden-replay-sequence'; replaySequence.styleId = goldenStyle.id; replayBaseline.sequences.push(replaySequence)
 replayBaseline.styles = [goldenStyle]
@@ -274,7 +276,7 @@ const values: Record<string, unknown> = {
   project: buildProjectManifest({ id: 'golden-project', createdAt: timestamp, locale: 'zh', draft: false, mainVideoEditId: document.id, memories: [{ id: 'brand', content: '这期品牌色用红色。', source: 'user', revision: 1, updatedAt: timestamp }] }),
   'project-package': { format: 'henji-package', version: 1, type: 'project', name: '黄金项目', exportedAt: timestamp, folders: { generated: '生成结果', materials: '素材' }, documents: [{ id: document.id, path: '黄金剪辑.henji-video' }] },
   'code-git-location': sourceVersion.files[0].location,
-  'code-version': { id: 'code-version', ...sourceVersion },
+  'code-version': { id: 'code-version', ...projectSourceVersion },
   'code-author-api': { apiVersion: CODE_AUTHOR_API_VERSION },
   'code-component': { schemaVersion: 1, name: '组件', version: 1, description: '黄金组件', exports: ['value'], imports: [] },
   'code-asset': codeAssetSchema.parse({ format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: '代码标题', sourceVersion, codeSources: [{ hash, source }], parameters: { label: '黄金样本' }, curves: {}, images: [] }),

@@ -6,12 +6,45 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createTestEnvironment, type TestEnvironment } from './documents.test-support'
 import { CodeGitRepository, codeDigest } from './code-git'
 import { packageComponentSource } from '../../../../src/core/videoEdit/codeMaterial/components'
-import { parseGitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
+import { gitCodeLocation, parseGitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
 import { PersistenceError } from '../../../../src/core/persistence/migrations'
 
 let env: TestEnvironment
 beforeEach(() => { env = createTestEnvironment() })
 afterEach(async () => { vi.restoreAllMocks(); await env.cleanup() })
+
+it('旧 Git 工作区一次移动到 legacy，历史引用不变；脏文件点名拒绝且可幂等重跑', async () => {
+  const service = env.services.service
+  const project = await service.createProject({ name: '旧 Git 工程' })
+  const document = await service.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: project.id }, name: '剪辑' })
+  const root = path.join(project.path, '代码')
+  const files = { '素材/开场/main.ts': 'export const title = 1', '组件/边框/main.ts': 'export const border = 2', 'README.md': '作者说明' }
+  await fsp.mkdir(root, { recursive: true }); await git.init({ fs, dir: root, defaultBranch: 'main' })
+  for (const [filepath, source] of Object.entries(files)) {
+    await fsp.mkdir(path.dirname(path.join(root, filepath)), { recursive: true })
+    await fsp.writeFile(path.join(root, filepath), source); await git.add({ fs, dir: root, filepath })
+  }
+  const old = await git.commit({ fs, dir: root, message: '旧工作区', author: { name: 'test', email: 'test@example.com' } })
+  await git.tag({ fs, dir: root, ref: '素材/开场@v1', object: old })
+  await git.tag({ fs, dir: root, ref: '组件/边框@v1', object: old })
+  const file = { path: 'main.ts', location: gitCodeLocation({ repository: root, oid: old, filepath: '素材/开场/main.ts' }), hash: codeDigest(files['素材/开场/main.ts']) }
+  await service.saveDocument({ target: { id: document.meta.id }, expectedRevision: 0, content: { ...document.content as object, codeMaterials: [{ id: 'old', versions: [{ files: [file] }] }] } })
+  await fsp.writeFile(path.join(root, '素材/开场/main.ts'), '外部编辑')
+  await expect(service.migrateCodeStorage(project.id)).rejects.toThrow('素材/开场/main.ts')
+  expect(await fsp.readFile(path.join(root, '素材/开场/main.ts'), 'utf8')).toBe('外部编辑')
+  await fsp.writeFile(path.join(root, '素材/开场/main.ts'), files['素材/开场/main.ts'])
+  expect(await service.migrateCodeStorage(project.id)).toMatchObject({ relocatedFiles: 2 })
+  const commits = await git.log({ fs, dir: root })
+  expect(commits).toHaveLength(2)
+  expect(await new CodeGitRepository(root).sourceAt(old, '素材/开场/main.ts')).toBe(files['素材/开场/main.ts'])
+  expect(JSON.stringify((await service.readDocument({ id: document.meta.id })).content)).toContain(file.location)
+  expect(await service.readCodeFile(file)).toBe(files['素材/开场/main.ts'])
+  expect(await fsp.readFile(path.join(root, 'legacy/materials/开场/main.ts'), 'utf8')).toBe(files['素材/开场/main.ts'])
+  expect(await fsp.readFile(path.join(root, 'legacy/components/边框/main.ts'), 'utf8')).toBe(files['组件/边框/main.ts'])
+  expect(await fsp.readFile(path.join(root, 'README.md'), 'utf8')).toBe(files['README.md'])
+  expect(await service.migrateCodeStorage(project.id)).toMatchObject({ relocatedFiles: 0 })
+  expect(await git.resolveRef({ fs, dir: root, ref: 'HEAD' })).toBe(commits[0].oid)
+})
 
 async function legacy() {
   const service = env.services.service
@@ -53,7 +86,7 @@ it('旧路径只读兼容；逐版本导入、保存读回后归档，重跑不�
   }
   expect(await service.listCodeComponents(target)).toEqual([])
   expect(await fsp.stat(path.join(root, '开场')).catch(() => null)).toBeNull()
-  expect(await fsp.readFile(path.join(root, '素材/开场/parts/title.ts'), 'utf8')).toBe('export const title=3')
+  expect(await fsp.readFile(path.join(root, 'legacy/materials/开场/parts/title.ts'), 'utf8')).toBe('export const title=3')
   const backups = await fsp.readdir(path.join(project.path, '.henji/backups'))
   expect(backups.some(name => name.startsWith('code-git-'))).toBe(true)
   expect(await service.migrateCodeStorage(project.id)).toMatchObject({ importedVersions: 0, archivedFolders: 0 })
@@ -87,7 +120,7 @@ it('混存时导入旧历史不降低最新工作区；其他文档仍引用的�
   const other = await service.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: otherProject.id }, name: '引用旧文件' })
   await service.saveDocument({ target: { id: other.meta.id }, expectedRevision: 0, content })
   expect(await service.migrateCodeStorage(project.id)).toMatchObject({ importedVersions: 3, archivedFolders: 0, retainedFolders: 2 })
-  expect(await fsp.readFile(path.join(root, '素材/开场/parts/title.ts'), 'utf8')).toBe('export const title=4')
+  expect(await fsp.readFile(path.join(root, 'legacy/materials/开场/parts/title.ts'), 'utf8')).toBe('export const title=4')
   expect(await service.readCodeFile(latest.files[0])).toBe('export const title=4')
   expect((await service.listCodeComponents(target))[0].versions).toHaveLength(1)
   await service.collectDocumentMedia({ id: other.meta.id })
@@ -97,15 +130,15 @@ it('混存时导入旧历史不降低最新工作区；其他文档仍引用的�
 it('导入中断后手改工作区不被重试覆盖', async () => {
   const { service, project, target, root } = await legacy()
   await service.writeCodeVersion({ target, definitionId: 'definition', name: '开场', folder: '开场', contents: { entry: 'main.ts', files: { 'main.ts': 'newest' } } })
-  await fsp.writeFile(path.join(root, '素材/开场/main.ts'), '用户改动')
+  await fsp.writeFile(path.join(root, 'legacy/materials/开场/main.ts'), '用户改动')
   await expect(service.migrateCodeStorage(project.id)).rejects.toThrow('未提交')
-  expect(await fsp.readFile(path.join(root, '素材/开场/main.ts'), 'utf8')).toBe('用户改动')
+  expect(await fsp.readFile(path.join(root, 'legacy/materials/开场/main.ts'), 'utf8')).toBe('用户改动')
 })
 
 it('提交前进程中断留下部分工作区与索引，重跑恢复；索引含独有用户编辑时拒绝', async () => {
   const { service, project, root } = await legacy()
   await git.init({ fs, dir: root, defaultBranch: 'main' })
-  const filepath = '素材/开场/parts/title.ts'
+  const filepath = 'legacy/materials/开场/parts/title.ts'
   await fsp.mkdir(path.dirname(path.join(root, filepath)), { recursive: true })
   await fsp.writeFile(path.join(root, filepath), '用户暂存的独有编辑')
   await git.add({ fs, dir: root, filepath })

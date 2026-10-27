@@ -217,7 +217,7 @@ export function rewriteContentPaths(content: unknown, mapping: ReadonlyMap<strin
     const location: unknown = definition.versions[0]?.files?.[0]?.location
     if (typeof location !== 'string') continue
     const git = parseGitCodeLocation(location)
-    if (git) { if (git.filepath.startsWith('素材/')) definition.folder = git.filepath.split('/')[1]; continue }
+    if (git) { if (git.filepath.startsWith('素材/')) definition.folder = git.filepath.split('/')[1]; else if (git.filepath.startsWith('legacy/materials/')) definition.folder = git.filepath.split('/')[2]; continue }
     const segments = location.split(/[\\/]/); const index = segments.lastIndexOf('代码')
     if (index >= 0 && segments[index + 1] !== '组件库') definition.folder = segments[index + 1]
   }

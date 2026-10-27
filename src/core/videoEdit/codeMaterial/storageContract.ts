@@ -6,6 +6,7 @@ import type { DocumentTransferResult } from '../../documents/types'
 
 export interface MigrateCodeStorageResult {
   documents: DocumentTransferResult[]
+  relocatedFiles?: number
   importedVersions: number
   archivedFolders: number
   retainedFolders: number

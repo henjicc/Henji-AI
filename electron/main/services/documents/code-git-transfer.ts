@@ -16,14 +16,17 @@ export async function transferGitCode(locations: readonly string[], destination:
     if (!parsed) continue
     if (!path.isAbsolute(parsed.repository)) throw new Error('代码仓库位置未解析，请重新打开原项目。')
     if (path.resolve(parsed.repository) === path.resolve(destination)) { mapping.set(location, location); continue }
-    const [kind, name] = parsed.filepath.split('/')
+    const segments = parsed.filepath.split('/')
+    const legacy = segments[0] === 'legacy' && ['materials', 'components'].includes(segments[1])
+    const kind = legacy ? (segments[1] === 'materials' ? '素材' : '组件') : segments[0]
+    const name = legacy ? segments[2] : segments[1]
     if (!['素材', '组件'].includes(kind)) {
       const key = `${parsed.repository}:${parsed.oid}`
       const group = projectGroups.get(key) ?? { repository: new CodeGitRepository(parsed.repository), references: [] }
       group.references.push({ location, parsed }); projectGroups.set(key, group); continue
     }
     if (!name) throw new Error('代码版本模块位置无效。')
-    const prefix = `${kind}/${name}`; const key = `${parsed.repository}:${prefix}`
+    const prefix = legacy ? `legacy/${segments[1]}/${name}` : `${kind}/${name}`; const key = `${parsed.repository}:${prefix}`
     const group = groups.get(key) ?? { repository: new CodeGitRepository(parsed.repository), prefix, references: [] }
     group.references.push({ location, parsed }); groups.set(key, group)
   }
@@ -41,7 +44,7 @@ export async function transferGitCode(locations: readonly string[], destination:
     const versions = await group.repository.versions()
     const copies: VersionCopy[] = []
     for (const oid of new Set(group.references.map(reference => reference.parsed.oid))) {
-      const original = versions.find(version => version.oid === oid && `${version.kind}/${version.name}` === group.prefix)
+      const original = versions.find(version => version.oid === oid && (group.prefix === `${version.kind}/${version.name}` || group.prefix === `legacy/${version.kind === '素材' ? 'materials' : 'components'}/${version.name}`))
       if (!original) throw new Error('源码版本标签缺失，请从备份恢复原仓库标签后重新复制。')
       const files: Record<string, string> = {}
       for (const file of await group.repository.files(oid, group.prefix)) files[file.slice(group.prefix.length + 1)] = await group.repository.sourceAt(oid, file)
@@ -62,11 +65,11 @@ export async function transferGitCode(locations: readonly string[], destination:
         let conflict = false
         // Different material identities cannot share a worktree even when version numbers do not overlap.
         const owner = copies[0].files['.definition']
-        if (owner && matches.length && await target.sourceAt(matches.at(-1)!.oid, `${original.kind}/${name}/.definition`) !== owner) conflict = true
+        if (owner && matches.length && await target.sourceAt(matches.at(-1)!.oid, `${await target.versionPrefix(matches.at(-1)!)}/.definition`) !== owner) conflict = true
         for (const copy of copies) {
           const match = matches.find(version => version.version === copy.original.version)
           if (!match) continue
-          const prefix = `${original.kind}/${name}`
+          const prefix = await target.versionPrefix(match)
           const files = await target.files(match.oid, prefix)
           if (files.length !== Object.keys(copy.files).length) { conflict = true; break }
           for (const [file, source] of Object.entries(copy.files)) {

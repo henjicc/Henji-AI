@@ -7,13 +7,17 @@ import { getPlatform } from '@/platform/runtime'
 import { videoEditDocumentSchema } from '@/core/videoEdit/document'
 import { videoEditSchemaRef } from './videoEditFields'
 import { listVideoEditInstances, requireVideoEditInstance, openVideoEditDocument, videoEditDomainRevision } from './videoEditService'
-import { readVideoCodeProject, makeCodeProjectFile, replaceVideoCodeProjectFiles } from './videoEditCodeProject'
+import { readVideoCodeProject, makeCodeProjectFile, replaceVideoCodeProjectFiles, onCodeProjectCommitFailure } from './videoEditCodeProject'
 
 export const CODE_PROJECT_FILE = 'video_edit.code_project_file'
 export const CODE_PROJECT = 'video_edit.code_project'
 const revisions = (): Record<string, number> => ({ video_edit: videoEditDomainRevision() })
 const refOf = (id: string, path: string): ApplicationRef => ({ kind: CODE_PROJECT_FILE, id: `${id}:${path}`, label: path })
 const renamedPaths = new Map<string, string>()
+function restoreAliases(id: string, snapshot: Map<string, string>): void {
+  for (const key of renamedPaths.keys()) if (key.startsWith(`${id}:`)) renamedPaths.delete(key)
+  for (const [key, value] of snapshot) renamedPaths.set(key, value)
+}
 function split(ref: ApplicationRef): { id: string; path: string } {
   const index = ref.id.indexOf(':')
   return { id: index < 0 ? ref.id : ref.id.slice(0, index), path: renamedPaths.get(ref.id) ?? (index < 0 ? '' : ref.id.slice(index + 1)) }
@@ -74,26 +78,36 @@ const undo = new Map<string, { id: string; before: CodeProjectFile[]; after: Cod
 const result = (refs: ApplicationRef[], undoToken?: string): ApplicationCompletedStepResult => ({ status: 'completed', directRefs: refs, resultingRevisions: revisions(), undoToken, evidence: [{ kind: 'entity_state', fact: '工程文件已在事务中更新，可读回；批次结束提交一次。', capturedAt: new Date().toISOString() }] })
 async function apply(step: FileStep, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
   const id = split(step.kind === 'mutation' ? step.target : step.parent).id
-  const before = structuredClone((await readVideoCodeProject(id)).files); let after = structuredClone(before); const refs: ApplicationRef[] = []; const renames = new Map(renamedPaths)
+  const state = await readVideoCodeProject(id)
+  const before = structuredClone(state.files); let after = structuredClone(before); const refs: ApplicationRef[] = []
+  const renames = new Map([...renamedPaths].filter(([key]) => key.startsWith(`${id}:`)))
+  onCodeProjectCommitFailure(id, () => restoreAliases(id, renames))
   if (step.kind === 'mutation') {
     const original = after.find(file => file.path === split(step.target).path)
     if (!original) throw new Error(`工程文件 ${split(step.target).path} 不存在。`)
     const draft: Data = { ...original }; await applyWriterTable(fieldWriterTable(fileFields), draft, step.mutations)
     const file = await makeCodeProjectFile(String(draft.path), String(draft.source))
     if (file.path !== original.path && after.some(other => other.path.toLowerCase() === file.path.toLowerCase())) throw new Error(`工程文件 ${file.path} 已存在，不能覆盖。`)
-    after = after.map(other => other === original ? file : other); refs.push(step.target); if (file.path !== original.path) renamedPaths.set(step.target.id, file.path)
+    after = after.map(other => other === original ? file : other); refs.push(step.target)
+    if (file.path !== original.path) {
+      for (const [key, value] of renamedPaths) if (key.startsWith(`${id}:`) && value === original.path) renamedPaths.set(key, file.path)
+      renamedPaths.set(step.target.id, file.path)
+    }
   } else if (step.operation.kind === 'create') {
     for (const item of step.operation.items) {
       const raw = Object.fromEntries(Object.entries(item.properties).map(([key, value]) => [key.replace(`${CODE_PROJECT_FILE}.`, ''), value]))
       const parsed = z.object({ path: schemas.path, source: schemas.source }).strict().parse(raw)
       if (after.some(file => file.path.toLowerCase() === parsed.path.toLowerCase())) throw new Error(`工程文件 ${parsed.path} 已存在，不能覆盖。`)
-      after.push(await makeCodeProjectFile(parsed.path, parsed.source)); refs.push(refOf(id, parsed.path))
+      after.push(await makeCodeProjectFile(parsed.path, parsed.source)); refs.push(refOf(id, parsed.path)); renamedPaths.delete(`${id}:${parsed.path}`)
     }
   } else for (const ref of step.operation.targets) {
     const parsed = split(ref)
     if (parsed.id !== id || ref.kind !== CODE_PROJECT_FILE || !after.some(file => file.path === parsed.path)) throw new Error(`工程文件 ${parsed.path} 不属于当前工程或不存在。`)
     after = after.filter(file => file.path !== parsed.path); refs.push(ref)
   }
+  const changedPaths = new Set([...before, ...after].filter(file => before.find(value => value.path === file.path)?.hash !== after.find(value => value.path === file.path)?.hash).map(file => file.path))
+  const dirty = state.changes.filter(change => changedPaths.has(change.path))
+  if (dirty.length) { restoreAliases(id, renames); throw new Error(`工程文件有未提交的外部修改：${dirty.map(change => change.path).join('、')}；请先读取 changes 并提交外部修改。`) }
   context.signal?.throwIfAborted()
   await replaceVideoCodeProjectFiles(id, after, context.transactionSummary ?? '修改代码工程')
   const token = crypto.randomUUID(); undo.set(token, { id, before, after, refs, renames }); return result(refs, token)
@@ -102,7 +116,9 @@ async function restore(token: string): Promise<ApplicationCompletedStepResult> {
   const record = undo.get(token); if (!record) throw new Error('工程文件撤销记录已失效。')
   const signature = (files: CodeProjectFile[]) => JSON.stringify(files.map(file => [file.path, file.hash]).sort(([a], [b]) => a.localeCompare(b)))
   if (signature((await readVideoCodeProject(record.id)).files) !== signature(record.after)) throw new Error('工程文件已有后续或外部修改，请先读取 changes 并处理后再撤销。')
-  await replaceVideoCodeProjectFiles(record.id, record.before, '撤销代码工程修改'); renamedPaths.clear(); for (const [key, value] of record.renames) renamedPaths.set(key, value); return result(record.refs)
+  const currentAliases = new Map([...renamedPaths].filter(([key]) => key.startsWith(`${record.id}:`)))
+  onCodeProjectCommitFailure(record.id, () => restoreAliases(record.id, currentAliases))
+  await replaceVideoCodeProjectFiles(record.id, record.before, '撤销代码工程修改'); restoreAliases(record.id, record.renames); return result(record.refs)
 }
 export class CodeProjectFileMutationExecutor implements ApplicationMutationExecutor {
   readonly entityType = CODE_PROJECT_FILE

@@ -23,6 +23,22 @@ import { createDefaultLlmConfig } from '../llm/defaults'
 import { migrateEmbeddedVideoEditMotionBlurMaster, migrateVideoEditMotionBlurMaster } from '../videoEdit/motionBlurMigration'
 import { parseGitCodeLocation } from '../storage/gitCodeLocation'
 
+it('工程入口元数据是可选增量；保留旧记录并读回新黄金样本的完整闭包', () => {
+  const format = PERSISTENCE_FORMATS.find(value => value.id === 'code-version')!
+  const old = JSON.parse(fs.readFileSync('tests/fixtures/persistence/code-version/v2.json', 'utf8'))
+  expect(upgradePersistenceContent(format, old, 2)).toEqual(old)
+  expect(format.minReaderVersion).toBe(2)
+  const current = JSON.parse(fs.readFileSync('tests/fixtures/persistence/code-version/v3.json', 'utf8'))
+  expect(format.schema.parse(current)).toEqual(current)
+  expect(current.project).toEqual({ commit: 'a'.repeat(40), entry: 'entries/title.ts' })
+  expect(parseGitCodeLocation(current.files[0].location)).toMatchObject({ oid: current.project.commit, filepath: current.project.entry })
+  for (const [id, version, minimum] of [['video_edit', 35, 34], ['screen_recording', 38, 37]] as const) {
+    const envelope = parseDocumentText(fs.readFileSync(`tests/fixtures/persistence/document.${id}/v${version}.json`, 'utf8'))
+    expect(envelope.kindMinReaderVersion).toBe(minimum)
+    expect(JSON.stringify(envelope.content)).toContain('entries/title.ts')
+  }
+})
+
 it('Git 引用格式提高最低可读版本；旧引用纯迁移不做 I/O、不丢文件位置或哈希', () => {
   const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
   const before = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v33.json', 'utf8'))
@@ -256,8 +272,8 @@ describe('所有登记格式的黄金样本', () => {
 
   it('过渡加入 gl-transitions 转场：剪辑 v33、录制会话 v36 只放宽种类，最低可读版本不变；旧样本原样升上来', () => {
     const versioned = (id: string) => PERSISTENCE_FORMATS.find(value => value.id === id)!
-    expect([versioned('document.video_edit').version, versioned('document.video_edit').minReaderVersion]).toEqual([34, 34])
-    expect([versioned('document.screen_recording').version, versioned('document.screen_recording').minReaderVersion]).toEqual([37, 37])
+    expect([versioned('document.video_edit').version, versioned('document.video_edit').minReaderVersion]).toEqual([35, 34])
+    expect([versioned('document.screen_recording').version, versioned('document.screen_recording').minReaderVersion]).toEqual([38, 37])
     const v33 = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v33.json', 'utf8'))
     expect(v33).toMatchObject({ kindVersion: 33, kindMinReaderVersion: 31 })
     expect((v33.content as { sequences: Array<{ transitions: Array<{ kind: string }> }> }).sequences[0].transitions.map(item => item.kind)).toContain('gl.Cube')

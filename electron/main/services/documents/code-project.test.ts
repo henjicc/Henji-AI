@@ -52,6 +52,28 @@ it('提交失败恢复文件与暂存区；拒绝捕获用户暂存区', async (
   await fsp.writeFile(path.join(repo.dir, 'user.ts'), 'user')
   await git.add({ fs, dir: repo.dir, filepath: 'user.ts' })
   await expect(repo.change({ message: '不能混入', changes: [edit('a.ts', 'new', 'a')] })).rejects.toThrow('user.ts')
+  const index = await fsp.readFile(path.join(repo.dir, '.git/index'))
+  vi.spyOn(git, 'commit').mockRejectedValueOnce(new Error('外部提交磁盘失败'))
+  await expect(repo.commitWorkspace('失败')).rejects.toThrow('工作区原文保留')
+  expect(await fsp.readFile(path.join(repo.dir, '.git/index'))).toEqual(index)
+  expect(await fsp.readFile(path.join(repo.dir, 'user.ts'), 'utf8')).toBe('user')
+})
+
+it('记录50文件工程的批量提交与闭包缓存耗时', async () => {
+  const sources = Object.fromEntries(Array.from({ length: 49 }, (_, index) => [`style/m${index}.ts`, `export const v=${index}`]))
+  sources['entries/main.ts'] = Object.keys(sources).map(file => `export * from "../${file}";`).join('\n')
+  await repo.change({ message: '50文件工程', changes: Object.entries(sources).map(([file, source]) => edit(file, source)) })
+  const times: number[] = []
+  for (let version = 0; version < 8; version++) {
+    const paths = Object.keys(sources).slice(0, 10)
+    const changes = paths.map(file => edit(file, `${sources[file]}\n//${version}`, sources[file]))
+    const start = performance.now(); await repo.change({ message: `修改${version}`, changes }); times.push(performance.now() - start)
+    for (const change of changes) sources[change.path] = change.source!
+  }
+  const cold = performance.now(); const closure = await repo.resolve('entries/main.ts'); const coldMs = performance.now() - cold
+  const warm = performance.now(); for (let index = 0; index < 50; index++) await repo.resolve('entries/main.ts', closure.commit)
+  process.stdout.write(`工程基准（50文件，每次改10个，8批）：提交中位${times.sort((a, b) => a - b)[4].toFixed(2)}ms，闭包冷读${coldMs.toFixed(2)}ms，缓存均值${((performance.now() - warm) / 50).toFixed(3)}ms\n`)
+  expect(closure.files).toHaveLength(50)
 })
 it('入口闭包递归相对导入、重导出、循环、着色器，忽略说明和外部模块，按提交缓存', async () => {
   const first = await repo.change({ message: '源码树', changes: [

@@ -9,7 +9,7 @@ import { migrateColorGradeParamsV1 } from '../imaging/adjustments/colorGradeMigr
  */
 export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> = {
   // 版本位置支持 git:；纯格式迁移保留已有位置，磁盘导入由显式项目操作执行。
-  'code-version': { 1: value => structuredClone(value) },
+  'code-version': { 1: value => structuredClone(value), 2: value => structuredClone(value) },
   'code-asset': { 6: value => ({ ...structuredClone(value) as object, version: 7, minReaderVersion: 7 }) },
   project: { 1: value => ({ ...value as object, version: 2, minReaderVersion: 1 }) },
   // 2 → 3：样片画布放宽到 3840×2160、60 帧，旧内容原样有效。

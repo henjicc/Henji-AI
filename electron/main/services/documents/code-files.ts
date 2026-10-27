@@ -13,7 +13,7 @@ import type { DiscardCodeFilesRequest, PublishCodeComponentRequest, WriteCodeVer
 import { isPathInside } from '../../../../src/core/storage/pathSyntax'
 import { sameEntryName } from '../../../../src/core/documents/naming'
 import { createFileExclusively } from '../fs/no-overwrite'
-import { CodeGitRepository } from './code-git'
+import { CodeGitRepository, codeWorkingPrefix } from './code-git'
 import { gitCodeLocation, parseGitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
 import type { MainLogger } from '../logging/main-logger'
 import type { DocumentWorkspace } from './workspace'
@@ -65,11 +65,29 @@ export class DocumentCodeFiles {
   }
   async commitProject(request: { target: DocumentTarget; message: string }): Promise<string> {
     const root = await this.root(request.target); await this.workspace.ensureInternalFolder(root)
-    return new CodeProjectRepository(path.join(root, '代码')).commitWorkspace(request.message)
+    this.logger.info('提交工程外部修改开始', { event: 'documents.code.project.external.start' })
+    try { const oid = await new CodeProjectRepository(path.join(root, '代码')).commitWorkspace(request.message); this.logger.info('提交工程外部修改完成', { event: 'documents.code.project.external.completed' }); return oid }
+    catch (error) { this.logger.warn('提交工程外部修改失败', { event: 'documents.code.project.external.failed', error }); throw error }
   }
   private async root(target: DocumentTarget): Promise<string> {
     const read = await this.repository.read(target)
-    return (await this.workspace.resolveContainer(read.meta.container)).root
+    const root = (await this.workspace.resolveContainer(read.meta.container)).root
+    const git = new CodeGitRepository(path.join(root, '代码'))
+    if (!await git.exists() && await fsp.stat(git.dir).catch(error => { if (error.code === 'ENOENT') return null; throw error })) {
+      const referencesRepository = (value: unknown): boolean => {
+        if (typeof value === 'string') { const ref = parseGitCodeLocation(value); return !!ref && path.resolve(ref.repository) === git.dir }
+        return !!value && typeof value === 'object' && Object.values(value).some(referencesRepository)
+      }
+      const missing = () => new Error('代码仓库 .git 缺失，但项目文档仍引用原历史；请保留源码并恢复 .git 备份，不能自动创建新仓库覆盖历史。')
+      if (referencesRepository(read.content)) throw missing()
+      // An empty sibling document must not recreate a lost shared repository either.
+      const projectId = read.meta.container.kind === 'project' ? read.meta.container.projectId : null
+      for (const item of this.workspace.catalog.listDocuments({ projectId, includeDrafts: true })) {
+        if (item.id === read.meta.id || this.kinds.get(item.kind)?.storage !== 'json') continue
+        if (referencesRepository((await this.repository.read({ id: item.id, path: item.path })).content)) throw missing()
+      }
+    }
+    return root
   }
   private async safe(root: string, target: string, create = false, created?: string[]): Promise<void> {
     await ensureCodeLocation(root, target, this.workspace.style, create, created)
@@ -119,9 +137,10 @@ export class DocumentCodeFiles {
       const stem = codeFolderName(request.name)
       for (let suffix = 1; ; suffix++) {
         const candidate = folder ?? (suffix === 1 ? stem : `${stem} (${suffix})`)
-        const marker = path.join(root, '代码', '素材', candidate, '.definition')
+        const marker = path.join(root, '代码', codeWorkingPrefix('素材', candidate), '.definition')
         await this.safe(root, marker)
-        const owner = await fsp.readFile(marker, 'utf8').catch(error => { if (error.code === 'ENOENT') return null; throw error })
+        const oldMarker = path.join(root, '代码', '素材', candidate, '.definition'); await this.safe(root, oldMarker)
+        const owner = await fsp.readFile(marker, 'utf8').catch(async error => { if (error.code === 'ENOENT') return fsp.readFile(oldMarker, 'utf8').catch(error => { if (error.code === 'ENOENT') return null; throw error }); throw error })
         if (owner && owner !== request.definitionId) {
           if (folder) throw new Error('素材目录属于另一份代码定义，请重新创建素材。')
           continue
@@ -171,8 +190,9 @@ export class DocumentCodeFiles {
     }
     const repository = new CodeGitRepository(path.join(root, '代码'))
     for (const version of await repository.versions('组件')) {
-      const location = gitCodeLocation({ oid: version.oid, repository: repository.dir, filepath: `组件/${version.name}/main.ts` })
-      const source = await repository.sourceAt(version.oid, `组件/${version.name}/main.ts`)
+      const prefix = await repository.versionPrefix(version)
+      const location = gitCodeLocation({ oid: version.oid, repository: repository.dir, filepath: `${prefix}/main.ts` })
+      const source = await repository.sourceAt(version.oid, `${prefix}/main.ts`)
       const hash = digest(source)
       const legacy = records.findIndex(record => record.name === version.name && record.metadata.version === version.version)
       if (legacy >= 0) {

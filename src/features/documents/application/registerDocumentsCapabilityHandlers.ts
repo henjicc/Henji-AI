@@ -183,7 +183,7 @@ export function registerDocumentsCapabilityHandlers(
     await operations().findProject(input.projectId)
     const result = await operations().migrateCodeStorage(input.projectId)
     const target = { kind: DOCUMENT_PROJECT_ENTITY_TYPE, id: input.projectId }
-    return { resultRef: target, importedVersions: result.importedVersions, archivedFolders: result.archivedFolders, retainedFolders: result.retainedFolders,
+    return { resultRef: target, relocatedFiles: result.relocatedFiles ?? 0, importedVersions: result.importedVersions, archivedFolders: result.archivedFolders, retainedFolders: result.retainedFolders,
       verification: { verified: true, condition: '迁移服务已保存并读回项目文档，逐项核对版本内容，原文件保留或已归档', target } }
   })
 

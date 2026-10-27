@@ -14,7 +14,7 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
-import { closeVideoEditProject, listVideoEditInstances, saveVideoEdit, undoVideoEdit, editVideoProject, getActiveVideoEditSequence, appendVideoEditMedia, duplicateVideoEditSequence, editVideoSequence, updateVideoEditCreativeIntents } from './videoEditService'
+import { openVideoEditDocument, closeVideoEditProject, listVideoEditInstances, saveVideoEdit, undoVideoEdit, editVideoProject, getActiveVideoEditSequence, appendVideoEditMedia, duplicateVideoEditSequence, editVideoSequence, updateVideoEditCreativeIntents } from './videoEditService'
 import { createVideoEditCodeItems, createVideoEditCodeMaterials, createVideoEditCodeVersions, createVideoEditFilterMaterials, createVideoEditCodeAssetInstance } from './videoEditCodeService'
 import { appendVideoEditItems, createVideoEditGraphicItem } from './videoEditProjectItems'
 import { ensureVideoEditCodeParameterMetadata, readVideoEditCodeMetadata } from './videoEditCodeState'
@@ -1130,25 +1130,33 @@ it('工程入口走真实 Git、正式创建与升级，闭包完整流入资产
   const app = createApplicationHarness(); const parent = { kind: 'video_edit.document', id }
   try {
     const text = 'import {x} from "../style/tokens"; import shader from "../style/a.wgsl";\n' + source.replace('100+t*20', 'x+t*20')
-    await service.changeCodeProject({ target, message: '工程初稿', changes: [{ path: 'entries/opening.ts', source: text, expectedHash: null }, { path: 'style/tokens.ts', source: 'export const x=100', expectedHash: null }, { path: 'style/a.wgsl', source: 'fn shader() {}', expectedHash: null }, { path: 'README.md', source: '说明', expectedHash: null }] })
-    await app.requireResult('change_application_entities', { summary: '工程入口素材', changes: [{ kind: 'create_items', entityType: 'video_edit.code_material', parent, items: [{ properties: { project_entry: 'entries/opening.ts' } }] }] }, (await app.read(parent)).revisions as Record<string, number>)
+    await service.changeCodeProject({ target, message: '工程初稿', changes: [{ path: 'entries/opening.ts', source: text, expectedHash: null }, { path: 'entries/overlay.ts', source: text, expectedHash: null }, { path: 'style/tokens.ts', source: 'export const x=100', expectedHash: null }, { path: 'style/a.wgsl', source: 'fn shader() {}', expectedHash: null }, { path: 'README.md', source: '说明', expectedHash: null }] })
+    await app.requireResult('change_application_entities', { summary: '工程入口素材', changes: [{ kind: 'create_items', entityType: 'video_edit.code_material', parent, items: [{ properties: { project_entry: 'entries/opening.ts' } }, { properties: { project_entry: 'entries/overlay.ts' } }] }] }, (await app.read(parent)).revisions as Record<string, number>)
     const definition = owner.document.codeMaterials![0]; const first = definition.versions[0]
     expect(first.project?.entry).toBe('entries/opening.ts'); expect(first.files.map(file => file.path)).toEqual(['entries/opening.ts', 'style/a.wgsl', 'style/tokens.ts'])
+    const sharedDisk = await api.createDocument({ kind: 'video_edit', container: owner.session.documentMeta.container, name: '同项目另一剪辑' })
+    const shared = await openVideoEditDocument({ id: sharedDisk.meta.id }, { focus: false })
+    const [sharedDefinition] = await createVideoEditCodeMaterials(shared.document.id, [{ projectEntry: 'entries/opening.ts' }])
+    const used = await app.read({ kind: 'video_edit.code_project_file', id: `${id}:style/tokens.ts` }, ['video_edit.code_project_file.used_by'])
+    expect((used.properties as Record<string, unknown>)['video_edit.code_project_file.used_by']).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: `${id}:${definition.id}` }), expect.objectContaining({ id: `${shared.document.id}:${sharedDefinition}` }),
+    ]))
     expect((await service.readCodeProject(target)).log).toHaveLength(1)
     await expect(createVideoEditCodeVersions(id, [{ definitionId: definition.id }])).rejects.toThrow('相同源码版本')
-    const item = owner.document.items.find(item => item.code?.definitionId === definition.id)!
-    const [clipId] = appendVideoEditItems(id, [item.id], owner.activeSequenceId)
+    const originalDefaults = owner.document.codeMaterials!.map(value => value.defaultVersionId)
+    const items = owner.document.items.filter(item => item.code)
+    const [clipId] = appendVideoEditItems(id, items.map(item => item.id), owner.activeSequenceId)
     const before = (await service.readCodeProject(target)).files.find(file => file.path === 'style/tokens.ts')!
     await service.changeCodeProject({ target, message: '修改风格', changes: [{ path: before.path, source: 'export const x=200', expectedHash: before.hash }] })
     const upgraded = await app.requireResult('upgrade_video_edit_code_materials', { documentRef: parent })
-    expect(upgraded.upgrades).toEqual([expect.objectContaining({ oldVersion: first.id, changedFiles: ['style/tokens.ts'], retargetedClips: 1 })])
+    expect(upgraded.upgrades).toEqual(originalDefaults.map(oldVersion => expect.objectContaining({ oldVersion, changedFiles: ['style/tokens.ts'], retargetedClips: 1 })))
     const current = owner.document.codeMaterials![0].defaultVersionId
     expect(current).not.toBe(first.id)
     expect(owner.document.sequences.flatMap(sequence => sequence.clips).find(clip => clip.id === clipId)!.code!.versionId).toBe(current)
     expect((await service.readCodeProject(target)).log).toHaveLength(2)
     expect((await app.requireResult('upgrade_video_edit_code_materials', { documentRef: parent })).upgrades).toEqual([])
     undoVideoEdit(id)
-    expect(owner.document.codeMaterials![0].defaultVersionId).toBe(first.id)
+    expect(owner.document.codeMaterials!.map(value => value.defaultVersionId)).toEqual(originalDefaults)
     expect(owner.document.sequences.flatMap(sequence => sequence.clips).find(clip => clip.id === clipId)!.code!.versionId).toBe(first.id)
     undoVideoEdit(id, true)
     const { bytes } = collectionBoundary()
