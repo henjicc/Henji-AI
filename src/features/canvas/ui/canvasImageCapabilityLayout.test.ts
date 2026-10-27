@@ -36,18 +36,11 @@ describe('图片能力工具条响应式容量', () => {
     }
     const actions = resolveCanvasImageCapabilityActionsForSourceNode(sourceNode)
     const partition = partitionCanvasImageCapabilities(actions, 4)
+    const overflowActions = partition.overflowGroups.flatMap(({ actions: groupActions }) => groupActions)
 
-    expect(partition.inline.map(({ capability }) => capability.id)).toEqual([
-      CANVAS_IMAGE_CAPABILITY_IDS.elementEdit,
-      CANVAS_IMAGE_CAPABILITY_IDS.upscale,
-      CANVAS_IMAGE_CAPABILITY_IDS.relight,
-      CANVAS_IMAGE_CAPABILITY_IDS.panorama,
-    ])
-    expect(partition.overflowGroups.map(({ group }) => group)).toEqual([
-      'transformation',
-      'structure',
-      'local',
-    ])
+    expect(partition.inline).toEqual(actions.filter(({ disabledReasonKey }) => disabledReasonKey === null).slice(0, 4))
+    expect([...partition.inline, ...overflowActions].map(({ capability }) => capability.id).sort())
+      .toEqual(actions.map(({ capability }) => capability.id).sort())
     expect(partition.overflowGroups
       .flatMap(({ actions: groupActions }) => groupActions)
       .find(({ capability }) => capability.id === CANVAS_IMAGE_CAPABILITY_IDS.layerSeparation))

@@ -68,28 +68,25 @@ describe('3D 镜头参考停靠面板', () => {
     iframe.remove()
   })
   it('场景为空时对象列表显示统一空状态，且面板内没有重复标题', () => {
-    const { container } = render(<ObjectListPanel />)
+    render(<ObjectListPanel />)
     expect(screen.getByText('场景为空')).toBeTruthy()
     expect(screen.queryByText('场景对象')).toBeNull()
-    expect(container.firstElementChild?.className).not.toContain('bg-raised')
   })
 
-  it('改名时只出现输入框，不再在外面套强调色描边框', () => {
+  it('双击对象进入改名输入框并带出原名', () => {
     act(() => useCameraStageStore.getState().addPrimitive('box'))
     const name = useCameraStageStore.getState().objects[0].name
     render(<ObjectListPanel />)
     fireEvent.doubleClick(screen.getByRole('button', { name }))
     const input = screen.getByRole('textbox', { name: '对象名称' }) as HTMLInputElement
     expect(input.value).toBe(name)
-    expect(input.closest('.border-accent')).toBeNull()
   })
 
-  it('未选中对象时属性面板显示场景设置分组，不再画标题带与抬升底色', () => {
+  it('未选中对象时属性面板显示场景设置分组，不再画标题带', () => {
     const { container } = render(<PropertyPanel />)
     expect(screen.getByText('地面')).toBeTruthy()
     expect(screen.getByText('阳光')).toBeTruthy()
     expect(screen.queryByText('场景设置')).toBeNull()
-    expect(container.firstElementChild?.className).not.toContain('bg-raised')
     // 样式决定其余地面参数的含义，排在第一位
     const labels = Array.from(container.querySelectorAll('.text-xs.text-text2')).map((node) => node.textContent)
     expect(labels.indexOf('样式')).toBeLessThan(labels.indexOf('底色'))

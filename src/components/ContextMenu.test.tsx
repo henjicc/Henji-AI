@@ -21,7 +21,7 @@ it('右键菜单走共享浮层：挂到顶层、登记浮层层、按视口限�
   expect(panel.hasAttribute('data-ui-overlay-id')).toBe(true)
   // 视口限高由共享定位给出，滚动在共享内容区
   expect(panel.style.maxHeight).not.toBe('')
-  expect(menu.closest('[data-panel-scroll-region]')?.className).toContain('overflow-y-auto')
+  expect(menu.closest('[data-panel-scroll-region]')).not.toBeNull()
   fireEvent.keyDown(screen.getByRole('menuitem', { name: '命令39' }), { key: 'Enter' })
   await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(1))
 })

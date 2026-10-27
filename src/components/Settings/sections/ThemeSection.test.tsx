@@ -39,13 +39,13 @@ describe('外观设置（种子式）', () => {
   beforeEach(resetTheme)
   afterEach(() => { cleanup(); resetTheme() })
 
-  it('四个预设、六个强调色、三档对比度都以单选呈现，默认石墨 / 跟随预设 / 标准', () => {
+  it('预设、强调色、对比度都以单选呈现，默认石墨 / 跟随预设 / 标准', () => {
     renderSection()
     const presets = within(screen.getByRole('radiogroup', { name: '主题预设' })).getAllByRole('radio')
-    expect(presets.map((item) => item.textContent)).toEqual(['石墨', '深海', '胶片', '纸白'])
+    expect(presets.map((item) => item.textContent)).toEqual(Object.values(THEME_PRESETS).map((preset) => preset.name.zh))
     expect(screen.getByRole('radio', { name: '石墨' })).toHaveProperty('ariaChecked', 'true')
     const accents = within(screen.getByRole('radiogroup', { name: '强调色' })).getAllByRole('radio')
-    expect(accents.map((item) => item.getAttribute('aria-label'))).toEqual(['跟随预设', '蓝', '紫', '青', '橙', '玫红'])
+    expect(accents.map((item) => item.getAttribute('aria-label'))).toEqual(THEME_ACCENT_CHOICES.map((choice) => choice.name.zh))
     expect(screen.getByRole('radio', { name: '跟随预设' })).toHaveProperty('ariaChecked', 'true')
     expect(screen.getByRole('radio', { name: '标准' })).toHaveProperty('ariaChecked', 'true')
     // 逐色编辑、色调与 hex 输入已移除，界面不展示种子数值

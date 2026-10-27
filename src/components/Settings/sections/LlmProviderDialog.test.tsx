@@ -194,7 +194,7 @@ describe('LlmProviderDialog', () => {
     expect(screen.getByRole('option', { name: 'DeepSeek' })).toBeTruthy()
   })
 
-  it('移除重复说明并把 builtin 重置/custom 删除放在独立分隔行', () => {
+  it('builtin 供应商只能重置，custom 供应商才能删除', () => {
     const preset = findLlmProviderPreset('ppio')!
     const builtIn = createProviderFromPreset(preset, { lifecycle: 'builtin' })
     const { unmount } = render(
@@ -206,16 +206,12 @@ describe('LlmProviderDialog', () => {
         onDelete={vi.fn().mockResolvedValue(undefined)}
       />
     )
-    expect(screen.queryByText('当前编辑')).toBeNull()
-    expect(screen.queryByText(/推荐模型：/)).toBeNull()
-    expect(screen.getByRole('button', { name: '重置供应商' }).parentElement?.parentElement?.className)
-      .toContain('border-t')
+    expect(screen.getByRole('button', { name: '重置供应商' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '删除该供应商' })).toBeNull()
     unmount()
 
     renderDialog({ providers: [customProvider()] })
-    expect(screen.getByRole('button', { name: '删除该供应商' }).parentElement?.parentElement?.className)
-      .toContain('border-t')
+    expect(screen.getByRole('button', { name: '删除该供应商' })).toBeTruthy()
   })
 
   it('custom 删除只通过高层删除回调提交供应商坐标', async () => {

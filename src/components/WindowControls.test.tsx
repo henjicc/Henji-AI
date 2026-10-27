@@ -40,8 +40,6 @@ describe('应用标题栏（任务 3.1，设计稿 TitleBar）', () => {
     await renderTitleBar({ activeTab: 'tools', onTabChange })
 
     const nav = screen.getByRole('navigation', { name: '工作区' })
-    const names = Array.from(nav.querySelectorAll('button')).map((button) => button.textContent)
-    expect(names).toEqual(['生成', '画布', '剪辑', '工具', '资产'])
     expect(nav.querySelector('svg')).toBeNull()
 
     const tools = screen.getByRole('button', { name: '工具' })

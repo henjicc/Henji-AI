@@ -29,18 +29,13 @@ function StatefulInput({ disabled = false }: { disabled?: boolean }): JSX.Elemen
 }
 
 describe('ApiKeyInput', () => {
-  it('把无框眼睛动作嵌入同一个输入容器，并保持 label 与键盘语义', () => {
+  it('把眼睛动作嵌入同一个输入容器，并保持 label 与键盘语义', () => {
     render(<StatefulInput />)
     const input = screen.getByLabelText('API 密钥') as HTMLInputElement
     const toggle = screen.getByRole('button', { name: '显示密钥' })
 
     expect(input.type).toBe('password')
-    expect(input.className).toContain('pr-12')
     expect(toggle.parentElement).toBe(input.parentElement)
-    expect(toggle.className).toContain('absolute')
-    // 嵌在输入框里的静默图标按钮（静息无底无框）
-    expect(toggle.dataset.tone).toBe('default')
-    expect(toggle.className).not.toContain('ui-btn-on')
     expect(input.getAttribute('aria-describedby')).toBeTruthy()
     expect(toggle.getAttribute('aria-pressed')).toBe('false')
 

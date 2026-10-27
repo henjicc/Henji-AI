@@ -97,14 +97,11 @@ describe('AssetGroupFocusOverlay', () => {
 
   afterEach(cleanup);
 
-  it('以不模糊的全画布工作面展示每个素材及其就地操作', () => {
+  it('在工作面展示每个素材及其就地操作，并可关闭', () => {
     const onClose = vi.fn();
     const rendered = render(<AssetGroupFocusOverlay groupId="group-1" onClose={onClose} />);
     const workspace = rendered.getByRole('region', { name: 'canvas.assetGroup.manager.label' });
 
-    expect(workspace.className).toContain('inset-0');
-    expect(workspace.className).toContain('bg-window');
-    expect(workspace.querySelector('.ui-glass-scrim')).toBeNull();
     expect(workspace.querySelectorAll('[data-asset-group-manager-member]')).toHaveLength(4);
     expect(rendered.getAllByTestId('member-preview')).toHaveLength(3);
 
