@@ -40,6 +40,8 @@ const MAX_IN_FLIGHT = 4
 const REVALIDATE_MS = 10_000
 const DETAIL_ALIGN = 4096
 const DETAIL_ENTRIES = 12
+/** 精细层回读失败后的退避重试间隔（毫秒）；用完仍失败就停在多级峰值显示，平移到新窗口会重新开始。 */
+const DETAIL_RETRY_DELAYS_MS = [500, 1500, 4000]
 
 interface Entry {
   key: string
@@ -53,7 +55,17 @@ interface Entry {
   controller?: AbortController
   queued: boolean
 }
-interface DetailEntry { key: string; users: number; lastUsed: number; window?: WaveformDetailWindow; controller?: AbortController; failed?: boolean }
+interface DetailEntry {
+  key: string
+  users: number
+  lastUsed: number
+  window?: WaveformDetailWindow
+  controller?: AbortController
+  /** 已失败的回读次数；用完重试次数后 failed 置位，不再回读。 */
+  failures: number
+  retryTimer?: ReturnType<typeof setTimeout>
+  failed?: boolean
+}
 
 const IDLE: WaveformState = Object.freeze({ status: 'idle' })
 const entries = new Map<string, Entry>()
@@ -223,36 +235,48 @@ export function waveformDetailKey(data: WaveformData, start: number, end: number
   return `${data.key}|${data.pyramid.version}|${start}|${end}`
 }
 
-/** 回读 [start, end) 帧的原始带符号采样（主进程区间解码，按样本精确对齐）。 */
+function loadDetail(owned: DetailEntry, data: WaveformData, start: number, end: number): void {
+  const key = owned.key
+  const controller = new AbortController()
+  owned.controller = controller
+  const { sampleRate } = data.pyramid
+  const ref = normalizedRef(data.ref)
+  const startUs = Math.floor(start * 1_000_000 / sampleRate)
+  const endUs = Math.floor(end * 1_000_000 / sampleRate)
+  const fail = (error: unknown): void => {
+    owned.failures++
+    const willRetry = owned.failures <= DETAIL_RETRY_DELAYS_MS.length
+    logger.warn('精细波形回读失败，保留多级峰值显示', { data: [data.ref.source, error], context: { failures: owned.failures, maxRetries: DETAIL_RETRY_DELAYS_MS.length, willRetry } })
+    if (!willRetry) { owned.failed = true; return }
+    owned.retryTimer = setTimeout(() => {
+      owned.retryTimer = undefined
+      if (details.get(key) === owned && owned.users > 0 && !owned.window && !owned.controller) loadDetail(owned, data, start, end)
+    }, DETAIL_RETRY_DELAYS_MS[owned.failures - 1])
+  }
+  void getPlatform().audioEdit.extractWaveformRange({ ...ref, startUs, endUs, bucketCount: 16, samples: true }, controller.signal).then((result) => {
+    if (details.get(key) !== owned || controller.signal.aborted) return
+    const channels = result.channels.map((channel) => channel.samples).filter((samples): samples is Float32Array => samples instanceof Float32Array)
+    if (channels.length !== result.channels.length || !channels.length) { fail(new Error('精细波形回读缺少采样')); return }
+    owned.window = { key, firstFrame: audioWaveformSampleIndex(result.startUs, result.sampleRate), frameCount: channels[0].length, channels }
+    notify()
+  }, (error: unknown) => {
+    if (details.get(key) !== owned || controller.signal.aborted || isAbort(error)) return
+    fail(error)
+  }).finally(() => { if (owned.controller === controller) owned.controller = undefined })
+}
+
+/** 回读 [start, end) 帧的原始带符号采样（主进程区间解码，按样本精确对齐）；失败时有限次退避重试。 */
 export function acquireWaveformDetail(data: WaveformData, start: number, end: number): () => void {
   const key = waveformDetailKey(data, start, end)
   let entry = details.get(key)
   if (!entry) {
-    entry = { key, users: 0, lastUsed: Date.now() }
+    entry = { key, users: 0, lastUsed: Date.now(), failures: 0 }
     details.set(key, entry)
   }
   const owned = entry
   owned.users++
   owned.lastUsed = Date.now()
-  if (!owned.window && !owned.controller && !owned.failed) {
-    const controller = new AbortController()
-    owned.controller = controller
-    const { sampleRate } = data.pyramid
-    const ref = normalizedRef(data.ref)
-    const startUs = Math.floor(start * 1_000_000 / sampleRate)
-    const endUs = Math.floor(end * 1_000_000 / sampleRate)
-    void getPlatform().audioEdit.extractWaveformRange({ ...ref, startUs, endUs, bucketCount: 16, samples: true }, controller.signal).then((result) => {
-      if (details.get(key) !== owned || controller.signal.aborted) return
-      const channels = result.channels.map((channel) => channel.samples).filter((samples): samples is Float32Array => samples instanceof Float32Array)
-      if (channels.length !== result.channels.length || !channels.length) { owned.failed = true; return }
-      owned.window = { key, firstFrame: audioWaveformSampleIndex(result.startUs, result.sampleRate), frameCount: channels[0].length, channels }
-      notify()
-    }, (error: unknown) => {
-      if (details.get(key) !== owned || controller.signal.aborted || isAbort(error)) return
-      owned.failed = true
-      logger.warn('精细波形回读失败，保留多级峰值显示', { data: [data.ref.source, error] })
-    }).finally(() => { if (owned.controller === controller) owned.controller = undefined })
-  }
+  if (!owned.window && !owned.controller && !owned.retryTimer && !owned.failed) loadDetail(owned, data, start, end)
   let released = false
   return () => {
     if (released) return
@@ -260,7 +284,12 @@ export function acquireWaveformDetail(data: WaveformData, start: number, end: nu
     owned.users--
     owned.lastUsed = Date.now()
     if (owned.users > 0) return
-    if (owned.controller && !owned.window) { owned.controller.abort(new DOMException('波形已无使用者', 'AbortError')); owned.controller = undefined; details.delete(key) }
+    // 回读中或等待重试时无人使用：取消并丢弃，下次进入这个窗口重新计数。
+    if (!owned.window && (owned.controller || owned.retryTimer)) {
+      owned.controller?.abort(new DOMException('波形已无使用者', 'AbortError')); owned.controller = undefined
+      clearTimeout(owned.retryTimer); owned.retryTimer = undefined
+      details.delete(key)
+    }
     const idle = [...details.values()].filter((item) => item.users === 0).sort((a, b) => a.lastUsed - b.lastUsed)
     while (details.size > DETAIL_ENTRIES && idle.length) details.delete(idle.shift()!.key)
   }
@@ -269,7 +298,7 @@ export function acquireWaveformDetail(data: WaveformData, start: number, end: nu
 /** 仅供测试：清空会话缓存。 */
 export function resetWaveformDataForTests(): void {
   for (const entry of entries.values()) entry.controller?.abort(new DOMException('重置', 'AbortError'))
-  for (const entry of details.values()) entry.controller?.abort(new DOMException('重置', 'AbortError'))
+  for (const entry of details.values()) { entry.controller?.abort(new DOMException('重置', 'AbortError')); clearTimeout(entry.retryTimer) }
   entries.clear(); details.clear(); waiting.length = 0; inFlight = 0; generation++
   notify()
 }

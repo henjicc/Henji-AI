@@ -94,4 +94,55 @@ describe('renderer waveform data service', () => {
     expect(readWaveformDetail(waveformDetailKey(data, 4096, 8192))).toMatchObject({ firstFrame: 4096, frameCount: 4096 })
     releaseDetail(); release()
   })
+  it('精细波形回读失败后退避重试，第二次成功显示精细层', async () => {
+    const ref = { source: 'D:/retry-detail.wav', channels: 1 as const }
+    const release = acquireWaveform(ref, 'full')
+    calls[0].resolve(pyramid()); await flush()
+    const data = readWaveformState(ref, 'full').data!
+    vi.useFakeTimers()
+    const range = platform.audioEdit.extractWaveformRange
+      .mockRejectedValueOnce(new Error('decode busy'))
+      .mockImplementation(async (request: { startUs: number; endUs: number }) => ({ startUs: request.startUs, endUs: request.endUs, durationSeconds: 1, sampleRate: 48000, channelCount: 1, fileIdentity: 'f', channels: [{ peak: [], rms: [], sampleCounts: [], samples: new Float32Array(4096).fill(0.5) }] } as AudioWaveformRangeResult))
+    const releaseDetail = acquireWaveformDetail(data, 4096, 8192)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(range).toHaveBeenCalledTimes(1)
+    expect(readWaveformDetail(waveformDetailKey(data, 4096, 8192))).toBeUndefined()
+    // 等待重试期间同一窗口的其他使用者不重复发请求。
+    const again = acquireWaveformDetail(data, 4096, 8192); again()
+    expect(range).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(range).toHaveBeenCalledTimes(2)
+    expect(readWaveformDetail(waveformDetailKey(data, 4096, 8192))).toMatchObject({ firstFrame: 4096, frameCount: 4096 })
+    releaseDetail(); release()
+  })
+  it('精细波形连续失败到重试上限后停止回读', async () => {
+    const ref = { source: 'D:/broken-detail.wav', channels: 1 as const }
+    const release = acquireWaveform(ref, 'full')
+    calls[0].resolve(pyramid()); await flush()
+    const data = readWaveformState(ref, 'full').data!
+    vi.useFakeTimers()
+    const range = platform.audioEdit.extractWaveformRange.mockRejectedValue(new Error('decode failed'))
+    const releaseDetail = acquireWaveformDetail(data, 4096, 8192)
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(range).toHaveBeenCalledTimes(4)
+    const again = acquireWaveformDetail(data, 4096, 8192)
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(range).toHaveBeenCalledTimes(4)
+    expect(readWaveformDetail(waveformDetailKey(data, 4096, 8192))).toBeUndefined()
+    again(); releaseDetail(); release()
+  })
+  it('等待重试时无人使用即取消重试', async () => {
+    const ref = { source: 'D:/released-detail.wav', channels: 1 as const }
+    const release = acquireWaveform(ref, 'full')
+    calls[0].resolve(pyramid()); await flush()
+    const data = readWaveformState(ref, 'full').data!
+    vi.useFakeTimers()
+    const range = platform.audioEdit.extractWaveformRange.mockRejectedValue(new Error('decode failed'))
+    const releaseDetail = acquireWaveformDetail(data, 4096, 8192)
+    await vi.advanceTimersByTimeAsync(0)
+    releaseDetail()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(range).toHaveBeenCalledTimes(1)
+    release()
+  })
 })
