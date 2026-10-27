@@ -69,53 +69,72 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+/** 已有部分下载时用 Range 续传（服务器不支持就从头下）；中途断开留下已收到的字节，下次接着下。 */
 function downloadOnce(url, destination, expectedSize, redirects = 0) {
+  const offset = fs.existsSync(destination) ? fs.statSync(destination).size : 0
+  if (expectedSize && offset === expectedSize) return Promise.resolve(offset)
   return new Promise((resolve, reject) => {
-    const request = https.get(url, { headers: { 'User-Agent': 'henji-ai-build' }, timeout: 60_000 }, (response) => {
+    const headers = { 'User-Agent': 'henji-ai-build', ...(offset > 0 ? { Range: `bytes=${offset}-` } : {}) }
+    const request = https.get(url, { headers, timeout: 60_000 }, (response) => {
       const status = response.statusCode ?? 0
       if (status >= 300 && status < 400 && response.headers.location) {
         response.resume()
         if (redirects > 5) return reject(new Error('下载重定向次数过多'))
         return resolve(downloadOnce(new URL(response.headers.location, url).toString(), destination, expectedSize, redirects + 1))
       }
-      if (status !== 200) {
+      if (status === 416 && offset > 0) {
+        // 已有的部分比服务器文件还长或不可续：丢掉重下
+        response.resume(); fs.rmSync(destination, { force: true })
+        return reject(new Error('续传位置无效，已清除部分下载'))
+      }
+      if (status !== 200 && status !== 206) {
         response.resume()
         const error = new Error(`下载失败：HTTP ${status}`)
         error.httpStatus = status
         return reject(error)
       }
-      const file = fs.createWriteStream(destination)
-      let received = 0
+      const append = status === 206
+      const file = fs.createWriteStream(destination, { flags: append ? 'a' : 'w' })
+      let received = append ? offset : 0
       let lastReport = Date.now()
       response.on('data', (chunk) => {
         received += chunk.length
         if (Date.now() - lastReport > 5_000) {
           lastReport = Date.now()
-          log(`已下载 ${(received / 1048576).toFixed(1)}${expectedSize ? ` / ${(expectedSize / 1048576).toFixed(1)}` : ''} MiB`)
+          log(`已下载 ${(received / 1048576).toFixed(1)}${expectedSize ? ` / ${(expectedSize / 1048576).toFixed(1)}` : ''} MiB${append ? '（续传）' : ''}`)
         }
       })
       response.pipe(file)
-      file.on('finish', () => file.close(() => resolve(received)))
+      file.on('finish', () => file.close(() => {
+        if (expectedSize && received < expectedSize) return reject(new Error(`连接提前结束（${(received / 1048576).toFixed(1)} MiB）`))
+        resolve(received)
+      }))
       file.on('error', reject)
-      response.on('error', reject)
+      response.on('error', (error) => { file.end(); reject(error) })
     })
     request.on('timeout', () => request.destroy(new Error('下载超时')))
     request.on('error', reject)
   })
 }
 
-/** 临时网络故障按 2/5/10/30/60 秒退避重试；证书错误与 4xx 立即失败（AGENTS.md 网络故障规则）。源码包脚本复用。 */
+/**
+ * 临时网络故障按 2/5/10/30/60 秒退避重试；证书错误与 4xx 立即失败（AGENTS.md 网络故障规则）。源码包脚本复用。
+ * 每次重试从已下载的位置续传；只要这一次有进展，退避就从头算，不会因为大文件多断几次而放弃。
+ */
 async function downloadWithRetry(url, destination, expectedSize = null) {
-  for (let attempt = 0; ; attempt += 1) {
+  const sizeOf = () => (fs.existsSync(destination) ? fs.statSync(destination).size : 0)
+  for (let attempt = 0, total = 0; ; attempt += 1, total += 1) {
+    const before = sizeOf()
     try {
       return await downloadOnce(url, destination, expectedSize)
     } catch (error) {
       const message = error instanceof Error ? `${error.code ?? ''} ${error.message}` : String(error)
       // 认证/证书错误与 4xx 不是临时故障，停止盲重试。
       if (CERT_ERROR.test(message) || (error.httpStatus >= 400 && error.httpStatus < 500)) throw error
+      if (sizeOf() > before && total < 100) attempt = 0
       const delay = RETRY_DELAYS_MS[attempt]
       if (delay === undefined) throw error
-      log(`下载中断（${message.trim()}），${delay / 1000}s 后重试（第 ${attempt + 1} 次）`)
+      log(`下载中断（${message.trim()}），${delay / 1000}s 后从 ${(sizeOf() / 1048576).toFixed(1)} MiB 处续传（第 ${total + 1} 次）`)
       await sleep(delay)
     }
   }
