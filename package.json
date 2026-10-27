@@ -155,6 +155,7 @@
     "highs": "1.15.3",
     "i18next": "^23.7.0",
     "i18next-browser-languagedetector": "^7.2.0",
+    "isomorphic-git": "1.44.4",
     "koffi": "3.3.2",
     "konva": "^10.2.0",
     "lucide-react": "^0.562.0",
