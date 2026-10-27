@@ -1,4 +1,5 @@
 import fsp from 'node:fs/promises'
+import { parseGitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
 import { persistenceForwardFields } from '../../../../src/core/persistence/migrations'
 import { restoreForwardFields } from '../../../../src/core/persistence/forwardCompat'
 import path from 'node:path'
@@ -740,6 +741,12 @@ export class DocumentRepository {
     const queue = [...report.references]
     const worker = async (): Promise<void> => {
       for (let reference = queue.shift(); reference; reference = queue.shift()) {
+        const git = parseGitCodeLocation(reference.path)
+        if (git) {
+          // Blob integrity is checked by the source reader on demand; opening only checks repository availability.
+          if (!(await fsp.stat(path.join(git.repository, '.git')).catch(() => null))?.isDirectory()) missingPaths.push(reference.path)
+          continue
+        }
         const exists = pathKey(this.workspace.style, reference.path) !== null
           && await fsp.stat(reference.path).then(() => true, () => false)
         if (!exists) {

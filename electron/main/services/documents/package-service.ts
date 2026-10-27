@@ -1,3 +1,5 @@
+import { GitCodePackageSnapshot } from './code-git-transfer'
+import { parseGitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
 import { ZipArchive } from 'archiver'
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
@@ -122,13 +124,16 @@ export class DocumentPackageService {
     return await this.logged('export_document', { documentId: request.target.id }, async () => {
       const file = await this.options.repository.locateFile(request.target)
       const container = await this.workspace.containerForPath(file.path)
+      const codeSnapshot = new GitCodePackageSnapshot(this.options.stagingDirectory, container.root, false)
+      await codeSnapshot.initialize()
+      try {
       const names = new EntryNames()
       const entries: PackageEntry[] = []
       const missingPaths: string[] = []
       const documentEntry = path.basename(file.path)
       names.add(documentEntry)
       if (file.envelope) {
-        const packed = await this.packDocumentContent(file, container, names, { includeContainerFiles: true })
+        const packed = await this.packDocumentContent(file, container, names, { includeContainerFiles: true, codeSnapshot })
         entries.push(...packed.entries)
         missingPaths.push(...packed.missingPaths)
         entries.unshift({ name: documentEntry, bytes: packed.bytes })
@@ -150,8 +155,12 @@ export class DocumentPackageService {
         documents: [{ id: file.header.id, path: documentEntry }],
       }
       const target = await this.destinationFor(request.destination, manifest.name)
-      await this.writePackage(target, manifest, entries)
-      return { path: target, files: entries.length, missingPaths }
+      const codeEntries = await codeSnapshot.entries()
+      const codeNames = new Set(codeEntries.map(entry => entry.name))
+      const packageEntries = [...entries.filter(entry => !codeNames.has(entry.name)), ...codeEntries]
+      await this.writePackage(target, manifest, packageEntries)
+      return { path: target, files: packageEntries.length, missingPaths }
+      } finally { await codeSnapshot.dispose() }
     })
   }
 
@@ -163,6 +172,9 @@ export class DocumentPackageService {
         await this.options.scanner.refresh()
         return await this.workspace.resolveContainer({ kind: 'project', projectId: request.projectId })
       })
+      const codeSnapshot = new GitCodePackageSnapshot(this.options.stagingDirectory, container.root, true)
+      await codeSnapshot.initialize()
+      try {
       const files = await this.walk(container.root)
       const names = new EntryNames()
       for (const relative of files) names.add(relative)
@@ -190,7 +202,7 @@ export class DocumentPackageService {
           entries.push({ name: relative, source: absolute })
           continue
         }
-        const packed = await this.packDocumentContent(file, container, names, { includeContainerFiles: false })
+        const packed = await this.packDocumentContent(file, container, names, { includeContainerFiles: false, codeSnapshot })
         entries.push({ name: relative, bytes: packed.bytes }, ...packed.entries)
         missingPaths.push(...packed.missingPaths)
       }
@@ -205,8 +217,12 @@ export class DocumentPackageService {
         documents,
       }
       const target = await this.destinationFor(request.destination, manifest.name)
-      await this.writePackage(target, manifest, entries)
-      return { path: target, files: entries.length, missingPaths }
+      const codeEntries = await codeSnapshot.entries()
+      const codeNames = new Set(codeEntries.map(entry => entry.name))
+      const packageEntries = [...entries.filter(entry => !codeNames.has(entry.name)), ...codeEntries]
+      await this.writePackage(target, manifest, packageEntries)
+      return { path: target, files: packageEntries.length, missingPaths }
+      } finally { await codeSnapshot.dispose() }
     })
   }
 
@@ -218,7 +234,7 @@ export class DocumentPackageService {
     file: LoadedDocumentFile,
     container: ResolvedContainer,
     names: EntryNames,
-    options: { includeContainerFiles: boolean },
+    options: { includeContainerFiles: boolean; codeSnapshot: GitCodePackageSnapshot },
   ): Promise<{ bytes: Buffer; entries: PackageEntry[]; missingPaths: string[] }> {
     const style = this.workspace.style
     const decoded = decodeDocumentContent(file, container, this.workspace)
@@ -231,7 +247,9 @@ export class DocumentPackageService {
     const codeTargets = await codeGroupDestinations(decoded.report.references
       .filter(reference => parseAbsolutePath(style, reference.path) !== null)
       .map(reference => reference.path), container, false)
+    for (const [source, target] of await options.codeSnapshot.collect(decoded.report.references.map(reference => reference.path))) mapping.set(source, target)
     for (const reference of decoded.report.references) {
+      if (parseGitCodeLocation(reference.path)) continue
       const key = pathKey(style, reference.path) ?? reference.path
       if (mapping.has(key) || this.options.kinds.forFileName(path.basename(reference.path))) continue
       const parsed = parseAbsolutePath(style, reference.path)

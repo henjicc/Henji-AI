@@ -10,6 +10,8 @@ import { parseAbsolutePath, pathKey, relativeSegments, type PathStyle } from '..
 import { copyFileNoOverwrite, EntryExistsError } from '../fs/no-overwrite'
 import type { ResolvedContainer } from './workspace'
 import { ensureCodeLocation } from './code-files'
+import { parseGitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
+import { transferGitCode } from './code-git-transfer'
 
 /*
  * 文档换容器时带走它用到的素材（实施方案 2.11）：原容器里被引用的文件复制到新容器，原处保留；
@@ -163,7 +165,10 @@ export async function transferContainerMedia(options: MediaTransferOptions): Pro
   const missingPaths: string[] = []
   let copied = 0
   const codeTargets = await codeGroupDestinations(options.references.filter(reference => reference.scope === 'container' && !options.isDocumentFile(reference.path)).map(reference => reference.path), to)
+  const gitTransfers = await transferGitCode(options.references.filter(reference => reference.scope === 'container').map(reference => reference.path), path.join(to.root, '代码'))
+  for (const [source, target] of gitTransfers) { mapping.set(source, target); if (source !== target) copied++ }
   for (const reference of options.references) {
+    if (parseGitCodeLocation(reference.path)) continue
     if (reference.scope !== 'container' || options.isDocumentFile(reference.path)) continue
     const parsed = parseAbsolutePath(style, reference.path)
     const rest = parsed ? relativeSegments(style, fromRoot, parsed) : null
@@ -189,6 +194,7 @@ export async function transferContainerMedia(options: MediaTransferOptions): Pro
 export function rewriteContentPaths(content: unknown, mapping: ReadonlyMap<string, string>, style: PathStyle): unknown {
   if (!mapping.size) return content
   const rewritten = mapContentStrings(content, (value) => {
+    if (value.startsWith('git:')) return mapping.get(value) ?? value
     const key = pathKey(style, value)
     return key !== null ? mapping.get(key) ?? value : value
   })
@@ -196,6 +202,8 @@ export function rewriteContentPaths(content: unknown, mapping: ReadonlyMap<strin
     if (!definition || typeof definition !== 'object' || typeof definition.folder !== 'string' || !Array.isArray(definition.versions)) continue
     const location: unknown = definition.versions[0]?.files?.[0]?.location
     if (typeof location !== 'string') continue
+    const git = parseGitCodeLocation(location)
+    if (git) { if (git.filepath.startsWith('素材/')) definition.folder = git.filepath.split('/')[1]; continue }
     const segments = location.split(/[\\/]/); const index = segments.lastIndexOf('代码')
     if (index >= 0 && segments[index + 1] !== '组件库') definition.folder = segments[index + 1]
   }
@@ -228,7 +236,10 @@ export async function collectContainerMedia(options: MediaCollectOptions): Promi
     ...options.programReferences.filter((value) => parseAbsolutePath(style, value) !== null),
   ]
   const codeTargets = await codeGroupDestinations(candidates.filter(source => parseAbsolutePath(style, source) !== null && !options.isDocumentFile(source)), to)
+  const gitTransfers = await transferGitCode(candidates, path.join(to.root, '代码'))
+  for (const [source, target] of gitTransfers) { mapping.set(source, target); if (source !== target) copied++ }
   for (const source of candidates) {
+    if (parseGitCodeLocation(source)) continue
     const key = pathKey(style, source)
     if (options.isDocumentFile(source)) continue
     if (!key) {

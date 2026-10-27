@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { createLocationCodec, type LocationContext } from './locationCodec'
+import { gitCodeLocation, parseGitCodeLocation } from './gitCodeLocation'
 import {
   isPathInside,
   joinRelativeSegments,
@@ -14,6 +15,16 @@ const WIN_USER = 'D:\\文档\\痕迹AI'
 const WIN_PROJECT = 'D:\\文档\\痕迹AI\\项目\\我的 项目'
 const WIN_OTHER = 'E:\\外部位置\\另一个项目'
 const WIN_PROGRAM = 'C:\\Users\\me\\AppData\\Local\\com.henji.ai\\Henji-AI'
+
+it('Git 引用的仓库相对容器编码，移动后重定位，报告保留完整版本身份', () => {
+  const codec = createLocationCodec(winContext({ kind: 'project', projectId: 'p1' }))
+  const reference = gitCodeLocation({ oid: 'a'.repeat(40), repository: `${WIN_PROJECT}\\代码`, filepath: '素材/开场/parts/main.ts' })
+  const encoded = codec.encode(reference)
+  expect(parseGitCodeLocation(encoded.stored)?.repository).toBe('henji:/代码')
+  expect(encoded.reference).toMatchObject({ scope: 'container', path: reference })
+  expect(codec.decode(encoded.stored).value).toBe(reference)
+  expect(codec.decode('git:invalid').unresolved?.reason).toBe('invalid')
+})
 
 it('未知项目的越界路径仍分类为 invalid，不能作为外部引用跳过', () => {
   const codec = createLocationCodec({ style: 'win32', userRoot: WIN_USER, projects: [] })

@@ -1019,7 +1019,7 @@ it('公共入口创建 TS 代码素材附带类型检查结论，加载或试渲
   } finally { boundary.failTrial = false; typeCheck.mockRestore(); app.dispose() }
 })
 
-it('真实源码目录：试渲染失败、取消、提交失败和公共事务补偿零残留，成功及撤销重做保留源码', async () => {
+it('真实 Git 源码：失败补偿不采用版本，撤销重做与资产往返保留不可变源码', async () => {
   const env = createTestEnvironment()
   const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id
   const service = env.services.service
@@ -1039,19 +1039,23 @@ it('真实源码目录：试渲染失败、取消、提交失败和公共事务�
   try {
     boundary.failTrial = true
     await expect(createVideoEditCodeMaterials(id, [{ source }])).rejects.toThrow('GPU trial rejected')
-    expect(await entries()).toEqual([])
+    expect(owner.document.codeMaterials ?? []).toEqual([])
+    expect(await env.services.service.listCodeComponents(target)).toEqual([])
     boundary.failTrial = false
     await expect(createVideoEditCodeMaterials(id, [{ source: 'bad syntax' }])).rejects.toThrow()
-    expect(await entries()).toEqual([])
+    expect(owner.document.codeMaterials ?? []).toEqual([])
+    expect(await env.services.service.listCodeComponents(target)).toEqual([])
     const controller = new AbortController()
     writeMock.mockImplementation(async request => { const result = await service.writeCodeVersion({ ...request, target }); controller.abort(); return result })
     await expect(createVideoEditCodeMaterials(id, [{ source }], controller.signal)).rejects.toThrow()
     writeMock.mockImplementation(request => service.writeCodeVersion({ ...request, target }))
-    expect(await entries()).toEqual([])
+    expect(owner.document.codeMaterials ?? []).toEqual([])
+    expect(await env.services.service.listCodeComponents(target)).toEqual([])
     const commit = vi.spyOn(projectService, 'editVideoProject').mockImplementation(() => { throw new Error('提交失败') })
     await expect(createVideoEditCodeMaterials(id, [{ source }])).rejects.toThrow('提交失败')
     commit.mockRestore()
-    expect(await entries()).toEqual([])
+    expect(owner.document.codeMaterials ?? []).toEqual([])
+    expect(await env.services.service.listCodeComponents(target)).toEqual([])
     const parent = { kind: 'video_edit.document', id }
     const historyBefore = [...owner.past]
     const result = await app.call('change_application_entities', { summary: '失败事务', changes: [
@@ -1061,37 +1065,48 @@ it('真实源码目录：试渲染失败、取消、提交失败和公共事务�
     expect(owner.past).toEqual(historyBefore)
     expect(result).toMatchObject({ ok: false })
     expect(owner.document.codeMaterials ?? []).toEqual([])
-    expect(await entries()).toEqual([])
+    expect(owner.document.codeMaterials ?? []).toEqual([])
+    expect(await env.services.service.listCodeComponents(target)).toEqual([])
     const components = new CodeComponentCollectionExecutor()
     await expect(components.apply({ kind: 'collection', entityType: 'video_edit.code_component', parent, expectedRevisions: {}, operation: {
       kind: 'create', items: ['export const size=1;', 'export default {}'].map(value => ({ properties: { 'video_edit.code_component.name': '失败组件', 'video_edit.code_component.source': value } })),
     } }, { requestId: 'disk-compensation', exposure: 'assistant', permissions: new Set(['video_edit:write']), acceptedDataClasses: new Set(['C1']) })).rejects.toThrow('默认导出')
-    expect(await entries()).toEqual([])
+    expect(owner.document.codeMaterials ?? []).toEqual([])
+    expect(await env.services.service.listCodeComponents(target)).toEqual([])
     const [definitionId] = await createVideoEditCodeMaterials(id, [{ source }])
     const baseline = await entries()
     expect(baseline.some(entry => entry.endsWith('main.ts'))).toBe(true)
     boundary.failTrial = true
     await expect(createVideoEditCodeVersions(id, [{ definitionId, source: source.replace('100+t', '800+t') }])).rejects.toThrow('GPU trial rejected')
-    expect(await entries()).toEqual(baseline)
+    expect(await entries()).toEqual(expect.arrayContaining(baseline))
     boundary.failTrial = false
     const item = owner.document.items.find(item => item.code?.definitionId === definitionId)!
     const [clipId] = appendVideoEditItems(id, [item.id], owner.activeSequenceId)
     const candidateTarget = { projectId: id, sequenceId: owner.activeSequenceId, clipId, versionId: item.code!.versionId }
     boundary.failTrial = true
     await expect(prepareVideoEditCodeCandidate(candidateTarget, source.replace('100+t', '900+t'))).rejects.toThrow('GPU trial rejected')
-    expect(await entries()).toEqual(baseline)
+    expect(await entries()).toEqual(expect.arrayContaining(baseline))
     boundary.failTrial = false
     const candidate = await prepareVideoEditCodeCandidate(candidateTarget, source.replace('100+t', '900+t'))
     disposeVideoEditCodeCandidate(candidate)
-    await vi.waitFor(async () => expect(await entries()).toEqual(baseline))
+    await vi.waitFor(async () => expect(await entries()).toEqual(expect.arrayContaining(baseline)))
     // Undo placement first, then creation; redo must still resolve immutable source.
     undoVideoEdit(id)
-    undoVideoEdit(id); expect(await entries()).toEqual(baseline)
+    undoVideoEdit(id); expect(await entries()).toEqual(expect.arrayContaining(baseline))
     undoVideoEdit(id, true); expect(owner.document.codeMaterials?.[0].id).toBe(definitionId)
     await saveVideoEdit(id)
     const reopened = await reopenVideoEdit(id)
     expect(reopened.document.codeMaterials?.[0].id).toBe(definitionId)
-    expect(await entries()).toEqual(baseline)
+    expect(await entries()).toEqual(expect.arrayContaining(baseline))
+    const version = reopened.document.codeMaterials![0].versions[0]
+    expect(version.files[0].location.startsWith('git:')).toBe(true)
+    const { bytes } = collectionBoundary()
+    await collectVideoEditCodeAsset(id, { kind: 'definition', definitionId }, { path: 'D:/git-roundtrip.henji-code' })
+    const asset = decodeCodeAsset(bytes.get('D:/git-roundtrip.henji-code')!)
+    expect(asset.sourceVersion.files[0].location).toBe(`asset:${version.files[0].hash}`)
+    const imported = await createVideoEditCodeAssetInstance(id, importPublication(asset))
+    const importedVersion = reopened.document.codeMaterials!.find(definition => definition.id === imported.definitionId)!.versions[0]
+    expect(await service.readCodeFile(importedVersion.files[0])).toBe(await service.readCodeFile(version.files[0]))
   } finally {
     app.dispose()
     await closeVideoEditProject(id)

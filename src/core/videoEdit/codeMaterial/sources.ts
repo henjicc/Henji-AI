@@ -109,15 +109,17 @@ export async function loadCodeSourceReferences(version: { files: readonly CodeFi
   }
   // 同一路径合并并发 I/O，两个不同路径即使原哈希相同也分别读取。
   await Promise.all([...pending.values()].map(file => {
-    const known = readingLocations.get(file.location)
+    const readKey = JSON.stringify([file.location, file.hash])
+    const known = readingLocations.get(readKey)
     if (known) return known
     const pending = (async () => {
       const source = await reader!(file)
       const hash = await sha256HexString(source)
+      if (file.location.startsWith('git:') && hash !== file.hash) throw new CodeMaterialError('COMPATIBILITY', `${file.path} 的版本内容校验失败，请从工程备份恢复。`)
       rememberCodeSource(hash, source); locationHashes.set(file.location, hash)
       verifiedLocations.set(JSON.stringify([file.location, file.hash]), Date.now())
-    })().finally(() => { readingLocations.delete(file.location) })
-    readingLocations.set(file.location, pending)
+    })().finally(() => { readingLocations.delete(readKey) })
+    readingLocations.set(readKey, pending)
     return pending
   }))
 }
@@ -143,8 +145,10 @@ export function resolveCodeMaterialFiles(version: { entry: string; files: readon
   return normalizeCodeMaterialFiles({ entry: version.entry, files: Object.fromEntries(version.files.map(file => [file.path, resolver.read(file.hash, file.location, file.path)])) })
 }
 export async function verifyCodeSourceReferences(version: { files: readonly CodeFileReference[] }, resolver: CodeSourceResolver): Promise<void> {
-  // 兼容资产导入调用方：只确认可读，内容身份由实际读到的文本决定。
-  for (const file of version.files) resolver.read(file.hash, file.location, file.path)
+  for (const file of version.files) {
+    const source = resolver.read(file.hash, file.location, file.path)
+    if (await sha256HexString(source) !== file.hash) throw new CodeMaterialError('COMPATIBILITY', `${file.path} 的源码内容校验失败，请恢复原版本后重试。`)
+  }
 }
 
 /** 仅保存快照更新已有 hash；读取不改文档、不标脏，也不写原文件。 */

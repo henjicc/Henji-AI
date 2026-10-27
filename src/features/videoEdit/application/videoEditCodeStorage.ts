@@ -1,5 +1,6 @@
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { getPlatform } from '@/platform/runtime'
+import { parseGitCodeLocation } from '@/core/storage/gitCodeLocation'
 import { rememberCodeSource, loadCodeSourceReferences, addressCodeMaterialFiles, resolveCodeMaterialFiles, type CodeMaterialFiles, type CodeFileReference, type CodeComponentPin } from '@/core/videoEdit/codeMaterial/sources'
 import { pinCodeComponentImports, expandPinnedCodeComponents, codeComponentNameSchema, componentSourceMetadata, rewriteCodeComponentImports, type CodeComponentVersion, type CodeComponent } from '@/core/videoEdit/codeMaterial/components'
 import { assetCodeSourceResolver, type CodeAsset } from '@/core/videoEdit/codeAsset'
@@ -84,7 +85,10 @@ export interface CodeComponentReference { materialRef: { kind: string; id: strin
 export async function codeComponentReferences(projectId: string, name?: string, version?: number): Promise<CodeComponentReference[]> {
   const owner = requireVideoEditInstance(projectId); const container = owner.session.documentMeta.container
   const component = name === undefined ? undefined : (await projectCodeComponents(projectId)).find(component => component.name === name)
-  const normalize = (location: string): string => location.replace(/\\/g, '/').toLocaleLowerCase()
+  const normalize = (location: string): string => {
+    const git = parseGitCodeLocation(location)
+    return (git ? `${git.repository}/${git.filepath}` : location).replace(/\\/g, '/').toLocaleLowerCase()
+  }
   const location = component?.versions[0]?.location
   const folder = location ? normalize(location).slice(0, normalize(location).lastIndexOf('/') + 1) : undefined
   const open = listVideoEditInstances().filter(value => JSON.stringify(value.session.documentMeta.container) === JSON.stringify(container))

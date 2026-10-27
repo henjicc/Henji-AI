@@ -1,3 +1,4 @@
+import { gitCodeLocation, parseGitCodeLocation } from './gitCodeLocation'
 import {
   comparisonKey,
   formatAbsolutePath,
@@ -285,6 +286,11 @@ export function createLocationCodec(context: LocationContext): LocationCodec {
   }
 
   function encode(value: string): LocationEncodeResult {
+    if (value.startsWith('git:')) {
+      const git = parseGitCodeLocation(value)!
+      const result = encode(git.repository)
+      return { stored: gitCodeLocation({ ...git, repository: result.stored }), ...(result.reference ? { reference: { ...result.reference, path: value } } : {}), ...(result.programReference ? { programReference: true } : {}) }
+    }
     if (!PATH_LIKE.test(value) || isEncodedLocation(value)) return { stored: value }
     let candidate: string | null = value
     if (LOCAL_MEDIA_URL.test(value)) candidate = localPathFromUrl(style, value, 'media')
@@ -317,6 +323,15 @@ export function createLocationCodec(context: LocationContext): LocationCodec {
   }
 
   function decode(value: string): LocationDecodeResult {
+    if (value.startsWith('git:')) {
+      try {
+        const git = parseGitCodeLocation(value)!
+        const result = decode(git.repository)
+        if (result.unresolved) return { value, unresolved: { ...result.unresolved, value } }
+        const decoded = gitCodeLocation({ ...git, repository: result.value })
+        return { value: decoded, ...(result.reference ? { reference: { ...result.reference, path: decoded } } : {}), ...(result.programReference ? { programReference: true } : {}) }
+      } catch { return { value, unresolved: { value, reason: 'invalid' } } }
+    }
     if (!PATH_LIKE.test(value)) return { value }
     if (value.startsWith(LOCATION_HOST_PREFIX)) {
       if (value.startsWith(LOCATION_USER_PREFIX)) {

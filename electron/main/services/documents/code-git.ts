@@ -106,6 +106,26 @@ export class CodeGitRepository {
     } catch (error) { throw new Error(`${recovery} ${error instanceof Error ? error.message : String(error)}`, { cause: error }) }
   }
 
+  async sourceAt(oid: string, filepath: string): Promise<string> {
+    await this.safePath('.git/objects')
+    const { blob } = await git.readBlob({ ...this.options, oid, filepath })
+    if (blob.byteLength > MAX_SOURCE_BYTES) throw new Error('源码超过16MiB。')
+    return this.read(gitCodeLocation({ repository: this.dir, oid, filepath }), codeDigest(blob))
+  }
+
+  async isWithdrawn(location: string): Promise<boolean> {
+    const reference = parseGitCodeLocation(location)
+    if (!reference || path.resolve(reference.repository) !== this.dir) throw new Error('代码版本不属于此仓库。')
+    return (await git.listTags(this.options)).includes(`撤回/${reference.oid}`)
+  }
+
+  async withdrawLocked(location: string, hash: string): Promise<void> {
+    const reference = parseGitCodeLocation(location)
+    if (!reference?.filepath.startsWith('组件/') || path.resolve(reference.repository) !== this.dir) throw new Error('只能撤回本项目的组件发布。')
+    await this.read(location, hash)
+    if (!(await this.isWithdrawn(location))) await git.tag({ ...this.options, ref: `撤回/${reference.oid}`, object: reference.oid })
+  }
+
   /** Caller may hold exclusive across allocating an ordinal and committing it. */
   async writeLocked(input: GitCodeWrite): Promise<{ oid: string; files: Array<{ path: string; location: string; hash: string }> }> {
     if (!Number.isSafeInteger(input.version) || input.version < 1 || !input.name || /[/\\:\0]/.test(input.name) || ['.', '..', '.git'].includes(input.name.toLowerCase())) throw new Error('代码版本名称或序号无效。')
