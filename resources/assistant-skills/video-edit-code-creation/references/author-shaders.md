@@ -13,6 +13,7 @@ async createWebGPU(device) => {
 
 - `createWebGPU` 每个实例只调用一次：在这里建着色器模块、管线、缓冲；`draw` 每帧调用，只写 uniform、建绑定组、提交命令。
 - `target` 是本帧输出纹理，格式以 `target.format` 为准（可能是 `rgba8unorm` 或 `rgba16float`），按格式缓存管线。输出为预乘 alpha。
+- `width` / `height` 是 `target` 的像素尺寸。节目回放分辨率降低（1/2、1/4…）时它们与 `target` 一起按比例缩小，`info.renderScale` 给出比例（完整分辨率、取帧与导出没有这个字段，即 1）。坐标按 `width` / `height` 的比例写（`pos.xy / vec2f(width, height)`），按像素写的长度（线宽、点距、模糊半径）乘 `info.renderScale ?? 1` 传进 uniform，缩小预览时画面与完整分辨率一致。滤镜的输入、输出同样按缩小后的尺寸给出。
 - `inputs.images[参数名]` 是图片、视频参数的纹理 `{ texture, width, height }`（预乘 alpha，视频每帧是当前帧）。生成器和滤镜都有。**GPU 入口一律直接采样它，不要读 `assets`**：读 `assets` 会把这一帧从 GPU 拷成位图，4K 视频每帧多花好几毫秒；不读就不拷。
 - 滤镜另有 `inputs.current`（当前输入画面）和 `inputs.frames`（模块 `frames` 声明的相邻帧 `{ offset, texture, available }`，顺序与声明一致）。输入纹理归时间线所有，只读，不要销毁，只在这次 `draw` 里有效，不要跨帧缓存纹理对象。
 - 中间纹理由你创建与释放：尺寸变化时等待 `device.queue.onSubmittedWorkDone()` 后销毁旧纹理；`dispose` 里释放缓冲和纹理。
@@ -70,7 +71,7 @@ export default {
 
 ## createWebGL
 
-`createWebGL(gl)` 返回 `{ draw(time, params, width, height, assets, info), dispose? }`。宿主提供透明、预乘 alpha 的 WebGL2 画布并在每帧清空，绘制结果复制到输出。适合迁移现成的 WebGL/GLSL 代码；新写的 GPU 效果优先 WebGPU。WebGL 入口不接收滤镜输入。
+`createWebGL(gl)` 返回 `{ draw(time, params, width, height, assets, info), dispose? }`。宿主提供透明、预乘 alpha 的 WebGL2 画布并在每帧清空，绘制结果复制到输出；`width` / `height` 与 WebGPU 相同，是输出像素尺寸。适合迁移现成的 WebGL/GLSL 代码；新写的 GPU 效果优先 WebGPU。WebGL 入口不接收滤镜输入。
 
 ## 内置着色器组件
 

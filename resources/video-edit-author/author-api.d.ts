@@ -41,6 +41,11 @@ export interface AuthorFrameInfo {
   audio?: AuthorAudioAnalysis
   /** 当前帧在音频分析区间内的秒数。 */
   audioTime?: number
+  /**
+   * 输出像素与画布像素之比，只在回放分辨率降低时出现（1/2 时为 0.5）；完整分辨率与导出没有（即 1）。Canvas 坐标不受影响；
+   * WebGPU / WebGL 的 target 与 width/height 已是缩小后的像素，按像素写的长度乘 `info.renderScale ?? 1`。
+   */
+  renderScale?: number
 }
 
 /** 参数值按 params.键名 读取；键名与取值形状由 params 声明推断，推断不出时为 any。 */

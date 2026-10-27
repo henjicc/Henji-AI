@@ -45,15 +45,17 @@ import { videoEditEffectMask } from './videoEditEffectMasks'
 import { videoEditClipPictureSize } from '@/core/videoEdit/clipGeometry'
 import { evaluateCodeElementOverride } from '@/core/videoEdit/codeElementOverrides'
 import { videoEditTextResolution } from './videoEditTextSurface'
+import { videoEditRenderSize, type VideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution'
 
 const logger = createLogger('features.videoEdit.codeSources')
 /** Soft cache budgets: the current frame's working set is pinned regardless of chain length. */
 const CACHED_PROGRAMS = 32; const CACHED_PROGRAM_BYTES = 16 * 1024 ** 2
-type CodeRuntime = Pick<VideoEditCodeGpu, 'authorGenerator' | 'inspectAuthor' | 'retainAuthorInstances' | 'observeAuthor' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'draw' | 'generatorTargetCapacity' | 'spillGeneratorTarget' | 'resetFramePerformance' | 'warmAuthor' | 'protectAuthorInstances'>>
+type CodeRuntime = Pick<VideoEditCodeGpu, 'authorGenerator' | 'inspectAuthor' | 'retainAuthorInstances' | 'observeAuthor' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'draw' | 'generatorTargetCapacity' | 'spillGeneratorTarget' | 'resetFramePerformance' | 'warmAuthor' | 'protectAuthorInstances' | 'renderDivisor'>>
 type Compiler = Pick<VideoEditCodeCompiler, 'bundle' | 'dispose'> & Partial<Pick<VideoEditCodeCompiler, 'diagnostics'>>
 interface KnownVersion { source: string; apiVersion: number; languageVersion: number; bytes: number }
 interface CachedProgram { source: string; program: CodeMaterialProgram; bytes: number }
-interface Plan { clip: VideoEditClip; key: string; static: boolean; program?: CodeMaterialProgram; draws?: VideoEditGraphicDraw[]; parameters: CodeParameterValues; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean; motion?: CodeMotionClock }
+/** `divisor`：这一帧代码生成器的回放分辨率缩小倍数，与缓存键一起取，画面与键始终一致。 */
+interface Plan { clip: VideoEditClip; key: string; static: boolean; program?: CodeMaterialProgram; draws?: VideoEditGraphicDraw[]; parameters: CodeParameterValues; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean; motion?: CodeMotionClock; divisor?: VideoEditRenderDivisor }
 export interface PreparedVideoEditCodeEffect { effect: VideoEditEffect; builtin?: undefined; version: string; instanceKey: string; info: AuthorFrameInfo; program: CodeMaterialProgram; parameters: CodeParameterValues; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean }
 /** 内置效果不需要编译源码，直接交给合成器的 GPU 实现（4.7）；`mask` 是这一帧的智能区域蒙版（4.7d）。 */
 export interface PreparedVideoEditBuiltinEffect { effect: VideoEditEffect; builtin: VideoEditBuiltinEffectInstance & RecordingCursorRenderInput & RecordingEffectsRenderInput; mask?: VideoEditSmartRegionMask }
@@ -247,7 +249,10 @@ export class VideoEditCodeSources {
             const program = await this.program(key, codeMaterialSource(document, effect.code), controller.signal, pinned); assertCurrent()
             if (program.kind !== 'filter') throw new CodeMaterialError('TYPE', '附加效果必须使用单输入滤镜源码。')
             const animation = await animated(clip, effect.code, program)
-            chain.push({ effect, version: key, instanceKey: `${clip.id}:${effect.id}`, info: { audio: animation.context.audio, audioTime: animation.context.audioTime, time: animation.context.time, frameDuration: 1 / document.fps, clip: { time: animation.context.localTime, duration: clip.duration / document.fps } }, program, ...animation })
+            // 回放分辨率降低时滤镜的输入、输出按序列缩小后的尺寸给出（任务 4.9），比例随 info 告诉作者。
+            const divisor = this.runtime?.renderDivisor ?? 1
+            const renderScale = divisor === 1 ? undefined : videoEditRenderSize(document.width, document.height, divisor).height / document.height
+            chain.push({ effect, version: key, instanceKey: `${clip.id}:${effect.id}`, info: { audio: animation.context.audio, audioTime: animation.context.audioTime, time: animation.context.time, frameDuration: 1 / document.fps, clip: { time: animation.context.localTime, duration: clip.duration / document.fps }, ...(renderScale ? { renderScale } : {}) }, program, ...animation })
           } catch (error) {
             assertCurrent()
             if (!options.onEffectError) throw error
@@ -278,9 +283,11 @@ export class VideoEditCodeSources {
         const sourceTime = videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, transitionHandles && program.mode === 'static')
         const overrideValues = clip.elementOverrides ? Object.fromEntries(Object.entries(clip.elementOverrides).map(([id, value]) => [id, evaluateCodeElementOverride(value, sourceTime)])) : undefined
         const isStatic = program.mode === 'static' && !codeMaterialUsesAudio(program) && !Object.values(clip.code.parameters).some(value => isCodeImageReference(value) && value.kind !== 'image')
-        const target = isStatic ? `code:static:${JSON.stringify([key, parameters, imageSources, documentFontRevision(), overrideValues])}` : `code:dynamic:${clip.id}`
+        // 回放分辨率（任务 4.9）：缩小倍数进静态缓存键，切回完整分辨率时不会沿用缩小的画面。
+        const divisor = this.runtime?.renderDivisor ?? 1
+        const target = isStatic ? `code:static:${JSON.stringify([key, parameters, imageSources, documentFontRevision(), overrideValues, ...(divisor === 1 ? [] : [divisor])])}` : `code:dynamic:${clip.id}`
         keys.add(target)
-        plans.push({ clip, key: target, static: isStatic, program, parameters, context, transitionHandles, ...(motion ? { motion } : {}) })
+        plans.push({ clip, key: target, static: isStatic, program, parameters, context, transitionHandles, ...(motion ? { motion } : {}), ...(divisor === 1 ? {} : { divisor }) })
       }
       assertCurrent(); if (!options.preparationOnly) this.protectedKeys = keys
       const result: PreparedCodeSources = { pictures: new Map(), effects, sourceTimestamps: plans.map(plan => plan.context.time), cacheHits: 0 }
@@ -338,7 +345,10 @@ export class VideoEditCodeSources {
               }
               const sourceTime = videoEditClipSourceTimeAt(plan.clip, frame - plan.clip.start, document.frameRate, plan.transitionHandles && plan.program!.mode === 'static')
               const overrides = plan.clip.elementOverrides ? Object.fromEntries(Object.entries(plan.clip.elementOverrides).map(([id, value]) => [id, evaluateCodeElementOverride(value, sourceTime)])) : undefined
-              picture = await this.runtime!.authorGenerator(plan.key, plan.clip.id, plan.program!, plan.context, plan.parameters, assets satisfies AuthorAssets, { audio: plan.context.audio, audioTime: plan.context.audioTime, time: plan.context.time, frameDuration: 1 / document.fps, clip: { time: plan.context.localTime, duration: plan.clip.duration / document.fps } }, overrides, document.motionBlur === true, images)
+              const info = { audio: plan.context.audio, audioTime: plan.context.audioTime, time: plan.context.time, frameDuration: 1 / document.fps, clip: { time: plan.context.localTime, duration: plan.clip.duration / document.fps } }
+              picture = plan.divisor
+                ? await this.runtime!.authorGenerator(plan.key, plan.clip.id, plan.program!, plan.context, plan.parameters, assets satisfies AuthorAssets, info, overrides, document.motionBlur === true, images, plan.divisor)
+                : await this.runtime!.authorGenerator(plan.key, plan.clip.id, plan.program!, plan.context, plan.parameters, assets satisfies AuthorAssets, info, overrides, document.motionBlur === true, images)
             }
             assertCurrent()
             if (plan.static) this.staticPictures.set(plan.key, picture)

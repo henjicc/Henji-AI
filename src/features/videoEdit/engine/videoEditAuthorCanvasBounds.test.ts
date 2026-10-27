@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { authorCanvasContent, scaleAuthorCanvasEffect } from './videoEditAuthorCanvasBounds'
-import { AuthorCanvasAsset, recordAuthorCanvas } from './videoEditAuthorCanvasRecorder'
+import { AuthorCanvasAsset, recordAuthorCanvas, replayAuthorCanvas } from './videoEditAuthorCanvasRecorder'
 
 /** 只用来量字的 2D 上下文替身：默认状态与真实画布相同，字宽 = 字数 × 字号 / 2，上 0.8、下 0.2 字号。 */
 function measureContext(): OffscreenCanvasRenderingContext2D {
@@ -72,5 +72,17 @@ describe('缩小栅格时换算阴影与滤镜', () => {
     expect(scaleAuthorCanvasEffect('filter', 'none', .5, .5)).toBe('none')
     expect(scaleAuthorCanvasEffect('lineWidth', 4, .5, .5)).toBe(4)
     expect(scaleAuthorCanvasEffect('filter', 'blur(1em)', .5, .5)).toBeUndefined()
+  })
+
+  it('重放时只在给了比例时换算，完整分辨率原样重放', () => {
+    const measure = measureContext()
+    const recording = recordAuthorCanvas({ width: 100, height: 100 }, measure, [1, 0, 0, 1, 0, 0], ctx => { ctx.shadowBlur = 12; ctx.filter = 'blur(6px)'; ctx.fillRect(0, 0, 10, 10) })
+    const replay = (effects?: { sx: number; sy: number }) => {
+      const target = { setTransform() {}, fillRect() {} } as Record<string, unknown>
+      replayAuthorCanvas(recording, target as unknown as OffscreenCanvasRenderingContext2D, () => ({}) as CanvasImageSource, [1, 0, 0, 1, 0, 0], effects)
+      return [target.shadowBlur, target.filter]
+    }
+    expect(replay()).toEqual([12, 'blur(6px)'])
+    expect(replay({ sx: .5, sy: .5 })).toEqual([6, 'blur(3px)'])
   })
 })

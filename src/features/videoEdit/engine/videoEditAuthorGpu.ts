@@ -107,8 +107,13 @@ export class VideoEditAuthorGpu {
   lens(source: GpuTexture, target: GpuTexture, width: number, height: number, radius: number): void {
     this.pass('lens', view(source), view(target, 0), new Float32Array([width, height, radius, 0, 0, 0, 0, 0]))
   }
-  draw(target: GpuTexture, width: number, height: number, source: LayerImage, samples: CodeMotionSample[], clip?: [number, number, number, number]): void {
-    const prepared = prepareCodeMotion(source, [1, 0, 0, 1, 0, 0], samples, width, height, Number.MAX_SAFE_INTEGER)
+  /**
+   * `width`/`height` 是 `target` 的像素尺寸；位姿与 `clip` 是画布像素。`scale`：画布像素到 `target` 像素的比例（回放分辨率
+   * 降低时小于 1），叠在所有位姿外面；缺省为 1。
+   */
+  draw(target: GpuTexture, width: number, height: number, source: LayerImage, samples: CodeMotionSample[], clip?: readonly [number, number, number, number], scale?: readonly [number, number]): void {
+    if (clip && scale) clip = [clip[0] * scale[0], clip[1] * scale[1], clip[2] * scale[0], clip[3] * scale[1]]
+    const prepared = prepareCodeMotion(source, scale ? [scale[0], 0, 0, scale[1], 0, 0] : [1, 0, 0, 1, 0, 0], samples, width, height, Number.MAX_SAFE_INTEGER)
     if (!prepared) return
     const { bounds, data } = prepared
     // Match Frameflow's fragment-center clip test, including fractional edges.

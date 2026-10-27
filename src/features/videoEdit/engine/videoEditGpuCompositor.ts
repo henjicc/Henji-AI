@@ -246,7 +246,7 @@ export class VideoEditGpuCompositor {
     return ready
   }
   /** Pictures snapshotted from now on are stored at 1/divisor of their decoded size; the layer shader samples them by UV. */
-  setPictureDivisor(divisor: VideoEditRenderDivisor): void { this.pictureDivisor = divisor }
+  setPictureDivisor(divisor: VideoEditRenderDivisor): void { this.pictureDivisor = divisor; this.codeRuntime?.setRenderDivisor(divisor) }
   private downscalePipelines(divisor: 1 | 2 | 4 | 8, srgb = false): Promise<{ y: GpuRenderPipeline; uv: GpuRenderPipeline; rgba: Map<string, GpuRenderPipeline> }> {
     const key = `${divisor}:${srgb}`
     let ready = this.downscale.get(key)
@@ -403,6 +403,8 @@ export class VideoEditGpuCompositor {
       this.assertDevice()
       if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用，请重新加载预览。')
       this.codeRuntime ??= new VideoEditCodeGpu(this.device)
+      // 代码生成器与解码画面一样按回放分辨率缩小（任务 4.9）；导出从不设置，始终为 1。
+      this.codeRuntime.setRenderDivisor(this.pictureDivisor)
     }
     return this.codeRuntime
   }
@@ -541,7 +543,8 @@ export class VideoEditGpuCompositor {
         } else if (code) {
           if (picture.owner !== device) throw new Error('代码画面不属于当前剪辑GPU设备。')
           this.codeRuntime?.assertPictureLive(picture)
-          resource = picture.texture.createView(); width = picture.width; height = picture.height
+          // 放置按画面尺寸：回放分辨率降低时纹理更小，按 UV 取样（与降采样的视频帧保留显示尺寸相同）。
+          resource = picture.texture.createView(); width = picture.displayWidth ?? picture.width; height = picture.displayHeight ?? picture.height
         } else if (cachedVideo) {
           resource = picture.texture.createView(); width = picture.displayWidth; height = picture.displayHeight
         } else {

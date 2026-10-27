@@ -78,6 +78,22 @@ it('参数与时间变化复用目标，完整参数、素材和覆盖直接传�
   expect(runtime.diagnostics()).toMatchObject({ surfaces: 0, residentBytes: 0 })
 })
 
+it('1/2 回放分辨率：输出纹理减半、放置尺寸不变，作者拿到输出尺寸与 renderScale；完整分辨率原样调用', async () => {
+  const { runtime, program } = fixture()
+  const size = { width: 3840, height: 2160 }
+  try {
+    const half = await runtime.authorGenerator('frame', 'clip', program, size, {}, {}, info, undefined, true, {}, 2)
+    expect([half.width, half.height, half.displayWidth, half.displayHeight]).toEqual([1920, 1080, 3840, 2160])
+    expect(author.render).toHaveBeenLastCalledWith(half.texture, 3840, 2160, {}, {}, { ...info, renderScale: .5 }, undefined, { frames: [], images: {} }, true, { width: 1920, height: 1080 })
+    // 切回完整分辨率：换一张整幅纹理，调用与以前逐项相同
+    const full = await runtime.authorGenerator('frame', 'clip', program, size, {}, {}, info)
+    expect([full.width, full.height, full.displayWidth, full.displayHeight]).toEqual([3840, 2160, 3840, 2160])
+    expect(full).not.toBe(half)
+    expect(author.render).toHaveBeenLastCalledWith(full.texture, 3840, 2160, {}, {}, info, undefined, { frames: [], images: {} }, true)
+    expect(runtime.renderDivisor).toBe(1); runtime.setRenderDivisor(4); expect(runtime.renderDivisor).toBe(4)
+  } finally { await runtime.dispose() }
+})
+
 it('滤镜保留输入精度与相邻帧，拒绝跨设备、错误顺序和输入输出别名', async () => {
   const { runtime, program } = fixture()
   const filter = { ...program, kind: 'filter' as const, frames: [-.5] }

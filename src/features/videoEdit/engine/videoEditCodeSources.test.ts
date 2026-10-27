@@ -45,6 +45,30 @@ function changedVersion(document: VideoEditComposition, id: string): VideoEditCo
   return { ...document, revision: document.revision + 1, clips: document.clips.map(clip => ({ ...clip, code: { ...clip.code!, versionId: id } })) }
 }
 const imageInputs = (id: string): Promise<ReadonlyMap<string, VideoEditCodeImageInput>> => Promise.resolve(new Map([[id, { source: {}, width: 100, height: 100 } as VideoEditCodeImageInput]]))
+it('回放分辨率的缩小倍数随生成器调用传下并进静态缓存键：切回完整分辨率重新渲染整幅画面', async () => {
+  const document = fixture()
+  const boundary = boundaries(document)
+  const runtime = await boundary.acquire()
+  try {
+    await boundary.sources.prepare(document, document.clips, 0, () => true)
+    expect(boundary.generator.mock.lastCall).toHaveLength(10)
+    const fullKey = boundary.generator.mock.lastCall![0]
+    Object.assign(runtime, { renderDivisor: 2 })
+    await boundary.sources.prepare(document, document.clips, 0, () => true)
+    expect(boundary.generator).toHaveBeenCalledTimes(2)
+    expect(boundary.generator.mock.lastCall![10 as number]).toBe(2)
+    expect(boundary.generator.mock.lastCall![0]).not.toBe(fullKey)
+    // 同一倍数下静态画面照常沿用
+    await boundary.sources.prepare(document, document.clips, 1, () => true)
+    expect(boundary.generator).toHaveBeenCalledTimes(2)
+    Object.assign(runtime, { renderDivisor: 1 })
+    await boundary.sources.prepare(document, document.clips, 0, () => true)
+    expect(boundary.generator).toHaveBeenCalledTimes(3)
+    expect(boundary.generator.mock.lastCall).toHaveLength(10)
+    expect(boundary.generator.mock.lastCall![0]).toBe(fullKey)
+  } finally { await boundary.sources.dispose() }
+})
+
 it('分层作者收到正式源时钟、参数和片段局部信息，动态曝光不误用静态缓存', async () => {
   const code = 'export default {name:"参数运动",width:64,height:64,durationSeconds:3,params:[{key:"amount",type:"number",title:"位置",default:0,min:0,max:100,step:1,animatable:true}],motionBlur:{},layers(p){return [{id:"box",bounds:[0,0,8,8],pose:t=>({x:p.amount+t}),draw(ctx){ctx.fillRect(0,0,8,8);}}];}}'
   const document = fixture(code)

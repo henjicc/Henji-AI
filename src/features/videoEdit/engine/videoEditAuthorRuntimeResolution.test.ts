@@ -125,3 +125,35 @@ it('静止层只栅格、上传有内容的范围：停稳后上传字节大幅�
   } finally { await runtime.dispose() }
 })
 
+it('1/2 回放分辨率：代码图层的栅格与目标都减半，作者坐标不变，画面等于完整画面的缩小', async () => {
+  const runtime = new VideoEditAuthorRuntime(device(), { name: '信号点', layers })
+  const half = target(100, 50)
+  try {
+    for (let frame = 0; frame < 4; frame++) {
+      const statistics = await runtime.render(half, 200, 100, {}, {}, info(frame), undefined, undefined, false, { width: 100, height: 50 })
+      expect(half.pixels).toEqual(reference(expected(frame), 100, 50, .5))
+      if (frame === 3) expect(statistics!.uploadBytes).toBeLessThan(100 * 50 * 4 / 10)
+    }
+    // 能换算的静止组栅格不超过一半画幅；带位姿的方块按 1 倍（完整分辨率是 2 倍）；滤镜换算不了的层按画布像素栅格并带 mip
+    const stills = gpu.textures.filter(texture => texture.mips === 1)
+    expect(stills.every(texture => texture.width <= 100 && texture.height <= 50)).toBe(true)
+    expect(gpu.textures).toContainEqual(expect.objectContaining({ width: 24, height: 24 }))
+    expect(gpu.textures.some(texture => texture.mips > 1 && texture.width > 24)).toBe(true)
+    // 切回完整分辨率：不沿用缩小的栅格
+    const full = target(200, 100)
+    await runtime.render(full, 200, 100, {}, {}, info(4), undefined, undefined, false)
+    expect(full.pixels).toEqual(reference(expected(4), 200, 100, 1))
+    expect(gpu.textures).toContainEqual(expect.objectContaining({ width: 44, height: 44 }))
+  } finally { await runtime.dispose() }
+})
+
+it('原生 GPU 入口在 1/2 时拿到缩小后的 target 与像素尺寸，元素选框仍按画布像素', async () => {
+  const draw = vi.fn()
+  const runtime = new VideoEditAuthorRuntime({} as GpuDevice, { name: '着色器', createWebGPU: () => ({ draw }) })
+  const half = target(960, 540)
+  try {
+    await runtime.render(half, 1920, 1080, {}, {}, { ...info(0), renderScale: .5 }, undefined, { frames: [], images: {} }, true, { width: 960, height: 540 })
+    expect(draw).toHaveBeenCalledWith(half, 0, {}, 960, 540, {}, expect.objectContaining({ renderScale: .5 }), { frames: [], images: {} })
+    expect(runtime.observeElements()[0].bounds).toEqual([0, 0, 1920, 1080])
+  } finally { await runtime.dispose() }
+})

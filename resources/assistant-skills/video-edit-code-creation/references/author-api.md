@@ -53,7 +53,8 @@ layers(params, width, height, assets, info) => Layer[]
 - `time` 是素材源时间（秒，随片段裁剪、变速、倒放连续），关键帧与动画都按它写。
 - `params` 为当前帧参数值（已应用关键帧曲线），见 parameter-types 的取值表。
 - `assets` 为 image 参数的画面（`CanvasImageSource`），按参数键取，如 `assets.logo`；未绑定时没有该键。
-- `info`：`time`、`frameDuration`（一帧秒数）、`clip.time` / `clip.duration`（片段内时间与片段时长）、可选 `audio` / `audioTime`（见 author-api-media）。
+- `info`：`time`、`frameDuration`（一帧秒数）、`clip.time` / `clip.duration`（片段内时间与片段时长）、可选 `audio` / `audioTime`（见 author-api-media）、可选 `renderScale`（见下）。
+- 节目监视器回放分辨率降低（1/2、1/4…）时，宿主按比例缩小栅格与上传，`ctx` 的坐标、`width` / `height` 仍是画布像素，Canvas 代码不用做任何处理；这时 `info.renderScale` 是输出像素与画布像素之比（如 0.5）。完整分辨率、取帧与导出没有这个字段，画面不受影响。
 
 ## 图层：layers
 

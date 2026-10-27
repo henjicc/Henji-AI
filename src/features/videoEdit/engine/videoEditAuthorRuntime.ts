@@ -19,7 +19,7 @@ interface SurfaceContent { key: string; parts: Painted[] }
  * Motion layers own a raster canvas and a mipmapped texture. Still groups paint on the shared scratch canvas and keep
  * only their texture: a canvas is needed only while painting, before the upload.
  */
-interface Surface { texture: GpuTexture; width: number; height: number; canvas?: OffscreenCanvas; content?: SurfaceContent }
+interface Surface { texture: GpuTexture; width: number; height: number; mips?: boolean; canvas?: OffscreenCanvas; content?: SurfaceContent }
 /** `quiet`: frames since the layer last changed; Infinity while it has not changed since it first appeared. */
 interface LayerHistory { painted?: Painted; quiet: number }
 interface Part { painted?: Painted; draw(ctx: OffscreenCanvasRenderingContext2D): void }
@@ -82,12 +82,15 @@ export class VideoEditAuthorRuntime {
     surface.texture.destroy(); this.textures.delete(surface.texture)
     if (surface.canvas) surface.canvas.width = surface.canvas.height = 1
   }
-  /** `canvas`: a motion layer's own raster canvas with a mipmapped texture; otherwise a texture for a still group. */
-  private surface(index: number, width: number, height: number, canvas: boolean): Surface {
+  /**
+   * `canvas`: a motion layer's own raster canvas with a mipmapped texture; otherwise a texture for a still group.
+   * `mips`: a still group rastered larger than it is drawn (full canvas pixels into a reduced target) samples mip levels.
+   */
+  private surface(index: number, width: number, height: number, canvas: boolean, mips = canvas): Surface {
     const previous = this.surfaces[index]
-    if (previous && previous.width === width && previous.height === height && !!previous.canvas === canvas) return previous
+    if (previous && previous.width === width && previous.height === height && !!previous.canvas === canvas && !!previous.mips === mips) return previous
     if (previous) this.release(previous)
-    const surface: Surface = { texture: this.texture(width, height, canvas), width, height, ...(canvas ? { canvas: new OffscreenCanvas(width, height) } : {}) }
+    const surface: Surface = { texture: this.texture(width, height, mips), width, height, mips, ...(canvas ? { canvas: new OffscreenCanvas(width, height) } : {}) }
     this.surfaces[index] = surface
     return surface
   }
@@ -124,37 +127,47 @@ export class VideoEditAuthorRuntime {
   }
   private renders: Promise<unknown> = Promise.resolve()
   /** One frame at a time per instance: a warm-up ahead of the playhead and a visible frame never share surfaces. */
-  /** `motionBlur`：序列的运动模糊总开关，管带位姿图层的快门取样。返回 Canvas 图层这一帧的沿用与上传统计（原生 GPU 入口没有）。 */
-  render(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs, motionBlur = true): Promise<CodeLayerStatistics | undefined> {
-    const result = this.renders.then(() => this.renderFrame(target, width, height, params, assets, info, overrides, inputs, motionBlur))
+  /**
+   * `motionBlur`：序列的运动模糊总开关，管带位姿图层的快门取样。返回 Canvas 图层这一帧的沿用与上传统计（原生 GPU 入口没有）。
+   * `output`：`target` 的像素尺寸，缺省等于画布尺寸 `width`×`height`。回放分辨率降低时比画布小：Canvas 图层的作者坐标仍是
+   * 画布像素，由宿主按比例缩小栅格与合成；WebGPU / WebGL 入口拿到的 target 与 width/height 是缩小后的像素尺寸。
+   */
+  render(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs, motionBlur = true, output?: { width: number; height: number }): Promise<CodeLayerStatistics | undefined> {
+    const result = this.renders.then(() => this.renderFrame(target, width, height, params, assets, info, overrides, inputs, motionBlur, output))
     this.renders = result.catch(() => undefined)
     return result
   }
-  private async renderFrame(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs, motionBlur = true): Promise<CodeLayerStatistics | undefined> {
+  private async renderFrame(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs, motionBlur = true, output?: { width: number; height: number }): Promise<CodeLayerStatistics | undefined> {
     if (this.closed) throw new Error('代码效果会话已关闭。')
     const frameImages: ImageBitmap[] = []
+    // 画布像素到 target 像素的比例：完整分辨率与导出为 1，所有路径与原来逐条相同。
+    const outWidth = output?.width ?? width, outHeight = output?.height ?? height
+    if (![outWidth, outHeight].every(value => Number.isInteger(value) && value >= 1)) throw new Error('输出尺寸无效。')
+    const sx = outWidth / width, sy = outHeight / height
+    const scale = sx !== 1 || sy !== 1 ? [sx, sy] as const : undefined
     try {
       params = authorParameterValues(this.parameterMetadata, params)
       if (!Number.isFinite(info.time) || !(info.frameDuration > 0) || !Number.isFinite(info.clip?.time) || !(info.clip.duration > 0)) throw new Error('效果需要有效的帧时间和片段时间。')
       const whole: AuthorLayer = { id: AUTHOR_WHOLE_EFFECT_ID, name: this.effect.name, bounds: [0, 0, width, height], draw() {} }
       if ((this.effect.createWebGPU || this.effect.createWebGL) && overrides && Object.hasOwn(overrides, AUTHOR_WHOLE_EFFECT_ID)) {
-        if (!this.nativeOverrideTarget || this.nativeOverrideTarget.width !== width || this.nativeOverrideTarget.height !== height) {
+        if (!this.nativeOverrideTarget || this.nativeOverrideTarget.width !== outWidth || this.nativeOverrideTarget.height !== outHeight) {
           if (this.nativeOverrideTarget) { this.nativeOverrideTarget.texture.destroy(); this.textures.delete(this.nativeOverrideTarget.texture) }
-          const texture = this.device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: 0x01 | 0x02 | 0x04 | 0x08 | 0x10 })
-          this.textures.add(texture); this.nativeOverrideTarget = { texture, width, height }
+          const texture = this.device.createTexture({ size: [outWidth, outHeight], format: 'rgba8unorm', usage: 0x01 | 0x02 | 0x04 | 0x08 | 0x10 })
+          this.textures.add(texture); this.nativeOverrideTarget = { texture, width: outWidth, height: outHeight }
         }
         const picture = this.nativeOverrideTarget.texture
-        const statistics = await this.renderFrame(picture, width, height, params, assets, info, undefined, inputs, motionBlur)
+        const statistics = await this.renderFrame(picture, width, height, params, assets, info, undefined, inputs, motionBlur, output)
         await this.layers.begin(target)
         const samples = authorLayerSamples(whole, this.effect, info, { x: 0, y: 0, width, height }, overrides[AUTHOR_WHOLE_EFFECT_ID], motionBlur)
-        this.layers.draw(target, width, height, { texture: picture, x: 0, y: 0, width, height }, samples)
+        // 整幅画面按画布像素取样（纹理坐标与纹理尺寸无关），覆盖矩阵仍是画布像素，外面再叠输出比例。
+        this.layers.draw(target, outWidth, outHeight, { texture: picture, x: 0, y: 0, width, height }, samples, undefined, scale)
         this.layers.finish()
         this.lastFrame = { layers: [whole], width, height, time: info.time, parameters: params, overrides }
         return statistics
       }
       if (this.effect.createWebGPU) {
         this.webgpu ??= await this.effect.createWebGPU(this.device)
-        await this.webgpu.draw(target, info.time, params, width, height, assets, info, inputs)
+        await this.webgpu.draw(target, info.time, params, outWidth, outHeight, assets, info, inputs)
         this.lastFrame = { layers: [whole], width, height, time: info.time, parameters: params }
         return undefined
       }
@@ -167,14 +180,14 @@ export class VideoEditAuthorRuntime {
           this.webgl = this.effect.createWebGL(this.gl)
         }
         const gl = this.gl, canvas = gl.canvas as OffscreenCanvas
-        if (canvas.width !== width) canvas.width = width
-        if (canvas.height !== height) canvas.height = height
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, width, height)
+        if (canvas.width !== outWidth) canvas.width = outWidth
+        if (canvas.height !== outHeight) canvas.height = outHeight
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, outWidth, outHeight)
         gl.disable(gl.SCISSOR_TEST); gl.colorMask(true, true, true, true); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT)
-        this.webgl!.draw(info.time, params, width, height, assets, info)
-        this.device.queue.copyExternalImageToTexture({ source: canvas }, { texture: target, premultipliedAlpha: true }, [width, height])
+        this.webgl!.draw(info.time, params, outWidth, outHeight, assets, info)
+        this.device.queue.copyExternalImageToTexture({ source: canvas }, { texture: target, premultipliedAlpha: true }, [outWidth, outHeight])
         this.lastFrame = { layers: [whole], width, height, time: info.time, parameters: params }
-        return { reused: 0, redrawn: 0, direct: 0, video: 0, uploads: 1, uploadBytes: width * height * 4 }
+        return { reused: 0, redrawn: 0, direct: 0, video: 0, uploads: 1, uploadBytes: outWidth * outHeight * 4 }
       }
       // 连续两帧都换了图的输入是逐帧变化的视频帧：之后直接画；某帧没换就回到静态图片的像素缓存。
       for (const [key, cached] of this.canvasImages) {
@@ -251,29 +264,33 @@ export class VideoEditAuthorRuntime {
           history.set(slot, { painted, quiet })
           return { painted, volatile: quiet < QUIET_FRAMES, video: [...painted?.recording.assets ?? []].some(key => (this.assetChanges.get(key) ?? 0) >= 2) }
         }
-        const paint = async (canvas: OffscreenCanvas, setup: Matrix, parts: Part[]): Promise<void> => {
+        /** `effects`：栅格比画布像素缩小的比例，阴影与滤镜长度按它换算（只给录下的、可换算的图层）。 */
+        const paint = async (canvas: OffscreenCanvas, setup: Matrix, parts: Part[], effects?: { sx: number; sy: number }): Promise<void> => {
           for (const part of parts) for (const key of part.painted?.recording.assets ?? []) await freshAsset(key)
           const ctx = canvas.getContext('2d')
           if (!ctx) throw new Error('Canvas2D 不可用。')
           ctx.reset(); ctx.setTransform(...setup)
           const rasterStarted = performance.now()
           for (const part of parts) {
-            if (part.painted) replayAuthorCanvas(part.painted.recording, ctx, key => fresh.get(key)!, setup)
+            if (part.painted) replayAuthorCanvas(part.painted.recording, ctx, key => fresh.get(key)!, setup, effects)
             else part.draw(authorCanvasContext(ctx, setup))
           }
           recordVideoEditPreparation('authorRaster', performance.now() - rasterStarted)
         }
         const assetSize = (key: string): readonly [number, number] | undefined => { const cached = this.canvasImages.get(key)?.source; return cached && [cached.width, cached.height] }
-        /** 录下的几层画到的范围（画布像素）；有一层推不出或读画布本身就是 undefined（整幅）。 */
-        const contentOf = (parts: Painted[]): AuthorCanvasBox | null | undefined => {
-          if (!measure) return undefined
-          let bounds: AuthorCanvasBox | null = null
+        /** 录下的几层画到的范围（画布像素）与能否缩小栅格；有一层推不出就是 undefined（整幅）。 */
+        const contentOf = (parts: Painted[]): { bounds: AuthorCanvasBox | null | undefined; scalable: boolean } => {
+          if (!measure) return { bounds: undefined, scalable: false }
+          let bounds: AuthorCanvasBox | null = null, known = true, scalable = true
           for (const part of parts) {
             const content = authorCanvasContent(part.recording, measure, assetSize)
-            if (content.readsCanvas || content.bounds === undefined) return undefined
-            if (content.bounds) bounds = bounds ? [Math.min(bounds[0], content.bounds[0]), Math.min(bounds[1], content.bounds[1]), Math.max(bounds[2], content.bounds[2]), Math.max(bounds[3], content.bounds[3])] : content.bounds
+            // 读画布本身的层依赖画布尺寸与已画内容：整幅、按原尺寸画。
+            if (content.readsCanvas) return { bounds: undefined, scalable: false }
+            scalable &&= content.scalable
+            if (content.bounds === undefined) known = false
+            else if (content.bounds) bounds = bounds ? [Math.min(bounds[0], content.bounds[0]), Math.min(bounds[1], content.bounds[1]), Math.max(bounds[2], content.bounds[2]), Math.max(bounds[3], content.bounds[3])] : content.bounds
           }
-          return bounds
+          return { bounds: known ? bounds : undefined, scalable }
         }
         const upload = (source: OffscreenCanvas, texture: GpuTexture, region: { x: number; y: number; width: number; height: number }): void => {
           this.device.queue.copyExternalImageToTexture(region.x || region.y ? { source, origin: [region.x, region.y] } : { source }, { texture, premultipliedAlpha: true }, [region.width, region.height])
@@ -282,31 +299,37 @@ export class VideoEditAuthorRuntime {
         /**
          * Still layers drawn in sequence on one transparent canvas, as Frameflow does. Only the part that can hold content
          * is rastered and uploaded: `crop` (the layers' clips, canvas pixels) narrowed to what the recorded commands paint.
-         * `layers`/`video`: how many author layers the parts stand for, and how many of them draw a video input.
+         * At a reduced output the raster is scaled like the target, with shadows and filters converted; layers whose drawing
+         * cannot be scaled faithfully (direct drawing, reading the canvas, unknown filters) are rastered at canvas pixels
+         * with mip levels and drawn smaller. `layers`/`video`: how many author layers the parts stand for, and how many of
+         * them draw a video input.
          */
         const stillGroup = async (slot: string, surfaceIndex: number, parts: Part[], crop: { x: number; y: number; width: number; height: number }, layers: number, video: number): Promise<void> => {
           const recorded = parts.every(part => part.painted) ? parts.map(part => part.painted!) : undefined
-          const bounds = recorded ? contentOf(recorded) : undefined
-          const raster = bounds === null ? null : authorStillRaster(crop, bounds, 1, 1, width, height)
+          const analysed = recorded ? contentOf(recorded) : { bounds: undefined, scalable: false }
+          const rx = analysed.scalable ? sx : 1, ry = analysed.scalable ? sy : 1
+          const raster = analysed.bounds === null ? null : authorStillRaster(crop, analysed.bounds, rx, ry, rx === 1 ? width : outWidth, ry === 1 ? height : outHeight)
           // 什么也没画（或全在裁剪外）：不占纹理、不画。
           if (!raster) { statistics.reused += layers; statistics.video += video; return }
-          const surface = this.surface(surfaceIndex, raster.width, raster.height, false)
+          const mips = !!scale && rx === 1 && ry === 1
+          const surface = this.surface(surfaceIndex, raster.width, raster.height, false, mips)
           used.add(surfaceIndex)
-          const content = recorded && { key: `${slot}\u0000${width}x${height}\u0000${raster.x},${raster.y}`, parts: recorded }
+          const content = recorded && { key: `${slot}\u0000${width}x${height}\u0000${raster.x},${raster.y}\u0000${rx},${ry}`, parts: recorded }
           if (content && sameContent(surface.content, content)) { statistics.reused += layers; recordVideoEditPreparation('authorRasterReused', 0) }
           else {
             surface.content = undefined
-            // 只在内容大小的画布上按整数平移栅格：与在整帧画布上画再截取逐像素相同。
-            const canvas = this.scratch(raster.width, raster.height, 2 * width * height)
-            await paint(canvas, [1, 0, 0, 1, 0 - raster.x, 0 - raster.y], parts)
+            const canvas = this.scratch(raster.width, raster.height, 2 * Math.max(width * height, outWidth * outHeight))
+            await paint(canvas, [rx, 0, 0, ry, 0 - raster.x, 0 - raster.y], parts, rx !== 1 || ry !== 1 ? { sx: rx, sy: ry } : undefined)
             const uploadStarted = performance.now()
             upload(canvas, surface.texture, { x: 0, y: 0, width: raster.width, height: raster.height })
+            if (mips) this.layers.mipmaps(surface.texture, raster.width, raster.height)
             recordVideoEditPreparation('authorUpload', performance.now() - uploadStarted)
             surface.content = content && recorded!.every(part => part.recording.comparable) ? content : undefined
             if (recorded) statistics.redrawn += layers; else statistics.direct += layers
           }
           statistics.video += video
-          this.layers.draw(target, width, height, { texture: surface.texture, x: 0, y: 0, width: raster.width, height: raster.height }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, raster.x, raster.y], opacity: 1 } }])
+          // 栅格像素 → 画布像素；输出比例由 scale 叠在外面（完整分辨率时就是 [1,0,0,1,x,y]）。
+          this.layers.draw(target, outWidth, outHeight, { texture: surface.texture, x: 0, y: 0, width: raster.width, height: raster.height }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1 / rx, 0, 0, 1 / ry, raster.x / rx, raster.y / ry], opacity: 1 } }], undefined, scale)
         }
         try {
       const listStarted = performance.now()
@@ -380,19 +403,24 @@ export class VideoEditAuthorRuntime {
           const textureLimit = (this.device as GpuDevice & { limits?: Record<string, number> }).limits?.maxTextureDimension2D ?? 8192
           const limit = Math.min((textureLimit - 2 * unitPad) / Math.max(bounds.width, bounds.height), Math.sqrt(16e6 / Math.max(1, bounds.width * bounds.height)))
           const slot = `layer:${index}:${id}`
-          const resolution = authorRasterScale(need, limit, this.liveLayers.has(slot))
+          const fullResolution = authorRasterScale(need, limit, this.liveLayers.has(slot))
+          const fullPad = authorLayerBlur(center, fullResolution, layer.blurShape).pad
+          const draw = (ctx: OffscreenCanvasRenderingContext2D): void => layer.draw(ctx, info.time)
+          const recorded = record(slot, { width: Math.ceil(bounds.width * fullResolution) + fullPad * 2, height: Math.ceil(bounds.height * fullResolution) + fullPad * 2 }, [fullResolution, 0, 0, fullResolution, fullPad - x * fullResolution, fullPad - y * fullResolution], draw)
+          if (recorded.video) { this.liveLayers.add(slot); statistics.video++ } else this.liveLayers.delete(slot)
+          // 回放分辨率降低时栅格跟着缩小，阴影与滤镜同比换算；画法换算不了的层（直接绘制、读画布、认不出的滤镜）照原分辨率栅格。
+          const shrink = scale ? Math.max(sx, sy) : 1
+          const reduced = shrink < 1 && !!recorded.painted && contentOf([recorded.painted]).scalable
+          const resolution = reduced ? fullResolution * shrink : fullResolution
           const { radius, pad } = authorLayerBlur(center, resolution, layer.blurShape)
           const surface = this.surface(index * 2, Math.ceil(bounds.width * resolution) + pad * 2, Math.ceil(bounds.height * resolution) + pad * 2, true)
           const canvas = surface.canvas!, region = { x: 0, y: 0, width: canvas.width, height: canvas.height }
           const setup: Matrix = [resolution, 0, 0, resolution, pad - x * resolution, pad - y * resolution]
-          const draw = (ctx: OffscreenCanvasRenderingContext2D): void => layer.draw(ctx, info.time)
-          const recorded = record(slot, canvas, setup, draw)
-          if (recorded.video) { this.liveLayers.add(slot); statistics.video++ } else this.liveLayers.delete(slot)
           const content = recorded.painted && { key: `${slot}\u0000${canvas.width}x${canvas.height}\u0000${setup.join(',')}`, parts: [recorded.painted] }
           const changed = !content || !sameContent(surface.content, content)
           if (changed) {
             surface.content = undefined
-            await paint(canvas, setup, [{ painted: recorded.painted, draw }])
+            await paint(canvas, setup, [{ painted: recorded.painted, draw }], reduced ? { sx: shrink, sy: shrink } : undefined)
             surface.content = content && recorded.painted!.recording.comparable ? content : undefined
             if (recorded.painted) statistics.redrawn++; else statistics.direct++
           } else { statistics.reused++; recordVideoEditPreparation('authorRasterReused', 0) }
@@ -431,7 +459,7 @@ export class VideoEditAuthorRuntime {
             const matrix: CodeMatrix = [m[0] / resolution, m[1] / resolution, m[2] / resolution, m[3] / resolution, m[4] + m[0] * ox + m[2] * oy, m[5] + m[1] * ox + m[3] * oy]
             return { ...sample, pose: { ...sample.pose, matrix } }
           })
-          this.layers.draw(target, width, height, { texture: picture, x: 0, y: 0, width: canvas.width, height: canvas.height }, poses, layer.clip)
+          this.layers.draw(target, outWidth, outHeight, { texture: picture, x: 0, y: 0, width: canvas.width, height: canvas.height }, poses, layer.clip, scale)
         } catch (cause) {
           if (cause instanceof AuthorAssetPending) throw cause
           throw new Error(`第 ${index + 1} 层${layer.name ? `「${layer.name}」` : ''}：${cause instanceof Error ? cause.message : String(cause)}`, { cause })

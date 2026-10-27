@@ -1,3 +1,5 @@
+import { scaleAuthorCanvasEffect } from './videoEditAuthorCanvasBounds'
+
 /**
  * Canvas 作者图层的绘制指令录制与重放。
  *
@@ -69,6 +71,8 @@ const realize = (ctx: OffscreenCanvasRenderingContext2D, value: Value): Value =>
   return value
 }
 
+/** 不随变换缩放的状态（Canvas 规范，Chromium 实测一致）。 */
+const SCALED_EFFECTS = new Set(['shadowBlur', 'shadowOffsetX', 'shadowOffsetY', 'filter'])
 const STATE = ['fillStyle', 'strokeStyle', 'globalAlpha', 'globalCompositeOperation', 'lineWidth', 'lineCap', 'lineJoin', 'miterLimit', 'lineDashOffset', 'shadowBlur', 'shadowColor', 'shadowOffsetX', 'shadowOffsetY', 'font', 'textAlign', 'textBaseline', 'direction', 'filter', 'imageSmoothingEnabled', 'imageSmoothingQuality', 'letterSpacing', 'wordSpacing', 'fontKerning', 'fontStretch', 'fontVariantCaps', 'textRendering', 'lang'] as const
 const TEXT_STATE = ['font', 'letterSpacing', 'wordSpacing', 'fontKerning', 'fontStretch', 'fontVariantCaps', 'textRendering', 'direction', 'lang', 'textAlign', 'textBaseline'] as const
 const DRAW = new Set(['beginPath', 'closePath', 'moveTo', 'lineTo', 'bezierCurveTo', 'quadraticCurveTo', 'arc', 'arcTo', 'ellipse', 'rect', 'roundRect', 'fill', 'stroke', 'clip', 'fillRect', 'strokeRect', 'clearRect', 'fillText', 'strokeText', 'drawImage'])
@@ -239,8 +243,11 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
   return { ops, comparable, assets, isolated, balanced }
 }
 
-/** 在真实画布上按录制顺序重放；作者图片在用到时才取本帧的位图。`transform` 与录制时相同，作者的 setTransform 相对它生效。 */
-export function replayAuthorCanvas(recording: AuthorCanvasRecording, ctx: OffscreenCanvasRenderingContext2D, asset: (key: string) => CanvasImageSource, transform: Matrix = [1, 0, 0, 1, 0, 0]): void {
+/**
+ * 在真实画布上按录制顺序重放；作者图片在用到时才取本帧的位图。`transform` 与录制时相同，作者的 setTransform 相对它生效。
+ * `effects`：栅格相对画布像素缩小的比例。阴影与 filter 的长度不随变换缩放，按这个比例换算（见 scaleAuthorCanvasEffect）。
+ */
+export function replayAuthorCanvas(recording: AuthorCanvasRecording, ctx: OffscreenCanvasRenderingContext2D, asset: (key: string) => CanvasImageSource, transform: Matrix = [1, 0, 0, 1, 0, 0], effects?: { sx: number; sy: number }): void {
   const gradients = new Map<number, CanvasGradient>(), patterns = new Map<number, CanvasPattern | null>()
   const decode = (value: Value): Value => {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) return value
@@ -256,7 +263,10 @@ export function replayAuthorCanvas(recording: AuthorCanvasRecording, ctx: Offscr
   }
   const target = ctx as unknown as Record<string, unknown>
   for (const [name, ...args] of recording.ops as Array<[string, ...Value[]]>) {
-    if (name === 'set') target[args[0] as string] = decode(args[1])
+    if (name === 'set') {
+      const property = args[0] as string, value = decode(args[1])
+      target[property] = effects && SCALED_EFFECTS.has(property) ? scaleAuthorCanvasEffect(property, value, effects.sx, effects.sy) ?? value : value
+    }
     else if (name === 'gradient') {
       const [id, kind, ...values] = args as [number, string, ...number[]]
       gradients.set(id, createGradient(ctx, kind, values))

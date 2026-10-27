@@ -127,6 +127,24 @@ it('预览及离屏导出写同一透视矩阵，普通片段清空矩阵且不�
   expect([...(device.queue.writeBuffer.mock.lastCall![2] as Float32Array).slice(12)]).toEqual(new Array<number>(12).fill(0))
   await compositor.dispose()
 })
+it('回放分辨率同步给代码生成器；缩小的代码画面按放置尺寸合成，位置、缩放与锚点和完整画面相同', async () => {
+  const { compositor, device } = copyFixture(async () => {})
+  const project = createVideoEditDocument('缩小代码画面'); project.sequences[0].width = 3840; project.sequences[0].height = 2160; project.items.push({ id: 'image', kind: 'image', name: '输入' })
+  const document = videoEditComposition(project, project.sequences[0].id); const clip = makeVideoEditItemClip(project, 'image', document.id, { frame: 0 })
+  const code = await compositor.code()
+  expect(code.renderDivisor).toBe(1)
+  compositor.setPictureDivisor(2); expect(code.renderDivisor).toBe(2)
+  compositor.setPictureDivisor(1); expect(code.renderDivisor).toBe(1)
+  const full = await code.target('full', 3840, 2160)
+  const placed = { ...clip, x: .1, y: -.2, scale: .5, rotation: 30, anchorX: .2, anchorY: .7 }
+  await (await compositor.draw(document, [placed], [full], () => true)).completion
+  const expected = [...device.queue.writeBuffer.mock.lastCall![2] as Float32Array]
+  // 纹理只有一半（且宽度取整后比例略有出入）：放置仍按画面尺寸，均匀缓冲逐项相同
+  const reduced = new VideoEditCodePicture(full.texture, 1921, 1080, full.owner, 'rgba8unorm', false, { width: 3840, height: 2160 })
+  await (await compositor.draw(document, [placed], [reduced], () => true)).completion
+  expect([...device.queue.writeBuffer.mock.lastCall![2] as Float32Array]).toEqual(expected)
+  await compositor.dispose()
+})
 afterEach(() => { vi.unstubAllGlobals(); state.format = 'rgba8unorm' })
 it('历史像素复制编码在同一提交内，保留带行填充的 BGRA；离屏不截取，普通预览不读回', async () => {
   let complete!: () => void

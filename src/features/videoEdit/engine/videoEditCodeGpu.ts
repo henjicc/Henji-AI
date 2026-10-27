@@ -28,6 +28,7 @@ import { VideoEditAuthorPrograms } from './videoEditAuthorPrograms'
 import type { CodeAuthorBundle, CodeAuthorProgram } from '@/core/videoEdit/codeAuthorProgram'
 import type { AuthorAssets, AuthorFrameInfo, AuthorGpuInputs } from './videoEditAuthorModule'
 import type { AuthorElementOverrides } from './videoEditAuthorElements'
+import { videoEditRenderSize, type VideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution'
 
 // 4K media + grading + author filters need more than eight RGBA8 surfaces.
 // Allocate on demand, with a bounded 512MiB tier independent of precise targets.
@@ -99,17 +100,25 @@ export class VideoEditCodeGpu {
   }
   private authors(): VideoEditAuthorPrograms { return this.authorPrograms ??= new VideoEditAuthorPrograms(this.device) }
   async inspectAuthor(bundle: CodeAuthorBundle): Promise<CodeAuthorProgram> { return this.trackAuthor(async () => { await this.ready; this.assertLive(); return this.authors().inspect(bundle) }) }
-  async authorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, motionBlur = true, images: AuthorGpuInputs['images'] = {}): Promise<VideoEditCodePicture> {
-    return this.trackAuthor(() => this.renderAuthorGenerator(key, instanceKey, program, size, parameters, assets, info, overrides, motionBlur, images))
+  /**
+   * `divisor`：节目回放分辨率的缩小倍数（任务 4.9，导出与完整分辨率为 1）。大于 1 时输出纹理按比例缩小，画面的放置尺寸仍是
+   * `size`；Canvas 作者坐标不变，WebGPU / WebGL 入口拿到缩小后的 target 与 width/height，`info.renderScale` 给出比例。
+   */
+  async authorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, motionBlur = true, images: AuthorGpuInputs['images'] = {}, divisor: VideoEditRenderDivisor = 1): Promise<VideoEditCodePicture> {
+    return this.trackAuthor(() => this.renderAuthorGenerator(key, instanceKey, program, size, parameters, assets, info, overrides, motionBlur, images, divisor))
   }
-  private async renderAuthorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides: AuthorElementOverrides | undefined, motionBlur: boolean, images: AuthorGpuInputs['images']): Promise<VideoEditCodePicture> {
+  private async renderAuthorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides: AuthorElementOverrides | undefined, motionBlur: boolean, images: AuthorGpuInputs['images'], divisor: VideoEditRenderDivisor): Promise<VideoEditCodePicture> {
     await this.ready; this.assertLive()
     const runtime = await this.authors().instance(instanceKey, program)
     this.assertLive()
-    const target = this.surface(key, size.width, size.height)
+    const output = divisor === 1 ? undefined : videoEditRenderSize(size.width, size.height, divisor)
+    const target = output ? this.surface(key, output.width, output.height, 'rgba8unorm', false, size) : this.surface(key, size.width, size.height)
     const started = performance.now()
     for (const image of Object.values(images)) this.assertInput(image.texture)
-    const layers = await runtime.render(target.picture.texture, size.width, size.height, parameters, assets, info, overrides, { frames: [], images }, motionBlur)
+    // 完整分辨率按原样调用（不多传参数、不改 info），画面与之前逐像素相同。
+    const layers = output
+      ? await runtime.render(target.picture.texture, size.width, size.height, parameters, assets, { ...info, renderScale: output.height / size.height }, overrides, { frames: [], images }, motionBlur, output)
+      : await runtime.render(target.picture.texture, size.width, size.height, parameters, assets, info, overrides, { frames: [], images }, motionBlur)
     const completed = this.trackPerformance(key, { frame: Math.floor(info.time / info.frameDuration), cpuMs: performance.now() - started, gpuMs: 0, budgetMs: info.frameDuration * 1000, ...(layers ? { layers } : {}) }, started, started, performance.now())
     this.pending = this.device.queue.onSubmittedWorkDone().then(completed); this.counts.generatorFrames++
     return target.picture
@@ -240,12 +249,14 @@ export class VideoEditCodeGpu {
     this.counts.textureAllocations++
     return texture
   }
-  private surface(key: string, width: number, height: number, format: VideoEditGpuColorFormat = 'rgba8unorm', retainMask = false): Surface {
+  /** `display`：画面的放置尺寸，缺省等于纹理尺寸（见 VideoEditCodePicture.displayWidth）。 */
+  private surface(key: string, width: number, height: number, format: VideoEditGpuColorFormat = 'rgba8unorm', retainMask = false, display?: { width: number; height: number }): Surface {
     let surface = this.surfaces.get(key)
-    if (surface && (surface.picture.width !== width || surface.picture.height !== height || surface.picture.textureFormat !== format)) { this.releaseSurface(key); surface = undefined }
+    const displayWidth = display?.width ?? width, displayHeight = display?.height ?? height
+    if (surface && (surface.picture.width !== width || surface.picture.height !== height || surface.picture.textureFormat !== format || surface.picture.displayWidth !== displayWidth || surface.picture.displayHeight !== displayHeight)) { this.releaseSurface(key); surface = undefined }
     if (!surface) {
       const texture = this.texture(width, height, format)
-      surface = { picture: new VideoEditCodePicture(texture, width, height, this.device, format), bytes: width * height * videoEditGpuBytesPerPixel(format), buffers: [] }
+      surface = { picture: new VideoEditCodePicture(texture, width, height, this.device, format, false, display), bytes: width * height * videoEditGpuBytesPerPixel(format), buffers: [] }
       this.surfaces.set(key, surface)
     }
     if (!retainMask) surface.maskData = undefined
@@ -552,6 +563,10 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     return target.picture
   }
   resetFramePerformance(): void { this.performanceFrames.clear(); this.performanceSpans.clear() }
+  private divisor: VideoEditRenderDivisor = 1
+  /** 合成器所在节目的回放分辨率缩小倍数（任务 4.9），由合成器同步；导出会话始终为 1。 */
+  get renderDivisor(): VideoEditRenderDivisor { return this.divisor }
+  setRenderDivisor(divisor: VideoEditRenderDivisor): void { this.divisor = divisor }
   captureFramePerformance(): () => CodeFramePerformance[] {
     // Keep this request's records alive while the next pipelined frame resets the
     // current maps. Queue completion still updates these captured span objects.
