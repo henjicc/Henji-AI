@@ -85,6 +85,7 @@ import { readPriceEstimateDisplaySettings } from '@/core/pricing/priceDisplay'
 import AudioPlayer from '@/components/AudioPlayer'
 import { WaveformView } from '@/components/waveform/WaveformView'
 import { TypographyPanel } from '@/components/typography/TypographyPanel'
+import { PropertyHeading } from '@/components/ui/params/ParamList'
 import { defaultTextStyle } from '@/core/imaging/vectorContent/text'
 import { type ButtonSize } from '@/components/ui/primitiveInternals'
 import { createPlainTextPromptDocument } from '@/core/inputs/promptDocument/types'
@@ -367,6 +368,7 @@ export function NavigationSection(): JSX.Element {
 
 export function FormSection(): JSX.Element {
   const [open, setOpen] = useState(true)
+  const [propertyOpen, setPropertyOpen] = useState(true)
   const idle = (): void => undefined
   const gesture = { onBegin: idle, onFinish: idle, onCancel: idle }
   const [angle, setAngle] = useState(30)
@@ -388,14 +390,18 @@ export function FormSection(): JSX.Element {
           <UiSwitch checked />
         </UiFormRow>
       </UiGroup></div>
-      {/* 属性面板（重要记录 019）：四列 箭头 / 秒表 / 名称 / 右对齐数值；单位挂进右侧单位道，下拉与勾选右缘对齐到道边。 */}
+      {/* 属性面板（重要记录 019）：四列 箭头 / 秒表 / 名称 / 右对齐数值；单位挂进右侧单位道，下拉与勾选右缘对齐到道边。
+          分组标题是同一套四列里的可折叠小标题（箭头落在秒表列）。 */}
       <UiPanel variant="bare" className="w-80"><UiFieldLayoutContext.Provider value="property">
-        <UiFormRow label="位置" leading={<UiIconButton size="2xs" on aria-label="关闭位置关键帧"><Timer /></UiIconButton>}>
-          <NumberInput size="sm" align="right" value={960} onChange={noop} /><UiPropertyUnit hanging={false} />
-          <NumberInput size="sm" align="right" value={540} onChange={noop} />
-        </UiFormRow>
-        <UiFormRow label="缩放"><NumberInput size="sm" align="right" value={100} onChange={noop} /><UiPropertyUnit>%</UiPropertyUnit></UiFormRow>
-        <UiFormRow label="重复边缘像素"><UiCheckbox checked onCheckedChange={noop} aria-label="重复边缘像素" /></UiFormRow>
+        <PropertyHeading label="变换" name={`${propertyOpen ? '收起' : '展开'}变换`} open={propertyOpen} onToggle={() => setPropertyOpen(value => !value)} />
+        {propertyOpen && <>
+          <UiFormRow label="位置" leading={<UiIconButton size="2xs" on aria-label="关闭位置关键帧"><Timer /></UiIconButton>}>
+            <NumberInput size="sm" align="right" value={960} onChange={noop} /><UiPropertyUnit hanging={false} />
+            <NumberInput size="sm" align="right" value={540} onChange={noop} />
+          </UiFormRow>
+          <UiFormRow label="缩放"><NumberInput size="sm" align="right" value={100} onChange={noop} /><UiPropertyUnit>%</UiPropertyUnit></UiFormRow>
+          <UiFormRow label="重复边缘像素"><UiCheckbox checked onCheckedChange={noop} aria-label="重复边缘像素" /></UiFormRow>
+        </>}
       </UiFieldLayoutContext.Provider></UiPanel>
       <div><UiGroup divided titleTone="compact" title="紧凑分组" labelWidth={96}>
         <UiFormRow label="不透明度" density="compact">

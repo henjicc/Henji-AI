@@ -63,6 +63,9 @@ const CHECKED_ATTRIBUTES = {
   UiRecordList: 'className',
   UiRecordItem: 'className',
   UiViewerShell: 'className',
+  // 重要记录 021：特殊面板外壳的头部、滚动正文与底部操作行由组件画；className 只放交互标记类（nodrag、nowheel），
+  // 高度用 height、正文留白用 bodyPadding、宽度用 bodyWidth。
+  UiSpecialPanel: 'className',
   Dropdown: 'buttonClassName',
   PanelTrigger: 'buttonClassName',
 };
@@ -106,6 +109,9 @@ const RULE_E_EXEMPT = {
   UiReadout: '只开放 size/tone 语义参数，没有对外 className。',
   UiSpinner: '只开放 size/tone/active 语义参数，没有对外 className。',
   UiVirtualGrid: '长网格滚动容器，没有对外 className；格内控件由各自共享组件按规则 E 检查。',
+  UiPropertyUnit: '属性行的数值单位，只开放 hanging 语义参数，没有对外 className。',
+  UiPropertyMenuContext: 'React 上下文对象（属性面板的面板级右键菜单），没有自身 DOM 与 className。',
+  UiBooleanAppearanceContext: 'React 上下文对象（开关按区域取滑块或复选框外观），没有自身 DOM 与 className。',
 };
 /** 内容随网格拉伸或随内容撑高的条目类组件：只禁止固定高度。 */
 const ITEM_COMPONENTS = new Set(['UiOptionButton', 'UiChipButton', 'UiNavButton']);
