@@ -9,6 +9,7 @@ import { createVideoEditSequence, videoEditClipSchema, videoEditComposition } fr
 import { addLegacyVideoEditTracks, createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { VideoEditRenderTransport } from './videoEditRenderTransport'
+import { VideoEditRenderBusyError } from './videoEditGpuFailure'
 
 const proxyState = vi.hoisted(() => ({ sources: {} as Record<string, import('@/core/videoEdit/proxy').VideoProxyResult> }))
 vi.mock('../application/videoEditProxy', () => ({ verifiedVideoEditProxySources: async () => proxyState.sources }))
@@ -170,6 +171,24 @@ it('正常回执及主动释放清理请求期限，不留下延迟终止', asyn
   await session.dispose(); await failure
   expect(vi.getTimerCount()).toBe(0)
   expect(old.terminate).toHaveBeenCalledOnce()
+})
+
+it('请求排满时按背压拒绝（可识别的忙碌错误），不终止会话，空出位置后照常出画', async () => {
+  const session = new VideoEditRenderSession(composition())
+  await session.prepareGpu()
+  const worker = workers[0]; worker.respond = false
+  const queued = [0, 1, 2, 3].map(frame => session.present(frame))
+  await Promise.resolve(); await Promise.resolve()
+  const busy = await session.present(4).catch((error: unknown) => error)
+  expect(busy).toBeInstanceOf(VideoEditRenderBusyError)
+  expect(worker.terminate).not.toHaveBeenCalled()
+  const first = worker.messages.find(entry => entry.message.kind === 'render')!.message as Extract<RenderRequest, { kind: 'render' }>
+  worker.onmessage!({ data: { id: first.id, presented: true } } as MessageEvent)
+  await expect(queued[0]).resolves.toMatchObject({ presented: true })
+  worker.respond = true
+  await expect(session.present(5)).resolves.toMatchObject({ presented: true })
+  await session.dispose()
+  await Promise.allSettled(queued)
 })
 
 it('历史帧复制只随显式录制请求，过期回执释放位图', async () => {

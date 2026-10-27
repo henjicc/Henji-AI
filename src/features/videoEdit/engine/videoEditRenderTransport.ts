@@ -1,5 +1,5 @@
 import { prepareVideoEditAuthorBundle } from './videoEditSharedCompiler'
-import { VideoEditGpuDeviceLostError } from './videoEditGpuFailure'
+import { VideoEditGpuDeviceLostError, VideoEditRenderBusyError } from './videoEditGpuFailure'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { SharedCompilationRequest, SharedCompilationResponse } from './videoEditSharedCompilation'
 import { videoEditTimingContext, videoEditTimingEvent, type VideoEditTimingContext } from './videoEditFirstFrameTiming'
@@ -24,6 +24,8 @@ import type { AuthorModuleUrls } from './videoEditAuthorModules'
 import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 
 const logger = createLogger('features.videoEdit.render')
+/** 一个渲染会话同时排着的请求上限（Worker 串行执行，排得越多停止与跳转越慢）。 */
+const VIDEO_EDIT_RENDER_QUEUE_LIMIT = 4
 let nativeWarmup: Promise<void> | undefined
 /** The application owns the decoder process; warming status creates no frame route or decoder session. */
 export function warmVideoEditNativeDecoder(): Promise<void> {
@@ -276,7 +278,8 @@ export class VideoEditRenderTransport {
   }
   private request(request: RenderRequest extends infer T ? T extends RenderRequest ? Omit<T, 'id'> : never : never, transfer: Transferable[] = [], submitted?: () => void): Promise<RenderResponse> {
     if (this.disposed) return Promise.reject(this.failure ?? new Error('剪辑渲染已关闭。'))
-    if (this.pending.size >= 4) return Promise.reject(new Error('剪辑渲染请求过多。'))
+    // 最后一道防线：调用方应先按自己的在途数限流（节目预览见 VideoEditPreview），排满时按背压拒绝。
+    if (this.pending.size >= VIDEO_EDIT_RENDER_QUEUE_LIMIT) return Promise.reject(new VideoEditRenderBusyError())
     const id = ++this.nextId
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => this.fail(new Error('剪辑渲染超过时限，已停止当前画面任务。请检查代码效果后重新加载预览；已保存的作品不受影响。')), this.requestTimeoutMs)

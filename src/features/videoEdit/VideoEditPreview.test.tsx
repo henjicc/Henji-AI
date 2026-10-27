@@ -9,7 +9,7 @@ import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, del
 import { setVideoEditAnnotationBrush } from './application/videoEditAnnotations'
 import { applyVideoEditBuiltinEffect, updateVideoEditBuiltinEffect } from './application/videoEditCompositing'
 import { VideoEditPreview } from './VideoEditPreview'
-import { VideoEditGpuDeviceLostError } from './engine/videoEditGpuFailure'
+import { VideoEditGpuDeviceLostError, VideoEditRenderBusyError } from './engine/videoEditGpuFailure'
 import { registerVideoEditSourcePresenter, updateVideoEditSource } from './application/videoEditSource'
 import { resetVideoEditPlaybackResolutionCache, setVideoEditPlaybackResolution } from './application/videoEditPlaybackResolution'
 import { setVideoEditPosterFrame } from './application/videoEditProgramCapture'
@@ -635,4 +635,100 @@ it('松开拖动在最终停帧回执前预热，回到曾预热的位置仍重�
   view.unmount()
   await act(async () => { pending.resolve({ presented: true, sourceTimestamps: [0] }); await vi.advanceTimersByTimeAsync(5) })
   expect(pixel.arm).toHaveBeenCalledTimes(count + 1)
+})
+
+/** 模拟 Worker 依次把节目已发出的画面交给 GPU 并回执；每轮之后让调度跑一次。 */
+const settledFrames = new WeakSet<object>()
+async function completeProgramFrames(rounds: number, options: { submitOnly?: boolean } = {}): Promise<void> {
+  for (let round = 0; round < rounds; round++) {
+    await act(async () => {
+      for (const request of [...pixel.requests]) {
+        if (settledFrames.has(request)) continue
+        request.submitted?.()
+        if (options.submitOnly) continue
+        settledFrames.add(request); request.resolve({ sourceTimestamps: [request.frame / 30], presented: true })
+      }
+      await vi.advanceTimersByTimeAsync(1)
+    })
+  }
+}
+const openProgramFrames = (): number => pixel.requests.filter(request => !settledFrames.has(request)).length
+/** 暂停时节目调度每 2ms 推进一步；数一段时间里排了几次，就知道同时有几条调度在跑。 */
+async function pausedProgramSteps(): Promise<number> {
+  const spy = vi.spyOn(globalThis, 'setTimeout')
+  try {
+    await act(async () => { await vi.advanceTimersByTimeAsync(100) })
+    return spy.mock.calls.filter(([, delay]) => delay === 2).length
+  } finally { spy.mockRestore() }
+}
+it('播放一次再暂停后节目调度仍只有一条：流水提前调度与提交回执不会各起一条，再次起播只渲染一次起播帧', async () => {
+  const info = vi.spyOn(console, 'info')
+  const playStarts = (): number => info.mock.calls.filter(([line]) => String(line).includes('节目起播准备完成')).length
+  const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
+  const view = render(<VideoEditPreview instance={instance} onError={vi.fn()} />)
+  await act(async () => {})
+  await completeProgramFrames(2)
+  const idle = await pausedProgramSteps()
+  expect(idle).toBeGreaterThan(0)
+  act(() => setVideoEditView(instance.document.id, { playing: true }))
+  await completeProgramFrames(12)
+  act(() => setVideoEditView(instance.document.id, { playing: false }))
+  await completeProgramFrames(4)
+  expect(await pausedProgramSteps()).toBe(idle)
+  const before = pixel.requests.length; const startFrame = instance.frame
+  act(() => setVideoEditView(instance.document.id, { playing: true }))
+  await act(async () => { await vi.advanceTimersByTimeAsync(5) })
+  expect(pixel.requests.slice(before).map(request => request.frame)).toEqual([startFrame])
+  expect(playStarts()).toBe(1)
+  // 只提交不回执：在途画面停在预算内，不靠渲染会话拒绝来限流。
+  await completeProgramFrames(1)
+  expect(playStarts()).toBe(2)
+  await completeProgramFrames(6, { submitOnly: true })
+  expect(openProgramFrames()).toBe(3)
+  act(() => setVideoEditView(instance.document.id, { playing: false }))
+  await completeProgramFrames(4)
+  expect(await pausedProgramSteps()).toBe(idle)
+  view.unmount()
+})
+it('播放中流水的一帧失败后恢复，节目调度不多出一条', async () => {
+  const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
+  const view = render(<VideoEditPreview instance={instance} onError={vi.fn()} />)
+  await act(async () => {})
+  await completeProgramFrames(2)
+  const idle = await pausedProgramSteps()
+  expect(idle).toBeGreaterThan(0)
+  act(() => setVideoEditView(instance.document.id, { playing: true }))
+  await act(async () => { await vi.advanceTimersByTimeAsync(5) })
+  await completeProgramFrames(1)
+  await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+  expect(openProgramFrames()).toBe(2)
+  const failed = pixel.requests.find(request => !settledFrames.has(request))!
+  settledFrames.add(failed)
+  await act(async () => { failed.reject(new Error('素材解码暂时中断。')); await vi.advanceTimersByTimeAsync(1) })
+  expect(instance.playing).toBe(false); expect(view.getByText('素材解码暂时中断。')).toBeTruthy()
+  await completeProgramFrames(2)
+  await act(async () => { await vi.advanceTimersByTimeAsync(2500) })
+  await completeProgramFrames(2)
+  expect(view.queryByText('素材解码暂时中断。')).toBeNull()
+  expect(await pausedProgramSteps()).toBe(idle)
+  view.unmount()
+})
+it('渲染队列已满是背压：被拒的那帧重新请求，播放不停也不提示失败', async () => {
+  const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
+  const onError = vi.fn(); const view = render(<VideoEditPreview instance={instance} onError={onError} />)
+  await act(async () => {})
+  await completeProgramFrames(2)
+  act(() => setVideoEditView(instance.document.id, { playing: true }))
+  await act(async () => { await vi.advanceTimersByTimeAsync(5) })
+  await completeProgramFrames(1)
+  await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+  const rejected = pixel.requests.filter(request => !settledFrames.has(request)).at(-1)!
+  settledFrames.add(rejected)
+  await act(async () => { rejected.reject(new VideoEditRenderBusyError()); await vi.advanceTimersByTimeAsync(10) })
+  expect(instance.playing).toBe(true)
+  expect(view.queryByText(new VideoEditRenderBusyError().message)).toBeNull(); expect(onError).not.toHaveBeenCalled()
+  expect(pixel.requests.filter(request => request.frame === rejected.frame)).toHaveLength(2)
+  act(() => setVideoEditView(instance.document.id, { playing: false }))
+  await completeProgramFrames(4)
+  view.unmount()
 })
