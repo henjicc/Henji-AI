@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import { createVideoEditDocument, createVideoEditSequence, videoEditComposition, type VideoEditClip, type VideoEditDocument } from './document'
 import { addLegacyVideoEditTracks } from './testFixtures'
-import { videoEditRenderWindows } from './renderCache'
+import { videoEditRenderWindows, videoEditRenderWindowSet } from './renderCache'
 
 const dependencies = { fontRevision: 1, analysis: '' }
 function project(): VideoEditDocument {
@@ -84,4 +84,49 @@ it('复制效果实例共用预览，隐藏的跟踪来源变化仍使依赖段�
   sequence.clips[2].x = 0.5
   expect(keys(document)[0]).not.toBe(before[0])
   expect(keys(document)[1]).toBe(before[1])
+})
+
+/** 主序列放一段代码片段：定义有两个版本，片段用第一个。工程里两份风格，序列绑定第一份。 */
+function codeProject(): VideoEditDocument {
+  const document = project(), sequence = document.sequences[0]
+  const version = (id: string, hash: string) => ({ id, apiVersion: 4, languageVersion: 4, entry: 'main.ts', files: [{ path: 'main.ts', location: `git:${hash}:代码:main.ts`, hash }] })
+  document.codeMaterials = [{ id: 'definition', name: '台面', folder: '台面', defaultVersionId: 'version-1', versions: [version('version-1', 'a'.repeat(64)), version('version-2', 'b'.repeat(64))] }] as unknown as VideoEditDocument['codeMaterials']
+  document.items.push({ id: 'item-code', name: '台面', kind: 'code', code: { definitionId: 'definition', versionId: 'version-1', parameters: {} } } as unknown as VideoEditDocument['items'][number])
+  sequence.clips.push({ ...sequence.clips[0], id: 'code', kind: 'code', itemId: 'item-code', track: 3, start: 0, duration: 600, code: { definitionId: 'definition', versionId: 'version-1', parameters: {} } } as VideoEditClip)
+  const style = (id: string) => ({ id, name: id, version: 1, contentHash: 'c'.repeat(64), updatedAt: '2026-10-28T00:00:00.000Z', guide: '说明' })
+  document.styles = [style('bound'), style('other')] as unknown as VideoEditDocument['styles']
+  sequence.styleId = 'bound'
+  return document
+}
+
+it('代码只计入片段用到的版本，风格只计入序列绑定的那份：新增未用版本或改其他风格不失效', () => {
+  const base = codeProject(), before = keys(base)
+  const unused = structuredClone(base); unused.codeMaterials![0].versions.push({ ...unused.codeMaterials![0].versions[1], id: 'version-3' }); unused.codeMaterials![0].name = '台面（改名）'; unused.codeMaterials![0].defaultVersionId = 'version-3'
+  expect(keys(unused)).toEqual(before)
+  const otherStyle = structuredClone(base); (otherStyle.styles![1] as { guide: string }).guide = '改过的说明'
+  expect(keys(otherStyle)).toEqual(before)
+  // 用到的版本内容变了：只有代码片段覆盖的前两段失效。
+  const edited = structuredClone(base); edited.codeMaterials![0].versions[0].files[0].hash = 'd'.repeat(64)
+  expect(keys(edited).map((key, index) => key === before[index])).toEqual([false, false, ...Array(16).fill(true)])
+  // 改用另一个版本同样失效；绑定的风格变化让整条序列失效。
+  const switched = structuredClone(base); switched.sequences[0].clips.find(clip => clip.id === 'code')!.code!.versionId = 'version-2'
+  expect(keys(switched).slice(0, 2).some((key, index) => key === before[index])).toBe(false)
+  const boundStyle = structuredClone(base); (boundStyle.styles![0] as { guide: string }).guide = '改过的说明'
+  expect(keys(boundStyle).every((key, index) => key !== before[index])).toBe(true)
+})
+
+it('输入签名：只改声音沿用上一次的整份结果，画面变化重新分段；沿用的结果与重新计算一致', () => {
+  const base = codeProject(), sequence = base.sequences[0]
+  sequence.clips.push({ ...sequence.clips[0], id: 'sound', kind: 'audio', track: 0, start: 300, duration: 300 })
+  const previous = videoEditRenderWindowSet(videoEditComposition(base, sequence.id), dependencies)
+  const quiet = structuredClone(base); quiet.sequences[0].clips = quiet.sequences[0].clips.filter(clip => clip.id !== 'sound'); quiet.sequences[0].clips[0].volume = .2; quiet.revision++
+  const reused = videoEditRenderWindowSet(videoEditComposition(quiet, sequence.id), dependencies, previous)
+  expect(reused).toBe(previous)
+  expect(videoEditRenderWindows(videoEditComposition(quiet, sequence.id), dependencies)).toEqual(previous.windows)
+  const moved = structuredClone(base); moved.sequences[0].clips[0].x = .25
+  const recomputed = videoEditRenderWindowSet(videoEditComposition(moved, sequence.id), dependencies, previous)
+  expect(recomputed).not.toBe(previous); expect(recomputed.signature).not.toBe(previous.signature)
+  expect(recomputed.windows).toEqual(videoEditRenderWindows(videoEditComposition(moved, sequence.id), dependencies))
+  // 依赖（字体、分析结果）变化也不能沿用。
+  expect(videoEditRenderWindowSet(videoEditComposition(quiet, sequence.id), { ...dependencies, fontRevision: 9 }, previous)).not.toBe(previous)
 })

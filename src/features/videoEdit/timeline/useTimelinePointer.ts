@@ -27,6 +27,7 @@ type PointerGesture = BaseGesture & (
   /** `variant`: Premiere modifier drag of a clip body, read from the keys held on every move (Alt copy, Ctrl insert, both: copy and insert). */
   /** `newTracks`: tracks this drag creates above the top video track / below the bottom audio track, kept stable across moves. */
   | { kind: 'clip'; handle: VideoEditTimelineDrag; ids: string[]; primary: string; mode: VideoEditTimelineAdjustment['mode']; variant: ClipDragVariant; moved: boolean; adjustment?: VideoEditTimelineAdjustment; rearrange?: VideoEditTimelineRearrange; error?: Error; newTracks: VideoEditSequence['tracks'] }
+  /** 框选：拖动时按框算出的命中（加选时并上 `initial`）只作时间线的预选中实时显示，松手才写进选区；Esc 与取消回到 `initial`。 */
   | { kind: 'box'; initial: string[]; additive: boolean; linked: VideoEditRelations }
   | { kind: 'hand'; left: number; last: number; region?: TimelineRegionKind }
   /** `snap`: Shift held — the playhead snaps to edit points, markers and the sequence in/out (Premiere). */
@@ -69,8 +70,12 @@ export function useTimelinePointer(options: Options) {
   const viewport = useRef<HTMLDivElement>(null)
   const pointer = useRef<PointerGesture>()
   const animation = useRef<RafScheduler<[]>>()
+  /** 框选的预选中每帧最多算一次（指针事件可能比刷新率密）。 */
+  const boxFrame = useRef<RafScheduler<[]>>()
   const [preview, setPreview] = useState<VideoEditSequence | null>(null)
   const [box, setBox] = useState<TimelineBox | null>(null)
+  /** 框选拖动中显示为选中的片段；null 表示没有框选，照常显示正式选区。 */
+  const [boxSelection, setBoxSelection] = useState<ReadonlySet<string> | null>(null)
   const [resized, setResized] = useState<{ trackId: string; height: number } | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const waiting = useRef(new WeakSet<Promise<void>>())
@@ -96,11 +101,25 @@ export function useTimelinePointer(options: Options) {
   }
   const detach = (): PointerGesture | undefined => {
     const previous = pointer.current; pointer.current = undefined
-    animation.current?.cancel()
+    animation.current?.cancel(); boxFrame.current?.cancel()
     if (previous && viewport.current?.hasPointerCapture?.(previous.pointerId)) viewport.current.releasePointerCapture(previous.pointerId)
     return previous
   }
-  const clear = (): void => { setPreview(null); setBox(null); setResized(null); setFailure(null); clearTimelineSnap() }
+  const clear = (): void => { setPreview(null); setBox(null); setBoxSelection(null); setResized(null); setFailure(null); clearTimelineSnap() }
+  /** 框内命中的片段（按链接选择展开），加选时并上按下前的选中；拖动中的预选中与松手写入的选区用同一算法。 */
+  const boxHits = (gesture: Extract<PointerGesture, { kind: 'box' }>): string[] => {
+    const { sequence, pixels } = current.current; const rows = current.current.layout.current.rows
+    const at = point(gesture.client); const fromY = Math.min(gesture.origin.y, at.y); const toY = Math.max(gesture.origin.y, at.y)
+    const ids = selectVideoEditRegion(sequence, { from: Math.max(0, gesture.origin.x / pixels), to: Math.max(0, at.x / pixels), tracks: rows.filter(row => Math.max(row.top, row.clipTop) < toY && Math.min(row.top + row.height, row.clipBottom) > fromY).map(row => row.track.index) }, gesture.linked)
+    return gesture.additive ? [...new Set([...gesture.initial, ...ids])] : ids
+  }
+  /** 只改时间线自己的预选中，不写正式选区：选区一变，效果控件等依赖它的面板都会重绘。 */
+  const previewBox = (): void => {
+    const gesture = pointer.current
+    if (gesture?.kind !== 'box' || !viewport.current) return
+    const ids = boxHits(gesture)
+    setBoxSelection(previous => previous && previous.size === ids.length && ids.every(id => previous.has(id)) ? previous : new Set(ids))
+  }
   const cancel = (): void => {
     const previous = detach()
     if (previous?.kind === 'clip' || previous?.kind === 'trim') finishVideoEditTimelineDrag(previous.handle)
@@ -189,7 +208,7 @@ export function useTimelinePointer(options: Options) {
         const next = previewVideoEditTimelineTrim(gesture.handle, trim)
         gesture.trim = trim; setFailure(null); setPreview(next)
       } catch (error) { gesture.trim = undefined; setPreview(null); clearTimelineSnap(); if (error instanceof VideoEditCodeMetadataPending) resumeMetadata(error, gesture); else setFailure(error instanceof Error ? error.message : String(error)) }
-    } else if (gesture.kind === 'zoom' || gesture.kind === 'box') setBox({ from: gesture.origin, to: at })
+    } else if (gesture.kind === 'zoom' || gesture.kind === 'box') { setBox({ from: gesture.origin, to: at }); if (gesture.kind === 'box') boxFrame.current?.schedule() }
     else if (gesture.kind === 'height') {
       gesture.next = Math.max(24, Math.min(160, Math.round(gesture.height + gesture.client.y - gesture.origin.y)))
       setResized({ trackId: gesture.trackId, height: gesture.next })
@@ -321,7 +340,8 @@ export function useTimelinePointer(options: Options) {
         setVideoEditView(instance.document.id, { playing: false })
         return
       }
-      if (!clip) { capture({ ...base(event), kind: 'box', initial: [...instance.selectedClipIds], additive: event.ctrlKey || event.metaKey || event.shiftKey, linked }); setBox({ from: at, to: at }); return }
+      // 按下就显示预选中：不加选时空白处一按即取消原选中（PR），松手才写进选区。
+      if (!clip) { capture({ ...base(event), kind: 'box', initial: [...instance.selectedClipIds], additive: event.ctrlKey || event.metaKey || event.shiftKey, linked }); setBox({ from: at, to: at }); boxFrame.current?.schedule(); return }
       // Shift+click adds or removes the clip (Premiere); Ctrl and Alt press on to modifier drags below.
       if (event.shiftKey) { select([clip.id], true, false, linked); return }
       // Alt on an already selected linked clip narrows the selection to that single portion.
@@ -352,8 +372,7 @@ export function useTimelinePointer(options: Options) {
     const previous = detach(); clear()
     if (!previous) return
     if (!valid(previous)) { if (previous.kind === 'clip' || previous.kind === 'trim') finishVideoEditTimelineDrag(previous.handle); if (previous.kind === 'transition' || previous.kind === 'fade') finishVideoEditTimelineHandleDrag(previous.drag, false); return }
-    const { instance, sequence, pixels, onError } = current.current; const layout = current.current.layout.current
-    const rows = layout.rows
+    const { instance, sequence, pixels, onError } = current.current
     try {
       if (previous.kind === 'clip') {
         if (previous.error) { finishVideoEditTimelineDrag(previous.handle); throw previous.error }
@@ -371,11 +390,8 @@ export function useTimelinePointer(options: Options) {
         const at = point(previous.client); const from = Math.min(previous.origin.x, at.x) / pixels; const to = Math.max(previous.origin.x, at.x) / pixels
         if (Math.abs(at.x - previous.origin.x) > 4) control?.showRange(Math.max(0, from), Math.max(0, to))
         else control?.zoomAt(Math.max(0, at.x / pixels), previous.zoomOut ? 0.5 : 2)
-      } else if (previous.kind === 'box') {
-        const at = point(previous.client); const fromY = Math.min(previous.origin.y, at.y); const toY = Math.max(previous.origin.y, at.y)
-        const ids = selectVideoEditRegion(sequence, { from: Math.max(0, previous.origin.x / pixels), to: Math.max(0, at.x / pixels), tracks: rows.filter(row => Math.max(row.top, row.clipTop) < toY && Math.min(row.top + row.height, row.clipBottom) > fromY).map(row => row.track.index) }, previous.linked)
-        setVideoEditTimelineView(instance.document.id, { selectedClipIds: previous.additive ? [...new Set([...previous.initial, ...ids])] : ids })
-      } else if (previous.kind === 'height' && previous.next !== previous.height) updateVideoEditTrack(instance.document.id, sequence.id, previous.trackId, { height: previous.next })
+      } else if (previous.kind === 'box') setVideoEditTimelineView(instance.document.id, { selectedClipIds: boxHits(previous) })
+      else if (previous.kind === 'height' && previous.next !== previous.height) updateVideoEditTrack(instance.document.id, sequence.id, previous.trackId, { height: previous.next })
       else if (previous.kind === 'seek') setVideoEditView(instance.document.id, { scrubbing: false })
       else if (previous.kind === 'razor') {
         const context = captureVideoEditCommandContext(instance.document.id, 'timeline', { clipIds: [previous.clipId], linked: previous.linked, frame: Math.max(0, Math.round(point(previous.client).x / pixels)) })
@@ -395,7 +411,7 @@ export function useTimelinePointer(options: Options) {
   useLayoutEffect(() => {
     // 时间线可能挂在系统浮窗里：失焦与隐藏按它实际所在的窗口判断。
     const ownerDocument = ownerDocumentOf(viewport.current); const ownerWindow = ownerWindowOf(viewport.current)
-    animation.current = createRafScheduler(tick, ownerWindow)
+    animation.current = createRafScheduler(tick, ownerWindow); boxFrame.current = createRafScheduler(previewBox, ownerWindow)
     const blur = (): void => cancel()
     const hidden = (): void => { if (ownerDocument.hidden) cancel() }
     ownerWindow.addEventListener('blur', blur); ownerDocument.addEventListener('visibilitychange', hidden)
@@ -403,5 +419,5 @@ export function useTimelinePointer(options: Options) {
     // All listeners read the fixed gesture/current refs, never a former selection closure.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  return { viewport, preview, box, resized, failure, down, move, up, resize, cancel, select }
+  return { viewport, preview, box, boxSelection, resized, failure, down, move, up, resize, cancel, select }
 }

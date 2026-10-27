@@ -1,15 +1,17 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { videoEditComposition } from '@/core/videoEdit/document'
-import { renderVideoEditRenderCache, readVideoEditRenderCache, recordVideoEditProgramRender, readyVideoEditRenderWindows } from './videoEditRenderCache'
+import { renderVideoEditRenderCache, readVideoEditRenderCache, recordVideoEditProgramRender, readyVideoEditRenderWindows, peekVideoEditRenderCache, requestVideoEditRenderBarWindows, subscribeVideoEditRenderBar } from './videoEditRenderCache'
 
+type TestWindow = { key: string; startFrame: number; endFrame: number; heavy: boolean }
 const state = vi.hoisted(() => ({
   instances: [] as Array<{ document: { id: string }; playing: boolean; scrubbing: boolean; busy: boolean; playbackDirection?: number; frame?: number }>,
   composition: {} as unknown,
-  windows: [{ key: 'window', startFrame: 0, endFrame: 3, heavy: true }],
+  windows: [{ key: 'window', startFrame: 0, endFrame: 3, heavy: true }] as TestWindow[],
   render: vi.fn(async (..._args: unknown[]) => {}), dispose: vi.fn(async () => {}), add: vi.fn(async () => {}),
   discard: vi.fn(async () => {}), commit: vi.fn(async (..._args: unknown[]) => ({})), cancel: vi.fn(async () => {}),
   sessions: 0, viewListeners: new Set<() => void>(), events: [] as string[],
+  windowSet: vi.fn((..._args: unknown[]): { signature: string; windows: TestWindow[] } => ({ signature: 'test', windows: state.windows })),
 }))
 vi.mock('mediabunny', () => ({
   CanvasSource: class { add = state.add }, Mp4OutputFormat: class {}, StreamTarget: class {},
@@ -22,7 +24,7 @@ vi.mock('@/core/logging', () => ({ createLogger: () => {
 vi.mock('@/services/mediaCache/mediaCacheSettings', () => ({ getMediaCacheSettings: () => ({}), subscribeMediaCacheSettings: () => () => {} }))
 vi.mock('@/services/mediaCache/hardwareCapabilities', () => ({ resolveRenderCacheCodec: () => 'h264' }))
 vi.mock('@/core/videoEdit/renderBitrate', () => ({ videoEditRenderEncoding: () => ({ profile: 'test', codec: 'h264' }) }))
-vi.mock('@/core/videoEdit/renderCache', () => ({ VIDEO_EDIT_RENDER_CACHE_VERSION: 2, videoEditRenderWindows: () => state.windows }))
+vi.mock('@/core/videoEdit/renderCache', () => ({ VIDEO_EDIT_RENDER_CACHE_VERSION: 2, videoEditRenderWindowSet: (...args: unknown[]) => state.windowSet(...args) }))
 vi.mock('@/platform/fonts', () => ({ fontLibrarySnapshot: () => ({ revision: 0 }) }))
 vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ settings: { get: async () => undefined, set: async () => {} }, mediaCache: {
   renderList: async () => [], renderRemove: async () => 0, renderBegin: async () => 'temporary', renderCommit: state.commit, renderDiscard: state.discard,
@@ -259,4 +261,45 @@ it('实测流畅覆盖重段预测，取消仅丢当前段并保留已完成段'
   expect(result).toMatchObject({ cancelled: true, renderedWindows: 1, readyFrames: 3 })
   expect(state.commit).toHaveBeenCalledOnce()
   expect(state.discard).toHaveBeenCalledOnce()
+})
+
+it('渲染条重绘不分段：内容变了先给上一次的读数并标为过期，空闲时只算最新内容，算完通知渲染条', async () => {
+  useFakeClock()
+  const owner = state.instances[0] as (typeof state.instances)[number] & { activeSequenceId?: string }, projectId = owner.document.id
+  // 当前序列与节目、渲染条共用同一份合成：加载缓存时的回收不另算一遍。
+  owner.activeSequenceId = (state.composition as { id: string }).id
+  expect(peekVideoEditRenderCache(projectId)).toEqual({ view: null, current: false })
+  expect(state.windowSet).not.toHaveBeenCalled()
+  const notified = vi.fn(); const stop = subscribeVideoEditRenderBar(notified)
+  requestVideoEditRenderBarWindows(projectId); requestVideoEditRenderBarWindows(projectId)
+  expect(state.windowSet).not.toHaveBeenCalled()
+  await vi.advanceTimersByTimeAsync(0)
+  expect(state.windowSet).toHaveBeenCalledOnce(); expect(notified).toHaveBeenCalledOnce()
+  const first = peekVideoEditRenderCache(projectId)
+  expect(first.current).toBe(true); expect(first.view?.windows.map(window => window.startFrame)).toEqual([0])
+  // 新的文档快照：重绘拿到上一次的读数，不分段。
+  state.composition = { ...(state.composition as object) }; state.windows = [{ key: 'moved', startFrame: 30, endFrame: 33, heavy: true }]
+  expect(peekVideoEditRenderCache(projectId)).toEqual({ view: first.view, current: false })
+  requestVideoEditRenderBarWindows(projectId)
+  // 空闲前又编辑一次：旧快照不再算，只算最新的。
+  state.composition = { ...(state.composition as object) }
+  requestVideoEditRenderBarWindows(projectId)
+  await vi.advanceTimersByTimeAsync(0)
+  expect(state.windowSet).toHaveBeenCalledTimes(2); expect(notified).toHaveBeenCalledTimes(2)
+  expect(peekVideoEditRenderCache(projectId).view?.windows.map(window => window.startFrame)).toEqual([30])
+  expect(state.windowSet).toHaveBeenCalledTimes(2)
+  stop()
+})
+
+it('回收过期文件时同一文档快照的各序列只分段一次，分段沿用同一序列上一次的结果', async () => {
+  const owner = state.instances[0]
+  await renderVideoEditRenderCache(owner.document.id, { scope: 'needed' })
+  const calls = state.windowSet.mock.calls.length
+  await renderVideoEditRenderCache(owner.document.id, { scope: 'needed' })
+  expect(state.windowSet.mock.calls.length).toBe(calls)
+  // 新快照才重新分段，并把同一序列上一次的结果交给签名比较。
+  const previous = state.windowSet.mock.results.at(-1)!.value
+  state.composition = { ...(state.composition as object) }
+  readVideoEditRenderCache(owner.document.id)
+  expect(state.windowSet.mock.calls.at(-1)![2]).toBe(previous)
 })

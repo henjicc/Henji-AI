@@ -300,6 +300,36 @@ it('框选与关联选择不误定位播放头；Shift 点击关联集合整体�
   expect(new Set(owner.selectedClipIds)).toEqual(new Set(ids)); expect(owner.selection).toBe(ids[1]); expect(onError).not.toHaveBeenCalled()
 })
 
+it('框选拖动中按帧实时显示预选中，不写正式选区；Esc 回到按下前的选中，加选显示并集，松手才写入', () => {
+  const clock = layoutClock()
+  setVideoEditTimelineView(owner.document.id, { selectedClipIds: [ids[0]] })
+  const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' }); const y = trackClientY()
+  const shown = (): string[] => [...view.container.querySelectorAll<HTMLElement>('[data-video-edit-clip][data-selected]')].map(element => element.dataset.videoEditClip!)
+  const history = owner.past.length
+  // 片段：视频 [0,30)，代码 [60,90)；每帧 2px。框只盖住代码。
+  fireEvent.pointerDown(host, event(header + 200, y - 2))
+  fireEvent.pointerMove(host, event(header + 160, y)); fireEvent.pointerMove(host, event(header + 100, y + 2))
+  // 两次移动只排了一帧：帧到之前仍显示正式选区。
+  expect(shown()).toEqual([ids[0]])
+  clock.step()
+  expect(shown()).toEqual([ids[1]]); expect(owner.selectedClipIds).toEqual([ids[0]])
+  fireEvent.pointerMove(host, event(header + 240, y + 2)); clock.step()
+  expect(shown()).toEqual([])
+  fireEvent.keyDown(host, { key: 'Escape' })
+  expect(shown()).toEqual([ids[0]]); expect(owner.selectedClipIds).toEqual([ids[0]])
+  fireEvent.pointerUp(host, event(header + 240, y + 2)); expect(owner.selectedClipIds).toEqual([ids[0]])
+  // Ctrl 加选：显示按下前的选中与框内片段的并集，松手写入同一结果。
+  fireEvent.pointerDown(host, event(header + 200, y - 2, { ctrlKey: true })); fireEvent.pointerMove(host, event(header + 100, y + 2, { ctrlKey: true })); clock.step()
+  expect(new Set(shown())).toEqual(new Set(ids)); expect(owner.selectedClipIds).toEqual([ids[0]])
+  fireEvent.pointerUp(host, event(header + 100, y + 2, { ctrlKey: true }))
+  expect(new Set(owner.selectedClipIds)).toEqual(new Set(ids)); expect(new Set(shown())).toEqual(new Set(ids))
+  // 空白处单击：按下即显示取消选中，松手写入。
+  fireEvent.pointerDown(host, event(header + 260, y)); clock.step()
+  expect(shown()).toEqual([]); expect(new Set(owner.selectedClipIds)).toEqual(new Set(ids))
+  fireEvent.pointerUp(host, event(header + 260, y)); expect(owner.selectedClipIds).toEqual([])
+  expect(owner.past).toHaveLength(history); expect(onError).not.toHaveBeenCalled()
+})
+
 it('Premiere 修饰键拖动：Alt 复制、Ctrl 重排插入、Ctrl+Alt 复制插入，各一步历史；双击片段在源监视器打开', async () => {
   const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })
   const spans = () => current().clips.filter(clip => clip.track === 1).map(clip => [clip.start, clip.duration]).sort((a, b) => a[0] - b[0])
@@ -587,8 +617,10 @@ it('矮时间线：片段拖向所在区的边缘才滚动这一区，按住不�
   for (const [pressY, label] of [[100, 'box'], [14, 'ruler']] as const) {
     const target = label === 'ruler' ? view.getByRole('slider', { name: '剪辑时间定位' }) : host
     fireEvent.pointerDown(target, event(890, pressY)); fireEvent.pointerMove(host, event(890, pressY))
+    // 框选的预选中单独占一帧回调，不带动边缘滚动。
+    if (label === 'box') { expect(clock.callbacks.size).toBe(1); clock.step() }
     expect(clock.callbacks.size).toBe(0); expect(host.scrollLeft).toBe(0)
-    fireEvent.pointerMove(host, event(896, pressY)); expect(clock.callbacks.size).toBe(1)
+    fireEvent.pointerMove(host, event(896, pressY)); expect(clock.callbacks.size).toBe(label === 'box' ? 2 : 1)
     clock.step(); expect(host.scrollLeft).toBeGreaterThan(0)
     fireEvent.pointerCancel(host, event(896, pressY)); expect(clock.callbacks.size).toBe(0)
     host.scrollLeft = 0; fireEvent.scroll(host)

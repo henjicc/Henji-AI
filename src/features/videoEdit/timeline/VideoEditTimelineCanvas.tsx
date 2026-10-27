@@ -170,6 +170,8 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   const inPlaceFrameAt = (clientX: number): number | null => { const host = pointer.viewport.current; if (!host) return null; const x = clientX - host.getBoundingClientRect().left + host.scrollLeft - TIMELINE_HEADER_WIDTH; return x < 0 ? null : Math.floor(x / pixels) }
   const menu = useTimelineMenu(instance, onError, pointer.cancel, setAudioChannels, clipId => clipSource.open(instance.document.id, clipId), { items: inPlace.items, frameAt: inPlaceFrameAt }, setSceneTarget, setReframeTarget, setNestTarget)
   const displayed = pointer.preview ?? sequence
+  // 框选拖动中显示预选中（外观与选中一致），松手才写进选区。
+  const shownSelection = pointer.boxSelection ?? new Set(instance.selectedClipIds)
   const keyframeLanes = expanded.size ? lanesOf(displayed) : new Map<string, VideoEditKeyframeLane[]>()
   // 拖动预览里新建的轨道也要显示出来（PR：拖到轨道外即出现新轨道）。
   const layout = timelineLayout(heightsOf(displayed), layoutInput, pointer.resized)
@@ -381,7 +383,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         const offset = syncOffsets.get(clip.id)
         const offsetLabel = offset === undefined ? undefined : `${offset > 0 ? '+' : ''}${offset}`
         const speedLabel = videoEditClipSpeedLabel(clip)
-        const selected = instance.selectedClipIds.includes(clip.id)
+        const selected = shownSelection.has(clip.id)
         // Picture clips show a filmstrip of their media (task 2.4); sound clips their waveform (task 2.3).
         const sound = clip.kind === 'audio' || clip.kind === 'video' && clip.sourceComponent === 'audio'
         const picture = !sound && (clip.kind === 'video' && media?.kind === 'video' || clip.kind === 'image' && media?.kind === 'image')
@@ -393,7 +395,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         const clipWidth = Math.max(3, clip.duration * pixels)
         const fadeIn = (clip.fadeInFrames ?? 0) * pixels; const fadeOut = (clip.fadeOutFrames ?? 0) * pixels
         const fadable = clip.kind !== 'adjustment' && clipWidth >= FADE_HANDLE_MIN_WIDTH
-        return <div key={clip.id} data-ui-timeline-item data-video-edit-clip={clip.id} data-clip-start={clip.start} data-clip-duration={clip.duration} className={`group absolute overflow-hidden rounded-md border ${selected ? CLIP_SELECTED_LINE : ''}`} data-clip-dimmed={dimmed || undefined} style={{ top: row.top - region.top + 2, height: row.height - 4, left: clipLeft, width: clipWidth, ...surface }}>
+        return <div key={clip.id} data-ui-timeline-item data-video-edit-clip={clip.id} data-selected={selected || undefined} data-clip-start={clip.start} data-clip-duration={clip.duration} className={`group absolute overflow-hidden rounded-md border ${selected ? CLIP_SELECTED_LINE : ''}`} data-clip-dimmed={dimmed || undefined} style={{ top: row.top - region.top + 2, height: row.height - 4, left: clipLeft, width: clipWidth, ...surface }}>
           {picture && media && <VideoEditClipFilmstrip mode={thumbnails} clipId={clip.id} source={media.path} sourceRevision={media.sourceRevision} still={media.kind === 'image'} aspect={media.width > 0 && media.height > 0 ? media.width / media.height : 16 / 9}
             mediaEndSeconds={media.durationSeconds} frameSeconds={media.frameRate ? media.frameRate.denominator / media.frameRate.numerator : 1 / 30} clip={clip} fps={fps} pixels={pixels} clipWidth={clipWidth} height={row.height - 6}
             visibleFrom={stripEdge(view.left + TIMELINE_HEADER_WIDTH - clipLeft, clipWidth, Math.floor)} visibleTo={stripEdge(view.left + view.width - clipLeft, clipWidth, Math.ceil)} devicePixelRatio={devicePixelRatio} active={visible} />}
