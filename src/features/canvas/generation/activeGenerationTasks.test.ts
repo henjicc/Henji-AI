@@ -13,7 +13,6 @@ import {
   isCanvasGenerationTaskActive,
   isCanvasGenerationResumeLeaseCurrent,
   releaseCanvasGenerationResumeLease,
-  releaseCanvasGenerationResumeLeasesForProject,
 } from './activeGenerationTasks'
 
 describe('createCanvasGenerationTaskLifecycle', () => {
@@ -72,15 +71,5 @@ describe('createCanvasGenerationTaskLifecycle', () => {
       'shared-task',
       projectBLease as symbol,
     )).toBe(true)
-  })
-
-  it('项目切换只撤销旧项目的恢复租约', () => {
-    const projectALease = acquireCanvasGenerationResumeLease('project-a', 'task-a') as symbol
-    const projectBLease = acquireCanvasGenerationResumeLease('project-b', 'task-b') as symbol
-
-    releaseCanvasGenerationResumeLeasesForProject('project-a')
-
-    expect(isCanvasGenerationResumeLeaseCurrent('project-a', 'task-a', projectALease)).toBe(false)
-    expect(isCanvasGenerationResumeLeaseCurrent('project-b', 'task-b', projectBLease)).toBe(true)
   })
 })

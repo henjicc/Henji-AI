@@ -116,7 +116,7 @@ describe('三维应用反射注册', () => {
     ])
     const validSnapshot = await mocks.readSnapshot()
     mocks.readSnapshot.mockImplementation(async (projectId: string) => {
-      if (projectId === 'old-project') throw new Error('UNSUPPORTED_CAMERA_STAGE_SCHEMA:12')
+      if (projectId === 'old-project') throw new Error('[cameraStage] 场景数据结构无效')
       return validSnapshot
     })
     const registration = createCameraStageReflectionRegistrations(() => 7)
