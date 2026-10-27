@@ -21,8 +21,9 @@ let logConfig: LogConfig = {
 }
 
 function resolveDefaultLevel(): LogLevel {
-  // 开发运行与正式版同一默认级别；debug 日志用测试模式或 `--dev-checks` 打开。单元测试照旧记 debug（不少测试断言 debug 事件）
-  if (import.meta.env.MODE === 'test' || (import.meta.env.DEV && readDevelopmentLaunchOptions().checks)) {
+  // 开发运行与正式版同一默认级别；debug 日志用测试模式或 `--dev-checks` 打开。单元测试照旧记 debug（不少测试断言 debug 事件）。
+  // 按 Vitest 本身判断而不是 MODE：测试按套件用 `--mode unit` / `native` 等运行，MODE 并不是 'test'。
+  if (import.meta.env.VITEST || (import.meta.env.DEV && readDevelopmentLaunchOptions().checks)) {
     return 'debug'
   }
   return isTestModeEnabledFromStorage() ? 'debug' : 'info'
