@@ -13,6 +13,8 @@ import { editVideoProject, focusVideoEditPanel, requireVideoEditInstance, update
 import { readVideoEditCodeEditor, setVideoEditCodeParameter, type VideoEditCodeTarget } from './videoEditCodeParameters'
 import { codeAuthorTextParameterValue, readCodeAuthorTextBinding } from '@/core/videoEdit/codeAuthorTextBinding'
 import { z } from 'zod'
+import { codeMaterialVersion } from '@/core/videoEdit/codeMaterialDocument'
+import { openVideoEditCodeProjectFile } from './videoEditCodeProjectView'
 
 const elementEditSchema = codeElementOverrideValuesSchema.extend({ text: z.string().max(4096).optional() })
 
@@ -131,4 +133,14 @@ let pendingSource: string | undefined
 const sourceOpenerKey = (target: VideoEditCodeTarget): string => JSON.stringify([target.projectId, target.sequenceId, target.clipId, target.versionId, target.effectId])
 export { videoEditCodeElementHostSummary, videoEditCodeElementOverrideSummary } from './videoEditCodeElementSummary'
 export function registerVideoEditCodeSourceOpener(target: VideoEditCodeTarget, open: () => void): () => void { const key = sourceOpenerKey(target); sourceOpeners.set(key, open); if (pendingSource === key) { pendingSource = undefined; open() } return () => { if (sourceOpeners.get(key) === open) sourceOpeners.delete(key) } }
-export function showVideoEditCodeElementSource(target: VideoEditCodeElementTarget): void { resolve(target); const key = sourceOpenerKey(target); focusVideoEditPanel(target.projectId, 'effects'); const open = sourceOpeners.get(key); if (open) open(); else pendingSource = key }
+export function showVideoEditCodeElementSource(target: VideoEditCodeElementTarget): void {
+  const { clip } = resolve(target)
+  // 工程素材的源码在代码工程里：打开元素所在的文件并选中它那一段
+  const version = codeMaterialVersion(requireVideoEditInstance(target.projectId).document, clip.code!)
+  if (version.project) {
+    const span = readVideoEditCodeElementEdit(target).element?.sourceSpan
+    const file = span && version.files.find(value => value.path === span.file)
+    openVideoEditCodeProjectFile(target.projectId, file ? file.path : version.project.entry, file && span ? { hash: file.hash, start: span.start, end: span.end } : undefined)
+    return
+  }
+  const key = sourceOpenerKey(target); focusVideoEditPanel(target.projectId, 'effects'); const open = sourceOpeners.get(key); if (open) open(); else pendingSource = key }

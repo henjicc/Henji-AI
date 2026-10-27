@@ -2,7 +2,7 @@ import { upgradeVideoEditCodeMaterials } from './videoEditCodeProjectUpgrade'
 import { getPlatform } from '@/platform/runtime'
 import { upgradeVideoEditCodeMaterialsCapability, commitVideoEditCodeProjectCapability } from '@/core/application-control/domains/videoEdit/videoEditCodeProjectCapabilities'
 import { CodeProjectFileMutationExecutor, CodeProjectFileCollectionExecutor } from './videoEditCodeProjectReflection'
-import { codeProjectPersistenceParticipants } from './videoEditCodeProject'
+import { codeProjectPersistenceParticipants, notifyVideoCodeProjectChanged } from './videoEditCodeProject'
 import { registerCurrentDocumentProvider } from '@/features/documents'
 import { activeVideoEditInstance } from './videoEditService'
 import '../layout/videoEditDockLayout'
@@ -174,6 +174,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
         await openVideoEditDocument({ id: input.documentRef.id }, { focus: false })
         const target = { id: input.documentRef.id, path: requireVideoEditInstance(input.documentRef.id).session.documentMeta.path }
         const commit = await getPlatform().documents.commitCodeProject({ target, message: input.message })
+        notifyVideoCodeProjectChanged(input.documentRef.id)
         return { resultRef: { kind: 'video_edit.code_project', id: input.documentRef.id }, commit, verified: (await getPlatform().documents.readCodeProject(target)).head === commit, message: '已提交工程工作区。' }
       }
       if (definition.id === sendVideoEditAudioCapability.id) {

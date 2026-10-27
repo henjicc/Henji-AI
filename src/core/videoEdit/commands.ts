@@ -1,12 +1,12 @@
 import { z } from 'zod'
 
-export type VideoEditCommandScope = 'annotations' | 'global' | 'timeline' | 'program' | 'source' | 'project' | 'effects' | 'content' | 'tracking' | 'color_grade' | 'title_templates' | 'style_kits' | 'mask'
+export type VideoEditCommandScope = 'annotations' | 'global' | 'timeline' | 'program' | 'source' | 'project' | 'effects' | 'content' | 'tracking' | 'color_grade' | 'title_templates' | 'style_kits' | 'code_project' | 'mask'
 export interface VideoEditShortcut { code: string; ctrl: boolean; alt: boolean; shift: boolean; meta: boolean }
 const key = (code: string, ctrl = false, shift = false, alt = false): VideoEditShortcut => ({ code, ctrl, shift, alt, meta: false })
 const editScopes: VideoEditCommandScope[] = ['timeline', 'program']
 const monitorScopes: VideoEditCommandScope[] = ['timeline', 'program', 'source']
 /** 空格同 PR：焦点在素材、效果等面板里也能播放/暂停当前序列（遮罩编辑等专用作用域除外）。 */
-const playbackScopes: VideoEditCommandScope[] = [...monitorScopes, 'global', 'project', 'effects', 'content', 'annotations', 'tracking', 'color_grade', 'title_templates', 'style_kits']
+const playbackScopes: VideoEditCommandScope[] = [...monitorScopes, 'global', 'project', 'effects', 'content', 'annotations', 'tracking', 'color_grade', 'title_templates', 'style_kits', 'code_project']
 /**
  * `alternates`：同一命令的第二组默认键（Premiere 里 Delete 与 Backspace 都能清除片段）。用户改键后只保留用户的那一个。
  * 默认键位以本机 Adobe Premiere Pro 2026（Windows）`Adobe Premiere Pro Defaults.kys` 为准，对照表见任务 2.2。

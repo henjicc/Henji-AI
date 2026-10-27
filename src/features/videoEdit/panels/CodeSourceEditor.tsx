@@ -13,6 +13,7 @@ import { requireVideoEditInstance, subscribeVideoEditView, videoEditViewRevision
 import { videoEditParameterTargetIdentity } from './useCodeParameterGesture'
 import { registerVideoEditCodeSourceOpener } from '../application/videoEditCodeElementEditing'
 import { ProjectCodeComponents } from './ProjectCodeComponents'
+import { openVideoEditCodeProjectFile } from '../application/videoEditCodeProjectView'
 
 function CandidatePreview({ candidate, onError }: { candidate: VideoEditCodeCandidate; onError: (reason: unknown) => void }): React.ReactElement {
   const host = useRef<HTMLCanvasElement>(null)
@@ -166,7 +167,19 @@ function SourceDraft({ editor }: { editor: VideoEditCodeEditorState }): React.Re
   </UiGroup>
 }
 
+/** 工程入口素材的源码就是代码工程里的文件：在代码面板里看和改，提交后升级素材；不在这里另存成脱离工程的版本。 */
+function ProjectSource({ editor, project, fileCount }: { editor: VideoEditCodeEditorState; project: { entry: string }; fileCount: number }): React.ReactElement {
+  return <UiGroup divided titleTone="compact" title={<UiButton size="sm" className="-ml-2" onClick={() => openVideoEditCodeProjectFile(editor.target.projectId, project.entry)}>在代码面板中打开</UiButton>}>
+    <span className="min-w-0 truncate text-xs text-text3" title={project.entry}>入口 {project.entry} · 用到 {fileCount} 个文件</span>
+  </UiGroup>
+}
+
 export function CodeSourceEditor({ editor }: { editor: VideoEditCodeEditorState }): React.ReactElement {
+  const version = codeMaterialVersion(requireVideoEditInstance(editor.target.projectId).document, editor.code)
+  return version.project ? <ProjectSource editor={editor} project={version.project} fileCount={version.files.length} /> : <MaterialSource editor={editor} />
+}
+
+function MaterialSource({ editor }: { editor: VideoEditCodeEditorState }): React.ReactElement {
   const [expanded, setExpanded] = useState(false)
   useLayoutEffect(() => registerVideoEditCodeSourceOpener(editor.target, () => setExpanded(true)), [editor.target])
   return <UiGroup divided titleTone="compact" title={<UiButton size="sm" className="-ml-2" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? '收起源码编辑' : '查看与编辑源码'}</UiButton>}>

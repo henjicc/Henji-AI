@@ -10,6 +10,7 @@ import { getPlatform } from '@/platform/runtime'
 import { createVideoEditTestProject, closeAllVideoEdits } from './videoEditDocumentTestKit'
 import { openVideoEditDocument } from './videoEditService'
 import { CODE_PROJECT_FILE, CODE_PROJECT } from './videoEditCodeProjectReflection'
+import { readVideoCodeProject, subscribeVideoCodeProjectChanges } from './videoEditCodeProject'
 let root: string
 let repository: CodeProjectRepository
 let app: ReturnType<typeof createApplicationHarness>
@@ -74,4 +75,18 @@ it('文件路径可改名；经原引用读回新路径，撤销恢复原文件'
   expect((await app.change(ref, { [`${CODE_PROJECT_FILE}.path`]: 'b.ts' })).ok).toBe(true)
   expect((await app.change({ kind: CODE_PROJECT_FILE, id: `${parent.id}:b.ts` }, { [`${CODE_PROJECT_FILE}.path`]: 'c.ts' })).ok).toBe(true)
   expect((await app.read(ref, [`${CODE_PROJECT_FILE}.path`])).properties).toMatchObject({ [`${CODE_PROJECT_FILE}.path`]: 'c.ts' })
+})
+
+it('提交落盘、批次释放后才通知界面重读，读到的是新提交；整批失败不通知', async () => {
+  const owner = await createVideoEditTestProject(); const parent = { kind: 'video_edit.document', id: owner.document.id }
+  const seen: { id: string; log: string[] }[] = []
+  const stop = subscribeVideoCodeProjectChanges(id => { void readVideoCodeProject(id).then(state => seen.push({ id, log: state.log.map(entry => entry.message) })) })
+  const create = { kind: 'create_items', entityType: CODE_PROJECT_FILE, parent, items: [{ properties: { path: 'a.ts', source: 'a' } }] }
+  expect((await app.call('change_application_entities', { summary: '整批拒绝', changes: [create, create] }, (await app.read(parent)).revisions as Record<string, number>)).ok).toBe(false)
+  await app.requireResult('change_application_entities', { summary: '新文件', changes: [create] }, (await app.read(parent)).revisions as Record<string, number>)
+  await fsp.writeFile(path.join(repository.dir, 'a.ts'), 'outside')
+  await app.requireResult('commit_video_edit_code_project', { documentRef: parent, message: '外部编辑' })
+  await vi.waitFor(() => expect(seen).toHaveLength(2))
+  stop()
+  expect(seen).toEqual([{ id: parent.id, log: ['新文件'] }, { id: parent.id, log: ['外部编辑', '新文件'] }])
 })
