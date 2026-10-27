@@ -70,6 +70,17 @@ it('停止后旧混音的 finally 不会释放新请求的在途锁', async () =
   expect(h.mixes).toHaveLength(2); expect(h.nodes).toHaveLength(0)
 })
 
+it('连续起停时停止后仍在混的旧块与当前块合计最多两块，旧块回来后当前播放继续排块', async () => {
+  const h = harness(); const scheduler = new VideoEditAudioScheduler()
+  for (let run = 0; run < 4; run++) { scheduler.start(run); scheduler.pump(h.pump(run)); scheduler.stop() }
+  expect(h.mixes).toHaveLength(2)
+  scheduler.start(0); scheduler.pump(h.pump(0))
+  expect(h.mixes).toHaveLength(2)
+  h.mixes[0].resolve(buffer(.5)); await settle()
+  scheduler.pump(h.pump(0))
+  expect(h.mixes.map(mix => mix.from)).toEqual([0, 1, 0])
+})
+
 it('按 0.5 秒块、提前 0.4 秒、一次一块地请求，块放在音频时钟 origin + from 处，结尾截短', async () => {
   const { nodes, mixes, pump } = harness()
   const scheduler = new VideoEditAudioScheduler()

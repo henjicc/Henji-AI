@@ -1,6 +1,11 @@
 export const VIDEO_EDIT_AUDIO_BLOCK_SECONDS = 0.5
 export const VIDEO_EDIT_AUDIO_LOOKAHEAD_SECONDS = 0.4
 export const VIDEO_EDIT_AUDIO_FADE_SECONDS = 0.005
+/**
+ * 同时在混的块上限（含停止后仍在混、结果会被丢弃的旧块）。混音在渲染会话里串行执行、请求数有上限：
+ * 连续起停或定位时不能每次都再排一块，否则旧块堆满队列，新的混音被拒、播放被迫停下。
+ */
+const VIDEO_EDIT_AUDIO_MIXES_IN_FLIGHT = 2
 
 export interface VideoEditAudioPump {
   context: BaseAudioContext
@@ -40,6 +45,8 @@ export class VideoEditAudioScheduler {
   private run?: AudioRun
   private generation = 0
   private pending = false
+  /** 还没回来的混音块数，跨越停止与重新开始。 */
+  private mixing = 0
   private from = 0
   private nextFrame?: number
 
@@ -54,14 +61,14 @@ export class VideoEditAudioScheduler {
     const rate = context.sampleRate
     const fromFrame = this.nextFrame ?? Math.round(this.from * rate)
     const endFrame = Math.round(request.endTime * rate)
-    if (this.pending || fromFrame >= Math.round((request.timelineTime + VIDEO_EDIT_AUDIO_LOOKAHEAD_SECONDS) * rate) || fromFrame >= endFrame) return
+    if (this.pending || this.mixing >= VIDEO_EDIT_AUDIO_MIXES_IN_FLIGHT || fromFrame >= Math.round((request.timelineTime + VIDEO_EDIT_AUDIO_LOOKAHEAD_SECONDS) * rate) || fromFrame >= endFrame) return
     if (!this.run) {
       const gain = context.createGain(); gain.gain.value = 0; gain.connect(request.destination)
       this.run = { context, gain, nodes: new Set(), originFrame: Math.round(request.origin * rate), retired: false, started: false }
     }
     const run = this.run
     const frames = Math.min(Math.round(VIDEO_EDIT_AUDIO_BLOCK_SECONDS * rate), endFrame - fromFrame)
-    this.nextFrame = fromFrame + frames; this.pending = true
+    this.nextFrame = fromFrame + frames; this.pending = true; this.mixing++
     const generation = this.generation
     void request.mix(fromFrame / rate, frames / rate).then(buffer => {
       if (generation !== this.generation || !request.isCurrent()) return
@@ -97,7 +104,7 @@ export class VideoEditAudioScheduler {
       node.start(when, offsetFrame / rate, (availableFrames - offsetFrame) / rate)
     }).catch(error => {
       if (generation === this.generation && request.isCurrent()) request.onError(error)
-    }).finally(() => { if (generation === this.generation) this.pending = false })
+    }).finally(() => { this.mixing--; if (generation === this.generation) this.pending = false })
   }
 
   stop(): void {
