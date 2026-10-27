@@ -193,7 +193,7 @@ const descriptions: Record<string, string> = {
   'video_edit.marker.strength': '节拍的相对重音强度，0–1，越大重音越强。',
   'video_edit.item.code_parameters': '素材项的代码实例参数。按固定源码版本的 parameters/types 声明校验；先读出并保留其它键。只改变此素材项的初始值，现有片段实例独立。图片使用当前剪辑的 {kind:"image",mediaId} 或 null，其它新类型使用声明的 JSON 形状。',
   'video_edit.item.code_curves': '素材项代码参数的初始动画，源微秒 sourceInUs 加 sourceRemainder，按类型校验值及 linear/ease/hold/bezier（左点 bezier:[x1,y1,x2,y2]，x 为 0–1 时间比例，y 为值变化比例且可过冲）；只改变此素材项，现有片段实例独立。省略某参数关闭动画，禁止空关键帧数组。',
-  'video_edit.code_material.files': '完整源码文件集合 {相对.ts路径:源码}；创建时与 source 二选一，entry 默认 main.ts。项目组件通过 import {lowerThird} from "@组件/人名条" 读取本项目最新版本，或 "@组件/人名条@2" 指定版本；创建素材版本时钉住完整依赖，之后组件更新不影响已有素材。另支持 v3 顶部 import {a,b as c} from "./模块"（可省略.ts），模块仅支持 const/export const（纯箭头 helper 可用），禁止默认导出、循环依赖、越出版本根目录和副作用。shaders/types/parameters 只写入口 export default，可引用导入的静态字面量常量。单文件64KiB。版本不可改写。',
+  'video_edit.code_material.files': '完整源码文件集合 {相对.ts路径:源码}；创建时与 source 二选一，entry 默认 main.ts。项目组件通过 import {lowerThird} from "@组件/人名条" 读取本项目最新版本，或 "@组件/人名条@2" 指定版本；创建素材版本时钉住完整依赖，之后组件更新不影响已有素材。本素材内的其他文件是普通 ES 模块：顶部 import {a,b as c} from "./相对路径"（不写扩展名），只用具名导出，只有入口写 export default；缺失文件、缺失导出、循环导入与越出根目录会被拒绝。入口的 parameters/types/shaders 可直接引用模块导出的静态对象。默认按风格层、片子层组件与段落入口拆开，不写单文件。单文件64KiB。版本不可改写。',
   'video_edit.code_material.entry': '入口文件相对路径，创建时默认 main.ts；必须存在于 files 中，source 写法只允许 main.ts。',
   'video_edit.code_version.files': '固定版本全部文件 {路径:源码}；创建时与 source 二选一。多文件规则同 code_material.files；只创建新版本，不修改已有版本。',
   'video_edit.code_version.entry': '固定版本入口路径，创建时默认 main.ts，必须存在于 files 中。',
