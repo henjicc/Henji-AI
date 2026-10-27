@@ -21,10 +21,20 @@ export const VIDEO_EDIT_DECODE_NEIGHBOUR_SECONDS = 2
  * one while playing (each such decode competes with the pictures being shown for the one native decoder).
  */
 export const VIDEO_EDIT_STILL_LOOKAHEAD_SECONDS = 60
+/**
+ * Moving code video inputs (a code clip's video parameter following the clip) of clips about to start are opened and
+ * decoded to their first picture while paused or idle, nearest first and at most this many (one decoder session each),
+ * within the paused neighbourhood ahead (`VIDEO_EDIT_DECODE_NEIGHBOUR_SECONDS`): pressing play then reaches them already
+ * positioned. Farther ones the renderer prepares itself once playing (three seconds ahead, stepping between frames).
+ */
+export const VIDEO_EDIT_INPUT_LOOKAHEAD_REFERENCES = 6
 export interface VideoEditLookaheadScope { document: VideoEditComposition; key: string; input?: ReturnType<typeof codeMediaInputComposition>; parent?: VideoEditComposition }
 export interface VideoEditDecodeTarget { media: VideoEditMedia; time: number; purpose: 'playback' | 'seek'; distance: number; clipId?: string }
-/** `still`: a code video input fixed at one time; `input` is its input composition (decoded into the renderer's still store). */
-export interface VideoEditContentTarget { kind: 'image' | 'code' | 'still'; key: string; scopes: VideoEditLookaheadScope[]; document: VideoEditComposition; clip: VideoEditClip; frame: number; media?: VideoEditMedia; distance: number; input?: ReturnType<typeof codeMediaInputComposition> }
+/**
+ * `still`: a code video input fixed at one time; `input` is its input composition (decoded into the renderer's still
+ * store). `input`: a moving code video input of a clip not showing yet; the last scope is the input itself.
+ */
+export interface VideoEditContentTarget { kind: 'image' | 'code' | 'still' | 'input'; key: string; scopes: VideoEditLookaheadScope[]; document: VideoEditComposition; clip: VideoEditClip; frame: number; media?: VideoEditMedia; distance: number; input?: ReturnType<typeof codeMediaInputComposition> }
 export interface VideoEditLookaheadTargets { video: VideoEditDecodeTarget[]; content: VideoEditContentTarget[] }
 const keyOf = (target: VideoEditDecodeTarget): string => `${target.media.path}\0${target.media.sourceRevision ?? ''}\0${target.purpose}`
 
@@ -35,7 +45,10 @@ export function videoEditLookaheadTargets(document: VideoEditComposition, frame:
     const target = { media, time, purpose, distance, clipId }, key = keyOf(target)
     if (!targets.has(key)) targets.set(key, target)
   }
-  const visit = (doc: VideoEditComposition, at: number, distance: number, sequential: boolean, scopes: VideoEditLookaheadScope[]): void => {
+  /** Clips showing at the playhead (by scope): their inputs are read by the paused frame itself. */
+  const showing = new Set<string>()
+  let movingInputs = 0
+  const visit = (doc: VideoEditComposition, at: number, distance: number, sequential: boolean, scopes: VideoEditLookaheadScope[], inputs: boolean): void => {
     if (scopes.length >= VIDEO_EDIT_MAX_SEQUENCE_DEPTH) return
     const visible = videoEditVisibleTracks(doc)
     const clips = new Map(activeVideoEditClips(doc, at).filter(clip => clip.kind !== 'audio' && visible.has(clip.track)).map(clip => [clip.id, clip]))
@@ -44,7 +57,7 @@ export function videoEditLookaheadTargets(document: VideoEditComposition, frame:
     for (const clip of clips.values()) {
       if (clip.kind === 'sequence') {
         const child = videoEditNestedComposition(doc, clip)
-        if (child) visit(child, videoEditNestedPictureFrame(doc, clip, child, at), distance, sequential && !clip.reverse, [...scopes, { document: child, key: videoEditNestedPictureKey(child, clip) }])
+        if (child) visit(child, videoEditNestedPictureFrame(doc, clip, child, at), distance, sequential && !clip.reverse, [...scopes, { document: child, key: videoEditNestedPictureKey(child, clip) }], inputs)
       } else if (clip.kind === 'video') {
         const media = videoEditClipMedia(doc, clip)
         if (media?.kind === 'video') add(media, videoEditPictureSeconds(clipSourceSeconds(clip, videoEditHandleFrame(clip, at, doc.fps, media.durationSeconds), doc.fps)), sequential && !clip.reverse ? 'playback' : 'seek', distance, clip.id)
@@ -66,8 +79,21 @@ export function videoEditLookaheadTargets(document: VideoEditComposition, frame:
         if (!isCodeImageReference(reference) || reference.kind !== 'sequence') continue
         try {
           const input = codeMediaInputComposition(doc, clip, reference, at)
-          visit(input.document, input.frame, distance, false, [...scopes, { document: input.document, key: input.sessionKey, input, parent: doc }])
+          visit(input.document, input.frame, distance, false, [...scopes, { document: input.document, key: input.sessionKey, input, parent: doc }], inputs)
         } catch { /* 非法引用由正式渲染报告。 */ }
+      }
+      // Paused: a moving video input of a clip that starts ahead (found first at the frame it enters, the nearest).
+      const shownKey = `${scopeKey}\0${clip.id}`
+      if (distance === 0) showing.add(shownKey)
+      if (inputs && clip.code && !showing.has(shownKey)) for (const reference of Object.values(clip.code.parameters)) {
+        if (!isCodeImageReference(reference) || reference.kind !== 'video' || reference.time !== undefined || movingInputs >= VIDEO_EDIT_INPUT_LOOKAHEAD_REFERENCES) continue
+        try {
+          const input = codeMediaInputComposition(doc, clip, reference, at)
+          const key = `${scopeKey}:input:${input.sessionKey}`
+          if (content.has(key)) continue
+          content.set(key, { kind: 'input', key, scopes: [...scopes, { document: input.document, key: input.sessionKey, input, parent: doc }], document: doc, clip, frame: at, distance, input })
+          movingInputs++
+        } catch { /* 非法引用由进入片段时的正式渲染报告。 */ }
       }
     }
   }
@@ -77,9 +103,11 @@ export function videoEditLookaheadTargets(document: VideoEditComposition, frame:
     for (const delta of offset === 0 ? [0] : [offset, -offset]) {
       if (delta < -before || delta > after || frame + delta < 0) continue
       const at = frame + delta, distance = Math.abs(delta) / document.fps
-      const cached = playing ? windows.find(window => at >= window.startFrame && at < window.endFrame) : undefined
+      const window = windows.find(window => at >= window.startFrame && at < window.endFrame)
+      const cached = playing ? window : undefined
       if (cached) add({ id: `render-cache:${cached.key}`, name: '预渲染', kind: 'video', path: cached.url, width: cached.width, height: cached.height, hasAudio: false, durationSeconds: (cached.endFrame - cached.startFrame) / cached.fps }, (at - cached.startFrame) / document.fps, 'playback', distance)
-      else visit(document, at, distance, playing, [])
+      // A pre-rendered window plays its file there: an input of a clip entering inside it never runs.
+      else visit(document, at, distance, playing, [], !playing && delta > 0 && !window)
     }
   }
   // Stills: every fixed-time video input of a clip in the wider window, once per picture (nested sequences included).
@@ -149,7 +177,9 @@ export class VideoEditDecodeLookahead {
   beforeFrame(document: VideoEditComposition, frame: number, playing: boolean): void {
     clearTimeout(this.timer)
     const last = this.last
-    if (!playing || !last || !last.playing || last.document !== document || frame < last.frame - 3 || frame - last.frame > Math.ceil(document.fps)) this.cancel()
+    // The same paused frame drawn again (a repaint) keeps what was prepared around it: sessions opened ahead stay open.
+    const repaint = !playing && last && !last.playing && last.document === document && last.frame === frame
+    if (!repaint && (!playing || !last || !last.playing || last.document !== document || frame < last.frame - 3 || frame - last.frame > Math.ceil(document.fps))) this.cancel()
     this.last = { frame, playing, document }
   }
 

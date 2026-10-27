@@ -110,8 +110,11 @@ function videoEditPictureCovers(picture: { timestamp: number; duration: number }
 }
 export interface VideoEditRenderResult { canvas: OffscreenCanvas; nestedPicture?: VideoEditCodePicture; sourceTimestamps: number[]; blankPictures: number; singleFrameReads: number; cacheHits: number; cacheBytes: number; presented: boolean; renderCached: boolean; decodeMs: number; gpuMs: number; effectErrors?: string[]; approximate?: boolean; completion: Promise<void> }
 export interface VideoEditRenderCacheWindow { key: string; startFrame: number; endFrame: number; url: string; width: number; height: number; fps: number }
-/** `prewarm`: stops the walk of a session opened ahead (the clip starts, playback stops, the session closes). */
-interface CodeInputSession { renderer: VideoEditRenderer; tail: Promise<unknown>; document: VideoEditComposition; sourceKey: string; lastKey?: string; lastPicture?: VideoEditCodePicture; ownerKey: string; prewarm?: AbortController }
+/**
+ * `prewarm`: stops the walk of a session opened ahead (the clip starts, playback stops, the session closes); `ahead`:
+ * whether that walk reached the clip's first picture.
+ */
+interface CodeInputSession { renderer: VideoEditRenderer; tail: Promise<unknown>; document: VideoEditComposition; sourceKey: string; lastKey?: string; lastPicture?: VideoEditCodePicture; ownerKey: string; prewarm?: AbortController; ahead?: Promise<boolean> }
 /** A still being decoded in the background (owner only); `urgent` once a showing frame waits for it. */
 interface StillDecode { done: Promise<boolean>; controller: AbortController; urgent: boolean; promote?: () => void }
 /**
@@ -341,7 +344,7 @@ export class VideoEditRenderer {
     return [...renderers]
   }
   get waitingForPresentation(): boolean { return this.compositor?.waitingForPresentation === true }
-  readonly lookaheadMetrics = { imagePrepared: 0, imageHits: 0, codePrepared: 0, codeHits: 0, stillPrepared: 0, budgetSkipped: 0 }
+  readonly lookaheadMetrics = { imagePrepared: 0, imageHits: 0, codePrepared: 0, codeHits: 0, stillPrepared: 0, inputPrepared: 0, budgetSkipped: 0 }
   private nestedPicture(child: VideoEditComposition, key: string): { renderer: VideoEditRenderer; tail: Promise<unknown> } {
     const owner = this.nestedOwner ?? this
     let entry = owner.nestedPictures.get(key)
@@ -426,6 +429,18 @@ export class VideoEditRenderer {
   /** 只做模块/元数据和图片准备，不渲染废弃帧，不向节目 GPU 队列插入作者绘制。 */
   async prepareLookahead(target: VideoEditContentTarget, signal: AbortSignal): Promise<boolean> {
     if (this.disposed || signal.aborted) return false
+    // A moving video input of a clip starting soon: its input session opens now and walks to the clip's first picture
+    // (paused or idle, so freely); pressing play reaches it positioned.
+    if (target.kind === 'input') {
+      const scope = target.scopes.at(-1), parents = target.scopes.slice(0, -1)
+      if (!scope?.input || !scope.parent) return false
+      if (this.lookaheadRenderers().length >= 12 && !this.lookaheadRenderer(parents, false)) { this.lookaheadMetrics.budgetSkipped++; return false }
+      const parent = this.lookaheadRenderer(parents, true)
+      if (!parent || parent.disposed) return false
+      const prepared = await parent.prewarmAhead(scope.parent, target.clip, target.frame, scope.input, signal)
+      if (prepared) this.lookaheadMetrics.inputPrepared++
+      return prepared
+    }
     // A still near the playhead is decoded once into the tree's still store (in bounded steps that yield to frames).
     if (target.kind === 'still') {
       const identity = target.input && this.stillIdentity(target.input)
@@ -931,21 +946,49 @@ export class VideoEditRenderer {
    */
   private prewarmCodeInputs(document: VideoEditComposition, frame: number, upcoming: ReadonlyArray<{ clip: VideoEditClip; first: number; source: ReturnType<typeof codeMediaInputComposition> }>): void {
     for (const { clip, first, source } of upcoming) {
-      const key = source.sessionKey
       if (source.still) { void this.ensureStill(source); continue }
-      if (this.codeInputs.has(key)) continue
-      const renderer = this.codeInputRenderer(source)
-      const controller = new AbortController()
-      const entry: CodeInputSession = { renderer, tail: Promise.resolve(), document, sourceKey: source.sampleKey, ownerKey: `code-input:${key}`, prewarm: controller }
-      this.codeInputs.set(key, entry); this.prewarmedInputs.add(key)
-      const started = performance.now()
       // Done well before the clip starts: four fifths of the time left until then.
-      const deadline = performance.now() + Math.max(0, first - frame) / document.fps * 800
-      entry.tail = renderer.prewarmCodeInput(controller.signal, deadline).then(() => {
-        recordVideoEditPreparation('codeInputPrewarm', performance.now() - started)
-        logger.debug('代码视频输入已提前解到入点', { event: 'video_edit.code_input.prewarm.completed', context: { sequenceId: document.id, clipId: clip.id, startFrame: first, durationMs: performance.now() - started } })
-      }, error => this.prewarmFailed(error, controller.signal, renderer, { sequenceId: document.id, clipId: clip.id, startFrame: first }))
+      void this.prewarmInput(document, clip, first, source, performance.now() + Math.max(0, first - frame) / document.fps * 800)
     }
+  }
+  /**
+   * Opens the input session of a moving reference whose clip first shows at `first` and walks it to that picture
+   * (`prewarmCodeInput`); an input already open is left as it is. Resolves whether the walk got there.
+   */
+  private prewarmInput(document: VideoEditComposition, clip: VideoEditClip, first: number, source: ReturnType<typeof codeMediaInputComposition>, deadline?: number): Promise<boolean> {
+    const key = source.sessionKey
+    const existing = this.codeInputs.get(key)
+    if (existing) return existing.ahead ?? Promise.resolve(true)
+    const renderer = this.codeInputRenderer(source)
+    const controller = new AbortController()
+    const entry: CodeInputSession = { renderer, tail: Promise.resolve(), document, sourceKey: source.sampleKey, ownerKey: `code-input:${key}`, prewarm: controller }
+    this.codeInputs.set(key, entry); this.prewarmedInputs.add(key)
+    const started = performance.now()
+    const walk = renderer.prewarmCodeInput(controller.signal, deadline)
+    entry.tail = walk.then(() => {
+      recordVideoEditPreparation('codeInputPrewarm', performance.now() - started)
+      logger.debug('代码视频输入已提前解到入点', { event: 'video_edit.code_input.prewarm.completed', context: { sequenceId: document.id, clipId: clip.id, startFrame: first, durationMs: performance.now() - started, paused: deadline === undefined } })
+    }, error => this.prewarmFailed(error, controller.signal, renderer, { sequenceId: document.id, clipId: clip.id, startFrame: first }))
+    entry.ahead = walk.then(() => true, () => false)
+    return entry.ahead
+  }
+  /**
+   * The idle lookahead's prewarm of a moving input (`prepareLookahead`): the walk belongs to the input session, so a
+   * cancelled lookahead (a new frame, pressing play) only stops waiting for it; the renderer's own rules stop it (the
+   * clip starts, playback stops, the playhead moves away and the input is no longer kept). A walk that failed (the
+   * decoder budget had no room) gives its session back, so the lookahead's retry opens it again.
+   */
+  private async prewarmAhead(document: VideoEditComposition, clip: VideoEditClip, first: number, source: ReturnType<typeof codeMediaInputComposition>, signal: AbortSignal): Promise<boolean> {
+    const key = source.sessionKey
+    const ahead = this.prewarmInput(document, clip, first, source)
+    const prepared = await new Promise<boolean>(resolve => {
+      const stop = (): void => resolve(false)
+      signal.addEventListener('abort', stop, { once: true })
+      void ahead.then(value => { signal.removeEventListener('abort', stop); resolve(value) })
+    })
+    const entry = this.codeInputs.get(key)
+    if (!prepared && !signal.aborted && entry && this.prewarmedInputs.has(key) && !entry.prewarm?.signal.aborted) await this.disposeCodeInputs(new Set([...this.codeInputs.keys()].filter(other => other !== key)))
+    return prepared
   }
   private prewarmFailed(error: unknown, signal: AbortSignal, renderer: VideoEditRenderer, context: Record<string, unknown>): void {
     if (signal.aborted || renderer.disposed) return

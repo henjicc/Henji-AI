@@ -705,6 +705,74 @@ it('定格帧在后台解码途中片段开始：显示帧等它解完（剩下�
     expect(still[0].reads.every(read => read.speculative && read.decoded <= 7)).toBe(true)
   } finally { gate.hold = false; while (gate.pending.length) gate.release(); await renderer.dispose() }
 })
+it('暂停时提前打开并解到 2 秒内要开始的移动视频输入：起播后切入帧直接命中；重画保留，播放头移开时回收', async () => {
+  const { backend, readers } = inputReaders()
+  // w1 shows the recording from frame 0; w2 (5 seconds in) starts at frame 6.
+  const document = recordingWindowsFixture(6)
+  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const w2 = () => readers.filter(reader => reader.exclusive && (reader.times[0] ?? 0) >= 5)
+  try {
+    await (await renderer.render(0)).completion
+    const content = videoEditLookaheadTargets(document, 0, false).content
+    // 旧实现暂停时不列入移动视频输入：起播那一刻才打开 w2 并从关键帧解到入点（实测 549–568ms）。
+    const inputs = content.filter(target => target.kind === 'input')
+    expect(inputs.map(target => [target.clip.id, Math.round(target.distance * 60)])).toEqual([['w2', 6]])
+    // Playing scans no such targets (the renderer prewarms three seconds ahead itself); w1 is read by the paused frame.
+    expect(videoEditLookaheadTargets(document, 0, true).content.filter(target => target.kind === 'input')).toEqual([])
+    renderer.retainLookahead(content)
+    expect(await renderer.prepareLookahead(inputs[0], new AbortController().signal)).toBe(true)
+    expect(w2()).toHaveLength(1); expect(us(w2()[0].times)).toEqual(us([videoEditPictureSeconds(5)]))
+    // A repaint of the paused frame keeps it.
+    await (await renderer.render(0)).completion
+    expect(renderer.codeDiagnostics()).toMatchObject({ codeInputSessions: 2, codeInputsPrewarmed: 1 }); expect(w2()[0].closed).toBe(false)
+    // Pressing play: the lookahead lets go (the worker cancels it), the first frames keep the input as upcoming.
+    renderer.retainLookahead([])
+    for (let frame = 0; frame < 8; frame++) {
+      contentInputs.borrows = []
+      await (await renderer.render(frame, true)).completion
+      if (frame === 6) expect(us([shownInputs().w2])).toEqual(us([5]))
+    }
+    // Entering at frame 6 read nothing new; frame 7 one picture, on the same reader.
+    expect(w2()).toHaveLength(1); expect(us(w2()[0].times)).toEqual(us([videoEditPictureSeconds(5), videoEditPictureSeconds(5 + 1 / 60)]))
+    // Paused again: prepared once more, then the playhead moves away and the paused frame there closes it.
+    await renderer.stopPlayback()
+    const again = videoEditLookaheadTargets(document, 0, false).content
+    renderer.retainLookahead(again)
+    expect(await renderer.prepareLookahead(again.find(target => target.kind === 'input')!, new AbortController().signal)).toBe(true)
+    const reopened = w2().at(-1)!
+    expect(reopened.closed).toBe(false)
+    renderer.retainLookahead([])
+    await (await renderer.render(300)).completion
+    expect(reopened.closed).toBe(true); expect(renderer.codeDiagnostics().codeInputsPrewarmed).toBe(0)
+  } finally { await renderer.dispose() }
+})
+it('暂停预热因解码预算被拒：交回会话，前瞻重试时重新打开；不动正在显示的输入', async () => {
+  const { backend, readers } = inputReaders()
+  const document = recordingWindowsFixture(6)
+  let refuse = true
+  const { VideoEditNativeFailure } = await import('./videoEditNativeFailure')
+  const open = backend.open.bind(backend)
+  backend.open = media => {
+    const opened = open(media)
+    return { ...opened, ready: opened.ready.then(source => ({ ...source, clipFrames: options => {
+      const reader = source.clipFrames(options)!
+      return { ...reader, frameAt: (time, read) => refuse && read?.speculative ? Promise.reject(new VideoEditNativeFailure('解码会话已满', 'budget', 'BUDGET_EXCEEDED')) : reader.frameAt(time, read) }
+    } })) }
+  }
+  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  try {
+    await (await renderer.render(0)).completion
+    const content = videoEditLookaheadTargets(document, 0, false).content, input = content.find(target => target.kind === 'input')!
+    renderer.retainLookahead(content)
+    expect(await renderer.prepareLookahead(input, new AbortController().signal)).toBe(false)
+    // The refused input's session is closed; w1 (showing) stays.
+    expect(renderer.codeDiagnostics()).toMatchObject({ codeInputSessions: 1, codeInputsPrewarmed: 0 })
+    expect(readers.find(reader => reader.exclusive && reader.times[0] === videoEditPictureSeconds(0))!.closed).toBe(false)
+    refuse = false
+    expect(await renderer.prepareLookahead(input, new AbortController().signal)).toBe(true)
+    expect(renderer.codeDiagnostics()).toMatchObject({ codeInputSessions: 2, codeInputsPrewarmed: 1 })
+  } finally { await renderer.dispose() }
+})
 it('导出逐帧：重叠段两个引用每帧各读一次准确画面，不提前打开，读取位置各自只向前', async () => {
   const { backend, readers } = inputReaders()
   const renderer = new VideoEditRenderer(recordingWindowsFixture(), undefined, undefined, 8 * 1024 ** 3, backend)

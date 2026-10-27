@@ -149,3 +149,22 @@ it('五秒及更短预渲染段在前瞻范围内预打开，平移后仍按段�
   expect(targets.find(target => target.media.path === windows[1].url)).toMatchObject({ time: 0, distance: 1, purpose: 'playback' })
   expect(videoEditDecodeTargets(composition, 150, false, windows).every(target => !target.media.path.startsWith('preview-'))).toBe(true)
 })
+
+it('暂停时同一帧重画不取消已准备好的内容（提前打开的会话保持），播放头移开才取消', async () => {
+  vi.useFakeTimers()
+  const { composition } = fixture()
+  const signals: AbortSignal[] = []
+  const retained: number[] = []
+  const scheduler = new VideoEditDecodeLookahead(undefined, media => media, { idle: () => true, prepare: (_target, signal) => { signals.push(signal); return new Promise<boolean>(() => {}) }, retain: targets => { retained.push(targets.length) } })
+  composition.media[0] = { ...composition.media[0], kind: 'image' }
+  composition.clips = [{ ...composition.clips[0], kind: 'image' }]
+  scheduler.beforeFrame(composition, 0, false); scheduler.update(composition, 0, false, [])
+  await vi.advanceTimersByTimeAsync(200)
+  expect(signals).toHaveLength(1)
+  // 旧实现每个暂停帧都整体取消：重画一次就关掉提前打开的解码会话，随后再从关键帧重来。
+  scheduler.beforeFrame(composition, 0, false)
+  expect(signals[0].aborted).toBe(false); expect(retained.at(-1)).toBeGreaterThan(0)
+  scheduler.beforeFrame(composition, 30, false)
+  expect(signals[0].aborted).toBe(true); expect(retained.at(-1)).toBe(0)
+  scheduler.cancel()
+})
