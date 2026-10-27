@@ -318,7 +318,9 @@ it('带 clip 的静止层组只栅格、上传 clip 的范围，并按该位置�
   ] })
   for (let frame = 0; frame < 4; frame++) await runtime.render(output, 100, 50, {}, {}, frameInfo(frame))
   const last = upload.mock.calls.at(-1)!
-  expect(last[0].origin).toEqual([10, 20]); expect(last[2]).toEqual([20, 30])
+  // 只在 clip 大小的画布上平移栅格：整张画布上传，不再从整帧画布里截取
+  expect(last[0].origin).toBeUndefined(); expect(last[2]).toEqual([20, 30])
+  expect([last[0].source.width, last[0].source.height]).toEqual([20, 30])
   const draw = layerDraw.mock.calls.at(-1)!
   expect(draw[3]).toMatchObject({ x: 0, y: 0, width: 20, height: 30 })
   expect(draw[4][0].pose.matrix).toEqual([1, 0, 0, 1, 10, 20])

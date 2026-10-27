@@ -66,6 +66,19 @@ export function authorStillCrop(clips: ReadonlyArray<readonly [number, number, n
   return cropWidth > 0 && cropHeight > 0 ? { x, y, width: cropWidth, height: cropHeight } : null
 }
 
+/**
+ * 一组静止层实际栅格、上传的范围（栅格像素，整数）。`crop` 是 clip 并集（画布像素，见 authorStillCrop），`bounds` 是录下的
+ * 指令画到的范围（画布像素，推不出时 undefined），两者相交后按 `rx`、`ry`（栅格像素 / 画布像素）换算，限在
+ * `rasterWidth`×`rasterHeight` 内并向外取整。为空返回 null。
+ */
+export function authorStillRaster(crop: { x: number; y: number; width: number; height: number }, bounds: readonly [number, number, number, number] | undefined, rx: number, ry: number, rasterWidth: number, rasterHeight: number): { x: number; y: number; width: number; height: number } | null {
+  let x0 = crop.x, y0 = crop.y, x1 = crop.x + crop.width, y1 = crop.y + crop.height
+  if (bounds) { x0 = Math.max(x0, bounds[0]); y0 = Math.max(y0, bounds[1]); x1 = Math.min(x1, bounds[2]); y1 = Math.min(y1, bounds[3]) }
+  const left = Math.max(0, Math.floor(x0 * rx)), top = Math.max(0, Math.floor(y0 * ry))
+  const right = Math.min(rasterWidth, Math.ceil(x1 * rx)), bottom = Math.min(rasterHeight, Math.ceil(y1 * ry))
+  return right > left && bottom > top ? { x: left, y: top, width: right - left, height: bottom - top } : null
+}
+
 export function authorPoseMatrix(pose: AuthorPose): CodeMatrix {
   // Frameflow rotation is in radians, matching Canvas2D.
   const c = Math.cos(pose.rotation ?? 0), s = Math.sin(pose.rotation ?? 0)

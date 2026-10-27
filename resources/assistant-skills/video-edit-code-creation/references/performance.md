@@ -16,6 +16,7 @@
 - **不变的不重画**：每层的绘制指令与上一帧逐条相同（用到的图片也没换），就沿用已上传的栅格，不重新栅格化、不上传。
 - **静止层与在变的层自动拆开**：相邻、没有 pose 的图层原本合在一张整帧画布上画；最近在变的层（变过之后十来帧内）会被拆出去单独栅格，静止的层沿用。只用默认叠加（source-over）的层才拆；用了 `globalCompositeOperation`、`clearRect` 或读画布本身的层，与前面的层留在同一张画布，保证混合结果不变。
 - **看不见的不画**：带 pose 的层在快门内都返回 `null` 或透明度为 0 时，这一帧不绘制、不栅格化。
+- **只栅格有内容的那一块**：没有 pose 的层按录下的绘制指令（矩形、路径、文字、图片，连同线宽、阴影、滤镜外扩）推出画到的范围，只栅格、上传那一块，再叠回原位置。用 Path2D、认不出的 filter（`url()`、非 px 长度）时推不出，按 clip 或整帧处理。
 
 ## 读成本反馈
 
@@ -30,7 +31,7 @@
 | 循环里的 `measureText`/`chars` | 每帧重复量字 | 量字放在循环外，结果用变量复用 |
 | 满屏的流体、烟、极光、颗粒场、点阵底纹 | 用成千上万个图形拼 | 写成 WGSL 着色器图层，见 author-shaders |
 | 停稳的帧 `layers.redrawn` 仍多、沿用少 | draw 里按 time 改位置、大小、透明度 | 内容不变的部分改成 pose；只有内容本身在变（数字滚动、逐字出现）的才每帧画 |
-| 停稳的帧 `uploadBytes` 仍有几十 MB | 循环细节（脉冲、闪烁）画在没有 clip 的整帧层里；或缓存的图块是 OffscreenCanvas | 细节拆成带 pose 的小图层或加 `clip`；图块缓存成 `transferToImageBitmap()` 的位图 |
+| 停稳的帧 `uploadBytes` 仍有几十 MB | 循环细节（脉冲、闪烁）用 Path2D 或认不出的 filter 画在整帧层里，范围推不出；或缓存的图块是 OffscreenCanvas | 细节拆成带 pose 的小图层，或改用路径方法直接画、加 `clip`；图块缓存成 `transferToImageBitmap()` 的位图 |
 | `layers.direct` 不为 0 | 对图层的 ctx 调 `getImageData`、`putImageData` 等读写像素 | 需要采样时在自己的 OffscreenCanvas 上读、把结果缓存起来；逐像素工作移到 createWebGPU |
 | 画着视频或录屏的层（`layers.video` 不为 0） | 视频每帧换画面，Canvas 每帧拷位图、重画、整帧上传 | 改成 `createWebGPU` 生成器采样 `inputs.images` 的纹理，见 author-shaders |
 
