@@ -33,6 +33,8 @@ const verification = (target = documentRef) => ({ verified: true, condition: mes
 
 // 来自第四轮外部成功回执及现有领域测试的代表性回执，禁止从待测 outputSchema 反推样本。
 const successData: Record<string, Record<string, unknown>> = {
+  search_app_store_icons: { country: 'cn', candidates: [{ appId: '6480446430', name: '元宝', developer: '腾讯', platform: 'iphone', category: '工具' }], ...revisions },
+  save_app_store_icon: { assetRef, projectId: 'project', name: '元宝', width: 1024, height: 1024, transparentCorners: true, verification: { verified: true, condition: message }, ...revisions },
   prepare_video_edit_subtitle_audio: { documentRef, audioDocumentRef, ...verified },
   generate_video_edit_subtitles: { documentRef, audioDocumentRef, captionRefs: [ref('video_edit.caption')], createdCaptionRefs: [ref('video_edit.caption')], ...verified },
   get_video_edit_clip_pauses: { clipRef, source: 'words_and_energy', pauses: [{ startFrame: 30, endFrame: 42, durationMs: 200, kind: 'silence', cutFrame: 36 }], words: [{ text: '你好', startFrame: 0, endFrame: 30 }], cutCandidates: [{ boundary: 'end', targetFrame: 30, cutFrame: 36, retainedFromFrame: 32, retainedToFrame: 40 }], message },

@@ -1,3 +1,5 @@
+import type { SearchAppStoreIconsInput, SaveAppStoreIconInput, AppStoreIconSearchResult, SavedAppStoreIcon } from '../../core/appStoreIcons'
+
 export type AssetMediaType = 'image' | 'video' | 'audio' | 'code'
 export type AssetSource = 'generated' | 'canvas' | 'camera-stage' | 'imported' | 'external' | 'video-edit'
 export type AssetInspectionStatus = 'pending' | 'ready' | 'missing' | 'failed'
@@ -9,6 +11,8 @@ export interface CreateAssetInput { filePath: string; mediaType: AssetMediaType;
 export interface AssetQueryInput { mediaType?: AssetMediaType; libraryId?: string; tag?: string; keyword?: string; page?: number; pageSize?: number; sort?: 'created' | 'recent' }
 export interface AssetPage { items: AssetRecord[]; total: number; page: number; pageSize: number }
 export interface AssetLibraryPlatform {
+  searchAppStoreIcons(input: SearchAppStoreIconsInput): Promise<AppStoreIconSearchResult>
+  saveAppStoreIcon(input: SaveAppStoreIconInput): Promise<SavedAppStoreIcon>
   createAsset(input: CreateAssetInput): Promise<AssetRecord>
   updateAsset(id: string, name: string): Promise<AssetRecord>
   deleteAsset(id: string): Promise<void>

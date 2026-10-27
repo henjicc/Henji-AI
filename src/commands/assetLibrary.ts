@@ -1,4 +1,5 @@
 import { getPlatform } from '@/platform'
+import type { SearchAppStoreIconsInput, SaveAppStoreIconInput, AppStoreIconSearchResult, SavedAppStoreIcon } from '@/core/appStoreIcons'
 import { notifyApplicationDomainChanged } from '@/core/application-control/domainChangeSignal'
 import type { AssetLibraryRecord, AssetLibrarySnapshot, AssetPage, AssetQueryInput, AssetRecord, CreateAssetInput } from '@/platform/contracts/assetLibrary'
 
@@ -9,6 +10,8 @@ async function assetWrite<TResult>(operation: () => Promise<TResult>): Promise<T
 }
 
 export function createAsset(input: CreateAssetInput): Promise<AssetRecord> { return assetWrite(() => getPlatform().assetLibrary.createAsset(input)) }
+export function searchAppStoreIcons(input: SearchAppStoreIconsInput): Promise<AppStoreIconSearchResult> { return getPlatform().assetLibrary.searchAppStoreIcons(input) }
+export function saveAppStoreIcon(input: SaveAppStoreIconInput): Promise<SavedAppStoreIcon> { return assetWrite(() => getPlatform().assetLibrary.saveAppStoreIcon(input)) }
 export function updateAsset(id: string, name: string): Promise<AssetRecord> { return assetWrite(() => getPlatform().assetLibrary.updateAsset(id, name)) }
 export function deleteAsset(id: string): Promise<void> { return assetWrite(() => getPlatform().assetLibrary.deleteAsset(id)) }
 export function queryAssets(input: AssetQueryInput = {}): Promise<AssetPage> { return getPlatform().assetLibrary.queryAssets(input) }

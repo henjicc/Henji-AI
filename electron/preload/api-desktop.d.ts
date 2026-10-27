@@ -285,6 +285,8 @@ export interface HenjiCreateAssetInput { filePath: string; mediaType: HenjiAsset
 export interface HenjiAssetQueryInput { mediaType?: HenjiAssetMediaType; libraryId?: string; tag?: string; keyword?: string; page?: number; pageSize?: number; sort?: 'created' | 'recent' }
 export interface HenjiAssetPage { items: HenjiAssetRecord[]; total: number; page: number; pageSize: number }
 export interface HenjiAssetLibraryApi {
+  searchAppStoreIcons(input: import('../../src/core/appStoreIcons').SearchAppStoreIconsInput): Promise<import('../../src/core/appStoreIcons').AppStoreIconSearchResult>
+  saveAppStoreIcon(input: import('../../src/core/appStoreIcons').SaveAppStoreIconInput): Promise<import('../../src/core/appStoreIcons').SavedAppStoreIcon>
   createAsset(input: HenjiCreateAssetInput): Promise<HenjiAssetRecord>
   updateAsset(id: string, name: string): Promise<HenjiAssetRecord>
   deleteAsset(id: string): Promise<void>

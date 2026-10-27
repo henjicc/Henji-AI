@@ -342,6 +342,8 @@ const imageEditorV3Api = createImageEditorV3Api(
 )
 
 const assetLibraryApi: HenjiAssetLibraryApi = {
+  searchAppStoreIcons: input => nativeInvoke('assetLibrary:searchAppStoreIcons', input),
+  saveAppStoreIcon: input => nativeInvoke('assetLibrary:saveAppStoreIcon', input),
   createAsset: (input) => nativeInvoke('assetLibrary:createAsset', input),
   updateAsset: (id, name) => nativeInvoke('assetLibrary:updateAsset', { id, name }),
   deleteAsset: (id) => nativeInvoke('assetLibrary:deleteAsset', { id }),

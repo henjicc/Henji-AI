@@ -153,6 +153,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.75.0'] = 'edca68df0b82021365d99eb4de7be84f8d5a227895f6394cceadde1f0a10a1fc'
     // 剪辑自动画面检查：query_video_edit_review 的 motion 复核新增 settled_jitter / safe_area / motion_too_fast 与 motion.pace。
     fingerprints['2.76.0'] = '9c3a0a3ea0296d8b11959ee78dbdf5116f8e03854a93ae0dc5b46c55985232f0'
+    // App Store 高清图标搜索与保存，共用素材领域声明。
+    fingerprints['2.77.0'] = 'd9f825d4a9f7be50758015541a960d2af46addda34bfd5b2e7520bec998d498e'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], `工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹：${fingerprint}`).toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {

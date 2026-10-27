@@ -1,4 +1,5 @@
 import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
+import { registerAppStoreIconHandlers } from './registerAppStoreIconHandlers'
 
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
 import { parseCapabilityInput, throwIfCapabilityAborted } from '@/features/application-control/capabilities/handlerUtils'
@@ -18,6 +19,7 @@ interface AssetQueryInput {
 export function registerAssetCapabilityHandlers(
   registrar: ApplicationCapabilityHandlerRegistrar
 ): void {
+  registerAppStoreIconHandlers(registrar)
   registrar.registerHandler('query_assets', async (input) => {
     const parsed = parseCapabilityInput<AssetQueryInput>('query_assets', input)
     return await assetApplicationService.query(parsed)

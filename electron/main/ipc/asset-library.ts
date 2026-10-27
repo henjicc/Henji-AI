@@ -1,4 +1,6 @@
 import { parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
+import { appStoreIconService } from '../services/app-store-icons/runtime'
+import { searchAppStoreIconsSchema, saveAppStoreIconSchema } from '../../../src/core/appStoreIcons'
 import { addAssetToLibrary, checkAssetPaths, createAsset, createLibrary, deleteAsset, deleteLibrary, inspectAsset, inspectAssetFileContent, inspectAssets, inspectLibrary, listLibraries, listTags, queryAssets, relocateAsset, removeAssetFromLibrary, renameLibrary, restoreLibrary, setAssetTags, touchAsset, updateAsset } from '../services/asset-library'
 import type { AssetLibrarySnapshotDto, AssetMediaType, AssetQuery, AssetSource, CreateAssetRequest } from '../services/asset-library/types'
 import { createMainLogger } from '../services/logging'
@@ -37,6 +39,8 @@ function parseLibrarySnapshot(input: unknown): AssetLibrarySnapshotDto {
 
 export function registerAssetLibraryIpc(): void {
   logger.info('开始注册资产库 IPC', { event: 'asset_library.ipc.register.start' })
+  registerIpcHandler('assetLibrary:searchAppStoreIcons', input => searchAppStoreIconsSchema.parse(input), input => appStoreIconService.search(input), assertTrustedApplicationSender)
+  registerIpcHandler('assetLibrary:saveAppStoreIcon', input => saveAppStoreIconSchema.parse(input), input => appStoreIconService.save(input), assertTrustedApplicationSender)
   registerIpcHandler('assetLibrary:createAsset', parseCreate, createAsset)
   registerIpcHandler('assetLibrary:inspectFileContent', input => {
     const record = parseRecord(input); const mediaType = requiredString(record, 'mediaType') as AssetMediaType
@@ -63,6 +67,6 @@ export function registerAssetLibraryIpc(): void {
   registerIpcHandler('assetLibrary:setAssetTags', parseAssetTags, ({ assetId, tags }) => setAssetTags(assetId, tags))
   logger.info('资产库 IPC 注册完成', {
     event: 'asset_library.ipc.register.completed',
-    context: { handlerCount: 20 },
+    context: { handlerCount: 22 },
   })
 }

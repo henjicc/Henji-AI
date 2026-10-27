@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { APP_STORE_ICON_CAPABILITIES } from './appStoreIconCapabilities'
 
 import type { ApplicationCapabilityDefinition } from '../../applicationCapabilities'
 import {
@@ -283,6 +284,7 @@ const deleteAsset = defineApplicationCapability({
 })
 
 export const ASSET_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
+  ...APP_STORE_ICON_CAPABILITIES,
   queryAssets,
   getAsset,
   listAssetLibraries,
