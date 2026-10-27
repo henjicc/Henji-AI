@@ -30,13 +30,18 @@ const OTHER_COMMAND_TOKENS: Record<string, string> = {
 /** 按文件登记的 FFmpeg 选项例外：必须真实出现，避免例外过期后继续放行。 */
 const FILE_EXCEPTIONS: Record<string, Record<string, string>> = {
   'electron/main/services/audio-edit/speech-energy.ts': { inf: 'astats 返回的负无穷电平元数据，不是命令行参数' },
-  'electron/main/services/video/hwaccel.ts': { allow_sw: 'h264_videotoolbox 私有选项，只在 macOS 构建中存在' },
+  'electron/main/services/video/hwaccel.ts': {
+    allow_sw: 'h264_videotoolbox 私有选项，只在 macOS 构建中存在',
+    realtime: 'h264_videotoolbox 私有选项（实时编码提示），只在 macOS 构建中存在',
+  },
   'electron/main/services/video/proxy.ts': { allow_sw: '代理在 macOS 用 h264_videotoolbox 时的私有选项，只在 macOS 构建中存在' },
   'electron/main/services/video/ffmpeg-loader.ts': { filter_complex_script: '只对仍声明该选项的 6.1.2 使用（按选项列表判定）' },
   'electron/main/services/video/ffmpeg-loader.test.ts': { filter_complex_script: '旧写法分支的精确测试' },
-  'electron/main/services/audio-edit/render.test.ts': { filter_complex_script: '替身里模拟 ffmpegFilterComplexFileArgs 的旧写法返回值，实际参数由 ffmpeg-loader 按版本决定' },
   'electron/main/services/screen-recording/capture/process.ts': { e: 'Node 采集看护进程的脚本参数，不传给 FFmpeg' },
   'scripts/lib/uiInspectionSceneScreenCapture.cjs': { EncodedCommand: 'PowerShell 性能采样脚本参数，不传给 FFmpeg' },
+  // 两个录音构建脚本只因复用 video-decoder-ffmpeg.cjs 的下载函数而含 ffmpeg 字样，参数属于 cmake / git。
+  'scripts/build-audio-capture.cjs': { S: 'cmake -S 源码目录', B: 'cmake -B 构建目录', A: 'cmake -A 目标平台' },
+  'scripts/publish-audio-capture-source.cjs': { B: 'git checkout -B', A: 'git add -A', m: 'git commit -m' },
 }
 
 const SCAN_ROOTS = ['electron', 'scripts', 'src', 'native/video-decoder/src']
