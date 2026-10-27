@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { emptyMemorySnapshot } from '../../../src/core/assistant/memoryEntries'
 import type { LocationContext } from '../../../src/core/storage/locationCodec'
 
 vi.mock('./logging/main-logger', () => ({
@@ -100,7 +101,7 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
       expect(h1).toMatchObject({ prompt: '一只橘猫趴在窗台上晒太阳', status: 'success', created_at: '2026-01-01 00:00:00' })
       expect(db.prepare('SELECT params, result_paths FROM history WHERE id = ?').get('h2')).toEqual({ params: '{}', result_paths: '[]' })
 
-      // 预设、设置（作品目录本身不换算）、自定义模型、助手记忆原样保留。
+      // 预设、设置（作品目录本身不换算）、自定义模型原样保留。
       expect(JSON.parse((db.prepare('SELECT params FROM presets').get() as { params: string }).params)).toEqual({ reference: 'henji://user/生成结果/a.png' })
       expect(db.prepare('SELECT is_favorite, use_count FROM presets').get()).toEqual({ is_favorite: 1, use_count: 3 })
       const settings = new Map((db.prepare('SELECT key, value FROM settings').all() as Array<{ key: string; value: string }>).map((row) => [row.key, row.value]))
@@ -108,7 +109,9 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
       expect(JSON.parse(settings.get('voice_library')!)).toEqual([{ sample: 'henji://user/生成结果/a.png' }])
       expect(settings.get('theme')).toBe('dark')
       expect(db.prepare('SELECT config FROM custom_models').get()).toEqual({ config: '{"a":1}' })
-      expect(db.prepare('SELECT content FROM agent_memories').get()).toEqual({ content: '记住' })
+      // 第 22 项：旧助手记忆按用户 2026-10-23 授权一次性清空，换成空的三层记忆（ef65fb822）。
+      expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'agent_memor%'").all()).toEqual([])
+      expect(JSON.parse((db.prepare('SELECT state_json FROM assistant_memory').get() as { state_json: string }).state_json)).toEqual(emptyMemorySnapshot())
 
       // 素材库：位置写法；本程序生成的缩略图只留文件名，其他缩略图清空并让下次检查重建。
       expect(columns(db, 'assets')).toEqual(expect.arrayContaining(['thumbnail_name', 'content_identity']))
@@ -150,7 +153,7 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
       db.prepare('INSERT INTO application_invocations(operation_id,caller_id,state,record_json,updated_at) VALUES(?,?,?,?,?)')
         .run(record.operationId, record.callerId, record.state, JSON.stringify(record), 1)
       const result = runSchemaMigrations(db, undefined, { backupDirectory: path.join(base, 'review-backups') })
-      expect(result.applied).toEqual([20, 21])
+      expect(result.applied).toEqual(ALL_VERSIONS.filter(version => version >= 20))
       expect(result.backupPath).toBeTruthy()
       const saved = JSON.parse((db.prepare('SELECT record_json FROM application_invocations').get() as { record_json: string }).record_json)
       expect(saved).toMatchObject({ input: record.input, result: record.result, state: record.state, confirmation: { expiresAt: null, purpose: 'review' } })

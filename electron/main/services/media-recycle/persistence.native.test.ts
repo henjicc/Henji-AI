@@ -9,6 +9,7 @@ vi.mock('../db', () => ({ getDb: () => state.db! }))
 vi.mock('../appPaths', () => ({
   getProgramDataDir: () => state.program,
   getProgramStoreDir: (key: string) => path.join(state.program, key),
+  getUserRootDir: () => state.user,
   getUserFolderDir: (key: string) => path.join(state.user, key),
   getUserModelsLocation: () => ({ dir: path.join(state.user, 'models'), locale: 'en' }),
 }))
