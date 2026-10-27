@@ -158,6 +158,7 @@ docs/rules/          架构、界面、测试等项目规则
 - **本地模型与数据**：[ONNX Runtime](https://onnxruntime.ai/)、[SQLite](https://sqlite.org/) / [better-sqlite3](https://github.com/WiseLibs/better-sqlite3)、[sharp](https://sharp.pixelplumbing.com/)
 - **音效理解**：[CLAP](https://huggingface.co/laion/larger_clap_general)（LAION，听音检索模型）、[Tokenizers.js](https://github.com/huggingface/tokenizers.js)；音效库“听音挑选、按击中点卡点”的思路来自 [earshot](https://github.com/Leonxlnx/earshot)
 - **智能助手**：[Pi](https://github.com/earendil-works/pi)、[Model Context Protocol](https://modelcontextprotocol.io/)
+- **应用图标**：[HQ-ICON](https://github.com/YuKongA/HQ-ICON)（作者 YuKongA，MIT），参考其 App Store 高清图标的获取方法；应用数据来自[苹果 Search API](https://performance-partners.apple.com/search-api)。
 
 完整依赖及其许可证见应用内「设置 → 关于」。
 

@@ -274,6 +274,12 @@ function generate(options) {
     homepage: 'https://github.com/gl-transitions/gl-transitions', sources: ['https://registry.npmjs.org/gl-transitions/-/gl-transitions-2.0.0.tgz (wgsl/*.wgsl, adapted entry points and premultiplied alpha only)'],
     textIds: [textTable.add(glTransitionsLicense), textTable.add(stereoViewerLicense)], textOrigin: 'package',
   })
+  // HQ-ICON 的输入解析与苹果高清图地址规则是非 npm 来源，沿用同一许可清单。
+  const hqIconLicense = readTextIfExists(path.join(REFERENCE_DIR, 'HQ-ICON-MIT.txt'))
+  if (!hqIconLicense) missing.push('HQ-ICON：缺少 MIT 许可原文')
+  else runtime.push({ id: 'reference:hq-icon', name: 'HQ-ICON (App Store icon retrieval, YuKongA)', version: 'reference', license: 'MIT', ecosystem: 'runtime',
+    homepage: 'https://github.com/YuKongA/HQ-ICON', sources: ['https://github.com/YuKongA/HQ-ICON (input parsing and high-resolution icon URL method)', 'https://performance-partners.apple.com/search-api (Apple data source)'],
+    textIds: [textTable.add(hqIconLicense)], textOrigin: 'reference' })
   const ffmpeg = ffmpegRuntime(options, textTable, referenceTexts)
   if (ffmpeg) runtime.push(ffmpeg)
   else if (options.platform === 'win32') missing.push('FFmpeg：未找到已就绪的 FFmpeg 包（先运行 npm run build:video-decoder）')
