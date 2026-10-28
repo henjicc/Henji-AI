@@ -31,7 +31,7 @@
   legacy/                     软件维护的旧式素材与组件副本，不要手改
 ```
 
-`<style>`、`<film>` 用简短的英文名（如 `dot-matrix`、`yuanbao`）。规模小的片子可以少几个文件，但三层与 entries 的划分不能省。
+`<style>`、`<film>` 用简短的英文名（如 `dot-matrix`、`launch-film`）。规模小的片子可以少几个文件，但三层与 entries 的划分不能省。
 
 ## 命名
 
@@ -54,16 +54,17 @@
 - 同样的代码出现第二次就提到上层；改风格只动 `style/`，改某段只动这段的描述。做不到说明拆分不对，先重新拆。
 - 每个文件职责单一、单独读得懂，一般几十到两三百行；64KiB 是单文件上限，不是目标。只有一次性、约 100 行以内、别处不会再用的小效果可以直接放在一个入口里。
 
-## 内置库：three 与 opentype.js
+## 内置库
 
-可以直接 `import` 两个随软件发行的库，不联网：
+随软件发行、不联网，直接 `import`：
 
-| 库 | 当前版本 | 能写的导入路径 |
-| --- | --- | --- |
-| three | 0.186.1 | `three`、`three/webgpu`、`three/tsl`；附加模块写 `three/addons/<子路径>.js`（同 `three/examples/jsm/…`，`.js` 不能省） |
-| opentype.js | 2.0.0 | `opentype.js`，只有具名导出：`import { parse } from "opentype.js"`（没有默认导出，字体字节读进来再 `parse`） |
+| 库 | 当前版本 | 起始接口 | 能写的导入路径 |
+| --- | --- | --- | --- |
+| three | 0.186.1 | v5 | `three`、`three/webgpu`、`three/tsl`；附加模块写 `three/addons/<子路径>.js`（同 `three/examples/jsm/…`，`.js` 不能省） |
+| opentype.js | 2.0.0 | v5 | `opentype.js`，只有具名导出：`import { parse } from "opentype.js"`（没有默认导出，字体字节读进来再 `parse`） |
+| henji-layout | 1.0.0 | v6 | `henji-layout/text`（`layoutText`、`drawText` 排版与绘制）、`henji-layout/flex`（`layoutBoxes` 盒子布局）；见 author-text-motion |
 
-- **作者接口 v5 起可用**：v4 及以前编译的代码版本导入内置库会报错，把源码另存为新版本就按 v5 编译。
+- **按起始接口可用**：作者接口低于起始版本的代码版本导入会报错，另存为新版本即按当前作者接口编译。
 - 版本记在代码版本里：新写的代码用上表的版本，已有版本按当时记录的版本继续跑，软件升级库版本不会悄悄改变旧画面。
 - 同一版本的库各片段共用一份实例，模块顶层不放会被别的片段看到的状态。
 - 类型检查按库的真实类型报错。three 接管宿主 WebGL 上下文见 [纵深与三维](recipes-3d.md) 的“用 three 画真实网格”。

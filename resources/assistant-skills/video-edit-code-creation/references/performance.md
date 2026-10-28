@@ -30,7 +30,8 @@
 |---|---|---|
 | 大 `repeat` 里的 `noise()` | 每个元素每帧多次噪声 | 每个元素只取一次噪声再派生；或把整片场写成着色器 |
 | 逐字 `blur`/`glow` | 每个字形单独做效果 | 只在入场那几帧给模糊，落定后为 0（为 0 时不计算） |
-| 循环里的 `measureText`/`chars` | 每帧重复量字 | 量字放在循环外，结果用变量复用 |
+| 循环里的 `measureText`/`chars` | 手写逐字量字 | 整段用 `layoutText` 排一次，逐字读它的 `graphemes`（见 author-text-motion）；它在一次排版内复用量字结果，跨帧不缓存 |
+| 静止文字的层每帧 `redrawn` | `drawText` 每次重新栅格，引擎认不出没变 | 放进 `mode: "static"` 的素材，或落定后给图层 `cacheKey`（键里带文字与样式） |
 | 满屏的流体、烟、极光、颗粒场、点阵底纹 | 用成千上万个图形拼 | 写成 WGSL 着色器图层，见 author-shaders |
 | 停稳的帧 `layers.redrawn` 仍多、沿用少 | draw 里按 time 改位置、大小、透明度 | 内容不变的部分改成 pose；只有内容本身在变（数字滚动、逐字出现）的才每帧画 |
 | 停稳的帧 `uploadBytes` 仍有几十 MB | 循环细节（脉冲、闪烁）用 Path2D 或认不出的 filter 画在整帧层里，范围推不出；或缓存的图块是 OffscreenCanvas | 细节拆成带 pose 的小图层，或改用路径方法直接画、加 `clip`；图块缓存成 `transferToImageBitmap()` 的位图 |

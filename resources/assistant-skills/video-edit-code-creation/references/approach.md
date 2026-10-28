@@ -33,6 +33,7 @@
 背景用代码画缓慢流动的光带，标题单独成层，参数开放标题、颜色、流速与入场；试帧能检查焦点，不能据一帧宣称 4K 实时性能通过。
 
 ```ts
+import { layoutText, drawText } from "henji-layout/text"
 const clamp01 = v => Math.min(1, Math.max(0, v))
 export default {
   name: "纹理与信息分工", kind: "generator", mode: "dynamic",
@@ -54,8 +55,7 @@ export default {
       } },
       { id: "title", bounds: [width * .08, height * .42, width * .92, height * .58], draw(ctx, time) {
         ctx.globalAlpha = clamp01((time - .15) / (params.enter * .5))
-        ctx.fillStyle = params.ink; ctx.font = `700 ${height * .08}px sans-serif`; ctx.textBaseline = "middle"
-        ctx.fillText(params.title, width * .08, height * .5, width * .84)
+        drawText(ctx, layoutText(params.title, { fontSize: height * .08, fontWeight: 700, align: "left", fill: { color: params.ink } }, { maxWidth: width * .84, maxLines: 2, fit: { minFontSize: height * .04 }, anchor: { x: width * .08, y: height * .5, horizontal: 0, vertical: .5 } }))
       } }
     ]
   }

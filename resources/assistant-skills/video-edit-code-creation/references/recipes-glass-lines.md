@@ -25,13 +25,14 @@ Frost 是冰霜生成材质，不是模糊现有画面的滤镜。生成器读�
 - 单向从起点长出；双向从中点向两端长出，.6–1.2 秒 expoOut；多段图标各段同时从中间长出，形成统一性。
 - SVG 图标的 d 字符串可直接 `new Path2D(d)` 绘制；SVG 里的滤镜、渐变定义不会生效。已有真实 Logo 走 image 参数；描边图标用已核对路径或项目组件，不手画近似 Logo、不用 emoji／符号字当图标。
 - 一套图标统一线宽、端点与风格。1080p 主体图标可 300–500px，小图标 80–160px，线宽 2–4px 是起点，缩小帧看清楚再定。
-- 圆角卡片用 `ctx.roundRect(x, y, w, h, r)`（r 可为 1–4 项数组）；圆角 16–32px，线宽 2–4px，按短边比例统一。文字驱动宽高时先量字，圆角 ≤ 高度一半。
+- 圆角卡片用 `ctx.roundRect(x, y, w, h, r)`（r 可为 1–4 项数组）；圆角 16–32px，线宽 2–4px，按短边比例统一。文字驱动宽高时取 layoutText 的 `box`，圆角 ≤ 高度一半。
 
 ## 完整样例：磨砂透镜＋描边引导
 
 背景色带由代码画出，透镜区域重画同一背景并模糊、加边光，标题与生长线保持清晰。文字、色彩、磨砂、线条节奏开放参数。
 
 ```ts
+import { layoutText, drawText } from "henji-layout/text"
 const clamp01 = v => Math.min(1, Math.max(0, v))
 const expoOut = t => t >= 1 ? 1 : 1 - Math.pow(2, -10 * t)
 function backdrop(ctx, width, height, time) {
@@ -69,8 +70,7 @@ export default {
       } },
       { id: "label", bounds: [width * .66, height * .78, width * .94, height * .86], draw(ctx, time) {
         ctx.globalAlpha = clamp01((time - .2 - params.seconds * .6) / .3)
-        ctx.fillStyle = params.accent; ctx.font = "600 48px sans-serif"; ctx.textBaseline = "top"
-        ctx.fillText(params.label, width * .66, height * .78, width * .28)
+        drawText(ctx, layoutText(params.label, { fontSize: 48, fontWeight: 600, align: "left", fill: { color: params.accent } }, { maxWidth: width * .28, maxLines: 2, fit: { minFontSize: 28 }, anchor: { x: width * .66, y: height * .78, horizontal: 0, vertical: 0 } }))
       } }
     ]
   }

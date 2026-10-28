@@ -6,28 +6,32 @@
 
 ## 打字机与光标
 
-可见字数由时间直接求：`Math.floor(progress * n)`，绘制前缀 `chars.slice(0, shown).join("")`，光标位置用 `ctx.measureText(前缀).width`，不要用整句宽度。光标用矩形，不用字体里的方块符号；多行先自己换行，再按行列放光标。时间决定显隐，随机寻帧不会重打字。输入中常亮，结束后每秒 2 次闪烁。
+可见字数由时间直接求：`Math.floor(progress * n)`，n 是整句排版结果的字素数。整句用 `layoutText` 排一次定下折行与光标位置；绘制前缀用同样的样式与 `maxWidth` 再排一次（左对齐、按字折行时前缀的折行与整句一致），光标放在最后一个已显示字素的 `x + advance`、所在行的 `y` 与 `height` 上，不要用整句宽度。光标用矩形，不用字体里的方块符号。时间决定显隐，随机寻帧不会重打字。输入中常亮，结束后每秒 2 次闪烁。
 
 ```ts
+import { layoutText, drawText } from "henji-layout/text"
 const clamp01 = v => Math.min(1, Math.max(0, v))
 export default {
   name: "终端输入", kind: "generator", mode: "dynamic", width: 1920, height: 1080, durationSeconds: 5,
   params: [
     { key: "value", type: "text", title: "输入内容", default: "输入一个好想法", maxLength: 200, layer: "terminal" },
-    { key: "ink", type: "color", title: "字符颜色", default: "#8cf2c2" },
-    { key: "size", type: "number", title: "字号", default: 64, min: 24, max: 96, step: 1 },
+    { key: "style", type: "textStyle", title: "字符样式", layer: "terminal", default: { fontFamily: "monospace", fontSize: 64, align: "left", fill: { color: "#8cf2c2" } } },
     { key: "seconds", type: "number", title: "输入秒数", default: 1.4, min: .4, max: 3, step: .1 }
   ],
   layers(params, width, height) {
-    const x = width * .08, y = height * .5
-    return [{ id: "terminal", bounds: [x, y - params.size, width * .92, y + params.size], draw(ctx, time) {
-      const chars = Array.from(params.value)
-      const shown = Math.floor(clamp01((time - .2) / params.seconds) * chars.length)
-      const prefix = chars.slice(0, shown).join("")
-      ctx.font = `${params.size}px monospace`; ctx.fillStyle = params.ink; ctx.textBaseline = "middle"
-      ctx.fillText(prefix, x, y)
-      const typing = time < .2 + params.seconds
-      if (typing || Math.floor(time * 4) % 2 === 0) ctx.fillRect(x + ctx.measureText(prefix).width + 6, y - params.size * .5, params.size * .15, params.size)
+    const x = width * .08, y = height * .4, options = { maxWidth: width * .84 }
+    const full = layoutText(params.value, params.style, options), size = full.style.fontSize
+    const marks = full.graphemes.filter(g => g.x !== null)
+    return [{ id: "terminal", bounds: [x, y, x + width * .84, y + Math.max(full.box.height, size * 1.25)], draw(ctx, time) {
+      const shown = Math.floor(clamp01((time - .2) / params.seconds) * marks.length)
+      const last = marks[shown - 1], line = full.lines[last ? last.line : 0]
+      ctx.save(); ctx.translate(x, y)
+      drawText(ctx, layoutText(params.value.slice(0, last ? last.source.end : 0), params.style, options))
+      if (time < .2 + params.seconds || Math.floor(time * 4) % 2 === 0) {
+        ctx.fillStyle = full.style.fill.color
+        ctx.fillRect((last ? last.x + last.advance : line?.x ?? 0) + size * .1, line?.y ?? 0, size * .15, line?.height ?? size * 1.25)
+      }
+      ctx.restore()
     } }]
   }
 }
@@ -37,6 +41,6 @@ export default {
 
 整数用 `Math.round(目标 × 缓动进度)`；格式化用 `Intl.NumberFormat` 或 `toFixed`，结束精确等于目标。完整数字卡见 examples 的 rolling-data。用 number 参数开放目标值、滚动秒数与颜色。
 
-左对齐随位数增长会挤单位：右锚（`ctx.textAlign = "right"`）或按终值宽度预留列，不让单位每帧随数宽抖动。等宽数字用 `font-variant-numeric` 不可用时选等宽字体，或按 `measureText("0")` 最大字宽固定格宽。千分号、小数点、负号与单位分开排版时保持基线一致。
+左对齐随位数增长会挤单位：用 `layoutText` 的 `anchor` 把数字右锚（`horizontal: 1`），或先排终值、取它的 `box.width` 作固定盒宽（`box: { width }` 配 `align: "right"`），不让单位每帧随数宽抖动。数字选等宽字体。千分号、小数点、负号与单位分开排版时，按各自 `lines[0].alphabeticBaseline` 对齐字母基线（`baseline` 默认是中线，字号不同时对不齐）。
 
 停留帧复查目标值和单位；开始、位数跨越、最后一帧检查跳动；数字落定对齐说到该数据的配音重音。价格／人名／统计量不得用样例默认值替代用户事实。

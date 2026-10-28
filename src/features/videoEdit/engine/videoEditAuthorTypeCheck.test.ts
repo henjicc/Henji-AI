@@ -36,6 +36,16 @@ it('排版库挂载发行的真实声明，类型错误可检出；切回 v5 后
 
 describe('作者源码类型检查', () => {
   it('技能文档里的每个完整源码都没有类型错误（不能误报给助手照抄的写法）', () => {
+    // 冻结发行的库读仓库里与 Worker 同一份 types.json，样例按真实声明检查；其余库读不到时照常退回无类型。
+    const frozen = (library: string, version: string): AuthorLibraryTypePackage | undefined => {
+      const file = path.join('resources/video-edit-author/frozen', library, version, 'types.json')
+      return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) as AuthorLibraryTypePackage : undefined
+    }
+    const typed = createAuthorTypeChecker({ ...AUTHOR_TYPE_ENVIRONMENT, libraryTypes: frozen })
+    const lines = (source: string): string[] => {
+      const files: CodeMaterialFiles = { apiVersion: CODE_AUTHOR_API_VERSION, ...normalizeCodeMaterialFiles(source) }
+      return typed.check(files, Object.keys(files.files)).diagnostics.map(codeTypeDiagnosticLine)
+    }
     const dir = path.resolve('resources/assistant-skills/video-edit-code-creation')
     const files = [path.join(dir, 'SKILL.md'), ...fs.readdirSync(path.join(dir, 'references')).map(name => path.join(dir, 'references', name))]
     const sources = files.flatMap(file => [...fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n').matchAll(/```ts\n([\s\S]*?)```/g)].map(match => ({ file: path.basename(file), source: match[1] })))

@@ -37,7 +37,7 @@
 | image | 仅生成器，不可动画 | 引用；代码从 `assets[key]` 取画面，见 author-api-media | 图片选择 |
 | audio | 不可动画 | 引用；分析结果在 `info.audio` | 声音选择 |
 
-font 参数的值是字体族名，直接拼进 `ctx.font`；用户机器缺字体时剪辑会提示，先查 font 实体挑已安装的字体。
+font 参数的值是字体族名，作为 textStyle 的 `fontFamily` 传给 layoutText；用户机器缺字体时剪辑会提示，先查 font 实体挑已安装的字体。
 
 ## 在源码里取用
 

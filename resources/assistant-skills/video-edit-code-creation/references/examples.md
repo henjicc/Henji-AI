@@ -15,10 +15,11 @@
 
 ## 一：克制的自适应标题条
 
-把片名放在左下安全框，窄色线提供识别，底板只承载文字。0.6 秒进场、足够停留、最后 0.4 秒退出；换字后量字驱动宽度。
+把片名放在左下安全框，窄色线提供识别，底板只承载文字。0.6 秒进场、足够停留、最后 0.4 秒退出；换字后由排版结果驱动底板宽高，长标题折成两行或缩小字号。
 
 <!-- skill-example: lower-third -->
 ```ts
+import { layoutText, drawText } from "henji-layout/text"
 const css = c => `rgba(${c[0] * 255}, ${c[1] * 255}, ${c[2] * 255}, ${c[3]})`
 const clamp01 = v => Math.min(1, Math.max(0, v))
 const expoOut = t => t >= 1 ? 1 : 1 - Math.pow(2, -10 * t)
@@ -32,14 +33,14 @@ export default {
   ],
   layers(params) {
     const enter = t => expoOut(clamp01(t / .6)), leave = t => clamp01((t - 3.6) / .4)
-    return [{ id: "title-bar", bounds: [0, 0, 1040, 132],
-      pose: t => ({ x: -1080 + 1200 * enter(t), y: 830, opacity: enter(t) * (1 - leave(t)) }),
+    const text = layoutText(params.title, { fontFamily: params.font || "sans-serif", fontSize: 64, fontWeight: 600, align: "left", fill: { color: "#f0f5f2" } }, { maxWidth: 920, maxLines: 2, fit: { minFontSize: 40 } })
+    const w = text.box.width + 88, h = Math.max(132, text.box.height + 48)
+    return [{ id: "title-bar", bounds: [0, 0, w, h],
+      pose: t => ({ x: -1080 + 1200 * enter(t), y: 962 - h, opacity: enter(t) * (1 - leave(t)) }),
       draw(ctx) {
-        ctx.font = `600 64px ${params.font}`
-        const width = Math.min(920, ctx.measureText(params.title).width)
-        ctx.fillStyle = "rgba(9, 11, 14, .94)"; ctx.beginPath(); ctx.roundRect(0, 0, width + 88, 132, 12); ctx.fill()
-        ctx.fillStyle = css(params.accent); ctx.fillRect(0, 24, 4, 84)
-        ctx.fillStyle = "#f0f5f2"; ctx.textBaseline = "middle"; ctx.fillText(params.title, 44, 66, 920)
+        ctx.fillStyle = "rgba(9, 11, 14, .94)"; ctx.beginPath(); ctx.roundRect(0, 0, w, h, 12); ctx.fill()
+        ctx.fillStyle = css(params.accent); ctx.fillRect(0, 24, 4, h - 48)
+        ctx.save(); ctx.translate(44, (h - text.box.height) / 2); drawText(ctx, text); ctx.restore()
       } }]
   }
 }
@@ -117,10 +118,11 @@ export default {
 
 ## 二：逐字错峰花字
 
-花字只强调一句短语。竖向 48px 错峰进场，冷色渐变描边、轻辉光与深底构成层次，避免每个字同时跳动。
+花字只强调一句短语。竖向 48px 错峰进场，浅色外描边、轻辉光（textStyle 的 shadows）与深底构成层次，避免每个字同时跳动。
 
 <!-- skill-example: stagger-title -->
 ```ts
+import { layoutText, drawText } from "henji-layout/text"
 const clamp01 = v => Math.min(1, Math.max(0, v))
 const expoOut = t => t >= 1 ? 1 : 1 - Math.pow(2, -10 * t)
 export default {
@@ -131,25 +133,21 @@ export default {
     { key: "glowPower", type: "number", title: "辉光强度", default: .65, min: 0, max: 2, step: .05 }
   ],
   layers(params, width, height) {
+    const layout = layoutText(params.title, {
+      fontSize: 112, fontWeight: 800, fill: { color: "#a7cdef" },
+      strokes: [{ color: "#e0f7ff", width: 2, position: "outside" }],
+      shadows: [{ color: "#59a6e6", opacity: .9, angle: 90, distance: 0, size: 0, blur: 16 * params.glowPower }]
+    }, { maxWidth: 1600, maxLines: 1, fit: { minFontSize: 56 }, anchor: { x: 960, y: 540, horizontal: .5, vertical: .5 } })
+    const glyphs = layout.graphemes.filter(g => g.x !== null && g.text.trim()).map(g => ({ g, one: layoutText(g.text, g.style) }))
     return [
       { id: "background", draw(ctx) { ctx.fillStyle = "#06080e"; ctx.fillRect(0, 0, width, height) } },
       { id: "headline", bounds: [160, 440, 1760, 640], draw(ctx, time) {
-        ctx.font = "800 112px sans-serif"; ctx.textBaseline = "middle"
-        const chars = Array.from(params.title), widths = chars.map(c => ctx.measureText(c).width)
-        const total = widths.reduce((a, b) => a + b, 0)
-        const ink = ctx.createLinearGradient(960 - total / 2, 0, 960 + total / 2, 0)
-        ink.addColorStop(0, "#85dbeb"); ink.addColorStop(1, "#bda3ed")
         const out = 1 - clamp01((time - 3.6) / .4)
-        let x = 960 - total / 2
-        chars.forEach((c, i) => {
-          const start = i * .045, p = expoOut(clamp01((time - start) / .55))
-          ctx.globalAlpha = clamp01((time - start) / .28) * out
-          ctx.shadowColor = "rgba(89, 166, 230, .9)"; ctx.shadowBlur = 16 * params.glowPower
-          ctx.lineWidth = 2; ctx.strokeStyle = "#e0f7ff"; ctx.fillStyle = ink
-          const y = 540 + (1 - p) * 48
-          ctx.fillText(c, x, y); ctx.strokeText(c, x, y); x += widths[i]
+        glyphs.forEach(({ g, one }, i) => {
+          const start = i * .045, p = expoOut(clamp01((time - start) / .55)), at = one.graphemes[0]
+          ctx.save(); ctx.globalAlpha = clamp01((time - start) / .28) * out
+          ctx.translate(g.x - at.x, g.y - at.y + (1 - p) * 48); drawText(ctx, one); ctx.restore()
         })
-        ctx.globalAlpha = 1; ctx.shadowBlur = 0
       } }
     ]
   }
@@ -220,6 +218,7 @@ export default {
 
 <!-- skill-example: aurora-chapter -->
 ```ts
+import { layoutText, drawText } from "henji-layout/text"
 const clamp01 = v => Math.min(1, Math.max(0, v))
 const expoOut = t => t >= 1 ? 1 : 1 - Math.pow(2, -10 * t)
 const hash = i => { let h = Math.imul(i, 0x9e3779b1); h ^= h >>> 15; h = Math.imul(h, 0x85ebca77); h ^= h >>> 13; return (h >>> 0) / 4294967296 }
@@ -233,6 +232,8 @@ export default {
   ],
   layers(params, width, height) {
     const p = t => expoOut(clamp01((t - .15) / .7))
+    const label = layoutText(`第 ${params.chapter} 章`, { fontSize: 30, tracking: 100, align: "left", fill: { color: "#8cbfb8" } })
+    const title = layoutText(params.title, { fontSize: 88, fontWeight: 600, align: "left", fill: { color: "#f0f5f0" } }, { maxWidth: 1176, maxLines: 2, fit: { minFontSize: 56 } })
     return [
       { id: "aurora", draw(ctx, time) {
         ctx.fillStyle = "#050910"; ctx.fillRect(0, 0, width, height)
@@ -253,9 +254,8 @@ export default {
         draw(ctx, time) {
           ctx.fillStyle = "rgba(6, 11, 15, .88)"; ctx.strokeStyle = "rgba(120, 163, 161, .32)"; ctx.lineWidth = 1
           ctx.beginPath(); ctx.roundRect(300, 320, 1320, 440, 20); ctx.fill(); ctx.stroke()
-          ctx.fillStyle = "#8cbfb8"; ctx.font = "30px sans-serif"; ctx.textBaseline = "middle"
-          ctx.letterSpacing = "3px"; ctx.fillText("CHAPTER", 372, 402); ctx.letterSpacing = "0px"; ctx.fillText(params.chapter, 588, 402)
-          ctx.fillStyle = "#f0f5f0"; ctx.font = "600 88px sans-serif"; ctx.fillText(params.title, 372, 546, 1176)
+          ctx.save(); ctx.translate(372, 384); drawText(ctx, label); ctx.restore()
+          ctx.save(); ctx.translate(372, 650 - title.box.height); drawText(ctx, title); ctx.restore()
           ctx.strokeStyle = "rgba(140, 191, 184, .35)"; ctx.beginPath(); ctx.moveTo(372, 680); ctx.lineTo(372 + 1176 * p(time), 680); ctx.stroke()
         } }
     ]
@@ -329,6 +329,7 @@ export default {
 
 <!-- skill-example: rolling-data -->
 ```ts
+import { layoutText, drawText } from "henji-layout/text"
 const clamp01 = v => Math.min(1, Math.max(0, v))
 const expoOut = t => t >= 1 ? 1 : 1 - Math.pow(2, -10 * t)
 export default {
@@ -340,14 +341,19 @@ export default {
     { key: "unit", type: "text", title: "单位", default: "件", maxLength: 12, layer: "data-card" }
   ],
   layers(params) {
+    const digits = { fontFamily: "monospace", fontWeight: 600, align: "left" as const, fill: { color: "#f0f5f2" } }
+    // 字号按终值定一次，滚动途中位数变化不改字号。
+    const size = layoutText(String(params.value), { ...digits, fontSize: 132 }, { maxWidth: 712, fit: { minFontSize: 64 } }).style.fontSize
+    const label = layoutText(params.label, { fontSize: 40, align: "left", fill: { color: "#9eb0b3" } }, { maxWidth: 712, maxLines: 2, fit: { minFontSize: 28 } })
+    const unit = layoutText(params.unit, { fontSize: 32, align: "left", fill: { color: "#8ac2b0" } }, { maxWidth: 712 })
     return [{ id: "data-card", bounds: [540, 280, 1380, 800], draw(ctx, time) {
       const p = expoOut(clamp01((time - .2) / 1.3))
+      const number = layoutText(String(Math.round(params.value * p)), { ...digits, fontSize: size })
       ctx.fillStyle = "#0b0e11"; ctx.strokeStyle = "rgba(166, 179, 179, .18)"; ctx.lineWidth = 1
       ctx.beginPath(); ctx.roundRect(540, 280, 840, 520, 20); ctx.fill(); ctx.stroke()
-      ctx.textBaseline = "middle"
-      ctx.fillStyle = "#9eb0b3"; ctx.font = "40px sans-serif"; ctx.fillText(params.label, 604, 370, 712)
-      ctx.fillStyle = "#f0f5f2"; ctx.font = "600 132px monospace"; ctx.fillText(String(Math.round(params.value * p)), 604, 536, 712)
-      ctx.fillStyle = "#8ac2b0"; ctx.font = "32px sans-serif"; ctx.fillText(params.unit, 604, 650)
+      for (const [text, centerY] of [[label, 370], [number, 536], [unit, 650]] as const) {
+        ctx.save(); ctx.translate(604, centerY - text.box.height / 2); drawText(ctx, text); ctx.restore()
+      }
       ctx.strokeStyle = "#8ac2b0"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(604, 726); ctx.lineTo(604 + 712 * p, 726); ctx.stroke()
     } }]
   }

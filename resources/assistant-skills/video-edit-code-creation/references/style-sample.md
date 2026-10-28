@@ -19,4 +19,4 @@
 
 ## 样片代码
 
-默认导出 `{ name, kind: "generator", mode: "dynamic", params: [], motionBlur: { shutter: 180 }, layers(params, width, height, assets, info) }`（见 author-api）。不动的背景、颗粒做成没有 pose 的层；会位移缩放的元素各成一层，内容只画一次，位姿写进 `pose(t)`；计数、逐字这类内容变化在 `draw(ctx, t)` 里按 t 画。画面完全由时间决定（随机用固定种子），最底层画满不透明背景，以画面高度为单位换算尺寸（`u = height / 720`，按 4K 写坐标时用 `height / 2160`），代码与分辨率无关，换规格不改画面，量字用 `new OffscreenCanvas(1, 1)`，渐变两端用同一 RGB 只改透明度。
+默认导出 `{ name, kind: "generator", mode: "dynamic", params: [], motionBlur: { shutter: 180 }, layers(params, width, height, assets, info) }`（见 author-api）。不动的背景、颗粒做成没有 pose 的层；会位移缩放的元素各成一层，内容只画一次，位姿写进 `pose(t)`；计数、逐字这类内容变化在 `draw(ctx, t)` 里按 t 画。画面完全由时间决定（随机用固定种子），最底层画满不透明背景，以画面高度为单位换算尺寸（`u = height / 720`，按 4K 写坐标时用 `height / 2160`），代码与分辨率无关，换规格不改画面，文字用排版库 `layoutText`/`drawText` 排版绘制（author-text-motion），渐变两端用同一 RGB 只改透明度。

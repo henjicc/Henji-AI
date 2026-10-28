@@ -79,6 +79,7 @@ layers(params, width, height, assets, info) => Layer[]
 draw 里的坐标始终是画布像素，`setTransform`、`resetTransform`、`getTransform` 也一样（运动层的栅格缩放由宿主叠上）。渐变、图案对象（含图案的 `setTransform`）可以缓存到模块变量跨帧复用；预先画好、反复贴的图块缓存成 `transferToImageBitmap()` 得到的 ImageBitmap，不要缓存 OffscreenCanvas。
 
 ```ts
+import { layoutText, drawText } from "henji-layout/text"
 export default {
   name: "分层标题", kind: "generator", mode: "dynamic", width: 1920, height: 1080,
   params: [
@@ -87,16 +88,12 @@ export default {
   ],
   layers(params, width, height) {
     const enter = t => 1 - Math.pow(2, -10 * Math.min(1, Math.max(0, t / .6)))
+    const title = layoutText(params.title, params.titleStyle, { maxWidth: 1100, maxLines: 1, fit: { minFontSize: 48 }, anchor: { x: width / 2, y: 540, horizontal: .5, vertical: .5 } })
     return [
       { id: "plate", bounds: [360, 440, 1560, 640], pose: t => ({ y: (1 - enter(t)) * 80, opacity: enter(t) }),
         draw(ctx) { ctx.fillStyle = "#1d2a33"; ctx.beginPath(); ctx.roundRect(360, 440, 1200, 200, 20); ctx.fill() } },
       { id: "title", bounds: [410, 470, 1510, 610], pose: t => ({ y: (1 - enter(t - .1)) * 60, opacity: enter(t - .1) }),
-        draw(ctx) {
-          const style = params.titleStyle
-          ctx.font = `${style.fontWeight ?? 700} ${style.fontSize ?? 120}px ${style.fontFamily ?? "sans-serif"}`
-          ctx.fillStyle = style.fill?.color ?? "#ffffff"; ctx.textAlign = "center"; ctx.textBaseline = "middle"
-          ctx.fillText(params.title, width / 2, 540, 1100)
-        } }
+        draw(ctx) { drawText(ctx, title) } }
     ]
   }
 }
