@@ -122,7 +122,7 @@ describe('原生生成提交事实', () => {
     const input = { operationId: crypto.randomUUID(), baselineIds: [baseline.id], modelId: 'model', prompt: 'test', mediaType: 'image' }
     const access = { allowWrites: true, allowDestructive: false, allowPaid: true }
     const original = coordinator.prepare('caller', input, 'host', access, 'create_visible_generation_task')
-    coordinator.dispatched(original, 'request', 'host')
+    coordinator.dispatched({ ...original, approval: { decision: 'auto', reason: '夹具' } }, 'request', 'host')
     coordinator.interrupted('request', 'host')
     expect(coordinator.prepare('caller', input, 'host', access, 'create_visible_generation_task').state).toBe('unknown')
     expect(() => coordinator.prepare('caller', { ...input, operationId: crypto.randomUUID() },

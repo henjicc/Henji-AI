@@ -88,7 +88,7 @@ describe.skipIf(!process.versions.electron)('应用原生操作记录与恢复',
       : [{ kind, entityType: 'canvas.node', parent: target, items: [{ type: 'text', text: '新文字' }] }]
     const original = coordinator.prepare(f.callerId, { operationId: randomUUID(), changes }, f.rendererEpoch, access)
     const requestId = randomUUID()
-    coordinator.dispatched(original, requestId, f.rendererEpoch)
+    coordinator.dispatched({ ...original, paidGenerationEstimate: 0.5 }, requestId, f.rendererEpoch)
     const result = { ok: false, error: { details: { transaction: { code: 'VERIFICATION_FAILED', effects: [{ kind: 'entity_updated', target }], partial: { completedStepIndexes: [0], compensatedStepIndexes: [], uncompensatedStepIndexes: [0] } } } } }
     coordinator.complete({ requestId, rendererEpoch: f.rendererEpoch, result })
     expect(f.store.get(original.operationId, f.callerId)?.state).toBe('partial')
@@ -150,7 +150,7 @@ describe.skipIf(!process.versions.electron)('应用原生操作记录与恢复',
     const sequenceRef = { kind: 'video_edit.sequence', id: 'video:sequence' }
     const args = { operationId: randomUUID(), documentRef, sequenceRef, clipRef: { kind: 'video_edit.clip', id: 'video:voice' } }
     const first = coordinator.prepare(f.callerId, args, f.rendererEpoch, access, 'generate_video_edit_subtitles')
-    f.store.save({ ...first, state: 'unknown' })
+    f.store.save({ ...first, state: 'unknown', paidGenerationEstimate: 0.5 })
     for (const entityType of ['video_edit.code_version', 'video_edit.code_material']) {
       expect(coordinator.prepare(f.callerId, { operationId: randomUUID(), changes: [{ kind: 'create_items', entityType, parent: documentRef, items: [{ properties: {} }] }] }, f.rendererEpoch, access).state).toBe('prepared')
     }
@@ -262,7 +262,7 @@ describe.skipIf(!process.versions.electron)('应用原生操作记录与恢复',
     const coordinator = new ApplicationOperationCoordinator(f.store, undefined, () => new Set(['settings.registry']), show)
     for (const decision of ['later', 'completed', 'not_executed'] as const) {
       const baseline = f.store.baseline(f.callerId, [{ kind: 'settings.registry', id: 'singleton' }], { settings: 1 }, f.rendererEpoch).id
-      const original = { ...coordinator.prepare(f.callerId, input(baseline), f.rendererEpoch, access), rendererEpoch: f.rendererEpoch, state: 'unknown' as const }
+      const original = { ...coordinator.prepare(f.callerId, input(baseline), f.rendererEpoch, access), rendererEpoch: f.rendererEpoch, state: 'unknown' as const, paidGenerationEstimate: 0.5 }
       f.store.save(original)
       await coordinator.review(original, randomUUID(), async () => ({ ok: false }), () => undefined)
       expect(show).toHaveBeenLastCalledWith(expect.objectContaining({ title: '这次修改生效了吗？', message: expect.stringContaining('没能读取目标的当前情况。') }))
@@ -291,7 +291,7 @@ describe.skipIf(!process.versions.electron)('应用原生操作记录与恢复',
   it('重启后缺失回执可由应用核对恢复；原宿主、撤销授权及取消确认不能放行', async () => {
     const f = fixture(); const raw = input(f.baseline)
     const original = f.coordinator.prepare(f.callerId, raw, f.rendererEpoch, access)
-    f.coordinator.dispatched(original, randomUUID(), f.rendererEpoch)
+    f.coordinator.dispatched({ ...original, paidGenerationEstimate: 0.5 }, randomUUID(), f.rendererEpoch)
     const review = vi.fn()
     const coordinator = new ApplicationOperationCoordinator(f.store, undefined, () => new Set(['settings.registry']), review)
     const record = f.store.get(original.operationId, f.callerId)!
@@ -366,7 +366,7 @@ describe.skipIf(!process.versions.electron)('应用原生操作记录与恢复',
   it.each([false, true])('新连接仅在全部目标重新核实=%s 后才能继续修改，不会重放旧事务', async (verified) => {
     const f = fixture()
     const original = f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
-    f.store.save({ ...original, state: 'partial', result: { ok: false, error: { details: { transaction: { code: 'VERIFICATION_FAILED', partial: { completedStepIndexes: [0], compensatedStepIndexes: [], uncompensatedStepIndexes: [0] } } } } } })
+    f.store.save({ ...original, state: 'partial', paidGenerationEstimate: 0.5, result: { ok: false, error: { details: { transaction: { code: 'VERIFICATION_FAILED', partial: { completedStepIndexes: [0], compensatedStepIndexes: [], uncompensatedStepIndexes: [0] } } } } } })
     const host = new ApplicationHostBridge(() => undefined, f.coordinator)
     vi.spyOn(host, 'ready', 'get').mockReturnValue(true)
     const execute = vi.spyOn(host, 'execute').mockImplementation(async (_caller, capability, _input, _signal, options) => {
@@ -388,7 +388,7 @@ describe.skipIf(!process.versions.electron)('应用原生操作记录与恢复',
     const f = fixture()
     const original = f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
     const result = { ok: false, error: { details: { transaction: { code: 'VERIFICATION_FAILED', partial: { completedStepIndexes: [0], compensatedStepIndexes: [], uncompensatedStepIndexes: [0] } } } } }
-    f.store.save({ ...original, state: 'partial', result })
+    f.store.save({ ...original, state: 'partial', paidGenerationEstimate: 0.5, result })
     const verify = vi.fn().mockResolvedValue({ ok: true, data: { verification: { verified: false } } })
     await f.coordinator.reconcileVerification(f.store.get(original.operationId, f.callerId)!, verify)
     expect(() => f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)).toThrow('RECOVERY_REQUIRED')
@@ -494,7 +494,7 @@ describe.skipIf(!process.versions.electron)('应用原生操作记录与恢复',
     const raw = { operationId: randomUUID(), documentId: 'project', nodeId: 'first', inputSignature: 'original-input' }
     const first = f.coordinator.prepare(f.callerId, raw, f.rendererEpoch, paid, 'submit_canvas_node_generation')
     const requestId = randomUUID()
-    f.coordinator.dispatched(first, requestId, f.rendererEpoch)
+    f.coordinator.dispatched({ ...first, approval: { decision: 'auto', reason: '夹具' } }, requestId, f.rendererEpoch)
     f.coordinator.interrupted(requestId, f.rendererEpoch)
     expect(f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID(), nodeId: 'second' }, f.rendererEpoch, paid, 'submit_canvas_node_generation').state).toBe('prepared')
     expect(() => f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID() }, f.rendererEpoch, paid, 'submit_canvas_node_generation')).toThrow(first.operationId)
@@ -540,7 +540,7 @@ describe.skipIf(!process.versions.electron)('应用原生操作记录与恢复',
     expect(() => f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID() },
       f.rendererEpoch, access, 'resume_canvas_generation_task')).toThrow(first.operationId)
   })
-  it('编辑预览读取同一素材不互锁，未知创建不能重放，保存锁定被消费的预览', () => {
+  it('编辑预览读取同一素材不互锁，保存锁定被消费的预览', () => {
     const f = fixture()
     const raw = { operationId: randomUUID(), sourceRef: { kind: 'asset', id: 'source-image' }, operations: [{ kind: 'flip_h' }] }
     const first = f.coordinator.prepare(f.callerId, raw, f.rendererEpoch, access, 'create_image_edit_preview')
@@ -549,8 +549,6 @@ describe.skipIf(!process.versions.electron)('应用原生操作记录与恢复',
     f.coordinator.dispatched(first, requestId, f.rendererEpoch)
     expect(f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID(), operations: [{ kind: 'rotate_cw', degrees: 90 }] },
       f.rendererEpoch, access, 'create_image_edit_preview').state).toBe('prepared')
-    f.coordinator.interrupted(requestId, f.rendererEpoch)
-    expect(() => f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID() }, f.rendererEpoch, access, 'create_image_edit_preview')).toThrow(first.operationId)
     const commit = f.coordinator.prepare(f.callerId, { operationId: randomUUID(), previewRef: 'preview-existing' }, f.rendererEpoch, access, 'commit_image_edit')
     expect(commit.targetRefs).toEqual([{ kind: 'image_edit.preview', id: 'preview-existing' }])
     f.coordinator.dispatched(commit, randomUUID(), f.rendererEpoch)
@@ -562,7 +560,7 @@ describe.skipIf(!process.versions.electron)('应用原生操作记录与恢复',
     const raw = { operationId: randomUUID(), modelId: 'fixture', prompt: '原请求', mediaType: 'image', destination: { mode: 'history' } }
     const first = f.coordinator.prepare(f.callerId, raw, f.rendererEpoch, { ...access, allowPaid: true }, 'create_visible_generation_task')
     const requestId = randomUUID()
-    f.coordinator.dispatched(first, requestId, f.rendererEpoch)
+    f.coordinator.dispatched({ ...first, approval: { decision: 'auto', reason: '夹具' } }, requestId, f.rendererEpoch)
     f.coordinator.interrupted(requestId, f.rendererEpoch)
     expect(() => f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID() }, f.rendererEpoch,
       { ...access, allowPaid: true }, 'create_visible_generation_task')).toThrow(first.operationId)
@@ -632,7 +630,7 @@ describe.skipIf(!process.versions.electron)('应用原生操作记录与恢复',
     const project = { kind: 'canvas.document', id: 'project' }
     const args = { operationId: randomUUID(), modelId: 'fixture', prompt: '第一张', mediaType: 'image', destination: { mode: 'canvas', documentId: project.id } }
     const first = f.coordinator.prepare(f.callerId, args, f.rendererEpoch, { ...access, allowPaid: true }, 'create_visible_generation_task')
-    f.coordinator.dispatched(first, randomUUID(), f.rendererEpoch)
+    f.coordinator.dispatched({ ...first, approval: { decision: 'auto', reason: '夹具' } }, randomUUID(), f.rendererEpoch)
     const create = { operationId: randomUUID(), changes: [{ kind: 'create_items', entityType: 'canvas.node', parent: project, items: [{ properties: { 'canvas.node.node_type': 'uploadNode' } }] }] }
     const append = f.coordinator.prepare(f.callerId, create, f.rendererEpoch, access)
     f.coordinator.dispatched(append, randomUUID(), f.rendererEpoch)
@@ -764,7 +762,7 @@ describe.skipIf(!process.versions.electron)('应用原生操作记录与恢复',
   })
   it('取消及重启未知保留原关联，匹配的迟到回执能收敛，无关读取不能解除', () => {
     const f = fixture(); const record = f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
-    const requestId = randomUUID(); f.coordinator.dispatched(record, requestId, f.rendererEpoch)
+    const requestId = randomUUID(); f.coordinator.dispatched({ ...record, paidGenerationEstimate: 0.5 }, requestId, f.rendererEpoch)
     f.coordinator.interrupted(requestId, f.rendererEpoch)
     expect(() => f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)).toThrow('RECOVERY_REQUIRED')
     f.coordinator.rememberRead(f.callerId, { ok: true, data: { ref: { kind: 'canvas.document', id: 'B' }, revisions: { canvas: 2 } } }, f.rendererEpoch)

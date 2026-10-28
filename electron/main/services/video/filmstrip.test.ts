@@ -155,7 +155,7 @@ describe('filmstrip frame service', () => {
   it('retries frames a direct seek could not decode from a margin earlier, reports frames still without a picture, and refuses frames of a file that changed meanwhile', async () => {
     // A direct seek to 3s yields nothing; the margin retry (input seek 0, output seek 3) does. Nothing exists beyond 5s.
     produce = (time, margin) => time < 5 && (time !== 3 || margin)
-    const frames = service()
+    const frames = service({ gatherMs: 50 })
     const [inside, seekFailed, beyond] = await Promise.allSettled([1, 3, 9].map(seconds => frames.frame({ source: 'D:/clip.mp4', timeUs: seconds * 1_000_000, height: 48 })))
     expect(inside.status).toBe('fulfilled')
     expect(seekFailed.status).toBe('fulfilled')
@@ -175,7 +175,7 @@ describe('filmstrip frame service', () => {
 
   it('splits a batch of large pictures into consecutive processes within the decoder memory budget', async () => {
     expect([filmstripInputsPerProcess(3840, 2160, 8), filmstripInputsPerProcess(2560, 1440, 8), filmstripInputsPerProcess(1920, 1080, 8), filmstripInputsPerProcess(7680, 4320, 8), filmstripInputsPerProcess(0, 0, 8)]).toEqual([2, 4, 8, 1, 8])
-    const frames = service({ probe: async () => ({ startSeconds: 0, width: 3840, height: 2160 }), concurrency: 1 })
+    const frames = service({ probe: async () => ({ startSeconds: 0, width: 3840, height: 2160 }), concurrency: 1, gatherMs: 50 })
     await Promise.all([0, 1, 2, 3, 4].map(seconds => frames.frame({ source: 'D:/uhd.mp4', timeUs: seconds * 1_000_000, height: 48 })))
     expect(spawned.map(child => outputsOf(child.args).length)).toEqual([2, 2, 1])
     expect(frames.statistics()).toMatchObject({ batches: 1, generated: 5 })

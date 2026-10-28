@@ -49,7 +49,7 @@ beforeEach(() => {
   vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue({ sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) })
   vi.spyOn(getPlatform().system.paths, 'dirname').mockResolvedValue(root)
   vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined)
-  vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(new Blob(['png'])))
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(new Uint8Array([0x70, 0x6e, 0x67])))
   vi.stubGlobal('createImageBitmap', async () => ({ width: 800, height: 600, close() {} }))
   vi.spyOn(getPlatform().system.fs, 'readDirPage').mockImplementation(async (path, options) => {
     if (options?.close) return { entries: [], realPath: path }
