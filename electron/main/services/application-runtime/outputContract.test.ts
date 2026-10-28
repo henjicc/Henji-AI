@@ -195,6 +195,10 @@ successData.plan_screen_recording_director = { resultRef: recordingRef, verified
 successData.start_screen_recording_director = { resultRef: documentRef, sessionRef: recordingRef, sequenceRefs: [sequenceRef], verified: true }
 successData.cancel_screen_recording_director = { resultRef: recordingRef, verified: true }
 successData.redub_screen_recording_sentence = { resultRef: clipRef, verified: true, undoSteps: 1 }
+const annotationRef = ref('video_edit.annotation', 'document:mark')
+successData.query_video_edit_annotations = { documentRef, refs: [annotationRef], revisions: { video_edit: 29 }, items: [{ ref: annotationRef, sequenceRef, status: 'addressed', author: { kind: 'user', name: '我' }, frame: 12, endFrame: null, clipRef, targetKind: 'arrow', text: '标题再大一点', textTruncated: false, replyCount: 1, lastReply: '已放大到 120%' }], total: 1, nextCursor: null, message }
+successData.update_video_edit_annotations = { documentRef, resultRefs: [annotationRef], message, verification: { verified: true, condition: message } }
+successData.remove_video_edit_annotations = { documentRef, removedRefs: [ref('video_edit.annotation', 'document:duplicate')], resultRefs: [annotationRef], message, verification: { verified: true, condition: message } }
 for (const action of ['start', 'pause', 'resume', 'mark', 'stop', 'cancel', 'recover']) {
   successData[`${action}_screen_recording`] = { resultRef: recordingRef, ...verified, ...revisions }
 }

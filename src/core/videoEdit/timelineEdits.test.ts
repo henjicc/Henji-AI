@@ -197,18 +197,20 @@ it('普通删除留隙，波纹删除合并区间且不修改关闭同步的轨�
   sequence.clips.push({ ...sequence.clips[0], id: 'overlap', start: 5, duration: 90, track: 3 })
   expect(() => apply(document, { kind: 'delete', clipIds: ['a'], ripple: true })).toThrow('未选片段')
 })
-it('锁定任一链接伙伴整组拒绝，通用提交也保护标注、新增及同次解锁绕过', () => {
+it('锁定任一链接伙伴整组拒绝，通用提交保护新增及同次解锁绕过，批注不受锁定限制', () => {
   const { document } = fixture(); const next = apply(document, { kind: 'separate_audio', clipIds: ['a'], audioTrack: 0 })
   next.sequences[0].tracks[0].locked = true
   expect(() => apply(next, { kind: 'delete', clipIds: ['a'] })).toThrow('锁定')
   expect(() => apply(next, { kind: 'adjust', clipIds: ['a'], mode: 'move', delta: 1 })).toThrow('锁定')
   for (const update of [
     (value: typeof next) => { value.sequences[0].clips.find(clip => clip.kind === 'audio')!.volume = .2 },
-    (value: typeof next) => { const clip = value.sequences[0].clips.find(clip => clip.kind === 'audio')!; value.sequences[0].annotations.push({ id: 'mark', clipId: clip.id, frame: 12, target: { kind: 'point', x: .5, y: .5 }, space: 'composition-normalized', status: 'open', author: { kind: 'user', name: '我' }, createdAt: '2026-10-08T00:00:00.000Z', thread: [], text: '检查' }) },
     (value: typeof next) => { value.sequences[0].tracks[0].locked = false; value.sequences[0].clips = value.sequences[0].clips.filter(clip => clip.kind !== 'audio') },
   ]) { const candidate = structuredClone(next); update(candidate); expect(() => assertVideoEditLockedTracks(next, candidate)).toThrow('锁定') }
   const unlocked = structuredClone(next); unlocked.sequences[0].tracks[0].locked = false; unlocked.sequences[0].tracks[0].height = 96
   expect(() => assertVideoEditLockedTracks(next, unlocked)).not.toThrow()
+  const reviewed = structuredClone(next); const audio = reviewed.sequences[0].clips.find(clip => clip.kind === 'audio')!
+  reviewed.sequences[0].annotations.push({ id: 'mark', clipId: audio.id, frame: 12, target: { kind: 'point', x: .5, y: .5 }, space: 'composition-normalized', status: 'open', author: { kind: 'user', name: '我' }, createdAt: '2026-10-08T00:00:00.000Z', thread: [], text: '检查' })
+  expect(() => assertVideoEditLockedTracks(next, reviewed)).not.toThrow()
 })
 it('复制粘贴重新映射链接与标注，换帧率按绝对边界换算且不连接原片段', () => {
   const { document } = fixture(); let next = apply(document, { kind: 'separate_audio', clipIds: ['a'], audioTrack: 0 })

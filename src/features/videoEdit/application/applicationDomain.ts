@@ -17,6 +17,7 @@ import { executeVideoEditPrivacy } from './videoEditPrivacyCapability'
 import { CodeComponentCollectionExecutor } from './videoEditCodeComponentReflection'
 import { videoEditStaggerCapability } from '@/core/application-control/domains/videoEdit/videoEditStaggerCapability'
 import { staggerVideoMotion } from './videoEditMotionDraft'
+import { handleVideoEditAnnotationCapability } from './videoEditAnnotationBatch'
 export { videoCreativeIntentProvider } from './videoEditCreativeIntentReflection'
 import { VideoEditTextPresetExecutor, VideoEditTextPresetMutationExecutor } from './videoEditTextPresetReflection'
 import { VideoEditProjectTemplateCollectionExecutor, VideoEditProjectTemplateMutationExecutor, VideoEditStyleCollectionExecutor, VideoEditStyleMutationExecutor, STYLE_ENTITY, TEMPLATE_ENTITY } from './videoEditStyleReflection'
@@ -50,7 +51,7 @@ import { handleVideoEditSceneCapability } from './videoEditSceneCapability'
 import { handleVideoEditWorkspaceTransfer } from './videoEditWorkspaceTransfer'
 import { VideoEditCollectionExecutor, VideoEditMutationExecutor } from './videoEditExecutors'
 import { VIDEO_EDIT_COMPOSITE_TYPES } from './videoEditCompositeEntities'
-import { openVideoEditDocument, releaseVideoEditDocument, requireVideoEditInstance, saveVideoEdit, verifyVideoEditSaved, videoEditDocumentFromContent, type VideoEditInstance, undoVideoEdit, videoEditBusyReason } from './videoEditService'
+import { beginVideoEditCommitBatch, bindVideoEditCommitBatch, endVideoEditCommitBatch, videoEditPersistenceKey, openVideoEditDocument, releaseVideoEditDocument, requireVideoEditInstance, saveVideoEdit, verifyVideoEditSaved, videoEditDocumentFromContent, type VideoEditInstance, undoVideoEdit, videoEditBusyReason } from './videoEditService'
 import { videoEditCoverSource, videoEditFrameSourceAt } from './videoEditProjectCover'
 import { registerDocumentCoverProvider, registerDocumentHoverPreview } from '@/features/documents/documentCovers'
 import { getDocumentOperations, registerDocumentBusyCheck, registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
@@ -192,6 +193,8 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
         const changed = staggerVideoMotion(id, child(input.sequenceRef), child(input.sourceRef), input.targetRefs.map(child), input.sourceRange, input.stepFrames)
         return { resultRefs: changed.map(clipId => ({ kind: 'video_edit.clip', id: `${id}:${clipId}` })), message: '已错峰复制动作。', verification: { verified: true, condition: '所有目标曲线通过范围校验并在同一次文档编辑中提交。' } }
       }
+      const annotations = handleVideoEditAnnotationCapability(definition.id, raw)
+      if (annotations) return annotations
       if (definition.id === analyzeVideoEditBeatsCapability.id) return executeVideoEditBeatCapability(analyzeVideoEditBeatsCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === placeVideoEditSoundEffectsCapability.id) return placeVideoEditSoundEffects(placeVideoEditSoundEffectsCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === remixVideoEditMusicCapability.id) return executeVideoEditMusicRemixCapability(remixVideoEditMusicCapability.inputSchema.parse(raw), context.signal)
@@ -383,23 +386,12 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       const owner = requireVideoEditInstance(id)
       const existing = persistenceOwners.get(owner)
       if (existing) return existing
-      const participant: ApplicationPersistenceParticipant = { key: `video_edit:${id}`, begin() {
-      const instance = requireVideoEditInstance(id)
-      const initial = instance.document; const past = instance.past.slice(); const future = instance.future.slice()
-      return {
-        async confirm() { try { await saveVideoEdit(id) } catch (error) { throw new ApplicationPersistenceFailure('修改已保留但未保存。请重试保存，不要再次执行剪辑。', { memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'document', recovery: { capabilityId: 'save_video_edit', target: { kind: 'video_edit.document', id }, replayMutation: false } }, error) } },
-        release() {
-          // Confirming an existing intent receipt is persistence recovery, not another artwork edit.
-          const historyContent = (document: VideoEditInstance['document']) => ({ ...document, revision: 0,
-            creativeIntents: document.creativeIntents && { ...document.creativeIntents,
-              drafts: document.creativeIntents.drafts.map(draft => ({ ...draft, applications: draft.applications.map(application => ({ ...application, saved: false })) })),
-            },
-          })
-          const changed = JSON.stringify(historyContent(initial)) !== JSON.stringify(historyContent(instance.document))
-          instance.past = changed ? [...past.slice(-49), initial] : past
-          instance.future = changed ? [] : future
-        },
-      }
+      const participant: ApplicationPersistenceParticipant = { key: videoEditPersistenceKey(id), begin() {
+      const batch = beginVideoEditCommitBatch(id)
+      return bindVideoEditCommitBatch({
+        async confirm() { endVideoEditCommitBatch(batch); try { await saveVideoEdit(id) } catch (error) { throw new ApplicationPersistenceFailure('修改已保留但未保存。请重试保存，不要再次执行剪辑。', { memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'document', recovery: { capabilityId: 'save_video_edit', target: { kind: 'video_edit.document', id }, replayMutation: false } }, error) } },
+        release() { endVideoEditCommitBatch(batch) },
+      }, batch)
       } }
       persistenceOwners.set(owner, participant)
       return participant

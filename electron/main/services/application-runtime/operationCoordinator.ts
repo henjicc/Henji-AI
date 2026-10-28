@@ -15,6 +15,10 @@ const refSchema = z.object({ kind: z.string(), id: z.string() }).passthrough()
 const envelopeSchema = z.object({ operationId: z.string().uuid(), baselineIds: z.array(z.string().uuid()).max(32).default([]) })
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 
+/** 拒绝信息只点名前 10 个目标并给总数：一次删几百条时整段引用会把错误撑到读不完。 */
+function listRefs(refs: ReadonlyArray<{ kind: string; id: string }>): string {
+  return refs.length > 10 ? `${JSON.stringify(refs.slice(0, 10))} 等共 ${refs.length} 个` : JSON.stringify(refs)
+}
 function resultRefs(value: unknown): Array<{ kind: string; id: string }> {
   if (Array.isArray(value)) return value.flatMap(resultRefs)
   if (!value || typeof value !== 'object') return []
@@ -227,8 +231,10 @@ export class ApplicationOperationCoordinator {
     const deletionRefs: Array<{ kind: string; id: string }> = []
     let destructive = false
     let writeRefs: Array<{ kind: string; id: string }> | undefined
+    let baselineCapabilityId: string | undefined
     if (capabilityId !== 'change_application_entities') {
       const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(capabilityId)
+      baselineCapabilityId = definition?.baselineCapabilityId
       if (!definition?.resolveOperationTargets || definition.readOnly) throw new Error('PERMISSION_DENIED:此能力尚未登记持久目标绑定。')
       if (definition.paidGenerationPreparation && !access.allowPaid) throw new Error('PERMISSION_DENIED:此连接没有付费生成授权。')
       if (definition.destructive && !access.allowDestructive) throw new Error('PERMISSION_DENIED:此连接没有删除授权。')
@@ -251,7 +257,9 @@ export class ApplicationOperationCoordinator {
       }
     }
     }
-    if (destructive && !baselineIds.length) throw new Error(`BASELINE_REQUIRED:删除操作需要先核对目标。请用 read_application_entity 读取 ${JSON.stringify(deletionRefs)}，再提交返回的 baselineIds。`)
+    if (destructive && !baselineIds.length) throw new Error(baselineCapabilityId
+      ? `BASELINE_REQUIRED:删除操作需要先核对目标（${listRefs(deletionRefs)}）。请调用 ${baselineCapabilityId} 筛出这些目标，再提交它返回的 baselineId。`
+      : `BASELINE_REQUIRED:删除操作需要先核对目标。请用 read_application_entity 读取 ${listRefs(deletionRefs)}，再提交返回的 baselineIds。`)
     const baselines = baselineIds.map((id) => this.store.readBaseline(id, callerId))
     const currentAccess = operationAccess({ operationId, callerId, capabilityId, input, targetRefs: writeRefs ?? refs })
     let speechRecoveryOf: string | undefined
@@ -296,7 +304,9 @@ export class ApplicationOperationCoordinator {
       throw new Error('BASELINE_EXPIRED:镜头参考的修订范围已从 toolbox 改为 camera_stage。请用 read_application_entity 重新读取原目标，使用返回的新 baselineId 提交。')
     }
     const missing = deletionRefs.filter((ref) => !baselines.some((baseline) => baseline.refs.some((item) => item.kind === ref.kind && item.id === ref.id)))
-    if (baselines.length && missing.length) throw new Error(`BASELINE_TARGET_MISMATCH:缺少 ${JSON.stringify(missing)} 的读取。普通操作可省略 baselineIds 由应用自动核对；删除操作请先用 read_application_entity 读取以上目标。`)
+    if (baselines.length && missing.length) throw new Error(baselineCapabilityId
+      ? `BASELINE_TARGET_MISMATCH:缺少 ${listRefs(missing)} 的读取。请重新调用 ${baselineCapabilityId}，用覆盖全部目标的 baselineId 提交。`
+      : `BASELINE_TARGET_MISMATCH:缺少 ${listRefs(missing)} 的读取。普通操作可省略 baselineIds 由应用自动核对；删除操作请先用 read_application_entity 读取以上目标。`)
     // 非删除目标可不带基线，但显式提交的基线必须对应本次某个目标：传错对象的基线是调用错误，不能被静默忽略
     const unrelated = baselines.filter((baseline) => !baseline.refs.some((item) => refs.some((ref) => ref.kind === item.kind && ref.id === item.id)))
     if (unrelated.length) throw new Error(`BASELINE_TARGET_MISMATCH:基线 ${unrelated.map((baseline) => baseline.id).join('、')} 不对应本次任何目标。请读取本次要修改或删除的目标后再提交，或省略 baselineIds。`)

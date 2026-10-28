@@ -19,7 +19,7 @@ import { freezeApplicationWrites } from '@/core/applicationLifecycle/application
 import { beginVideoEditGesture, finishVideoEditGesture, updateVideoEditPicturePosition, subscribeVideoEditDomain } from './videoEditService'
 import { createVideoEditGraphic } from '@/core/videoEdit/graphics'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
-import { openVideoEditDocument, activeVideoEditInstance, closeVideoEditProject } from './videoEditService'
+import { openVideoEditDocument, activeVideoEditInstance, closeVideoEditProject, subscribeVideoEditCommandFacts, beginVideoEditCommitBatch, endVideoEditCommitBatch, withVideoEditCommitBatch } from './videoEditService'
 
 it('并发后台打开复用唯一实例，前台打开仍聚焦；失败后可重试', async () => {
   const original = await createLegacyTrackVideoEditProject()
@@ -229,6 +229,80 @@ it('内容版本覆盖编辑、撤销重做、取消草稿和接收内容，元�
   await owner.session.reload(); expect(owner.contentVersion).toBe(++version)
 })
 
+it('一次通用事务改 20 个片段只提交一次、界面通知与只改一个时一样多、撤销栈只多一步，任一步失败整体回滚', async () => {
+  const instance = await createLegacyTrackVideoEditProject(); const id = instance.document.id
+  appendVideoEditClip(id); const track = getActiveVideoEditSequence(instance).clips[0].track
+  for (let index = 1; index < 20; index++) appendVideoEditClip(id, undefined, { frame: index * 600, track })
+  const clips = getActiveVideoEditSequence(instance).clips; expect(clips).toHaveLength(20)
+  const app = createApplicationHarness(); let commits = 0; let notifications = 0
+  const stopFacts = subscribeVideoEditCommandFacts((_owner, fact) => { if (fact.phase === 'committed') commits++ })
+  const stopListening = subscribeVideoEdit(() => { notifications++ })
+  const changes = (opacity: number) => clips.map(clip => ({ kind: 'set_properties', entityType: 'video_edit.clip', target: { kind: 'video_edit.clip', id: `${id}:${clip.id}` }, properties: { 'video_edit.clip.opacity': opacity } }))
+  try {
+    expect(await app.call('change_application_entities', { summary: '单个透明度', changes: changes(.7).slice(0, 1) })).toMatchObject({ ok: true })
+    const single = notifications; undoVideoEdit(id); commits = 0; notifications = 0
+    const past = instance.past.length
+    expect(await app.call('change_application_entities', { summary: '统一透明度', changes: changes(.5) })).toMatchObject({ ok: true })
+    // 保存状态的通知与步数无关；内容通知在批结束时只发一次
+    expect(commits).toBe(1); expect(notifications).toBe(single); expect(instance.past).toHaveLength(past + 1)
+    expect(getActiveVideoEditSequence(instance).clips.every(clip => clip.opacity === .5)).toBe(true)
+    undoVideoEdit(id); expect(getActiveVideoEditSequence(instance).clips.every(clip => clip.opacity !== .5)).toBe(true)
+    // 最后一个片段所在轨道锁定：前 19 步执行后第 20 步失败，整组补偿回原样，不留提交与撤销步骤
+    const last = clips.at(-1)!; const other = getActiveVideoEditSequence(instance).tracks.find(value => value.kind === 'video' && value.index !== track)!
+    editVideoProject(id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => clip.id === last.id ? { ...clip, track: other.index } : clip), tracks: sequence.tracks.map(value => value.id === other.id ? { ...value, locked: true } : value) })) }))
+    const opacities = getActiveVideoEditSequence(instance).clips.map(clip => clip.opacity); const lockedPast = instance.past.length; commits = 0
+    const failed = await app.call('change_application_entities', { summary: '统一透明度', changes: changes(.3) })
+    expect(failed.ok).toBe(false); expect(JSON.stringify(failed)).toContain('锁定')
+    expect(getActiveVideoEditSequence(instance).clips.map(clip => clip.opacity)).toEqual(opacities)
+    expect(commits).toBe(0); expect(instance.past).toHaveLength(lockedPast)
+  } finally { stopFacts(); stopListening(); app.dispose() }
+})
+it('事务提交批只收本事务的写入：期间用户修改立即发布并有自己的操作事实和撤销步骤，事务撤销只撤自己的修改', async () => {
+  const instance = await createLegacyTrackVideoEditProject(); const id = instance.document.id
+  appendVideoEditClip(id); const clipId = getActiveVideoEditSequence(instance).clips[0].id
+  const facts: string[] = []; let notifications = 0
+  const stopFacts = subscribeVideoEditCommandFacts((_owner, fact) => { if (fact.phase === 'committed') facts.push(fact.operationId) })
+  const stopListening = subscribeVideoEdit(() => { notifications++ })
+  const moveClip = (x: number) => editVideoProject(id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => clip.id === clipId ? { ...clip, x } : clip) })) }))
+  const rename = (name: string) => updateVideoEditSequenceSettings(id, instance.activeSequenceId, { name })
+  try {
+    const past = instance.past.length; const originalX = getActiveVideoEditSequence(instance).clips[0].x; const originalName = getActiveVideoEditSequence(instance).name
+    const batch = beginVideoEditCommitBatch(id)
+    withVideoEditCommitBatch(batch, () => moveClip(.1))
+    expect(notifications).toBe(0); expect(facts).toHaveLength(0)
+    rename('用户改名')
+    const afterUser = notifications; expect(afterUser).toBeGreaterThan(0); expect(facts).toHaveLength(1)
+    withVideoEditCommitBatch(batch, () => moveClip(.2)); withVideoEditCommitBatch(batch, () => moveClip(.3))
+    expect(notifications).toBe(afterUser)
+    endVideoEditCommitBatch(batch)
+    expect(notifications).toBeGreaterThan(afterUser); expect(facts).toHaveLength(2); expect(new Set(facts).size).toBe(2)
+    // 事务第 1 步、用户改名、事务第 2–3 步：后两步相邻并成一步，用户改名保留自己的撤销步骤
+    expect(instance.past).toHaveLength(past + 3)
+    undoVideoEdit(id); expect(getActiveVideoEditSequence(instance)).toMatchObject({ name: '用户改名' }); expect(getActiveVideoEditSequence(instance).clips[0].x).toBe(.1)
+    undoVideoEdit(id); expect(getActiveVideoEditSequence(instance).name).toBe(originalName); expect(getActiveVideoEditSequence(instance).clips[0].x).toBe(.1)
+    undoVideoEdit(id); expect(getActiveVideoEditSequence(instance).clips[0].x).toBe(originalX)
+  } finally { stopFacts(); stopListening() }
+})
+it('两个事务的提交批交错时各自计数、各自记操作事实，结束一个不放出另一个的通知', async () => {
+  const instance = await createLegacyTrackVideoEditProject(); const id = instance.document.id
+  const facts: Array<{ operationId: string; name: string }> = []; let notifications = 0
+  const stopFacts = subscribeVideoEditCommandFacts((_owner, fact) => { if (fact.phase === 'committed') facts.push({ operationId: fact.operationId, name: fact.after.sequences[0].name }) })
+  const stopListening = subscribeVideoEdit(() => { notifications++ })
+  const rename = (name: string) => updateVideoEditSequenceSettings(id, instance.activeSequenceId, { name })
+  try {
+    const past = instance.past.length
+    const first = beginVideoEditCommitBatch(id); const second = beginVideoEditCommitBatch(id)
+    withVideoEditCommitBatch(first, () => rename('甲 1')); withVideoEditCommitBatch(second, () => rename('乙 1'))
+    withVideoEditCommitBatch(second, () => rename('乙 2')); withVideoEditCommitBatch(first, () => rename('甲 2'))
+    expect(notifications).toBe(0)
+    endVideoEditCommitBatch(first)
+    const afterFirst = notifications; expect(afterFirst).toBeGreaterThan(0); expect(facts).toEqual([{ operationId: expect.any(String), name: '甲 2' }])
+    endVideoEditCommitBatch(second)
+    expect(notifications).toBeGreaterThan(afterFirst); expect(facts).toHaveLength(2); expect(facts[1].name).toBe('乙 2'); expect(facts[1].operationId).not.toBe(facts[0].operationId)
+    // 甲 1、乙 1–2（相邻并成一步）、甲 2
+    expect(instance.past).toHaveLength(past + 3)
+  } finally { stopFacts(); stopListening() }
+})
 it('公共修改与手动编辑共用历史并可保存重开', async () => {
   const instance = (await createLegacyTrackVideoEditProject())
   appendVideoEditClip(instance.document.id)

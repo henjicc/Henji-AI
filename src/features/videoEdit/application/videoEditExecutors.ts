@@ -3,6 +3,7 @@ import { withVideoEditCodeMetadata, ensureVideoEditChangedCodeMetadata, ensureVi
 import { getVideoEditRenderPreference, setVideoEditRenderPreference, type VideoEditRenderPreference } from './videoEditRenderCache'
 import { discardVideoEditCodeFiles, codePublicationFiles } from './videoEditCodeStorage'
 import { codePerformanceMessage, type CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
+import { videoEditTransactionBatch, withVideoEditCommitBatch } from './videoEditService'
 import { withVideoEditCurrentMetadata, saveVideoEdit, editVideoProject, restoreVideoEditSnapshot, requireVideoEditInstance, listVideoEditInstances, getVideoEditProjectView, setVideoEditProjectView, switchVideoEditSequence, getVideoEditTimelineView, setVideoEditTimelineView, validateVideoEditTimelineView, validateVideoEditProgramControl, setVideoEditView, videoEditProgramCommandIdentity, restoreVideoEditProgramCommandIdentity, subscribeVideoEditView, subscribeVideoEditDomain, videoEditDomainRevision as videoEditRevision, type VideoEditProjectView, type VideoEditTimelineView } from './videoEditService'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { assertVideoEditAnnotationTransition } from '@/core/videoEdit/annotations'
@@ -20,7 +21,8 @@ import { videoEditTransitionClipIds } from '@/core/videoEdit/transitions'
 import { VIDEO_EDIT_FIELDS, VIDEO_EDIT_CONTROLLED_AGGREGATES, VIDEO_EDIT_CLIP_CONTENT_CASCADES, VIDEO_EDIT_CLIP_KEYFRAME_TIME_CASCADE, VIDEO_EDIT_TIME_CASCADES, VIDEO_EDIT_COMPOSITE_CASCADES, VIDEO_EDIT_PROGRAM_SOURCE_CASCADE, videoEditCollectionValues, videoEditDataKey, type VideoEditEntityType } from './videoEditFields'
 import { pauseVideoEditSourceForProgram, restoreVideoEditSourcePause, revertVideoEditSourcePause, matchesVideoEditSourceCommand, videoEditSourceCommandIdentity, type VideoEditSourcePause } from './videoEditSource'
 import { videoEditCaptionSchema, videoEditMarkerSchema, reconcileVideoEditTimedContent } from '@/core/videoEdit/timedContent'
-import { readVideoEditData, splitVideoEditRef } from './videoEditReflection'
+import { assertVideoEditEntityExists, readVideoEditData, splitVideoEditRef } from './videoEditReflection'
+import { settleVideoEditAnnotationChange } from './videoEditAnnotationBatch'
 import { getVideoEditPlaybackResolution, setVideoEditPlaybackResolution } from './videoEditPlaybackResolution'
 import type { VideoEditPlaybackResolutionSetting } from '@/core/videoEdit/playbackResolution'
 import { removeVideoEditItems, removeVideoEditBins, makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
@@ -141,7 +143,7 @@ function withAuthoringHints(result: ApplicationCompletedStepResult, versions: Ar
   if (measurements.length) evidence.push({ kind: 'observation', fact: measurements.map(codePerformanceMessage).join('\n'), data: measurements.map(value => ({ frame: value.frame, cpuMs: value.cpuMs, gpuMs: value.gpuMs, budgetMs: value.budgetMs, ...(value.structures ? { structures: value.structures.map(item => ({ ...item, sourceSpan: { ...item.sourceSpan } })) } : {}), ...(value.reuse ? { reuse: { ...value.reuse } } : {}), ...(value.attribution ? { attribution: value.attribution } : {}), ...(value.heaviest ? { heaviest: { kind: value.heaviest.kind, cpuMs: value.heaviest.cpuMs, sourceSpan: { ...value.heaviest.sourceSpan } } } : {}) })), capturedAt })
   return { ...result, evidence }
 }
-async function restore(token: string, compensation = false): Promise<ApplicationCompletedStepResult> {
+async function restore(token: string, compensation = false, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
   const record = undo.get(token); if (!record) throw new Error('撤销记录已过期，请使用剪辑撤销。')
   const instance = requireVideoEditInstance(record.before.id)
   if (instance !== record.owner) throw new Error('原剪辑会话已关闭，请使用当前剪辑历史。')
@@ -174,7 +176,7 @@ async function restore(token: string, compensation = false): Promise<Application
       throw error
     } finally { unsubscribeView(); unsubscribeDomain() }
   }
-  restoreVideoEditSnapshot(record.before.id, record.after, record.before, compensation); undo.delete(token)
+  withVideoEditCommitBatch(videoEditTransactionBatch(context, record.before.id), () => restoreVideoEditSnapshot(record.before.id, record.after, record.before, compensation)); undo.delete(token)
   if (compensation) {
     const previous = new Set(codePublicationFiles(record.before).map(file => file.location))
     const files = codePublicationFiles(record.after).filter(file => !previous.has(file.location))
@@ -210,14 +212,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
     await applyWriterTable(fieldWriterTable(VIDEO_EDIT_FIELDS[this.entityType]), data, step.mutations)
     const anchorSequence = this.entityType === 'video_edit.clip' && keys.includes('video_edit.clip.content_anchor') ? before.sequences.find(sequence => sequence.clips.some(clip => clip.id === childId)) : undefined
     const expectedAnchor = anchorSequence ? resolveVideoEditContentAnchor(projectId, anchorSequence.id, childId, data.contentAnchor ?? null) : undefined
-    if (this.entityType === 'video_edit.annotation') {
-      const prior = before.sequences.flatMap(sequence => sequence.annotations).find(mark => mark.id === childId)!
-      if (data.status === 'addressed' && prior.status !== 'addressed') data.addressedBy = { transactionId: context?.requestId ?? crypto.randomUUID(), revision: before.revision + 1 }
-      if (data.status === 'open') delete data.addressedBy
-      const next = videoEditAnnotationSchema.parse(data)
-      assertVideoEditAnnotationTransition(prior, next, context?.exposure === 'ui' ? 'user' : 'agent')
-      if (context?.exposure !== 'ui' && next.thread.slice(prior.thread.length).some(message => message.author.kind === 'user')) throw new Error('Agent回复不能冒充用户。')
-    }
+    const annotation = this.entityType === 'video_edit.annotation' ? settleVideoEditAnnotationChange(before.sequences.flatMap(sequence => sequence.annotations).find(mark => mark.id === childId)!, data, { source: context?.exposure === 'ui' ? 'user' : 'agent' }, { transactionId: context?.requestId ?? crypto.randomUUID(), revision: before.revision + 1 }) : undefined
     if (!isVideoEditContentCurrent(owner, contentVersion) || (viewBefore && !sameProjectView(projectViewSnapshot(projectId), viewBefore))) throw new Error('剪辑或浏览会话已有后续修改，请重读当前状态。')
     if (this.entityType === 'video_edit.clip' && step.mutations.some(mutation => mutation.propertyId === 'video_edit.clip.source_in_us')) data.sourceRemainder = { numerator: 0, denominator: 1 }
     if (this.entityType === 'video_edit.item') for (const key of ['graphicKind', 'graphicWidth', 'graphicHeight', 'contentQueries']) delete data[key]
@@ -264,7 +259,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
           if (keys.includes('video_edit.clip.follow')) assertVideoEditClipFollow(next, next.clips.find(clip => clip.id === childId)!)
           return next
         }
-        if (this.entityType === 'video_edit.annotation') return { ...sequence, annotations: sequence.annotations.map(mark => mark.id === childId ? videoEditAnnotationSchema.parse(data) : mark) }
+        if (annotation) return { ...sequence, annotations: sequence.annotations.map(mark => mark.id === childId ? annotation : mark) }
         if (this.entityType === 'video_edit.marker') return { ...sequence, markers: sequence.markers?.map(mark => mark.id === childId ? videoEditMarkerSchema.parse(data) : mark) }
         if (this.entityType === 'video_edit.caption') return { ...sequence, captions: sequence.captions?.map(caption => caption.id === childId ? videoEditCaptionSchema.parse(data) : caption) }
         if (this.entityType === 'video_edit.track') return { ...sequence, tracks: sequence.tracks.map(track => track.id === childId ? videoEditTrackSchema.parse(data) : track) }
@@ -316,13 +311,14 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
       await verifyVideoEditContentAnchorSources(projectId, anchorSequence.id, [expectedAnchor], context?.signal)
       if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('核对期间剪辑已有后续修改，请重读当前状态。')
     }
-    const after = editVideoProject(projectId, update)
+    const batch = videoEditTransactionBatch(context, projectId)
+    const after = withVideoEditCommitBatch(batch, () => editVideoProject(projectId, update))
     if (anchorSequence) {
       const sequence = after.sequences.find(sequence => sequence.id === anchorSequence.id)!
       const target = sequence.clips.find(clip => clip.id === childId)
       const stable = retimeVideoEditContentClips(sequence, sequence, new Map()).find(clip => clip.id === childId)
       if (!target || JSON.stringify(target.contentAnchor) !== JSON.stringify(expectedAnchor) || !stable || target.start !== stable.start || target.duration !== stable.duration) {
-        restoreVideoEditSnapshot(projectId, after, before, true)
+        withVideoEditCommitBatch(batch, () => restoreVideoEditSnapshot(projectId, after, before, true))
         throw new Error('内容关联未通过来源与时间读回核对，本次修改已撤回，请重新查询。')
       }
     }
@@ -335,8 +331,8 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
     if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.program_playback')) setVideoEditView(projectId, data.programPlayback as ProjectViewSnapshot['program'])
     return completed(before, after, [step.target], viewBefore, sourcePause)
   }
-  async compensate(_step: Extract<ApplicationPlannedStep, { kind: 'mutation' }>, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> { return result.undoToken ? (await restore(result.undoToken, true)).evidence : [] }
-  async undo(token: string): Promise<ApplicationCompletedStepResult> { return restore(token) }
+  async compensate(_step: Extract<ApplicationPlannedStep, { kind: 'mutation' }>, result: ApplicationCompletedStepResult, context?: ApplicationExecutionContext): Promise<ApplicationEvidence[]> { return result.undoToken ? (await restore(result.undoToken, true, context)).evidence : [] }
+  async undo(token: string, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> { return restore(token, false, context) }
 }
 export class VideoEditCollectionExecutor implements ApplicationCollectionExecutor {
   readonly effectContract: ApplicationEffectContract
@@ -455,7 +451,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
           refs.push({ kind: this.entityType, id: `${before.id}:${id}` })
         }
       } else {
-        const ids = step.operation.targets.map(ref => { const target = splitVideoEditRef(ref); if (target.projectId !== before.id || ref.kind !== this.entityType) throw new Error('目标不属于此剪辑或集合。'); readVideoEditData(ref); return target.childId })
+        const ids = step.operation.targets.map(ref => { const target = splitVideoEditRef(ref); if (target.projectId !== before.id || ref.kind !== this.entityType) throw new Error('目标不属于此剪辑或集合。'); assertVideoEditEntityExists(ref); return target.childId })
         if (VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === this.entityType)) { removeVideoEditCompositeEntities(document, this.entityType as VideoEditCompositeEntityType, parsed.childId, ids); refs.push(...step.operation.targets); return document }
         switch (this.entityType) {
           case 'video_edit.sequence':
@@ -515,7 +511,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
         if (!isVideoEditContentCurrent(instance, contentVersion)) throw new Error('核对期间剪辑已有后续修改，请重读当前状态。')
       }
     }
-    const after = editVideoProject(before.id, current => withVideoEditCurrentMetadata(next, current))
+    const after = withVideoEditCommitBatch(videoEditTransactionBatch(context, before.id), () => editVideoProject(before.id, current => withVideoEditCurrentMetadata(next, current)))
     const result = completed(before, after, refs)
     // 删除轨道连同其上的片段（同 PR）：被删片段是级联副作用。
     if (this.entityType === 'video_edit.track') {
@@ -525,6 +521,6 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
     }
     return result
   }
-  async compensate(_step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> { return result.undoToken ? (await restore(result.undoToken, true)).evidence : [] }
-  async undo(token: string): Promise<ApplicationCompletedStepResult> { return restore(token) }
+  async compensate(_step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, result: ApplicationCompletedStepResult, context?: ApplicationExecutionContext): Promise<ApplicationEvidence[]> { return result.undoToken ? (await restore(result.undoToken, true, context)).evidence : [] }
+  async undo(token: string, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> { return restore(token, false, context) }
 }

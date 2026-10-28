@@ -4,6 +4,7 @@ import { codeFramePerformanceSchema } from '../../../videoEdit/codeMaterial/perf
 import { VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from '../../../videoEdit/time'
 import { detectVideoEditPrivacyCapability } from './videoEditPrivacyCapability'
 import { videoEditStaggerCapability } from './videoEditStaggerCapability'
+import { VIDEO_EDIT_ANNOTATION_CAPABILITIES } from './videoEditAnnotationCapabilities'
 import { VIDEO_EDIT_MULTICAM_CAPABILITIES } from './videoEditMulticamCapabilities'
 import { VIDEO_EDIT_STYLE_CAPABILITIES } from './videoEditStyleCapabilities'
 import { generateVideoEditProxyCapability } from './videoEditProxyCapability'
@@ -163,7 +164,7 @@ export const trimVideoEditClipCapability = defineApplicationCapability({
   verificationContract: { kind: 'effect_receipt', requireEffects: true, requireVerifiedEffects: true },
   resolveObservedEffects: (_input, result) => [{ effect: 'execute', entityTypes: ['video_edit.document'], propertyIds: [], targetRefs: [result.resultRef], count: 1, verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [] }],
 })
-export const VIDEO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [importVideoEditProjectFilesCapability, upgradeVideoEditCodeMaterialsCapability,commitVideoEditCodeProjectCapability, sendVideoEditAudioCapability, detectVideoEditPrivacyCapability, videoEditStaggerCapability, analyzeVideoEditBeatsCapability, retryVideoEditSmartRegionCapability, ...VIDEO_EDIT_STYLE_CAPABILITIES, ...VIDEO_EDIT_MULTICAM_CAPABILITIES, nestVideoEditClipsCapability, reframeVideoEditCapability, screenAttentionVideoEditCapability, generateVideoEditAudioDuckingCapability, rippleVideoEditClipSpeedCapability, rampVideoEditClipSpeedCapability, ...VIDEO_EDIT_TRACKING_CAPABILITIES, ...[
+export const VIDEO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [importVideoEditProjectFilesCapability, upgradeVideoEditCodeMaterialsCapability,commitVideoEditCodeProjectCapability, sendVideoEditAudioCapability, detectVideoEditPrivacyCapability, videoEditStaggerCapability, ...VIDEO_EDIT_ANNOTATION_CAPABILITIES, analyzeVideoEditBeatsCapability, retryVideoEditSmartRegionCapability, ...VIDEO_EDIT_STYLE_CAPABILITIES, ...VIDEO_EDIT_MULTICAM_CAPABILITIES, nestVideoEditClipsCapability, reframeVideoEditCapability, screenAttentionVideoEditCapability, generateVideoEditAudioDuckingCapability, rippleVideoEditClipSpeedCapability, rampVideoEditClipSpeedCapability, ...VIDEO_EDIT_TRACKING_CAPABILITIES, ...[
   ['save_video_edit', '保存剪辑', '立即把剪辑的当前修改写入它在项目文件夹里的剪辑文件（平时会自动保存）。失败后只重试保存，不重复修改。documentRef 的 id 即剪辑的文档 ID（取自 list_documents）。'],
   ['undo_video_edit', '撤销剪辑修改', '撤销目标剪辑的一步手动或助手修改。'],
   ['redo_video_edit', '重做剪辑修改', '恢复目标剪辑刚撤销的一步修改。'],

@@ -116,7 +116,7 @@ export async function withApplicationPersistenceBoundary<T>(input: {
     for (const participant of input.participants) {
       if (!batches.has(participant.key)) batches.set(participant.key, participant.begin())
     }
-    const context = { ...input.context, persistenceScopes: new Set(batches.keys()) }
+    const context = { ...input.context, persistenceScopes: new Set(batches.keys()), persistenceBatches: new Map(batches) }
     let result: T
     try {
       result = await input.execute(context)

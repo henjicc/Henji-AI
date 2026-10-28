@@ -59,6 +59,13 @@ export function videoEditEntityItems(document: VideoEditDocument, type: VideoEdi
     case 'video_edit.builtin_effect': return [...VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => ({ id: videoEditBuiltinRefId(definition.id), name: definition.name })), ...VIDEO_EDIT_TRANSITION_PRESETS.map(preset => ({ id: `${VIDEO_EDIT_TRANSITION_REF_PREFIX}${preset.kind}`, name: preset.name }))]
   }
 }
+/** 只核对引用指向的实体仍在，不读属性：删除前核对父序列、`propertyIds: []` 读基线都走这里，避免整份克隆序列和重算转写。 */
+export function assertVideoEditEntityExists(ref: ApplicationRef): void {
+  const { projectId, childId } = splitVideoEditRef(ref); const instance = requireVideoEditInstance(projectId)
+  if (ref.kind === 'video_edit.document') return
+  if (!VIDEO_EDIT_TYPES.includes(ref.kind as VideoEditEntityType)) throw new Error('未知剪辑实体类型。')
+  if (!videoEditEntityItems(instance.document, ref.kind as VideoEditEntityType).some(item => item.id === childId)) throw new Error('NOT_FOUND：目标不属于此剪辑或已删除。')
+}
 export function readVideoEditData(ref: ApplicationRef, codeMetadata = false, propertyIds?: readonly string[], permissions?: ReadonlySet<string>): VideoEditFieldData {
   const { projectId, childId } = splitVideoEditRef(ref); const instance = requireVideoEditInstance(projectId)
   if (ref.kind === 'video_edit.document') return { audioLinkNotices: getVideoEditAudioLinkNotices(projectId).map(n => ({ ...n })), audioAnalysisProgress: videoEditContentAudioProgress(projectId), selectedCodeElement: JSON.parse(JSON.stringify(videoEditSelectedCodeElementContext(instance))), mediaImport: (() => { const task = videoEditImportTask(projectId); return task ? { phase: task.phase, completed: task.completed, total: task.total, totalKnown: task.totalKnown ?? false, discovered: task.discovered ?? task.total, queued: task.queued, requests: task.requests, imported: task.imported, skipped: task.skipped } : null })(), proxyPreference: { ...getVideoEditProxyPreference(projectId) }, colorLuts: (instance.document.colorLuts ?? []).map(({ id, name }) => ({ id, name })), name: instance.document.name, frame: instance.frame, selection: instance.selection ?? '', activeSequenceId: instance.activeSequenceId, dirty: instance.dirty, selectedItemIds: [...instance.selectedItemIds], selectedBinId: instance.selectedBinId, openSequenceIds: [...instance.openSequenceIds], timelineView: { ...getVideoEditTimelineView(projectId) }, programPlayback: { frame: instance.frame, playing: instance.playing, playbackDirection: instance.playbackDirection }, playbackResolution: { ...getVideoEditPlaybackResolution(projectId) }, renderCache: JSON.parse(JSON.stringify(readVideoEditRenderCache(projectId))), renderPreference: { ...getVideoEditRenderPreference(projectId) } }
@@ -140,6 +147,7 @@ class VideoEditProvider implements ApplicationEntityProvider {
   }
   async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }, context?: ApplicationControlAccessContext) {
     if (!listVideoEditInstances().some(owner => owner.document.id === splitVideoEditRef(ref).projectId)) await openVideoEditDocument({ id: splitVideoEditRef(ref).projectId }, { focus: false })
+    if (request.propertyIds?.length === 0) { assertVideoEditEntityExists(ref); return { ref, entityType: this.entityType, revisions: { video_edit: videoEditRevision() }, properties: {}, capturedAt: new Date().toISOString() } }
     if (this.entityType === 'video_edit.media' && (!request.propertyIds?.length || request.propertyIds.includes('video_edit.media.proxy_state'))) { const target = splitVideoEditRef(ref); await ensureVideoEditProxyState(target.projectId, target.childId) }
     const needsMetadata = ['video_edit.code_material', 'video_edit.code_version'].includes(this.entityType)
     if (needsMetadata) {
@@ -181,7 +189,7 @@ class VideoEditProvider implements ApplicationEntityProvider {
   }
   async getCollectionAvailability(parent: ApplicationRef) {
     if (!listVideoEditInstances().some(owner => owner.document.id === splitVideoEditRef(parent).projectId)) await openVideoEditDocument({ id: splitVideoEditRef(parent).projectId }, { focus: false })
-    readVideoEditData(parent)
+    assertVideoEditEntityExists(parent)
     const availability = unrestrictedCollectionAvailability(this.entityType, parent, { video_edit: videoEditRevision() }, ['video_edit:write'])
     if (this.entityType === 'video_edit.caption') {
       const { projectId, childId } = splitVideoEditRef(parent)

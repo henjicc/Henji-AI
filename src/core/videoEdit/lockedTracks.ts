@@ -2,7 +2,10 @@ import type { VideoEditDocument, VideoEditSequence } from './document'
 import { videoEditTransitionClipIds } from './transitions'
 import { videoEditCaptionClipIds } from './captionSpeech'
 
-/** Lock is an editing constraint, not an output switch. Undo restores the whole transaction. */
+/**
+ * Lock is an editing constraint, not an output switch. Undo restores the whole transaction.
+ * 批注是审片记录而不是画面内容：锁定轨道上片段挂的批注照样可以增删、改状态和回复。
+ */
 export function assertVideoEditLockedTracks(before: VideoEditDocument, after: VideoEditDocument): void {
   for (const sequence of before.sequences) {
     const target = after.sequences.find(value => value.id === sequence.id)
@@ -15,11 +18,10 @@ export function assertVideoEditLockedTracks(before: VideoEditDocument, after: Vi
       const content = (value: VideoEditSequence): string => {
         const clips = value.clips.filter(clip => clip.track === track.index).sort((a, b) => a.id.localeCompare(b.id))
         const ids = new Set(clips.map(clip => clip.id))
-        const annotations = value.annotations.filter(mark => Boolean(mark.clipId && ids.has(mark.clipId))).sort((a, b) => a.id.localeCompare(b.id))
         const markers = (value.markers ?? []).filter(mark => mark.clipId && Boolean(mark.clipId && ids.has(mark.clipId))).sort((a, b) => a.id.localeCompare(b.id))
         const captions = (value.captions ?? []).filter(caption => videoEditCaptionClipIds(caption).some(id => ids.has(id))).sort((a, b) => a.id.localeCompare(b.id))
         const transitions = (value.transitions ?? []).filter(transition => videoEditTransitionClipIds(transition).some(id => ids.has(id))).sort((a, b) => a.id.localeCompare(b.id))
-        return JSON.stringify({ clips, annotations, markers, captions, transitions })
+        return JSON.stringify({ clips, markers, captions, transitions })
       }
       if (content(sequence) !== content(target)) throw new Error(`轨道“${track.name}”已锁定，请先解锁再编辑。`)
     }

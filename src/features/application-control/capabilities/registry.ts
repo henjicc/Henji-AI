@@ -117,7 +117,9 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
             observed.add(scope)
             if (automatic) expected[scope] = current
             else if (expected[scope] !== current) {
-              throw new Error(`CONFLICT:${ref.kind} 的 ${scope} 数据已变化或缺少基线，请调用 read_application_entity({ref:${JSON.stringify(ref)},propertyIds:[]}) 取得 baselineId，再使用该 baselineIds 提交。`)
+              throw new Error(definition.baselineCapabilityId
+                ? `CONFLICT:${ref.kind} 的 ${scope} 数据已变化或缺少基线，请重新调用 ${definition.baselineCapabilityId} 取新的 baselineId，再用它提交。`
+                : `CONFLICT:${ref.kind} 的 ${scope} 数据已变化或缺少基线，请调用 read_application_entity({ref:${JSON.stringify(ref)},propertyIds:[]}) 取得 baselineId，再使用该 baselineIds 提交。`)
             }
           }
         }

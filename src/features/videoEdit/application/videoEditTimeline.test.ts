@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
-import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, getVideoEditTimelineView, listVideoEditInstances, saveVideoEdit, setVideoEditTimelineView, setVideoEditView, subscribeVideoEdit, switchVideoEditSequence, undoVideoEdit } from './videoEditService'
+import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, getVideoEditTimelineView, listVideoEditInstances, saveVideoEdit, setVideoEditTimelineView, setVideoEditView, switchVideoEditSequence, undoVideoEdit } from './videoEditService'
 import { beginVideoEditTimelineDrag, copyVideoEditTimeline, executeVideoEditTimelineEdit, finishVideoEditTimelineDrag, previewVideoEditTimelineDrag, readVideoEditClipboard, separateVideoEditAudio, updateVideoEditTrack } from './videoEditTimeline'
 import * as mediaService from './videoEditMedia'
 import { VideoEditMutationExecutor } from './videoEditExecutors'
@@ -150,14 +150,12 @@ it('领域锁定覆盖手动、公共字段与拖动入口，通用事务失败�
     expect((await app.read(trackRef, ['video_edit.track.height', 'video_edit.track.sync_locked'])).properties).toMatchObject({ 'video_edit.track.height': 32, 'video_edit.track.sync_locked': true })
     updateVideoEditTrack(id, sequence.id, track.id, { locked: false })
     const baseline = await app.read(ref); const past = owner.past.length
-    let lockedIntermediate = false
-    const unsubscribe = subscribeVideoEdit(() => { if (getActiveVideoEditSequence(owner).tracks[1].locked && getActiveVideoEditSequence(owner).clips[0].x === .2) lockedIntermediate = true })
     const failed = await app.call('change_application_entities', { summary: '验证锁定失败回滚', changes: [
       { kind: 'set_properties', entityType: ref.kind, target: ref, properties: { 'video_edit.clip.x': .2 } },
       { kind: 'set_properties', entityType: trackRef.kind, target: trackRef, properties: { 'video_edit.track.locked': true } },
       { kind: 'set_properties', entityType: ref.kind, target: ref, properties: { 'video_edit.clip.x': .3 } },
     ] }, baseline.revisions as Record<string, number>)
-    unsubscribe(); expect(lockedIntermediate).toBe(true)
+    // 同一事务的中间状态不逐步通知界面；第 3 步撞上第 2 步刚加的锁，报错本身证明前两步已执行。
     expect(failed.ok).toBe(false); expect(JSON.stringify(failed)).toContain('锁定'); expect(getActiveVideoEditSequence(owner).clips[0].x).toBe(0); expect(getActiveVideoEditSequence(owner).tracks[1].locked).toBe(false); expect(owner.past.length).toBe(past)
   } finally { app.dispose() }
 })

@@ -27,6 +27,7 @@ const RESULT_SCENARIOS: Record<string, Scenario[]> = {
   video_edit: [
     { file: 'src/features/videoEdit/application/videoEditService.test.ts', title: '公共修改与手动编辑共用历史并可保存重开' },
     { file: 'src/features/videoEdit/application/videoEditService.test.ts', title: '保存失败保留助手修改且恢复不会重放编辑' },
+    { file: 'src/features/videoEdit/application/videoEditAnnotationBatch.test.ts', title: '按条件查询后用查询结果删除并合并重复，剪辑里只剩保留的那条并附合并说明' },
   ],
   settings: [
     { file: 'src/features/settings/application-control/settingsReflectionResult.test.ts', title: '通过 describe 与 change 切换 general.language，正式读取值随之变化' },
@@ -82,7 +83,7 @@ const RESULT_SCENARIO_BASELINE: Record<keyof typeof RESULT_SCENARIOS, number> = 
   audio_capture: 2,
   workspace_layout: 2,
   screen_recording: 2,
-  video_edit: 2,
+  video_edit: 3,
   memory: 2,
   settings: 2,
   assets: 3,

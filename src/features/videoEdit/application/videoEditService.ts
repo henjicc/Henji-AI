@@ -1,3 +1,4 @@
+import type { ApplicationExecutionContext } from '@/core/application-control'
 import { getVideoEditSequenceDefaults } from './videoEditSequenceDefaults'
 import { beginVideoEditFirstFrame, countVideoEditTiming, endVideoEditTiming } from '../engine/videoEditFirstFrameTiming'
 import { videoEditExportHistorySchema, type VideoEditExportHistoryEntry } from '@/core/videoEdit/document'
@@ -348,7 +349,66 @@ export function finishVideoEditGesture(handle: VideoEditGesture, commit = true):
 }
 function cancelVideoEditGesture(owner: VideoEditInstance): void { const state = gestures.get(owner); if (state) finishVideoEditGesture(state.handle, false) }
 function notifyVideoEditContent(instance: VideoEditInstance): void {
+  const batch = writingBatch(instance)
+  if (batch) { batch.content = true; return }
   for (const listener of contentListeners.get(instance) ?? []) listener()
+}
+/**
+ * 一次通用事务里对同一份剪辑的多步写入合成一次提交：每步照常校验、推进版本并记补偿历史
+ * （后续步骤的可用性复核与失败补偿都依赖它），但界面与预览只在事务结束时收到一次通知，
+ * 操作事实只发一条，事务自己相邻的撤销条目并成一步。否则改 20 个片段就是 20 次整份重配预览。
+ * 批只认带着它的令牌写入的那几次同步提交：事务等待试渲染、字体时用户在界面上的修改照常立即发布、
+ * 记自己的操作事实和撤销步骤；两个事务各持一个批，互不影响。
+ */
+export interface VideoEditCommitBatch {
+  readonly instance: VideoEditInstance
+  readonly pastAtBegin: readonly VideoEditDocument[]; readonly futureAtBegin: readonly VideoEditDocument[]
+  readonly own: Set<VideoEditDocument>
+  first?: VideoEditDocument; last?: VideoEditDocument; operationId?: string
+  published: boolean; content: boolean; ended: boolean
+}
+let activeCommitBatch: VideoEditCommitBatch | undefined
+function writingBatch(instance: VideoEditInstance): VideoEditCommitBatch | undefined {
+  return activeCommitBatch?.instance === instance && !activeCommitBatch.ended ? activeCommitBatch : undefined
+}
+export function beginVideoEditCommitBatch(id: string): VideoEditCommitBatch {
+  const instance = requireVideoEditInstance(id)
+  return { instance, pastAtBegin: instance.past.slice(), futureAtBegin: instance.future.slice(), own: new Set(), published: false, content: false, ended: false }
+}
+export function videoEditPersistenceKey(id: string): string { return `video_edit:${id}` }
+/** 事务的持久化批与提交批一一对应；执行器从自己的事务上下文取回令牌，拿不到别的事务的批。 */
+const transactionBatches = new WeakMap<object, VideoEditCommitBatch>()
+export function bindVideoEditCommitBatch<T extends object>(handle: T, batch: VideoEditCommitBatch): T { transactionBatches.set(handle, batch); return handle }
+export function videoEditTransactionBatch(context: Pick<ApplicationExecutionContext, 'persistenceBatches'> | undefined, id: string): VideoEditCommitBatch | undefined {
+  const handle = context?.persistenceBatches?.get(videoEditPersistenceKey(id))
+  return handle ? transactionBatches.get(handle) : undefined
+}
+/** 只在这次同步写入期间把提交记到批上；写入函数里不能有等待。 */
+export function withVideoEditCommitBatch<T>(batch: VideoEditCommitBatch | undefined, write: () => T): T {
+  if (!batch || batch.ended) return write()
+  const previous = activeCommitBatch; activeCommitBatch = batch
+  try { return write() } finally { activeCommitBatch = previous }
+}
+/** 确认介绍的意图回执只改保存标记，属于持久化恢复，不算作品修改、不留撤销步骤。 */
+function historyContent(document: VideoEditDocument): string {
+  return JSON.stringify({ ...document, revision: 0, creativeIntents: document.creativeIntents && { ...document.creativeIntents,
+    drafts: document.creativeIntents.drafts.map(draft => ({ ...draft, applications: draft.applications.map(application => ({ ...application, saved: false })) })) } })
+}
+export function endVideoEditCommitBatch(batch: VideoEditCommitBatch): void {
+  if (batch.ended) return
+  batch.ended = true
+  const { instance } = batch
+  const unchanged = !batch.first || !batch.last || historyContent(batch.first) === historyContent(batch.last)
+  const foreign = instance.past.filter(entry => !batch.own.has(entry))
+  if (unchanged && foreign.length === batch.pastAtBegin.length && foreign.every((entry, index) => entry === batch.pastAtBegin[index])) {
+    instance.past = [...batch.pastAtBegin]; instance.future = [...batch.futureAtBegin]
+  } else {
+    // 只并本事务自己相邻的条目；夹在中间的用户修改保留各自的撤销步骤
+    instance.past = instance.past.filter((entry, index, all) => !(batch.own.has(entry) && index > 0 && batch.own.has(all[index - 1])))
+  }
+  if (batch.operationId && batch.first && batch.last && !sameDocumentContent(batch.first, batch.last)) publishCommandFact(instance, { operationId: batch.operationId, phase: 'committed', before: batch.first, after: batch.last })
+  if (batch.published) { countVideoEditTiming('publications'); for (const listener of domainListeners) listener(); for (const listener of listeners) listener(); for (const listener of viewListeners) listener() }
+  if (batch.content) notifyVideoEditContent(instance)
 }
 export function subscribeVideoEdit(listener: () => void): () => void { listeners.add(listener); return () => { listeners.delete(listener) } }
 export function videoEditRevision(): number { return revision }
@@ -634,10 +694,14 @@ function publishVideoEditDocument(instance: VideoEditInstance, next: VideoEditDo
   }
   if (!spatialOnly) { rescaleSequenceViews(instance, before); reconcileSequenceView(instance) }
   instance.version++; instance.contentVersion++
-  if (operationId) publishCommandFact(instance, { operationId, phase: 'committed', before, after: instance.document })
+  const batch = spatialOnly ? undefined : writingBatch(instance)
+  if (batch) { batch.first ??= before; batch.last = instance.document; if (recordHistory) batch.own.add(before) }
+  if (operationId) { if (batch) batch.operationId ??= operationId; else publishCommandFact(instance, { operationId, phase: 'committed', before, after: instance.document }) }
   // 受限手势草稿只刷新实时画面及叠层；结束/取消由 finishVideoEditGesture 统一刷新完整界面。
   // 否则每个指针事件都会重绘时间线、项目列表和所有 Dock 面板。
   if (spatialOnly) publishVideoEditDomain()
+  // 批内只推进版本号，供后续步骤的基线与“内容未变”核对；通知留到批结束。
+  else if (batch) { revision++; domainRevision++; viewRevision++; batch.published = true }
   else publishVideoEdit(true)
   if (recordHistory) notifyVideoEditContent(instance)
   return instance.document

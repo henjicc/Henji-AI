@@ -21,6 +21,7 @@ const ATOMIC_DOCUMENT_ALGORITHMS = new Set([
   'upgrade_video_edit_code_materials',
   'detect_video_edit_sensitive_text',
   'stagger_video_edit_motion',
+  'update_video_edit_annotations', 'remove_video_edit_annotations',
   'analyze_video_edit_beats',
   'generate_video_edit_screen_attention', 'auto_reframe_video_edit', 'bind_video_edit_style', 'generate_video_edit_audio_ducking',
   'normalize_video_edit_loudness', 'trim_video_edit_clip', 'ripple_video_edit_clip_speed',

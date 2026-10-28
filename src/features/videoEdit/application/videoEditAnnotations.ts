@@ -1,12 +1,13 @@
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { createLogger } from '@/core/logging'
-import { assertVideoEditAnnotationTransition, VIDEO_EDIT_ANNOTATION_COLOR_NAMES, videoEditAnnotationSchema, type VideoEditAnnotation, type VideoEditAnnotationColor, type VideoEditAnnotationTarget, type VideoEditAnnotationWeight } from '@/core/videoEdit/annotations'
+import { VIDEO_EDIT_ANNOTATION_COLOR_NAMES, videoEditAnnotationSchema, type VideoEditAnnotation, type VideoEditAnnotationColor, type VideoEditAnnotationTarget, type VideoEditAnnotationWeight } from '@/core/videoEdit/annotations'
 import type { VideoEditCommandId } from '@/core/videoEdit/commands'
 import { openAssistant } from '@/features/assistant/store/assistantUiStore'
 import { assetToAgentAttachment } from '@/features/assistant/conversation/assistantAttachments'
 import { getPlatform } from '@/platform/runtime'
 import { createHostContextSnapshot } from '@/features/application-control/hostContext/hostContext'
 import { observeVideoEditFrame } from './videoEditFrameObservation'
+import { settleVideoEditAnnotationChange, updateVideoEditAnnotationStatuses, VIDEO_EDIT_ANNOTATION_USER } from './videoEditAnnotationBatch'
 import { editVideoSequence, focusVideoEditPanel, requireVideoEditInstance, restoreVideoEditSnapshot, setVideoEditTimelineView, setVideoEditView, switchVideoEditSequence } from './videoEditService'
 
 const logger = createLogger('features.videoEdit.annotations')
@@ -60,10 +61,8 @@ export function updateVideoEditAnnotation(projectId: string, id: string, update:
   const owner = requireVideoEditInstance(projectId)
   const sequence = owner.document.sequences.find(sequence => sequence.annotations.some(mark => mark.id === id))
   if (!sequence) throw new Error('标注已删除，请重新选择。')
-  editVideoSequence(projectId, sequence.id, sequence => ({ ...sequence, annotations: sequence.annotations.map(mark => {
-    if (mark.id !== id) return mark
-    const next = videoEditAnnotationSchema.parse(update(mark)); assertVideoEditAnnotationTransition(mark, next, 'user'); return next
-  }) }))
+  const association = { transactionId: crypto.randomUUID(), revision: owner.document.revision + 1 }
+  editVideoSequence(projectId, sequence.id, sequence => ({ ...sequence, annotations: sequence.annotations.map(mark => mark.id === id ? settleVideoEditAnnotationChange(mark, update(mark), VIDEO_EDIT_ANNOTATION_USER, association) : mark) }))
 }
 export function deleteVideoEditAnnotation(projectId: string, id: string): void {
   const owner = requireVideoEditInstance(projectId); const sequence = owner.document.sequences.find(sequence => sequence.annotations.some(mark => mark.id === id))
@@ -71,7 +70,7 @@ export function deleteVideoEditAnnotation(projectId: string, id: string): void {
   editVideoSequence(projectId, sequence.id, sequence => ({ ...sequence, annotations: sequence.annotations.filter(mark => mark.id !== id) }))
 }
 export function reviewVideoEditAnnotation(projectId: string, id: string, pass: boolean, opinion = ''): void {
-  updateVideoEditAnnotation(projectId, id, mark => ({ ...mark, status: pass ? 'resolved' : 'open', ...(pass ? {} : { addressedBy: undefined }), thread: [...mark.thread, { id: crypto.randomUUID(), author: { kind: 'user', name: '我' }, createdAt: new Date().toISOString(), text: pass ? '确认改好了。' : opinion.trim() || '请重新处理。' }] }))
+  updateVideoEditAnnotationStatuses(projectId, [{ id, status: pass ? 'resolved' : 'open', reply: pass ? '确认改好了。' : opinion.trim() || '请重新处理。' }], VIDEO_EDIT_ANNOTATION_USER)
   logger.info('审查剪辑标注', { event: 'video_edit.annotation.reviewed', context: { projectId, annotationId: id, passed: pass } })
 }
 export function jumpToVideoEditAnnotation(projectId: string, id: string): void {
@@ -79,19 +78,23 @@ export function jumpToVideoEditAnnotation(projectId: string, id: string): void {
   if (!sequence || !mark) throw new Error('标注已删除。')
   setSelectedAnnotation(projectId, id); switchVideoEditSequence(projectId, sequence.id); setVideoEditView(projectId, { playing: false, frame: mark.frame, ...(mark.clipId ? { selection: mark.clipId } : {}) }); focusVideoEditPanel(projectId, 'annotations')
 }
-/** The normal transaction participant coalesces content edits and addressed into one history boundary. */
+/**
+ * The normal transaction participant coalesces content edits and addressed into one history boundary.
+ * 处理前的快照是最近一份还没被这次处理关联的快照；批注当时可能是待处理，也可能是直接改完的待发送草稿。
+ */
 export function undoVideoEditAnnotationChange(projectId: string, id: string): void {
   const owner = requireVideoEditInstance(projectId)
   const mark = owner.document.sequences.flatMap(sequence => sequence.annotations).find(mark => mark.id === id)
   if (!mark?.addressedBy) throw new Error('此标注没有可撤销的处理记录。')
   const association = mark.addressedBy
   let index = -1
-  for (let candidate = owner.past.length - 1; candidate >= 0; candidate--) { const snapshot = owner.past[candidate]; if (snapshot.revision < association.revision && snapshot.sequences.some(sequence => sequence.annotations.some(prior => prior.id === id && prior.status === 'open'))) { index = candidate; break } }
+  for (let candidate = owner.past.length - 1; candidate >= 0; candidate--) { const snapshot = owner.past[candidate]; if (snapshot.revision < association.revision && snapshot.sequences.some(sequence => sequence.annotations.some(prior => prior.id === id && prior.addressedBy?.transactionId !== association.transactionId))) { index = candidate; break } }
   const before = owner.past[index]; const after = owner.past[index + 1] ?? owner.document
   const content = (document: typeof owner.document): string => JSON.stringify({ ...document, revision: 0, sequences: document.sequences.map(sequence => ({ ...sequence, annotations: [] })) })
   if (!before || content(after) !== content(owner.document)) throw new Error('此次处理之后已有其他内容修改，请先用剪辑撤销回到该步骤。')
   const annotations = owner.document.sequences.flatMap(sequence => sequence.annotations).filter(item => item.addressedBy?.transactionId === association.transactionId)
-  restoreVideoEditSnapshot(projectId, owner.document, { ...before, sequences: before.sequences.map(sequence => ({ ...sequence, annotations: (owner.document.sequences.find(current => current.id === sequence.id)?.annotations ?? sequence.annotations).map(item => annotations.some(current => current.id === item.id) ? { ...item, status: 'open', addressedBy: undefined } : item) })) })
+  const priorStatus = new Map(before.sequences.flatMap(sequence => sequence.annotations.map(item => [item.id, item.status] as const)))
+  restoreVideoEditSnapshot(projectId, owner.document, { ...before, sequences: before.sequences.map(sequence => ({ ...sequence, annotations: (owner.document.sequences.find(current => current.id === sequence.id)?.annotations ?? sequence.annotations).map(item => annotations.some(current => current.id === item.id) ? { ...item, status: priorStatus.get(item.id) === 'draft' ? 'draft' : 'open', addressedBy: undefined } : item) })) })
   logger.info('撤销剪辑标注处理', { event: 'video_edit.annotation.undo', context: { projectId, annotationId: id } })
 }
 export function videoEditAnnotationPrompt(projectId: string, marks: readonly VideoEditAnnotation[], note: string): string {
