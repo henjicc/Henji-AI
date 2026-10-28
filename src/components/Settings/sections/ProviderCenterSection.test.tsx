@@ -6,12 +6,12 @@ import type { UseLlmSettingsResult } from '../hooks/useLlmSettings'
 import type { Provider } from '@/config/providers'
 import i18n from '@/i18n/config'
 
-const mocks = vi.hoisted(() => ({ fetchModels: vi.fn(), providers: [] as Provider[], errors: {} as Record<string, string>, language: '' }))
+const mocks = vi.hoisted(() => ({ fetchModels: vi.fn(), providers: [] as Provider[], errors: {} as Record<string, string>, drafts: {} as Record<string, string>, saveKey: vi.fn(), language: '' }))
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: mocks.language ? i18n.getFixedT(mocks.language, 'settings') : (key: string) => key, currentLanguage: mocks.language || 'zh-CN' }) }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 vi.mock('@/config/providers', () => ({ getProviders: () => mocks.providers }))
-vi.mock('../hooks/useApiKeys', () => ({ useApiKeys: () => ({ keys: {}, visibility: {}, errors: mocks.errors, updateKey: vi.fn(), toggleVisibility: vi.fn() }) }))
+vi.mock('../hooks/useApiKeys', () => ({ useApiKeys: () => ({ keys: Object.fromEntries(mocks.providers.map(provider => [provider.id, mocks.drafts[provider.id] ?? ''])), visibility: {}, errors: mocks.errors, updateKey: vi.fn(), saveKey: mocks.saveKey, clearKey: vi.fn(), toggleVisibility: vi.fn() }) }))
 vi.mock('../hooks/useExternalLink', () => ({ useExternalLink: () => ({ openExternal: vi.fn() }) }))
 vi.mock('./useGenerationModelVisibility', () => ({
   useGenerationModelVisibility: () => ({
@@ -40,14 +40,27 @@ const llm = {
   loading: false,
   config: { providers: [provider], models: [], agentProfiles: [], selectedAgentProfileId: '' },
   keys: {}, visibility: {}, keyErrors: {},
-  updateKey: vi.fn(), toggleVisibility: vi.fn(),
+  updateKey: vi.fn(), saveKey: vi.fn(), clearKey: vi.fn(), toggleVisibility: vi.fn(),
   saveConfig: vi.fn(), commitProviderSettings: vi.fn(), deleteProviderSettings: vi.fn(),
 } as unknown as UseLlmSettingsResult
 
-beforeEach(() => { vi.clearAllMocks(); mocks.providers = []; mocks.errors = {}; mocks.language = '' })
+beforeEach(() => { vi.clearAllMocks(); mocks.providers = []; mocks.errors = {}; mocks.drafts = {}; mocks.language = '' })
 afterEach(cleanup)
 
 describe('供应商中心密钥错误', () => {
+  it.each([['fal'], ['volcengine', 'volcengine-speech']])('生成供应商 %s 的保存按钮提交对应凭据草稿', async (...ids) => {
+    mocks.providers = ids.map(id => ({ id, name: id, type: 'image', models: [] }))
+    mocks.drafts = Object.fromEntries(ids.map(id => [id, 'complete-replacement-value']))
+    render(<ProviderCenterSection llm={{ ...llm, config: { ...llm.config, providers: [] } }} />)
+    const buttons = await screen.findAllByRole('button', { name: /^(?:保存|Save)$/ })
+    buttons.forEach(button => fireEvent.click(button))
+    expect(mocks.saveKey.mock.calls.map(([id]) => id)).toEqual(ids)
+  })
+  it('LLM 供应商保存按钮提交对应草稿', async () => {
+    render(<ProviderCenterSection llm={{ ...llm, keys: { 'custom-relay': 'complete-replacement-value' } }} />)
+    fireEvent.click(await screen.findByRole('button', { name: /^(?:保存|Save)$/ }))
+    expect(llm.saveKey).toHaveBeenCalledWith('custom-relay')
+  })
   it.each([
     ['zh-CN', 'encryptionUnavailable', '系统加密'],
     ['en-US', 'encryptionUnavailable', 'secure key storage'],

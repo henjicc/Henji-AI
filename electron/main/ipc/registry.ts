@@ -1,6 +1,7 @@
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { readTranscriptionFacts, type TranscriptionFacts } from '../../../src/core/audioEdit/transcriptionFailure'
 import { readPaidFailureFacts, type PaidFailureFacts } from '../../../src/core/application-control/paidApproval'
+import { redactLogCredentials } from '../../../src/core/logging/sanitize'
 
 export interface IpcErrorEnvelope {
   name: string
@@ -91,7 +92,7 @@ export function registerIpcHandler<TInput, TResult>(
     } catch (error) {
       return {
         ok: false,
-        error: normalizeError(error),
+        error: redactLogCredentials(normalizeError(error)) as IpcErrorEnvelope,
       }
     }
   })

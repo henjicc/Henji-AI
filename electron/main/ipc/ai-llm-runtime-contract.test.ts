@@ -8,7 +8,13 @@ const mocks = vi.hoisted(() => ({
   recoverSavedGenerationResult: vi.fn(),
   llmChatStream: vi.fn(),
   llmModelStep: vi.fn(),
+  testProviderConnection: vi.fn(),
   resolveContainerGeneratedFolder: vi.fn(),
+}))
+
+vi.mock('@henjicc/ai-sdk', async importOriginal => ({
+  ...await importOriginal<typeof import('@henjicc/ai-sdk')>(),
+  testProviderConnection: mocks.testProviderConnection,
 }))
 
 vi.mock('electron', () => ({
@@ -64,6 +70,7 @@ vi.mock('../../../src/core/llm/capabilitySmoke', () => ({
 
 import { registerAiRuntimeIpc } from './ai-runtime'
 import { registerLlmRuntimeIpc } from './llm-runtime'
+import { registerLogSecret } from '../../../src/core/logging/sanitize'
 
 interface TestSender {
   send: ReturnType<typeof vi.fn>
@@ -83,6 +90,36 @@ beforeEach(() => {
 })
 
 describe('AI/LLM IPC 契约', () => {
+  it('连接测试和聊天流只替换已登记密钥，业务文本与包络保持原样', async () => {
+    const key = 'opaque-provider-echo-value'
+    registerLogSecret(key, 'ipc-fixture')
+    mocks.testProviderConnection.mockResolvedValueOnce({ ok: false, message: `rejected ${key}; password=ordinary` })
+    const sender = { send: vi.fn() }
+    await expect(handler('ai:testProviderConnection')({ sender }, { providerId: 'test' })).resolves.toEqual({ ok: true, data: { ok: false, message: 'rejected ***; password=ordinary' } })
+    mocks.llmChatStream.mockImplementationOnce(async (_request, emit) => emit({ type: 'Error', data: `rejected ${key}; token=ordinary` }))
+    await handler('llm:chatStream')({ sender }, { streamId: 'stream-id', request: { providerId: 'test', modelId: 'test', messages: [] } })
+    expect(sender.send).toHaveBeenCalledWith('llm:chatStream:event', { streamId: 'stream-id', event: { type: 'Error', data: 'rejected ***; token=ordinary' } })
+  })
+
+  it('聊天流跨 delta 脱敏，普通未匹配尾段在终态之前释放', async () => {
+    const key = 'opaque-chat-split-credential'
+    registerLogSecret(key, 'chat-split-fixture')
+    const sender = { send: vi.fn() }
+    mocks.llmChatStream.mockImplementationOnce(async (_request, emit) => {
+      emit({ type: 'Token', data: 'hello opaque-chat-' })
+      emit({ type: 'ReasoningToken', data: 'opaque-chat-split-' })
+      emit({ type: 'Token', data: 'split-credential' })
+      emit({ type: 'ReasoningToken', data: 'credential' })
+      emit({ type: 'Token', data: ' opaque-chat-' })
+      emit({ type: 'Done', data: {} })
+    })
+    await handler('llm:chatStream')({ sender }, { streamId: key, request: { providerId: 'test', modelId: 'test', messages: [] } })
+    const payloads = sender.send.mock.calls.map(call => call[1] as { streamId: string; event: { type: string; data: string } })
+    expect(payloads.every(payload => payload.streamId === key)).toBe(true)
+    expect(payloads.filter(payload => payload.event.type === 'Token').map(payload => payload.event.data).join('')).toBe('hello *** opaque-chat-')
+    expect(payloads.filter(payload => payload.event.type === 'ReasoningToken').map(payload => payload.event.data).join('')).toBe('***')
+    expect(payloads.at(-1)?.event.type).toBe('Done')
+  })
   it('ai:generate 与 ai:continuePolling 的 payload/返回字段保持不变', async () => {
     const generateResponse = {
       status: 'completed',
@@ -226,6 +263,8 @@ describe('AI/LLM IPC 契约', () => {
   })
 
   it('llm:modelStep 保留完整 input、返回结构与 streamId 事件包络', async () => {
+    const echoedKey = 'opaque-model-step-credential'
+    registerLogSecret(echoedKey, 'model-step-fixture')
     const input = {
       requestId: 'model-step-request',
       runId: 'run-a',
@@ -257,7 +296,7 @@ describe('AI/LLM IPC 契约', () => {
       stepId: input.stepId,
       providerId: input.providerId,
       modelId: input.modelId,
-      text: '完成',
+      text: `完成 ${echoedKey}`,
       reasoningText: '',
       structuredOutput: null,
       toolCalls: [],
@@ -278,7 +317,10 @@ describe('AI/LLM IPC 契约', () => {
       elapsedMs: 10,
     }
     mocks.llmModelStep.mockImplementationOnce(async (_input, emit) => {
-      emit({ type: 'TextDelta', text: '完成' })
+      emit({ type: 'TextDelta', text: `完成 ${echoedKey.slice(0, 15)}` })
+      emit({ type: 'TextDelta', text: echoedKey.slice(15) })
+      emit({ type: 'ReasoningDelta', text: echoedKey.slice(0, 15) })
+      emit({ type: 'ReasoningDelta', text: echoedKey.slice(15) })
       return result
     })
     const sender: TestSender = { send: vi.fn() }
@@ -286,11 +328,12 @@ describe('AI/LLM IPC 契约', () => {
     await expect(handler('llm:modelStep')({ sender }, {
       streamId: 'model-step-stream',
       input,
-    })).resolves.toEqual({ ok: true, data: result })
+    })).resolves.toEqual({ ok: true, data: { ...result, text: '完成 ***' } })
     expect(mocks.llmModelStep).toHaveBeenCalledWith(input, expect.any(Function))
     expect(sender.send).toHaveBeenCalledWith('llm:modelStep:event', {
       streamId: 'model-step-stream',
-      event: { type: 'TextDelta', text: '完成' },
+      event: { type: 'TextDelta', text: '***' },
     })
+    expect(sender.send).toHaveBeenCalledWith('llm:modelStep:event', { streamId: 'model-step-stream', event: { type: 'ReasoningDelta', text: '***' } })
   })
 })

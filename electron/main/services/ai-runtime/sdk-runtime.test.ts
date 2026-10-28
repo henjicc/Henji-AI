@@ -10,7 +10,8 @@ const grants = vi.hoisted(() => ({ lexical: vi.fn(() => true), real: vi.fn(async
 vi.mock('../../protocol', () => ({ isPathWithinAllowedMediaRoots: grants.lexical, isRealPathWithinAllowedMediaRoots: grants.real }))
 vi.mock('node:fs/promises', () => ({ realpath: async (value: string) => value, access: async () => {}, stat: async () => ({ isFile: () => true }) }))
 
-import { electronMediaReader } from './sdk-runtime'
+import { electronCredentialStore, electronMediaReader } from './sdk-runtime'
+import { getAiProviderApiKey, getLlmProviderApiKey } from '../keystore'
 import { sdkRuntimeContext } from './sdk-runtime'
 import { inspectElectronHostCapabilities } from './host-capabilities'
 
@@ -18,6 +19,13 @@ afterEach(() => { vi.restoreAllMocks(); vi.clearAllMocks() })
 beforeEach(() => { grants.lexical.mockReturnValue(true); grants.real.mockResolvedValue(true) })
 
 describe('Electron SDK media reader', () => {
+  it('SDK 请求仍从主进程凭据槽获取明文，生成与语音识别复用同一槽', () => {
+    vi.mocked(getAiProviderApiKey).mockReturnValue('generation-fixture-key')
+    vi.mocked(getLlmProviderApiKey).mockReturnValue('llm-fixture-key')
+    expect(electronCredentialStore.get('generation', 'fal')).toBe('generation-fixture-key')
+    expect(electronCredentialStore.get('speech-recognition', 'fal')).toBe('generation-fixture-key')
+    expect(electronCredentialStore.get('llm', 'shared-slot')).toBe('llm-fixture-key')
+  })
   it.each(['lexical', 'real'] as const)('拒绝 %s 授权检查失败的路径且不读取字节', async boundary => {
     if (boundary === 'lexical') grants.lexical.mockReturnValue(false)
     else grants.real.mockResolvedValue(false)

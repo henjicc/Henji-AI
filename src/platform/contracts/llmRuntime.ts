@@ -11,6 +11,7 @@ import type { ModelCapabilitySmokeRequest, ModelCapabilitySmokeResult } from '@/
 export interface LlmProviderKeyStatusDto {
   credentialId: string
   configured: boolean
+  maskedHint?: string | null
 }
 
 export type LlmCredentialMutationDto =
@@ -41,7 +42,6 @@ export interface LlmProviderSettingsResultDto {
 }
 
 export interface LlmRuntimePlatform {
-  getProviderApiKey(credentialId: string): Promise<string | null>
   getProviderKeyStatus(credentialIds: string[]): Promise<LlmProviderKeyStatusDto[]>
   readConfig(): Promise<LlmConfigState | null>
   writeConfig(config: LlmConfigState): Promise<void>

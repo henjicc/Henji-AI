@@ -53,6 +53,7 @@ export type ReplayHostResult =
 
 export type ReplayReport =
   | { kind: 'ready'; now: number }
+  | { kind: 'failed'; message: string }
   | { kind: 'conflict'; t: number; message: string }
   | { kind: 'warning'; t: number; message: string }
   | { kind: 'action'; t: number; name: string }

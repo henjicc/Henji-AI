@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import i18n from '@/i18n/config'
 import {
-  aiGetProviderApiKey,
+  aiGetProviderKeyInfo,
   aiSetProviderApiKey,
   aiTestProviderConnection,
 } from '@/commands/aiRuntime'
@@ -17,7 +17,7 @@ import { onboardingManager } from '../application/onboardingManager'
 import { OnboardingModal } from './OnboardingModal'
 
 vi.mock('@/commands/aiRuntime', () => ({
-  aiGetProviderApiKey: vi.fn(),
+  aiGetProviderKeyInfo: vi.fn(),
   aiSetProviderApiKey: vi.fn(),
   aiTestProviderConnection: vi.fn(),
 }))
@@ -52,7 +52,7 @@ describe('OnboardingModal', () => {
     localStorage.clear()
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
     await i18n.changeLanguage('zh-CN')
-    vi.mocked(aiGetProviderApiKey).mockResolvedValue(null)
+    vi.mocked(aiGetProviderKeyInfo).mockResolvedValue({ configured: false, maskedHint: null })
     vi.mocked(aiSetProviderApiKey).mockResolvedValue()
     vi.mocked(aiTestProviderConnection).mockResolvedValue({
       providerId: 'fal',
@@ -107,6 +107,21 @@ describe('OnboardingModal', () => {
     expect(aiTestProviderConnection).toHaveBeenCalledWith('fal')
     expect(await screen.findByText('连接成功，密钥有效')).toBeTruthy()
     expect(screen.getByText('HTTP 状态：200')).toBeTruthy()
+  })
+
+  it('已保存密钥只显示摘要，主进程可直接测试而无需重新填写', async () => {
+    vi.mocked(aiGetProviderKeyInfo).mockResolvedValue({ configured: true, maskedHint: '••••1234' })
+    onboardingManager.setPrimaryProvider('fal')
+    onboardingManager.goToStep('api-key')
+    render(<OnboardingModal />)
+    expect(await screen.findByText('已配置 · ••••1234')).toBeTruthy()
+    const input = screen.getByPlaceholderText('输入新密钥以替换') as HTMLInputElement
+    expect(input.value).toBe('')
+    vi.mocked(aiSetProviderApiKey).mockClear()
+    vi.mocked(aiTestProviderConnection).mockClear()
+    fireEvent.click(screen.getByRole('button', { name: '保存并测试' }))
+    await waitFor(() => expect(aiTestProviderConnection).toHaveBeenCalledWith('fal'))
+    expect(aiSetProviderApiKey).not.toHaveBeenCalled()
   })
 
   it('从设置里重新运行时，准备首个任务会关掉设置弹窗，提示气泡指向的模型选择不被挡住（5.7）', async () => {

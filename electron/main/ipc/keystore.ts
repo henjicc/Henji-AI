@@ -1,11 +1,11 @@
 import {
-  getAiProviderApiKey,
-  getLlmProviderApiKey,
+  getProviderKeyInfo,
   getLlmProviderKeyStatus,
   removeAiProviderApiKey,
   setAiProviderApiKey,
 } from '../services/keystore'
 import { parseRecord, registerIpcHandler } from './registry'
+import type { ProviderKeyInfo } from '../../../src/core/providerKeyInfo'
 
 interface ProviderKeyPayload {
   providerId: string
@@ -13,10 +13,6 @@ interface ProviderKeyPayload {
 
 interface SetProviderKeyPayload extends ProviderKeyPayload {
   apiKey: string
-}
-
-interface CredentialPayload {
-  credentialId: string
 }
 
 interface CredentialIdsPayload {
@@ -44,11 +40,6 @@ function parseSetProviderKeyPayload(input: unknown): SetProviderKeyPayload {
   }
 }
 
-function parseCredentialPayload(input: unknown): CredentialPayload {
-  const record = parseRecord(input)
-  return { credentialId: readStringField(record, 'credentialId') }
-}
-
 function parseCredentialIdsPayload(input: unknown): CredentialIdsPayload {
   const record = parseRecord(input)
   const credentialIds = record.credentialIds
@@ -68,12 +59,8 @@ export function registerKeystoreIpc(): void {
     removeAiProviderApiKey(providerId)
   })
 
-  registerIpcHandler<ProviderKeyPayload, string | null>('ai:getProviderApiKey', parseProviderKeyPayload, ({ providerId }) => {
-    return getAiProviderApiKey(providerId)
-  })
-
-  registerIpcHandler<CredentialPayload, string | null>('llm:getProviderApiKey', parseCredentialPayload, ({ credentialId }) => {
-    return getLlmProviderApiKey(credentialId)
+  registerIpcHandler<ProviderKeyPayload, ProviderKeyInfo>('ai:getProviderKeyInfo', parseProviderKeyPayload, ({ providerId }) => {
+    return getProviderKeyInfo(providerId)
   })
 
   registerIpcHandler<CredentialIdsPayload, Array<{ credentialId: string; configured: boolean }>>(

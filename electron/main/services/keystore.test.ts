@@ -39,6 +39,7 @@ import {
   getLlmProviderApiKey,
   getLlmProviderKeyStatus,
   getKey,
+  getProviderKeyInfo,
   hasKey,
   restoreEncryptedKeySnapshot,
   removeAiProviderApiKey,
@@ -46,6 +47,7 @@ import {
   setAiProviderApiKey,
   setLlmProviderApiKey,
 } from './keystore'
+import { createRegisteredSecretStreamRedactor, redactRegisteredSecretText } from '../../../src/core/logging/sanitize'
 
 const KEYSTORE_RELATIVE_PATH = path.join('com.henji.ai', 'Henji-AI', 'provider-keys.enc.json')
 
@@ -76,6 +78,48 @@ describe('keystore', () => {
   it('没存过的密钥返回 null', () => {
     expect(getKey(AI_KEY_NAMESPACE, 'fal')).toBeNull()
     expect(hasKey(AI_KEY_NAMESPACE, 'fal')).toBe(false)
+  })
+
+  it('仅在保存或解密成功后登记，替换、删除与补偿同步注销旧值', () => {
+    const first = 'opaque-first-credential'
+    const second = 'opaque-second-credential'
+    const failed = 'opaque-failed-credential'
+    mocks.encryptString.mockImplementationOnce(() => { throw new Error('encrypt failed') })
+    expect(() => setAiProviderApiKey('log-test', failed)).toThrow('encrypt failed')
+    expect(redactRegisteredSecretText(failed)).toBe(failed)
+    setAiProviderApiKey('log-test', first)
+    expect(redactRegisteredSecretText(first)).toBe('***')
+    const snapshot = captureEncryptedKeySnapshot(AI_KEY_NAMESPACE, 'log-test')
+    setAiProviderApiKey('log-test', second)
+    expect(redactRegisteredSecretText(`${first} ${second}`)).toBe(`${first} ***`)
+    restoreEncryptedKeySnapshot(snapshot)
+    expect(redactRegisteredSecretText(`${first} ${second}`)).toBe(`*** ${second}`)
+    removeAiProviderApiKey('log-test')
+    expect(redactRegisteredSecretText(first)).toBe(first)
+    writeRawKeystore({ 'provider:log-test': Buffer.from(`enc:${first}`).toString('base64') })
+    getAiProviderApiKey('log-test')
+    expect(redactRegisteredSecretText(first)).toBe('***')
+    removeAiProviderApiKey('log-test')
+  })
+
+  it('落盘失败不登记待保存凭据', () => {
+    const key = 'opaque-unwritten-credential'
+    const rename = vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => { throw new Error('write failed') })
+    try {
+      expect(() => setAiProviderApiKey('failed-write', key)).toThrow('write failed')
+      expect(redactRegisteredSecretText(key)).toBe(key)
+    } finally { rename.mockRestore() }
+  })
+
+  it('MCP 连接 JSON 不作为整段凭据登记，解密和事务恢复同样适用', () => {
+    const value = JSON.stringify({ connections: [{ token: 'mcp-test-connection-token' }] })
+    setKey('mcp', 'connections', value)
+    expect(redactRegisteredSecretText(value)).toBe(value)
+    expect(getKey('mcp', 'connections')).toBe(value)
+    const snapshot = captureEncryptedKeySnapshot('mcp', 'connections')
+    restoreEncryptedKeySnapshot(snapshot)
+    expect(redactRegisteredSecretText(value)).toBe(value)
+    expect(createRegisteredSecretStreamRedactor().write('output {')).toBe('output {')
   })
 
   /*
@@ -144,7 +188,7 @@ describe('keystore', () => {
     setAiProviderApiKey('ppio', 'legacy-ppio')
     setLlmProviderApiKey('bigmodel-cn', 'cn-secret')
 
-    expect(getLlmProviderKeyStatus(['ppio', 'bigmodel-cn', 'bigmodel-global'])).toEqual([
+    expect(getLlmProviderKeyStatus(['ppio', 'bigmodel-cn', 'bigmodel-global'])).toMatchObject([
       { credentialId: 'ppio', configured: true },
       { credentialId: 'bigmodel-cn', configured: true },
       { credentialId: 'bigmodel-global', configured: false },
@@ -184,4 +228,20 @@ describe('keystore', () => {
     rename.mockRestore()
     expect(getLlmProviderApiKey('atomic-slot')).toBe('old-secret')
   })
+})
+
+it('设置摘要从不返回完整密钥，替换、共享槽和清除保持一致', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'henji-key-info-'))
+  vi.stubEnv('LOCALAPPDATA', dir)
+  mocks.isEncryptionAvailable.mockReturnValue(true)
+  try {
+    setAiProviderApiKey('fal', 'fixture-provider-secret-1234')
+    expect(getProviderKeyInfo('fal')).toEqual({ configured: true, maskedHint: '••••1234' })
+    expect(getLlmProviderKeyStatus(['fal'])).toEqual([{ credentialId: 'fal', configured: true, maskedHint: '••••1234' }])
+    setLlmProviderApiKey('fal', 'tiny')
+    expect(getProviderKeyInfo('fal')).toEqual({ configured: true, maskedHint: '••••' })
+    expect(getAiProviderApiKey('fal')).toBe('tiny')
+    removeAiProviderApiKey('fal')
+    expect(getProviderKeyInfo('fal')).toEqual({ configured: false, maskedHint: null })
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); vi.unstubAllEnvs() }
 })

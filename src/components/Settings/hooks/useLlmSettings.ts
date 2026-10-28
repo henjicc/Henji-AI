@@ -3,7 +3,6 @@ import type { LlmConfigState, LlmModelConfig, LlmProviderConfig } from '@henjicc
 import { createDefaultLlmConfig } from '@/core/llm/defaults'
 import { LLM_CONFIG_CHANGED_EVENT } from '@/core/llm/events'
 import {
-  llmGetProviderApiKey,
   llmGetProviderKeyStatus,
 } from '@/commands/llmRuntime'
 import { llmConfigService } from '@/services/llm'
@@ -12,7 +11,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiKeySaveErrorKey } from './useApiKeys'
 
 const logger = createLogger('components.Settings.hooks.useLlmSettings')
-const WRITE_DEBOUNCE_MS = 450
 
 type KeyMap = Record<string, string>
 type VisibilityMap = Record<string, boolean>
@@ -20,12 +18,15 @@ type StatusMap = Record<string, boolean>
 
 export interface UseLlmSettingsResult {
   config: LlmConfigState
+  hints: KeyMap
   keys: KeyMap
   keyErrors: KeyMap
   visibility: VisibilityMap
   status: StatusMap
   loading: boolean
   updateKey: (providerId: string, value: string) => void
+  saveKey: (providerId: string) => Promise<void>
+  clearKey: (providerId: string) => void
   toggleVisibility: (providerId: string) => void
   saveConfig: (config: LlmConfigState) => Promise<void>
   commitProviderSettings: (
@@ -38,13 +39,12 @@ export interface UseLlmSettingsResult {
 
 export function useLlmSettings(): UseLlmSettingsResult {
   const [config, setConfig] = useState<LlmConfigState>(createDefaultLlmConfig())
+  const [hints, setHints] = useState<KeyMap>({})
   const [keys, setKeys] = useState<KeyMap>({})
   const [keyErrors, setKeyErrors] = useState<KeyMap>({})
   const [visibility, setVisibility] = useState<VisibilityMap>({})
   const [status, setStatus] = useState<StatusMap>({})
   const [loading, setLoading] = useState(true)
-  const timersRef = useRef<Record<string, ReturnType<typeof setTimeout> | undefined>>({})
-  const pendingRef = useRef<Record<string, (() => Promise<void>) | undefined>>({})
   const mountedRef = useRef(false)
 
   const credentialIds = useMemo(
@@ -67,15 +67,9 @@ export function useLlmSettings(): UseLlmSettingsResult {
       }
     }
     void bootstrap()
-    const timers = timersRef.current
     return () => {
       disposed = true
       mountedRef.current = false
-      Object.values(timers).forEach(timer => {
-        if (timer) clearTimeout(timer)
-      })
-      Object.values(pendingRef.current).forEach(persist => { if (persist) void persist() })
-      pendingRef.current = {}
     }
   }, [])
 
@@ -86,20 +80,20 @@ export function useLlmSettings(): UseLlmSettingsResult {
       try {
         const statuses = await llmGetProviderKeyStatus(credentialIds)
         if (disposed) return
-        const statusByCredential = new Map(statuses.map(item => [item.credentialId, item.configured]))
+        const statusByCredential = new Map(statuses.map(item => [item.credentialId, item]))
         const nextStatus: StatusMap = {}
-        const nextKeys: KeyMap = {}
-        await Promise.all(config.providers.map(async provider => {
+        const nextHints: KeyMap = {}
+        config.providers.forEach(provider => {
           const credentialId = provider.credentialId ?? provider.providerId
-          const configured = statusByCredential.get(credentialId) === true
+          const configured = statusByCredential.get(credentialId)?.configured === true
           nextStatus[provider.providerId] = configured
           if (configured) {
-            nextKeys[provider.providerId] = await llmGetProviderApiKey(credentialId) ?? ''
+            nextHints[provider.providerId] = statusByCredential.get(credentialId)?.maskedHint ?? '••••'
           }
-        }))
+        })
         if (disposed) return
         setStatus(nextStatus)
-        setKeys(prev => ({ ...prev, ...nextKeys }))
+        setHints(nextHints)
       } catch (error) {
         logger.error('[useLlmSettings] load key status failed', error)
       }
@@ -114,45 +108,35 @@ export function useLlmSettings(): UseLlmSettingsResult {
     const credentialId = provider.credentialId ?? provider.providerId
     const [statusItem] = await llmGetProviderKeyStatus([credentialId])
     const configured = statusItem?.configured === true
-    const apiKey = configured ? (await llmGetProviderApiKey(credentialId)) ?? '' : ''
+    const hint = configured ? statusItem.maskedHint ?? '••••' : ''
     if (!mountedRef.current) return
     const affectedProviderIds = config.providers
       .filter(item => (item.credentialId ?? item.providerId) === credentialId)
       .map(item => item.providerId)
     setStatus(prev => Object.assign({}, prev, ...affectedProviderIds.map(id => ({ [id]: configured }))))
-    setKeys(prev => Object.assign({}, prev, ...affectedProviderIds.map(id => ({ [id]: apiKey }))))
+    setHints(prev => Object.assign({}, prev, ...affectedProviderIds.map(id => ({ [id]: hint }))))
   }
 
-  const updateKey = (providerId: string, value: string): void => {
-    setKeys(prev => ({ ...prev, [providerId]: value }))
-    setKeyErrors(prev => { const next = { ...prev }; delete next[providerId]; return next })
-    const existingTimer = timersRef.current[providerId]
-    if (existingTimer) clearTimeout(existingTimer)
-    const persist = async (): Promise<void> => {
-      try {
-        const trimmed = value.trim()
-        const provider = config.providers.find(item => item.providerId === providerId)
-        if (!provider) throw new Error(`Provider "${providerId}" is no longer available; reload settings and retry`)
-        await llmConfigService.commitProviderSettings(
-          provider,
-          [],
-          trimmed ? { kind: 'set', apiKey: trimmed } : { kind: 'remove' }
-        )
-        if (mountedRef.current) {
-          await refreshProviderKey(providerId)
-          if (mountedRef.current) setKeyErrors(prev => { const next = { ...prev }; delete next[providerId]; return next })
-        }
-      } catch (error) {
-        logger.error(`[useLlmSettings] update key failed: ${providerId}`, error)
-        if (mountedRef.current) setKeyErrors(prev => ({ ...prev, [providerId]: apiKeySaveErrorKey(error) }))
+  const persistKey = async (providerId: string, value: string, remove = false): Promise<void> => {
+    try {
+      const trimmed = value.trim()
+      if (!remove && !trimmed) return
+      const provider = config.providers.find(item => item.providerId === providerId)
+      if (!provider) throw new Error(`Provider "${providerId}" is no longer available; reload settings and retry`)
+      await llmConfigService.commitProviderSettings(
+        provider,
+        [],
+        remove ? { kind: 'remove' } : { kind: 'set', apiKey: trimmed }
+      )
+      if (mountedRef.current) {
+        setKeys(prev => prev[providerId] === value ? { ...prev, [providerId]: '' } : prev)
+        await refreshProviderKey(providerId)
+        if (mountedRef.current) setKeyErrors(prev => { const next = { ...prev }; delete next[providerId]; return next })
       }
+    } catch (error) {
+      logger.error(`[useLlmSettings] update key failed: ${providerId}`, error)
+      if (mountedRef.current) setKeyErrors(prev => ({ ...prev, [providerId]: apiKeySaveErrorKey(error) }))
     }
-    pendingRef.current[providerId] = persist
-    timersRef.current[providerId] = setTimeout(() => {
-      delete pendingRef.current[providerId]
-      delete timersRef.current[providerId]
-      void persist()
-    }, WRITE_DEBOUNCE_MS)
   }
 
   const toggleVisibility = (providerId: string): void => {
@@ -209,11 +193,20 @@ export function useLlmSettings(): UseLlmSettingsResult {
   return {
     config,
     keys,
+    hints,
     keyErrors,
     visibility,
     status,
     loading,
-    updateKey,
+    updateKey: (providerId, value) => {
+      setKeys(prev => ({ ...prev, [providerId]: value }))
+      setKeyErrors(prev => { const next = { ...prev }; delete next[providerId]; return next })
+    },
+    saveKey: providerId => persistKey(providerId, keys[providerId] ?? ''),
+    clearKey: providerId => {
+      setKeys(prev => ({ ...prev, [providerId]: '' }))
+      void persistKey(providerId, '', true)
+    },
     toggleVisibility,
     saveConfig,
     commitProviderSettings,

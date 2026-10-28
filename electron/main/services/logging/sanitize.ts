@@ -1,6 +1,8 @@
 import { getLogCaptureMode, type LogCaptureMode } from './capture-config'
 import type { MainLogEvent } from './types'
 import type { JsonObject, JsonValue } from '@henjicc/ai-sdk'
+import { isSensitiveKey, redactRegisteredSecretText } from '../../../../src/core/logging/sanitize'
+export { isSensitiveKey } from '../../../../src/core/logging/sanitize'
 
 /**
  * 请求/响应体脱敏 + 截断工具。
@@ -44,7 +46,7 @@ export function sanitizeJsonValue(value: JsonValue, depth = 0): JsonValue {
     return next
   }
   if (typeof value === 'string') {
-    return sanitizeString(value, mode)
+    return sanitizeString(redactRegisteredSecretText(value), mode)
   }
   return value
 }
@@ -65,16 +67,6 @@ export function applyEventSizeFuse(event: MainLogEvent): MainLogEvent {
     error: undefined,
     truncatedByLimit: true,
   }
-}
-
-export function isSensitiveKey(key: string): boolean {
-  const lower = key.toLowerCase()
-  return lower.includes('api_key') ||
-    lower.includes('apikey') ||
-    lower.includes('authorization') ||
-    lower.includes('token') ||
-    lower.includes('secret') ||
-    lower.includes('password')
 }
 
 function sanitizeString(value: string, mode: LogCaptureMode): string {

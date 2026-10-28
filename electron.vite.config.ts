@@ -3,6 +3,7 @@ import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
 import { videoEditRenderEngineVersion } from './scripts/vite/renderEngineVersion.mjs'
+import { replayMainWorld } from './scripts/vite/replayMainWorld'
 
 /**
  * 热更新只原地替换界面组件（以及自己声明接受热更新的模块）；改到业务服务、工具函数这类模块时整页重新加载。
@@ -71,12 +72,13 @@ export default defineConfig({
     },
   },
   preload: {
+    plugins: [replayMainWorld()],
     build: {
       outDir: 'out/preload',
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'electron/preload/index.ts'),
-          // 网页录制重演的离屏窗口专用（contextIsolation:false，在页面自身环境里先于页面脚本运行）。
+          // 隔离 preload 只提供重演 IPC；自包含运行时同步注入页面主世界。
           'web-replay': resolve(__dirname, 'electron/preload/web-replay.ts'),
         },
         output: {

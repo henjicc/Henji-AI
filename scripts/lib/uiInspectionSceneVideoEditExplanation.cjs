@@ -41,9 +41,9 @@ function createVideoEditExplanationScene() {
             transcript: { text: '', unit: 'ms', granularity: 'segment', words: [], segments: [] } } }
         })
         // No credential is written; settings only receives fixture availability in this isolated process.
-        const key = handlers.get('ai:getProviderApiKey'); globalThis.__t150KeyOriginal = key
-        ipcMain.removeHandler('ai:getProviderApiKey')
-        ipcMain.handle('ai:getProviderApiKey', async (event, input) => input.providerId === 'bailian' ? { ok: true, data: 'local-reality-fixture' } : key(event, input))
+        const key = handlers.get('ai:getProviderKeyInfo'); globalThis.__t150KeyOriginal = key
+        ipcMain.removeHandler('ai:getProviderKeyInfo')
+        ipcMain.handle('ai:getProviderKeyInfo', async (event, input) => input.providerId === 'bailian' ? { ok: true, data: { configured: true, maskedHint: '••••ture' } } : key(event, input))
         const status = handlers.get('ai:getRuntimeProviderKeyStatus'); globalThis.__t150StatusOriginal = status
         ipcMain.removeHandler('ai:getRuntimeProviderKeyStatus')
         ipcMain.handle('ai:getRuntimeProviderKeyStatus', async event => {
@@ -222,7 +222,7 @@ function createVideoEditExplanationScene() {
         await page.evaluate(() => window.__t150NativeRelease?.()).catch(() => {})
         store(); await client?.close(); await disableMcp(page).catch(() => {})
         await app.evaluate(({ ipcMain }) => {
-          for (const [channel, original] of [['audioEdit:explanation', globalThis.__t150AudioOriginal], ['ai:getProviderApiKey', globalThis.__t150KeyOriginal], ['ai:getRuntimeProviderKeyStatus', globalThis.__t150StatusOriginal]]) { ipcMain.removeHandler(channel); if (original) ipcMain.handle(channel, original) }
+          for (const [channel, original] of [['audioEdit:explanation', globalThis.__t150AudioOriginal], ['ai:getProviderKeyInfo', globalThis.__t150KeyOriginal], ['ai:getRuntimeProviderKeyStatus', globalThis.__t150StatusOriginal]]) { ipcMain.removeHandler(channel); if (original) ipcMain.handle(channel, original) }
           delete globalThis.__t150AudioOriginal; delete globalThis.__t150KeyOriginal
           delete globalThis.__t150StatusOriginal
           delete globalThis.__t150TranscriptByChunk

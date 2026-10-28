@@ -146,6 +146,7 @@ export class WebRecordingPlayer {
   private issues: ReplayIssue[] = []
   private loose = 0
   private ready: ((now: number) => void) | null = null
+  private rejectReady: ((error: Error) => void) | null = null
   private bootstrappedResolve: (() => void) | null = null
   /** Page time (ms) the engine last moved the page to. */
   private pageMs = 0
@@ -188,6 +189,7 @@ export class WebRecordingPlayer {
   bootstrapped(): void { this.bootstrappedResolve?.() }
   report(report: ReplayReport): void {
     if (report.kind === 'ready') this.ready?.(report.now)
+    else if (report.kind === 'failed') this.rejectReady?.(new Error(report.message))
     else if (report.kind === 'conflict' || report.kind === 'warning') this.issue(report.kind, report.message, report.t)
   }
 
@@ -269,11 +271,24 @@ export class WebRecordingPlayer {
     const win = new BrowserWindow({
       show: options.show ?? false, width: Math.round(env.viewport.width), height: Math.round(env.viewport.height), useContentSize: true, frame: false, resizable: true,
       webPreferences: {
-        partition, preload: path.join(__dirname, '../preload/web-replay.cjs'), contextIsolation: false, sandbox: true, nodeIntegration: false,
+        partition, preload: path.join(__dirname, '../preload/web-replay.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false,
         offscreen: gpu ? { useSharedTexture: true, deviceScaleFactor: dpr } : { deviceScaleFactor: dpr }, backgroundThrottling: false, spellcheck: false,
       },
     })
     const contents = win.webContents
+    let windowOpenReported = false
+    contents.setWindowOpenHandler(() => {
+      if (!windowOpenReported) this.issue('warning', '页面尝试打开新窗口，重演中已阻止')
+      windowOpenReported = true
+      return { action: 'deny' }
+    })
+    let injectionFailure: Error | null = null
+    let rejectBootstrap: ((error: Error) => void) | null = null
+    contents.on('preload-error', (_event, _preloadPath, error) => {
+      injectionFailure = new Error(`重演运行时注入失败：${error.message}`)
+      rejectBootstrap?.(injectionFailure)
+      this.rejectReady?.(injectionFailure)
+    })
     players.set(contents.id, this)
     // From the first paint on: shared textures must go back to the browser's small pool.
     source?.attach(contents)
@@ -300,6 +315,7 @@ export class WebRecordingPlayer {
       const stage = (name: string): void => logger.info('网页重演进度', { event: 'web_replay.replay.stage', context: { recordingId: this.manifest.id, stage: name } })
       stage('window')
       await withTimeout(contents.loadURL('about:blank'), 30_000, '重演窗口启动超时')
+      if (injectionFailure) throw injectionFailure
       contents.debugger.attach('1.3')
       await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: env.colorScheme }, { name: 'prefers-reduced-motion', value: env.reducedMotion ? 'reduce' : 'no-preference' }] })
       await cdp('Emulation.setFocusEmulationEnabled', { enabled: true })
@@ -309,16 +325,21 @@ export class WebRecordingPlayer {
       contents.setFrameRate(CAPTURE_FRAME_RATE)
 
       // 1) restore storage on the recorded origin, 2) load the recorded entry URL
-      const bootstrapped = new Promise<void>(resolve => { this.bootstrappedResolve = resolve })
+      const bootstrapped = new Promise<void>((resolve, reject) => { this.bootstrappedResolve = resolve; rejectBootstrap = reject })
       stage('bootstrap')
-      await withTimeout(contents.loadURL(`${origin}${BOOTSTRAP_PATH}`), 30_000, '重演引导页加载超时')
+      await Promise.all([
+        withTimeout(contents.loadURL(`${origin}${BOOTSTRAP_PATH}`), 30_000, '重演引导页加载超时'),
+        withTimeout(bootstrapped, 30_000, '页面存储恢复超时'),
+      ])
+      rejectBootstrap = null
       stage('bootstrap-loaded')
-      await withTimeout(bootstrapped, 30_000, '页面存储恢复超时')
       await encoderReady
 
       const capture = source
-      const readyAt = new Promise<number>(resolve => { this.ready = resolve })
+      const readyAt = new Promise<number>((resolve, reject) => { this.ready = resolve; this.rejectReady = reject })
       const loading = contents.loadURL(env.url)
+      // 页面加载可先于 ready 等待失败，提前接住拒绝，避免悬挂到运行时超时。
+      void loading.catch(error => this.rejectReady?.(error))
       stage('app')
       this.pageMs = await withTimeout(readyAt, 30_000, '重演页面没有加载探针运行时')
       stage('ready')
@@ -536,6 +557,8 @@ export class WebRecordingPlayer {
       logger.error('网页重演失败', { event: 'web_replay.replay.failed', context: { recordingId: this.manifest?.id, pageAtMs: Math.round(this.pageMs), ...stats }, error: String(error) })
       throw error
     } finally {
+      this.ready = null
+      this.rejectReady = null
       players.delete(contents.id)
       await input.dispose()
       if (!win.isDestroyed()) win.destroy()

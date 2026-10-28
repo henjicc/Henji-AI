@@ -1,3 +1,5 @@
+import type { ProviderKeyInfo } from '../core/providerKeyInfo'
+import { registerLogSecret, unregisterLogSecret } from '../core/logging/sanitize'
 import type { AiRuntimeTrace } from '@/core/types'
 import type { StructuredGenerationOutput, TtsVoice } from '@henjicc/ai-sdk'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
@@ -81,18 +83,20 @@ function ensureDesktopRuntime(): void {
 export async function aiSetProviderApiKey(providerId: string, apiKey: string): Promise<void> {
   ensureDesktopRuntime()
   await getPlatform().aiRuntime.setProviderApiKey(providerId, apiKey)
+  registerLogSecret(apiKey.trim(), `provider:${providerId}`)
   ttsVoiceCache.clear()
 }
 
 export async function aiRemoveProviderApiKey(providerId: string): Promise<void> {
   ensureDesktopRuntime()
   await getPlatform().aiRuntime.removeProviderApiKey(providerId)
+  unregisterLogSecret(`provider:${providerId}`)
   ttsVoiceCache.clear()
 }
 
-export async function aiGetProviderApiKey(providerId: string): Promise<string | null> {
+export async function aiGetProviderKeyInfo(providerId: string): Promise<ProviderKeyInfo> {
   ensureDesktopRuntime()
-  return await getPlatform().aiRuntime.getProviderApiKey(providerId)
+  return await getPlatform().aiRuntime.getProviderKeyInfo(providerId)
 }
 
 export async function aiGetProviderKeyStatus(): Promise<ProviderKeyStatusDto[]> {

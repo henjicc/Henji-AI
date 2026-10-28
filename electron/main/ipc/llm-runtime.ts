@@ -20,6 +20,7 @@ import { sdkRuntimeContext } from '../services/ai-runtime/sdk-runtime'
 import { cancelLlmRuntimeTask, llmChatStream, llmModelStep } from '../services/llm/runtime'
 import { verifyModelCapabilities } from '../services/llm/sdk/capability-smoke'
 import { parseRecord, parseStringField, registerIpcHandler } from './registry'
+import { createRegisteredSecretStreamRedactor, redactRegisteredSecrets } from '../../../src/core/logging/sanitize'
 
 interface ChatStreamPayload {
   streamId: string
@@ -41,22 +42,59 @@ interface ModelStepEventPayload {
   event: ModelStepEvent
 }
 
+function createStreamEmitter<T extends { type: string }>(
+  send: (event: T) => void,
+  readText: (event: T) => string | undefined,
+  replaceText: (event: T, text: string) => T,
+): { emit(event: T): void; flush(): void } {
+  const streams = new Map<string, { event: T; redactor: ReturnType<typeof createRegisteredSecretStreamRedactor> }>()
+  return {
+    emit(event) {
+      const text = readText(event)
+      if (text === undefined) { send(redactRegisteredSecrets(event)); return }
+      const stream = streams.get(event.type) ?? { event, redactor: createRegisteredSecretStreamRedactor() }
+      stream.event = event
+      streams.set(event.type, stream)
+      const safe = stream.redactor.write(text)
+      if (safe) send(replaceText(event, safe))
+    },
+    flush() {
+      for (const { event, redactor } of streams.values()) {
+        const text = redactor.flush()
+        if (text) send(replaceText(event, text))
+      }
+      streams.clear()
+    },
+  }
+}
+
 export function registerLlmRuntimeIpc(): void {
   registerIpcHandler<ChatStreamPayload, void>('llm:chatStream', parseChatStreamPayload, async (payload, event) => {
-    await llmChatStream(payload.request, (streamEvent) => {
+    const emitter = createStreamEmitter<LlmStreamEventDto>(streamEvent => {
       const eventPayload: ChatStreamEventPayload = {
         streamId: payload.streamId,
         event: streamEvent,
       }
       event.sender.send('llm:chatStream:event', eventPayload)
-    })
+    }, item => item.type === 'Token' || item.type === 'ReasoningToken' ? item.data : undefined,
+    (item, text) => item.type === 'Token' || item.type === 'ReasoningToken' ? { ...item, data: text } : item)
+    try {
+      await llmChatStream(payload.request, streamEvent => {
+        if (streamEvent.type === 'Done' || streamEvent.type === 'Error') emitter.flush()
+        emitter.emit(streamEvent)
+      })
+    } finally { emitter.flush() }
   })
 
   registerIpcHandler<ModelStepPayload, ModelStepResult>('llm:modelStep', parseModelStepPayload, async (payload, event) => {
-    return await llmModelStep(payload.input, (stepEvent) => {
+    const emitter = createStreamEmitter<ModelStepEvent>(stepEvent => {
       const eventPayload: ModelStepEventPayload = { streamId: payload.streamId, event: stepEvent }
       event.sender.send('llm:modelStep:event', eventPayload)
-    })
+    }, item => item.type === 'TextDelta' || item.type === 'ReasoningDelta' ? item.text : undefined,
+    (item, text) => item.type === 'TextDelta' || item.type === 'ReasoningDelta' ? { ...item, text } : item)
+    try {
+      return redactRegisteredSecrets(await llmModelStep(payload.input, emitter.emit))
+    } finally { emitter.flush() }
   })
 
   registerIpcHandler<ModelCapabilitySmokeRequest, ModelCapabilitySmokeResult>(

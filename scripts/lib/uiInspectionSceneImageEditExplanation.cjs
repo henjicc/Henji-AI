@@ -5,7 +5,7 @@ async function installImageExplanationFixture(page, app) {
   await app.evaluate(({ ipcMain }) => {
     const handlers = ipcMain._invokeHandlers
     const originals = new Map()
-    for (const key of ['audioEdit:explanation', 'ai:getProviderApiKey', 'ai:getRuntimeProviderKeyStatus']) originals.set(key, handlers.get(key))
+    for (const key of ['audioEdit:explanation', 'ai:getProviderKeyInfo', 'ai:getRuntimeProviderKeyStatus']) originals.set(key, handlers.get(key))
     globalThis.__t157Originals = originals
     globalThis.__t157Transcripts = {}; globalThis.__t157Calls = 0
     ipcMain.removeHandler('audioEdit:explanation')
@@ -22,8 +22,8 @@ async function installImageExplanationFixture(page, app) {
       globalThis.__t157Calls++
       return { ok: true, data: { modelId: input.modelId, providerId: 'bailian', requestId: input.requestId, transcript } }
     })
-    ipcMain.removeHandler('ai:getProviderApiKey')
-    ipcMain.handle('ai:getProviderApiKey', async (event, input) => input.providerId === 'bailian' ? { ok: true, data: 'local-reality-fixture' } : originals.get('ai:getProviderApiKey')(event, input))
+    ipcMain.removeHandler('ai:getProviderKeyInfo')
+    ipcMain.handle('ai:getProviderKeyInfo', async (event, input) => input.providerId === 'bailian' ? { ok: true, data: { configured: true, maskedHint: '••••ture' } } : originals.get('ai:getProviderKeyInfo')(event, input))
     ipcMain.removeHandler('ai:getRuntimeProviderKeyStatus')
     ipcMain.handle('ai:getRuntimeProviderKeyStatus', async event => {
       const result = await originals.get('ai:getRuntimeProviderKeyStatus')(event)
@@ -32,7 +32,7 @@ async function installImageExplanationFixture(page, app) {
   })
   return async () => {
     await page.evaluate(() => window.__t157NativeRelease?.()).catch(() => {})
-    await app.evaluate(({ ipcMain }) => { for (const [key, handler] of globalThis.__t157Originals) { ipcMain.removeHandler(key); ipcMain.handle(key, handler) } })
+    await app.evaluate(({ ipcMain }) => { for (const [key, handler] of globalThis.__t157Originals) { ipcMain.removeHandler(key); if (handler) ipcMain.handle(key, handler) } })
   }
 }
 

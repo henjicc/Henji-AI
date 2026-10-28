@@ -340,6 +340,9 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
                   return <div key={id} className="space-y-2">
                     <div className={UI_TEXT_LABEL_CLASS}>{service}</div>
                     <ApiKeyInput value={generationKeys.keys[id]} visible={generationKeys.visibility[id]}
+                      maskedHint={generationKeys.hints?.[id]}
+                      onClear={() => generationKeys.clearKey(id)}
+                      onSave={() => { void generationKeys.saveKey(id) }}
                       error={generationKeys.errors[id] ? t(generationKeys.errors[id]!) : undefined}
                       onChange={value => generationKeys.updateKey(id, value)}
                       onToggleVisibility={() => generationKeys.toggleVisibility(id)}
@@ -351,6 +354,12 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
               </div>
             ) : generationCredential || credentialProvider ? (
               <ApiKeyInput
+                maskedHint={generationCredential ? generationKeys.hints?.[generationCredential] : credentialProvider ? llm.hints?.[credentialProvider.providerId] : undefined}
+                onClear={() => generationCredential ? generationKeys.clearKey(generationCredential) : credentialProvider && llm.clearKey(credentialProvider.providerId)}
+                onSave={() => {
+                  if (generationCredential) void generationKeys.saveKey(generationCredential)
+                  else if (credentialProvider) void llm.saveKey(credentialProvider.providerId)
+                }}
                 error={generationCredential
                   ? (generationKeys.errors[generationCredential] ? t(generationKeys.errors[generationCredential]!) : undefined)
                   : (credentialProvider && llm.keyErrors[credentialProvider.providerId] ? t(llm.keyErrors[credentialProvider.providerId]) : undefined)}

@@ -2,6 +2,8 @@ import { BrowserWindow } from 'electron'
 import { applyEventSizeFuse } from './sanitize'
 import { writeLogEventsToFile } from './writer'
 import type { MainLogEvent } from './types'
+import { redactLogCredentials } from '../../../../src/core/logging/sanitize'
+import { getLogCaptureMode } from './capture-config'
 
 /** 渲染层订阅日志事件的 IPC 通道，preload 白名单需同步声明该通道。 */
 export const LOG_EVENT_CHANNEL = 'henji://log-event'
@@ -30,7 +32,14 @@ export async function appendLogEvents(events: MainLogEvent[]): Promise<void> {
 
   // 单条事件体积保险丝：无论事件来自前端桥接还是主进程自身，落盘/推送前统一过一遍，
   // 防止超大 context（如异常巨大的完整捕获内容）拖垮写入队列与渲染层实时展示。
-  const safeEvents = events.map(applyEventSizeFuse)
+  const safeEvents = events.map(event => {
+    const safe = redactLogCredentials(event, { maxDepth: getLogCaptureMode() === 'full' ? Infinity : 12 }) as MainLogEvent
+    if (!safe.event) {
+      const compact = safe.message.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+      safe.event = compact ? compact.slice(0, 64) : `${safe.level}.event`
+    }
+    return applyEventSizeFuse(safe)
+  })
   await writeLogEventsToFile(safeEvents)
   pushLogEvents(safeEvents)
 }

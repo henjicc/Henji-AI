@@ -20,8 +20,8 @@ export function createElectronAiRuntime(): AiRuntimePlatform {
     removeProviderApiKey: async (providerId) => {
       await getNativeAi().removeProviderApiKey(providerId)
     },
-    getProviderApiKey: async (providerId) => {
-      return await getNativeAi().getProviderApiKey(providerId)
+    getProviderKeyInfo: async (providerId) => {
+      return await getNativeAi().getProviderKeyInfo(providerId)
     },
     getProviderKeyStatus: async () => {
       return await getNativeAi().getProviderKeyStatus()

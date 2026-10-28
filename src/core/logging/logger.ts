@@ -724,24 +724,22 @@ function createInternalLogger(ctx: LoggerContext): Logger {
         ? { ...ctx.context, ...meta.context }
         : { ...ctx.context, detail: meta.context }
 
-    const sanitizedContext = sanitizeLogPayload(mergedContext)
-    const sanitizedError = sanitizeLogPayload(meta.error)
-
-    const event: LogEvent = {
+    const event = sanitizeLogPayload({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
       timestamp: new Date().toISOString(),
       level,
       domain: ctx.domain,
-      event: meta.event || inferEvent(message, level),
+      event: meta.event || '',
       message,
       requestId: meta.requestId,
       taskId: meta.taskId,
       modelId: meta.modelId,
       providerId: meta.providerId,
-      context: sanitizedContext,
-      error: sanitizedError,
+      context: mergedContext,
+      error: meta.error,
       source: 'frontend',
-    }
+    }) as LogEvent
+    if (!event.event) event.event = inferEvent(event.message, level)
 
     appendLogEvent(event)
     writeToConsole(event)

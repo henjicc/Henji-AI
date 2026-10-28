@@ -66,16 +66,20 @@ export class GpuFrameCapture implements FrameSource {
     ses.protocol.handle('https', () => new Response(READER_PAGE, { headers: { 'content-type': 'text/html; charset=utf-8' } }))
     const reader = new BrowserWindow({
       show: false, width: 64, height: 64, frame: false,
-      webPreferences: { partition: this.partition, preload: path.join(__dirname, '../preload/web-replay.cjs'), contextIsolation: false, sandbox: true, nodeIntegration: false, backgroundThrottling: false, spellcheck: false },
+      webPreferences: { partition: this.partition, preload: path.join(__dirname, '../preload/web-replay.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false, spellcheck: false },
     })
     this.reader = reader
+    reader.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    reader.webContents.on('preload-error', (_event, _preloadPath, error) => this.onReady({ ok: false, error: `重演取帧运行时注入失败：${error.message}` }))
     readers.set(reader.webContents.id, this)
     this.readyState = new Promise<void>((resolve, reject) => {
       this.resolveReady = state => (state.ok ? resolve() : reject(new Error(`重演取帧窗口不能用 WebGPU：${state.error ?? ''}`)))
     })
     this.readyState.catch(() => undefined)
-    await withTimeout(reader.loadURL(`${READER_ORIGIN}/`), 15_000, '重演取帧窗口启动超时')
-    await withTimeout(this.readyState, 15_000, '重演取帧窗口没有准备好 WebGPU')
+    await Promise.all([
+      withTimeout(reader.loadURL(`${READER_ORIGIN}/`), 15_000, '重演取帧窗口启动超时'),
+      withTimeout(this.readyState, 15_000, '重演取帧窗口没有准备好 WebGPU'),
+    ])
   }
 
   onReady(state: { ok: boolean; error?: string }): void { this.resolveReady?.(state) }

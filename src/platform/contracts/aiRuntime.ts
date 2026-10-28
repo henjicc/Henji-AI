@@ -1,3 +1,4 @@
+import type { ProviderKeyInfo } from '../../core/providerKeyInfo'
 import type { AiRuntimeTrace } from '@/core/types'
 import type { StructuredGenerationOutput, TtsVoice } from '@henjicc/ai-sdk'
 import type { DocumentContainerRef } from '../../core/documents/types'
@@ -96,7 +97,7 @@ export interface AiRuntimePlatform {
   readSavedResult(requestId: string): Promise<AiSavedResult | null>
   setProviderApiKey(providerId: string, apiKey: string): Promise<void>
   removeProviderApiKey(providerId: string): Promise<void>
-  getProviderApiKey(providerId: string): Promise<string | null>
+  getProviderKeyInfo(providerId: string): Promise<ProviderKeyInfo>
   getProviderKeyStatus(): Promise<ProviderKeyStatusDto[]>
   testProviderConnection(providerId: string): Promise<ProviderConnectionTestResultDto>
   listTtsVoices(modelId: string): Promise<TtsVoice[]>

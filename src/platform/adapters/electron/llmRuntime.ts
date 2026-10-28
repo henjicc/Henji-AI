@@ -13,9 +13,6 @@ function getNativeLlm(): NonNullable<typeof window.henjiNative>['llm'] {
 
 export function createElectronLlmRuntime(): LlmRuntimePlatform {
   return {
-    getProviderApiKey: async (credentialId) => {
-      return await getNativeLlm().getProviderApiKey(credentialId)
-    },
     getProviderKeyStatus: async (credentialIds) => {
       return await getNativeLlm().getProviderKeyStatus(credentialIds)
     },

@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import { registerLogSecret, unregisterLogSecret } from '../core/logging/sanitize'
 import type { LlmChatRequest, LlmConfigState, LlmStreamEvent } from '@henjicc/ai-sdk'
 import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '@henjicc/ai-sdk'
 import type { ModelCapabilitySmokeRequest, ModelCapabilitySmokeResult } from '@/core/llm/capabilitySmoke'
@@ -16,17 +17,13 @@ const paidRequests = new Map<string, { controller: AbortController; started: boo
 export interface LlmProviderKeyStatusDto {
   credentialId: string
   configured: boolean
+  maskedHint?: string | null
 }
 
 function ensureDesktopRuntime(): void {
   if (!isDesktopRuntime()) {
     throw new Error('LLM Runtime only available in desktop mode')
   }
-}
-
-export async function llmGetProviderApiKey(credentialId: string): Promise<string | null> {
-  ensureDesktopRuntime()
-  return await getPlatform().llmRuntime.getProviderApiKey(credentialId)
 }
 
 export async function llmGetProviderKeyStatus(credentialIds: string[]): Promise<LlmProviderKeyStatusDto[]> {
@@ -48,14 +45,19 @@ export async function llmCommitProviderSettings(
   request: CommitLlmProviderSettingsDto
 ): Promise<LlmProviderSettingsResultDto> {
   ensureDesktopRuntime()
-  return await getPlatform().llmRuntime.commitProviderSettings(request)
+  const result = await getPlatform().llmRuntime.commitProviderSettings(request)
+  if (request.credential.kind === 'set') registerLogSecret(request.credential.apiKey.trim(), `provider:${result.credentialId}`)
+  else if (result.credentialAction === 'removed') unregisterLogSecret(`provider:${result.credentialId}`)
+  return result
 }
 
 export async function llmDeleteProviderSettings(
   request: DeleteLlmProviderSettingsDto
 ): Promise<LlmProviderSettingsResultDto> {
   ensureDesktopRuntime()
-  return await getPlatform().llmRuntime.deleteProviderSettings(request)
+  const result = await getPlatform().llmRuntime.deleteProviderSettings(request)
+  if (result.credentialAction === 'removed') unregisterLogSecret(`provider:${result.credentialId}`)
+  return result
 }
 
 export async function llmChatStream(

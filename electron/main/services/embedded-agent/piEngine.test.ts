@@ -104,6 +104,15 @@ function applicationCatalog(allowWrites = true) {
 }
 
 describe('Pi official SDK engine', () => {
+  it('凭据只用于请求认证，不进入模型上下文、工具参数或对外事件', async () => {
+    const f = await fixture()
+    await f.engine.command({ action: 'prompt', input: { text: '读取项目', context: '{}' } })
+    expect(f.headers.length).toBeGreaterThan(0)
+    expect(f.headers.every(header => header.authorization === 'Bearer fixture-key')).toBe(true)
+    expect(JSON.stringify(f.requests)).not.toContain('fixture-key')
+    expect(JSON.stringify(f.tool.mock.calls)).not.toContain('fixture-key')
+    expect(JSON.stringify(f.events)).not.toContain('fixture-key')
+  })
   it('OpenRouter 兼容端点不附带 Pi 的归因头', async () => {
     const f = await fixture()
     f.setToolPlan([])

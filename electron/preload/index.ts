@@ -186,7 +186,7 @@ const customModelsApi: HenjiCustomModelsApi = {
 const aiApi: HenjiAiApi = {
   setProviderApiKey: (providerId, apiKey) => nativeInvoke('ai:setProviderApiKey', { providerId, apiKey }),
   removeProviderApiKey: (providerId) => nativeInvoke('ai:removeProviderApiKey', { providerId }),
-  getProviderApiKey: (providerId) => nativeInvoke('ai:getProviderApiKey', { providerId }),
+  getProviderKeyInfo: (providerId) => nativeInvoke('ai:getProviderKeyInfo', { providerId }),
   getProviderKeyStatus: () => nativeInvoke('ai:getRuntimeProviderKeyStatus'),
   testProviderConnection: (providerId) => nativeInvoke('ai:testProviderConnection', { providerId }),
   listTtsVoices: (modelId) => nativeInvoke('ai:listTtsVoices', { modelId }),
@@ -200,7 +200,6 @@ const aiApi: HenjiAiApi = {
 }
 
 const llmApi: HenjiLlmApi = {
-  getProviderApiKey: (credentialId) => nativeInvoke('llm:getProviderApiKey', { credentialId }),
   getProviderKeyStatus: (credentialIds) => nativeInvoke('llm:getProviderKeyStatus', { credentialIds }),
   readConfig: () => nativeInvoke('llm:providerSettings:readConfig'),
   writeConfig: config => nativeInvoke('llm:providerSettings:writeConfig', { config }),

@@ -36,6 +36,10 @@
     "assistant-skills": "Assistant Skills"
   },
   "apiKeys": {
+    "configuredHint": "Configured · {{hint}}",
+    "clear": "Clear",
+    "replacePlaceholder": "Enter a new key to replace",
+    "saveDisabledReason": "Enter a key first",
     "title": "API Key Settings",
     "description": "Configure API keys for each provider. Keys are stored locally.",
     "migrationHint": "The Electron version uses a new secure key store. If keys from the older Tauri version appear empty, please enter them once again.",

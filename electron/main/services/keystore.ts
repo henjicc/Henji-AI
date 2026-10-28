@@ -1,4 +1,6 @@
 import { KEYSTORE_VERSION } from '../../../src/core/persistence/schemaVersions'
+import type { ProviderKeyInfo } from '../../../src/core/providerKeyInfo'
+import { registerLogSecret, unregisterLogSecret } from '../../../src/core/logging/sanitize'
 import { safeStorage } from 'electron'
 import fs from 'node:fs'
 import { parsePersistenceJson, upgradeStoredFileSync } from './persistence/stored-file'
@@ -125,8 +127,15 @@ export function setKey(namespace: KeyNamespace, providerId: string, apiKey: stri
   }
 
   const data = readKeystoreFile()
-  data.keys[buildKey(namespace, providerId)] = safeStorage.encryptString(trimmedKey).toString('base64')
+  const storeKey = buildKey(namespace, providerId)
+  data.keys[storeKey] = safeStorage.encryptString(trimmedKey).toString('base64')
   writeKeystoreFile(data)
+  registerProviderLogSecret(trimmedKey, storeKey)
+}
+
+function registerProviderLogSecret(value: string, storeKey: string): void {
+  // 通用密钥库也存 MCP 连接 JSON；整段记录不是凭据，不能进入流式匹配候选。其余命名空间都是凭据。
+  if (!storeKey.startsWith('mcp:')) registerLogSecret(value, storeKey)
 }
 
 export interface EncryptedKeySnapshot {
@@ -141,18 +150,21 @@ export function captureEncryptedKeySnapshot(namespace: KeyNamespace, providerId:
   return { storeKey, encrypted: readKeystoreFile().keys[storeKey] ?? null }
 }
 
-/** 只恢复已经加密的条目，不接触或返回明文。 */
+/** 补偿成功后同步恢复脱敏登记，避免待提交值污染后续日志。 */
 export function restoreEncryptedKeySnapshot(snapshot: EncryptedKeySnapshot): void {
   const data = readKeystoreFile()
   if (snapshot.encrypted === null) delete data.keys[snapshot.storeKey]
   else data.keys[snapshot.storeKey] = snapshot.encrypted
   writeKeystoreFile(data)
+  unregisterLogSecret(snapshot.storeKey)
+  if (snapshot.encrypted !== null) decryptStoredKey(snapshot.encrypted, snapshot.storeKey)
 }
 
 export function removeKey(namespace: KeyNamespace, providerId: string): void {
   const data = readKeystoreFile()
   delete data.keys[buildKey(namespace, providerId)]
   writeKeystoreFile(data)
+  unregisterLogSecret(buildKey(namespace, providerId))
 }
 
 /**
@@ -169,7 +181,9 @@ export function removeKey(namespace: KeyNamespace, providerId: string): void {
  */
 function decryptStoredKey(encrypted: string, storeKey: string): string | null {
   try {
-    return safeStorage.decryptString(Buffer.from(encrypted, 'base64'))
+    const key = safeStorage.decryptString(Buffer.from(encrypted, 'base64'))
+    registerProviderLogSecret(key, storeKey)
+    return key
   } catch (error) {
     logger.warn('已保存的密钥无法解密，按未配置处理', {
       event: 'keystore.decrypt.failed',
@@ -227,6 +241,8 @@ function migrateLegacyProviderCredential(providerId: string): void {
   data.keys[sharedStoreKey] = data.keys[source]
   for (const storeKey of legacyStoreKeys) delete data.keys[storeKey]
   writeKeystoreFile(data)
+  for (const storeKey of legacyStoreKeys) unregisterLogSecret(storeKey)
+  decryptStoredKey(data.keys[sharedStoreKey], sharedStoreKey)
 }
 
 function getProviderCredential(providerId: string): string | null {
@@ -246,6 +262,7 @@ function removeProviderCredential(providerId: string): void {
   delete data.keys[buildKey(LEGACY_AI_KEY_NAMESPACE, providerId)]
   delete data.keys[buildKey(LEGACY_LLM_KEY_NAMESPACE, providerId)]
   writeKeystoreFile(data)
+  for (const namespace of [PROVIDER_KEY_NAMESPACE, LEGACY_AI_KEY_NAMESPACE, LEGACY_LLM_KEY_NAMESPACE]) unregisterLogSecret(buildKey(namespace, providerId))
 }
 
 export function setAiProviderApiKey(providerId: string, apiKey: string): void {
@@ -279,9 +296,15 @@ export function getLlmProviderApiKey(credentialId: string): string | null {
   return getProviderCredential(credentialId)
 }
 
-export function getLlmProviderKeyStatus(credentialIds: string[]): Array<{ credentialId: string; configured: boolean }> {
+export function getProviderKeyInfo(credentialId: string): ProviderKeyInfo {
+  migrateLegacyProviderCredential(credentialId)
+  const key = readStoredKey(PROVIDER_KEY_NAMESPACE, credentialId)
+  return { configured: key !== null, maskedHint: key === null ? null : key.length > 8 ? `••••${key.slice(-4)}` : '••••' }
+}
+
+export function getLlmProviderKeyStatus(credentialIds: string[]): Array<ProviderKeyInfo & { credentialId: string }> {
   return credentialIds.map((credentialId) => ({
     credentialId,
-    configured: hasProviderCredential(credentialId),
+    ...getProviderKeyInfo(credentialId),
   }))
 }

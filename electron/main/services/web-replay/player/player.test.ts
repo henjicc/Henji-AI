@@ -24,6 +24,11 @@ const fake = vi.hoisted(() => ({
   failAtFrame: -1,
   nextId: 100,
   gpuOpened: 0,
+  injectionFails: false,
+  bootstrapFails: false,
+  preloadErrors: new Map<number, NonNullable<FakePage['paint']>>(),
+  popupHandler: vi.fn(),
+  popupAttempt: false,
   gpuBreaksMidway: false,
 }))
 
@@ -82,11 +87,21 @@ vi.mock('electron', () => ({
       page: this.page,
       debugger: { attach: vi.fn(), sendCommand: async () => ({}) },
       loadURL: async (url: string) => {
-        if (url.includes('bootstrap')) fake.handlers.get('web-replay:bootstrapped')?.({ sender: { id: this.page.id } })
-        else if (url !== 'about:blank') { this.page.pageNow = 20; fake.handlers.get('web-replay:report')?.({ sender: { id: this.page.id } }, { kind: 'ready', now: 20 }) }
+        if (url.includes('bootstrap') && fake.bootstrapFails) fake.preloadErrors.get(this.page.id)?.({}, 'preload', new Error('bootstrap fixture failure'))
+        else if (url.includes('bootstrap')) fake.handlers.get('web-replay:bootstrapped')?.({ sender: { id: this.page.id } })
+        else if (url !== 'about:blank' && fake.injectionFails) { fake.handlers.get('web-replay:report')?.({ sender: { id: this.page.id } }, { kind: 'failed', message: '重演运行时注入失败：fixture failure' }); return }
+        else if (url !== 'about:blank') {
+          this.page.pageNow = 20
+          if (fake.popupAttempt) expect(fake.popupHandler.mock.lastCall?.[0]()).toEqual({ action: 'deny' })
+          fake.handlers.get('web-replay:report')?.({ sender: { id: this.page.id } }, { kind: 'ready', now: 20 })
+        }
       },
+      setWindowOpenHandler: fake.popupHandler,
       setFrameRate: vi.fn(), executeJavaScript: evaluate(this.page),
-      on: (event: string, callback: FakePage['paint']) => { if (event === 'paint') this.page.paint = callback },
+      on: (event: string, callback: FakePage['paint']) => {
+        if (event === 'paint') this.page.paint = callback
+        if (event === 'preload-error' && callback) fake.preloadErrors.set(this.page.id, callback)
+      },
     }
     constructor() { fake.pages.push(this.page) }
     setContentSize = vi.fn()
@@ -153,6 +168,11 @@ afterEach(async () => {
   fake.changing = new Set()
   fake.staleFirst = true
   fake.failAtFrame = -1
+  fake.injectionFails = false
+  fake.bootstrapFails = false
+  fake.preloadErrors.clear()
+  fake.popupHandler.mockClear()
+  fake.popupAttempt = false
   fake.gpuOpened = 0
   fake.gpuBreaksMidway = false
   if (root) await fs.rm(root, { recursive: true, force: true })
@@ -267,3 +287,23 @@ it('导演稿：剪掉的区间与快放都按页面帧节奏推进、不出帧�
   expect((await readTrack(boxTrack)).map(line => line.t).slice(-3)).toEqual([1_500_000, 1_600_000, 1_700_000])
   await expect(fs.access(path.join(root, BOX_TRACK_FILE))).rejects.toThrow()
 })
+
+it('注入失败立即拒绝重演并关闭弹窗入口', async () => {
+  root = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-replay-injection-'))
+  fake.injectionFails = true
+  await expect(new WebRecordingPlayer(recordingStore(root)).render({ output: path.join(root, 'video.mp4'), video: false })).rejects.toThrow('重演运行时注入失败：fixture failure')
+  expect(fake.popupHandler.mock.calls[0][0]()).toEqual({ action: 'deny' })
+}, 2000)
+
+it('网页尝试弹窗时拒绝创建，并将行为差异纳入重演告警', async () => {
+  root = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-replay-popup-'))
+  fake.popupAttempt = true
+  const result = await new WebRecordingPlayer(recordingStore(root)).render({ output: path.join(root, 'video.mp4'), video: false })
+  expect(result.issues).toEqual([{ t: 0, kind: 'warning', message: '页面尝试打开新窗口，重演中已阻止' }])
+})
+
+it('bootstrap preload 失败立即带原因拒绝，不等待存储恢复超时', async () => {
+  root = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-bootstrap-injection-'))
+  fake.bootstrapFails = true
+  await expect(new WebRecordingPlayer(recordingStore(root)).render({ output: path.join(root, 'video.mp4'), video: false })).rejects.toThrow('重演运行时注入失败：bootstrap fixture failure')
+}, 2000)

@@ -1,3 +1,4 @@
+import type { ProviderKeyInfo } from '../../src/core/providerKeyInfo'
 import type {
   LlmConfigState,
   LlmModelConfig,
@@ -104,7 +105,7 @@ export interface HenjiProviderConnectionTestResult {
 export interface HenjiAiApi {
   setProviderApiKey(providerId: string, apiKey: string): Promise<void>
   removeProviderApiKey(providerId: string): Promise<void>
-  getProviderApiKey(providerId: string): Promise<string | null>
+  getProviderKeyInfo(providerId: string): Promise<ProviderKeyInfo>
   getProviderKeyStatus(): Promise<HenjiProviderKeyStatus[]>
   testProviderConnection(providerId: string): Promise<HenjiProviderConnectionTestResult>
   listTtsVoices(modelId: string): Promise<import('@henjicc/ai-sdk').TtsVoice[]>
@@ -125,8 +126,7 @@ export interface HenjiAiApi {
 }
 
 export interface HenjiLlmApi {
-  getProviderApiKey(credentialId: string): Promise<string | null>
-  getProviderKeyStatus(credentialIds: string[]): Promise<Array<{ credentialId: string; configured: boolean }>>
+  getProviderKeyStatus(credentialIds: string[]): Promise<Array<{ credentialId: string; configured: boolean; maskedHint?: string | null }>>
   readConfig(): Promise<LlmConfigState | null>
   writeConfig(config: LlmConfigState): Promise<void>
   commitProviderSettings(request: {

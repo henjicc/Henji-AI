@@ -1,3 +1,4 @@
+import { redactRegisteredSecrets } from '../../../src/core/logging/sanitize'
 import {
   cancelRuntimeTask,
   continuePolling,
@@ -101,7 +102,7 @@ export function registerAiRuntimeIpc(): void {
   registerIpcHandler<string, ProviderConnectionTestResultDto>(
     'ai:testProviderConnection',
     (input) => parseStringField(input, 'providerId'),
-    (providerId) => testProviderConnection(providerId, sdkRuntimeContext)
+    async (providerId) => redactRegisteredSecrets(await testProviderConnection(providerId, sdkRuntimeContext))
   )
 
   registerIpcHandler<string, import('@henjicc/ai-sdk').TtsVoice[]>(

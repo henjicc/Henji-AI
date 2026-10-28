@@ -1,3 +1,4 @@
+import type { ProviderKeyInfo } from '@/core/providerKeyInfo'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useEffect, useMemo, useState } from 'react'
 import {
@@ -28,7 +29,7 @@ import {
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import ApiKeyInput from '@/components/Settings/components/ApiKeyInput'
 import { useDataPath } from '@/components/Settings/hooks/useDataPath'
-import { aiGetProviderApiKey, aiSetProviderApiKey, aiTestProviderConnection } from '@/commands/aiRuntime'
+import { aiGetProviderKeyInfo, aiSetProviderApiKey, aiTestProviderConnection } from '@/commands/aiRuntime'
 import { API_KEY_PROVIDERS, type ApiKeyProvider } from '@/core/config/providers'
 import { emitApplicationEvent } from '@/core/events/applicationEvents'
 import { createLogger } from '@/core/logging'
@@ -166,6 +167,7 @@ function ProviderStep({
 function ApiKeyStep({
   providerId,
   apiKey,
+  maskedHint,
   visible,
   configured,
   connectionResult,
@@ -174,6 +176,7 @@ function ApiKeyStep({
 }: {
   providerId: ApiKeyProvider
   apiKey: string
+  maskedHint?: string
   visible: boolean
   configured: boolean
   connectionResult: ProviderConnectionTestResultDto | null
@@ -190,6 +193,7 @@ function ApiKeyStep({
       <div className="mt-8">
         <ApiKeyInput
           value={apiKey}
+          maskedHint={maskedHint}
           visible={visible}
           onChange={onApiKeyChange}
           onToggleVisibility={onVisibilityChange}
@@ -246,13 +250,14 @@ export function OnboardingModal(): JSX.Element {
   const state = useOnboardingState()
   const setProviderKeyStatus = useSettingsStore((value) => value.setProviderKeyStatus)
   const [apiKey, setApiKey] = useState('')
+  const [keyInfo, setKeyInfo] = useState<ProviderKeyInfo>()
   const [keyVisible, setKeyVisible] = useState(false)
   const [testing, setTesting] = useState(false)
   const [connectionResult, setConnectionResult] = useState<ProviderConnectionTestResultDto | null>(null)
   const [language, setLanguage] = useState<LanguageOption>(getCurrentLanguage())
   const dataPath = useDataPath(state.isOpen)
   const stepIndex = ONBOARDING_STEP_IDS.indexOf(state.activeStepId)
-  const providerConfigured = state.configuredProviders.includes(state.primaryProvider)
+  const providerConfigured = keyInfo?.configured ?? state.configuredProviders.includes(state.primaryProvider)
 
   useEffect(() => {
     if (state.isOpen) onboardingManager.open()
@@ -263,9 +268,11 @@ export function OnboardingModal(): JSX.Element {
     let disposed = false
     setConnectionResult(null)
     setKeyVisible(false)
-    void aiGetProviderApiKey(state.primaryProvider)
+    setApiKey('')
+    setKeyInfo(undefined)
+    void aiGetProviderKeyInfo(state.primaryProvider)
       .then((value) => {
-        if (!disposed) setApiKey(value ?? '')
+        if (!disposed) setKeyInfo(value)
       })
       .catch((error) => {
         logger.error('读取首次设置密钥失败', error, {
@@ -287,6 +294,7 @@ export function OnboardingModal(): JSX.Element {
         <ApiKeyStep
           providerId={state.primaryProvider}
           apiKey={apiKey}
+          maskedHint={keyInfo?.maskedHint ?? undefined}
           visible={keyVisible}
           configured={providerConfigured}
           connectionResult={connectionResult}
@@ -301,15 +309,19 @@ export function OnboardingModal(): JSX.Element {
         <FirstTaskStep providerId={state.primaryProvider} configured={providerConfigured} />
       )
     }
-  }, [apiKey, connectionResult, dataPath, keyVisible, providerConfigured, state.activeStepId, state.primaryProvider])
+  }, [apiKey, keyInfo, connectionResult, dataPath, keyVisible, providerConfigured, state.activeStepId, state.primaryProvider])
 
   const saveAndTest = async (): Promise<void> => {
     const trimmed = apiKey.trim()
-    if (!trimmed || testing) return
+    if ((!trimmed && !providerConfigured) || testing) return
     setTesting(true)
     setConnectionResult(null)
     try {
-      await aiSetProviderApiKey(state.primaryProvider, trimmed)
+      if (trimmed) {
+        await aiSetProviderApiKey(state.primaryProvider, trimmed)
+        setApiKey('')
+        setKeyInfo(await aiGetProviderKeyInfo(state.primaryProvider))
+      }
       setProviderKeyStatus(state.primaryProvider, true)
       emitApplicationEvent('provider-key-configured', { providerId: state.primaryProvider })
       const tested = await aiTestProviderConnection(state.primaryProvider)
@@ -401,7 +413,7 @@ export function OnboardingModal(): JSX.Element {
         ) : null}
         <UiButton
           variant="primary"
-          disabled={dataPath.isMigrating || testing || (state.activeStepId === 'api-key' && !connectionResult && !apiKey.trim())}
+          disabled={dataPath.isMigrating || testing || (state.activeStepId === 'api-key' && !connectionResult && !apiKey.trim() && !providerConfigured)}
           onClick={primaryAction}
         >
           {primaryLabel}

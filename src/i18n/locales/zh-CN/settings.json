@@ -36,6 +36,10 @@
     "assistant-skills": "助手技能"
   },
   "apiKeys": {
+    "configuredHint": "已配置 · {{hint}}",
+    "clear": "清除",
+    "replacePlaceholder": "输入新密钥以替换",
+    "saveDisabledReason": "先输入密钥",
     "title": "API 密钥设置",
     "description": "配置各个服务提供商的 API 密钥。密钥将安全地存储在本地。",
     "migrationHint": "Electron 版本会使用新的安全密钥存储；如果从旧 Tauri 版本切换后密钥显示为空，请重新填写一次。",

@@ -1,10 +1,11 @@
 /** @vitest-environment jsdom */
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useState } from 'react'
 
 import ApiKeyInput from './ApiKeyInput'
+import i18n from '@/i18n/config'
 
 afterEach(cleanup)
 
@@ -58,4 +59,42 @@ describe('ApiKeyInput', () => {
     expect(toggle.getAttribute('aria-disabled')).toBe('true')
     expect(input.getAttribute('aria-describedby')?.split(' ')).toHaveLength(2)
   })
+})
+
+it('已配置摘要不是输入值，替换与清除动作保持独立', async () => {
+  await i18n.changeLanguage('zh-CN')
+  const change = vi.fn(), clear = vi.fn()
+  render(<ApiKeyInput value="" maskedHint="••••1234" visible={false} onChange={change} onClear={clear} onToggleVisibility={() => {}} placeholder="密钥" showLabel="显示" hideLabel="隐藏" />)
+  expect(screen.getByText('已配置 · ••••1234')).toBeTruthy()
+  const input = screen.getByPlaceholderText('输入新密钥以替换') as HTMLInputElement
+  expect(input.value).toBe('')
+  fireEvent.change(input, { target: { value: 'replacement' } })
+  expect(change).toHaveBeenCalledWith('replacement')
+  fireEvent.click(screen.getByRole('button', { name: '清除' }))
+  expect(clear).toHaveBeenCalledTimes(1)
+})
+
+it('替换草稿只由保存或回车提交，输入与失焦不提交，空草稿不能保存', async () => {
+  await i18n.changeLanguage('zh-CN')
+  const save = vi.fn()
+  function Draft(): JSX.Element {
+    const [value, setValue] = useState('')
+    return <ApiKeyInput value={value} onChange={setValue} onSave={save} maskedHint="••••1234" visible={false} onToggleVisibility={() => {}} placeholder="密钥" showLabel="显示" hideLabel="隐藏" />
+  }
+  render(<Draft />)
+  const saveButton = screen.getByRole('button', { name: '保存' }) as HTMLButtonElement
+  expect(saveButton.getAttribute('aria-disabled')).toBe('true')
+  const input = screen.getByPlaceholderText('输入新密钥以替换')
+  fireEvent.change(input, { target: { value: 'partial-replacement' } })
+  fireEvent.blur(input)
+  expect(save).not.toHaveBeenCalled()
+  fireEvent.change(input, { target: { value: 'complete-replacement-value' } })
+  fireEvent.click(saveButton)
+  expect(save).toHaveBeenCalledTimes(1)
+  fireEvent.keyDown(input, { key: 'Enter' })
+  expect(save).toHaveBeenCalledTimes(2)
+  fireEvent.change(input, { target: { value: '' } })
+  expect(saveButton.getAttribute('aria-disabled')).toBe('true')
+  fireEvent.keyDown(input, { key: 'Enter' })
+  expect(save).toHaveBeenCalledTimes(2)
 })
