@@ -82,11 +82,16 @@ export interface AuthorModule {
   dispose?(): void | Promise<void>
 }
 
+// Vite 4 即使看到 @vite-ignore 仍会注入窗口客户端；固定函数体让原生模块加载不经过 import-analysis。
+// 前提是渲染进程未设置不含 unsafe-eval 的 CSP。静态资源桥需要单独的开发/打包分发入口；
+// new URL 只生成地址，既不隔离接收该地址的变量 import，也不会自行让桥的 JS 跳过 Vite 转换。
+const importNativeModule = new Function('url', 'return import(url)') as (url: string) => Promise<{ default?: AuthorModule }>
+
 /** Native import resolves relative dependencies and cycles using standard ESM semantics.
  * Every entry runs with seeded randomness and frame-derived clocks (see videoEditAuthorDeterminism). */
 export async function loadAuthorModule(url: string): Promise<AuthorModule> {
   try {
-    const loaded: { default?: AuthorModule } = await importAuthorDeterministic(() => import(/* @vite-ignore */ url))
+    const loaded = await importAuthorDeterministic(() => importNativeModule(url))
     const effect = loaded.default
     if (!effect || typeof effect.name !== 'string') throw new Error('默认导出需要效果名称 name。')
     if (![effect.draw, effect.layers, effect.createWebGL, effect.createWebGPU].some(value => typeof value === 'function')) throw new Error('效果需要 draw、layers、createWebGL 或 createWebGPU 入口。')

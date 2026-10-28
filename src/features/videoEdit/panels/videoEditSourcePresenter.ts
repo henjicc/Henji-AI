@@ -303,6 +303,9 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
     signal.addEventListener('abort', abort, { once: true })
     try {
       if (!request.itemId) { release(); return { timeUs: 0, presentedTimeUs: 0, playing: false, volume: request.volume } }
+      // 失败画布已转移且不能复用，同一素材的后续定位也必须重新建立完整来源。
+      // 空闲故障由下一次定位恢复；主动恢复需要独立的调度与画布交接，不能从终止回调重入当前定位请求。
+      if (nativeView?.owner?.terminated || frames?.terminated) release()
       const originalMedia = resolveMedia(request.itemId)
       const proxy = proxyProjectId ? getVideoEditProxySources(proxyProjectId)[originalMedia.id] : undefined
       const media = proxy ? { ...originalMedia, sourceRevision: `${originalMedia.sourceRevision ?? ''}:proxy:${proxy.key}` } : originalMedia

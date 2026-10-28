@@ -4,10 +4,11 @@ import type { VideoEditMedia } from '@/core/videoEdit/document'
 import { createVideoEditSourcePresenter } from './videoEditSourcePresenter'
 
 vi.mock('@/services/imageSource', () => ({ resolveImageDisplayUrl: (path: string) => `media:${path}` }))
-const gpu = vi.hoisted(() => ({ blocked: false, calls: [] as number[], requests: [] as Array<() => void>, invalidates: vi.fn(), closes: vi.fn(), created: 0, closing: undefined as Promise<void> | undefined, timestamp: undefined as ((timeUs: number) => number) | undefined, backend: 'browser' as 'browser' | 'native', plays: [] as Array<[number, number | undefined]> }))
+const gpu = vi.hoisted(() => ({ failed: false, blocked: false, calls: [] as number[], requests: [] as Array<() => void>, invalidates: vi.fn(), closes: vi.fn(), created: 0, closing: undefined as Promise<void> | undefined, timestamp: undefined as ((timeUs: number) => number) | undefined, backend: 'browser' as 'browser' | 'native', plays: [] as Array<[number, number | undefined]> }))
 vi.mock('../engine/videoEditSourceFrames', () => ({ videoEditSourceBackend: async () => gpu.backend, VideoEditSourceFrames: class {
   private revision = 0
-  constructor(private readonly media: VideoEditMedia) { gpu.created++ }
+  get terminated() { return gpu.failed }
+  constructor(private readonly media: VideoEditMedia) { gpu.created++; gpu.failed = false }
   async present(timeUs: number) {
     const revision = this.revision; gpu.calls.push(timeUs)
     if (gpu.blocked) await new Promise<void>(resolve => gpu.requests.push(resolve))
@@ -44,6 +45,7 @@ let host: HTMLDivElement
 let frameCallbacks: Map<number, VideoFrameRequestCallback>
 let nextFrame: number
 beforeEach(() => {
+  gpu.failed = false
   host = document.createElement('div'); document.body.append(host); frameCallbacks = new Map(); nextFrame = 0
   gpu.blocked = false; gpu.calls = []; gpu.requests = []; gpu.invalidates.mockClear(); gpu.closes.mockClear(); gpu.created = 0; gpu.closing = undefined; gpu.timestamp = undefined; gpu.backend = 'browser'; gpu.plays = []; sound.players = []; sound.fail = undefined
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(function (this: HTMLMediaElement) { Object.defineProperty(this, 'paused', { value: true, configurable: true }) })
@@ -360,6 +362,20 @@ it('源音频通过同一个实际媒体元素确认定位和音量，关闭释�
   presenter.dispose()
 })
 
+it('源画面 Worker 已终止后同一素材的定位使用新会话与新画布', async () => {
+  gpu.backend = 'native'
+  const presenter = createVideoEditSourcePresenter(host, () => media, vi.fn())
+  const request = { itemId: 'item', timeUs: 45_000, playing: false, volume: .5 }
+  const first = presenter.present(request, new AbortController().signal)
+  await loadVideo(); await first
+  const old = host.querySelector('canvas')
+  gpu.failed = true
+  const next = presenter.present({ ...request, timeUs: 90_000 }, new AbortController().signal)
+  await loadVideo(); await next
+  expect(gpu.created).toBe(2); expect(gpu.closes).toHaveBeenCalledOnce()
+  expect(host.querySelector('canvas')).not.toBe(old)
+  await presenter.dispose()
+})
 it('只有原生能解的视频不用媒体元素：渲染会话确认定位画面，正向按连续帧节拍播放到结尾停止，反向按真实时间戳后退；静音；释放会话', async () => {
   vi.useFakeTimers()
   vi.spyOn(performance, 'now').mockImplementation(() => Date.now())

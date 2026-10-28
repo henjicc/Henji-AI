@@ -43,7 +43,8 @@ it('声音按画面时钟对齐：源秒数在 performance 时刻 at 发声，�
   const mixes: Array<[number, number]> = []
   const session = { mixAudio: vi.fn(async (from: number, duration: number) => { mixes.push([from, duration]); return { duration } }), dispose: vi.fn(async () => undefined) }
   const documents: VideoEditComposition[] = []
-  const player = new VideoEditSourceSoundPlayer(video, document => { documents.push(document); return session as unknown as VideoEditRenderSession })
+  const next = { ...session, dispose: vi.fn(async () => undefined) }
+  const player = new VideoEditSourceSoundPlayer(video, document => { documents.push(document); return (documents.length === 1 ? session : next) as unknown as VideoEditRenderSession })
   await player.prepare(1.4)
   expect(created.at(-1)!.gain.value).toBe(1)
   // Source 2.0s is due 16.7ms after now: it sounds 16.7ms after the current audio time.
@@ -55,7 +56,11 @@ it('声音按画面时钟对齐：源秒数在 performance 时刻 at 发声，�
   // Through the monitor volume (clamped to 1), then the level meter.
   expect(sources[0].connect).toHaveBeenCalledWith(created.at(-1))
   expect(documents).toHaveLength(1)
+  Object.assign(session, { terminated: true })
+  player.start(3, 1016.7); player.pump(3, () => true, () => {})
+  await vi.waitFor(() => expect(documents).toHaveLength(2))
+  expect(session.dispose).toHaveBeenCalledOnce()
   await player.dispose()
-  expect(context.close).toHaveBeenCalledOnce(); expect(session.dispose).toHaveBeenCalledOnce()
+  expect(context.close).toHaveBeenCalledOnce(); expect(session.dispose).toHaveBeenCalledOnce(); expect(next.dispose).toHaveBeenCalledOnce()
   await expect(player.prepare(1)).rejects.toThrow('源声音已关闭。')
 })

@@ -9,7 +9,7 @@ import { createVideoEditSequence, videoEditClipSchema, videoEditComposition } fr
 import { addLegacyVideoEditTracks, createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { VideoEditRenderTransport } from './videoEditRenderTransport'
-import { VideoEditRenderBusyError } from './videoEditGpuFailure'
+import { VideoEditRenderBusyError, VideoEditRenderWorkerError } from './videoEditGpuFailure'
 
 const proxyState = vi.hoisted(() => ({ sources: {} as Record<string, import('@/core/videoEdit/proxy').VideoProxyResult> }))
 vi.mock('../application/videoEditProxy', () => ({ verifiedVideoEditProxySources: async () => proxyState.sources }))
@@ -156,6 +156,71 @@ it('卡死渲染终止共享会话、释放全部等待和原生通道，显式�
   await expect(recovered.present(0)).resolves.toMatchObject({ presented: true })
   expect(workers).toHaveLength(2)
   await recovered.dispose()
+})
+
+it('Worker 原始异常释放通道与等待，拒收迟到模块请求及画面；新会话使用新端口出帧', async () => {
+  const session = new VideoEditRenderSession(composition())
+  await session.prepareGpu()
+  const old = workers[0]; old.respond = false
+  const pending = session.present(7)
+  const rejected = expect(pending).rejects.toBeInstanceOf(VideoEditRenderWorkerError)
+  const cause = new Error('原始异常')
+  ;(old.onerror as (event: Partial<ErrorEvent>) => void)({ message: cause.message, filename: 'blob:author', lineno: 12, colno: 9, error: null, preventDefault: vi.fn() })
+  await rejected
+  expect(session.terminated).toBe(true)
+  expect(session.terminalError?.cause).toBeUndefined()
+  expect((session.terminalError as VideoEditRenderWorkerError).authorError().message).toBe('原始异常（blob:author:12:9）')
+  const log = platform.logs.find(entry => (entry.meta as { event: string }).event === 'video_edit.render.session.failed')!.meta as { context: Record<string, unknown> }
+  expect(log.context).toMatchObject({ filename: 'blob:author', line: 12, column: 9 })
+  expect(log.context).not.toHaveProperty('stack')
+  const messages = old.messages.length
+  old.onmessage!({ data: { kind: 'code.read', token: 1, file: { location: 'memory:old' } } } as MessageEvent)
+  const close = vi.fn(), historyClose = vi.fn()
+  old.onmessage!({ data: { id: 1, bitmap: { close }, history: { close: historyClose } } } as unknown as MessageEvent)
+  expect(close).toHaveBeenCalledOnce(); expect(historyClose).toHaveBeenCalledOnce()
+  expect(old.messages).toHaveLength(messages)
+  expect(platform.disconnect).toHaveBeenCalledWith('vf-route-1')
+  const port = { kind: 'new-port' } as unknown as MessagePort
+  platform.connect.mockResolvedValueOnce({ route: 'vf-route-2', port })
+  const next = new VideoEditRenderSession(composition())
+  await expect(next.present(7)).resolves.toMatchObject({ presented: true })
+  expect(workers[1].messages).toContainEqual(expect.objectContaining({ message: { kind: 'nativeFrames.attach', port }, transfer: [port] }))
+  await next.dispose()
+})
+
+it('Worker 内未捕获异常回报保留真实堆栈并结束请求，释放后的警告日志仍转发', async () => {
+  const session = new VideoEditRenderSession(composition())
+  await session.prepareGpu()
+  const worker = workers[0]; worker.respond = false
+  const pending = session.present(0), rejected = expect(pending).rejects.toBeInstanceOf(VideoEditRenderWorkerError)
+  const context = { message: 'missingSymbol is not defined', filename: 'blob:author', line: 7, column: 3, stack: 'ReferenceError: missingSymbol is not defined\n at blob:author:7:3' }
+  worker.onmessage!({ data: { kind: 'log', level: 'warn', message: '原始线程异常', event: 'video_edit.render.worker.uncaught_error', context } } as MessageEvent)
+  await rejected
+  expect(session.terminated).toBe(true)
+  expect(platform.logs).toContainEqual(expect.objectContaining({ meta: expect.objectContaining({ event: 'video_edit.render.worker.uncaught_error', context }) }))
+  worker.onmessage!({ data: { kind: 'log', level: 'warn', message: '释放警告', event: 'video_edit.render.dispose.warning', context: {} } } as MessageEvent)
+  expect(platform.logs).toContainEqual(expect.objectContaining({ message: '释放警告' }))
+})
+it('未处理的 Promise 拒绝只记日志，不终止会话或打断在途画面，后续仍能出帧', async () => {
+  const session = new VideoEditRenderSession(composition())
+  await session.prepareGpu()
+  const worker = workers[0]; worker.respond = false
+  let completed = false
+  const pending = session.present(4).then(result => { completed = true; return result })
+  await Promise.resolve()
+  const context = { message: 'Failed to fetch', stack: 'TypeError: Failed to fetch\n at blob:author:3:7' }
+  worker.onmessage!({ data: { kind: 'log', level: 'warn', message: '异步拒绝', event: 'video_edit.render.worker.unhandled_rejection', context } } as MessageEvent)
+  await Promise.resolve()
+  expect(session.terminated).toBe(false); expect(session.terminalError).toBeUndefined()
+  expect(worker.terminate).not.toHaveBeenCalled(); expect(completed).toBe(false)
+  expect(platform.logs).toContainEqual(expect.objectContaining({ meta: expect.objectContaining({ event: 'video_edit.render.worker.unhandled_rejection', context }) }))
+  const request = worker.messages.at(-1)!.message
+  if (!('id' in request)) throw new Error('渲染请求未发送。')
+  worker.onmessage!({ data: { id: request.id, presented: true } } as MessageEvent)
+  expect(await pending).toMatchObject({ presented: true })
+  worker.respond = true
+  await expect(session.present(5)).resolves.toMatchObject({ presented: true })
+  await session.dispose()
 })
 
 it('正常回执及主动释放清理请求期限，不留下延迟终止', async () => {

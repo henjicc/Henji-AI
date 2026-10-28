@@ -8,6 +8,7 @@ import { ensureVideoEditChangedCodeMetadata } from './videoEditCodeState'
 import { subscribeVideoEditDomain, type VideoEditInstance } from './videoEditService'
 import { videoEditTransitionClipIds, videoEditTransitionWindow } from '@/core/videoEdit/transitions'
 import { videoEditRenderFailures } from '../engine/videoEditRenderFailures'
+import { VideoEditRenderWorkerError } from '../engine/videoEditGpuFailure'
 
 export interface VideoEditTrialTarget { sequenceId: string; clipId: string; effectIds?: string[] }
 /** Exact original-clock endpoints, plus every affected transition boundary. */
@@ -66,7 +67,7 @@ export function videoEditCodeValidationFrames(document: VideoEditDocument, targe
 export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEditComposition; frame: number }>, signal: AbortSignal, keepLast = false, collect?: ImageBitmap[], measurements?: CodeFramePerformance[], observe?: (value: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation) => void, notices?: Set<string>): Promise<ImageBitmap | undefined> {
   if (!frames.length) throw new Error('源码检查需要边界画面。')
   signal.throwIfAborted()
-  let renderer: VideoEditRenderSession | undefined; let lease: VideoEditOffscreenLease | undefined; let bitmap: ImageBitmap | undefined
+  let lease: VideoEditOffscreenLease | undefined; let bitmap: ImageBitmap | undefined
   const poolAbort = new AbortController()
   let succeeded = false
   let expired = false; let timer: ReturnType<typeof setTimeout> | undefined; let abort: (() => void) | undefined
@@ -85,8 +86,13 @@ export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEd
     signal.throwIfAborted()
     for (const input of frames) {
       signal.throwIfAborted()
-      const preparationStarted = performance.now()
-      let sessionReused = !!renderer
+      let preparationStarted = performance.now()
+      let sessionReused = !!lease
+      let measuredSession = lease?.session
+      const measureSession = (session: NonNullable<typeof measuredSession>): void => {
+        if (measuredSession && session !== measuredSession) { sessionReused = false; preparationStarted = performance.now() }
+        measuredSession = session
+      }
       // Detect a stalled frame, rather than imposing a total duration/count budget on a large edit.
       clearTimeout(timer)
       timer = setTimeout(() => { expired = true; rejectDeadline(new Error('源码单帧试渲染超过30秒，已释放候选；请重新检查。')) }, 30_000)
@@ -98,13 +104,13 @@ export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEd
           if (expired || signal.aborted) { void value.release(true); throw signal.reason ?? new Error('试渲染已超时。') }
           return value
         })
-        lease = await Promise.race([acquiring, deadline]); renderer = lease.session; sessionReused = lease.reused
-      } else await Promise.race([renderer!.replaceContent(input.document), deadline])
+        lease = await Promise.race([acquiring, deadline]); sessionReused = lease.reused; measuredSession = lease.session
+      } else await Promise.race([lease.run(input.document, session => { measureSession(session); return session.replaceContent(input.document) }), deadline])
       const present = async (frame: number): ReturnType<VideoEditRenderSession['present']> => {
         signal.throwIfAborted()
         clearTimeout(timer)
         timer = setTimeout(() => { expired = true; rejectDeadline(new Error('源码单帧试渲染超过30秒，已释放候选；请重新检查。')) }, 30_000)
-        return await Promise.race([renderer!.present(frame, false, false, undefined, undefined, undefined, 'interactive', false, Boolean(observe)).then(result => {
+        return await Promise.race([lease!.run(input.document, session => { measureSession(session); return session.present(frame, false, false, undefined, undefined, undefined, 'interactive', false, Boolean(observe)) }).then(result => {
           if (expired || signal.aborted) { result.bitmap?.close(); throw signal.reason ?? new Error('源码候选已失效。') }
           if (result.authorElements && frame === input.frame) observe?.(result.authorElements)
           return result
@@ -122,12 +128,15 @@ export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEd
         // animated output cannot report the cheap identical-frame cache as playback.
         const precedingFrame = input.frame > 0 ? input.frame - 1 : Math.min(1, Math.max(0, videoEditDuration(input.document) - 1))
         let sampling: NonNullable<CodeFramePerformance['sampling']> = { mode: precedingFrame === input.frame ? 'repeat-frame' : 'adjacent-frame', precedingFrame }
+        const samplingSession = lease.session
         try {
           const warmup = await present(precedingFrame)
           warmup.bitmap?.close()
+          if (lease.session !== samplingSession) throw new Error('测量期间画面会话已重建，未取得连续帧测量。')
           const warmupFailures = videoEditRenderFailures(warmup)
           if (!warmup.presented || warmupFailures.length) throw new Error(warmupFailures.join('\n') || '相邻帧没有生成画面。')
           const steady = await present(input.frame)
+          if (lease.session !== samplingSession) { steady.bitmap?.close(); throw new Error('测量期间画面会话已重建，未取得连续帧测量。') }
           const steadyFailures = videoEditRenderFailures(steady)
           if (!steady.presented || !steady.bitmap || steadyFailures.length || !steady.codePerformance?.length) { steady.bitmap?.close(); throw new Error(steadyFailures.join('\n') || '稳态采样没有返回画面及成本。') }
           bitmap.close(); bitmap = steady.bitmap; result = steady
@@ -148,7 +157,8 @@ export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEd
     const kept = keepLast ? bitmap : undefined
     if (!keepLast) bitmap?.close()
     bitmap = undefined; return kept
-  } finally {
+  } catch (error) { throw error instanceof VideoEditRenderWorkerError ? error.authorError() : error }
+  finally {
     bitmap?.close(); clearTimeout(timer); if (abort) signal.removeEventListener('abort', abort)
     await lease?.release(!succeeded || expired || signal.aborted)
   }

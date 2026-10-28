@@ -48,6 +48,11 @@ export class VideoEditSourceSoundPlayer {
   private origin = 0
   private disposed = false
 
+  private renderSession(): VideoEditRenderSession {
+    if (this.session?.terminated) { void this.session.dispose(); this.session = undefined }
+    return this.session ??= this.createSession(videoEditSourceSoundComposition(this.media, this.layout))
+  }
+
   constructor(private readonly media: VideoEditMedia, private readonly createSession: (document: VideoEditComposition) => VideoEditRenderSession = document => new VideoEditRenderSession(document), private readonly layout?: readonly VideoEditAudioMapping[]) {}
 
   /** Starts the audio clock (it may need a user gesture or a device wake-up) and applies the monitor volume. */
@@ -77,7 +82,7 @@ export class VideoEditSourceSoundPlayer {
     if (!context || !gain || this.disposed) return
     this.scheduler.pump({
       context, destination: gain, origin: this.origin, timelineTime: seconds, endTime: this.media.durationSeconds,
-      mix: (from, duration) => (this.session ??= this.createSession(videoEditSourceSoundComposition(this.media, this.layout))).mixAudio(from, duration),
+      mix: (from, duration) => this.renderSession().mixAudio(from, duration),
       isCurrent: () => !this.disposed && isCurrent(), onError,
     })
   }
@@ -98,7 +103,7 @@ export class VideoEditSourceSoundPlayer {
     const apply = (): void => {
       if (this.disposed || !this.context || !this.gain) return
       this.scrubber.attach({ context: this.context, destination: this.gain })
-      this.scrubber.setSource(this.scrubSource ??= videoEditScrubSource(SOURCE_SOUND_RATE, this.media.durationSeconds, (from, duration) => (this.session ??= this.createSession(videoEditSourceSoundComposition(this.media, this.layout))).mixAudio(from, duration)))
+      this.scrubber.setSource(this.scrubSource ??= videoEditScrubSource(SOURCE_SOUND_RATE, this.media.durationSeconds, (from, duration) => this.renderSession().mixAudio(from, duration)))
       if (step) this.scrubber.step(seconds, Math.max(AUDIO_SCRUB_STEP_SECONDS, 1 / fps))
       else this.scrubber.move(seconds, { quantum: 1 / fps, at })
     }

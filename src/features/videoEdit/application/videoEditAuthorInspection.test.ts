@@ -1,9 +1,10 @@
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { videoEditComposition } from '@/core/videoEdit/document'
 import { videoEditOffscreenPool } from '../engine/videoEditOffscreenPool'
 import type { VideoEditRenderTransport } from '../engine/videoEditRenderTransport'
 import { inspectVideoEditAuthor } from './videoEditAuthorInspection'
+import { VideoEditRenderWorkerError } from '../engine/videoEditGpuFailure'
 
 const state = vi.hoisted(() => ({ starts: 0, reads: vi.fn(), release: vi.fn(async () => undefined), dispose: vi.fn(async () => undefined) }))
 vi.mock('../engine/videoEditRenderTransport', () => ({ VideoEditRenderTransport: class {
@@ -14,12 +15,22 @@ vi.mock('../engine/videoEditRenderTransport', () => ({ VideoEditRenderTransport:
   dispose = state.dispose
 } }))
 vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ system: { memoryInfo: async () => ({ availableBytes: 4 * 1024 ** 3, totalBytes: 8 * 1024 ** 3 }) } }) }))
-vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), warn: vi.fn() }) }))
+vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), warn: vi.fn(), info: vi.fn() }) }))
 
+beforeEach(() => { state.starts = 0; state.reads.mockReset(); state.release.mockClear(); state.dispose.mockClear() })
 afterEach(async () => {
   await vi.advanceTimersByTimeAsync(60_000)
   vi.useRealTimers()
   vi.unstubAllGlobals()
+})
+it('作者检查在两次恢复失败后仍向调用者返回原始异常及文件行列', async () => {
+  vi.useFakeTimers(); vi.stubGlobal('URL', { createObjectURL: () => 'blob:author', revokeObjectURL: vi.fn() })
+  state.reads.mockRejectedValue(new VideoEditRenderWorkerError('剪辑画面处理已中断，请重新加载预览。', undefined, { message: 'ReferenceError: missingSymbol is not defined', filename: 'effect.js', line: 8, column: 6 }))
+  const reads = state.reads.mock.calls.length
+  const pending = inspectVideoEditAuthor({ code: 'export default {}', map: '', locations: { layers: {} } }).catch((error: Error) => error)
+  await vi.advanceTimersByTimeAsync(750)
+  expect(await pending).toMatchObject({ message: 'ReferenceError: missingSymbol is not defined（effect.js:8:6）' })
+  expect(state.reads.mock.calls.length - reads).toBe(3)
 })
 
 it('作者检查不等待正在准备字体的文档租约；复用检查线程并在空闲时释放', async () => {

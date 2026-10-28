@@ -39,6 +39,7 @@ export class VideoEditSourceFrames {
   private readonly durationUs: number
   private revision = 0
   private disposed = false
+  get terminated(): boolean { return this.disposed || this.session.terminated }
   private released?: Promise<void>
   /** Set while playing forward through the renderer's scheduled path (a document spanning the whole source). */
   private playback?: number

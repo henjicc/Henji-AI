@@ -17,10 +17,11 @@ import type { ContentDiskCache } from '../../../../electron/main/services/media/
 
 const pixels = vi.hoisted(() => ({ frames: [] as number[], dispose: vi.fn(), pause: undefined as (() => Promise<void>) | undefined }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
+  terminated = false
   constructor(readonly composition: VideoEditComposition) {}
   async setRenderDivisor() {}
   async present(frame: number, _sequential: boolean, _scrub: boolean, _deadline: unknown, _submitted: unknown, size: { width: number; height: number }) {
-    await pixels.pause?.()
+    try { await pixels.pause?.() } catch (error) { this.terminated = true; throw error }
     pixels.frames.push(frame); return { rgb: new Uint8Array(size.width * size.height * 3).fill(frame) }
   }
   async dispose() { pixels.dispose() }
@@ -135,6 +136,20 @@ it('utility 分批限制传输字节，停止后不请求后续批次，错误/�
   const assertion = expect(pending).rejects.toThrow('取消'); controller.abort(); await assertion
 })
 
+it('跟踪帧的 Worker 失败后移除旧会话，下一次读取重新准备并返回像素', async () => {
+  const { document, clip } = fixture(), { source, composition } = videoEditSequenceTrackingSource(document, clip)!
+  const reply = vi.fn(async () => {}), prepare = vi.fn()
+  const renderer = new VideoEditTrackingFrames(() => composition, reply, prepare)
+  const request = { first: 0, count: 1, width: 64, height: 36 }
+  pixels.pause = async () => { throw new Error('Worker 已退出') }
+  renderer.handle({ kind: 'frames', id: 'failed', jobId: 'job', source, request })
+  await vi.waitFor(() => expect(reply).toHaveBeenCalledWith(expect.objectContaining({ id: 'failed', error: 'Worker 已退出' })))
+  expect(pixels.dispose).toHaveBeenCalledOnce()
+  pixels.pause = undefined
+  renderer.handle({ kind: 'frames', id: 'recovered', jobId: 'job', source, request })
+  await vi.waitFor(() => expect(reply).toHaveBeenCalledWith(expect.objectContaining({ id: 'recovered', frames: [expect.any(Uint8Array)] })))
+  expect(prepare).toHaveBeenCalledTimes(2); renderer.dispose()
+})
 it('离屏渲染等待期间释放会话，迟到像素不回复后台且解码会话销毁', async () => {
   const { document, clip } = fixture(); const { source, composition } = videoEditSequenceTrackingSource(document, clip)!
   let finish!: () => void

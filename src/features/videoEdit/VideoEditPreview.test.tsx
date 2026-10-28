@@ -5,11 +5,11 @@ import { webcrypto } from 'node:crypto'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
-import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, deleteVideoEditSequence, switchVideoEditSequence, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, setVideoEditTimelineView, undoVideoEdit, beginVideoEditGesture, finishVideoEditGesture, updateVideoEditCreativeIntents } from './application/videoEditService'
+import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, deleteVideoEditSequence, switchVideoEditSequence, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, setVideoEditTimelineView, subscribeVideoEditView, undoVideoEdit, beginVideoEditGesture, finishVideoEditGesture, updateVideoEditCreativeIntents } from './application/videoEditService'
 import { setVideoEditAnnotationBrush } from './application/videoEditAnnotations'
 import { applyVideoEditBuiltinEffect, updateVideoEditBuiltinEffect } from './application/videoEditCompositing'
 import { VideoEditPreview } from './VideoEditPreview'
-import { VideoEditGpuDeviceLostError, VideoEditRenderBusyError } from './engine/videoEditGpuFailure'
+import { VideoEditGpuDeviceLostError, VideoEditRenderBusyError, VideoEditRenderWorkerError } from './engine/videoEditGpuFailure'
 import { registerVideoEditSourcePresenter, updateVideoEditSource } from './application/videoEditSource'
 import { resetVideoEditPlaybackResolutionCache, setVideoEditPlaybackResolution } from './application/videoEditPlaybackResolution'
 import { setVideoEditPosterFrame } from './application/videoEditProgramCapture'
@@ -20,6 +20,8 @@ const scrub = vi.hoisted(() => ({ request: vi.fn(), stop: vi.fn() }))
 vi.mock('./engine/videoEditAudioScrub', async importOriginal => ({ ...await importOriginal<typeof import('./engine/videoEditAudioScrub')>(), VideoEditAudioScrubber: class { request = scrub.request; stop = scrub.stop } }))
 vi.mock('./application/videoEditProjectCover', () => ({ saveVideoEditPosterCover: vi.fn(async () => undefined), updateVideoEditProjectCover: vi.fn(async () => undefined) }))
 vi.mock('./engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
+  terminalError?: Error
+  get terminated() { return !!this.terminalError }
   setTracks() {}
   async prepareGpu() {}
   adoptProject() {}
@@ -33,7 +35,7 @@ vi.mock('./engine/videoEditRenderSession', () => ({ VideoEditRenderSession: clas
   armPlayback = pixel.arm
   stopPlayback = stopNotification
   setSmartRegions = vi.fn()
-  present(frame: number, sequential?: boolean, scrubbing?: boolean | 'fast', deadline?: number, submitted?: () => void) { return new Promise((resolve, reject) => pixel.requests.push({ frame, sequential, scrubbing, deadline, resolve, reject, submitted })) }
+  present(frame: number, sequential?: boolean, scrubbing?: boolean | 'fast', deadline?: number, submitted?: () => void) { return new Promise((resolve, reject) => pixel.requests.push({ frame, sequential, scrubbing, deadline, resolve, reject: error => { if (error instanceof VideoEditRenderWorkerError) this.terminalError = error; reject(error) }, submitted })) }
 } }))
 beforeEach(() => {
   stopNotification.mockClear()
@@ -537,10 +539,80 @@ it('GPU 丢失释放旧会话后重建；连续失效停止自动重试，避免
   const view = render(<VideoEditPreview instance={owner} onError={vi.fn()} />)
   await act(async () => {})
   for (let attempt = 0; attempt < 3; attempt++) {
-    await act(async () => { pixel.requests.at(-1)!.reject(new VideoEditGpuDeviceLostError('device destroyed')); await vi.advanceTimersByTimeAsync(1) })
+    await act(async () => { pixel.requests.at(-1)!.reject(new VideoEditGpuDeviceLostError('device destroyed')); await vi.advanceTimersByTimeAsync(500) })
   }
   expect(pixel.sessions).toBe(3)
   expect(pixel.dispose).toHaveBeenCalledTimes(3)
+  expect(view.getByText(/画面处理连续中断/)).toBeTruthy()
+  await act(async () => { await vi.advanceTimersByTimeAsync(20_000) })
+  expect(pixel.sessions).toBe(3)
+  view.unmount()
+})
+it('普通 Worker 故障退避重建新画布并恢复当前播放头', async () => {
+  const info = vi.spyOn(console, 'info')
+  const recoveryCompletions = (): number => info.mock.calls.filter(([line]) => String(line).includes('节目画面已恢复')).length
+  const owner = await createVideoEditProject(); appendVideoEditClip(owner.document.id)
+  setVideoEditView(owner.document.id, { frame: 7 })
+  const onError = vi.fn()
+  const view = render(<VideoEditPreview instance={owner} onError={onError} />)
+  await act(async () => {})
+  const oldSurface = view.getByLabelText('剪辑画面')
+  const old = pixel.requests[0]
+  await act(async () => { old.reject(new VideoEditRenderWorkerError('worker exited')) })
+  expect(pixel.sessions).toBe(1)
+  await act(async () => { await vi.advanceTimersByTimeAsync(249) })
+  expect(pixel.sessions).toBe(1)
+  await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+  expect(pixel.sessions).toBe(2)
+  expect(view.getByLabelText('剪辑画面')).not.toBe(oldSurface)
+  expect(pixel.requests.at(-1)!.frame).toBe(7)
+  await act(async () => { pixel.requests.at(-1)!.resolve({ presented: true, sourceTimestamps: [7 / 30] }) })
+  expect(view.queryByText('节目画面无法显示')).toBeNull()
+  expect((view.getByLabelText('剪辑画面') as HTMLElement).dataset.presentedFrame).toBe('7')
+  expect(recoveryCompletions()).toBe(1)
+  act(() => view.rerender(<VideoEditPreview instance={owner} onError={onError} visible={false} />))
+  act(() => view.rerender(<VideoEditPreview instance={owner} onError={onError} visible />))
+  await act(async () => {})
+  await act(async () => { pixel.requests.at(-1)!.resolve({ presented: true, sourceTimestamps: [7 / 30] }) })
+  expect(recoveryCompletions()).toBe(1)
+  view.unmount()
+})
+it('旧 Worker 流水的迟到回执不覆盖重建后的画面，携带的历史位图被释放', async () => {
+  const owner = await createVideoEditProject(); appendVideoEditClip(owner.document.id)
+  const view = render(<VideoEditPreview instance={owner} onError={vi.fn()} />)
+  await act(async () => {})
+  await completeProgramFrames(2)
+  act(() => setVideoEditView(owner.document.id, { playing: true }))
+  await act(async () => { await vi.advanceTimersByTimeAsync(5) })
+  await completeProgramFrames(1)
+  await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+  const [failed, late] = pixel.requests.filter(request => !settledFrames.has(request))
+  expect(late).toBeTruthy()
+  const pauseNotice = vi.fn()
+  const unsubscribe = subscribeVideoEditView(() => { if (!owner.playing) pauseNotice() })
+  await act(async () => { failed.reject(new VideoEditRenderWorkerError('退出')); await vi.advanceTimersByTimeAsync(250) })
+  expect(pauseNotice).toHaveBeenCalled(); unsubscribe()
+  const frame = owner.frame
+  await act(async () => { pixel.requests.at(-1)!.resolve({ presented: true, sourceTimestamps: [frame / 30] }) })
+  const surface = view.getByLabelText('剪辑画面') as HTMLElement
+  const close = vi.fn()
+  await act(async () => { late.resolve({ presented: true, sourceTimestamps: [99], history: { close } as unknown as ImageBitmap }) })
+  expect(surface.dataset.presentedFrame).toBe(String(frame)); expect(owner.frame).toBe(frame)
+  expect(close).toHaveBeenCalledOnce()
+  act(() => setVideoEditView(owner.document.id, { frame: frame + 1 }))
+  await act(async () => { await vi.advanceTimersByTimeAsync(2) })
+  await act(async () => { pixel.requests.at(-1)!.reject(new VideoEditRenderWorkerError('再次退出')); await vi.advanceTimersByTimeAsync(500) })
+  expect(pixel.sessions).toBe(3)
+  view.unmount()
+})
+it('普通 Worker 连续失败只自动重建两次，停止后显示现有失败状态', async () => {
+  const owner = await createVideoEditProject(); appendVideoEditClip(owner.document.id)
+  const view = render(<VideoEditPreview instance={owner} onError={vi.fn()} />)
+  await act(async () => {})
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await act(async () => { pixel.requests.at(-1)!.reject(new VideoEditRenderWorkerError('worker exited')); await vi.advanceTimersByTimeAsync(500) })
+  }
+  expect(pixel.sessions).toBe(3)
   expect(view.getByText(/画面处理连续中断/)).toBeTruthy()
   await act(async () => { await vi.advanceTimersByTimeAsync(20_000) })
   expect(pixel.sessions).toBe(3)

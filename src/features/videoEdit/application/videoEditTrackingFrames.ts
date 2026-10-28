@@ -57,7 +57,12 @@ export class VideoEditTrackingFrames {
         logger.warn('嵌套跟踪取帧失败', { event: 'video_edit.tracking.frames.failed', error })
         await this.reply({ id: event.id, frames: [], error: error instanceof Error ? error.message.slice(0, 300) : '嵌套画面读取失败。' })
       }
-    } finally { if (session && ownsFrameRequest) session.busy = false }
+    } finally {
+      if (session && ownsFrameRequest) {
+        session.busy = false
+        if (session.renderer.terminated && this.sessions.get(event.jobId) === session) this.release(event.jobId)
+      }
+    }
   }
   dispose(): void { for (const jobId of this.sessions.keys()) this.release(jobId) }
 }

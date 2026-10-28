@@ -80,6 +80,7 @@ export function retainVideoEditProgramWarmup(): () => void {
 export function takeVideoEditProgram(projectId: string, sequenceId: string): Program | undefined {
   const entry = spare
   if (!entry) return
+  if (entry.renderer.terminated) { retire('session-terminated'); return }
   spare = undefined
   entry.renderer.adoptProject(projectId)
   const timing = videoEditTimingContext(projectId, sequenceId)

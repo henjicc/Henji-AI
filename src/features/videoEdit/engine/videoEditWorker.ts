@@ -1,4 +1,4 @@
-import { videoEditRenderFailure } from './videoEditGpuFailure'
+import { videoEditRenderFailure, installVideoEditWorkerErrorReporting } from './videoEditGpuFailure'
 import { enableVideoEditFrameTrace, traceVideoEditFrame } from './videoEditFrameTrace'
 import { VideoEditSharedCompilation, type SharedCompilationResponse } from './videoEditSharedCompilation'
 import { installAuthorMetadataCache } from './videoEditAuthorMetadataCache'
@@ -25,6 +25,8 @@ import { LoadedFontFaces } from '@/platform/fontFaces'
 import { receiveCodeSourceTexts, installCodeSourceReader } from '@/core/videoEdit/codeMaterial/sources'
 import type { FontPayload } from '@/platform/fonts'
 import type { VideoEditParameterUpdate } from './videoEditParameterUpdate'
+
+installVideoEditWorkerErrorReporting(self)
 
 /**
  * Decoding settings of one render session. `localPaths` maps each media item's fetchable URL (its path in the worker)

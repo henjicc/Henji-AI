@@ -191,7 +191,7 @@ class PresetRenderer {
       if (signal.aborted) abort()
     })
     try {
-      const result = await Promise.race([lease.session.present(frame).then(result => {
+      const result = await Promise.race([lease.run(composition, session => session.present(frame)).then(result => {
         if (expired || signal.aborted) { result.bitmap?.close(); throw signal.reason ?? new Error('预览已失效。') }
         return result
       }), deadline])

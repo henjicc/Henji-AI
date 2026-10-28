@@ -5,6 +5,7 @@ import { UiModal } from '@/components/ui'
 import { createVideoEditDocument, createVideoEditSequence, videoEditComposition } from '@/core/videoEdit/document'
 import { videoEditSequenceExportSettings } from '@/core/videoEdit/exportPresets'
 import { VideoEditExportPreview } from './VideoEditExportPreview'
+import { VideoEditRenderWorkerError } from '../engine/videoEditGpuFailure'
 
 const renderer = vi.hoisted(() => ({
   create: vi.fn(), renderBitmap: vi.fn(), updateDocument: vi.fn(), dispose: vi.fn(),
@@ -32,6 +33,32 @@ function picture() {
   const bitmap = { width: 640, height: 360, close: vi.fn() } as unknown as ImageBitmap
   return { bitmap }
 }
+it('普通 Worker 失败退避后重建并恢复当前帧，连续失败上限沿用重试入口', async () => {
+  vi.useFakeTimers()
+  renderer.renderBitmap.mockRejectedValueOnce(new VideoEditRenderWorkerError('退出')).mockResolvedValueOnce(picture())
+  const view = render(<VideoEditExportPreview {...fixture()} />)
+  await act(async () => {})
+  expect(renderer.create).toHaveBeenCalledOnce()
+  await act(async () => { await vi.advanceTimersByTimeAsync(250) })
+  expect(renderer.create).toHaveBeenCalledTimes(2)
+  expect(view.getByLabelText('导出画面预览').parentElement?.getAttribute('aria-busy')).toBe('false')
+  view.unmount()
+})
+it('普通 Worker 连续失败达到上限后停止重建，用户重试能恢复画面', async () => {
+  vi.useFakeTimers(); renderer.renderBitmap.mockRejectedValue(new VideoEditRenderWorkerError('退出'))
+  const view = render(<VideoEditExportPreview {...fixture()} />)
+  await act(async () => {})
+  await act(async () => { await vi.advanceTimersByTimeAsync(250) })
+  await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+  expect(renderer.create).toHaveBeenCalledTimes(3)
+  expect(view.getByText('预览未能生成')).toBeTruthy()
+  await act(async () => { await vi.advanceTimersByTimeAsync(20_000) })
+  expect(renderer.create).toHaveBeenCalledTimes(3)
+  renderer.renderBitmap.mockResolvedValue(picture())
+  await act(async () => { fireEvent.click(view.getByRole('button', { name: /Retry|重试/ })) })
+  expect(renderer.create).toHaveBeenCalledTimes(4)
+  expect(view.queryByText('预览未能生成')).toBeNull()
+})
 function deferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>(done => { resolve = done })

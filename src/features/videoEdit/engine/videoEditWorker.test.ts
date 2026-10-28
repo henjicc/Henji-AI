@@ -31,7 +31,7 @@ const document = createVideoEditTestDocument('联系表回读')
 const composition = videoEditComposition(document, document.sequences[0].id)
 const messages: RenderResponse[] = []
 const postMessage = vi.fn((message: RenderResponse) => { messages.push(message) })
-const worker = { onmessage: undefined as unknown as (event: { data: RenderRequest }) => void, postMessage }
+const worker = { onmessage: undefined as unknown as (event: { data: RenderRequest }) => void, postMessage, addEventListener: vi.fn() }
 const bitmap = () => ({ width: 1920, height: 1080, close: vi.fn() }) as unknown as ImageBitmap
 let nextId = 0
 async function send(request: Omit<Extract<RenderRequest, { kind: 'render' }>, 'id'>): Promise<RenderResponse> {
@@ -65,6 +65,11 @@ function render(pixels: ImageBitmap, completion: Promise<void> = Promise.resolve
   })
 }
 const request = { kind: 'render', frame: 15, sequential: false } as const
+
+it('渲染 Worker 入口显式注册未捕获异常与未处理拒绝的监听', () => {
+  expect(worker.addEventListener).toHaveBeenCalledWith('error', expect.any(Function))
+  expect(worker.addEventListener).toHaveBeenCalledWith('unhandledrejection', expect.any(Function))
+})
 
 it('联系表/单帧/试渲染在同次提交捕获全尺寸像素，不读已过期的画布', async () => {
   const pixels = bitmap(); render(pixels)

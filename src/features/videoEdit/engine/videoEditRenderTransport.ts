@@ -1,5 +1,5 @@
 import { prepareVideoEditAuthorBundle } from './videoEditSharedCompiler'
-import { VideoEditGpuDeviceLostError, VideoEditRenderBusyError } from './videoEditGpuFailure'
+import { VideoEditGpuDeviceLostError, VideoEditRenderBusyError, VideoEditRenderWorkerError } from './videoEditGpuFailure'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { SharedCompilationRequest, SharedCompilationResponse } from './videoEditSharedCompilation'
 import { videoEditTimingContext, videoEditTimingEvent, type VideoEditTimingContext } from './videoEditFirstFrameTiming'
@@ -26,6 +26,11 @@ import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 const logger = createLogger('features.videoEdit.render')
 /** 一个渲染会话同时排着的请求上限（Worker 串行执行，排得越多停止与跳转越慢）。 */
 const VIDEO_EDIT_RENDER_QUEUE_LIMIT = 4
+const activeTransports = new Set<VideoEditRenderTransport>()
+// 整页刷新由窗口负责；页面确实离开后统一关闭会话，释放还在主进程持有的帧通道。
+if (typeof window !== 'undefined') window.addEventListener('pagehide', () => {
+  for (const session of activeTransports) void session.dispose(true)
+})
 let nativeWarmup: Promise<void> | undefined
 /** The application owns the decoder process; warming status creates no frame route or decoder session. */
 export function warmVideoEditNativeDecoder(): Promise<void> {
@@ -59,6 +64,8 @@ export class VideoEditRenderTransport {
   private preopenVersion = 0
   private disposed = false
   private failure?: Error
+  get terminated(): boolean { return this.disposed }
+  get terminalError(): Error | undefined { return this.failure }
   private timing?: VideoEditTimingContext
   private async timed<T>(stage: string, operation: () => Promise<T>): Promise<T> {
     const started = performance.now()
@@ -181,11 +188,17 @@ export class VideoEditRenderTransport {
     }
   }
   constructor(private readonly host: VideoEditRenderHost, private document: VideoEditComposition, previewWidth?: number, _preparing?: (active: boolean) => void, surface?: OffscreenCanvas, cacheBudgetBytes?: number, private proxyProjectId?: string, private readonly exportProxies = false, private readonly requestTimeoutMs = 60_000) {
+    activeTransports.add(this)
     this.timing = videoEditTimingContext(proxyProjectId, document.id)
     if (this.timing) videoEditTimingEvent(this.timing, 'render.session.start')
     // Preview owns the transferred full-size surface; reserve the export scratch lazily.
     this.canvas = new OffscreenCanvas(previewWidth ? 1 : document.width, previewWidth ? 1 : document.height)
     this.worker.onmessage = (event: MessageEvent<RenderResponse | RenderLogMessage | SharedCompilationRequest>) => {
+      // 终止之后已排队的消息仍可能送达，不能重新打开模块、源码或任何请求通道。
+      if (this.disposed && ('kind' in event.data ? event.data.kind !== 'log' : !this.pending.has(event.data.id))) {
+        if (!('kind' in event.data)) { event.data.bitmap?.close(); event.data.history?.close() }
+        return
+      }
       if ('kind' in event.data && event.data.kind === 'code.releaseModules') {
         this.moduleGraphs.get(event.data.token)?.dispose(); this.moduleGraphs.delete(event.data.token); return
       }
@@ -231,7 +244,15 @@ export class VideoEditRenderTransport {
         })
         return
       }
-      if ('kind' in event.data) { const entry = event.data; logger[entry.level](entry.message, { event: entry.event, context: entry.context }); return }
+      if ('kind' in event.data) {
+        const entry = event.data
+        logger[entry.level](entry.message, { event: entry.event, context: entry.context })
+        if (entry.event === 'video_edit.render.worker.uncaught_error') {
+          const { message, filename, line, column } = entry.context
+          this.fail(new VideoEditRenderWorkerError('剪辑画面处理已中断，请重新加载预览。', undefined, { message: typeof message === 'string' ? message : entry.message, ...(typeof filename === 'string' ? { filename } : {}), ...(typeof line === 'number' ? { line } : {}), ...(typeof column === 'number' ? { column } : {}) }))
+        }
+        return
+      }
       const value = event.data; const pending = this.pending.get(value.id)
       if (value.phase === 'submitted') { pending?.submitted?.(); return }
       this.pending.delete(value.id)
@@ -239,8 +260,13 @@ export class VideoEditRenderTransport {
       clearTimeout(pending.timer)
       if (value.error) pending.reject(value.gpuDeviceLost !== undefined ? new VideoEditGpuDeviceLostError(value.gpuDeviceLost) : new Error(value.error)); else pending.resolve(value)
     }
-    this.worker.onerror = event => { event.preventDefault?.(); this.fail(new Error(`剪辑渲染中断：${event.message}。请重新加载预览。`)) }
-    this.worker.onmessageerror = () => this.fail(new Error('剪辑画面结果无法读取，请重新加载预览。'))
+    this.worker.onerror = event => {
+      event.preventDefault?.()
+      const original: unknown = event.error
+      const error = new VideoEditRenderWorkerError('剪辑画面处理已中断，请重新加载预览。', original instanceof Error ? { cause: original } : undefined, { message: event.message, filename: event.filename, line: event.lineno, column: event.colno })
+      this.fail(error, { filename: event.filename, line: event.lineno, column: event.colno, workerMessage: event.message })
+    }
+    this.worker.onmessageerror = () => this.fail(new VideoEditRenderWorkerError('剪辑画面结果无法读取，请重新加载预览。'))
     // Verify original media before dependent code/font preparation or opening a decoder channel.
     this.ready = this.timed('content', () => this.content.check(document)).then(() => Promise.all([this.timed('proxies', () => this.selectProxies()), this.connectNative(), this.timed('luts', () => this.authorizeLuts(document)), this.timed('fonts', () => this.syncFonts(document))])).then(async ([, decode]) => { const codeSources = await this.timed('code', () => this.codeSources(document)); return this.timed('init', () => this.request({ kind: 'init', timing: this.timing, document: this.mediaDocument(document), codeSources, previewWidth, surface, cacheBudgetBytes, decode: { ...decode, localPaths: this.localPaths(document), proxies: this.proxySources() } }, surface ? [surface] : [])) })
     void this.ready.then(() => { this.readySettled = true }, () => undefined)
@@ -267,9 +293,10 @@ export class VideoEditRenderTransport {
   }
   /** An unresponsive author shares this worker; terminate the whole session and
    * let its existing owner/pool rebuild. Never automatically replay hung source. */
-  private fail(error: Error): void {
+  private fail(error: Error, detail: Record<string, unknown> = {}): void {
     if (this.disposed) return
     this.failure = error; this.disposed = true
+    activeTransports.delete(this)
     this.worker.terminate()
     for (const modules of this.moduleGraphs.values()) modules.dispose()
     this.moduleGraphs.clear()
@@ -279,7 +306,7 @@ export class VideoEditRenderTransport {
     this.compilations.clear(); this.stopFonts?.(); releaseDocumentFonts(this); this.content.dispose()
     this.canvas.width = this.canvas.height = 1
     this.disconnectNative()
-    logger.warn('剪辑渲染会话已中止', { event: 'video_edit.render.session.failed', error, context: { sequenceId: this.document.id } })
+    logger.warn('剪辑渲染会话已中止', { event: 'video_edit.render.session.failed', error, context: { sequenceId: this.document.id, ...detail } })
   }
   private disconnectNative(): void {
     if (!this.route) return
@@ -391,9 +418,10 @@ export class VideoEditRenderTransport {
     channels.forEach((channel, index) => buffer.getChannelData(index).set(channel))
     return buffer
   }
-  async dispose(): Promise<void> {
+  async dispose(immediate = false): Promise<void> {
     if (this.disposed) return
     this.disposed = true
+    activeTransports.delete(this)
     for (const controller of this.compilations.values()) controller.abort()
     this.compilations.clear()
     this.stopFonts?.()
@@ -401,6 +429,12 @@ export class VideoEditRenderTransport {
     this.content.dispose()
     for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new Error('剪辑渲染已关闭。')) }
     this.pending.clear()
+    if (immediate) {
+      this.worker.terminate(); this.canvas.width = this.canvas.height = 1
+      for (const modules of this.moduleGraphs.values()) modules.dispose()
+      this.moduleGraphs.clear(); this.disconnectNative()
+      return
+    }
     const id = ++this.nextId
     let timer: ReturnType<typeof setTimeout> | undefined
     const closed = new Promise<RenderResponse>((resolve, reject) => { this.pending.set(id, { resolve, reject }); this.worker.postMessage({ kind: 'dispose', id } satisfies RenderRequest) })

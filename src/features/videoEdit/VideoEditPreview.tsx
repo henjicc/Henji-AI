@@ -1,5 +1,5 @@
 import { installVideoEditCodeElements } from './application/videoEditCodeElements'
-import { VideoEditGpuDeviceLostError, VideoEditRenderBusyError } from './engine/videoEditGpuFailure'
+import { VideoEditGpuDeviceLostError, VideoEditRenderBusyError, VideoEditRenderWorkerError, VideoEditRenderRecovery } from './engine/videoEditGpuFailure'
 import { createVideoEditProgramSurface as createProgramSurface, retainVideoEditProgramWarmup, takeVideoEditProgram } from './engine/videoEditProgramPool'
 import { recordVideoEditFirstFrame } from './engine/videoEditFirstFrameTiming'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
@@ -190,7 +190,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
   /** 本次挂载的渲染器是否已有画面上屏；之前显示“正在准备画面”，避免打开工程时只看到一块黑。 */
   const [pictureReady, setPictureReady] = useState(false)
   const [retry, setRetry] = useState(0)
-  const gpuRecoveryTimes = useRef<number[]>([])
+  const recovery = useRef(new VideoEditRenderRecovery())
+  const recoveryPending = useRef(false)
   const [effectFailure, setEffectFailure] = useState<string | null>(null)
   const [renderFailure, setRenderFailure] = useState<string | null>(null)
   const [collecting, setCollecting] = useState(false)
@@ -208,11 +209,13 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
   // 节目面板整个生命周期只用一个渲染器：切换序列（含尺寸不同的序列、拖素材自动新建的序列）只换文档，
   // Worker 按新尺寸原地调整画布，切过去立刻出第一帧。以前按序列重建，每次切序列节目画面要空白约 1.5 秒。
   useEffect(() => {
+    const recovering = recoveryPending.current; recoveryPending.current = false
     if (!visible) { setVideoEditView(instance.document.id, { playing: false }, true); setPreparing(false); setLevels([]); return }
     const previousRelease = programReleases.get(instance) ?? Promise.resolve()
     setRenderFailure(null); setEffectFailure(null); setPictureReady(false)
     let pictureShown = false
     let stopped = false
+    let recoveryTimer: ReturnType<typeof setTimeout> | undefined
     let stopCurrent: () => void = () => {}
     const stop = (): void => { stopped = true; stopCurrent() }
     stopPreview.current = stop
@@ -449,7 +452,10 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       if (result.presented === true) {
         recordVideoEditFirstFrame(instance.document.id, composition.id, { frame: target, decodeMs: result.decodeMs, gpuMs: result.gpuMs, sourceTimestamps: result.sourceTimestamps })
         // 只在首帧时改状态：逐帧调用 setState 会让整个节目面板（含工具栏）跟着每帧重渲染。
-        if (!pictureShown) { pictureShown = true; setPictureReady(true) }
+        if (!pictureShown) {
+          pictureShown = true; setPictureReady(true)
+          if (recovering) logger.info('节目画面已恢复', { event: 'video_edit.preview.session_recover.completed', context: { projectId: instance.document.id, frame: target } })
+        }
       }
       lastPresentation = requestedAt
       surface.dataset.requestedAt = String(requestedAt); surface.dataset.renderMs = String(performance.now() - requestedAt)
@@ -549,6 +555,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         if (captureHistory !== historyEnabled) { historyEnabled = captureHistory; if (historyEnabled) lastRequested = -1; else retainExplanationPixels(surface, -1) }
         if (appliedFonts !== renderer.fontPresentationRevision) { appliedFonts = renderer.fontPresentationRevision; lastRequested = -1 }
         requestCommand = command; requestDocument = document
+        // 空闲时的 Worker 故障没有在途请求可拒绝，仍须由同一个调度循环发现并退役。
+        if (renderer.terminalError || audioRenderer?.terminalError) throw renderer.terminalError ?? audioRenderer?.terminalError
         // 代理只在播放与拖动播放头时使用；停下（暂停、拖动松手）后节目换回原片实时合成的完整画质，
         // 取帧观察与导出始终用原片。没有可用代理时不切换，避免每次起停都重建解码会话。
         const availableProxies = videoEditProxySignature(instance.document.id)
@@ -787,23 +795,28 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           logger.debug('节目渲染队列已满，稍后重试', { event: 'video_edit.preview.render_backpressure', context: { projectId: instance.document.id, playing: instance.playing } })
           wake(PROGRAM_BUSY_RETRY_MS); return
         }
-        if (videoMotionComposition(instance) !== requestDocument || videoEditProgramCommandIdentity(instance.document.id) !== requestCommand) { wake(0); return }
+        const recoverable = error instanceof VideoEditGpuDeviceLostError || error instanceof VideoEditRenderWorkerError
+        if (!recoverable && (videoMotionComposition(instance) !== requestDocument || videoEditProgramCommandIdentity(instance.document.id) !== requestCommand)) { wake(0); return }
+        // 暂停通知会同步唤醒节目调度；先阻止重入，经正式入口通知其他视图暂停，再清理会话。
+        const retiring = recoverable || renderer.terminated || audioRenderer?.terminated
+        if (retiring) stopped = true
         setVideoEditView(instance.document.id, { playing: false }, true)
+        if (retiring) stop()
         // Shown on the program monitor itself and cleared by the next presented frame.
         logger.warn('节目画面渲染失败', { event: 'video_edit.preview.render_failed', error, context: { projectId: instance.document.id, revision: requestDocument.revision, cause: error instanceof Error && error.cause instanceof Error ? error.cause.message : undefined } })
-        if (error instanceof VideoEditGpuDeviceLostError) {
-          const now = Date.now()
-          gpuRecoveryTimes.current = gpuRecoveryTimes.current.filter(at => now - at < 30_000)
-          // A lost device cannot execute another draw. Retire the complete owner (including
-          // nested pictures and decoders) before mounting a fresh session on a fresh canvas.
-          stop()
-          if (gpuRecoveryTimes.current.length < 2) {
-            gpuRecoveryTimes.current.push(now)
-            logger.info('重新建立节目画面', { event: 'video_edit.preview.gpu_recover', context: { projectId: instance.document.id, attempt: gpuRecoveryTimes.current.length } })
-            setRetry(value => value + 1)
-          } else setRenderFailure('画面处理连续中断，请重新加载预览；如果仍无法显示，请重启软件。')
+        if (recoverable) {
+          // 已转移的画布不能再次转移；完整释放旧会话后，由新挂载取得当前播放头和新的帧通道。
+          const delayMs = recovery.current.nextDelay()
+          if (delayMs !== undefined) {
+            logger.info('重新建立节目画面', { event: 'video_edit.preview.session_recover.start', context: { projectId: instance.document.id, attempt: recovery.current.attempts, delayMs } })
+            recoveryTimer = setTimeout(() => { recoveryPending.current = true; setRetry(value => value + 1) }, delayMs)
+          } else {
+            setRenderFailure('画面处理连续中断，请重新加载预览；如果仍无法显示，请重启软件。')
+            logger.warn('节目画面自动恢复已停止', { event: 'video_edit.preview.session_recover.failed', error, context: { projectId: instance.document.id, attempts: recovery.current.attempts } })
+          }
           return
         }
+        if (renderer.terminated || audioRenderer?.terminated) { stop(); setRenderFailure(error instanceof Error ? error.message : String(error)); return }
         failedDocument = requestDocument; failedFrame = instance.frame; lastFrame = -1; lastRequested = -1
         failedRetryAt = Date.now() + failedRetryMs; failedRetryMs = Math.min(10_000, failedRetryMs * 2)
         setRenderFailure(error instanceof Error ? error.message : String(error))
@@ -824,7 +837,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     void step()
     }
     void initialize().catch(error => { if (!stopped) onError(error) })
-    return stop
+    return () => { clearTimeout(recoveryTimer); stop() }
   }, [instance, onError, retry, visible])
   const busy = collecting || preparing
   /** 选帧、设封面、编辑当前帧：先原地暂停，等播放头落在实际上屏的那一帧（见 `settlePause`），再按那一帧取图。 */
@@ -976,7 +989,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         <UiOptionButton variant="menu" size="sm" active={multicamView} onClick={() => setMulticamView(value => !value)}>多机位视图（1–9 切换）</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" disabled={!multicam || instance.playing} onClick={() => { if (multicam) void autoSwitchVideoEditMulticam({ projectId: instance.document.id, sequenceId: instance.activeSequenceId, clipId: multicam.clip.id }).catch(onError) }}>建议机位切换</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" active={!playbackResolution.fullWhenPaused} disabled={playbackResolution.resolution === 'full'} tooltip="默认暂停时回到完整分辨率以便看清细节；打开后暂停时也保持所选回放分辨率" onClick={() => changePlaybackResolution({ fullWhenPaused: !playbackResolution.fullWhenPaused })}><Gauge size={UI_ICON_SIZE.sm} />暂停时也用此分辨率</UiOptionButton>
-        <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={preparing} onClick={() => setRetry(value => value + 1)}><RotateCcw size={UI_ICON_SIZE.sm} />重新加载预览</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={preparing} onClick={() => { recovery.current.reset(); recoveryPending.current = false; setRetry(value => value + 1) }}><RotateCcw size={UI_ICON_SIZE.sm} />重新加载预览</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} onClick={captureFrame}><ImagePlus size={UI_ICON_SIZE.sm} />选帧加入资产库</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} onClick={() => setCanvasSend({ projectId: instance.document.id, sequenceId: instance.activeSequenceId, source: { kind: 'frame', frame: instance.frame } })}><ICON_WORKSPACE_CANVAS size={UI_ICON_SIZE.sm} />发送当前帧到画布</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} tooltip="把当前画面作为项目列表里的封面" onClick={setPosterFrame}><ImageUp size={UI_ICON_SIZE.sm} />设为项目封面</UiOptionButton>

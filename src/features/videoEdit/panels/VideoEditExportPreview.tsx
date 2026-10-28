@@ -5,6 +5,7 @@ import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { videoEditExportGeometry, type VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
 import { BLACK_HEX } from '@/core/theme/colorTokens'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
+import { VideoEditRenderWorkerError, VideoEditRenderRecovery } from '../engine/videoEditGpuFailure'
 import { videoEditSmartRegionSegments } from '../application/videoEditSmartRegions'
 import { videoEditTrackResults } from '../application/videoEditTracking'
 
@@ -22,14 +23,18 @@ export function VideoEditExportPreview({ composition, settings, frame, projectId
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [attempt, setAttempt] = useState(0)
+  const recovery = useRef(new VideoEditRenderRecovery())
   useEffect(() => {
     if (!settings.videoEnabled) return
     let stopped = false; let running = false
+    let cancelled = false
+    let recoveryTimer: ReturnType<typeof setTimeout> | undefined
     let timer: ReturnType<typeof setTimeout> | undefined
     let applied: VideoEditComposition = pictures
     let renderer: VideoEditRenderSession
     try { renderer = new VideoEditRenderSession(pictures, 640, undefined, undefined, undefined, settings.useProxies ? projectId : undefined, settings.useProxies) } catch (reason) { setError('无法生成导出预览，请重试。'); setLoading(false); logger.warn('创建导出预览失败', { event: 'video_edit.export.preview_failed', error: reason, context: { projectId, frame: requested.current.frame } }); return }
-    const dispose = (): void => { void renderer.dispose().catch(reason => logger.warn('释放导出预览失败', { event: 'video_edit.export.preview_cleanup_failed', error: reason })) }
+    let disposing: Promise<void> | undefined
+    const dispose = (): Promise<void> => disposing ??= renderer.dispose().catch(reason => logger.warn('释放导出预览失败', { event: 'video_edit.export.preview_cleanup_failed', error: reason }))
     const render = async (): Promise<void> => {
       if (running || stopped) return
       running = true
@@ -42,7 +47,7 @@ export function VideoEditExportPreview({ composition, settings, frame, projectId
             stopped = true
             setError('预览等待时间过长，请重试。'); setLoading(false)
             logger.warn('导出预览等待超时', { event: 'video_edit.export.preview_failed', error: new Error('导出预览等待超时'), context: { projectId, frame: request.frame, timeoutMs: PREVIEW_WAIT_MS } })
-            dispose()
+            void dispose()
           }, PREVIEW_WAIT_MS)
           const document = request.pictures
           if (applied !== document) { await renderer.updateDocument(document); applied = document }
@@ -67,11 +72,25 @@ export function VideoEditExportPreview({ composition, settings, frame, projectId
           clearTimeout(timer)
           if (request === requested.current) break
         }
-      } catch (reason) { if (!stopped) { setError('无法生成导出预览，请重试。'); setLoading(false); logger.warn('渲染导出预览失败', { event: 'video_edit.export.preview_failed', error: reason, context: { projectId, frame: requested.current.frame } }) } }
+      } catch (reason) {
+        if (!stopped) {
+          logger.warn('渲染导出预览失败', { event: 'video_edit.export.preview_failed', error: reason, context: { projectId, frame: requested.current.frame } })
+          if (reason instanceof VideoEditRenderWorkerError) {
+            stopped = true
+            const delayMs = recovery.current.nextDelay()
+            if (delayMs !== undefined) {
+              await dispose()
+              if (!cancelled) recoveryTimer = setTimeout(() => setAttempt(value => value + 1), delayMs)
+              return
+            }
+          }
+          setError('无法生成导出预览，请重试。'); setLoading(false)
+        }
+      }
       finally { clearTimeout(timer); running = false }
     }
     setLoading(true); setError(''); drain.current = () => { void render() }; drain.current()
-    return () => { stopped = true; clearTimeout(timer); drain.current = () => undefined; dispose() }
+    return () => { cancelled = true; stopped = true; clearTimeout(timer); clearTimeout(recoveryTimer); drain.current = () => undefined; void dispose() }
     // A sequence/proxy change owns a new render session; other changes are coalesced in its drain.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [composition.id, projectId, settings.videoEnabled, settings.useProxies, attempt])
@@ -80,6 +99,6 @@ export function VideoEditExportPreview({ composition, settings, frame, projectId
   return <div aria-busy={loading} className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-media">
     <canvas ref={canvas} aria-label="导出画面预览" hidden={Boolean(error)} className="max-h-full max-w-full object-contain" style={{ aspectRatio: settings.width / settings.height }} />
     {loading && <div className="absolute inset-0 flex items-center justify-center"><UiLoading message="正在准备预览…" /></div>}
-    {error && <div className="absolute inset-0 flex items-center justify-center bg-panel"><UiError title="预览未能生成" message={error} onRetry={() => setAttempt(value => value + 1)} /></div>}
+    {error && <div className="absolute inset-0 flex items-center justify-center bg-panel"><UiError title="预览未能生成" message={error} onRetry={() => { recovery.current.reset(); setAttempt(value => value + 1) }} /></div>}
   </div>
 }

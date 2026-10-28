@@ -5,6 +5,9 @@ import { videoEditNestedFrame } from '@/core/videoEdit/nestedSequences'
 import { getActiveVideoEditSequence, subscribeVideoEditDomain, subscribeVideoEditView, videoEditDomainRevision, videoEditViewRevision, type VideoEditInstance } from '../application/videoEditService'
 import { switchVideoEditMulticam, videoEditProgramMulticam } from '../application/videoEditMulticam'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
+import { VideoEditRenderWorkerError, VideoEditRenderRecovery } from '../engine/videoEditGpuFailure'
+import { createLogger } from '@/core/logging'
+const logger = createLogger('features.videoEdit.multicamPreview')
 const releases = new WeakMap<VideoEditInstance, Promise<unknown>>()
 
 /** Render every angle through the existing worker/decoder contract; never spawn HTML video playback clocks. */
@@ -14,6 +17,7 @@ export function VideoEditMulticamView({ instance, onError }: { instance: VideoEd
   const target = videoEditProgramMulticam(instance)
   const [failure, setFailure] = useState('')
   const [retry, setRetry] = useState(0)
+  const recovery = useRef(new VideoEditRenderRecovery())
   const canvases = useRef(new Map<string, HTMLCanvasElement>())
   const cameraKey = target?.source.multicam?.cameras.map(camera => camera.id).join(':') ?? ''
   const sourceId = target?.source.id
@@ -21,16 +25,21 @@ export function VideoEditMulticamView({ instance, onError }: { instance: VideoEd
     if (!sourceId) return
     let stopped = false; let failed = false; let timer: ReturnType<typeof setTimeout> | undefined
     let lastFrame = -1; let lastRevision = -1
+    let recovering = false
     const sessions = new Map<string, VideoEditRenderSession>()
+    let retiring: Promise<unknown> | undefined
+    const releaseSessions = (): Promise<unknown> => retiring ??= Promise.allSettled([...sessions.values()].map(session => session.dispose()))
     const previousRelease = releases.get(instance) ?? Promise.resolve()
     setFailure('')
     const render = async (): Promise<void> => {
+      let delayMs = 100
       try {
         await previousRelease
         if (stopped) return
         const target = videoEditProgramMulticam(instance)
         if (!target || target.source.id !== sourceId) return
         const parent = getActiveVideoEditSequence(instance)
+        for (const session of sessions.values()) if (session.terminalError) throw session.terminalError
         if (lastFrame === instance.frame && lastRevision === instance.document.revision) return
         const frame = instance.frame; const revision = instance.document.revision
         for (const camera of target.source.multicam!.cameras) {
@@ -46,12 +55,27 @@ export function VideoEditMulticamView({ instance, onError }: { instance: VideoEd
           } finally { result.bitmap.close() }
         }
         lastFrame = frame; lastRevision = revision
+        if (recovering) { recovering = false; logger.info('多机位画面已恢复', { event: 'video_edit.multicam.preview_recover.completed', context: { sourceId, frame } }) }
         if (!stopped) setFailure('')
-      } catch (error) { if (!stopped) { failed = true; setFailure(error instanceof Error ? error.message : String(error)); onError(error) } }
-      finally { if (!stopped && !failed) timer = setTimeout(() => void render(), 100) }
+      } catch (error) {
+        if (!stopped) {
+          const recoveryDelay = error instanceof VideoEditRenderWorkerError ? recovery.current.nextDelay() : undefined
+          if (recoveryDelay !== undefined) {
+            recovering = true
+            logger.info('重新建立多机位画面', { event: 'video_edit.multicam.preview_recover.start', context: { sourceId, attempt: recovery.current.attempts } })
+            await releaseSessions()
+            sessions.clear(); retiring = undefined; lastFrame = -1; lastRevision = -1
+            delayMs = recoveryDelay
+            return
+          }
+          logger.warn('多机位画面无法显示', { event: 'video_edit.multicam.preview_recover.failed', error, context: { sourceId, attempts: recovery.current.attempts } })
+          failed = true; setFailure(error instanceof Error ? error.message : String(error)); onError(error)
+        }
+      }
+      finally { if (!stopped && !failed) timer = setTimeout(() => void render(), delayMs) }
     }
     void render()
-    return () => { stopped = true; if (timer) clearTimeout(timer); releases.set(instance, Promise.allSettled([...sessions.values()].map(session => session.dispose()))) }
+    return () => { stopped = true; if (timer) clearTimeout(timer); releases.set(instance, releaseSessions()) }
   }, [instance, sourceId, cameraKey, onError, retry])
   const choose = (index: number): void => {
     const current = videoEditProgramMulticam(instance); const camera = current?.source.multicam?.cameras[index]
@@ -69,6 +93,6 @@ export function VideoEditMulticamView({ instance, onError }: { instance: VideoEd
         <span className="w-full truncate text-xs" title={`${camera.name}${camera.speaker ? ` · ${camera.speaker}` : ''}`}>{index + 1} · {camera.name}{camera.speaker ? ` · ${camera.speaker}` : ''}</span>
       </UiOptionButton>)}
     </div>
-    {failure && <UiError message={failure} onRetry={() => setRetry(value => value + 1)} />}
+    {failure && <UiError message={failure} onRetry={() => { recovery.current.reset(); setRetry(value => value + 1) }} />}
   </div>
 }
