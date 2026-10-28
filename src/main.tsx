@@ -106,7 +106,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     ),
 )
 
-// 开发运行改到业务模块会整页重新加载：回到原来的工作区和文档（只在主窗口，正式版不打包）
-if (import.meta.env.DEV && !isLogsView && !isRecordingControlView && !isRecordingFrameView && !isCameraStageRenderView) {
-  void import('@/features/documents/developmentReloadResume').then(({ installDevelopmentReloadResume }) => installDevelopmentReloadResume())
+// 页面重新加载（开发运行改到业务模块、崩溃后自动重载）后回到原来的工作区、文档和播放位置（只在主窗口）
+if (!isLogsView && !isRecordingControlView && !isRecordingFrameView && !isCameraStageRenderView) {
+  void import('@/features/documents/rendererReloadResume').then(({ installRendererReloadResume }) => installRendererReloadResume())
 }

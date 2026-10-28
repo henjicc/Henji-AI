@@ -39,6 +39,8 @@ import { videoEditInPlaceRecordsSchema, type VideoEditInPlaceRecord } from '@/co
 import { VIDEO_EDIT_FOCUSABLE_PANELS, type VideoEditFocusablePanel } from '@/core/videoEdit/panels'
 
 import { initializeVideoEditCodeSourceRuntime } from './videoEditCodeSourceRuntime'
+import { readDocumentSessionState, writeDocumentSessionState } from '@/commands/documents'
+import { registerReloadResumeView } from '@/features/documents/rendererReloadResume'
 
 const logger = createLogger('features.videoEdit')
 export interface VideoEditTimelineView {
@@ -524,6 +526,25 @@ export function switchVideoEditSequence(projectId: string, sequenceId: string, o
   const opened = findActiveVideoEditSequence(instance)
   if (options.fromStart || (opened && instance.frame >= videoEditDuration(opened))) instance.frame = 0
   instance.playing = false; instance.playbackDirection = 1; instance.scrubbing = false; programCommands.set(instance, {}); reconcileSequenceView(instance); publishVideoEdit(true)
+  rememberVideoEditSequence(projectId, sequenceId)
+}
+/*
+ * 每份剪辑上次所在的序列记在文档会话状态里（本机程序目录，随时可丢，不进剪辑文件、不算修改），
+ * 用户重新打开时回到那条。崩溃后的安全恢复只是不自动重开文档；用户手动打开照常回到上次的序列。
+ */
+const LAST_SEQUENCE_KEY = 'video_edit.sequence'
+async function readLastVideoEditSequence(documentId: string): Promise<string | null> {
+  try {
+    const value = await readDocumentSessionState({ docId: documentId, key: LAST_SEQUENCE_KEY }) as { sequenceId?: unknown } | null
+    return typeof value?.sequenceId === 'string' ? value.sequenceId : null
+  } catch (error) {
+    logger.warn('上次所在的序列读取失败，从第一条序列打开', { event: 'video_edit.last_sequence.read_failed', error: toError(error), context: { docId: documentId } })
+    return null
+  }
+}
+function rememberVideoEditSequence(documentId: string, sequenceId: string): void {
+  void writeDocumentSessionState({ docId: documentId, key: LAST_SEQUENCE_KEY, value: { sequenceId } })
+    .catch(error => logger.warn('上次所在的序列未能记下', { event: 'video_edit.last_sequence.write_failed', error: toError(error), context: { docId: documentId } }))
 }
 export function editVideoSequence(projectId: string, sequenceId: string, update: (sequence: VideoEditSequence) => VideoEditSequence, gesture?: VideoEditGesture): VideoEditDocument {
   const change = (document: VideoEditDocument): VideoEditDocument => {
@@ -926,13 +947,15 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
   if (existing && existing.session === session && !session.isEnded) { if (focus) focusVideoEdit(session.id); return existing }
   const loaded = videoEditDocumentFromContent(session.getContent(), session.documentMeta)
   const root = projectRootOf(session)
-  const detached = root ? await relocateProjectMedia(loaded, root) : null
+  const [detached, lastSequenceId] = await Promise.all([root ? relocateProjectMedia(loaded, root) : null, readLastVideoEditSequence(session.id)])
   const document = detached ?? loaded
   invalidateCodeSourceReads((document.codeMaterials ?? []).flatMap(definition => definition.versions))
   if (session.isEnded) throw new Error('剪辑在打开期间已关闭。')
-  const view = defaultSequenceView(document.sequences[0])
+  // 回到上次所在的序列；那条已被删掉时用第一条
+  const opening = document.sequences.find(sequence => sequence.id === lastSequenceId) ?? document.sequences[0]
+  const view = defaultSequenceView(opening)
   const instance = {
-    document, activeSequenceId: document.sequences[0]?.id ?? '', sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: document.sequences.slice(0, 1).map(sequence => sequence.id),
+    document, activeSequenceId: opening?.id ?? '', sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: opening ? [opening.id] : [],
     session, past: [], future: [], ...view, playing: false, playbackDirection: 1, activePanel: 'timeline', busy: false, version: 0, contentVersion: 0,
   } as unknown as VideoEditInstance
   Object.defineProperties(instance, {
@@ -1255,4 +1278,20 @@ export function appendVideoEditClip(id: string, mediaId?: string, placement?: { 
 // 剪辑内容由文档会话登记表在退出屏障里写完；这里只拦住进行中的导出并收起参数调整与播放
 registerApplicationCloseGuard(async () => {
   for (const instance of instances.values()) { if (instance.busy || activities.get(instance)?.size) throw new Error(videoEditBusyReason(instance.document.id) ?? '请等待处理完成。'); for (const prepare of [...(closePreparations.get(instance) ?? [])]) await prepare(); cancelVideoEditGesture(instance); instance.playing = false }
+})
+// 页面重新加载后回到原来的序列标签与播放头（只在本窗口这一轮会话里有效，见 rendererReloadResume）
+interface VideoEditReloadView { sequenceId: string; openSequenceIds: string[]; frame: number }
+registerReloadResumeView('video_edit', {
+  capture: () => Object.fromEntries([...instances.values()].map((instance): [string, VideoEditReloadView] => [instance.document.id, { sequenceId: instance.activeSequenceId, openSequenceIds: [...instance.openSequenceIds], frame: instance.frame }])),
+  restore: (id, raw) => {
+    const view = raw as Partial<VideoEditReloadView>
+    const instance = requireVideoEditInstance(id)
+    const exists = (sequenceId: unknown): sequenceId is string => instance.document.sequences.some(sequence => sequence.id === sequenceId)
+    if (!exists(view.sequenceId)) return
+    switchVideoEditSequence(id, view.sequenceId)
+    const open = Array.isArray(view.openSequenceIds) ? view.openSequenceIds.filter(exists) : []
+    if (open.includes(view.sequenceId)) setVideoEditProjectView(id, { openSequenceIds: open })
+    const frame = view.frame, sequence = findActiveVideoEditSequence(instance)
+    if (sequence && typeof frame === 'number' && Number.isSafeInteger(frame) && frame >= 0 && frame < videoEditDuration(sequence)) setVideoEditView(id, { frame })
+  },
 })

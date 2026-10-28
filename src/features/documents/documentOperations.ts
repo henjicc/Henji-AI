@@ -220,6 +220,7 @@ export class DocumentOperations {
   private readonly kinds: Pick<DocumentKindRegistry, 'require'>
   private readonly logger: Logger
   private readonly openers = new Map<DocumentKindId, DocumentOpener>()
+  private readonly openerWaiters = new Map<DocumentKindId, (() => void)[]>()
   private readonly releasers = new Map<DocumentKindId, DocumentReleaser>()
   private readonly busyChecks = new Map<DocumentKindId, DocumentBusyCheck>()
   private readonly creators = new Map<DocumentKindId, DocumentCreator>()
@@ -246,6 +247,8 @@ export class DocumentOperations {
   /** 登记某类文档的打开方式；返回取消登记函数。同一类型只保留最后登记的那个。 */
   registerOpener(kind: DocumentKindId, opener: DocumentOpener): () => void {
     this.openers.set(kind, opener)
+    for (const resolve of this.openerWaiters.get(kind) ?? []) resolve()
+    this.openerWaiters.delete(kind)
     return () => {
       if (this.openers.get(kind) === opener) this.openers.delete(kind)
     }
@@ -293,6 +296,20 @@ export class DocumentOperations {
 
   canOpen(kind: DocumentKindId): boolean {
     return this.openers.has(kind)
+  }
+
+  /**
+   * 等到这类文档登记了打开方式。打开方式在应用宿主（能力登记表）懒加载时由各领域一次登记，
+   * 启动早期还没有；启动时就要打开文档的调用方（重新加载后回到原文档）等这里，不轮询。
+   * 宿主载入失败时永远不会登记，调用方自己定等待上限。
+   */
+  async whenOpenable(kind: DocumentKindId): Promise<void> {
+    if (this.openers.has(kind)) return
+    await new Promise<void>((resolve) => {
+      const waiters = this.openerWaiters.get(kind) ?? []
+      waiters.push(resolve)
+      this.openerWaiters.set(kind, waiters)
+    })
   }
 
   /** 可以在容器里直接新建并打开的类型（已登记新建方式的）。 */
