@@ -281,19 +281,27 @@ export class VideoEditNativeDecoderSession {
   }
 }
 
-/** Runs seek-session operations one at a time; a foreground operation preempts speculative ones. */
+/** Runs seek-session operations one at a time; a foreground operation preempts speculative and unclaimed ones. */
 class NativeSeekLane {
   private tail: Promise<unknown> = Promise.resolve()
   private readonly speculative = new Set<AbortController>()
+  private readonly unclaimed = new Set<AbortController>()
   run<T>(operation: (signal: AbortSignal) => Promise<T>, speculative = false): Promise<T> {
-    if (!speculative) for (const controller of this.speculative) controller.abort()
+    if (!speculative) { for (const controller of this.speculative) controller.abort(); this.stopUnclaimed() }
     const controller = new AbortController()
     if (speculative) this.speculative.add(controller)
     const result = this.tail.catch(() => undefined).then(() => operation(controller.signal)).finally(() => this.speculative.delete(controller))
     this.tail = result
     return result
   }
-  cancelSpeculative(): void { for (const controller of this.speculative) controller.abort() }
+  cancelSpeculative(): void { for (const controller of this.speculative) controller.abort(); this.stopUnclaimed() }
+  /**
+   * Marks the operation of `controller` as one nobody waits for any more: the next foreground operation here, or a
+   * foreground read or playback plan of another file (`VideoEditNativeFrames.stopUnclaimed`), stops it. The result
+   * undoes that.
+   */
+  unclaim(controller: AbortController): () => void { this.unclaimed.add(controller); return () => { this.unclaimed.delete(controller) } }
+  stopUnclaimed(): void { for (const controller of this.unclaimed) controller.abort() }
 }
 
 /** One opened file and revision on the native backend. */
@@ -323,7 +331,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
   /** 前台先取消推测读取；同文件等待取消收束，避免旧计划取消新计划。 */
   async use<T>(operation: () => Promise<T>): Promise<T> {
     this.active++; this.activeSeek++; this.lastUsed = performance.now()
-    this.owner.cancelSpeculative()
+    this.owner.cancelSpeculative(); this.owner.stopUnclaimed(this)
     try { await this.warming?.done.catch(() => undefined); return await operation() }
     finally { this.active--; this.activeSeek--; this.lastUsed = performance.now() }
   }
@@ -453,7 +461,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
         const speculative = options?.speculative === true
         // A foreground read does not wait for a background step to finish decoding: the step stops where it got to and
         // this read continues from there.
-        if (!speculative) for (const controller of speculativeReads) controller.abort()
+        if (!speculative) { for (const controller of speculativeReads) controller.abort(); this.owner.stopUnclaimed(this) }
         const own = speculative ? new AbortController() : undefined
         if (own) speculativeReads.add(own)
         const signal = own ? eitherSignal(own.signal, options?.signal) : options?.signal
@@ -512,7 +520,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
     // session), so this one runs on a playback session of its own, closed with the plan. Without room for one it
     // takes the shared session as before.
     const concurrent = this.activePlayback > 0
-    this.active++; this.activePlayback++; this.lastUsed = performance.now(); this.owner.cancelSpeculative()
+    this.active++; this.activePlayback++; this.lastUsed = performance.now(); this.owner.cancelSpeculative(); this.owner.stopUnclaimed()
     let own: VideoEditNativeDecoderSession | undefined
     try {
       await this.warming?.done.catch(() => undefined)
@@ -575,6 +583,12 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
   log(level: 'debug' | 'info', message: string, event: string, context: Record<string, unknown>): void { this.options.log?.(level, message, event, context) }
 
   cancelSpeculative(): void { for (const { source } of this.files.values()) source.cancelWarm() }
+  /**
+   * Stops the seek windows nobody waits for any more (`NativeSeekLane.unclaim`) of every file but `keep`: a foreground
+   * read or a playback plan elsewhere needs the hardware decoder, the GPU queue and the worker more than they do. The
+   * file being read keeps its own, for a read continuing them.
+   */
+  stopUnclaimed(keep?: VideoEditNativeFileSource): void { for (const { source } of this.files.values()) if (source !== keep) source.lane.stopUnclaimed() }
   private async settleSpeculative(): Promise<void> { await Promise.all([...this.files.values()].map(entry => entry.source.settleWarm())) }
 
   /** 余量完全由服务端给出（实测最大会话或冷启动保留量）；旧服务缺字段时不做推测打开。 */
@@ -770,7 +784,14 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
 }
 
 interface SeekWaiter { time: number; resolve: (frame: VideoEditGpuFrame | undefined) => void; reject: (error: Error) => void }
-interface SeekWindow { start: number; speculative: boolean; waiters: Set<SeekWaiter>; abort: AbortController; done: Promise<void> }
+/**
+ * `unclaimed`: every read waiting for the window was abandoned. It keeps decoding: a read of the same window takes it
+ * back (a step back from an abandoned paused frame often lies just behind it), and the next other operation on the
+ * session, or a foreground read or playback plan of another file, stops it. Holds the undo of `NativeSeekLane.unclaim`.
+ * An unclaimed window still counts toward the two windows a prefetch leaves room for: it lives only until the next
+ * read of any file, which either takes it back or stops it.
+ */
+interface SeekWindow { start: number; speculative: boolean; waiters: Set<SeekWaiter>; abort: AbortController; done: Promise<void>; unclaimed?: () => void }
 
 /**
  * Exact-frame seeking on the native backend with decoded pictures kept in the renderer's shared frame cache.
@@ -801,15 +822,23 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
     try { return await this.snapshot(picture, videoEditGpuFrameUsesChroma(picture)) } finally { picture.close() }
   }
 
-  sample(time: number, direction: number, singleFrame = false, approximate = false): Promise<{ sample?: VideoEditGpuFrame; hit: boolean; approximate?: boolean }> {
+  /**
+   * Aborting `signal` abandons the read: a single-frame read stops the native decode where it got to (the session keeps
+   * that position), a window read leaves its window, and a window nobody waits for any more is left unclaimed (see
+   * `SeekWindow`).
+   */
+  sample(time: number, direction: number, singleFrame = false, approximate = false, signal?: AbortSignal): Promise<{ sample?: VideoEditGpuFrame; hit: boolean; approximate?: boolean }> {
     if (this.disposed) return Promise.reject(closedFailure())
-    return this.backend.managesIdleSessions ? this.source().use(() => this.sampleActive(time, direction, singleFrame, approximate)) : this.sampleActive(time, direction, singleFrame, approximate)
+    if (signal?.aborted) return Promise.reject(readAbandoned())
+    return this.backend.managesIdleSessions ? this.source().use(() => this.sampleActive(time, direction, singleFrame, approximate, signal)) : this.sampleActive(time, direction, singleFrame, approximate, signal)
   }
 
-  private async sampleActive(time: number, direction: number, singleFrame: boolean, approximate: boolean): Promise<{ sample?: VideoEditGpuFrame; hit: boolean; approximate?: boolean }> {
+  private async sampleActive(time: number, direction: number, singleFrame: boolean, approximate: boolean, signal?: AbortSignal): Promise<{ sample?: VideoEditGpuFrame; hit: boolean; approximate?: boolean }> {
     if (this.disposed) throw closedFailure()
     if (this.failure) throw this.failure
+    if (signal?.aborted) throw readAbandoned()
     const source = this.source()
+    this.backend.stopUnclaimed(source)
     const changed = Math.sign(direction) !== this.direction
     this.direction = Math.sign(direction)
     if (direction === 0 || changed) this.cancelSpeculative()
@@ -817,14 +846,19 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
     if (cached) { recordVideoEditPreparation('scrubCacheHit', 0); if (direction !== 0) this.prefetch(source, time, direction); return { sample: cached, hit: true } }
     const session = await source.seek()
     if (this.disposed) throw closedFailure()
-    if (session.intraOnly || singleFrame) {
+    if (signal?.aborted) throw readAbandoned()
+    const start = Math.floor(time / VIDEO_EDIT_NATIVE_SEEK_WINDOW_SECONDS) * VIDEO_EDIT_NATIVE_SEEK_WINDOW_SECONDS
+    // An exact read of a window left unclaimed takes it back instead of stopping it and decoding the picture again.
+    const unclaimed = this.windows.get(start)
+    const rejoin = !approximate && !!unclaimed?.unclaimed && !unclaimed.abort.signal.aborted
+    if ((session.intraOnly || singleFrame) && !rejoin) {
       // A first still needs only one picture. Decode the GOP natively without importing/copying its preceding frames.
       // Continuous scrubbing keeps the existing window cache and speculative neighbour decoding.
       const queued = performance.now()
       const picture = await source.lane.run(async () => {
         recordVideoEditPreparation('scrubLaneWait', performance.now() - queued)
         const started = performance.now()
-        const value = await session.frameAt(time, approximate && !session.intraOnly)
+        const value = await session.frameAt(time, approximate && !session.intraOnly, false, signal)
         recordVideoEditPreparation(value?.approximate ? 'scrubKeyFrame' : 'scrubExactFrame', performance.now() - started)
         return value
       })
@@ -840,12 +874,12 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
     // the window was stopped. Decode once more instead of showing nothing (task 3.1: a scrubbed layer showed no picture);
     // only a time without any picture in the file (before its first frame) stays empty.
     for (let attempt = 0; attempt < 2; attempt++) {
+      if (signal?.aborted) throw readAbandoned()
       const already = this.cached(time)
       if (already) return { sample: already, hit: true }
-      const start = Math.floor(time / VIDEO_EDIT_NATIVE_SEEK_WINDOW_SECONDS) * VIDEO_EDIT_NATIVE_SEEK_WINDOW_SECONDS
       const window = this.window(source, start, false)
       const waited = performance.now()
-      const picture = await new Promise<VideoEditGpuFrame | undefined>((resolve, reject) => window.waiters.add({ time, resolve, reject }))
+      const picture = await this.wait(source, window, time, signal)
       recordVideoEditPreparation('scrubWindow', performance.now() - waited)
       if (picture) {
         if (direction !== 0) this.prefetch(source, time, direction)
@@ -855,6 +889,26 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
       if (this.failure) throw this.failure
     }
     return { hit: false }
+  }
+
+  /** The picture at `time` from `window`; aborting `signal` leaves the window, unclaimed once nobody waits for it. */
+  private wait(source: VideoEditNativeFileSource, window: SeekWindow, time: number, signal?: AbortSignal): Promise<VideoEditGpuFrame | undefined> {
+    const unclaim = (): void => { if (!window.waiters.size && !window.unclaimed && !window.abort.signal.aborted) window.unclaimed = source.lane.unclaim(window.abort) }
+    if (signal?.aborted) { unclaim(); return Promise.reject(readAbandoned()) }
+    return new Promise((resolve, reject) => {
+      const leave = (): void => {
+        if (!window.waiters.delete(waiter)) return
+        reject(readAbandoned())
+        unclaim()
+      }
+      const waiter: SeekWaiter = {
+        time,
+        resolve: frame => { signal?.removeEventListener('abort', leave); resolve(frame) },
+        reject: error => { signal?.removeEventListener('abort', leave); reject(error) },
+      }
+      window.waiters.add(waiter)
+      signal?.addEventListener('abort', leave, { once: true })
+    })
   }
 
   private cancelSpeculative(): void {
@@ -886,7 +940,11 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
 
   private window(source: VideoEditNativeFileSource, start: number, speculative: boolean): SeekWindow {
     const existing = this.windows.get(start)
-    if (existing) { if (!speculative) existing.speculative = false; return existing }
+    // A stopped window still finishing delivers nothing more: a new read starts a new one (it queues on the lane behind it).
+    if (existing && !existing.abort.signal.aborted) {
+      if (!speculative) { existing.speculative = false; existing.unclaimed?.(); existing.unclaimed = undefined }
+      return existing
+    }
     if (!speculative) this.cancelSpeculative()
     const window: SeekWindow = { start, speculative, waiters: new Set(), abort: new AbortController(), done: Promise.resolve() }
     this.windows.set(start, window)
@@ -937,7 +995,7 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
     }, speculative)
     // A finished window leaves the map before its waiters resume: a read joining it afterwards would wait forever
     // (task 3.1: removal used to run one step later, in `finally`).
-    const finish = (): void => { if (this.windows.get(start) === window) this.windows.delete(start) }
+    const finish = (): void => { window.unclaimed?.(); window.unclaimed = undefined; if (this.windows.get(start) === window) this.windows.delete(start) }
     window.done = window.done.then(() => {
       finish()
       for (const waiter of window.waiters) waiter.resolve(this.cached(waiter.time))

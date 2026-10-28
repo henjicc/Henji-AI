@@ -330,6 +330,27 @@ it('暂停时远距离跳转先出近似画面并标记，紧接着补精确帧�
   expect(pixel.requests).toHaveLength(before + 1)
   view.unmount()
 })
+it('跳转后精确画面还在解时不预热（预热在 Worker 里排在它后面，循环等它就发不出下一次点击）；精确画面回来后才预热', async () => {
+  let now = 0
+  vi.spyOn(performance, 'now').mockImplementation(() => now)
+  const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
+  const view = render(<VideoEditPreview instance={instance} onError={vi.fn()} />)
+  await act(async () => { await Promise.resolve() })
+  await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [0], presented: true }); await vi.advanceTimersByTimeAsync(2) })
+  now = 2000
+  await act(async () => { await vi.advanceTimersByTimeAsync(10) })
+  const armed = pixel.arm.mock.calls.length
+  await act(async () => { setVideoEditView(instance.document.id, { frame: 50 }); await vi.advanceTimersByTimeAsync(2) })
+  await act(async () => { pixel.requests.at(-1)!.resolve({ sourceTimestamps: [50 / 30], presented: true, approximate: true }); await vi.advanceTimersByTimeAsync(10) })
+  const exact = pixel.requests.at(-1)!
+  expect(exact).toMatchObject({ frame: 50, scrubbing: false })
+  // Any view update meanwhile runs the scheduler again.
+  await act(async () => { setVideoEditView(instance.document.id, { frame: 50 }); await vi.advanceTimersByTimeAsync(10) })
+  expect(pixel.arm).toHaveBeenCalledTimes(armed)
+  await act(async () => { exact.resolve({ sourceTimestamps: [50 / 30], presented: true }); await vi.advanceTimersByTimeAsync(10) })
+  expect(pixel.arm).toHaveBeenLastCalledWith(50)
+  view.unmount()
+})
 it('切换序列（含尺寸不同的序列）复用同一渲染会话只换文档，不销毁也不重建', async () => {
   const instance = (await createVideoEditProject())!; const first = instance.activeSequenceId
   const { width, height } = getActiveVideoEditSequence(instance)

@@ -2159,15 +2159,17 @@ it('快速拖动与远距离跳转：代码视频输入先给近似画面（整�
   } finally { await renderer.dispose() }
 })
 it('拖动中后台追向指针的精确读取：指针退回或向前跳出半秒以上时放弃、改读新位置，小步向前不放弃；松手时这一帧自己的读取打断它，不排在它后面', async () => {
-  // Background exact reads (they carry a signal) decode until released or abandoned, like a long-GOP seek.
+  // Background exact reads decode until released or abandoned, like a long-GOP seek; the paused frames' own reads
+  // (carrying their frame's signal) answer at once: w1 at 290 and 320, w2 (30 seconds in from frame 300) at 320.
   const reads: Array<{ time: number; signal?: AbortSignal }> = []
   const picture = (time: number) => ({ timestamp: Math.floor(time * 60 + 1e-6) / 60, duration: 1 / 60, format: 'NV12', close: vi.fn() }) as unknown as VideoSample
+  const pausedFrames = new Set([290, 320, 1820])
   const backend: VideoEditFrameBackend = {
     open: media => ({ key: media.path, ready: Promise.resolve({ codec: 'avc1',
       clipFrames: options => options?.exclusive ? { continues: true, async *frames() {}, close: () => {},
         frameAt: (time: number, read?: VideoEditFrameReadOptions) => {
           const signal = read?.signal
-          if (!signal || read.keyFrame || read.speculative) return Promise.resolve(picture(time))
+          if (!signal || read.keyFrame || read.speculative || pausedFrames.has(Math.floor(time * 60 + 1e-6))) return Promise.resolve(picture(time))
           reads.push({ time, signal })
           return new Promise<never>((_, reject) => signal.addEventListener('abort', () => reject(new DOMException('取帧已取消。', 'AbortError')), { once: true }))
         } } : { async *frames() {}, frameAt: async () => null },
@@ -2193,6 +2195,51 @@ it('拖动中后台追向指针的精确读取：指针退回或向前跳出半�
     const rested = await renderer.render(320, false); await rested.completion
     expect(reads[2].signal!.aborted).toBe(true); expect(reads).toHaveLength(3)
     expect(us([shownInputs().w1])).toEqual(us([320 / 60]))
+  } finally { await renderer.dispose() }
+})
+it('连续点击 A→B→C：更新的暂停请求放弃还在解码的精确画面（读取取消、不上屏），只有 C 上屏；同一帧与半秒内向前一步不放弃，播放、导出与回读像素的帧从不放弃', async () => {
+  // Exact reads of the recording decode until released or abandoned, like long-GOP seeks.
+  const reads: Array<{ frame: number; signal?: AbortSignal; release: () => void }> = []
+  const picture = (time: number) => ({ timestamp: Math.floor(time * 60 + 1e-6) / 60, duration: 1 / 60, format: 'NV12', close: vi.fn() }) as unknown as VideoSample
+  const backend: VideoEditFrameBackend = {
+    open: media => ({ key: media.path, ready: Promise.resolve({ codec: 'avc1',
+      clipFrames: options => options?.exclusive ? { continues: true, async *frames() {}, close: () => {},
+        frameAt: (time: number, read?: VideoEditFrameReadOptions) => read?.speculative ? Promise.resolve(picture(time)) : new Promise((resolve, reject) => {
+          reads.push({ frame: Math.floor(time * 60 + 1e-6), ...(read?.signal ? { signal: read.signal } : {}), release: () => resolve(picture(time)) })
+          read?.signal?.addEventListener('abort', () => reject(new DOMException('取帧已取消。', 'AbortError')), { once: true })
+        }) } : { async *frames() {}, frameAt: async () => null },
+      clipAudio: () => undefined, async *schedule() {} }) }),
+    release: () => {},
+    seeker: () => ({ sample: async () => ({ hit: false }), dispose: async () => {} }),
+  }
+  const renderer = new VideoEditRenderer(walkFixture(), 3840, undefined, 8 * 1024 ** 3, backend)
+  const reading = async (count: number): Promise<void> => { await vi.waitFor(() => expect(reads).toHaveLength(count)) }
+  try {
+    const drawn = boundary.draws.length
+    const a = renderer.render(100); await reading(1)
+    renderer.supersedePausedFrame(220)
+    expect(await a).toMatchObject({ presented: false, superseded: true }); expect(reads[0].signal!.aborted).toBe(true)
+    const b = renderer.render(220); await reading(2)
+    renderer.supersedePausedFrame(40)
+    expect(await b).toMatchObject({ presented: false, superseded: true }); expect(reads[1].signal!.aborted).toBe(true)
+    const c = renderer.render(40); await reading(3)
+    // The same frame again, or a short step ahead (its decoder is on the way): kept.
+    renderer.supersedePausedFrame(40); renderer.supersedePausedFrame(60)
+    expect(reads[2].signal!.aborted).toBe(false)
+    reads[2].release()
+    const shown = await c; await shown.completion
+    expect(shown).toMatchObject({ presented: true }); expect(shown.superseded).toBeUndefined()
+    // Neither abandoned frame drew anything, on screen or into its input's target.
+    expect(topDraws(drawn)).toEqual([['w1']]); expect(boundary.draws.slice(drawn).filter(draw => draw.offscreen)).toHaveLength(1)
+    expect(us([shownInputs().w1])).toEqual(us([40 / 60]))
+    // A playback frame (export reads sequentially too) and one reading its pixels back carry nothing to abandon.
+    const played = renderer.render(41, true); await reading(4)
+    renderer.supersedePausedFrame(300)
+    reads[3].release(); expect((await played).presented).toBe(true)
+    const captured = renderer.render(42, false, false, undefined, undefined, undefined, 'interactive', () => {}); await reading(5)
+    renderer.supersedePausedFrame(300)
+    reads[4].release(); expect((await captured).presented).toBe(true)
+    expect(reads.slice(3).map(read => read.signal)).toEqual([undefined, undefined])
   } finally { await renderer.dispose() }
 })
 /**

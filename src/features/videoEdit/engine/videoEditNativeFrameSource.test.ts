@@ -702,6 +702,97 @@ describe('原生定位器', () => {
     expect(cache.bytes).toBe(0)
   })
 
+  it('放弃的定位：等会话时就被放弃的不开窗口；窗口没人等了不停，同一窗口的读取（含后退一步的单帧读取）接着用它，读别的窗口时才停；单帧定位让原生停下这次解码', async () => {
+    const channel = new FakeChannel()
+    const cache = new VideoEditFrameCache(1024 ** 3)
+    const seeker = backend(channel).seeker(media(), cache, snapshot)
+    const schedules = (): Array<{ streamId: string; scheduleId: string; range: { from: number } }> => channel.calls.filter(call => call.method === 'schedule').map(call => call.params as { streamId: string; scheduleId: string; range: { from: number } })
+    const plan = (from: number) => schedules().filter(value => value.range.from === from)
+    const cancelled = (): unknown[] => channel.calls.filter(call => call.method === 'cancelSchedule').map(call => call.params.scheduleId)
+    // Abandoned while the session is still opening: no window, no waiter left behind.
+    const opening = new AbortController()
+    const early = seeker.sample(3.5, 0, false, false, opening.signal)
+    opening.abort()
+    await expect(early).rejects.toMatchObject({ name: 'AbortError' })
+    await flush()
+    expect(schedules()).toHaveLength(0)
+    // A paused frame's window read is abandoned: the window keeps decoding, unclaimed.
+    const controller = new AbortController()
+    const abandoned = seeker.sample(3.5, 0, false, false, controller.signal)
+    await vi.waitFor(() => expect(schedules()).toHaveLength(1))
+    const kept = schedules()[0]
+    controller.abort()
+    await expect(abandoned).rejects.toMatchObject({ name: 'AbortError' })
+    await flush()
+    expect(cancelled()).toEqual([])
+    // A step back (a single exact read) inside it takes it back: no new plan, no single-frame read.
+    const back = seeker.sample(3.48, -1, true)
+    await flush()
+    for (let index = 0; index < 30; index++) channel.frame(kept.streamId, { kind: 'schedule', id: kept.scheduleId, index }, Math.round((3 + index / 60) * 1e6))
+    const stepped = await back
+    expect(stepped.sample?.timestamp).toBeCloseTo(3 + 28 / 60, 6); stepped.sample?.close()
+    expect(plan(3)).toHaveLength(1); expect(channel.calls.some(call => call.method === 'frameAt')).toBe(false)
+    channel.event({ type: 'schedule_done', streamId: kept.streamId, scheduleId: kept.scheduleId, reason: 'completed', message: null, delivered: 30 })
+    await flush(40)
+    // Left unclaimed again, a read of another window stops it before decoding its own.
+    const other = new AbortController()
+    const left = seeker.sample(5.5, 0, false, false, other.signal)
+    await vi.waitFor(() => expect(plan(5)).toHaveLength(1))
+    const unclaimed = plan(5)[0]
+    other.abort()
+    await expect(left).rejects.toMatchObject({ name: 'AbortError' })
+    const jump = seeker.sample(6.2, 0)
+    await vi.waitFor(() => expect(plan(6)).toHaveLength(1))
+    expect(cancelled()).toContain(unclaimed.scheduleId)
+    const window = plan(6)[0]
+    expect(window.range).toEqual({ from: 6, to: 7 })
+    channel.frame(window.streamId, { kind: 'schedule', id: window.scheduleId, index: 0 }, 6_200_000)
+    channel.event({ type: 'schedule_done', streamId: window.streamId, scheduleId: window.scheduleId, reason: 'completed', message: null, delivered: 1 })
+    const shown = await jump
+    expect(shown.sample?.timestamp).toBe(6.2); shown.sample?.close()
+    channel.answers.frameAt = () => new Promise(() => {})
+    const single = new AbortController()
+    const still = seeker.sample(1.5, 0, true, false, single.signal)
+    await vi.waitFor(() => expect(channel.calls.some(call => call.method === 'frameAt')).toBe(true))
+    const ticket = channel.last('frameAt').ticket
+    single.abort()
+    await expect(still).rejects.toMatchObject({ name: 'AbortError' })
+    expect(channel.last('cancelFrameAt')).toMatchObject({ ticket })
+    await seeker.dispose()
+  })
+
+  it('无人认领的窗口在读另一个文件或开始播放时也停下：不和它们抢硬件解码器与 Worker', async () => {
+    const channel = new FakeChannel()
+    const cache = new VideoEditFrameCache(1024 ** 3)
+    const frames = backend(channel)
+    const seeker = frames.seeker(media(), cache, snapshot)
+    const cancelled = (): unknown[] => channel.calls.filter(call => call.method === 'cancelSchedule').map(call => call.params.scheduleId)
+    const abandon = async (time: number): Promise<unknown> => {
+      const plans = channel.calls.filter(call => call.method === 'schedule').length
+      const controller = new AbortController()
+      const read = seeker.sample(time, 0, false, false, controller.signal)
+      await vi.waitFor(() => expect(channel.calls.filter(call => call.method === 'schedule')).toHaveLength(plans + 1))
+      const plan = channel.last('schedule').scheduleId
+      controller.abort()
+      await expect(read).rejects.toMatchObject({ name: 'AbortError' })
+      await flush()
+      expect(cancelled()).not.toContain(plan)
+      return plan
+    }
+    const other = media({ id: 'n', path: 'henji-media://local/D%3A%2Fb.mov' })
+    // A foreground read of another file.
+    const first = await abandon(3.5)
+    expect((await frames.seeker(other, cache, snapshot).sample(1, 0, true)).hit).toBe(false)
+    expect(cancelled()).toContain(first)
+    // A playback plan starting (of another file here; its own file's seek session too).
+    const second = await abandon(5.5)
+    const stop = new AbortController()
+    const playing = (await frames.open(other).ready).schedule([1, 1 + 1 / 60], stop.signal).next()
+    await vi.waitFor(() => expect(cancelled()).toContain(second))
+    stop.abort(); await playing
+    await seeker.dispose()
+  })
+
   it('变帧率时长不准：画面保持到下一帧开始，定位到间隙里的时间得到前一帧而不是空层，之后同一间隙命中缓存（3.1）', async () => {
     const channel = new FakeChannel()
     const cache = new VideoEditFrameCache(1024 ** 3)

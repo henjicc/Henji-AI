@@ -6,7 +6,7 @@ import type { VideoEditPresentationCapture } from './videoEditGpuCompositor'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 
-const state = vi.hoisted(() => ({ render: vi.fn(), readRgb: vi.fn(), performance: [] as CodeFramePerformance[], jump: vi.fn(), hasJump: false }))
+const state = vi.hoisted(() => ({ render: vi.fn(), readRgb: vi.fn(), performance: [] as CodeFramePerformance[], jump: vi.fn(), hasJump: false, supersede: vi.fn(), abandon: vi.fn() }))
 vi.mock('./videoEditRenderer', () => ({ VideoEditRenderer: class {
   constructor(readonly document: unknown) {}
   render = state.render
@@ -22,6 +22,8 @@ vi.mock('./videoEditRenderer', () => ({ VideoEditRenderer: class {
   async stopPlayback() {}
   hasJumpPreview() { return state.hasJump }
   presentJumpPreviewNow = state.jump
+  supersedePausedFrame = state.supersede
+  abandonPausedFrame = state.abandon
 } }))
 vi.mock('./videoEditTrackingPixels', () => ({ readVideoEditTrackingRgb: state.readRgb }))
 
@@ -46,7 +48,7 @@ async function init(direct = false): Promise<void> {
 beforeEach(async () => {
   vi.stubGlobal('self', worker)
   vi.stubGlobal('createImageBitmap', vi.fn(async () => bitmap()))
-  postMessage.mockClear(); state.render.mockReset(); state.jump.mockReset(); state.hasJump = false; messages.length = 0; state.performance = []
+  postMessage.mockClear(); state.render.mockReset(); state.jump.mockReset(); state.supersede.mockReset(); state.abandon.mockReset(); state.hasJump = false; messages.length = 0; state.performance = []
   state.readRgb.mockReset().mockReturnValue(new Uint8Array([1, 2, 3]))
   await import('./videoEditWorker')
   await init()
@@ -193,6 +195,23 @@ it('前一次点击的精确画面还在准备时，远距离跳转在队列外�
   expect(state.render).toHaveBeenCalledOnce()
   release()
   await vi.waitFor(() => expect(messages.find(message => message.id === exact && !message.phase)).toMatchObject({ skipped: true }))
+})
+
+it('暂停画面请求一到就让渲染器放弃还在准备的暂停精确画面，关闭会话时无条件放弃；导出、播放帧与要回读像素的请求不放弃', async () => {
+  render(bitmap())
+  await send({ kind: 'render', frame: 20, sequential: false, scrubbing: 'fast' })
+  await send({ kind: 'render', frame: 21, sequential: true })
+  await send({ kind: 'render', frame: 22, sequential: false, deadline: performance.timeOrigin + performance.now() })
+  await send({ kind: 'render', frame: 23, sequential: false, readRgb: { width: 4, height: 4 } })
+  await send({ kind: 'render', frame: 24, sequential: false, history: true })
+  expect(state.supersede.mock.calls).toEqual([[20]])
+  expect(state.abandon).not.toHaveBeenCalled()
+  // Closing the session abandons it unconditionally, before queueing behind its decoding. The close is answered before
+  // the test ends: the next test's session opens on the same worker module.
+  const closing = ++nextId
+  worker.onmessage({ data: { kind: 'dispose', id: closing } })
+  expect(state.abandon).toHaveBeenCalledOnce()
+  await vi.waitFor(() => expect(messages.some(message => message.id === closing)).toBe(true))
 })
 
 it('停止播放当场作废还没上屏的播放帧：排队的答复 skipped 不渲染，正在等刷新的放弃呈现；之后的暂停帧照常画', async () => {

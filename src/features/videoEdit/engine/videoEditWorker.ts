@@ -204,6 +204,9 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
     // 也不会把一串过时的精确帧（长 GOP 每帧可达一秒）排在后面，节目的在途名额也随即空出来。
     for (const [id, skip] of queuedFrames) if (id < request.id) { queuedFrames.delete(id); skip() }
     if (!request.history && !request.readRgb) queuedFrames.set(request.id, () => { skipped = true; releaseForeground(); self.postMessage({ id: request.id, presented: false, skipped: true } satisfies RenderResponse) })
+    // 已在准备的暂停精确画面（长 GOP 可达一秒）也让给这一帧：渲染器放弃它（答复 skipped），解码停在已解到的位置，
+    // 这一帧不排在一幅没人要的画面后面。播放帧（有呈现时刻）与要回读像素的帧不放弃任何帧。
+    if (request.deadline === undefined && !request.history && !request.readRgb) renderer?.supersedePausedFrame(request.frame)
   }
   if (request.kind === 'init') { enableVideoEditFrameTrace(request.traceFrames === true); enableVideoEditRenderDiagnostics(request.diagnostics === true); labelNativePort() }
 
@@ -226,7 +229,8 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
   if (request.kind === 'regions') { setVideoEditSmartRegionSegments(request.regions); renderer?.cancelPresentation(); return }
   if (request.kind === 'renderCache') { renderCachePaths.clear(); for (const [url, path] of Object.entries(request.localPaths)) renderCachePaths.set(url, path); renderCacheWindows = request.windows; renderer?.setRenderCache(renderCacheWindows); if (renderer) decodeLookahead?.windowsChanged(renderer.document, renderCacheWindows); else releasePreopened(); return }
   if (request.kind === 'invalidate') { if (revision !== request.revision) { revision = request.revision; renderer?.cancelPresentation() } return }
-  if (request.kind === 'dispose') { revision = Number.MAX_SAFE_INTEGER; renderer?.cancelPresentation() }
+  // 关闭会话时在准备的暂停精确画面已经没人要：当场放弃，关闭不用排在它的解码后面。
+  if (request.kind === 'dispose') { revision = Number.MAX_SAFE_INTEGER; renderer?.cancelPresentation(); renderer?.abandonPausedFrame() }
   if (request.kind === 'init' || request.kind === 'update' || request.kind === 'replaceContent') { timing = 'timing' in request ? request.timing : undefined; timedStages.clear(); timingEvent(`worker.${request.kind}`); receiveCodeSourceTexts(request.codeSources) }
   if (request.kind === 'init' || request.kind === 'replaceContent') revision = request.document.revision
   if (request.kind === 'update') revision = Math.max(revision, request.document.revision)

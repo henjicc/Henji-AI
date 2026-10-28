@@ -134,9 +134,10 @@ export interface VideoEditFrameSeeker {
   /**
    * `direction` is the recent scrub direction (-1, 0, 1); it only steers prefetching. The picture is an owned GPU
    * frame, or a decoded picture the renderer still normalizes. `approximate`: a fast scrub accepts the key frame of the
-   * target's GOP when reaching the exact picture needs a new seek; the result then says `approximate`.
+   * target's GOP when reaching the exact picture needs a new seek; the result then says `approximate`. `signal`
+   * abandons the read as `VideoEditFrameReadOptions.signal` does (a backend that cannot stop may still answer).
    */
-  sample(time: number, direction: number, singleFrame?: boolean, approximate?: boolean): Promise<{ sample?: VideoEditDecodedPicture | VideoEditGpuFrame; hit: boolean; approximate?: boolean }>
+  sample(time: number, direction: number, singleFrame?: boolean, approximate?: boolean, signal?: AbortSignal): Promise<{ sample?: VideoEditDecodedPicture | VideoEditGpuFrame; hit: boolean; approximate?: boolean }>
   dispose(): Promise<void>
 }
 

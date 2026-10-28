@@ -770,7 +770,9 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         // 首帧后的第一秒留给用户操作；停稳且没有输入时再准备声音与前向解码，播放命令仍可按需准备。
         // 按住拖动播放头期间不预热：预热要打开连续解码并预混首段声音（复杂工程约 0.6 秒），循环等它完成期间不再请求新画面，
         // 拖动方向反转、指针短暂停住时就出现半秒以上的停顿；松手时由上面的 releasedScrub 预热一次，起播照样即时。
-        if (!playing && approximateFrame < 0 && performance.now() - firstPresentationAt >= 1100 && !current.scrubbing && (armedDocument !== undefined || performance.now() - lastInteractionAt >= 180) && lastFrame === current.frame && current.frame === lastRequested && !!current.scrubbing === lastScrubbing && (armedDocument !== document || armedFrame !== current.frame) && captureFull === 0) {
+        // 画面请求还在途（跳转先出近似画面后，精确画面还在解）时也不预热：预热在 Worker 里排在这幅画面后面，循环等它期间
+        // 下一次点击发不出去，Worker 也就放弃不了这幅没人要的精确画面，连续点击时一次要多等它解完。
+        if (!playing && approximateFrame < 0 && framesInFlight === 0 && performance.now() - firstPresentationAt >= 1100 && !current.scrubbing && (armedDocument !== undefined || performance.now() - lastInteractionAt >= 180) && lastFrame === current.frame && current.frame === lastRequested && !!current.scrubbing === lastScrubbing && (armedDocument !== document || armedFrame !== current.frame) && captureFull === 0) {
           await preparePlayback(document, current.frame)
           if (stopped) return
           // 刷新周期在后台量，不挡住紧接着的起播。
