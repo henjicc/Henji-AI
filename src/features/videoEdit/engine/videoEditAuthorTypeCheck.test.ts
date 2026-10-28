@@ -6,15 +6,33 @@ import { normalizeCodeMaterialFiles, type CodeMaterialFiles } from '@/core/video
 import { codeTypeDiagnosticLine } from '@/core/videoEdit/codeMaterial/typeDiagnostics'
 import { createAuthorTypeChecker, type AuthorLibraryTypePackage } from './videoEditAuthorTypeCheck'
 import { AUTHOR_TYPE_ENVIRONMENT } from './videoEditAuthorTypeEnvironment'
+import { CODE_AUTHOR_API_VERSION } from '@/core/videoEdit/codeMaterialPersistence'
 
 /** 与检查 Worker 同一份环境（Vite 打包的标准库、WebGPU 与作者接口声明），只是不经线程。 */
 const checker = createAuthorTypeChecker(AUTHOR_TYPE_ENVIRONMENT)
 const check = (input: string | CodeMaterialFiles, report?: string[]) => {
-  const files = normalizeCodeMaterialFiles(input)
+  const files: CodeMaterialFiles = { apiVersion: CODE_AUTHOR_API_VERSION, ...normalizeCodeMaterialFiles(input) }
   return checker.check(files, report ?? Object.keys(files.files))
 }
 const lines = (input: string | CodeMaterialFiles, report?: string[]): string[] => check(input, report).diagnostics.map(codeTypeDiagnosticLine)
 const color = JSON.stringify(APP_ACCENT_HEX)
+
+it('排版库挂载发行的真实声明，类型错误可检出；切回 v5 后同一源码不可用', () => {
+  const read = vi.fn((library: string, version: string): AuthorLibraryTypePackage | undefined => library === 'henji-layout' ? JSON.parse(fs.readFileSync(path.join('resources/video-edit-author/frozen', library, version, 'types.json'), 'utf8')) as AuthorLibraryTypePackage : undefined)
+  const typed = createAuthorTypeChecker({ ...AUTHOR_TYPE_ENVIRONMENT, libraryTypes: read })
+  const source = 'import { layoutText, drawText } from "henji-layout/text"; import { layoutBoxes } from "henji-layout/flex"; export default { name: "排版", draw(ctx) { const boxes = layoutBoxes({ id: "root", children: [{ id: "title", text: { content: "中文", style: { fontSize: 32 } } }] }, { width: 320, height: 180 }); drawText(ctx, boxes.title.text); drawText(ctx, layoutText("标题", { fontSize: 32 })); } };'
+  const files = { entry: 'main.ts', apiVersion: 6 as const, libraries: { 'henji-layout': '1.0.0' }, files: { 'main.ts': source } }
+  expect(typed.check(files, ['main.ts']).diagnostics).toEqual([])
+  expect(read).toHaveBeenCalledWith('henji-layout', '1.0.0')
+  const invalid = { ...files, files: { 'main.ts': source.replace('fontSize: 32', 'fontSize: "large"') } }
+  expect(typed.check(invalid, ['main.ts']).diagnostics.some(diagnostic => /string.*number/.test(diagnostic.message))).toBe(true)
+  const incompatible = typed.check({ ...files, apiVersion: 5 }, ['main.ts']).diagnostics.filter(diagnostic => diagnostic.code === 2307)
+  expect(incompatible).toHaveLength(2)
+  expect(incompatible.every(diagnostic => /作者接口 v6/.test(diagnostic.message))).toBe(true)
+  expect(typed.check(files, ['main.ts']).diagnostics).toEqual([])
+  const missing = createAuthorTypeChecker({ ...AUTHOR_TYPE_ENVIRONMENT, libraryTypes: () => undefined })
+  expect(missing.check(files, ['main.ts']).diagnostics.some(diagnostic => /types.json/.test(diagnostic.message))).toBe(true)
+})
 
 describe('作者源码类型检查', () => {
   it('技能文档里的每个完整源码都没有类型错误（不能误报给助手照抄的写法）', () => {
@@ -104,7 +122,7 @@ function nodeModulesTypes(library: string, version: string): AuthorLibraryTypePa
 describe('作者源码导入内置库', () => {
   const libraryChecker = createAuthorTypeChecker({ ...AUTHOR_TYPE_ENVIRONMENT, libraryTypes: nodeModulesTypes })
   const libraryLines = (input: string | CodeMaterialFiles): string[] => {
-    const files = normalizeCodeMaterialFiles(input)
+    const files = { apiVersion: 5 as const, ...normalizeCodeMaterialFiles(input) }
     return libraryChecker.check(files, Object.keys(files.files)).diagnostics.map(codeTypeDiagnosticLine)
   }
 
@@ -135,7 +153,7 @@ export default {
 
   it('库里的类型错误按原文行列报出；没随包的子路径照实报找不到模块', () => {
     const source = 'import * as THREE from "three"\nconst v = new THREE.Vector3()\nv.lenght()\nexport default { name: "x", draw() { void v } }'
-    const [typo] = libraryChecker.check(normalizeCodeMaterialFiles(source), ['main.ts']).diagnostics
+    const [typo] = libraryChecker.check({ ...normalizeCodeMaterialFiles(source), apiVersion: 5 }, ['main.ts']).diagnostics
     expect(typo).toMatchObject({ code: 2551, span: { startLine: 3, startColumn: 3 } })
     expect(source.slice(typo.span.start, typo.span.end)).toBe('lenght')
     expect(libraryLines('import { TTFLoader } from "three/addons/loaders/TTFLoader.js"\nexport default { name: "x", draw() { void TTFLoader } }')[0]).toMatch(/^main\.ts:1:27 TS2307 /)
@@ -144,7 +162,7 @@ export default {
   it('读不到类型包时导入按 any 处理，不诱导删掉导入', () => {
     const untyped = createAuthorTypeChecker({ ...AUTHOR_TYPE_ENVIRONMENT, libraryTypes: () => undefined })
     const files = normalizeCodeMaterialFiles('import * as THREE from "three"\nimport { GLTFLoader } from "three/addons/loaders/GLTFLoader.js"\nexport default { name: "x", draw() { void new THREE.Scene(); void GLTFLoader } }')
-    expect(untyped.check(files, ['main.ts']).diagnostics).toEqual([])
+    expect(untyped.check({ ...files, apiVersion: 5 }, ['main.ts']).diagnostics).toEqual([])
   })
 })
 

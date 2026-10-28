@@ -65,7 +65,7 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   { ...format('project', '项目说明', PROJECT_MANIFEST_VERSION, 'ProjectManifest.version', 'electron/main/services/documents/workspace.ts::readManifest', projectManifestSchema), minReaderVersion: 1 },
   { ...format('project-package', '项目和文档包', PACKAGE_VERSION, 'henji-package.json.version', 'electron/main/services/documents/package-service.ts::readManifest', packageManifestSchema), requiredFixtures: [{ extension: 'json' }, { extension: 'henjipack' }] },
   format('code-git-location', 'Git 源码位置', 1, 'git:<40位提交OID>:<encodeURIComponent(仓库位置)>:<encodeURIComponent(POSIX仓库内路径)>；仓库位置存取时使用既有 henji:/ 编码。轻量版本标签：素材或组件/<转义名>@vN；撤回标签：撤回/<OID>。', 'src/core/storage/gitCodeLocation.ts::parseGitCodeLocation', gitCodeLocationSchema),
-  { ...format('code-version', '代码源码版本', CODE_MATERIAL_VERSION_RECORD, '所在剪辑内容版本（记录随剪辑文档的 kindVersion 读写）', 'electron/main/services/documents/code-files.ts::read', codeMaterialVersionSchema, 'file', { source: codeMaterialFilesSchema }), minReaderVersion: 2 },
+  { ...format('code-version', '代码源码版本', CODE_MATERIAL_VERSION_RECORD, '所在剪辑内容版本（记录随剪辑文档的 kindVersion 读写）', 'electron/main/services/documents/code-files.ts::read', codeMaterialVersionSchema, 'file', { source: codeMaterialFilesSchema }), minReaderVersion: 5 },
   // 作者宿主接口：每个代码版本记录 apiVersion；宿主接口变化时升版本并按 apiVersion 保持旧代码的原行为，不迁移源码。
   // 最低可读版本就是接口版本本身：按新接口写的代码只有认识它的宿主才能运行。
   format('code-author-api', '代码作者宿主接口', CODE_AUTHOR_API_VERSION, 'CodeMaterialVersion.apiVersion / CodeAsset.sourceVersion.apiVersion', 'src/features/videoEdit/engine/videoEditAuthorRuntime.ts', codeAuthorApiSchema),

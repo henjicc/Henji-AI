@@ -1,7 +1,7 @@
 /**
- * 代码效果可直接导入的内置第三方库：库名、版本、模块入口、类型与许可的唯一登记。
+ * 代码效果可直接导入的内置库：库名、版本、模块入口、类型与许可的唯一登记。
  *
- * 每个版本由 `scripts/build-author-libraries.ts` 从 npm 别名包 `henji-author-<库名>-<版本>` 生成到
+ * 第三方库由 `scripts/build-author-libraries.ts` 从 npm 别名包 `henji-author-<库名>-<版本>` 生成，自家库从冻结产物复制到
  * `resources/author-libs/<库名>/<版本>/`，经 `henji-media://author-lib/` 只读提供。渲染 Worker 按 URL
  * 只求值一次模块，所以引用同一版本的多个效果共用一份库实例；旧版本随包保留，已有工程按记录的版本继续加载。
  *
@@ -14,15 +14,18 @@ export type AuthorLibraryLicense = typeof AUTHOR_LIBRARY_LICENSES[number]
 
 export interface AuthorLibraryRelease {
   license: AuthorLibraryLicense
+  minApiVersion: number
+  /** 自家库只从已冻结且带摘要的产物发行，不在日常构建中读取最新源码。 */
+  frozen?: string
   /** 完整说明符 → 版本目录内的模块路径。 */
   modules: Readonly<Record<string, string>>
   /** 说明符前缀 → 版本目录内的目录；前缀之后的子路径原样拼接。 */
   directories?: Readonly<Record<string, string>>
   /**
    * 作者类型检查用的声明，构建时打成版本目录里的 `types.json`，检查时挂到内存里的 `/node_modules/<mount>/`。
-   * `package`：来自 npm 别名包 `henji-author-<库名>-types-<版本>`；`file`：仓库内手写的声明（上游没有对得上的类型包时）。
+   * `package`：npm 别名类型包；`file`：上游无对应声明时的仓库声明；`frozen`：随不可变版本保存的权威类型生成结果。
    */
-  types: { mount: string; license: AuthorLibraryLicense; source: 'package' } | { mount: string; license: AuthorLibraryLicense; source: 'file'; file: string }
+  types: { mount: string; license: AuthorLibraryLicense; source: 'package' | 'frozen' } | { mount: string; license: AuthorLibraryLicense; source: 'file'; file: string }
 }
 
 export const AUTHOR_LIBRARY_HOST = 'author-lib'
@@ -33,6 +36,7 @@ export const AUTHOR_LIBRARIES: Readonly<Record<string, Readonly<Record<string, A
   three: {
     '0.186.1': {
       license: 'MIT',
+      minApiVersion: 5,
       // three.module.js 与 three.webgpu.js 都从 three.core.js 取核心类，混用两个入口时类仍是同一份。
       modules: {
         three: 'build/three.module.js',
@@ -48,7 +52,15 @@ export const AUTHOR_LIBRARIES: Readonly<Record<string, Readonly<Record<string, A
   },
   'opentype.js': {
     // @types/opentype.js 只到 1.3.x：2.0 去掉了默认导出，load/loadSync 只剩弃用提示，所以用手写的 2.0 声明。
-    '2.0.0': { license: 'MIT', modules: { 'opentype.js': 'opentype.mjs' }, types: { mount: 'opentype.js', license: 'MIT', source: 'file', file: 'resources/video-edit-author/libraries/opentype.js-2.0.0.d.ts' } },
+    '2.0.0': { license: 'MIT', minApiVersion: 5, modules: { 'opentype.js': 'opentype.mjs' }, types: { mount: 'opentype.js', license: 'MIT', source: 'file', file: 'resources/video-edit-author/libraries/opentype.js-2.0.0.d.ts' } },
+  },
+  'henji-layout': {
+    '1.0.0': {
+      license: 'Apache-2.0', minApiVersion: 6,
+      frozen: 'resources/video-edit-author/frozen/henji-layout/1.0.0',
+      modules: { 'henji-layout/text': 'text.mjs', 'henji-layout/flex': 'flex.mjs' },
+      types: { mount: 'henji-layout', license: 'Apache-2.0', source: 'frozen' },
+    },
   },
 }
 
@@ -59,6 +71,15 @@ export type AuthorLibraryVersions = Readonly<Record<string, string>>
 export const DEFAULT_AUTHOR_LIBRARY_VERSIONS: AuthorLibraryVersions = {
   three: '0.186.1',
   'opentype.js': '2.0.0',
+  'henji-layout': '1.0.0',
+}
+
+/** 未知版本由模块解析报错；已知版本的最低接口要求在所有导入路径共用。 */
+export function authorLibraryCompatibilityError(library: string, version: string, apiVersion = 4): string | undefined {
+  const release = AUTHOR_LIBRARIES[library]?.[version]
+  return release && apiVersion < release.minApiVersion
+    ? `内置库 ${library}@${version} 从作者接口 v${release.minApiVersion} 起可用，这一版按作者接口 v${apiVersion} 编译。请把源码另存为使用作者接口 v${release.minApiVersion} 的新版本，或移除此库导入；旧版本保持原样。`
+    : undefined
 }
 
 export interface ResolvedAuthorLibraryModule {
@@ -114,13 +135,13 @@ export function resolveAuthorLibraryModule(specifier: string, versions?: AuthorL
 }
 
 /** 说明符只在运行时才知道的动态 import 用这张表查找，规则与 `resolveAuthorLibraryModule` 相同。 */
-export function authorLibraryImportTable(versions?: AuthorLibraryVersions): { modules: Record<string, string>; directories: Array<[string, string]> } {
+export function authorLibraryImportTable(versions?: AuthorLibraryVersions, apiVersion = 4): { modules: Record<string, string>; directories: Array<[string, string]> } {
   const modules: Record<string, string> = {}
   const directories: Array<[string, string]> = []
   for (const library of Object.keys(AUTHOR_LIBRARIES)) {
     const version = authorLibraryVersion(library, versions)
     const release = version ? AUTHOR_LIBRARIES[library][version] : undefined
-    if (!version || !release) continue
+    if (!version || !release || authorLibraryCompatibilityError(library, version, apiVersion)) continue
     for (const [specifier, path] of Object.entries(release.modules)) modules[specifier] = authorLibraryUrl(library, version, path)
     for (const [prefix, directory] of Object.entries(release.directories ?? {})) directories.push([prefix, authorLibraryUrl(library, version, directory)])
   }
@@ -134,6 +155,6 @@ export function describeAuthorLibraries(versions?: AuthorLibraryVersions): strin
     const release = version ? AUTHOR_LIBRARIES[library][version] : undefined
     if (!release) return library
     const specifiers = [...Object.keys(release.modules), ...Object.keys(release.directories ?? {}).map(prefix => `${prefix}*`)]
-    return `${library}@${version}（${specifiers.join('、')}）`
+    return `${library}@${version}（${specifiers.join('、')}）（作者接口 v${release.minApiVersion}+）`
   }).join('；')
 }

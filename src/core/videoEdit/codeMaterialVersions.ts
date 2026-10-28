@@ -4,6 +4,7 @@ import { CodeMaterialError } from './codeMaterial/contract'
 import type { CodeAuthorApiVersion, CodeAuthorProgram as CodeMaterialProgram } from './codeAuthorProgram'
 import { addressCodeMaterialFiles, codeVersionContentKey, resolveCodeMaterialFiles, documentCodeSourceResolver, type CodeMaterialFiles, type CodeSourceResolver, type CodeComponentPin, type CodeFileReference } from './codeMaterial/sources'
 import { expandPinnedCodeComponents } from './codeMaterial/components'
+import { authorLibraryCompatibilityError } from './codeMaterial/authorLibraries'
 
 export type CodeSourceCompiler = (files: CodeMaterialFiles) => Promise<CodeMaterialProgram>
 export interface CodeMaterialDefinitionResult { definition: CodeMaterialDefinition; program: CodeMaterialProgram }
@@ -22,12 +23,17 @@ function versionLibraries(publication: CodeVersionPublication, program: CodeMate
   const explicit = explicitLibraries(publication)
   const supported = program.apiVersion >= CODE_AUTHOR_LIBRARIES_MIN_API_VERSION
   if (explicit && !supported) throw new CodeMaterialError('COMPATIBILITY', `内置库（${Object.keys(explicit).join('、')}）从作者接口 v${CODE_AUTHOR_LIBRARIES_MIN_API_VERSION} 起可用，这份源码编译出的是 v${program.apiVersion}：请按 v${CODE_AUTHOR_LIBRARIES_MIN_API_VERSION} 编写源码，或不再使用内置库。`)
+  for (const [library, version] of Object.entries(explicit ?? program.bundle.libraries ?? {})) {
+    const error = authorLibraryCompatibilityError(library, version, program.apiVersion)
+    if (error) throw new CodeMaterialError('COMPATIBILITY', error)
+  }
   if (explicit || !supported) return explicit
-  const used = { ...program.bundle.libraries, ...publication.inheritedLibraries }
+  const inherited = Object.fromEntries(Object.entries(publication.inheritedLibraries ?? {}).filter(([library, version]) => !authorLibraryCompatibilityError(library, version, program.apiVersion)))
+  const used = { ...program.bundle.libraries, ...inherited }
   return Object.keys(used).length ? used : undefined
 }
 /** 新代码的编译输入：按当前（或资产固定的）作者接口编译，内置库按明确给出或沿用的版本解析，其余按第一套。 */
-function compilation(files: CodeMaterialFiles, publication: CodeVersionPublication): CodeMaterialFiles {
+export function codeVersionCompilation(files: CodeMaterialFiles, publication: CodeVersionPublication): CodeMaterialFiles {
   const libraries = explicitLibraries(publication) ?? publication.inheritedLibraries
   return { ...files, apiVersion: publication.apiVersion ?? CODE_AUTHOR_API_VERSION, ...(libraries && Object.keys(libraries).length ? { libraries } : {}) }
 }
@@ -35,10 +41,10 @@ function compilation(files: CodeMaterialFiles, publication: CodeVersionPublicati
 export async function makeCodeMaterialDefinition(source: string | CodeMaterialFiles, compile: CodeSourceCompiler, publication: CodeVersionPublication, identity?: { id: string; folder?: string }): Promise<CodeMaterialDefinitionResult> {
   const addressed = await addressCodeMaterialFiles(source)
   const contents = resolveCodeMaterialFiles(addressed, documentCodeSourceResolver())
-  const program = await compile(compilation(expandPinnedCodeComponents(contents, publication.imports, documentCodeSourceResolver()), publication))
+  const program = await compile(codeVersionCompilation(expandPinnedCodeComponents(contents, publication.imports, documentCodeSourceResolver()), publication))
   const id = identity?.id ?? crypto.randomUUID(); const name = publication.name ?? program.name
-  const stored = await publication.write(id, name, contents, identity?.folder)
   const libraries = versionLibraries(publication, program)
+  const stored = await publication.write(id, name, contents, identity?.folder)
   const version = { id: crypto.randomUUID(), apiVersion: program.apiVersion, languageVersion: program.languageVersion, entry: addressed.entry, files: stored.files, ...(publication.project ? { project: publication.project } : {}), ...(publication.imports.length ? { imports: publication.imports } : {}), ...(libraries ? { libraries: { ...libraries } } : {}) }
   const definition = codeMaterialDefinitionSchema.parse({ id, name, ...(stored.folder ? { folder: stored.folder } : {}), defaultVersionId: version.id, versions: [version] })
   return { definition, program }

@@ -2,7 +2,7 @@ import { parse } from 'es-module-lexer/js'
 import type { CodeAuthorBundle } from '@/core/videoEdit/codeAuthorProgram'
 import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { resolveAuthorProjectImport } from '@/core/videoEdit/codeMaterial/authorModulePaths'
-import { AUTHOR_LIBRARIES, authorLibraryImportTable, describeAuthorLibraries, resolveAuthorLibraryModule, type AuthorLibraryVersions, type ResolvedAuthorLibraryModule } from '@/core/videoEdit/codeMaterial/authorLibraries'
+import { AUTHOR_LIBRARIES, authorLibraryVersion, authorLibraryCompatibilityError, authorLibraryImportTable, describeAuthorLibraries, resolveAuthorLibraryModule, type AuthorLibraryVersions, type ResolvedAuthorLibraryModule } from '@/core/videoEdit/codeMaterial/authorLibraries'
 import { CODE_AUTHOR_LIBRARIES_MIN_API_VERSION } from '@/core/videoEdit/codeMaterialPersistence'
 
 const BARE_SPECIFIER = /^(?![./]|[a-z][a-z0-9+.-]*:)/i
@@ -20,14 +20,12 @@ export function missingAuthorModuleMessage(specifier: string, importer: string |
 
 /** 内置库从作者接口 v5 起可用；更早的版本遇到内置库名明确拒绝，不静默放行一个记录不了版本的导入。 */
 const librariesAvailable = (apiVersion?: number): boolean => (apiVersion ?? 4) >= CODE_AUTHOR_LIBRARIES_MIN_API_VERSION
-function unavailableAuthorLibraryMessage(specifier: string, importer: string | undefined, apiVersion?: number): string {
-  return `${importer ?? '源码'} 导入了内置库 ${specifier}：内置库从作者接口 v${CODE_AUTHOR_LIBRARIES_MIN_API_VERSION} 起可用，这一版按作者接口 v${apiVersion ?? 4} 编译。请把源码另存为新版本后再使用内置库。`
-}
 /** 项目里找不到的说明符按内置库解析；解析不到或作者接口不支持时给出原因。 */
 export function resolveAuthorBuiltInImport(specifier: string, importer: string | undefined, files: Pick<CodeMaterialFiles, 'apiVersion' | 'libraries'>): { library: ResolvedAuthorLibraryModule } | { error: string } {
   const library = resolveAuthorLibraryModule(specifier, files.libraries)
   if (!library) return { error: missingAuthorModuleMessage(specifier, importer, files.libraries) }
-  return librariesAvailable(files.apiVersion) ? { library } : { error: unavailableAuthorLibraryMessage(specifier, importer, files.apiVersion) }
+  const error = authorLibraryCompatibilityError(library.library, library.version, files.apiVersion)
+  return error ? { error } : { library }
 }
 
 /** 项目根目录里与内置库同名的文件导入这个库名，解析到的是它自己；直接报出遮挡，不让它静默成自引用。 */
@@ -41,15 +39,17 @@ export function shadowedAuthorLibraryMessage(specifier: string, importer: string
  * import() 照常以拒绝的 Promise 报错并列出可用的内置库；其他说明符原样交给浏览器。
  */
 export function authorLibraryRuntimeResolver(importer: string, files: Pick<CodeMaterialFiles, 'apiVersion' | 'libraries'>): string {
-  const available = librariesAvailable(files.apiVersion)
-  const table = available ? authorLibraryImportTable(files.libraries) : { modules: {}, directories: [] }
+  const table = authorLibraryImportTable(files.libraries, files.apiVersion ?? 4)
   const message = (text: string): string[] => text.split('\u0000')
   const [before, after] = message(missingAuthorModuleMessage('\u0000', importer, files.libraries))
   // 作者接口不支持内置库时，内置库名给出版本原因，其余裸名照常报找不到。
-  const [lockedBefore, lockedAfter] = message(unavailableAuthorLibraryMessage('\u0000', importer, files.apiVersion))
-  const locked = available ? [] : Object.keys(AUTHOR_LIBRARIES)
+  const locked = Object.keys(AUTHOR_LIBRARIES).flatMap(library => {
+    const version = authorLibraryVersion(library, files.libraries)
+    const error = version && authorLibraryCompatibilityError(library, version, files.apiVersion)
+    return error ? [[library, error]] : []
+  })
   const fail = (head: string, tail: string): string => `return 'data:text/javascript,'+encodeURIComponent('throw new Error('+JSON.stringify(${JSON.stringify(head)}+s+${JSON.stringify(tail)})+')');`
-  return `(s)=>{const l=${JSON.stringify(table.modules)};if(Object.hasOwn(l,s))return l[s];for(const [p,b] of ${JSON.stringify(table.directories)}){const r=s.slice(p.length);if(s.startsWith(p)&&r&&!r.split('/').some(x=>x===''||x==='.'||x==='..'))return b+r;}if(${JSON.stringify(locked)}.some(n=>s===n||s.startsWith(n+'/'))){${fail(lockedBefore, lockedAfter)}}if(${BARE_SPECIFIER}.test(s)){${fail(before, after)}}return s;}`
+  return `(s)=>{const l=${JSON.stringify(table.modules)};if(Object.hasOwn(l,s))return l[s];for(const [p,b] of ${JSON.stringify(table.directories)}){const r=s.slice(p.length);if(s.startsWith(p)&&r&&!r.split('/').some(x=>x===''||x==='.'||x==='..'))return b+r;}for(const [n,e] of ${JSON.stringify(locked)})if(s===n||s.startsWith(n+'/'))return 'data:text/javascript,'+encodeURIComponent('throw new Error('+JSON.stringify(e)+')');if(${BARE_SPECIFIER}.test(s)){${fail(before, after)}}return s;}`
 }
 
 /** esbuild 产物里运行时才确定的 import(...) 套上同一个内置库查找，两条编译路径行为一致。 */
@@ -138,7 +138,7 @@ function usedAuthorLibraries(files: CodeMaterialFiles): Record<string, string> |
     for (const request of imports) {
       if (!request.specifier || !BARE_SPECIFIER.test(request.specifier) || resolveAuthorProjectImport(files, path, request.specifier)) continue
       const library = resolveAuthorLibraryModule(request.specifier, files.libraries)
-      if (library) used[library.library] = library.version
+      if (library && !authorLibraryCompatibilityError(library.library, library.version, files.apiVersion)) used[library.library] = library.version
     }
   }
   return Object.keys(used).length ? used : undefined

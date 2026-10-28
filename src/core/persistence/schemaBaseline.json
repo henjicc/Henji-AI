@@ -126,10 +126,10 @@
       "minReaderVersion": 1
     },
     "document.video_edit": {
-      "version": 37,
-      "fingerprint": "514e0aab6c3e0e4f520b863d4dd8c73105dd8ba8b187072454a7fc4f9615a8dd",
+      "version": 38,
+      "fingerprint": "36ae7d45be362b74a8c621e6dcc8072e8cb708e18ae00782a84df7218c836a07",
       "supportedFrom": 17,
-      "minReaderVersion": 37
+      "minReaderVersion": 38
     },
     "document.canvas": {
       "version": 1,
@@ -156,10 +156,10 @@
       "minReaderVersion": 1
     },
     "document.screen_recording": {
-      "version": 40,
-      "fingerprint": "b9dd68c8a43445f5ea1797854a67deb1b6c4b858f86654479a3a72548e8b3984",
+      "version": 41,
+      "fingerprint": "51d3878f3485627454f51803965bef0b970fd4038045a904530f2bbb996b5c8c",
       "supportedFrom": 19,
-      "minReaderVersion": 40
+      "minReaderVersion": 41
     },
     "project": {
       "version": 2,
@@ -174,16 +174,16 @@
       "minReaderVersion": 1
     },
     "code-version": {
-      "version": 4,
-      "fingerprint": "6c26c25a71fb628eda604b67b3a8c45f7e67cd50fb5416d55bf9d38471d4df3a",
+      "version": 5,
+      "fingerprint": "7fa108424fd6162244155be687d74bc473ff4b00415436192eb2aa1f5fdc8f5e",
       "supportedFrom": 1,
-      "minReaderVersion": 2
+      "minReaderVersion": 5
     },
     "code-author-api": {
-      "version": 5,
-      "fingerprint": "152e6dbb754920d70874b455dfa2e67f944f9c213afd1410f6ae57cc6c879114",
+      "version": 6,
+      "fingerprint": "7f986ac7b0dcbceba5dcd97e87abd340c0a0b20dfb7220878eb5e1d6ccfc8443",
       "supportedFrom": 4,
-      "minReaderVersion": 5
+      "minReaderVersion": 6
     },
     "code-component": {
       "version": 1,
@@ -192,10 +192,10 @@
       "minReaderVersion": 1
     },
     "code-asset": {
-      "version": 9,
-      "fingerprint": "5de67654575e4a1661db8fe35aa485de6cfc35cccf57ba5bd346ca50a530b891",
+      "version": 10,
+      "fingerprint": "6ec4eb7dc60de5734cbe11d86b84a431c3e9028f8000e78e723bd2b1a25de672",
       "supportedFrom": 6,
-      "minReaderVersion": 7
+      "minReaderVersion": 10
     },
     "settings": {
       "version": 16,

@@ -112,5 +112,22 @@ it('JS 直出路径按工程记录的版本解析，未登记的裸名列出可�
 it('JS 直出路径的 v4 源码导入内置库时明确拒绝，也不记录库版本', () => {
   const legacy = directAuthorBundle({ entry: 'main.js', files: { 'main.js': 'import * as T from "three"; export default T;' } })!
   expect(legacy.libraries).toBeUndefined()
-  expect(() => rewriteAuthorModule(legacy.modules!, 'main.js', path => path)).toThrow('main.js 导入了内置库 three：内置库从作者接口 v5 起可用，这一版按作者接口 v4 编译')
+  expect(() => rewriteAuthorModule(legacy.modules!, 'main.js', path => path)).toThrow(/three@.*从作者接口 v5 起可用.*作者接口 v4/)
+})
+
+it('排版库在静态、字面动态和运行时动态导入共用逐库 v6 门槛，v5 的旧库保持可用', async () => {
+  for (const source of ['import { layoutText } from "henji-layout/text";', 'export const load = () => import("henji-layout/flex");']) {
+    const files = { entry: 'main.js', apiVersion: 5 as const, files: { 'main.js': source } }
+    expect(() => rewriteAuthorModule(files, 'main.js', path => path)).toThrow(/作者接口 v6.*另存为.*新版本/)
+    expect(rewriteAuthorModule({ ...files, apiVersion: 6 }, 'main.js', path => path)).toContain('henji-media://author-lib/henji-layout/1.0.0/')
+  }
+  const { authorLibraryRuntimeResolver } = await import('./videoEditAuthorModules')
+  for (const apiVersion of [4, 5, 6] as const) {
+    const resolve = new Function(`return ${authorLibraryRuntimeResolver('main.js', { apiVersion })}`)() as (name: string) => string
+    for (const name of ['henji-layout/text', 'henji-layout/flex']) {
+      if (apiVersion < 6) expect(decodeURIComponent(resolve(name))).toMatch(/作者接口 v6.*另存为.*新版本/)
+      else expect(resolve(name)).toContain('henji-media://author-lib/henji-layout/1.0.0/')
+    }
+    if (apiVersion === 5) expect(resolve('three')).toContain('/three/0.186.1/')
+  }
 })

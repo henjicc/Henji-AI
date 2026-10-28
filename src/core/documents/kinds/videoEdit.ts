@@ -130,10 +130,13 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   // 31：序列 motionBlur 改为总开关（同时管代码图层的位姿模糊），片段新增 motionBlur:false；旧程序会把关掉的总开关当成代码图层照常模糊，提高到 31。
   // 37：片段新增 enabled:false（停用），旧程序忽略它会照常播放与导出停用的片段；新增片子数据 scenes 与代码参数值 {kind:'scene'}，
   // 代码版本可写作者接口 v5 与内置库 libraries，旧程序读不懂这些（作者接口最高只认 v4），提高到 37，让旧程序明确提示升级。
-  minReaderVersion: 37,
+  // 38：作者接口 v6 可使用排版库；旧程序无法执行，最低可读版本同步提高。
+  minReaderVersion: 38,
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 37 → 38：只接受新作者接口；旧源码、apiVersion 与固定库版本原样保留。
+    37: content => structuredClone(content),
     // 36 → 37：片段新增可选 enabled:false，文档新增可选片子数据 scenes，代码参数可引用片子数据，代码版本新增可选内置库 libraries 并接受作者接口 v5；
     // 旧内容不含这些，原样有效。
     36: content => structuredClone(content),

@@ -1,9 +1,9 @@
 import { addressCodeMaterialFiles, documentCodeSourceResolver, type CodeMaterialFiles } from './codeMaterial/sources'
 import { testCodeSource } from './codeMaterial/sourceTestFixtures'
 import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { testAuthorBundle, testAuthorProgram } from '../../features/videoEdit/engine/videoEditAuthorTestFixtures'
-import { codeMaterialDefinitionsSchema } from './codeMaterialPersistence'
+import { CODE_AUTHOR_API_VERSION, codeMaterialDefinitionsSchema } from './codeMaterialPersistence'
 import { appendCodeMaterialVersion, makeCodeMaterialDefinition, type CodeSourceCompiler, type CodeVersionPublication } from './codeMaterialVersions'
 import { videoEditDocumentSchema } from './document'
 import { codeVersionContentKey } from './codeMaterial/sources'
@@ -12,18 +12,18 @@ import { GOLDEN_SCENE_DECLARATION } from './scene/sceneTestFixtures'
 const compile = async (source: CodeMaterialFiles) => testAuthorProgram(testAuthorBundle(source))
 const publication: CodeVersionPublication = { imports: [], async write(id, _name, files, folder) { return { folder: folder ?? id, files: (await addressCodeMaterialFiles(files)).files } } }
 const source = (defaultValue = .5) => `export default {name:"原生素材",kind:"generator",width:3840,height:2160,durationSeconds:10,params:[{key:"amount",type:"number",title:"数量",default:${defaultValue},min:0,max:1,step:.01}],draw(ctx,t,p){ctx.globalAlpha=p.amount;ctx.fillRect(t,0,100,100);}}`
-describe('作者接口 v5 与内置库接通', () => {
-  it('新代码按当前作者接口编译并记录为 v5，带上实际导入的内置库', async () => {
+describe('作者接口与内置库版本保持一致', () => {
+  it('新代码按当前作者接口编译并记录，带上实际导入的内置库', async () => {
     const inputs: CodeMaterialFiles[] = []
     // 模拟打包器报告源码导入了 three。
     const importsThree: CodeSourceCompiler = async files => { inputs.push(files); const program = await compile(files); return { ...program, bundle: { ...program.bundle, libraries: { three: '0.186.1' } } } }
     const { definition } = await makeCodeMaterialDefinition(source(), importsThree, publication)
-    expect(inputs[0]).toMatchObject({ apiVersion: 5 }); expect(inputs[0]).not.toHaveProperty('libraries')
-    expect(definition.versions[0]).toMatchObject({ apiVersion: 5, libraries: { three: '0.186.1' } })
+    expect(inputs[0]).toMatchObject({ apiVersion: CODE_AUTHOR_API_VERSION }); expect(inputs[0]).not.toHaveProperty('libraries')
+    expect(definition.versions[0]).toMatchObject({ apiVersion: inputs[0].apiVersion, libraries: { three: '0.186.1' } })
     // 追加版本按前一版记录的库版本解析，并照旧记录。
     const next = await appendCodeMaterialVersion(definition, source(.6), importsThree, documentCodeSourceResolver(), publication)
-    expect(inputs.at(-1)).toMatchObject({ apiVersion: 5, libraries: { three: '0.186.1' } })
-    expect(next.definition.versions.find(version => version.id === next.versionId)).toMatchObject({ apiVersion: 5, libraries: { three: '0.186.1' } })
+    expect(inputs.at(-1)).toMatchObject({ apiVersion: CODE_AUTHOR_API_VERSION, libraries: { three: '0.186.1' } })
+    expect(next.definition.versions.find(version => version.id === next.versionId)).toMatchObject({ apiVersion: inputs.at(-1)?.apiVersion, libraries: { three: '0.186.1' } })
     // 没导入内置库的新代码不记录 libraries。
     expect((await makeCodeMaterialDefinition(source(), compile, publication)).definition.versions[0]).not.toHaveProperty('libraries')
   })
@@ -39,10 +39,10 @@ describe('作者接口 v5 与内置库接通', () => {
     expect(inputs[1]).toMatchObject({ apiVersion: 4 })
     const kept = appended.definition.versions.find(version => version.id === legacy.id)!
     expect(kept).toEqual(legacy); expect(codeVersionContentKey(kept)).toBe(key)
-    expect(appended.definition.versions.find(version => version.id === appended.versionId)?.apiVersion).toBe(5)
+    expect(appended.definition.versions.find(version => version.id === appended.versionId)?.apiVersion).toBe(appended.program.apiVersion)
   })
 
-  it('候选还原到某个 v4 版本的原源码时得到新的 v5 版本，程序与记录的作者接口一致', async () => {
+  it('候选还原到某个 v4 版本的原源码时得到当前接口的新版本，程序与记录的作者接口一致', async () => {
     const { definition } = await makeCodeMaterialDefinition(source(), compile, { ...publication, apiVersion: 4 })
     const legacy = definition.versions[0]
     // 先改一版再改回原源码：与 v4 那版源码完全相同。
@@ -51,16 +51,16 @@ describe('作者接口 v5 与内置库接通', () => {
     const version = restored.definition.versions.find(value => value.id === restored.versionId)!
     expect(restored.versionId).not.toBe(legacy.id)
     // 登记元数据时按这条核对（videoEditCodeState 的“源码语言版本与检查结果不一致”）。
-    expect(version.apiVersion).toBe(5); expect(restored.program.apiVersion).toBe(version.apiVersion)
+    expect(version.apiVersion).toBe(CODE_AUTHOR_API_VERSION); expect(restored.program.apiVersion).toBe(version.apiVersion)
     expect(codeVersionContentKey(version)).not.toBe(codeVersionContentKey(legacy))
-    // 同一份 v5 源码再交一次复用刚才那一版。
+    // 源码和作者接口均未变化时，复用同一不可变版本。
     const again = await appendCodeMaterialVersion(restored.definition, source(), compile, documentCodeSourceResolver(), publication)
     expect(again.versionId).toBe(restored.versionId)
   })
 
   it('作者接口 v5 的代码可以声明片子数据参数；固定为 v4 时同一声明不通过', async () => {
     const film = `export default {name:"片子",kind:"generator",params:[{key:"film",type:"scene",title:"片子数据",schema:${JSON.stringify(GOLDEN_SCENE_DECLARATION)}}],draw(){}}`
-    const { definition, program } = await makeCodeMaterialDefinition(film, compile, publication)
+    const { definition, program } = await makeCodeMaterialDefinition(film, compile, { ...publication, apiVersion: 5 })
     expect(definition.versions[0].apiVersion).toBe(5)
     expect(program.parameters[0]).toMatchObject({ key: 'film', type: 'scene', default: null })
     await expect(makeCodeMaterialDefinition(film, compile, { ...publication, apiVersion: 4 })).rejects.toThrow('film.type')
@@ -68,6 +68,16 @@ describe('作者接口 v5 与内置库接通', () => {
 })
 
 describe('剪辑源码文件引用契约', () => {
+  it('显式指定 v6 库却按 v5 编译时在写入前拒绝；旧版本升级不修改历史记录', async () => {
+    const write = vi.fn(publication.write)
+    await expect(makeCodeMaterialDefinition(source(), compile, { ...publication, write, apiVersion: 5, libraries: { 'henji-layout': '1.0.0' } })).rejects.toThrow(/作者接口 v6/)
+    expect(write).not.toHaveBeenCalled()
+    const legacy = await makeCodeMaterialDefinition(source(), compile, { ...publication, apiVersion: 5, libraries: { three: '0.186.1' } })
+    const before = structuredClone(legacy.definition)
+    const next = await appendCodeMaterialVersion(legacy.definition, source(.7), compile, documentCodeSourceResolver(), publication)
+    expect(next.definition.versions[0]).toEqual(before.versions[0])
+    expect(legacy.definition).toEqual(before)
+  })
   it('内置库只在新版本也编译为 v5 时沿用；明确带库却编出 v4 时报出可照着改的原因', async () => {
     // 源码里带 /*v5*/ 的按作者接口 v5 编译，其余按 v4。
     const byApi: CodeSourceCompiler = async files => ({ ...await compile(files), apiVersion: files.files[files.entry].includes('/*v5*/') ? 5 : 4 })

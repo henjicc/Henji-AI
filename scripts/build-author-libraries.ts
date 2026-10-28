@@ -3,7 +3,8 @@
  * 生成代码效果的内置第三方库：resources/author-libs/<库名>/<版本>/（不入 Git，构建时生成）。
  *
  * 库名、版本、入口、类型与许可只登记在 src/core/videoEdit/codeMaterial/authorLibraries.ts；本脚本只决定从
- * npm 别名包 `henji-author-<库名>-<版本>` 拷哪些文件。库内部的裸名按同一份登记改成相对路径，再压缩。
+ * npm 别名包 `henji-author-<库名>-<版本>` 拷哪些文件。自家库只核验、复制冻结目录，绝不重新编译最新源码。
+ * 第三方库内部的裸名按同一份登记改成相对路径，再压缩。
  * 渲染 Worker 里没有 import map，产物残留任何裸名或 http(s) 导入都无法加载，所以发现即失败。
  * 随库的第三方组件只登记在 scripts/third-party-licenses/author-libs/components.json，许可全文写进各版本的 NOTICE.txt。
  * 作者类型检查用的声明打成同目录的 types.json，由源码检查 Worker 按需读取。
@@ -17,6 +18,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import esbuild from 'esbuild-wasm'
 import { parse } from 'es-module-lexer/js'
+import { readFrozenAuthorRelease } from './lib/frozenAuthorLibraries.ts'
 import {
   AUTHOR_LIBRARIES,
   AUTHOR_LIBRARY_LICENSES,
@@ -166,7 +168,7 @@ function typePackage(library: string, version: string, release: AuthorLibraryRel
     files['package.json'] = fs.readFileSync(manifestFile, 'utf8')
     files.LICENSE = fs.readFileSync(path.join(directory, 'LICENSE'), 'utf8')
     for (const file of listFiles(directory, /\.d\.ts$/, relative => relative === 'node_modules')) files[posix(path.relative(directory, file))] = fs.readFileSync(file, 'utf8')
-  } else {
+  } else if (types.source === 'file') {
     files['package.json'] = JSON.stringify({ name: types.mount, version, types: 'index.d.ts' })
     files['index.d.ts'] = fs.readFileSync(path.join(root, types.file), 'utf8')
   }
@@ -185,9 +187,23 @@ function noticeText(key: string, present: VendoredComponent[]): string {
 
 async function buildRelease(library: string, version: string, destination: string): Promise<{ outputs: string[]; bytes: number; excluded: string[] }> {
   const key = `${library}@${version}`
+  const release = AUTHOR_LIBRARIES[library][version]
+  if (release.frozen) {
+    const source = path.join(root, release.frozen)
+    const manifest = readFrozenAuthorRelease(source, library, version)
+    const written = [...Object.keys(manifest.outputs), 'release.json']
+    for (const entry of [...Object.values(release.modules), AUTHOR_LIBRARY_TYPES_FILE, 'LICENSE']) if (!manifest.outputs[entry]) throw new Error(`${key} 冻结产物缺少 ${entry}`)
+    fs.mkdirSync(destination, { recursive: true })
+    let bytes = 0
+    for (const file of written) {
+      fs.mkdirSync(path.dirname(path.join(destination, file)), { recursive: true })
+      fs.copyFileSync(path.join(source, file), path.join(destination, file))
+      bytes += fs.statSync(path.join(source, file)).size
+    }
+    return { outputs: written.map(file => `${library}/${version}/${file}`), bytes, excluded: [] }
+  }
   const plan = PLANS[key]
   if (!plan) throw new Error(`${key} 已登记但构建脚本没有拷贝计划`)
-  const release = AUTHOR_LIBRARIES[library][version]
   assertAllowedLicense(key, release.license)
   const source = packageDirectory(authorLibraryPackageName(library, version))
   const manifestFile = path.join(source, 'package.json')
@@ -269,9 +285,16 @@ function inputsHash(): string {
   for (const tool of ['esbuild-wasm', 'es-module-lexer']) add(tool, path.join(packageDirectory(tool), 'package.json'))
   for (const [library, releases] of Object.entries(AUTHOR_LIBRARIES)) {
     for (const [version, release] of Object.entries(releases)) {
+      if (release.frozen) {
+        const source = path.join(root, release.frozen)
+        const manifest = readFrozenAuthorRelease(source, library, version)
+        add(`${library}@${version} frozen`, path.join(source, 'release.json'))
+        for (const file of Object.keys(manifest.outputs)) add(`${library}@${version}/${file}`, path.join(source, file))
+        continue
+      }
       add(`${library}@${version}`, path.join(packageDirectory(authorLibraryPackageName(library, version)), 'package.json'))
       if (release.types.source === 'package') add(`${library}@${version} types`, path.join(packageDirectory(authorLibraryTypesPackageName(library, version)), 'package.json'))
-      else add(`${library}@${version} types`, path.join(root, release.types.file))
+      else if (release.types.source === 'file') add(`${library}@${version} types`, path.join(root, release.types.file))
     }
   }
   return hash.digest('hex')
@@ -280,6 +303,9 @@ function inputsHash(): string {
 /** 指纹相同还要产物齐全：手动删掉或被清理掉的文件要重建，不能当作最新。 */
 function upToDate(stamp: string): boolean {
   try {
+    for (const [library, releases] of Object.entries(AUTHOR_LIBRARIES)) for (const [version, release] of Object.entries(releases)) {
+      if (release.frozen) readFrozenAuthorRelease(path.join(outputRoot, library, version), library, version)
+    }
     const recorded = JSON.parse(fs.readFileSync(stampFile, 'utf8')) as { hash?: string; files?: string[] }
     return recorded.hash === stamp && Array.isArray(recorded.files) && recorded.files.length > 0 && recorded.files.every(file => fs.statSync(path.join(outputRoot, file)).isFile())
   } catch {

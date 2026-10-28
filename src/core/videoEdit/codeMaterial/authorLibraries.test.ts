@@ -19,7 +19,9 @@ it('未登记的库、子路径与越出登记目录的路径都不解析', () =
     expect(resolveAuthorLibraryModule(specifier), specifier).toBeUndefined()
   }
   expect(describeAuthorLibraries()).toContain('three@0.186.1（three、three/webgpu、three/tsl、three/addons/*、three/examples/jsm/*）')
-  expect(authorLibraryImportTable().directories).toContainEqual(['three/addons/', 'henji-media://author-lib/three/0.186.1/examples/jsm/'])
+  expect(authorLibraryImportTable().modules).toEqual({})
+  expect(authorLibraryImportTable().directories).toEqual([])
+  expect(authorLibraryImportTable(undefined, 5).directories).toContainEqual(['three/addons/', 'henji-media://author-lib/three/0.186.1/examples/jsm/'])
 })
 
 describe('追加新版本与改默认版本', () => {
@@ -34,6 +36,6 @@ describe('追加新版本与改默认版本', () => {
     expect(resolveAuthorLibraryModule('three', { three: '0.186.1' })?.version).toBe('0.186.1')
     expect(resolveAuthorLibraryModule('three')?.version).toBe('0.186.1')
     expect(resolveAuthorLibraryModule('three/addons/math/SimplexNoise.js', {})?.version).toBe('0.186.1')
-    expect(authorLibraryImportTable({ three: '0.200.0' }).modules.three).toBe('henji-media://author-lib/three/0.200.0/build/three.module.js')
+    expect(authorLibraryImportTable({ three: '0.200.0' }, 5).modules.three).toBe('henji-media://author-lib/three/0.200.0/build/three.module.js')
   })
 })

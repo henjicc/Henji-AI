@@ -93,10 +93,20 @@ it('TS 路径同样报出同名项目文件遮住内置库', async () => {
 })
 
 it('作者接口 v4 的源码导入内置库时明确拒绝，不静默放行一个记录不了版本的导入', async () => {
-  await expect(bundleAuthorFiles({ entry: 'main.ts', files: { 'main.ts': 'import * as T from "three"; export default T;' } }, build)).rejects.toThrow('内置库从作者接口 v5 起可用，这一版按作者接口 v4 编译')
+  await expect(bundleAuthorFiles({ entry: 'main.ts', files: { 'main.ts': 'import * as T from "three"; export default T;' } }, build)).rejects.toThrow(/three@.*从作者接口 v5 起可用.*作者接口 v4/)
   const runtime = await bundleAuthorFiles({ entry: 'main.ts', apiVersion: 4, files: { 'main.ts': 'export const load = (name: string) => import(name); export default { name: "x", draw() {} };' } }, build)
   const call = /import\((\(\(s\)=>\{[\s\S]*?return s;\}\))\(name\)\)/.exec(runtime.code)
   const resolve = new Function(`return ${call![1]}`)() as (specifier: string) => string
-  expect(decodeURIComponent(resolve('three/webgpu'))).toContain('内置库从作者接口 v5 起可用')
+  expect(decodeURIComponent(resolve('three/webgpu'))).toMatch(/three@.*从作者接口 v5 起可用/)
   expect(decodeURIComponent(resolve('lodash'))).toContain('找不到模块 lodash')
+})
+
+it('TS 打包与原生模块路径使用相同的排版库 v6 门槛', async () => {
+  for (const source of ['import { layoutText } from "henji-layout/text"; export default { name: "标题", draw() { return layoutText("a", {}); } };', 'export const load = () => import("henji-layout/flex"); export default { name: "标题", draw() {} };']) {
+    const files = { entry: 'main.ts', files: { 'main.ts': source } }
+    await expect(bundleAuthorFiles({ ...files, apiVersion: 5 }, build)).rejects.toThrow(/作者接口 v6/)
+    const result = await bundleAuthorFiles({ ...files, apiVersion: 6 }, build)
+    expect(result.code).toContain('henji-media://author-lib/henji-layout/1.0.0/')
+    expect(result.libraries).toEqual({ 'henji-layout': '1.0.0' })
+  }
 })

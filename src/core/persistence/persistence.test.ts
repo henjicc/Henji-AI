@@ -23,11 +23,33 @@ import { createDefaultLlmConfig } from '../llm/defaults'
 import { migrateEmbeddedVideoEditMotionBlurMaster, migrateVideoEditMotionBlurMaster } from '../videoEdit/motionBlurMigration'
 import { parseGitCodeLocation } from '../storage/gitCodeLocation'
 
+it('v6 排版库的嵌套格式拒绝旧读者，逐版本迁移保留旧代码接口与库版本', () => {
+  const read = (id: string, version: number): Record<string, unknown> => JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v${version}.json`, 'utf8')) as Record<string, unknown>
+  for (const [id, previous] of [['code-author-api', 5], ['code-version', 4], ['document.video_edit', 37], ['document.screen_recording', 40], ['code-asset', 9]] as const) {
+    const format = PERSISTENCE_FORMATS.find(format => format.id === id)!
+    const old = read(id, previous)
+    const input = id.startsWith('document.') ? old.content : old
+    const original = structuredClone(input)
+    const upgraded = upgradePersistenceContent(format, input, previous)
+    expect(input).toEqual(original)
+    if (id === 'code-asset') expect((upgraded as { sourceVersion: unknown }).sourceVersion).toEqual(old.sourceVersion)
+    else expect(upgraded).toEqual(original)
+    const latest = read(id, format.version)
+    const content = id.startsWith('document.') ? latest.content : latest
+    expect(format.schema.safeParse(content).success).toBe(true)
+    const minimum = id.startsWith('document.') ? Number(latest.kindMinReaderVersion) : format.minReaderVersion ?? format.version
+    expect(() => upgradePersistenceContent({ ...format, version: previous }, content, format.version, undefined, minimum)).toThrowError(expect.objectContaining({ code: 'newer-version' }))
+  }
+  const versionFormat = PERSISTENCE_FORMATS.find(format => format.id === 'code-version')!
+  const record = read('code-version', versionFormat.version)
+  expect(record.libraries).toMatchObject({ 'henji-layout': '1.0.0' })
+  expect(versionFormat.schema.safeParse({ ...record, apiVersion: 5 }).success).toBe(false)
+})
+
 it('工程入口元数据是可选增量；保留旧记录并读回新黄金样本的完整闭包', () => {
   const format = PERSISTENCE_FORMATS.find(value => value.id === 'code-version')!
   const old = JSON.parse(fs.readFileSync('tests/fixtures/persistence/code-version/v2.json', 'utf8'))
   expect(upgradePersistenceContent(format, old, 2)).toEqual(old)
-  expect(format.minReaderVersion).toBe(2)
   const current = JSON.parse(fs.readFileSync('tests/fixtures/persistence/code-version/v3.json', 'utf8'))
   expect(format.schema.parse(current)).toEqual(current)
   expect(current.project).toEqual({ commit: 'a'.repeat(40), entry: 'entries/title.ts' })

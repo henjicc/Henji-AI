@@ -9,7 +9,7 @@ import { assetCodeSourceResolver, rememberCodeAssetSources } from '@/core/videoE
 import { prepareProjectCodePublication, prepareCodeVersionPublication } from './videoEditCodeStorage'
 import { addressCodeMaterialFiles, loadCodeSourceReferences, codeFilesFromInput, componentFileReferences, verifyCodeSourceReferences, documentCodeSourceResolver, resolveCodeMaterialFiles, type CodeFileReference } from '@/core/videoEdit/codeMaterial/sources'
 import { createLogger } from '@/core/logging'
-import { appendCodeMaterialVersion, makeCodeMaterialDefinition } from '@/core/videoEdit/codeMaterialVersions'
+import { appendCodeMaterialVersion, makeCodeMaterialDefinition, codeVersionCompilation } from '@/core/videoEdit/codeMaterialVersions'
 import { validateCodeMaterialParameters } from '@/core/videoEdit/codeMaterial/parameters'
 import { isCodeImageReference, isCodeAudioReference } from '@/core/videoEdit/codeMaterial/contract'
 import { createVideoEditSequence, videoEditComposition, videoEditDocumentSchema } from '@/core/videoEdit/document'
@@ -112,7 +112,7 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
       // 代码资产按它记录的作者接口与内置库重建，v4 资产导入后仍是 v4。
       const pinned = publication ? { apiVersion: publication.asset.sourceVersion.apiVersion as CodeAuthorApiVersion } : {}
       const publicationState = { ...prepared, ...pinned, ...(libraries ? { libraries } : {}) }
-      const typeCheck = typeReports ? startVideoEditCodeTypeCheck(contents, publicationState.imports, typeAbort.signal) : undefined
+      const typeCheck = typeReports ? startVideoEditCodeTypeCheck(codeVersionCompilation(contents, publicationState), publicationState.imports, typeAbort.signal) : undefined
       if (typeCheck) typeChecks.push(typeCheck)
       const { definition, program } = await withVideoEditCodeTypeContext(() => makeCodeMaterialDefinition(contents, source => compileVideoEditCode(source, controller.signal), publicationState), typeCheck ? [typeCheck] : [], controller.signal)
       controller.signal.throwIfAborted()
@@ -239,8 +239,9 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
       if (entry && (input.files !== undefined || input.source !== undefined || input.entry !== undefined)) throw new Error('工程型素材从 project_commit（默认 HEAD）解析同一入口，不接受 source/files/entry。')
       const project = entry ? await prepareProjectCodePublication(projectId, entry, input.projectCommit) : undefined
       const contents = project?.contents ?? codeFilesFromInput(input)
-      const publicationState = project?.publication ?? await prepareCodeVersionPublication(projectId, contents, undefined, undefined, createdFiles)
-      const typeCheck = typeReports ? startVideoEditCodeTypeCheck(contents, publicationState.imports, typeAbort.signal) : undefined
+      const prepared = project?.publication ?? await prepareCodeVersionPublication(projectId, contents, undefined, undefined, createdFiles)
+      const publicationState = { ...prepared, inheritedLibraries: prepared.inheritedLibraries ?? definition.versions.find(version => version.id === definition.defaultVersionId)?.libraries }
+      const typeCheck = typeReports ? startVideoEditCodeTypeCheck(codeVersionCompilation(contents, publicationState), publicationState.imports, typeAbort.signal) : undefined
       if (typeCheck) typeChecks.push(typeCheck)
       const result = await withVideoEditCodeTypeContext(() => appendCodeMaterialVersion(definition, contents, source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver(), publicationState), typeCheck ? [typeCheck] : [], controller.signal)
       controller.signal.throwIfAborted()

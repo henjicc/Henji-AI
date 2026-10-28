@@ -174,6 +174,7 @@ function main(argv = process.argv.slice(2)) {
   options.compatibilityStart = options['compatibility-start']
   if ((options.devBreak || options.restoreSupport || options.reason || options.waiveBefore || options.init || options.frameworkAdoption || options.compatibilityStart) && !options.write) throw new Error('登记命令必须通过 persistence:baseline 执行。')
   if (options.waiveBefore && !options.devBreak) throw new Error('--waive-before 只允许和 --dev-break、--reason 一起使用。')
+  loadTypeScript('scripts/lib/frozenAuthorLibraries.ts').validateFrozenAuthorHistory(ROOT)
   const formats = snapshot()
   let baseline
   if (options.init) {

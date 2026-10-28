@@ -1,6 +1,6 @@
 import ts from 'typescript'
 import { resolveAuthorProjectImport } from '@/core/videoEdit/codeMaterial/authorModulePaths'
-import { AUTHOR_LIBRARIES, resolveAuthorLibraryModule } from '@/core/videoEdit/codeMaterial/authorLibraries'
+import { AUTHOR_LIBRARIES, authorLibraryCompatibilityError, resolveAuthorLibraryModule } from '@/core/videoEdit/codeMaterial/authorLibraries'
 import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import type { CodeTypeCheckResult, CodeTypeDiagnostic } from '@/core/videoEdit/codeMaterial/typeDiagnostics'
 
@@ -169,22 +169,29 @@ export function createAuthorTypeChecker(environment: AuthorTypeEnvironment): Aut
   const read = (name: string): string | undefined => name === ENV.untypedLibrary ? untyped.text : texts.get(name)?.text ?? fixed.get(name) ?? mountedFile(name)?.text
   /** 源码导入了哪个内置库就挂哪个库的类型，版本按代码版本记录。 */
   const mountLibraries = (files: CodeMaterialFiles): void => {
+    const wanted = new Set<string>()
     for (const [path, text] of Object.entries(files.files)) {
       if (!CODE_FILE.test(path)) continue
       for (const { fileName } of ts.preProcessFile(text, true, true).importedFiles) {
         if (resolveAuthorProjectImport(files, path, fileName)) continue
         const library = resolveAuthorLibraryModule(fileName, files.libraries)
+        if (library && authorLibraryCompatibilityError(library.library, library.version, files.apiVersion)) continue
+        if (library) wanted.add(library.library)
         const entry = library && mounted.get(library.library)
         // 上次没读到类型包的库每次检查都再问一次环境，由环境决定何时重试。
         if (!library || entry && entry.version === library.version && entry.types) continue
         mounted.set(library.library, { version: library.version, types: environment.libraryTypes?.(library.library, library.version) })
       }
     }
-    const text = untypedLibraries([...mounted].filter(([, entry]) => !entry.types).map(([library, entry]): [string, string] => [library, entry.version]))
+    for (const library of mounted.keys()) if (!wanted.has(library)) mounted.delete(library)
+    const text = untypedLibraries([...mounted].filter(([library, entry]) => !entry.types && !AUTHOR_LIBRARIES[library][entry.version].frozen).map(([library, entry]): [string, string] => [library, entry.version]))
     if (text !== untyped.text) untyped = { text, version: untyped.version + 1 }
   }
   const moduleHost: ts.ModuleResolutionHost = { fileExists: name => read(name) !== undefined, readFile: read }
-  const host: ts.LanguageServiceHost = {
+  const host: ts.LanguageServiceHost & Pick<ts.CompilerHost, 'hasInvalidatedResolutions'> = {
+    getProjectVersion: () => String(revision),
+    // 源码不变也可能切换作者接口或固定库版本；模块解析不能复用前一套挂载的结果。
+    hasInvalidatedResolutions: () => true,
     getCompilationSettings: () => OPTIONS,
     getScriptFileNames: () => [...roots, ENV.webgpu, ENV.globals, ENV.modules, ENV.untypedLibrary],
     getScriptVersion: name => name === ENV.untypedLibrary ? `untyped@${untyped.version}` : mountedFile(name)?.version ?? String(texts.get(name)?.version ?? 0),
@@ -204,7 +211,7 @@ export function createAuthorTypeChecker(environment: AuthorTypeEnvironment): Aut
       if (target) return { resolvedModule: extension ? { resolvedFileName: AUTHOR_ROOT + target, extension, isExternalLibraryImport: false } : undefined }
       // 项目里没有才查内置库，与打包器同一顺序；没随包的子路径（如被排除的加载器）照实报找不到模块。
       const library = resolveAuthorLibraryModule(literal.text, current.libraries)
-      if (!library) return { resolvedModule: undefined }
+      if (!library || authorLibraryCompatibilityError(library.library, library.version, current.apiVersion)) return { resolvedModule: undefined }
       const types = mounted.get(library.library)?.types
       if (!types) return { resolvedModule: undefined }
       if (!types.modules.includes(library.path)) return { resolvedModule: undefined }
@@ -214,6 +221,7 @@ export function createAuthorTypeChecker(environment: AuthorTypeEnvironment): Aut
   const service = ts.createLanguageService(host, ts.createDocumentRegistry())
   return {
     check(files, report) {
+      revision++
       const started = performance.now()
       const shifted = new Map<string, Insertion[]>()
       const next = new Map<string, string>()
@@ -240,10 +248,24 @@ export function createAuthorTypeChecker(environment: AuthorTypeEnvironment): Aut
         if (!program?.getSourceFile(name) || leadingPragma(original, 'ts-nocheck') || /\.[cm]?jsx?$/.test(path) && !leadingPragma(original, 'ts-check')) continue
         checkedFiles.push(path)
         const position = lineColumn(original)
+        const importErrors: Array<{ start: number; end: number }> = []
+        for (const request of ts.preProcessFile(original, true, true).importedFiles) {
+          if (resolveAuthorProjectImport(files, path, request.fileName)) continue
+          const library = resolveAuthorLibraryModule(request.fileName, files.libraries)
+          const error = library && (authorLibraryCompatibilityError(library.library, library.version, files.apiVersion)
+            ?? (AUTHOR_LIBRARIES[library.library][library.version].frozen && !mounted.get(library.library)?.types ? `内置库 ${library.library}@${library.version} 的类型声明未加载，无法检查此导入。请恢复随应用发行的 types.json 后重试。` : undefined))
+          if (error) {
+            importErrors.push({ start: request.pos, end: request.end })
+            const a = position(request.pos), b = position(request.end)
+            diagnostics.push({ code: 2307, message: error, span: { file: path, start: request.pos, end: request.end, startLine: a.line, startColumn: a.column, endLine: b.line, endColumn: b.column } })
+          }
+        }
         for (const diagnostic of [...service.getSyntacticDiagnostics(name), ...service.getSemanticDiagnostics(name)]) {
           if (diagnostic.category !== ts.DiagnosticCategory.Error || IGNORED_CODES.has(diagnostic.code)) continue
           const insertions = shifted.get(path) ?? []
           const start = originalOffset(diagnostic.start ?? 0, insertions), end = Math.max(start, originalOffset((diagnostic.start ?? 0) + (diagnostic.length ?? 0), insertions))
+          // TS 的模块不存在提示覆盖不了版本修复方式；同一导入只保留能指导作者修复的提示。
+          if (diagnostic.code === 2307 && importErrors.some(span => start <= span.end && end >= span.start)) continue
           const a = position(start), b = position(end)
           diagnostics.push({ code: diagnostic.code, message: flattenMessage(diagnostic.messageText), span: { file: path, start, end, startLine: a.line, startColumn: a.column, endLine: b.line, endColumn: b.column } })
         }

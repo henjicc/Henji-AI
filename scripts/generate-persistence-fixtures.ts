@@ -68,8 +68,8 @@ const source = `export default {
 `
 const program = testCodeMetadata({ name: '黄金代码', width: 1920, height: 1080, durationSeconds: 4, parameters, apiVersion: CODE_AUTHOR_API_VERSION })
 const hash = createHash('sha256').update(source).digest('hex')
-// 代码版本 v4 / 代码资产 v9 / 剪辑内容 v37：内置库记录库名与精确版本。
-const sourceVersion = { apiVersion: CODE_AUTHOR_API_VERSION, languageVersion: 4 as const, entry: 'main.ts', files: [{ path: 'main.ts', location: gitCodeLocation({ oid: 'a'.repeat(40), repository: 'henji:/代码', filepath: '素材/标题/main.ts' }), hash }], imports: [], libraries: { three: '0.186.1' } }
+// 代码版本 v5 / 代码资产 v10 / 剪辑内容 v38：排版库固定版本，作者接口 v6。
+const sourceVersion = { apiVersion: CODE_AUTHOR_API_VERSION, languageVersion: 4 as const, entry: 'main.ts', files: [{ path: 'main.ts', location: gitCodeLocation({ oid: 'a'.repeat(40), repository: 'henji:/代码', filepath: '素材/标题/main.ts' }), hash }], imports: [], libraries: { three: '0.186.1', 'henji-layout': '1.0.0' } }
 const projectSourceVersion = { ...sourceVersion, entry: 'entries/title.ts', files: [{ ...sourceVersion.files[0], path: 'entries/title.ts', location: gitCodeLocation({ oid: 'a'.repeat(40), repository: 'henji:/代码', filepath: 'entries/title.ts' }) }], project: { commit: 'a'.repeat(40), entry: 'entries/title.ts' } }
 const document = createVideoEditDocument('持久格式黄金样本')
 document.id = 'golden-video'

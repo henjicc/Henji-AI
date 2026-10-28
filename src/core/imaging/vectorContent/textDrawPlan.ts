@@ -565,7 +565,8 @@ function assemble(seed: PlanSeed, style: TextStyle, constraints: TextDrawConstra
 
 function selectTextPlan(input: string | RichTextContent, textStyle: TextStyle, constraints: TextDrawConstraints, measureInput: TextPlanMeasure): { seed: PlanSeed; style: TextStyle; measure: TextPlanMeasure; fit: TextDrawPlan['fit'] } {
   if (!Number.isFinite(textStyle.fontSize) || textStyle.fontSize < 1 || !Number.isFinite(textStyle.fontWeight)) throw new TextDrawPlanError('BUDGET', '文字字号或字重无效。')
-  for (const value of [constraints.maxWidth, constraints.maxHeight, constraints.wrapWidth, constraints.box?.width, constraints.box?.height]) if (value !== undefined && (!Number.isFinite(value) || value <= 0)) throw new TextDrawPlanError('BUDGET', '文字约束尺寸必须为有限正数。')
+  // flex 收缩或 padding 可以得到零内容框；保留超框/遗漏事实，不能把合法的折叠状态当成排版失败。
+  for (const value of [constraints.maxWidth, constraints.maxHeight, constraints.wrapWidth, constraints.box?.width, constraints.box?.height]) if (value !== undefined && (!Number.isFinite(value) || value < 0)) throw new TextDrawPlanError('BUDGET', '文字约束尺寸必须为有限非负数。')
   if (constraints.maxLines !== undefined && (!Number.isInteger(constraints.maxLines) || constraints.maxLines < 1)) throw new TextDrawPlanError('BUDGET', '最大行数必须为正整数。')
   if (constraints.frame && ![constraints.frame.width, constraints.frame.height].every(value => Number.isFinite(value) && value > 0)) throw new TextDrawPlanError('BUDGET', '作品画幅必须为有限正数。')
   if (constraints.anchor && !Object.values(constraints.anchor).every(Number.isFinite)) throw new TextDrawPlanError('BUDGET', '文字锚点必须为有限数值。')

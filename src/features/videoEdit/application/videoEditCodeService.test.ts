@@ -1,4 +1,5 @@
 import fsp from 'node:fs/promises'
+import { CODE_AUTHOR_API_VERSION } from '@/core/videoEdit/codeMaterialPersistence'
 import path from 'node:path'
 import { createTestEnvironment } from '../../../../electron/main/services/documents/documents.test-support'
 import { createElement } from 'react'
@@ -1027,7 +1028,7 @@ it('公共入口创建 TS 代码素材附带类型检查结论，加载或试渲
     const result = await create(typo)
     expect(result).toMatchObject({ ok: true })
     expect(result.data!.evidence.find(value => value.fact.startsWith('类型检查发现 1 处问题'))).toMatchObject({ kind: 'observation', data: { status: 'checked', checkedFiles: ['main.ts'], total: 1, diagnostics: [expect.objectContaining({ file: 'main.ts', line: 1, column: typo.indexOf('fillStlye') + 1, code: 2551 })] } })
-    expect(typeCheck).toHaveBeenCalledWith(expect.objectContaining({ entry: 'main.ts' }), ['main.ts'], expect.any(AbortSignal))
+    expect(typeCheck).toHaveBeenCalledWith(expect.objectContaining({ entry: 'main.ts', apiVersion: CODE_AUTHOR_API_VERSION }), ['main.ts'], expect.any(AbortSignal))
     expect((await create(source)).data!.evidence.find(value => value.fact.startsWith('类型检查'))?.fact).toBe('类型检查通过：main.ts。')
     // 读取声明失败（拼错 name）：原错误信息保留在前，类型检查指出拼错的字段。
     const missingName = await create(source.replace('name:', 'nmae:'))

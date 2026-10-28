@@ -1,6 +1,8 @@
 {
   "comment": "代码效果内置库里随库分发的第三方组件。scripts/build-author-libraries.ts 据此决定收入哪些随库文件并写 NOTICE.txt；scripts/generate-third-party-licenses.cjs 据此登记进第三方清单。texts 是本目录下的许可全文。include 为 if-referenced 的文件只在被白名单模块引用时收入，embedded 表示组件已内联在列出的文件里。",
   "components": [
+    { "library": "henji-layout@1.0.0", "name": "Yoga", "version": "3.2.1", "license": "MIT", "homepage": "https://github.com/facebook/yoga", "include": "embedded", "files": ["flex-runtime.mjs"], "texts": ["yoga-MIT.txt"] },
+    { "library": "henji-layout@1.0.0", "name": "zod", "version": "4.4.3", "license": "MIT", "homepage": "https://zod.dev", "include": "embedded", "files": ["chunk-NKZKPSNV.mjs"], "texts": ["zod-MIT.txt"] },
     { "library": "three@0.186.1", "name": "fflate", "version": "0.8.2", "license": "MIT", "homepage": "https://github.com/101arrowz/fflate", "include": "if-referenced", "files": ["examples/jsm/libs/fflate.module.js"], "texts": ["fflate-MIT.txt"] },
     { "library": "three@0.186.1", "name": "ktx-parse", "version": "three-0.186.1", "license": "MIT", "homepage": "https://github.com/donmccurdy/KTX-Parse", "include": "if-referenced", "files": ["examples/jsm/libs/ktx-parse.module.js"], "texts": ["ktx-parse-MIT.txt"] },
     { "library": "three@0.186.1", "name": "meshoptimizer (simplifier)", "version": "1.1", "license": "MIT", "homepage": "https://github.com/zeux/meshoptimizer", "include": "if-referenced", "files": ["examples/jsm/libs/meshopt_simplifier.module.js"], "texts": ["meshoptimizer-MIT.txt"] },
