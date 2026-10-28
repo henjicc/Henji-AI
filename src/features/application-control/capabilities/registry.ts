@@ -14,6 +14,7 @@ import { hostErrorCodeSchema } from '@/core/application-control/hostContracts'
 import { ApplicationWriteFailure, applicationWriteChannel, assertApplicationWriteChannel } from '@/core/application-control/execution/writeExecution'
 import { ApplicationTransactionFailure, ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import { capabilityVerificationEnvelope } from '@/core/application-control/capabilityVerification'
+import { ApplicationRevokedReason } from '@/core/application-control/execution/cancelReason'
 import { transactionFailureFacts } from '@/core/application-control/applicationTransactionFailureFacts'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
 import { applicationCallerAccess, assertApplicationCapabilityAllowed } from '@/core/application-control/callerContext'
@@ -302,7 +303,7 @@ function projectFailure(error: unknown): ApplicationCapabilityFailure {
       },
     }
   }
-  if (message === 'ABORTED' || (error instanceof DOMException && error.name === 'AbortError')) {
+  if (message === 'ABORTED' || (error instanceof DOMException && error.name === 'AbortError') || error instanceof ApplicationRevokedReason) {
     return { ok: false, error: { code: 'ABORTED', message: '操作已取消', recoverable: false } }
   }
   if (message === 'NOT_FOUND' || message.endsWith('_NOT_FOUND')) {

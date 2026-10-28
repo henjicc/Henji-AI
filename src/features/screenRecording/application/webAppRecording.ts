@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { fieldDescriptors, unrestrictedCollectionAvailability, type ApplicationEntityProvider, type ApplicationEntityRegistration, type ApplicationPropertyDescriptor, type ApplicationRef, type JsonValue } from '@/core/application-control'
-import { importWebRecordingCapability, importWebRecordingToProjectCapability, readWebAppRecordingCapability, renderWebAppReplayCapability, startWebAppRecordingCapability, stopWebAppRecordingCapability } from '@/core/application-control/domains/screenRecording/webAppCapability'
+import { cancelWebAppReplayCapability, importWebRecordingCapability, importWebRecordingToProjectCapability, readWebAppRecordingCapability, renderWebAppReplayCapability, startWebAppRecordingCapability, stopWebAppRecordingCapability } from '@/core/application-control/domains/screenRecording/webAppCapability'
+import { webReplayRenderOutput } from '@/core/webReplay/renderResult'
+import { abortedByRevocation } from '@/core/application-control/execution/cancelReason'
 import { importWebRecordingToVideo } from './webRecordingVideoImport'
 import type { CapabilityExecutionContext } from '@/features/application-control'
 import { getPlatform } from '@/platform'
@@ -105,9 +107,10 @@ export function webAppRecordingRegistrations(): ApplicationEntityRegistration[] 
   })) as ApplicationEntityRegistration[]
 }
 
-export const WEB_APP_CAPABILITY_IDS = new Set<string>([startWebAppRecordingCapability.id, stopWebAppRecordingCapability.id, readWebAppRecordingCapability.id, renderWebAppReplayCapability.id, importWebRecordingCapability.id, importWebRecordingToProjectCapability.id])
-/** Saved recordings stay usable with the experimental switch off; only recording and replay need it. */
-const WORKS_WHEN_DISABLED = new Set<string>([readWebAppRecordingCapability.id, importWebRecordingCapability.id, importWebRecordingToProjectCapability.id])
+export const WEB_APP_CAPABILITY_IDS = new Set<string>([startWebAppRecordingCapability.id, stopWebAppRecordingCapability.id, readWebAppRecordingCapability.id, renderWebAppReplayCapability.id, cancelWebAppReplayCapability.id, importWebRecordingCapability.id, importWebRecordingToProjectCapability.id])
+/** Saved recordings stay usable with the experimental switch off; only recording and replay need it. Cancelling must always work. */
+const WORKS_WHEN_DISABLED = new Set<string>([readWebAppRecordingCapability.id, cancelWebAppReplayCapability.id, importWebRecordingCapability.id, importWebRecordingToProjectCapability.id])
+const UUID = z.string().uuid()
 
 /** Handlers for the web app recording capabilities; all real work happens in the main-process service. */
 export async function executeWebAppCapability(id: string, input: unknown, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {
@@ -147,6 +150,12 @@ export async function executeWebAppCapability(id: string, input: unknown, contex
     const status = manifest.status === 'complete' ? 'complete' : 'interrupted'
     return { resultRef: parsed.recordingRef, status, durationMs: Math.round(manifest.durationUs / 1000), warnings: manifest.warnings.map(w => w.message), verified: (await platform.recordings()).find(r => r.id === manifest.id)?.status === status }
   }
+  if (id === cancelWebAppReplayCapability.id) {
+    const parsed = cancelWebAppReplayCapability.inputSchema.parse(input)
+    // 没有可取消的重演是登记的写入前拒绝（rejectionErrors.ts），写执行层直接判为未执行
+    const cancelled = await platform.cancelRender({ recordingId: parsed.recordingRef.id })
+    return { resultRef: parsed.recordingRef, previousState: cancelled.previousState, state: cancelled.state, verified: cancelled.state === 'cancelled' }
+  }
   if (id === readWebAppRecordingCapability.id) {
     if (permissions && !permissions.includes('screen_recording:read')) throw new Error('PERMISSION_DENIED:读取网页录制需要 screen_recording:read 权限')
     const parsed = readWebAppRecordingCapability.inputSchema.parse(input)
@@ -157,12 +166,14 @@ export async function executeWebAppCapability(id: string, input: unknown, contex
   context.signal.throwIfAborted()
   const longEdge = { recorded: undefined, '1080p': 1920, '1440p': 2560, '4k': 3840 }[parsed.resolution]
   const director = { ...(parsed.director ? { director: parsed.director } : {}), ...(parsed.directorFile ? { directorFile: parsed.directorFile } : {}), ...(parsed.take ? { take: parsed.take } : {}) }
-  // 导演稿校验不通过（逐条点名字段）时一帧也没渲染：标成未执行，改好后可以直接重试
-  const result = await platform.render({ recordingId: parsed.recordingRef.id, fps: parsed.fps, pointer: parsed.pointer, ...(longEdge ? { longEdge } : {}), ...(parsed.textOnly ? { textOnly: true } : {}), ...(parsed.boxSelectors ? { boxSelectors: parsed.boxSelectors } : {}), ...director })
-    .catch((error: unknown) => { throw error instanceof Error && error.name === 'WebReplayDirectorError' ? notExecutedFailure(error) : error })
-  return {
-    resultRef: parsed.recordingRef, video: result.output, pointer: parsed.pointer, width: result.width, height: result.height, frames: result.frames,
-    conflicts: result.issues.filter(i => i.kind === 'conflict').map(i => i.message), warnings: result.issues.filter(i => i.kind === 'warning').map(i => i.message), verified: result.frames > 0,
-    ...(result.take ? { take: { name: result.take.name, directory: result.take.directory, video: result.take.video, durationMs: result.take.durationMs, frames: result.take.frames, steps: result.take.steps } } : {}),
-  }
+  // 主进程按操作标识登记这次重演：渲染层重载后账本凭它找回结果。只有撤销授权会停下重演；宿主断开、
+  // 页面重载、宿主卸载中止的只是这边的等待，重演照常跑完、结果记进原操作。调用方要停用 cancel_web_app_replay。
+  const jobId = UUID.safeParse(context.requestId).success ? context.requestId! : crypto.randomUUID()
+  const cancel = (): void => { if (!abortedByRevocation(context.signal)) return; void platform.cancelRender({ jobId }).catch((error: unknown) => logger.warn('网页重演没能取消', { event: 'web_replay.replay.cancel_failed', requestId: jobId, error: String(error) })) }
+  context.signal.addEventListener('abort', cancel, { once: true })
+  try {
+    // 导演稿不对、同一段已在重演、被取消都是登记的写入前拒绝（rejectionErrors.ts），写执行层直接判为未执行
+    const result = await platform.render({ recordingId: parsed.recordingRef.id, fps: parsed.fps, pointer: parsed.pointer, ...(longEdge ? { longEdge } : {}), ...(parsed.textOnly ? { textOnly: true } : {}), ...(parsed.boxSelectors ? { boxSelectors: parsed.boxSelectors } : {}), ...director }, jobId)
+    return webReplayRenderOutput(parsed.recordingRef.id, parsed.pointer, result)
+  } finally { context.signal.removeEventListener('abort', cancel) }
 }

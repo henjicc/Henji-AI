@@ -13,6 +13,7 @@ export const WEB_REPLAY_CHANNELS = {
   restore: 'webReplay:restore',
   renderProgress: 'webReplay:render-progress',
   render: 'webReplay:render',
+  cancelRender: 'webReplay:cancel-render',
   read: 'webReplay:read',
   reveal: 'webReplay:reveal',
   rename: 'webReplay:rename',
@@ -90,6 +91,12 @@ export interface WebReplayRenderRequest {
   /** 版本名（takes/ 下的文件夹名）；给了导演稿而没给名字时按时间起名。同名的旧版本在新版本写完后被替换。 */
   take?: string
 }
+/** 主进程登记的一次重演：渲染层重载后仍可按 jobId 查到结果。 */
+export type WebReplayJobState = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+/** 按 jobId 取消调用方自己的重演，或按 recordingId 取消这段录制排队中或正在跑的重演。 */
+export type WebReplayCancelTarget = { jobId: string } | { recordingId: string }
+/** `previousState` 是取消时的状态；`state` 是等它停下后的状态（来不及停下时仍是 running）。 */
+export interface WebReplayCancelResult { jobId: string; recordingId: string; previousState: 'queued' | 'running'; state: WebReplayJobState }
 export interface WebReplayRenderResult {
   output: string
   frames: number
@@ -127,7 +134,9 @@ export interface WebReplayPlatform {
   restore(recordingId: string): Promise<void>
   /** Live frames while a replay renders (about five per second). */
   onRenderProgress(listener: (event: WebReplayRenderProgress) => void): () => void
-  render(request: WebReplayRenderRequest): Promise<WebReplayRenderResult>
+  /** `jobId` 是主进程登记这次重演用的标识（应用操作传自己的操作标识）；不给时主进程自起。 */
+  render(request: WebReplayRenderRequest, jobId?: string): Promise<WebReplayRenderResult>
+  cancelRender(target: WebReplayCancelTarget): Promise<WebReplayCancelResult>
   read(request: WebReplayReadRequest): Promise<WebReplayReadResult>
   /** Shows a file of this recording (a rendered video) or its folder in the system file manager. */
   reveal(recordingId: string, file?: string): Promise<void>

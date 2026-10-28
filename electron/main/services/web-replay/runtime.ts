@@ -3,11 +3,12 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { net, shell } from 'electron'
 import type { WebRecordingManifest } from '../../../../src/core/webReplay/schema'
-import type { WebRecordingBackupOptions, WebRecordingDestination, WebRecordingImportRequest, WebRecordingSummary, WebReplayReadRequest, WebReplayReadResult, WebReplayRenderProgress, WebReplayRenderRequest, WebReplayRenderResult, WebReplayServerState } from '../../../../src/platform/contracts/webReplay'
+import type { WebRecordingBackupOptions, WebRecordingDestination, WebRecordingImportRequest, WebRecordingSummary, WebReplayCancelResult, WebReplayCancelTarget, WebReplayReadRequest, WebReplayReadResult, WebReplayRenderProgress, WebReplayRenderRequest, WebReplayRenderResult, WebReplayServerState } from '../../../../src/platform/contracts/webReplay'
 import { createMainLogger } from '../logging'
 import { BACKUP_VIDEO_FILE, WebRecordingBackupVideo, BACKUP_AUDIO_DIRECTORY, mixWebRecordingBackupAudio } from './backupVideo'
 import { WebRecordingPlayer, type ReplayOptions } from './player/player'
 import { ReplayRenderQueue } from './renderQueue'
+import { webReplayRenderJobs } from './renderJobs'
 import { WEB_REPLAY_PORT, WebReplayServer } from './server'
 import { webRecordingsRoot, WebRecordingStore } from './store'
 import { forgetActiveWebRecording, listWebRecordingLocations, rememberActiveWebRecording, resolveWebRecordingDirectory, resolveWebRecordingLocation, webRecordingIdTaken } from './locations'
@@ -21,7 +22,7 @@ import { readBoxTrack } from './boxTrackReader'
 import { newestReplayName, REPLAY_CLEAN_SUFFIX } from '../../../../src/core/webReplay/replayVideos'
 import { checkDirectorAgainstRecording, parseWebReplayDirector, WebReplayDirectorError, type WebReplayDirector } from '../../../../src/core/webReplay/director'
 import type { WebRecordingTakeInfo } from '../../../../src/platform/contracts/webReplay'
-import { listWebReplayTakes, readWebReplayTake, readWebReplayTakeBehavior, renderWebReplayTake, TAKE_FILES, type WebReplayTakeSummary } from './takes'
+import { listWebReplayTakes, readWebReplayTake, readWebReplayTakeBehavior, renderWebReplayTake, TAKE_FILES, TAKES_DIRECTORY, type WebReplayTakeSummary } from './takes'
 
 const logger = createMainLogger('main.web_replay')
 const MAX_EXTERNAL_BYTES = 32 * 1024 * 1024
@@ -201,7 +202,7 @@ export async function listWebRecordings(): Promise<WebRecordingSummary[]> {
 /** Deleting moves the directory to a trash folder beside it, so the operation can be undone. */
 export async function removeWebRecording(recordingId: string): Promise<void> {
   if ((server?.apps() ?? []).some(app => app.recordingId === recordingId)) throw new Error('这段网页录制还在进行，请先停止')
-  if (rendering.has(recordingId)) throw new Error('这段网页录制正在重演，请等待完成')
+  if (webReplayRenderJobs.active(recordingId)) throw new Error('这段网页录制正在重演，请等待完成或先取消重演')
   const location = await resolveWebRecordingLocation(recordingId)
   const trash = path.join(webRecordingsRoot(), TRASH)
   await fs.mkdir(trash, { recursive: true })
@@ -342,22 +343,82 @@ export async function revealWebRecording(recordingId: string, file?: string): Pr
   else { const error = await shell.openPath(target); if (error) throw new Error(error) }
 }
 
-const rendering = new Set<string>()
 /** 同一时间只重演一段：几段同时渲染会抢 GPU、CPU 与编码器，每段都更慢。 */
 const renderQueue = new ReplayRenderQueue()
-export async function renderWebRecording(request: WebReplayRenderRequest, signal?: AbortSignal, onProgress?: (progress: WebReplayRenderProgress) => void): Promise<WebReplayRenderResult> {
+
+/**
+ * 重演登记在主进程（webReplayRenderJobs），取消也只走登记里的控制：渲染层重载时这里照常跑完，
+ * 结果留在登记里供账本恢复。`jobId` 由调用方给（应用操作用自己的操作标识），不给时自起。
+ */
+export async function renderWebRecording(request: WebReplayRenderRequest, jobId: string = crypto.randomUUID(), onProgress?: (progress: WebReplayRenderProgress) => void): Promise<WebReplayRenderResult> {
   const recordingId = request.recordingId
-  if (rendering.has(recordingId)) throw new Error('这段网页录制正在重演，请等待完成')
-  rendering.add(recordingId)
+  let signal: AbortSignal
+  try { signal = webReplayRenderJobs.begin(jobId, recordingId).signal } catch (error) {
+    logger.info('网页重演重复提交，已拒绝', { event: 'web_replay.replay.busy', context: { recordingId, jobId } })
+    throw error
+  }
+  let directory: string | null = null
+  let before: Map<string, string> | null = null
   try {
-    const directory = await resolveWebRecordingDirectory(recordingId)
+    directory = await resolveWebRecordingDirectory(recordingId)
+    const recordingDirectory = directory
     const queuedAt = Date.now()
-    return await renderQueue.run(() => renderReplay(request, directory, Date.now() - queuedAt, signal, onProgress), {
+    const result = await renderQueue.run(async () => {
+      webReplayRenderJobs.running(jobId)
+      before = await recordingFiles(recordingDirectory)
+      return renderReplay(request, recordingDirectory, Date.now() - queuedAt, signal, progress => { webReplayRenderJobs.progress(jobId, progress.progress); onProgress?.(progress) })
+    }, {
       signal,
-      onQueued: ahead => logger.info('网页重演排队，等前面的重演结束', { event: 'web_replay.replay.queued', context: { recordingId, ahead, textOnly: request.textOnly === true } }),
-      onCancelled: () => logger.info('排队中的网页重演已取消', { event: 'web_replay.replay.queue_cancelled', context: { recordingId, waitedMs: Date.now() - queuedAt } }),
+      onQueued: ahead => logger.info('网页重演排队，等前面的重演结束', { event: 'web_replay.replay.queued', context: { recordingId, jobId, ahead, textOnly: request.textOnly === true } }),
+      onCancelled: () => logger.info('排队中的网页重演已取消', { event: 'web_replay.replay.queue_cancelled', context: { recordingId, jobId, waitedMs: Date.now() - queuedAt } }),
     })
-  } finally { rendering.delete(recordingId) }
+    webReplayRenderJobs.complete(jobId, result)
+    return result
+  } catch (error) {
+    const failure = signal.aborted ? await cancelledFailure(directory, before) : error
+    webReplayRenderJobs.fail(jobId, failure)
+    throw failure
+  }
+}
+
+/**
+ * 录制文件夹（及 takes/ 下的版本）当前的样子：文件按大小与修改时间，文件夹只看名字（里面的暂存进出会改它的时间）。
+ * 取消后与开始时比对，才能说“没有改动”。
+ */
+async function recordingFiles(directory: string): Promise<Map<string, string>> {
+  const files = new Map<string, string>()
+  for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+    if (entry.isDirectory()) { files.set(`${entry.name}/`, ''); continue }
+    const stat = await fs.stat(path.join(directory, entry.name)).catch(() => null)
+    files.set(entry.name, stat ? `${stat.size}:${stat.mtimeMs}` : '')
+  }
+  for (const name of await fs.readdir(path.join(directory, TAKES_DIRECTORY)).catch(() => [] as string[])) files.set(`${TAKES_DIRECTORY}/${name}`, '')
+  return files
+}
+
+/**
+ * 取消后的结论：还没开始（排队中）或录制文件夹与开始时一样，是没有执行（执行层据名字判为未执行）；
+ * 播放器没能删掉写了一半的视频、文字轨或位置轨已经换上、版本替换到一半等留下了改动的，如实点名，按失败处理。
+ */
+async function cancelledFailure(directory: string | null, before: Map<string, string> | null): Promise<Error> {
+  const cancelled = (): Error => Object.assign(new Error('已取消重演，录制文件夹没有改动'), { name: 'WebReplayCancelledError' })
+  if (!directory || !before) return cancelled()
+  const after = await recordingFiles(directory).catch(() => null)
+  if (!after) return new Error('已取消重演，但没能读回录制文件夹，不确定是否留下了写了一半的文件，请检查录制文件夹')
+  const added = [...after.keys()].filter(name => !before.has(name))
+  const removed = [...before.keys()].filter(name => !after.has(name))
+  const changed = [...after.keys()].filter(name => before.has(name) && before.get(name) !== after.get(name))
+  if (!added.length && !removed.length && !changed.length) return cancelled()
+  const list = (names: string[]): string => names.slice(0, 6).join('、') + (names.length > 6 ? ` 等 ${names.length} 项` : '')
+  const parts = [added.length ? `多出 ${list(added)}` : '', removed.length ? `少了 ${list(removed)}` : '', changed.length ? `改动了 ${list(changed)}` : ''].filter(Boolean)
+  return new Error(`已取消重演，但录制文件夹和开始时不一样：${parts.join('；')}。这些可能是没清理掉的半成品或已换上的轨道，请检查后再决定是否重演`)
+}
+
+export async function cancelWebRecordingRender(target: WebReplayCancelTarget): Promise<WebReplayCancelResult> {
+  logger.info('取消网页重演', { event: 'web_replay.replay.cancel_requested', context: target })
+  const { job, previousState } = await webReplayRenderJobs.cancel(target)
+  logger.info('网页重演取消结束', { event: 'web_replay.replay.cancel_completed', context: { jobId: job.jobId, recordingId: job.recordingId, previousState, state: job.state } })
+  return { jobId: job.jobId, recordingId: job.recordingId, previousState, state: job.state }
 }
 
 /** 导演稿：直接给的或从文件读的；校验失败时（逐条点名字段）一帧也不渲染。只给版本名时是照录制原样的版本。 */

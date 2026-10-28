@@ -5,6 +5,9 @@ import type { OperationRecord } from './operationStore'
 import type { LocalHostRequest } from '../../../../src/core/application-control/localHostContracts'
 import { applicationUserConfirmation } from '../../../../src/core/application-control/userConfirmation'
 import { initializeApplicationRuntime, createEmbeddedApplicationClient } from './runtime'
+import { webReplayRenderJobs } from '../web-replay/renderJobs'
+import { webReplayJobIdOf } from './persistedOperationRecovery'
+import type { HostContextSnapshot } from '../../../../src/core/application-control/hostContracts'
 
 vi.mock('electron', () => ({ app: { isPackaged: false }, dialog: { showMessageBox: vi.fn() } }))
 vi.mock('../db', () => ({ getDb: () => undefined }))
@@ -57,4 +60,30 @@ it('人工核对只通知可信渲染宿主，不调用 Electron 系统对话框
   await operations.review(record, rendererEpoch, async () => ({ ok: true, data: { properties: { 'video_edit.document.name': '主剪辑' } } }), () => undefined)
   expect(send).toHaveBeenLastCalledWith('application:host:reviews', expect.objectContaining({ open: expect.objectContaining({ operationId: record.operationId }), items: expect.arrayContaining([expect.objectContaining({ title: '这次修改生效了吗？', message: expect.stringContaining('主剪辑') })]) }))
   expect(dialog.showMessageBox).not.toHaveBeenCalled()
+})
+
+const replayResult = { output: 'D:/r/replay.clean.mp4', frames: 30, width: 1280, height: 720, durationMs: 1000, issues: [], looseMatches: 0, unusedCalls: 0, locatorMisses: 0 }
+const replayRecord = (rendererEpoch: string, recordingId = randomUUID()): OperationRecord & { recordingId: string } => ({ operationId: randomUUID(), callerId: randomUUID(), capabilityId: 'render_web_app_replay', inputDigest: 'replay',
+  input: { recordingRef: { kind: 'screen_recording.web_recording', id: recordingId } }, state: 'executing', requestId: randomUUID(), rendererEpoch, recordingId })
+
+it('网页重演结束时：发起它的页面还在等就以页面回执为准；重载空档里结束的，等新页面发布上下文再结账', () => {
+  const { host, operations } = initializeApplicationRuntime()
+  const epoch = randomUUID()
+  host.register({ rendererEpoch: epoch, attachmentSequence: 3, ready: true, tools: [], domains: [] }, { send: vi.fn() })
+  const live = replayRecord(epoch)
+  operations.store.save(live)
+  webReplayRenderJobs.begin(webReplayJobIdOf(live), live.recordingId)
+  webReplayRenderJobs.complete(webReplayJobIdOf(live), replayResult)
+  expect(operations.store.get(live.operationId, live.callerId)).toMatchObject({ state: 'executing' })
+
+  // 页面重载：旧页面断开，回执丢失，新页面还没发布上下文
+  host.disconnect()
+  const orphan = { ...replayRecord(epoch), state: 'unknown' as const }
+  operations.store.save(orphan)
+  webReplayRenderJobs.begin(webReplayJobIdOf(orphan), orphan.recordingId)
+  webReplayRenderJobs.complete(webReplayJobIdOf(orphan), replayResult)
+  expect(operations.store.get(orphan.operationId, orphan.callerId)).toMatchObject({ state: 'unknown' })
+  host.register({ rendererEpoch: randomUUID(), attachmentSequence: 4, ready: true, tools: [], domains: [] }, { send: vi.fn() })
+  host.publishContext({ revision: 3, scopeRevisions: { screen_recording: 0 } } as unknown as HostContextSnapshot)
+  expect(operations.store.get(orphan.operationId, orphan.callerId)).toMatchObject({ state: 'completed', result: { ok: true, resultingRevision: 3, data: { video: replayResult.output } } })
 })

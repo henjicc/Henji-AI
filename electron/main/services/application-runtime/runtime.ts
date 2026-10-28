@@ -5,7 +5,8 @@ import { createMainLogger } from '../logging'
 import { ApplicationToolDispatcher } from './applicationToolDispatcher'
 import { ApplicationOperationCoordinator } from './operationCoordinator'
 import { ApplicationOperationStore } from './operationStore'
-import { recoverPersistedGenerationOperation, recoverPersistedTranscriptionOperation } from './persistedOperationRecovery'
+import { recoverPersistedGenerationOperation, recoverPersistedTranscriptionOperation, recoverPersistedWebReplayOperation, webReplayJobIdOf } from './persistedOperationRecovery'
+import { webReplayRenderJobs } from '../web-replay/renderJobs'
 import { getAudioEditStoredTask } from '../audio-edit/task-store'
 import type { ApplicationAccess } from './toolCatalog'
 import { getDb } from '../db'
@@ -21,13 +22,18 @@ let runtime: { host: ApplicationHostBridge; operations: ApplicationOperationCoor
 /** 应用生命周期持有账本和宿主；协议适配器只提供调用者授权。 */
 export function initializeApplicationRuntime() {
   if (runtime) return runtime
+  // 恢复回执必须带上 revision/scopeRevisions，否则按 schema 校验的标准 MCP 客户端会拒收整条结果。
+  // 原回执没有时用宿主当前快照兜住。
+  const currentRevisions = () => {
+    const context = host.getContext()
+    return context ? { revision: context.revision, scopeRevisions: context.scopeRevisions } : undefined
+  }
   const operations: ApplicationOperationCoordinator = new ApplicationOperationCoordinator(new ApplicationOperationStore(getDb()),
-    // 第三个参数不是可选装饰：恢复回执必须带上 revision/scopeRevisions，否则按 schema
-    // 校验的标准 MCP 客户端会拒收整条结果。原回执没有时用宿主当前快照兜住。
-    record => recoverPersistedTranscriptionOperation(getAudioEditStoredTask, record) ?? recoverPersistedGenerationOperation(id => getGenerationHistoryStore().getStatus(id), record, () => {
-      const context = host.getContext()
-      return context ? { revision: context.revision, scopeRevisions: context.scopeRevisions } : undefined
-    }), () => host.writableEntityTypes(), item => host.publishReviews(item))
+    record => recoverPersistedTranscriptionOperation(getAudioEditStoredTask, record)
+      // 渲染层还连着、仍在等这次调用时以它的回执为准；主进程用登记重建只在它不在时兜底
+      ?? recoverPersistedWebReplayOperation(id => webReplayRenderJobs.get(id), record, currentRevisions, original => host.ready && host.rendererEpoch === original.rendererEpoch)
+      ?? recoverPersistedGenerationOperation(id => getGenerationHistoryStore().getStatus(id), record, currentRevisions),
+    () => host.writableEntityTypes(), item => host.publishReviews(item))
   const host: ApplicationHostBridge = new ApplicationHostBridge(id => {
     if (embeddedCallers.has(id)) return
     if (!externalAuthority) throw new Error('调用者未获授权。')
@@ -53,6 +59,27 @@ export function initializeApplicationRuntime() {
     }
   }
   operations.onChange(() => host.publishReviews())
+  // 网页重演在主进程跑，渲染层重载只断了回执：重载后（账本变化时）把仍在跑的标回执行中，重演结束时用登记的
+  // 结果结账。重载空档里结束的拿不到宿主修订号，先记下，等新页面发布上下文时再结。result() 只存档、
+  // 不触发 onChange，不会循环。登记只在内存：结束后到新页面就绪前应用就退出，这次操作仍是待核对，文件照常在盘上。
+  const unsettledReplayJobs = new Set<string>()
+  const settleWebReplay = (only?: ReadonlySet<string>): void => {
+    try {
+      const remaining = new Set<string>()
+      for (const record of operations.store.unresolved()) {
+        const jobId = webReplayJobIdOf(record)
+        if (record.capabilityId !== 'render_web_app_replay' || (only && !only.has(jobId))) continue
+        operations.result(record)
+        const after = operations.store.get(record.operationId, record.callerId)
+        if (after && (after.state === 'executing' || (after.state === 'unknown' && !after.result))) remaining.add(jobId)
+      }
+      for (const jobId of [...unsettledReplayJobs]) if ((!only || only.has(jobId)) && !remaining.has(jobId)) unsettledReplayJobs.delete(jobId)
+    } catch (error) { createMainLogger('main.application_runtime').warn('网页重演结果没能记进操作账本', { event: 'application.web_replay.settle_failed', error }) }
+  }
+  operations.onChange(() => settleWebReplay())
+  webReplayRenderJobs.onSettled(job => { unsettledReplayJobs.add(job.jobId); settleWebReplay(new Set([job.jobId])); host.publishReviews() })
+  host.onChange(kind => { if (kind === 'context' && unsettledReplayJobs.size) settleWebReplay(new Set(unsettledReplayJobs)) })
+  webReplayRenderJobs.setOwnerResolver(jobId => operations.store.unresolved().find(record => record.capabilityId === 'render_web_app_replay' && webReplayJobIdOf(record) === jobId)?.operationId)
   runtime = { host, operations, embedded, reviewOperation }
   return runtime
 }

@@ -7,7 +7,7 @@ import { recordingEncodingFields } from '../../../src/core/screenRecording/encod
 import { registerIpcHandler, parseVoid } from './registry'
 import { assertTrustedApplicationSender } from './application-control'
 import { webRecordingEditSource } from '../services/web-replay/editSource'
-import { backupAudioDirectory, exportWebRecordingVideos, importWebRecordingToProject, mixWebRecordingAudio, renameWebRecordings, listWebRecordings, readWebRecording, removeWebRecording, restoreWebRecording, revealWebRecording, setWebReplayEnabled, onWebReplayStateChanged, renderWebRecording, startWebRecording, stopWebRecording, webReplayState } from '../services/web-replay/runtime'
+import { backupAudioDirectory, exportWebRecordingVideos, importWebRecordingToProject, mixWebRecordingAudio, renameWebRecordings, listWebRecordings, readWebRecording, removeWebRecording, restoreWebRecording, revealWebRecording, setWebReplayEnabled, onWebReplayStateChanged, renderWebRecording, cancelWebRecordingRender, startWebRecording, stopWebRecording, webReplayState } from '../services/web-replay/runtime'
 
 const uuid = z.string().uuid()
 const fps = z.union([z.literal(30), z.literal(60)])
@@ -17,8 +17,9 @@ const backupSchema = z.union([
 ]).nullable()
 const destinationSchema = z.object({ projectId: z.string().min(1).max(200), name: z.string().trim().min(1).max(120).optional() }).strict()
 // 导演稿在服务里校验（失败时逐条点名字段），这里只收下。
+// jobId 是主进程登记这次重演的标识（应用操作传自己的操作标识），取消只认登记过的。
 const renderSchema = z.object({
-  recordingId: uuid, output: z.string().min(1).optional(), fps: z.number().int().min(1).max(120).optional(), pointer: z.boolean().optional(), longEdge: z.number().int().min(320).max(7680).optional(), textOnly: z.boolean().optional(), boxSelectors: boxSelectorsSchema.optional(),
+  jobId: uuid.optional(), recordingId: uuid, output: z.string().min(1).optional(), fps: z.number().int().min(1).max(120).optional(), pointer: z.boolean().optional(), longEdge: z.number().int().min(320).max(7680).optional(), textOnly: z.boolean().optional(), boxSelectors: boxSelectorsSchema.optional(),
   director: z.unknown().optional(), directorFile: z.string().min(1).max(32768).optional(), take: webReplayTakeNameSchema.optional(),
 }).strict().refine(value => value.director === undefined || value.directorFile === undefined, { path: ['directorFile'], message: 'director 与 directorFile 二选一' }).refine(value => !value.output || (value.director === undefined && !value.directorFile && !value.take), { path: ['output'], message: '版本写在录制的 takes/ 下，不能另给 output' })
 
@@ -31,8 +32,10 @@ export function registerWebReplayIpc(): void {
   registerIpcHandler(WEB_REPLAY_CHANNELS.render, raw => renderSchema.parse(raw), async (input, event) => {
     assertTrustedApplicationSender(event)
     const sender = event.sender
-    return renderWebRecording(input, undefined, progress => { if (!sender.isDestroyed()) sender.send(WEB_REPLAY_CHANNELS.renderProgress, progress) })
+    const { jobId, ...request } = input
+    return renderWebRecording(request, jobId, progress => { if (!sender.isDestroyed()) sender.send(WEB_REPLAY_CHANNELS.renderProgress, progress) })
   })
+  registerIpcHandler(WEB_REPLAY_CHANNELS.cancelRender, raw => z.union([z.object({ jobId: uuid }).strict(), z.object({ recordingId: uuid }).strict()]).parse(raw), async (input, event) => { assertTrustedApplicationSender(event); return cancelWebRecordingRender(input) })
   registerIpcHandler(WEB_REPLAY_CHANNELS.remove, raw => z.object({ recordingId: uuid }).strict().parse(raw), async (input, event) => { assertTrustedApplicationSender(event); await removeWebRecording(input.recordingId) })
   registerIpcHandler(WEB_REPLAY_CHANNELS.restore, raw => z.object({ recordingId: uuid }).strict().parse(raw), async (input, event) => { assertTrustedApplicationSender(event); await restoreWebRecording(input.recordingId) })
   registerIpcHandler(WEB_REPLAY_CHANNELS.read, raw => z.object({ recordingId: uuid, track: z.enum(['data', 'behavior', 'text', 'boxes', 'timemap']), offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(500), query: z.string().trim().min(1).max(200).optional(), take: webReplayTakeNameSchema.optional(), ...boxTrackQueryShape }).strict().refine(validBoxTimeRange, { path: ['toSeconds'], message: 'toSeconds 不得小于 fromSeconds' }).refine(value => value.track !== 'boxes' || value.limit <= 200, { path: ['limit'], message: 'boxes 每页最多 200 条' }).parse(raw), async (input, event) => { assertTrustedApplicationSender(event); return readWebRecording(input) })

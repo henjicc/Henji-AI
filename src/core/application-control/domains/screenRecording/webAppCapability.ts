@@ -56,7 +56,7 @@ export const readWebAppRecordingCapability = defineApplicationCapability({ ...co
 
 export const renderWebAppReplayCapability = defineApplicationCapability({ ...common,
   id: 'render_web_app_replay', title: '重演网页录制并出视频',
-  description: '实验性功能，需先开启设置属性 experimental.web_app_recording。不联网、不启动原应用，在痕迹内用录制的前端资源重新运行界面，按录制的操作和数据重演，逐帧编码成 MP4。默认出不画鼠标的干净画面，导入剪辑（import_web_recording）时会重画鼠标与点击；只想看重演效果时 pointer=true 把鼠标画进视频。要给成片用更清晰的画面时设 resolution（如 4k）。返回视频的本机路径与重演中发现的冲突（录制里没有的请求、缺失资源等）。同一时间只重演一段，其余按顺序排队，不必并行发起多段。重演逐帧推进页面时间：每一帧都停在录制里的对应时刻再出画面，画面、文字轨与位置轨不会超前或落后于录制；耗时不随录制时长固定，画面静止的段落比实时快得多。'
+  description: '实验性功能，需先开启设置属性 experimental.web_app_recording。不联网、不启动原应用，在痕迹内用录制的前端资源重新运行界面，按录制的操作和数据重演，逐帧编码成 MP4。默认出不画鼠标的干净画面，导入剪辑（import_web_recording）时会重画鼠标与点击；只想看重演效果时 pointer=true 把鼠标画进视频。返回视频的本机路径与重演中发现的冲突（录制里没有的请求、缺失资源等）。同一时间只重演一段，其余按顺序排队；同一段在排队或重演时再提交记为未执行，错误给出原操作 ID。界面重新加载或取消这次调用都不会停下重演，结果仍记进原操作；要停用 cancel_web_app_replay。重演逐帧推进页面时间：每一帧都停在录制里的对应时刻再出画面，画面、文字轨与位置轨不会超前或落后于录制；耗时不随录制时长固定，画面静止的段落比实时快得多。'
     + '给导演稿（director 直接写，或 directorFile 给 JSON 文件路径）时不完全照录制来，出一个版本到录制文件夹的 takes/<take>/，录制本身不动：视频（干净画面，0.5 秒一个关键帧）、boxes.jsonl 与 text.jsonl（时刻是版本视频的秒数）、behavior.json（版本里实际发生的鼠标键盘，导入剪辑时据此重画鼠标）、timemap.json（输出时间与录制时间对照）、director.json。导演稿能做：timeline 留下哪些录制区间与倍速（没列出的剪掉，页面在不出画面的情况下推过去，用快放把前后接起来，ramp 让变速平滑）；typewriter 把一次输入或粘贴进去的文字改成逐字打出来（打字时录制时间停住）；pointer 把一段鼠标移动换成平滑路径或给定关键点；clicks 把某次点击改到指定元素上；actions 在某个录制时刻注入点击、悬停、按元素滚动、拖动或 Ctrl+滚轮缩放（目标用 CSS 选择器、看得见的文字或坐标）。'
     + '不能做：发出录制里没有的请求或宿主调用——数据只能来自录制，改出来的操作（如点了录制里没点过的按钮、逐字输入触发了联想搜索）要发新请求时不会联网，按冲突报告并点名是导演稿的哪一步；也不能改页面上显示的文字和数据。导演稿校验不通过时一帧也不渲染，并逐条点名字段。',
   aliases: ['网页重演', '重演录制', 'replay web recording'], timeoutMs: 600000,
@@ -64,7 +64,7 @@ export const renderWebAppReplayCapability = defineApplicationCapability({ ...com
     pointer: z.boolean().default(false).describe('是否把鼠标画进视频：false（默认）干净画面，给剪辑用；true 画出鼠标与点击，只看重演效果时用'),
     textOnly: z.boolean().default(false).describe('true 只重演出画面文字轨和界面元素位置轨（不出视频），之后用 read_web_app_recording 的 text 或 boxes 查询；出视频时也会顺带写两条轨'),
     boxSelectors: boxSelectorsSchema.optional().describe('额外采样的 CSS 选择器，最多 32 个，如 [".ask", ".crumbs", ".settings-section"]。默认已采 [data-replay-id] 与 [data-act]；键优先 data-replay-id，否则 act:<值>#<同名序号>，其余用 <选择器>#<匹配序号>；序号从 0 开始且计入隐藏元素，重叠匹配取第一个选择器。重排或插入会改变序号，需跨结构变化稳定跟踪时请在被录应用标 data-replay-id。位置轨与画面同一时刻、每个输出帧采样一次（页面没有任何变化的帧沿用上一次）；复杂或大范围选择器会让重演变慢。'),
-    resolution: z.enum(['recorded', '1080p', '1440p', '4k']).default('recorded').describe('清晰度：recorded（默认）按录制时的屏幕缩放；1080p / 1440p / 4k 把画面长边渲染到 1920 / 2560 / 3840 像素，保持原始比例，界面按矢量重新绘制而不是放大位图'),
+    resolution: z.enum(['recorded', '1080p', '1440p', '4k']).default('recorded').describe('清晰度：给成片用更清晰的画面时设高一档；recorded（默认）按录制时的屏幕缩放；1080p / 1440p / 4k 把画面长边渲染到 1920 / 2560 / 3840 像素，保持原始比例，界面按矢量重新绘制而不是放大位图'),
     director: webReplayDirectorSchema.optional().describe('可选：导演稿。时间都写录制时间（秒，与 read_web_app_recording 行为轨的时刻一致）。例：{"version":1,"timeline":{"segments":[{"from":0,"to":11.2},{"from":35.8,"to":41.4},{"from":41.4,"to":52.2,"speed":3}],"ramp":0.4},"typewriter":[{"at":36.8,"charsPerSecond":14}]}'),
     directorFile: z.string().min(1).max(32768).optional().describe('可选：导演稿 JSON 文件的本机绝对路径（与 director 二选一）'),
     take: webReplayTakeNameSchema.optional().describe('可选：版本名，即 takes/ 下的文件夹名；给了导演稿没给名字时按时间起名；同名的旧版本在新版本完整写好后才被替换') }).strict()
@@ -75,6 +75,20 @@ export const renderWebAppReplayCapability = defineApplicationCapability({ ...com
   resolveOperationTargets: input => [input.recordingRef],
   control: capabilityControl('execute', ['screen_recording.web_recording'], { cancelable: true }),
   summarize: result => (result.take ? `版本“${result.take.name}”已出：${result.frames} 帧，${Math.round(result.take.durationMs / 100) / 10} 秒，${result.conflicts.length} 处冲突。` : `重演完成：${result.frames} 帧，${result.conflicts.length} 处冲突。`),
+})
+
+export const cancelWebAppReplayCapability = defineApplicationCapability({ ...common,
+  id: 'cancel_web_app_replay', title: '取消网页重演',
+  description: '取消这段网页录制排队中或正在进行的重演（render_web_app_replay）。排队中的直接离开队列；正在跑的停下，写了一半的视频与轨道会删掉，录制和之前的重演视频、版本都不动。原重演操作记为未执行。返回取消时的状态和停下后的状态。没有排队或正在进行的重演时报未执行。',
+  aliases: ['取消网页重演', '停止重演', '清空重演队列', 'cancel web replay'],
+  inputSchema: z.object({ recordingRef: webRecordingRefSchema }).strict(),
+  outputSchema: capabilityOutputSchema({ resultRef: webRecordingRefSchema, previousState: z.enum(['queued', 'running']), state: z.enum(['queued', 'running', 'completed', 'failed', 'cancelled']), verified: z.boolean() }),
+  acceptsRefs: ['screen_recording.web_recording'], producesRefs: ['screen_recording.web_recording'],
+  resolveOperationTargets: input => [input.recordingRef],
+  // 不占用录制的写入：正在跑的重演操作自己持有这段录制，取消必须能越过它。
+  resolveOperationWriteTargets: () => [],
+  control: capabilityControl('execute', ['screen_recording.web_recording']),
+  summarize: result => (result.state === 'cancelled' ? `已取消${result.previousState === 'queued' ? '排队中的' : '正在进行的'}重演。` : `取消已发出，重演当前状态：${result.state}。`),
 })
 
 const destinationSchema = z.object({
@@ -119,4 +133,4 @@ export const importWebRecordingToProjectCapability = defineApplicationCapability
   summarize: result => `网页录制已放进项目：${result.directory}`,
 })
 
-export const WEB_APP_RECORDING_CAPABILITIES = [startWebAppRecordingCapability, stopWebAppRecordingCapability, readWebAppRecordingCapability, renderWebAppReplayCapability, importWebRecordingCapability, importWebRecordingToProjectCapability]
+export const WEB_APP_RECORDING_CAPABILITIES = [startWebAppRecordingCapability, stopWebAppRecordingCapability, readWebAppRecordingCapability, renderWebAppReplayCapability, cancelWebAppReplayCapability, importWebRecordingCapability, importWebRecordingToProjectCapability]

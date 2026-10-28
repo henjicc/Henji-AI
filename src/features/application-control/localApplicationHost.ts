@@ -3,6 +3,7 @@ import { applicationPaidRequest } from '@/services/paidApproval'
 import type { ApplicationRef } from '@/core/application-control'
 import { z } from 'zod'
 import { createApplicationCallerGrant, revokeApplicationCallerGrant, type ApplicationCallerGrant } from '@/core/application-control/callerContext'
+import { ApplicationRevokedReason } from '@/core/application-control/execution/cancelReason'
 import { localHostRequestSchema, APPLICATION_CAPABILITY_IDS, APPLICATION_READ_CAPABILITY_IDS, APPLICATION_READ_PERMISSIONS, APPLICATION_WRITE_PERMISSIONS, type ApplicationHostPlatform, type LocalTool } from '@/core/application-control/localHostContracts'
 import { createLogger } from '@/core/logging'
 import { applicationCallerAccess } from '@/core/application-control/callerContext'
@@ -130,7 +131,7 @@ export function attachLocalApplicationHost(platform: ApplicationHostPlatform, re
     void execute().catch((error) => logger.error('发送操作结果失败', error, { event: `mcp.${action}.reply.failed` })).finally(() => { unbindConfirmation(); active.delete(requestId); grants.delete(requestId) })
   })
   const unsubscribeCancel = platform.onCancel((id) => active.get(id)?.abort())
-  const unsubscribeRevoke = platform.onRevoke((id) => { for (const [key, grant] of grants) if (grant.callerId === id) { revokeApplicationCallerGrant(grant); active.get(key)?.abort(); grants.delete(key) } })
+  const unsubscribeRevoke = platform.onRevoke((id) => { for (const [key, grant] of grants) if (grant.callerId === id) { revokeApplicationCallerGrant(grant); active.get(key)?.abort(new ApplicationRevokedReason()); grants.delete(key) } })
   void platform.registerHost({ rendererEpoch, attachmentSequence, ready, tools, domains }).catch((error) => logger.error('连接应用宿主失败', error, { event: 'mcp.host.register.failed' }))
   return () => {
     disposed = true
