@@ -1,7 +1,7 @@
 import { codeSourcesSchema, rememberCodeSource, componentFileReferences, type CodeSourceResolver } from './codeMaterial/sources'
 import { z } from 'zod'
 import { codeMaterialInstanceSchema, codeMaterialVersionSchema } from './codeMaterialPersistence'
-import { isCodeImageReference, isCodeAudioReference } from './codeMaterial/contract'
+import { isCodeImageReference, isCodeAudioReference, isCodeSceneReference } from './codeMaterial/contract'
 import { codeElementOverridesSchema } from './codeElementOverrides'
 import { formatMigrations } from '../persistence/formatMigrations'
 import { PersistenceError, upgradePersistenceContent, type PersistenceContract } from '../persistence/migrations'
@@ -9,8 +9,8 @@ import { PersistenceError, upgradePersistenceContent, type PersistenceContract }
 /** Bytes bound a serialized source manifest; image dependency count has no product ceiling. */
 export const CODE_ASSET_LIMITS = Object.freeze({ bytes: 512 * 1024 })
 export const CODE_ASSET_MIME = 'application/x-henji-code'
-export const CODE_ASSET_VERSION = 8
-/** 能读懂本程序写出的代码资产的最低版本：8 只给视频参数新增可选取帧时间表 spans。 */
+export const CODE_ASSET_VERSION = 9
+/** 能读懂本程序写出的代码资产的最低版本：8 只给视频参数新增可选取帧时间表 spans，9 只给源码版本新增可选内置库 libraries。 */
 export const CODE_ASSET_MIN_READER_VERSION = 7
 export const codeAssetContentSchema = z.object({ sizeBytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), fileModifiedAt: z.number().finite().nonnegative(), contentIdentity: z.string().regex(/^[a-f0-9]{64}$/) }).strict()
 const image = z.object({
@@ -19,7 +19,7 @@ const image = z.object({
 }).strict()
 export const codeAssetSchema = z.object({
   format: z.literal('henji-code-asset'), version: z.literal(CODE_ASSET_VERSION), minReaderVersion: z.number().int().positive().optional(), name: z.string().trim().min(1).max(200),
-  sourceVersion: z.object({ apiVersion: codeMaterialVersionSchema.shape.apiVersion, languageVersion: codeMaterialVersionSchema.shape.languageVersion, entry: codeMaterialVersionSchema.shape.entry, files: codeMaterialVersionSchema.shape.files, imports: codeMaterialVersionSchema.shape.imports }).strict(),
+  sourceVersion: z.object({ apiVersion: codeMaterialVersionSchema.shape.apiVersion, languageVersion: codeMaterialVersionSchema.shape.languageVersion, entry: codeMaterialVersionSchema.shape.entry, files: codeMaterialVersionSchema.shape.files, imports: codeMaterialVersionSchema.shape.imports, libraries: codeMaterialVersionSchema.shape.libraries }).strict(),
   codeSources: codeSourcesSchema,
   parameters: codeMaterialInstanceSchema.shape.parameters,
   curves: codeMaterialInstanceSchema.shape.curves,
@@ -29,6 +29,8 @@ export const codeAssetSchema = z.object({
   const hashes = new Set(value.codeSources.map(source => source.hash))
   if ([...value.sourceVersion.files, ...componentFileReferences(value.sourceVersion.imports)].some(file => !hashes.has(file.hash))) context.addIssue({ code: 'custom', message: '代码资产的源码或固定组件依赖缺失。' })
   try { codeMaterialVersionSchema.parse({ ...value.sourceVersion, id: 'asset-version' }) } catch (error) { context.addIssue({ code: 'custom', message: error instanceof Error ? error.message : '代码素材文件无效。' }) }
+  // 片子数据存在剪辑里，资产不携带它，片子数据参数在资产里只能是 null。
+  if (Object.values(value.parameters).some(isCodeSceneReference)) context.addIssue({ code: 'custom', message: '代码资产不携带片子数据，片子数据参数须为空。' })
   const ids = value.images.map(image => image.id)
   if (new Set(ids).size !== ids.length) context.addIssue({ code: 'custom', message: '代码素材媒体依赖标识重复。' })
   const references = Object.values(value.parameters).flatMap(value => (isCodeImageReference(value) && value.kind !== 'sequence' || isCodeAudioReference(value)) ? [value.mediaId] : [])
@@ -40,6 +42,11 @@ export const codeAssetSchema = z.object({
   }
 })
 export type CodeAsset = z.infer<typeof codeAssetSchema>
+/** 片子数据存在剪辑里，不随资产带走：收录时把片子数据参数置空，返回置空后的参数与被置空的参数名。 */
+export function detachCodeAssetScenes(parameters: CodeAsset['parameters']): { parameters: CodeAsset['parameters']; detached: string[] } {
+  const detached = Object.keys(parameters).filter(key => isCodeSceneReference(parameters[key]))
+  return { parameters: { ...parameters, ...Object.fromEntries(detached.map(key => [key, null])) }, detached }
+}
 /** Archive payloads carry text; ordinary documents never do. Verification precedes import publication. */
 export function assetCodeSourceResolver(asset: CodeAsset): CodeSourceResolver {
   const sources = new Map(asset.codeSources.map(value => [value.hash, value.source]))

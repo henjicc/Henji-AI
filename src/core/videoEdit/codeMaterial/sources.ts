@@ -179,8 +179,12 @@ export function mergeCodeSources(...groups: readonly (readonly CodeSource[] | un
 export function pruneCodeSources<T>(document: T): T { return document }
 export function codeMaterialFilesKey(input: CodeMaterialFiles): string { return JSON.stringify([input.entry, Object.entries(input.files).sort(([a], [b]) => a.localeCompare(b)), Object.entries(input.resolvedImports ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([path, imports]) => [path, Object.entries(imports).sort(([a], [b]) => a.localeCompare(b))])]) }
 
-/** Container relocation changes locations, never the immutable author content. */
-export function codeVersionContentKey(version: { entry: string; files: readonly CodeFileReference[]; imports?: readonly CodeComponentPin[] }): string {
+/**
+ * Container relocation changes locations, never the immutable author content.
+ * 内置库版本决定作者代码实际跑的库，同样属于内容；没有 libraries（或为空）的版本键不变，已有缓存继续有效。
+ */
+export function codeVersionContentKey(version: { entry: string; files: readonly CodeFileReference[]; imports?: readonly CodeComponentPin[]; libraries?: Readonly<Record<string, string>> }): string {
   const pinKey = (pin: CodeComponentPin): unknown => [pin.name, pin.version, pin.hash, pin.imports.map(pinKey)]
-  return JSON.stringify([version.entry, version.files.map(file => [file.path, file.hash]), (version.imports ?? []).map(pinKey)])
+  const libraries = version.libraries && Object.keys(version.libraries).length ? [Object.entries(version.libraries).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)] : []
+  return JSON.stringify([version.entry, version.files.map(file => [file.path, file.hash]), (version.imports ?? []).map(pinKey), ...libraries])
 }

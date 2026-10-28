@@ -39,6 +39,7 @@ import { RECORDING_ZOOM_EFFECT } from './recordingZoom'
 import { VIDEO_EDIT_DOCUMENT_VERSION } from '../persistence/schemaVersions'
 import { videoEditClipRemixSchema } from './musicRemix'
 import { essentialSoundSettingsSchema } from '../audio/essentialSound'
+import { videoEditSceneReferenceIssues, videoEditScenesSchema } from './scene/sceneSchema'
 
 const frame = z.number().int().min(0).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES)
 const identifier = z.string().min(1).max(100)
@@ -107,6 +108,8 @@ const videoEditClipStateSchema = z.object({
   anchorX: videoEditClipAnimatedValueSchemas.anchorX.optional(), anchorY: videoEditClipAnimatedValueSchemas.anchorY.optional(), curves: videoEditClipCurvesSchema.optional(),
   /** 片段自身变换动画的运动模糊（2026-10-27，只给助手调，界面不提供）：省略跟随序列总开关，false 只关这个片段。 */
   motionBlur: z.literal(false).optional().describe('片段自身动画（位置、缩放、旋转、锚点关键帧）的运动模糊：省略时跟随序列总开关，false 只关掉这个片段。代码素材里各图层的模糊由源码图层的 motionBlur 控制；序列总开关关掉时一律不模糊。'),
+  /** 片段启用开关（剪辑内容第 37 版，PR 的“启用”）：只存“停用”，省略即启用。 */
+  enabled: z.literal(false).optional().describe('片段是否启用：省略为启用，false 时片段留在时间线上但不参与画面与声音。'),
   opacity: videoEditClipAnimatedValueSchemas.opacity, volume: videoEditClipAnimatedValueSchemas.volume, gainDb: videoEditGainDbSchema.optional(), audioRole: videoEditAudioRoleSchema.optional(), essentialSound: essentialSoundSettingsSchema.optional(), text: z.string().max(2000),
   textStyle: videoEditTextStyleSchema.optional(),
   /** PR 淡化手柄：片段开头淡入、结尾淡出的帧数（画面从透明渐显，声音按恒定功率渐强）；没有就是不淡化。 */
@@ -135,7 +138,7 @@ export const videoEditClipSchema = videoEditClipStateSchema.extend({
   takes: z.array(videoEditClipTakeSchema).optional(),
 })
 /** 原生模板的内容：自成一体的文字与图形片段快照（start/track 相对组合起点），不带媒体、代码、跟踪或效果。 */
-export const videoEditNativeTemplateClipSchema = videoEditClipSchema.pick({ name: true, kind: true, track: true, start: true, duration: true, sourceInUs: true, sourceRemainder: true, x: true, y: true, scale: true, rotation: true, anchorX: true, anchorY: true, opacity: true, volume: true, text: true, textStyle: true, graphic: true, curves: true }).strip().superRefine((clip, ctx) => {
+export const videoEditNativeTemplateClipSchema = videoEditClipSchema.pick({ name: true, kind: true, track: true, start: true, duration: true, sourceInUs: true, sourceRemainder: true, x: true, y: true, scale: true, rotation: true, anchorX: true, anchorY: true, opacity: true, volume: true, text: true, textStyle: true, graphic: true, curves: true, enabled: true }).strip().superRefine((clip, ctx) => {
   if (clip.kind !== 'graphic' && clip.kind !== 'text' || clip.kind === 'graphic' && !clip.graphic) ctx.addIssue({ code: 'custom', message: '原生模板只接受文字或图形片段。' })
 })
 export const videoEditNativeTemplateContentSchema = z.object({ width: z.number().int().min(16).max(8192), height: z.number().int().min(16).max(8192), fps: z.number().finite().positive().max(120), clips: z.array(videoEditNativeTemplateClipSchema).min(1) }).strict()
@@ -193,6 +196,8 @@ export const videoEditDocumentSchema = z.object({
   posterFrame: z.object({ sequenceId: identifier, frame: z.number().int().nonnegative() }).strict().optional(),
   /** 原地生成续接元数据，不属于剪辑撤销历史。旧文件可省略。 */
   inPlaceGenerations: videoEditInPlaceRecordsSchema.optional(),
+  /** 片子数据（剪辑内容第 37 版）：代码参数 {kind:'scene', sceneId} 引用的结构化“画什么”，记录取值由代码声明（scene/sceneDeclaration.ts）。 */
+  scenes: videoEditScenesSchema.optional(),
 }).strict().superRefine((document, ctx) => {
   const issue = (message: string): void => { ctx.addIssue({ code: 'custom', message }) }
   const mediaById = new Map(document.media.map(value => [value.id, value]))
@@ -210,7 +215,8 @@ export const videoEditDocumentSchema = z.object({
   const lutsById = new Set(document.colorLuts?.map(value => value.id))
   for (const media of document.media) if (media.assetContent && !media.assetId && !media.assetContent.contentIdentity) issue('原文件内容快照需要固定内容身份。')
   const ids = new Set<string>()
-  for (const item of [...(document.styles ?? []), ...(document.templates ?? []), ...(document.colorLuts ?? []), ...document.media, ...document.bins, ...document.items, ...(document.codeMaterials ?? []), ...(document.codeMaterials ?? []).flatMap(definition => definition.versions), ...document.sequences, ...document.sequences.flatMap(sequence => [...sequence.tracks, ...sequence.clips, ...sequence.annotations, ...(sequence.markers ?? []), ...(sequence.captions ?? []), ...(sequence.transitions ?? []), ...sequence.clips.flatMap(clip => clip.effects ?? [])])]) {
+  for (const message of videoEditSceneReferenceIssues(document)) issue(message)
+  for (const item of [...(document.scenes ?? []), ...(document.styles ?? []), ...(document.templates ?? []), ...(document.colorLuts ?? []), ...document.media, ...document.bins, ...document.items, ...(document.codeMaterials ?? []), ...(document.codeMaterials ?? []).flatMap(definition => definition.versions), ...document.sequences, ...document.sequences.flatMap(sequence => [...sequence.tracks, ...sequence.clips, ...sequence.annotations, ...(sequence.markers ?? []), ...(sequence.captions ?? []), ...(sequence.transitions ?? []), ...sequence.clips.flatMap(clip => clip.effects ?? [])])]) {
     if (ids.has(item.id)) issue('剪辑包含重复标识。')
     ids.add(item.id)
   }

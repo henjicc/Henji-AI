@@ -1,10 +1,10 @@
 import type { AudioContentAnalysis } from '../../audioAnalysis/contentAnalysis'
 /** Host safety bounds for structured graphics, component graphs and glyph requests; author JS has no language budget. */
 export const CODE_MATERIAL_LIMITS = Object.freeze({ depth: 64, stringLength: 4096, textCharacters: 8192, pathPoints: 4096 })
-export type { CodeColor, CodeImageReference, CodeVideoSpan, CodeAudioReference, CodePoint, CodeGrade, CodeGradientStop, CodeRange, CodeEasing, CodeBasicParameterValue, CodeParameterObject, CodeParameterValue, CodeParameterValues, CodeParameterVisibility, CodeBasicParameterDeclaration, CodeParameterTypeDefinition, CodeParameterDeclaration } from '../../imaging/parameterTypes'
+export type { CodeColor, CodeImageReference, CodeVideoSpan, CodeAudioReference, CodeSceneReference, CodePoint, CodeGrade, CodeGradientStop, CodeRange, CodeEasing, CodeBasicParameterValue, CodeParameterObject, CodeParameterValue, CodeParameterValues, CodeParameterVisibility, CodeBasicParameterDeclaration, CodeParameterTypeDefinition, CodeParameterDeclaration } from '../../imaging/parameterTypes'
 import type { CodeColor, CodeImageReference, CodeVideoSpan } from '../../imaging/parameterTypes'
 import { CODE_VIDEO_SPAN_LIMIT, codeVideoSpansIssue } from './videoSpans'
-export const CODE_PARAMETER_TYPES = ['number', 'angle', 'point', 'range', 'color', 'gradient', 'curve', 'grade', 'choice', 'boolean', 'text', 'textStyle', 'table', 'font', 'image', 'audio', 'easing', 'seed'] as const
+export const CODE_PARAMETER_TYPES = ['number', 'angle', 'point', 'range', 'color', 'gradient', 'curve', 'grade', 'choice', 'boolean', 'text', 'textStyle', 'table', 'font', 'image', 'audio', 'easing', 'seed', 'scene'] as const
 export interface CodeMaterialContext { time: number; localTime: number; sequenceTime: number; width: number; height: number; frame: number; fps: number; seed?: number; audio?: AudioContentAnalysis; audioTime?: number }
 export interface CodeSourceSpan { file: string; start: number; end: number; startLine: number; startColumn: number; endLine: number; endColumn: number }
 export const CODE_BLEND_NAMES = ['normal', 'multiply', 'screen', 'overlay', 'add', 'lighten', 'darken', 'difference', 'exclusion', 'soft-light', 'hard-light', 'color-dodge', 'color-burn', 'hue', 'saturation', 'color', 'luminosity'] as const
@@ -102,6 +102,16 @@ export function codeAudioReference(value: unknown, label: string): import('../..
 }
 export function isCodeAudioReference(value: unknown): value is import('../../imaging/parameterTypes').CodeAudioReference {
   try { codeAudioReference(value, '音频'); return true } catch { return false }
+}
+/** 片子数据参数的值：只引用同一剪辑里的一份片子数据（scenes），记录本身不进参数。 */
+export function codeSceneReference(value: unknown, label: string): import('../../imaging/parameterTypes').CodeSceneReference {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || ![null, Object.prototype].includes(Object.getPrototypeOf(value))) throw new CodeMaterialError('PARAMETERS', `${label}需要片子数据引用。`)
+  const fields = Object.getOwnPropertyDescriptors(value)
+  if (Reflect.ownKeys(value).length !== 2 || fields.kind?.value !== 'scene' || typeof fields.sceneId?.value !== 'string' || !fields.sceneId.value.length || fields.sceneId.value.length > 100) throw new CodeMaterialError('PARAMETERS', `${label}仅允许 kind:scene 和 sceneId。`)
+  return { kind: 'scene', sceneId: fields.sceneId.value }
+}
+export function isCodeSceneReference(value: unknown): value is import('../../imaging/parameterTypes').CodeSceneReference {
+  try { codeSceneReference(value, '片子数据'); return true } catch { return false }
 }
 export function isCodeColor(value: unknown): value is CodeColor {
   return Array.isArray(value) && value.length === 4 && value.every(channel => typeof channel === 'number' && Number.isFinite(channel) && channel >= 0 && channel <= 1)

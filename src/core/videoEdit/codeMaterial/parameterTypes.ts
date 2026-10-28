@@ -1,47 +1,26 @@
-import { CODE_PARAMETER_TYPES, CodeMaterialError, assertCodeMaterialKey, codeColor, finiteCodeNumber } from './contract'
+import { CODE_PARAMETER_TYPES, assertCodeMaterialKey, codeColor, finiteCodeNumber } from './contract'
 import type { CodeBasicParameterDeclaration, CodeBasicParameterValue, CodeParameterDeclaration, CodeParameterObject, CodeParameterTypeDefinition, CodeParameterValue, CodeParameterVisibility, CodePoint } from './contract'
 import { CODE_EASE_NAMES } from './motion'
 import { textStyleSchema } from '../../imaging/vectorContent/text'
+import { declarationBoolean as bool, declarationEnum as enumValue, declarationFail as fail, declarationFields as fields, declarationNumber as number, declarationObject as object, declarationPoint as point, declarationText as text } from './declarationReader'
+import { CODE_SCENE_MIN_API_VERSION, parseCodeSceneSchema } from '../scene/sceneDeclaration'
 
-function fail(label: string, expected: string): never { throw new CodeMaterialError('PARAMETERS', `${label} 期望${expected}。`) }
-function object(value: unknown, label: string): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || ![null, Object.prototype].includes(Object.getPrototypeOf(value))) fail(label, '静态 JSON 对象')
-  const descriptors = Object.getOwnPropertyDescriptors(value)
-  if (Reflect.ownKeys(value).length !== Object.keys(descriptors).length || Object.values(descriptors).some(field => !('value' in field) || !field.enumerable)) fail(label, '无访问器的 JSON 对象')
-  return value as Record<string, unknown>
-}
-function fields(item: Record<string, unknown>, allowed: readonly string[], label: string): void {
-  for (const key of Object.keys(item)) if (!allowed.includes(key)) fail(`${label}.${key}`, `已声明字段（可用：${allowed.join('、')}）`)
-}
-function text(value: unknown, label: string, max: number, empty = false): string {
-  if (typeof value !== 'string' || value.length > max || !empty && !value.length) fail(label, `${empty ? '0' : '1'}–${max} 字的字符串`)
-  return value
-}
-function bool(value: unknown, label: string): boolean { if (typeof value !== 'boolean') fail(label, '布尔值'); return value }
-function number(value: unknown, label: string, min: number, max: number, integer = false): number {
-  const n = finiteCodeNumber(value, label)
-  if (n < min || n > max || integer && !Number.isInteger(n)) fail(label, `${min}–${max} 的${integer ? '整数' : '有限数值'}`)
-  return n
-}
-function enumValue<T extends string>(value: unknown, allowed: readonly T[], label: string): T {
-  if (typeof value !== 'string' || !allowed.includes(value as T)) fail(label, allowed.join(' | '))
-  return value as T
-}
-function point(value: unknown, label: string): CodePoint {
-  const raw = object(value, label); fields(raw, ['x', 'y'], label)
-  return { x: finiteCodeNumber(raw.x, `${label}.x`), y: finiteCodeNumber(raw.y, `${label}.y`) }
-}
 const extras: Record<string, string[]> = {
   number: ['min', 'max', 'step', 'unit', 'control'], angle: ['min', 'max'], point: ['space', 'min', 'max'], range: ['min', 'max', 'step', 'unit'], color: ['alpha'],
-  gradient: ['maxStops'], curve: ['kind'], grade: [], choice: ['options', 'control'], boolean: [], text: ['maxLength', 'multiline'], textStyle: [], table: ['fields', 'rowKey'], font: [], image: [], audio: [], easing: [], seed: [],
+  gradient: ['maxStops'], curve: ['kind'], grade: [], choice: ['options', 'control'], boolean: [], text: ['maxLength', 'multiline'], textStyle: [], table: ['fields', 'rowKey'], font: [], image: [], audio: [], easing: [], seed: [], scene: ['schema'],
 }
-function declaration(key: string, raw: unknown, types: Record<string, CodeParameterTypeDefinition>, field: false | 'custom' | 'table' = false): CodeParameterDeclaration {
+/** 作者接口 v5 起才有片子数据参数；更早的代码里 scene 仍可以是自定义类型名，按原样解析。 */
+function baseTypes(apiVersion: number | undefined): readonly string[] {
+  return apiVersion !== undefined && apiVersion >= CODE_SCENE_MIN_API_VERSION ? CODE_PARAMETER_TYPES : CODE_PARAMETER_TYPES.filter(type => type !== 'scene')
+}
+function declaration(key: string, raw: unknown, types: Record<string, CodeParameterTypeDefinition>, field: false | 'custom' | 'table' = false, apiVersion?: number): CodeParameterDeclaration {
   assertCodeMaterialKey(key)
   const item = object(raw, key); const type = text(item.type, `${key}.type`, 64)
   const custom = Object.prototype.hasOwnProperty.call(types, type) ? types[type] : undefined
-  if (!Object.prototype.hasOwnProperty.call(extras, type) && !custom) fail(`${key}.type`, `基础类型或已声明自定义类型（${[...CODE_PARAMETER_TYPES, ...Object.keys(types)].join('、')}）`)
-  if (field && (type === 'image' || type === 'audio' || type === 'table' || type === 'textStyle' && field === 'custom' || custom)) fail(`${key}.type`, '基础参数类型；数据表字段也可使用文字样式，不允许媒体或嵌套结构')
-  fields(item, ['type', 'title', 'description', 'tooltip', 'default', 'animatable', ...(field ? [] : ['group', 'layer', 'advanced', 'visibleWhen']), ...(extras[type] ?? [])], key)
+  if (!baseTypes(apiVersion).includes(type) && !custom) fail(`${key}.type`, `基础类型或已声明自定义类型（${[...baseTypes(apiVersion), ...Object.keys(types)].join('、')}）`)
+  if (field && (type === 'image' || type === 'audio' || type === 'scene' || type === 'table' || type === 'textStyle' && field === 'custom' || custom)) fail(`${key}.type`, '基础参数类型；数据表字段也可使用文字样式，不允许媒体、片子数据或嵌套结构')
+  // 自定义类型只有共同的键；与内置类型同名（v4 里的 scene）时也不借用内置类型的额外键。
+  fields(item, ['type', 'title', 'description', 'tooltip', 'default', 'animatable', ...(field ? [] : ['group', 'layer', 'advanced', 'visibleWhen']), ...(custom ? [] : extras[type] ?? [])], key)
   const base = { key, title: text(item.title, `${key}.title`, 80), description: text(item.description ?? '', `${key}.description`, 1000, true), animatable: bool(item.animatable ?? false, `${key}.animatable`),
     ...(item.tooltip === undefined ? {} : { tooltip: text(item.tooltip, `${key}.tooltip`, 200, true) }),
     ...(item.layer === undefined ? {} : { layer: text(item.layer, `${key}.layer`, Number.MAX_SAFE_INTEGER) }),
@@ -96,7 +75,10 @@ function declaration(key: string, raw: unknown, types: Record<string, CodeParame
   else if (type === 'boolean') result = { ...base, type, default: bool(item.default, `${key}.default`) }
   else if (type === 'seed') result = { ...base, type, default: number(item.default, `${key}.default`, 0, 4294967295, true) }
   else if (type === 'easing') result = { ...base, type, default: item.default as Extract<CodeBasicParameterDeclaration, { type: 'easing' }>['default'] }
-  else {
+  else if (type === 'scene') {
+    if (item.default !== undefined && item.default !== null || base.animatable) fail(key, '片子数据参数 default:null（可省略）且 animatable:false')
+    result = { ...base, type, default: null, animatable: false, schema: parseCodeSceneSchema(item.schema, `${key}.schema`) }
+  } else {
     if (item.default !== null || base.animatable) fail(key, '媒体 default:null 且 animatable:false')
     result = { ...base, type: type as 'image' | 'audio', default: null, animatable: false }
   }
@@ -104,11 +86,12 @@ function declaration(key: string, raw: unknown, types: Record<string, CodeParame
   return result
 }
 
-export function parseCodeMaterialTypes(raw: unknown): Record<string, CodeParameterTypeDefinition> {
+/** `apiVersion` 是代码版本记录的作者接口版本；省略时按最早的作者接口解析（不认片子数据参数）。 */
+export function parseCodeMaterialTypes(raw: unknown, apiVersion?: number): Record<string, CodeParameterTypeDefinition> {
   const result: Record<string, CodeParameterTypeDefinition> = {}
   for (const [name, rawType] of Object.entries(object(raw, 'types'))) {
     assertCodeMaterialKey(name)
-    if (CODE_PARAMETER_TYPES.includes(name as typeof CODE_PARAMETER_TYPES[number])) fail(`types.${name}`, '不与基础类型重名的类型名')
+    if (baseTypes(apiVersion).includes(name)) fail(`types.${name}`, '不与基础类型重名的类型名')
     const item = object(rawType, `types.${name}`); fields(item, ['title', 'layout', 'fields'], `types.${name}`)
     const members = Object.entries(object(item.fields, `types.${name}.fields`))
     if (!members.length || members.length > 16) fail(`types.${name}.fields`, '1–16 个基础类型字段')
@@ -119,10 +102,11 @@ export function parseCodeMaterialTypes(raw: unknown): Record<string, CodeParamet
   }
   return result
 }
-export function parseCodeMaterialV3Parameters(raw: unknown, types: Record<string, CodeParameterTypeDefinition>): CodeParameterDeclaration[] {
+/** `apiVersion` 同 parseCodeMaterialTypes：v5 起才能声明片子数据参数（type:'scene'）。 */
+export function parseCodeMaterialV3Parameters(raw: unknown, types: Record<string, CodeParameterTypeDefinition>, apiVersion?: number): CodeParameterDeclaration[] {
   const result: CodeParameterDeclaration[] = []
   for (const [key, value] of Object.entries(object(raw, 'parameters'))) {
-    const parsed = declaration(key, value, types)
+    const parsed = declaration(key, value, types, false, apiVersion)
     const condition = object(value, key).visibleWhen
     if (condition !== undefined) {
       const item = object(condition, `${key}.visibleWhen`); fields(item, ['param', 'equals', 'notEquals', 'in'], `${key}.visibleWhen`)
@@ -188,7 +172,7 @@ export function validateCodeMaterialV3ParameterValue(declaration: CodeParameterD
       const raw = object(value, key); fields(raw, Object.keys(declaration.fields), key)
       return Object.fromEntries(Object.entries(declaration.fields).map(([name, field]) => [name, validateCodeMaterialV3ParameterValue({ ...field, key: `${key}.${name}` }, raw[name]) as CodeBasicParameterValue]))
     }
-    case 'audio': case 'image': if (value === null) return null; fail(key, 'null；图片引用请走既有图片参数校验')
+    case 'audio': case 'image': case 'scene': if (value === null) return null; return fail(key, declaration.type === 'scene' ? 'null；片子数据引用请走参数实例校验' : 'null；图片引用请走既有图片参数校验')
   }
 }
 /** Metadata preserves the source spelling while the executable IR uses a closed custom tag. */

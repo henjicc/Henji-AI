@@ -305,10 +305,11 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
         }
         // 能力调用不弹保存对话框：先写进项目“导出”文件夹再收录。
         const path = async (): Promise<string> => uniqueVideoEditOutputPath(await videoEditProjectOutputDirectory(ref.projectId), '可编辑代码素材', 'henji-code')
-        const asset = await collectVideoEditCodeAsset(ref.projectId, target, { ...(input.libraryRef ? { libraryId: input.libraryRef.id } : {}), path }, context.signal)
-        if (!asset) throw new Error('用户取消代码素材保存，没有收录资产。')
-        const resultRef = { kind: 'asset' as const, id: asset.id }
-        return { resultRef, documentRef: input.documentRef, message: '可编辑代码素材已加入资产库，可在另一剪辑引用并重新调参。', verification: { verified: true, target: resultRef, condition: '正式资产检查已核对代码清单的固定路径、结构与内容身份。' } }
+        const collected = await collectVideoEditCodeAsset(ref.projectId, target, { ...(input.libraryRef ? { libraryId: input.libraryRef.id } : {}), path }, context.signal)
+        if (!collected) throw new Error('用户取消代码素材保存，没有收录资产。')
+        const resultRef = { kind: 'asset' as const, id: collected.asset.id }
+        const detached = collected.detachedSceneParameters.length ? `片子数据没有随资产带走：参数 ${collected.detachedSceneParameters.join('、')} 在资产里为空，导入后需要重新指定。` : ''
+        return { resultRef, documentRef: input.documentRef, message: `可编辑代码素材已加入资产库，可在另一剪辑引用并重新调参。${detached}`, verification: { verified: true, target: resultRef, condition: '正式资产检查已核对代码清单的固定路径、结构与内容身份。' } }
       }
       if (definition.id === collectVideoEditOutputCapability.id) {
         const input = collectVideoEditOutputCapability.inputSchema.parse(raw)

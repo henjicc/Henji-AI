@@ -1,0 +1,26 @@
+{
+  "version": 3,
+  "minReaderVersion": 3,
+  "content": {
+    "id": "golden-library-template",
+    "name": "黄金模板",
+    "description": "代码标题模板。",
+    "version": 3,
+    "contentHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "updatedAt": "2026-10-09T00:00:00.000Z",
+    "style": {
+      "id": "golden-style",
+      "version": 2
+    },
+    "body": {
+      "kind": "code",
+      "code": {
+        "entry": "main.ts",
+        "files": {
+          "main.ts": "export default {\n  name: \"黄金代码\", kind: \"generator\", mode: \"dynamic\", width: 1920, height: 1080, durationSeconds: 4,\n  motionBlur: { shutter: 180, maxSamples: 16 },\n  params: [{\"key\":\"nodes\",\"type\":\"table\",\"title\":\"节点数据\",\"rowKey\":\"id\",\"fields\":{\"id\":{\"type\":\"text\",\"title\":\"键\",\"default\":\"\",\"maxLength\":64},\"label\":{\"type\":\"text\",\"title\":\"文案\",\"default\":\"\",\"maxLength\":200}},\"default\":[{\"id\":\"node-0\",\"label\":\"首项\"}]},{\"key\":\"titleStyle\",\"type\":\"textStyle\",\"title\":\"文字样式\",\"layer\":\"golden-motion\",\"default\":{\"fontFamily\":\"sans-serif\",\"fontSize\":64}},{\"key\":\"label\",\"type\":\"text\",\"title\":\"标题\",\"default\":\"黄金样本\",\"maxLength\":200},{\"key\":\"size\",\"type\":\"number\",\"title\":\"字号\",\"default\":24,\"min\":1,\"max\":72,\"step\":1,\"unit\":\"px\"},{\"key\":\"screen\",\"type\":\"image\",\"title\":\"录屏\",\"default\":null},{\"key\":\"film\",\"type\":\"scene\",\"title\":\"片子数据\",\"schema\":{\"id\":\"golden.film\",\"version\":1,\"title\":\"黄金片子\",\"kinds\":{\"segment\":{\"title\":\"段落\",\"at\":\"start\",\"end\":\"end\",\"influence\":\"span\",\"lane\":{\"style\":\"bar\",\"label\":\"name\"},\"fields\":{\"name\":{\"type\":\"text\",\"title\":\"名字\",\"maxLength\":80},\"start\":{\"type\":\"time\"},\"end\":{\"type\":\"time\"}}},\"window\":{\"title\":\"窗口\",\"footage\":\"media\",\"fields\":{\"name\":{\"type\":\"text\",\"maxLength\":80},\"rect\":{\"type\":\"deskRect\"},\"media\":{\"type\":\"media\",\"accept\":[\"video\"]}}},\"shot\":{\"title\":\"窗口内容\",\"parent\":[\"window\"],\"at\":\"at\",\"influence\":\"untilNext\",\"footage\":\"media\",\"lane\":{\"style\":\"block\"},\"fields\":{\"at\":{\"type\":\"time\"},\"media\":{\"type\":\"media\",\"accept\":[\"video\"]},\"src\":{\"type\":\"sourceTime\"},\"rate\":{\"type\":\"number\",\"min\":0,\"max\":16,\"default\":1}}},\"focus\":{\"title\":\"高亮\",\"fields\":{\"name\":{\"type\":\"text\",\"maxLength\":80,\"optional\":true}}},\"focusKey\":{\"title\":\"镜头落点\",\"parent\":[\"focus\"],\"at\":\"at\",\"duration\":\"dur\",\"influence\":\"neighbors\",\"margin\":{\"before\":0.3},\"footage\":\"win\",\"lane\":{\"style\":\"key\"},\"cues\":{\"land\":{\"at\":\"at\",\"title\":\"落定\"}},\"fields\":{\"at\":{\"type\":\"time\",\"anchor\":\"footage\"},\"dur\":{\"type\":\"duration\",\"max\":10},\"win\":{\"type\":\"ref\",\"to\":[\"window\"]},\"target\":{\"type\":\"windowRegion\"},\"pad\":{\"type\":\"number\",\"min\":0,\"max\":1,\"default\":0.2},\"track\":{\"type\":\"uiTrack\",\"optional\":true}}},\"cut\":{\"title\":\"剪切\",\"at\":\"from\",\"end\":\"to\",\"influence\":\"span\",\"lane\":{\"style\":\"cut\"},\"fields\":{\"from\":{\"type\":\"time\"},\"to\":{\"type\":\"time\"},\"enabled\":{\"type\":\"boolean\",\"default\":true}}}}}}],\n  layers() {\n    return [{ id: \"golden-motion\", bounds: [0, 0, 100, 100], blurShape: \"lens\", pose: t => ({ x: t * 10, blur: 8 }), draw(ctx) { ctx.fillStyle = \"#000000\"; ctx.fillRect(0, 0, 100, 100) } }]\n  }\n}\n"
+        }
+      },
+      "durationSeconds": 4
+    }
+  }
+}

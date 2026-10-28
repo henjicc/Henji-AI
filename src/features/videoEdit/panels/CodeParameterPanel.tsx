@@ -50,7 +50,7 @@ function CollectCodeAsset({ editor, onError }: { editor: VideoEditCodeEditorStat
       const target = editor.target
       const owner = requireVideoEditInstance(target.projectId)
       const libraryId = useAssetLibraryStore.getState().libraryId
-      const asset = await collectVideoEditCodeAsset(target.projectId, { kind: 'clip', sequenceId: target.sequenceId, clipId: target.clipId, ...(target.effectId ? { effectId: target.effectId } : {}) }, libraryId ? { libraryId } : {}, controller.signal)
+      const asset = (await collectVideoEditCodeAsset(target.projectId, { kind: 'clip', sequenceId: target.sequenceId, clipId: target.clipId, ...(target.effectId ? { effectId: target.effectId } : {}) }, libraryId ? { libraryId } : {}, controller.signal))?.asset
       if (asset && !controller.signal.aborted && activeVideoEditInstance() === owner) {
         useAssetLibraryStore.getState().setSelectedAsset(asset); openAssetLibrary('floating')
       }

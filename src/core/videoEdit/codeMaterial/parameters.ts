@@ -1,4 +1,4 @@
-import { CodeMaterialError, assertCodeMaterialKey, codeColor, codeImageReference, codeAudioReference, finiteCodeNumber } from './contract'
+import { CodeMaterialError, assertCodeMaterialKey, codeColor, codeImageReference, codeAudioReference, codeSceneReference, finiteCodeNumber } from './contract'
 import type { CodeMaterialMetadata } from '../codeMaterialDocument'
 import type { CodeParameterDeclaration, CodeParameterValue, CodeParameterValues } from './contract'
 import { validateCodeMaterialV3ParameterValue } from './parameterTypes'
@@ -20,6 +20,7 @@ export function validateCodeMaterialParameterValue(declaration: CodeParameterDec
   if (declaration.type === 'text') return text(value, key, declaration.maxLength, true)
   if (declaration.type === 'audio') return value === null ? null : codeAudioReference(value, key)
   if (declaration.type === 'image') return value === null ? null : codeImageReference(value, key)
+  if (declaration.type === 'scene') return value === null ? null : codeSceneReference(value, key)
   return validateCodeMaterialV3ParameterValue(declaration, value)
 }
 export function validateCodeMaterialParameters(program: Pick<CodeMaterialMetadata, 'parameters'>, values: Readonly<Record<string, unknown>> = {}): CodeParameterValues {

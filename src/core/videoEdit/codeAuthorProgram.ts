@@ -34,7 +34,7 @@ export interface CodeAuthorBundle { code: string; map: string; locations: CodeAu
 /** Rebuildable executable module plus declarations read in the render worker.
  * Source files, parameters and overrides remain the persisted truth. */
 export interface CodeAuthorProgram extends CodeMaterialMetadata {
-  apiVersion: 4
+  apiVersion: 4 | 5
   languageVersion: 4
   bundle: CodeAuthorBundle
   frames: number[]

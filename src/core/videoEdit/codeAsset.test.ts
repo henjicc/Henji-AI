@@ -1,12 +1,20 @@
 import { testCodeAssetSource } from './codeMaterial/sourceTestFixtures'
 import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { describe, expect, it } from 'vitest'
-import { CODE_ASSET_VERSION, CODE_ASSET_LIMITS, decodeCodeAsset, encodeCodeAsset, type CodeAsset } from './codeAsset'
+import { CODE_ASSET_VERSION, CODE_ASSET_LIMITS, decodeCodeAsset, detachCodeAssetScenes, encodeCodeAsset, type CodeAsset } from './codeAsset'
 import { videoEditDocumentSchema } from './document'
 
 const content = { sizeBytes: 123, fileModifiedAt: 456, contentIdentity: 'a'.repeat(64) }
 const fixture = (): CodeAsset => ({ format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: '透明标题', ...testCodeAssetSource('source'), parameters: { label: '中文', size: 20, tint: [1, 0, 0, 1], image: { kind: 'image', mediaId: 'old-image' } }, curves: { size: [{ id: 'key', sourceInUs: 1, sourceRemainder: { numerator: 1, denominator: 3 }, value: 21, interpolation: 'ease' }] }, images: [{ kind: 'image', id: 'old-image', path: 'D:/original.png', content, assetId: 'original' }] })
 describe('可编辑代码资产文件契约', () => {
+  it('片子数据不随资产带走：收录时片子数据参数置空并报出参数名，资产不接受残留的片子数据引用', () => {
+    const asset = fixture()
+    const { parameters, detached } = detachCodeAssetScenes({ ...asset.parameters, film: { kind: 'scene', sceneId: 'golden-scene' } })
+    expect(detached).toEqual(['film'])
+    expect(decodeCodeAsset(encodeCodeAsset({ ...asset, parameters })).parameters).toEqual({ ...asset.parameters, film: null })
+    expect(detachCodeAssetScenes(asset.parameters)).toEqual({ parameters: asset.parameters, detached: [] })
+    expect(() => encodeCodeAsset({ ...asset, parameters: { ...asset.parameters, film: { kind: 'scene', sceneId: 'golden-scene' } } })).toThrow('片子数据')
+  })
   it('音频、视频固定时间和下方画面无损往返，拒绝依赖种类错配', () => {
     const asset: CodeAsset = { ...fixture(), parameters: { sound: { kind: 'audio', mediaId: 'video' }, picture: { kind: 'video', mediaId: 'video', time: .25 }, lower: { kind: 'sequence', mediaId: 'below' } }, images: [{ id: 'video', kind: 'video', path: 'D:/original.mp4', content }] }
     expect(decodeCodeAsset(encodeCodeAsset(asset))).toEqual(asset)

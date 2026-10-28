@@ -5,6 +5,16 @@ import { renameCodeMaterialFile } from './fileEdits'
 
 const entry = 'export default {languageVersion:3,apiVersion:1,name:"组件",kind:"generator",mode:"static",width:16,height:16,durationSeconds:1,seed:1,parameters:{},render(ctx){return [latest(),old()]}}'
 describe('位置解析与固定组件依赖', () => {
+  it('内置库版本算进代码版本内容键，与书写顺序无关；没有内置库的版本键与原来一致', () => {
+    const version = { entry: 'main.ts', files: [{ path: 'main.ts', location: 'memory:main', hash: 'a'.repeat(64) }] }
+    // 已有缓存以这个键寻址：没有 libraries 时不能变。
+    expect(codeVersionContentKey(version)).toBe(JSON.stringify(['main.ts', [['main.ts', 'a'.repeat(64)]], []]))
+    expect(codeVersionContentKey({ ...version, libraries: {} })).toBe(codeVersionContentKey(version))
+    const three = codeVersionContentKey({ ...version, libraries: { three: '0.186.1' } })
+    expect(three).not.toBe(codeVersionContentKey(version))
+    expect(three).not.toBe(codeVersionContentKey({ ...version, libraries: { three: '0.187.0' } }))
+    expect(codeVersionContentKey({ ...version, libraries: { three: '0.186.1', 'opentype.js': '1.3.4' } })).toBe(codeVersionContentKey({ ...version, libraries: { 'opentype.js': '1.3.4', three: '0.186.1' } }))
+  })
   it('共享依赖只读取一次；过大依赖树在递归解析前按内存预算明确拒绝', () => {
     const leaf: CodeComponentPin = { name: '共用', version: 1, location: '/项目/代码/组件库/共用/v1.ts', hash: 'a'.repeat(64), imports: [] }
     const top = { ...leaf, name: '父组件', location: '/项目/代码/组件库/父组件/v1.ts', hash: 'b'.repeat(64), imports: [leaf, leaf] }

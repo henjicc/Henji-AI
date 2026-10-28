@@ -47,7 +47,9 @@ export const VIDEO_EDIT_PROGRAM_SOURCE_CASCADE = { declarationId: 'video_edit.pr
 const schemas: Record<VideoEditEntityType, Record<string, z.ZodType>> = {
   'video_edit.document': { name: z.string().min(1).max(200), frame: z.number().int().nonnegative(), selection: z.string(), activeSequenceId: z.string(), dirty: z.boolean(), selectedItemIds: z.array(z.string().min(1)), selectedBinId: z.string().max(100), openSequenceIds: z.array(z.string().min(1)) },
   // 速度（4.13）以 speed_percent 百分比公开（见下），不公开内部有理数。
-  'video_edit.clip': Object.fromEntries(Object.entries(videoEditClipSchema.shape).filter(([key]) => !['id', 'sourceRemainder', 'speed', 'curves'].includes(key))),
+  // 片段启用开关 enabled 暂不公开：播放、导出与混音还没读它，公开会让助手以为停用生效。片段启用行为（问题记录 #11）接上后，
+  // 再按下方 motionBlur 的写法映射成 boolean 开放（true 写入时省略）。
+  'video_edit.clip': Object.fromEntries(Object.entries(videoEditClipSchema.shape).filter(([key]) => !['id', 'sourceRemainder', 'speed', 'curves', 'enabled'].includes(key))),
   'video_edit.annotation': Object.fromEntries(Object.entries(videoEditAnnotationSchema.shape).filter(([key]) => key !== 'id' && key !== 'sourceRemainder')),
   'video_edit.sequence': Object.fromEntries(Object.entries(videoEditSequenceSchema.shape).filter(([key]) => !['id', 'clips', 'annotations', 'tracks', 'markers', 'captions', 'textTranscription'].includes(key))),
   'video_edit.marker': { ...Object.fromEntries(Object.entries(videoEditMarkerSchema.shape).filter(([key]) => key !== 'id')), clipId: z.string().max(100) },

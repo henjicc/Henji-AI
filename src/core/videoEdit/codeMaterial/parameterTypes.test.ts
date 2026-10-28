@@ -6,6 +6,7 @@ import { codeParameterMetadata, parseCodeMaterialTypes } from './parameterTypes'
 import { easeCodeParameter, sampleCodeCurve, sampleCodeGradient } from './parameterSampling'
 import { codeMaterialInstanceSchema } from '../codeMaterialPersistence'
 import { codeMaterialKeyframeSchema, evaluateCodeMaterialParameters, prepareCodeMaterialParameters } from '../codeMaterialAnimation'
+import { GOLDEN_SCENE_DECLARATION } from '../scene/sceneTestFixtures'
 
 const declaration = (parameters: Record<string, unknown>, _body = '', types: Record<string, unknown> = {}) => ({ name: '参数契约', parameters, types })
 const grade = { hue: 30, strength: .4, luminance: -.2 }
@@ -126,5 +127,18 @@ describe('参数采样、动画及持久化', () => {
     expect(() => validateCodeMaterialParameterValue(program.parameters.find(p => p.key === 'curve')!, Array.from({ length: 65 }, (_, i) => ({ x: i / 64, y: .5 })))).toThrow()
     const many = Object.fromEntries(Array.from({ length: 100 }, (_, i) => [`p${i}`, i]))
     expect(codeMaterialInstanceSchema.parse({ definitionId: 'd', versionId: 'v', parameters: many }).parameters).toEqual(many)
+  })
+  it('作者接口 v5 才能声明片子数据参数，值只能是 null 或片子数据引用；v4 代码里名叫 scene 的自定义类型照旧解析', () => {
+    const film = { type: 'scene', title: '片子数据', schema: GOLDEN_SCENE_DECLARATION }
+    const parameter = testCodeMetadata({ parameters: { film }, apiVersion: 5 }).parameters[0]
+    expect(parameter).toMatchObject({ type: 'scene', default: null, animatable: false, schema: { id: 'golden.film', version: 1 } })
+    expect(validateCodeMaterialParameterValue(parameter, { kind: 'scene', sceneId: 'golden-scene' })).toEqual({ kind: 'scene', sceneId: 'golden-scene' })
+    expect(() => validateCodeMaterialParameterValue(parameter, { kind: 'scene', sceneId: 'golden-scene', extra: 1 })).toThrow(CodeMaterialError)
+    expect(() => testCodeMetadata({ parameters: { film } })).toThrow(CodeMaterialError)
+    const legacy = { types: { scene: { title: '场景', layout: 'stack', fields: { size: basic.number } } }, parameters: { look: { type: 'scene', title: '场景', default: {} } } }
+    expect(testCodeMetadata(legacy).parameters[0]).toMatchObject({ type: 'custom', typeName: 'scene', default: { size: 2 } })
+    // 自定义类型不借用同名内置类型的额外键。
+    expect(() => testCodeMetadata({ ...legacy, parameters: { look: { ...legacy.parameters.look, schema: GOLDEN_SCENE_DECLARATION } } })).toThrow(CodeMaterialError)
+    expect(() => testCodeMetadata({ ...legacy, apiVersion: 5 })).toThrow(CodeMaterialError)
   })
 })

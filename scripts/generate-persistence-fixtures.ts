@@ -32,6 +32,7 @@ import { bindVideoEditCaptionSpeech } from '../src/core/videoEdit/captionSpeech'
 import { CODE_ASSET_VERSION, codeAssetSchema } from '../src/core/videoEdit/codeAsset'
 import { CODE_AUTHOR_API_VERSION } from '../src/core/videoEdit/codeMaterialPersistence'
 import { titleGraphic } from '../src/core/videoEdit/titleGraphics'
+import { GOLDEN_SCENE_DECLARATION, goldenScene } from '../src/core/videoEdit/scene/sceneTestFixtures'
 import { BLANK_STYLE_SAMPLE_SOURCE } from '../src/core/videoEdit/styles/blankSample'
 import { styleGuideTemplate } from '../src/core/videoEdit/styles/styleGuide'
 import { VIDEO_EDIT_PRESET_PACKAGE_VERSION } from '../src/core/videoEdit/presetPackage'
@@ -53,6 +54,8 @@ const parameters = {
   size: { type: 'number', title: '字号', default: 24, min: 1, max: 72, step: 1, unit: 'px' },
   // 剪辑内容 v36：视频参数可按取帧时间表取帧（见下方片段的 screen）。
   screen: { type: 'image', title: '录屏', default: null },
+  // 剪辑内容 v37 / 作者接口 v5：片子数据参数，声明记录种类与字段含义（见下方 document.scenes 与片段的 film）。
+  film: { type: 'scene', title: '片子数据', schema: GOLDEN_SCENE_DECLARATION },
 }
 const source = `export default {
   name: "黄金代码", kind: "generator", mode: "dynamic", width: 1920, height: 1080, durationSeconds: 4,
@@ -63,9 +66,10 @@ const source = `export default {
   }
 }
 `
-const program = testCodeMetadata({ name: '黄金代码', width: 1920, height: 1080, durationSeconds: 4, parameters })
+const program = testCodeMetadata({ name: '黄金代码', width: 1920, height: 1080, durationSeconds: 4, parameters, apiVersion: CODE_AUTHOR_API_VERSION })
 const hash = createHash('sha256').update(source).digest('hex')
-const sourceVersion = { apiVersion: CODE_AUTHOR_API_VERSION, languageVersion: 4 as const, entry: 'main.ts', files: [{ path: 'main.ts', location: gitCodeLocation({ oid: 'a'.repeat(40), repository: 'henji:/代码', filepath: '素材/标题/main.ts' }), hash }], imports: [] }
+// 代码版本 v4 / 代码资产 v9 / 剪辑内容 v37：内置库记录库名与精确版本。
+const sourceVersion = { apiVersion: CODE_AUTHOR_API_VERSION, languageVersion: 4 as const, entry: 'main.ts', files: [{ path: 'main.ts', location: gitCodeLocation({ oid: 'a'.repeat(40), repository: 'henji:/代码', filepath: '素材/标题/main.ts' }), hash }], imports: [], libraries: { three: '0.186.1' } }
 const projectSourceVersion = { ...sourceVersion, entry: 'entries/title.ts', files: [{ ...sourceVersion.files[0], path: 'entries/title.ts', location: gitCodeLocation({ oid: 'a'.repeat(40), repository: 'henji:/代码', filepath: 'entries/title.ts' }) }], project: { commit: 'a'.repeat(40), entry: 'entries/title.ts' } }
 const document = createVideoEditDocument('持久格式黄金样本')
 document.id = 'golden-video'
@@ -115,6 +119,9 @@ document.media.push({ id: 'golden-screen', name: '屏幕原片', path: '/persist
 document.items.push({ id: 'golden-screen-item', name: '屏幕原片', kind: 'video', mediaId: 'golden-screen' })
 // 剪辑内容 v36：代码视频参数的取帧时间表——正常播放、停住并关掉录制鼠标、段间空档不参与、三倍速快放。
 clip.code!.parameters.screen = { kind: 'video', mediaId: 'golden-screen', spans: [{ from: 0, to: 1, src: 0 }, { from: 1, to: 1.5, src: 1, rate: 0, cursor: false }, { from: 2, to: 2.5, src: 1, rate: 3 }] }
+// 剪辑内容 v37：片子数据存在文档里，代码参数只引用它。
+document.scenes = [goldenScene('golden-screen')]
+clip.code!.parameters.film = { kind: 'scene', sceneId: 'golden-scene' }
 const cursorClip = makeVideoEditItemClip(document, 'golden-screen-item', sequence.id, { frame: 90, duration: 90 })
 cursorClip.id = 'golden-cursor-clip'
 cursorClip.effects = [{ id: 'golden-cursor', name: '录制光标', enabled: true, amount: 1, builtin: { id: 'recording_cursor', params: { size: 3, smoothing: 40, click_style: 'ripple' } } },
@@ -180,6 +187,8 @@ soundDocument.items.push({ id: 'golden-sound-item', name: '鼓点', kind: 'audio
 const soundClip = makeVideoEditItemClip(soundDocument, 'golden-sound-item', soundSequence.id, { frame: 0, duration: 90 })
 soundClip.gainDb = 19
 soundClip.id = 'golden-sound-clip'; soundClip.snapToBeat = true; soundClip.pitchSemitones = -3
+// 剪辑内容 v37 / 录制会话 v40 / 字幕回填记录 v22：停用的片段留在时间线上。
+soundClip.enabled = false
 soundClip.remix = { id: 'golden-remix', segment: 0, targetFrames: 90, repetition: 0.5, granularity: 'bar', seed: 0, analysisIdentity: `music-v1:${'b'.repeat(64)}`, sourceInUs: 0, sourceOutUs: 3000000 }
 document.media.push(...soundDocument.media)
 document.items.push(...soundDocument.items)

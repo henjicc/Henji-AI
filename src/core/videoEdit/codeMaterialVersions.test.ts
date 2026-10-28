@@ -4,13 +4,25 @@ import { createVideoEditTestDocument as createVideoEditDocument } from './testFi
 import { describe, expect, it } from 'vitest'
 import { testAuthorBundle, testAuthorProgram } from '../../features/videoEdit/engine/videoEditAuthorTestFixtures'
 import { codeMaterialDefinitionsSchema } from './codeMaterialPersistence'
-import { appendCodeMaterialVersion, makeCodeMaterialDefinition, type CodeVersionPublication } from './codeMaterialVersions'
+import { appendCodeMaterialVersion, makeCodeMaterialDefinition, type CodeSourceCompiler, type CodeVersionPublication } from './codeMaterialVersions'
 import { videoEditDocumentSchema } from './document'
 
 const compile = async (source: CodeMaterialFiles) => testAuthorProgram(testAuthorBundle(source))
 const publication: CodeVersionPublication = { imports: [], async write(id, _name, files, folder) { return { folder: folder ?? id, files: (await addressCodeMaterialFiles(files)).files } } }
 const source = (defaultValue = .5) => `export default {name:"原生素材",kind:"generator",width:3840,height:2160,durationSeconds:10,params:[{key:"amount",type:"number",title:"数量",default:${defaultValue},min:0,max:1,step:.01}],draw(ctx,t,p){ctx.globalAlpha=p.amount;ctx.fillRect(t,0,100,100);}}`
 describe('剪辑源码文件引用契约', () => {
+  it('内置库只在新版本也编译为 v5 时沿用；明确带库却编出 v4 时报出可照着改的原因', async () => {
+    // 源码里带 /*v5*/ 的按作者接口 v5 编译，其余按 v4。
+    const byApi: CodeSourceCompiler = async files => ({ ...await compile(files), apiVersion: files.files[files.entry].includes('/*v5*/') ? 5 : 4 })
+    const libraries = { three: '0.186.1' }
+    const { definition } = await makeCodeMaterialDefinition(`${source()}/*v5*/`, byApi, { ...publication, libraries })
+    expect(definition.versions[0].libraries).toEqual(libraries)
+    const v5 = await appendCodeMaterialVersion(definition, `${source(.6)}/*v5*/`, byApi, documentCodeSourceResolver(), publication)
+    expect(v5.definition.versions.find(version => version.id === v5.versionId)?.libraries).toEqual(libraries)
+    const v4 = await appendCodeMaterialVersion(definition, source(.7), byApi, documentCodeSourceResolver(), publication)
+    expect(v4.definition.versions.find(version => version.id === v4.versionId)).not.toHaveProperty('libraries')
+    await expect(makeCodeMaterialDefinition(source(), byApi, { ...publication, libraries })).rejects.toThrow('从作者接口 v5 起可用，这份源码编译出的是 v4')
+  })
   it('作者版本经过正式追加与文档保存重读，只持久化源码引用', async () => {
     const v3 = source()
     const { definition } = await makeCodeMaterialDefinition(v3, compile, publication)

@@ -29,7 +29,8 @@ export async function upgradeVideoEditCodeMaterials(input: Input, signal?: Abort
     const old = definition.versions.find(version => version.id === definition.defaultVersionId)!
     const project = await prepareProjectCodePublication(id, old.project!.entry, commit)
     const addressed = await addressCodeMaterialFiles(project.contents)
-    const key = codeVersionContentKey({ ...addressed, imports: project.publication.imports })
+    // 与 appendCodeMaterialVersion 一致：工程没有指定内置库时沿用原版本的（相同源码编译出相同的作者接口版本）。
+    const key = codeVersionContentKey({ ...addressed, imports: project.publication.imports, libraries: project.publication.libraries ?? old.libraries })
     if (key === codeVersionContentKey(old)) continue
     const existing = definition.versions.find(version => codeVersionContentKey(version) === key)
     const before = new Map(old.files.map(file => [file.path, file.hash])); const after = new Map(addressed.files.map(file => [file.path, file.hash]))

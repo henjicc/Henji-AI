@@ -55,6 +55,7 @@ export const videoEditContentSchema = z.object({
   posterFrame: z.looseObject({ sequenceId: z.string().min(1), frame: z.number() }).optional(),
   inPlaceGenerations: videoEditInPlaceRecordsSchema.optional(),
   creativePlacements: videoEditDocumentSchema.shape.creativePlacements,
+  scenes: z.array(identified).optional(),
 })
 
 export type VideoEditDocumentContent = z.infer<typeof videoEditContentSchema>
@@ -90,6 +91,7 @@ function isEmptyVideoEditContent(content: VideoEditDocumentContent): boolean {
     && content.bins.length === 0
     && (content.codeMaterials?.length ?? 0) === 0
     && (content.inPlaceGenerations?.length ?? 0) === 0
+    && (content.scenes?.length ?? 0) === 0
     && !content.sequences.some(sequenceHasContent)
 }
 
@@ -126,10 +128,15 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   // 27：序列新增运动模糊与帧混合开关，旧程序忽略它们会渲染出不同的画面，提高到 27。
   // 28：音轨混音（轨道音量、声像、轨道效果）、主轨与片段基本声音，旧程序忽略它们会混出不同的声音，提高到 28。
   // 31：序列 motionBlur 改为总开关（同时管代码图层的位姿模糊），片段新增 motionBlur:false；旧程序会把关掉的总开关当成代码图层照常模糊，提高到 31。
-  minReaderVersion: 34,
+  // 37：片段新增 enabled:false（停用），旧程序忽略它会照常播放与导出停用的片段；新增片子数据 scenes 与代码参数值 {kind:'scene'}，
+  // 代码版本可写作者接口 v5 与内置库 libraries，旧程序读不懂这些（作者接口最高只认 v4），提高到 37，让旧程序明确提示升级。
+  minReaderVersion: 37,
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 36 → 37：片段新增可选 enabled:false，文档新增可选片子数据 scenes，代码参数可引用片子数据，代码版本新增可选内置库 libraries 并接受作者接口 v5；
+    // 旧内容不含这些，原样有效。
+    36: content => structuredClone(content),
     // 35 → 36：代码视频参数新增可选取帧时间表 spans；旧内容原样有效，旧程序忽略它只会改按片段时间取帧，最低可读版本不变。
     35: content => structuredClone(content),
     // 34 → 35：可选 project 固定工程提交与入口，原闭包 files 仍可独立读取。

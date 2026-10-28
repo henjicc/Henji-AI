@@ -4,7 +4,7 @@ import { createTestEnvironment } from '../../../../electron/main/services/docume
 import { createElement } from 'react'
 import { act, fireEvent, render, waitFor } from '@testing-library/react'
 import { CodeSourceEditor } from '../panels/CodeSourceEditor'
-import { documentCodeSourceResolver, resolveCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
+import { codeVersionContentKey, documentCodeSourceResolver, resolveCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { testCodeSource, testSetCodeSource } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { testCodeAssetSource, testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
@@ -47,7 +47,7 @@ import { AUTHOR_TYPE_ENVIRONMENT } from '../engine/videoEditAuthorTypeEnvironmen
 /** 短活共用的离屏会话按设计常驻；回收它之后不应再有任何渲染器存活。 */
 async function expectRenderersReleased(): Promise<void> { await videoEditOffscreenPool.dispose(); expect(boundary.activeRenderers).toBe(0) }
 
-const boundary = vi.hoisted(() => ({ compileGate: undefined as Promise<void> | undefined, trialGate: undefined as Promise<void> | undefined, compileCalls: 0, trialCalls: 0, failTrial: false, proveFilters: false, filterProofs: 0, activeRenderers: 0, disposedCompilers: 0, dimensions: [] as number[][], presentedFrames: [] as number[] }))
+const boundary = vi.hoisted(() => ({ compileGate: undefined as Promise<void> | undefined, trialGate: undefined as Promise<void> | undefined, compileCalls: 0, trialCalls: 0, failTrial: false, proveFilters: false, filterProofs: 0, activeRenderers: 0, disposedCompilers: 0, dimensions: [] as number[][], presentedFrames: [] as number[], apiVersion: 4 as 4 | 5 }))
 // Only thread/pixel boundaries are replaced. AST language checks, domain
 // validation, public tool registry, transactions and save/reopen are real.
 vi.mock('../engine/videoEditCodeCompiler', async () => {
@@ -67,7 +67,7 @@ vi.mock('../engine/videoEditCodeCompiler', async () => {
 })
 vi.mock('./videoEditAuthorInspection', async () => {
  const { testAuthorProgram } = await import('../engine/videoEditAuthorTestFixtures')
- return { inspectVideoEditAuthor: async (bundle: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorBundle) => testAuthorProgram(bundle) }
+ return { inspectVideoEditAuthor: async (bundle: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorBundle) => ({ ...testAuthorProgram(bundle), apiVersion: boundary.apiVersion }) }
 })
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   setTracks() {}
@@ -677,6 +677,29 @@ it('代码资产原始参数和有理源曲线一次发布、保存重开、单�
   expect(reopened.document.items).toHaveLength(2); undoVideoEdit(id)
   expect(reopened.document.items.some(item => item.id === next.itemId)).toBe(false); expect(reopened.document.items[0].code).toEqual(code)
 })
+it('内置库随代码资产导入、收录导出与追加版本一路带着，内容键不变', async () => {
+  boundary.apiVersion = 5
+  try {
+    const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id
+    const libraries = { three: '0.186.1' }
+    const fixture = codeAssetFixture()
+    const created = await createVideoEditCodeAssetInstance(id, importPublication({ ...fixture, sourceVersion: { ...fixture.sourceVersion, apiVersion: 5, libraries } }))
+    const definitionId = owner.document.items.find(item => item.id === created.itemId)!.code!.definitionId
+    const imported = owner.document.codeMaterials!.find(definition => definition.id === definitionId)!.versions[0]
+    expect(imported.libraries).toEqual(libraries)
+    const [clipId] = appendVideoEditItems(id, [created.itemId!], owner.activeSequenceId)
+    const filePath = resolvePath(pathSeparator, 'libraries.henji-code')
+    const { bytes, platform } = collectionBoundary(); vi.mocked(platform.system.dialog.save).mockResolvedValue(filePath)
+    await collectVideoEditCodeAsset(id, { kind: 'clip', sequenceId: owner.activeSequenceId, clipId })
+    const exported = decodeCodeAsset(bytes.get(filePath)!).sourceVersion
+    expect(exported.libraries).toEqual(libraries)
+    expect(codeVersionContentKey(exported)).toBe(codeVersionContentKey(imported))
+    // 同样的源码追加时按内容键（含沿用的内置库）认出已有版本；改了源码的新版本沿用内置库。
+    await expect(createVideoEditCodeVersions(id, [{ definitionId, source }])).rejects.toThrow('相同源码版本已存在')
+    const [next] = await createVideoEditCodeVersions(id, [{ definitionId, source: source.replace('default:.5', 'default:.6') }])
+    expect(owner.document.codeMaterials!.find(definition => definition.id === definitionId)!.versions.find(version => version.id === next)!.libraries).toEqual(libraries)
+  } finally { boundary.apiVersion = 4 }
+})
 it('图层变换覆盖收录并导入为素材初始值，新片段独立复制且保存重开不丢失', async () => {
   const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id
   const code = source.replace('apiVersion:1,', 'apiVersion:1,languageVersion:3,').replace('ellipse({x:', 'ellipse({id:"circle",x:')
@@ -760,7 +783,7 @@ it('代码资产收录失败保留清单；重试不再选路径、写文件、�
   const manifest = decodeCodeAsset(bytes.get('D:/original.henji-code')!)
   expect(manifest.parameters.amount).toBe(.7); expect(manifest.curves).toEqual(codeAssetFixture().curves)
   expect(manifest.sourceVersion).toEqual(codeAssetFixture().sourceVersion); expect('assetOrigin' in manifest.sourceVersion).toBe(false)
-  expect(await collectVideoEditCodeAsset(id, target)).toMatchObject({ mediaType: 'code', filePath: 'D:/original.henji-code', source: 'video-edit' })
+  expect(await collectVideoEditCodeAsset(id, target)).toMatchObject({ asset: { mediaType: 'code', filePath: 'D:/original.henji-code', source: 'video-edit' }, detachedSceneParameters: [] })
   expect(platform.system.fs.writeFile).toHaveBeenCalledOnce(); expect(platform.system.dialog.save).toHaveBeenCalledOnce()
   expect(boundary.compileCalls).toBe(compiled); expect(boundary.trialCalls).toBe(rendered); expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history)
 })

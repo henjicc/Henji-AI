@@ -3,7 +3,7 @@ import { backupPersistenceSnapshot } from '@/core/persistence/backup'
 import { PersistenceError } from '@/core/persistence/migrations'
 import { componentFileReferences, documentCodeSourceResolver, loadCodeSourceReferences, type CodeComponentPin } from '@/core/videoEdit/codeMaterial/sources'
 import { createLogger } from '@/core/logging'
-import { CODE_ASSET_VERSION, CODE_ASSET_LIMITS, codeAssetSchema, codeAssetContract, parseCodeAssetBytes, decodeCodeAsset, encodeCodeAsset, type CodeAsset } from '@/core/videoEdit/codeAsset'
+import { CODE_ASSET_VERSION, CODE_ASSET_LIMITS, codeAssetSchema, codeAssetContract, parseCodeAssetBytes, decodeCodeAsset, detachCodeAssetScenes, encodeCodeAsset, type CodeAsset } from '@/core/videoEdit/codeAsset'
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
 import { codeMaterialMediaIds } from '@/core/videoEdit/codeMaterialResources'
 import { prepareCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
@@ -72,8 +72,10 @@ export async function readVideoEditCodeAsset(assetId: string, signal?: AbortSign
   return { asset, manifest }
 }
 
+/** `detachedSceneParameters`：片子数据没有随资产带走、在资产里被置空的参数名。 */
+export interface VideoEditCodeAssetCollection { asset: AssetRecord; detachedSceneParameters: string[] }
 /** Save the raw fixed instance, never the currently evaluated animation values. */
-export async function collectVideoEditCodeAsset(projectId: string, target: VideoEditCodeAssetTarget, options: { libraryId?: string; path?: string | (() => Promise<string>) } = {}, signal?: AbortSignal): Promise<AssetRecord | null> {
+export async function collectVideoEditCodeAsset(projectId: string, target: VideoEditCodeAssetTarget, options: { libraryId?: string; path?: string | (() => Promise<string>) } = {}, signal?: AbortSignal): Promise<VideoEditCodeAssetCollection | null> {
   const owner = requireVideoEditInstance(projectId); const baseline = owner.document; const contentVersion = owner.contentVersion; const targetKey = JSON.stringify(target)
   if (collecting.has(owner)) throw new Error('原剪辑正在收录代码素材，请等待完成。')
   collecting.add(owner)
@@ -85,10 +87,12 @@ export async function collectVideoEditCodeAsset(projectId: string, target: Video
     await ensureVideoEditCodeParameterMetadata(owner, baseline, selected.code.definitionId, selected.code.versionId)
     const source = codeMaterialSource(baseline, selected.code)
     prepareCodeMaterialParameters(readVideoEditCodeMetadata(owner, baseline)(selected.code), selected.code)
+    const { parameters, detached } = detachCodeAssetScenes(structuredClone(selected.code.parameters))
+    if (detached.length) logger.info('片子数据不随代码资产带走，资产里的片子数据参数置空', { event: 'video_edit.code_asset.scenes_detached', context: { projectId, parameters: detached } })
     const cached = latest.get(owner)
     if (typeof options.path !== 'string' && cached?.document === baseline && cached.target === targetKey) {
       await verifyVideoEditOutput(cached.receipt); assertOwner(owner, contentVersion, signal)
-      return await collectVideoEditOutput(cached.receipt, options, signal)
+      return { asset: await collectVideoEditOutput(cached.receipt, options, signal), detachedSceneParameters: detached }
     }
     if (options.libraryId) await assetApplicationService.inspectLibrary(options.libraryId)
     const images: CodeAsset['images'] = []
@@ -100,7 +104,7 @@ export async function collectVideoEditCodeAsset(projectId: string, target: Video
       assertOwner(owner, contentVersion, signal)
       images.push({ kind: media.kind, id, path: media.path, content, ...(media.assetId ? { assetId: media.assetId } : {}) })
     }
-    const manifest = codeAssetSchema.parse({ format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: selected.name, sourceVersion: { apiVersion: source.apiVersion, languageVersion: source.languageVersion, entry: source.entry, files: source.files.map(file => ({ ...file, location: `asset:${file.hash}` })), ...(source.imports ? { imports: assetPins(source.imports) } : {}) }, codeSources: [...new Map([...source.files, ...componentFileReferences(source.imports)].map(file => [file.hash, { hash: file.hash, source: documentCodeSourceResolver().read(file.hash, file.location, file.path) }])).values()], parameters: structuredClone(selected.code.parameters), ...(selected.code.curves ? { curves: structuredClone(selected.code.curves) } : {}), ...(selected.elementOverrides ? { elementOverrides: structuredClone(selected.elementOverrides) } : {}), images })
+    const manifest = codeAssetSchema.parse({ format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: selected.name, sourceVersion: { apiVersion: source.apiVersion, languageVersion: source.languageVersion, entry: source.entry, files: source.files.map(file => ({ ...file, location: `asset:${file.hash}` })), ...(source.imports ? { imports: assetPins(source.imports) } : {}), ...(source.libraries ? { libraries: { ...source.libraries } } : {}) }, codeSources: [...new Map([...source.files, ...componentFileReferences(source.imports)].map(file => [file.hash, { hash: file.hash, source: documentCodeSourceResolver().read(file.hash, file.location, file.path) }])).values()], parameters, ...(selected.code.curves ? { curves: structuredClone(selected.code.curves) } : {}), ...(selected.elementOverrides ? { elementOverrides: structuredClone(selected.elementOverrides) } : {}), images })
     const bytes = encodeCodeAsset(manifest); const platform = getPlatform()
     const path = typeof options.path === 'function' ? await options.path() : options.path ?? await platform.system.dialog.save({ defaultPath: `${selected.name}.henji-code`, filters: [{ name: '可编辑代码素材', extensions: ['henji-code'] }] })
     assertOwner(owner, contentVersion, signal)
@@ -112,7 +116,7 @@ export async function collectVideoEditCodeAsset(projectId: string, target: Video
     const receipt = await publishVideoEditOutput({ owner, sequenceId: selected.sequenceId, revision: baseline.revision, path, name: manifest.name, kind: 'code' })
     latest.set(owner, { document: baseline, target: targetKey, receipt })
     assertOwner(owner, contentVersion, signal)
-    return await collectVideoEditOutput(receipt, options, signal)
+    return { asset: await collectVideoEditOutput(receipt, options, signal), detachedSceneParameters: detached }
   } catch (error) { logger.warn('可编辑代码素材未完成收录', { event: 'video_edit.code_asset.collect.failed', error, context: { projectId } }); throw error }
   finally { collecting.delete(owner) }
 }

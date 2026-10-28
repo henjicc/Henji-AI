@@ -19,7 +19,7 @@ export function testCodeAssetSource(source: string): { codeSources: CodeSource[]
 }
 export function testFilesSource(input: string | CodeMaterialFiles): string { return typeof input === 'string' ? input : input.files[input.entry] }
 /** Control metadata exactly as the author host normalizes declarations; drawing code is irrelevant here. */
-export function testCodeMetadata(input: { name?: string; kind?: 'generator' | 'filter'; mode?: 'static' | 'dynamic'; width?: number; height?: number; durationSeconds?: number; parameters?: Record<string, unknown>; types?: Record<string, unknown> }): CodeMaterialMetadata {
-  const types = parseCodeMaterialTypes(input.types ?? {})
-  return { name: input.name ?? '测试效果', kind: input.kind ?? 'generator', mode: input.mode ?? 'dynamic', seed: 0, width: input.width, height: input.height, durationSeconds: input.durationSeconds, types, parameters: parseCodeMaterialV3Parameters(input.parameters ?? {}, types) }
+export function testCodeMetadata(input: { name?: string; kind?: 'generator' | 'filter'; mode?: 'static' | 'dynamic'; width?: number; height?: number; durationSeconds?: number; parameters?: Record<string, unknown>; types?: Record<string, unknown>; apiVersion?: number }): CodeMaterialMetadata {
+  const types = parseCodeMaterialTypes(input.types ?? {}, input.apiVersion)
+  return { name: input.name ?? '测试效果', kind: input.kind ?? 'generator', mode: input.mode ?? 'dynamic', seed: 0, width: input.width, height: input.height, durationSeconds: input.durationSeconds, types, parameters: parseCodeMaterialV3Parameters(input.parameters ?? {}, types, input.apiVersion) }
 }

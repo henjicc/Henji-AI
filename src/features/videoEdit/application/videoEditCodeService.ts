@@ -107,7 +107,9 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
       if (input.projectEntry && (input.files !== undefined || input.source !== undefined || input.entry !== undefined)) throw new Error('project_entry 不能与 source/files/entry 同时提供。')
       const project = input.projectEntry ? await prepareProjectCodePublication(projectId, input.projectEntry, undefined, input.name) : undefined
       const contents = project?.contents ?? codeFilesFromInput(input)
-      const publicationState = project?.publication ?? await prepareCodeVersionPublication(projectId, contents, input.name, publication?.asset.sourceVersion.imports, createdFiles)
+      const prepared = project?.publication ?? await prepareCodeVersionPublication(projectId, contents, input.name, publication?.asset.sourceVersion.imports, createdFiles)
+      const libraries = publication?.asset.sourceVersion.libraries
+      const publicationState = libraries ? { ...prepared, libraries } : prepared
       const typeCheck = typeReports ? startVideoEditCodeTypeCheck(contents, publicationState.imports, typeAbort.signal) : undefined
       if (typeCheck) typeChecks.push(typeCheck)
       const { definition, program } = await withVideoEditCodeTypeContext(() => makeCodeMaterialDefinition(contents, source => compileVideoEditCode(source, controller.signal), publicationState), typeCheck ? [typeCheck] : [], controller.signal)

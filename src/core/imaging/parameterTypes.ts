@@ -1,4 +1,5 @@
 import type { TextStyle } from './vectorContent/text'
+import type { CodeSceneSchema } from '../videoEdit/scene/sceneDeclaration'
 export type CodeColor = [number, number, number, number]
 /**
  * 视频参数取帧时间表的一段：片段时间 t（片段入点 + 片段内时间，秒）落在 [from, to) 时取 src + (t − from) × rate（缺省 1，0 为停住）；
@@ -7,6 +8,8 @@ export type CodeColor = [number, number, number, number]
 export interface CodeVideoSpan { from: number; to: number; src: number; rate?: number; cursor?: boolean }
 export type CodeImageReference = { kind: 'image'; mediaId: string; time?: never; spans?: never } | { kind: 'video'; mediaId: string; time?: number; spans?: CodeVideoSpan[] } | { kind: 'sequence'; mediaId: 'below'; time?: never; spans?: never }
 export interface CodeAudioReference { kind: 'audio'; mediaId: string }
+/** 片子数据参数的值：引用同一剪辑 scenes 里的一份（作者接口 v5 起）。 */
+export interface CodeSceneReference { kind: 'scene'; sceneId: string }
 export interface CodePoint { x: number; y: number }
 export interface CodeGrade { hue: number; strength: number; luminance: number }
 export interface CodeGradientStop { at: number; color: CodeColor }
@@ -15,7 +18,7 @@ export type CodeEasing = string | CodeColor
 export type CodeBasicParameterValue = number | boolean | string | CodeColor | CodeRange | CodePoint | CodeGrade | CodeGradientStop[] | CodePoint[]
 export type CodeParameterObject = Record<string, CodeBasicParameterValue>
 export type CodeParameterTableRow = Record<string, CodeBasicParameterValue | TextStyle>
-export type CodeParameterValue = CodeBasicParameterValue | CodeParameterObject | CodeParameterTableRow[] | TextStyle | CodeImageReference | CodeAudioReference | null
+export type CodeParameterValue = CodeBasicParameterValue | CodeParameterObject | CodeParameterTableRow[] | TextStyle | CodeImageReference | CodeAudioReference | CodeSceneReference | null
 export type CodeParameterValues = Record<string, CodeParameterValue>
 export interface CodeParameterVisibility { param: string; equals?: number | boolean | string; notEquals?: number | boolean | string; in?: (number | boolean | string)[] }
 interface ParameterBase { key: string; title: string; description: string; animatable: boolean; tooltip?: string; group?: string; layer?: string; advanced?: boolean; visibleWhen?: CodeParameterVisibility }
@@ -41,6 +44,7 @@ export type CodeTextStyleParameterDeclaration = ParameterBase & { type: 'textSty
 export type CodeParameterDeclaration = CodeBasicParameterDeclaration | CodeTextStyleParameterDeclaration | (ParameterBase & (
   | { type: 'image'; default: null; animatable: false }
   | { type: 'audio'; default: null; animatable: false }
+  | { type: 'scene'; default: null; animatable: false; schema: CodeSceneSchema }
   | { type: 'table'; default: CodeParameterTableRow[]; fields: Record<string, CodeBasicParameterDeclaration | CodeTextStyleParameterDeclaration>; rowKey?: string }
   | { type: 'custom'; typeName: string; default: CodeParameterObject; fields: Record<string, CodeBasicParameterDeclaration> }
 ))

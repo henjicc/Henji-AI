@@ -23,4 +23,6 @@ export const codeMaterialVideoSpansSchema = z.array(z.object({ from: finite, to:
 const videoReference = z.object({ kind: z.literal('video'), mediaId: z.string().min(1).max(100), time: finite.nonnegative().optional(), spans: codeMaterialVideoSpansSchema.optional() }).strict().refine(value => value.time === undefined || value.spans === undefined, '视频参数的 time 与 spans 不能同时给出。')
 export const codeMaterialImageReferenceSchema = z.union([z.object({ kind: z.literal('image'), mediaId: z.string().min(1).max(100) }).strict(), videoReference, z.object({ kind: z.literal('sequence'), mediaId: z.literal('below') }).strict()])
 export const codeMaterialAudioReferenceSchema = z.object({ kind: z.literal('audio'), mediaId: z.string().min(1).max(100) }).strict()
-export const codeMaterialParameterValueSchema = z.union([codeMaterialAnimatedParameterValueSchema, codeMaterialImageReferenceSchema, codeMaterialAudioReferenceSchema, z.null()])
+/** 片子数据参数的值（剪辑内容第 37 版，作者接口 v5）：引用同一剪辑 scenes 里的一份，引用须存在由剪辑文档校验。 */
+export const codeMaterialSceneReferenceSchema = z.object({ kind: z.literal('scene'), sceneId: z.string().min(1).max(100) }).strict()
+export const codeMaterialParameterValueSchema = z.union([codeMaterialAnimatedParameterValueSchema, codeMaterialImageReferenceSchema, codeMaterialAudioReferenceSchema, codeMaterialSceneReferenceSchema, z.null()])
