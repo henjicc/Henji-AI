@@ -165,6 +165,7 @@
     "lucide-react": "^0.562.0",
     "mediabunny": "1.61.0",
     "onnxruntime-node": "1.30.0",
+    "nanoid": "3.3.20",
     "pica": "^9.0.1",
     "pinyin-match": "^1.2.10",
     "pinyin-pro": "3.29.4",
@@ -193,6 +194,7 @@
   "devDependencies": {
     "@dagrejs/graphlib": "4.0.5",
     "@electron/rebuild": "^4.2.1",
+    "@electron/asar": "3.4.1",
     "@testing-library/react": "^16.3.2",
     "@types/archiver": "^8.0.0",
     "@types/better-sqlite3": "^7.6.13",
@@ -211,6 +213,7 @@
     "electron-builder": "^26.15.3",
     "electron-vite": "^3.1.0",
     "eslint": "^8.45.0",
+    "esbuild": "0.18.20",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.3",
     "fast-check": "^4.9.0",
@@ -219,11 +222,15 @@
     "knip": "6.40.0",
     "madge": "8.0.0",
     "patch-package": "8.0.1",
+    "minimatch": "9.0.3",
     "pixelmatch": "^7.2.0",
     "playwright": "^1.61.1",
     "postcss": "^8.4.31",
+    "pngjs": "7.0.0",
     "tailwindcss": "^3.3.3",
     "vite": "^4.4.5",
-    "vitest": "^1.6.1"
+    "vite-node": "1.6.1",
+    "vitest": "^1.6.1",
+    "yaml": "2.9.1"
   }
 }
