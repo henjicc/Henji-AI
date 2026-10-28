@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import { isSafeRendererRecovery } from '@/core/applicationLifecycle/rendererRecovery'
 import { isStartupWorkspaceId } from '@/core/types/workspace'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { currentDocumentContext } from './currentDocumentContext'
@@ -16,14 +17,18 @@ interface ReloadResumeState { workspace: string; documentId: string | null }
  * 重新加载前记下所在工作区和正在看的文档，加载后切回工作区、重新打开那份文档，人不用从工程列表重新找。
  * 只听开发服务器发起的重新加载；用户手动刷新、正式版都不走这里。
  */
-export function installDevelopmentReloadResume(): void {
-  const hot = import.meta.hot
+export function installDevelopmentReloadResume(hot: ImportMeta['hot'] = import.meta.hot): void {
   if (!hot) return
   let saved: ReloadResumeState | null = null
   try {
     saved = JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? 'null') as ReloadResumeState | null
     sessionStorage.removeItem(STORAGE_KEY)
   } catch { saved = null }
+  // 崩溃后的安全恢复不回到原来的文档：正是它可能把界面弄崩。记下的状态照样丢掉，之后的重新加载重新记。
+  if (saved && isSafeRendererRecovery()) {
+    logger.info('安全恢复启动，跳过重新打开文档', { event: 'documents.dev_reload_resume.skipped', context: { reason: 'safe_recovery' } })
+    saved = null
+  }
   // 连着改几个文件会连着重新加载：上一次的恢复还没做完时，留着原来记下的，不拿半途的空状态覆盖
   let resuming = saved
   hot.on('vite:beforeFullReload', () => {

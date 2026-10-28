@@ -17,10 +17,28 @@ class ApplicationHostDisconnectedError extends Error {}
 
 let externalTools: LocalTool[] | undefined
 
+/** 宿主不可用的已知原因；没有原因时就是普通的页面重载或冷启动未注册。 */
+export type ApplicationHostUnavailableReason = 'renderer_crashed'
+/** recovering 为 false 时窗口不会自动重载（助手命令行），调用方不该再重试。 */
+export interface ApplicationHostUnavailable { reason: ApplicationHostUnavailableReason; recovering: boolean }
+
+/** 宿主未就绪时对外的统一失败形状：写入入口零执行登记与读取失败共用，免得两处文案和字段各写一份。 */
+export function applicationNotReadyFailure(unavailable?: ApplicationHostUnavailable, retryAfterMs = 1000): { code: 'APPLICATION_NOT_READY'; message: string; recoverable: boolean; details: Record<string, unknown> } {
+  const recoverable = unavailable?.recovering !== false
+  const message = !unavailable ? '应用正在重新连接，请稍后重试。' : recoverable ? '应用界面已崩溃、正在恢复，请稍后重试。' : '应用界面已崩溃，本次运行无法继续。'
+  return { code: 'APPLICATION_NOT_READY', message, recoverable,
+    details: { execution: { notExecuted: true }, ...(recoverable ? { retryAfterMs } : {}), ...(unavailable ? { reason: unavailable.reason } : {}) } }
+}
+
 export class ApplicationHostNotReadyError extends Error {
   readonly retryAfterMs = 1000
   readonly notExecuted = true
-  constructor() { super('APPLICATION_NOT_READY:应用正在重新连接，请稍后重试。') }
+  readonly reason?: ApplicationHostUnavailableReason
+  constructor(readonly unavailable?: ApplicationHostUnavailable) {
+    super(`APPLICATION_NOT_READY:${applicationNotReadyFailure(unavailable).message}`)
+    this.reason = unavailable?.reason
+  }
+  failure(): ReturnType<typeof applicationNotReadyFailure> { return applicationNotReadyFailure(this.unavailable, this.retryAfterMs) }
 }
 
 export class ApplicationHostBridge {
@@ -28,6 +46,8 @@ export class ApplicationHostBridge {
   private pending = new Map<string, Pending>()
   private attachmentSequence = -1
   private context?: HostContextSnapshot
+  /** 渲染进程异常退出后到新页面注册就绪之前一直保留，外部调用据此立刻拒绝，而不是等到超时。 */
+  private unavailable?: ApplicationHostUnavailable
   private listeners = new Set<(kind: 'context' | 'catalog') => void>()
   getContext(): HostContextSnapshot | undefined { return this.context }
   publishContext(context: HostContextSnapshot): void { this.context = context; this.changed('context') }
@@ -39,10 +59,11 @@ export class ApplicationHostBridge {
       const aborted = () => { cleanup(); reject(new Error('请求已取消。')) }
       const check = () => {
         try { this.assertAuthorized(callerId) } catch (error) { cleanup(); reject(error); return }
+        if (this.unavailable) { cleanup(); reject(new ApplicationHostNotReadyError(this.unavailable)); return }
         if (this.ready) { cleanup(); resolve() }
       }
       const unsubscribe = this.onChange(check)
-      const timer = setTimeout(() => { cleanup(); reject(new ApplicationHostNotReadyError()) }, Math.max(0, deadline - Date.now()))
+      const timer = setTimeout(() => { cleanup(); reject(new ApplicationHostNotReadyError(this.unavailable)) }, Math.max(0, deadline - Date.now()))
       signal.addEventListener('abort', aborted, { once: true })
       if (signal.aborted) aborted()
       else check()
@@ -52,6 +73,7 @@ export class ApplicationHostBridge {
     private readonly describeCaller?: (callerId: string) => LocalHostRequest['caller']) {}
   get rendererEpoch(): string { return this.host?.registration.rendererEpoch ?? '' }
   get ready(): boolean { return this.host?.registration.ready === true }
+  get hostUnavailable(): ApplicationHostUnavailable | undefined { return this.unavailable }
   publishReviews(open?: { operationId: string; callerId: string }): void {
     if (this.ready) this.host?.transport.send('application:host:reviews', { items: this.operations?.pendingReviews() ?? [], ...(open ? { open } : {}) })
   }
@@ -77,20 +99,28 @@ export class ApplicationHostBridge {
     if (this.host && this.host.registration.rendererEpoch !== registration.rendererEpoch) this.disconnect()
     else if (!registration.ready) this.cancelPending()
     this.host = { registration, transport }
+    if (registration.ready) this.unavailable = undefined
     this.changed()
   }
-  disconnect(): void {
-    this.cancelPending()
+  /** 渲染进程异常退出：页面没了也不会再有回执，在途调用立刻按崩溃结束；之后的调用直接拒绝，直到新页面注册就绪。 */
+  rendererCrashed(recovering = true): void {
+    this.unavailable = { reason: 'renderer_crashed', recovering }
+    this.disconnect(this.unavailable)
+  }
+  disconnect(unavailable?: ApplicationHostUnavailable): void {
+    this.cancelPending(undefined, unavailable)
     this.host = undefined
     this.context = undefined
     this.changed()
   }
-  cancelPending(callerIds?: ReadonlySet<string>): void {
+  cancelPending(callerIds?: ReadonlySet<string>, unavailable?: ApplicationHostUnavailable): void {
     for (const [id, pending] of this.pending) {
       if (callerIds && !callerIds.has(pending.callerId)) continue
-      this.operations?.interrupted(id, pending.rendererEpoch)
-      this.host?.transport.send('application:host:cancel', id)
-      pending.reject(new ApplicationHostDisconnectedError('应用页面正在重新连接，请稍后重试。'))
+      this.operations?.interrupted(id, pending.rendererEpoch, unavailable?.reason)
+      // 已退出的渲染进程收不到取消通知，不再向它发送。
+      if (!unavailable) this.host?.transport.send('application:host:cancel', id)
+      // 普通重载时只读调用会等新宿主重新派发；崩溃后恢复时间不定，直接把原因交给调用方。
+      pending.reject(unavailable ? new ApplicationHostNotReadyError(unavailable) : new ApplicationHostDisconnectedError('应用页面正在重新连接，请稍后重试。'))
       pending.cleanup()
       this.pending.delete(id)
     }
@@ -179,12 +209,13 @@ export class ApplicationHostBridge {
   private async dispatch(callerId: string, capabilityId: LocalHostRequest['capabilityId'], input: Record<string, unknown>, signal: AbortSignal,
     options: { reviewTarget?: boolean; operation?: OperationRecord; recoveryVerification?: OperationRecord['recoveryVerification']; recoveryOperation?: LocalHostRequest['recoveryOperation']; allowWrites?: boolean; allowDestructive?: boolean; allowPaid?: boolean }, reconnectDeadline?: number): Promise<Record<string, unknown>> {
     this.assertAuthorized(callerId)
+    if (this.unavailable) throw new ApplicationHostNotReadyError(this.unavailable)
     if (!this.ready || !this.host) {
       const readOnly = BUILTIN_APPLICATION_CAPABILITIES.find(item => item.id === capabilityId)?.readOnly === true
       if (options.operation || !readOnly) throw new ApplicationHostNotReadyError()
       await this.waitUntilReady(callerId, signal, reconnectDeadline ?? Date.now() + 10_000)
       this.assertAuthorized(callerId)
-      if (!this.ready || !this.host) throw new ApplicationHostNotReadyError()
+      if (!this.ready || !this.host) throw new ApplicationHostNotReadyError(this.unavailable)
     }
     if (signal.aborted) return Promise.reject(new Error('请求已取消。'))
     if ([...this.pending.values()].filter(pending => pending.waiting).length >= 8) return Promise.reject(new Error('应用正忙，请稍后重试。'))

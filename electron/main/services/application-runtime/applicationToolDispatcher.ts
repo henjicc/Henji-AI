@@ -54,6 +54,7 @@ export class ApplicationToolDispatcher {
       if (signal.aborted) return applicationFailure('ABORTED:媒体读取已取消。')
       return { ok: true, data: metadataOnly ? { ref: input.ref, mimeType: media.mimeType, totalBytes: media.totalBytes } : media }
     } catch (error) {
+      if (error instanceof ApplicationHostNotReadyError) return { ok: false, error: error.failure() }
       const message = this.inputError(callerId, 'read_application_media', error, args ?? {}, readMediaInputSchema) ?? (error instanceof ApplicationMediaResourceError ? `${error.code}:${error.message}` : '媒体读取失败，请稍后重试。')
       return applicationFailure(message)
     }
@@ -174,7 +175,7 @@ export class ApplicationToolDispatcher {
           const access = this.connections.access(callerId)
           const writeId = APPLICATION_WRITE_CAPABILITY_IDS.find(id => id === name)
           if (!this.host.ready && access.allowWrites && writeId) {
-            const result = this.operations.result(this.operations.rejectBeforeDispatch(callerId, args ?? {}, writeId, 1000))
+            const result = this.operations.result(this.operations.rejectBeforeDispatch(callerId, args ?? {}, writeId, 1000, this.host.hostUnavailable))
             return { ...result, ok: result.ok === true }
           }
           if (name === 'change_application_entities' && access.allowWrites && Array.isArray(args?.changes)) {
@@ -208,7 +209,9 @@ export class ApplicationToolDispatcher {
                 const message = error instanceof Error ? error.message : '生成准备失败。'
                 const code = /^(PROVIDER_(?:PRODUCT_NOT_ACTIVATED|MODEL_ACCESS_DENIED|INSUFFICIENT_BALANCE)):/.exec(message)?.[1] ?? 'GENERATION_PREFLIGHT_REJECTED'
                 logger.warn('生成提交前检查未通过', { event: 'application.generation_preflight.failed', requestId: operation.operationId, error })
-                if (this.operations.store.get(operation.operationId, callerId)?.state === 'preparing') this.operations.store.save({ ...this.operations.store.get(operation.operationId, callerId)!, state: 'not_executed', verificationState: 'verified', result: { ok: false, error: { code, message, details: { execution: { notExecuted: true } } } } })
+                // 宿主未就绪（含界面崩溃）与写入入口、读取用同一个错误形状，调用方按同一条规则重试。
+                const failure = error instanceof ApplicationHostNotReadyError ? error.failure() : { code, message, details: { execution: { notExecuted: true } } }
+                if (this.operations.store.get(operation.operationId, callerId)?.state === 'preparing') this.operations.store.save({ ...this.operations.store.get(operation.operationId, callerId)!, state: 'not_executed', verificationState: 'verified', result: { ok: false, error: failure } })
               }
             }
             if (this.operations.store.get(operation.operationId, callerId)?.state === 'preparing') {
@@ -216,7 +219,8 @@ export class ApplicationToolDispatcher {
                 const current = this.operations.store.get(operation.operationId, callerId)!
                 // 尚未派发的宿主拒绝是明确零执行；已派发后的等待失败保留执行事实。
                 if (current.state === 'preparing') this.operations.store.save({ ...current, state: 'not_executed', result: {
-                  ok: false, error: { code: 'DISPATCH_REJECTED', message: error instanceof Error ? error.message : '应用尚未就绪。', recoverable: true, details: { execution: { notExecuted: true }, ...(error instanceof ApplicationHostNotReadyError ? { retryAfterMs: error.retryAfterMs } : {}) } },
+                  ok: false, error: error instanceof ApplicationHostNotReadyError ? error.failure()
+                    : { code: 'DISPATCH_REJECTED', message: error instanceof Error ? error.message : '应用尚未就绪。', recoverable: true, details: { execution: { notExecuted: true } } },
                 } })
               }
             }
@@ -236,7 +240,7 @@ export class ApplicationToolDispatcher {
         if (Buffer.byteLength(text) > MAX_RESULT) throw new Error('读取结果过大，请缩小字段或分页读取。')
         return { ...result, ok: result.ok === true }
       } catch (error) {
-        if (error instanceof ApplicationHostNotReadyError) return { ok: false, error: { code: 'APPLICATION_NOT_READY', message: error.message, recoverable: true, details: { retryAfterMs: error.retryAfterMs, execution: { notExecuted: true } } } }
+        if (error instanceof ApplicationHostNotReadyError) return { ok: false, error: error.failure() }
         return applicationFailure(this.inputError(callerId, name, error, args ?? {}) ?? (error instanceof Error ? error.message : '应用读取失败，请稍后重试。'))
       }
   }

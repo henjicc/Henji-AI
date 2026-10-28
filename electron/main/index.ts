@@ -1,6 +1,6 @@
-import { registerApplicationControlIpc } from './ipc/application-control'
+import { registerApplicationControlIpc, watchApplicationHostRenderer } from './ipc/application-control'
 import { registerAppMenuIpc } from './ipc/app-menu'
-import { app, BrowserWindow, dialog } from 'electron'
+import { app, BrowserWindow, crashReporter, dialog } from 'electron'
 import path from 'node:path'
 import { warmApiMartEndpointPreference, warmGrsaiEndpointPreference } from '@henjicc/ai-sdk'
 import { registerAiRuntimeIpc } from './ipc/ai-runtime'
@@ -91,6 +91,21 @@ if (isolatedAppData) {
   app.setPath('appData', isolatedAppData)
 }
 
+/*
+ * 崩溃转储只留在本机，供排查渲染进程、GPU 进程里的原生访问冲突；不上传、不弹窗。
+ * 必须在 ready 之前启动才能覆盖之后创建的子进程。目录显式定在用户数据目录下，
+ * 窗口在崩溃后按 crashDumps 路径找最新转储写进日志。
+ */
+let crashReporterOutcome: { directory: string } | { error: unknown }
+try {
+  const directory = path.join(app.getPath('userData'), 'Crashpad')
+  app.setPath('crashDumps', directory)
+  crashReporter.start({ uploadToServer: false })
+  crashReporterOutcome = { directory }
+} catch (error) {
+  crashReporterOutcome = { error }
+}
+
 // henji.db 第一次打开时执行迁移账本；位置换算与备份目录在这里登记（数据库模块本身不依赖作品目录）。
 configureDatabaseMigrations(databaseMigrationOptions)
 configureCacheDeletionBoundary(managedMediaRoots)
@@ -116,6 +131,10 @@ if (remoteDebuggingPort) {
 }
 
 app.whenReady().then(async () => {
+  // 日志写入依赖 ready 后的应用路径，崩溃转储的启动结果放到这里补记。
+  const crashLogger = createMainLogger('main.crash_reporter')
+  if ('directory' in crashReporterOutcome) crashLogger.info('崩溃转储已启用', { event: 'crash_reporter.start.completed', context: { directoryName: path.basename(crashReporterOutcome.directory) } })
+  else crashLogger.error('崩溃转储启动失败', { event: 'crash_reporter.start.failed', error: crashReporterOutcome.error })
   try {
     getDb()
   } catch (error) {
@@ -212,7 +231,9 @@ app.whenReady().then(async () => {
       app.quit()
       return
     }
-    const cliWindow = createWindow({ headless: !assistantCliOptions.visible })
+    // 命令行的助手会话跑在主进程里，界面崩溃后不自动重载：换一个丢了状态的新界面会让后续工具调用照常成功、掩盖这次崩溃。
+    const cliWindow = createWindow({ headless: !assistantCliOptions.visible, recoverRendererCrash: false })
+    watchApplicationHostRenderer(cliWindow.webContents, { recovering: false })
     void runAssistantCli(cliWindow.webContents, assistantCliOptions).then(async (exitCode) => {
       // CLI 必须有确定的进程终点。供应商请求取消后极少数 SDK 会迟迟不释放连接，
       // 不能让已经产出终态的真实验收命令永远挂住。
@@ -226,7 +247,7 @@ app.whenReady().then(async () => {
 
   let releaseStartup!: () => void
   const startupReady = new Promise<void>(resolve => { releaseStartup = resolve })
-  createWindow({
+  const mainWindow = createWindow({
     presentation: resolveWindowPresentationMode(),
     beforeRendererLoad: async () => {
       try {
@@ -243,11 +264,12 @@ app.whenReady().then(async () => {
       } finally { releaseStartup() }
     },
   })
+  watchApplicationHostRenderer(mainWindow.webContents)
 
   app.on('activate', async () => {
     await startupReady
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow()
+      watchApplicationHostRenderer(createWindow().webContents)
     }
   })
 })

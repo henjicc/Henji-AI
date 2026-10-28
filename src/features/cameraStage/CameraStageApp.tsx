@@ -18,6 +18,10 @@ import {
 import { persistDirectorView } from './scene/directorViewState'
 import { useCameraStageSessionStore } from './store/cameraStageSessionStore'
 import { useCameraStageStore } from './store/cameraStageStore'
+import { isSafeRendererRecovery } from '@/core/applicationLifecycle/rendererRecovery'
+
+/** 本页第一次进入三维舞台时是否已经按安全恢复判断过；之后手动打开文档不受影响。 */
+let safeRecoveryHandled = false
 
 /**
  * 3D 镜头参考入口：“镜头参考列表 ↔ 场景编辑器”两级视图。
@@ -66,6 +70,16 @@ const CameraStageAppInner: React.FC<CameraStageAppProps> = ({ onBackToToolbox })
       const currentSession = useCameraStageSessionStore.getState()
       if (cancelled || currentSession.appView !== view
         || currentSession.lastDocumentId !== lastDocumentId) return
+      // 崩溃后的安全恢复：本页第一次进入时不自动打开上次的舞台文档，它可能正是把界面弄崩的那份；记录保留，用户可手动打开。
+      // 只在未被取消的首次执行里判断，严格模式下的双次挂载不会把这一次用掉。
+      if (!safeRecoveryHandled) {
+        safeRecoveryHandled = true
+        if (isSafeRendererRecovery() && view === 'editor' && lastDocumentId && useCameraStageStore.getState().currentProjectId !== lastDocumentId) {
+          setAppView('list')
+          if (!cancelled) setRestoring(false)
+          return
+        }
+      }
       if (view !== 'editor') {
         if (!cancelled) setRestoring(false)
         return

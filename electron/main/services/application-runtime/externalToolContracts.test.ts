@@ -87,3 +87,44 @@ it('媒体每块只读最小实体属性核验授权，不创建内部读取基�
   expect((await dispatcher.readMedia('caller', { ref }, signal)).ok).toBe(false)
   expect(readApplicationMediaResource).toHaveBeenCalledTimes(calls)
 })
+
+it('界面崩溃期间外部读取与写入拿到同一个带崩溃原因的未就绪错误', async () => {
+  const { ApplicationOperationCoordinator } = await import('./operationCoordinator')
+  const { ApplicationOperationStore } = await import('./operationStore')
+  const store = Object.create(ApplicationOperationStore.prototype) as InstanceType<typeof ApplicationOperationStore>
+  vi.spyOn(store, 'recoverInterrupted').mockImplementation(() => undefined)
+  vi.spyOn(store, 'unresolved').mockImplementation(() => [])
+  vi.spyOn(store, 'get').mockImplementation(() => undefined)
+  vi.spyOn(store, 'prepare').mockImplementation(value => value)
+  vi.spyOn(store, 'save').mockImplementation(() => undefined)
+  const operations = new ApplicationOperationCoordinator(store)
+  const host = new ApplicationHostBridge(() => {}, operations)
+  host.register({ rendererEpoch: '00000000-0000-4000-8000-000000000001', attachmentSequence: 1, ready: true, tools: [], domains: [] }, { send: () => undefined })
+  host.rendererCrashed()
+  const dispatcher = new ApplicationToolDispatcher(connections, host, operations)
+  const expected = { code: 'APPLICATION_NOT_READY', message: '应用界面已崩溃、正在恢复，请稍后重试。', recoverable: true,
+    details: { execution: { notExecuted: true }, retryAfterMs: 1000, reason: 'renderer_crashed' } }
+  const read = await dispatcher.call('caller', 'get_current_application_context', {}, signal)
+  const write = await dispatcher.call('caller', 'change_application_entities', { operationId: randomUUID(), changes: [] }, signal)
+  expect(read).toEqual({ ok: false, error: expected })
+  expect(write).toMatchObject({ ok: false, executionState: 'not_executed', result: { ok: false, error: expected } })
+})
+
+it('界面崩溃发生在派发途中：保存重试与媒体读取同样返回带崩溃原因的未就绪错误并记零执行', async () => {
+  const { ApplicationHostNotReadyError } = await import('./applicationHostBridge')
+  const host = new ApplicationHostBridge(() => {})
+  host.register({ rendererEpoch: '00000000-0000-4000-8000-000000000001', attachmentSequence: 1, ready: true, tools: [], domains: [] }, { send: () => undefined })
+  vi.spyOn(host, 'execute').mockRejectedValue(new ApplicationHostNotReadyError({ reason: 'renderer_crashed', recovering: true }))
+  let record = { operationId: randomUUID(), callerId: 'caller', inputDigest: 'digest', input: {}, capabilityId: 'retry_canvas_document_save', state: 'prepared' } as OperationRecord
+  const operations = {
+    prepareSaveRecovery: () => record,
+    store: { beginPreparation: () => { record = { ...record, state: 'preparing' }; return true }, get: () => record, save: (value: OperationRecord) => { record = value } },
+    result: (value: OperationRecord) => ({ ok: false, executionState: value.state, result: value.result }),
+  } as unknown as ApplicationOperationCoordinator
+  const dispatcher = new ApplicationToolDispatcher(connections, host, operations)
+  const expected = { code: 'APPLICATION_NOT_READY', message: '应用界面已崩溃、正在恢复，请稍后重试。', recoverable: true,
+    details: { execution: { notExecuted: true }, retryAfterMs: 1000, reason: 'renderer_crashed' } }
+  expect(await dispatcher.call('caller', 'retry_application_operation_save', { operationId: randomUUID(), originalOperationId: randomUUID() }, signal))
+    .toMatchObject({ ok: false, executionState: 'not_executed', result: { ok: false, error: expected } })
+  expect(await dispatcher.readMedia('caller', { ref: { kind: 'asset', id: 'asset' } }, signal)).toEqual({ ok: false, error: expected })
+})

@@ -1,5 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { ApplicationHostBridge } from './applicationHostBridge'
+import { ApplicationHostBridge, ApplicationHostNotReadyError } from './applicationHostBridge'
+import { ApplicationOperationCoordinator } from './operationCoordinator'
+import { ApplicationOperationStore, type OperationRecord } from './operationStore'
 import type { LocalHostRequest } from '../../../../src/core/application-control/localHostContracts'
 import { applicationUserConfirmation } from '../../../../src/core/application-control/userConfirmation'
 
@@ -133,4 +135,69 @@ it('冷启动时上下文先于首次注册到达，注册不会清掉它', () =
   bridge.register({ rendererEpoch: 'epoch', attachmentSequence: 1, ready: true, tools: [], domains: [] } as never, transport)
   expect(bridge.ready).toBe(true)
   expect(bridge.getContext()).toMatchObject({ uiReady: true })
+})
+it('渲染进程崩溃时在途读取与已派发写入立刻结束，之后的调用直接拒绝，新页面就绪后恢复', async () => {
+  vi.useFakeTimers()
+  let record: OperationRecord = { operationId: 'op', callerId: 'writer', inputDigest: 'digest', input: { paid: true }, capabilityId: 'change_application_entities', state: 'preparing' }
+  const store = Object.create(ApplicationOperationStore.prototype) as ApplicationOperationStore
+  vi.spyOn(store, 'recoverInterrupted').mockImplementation(() => undefined)
+  vi.spyOn(store, 'unresolved').mockImplementation(() => [])
+  vi.spyOn(store, 'claim').mockImplementation((value, requestId, rendererEpoch) => { record = { ...value, state: 'executing', requestId, rendererEpoch } })
+  vi.spyOn(store, 'byRequest').mockImplementation(requestId => record.requestId === requestId ? record : undefined)
+  vi.spyOn(store, 'save').mockImplementation(value => { record = value })
+  const operations = new ApplicationOperationCoordinator(store)
+  const bridge = new ApplicationHostBridge(() => undefined, operations)
+  const sent: string[] = []
+  const register = (sequence: number, ready = true) => bridge.register({ rendererEpoch: `00000000-0000-4000-8000-${String(sequence).padStart(12, '0')}`, attachmentSequence: sequence, ready, tools: [], domains: [] }, {
+    send: (channel, payload) => {
+      sent.push(channel)
+      const request = payload as LocalHostRequest
+      if (channel === 'application:host:request' && sequence > 1) bridge.complete({ ...request, result: { ok: true } })
+    },
+  })
+  register(1)
+  const read = bridge.execute('reader', 'get_current_application_context', {}, new AbortController().signal)
+  const write = bridge.execute('writer', 'change_application_entities', {}, new AbortController().signal, { operation: record })
+  const notReady = { reason: 'renderer_crashed', message: 'APPLICATION_NOT_READY:应用界面已崩溃、正在恢复，请稍后重试。' }
+  const readFailure = expect(read).rejects.toMatchObject(notReady)
+  const writeFailure = expect(write).rejects.toMatchObject(notReady)
+  bridge.rendererCrashed()
+  await readFailure
+  await writeFailure
+  expect(sent.filter(channel => channel === 'application:host:cancel')).toEqual([])
+  expect(vi.getTimerCount()).toBe(0)
+  // 执行中的修改仍是 unknown，回执写明中断原因；涉及付费的照旧保留不重复执行的保护。
+  expect(record).toMatchObject({ state: 'unknown', result: { ok: false, error: { code: 'CONNECTION_INTERRUPTED', message: expect.stringMatching(/^已中断/),
+    details: { interruption: { reason: 'renderer_crashed' } } } } })
+  expect(operations.result(record).recovery).toMatch(/禁止重复原修改/)
+  const failure = await bridge.execute('reader', 'get_current_application_context', {}, new AbortController().signal).catch((error: unknown) => error)
+  expect(failure).toBeInstanceOf(ApplicationHostNotReadyError)
+  expect((failure as ApplicationHostNotReadyError).failure()).toEqual({ code: 'APPLICATION_NOT_READY', message: '应用界面已崩溃、正在恢复，请稍后重试。', recoverable: true,
+    details: { execution: { notExecuted: true }, retryAfterMs: 1000, reason: 'renderer_crashed' } })
+  // 重新加载的页面先以未就绪注册，原因要保留到真正就绪。
+  register(2, false)
+  expect(bridge.hostUnavailable?.reason).toBe('renderer_crashed')
+  register(3)
+  expect(bridge.hostUnavailable).toBeUndefined()
+  await expect(bridge.execute('reader', 'get_current_application_context', {}, new AbortController().signal)).resolves.toMatchObject({ ok: true })
+})
+it('未就绪时写入入口登记零执行，崩溃原因进入对外详情', () => {
+  const store = Object.create(ApplicationOperationStore.prototype) as ApplicationOperationStore
+  vi.spyOn(store, 'recoverInterrupted').mockImplementation(() => undefined)
+  vi.spyOn(store, 'unresolved').mockImplementation(() => [])
+  vi.spyOn(store, 'get').mockImplementation(() => undefined)
+  vi.spyOn(store, 'prepare').mockImplementation(value => value as OperationRecord)
+  vi.spyOn(store, 'save').mockImplementation(() => undefined)
+  const operations = new ApplicationOperationCoordinator(store)
+  const record = operations.rejectBeforeDispatch('caller', { operationId: '00000000-0000-4000-8000-000000000009', changes: [] }, 'change_application_entities', 1000, { reason: 'renderer_crashed', recovering: true })
+  expect(record).toMatchObject({ state: 'not_executed', result: { ok: false, error: { code: 'APPLICATION_NOT_READY', message: '应用界面已崩溃、正在恢复，请稍后重试。',
+    details: { reason: 'renderer_crashed', execution: { notExecuted: true } } } } })
+})
+it('助手命令行的界面崩溃后不会恢复：对外说明本次运行无法继续，且不可重试', async () => {
+  const bridge = new ApplicationHostBridge(() => undefined)
+  bridge.register({ rendererEpoch: '00000000-0000-4000-8000-000000000001', attachmentSequence: 1, ready: true, tools: [], domains: [] }, { send: () => undefined })
+  bridge.rendererCrashed(false)
+  const failure = await bridge.execute('reader', 'get_current_application_context', {}, new AbortController().signal).catch((error: unknown) => error)
+  expect((failure as ApplicationHostNotReadyError).failure()).toEqual({ code: 'APPLICATION_NOT_READY', message: '应用界面已崩溃，本次运行无法继续。', recoverable: false,
+    details: { execution: { notExecuted: true }, reason: 'renderer_crashed' } })
 })

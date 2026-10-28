@@ -13,6 +13,7 @@ import { UiErrorBoundary } from '@/components/ui'
 import { configureGenerationSubmissionConfirmation } from '@/core/services/generationSubmissionConfirmation'
 import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 import { readDevelopmentLaunchOptions } from '@/core/development/developmentLaunch'
+import { isSafeRendererRecovery } from '@/core/applicationLifecycle/rendererRecovery'
 
 initLoggerConfig()
 configureGenerationSubmissionConfirmation(requestAlertConfirmation)
@@ -60,6 +61,8 @@ const CameraStageRenderWorker = React.lazy(
 )
 
 const developmentLaunch = readDevelopmentLaunchOptions()
+// 崩溃后的安全恢复参数在任何启动恢复之前读出并从地址里去掉，本页之后都按记下的结果判断
+isSafeRendererRecovery()
 // 运行时布局守卫（重要记录 020）：默认不运行，开发运行与正式版一致；`--dev-checks` 时描边，`--dev-layout-guard[=log]` 单独指定。
 // 安装包不运行。按需加载，正式启动路径不含它；录制控制条、录制边框与三维渲染这些辅助窗口不跑。
 const layoutGuardMode = developmentLaunch.layoutGuard ?? (developmentLaunch.checks ? 'outline' : null)

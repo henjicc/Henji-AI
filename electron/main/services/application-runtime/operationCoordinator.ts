@@ -9,6 +9,7 @@ import { requiresMutationReview } from '../../../../src/core/application-control
 import type { OperationReviewItem } from '../../../../src/core/application-control/operationReview'
 import { reviewPresentation } from './operationReviewPresentation'
 import { createMainLogger } from '../logging'
+import { applicationNotReadyFailure, type ApplicationHostUnavailable, type ApplicationHostUnavailableReason } from './applicationHostBridge'
 
 const refSchema = z.object({ kind: z.string(), id: z.string() }).passthrough()
 const envelopeSchema = z.object({ operationId: z.string().uuid(), baselineIds: z.array(z.string().uuid()).max(32).default([]) })
@@ -183,7 +184,7 @@ export class ApplicationOperationCoordinator {
     this.changed()
   }
   /** 宿主未注册时只登记入口零执行事实；不读取领域白名单，也绝不覆盖既有执行账。 */
-  rejectBeforeDispatch(callerId: string, raw: Record<string, unknown>, capabilityId: OperationRecord['capabilityId'], retryAfterMs: number): OperationRecord {
+  rejectBeforeDispatch(callerId: string, raw: Record<string, unknown>, capabilityId: OperationRecord['capabilityId'], retryAfterMs: number, unavailable?: ApplicationHostUnavailable): OperationRecord {
     const { operationId, baselineIds } = envelopeSchema.parse(raw)
     const input = { ...raw }; delete input.operationId; delete input.baselineIds
     const digest = operationDigest(capabilityId === 'change_application_entities' ? { input, baselineIds } : { input, baselineIds, capabilityId })
@@ -194,8 +195,7 @@ export class ApplicationOperationCoordinator {
     }
     const record = this.store.prepare({ operationId, callerId, inputDigest: digest, input, capabilityId, state: 'prepared' })
     const rejected: OperationRecord = { ...record, state: 'not_executed', verificationState: 'verified', result: { ok: false,
-      error: { code: 'APPLICATION_NOT_READY', message: '应用正在重新连接，请稍后重试。', recoverable: true,
-        details: { execution: { notExecuted: true }, retryAfterMs } } } }
+      error: applicationNotReadyFailure(unavailable, retryAfterMs) } }
     this.store.save(rejected)
     return rejected
   }
@@ -310,13 +310,17 @@ export class ApplicationOperationCoordinator {
       ...(capabilityId === 'place_video_edit_creative_result' ? { atomicPlacement: true } : {}) })
   }
   dispatched(record: OperationRecord, requestId: string, rendererEpoch: string): void { this.store.claim(record, requestId, rendererEpoch) }
-  interrupted(requestId: string, rendererEpoch: string): void {
+  interrupted(requestId: string, rendererEpoch: string, reason?: ApplicationHostUnavailableReason): void {
     const record = this.store.byRequest(requestId, rendererEpoch)
     if (record?.state === 'awaiting_user_confirmation' && record.confirmation?.purpose === 'execution') {
       this.store.save({ ...record, state: 'not_executed', verificationState: 'verified', confirmation: undefined,
         result: { ok: false, error: { code: 'CONFIRMATION_INTERRUPTED', message: '应用在确认前重载；未继续执行或计费。', details: { execution: { notExecuted: true } } } } })
     } else if (record?.state === 'executing') {
-      this.store.save(this.recoverPreflight({ ...record, state: 'unknown', confirmation: undefined }))
+      // 中断不是新的执行状态：账本仍记 unknown（状态枚举属于持久格式），原因写进回执，核对界面按“连接中断”呈现。
+      // 不写 execution 事实，免得被当成可证明的零执行；付费保护照常由 protectsUnknownOutcome 判断。
+      const interruption = reason ? { result: { ok: false, error: { code: 'CONNECTION_INTERRUPTED', recoverable: true,
+        message: '已中断：应用界面在执行中崩溃，修改是否生效尚待核对。', details: { interruption: { reason, at: new Date().toISOString() } } } } } : {}
+      this.store.save(this.recoverPreflight({ ...record, state: 'unknown', confirmation: undefined, ...interruption }))
     }
     this.changed()
   }
