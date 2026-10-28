@@ -23,6 +23,7 @@ import {
   type MoveDocumentRequest,
   type NameCheckRequest,
   type ProjectListQuery,
+  type ResolveProjectFilesRequest,
   type RenameDocumentRequest,
   type RenameProjectRequest,
   type SaveDocumentCoverRequest,
@@ -185,6 +186,12 @@ export const importFileRequestSchema: z.ZodType<ImportFileRequest> = z.object({
     return checked.ok && checked.name === value
   }, '素材分类必须是单个有效文件夹名。').optional(),
   reuseIdentical: z.boolean().optional(),
+}).strict()
+
+/** 逐条判断放在主进程：空串、绝对路径与 `..` 不在这里拒绝，返回时按条点名原因。 */
+export const resolveProjectFilesRequestSchema: z.ZodType<ResolveProjectFilesRequest> = z.object({
+  projectId: documentIdSchema,
+  paths: z.array(z.string().max(4_096)).min(1).max(256),
 }).strict()
 
 /** 会话状态的键：小写字母、数字与 . _ - ，由工具自己约定（如 `canvas.history`）。 */

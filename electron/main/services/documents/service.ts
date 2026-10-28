@@ -36,6 +36,8 @@ import type {
   ProjectSummary,
   RenameDocumentRequest,
   RenameProjectRequest,
+  ResolveProjectFilesRequest,
+  ResolveProjectFilesResult,
   SaveDocumentCoverRequest,
   SaveDocumentRequest,
   SetProjectMainDocumentRequest,
@@ -47,6 +49,7 @@ import path from 'node:path'
 import type { DocumentKindRegistry } from '../../../../src/core/documents/kinds'
 import { isPathInside } from '../../../../src/core/storage/pathSyntax'
 import { DocumentLocationError } from './errors'
+import { resolveProjectRelativePaths } from './project-files'
 import type { DocumentCoverStore } from './covers'
 import type { DocumentIndexScanner } from './index-scanner'
 import type { DocumentPackageService } from './package-service'
@@ -212,6 +215,12 @@ export class DocumentService implements DocumentsPlatform {
 
   importFile(request: ImportFileRequest): Promise<ImportFileResult> {
     return this.parts.repository.importFile(request)
+  }
+
+  /** 项目位置以索引为准并核对项目说明（找不到报 ProjectNotFoundError）；逐条判断交给 project-files。 */
+  async resolveProjectFiles(request: ResolveProjectFilesRequest): Promise<ResolveProjectFilesResult> {
+    const container = await this.parts.workspace.resolveContainer({ kind: 'project', projectId: request.projectId })
+    return resolveProjectRelativePaths(container.root, request.paths, this.parts.workspace.style)
   }
 
   resolveDocumentLink(link: DocumentLink): Promise<DocumentLinkResolution> {

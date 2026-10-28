@@ -167,6 +167,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.82.0'] = '6c2cdd346941629b12e81cd81f71e16c5d97ac73f2e16fa18fe334f82e7be95f'
     // 代码视频参数新增可选取帧时间表 spans（{from,to,src,rate?,cursor?}），与固定时刻 time 互斥。
     fingerprints['2.83.0'] = 'f4a8495d3efe632291daf8a53f04362f36a18945696c0e7e8c57b82f65fd11ba'
+    // 新增 import_video_edit_project_files：按项目内相对路径把项目文件夹里的文件导入剪辑，不必让用户点选文件夹。
+    fingerprints['2.84.0'] = '9635ffed026442d872af3d5e3d0967bd760b8114734e378eb49c49cda726be15'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], `工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹：${fingerprint}`).toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {

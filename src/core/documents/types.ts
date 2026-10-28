@@ -261,6 +261,31 @@ export interface ImportFileResult {
   copied: boolean
 }
 
+/** 按项目内相对路径定位文件（助手导入项目里的素材）：主进程按项目文件夹的真实路径判断是否仍在项目内。 */
+export interface ResolveProjectFilesRequest {
+  projectId: string
+  /** 项目文件夹里的相对路径，`/` 或 `\` 分隔；绝对路径、盘符、`..` 与指向项目外的链接一律拒绝。 */
+  paths: string[]
+}
+
+/**
+ * 拒绝原因：absolute_path 绝对路径/盘符/网络路径；parent_segment 含 `..`；invalid_path 空、指向项目文件夹本身或含非法字符；
+ * outside_project 真实位置在项目外（符号链接或联接点指出去）；not_found 项目里没有；unreadable 无权读取或不是普通文件/文件夹。
+ */
+export type ProjectFileRejectionReason = 'absolute_path' | 'parent_segment' | 'invalid_path' | 'outside_project' | 'not_found' | 'unreadable'
+
+export type ProjectFileResolution =
+  /** relativePath 为规范化后的写法（`/` 分隔、去掉 `.`）；path 为真实路径。 */
+  | { input: string; status: 'resolved'; relativePath: string; path: string; kind: 'file' | 'directory' }
+  | { input: string; status: 'rejected'; reason: ProjectFileRejectionReason; message: string }
+
+export interface ResolveProjectFilesResult {
+  /** 项目文件夹的真实路径；递归读取子文件夹时作为不可越过的边界。 */
+  root: string
+  /** 与请求的 paths 一一对应、同序。 */
+  entries: ProjectFileResolution[]
+}
+
 export interface FinalizeProjectRequest {
   projectId: string
   name: string

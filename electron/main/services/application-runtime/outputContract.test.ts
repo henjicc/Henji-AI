@@ -251,6 +251,10 @@ successData.read_video_edit_super_keyframes = { resultRef: ref('video_edit.inten
 for (const name of ['import_video_edit_asset', 'import_video_edit_folder', 'save_video_edit', 'split_video_edit', 'add_video_edit_frame_hold', 'trim_video_edit_clip', 'undo_video_edit', 'redo_video_edit']) {
   successData[name] = { resultRef: documentRef, message, verification: verification() }
 }
+successData.import_video_edit_project_files = { resultRef: documentRef, message, verification: verification(), importedCount: 1, reusedCount: 1, skippedCount: 1, truncated: false,
+  items: [{ itemRef: ref('video_edit.item', 'document:item'), mediaRef: ref('video_edit.media', 'document:media'), binRef: ref('video_edit.bin', 'document:bin'), relativePath: '素材/录屏/a.mp4', status: 'imported' },
+    { itemRef: ref('video_edit.item', 'document:shot'), mediaRef: ref('video_edit.media', 'document:shot'), binRef: null, relativePath: '素材/截图/产品主页.png', status: 'reused' }],
+  skipped: [{ relativePath: '素材/录屏/外链', reason: 'outside_project', message: '真实位置不在项目文件夹内（符号链接或联接点指向项目外），已跳过。' }] }
 successData.add_sound_library_folder = { status: 'added', resultRef: ref('sound_library.folder'), folderStatus: 'indexing', message, verification: { verified: true, condition: '已回读登记表。' } }
 successData.search_sound_effects = { matches: [{ soundRef: ref('sound_library.sound'), folderRef: ref('sound_library.folder'), name: '嗖02-短', englishName: null, chineseName: '嗖02-短', relativePath: '转场/嗖02-短.mp3', durationSeconds: 0.9, attackSeconds: 0.2, hitSeconds: 0.36, peakDbfs: -1, loudnessLufs: -12, brightness: 'bright', score: 0.9, matchedBy: ['name'] }], noGoodMatch: false, listening: 'model_not_downloaded', considered: 2, indexedSounds: 2, skippedFiles: 0, message }
 successData.place_video_edit_sound_effects = { resultRefs: [clipRef], documentRef, placements: [{ clipRef, soundRef: ref('sound_library.sound'), startFrame: 10, targetSeconds: 0.5, anchorSeconds: 0.36, alignedSeconds: 0.5, trimmedHeadSeconds: 0.026, trackRef: ref('video_edit.track') }], message, verification: { verified: true, condition: '已回读。' } }

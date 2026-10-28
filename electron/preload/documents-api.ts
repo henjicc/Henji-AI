@@ -33,6 +33,7 @@ export function createDocumentsApi(invoke: NativeInvoke): DocumentsPlatform {
     migrateCodeStorage: (projectId) => invoke(c.migrateCodeStorage, { projectId }),
     collectDocumentMedia: (target) => invoke(c.collectDocumentMedia, target),
     importFile: (request) => invoke(c.importFile, request),
+    resolveProjectFiles: (request) => invoke(c.resolveProjectFiles, request),
     resolveDocumentLink: (link) => invoke(c.resolveDocumentLink, link),
     checkName: (request) => invoke(c.checkName, request),
     getDocumentCover: (docId) => invoke(c.getDocumentCover, { docId }),

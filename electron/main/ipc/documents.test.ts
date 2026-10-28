@@ -21,7 +21,7 @@ const METHODS: Array<keyof DocumentsPlatform> = [
   'duplicateDocument', 'trashDocument', 'deleteEmptyDraft', 'forgetDocument', 'revealDocument', 'resolveDocumentLink', 'checkName',
   'getDocumentCover', 'saveDocumentCover', 'refreshIndex', 'readSessionState', 'writeSessionState', 'listProjects', 'createProject', 'renameProject', 'finalizeProject',
   'trashProject', 'registerExternalProject', 'registerExternalDocument', 'forgetExternalLocation', 'revealProject',
-  'exportDocumentPackage', 'exportProjectPackage', 'importPackage',
+  'exportDocumentPackage', 'exportProjectPackage', 'importPackage', 'resolveProjectFiles',
 ]
 
 function api(): DocumentsPlatform {
@@ -77,6 +77,7 @@ describe('文档底座 IPC 契约（preload 桥 → 主进程校验 → Document
       ['exportDocumentPackage', [{ target }], [{ target }]],
       ['exportProjectPackage', [{ projectId: 'p1', destination: '/elsewhere/p.hjpak' }], [{ projectId: 'p1', destination: '/elsewhere/p.hjpak' }]],
       ['importPackage', [{ source: '/elsewhere/p.hjpak', container: { kind: 'project', projectId: 'p1' } }], [{ source: '/elsewhere/p.hjpak', container: { kind: 'project', projectId: 'p1' } }]],
+      ['resolveProjectFiles', [{ projectId: 'p1', paths: ['素材/截图/a.png', '../escape'] }], [{ projectId: 'p1', paths: ['素材/截图/a.png', '../escape'] }]],
     ]
     for (const [method, args, expected] of calls) {
       const call = bridge[method] as (...values: unknown[]) => Promise<unknown>
@@ -95,7 +96,9 @@ describe('文档底座 IPC 契约（preload 桥 → 主进程校验 → Document
     await expect(bridge.moveDocument({ target: { id: 'a' }, container: { kind: 'project' } } as never)).rejects.toThrow()
     await expect(bridge.saveDocumentCover({ docId: 'a', sources: [] })).rejects.toThrow()
     await expect(bridge.readSessionState({ docId: 'a', key: '../escape' })).rejects.toThrow()
-    for (const method of ['saveDocument', 'createDocument', 'readDocument', 'trashProject', 'moveDocument', 'saveDocumentCover', 'readSessionState'] as const) {
+    await expect(bridge.resolveProjectFiles({ projectId: 'p1', paths: [] })).rejects.toThrow()
+    await expect(bridge.resolveProjectFiles({ projectId: 'p1', paths: ['a'], root: 'D:/' } as never)).rejects.toThrow()
+    for (const method of ['saveDocument', 'createDocument', 'readDocument', 'trashProject', 'moveDocument', 'saveDocumentCover', 'readSessionState', 'resolveProjectFiles'] as const) {
       expect(mock.service[method]).not.toHaveBeenCalled()
     }
   })

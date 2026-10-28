@@ -28,6 +28,7 @@ it('口播十一工具与共用剪辑输入只接受自身字段，真实必填�
     ...['save_video_edit', 'undo_video_edit', 'redo_video_edit', 'import_video_edit_folder'].map(id => [id, { documentRef: { kind: 'video_edit.document', id: 'video' } }, ['documentRef']] as [string, Record<string, unknown>, string[]]),
     ['split_video_edit', { documentRef: { kind: 'video_edit.document', id: 'video' }, clipRef: { kind: 'video_edit.clip', id: 'video:clip' }, frame: 5 }, ['documentRef', 'clipRef', 'frame']],
     ['import_video_edit_asset', { documentRef: { kind: 'video_edit.document', id: 'video' }, assetRef: { kind: 'asset', id: 'asset' } }, ['documentRef', 'assetRef']],
+    ['import_video_edit_project_files', { documentRef: { kind: 'video_edit.document', id: 'video' }, paths: ['素材/截图/产品主页.png'] }, ['documentRef', 'paths']],
     ...['ripple_delete_video_edit_text', 'extract_video_edit_text', 'insert_video_edit_text'].map(id => [id, {
       documentRef: { kind: 'video_edit.document', id: 'video' }, sequenceRef: { kind: 'video_edit.sequence', id: 'video:sequence' },
       selector: { kind: 'text', text: '原稿' }, ...(id === 'insert_video_edit_text' ? { frame: 5 } : {}),

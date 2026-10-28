@@ -34,6 +34,8 @@ import type {
   ProjectListQuery,
   ProjectSummary,
   RenameDocumentRequest,
+  ResolveProjectFilesRequest,
+  ResolveProjectFilesResult,
   RenameProjectRequest,
   SaveDocumentCoverRequest,
   SaveDocumentRequest,
@@ -94,6 +96,8 @@ export interface DocumentsPlatform {
   collectDocumentMedia(target: DocumentTarget): Promise<DocumentTransferResult>
   /** 把一个文件复制进容器的“生成结果”或“素材”（同名且内容相同时复用，不同则加序号，从不覆盖）。 */
   importFile(request: ImportFileRequest): Promise<ImportFileResult>
+  /** 按项目内相对路径定位文件或文件夹；按真实路径判断，项目外（含链接指出去的）逐条拒绝并说明原因。 */
+  resolveProjectFiles(request: ResolveProjectFilesRequest): Promise<ResolveProjectFilesResult>
   resolveDocumentLink(link: DocumentLink): Promise<DocumentLinkResolution>
   /** 名称检查：只在同一个文件夹里查重，返回可用 / 重名 / 非法。 */
   checkName(request: NameCheckRequest): Promise<NameCheckResult>
@@ -161,6 +165,7 @@ export const DOCUMENT_IPC_CHANNELS = {
   revealDocument: 'documents:reveal',
   collectDocumentMedia: 'documents:collectMedia',
   importFile: 'documents:importFile',
+  resolveProjectFiles: 'documents:projects:resolveFiles',
   resolveDocumentLink: 'documents:resolveLink',
   checkName: 'documents:checkName',
   getDocumentCover: 'documents:cover:get',

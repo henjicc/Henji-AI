@@ -26,6 +26,7 @@ import {
   projectListPageQuerySchema,
   renameDocumentRequestSchema,
   renameProjectRequestSchema,
+  resolveProjectFilesRequestSchema,
   saveDocumentCoverRequestSchema,
   saveDocumentRequestSchema,
   setProjectMainDocumentRequestSchema,
@@ -74,6 +75,7 @@ export function registerDocumentsIpc(): void {
   registerIpcHandler(c.revealDocument, parseWith(documentTargetSchema), (target) => service().revealDocument(target))
   registerIpcHandler(c.collectDocumentMedia, parseWith(documentTargetSchema), (target) => service().collectDocumentMedia(target))
   registerIpcHandler(c.importFile, parseWith(importFileRequestSchema), (request) => service().importFile(request))
+  registerIpcHandler(c.resolveProjectFiles, parseWith(resolveProjectFilesRequestSchema), (request) => service().resolveProjectFiles(request))
   registerIpcHandler(c.resolveDocumentLink, parseWith(documentLinkSchema), (link) => service().resolveDocumentLink(link))
   registerIpcHandler(c.checkName, parseWith(nameCheckRequestSchema), (request) => service().checkName(request))
   registerIpcHandler(c.getDocumentCover, parseWith(documentIdRequestSchema), ({ docId }) => service().getDocumentCover(docId))

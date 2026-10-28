@@ -2,6 +2,7 @@ import { createLogger } from '@/core/logging'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
 import { VideoEditSequenceFrameRateRequired } from '@/core/videoEdit/projectItems'
 import { getPlatform } from '@/platform/runtime'
+import type { FsDirPageOptions } from '@/platform/contracts/system'
 import { importVideoEditSources, videoEditMediaPathKey, VIDEO_EDIT_IMPORT_EXTENSIONS } from './videoEditMedia'
 import { editVideoEditImportGroup, finishVideoEditImportGroup, rollbackVideoEditImportGroup, waitVideoEditImportEdit, mergeVideoEditImportDocument, requireVideoEditInstance, listVideoEditInstances, type VideoEditImportEditGroup } from './videoEditService'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -16,16 +17,34 @@ export class VideoEditPartialImportFailure extends Error {
   constructor(readonly imported: number, readonly cancelled: boolean, cause: unknown) { super(cancelled ? '导入已取消，已导入部分已保留。' : '导入未完成，已导入部分已保留。', { cause }); this.name = cancelled ? 'AbortError' : 'VideoEditPartialImportFailure' }
 }
 export interface VideoEditFolderImportResult { itemIds: string[]; skipped: number }
-export interface VideoEditFolderImportOptions { signal?: AbortSignal; onProgress?: (progress: VideoEditImportProgress) => void }
-interface Enumeration { visited: Set<string>; skipped: number; entries: number; signal?: AbortSignal; task?: VideoEditImportTask; onProgress?: VideoEditFolderImportOptions['onProgress']; onFolder?: (folder: VideoEditImportFolder, parent?: VideoEditImportFolder) => void | Promise<void> }
+/**
+ * 每一项跳过的原因（与 skipped 计数一一对应）：unsupported 格式不支持；duplicate 目标素材箱里已有同一文件（itemId 为复用的素材项）或本次重复给出；
+ * unreadable 读不出或无法解码；repeated_folder 目录回环或同一目录重复给出；outside_project 链接或联接点指向 boundary 之外。
+ */
+export type VideoEditImportSkipReason = 'unsupported' | 'duplicate' | 'unreadable' | 'repeated_folder' | 'outside_project'
+export interface VideoEditImportSkip { path: string; reason: VideoEditImportSkipReason; itemId?: string }
+export interface VideoEditFolderImportOptions {
+  signal?: AbortSignal
+  onProgress?: (progress: VideoEditImportProgress) => void
+  /** 只读这个文件夹（真实路径）以内：指向外部的链接与联接点跳过，记为 outside_project。 */
+  boundary?: string
+  onSkipped?: (skip: VideoEditImportSkip) => void
+  /** 没有文件夹时散文件读不出也跳过（默认与拖入一致：整次失败）。 */
+  skipUnreadableFiles?: boolean
+}
+interface Enumeration { visited: Set<string>; skipped: number; entries: number; signal?: AbortSignal; task?: VideoEditImportTask; onProgress?: VideoEditFolderImportOptions['onProgress']; onFolder?: (folder: VideoEditImportFolder, parent?: VideoEditImportFolder) => void | Promise<void>; boundary?: string; onSkipped?: VideoEditFolderImportOptions['onSkipped'] }
 function childPath(parent: string, name: string): string { return `${parent.replace(/[\\/]+$/, '')}${parent.includes('\\') ? '\\' : '/'}${name}` }
 function baseName(path: string): string { return path.replace(/[\\/]+$/, '').split(/[\\/]/).at(-1) || path }
+/** 文件夹导入认得的格式（拖入的散文件不按扩展名过滤，由探测判断）。 */
+export function isVideoEditImportableFile(path: string): boolean { return IMPORTABLE.test(path) }
+function skip(state: Enumeration, path: string, reason: VideoEditImportSkipReason): void { state.skipped++; state.onSkipped?.({ path, reason }) }
 
 /** Iterative traversal: realpath detects junction/symlink cycles; IPC pages bound I/O and cancellation latency. */
 export async function readVideoEditImportFolder(path: string, state: Enumeration = { visited: new Set(), skipped: 0, entries: 0 }): Promise<VideoEditImportFolder | undefined> {
   const root: VideoEditImportFolder = { path, name: baseName(path), files: [], folders: [] }
   const pending = [{ folder: root, parent: undefined as VideoEditImportFolder | undefined }]
   let rootRead = false
+  const pageOptions = (cursor: string | undefined): FsDirPageOptions | undefined => state.boundary ? { ...(cursor ? { cursor } : {}), boundary: state.boundary } : cursor ? { cursor } : undefined
   while (pending.length) {
     state.signal?.throwIfAborted()
     const { folder, parent } = pending.pop()!
@@ -36,13 +55,13 @@ export async function readVideoEditImportFolder(path: string, state: Enumeration
     try {
       do {
         state.signal?.throwIfAborted()
-        const page = await getPlatform().system.fs.readDirPage(readPath, cursor ? { cursor } : undefined)
+        const page = await getPlatform().system.fs.readDirPage(readPath, pageOptions(cursor))
         cursor = page.cursor
         state.signal?.throwIfAborted()
         if (first) {
           first = false
           const key = videoEditMediaPathKey(page.realPath)
-          if (state.visited.has(key)) { state.skipped++; break }
+          if (state.visited.has(key)) { skip(state, page.realPath, 'repeated_folder'); break }
           state.visited.add(key); accepted = true
           folder.path = page.realPath
           materializing = true; await state.onFolder?.(folder, parent); materializing = false
@@ -51,8 +70,9 @@ export async function readVideoEditImportFolder(path: string, state: Enumeration
         for (const entry of page.entries) {
           if (SYSTEM_FILE.test(entry.name)) continue
           if (!entry.isDirectory) state.entries++
-          if (entry.unreadable) { state.skipped++; continue }
           const child = childPath(folder.path, entry.name)
+          if (entry.outside) { skip(state, child, 'outside_project'); continue }
+          if (entry.unreadable) { skip(state, child, 'unreadable'); continue }
           if (entry.isDirectory) children.push({ path: child, name: entry.name, files: [], folders: [] })
           else folder.files.push(child)
         }
@@ -62,7 +82,7 @@ export async function readVideoEditImportFolder(path: string, state: Enumeration
       state.signal?.throwIfAborted()
       if (materializing) throw error
       if (!parent && !accepted && error instanceof Error && /ENOTDIR/.test(error.message)) return undefined
-      state.skipped++
+      skip(state, readPath, error instanceof Error && error.message.includes('OUTSIDE_BOUNDARY') ? 'outside_project' : 'unreadable')
       logger.info('跳过无法读取的目录', { event: 'video_edit.media.folder_import.skipped', error })
     } finally {
       if (cursor) await getPlatform().system.fs.readDirPage(readPath, { cursor, close: true })
@@ -128,7 +148,7 @@ export async function importVideoEditPathsAndFolders(projectId: string, paths: r
     let skipped = state.skipped
     const files: Array<{ path: string; binId?: string }> = loose.map(path => ({ path, ...(binId ? { binId } : {}) }))
     for (const { folder } of folderEntries(folders)) for (const path of folder.files) {
-      if (!IMPORTABLE.test(path)) { skipped++; continue }
+      if (!IMPORTABLE.test(path)) { skipped++; options.onSkipped?.({ path, reason: 'unsupported' }); continue }
       files.push({ path, ...(targets.get(folder) ? { binId: targets.get(folder) } : {}) })
     }
     let processed = task.total - files.length
@@ -148,13 +168,13 @@ export async function importVideoEditPathsAndFolders(projectId: string, paths: r
         const sources: Array<{ path: string }> = []; const seen = new Set<string>()
         for (const file of batch) {
           const key = videoEditMediaPathKey(file.path); const id = existing.get(key)
-          if (duplicatePolicy === 'skip' && (id || seen.has(key))) { skipped++; processed++; if (id && afterImport) itemIds.push(id) }
+          if (duplicatePolicy === 'skip' && (id || seen.has(key))) { skipped++; processed++; options.onSkipped?.({ path: file.path, reason: 'duplicate', ...(id ? { itemId: id } : {}) }); if (id && afterImport) itemIds.push(id) }
           else { sources.push({ path: file.path }); seen.add(key) }
         }
         task.skipped = skipped
         if (sources.length) itemIds.push(...await importVideoEditSources(projectId, sources, target, signal, undefined, [], {
           task, commit, duplicatePolicy, progressOffset: processed, progressTotal: task.total, onProgress: options.onProgress,
-          ...(folders.length ? { skipUnreadable: (path: string, reason: unknown) => { skipped++; logger.info('跳过无法读取的素材', { event: 'video_edit.media.folder_import.skipped', error: reason, context: { projectId, extension: path.split('.').at(-1)?.toLowerCase() } }) } } : {}),
+          ...(folders.length || options.skipUnreadableFiles ? { skipUnreadable: (path: string, reason: unknown) => { skipped++; options.onSkipped?.({ path, reason: 'unreadable' }); logger.info('跳过无法读取的素材', { event: 'video_edit.media.folder_import.skipped', error: reason, context: { projectId, extension: path.split('.').at(-1)?.toLowerCase() } }) } } : {}),
         }))
         processed += sources.length; task.skipped = skipped; report()
       }
@@ -196,7 +216,7 @@ export async function importVideoEditPathsAndFolders(projectId: string, paths: r
     prepare: async task => {
       if (binId && !owner.document.bins.some(bin => bin.id === binId)) throw new Error('目标素材箱不存在。')
       const signal = task.controller.signal
-      state = { visited: new Set(), skipped: 0, entries: 0, signal, task, onProgress: options.onProgress, onFolder: async (folder, parent) => {
+      state = { visited: new Set(), skipped: 0, entries: 0, signal, task, onProgress: options.onProgress, boundary: options.boundary, onSkipped: options.onSkipped, onFolder: async (folder, parent) => {
         await waitVideoEditImportEdit(owner, signal)
         const parentId = parent ? targets.get(parent) : binId
         if (!createBins) { targets.set(folder, binId); return }

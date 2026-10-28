@@ -76,8 +76,9 @@ import { uniqueVideoEditOutputPath, videoEditProjectOutputDirectory, videoEditQu
 import { VideoEditExportPresetExecutor, VideoEditExportPresetMutationExecutor } from './videoEditExportPresetReflection'
 import { VideoEditSourceExecutor } from './videoEditSourceExecutor'
 import { importVideoEditSources } from './videoEditMedia'
-import { chooseVideoEditFolders, VideoEditPartialImportFailure } from './videoEditFolderImport'
-import { ApplicationTransactionFailure } from '@/core/application-control/execution/transactionFailure'
+import { chooseVideoEditFolders } from './videoEditFolderImport'
+import { importVideoEditProjectFiles, settleVideoEditPartialImport } from './videoEditProjectFileImport'
+import { importVideoEditProjectFilesCapability } from '@/core/application-control/domains/videoEdit/videoEditProjectFileImportCapability'
 import { collectVideoEditOutput } from './videoEditOutputs'
 import { captureVideoEditProgramFrame } from './videoEditProgramCapture'
 import { collectVideoEditCodeAsset, importVideoEditCodeAsset, type VideoEditCodeAssetTarget } from './videoEditCodeAssets'
@@ -121,7 +122,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
   failure(error) {
     if (error instanceof VideoEditOperationFailure) {
       // 纯规划阶段的拒绝；已提交生成或保存失败不在此名单，不能抹掉执行事实。
-      const notExecuted = ['reference_missing', 'sequence_missing', 'clip_missing', 'take_missing', 'duration_range', 'range', 'track_locked', 'slot_occupied', 'trim_boundary', 'failed_task_missing', 'recover_original'].includes(String(error.facts.reason))
+      const notExecuted = ['reference_missing', 'sequence_missing', 'clip_missing', 'take_missing', 'duration_range', 'range', 'track_locked', 'slot_occupied', 'trim_boundary', 'failed_task_missing', 'recover_original', 'not_in_project', 'project_path_rejected'].includes(String(error.facts.reason))
       return { ok: false, error: { code: 'CAPABILITY_REJECTED', message: error.message, recoverable: true, details: { videoEdit: error.facts, ...(notExecuted ? { execution: { notExecuted: true } } : {}) } } }
     }
     return undefined
@@ -195,6 +196,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       if (definition.id === placeVideoEditSoundEffectsCapability.id) return placeVideoEditSoundEffects(placeVideoEditSoundEffectsCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === remixVideoEditMusicCapability.id) return executeVideoEditMusicRemixCapability(remixVideoEditMusicCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === retryVideoEditSmartRegionCapability.id) return retryVideoEditSmartRegionFromCapability(raw, context.signal)
+      if (definition.id === importVideoEditProjectFilesCapability.id) return importVideoEditProjectFiles(raw, context.signal)
       const styles = await handleVideoEditStyleCapability(definition.id, raw, context.signal)
       if (styles !== undefined) return styles
       const multicam = await handleVideoEditMulticamCapability(definition.id, raw, context.signal)
@@ -323,17 +325,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
           const contentVersion = owner.contentVersion
           let result
           try { result = await chooseVideoEditFolders(id, undefined, { signal: context.signal }) }
-          catch (error) {
-            if (!(error instanceof VideoEditPartialImportFailure)) throw error
-            if (requireVideoEditInstance(id) !== owner) throw new Error('原剪辑已关闭，未写入重新打开的剪辑。', { cause: error })
-            try { await saveVideoEdit(id) } catch (saveError) {
-              throw new ApplicationPersistenceFailure('已导入部分保留在剪辑里，但保存未确认。请重试保存，不要重复导入。', { memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'document', recovery: { capabilityId: 'save_video_edit', target: input.documentRef, replayMutation: false } }, saveError)
-            }
-            throw new ApplicationTransactionFailure({ status: 'failed', code: 'EXECUTION_FAILED', message: `${error.message}已保留 ${error.imported} 个素材，可读回当前剪辑或撤销本次导入。`, recoverable: false,
-              resultRefs: [input.documentRef], effects: [{ effect: 'execute', entityType: 'video_edit.document', refs: [input.documentRef], propertyIds: [], origin: { kind: 'direct' } }],
-              partial: { completedStepIndexes: [0], compensatedStepIndexes: [], uncompensatedStepIndexes: [0] },
-            })
-          }
+          catch (error) { return settleVideoEditPartialImport(error, owner, input.documentRef) }
           if (isVideoEditContentCurrent(owner, contentVersion) && !result.skipped) throw new Error('未导入素材，用户取消选择或所选目录无法读取。')
           await saveVideoEdit(id)
           const current = requireVideoEditInstance(id)

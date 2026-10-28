@@ -2,10 +2,16 @@ export interface FsDirEntry {
   name: string
   isDirectory: boolean
   unreadable?: boolean
+  /** 只在分页读取给了 boundary 时出现：链接条目的真实位置在边界外，调用方不得读取。 */
+  outside?: boolean
 }
 
 export interface FsDirPage { entries: FsDirEntry[]; realPath: string; cursor?: string }
-export interface FsDirPageOptions { cursor?: string; close?: boolean }
+/**
+ * boundary：只允许读这个文件夹（按真实路径）以内。目录本身的真实位置越界时报 `OUTSIDE_BOUNDARY` 错误，
+ * 指向边界外的链接条目标 `outside`；用于按项目文件夹导入素材时不跟着链接、联接点走出项目。
+ */
+export interface FsDirPageOptions { cursor?: string; close?: boolean; boundary?: string }
 
 export interface FsPlatform {
   readFile(path: string, options?: { maxBytes: number }): Promise<Uint8Array>

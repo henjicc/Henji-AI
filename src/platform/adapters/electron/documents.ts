@@ -40,6 +40,7 @@ export function createElectronDocuments(): DocumentsPlatform {
     revealDocument: (target) => getNativeDocuments().revealDocument(target),
     collectDocumentMedia: (target) => getNativeDocuments().collectDocumentMedia(target),
     importFile: (request) => getNativeDocuments().importFile(request),
+    resolveProjectFiles: (request) => getNativeDocuments().resolveProjectFiles(request),
     resolveDocumentLink: (link) => getNativeDocuments().resolveDocumentLink(link),
     checkName: (request) => getNativeDocuments().checkName(request),
     getDocumentCover: (docId) => getNativeDocuments().getDocumentCover(docId),

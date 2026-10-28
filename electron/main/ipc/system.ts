@@ -33,13 +33,15 @@ import type { FsDirPage } from '../../../src/platform/contracts/system'
 interface PathPayload {
   path: string
 }
-interface ReadDirPayload extends PathPayload { paged?: boolean; cursor?: string; close?: boolean }
+interface ReadDirPayload extends PathPayload { paged?: boolean; cursor?: string; close?: boolean; boundary?: string }
 function parseReadDirPayload(input: unknown): ReadDirPayload {
   const record = parseRecord(input)
   if (record.paged !== undefined && typeof record.paged !== 'boolean' || record.close !== undefined && typeof record.close !== 'boolean') throw new Error('目录读取选项无效。')
   const cursor = parseOptionalStringField(input, 'cursor')
   if (cursor !== undefined && !/^[a-f0-9-]{36}$/.test(cursor)) throw new Error('目录读取游标无效。')
-  return { ...parsePathPayload(input), paged: record.paged as boolean | undefined, close: record.close as boolean | undefined, cursor }
+  const boundary = parseOptionalStringField(input, 'boundary')
+  if (boundary !== undefined && (!boundary || boundary.includes('\0'))) throw new Error('目录读取边界无效。')
+  return { ...parsePathPayload(input), paged: record.paged as boolean | undefined, close: record.close as boolean | undefined, cursor, ...(boundary !== undefined ? { boundary } : {}) }
 }
 
 interface ReadFilePayload extends PathPayload { maxBytes?: number }
