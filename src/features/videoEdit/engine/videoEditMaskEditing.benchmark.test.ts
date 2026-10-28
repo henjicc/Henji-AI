@@ -43,11 +43,16 @@ it.skipIf(process.env.HENJI_MASK_BENCH !== '1')('4K mask rasterization and real 
   expect(owner.document).toBe(final)
   editVideoProject(owner.document.id, document => ({ ...document, sequences: document.sequences.map(value => value.id !== sequence.id ? value : { ...value, width: 3840, height: 2160, frameRate: { numerator: 60, denominator: 1 }, clips: Array.from({length:1000},(_,i)=>({...value.clips[0],id:i===0 ? clip.id : `bench-${i}`,start:i*value.clips[0].duration,effects:value.clips[0].effects?.map(effect=>({...effect,id:i===0 ? effect.id : `bench-effect-${i}`}))})) }) }))
   const large = beginVideoEditGesture(owner.document.id)
-  const wholeDocument = sample(index => updateVideoEditGesture(large, document => {
-    const effects = document.sequences.find(value=>value.id===sequence.id)!.clips[0].effects!
-    effects[0].mask = { regionId:'shapes',shapes:[editVideoEditMaskShape(shape,'move',0,index/1000,0,{u:0,v:0})] }
-    return document
-  }),10)
+  const wholeDocument = sample(index => updateVideoEditGesture(large, document => ({
+    ...document,
+    sequences: document.sequences.map(value => value.id === sequence.id ? {
+      ...value,
+      clips: value.clips.map((clip, clipIndex) => clipIndex === 0 ? {
+        ...clip,
+        effects: clip.effects!.map((effect, effectIndex) => effectIndex === 0 ? { ...effect, mask: { regionId: 'shapes', shapes: [editVideoEditMaskShape(shape, 'move', 0, index / 1000, 0, { u: 0, v: 0 })] } } : effect),
+      } : clip),
+    } : value),
+  })),10)
   finishVideoEditGesture(large)
   const localGesture = beginVideoEditGesture(owner.document.id)
   const localMask = sample(index => updateVideoEditBuiltinEffect(target,effectId,{mask:{regionId:'shapes',shapes:[editVideoEditMaskShape(shape,'move',0,index/1000,.01,{u:0,v:0})]}},localGesture),30)

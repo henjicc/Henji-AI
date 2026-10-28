@@ -48,7 +48,7 @@ it.skipIf(process.env.HENJI_GESTURE_BENCH !== '1')('service gestures with v3, fo
       const update = sample(i => {
         if (kind === 'mask') updateVideoEditMaskGesture(handle, sequence.id, 'clip0', 'effect0', { regionId: 'shapes', shapes: [editVideoEditMaskShape(createVideoEditMaskShape('ellipse', 'mask'), 'move', 0, i / 1000, 0, { u: 0, v: 0 })] })
         else if (kind === 'position') updateVideoEditPicturePosition(handle, sequence.id, 'clip0', { x: i / 1000, y: .1 })
-        else updateVideoEditGesture(handle, next => { next.sequences[0].clips[0].x = i / 1000; return next })
+        else updateVideoEditGesture(handle, next => ({ ...next, sequences: next.sequences.map((value, sequenceIndex) => sequenceIndex === 0 ? { ...value, clips: value.clips.map((clip, clipIndex) => clipIndex === 0 ? { ...clip, x: i / 1000 } : clip) } : value) }))
       }, kind === 'generic' ? 30 : 100)
       const start = performance.now(); finishVideoEditGesture(handle)
       return { update, finishMs: performance.now() - start }
@@ -60,7 +60,7 @@ it.skipIf(process.env.HENJI_GESTURE_BENCH !== '1')('service gestures with v3, fo
   const initialHistory = owner.past.length
   for (let i = 0; i < 60; i++) {
     const start = performance.now()
-    updateVideoEditBuiltinEffect({ projectId: owner.document.id, sequenceId: sequence.id, clipId: 'clip0' }, 'effect0', { params: { strength: i / 10 } }, paramGesture)
+    updateVideoEditBuiltinEffect({ projectId: owner.document.id, sequenceId: sequence.id, clipId: 'clip0' }, 'effect0', { params: { sigma_fraction_height: i / 1000 } }, paramGesture)
     paramTimes.push(performance.now() - start)
   }
   expect(owner.past).toHaveLength(initialHistory)
