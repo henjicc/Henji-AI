@@ -10,6 +10,7 @@ import type { VideoEditNativeFrames } from './videoEditNativeFrameSource'
 import type { VideoEditRenderCacheWindow } from './videoEditRenderer'
 import { videoEditNativeFailureKind } from './videoEditNativeFailure'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
+import { videoEditCodeInputParameters, type VideoEditCodeDeclarationReader } from '@/core/videoEdit/codeInputParameters'
 
 // 原片打开约 200ms，加约 1 秒 GOP 定位及调度余量；3 秒覆盖切点，避免预打开整条时间线。
 export const VIDEO_EDIT_DECODE_LOOKAHEAD_SECONDS = 3
@@ -41,8 +42,11 @@ export interface VideoEditLookaheadTargets { video: VideoEditDecodeTarget[]; con
 const timetabled = (reference: unknown): reference is Extract<CodeImageReference, { kind: 'video' }> => isCodeImageReference(reference) && reference.kind === 'video' && !!reference.spans
 const keyOf = (target: VideoEditDecodeTarget): string => `${target.media.path}\0${target.media.sourceRevision ?? ''}\0${target.purpose}`
 
-/** 与节目共用嵌套映射、转场余量和输入合成；逐帧扫描以免漏掉变速后的短镜头。 */
-export function videoEditLookaheadTargets(document: VideoEditComposition, frame: number, playing: boolean, windows: readonly VideoEditRenderCacheWindow[] = []): VideoEditLookaheadTargets {
+/**
+ * 与节目共用嵌套映射、转场余量和输入合成；逐帧扫描以免漏掉变速后的短镜头。
+ * `declarations`：已读好的代码声明，代码片段的视频与图片输入按合成后的参数（含片子数据派生的取帧参数）找；读不到的只看片段上存的参数。
+ */
+export function videoEditLookaheadTargets(document: VideoEditComposition, frame: number, playing: boolean, windows: readonly VideoEditRenderCacheWindow[] = [], declarations?: VideoEditCodeDeclarationReader): VideoEditLookaheadTargets {
   const targets = new Map<string, VideoEditDecodeTarget>(), content = new Map<string, VideoEditContentTarget>()
   const add = (media: VideoEditMedia, time: number, purpose: VideoEditDecodeTarget['purpose'], distance: number, clipId?: string): void => {
     const target = { media, time, purpose, distance, clipId }, key = keyOf(target)
@@ -58,6 +62,7 @@ export function videoEditLookaheadTargets(document: VideoEditComposition, frame:
     for (const window of videoEditPictureTransitionsAt(doc, at)) for (const clip of videoEditTransitionPictureClips(window)) clips.set(clip.id, clip)
     const scopeKey = JSON.stringify(scopes.map(scope => scope.key))
     for (const clip of clips.values()) {
+      const parameters = videoEditCodeInputParameters(doc, clip.code, declarations)
       if (clip.kind === 'sequence') {
         const child = videoEditNestedComposition(doc, clip)
         if (child) visit(child, videoEditNestedPictureFrame(doc, clip, child, at), distance, sequential && !clip.reverse, [...scopes, { document: child, key: videoEditNestedPictureKey(child, clip) }], inputs)
@@ -66,7 +71,7 @@ export function videoEditLookaheadTargets(document: VideoEditComposition, frame:
         if (media?.kind === 'video') add(media, videoEditPictureSeconds(clipSourceSeconds(clip, videoEditHandleFrame(clip, at, doc.fps, media.durationSeconds), doc.fps)), sequential && !clip.reverse ? 'playback' : 'seek', distance, clip.id)
       }
       const codes = [clip.code, ...activeVideoEditEffects(clip).map(effect => effect.code)].filter(code => !!code)
-      const ids = new Set([...(clip.kind === 'image' ? [videoEditClipMedia(doc, clip)?.id ?? ''] : []), ...codes.flatMap(code => [...codeMaterialImageIds(code)])])
+      const ids = new Set([...(clip.kind === 'image' ? [videoEditClipMedia(doc, clip)?.id ?? ''] : []), ...codes.flatMap(code => [...codeMaterialImageIds(code === clip.code ? { ...code, parameters } : code)])])
       for (const id of ids) {
         const media = doc.media.find(media => media.id === id && media.kind === 'image')
         const key = `${scopeKey}:image:${id}:${media?.path}:${media?.sourceRevision ?? ''}`
@@ -91,11 +96,11 @@ export function videoEditLookaheadTargets(document: VideoEditComposition, frame:
       const shownKey = `${scopeKey}\0${clip.id}`
       if (distance === 0) {
         showing.add(shownKey)
-        for (const reference of Object.values(clip.code?.parameters ?? {})) if (timetabled(reference)) {
+        for (const reference of Object.values(parameters)) if (timetabled(reference)) {
           try { const input = codeMediaInputComposition(doc, clip, reference, at); if (input) showing.add(`${scopeKey}\0${input.sessionKey}`) } catch { /* 非法引用由正式渲染报告。 */ }
         }
       }
-      if (inputs && clip.code) for (const reference of Object.values(clip.code.parameters)) {
+      if (inputs && clip.code) for (const reference of Object.values(parameters)) {
         if (!isCodeImageReference(reference) || reference.kind !== 'video' || reference.time !== undefined || movingInputs >= VIDEO_EDIT_INPUT_LOOKAHEAD_REFERENCES) continue
         if (!reference.spans && showing.has(shownKey)) continue
         try {
@@ -139,7 +144,7 @@ export function videoEditLookaheadTargets(document: VideoEditComposition, frame:
         continue
       }
       if (!clip.code) continue
-      for (const reference of Object.values(clip.code.parameters)) {
+      for (const reference of Object.values(videoEditCodeInputParameters(doc, clip.code, declarations))) {
         if (!isCodeImageReference(reference) || reference.kind !== 'video' || reference.time === undefined) continue
         try {
           const input = codeMediaInputComposition(doc, clip, reference, start)!
@@ -178,7 +183,7 @@ export class VideoEditDecodeLookahead {
   private maintainedAt = -Infinity
 
   constructor(private readonly backend: VideoEditNativeFrames | undefined, private readonly mapMedia: (media: VideoEditMedia) => VideoEditMedia = media => media,
-    private readonly host?: { idle(): boolean; prepare(target: VideoEditContentTarget, signal: AbortSignal): Promise<boolean>; retain(targets: readonly VideoEditContentTarget[]): void }) {}
+    private readonly host?: { idle(): boolean; prepare(target: VideoEditContentTarget, signal: AbortSignal): Promise<boolean>; retain(targets: readonly VideoEditContentTarget[]): void; declarations?: VideoEditCodeDeclarationReader }) {}
 
   clipIdsForMedia(mediaId: string): string[] { return this.targets.filter(target => target.media.id === mediaId && target.clipId).map(target => target.clipId!) }
 
@@ -221,7 +226,7 @@ export class VideoEditDecodeLookahead {
       const started = performance.now()
       this.lastScan = started
       try {
-        const targets = videoEditLookaheadTargets(document, frame, playing, windows)
+        const targets = videoEditLookaheadTargets(document, frame, playing, windows, this.host?.declarations)
         this.backend?.log('debug', '前瞻窗口扫描', 'video_edit.decode.lookahead.scan', { durationMs: performance.now() - started, video: targets.video.length, content: targets.content.length })
         this.content = targets.content
         this.host?.retain(this.content)

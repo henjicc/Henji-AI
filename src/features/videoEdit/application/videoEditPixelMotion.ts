@@ -2,13 +2,16 @@ import { createLogger } from '@/core/logging'
 import type { VideoEditComposition, VideoEditMedia } from '@/core/videoEdit/document'
 import { VideoEditSourceMapIndex, visitVideoEditPictureInstances, type VideoEditSourceMapRange } from '@/core/videoEdit/sourceMap'
 import type { VideoEditPixelMotionInput, VideoEditPixelMotionPlacement } from '@/core/videoEdit/pixelMotionReview'
-import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
+import { isCodeImageReference, type CodeParameterDeclaration } from '@/core/videoEdit/codeMaterial/contract'
+import type { CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
+import { videoEditCodeSceneKeys } from '@/core/videoEdit/codeInputParameters'
 import { VIDEO_EDIT_MOTION_STRUCTURE_SAMPLE_BUDGET } from '@/core/videoEdit/motionStructure'
 import { getPlatform } from '@/platform/runtime'
 import { inspectVideoEditMediaContent, verifyVideoEditMediaContent } from '../videoEditMediaContent'
 import { beginVideoEditContentQuery } from './videoEditContentQueryProgress'
 import type { VideoEditInstance } from './videoEditService'
 import { analyzeVideoEditMotionStructure } from './videoEditMotionReviewWorkerClient'
+import { settleVideoEditCodeDeclarations, videoEditCodeDeclarationReader } from './videoEditCodeDeclarations'
 
 const logger = createLogger('features.videoEdit.review')
 interface Plan { media: VideoEditMedia; placements: VideoEditPixelMotionPlacement[]; from: number; to: number }
@@ -36,15 +39,24 @@ export async function pinVideoEditMotionSources(sources: readonly VideoEditMedia
 export async function readVideoEditPixelMotion(owner: VideoEditInstance, composition: VideoEditComposition, range: VideoEditSourceMapRange, signal: AbortSignal, assertCurrent: () => void): Promise<{ pixels: VideoEditPixelMotionInput[]; sources: VideoEditMedia[] }> {
   assertCurrent()
   let inputItemId: string | undefined
+  // 片子数据派生的取帧参数不存在片段上，按代码声明解析后才知道，所以引用片子数据的代码片段也算有画面输入。
+  const sceneCodes: CodeMaterialInstance[] = []
   visitVideoEditPictureInstances(composition, range, { sequence() {}, clip(_local, entry) {
-    if (Object.values(entry.path.at(-1)!.clip.code?.parameters ?? {}).some(value => isCodeImageReference(value) && value.kind !== 'image')) inputItemId ??= entry.path.at(-1)!.itemId
+    const code = entry.path.at(-1)!.clip.code
+    const scenes = videoEditCodeSceneKeys(code).length > 0
+    if (scenes) sceneCodes.push(code!)
+    if (scenes || Object.values(code?.parameters ?? {}).some(value => isCodeImageReference(value) && value.kind !== 'image')) inputItemId ??= entry.path.at(-1)!.itemId
   } })
   let inputs: VideoEditPixelMotionPlacement[] = []
   if (inputItemId) {
     const task = beginVideoEditContentQuery(owner, inputItemId, signal, ['video_edit:read'])
     try {
       task.report({ phase: 'analyzing_video', message: '定位代码使用的画面来源' })
-      const input = await analyzeVideoEditMotionStructure({ composition, range, policy: {}, planInputsOnly: true }, task.signal)
+      // 读不出声明的代码版本不派生画面输入（只看片段上存的参数），与预渲染分段的退路一致，不让整个审查失败。
+      const read = videoEditCodeDeclarationReader(owner)
+      const codeDeclarations = sceneCodes.length ? await settleVideoEditCodeDeclarations(() => Object.fromEntries(sceneCodes.flatMap(code => { const declarations = read(code); return declarations ? [[code.versionId, declarations] as [string, readonly CodeParameterDeclaration[]]] : [] }))) : undefined
+      task.signal.throwIfAborted(); assertCurrent()
+      const input = await analyzeVideoEditMotionStructure({ composition, range, policy: {}, planInputsOnly: true, ...(codeDeclarations ? { codeDeclarations } : {}) }, task.signal)
       task.signal.throwIfAborted(); assertCurrent()
       if (!input.inputPlacements) throw new Error('代码画面输入未返回映射证据，请重新查询。')
       inputs = input.inputPlacements; task.finish('completed')

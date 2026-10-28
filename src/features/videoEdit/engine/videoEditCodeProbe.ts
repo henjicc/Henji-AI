@@ -6,6 +6,7 @@ import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { VideoEditRenderSession } from './videoEditRenderSession'
 import { VideoEditCodeCompiler } from './videoEditCodeCompiler'
 import { AUTHOR_GAIN_SOURCE } from './videoEditAuthorProbeSources'
+import { videoEditRenderFailures } from './videoEditRenderFailures'
 import type { CodeParameterValues } from '@/core/videoEdit/codeMaterial/contract'
 export { runVideoEditCompositeProbe } from './videoEditCompositeProbe'
 export { runVideoEditCodeInputProbe } from './videoEditCodeInputProbe'
@@ -26,6 +27,7 @@ export async function runVideoEditCodeProbe(host: HTMLElement): Promise<Record<s
   const compiler = new VideoEditCodeCompiler()
   let session: VideoEditRenderSession | undefined
   let snapshot: ImageBitmap | undefined
+  const sceneNotices = new Set<string>()
   try {
     const cold = performance.now()
     for (const text of [staticSource, titleSource, AUTHOR_GAIN_SOURCE]) await compiler.bundle(normalizeCodeMaterialFiles(text))
@@ -53,7 +55,8 @@ export async function runVideoEditCodeProbe(host: HTMLElement): Promise<Record<s
     }
     const render = async (frame: number, inspectFrame = false): Promise<{ elapsed: number; cpu: number }> => {
       const began = performance.now(), result = await session!.present(frame)
-      if (!result.presented || !result.bitmap || result.effectErrors?.length) { result.bitmap?.close(); throw new Error(result.effectErrors?.join('\n') || '正式渲染没有返回画面') }
+      const failures = videoEditRenderFailures(result, sceneNotices)
+      if (!result.presented || !result.bitmap || failures.length) { result.bitmap?.close(); throw new Error(failures.join('\n') || '正式渲染没有返回画面') }
       if (inspectFrame) { snapshot?.close(); snapshot = result.bitmap; canvas.getContext('2d')!.drawImage(snapshot, 0, 0) }
       else result.bitmap.close()
       return { elapsed: performance.now() - began, cpu: (result.codePerformance ?? []).reduce((sum, value) => sum + value.cpuMs, 0) }
@@ -75,6 +78,6 @@ export async function runVideoEditCodeProbe(host: HTMLElement): Promise<Record<s
     if (!recovered) throw new Error('作者异常没有传回正式会话。')
     await set('title', false); await render(0, true)
     canvas.dataset.codeExperiment = 'ready'
-    return { completed: true, coldCompileMs, compileCacheMs, firstGpuFrameMs: first.elapsed, titleFirstMs: titleFirst.elapsed, hotFrames: hot.length, completedGpuFrameMs: { mean: hot.reduce((sum, value) => sum + value, 0) / hot.length, p95: percentile(hot, .95), max: Math.max(...hot) }, hotCpuEvaluationMs: { mean: cpu.reduce((sum, value) => sum + value, 0) / cpu.length, p95: percentile(cpu, .95) }, parameterResponseMs: parameter.elapsed, transparentOnBlack, filtered, changed, randomFramePixels: results, readbackCount: readbacks.length, resolution: [3840, 2160], recovered }
+    return { completed: true, coldCompileMs, compileCacheMs, firstGpuFrameMs: first.elapsed, titleFirstMs: titleFirst.elapsed, hotFrames: hot.length, completedGpuFrameMs: { mean: hot.reduce((sum, value) => sum + value, 0) / hot.length, p95: percentile(hot, .95), max: Math.max(...hot) }, hotCpuEvaluationMs: { mean: cpu.reduce((sum, value) => sum + value, 0) / cpu.length, p95: percentile(cpu, .95) }, parameterResponseMs: parameter.elapsed, transparentOnBlack, filtered, changed, randomFramePixels: results, readbackCount: readbacks.length, resolution: [3840, 2160], recovered, ...(sceneNotices.size ? { sceneNotices: [...sceneNotices] } : {}) }
   } finally { compiler.dispose(); snapshot?.close(); await session?.dispose() }
 }

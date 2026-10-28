@@ -50,7 +50,14 @@ export interface AuthorFrameInfo {
 
 /** 参数值按 params.键名 读取；键名与取值形状由 params 声明推断，推断不出时为 any。 */
 export type AuthorParams = { readonly [key: string]: any }
-/** image 参数的画面，按参数键取；未绑定、或视频参数带取帧时间表（spans）而这一帧不在任何一段里时没有该键。 */
+/**
+ * scene 参数（作者接口 v5）的值：宿主按这个参数声明的 schema 解析好的全片描述——剪后时间、按录屏秒锚定后的时刻、
+ * 窗口内容时间表（timetables[].shots[]）。窗口内容的画面按 shot.input 键在 assets / inputs.images 里取。
+ * 只读：同一文档版本内各帧、各片段拿到的是同一个已冻结的对象，可以按对象身份缓存自己的派生数据，修改会报错。
+ * 未绑定或没能解析时为 null。
+ */
+export type AuthorScene = { readonly [key: string]: any }
+/** image 参数的画面，按参数键取；未绑定、或视频参数带取帧时间表（spans）而这一帧不在任何一段里时没有该键。片子数据派生的画面按 shot.input 键取。 */
 export type AuthorAssets = { readonly [key: string]: CanvasImageSource }
 
 /** 变换作用在画布坐标上：先绕画布原点缩放、旋转（弧度），再平移 x/y。 */
@@ -118,7 +125,8 @@ type AuthorParamValue<D> =
               : D extends { readonly type: 'range' } ? D extends { readonly default: readonly unknown[] } ? [number, number] : number
                 : D extends { readonly type: 'gradient' } ? Array<{ at: number; color: AuthorColor }>
                   : D extends { readonly type: 'curve' } ? AuthorPoint[]
-                    : any
+                    : D extends { readonly type: 'scene' } ? AuthorScene | null
+                      : any
 /** 键名不确定（params 由变量或函数拼出）时退回 AuthorParams。 */
 export type AuthorParamValues<P extends readonly AuthorParamDeclaration[]> =
   string extends P[number]['key'] ? AuthorParams : { readonly [D in P[number] as D['key']]: AuthorParamValue<D> }
@@ -134,7 +142,7 @@ export interface AuthorGpuInputs {
   /** 只有滤镜有：正在处理的画面。 */
   current?: GPUTexture
   frames: ReadonlyArray<{ offset: number; texture: GPUTexture; available: boolean }>
-  /** 图片、视频参数的纹理，键同参数名（没有画面的参数没有该键，同 AuthorAssets）。直接采样它，不要读 assets：读 assets 会把这一帧拷成位图。 */
+  /** 图片、视频参数的纹理，键同参数名；片子数据派生的画面按 shot.input 键（没有画面的没有该键，同 AuthorAssets）。直接采样它，不要读 assets：读 assets 会把这一帧拷成位图。 */
   images: { readonly [key: string]: AuthorGpuImage }
 }
 export interface AuthorWebGPU<P extends readonly AuthorParamDeclaration[] = readonly AuthorParamDeclaration[]> {

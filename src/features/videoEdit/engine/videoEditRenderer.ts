@@ -6,7 +6,9 @@ import type { AuthorGpuInputs } from './videoEditAuthorModule'
 import type { PreparedVideoEditCodeEffect, PreparedVideoEditEffect } from './videoEditCodeSources'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 import { traceVideoEditFrame } from './videoEditFrameTrace'
-import { isCodeImageReference, type CodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
+import { isCodeImageReference, type CodeImageReference, type CodeParameterDeclaration } from '@/core/videoEdit/codeMaterial/contract'
+import { videoEditCodeInputParameters } from '@/core/videoEdit/codeInputParameters'
+import type { CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
 import { codeMaterialUsesAudio } from '@/core/videoEdit/codeMaterialResources'
 import { VideoEditContentAudio } from './videoEditContentAudio'
 import { codeAudioComposition, codeAudioReferenceMediaId, codeAudioTime } from '@/core/videoEdit/codeAudio'
@@ -123,7 +125,9 @@ function stillDecodeKey(still: string, time: number): string { return JSON.strin
 function videoEditPictureCovers(picture: { timestamp: number; duration: number } | undefined, time: number): boolean {
   return !!picture && picture.timestamp <= time + 1e-6 && time < picture.timestamp + picture.duration - 1e-7
 }
-export interface VideoEditRenderResult { canvas: OffscreenCanvas; nestedPicture?: VideoEditCodePicture; sourceTimestamps: number[]; blankPictures: number; singleFrameReads: number; cacheHits: number; cacheBytes: number; presented: boolean; renderCached: boolean; decodeMs: number; gpuMs: number; effectErrors?: string[]; approximate?: boolean; /** Not presented because a later request's picture reached the screen first. */ superseded?: boolean; completion: Promise<void> }
+export interface VideoEditRenderResult { canvas: OffscreenCanvas; nestedPicture?: VideoEditCodePicture; sourceTimestamps: number[]; blankPictures: number; singleFrameReads: number; cacheHits: number; cacheBytes: number; presented: boolean; renderCached: boolean; decodeMs: number; gpuMs: number; effectErrors?: string[];
+  /** 这一帧用到的片子数据里会让画面缺内容的问题（含嵌套序列里的）：要呈现给用户，但不是效果失败，不挡试渲染与导出。 */
+  sceneIssues?: string[]; approximate?: boolean; /** Not presented because a later request's picture reached the screen first. */ superseded?: boolean; completion: Promise<void> }
 export interface VideoEditRenderCacheWindow { key: string; startFrame: number; endFrame: number; url: string; width: number; height: number; fps: number }
 /**
  * How the walk of an input session opened ahead ended: it reached the clip's first picture; it failed (the decoder
@@ -434,6 +438,17 @@ export class VideoEditRenderer {
     return [...renderers]
   }
   get waitingForPresentation(): boolean { return this.compositor?.waitingForPresentation === true }
+  /**
+   * 整棵渲染树里已读好的代码声明（不触发编译）：解码前瞻据此加上片子数据派生的取帧参数。还没有哪个会话读过这一版时为
+   * undefined，前瞻就只看片段上存的参数；正式渲染每一帧都会先读好（VideoEditCodeSources.prepareScenes）。
+   */
+  codeDeclarations(instance: CodeMaterialInstance): readonly CodeParameterDeclaration[] | undefined {
+    for (const renderer of this.lookaheadOwner.lookaheadRenderers()) {
+      const declarations = renderer.codeSources?.declarations(instance)
+      if (declarations) return declarations
+    }
+    return undefined
+  }
   readonly lookaheadMetrics = { imagePrepared: 0, imageHits: 0, codePrepared: 0, codeHits: 0, stillPrepared: 0, inputPrepared: 0, budgetSkipped: 0 }
   private nestedPicture(child: VideoEditComposition, key: string): { renderer: VideoEditRenderer; tail: Promise<unknown> } {
     const owner = this.nestedOwner ?? this
@@ -1020,7 +1035,7 @@ export class VideoEditRenderer {
     }
     const upcoming = document.clips.flatMap(clip => {
       if (!clip.code || !picture.has(clip)) return []
-      const references = Object.values(clip.code.parameters).filter((reference): reference is Extract<CodeImageReference, { kind: 'video' }> => isCodeImageReference(reference) && reference.kind === 'video')
+      const references = Object.values(videoEditCodeInputParameters(document, clip.code, instance => this.codeSources?.declarations(instance))).filter((reference): reference is Extract<CodeImageReference, { kind: 'video' }> => isCodeImageReference(reference) && reference.kind === 'video')
       if (!references.length) return []
       const end = clip.start + clip.duration
       let first = entering(clip)
@@ -1400,7 +1415,7 @@ export class VideoEditRenderer {
    * approximate video input pictures (see `VideoEditScrubMode`). */
   private async prepareCodeInputs(document: VideoEditComposition, active: VideoEditClip[], frame: number, sequential: boolean, quality: EffectQuality, current: () => boolean, context: NestedFrameContext, path: string[], scrubbing: VideoEditScrubMode = false): Promise<Map<string, VideoEditCodePicture>> {
     // A timetabled video parameter between its spans takes no part in this frame: no read, no session, no budget.
-    const requests = active.flatMap(clip => Object.entries(clip.code?.parameters ?? {}).flatMap(([parameter, reference]) => {
+    const requests = active.flatMap(clip => Object.entries(videoEditCodeInputParameters(document, clip.code, instance => this.codeSources?.declarations(instance))).flatMap(([parameter, reference]) => {
       if (!isCodeImageReference(reference) || reference.kind === 'image') return []
       const source = codeMediaInputComposition(document, clip, reference, frame)
       return source ? [{ clip, parameter, reference, source }] : []
@@ -1696,7 +1711,7 @@ export class VideoEditRenderer {
     const composite = transitions.length || active.some(clip => clip.kind === 'adjustment' || activeVideoEditEffects(clip).length) ? buildVideoEditCompositePlan(active, transitions) : undefined
     const timestamps: number[] = []
     const gpu = this.ensureCompositor()
-    const effectErrors: string[] = []
+    const effectErrors: string[] = [], sceneIssues: string[] = []
     const onEffectError = (effect: VideoEditEffect, error: unknown): void => {
       const message = `效果“${effect.name}”无法应用，已跳过；请重置参数或修改滤镜源码。`
       if (!effectErrors.includes(message)) effectErrors.push(message)
@@ -1708,7 +1723,11 @@ export class VideoEditRenderer {
       if (this.disposed) throw new DOMException('剪辑渲染已关闭。', 'AbortError')
       this.codeSources ??= new VideoEditCodeSources(document, () => this.compositor!.code(), undefined, () => { this.lookaheadOwner.lookaheadMetrics.codeHits++ })
     }
-    const imageIds = new Set(active.flatMap(clip => [...codeMaterialImageIds(clip.code), ...activeVideoEditEffects(clip).flatMap(effect => [...codeMaterialImageIds(effect.code)]), ...(clip.kind === 'image' ? [videoEditClipMedia(document, clip)?.id ?? ''] : [])]))
+    // 片子数据派生的取帧参数（视频与截图）按代码声明解析：先读好引用片子数据的代码，取帧、图片与代码准备才看到同一份合成参数。
+    const scenesReady = this.codeSources?.prepareScenes(document, active)
+    if (scenesReady) await scenesReady
+    const declarations = (instance: CodeMaterialInstance): readonly CodeParameterDeclaration[] | undefined => this.codeSources?.declarations(instance)
+    const imageIds = new Set(active.flatMap(clip => [...codeMaterialImageIds(clip.code && { ...clip.code, parameters: videoEditCodeInputParameters(document, clip.code, declarations) }), ...activeVideoEditEffects(clip).flatMap(effect => [...codeMaterialImageIds(effect.code)]), ...(clip.kind === 'image' ? [videoEditClipMedia(document, clip)?.id ?? ''] : [])]))
     const imageMedia = [...imageIds].map(id => {
       const media = document.media.find(media => media.id === id && ['image', 'video'].includes(media.kind))
       if (!media) throw new Error('代码图片引用或图片片段的源素材不存在。')
@@ -1788,6 +1807,7 @@ export class VideoEditRenderer {
             const result = await renderer.render(childFrame, playing, _scrubbing, canPresent, undefined, { context: nestedContext, key: targetKey, path: [...path, child.id], ownerKey: rendererKey, ...(playbackPlan ? { playbackPlan } : {}) }, quality)
             if (!result.presented || !result.nestedPicture) throw new DOMException('旧嵌套画面已取消。', 'AbortError')
             effectErrors.push(...(result.effectErrors ?? []))
+            for (const message of result.sceneIssues ?? []) if (!sceneIssues.includes(message)) sceneIssues.push(message)
             if (!nestedRender) recordVideoEditPreparation('nestedRender', performance.now() - nestedStarted)
             timestamps.push(...result.sourceTimestamps); blankPictures += result.blankPictures; singleFrameReads += result.singleFrameReads; if (result.approximate) approximatePictures++
             return result.nestedPicture
@@ -1964,7 +1984,10 @@ export class VideoEditRenderer {
     if (!canPresent()) return { canvas: this.canvas, sourceTimestamps: [], blankPictures, singleFrameReads, cacheHits, cacheBytes: this.frameCache.bytes, presented: false, renderCached: !!cachedWindow, decodeMs: performance.now() - decodeStart, gpuMs: 0, completion: Promise.resolve() }
     const codeFailure = preparedCode.find(result => result.status === 'rejected')
     if (codeFailure?.status === 'rejected') throw codeFailure.reason
-    if (preparedCode[0]?.status === 'fulfilled') { cacheHits += preparedCode[0].value.cacheHits; timestamps.push(...preparedCode[0].value.sourceTimestamps) }
+    if (preparedCode[0]?.status === 'fulfilled') {
+      cacheHits += preparedCode[0].value.cacheHits; timestamps.push(...preparedCode[0].value.sourceTimestamps)
+      for (const message of preparedCode[0].value.sceneIssues) if (!sceneIssues.includes(message)) sceneIssues.push(message)
+    }
     const failure = settled.find(result => result.status === 'rejected')
     if (failure?.status === 'rejected') throw failure.reason
     if (imageResults[0].status === 'rejected') throw imageResults[0].reason
@@ -2020,7 +2043,7 @@ export class VideoEditRenderer {
     // The frame (the top of the tree) completes after its code input pictures; their failure fails it.
     const frameCompletion = !nestedRender && nestedContext.completions.length ? Promise.all([completion, ...nestedContext.completions]).then(() => undefined) : completion
     // A top-level frame is approximate when any picture of its tree is, code video inputs included.
-    return { canvas: this.canvas, ...(nestedPicture ? { nestedPicture } : {}), sourceTimestamps: timestamps, blankPictures, singleFrameReads, cacheHits, cacheBytes: this.frameCache.bytes, presented, renderCached: !!cachedWindow, decodeMs, gpuMs, effectErrors, ...(approximatePictures || !nestedRender && nestedContext.approximate ? { approximate: true } : {}), completion: frameCompletion }
+    return { canvas: this.canvas, ...(nestedPicture ? { nestedPicture } : {}), sourceTimestamps: timestamps, blankPictures, singleFrameReads, cacheHits, cacheBytes: this.frameCache.bytes, presented, renderCached: !!cachedWindow, decodeMs, gpuMs, effectErrors, ...(sceneIssues.length ? { sceneIssues } : {}), ...(approximatePictures || !nestedRender && nestedContext.approximate ? { approximate: true } : {}), completion: frameCompletion }
   }
   /** 声音片段的音频效果链（4.7c），按片段 ID；状态跨混音块延续，本块没用到的片段释放。 */
   private readonly audioChains = new Map<string, AudioEffectChain>()

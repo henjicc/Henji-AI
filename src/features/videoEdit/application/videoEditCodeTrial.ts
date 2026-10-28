@@ -7,6 +7,7 @@ import type { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 import { ensureVideoEditChangedCodeMetadata } from './videoEditCodeState'
 import { subscribeVideoEditDomain, type VideoEditInstance } from './videoEditService'
 import { videoEditTransitionClipIds, videoEditTransitionWindow } from '@/core/videoEdit/transitions'
+import { videoEditRenderFailures } from '../engine/videoEditRenderFailures'
 
 export interface VideoEditTrialTarget { sequenceId: string; clipId: string; effectIds?: string[] }
 /** Exact original-clock endpoints, plus every affected transition boundary. */
@@ -58,8 +59,11 @@ export function videoEditCodeValidationFrames(document: VideoEditDocument, targe
 
 /** One serial queue for creation, source candidates and explicit version binds.
  * Every trial holds an exclusive lease on the production offscreen worker. */
-/** `collect` receives every presented frame (caller owns and closes them); used for short animated previews. */
-export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEditComposition; frame: number }>, signal: AbortSignal, keepLast = false, collect?: ImageBitmap[], measurements?: CodeFramePerformance[], observe?: (value: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation) => void): Promise<ImageBitmap | undefined> {
+/**
+ * `collect` receives every presented frame (caller owns and closes them); used for short animated previews.
+ * `notices` 收集试渲染帧里片子数据需要用户处理的问题（只有影响这些帧的才报）。
+ */
+export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEditComposition; frame: number }>, signal: AbortSignal, keepLast = false, collect?: ImageBitmap[], measurements?: CodeFramePerformance[], observe?: (value: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation) => void, notices?: Set<string>): Promise<ImageBitmap | undefined> {
   if (!frames.length) throw new Error('源码检查需要边界画面。')
   signal.throwIfAborted()
   let renderer: VideoEditRenderSession | undefined; let lease: VideoEditOffscreenLease | undefined; let bitmap: ImageBitmap | undefined
@@ -108,7 +112,8 @@ export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEd
       }
       let result = await present(input.frame)
       bitmap?.close(); bitmap = result.bitmap
-      if (result.effectErrors?.length) throw new Error(result.effectErrors.join('\n'))
+      const failures = videoEditRenderFailures(result, notices)
+      if (failures.length) throw new Error(failures.join('\n'))
       if (!result.presented || !bitmap) throw new Error('源码候选没有生成可用画面。')
       if (measurements && result.codePerformance?.length) {
         const first = result.codePerformance
@@ -120,9 +125,11 @@ export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEd
         try {
           const warmup = await present(precedingFrame)
           warmup.bitmap?.close()
-          if (!warmup.presented || warmup.effectErrors?.length) throw new Error(warmup.effectErrors?.join('\n') || '相邻帧没有生成画面。')
+          const warmupFailures = videoEditRenderFailures(warmup)
+          if (!warmup.presented || warmupFailures.length) throw new Error(warmupFailures.join('\n') || '相邻帧没有生成画面。')
           const steady = await present(input.frame)
-          if (!steady.presented || !steady.bitmap || steady.effectErrors?.length || !steady.codePerformance?.length) { steady.bitmap?.close(); throw new Error(steady.effectErrors?.join('\n') || '稳态采样没有返回画面及成本。') }
+          const steadyFailures = videoEditRenderFailures(steady)
+          if (!steady.presented || !steady.bitmap || steadyFailures.length || !steady.codePerformance?.length) { steady.bitmap?.close(); throw new Error(steadyFailures.join('\n') || '稳态采样没有返回画面及成本。') }
           bitmap.close(); bitmap = steady.bitmap; result = steady
         } catch (error) {
           // Optional diagnostics must not change acceptance of the requested

@@ -1,13 +1,15 @@
 import { isCodeImageReference } from './codeMaterial/contract'
 import { codeMediaInputComposition, codeMediaInputSample } from './codeMediaInput'
+import { videoEditCodeInputParameters, type VideoEditCodeDeclarationReader } from './codeInputParameters'
 import type { VideoEditComposition } from './document'
 import { VIDEO_EDIT_MOTION_STRUCTURE_SAMPLE_BUDGET } from './motionStructure'
 import type { VideoEditPixelMotionPlacement } from './pixelMotionReview'
 import { VideoEditSourceMapIndex, videoEditSourceMapLocalFrame, videoEditSourceMapSampleSeconds, visitVideoEditPictureInstances, type VideoEditSourceMapEntry, type VideoEditSourceMapRange } from './sourceMap'
 
 /** Match the renderer's prepared input parameters, not a claim that author code
- * draws them or that a raw source survives the lower composition/effects. */
-export function videoEditCodeInputMotionPlacements(root: VideoEditComposition, range: VideoEditSourceMapRange): VideoEditPixelMotionPlacement[] {
+ * draws them or that a raw source survives the lower composition/effects.
+ * `declarations`：片子数据派生的取帧参数要按代码声明解析，读不到声明的片段只看片段上存的参数。 */
+export function videoEditCodeInputMotionPlacements(root: VideoEditComposition, range: VideoEditSourceMapRange, declarations?: VideoEditCodeDeclarationReader): VideoEditPixelMotionPlacement[] {
   const result: VideoEditPixelMotionPlacement[] = []
   let frames = 0, work = 0
   const append = (owner: VideoEditSourceMapEntry, source: VideoEditSourceMapEntry | undefined, parameter: string, kind: 'video' | 'sequence', mediaId: string, times: number[], from: number, duration: number): void => {
@@ -23,7 +25,7 @@ export function videoEditCodeInputMotionPlacements(root: VideoEditComposition, r
   visitVideoEditPictureInstances(root, range, { sequence() {}, clip(local, owner) {
     const clip = owner.path.at(-1)!.clip
     if (clip.kind !== 'code' || !clip.code) return
-    for (const [parameter, reference] of Object.entries(clip.code.parameters)) {
+    for (const [parameter, reference] of Object.entries(videoEditCodeInputParameters(local, clip.code, declarations))) {
       if (!isCodeImageReference(reference) || reference.kind === 'image') continue
       if (reference.kind === 'video') {
         const media = local.media.find(media => media.id === reference.mediaId && media.kind === 'video')

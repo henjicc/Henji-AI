@@ -6,7 +6,7 @@ import { CodeMaterialError, type CodeSourceSpan } from '@/core/videoEdit/codeMat
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { codeElementAtSource } from '@/core/videoEdit/codeElementSelection'
 import { selectedVideoEditCodeElement, selectVideoEditCodeElement, videoEditCodeElementFrames } from '../application/videoEditCodeElements'
-import { Dropdown, UiButton, UiCheckbox, UiError, UiFormRow, UiGroup, UiLoading, UiTextArea, UiInput, UiOptionButton } from '@/components/ui'
+import { Dropdown, UiButton, UiCheckbox, UiError, UiFormRow, UiGroup, UiInlineStatus, UiLoading, UiTextArea, UiInput, UiOptionButton } from '@/components/ui'
 import { commitVideoEditCodeCandidate, disposeVideoEditCodeCandidate, prepareVideoEditCodeCandidate, type VideoEditCodeApplyScope, type VideoEditCodeCandidate } from '../application/videoEditCodeCandidates'
 import type { VideoEditCodeEditorState } from '../application/videoEditCodeParameters'
 import { requireVideoEditInstance, subscribeVideoEditView, videoEditViewRevision } from '../application/videoEditService'
@@ -155,6 +155,7 @@ function SourceDraft({ editor }: { editor: VideoEditCodeEditorState }): React.Re
     {candidate && <UiGroup title="候选画面" gap="row">
       <CandidatePreview candidate={candidate} onError={reason => { invalidate(); setError(reason instanceof Error ? reason.message : '候选画面无法显示。') }} />
       <span className="text-xs text-text3">将应用到 {candidate.clipCount} 个片段</span>
+      {candidate.notices?.map(notice => <UiInlineStatus key={notice} tone="warning" truncate data-video-edit-code-candidate-notice>{notice}</UiInlineStatus>)}
       {candidate.impacts.length > 0 && <UiGroup title="参数与关键帧变化" gap="row">
         {candidate.impacts.map((impact, index) => <div key={index} className="text-xs" data-video-edit-code-migration-impact>
           <div className="text-text1">{impact.sequenceName} · {impact.clipName} · {impact.title}</div>

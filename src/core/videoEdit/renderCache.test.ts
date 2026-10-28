@@ -1,7 +1,9 @@
 import { expect, it } from 'vitest'
 import { createVideoEditDocument, createVideoEditSequence, videoEditComposition, type VideoEditClip, type VideoEditDocument } from './document'
 import { addLegacyVideoEditTracks } from './testFixtures'
-import { videoEditRenderWindows, videoEditRenderWindowSet } from './renderCache'
+import { videoEditRenderWindows, videoEditRenderWindowSet, type VideoEditRenderDependencies } from './renderCache'
+import { parseCodeMaterialV3Parameters } from './codeMaterial/parameterTypes'
+import { GOLDEN_SCENE_DECLARATION, goldenScene } from './scene/sceneTestFixtures'
 
 const dependencies = { fontRevision: 1, analysis: '' }
 function project(): VideoEditDocument {
@@ -150,4 +152,50 @@ it('输入签名：只改声音沿用上一次的整份结果，画面变化重�
   expect(recomputed.windows).toEqual(videoEditRenderWindows(videoEditComposition(moved, sequence.id), dependencies))
   // 依赖（字体、分析结果）变化也不能沿用。
   expect(videoEditRenderWindowSet(videoEditComposition(quiet, sequence.id), { ...dependencies, fontRevision: 9 }, previous)).not.toBe(previous)
+})
+
+const filmDeclarations = parseCodeMaterialV3Parameters({ film: { type: 'scene', title: '片子', schema: GOLDEN_SCENE_DECLARATION } }, {}, 5)
+const resolved: VideoEditRenderDependencies = { ...dependencies, codeDeclarations: () => filmDeclarations }
+/** 一个 15 秒的整片代码片段读黄金片子数据（录屏素材 a 只出现在片子数据的记录里）；`nested` 时它放进子序列，主序列只有嵌套片段。 */
+function film(nested = false): VideoEditDocument {
+  const document = project(), [main, child] = document.sequences
+  document.scenes = [goldenScene('a')]
+  document.items.push({ id: 'item-film', name: '片子', kind: 'code', code: { definitionId: 'film', versionId: 'v5', parameters: {} } })
+  const clip: VideoEditClip = { ...main.clips[0], id: 'film', itemId: 'item-film', kind: 'code', duration: 900, code: { definitionId: 'film', versionId: 'v5', parameters: { film: { kind: 'scene', sceneId: 'golden-scene' } } } }
+  if (nested) { child.clips = [clip]; main.clips = [{ ...main.clips[1], start: 0, duration: 900 }] } else main.clips = [clip]
+  return document
+}
+const keysWith = (document: VideoEditDocument, deps: VideoEditRenderDependencies): string[] => videoEditRenderWindows(videoEditComposition(document, document.sequences[0].id), deps).map(window => window.key)
+
+it('片子数据只让与改动记录时段相交的窗口失效；读不到代码声明时按整份计入，没被引用的片子数据不影响任何窗口', () => {
+  const base = film(), before = keysWith(base, resolved)
+  expect(before).toHaveLength(3)
+  // 段落只占片段素材时间 0.5–2.5 秒：只有第一段（0–5 秒）失效
+  const renamed = structuredClone(base); renamed.scenes![0].records.find(record => record.id === 'seg-switch')!.values.name = '路由器'
+  expect(keysWith(renamed, resolved).map((key, index) => key === before[index])).toEqual([false, true, true])
+  // 片段在时间线上挪动，片子数据跟着片段走，各段内容不变
+  const moved = structuredClone(base); moved.sequences[0].clips[0].start = 300
+  expect(keysWith(moved, resolved).slice(1)).toEqual(before)
+  const coarse = keysWith(base, dependencies)
+  expect(keysWith(renamed, dependencies).every((key, index) => key !== coarse[index])).toBe(true)
+  const plain = project(), plainBefore = keys(plain)
+  plain.scenes = [goldenScene('a')]
+  expect(keys(plain)).toEqual(plainBefore)
+})
+
+it('片子数据引用的素材换了源文件时用到它的段失效、无关素材不影响；子序列里代码读的片子数据改了，父序列的段也失效', () => {
+  const base = film()
+  base.media.push({ id: 'b', name: 'b', path: '/b.mp4', kind: 'video', width: 1920, height: 1080, durationSeconds: 120 })
+  const before = keysWith(base, resolved)
+  // 窗口记录没有时刻（每一段都计入），它引用录屏 a：a 换源文件，三段都失效
+  const relinked = structuredClone(base); relinked.media[0].sourceRevision = 'replaced'
+  expect(keysWith(relinked, resolved).every((key, index) => key !== before[index])).toBe(true)
+  const unrelated = structuredClone(base); unrelated.media[1].sourceRevision = 'replaced'
+  expect(keysWith(unrelated, resolved)).toEqual(before)
+
+  const parent = film(true), nestedBefore = keysWith(parent, resolved)
+  const renamed = structuredClone(parent); renamed.scenes![0].records.find(record => record.id === 'seg-switch')!.values.name = '路由器'
+  expect(keysWith(renamed, resolved).every((key, index) => key !== nestedBefore[index])).toBe(true)
+  const relinkedNested = structuredClone(parent); relinkedNested.media[0].sourceRevision = 'replaced'
+  expect(keysWith(relinkedNested, resolved).every((key, index) => key !== nestedBefore[index])).toBe(true)
 })

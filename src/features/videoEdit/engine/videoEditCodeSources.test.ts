@@ -15,6 +15,9 @@ import type { VideoEditCodePicture, VideoEditCodeImageInput } from './videoEditC
 import { createVideoEditGraphic } from '@/core/videoEdit/graphics'
 import { videoEditTransitionWindow } from '@/core/videoEdit/transitions'
 import { createVideoEditMaskShape } from '@/core/videoEdit/effectMasks'
+import { codeMediaInputKey } from '@/core/videoEdit/codeMediaInput'
+import { videoEditCodeInputs } from '@/core/videoEdit/codeInputParameters'
+import { GOLDEN_SCENE_DECLARATION, goldenScene } from '@/core/videoEdit/scene/sceneTestFixtures'
 
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), warn: vi.fn() }) }))
 function source(mode: 'static' | 'dynamic' = 'static', name = '新图形', kind = 'generator'): string {
@@ -66,6 +69,47 @@ it('回放分辨率的缩小倍数随生成器调用传下并进静态缓存键�
     expect(boundary.generator).toHaveBeenCalledTimes(3)
     expect(boundary.generator.mock.lastCall).toHaveLength(10)
     expect(boundary.generator.mock.lastCall![0]).toBe(fullKey)
+  } finally { await boundary.sources.dispose() }
+})
+
+it('片子数据参数（作者接口 v5）：params 拿到解析结果、派生的取帧参数进 inputs.images，同一文档版本各帧共用一个解析结果；超限问题交给呈现通道', async () => {
+  const code = `export default {name:"片子",mode:"dynamic",width:64,height:64,durationSeconds:10,params:[{key:"film",type:"scene",title:"片子",schema:${JSON.stringify(GOLDEN_SCENE_DECLARATION)}}],draw(){}}`
+  const document = fixture(code)
+  document.codeMaterials![0].versions[0].apiVersion = 5
+  document.media = [{ id: 'screen', name: '录屏', kind: 'video', path: '/screen.mp4', durationSeconds: 60, width: 1920, height: 1080 }]
+  document.items.push({ id: 'screen', name: '录屏', kind: 'video', mediaId: 'screen' })
+  document.scenes = [goldenScene('screen')]
+  document.clips[0].code!.parameters = { film: { kind: 'scene', sceneId: 'golden-scene' } }
+  document.clips[0].duration = 300
+  const boundary = boundaries(document)
+  const lastCall = (): Parameters<VideoEditCodeGpu['authorGenerator']> => boundary.generator.mock.lastCall as unknown as Parameters<VideoEditCodeGpu['authorGenerator']>
+  try {
+    const instance = document.clips[0].code!
+    expect(boundary.sources.declarations(instance)).toBeUndefined()
+    await boundary.sources.prepareScenes(document, document.clips)
+    const film = videoEditCodeInputs(document, instance, value => boundary.sources.declarations(value))!.scenes.film
+    const input = film.timetables[0].shots[0].input, picture = codeMediaInputKey('clip', input)
+    const first = await boundary.sources.prepare(document, document.clips, 30, () => true, imageInputs(picture))
+    const [, , , , params, , , , , images = {}] = lastCall()
+    expect(params.film).toBe(film)
+    // 解析结果在各帧、各片段间共享，交给作者前已冻结
+    expect(Object.isFrozen(film.records[0])).toBe(true)
+    expect(() => { (film.byId as Map<string, unknown>).set('x', {}) }).toThrow()
+    expect(Object.hasOwn(params, input)).toBe(false)
+    expect(Object.keys(images)).toEqual([input])
+    expect(first.sceneIssues).toEqual([])
+    await boundary.sources.prepare(document, document.clips, 31, () => true, imageInputs(picture))
+    expect(lastCall()[4].film).toBe(film)
+    // 新的文档版本：重新解析；一条取帧车道超过上限（保留的段放到 5.12 秒）时，问题只随截断以后的帧交给渲染器呈现
+    const shots = Array.from({ length: 600 }, (_, index) => ({ id: `shot-${index}`, kind: 'shot', parent: 'win-demo', values: { at: index * 0.01, media: 'screen', src: index } }))
+    const next: VideoEditComposition = { ...document, revision: document.revision + 1, scenes: [{ ...document.scenes[0], records: [...document.scenes[0].records.filter(record => record.kind !== 'shot'), ...shots] }] }
+    boundary.sources.updateDocument(next)
+    const intact = await boundary.sources.prepare(next, next.clips, 30, () => true, imageInputs(picture))
+    expect(lastCall()[4].film).not.toBe(film)
+    expect(intact.sceneIssues).toEqual([])
+    const overflow = await boundary.sources.prepare(next, next.clips, Math.round(6 * next.fps), () => true)
+    expect(overflow.sceneIssues).toHaveLength(1)
+    expect(overflow.sceneIssues[0]).toContain(document.scenes[0].name)
   } finally { await boundary.sources.dispose() }
 })
 

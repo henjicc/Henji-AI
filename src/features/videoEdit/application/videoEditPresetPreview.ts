@@ -8,6 +8,7 @@ import type { VideoEditStyleSample } from '@/core/videoEdit/styles/styleSchemas'
 import type { CodeParameterValues } from '@/core/videoEdit/codeMaterial/contract'
 import { getBundledResourcePath } from '@/platform/desktopApi'
 import { videoEditOffscreenPool } from '../engine/videoEditOffscreenPool'
+import { videoEditRenderFailures } from '../engine/videoEditRenderFailures'
 import { compileVideoEditCode } from './videoEditCodeState'
 import type { VideoEditPresetSource } from './videoEditPresetCatalog'
 
@@ -195,7 +196,9 @@ class PresetRenderer {
         return result
       }), deadline])
       if (signal.aborted) { result.bitmap?.close(); signal.throwIfAborted() }
-      if (result.effectErrors?.length) { result.bitmap?.close(); throw new Error(result.effectErrors.join('\n')) }
+      // 样片里片子数据的问题只影响内容，不是样片坏了：样片缩略图没有文字位置，问题已由渲染 Worker 写进日志。
+      const failures = videoEditRenderFailures(result)
+      if (failures.length) { result.bitmap?.close(); throw new Error(failures.join('\n')) }
       succeeded = true
       return result.bitmap ?? null
     } finally { clearTimeout(timer); signal.removeEventListener('abort', abort); await lease.release(!succeeded) }

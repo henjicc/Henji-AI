@@ -4,10 +4,13 @@ import { videoEditReachableSequences } from './sequenceGraph'
 import { videoEditFps } from './time'
 import { videoEditSequenceFrameAtSeconds } from './nestedSequences'
 import { codeMaterialMediaIds } from './codeMaterialResources'
+import { videoEditCodeSceneKeys } from './codeInputParameters'
+import type { CodeSceneReference } from './codeMaterial/contract'
+import { videoEditSceneRecordMediaIds } from './scene/sceneMedia'
 import { videoEditEffectCodes } from './compositing'
 import type { TrackingSequenceSource } from '../../platform/contracts/tracking'
 
-export type TrackingDocument = Pick<VideoEditDocument, 'media' | 'items'> & Partial<Pick<VideoEditDocument, 'sequences' | 'codeMaterials' | 'colorLuts' | 'revision'>>
+export type TrackingDocument = Pick<VideoEditDocument, 'media' | 'items'> & Partial<Pick<VideoEditDocument, 'sequences' | 'codeMaterials' | 'colorLuts' | 'scenes' | 'revision'>>
 const sequenceKeys = Object.keys(videoEditSequenceSchema.shape) as Array<keyof VideoEditSequence>
 
 /** Worker 与渲染协调器共用键；机位不同不能共用同一源的跟踪结果。 */
@@ -25,12 +28,19 @@ export function videoEditSequenceTrackingSource(document: TrackingDocument, clip
   const ids = new Set(sequences.flatMap(sequence => sequence.clips.map(clip => clip.itemId)))
   const items = document.items.filter(item => ids.has(item.id))
   const mediaIds = new Set(items.map(item => item.mediaId))
+  const sceneIds = new Set<string>()
   for (const sequence of sequences) for (const clip of sequence.clips) {
-    for (const instance of [clip.code, ...videoEditEffectCodes(clip.effects)]) for (const id of codeMaterialMediaIds(instance)) mediaIds.add(id)
+    for (const instance of [clip.code, ...videoEditEffectCodes(clip.effects)]) {
+      for (const id of codeMaterialMediaIds(instance)) mediaIds.add(id)
+      for (const key of videoEditCodeSceneKeys(instance)) sceneIds.add((instance!.parameters[key] as CodeSceneReference).sceneId)
+    }
   }
+  // 子合成里的代码读到的片子数据及其中引用的素材也是画面内容；只计入被引用的那几份，别的片子数据改了不让跟踪失效。
+  const scenes = document.scenes?.filter(scene => sceneIds.has(scene.id)) ?? []
+  for (const id of videoEditSceneRecordMediaIds(document, scenes.flatMap(scene => scene.records))) mediaIds.add(id)
   // 根是合成快照，可能继承工程外壳与任务元数据；按权威序列字段投影，不维护排除名单。
   const projection = { version: 2, sequences: sequences.map(sequence => Object.fromEntries(sequenceKeys.map(key => [key, sequence[key]]))),
-    items, media: document.media.filter(media => mediaIds.has(media.id)), codeMaterials: document.codeMaterials, colorLuts: document.colorLuts }
+    items, media: document.media.filter(media => mediaIds.has(media.id)), codeMaterials: document.codeMaterials, colorLuts: document.colorLuts, ...(scenes.length ? { scenes } : {}) }
   const canonical = JSON.stringify(projection, (_key, value: unknown) => value && typeof value === 'object' && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) : value)
   return { composition, source: { kind: 'sequence', signature: uuidv5(canonical, uuidv5.URL), fps: composition.fps, width: composition.width, height: composition.height } }
 }

@@ -8,8 +8,10 @@ import { collectVideoEditPixelMotion, type VideoEditPixelMotionInput } from '../
 import type { AudioContentAnalysis } from '../../../core/audioAnalysis/contentAnalysis'
 import { videoEditCodeInputMotionPlacements } from '../../../core/videoEdit/codeInputMotion'
 import type { VideoEditPixelMotionPlacement } from '../../../core/videoEdit/pixelMotionReview'
+import type { CodeParameterDeclaration } from '../../../core/videoEdit/codeMaterial/contract'
 
-export interface VideoEditMotionReviewRequest { composition: VideoEditComposition; range: VideoEditSourceMapRange; policy: MotionReviewPolicy; programs?: Record<string, CodeMaterialProgram>; pixels?: VideoEditPixelMotionInput[]; audios?: Record<string, AudioContentAnalysis>; planInputsOnly?: boolean }
+/** `codeDeclarations`：引用片子数据的代码版本（按版本 ID）的参数声明，planInputsOnly 据此加上片子数据派生的取帧参数。 */
+export interface VideoEditMotionReviewRequest { composition: VideoEditComposition; range: VideoEditSourceMapRange; policy: MotionReviewPolicy; programs?: Record<string, CodeMaterialProgram>; pixels?: VideoEditPixelMotionInput[]; audios?: Record<string, AudioContentAnalysis>; planInputsOnly?: boolean; codeDeclarations?: Record<string, readonly CodeParameterDeclaration[]> }
 export type VideoEditMotionReviewResult = VideoEditMotionStructureResult & { sampledCodeFrames?: number; sampledElements?: number; warnings?: string[]; inputPlacements?: VideoEditPixelMotionPlacement[] }
 export type VideoEditMotionReviewResponse = { result: VideoEditMotionReviewResult } | { error: string } | { observeFrame: { id: number; composition: VideoEditComposition; frame: number } }
 export type VideoEditMotionReviewMessage = VideoEditMotionReviewRequest | { observation: { id: number; value: CodeAuthorFrameObservation } }
@@ -21,7 +23,8 @@ scope.onmessage = async (event: MessageEvent<VideoEditMotionReviewMessage>): Pro
   try {
     const { composition, range, policy, programs, pixels } = event.data
     if (event.data.planInputsOnly) {
-      scope.postMessage({ result: { records: [], sampledFrames: 0, sampledInstances: 0, inputPlacements: videoEditCodeInputMotionPlacements(composition, range) } } satisfies VideoEditMotionReviewResponse)
+      const declarations = event.data.codeDeclarations
+      scope.postMessage({ result: { records: [], sampledFrames: 0, sampledInstances: 0, inputPlacements: videoEditCodeInputMotionPlacements(composition, range, declarations && (instance => declarations[instance.versionId])) } } satisfies VideoEditMotionReviewResponse)
       return
     }
     const result: VideoEditMotionReviewResult = collectVideoEditMotionStructure(composition, range, policy)

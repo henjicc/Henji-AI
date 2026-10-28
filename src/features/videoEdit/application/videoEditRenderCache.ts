@@ -16,6 +16,8 @@ import { videoEditTrackResults, waitVideoEditTracking, subscribeVideoEditTrackin
 import { videoEditSmartRegionSegments, waitVideoEditSmartRegions, subscribeVideoEditSmartRegions } from './videoEditSmartRegions'
 import { videoEditMeasuredRenderState, type VideoEditRenderPerformance } from '@/core/videoEdit/renderPerformance'
 import { loadVideoEditRenderPerformance, readVideoEditRenderPerformance, recordVideoEditRenderPerformance } from './videoEditRenderPerformance'
+import { VideoEditCodeMetadataPending } from './videoEditCodeState'
+import { settleVideoEditCodeDeclarations, subscribeVideoEditCodeDeclarations, videoEditCodeDeclarationReader } from './videoEditCodeDeclarations'
 import type { RenderResponse } from '../engine/videoEditWorker'
 
 /**
@@ -164,6 +166,8 @@ function readyEntry(cache: ProjectCache | undefined, window: VideoEditRenderWind
 let analysisRevision = 0
 subscribeVideoEditTracking(() => { analysisRevision++ })
 subscribeVideoEditSmartRegions(() => { analysisRevision++ })
+// 读不出的代码声明在后台重读成功：引用片子数据的段从整份计入换回按时段计入，和分析结果一样让窗口重算并通知界面。
+subscribeVideoEditCodeDeclarations(() => { analysisRevision++; barRevision++; for (const listener of barListeners) listener(); publishVideoEdit() })
 const windowMemo = new WeakMap<VideoEditComposition, { revision: number; fontRevision: number; windows: VideoEditRenderWindow[] }>()
 /**
  * 每条序列上一次算出的窗口与输入签名。每次编辑都会产生新的文档快照，按对象缓存必然落空；
@@ -175,17 +179,35 @@ function windowsCurrent(composition: VideoEditComposition): boolean {
   const memo = windowMemo.get(composition)
   return memo?.revision === analysisRevision && memo.fontRevision === fontLibrarySnapshot().revision
 }
-/** 当前序列的窗口与指纹；同一文档快照与依赖只算一次。 */
-export function videoEditRenderCacheWindows(composition: VideoEditComposition): VideoEditRenderWindow[] {
+/**
+ * 当前序列的窗口与指纹；同一文档快照与依赖只算一次。片子数据按代码声明分段计入，声明还在读取时抛出
+ * VideoEditCodeMetadataPending：这时的指纹和读好以后的不同，不能拿来回收或渲染文件。
+ */
+export function videoEditRenderCacheWindows(owner: VideoEditInstance, composition: VideoEditComposition): VideoEditRenderWindow[] {
   const fontRevision = fontLibrarySnapshot().revision
   const memo = windowMemo.get(composition)
   if (memo?.revision === analysisRevision && memo.fontRevision === fontRevision) return memo.windows
-  const dependencies = { fontRevision, analysis: JSON.stringify([videoEditTrackResults(composition), videoEditSmartRegionSegments()]) }
+  const dependencies = { fontRevision, analysis: JSON.stringify([videoEditTrackResults(composition), videoEditSmartRegionSegments()]), codeDeclarations: videoEditCodeDeclarationReader(owner) }
   const set = videoEditRenderWindowSet(composition, dependencies, lastWindowSets.get(composition.id))
   lastWindowSets.delete(composition.id); lastWindowSets.set(composition.id, set)
   if (lastWindowSets.size > LAST_WINDOW_SET_LIMIT) lastWindowSets.delete(lastWindowSets.keys().next().value!)
   windowMemo.set(composition, { revision: analysisRevision, fontRevision, windows: set.windows })
   return set.windows
+}
+
+const announcedDeclarations = new WeakSet<Promise<void>>()
+/** 同步读数用：代码声明还在读取时先当作没有窗口，读好后通知节目与渲染条重读（同一次读取只通知一次）。 */
+function currentWindows(owner: VideoEditInstance, composition: VideoEditComposition): VideoEditRenderWindow[] | undefined {
+  try { return videoEditRenderCacheWindows(owner, composition) }
+  catch (error) {
+    if (!(error instanceof VideoEditCodeMetadataPending)) throw error
+    if (!announcedDeclarations.has(error.ready)) {
+      announcedDeclarations.add(error.ready)
+      const announce = (): void => { barRevision++; for (const listener of barListeners) listener(); publishVideoEdit() }
+      void error.ready.then(announce, announce)
+    }
+    return undefined
+  }
 }
 
 /** 非当前序列的合成按文档快照缓存：同一快照反复回收时不重算窗口。当前序列与节目、渲染条共用同一份。 */
@@ -200,10 +222,11 @@ function sequenceComposition(instance: VideoEditInstance, sequenceId: string): V
 }
 
 async function pruneEntries(instance: VideoEditInstance, cache: ProjectCache): Promise<void> {
-  const valid = new Map(instance.document.sequences.flatMap(sequence => {
+  // 等代码声明读好再回收：读取中算出的指纹和最终的不同，会把还能用的文件当成过期删掉。
+  const valid = await settleVideoEditCodeDeclarations(() => new Map(instance.document.sequences.flatMap(sequence => {
     const composition = sequenceComposition(instance, sequence.id), profile = videoEditRenderProfile(composition).profile
-    return videoEditRenderCacheWindows(composition).map(window => [window.key, profile] as const)
-  }))
+    return videoEditRenderCacheWindows(instance, composition).map(window => [window.key, profile] as const)
+  })))
   const stale = [...cache.entries.values()].filter(entry => valid.get(entry.windowKey) !== entry.profile)
   if (!stale.length) return
   for (const entry of stale) cache.entries.delete(entry.windowKey)
@@ -223,9 +246,11 @@ function loadedCache(projectId: string, load = false): ProjectCache | undefined 
 /** 节目当前序列已就绪的预渲染窗口（本地文件）；指纹不匹配的旧文件不会被播放。 */
 export function readyVideoEditRenderWindows(projectId: string, composition: VideoEditComposition): Array<{ key: string; startFrame: number; endFrame: number; path: string; width: number; height: number; fps: number }> {
   const cache = loadedCache(projectId, true)
-  if (!cache) return []
+  const owner = listVideoEditInstances().find(value => value.document.id === projectId)
+  const windows = cache && owner && currentWindows(owner, composition)
+  if (!cache || !windows) return []
   const { profile } = videoEditRenderProfile(composition)
-  return videoEditRenderCacheWindows(composition).flatMap(window => {
+  return windows.flatMap(window => {
     const entry = readyEntry(cache, window, profile)
     return entry ? [{ key: entry.windowKey, startFrame: window.startFrame, endFrame: window.endFrame, path: entry.path, width: entry.width, height: entry.height, fps: entry.fps }] : []
   })
@@ -249,7 +274,8 @@ export function recordVideoEditProgramRender(projectId: string, composition: Vid
   if (!instance.playing || instance.playbackDirection !== 1 || instance.scrubbing || findActiveVideoEditSequence(instance) !== composition) { lastShown.delete(projectId); return }
   const now = performance.now(), previous = lastShown.get(projectId)
   lastShown.set(projectId, { composition, frame, at: now })
-  const windows = videoEditRenderCacheWindows(composition)
+  const windows = currentWindows(instance, composition)
+  if (!windows) return
   const windowAt = (at: number): VideoEditRenderWindow | undefined => windows.find(window => window.startFrame <= at && window.endFrame > at)
   // 同一次连续播放（一秒内、向前不超过一秒）才算跳帧；起播、跳转或停顿后的第一帧只作为新的起点。
   if (previous && previous.composition === composition && frame > previous.frame && frame - previous.frame <= composition.fps && now - previous.at < 1000) {
@@ -291,7 +317,7 @@ export function readVideoEditRenderCache(projectId: string, sequenceId?: string)
   const cache = loadedCache(projectId, true)
   const job = jobs.get(instance)
   const { profile } = videoEditRenderProfile(composition)
-  const windows = videoEditRenderCacheWindows(composition).map(window => ({ startFrame: window.startFrame, endFrame: window.endFrame,
+  const windows = (currentWindows(instance, composition) ?? []).map(window => ({ startFrame: window.startFrame, endFrame: window.endFrame,
     ...(readVideoEditRenderPerformance(window.key) ? { performance: readVideoEditRenderPerformance(window.key) } : {}),
     state: readyEntry(cache, window, profile) ? 'ready' as const : job?.current === window.key ? 'rendering' as const : measuredState(window) }))
   const frames = (state: VideoEditRenderWindowState): number => windows.filter(window => window.state === state).reduce((sum, window) => sum + window.endFrame - window.startFrame, 0)
@@ -330,7 +356,12 @@ export function requestVideoEditRenderBarWindows(projectId: string): void {
   whenIdle(() => {
     if (current() !== composition) { pendingBarWindows.delete(composition); return }
     // 算不出的内容（如转场引用已失效）保持挂起：播放头每动一下都会重绘渲染条，不能每次重试、重复记日志。
-    try { videoEditRenderCacheWindows(composition) } catch (error) { logger.warn('渲染条分段未算出', { event: 'video_edit.render_cache.windows_failed', error, context: { projectId } }); return }
+    const owner = listVideoEditInstances().find(value => value.document.id === projectId)
+    if (!owner) { pendingBarWindows.delete(composition); return }
+    try {
+      // 代码声明读好以后 currentWindows 会通知渲染条，那时再补算。
+      if (!currentWindows(owner, composition)) { pendingBarWindows.delete(composition); return }
+    } catch (error) { logger.warn('渲染条分段未算出', { event: 'video_edit.render_cache.windows_failed', error, context: { projectId } }); return }
     pendingBarWindows.delete(composition)
     barRevision++
     for (const listener of barListeners) listener()
@@ -364,7 +395,9 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
   const cache = await cacheOf(projectId); loaded.set(projectId, cache)
   if (jobs.has(instance)) throw new Error('该剪辑正在预渲染，请等待完成或先取消。')
   const range = request.range ?? { startFrame: 0, endFrame: Number.MAX_SAFE_INTEGER }
-  let windows = videoEditRenderCacheWindows(composition).filter(window => window.endFrame > range.startFrame && window.startFrame < range.endFrame && (request.scope === 'all' || measuredState(window) !== 'realtime'))
+  const all = await settleVideoEditCodeDeclarations(() => videoEditRenderCacheWindows(instance, composition))
+  if (jobs.has(instance)) throw new Error('该剪辑正在预渲染，请等待完成或先取消。')
+  let windows = all.filter(window => window.endFrame > range.startFrame && window.startFrame < range.endFrame && (request.scope === 'all' || measuredState(window) !== 'realtime'))
   const around = request.aroundFrame
   const encoding = videoEditRenderProfile(composition)
   let pending = [...new Map(windows.filter(window => !readyEntry(cache, window, encoding.profile)).map(window => [window.key, window])).values()]
@@ -407,7 +440,7 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
       smartRegions = await waitVideoEditSmartRegions(composition, composition, job.controller.signal)
       await waitVideoEditTracking(composition, composition, job.controller.signal)
       // 分析刚完成会改变指纹；编码必须使用实际交给会话的结果身份，不能把新画面写到旧键。
-      const refreshed = new Map(videoEditRenderCacheWindows(composition).map(window => [window.startFrame, window]))
+      const refreshed = new Map((await settleVideoEditCodeDeclarations(() => videoEditRenderCacheWindows(instance, composition))).map(window => [window.startFrame, window]))
       windows = windows.map(window => refreshed.get(window.startFrame)!)
       pending = [...new Map(pending.map(window => refreshed.get(window.startFrame)!).filter(window => !readyEntry(cache, window, encoding.profile)).map(window => [window.key, window])).values()]
       job.total = pending.length

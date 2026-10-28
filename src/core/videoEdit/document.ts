@@ -348,7 +348,8 @@ export type VideoEditMedia = z.infer<typeof videoEditMediaSchema>
 export type VideoEditItem = z.infer<typeof videoEditItemSchema>
 export type VideoEditBin = z.infer<typeof videoEditBinSchema>
 export type VideoEditAnnotation = z.infer<typeof videoEditAnnotationSchema>
-export type VideoEditComposition = VideoEditSequence & Pick<VideoEditDocument, 'media' | 'items' | 'revision' | 'codeMaterials' | 'colorLuts' | 'styles'> & { fps: number; sequences?: VideoEditSequence[] }
+/** 渲染快照：序列加上它引用的工程级资源；片子数据随快照带上，代码参数按 sceneId 在其中查找。 */
+export type VideoEditComposition = VideoEditSequence & Pick<VideoEditDocument, 'media' | 'items' | 'revision' | 'codeMaterials' | 'colorLuts' | 'styles' | 'scenes'> & { fps: number; sequences?: VideoEditSequence[] }
 export function createVideoEditSequence(name = '序列 1'): VideoEditSequence {
   return { id: crypto.randomUUID(), name, width: 1920, height: 1080, frameRate: { numerator: 30, denominator: 1 }, pixelAspectRatio: { numerator: 1, denominator: 1 }, sampleRate: 48000, channels: 2,
     // 运动模糊总开关新建即开（2026-10-27 用户要求）；只模糊在动的片段与图层，不动的不花时间
@@ -364,8 +365,8 @@ export function videoEditComposition(document: VideoEditDocument, sequenceId: st
   if (!sequence) throw new Error('目标序列不存在。')
   return composeVideoEditSequence(document, sequence)
 }
-function composeVideoEditSequence(document: Pick<VideoEditComposition, 'media' | 'items' | 'sequences' | 'styles' | 'colorLuts' | 'codeMaterials' | 'revision'>, sequence: VideoEditSequence): VideoEditComposition {
-  return { ...sequence, width: Math.round(sequence.width * sequence.pixelAspectRatio.numerator / sequence.pixelAspectRatio.denominator), media: document.media, items: document.items, sequences: document.sequences, ...(document.styles ? { styles: document.styles } : {}), ...(document.colorLuts ? { colorLuts: document.colorLuts } : {}), ...(document.codeMaterials ? { codeMaterials: document.codeMaterials } : {}), revision: document.revision, fps: videoEditFps(sequence.frameRate) }
+function composeVideoEditSequence(document: Pick<VideoEditComposition, 'media' | 'items' | 'sequences' | 'styles' | 'colorLuts' | 'codeMaterials' | 'scenes' | 'revision'>, sequence: VideoEditSequence): VideoEditComposition {
+  return { ...sequence, width: Math.round(sequence.width * sequence.pixelAspectRatio.numerator / sequence.pixelAspectRatio.denominator), media: document.media, items: document.items, sequences: document.sequences, ...(document.styles ? { styles: document.styles } : {}), ...(document.colorLuts ? { colorLuts: document.colorLuts } : {}), ...(document.codeMaterials ? { codeMaterials: document.codeMaterials } : {}), ...(document.scenes ? { scenes: document.scenes } : {}), revision: document.revision, fps: videoEditFps(sequence.frameRate) }
 }
 export function videoEditClipMedia(document: Pick<VideoEditComposition, 'media' | 'items'>, clip: VideoEditClip): VideoEditMedia | undefined {
   const item = document.items.find(item => item.id === clip.itemId)
