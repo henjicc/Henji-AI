@@ -44,6 +44,9 @@ import { updateVideoEditClipInSequence } from './videoEditClipSpeed'
 import { resolveVideoEditContentAnchor, verifyVideoEditContentAnchorSources } from './videoEditContentAnchors'
 import { retimeVideoEditContentClips } from '@/core/videoEdit/contentAnchors'
 import { withDefaultVideoEditStyle } from './videoEditStyles'
+import { VIDEO_EDIT_SCENE, VIDEO_EDIT_SCENE_CREATE_KEYS, VIDEO_EDIT_SCENE_DECLARATION_SOURCE, VIDEO_EDIT_SCENE_FIELDS, VIDEO_EDIT_SCENE_RECORD, VIDEO_EDIT_SCENE_RECORD_CASCADES, VIDEO_EDIT_SCENE_RECORD_CREATE_KEYS, parseVideoEditSceneRef, videoEditSceneDraftChanges, videoEditSceneRecordCascades, videoEditSceneRecordRef, videoEditSceneRef, type VideoEditSceneDraft, type VideoEditSceneEntityType } from './videoEditSceneFields'
+import { createVideoEditScenes, findVideoEditScene, removeVideoEditScenes, writeVideoEditScene, type VideoEditSceneCreateInput, type VideoEditSceneIssue, type VideoEditSceneRecordInput } from './videoEditScenes'
+import type { VideoEditSceneRecord } from '@/core/videoEdit/scene/sceneSchema'
 
 interface ProjectViewSnapshot { view: VideoEditProjectView; activeSequenceId: string; timeline: VideoEditTimelineView; primary: string | null; program: { frame: number; playing: boolean; playbackDirection: 1 | -1 }; programCommand: object; playbackResolution: VideoEditPlaybackResolutionSetting; proxyPreference: VideoEditProxyPreference; renderPreference: VideoEditRenderPreference }
 function projectViewSnapshot(projectId: string): ProjectViewSnapshot {
@@ -523,4 +526,113 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
   }
   async compensate(_step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, result: ApplicationCompletedStepResult, context?: ApplicationExecutionContext): Promise<ApplicationEvidence[]> { return result.undoToken ? (await restore(result.undoToken, true, context)).evidence : [] }
   async undo(token: string, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> { return restore(token, false, context) }
+}
+/** 整份写 records 带出的记录增删改，撤销时按反方向报出。 */
+function withSceneRecordCascades(result: ApplicationCompletedStepResult, before: VideoEditDocument, after: VideoEditDocument, direct: readonly ApplicationRef[]): ApplicationCompletedStepResult {
+  const effects = videoEditSceneRecordCascades(before, after, direct)
+  return effects.length ? { ...result, cascadeEffects: [...result.cascadeEffects ?? [], ...effects] } : result
+}
+/** 写入不因解析问题被拒，但会让画面缺内容的（severity 为 user）放进回执，调用方要告诉用户。 */
+function withSceneWarnings(result: ApplicationCompletedStepResult, warnings: readonly VideoEditSceneIssue[]): ApplicationCompletedStepResult {
+  if (!warnings.length) return result
+  const fact = `写入后解析发现会让画面缺内容的问题：${warnings.slice(0, 5).map(warning => warning.message).join('；')}${warnings.length > 5 ? `；等共 ${warnings.length} 处` : ''}`.slice(0, 1000)
+  return { ...result, evidence: [...result.evidence, { kind: 'observation', fact, data: warnings.map(warning => ({ ...warning })), capturedAt: new Date().toISOString() }] }
+}
+/** 片子数据与其中记录的属性写入：写入表填草稿，草稿换成修改交给 writeVideoEditScene；撤销与补偿复用剪辑历史快照。 */
+export class VideoEditSceneMutationExecutor implements ApplicationMutationExecutor {
+  readonly effectContract: ApplicationEffectContract
+  readonly writableProperties
+  readonly propertyOperations
+  constructor(readonly entityType: VideoEditSceneEntityType) {
+    const table = fieldWriterTable(VIDEO_EDIT_SCENE_FIELDS[entityType]); this.writableProperties = writableProperties(table); this.propertyOperations = propertyOperations(table)
+    this.effectContract = { direct: [], cascades: entityType === VIDEO_EDIT_SCENE ? VIDEO_EDIT_SCENE_RECORD_CASCADES : [] }
+  }
+  async apply(step: Extract<ApplicationPlannedStep, { kind: 'mutation' }>, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
+    const target = parseVideoEditSceneRef(step.target)
+    const owner = requireVideoEditInstance(target.projectId); const before = owner.document
+    const record = target.recordId === undefined ? undefined : findVideoEditScene(before, target.sceneId).records.find(item => item.id === target.recordId)
+    if (target.recordId !== undefined && !record) throw new Error(`NOT_FOUND：片子数据记录 ${target.recordId} 不存在，请重新列出 ${VIDEO_EDIT_SCENE_RECORD}。`)
+    const draft: VideoEditSceneDraft = { untune: [] }
+    await applyWriterTable(fieldWriterTable(VIDEO_EDIT_SCENE_FIELDS[this.entityType]), draft, step.mutations)
+    const written = await writeVideoEditScene(target.projectId, target.sceneId, videoEditSceneDraftChanges(this.entityType, draft, target.recordId), { batch: videoEditTransactionBatch(context, target.projectId) })
+    return withSceneWarnings(withSceneRecordCascades(completed(before, owner.document, [step.target]), before, owner.document, [step.target]), written.warnings)
+  }
+  async compensate(_step: Extract<ApplicationPlannedStep, { kind: 'mutation' }>, result: ApplicationCompletedStepResult, context?: ApplicationExecutionContext): Promise<ApplicationEvidence[]> { return result.undoToken ? (await restore(result.undoToken, true, context)).evidence : [] }
+  async undo(token: string, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
+    const record = undo.get(token); const result = await restore(token, false, context)
+    return record ? withSceneRecordCascades(result, record.after, record.before, record.refs) : result
+  }
+}
+/** 片子数据下的记录增删；父实体是 video_edit.scene。 */
+export class VideoEditSceneRecordCollectionExecutor implements ApplicationCollectionExecutor {
+  readonly entityType = VIDEO_EDIT_SCENE_RECORD
+  readonly effectContract: ApplicationEffectContract = { direct: [], cascades: [] }
+  async apply(step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
+    if (step.parent.kind !== VIDEO_EDIT_SCENE) throw new Error(`${VIDEO_EDIT_SCENE_RECORD} 的父实体须为 ${VIDEO_EDIT_SCENE}（收到 ${step.parent.kind}）。`)
+    const target = parseVideoEditSceneRef(step.parent)
+    const owner = requireVideoEditInstance(target.projectId); const before = owner.document
+    findVideoEditScene(before, target.sceneId)
+    const batch = videoEditTransactionBatch(context, target.projectId)
+    const key = (name: string): string => `${VIDEO_EDIT_SCENE_RECORD}.${name}`
+    if (step.operation.kind === 'create') {
+      const records = step.operation.items.map((item, index): VideoEditSceneRecordInput & { id: string } => {
+        const unknown = Object.keys(item.properties).filter(propertyId => !VIDEO_EDIT_SCENE_RECORD_CREATE_KEYS.some(name => propertyId === key(name)))
+        if (unknown.length) throw new Error(`第 ${index} 项有创建时不能写的属性：${unknown.join('、')}；可写：${VIDEO_EDIT_SCENE_RECORD_CREATE_KEYS.map(key).join('、')}。`)
+        const value = (name: string): unknown => item.properties[key(name)]
+        const id = value('record_id'), parent = value('parent'), tuned = value('tuned')
+        return { id: typeof id === 'string' ? id : crypto.randomUUID(), kind: value('kind') as string, ...(typeof parent === 'string' && parent ? { parent } : {}), values: value('values') as VideoEditSceneRecordInput['values'], ...(Array.isArray(tuned) && tuned.length ? { tuned: tuned as string[] } : {}) }
+      })
+      const written = await writeVideoEditScene(target.projectId, target.sceneId, [{ kind: 'create', records }], { batch })
+      return withSceneWarnings(completed(before, owner.document, records.map(record => videoEditSceneRecordRef(target.projectId, target.sceneId, record))), written.warnings)
+    }
+    const ids = step.operation.targets.map(ref => {
+      const parsed = parseVideoEditSceneRef(ref)
+      if (ref.kind !== VIDEO_EDIT_SCENE_RECORD || parsed.projectId !== target.projectId || parsed.sceneId !== target.sceneId) throw new Error('要删除的记录不属于这份片子数据，请使用目录返回的完整引用。')
+      return parsed.recordId!
+    })
+    const written = await writeVideoEditScene(target.projectId, target.sceneId, [{ kind: 'remove', recordIds: ids }], { batch })
+    return withSceneWarnings(completed(before, owner.document, step.operation.targets), written.warnings)
+  }
+  async compensate(_step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, result: ApplicationCompletedStepResult, context?: ApplicationExecutionContext): Promise<ApplicationEvidence[]> { return result.undoToken ? (await restore(result.undoToken, true, context)).evidence : [] }
+  async undo(token: string, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> { return restore(token, false, context) }
+}
+/** 剪辑下的片子数据增删；父实体是 video_edit.document。新建、删除带出的记录增删作为级联报出。 */
+export class VideoEditSceneCollectionExecutor implements ApplicationCollectionExecutor {
+  readonly entityType = VIDEO_EDIT_SCENE
+  readonly effectContract: ApplicationEffectContract = { direct: [], cascades: VIDEO_EDIT_SCENE_RECORD_CASCADES }
+  async apply(step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
+    if (step.parent.kind !== 'video_edit.document') throw new Error(`${VIDEO_EDIT_SCENE} 的父实体须为 video_edit.document（收到 ${step.parent.kind}）。`)
+    const projectId = step.parent.id
+    const owner = requireVideoEditInstance(projectId); const before = owner.document
+    const batch = videoEditTransactionBatch(context, projectId)
+    const key = (name: string): string => `${VIDEO_EDIT_SCENE}.${name}`
+    let refs: ApplicationRef[], warnings: readonly VideoEditSceneIssue[] = []
+    if (step.operation.kind === 'create') {
+      const inputs = step.operation.items.map((item, index): VideoEditSceneCreateInput => {
+        const unknown = Object.keys(item.properties).filter(propertyId => !VIDEO_EDIT_SCENE_CREATE_KEYS.some(name => propertyId === key(name)))
+        if (unknown.length) throw new Error(`第 ${index} 项有新建时不能写的属性：${unknown.join('、')}；可写：${VIDEO_EDIT_SCENE_CREATE_KEYS.map(key).join('、')}。`)
+        const value = (name: string): unknown => item.properties[key(name)]
+        const source = VIDEO_EDIT_SCENE_DECLARATION_SOURCE.safeParse(value('declaration_source'))
+        if (!source.success) throw new Error(`第 ${index} 项的 ${key('declaration_source')} 须为 {versionId: 代码版本 ID, parameterKey: 其中 type 为 scene 的参数键}。`)
+        const id = value('scene_id'), records = value('records')
+        return { id: typeof id === 'string' ? id : crypto.randomUUID(), name: value('name') as string, declarationSource: source.data, ...(records !== undefined ? { records: records as VideoEditSceneRecord[] } : {}) }
+      })
+      const created = await createVideoEditScenes(projectId, inputs, { batch })
+      refs = created.scenes.map(scene => videoEditSceneRef(projectId, scene)); warnings = created.warnings
+    } else {
+      const ids = step.operation.targets.map(ref => {
+        const parsed = parseVideoEditSceneRef(ref)
+        if (ref.kind !== VIDEO_EDIT_SCENE || parsed.projectId !== projectId) throw new Error('要删除的片子数据不属于这份剪辑，请使用目录返回的完整引用。')
+        return parsed.sceneId
+      })
+      removeVideoEditScenes(projectId, ids, { batch })
+      refs = step.operation.targets
+    }
+    return withSceneWarnings(withSceneRecordCascades(completed(before, owner.document, refs), before, owner.document, refs), warnings)
+  }
+  async compensate(_step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, result: ApplicationCompletedStepResult, context?: ApplicationExecutionContext): Promise<ApplicationEvidence[]> { return result.undoToken ? (await restore(result.undoToken, true, context)).evidence : [] }
+  async undo(token: string, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
+    const record = undo.get(token); const result = await restore(token, false, context)
+    return record ? withSceneRecordCascades(result, record.after, record.before, record.refs) : result
+  }
 }

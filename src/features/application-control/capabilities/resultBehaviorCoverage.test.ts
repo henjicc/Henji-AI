@@ -28,6 +28,9 @@ const RESULT_SCENARIOS: Record<string, Scenario[]> = {
     { file: 'src/features/videoEdit/application/videoEditService.test.ts', title: '公共修改与手动编辑共用历史并可保存重开' },
     { file: 'src/features/videoEdit/application/videoEditService.test.ts', title: '保存失败保留助手修改且恢复不会重放编辑' },
     { file: 'src/features/videoEdit/application/videoEditAnnotationBatch.test.ts', title: '按条件查询后用查询结果删除并合并重复，剪辑里只剩保留的那条并附合并说明' },
+    { file: 'src/features/videoEdit/application/videoEditScenes.test.ts', title: '通过通用修改改一个框的留白：读回变化、改到的字段自动记手调、一步撤销、保存重开还在' },
+    { file: 'src/features/videoEdit/application/videoEditScenes.test.ts', title: '整份写 records 推近一个镜头：一次提交一步撤销、读回剪后时刻；整份写与逐条写的拒绝出自同一份校验' },
+    { file: 'src/features/videoEdit/application/videoEditScenes.test.ts', title: '通过通用集合新建一条镜头落点并删除：读回按剪切换算的时刻，删除后记录不在，撤销回来' },
   ],
   settings: [
     { file: 'src/features/settings/application-control/settingsReflectionResult.test.ts', title: '通过 describe 与 change 切换 general.language，正式读取值随之变化' },
@@ -83,7 +86,7 @@ const RESULT_SCENARIO_BASELINE: Record<keyof typeof RESULT_SCENARIOS, number> = 
   audio_capture: 2,
   workspace_layout: 2,
   screen_recording: 2,
-  video_edit: 3,
+  video_edit: 6,
   memory: 2,
   settings: 2,
   assets: 3,

@@ -33,6 +33,10 @@ import { createVideoEditSubtitlePresetRegistration } from './videoEditSubtitlePr
 import { createVideoEditExportPresetRegistration } from './videoEditExportPresetReflection'
 import { createFontRegistration } from './fontReflection'
 import { createVideoEditStyleRegistrations } from './videoEditStyleReflection'
+import { VIDEO_EDIT_SCENE_LIMITS } from '@/core/videoEdit/scene/sceneSchema'
+import { VIDEO_EDIT_SCENE, VIDEO_EDIT_SCENE_DECLARATION_BLOCK, VIDEO_EDIT_SCENE_FIELDS, VIDEO_EDIT_SCENE_RECORD, VIDEO_EDIT_SCENE_RECORD_REQUIRED, VIDEO_EDIT_SCENE_REQUIRED, VIDEO_EDIT_SCENE_TYPES, parseVideoEditSceneRef, videoEditSceneRecordRef, videoEditSceneRef, videoEditSceneSchemaDocuments, type VideoEditSceneEntityType, type VideoEditSceneFieldSource } from './videoEditSceneFields'
+import { findVideoEditScene, loadVideoEditSceneDeclarations } from './videoEditScenes'
+import { videoEditSceneMedia } from '@/core/videoEdit/scene/sceneMedia'
 
 export function splitVideoEditRef(ref: ApplicationRef): { projectId: string; childId: string } {
   if (ref.kind === 'video_edit.document') return { projectId: ref.id, childId: '' }
@@ -228,6 +232,79 @@ class VideoEditProvider implements ApplicationEntityProvider {
     return availability
   }
 }
+/** 片子数据与记录：读取前读好引用它的代码声明，剪后时刻、是否剪掉与问题都由解析得出。 */
+class VideoEditSceneProvider implements ApplicationEntityProvider {
+  constructor(readonly entityType: VideoEditSceneEntityType) {}
+  private async open(projectId: string): Promise<void> {
+    if (!listVideoEditInstances().some(owner => owner.document.id === projectId)) await openVideoEditDocument({ id: projectId }, { focus: false })
+  }
+  /** 声明按读取开始时的那份文档读，返回的数据与版本号同属这一份。 */
+  private async source(ref: ApplicationRef, declaration = true): Promise<{ source: VideoEditSceneFieldSource; revisions: Record<string, number> }> {
+    const target = parseVideoEditSceneRef(ref); await this.open(target.projectId)
+    const owner = requireVideoEditInstance(target.projectId); const document = owner.document; const revisions = { video_edit: videoEditRevision() }
+    const scene = findVideoEditScene(document, target.sceneId)
+    const record = target.recordId === undefined ? undefined : scene.records.find(item => item.id === target.recordId)
+    if (target.recordId !== undefined && !record) throw new Error(`NOT_FOUND：片子数据“${scene.name}”里没有记录 ${target.recordId}，请重新列出 ${VIDEO_EDIT_SCENE_RECORD}。`)
+    const state = declaration ? await loadVideoEditSceneDeclarations(owner, document, target.sceneId) : { declaration: undefined, block: undefined, notes: [] }
+    return { source: { projectId: target.projectId, scene, state, media: videoEditSceneMedia(document), record }, revisions }
+  }
+  async listEntities(request: { cursor?: string; limit: number }) {
+    const all = listVideoEditInstances().flatMap(instance => (instance.document.scenes ?? []).flatMap(scene => this.entityType === VIDEO_EDIT_SCENE ? [videoEditSceneRef(instance.document.id, scene)] : scene.records.map(record => videoEditSceneRecordRef(instance.document.id, scene.id, record))))
+    const offset = Math.max(0, Number(request.cursor) || 0)
+    return { refs: all.slice(offset, offset + request.limit), nextCursor: offset + request.limit < all.length ? String(offset + request.limit) : null, revisions: { video_edit: videoEditRevision() } }
+  }
+  async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }) {
+    const { source, revisions } = await this.source(ref, request.propertyIds?.length !== 0)
+    const fields = request.propertyIds ? VIDEO_EDIT_SCENE_FIELDS[this.entityType].filter(field => request.propertyIds!.includes(field.propertyId)) : VIDEO_EDIT_SCENE_FIELDS[this.entityType]
+    return { ref, entityType: this.entityType, revisions, properties: fieldReadValues(fields, source), capturedAt: new Date().toISOString() }
+  }
+  async getPropertyAvailability(ref: ApplicationRef, propertyIds: string[]) {
+    const { source, revisions } = await this.source(ref)
+    const { block } = source.state
+    const kinds = source.state.declaration?.schema.kinds
+    const kind = source.record && kinds && Object.hasOwn(kinds, source.record.kind) ? kinds[source.record.kind] : undefined
+    return propertyIds.map(propertyId => {
+      const field = VIDEO_EDIT_SCENE_FIELDS[this.entityType].find(item => item.propertyId === propertyId)
+      if (!field) throw new Error(`未知属性 ${propertyId}，可用属性：${VIDEO_EDIT_SCENE_FIELDS[this.entityType].map(item => item.propertyId).join('、')}`)
+      const blocked = block !== undefined && propertyId !== `${VIDEO_EDIT_SCENE}.name`
+      // 记录类型没有时刻、或时间点记录写结束：这类记录结构上就没有这处位置可改。
+      const timing = !blocked && propertyId === `${VIDEO_EDIT_SCENE_RECORD}.start_cut` && !kind?.at ? `${source.record!.kind} 记录没有声明时刻（at），没有位置可改。`
+        : !blocked && propertyId === `${VIDEO_EDIT_SCENE_RECORD}.end_cut` && !(kind?.at && (kind.end || kind.duration)) ? `${source.record!.kind} 记录没有起止（只有开始或没有时刻），改开始写 start_cut。` : undefined
+      return { propertyId, readable: true, writable: Boolean(field.writer) && !blocked && !timing, reasons: !field.writer ? [field.descriptor.readOnlyReason!] : blocked ? [block] : timing ? [timing] : [], ...(field.writer && blocked ? { blocks: [VIDEO_EDIT_SCENE_DECLARATION_BLOCK] } : {}), requiredPermissions: ['video_edit:read'], revisions }
+    })
+  }
+  async getCollectionAvailability(parent: ApplicationRef) {
+    if (this.entityType === VIDEO_EDIT_SCENE) {
+      if (parent.kind !== 'video_edit.document') throw new Error(`${VIDEO_EDIT_SCENE} 的父实体是 video_edit.document（剪辑），收到 ${parent.kind}。`)
+      await this.open(parent.id)
+      const scenes = requireVideoEditInstance(parent.id).document.scenes ?? []
+      const availability = unrestrictedCollectionAvailability(this.entityType, parent, { video_edit: videoEditRevision() }, ['video_edit:write'])
+      if (scenes.length >= VIDEO_EDIT_SCENE_LIMITS.scenes) availability.create = { ...availability.create, available: false, reasons: [`一份剪辑最多 ${VIDEO_EDIT_SCENE_LIMITS.scenes} 份片子数据。`] }
+      if (!scenes.length) availability.remove = { ...availability.remove, available: false, reasons: ['这份剪辑还没有片子数据。'] }
+      return availability
+    }
+    if (parent.kind !== VIDEO_EDIT_SCENE) throw new Error(`${VIDEO_EDIT_SCENE_RECORD} 的父实体是 ${VIDEO_EDIT_SCENE}（片子数据），收到 ${parent.kind}。`)
+    const { source, revisions } = await this.source(parent)
+    const availability = unrestrictedCollectionAvailability(this.entityType, parent, revisions, ['video_edit:write'])
+    const { block } = source.state
+    if (block) {
+      availability.create = { ...availability.create, available: false, reasons: [block], blocks: [VIDEO_EDIT_SCENE_DECLARATION_BLOCK] }
+      availability.remove = { ...availability.remove, available: false, reasons: [block], blocks: [VIDEO_EDIT_SCENE_DECLARATION_BLOCK] }
+    } else if (!source.scene.records.length) availability.remove = { ...availability.remove, available: false, reasons: ['这份片子数据还没有记录。'] }
+    return availability
+  }
+}
+const SCENE_ENTITY_TEXT: Record<VideoEditSceneEntityType, { title: string; description: string }> = {
+  [VIDEO_EDIT_SCENE]: { title: '片子数据', description: '片子数据：代码做的片子里“画什么”的结构化记录（段落、窗口内容时间表、框、组件、镜头落点、剪切；不是镜头检测）。代码版本用 scene 参数声明记录类型与字段含义（读 schema），代码片段的 scene 参数引用它。在 video_edit.document 下新建（name、declaration_source 必填，可带初始 records）或删除；还有代码参数引用的不能删。改数据马上生效，不改代码、不提交、不升级素材，进剪辑撤销栈。逐条读改增删用 video_edit.scene_record；一次要改很多条（超过事务 32 步）就整份写 records。时刻是引用它的代码片段的素材时间（秒，0 = 素材开头），未剪切；剪切本身也是记录，记录读回的 start/end 才是剪后时刻。改完读 issues 核对。' },
+  [VIDEO_EDIT_SCENE_RECORD]: { title: '片子数据记录', description: '片子数据里的一条记录。kind 是代码声明的记录类型，values 按 schema.kinds[kind].fields 从严校验，不合法的整次不写并点名记录与字段。特殊语义只看声明的 role：cut 剪切（at 到结束这段剪掉，之后的记录前移；enabled 为 false 时不生效）、segment 段落（挂在它下面的记录随它一起被剪掉）、shot 窗口内容（同一父记录下同类的几项组成取帧时间表）；没写 role 的类型没有特殊语义。直接改 values 时改到的字段自动记进 tuned（手调过，重新生成会保留）；从 tuned 去掉就是恢复自动。start/end 是解析后的剪后时刻（只读），按剪后时刻改位置写 start_cut/end_cut；dropped 表示被剪掉，issues 是这条记录的问题。' },
+}
+function createVideoEditSceneRegistrations(): ApplicationEntityRegistration[] {
+  return VIDEO_EDIT_SCENE_TYPES.map(entityType => ({
+    entity: { id: entityType, domain: 'video_edit', version: 1, ...SCENE_ENTITY_TEXT[entityType], refKind: entityType, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: entityType === VIDEO_EDIT_SCENE ? ['video_edit.document'] : [VIDEO_EDIT_SCENE], revisionScopes: ['video_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: videoEditSchemaRef('entity', entityType),
+      collectionWrite: entityType === VIDEO_EDIT_SCENE ? { creatable: true, removable: true, requiredPropertyIds: VIDEO_EDIT_SCENE_REQUIRED, maxItemsPerChange: VIDEO_EDIT_SCENE_LIMITS.scenes } : { creatable: true, removable: true, requiredPropertyIds: VIDEO_EDIT_SCENE_RECORD_REQUIRED, maxItemsPerChange: 128 } },
+    properties: fieldDescriptors(VIDEO_EDIT_SCENE_FIELDS[entityType]), provider: new VideoEditSceneProvider(entityType), schemaDocuments: videoEditSceneSchemaDocuments(entityType),
+  }))
+}
 const titles: Record<VideoEditEntityType, string> = { 'video_edit.tracker': '片段跟踪器', 'video_edit.document': '剪辑', 'video_edit.sequence': '剪辑序列', 'video_edit.bin': '素材箱', 'video_edit.item': '素材项', 'video_edit.track': '序列轨道', 'video_edit.clip': '剪辑片段', 'video_edit.annotation': '画面标注', 'video_edit.media': '原路径素材', 'video_edit.source': '源素材预览', 'video_edit.code_material': '原生代码素材', 'video_edit.code_version': '固定源码版本', 'video_edit.marker': '时间标记', 'video_edit.caption': '导出字幕', 'video_edit.graphic_object': '片段图形对象', 'video_edit.effect': '片段效果', 'video_edit.transition': '序列转场', 'video_edit.builtin_effect': '内置效果与过渡目录' }
 const sequenceChildren = ['video_edit.clip', 'video_edit.annotation', 'video_edit.track', 'video_edit.marker', 'video_edit.caption', 'video_edit.transition']
 const required: Partial<Record<VideoEditEntityType, string[]>> = {
@@ -249,5 +326,5 @@ export function createVideoEditRegistrations(): ApplicationEntityRegistration[] 
       ...(entityType === 'video_edit.builtin_effect' ? { writeExclusion: { reason: VIDEO_EDIT_BUILTIN_CATALOG_READ_ONLY } } : {}),
       ...(required[entityType] ? { collectionWrite: { creatable: true, removable: entityType !== 'video_edit.code_version', requiredPropertyIds: required[entityType]!, maxItemsPerChange: 32 } } : {}),
     }, properties: fieldDescriptors(VIDEO_EDIT_FIELDS[entityType]), provider: new VideoEditProvider(entityType), schemaDocuments: videoEditSchemaDocuments(entityType),
-  })), createVideoEditExplanationRegistration(), createCodeComponentRegistration(), ...createCodeProjectRegistrations(), createVideoEditTextPresetRegistration(), createVideoEditEffectPresetRegistration(), createVideoEditPresetRegistration(), createVideoEditSubtitlePresetRegistration(), createVideoEditExportPresetRegistration(), createFontRegistration(), ...createVideoEditStyleRegistrations()]
+  })), createVideoEditExplanationRegistration(), createCodeComponentRegistration(), ...createCodeProjectRegistrations(), createVideoEditTextPresetRegistration(), createVideoEditEffectPresetRegistration(), createVideoEditPresetRegistration(), createVideoEditSubtitlePresetRegistration(), createVideoEditExportPresetRegistration(), createFontRegistration(), ...createVideoEditStyleRegistrations(), ...createVideoEditSceneRegistrations()]
 }
