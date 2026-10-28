@@ -15,7 +15,7 @@ import { videoEditCodeElementFrames, videoEditProgramClipAt } from './videoEditC
 const font = vi.hoisted(() => ({ generation: 0, calls: 0 }))
 vi.mock('../videoEditGlyphMetrics', async () => {
   const { layoutCodeText } = await import('@/core/videoEdit/codeMaterial/textLayout')
-  return { measureCodeText: (request: Parameters<typeof layoutCodeText>[0]) => { font.calls++; return { ...layoutCodeText(request, text => text.length * request.fontSize), fontGeneration: font.generation } } }
+  return { measureCodeText: (request: Parameters<typeof layoutCodeText>[0]) => { font.calls++; return { ...layoutCodeText(request, text => text.length * request.fontSize, { alphabeticPlacement: 'em' }), fontGeneration: font.generation } } }
 })
 afterEach(async () => { await closeAllVideoEdits(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 

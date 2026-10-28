@@ -19,7 +19,7 @@ vi.mock('../engine/videoEditCodeCompiler', async () => {
 })
 vi.mock('../videoEditGlyphMetrics', async () => {
   const { layoutCodeText } = await import('@/core/videoEdit/codeMaterial/textLayout')
-  return { measureCodeText: (request: Parameters<typeof layoutCodeText>[0]) => ({ ...layoutCodeText(request, text => text.length * request.fontSize), fontGeneration: 0 }) }
+  return { measureCodeText: (request: Parameters<typeof layoutCodeText>[0]) => ({ ...layoutCodeText(request, text => text.length * request.fontSize, { alphabeticPlacement: 'em' }), fontGeneration: 0 }) }
 })
 afterEach(async () => { await closeAllVideoEdits(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 

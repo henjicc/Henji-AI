@@ -72,3 +72,13 @@ it('v3缺失字体显式标记并改用sans-serif，坏测量拒绝', () => {
   vi.stubGlobal('OffscreenCanvas', class { getContext() { return { font: '', measureText() { return { width: Number.NaN } } } } })
   expect(() => measureCodeText(request)).toThrow('度量无效')
 })
+it('字体上下界决定作者基线，缓存失效后重新采用共享计划的度量', () => {
+  let descent = 4
+  vi.stubGlobal('OffscreenCanvas', class { getContext() { return { font: '', measureText(text: string) { return { width: text.length * 10, fontBoundingBoxAscent: 18, fontBoundingBoxDescent: descent } } } } })
+  const request = { text: 'AB', fontFamily: 'sans-serif', fontWeight: 450.5, fontStyle: 'normal', fontSize: 20, letterSpacing: 0, lineHeight: 1.2, maxWidth: 0, wrap: false, maxLines: 0 }
+  expect(measureCodeText(request).baselineOffset).toBe(19)
+  descent = 8
+  expect(measureCodeText(request).baselineOffset).toBe(19)
+  invalidateCodeTextMetrics()
+  expect(measureCodeText(request).baselineOffset).toBe(17)
+})
