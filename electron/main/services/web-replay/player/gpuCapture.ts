@@ -50,6 +50,8 @@ export class GpuFrameCapture implements FrameSource {
   private width = 0
   private height = 0
   private disposed = false
+  /** 画面不带共享纹理（这台机器的共享纹理接口不可用）：GPU 路线走不通，取帧时交给 CPU 采集重来。 */
+  private failure: GpuCaptureError | null = null
   received = 0
   /** Pictures read that turned out to show an earlier frame; tiles copied back. */
   stale = 0
@@ -88,7 +90,11 @@ export class GpuFrameCapture implements FrameSource {
   attach(contents: WebContents): void {
     contents.on('paint', event => {
       const texture = event.texture
-      if (!texture) return
+      if (!texture) {
+        this.failure ??= new GpuCaptureError('重演窗口的画面不带共享纹理')
+        this.wake?.()
+        return
+      }
       if (this.disposed) { texture.release(); return }
       try {
         this.received += 1
@@ -127,6 +133,7 @@ export class GpuFrameCapture implements FrameSource {
   async take(token: number, timeoutMs: number): Promise<TakenFrame | null> {
     const deadline = Date.now() + timeoutMs
     for (;;) {
+      if (this.failure) throw this.failure
       const entry = this.textures.pop()
       if (entry) {
         for (const older of this.textures.splice(0)) older.release()
@@ -146,6 +153,7 @@ export class GpuFrameCapture implements FrameSource {
   }
 
   async takeLatest(): Promise<TakenFrame | null> {
+    if (this.failure) throw this.failure
     const entry = this.textures.pop()
     if (!entry) return null
     for (const older of this.textures.splice(0)) older.release()
