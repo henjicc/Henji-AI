@@ -32,6 +32,8 @@ import { VirtuosoMockContext } from 'react-virtuoso'
 import { createVideoEditCaption } from '../application/videoEditTimedContent'
 import { selectedVideoEditSubtitleId } from '../application/videoEditSubtitleSelection'
 import { VideoEditTimedContentPanel } from '../panels/VideoEditTimedContentPanel'
+import { VideoEditTextOverlay } from '../panels/VideoEditTextOverlay'
+import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 const source = "export default {name:\"代码\",kind:\"generator\",mode:\"dynamic\",width:64,height:64,durationSeconds:30,params:[],draw(ctx,t,p){ctx.fillRect(p.amount ?? 0,0,100,100);}}"
@@ -544,6 +546,29 @@ it('空白点击与静止片段点击不编辑或定位，标尺实际定位更�
   fireEvent.pointerDown(ruler, event(header + 40, 14)); fireEvent.pointerMove(host, event(header + 60, 14))
   expect(owner.scrubbing).toBe(true)
   fireEvent.pointerUp(host, event(header + 60, 14)); expect(owner.scrubbing).toBe(false)
+})
+
+it('拖动播放头中内容被改动或缩放变化，手势失效后 scrubbing 仍回到 false，节目覆盖层恢复', () => {
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ font: '', measureText: (text: string) => ({ width: [...text].length * 20 }) } as unknown as CanvasRenderingContext2D)
+  const caption = createVideoEditCaption(owner.document.id, owner.activeSequenceId, { start: 0, duration: 600, text: '字幕', style: videoEditSubtitleStyleSchema.parse({}) })
+  const view = render(<><View /><VideoEditTextOverlay instance={owner} onError={onError} /></>)
+  const host = view.getByRole('region', { name: '时间线编辑区域' }); const ruler = view.getByRole('slider', { name: '剪辑时间定位' })
+  const shown = (): boolean => Boolean(view.container.querySelector(`[data-video-edit-caption="${caption}"]`))
+  expect(shown()).toBe(true)
+  fireEvent.pointerDown(ruler, event(header + 40, 14)); fireEvent.pointerMove(host, event(header + 60, 14))
+  expect(owner.scrubbing).toBe(true); expect(shown()).toBe(false)
+  act(() => { editVideoProject(owner.document.id, document => { document.items[0].name = '助手改名'; return document }) })
+  fireEvent.pointerUp(host, event(header + 70, 14))
+  expect(owner.scrubbing).toBe(false); expect(shown()).toBe(true)
+  fireEvent.pointerDown(ruler, event(header + 40, 14)); fireEvent.pointerMove(host, event(header + 60, 14))
+  expect(owner.scrubbing).toBe(true)
+  act(() => { setVideoEditTimelineView(owner.document.id, { zoom: owner.zoom * 2 }) })
+  fireEvent.pointerUp(host, event(header + 70, 14))
+  expect(owner.scrubbing).toBe(false); expect(shown()).toBe(true)
+  fireEvent.pointerDown(ruler, event(header + 40, 14)); fireEvent.pointerMove(host, event(header + 60, 14))
+  expect(owner.scrubbing).toBe(true)
+  view.unmount(); expect(owner.scrubbing).toBe(false)
+  expect(onError).not.toHaveBeenCalled()
 })
 
 it('边缘持续滚动使用同一命中坐标，取消释放动画资源且无领域草稿', () => {

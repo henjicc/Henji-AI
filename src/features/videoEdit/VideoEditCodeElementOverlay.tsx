@@ -1,26 +1,29 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { codeElementFramePolygon, codeElementLabel } from '@/core/videoEdit/codeElementSelection'
 import { hitVideoEditCodeElement, selectedVideoEditCodeElement, selectVideoEditCodeElement, videoEditCodeElementFrames, videoEditProgramClipAt } from './application/videoEditCodeElements'
-import { getActiveVideoEditSequence, setVideoEditView, subscribeVideoEditView, videoEditViewRevision, subscribeVideoEditDomain, videoEditDomainRevision, type VideoEditInstance } from './application/videoEditService'
+import { getActiveVideoEditSequence, setVideoEditView, videoEditRevision, subscribeVideoEditDomain, videoEditDomainRevision, type VideoEditInstance } from './application/videoEditService'
+import { sameVideoEditViewFields, useVideoEditViewSelector } from './application/useVideoEditViewSelector'
 import { getVideoEditMaskEditing, subscribeVideoEditMaskEditing, videoEditMaskEditingRevision } from './application/videoEditMaskEditing'
 import { getVideoEditTrackingEditing, subscribeVideoEditTrackingEditing, videoEditTrackingEditingRevision } from './application/videoEditTrackingEditing'
 import { VideoEditCodeElementEditOverlay } from './VideoEditCodeElementEditOverlay'
 
 export function VideoEditCodeElementOverlay({ instance, enabled, onError }: { instance: VideoEditInstance; enabled: boolean; onError: (error: unknown) => void }): React.ReactElement {
-  useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
+  // 播放和拖动播放头时不建元素命中索引、不放编辑层，也就不必逐帧重绘；停下或松手时按最终帧补一次。
+  useVideoEditViewSelector(() => [videoEditRevision(), instance.playing || instance.scrubbing ? null : instance.frame, instance.playing, Boolean(instance.scrubbing)], sameVideoEditViewFields)
   useSyncExternalStore(subscribeVideoEditDomain, videoEditDomainRevision)
   useSyncExternalStore(subscribeVideoEditMaskEditing, videoEditMaskEditingRevision)
   useSyncExternalStore(subscribeVideoEditTrackingEditing, videoEditTrackingEditingRevision)
   const sequence = getActiveVideoEditSequence(instance)
   const blocked = [getVideoEditMaskEditing(), getVideoEditTrackingEditing()].some(target => target?.projectId === instance.document.id && target.sequenceId === sequence.id && sequence.clips.some(clip => clip.id === target.clipId && instance.frame >= clip.start && instance.frame < clip.start + clip.duration))
   const available = enabled && !blocked
+  const moving = instance.playing || Boolean(instance.scrubbing)
   const root = useRef<HTMLDivElement>(null)
   const [hover, setHover] = useState<{ clipId: string; elementId: string } | null>(null)
   const last = useRef<{ x: number; y: number; frame: number; sequenceId: string; document: object }>()
   let selected: ReturnType<typeof selectedVideoEditCodeElement>
   let entries: ReturnType<typeof videoEditCodeElementFrames> = new Map()
   let failure: unknown
-  try { if (available && !instance.playing && (hover || instance.selectedCodeElement)) { entries = videoEditCodeElementFrames(instance); selected = selectedVideoEditCodeElement(instance) } } catch (error) { failure = error }
+  try { if (available && !moving && (hover || instance.selectedCodeElement)) { entries = videoEditCodeElementFrames(instance); selected = selectedVideoEditCodeElement(instance) } } catch (error) { failure = error }
   const errorRef = useRef(onError); errorRef.current = onError
   useEffect(() => { if (failure) errorRef.current(failure) }, [failure])
   useEffect(() => {
@@ -62,7 +65,7 @@ export function VideoEditCodeElementOverlay({ instance, enabled, onError }: { in
   const entry = hover ? entries.get(hover.clipId) : undefined; const hovered = entry?.index.byId.get(hover?.elementId ?? '')
   const shapes = entry && hovered && hovered !== selected?.element ? [{ entry, element: hovered }] : []
   return <div ref={root} aria-label="代码元素选择层" className="pointer-events-none absolute inset-0">
-    {available && selected && !instance.playing && <VideoEditCodeElementEditOverlay key={`${selected.entry.clip.id}:${selected.element.elementId}`} instance={instance} selected={selected} onError={onError} />}
+    {available && selected && !moving && <VideoEditCodeElementEditOverlay key={`${selected.entry.clip.id}:${selected.element.elementId}`} instance={instance} selected={selected} onError={onError} />}
     {/* icon-token-allow: 元素选框是作者画布几何经片段变换后的轮廓，不是界面图标。 */}
     <svg viewBox="0 0 1000 1000" preserveAspectRatio="none" className="absolute inset-0 h-full w-full" fill="none" aria-hidden>
       {shapes.map(shape => <polygon key={`${shape.entry.clip.id}:${shape.element.elementId}`} data-code-element-hover points={codeElementFramePolygon(shape.element, shape.entry.clip, shape.entry.picture, sequence).map(point => `${point.x * 1000},${point.y * 1000}`).join(' ')} className="stroke-accent opacity-40" strokeWidth={2} vectorEffect="non-scaling-stroke" />)}

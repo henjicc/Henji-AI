@@ -10,9 +10,10 @@ import { updateVideoEditTimedContent } from '../application/videoEditTimedConten
 import { ownerWindowOf } from '@/utils/crossRealmDom'
 import { addVideoEditProgramText } from '../application/videoEditProgramText'
 import { updateVideoEditClipProperties } from '../application/videoEditClipProperties'
-import { beginVideoEditGesture, finishVideoEditGesture, getActiveVideoEditSequence, setVideoEditView, setVideoEditTimelineView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditDomainRevision, videoEditViewRevision, videoEditProgramCommandIdentity, type VideoEditGesture, type VideoEditInstance } from '../application/videoEditService'
+import { beginVideoEditGesture, finishVideoEditGesture, getActiveVideoEditSequence, setVideoEditView, setVideoEditTimelineView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditDomainRevision, videoEditProgramCommandIdentity, videoEditRevision, type VideoEditGesture, type VideoEditInstance } from '../application/videoEditService'
 import { getVideoEditMaskEditing, setVideoEditMaskEditing, subscribeVideoEditMaskEditing, videoEditMaskEditingRevision } from '../application/videoEditMaskEditing'
 import { getVideoEditTrackingEditing, setVideoEditTrackingEditing, subscribeVideoEditTrackingEditing, videoEditTrackingEditingRevision } from '../application/videoEditTrackingEditing'
+import { sameVideoEditViewFields, useVideoEditViewSelector } from '../application/useVideoEditViewSelector'
 
 interface TextSession { caption?: Pick<CaptionTextTarget, 'captionId' | 'field'>; clipId: string; sequenceId: string; frame: number; tool: string; command: object; gesture: VideoEditGesture }
 interface TextDrag { pointerId: number; start: { x: number; y: number }; clip?: VideoEditClip; corner?: number; layout?: VideoEditTextLayout; session?: TextSession; sequenceId: string; frame: number; document: object }
@@ -22,7 +23,9 @@ export function VideoEditTextOverlay({ instance, onError, enabled = true }: { in
   const { t } = useTranslation('ui')
   useSyncExternalStore(subscribeVideoEditSubtitleSelection, videoEditSubtitleSelectionRevision)
   useSyncExternalStore(subscribeVideoEditDomain, videoEditDomainRevision)
-  useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
+  // 拖动播放头时不逐帧排版：拖动中不放命中目标，松手（scrubbing 变回 false）时按最终帧补一次。
+  // 播放中仍逐帧计算字幕命中，以便播放中点选字幕。
+  useVideoEditViewSelector(() => [videoEditRevision(), instance.scrubbing ? null : instance.frame, instance.playing, Boolean(instance.scrubbing)], sameVideoEditViewFields)
   useSyncExternalStore(subscribeVideoEditMaskEditing, videoEditMaskEditingRevision)
   useSyncExternalStore(subscribeVideoEditTrackingEditing, videoEditTrackingEditingRevision)
   const root = useRef<HTMLDivElement>(null); const editor = useRef<HTMLDivElement>(null)
@@ -141,8 +144,9 @@ export function VideoEditTextOverlay({ instance, onError, enabled = true }: { in
     } catch (error) { onError(error) }
   }
   if (!available) return null
+  const scrubbing = Boolean(instance.scrubbing)
   const visibleTracks = videoEditVisibleTracks(sequence)
-  const clips = sequence.clips.filter(clip => !instance.playing && clip.kind === 'text' && instance.frame >= clip.start && instance.frame < clip.start + clip.duration && visibleTracks.has(clip.track) && sequence.tracks.some(track => track.index === clip.track && !track.locked)).sort((a, b) => a.track - b.track).map(clip => evaluateVideoEditClip(clip, instance.frame))
+  const clips = sequence.clips.filter(clip => !instance.playing && !scrubbing && clip.kind === 'text' && instance.frame >= clip.start && instance.frame < clip.start + clip.duration && visibleTracks.has(clip.track) && sequence.tracks.some(track => track.index === clip.track && !track.locked)).sort((a, b) => a.track - b.track).map(clip => evaluateVideoEditClip(clip, instance.frame))
   const activeIds = new Set(clips.map(clip => clip.id))
   for (const id of layoutCache.current.keys()) if (!activeIds.has(id)) layoutCache.current.delete(id)
   let context: CanvasRenderingContext2D | null | undefined
@@ -151,7 +155,7 @@ export function VideoEditTextOverlay({ instance, onError, enabled = true }: { in
     if (!context) return 0
     context.font = font; return context.measureText(text).width
   }
-  const captions = videoEditCaptionTextTargets(sequence, instance.frame, measure)
+  const captions = scrubbing ? [] : videoEditCaptionTextTargets(sequence, instance.frame, measure)
   const targets = [...clips.map(clip => ({ clip, caption: undefined as CaptionTextTarget | undefined })), ...captions.map(caption => ({ clip: caption.clip, caption }))]
   return <div ref={root} className={`absolute inset-0 ${instance.tool === 'type' || editingId ? 'pointer-events-auto cursor-text' : 'pointer-events-none'}`} style={{ containerType: 'size' }} aria-label="节目文字工具" data-video-edit-text-overlay onPointerDown={event => down(event)} onPointerMove={move} onPointerUp={up} onPointerCancel={cancelDrag} onLostPointerCapture={cancelDrag}>
     {targets.map(({ clip, caption }) => {

@@ -3,7 +3,8 @@ import { useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { UiInput } from '@/components/ui'
 import { parseVideoEditSecondsInput, parseVideoEditTimecodeInput, videoEditFrameCount } from '@/core/videoEdit/timecode'
 import { videoEditDuration } from '@/core/videoEdit/document'
-import { getActiveVideoEditSequence, setVideoEditView, subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from '../application/videoEditService'
+import { getActiveVideoEditSequence, setVideoEditView, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
+import { sameVideoEditViewFields, useVideoEditViewSelector } from '../application/useVideoEditViewSelector'
 import { TIMELINE_HEADER_WIDTH, timelineTimecode } from './timelineGeometry'
 
 /** 时间码的显示方式（Premiere：Ctrl+点击时间码在“时间码 / 帧号”之间切换），节目监视器与时间线共用，本机记住。 */
@@ -41,6 +42,12 @@ export function VideoEditTimecodeReadout({ label, frame, fps, maxFrame, onSeek, 
   const drag = useRef<{ x: number; frame: number; moved: boolean; pointerId: number } | null>(null)
   const text = display === 'frames' ? videoEditFrameCount(frame) : `${timelineTimecode(frame, fps)}${Number.isInteger(fps) ? '' : ' NDF'}`
   const seek = (target: number, scrubbing = false): void => { onSeek(Math.max(0, Math.min(maxFrame, Math.round(target))), scrubbing) }
+  /** 拖动的唯一结束出口：松手、取消与丢失指针捕获都在当前帧落定并结束 scrubbing。 */
+  const endDrag = (): { moved: boolean; pointerId: number } | null => {
+    const state = drag.current; drag.current = null
+    if (state?.moved) seek(frame)
+    return state
+  }
   const commit = (value: string): void => {
     const seconds = parseVideoEditSecondsInput(value)
     if (seconds !== null) {
@@ -74,12 +81,11 @@ export function VideoEditTimecodeReadout({ label, frame, fps, maxFrame, onSeek, 
       seek(state.frame + dx * (event.shiftKey ? 10 : 1), true)
     }}
     onPointerUp={event => {
-      const state = drag.current; drag.current = null
-      if (!state || state.pointerId !== event.pointerId) return
-      if (state.moved) seek(frame)
-      else setEditing(display === 'frames' ? videoEditFrameCount(frame) : timelineTimecode(frame, fps))
+      const state = endDrag()
+      if (state && state.pointerId === event.pointerId && !state.moved) setEditing(display === 'frames' ? videoEditFrameCount(frame) : timelineTimecode(frame, fps))
     }}
-    onPointerCancel={() => { if (drag.current?.moved) seek(frame); drag.current = null }}
+    onPointerCancel={endDrag}
+    onLostPointerCapture={endDrag}
     onKeyDown={event => {
       if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); setEditing(display === 'frames' ? videoEditFrameCount(frame) : timelineTimecode(frame, fps)) }
     }}>{text}</span>
@@ -87,7 +93,7 @@ export function VideoEditTimecodeReadout({ label, frame, fps, maxFrame, onSeek, 
 
 /** 节目监视器与时间线的时间码：序列播放头 */
 export function VideoEditTimecode({ instance, label, className = '' }: { instance: VideoEditInstance; label: string; className?: string }): React.ReactElement {
-  useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
+  useVideoEditViewSelector(() => [videoEditRevision(), instance.frame], sameVideoEditViewFields)
   const sequence = getActiveVideoEditSequence(instance)
   return <VideoEditTimecodeReadout label={label} frame={instance.frame} fps={sequence.fps} maxFrame={Math.floor(sequence.fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)} className={className}
     onSeek={(frame, scrubbing) => setVideoEditView(instance.document.id, { frame, playing: false, scrubbing })} />
@@ -97,7 +103,8 @@ export function VideoEditTimecode({ instance, label, className = '' }: { instanc
  * 入出点持续时间（PR 节目监视器右侧的读数）：设了序列入点或出点时显示入点到出点的时长，只设一端时算到序列开头或结尾。
  */
 export function VideoEditInOutDuration({ instance, className = '' }: { instance: VideoEditInstance; className?: string }): React.ReactElement | null {
-  useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
+  // 入出点和序列时长都随内容发布变化，不看播放头。
+  useVideoEditViewSelector(videoEditRevision)
   if (instance.inFrame === null && instance.outFrame === null) return null
   const sequence = getActiveVideoEditSequence(instance)
   const frames = Math.max(0, (instance.outFrame ?? videoEditDuration(sequence)) - (instance.inFrame ?? 0))
@@ -106,7 +113,7 @@ export function VideoEditInOutDuration({ instance, className = '' }: { instance:
 }
 /** 播放头：强调色竖线（设计稿 VideoEdit；强调色只用于主动作、焦点、播放头与选中指示）。 */
 export function VideoEditTimelinePlayhead({ instance, pixels }: { instance: VideoEditInstance; pixels: number }): React.ReactElement {
-  useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
+  useVideoEditViewSelector(() => instance.frame)
   return <div className="pointer-events-none absolute bottom-0 top-0 z-raised w-px bg-accent-ring" style={{ left: TIMELINE_HEADER_WIDTH + instance.frame * pixels }} data-video-edit-playhead />
 }
 /** 播放头在标尺上的“头”（Premiere 的蓝色指示器）：标尺压在轨道之上，竖线画不进标尺，头放在标尺里，下端接竖线。 */
@@ -114,13 +121,13 @@ const PLAYHEAD_HEAD_SHAPE = { clipPath: 'polygon(0 0, 100% 0, 100% 55%, 50% 100%
 /** 头宽 12（w-3）。轨道里的竖线从帧位置起向右 1 像素，头的中线要对准这 1 像素的中间，不能对准帧位置，否则高分屏上两段竖线错开一个物理像素，看着像断开。 */
 const PLAYHEAD_HEAD_OFFSET = 6 - 0.5
 export function VideoEditTimelinePlayheadHead({ instance, pixels }: { instance: VideoEditInstance; pixels: number }): React.ReactElement {
-  useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
+  useVideoEditViewSelector(() => instance.frame)
   return <div aria-hidden="true" data-video-edit-playhead-head className="pointer-events-none absolute bottom-0 top-0 z-raised flex w-3 flex-col items-center" style={{ left: instance.frame * pixels - PLAYHEAD_HEAD_OFFSET }}>
     <div data-video-edit-playhead-grip className="pointer-events-auto mt-auto h-3 w-3 cursor-ew-resize bg-accent-ring" style={PLAYHEAD_HEAD_SHAPE} />
     <div className="h-1 w-px bg-accent-ring" />
   </div>
 }
 export function VideoEditTimelinePosition({ instance, children }: { instance: VideoEditInstance; children: ReactNode }): React.ReactElement {
-  useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
+  useVideoEditViewSelector(() => [videoEditRevision(), instance.frame], sameVideoEditViewFields)
   return <div className="relative min-w-0 flex-1" role="slider" tabIndex={0} aria-label="剪辑时间定位" aria-valuemin={0} aria-valuemax={Math.floor(getActiveVideoEditSequence(instance).fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)} aria-valuenow={instance.frame}>{children}</div>
 }

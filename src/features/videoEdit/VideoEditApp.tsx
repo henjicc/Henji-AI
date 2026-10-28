@@ -17,7 +17,7 @@ import { ChevronDown, ChevronLeft, Download, FolderInput, FolderOpen, Keyboard, 
 import { useTranslation } from 'react-i18next'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import type { DockviewApi } from 'dockview-react'
-import { activeVideoEditInstance, collectVideoEditMedia, createVideoEditProject, findActiveVideoEditSequence, leaveVideoEditProject, listVideoEditInstances, openVideoEditProject, openVideoEditProjectFolder, subscribeVideoEdit, subscribeVideoEditView, videoEditViewRevision, videoEditRevision, focusVideoEdit, focusVideoEditPanel, videoEditExportRange, type VideoEditInstance } from './application/videoEditService'
+import { activeVideoEditInstance, collectVideoEditMedia, createVideoEditProject, findActiveVideoEditSequence, leaveVideoEditProject, listVideoEditInstances, openVideoEditProject, openVideoEditProjectFolder, subscribeVideoEdit, videoEditRevision, focusVideoEdit, focusVideoEditPanel, videoEditExportRange, type VideoEditInstance } from './application/videoEditService'
 import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { cancelVideoEditExport, videoEditExportTask } from './application/videoEditExport'
 import { VideoEditDock } from './layout/VideoEditDock'
@@ -64,8 +64,9 @@ function toggleMaximizedGroup(api: DockviewApi | null, hovered: Element | null):
  * 右端撤销/重做、布局预设（面板开关在标题栏“窗口”菜单），唯一一条分隔线后是成片收录与唯一主动作“导出”。
  * 拆分、删除在“剪辑”“编辑”菜单与快捷键里。
  */
-function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEditInstance; api: DockviewApi | null; run: (operation: () => unknown | Promise<unknown>) => void; onNotice: (message: string) => void }): React.ReactElement {
-  useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
+export function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEditInstance; api: DockviewApi | null; run: (operation: () => unknown | Promise<unknown>) => void; onNotice: (message: string) => void }): React.ReactElement {
+  // 命令带上的命令状态都随内容、选择与工具的发布变化，不看播放头；只订阅这类发布，拖动播放头时不重绘、不重新捕获命令上下文。
+  useSyncExternalStore(subscribeVideoEdit, videoEditRevision)
   useSyncExternalStore(subscribeVideoEditBeats, videoEditBeatRevision)
   const { t } = useTranslation('ui')
   const sequence = findActiveVideoEditSequence(instance); const projectId = instance.document.id

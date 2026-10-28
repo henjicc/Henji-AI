@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import React from 'react'
-import { cleanup, render } from '@testing-library/react'
-import { afterEach, expect, it } from 'vitest'
+import { cleanup, fireEvent, render } from '@testing-library/react'
+import { afterEach, expect, it, vi } from 'vitest'
 import type { VideoEditInstance } from '../application/videoEditService'
 import { TIMELINE_HEADER_WIDTH } from './timelineGeometry'
-import { VideoEditTimelinePlayhead, VideoEditTimelinePlayheadHead } from './VideoEditTimelineTransport'
+import { VideoEditTimecodeReadout, VideoEditTimelinePlayhead, VideoEditTimelinePlayheadHead } from './VideoEditTimelineTransport'
 
 afterEach(cleanup)
 
@@ -23,4 +23,17 @@ it('标尺里播放头的头部与轨道里的竖线对齐，两段竖线不错�
   expect(head.className).toContain('w-3')
   expect(line.className).toContain('w-px')
   expect(headCenter).toBeCloseTo(lineCenter, 6)
+})
+
+it('时间码拖动丢失指针捕获时也在当前帧落定并结束拖动', () => {
+  Element.prototype.setPointerCapture = () => undefined
+  const onSeek = vi.fn()
+  const view = render(<VideoEditTimecodeReadout label="当前时间码" frame={10} fps={30} maxFrame={1000} onSeek={onSeek} />)
+  const readout = view.getByRole('spinbutton', { name: '当前时间码' })
+  fireEvent.pointerDown(readout, { button: 0, clientX: 0, pointerId: 1 }); fireEvent.pointerMove(readout, { clientX: 20, pointerId: 1 })
+  expect(onSeek).toHaveBeenLastCalledWith(30, true)
+  fireEvent.lostPointerCapture(readout, { pointerId: 1 })
+  expect(onSeek).toHaveBeenLastCalledWith(10, false)
+  fireEvent.pointerUp(readout, { pointerId: 1 })
+  expect(onSeek).toHaveBeenCalledTimes(2); expect(view.queryByRole('textbox')).toBeNull()
 })

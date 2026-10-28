@@ -10,7 +10,7 @@ import { expandVideoEditSelection, selectVideoEditRegion, selectVideoEditTrackFr
 import { videoEditMoveTrackMap } from '@/core/videoEdit/timelineEdits'
 import { addVideoEditTextClipAt, beginVideoEditTimelineDrag, finishVideoEditTimelineDrag, finishVideoEditTimelineRearrange, finishVideoEditTimelineTrim, previewVideoEditTimelineDrag, previewVideoEditTimelineRearrange, previewVideoEditTimelineTrim, updateVideoEditTrack, type VideoEditTimelineAdjustment, type VideoEditTimelineDrag, type VideoEditTimelineRearrange, type VideoEditTimelineTrimDrag } from '../application/videoEditTimeline'
 import { captureVideoEditCommandContext, executeVideoEditCommand } from '../application/videoEditCommands'
-import { focusVideoEditPanel, requireVideoEditInstance, setVideoEditTimelineView, setVideoEditView, type VideoEditInstance } from '../application/videoEditService'
+import { focusVideoEditPanel, listVideoEditInstances, requireVideoEditInstance, setVideoEditTimelineView, setVideoEditView, type VideoEditInstance } from '../application/videoEditService'
 import { videoEditTimelineViewport } from '../application/videoEditTimelineViewport'
 import { isTimelineTrimTool, timelineTrimEdge, timelineTrimNeedsEdge, timelineTrimRequest, timelineTrimSnapExclusions, type TimelineTrimTool } from './timelineTrimGesture'
 import { elementOfEventTarget, isEventInsideCurrentTarget, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
@@ -99,10 +99,15 @@ export function useTimelinePointer(options: Options) {
       return isVideoEditContentCurrent(gesture.owner, gesture.contentVersion) && gesture.owner.activeSequenceId === gesture.sequenceId && gesture.owner.tool === gesture.tool && gesture.owner.zoom === gesture.zoom && current.current.pixels === gesture.pixels && (gesture.kind !== 'clip' || JSON.stringify(gesture.owner.selectedClipIds) === JSON.stringify(gesture.ids))
     } catch { return false }
   }
+  /**
+   * 手势结束的唯一出口：松手、取消、失焦与卸载都经过这里。拖动播放头时即使手势已失效（内容被改、缩放或工具变了）
+   * 也要把 scrubbing 置回，否则预渲染、画面拖动模式和节目覆盖层会一直按“拖动中”处理。
+   */
   const detach = (): PointerGesture | undefined => {
     const previous = pointer.current; pointer.current = undefined
     animation.current?.cancel(); boxFrame.current?.cancel()
     if (previous && viewport.current?.hasPointerCapture?.(previous.pointerId)) viewport.current.releasePointerCapture(previous.pointerId)
+    if (previous?.kind === 'seek' && previous.owner.scrubbing && listVideoEditInstances().includes(previous.owner)) setVideoEditView(previous.owner.document.id, { scrubbing: false })
     return previous
   }
   const clear = (): void => { setPreview(null); setBox(null); setBoxSelection(null); setResized(null); setFailure(null); clearTimelineSnap() }
@@ -124,7 +129,6 @@ export function useTimelinePointer(options: Options) {
     const previous = detach()
     if (previous?.kind === 'clip' || previous?.kind === 'trim') finishVideoEditTimelineDrag(previous.handle)
     if (previous?.kind === 'transition' || previous?.kind === 'fade') finishVideoEditTimelineHandleDrag(previous.drag, false)
-    if (previous?.kind === 'seek' && valid(previous)) setVideoEditView(previous.owner.document.id, { scrubbing: false })
     clear()
   }
   /** 拖动中的边缘吸附（吸附开着时）：一起移动的边缘里最近的那个吸到播放头、编辑点与标记（8 像素内），返回要补的帧数并显示提示线。 */
@@ -392,7 +396,6 @@ export function useTimelinePointer(options: Options) {
         else control?.zoomAt(Math.max(0, at.x / pixels), previous.zoomOut ? 0.5 : 2)
       } else if (previous.kind === 'box') setVideoEditTimelineView(instance.document.id, { selectedClipIds: boxHits(previous) })
       else if (previous.kind === 'height' && previous.next !== previous.height) updateVideoEditTrack(instance.document.id, sequence.id, previous.trackId, { height: previous.next })
-      else if (previous.kind === 'seek') setVideoEditView(instance.document.id, { scrubbing: false })
       else if (previous.kind === 'razor') {
         const context = captureVideoEditCommandContext(instance.document.id, 'timeline', { clipIds: [previous.clipId], linked: previous.linked, frame: Math.max(0, Math.round(point(previous.client).x / pixels)) })
         void executeVideoEditCommand(context, 'split').catch(onError)
@@ -415,7 +418,7 @@ export function useTimelinePointer(options: Options) {
     const blur = (): void => cancel()
     const hidden = (): void => { if (ownerDocument.hidden) cancel() }
     ownerWindow.addEventListener('blur', blur); ownerDocument.addEventListener('visibilitychange', hidden)
-    return () => { const previous = detach(); if (previous?.kind === 'clip' || previous?.kind === 'trim') finishVideoEditTimelineDrag(previous.handle); if (previous?.kind === 'transition' || previous?.kind === 'fade') finishVideoEditTimelineHandleDrag(previous.drag, false); if (previous?.kind === 'seek' && valid(previous)) setVideoEditView(previous.owner.document.id, { scrubbing: false }); ownerWindow.removeEventListener('blur', blur); ownerDocument.removeEventListener('visibilitychange', hidden) }
+    return () => { const previous = detach(); if (previous?.kind === 'clip' || previous?.kind === 'trim') finishVideoEditTimelineDrag(previous.handle); if (previous?.kind === 'transition' || previous?.kind === 'fade') finishVideoEditTimelineHandleDrag(previous.drag, false); ownerWindow.removeEventListener('blur', blur); ownerDocument.removeEventListener('visibilitychange', hidden) }
     // All listeners read the fixed gesture/current refs, never a former selection closure.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

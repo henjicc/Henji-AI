@@ -1,7 +1,8 @@
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
-import { useRef, useSyncExternalStore } from 'react'
+import { useRef } from 'react'
 import type { VideoEditSequence } from '@/core/videoEdit/document'
-import { setVideoEditTimelineView, subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from '../application/videoEditService'
+import { setVideoEditTimelineView, type VideoEditInstance } from '../application/videoEditService'
+import { sameVideoEditViewFields, useVideoEditViewSelector } from '../application/useVideoEditViewSelector'
 import { clearTimelineSnap, snapTimelineEdges, timelineSnapPoints, TIMELINE_SNAP_PIXELS } from './timelineSnap'
 
 type Handle = 'in' | 'out' | 'move'
@@ -11,12 +12,12 @@ interface Props { instance: VideoEditInstance; sequence: VideoEditSequence; fps:
  * 拖两端改入点／出点，拖中间整体平移；吸附开着时吸到播放头、编辑点与标记。入出点是视图状态，和 I／O 键一样不进撤销。
  */
 export function VideoEditTimelineInOut({ instance, sequence, fps, duration, pixels, onError }: Props): React.ReactElement | null {
-  useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
+  const [inFrame, outFrame] = useVideoEditViewSelector(() => [instance.inFrame, instance.outFrame] as const, sameVideoEditViewFields)
   const drag = useRef<{ handle: Handle; pointerId: number; x: number; inFrame: number | null; outFrame: number | null } | null>(null)
-  if (instance.inFrame === null && instance.outFrame === null) return null
+  if (inFrame === null && outFrame === null) return null
   const maxFrame = Math.floor(fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)
-  const from = instance.inFrame ?? 0
-  const to = instance.outFrame ?? Math.max(from + 1, duration)
+  const from = inFrame ?? 0
+  const to = outFrame ?? Math.max(from + 1, duration)
   const start = (event: React.PointerEvent<HTMLElement>, handle: Handle): void => {
     if (event.button !== 0) return
     // 不让标尺把这次按下当成定位播放头
