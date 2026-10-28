@@ -162,34 +162,3 @@ export const getMediaDurationFormatted = async (
     return null
   }
 }
-
-/**
- * 格式化尺寸字符串（添加分辨率标签）
- * @param dimensions 尺寸字符串，如 "1920x1080"
- * @returns 带标签的尺寸，如 "1920x1080 (1080P)"
- */
-export const formatDimensions = (dimensions: string): string => {
-  const [width, height] = dimensions.split('x').map(Number)
-
-  if (isNaN(width) || isNaN(height)) {
-    return dimensions
-  }
-
-  // 添加常见分辨率标签
-  const maxDimension = Math.max(width, height)
-  let label = ''
-
-  if (maxDimension >= 3840) {
-    label = ' (4K)'
-  } else if (maxDimension >= 2560) {
-    label = ' (2K)'
-  } else if (maxDimension >= 1920) {
-    label = ' (1080P)'
-  } else if (maxDimension >= 1280) {
-    label = ' (720P)'
-  } else if (maxDimension >= 854) {
-    label = ' (480P)'
-  }
-
-  return `${dimensions}${label}`
-}

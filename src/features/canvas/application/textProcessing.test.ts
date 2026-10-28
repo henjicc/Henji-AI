@@ -9,7 +9,6 @@ import {
   listTextProcessingModels,
   resolveTextProcessingSystemPrompt,
   resolveTextProcessingModel,
-  shouldReuseTextProcessingOutput,
 } from './textProcessing'
 
 function createConfig(): LlmConfigState {
@@ -156,19 +155,4 @@ describe('textProcessing', () => {
     })).not.toBe(fingerprint)
   })
 
-  it('只在下游触发、固定结果开启、上次成功且输入未变时复用', () => {
-    const reusable = {
-      trigger: 'dependency' as const,
-      fixedResult: true,
-      lastExecutionStatus: 'success' as const,
-      lastOutputFingerprint: 'v1-same',
-      fingerprint: 'v1-same',
-    }
-
-    expect(shouldReuseTextProcessingOutput(reusable)).toBe(true)
-    expect(shouldReuseTextProcessingOutput({ ...reusable, trigger: 'direct' })).toBe(false)
-    expect(shouldReuseTextProcessingOutput({ ...reusable, fixedResult: false })).toBe(false)
-    expect(shouldReuseTextProcessingOutput({ ...reusable, lastExecutionStatus: 'failed' })).toBe(false)
-    expect(shouldReuseTextProcessingOutput({ ...reusable, fingerprint: 'v1-changed' })).toBe(false)
-  })
 })

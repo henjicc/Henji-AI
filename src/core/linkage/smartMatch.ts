@@ -197,14 +197,3 @@ export function ratioToNumber(ratio: string): number {
 
   return w / h
 }
-
-/**
- * 数值转最接近的比例字符串
- *
- * @param value - 比例数值
- * @param availableRatios - 可用比例数组
- * @returns 最接近的比例字符串
- */
-export function numberToRatio(value: number, availableRatios: string[]): string {
-  return findClosestRatio(value, availableRatios)
-}

@@ -106,10 +106,6 @@ export function normalizeHex(input: string): string | null {
   return match ? `#${match[1].toUpperCase()}` : null;
 }
 
-export function isHexColor(input: unknown): input is string {
-  return typeof input === 'string' && HEX6_PATTERN.test(input.trim());
-}
-
 /** 解析 `#RRGGBB`、`rgb()`、`rgba()`（逗号或空格分隔）；无法解析返回 null。 */
 export function parseColor(input: string): RgbaColor | null {
   const trimmed = input.trim();

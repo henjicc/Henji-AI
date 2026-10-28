@@ -1,7 +1,7 @@
 import { toDisplaySrc } from '@/platform/desktopApi'
 
 import type { GeneratorOptions } from '../types'
-import { isRecord, isStringArray } from '../utils/typeGuards'
+import { isRecord } from '../utils/typeGuards'
 
 export function asGeneratorOptions(value: DynamicValue): GeneratorOptions {
   return isRecord(value) ? (value as GeneratorOptions) : {}
@@ -20,16 +20,6 @@ export function classifyMediaSourceKind(source: string): string {
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return 'remote-url'
   if (/^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(trimmed)) return 'local-path'
   return 'other'
-}
-
-export function summarizeMediaSources(values: DynamicValue): Array<DynamicValueMap> {
-  if (!isStringArray(values)) return []
-  return values.map((value, index) => ({
-    index,
-    kind: classifyMediaSourceKind(value),
-    length: value.length,
-    preview: value.startsWith('data:') ? value.slice(0, 48) : value.slice(0, 140),
-  }))
 }
 
 export function isFileValue(value: DynamicValue): value is File {

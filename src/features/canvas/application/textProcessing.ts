@@ -157,16 +157,3 @@ export function createTextProcessingInputFingerprint(input: {
   }
   return `v1-${(hash >>> 0).toString(16).padStart(8, '0')}`
 }
-
-export function shouldReuseTextProcessingOutput(input: {
-  trigger: 'direct' | 'dependency'
-  fixedResult?: boolean
-  lastExecutionStatus?: 'success' | 'failed'
-  lastOutputFingerprint?: string
-  fingerprint: string
-}): boolean {
-  return input.trigger === 'dependency'
-    && input.fixedResult !== false
-    && input.lastExecutionStatus === 'success'
-    && input.lastOutputFingerprint === input.fingerprint
-}

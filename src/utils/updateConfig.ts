@@ -142,16 +142,3 @@ export function shouldCheckForUpdates(): boolean {
   return false
 }
 
-/**
- * 获取频率的显示文本
- */
-export function getFrequencyLabel(frequency: UpdateConfig['frequency']): string {
-  const labels: Record<UpdateConfig['frequency'], string> = {
-    startup: '每次启动时',
-    daily: '每天',
-    weekly: '每周',
-    never: '从不'
-  }
-  return labels[frequency]
-}
-

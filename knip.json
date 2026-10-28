@@ -23,5 +23,25 @@
     "src/features/canvas/extensions/CanvasExtension.ts"
   ],
   "project": ["src/**/*.{ts,tsx}", "electron/**/*.ts", "scripts/**/*.{cjs,mjs,js,ts}", "*.config.{ts,js,cjs}", "!scripts/__fixtures__/**"],
-  "ignoreBinaries": ["attrib", "cargo", "rustup", "dumpbin", "powershell", "pwsh", "ffmpeg", "ffprobe"]
+  "ignoreDependencies": [
+    "henji-author-opentype.js-2.0.0",
+    "henji-author-three-0.186.1",
+    "henji-author-three-types-0.186.1"
+  ],
+  "ignoreIssues": {
+    "electron.vite.config.ts": ["exports"],
+    "vite.config.ts": ["exports"],
+    "vitest.config.ts": ["exports"],
+    "postcss.config.js": ["exports"],
+    "scripts/electron-builder-after-pack.cjs": ["exports"]
+  },
+  "ignoreUnresolved": [
+    "./audio-edit-mask-worker.cjs",
+    "./audio-edit-mouth-click-worker.cjs",
+    "./audio-edit-effects-worker.cjs",
+    "./font-worker.cjs",
+    "./image-registration-worker.cjs",
+    "./image-color-lut-worker.cjs"
+  ],
+  "ignoreBinaries": ["attrib", "cargo", "rustup", "dumpbin", "powershell", "pwsh", "ffmpeg", "ffprobe", "reg", "taskkill.exe"]
 }

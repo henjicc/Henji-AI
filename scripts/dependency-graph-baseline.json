@@ -470,14 +470,6 @@
       "cell": "assistant → audioEdit"
     },
     {
-      "from": "src/features/assistant/results/openAssistantResult.ts",
-      "to": "src/features/canvas/application/canvasApplicationService.ts",
-      "kind": "static",
-      "specifier": "@/features/canvas/application/canvasApplicationService",
-      "line": 2,
-      "cell": "assistant → canvas"
-    },
-    {
       "from": "src/features/audioEdit/application/applicationDomain.ts",
       "to": "src/features/application-control/domainModule.ts",
       "kind": "type",
@@ -2961,7 +2953,7 @@
     "assets → videoEdit": 3,
     "assistant → application-control": 2,
     "assistant → assets": 2,
-    "assistant → canvas": 2,
+    "assistant → canvas": 1,
     "assistant → audioEdit": 1,
     "audioEdit → application-control": 3,
     "audioEdit → assistant": 2,

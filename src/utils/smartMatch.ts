@@ -34,18 +34,3 @@ export function calculateAspectRatio(width: number, height: number): string {
 
   return closest
 }
-
-/**
- * 计算最大公约数（用于简化比例）
- */
-function gcd(a: number, b: number): number {
-  return b === 0 ? a : gcd(b, a % b)
-}
-
-/**
- * 将宽高转换为简化的比例字符串
- */
-export function simplifyRatio(width: number, height: number): string {
-  const divisor = gcd(width, height)
-  return `${width / divisor}:${height / divisor}`
-}

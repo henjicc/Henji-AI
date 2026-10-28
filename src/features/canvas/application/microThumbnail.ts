@@ -155,10 +155,3 @@ export function requestMicroThumbnail(src: string): MicroThumbnailRequest {
     },
   };
 }
-
-/** 无生命周期的调用保留请求到完成；带界面生命周期的调用使用 requestMicroThumbnail。 */
-export function ensureMicroThumbnail(src: string): Promise<string> {
-  const request = requestMicroThumbnail(src);
-  void request.promise.then(request.release);
-  return request.promise;
-}

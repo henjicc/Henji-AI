@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PEN_TENSION, penBoundsPoints, resolvePenTensionPoints } from './penGeometry';
+import { PEN_TENSION, penBoundsPoints, resolvePenTensionPoints } from '@/core/imageEdit/marks/penGeometry';
 
 describe('penGeometry', () => {
   it('creates smooth controls around a corner', () => {

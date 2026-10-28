@@ -81,10 +81,6 @@ export function parseAbsolutePath(style: PathStyle, value: string): ParsedAbsolu
   return style === 'win32' ? parseWin32(value) : parsePosix(value)
 }
 
-export function isAbsolutePath(style: PathStyle, value: string): boolean {
-  return parseAbsolutePath(style, value) !== null
-}
-
 /** 按平台原生写法输出：win32 用反斜杠，posix 用正斜杠。 */
 export function formatAbsolutePath(style: PathStyle, parsed: ParsedAbsolutePath): string {
   if (style === 'posix') return `/${parsed.segments.join('/')}`

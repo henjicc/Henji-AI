@@ -125,7 +125,3 @@ export function validatePromptDocumentV1(value: unknown): PromptDocumentValidati
     },
   }
 }
-
-export function isPromptDocumentV1(value: unknown): value is PromptDocumentV1 {
-  return validatePromptDocumentV1(value).valid
-}

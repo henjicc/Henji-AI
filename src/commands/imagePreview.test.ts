@@ -16,10 +16,11 @@ vi.mock('./imagePersistenceCommands', () => ({ persistImageSource: async (source
 vi.mock('@/services/imageSource', () => ({
   loadImageElement: async () => mocks.image,
   imageUrlToDataUrl: async (source: string) => source,
+  persistImageLocally: async (source: string) => source,
 }));
 
 import { prepareNodeImageSource } from './image';
-import { createPreviewDataUrl } from '@/features/canvas/application/imageData';
+import { prepareNodeImage } from '@/features/canvas/application/imageData';
 
 afterEach(() => { vi.restoreAllMocks(); });
 
@@ -39,13 +40,13 @@ it.each(['png', 'webp', 'jpeg'])('两入口缩放同一 %s 图片至同尺寸，
   const encoded = mockCanvas();
   const source = `data:image/${extension};base64,source`;
   const command = await prepareNodeImageSource(source, 512);
-  const canvas = await createPreviewDataUrl(source, 512);
+  const canvas = await prepareNodeImage(source, 512);
   expect(encoded).toEqual([
     { width: 512, height: 288, args: ['image/jpeg', 0.86] },
     { width: 512, height: 288, args: extension === 'jpeg' ? ['image/jpeg', 0.86] : [`image/${extension}`] },
   ]);
   expect(command.previewImagePath).toBe('data:image/jpeg;base64,preview');
-  expect(canvas).toBe(`data:image/${extension};base64,preview`);
+  expect(canvas.previewImageUrl).toBe(`data:image/${extension};base64,preview`);
 });
 
 it('不放大图片，竖图和极窄图片保留宽高比及至少一像素', () => {

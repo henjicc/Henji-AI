@@ -121,17 +121,3 @@ export function batchSetNestedValues(
 
   return result
 }
-
-/**
- * 检查路径是否存在
- *
- * @param obj - 对象
- * @param path - 嵌套路径
- * @returns 路径是否存在
- */
-export function hasNestedPath(
-  obj: DynamicValueMap,
-  path: string
-): boolean {
-  return getNestedValue(obj, path) !== undefined
-}

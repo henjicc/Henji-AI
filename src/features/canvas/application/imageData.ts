@@ -81,11 +81,6 @@ export function shouldUseOriginalImageByZoom(zoom: number): boolean {
   return Number.isFinite(zoom) && zoom >= ORIGINAL_IMAGE_ZOOM_THRESHOLD;
 }
 
-export function extractBase64Payload(dataUrl: string): string {
-  const [, payload = ''] = dataUrl.split(',');
-  return payload;
-}
-
 function resolveFileExtension(file: File): string {
   const mime = file.type.toLowerCase();
   if (mime === 'image/png') return 'png';
@@ -165,16 +160,6 @@ function resolvePreviewMimeType(imageUrl: string): ImagePreviewMime {
     return 'image/webp';
   }
   return 'image/jpeg';
-}
-
-export async function createPreviewDataUrl(
-  imageUrl: string,
-  maxDimension = DEFAULT_PREVIEW_MAX_DIMENSION
-): Promise<string> {
-  const normalizedDataUrl = await imageUrlToDataUrl(imageUrl);
-  const image = await loadImageElement(normalizedDataUrl);
-  const safeMaxDimension = Math.max(64, Math.floor(maxDimension));
-  return renderImagePreviewDataUrl(image, normalizedDataUrl, safeMaxDimension, resolvePreviewMimeType(normalizedDataUrl));
 }
 
 export async function prepareNodeImage(
