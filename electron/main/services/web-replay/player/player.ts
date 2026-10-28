@@ -295,7 +295,7 @@ export class WebRecordingPlayer {
       return flushShot().then(() => call)
     }
     const startedAt = Date.now()
-    const stats = { capture: video ? (gpu ? 'gpu' : 'cpu') : 'none', advances: 0, steps: 0, cutSteps: 0, quiet: 0, captured: 0, unchanged: 0, tokenMisses: 0, tokenRepaints: 0, sampleFailures: 0, pageMs: 0, captureMs: 0, encodeMs: 0, sampleMs: 0 }
+    const stats = { capture: video ? (gpu ? 'gpu' : 'cpu') : 'none', advances: 0, steps: 0, pageFrames: 0, quiet: 0, captured: 0, unchanged: 0, tokenMisses: 0, tokenRepaints: 0, sampleFailures: 0, pageMs: 0, captureMs: 0, encodeMs: 0, sampleMs: 0 }
     try {
       const stage = (name: string): void => logger.info('网页重演进度', { event: 'web_replay.replay.stage', context: { recordingId: this.manifest.id, stage: name } })
       stage('window')
@@ -420,11 +420,12 @@ export class WebRecordingPlayer {
         if (op.step) this.activeStep = { label: op.step, untilPageUs: op.pageUs + STEP_BLAME_US }
         else if (op.kind === 'event' && op.event.kind !== 'resize' && op.event.kind !== 'focus' && op.event.kind !== 'action' && !(op.event.kind === 'pointer' && op.event.type === 'move')) this.activeStep = null
         if (op.kind === 'advance') {
-          // A cut: the page goes on (its frame callbacks run), nothing is captured.
+          // A page frame between pictures (a cut, or a fast stretch): it renders for real, so frame callbacks run and
+          // the input the browser holds, resize notifications and scroll events reach the page; nothing is captured.
           await flushHeld(atMs)
           if (site.inFlight()) await loaded()
           const report = await page<ReplayFrameReport>(`${control}.frame(${atMs}, ${JSON.stringify({ allowQuiet: !inputSinceFrame })})`)
-          stats.cutSteps += 1
+          stats.pageFrames += 1
           this.pageMs = report.now
           nextDue = Infinity
           if (!report.quiet) { inputSinceFrame = false; renderedSinceCapture = true }

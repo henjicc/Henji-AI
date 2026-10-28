@@ -4,14 +4,19 @@ import type { WebRecordingBehaviorEvent } from './schema'
 
 /**
  * 把录制的行为轨与导演稿排成一条按输出时间先后的执行清单：录制事件、逐字输入、改写的鼠标移动、注入的操作、
- * 剪掉区间里不出帧的推进小步，以及要出画面的帧。重演引擎只按清单逐条执行。
+ * 不出画面的页面帧，以及要出画面的帧。重演引擎只按清单逐条执行。
  *
  * 排序键（输出时间、页面时间、类别、登记顺序）：输出时间与页面时间都只增不减（剪掉的区间输出时间不动、
  * 页面时间前进；停住打字时录制时间不动、两者前进），同一刻先派发输入、再推进页面、最后出帧。
  */
 
-/** 剪掉的区间按这么长的页面时间一步推过去（每步渲染一次但不出画面，页面的动画帧回调照常跑）。 */
-export const CUT_STEP_US = 50_000
+/**
+ * 页面帧的节奏（页面时间）。页面的帧回调、浏览器攒着的鼠标移动与滚轮都按渲染的次数走：画布的平滑、惯性与
+ * 滚轮缩放按帧数计算，渲染次数随倍速变化，结果就随倍速变化。所以页面总按这个节奏渲染，与倍速、输出帧率无关；
+ * 两个输出帧之间页面走过的每一格补一个不出画面的页面帧（advance），剪掉的区间也一样。离输出帧不到半格的格点
+ * 让给那一帧：1 倍速 60fps 不多出页面帧，整数倍速下各倍速渲染的页面时刻完全相同。
+ */
+export const PAGE_FRAME_US = 1e6 / 60
 /** typewriter.at 与文字输入的录制时刻最多差这么多。 */
 export const TYPEWRITER_MATCH_US = 300_000
 /** clicks.at 与录制的按下时刻最多差这么多。 */
@@ -112,7 +117,7 @@ type Pointer = Extract<WebRecordingBehaviorEvent, { kind: 'pointer' }>
 type Typed = Extract<WebRecordingBehaviorEvent, { kind: 'text' | 'paste' }>
 const typedText = (event: Typed): string => (event.kind === 'text' ? event.data : event.files.length ? '' : event.text ?? '')
 
-/** 鼠标改写：覆盖一段录制时间，期间录制的移动不发，改为每帧按 at() 的位置移动。优先级高的盖过低的。 */
+/** 鼠标改写：覆盖一段录制时间，期间录制的移动不发，改为每个页面帧按 at() 的位置移动。优先级高的盖过低的。 */
 interface Override { fromUs: number; toUs: number; priority: number; order: number; step: string; at(recUs: number): PlanPoint }
 
 export function planWebReplay(input: PlanInput): DirectorPlan {
@@ -300,27 +305,17 @@ export function planWebReplay(input: PlanInput): DirectorPlan {
   }
   for (const entry of injected) placeEvent(entry.event, { point: entry.point, step: entry.step, injected: true })
 
-  // 剪掉的区间：不出帧，分小步推过去
-  for (const cut of timeline.cuts) {
-    for (let page = cut.pageFromUs + CUT_STEP_US; ; page += CUT_STEP_US) {
-      const at = Math.min(page, cut.pageToUs)
-      push({ kind: 'advance', outUs: cut.outUs, pageUs: at, recUs: cut.recFromUs + (at - cut.pageFromUs), visible: false }, 1)
-      if (at >= cut.pageToUs) break
-    }
-  }
-
-  // 每一帧：改写的鼠标先移到这一刻的位置，再出画面
+  // 每个页面帧（出画面的帧与不出画面的 advance）：改写的鼠标先移到这一刻的位置，再渲染
   let lastMove = ''
-  for (let index = 0; index < timeline.frames; index += 1) {
-    const outUs = timeline.frameOutUs(index)
-    const { recUs, pageUs } = timeline.at(outUs)
-    const override = overrideAt(recUs)
+  for (const at of pageFrames(timeline)) {
+    const override = overrideAt(at.recUs)
     if (override) {
-      const position = override.at(recUs)
+      const position = override.at(at.recUs)
       const key = JSON.stringify(position)
-      if (key !== lastMove) { push({ kind: 'move', point: position, outUs, pageUs, recUs, visible: true, step: override.step }, 0); lastMove = key }
+      if (key !== lastMove) { push({ kind: 'move', point: position, outUs: at.outUs, pageUs: at.pageUs, recUs: at.recUs, visible: at.visible, step: override.step }, 0); lastMove = key }
     } else lastMove = ''
-    push({ kind: 'frame', index, outUs, pageUs, recUs, visible: true }, 2)
+    if (at.index === undefined) push({ kind: 'advance', outUs: at.outUs, pageUs: at.pageUs, recUs: at.recUs, visible: at.visible }, 1)
+    else push({ kind: 'frame', index: at.index, outUs: at.outUs, pageUs: at.pageUs, recUs: at.recUs, visible: true }, 2)
   }
   // 改写区间的终点正好落在两帧之间时，补一步到终点
   for (const o of overrides) {
@@ -331,6 +326,35 @@ export function planWebReplay(input: PlanInput): DirectorPlan {
 
   list.sort((a, b) => a.op.outUs - b.op.outUs || a.op.pageUs - b.op.pageUs || a.phase - b.phase || a.seq - b.seq)
   return { timeline, ops: list.map(entry => entry.op), anchors, glides, notes, steps }
+}
+
+interface PageFrame { outUs: number; pageUs: number; recUs: number; visible: boolean; /** 出画面的帧的序号；不出画面的页面帧没有。 */ index?: number }
+
+/**
+ * 按页面时间先后的全部页面帧：输出帧，加上页面时间上每一格（PAGE_FRAME_US 的整数倍）附近没有输出帧的格点。
+ * 每个格点管 [格点 − 半格, 格点 + 半格)，落在里面的输出帧代替它。
+ * 页面时间与录制时间取整到微秒（与录制的时刻同一精度）：同一个页面时刻在各倍速下由不同的浮点算式得出，
+ * 取整后才是同一个值，鼠标改写等按时刻判断的结果才不随倍速变。
+ */
+function pageFrames(timeline: DirectorTimeline): PageFrame[] {
+  const frames: PageFrame[] = Array.from({ length: timeline.frames }, (_, index) => {
+    const outUs = timeline.frameOutUs(index)
+    const { recUs, pageUs } = timeline.at(outUs)
+    return { index, outUs, recUs: Math.round(recUs), pageUs: Math.round(pageUs), visible: true }
+  })
+  const half = PAGE_FRAME_US / 2
+  const list: PageFrame[] = []
+  let next = 0
+  // 最后一个输出帧之后的页面帧不影响版本，不排
+  for (let n = 1; ; n += 1) {
+    const gridUs = n * PAGE_FRAME_US
+    while (next < frames.length && frames[next].pageUs < gridUs - half) list.push(frames[next++])
+    if (next === frames.length) return list
+    if (frames[next].pageUs < gridUs + half) continue
+    // 输出位置按未取整的格点算，与输出帧（按帧序号算）一样，同一刻的事件在各倍速下排在它同一侧
+    const place = timeline.placePage(gridUs)
+    list.push({ outUs: place.outUs, pageUs: Math.round(gridUs), recUs: Math.round(timeline.recOfPage(gridUs)), visible: place.visible })
+  }
 }
 
 function easeU(recUs: number, fromUs: number, toUs: number): number {

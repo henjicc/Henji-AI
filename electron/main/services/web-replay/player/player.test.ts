@@ -9,7 +9,8 @@ import { CAPTURE_TOKEN_COLORS } from '../../../../../packages/web-replay-probe/s
  * Fake replay pages that keep page time exactly as the probe's virtual clock does: it only moves when the
  * engine calls advance/frame. Each window has its own page; a frame paints a picture carrying its token.
  */
-interface FakePage { id: number; pageNow: number; frames: number; log: string[]; dispatched: Array<{ kind: string; at: number }>; paint: null | ((event: unknown, dirty: unknown, image: unknown) => void) }
+/** log：出画面的帧（按页面时刻）；pageFrames：不出画面的页面帧（请求的页面时刻）。frames 只数出画面的帧。 */
+interface FakePage { id: number; pageNow: number; frames: number; log: string[]; pageFrames: number[]; dispatched: Array<{ kind: string; at: number }>; paint: null | ((event: unknown, dirty: unknown, image: unknown) => void) }
 interface FakeEncoder { output: string; writes: number[]; finished: number[] }
 const fake = vi.hoisted(() => ({
   handlers: new Map<string, (...args: unknown[]) => void>(),
@@ -41,6 +42,12 @@ function evaluate(page: FakePage) {
     if ((m = code.match(/\.frame\(([\d.]+), (\{.*\})\)/))) {
       const t = Number(m[1])
       const options = JSON.parse(m[2]) as { token?: number; samples?: string[] }
+      // 出画面的帧都带采样；不带的是两帧之间的页面帧
+      if (!options.samples) {
+        page.pageNow = Math.max(page.pageNow, t)
+        page.pageFrames.push(t)
+        return { now: page.pageNow, timers: 0, frameCallbacks: 0, animations: 0, quiet: false, samples: {} }
+      }
       const index = page.frames++
       if (index === fake.failAtFrame) throw new Error('页面崩了')
       page.pageNow = Math.max(page.pageNow, t)
@@ -69,7 +76,7 @@ vi.mock('electron', () => ({
   session: { fromPartition: () => ({ clearStorageData: async () => {}, protocol: { unhandle: vi.fn() } }) },
   nativeImage: { createFromBitmap: () => ({ toJPEG: () => Buffer.from('jpeg') }) },
   BrowserWindow: class {
-    private readonly page: FakePage = { id: fake.nextId++, pageNow: 0, frames: 0, log: [], dispatched: [], paint: null }
+    private readonly page: FakePage = { id: fake.nextId++, pageNow: 0, frames: 0, log: [], pageFrames: [], dispatched: [], paint: null }
     webContents = {
       id: this.page.id,
       page: this.page,
@@ -226,7 +233,7 @@ it('GPU 取帧中途坏掉：结果不发布，整段改用 CPU 画面重演，�
   expect(fake.encoders.map(encoder => [encoder.writes, encoder.finished])).toEqual([[[0, 3], [5]]])
 })
 
-it('导演稿：剪掉的区间不出帧分小步推过去，打字逐字输入，冲突点名导演稿那一步，版本的行为轨在输出时间上', async () => {
+it('导演稿：剪掉的区间与快放都按页面帧节奏推进、不出帧，打字逐字输入，冲突点名导演稿那一步，版本的行为轨在输出时间上', async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-lockstep-director-'))
   const behavior = [
     { kind: 'text', t: 500_000, data: 'ab' },
@@ -241,12 +248,12 @@ it('导演稿：剪掉的区间不出帧分小步推过去，打字逐字输入�
   expect(result.frames).toBe(17)
   expect(result.durationMs).toBeCloseTo(1700, 6)
   const [page] = fake.pages
-  // 打字时页面时间照走（0.5→0.7 秒），之后页面时间比录制多 0.2 秒；剪掉的 1.0–2.5 秒（页面 1.2–2.7 秒）按 50 毫秒一步推，不出画面
-  const cut = page.log.filter(line => !line.endsWith('captured')).map(line => Number(line.split(' ')[1]))
-  expect(cut[0]).toBe(1250)
-  expect(cut.at(-1)).toBe(2700)
-  expect(cut.length).toBe(30)
+  // 打字时页面时间照走（0.5→0.7 秒），之后页面时间比录制多 0.2 秒。页面每 1/60 秒渲染一次：
+  // 剪掉的 1.0–2.5 秒（页面 1.2–2.7 秒）与两个出画面的帧之间都补不出画面的页面帧，到 2.7 秒接缝由出画面的帧接上
+  const grid = (n: number): number => Math.round(n * 1e6 / 60) / 1000
+  expect(page.pageFrames.filter(t => t > 1200 && t < 2700)).toEqual(Array.from({ length: 89 }, (_, k) => grid(73 + k)))
   const captured = page.log.filter(line => line.endsWith('captured')).map(line => Number(line.split(' ')[1]))
+  expect([...page.pageFrames, ...captured.slice(1)].sort((a, b) => a - b)).toEqual(Array.from({ length: 210 }, (_, k) => grid(k + 1)))
   expect(captured.slice(0, 3)).toEqual([20, 100, 200])
   expect(captured.slice(5, 9)).toEqual([500, 600, 700, 800])
   expect(captured.slice(12)).toEqual([2700, 2900, 3100, 3300, 3500])

@@ -190,6 +190,27 @@ export class DirectorTimeline {
     return { outUs: this.durationUs, visible: false, after: true }
   }
 
+  /**
+   * 页面时刻在输出里的位置：在留下的区间或停住打字里时是显示它的输出时刻；在剪掉的区间里时 visible=false、
+   * outUs 是接缝；在时间线之后时 after=true。与 placeRec 一致：两段留下的部分相接的那一刻算前一段；
+   * 剪掉的区间与后面一段相接的那一刻（剪掉区间的终点）算后面那段，visible=true。
+   */
+  placePage(pageUs: number): RecPlacement {
+    for (const span of this.spans) {
+      if (span.cut) {
+        if (pageUs < span.cut.pageToUs) return { outUs: span.cut.outUs, visible: false, after: false }
+        continue
+      }
+      const piece = span.piece!
+      const pageSpan = piece.kind === 'hold' ? piece.outEndUs - piece.outStartUs : piece.recEndUs - piece.recStartUs
+      if (pageUs > piece.pageStartUs + pageSpan + EPS) continue
+      const offset = Math.max(0, pageUs - piece.pageStartUs)
+      const outOffset = piece.kind === 'hold' ? offset : tauFor(piece.v0, piece.v1, piece.outEndUs - piece.outStartUs, offset)
+      return { outUs: piece.outStartUs + outOffset, visible: true, after: false }
+    }
+    return { outUs: this.durationUs, visible: false, after: true }
+  }
+
   /** 录制时刻的页面时间（同一刻停住的打字不算在内：事件排在打字之前）。 */
   pageOfRec(recUs: number): number {
     let offset = 0

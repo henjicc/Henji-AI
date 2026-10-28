@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { parseWebReplayDirector, WebReplayDirectorError, checkDirectorAgainstRecording } from './director'
 import { DirectorTimeline } from './directorTimeline'
-import { CUT_STEP_US, planWebReplay, typewriterSchedule, type PlanOp } from './directorPlan'
+import { PAGE_FRAME_US, planWebReplay, typewriterSchedule, type DirectorPlan, type PlanOp } from './directorPlan'
 import type { WebRecordingBehaviorEvent } from './schema'
+import { VirtualScheduler } from '../../../packages/web-replay-probe/src/replay/virtualClock'
 
 const S = 1_000_000
 const move = (t: number, x: number, y: number): WebRecordingBehaviorEvent => ({ kind: 'pointer', t, type: 'move', x, y, button: -1, buttons: 0, clickCount: 0, pointerType: 'mouse', mods: 0 })
@@ -117,7 +118,7 @@ describe('执行清单', () => {
   it('没有导演稿时与录制一致：事件在自己的时刻、先于同刻的帧', () => {
     const events = [move(250_000, 1, 1), { kind: 'key', t: 600_000, type: 'down', key: 'a', code: 'KeyA', keyCode: 65, location: 0, repeat: false, mods: 0, composing: false } as WebRecordingBehaviorEvent]
     const plan = planWebReplay({ events, totalRecUs: S, fps: 4, viewport })
-    expect(kinds(plan.ops)).toEqual(['frame', 'pointer:move', 'frame', 'frame', 'key:down', 'frame'])
+    expect(kinds(plan.ops.filter(op => op.kind !== 'advance'))).toEqual(['frame', 'pointer:move', 'frame', 'frame', 'key:down', 'frame'])
     expect(plan.ops.filter(op => op.kind === 'event').map(op => [op.outUs, op.pageUs])).toEqual([[250_000, 250_000], [600_000, 600_000]])
     expect(plan.notes).toEqual([])
   })
@@ -137,16 +138,15 @@ describe('执行清单', () => {
     expect(frames.map(op => [op.recUs, op.pageUs])).toEqual([[S, 1.1 * S], [S, 1.2 * S]])
   })
 
-  it('剪掉的区间：事件照发但不出现在版本里，按不超过 50 毫秒一步推过去，不出帧', () => {
+  it('剪掉的区间：事件照发但不出现在版本里，按页面帧节奏推过去，不出帧', () => {
     const events = [move(1 * S, 5, 5), move(4 * S, 6, 6), move(8 * S, 7, 7)]
     const director = parseWebReplayDirector({ version: 1, timeline: { segments: [{ from: 0, to: 2 }, { from: 7, to: 9 }] } })
     const plan = planWebReplay({ director, events, totalRecUs: 9 * S, fps: 10, viewport })
     const cut = plan.ops.filter(op => op.outUs === 2 * S && op.kind !== 'frame')
     expect(cut.filter(op => op.kind === 'event').map(op => op.visible)).toEqual([false])
-    const steps = cut.filter(op => op.kind === 'advance').map(op => op.pageUs)
-    expect(steps[0]).toBe(2 * S + CUT_STEP_US)
-    expect(steps.at(-1)).toBe(7 * S)
-    expect(Math.max(...steps.slice(1).map((page, i) => page - steps[i]))).toBeLessThanOrEqual(CUT_STEP_US)
+    // 页面 2–7 秒里每 1/60 秒一个不出画面的页面帧，7 秒那一格让给接缝后的第一帧
+    const steps = cut.filter(op => op.kind === 'advance' && !op.visible).map(op => op.pageUs)
+    expect(steps).toEqual(Array.from({ length: 299 }, (_, k) => Math.round((121 + k) * PAGE_FRAME_US)))
     // 帧都在留下的区间里
     const frames = plan.ops.filter(op => op.kind === 'frame')
     expect(frames).toHaveLength(40)
@@ -199,7 +199,7 @@ describe('执行清单', () => {
     expect(drag).toEqual([['down', 3 * S, { anchor: 1 }], ['up', 3.5 * S, { anchor: 2 }]])
   })
 
-  it('平滑鼠标：期间录制的移动换成每帧一步的平滑路径，经过录制的点击位置', () => {
+  it('平滑鼠标：期间录制的移动换成每个页面帧一步的平滑路径，经过录制的点击位置', () => {
     const events = [move(0, 0, 0), move(0.3 * S, 50, 80), move(0.6 * S, 10, 20), press(0.8 * S, 'down', 100, 100), press(0.85 * S, 'up', 100, 100), move(1.2 * S, 200, 200)]
     const director = parseWebReplayDirector({ version: 1, pointer: [{ mode: 'smooth', from: 0.1, to: 1.1, every: 0.25 }] })
     const plan = planWebReplay({ director, events, totalRecUs: 2 * S, fps: 20, viewport })
@@ -207,8 +207,10 @@ describe('执行清单', () => {
     const moves = plan.ops.filter((op): op is Extract<PlanOp, { kind: 'move' }> => op.kind === 'move')
     const at = (recUs: number) => moves.find(op => Math.abs(op.recUs - recUs) < 1)!.point
     expect(at(0.8 * S)).toEqual({ x: 100, y: 100 })
-    // 点完停着不动的那几帧不重复发移动
-    expect(moves.length).toBe(16)
+    // 位置变了才发移动：点完停着不动的那段不重复发，只在改写结束时补一步到终点（补的这步可能与上一步同位置）
+    const placed = moves.filter(op => op.recUs < 1.1 * S).map(op => JSON.stringify(op.point))
+    expect(placed.filter((point, i) => i > 0 && point === placed[i - 1])).toEqual([])
+    expect(moves.filter(op => op.recUs > 0.85 * S).map(op => op.recUs)).toEqual([1.1 * S])
     expect(moves.at(-1)!.point).toEqual({ x: 100, y: 100 })
   })
 
@@ -216,5 +218,68 @@ describe('执行清单', () => {
     const director = parseWebReplayDirector({ version: 1, typewriter: [{ at: 1 }], clicks: [{ at: 2, target: { selector: '.x' } }] })
     const plan = planWebReplay({ director, events: [], totalRecUs: 3 * S, fps: 10, viewport })
     expect(plan.notes).toEqual(['typewriter[0]（逐字打字）：1 秒前后 0.3 秒内没有文字输入（带文件的粘贴不拆）', 'clicks[0]（改点击位置）：2 秒前后 0.5 秒内没有点击'])
+  })
+})
+
+describe('页面帧节奏与倍速无关', () => {
+  // 一次拖动画布（每 1/60 秒一次移动）后紧跟一串快速滚轮：画布用帧回调做惯性与缩放的典型输入
+  const wheel = (t: number): WebRecordingBehaviorEvent => ({ kind: 'wheel', t, x: 300, y: 300, dx: 0, dy: -100, mods: 2 })
+  const recorded: WebRecordingBehaviorEvent[] = [
+    press(2 * S, 'down', 100, 100),
+    ...Array.from({ length: 29 }, (_, i) => move(Math.round(2 * S + (i + 1) * S / 60), 100 + 20 * (i + 1), 100)),
+    press(2.5 * S, 'up', 680, 100),
+    ...[0, 30_000, 60_000, 90_000].map(dt => wheel(3 * S + dt)),
+  ]
+  const planAt = (speed: number, actions: unknown[] = []): DirectorPlan => planWebReplay({
+    director: parseWebReplayDirector({ version: 1, timeline: { segments: [{ from: 1.5, to: 4, speed }] }, actions }),
+    events: recorded, totalRecUs: 4 * S, fps: 60, viewport,
+  })
+  const SPEEDS = [4, 8, 16]
+
+  it('各倍速跑的页面帧时刻相同，改写的鼠标每个页面帧移一次；1 倍速 60fps 不多跑页面帧', () => {
+    const drag = [{ kind: 'drag', at: 3.4, target: { x: 200, y: 200 }, to: { x: 400, y: 260 }, duration: 0.3, approach: 0.2 }]
+    // 只比到 16 倍速最后一帧（3.9 秒）：之后不出画面，各倍速收尾的位置本来就不同
+    const pageFrames = (plan: DirectorPlan): number[] => plan.ops.filter(op => (op.kind === 'advance' || op.kind === 'frame') && op.pageUs <= 3.9 * S).map(op => Math.round(op.pageUs))
+    const round = (value: unknown): unknown => JSON.parse(JSON.stringify(value), (_key, v: unknown) => (typeof v === 'number' ? Math.round(v * 1e6) / 1e6 : v))
+    const moves = (plan: DirectorPlan): unknown[] => plan.ops.flatMap(op => (op.kind === 'move' ? [[Math.round(op.pageUs), round(op.point)]] : []))
+    const base = planAt(1, drag)
+    // 每 1/60 秒一个页面帧，剪掉的 0–1.5 秒与留下的部分一样
+    expect(pageFrames(base)).toEqual(Array.from({ length: 234 }, (_, n) => Math.round((n + 1) * PAGE_FRAME_US)))
+    expect(moves(base).length).toBeGreaterThan(30)
+    for (const speed of SPEEDS) {
+      const plan = planAt(speed, drag)
+      expect(pageFrames(plan)).toEqual(pageFrames(base))
+      expect(moves(plan)).toEqual(moves(base))
+    }
+    expect(planWebReplay({ events: recorded, totalRecUs: 4 * S, fps: 60, viewport }).ops.some(op => op.kind === 'advance')).toBe(false)
+  })
+
+  it('按帧数计算的拖动惯性与滚轮缩放，各倍速结果相同', async () => {
+    // 页面里的画布：拖动时每帧记下移动量，松开后按帧衰减滑行；攒到同一帧的滚轮按方向缩放一格
+    const simulate = async (plan: DirectorPlan): Promise<{ panX: number; zoom: number }> => {
+      const clock = new VirtualScheduler(0)
+      let pointerX = 0, lastX = 0, velocity = 0, panX = 0, zoom = 1, pressed = false, wheelDy = 0
+      const tick = (): void => {
+        if (wheelDy) { zoom *= wheelDy < 0 ? 1.1 : 1 / 1.1; wheelDy = 0 }
+        if (pressed) { velocity = pointerX - lastX; lastX = pointerX; panX = pointerX } else if (Math.abs(velocity) > 0.01) { panX += velocity; velocity *= 0.9 }
+        clock.requestFrame(tick)
+      }
+      clock.requestFrame(tick)
+      const none = async (): Promise<void> => {}
+      for (const op of plan.ops) {
+        await clock.advanceTo(op.pageUs / 1000, none)
+        if (op.kind === 'advance' || op.kind === 'frame') { await clock.runFrame(none); continue }
+        if (op.kind !== 'event') continue
+        const event = op.event
+        if (event.kind === 'wheel') wheelDy += event.dy
+        if (event.kind !== 'pointer') continue
+        if (event.type === 'down') { pressed = true; pointerX = lastX = event.x } else if (event.type === 'up') pressed = false
+        else if (pressed) pointerX = event.x
+      }
+      return { panX, zoom }
+    }
+    const base = await simulate(planAt(1))
+    expect(base.zoom).toBeCloseTo(1.1 ** 4, 9)
+    for (const speed of SPEEDS) expect(await simulate(planAt(speed))).toEqual(base)
   })
 })
