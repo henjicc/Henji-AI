@@ -1,4 +1,4 @@
-import { askAssistantAtVideoEditFrame, chooseVideoEditAnnotationShape, videoEditAnnotationBrush, VIDEO_EDIT_ANNOTATION_SHAPE_COMMANDS, VIDEO_EDIT_ANNOTATION_SHAPES } from './videoEditAnnotations'
+import { askAssistantAtVideoEditFrame, chooseVideoEditAnnotationShape, executeVideoEditAnnotationCommand, isVideoEditAnnotationBatchCommand, videoEditAnnotationBrush, videoEditAnnotationCommandState, VIDEO_EDIT_ANNOTATION_SHAPE_COMMANDS, VIDEO_EDIT_ANNOTATION_SHAPES } from './videoEditAnnotations'
 import { requestVideoEditScrub } from '../engine/videoEditAudioScrub'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { VIDEO_EDIT_COMMANDS, VIDEO_EDIT_TOOL_COMMANDS, isVideoEditToolCommand, type VideoEditCommandId, type VideoEditCommandScope } from '@/core/videoEdit/commands'
@@ -175,6 +175,7 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
     if (id === 'new_project') return { enabled: true }
     if (!owner) return { enabled: false, reason: '请先打开剪辑。' }
     if (id === 'undo' || id === 'redo') return { enabled: Boolean(id === 'undo' ? owner.past.length : owner.future.length), reason: '没有可恢复的编辑。' }
+    if (context.scope === 'annotations' && isVideoEditAnnotationBatchCommand(id)) return videoEditAnnotationCommandState(owner, id)
     if (id in FOCUS_PANELS || id === 'maximize_panel' || id === 'save' || id === 'import') return { enabled: true }
     if (id === 'new_sequence') return { enabled: true }
     if (id === 'new_bin') return { enabled: true }
@@ -289,6 +290,7 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
   const { owner, source } = stateOf(context)
   if (id === 'new_project') { await createVideoEditProject(); return }
   const projectId = owner!.document.id
+  if (context.scope === 'annotations' && isVideoEditAnnotationBatchCommand(id)) { await executeVideoEditAnnotationCommand(owner!, id); return }
   if (id === 'annotation_ask') { await askAssistantAtVideoEditFrame(projectId); return }
   if (id === 'annotation_select') { setVideoEditTimelineView(projectId, { tool: 'select' }); return }
   const shape = VIDEO_EDIT_ANNOTATION_SHAPES.find(item => VIDEO_EDIT_ANNOTATION_SHAPE_COMMANDS[item] === id)

@@ -24,7 +24,7 @@ interface Located { sequenceId: string; mark: VideoEditAnnotation }
  * 单条批注修改的唯一规则：通用属性写入与批量服务都经这里。
  * 写成已改完时由宿主补上处理关联（撤销边界），重开时清掉；状态转换与回复只能追加由 assertVideoEditAnnotationTransition 判定。
  */
-export function settleVideoEditAnnotationChange(prior: VideoEditAnnotation, candidate: unknown, actor: Pick<VideoEditAnnotationActor, 'source'>, association: { transactionId: string; revision: number }): VideoEditAnnotation {
+export function settleVideoEditAnnotationChange(prior: VideoEditAnnotation, candidate: unknown, actor: Pick<VideoEditAnnotationActor, 'source'>, association: { transactionId?: string; revision: number }): VideoEditAnnotation {
   const draft = { ...(candidate as Record<string, unknown>) }
   if (draft.status === 'addressed' && prior.status !== 'addressed') draft.addressedBy = association
   if (draft.status === 'open') delete draft.addressedBy
@@ -65,13 +65,16 @@ export class VideoEditAnnotationRejection extends Error {
   constructor(message: string, readonly annotationId: string) { super(message); this.name = 'VideoEditAnnotationRejection' }
 }
 
-/** 逐条改状态并可附回复；任一条不合规则整批不写。返回实际改动的批注 id。 */
-export function updateVideoEditAnnotationStatuses(projectId: string, changes: readonly VideoEditAnnotationStatusChange[], actor: VideoEditAnnotationActor): string[] {
+/**
+ * 逐条改状态并可附回复；任一条不合规则整批不写。返回实际改动的批注 id。
+ * `linkChange: false`：写成已改完时不关联某次修改（用户手动标的已改完背后没有可单独撤销的那次修改）。
+ */
+export function updateVideoEditAnnotationStatuses(projectId: string, changes: readonly VideoEditAnnotationStatusChange[], actor: VideoEditAnnotationActor, options: { linkChange?: boolean } = {}): string[] {
   logger.info('批量处理批注开始', { event: 'video_edit.annotation.batch_update.start', context: { projectId, count: changes.length, source: actor.source } })
   try {
     const owner = requireVideoEditInstance(projectId); const before = owner.document
     const located = new Map(locate(before, { ids: changes.map(change => change.id) }).map(item => [item.mark.id, item.mark]))
-    const association = { transactionId: crypto.randomUUID(), revision: before.revision + 1 }
+    const association = { ...(options.linkChange === false ? {} : { transactionId: crypto.randomUUID() }), revision: before.revision + 1 }
     const next = new Map<string, VideoEditAnnotation>()
     for (const change of changes) {
       const prior = next.get(change.id) ?? located.get(change.id)!

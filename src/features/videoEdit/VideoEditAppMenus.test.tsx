@@ -7,7 +7,8 @@ import { VideoEditAppMenus } from './VideoEditAppMenus'
 const mock = vi.hoisted(() => ({ execute: vi.fn(async () => undefined), state: vi.fn(() => ({ enabled: false, reason: '请先选择片段。' })) }))
 vi.mock('@/stores/settingsStore', () => ({ useSettingsStore: (selector: (state: { videoEditShortcuts: object }) => unknown) => selector({ videoEditShortcuts: { split: { code: 'KeyS', ctrl: true, shift: true, alt: false, meta: false } } }) }))
 vi.mock('./application/videoEditService', () => ({ activeVideoEditInstance: () => ({ document: { id: 'project' }, activePanel: 'timeline' }), subscribeVideoEdit: () => () => undefined, subscribeVideoEditView: () => () => undefined, videoEditRevision: () => 1, videoEditViewRevision: () => 1 }))
-vi.mock('./application/videoEditCommands', () => ({ captureVideoEditCommandContext: () => ({}), executeVideoEditCommand: mock.execute, videoEditCommandState: mock.state }))
+vi.mock('./application/videoEditCommands', () => ({ captureVideoEditCommandContext: (_projectId: string, scope: string) => ({ scope }), executeVideoEditCommand: mock.execute, videoEditCommandState: mock.state }))
+vi.mock('./application/videoEditAnnotations', () => ({ subscribeVideoEditAnnotationSelection: () => () => undefined, videoEditAnnotationSelectionRevision: () => 1 }))
 afterEach(cleanup)
 
 it('挂载声明菜单并往视图菜单加安全框，读取注册表及用户改键，卸载撤回', async () => {
@@ -18,6 +19,10 @@ it('挂载声明菜单并往视图菜单加安全框，读取注册表及用户�
   expect(findAppMenuCommand('videoEdit.split')).toMatchObject({ shortcut: 'Ctrl+Shift+S', disabledReason: '请先选择片段。' })
   expect(findAppMenuCommand('videoEdit.new_sequence')).toBeDefined()
   expect(findAppMenuCommand('videoEdit.prev_marker')).toBeDefined()
+  // 批注菜单固定在批注作用域执行同一条命令：当前面板是时间线时，“删除选中批注”也不会删片段
+  await findAppMenuCommand('videoEdit.annotations.delete')!.run()
+  expect(mock.execute).toHaveBeenLastCalledWith({ scope: 'annotations' }, 'delete')
+  expect(findAppMenuCommand('videoEdit.annotations.delete')).toMatchObject({ label: '删除选中批注', shortcut: 'Delete' })
   view.unmount()
   expect(getAppMenus()).toEqual([])
 })

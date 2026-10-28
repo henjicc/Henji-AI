@@ -12,6 +12,8 @@ import { selectVideoEditTransition } from './videoEditTransitions'
 import { updateVideoEditCreativeIntents } from './videoEditService'
 import { subscribeVideoEditScrub } from '../engine/videoEditAudioScrub'
 import { matchVideoEditShortcut } from '@/core/videoEdit/commands'
+import { useAlertDialogStore } from '@/stores/alertDialogStore'
+import { createVideoEditAnnotation } from './videoEditAnnotations'
 
 // 过渡命令的画面试渲染需要 GPU Worker；命令层只验证编辑与撤销，试渲染由 videoEditCodeService.test 覆盖。
 vi.mock('./videoEditCodeTrial', async () => ({ ...await vi.importActual<typeof import('./videoEditCodeTrial')>('./videoEditCodeTrial'), trialVideoEditCodeDocument: async () => undefined }))
@@ -302,4 +304,16 @@ it('Ctrl+D 在离播放头最近的编辑点应用默认视频过渡，Shift+D �
   expect(getActiveVideoEditSequence(owner).transitions).toEqual([{ id: expect.any(String), kind: 'cross_dissolve', leftClipId: second, durationFrames: 30 }])
   undoVideoEdit(id)
   expect(getActiveVideoEditSequence(owner).transitions).toEqual([])
+})
+it('批注作用域里 Ctrl+A、Delete 作用于批注：全选当前筛选、确认后删除选中批注，时间线上选中的片段不动', async () => {
+  const { owner, id, first } = await fixture()
+  const key = (code: string, ctrlKey = false) => matchVideoEditShortcut({ code, key: code, ctrlKey, metaKey: false, altKey: false, shiftKey: false, repeat: false, isComposing: false, defaultPrevented: false }, 'annotations', {})
+  expect([key('KeyA', true), key('Delete')]).toEqual(['select_all', 'delete'])
+  for (const frame of [0, 5]) createVideoEditAnnotation(id, owner.activeSequenceId, { frame, target: { kind: 'point', x: .5, y: .5 }, text: `第 ${frame} 帧`, status: 'open' })
+  await executeVideoEditCommand(captureVideoEditCommandContext(id, 'annotations'), 'select_all')
+  const removing = executeVideoEditCommand(captureVideoEditCommandContext(id, 'annotations'), 'delete')
+  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
+  useAlertDialogStore.getState().confirmCurrent(); await removing
+  expect(getActiveVideoEditSequence(owner).annotations).toEqual([]); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.id)).toContain(first)
+  expect(videoEditCommandState(captureVideoEditCommandContext(id, 'annotations'), 'delete')).toEqual({ enabled: false, reason: '请先选中批注。' })
 })
