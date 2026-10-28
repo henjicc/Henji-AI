@@ -274,6 +274,12 @@ function generate(options) {
     homepage: 'https://github.com/gl-transitions/gl-transitions', sources: ['https://registry.npmjs.org/gl-transitions/-/gl-transitions-2.0.0.tgz (wgsl/*.wgsl, adapted entry points and premultiplied alpha only)'],
     textIds: [textTable.add(glTransitionsLicense), textTable.add(stereoViewerLicense)], textOrigin: 'package',
   })
+  // 网页重演的滚动曲线移植自 Chromium 源码（packages/web-replay-probe/src/replay/scrollCurve.ts），不在 npm ls 里。
+  const chromiumLicense = readTextIfExists(path.join(REFERENCE_DIR, 'Chromium-BSD-3-Clause.txt'))
+  if (!chromiumLicense) missing.push('Chromium：缺少滚动曲线移植的 BSD 3-Clause 许可原文')
+  else runtime.push({ id: 'vendored:chromium-scroll-curve', name: 'Chromium (scroll animation curve, ported to web replay)', version: 'deb41ddc5770bd74cc7d0e4d6a7d7b12e2c5ecec', license: 'BSD-3-Clause', ecosystem: 'runtime',
+    homepage: 'https://www.chromium.org', sources: ['https://chromium.googlesource.com/chromium/src/+/deb41ddc5770bd74cc7d0e4d6a7d7b12e2c5ecec/cc/animation/scroll_offset_animation_curve.cc (ease-in-out curve, segment durations and retargeting, ported to TypeScript)'],
+    textIds: [textTable.add(chromiumLicense)], textOrigin: 'package' })
   // HQ-ICON 的输入解析与苹果高清图地址规则是非 npm 来源，沿用同一许可清单。
   const hqIconLicense = readTextIfExists(path.join(REFERENCE_DIR, 'HQ-ICON-MIT.txt'))
   if (!hqIconLicense) missing.push('HQ-ICON：缺少 MIT 许可原文')

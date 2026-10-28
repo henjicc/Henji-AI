@@ -10,7 +10,9 @@ import { installCursorOverlay } from './cursorOverlay'
 import { installSmoothScroll } from './smoothScroll'
 import { holdIndexedDb } from './storageHold'
 import { resolveReplayTarget } from './target'
+import { installTopLayer } from './topLayer'
 import { installVirtualClock } from './virtualClock'
+import { holdWorkers } from './workerHold'
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
@@ -90,8 +92,18 @@ export function installReplayRuntime(host: ReplayHost): void {
   const conflict = (message: string): void => host.report({ kind: 'conflict', t: nowUs(), message })
 
   // ---- time: page time is driven by the engine (lockstep), the wall clock follows the recording
-  const clock = installVirtualClock(performance.now(), message => host.report({ kind: 'warning', t: nowUs(), message }))
+  const warn = (message: string): void => host.report({ kind: 'warning', t: nowUs(), message })
+  const clock = installVirtualClock(performance.now(), warn)
   holdIndexedDb(work => clock.hold(work))
+  installTopLayer()
+  holdWorkers(work => clock.hold(work), clock.wallTimeout, warn)
+  // Video frames follow the real clock; seeking them to page time is not done.
+  let videoWarned = false
+  addEventListener('play', event => {
+    if (videoWarned || !(event.target instanceof HTMLVideoElement)) return
+    videoWarned = true
+    warn('页面在播放视频：视频按真实时间播放，画面可能和录制差几帧')
+  }, { capture: true, passive: true })
   installSmoothScroll()
   const RealDate = Date
   const wallNow = (): number => boot.wallAtZeroMs + performance.now()

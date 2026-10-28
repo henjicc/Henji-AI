@@ -1,6 +1,6 @@
 /**
- * Lockstep page clock for replay. Page time (performance.now, Date, timers, animation frames, Web
- * Animations, event timestamps) moves only when the engine advances it, so every captured frame shows
+ * Lockstep page clock for replay. Page time (performance.now, Date, timers, idle callbacks, animation
+ * frames, Web Animations, event timestamps) moves only when the engine advances it, so every captured frame shows
  * exactly the recorded moment however long capturing it takes, and the replay may run faster or slower
  * than the wall clock without any frame running ahead of its time.
  *
@@ -13,6 +13,11 @@
  */
 
 interface Timer { id: number; due: number; seq: number; handler: TimerHandler; args: unknown[]; interval: number | null; nesting: number }
+
+/** Longest idle period browsers give an idle callback (the requestIdleCallback spec's 50 ms cap). */
+const IDLE_PERIOD_MS = 50
+/** What one timeRemaining() read costs an idle callback's budget while page time stands still. */
+const IDLE_READ_COST_MS = 1
 
 /** Earliest timer first; equal due times keep scheduling order. */
 function earlier(a: Timer, b: Timer): boolean { return a.due < b.due || (a.due === b.due && a.seq < b.seq) }
@@ -46,6 +51,33 @@ export class VirtualScheduler {
   }
 
   cancelFrame(id: unknown): void { this.frames.delete(Number(id)) }
+
+  /**
+   * requestIdleCallback the way @sinonjs/fake-timers runs it: at once when no timer is waiting,
+   * otherwise after the 50 ms idle period browsers cap a deadline at (sooner if `timeout` says so).
+   * A `timeout` of 0 means none, as in the spec. The deadline is the time until the next timer, at
+   * most 50 ms. Page time stands still while the callback runs, so each `timeRemaining()` read counts
+   * as a millisecond of work: a loop that works until the time runs out ends after at most 50 reads,
+   * the same way at every replay speed.
+   */
+  requestIdle(callback: IdleRequestCallback, timeout: number | undefined): number {
+    const limit = Number(timeout) > 0 ? Number(timeout) : undefined
+    const idle = this.timers.size > 0 ? IDLE_PERIOD_MS : 0
+    const delay = limit === undefined ? idle : Math.min(limit, idle)
+    const didTimeout = limit !== undefined && delay < idle
+    return this.setTimer(() => {
+      const start = this.now
+      let budget = Math.min(IDLE_PERIOD_MS, Math.max(0, this.nextDue() - start))
+      callback({
+        didTimeout,
+        timeRemaining: () => {
+          const left = Math.max(0, budget - (this.now - start))
+          budget -= IDLE_READ_COST_MS
+          return left
+        },
+      })
+    }, delay, [], false)
+  }
 
   /** Due time of the next timer, or Infinity. */
   nextDue(): number {
@@ -254,10 +286,18 @@ export interface VirtualClockControl {
   realFrame(): Promise<void>
   /** Page time holds still until `work` settles (recorded calls, storage). */
   hold<T>(work: Promise<T>): Promise<T>
+  /** A timeout on the real clock (page timers wait for page time); returns its cancel. */
+  wallTimeout(callback: () => void, ms: number): () => void
   addAnimationRoot(root: ShadowRoot): void
 }
 
-/** Overrides the page's clocks with page time starting at `startMs`. Call before any page script. */
+/**
+ * Overrides the page's clocks with page time starting at `startMs`. Call before any page script.
+ *
+ * Known difference: page time stands still while the page loads, so the app shows up earlier in the
+ * replay than in the recording (about 30 ms against 153 ms). Matching it would need the recording to
+ * carry the load moments, a format change that would only buy back those first ~120 ms.
+ */
 export function installVirtualClock(startMs: number, report: (message: string) => void): VirtualClockControl {
   const realRaf = window.requestAnimationFrame.bind(window)
   const realSetTimeout = window.setTimeout.bind(window)
@@ -281,6 +321,8 @@ export function installVirtualClock(startMs: number, report: (message: string) =
   window.clearInterval = ((id?: unknown) => scheduler.clearTimer(id)) as typeof window.clearInterval
   window.requestAnimationFrame = callback => scheduler.requestFrame(callback)
   window.cancelAnimationFrame = id => scheduler.cancelFrame(id)
+  window.requestIdleCallback = (callback, options) => scheduler.requestIdle(callback, options?.timeout)
+  window.cancelIdleCallback = id => scheduler.clearTimer(id)
   const stamps = new WeakMap<Event, number>()
   Object.defineProperty(Event.prototype, 'timeStamp', {
     configurable: true,
@@ -370,6 +412,7 @@ export function installVirtualClock(startMs: number, report: (message: string) =
     },
     realFrame,
     hold,
+    wallTimeout(callback, ms) { const timer = realSetTimeout(callback, ms); return () => realClearTimeout(timer) },
     addAnimationRoot: root => animations.addRoot(root),
   }
 }

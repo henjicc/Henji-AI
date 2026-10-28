@@ -77,3 +77,34 @@ it('定时器抛错不打断时钟，交给页面的错误处理；字符串处�
   expect((globalThis as Record<string, unknown>).__virtualClockTest).toBe(7)
   expect(clock.nextDue()).toBe(Infinity)
 })
+
+it('requestIdleCallback：没有定时器在等就立即跑，有就等 50 毫秒（timeout 更短按 timeout）；剩余时间到下个定时器为止', async () => {
+  const clock = new VirtualScheduler(0)
+  const seen: Array<[string, number, number, boolean]> = []
+  const idle = (name: string): IdleRequestCallback => deadline => { seen.push([name, clock.now, deadline.timeRemaining(), deadline.didTimeout]) }
+  clock.requestIdle(idle('free'), undefined)
+  await clock.advanceTo(0, tick)
+  expect(seen).toEqual([['free', 0, 50, false]])
+
+  clock.setTimer(() => {}, 80, [], false)
+  clock.requestIdle(idle('busy'), undefined)
+  clock.requestIdle(idle('hurry'), 10)
+  clock.clearTimer(clock.requestIdle(idle('cancelled'), undefined))
+  await clock.advanceTo(100, tick)
+  // hurry: its timeout comes first, 40 ms before the next one due (busy); busy: after the 50 ms idle period, 30 ms before the 80 ms timer.
+  expect(seen.slice(1)).toEqual([['hurry', 10, 40, true], ['busy', 50, 30, false]])
+})
+
+it('requestIdleCallback：timeout 为 0 等于没设；回调里 timeRemaining 每读一次少 1 毫秒，做到时间用完的循环能结束', async () => {
+  const clock = new VirtualScheduler(0)
+  clock.setTimer(() => {}, 200, [], false)
+  const seen: Array<[number, boolean]> = []
+  let reads = 0
+  clock.requestIdle(deadline => {
+    seen.push([clock.now, deadline.didTimeout])
+    while (deadline.timeRemaining() > 0) reads += 1
+  }, 0)
+  await clock.advanceTo(100, tick)
+  expect(seen).toEqual([[50, false]])
+  expect(reads).toBe(50)
+})

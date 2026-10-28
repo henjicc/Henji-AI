@@ -1,7 +1,10 @@
+import { keepOnTop, topLayerHostCss } from './topLayer'
+
 /**
  * Draws the pointer inside the replayed page, so every captured frame shows it. The replay engine
  * dispatches trusted input, so the overlay simply follows the page's own mouse events. It lives in
  * a closed shadow root on <html> with pointer-events: none: hit testing and the app's DOM are untouched.
+ * Like the frame token it sits in the top layer, above the page's popovers and modal dialogs.
  */
 // The pointer is drawn inside the recorded app's page; it must stay a fixed white/black system-like cursor, not a Henji theme colour.
 // eslint-disable-next-line no-restricted-syntax
@@ -21,7 +24,7 @@ function cursorKind(target: EventTarget | null): 'arrow' | 'beam' {
 export function installCursorOverlay(): void {
   const mount = (): void => {
     const host = document.createElement('div')
-    host.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483647;contain:strict'
+    host.style.cssText = topLayerHostCss('inset:0;width:auto;height:auto;contain:strict')
     const root = host.attachShadow({ mode: 'closed' })
     root.innerHTML = `<style>
       .cursor{position:absolute;left:0;top:0;width:24px;height:24px;display:none;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.35));will-change:transform}
@@ -48,6 +51,7 @@ export function installCursorOverlay(): void {
       root.appendChild(ripple)
     }, { capture: true, passive: true })
     document.documentElement.appendChild(host)
+    keepOnTop(host)
   }
   if (document.documentElement) mount()
   else document.addEventListener('readystatechange', mount, { once: true })
