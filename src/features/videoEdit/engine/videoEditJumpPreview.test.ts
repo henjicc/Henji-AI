@@ -103,7 +103,8 @@ describe('VideoEditJumpPreview', () => {
     const { preview, reads, closedReaders } = setup()
     preview.setWindows([window('a', 0, 120), window('b', 120, 240)])
     const snapshot = vi.fn(async (decoded: VideoEditDecodedPicture) => ({ time: decoded.timestamp, allocationSize: () => 400, close: vi.fn() }) as unknown as VideoEditGpuFrame)
-    const [first, second] = await Promise.all([preview.exactPicture('a', media('a'), 0.5, snapshot), preview.exactPicture('a', media('a'), 0.6, snapshot)])
+    const first = await preview.exactPicture('a', media('a'), 0.5, snapshot)
+    const second = await preview.exactPicture('a', media('a'), 0.6, snapshot)
     expect(first).toBeDefined(); expect(second).toBeDefined()
     expect(reads.map(read => [read.path, read.time, read.options?.keyFrame ?? false])).toEqual([['cache/a.mp4', 0.5, false], ['cache/a.mp4', 0.6, false]])
     expect(closedReaders).toEqual([])
@@ -114,6 +115,41 @@ describe('VideoEditJumpPreview', () => {
     expect(preview.pictureCount).toBe(0)
     await preview.fillStep(0, () => true)
     expect(closedReaders).toEqual(['cache/a.mp4', 'cache/b.mp4'])
+  })
+
+  it('a newer jump abandons the exact picture still being read: the old one gets nothing, the reader stays and reads the new one', async () => {
+    const reads: Array<{ time: number; signal?: AbortSignal }> = []
+    const closed: string[] = []
+    const frames = {
+      open: (item: VideoEditMedia) => ({ key: item.path, ready: Promise.resolve({
+        clipFrames: () => ({
+          frames: async function* () {},
+          // The first read decodes until abandoned, like a long-GOP seek on the native backend.
+          frameAt: (time: number, options?: VideoEditFrameReadOptions) => {
+            reads.push({ time, signal: options?.signal })
+            if (reads.length > 1) return Promise.resolve({ timestamp: time, close: vi.fn() } as unknown as VideoEditDecodedPicture)
+            return new Promise<never>((_, reject) => options?.signal?.addEventListener('abort', () => reject(new DOMException('取帧已取消。', 'AbortError'))))
+          },
+          close: () => { closed.push(item.path) },
+        }),
+        clipAudio: () => undefined,
+        schedule: async function* () {},
+      }) }),
+      release: () => {},
+      seeker: () => { throw new Error('unused') },
+    } as unknown as VideoEditFrameBackend
+    const preview = new VideoEditJumpPreview(frames, async () => { throw new Error('unused') })
+    preview.setWindows([window('a', 0, 120)])
+    const snapshot = vi.fn(async (decoded: VideoEditDecodedPicture) => ({ time: decoded.timestamp, allocationSize: () => 400, close: vi.fn() }) as unknown as VideoEditGpuFrame)
+    const first = preview.exactPicture('a', media('a'), 1.9, snapshot)
+    await vi.waitFor(() => expect(reads).toHaveLength(1))
+    const second = preview.exactPicture('a', media('a'), 0.4, snapshot)
+    expect(reads[0].signal?.aborted).toBe(true)
+    expect(await first).toBeUndefined()
+    expect(await second).toBeDefined()
+    expect(reads.map(read => read.time)).toEqual([1.9, 0.4])
+    expect(snapshot).toHaveBeenCalledOnce()
+    expect(closed).toEqual([])
   })
 
   it('backs off after a failed read and never starts a step while the program is busy', async () => {

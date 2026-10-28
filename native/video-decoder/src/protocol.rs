@@ -34,6 +34,8 @@ pub enum Command {
     /// 心跳：主循环立即响应。主进程据此判断服务是否卡死（3.1）。
     Ping,
     Probe { path: String },
+    /// 取消在途的 `probe` 或 `frame_at`（按请求 ID）；目标已结束或不可取消时答复 `cancelled: false`。
+    /// 被取消的 `frame_at` 答复 CANCELLED，会话停在已解到的位置。
     Cancel { target_id: String },
     Shutdown,
     /// 合成测试画面帧流（1.2 纹理通道验证）。

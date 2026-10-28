@@ -580,6 +580,37 @@ describe('原生帧源：单帧与会话', () => {
     reader.close?.(); await frames.settled(); expect(frames.openSessions).toBe(0)
   })
 
+  it('放弃的取帧让原生停下这次解码：以 AbortError 结束、会话保留（下一次从停下处续解），迟到的帧交回；前台读取抢占在途的推测读取', async () => {
+    const channel = new FakeChannel(); const frames = backend(channel)
+    const answers: Array<() => void> = []
+    channel.answers.frameAt = params => new Promise(resolve => answers.push(() => resolve({ ticket: params.ticket, found: false, seeked: false, decodeMs: 1 })))
+    const reader = (await frames.open(media()).ready).clipFrames({ exclusive: true })!
+    const controller = new AbortController()
+    const abandoned = reader.frameAt(3, { signal: controller.signal })
+    await vi.waitFor(() => expect(answers).toHaveLength(1))
+    const ticket = channel.last('frameAt').ticket
+    controller.abort()
+    await expect(abandoned).rejects.toMatchObject({ name: 'AbortError' })
+    expect(channel.last('cancelFrameAt')).toEqual({ streamId: 'vf-1', ticket })
+    channel.frame('vf-1', { kind: 'frame_at', id: ticket as string }, 3_000_000)
+    expect(channel.released).toEqual([3_000_000])
+    answers[0]()
+    // A background step under way does not hold up the frame's own read: it stops, the read continues on the same session.
+    const step = reader.frameAt(5, { speculative: true })
+    await vi.waitFor(() => expect(answers).toHaveLength(2))
+    const stepTicket = channel.last('frameAt').ticket
+    const shown = reader.frameAt(5)
+    await expect(step).rejects.toMatchObject({ name: 'AbortError' })
+    expect(channel.last('cancelFrameAt')).toEqual({ streamId: 'vf-1', ticket: stepTicket })
+    await vi.waitFor(() => expect(answers).toHaveLength(3))
+    answers[2]()
+    expect(await shown).toBeNull()
+    expect(channel.calls.filter(call => call.method === 'frameAt').map(call => call.params.streamId)).toEqual(['vf-1', 'vf-1', 'vf-1'])
+    expect(channel.calls.filter(call => call.method === 'openDecoder')).toHaveLength(1)
+    expect(channel.calls.some(call => call.method === 'closeStream')).toBe(false)
+    reader.close?.(); await frames.settled()
+  })
+
   it('无画面的文件没有画面读取器，计划为空，但有声音读取器（原生声音已接通）', async () => {
     const source = await backend(new FakeChannel()).open(media({ kind: 'audio' })).ready
     expect(source.clipFrames()).toBeUndefined(); expect(source.clipAudio()).toBeDefined()

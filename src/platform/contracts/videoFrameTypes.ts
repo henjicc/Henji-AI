@@ -220,6 +220,8 @@ export type VideoFramePortCall =
   | { method: 'stats'; params: Record<string, never> }
   | { method: 'openDecoder'; params: Omit<VideoFrameDecoderRequest, 'route'> }
   | { method: 'frameAt'; params: VideoFrameAtRequest }
+  /** 放弃一条在途的单帧取帧（被新请求取代）：它以 CANCELLED 结束，原生会话停在已解到的位置。 */
+  | { method: 'cancelFrameAt'; params: { streamId: string; ticket: string } }
   | { method: 'schedule'; params: VideoFrameScheduleRequest }
   | { method: 'cancelSchedule'; params: { streamId: string; scheduleId: string } }
   | { method: 'closeStream'; params: { streamId: string } }
@@ -231,6 +233,8 @@ export interface VideoFramePortCallResults {
   stats: VideoFrameBridgeStats
   openDecoder: VideoFrameDecoderInfo
   frameAt: VideoFrameAtResult
+  /** 是否找到这条在途的取帧（已结束的为 false）。 */
+  cancelFrameAt: boolean
   schedule: VideoFrameScheduleAck
   cancelSchedule: boolean
   closeStream: boolean
@@ -330,6 +334,8 @@ export interface VideoFrameNativeStreamCounters {
   decodeUsTotal?: number
   uploadUsAverage?: number
   waitUsTotal?: number
+  /** 被取消（新请求取代）的单帧取帧数；旧服务没有这一项。 */
+  cancelled?: number
 }
 
 export interface VideoFrameNativeStats {

@@ -187,6 +187,15 @@ describe('运行中原生失败的恢复（3.1）', () => {
     }
   })
 
+  it('调用方放弃的读取不是故障：不重试、不改用后备、不重开会话', async () => {
+    const abandoned = new DOMException('取帧已取消。', 'AbortError')
+    const native = scripted('native', { frameAt: async () => { throw abandoned } })
+    const browser = scripted('browser', {})
+    const clip = (await new VideoEditFrameRouter(browser, native, { nativeAvailable: true }, () => {}).open(media()).ready).clipFrames({ exclusive: true })!
+    await expect(clip.frameAt(1, { signal: AbortSignal.abort() })).rejects.toBe(abandoned)
+    expect(native.calls).toEqual(['frameAt 1']); expect(native.resets()).toBe(0); expect(browser.calls).toEqual([])
+  })
+
   it('播放计划中途失败：已交付的时间不重复，余下的时间由后备继续，每个时间恰好一个结果', async () => {
     const native = scripted('native', { schedule: async function* (times) { yield picture('native', times[0]); yield picture('native', times[1]); throw serviceFailure() } })
     const browser = scripted('browser', { schedule: async function* (times) { for (const time of times) yield picture('browser', time) } })

@@ -35,6 +35,8 @@ export class VideoEditJumpPreview {
   /** Reader of `exactPicture` (one file at a time), and the read under way on it. */
   private exactReader?: { key: string; demux: string; frames: VideoEditClipFrames }
   private exactTail: Promise<unknown> = Promise.resolve()
+  /** The newest `exactPicture` request; a newer jump abandons it. */
+  private exactRequest?: AbortController
   private blockedUntil = 0
   private disposed = false
   /** Draws still reading a picture on the GPU (`lease`); pictures dropped meanwhile close once none is left. */
@@ -172,11 +174,15 @@ export class VideoEditJumpPreview {
    * 预渲染文件 `media`（窗口 `key`）在 `seconds` 处的精确画面（整帧合成结果），用一个自己的读取器读（同一文件连续读续解）；
    * 读不到时为 undefined。暂停画面的实时合成要从长 GOP 原片的关键帧解起（4K 录屏可达一秒），这一幅先替它站在屏幕上。
    * 前一次读取完成后才开始（读取器同时只读一幅），轮到时 `wanted` 已为假（又有了新请求、实时画面已好）就不读；`snapshot`
-   * 把它复制进自有显存，调用方用完关闭。
+   * 把它复制进自有显存，调用方用完关闭。新的跳转取代上一次：上一幅还没读完就放弃（解码停在已解到的位置，这一幅
+   * 从那里接着解），它得到 undefined。
    */
   exactPicture(key: string, media: VideoEditMedia, seconds: number, snapshot: (picture: VideoEditDecodedPicture) => Promise<VideoEditGpuFrame>, wanted: () => boolean = () => true): Promise<VideoEditGpuFrame | undefined> {
+    this.exactRequest?.abort()
+    const request = new AbortController()
+    this.exactRequest = request
     const read = async (): Promise<VideoEditGpuFrame | undefined> => {
-      if (this.disposed || !this.entries.get(key)?.active || !wanted()) return undefined
+      if (this.disposed || request.signal.aborted || !this.entries.get(key)?.active || !wanted()) return undefined
       if (this.exactReader?.key !== key) {
         this.closeExact()
         const demux = this.frames.open(media)
@@ -186,11 +192,13 @@ export class VideoEditJumpPreview {
         if (this.disposed) { frames.close?.(); this.frames.release(demux.key); return undefined }
         this.exactReader = { key, demux: demux.key, frames }
       }
-      const decoded = await this.exactReader.frames.frameAt(seconds, { speculative: true })
+      const decoded = await this.exactReader.frames.frameAt(seconds, { speculative: true, signal: request.signal })
       if (!decoded) return undefined
-      try { return this.disposed ? undefined : await snapshot(decoded) } finally { decoded.close() }
+      try { return this.disposed || request.signal.aborted ? undefined : await snapshot(decoded) } finally { decoded.close() }
     }
-    const result = this.exactTail.then(read, read).catch(() => { this.closeExact(); return undefined })
+    // An abandoned read keeps its reader (the next read continues its decoder); a failed one gives it back.
+    const result = this.exactTail.then(read, read).catch(() => { if (!request.signal.aborted) this.closeExact(); return undefined })
+      .finally(() => { if (this.exactRequest === request) this.exactRequest = undefined })
     this.exactTail = result
     return result
   }

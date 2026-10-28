@@ -224,7 +224,10 @@ export class VideoDecoderService {
     return this.call<VideoDecoderDecoderStarted>({ type: 'open_decoder', ...request }, options)
   }
 
-  /** 按时间取单帧：命中时 `frame` 事件先于响应到达。 */
+  /**
+   * 按时间取单帧：命中时 `frame` 事件先于响应到达。`signal` 中止（或超时）时同时让原生会话停下这次定位解码，
+   * 会话停在已解到的位置；中止前已发出的 `frame` 事件照常到达，由帧的接收方交回。
+   */
   async frameAt(streamId: string, time: number, ticket: string, options: VideoDecoderRequestOptions = {}, keyOnly = false): Promise<VideoDecoderFrameAtResult> {
     return this.call<VideoDecoderFrameAtResult>({ type: 'frame_at', streamId, time, ticket, ...(keyOnly ? { keyOnly: true } : {}) }, options)
   }
@@ -361,7 +364,7 @@ export class VideoDecoderService {
     return new Promise<unknown>((resolve, reject) => {
       const startedAt = this.options.now()
       const cancelNative = () => {
-        if (command.type === 'probe') this.writeCommand(child, this.allocateId(), { type: 'cancel', targetId: id })
+        if (command.type === 'probe' || command.type === 'frame_at') this.writeCommand(child, this.allocateId(), { type: 'cancel', targetId: id })
       }
       const timer = setTimeout(() => {
         this.pending.delete(id)

@@ -139,7 +139,8 @@ export class VideoEditFrameRouter implements VideoEditFrameBackend {
    * recovery per read, so a failure on the recovered backend is reported, never looped.
    */
   async recover(decision: Decision, media: VideoEditMedia, failed: VideoEditDecodeBackend, error: unknown, attempt: number): Promise<Recovery> {
-    if (error instanceof VideoEditGpuDeviceLostError) return { error }
+    // A read its caller abandoned (`VideoEditFrameReadOptions.signal`) did not fail: no retry, no fallback.
+    if (error instanceof VideoEditGpuDeviceLostError || (error as { name?: unknown } | null)?.name === 'AbortError') return { error }
     const kind = videoEditNativeFailureKind(error)
     if (failed === 'browser') {
       // The browser is the only reader here (native unavailable or not this file): name the format problem in user

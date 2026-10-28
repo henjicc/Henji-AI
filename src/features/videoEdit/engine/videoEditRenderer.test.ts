@@ -11,7 +11,7 @@ import type { CodeAuthorProgram as CodeMaterialProgram } from '@/core/videoEdit/
 import { testAuthorBundle, testAuthorProgram } from './videoEditAuthorTestFixtures'
 const compileCodeMaterial = (source: string) => testAuthorProgram(testAuthorBundle(source))
 import type { VideoSample } from 'mediabunny'
-import type { VideoEditFrameBackend } from './videoEditFrameSource'
+import type { VideoEditFrameBackend, VideoEditFrameReadOptions } from './videoEditFrameSource'
 import { createVideoEditNativeClipAudio, type VideoEditPcmSession } from './videoEditNativeAudio'
 import { VideoEditNativePicture } from './videoEditNativePicture'
 import type { NativeVideoFrame } from './videoEditNativeFrames'
@@ -943,6 +943,27 @@ it('暂停预热因解码预算被拒：交回会话，前瞻重试时重新打�
     refuse = false
     expect(await renderer.prepareLookahead(input, new AbortController().signal)).toBe(true)
     expect(renderer.codeDiagnostics()).toMatchObject({ codeInputSessions: 2, codeInputsPrewarmed: 1 })
+  } finally { await renderer.dispose() }
+})
+it('暂停预热的一步被放弃（前台读取接手了解码器）不算失败：不交回会话，也不动其他输入', async () => {
+  const { backend, readers } = inputReaders()
+  const document = recordingWindowsFixture(6)
+  const open = backend.open.bind(backend)
+  backend.open = media => {
+    const opened = open(media)
+    return { ...opened, ready: opened.ready.then(source => ({ ...source, clipFrames: options => {
+      const reader = source.clipFrames(options)!
+      return { ...reader, frameAt: (time, read) => read?.speculative ? Promise.reject(new DOMException('取帧已取消。', 'AbortError')) : reader.frameAt(time, read) }
+    } })) }
+  }
+  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  try {
+    await (await renderer.render(0)).completion
+    const content = videoEditLookaheadTargets(document, 0, false).content, input = content.find(target => target.kind === 'input')!
+    renderer.retainLookahead(content)
+    expect(await renderer.prepareLookahead(input, new AbortController().signal)).toBe(false)
+    expect(renderer.codeDiagnostics()).toMatchObject({ codeInputSessions: 2, codeInputsPrewarmed: 1 })
+    expect(readers.filter(reader => reader.exclusive).every(reader => !reader.closed)).toBe(true)
   } finally { await renderer.dispose() }
 })
 it('导出逐帧：重叠段两个引用每帧各读一次准确画面，不提前打开，读取位置各自只向前', async () => {
@@ -2122,6 +2143,43 @@ it('快速拖动与远距离跳转：代码视频输入先给近似画面（整�
     const after = await renderer.render(95, false); await after.completion
     expect(after.approximate).toBeUndefined()
     expect(us([shownInputs().w1])).toEqual(us([95 / 60]))
+  } finally { await renderer.dispose() }
+})
+it('拖动中后台追向指针的精确读取：指针退回或向前跳出半秒以上时放弃、改读新位置，小步向前不放弃；松手时这一帧自己的读取打断它，不排在它后面', async () => {
+  // Background exact reads (they carry a signal) decode until released or abandoned, like a long-GOP seek.
+  const reads: Array<{ time: number; signal?: AbortSignal }> = []
+  const picture = (time: number) => ({ timestamp: Math.floor(time * 60 + 1e-6) / 60, duration: 1 / 60, format: 'NV12', close: vi.fn() }) as unknown as VideoSample
+  const backend: VideoEditFrameBackend = {
+    open: media => ({ key: media.path, ready: Promise.resolve({ codec: 'avc1',
+      clipFrames: options => options?.exclusive ? { continues: true, async *frames() {}, close: () => {},
+        frameAt: (time: number, read?: VideoEditFrameReadOptions) => {
+          const signal = read?.signal
+          if (!signal || read.keyFrame || read.speculative) return Promise.resolve(picture(time))
+          reads.push({ time, signal })
+          return new Promise<never>((_, reject) => signal.addEventListener('abort', () => reject(new DOMException('取帧已取消。', 'AbortError')), { once: true }))
+        } } : { async *frames() {}, frameAt: async () => null },
+      clipAudio: () => undefined, async *schedule() {} }) }),
+    release: () => {},
+    seeker: () => ({ sample: async () => ({ hit: false }), dispose: async () => {} }),
+  }
+  const renderer = new VideoEditRenderer(walkFixture(), 3840, undefined, 8 * 1024 ** 3, backend)
+  const scrub = async (frame: number): Promise<void> => { await (await renderer.render(frame, false, true)).completion }
+  const at = (frame: number): number => videoEditPictureSeconds(frame / 60)
+  try {
+    await (await renderer.render(290, false)).completion
+    await scrub(280)
+    await vi.waitFor(() => expect(reads).toHaveLength(1))
+    await scrub(270)
+    await vi.waitFor(() => expect(reads).toHaveLength(2))
+    expect(reads[0].signal!.aborted).toBe(true); expect(reads[1].time).toBeCloseTo(at(270), 6)
+    await scrub(275)
+    expect(reads[1].signal!.aborted).toBe(false); expect(reads).toHaveLength(2)
+    await scrub(315)
+    await vi.waitFor(() => expect(reads).toHaveLength(3))
+    expect(reads[1].signal!.aborted).toBe(true); expect(reads[2].time).toBeCloseTo(at(315), 6)
+    const rested = await renderer.render(320, false); await rested.completion
+    expect(reads[2].signal!.aborted).toBe(true); expect(reads).toHaveLength(3)
+    expect(us([shownInputs().w1])).toEqual(us([320 / 60]))
   } finally { await renderer.dispose() }
 })
 /**

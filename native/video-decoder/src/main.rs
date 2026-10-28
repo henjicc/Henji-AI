@@ -3,7 +3,8 @@
 //! 控制面：stdin/stdout 交换长度前缀 JSON（见 protocol.rs）；stderr 输出一行一 JSON 的结构化日志，
 //! 由主进程转入统一日志。stdin 关闭即退出，父进程异常结束时服务不会残留。
 //!
-//! 命令：hello（版本、FFmpeg 信息、D3D11 设备、登记客户端 PID、资源上限）、ping（心跳）、probe（流信息）、cancel、shutdown；
+//! 命令：hello（版本、FFmpeg 信息、D3D11 设备、登记客户端 PID、资源上限）、ping（心跳）、probe（流信息）、
+//! cancel（取消探测或单帧取帧，见 cancel.rs）、shutdown；
 //! 帧流（1.2）：start_test_stream、stop_stream、release_frame（通知）、stats、close_client_handles；
 //! 解码会话（1.3，协议见 decode/mod.rs）：open_decoder、frame_at、schedule、cancel_schedule；
 //! 声音会话（2.3，协议见 audio/mod.rs）：open_audio、read_audio、close_audio（PCM 走二进制附件）。
@@ -14,6 +15,7 @@
 
 mod audio;
 mod budget;
+mod cancel;
 mod convert;
 mod decode;
 mod ffmpeg_info;
@@ -25,17 +27,14 @@ mod streams;
 mod test_pattern;
 
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use std::io::{self, BufReader};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Instant;
 
+use cancel::{CancelMap, CancelToken};
 use protocol::{Command, ServiceError};
 
 const SERVICE_VERSION: &str = env!("CARGO_PKG_VERSION");
-
-type CancelMap = Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>;
 
 /// 写出一条消息（响应或事件）；stdout 锁保证多线程写出不交错。
 fn send(value: &Value) {
@@ -172,14 +171,12 @@ impl Service {
     }
 
     fn start_probe(&self, id: String, path: String) {
-        let flag = Arc::new(AtomicBool::new(false));
-        self.cancels.lock().unwrap().insert(id.clone(), flag.clone());
-        let cancels = self.cancels.clone();
+        let cancel = CancelToken::register(&self.cancels, &id);
         // 探测可能被慢速磁盘或网络盘阻塞，放到独立线程，控制通道保持响应（可随时取消）。
         std::thread::spawn(move || {
             let started = Instant::now();
-            let result = probe::probe(&path, &flag);
-            cancels.lock().unwrap().remove(&id);
+            let result = probe::probe(&path, cancel.flag());
+            drop(cancel);
             let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
             match &result {
                 Ok(value) => {
@@ -196,8 +193,7 @@ impl Service {
     }
 
     fn cancel(&self, target_id: &str) -> Value {
-        let found = self.cancels.lock().unwrap().get(target_id).map(|flag| flag.store(true, Ordering::Relaxed)).is_some();
-        json!({ "targetId": target_id, "cancelled": found })
+        json!({ "targetId": target_id, "cancelled": cancel::cancel(&self.cancels, target_id) })
     }
 }
 
@@ -306,7 +302,9 @@ fn main() {
                 }
             }
             Command::FrameAt { stream_id, time, ticket, key_only } => {
-                if let Err(error) = service.streams.dispatch(&stream_id, decode::SessionCommand::FrameAt { request_id: request.id.clone(), time, ticket, key_only }) {
+                // 被新请求取代时客户端按请求 ID 取消；会话处理完（或派发失败丢下命令）时自动出表。
+                let cancel = CancelToken::register(&service.cancels, &request.id);
+                if let Err(error) = service.streams.dispatch(&stream_id, decode::SessionCommand::FrameAt { request_id: request.id.clone(), time, ticket, key_only, cancel }) {
                     respond(&request.id, Err(error));
                 }
             }
@@ -355,11 +353,10 @@ fn main() {
                 }
             }
             Command::Shutdown => {
-                for flag in service.cancels.lock().unwrap().values() {
-                    flag.store(true, Ordering::Relaxed);
-                }
+                // 先停会话：在途与排队的单帧取帧答复“会话已停止”，不被当成新请求取代；再取消独立线程里的探测。
                 service.streams.stop_all();
                 service.audio.stop_all();
+                cancel::cancel_all(&service.cancels);
                 respond(&request.id, Ok(json!({ "stopping": true })));
                 logging::info("service.stopping", "收到关闭请求，服务退出", json!({}));
                 break;

@@ -265,11 +265,21 @@ export function parseVideoFrameCancelRequest(input: unknown): { streamId: string
   return { streamId: parseId(record, 'streamId'), scheduleId: parseId(record, 'scheduleId') }
 }
 
+export function parseVideoFrameAtCancelRequest(input: unknown): { streamId: string; ticket: string } {
+  const record = parseRecord(input, '取消取帧请求')
+  return { streamId: parseId(record, 'streamId'), ticket: parseId(record, 'ticket') }
+}
+
+/** 在途单帧取帧的键：流号与渲染层给的票据（同一会话内唯一）。 */
+const frameAtKey = (streamId: string, ticket: string): string => `${streamId}\u0000${ticket}`
+
 export class VideoFrameBridge {
   private readonly streams = new Map<string, BridgeStream>()
   /** 启动响应尚未处理时先到达的帧（同一块 stdout 里响应之后紧跟首帧）。 */
   private readonly pendingStarts = new Map<string, VideoDecoderFrameEvent[]>()
   private readonly orphanHandles = new Set<string>()
+  /** 在途单帧取帧的中止控制（`frameAtKey`）：渲染层放弃被新请求取代的读取时经 `cancelFrameAt` 打断原生解码。 */
+  private readonly frameAts = new Map<string, AbortController>()
   private unreleasedImports = 0
   private nextStreamId = 1
   private overdueTimer: ReturnType<typeof setInterval> | null = null
@@ -327,7 +337,27 @@ export class VideoFrameBridge {
 
   async frameAt(targetId: number, request: VideoFrameAtRequest): Promise<VideoFrameAtResult> {
     this.ownedDecoder(request.streamId, targetId)
-    return this.options.service.frameAt(request.streamId, request.time, request.ticket, {}, request.keyOnly === true)
+    const key = frameAtKey(request.streamId, request.ticket)
+    const controller = new AbortController()
+    this.frameAts.set(key, controller)
+    try {
+      return await this.options.service.frameAt(request.streamId, request.time, request.ticket, { signal: controller.signal }, request.keyOnly === true)
+    } finally {
+      if (this.frameAts.get(key) === controller) this.frameAts.delete(key)
+    }
+  }
+
+  /**
+   * 放弃本窗口一条在途的单帧取帧（被新请求取代）：取帧请求以 CANCELLED 结束，原生会话停在已解到的位置。
+   * 只认发起窗口自己的会话；返回是否找到这条取帧。
+   */
+  cancelFrameAt(targetId: number, streamId: string, ticket: string): boolean {
+    const stream = this.streams.get(streamId)
+    if (!stream || stream.target.id !== targetId || stream.kind !== 'decoder') return false
+    const controller = this.frameAts.get(frameAtKey(streamId, ticket))
+    if (!controller) return false
+    controller.abort()
+    return true
   }
 
   async schedule(targetId: number, request: VideoFrameScheduleRequest): Promise<VideoFrameScheduleAck> {

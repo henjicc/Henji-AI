@@ -46,6 +46,7 @@ const PORT_CALL_CHANNELS: Record<VideoFramePortCall['method'], string> = {
   stats: 'videoFrames:stats',
   openDecoder: 'videoFrames:openDecoder',
   frameAt: 'videoFrames:frameAt',
+  cancelFrameAt: 'videoFrames:cancelFrameAt',
   schedule: 'videoFrames:schedule',
   cancelSchedule: 'videoFrames:cancelSchedule',
   closeStream: 'videoFrames:closeStream',

@@ -8,6 +8,7 @@ import {
   parseVideoAudioCloseRequest,
   parseVideoAudioOpenRequest,
   parseVideoAudioReadRequest,
+  parseVideoFrameAtCancelRequest,
   parseVideoFrameAtRequest,
   parseVideoFrameCancelRequest,
   parseVideoFrameDecoderRequest,
@@ -86,6 +87,7 @@ export function registerVideoFramesIpc(): void {
     return getVideoFrameBridge().openDecoder(webContentsFrameTarget(event.sender), request)
   })
   registerIpcHandler<VideoFrameAtRequest, VideoFrameAtResult>('videoFrames:frameAt', parseVideoFrameAtRequest, (request, event) => getVideoFrameBridge().frameAt(event.sender.id, request))
+  registerIpcHandler<{ streamId: string; ticket: string }, boolean>('videoFrames:cancelFrameAt', parseVideoFrameAtCancelRequest, (request, event) => getVideoFrameBridge().cancelFrameAt(event.sender.id, request.streamId, request.ticket))
   registerIpcHandler<VideoFrameScheduleRequest, VideoFrameScheduleAck>('videoFrames:schedule', parseVideoFrameScheduleRequest, (request, event) => getVideoFrameBridge().schedule(event.sender.id, request))
   registerIpcHandler<{ streamId: string; scheduleId: string }, boolean>('videoFrames:cancelSchedule', parseVideoFrameCancelRequest, (request, event) => getVideoFrameBridge().cancelSchedule(event.sender.id, request.streamId, request.scheduleId))
   registerIpcHandler<string, boolean>(

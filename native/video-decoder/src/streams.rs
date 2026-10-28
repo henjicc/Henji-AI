@@ -149,6 +149,8 @@ pub struct StreamCounters {
     /// 拖动解码窗口里交出前等上一帧显卡工作完成的帧数（3.8）与累计等待微秒。
     pub paces: AtomicU64,
     pub pace_us: AtomicU64,
+    /// 被客户端取消（新请求取代）的单帧取帧数。
+    pub cancelled: AtomicU64,
 }
 
 pub struct StreamControl {
@@ -212,6 +214,7 @@ pub fn counters_value(control: &StreamControl) -> Value {
         "settleUsTotal": load(&counters.settle_us),
         "paces": load(&counters.paces),
         "paceUsTotal": load(&counters.pace_us),
+        "cancelled": load(&counters.cancelled),
     })
 }
 

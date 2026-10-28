@@ -4,6 +4,7 @@
 //! - `open_decoder { streamId, path, streamIndex?, purpose: playback|seek, poolSize?, hardware?: auto|off, format? }`
 //!   → 会话线程打开文件、解出第一帧以确定像素格式与色彩，再响应流信息（与测试流同形，另含 `decoder`、时间信息）；
 //! - `frame_at { streamId, time, ticket }`：命中时先发 `frame` 事件（`request.kind = frame_at`）再响应 `{ found: true, ptsUs… }`；
+//!   被 `cancel` 取消（新请求取代了它）时在出队、每解出一帧、等槽位时停下，答复 CANCELLED，会话停在已解到的位置；
 //! - `schedule { streamId, scheduleId, times | range }`：主线程立即确认，会话按请求顺序每项恰好发一个 `frame`
 //!   （`request.kind = schedule, index`）或 `frame_missing`，最后发 `schedule_done`；新计划取消旧计划，计划进行中 `frame_at` 返回 BUSY；
 //! - `cancel_schedule`、`stop_stream`、`release_frame` 同 1.2。
@@ -29,6 +30,7 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, TryRecvError};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use crate::cancel::CancelToken;
 use crate::logging;
 use crate::protocol::ServiceError;
 use crate::streams::StreamControl;
@@ -107,7 +109,7 @@ pub enum SchedulePlan {
 
 #[derive(Debug)]
 pub enum SessionCommand {
-    FrameAt { request_id: String, time: f64, ticket: String, key_only: bool },
+    FrameAt { request_id: String, time: f64, ticket: String, key_only: bool, cancel: CancelToken },
     Schedule { schedule_id: String, plan: SchedulePlan },
     Cancel { schedule_id: String },
 }
@@ -127,6 +129,16 @@ impl From<ServiceError> for Abort {
             Abort::Failed(error)
         }
     }
+}
+
+/// 单帧取帧被客户端取消（新请求取代了它）。
+fn superseded() -> ServiceError {
+    ServiceError::new("CANCELLED", "取帧已被新请求取代")
+}
+
+/// 会话已停止（关闭流、服务关闭）：在途与排队的单帧取帧都这样答复。
+fn session_stopped() -> ServiceError {
+    ServiceError::new("CANCELLED", "解码会话已停止")
 }
 
 #[derive(Clone)]
@@ -232,11 +244,15 @@ mod imp {
         /// 单帧定位走向目标时，呈现时间早于它的包跳过非参考帧：这些帧既不显示也不被参考，4 秒 GOP 的 4K 录屏
         /// 定位到 GOP 末尾实测从 1.1 秒降到 0.58 秒。只在 `frame_at` 推进期间设置，播放计划与预打开不跳。
         skip_before: Option<i64>,
-        /// 当前段里按 `skip_before` 标记跳过的包中最晚的呈现时间（开新段时清空）。之后的取帧若落在候选帧与它之间，
-        /// 那里可能缺被跳过的帧：单帧取帧不跳过重解，播放计划与区间取帧先重新定位（`force_seek`）。
-        run_skipped: Option<i64>,
+        /// 当前段里按 `skip_before` 标记跳过、呈现时间晚于候选帧的包（开新段时清空，每次单帧取帧后去掉不晚于候选帧的）。
+        /// 解码器送包领先于出帧，半途停下（近似取帧、被取消）时这里会留下候选帧之后跳过的包；之后的取帧若有落在
+        /// 候选帧与目标之间的，那里可能缺被跳过的帧：单帧取帧不跳过重解，播放计划与区间取帧先重新定位（`force_seek`）。
+        /// 只记最晚的一个不够：它晚于目标时，目标之前同样可能缺帧。
+        run_skipped: Vec<i64>,
         /// 下一次 `locate` 必须开新段（见 `run_skipped`）。
         force_seek: bool,
+        /// 正在处理的单帧取帧的取消标志（只在 `frame_at` 期间有值）。
+        cancel: Option<CancelToken>,
     }
 
     fn frame_ts(frame: &Frame) -> i64 {
@@ -443,14 +459,20 @@ mod imp {
                 paced: false,
                 settle_logged: false,
                 skip_before: None,
-                run_skipped: None,
+                run_skipped: Vec::new(),
                 force_seek: false,
+                cancel: None,
             };
             Ok((session, response))
         }
 
         fn stopped(&self) -> bool {
             self.control.stop.load(Ordering::Relaxed)
+        }
+
+        /// 正在处理的单帧取帧已被客户端取消。
+        fn cancelled(&self) -> bool {
+            self.cancel.as_ref().is_some_and(CancelToken::is_cancelled)
         }
 
         fn run(&mut self) {
@@ -467,11 +489,29 @@ mod imp {
                     },
                 };
                 match command {
-                    SessionCommand::FrameAt { request_id, time, ticket, key_only } => self.frame_at(&request_id, time, ticket, key_only),
+                    SessionCommand::FrameAt { request_id, time, ticket, key_only, cancel } => {
+                        let result = self.answer_frame_at(time, ticket, key_only, cancel);
+                        crate::respond(&request_id, result);
+                    }
                     SessionCommand::Schedule { schedule_id, plan } => self.run_schedule(schedule_id, plan),
                     SessionCommand::Cancel { .. } => {}
                 }
             }
+            // 停止时队列里还没处理的单帧取帧逐个答复，客户端不必等到超时。
+            for request_id in self.unanswered_frame_ats() {
+                crate::respond(&request_id, Err(session_stopped()));
+            }
+        }
+
+        /// 取出队列里剩下的单帧取帧（会话停止后调用），返回它们的请求 ID；取消标志随命令出表。
+        /// 停止时主线程不再派发新命令，取完即全部。计划已在派发前确认，随会话停止不另答复。
+        fn unanswered_frame_ats(&mut self) -> Vec<String> {
+            std::iter::from_fn(|| self.commands.try_recv().ok())
+                .filter_map(|command| match command {
+                    SessionCommand::FrameAt { request_id, .. } => Some(request_id),
+                    _ => None,
+                })
+                .collect()
         }
 
         fn position(&self) -> Position {
@@ -530,7 +570,7 @@ mod imp {
             // 放弃尚未用上的预接续段：新段开始后它的帧都不再认领。
             self.queued = None;
             self.run_all_key = true;
-            self.run_skipped = None;
+            self.run_skipped.clear();
             self.force_seek = false;
             let key = self.seek_to_key(ticks)?;
             let counters = &self.control.counters;
@@ -575,7 +615,7 @@ mod imp {
                     return Ok(None);
                 }
                 let limit = self.prefeed_limit();
-                let feed = Feed { pending: &mut self.pending_packet, last_fed_dts: &mut self.last_fed_dts, draining: &mut self.draining, drained: &mut self.drained, fed_since_output: &mut self.fed_since_output, decode_errors: &mut self.decode_error_count, all_key: &mut self.run_all_key, skip_before: self.skip_before, skipped_last: &mut self.run_skipped };
+                let feed = Feed { pending: &mut self.pending_packet, last_fed_dts: &mut self.last_fed_dts, draining: &mut self.draining, drained: &mut self.drained, fed_since_output: &mut self.fed_since_output, decode_errors: &mut self.decode_error_count, all_key: &mut self.run_all_key, skip_before: self.skip_before, skipped: &mut self.run_skipped };
                 match next_frame(&mut self.decoder, &mut self.input, &mut self.tracker, feed, &self.control, limit)? {
                     Fetched::Frame(frame) => return Ok(Some(frame)),
                     Fetched::End => return Ok(None),
@@ -642,6 +682,7 @@ mod imp {
 
         /// 同 `advance_to`，但最多再解出 `max_frames` 帧就停在已解出的候选帧上（至少要有一帧）。返回是否已推进到目标。
         /// 按帧数而不按时间限：硬解提交是异步的，几毫秒就能交给显卡十几帧，真正的解码时间在交出前等显卡完成时才付。
+        /// 单帧取帧被取消时在同一处停下（已有候选帧时才停，停下的状态与半途停下的近似取帧相同）。
         fn advance_within(&mut self, ticks: i64, max_frames: Option<u32>) -> Result<bool, ServiceError> {
             let mut decoded = 0u32;
             loop {
@@ -663,8 +704,13 @@ mod imp {
                         return Ok(true);
                     }
                 }
-                if self.candidate.is_some() && max_frames.is_some_and(|limit| decoded >= limit) {
-                    return Ok(false);
+                if self.candidate.is_some() {
+                    if self.cancelled() {
+                        return Err(superseded());
+                    }
+                    if max_frames.is_some_and(|limit| decoded >= limit) {
+                        return Ok(false);
+                    }
                 }
                 match self.next_frame()? {
                     Some(frame) => {
@@ -751,12 +797,15 @@ mod imp {
             }
         }
 
-        /// 等一个空闲槽位。
+        /// 等一个空闲槽位。单帧取帧被取消时不再等（`Abort::Cancelled`）。
         fn wait_slot(&mut self, deadline: Option<Instant>, interruptible: bool) -> Result<u32, Abort> {
             let started = Instant::now();
             let result = loop {
                 if self.stopped() {
                     break Err(Abort::Stopped);
+                }
+                if self.cancelled() {
+                    break Err(Abort::Cancelled);
                 }
                 if let Some(slot) = self.control.slots.acquire() {
                     break Ok(slot);
@@ -848,13 +897,55 @@ mod imp {
             }
         }
 
-        fn frame_at(&mut self, request_id: &str, time: f64, ticket: String, key_only: bool) {
+        /// 单帧取帧的答复。`cancel` 在处理期间挂在会话上：出队时已取消就不解码，解码途中与等槽位时取消就停下。
+        /// 会话同时停止（关闭流、服务关闭）时答复会话已停止，不算被新请求取代。
+        fn answer_frame_at(&mut self, time: f64, ticket: String, key_only: bool, cancel: CancelToken) -> Result<Value, ServiceError> {
             let started = Instant::now();
-            if !time.is_finite() {
-                crate::respond(request_id, Err(ServiceError::new("INVALID_REQUEST", "时间无效")));
-                return;
+            self.cancel = Some(cancel);
+            let result = if self.cancelled() { Err(superseded()) } else { self.frame_at_result(time, ticket, key_only, started) };
+            let cancelled = self.cancelled();
+            self.cancel = None;
+            match result {
+                Err(error) if error.code == "CANCELLED" && self.stopped() => Err(session_stopped()),
+                Err(error) if error.code == "CANCELLED" && cancelled => {
+                    self.control.counters.cancelled.fetch_add(1, Ordering::Relaxed);
+                    Err(error)
+                }
+                other => other,
             }
-            let ticks = seconds_to_ticks(time, self.time_base);
+        }
+
+        fn frame_at_result(&mut self, time: f64, ticket: String, key_only: bool, started: Instant) -> Result<Value, ServiceError> {
+            if !time.is_finite() {
+                return Err(ServiceError::new("INVALID_REQUEST", "时间无效"));
+            }
+            let (seeked, approximate) = self.locate_frame(seconds_to_ticks(time, self.time_base), key_only).inspect_err(|error| {
+                if error.code == "DECODE_FAILED" {
+                    crate::platform::exit_if_device_lost(self.platform.as_ref(), "frame_at");
+                }
+            })?;
+            if self.candidate.is_none() {
+                self.control.counters.missing.fetch_add(1, Ordering::Relaxed);
+                return Ok(json!({ "ticket": ticket, "found": false, "seeked": seeked, "decodeMs": started.elapsed().as_secs_f64() * 1000.0 }));
+            }
+            let mut value = match self.deliver(RequestTag::FrameAt(ticket.clone()), Some(Instant::now() + FRAME_AT_SLOT_TIMEOUT), false) {
+                Ok(value) => value,
+                Err(Abort::Failed(error)) => return Err(error),
+                Err(Abort::Cancelled) => return Err(superseded()),
+                Err(Abort::Stopped) => return Err(session_stopped()),
+            };
+            value["ticket"] = json!(ticket);
+            value["found"] = json!(true);
+            value["seeked"] = json!(seeked);
+            if approximate {
+                value["approximate"] = json!(true);
+            }
+            value["decodeMs"] = json!(started.elapsed().as_secs_f64() * 1000.0);
+            Ok(value)
+        }
+
+        /// 按需定位并推进到 `ticks`，候选帧即答复的画面。返回（是否定位过，是否近似）。
+        fn locate_frame(&mut self, ticks: i64, key_only: bool) -> Result<(bool, bool), ServiceError> {
             // 走向目标的途中跳过离目标足够远的非参考帧（`skip_before`）；目标附近照常全解，精确画面不变。
             let margin = seconds_to_duration_ticks(SKIP_NONREF_MARGIN_SECONDS.max(if self.frame_rate > 0.0 { 3.0 / self.frame_rate } else { 0.0 }), self.time_base);
             self.skip_before = Some(ticks.saturating_sub(margin));
@@ -875,46 +966,22 @@ mod imp {
             } else {
                 self.locate(ticks, true)
             };
-            // 候选帧之后、目标之前（含）有被标记跳过的包：目标前有一段超过边界的空档（可变帧率），或者之前的近似取帧
-            // 在这里跳过了帧，被跳过的非参考帧里可能就有目标的画面，不跳过重解一次。
+            // 候选帧之后、目标之前（含）有被标记跳过的包：目标前有一段超过边界的空档（可变帧率），或者之前半途停下的
+            // 取帧在这里跳过了帧，被跳过的非参考帧里可能就有目标的画面，不跳过重解一次。
             let located = match located {
-                Ok(_) if !approximate && self.candidate.as_ref().zip(self.run_skipped).is_some_and(|(frame, skipped)| skipped > frame_ts(frame) && skipped <= ticks) => {
-                    logging::info("decode.skip_redo", "目标前可能缺被跳过的帧，不跳过重解", json!({ "streamId": self.stream_id, "ticks": ticks, "candidate": self.candidate.as_ref().map(frame_ts), "skipped": self.run_skipped }));
+                Ok(_) if !approximate && self.candidate.as_ref().map(frame_ts).is_some_and(|candidate| self.run_skipped.iter().any(|&skipped| skipped > candidate && skipped <= ticks)) => {
+                    logging::info("decode.skip_redo", "目标前可能缺被跳过的帧，不跳过重解", json!({ "streamId": self.stream_id, "ticks": ticks, "candidate": self.candidate.as_ref().map(frame_ts), "skipped": self.run_skipped.iter().max() }));
                     self.skip_before = None;
                     self.start_run(ticks, true).and_then(|_| self.advance_to(ticks)).map(|_| true)
                 }
                 other => other,
             };
             self.skip_before = None;
-            let seeked = match located {
-                Ok(seeked) => seeked,
-                Err(error) => {
-                    if error.code == "DECODE_FAILED" {
-                        crate::platform::exit_if_device_lost(self.platform.as_ref(), "frame_at");
-                    }
-                    crate::respond(request_id, Err(error));
-                    return;
-                }
-            };
-            if self.candidate.is_none() {
-                self.control.counters.missing.fetch_add(1, Ordering::Relaxed);
-                crate::respond(request_id, Ok(json!({ "ticket": ticket, "found": false, "seeked": seeked, "decodeMs": started.elapsed().as_secs_f64() * 1000.0 })));
-                return;
+            // 不晚于候选帧的跳过不影响之后的取帧：同一段里候选帧只向前走，向后的取帧先开新段。
+            if let Some(candidate) = self.candidate.as_ref().map(frame_ts) {
+                self.run_skipped.retain(|&skipped| skipped > candidate);
             }
-            match self.deliver(RequestTag::FrameAt(ticket.clone()), Some(Instant::now() + FRAME_AT_SLOT_TIMEOUT), false) {
-                Ok(mut value) => {
-                    value["ticket"] = json!(ticket);
-                    value["found"] = json!(true);
-                    value["seeked"] = json!(seeked);
-                    if approximate {
-                        value["approximate"] = json!(true);
-                    }
-                    value["decodeMs"] = json!(started.elapsed().as_secs_f64() * 1000.0);
-                    crate::respond(request_id, Ok(value));
-                }
-                Err(Abort::Failed(error)) => crate::respond(request_id, Err(error)),
-                Err(_) => crate::respond(request_id, Err(ServiceError::new("CANCELLED", "解码已停止"))),
-            }
+            located.map(|seeked| (seeked, approximate))
         }
 
         fn missing(&self, schedule_id: &str, index: usize, reason: &str) {
@@ -926,8 +993,8 @@ mod imp {
             let started = Instant::now();
             self.schedule = Some(schedule_id.clone());
             self.cut = None;
-            // 单帧取帧在当前段里跳过过帧：计划要逐帧交出，先重新定位。
-            if self.run_skipped.is_some() {
+            // 单帧取帧在当前段的候选帧之后跳过过帧：计划要逐帧交出，先重新定位。
+            if !self.run_skipped.is_empty() {
                 self.force_seek = true;
             }
             let delivered_before = self.delivered;
@@ -1048,13 +1115,13 @@ mod imp {
         all_key: &'a mut bool,
         /// 呈现时间早于它的包跳过非参考帧（单帧定位走向目标的途中，见 `Session::skip_before`）。
         skip_before: Option<i64>,
-        /// 按 `skip_before` 标记跳过的包里最晚的呈现时间。
-        skipped_last: &'a mut Option<i64>,
+        /// 按 `skip_before` 标记跳过的包的呈现时间（见 `Session::run_skipped`）。
+        skipped: &'a mut Vec<i64>,
     }
 
     /// 送包取帧的公共实现（打开时取第一帧与会话共用）。`limit`：只送时间不晚于它的包（预先接续，3.6）。
     fn next_frame(decoder: &mut Decoder, input: &mut Input, tracker: &mut RunTracker, feed: Feed<'_>, control: &StreamControl, limit: Option<i64>) -> Result<Fetched, ServiceError> {
-        let Feed { pending, last_fed_dts, draining, drained, fed_since_output, decode_errors, all_key, skip_before, skipped_last } = feed;
+        let Feed { pending, last_fed_dts, draining, drained, fed_since_output, decode_errors, all_key, skip_before, skipped } = feed;
         let counters = &control.counters;
         loop {
             if control.stop.load(Ordering::Relaxed) {
@@ -1111,10 +1178,11 @@ mod imp {
                     if !packet.is_key() {
                         *all_key = false;
                     }
-                    let skip = skip_before.is_some_and(|limit| packet.pts().is_some_and(|pts| pts < limit));
-                    if skip {
-                        *skipped_last = packet.pts().max(*skipped_last);
+                    let skip_pts = skip_before.and_then(|limit| packet.pts().filter(|&pts| pts < limit));
+                    if let Some(pts) = skip_pts {
+                        skipped.push(pts);
                     }
+                    let skip = skip_pts.is_some();
                     decoder.skip_nonref(skip);
                     let started = Instant::now();
                     match decoder.send(Some(&packet)) {
@@ -1173,7 +1241,7 @@ mod imp {
             self.tracker.begin(key.timestamp().unwrap_or(i64::MIN));
             self.pending = Some(key);
             let (mut fed, mut errors) = (0u32, 0u64);
-            let feed = Feed { pending: &mut self.pending, last_fed_dts: &mut self.last_fed_dts, draining: &mut self.draining, drained: &mut self.drained, fed_since_output: &mut fed, decode_errors: &mut errors, all_key: &mut self.all_key, skip_before: None, skipped_last: &mut None };
+            let feed = Feed { pending: &mut self.pending, last_fed_dts: &mut self.last_fed_dts, draining: &mut self.draining, drained: &mut self.drained, fed_since_output: &mut fed, decode_errors: &mut errors, all_key: &mut self.all_key, skip_before: None, skipped: &mut Vec::new() };
             match next_frame(&mut self.decoder, &mut self.input, &mut self.tracker, feed, control, None)? {
                 Fetched::Frame(frame) | Fetched::Queued(frame) => Ok(frame),
                 Fetched::End | Fetched::Limit => Err(ServiceError::new("DECODE_FAILED", "无法解出第一帧画面")),
@@ -1222,6 +1290,194 @@ mod imp {
             eprintln!("REUSE_MEASUREMENT {}", json!({ "sample": paths[0], "rows": rows }));
             drop(reused);
             std::fs::remove_file(second).unwrap();
+        }
+    }
+
+    #[cfg(test)]
+    mod cancel_tests {
+        use super::*;
+        use crate::cancel::CancelMap;
+        use crate::convert::WritePath;
+        use crate::platform::{HardwareDevice, TestStream, WriteStats};
+
+        /// 软解会话不需要显卡：写入槽位什么也不做。
+        struct NoOutput(u32);
+        impl FrameOutput for NoOutput {
+            fn remote_handles(&self) -> Vec<u64> {
+                vec![0; self.0 as usize]
+            }
+            unsafe fn write(&mut self, _: *const ffmpeg_sys_next::AVFrame, _: u32, _: WritePath, _: &ColorInfo, _: bool) -> Result<WriteStats, String> {
+                Ok(WriteStats::default())
+            }
+            fn settle(&mut self, _: Duration) -> Result<u64, String> {
+                Ok(0)
+            }
+            fn pace(&mut self, _: Duration) -> Result<u64, String> {
+                Ok(0)
+            }
+            fn cpu_fallback_used(&self) -> bool {
+                false
+            }
+            fn into_resources(self: Box<Self>) -> Box<dyn StreamResources> {
+                Box::new(NoResources)
+            }
+        }
+
+        struct SoftwareOnly;
+        impl VideoPlatform for SoftwareOnly {
+            fn summary(&self) -> Value {
+                json!({})
+            }
+            fn register_client(&self, _: u32) -> Result<(), String> {
+                Ok(())
+            }
+            fn client_ready(&self) -> bool {
+                true
+            }
+            fn close_client_handle(&self, _: u64) -> Result<(), String> {
+                Ok(())
+            }
+            fn local_memory(&self) -> Option<(u64, u64)> {
+                None
+            }
+            fn device_lost(&self) -> Option<String> {
+                None
+            }
+            fn hardware_device(&self) -> Result<HardwareDevice, String> {
+                Err("测试只用软解".into())
+            }
+            fn has_decoder_profile(&self, _: &str) -> bool {
+                false
+            }
+            fn create_frame_output(&self, _: SharedFormat, _: (u32, u32), _: (u32, u32), count: u32) -> Result<Box<dyn FrameOutput>, String> {
+                Ok(Box::new(NoOutput(count)))
+            }
+            fn start_test_stream(&self, _: &crate::streams::TestStreamOptions, _: Arc<StreamControl>) -> Result<TestStream, String> {
+                Err("测试不用合成画面".into())
+            }
+        }
+
+        /// 30fps、2 秒一个关键帧、带 B 帧的 H.264（FFmpeg CLI 生成，`video-decoder-ffmpeg.cjs test` 已把它放进 PATH）。
+        fn generate(name: &str) -> Option<String> {
+            let path = std::env::temp_dir().join(format!("henji-decode-cancel-{}-{name}.mp4", std::process::id()));
+            let status = std::process::Command::new("ffmpeg")
+                .args(["-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=30:duration=4", "-c:v", "libx264", "-preset", "veryfast", "-bf", "3", "-g", "60", "-keyint_min", "60", "-sc_threshold", "0", "-pix_fmt", "yuv420p"])
+                .arg(&path)
+                .status()
+                .ok()?;
+            status.success().then(|| path.to_string_lossy().into_owned())
+        }
+
+        fn open_with_commands(path: &str) -> (std::sync::mpsc::Sender<SessionCommand>, Session) {
+            let (commands, receiver) = std::sync::mpsc::channel();
+            let options = DecodeOptions { stream_id: "cancel-test".into(), path: path.into(), stream_index: None, purpose: Purpose::Seek, pool_size: None, hardware: false, format: None, transfer: None };
+            let budget = crate::budget::Budget::new(crate::budget::Limits::for_adapter(None));
+            (commands, Session::open(Arc::new(SoftwareOnly), &options, Arc::new(StreamControl::new(0)), receiver, &budget).map(|(session, _)| session).expect("打开测试视频"))
+        }
+
+        fn open(path: &str) -> Session {
+            open_with_commands(path).1
+        }
+
+        fn exact(session: &mut Session, seconds: f64) -> i64 {
+            let ticks = seconds_to_ticks(seconds, session.time_base);
+            let (_, approximate) = session.locate_frame(ticks, false).expect("精确取帧");
+            assert!(!approximate);
+            frame_ts(session.candidate.as_ref().expect("有画面"))
+        }
+
+        /// 定位到第二个 GOP 末尾的取帧被取消：会话停在解出的关键帧上，而帧级多线程解码器已经按“跳过非参考帧”多送了
+        /// 一批包。之后同一时刻、以及这批包范围内更早时刻的精确取帧，必须与新会话直接取到的画面相同。
+        #[test]
+        fn cancelled_frame_at_keeps_position_and_later_exact_reads_match() {
+            let Some(path) = generate("position") else {
+                eprintln!("跳过：没有 ffmpeg");
+                return;
+            };
+            let table = CancelMap::default();
+            let cancelled = |session: &mut Session, seconds: f64| {
+                session.cancel = Some(CancelToken::register(&table, "frame-at"));
+                crate::cancel::cancel(&table, "frame-at");
+                let ticks = seconds_to_ticks(seconds, session.time_base);
+                assert_eq!(session.locate_frame(ticks, false).unwrap_err().code, "CANCELLED");
+                session.cancel = None;
+                assert!(frame_ts(session.candidate.as_ref().expect("停在已解出的帧上")) < ticks, "半途停下");
+            };
+            let far = 3.9;
+            let mut session = open(&path);
+            cancelled(&mut session, far);
+            assert_eq!(exact(&mut session, far), exact(&mut open(&path), far));
+            for frame in 1..=12 {
+                let seconds = 2.0 + (frame as f64 + 0.25) / 30.0;
+                let mut session = open(&path);
+                cancelled(&mut session, far);
+                assert_eq!(exact(&mut session, seconds), exact(&mut open(&path), seconds), "第二个 GOP 第 {frame} 帧");
+            }
+            assert!(table.lock().unwrap().is_empty(), "取消标志随持有者出表");
+            let _ = std::fs::remove_file(path);
+        }
+
+        /// 出队时已取消的取帧不解码；等空闲槽位时被取消立即答复，不等到槽位超时；二者都计入取消计数。会话同时停止
+        /// （关闭流、服务关闭）时答复“会话已停止”，不计入。
+        #[test]
+        fn cancel_is_checked_when_dequeued_and_while_waiting_for_a_slot() {
+            let Some(path) = generate("checks") else {
+                eprintln!("跳过：没有 ffmpeg");
+                return;
+            };
+            let table = CancelMap::default();
+            let token = |cancel: bool| {
+                let token = CancelToken::register(&table, "frame-at");
+                if cancel {
+                    crate::cancel::cancel(&table, "frame-at");
+                }
+                token
+            };
+            let mut session = open(&path);
+            let counters = session.control.clone();
+            let decoded = counters.counters.decoded.load(Ordering::Relaxed);
+            assert_eq!(session.answer_frame_at(1.0, "t1".into(), false, token(true)).unwrap_err(), superseded());
+            assert_eq!(counters.counters.decoded.load(Ordering::Relaxed), decoded, "出队时已取消：不解码");
+            // 目标已解出、只差交出，而槽位全被占着：等待中被取消。
+            exact(&mut session, 1.0);
+            while counters.slots.acquire().is_some() {}
+            let canceller = {
+                let table = table.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_millis(50));
+                    crate::cancel::cancel(&table, "frame-at")
+                })
+            };
+            let waiting = Instant::now();
+            assert_eq!(session.answer_frame_at(1.0, "t2".into(), false, token(false)).unwrap_err(), superseded());
+            assert!(canceller.join().unwrap(), "取消时取帧仍在等槽位");
+            assert!(waiting.elapsed() < FRAME_AT_SLOT_TIMEOUT, "取消后不再等槽位");
+            assert_eq!(counters.counters.cancelled.load(Ordering::Relaxed), 2);
+            counters.stop.store(true, Ordering::Relaxed);
+            assert_eq!(session.answer_frame_at(1.0, "t3".into(), false, token(true)).unwrap_err(), session_stopped());
+            assert_eq!(counters.counters.cancelled.load(Ordering::Relaxed), 2, "会话停止不算被取代");
+            assert!(table.lock().unwrap().is_empty());
+            let _ = std::fs::remove_file(path);
+        }
+
+        /// 会话停止时队列里还没处理的取帧都要答复（`run` 逐个答复会话已停止），取消标志随命令出表。
+        #[test]
+        fn queued_frame_ats_are_collected_for_an_answer_when_the_session_stops() {
+            let Some(path) = generate("queued") else {
+                eprintln!("跳过：没有 ffmpeg");
+                return;
+            };
+            let (commands, mut session) = open_with_commands(&path);
+            let table = CancelMap::default();
+            for id in ["q1", "q2"] {
+                commands.send(SessionCommand::FrameAt { request_id: id.into(), time: 1.0, ticket: id.into(), key_only: false, cancel: CancelToken::register(&table, id) }).unwrap();
+            }
+            commands.send(SessionCommand::Cancel { schedule_id: "s".into() }).unwrap();
+            session.control.stop.store(true, Ordering::Relaxed);
+            drop(commands);
+            assert_eq!(session.unanswered_frame_ats(), ["q1", "q2"]);
+            assert!(table.lock().unwrap().is_empty(), "取消标志随命令出表");
+            let _ = std::fs::remove_file(path);
         }
     }
 }

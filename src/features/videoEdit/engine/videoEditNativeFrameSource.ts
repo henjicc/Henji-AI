@@ -63,6 +63,11 @@ interface Ticket { deliver: (frame: NativeVideoFrame) => void; fail: (error: Err
 
 const decodeFailure = videoEditNativeReadFailure
 const closedFailure = (): VideoEditNativeFailure => videoEditNativeClosed()
+/** A read its caller abandoned (`VideoEditFrameReadOptions.signal`); not a decoding failure. */
+const readAbandoned = (): DOMException => new DOMException('取帧已取消。', 'AbortError')
+const isAbandoned = (error: unknown): boolean => (error as { name?: unknown } | null)?.name === 'AbortError'
+/** Aborted when either is (a preemption here, or the caller abandoning the read). */
+const eitherSignal = (signal: AbortSignal, caller?: AbortSignal): AbortSignal => caller ? AbortSignal.any([signal, caller]) : signal
 
 /** One native decoder session (a native stream) and the routing of its frames and plan events. */
 export class VideoEditNativeDecoderSession {
@@ -138,21 +143,34 @@ export class VideoEditNativeDecoderSession {
   /**
    * The picture showing at `time`, or null when the file has none there. `background`: a read ahead of need, timed as
    * `nativeFrameAtBackground` so a frame's stages tell its own reads from the background steps running beside it.
+   * Aborting `signal` stops the native decode where it got to (the session keeps that position) and rejects with an
+   * `AbortError`; a frame already on its way goes straight back.
    */
-  async frameAt(time: number, keyOnly = false, background = false): Promise<VideoEditNativePicture | null> {
+  async frameAt(time: number, keyOnly = false, background = false, signal?: AbortSignal): Promise<VideoEditNativePicture | null> {
     if (this.closing || this.ended) throw this.ended ?? closedFailure()
+    if (signal?.aborted) throw readAbandoned()
     const ticket = `t${++this.next}`
     let ticketEntry!: Ticket
     const arrived = new Promise<NativeVideoFrame>((deliver, fail) => { ticketEntry = { deliver, fail } })
     void arrived.catch(() => undefined)
     this.tickets.set(ticket, ticketEntry)
+    let abandon = (): void => {}
+    const abandoned = new Promise<never>((_, reject) => {
+      abandon = () => {
+        this.tickets.delete(ticket)
+        void this.channel.call('cancelFrameAt', { streamId: this.info.streamId, ticket }).catch(() => undefined)
+        reject(readAbandoned())
+      }
+    })
+    void abandoned.catch(() => undefined)
+    signal?.addEventListener('abort', abandon, { once: true })
     let taken = false
     const started = performance.now()
     try {
-      const result = await this.channel.call('frameAt', { streamId: this.info.streamId, time, ticket, ...(keyOnly ? { keyOnly } : {}) }).catch(error => { throw decodeFailure(this.name, error) })
+      const result = await Promise.race([this.channel.call('frameAt', { streamId: this.info.streamId, time, ticket, ...(keyOnly ? { keyOnly } : {}) }).catch(error => { throw decodeFailure(this.name, error) }), abandoned])
       if (!result.found) return null
       let timer: ReturnType<typeof setTimeout> | undefined
-      const frame = await Promise.race([arrived, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(decodeFailure(this.name, new Error('原生帧未送达'))), FRAME_ARRIVAL_TIMEOUT_MS) })]).finally(() => clearTimeout(timer))
+      const frame = await Promise.race([arrived, abandoned, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(decodeFailure(this.name, new Error('原生帧未送达'))), FRAME_ARRIVAL_TIMEOUT_MS) })]).finally(() => clearTimeout(timer))
       taken = true
       // Where a slow read spent its time: in the service (decoding, a seek back to a key frame, waiting for a free
       // pool slot, the copy) or on the way (the request and the frame relayed through the main processes).
@@ -166,6 +184,7 @@ export class VideoEditNativeDecoderSession {
       if (result.approximate) picture.approximate = true
       return picture
     } finally {
+      signal?.removeEventListener('abort', abandon)
       this.tickets.delete(ticket)
       // A frame that arrived (or arrives) for an abandoned read goes straight back.
       if (!taken) void arrived.then(frame => frame.release(), () => undefined)
@@ -385,7 +404,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
     if (options?.exclusive) return this.exclusiveFrames()
     return {
       frames: start => this.frames(start),
-      frameAt: seconds => this.use(() => this.lane.run(async () => { recordVideoEditPreparation('nativeFrameAt', 0); return (await this.seek()).frameAt(seconds) })),
+      frameAt: (seconds, options) => this.use(() => this.lane.run(async lane => { recordVideoEditPreparation('nativeFrameAt', 0); return (await this.seek()).frameAt(seconds, false, false, eitherSignal(lane, options?.signal)) })),
     }
   }
 
@@ -424,35 +443,46 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
       }, () => { if (session === opening) session = undefined })
       return opening
     }
-    const shared = (seconds: number, keyFrame = false): Promise<VideoEditNativePicture | null> => this.use(() => this.lane.run(async () => (await this.seek()).frameAt(seconds, keyFrame)))
+    const shared = (seconds: number, keyFrame = false, signal?: AbortSignal): Promise<VideoEditNativePicture | null> => this.use(() => this.lane.run(async lane => (await this.seek()).frameAt(seconds, keyFrame, false, eitherSignal(lane, signal))))
+    /** Speculative reads queued or under way (background walk steps); the next foreground read preempts them. */
+    const speculativeReads = new Set<AbortController>()
     return {
       continues: true,
       frames: start => this.frames(start),
       frameAt: (seconds, options) => {
         const speculative = options?.speculative === true
+        // A foreground read does not wait for a background step to finish decoding: the step stops where it got to and
+        // this read continues from there.
+        if (!speculative) for (const controller of speculativeReads) controller.abort()
+        const own = speculative ? new AbortController() : undefined
+        if (own) speculativeReads.add(own)
+        const signal = own ? eitherSignal(own.signal, options?.signal) : options?.signal
         const read = tail.catch(() => undefined).then(async () => {
           if (closed || this.closed) throw closedFailure()
+          if (signal?.aborted) throw readAbandoned()
           this.lastUsed = performance.now()
           recordVideoEditPreparation('nativeFrameAt', 0)
-          if (!session && performance.now() < sharingUntil) { if (speculative) throw new VideoEditNativeFailure(videoEditNativeFailureMessage(this.media.name, 'budget'), 'budget', 'BUDGET_EXCEEDED'); return shared(seconds, options?.keyFrame === true) }
+          if (!session && performance.now() < sharingUntil) { if (speculative) throw new VideoEditNativeFailure(videoEditNativeFailureMessage(this.media.name, 'budget'), 'budget', 'BUDGET_EXCEEDED'); return shared(seconds, options?.keyFrame === true, signal) }
           let pending: Promise<VideoEditNativeDecoderSession> | undefined
           try {
             if (!session && speculative && !await this.owner.makeRoomAhead()) throw new VideoEditNativeFailure(videoEditNativeFailureMessage(this.media.name, 'budget'), 'budget', 'BUDGET_EXCEEDED')
             if (closed) throw closedFailure()
             pending = open(speculative)
-            return await (await pending).frameAt(seconds, options?.keyFrame === true, speculative)
+            return await (await pending).frameAt(seconds, options?.keyFrame === true, speculative, signal)
           } catch (error) {
+            // An abandoned read keeps the session: the next read continues where the native decode stopped.
+            if (isAbandoned(error)) throw error
             const kind = videoEditNativeFailureKind(error)
             if (kind === 'budget' && !speculative && !closed) {
               sharingUntil = performance.now() + EXCLUSIVE_RETRY_MS
               this.owner.log('info', '解码会话已满，此视频输入暂时改用素材共享的定位会话', 'video_edit.decode.exclusive.shared', { mediaId: this.media.id, sessions: this.owner.openSessions, retryInMs: EXCLUSIVE_RETRY_MS })
-              return shared(seconds, options?.keyFrame === true)
+              return shared(seconds, options?.keyFrame === true, signal)
             }
             // A hung or lost session must not answer the retry: close it so the next read opens a fresh one.
             if (kind === 'service') drop(pending)
             throw error
           }
-        })
+        }).finally(() => { if (own) speculativeReads.delete(own) })
         tail = read
         return read
       },

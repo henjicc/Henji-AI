@@ -259,6 +259,18 @@ describe('VideoDecoderService', () => {
     expect(children[0].received.filter((message) => message.type === 'probe')).toHaveLength(1)
   })
 
+  it('放弃在途取帧时按它的请求 ID 让原生会话停下这次解码', async () => {
+    const { service, children } = createHarness(standardHandler({ frame_at: () => undefined }))
+    await service.ensureStarted()
+    const controller = new AbortController()
+    const pending = service.frameAt('vf-1', 2, 't1', { signal: controller.signal })
+    await waitFor(() => children[0].received.some((message) => message.type === 'frame_at'))
+    controller.abort()
+    await expectCode(pending, 'CANCELLED')
+    await waitFor(() => children[0].received.some((message) => message.type === 'cancel'))
+    expect(children[0].received.find((message) => message.type === 'cancel')?.targetId).toBe(children[0].received.find((message) => message.type === 'frame_at')?.id)
+  })
+
   it('detects a crash, fails in-flight requests and restarts per policy', async () => {
     const { service, children, events } = createHarness([
       standardHandler({ probe: (_message, child) => child.exit(3221225477) }),

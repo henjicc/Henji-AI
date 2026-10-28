@@ -11,6 +11,7 @@ export { VideoDecoderError } from './protocol'
 export {
   VideoFrameBridge,
   VIDEO_FRAMES_STREAM_ENDED_CHANNEL,
+  parseVideoFrameAtCancelRequest,
   parseVideoFrameAtRequest,
   parseVideoFrameCancelRequest,
   parseVideoFrameDecoderRequest,

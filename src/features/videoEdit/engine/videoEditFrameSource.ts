@@ -84,6 +84,12 @@ export interface VideoEditFrameReadOptions {
    * cannot position return the exact picture.
    */
   keyFrame?: boolean
+  /**
+   * Abandons the read once its picture is no longer wanted (a newer read replaced it). The native backend stops the
+   * decode where it got to, so the next read of the reader continues from there, and rejects with an `AbortError`;
+   * a backend that cannot stop may still answer. An abandoned read is never a decoding failure.
+   */
+  signal?: AbortSignal
 }
 
 /** Sound reads of one clip. The renderer never reads one clip's sound concurrently (the render worker serializes). */

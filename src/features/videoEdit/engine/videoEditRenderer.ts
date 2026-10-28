@@ -87,6 +87,11 @@ export type VideoEditScrubMode = boolean | 'fast'
 export const VIDEO_EDIT_SCRUB_HOLD_SECONDS = 4
 /** 慢速拖动时，目标在代码视频输入当前画面之后不超过这么久（秒，约 6 帧）就直接续解出精确画面，不先沿用旧画面。 */
 export const VIDEO_EDIT_SCRUB_CONTINUE_SECONDS = 0.1
+/**
+ * 拖动中后台追向指针的精确读取：指针退回、或向前跳过这么久（秒）以上时放弃它（解码器停在已解到的位置），改读新位置。
+ * 更小的向前移动多半还在同一个 GOP 里，读完再接着追更快；每次都放弃的话一直拿不到画面。
+ */
+export const VIDEO_EDIT_SCRUB_RETARGET_SECONDS = 0.5
 /** 拖动播放头混音时保留的空闲声音来源（含嵌套序列的声音渲染器）上限。 */
 export const VIDEO_EDIT_IDLE_AUDIO_SOURCES = 8
 /** 浏览器回退路径的闲置读取器上限；原生会话按服务端预算保留，不使用此数量。 */
@@ -121,10 +126,18 @@ function videoEditPictureCovers(picture: { timestamp: number; duration: number }
 export interface VideoEditRenderResult { canvas: OffscreenCanvas; nestedPicture?: VideoEditCodePicture; sourceTimestamps: number[]; blankPictures: number; singleFrameReads: number; cacheHits: number; cacheBytes: number; presented: boolean; renderCached: boolean; decodeMs: number; gpuMs: number; effectErrors?: string[]; approximate?: boolean; /** Not presented because a later request's picture reached the screen first. */ superseded?: boolean; completion: Promise<void> }
 export interface VideoEditRenderCacheWindow { key: string; startFrame: number; endFrame: number; url: string; width: number; height: number; fps: number }
 /**
- * `prewarm`: stops the walk of a session opened ahead (the clip starts, playback stops, the session closes); `ahead`:
- * whether that walk reached the clip's first picture.
+ * How the walk of an input session opened ahead ended: it reached the clip's first picture; it failed (the decoder
+ * budget had no room, a decoding failure); or it was stopped, by its own stop or by the clip's own read taking the
+ * decoder over (an abandoned read). Stopped is not a failure.
  */
-interface CodeInputSession { renderer: VideoEditRenderer; tail: Promise<unknown>; document: VideoEditComposition; sourceKey: string; lastKey?: string; lastPicture?: VideoEditCodePicture; /** The last picture is an approximate one (fast scrub, far jump): an exact request draws it again. */ lastApproximate?: boolean; ownerKey: string; prewarm?: AbortController; ahead?: Promise<boolean> }
+type CodeInputPrewarm = 'reached' | 'failed' | 'stopped'
+/**
+ * `prewarm`: stops the walk of a session opened ahead (the clip starts, playback stops, the session closes); `ahead`:
+ * how that walk ended.
+ */
+interface CodeInputSession { renderer: VideoEditRenderer; tail: Promise<unknown>; document: VideoEditComposition; sourceKey: string; lastKey?: string; lastPicture?: VideoEditCodePicture; /** The last picture is an approximate one (fast scrub, far jump): an exact request draws it again. */ lastApproximate?: boolean; ownerKey: string; prewarm?: AbortController; ahead?: Promise<CodeInputPrewarm> }
+/** A read abandoned through its signal (or a walk stopped through its own): never a failure to report or recover from. */
+const isAbortError = (error: unknown): boolean => (error as { name?: unknown } | null)?.name === 'AbortError'
 /** A still being decoded in the background (owner only); `urgent` once a showing frame waits for it. */
 interface StillDecode { done: Promise<boolean>; controller: AbortController; urgent: boolean; promote?: () => void }
 /**
@@ -251,8 +264,12 @@ interface VideoSource {
   codec?: string
   /** First picture of an upcoming cut, decoded before the boundary frame is requested. */
   prerolled?: Promise<void>
-  /** Scrub of a code video input: the background walk toward the newest pointer time (`readAhead`); `keyFrame` reads approximate pictures. */
-  ahead?: { time: number; keyFrame: boolean }
+  /**
+   * Scrub of a code video input: the background walk toward the newest pointer time (`readAhead`); `keyFrame` reads
+   * approximate pictures. `read` is the walk's read under way (its target, whether it is exact), abandoned through
+   * `abort` once the pointer moved where it no longer helps or a read of the frame itself takes over.
+   */
+  ahead?: { time: number; keyFrame: boolean; read?: { target: number; exact: boolean; abort: AbortController } }
   /** Pictures a background read replaced; closed at this source's next read (the frames drawing them were submitted). */
   retired?: VideoEditGpuFrame[]
   /** Counts reads that set `current`: a background read installs its picture only when no later read began. */
@@ -1052,9 +1069,9 @@ export class VideoEditRenderer {
   }
   /**
    * Opens the input session of a moving reference whose clip first shows at `first` and walks it to that picture
-   * (`prewarmCodeInput`); an input already open is left as it is. Resolves whether the walk got there.
+   * (`prewarmCodeInput`); an input already open is left as it is. Resolves how the walk ended.
    */
-  private prewarmInput(document: VideoEditComposition, clip: VideoEditClip, first: number, source: CodeMediaInput, deadline?: number): Promise<boolean> {
+  private prewarmInput(document: VideoEditComposition, clip: VideoEditClip, first: number, source: CodeMediaInput, deadline?: number): Promise<CodeInputPrewarm> {
     const key = source.sessionKey
     const existing = this.codeInputs.get(key)
     // An input opened ahead for another first picture (it was to show live after a pre-rendered window that has gone
@@ -1062,7 +1079,7 @@ export class VideoEditRenderer {
     // input kept between its spans whose next span does not continue a short step ahead of where its decoder stands
     // (a skip or a jump back): its boundary frame would seek otherwise.
     const stale = existing && existing.sourceKey !== source.sampleKey && (this.prewarmedInputs.has(key) || source.timetabled && !this.continuesInput(existing, source))
-    if (existing && !stale) return existing.ahead ?? Promise.resolve(true)
+    if (existing && !stale) return existing.ahead ?? Promise.resolve('reached')
     if (existing) {
       this.codeInputs.delete(key); this.prewarmedInputs.delete(key); existing.prewarm?.abort()
       void existing.renderer.dispose().then(() => existing.tail).catch(() => undefined)
@@ -1077,7 +1094,7 @@ export class VideoEditRenderer {
       recordVideoEditPreparation('codeInputPrewarm', performance.now() - started)
       logger.debug('代码视频输入已提前解到入点', { event: 'video_edit.code_input.prewarm.completed', context: { sequenceId: document.id, clipId: clip.id, startFrame: first, durationMs: performance.now() - started, paused: deadline === undefined } })
     }, error => this.prewarmFailed(error, controller.signal, renderer, { sequenceId: document.id, clipId: clip.id, startFrame: first }))
-    entry.ahead = walk.then(() => true, () => false)
+    entry.ahead = walk.then(() => 'reached' as const, error => isAbortError(error) ? 'stopped' as const : 'failed' as const)
     return entry.ahead
   }
   /** Whether an open input's next picture is at most one long prewarm step ahead of the picture its decoder last read. */
@@ -1091,22 +1108,23 @@ export class VideoEditRenderer {
    * The idle lookahead's prewarm of a moving input (`prepareLookahead`): the walk belongs to the input session, so a
    * cancelled lookahead (a new frame, pressing play) only stops waiting for it; the renderer's own rules stop it (the
    * clip starts, playback stops, the playhead moves away and the input is no longer kept). A walk that failed (the
-   * decoder budget had no room) gives its session back, so the lookahead's retry opens it again.
+   * decoder budget had no room) gives its session back, so the lookahead's retry opens it again; a stopped walk keeps
+   * it (its decoder may be the one the clip's own read is using).
    */
   private async prewarmAhead(document: VideoEditComposition, clip: VideoEditClip, first: number, source: CodeMediaInput, signal: AbortSignal): Promise<boolean> {
     const key = source.sessionKey
     const ahead = this.prewarmInput(document, clip, first, source)
-    const prepared = await new Promise<boolean>(resolve => {
-      const stop = (): void => resolve(false)
+    const outcome = await new Promise<CodeInputPrewarm>(resolve => {
+      const stop = (): void => resolve('stopped')
       signal.addEventListener('abort', stop, { once: true })
       void ahead.then(value => { signal.removeEventListener('abort', stop); resolve(value) })
     })
     const entry = this.codeInputs.get(key)
-    if (!prepared && !signal.aborted && entry && this.prewarmedInputs.has(key) && !entry.prewarm?.signal.aborted) await this.disposeCodeInputs(new Set([...this.codeInputs.keys()].filter(other => other !== key)))
-    return prepared
+    if (outcome === 'failed' && !signal.aborted && entry && this.prewarmedInputs.has(key) && !entry.prewarm?.signal.aborted) await this.disposeCodeInputs(new Set([...this.codeInputs.keys()].filter(other => other !== key)))
+    return outcome === 'reached'
   }
   private prewarmFailed(error: unknown, signal: AbortSignal, renderer: VideoEditRenderer, context: Record<string, unknown>): void {
-    if (signal.aborted || renderer.disposed) return
+    if (signal.aborted || renderer.disposed || isAbortError(error)) return
     // The budget refusing a decoder ahead of need is the one reason entering the clip still opens and seeks there
     // (logged once per input: the idle lookahead retries a refused still every half second).
     const owner = this.lookaheadOwner, logged = JSON.stringify(context)
@@ -1197,18 +1215,31 @@ export class VideoEditRenderer {
    * pictures (a key frame, or a short step forward), a slow one going back exact ones. Every arriving picture becomes
    * the input's current picture; the frames shown meanwhile draw the previous one, so the program keeps the pointer's
    * pace while the decoder catches up. A read of the frame itself (the pointer rested, or the time is far away) ends the
-   * walk and wins over it.
+   * walk and wins over it, abandoning the walk's read under way. An exact read the pointer left behind (it went back, or
+   * more than `VIDEO_EDIT_SCRUB_RETARGET_SECONDS` ahead) is abandoned too and the walk reads the new time; the decoder
+   * keeps the position it reached.
    */
   private readAhead(clipId: string, pending: Promise<VideoSource>, source: VideoSource, media: VideoEditMedia, time: number, keyFrame: boolean): void {
-    if (source.ahead) { source.ahead.time = time; source.ahead.keyFrame = keyFrame; return }
-    const ahead = { time, keyFrame }
+    if (source.ahead) {
+      source.ahead.time = time; source.ahead.keyFrame = keyFrame
+      const read = source.ahead.read
+      if (read?.exact && (time < read.target || time - read.target > VIDEO_EDIT_SCRUB_RETARGET_SECONDS)) read.abort.abort()
+      return
+    }
+    const ahead: NonNullable<VideoSource['ahead']> = { time, keyFrame }
     source.ahead = ahead
     void (async () => {
       for (let target = time; ; target = ahead.time) {
         const epoch = source.readEpoch = (source.readEpoch ?? 0) + 1
         const reading = performance.now()
-        const read = await source.video?.frameAt(target, ahead.keyFrame ? { keyFrame: true } : undefined)
-        recordVideoEditPreparation('codeInputScrubAhead', performance.now() - reading)
+        const abort = new AbortController()
+        ahead.read = { target, exact: !ahead.keyFrame, abort }
+        let read: VideoEditDecodedPicture | null | undefined
+        try { read = await source.video?.frameAt(target, { ...(ahead.keyFrame ? { keyFrame: true } : {}), signal: abort.signal }) } catch (error) {
+          if (!abort.signal.aborted) throw error
+          read = null
+        } finally { ahead.read = undefined }
+        recordVideoEditPreparation(abort.signal.aborted ? 'codeInputScrubAheadAbandoned' : 'codeInputScrubAhead', performance.now() - reading)
         if (read) {
           let normalized: VideoEditGpuFrame
           try { normalized = await this.ensureCompositor().snapshot(read, videoEditGpuFrameUsesChroma(read, source.codec), true) } finally { read.close() }
@@ -1218,7 +1249,8 @@ export class VideoEditRenderer {
           source.current = normalized; source.previousTime = target; source.prewarmed = false
           if (this.codeInput?.history) this.frameCache.put(media.path, normalized.clone(), new Set())
         }
-        if (source.ahead !== ahead || ahead.time === target) return
+        // An abandoned read reached nothing: read the newest time even if the pointer came back to the same one.
+        if (source.ahead !== ahead || (ahead.time === target && !abort.signal.aborted)) return
       }
     })().catch(error => { if (!this.disposed) logger.debug('拖动中的视频输入后台取帧未完成', { event: 'video_edit.code_input.scrub_ahead.failed', error, context: { mediaId: media.id } }) })
       .finally(() => { if (source.ahead === ahead) source.ahead = undefined })
@@ -1828,8 +1860,9 @@ export class VideoEditRenderer {
             approximatePictures++
             recordVideoEditPreparation('codeInputScrubHold', 0)
           } else {
-            // A read of its own: a background walk still under way must not replace this picture afterwards.
-            source.ahead = undefined; source.readEpoch = (source.readEpoch ?? 0) + 1
+            // A read of its own: a background walk still under way must not replace this picture afterwards, nor hold the
+            // decoder while this read waits behind it.
+            source.ahead?.read?.abort.abort(); source.ahead = undefined; source.readEpoch = (source.readEpoch ?? 0) + 1
             source.current?.close(); source.current = undefined; source.prewarmed = false
             if (kept instanceof VideoEditGpuFrame) { source.current = kept.clone(); cacheHits++ }
             else {

@@ -3,6 +3,7 @@ import type { ImportSharedTextureOptions, SendSharedTextureOptions, SharedTextur
 import type { MainLoggerMeta } from '../logging/main-logger'
 import type { VideoDecoderLifecycleEvent } from './client'
 import type { VideoDecoderDecoderStarted, VideoDecoderEvent, VideoDecoderOpenRequest, VideoDecoderStreamStarted, VideoDecoderTestStreamRequest } from './protocol'
+import { VideoDecoderError } from './protocol'
 import {
   encodeNtHandle,
   parseVideoFrameAtRequest,
@@ -388,10 +389,10 @@ describe('VideoFrameBridge decoder sessions', () => {
     await expect(bridge.frameAt(8, { streamId: 'vf-1', time: 1, ticket: 't1' })).rejects.toThrow('不属于当前窗口')
     await expect(bridge.frameAt(7, { streamId: 'vf-2', time: 1, ticket: 't1' })).rejects.toThrow()
     await expect(bridge.frameAt(7, { streamId: 'vf-1', time: 1, ticket: 't1' })).resolves.toMatchObject({ ticket: 't1', found: true, ptsUs: 1_000_000 })
-    expect(native.service.frameAt).toHaveBeenCalledWith('vf-1', 1, 't1', {}, false)
+    expect(native.service.frameAt).toHaveBeenCalledWith('vf-1', 1, 't1', { signal: expect.any(AbortSignal) }, false)
     // 快速拖动的关键帧近似取帧原样转给解码服务。
     await bridge.frameAt(7, { streamId: 'vf-1', time: 2, ticket: 't3', keyOnly: true })
-    expect(native.service.frameAt).toHaveBeenLastCalledWith('vf-1', 2, 't3', {}, true)
+    expect(native.service.frameAt).toHaveBeenLastCalledWith('vf-1', 2, 't3', { signal: expect.any(AbortSignal) }, true)
     await expect(bridge.schedule(8, { streamId: 'vf-1', scheduleId: 's1', times: [0] })).rejects.toThrow()
     await expect(bridge.schedule(7, { streamId: 'vf-1', scheduleId: 's1', times: [0, 0.5] })).resolves.toEqual({ scheduleId: 's1', count: 2 })
     expect(native.service.schedule).toHaveBeenCalledWith({ streamId: 'vf-1', scheduleId: 's1', times: [0, 0.5] })
@@ -399,6 +400,27 @@ describe('VideoFrameBridge decoder sessions', () => {
     expect(await bridge.cancelSchedule(7, 'vf-1', 's1')).toBe(true)
     await bridge.closeStream('vf-1', 'requested', 7)
     await expect(bridge.frameAt(7, { streamId: 'vf-1', time: 1, ticket: 't2' })).rejects.toThrow()
+  })
+
+  it('放弃在途取帧：只有发起窗口能按票据中止自己会话的取帧，中止经信号交给解码服务；已结束的取帧找不到', async () => {
+    const native = createService()
+    let signal: AbortSignal | undefined
+    vi.mocked(native.service.frameAt).mockImplementationOnce((_streamId, _time, ticket, options = {}) => {
+      signal = options.signal
+      return new Promise((_, reject) => options.signal?.addEventListener('abort', () => reject(new VideoDecoderError('CANCELLED', `取帧 ${ticket} 已取消`))))
+    })
+    const bridge = new VideoFrameBridge({ service: native.service, sharedTexture: createSharedTexture().api, logger: createLogger().logger, overdueCheckIntervalMs: 0 })
+    await bridge.openDecoder(createTarget(7).target, { ...decoderRequest, purpose: 'seek' })
+    const pending = bridge.frameAt(7, { streamId: 'vf-1', time: 3, ticket: 't1' })
+    expect(bridge.cancelFrameAt(8, 'vf-1', 't1')).toBe(false)
+    expect(bridge.cancelFrameAt(7, 'vf-1', 't9')).toBe(false)
+    expect(signal?.aborted).toBe(false)
+    expect(bridge.cancelFrameAt(7, 'vf-1', 't1')).toBe(true)
+    await expect(pending).rejects.toMatchObject({ code: 'CANCELLED' })
+    expect(signal?.aborted).toBe(true)
+    expect(bridge.cancelFrameAt(7, 'vf-1', 't1')).toBe(false)
+    await bridge.frameAt(7, { streamId: 'vf-1', time: 4, ticket: 't2' })
+    expect(bridge.cancelFrameAt(7, 'vf-1', 't2')).toBe(false)
   })
 
   it('closes the sessions of one frame channel when that channel disconnects, leaving other channels and windows alone', async () => {
