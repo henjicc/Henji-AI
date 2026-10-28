@@ -237,7 +237,7 @@ it('字幕画面选择保留当前帧、原译文独立编辑，Enter 提交一�
   const onError = vi.fn(); const view = render(<VideoEditTextOverlay instance={owner} onError={onError} />)
   const target = (field: string) => view.container.querySelector(`[data-caption-field="${field}"]`)!
   pointer(target('text'), 'down', .5, .85)
-  expect(selectedVideoEditSubtitleId(owner)).toBe(id); expect(owner.frame).toBe(45); expect(owner.activePanel).toBe('content')
+  expect(selectedVideoEditSubtitleId(owner)).toBe(id); expect(owner.frame).toBe(45); expect(owner.activePanel).toBe('effects')
   const past = owner.past.length
   fireEvent.doubleClick(target('translation'))
   let editor = view.getByRole('textbox'); expect(editor.textContent).toBe('Translation')

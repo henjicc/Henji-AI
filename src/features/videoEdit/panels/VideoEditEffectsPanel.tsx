@@ -22,6 +22,8 @@ import { VideoEditBasicSoundPanel } from './VideoEditBasicSoundPanel'
 import { VideoEditCodeElementsPanel } from './VideoEditCodeElementsPanel'
 import { VideoEditRecordingPanel } from './VideoEditRecordingPanel'
 import { VideoEditTimeRemapPanel } from './VideoEditTimeRemapPanel'
+import { VideoEditSubtitleInspector } from './VideoEditSubtitleStylePanel'
+import { selectedVideoEditSubtitleId, subscribeVideoEditSubtitleSelection, videoEditSubtitleSelectionRevision } from '../application/videoEditSubtitleSelection'
 
 /**
  * 片段名一行（重要记录 019）：确认是哪个片段；变过速时跟一个速度读数。改名在“更多”菜单里（或双击名称），回车或失焦提交一次。
@@ -45,11 +47,12 @@ function ClipNameHeader({ clip, speed, onRename }: { clip: VideoEditClip; speed:
 
 /**
  * 效果控件（重要记录 019，对齐 AE / PR）：片段名一行 → 片段固有效果（运动 / 不透明度 / 音频，每节 fx 开关、可折叠）→
- * 代码参数或图形 → 附加效果（直接一节一节列出，没有“附加效果”这个大标题）→ 过渡。每行四列：箭头 / 秒表 / 名称 / 右对齐的数值，
+ * 代码参数或图形 → 附加效果（直接一节一节列出，没有“附加效果”这个大标题）→ 过渡。没选片段时显示选中的过渡或字幕（字幕名、剪辑后复核与字幕样式）。每行四列：箭头 / 秒表 / 名称 / 右对齐的数值，
  * 重置在名称的右键菜单。添加、复制效果在右下角底栏。批注在批注面板里看，这里不重复。
  */
 function VideoEditEffectsPanelContent({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (reason: unknown) => void; visible?: boolean }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
+  useSyncExternalStore(subscribeVideoEditSubtitleSelection, videoEditSubtitleSelectionRevision)
   const errorHandler = useRef(onError); errorHandler.current = onError
   const reportError = useCallback((reason: unknown): void => errorHandler.current(reason), [])
   const menu = useContextMenu()
@@ -58,6 +61,7 @@ function VideoEditEffectsPanelContent({ instance, onError, visible = true }: { i
   const selection = instance.selection
   const selected = useMemo(() => sequence.clips.find(clip => clip.id === selection), [sequence, selection])
   const projectId = instance.document.id
+  const captionId = selected ? undefined : selectedVideoEditSubtitleId(instance, sequence.id)
   const gesture = useVideoEditClipPropertyGesture(projectId, sequence.id, selected?.id ?? '', reportError)
   const run = (operation: () => unknown): void => { try { operation() } catch (error) { onError(error) } }
   return <UiFieldLayoutContext.Provider value="property"><UiPropertyMenuContext.Provider value={menu.showMenu}>
@@ -67,7 +71,7 @@ function VideoEditEffectsPanelContent({ instance, onError, visible = true }: { i
           <ClipNameHeader key={`name:${selected.id}`} clip={selected} speed={videoEditClipSpeedReadout(selected)} onRename={name => run(() => updateVideoEditClipProperties(projectId, sequence.id, selected.id, { name }))} />
           <VideoEditClipPropertySections clip={selected} frame={{ ...sequence, playhead: instance.frame }} gesture={gesture} />
           {visible && selected.kind === 'text' && <VideoEditTextStylePanel key={`text-style:${selected.id}`} projectId={projectId} sequenceId={sequence.id} clip={selected} height={sequence.height} onError={reportError} />}
-        </> : selectedVideoEditTransitionId(instance) ? null : <UiEmpty size="sm" title="选择片段以编辑" />}
+        </> : selectedVideoEditTransitionId(instance) ? null : captionId ? <VideoEditSubtitleInspector instance={instance} sequenceId={sequence.id} captionId={captionId} onError={reportError} /> : <UiEmpty size="sm" title="选择片段以编辑" />}
         {visible && <VideoEditBasicSoundPanel instance={instance} onError={reportError} />}
         {visible && selected?.kind === 'code' && selected.code && <CodeParameterPanel key={JSON.stringify(['source-code', projectId, sequence.id, selected.id])} projectId={projectId} sequenceId={sequence.id} clipId={selected.id} onError={onError} />}
         {visible && selected?.kind === 'code' && selected.code && <VideoEditCodeElementsPanel instance={instance} clipId={selected.id} onError={reportError} />}

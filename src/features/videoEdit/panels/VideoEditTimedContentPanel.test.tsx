@@ -214,7 +214,7 @@ it('字幕浮层区分模型加载、失败重试和未配置，每次重开刷�
   let fail!: (error: Error) => void
   vi.mocked(getPlatform().audioEdit.listAsrModels).mockReturnValueOnce(new Promise((_resolve, reject) => { fail = reject }))
   const view = render(<View />)
-  const trigger = view.getByRole('button', { name: '自动字幕与样式' })
+  const trigger = view.getByRole('button', { name: '自动字幕' })
   fireEvent.click(trigger)
   await view.findByText('正在读取语音识别模型…')
   expect(view.getByRole('button', { name: '转录并生成字幕' }).hasAttribute('disabled')).toBe(true)

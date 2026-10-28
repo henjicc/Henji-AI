@@ -7,6 +7,7 @@ import { closeApplicationSurface as closeSurface, listApplicationSurfaces, openA
 import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
 import { focusVideoEdit, focusVideoEditPanel, switchVideoEditSequence, setVideoEditView, setVideoEditProjectView, requireVideoEditInstance } from '@/features/videoEdit/application/videoEditService'
 import { readVideoEditData, splitVideoEditRef } from '@/features/videoEdit/application/videoEditReflection'
+import { selectVideoEditSubtitle } from '@/features/videoEdit'
 import type { CapabilityExecutionContext } from '@/features/application-control/capabilities/handlerTypes'
 
 export type { ApplicationSurfaceDefinition } from '@/features/navigation/application/index'
@@ -67,11 +68,17 @@ export async function focusApplicationEntity(
       if (!mark) throw new Error('NOT_FOUND')
       setVideoEditView(projectId, { selection: mark.clipId, frame: mark.frame, playing: false })
     }
-    if (ref.kind === 'video_edit.marker' || ref.kind === 'video_edit.caption') {
-      const content = ref.kind === 'video_edit.marker' ? sequence?.markers?.find(mark => mark.id === childId) : sequence?.captions?.find(caption => caption.id === childId)
-      if (!content) throw new Error('NOT_FOUND')
-      setVideoEditView(projectId, { selection: content.clipId ?? null, frame: 'frame' in content ? content.frame : content.start, playing: false })
+    if (ref.kind === 'video_edit.marker') {
+      const mark = sequence?.markers?.find(mark => mark.id === childId)
+      if (!sequence || !mark) throw new Error('NOT_FOUND')
+      selectVideoEditSubtitle(projectId, sequence.id, null)
+      setVideoEditView(projectId, { selection: mark.clipId ?? null, frame: mark.frame, playing: false })
       focusVideoEditPanel(projectId, 'content')
+    }
+    // 助手定位字幕与人在时间线上点选同一条路：选中字幕、清空片段选择、效果控件显示它的样式。
+    if (ref.kind === 'video_edit.caption') {
+      if (!sequence?.captions?.some(caption => caption.id === childId)) throw new Error('NOT_FOUND')
+      selectVideoEditSubtitle(projectId, sequence.id, childId)
     }
     return { ref, ...openApplicationSurface('workspace.video_edit', correlation) }
   }

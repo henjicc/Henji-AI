@@ -51,11 +51,18 @@ export interface VideoEditTimelineView {
   /** Premiere Linked Selection (absent means on): clicks extend to linked partners; groups always. The selection itself is the edit set. */
   linkedSelection?: boolean
 }
+/** 每条序列各记一份的视图状态（切换序列时保存与恢复）。 */
+type VideoEditSequenceView = VideoEditTimelineView & { selection: string | null; frame: number; selectedCaptionId: string | null }
 export interface VideoEditInstance extends VideoEditTimelineView {
   selectedCodeElement?: import('@/core/videoEdit/codeElementSelection').VideoEditCodeElementSelection | null
+  /**
+   * 当前序列里选中的字幕（视图状态，不进文档，切换序列时随序列视图保存与恢复）。与片段选择互斥：
+   * 片段选择只经 `commitClipSelection` 写入，选中片段时它被清掉；`setVideoEditSelectedCaption` 选中字幕时清空片段选择。
+   */
+  selectedCaptionId?: string | null
   document: VideoEditDocument
   activeSequenceId: string
-  sequenceViews: Map<string, VideoEditTimelineView & { selection: string | null; frame: number }>
+  sequenceViews: Map<string, VideoEditSequenceView>
   selectedItemIds: string[]
   selectedBinId: string
   openSequenceIds: string[]
@@ -348,6 +355,31 @@ export function videoEditRevision(): number { return revision }
 export function subscribeVideoEditView(listener: () => void): () => void { viewListeners.add(listener); return () => { viewListeners.delete(listener) } }
 export function videoEditViewRevision(): number { return viewRevision }
 function publishView(): void { viewRevision++; for (const listener of viewListeners) listener() }
+const captionSelectionListeners = new Set<() => void>()
+let captionSelectionRevision = 0
+export function subscribeVideoEditCaptionSelection(listener: () => void): () => void { captionSelectionListeners.add(listener); return () => { captionSelectionListeners.delete(listener) } }
+export function videoEditCaptionSelectionRevision(): number { return captionSelectionRevision }
+function publishCaptionSelection(): void { captionSelectionRevision++; for (const listener of captionSelectionListeners) listener() }
+function writeCaptionSelection(instance: VideoEditInstance, captionId: string | null): void {
+  if ((instance.selectedCaptionId ?? null) === captionId) return
+  instance.selectedCaptionId = captionId; publishCaptionSelection()
+}
+/** 片段选择的唯一写入口：选中片段非空时同时取消字幕选择（两者互斥，同 PR 与过渡选择）。 */
+function commitClipSelection(instance: VideoEditInstance, ids: string[]): void {
+  instance.selectedClipIds = ids
+  if (ids.length) writeCaptionSelection(instance, null)
+}
+/**
+ * 字幕选择的唯一写入口：选中一条字幕时清空片段选择；传 null 取消。每次选中都通知订阅者，
+ * 重复选中同一条也会让字幕列表重新滚到它。
+ */
+export function setVideoEditSelectedCaption(id: string, captionId: string | null): void {
+  const instance = requireVideoEditInstance(id)
+  if (captionId === null) { writeCaptionSelection(instance, null); return }
+  if (!findActiveVideoEditSequence(instance)?.captions?.some(caption => caption.id === captionId)) throw new Error('原字幕已移除，请重新选择。')
+  if (instance.selectedClipIds.length || instance.selection) { cancelVideoEditGesture(instance); commitClipSelection(instance, []); instance.selection = null; instance.selectedCodeElement = null; publishVideoEdit() }
+  instance.selectedCaptionId = captionId; publishCaptionSelection()
+}
 export function videoEditDomainRevision(): number { return domainRevision }
 export function subscribeVideoEditDomain(listener: () => void): () => void { domainListeners.add(listener); return () => { domainListeners.delete(listener) } }
 export function listVideoEditInstances(): VideoEditInstance[] { return [...instances.values()] }
@@ -378,12 +410,13 @@ export function getActiveVideoEditSequence(instance: VideoEditInstance): VideoEd
 function reconcileSequenceView(instance: VideoEditInstance): void {
   if (!instance.document.sequences.some(sequence => sequence.id === instance.activeSequenceId)) {
     instance.activeSequenceId = instance.document.sequences[0]?.id ?? ''
-    Object.assign(instance, instance.sequenceViews.get(instance.activeSequenceId) ?? defaultSequenceView(findActiveVideoEditSequence(instance)))
+    restoreSequenceView(instance, instance.sequenceViews.get(instance.activeSequenceId) ?? defaultSequenceView(findActiveVideoEditSequence(instance)))
     instance.playing = false; instance.scrubbing = false
   }
   const sequence = findActiveVideoEditSequence(instance)
-  if (!sequence) { Object.assign(instance, defaultSequenceView()); instance.playing = false; instance.scrubbing = false; instance.openSequenceIds = [] }
-  instance.selectedClipIds = instance.selectedClipIds.filter(id => sequence?.clips.some(clip => clip.id === id))
+  if (!sequence) { restoreSequenceView(instance, defaultSequenceView()); instance.playing = false; instance.scrubbing = false; instance.openSequenceIds = [] }
+  commitClipSelection(instance, instance.selectedClipIds.filter(id => sequence?.clips.some(clip => clip.id === id)))
+  if (instance.selectedCaptionId && !sequence?.captions?.some(caption => caption.id === instance.selectedCaptionId)) writeCaptionSelection(instance, null)
   if (!instance.selectedClipIds.includes(instance.selection ?? '')) instance.selection = instance.selectedClipIds[0] ?? null
   instance.targetTrackIds = instance.targetTrackIds.filter(id => sequence?.tracks.some(track => track.id === id))
   instance.selectedItemIds = instance.selectedItemIds.filter(id => instance.document.items.some(item => item.id === id))
@@ -391,8 +424,14 @@ function reconcileSequenceView(instance: VideoEditInstance): void {
   instance.openSequenceIds = instance.openSequenceIds.filter(id => instance.document.sequences.some(sequence => sequence.id === id))
   if (instance.activeSequenceId && !instance.openSequenceIds.includes(instance.activeSequenceId)) instance.openSequenceIds.push(instance.activeSequenceId)
 }
-function defaultSequenceView(sequence?: VideoEditSequence): VideoEditTimelineView & { selection: string | null; frame: number } {
-  return { selectedClipIds: [], targetTrackIds: ['video', 'audio'].flatMap(kind => { const track = sequence?.tracks.find(track => track.kind === kind && !track.locked); return track ? [track.id] : [] }), tool: 'select', snapping: true, zoom: 1, inFrame: null, outFrame: null, linkedSelection: true, selection: null, frame: 0 }
+/** 换到另一条序列时恢复它的视图；字幕选择随之变化时通知只订阅字幕选择的组件。 */
+function restoreSequenceView(instance: VideoEditInstance, view: VideoEditSequenceView): void {
+  const captionBefore = instance.selectedCaptionId ?? null
+  Object.assign(instance, structuredClone(view))
+  if ((instance.selectedCaptionId ?? null) !== captionBefore) publishCaptionSelection()
+}
+function defaultSequenceView(sequence?: VideoEditSequence): VideoEditSequenceView {
+  return { selectedCaptionId: null, selectedClipIds: [], targetTrackIds: ['video', 'audio'].flatMap(kind => { const track = sequence?.tracks.find(track => track.kind === kind && !track.locked); return track ? [track.id] : [] }), tool: 'select', snapping: true, zoom: 1, inFrame: null, outFrame: null, linkedSelection: true, selection: null, frame: 0 }
 }
 function rescaleSequenceViews(instance: VideoEditInstance, before: VideoEditDocument): void {
   for (const sequence of instance.document.sequences) {
@@ -417,11 +456,11 @@ export function switchVideoEditSequence(projectId: string, sequenceId: string, o
   }
   beginVideoEditFirstFrame(projectId, sequenceId, 'switch')
   cancelVideoEditGesture(instance)
-  instance.sequenceViews.set(instance.activeSequenceId, { ...getVideoEditTimelineView(projectId), selection: instance.selection, frame: instance.frame })
+  instance.sequenceViews.set(instance.activeSequenceId, { ...getVideoEditTimelineView(projectId), selection: instance.selection, frame: instance.frame, selectedCaptionId: instance.selectedCaptionId ?? null })
   instance.activeSequenceId = sequenceId
   instance.selectedCodeElement = null
   if (!instance.openSequenceIds.includes(sequenceId)) instance.openSequenceIds.push(sequenceId)
-  Object.assign(instance, structuredClone(instance.sequenceViews.get(sequenceId) ?? defaultSequenceView(findActiveVideoEditSequence(instance))))
+  restoreSequenceView(instance, instance.sequenceViews.get(sequenceId) ?? defaultSequenceView(findActiveVideoEditSequence(instance)))
   const opened = findActiveVideoEditSequence(instance)
   if (options.fromStart || (opened && instance.frame >= videoEditDuration(opened))) instance.frame = 0
   instance.playing = false; instance.playbackDirection = 1; instance.scrubbing = false; programCommands.set(instance, {}); reconcileSequenceView(instance); publishVideoEdit(true)
@@ -664,7 +703,7 @@ export function setVideoEditView(id: string, values: Partial<Pick<VideoEditInsta
   if (selectionChanged) cancelVideoEditGesture(instance)
   if (selectionChanged && values.selectedCodeElement === undefined) instance.selectedCodeElement = null
   Object.assign(instance, values)
-  instance.selectedClipIds = selectedClipIds
+  commitClipSelection(instance, selectedClipIds)
   if (selectionChanged || elementSelectionChanged) publishVideoEdit(programCommand)
   else { if (programCommand) domainRevision++; publishView() }
   return command
@@ -712,7 +751,9 @@ export function setVideoEditTimelineView(id: string, values: Partial<VideoEditTi
   const primary = primaryClipId ?? (next.selectedClipIds.includes(instance.selection ?? '') ? instance.selection : next.selectedClipIds[0] ?? null)
   if (JSON.stringify(next) === JSON.stringify(getVideoEditTimelineView(id)) && primary === instance.selection) return
   if (JSON.stringify(next.selectedClipIds) !== JSON.stringify(instance.selectedClipIds) || primary !== instance.selection) cancelVideoEditGesture(instance)
-  Object.assign(instance, next)
+  const { selectedClipIds, ...rest } = next
+  Object.assign(instance, rest)
+  commitClipSelection(instance, selectedClipIds)
   instance.selection = primary
   if (instance.selectedCodeElement?.clipId !== primary) instance.selectedCodeElement = null
   publishVideoEdit(true)

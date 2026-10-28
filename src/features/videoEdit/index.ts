@@ -16,3 +16,4 @@ export { prepareVideoEditAudioGain, prepareVideoEditRecordingGain, measureVideoE
 export { readVideoMotionGroup } from './application/videoEditMotionGroup'
 export { removeSuperKeyframeTake, superKeyframeAttachment, openVideoSuperKeyframesInAssistant } from './application/videoEditSuperKeyframes'
 export { listVideoEditInstances, subscribeVideoEditDomain, videoEditDomainRevision } from './application/videoEditService'
+export { selectVideoEditSubtitle } from './application/videoEditSubtitleSelection'

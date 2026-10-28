@@ -10,7 +10,7 @@ import { updateVideoEditTimedContent } from '../application/videoEditTimedConten
 import { ownerWindowOf } from '@/utils/crossRealmDom'
 import { addVideoEditProgramText } from '../application/videoEditProgramText'
 import { updateVideoEditClipProperties } from '../application/videoEditClipProperties'
-import { beginVideoEditGesture, finishVideoEditGesture, focusVideoEditPanel, getActiveVideoEditSequence, setVideoEditView, setVideoEditTimelineView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditDomainRevision, videoEditViewRevision, videoEditProgramCommandIdentity, type VideoEditGesture, type VideoEditInstance } from '../application/videoEditService'
+import { beginVideoEditGesture, finishVideoEditGesture, getActiveVideoEditSequence, setVideoEditView, setVideoEditTimelineView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditDomainRevision, videoEditViewRevision, videoEditProgramCommandIdentity, type VideoEditGesture, type VideoEditInstance } from '../application/videoEditService'
 import { getVideoEditMaskEditing, setVideoEditMaskEditing, subscribeVideoEditMaskEditing, videoEditMaskEditingRevision } from '../application/videoEditMaskEditing'
 import { getVideoEditTrackingEditing, setVideoEditTrackingEditing, subscribeVideoEditTrackingEditing, videoEditTrackingEditingRevision } from '../application/videoEditTrackingEditing'
 
@@ -109,7 +109,7 @@ export function VideoEditTextOverlay({ instance, onError, enabled = true }: { in
       finish(); cancelDrag()
       if (!clip && (wasEditing || instance.tool !== 'type')) return
       if (instance.playing) setVideoEditView(instance.document.id, { playing: false })
-      if (caption) { selectVideoEditSubtitle(instance.document.id, sequence.id, caption.captionId, { preserveFrame: true }); focusVideoEditPanel(instance.document.id, 'content'); event.currentTarget.focus(); event.preventDefault(); return }
+      if (caption) { selectVideoEditSubtitle(instance.document.id, sequence.id, caption.captionId, { preserveFrame: true }); event.currentTarget.focus(); event.preventDefault(); return }
       if (clip && instance.tool === 'type' && corner === undefined) { beginEditing(clip.id); return }
       if (clip) setVideoEditTimelineView(instance.document.id, { selectedClipIds: [clip.id] }, clip.id)
       dragging.current = { pointerId: event.pointerId, start: point(event), clip, corner, layout, ...(clip ? { session: session(clip.id) } : {}), sequenceId: sequence.id, frame: instance.frame, document: instance.document }

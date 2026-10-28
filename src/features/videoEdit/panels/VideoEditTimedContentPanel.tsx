@@ -3,11 +3,12 @@ import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { VideoEditSubtitleActions } from './VideoEditSubtitleActions'
+import { VideoEditSubtitleStyleButton } from './VideoEditSubtitleStylePanel'
 import { VideoEditTextPanel } from './VideoEditTextPanel'
 import { splitVideoEditSubtitle, mergeVideoEditSubtitles } from '../application/videoEditAutoSubtitles'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import { FileInput, FileOutput, MoreHorizontal, Plus } from 'lucide-react'
-import { Dropdown, PanelTrigger, UiButton, UiChipButton, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton, UiLoading, UiOverflowRow, UiSearchInput, UiOptionButton, UiTextArea, type UiOverflowRowItem } from '@/components/ui'
+import { Dropdown, PanelTrigger, UiButton, UiChipButton, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton, UiLoading, UiSearchInput, UiOptionButton, UiTextArea, UiToolbar } from '@/components/ui'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import NumberInput from '@/components/ui/NumberInput'
 import { UI_TEXT_PANEL_TITLE_CLASS, UI_TEXT_SECONDARY_CLASS } from '@/components/ui/styleTokens'
@@ -90,7 +91,7 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
     const value = values?.find(value => value.id === entry.value.id)
     if (!value) throw new Error('此字幕或标记已移除，请重新选择。')
     if (instance.activeSequenceId !== current.id) switchVideoEditSequence(projectId, current.id)
-    if (entry.kind === 'caption') selectVideoEditSubtitle(projectId, current.id, value.id)
+    if (entry.kind === 'caption') selectVideoEditSubtitle(projectId, current.id, value.id, { reveal: false })
     else { selectVideoEditSubtitle(projectId, current.id, null); setVideoEditView(projectId, { frame: 'start' in value ? value.start : value.frame, playing: false }) }
   })
   const changeAnchor = (clipId: string): void => setDraft(previous => {
@@ -132,29 +133,28 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
     void operation(controller.signal).then(() => { if (mounted.current && !controller.signal.aborted) setDraft(null) }, reason => { if (!controller.signal.aborted) report(reason) }).finally(() => { if (mounted.current && pending.current === controller) { pending.current = undefined; setBusy(false) } })
   }
   const selected = entries.find(entry => entry.value.id === selectedId)
-  const headerItems: UiOverflowRowItem[] = [
-    { id: 'tabs', pinned: true, priority: 10, node: <div role="tablist" aria-label="字幕或标记" className="flex min-w-0 items-center">
-        {(['caption', 'marker'] as const).map(value => <UiChipButton key={value} role="tab" selectionRole="navigation" selectionAppearance="subtle" active={!showText && kind === value} aria-selected={!showText && kind === value} disabled={busy}
-          onClick={() => { setShowText(false); setKind(value); setDraft(null); setSelectedId(''); setError('') }}>{value === 'caption' ? '字幕' : '标记'}</UiChipButton>)}
-        <UiChipButton role="tab" selectionRole="navigation" selectionAppearance="subtle" active={showText} aria-selected={showText} disabled={busy} onClick={() => { setShowText(true); setDraft(null) }}>文本</UiChipButton>
-      </div> },
-    ...(!showText ? [{ id: 'add', priority: 5, node: <UiIconButton size="xs" aria-label={kind === 'caption' ? '新增字幕' : '新增标记'} tooltip={kind === 'caption' ? '新增字幕' : '新增标记'} disabled={busy || kind === 'caption' && sequence.captionTrackLocked} onClick={() => { setDraft(freshDraft(kind)); setError('') }}><Plus  /></UiIconButton> }] : []),
-    ...(!showText && kind === 'caption' ? [
-      { id: 'subtitle', priority: 2, node: <VideoEditSubtitleActions instance={instance} sequence={sequence} selectedCaptionId={selectedCaptionId} onError={report} /> },
-      { id: 'files', priority: 1, node: <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" disabled={busy} renderPanel={() => <div role="menu" aria-label="字幕文件" className="flex flex-col gap-0.5">
-          <UiOptionButton role="menuitem" variant="menu" size="sm" className="w-full gap-2" disabled={busy || sequence.captionTrackLocked} onClick={() => { setDraft(freshDraft('import')); setError('') }}><FileInput size={UI_ICON_SIZE.sm} />导入字幕…</UiOptionButton>
-          <UiOptionButton role="menuitem" variant="menu" size="sm" className="w-full gap-2" disabled={!sequence.captions?.length} onClick={() => asyncFile(signal => exportVideoEditSubtitles(projectId, 'srt', sequence.id, signal, 'sequence'))}><FileOutput size={UI_ICON_SIZE.sm} />导出 SRT（序列时间）</UiOptionButton>
-          <UiOptionButton role="menuitem" variant="menu" size="sm" className="w-full gap-2" disabled={!sequence.captions?.length} onClick={() => asyncFile(signal => exportVideoEditSubtitles(projectId, 'vtt', sequence.id, signal))}><FileOutput size={UI_ICON_SIZE.sm} />导出 WebVTT</UiOptionButton>
-        </div>}>
-          {({ open, togglePanel }) => <UiIconButton size="xs" aria-label="导入或导出字幕" tooltip="导入或导出字幕" on={open} aria-haspopup="menu" aria-expanded={open} disabled={busy} data-panel-trigger-button onClick={togglePanel}><MoreHorizontal  /></UiIconButton>}
-        </PanelTrigger> },
-    ] : []),
-  ]
+  const tools = <>
+    <UiIconButton size="sm" aria-label={kind === 'caption' ? '新增字幕' : '新增标记'} tooltip={kind === 'caption' ? '新增字幕' : '新增标记'} disabled={busy || kind === 'caption' && sequence.captionTrackLocked} onClick={() => { setDraft(freshDraft(kind)); setError('') }}><Plus /></UiIconButton>
+    {kind === 'caption' && <>
+      <VideoEditSubtitleActions instance={instance} sequence={sequence} onError={report} />
+      <VideoEditSubtitleStyleButton instance={instance} sequenceId={sequence.id} selectedCaptionId={selectedCaptionId} onError={report} />
+      <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" disabled={busy} renderPanel={() => <div role="menu" aria-label="字幕文件" className="flex flex-col gap-0.5">
+        <UiOptionButton role="menuitem" variant="menu" size="sm" className="w-full gap-2" disabled={busy || sequence.captionTrackLocked} onClick={() => { setDraft(freshDraft('import')); setError('') }}><FileInput size={UI_ICON_SIZE.sm} />导入字幕…</UiOptionButton>
+        <UiOptionButton role="menuitem" variant="menu" size="sm" className="w-full gap-2" disabled={!sequence.captions?.length} onClick={() => asyncFile(signal => exportVideoEditSubtitles(projectId, 'srt', sequence.id, signal, 'sequence'))}><FileOutput size={UI_ICON_SIZE.sm} />导出 SRT（序列时间）</UiOptionButton>
+        <UiOptionButton role="menuitem" variant="menu" size="sm" className="w-full gap-2" disabled={!sequence.captions?.length} onClick={() => asyncFile(signal => exportVideoEditSubtitles(projectId, 'vtt', sequence.id, signal))}><FileOutput size={UI_ICON_SIZE.sm} />导出 WebVTT</UiOptionButton>
+      </div>}>
+        {({ open, togglePanel }) => <UiIconButton size="sm" aria-label="导入或导出字幕" tooltip="导入或导出字幕" aria-haspopup="menu" aria-expanded={open} disabled={busy} data-panel-trigger-button onClick={togglePanel}><MoreHorizontal /></UiIconButton>}
+      </PanelTrigger>
+    </>}
+  </>
+  const total = kind === 'caption' ? sequence.captions?.length ?? 0 : sequence.markers?.length ?? 0
   return <div className="flex h-full min-h-0 flex-col overflow-hidden" aria-label="字幕与标记" data-video-edit-timed-content-sequence={sequence.id} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); cancel() } }}>
-    {/* 导航和动作共用一条带；窄面板把次要动作收进浮层，下面只有搜索从属带。 */}
-    <UiOverflowRow className="shrink-0 gap-1 px-2 pt-1" items={headerItems} renderOverflow={hidden => <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} panelPadding="content" renderPanel={() => <div className="flex flex-wrap items-center gap-2">{hidden.map(id => <div key={id}>{headerItems.find(item => item.id === id)?.node}</div>)}</div>}>
-      {({ open, togglePanel }) => <UiIconButton size="xs" aria-label="更多字幕与标记操作" aria-expanded={open} aria-haspopup="dialog" on={open} data-panel-trigger-button onClick={togglePanel}><MoreHorizontal  /></UiIconButton>}
-    </PanelTrigger>} />
+    {/* 顶上只放三个标签；新增、自动字幕、样式与导入导出在底栏右侧（重要记录 018）。 */}
+    <div role="tablist" aria-label="字幕或标记" className="flex shrink-0 items-center px-2 pt-1">
+      {(['caption', 'marker'] as const).map(value => <UiChipButton key={value} role="tab" selectionRole="navigation" selectionAppearance="subtle" active={!showText && kind === value} aria-selected={!showText && kind === value} disabled={busy}
+        onClick={() => { setShowText(false); setKind(value); setDraft(null); setSelectedId(''); setError('') }}>{value === 'caption' ? '字幕' : '标记'}</UiChipButton>)}
+      <UiChipButton role="tab" selectionRole="navigation" selectionAppearance="subtle" active={showText} aria-selected={showText} disabled={busy} onClick={() => { setShowText(true); setDraft(null) }}>文本</UiChipButton>
+    </div>
     {showText ? <VideoEditTextPanel instance={instance} sequence={sequence} onError={report} /> : <>
     <div className="shrink-0 px-2 py-1.5">
       <UiSearchInput aria-label="搜索字幕或标记" placeholder="搜索文字或片段" size="sm" className="w-full" value={keyword} onChange={event => setKeyword(event.target.value)} />
@@ -195,6 +195,7 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
     </UiGroup>}
     {busy && <UiLoading size="xs" message="正在处理字幕文件…" />}
     {busy && !draft && <UiButton className="mx-2 mb-2" onClick={cancel}>取消文件操作</UiButton>}
+    <UiToolbar variant="footer" aria-label={kind === 'caption' ? '字幕工具' : '标记工具'} trailing={tools}>{kind === 'caption' ? `${total} 条字幕` : `${total} 个标记`}</UiToolbar>
     </>}
   </div>
 }

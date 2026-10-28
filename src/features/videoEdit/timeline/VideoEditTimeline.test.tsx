@@ -236,7 +236,7 @@ it('字幕时间线点击与面板行双向选中，切换标记页后也能定�
   const view = render(<><View /><VirtuosoMockContext.Provider value={{ viewportHeight: 280, itemHeight: 56 }}><VideoEditTimedContentPanel instance={owner} onError={onError} /></VirtuosoMockContext.Provider></>)
   const secondBar = view.getByRole('button', { name: '定位字幕 第二条' })
   fireEvent.click(secondBar)
-  expect(owner.frame).toBe(60); expect(owner.activePanel).toBe('content')
+  expect(owner.frame).toBe(60); expect(owner.activePanel).toBe('effects')
   expect(selectedVideoEditSubtitleId(owner)).toBe(second)
   expect(secondBar.getAttribute('aria-pressed')).toBe('true')
   expect((await view.findByRole('button', { name: '字幕：第二条' })).getAttribute('aria-pressed')).toBe('true')

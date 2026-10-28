@@ -1,27 +1,21 @@
-import { useVideoEditTypographyGesture } from './useVideoEditTypographyGesture'
-import { VideoEditTypographyPanel } from './VideoEditTypographyPanel'
+import { Captions } from 'lucide-react'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Dropdown, PanelTrigger, UiButton, UiCheckbox, UiEmpty, UiError, UiFormRow, UiGroup, UiLoading, UI_TEXT_META_CLASS } from '@/components/ui'
+import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton, UiLoading, UiSpinner, UI_TEXT_META_CLASS } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import { Z_LAYERS } from '@/core/theme/zLayers'
-import { scaleVideoEditTextStyle } from '@/core/videoEdit/text'
-import { videoEditSubtitleStyleSchema, type VideoEditSubtitleStyle } from '@/core/videoEdit/subtitleStyle'
 import type { VideoEditSequence } from '@/core/videoEdit/document'
 import { getPlatform } from '@/platform/runtime'
-import { styleVideoEditSubtitles, segmentVideoEditSubtitles, type SubtitleScope } from '../application/videoEditAutoSubtitles'
-import { updateVideoEditTimedContent } from '../application/videoEditTimedContent'
+import { segmentVideoEditSubtitles, type SubtitleScope } from '../application/videoEditAutoSubtitles'
 import { readSubtitleJob, subscribeSubtitleJobs, subtitleJobsRevision, runVideoEditSubtitleJob, cancelSubtitleJob, findRecoverableSubtitleAudio } from '../application/videoEditSubtitleJobs'
 import { subscribeVideoEditDomain, videoEditDomainRevision, type VideoEditInstance } from '../application/videoEditService'
-import { listVideoEditSubtitlePresets } from '../application/videoEditSubtitlePresets'
 import { confirmVideoEditBilingualSubtitles, type SubtitleTranslationLanguage } from '../application/videoEditBilingualSubtitles'
-import { useVideoEditFontPreview } from './useVideoEditFontPreview'
-import { collectVideoEditFonts } from '@/core/videoEdit/fonts'
 import { SUBTITLE_STYLE_PROFILES } from '@/core/videoEdit/subtitleStyleProfiles'
 
 const netflix = SUBTITLE_STYLE_PROFILES.netflix_zh_hans
 
-export function VideoEditSubtitleActions({ instance, sequence, selectedCaptionId, onError }: { instance: VideoEditInstance; sequence: VideoEditSequence; selectedCaptionId?: string; onError: (error: unknown) => void }): React.ReactElement {
+/** 自动字幕入口：转录生成、规范化已有字幕与双语字幕。字幕样式在 `VideoEditSubtitleStylePanel`。 */
+export function VideoEditSubtitleActions({ instance, sequence, onError }: { instance: VideoEditInstance; sequence: VideoEditSequence; onError: (error: unknown) => void }): React.ReactElement {
   const { t } = useTranslation('common')
   useSyncExternalStore(subscribeVideoEditDomain, videoEditDomainRevision)
   sequence = instance.document.sequences.find(value => value.id === sequence.id) ?? sequence
@@ -31,27 +25,12 @@ export function VideoEditSubtitleActions({ instance, sequence, selectedCaptionId
   const [maxLines, setMaxLines] = useState(netflix.maxLines); const [pauseSeconds, setPauseSeconds] = useState(.25)
   const [subtitleProfile, setSubtitleProfile] = useState<'netflix_zh_hans' | 'custom'>('netflix_zh_hans')
   const subtitleOptions = subtitleProfile === 'netflix_zh_hans' ? { style: subtitleProfile } : { style: subtitleProfile, maxCharacters, maxLines, pauseSeconds, minDurationSeconds }
-  const [presetId, setPresetId] = useState('')
-  // 全局样式（重要记录 019）：默认勾上，改动作用于这条序列的全部字幕；取消后只改选中的那条（没选中时不改）。
-  const [global, setGlobal] = useState(true)
-  const targets: readonly string[] | undefined = global ? undefined : selectedCaptionId ? [selectedCaptionId] : []
-  const applicable = Boolean(sequence.captions?.length) && !sequence.captionTrackLocked && (global || Boolean(selectedCaptionId))
   const [targetLanguage, setTargetLanguage] = useState<SubtitleTranslationLanguage>('en')
   const [translating, setTranslating] = useState(false)
   const [normalizing, setNormalizing] = useState(false)
   const normalization = useRef<AbortController>()
   const translation = useRef<AbortController>()
-  const presets = listVideoEditSubtitlePresets()
   const [language, setLanguage] = useState<'zh' | 'en'>('zh')
-  const currentCaption = selectedCaptionId ? sequence.captions?.find(cue => cue.id === selectedCaptionId) : sequence.captions?.[0]
-  const [style, setStyle] = useState<VideoEditSubtitleStyle>(() => currentCaption?.style || videoEditSubtitleStyleSchema.parse({}))
-  useEffect(() => { setStyle(currentCaption?.style || videoEditSubtitleStyleSchema.parse({})) }, [currentCaption?.id, currentCaption?.style, selectedCaptionId, sequence.id])
-  const { bottomMargin: _bottomMargin, ...typography } = style
-  const typographyGesture = useVideoEditTypographyGesture(instance.document.id, `${sequence.id}:subtitle:${selectedCaptionId ?? ''}`, onError)
-  const typographyBaseline = useRef<VideoEditSubtitleStyle>()
-  const beginTypography = (): void => { typographyBaseline.current ??= style; if (sequence.captions?.length) typographyGesture.begin() }
-  const endTypography = (commit: boolean): void => { typographyGesture.end(commit); const baseline = typographyBaseline.current; typographyBaseline.current = undefined; if (!commit && baseline) setStyle(baseline) }
-  const previewFont = useVideoEditFontPreview(instance.document.id, `${sequence.id}:subtitle:${selectedCaptionId ?? ''}`, onError, (fontFamily, gesture) => { if (applicable) styleVideoEditSubtitles(instance.document.id, sequence.id, { ...style, fontFamily }, targets, gesture) })
   const [open, setOpen] = useState(false)
   const [modelAttempt, setModelAttempt] = useState(0)
   const [models, setModels] = useState<'loading' | 'failed' | 'unconfigured' | 'configured'>('loading'); const [recoverable, setRecoverable] = useState<string>()
@@ -75,9 +54,6 @@ export function VideoEditSubtitleActions({ instance, sequence, selectedCaptionId
   const busy = transcribing || translating || normalizing
   const retry = job?.state !== 'completed' ? job?.audioDocumentId ?? recoverable : undefined
   const run = (resume?: string): void => { void runVideoEditSubtitleJob(instance, sequence.id, scope, trackId || undefined, { ...subtitleOptions, language }, resume).catch(error => { if (mounted.current) onError(error) }) }
-  /** 把一份样式写进字幕：范围由“全局样式”决定，一次修改一步撤销。 */
-  const applyStyle = (value: VideoEditSubtitleStyle): void => { if (!applicable) return; try { styleVideoEditSubtitles(instance.document.id, sequence.id, value, targets) } catch (error) { onError(error) } }
-  const changeStyle = (value: VideoEditSubtitleStyle): void => { setPresetId(''); setStyle(value) }
   const normalize = (): void => {
     const controller = new AbortController(); normalization.current = controller; setNormalizing(true)
     void segmentVideoEditSubtitles(instance.document.id, sequence.id, subtitleOptions, undefined, controller.signal).catch(error => { if (mounted.current && !controller.signal.aborted) onError(error) }).finally(() => { if (mounted.current) setNormalizing(false); if (normalization.current === controller) normalization.current = undefined })
@@ -87,10 +63,6 @@ export function VideoEditSubtitleActions({ instance, sequence, selectedCaptionId
     void confirmVideoEditBilingualSubtitles(instance.document.id, sequence.id, { targetLanguage }, controller.signal).catch(error => { if (mounted.current && !controller.signal.aborted) onError(error) }).finally(() => { if (mounted.current) setTranslating(false); if (translation.current === controller) translation.current = undefined })
   }
   return <PanelTrigger open={open} onOpenChange={setOpen} panelSize="compact" zIndex={Z_LAYERS.dropdown} renderPanel={() => <div className="flex max-h-96 flex-col gap-3 overflow-auto">
-    {Boolean(currentCaption?.reviewReasons?.length) && <UiGroup title="剪辑后复核" titleTone="compact">
-      <p className={UI_TEXT_META_CLASS}>这条字幕有待核对的内容。请核对正文、译文与声音是否对应，并检查显示时间。</p>
-      <UiButton size="sm" disabled={sequence.captionTrackLocked || busy} disabledReason={sequence.captionTrackLocked ? '字幕轨道已锁定，请先解锁。' : busy ? '字幕正在处理中，请稍后确认。' : undefined} onClick={() => { if (currentCaption) { try { updateVideoEditTimedContent(instance.document.id, sequence.id, 'caption', currentCaption.id, { reviewReasons: [] }) } catch (error) { onError(error) } } }}>确认已检查</UiButton>
-    </UiGroup>}
     <UiGroup title="自动字幕" titleTone="compact">
       <UiFormRow label="范围" density="compact"><Dropdown ariaLabel="字幕转录范围" size="sm" value={scope} onSelect={setScope} disabled={sequence.captionTrackLocked || busy} options={[{ value: 'sequence', label: '整个序列' }, { value: 'in-out', label: '序列入出点' }, { value: 'selection', label: '选中片段' }]} /></UiFormRow>
       <UiFormRow label="声音" density="compact"><Dropdown ariaLabel="字幕声音来源" size="sm" value={trackId} onSelect={setTrackId} disabled={sequence.captionTrackLocked || busy} options={[{ value: '', label: '可听混音' }, ...sequence.tracks.map(track => ({ value: track.id, label: track.name }))]} /></UiFormRow>
@@ -109,15 +81,6 @@ export function VideoEditSubtitleActions({ instance, sequence, selectedCaptionId
       {normalizing && <UiLoading size="xs" message="正在整理字幕"><UiButton size="sm" onClick={() => normalization.current?.abort()}>取消</UiButton></UiLoading>}
       {transcribing && <UiLoading size="xs" message={job?.state === 'preparing' ? `准备声音 ${Math.round(job.progress * 100)}%` : job?.state === 'confirming' ? '等待费用确认' : '正在识别声音'}><UiButton size="sm" onClick={() => cancelSubtitleJob(instance, sequence.id)}>取消</UiButton></UiLoading>}
     </UiGroup>
-    <UiGroup title="字幕样式" titleTone="compact" divided>
-      <UiFormRow label="全局样式" info="勾上时改动作用于这条序列的全部字幕；取消后只改选中的字幕。" density="compact" inline><UiCheckbox aria-label="全局样式" checked={global} onCheckedChange={setGlobal} /></UiFormRow>
-      <UiFormRow label="样式预设" density="compact"><Dropdown ariaLabel="字幕样式预设" size="sm" value={presetId} options={[{ value: '', label: '自定义样式' }, ...presets.map(preset => ({ value: preset.id, label: preset.name }))]} onSelect={id => { setPresetId(id); const preset = presets.find(preset => preset.id === id); if (preset) { setStyle(preset.style); applyStyle(preset.style) } }} /></UiFormRow>
-      <VideoEditTypographyPanel key={`${instance.document.id}:${sequence.id}:${selectedCaptionId ?? ''}`} onBegin={beginTypography} onEnd={endTypography} style={scaleVideoEditTextStyle(typography, sequence.height / 1080)} fontLabel="字幕字体" onError={onError} onFontPreview={previewFont} projectFonts={collectVideoEditFonts(instance.document).map(use => use.font)} onChange={typography => {
-        const next = videoEditSubtitleStyleSchema.parse({ ...scaleVideoEditTextStyle(typography, 1080 / sequence.height), bottomMargin: style.bottomMargin })
-        if (applicable) styleVideoEditSubtitles(instance.document.id, sequence.id, next, targets, typographyGesture.handle.current); changeStyle(next)
-      }} />
-      <UiFormRow label="底部安全区（%）" density="compact"><NumberInput ariaLabel="字幕底部安全区百分比" size="sm" value={style.bottomMargin * 100} min={0} max={100} step={1} onChange={value => { const next = { ...style, bottomMargin: value / 100 }; changeStyle(next); applyStyle(next) }} /></UiFormRow>
-    </UiGroup>
     <UiGroup title="双语字幕" titleTone="compact" divided>
       <UiFormRow label="第二语言" density="compact"><Dropdown ariaLabel="字幕第二语言" size="sm" value={targetLanguage} onSelect={setTargetLanguage} disabled={sequence.captionTrackLocked || busy} options={[{ value: 'en', label: '英语' }, { value: 'zh', label: '中文' }, { value: 'ja', label: '日语' }, { value: 'ko', label: '韩语' }, { value: 'fr', label: '法语' }, { value: 'es', label: '西班牙语' }, { value: 'de', label: '德语' }]} /></UiFormRow>
       <UiButton loading={translating} size="sm" disabled={sequence.captionTrackLocked || busy || !sequence.captions?.length} onClick={translate}>{'生成第二语言'}</UiButton>
@@ -125,6 +88,6 @@ export function VideoEditSubtitleActions({ instance, sequence, selectedCaptionId
       {translating && <UiButton size="sm" onClick={() => translation.current?.abort(new Error('双语字幕已取消。'))}>取消翻译</UiButton>}
     </UiGroup>
   </div>}>
-    {({ togglePanel, open }) => <UiButton size="sm" aria-label="自动字幕与样式" aria-haspopup="dialog" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}>{busy ? '处理…' : '转录'}</UiButton>}
+    {({ togglePanel, open }) => <UiIconButton size="sm" aria-label="自动字幕" tooltip={busy ? '自动字幕（处理中）' : '自动字幕'} aria-haspopup="dialog" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}>{busy ? <UiSpinner size="sm" /> : <Captions />}</UiIconButton>}
   </PanelTrigger>
 }

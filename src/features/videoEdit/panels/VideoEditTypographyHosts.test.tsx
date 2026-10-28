@@ -10,7 +10,7 @@ import { createVideoEditCaption } from '../application/videoEditTimedContent'
 import { getActiveVideoEditSequence, setVideoEditTimelineView, undoVideoEdit } from '../application/videoEditService'
 import { VideoEditTextStylePanel } from './VideoEditTextStylePanel'
 import { VideoEditGraphicPanel } from './VideoEditGraphicPanel'
-import { VideoEditSubtitleActions } from './VideoEditSubtitleActions'
+import { VideoEditSubtitleStyleFields } from './VideoEditSubtitleStylePanel'
 beforeEach(() => { installHarnessNativeStorage(); vi.spyOn(getPlatform().audioEdit, 'listAsrModels').mockResolvedValue([]); vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ font: '', measureText: (text: string) => ({ width: text.length * 20 }) } as unknown as CanvasRenderingContext2D) })
 afterEach(async () => { cleanup(); await closeAllVideoEdits(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 it.each(['text', 'graphic', 'subtitle'] as const)('三宿主 %s 同一外观写入/撤销，图形复用对象列表及关键帧行', async host => {
@@ -22,7 +22,7 @@ it.each(['text', 'graphic', 'subtitle'] as const)('三宿主 %s 同一外观写�
     read = () => getActiveVideoEditSequence(owner).clips.find(value => value.id === id)?.textStyle?.allCaps
   } else if (host === 'subtitle') {
     const id = createVideoEditCaption(projectId, sequenceId, { start: 0, duration: 30, text: '字幕' })
-    element = <VideoEditSubtitleActions instance={owner} sequence={getActiveVideoEditSequence(owner)} selectedCaptionId={id} onError={error} />
+    element = <VideoEditSubtitleStyleFields instance={owner} sequenceId={sequenceId} selectedCaptionId={id} onError={error} />
     read = () => { const style = getActiveVideoEditSequence(owner).captions?.find(value => value.id === id)?.style; return style ? style.allCaps : undefined }
   } else {
     const id = await addTestTitleTemplate(projectId, sequenceId); setVideoEditTimelineView(projectId, { selectedClipIds: [id] }, id)
@@ -30,7 +30,6 @@ it.each(['text', 'graphic', 'subtitle'] as const)('三宿主 %s 同一外观写�
     read = () => getActiveVideoEditSequence(owner).clips.find(value => value.id === id)?.graphic?.objects.filter(value => value.kind === 'text').at(-1)?.textStyle?.allCaps
   }
   const history = owner.past.length; const view = render(element)
-  if (host === 'subtitle') fireEvent.click(view.getByLabelText('自动字幕与样式'))
   fireEvent.click(await view.findByLabelText('全部大写')); expect(read()).toBe(true); expect(owner.past).toHaveLength(history + 1)
   undoVideoEdit(projectId); expect(read()).not.toBe(true); expect(error).not.toHaveBeenCalled()
   if (host === 'graphic') { expect(view.getAllByLabelText('图形对象层级')).toHaveLength(1); expect(view.container.querySelector('[data-video-edit-code-keyframes="scale"]')).toBeTruthy() }

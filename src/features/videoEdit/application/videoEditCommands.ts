@@ -296,7 +296,7 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
   if (id === 'open_in_source') { await updateVideoEditSource(projectId, { itemId: owner!.document.items.find(item => context.itemIds.includes(item.id) && item.mediaId)!.id }); focusVideoEditPanel(projectId, 'source'); return }
   if (id === 'deselect_all' && context.scope === 'project') { setVideoEditProjectView(projectId, { selectedItemIds: [] }); return }
   const sequenceId = context.sequenceId!; const sequence = getActiveVideoEditSequence(owner!)
-  if (id === 'select_all' || id === 'deselect_all') selectVideoEditSubtitle(projectId, sequenceId, null)
+  if (id === 'deselect_all') selectVideoEditSubtitle(projectId, sequenceId, null)
   const transitionRequest = TRANSITION_COMMANDS[id]
   if (transitionRequest) { await applyVideoEditDefaultTransitions(projectId, sequenceId, videoEditDefaultTransitionTargets(owner!, transitionRequest, context.clipIds, context.frame)); return }
   const captionId = id === 'delete' ? selectedVideoEditSubtitleId(owner!, sequenceId) : undefined

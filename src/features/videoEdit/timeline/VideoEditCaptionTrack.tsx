@@ -33,7 +33,7 @@ export function VideoEditCaptionTrack({ instance, sequence, geometry, pixels, vi
   useEffect(() => () => cancel.current?.(), [instance, sequence.id])
   useEffect(() => { cancel.current?.() }, [sequence, pixels])
   const run = (action: () => void): void => { try { action() } catch (error) { onError(error) } }
-  const select = (id: string): void => { selectVideoEditSubtitle(projectId, sequence.id, id); focusVideoEditPanel(projectId, 'content') }
+  const select = (id: string): void => { selectVideoEditSubtitle(projectId, sequence.id, id) }
   const down = (event: React.PointerEvent<HTMLElement>, caption: VideoEditCaption, mode: VideoEditCaptionGesture): void => {
     if (event.button !== 0) return
     event.preventDefault(); event.stopPropagation()
