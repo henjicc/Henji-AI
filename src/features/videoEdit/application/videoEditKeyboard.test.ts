@@ -14,6 +14,22 @@ it('效果控件Delete和Backspace作用于效果，时间线作用于片段，�
   panel.dataset.videoEditPanel = 'timeline'
   expect(videoEditKeyboardCommand(event(header, 'Delete'), 'effects', config)).toEqual({ id: 'delete', scope: 'timeline' })
 })
+it('焦点所在面板决定作用域：没有自己命令的面板里传输与导航照常作用于序列，编辑命令不落到时间线', () => {
+  // 跟踪、调色、标题模板、风格、代码面板只出现在播放命令的作用域里，同样算没有专属命令
+  for (const id of ['scenes', 'presets', 'audio_mixer', 'tracking', 'color_grade', 'title_templates', 'style_kits', 'code_project']) {
+    const panel = document.createElement('div'); panel.dataset.videoEditPanel = id
+    const row = document.createElement('button'); panel.append(row)
+    // activePanel 还停在时间线（Dock 激活事件没跟上这次点击）
+    for (const code of ['Delete', 'Semicolon']) expect(videoEditKeyboardCommand(event(row, code), 'timeline', {})).toBeUndefined()
+    expect(videoEditKeyboardCommand(event(row, 'KeyX', true), 'timeline', {})).toBeUndefined()
+    expect(videoEditKeyboardCommand(event(row, 'KeyZ', true), 'timeline', {})?.id).toBe('undo')
+    for (const [code, command] of [['KeyL', 'play_forward'], ['Space', 'play_pause'], ['ArrowRight', 'step_forward'], ['KeyI', 'mark_in'], ['Home', 'go_start']]) {
+      expect(videoEditKeyboardCommand(event(row, code), 'timeline', {})).toEqual({ id: command, scope: 'timeline' })
+    }
+  }
+  // 焦点不在任何面板里才退回 activePanel
+  expect(videoEditKeyboardCommand(event(document.createElement('div'), 'Delete'), 'timeline', {})).toEqual({ id: 'delete', scope: 'timeline' })
+})
 it('节目画面 T/V 切换文字和选择，纯文本就地编辑保留 T/V 输入', () => {
   const panel = document.createElement('div'); panel.dataset.videoEditPanel = 'program'
   const picture = document.createElement('div'); panel.append(picture)

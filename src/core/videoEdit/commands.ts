@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export type VideoEditCommandScope = 'annotations' | 'global' | 'timeline' | 'program' | 'source' | 'project' | 'effects' | 'content' | 'tracking' | 'color_grade' | 'title_templates' | 'style_kits' | 'code_project' | 'mask'
+export type VideoEditCommandScope = 'annotations' | 'global' | 'timeline' | 'program' | 'source' | 'project' | 'effects' | 'content' | 'tracking' | 'color_grade' | 'title_templates' | 'style_kits' | 'code_project' | 'scenes' | 'mask'
 export interface VideoEditShortcut { code: string; ctrl: boolean; alt: boolean; shift: boolean; meta: boolean }
 const key = (code: string, ctrl = false, shift = false, alt = false): VideoEditShortcut => ({ code, ctrl, shift, alt, meta: false })
 const editScopes: VideoEditCommandScope[] = ['timeline', 'program']
@@ -11,7 +11,12 @@ const playbackScopes: VideoEditCommandScope[] = [...monitorScopes, 'global', 'pr
  * `alternates`：同一命令的第二组默认键（Premiere 里 Delete 与 Backspace 都能清除片段）。用户改键后只保留用户的那一个。
  * 默认键位以本机 Adobe Premiere Pro 2026（Windows）`Adobe Premiere Pro Defaults.kys` 为准，对照表见任务 2.2。
  */
-function command<const T extends string>(id: T, title: string, scopes: VideoEditCommandScope[], shortcut?: VideoEditShortcut, repeat = false, alternates: readonly VideoEditShortcut[] = []) { return { id, title, scopes, shortcut, repeat, alternates } }
+function command<const T extends string>(id: T, title: string, scopes: VideoEditCommandScope[], shortcut?: VideoEditShortcut, repeat = false, alternates: readonly VideoEditShortcut[] = []) { return { id, title, scopes, shortcut, repeat, alternates, navigation: false as boolean } }
+/**
+ * 传输与导航（播放、逐帧、入出点、跳编辑点与首尾、标记间跳转）：只动播放头和入出点、不改内容。焦点在没有自己命令的
+ * 面板（预设、效果库、音轨混合器、片子数据……）时照常作用于当前序列（PR 的习惯），删除、剪切这类编辑命令不会落到时间线。
+ */
+function navigation<T extends ReturnType<typeof command>>(item: T): T { return { ...item, navigation: true } }
 export const VIDEO_EDIT_COMMANDS = [
   // 批注工具（剪辑命令带里的一个工具）：Alt+C 进入，进入后 1–7 换形状，Esc 回到选择工具；C、A 仍是剃刀与轨道选择。
   command('annotate_tool', '批注工具', editScopes, key('KeyC', false, false, true)),
@@ -62,31 +67,31 @@ export const VIDEO_EDIT_COMMANDS = [
   // 匹配帧（PR 序列菜单）：F 在源监视器打开播放头下片段的素材并定位到同一帧；Shift+R 反过来把播放头移到源监视器当前帧在序列里的位置。
   command('match_frame', '匹配帧', editScopes, key('KeyF')),
   command('reverse_match_frame', '反向匹配帧', monitorScopes, key('KeyR', false, true)),
-  command('play_pause', '播放／暂停', playbackScopes, key('Space')),
-  command('step_back', '上一帧', monitorScopes, key('ArrowLeft'), true),
-  command('step_forward', '下一帧', monitorScopes, key('ArrowRight'), true),
-  command('step_back_five', '后退五帧', monitorScopes, key('ArrowLeft', false, true), true),
-  command('step_forward_five', '前进五帧', monitorScopes, key('ArrowRight', false, true), true),
-  command('play_reverse', '反向浏览（静音）', monitorScopes, key('KeyJ')),
-  command('play_stop', '停止播放', monitorScopes, key('KeyK')),
-  command('play_forward', '正向播放', monitorScopes, key('KeyL')),
-  command('go_prev_edit', '转到上一个编辑点', editScopes, key('ArrowUp'), true),
-  command('go_next_edit', '转到下一个编辑点', editScopes, key('ArrowDown'), true),
-  command('go_prev_edit_any', '转到任意轨道上一个编辑点', editScopes, key('ArrowUp', false, true), true),
-  command('go_next_edit_any', '转到任意轨道下一个编辑点', editScopes, key('ArrowDown', false, true), true),
-  command('go_start', '转到序列开头', editScopes, key('Home')),
-  command('go_end', '转到序列结尾', editScopes, key('End')),
-  command('mark_in', '设置入点', monitorScopes, key('KeyI')),
-  command('mark_out', '设置出点', monitorScopes, key('KeyO')),
+  navigation(command('play_pause', '播放／暂停', playbackScopes, key('Space'))),
+  navigation(command('step_back', '上一帧', monitorScopes, key('ArrowLeft'), true)),
+  navigation(command('step_forward', '下一帧', monitorScopes, key('ArrowRight'), true)),
+  navigation(command('step_back_five', '后退五帧', monitorScopes, key('ArrowLeft', false, true), true)),
+  navigation(command('step_forward_five', '前进五帧', monitorScopes, key('ArrowRight', false, true), true)),
+  navigation(command('play_reverse', '反向浏览（静音）', monitorScopes, key('KeyJ'))),
+  navigation(command('play_stop', '停止播放', monitorScopes, key('KeyK'))),
+  navigation(command('play_forward', '正向播放', monitorScopes, key('KeyL'))),
+  navigation(command('go_prev_edit', '转到上一个编辑点', editScopes, key('ArrowUp'), true)),
+  navigation(command('go_next_edit', '转到下一个编辑点', editScopes, key('ArrowDown'), true)),
+  navigation(command('go_prev_edit_any', '转到任意轨道上一个编辑点', editScopes, key('ArrowUp', false, true), true)),
+  navigation(command('go_next_edit_any', '转到任意轨道下一个编辑点', editScopes, key('ArrowDown', false, true), true)),
+  navigation(command('go_start', '转到序列开头', editScopes, key('Home'))),
+  navigation(command('go_end', '转到序列结尾', editScopes, key('End'))),
+  navigation(command('mark_in', '设置入点', monitorScopes, key('KeyI'))),
+  navigation(command('mark_out', '设置出点', monitorScopes, key('KeyO'))),
   command('mark_clip', '标记片段', editScopes, key('KeyX')),
-  command('go_in', '转到入点', editScopes, key('KeyI', false, true)),
-  command('go_out', '转到出点', editScopes, key('KeyO', false, true)),
-  command('clear_in', '清除入点', monitorScopes, key('KeyI', true, true)),
-  command('clear_out', '清除出点', monitorScopes, key('KeyO', true, true)),
-  command('clear_in_out', '清除入点和出点', monitorScopes, key('KeyX', true, true)),
+  navigation(command('go_in', '转到入点', editScopes, key('KeyI', false, true))),
+  navigation(command('go_out', '转到出点', editScopes, key('KeyO', false, true))),
+  navigation(command('clear_in', '清除入点', monitorScopes, key('KeyI', true, true))),
+  navigation(command('clear_out', '清除出点', monitorScopes, key('KeyO', true, true))),
+  navigation(command('clear_in_out', '清除入点和出点', monitorScopes, key('KeyX', true, true))),
   command('add_marker', '添加标记', editScopes, key('KeyM')),
-  command('next_marker', '转到下一个标记', editScopes, key('KeyM', false, true), true),
-  command('prev_marker', '转到上一个标记', editScopes, key('KeyM', true, true), true),
+  navigation(command('next_marker', '转到下一个标记', editScopes, key('KeyM', false, true), true)),
+  navigation(command('prev_marker', '转到上一个标记', editScopes, key('KeyM', true, true), true)),
   command('select_clip_at_playhead', '选择播放头处的片段', editScopes, key('KeyD')),
   command('split', '在播放头拆分', editScopes, key('KeyK', true)),
   command('frame_hold', '添加帧定格', editScopes),
@@ -155,6 +160,21 @@ export const VIDEO_EDIT_COMMANDS = [
   command('project_toggle_view', '切换素材视图', ['project'], key('Backslash', false, true)),
 ] as const
 export type VideoEditCommandId = typeof VIDEO_EDIT_COMMANDS[number]['id']
+/** 有专属命令（导航与全局命令之外）的作用域；其余面板（预设、效果库、音轨混合器、跟踪、调色……）只借用导航与全局命令。 */
+const OWN_COMMAND_SCOPES: ReadonlySet<string> = new Set<string>(['global', ...VIDEO_EDIT_COMMANDS.filter(command => !command.navigation && !command.scopes.includes('global')).flatMap(command => command.scopes)])
+/** 按键在这个面板里按哪个作用域匹配。 */
+export function videoEditPanelShortcutScope(panel: string): VideoEditCommandScope {
+  return OWN_COMMAND_SCOPES.has(panel) ? panel as VideoEditCommandScope : 'timeline'
+}
+/**
+ * 焦点在某个面板时，命令在哪个作用域执行（键盘与应用菜单共用这一处判定）：有专属命令的面板就是它自己；
+ * 没有的面板里导航与全局命令作用于当前序列（时间线作用域），编辑命令不适用（undefined），不会落到时间线上。
+ */
+export function videoEditPanelCommandScope(panel: string, id: VideoEditCommandId): VideoEditCommandScope | undefined {
+  if (OWN_COMMAND_SCOPES.has(panel)) return panel as VideoEditCommandScope
+  const command = VIDEO_EDIT_COMMANDS.find(item => item.id === id)
+  return command && (command.navigation || command.scopes.includes('global')) ? 'timeline' : undefined
+}
 /** 工具命令 → 时间线工具（模式）。 */
 export const VIDEO_EDIT_TOOL_COMMANDS = { select_tool: 'select', track_tool: 'track', track_backward_tool: 'track_backward', ripple_tool: 'ripple', roll_tool: 'roll', rate_stretch_tool: 'rate_stretch', razor_tool: 'razor', slip_tool: 'slip', slide_tool: 'slide', pen_tool: 'pen', hand_tool: 'hand', zoom_tool: 'zoom', type_tool: 'type', annotate_tool: 'annotate' } as const satisfies Partial<Record<VideoEditCommandId, string>>
 export type VideoEditToolCommandId = keyof typeof VIDEO_EDIT_TOOL_COMMANDS

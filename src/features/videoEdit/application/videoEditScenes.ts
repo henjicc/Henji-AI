@@ -4,11 +4,11 @@ import type { CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersiste
 import type { VideoEditDocument } from '@/core/videoEdit/document'
 import { validateCodeSceneRecords, type CodeSceneKindDeclaration, type CodeSceneMediaKind, type CodeSceneSchema, type CodeSceneValue } from '@/core/videoEdit/scene/sceneDeclaration'
 import { videoEditSceneMedia } from '@/core/videoEdit/scene/sceneMedia'
-import { resolveVideoEditScene, videoEditSceneWriteBackSpan, videoEditSceneWriteBackTime, type ResolvedVideoEditScene } from '@/core/videoEdit/scene/sceneResolve'
+import { resolveVideoEditScene, videoEditSceneWriteBackSpan, videoEditSceneWriteBackTime, type ResolvedVideoEditScene, type ResolvedVideoEditSceneRecord } from '@/core/videoEdit/scene/sceneResolve'
 import { VIDEO_EDIT_SCENE_LIMITS, videoEditSceneSchema, type VideoEditScene, type VideoEditSceneRecord } from '@/core/videoEdit/scene/sceneSchema'
 import { ensureVideoEditCodeParameterMetadata, readVideoEditCodeMetadata } from './videoEditCodeState'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
-import { editVideoProject, requireVideoEditInstance, withVideoEditCommitBatch, type VideoEditCommitBatch, type VideoEditInstance } from './videoEditService'
+import { editVideoProject, finishVideoEditGesture, requireVideoEditInstance, updateVideoEditParameterGesture, videoEditCommittedDocument, withVideoEditCommitBatch, type VideoEditCommitBatch, type VideoEditGesture, type VideoEditInstance } from './videoEditService'
 
 /*
  * 片子数据的领域服务：读（按引用它的代码版本声明解析、校验）与写入入口（writeVideoEditScene 改记录与名称，
@@ -44,6 +44,8 @@ export interface VideoEditSceneWriteOptions {
   readonly batch?: VideoEditCommitBatch
   /** manual（默认）：人或助手的直接修改，改到的字段记手调；generated：重新生成、迁移等自动结果。 */
   readonly origin?: 'manual' | 'generated'
+  /** 检查器拖动的手势（预览见 previewVideoEditSceneGesture）：松手时经这里按声明校验并整笔提交，一步撤销。 */
+  readonly gesture?: VideoEditGesture
 }
 /** 读回与拒绝里的一条问题；severity 为 user 的会让画面缺内容、用户又难以察觉，必须呈现给用户。 */
 export interface VideoEditSceneIssue { readonly recordId?: string; readonly path: string; readonly message: string; readonly severity?: 'user' }
@@ -88,6 +90,8 @@ export interface VideoEditSceneDeclarationState {
   readonly declaration: VideoEditSceneDeclaration | undefined
   /** 不能改记录的原因（这时只能改名）；可以改时 undefined。 */
   readonly block: string | undefined
+  /** 不能改的原因归类（有 block 时给出）：block 是写给助手的做法，界面按它换成用户语言的说明。 */
+  readonly reason?: 'unreferenced' | 'unreadable' | 'mismatch'
   /** 不挡写入、但读回要让人知道的情况。 */
   readonly notes: readonly VideoEditSceneIssue[]
 }
@@ -100,10 +104,13 @@ const RESTRUCTURE = '结构不一致时只能改名。做法：在 video_edit.do
 export function videoEditSceneDeclarationState(scene: Pick<VideoEditScene, 'schema'>, readable: readonly VideoEditSceneDeclaration[], unreadable: readonly string[]): VideoEditSceneDeclarationState {
   const same = (item: VideoEditSceneDeclaration): boolean => item.schema.id === scene.schema.id && item.schema.version === scene.schema.version
   const unreadableText = `引用它的代码版本暂时读不到（${[...new Set(unreadable)].join('、')}）`
-  if (!readable.length) return { declaration: undefined, block: unreadable.length ? `${unreadableText}，无法按代码声明校验；代码恢复可读（补齐源码或编译通过）后再改。` : NO_DECLARATION, notes: [] }
+  if (!readable.length) return unreadable.length
+    ? { declaration: undefined, block: `${unreadableText}，无法按代码声明校验；代码恢复可读（补齐源码或编译通过）后再改。`, reason: 'unreadable', notes: [] }
+    : { declaration: undefined, block: NO_DECLARATION, reason: 'unreferenced', notes: [] }
   const mismatched = readable.filter(item => !same(item))
   return {
     declaration: readable.find(same) ?? readable[0],
+    ...(mismatched.length ? { reason: 'mismatch' as const } : {}),
     block: mismatched.length ? `片子数据按 ${scene.schema.id}@${scene.schema.version} 写成，引用它的代码里 ${mismatched.map(item => `版本 ${item.versionId} 的参数 ${item.parameterKey} 声明的是 ${item.schema.id}@${item.schema.version}`).join('、')}。${RESTRUCTURE}` : undefined,
     notes: unreadable.length ? [{ path: 'schema', message: `${unreadableText}，没有用它们核对。` }] : [],
   }
@@ -147,6 +154,47 @@ export function videoEditSceneIssues(scene: VideoEditScene, state: VideoEditScen
 /** 剪后时刻的全片描述；没有声明时 undefined。 */
 export function resolveVideoEditSceneView(scene: VideoEditScene, schema: CodeSceneSchema | undefined, media: ReadonlyMap<string, CodeSceneMediaKind>): ResolvedVideoEditScene | undefined {
   return schema ? resolveVideoEditScene(scene, schema, { media }) : undefined
+}
+/** 检查器记录树的一行：深度、子记录数与解析结果（被剪掉的记录没有解析结果）。 */
+export interface VideoEditSceneTreeRow {
+  readonly record: VideoEditSceneRecord
+  readonly depth: number
+  readonly childCount: number
+  readonly resolved: ResolvedVideoEditSceneRecord | undefined
+}
+/**
+ * 记录树按 parent 展开成行：同一层先按声明里记录类型的顺序（段落、窗口、窗口内容……，未声明的类型排最后），
+ * 再按开始时刻（剪后；被剪掉的取记录里的时刻），最后按文档顺序。collapsed 里的记录不展开子记录。
+ */
+export function videoEditSceneTreeRows(scene: VideoEditScene, schema: CodeSceneSchema | undefined, resolved: ResolvedVideoEditScene | undefined, collapsed: ReadonlySet<string> = new Set()): VideoEditSceneTreeRow[] {
+  const kinds = schema ? Object.keys(schema.kinds) : []
+  const order = new Map(scene.records.map((record, index) => [record.id, index]))
+  const kindIndex = (record: VideoEditSceneRecord): number => { const index = kinds.indexOf(record.kind); return index < 0 ? kinds.length : index }
+  const start = (record: VideoEditSceneRecord): number => {
+    const at = resolved?.byId.get(record.id)?.at
+    if (at !== undefined) return at
+    const field = schema && Object.hasOwn(schema.kinds, record.kind) ? schema.kinds[record.kind].at : undefined
+    const raw = field === undefined ? undefined : record.values[field]
+    return typeof raw === 'number' ? raw : Infinity
+  }
+  const children = new Map<string | undefined, VideoEditSceneRecord[]>()
+  for (const record of scene.records) {
+    const parent = record.parent !== undefined && order.has(record.parent) ? record.parent : undefined
+    const list = children.get(parent) ?? []; list.push(record); children.set(parent, list)
+  }
+  // 时刻相同（含都没有时刻）时按文档顺序：Infinity − Infinity 是 NaN，不能直接相减。
+  const byStart = (a: VideoEditSceneRecord, b: VideoEditSceneRecord): number => { const x = start(a), y = start(b); return x === y ? 0 : x < y ? -1 : 1 }
+  for (const list of children.values()) list.sort((a, b) => kindIndex(a) - kindIndex(b) || byStart(a, b) || order.get(a.id)! - order.get(b.id)!)
+  const rows: VideoEditSceneTreeRow[] = []
+  const visit = (parent: string | undefined, depth: number): void => {
+    for (const record of children.get(parent) ?? []) {
+      const count = children.get(record.id)?.length ?? 0
+      rows.push({ record, depth, childCount: count, resolved: resolved?.byId.get(record.id) })
+      if (count && !collapsed.has(record.id)) visit(record.id, depth + 1)
+    }
+  }
+  visit(undefined, 0)
+  return rows
 }
 /** 解析阶段会让画面缺内容的问题（severity 为 user）：写入不因它们被拒，但要在回执里告诉调用方。 */
 function userWarnings(scene: VideoEditScene, schema: CodeSceneSchema | undefined, media: ReadonlyMap<string, CodeSceneMediaKind>): VideoEditSceneIssue[] {
@@ -243,11 +291,20 @@ export function applyVideoEditSceneChanges(scene: VideoEditScene, changes: reado
   const next = parsed.data!
   if (!recordsChanged) return next
   const schema = context.schema!
-  const before = new Set(validateCodeSceneRecords(schema, scene, { media: context.media }).map(issueIdentity(scene)))
+  const before = existingIssueKeys(scene, schema, context.media)
   const identity = issueIdentity(next)
   const introduced = validateCodeSceneRecords(schema, next, { media: context.media }).filter(issue => !before.has(identity(issue)))
   if (introduced.length) reject(introduced)
   return next
+}
+const existingIssues = new WeakMap<VideoEditScene, { schema: CodeSceneSchema; media: ReadonlyMap<string, CodeSceneMediaKind>; keys: ReadonlySet<string> }>()
+/** 写入前就有的问题：拖动时每一下都按同一份手势起点套用修改，起点的校验按对象身份只算一次。 */
+function existingIssueKeys(scene: VideoEditScene, schema: CodeSceneSchema, media: ReadonlyMap<string, CodeSceneMediaKind>): ReadonlySet<string> {
+  const cached = existingIssues.get(scene)
+  if (cached?.schema === schema && cached.media === media) return cached.keys
+  const keys = new Set(validateCodeSceneRecords(schema, scene, { media }).map(issueIdentity(scene)))
+  existingIssues.set(scene, { schema, media, keys })
+  return keys
 }
 /** 认同一条问题：记录、去掉列表下标的路径、问题文字，以及路径那处的取值。 */
 function issueIdentity(scene: VideoEditScene): (issue: VideoEditSceneIssue) => string {
@@ -335,6 +392,17 @@ function retimeRecord(record: VideoEditSceneRecord, change: Extract<VideoEditSce
   return next
 }
 
+/**
+ * 拖动中的预览：按手势开始时的片子数据 base 套用修改（与 writeVideoEditScene 同一份规则，手调按 base 比较），
+ * 写进手势草稿，只用于实时看效果；松手时用 writeVideoEditScene 的 gesture 选项按声明重新校验并提交。
+ * 被拒时抛 VideoEditSceneRejection，草稿不变。
+ */
+export function previewVideoEditSceneGesture(handle: VideoEditGesture, sceneId: string, base: VideoEditScene, changes: readonly VideoEditSceneChange[], context: VideoEditSceneWriteContext): VideoEditScene {
+  const next = applyVideoEditSceneChanges(base, changes, context)
+  updateVideoEditParameterGesture(handle, document => ({ ...document, scenes: (document.scenes ?? []).map(item => item.id === sceneId ? next : item) }))
+  return next
+}
+
 /** 写入结果：提交后的片子数据，以及解析发现的会让画面缺内容的问题（写入照常进行，回执里告诉调用方）。 */
 export interface VideoEditSceneWriteResult { readonly scene: VideoEditScene; readonly warnings: readonly VideoEditSceneIssue[] }
 /**
@@ -342,13 +410,25 @@ export interface VideoEditSceneWriteResult { readonly scene: VideoEditScene; rea
  * 与同一事务的其他写入合成一次提交）。不提交代码、不升级素材。被拒时抛 VideoEditSceneRejection，剪辑不变。
  */
 export async function writeVideoEditScene(projectId: string, sceneId: string, changes: readonly VideoEditSceneChange[], options: VideoEditSceneWriteOptions = {}): Promise<VideoEditSceneWriteResult> {
-  const owner = requireVideoEditInstance(projectId); const contentVersion = owner.contentVersion; const document = owner.document
-  const scene = findVideoEditScene(document, sceneId)
-  const state = changes.some(change => change.kind !== 'rename') ? await loadVideoEditSceneDeclarations(owner, document, sceneId) : undefined
-  if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('读取代码声明期间剪辑已有后续修改，请重读当前状态。')
-  const schema = state?.declaration?.schema
-  const next = applyVideoEditSceneChanges(scene, changes, { schema, block: state?.block, media: videoEditSceneMedia(document), origin: options.origin })
-  withVideoEditCommitBatch(options.batch, () => editVideoProject(projectId, current => ({ ...current, scenes: (current.scenes ?? []).map(item => item.id === sceneId ? next : item) })))
+  const owner = requireVideoEditInstance(projectId); const contentVersion = owner.contentVersion
+  const { gesture } = options
+  if (gesture && (gesture.projectId !== projectId || options.batch)) throw new Error('拖动手势只能提交到它所属的剪辑，且不和事务批一起用。')
+  // 拖动提交：按手势开始时的剪辑（预览之前）读声明、校验，结果写进草稿后整笔提交；任何一步失败都取消手势回到起点。
+  const document = gesture ? videoEditCommittedDocument(owner) : owner.document
+  const replace = (next: VideoEditScene) => (current: VideoEditDocument): VideoEditDocument => ({ ...current, scenes: (current.scenes ?? []).map(item => item.id === sceneId ? next : item) })
+  let schema: CodeSceneSchema | undefined
+  try {
+    const scene = findVideoEditScene(document, sceneId)
+    const state = changes.some(change => change.kind !== 'rename') ? await loadVideoEditSceneDeclarations(owner, document, sceneId) : undefined
+    if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('读取代码声明期间剪辑已有后续修改，请重读当前状态。')
+    schema = state?.declaration?.schema
+    const next = applyVideoEditSceneChanges(scene, changes, { schema, block: state?.block, media: videoEditSceneMedia(document), origin: options.origin })
+    if (gesture) { updateVideoEditParameterGesture(gesture, replace(next)); finishVideoEditGesture(gesture) }
+    else withVideoEditCommitBatch(options.batch, () => editVideoProject(projectId, replace(next)))
+  } catch (error) {
+    if (gesture) finishVideoEditGesture(gesture, false)
+    throw error
+  }
   logger.debug('片子数据已修改', { event: 'video_edit.scene.write.completed', context: { sceneId, changes: changes.map(change => change.kind) } })
   const committed = requireVideoEditInstance(projectId).document
   const result = findVideoEditScene(committed, sceneId)

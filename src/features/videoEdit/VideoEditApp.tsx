@@ -32,6 +32,7 @@ import { timelineCommandPresentation } from './timeline/timelineCommandPresentat
 import { VideoEditTimelineTools } from './timeline/VideoEditTimelineTools'
 import { VideoEditAnnotationToolOptions } from './VideoEditAnnotationToolOptions'
 import type { VideoEditCommandId } from '@/core/videoEdit/commands'
+import { VIDEO_EDIT_FOCUSABLE_PANELS, type VideoEditFocusablePanel } from '@/core/videoEdit/panels'
 import { collectVideoEditOutput } from './application/videoEditOutputs'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { openAssetLibrary } from '@/stores/navigationStore'
@@ -160,7 +161,7 @@ export default function VideoEditApp(): React.ReactElement {
   const audioDialog = useVideoEditAudioDialog(projectId)
   const focusPanel = (target: EventTarget | null): void => {
     const panel = target instanceof HTMLElement ? target.closest<HTMLElement>('[data-video-edit-panel]')?.dataset.videoEditPanel : undefined
-    if (projectId && panel && ['timeline', 'program', 'source', 'project', 'effects', 'content', 'color_grade'].includes(panel) && panel !== instance?.activePanel) focusVideoEditPanel(projectId, panel as NonNullable<typeof instance>['activePanel'])
+    if (projectId && panel && (VIDEO_EDIT_FOCUSABLE_PANELS as readonly string[]).includes(panel) && panel !== instance?.activePanel) focusVideoEditPanel(projectId, panel as VideoEditFocusablePanel)
   }
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   const hovered = useRef<Element | null>(null)

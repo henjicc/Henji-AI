@@ -1,5 +1,5 @@
 import { isHtmlElementNode, ownerDocumentOf } from '@/utils/crossRealmDom'
-import { matchVideoEditShortcut, type VideoEditCommandScope, type VideoEditKeyEvent, type VideoEditShortcutOverrides } from '@/core/videoEdit/commands'
+import { matchVideoEditShortcut, videoEditPanelCommandScope, videoEditPanelShortcutScope, type VideoEditCommandScope, type VideoEditKeyEvent, type VideoEditShortcutOverrides } from '@/core/videoEdit/commands'
 
 /** DOM protection belongs to the host; command meanings and bindings stay in the shared registry. */
 export function videoEditKeyboardCommand(event: VideoEditKeyEvent & { target: EventTarget | null }, fallback: VideoEditCommandScope, overrides: VideoEditShortcutOverrides) {
@@ -11,8 +11,10 @@ export function videoEditKeyboardCommand(event: VideoEditKeyEvent & { target: Ev
   // 空格同 PR：剪辑里任何地方都是播放/暂停。普通按钮（素材项、工具按钮）获得焦点时也不再吞掉空格——
   // 否则点过素材、拖过片段之后按空格毫无反应；只有开关、复选、单选这类“空格即切换”的控件保留原生行为。
   const nativeSpace = event.code === 'Space' && Boolean(target?.closest('[role="switch"],[role="checkbox"],[role="radio"]'))
-  const panel = target?.closest<HTMLElement>('[data-video-edit-panel]')?.dataset.videoEditPanel
-  const scope = panel && ['timeline', 'program', 'source', 'project', 'effects'].includes(panel) ? panel as VideoEditCommandScope : fallback
-  const id = matchVideoEditShortcut(event, scope, overrides, editable || nativeSpace)
-  return id ? { id, scope } : undefined
+  // 焦点在哪个面板里就按哪个面板判定：Dock 的激活事件可能没跟上这次点击，退回 activePanel 会让别的面板的
+  // Delete 删掉时间线片段。焦点不在任何面板里才退回 activePanel。面板与命令的对应规则见 videoEditPanelCommandScope。
+  const panel = target?.closest<HTMLElement>('[data-video-edit-panel]')?.dataset.videoEditPanel ?? fallback
+  const id = matchVideoEditShortcut(event, videoEditPanelShortcutScope(panel), overrides, editable || nativeSpace)
+  const scope = id && videoEditPanelCommandScope(panel, id)
+  return id && scope ? { id, scope } : undefined
 }

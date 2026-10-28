@@ -33,11 +33,13 @@ export const VIDEO_EDIT_PANELS = [
   { id: 'presets', title: '预设', ...INSPECTOR_MIN },
   // 代码：片子的代码工程（项目 代码/ 文件夹）的文件树、文件与提交记录；选中代码片段时标出它用到的文件。
   { id: 'code_project', title: '代码', ...INSPECTOR_MIN },
+  // 片子数据：代码片段引用的片子数据按记录树列出，选中一条改字段与剪后起止。
+  { id: 'scenes', title: '片子数据', ...INSPECTOR_MIN },
   // 音轨混合器（参照 Audition / PR）：每条音频轨道的效果、声像、静音独奏、推子，最右边主轨。音频编辑的“多轨”打开的就是这个布局。
   { id: 'audio_mixer', title: '音轨混合器', minimumWidth: 360, minimumHeight: 260 },
 ] as const
 export type VideoEditPanelId = typeof VIDEO_EDIT_PANELS[number]['id']
-const INSPECTOR_PANELS: readonly string[] = ['effects', 'title_templates', 'effects_library', 'presets', 'style_kits', 'annotations', 'content', 'tracking', 'color_grade', 'code_project']
+const INSPECTOR_PANELS: readonly string[] = ['effects', 'title_templates', 'effects_library', 'presets', 'style_kits', 'annotations', 'content', 'tracking', 'color_grade', 'code_project', 'scenes']
 
 function inspectorReference(api: DockviewApi, id: string, own?: DockviewGroupPanel): IDockviewPanel | undefined {
   if (!INSPECTOR_PANELS.includes(id)) return undefined
@@ -46,7 +48,7 @@ function inspectorReference(api: DockviewApi, id: string, own?: DockviewGroupPan
 
 /** A view-only layout: no project content, selection or transport state is serialized. */
 export function defaultVideoEditLayout(): SerializedDockview {
-  const panels = Object.fromEntries(VIDEO_EDIT_PANELS.filter(panel => panel.id !== 'annotations' && panel.id !== 'source' && panel.id !== 'content' && panel.id !== 'tracking' && panel.id !== 'color_grade' && panel.id !== 'audio_mixer' && panel.id !== 'code_project').map(({ id, title }) => [id, { id, contentComponent: id, title, renderer: 'always' as const }]))
+  const panels = Object.fromEntries(VIDEO_EDIT_PANELS.filter(panel => panel.id !== 'annotations' && panel.id !== 'source' && panel.id !== 'content' && panel.id !== 'tracking' && panel.id !== 'color_grade' && panel.id !== 'audio_mixer' && panel.id !== 'code_project' && panel.id !== 'scenes').map(({ id, title }) => [id, { id, contentComponent: id, title, renderer: 'always' as const }]))
   return {
     grid: {
       width: 1440, height: 860, orientation: Orientation.HORIZONTAL,

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { contributeAppMenus, type AppMenuCommand, type AppMenuEditRole } from '@/core/appMenu/appMenu'
-import { VIDEO_EDIT_COMMANDS, videoEditCommandShortcut, videoEditShortcutLabel, type VideoEditCommandId, type VideoEditCommandScope } from '@/core/videoEdit/commands'
+import { VIDEO_EDIT_COMMANDS, videoEditCommandShortcut, videoEditPanelCommandScope, videoEditShortcutLabel, type VideoEditCommandId, type VideoEditCommandScope } from '@/core/videoEdit/commands'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { activeVideoEditInstance, subscribeVideoEdit, subscribeVideoEditView, videoEditRevision, videoEditViewRevision } from './application/videoEditService'
 import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from './application/videoEditCommands'
@@ -42,14 +42,18 @@ export function VideoEditAppMenus(): null {
       const contextOf = (scope: VideoEditCommandScope) => { if (!contexts.has(scope)) contexts.set(scope, captureVideoEditCommandContext(projectId, scope)); return contexts.get(scope)! }
       const item = (id: VideoEditCommandId, fixed?: VideoEditCommandScope): AppMenuCommand => {
         const descriptor = VIDEO_EDIT_COMMANDS.find(command => command.id === id)!
-        const scope = fixed ?? panelScope
-        const state = videoEditCommandState(contextOf(scope), id)
+        // 与键盘同一条规则：没有专属命令的面板里，导航命令照常作用于当前序列，编辑命令不适用。
+        const scope = fixed ?? videoEditPanelCommandScope(panelScope, id)
+        const state = scope ? videoEditCommandState(contextOf(scope), id) : { enabled: false, reason: '此命令不适用于当前面板。', checked: undefined }
         const shortcut = videoEditCommandShortcut(id, shortcuts)
         return {
           kind: 'action', id: fixed ? `videoEdit.${fixed}.${id}` : `videoEdit.${id}`, label: (scope === 'annotations' ? annotationLabels[id] : undefined) ?? descriptor.title,
           shortcut: shortcut ? videoEditShortcutLabel(shortcut) : undefined, editRole: fixed ? undefined : editRoles[id],
           disabledReason: state.enabled ? undefined : state.reason, checked: state.checked, danger: scope === 'annotations' && dangerous.has(id) ? true : undefined,
-          run: () => executeVideoEditCommand(captureVideoEditCommandContext(projectId, fixed ?? activeVideoEditInstance()?.activePanel ?? 'timeline'), id),
+          run: async () => {
+            const at = fixed ?? videoEditPanelCommandScope(activeVideoEditInstance()?.activePanel ?? 'timeline', id)
+            if (at) await executeVideoEditCommand(captureVideoEditCommandContext(projectId, at), id)
+          },
         }
       }
       withdraw.current = contributeAppMenus('videoEdit', groups.map(group => ({ menu: group.menu, label: group.label, order: 100, items: group.ids.map(id => item(id, group.scope)) })))
