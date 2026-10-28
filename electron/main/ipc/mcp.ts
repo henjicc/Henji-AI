@@ -28,7 +28,7 @@ export function registerMcpIpc(): void {
   registerExternalApplicationAuthority((id) => connections.assertActive(id), (id) => connections.list().find(item => item.id === id)?.name)
   server = new LocalMcpServer(connections, host, (error) => logger.error('外部连接请求失败', { event: 'mcp.request.failed', error }), operations,
     (info) => logger.info('外部请求已通过授权', { event: 'mcp.request.authorized', context: { callerId: info.callerId } }),
-    (info) => logger.warn('外部连接认证失败', { event: 'mcp.request.rejected', context: info }), getAgentMemoryStore())
+    (info) => logger.warn(info.reason === 'invalid_token' ? '外部连接认证失败' : '外部请求同时进行的太多，已拒绝', { event: 'mcp.request.rejected', context: info }), getAgentMemoryStore())
   try { preferences = readMcpPreferences() } catch (error) {
     preferences = { ...DEFAULT_MCP_PREFERENCES, enabled: false, defaultAccess: { allowWrites: false, allowDestructive: false, allowPaid: false } }
     logger.error('读取外部连接设置失败，已保持关闭', { event: 'mcp.preferences.read.failed', error })
