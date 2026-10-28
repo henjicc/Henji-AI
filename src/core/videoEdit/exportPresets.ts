@@ -33,8 +33,9 @@ export const videoEditExportSettingsSchema = z.object({
 export type VideoEditExportSettings = z.infer<typeof videoEditExportSettingsSchema>
 export const videoEditExportPresetSchema = z.object({ id: z.string().min(1).max(100), name: z.string().trim().min(1).max(200), settings: videoEditExportSettingsSchema }).strict()
 export type VideoEditExportPreset = z.infer<typeof videoEditExportPresetSchema>
+// 内置视频预设默认把字幕烧录进画面（2026-10-28 用户：导出默认打开字幕）；仅音频的预设不输出字幕
 const preset = (id: string, name: string, width: number, height: number, videoBitrateMbps = 12, format: VideoEditExportSettings['format'] = 'mp4', fps: number | null = 30): VideoEditExportPreset => ({
-  id: `builtin:${id}`, name, settings: videoEditExportSettingsSchema.parse({ format, width, height, fps, videoBitrateMbps, audioBitrateKbps: 192, fit: 'fit', loudness: { targetLufs: -14, truePeakDbtp: -1 }, videoEnabled: format === 'mp4', audioCodec: format === 'wav' ? 'wav' : 'aac' }),
+  id: `builtin:${id}`, name, settings: videoEditExportSettingsSchema.parse({ format, width, height, fps, videoBitrateMbps, audioBitrateKbps: 192, fit: 'fit', loudness: { targetLufs: -14, truePeakDbtp: -1 }, videoEnabled: format === 'mp4', audioCodec: format === 'wav' ? 'wav' : 'aac', captionMode: format === 'mp4' ? 'burn' : 'none' }),
 })
 export const VIDEO_EDIT_DEFAULT_EXPORT_PRESET_ID = 'builtin:sequence'
 export const VIDEO_EDIT_EXPORT_PRESETS: readonly VideoEditExportPreset[] = [

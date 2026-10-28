@@ -187,7 +187,7 @@ it('无设置面板的导出也显示进度，确认取消并完成清理后才�
 })
 it('正式编码固定序列快照；输出帧率只影响画面；历史队列回执仍可收录，待处理阻止关闭', async () => {
   const owner = await project(); const projectId = owner.document.id; const gate = deferred<void>(); encoding.finalize.mockImplementationOnce(() => gate.promise)
-  const settings = { ...VIDEO_EDIT_EXPORT_PRESETS.find(value => value.id === 'builtin:douyin')!.settings, fps: 60, loudness: null, addToLibrary: false }
+  const settings = { ...VIDEO_EDIT_EXPORT_PRESETS.find(value => value.id === 'builtin:douyin')!.settings, fps: 60, loudness: null, addToLibrary: false, captionMode: 'none' as const }
   const jobs = await enqueueVideoEditExports([{ projectId, settings, path: file('a.mp4'), range: { startFrame: 1, endFrame: 3 } }, { projectId, settings: patchVideoEditExportSettings(settings, { format: 'wav' }), path: file('b.wav') }])
   editVideoSequence(projectId, owner.activeSequenceId, sequence => ({ ...sequence, name: '后续修改' }))
   await vi.waitFor(() => expect(encoding.finalize).toHaveBeenCalledOnce())
@@ -354,7 +354,7 @@ it.each(['burn', 'srt', 'vtt'] as const)('字幕%s进入正式画面或同名独
   if (captionMode !== 'burn') expect(new TextDecoder().decode(files.get(file(`caption.${captionMode}`)))).toContain('对白')
 })
 it('仅音频WAV不编码视频，关闭响度不创建PCM标准化会话；显式代理传给共同渲染入口', async () => {
-  const owner = await project(); const settings = patchVideoEditExportSettings(videoEditSequenceExportSettings(getActiveVideoEditSequence(owner)), { format: 'wav', loudness: null, useProxies: true, addToLibrary: false })
+  const owner = await project(); const settings = patchVideoEditExportSettings(videoEditSequenceExportSettings(getActiveVideoEditSequence(owner)), { format: 'wav', loudness: null, useProxies: true, addToLibrary: false, captionMode: 'none' })
   const [job] = await enqueueVideoEditExports([{ projectId: owner.document.id, path: file('sound.wav'), settings }]); await videoEditExportQueue.wait(job.id)
   expect(job.state).toBe('completed'); expect(encoding.videoOptions).toEqual([]); expect(encoding.rendered).toEqual([]); expect(encoding.audioOptions).toEqual([{ codec: 'pcm-s24', transform: { sampleRate: 48000, numberOfChannels: 2 } }]); expect(getPlatform().audioEdit.loudness.start).not.toHaveBeenCalled()
   expect(encoding.rendererOptions[0].slice(-2)).toEqual([owner.document.id, true])
@@ -416,10 +416,11 @@ it('无资产写授权拒绝自动收录；显式关闭后仍能通过正式公�
   expect(allowed.ok).toBe(true); await videoEditExportQueue.wait(videoEditExportQueue.list()[0].id)
   expect(getPlatform().assetLibrary.createAsset).not.toHaveBeenCalled()
 })
-it('开关从实际面板提交仅音频，字幕烧录改为SRT，响度关闭；折叠状态重新打开后保留', async () => {
+it('开关从实际面板提交仅音频，默认烧录的字幕改为SRT，响度关闭；折叠状态重新打开后保留', async () => {
   const owner = await project(); const view = render(<VideoEditExportDialog projectId={owner.document.id} onClose={vi.fn()} />)
   expect(view.getByRole('button', { name: '音频' }).getAttribute('aria-expanded')).toBe('false')
-  fireEvent.click(view.getByRole('button', { name: '音频' })); fireEvent.click(view.getByRole('switch', { name: '启用字幕' })); fireEvent.click(view.getByRole('switch', { name: '启用响度' })); fireEvent.click(view.getByRole('switch', { name: '启用视频' }))
+  expect(view.getByRole('switch', { name: '启用字幕' }).getAttribute('aria-checked')).toBe('true')
+  fireEvent.click(view.getByRole('button', { name: '音频' })); fireEvent.click(view.getByRole('switch', { name: '启用响度' })); fireEvent.click(view.getByRole('switch', { name: '启用视频' }))
   expect(view.getByRole('switch', { name: '启用音频' })).toHaveProperty('disabled', true)
   const files = new Map<string, Uint8Array>(); vi.mocked(getPlatform().system.fs.writeFile).mockImplementation(async (path, bytes) => { files.set(path, bytes) }); vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => new TextDecoder().decode(files.get(path)))
   vi.mocked(getPlatform().system.dialog.save).mockResolvedValueOnce(file('only-audio.aac'))

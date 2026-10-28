@@ -53,6 +53,10 @@ it('音视频开关统一格式与声音编码，禁止空输出和音频烧录'
   expect(videoEditExportSettingsSchema.safeParse({ ...settings, audioEnabled: false, videoEnabled: false }).success).toBe(false)
   expect(videoEditExportSettingsSchema.safeParse({ ...sound, captionMode: 'burn' }).success).toBe(false)
 })
+it('内置视频预设默认把字幕烧录进画面，仅音频预设不输出字幕', () => {
+  for (const preset of VIDEO_EDIT_EXPORT_PRESETS) expect(preset.settings.captionMode).toBe(preset.settings.videoEnabled ? 'burn' : 'none')
+  expect(videoEditSequenceExportSettings({ width: 3840, height: 2160, fps: 60, sampleRate: 48000, channels: 2 }).captionMode).toBe('burn')
+})
 it('预计大小按音视频合计码率乘时长，PCM按采样率声道24位计算', () => {
   const settings = { ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, videoBitrateMbps: 50, audioBitrateKbps: 320 }
   expect(videoEditExportEstimatedBytes(settings, 60)).toBe((50_000_000 + 320_000) * 60 / 8)

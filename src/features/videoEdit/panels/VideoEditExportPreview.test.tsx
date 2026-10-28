@@ -52,7 +52,7 @@ it('弹窗打开后画布已挂载，正式预览会话返回画面后绘制并�
   renderer.renderBitmap.mockResolvedValue(result)
   const view = render(<UiModal isOpen title="导出" onClose={vi.fn()}><VideoEditExportPreview {...props} /></UiModal>)
   await waitFor(() => expect(view.queryByText('正在准备预览…')).toBeNull())
-  expect(renderer.create).toHaveBeenCalledWith(expect.objectContaining({ id: props.composition.id, captions: [] }), 640, undefined, undefined, undefined, undefined, false)
+  expect(renderer.create).toHaveBeenCalledWith(expect.objectContaining({ id: props.composition.id }), 640, undefined, undefined, undefined, undefined, false)
   expect(renderer.renderBitmap).toHaveBeenCalledWith(12)
   const canvas = view.getByLabelText('导出画面预览') as HTMLCanvasElement
   expect(canvas.hidden).toBe(false)
