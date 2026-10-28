@@ -450,15 +450,39 @@ async function renderReplay(request: WebReplayRenderRequest, directory: string, 
   }
   const textTrack = path.join(directory, TEXT_TRACK_FILE)
   let options: ReplayOptions
+  let createdOutputDirectory: string | undefined
   if (request.textOnly) {
     logger.info('开始网页重演文字轨', { event: 'web_replay.replay.text_start', context: { recordingId, waitedMs } })
     options = { output: textTrack, fps: request.fps ?? 30, pointer: false, video: false, textTrack, boxSelectors: request.boxSelectors, signal, onFrame: onProgress ? progress => onProgress({ recordingId, progress, frame: '' }) : undefined }
   } else {
     // 干净画面（不画鼠标）的重演以 .clean.mp4 结尾：导入剪辑据此决定重画整个鼠标，还是只补点击。
     const output = request.output ?? path.join(directory, `replay-${new Date().toISOString().replace(/[:.]/g, '-')}${request.pointer === false ? REPLAY_CLEAN_SUFFIX : '.mp4'}`)
-    await fs.mkdir(path.dirname(output), { recursive: true })
+    // 与版本同理：失败或取消时只删这次为输出建出的第一层目录（播放器已删掉写了一半的视频）。
+    createdOutputDirectory = await fs.mkdir(path.dirname(output), { recursive: true })
     logger.info('开始网页重演', { event: 'web_replay.replay.start', context: { recordingId, output, waitedMs } })
     options = { output, fps: request.fps, pointer: request.pointer !== false, longEdge: request.longEdge, textTrack, boxSelectors: request.boxSelectors, signal, onFrame: onProgress ? (progress, frame) => onProgress({ recordingId, progress, frame }) : undefined }
   }
-  return WebRecordingPlayer.open(directory).render(options)
+  try {
+    return await WebRecordingPlayer.open(directory).render(options)
+  } catch (error) {
+    if (createdOutputDirectory) await removeCreatedDirectories(path.dirname(options.output), createdOutputDirectory)
+    throw error
+  }
+}
+
+/**
+ * 从 `deepest` 往上逐层删空文件夹，删到 `created`（这次 mkdir 建出的第一层）为止。mkdir 一次可能建出好几层，
+ * 只删第一层会因为里面还有下一层而失败；遇到非空就停，那一层里有别人放的东西。
+ */
+async function removeCreatedDirectories(deepest: string, created: string): Promise<void> {
+  // Windows 上 mkdir 返回带 \\?\ 前缀的路径，统一成同一种写法再比较；只在 created 及其里面删，绝不往上越界。
+  const same = (value: string): string => path.toNamespacedPath(path.resolve(value))
+  const top = same(created)
+  for (let directory = same(deepest); directory === top || directory.startsWith(top + path.sep); directory = path.dirname(directory)) {
+    const removed = await fs.rmdir(directory).then(() => true, (error: NodeJS.ErrnoException) => {
+      if (error.code !== 'ENOTEMPTY' && error.code !== 'EEXIST') logger.warn('网页重演输出文件夹没能清理', { event: 'web_replay.replay.cleanup_failed', context: { directory }, error: String(error) })
+      return false
+    })
+    if (!removed || directory === top) return
+  }
 }

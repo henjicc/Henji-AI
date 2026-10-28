@@ -13,6 +13,7 @@ vi.mock('../documents/runtime', () => ({ getDocumentService: vi.fn() }))
 vi.mock('../appPaths', () => ({ getUserFolderDir: () => boundary.directory }))
 
 import { renderWebRecording } from './runtime'
+import { WebRecordingStore } from './store'
 
 const ids = ['4c4fd189-61bf-4408-afc0-751c8c9ede67', '7d1e0c55-5a8e-4f3b-9d55-1f7a3c2b9e10']
 const ok = (): { output: string; frames: number; width: number; height: number; durationMs: number; issues: Array<{ t: number; kind: string; message: string }>; looseMatches: number; unusedCalls: number; locatorMisses: number } => ({ output: 'video.mp4', frames: 60, width: 10, height: 10, durationMs: 1000, issues: [], looseMatches: 0, unusedCalls: 0, locatorMisses: 0 })
@@ -82,6 +83,54 @@ it('取消后录制文件夹里留下了半成品：按失败处理并点名留�
   const error = await running.then(() => null, (value: unknown) => value as Error)
   expect(error?.name).toBe('Error')
   expect(error?.message).toContain('replay-half.mp4')
+})
+
+it('版本重演中途取消：只删这次建出的 takes/，判为已取消；原有的 takes/ 与重演期间别人新建的文件夹都不动', async () => {
+  const { cancelWebRecordingRender } = await import('./runtime')
+  vi.spyOn(WebRecordingStore.prototype, 'readManifest').mockResolvedValue({ durationUs: 10_000_000 } as Awaited<ReturnType<WebRecordingStore['readManifest']>>)
+  const cancelOnAbort = (during?: () => Promise<unknown>) => ({ signal }: { signal: AbortSignal }) => new Promise((_resolve, reject) => {
+    signal.addEventListener('abort', () => { void (during?.() ?? Promise.resolve()).then(() => reject(new Error('已取消重演'))) }, { once: true })
+  })
+  const cancelRun = async (jobId: string, during?: () => Promise<unknown>) => {
+    boundary.render.mockImplementationOnce(cancelOnAbort(during))
+    const started = boundary.render.mock.calls.length
+    const running = renderWebRecording({ recordingId: ids[0], take: '首问' }, jobId)
+    // 等播放器真正开始再取消：排队中取消走的是另一条路径。
+    await vi.waitFor(() => expect(boundary.render.mock.calls.length).toBe(started + 1))
+    const cancelled = await cancelWebRecordingRender({ recordingId: ids[0] })
+    return { cancelled, error: await running.then(() => null, (value: unknown) => value as Error) }
+  }
+
+  const first = await cancelRun('dddddddd-0000-4000-8000-000000000001')
+  expect(first.cancelled).toMatchObject({ previousState: 'running', state: 'cancelled' })
+  expect(first.error?.name).toBe('WebReplayCancelledError')
+  expect(await fs.readdir(boundary.directory)).not.toContain('takes')
+
+  // 重演期间用户在录制文件夹里新建的空文件夹不是这次重演建的：不删，如实点名。
+  const second = await cancelRun('dddddddd-0000-4000-8000-000000000002', () => fs.mkdir(path.join(boundary.directory, '我的笔记')))
+  expect(second.cancelled).toMatchObject({ state: 'failed' })
+  expect(second.error?.message).toContain('我的笔记/')
+  expect(await fs.readdir(boundary.directory)).toContain('我的笔记')
+  expect(await fs.readdir(boundary.directory)).not.toContain('takes')
+
+  await fs.rm(path.join(boundary.directory, '我的笔记'), { recursive: true })
+  await fs.mkdir(path.join(boundary.directory, 'takes', '旧版本'), { recursive: true })
+  const third = await cancelRun('dddddddd-0000-4000-8000-000000000003')
+  expect(third.cancelled).toMatchObject({ state: 'cancelled' })
+  expect(await fs.readdir(path.join(boundary.directory, 'takes'))).toEqual(['旧版本'])
+  vi.restoreAllMocks()
+})
+
+it('重演失败时删掉为输出新建的多层空文件夹，删到这次建出的第一层为止；里面有别的东西的那层起保留', async () => {
+  const output = path.join(boundary.directory, 'a', 'b', 'c', 'out.mp4')
+  boundary.render.mockRejectedValueOnce(new Error('编码失败'))
+  await expect(renderWebRecording({ recordingId: ids[0], output }, 'eeeeeeee-0000-4000-8000-000000000001')).rejects.toThrow('编码失败')
+  // 录制文件夹本身此时也是空的：清理只删这次建出的几层，不能越过它往上删。
+  expect(await fs.readdir(boundary.directory)).toEqual([])
+
+  boundary.render.mockImplementationOnce(async () => { await fs.writeFile(path.join(boundary.directory, 'a', 'b', '别人的.txt'), 'x'); throw new Error('编码失败') })
+  await expect(renderWebRecording({ recordingId: ids[0], output }, 'eeeeeeee-0000-4000-8000-000000000002')).rejects.toThrow('编码失败')
+  expect(await fs.readdir(path.join(boundary.directory, 'a', 'b'))).toEqual(['别人的.txt'])
 })
 
 it('重演结束的通知处理出错，不影响重演本身的结果', async () => {

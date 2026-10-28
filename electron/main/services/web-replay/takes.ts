@@ -98,12 +98,13 @@ export interface WebReplayTakeRequest {
 
 /**
  * 按导演稿重演出一个版本：先写进 takes/ 下的暂存文件夹，全部写完再换上（同名的旧版本这时才被替换）；
- * 失败或取消时暂存文件夹删掉，旧版本原样保留。
+ * 失败或取消时暂存文件夹删掉，这次才建出的 takes/ 也删掉，旧版本原样保留：录制文件夹回到开始时的样子。
  */
 export async function renderWebReplayTake(recordingDirectory: string, request: WebReplayTakeRequest): Promise<{ result: ReplayResult; take: WebReplayTakeSummary }> {
   const final = takeDirectory(recordingDirectory, request.name)
   const root = path.dirname(final)
-  await fs.mkdir(root, { recursive: true })
+  // recursive 的返回值是这次建出的第一层目录（已存在时为 undefined），失败时只删它，不碰本来就有的。
+  const createdRoot = await fs.mkdir(root, { recursive: true })
   const staging = path.join(root, `.${path.basename(final)}.${crypto.randomUUID()}.tmp`)
   await fs.mkdir(staging)
   const video = request.textOnly !== true
@@ -129,6 +130,7 @@ export async function renderWebReplayTake(recordingDirectory: string, request: W
     return { result, take: { ...manifest, directory: final, videoPath: video ? path.join(final, TAKE_FILES.video) : null } }
   } catch (error) {
     await fs.rm(staging, { recursive: true, force: true }).catch(cleanup => logger.warn('网页重演版本暂存没能清理', { event: 'web_replay.take.cleanup_failed', context: { staging }, error: String(cleanup) }))
+    if (createdRoot) await fs.rmdir(createdRoot).catch(cleanup => logger.warn('网页重演版本文件夹没能清理', { event: 'web_replay.take.cleanup_failed', context: { directory: createdRoot }, error: String(cleanup) }))
     throw error
   }
 }
