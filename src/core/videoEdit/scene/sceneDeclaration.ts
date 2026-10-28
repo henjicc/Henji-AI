@@ -27,7 +27,8 @@ export type CodeSceneValue = null | boolean | number | string | CodeSceneValue[]
 /**
  * 字段取值的语义类型：
  * - time：引用这份片子数据的代码片段的素材时间（秒，0 = 素材开头，未剪切，见 sceneSchema.ts 的时间约定）；anchor:'footage' 时也可写 {src}，表示所属素材播到第 src 秒的那一刻。
- * - duration：时长；sourceTime：所属素材里的源时间；media：剪辑里的素材 ID；ref：同一份片子数据里另一条记录的 ID。
+ * - duration：时长；作为记录类型的 duration（起止）时是未剪时间轴上的长度，和 at 一样不随剪切改写，
+ *   剪后结束由软件按 at + duration 换算（跨剪切的记录剪后变短）。sourceTime：所属素材里的源时间；media：剪辑里的素材 ID；ref：同一份片子数据里另一条记录的 ID。
  * - desk：台面上的长度（间距、尺寸）；deskRect {x,y,width,height}、deskPoint {x,y}、deskPath [{x,y}…]：台面坐标。
  *   台面由作者代码定义，台面到画面的换算由作者代码完成，软件只按台面单位存取。
  * - windowRegion：所属素材画面里的一块区域；region：节目画面里的一块区域；都按画面比例 0–1 的 {x,y,width,height}。
@@ -72,7 +73,10 @@ export interface CodeSceneKindDeclaration {
   /** 允许的父记录类型：声明了就必须有父记录，没声明就不能有。 */
   parent?: string[]
   fields: Record<string, CodeSceneFieldDeclaration>
-  /** 记录在片段时间轴上的位置（必填 time 字段）；end（time 字段）或 duration（duration 字段）给出结束，二选一。 */
+  /**
+   * 记录在片段时间轴上的位置（必填 time 字段）；end（time 字段）或 duration（duration 字段）给出结束，二选一。
+   * duration 是未剪时间轴上的长度：结束 = at + duration（未剪），写回时按未剪起止相减。
+   */
   at?: string
   end?: string
   duration?: string

@@ -24,6 +24,7 @@ const FILM = parseCodeSceneSchema({
     focusKey: { parent: ['focus'], at: 'at', influence: 'neighbors', footage: 'media', lane: { style: 'key' }, fields: { at: { type: 'time', anchor: 'footage' }, dur: { type: 'duration', max: 10, optional: true }, win: { type: 'ref', to: ['window'] }, media: { type: 'media', accept: ['video'] } } },
     card: { parent: ['segment'], at: 'at', end: 'out', influence: 'span', fields: { at: { type: 'time' }, out: { type: 'time' } } },
     label: { at: 'at', end: 'out', influence: 'span', fields: { at: { type: 'time' }, out: { type: 'time' } } },
+    note: { at: 'at', duration: 'dur', influence: 'span', fields: { at: { type: 'time' }, dur: { type: 'duration', max: 100 } } },
     cut: { role: 'cut', at: 'from', end: 'to', influence: 'span', lane: { style: 'cut' }, fields: { from: { type: 'time' }, to: { type: 'time' }, enabled: { type: 'boolean', default: true } } },
   },
 })
@@ -92,6 +93,9 @@ describe('片子数据解析', () => {
       // 没挂在段落下：整段落在剪切里的跟着丢，伸出剪切的留下来并报出来
       { id: 'label-inside', kind: 'label', values: { at: 308, out: 316 } },
       { id: 'label-stray', kind: 'label', values: { at: 307.27, out: 320 } },
+      // duration 是未剪长度：横跨剪切的剪后变短；按未剪起止整段落在剪切里的丢掉
+      { id: 'note-across', kind: 'note', values: { at: 300, dur: 20 } },
+      { id: 'note-inside', kind: 'note', values: { at: 307, dur: 9 } },
       ...[[302.6, 1.8], [306.0, 2.0], [316.7, 2.0], [324.8, 1.8], [326.1, 1.2], [333.4, 1.2], [338.4, 1.6], [339.2, 2.2]].map(([at, dur]) => ({ id: `cam@${at}`, kind: 'camera', values: { at, dur } })),
       { id: 'f16', kind: 'focus', parent: 'output', values: { end: 333.33 } },
       ...[326.08, 327.88, 329.33, 331.73].map(at => key(`k16@${at}`, 'f16', at, 'ans', 'out')),
@@ -112,6 +116,8 @@ describe('片子数据解析', () => {
     close(extent('output'), [306.31, 328.83]); close(extent('ans'), [314.26, 329.31])
     expect(['images', 'card-text', 'label-inside', 'cam@306'].map(id => resolved.byId.has(id))).toEqual([false, false, false, false])
     expect(resolved.issues).toEqual([expect.objectContaining({ recordId: 'label-stray', path: 'parent' })])
+    close(extent('note-across'), [300, 309.43])
+    expect(resolved.byId.has('note-inside')).toBe(false)
     close(resolved.byKind.camera.map(record => record.at!), [302.6, 306.13, 314.23, 315.53, 322.83, 327.83, 328.63])
     close(resolved.byKind.focusKey.map(record => record.at!), [315.51, 317.31, 318.76, 321.16])
     expect(resolved.byId.get('f16')!.values.end).toBeCloseTo(322.76, 9)
@@ -134,6 +140,8 @@ describe('片子数据解析', () => {
       [271.12, 306.22, { start: 271.12, end: 306.22 }, [271.12, 306.22]], [271.12, 306.5, { start: 271.12, end: 306.22 }, [271.12, 306.5]],
       [291.02, 305, { start: 291.02, end: 306.72 }, [291.02, 305]], [305.8, 306.1, { start: 302, end: 306.1 }, [305.8, 306.1]],
       [306.0, 314.26, { start: 316.88, end: 324.83 }, [316.57, 324.83]], [306.5, 309, { start: 302, end: 306.1 }, [317.07, 319.57]],
+      // 横跨剪切、用 duration 声明结束的记录原地写回，未剪长度仍是 20
+      [300, 309.43, { start: 300, end: 320 }, [300, 320]],
     ]
     for (const [start, end, original, expected] of spans) {
       const raw = videoEditSceneWriteBackSpan(resolved.cuts, start, end, original)

@@ -19,6 +19,8 @@ import type { VideoEditScene, VideoEditSceneRecord } from './sceneSchema'
  *   却没挂在它下面又留了下来的记录会在 issues 里报出来。
  * - 窗口内容按波纹删除换算：剪切里的画面不再出现，横跨剪切的一项在剪切后从对应的源时间接着放（停住的不拆）。
  * - 声明里所有 time 字段（含 time 列表）都按同一规则换算，不再手写一份时刻字段清单。
+ * - 起止用 duration 声明的记录：duration 和 at 一样是未剪时间轴上的长度，剪后结束 = 剪切换算(at + duration)，
+ *   跨剪切的记录剪后变短；丢弃判断用同一个未剪结束。values 里的 duration 字段保持未剪长度，剪后起止看记录的 at / end。
  */
 
 /** 窗口里换一段素材时默认叠化的时长（秒）；同一段素材跳到别处时不叠化，写了 xf 的按 xf。 */
@@ -341,7 +343,7 @@ function resolveScene(scene: VideoEditScene, schema: CodeSceneSchema, options: R
     if (container && (dropped.has(container.id) || !kindOf(container))) continue
     const containerKind = container ? kindOf(container)! : undefined
     const containerRaw = container ? rawExtent(container, containerKind!) : {}
-    const containerEnd = containerRaw.end === undefined ? undefined : containerKind!.end ? cutTime(containerRaw.end) : cutTime(containerRaw.at!) + (containerRaw.end - containerRaw.at!)
+    const containerEnd = containerRaw.end === undefined ? undefined : Math.max(cutTime(containerRaw.at!), cutTime(containerRaw.end))
     const end = containerEnd ?? options.duration ?? Infinity
     const kind = kinds[kindName], srcField = Object.keys(kind.fields).find(name => kind.fields[name].type === 'sourceTime')!
     const items = records.filter(record => !dropped.has(record.id)).map(record => ({ record, at: finite(record.values[kind.at!])! })).sort((a, b) => a.at - b.at)
@@ -439,7 +441,15 @@ function resolveScene(scene: VideoEditScene, schema: CodeSceneSchema, options: R
       continue
     }
     let at = kind.at ? finite(values[kind.at]) : undefined
-    let end = at === undefined ? undefined : kind.end ? finite(values[kind.end]) : kind.duration ? at + (finite(values[kind.duration]) ?? 0) : undefined
+    let end: number | undefined
+    if (at !== undefined && kind.end) end = finite(values[kind.end])
+    else if (at !== undefined && kind.duration) {
+      // 按录屏秒锚定的开始没有写下来的未剪时刻，取它剪切前那一侧的来源再加时长。
+      const start = finite(record.values[kind.at!]) ?? videoEditSceneWriteBackTime(cuts, at)
+      end = cutTime(start + (finite(values[kind.duration]) ?? 0))
+    }
+    // 开始留在剪切口一带不前移、结束却在前移区的记录，剪后结束会早于开始：收成开始那一刻。
+    if (at !== undefined && end !== undefined) end = Math.max(at, end)
     if (shots) { at = shots[0].at; end = shots[shots.length - 1].end }
     const item: MutableRecord = { id: record.id, kind: record.kind, source: record, parent, children: [], values, at, end, footage: kind.footage ? footageOf(record, raw, kinds) : undefined, timetables: [] }
     for (const shot of shots ?? []) shot.record = item
