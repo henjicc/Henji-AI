@@ -16,6 +16,16 @@
 只有必须验证“应用启动时主动取得焦点”、观察首屏，或用户明确要求前台弹出时，才使用普通
 `npm run electron:dev`。项目正式 `test:reality` Electron 自动化仍走其统一启动器，不得用开发命令替代。
 
+## 安全底线
+
+按 [AGENTS.md 安全分级](../../AGENTS.md#安全分级)，桌面容器只守下面几条，其余“防用户自己”的限制不加：
+
+- 密钥只经 `electron/main/services/keystore.ts` 用 safeStorage 加密存储；明文不进日志、IPC 返回值、助手上下文和代码素材的运行环境。
+- 窗口保持 `contextIsolation: true`、`sandbox: true`、`nodeIntegration: false`，preload 是渲染层访问主进程的唯一桥梁。
+- IPC 与媒体协议不设路径白名单、目录授权、调用方权限分级或容量硬上限：渲染层传来的任意本机绝对路径照常处理，大文件靠流式读写。外来代码由导入时的信任确认把关，不靠 IPC 层设卡。
+- 删除用户数据先进回收区，可恢复的操作不弹确认。
+- 自动更新下载的安装包先校验完整性再安装；不做代码签名。
+
 ## 自动化脚本
 
 Electron 自动化脚本通过 CDP/Playwright 启动构建产物。需要临时手动调试时，优先复用 `scripts/lib/electronLaunch.cjs` 中的启动方式。

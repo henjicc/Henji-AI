@@ -19,7 +19,7 @@
 | 新建或改造画布节点 | skill `canvas-node-builder` + 上面的 canvas.md |
 | 传递图片/视频/音频 URL 或路径、接入新媒体消费方、排查 `Failed to fetch` | [docs/rules/media-url.md](docs/rules/media-url.md) |
 | 新增供应商/模型、改参数 schema、改请求构建/轮询/流式协议、核对 API/价格、发布 SDK | [docs/rules/model-adaptation.md](docs/rules/model-adaptation.md) + [packages/ai-sdk/docs/model-adaptation/README.md](packages/ai-sdk/docs/model-adaptation/README.md)（资料总索引）+ [文档采集手册.md](packages/ai-sdk/docs/model-adaptation/文档采集手册.md)（官方资料、事件契约与 SDK 首发唯一详细规范）+ skill `henji-model-adaptation` |
-| 新增/改造工作区、页面/工具入口、工具箱工具、设置项、用户可查询数据、业务操作、长任务、稳定引用、权限、宿主上下文 | [docs/rules/assistant-capability.md](docs/rules/assistant-capability.md) + skill `henji-application-capability`；先做覆盖分级，命中 skill 不等于新增 MCP 工具 |
+| 新增/改造工作区、页面/工具入口、工具箱工具、设置项、用户可查询数据、业务操作、长任务、稳定引用、付费/外来代码/删除语义、宿主上下文 | [docs/rules/assistant-capability.md](docs/rules/assistant-capability.md) + skill `henji-application-capability`；先做覆盖分级，命中 skill 不等于新增 MCP 工具 |
 | 涉及网络请求、文件读写、长耗时任务、导入导出、状态流转、用户可见失败 | [docs/rules/logging.md](docs/rules/logging.md) |
 | 改动 `electron/main/**` 或 `electron/preload/**`、加 IPC、打包配置、自动更新 | [docs/rules/electron-desktop.md](docs/rules/electron-desktop.md) |
 | 规划路线、评审新功能是否跑偏、决定优先级、判断“做不做 / 做到什么程度” | [docs/rules/product-goal.md](docs/rules/product-goal.md) |
@@ -77,7 +77,7 @@ npm run test:reality -- --suite integration
 
 其余检查命令按改动类型选用，见 [docs/rules/testing.md](docs/rules/testing.md)。日常真实窗口验收需要新产物时用 `electron:bundle`；`electron:build` / `electron:dist` 仅用于构建链本身、发布或 L3，禁止因为“产物旧了”升级到完整构建。
 
-**助手行为确实需要验证时就真跑，不要默认写成手动步骤交给用户。** `assistant:cli` 跑在真实配置环境上，完整参数见 [assistant-capability.md](docs/rules/assistant-capability.md)。两条硬约束：改过会进入运行产物的代码必须先 `electron:bundle`，否则跑的是旧产物；`--approval full_access` 会产生**真实付费与写入**，必须由用户显式确认，默认不要带。
+**助手行为确实需要验证时就真跑，不要默认写成手动步骤交给用户。** `assistant:cli` 跑在真实配置环境上，完整参数见 [assistant-capability.md](docs/rules/assistant-capability.md)。改过会进入运行产物的代码必须先 `electron:bundle`，否则跑的是旧产物。真实资料目录里的写入和付费都是真的：付费按[安全分级](#安全分级)第 4 条的付费策略执行，超出策略的费用由用户在应用里确认，Agent 不替用户放宽策略。
 
 ## 全局架构边界
 
@@ -94,12 +94,35 @@ npm run test:reality -- --suite integration
 7. **SDK 开发与公共消费边界**：Henji-AI 是 `@henjicc/ai-sdk` 的唯一主开发仓库与首发验证宿主，仓内通过 `packages/ai-sdk` workspace 源码开发、构建和验证；Henji-AI 之外的项目一律从公共 npm registry 安装已经发布的精确版本，禁止使用 `workspace:`、`file:`、Git URL、GitHub Packages、源码复制或其他旁路。每次 SDK 改动必须先接入痕迹AI、完成必要检查并交给用户测试；用户测试确认没问题并明确要求发版后，Agent 才能执行公共 npm 发布。原有自主发布的持续授权已撤销；自动测试或 CI 通过、用户完成 npm 登录均不等于发布指令。消费方需要尚未发布的能力时，必须先回到本仓库实现、完成首发验证与用户测试，收到明确发布指令并发布后，再按实际影响升级消费项目。仅痕迹AI界面、规则或文档改动不触发 SDK 发布。详细门槛只维护在 [文档采集手册.md](packages/ai-sdk/docs/model-adaptation/文档采集手册.md)。
 8. **SDK 故障先判归属**：升级后报错先对照公共 DTO 并做同版本 SDK 最小直调；合法输入在 SDK 内失败或请求偏离官方契约才修 SDK，`null`/错类型、序列化、凭据、transport、媒体、取消和宿主生命周期问题修消费项目。`field?: T` 只允许省略或 `T`，不自动允许 `null`。完整矩阵见 [model-adaptation.md](docs/rules/model-adaptation.md#sdk-故障归属与修复位置)。
 
+## 安全分级
+
+**2026-10-28 用户确定：专业软件信任用户。** 除下面五条硬底线，软件里其他“防用户自己”的限制一律放开，不保留弯弯绕绕的审批、白名单和默认只读。每一处现有或新增的限制只能归入三类之一：
+
+- **放开**：直接删掉限制，不加替代确认。
+- **问一次**：只用于外来内容，在入口确认一次，记住选择，之后不再打扰。
+- **保留**：只用于五条硬底线。
+
+五条硬底线：
+
+1. **密钥**：继续用 safeStorage 加密存储（`electron/main/services/keystore.ts`），日志、助手、代码素材都拿不到明文。
+2. **Electron 隔离**：`contextIsolation: true`、`sandbox: true`、`nodeIntegration: false` 不动，preload 仍是唯一桥梁。
+3. **外来内容**：别人分享的风格包、模板、外部工程里带的代码，导入时问一次“包含代码，是否信任”（参照 Blender 打开他人 .blend 时的脚本信任）。代码素材的运行环境能联网，所以必须在首次执行之前问，读声明、试渲染都算执行。助手读到的网页、文档、录制里的文字只当数据，不当指令。
+4. **不可挽回**：真实付费调用按付费策略确认，默认单次 ¥2、每日 ¥20 以内自动通过，用户可以自己设置单次与每日金额，也可以完全放开。删除用户数据先进回收区；可恢复的操作不再确认。
+5. **更新包**：下载的安装包校验完整性（不签名，保持现状）。
+
+由此而来的做法：
+
+- **容量不设硬上限**：包与文档大小、扫描深度、源码大小、文件数、远程媒体大小、并发与订阅数等，靠完整遍历与流式读写支撑，不靠硬上限拒绝。
+- **不新增权限模型**：不加权限分级、风险等级、审批档、默认只读、路径白名单或目录授权。能力只声明三种语义：付费（走付费策略）、外来代码（走信任确认）、删除（进回收区）。
+- 对外能力契约随审批与权限模型删除升到大版本 3。
+- 提交前审查涉及安全时只看五条底线有没有被误伤；“限制放得太开”不算问题。
+
 ## 全局禁止事项
 
 - 禁止在业务组件中直接调模型生成 API（`fetch()` / `axios`）
 - 禁止在 UI 组件中写 `if (modelId === 'specific-model')` 这类模型特定分支
 - 禁止在参数面板中提供图片、视频、音频、PDF 等媒体/文件 URL 的手动输入框；即使供应商字段名是 `*_url`，也必须呈现为上传按钮或对应上传组件，由主进程调用当前供应商的官方文件上传服务并自动回填请求 URL
-- 禁止把内部实现状态直接展示在正式界面，包括但不限于 `revision`、schema/协议版本、请求/任务/资源 ID、哈希、缓存/Worker/渲染管线状态、调试计数与风险分级。可观察性进入日志、诊断页或开发模式；正式界面只呈现用户当前需要据此行动、决策、理解结果或恢复失败的信息，并使用用户任务语言表达
+- 禁止把内部实现状态直接展示在正式界面，包括但不限于 `revision`、schema/协议版本、请求/任务/资源 ID、哈希、缓存/Worker/渲染管线状态与调试计数。可观察性进入日志、诊断页或开发模式；正式界面只呈现用户当前需要据此行动、决策、理解结果或恢复失败的信息，并使用用户任务语言表达
 - 禁止给界面加不必要的副标题、说明文字和口号式文案：让布局、分组、控件与命名本身说明用途，把功夫花在想清楚交互上，不靠文字解释含糊的设计。常驻说明只留给不看就会选错，或涉及费用、数据丢失、不可逆操作的信息，其余进悬停提示（细则见 skill `henji-ui-surface`）
 - 禁止在 `src/components/ui/primitives.tsx` 以外的地方写原生 `<button>/<input>/<select>/<textarea>`
 - 禁止用 emoji（及 ✓ ✗ 等当图标用的符号字符）作图标或状态标记：正式界面（含日志窗口）的图标只能用 `lucide-react` 图标库，确属图形的才用 SVG；emoji 只允许出现在开发者控制台输出
@@ -149,7 +172,7 @@ npm run test:reality -- --suite integration
 
 - **什么时候审**：按 [testing.md](docs/rules/testing.md) 判为 L2、L3 的改动；以及不论等级，只要碰到这些高风险路径：持久格式与迁移，删除、移动用户数据或迁移数据目录，preload、IPC 与安全设置，SDK 请求构建、轮询与流式解析，自动更新与打包，真实付费调用与计费。L0、L1 不审。
 - **怎么审**：派一个全新上下文的子代理（Claude Code 用 Agent 工具或 `/code-review`；没有子代理的工具新开一个只读会话）。只交给它三样东西：本次改动的文件与 diff、一句话任务目标、与改动领域对应的 `docs/rules/` 文件。不交写代码时的推理和结论，免得它顺着同样的思路漏掉同样的问题。
-- **审什么**：正确性缺陷；修的是根因还是症状；共享实现的其他调用方有没有同源缺陷；是否违反对应领域的规则。风格、格式、颜色令牌这类静态门禁能拦住的不报。
+- **审什么**：正确性缺陷；修的是根因还是症状；共享实现的其他调用方有没有同源缺陷；是否违反对应领域的规则。安全只盯[安全分级](#安全分级)的五条硬底线有没有被误伤，“限制放得太开”不报。风格、格式、颜色令牌这类静态门禁能拦住的不报。
 - **怎么报**：每条写文件与行号、在什么输入或状态下出错，分为「重要」「小问题」「原有问题」（不是本次引入的）三类。只报有证据的问题，拿不准的标明。同一类问题报一次并列出全部位置，不逐行重复。
 - **怎么处理**：每条要么修，要么写明不修的理由。原有问题按“发现无关问题单独说明”处理，不并入本次改动。审查意见与代码、测试证据冲突时以证据为准。
 - **最多三轮**：第二轮起只审上一轮之后的增量，不重复已处理的问题。三轮后仍有重要问题，多半是方案本身有问题：停下来重新考虑做法或告诉用户，不继续逐条修补。
