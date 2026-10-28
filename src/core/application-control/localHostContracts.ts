@@ -81,12 +81,15 @@ export function externalWritableEntityTypes(domains: readonly LocalDomainSurface
 }
 
 /**
- * 对外契约版本。协议版本、SDK 版本与应用能力目录版本三者分开管理，客户端按本字段判断兼容性，
+ * 对外契约大版本。协议版本、SDK 版本与应用能力目录版本三者分开管理。
+ *
+ * 只有不兼容的变化（信封、授权模型、操作账本语义等让旧客户端按原方式调用会出错的改动）才手动升级。
+ * 工具的增删与参数、说明、输出变化由 `catalogSchemaHash` 自动反映，客户端按哈希判断缓存是否过期，
  * **不要按工具数量、顺序或名称前缀判断**。
  *
  * 当前只支持新应用契约，不提供旧工具或旧协议兼容入口。
  */
-export const EXTERNAL_CONTRACT_VERSION = '2.84.0' as const
+export const EXTERNAL_CONTRACT_VERSION = '2' as const
 /** 正式支持的现代协议；旧握手和其他版本拒绝，不降级。 */
 export const EXTERNAL_PROTOCOL_VERSIONS = ['2026-07-28'] as const
 export const EXTERNAL_SDK_VERSION = '2.0.0' as const

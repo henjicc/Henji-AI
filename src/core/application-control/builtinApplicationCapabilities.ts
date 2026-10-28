@@ -88,7 +88,7 @@ export const getCurrentApplicationContextCapability = defineCapability({
     }),
     videoEdit: hostContextSnapshotSchema.shape.videoEdit,
     catalogRevision: z.number().int().nonnegative(),
-    externalContractVersion: z.string().optional().describe('公共工具契约版本；与客户端缓存不符时用 describe_application_contract 的 names/includeSchemas 查询服务端完整参数。'),
+    externalContractVersion: z.string().optional().describe('对外契约大版本，只在不兼容变化时改变；工具参数与输出的缓存核对看 catalogSchemaHash。'),
     catalogSchemaHash: z.string().optional().describe('当前授权工具目录的 schema 哈希；变化时用 describe_application_contract 查询各工具 schemaHash，按 names/includeSchemas 获取最新参数。'),
     ready: z.boolean(),
     revision: z.number().int().nonnegative(),

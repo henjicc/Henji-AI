@@ -74,7 +74,7 @@ const publicMediaOutputSchema = z.object({ ok: z.literal(true), data: z.union([
 export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
   {
     name: 'describe_application_contract', tier: 'any', readOnly: true,
-    description: '发现协议、授权、限制、业务域与可用技能。domains 点名才展开实体；detail="full" 查询工具授权清单、排除理由与弃用策略。toolSchemas 返回每个工具的 name/schemaHash，可用 names 过滤；names 配合 includeSchemas=true 获取完整 description/inputSchema。本地缓存与 schemaHash 不一致时，以 describe 返回的 schema 为准并按其参数调用。catalogSchemaHash 可与 get_current_application_context 的目录哈希比较。2.6.0 起镜头参考文档与子实体的修订范围为 camera_stage；toolbox 仅保留工具箱自身状态。旧 toolbox 镜头基线已过期，请重新 read_application_entity 获取 baselineId。',
+    description: '发现协议、授权、限制、业务域与可用技能。domains 点名才展开实体；detail="full" 查询工具授权清单、排除理由与弃用策略。toolSchemas 返回每个工具的 name/schemaHash，可用 names 过滤；names 配合 includeSchemas=true 获取完整 description/inputSchema。本地缓存与 schemaHash 不一致时，以 describe 返回的 schema 为准并按其参数调用。catalogSchemaHash 可与 get_current_application_context 的目录哈希比较。',
     inputSchema: { type: 'object', properties: { domains: { type: 'array', items: { type: 'string', minLength: 1 }, maxItems: 16, description: '要展开实体清单的业务域；留空只看域级摘要。' }, detail: { type: 'string', enum: ['compact', 'full'], default: 'compact' }, names: { type: 'array', items: { type: 'string', minLength: 1 }, description: '仅返回这些已授权工具的 schema 摘要；省略时返回全部摘要。' }, includeSchemas: { type: 'boolean', default: false, description: '配合 names 返回完整 description/inputSchema，按需分批查询。' } }, additionalProperties: false },
   },
   {
@@ -217,9 +217,12 @@ function canonicalJson(value: unknown): string {
   return JSON.stringify(normalize(value))
 }
 
-/** 客户端可用相同 SHA-256 算法核对本地缓存；不修改工具描述。 */
-export function applicationToolSchemaHash(tool: Pick<Tool, 'name' | 'description' | 'inputSchema'>): string {
-  return createHash('sha256').update(canonicalJson({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema })).digest('hex').slice(0, 16)
+/**
+ * 客户端可用相同 SHA-256 算法核对本地缓存；不修改工具描述。
+ * 输出结构与注解也算进来：只改返回字段时客户端同样需要察觉缓存过期。
+ */
+export function applicationToolSchemaHash(tool: Pick<Tool, 'name' | 'description' | 'inputSchema' | 'outputSchema' | 'annotations'>): string {
+  return createHash('sha256').update(canonicalJson({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema, outputSchema: tool.outputSchema ?? null, annotations: tool.annotations ?? null })).digest('hex').slice(0, 16)
 }
 
 export function applicationCatalogSchemaHash(catalog: ApplicationToolCatalog): string {
@@ -264,7 +267,6 @@ const WORKFLOWS = [
   '发现：describe_application_contract → describe_application_entities（按域过滤）→ list_application_entities（cursor/limit 分页，where 按属性等值定位）。',
   '读取：按任务需要读取实体，获取真实引用和属性；普通操作不需要额外读取来拼接基线。删除前才必须逐个读取目标与集合父对象。',
   '修改：把 operationId（客户端生成的 UUID）连同业务参数传给写工具。普通操作省略 baselineIds，由应用自动核对；删除或要求严格按旧状态写入时提供相关 baselineIds。勿传 expectedRevisions。同一 operationId 重传返回原事实，不会重复执行。',
-  '镜头参考修订：2.6.0 起文档与子实体的 revisions、resultingRevisions 和宿主 scopeRevisions 使用 camera_stage，toolbox 仅表示工具箱自身状态。旧 toolbox 镜头基线返回 BASELINE_EXPIRED；请重新 read_application_entity 读取原目标，使用新 baselineId 提交。',
   MEMORY_RULES,
   '查任务：生成默认用 wait_generation_task 等待终态，用户主动询问即时进度才用 get_generation_task，三维渲染用 get_camera_stage_render_task，写操作事实用 get_application_operation；等待工具由宿主跟进，其他即时查询按需调用，不需要客户端支持通知扩展。可用 subscriptions/listen 订阅工具目录变更；收到 notifications/tools/list_changed 后重新 tools/list。',
   '取结果：看图用 read_application_media(mode="image") 直接取得图片内容；其他媒体按 offset 分块读到 eof；不支持富媒体的客户端只消费 totalBytes／eof／错误码也能理解状态并继续。',
@@ -291,7 +293,7 @@ export function buildApplicationContract(input: {
   // 不指定 names 时只给目录整体哈希，避免默认响应列出全部工具；需要逐个核对时按 names 查询。
   const toolSchemas = names === undefined ? undefined : input.catalog.tools.filter(tool => names.has(tool.name)).map(tool => ({
     name: tool.name, schemaHash: applicationToolSchemaHash(tool),
-    ...(input.includeSchemas && names ? { description: tool.description, inputSchema: tool.inputSchema } : {}),
+    ...(input.includeSchemas && names ? { description: tool.description, inputSchema: tool.inputSchema, outputSchema: tool.outputSchema ?? null, annotations: tool.annotations ?? null } : {}),
   }))
   const full = {
     contract: {
@@ -305,7 +307,7 @@ export function buildApplicationContract(input: {
       deprecationPolicy: EXTERNAL_DEPRECATION_POLICY,
     },
     catalogSchemaHash: applicationCatalogSchemaHash(input.catalog),
-    schemaHashAlgorithm: 'SHA-256(键排序 JSON{name,description,inputSchema}) 前16位；目录哈希为按 name 排序的 [{name,schemaHash}] 同算法。',
+    schemaHashAlgorithm: 'SHA-256(键排序 JSON{name,description,inputSchema,outputSchema,annotations}，缺省字段记为 null) 前16位；目录哈希为按 name 排序的 [{name,schemaHash}] 同算法。',
     ...(toolSchemas ? { toolSchemas } : { toolSchemasHint: '按 names 查询各工具 schemaHash；加 includeSchemas:true 取完整参数。' }),
     access: {
       read: true, write: input.access.allowWrites, destructive: input.access.allowDestructive, paid: input.access.allowPaid,
