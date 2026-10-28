@@ -84,8 +84,8 @@ export class VideoEditAuthorRuntime {
   private closed = false
   readonly parameterMetadata: AuthorEffectMetadata
   private lastFrame?: { layers: AuthorLayer[]; width: number; height: number; time: number; parameters: AuthorParameters; overrides?: AuthorElementOverrides }
-  constructor(private readonly device: GpuDevice, private readonly effect: AuthorModule, private readonly locations?: AuthorSourceLocations, private readonly ownsModule = true) {
-    this.parameterMetadata = authorEffectMetadata(effect)
+  constructor(private readonly device: GpuDevice, private readonly effect: AuthorModule, private readonly locations?: AuthorSourceLocations, private readonly ownsModule = true, apiVersion?: number) {
+    this.parameterMetadata = authorEffectMetadata(effect, apiVersion)
   }
   private texture(width: number, height: number, mips: boolean): GpuTexture {
     const texture = this.device.createTexture({ size: [width, height], mipLevelCount: mips ? 1 + Math.floor(Math.log2(Math.max(width, height))) : 1, format: 'rgba8unorm', usage: 0x01 | 0x02 | 0x04 | 0x10 })

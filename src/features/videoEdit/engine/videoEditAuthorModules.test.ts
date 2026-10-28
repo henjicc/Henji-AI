@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { createAuthorModuleUrls, directAuthorBundle } from './videoEditAuthorModules'
+import { createAuthorModuleUrls, directAuthorBundle, rewriteAuthorModule } from './videoEditAuthorModules'
 import { VideoEditCodeCompiler } from './videoEditCodeCompiler'
 import { authorJsLocations } from './videoEditAuthorJsLocations'
 
@@ -69,4 +69,48 @@ it('JSON 模块改写同时移除静态和动态导入的 JSON 属性', async ()
   const loaded = createAuthorModuleUrls(bundle)
   expect(await blobs.at(-1)!.text()).toBe('import data from "blob:test-1"; export const read=()=>import("blob:test-1");')
   loaded.dispose()
+})
+
+it('JS 直出路径把内置库的静态、字面动态与运行时动态导入都改成共享地址', async () => {
+  const bundle = directAuthorBundle({ entry: 'main.js', apiVersion: 5, files: {
+    'main.js': 'import * as THREE from "three"; import { pass } from "three/tsl"; export const lazy = () => import("three/addons/math/SimplexNoise.js"); export const any = (name) => import(name); export default { draw() { return [THREE, pass] } };',
+  } })!
+  expect(bundle.libraries).toEqual({ three: '0.186.1' })
+  const code = rewriteAuthorModule(bundle.modules!, 'main.js', path => `blob:${path}`)
+  expect(code).toContain('from "henji-media://author-lib/three/0.186.1/build/three.module.js"')
+  expect(code).toContain('from "henji-media://author-lib/three/0.186.1/build/three.tsl.js"')
+  expect(code).toContain('import("henji-media://author-lib/three/0.186.1/examples/jsm/math/SimplexNoise.js")')
+  // 运行时说明符：取出改写后的解析函数直接求值，按同一张表得到地址。
+  const resolver = /import\((\(\(s\)=>\{[\s\S]*\}\))\(name\)\)/.exec(code)![1]
+  const resolve = new Function(`return ${resolver}`)() as (specifier: string) => string
+  expect(resolve('opentype.js')).toBe('henji-media://author-lib/opentype.js/2.0.0/opentype.mjs')
+  expect(resolve('three/examples/jsm/loaders/GLTFLoader.js')).toBe('henji-media://author-lib/three/0.186.1/examples/jsm/loaders/GLTFLoader.js')
+  // 越出登记目录与未登记的裸名都换成只抛错的模块：import() 照常拒绝，错误列出可用的内置库。
+  for (const specifier of ['three/addons/../../build/three.cjs', 'lodash']) {
+    const url = resolve(specifier)
+    expect(url.startsWith('data:text/javascript,'), specifier).toBe(true)
+    expect(decodeURIComponent(url)).toContain(`找不到模块 ${specifier}（由 main.js 导入）。可用的内置库：three@0.186.1`)
+  }
+  expect(resolve('./local.js')).toBe('./local.js')
+})
+
+it('项目根目录的同名文件导入内置库名时报出遮挡，而不是静默导入自己', () => {
+  const files = { entry: 'main.js', files: { 'main.js': 'import "./three.js";', 'three.js': 'import * as T from "three"; export default T;' } }
+  expect(() => rewriteAuthorModule(files, 'three.js', path => path)).toThrow('three.js 导入 three 时解析到了它自己：项目里的同名文件遮住了内置库 three')
+  // 其他文件导入同名项目文件仍用项目里的副本。
+  expect(rewriteAuthorModule({ ...files, files: { ...files.files, 'main.js': 'import T from "three";' } }, 'main.js', path => `blob:${path}`)).toBe('import T from "blob:three.js";')
+})
+
+it('JS 直出路径按工程记录的版本解析，未登记的裸名列出可用的内置库', () => {
+  const unknown = directAuthorBundle({ entry: 'main.js', files: { 'main.js': 'import _ from "lodash";' } })!
+  expect(() => rewriteAuthorModule(unknown.modules!, 'main.js', path => path)).toThrow(/找不到模块 lodash（由 main\.js 导入）。可用的内置库：three@0\.186\.1/)
+  const pinned = { entry: 'main.js', apiVersion: 5 as const, files: { 'main.js': 'import * as T from "three";' }, libraries: { three: '0.999.0' } }
+  expect(directAuthorBundle(pinned)!.libraries).toBeUndefined()
+  expect(() => rewriteAuthorModule(pinned, 'main.js', path => path)).toThrow('找不到模块 three')
+})
+
+it('JS 直出路径的 v4 源码导入内置库时明确拒绝，也不记录库版本', () => {
+  const legacy = directAuthorBundle({ entry: 'main.js', files: { 'main.js': 'import * as T from "three"; export default T;' } })!
+  expect(legacy.libraries).toBeUndefined()
+  expect(() => rewriteAuthorModule(legacy.modules!, 'main.js', path => path)).toThrow('main.js 导入了内置库 three：内置库从作者接口 v5 起可用，这一版按作者接口 v4 编译')
 })

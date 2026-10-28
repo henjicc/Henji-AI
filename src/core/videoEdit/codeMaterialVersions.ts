@@ -1,7 +1,7 @@
-import { CODE_AUTHOR_LIBRARIES_MIN_API_VERSION, codeMaterialDefinitionSchema } from './codeMaterialPersistence'
+import { CODE_AUTHOR_API_VERSION, CODE_AUTHOR_LIBRARIES_MIN_API_VERSION, codeMaterialDefinitionSchema } from './codeMaterialPersistence'
 import type { CodeMaterialDefinition, CodeMaterialVersion } from './codeMaterialPersistence'
 import { CodeMaterialError } from './codeMaterial/contract'
-import type { CodeAuthorProgram as CodeMaterialProgram } from './codeAuthorProgram'
+import type { CodeAuthorApiVersion, CodeAuthorProgram as CodeMaterialProgram } from './codeAuthorProgram'
 import { addressCodeMaterialFiles, codeVersionContentKey, resolveCodeMaterialFiles, documentCodeSourceResolver, type CodeMaterialFiles, type CodeSourceResolver, type CodeComponentPin, type CodeFileReference } from './codeMaterial/sources'
 import { expandPinnedCodeComponents } from './codeMaterial/components'
 
@@ -10,20 +10,32 @@ export interface CodeMaterialDefinitionResult { definition: CodeMaterialDefiniti
 /**
  * `libraries`：这一版明确要用的内置库（来自代码资产等）。`inheritedLibraries`：追加版本时前一个默认版本的内置库，
  * 没有明确给出时沿用，但只在新版本也编译为支持内置库的作者接口时才沿用。
+ * `apiVersion`：固定按哪一版作者接口编译（代码资产按它记录的版本）；省略时新代码按当前作者接口编译。
  */
-export interface CodeVersionPublication { imports: CodeComponentPin[]; name?: string; project?: { commit: string; entry: string }; libraries?: Readonly<Record<string, string>>; inheritedLibraries?: Readonly<Record<string, string>>; write(definitionId: string, name: string, files: CodeMaterialFiles, folder?: string): Promise<{ folder?: string; files: CodeFileReference[] }> }
-/** 编译出结果后才能决定新版本用哪些内置库：作者接口不够时，明确给出的库给出可照着改的报错，沿用的库直接不带。 */
+export interface CodeVersionPublication { imports: CodeComponentPin[]; name?: string; project?: { commit: string; entry: string }; libraries?: Readonly<Record<string, string>>; inheritedLibraries?: Readonly<Record<string, string>>; apiVersion?: CodeAuthorApiVersion; write(definitionId: string, name: string, files: CodeMaterialFiles, folder?: string): Promise<{ folder?: string; files: CodeFileReference[] }> }
+const explicitLibraries = (publication: CodeVersionPublication): Readonly<Record<string, string>> | undefined => publication.libraries && Object.keys(publication.libraries).length ? publication.libraries : undefined
+/**
+ * 编译出结果后才能决定新版本用哪些内置库：作者接口不够时，明确给出的库给出可照着改的报错，沿用的库直接不带。
+ * 支持时记录沿用的库加上源码实际导入的库（编译按同一张表解析，同名库版本一致）。
+ */
 function versionLibraries(publication: CodeVersionPublication, program: CodeMaterialProgram): Readonly<Record<string, string>> | undefined {
-  const explicit = publication.libraries && Object.keys(publication.libraries).length ? publication.libraries : undefined
+  const explicit = explicitLibraries(publication)
   const supported = program.apiVersion >= CODE_AUTHOR_LIBRARIES_MIN_API_VERSION
   if (explicit && !supported) throw new CodeMaterialError('COMPATIBILITY', `内置库（${Object.keys(explicit).join('、')}）从作者接口 v${CODE_AUTHOR_LIBRARIES_MIN_API_VERSION} 起可用，这份源码编译出的是 v${program.apiVersion}：请按 v${CODE_AUTHOR_LIBRARIES_MIN_API_VERSION} 编写源码，或不再使用内置库。`)
-  return explicit ?? (supported ? publication.inheritedLibraries : undefined)
+  if (explicit || !supported) return explicit
+  const used = { ...program.bundle.libraries, ...publication.inheritedLibraries }
+  return Object.keys(used).length ? used : undefined
+}
+/** 新代码的编译输入：按当前（或资产固定的）作者接口编译，内置库按明确给出或沿用的版本解析，其余按第一套。 */
+function compilation(files: CodeMaterialFiles, publication: CodeVersionPublication): CodeMaterialFiles {
+  const libraries = explicitLibraries(publication) ?? publication.inheritedLibraries
+  return { ...files, apiVersion: publication.apiVersion ?? CODE_AUTHOR_API_VERSION, ...(libraries && Object.keys(libraries).length ? { libraries } : {}) }
 }
 /** Hash-addressed source is stored separately; IR is rebuildable cache. */
 export async function makeCodeMaterialDefinition(source: string | CodeMaterialFiles, compile: CodeSourceCompiler, publication: CodeVersionPublication, identity?: { id: string; folder?: string }): Promise<CodeMaterialDefinitionResult> {
   const addressed = await addressCodeMaterialFiles(source)
   const contents = resolveCodeMaterialFiles(addressed, documentCodeSourceResolver())
-  const program = await compile(expandPinnedCodeComponents(contents, publication.imports, documentCodeSourceResolver()))
+  const program = await compile(compilation(expandPinnedCodeComponents(contents, publication.imports, documentCodeSourceResolver()), publication))
   const id = identity?.id ?? crypto.randomUUID(); const name = publication.name ?? program.name
   const stored = await publication.write(id, name, contents, identity?.folder)
   const libraries = versionLibraries(publication, program)
@@ -39,7 +51,8 @@ export async function appendCodeMaterialVersion(definition: CodeMaterialDefiniti
   // 不挡住新版本；全部读不到才不核对种类（kindUnverified），由调用方记录。取消会在随后编译新版本时照常抛出。
   let previous: CodeMaterialProgram | undefined
   for (const version of [previousVersion, ...definition.versions.filter(value => value !== previousVersion).reverse()]) {
-    try { previous = await compile(expandPinnedCodeComponents(resolveCodeMaterialFiles(version, resolver), version.imports ?? [], resolver)) } catch { continue }
+    // 已有版本按它自己的记录编译，v4 记录照旧按 v4 读取。
+    try { previous = await compile({ ...expandPinnedCodeComponents(resolveCodeMaterialFiles(version, resolver), version.imports ?? [], resolver), apiVersion: version.apiVersion as CodeAuthorApiVersion, ...(version.libraries ? { libraries: version.libraries } : {}) }) } catch { continue }
     if (previous.apiVersion !== version.apiVersion || previous.languageVersion !== version.languageVersion) throw new CodeMaterialError('COMPATIBILITY', '源码语言版本与固定版本不一致。')
     break
   }
@@ -50,7 +63,7 @@ export async function appendCodeMaterialVersion(definition: CodeMaterialDefiniti
   const result = await makeCodeMaterialDefinition(source, async files => {
     const program = await compile(files)
     if (previous && previous.kind !== program.kind) throw new CodeMaterialError('COMPATIBILITY', '生成素材与输入滤镜不能在同一定义中互换，请另建素材。')
-    const key = codeVersionContentKey({ ...addressed, imports: publication.imports, libraries: versionLibraries(versionPublication, program) })
+    const key = codeVersionContentKey({ ...addressed, imports: publication.imports, libraries: versionLibraries(versionPublication, program), apiVersion: program.apiVersion })
     found.version = definition.versions.find(version => codeVersionContentKey(version) === key)
     return program
   }, { ...versionPublication, write: async (definitionId, name, files, folder) => found.version ? { files: found.version.files, folder: definition.folder! } : publication.write(definitionId, name, files, folder) }, definition)

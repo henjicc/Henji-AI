@@ -42,7 +42,7 @@ export type RenderRequest = { id: number } & (
   | { kind: 'scale'; divisor: number }
   | { kind: 'arm'; frame: number }
   | { kind: 'prepareGpu' }
-  | { kind: 'authorMetadata'; url: string; locations?: import('./videoEditAuthorBundle').AuthorSourceLocations }
+  | { kind: 'authorMetadata'; url: string; locations?: import('./videoEditAuthorBundle').AuthorSourceLocations; apiVersion?: number }
   | { kind: 'authorRelease'; url: string }
   | { kind: 'authorFrame'; assets?: Record<string, ImageBitmap>; url: string; params: import('./videoEditAuthorModule').AuthorParameters; info: import('./videoEditAuthorModule').AuthorFrameInfo; options?: Parameters<VideoEditRenderer['renderAuthorFrame']>[4] }
   | { kind: 'preopen'; document: VideoEditComposition; frame: number; localPaths: Record<string, string>; timing?: VideoEditTimingContext }
@@ -232,7 +232,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
         self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'authorMetadata') {
         if (!renderer) throw new Error('剪辑渲染会话尚未初始化。')
-        const authorMetadata = await renderer.readAuthorMetadata(request.url, request.locations)
+        const authorMetadata = await renderer.readAuthorMetadata(request.url, request.locations, request.apiVersion)
         self.postMessage({ id: request.id, authorMetadata } satisfies RenderResponse)
       } else if (request.kind === 'authorFrame') {
         if (!renderer) throw new Error('剪辑渲染会话尚未初始化。')

@@ -1,10 +1,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { APP_ACCENT_HEX } from '@/core/theme/colorTokens'
 import { normalizeCodeMaterialFiles, type CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { codeTypeDiagnosticLine } from '@/core/videoEdit/codeMaterial/typeDiagnostics'
-import { createAuthorTypeChecker } from './videoEditAuthorTypeCheck'
+import { createAuthorTypeChecker, type AuthorLibraryTypePackage } from './videoEditAuthorTypeCheck'
 import { AUTHOR_TYPE_ENVIRONMENT } from './videoEditAuthorTypeEnvironment'
 
 /** 与检查 Worker 同一份环境（Vite 打包的标准库、WebGPU 与作者接口声明），只是不经线程。 */
@@ -84,5 +84,81 @@ export default effect`)).toEqual([])
     expect(check({ entry: 'main.js', files: { 'main.js': body } })).toMatchObject({ checkedFiles: [], total: 0 })
     expect(lines({ entry: 'main.js', files: { 'main.js': `// @ts-check\n${body}` } })[0]).toMatch(/^main\.js:2:45 TS2551 /)
     expect(check(`// @ts-nocheck\n${body}`)).toMatchObject({ checkedFiles: [], total: 0 })
+  })
+})
+
+/** 与构建脚本写进 types.json 的内容相同：类型包的声明文件，加上实际随包的运行时模块（这里按来源包近似）。 */
+function nodeModulesTypes(library: string, version: string): AuthorLibraryTypePackage | undefined {
+  if (library === 'three') {
+    const typesRoot = path.resolve(`node_modules/henji-author-three-types-${version}`), runtimeRoot = path.resolve(`node_modules/henji-author-three-${version}`)
+    const walk = (directory: string, pattern: RegExp): string[] => fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => entry.name === 'node_modules' ? [] : entry.isDirectory() ? walk(path.join(directory, entry.name), pattern) : pattern.test(entry.name) ? [path.join(directory, entry.name)] : [])
+    const relative = (base: string, file: string): string => path.relative(base, file).split(path.sep).join('/')
+    const files = Object.fromEntries([path.join(typesRoot, 'package.json'), ...walk(typesRoot, /\.d\.ts$/)].map(file => [relative(typesRoot, file), fs.readFileSync(file, 'utf8')]))
+    const modules = [...walk(path.join(runtimeRoot, 'build'), /\.js$/), ...walk(path.join(runtimeRoot, 'examples/jsm'), /\.js$/)].map(file => relative(runtimeRoot, file)).filter(file => file !== 'examples/jsm/loaders/TTFLoader.js')
+    return { mount: '@types/three', modules, files }
+  }
+  if (library === 'opentype.js') return { mount: 'opentype.js', modules: ['opentype.mjs'], files: { 'package.json': JSON.stringify({ name: 'opentype.js', types: 'index.d.ts' }), 'index.d.ts': fs.readFileSync(path.resolve(`resources/video-edit-author/libraries/opentype.js-${version}.d.ts`), 'utf8') } }
+  return undefined
+}
+
+describe('作者源码导入内置库', () => {
+  const libraryChecker = createAuthorTypeChecker({ ...AUTHOR_TYPE_ENVIRONMENT, libraryTypes: nodeModulesTypes })
+  const libraryLines = (input: string | CodeMaterialFiles): string[] => {
+    const files = normalizeCodeMaterialFiles(input)
+    return libraryChecker.check(files, Object.keys(files.files)).diagnostics.map(codeTypeDiagnosticLine)
+  }
+
+  it('three、three/webgpu、three/addons 与 opentype.js 按真实类型解析，不报找不到模块', () => {
+    expect(libraryLines(`import * as THREE from "three"
+import { MeshBasicNodeMaterial } from "three/webgpu"
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js"
+import { SimplexNoise } from "three/examples/jsm/math/SimplexNoise.js"
+import { parse } from "opentype.js"
+const scene = new THREE.Scene(); scene.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new MeshBasicNodeMaterial()))
+void new GLTFLoader(); void new SimplexNoise().noise(0, 0)
+export const font = (bytes: ArrayBuffer) => parse(bytes).getPath("痕迹", 0, 0, 72).toPathData(2)
+export default { name: "x", draw() { void scene } }`)).toEqual([])
+  })
+
+  it('库里的类型错误按原文行列报出；没随包的子路径照实报找不到模块', () => {
+    const source = 'import * as THREE from "three"\nconst v = new THREE.Vector3()\nv.lenght()\nexport default { name: "x", draw() { void v } }'
+    const [typo] = libraryChecker.check(normalizeCodeMaterialFiles(source), ['main.ts']).diagnostics
+    expect(typo).toMatchObject({ code: 2551, span: { startLine: 3, startColumn: 3 } })
+    expect(source.slice(typo.span.start, typo.span.end)).toBe('lenght')
+    expect(libraryLines('import { TTFLoader } from "three/addons/loaders/TTFLoader.js"\nexport default { name: "x", draw() { void TTFLoader } }')[0]).toMatch(/^main\.ts:1:27 TS2307 /)
+  })
+
+  it('读不到类型包时导入按 any 处理，不诱导删掉导入', () => {
+    const untyped = createAuthorTypeChecker({ ...AUTHOR_TYPE_ENVIRONMENT, libraryTypes: () => undefined })
+    const files = normalizeCodeMaterialFiles('import * as THREE from "three"\nimport { GLTFLoader } from "three/addons/loaders/GLTFLoader.js"\nexport default { name: "x", draw() { void new THREE.Scene(); void GLTFLoader } }')
+    expect(untyped.check(files, ['main.ts']).diagnostics).toEqual([])
+  })
+})
+
+describe('Worker 里读取内置库类型包', () => {
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
+
+  it('同步读取带超时；读失败只短时记住，过后重试，读到的常驻', () => {
+    vi.useFakeTimers()
+    const timeouts: number[] = []
+    let available = false
+    vi.stubGlobal('XMLHttpRequest', class {
+      status = 0; responseText = ''; timeout = 0
+      open(): void {}
+      send(): void {
+        timeouts.push(this.timeout)
+        if (!available) throw new DOMException('timed out', 'TimeoutError')
+        this.status = 200; this.responseText = JSON.stringify({ mount: '@types/three', modules: [], files: {} })
+      }
+    })
+    const read = AUTHOR_TYPE_ENVIRONMENT.libraryTypes!
+    // 用一个别的测试不会读的版本号，避开模块级缓存。
+    expect(read('three', '9.9.9')).toBeUndefined()
+    available = true
+    expect(read('three', '9.9.9')).toBeUndefined()
+    vi.advanceTimersByTime(31_000)
+    expect(read('three', '9.9.9')).toMatchObject({ mount: '@types/three' })
+    expect(read('three', '9.9.9')).toMatchObject({ mount: '@types/three' })
+    expect(timeouts).toEqual([5000, 5000])
   })
 })

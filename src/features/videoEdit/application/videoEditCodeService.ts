@@ -16,7 +16,7 @@ import { createVideoEditSequence, videoEditComposition, videoEditDocumentSchema 
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
 import type { VideoEditDocument, VideoEditItem, VideoEditComposition, VideoEditMedia } from '@/core/videoEdit/document'
 import type { CodeMaterialDefinition, CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
-import type { CodeAuthorProgram as CodeMaterialProgram } from '@/core/videoEdit/codeAuthorProgram'
+import type { CodeAuthorApiVersion, CodeAuthorProgram as CodeMaterialProgram } from '@/core/videoEdit/codeAuthorProgram'
 import { createVideoEditGraphic } from '@/core/videoEdit/graphics'
 import { compileVideoEditCode, forgetVideoEditCodeMetadata, rememberVideoEditCodeMetadata } from './videoEditCodeState'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
@@ -109,7 +109,9 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
       const contents = project?.contents ?? codeFilesFromInput(input)
       const prepared = project?.publication ?? await prepareCodeVersionPublication(projectId, contents, input.name, publication?.asset.sourceVersion.imports, createdFiles)
       const libraries = publication?.asset.sourceVersion.libraries
-      const publicationState = libraries ? { ...prepared, libraries } : prepared
+      // 代码资产按它记录的作者接口与内置库重建，v4 资产导入后仍是 v4。
+      const pinned = publication ? { apiVersion: publication.asset.sourceVersion.apiVersion as CodeAuthorApiVersion } : {}
+      const publicationState = { ...prepared, ...pinned, ...(libraries ? { libraries } : {}) }
       const typeCheck = typeReports ? startVideoEditCodeTypeCheck(contents, publicationState.imports, typeAbort.signal) : undefined
       if (typeCheck) typeChecks.push(typeCheck)
       const { definition, program } = await withVideoEditCodeTypeContext(() => makeCodeMaterialDefinition(contents, source => compileVideoEditCode(source, controller.signal), publicationState), typeCheck ? [typeCheck] : [], controller.signal)

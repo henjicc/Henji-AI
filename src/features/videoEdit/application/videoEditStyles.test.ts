@@ -123,7 +123,7 @@ it('风格包往返：导出带说明书、样片、成员模板与预览，导�
   await expect(exportVideoEditStylePackage('shared', 'D:/out/分享风格.hjsty', {}, fileIo)).rejects.toThrow('已存在')
   await expect(exportVideoEditStylePackage('shared', 'D:/out/分享风格.json', {}, fileIo)).rejects.toThrow('.hjsty')
   const text = files.get('D:/out/分享风格.hjsty')!
-  expect(JSON.parse(text)).toMatchObject({ version: VIDEO_EDIT_STYLE_PACKAGE_VERSION, minReaderVersion: 1, content: { format: 'henji-video-style', style: { id: 'shared', version } } })
+  expect(JSON.parse(text)).toMatchObject({ version: VIDEO_EDIT_STYLE_PACKAGE_VERSION, content: { format: 'henji-video-style', style: { id: 'shared', version } } })
   // 另一台机器：全新风格库。
   const other = createTestStyleLibraryIo(); videoEditStyleLibrary.reset(other, undefined)
   try {

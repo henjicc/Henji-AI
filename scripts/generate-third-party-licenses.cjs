@@ -53,6 +53,7 @@ const JSON_FILE = path.join(outputDir, 'third-party-licenses.json')
 const TEXT_FILE = path.join(outputDir, 'THIRD-PARTY-NOTICES.txt')
 const STAMP_FILE = path.join(outputDir, '.inputs.sha256')
 const REFERENCE_DIR = path.join(__dirname, 'third-party-licenses')
+const AUTHOR_LIBRARY_LICENSE_DIR = path.join(REFERENCE_DIR, 'author-libs')
 const PRODUCT_NAME = '痕迹AI'
 
 function log(message) {
@@ -70,6 +71,10 @@ function parseArgs(argv) {
     else throw new Error(`未知参数：${arg}`)
   }
   return options
+}
+
+function readAuthorLibraryComponents() {
+  return JSON.parse(fs.readFileSync(path.join(AUTHOR_LIBRARY_LICENSE_DIR, 'components.json'), 'utf8')).components
 }
 
 function readTextIfExists(file) {
@@ -95,6 +100,9 @@ function inputFingerprint(options) {
   for (const file of files) hash.update(`${file}\n${readTextIfExists(path.join(root, file)) ?? ''}\n`)
   for (const name of fs.existsSync(REFERENCE_DIR) ? fs.readdirSync(REFERENCE_DIR).sort() : []) {
     hash.update(`${name}\n${readTextIfExists(path.join(REFERENCE_DIR, name)) ?? ''}\n`)
+  }
+  for (const name of fs.existsSync(AUTHOR_LIBRARY_LICENSE_DIR) ? fs.readdirSync(AUTHOR_LIBRARY_LICENSE_DIR).sort() : []) {
+    hash.update(`author-libs/${name}\n${readTextIfExists(path.join(AUTHOR_LIBRARY_LICENSE_DIR, name)) ?? ''}\n`)
   }
   return hash.digest('hex')
 }
@@ -286,6 +294,13 @@ function generate(options) {
   else runtime.push({ id: 'reference:hq-icon', name: 'HQ-ICON (App Store icon retrieval, YuKongA)', version: 'reference', license: 'MIT', ecosystem: 'runtime',
     homepage: 'https://github.com/YuKongA/HQ-ICON', sources: ['https://github.com/YuKongA/HQ-ICON (input parsing and high-resolution icon URL method)', 'https://performance-partners.apple.com/search-api (Apple data source)'],
     textIds: [textTable.add(hqIconLicense)], textOrigin: 'reference' })
+  // 代码效果内置库（three、opentype.js）随库分发的第三方组件不在 npm ls 里；与 scripts/build-author-libraries.ts 写 NOTICE.txt 用同一张表。
+  for (const component of readAuthorLibraryComponents()) {
+    const texts = component.texts.map((name) => readTextIfExists(path.join(AUTHOR_LIBRARY_LICENSE_DIR, name)))
+    if (texts.some((text) => !text)) { missing.push(`${component.name}（${component.library}）：缺少许可全文`); continue }
+    runtime.push({ id: `author-lib:${component.library}:${component.name}`, name: `${component.name} (bundled with ${component.library} for code effects)`, version: component.version, license: component.license, ecosystem: 'runtime',
+      homepage: component.homepage, sources: component.files.map((file) => `${component.library}/${file}`), textIds: texts.map((text) => textTable.add(text)), textOrigin: 'package' })
+  }
   const ffmpeg = ffmpegRuntime(options, textTable, referenceTexts)
   if (ffmpeg) runtime.push(ffmpeg)
   else if (options.platform === 'win32') missing.push('FFmpeg：未找到已就绪的 FFmpeg 包（先运行 npm run build:video-decoder）')

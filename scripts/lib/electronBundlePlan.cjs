@@ -10,6 +10,7 @@ function buildElectronBundlePlan(root) {
     { label: '构建原生录音引擎', command: process.execPath, args: [path.join(root, 'scripts/build-audio-capture.cjs')] },
     // 第三方许可清单在 FFmpeg 就绪后生成（读取包内许可与构建配置）；渲染层“关于”页面与安装包共用这份产物。
     { label: '生成第三方许可清单', command: process.execPath, args: [path.join(root, 'scripts/generate-third-party-licenses.cjs')] },
+    { label: '生成代码效果内置库', command: process.execPath, args: [path.join(root, 'scripts/build-author-libraries.ts')] },
     { label: '生成进度种子', command: process.execPath, args: [path.join(root, 'scripts/generate-progress-seeds.cjs')] },
     { label: '生成模型目录索引', command: process.execPath, args: [path.join(root, 'scripts/generate-catalog-index.cjs')] },
     { label: '准备 SDK 产物', command: process.execPath, args: [path.join(root, 'scripts/build-sdk-if-needed.cjs')] },

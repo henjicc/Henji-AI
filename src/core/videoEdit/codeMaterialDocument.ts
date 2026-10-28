@@ -2,6 +2,7 @@ import { expandPinnedCodeComponents } from './codeMaterial/components'
 import { documentCodeSourceResolver, resolveCodeMaterialFiles, type CodeMaterialFiles } from './codeMaterial/sources'
 import type { VideoEditClip, VideoEditDocument } from './document'
 import type { CodeMaterialInstance, CodeMaterialVersion } from './codeMaterialPersistence'
+import type { CodeAuthorApiVersion } from './codeAuthorProgram'
 import type { CodeParameterDeclaration, CodeParameterTypeDefinition } from './codeMaterial/contract'
 import { CodeMaterialError } from './codeMaterial/contract'
 import { prepareCodeMaterialParameters, proposeCodeMaterialMigration, type CodeMaterialMigrationImpact } from './codeMaterialAnimation'
@@ -27,7 +28,9 @@ export function videoEditCodeReferences(document: VideoEditDocument): CodeMateri
 export function codeMaterialSource(document: Pick<VideoEditDocument, 'codeMaterials'>, instance: CodeMaterialInstance): CodeMaterialVersion & { contents: CodeMaterialFiles; compilation: CodeMaterialFiles } {
   const version = codeMaterialVersion(document, instance)
   const resolver = documentCodeSourceResolver(document); const contents = resolveCodeMaterialFiles(version, resolver)
-  return { ...version, contents, compilation: expandPinnedCodeComponents(contents, version.imports ?? [], resolver) }
+  // 编译按版本记录的作者接口与内置库版本；记录的 apiVersion 已由 schema 限定在 4–5。
+  const options = { apiVersion: version.apiVersion as CodeAuthorApiVersion, ...(version.libraries ? { libraries: version.libraries } : {}) }
+  return { ...version, contents, compilation: { ...expandPinnedCodeComponents(contents, version.imports ?? [], resolver), ...options } }
 }
 export function codeMaterialVersion(document: Pick<VideoEditDocument, 'codeMaterials'>, instance: CodeMaterialInstance): CodeMaterialVersion {
   const version = document.codeMaterials?.find(definition => definition.id === instance.definitionId)?.versions.find(version => version.id === instance.versionId)

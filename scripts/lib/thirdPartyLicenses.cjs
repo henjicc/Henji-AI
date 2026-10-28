@@ -275,9 +275,12 @@ function collectNpmPackages(tree, { platform, arch, readPackageJson = (dir) => r
       const pkg = readPackageJson(child.path) ?? {}
       if (!matchesPlatformList(child.os ?? pkg.os, platform) || !matchesPlatformList(child.cpu ?? pkg.cpu, arch)) continue
       const firstParty = FIRST_PARTY_SCOPES.some((scope) => name.startsWith(scope))
-      if (!firstParty && !result.has(key)) {
-        result.set(key, {
-          name,
+      // npm 别名（如按版本随包的作者库 henji-author-three-0.186.1）在清单里写组件的真实名称。
+      const packageName = typeof pkg.name === 'string' && pkg.name ? pkg.name : name
+      const packageKey = `${packageName}@${child.version}`
+      if (!firstParty && !result.has(packageKey)) {
+        result.set(packageKey, {
+          name: packageName,
           version: child.version,
           license: normalizeLicenseExpression(pkg.license ?? pkg.licenses ?? child.license),
           author: normalizeAuthor(pkg.author),

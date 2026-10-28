@@ -19,7 +19,7 @@ import { createLogger } from '@/core/logging'
 import { codeMaterialVersion as codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeParameterValues } from '@/core/videoEdit/codeMaterial/contract'
-import type { CodeAuthorProgram as CodeMaterialProgram } from '@/core/videoEdit/codeAuthorProgram'
+import type { CodeAuthorApiVersion, CodeAuthorProgram as CodeMaterialProgram } from '@/core/videoEdit/codeAuthorProgram'
 import type { AuthorAssets, AuthorFrameInfo, AuthorGpuImage } from './videoEditAuthorModule'
 import { evaluateCodeMaterialParameters, prepareCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
 import type { PreparedCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
@@ -163,7 +163,10 @@ export class VideoEditCodeSources {
       this.programs.delete(key); this.programs.set(key, cached); return cached.program
     }
     await loadCodeSourceReferences(version); signal.throwIfAborted()
-    const resolver = documentCodeSourceResolver(); const files = expandPinnedCodeComponents(resolveCodeMaterialFiles(version, resolver), version.imports ?? [], resolver); const source = codeMaterialFilesKey(files)
+    const resolver = documentCodeSourceResolver()
+    // 按版本记录编译：作者接口版本与内置库版本都跟着记录走，默认库版本以后变了也不影响这一版。记录的 apiVersion 已由 schema 限定在 4–5。
+    const files = { ...expandPinnedCodeComponents(resolveCodeMaterialFiles(version, resolver), version.imports ?? [], resolver), apiVersion: version.apiVersion as CodeAuthorApiVersion, ...(version.libraries ? { libraries: version.libraries } : {}) }
+    const source = codeMaterialFilesKey(files)
     logger.debug('可见代码源码检查开始', { event: 'video_edit.code.compile.start', context: { sequenceId: this.document.id, version: key } })
     try {
       const started = performance.now()

@@ -121,6 +121,9 @@ src-tauri/
 resources/progress-seeds.json
 # 第三方许可清单（npm run gen:licenses 构建时生成）
 resources/licenses/
+# 代码效果内置第三方库（node scripts/build-author-libraries.ts 构建时生成）
+resources/author-libs/
+resources/author-libs.tmp/
 dev-data/
 scratchpad_feed/
 nul

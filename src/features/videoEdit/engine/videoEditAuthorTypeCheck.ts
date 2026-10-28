@@ -1,5 +1,6 @@
 import ts from 'typescript'
 import { resolveAuthorProjectImport } from '@/core/videoEdit/codeMaterial/authorModulePaths'
+import { AUTHOR_LIBRARIES, resolveAuthorLibraryModule } from '@/core/videoEdit/codeMaterial/authorLibraries'
 import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import type { CodeTypeCheckResult, CodeTypeDiagnostic } from '@/core/videoEdit/codeMaterial/typeDiagnostics'
 
@@ -9,7 +10,11 @@ export interface AuthorTypeEnvironment {
   libs: Readonly<Record<string, string>>
   webgpu: string
   authorApi: string
+  /** 按库名与版本读取内置库的类型包；读不到时返回 undefined，导入按 any 处理，不报成找不到模块。 */
+  libraryTypes?: (library: string, version: string) => AuthorLibraryTypePackage | undefined
 }
+/** 构建时生成的 `types.json`：挂到 `/node_modules/<mount>/` 的声明文件，以及实际随包的运行时模块路径。 */
+export interface AuthorLibraryTypePackage { mount: string; modules: string[]; files: Readonly<Record<string, string>> }
 export interface AuthorTypeChecker {
   /** report 为要报告的作者文件；其余文件（如钉住的项目组件）只参与解析与推断。 */
   check(files: CodeMaterialFiles, report: readonly string[]): CodeTypeCheckResult
@@ -19,7 +24,15 @@ export interface AuthorTypeChecker {
 export const AUTHOR_TYPE_LIBS = ['lib.esnext.d.ts', 'lib.webworker.d.ts', 'lib.webworker.iterable.d.ts', 'lib.webworker.asynciterable.d.ts'] as const
 const AUTHOR_ROOT = '/author/'
 const LIB_ROOT = '/lib/'
-const ENV = { webgpu: '/env/webgpu.d.ts', api: '/env/henji-author-api.d.ts', globals: '/env/henji-author-globals.d.ts', modules: '/env/henji-author-modules.d.ts' } as const
+const ENV = { webgpu: '/env/webgpu.d.ts', api: '/env/henji-author-api.d.ts', globals: '/env/henji-author-globals.d.ts', modules: '/env/henji-author-modules.d.ts', untypedLibrary: '/env/henji-author-untyped-library.d.ts' } as const
+const NODE_MODULES = '/node_modules/'
+/** 类型包读不到的库声明成无类型模块：导入的一切都是 any，作者代码照常检查其余部分。 */
+function untypedLibraries(libraries: Array<[string, string]>): string {
+  return libraries.flatMap(([library, version]) => {
+    const release = AUTHOR_LIBRARIES[library][version]
+    return [...Object.keys(release.modules), ...Object.keys(release.directories ?? {}).map(prefix => `${prefix}*`)].map(specifier => `declare module ${JSON.stringify(specifier)}`)
+  }).join('\n') + '\n'
+}
 /**
  * 包住默认导出的检查函数：借泛型推断 params 的键与取值，并给 draw/layers 的参数上下文类型。
  * 推断不出（没写 params，或对象另有错误）时退回宽类型，不把真正的错误挤成一条误导的 params 错误。
@@ -137,12 +150,41 @@ export function createAuthorTypeChecker(environment: AuthorTypeEnvironment): Aut
   let roots: string[] = []
   const texts = new Map<string, { text: string; version: number }>()
   let revision = 0
-  const read = (name: string): string | undefined => texts.get(name)?.text ?? fixed.get(name)
+  // 库名 → 已挂上的类型包；挂载路径与版本无关，换版本时按版本号让 LanguageService 重读这些文件。
+  const mounted = new Map<string, { version: string; types?: AuthorLibraryTypePackage }>()
+  const mountedFile = (name: string): { text: string; version: string } | undefined => {
+    if (!name.startsWith(NODE_MODULES)) return undefined
+    for (const [library, entry] of mounted) {
+      const prefix = entry.types && `${NODE_MODULES}${entry.types.mount}/`
+      if (!prefix || !name.startsWith(prefix)) continue
+      const text = entry.types!.files[name.slice(prefix.length)]
+      if (text !== undefined) return { text, version: `${library}@${entry.version}` }
+    }
+    return undefined
+  }
+  let untyped = { text: '\n', version: 0 }
+  const read = (name: string): string | undefined => name === ENV.untypedLibrary ? untyped.text : texts.get(name)?.text ?? fixed.get(name) ?? mountedFile(name)?.text
+  /** 源码导入了哪个内置库就挂哪个库的类型，版本按代码版本记录。 */
+  const mountLibraries = (files: CodeMaterialFiles): void => {
+    for (const [path, text] of Object.entries(files.files)) {
+      if (!CODE_FILE.test(path)) continue
+      for (const { fileName } of ts.preProcessFile(text, true, true).importedFiles) {
+        if (resolveAuthorProjectImport(files, path, fileName)) continue
+        const library = resolveAuthorLibraryModule(fileName, files.libraries)
+        const entry = library && mounted.get(library.library)
+        // 上次没读到类型包的库每次检查都再问一次环境，由环境决定何时重试。
+        if (!library || entry && entry.version === library.version && entry.types) continue
+        mounted.set(library.library, { version: library.version, types: environment.libraryTypes?.(library.library, library.version) })
+      }
+    }
+    const text = untypedLibraries([...mounted].filter(([, entry]) => !entry.types).map(([library, entry]): [string, string] => [library, entry.version]))
+    if (text !== untyped.text) untyped = { text, version: untyped.version + 1 }
+  }
   const moduleHost: ts.ModuleResolutionHost = { fileExists: name => read(name) !== undefined, readFile: read }
   const host: ts.LanguageServiceHost = {
     getCompilationSettings: () => OPTIONS,
-    getScriptFileNames: () => [...roots, ENV.webgpu, ENV.globals, ENV.modules],
-    getScriptVersion: name => String(texts.get(name)?.version ?? 0),
+    getScriptFileNames: () => [...roots, ENV.webgpu, ENV.globals, ENV.modules, ENV.untypedLibrary],
+    getScriptVersion: name => name === ENV.untypedLibrary ? `untyped@${untyped.version}` : mountedFile(name)?.version ?? String(texts.get(name)?.version ?? 0),
     getScriptSnapshot: name => { const text = read(name); return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text) },
     getCurrentDirectory: () => AUTHOR_ROOT,
     getDefaultLibFileName: options => LIB_ROOT + ts.getDefaultLibFileName(options),
@@ -156,7 +198,14 @@ export function createAuthorTypeChecker(environment: AuthorTypeEnvironment): Aut
       if (!containingFile.startsWith(AUTHOR_ROOT)) return ts.resolveModuleName(literal.text, containingFile, OPTIONS, moduleHost)
       const target = resolveAuthorProjectImport(current, containingFile.slice(AUTHOR_ROOT.length), literal.text)
       const extension = target && EXTENSIONS.find(([pattern]) => pattern.test(target))?.[1]
-      return { resolvedModule: target && extension ? { resolvedFileName: AUTHOR_ROOT + target, extension, isExternalLibraryImport: false } : undefined }
+      if (target) return { resolvedModule: extension ? { resolvedFileName: AUTHOR_ROOT + target, extension, isExternalLibraryImport: false } : undefined }
+      // 项目里没有才查内置库，与打包器同一顺序；没随包的子路径（如被排除的加载器）照实报找不到模块。
+      const library = resolveAuthorLibraryModule(literal.text, current.libraries)
+      if (!library) return { resolvedModule: undefined }
+      const types = mounted.get(library.library)?.types
+      if (!types) return { resolvedModule: undefined }
+      if (!types.modules.includes(library.path)) return { resolvedModule: undefined }
+      return ts.resolveModuleName(literal.text, containingFile, OPTIONS, moduleHost)
     }),
   }
   const service = ts.createLanguageService(host, ts.createDocumentRegistry())
@@ -175,6 +224,7 @@ export function createAuthorTypeChecker(environment: AuthorTypeEnvironment): Aut
       for (const name of [...texts.keys()]) if (!next.has(name)) texts.delete(name)
       for (const [name, text] of next) if (texts.get(name)?.text !== text) texts.set(name, { text, version: ++revision })
       current = files
+      mountLibraries(files)
       const reported = report.filter(path => CODE_FILE.test(path) && next.has(AUTHOR_ROOT + path))
       roots = reported.map(path => AUTHOR_ROOT + path)
       const program = service.getProgram()

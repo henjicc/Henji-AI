@@ -6,10 +6,67 @@ import { testAuthorBundle, testAuthorProgram } from '../../features/videoEdit/en
 import { codeMaterialDefinitionsSchema } from './codeMaterialPersistence'
 import { appendCodeMaterialVersion, makeCodeMaterialDefinition, type CodeSourceCompiler, type CodeVersionPublication } from './codeMaterialVersions'
 import { videoEditDocumentSchema } from './document'
+import { codeVersionContentKey } from './codeMaterial/sources'
+import { GOLDEN_SCENE_DECLARATION } from './scene/sceneTestFixtures'
 
 const compile = async (source: CodeMaterialFiles) => testAuthorProgram(testAuthorBundle(source))
 const publication: CodeVersionPublication = { imports: [], async write(id, _name, files, folder) { return { folder: folder ?? id, files: (await addressCodeMaterialFiles(files)).files } } }
 const source = (defaultValue = .5) => `export default {name:"原生素材",kind:"generator",width:3840,height:2160,durationSeconds:10,params:[{key:"amount",type:"number",title:"数量",default:${defaultValue},min:0,max:1,step:.01}],draw(ctx,t,p){ctx.globalAlpha=p.amount;ctx.fillRect(t,0,100,100);}}`
+describe('作者接口 v5 与内置库接通', () => {
+  it('新代码按当前作者接口编译并记录为 v5，带上实际导入的内置库', async () => {
+    const inputs: CodeMaterialFiles[] = []
+    // 模拟打包器报告源码导入了 three。
+    const importsThree: CodeSourceCompiler = async files => { inputs.push(files); const program = await compile(files); return { ...program, bundle: { ...program.bundle, libraries: { three: '0.186.1' } } } }
+    const { definition } = await makeCodeMaterialDefinition(source(), importsThree, publication)
+    expect(inputs[0]).toMatchObject({ apiVersion: 5 }); expect(inputs[0]).not.toHaveProperty('libraries')
+    expect(definition.versions[0]).toMatchObject({ apiVersion: 5, libraries: { three: '0.186.1' } })
+    // 追加版本按前一版记录的库版本解析，并照旧记录。
+    const next = await appendCodeMaterialVersion(definition, source(.6), importsThree, documentCodeSourceResolver(), publication)
+    expect(inputs.at(-1)).toMatchObject({ apiVersion: 5, libraries: { three: '0.186.1' } })
+    expect(next.definition.versions.find(version => version.id === next.versionId)).toMatchObject({ apiVersion: 5, libraries: { three: '0.186.1' } })
+    // 没导入内置库的新代码不记录 libraries。
+    expect((await makeCodeMaterialDefinition(source(), compile, publication)).definition.versions[0]).not.toHaveProperty('libraries')
+  })
+
+  it('已有 v4 记录照旧按 v4 编译核对，内容键不变；固定为 v4 的资产重建后仍是 v4', async () => {
+    const inputs: CodeMaterialFiles[] = []
+    const recording: CodeSourceCompiler = async files => { inputs.push(files); return compile(files) }
+    const { definition: created } = await makeCodeMaterialDefinition(source(), recording, { ...publication, apiVersion: 4 })
+    expect(created.versions[0].apiVersion).toBe(4)
+    const legacy = created.versions[0], key = codeVersionContentKey(legacy)
+    const appended = await appendCodeMaterialVersion(created, source(.7), recording, documentCodeSourceResolver(), publication)
+    // 前一版按自己的 v4 记录编译核对，不报“源码语言版本与固定版本不一致”。
+    expect(inputs[1]).toMatchObject({ apiVersion: 4 })
+    const kept = appended.definition.versions.find(version => version.id === legacy.id)!
+    expect(kept).toEqual(legacy); expect(codeVersionContentKey(kept)).toBe(key)
+    expect(appended.definition.versions.find(version => version.id === appended.versionId)?.apiVersion).toBe(5)
+  })
+
+  it('候选还原到某个 v4 版本的原源码时得到新的 v5 版本，程序与记录的作者接口一致', async () => {
+    const { definition } = await makeCodeMaterialDefinition(source(), compile, { ...publication, apiVersion: 4 })
+    const legacy = definition.versions[0]
+    // 先改一版再改回原源码：与 v4 那版源码完全相同。
+    const changed = await appendCodeMaterialVersion(definition, source(.7), compile, documentCodeSourceResolver(), publication)
+    const restored = await appendCodeMaterialVersion({ ...changed.definition, defaultVersionId: changed.versionId }, source(), compile, documentCodeSourceResolver(), publication)
+    const version = restored.definition.versions.find(value => value.id === restored.versionId)!
+    expect(restored.versionId).not.toBe(legacy.id)
+    // 登记元数据时按这条核对（videoEditCodeState 的“源码语言版本与检查结果不一致”）。
+    expect(version.apiVersion).toBe(5); expect(restored.program.apiVersion).toBe(version.apiVersion)
+    expect(codeVersionContentKey(version)).not.toBe(codeVersionContentKey(legacy))
+    // 同一份 v5 源码再交一次复用刚才那一版。
+    const again = await appendCodeMaterialVersion(restored.definition, source(), compile, documentCodeSourceResolver(), publication)
+    expect(again.versionId).toBe(restored.versionId)
+  })
+
+  it('作者接口 v5 的代码可以声明片子数据参数；固定为 v4 时同一声明不通过', async () => {
+    const film = `export default {name:"片子",kind:"generator",params:[{key:"film",type:"scene",title:"片子数据",schema:${JSON.stringify(GOLDEN_SCENE_DECLARATION)}}],draw(){}}`
+    const { definition, program } = await makeCodeMaterialDefinition(film, compile, publication)
+    expect(definition.versions[0].apiVersion).toBe(5)
+    expect(program.parameters[0]).toMatchObject({ key: 'film', type: 'scene', default: null })
+    await expect(makeCodeMaterialDefinition(film, compile, { ...publication, apiVersion: 4 })).rejects.toThrow('film.type')
+  })
+})
+
 describe('剪辑源码文件引用契约', () => {
   it('内置库只在新版本也编译为 v5 时沿用；明确带库却编出 v4 时报出可照着改的原因', async () => {
     // 源码里带 /*v5*/ 的按作者接口 v5 编译，其余按 v4。

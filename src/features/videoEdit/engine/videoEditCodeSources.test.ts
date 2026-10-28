@@ -5,7 +5,7 @@ import { createVideoEditTestDocument as createVideoEditDocument } from '../../..
 import { describe, expect, it, vi } from 'vitest'
 import { testAuthorBundle, testAuthorProgram } from './videoEditAuthorTestFixtures'
 import type { CodeAuthorProgram as CodeMaterialProgram, CodeAuthorBundle } from '@/core/videoEdit/codeAuthorProgram'
-import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
+import { codeMaterialFilesKey, type CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import * as codeComponents from '@/core/videoEdit/codeMaterial/components'
 import { videoEditComposition, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import { VideoEditCodeSources, type PreparedVideoEditCodeEffect } from './videoEditCodeSources'
@@ -332,6 +332,28 @@ describe('可见代码源与固定内容复用', () => {
       boundary.sources.updateDocument(document)
       expect((await boundary.sources.prepare(document, document.clips, 0, () => true)).pictures.get('clip')).toBe(old)
       expect(boundary.generator).toHaveBeenCalledOnce()
+    } finally { await boundary.sources.dispose() }
+  })
+})
+
+describe('按代码版本记录编译', () => {
+  it('作者接口版本与内置库版本跟着版本记录进编译输入；v4 且没有库记录的版本缓存键不变', async () => {
+    const document = fixture()
+    const v4 = document.codeMaterials![0].versions[0]
+    document.codeMaterials![0].versions.push({ ...v4, id: 'v5', apiVersion: 5, libraries: { three: '0.186.1' } })
+    const boundary = boundaries(document)
+    try {
+      await boundary.sources.prepare(document, document.clips, 0, () => true)
+      const old = boundary.compiler.bundle.mock.calls[0][0] as CodeMaterialFiles
+      expect(old).toMatchObject({ apiVersion: 4 }); expect(old).not.toHaveProperty('libraries')
+      const { apiVersion: _apiVersion, ...withoutApi } = old
+      expect(codeMaterialFilesKey(old)).toBe(codeMaterialFilesKey(withoutApi))
+      const next = changedVersion(document, 'v5'); boundary.sources.updateDocument(next)
+      await boundary.sources.prepare(next, next.clips, 0, () => true)
+      const pinned = boundary.compiler.bundle.mock.calls[1][0] as CodeMaterialFiles
+      expect(pinned).toMatchObject({ apiVersion: 5, libraries: { three: '0.186.1' } })
+      expect(codeMaterialFilesKey(pinned)).not.toBe(codeMaterialFilesKey(old))
+      expect(boundary.generator.mock.lastCall![2]).toMatchObject({ apiVersion: 5 })
     } finally { await boundary.sources.dispose() }
   })
 })

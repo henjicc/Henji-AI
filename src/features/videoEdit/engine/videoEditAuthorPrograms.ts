@@ -47,7 +47,8 @@ export class VideoEditAuthorPrograms {
     const effect = await this.module(bundle)
     return this.enqueue(async () => {
       if (this.closed) throw new Error('作者渲染会话已关闭。')
-      const program: CodeAuthorProgram = { ...authorEffectMetadata(effect), seed: 0, apiVersion: 4, languageVersion: 4, bundle }
+      // 作者接口版本由编译输入指定（来自代码版本记录）；没有指定即第一个作者 JS 接口 v4。
+      const program: CodeAuthorProgram = { ...authorEffectMetadata(effect, bundle.apiVersion), seed: 0, apiVersion: bundle.apiVersion ?? 4, languageVersion: 4, bundle }
       const pinned = new Set([bundle, ...[...this.instances.values()].map(value => value.program.bundle)])
       let bytes = [...this.modules.keys()].reduce((sum, value) => sum + bundleBytes(value), 0)
       for (const [source, entry] of this.modules) {
@@ -68,7 +69,7 @@ export class VideoEditAuthorPrograms {
       if (previous) { this.instances.delete(key); await previous.runtime.dispose() }
       const effect = await this.module(program.bundle)
       if (this.closed) throw new Error('作者渲染会话已关闭。')
-      const runtime = new VideoEditAuthorRuntime(this.device, effect, program.bundle.locations, false)
+      const runtime = new VideoEditAuthorRuntime(this.device, effect, program.bundle.locations, false, program.apiVersion)
       this.instances.set(key, { program, runtime })
       return runtime
     })

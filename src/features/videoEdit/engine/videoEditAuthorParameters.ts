@@ -19,8 +19,9 @@ export interface AuthorEffectMetadata extends AuthorParameterMetadata {
 }
 
 /** Read from the executed module in the render worker; absent placement hints
- * remain absent, rather than silently imposing a canvas or source duration. */
-export function authorEffectMetadata(effect: AuthorModule): AuthorEffectMetadata {
+ * remain absent, rather than silently imposing a canvas or source duration.
+ * `apiVersion` 是代码版本的作者接口版本（省略即 4）：v5 起才认片子数据参数，v4 代码里的同名自定义类型照旧有效。 */
+export function authorEffectMetadata(effect: AuthorModule, apiVersion?: number): AuthorEffectMetadata {
   if (effect.kind !== undefined && effect.kind !== 'generator' && effect.kind !== 'filter') throw new Error('效果 kind 必须为 generator 或 filter。')
   if (effect.mode !== undefined && effect.mode !== 'static' && effect.mode !== 'dynamic') throw new Error('效果 mode 必须为 static 或 dynamic。')
   const hints: Pick<AuthorEffectMetadata, 'width' | 'height' | 'durationSeconds'> = {}
@@ -32,13 +33,13 @@ export function authorEffectMetadata(effect: AuthorModule): AuthorEffectMetadata
   }
   const frames = [...(effect.frames ?? [])]
   if (frames.some(offset => !Number.isFinite(offset) || offset === 0) || new Set(frames).size !== frames.length) throw new Error('相邻帧偏移必须为不重复的非零有限数值。')
-  return { name: effect.name, kind: effect.kind ?? 'generator', mode: effect.mode ?? 'dynamic', frames, ...hints, ...authorParameterMetadata(effect) }
+  return { name: effect.name, kind: effect.kind ?? 'generator', mode: effect.mode ?? 'dynamic', frames, ...hints, ...authorParameterMetadata(effect, apiVersion) }
 }
 
 /** Only control metadata is normalized. The author module has already executed
  * as ordinary JS; none of its drawing or control flow is parsed here. */
-export function authorParameterMetadata(effect: Pick<AuthorModule, 'params' | 'types'>): AuthorParameterMetadata {
-  const types = parseCodeMaterialTypes(effect.types ?? {})
+export function authorParameterMetadata(effect: Pick<AuthorModule, 'params' | 'types'>, apiVersion?: number): AuthorParameterMetadata {
+  const types = parseCodeMaterialTypes(effect.types ?? {}, apiVersion)
   const parameters: Record<string, unknown> = Object.create(null)
   const hexColors: string[] = []
   for (const parameter of effect.params ?? []) {
@@ -66,7 +67,7 @@ export function authorParameterMetadata(effect: Pick<AuthorModule, 'params' | 't
     if (item.type === 'table') item.default ??= []
     Object.defineProperty(parameters, key, { value: item, enumerable: true })
   }
-  return { parameters: parseCodeMaterialV3Parameters(parameters, types), types, hexColors }
+  return { parameters: parseCodeMaterialV3Parameters(parameters, types, apiVersion), types, hexColors }
 }
 
 /** UI stores shared RGBA values; unchanged Frameflow code still receives CSS hex.

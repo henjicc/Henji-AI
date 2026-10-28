@@ -29,7 +29,17 @@ export interface CodeAuthorSourceLocations {
   factories?: Record<string, Record<string, CodeSourceSpan>>
   fallback?: CodeSourceSpan
 }
-export interface CodeAuthorBundle { code: string; map: string; locations: CodeAuthorSourceLocations; modules?: import('./codeMaterial/sources').CodeMaterialFiles }
+export interface CodeAuthorBundle {
+  code: string
+  map: string
+  locations: CodeAuthorSourceLocations
+  modules?: import('./codeMaterial/sources').CodeMaterialFiles
+  /** 静态导入到的内置库（库名 → 版本），供工程记录所用版本；没有用到时省略。 */
+  libraries?: import('./codeMaterial/authorLibraries').AuthorLibraryVersions
+  /** 编译时指定的作者接口版本；省略即 4。读取声明的程序沿用它，与代码版本记录保持一致。 */
+  apiVersion?: CodeAuthorApiVersion
+}
+export type CodeAuthorApiVersion = CodeAuthorProgram['apiVersion']
 
 /** Rebuildable executable module plus declarations read in the render worker.
  * Source files, parameters and overrides remain the persisted truth. */

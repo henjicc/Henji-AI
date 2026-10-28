@@ -63,8 +63,10 @@ test('npm 组件只收随目标平台分发的包，第一方包本身不收但�
   const ffmpeg = tempPackage(root, 'ffmpeg-ffprobe-static', { 'package.json': JSON.stringify({ license: 'GPL-3.0-or-later' }) })
   const sdk = tempPackage(root, '@henjicc/ai-sdk', { 'package.json': JSON.stringify({ license: 'Apache-2.0' }) })
   const nested = tempPackage(root, 'nested', { 'package.json': JSON.stringify({ license: 'ISC' }) })
+  const aliased = tempPackage(root, 'henji-author-three-0.186.1', { 'package.json': JSON.stringify({ name: 'three', license: 'MIT' }) })
   const tree = {
     dependencies: {
+      'henji-author-three-0.186.1': { version: '0.186.1', path: aliased },
       react: { version: '18.3.1', path: react, dependencies: { nested: { version: '1.0.0', path: nested } } },
       '@esbuild/darwin-arm64': { version: '0.28.1', path: darwinOnly },
       'ffmpeg-ffprobe-static': { version: '6.1.2', path: ffmpeg },
@@ -73,7 +75,7 @@ test('npm 组件只收随目标平台分发的包，第一方包本身不收但�
     },
   }
   const packages = collectNpmPackages(tree, { platform: 'win32', arch: 'x64' })
-  assert.deepEqual(packages.map((pkg) => `${pkg.name}@${pkg.version}`).sort(), ['nested@1.0.0', 'react@18.3.1'])
+  assert.deepEqual(packages.map((pkg) => `${pkg.name}@${pkg.version}`).sort(), ['nested@1.0.0', 'react@18.3.1', 'three@0.186.1'])
   const reactPkg = packages.find((pkg) => pkg.name === 'react')
   assert.equal(reactPkg.repository, 'https://github.com/facebook/react')
   assert.equal(reactPkg.author, 'Meta')

@@ -38,7 +38,10 @@ const programBytes = (program: CodeMaterialProgram): number => 2 * (program.bund
 export async function compileVideoEditCode(source: string | CodeMaterialFiles, signal?: AbortSignal): Promise<CodeMaterialProgram> {
   initializeVideoEditCodeSourceRuntime()
   signal?.throwIfAborted()
-  const files = normalizeCodeMaterialFiles(source), key = codeMaterialFilesKey(files)
+  // 作者接口与内置库版本是编译选项，不属于源码内容（内容按持久格式严格校验），先分开再合回。
+  const { apiVersion, libraries, ...contents } = typeof source === 'string' ? { entry: 'main.ts', files: { 'main.ts': source } } as CodeMaterialFiles : source
+  const files: CodeMaterialFiles = { ...normalizeCodeMaterialFiles(contents), ...(apiVersion !== undefined ? { apiVersion } : {}), ...(libraries ? { libraries } : {}) }
+  const key = codeMaterialFilesKey(files)
   const generation = compilerGeneration
   const cached = checkedPrograms.get(key)
   if (cached) { checkedPrograms.delete(key); checkedPrograms.set(key, cached); return cached }
@@ -51,7 +54,7 @@ export async function compileVideoEditCode(source: string | CodeMaterialFiles, s
     return compiling
   }
   const bundle = await prepareVideoEditAuthorBundle(files, signal)
-  const metadata = await readCodeMetadataCache(key)
+  const metadata = await readCodeMetadataCache(key, files.apiVersion)
   const program = metadata ? { ...metadata, bundle } : await inspectVideoEditAuthor(bundle, signal)
   if (!metadata) void writeCodeMetadataCache(key, program)
   signal?.throwIfAborted()

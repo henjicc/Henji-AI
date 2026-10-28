@@ -6,6 +6,8 @@ directories:
 files:
   - out/**
   - package.json
+  # 作者库的 npm 别名包只是 scripts/build-author-libraries.ts 的来源，随包的是 resources/author-libs。
+  - "!node_modules/henji-author-*{,/**/*}"
 extraResources:
   - from: resources/local-models
     to: resources/local-models
@@ -23,6 +25,13 @@ extraResources:
     to: resources/video-edit-styles
   - from: resources/video-edit-preview
     to: resources/video-edit-preview
+  # 代码效果内置第三方库（three、opentype.js 等，按版本常驻），由 scripts/build-author-libraries.ts 生成，
+  # 经 henji-media://author-lib/ 只读提供；指纹文件只供增量判断，不随包。
+  - from: resources/author-libs
+    to: resources/author-libs
+    filter:
+      - "**/*"
+      - "!.inputs.sha256"
   # 许可说明（任务 3.3）：README、项目 LICENSE、THIRD-PARTY-NOTICES（与“设置 → 关于”同源），Windows 另含
   # FFmpeg GPLv3 全文与构建信息、原生解码服务许可声明；由 npm run gen:licenses 生成（electron:build 以 --strict 运行）。
   # third-party-licenses.json 已进入渲染产物，指纹文件只供增量判断，二者不随包。
@@ -69,6 +78,7 @@ win:
     - out/**
     - package.json
     - "!node_modules/ffmpeg-ffprobe-static{,/**/*}"
+    - "!node_modules/henji-author-*{,/**/*}"
     # npm 装上了所有平台的可选二进制包；Windows 安装包只保留 win32-x64（约省 300MB，任务 3.3）。esbuild 只被
     # pi-coding-agent → chord 的构建期打包入口（chord/node、chord/bundler）引用，运行时不调用，保留本平台一份以防万一。
     - "!**/node_modules/@esbuild/!(win32-x64){,/**/*}"

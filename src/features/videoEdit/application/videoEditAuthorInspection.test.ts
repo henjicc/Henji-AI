@@ -33,7 +33,10 @@ it('作者检查不等待正在准备字体的文档租约；复用检查线程�
   try {
     const bundle = { code: 'export default {}', map: '', locations: { layers: {} } }
     expect((await inspectVideoEditAuthor(bundle)).name).toBe('author')
-    await inspectVideoEditAuthor(bundle)
+    // 参数声明按编译输入的作者接口解析；没有指定时仍是 v4。
+    expect(state.reads.mock.lastCall?.[2]).toBeUndefined()
+    expect(await inspectVideoEditAuthor({ ...bundle, apiVersion: 5 })).toMatchObject({ apiVersion: 5 })
+    expect(state.reads.mock.lastCall?.[2]).toBe(5)
     expect(state.starts).toBe(1)
     expect(state.release).toHaveBeenCalledTimes(2)
     expect(revoke).toHaveBeenCalledTimes(2)

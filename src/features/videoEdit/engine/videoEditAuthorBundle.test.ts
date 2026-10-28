@@ -58,3 +58,45 @@ it('indexes named factories once and does not guess among same-name nested funct
   expect(span.tag.startLine).toBe(2)
   expect(span.duplicate).toBeUndefined()
 })
+
+it('内置库保持外部依赖并改写成共享模块地址，记录所用版本', async () => {
+  const bundle = await bundleAuthorFiles({ entry: 'main.js', apiVersion: 5, files: {
+    'main.js': 'import * as THREE from "three"; import { WebGPURenderer } from "three/webgpu"; import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js"; export const font = () => import("opentype.js"); export default { draw() { return [THREE, WebGPURenderer, GLTFLoader] } };',
+  } }, build)
+  expect(bundle.code).toContain('from "henji-media://author-lib/three/0.186.1/build/three.module.js"')
+  expect(bundle.code).toContain('from "henji-media://author-lib/three/0.186.1/build/three.webgpu.js"')
+  expect(bundle.code).toContain('from "henji-media://author-lib/three/0.186.1/examples/jsm/loaders/GLTFLoader.js"')
+  expect(bundle.code).toContain('import("henji-media://author-lib/opentype.js/2.0.0/opentype.mjs")')
+  expect(bundle.libraries).toEqual({ three: '0.186.1', 'opentype.js': '2.0.0' })
+})
+
+it('项目里的同名文件优先于内置库；未登记的裸名列出可用的内置库', async () => {
+  const own = await bundleAuthorFiles({ entry: 'main.js', files: { 'main.js': 'import { v } from "three"; export default { draw() { return v } };', 'three.js': 'export const v = "vendored";' } }, build)
+  expect(own.code).toContain('"vendored"')
+  expect(own.libraries).toBeUndefined()
+  await expect(bundleAuthorFiles({ entry: 'main.js', files: { 'main.js': 'import _ from "lodash"; export default _;' } }, build)).rejects.toThrow(/找不到模块 lodash（由 main\.js 导入）。可用的内置库：three@0\.186\.1.*opentype\.js@2\.0\.0/)
+  await expect(bundleAuthorFiles({ entry: 'main.js', files: { 'main.js': 'import * as T from "three"; export default T;' }, libraries: { three: '0.999.0' } }, build)).rejects.toThrow('找不到模块 three')
+})
+
+it('TS 路径的运行时 import(名字) 与 JS 直出用同一张内置库表，并带上编译输入的作者接口版本', async () => {
+  const bundle = await bundleAuthorFiles({ entry: 'main.ts', apiVersion: 5, files: { 'main.ts': 'export const load = (name: string) => import(name); export default { name: "x", draw() {} };' } }, build)
+  expect(bundle.apiVersion).toBe(5)
+  const call = /import\((\(\(s\)=>\{[\s\S]*?return s;\}\))\(name\)\)/.exec(bundle.code)
+  expect(call, bundle.code).not.toBeNull()
+  const resolve = new Function(`return ${call![1]}`)() as (specifier: string) => string
+  expect(resolve('three/webgpu')).toBe('henji-media://author-lib/three/0.186.1/build/three.webgpu.js')
+  expect(decodeURIComponent(resolve('lodash'))).toContain('找不到模块 lodash（由 main.ts 导入）。可用的内置库：three@0.186.1')
+})
+
+it('TS 路径同样报出同名项目文件遮住内置库', async () => {
+  await expect(bundleAuthorFiles({ entry: 'main.ts', files: { 'main.ts': 'import T from "./three"; export default T;', 'three.ts': 'import * as T from "three"; export default T;' } }, build)).rejects.toThrow('three.ts 导入 three 时解析到了它自己')
+})
+
+it('作者接口 v4 的源码导入内置库时明确拒绝，不静默放行一个记录不了版本的导入', async () => {
+  await expect(bundleAuthorFiles({ entry: 'main.ts', files: { 'main.ts': 'import * as T from "three"; export default T;' } }, build)).rejects.toThrow('内置库从作者接口 v5 起可用，这一版按作者接口 v4 编译')
+  const runtime = await bundleAuthorFiles({ entry: 'main.ts', apiVersion: 4, files: { 'main.ts': 'export const load = (name: string) => import(name); export default { name: "x", draw() {} };' } }, build)
+  const call = /import\((\(\(s\)=>\{[\s\S]*?return s;\}\))\(name\)\)/.exec(runtime.code)
+  const resolve = new Function(`return ${call![1]}`)() as (specifier: string) => string
+  expect(decodeURIComponent(resolve('three/webgpu'))).toContain('内置库从作者接口 v5 起可用')
+  expect(decodeURIComponent(resolve('lodash'))).toContain('找不到模块 lodash')
+})

@@ -3,8 +3,14 @@ import { z } from 'zod'
 import { sha256HexString } from '../../../utils/save/hash'
 import { mapWithConcurrency } from '../../../utils/mapWithConcurrency'
 import { CODE_MATERIAL_LIMITS, CodeMaterialError } from './contract'
+import { authorLibraryVersion, type AuthorLibraryVersions } from './authorLibraries'
+import type { CodeAuthorApiVersion } from '../codeAuthorProgram'
 
-export interface CodeMaterialFiles { entry: string; files: Record<string, string>; resolvedImports?: Record<string, Record<string, string>> }
+/**
+ * 一次编译的输入。`apiVersion`：按哪一版作者接口编译，省略即 4（第一个作者 JS 接口）。
+ * `libraries`：代码版本记录的内置库版本，省略的库按第一套解析。
+ */
+export interface CodeMaterialFiles { entry: string; files: Record<string, string>; resolvedImports?: Record<string, Record<string, string>>; apiVersion?: CodeAuthorApiVersion; libraries?: AuthorLibraryVersions }
 export interface CodeSourceResolver { read(hash: string, location?: string, path?: string): string; contentKey?(hash: string, location: string): string }
 export interface CodeSource { hash: string; source: string }
 export interface CodeFileReference { path: string; location: string; hash: string }
@@ -177,14 +183,26 @@ export function mergeCodeSources(...groups: readonly (readonly CodeSource[] | un
 }
 /** Cleanup never deletes ordinary source files visible to the user, including abandoned candidates. */
 export function pruneCodeSources<T>(document: T): T { return document }
-export function codeMaterialFilesKey(input: CodeMaterialFiles): string { return JSON.stringify([input.entry, Object.entries(input.files).sort(([a], [b]) => a.localeCompare(b)), Object.entries(input.resolvedImports ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([path, imports]) => [path, Object.entries(imports).sort(([a], [b]) => a.localeCompare(b))])]) }
+/**
+ * 作者接口 4 与没有内置库记录是省略时的含义，键里不写，已有编译与声明缓存继续命中。
+ * 记录成第一套版本的库与不记录解析到同一份库，键里同样不写：新代码编译时与按版本记录重读时命中同一份缓存。
+ */
+export function codeMaterialFilesKey(input: CodeMaterialFiles): string {
+  const sorted = <T>(entries: Array<[string, T]>): Array<[string, T]> => entries.sort(([a], [b]) => a.localeCompare(b))
+  const pinned = Object.entries(input.libraries ?? {}).filter(([library, version]) => authorLibraryVersion(library) !== version)
+  const libraries = pinned.length ? sorted(pinned) : undefined
+  const runtime = input.apiVersion !== undefined && input.apiVersion !== 4 || libraries ? [{ apiVersion: input.apiVersion ?? 4, ...(libraries ? { libraries } : {}) }] : []
+  return JSON.stringify([input.entry, sorted(Object.entries(input.files)), sorted(Object.entries(input.resolvedImports ?? {})).map(([path, imports]) => [path, sorted(Object.entries(imports))]), ...runtime])
+}
 
 /**
  * Container relocation changes locations, never the immutable author content.
  * 内置库版本决定作者代码实际跑的库，同样属于内容；没有 libraries（或为空）的版本键不变，已有缓存继续有效。
  */
-export function codeVersionContentKey(version: { entry: string; files: readonly CodeFileReference[]; imports?: readonly CodeComponentPin[]; libraries?: Readonly<Record<string, string>> }): string {
+export function codeVersionContentKey(version: { entry: string; files: readonly CodeFileReference[]; imports?: readonly CodeComponentPin[]; libraries?: Readonly<Record<string, string>>; apiVersion?: number }): string {
   const pinKey = (pin: CodeComponentPin): unknown => [pin.name, pin.version, pin.hash, pin.imports.map(pinKey)]
   const libraries = version.libraries && Object.keys(version.libraries).length ? [Object.entries(version.libraries).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)] : []
-  return JSON.stringify([version.entry, version.files.map(file => [file.path, file.hash]), (version.imports ?? []).map(pinKey), ...libraries])
+  // 作者接口也是版本身份：同一份源码按 v4 与 v5 是两个版本。v4 不写，已有版本的键不变。
+  const api = version.apiVersion !== undefined && version.apiVersion !== 4 ? [{ apiVersion: version.apiVersion }] : []
+  return JSON.stringify([version.entry, version.files.map(file => [file.path, file.hash]), (version.imports ?? []).map(pinKey), ...libraries, ...api])
 }

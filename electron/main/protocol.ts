@@ -10,6 +10,7 @@ import {
   resolveImageEditorV3ResourceMediaUrl,
 } from './services/image-editor-v3/resource-media-url'
 import { persistMediaRootGrant, restorePersistedMediaRoots } from './services/media/rootGrants'
+import { AUTHOR_LIBRARY_HOST } from '../../src/core/videoEdit/codeMaterial/authorLibraries'
 
 const MEDIA_SCHEME = 'henji-media'
 const MEDIA_HOST = 'local'
@@ -24,6 +25,8 @@ interface MediaRequestTarget {
   targetPath: string
   mediaType?: string
   immutable?: boolean
+  /** 渲染 Worker 跨协议加载模块与 fetch 资源（wasm、json）都需要放行。 */
+  crossOrigin?: boolean
 }
 
 class MediaProtocolError extends Error {
@@ -39,6 +42,8 @@ class MediaProtocolError extends Error {
 export function inferMimeFromPath(targetPath: string): string {
   const lower = targetPath.toLowerCase()
   if (lower.endsWith('.mjs') || lower.endsWith('.js')) return 'text/javascript'
+  if (lower.endsWith('.wasm')) return 'application/wasm'
+  if (lower.endsWith('.json')) return 'application/json'
   if (lower.endsWith('.png')) return 'image/png'
   if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'
   if (lower.endsWith('.webp')) return 'image/webp'
@@ -183,6 +188,41 @@ function resolveMediaRequestTarget(url: string): MediaRequestTarget {
   return { targetPath: decodeURIComponent(encodedPath) }
 }
 
+function authorLibraryRoot(): string {
+  return path.join(app.isPackaged ? process.resourcesPath : app.getAppPath(), 'resources', 'author-libs')
+}
+
+/**
+ * 代码效果内置库：只读、只在随包目录内。地址里的每一段都按字面拼接，真实路径必须与拼接结果一致，
+ * 所以 `..`、编码后的分隔符、绝对路径与目录内的符号链接都到不了目录外。文件按版本目录常驻、内容不变，可长期缓存。
+ */
+async function resolveAuthorLibraryTarget(parsed: URL): Promise<MediaRequestTarget> {
+  if (parsed.username || parsed.password || parsed.port || parsed.search) {
+    throw new MediaProtocolError(400, 'Unsupported author library URL')
+  }
+  let segments: string[]
+  try {
+    segments = parsed.pathname.split('/').slice(1).map((segment) => decodeURIComponent(segment))
+  } catch {
+    throw new MediaProtocolError(400, 'Invalid author library path')
+  }
+  if (!segments.length || segments.some((segment) => !segment || segment === '.' || segment === '..' || /[\\/:\0]/.test(segment))) {
+    throw new MediaProtocolError(400, 'Invalid author library path')
+  }
+  let rootPath: string
+  let targetPath: string
+  try {
+    rootPath = await fsp.realpath(authorLibraryRoot())
+    targetPath = await fsp.realpath(path.join(rootPath, ...segments))
+  } catch {
+    throw new MediaProtocolError(404, 'Not found')
+  }
+  if (targetPath !== path.join(rootPath, ...segments) || !isInsideRoot(targetPath, rootPath)) {
+    throw new MediaProtocolError(403, 'Author library path is outside its root')
+  }
+  return { targetPath, immutable: true, crossOrigin: true }
+}
+
 function parseRangeHeader(rangeHeader: string | null, size: number): ByteRange | null {
   if (!rangeHeader) return null
 
@@ -242,13 +282,14 @@ function createHeaders(
   range: ByteRange | null,
   mediaType?: string,
   immutable = false,
+  crossOrigin = false,
 ): Headers {
   const headers = new Headers()
   headers.set('Accept-Ranges', 'bytes')
   headers.set('Content-Type', mediaType ?? inferMimeFromPath(targetPath))
   headers.set('X-Content-Type-Options', 'nosniff')
   // 作者模块由已授权目录提供，渲染 Worker 可跨协议原生加载循环 ESM 图。
-  if (inferMimeFromPath(targetPath) === 'text/javascript') headers.set('Access-Control-Allow-Origin', '*')
+  if (crossOrigin || inferMimeFromPath(targetPath) === 'text/javascript') headers.set('Access-Control-Allow-Origin', '*')
   headers.set(
     'Cache-Control',
     immutable || isContentAddressedPath(targetPath)
@@ -267,18 +308,29 @@ function createHeaders(
 }
 
 async function handleMediaRequest(request: Request): Promise<Response> {
+  // 作者库的失败响应也要放行跨源，否则 Worker 只看到 CORS 拒绝，看不到 404/403 的真实原因。
+  let crossOrigin = false
+  const failure = (body: string, status: number): Response => new Response(body, { status, headers: crossOrigin ? { 'Access-Control-Allow-Origin': '*' } : {} })
   try {
-    const target = resolveMediaRequestTarget(request.url)
+    const parsed = new URL(request.url)
+    let target: MediaRequestTarget
+    if (parsed.protocol === `${MEDIA_SCHEME}:` && parsed.hostname === AUTHOR_LIBRARY_HOST) {
+      crossOrigin = true
+      if (request.method !== 'GET' && request.method !== 'HEAD') return failure('Method not allowed', 405)
+      target = await resolveAuthorLibraryTarget(parsed)
+    } else {
+      target = resolveMediaRequestTarget(request.url)
+      assertAllowedMediaPath(target.targetPath)
+    }
     const { targetPath } = target
-    assertAllowedMediaPath(targetPath)
 
     const stat = await fsp.stat(targetPath)
     if (!stat.isFile()) {
-      return new Response('Not found', { status: 404 })
+      return failure('Not found', 404)
     }
 
     const range = parseRangeHeader(request.headers.get('range'), stat.size)
-    const headers = createHeaders(targetPath, stat.size, range, target.mediaType, target.immutable)
+    const headers = createHeaders(targetPath, stat.size, range, target.mediaType, target.immutable, target.crossOrigin)
     const status = range ? 206 : 200
 
     if (request.method === 'HEAD') {
@@ -288,9 +340,9 @@ async function handleMediaRequest(request: Request): Promise<Response> {
     return new Response(streamFile(targetPath, range), { status, headers })
   } catch (error) {
     if (error instanceof MediaProtocolError) {
-      return new Response(error.message, { status: error.status })
+      return failure(error.message, error.status)
     }
-    return new Response('Not found', { status: 404 })
+    return failure('Not found', 404)
   }
 }
 
@@ -304,6 +356,8 @@ export function registerMediaProtocolScheme(): void {
         stream: true,
         supportFetchAPI: true,
         corsEnabled: true,
+        // 内置作者库与作者模块是常驻 JS，V8 代码缓存省掉重复编译。
+        codeCache: true,
       },
     },
   ])
