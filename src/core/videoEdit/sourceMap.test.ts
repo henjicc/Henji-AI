@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createVideoEditDocument, createVideoEditSequence, videoEditComposition, type VideoEditClip, type VideoEditDocument } from './document'
+import { activeVideoEditClips, audibleVideoEditClips, createVideoEditDocument, createVideoEditSequence, videoEditComposition, videoEditPictureFilter, videoEditVisibleTrackIndexes, type VideoEditClip, type VideoEditDocument } from './document'
 import { addLegacyVideoEditTracks } from './testFixtures'
 import { VideoEditSourceMapIndex, projectVideoEditSourceMapRanges } from './sourceMap'
 import { videoEditNestedFrame } from './nestedSequences'
@@ -117,6 +117,21 @@ describe('成片到来源的派生映射', () => {
     expect(read(document).filter(entry => entry.medium === 'audio')).toHaveLength(0)
     sequence.tracks[2].solo = true
     expect(read(document).filter(entry => entry.medium === 'video').map(entry => entry.kind)).toEqual(['image'])
+  })
+  it('片段启用：停用片段不画、不发声、不进来源映射；轨道隐藏与独奏照旧，独奏轨上片段全停用时独奏仍压下其他轨', () => {
+    const { document, sequence } = fixture()
+    sequence.clips = [clip('a', { enabled: false }), clip('b', { track: 2 })]
+    const ids = (clips: readonly VideoEditClip[]): string[] => clips.map(value => value.id)
+    let composition = videoEditComposition(document, 'root')
+    expect(ids(activeVideoEditClips(composition, 10))).toEqual(['b']); expect(ids(audibleVideoEditClips(composition))).toEqual(['b'])
+    expect(videoEditPictureFilter(composition).has(sequence.clips[0])).toBe(false); expect(videoEditVisibleTrackIndexes(composition).has(1)).toBe(true)
+    expect(new Set(read(document).map(entry => entry.path[0].clipId))).toEqual(new Set(['b']))
+    sequence.tracks[1].solo = true
+    composition = videoEditComposition(document, 'root')
+    expect(activeVideoEditClips(composition, 10)).toEqual([]); expect(audibleVideoEditClips(composition)).toEqual([])
+    sequence.tracks[1].solo = false; sequence.tracks[2].enabled = false; sequence.clips[0] = clip('a')
+    composition = videoEditComposition(document, 'root')
+    expect(ids(activeVideoEditClips(composition, 10))).toEqual(['a']); expect(ids(audibleVideoEditClips(composition))).toEqual(['a'])
   })
   it('局部查询只映射相交区间；无关根片段改变复用既有映射，相关子序列改变使父实例失效', () => {
     const { document, sequence, index } = fixture()

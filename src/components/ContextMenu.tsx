@@ -1,5 +1,7 @@
 import { createLogger } from '@/core/logging'
 import React, { useEffect, useRef, type KeyboardEvent } from 'react'
+import { Check } from 'lucide-react'
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import type { MenuItem, MenuPosition } from '../hooks/useContextMenu'
 import PanelTrigger from '@/components/ui/PanelTrigger'
 import { UiOptionButton } from '@/components/ui/primitives'
@@ -17,7 +19,7 @@ interface ContextMenuProps {
     surface?: UiTriggerPanelSurface
 }
 
-const ENABLED_ITEM_SELECTOR = '[role="menuitem"]:not(:disabled)'
+const ENABLED_ITEM_SELECTOR = '[role="menuitem"]:not(:disabled), [role="menuitemcheckbox"]:not(:disabled)'
 
 function MenuList({ items, onClose }: { items: MenuItem[]; onClose: () => void }): React.ReactElement {
     const listRef = useRef<HTMLDivElement>(null)
@@ -56,6 +58,9 @@ function MenuList({ items, onClose }: { items: MenuItem[]; onClose: () => void }
         await item.onClick()
     }
 
+    // 有可勾选的项才给每一行留勾的位置，与应用菜单栏一致
+    const checkSlot = items.some(item => item.checked !== undefined)
+
     return (
         <div
             ref={listRef}
@@ -69,7 +74,8 @@ function MenuList({ items, onClose }: { items: MenuItem[]; onClose: () => void }
                 <React.Fragment key={item.id}>
                     <UiOptionButton
                         type="button"
-                        role="menuitem"
+                        role={item.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
+                        {...(item.checked === undefined ? {} : { 'aria-checked': item.checked })}
                         variant="menu"
                         size="md"
                         disabled={item.disabled === true}
@@ -89,6 +95,7 @@ function MenuList({ items, onClose }: { items: MenuItem[]; onClose: () => void }
                             void run(item)
                         }}
                     >
+                        {checkSlot ? <span aria-hidden="true" className="flex w-3.5 shrink-0 justify-center">{item.checked ? <Check size={UI_ICON_SIZE.sm} /> : null}</span> : null}
                         {item.icon ? <span aria-hidden="true" className="flex shrink-0 items-center text-text2">{item.icon}</span> : null}
                         <span className="min-w-0 flex-1 truncate">{item.label}</span>
                     </UiOptionButton>

@@ -1,6 +1,6 @@
 import { VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from '@/core/videoEdit/time'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
-import { videoEditVisibleTracks } from '@/core/videoEdit/document'
+import { videoEditVisibleTrackIndexes } from '@/core/videoEdit/document'
 import { videoEditEdgeTracks } from '@/core/videoEdit/tracks'
 import { newTextStyle } from '@/core/imaging/vectorContent/text'
 import { createLogger } from '@/core/logging'
@@ -10,7 +10,7 @@ const logger = createLogger('features.videoEdit.text')
 /** PR title placement: use an empty targeted video lane, otherwise add a video lane; never overwrite footage. */
 export function addVideoEditProgramText(instance: VideoEditInstance, point: { x: number; y: number }, boxWidth = 0): string {
   const sequence = getActiveVideoEditSequence(instance); const frame = instance.frame
-  const visible = videoEditVisibleTracks(sequence)
+  const visible = videoEditVisibleTrackIndexes(sequence)
   const lane = sequence.tracks.filter(track => track.kind === 'video' && visible.has(track.index) && !track.locked && instance.targetTrackIds.includes(track.id))
     .sort((a, b) => b.index - a.index).find(track => !sequence.clips.some(clip => clip.track === track.index && clip.start <= frame && frame < clip.start + clip.duration))
   const added = lane ? [] : videoEditEdgeTracks(sequence, 'video', 1).map(track => ({ ...track, solo: sequence.tracks.some(value => value.kind === 'video' && value.enabled && value.solo) }))

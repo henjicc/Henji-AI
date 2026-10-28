@@ -411,24 +411,31 @@ struct Mix { amount:vec4f, color:vec4f }
     this.mixReady.set(format, pending)
     try { await pending } catch (error) { if (this.mixReady.get(format) === pending) this.mixReady.delete(format); throw error }
   }
-  /** `through`：黑场／白场过渡经过的预乘纯色；不传为直接混合（交叉溶解、效果强度）。 */
-  async mix(key: string, left: VideoEditCodePicture, right: VideoEditCodePicture, amount: number, through?: readonly [number, number, number, number]): Promise<VideoEditCodePicture> {
-    if (left.owner !== this.device || right.owner !== this.device || left.width !== right.width || left.height !== right.height || !Number.isFinite(amount) || amount < 0 || amount > 1) throw new CodeMaterialError('CONTEXT', '透明混合需要同设备同尺寸画面和0到1的强度。')
+  /**
+   * `through`：黑场／白场过渡经过的预乘纯色；不传为直接混合（交叉溶解、效果强度）。
+   * 一侧传 `'transparent'`（过渡里停用的片段）时那一侧按透明画，尺寸取另一侧。
+   */
+  async mix(key: string, leftInput: VideoEditCodePicture | 'transparent', rightInput: VideoEditCodePicture | 'transparent', amount: number, through?: readonly [number, number, number, number]): Promise<VideoEditCodePicture> {
+    const size = leftInput === 'transparent' ? rightInput : leftInput
+    if (size === 'transparent') throw new CodeMaterialError('CONTEXT', '透明混合至少需要一侧画面。')
+    const left = leftInput === 'transparent' ? undefined : leftInput; const right = rightInput === 'transparent' ? undefined : rightInput
+    if ([left, right].some(picture => picture && (picture.owner !== this.device || picture.width !== size.width || picture.height !== size.height)) || !Number.isFinite(amount) || amount < 0 || amount > 1) throw new CodeMaterialError('CONTEXT', '透明混合需要同设备同尺寸画面和0到1的强度。')
     const old = this.surfaces.get(key)?.picture.texture
-    if (old && (old === left.texture || old === right.texture)) throw new CodeMaterialError('CONTEXT', '透明混合输入输出不能引用同一纹理。')
+    if (old && (old === left?.texture || old === right?.texture)) throw new CodeMaterialError('CONTEXT', '透明混合输入输出不能引用同一纹理。')
     // Mixing an 8-bit picture into a high-precision one keeps the higher precision.
-    const format = left.highPrecision || right.highPrecision ? VIDEO_EDIT_PRECISE_FORMAT : 'rgba8unorm'
+    const format = left?.highPrecision || right?.highPrecision ? VIDEO_EDIT_PRECISE_FORMAT : 'rgba8unorm'
     await this.ready; this.assertLive(); await this.prepareMix(format); this.assertLive()
-    this.assertInput(left.texture); this.assertInput(right.texture)
+    if (left) this.assertInput(left.texture)
+    if (right) this.assertInput(right.texture)
     const pipeline = this.mixPipelines.get(format)!
-    const target = this.surface(key, left.width, left.height, format)
-    if (target.picture.texture === left.texture || target.picture.texture === right.texture) throw new CodeMaterialError('CONTEXT', '透明混合输入输出不能引用同一纹理。')
+    const target = this.surface(key, size.width, size.height, format)
+    if (target.picture.texture === left?.texture || target.picture.texture === right?.texture) throw new CodeMaterialError('CONTEXT', '透明混合输入输出不能引用同一纹理。')
     target.mixBuffer ??= this.device.createBuffer({ size: 32, usage: 0x08 | 0x40 })
     this.device.queue.writeBuffer(target.mixBuffer, 0, new Float32Array([amount, through ? 1 : 0, 0, 0, ...(through ?? [0, 0, 0, 0])]))
     const encoder = this.device.createCommandEncoder()
     const pass = encoder.beginRenderPass({ colorAttachments: [{ view: target.picture.texture.createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] })
     pass.setPipeline(pipeline)
-    pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: left.texture.createView() }, { binding: 1, resource: right.texture.createView() }, { binding: 2, resource: this.sampler }, { binding: 3, resource: { buffer: target.mixBuffer } }] }))
+    pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: (left?.texture ?? this.transparent()).createView() }, { binding: 1, resource: (right?.texture ?? this.transparent()).createView() }, { binding: 2, resource: this.sampler }, { binding: 3, resource: { buffer: target.mixBuffer } }] }))
     pass.draw(3); pass.end(); this.submit(encoder); this.counts.mixFrames++
     return target.picture
   }

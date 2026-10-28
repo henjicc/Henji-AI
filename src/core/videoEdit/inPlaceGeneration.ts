@@ -1,5 +1,5 @@
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from './time'
-import { videoEditClipMedia, type VideoEditClip, type VideoEditCreativeSource, type VideoEditClipTake, type VideoEditDocument, type VideoEditSequence } from './document'
+import { videoEditClipMedia, videoEditPictureFilter, type VideoEditClip, type VideoEditCreativeSource, type VideoEditClipTake, type VideoEditDocument, type VideoEditSequence } from './document'
 import { makeVideoEditItemClip, placeVideoEditItem } from './projectItems'
 import { applyVideoEditTimelineEditResult } from './timelineEdits'
 import { videoEditFps } from './time'
@@ -90,8 +90,8 @@ function reference(document: VideoEditDocument, sequence: VideoEditSequence, cli
 
 /** 空隙两侧的画面：同一轨道优先，其次任意视频轨上离得最近的（高轨道优先，与节目画面一致）。 */
 function neighbours(document: VideoEditDocument, sequence: VideoEditSequence, trackIndex: number | null, from: number, to: number): VideoEditInPlaceReference[] {
-  const enabled = new Set(sequence.tracks.filter(track => track.kind === 'video' && track.enabled).map(track => track.index))
-  const candidates = sequence.clips.filter(clip => enabled.has(clip.track) && pictured(document, clip))
+  const picture = videoEditPictureFilter(sequence); const videoTracks = new Set(sequence.tracks.filter(track => track.kind === 'video').map(track => track.index))
+  const candidates = sequence.clips.filter(clip => videoTracks.has(clip.track) && picture.has(clip) && pictured(document, clip))
   const pick = (list: VideoEditClip[], score: (clip: VideoEditClip) => number): VideoEditClip | undefined => {
     const same = list.filter(clip => clip.track === trackIndex)
     const pool = same.length ? same : list

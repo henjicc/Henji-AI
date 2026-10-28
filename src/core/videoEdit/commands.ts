@@ -136,6 +136,8 @@ export const VIDEO_EDIT_COMMANDS = [
   command('locate_effects', '编辑片段属性', editScopes),
   // PR 剪辑 > 速度/持续时间（cmd.clip.speed，Ctrl+R，4.13）。
   command('clip_speed', '速度/持续时间…', editScopes, key('KeyR', true)),
+  // PR 剪辑 > 启用（Shift+E）：停用的片段留在时间线上，不画也不发声。
+  command('toggle_clip_enabled', '启用', editScopes, key('KeyE', false, true)),
   // 本机 PR cmd.clip.audiooptions.gain / virtualkey 2147483719 = G。
   command('audio_gain', '音频增益…', editScopes, key('KeyG')),
   command('new_bin', '新建素材箱', ['project'], key('KeyB', true)),

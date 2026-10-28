@@ -16,7 +16,7 @@ import { projectVideoEditNestedCaptions, projectVideoEditNestedContentClips } fr
 import { videoEditContentAnchorSchema, sliceVideoEditContentAnchor, assertVideoEditContentAnchors } from './contentAnchors'
 import { videoEditGraphicSchema } from './graphics'
 import { videoEditAdjustmentSchema, videoEditEffectSchema, validateVideoEditAdjustmentRanges, videoEditEffectAccepts, videoEditEffectCodes, videoEditEffectMedia } from './compositing'
-import { videoEditTransitionSchema, validateVideoEditTransitions, resizeVideoEditTransition } from './transitions'
+import { videoEditTransitionSchema, validateVideoEditTransitions, resizeVideoEditTransition, videoEditTransitionMedium, videoEditTransitionWindow, videoEditTransitionsAt, type VideoEditTransitionWindow } from './transitions'
 import { videoEditCreativeSourceSchema } from './creativeResult'
 import { videoEditCodeImageGenerationSchema } from './codeImageGeneration'
 import { videoEditLabelSchema } from './labels'
@@ -416,13 +416,49 @@ export function videoEditDuration(document: Pick<VideoEditSequence, 'clips' | 'c
 }
 /** 时间线帧 `timelineFrame` 上片段显示的源时间（秒），按片段速度与倒放换算（`clipSpeed.ts`）。 */
 export function clipSourceSeconds(clip: VideoEditClip, timelineFrame: number, fps: number): number { return videoEditClipSourceSecondsAt(clip, timelineFrame, fps) }
-export function videoEditVisibleTracks(document: Pick<VideoEditSequence, 'tracks'>): Set<number> {
+/** 片段启用（PR“启用”）：只存停用，缺省即启用。停用的片段留在时间线上，但不画也不发声。 */
+export function videoEditClipEnabled(clip: Pick<VideoEditClip, 'enabled'>): boolean { return clip.enabled !== false }
+export function setVideoEditClipEnabled(clip: VideoEditClip, enabled: boolean): VideoEditClip {
+  const { enabled: _enabled, ...rest } = clip
+  return enabled ? rest : { ...rest, enabled: false }
+}
+/**
+ * 轨道级显示：输出启用、且没被画面独奏排除的轨道序号；声音轨道总在其中（声音的独奏与静音由 audibleVideoEditClips 处理）。
+ * 只回答轨道本身的问题，判断某个片段画不画一律用 videoEditPictureFilter。
+ */
+export function videoEditVisibleTrackIndexes(document: Pick<VideoEditSequence, 'tracks'>): Set<number> {
   const solo = document.tracks.some(track => track.kind === 'video' && track.enabled && track.solo)
   return new Set(document.tracks.filter(track => track.enabled && (track.kind === 'audio' || !solo || track.solo)).map(track => track.index))
 }
+export interface VideoEditPictureFilter { has(clip: Pick<VideoEditClip, 'track' | 'enabled'>): boolean }
+/** 片段画面是否参与合成：所在轨道显示并且片段启用。 */
+export function videoEditPictureFilter(document: Pick<VideoEditSequence, 'tracks'>): VideoEditPictureFilter {
+  const tracks = videoEditVisibleTrackIndexes(document)
+  return { has: clip => videoEditClipEnabled(clip) && tracks.has(clip.track) }
+}
+function pictureTransition(window: VideoEditTransitionWindow, tracks: ReadonlySet<number>): VideoEditTransitionWindow[] {
+  if (!tracks.has(window.left.track)) return []
+  // 单侧过渡两边是同一个片段，只会整段保留或整段去掉。
+  const left = videoEditClipEnabled(window.left); const right = videoEditClipEnabled(window.right)
+  if (!left && !right) return []
+  return [left && right ? window : { ...window, empty: left ? 'right' : 'left' }]
+}
+/**
+ * 参与合成的画面过渡（对齐 PR）：轨道隐藏或两侧都停用的过渡不出现；只停用一侧时过渡照常进行，`empty` 标出那一侧，按透明画。
+ * 音频过渡不经过这里，停用片段不进混音即可。
+ */
+export function videoEditPictureTransitionWindows(document: Pick<VideoEditSequence, 'tracks' | 'clips' | 'transitions'>): VideoEditTransitionWindow[] {
+  const tracks = videoEditVisibleTrackIndexes(document)
+  return (document.transitions ?? []).filter(transition => videoEditTransitionMedium(transition.kind) === 'video').flatMap(transition => pictureTransition(videoEditTransitionWindow(document, transition), tracks))
+}
+/** 指定帧上参与合成的画面过渡，规则同 videoEditPictureTransitionWindows。 */
+export function videoEditPictureTransitionsAt(document: Pick<VideoEditSequence, 'tracks' | 'clips' | 'transitions'>, frame: number): VideoEditTransitionWindow[] {
+  const tracks = videoEditVisibleTrackIndexes(document)
+  return videoEditTransitionsAt(document, frame).flatMap(window => pictureTransition(window, tracks))
+}
 export function activeVideoEditClips(document: VideoEditComposition, at: number): VideoEditClip[] {
-  const visible = videoEditVisibleTracks(document)
-  return document.clips.filter(clip => at >= clip.start && at < clip.start + clip.duration && visible.has(clip.track)).sort((a, b) => a.track - b.track)
+  const picture = videoEditPictureFilter(document)
+  return document.clips.filter(clip => at >= clip.start && at < clip.start + clip.duration && picture.has(clip)).sort((a, b) => a.track - b.track)
 }
 export function audibleVideoEditClips(document: VideoEditComposition): VideoEditClip[] {
   let candidates = document.clips.filter(clip => !clip.frameHold && ['video', 'audio', 'sequence'].includes(clip.kind) && clip.sourceComponent !== 'video' && (clip.disabledIntrinsicSections?.includes('audio') || clip.volume > 0 || clip.curves?.volume?.some(point => typeof point.value === 'number' && point.value > 0)))
@@ -432,8 +468,9 @@ export function audibleVideoEditClips(document: VideoEditComposition): VideoEdit
     candidates = candidates.filter(clip => clip.id === master?.clipId || !document.multicam!.cameras.some(camera => camera.clipId === clip.id))
   }
   const tracks = new Map(document.tracks.map(track => [track.index, track]))
+  // 独奏按轨道上有没有声音片段判断，停用的片段也算：停用片段不改变别的轨道是否被独奏压下。
   const solo = candidates.some(clip => { const track = tracks.get(clip.track); return track?.enabled && track.solo })
-  return candidates.filter(clip => { const track = tracks.get(clip.track); return track?.enabled && !track.muted && (!solo || track.solo) })
+  return candidates.filter(clip => { const track = tracks.get(clip.track); return videoEditClipEnabled(clip) && track?.enabled && !track.muted && (!solo || track.solo) })
 }
 export function snapVideoEditFrame(document: Pick<VideoEditSequence, 'clips'>, value: number, excludedId: string, threshold: number): number {
   const candidates = [0, ...document.clips.filter(clip => clip.id !== excludedId).flatMap(clip => [clip.start, clip.start + clip.duration])]

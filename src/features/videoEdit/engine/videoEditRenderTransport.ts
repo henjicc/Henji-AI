@@ -5,7 +5,7 @@ import type { SharedCompilationRequest, SharedCompilationResponse } from './vide
 import { videoEditTimingContext, videoEditTimingEvent, type VideoEditTimingContext } from './videoEditFirstFrameTiming'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import type { VideoProxyResult } from '@/core/videoEdit/proxy'
-import { activeVideoEditClips, type VideoEditComposition } from '@/core/videoEdit/document'
+import { activeVideoEditClips, videoEditPictureTransitionsAt, type VideoEditComposition } from '@/core/videoEdit/document'
 import { isLikelyLocalImagePath, toFetchableMediaUrl } from '@/services/imageSource'
 import { getPlatform } from '@/platform/runtime'
 import { createLogger } from '@/core/logging'
@@ -17,7 +17,7 @@ import { fontLibrarySnapshot, subscribeFontLibrary } from '@/platform/fonts'
 import { loadDocumentFont, pinDocumentFonts, releaseDocumentFonts } from '@/platform/fontFaces'
 import { videoEditParameterUpdate, videoEditParameterNeedsFonts } from './videoEditParameterUpdate'
 import { documentCodeSourceResolver } from '@/core/videoEdit/codeMaterial/sources'
-import { videoEditTransitionsAt } from '@/core/videoEdit/transitions'
+import { videoEditTransitionPictureClips } from '@/core/videoEdit/transitions'
 import { videoEditNestedFrame } from '@/core/videoEdit/nestedSequences'
 import { activeVideoEditEffects } from '@/core/videoEdit/compositing'
 import type { AuthorModuleUrls } from './videoEditAuthorModules'
@@ -85,13 +85,13 @@ export class VideoEditRenderTransport {
   private frame = -1
   private fontScope = ''
   private fontDocument?: VideoEditComposition
-  /** 字体声明只取当前帧。嵌套序列使用对应源时间，转场两侧同时保留。 */
+  /** 字体声明只取当前帧画出来的片段。嵌套序列使用对应源时间，转场两侧同时保留（停用的一侧除外）。 */
   private fontsDocument(document: VideoEditComposition): VideoEditComposition {
     const sequences: NonNullable<VideoEditComposition['sequences']> = []
     const visit = (sequence: VideoEditComposition, frame: number, seen: Set<string>): VideoEditComposition['clips'] => {
       if (seen.has(sequence.id)) return []
       seen.add(sequence.id)
-      const visible = frame < 0 ? sequence.clips.filter(clip => !clip.code && !clip.effects?.some(effect => effect.code)) : [...new Map([...activeVideoEditClips(sequence, frame), ...videoEditTransitionsAt(sequence, frame).flatMap(window => [window.left, window.right])].map(clip => [clip.id, clip])).values()]
+      const visible = frame < 0 ? sequence.clips.filter(clip => !clip.code && !clip.effects?.some(effect => effect.code)) : [...new Map([...activeVideoEditClips(sequence, frame), ...videoEditPictureTransitionsAt(sequence, frame).flatMap(videoEditTransitionPictureClips)].map(clip => [clip.id, clip])).values()]
       const clips = visible.map(clip => clip.effects?.length ? { ...clip, effects: activeVideoEditEffects(clip) } : clip)
       for (const clip of clips) {
         const id = document.items.find(item => item.id === clip.itemId)?.sequenceId
@@ -259,9 +259,9 @@ export class VideoEditRenderTransport {
   }
   async prepareGpu(): Promise<void> { await this.ready; await this.request({ kind: 'prepareGpu' }) }
   async releaseAuthor(url: string): Promise<void> { await this.ready; await this.request({ kind: 'authorRelease', url }) }
-  async readAuthorMetadata(url: string, locations?: import('./videoEditAuthorBundle').AuthorSourceLocations): Promise<import('./videoEditAuthorParameters').AuthorEffectMetadata> {
+  async readAuthorMetadata(url: string, locations?: import('./videoEditAuthorBundle').AuthorSourceLocations, apiVersion?: number): Promise<import('./videoEditAuthorParameters').AuthorEffectMetadata> {
     await this.ready
-    const result = await this.request({ kind: 'authorMetadata', url, locations })
+    const result = await this.request({ kind: 'authorMetadata', url, locations, apiVersion })
     if (!result.authorMetadata) throw new Error('作者模块未返回参数声明，请重新检查源码。')
     return result.authorMetadata
   }

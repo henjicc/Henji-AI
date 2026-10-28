@@ -325,6 +325,29 @@ it('公共修改与手动编辑共用历史并可保存重开', async () => {
     expect(getActiveVideoEditSequence(restored).clips[0].text).toBe('输入文字')
   } finally { app.dispose() }
 })
+it('助手读写片段启用：读回布尔，停用只存 false、启用省略，进同一撤销栈，保存重开仍停用', async () => {
+  const instance = (await createLegacyTrackVideoEditProject())
+  appendVideoEditClip(instance.document.id)
+  const clip = getActiveVideoEditSequence(instance).clips[0]
+  const app = createApplicationHarness()
+  try {
+    const ref = { kind: 'video_edit.clip', id: `${instance.document.id}:${clip.id}` }
+    const enabled = async () => ((await app.read(ref, ['video_edit.clip.enabled'])).properties as Record<string, unknown>)['video_edit.clip.enabled']
+    expect(await enabled()).toBe(true)
+    const past = instance.past.length
+    expect(await app.change(ref, { 'video_edit.clip.enabled': false })).toMatchObject({ ok: true })
+    expect(getActiveVideoEditSequence(instance).clips[0].enabled).toBe(false); expect(instance.past).toHaveLength(past + 1)
+    expect(await enabled()).toBe(false)
+    undoVideoEdit(instance.document.id)
+    expect(getActiveVideoEditSequence(instance).clips[0]).not.toHaveProperty('enabled')
+    expect(await app.change(ref, { 'video_edit.clip.enabled': false })).toMatchObject({ ok: true })
+    expect(await app.change(ref, { 'video_edit.clip.enabled': true })).toMatchObject({ ok: true })
+    expect(getActiveVideoEditSequence(instance).clips[0]).not.toHaveProperty('enabled')
+    expect(await app.change(ref, { 'video_edit.clip.enabled': false })).toMatchObject({ ok: true })
+    await saveVideoEdit(instance.document.id)
+    expect(getActiveVideoEditSequence(await reopenVideoEdit(instance.document.id)).clips[0].enabled).toBe(false)
+  } finally { app.dispose() }
+})
 it('保存失败保留助手修改且恢复不会重放编辑', async () => {
   const instance = (await createLegacyTrackVideoEditProject())
   const app = createApplicationHarness()

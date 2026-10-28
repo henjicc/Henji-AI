@@ -2,7 +2,7 @@ import { videoEditOffscreenPool, type VideoEditOffscreenLease } from '../engine/
 import { type CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
-import { videoEditComposition, videoEditDuration, videoEditVisibleTracks, type VideoEditDocument } from '@/core/videoEdit/document'
+import { videoEditComposition, videoEditDuration, videoEditVisibleTrackIndexes, type VideoEditDocument } from '@/core/videoEdit/document'
 import type { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 import { ensureVideoEditChangedCodeMetadata } from './videoEditCodeState'
 import { subscribeVideoEditDomain, type VideoEditInstance } from './videoEditService'
@@ -32,20 +32,22 @@ export function videoEditCodeTrialFrames(document: VideoEditDocument, targets: V
   if (selected) { const key = `${selected.sequenceId}:${selected.frame}`; frames.delete(key); add(selected.sequenceId, selected.frame) }
   return [...frames.values()]
 }
+function withoutDisabled<T extends { enabled?: false }>(clip: T): Omit<T, 'enabled'> { const { enabled: _enabled, ...rest } = clip; return rest }
 /** Hidden state cannot certify a source by merely producing an empty bitmap.
  * Each target gets a separate, nonpersistent composition with honest clocks;
- * the final preview retains the user's original visibility and effect switches. */
+ * the final preview retains the user's original visibility and effect switches.
+ * 被试的片段停用时也强制启用；别的停用片段照常不画。 */
 export function videoEditCodeValidationFrames(document: VideoEditDocument, targets: VideoEditTrialTarget[], selected: { sequenceId: string; frame: number }): Array<{ document: VideoEditComposition; frame: number }> {
   if (!targets.length) throw new Error('请选择要检查的片段。')
   const frames: Array<{ document: VideoEditComposition; frame: number }> = []
   for (const target of targets) {
     const actual = videoEditComposition(document, target.sequenceId)
-    const visible = videoEditVisibleTracks(actual); const ids = new Set([target.clipId])
+    const visible = videoEditVisibleTrackIndexes(actual); const ids = new Set([target.clipId])
     for (const transition of actual.transitions ?? []) if (videoEditTransitionClipIds(transition).includes(target.clipId)) videoEditTransitionClipIds(transition).forEach(id => ids.add(id))
     const targetTracks = new Set(actual.clips.filter(clip => ids.has(clip.id)).map(clip => clip.track))
     const forced: VideoEditComposition = { ...actual,
       tracks: actual.tracks.map(track => ({ ...track, enabled: visible.has(track.index) || targetTracks.has(track.index), solo: false })),
-      clips: actual.clips.filter(clip => visible.has(clip.track) || ids.has(clip.id)).map(clip => clip.id === target.clipId ? { ...clip, opacity: 1, effectsEnabled: true, effects: clip.effects?.map(effect => !target.effectIds || target.effectIds.includes(effect.id) ? { ...effect, enabled: true, amount: 1 } : effect) } : clip),
+      clips: actual.clips.filter(clip => visible.has(clip.track) || ids.has(clip.id)).map(clip => clip.id === target.clipId ? { ...withoutDisabled(clip), opacity: 1, effectsEnabled: true, effects: clip.effects?.map(effect => !target.effectIds || target.effectIds.includes(effect.id) ? { ...effect, enabled: true, amount: 1 } : effect) } : clip),
       transitions: actual.transitions?.filter(transition => videoEditTransitionClipIds(transition).every(id => actual.clips.some(clip => clip.id === id && (visible.has(clip.track) || ids.has(clip.id))))),
     }
     for (const input of videoEditCodeTrialFrames(document, [target])) frames.push({ document: forced, frame: input.frame })

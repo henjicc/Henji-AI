@@ -79,10 +79,9 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
     if (boundary.failTrial) throw new Error('GPU trial rejected')
     if (boundary.proveFilters) {
 
-      const { videoEditVisibleTracks } = await import('@/core/videoEdit/document')
-      const { videoEditTransitionsAt } = await import('@/core/videoEdit/transitions')
-      const visible = videoEditVisibleTracks(this.document); const windows = videoEditTransitionsAt(this.document, frame)
-      for (const clip of this.document.clips) if (visible.has(clip.track) && (frame >= clip.start && frame < clip.start + clip.duration || windows.some(window => [window.left.id, window.right.id].includes(clip.id)))) {
+      const { videoEditPictureFilter, videoEditPictureTransitionsAt } = await import('@/core/videoEdit/document')
+      const picture = videoEditPictureFilter(this.document); const windows = videoEditPictureTransitionsAt(this.document, frame)
+      for (const clip of this.document.clips) if (picture.has(clip) && (frame >= clip.start && frame < clip.start + clip.duration || windows.some(window => [window.left.id, window.right.id].includes(clip.id)))) {
         if (clip.kind === 'adjustment' && clip.opacity === 0) continue
         for (const effect of clip.effects ?? []) if (effect.enabled && effect.amount > 0) {
           boundary.filterProofs++

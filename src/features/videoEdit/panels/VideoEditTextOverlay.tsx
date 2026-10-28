@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type PointerEvent } from 'react'
-import { videoEditVisibleTracks, type VideoEditClip } from '@/core/videoEdit/document'
+import { videoEditPictureFilter, type VideoEditClip } from '@/core/videoEdit/document'
 import { evaluateVideoEditClip } from '@/core/videoEdit/keyframes'
 import { videoEditClipToFrame } from '@/core/videoEdit/clipGeometry'
 import { layoutVideoEditText, videoEditTextWidth, resizeVideoEditText, videoEditTextPoint, type VideoEditTextLayout } from '@/core/videoEdit/text'
@@ -145,8 +145,8 @@ export function VideoEditTextOverlay({ instance, onError, enabled = true }: { in
   }
   if (!available) return null
   const scrubbing = Boolean(instance.scrubbing)
-  const visibleTracks = videoEditVisibleTracks(sequence)
-  const clips = sequence.clips.filter(clip => !instance.playing && !scrubbing && clip.kind === 'text' && instance.frame >= clip.start && instance.frame < clip.start + clip.duration && visibleTracks.has(clip.track) && sequence.tracks.some(track => track.index === clip.track && !track.locked)).sort((a, b) => a.track - b.track).map(clip => evaluateVideoEditClip(clip, instance.frame))
+  const picture = videoEditPictureFilter(sequence)
+  const clips = sequence.clips.filter(clip => !instance.playing && !scrubbing && clip.kind === 'text' && instance.frame >= clip.start && instance.frame < clip.start + clip.duration && picture.has(clip) && sequence.tracks.some(track => track.index === clip.track && !track.locked)).sort((a, b) => a.track - b.track).map(clip => evaluateVideoEditClip(clip, instance.frame))
   const activeIds = new Set(clips.map(clip => clip.id))
   for (const id of layoutCache.current.keys()) if (!activeIds.has(id)) layoutCache.current.delete(id)
   let context: CanvasRenderingContext2D | null | undefined

@@ -1,5 +1,5 @@
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from './time'
-import { createVideoEditSequence, videoEditDocumentSchema, videoEditDuration, videoEditVisibleTracks, type VideoEditClip, type VideoEditDocument, type VideoEditSequence, type VideoEditComposition } from './document'
+import { createVideoEditSequence, videoEditDocumentSchema, videoEditDuration, videoEditPictureFilter, videoEditVisibleTrackIndexes, type VideoEditClip, type VideoEditDocument, type VideoEditSequence, type VideoEditComposition } from './document'
 import { assertVideoEditClipsEditable } from './lockedTracks'
 import { clipSourceSeconds } from './document'
 import { videoEditTransitionClipIds } from './transitions'
@@ -47,8 +47,8 @@ export function nestVideoEditClips(document: VideoEditDocument, sequenceId: stri
   const track = visuals.length ? Math.max(...visuals.map(clip => clip.track)) : parent.tracks.find(track => track.kind === 'video' && !track.locked && track.enabled)?.index
   if (track === undefined) throw new Error('请先添加一条未锁定的视频轨道放置嵌套序列。')
   const host = parent.tracks.find(value => value.index === track)!
-  const visible = videoEditVisibleTracks(parent)
-  if (!visible.has(track) && visuals.some(clip => visible.has(clip.track))) throw new Error('替换轨道当前隐藏或未独奏，请先让所选画面使用一致的轨道显示状态。')
+  const picture = videoEditPictureFilter(parent)
+  if (!videoEditVisibleTrackIndexes(parent).has(track) && visuals.some(clip => picture.has(clip))) throw new Error('替换轨道当前隐藏或未独奏，请先让所选画面使用一致的轨道显示状态。')
   const sounds = selected.filter(clip => ['video', 'audio', 'sequence'].includes(clip.kind) && clip.sourceComponent !== 'video' && (clip.volume > 0 || clip.curves?.volume?.some(point => typeof point.value === 'number' && point.value > 0)))
   if (sounds.some(clip => { const source = parent.tracks.find(value => value.index === clip.track)!; return source.enabled && (source.solo && !host.solo || !source.muted && (!host.enabled || host.muted)) })) throw new Error('所选声音与替换轨道的静音或独奏状态不同，请先统一轨道状态，避免嵌套改变混音。')
   const minimum = visuals.length ? Math.min(...visuals.map(clip => clip.kind === 'adjustment' ? clip.adjustment!.fromTrack : clip.track)) : track

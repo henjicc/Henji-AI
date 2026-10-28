@@ -11,6 +11,7 @@ import { createLegacyTrackVideoEditProject } from './videoEditDocumentTestKit'
 import { selectVideoEditTransition } from './videoEditTransitions'
 import { updateVideoEditCreativeIntents } from './videoEditService'
 import { subscribeVideoEditScrub } from '../engine/videoEditAudioScrub'
+import { matchVideoEditShortcut } from '@/core/videoEdit/commands'
 
 // 过渡命令的画面试渲染需要 GPU Worker；命令层只验证编辑与撤销，试渲染由 videoEditCodeService.test 覆盖。
 vi.mock('./videoEditCodeTrial', async () => ({ ...await vi.importActual<typeof import('./videoEditCodeTrial')>('./videoEditCodeTrial'), trialVideoEditCodeDocument: async () => undefined }))
@@ -89,6 +90,27 @@ it('菜单启用状态与领域锁定、目标占用、波纹冲突一致，不�
   expect(videoEditCommandState(locked, 'delete').enabled).toBe(false); expect(videoEditCommandState(locked, 'copy').enabled).toBe(true)
   await expect(executeVideoEditCommand(locked, 'delete')).rejects.toThrow('锁定')
   expect(owner.past.length).toBe(history); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.id)).toEqual([first, second])
+})
+it('Shift+E 整批切换所选片段启用，一步撤销；混合状态先全部启用；锁定轨道拒绝并说明原因', async () => {
+  const { owner, id, first, second, sequence } = await fixture()
+  const shiftE = { code: 'KeyE', key: 'E', ctrlKey: false, metaKey: false, altKey: false, shiftKey: true, repeat: false, isComposing: false, defaultPrevented: false }
+  expect(matchVideoEditShortcut(shiftE, 'timeline', {})).toBe('toggle_clip_enabled')
+  const context = () => captureVideoEditCommandContext(id, 'timeline')
+  const enabled = () => getActiveVideoEditSequence(owner).clips.map(clip => clip.enabled !== false)
+  expect(videoEditCommandState(context(), 'toggle_clip_enabled')).toMatchObject({ enabled: true, checked: true })
+  await executeVideoEditCommand(context(), 'toggle_clip_enabled'); expect(enabled()).toEqual([false, true])
+  setVideoEditTimelineView(id, { selectedClipIds: [first, second] }, first)
+  expect(videoEditCommandState(context(), 'toggle_clip_enabled').checked).toBe(false)
+  const history = owner.past.length
+  await executeVideoEditCommand(context(), 'toggle_clip_enabled'); expect(enabled()).toEqual([true, true])
+  await executeVideoEditCommand(context(), 'toggle_clip_enabled'); expect(enabled()).toEqual([false, false])
+  expect(owner.past.length).toBe(history + 2)
+  undoVideoEdit(id); expect(enabled()).toEqual([true, true])
+  updateVideoEditTrack(id, sequence.id, sequence.tracks[1].id, { locked: true })
+  const locked = owner.past.length
+  expect(videoEditCommandState(context(), 'toggle_clip_enabled')).toMatchObject({ enabled: false, checked: true, reason: expect.stringContaining('锁定') })
+  await expect(executeVideoEditCommand(context(), 'toggle_clip_enabled')).rejects.toThrow('锁定')
+  expect(owner.past.length).toBe(locked); expect(enabled()).toEqual([true, true])
 })
 it('复制后菜单固定原剪贴板及目标轨道，跨序列按同类轨道相对顺序粘贴', async () => {
   const { owner, id, first, second, sequence } = await fixture()

@@ -1,10 +1,10 @@
-import { activeVideoEditClips, clipSourceSeconds, videoEditClipMedia, videoEditNestedComposition, videoEditVisibleTracks, type VideoEditClip, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
+import { activeVideoEditClips, clipSourceSeconds, videoEditClipMedia, videoEditNestedComposition, videoEditPictureFilter, videoEditPictureTransitionsAt, type VideoEditClip, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
 import { videoEditNestedPictureFrame, videoEditNestedPictureKey } from '@/core/videoEdit/nestedSequences'
 import { VIDEO_EDIT_MAX_SEQUENCE_DEPTH } from '@/core/videoEdit/sequenceGraph'
 import { activeVideoEditEffects } from '@/core/videoEdit/compositing'
 import { isCodeImageReference, type CodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
 import { codeMediaInputComposition, type CodeMediaInput } from '@/core/videoEdit/codeMediaInput'
-import { videoEditHandleFrame, videoEditTransitionsAt } from '@/core/videoEdit/transitions'
+import { videoEditHandleFrame, videoEditTransitionPictureClips } from '@/core/videoEdit/transitions'
 import { videoEditPictureSeconds } from '@/core/videoEdit/time'
 import type { VideoEditNativeFrames } from './videoEditNativeFrameSource'
 import type { VideoEditRenderCacheWindow } from './videoEditRenderer'
@@ -53,9 +53,9 @@ export function videoEditLookaheadTargets(document: VideoEditComposition, frame:
   let movingInputs = 0
   const visit = (doc: VideoEditComposition, at: number, distance: number, sequential: boolean, scopes: VideoEditLookaheadScope[], inputs: boolean): void => {
     if (scopes.length >= VIDEO_EDIT_MAX_SEQUENCE_DEPTH) return
-    const visible = videoEditVisibleTracks(doc)
-    const clips = new Map(activeVideoEditClips(doc, at).filter(clip => clip.kind !== 'audio' && visible.has(clip.track)).map(clip => [clip.id, clip]))
-    for (const window of videoEditTransitionsAt(doc, at)) if (visible.has(window.left.track)) for (const clip of [window.left, window.right]) clips.set(clip.id, clip)
+    const clips = new Map(activeVideoEditClips(doc, at).filter(clip => clip.kind !== 'audio').map(clip => [clip.id, clip]))
+    // 过渡里停用的一侧按透明画，不解码。
+    for (const window of videoEditPictureTransitionsAt(doc, at)) for (const clip of videoEditTransitionPictureClips(window)) clips.set(clip.id, clip)
     const scopeKey = JSON.stringify(scopes.map(scope => scope.key))
     for (const clip of clips.values()) {
       if (clip.kind === 'sequence') {
@@ -127,10 +127,10 @@ export function videoEditLookaheadTargets(document: VideoEditComposition, frame:
   const stillTargets = new Map<string, VideoEditContentTarget>()
   const stills = (doc: VideoEditComposition, from: number, to: number, distanceAt: (at: number) => number, depth: number): void => {
     if (depth >= VIDEO_EDIT_MAX_SEQUENCE_DEPTH || to <= from) return
-    const visible = videoEditVisibleTracks(doc)
+    const picture = videoEditPictureFilter(doc)
     for (const clip of doc.clips) {
       const start = Math.max(from, clip.start), end = Math.min(to, clip.start + clip.duration)
-      if (end <= start || !visible.has(clip.track)) continue
+      if (end <= start || !picture.has(clip)) continue
       if (clip.kind === 'sequence') {
         const child = videoEditNestedComposition(doc, clip)
         if (!child) continue

@@ -77,11 +77,19 @@ export function resizeVideoEditTransition(transition: VideoEditTransition, durat
  * 过渡在时间线上的窗口。单侧过渡的 `left` 与 `right` 是同一个片段，`side` 说明它在片段的哪一端：
  * `in` 在入点（从空白淡入），`out` 在出点（淡出到空白）；普通过渡没有 `side`。
  */
-export interface VideoEditTransitionWindow { transition: VideoEditTransition; left: VideoEditClip; right: VideoEditClip; start: number; end: number; cut: number; side?: VideoEditTransitionSide }
+export interface VideoEditTransitionWindow {
+  transition: VideoEditTransition; left: VideoEditClip; right: VideoEditClip; start: number; end: number; cut: number; side?: VideoEditTransitionSide
+  /** 只出现在画面过渡（document.ts 的 videoEditPictureTransitionsAt）里：停用的那一侧，不准备画面，按透明画。 */
+  empty?: 'left' | 'right'
+}
 export type VideoEditTransitionSide = 'in' | 'out'
 /** 单侧过渡在片段的哪一端（`in` 入点、`out` 出点）；两端都有片段时为 undefined。 */
 export function videoEditTransitionSide(transition: Pick<VideoEditTransition, 'leftClipId' | 'rightClipId'>): VideoEditTransitionSide | undefined {
   return transition.leftClipId && transition.rightClipId ? undefined : transition.rightClipId ? 'in' : transition.leftClipId ? 'out' : undefined
+}
+/** 画面过渡里要准备画面的片段：去掉停用的一侧（`empty`），单侧过渡只有一个。 */
+export function videoEditTransitionPictureClips(window: Pick<VideoEditTransitionWindow, 'left' | 'right' | 'side' | 'empty'>): VideoEditClip[] {
+  return window.side || window.empty === 'right' ? [window.left] : window.empty === 'left' ? [window.right] : [window.left, window.right]
 }
 /** 过渡挂着的片段（普通过渡两个，单侧过渡一个）。 */
 export function videoEditTransitionClipIds(transition: Pick<VideoEditTransition, 'leftClipId' | 'rightClipId'>): string[] {
@@ -197,12 +205,16 @@ export function videoEditTransitionMix(window: Pick<VideoEditTransitionWindow, '
  * 带参数的视频过渡交给内置效果着色器的输入：`progress` 0→1；单侧过渡另一侧是空白（透明），入点时前一段为空、出点时后一段为空。
  */
 export interface VideoEditBuiltinTransitionInput { kind: VideoEditBuiltinTransitionKind; params: VideoEditBuiltinParams; progress: number; emptyOutgoing?: boolean; emptyIncoming?: boolean }
-/** 这一帧画面过渡怎么画：交叉溶解、黑场、白场走混合（`videoEditTransitionMix`），其余走内置效果着色器。 */
-export function videoEditTransitionRender(window: Pick<VideoEditTransitionWindow, 'start' | 'end' | 'side' | 'transition'>, frame: number): { kind: 'mix'; amount: number; through?: [number, number, number, number] } | { kind: 'builtin'; input: VideoEditBuiltinTransitionInput } {
+/**
+ * 这一帧画面过渡怎么画：交叉溶解、黑场、白场走混合（`videoEditTransitionMix`；停用的一侧由合成换成透明画面），其余走内置效果着色器。
+ * 单侧过渡空着的一侧与停用的一侧（`empty`）同样标成空。
+ */
+export function videoEditTransitionRender(window: Pick<VideoEditTransitionWindow, 'start' | 'end' | 'side' | 'transition' | 'empty'>, frame: number): { kind: 'mix'; amount: number; through?: [number, number, number, number] } | { kind: 'builtin'; input: VideoEditBuiltinTransitionInput } {
   const kind = window.transition.kind
   if (!isVideoEditBuiltinTransitionKind(kind)) return { kind: 'mix', ...videoEditTransitionMix(window, frame) }
   const progress = videoEditTransitionAmount(window, frame)
-  return { kind: 'builtin', input: { kind, params: evaluateVideoEditTransitionParams(window.transition, frame - window.start), progress, ...(window.side === 'in' ? { emptyOutgoing: true } : window.side === 'out' ? { emptyIncoming: true } : {}) } }
+  const emptyOutgoing = window.side === 'in' || window.empty === 'left'; const emptyIncoming = window.side === 'out' || window.empty === 'right'
+  return { kind: 'builtin', input: { kind, params: evaluateVideoEditTransitionParams(window.transition, frame - window.start), progress, ...(emptyOutgoing ? { emptyOutgoing: true } : {}), ...(emptyIncoming ? { emptyIncoming: true } : {}) } }
 }
 /** 黑场／白场过渡经过的纯色（预乘 RGBA）；交叉溶解没有。 */
 export function videoEditTransitionDipColor(kind: VideoEditTransitionKind): [number, number, number, number] | undefined {

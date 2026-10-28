@@ -3,7 +3,7 @@ import { requestVideoEditScrub } from '../engine/videoEditAudioScrub'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { VIDEO_EDIT_COMMANDS, VIDEO_EDIT_TOOL_COMMANDS, isVideoEditToolCommand, type VideoEditCommandId, type VideoEditCommandScope } from '@/core/videoEdit/commands'
 import { placeVideoEditItems } from '@/core/videoEdit/projectItems'
-import { videoEditDuration, type VideoEditSequence } from '@/core/videoEdit/document'
+import { setVideoEditClipEnabled, videoEditClipEnabled, videoEditDuration, type VideoEditSequence } from '@/core/videoEdit/document'
 import { videoEditTransitionClipIds } from '@/core/videoEdit/transitions'
 import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { expandVideoEditSelection, videoEditPickRelations, type VideoEditRelations } from '@/core/videoEdit/timelineSelection'
@@ -261,6 +261,14 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
       if (!clips.length) return { enabled: false, reason: '请先选择声音片段或带声音的视频片段。' }
       assertVideoEditClipsEditable(sequence, clips.map(clip => clip.id)); return { enabled: true }
     }
+    if (id === 'toggle_clip_enabled') {
+      // 勾选表示所选片段全部启用；执行时整批改成相反状态。
+      const clips = selection(context)
+      if (!clips.length) return { enabled: false, reason: '请先选择片段。' }
+      const checked = clips.every(videoEditClipEnabled)
+      try { assertVideoEditClipsEditable(sequence, clips.map(clip => clip.id)) } catch (error) { return { enabled: false, reason: error instanceof Error ? error.message : String(error), checked } }
+      return { enabled: true, checked }
+    }
     if (id === 'clip_speed') {
       // 速度/持续时间（4.13）：所选片段里有源时间的那些（视频、音频、代码素材）。
       const clips = selection(context).filter(clip => !clip.frameHold && videoEditClipSpeedSupported(clip.kind))
@@ -314,6 +322,10 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
     case 'toggle_safe_margins': setVideoEditSafeMarginsVisible(!videoEditSafeMarginsVisible()); return
     case 'toggle_linked_selection': setVideoEditTimelineView(projectId, { linkedSelection: owner!.linkedSelection === false }); return
     case 'toggle_motion_blur': editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, motionBlur: !sequence.motionBlur })); return
+    case 'toggle_clip_enabled': {
+      const ids = new Set(context.clipIds); const enabled = !available.checked
+      editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, clips: sequence.clips.map(clip => ids.has(clip.id) ? setVideoEditClipEnabled(clip, enabled) : clip) })); return
+    }
     case 'toggle_frame_blend': editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, frameBlend: sequence.frameBlend ? undefined : true })); return
     // 面板组最大化属于布局，由剪辑页拿着停靠区执行；素材视图属于素材面板。命令层无事可做。
     case 'project_list_view': case 'project_icon_view': case 'project_toggle_view': return

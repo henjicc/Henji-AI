@@ -1,10 +1,10 @@
 import { testCodeManifest, testCodeMetadata } from './codeMaterial/sourceTestFixtures'
 import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { describe, expect, it } from 'vitest'
-import { changeVideoEditSequenceSettings, videoEditDocumentSchema, type VideoEditDocument } from './document'
+import { changeVideoEditSequenceSettings, setVideoEditClipEnabled, videoEditDocumentSchema, videoEditPictureTransitionWindows, videoEditPictureTransitionsAt, type VideoEditDocument } from './document'
 import { makeVideoEditItemClip } from './projectItems'
 import { applyVideoEditTimelineEdit, copyVideoEditClips } from './timelineEdits'
-import { applyVideoEditTransitionPairs, dragVideoEditTransition, retimeVideoEditTransitions, validateVideoEditTransitions, videoEditAudioTransitionClipGain, videoEditAudioTransitionGains, videoEditTransitionFit, videoEditTransitionMix, videoEditDefaultTransitionPairs, videoEditHandleFrame, videoEditTransitionAlignmentFields, videoEditTransitionDipColor, videoEditTransitionWindow, videoEditTransitionsAt, videoEditTransitionAmount, videoEditTransitionRender, videoEditTransitionSchema, VIDEO_EDIT_TRANSITION_PRESETS } from './transitions'
+import { applyVideoEditTransitionPairs, dragVideoEditTransition, retimeVideoEditTransitions, validateVideoEditTransitions, videoEditAudioTransitionClipGain, videoEditAudioTransitionGains, videoEditTransitionFit, videoEditTransitionMix, videoEditDefaultTransitionPairs, videoEditHandleFrame, videoEditTransitionAlignmentFields, videoEditTransitionDipColor, videoEditTransitionWindow, videoEditTransitionsAt, videoEditTransitionAmount, videoEditTransitionPictureClips, videoEditTransitionRender, videoEditTransitionSchema, VIDEO_EDIT_TRANSITION_PRESETS } from './transitions'
 import { WHITE_HEX } from '../theme/colorTokens'
 import { VIDEO_EDIT_BUILTIN_TRANSITION_KINDS, VIDEO_EDIT_TRANSITION_PARAMS, validateVideoEditTransitionParams } from './transitionParams'
 import { reconcileVideoEditTimedContent } from './timedContent'
@@ -274,6 +274,25 @@ describe('真实转场窗口、源余量和编辑持久契约', () => {
     expect(videoEditAudioTransitionClipGain(power, 'right', 1)).toBeCloseTo(1)
     expect(videoEditAudioTransitionClipGain({ ...tail, transition: { ...tail.transition, kind: 'constant_gain' as const } }, 'left', .25)).toBeCloseTo(.75)
     expect(videoEditAudioTransitionClipGain({ ...both, transition: { ...both.transition, kind: 'constant_gain' as const } }, 'right', .25)).toBeCloseTo(.25)
+  })
+  it('画面过渡对齐 PR：一侧停用照常过渡并把那一侧当空，两侧停用、单侧过渡的片段停用或轨道隐藏时不出现', () => {
+    const { sequence } = fixture()
+    const frame = videoEditTransitionWindow(sequence, sequence.transitions![0]).start
+    expect(videoEditPictureTransitionsAt(sequence, frame)).toMatchObject([{ left: { id: 'left' }, right: { id: 'right' } }])
+    expect(videoEditPictureTransitionsAt(sequence, frame)[0].empty).toBeUndefined()
+    sequence.clips[0] = setVideoEditClipEnabled(sequence.clips[0], false)
+    const [window] = videoEditPictureTransitionsAt(sequence, frame)
+    expect(window.empty).toBe('left'); expect(videoEditTransitionPictureClips(window).map(clip => clip.id)).toEqual(['right'])
+    const wipe = { ...window, transition: { ...window.transition, kind: 'wipe' as const } }
+    const render = videoEditTransitionRender(wipe, frame)
+    expect(render).toMatchObject({ kind: 'builtin', input: { emptyOutgoing: true } }); expect(render).not.toHaveProperty('input.emptyIncoming')
+    sequence.clips[1] = setVideoEditClipEnabled(sequence.clips[1], false)
+    expect(videoEditPictureTransitionsAt(sequence, frame)).toEqual([]); expect(videoEditPictureTransitionWindows(sequence)).toEqual([])
+    sequence.clips[0] = setVideoEditClipEnabled(sequence.clips[0], true)
+    sequence.transitions = [{ id: 'tail', kind: 'cross_dissolve', leftClipId: 'left', durationFrames: 10 }, { id: 'head', kind: 'cross_dissolve', rightClipId: 'right', durationFrames: 10 }]
+    expect(videoEditPictureTransitionWindows(sequence).map(window => [window.transition.id, window.empty])).toEqual([['tail', undefined]])
+    sequence.tracks.find(track => track.index === 1)!.enabled = false
+    expect(videoEditPictureTransitionWindows(sequence)).toEqual([])
   })
   it('第一批带参数的视频过渡（4.7）：登记完整、参数可选并校验、编辑保留参数、渲染走内置着色器且单侧另一侧为空', () => {
     for (const kind of VIDEO_EDIT_BUILTIN_TRANSITION_KINDS) {

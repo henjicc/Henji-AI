@@ -1,4 +1,4 @@
-import { audibleVideoEditClips, videoEditClipMedia, videoEditDuration, videoEditNestedComposition, videoEditVisibleTracks, type VideoEditClip, type VideoEditComposition } from './document'
+import { audibleVideoEditClips, videoEditClipMedia, videoEditDuration, videoEditNestedComposition, videoEditPictureFilter, type VideoEditClip, type VideoEditComposition } from './document'
 import { videoEditClipFrameBoundaryAtSource, videoEditClipSourceSecondsAt, videoEditClipSourceSecondsAtTime, videoEditClipSpeedValue } from './clipSpeed'
 import { videoEditNestedFrame } from './nestedSequences'
 import { VIDEO_EDIT_MAX_SEQUENCE_DEPTH } from './sequenceGraph'
@@ -82,8 +82,8 @@ function stepFor(composition: VideoEditComposition, clip: VideoEditClip): VideoE
 }
 function candidateClips(composition: VideoEditComposition, medium: VideoEditSourceMapMedium): VideoEditClip[] {
   if (medium === 'audio') return audibleVideoEditClips(composition)
-  const visible = videoEditVisibleTracks(composition)
-  return composition.clips.filter(clip => clip.kind !== 'audio' && visible.has(clip.track))
+  const picture = videoEditPictureFilter(composition)
+  return composition.clips.filter(clip => clip.kind !== 'audio' && picture.has(clip))
 }
 function leafEntry(composition: VideoEditComposition, clip: VideoEditClip, medium: VideoEditSourceMapMedium,
   path: readonly VideoEditSourceMapStep[], timeline: VideoEditSourceMapRange, rootFps: number): VideoEditSourceMapEntry | undefined {

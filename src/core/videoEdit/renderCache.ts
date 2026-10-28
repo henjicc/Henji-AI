@@ -1,8 +1,8 @@
 import { VIDEO_EDIT_RENDER_ENGINE_VERSION } from 'virtual:video-edit-render-engine'
 import { activeVideoEditEffects } from './compositing'
 import { VIDEO_EDIT_FRAME_INTERPOLATION_ENGINE } from './timeRemap'
-import { videoEditTransitionWindow, videoEditTransitionMedium } from './transitions'
-import { videoEditDuration, videoEditVisibleTracks, type VideoEditClip, type VideoEditComposition, type VideoEditSequence } from './document'
+import { videoEditTransitionPictureClips } from './transitions'
+import { videoEditClipEnabled, videoEditDuration, videoEditPictureFilter, videoEditPictureTransitionWindows, videoEditVisibleTrackIndexes, type VideoEditClip, type VideoEditComposition, type VideoEditSequence } from './document'
 
 /**
  * 预渲染缓存：按画面剪辑点分段，每段画面渲染成一份内容寻址的预览文件。
@@ -134,10 +134,11 @@ export function videoEditRenderWindowSet(document: VideoEditComposition, depende
   const size = Math.max(1, Math.round(document.fps * VIDEO_EDIT_RENDER_WINDOW_SECONDS))
   const context = new DigestContext(document)
   const minimum = Math.max(1, Math.round(document.fps * VIDEO_EDIT_RENDER_MIN_SECONDS))
-  const visible = videoEditVisibleTracks(document)
-  const visual = document.clips.filter(clip => clip.kind !== 'audio' && visible.has(clip.track))
-  const transitionWindows = (document.transitions ?? []).filter(transition => videoEditTransitionMedium(transition.kind) === 'video')
-    .map(transition => videoEditTransitionWindow(document, transition)).filter(window => visible.has(window.left.track))
+  const visible = videoEditVisibleTrackIndexes(document); const picture = videoEditPictureFilter(document)
+  // 停用片段的首尾仍作切点：开关一个片段只让与它重叠的窗口失效，别处的切段与已渲染文件不变。
+  const placed = document.clips.filter(clip => clip.kind !== 'audio' && visible.has(clip.track))
+  const visual = placed.filter(videoEditClipEnabled)
+  const transitionWindows = videoEditPictureTransitionWindows(document)
   const visibleCaptions = document.captionTrackEnabled === false ? [] : document.captions ?? []
   const { id: _id, binId: _bin, label: _label, textTranscription: _transcription, tracks: _tracks, sampleRate: _rate, channels: _channels, captionTrackLocked: _locked, clips: _clips, transitions: _transitions, captions: _captions, annotations: _annotations, markers: _markers, name: _name, media: _media, items: _items, sequences: _sequences, codeMaterials: _codeMaterials, colorLuts: _luts, styles: _styles, revision: _revision, ...settings } = document
   // 渲染引擎版本由合成、指纹与编码相关源码在构建时散列得出（scripts/vite/renderEngineVersion.mjs），引擎实现一变旧窗口全部失效。
@@ -155,10 +156,12 @@ export function videoEditRenderWindowSet(document: VideoEditComposition, depende
   }
   const signature = hash(JSON.stringify([base, duration, size, minimum, [...visible].sort((a, b) => a - b),
     followSources(visual).map(clip => [pictureClip(clip), context.references([clip])]),
-    transitionWindows.map(window => [window.transition, window.start, window.end, window.left.id, window.right.id]), visibleCaptions]))
+    // 停用片段不进指纹，但首尾参与切段：移动、裁剪、增删它都要重新分段。
+    placed.filter(clip => !videoEditClipEnabled(clip)).map(clip => [clip.start, clip.start + clip.duration]),
+    transitionWindows.map(window => [window.transition, window.start, window.end, window.left.id, window.right.id, window.empty]), visibleCaptions]))
   if (previous?.signature === signature) return previous
   const windows: VideoEditRenderWindow[] = []
-  const cuts = [...new Set([0, duration, ...visual.flatMap(clip => [clip.start, clip.start + clip.duration]),
+  const cuts = [...new Set([0, duration, ...placed.flatMap(clip => [clip.start, clip.start + clip.duration]),
     ...transitionWindows.flatMap(window => [window.start, window.end]), ...visibleCaptions.flatMap(caption => [caption.start, caption.start + caption.duration])])]
     .filter(frame => frame >= 0 && frame <= duration).sort((a, b) => a - b)
   const merged = [0]
@@ -169,20 +172,20 @@ export function videoEditRenderWindowSet(document: VideoEditComposition, depende
     for (let part = 0; part < count; part++) {
       const startFrame = start + Math.floor(length * part / count), endFrame = start + Math.floor(length * (part + 1) / count)
       const overlapping = transitionWindows.filter(window => window.start < endFrame && window.end > startFrame)
-      const handles = new Set(overlapping.flatMap(window => [window.left.id, window.right.id]))
+      const handles = new Set(overlapping.flatMap(window => videoEditTransitionPictureClips(window).map(clip => clip.id)))
       const clips = visual.filter(clip => handles.has(clip.id) || clip.start < endFrame && clip.start + clip.duration > startFrame)
       const dependencies = followSources(clips)
       // 同内容的副本可共用文件；片段身份只在段内引用关系中保留。
       const ids = new Map(dependencies.map((clip, index) => [clip.id, `clip:${index}`]))
       const pictures = dependencies.map(clip => {
-        const { id, name: _name, ...picture } = pictureClip(clip)
-        return { ...picture, id: ids.get(id), start: clip.start - startFrame, visible: visible.has(clip.track),
+        const { id, name: _name, ...shown } = pictureClip(clip)
+        return { ...shown, id: ids.get(id), start: clip.start - startFrame, visible: picture.has(clip),
           ...(clip.follow ? { follow: { ...clip.follow, clipId: ids.get(clip.follow.clipId) ?? clip.follow.clipId } } : {}),
           // 效果实例身份与名称不改变像素；副本会分配新身份，但应能共用预览。
           effects: activeVideoEditEffects(clip).map(({ id: _id, name: _name, ...effect }) => effect) }
       })
-      const transitions = overlapping.map(({ transition: { id: _id, ...transition }, start, end }) => ({ ...transition,
-        leftClipId: transition.leftClipId && ids.get(transition.leftClipId), rightClipId: transition.rightClipId && ids.get(transition.rightClipId), start: start - startFrame, end: end - startFrame }))
+      const transitions = overlapping.map(({ transition: { id: _id, ...transition }, start, end, empty }) => ({ ...transition,
+        leftClipId: transition.leftClipId && ids.get(transition.leftClipId), rightClipId: transition.rightClipId && ids.get(transition.rightClipId), start: start - startFrame, end: end - startFrame, empty }))
       const captions = visibleCaptions.filter(caption => caption.start < endFrame && caption.start + caption.duration > startFrame)
         .map(({ id: _id, clipId: _clipId, speech: _speech, ...caption }) => ({ ...caption, start: caption.start - startFrame }))
       const key = hash(JSON.stringify([base, endFrame - startFrame, pictures, transitions, captions, context.references(dependencies)]))

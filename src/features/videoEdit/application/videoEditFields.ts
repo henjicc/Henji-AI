@@ -47,9 +47,7 @@ export const VIDEO_EDIT_PROGRAM_SOURCE_CASCADE = { declarationId: 'video_edit.pr
 const schemas: Record<VideoEditEntityType, Record<string, z.ZodType>> = {
   'video_edit.document': { name: z.string().min(1).max(200), frame: z.number().int().nonnegative(), selection: z.string(), activeSequenceId: z.string(), dirty: z.boolean(), selectedItemIds: z.array(z.string().min(1)), selectedBinId: z.string().max(100), openSequenceIds: z.array(z.string().min(1)) },
   // 速度（4.13）以 speed_percent 百分比公开（见下），不公开内部有理数。
-  // 片段启用开关 enabled 暂不公开：播放、导出与混音还没读它，公开会让助手以为停用生效。片段启用行为（问题记录 #11）接上后，
-  // 再按下方 motionBlur 的写法映射成 boolean 开放（true 写入时省略）。
-  'video_edit.clip': Object.fromEntries(Object.entries(videoEditClipSchema.shape).filter(([key]) => !['id', 'sourceRemainder', 'speed', 'curves', 'enabled'].includes(key))),
+  'video_edit.clip': Object.fromEntries(Object.entries(videoEditClipSchema.shape).filter(([key]) => !['id', 'sourceRemainder', 'speed', 'curves'].includes(key))),
   'video_edit.annotation': Object.fromEntries(Object.entries(videoEditAnnotationSchema.shape).filter(([key]) => key !== 'id' && key !== 'sourceRemainder')),
   'video_edit.sequence': Object.fromEntries(Object.entries(videoEditSequenceSchema.shape).filter(([key]) => !['id', 'clips', 'annotations', 'tracks', 'markers', 'captions', 'textTranscription'].includes(key))),
   'video_edit.marker': { ...Object.fromEntries(Object.entries(videoEditMarkerSchema.shape).filter(([key]) => key !== 'id')), clipId: z.string().max(100) },
@@ -81,6 +79,8 @@ schemas['video_edit.sequence'].captionTrackEnabled = videoEditSequenceSchema.sha
 schemas['video_edit.sequence'].motionBlur = videoEditSequenceSchema.shape.motionBlur.unwrap()
 // 片段只存“关掉”：true 表示跟随序列总开关（存储时省略），false 只关这个片段
 schemas['video_edit.clip'].motionBlur = z.boolean()
+// 片段启用同样只存“停用”：true 为启用（存储时省略）
+schemas['video_edit.clip'].enabled = z.boolean()
 schemas['video_edit.sequence'].frameBlend = videoEditSequenceSchema.shape.frameBlend.unwrap()
 schemas['video_edit.sequence'].captionTrackLocked = videoEditSequenceSchema.shape.captionTrackLocked.unwrap()
 schemas['video_edit.sequence'].multicam = videoEditSequenceSchema.shape.multicam.unwrap().nullable()
@@ -310,6 +310,7 @@ descriptions['video_edit.clip.frame_hold'] = '是否为帧定格；定格引用�
 Object.assign(labels, { contentAnchor: '关联内容' })
 descriptions['video_edit.sequence.motion_blur'] = '整条序列的运动模糊总开关（新建序列默认开）：开着时有位置、缩放、旋转、锚点动画的片段，以及代码素材里声明了 motionBlur 的会动图层沿运动方向模糊；关掉则全部不模糊。单个片段用 video_edit.clip.motion_blur 关掉。'
 descriptions['video_edit.clip.motion_blur'] = '这个片段自身动画（位置、缩放、旋转、锚点关键帧）的运动模糊：true 跟随序列总开关（默认），false 只关掉这个片段。序列总开关 video_edit.sequence.motion_blur 关掉时一律不模糊。代码素材里单个图层的模糊在源码图层的 motionBlur 里控制。界面不提供这一项，由助手按画面需要调整。'
+descriptions['video_edit.clip.enabled'] = '片段是否启用（PR 剪辑 > 启用，Shift+E）：true 为启用（默认）；false 时片段留在时间线上、位置不变，但不参与节目画面、导出与混音，审片、源映射与封面也跳过它。一侧停用的视频过渡照常进行、停用那一侧按透明画；两侧都停用的过渡不出现。轨道隐藏、静音、独奏仍按轨道各自生效。锁定轨道上的片段不能改。'
 descriptions['video_edit.source.item_id'] = '源监视器打开的素材项，空字符串为关闭。视频、图片、音频按原文件播放；代码画面、图形、文字没有源文件，按只放这一项的临时序列预览（画幅与帧率跟当前序列，时长为放进时间线时的默认时长，没有声音，不设入出点）。打开不改作品，也不往时间线里放东西。'
 Object.assign(labels, { contentQueries: '素材内容查询进度' })
 schemas['video_edit.item'].contentQueries = z.array(mediaContentQueryProgressSchema).max(8)
@@ -358,7 +359,9 @@ export function videoEditCollectionValues(entityType: VideoEditEntityType, prope
       const curveKey = key.split('.').at(-2)!
       const curves = data[store]
       data[store] = { ...(curves && typeof curves === 'object' && !Array.isArray(curves) ? curves : {}), [curveKey]: parsed }
-    } else if (!((entityType === 'video_edit.clip' && ['textStyle', 'audioRole'].includes(key) || entityType === 'video_edit.item' && key === 'sourceRange') && parsed === null)) data[key] = parsed
+    } else if (!((entityType === 'video_edit.clip' && ['textStyle', 'audioRole'].includes(key) || entityType === 'video_edit.item' && key === 'sourceRange') && parsed === null)
+      // 片段的启用与运动模糊只存 false，true 即缺省
+      && !(entityType === 'video_edit.clip' && ['enabled', 'motionBlur'].includes(key) && parsed === true)) data[key] = parsed
   }
   return data
 }

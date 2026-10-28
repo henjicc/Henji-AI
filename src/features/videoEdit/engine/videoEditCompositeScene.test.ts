@@ -79,11 +79,13 @@ function pixels(document: VideoEditComposition, reserved: ReadonlySet<string>, o
       data.set(destination.texture, output); options.onFilter?.(); return destination
     },
     mix: async (key, left, right, amount) => {
-      const destination = target(key, left.width, left.height)
-      expect(destination.texture).not.toBe(left.texture); expect(destination.texture).not.toBe(right.texture)
-      expect(left.owner).toBe(device); expect(right.owner).toBe(device)
-      const output = mix(pixel(left), pixel(right), amount)
-      mixes.push({ key, leftKey: keys.get(left.texture)!, rightKey: keys.get(right.texture)!, amount, output })
+      const size = left === 'transparent' ? right : left
+      if (size === 'transparent') throw new Error('两侧都透明')
+      const destination = target(key, size.width, size.height)
+      for (const side of [left, right]) if (side !== 'transparent') { expect(destination.texture).not.toBe(side.texture); expect(side.owner).toBe(device) }
+      const color = (side: typeof left): CodeColor => side === 'transparent' ? [0, 0, 0, 0] : pixel(side)
+      const output = mix(color(left), color(right), amount)
+      mixes.push({ key, leftKey: left === 'transparent' ? 'transparent' : keys.get(left.texture)!, rightKey: right === 'transparent' ? 'transparent' : keys.get(right.texture)!, amount, output })
       data.set(destination.texture, output); return destination
     },
   }
@@ -215,6 +217,19 @@ describe('正式合成场景的预乘RGBA编排与有界目标', () => {
     expect(boundary.draws.at(-1)!.clips.map(value => value.id)).toEqual(['lower', 'left', 'caption'])
     expect(boundary.draws.at(-1)!.inputKeys).toEqual(['lower-raw', 'composite:transition:dissolve', 'caption-raw'])
     expect(reserved.size).toBe(3); expect(boundary.commits()).toBe(1)
+  })
+  it('交叉溶解一侧停用时那一侧不准备画面，按透明混合', async () => {
+    const left = clip('left', 2, { duration: 60 }); const right = clip('right', 2, { start: 60, duration: 60 })
+    const document = composition([left, right])
+    const window = { ...videoEditTransitionWindow(document, { id: 'dissolve', kind: 'cross_dissolve', leftClipId: left.id, rightClipId: right.id, durationFrames: 5 }), empty: 'left' as const }
+    const nodes = buildVideoEditCompositePlan([right], [window]); const reserved = videoEditCompositeSurfaceKeys(nodes)
+    const boundary = pixels(document, reserved)
+    const result = await renderVideoEditCompositeScene(document, nodes, new Map([[right.id, boundary.picture('right-raw', [0, 0, 1, 1])]]), new Map(), boundary.compositor, 60, () => true)
+    await result.completion
+    expect(boundary.mixes).toHaveLength(1); expect(boundary.mixes[0].leftKey).toBe('transparent')
+    expectPixel(boundary.mixes[0].output, [0, 0, .4, .4])
+    expect(boundary.draws.filter(value => value.target).map(value => value.clips)).toEqual([[right]])
+    expect(reserved.size).toBe(2)
   })
   it('转场外延滤镜保留原源时钟、负localTime和transitionHandles，仅替换全序列尺寸', async () => {
     const left = clip('left', 1, { duration: 60 }); const right = clip('right', 1, { start: 60, duration: 60 })

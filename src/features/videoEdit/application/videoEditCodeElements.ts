@@ -1,5 +1,5 @@
 import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
-import { videoEditVisibleTracks, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
+import { videoEditPictureFilter, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import { evaluateVideoEditClip } from '@/core/videoEdit/keyframes'
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
 import { videoEditFadeOpacity } from '@/core/videoEdit/fades'
@@ -23,10 +23,10 @@ export function installVideoEditCodeElements(instance: VideoEditInstance, observ
   if (observation.revision !== instance.document.revision) return false
   const sequence = instance.document.sequences.find(value => value.id === observation.sequenceId)
   if (!sequence) return false
-  const visible = videoEditVisibleTracks(sequence), elements = new Map<string, VideoEditCodeElementFrame>()
+  const picture = videoEditPictureFilter(sequence), elements = new Map<string, VideoEditCodeElementFrame>()
   for (const observed of observation.clips) {
     const raw = sequence.clips.find(clip => clip.id === observed.clipId)
-    if (!raw?.code || raw.kind !== 'code' || raw.code.versionId !== observed.versionId || !visible.has(raw.track) || observation.frame < raw.start || observation.frame >= raw.start + raw.duration) continue
+    if (!raw?.code || raw.kind !== 'code' || raw.code.versionId !== observed.versionId || !picture.has(raw) || observation.frame < raw.start || observation.frame >= raw.start + raw.duration) continue
     const evaluated = evaluateVideoEditClip(raw, observation.frame)
     const clip = { ...evaluated, opacity: evaluated.opacity * videoEditFadeOpacity(raw, observation.frame) }
     if (clip.opacity <= 0) continue
@@ -42,14 +42,14 @@ export function videoEditCodeElementFrames(instance: VideoEditInstance, sequence
   if (cached.document === instance.document) return cached.elements
   const sequence = instance.document.sequences.find(value => value.id === sequenceId)
   if (!sequence) return new Map()
-  const visible = videoEditVisibleTracks(sequence)
+  const picture = videoEditPictureFilter(sequence)
   const result = new Map<string, VideoEditCodeElementFrame>()
   // Direct manipulation must remain responsive while the next frame is rendering.
   // Reuse only the exact same source time and parameter state; apply host transforms,
   // never call author code or infer drawing operations on the UI thread.
   for (const [id, entry] of cached.elements) {
     const raw = sequence.clips.find(clip => clip.id === id)
-    if (!raw || raw.kind !== 'code' || !visible.has(raw.track) || frame < raw.start || frame >= raw.start + raw.duration || JSON.stringify(raw.code) !== JSON.stringify(entry.clip.code)) continue
+    if (!raw || raw.kind !== 'code' || !picture.has(raw) || frame < raw.start || frame >= raw.start + raw.duration || JSON.stringify(raw.code) !== JSON.stringify(entry.clip.code)) continue
     const time = videoEditClipSourceTimeAt(raw, frame - raw.start, sequence.frameRate)
     if (JSON.stringify(time) !== JSON.stringify(videoEditClipSourceTimeAt(entry.clip, frame - entry.clip.start, sequence.frameRate))) continue
     const observations = entry.index.bounds.flatMap(bound => {
@@ -70,9 +70,9 @@ export function videoEditCodeElementFrames(instance: VideoEditInstance, sequence
 }
 /** Pick only within the top visible picture. A non-code clip occludes code beneath it. */
 export function videoEditProgramClipAt(instance: VideoEditInstance, point: { x: number; y: number }): { clip: VideoEditClip; picture: { width: number; height: number }; entry?: VideoEditCodeElementFrame } | undefined {
-  const sequence = getActiveVideoEditSequence(instance); const visible = videoEditVisibleTracks(sequence)
+  const sequence = getActiveVideoEditSequence(instance); const picture = videoEditPictureFilter(sequence)
   const elements = videoEditCodeElementFrames(instance)
-  const clips = sequence.clips.filter(clip => clip.kind !== 'audio' && clip.kind !== 'adjustment' && instance.frame >= clip.start && instance.frame < clip.start + clip.duration && visible.has(clip.track)).sort((a, b) => b.track - a.track)
+  const clips = sequence.clips.filter(clip => clip.kind !== 'audio' && clip.kind !== 'adjustment' && instance.frame >= clip.start && instance.frame < clip.start + clip.duration && picture.has(clip)).sort((a, b) => b.track - a.track)
   for (const raw of clips) {
     const evaluated = evaluateVideoEditClip(raw, instance.frame); const clip = { ...evaluated, opacity: evaluated.opacity * videoEditFadeOpacity(raw, instance.frame) }; if (clip.opacity <= 0) continue
     const entry = elements.get(clip.id)

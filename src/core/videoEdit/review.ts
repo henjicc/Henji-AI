@@ -1,6 +1,5 @@
-import { videoEditDuration, videoEditVisibleTracks, type VideoEditComposition } from './document'
+import { videoEditDuration, videoEditPictureTransitionWindows, type VideoEditComposition } from './document'
 import { projectVideoEditSequenceMapRange, projectVideoEditSourceMapAuthorTimes, visitVideoEditPictureInstances, type VideoEditSourceMapEntry, type VideoEditSourceMapRange, type VideoEditSourceMapStep } from './sourceMap'
-import { videoEditTransitionMedium, videoEditTransitionWindow } from './transitions'
 import { videoEditTrackFrameTime, type VideoEditTrackHeader } from './tracking'
 import { videoEditNestedCaptionSourceId } from './nestedCaptions'
 import { activeVideoEditEffects } from './compositing'
@@ -84,14 +83,10 @@ export function collectVideoEditReviewStructure(composition: VideoEditCompositio
         const timeline = projectVideoEditSequenceMapRange(instance, { from: caption.start, to: caption.start + caption.duration })
         if (timeline) append({ kind: 'caption', timeline, sequenceId: local.id, path: instance.path, subjectId: videoEditNestedCaptionSourceId(caption) })
       }
-      const visible = videoEditVisibleTracks(local)
-      for (const transition of local.transitions ?? []) {
-        assertVideoEditReviewBudget(++work)
-        if (videoEditTransitionMedium(transition.kind) !== 'video') continue
-        const window = videoEditTransitionWindow(local, transition)
-        if (!visible.has(window.left.track) && !visible.has(window.right.track)) continue
+      work += (local.transitions ?? []).length; assertVideoEditReviewBudget(work)
+      for (const window of videoEditPictureTransitionWindows(local)) {
         const timeline = projectVideoEditSequenceMapRange(instance, { from: window.start, to: window.end })
-        if (timeline) append({ kind: 'transition', timeline, sequenceId: local.id, path: instance.path, subjectId: transition.id })
+        if (timeline) append({ kind: 'transition', timeline, sequenceId: local.id, path: instance.path, subjectId: window.transition.id })
       }
     },
     clip(local, entry, window) {

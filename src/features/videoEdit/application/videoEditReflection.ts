@@ -129,6 +129,7 @@ export function readVideoEditData(ref: ApplicationRef, codeMetadata = false, pro
     const source = instance.document.sequences.find(sequence => sequence.id === instance.document.items.find(item => item.id === clip.itemId)?.sequenceId)
     if (source?.multicam) data.multicamCameraId = clip.multicamCameraId ?? source.multicam.cameras[0].id
     data.motionBlur = clip.motionBlur !== false
+    data.enabled = clip.enabled !== false
     Object.assign(data, { graphicObjectIds: clip.graphic?.objects.map(object => object.id) ?? [], effectIds: clip.effects?.map(effect => effect.id) ?? [], adjustmentFromTrack: clip.adjustment?.fromTrack ?? null }, videoEditClipSpeedData(clip))
   }
   if (ref.kind === 'video_edit.item') {

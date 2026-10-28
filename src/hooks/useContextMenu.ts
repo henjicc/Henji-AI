@@ -9,6 +9,8 @@ export interface MenuItem {
     divider?: boolean
     /** 悬停可看全的完整文字（如被截断的路径）。 */
     title?: string
+    /** 可勾选的开关项（如片段“启用”）：给出时显示勾选状态，读屏读作复选菜单项。 */
+    checked?: boolean
 }
 
 /**

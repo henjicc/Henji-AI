@@ -24,7 +24,7 @@ import ContextMenu from '@/components/ContextMenu'
 import { UiButton } from '@/components/ui'
 import { UI_DIVIDER_CLASS, UI_TEXT_NUMERIC_CLASS } from '@/components/ui/styleTokens'
 import { VideoEditSequenceFrameRateRequired, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
-import { videoEditDuration, videoEditClipMedia, type VideoEditClip, type VideoEditSequence } from '@/core/videoEdit/document'
+import { videoEditClipEnabled, videoEditDuration, videoEditClipMedia, type VideoEditClip, type VideoEditSequence } from '@/core/videoEdit/document'
 import { rescaleVideoEditFrame, videoEditFps } from '@/core/videoEdit/time'
 import { videoEditClipSourceSecondsAtTime } from '@/core/videoEdit/clipSpeed'
 import { videoEditSyncOffsets } from '@/core/videoEdit/linkSync'
@@ -389,8 +389,8 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         const picture = !sound && (clip.kind === 'video' && media?.kind === 'video' || clip.kind === 'image' && media?.kind === 'image')
         // 片段底色按标签色（重要记录 019）：给素材改标签，时间线上的片段跟着变。
         const surface = videoEditClipLabelSurface(videoEditClipLabel(instance.document, clip), selected)
-        // Hidden picture tracks and muted sound tracks dim their clips (content only, see the overlay below), as in Premiere.
-        const dimmed = !row.track.enabled || row.track.kind === 'audio' && row.track.muted
+        // Hidden picture tracks, muted sound tracks and disabled clips dim their clips (content only, see the overlay below), as in Premiere.
+        const dimmed = !row.track.enabled || row.track.kind === 'audio' && row.track.muted || !videoEditClipEnabled(clip)
         const clipLeft = TIMELINE_HEADER_WIDTH + clip.start * pixels
         const clipWidth = Math.max(3, clip.duration * pixels)
         const fadeIn = (clip.fadeInFrames ?? 0) * pixels; const fadeOut = (clip.fadeOutFrames ?? 0) * pixels
@@ -400,7 +400,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
             mediaEndSeconds={media.durationSeconds} frameSeconds={media.frameRate ? media.frameRate.denominator / media.frameRate.numerator : 1 / 30} clip={clip} fps={fps} pixels={pixels} clipWidth={clipWidth} height={row.height - 6}
             visibleFrom={stripEdge(view.left + TIMELINE_HEADER_WIDTH - clipLeft, clipWidth, Math.floor)} visibleTo={stripEdge(view.left + view.width - clipLeft, clipWidth, Math.ceil)} devicePixelRatio={devicePixelRatio} active={visible} />}
           {range && <VideoEditClipWaveform clipId={clip.id} gainDb={clip.gainDb} sources={range.sources} startSeconds={range.startSeconds} endSeconds={range.endSeconds} reverse={clip.reverse} left={(range.from - clip.start) * pixels} width={(range.to - range.from) * pixels} visible={visible} lane={picture ? 'lower' : 'full'} />}
-          {/* 隐藏轨/静音轨只淡化画面与波形（盖一层半透明窗口底），片段名标签不跟着变淡：整片 opacity-50 时
+          {/* 隐藏轨/静音轨/停用片段只淡化画面与波形（盖一层半透明窗口底），片段名标签不跟着变淡：整片 opacity-50 时
               纸白下标签只剩 1.5:1（4.1 对比度审计） */}
           {dimmed && <div className="pointer-events-none absolute inset-0 bg-window/50" aria-hidden="true" />}
           <div className="absolute inset-0 flex">

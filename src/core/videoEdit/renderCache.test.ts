@@ -38,6 +38,27 @@ it('修改只让依赖它的窗口失效：片段参数、嵌套序列内容与�
 })
 
 
+it('停用片段只让与它重叠的窗口失效，切段不变；重新启用恢复原指纹', () => {
+  const base = project(); const before = keys(base)
+  const disabled = structuredClone(base); disabled.sequences[0].clips[1].enabled = false
+  expect(keys(disabled).map((key, index) => key === before[index])).toEqual([...Array(12).fill(true), ...Array(6).fill(false)])
+  delete disabled.sequences[0].clips[1].enabled
+  expect(keys(disabled)).toEqual(before)
+})
+
+it('输入签名覆盖停用片段的首尾：移动或删除可见轨上的停用片段重新分段，结果与重新计算一致', () => {
+  // 停用片段落在主片段中间，总时长与启用片段都不变，只有它的首尾决定切段。
+  const base = project(), sequence = base.sequences[0]
+  sequence.clips.push({ ...sequence.clips[0], id: 'off', track: 3, start: 450, duration: 300, enabled: false })
+  const previous = videoEditRenderWindowSet(videoEditComposition(base, sequence.id), dependencies)
+  const moved = structuredClone(base); moved.sequences[0].clips[2].start = 1050
+  const recomputed = videoEditRenderWindowSet(videoEditComposition(moved, sequence.id), dependencies, previous)
+  expect(recomputed).not.toBe(previous); expect(recomputed.windows).toEqual(videoEditRenderWindows(videoEditComposition(moved, sequence.id), dependencies))
+  const removed = structuredClone(base); removed.sequences[0].clips.splice(2, 1)
+  const fresh = videoEditRenderWindowSet(videoEditComposition(removed, sequence.id), dependencies, previous)
+  expect(fresh).not.toBe(previous); expect(fresh.windows).toEqual(videoEditRenderWindows(videoEditComposition(removed, sequence.id), dependencies))
+})
+
 it('整体平移保持内容指纹，副本共用键，源入点或关键帧变化使对应段失效', () => {
   const document = project(), sequence = document.sequences[0]
   sequence.clips = [{ ...sequence.clips[0], duration: 240 }]

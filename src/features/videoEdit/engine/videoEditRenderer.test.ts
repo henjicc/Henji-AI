@@ -1271,6 +1271,19 @@ it('拆出的音画共用原引用且混音逐样本不增倍，纯画面独奏�
     expect((await renderer.mixAudio(0, .01))[0].every(sample => sample === 0)).toBe(true)
   } finally { await renderer.dispose() }
 })
+it('停用的片段不画也不进混音，重新启用后恢复原样', async () => {
+  const document = fixture(); const renderer = new VideoEditRenderer(document)
+  try {
+    const original = await renderer.mixAudio(0, .01)
+    expect(original[0][0]).toBe(.25)
+    await renderer.updateDocument({ ...document, clips: document.clips.map(clip => ({ ...clip, enabled: false as const })) })
+    expect((await renderer.mixAudio(0, .01))[0].every(sample => sample === 0)).toBe(true)
+    await renderer.render(0); expect(boundary.draws.at(-1)!.ids).toEqual([])
+    await renderer.updateDocument(document)
+    expect(await renderer.mixAudio(0, .01)).toEqual(original)
+    await renderer.render(0); expect(boundary.draws.at(-1)!.ids).toEqual(['clip'])
+  } finally { await renderer.dispose() }
+})
 const codeSource = "export default {name:\"原创透明图形\",kind:\"generator\",mode:\"static\",width:3840,height:2160,durationSeconds:10,params:[],draw(){}}"
 function mixedFixture(): ReturnType<typeof videoEditComposition> {
   const document = fixture()

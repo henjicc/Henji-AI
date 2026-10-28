@@ -4,7 +4,7 @@ import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/docum
 import type { VideoEditCompositeNode } from '@/core/videoEdit/compositing'
 import type { VideoEditEffect } from '@/core/videoEdit/compositing'
 import { activeVideoEditEffects } from '@/core/videoEdit/compositing'
-import { videoEditTransitionRender } from '@/core/videoEdit/transitions'
+import { videoEditTransitionPictureClips, videoEditTransitionRender } from '@/core/videoEdit/transitions'
 import type { PreparedVideoEditEffect } from './videoEditCodeSources'
 import type { VideoEditCodePicture, VideoEditCodeGpu } from './videoEditCodeGpu'
 import type { VideoEditGpuCompositor, VideoEditPicture } from './videoEditGpuCompositor'
@@ -34,7 +34,7 @@ export function videoEditCompositeSurfaceKeys(nodes: readonly VideoEditComposite
   const visit = (node: VideoEditCompositeNode): void => {
     if (node.kind === 'clip') { if (effective(node.clip)) slots(node.clip).forEach(key => keys.add(key)); if (masked(node.clip)) keys.add(MASK_SOURCE).add(MASK_DOCUMENT) }
     else if (node.kind === 'transition') {
-      for (const clip of [node.window.left, node.window.right]) { slots(clip).forEach(key => keys.add(key)); if (masked(clip)) keys.add(MASK_SOURCE).add(MASK_DOCUMENT) }
+      for (const clip of videoEditTransitionPictureClips(node.window)) { slots(clip).forEach(key => keys.add(key)); if (masked(clip)) keys.add(MASK_SOURCE).add(MASK_DOCUMENT) }
       keys.add(`composite:transition:${node.window.transition.id}`)
     } else {
       node.children.forEach(visit)
@@ -121,16 +121,21 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
       current()
       if (node.kind === 'clip') layers.push(await resolveClip(node.clip))
       else if (node.kind === 'transition') {
-        // 单侧过渡（4.4）两边是同一个片段，只准备一次画面；怎么画由 videoEditTransitionRender 统一给出：
-        // 交叉溶解、黑场、白场走混合，带参数的过渡（4.7）走内置效果着色器。预览与导出都经过这里。
-        const left = await resolveClip(node.window.left, true); const right = node.window.side ? left : await resolveClip(node.window.right, true)
-        const render = videoEditTransitionRender(node.window, frame); const key = `composite:transition:${node.window.transition.id}`
+        // 单侧过渡（4.4）两边是同一个片段，只准备一次画面；停用的一侧（empty）不准备画面，按透明画。
+        // 怎么画由 videoEditTransitionRender 统一给出：交叉溶解、黑场、白场走混合，带参数的过渡（4.7）走内置效果着色器。预览与导出都经过这里。
+        const { window } = node
+        const shown = window.empty === 'left' ? window.right : window.left
+        const first = (await resolveClip(shown, true)).picture as VideoEditCodePicture
+        const second = window.side || window.empty ? first : (await resolveClip(window.right, true)).picture as VideoEditCodePicture
+        const left = window.empty === 'left' ? 'transparent' : first; const right = window.empty === 'right' ? 'transparent' : second
+        const render = videoEditTransitionRender(window, frame); const key = `composite:transition:${window.transition.id}`
         const runtime = await gpu()
+        // 内置过渡的空侧由 input 标记，那一侧传另一侧的画面占位，与单侧过渡相同。
         const picture = render.kind === 'mix'
-          ? await runtime.mix(key, left.picture as VideoEditCodePicture, right.picture as VideoEditCodePicture, render.amount, render.through)
-          : await runtime.transition(key, render.input, left.picture as VideoEditCodePicture, right.picture as VideoEditCodePicture)
+          ? await runtime.mix(key, left, right, render.amount, render.through)
+          : await runtime.transition(key, render.input, first, second)
         current()
-        layers.push({ clip: identity(node.window.left), picture })
+        layers.push({ clip: identity(shown), picture })
       } else {
         const children = await resolve(node.children)
         if (!effective(node.clip) || node.clip.opacity <= 0) layers.push(...children)

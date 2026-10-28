@@ -1,6 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { saveDocumentCover } from '@/commands/documents'
-import { clipSourceSeconds, videoEditClipMedia, videoEditDuration, videoEditVisibleTracks, type VideoEditClip, type VideoEditDocument } from '@/core/videoEdit/document'
+import { clipSourceSeconds, videoEditClipMedia, videoEditDuration, videoEditPictureFilter, type VideoEditClip, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditFps } from '@/core/videoEdit/time'
 import { notifyDocumentCoverChanged } from '@/features/documents/documentCovers'
 import type { DocumentCoverSource } from '@/core/documents/types'
@@ -32,8 +32,8 @@ export function videoEditCoverSource(document: VideoEditDocument): DocumentCover
   const sequence = (poster && document.sequences.find(item => item.id === poster.sequenceId)) || document.sequences[0]
   if (!sequence) return null
   const fps = videoEditFps(sequence.frameRate)
-  const visible = videoEditVisibleTracks(sequence)
-  const pictures = sequence.clips.filter(clip => (clip.kind === 'video' || clip.kind === 'image') && visible.has(clip.track))
+  const picture = videoEditPictureFilter(sequence)
+  const pictures = sequence.clips.filter(clip => (clip.kind === 'video' || clip.kind === 'image') && picture.has(clip))
   if (!pictures.length) return null
   const frame = poster && poster.sequenceId === sequence.id ? poster.frame : Math.floor(videoEditDuration(sequence) / 3)
   // 同一帧上层轨道（编号大）压住下层
@@ -49,9 +49,9 @@ export function videoEditFrameSourceAt(document: VideoEditDocument, fraction: nu
   const sequence = document.sequences[0]
   if (!sequence) return null
   const fps = videoEditFps(sequence.frameRate)
-  const visible = videoEditVisibleTracks(sequence)
+  const picture = videoEditPictureFilter(sequence)
   const frame = Math.floor(Math.max(0, Math.min(0.999, fraction)) * videoEditDuration(sequence))
-  const atFrame = sequence.clips.filter(clip => (clip.kind === 'video' || clip.kind === 'image') && visible.has(clip.track) && frame >= clip.start && frame < clip.start + clip.duration).sort((left, right) => right.track - left.track)
+  const atFrame = sequence.clips.filter(clip => (clip.kind === 'video' || clip.kind === 'image') && picture.has(clip) && frame >= clip.start && frame < clip.start + clip.duration).sort((left, right) => right.track - left.track)
   for (const clip of atFrame) { const source = clipCoverSource(document, clip, frame, fps); if (source) return source }
   return null
 }
