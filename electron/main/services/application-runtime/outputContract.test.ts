@@ -259,6 +259,8 @@ successData.read_video_edit_super_keyframes = { resultRef: ref('video_edit.inten
 for (const name of ['import_video_edit_asset', 'import_video_edit_folder', 'save_video_edit', 'split_video_edit', 'add_video_edit_frame_hold', 'trim_video_edit_clip', 'undo_video_edit', 'redo_video_edit']) {
   successData[name] = { resultRef: documentRef, message, verification: verification() }
 }
+successData.import_local_media = { assetRef, name: '音乐', mediaType: 'audio', sizeBytes: 4096, reused: false, verification: verification(assetRef) }
+successData.import_video_edit_folder = { ...successData.import_video_edit_folder, itemRefs: [ref('video_edit.item', 'document:item')], skippedEntries: [{ name: '坏文件.mp4', reason: 'unreadable', message: '文件无法解码，请换用完整媒体。' }], truncated: false }
 successData.import_video_edit_project_files = { resultRef: documentRef, message, verification: verification(), importedCount: 1, reusedCount: 1, skippedCount: 1, truncated: false,
   items: [{ itemRef: ref('video_edit.item', 'document:item'), mediaRef: ref('video_edit.media', 'document:media'), binRef: ref('video_edit.bin', 'document:bin'), relativePath: '素材/录屏/a.mp4', status: 'imported' },
     { itemRef: ref('video_edit.item', 'document:shot'), mediaRef: ref('video_edit.media', 'document:shot'), binRef: null, relativePath: '素材/截图/产品主页.png', status: 'reused' }],

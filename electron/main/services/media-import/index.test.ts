@@ -101,7 +101,7 @@ describe('main media import service', () => {
     expect(mocks.probeLocalMedia).toHaveBeenCalledTimes(2)
   })
 
-  it('reference 保留原始 full path 并持久授权目录', async () => {
+  it('reference 保留原始 full path 并沿用目录登记', async () => {
     const sourcePath = path.join(mocks.root, 'voice.wav')
     await fsp.writeFile(sourcePath, Buffer.concat([
       Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WAVE'), Buffer.alloc(16),
@@ -117,6 +117,17 @@ describe('main media import service', () => {
     expect(result.fullPath).toBe(sourcePath)
     expect(result.ownership).toBe('referenced')
     expect(mocks.allowMediaRoot).toHaveBeenCalledWith(path.dirname(sourcePath))
+  })
+
+  it('导入目录联接中的文件保留原引用和既有目录登记，不复制原件', async () => {
+    const outside = path.join(mocks.root, 'outside'); const project = path.join(mocks.root, 'project')
+    await fsp.mkdir(outside); await fsp.mkdir(project)
+    const real = path.join(outside, 'voice.mp3'); await fsp.writeFile(real, 'ID3media')
+    const link = path.join(project, 'link'); await fsp.symlink(outside, link, process.platform === 'win32' ? 'junction' : 'dir')
+    const sourcePath = path.join(link, 'voice.mp3')
+    expect(await importMediaFromPath({ importId: 'link-import', verifyContent: true, sourcePath, expectedKind: 'audio', ownership: 'referenced' })).toMatchObject({ fullPath: sourcePath, ownership: 'referenced' })
+    expect(mocks.allowMediaRoot).toHaveBeenCalledWith(path.dirname(sourcePath))
+    expect(await fsp.readdir(path.join(mocks.root, 'Uploads'))).toEqual([])
   })
 
   it('bytes 后备内容寻址，伪装类型和非绝对路径被拒绝', async () => {
@@ -139,9 +150,27 @@ describe('main media import service', () => {
     await expect(importMediaFromPath({
       importId: 'import-test-0006',
       sourcePath: 'relative.mp3',
+      verifyContent: true,
       expectedKind: 'audio',
       ownership: 'managed',
-    })).rejects.toThrow('absolute file path')
+    })).rejects.toThrow('绝对路径')
+  })
+
+  it('界面路径导入裸 PCM 与字节导入保持相同的未知时长行为', async () => {
+    const sourcePath = path.join(mocks.root, 'voice.pcm'); await fsp.writeFile(sourcePath, Buffer.from([1, 2, 3]))
+    mocks.probeLocalMedia.mockRejectedValue(new Error('no container'))
+    await expect(importMediaFromPath({ importId: 'pcm-path', sourcePath, expectedKind: 'audio', ownership: 'referenced' })).resolves.toMatchObject({ kind: 'audio', mimeType: 'audio/pcm', durationSeconds: 0 })
+    await expect(importMediaFromPath({ importId: 'pcm-assistant', sourcePath, expectedKind: 'audio', ownership: 'referenced', verifyContent: true })).rejects.toThrow('MEDIA_FORMAT_UNSUPPORTED')
+  })
+
+  it('预览写入失败保留原始错误名与码，去掉完整来源路径', async () => {
+    const sourcePath = path.join(mocks.root, 'large.jpg'); await fsp.writeFile(sourcePath, Buffer.from([0xff, 0xd8, 0xff, 1]))
+    const pipeline = { metadata: async () => ({ width: 2048, height: 1024 }), resize: () => pipeline, jpeg: () => pipeline,
+      toFile: async () => { throw Object.assign(new Error(`EACCES: 写入预览失败 '${sourcePath}'`), { code: 'EACCES' }) } }
+    mocks.loadSharp.mockResolvedValue(() => pipeline)
+    const error = await importMediaFromPath({ importId: 'poster-failure', sourcePath, expectedKind: 'image', ownership: 'referenced' }).catch(value => value)
+    expect(error).toMatchObject({ name: 'Error', code: 'EACCES', message: expect.stringContaining('写入预览失败') })
+    expect(error.message).not.toContain(sourcePath)
   })
 
   it('预热覆盖图像、原生工具与临时文件清理，并记录分阶段耗时', async () => {

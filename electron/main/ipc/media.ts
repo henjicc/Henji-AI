@@ -56,19 +56,21 @@ function readOwnership(value: unknown): LocalMediaOwnership {
 
 function parseImportFromPathPayload(input: unknown): ImportMediaFromPathRequest {
   const record = parseRecord(input)
-  const { importId, sourcePath, mimeType } = record
+  const { importId, sourcePath, mimeType, verifyContent } = record
   if (typeof importId !== 'string' || typeof sourcePath !== 'string') {
     throw new Error('Expected media import id and source path')
   }
   if (mimeType !== undefined && typeof mimeType !== 'string') {
     throw new Error('Expected optional media mime type')
   }
+  if (verifyContent !== undefined && typeof verifyContent !== 'boolean') throw new Error('Expected optional media content verification')
   return {
     importId,
     sourcePath,
     expectedKind: readMediaKind(record.expectedKind),
     ownership: readOwnership(record.ownership),
     mimeType,
+    ...(verifyContent !== undefined ? { verifyContent } : {}),
   }
 }
 

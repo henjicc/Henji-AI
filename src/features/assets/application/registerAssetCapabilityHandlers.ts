@@ -1,4 +1,5 @@
 import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
+import { importLocalMediaPath } from './localMediaImportService'
 import { registerAppStoreIconHandlers } from './registerAppStoreIconHandlers'
 
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
@@ -20,6 +21,7 @@ export function registerAssetCapabilityHandlers(
   registrar: ApplicationCapabilityHandlerRegistrar
 ): void {
   registerAppStoreIconHandlers(registrar)
+  registrar.registerHandler('import_local_media', (input, context) => importLocalMediaPath(input, context.signal))
   registrar.registerHandler('query_assets', async (input) => {
     const parsed = parseCapabilityInput<AssetQueryInput>('query_assets', input)
     return await assetApplicationService.query(parsed)

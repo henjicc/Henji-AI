@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 const create = vi.hoisted(() => vi.fn())
+const logError = vi.hoisted(() => vi.fn())
+vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: vi.fn(), error: logError }) }))
 vi.mock('@/commands/assetLibrary', () => ({ createAsset: create }))
 import { addMediaReferenceToLibrary, resolveLocalAssetPath } from './assetCollectionService'
 
@@ -23,4 +25,19 @@ describe('resolveLocalAssetPath', () => {
     expect(resolveLocalAssetPath('https://example.com/demo.png')).toBeNull()
     expect(resolveLocalAssetPath('blob:demo')).toBeNull()
   })
+})
+
+it('登记失败保留数据库错误码和取消身份，剥离输入路径', async () => {
+  const filePath = 'D:/private/voice.wav'
+  for (const [name, code] of [['SqliteError', 'SQLITE_BUSY'], ['AbortError', 'ABORT_ERR']]) {
+    const original = Object.assign(new Error(`失败 '${filePath}'`), { name, code })
+    original.stack = `Error: failed\n    at databaseWrite (${filePath}:9:2)`
+    create.mockRejectedValueOnce(original)
+    const error = await addMediaReferenceToLibrary({ filePath, mediaType: 'audio', source: 'imported' }).catch(value => value)
+    expect(error).toMatchObject({ name, code, message: "失败 '[本地路径]'" })
+    const logged = logError.mock.calls.at(-1)![1].error
+    expect(logged).toBeInstanceOf(Error); expect(logged).toBe(error)
+    expect(logged.stack).toContain('databaseWrite'); expect(logged.stack).not.toContain(filePath)
+    expect(logError.mock.calls.at(-1)![1].context).not.toHaveProperty('error')
+  }
 })

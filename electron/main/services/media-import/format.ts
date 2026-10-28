@@ -40,6 +40,22 @@ export const EXTENSION_FORMATS: Readonly<Record<string, DetectedMediaFormat>> = 
   '.pcm': { kind: 'audio', mimeType: 'audio/pcm', extension: 'pcm', durationProbe: 'optional' },
 }
 
+/** 助手导入由实际解析器补齐专业格式，不改变界面和字节导入的格式表。 */
+export const IMPORT_EXTENSION_FORMATS: Readonly<Record<string, DetectedMediaFormat>> = {
+  ...EXTENSION_FORMATS,
+  '.wmv': { kind: 'video', mimeType: 'video/x-ms-wmv', extension: 'wmv' },
+  '.flv': { kind: 'video', mimeType: 'video/x-flv', extension: 'flv' },
+  '.3gp': { kind: 'video', mimeType: 'video/3gpp', extension: '3gp' },
+  '.ts': { kind: 'video', mimeType: 'video/mp2t', extension: 'ts' },
+  '.aiff': { kind: 'audio', mimeType: 'audio/aiff', extension: 'aiff' },
+  '.aif': { kind: 'audio', mimeType: 'audio/aiff', extension: 'aif' },
+  '.wma': { kind: 'audio', mimeType: 'audio/x-ms-wma', extension: 'wma' },
+  '.tif': { kind: 'image', mimeType: 'image/tiff', extension: 'tif' },
+  '.tiff': { kind: 'image', mimeType: 'image/tiff', extension: 'tiff' },
+  '.heic': { kind: 'image', mimeType: 'image/heic', extension: 'heic' },
+  '.heif': { kind: 'image', mimeType: 'image/heif', extension: 'heif' },
+}
+
 function startsWith(bytes: Uint8Array, signature: number[], offset = 0): boolean {
   return signature.every((value, index) => bytes[offset + index] === value)
 }
@@ -48,7 +64,7 @@ function ascii(bytes: Uint8Array, offset: number, length: number): string {
   return Buffer.from(bytes.subarray(offset, offset + length)).toString('ascii')
 }
 
-function detectBySignature(bytes: Uint8Array, extensionHint: string): DetectedMediaFormat | null {
+export function detectBySignature(bytes: Uint8Array, extensionHint: string, includeImportFormats = false): DetectedMediaFormat | null {
   if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return EXTENSION_FORMATS['.png']
   if (startsWith(bytes, [0xff, 0xd8, 0xff])) return EXTENSION_FORMATS['.jpg']
   if (ascii(bytes, 0, 6) === 'GIF87a' || ascii(bytes, 0, 6) === 'GIF89a') return EXTENSION_FORMATS['.gif']
@@ -57,6 +73,7 @@ function detectBySignature(bytes: Uint8Array, extensionHint: string): DetectedMe
   if (ascii(bytes, 4, 4) === 'ftyp') {
     const brand = ascii(bytes, 8, 4).toLowerCase()
     if (brand === 'avif' || brand === 'avis') return EXTENSION_FORMATS['.avif']
+    if (includeImportFormats && ['heic', 'heix', 'hevc', 'hevx', 'mif1', 'msf1'].includes(brand)) return IMPORT_EXTENSION_FORMATS[extensionHint === '.heic' ? '.heic' : '.heif']
     if (extensionHint === '.m4a' || brand.startsWith('m4a')) return EXTENSION_FORMATS['.m4a']
     if (extensionHint === '.mov' || brand === 'qt  ') return EXTENSION_FORMATS['.mov']
     return EXTENSION_FORMATS['.mp4']
@@ -83,11 +100,11 @@ function detectBySignature(bytes: Uint8Array, extensionHint: string): DetectedMe
   return null
 }
 
-export function detectMediaFormat(bytes: Uint8Array, fileName: string): DetectedMediaFormat {
+export function detectMediaFormat(bytes: Uint8Array, fileName: string, options: { allowRawPcm?: boolean } = {}): DetectedMediaFormat {
   const extensionHint = path.extname(fileName).toLowerCase()
   const detected = detectBySignature(bytes, extensionHint)
   const expected = EXTENSION_FORMATS[extensionHint]
-  if (!detected || !expected || detected.kind !== expected.kind) {
+  if (!detected || !expected || detected.kind !== expected.kind || (detected.extension === 'pcm' && options.allowRawPcm === false)) {
     throw new Error('Unsupported or disguised media file')
   }
   return detected

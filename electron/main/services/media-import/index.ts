@@ -1,3 +1,4 @@
+import { mediaErrorDetails, redactMediaError } from '../../../../src/core/media/localMediaImportSafety'
 import crypto from 'node:crypto'
 import { registerOwnedMedia } from '../media-recycle/queue'
 import fs from 'node:fs'
@@ -20,6 +21,7 @@ import { loadSharp } from '../image/sharp-loader'
 import { createMainLogger } from '../logging'
 import { withMediaHeavyTask } from './concurrency'
 import { detectMediaFormat, type DetectedMediaFormat } from './format'
+import { validateLocalMediaSource } from './sourceValidation'
 import { probeLocalMedia, warmNativeMediaTools, writeVideoPoster } from './probe'
 import { writeOwnedMediaPreview } from '../asset-library/thumbnailService'
 
@@ -338,36 +340,29 @@ async function runImport(
       event: 'media_import.failed',
       requestId: importId,
       context: { expectedKind, ownership, warmupState, timings, totalMs: roundMs(performance.now() - started) },
-      error,
+      error: mediaErrorDetails(error),
     })
     throw error
   }
 }
 
 export async function importMediaFromPath(request: ImportMediaFromPathRequest): Promise<LocalMediaImportResult> {
-  return await runImport(request.importId, request.expectedKind, request.ownership, async () => {
-    const validationStarted = performance.now()
-    const validated = await validateSourcePath(request.sourcePath, request.expectedKind)
-    const validationMs = roundMs(performance.now() - validationStarted)
-    const persistenceStarted = performance.now()
-    const stored = request.ownership === 'referenced'
-      ? {
-          fullPath: request.sourcePath,
-          sizeBytes: validated.sizeBytes,
-          cacheKey: referencedCacheKey(request.sourcePath, validated.sizeBytes, validated.mtimeMs),
-          cacheHit: true,
-        }
-      : await storePathManaged(request.sourcePath, validated.format)
-    if (request.ownership === 'referenced') {
-      allowMediaRoot(path.dirname(request.sourcePath))
-    }
-    return {
-      format: validated.format,
-      stored,
-      validationMs,
-      persistenceMs: roundMs(performance.now() - persistenceStarted),
-    }
-  })
+  try {
+    return await runImport(request.importId, request.expectedKind, request.ownership, async () => {
+      const validationStarted = performance.now()
+      const validated = request.verifyContent
+        ? await validateLocalMediaSource(request.sourcePath, request.expectedKind, false)
+        : { ...await validateSourcePath(request.sourcePath, request.expectedKind), sourcePath: request.sourcePath, realPath: request.sourcePath }
+      const validationMs = roundMs(performance.now() - validationStarted)
+      const persistenceStarted = performance.now()
+      const stored = request.ownership === 'referenced'
+        ? { fullPath: validated.sourcePath, sizeBytes: validated.sizeBytes,
+            cacheKey: referencedCacheKey(validated.sourcePath, validated.sizeBytes, validated.mtimeMs), cacheHit: true }
+        : await storePathManaged(validated.realPath, validated.format)
+      if (request.ownership === 'referenced') allowMediaRoot(path.dirname(validated.sourcePath))
+      return { format: validated.format, stored, validationMs, persistenceMs: roundMs(performance.now() - persistenceStarted) }
+    })
+  } catch (error) { throw redactMediaError(error, [request.sourcePath]) }
 }
 
 export async function importMediaFromBytes(request: ImportMediaFromBytesRequest): Promise<LocalMediaImportResult> {

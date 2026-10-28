@@ -62,7 +62,7 @@ export async function importVideoEditProjectFiles(raw: unknown, signal: AbortSig
   const documentRef: DocumentRef = input.documentRef; const id = documentRef.id
   const owner = requireVideoEditInstance(id)
   const container = owner.session.documentMeta.container
-  if (container.kind !== 'project') throw rejectBeforeWrite('这份剪辑不在项目里，没有可导入的项目文件夹。请先用 move_document 把剪辑移进项目，或改用 import_video_edit_folder 请用户选择文件夹。', { reason: 'not_in_project' })
+  if (container.kind !== 'project') throw rejectBeforeWrite('这份剪辑不在项目里，没有可导入的项目文件夹。请先用 move_document 把剪辑移进项目，或改用 import_video_edit_folder 的 paths 直接提供任意绝对文件或目录路径。', { reason: 'not_in_project' })
   let binId: string | undefined
   if (input.binRef) {
     const childId = input.binRef.id.startsWith(`${id}:`) ? input.binRef.id.slice(id.length + 1) : undefined

@@ -8,7 +8,7 @@ import { readVideoInfo } from '../video/ops'
 import type { AssetMediaType } from './types'
 import { CODE_ASSET_LIMITS, CODE_ASSET_MIME, codeAssetContract, parseCodeAssetBytes, decodeCodeAsset } from '../../../../src/core/videoEdit/codeAsset'
 import { readFileBytes } from '../system'
-import { EXTENSION_FORMATS } from '../media-import/format'
+import { IMPORT_EXTENSION_FORMATS } from '../media-import/format'
 
 export interface MediaInspectionResult {
   mimeType: string
@@ -38,7 +38,7 @@ export function normalizeAssetPath(filePath: string): string {
 }
 
 export async function inspectMedia(filePath: string, mediaType: AssetMediaType): Promise<MediaInspectionResult> {
-  const format = EXTENSION_FORMATS[path.extname(filePath).toLowerCase()]
+  const format = IMPORT_EXTENSION_FORMATS[path.extname(filePath).toLowerCase()]
   const stat = await fs.stat(filePath)
   if (!stat.isFile()) throw new Error('Asset path is not a file')
   let width: number | null = null

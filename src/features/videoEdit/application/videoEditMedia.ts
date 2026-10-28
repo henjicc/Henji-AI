@@ -1,3 +1,4 @@
+import { mediaErrorDetails } from '@/core/media/localMediaImportSafety'
 import { reportVideoEditImport, withVideoEditImportTask, type VideoEditImportTask, type VideoEditImportProgress } from './videoEditImportTask'
 import { autoCreateVideoEditProxies } from './videoEditProxy'
 import { ALL_FORMATS, Input, UrlSource } from 'mediabunny'
@@ -41,17 +42,17 @@ async function settleImportBatches<T, R>(values: readonly T[], operation: (value
   }
   signal?.throwIfAborted(); return results
 }
-export async function inspectVideoEditMedia(path: string, signal?: AbortSignal): Promise<VideoEditMedia> {
-  return boundedMetadata(() => inspectMedia(path, signal))
+export async function inspectVideoEditMedia(path: string, signal?: AbortSignal, verifyImport = false): Promise<VideoEditMedia> {
+  return boundedMetadata(() => inspectMedia(path, signal, verifyImport))
 }
-async function inspectMedia(path: string, signal?: AbortSignal): Promise<VideoEditMedia> {
+async function inspectMedia(path: string, signal?: AbortSignal, verifyImport = false): Promise<VideoEditMedia> {
   signal?.throwIfAborted()
   const platform = getPlatform()
   if (!await platform.system.fs.exists(path)) throw new Error('源文件已移动或丢失，请重新定位素材。')
   await platform.media.allowRoot(await platform.system.paths.dirname(path))
   // The file kind is only known after probing. A fixed kind gives the before/after stat identity
   // the same namespace, including for audio-only containers and still images.
-  const before = await platform.assetLibrary.inspectFileContent(path, 'video')
+  const before = await (verifyImport ? platform.assetLibrary.inspectFileContent(path, 'video', true) : platform.assetLibrary.inspectFileContent(path, 'video'))
   signal?.throwIfAborted()
   const bindContent = async (media: VideoEditMedia): Promise<VideoEditMedia> => {
     signal?.throwIfAborted()
@@ -73,7 +74,7 @@ async function inspectMedia(path: string, signal?: AbortSignal): Promise<VideoEd
   const forced = await videoEditNativeMediaProbe.forcedBackend()
   const nativeProbe = forced === 'browser' ? Promise.resolve<VideoEditNativeProbeOutcome>({ status: 'unavailable' }) : videoEditNativeMediaProbe.probe(path, signal).catch((error: unknown): VideoEditNativeProbeOutcome => {
     signal?.throwIfAborted()
-    logger.warn('原生素材探测异常，改用后备探测', { event: 'video_edit.media.inspect.native_failed', error })
+    logger.warn('原生素材探测异常，改用后备探测', { event: 'video_edit.media.inspect.native_failed', error: mediaErrorDetails(error, [path]) })
     return { status: 'unavailable' }
   })
   const [native, browser] = await Promise.all([nativeProbe, inspectBrowserMedia(path, signal)])
@@ -81,7 +82,7 @@ async function inspectMedia(path: string, signal?: AbortSignal): Promise<VideoEd
   const browserDecodes = browser.status === 'read' && Boolean(browser.media)
   let resolved: ReturnType<typeof resolveVideoEditMediaInspection>
   try { resolved = resolveVideoEditMediaInspection(path, native, browser, forced) } catch (error) {
-    logger.info('剪辑素材无法解码', { event: 'video_edit.media.inspect.undecodable', error, context: { native: native.status, browserDecodes, ...(forced ? { forced } : {}) } })
+    logger.info('剪辑素材无法解码', { event: 'video_edit.media.inspect.undecodable', error: mediaErrorDetails(error, [path]), context: { native: native.status, browserDecodes, ...(forced ? { forced } : {}) } })
     throw error
   }
   const { backend, nativeDecodes, fields } = resolved
@@ -121,7 +122,7 @@ function validateAssetMedia(media: VideoEditMedia, asset: AssetRecord): void {
   if (media.kind !== asset.mediaType || asset.width !== null && asset.width !== media.width || asset.height !== null && asset.height !== media.height) throw new Error('素材库与剪辑的源文件信息不一致，请重新定位源素材。')
 }
 /** `skipUnreadable`：本地文件读不出或解码不了时跳过并报告（文件夹导入），而不是让整批导入失败。素材库引用始终严格。 */
-export interface VideoEditImportOptions { skipUnreadable?: (path: string, reason: unknown) => void; task?: VideoEditImportTask; onProgress?: (progress: VideoEditImportProgress) => void; commit?: (update: (document: VideoEditDocument) => VideoEditDocument) => VideoEditDocument; progressOffset?: number; progressTotal?: number; duplicatePolicy?: 'skip' | 'import' }
+export interface VideoEditImportOptions { verifyImport?: boolean; skipUnreadable?: (path: string, reason: unknown) => void; task?: VideoEditImportTask; onProgress?: (progress: VideoEditImportProgress) => void; commit?: (update: (document: VideoEditDocument) => VideoEditDocument) => VideoEditDocument; progressOffset?: number; progressTotal?: number; duplicatePolicy?: 'skip' | 'import' }
 export async function importVideoEditSources(projectId: string, sources: VideoEditImportSource[], binId?: string, signal?: AbortSignal, afterImport?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument | Promise<VideoEditDocument>, preserveProgramAnchors: readonly string[] = [], options: VideoEditImportOptions = {}): Promise<string[]> {
   if (!options.task) return withVideoEditImportTask(projectId, signal, task => importVideoEditSources(projectId, sources, binId, task.controller.signal, afterImport, preserveProgramAnchors, { ...options, task }), { total: sources.length })
   const owner = requireVideoEditInstance(projectId)
@@ -165,7 +166,7 @@ export async function importVideoEditSources(projectId: string, sources: VideoEd
     if (existing && source.asset) validateAssetMedia(existing, source.asset)
     const media = existing ?? (source.asset?.mediaType === 'image' && source.asset.width && source.asset.height && /\.(png|jpe?g|webp|bmp|avif)$/i.test(source.path)
       ? { id: crypto.randomUUID(), path: source.path, name: source.asset.displayName, kind: 'image' as const, width: source.asset.width, height: source.asset.height, durationSeconds: 0 }
-      : await inspectVideoEditMedia(source.path, signal))
+      : await inspectVideoEditMedia(source.path, signal, options.verifyImport))
     if (existing && source.asset && !existing.assetContent?.contentIdentity && existing.kind !== 'image') {
       const current = await inspectVideoEditMedia(source.path, signal)
       if (current.durationSeconds !== existing.durationSeconds || Boolean(current.hasAudio) !== Boolean(existing.hasAudio) || JSON.stringify(current.frameRate) !== JSON.stringify(existing.frameRate) || current.frameRateMode !== existing.frameRateMode) throw new Error('旧引用的时长、帧率或音轨尚未核验，请先重新定位源素材。')
@@ -221,7 +222,7 @@ export async function importVideoEditSources(projectId: string, sources: VideoEd
   logger.info('导入剪辑素材完成', { event: 'video_edit.media.import.completed', context: { projectId, count: ids.length } })
   return ids
   } catch (error) {
-    logger.debug('导入剪辑素材未完成', { event: 'video_edit.media.import.failed', error, context: { projectId } }); throw error
+    logger.debug('导入剪辑素材未完成', { event: 'video_edit.media.import.failed', error: mediaErrorDetails(error, sources.flatMap(source => source.path ? [source.path] : [])), context: { projectId } }); throw error
   }
 }
 export async function importVideoEditPaths(projectId: string, paths: string[], binId?: string): Promise<string[]> {

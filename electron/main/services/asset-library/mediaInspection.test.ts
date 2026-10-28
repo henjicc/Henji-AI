@@ -34,6 +34,8 @@ it('无容器 PCM 探测失败仍可收录，其他音频失败继续上抛', as
 })
 
 it.each([
+  ['wmv', 'video', 'video/x-ms-wmv'], ['flv', 'video', 'video/x-flv'], ['3gp', 'video', 'video/3gpp'], ['ts', 'video', 'video/mp2t'],
+  ['aiff', 'audio', 'audio/aiff'], ['wma', 'audio', 'audio/x-ms-wma'], ['tif', 'image', 'image/tiff'], ['tiff', 'image', 'image/tiff'],
   ['aac', 'audio', 'audio/aac'], ['opus', 'audio', 'audio/opus'],
   ['mkv', 'video', 'video/x-matroska'], ['m4v', 'video', 'video/mp4'], ['avif', 'image', 'image/avif'],
 ] as const)('检查 %s 使用导入层同源 MIME', async (extension, kind, mimeType) => {

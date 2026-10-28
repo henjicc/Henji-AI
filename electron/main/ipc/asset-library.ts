@@ -45,8 +45,9 @@ export function registerAssetLibraryIpc(): void {
   registerIpcHandler('assetLibrary:inspectFileContent', input => {
     const record = parseRecord(input); const mediaType = requiredString(record, 'mediaType') as AssetMediaType
     if (!MEDIA_TYPES.has(mediaType)) throw new Error('Invalid asset media type')
-    return { filePath: requiredString(record, 'filePath'), mediaType }
-  }, ({ filePath, mediaType }) => inspectAssetFileContent(filePath, mediaType), assertTrustedApplicationSender)
+    if (record.verifyImport !== undefined && typeof record.verifyImport !== 'boolean') throw new Error('Invalid import verification')
+    return { filePath: requiredString(record, 'filePath'), mediaType, verifyImport: record.verifyImport === true }
+  }, ({ filePath, mediaType, verifyImport }) => verifyImport ? inspectAssetFileContent(filePath, mediaType, true) : inspectAssetFileContent(filePath, mediaType), assertTrustedApplicationSender)
   registerIpcHandler('assetLibrary:updateAsset', parseName, ({ id, name }) => updateAsset({ id, displayName: name }))
   registerIpcHandler('assetLibrary:deleteAsset', (input) => parseStringField(input, 'id'), deleteAsset)
   registerIpcHandler('assetLibrary:queryAssets', parseQuery, queryAssets)

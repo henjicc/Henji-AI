@@ -39,3 +39,14 @@ it('图标 IPC 沿用可信 sender 与统一 schema，拒绝任意路径并保�
   boundary.iconSave.mockRejectedValue(error)
   expect(await save(event, { appId: '6480446430' })).toMatchObject({ ok: false, error: { name: 'DocumentLocationError', message: error.message } })
 })
+
+it('显式导入验证选项传到主进程，普通素材身份检查保持原参数', async () => {
+  const handler = boundary.handlers.get('assetLibrary:inspectFileContent')!
+  boundary.content.mockResolvedValue({ sizeBytes: 10, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) })
+  expect(await handler(event, { filePath: 'D:/media.ts', mediaType: 'video', verifyImport: true })).toMatchObject({ ok: true })
+  expect(boundary.content).toHaveBeenLastCalledWith('D:/media.ts', 'video', true)
+  expect(await handler(event, { filePath: 'D:/media.ts', mediaType: 'video' })).toMatchObject({ ok: true })
+  expect(boundary.content).toHaveBeenLastCalledWith('D:/media.ts', 'video')
+  expect(await handler(event, { filePath: 'D:/media.ts', mediaType: 'video', verifyImport: 'yes' })).toMatchObject({ ok: false })
+  expect(boundary.content).toHaveBeenCalledTimes(2)
+})

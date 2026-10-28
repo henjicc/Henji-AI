@@ -8,6 +8,8 @@ export interface ImportMediaFromPathRequest {
   expectedKind: LocalMediaKind
   ownership: LocalMediaOwnership
   mimeType?: string
+  /** 助手按绝对路径导入时核验实际格式；界面与字节导入沿用既有行为。 */
+  verifyContent?: boolean
 }
 
 export interface ImportMediaFromBytesRequest {

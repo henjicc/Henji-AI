@@ -294,7 +294,7 @@ export interface HenjiAssetLibraryApi {
   touchAsset(id: string): Promise<void>
   checkPaths(filePaths: string[]): Promise<boolean[]>
   inspectAsset(id: string): Promise<HenjiAssetRecord>
-  inspectFileContent(filePath: string, mediaType: HenjiAssetMediaType): Promise<HenjiAssetFileContent>
+  inspectFileContent(filePath: string, mediaType: HenjiAssetMediaType, verifyImport?: boolean): Promise<HenjiAssetFileContent>
   inspectAssets(ids: string[]): Promise<HenjiAssetRecord[]>
   relocateAsset(id: string, filePath: string): Promise<HenjiAssetRecord>
   listLibraries(): Promise<HenjiAssetLibraryRecord[]>

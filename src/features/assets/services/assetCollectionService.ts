@@ -1,3 +1,4 @@
+import { redactMediaError } from '@/core/media/localMediaImportSafety'
 import { createAsset } from '@/commands/assetLibrary'
 import { createLogger } from '@/core/logging'
 import { generatedMediaName } from '@/core/documents/generatedMediaName'
@@ -45,7 +46,8 @@ export async function addMediaReferenceToLibrary(input: CollectMediaReferenceInp
     logger.info('资产收录完成', { event: 'asset.collection.completed', assetId: asset.id, mediaType: asset.mediaType })
     return asset
   } catch (cause) {
-    logger.error('资产收录失败', cause, { event: 'asset.collection.failed', mediaType: input.mediaType, source: input.source })
-    throw cause
+    const error = redactMediaError(cause, [filePath])
+    logger.error('资产收录失败', { event: 'asset.collection.failed', context: { mediaType: input.mediaType, source: input.source }, error })
+    throw error
   }
 }

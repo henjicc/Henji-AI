@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import { validateLocalMediaSource } from '../media-import/sourceValidation'
 import { generatedMediaName } from '../../../../src/core/documents/generatedMediaName'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -97,7 +98,8 @@ function assetContentIdentity(asset: Pick<AssetDto, 'filePath' | 'mediaType'>, i
 let fileContentActive = 0
 const fileContentQueue: Array<() => void> = []
 /** Verify a saved original path independently of the lifetime of its library row. */
-export async function inspectAssetFileContent(filePath: string, mediaType: AssetDto['mediaType']): Promise<AssetFileContent> {
+export async function inspectAssetFileContent(filePath: string, mediaType: AssetDto['mediaType'], verifyImport = false): Promise<AssetFileContent> {
+  if (verifyImport) await validateLocalMediaSource(filePath, undefined, false)
   if (fileContentActive >= 2) {
     if (fileContentQueue.length >= 200) throw new Error('源文件检查繁忙，请稍后重试。')
     await new Promise<void>(resolve => fileContentQueue.push(resolve))

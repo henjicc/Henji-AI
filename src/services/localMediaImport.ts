@@ -33,6 +33,15 @@ const EXTENSION_KINDS: Record<string, LocalMediaKind> = {
   mp3: 'audio', wav: 'audio', flac: 'audio', ogg: 'audio', m4a: 'audio', aac: 'audio', opus: 'audio', pcm: 'audio',
 }
 
+/** 助手路径导入还支持由原生解析器识别的专业容器，不改变界面上传端口的格式选择。 */
+export function inferLocalMediaImportKind(path: string): LocalMediaKind | null {
+  const extension = path.split('.').at(-1)?.toLowerCase() ?? ''
+  if (['wmv', 'flv', '3gp', 'ts'].includes(extension)) return 'video'
+  if (['aiff', 'aif', 'wma'].includes(extension)) return 'audio'
+  if (['tif', 'tiff', 'heic', 'heif'].includes(extension)) return 'image'
+  return inferLocalMediaKind({ name: path, type: '' })
+}
+
 export function inferLocalMediaKind(file: Pick<File, 'name' | 'type'>): LocalMediaKind | null {
   const mimeKind = file.type.split('/')[0]
   if (mimeKind === 'image' || mimeKind === 'video' || mimeKind === 'audio') return mimeKind

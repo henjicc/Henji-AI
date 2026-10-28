@@ -20,7 +20,8 @@ export interface AssetLibraryPlatform {
   touchAsset(id: string): Promise<void>
   checkPaths(filePaths: string[]): Promise<boolean[]>
   inspectAsset(id: string): Promise<AssetRecord>
-  inspectFileContent(filePath: string, mediaType: AssetMediaType): Promise<AssetFileContent>
+  /** verifyImport 仅用于显式路径导入；普通资产身份检查不探测媒体格式。 */
+  inspectFileContent(filePath: string, mediaType: AssetMediaType, verifyImport?: boolean): Promise<AssetFileContent>
   inspectAssets(ids: string[]): Promise<AssetRecord[]>
   relocateAsset(id: string, filePath: string): Promise<AssetRecord>
   listLibraries(): Promise<AssetLibraryRecord[]>

@@ -78,7 +78,7 @@ import { uniqueVideoEditOutputPath, videoEditProjectOutputDirectory, videoEditQu
 import { VideoEditExportPresetExecutor, VideoEditExportPresetMutationExecutor } from './videoEditExportPresetReflection'
 import { VideoEditSourceExecutor } from './videoEditSourceExecutor'
 import { importVideoEditSources } from './videoEditMedia'
-import { chooseVideoEditFolders } from './videoEditFolderImport'
+import { chooseVideoEditFolders, importVideoEditPathsAndFolders, type VideoEditImportSkip } from './videoEditFolderImport'
 import { importVideoEditProjectFiles, settleVideoEditPartialImport } from './videoEditProjectFileImport'
 import { importVideoEditProjectFilesCapability } from '@/core/application-control/domains/videoEdit/videoEditProjectFileImportCapability'
 import { collectVideoEditOutput } from './videoEditOutputs'
@@ -325,20 +325,30 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
         const resultRef = { kind: 'asset' as const, id: asset.id }
         return { resultRef, documentRef: input.documentRef, message: '输出已加入资产库，可通过此素材引用加入画布。', verification: { verified: true, target: resultRef, condition: '正式资产检查已核对已发布输出的固定原路径与内容身份。' } }
       }
-      const input = definition.inputSchema.parse(raw) as { documentRef: { kind: 'video_edit.document'; id: string }; clipRef?: { id: string }; frame?: number; assetRef?: { id: string } }
+      const input = definition.inputSchema.parse(raw) as { documentRef: { kind: 'video_edit.document'; id: string }; clipRef?: { id: string }; frame?: number; assetRef?: { id: string }; paths?: string[] }
       const id = input.documentRef.id; const owner = requireVideoEditInstance(id)
       let importedItemIds: string[] | undefined
       switch (definition.id) {
         case 'import_video_edit_folder': {
           const contentVersion = owner.contentVersion
+          const skipped: VideoEditImportSkip[] = []
+          const options = { signal: context.signal, ...(input.paths ? { validateFiles: true, skipUnreadableFiles: true } : {}), onSkipped: (value: VideoEditImportSkip) => skipped.push(value) }
           let result
-          try { result = await chooseVideoEditFolders(id, undefined, { signal: context.signal }) }
-          catch (error) { return settleVideoEditPartialImport(error, owner, input.documentRef) }
-          if (isVideoEditContentCurrent(owner, contentVersion) && !result.skipped) throw new Error('未导入素材，用户取消选择或所选目录无法读取。')
+          try { result = input.paths ? await importVideoEditPathsAndFolders(id, input.paths, undefined, undefined, options) : await chooseVideoEditFolders(id, undefined, options) }
+          catch (error) {
+            if (!input.paths && isVideoEditContentCurrent(owner, contentVersion)) throw notExecutedFailure(error)
+            return settleVideoEditPartialImport(error, owner, input.documentRef)
+          }
+          const skippedEntries = skipped.slice(0, 200).map(value => ({ name: value.path.split(/[\\/]/).at(-1) || '素材', reason: value.reason,
+            message: value.message ?? ({ unsupported: '格式不支持，请换用受支持的图片、视频或音频。', duplicate: '同一文件已在素材箱中或本次重复给出。', unreadable: '路径不存在、无权读取、无法解码或网络盘不可达。请核对绝对路径、授予读取权限或恢复磁盘连接后重试。', repeated_folder: '同一真实目录重复出现或存在目录回环，已跳过。', outside_project: '链接目标超出项目边界，请使用 import_video_edit_folder 的 paths 提供绝对路径。' })[value.reason] }))
+          if (input.paths ? !result.itemIds.length && !result.createdBinCount : isVideoEditContentCurrent(owner, contentVersion)) {
+            if (input.paths && skipped.some(value => value.reason !== 'duplicate' && value.reason !== 'repeated_folder')) throw notExecutedFailure(new Error(`本次没有导入内容：${skippedEntries.map(value => `${value.name}：${value.message}`).join('；')}`))
+            if (!result.skipped) throw notExecutedFailure(new Error(input.paths ? '这些路径下没有可导入的媒体。' : '未导入素材，用户取消选择或所选目录无法读取。'))
+          }
           await saveVideoEdit(id)
           const current = requireVideoEditInstance(id)
           const verified = await verifyVideoEditSaved(id, current.document)
-          return { resultRef: input.documentRef, verification: { verified, target: input.documentRef, condition: '已从剪辑文件回读并核对导入的素材与素材箱。' }, message: `已导入 ${result.itemIds.length} 个素材，跳过 ${result.skipped} 项。` }
+          return { resultRef: input.documentRef, verification: { verified, target: input.documentRef, condition: '已从剪辑文件回读并核对导入的素材与素材箱。' }, message: `已导入或复用 ${result.itemIds.length} 个素材，跳过 ${result.skipped} 项。`, itemRefs: result.itemIds.slice(0, 64).map(itemId => ({ kind: 'video_edit.item', id: `${id}:${itemId}` })), skippedEntries, truncated: result.itemIds.length > 64 || skipped.length > 200 }
         }
         case 'undo_video_edit': undoVideoEdit(id); await saveVideoEdit(id); break
         case 'redo_video_edit': undoVideoEdit(id, true); await saveVideoEdit(id); break
