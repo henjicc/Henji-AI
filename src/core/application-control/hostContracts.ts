@@ -3,9 +3,11 @@ import { z } from 'zod'
 import { toolboxToolIdSchema } from '../toolbox/toolCatalog'
 import { VIDEO_EDIT_FOCUSABLE_PANELS } from '../videoEdit/panels'
 import { videoEditSelectedCodeElementContextSchema } from '../videoEdit/codeElementSelection'
+import { truncateCodePoints } from './identifiers'
 
 export const APPLICATION_HOST_CONTRACT_VERSION = 'application-host/v1' as const
 export const HOST_ANNOTATION_PREVIEW_CHARACTERS = 200
+export const HOST_ANNOTATION_PREVIEW_ITEMS = 12
 
 export const hostScopeSchema = z.string().regex(/^[a-z][a-z0-9_.-]{1,63}$/)
 export type HostScope = z.infer<typeof hostScopeSchema>
@@ -18,6 +20,36 @@ export const hostScopeRevisionsSchema = z.object({
   assets: z.number().int().nonnegative(),
 }).catchall(z.number().int().nonnegative())
 export type HostScopeRevisions = z.infer<typeof hostScopeRevisionsSchema>
+
+const hostAnnotationListSchema = z.object({ count: z.number().int().nonnegative(), items: z.array(z.object({ id: z.string().min(1), ref: z.string().min(1), text: z.string().max(HOST_ANNOTATION_PREVIEW_CHARACTERS), truncated: z.boolean().optional(), frame: z.number().int().nonnegative(), sequenceRef: z.string().min(1) }).strict()).max(HOST_ANNOTATION_PREVIEW_ITEMS) }).strict()
+const annotationCountSchema = z.number().int().nonnegative()
+
+type HostAnnotationStatus = 'draft' | 'open' | 'addressed' | 'resolved'
+interface HostAnnotationDocument {
+  id: string
+  sequences: ReadonlyArray<{ id: string; annotations: ReadonlyArray<{ id: string; text: string; frame: number; status: HostAnnotationStatus }> }>
+}
+
+/**
+ * 剪辑上下文里的批注摘要。draft（写了未发送）与 open（已发送待处理）分开列，
+ * 用户口头让助手“按批注改”时不必先点发送；只读取，不改任何状态。
+ */
+export function hostAnnotationContext(document: HostAnnotationDocument) {
+  const list = (status: HostAnnotationStatus) => {
+    const marks = document.sequences.flatMap(sequence => sequence.annotations.filter(mark => mark.status === status).map(mark => ({
+      id: mark.id,
+      ref: `video_edit.annotation:${document.id}:${mark.id}`,
+      text: truncateCodePoints(mark.text, HOST_ANNOTATION_PREVIEW_CHARACTERS),
+      ...(mark.text.length > HOST_ANNOTATION_PREVIEW_CHARACTERS ? { truncated: true } : {}),
+      frame: mark.frame,
+      sequenceRef: `video_edit.sequence:${document.id}:${sequence.id}`,
+    })))
+    return { count: marks.length, items: marks.slice(0, HOST_ANNOTATION_PREVIEW_ITEMS) }
+  }
+  const annotationCounts: Record<HostAnnotationStatus, number> = { draft: 0, open: 0, addressed: 0, resolved: 0 }
+  for (const sequence of document.sequences) for (const mark of sequence.annotations) annotationCounts[mark.status] += 1
+  return { openAnnotations: list('open'), draftAnnotations: list('draft'), annotationCounts }
+}
 
 export const hostContextSnapshotSchema = z.object({
   schemaVersion: z.literal(APPLICATION_HOST_CONTRACT_VERSION),
@@ -82,7 +114,10 @@ export const hostContextSnapshotSchema = z.object({
     elementOverrides: z.object({ count: z.number().int().nonnegative(), items: z.array(z.object({ clipRef: z.string(), elementId: z.string(), fields: z.array(z.string()), missing: z.boolean() }).strict()).max(12) }).strict().optional(),
     currentStyle: z.object({ ref: z.string().nullable(), name: z.string(), version: z.number().int().nullable(), summary: z.string(), userPreferences: styleMemoryEntriesSchema.optional() }).strict().optional(),
     presetPreferences: z.string().optional(),
-    openAnnotations: z.object({ count: z.number().int().nonnegative(), items: z.array(z.object({ id: z.string().min(1), ref: z.string().min(1), text: z.string().max(HOST_ANNOTATION_PREVIEW_CHARACTERS), truncated: z.boolean().optional(), frame: z.number().int().nonnegative(), sequenceRef: z.string().min(1) }).strict()).max(12) }).strict(),
+    openAnnotations: hostAnnotationListSchema,
+    /** 用户写了还没点发送的批注；用户口头说“按批注改”时它们同样是给助手的要求。 */
+    draftAnnotations: hostAnnotationListSchema.optional(),
+    annotationCounts: z.object({ draft: annotationCountSchema, open: annotationCountSchema, addressed: annotationCountSchema, resolved: annotationCountSchema }).strict().optional(),
     targetTrackRefs: z.array(z.string().min(1).max(500)).max(32),
   }).strict().optional(),
   assets: z.object({

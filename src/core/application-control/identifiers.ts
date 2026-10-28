@@ -42,6 +42,39 @@ export const applicationRefSchema = z.object({
 }).strict()
 export type ApplicationRef = z.infer<typeof applicationRefSchema>
 
+const APPLICATION_REF_LABEL_MAX = 200
+
+/** 取不超过 maxUnits 个 UTF-16 单位的前缀，按码点截断，不留孤立的代理项。 */
+export function truncateCodePoints(text: string, maxUnits: number): string {
+  if (text.length <= maxUnits) return text
+  let result = ''
+  for (const character of text) {
+    if (result.length + character.length > maxUnits) break
+    result += character
+  }
+  return result
+}
+
+/**
+ * label 只是给人和模型看的提示，领域常把名称或正文原样塞进来（批注、字幕可能有几百字）。
+ * 契约限 1–200 个 UTF-16 单位，任何一条超限都会让整页结果被拒，所以在公共出口统一收敛：
+ * 折叠空白、按码点截断不劈开代理对，空串返回 undefined 让调用方省略 label。
+ */
+export function toApplicationRefLabel(value: string | null | undefined): string | undefined {
+  const text = (value ?? '').replace(/\s+/g, ' ').trim()
+  if (!text) return undefined
+  if (text.length <= APPLICATION_REF_LABEL_MAX) return text
+  return `${truncateCodePoints(text, APPLICATION_REF_LABEL_MAX - 1)}…`
+}
+
+/** 统一规范 provider 返回的引用：label 交给 toApplicationRefLabel，其余字段原样保留。 */
+export function normalizeApplicationRefLabel<T extends object>(ref: T): T {
+  if (!('label' in ref)) return ref
+  const { label, ...rest } = ref as T & { label?: unknown }
+  const normalized = typeof label === 'string' ? toApplicationRefLabel(label) : undefined
+  return (normalized === undefined ? rest : { ...rest, label: normalized }) as T
+}
+
 export const applicationMediaRefSchema = applicationRefSchema.extend({
   kind: z.enum(['media.image', 'media.video', 'media.audio', 'generation.result']),
 }).strict()

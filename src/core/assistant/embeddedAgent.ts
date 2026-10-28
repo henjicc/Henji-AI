@@ -1,17 +1,22 @@
 import { z } from 'zod'
-import { applicationRefSchema } from '../application-control/identifiers'
+import { applicationRefSchema, truncateCodePoints } from '../application-control/identifiers'
 import { agentAttachmentsSchema, type AgentAttachment, type AgentMediaAttachment } from './attachments'
 import { HOST_ANNOTATION_PREVIEW_CHARACTERS, type HostContextSnapshot } from '../application-control/hostContracts'
 
 export const EMBEDDED_CONTEXT_MAX_CHARACTERS = 16000
+type HostAnnotationList = NonNullable<HostContextSnapshot['videoEdit']>['openAnnotations']
+function promptAnnotationList(list: HostAnnotationList): HostAnnotationList {
+  return { ...list, items: list.items.map(item => ({ ...item,
+    text: truncateCodePoints(item.text, HOST_ANNOTATION_PREVIEW_CHARACTERS), ...(item.text.length > HOST_ANNOTATION_PREVIEW_CHARACTERS ? { truncated: true } : {}) })) }
+}
 /** 高频宿主摘要只含首段；完整选区随独立快照保存，标注正文通过实体读取。 */
 export function buildEmbeddedPromptContext(snapshot: HostContextSnapshot): string {
   const context = { documentId: snapshot.documentId, projectId: snapshot.projectId, workspace: snapshot.workspace, canvas: snapshot.canvas,
     surface: snapshot.surface ? { ...snapshot.surface, selectedRefs: [...snapshot.surface.selectedRefs ?? []] } : undefined,
     ...(snapshot.videoEdit ? { videoEdit: { ...snapshot.videoEdit,
       selectedClipRefs: [...snapshot.videoEdit.selectedClipRefs], targetTrackRefs: [...snapshot.videoEdit.targetTrackRefs],
-      openAnnotations: { ...snapshot.videoEdit.openAnnotations, items: snapshot.videoEdit.openAnnotations.items.map(item => ({ ...item,
-        text: item.text.slice(0, HOST_ANNOTATION_PREVIEW_CHARACTERS), ...(item.text.length > HOST_ANNOTATION_PREVIEW_CHARACTERS ? { truncated: true } : {}) })) },
+      openAnnotations: promptAnnotationList(snapshot.videoEdit.openAnnotations),
+      ...(snapshot.videoEdit.draftAnnotations ? { draftAnnotations: promptAnnotationList(snapshot.videoEdit.draftAnnotations) } : {}),
     } } : {}),
     read: '标注完整正文用 read_application_entity 按 ref 读取；完整选区用 read_assistant_context 按发送时选区引用分页读取。',
     selectionCounts: { selectedRefs: snapshot.surface?.selectedRefs?.length ?? 0,
@@ -19,7 +24,7 @@ export function buildEmbeddedPromptContext(snapshot: HostContextSnapshot): strin
     truncated: false,
   }
   let serialized = JSON.stringify(context)
-  for (const items of [context.surface?.selectedRefs, context.videoEdit?.selectedClipRefs, context.videoEdit?.targetTrackRefs, context.videoEdit?.openAnnotations.items]) {
+  for (const items of [context.surface?.selectedRefs, context.videoEdit?.selectedClipRefs, context.videoEdit?.targetTrackRefs, context.videoEdit?.draftAnnotations?.items, context.videoEdit?.openAnnotations.items]) {
     while (serialized.length > EMBEDDED_CONTEXT_MAX_CHARACTERS && items?.length) {
       items.pop(); context.truncated = true; serialized = JSON.stringify(context)
     }

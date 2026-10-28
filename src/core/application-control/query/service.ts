@@ -10,7 +10,7 @@ import type {
   ApplicationControlAccessContext,
   ApplicationReflectionRegistry,
 } from '../registry'
-import type { ApplicationDataClass, ApplicationRef, JsonValue } from '../identifiers'
+import { normalizeApplicationRefLabel, type ApplicationDataClass, type ApplicationRef, type JsonValue } from '../identifiers'
 
 export interface ApplicationObservationArtifactInput {
   source: 'application_control_observation'
@@ -77,12 +77,13 @@ function relationRefs(item: ApplicationStructuredObservationItem): ApplicationRe
     for (const candidate of candidates) {
       if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) continue
       if (typeof candidate.kind === 'string' && typeof candidate.id === 'string') {
-        refs.push({
+        // 属性值里的引用来自各领域，label 常是原样名称或正文，放进响应前同样收敛到契约长度。
+        refs.push(normalizeApplicationRefLabel({
           kind: candidate.kind,
           id: candidate.id,
           ...(typeof candidate.revision === 'number' ? { revision: candidate.revision } : {}),
           ...(typeof candidate.label === 'string' ? { label: candidate.label } : {}),
-        })
+        }))
       }
     }
   }

@@ -193,4 +193,23 @@ describe('ApplicationObservationQueryService', () => {
     }, context)
     expect(result.items).toEqual([expect.objectContaining({ kind: 'operation_summary' })])
   })
+
+  it('属性值里引用的 label 超长或为空时，关系展开与可用性结果仍能通过契约', async () => {
+    for (const [label, expected] of [['名'.repeat(500), 200], ['', undefined]] as const) {
+      const registry = new ApplicationReflectionRegistry(catalogVersion)
+      registry.register(registration('alpha.item', 'alpha', {
+        'alpha.name': '甲',
+        'alpha.link': { kind: 'beta.item', id: 'one', label },
+      }, { 'alpha.items': 1 }))
+      registry.register(registration('beta.item', 'beta', { 'beta.name': '乙' }, { 'beta.items': 2 }))
+      const result = await new ApplicationObservationQueryService({ registry }).observe({
+        contractVersion: 'application-control/v2',
+        requestId: 'observe-relation-label',
+        refs: [{ kind: 'alpha.item', id: 'one' }],
+        selection: { includeSchemas: false, includeValues: true, includeAvailability: true, includeOperations: false, relationDepth: 1 },
+      }, context)
+      const related = result.items.find((item) => item.kind === 'property_availability' && item.ref.kind === 'beta.item')
+      expect(related?.kind === 'property_availability' ? related.ref.label?.length : 'missing').toBe(expected)
+    }
+  })
 })

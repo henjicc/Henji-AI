@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   APPLICATION_HOST_CONTRACT_VERSION,
+  hostAnnotationContext,
   hostContextSnapshotSchema,
 } from './hostContracts'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from './builtinApplicationCapabilityRegistry'
@@ -18,6 +19,22 @@ describe('application host contracts', () => {
     for (const focusedPanel of VIDEO_EDIT_FOCUSABLE_PANELS) {
       expect(videoEdit.safeParse({ documentRef: 'video_edit.document:p', sequenceRef: null, frame: 0, playing: false, inFrame: null, outFrame: null, focusedPanel, selectedClipRefs: [], openAnnotations: { count: 0, items: [] }, targetTrackRefs: [] }).success, focusedPanel).toBe(true)
     }
+  })
+  it('剪辑上下文把待发送批注与待处理批注分开列出，并报出各状态数量', () => {
+    const mark = (id: string, status: 'draft' | 'open' | 'addressed' | 'resolved', text = `批注 ${id}`) => ({ id, text, frame: 10, status })
+    const annotations = hostAnnotationContext({ id: 'p', sequences: [
+      { id: 's1', annotations: [mark('a', 'draft', '长'.repeat(260)), mark('b', 'open'), mark('c', 'addressed')] },
+      { id: 's2', annotations: [mark('d', 'draft')] },
+    ] })
+    expect(annotations.annotationCounts).toEqual({ draft: 2, open: 1, addressed: 1, resolved: 0 })
+    expect(annotations.openAnnotations).toEqual({ count: 1, items: [{ id: 'b', ref: 'video_edit.annotation:p:b', text: '批注 b', frame: 10, sequenceRef: 'video_edit.sequence:p:s1' }] })
+    expect(annotations.draftAnnotations.count).toBe(2)
+    expect(annotations.draftAnnotations.items.map(item => [item.ref, item.sequenceRef, item.truncated ?? false])).toEqual([
+      ['video_edit.annotation:p:a', 'video_edit.sequence:p:s1', true],
+      ['video_edit.annotation:p:d', 'video_edit.sequence:p:s2', false],
+    ])
+    const videoEdit = hostContextSnapshotSchema.shape.videoEdit.unwrap()
+    expect(videoEdit.parse({ documentRef: 'video_edit.document:p', sequenceRef: null, frame: 0, playing: false, inFrame: null, outFrame: null, focusedPanel: VIDEO_EDIT_FOCUSABLE_PANELS[0], selectedClipRefs: [], ...annotations, targetTrackRefs: [] }).draftAnnotations?.count).toBe(2)
   })
   it('拒绝没有明确项目 ID 的画布能力输入', () => {
     const capability = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('add_canvas_node')

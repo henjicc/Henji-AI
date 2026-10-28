@@ -7,7 +7,7 @@ import { videoEditCodeElementHostSummary } from '@/features/videoEdit/applicatio
 import { videoEditPresetHostSummary, videoEditStyleHostSummary } from '@/features/videoEdit/application/videoEditStyles'
 import {
   APPLICATION_HOST_CONTRACT_VERSION,
-  HOST_ANNOTATION_PREVIEW_CHARACTERS,
+  hostAnnotationContext,
   hostContextSnapshotSchema,
   type HostContextSnapshot,
   type HostScope,
@@ -330,7 +330,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
     },
     generation: { commandReady: generationReady },
     ...(videoEdit ? { videoEdit: {
-      openAnnotations: (() => { const marks = videoEdit.document.sequences.flatMap(sequence => sequence.annotations.filter(mark => mark.status === 'open').map(mark => ({ id: mark.id, ref: `video_edit.annotation:${videoEdit.document.id}:${mark.id}`, text: mark.text.slice(0, HOST_ANNOTATION_PREVIEW_CHARACTERS), ...(mark.text.length > HOST_ANNOTATION_PREVIEW_CHARACTERS ? { truncated: true } : {}), frame: mark.frame, sequenceRef: `video_edit.sequence:${videoEdit.document.id}:${sequence.id}` }))); return { count: marks.length, items: marks.slice(0, 12) } })(),
+      ...hostAnnotationContext(videoEdit.document),
       documentRef: `video_edit.document:${videoEdit.document.id}`,
       sequenceRef: videoEdit.activeSequenceId ? `video_edit.sequence:${videoEdit.document.id}:${videoEdit.activeSequenceId}` : null,
       frame: videoEdit.frame, playing: videoEdit.playing, inFrame: videoEdit.inFrame, outFrame: videoEdit.outFrame, focusedPanel: videoEdit.activePanel,

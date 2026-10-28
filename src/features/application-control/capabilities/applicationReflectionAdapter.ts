@@ -485,7 +485,7 @@ export const applicationReflectionHandlers = {
     const baselines = await captureMutationBaselines(changes, appContext).catch((error) => { throw new ApplicationPreflightFailure(error) })
     // 空基线与省略基线一致，需要自动读取集合可用性。
     if (context.callerGrant && Object.keys(expected).length === 0) {
-      if (changes.some((change) => change.kind === 'remove_items')) throw new ApplicationPreflightFailure(new Error('BASELINE_REQUIRED:删除前请读取目标并提供 baselineIds。'))
+      if (changes.some((change) => change.kind === 'remove_items')) throw new ApplicationPreflightFailure(new Error('BASELINE_REQUIRED:删除前请读取目标并提供 baselineIds。批量删除时，list_application_entities 返回的 baselineId 覆盖整页 refs，不必逐条读取。'))
       const current = await refreshedRevisionsIfTargetsUnchanged(baselines, changes, appContext).catch(error => { throw new ApplicationPreflightFailure(error) })
       if (!current) throw new ApplicationPreflightFailure(new Error('CONFLICT:目标正在变化，请稍后重试。'))
       expected = current

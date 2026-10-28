@@ -1,10 +1,15 @@
-import type { ApplicationRef } from '../identifiers'
+import { normalizeApplicationRefLabel, type ApplicationRef } from '../identifiers'
 import type { ApplicationEffectReceipt, ApplicationPlannedStep } from '../transactions'
 import type { ApplicationCascadeEffectDeclaration, ApplicationCompletedStepResult, ApplicationExecutionContext } from './types'
 
 export interface ApplicationPersistenceReceipt {
   effects: ApplicationEffectReceipt[]
   resultingRevisions: Record<string, number>
+}
+
+/** Effect 的 refs 来自领域执行器或持久化回执，label 在进入事务结果前统一收敛到契约长度。 */
+export function normalizeEffectRefLabels(effect: ApplicationEffectReceipt): ApplicationEffectReceipt {
+  return { ...effect, refs: effect.refs.map(normalizeApplicationRefLabel) }
 }
 
 export interface ApplicationPersistenceRecovery {
@@ -80,8 +85,9 @@ export async function withApplicationPersistenceBoundary<T>(input: {
   const batches = new Map<string, ApplicationPersistenceBatch>()
   const participants = new Map(input.participants.map((participant) => [participant.key, participant]))
   const receipts: ApplicationPersistenceReceipt[] = []
-  const acceptReceipt = (key: string, receipt: ApplicationPersistenceReceipt | void): void => {
-    if (!receipt) return
+  const acceptReceipt = (key: string, raw: ApplicationPersistenceReceipt | void): void => {
+    if (!raw) return
+    const receipt = { ...raw, effects: raw.effects.map(normalizeEffectRefLabels) }
     const declarations = participants.get(key)?.persistenceEffects ?? []
     for (const effect of receipt.effects) {
       const origin = effect.origin

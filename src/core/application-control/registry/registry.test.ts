@@ -399,6 +399,55 @@ describe('ApplicationReflectionRegistry', () => {
     )).rejects.toThrow(/list_application_entities/)
   })
 
+  it('provider 把超长正文当 label 时截到契约上限，不拒掉整页', async () => {
+    const registry = new ApplicationReflectionRegistry(catalogVersion)
+    const longText = `批注${'很长的内容 \n'.repeat(100)}`
+    registry.register({
+      ...registration(),
+      provider: {
+        ...provider,
+        async listEntities() {
+          return {
+            refs: [{ kind: 'sample.item', id: 'one', label: longText }, { kind: 'sample.item', id: 'two', label: '短' }],
+            nextCursor: null,
+            revisions: { 'sample.items': 3 },
+          }
+        },
+        async readEntity(ref, request) {
+          return { ...(await provider.readEntity(ref, request)), ref: { ...ref, label: longText } }
+        },
+      },
+    })
+    const page = await registry.listEntities('sample.item', { limit: 10 }, assistantContext)
+    const label = page.refs[0].label!
+    expect(label.length).toBe(200)
+    expect(label.endsWith('…')).toBe(true)
+    expect(label).not.toMatch(/\n|\s{2}/)
+    expect(page.refs[1].label).toBe('短')
+    const snapshot = await registry.readEntity({ kind: 'sample.item', id: 'one' }, ['sample.enabled'], assistantContext)
+    expect(snapshot.ref.label?.length).toBe(200)
+  })
+
+  it('provider 给出空白 label 时省略 label，而不是让整页校验失败', async () => {
+    const registry = new ApplicationReflectionRegistry(catalogVersion)
+    registry.register({
+      ...registration(),
+      provider: {
+        ...provider,
+        async listEntities() {
+          return { refs: [{ kind: 'sample.item', id: 'one', label: '' }, { kind: 'sample.item', id: 'two', label: '  \n ' }], nextCursor: null, revisions: { 'sample.items': 3 } }
+        },
+        async readEntity(ref, request) {
+          return { ...(await provider.readEntity(ref, request)), ref: { ...ref, label: '' } }
+        },
+      },
+    })
+    const page = await registry.listEntities('sample.item', { limit: 10 }, assistantContext)
+    expect(page.refs).toEqual([{ kind: 'sample.item', id: 'one' }, { kind: 'sample.item', id: 'two' }])
+    const snapshot = await registry.readEntity({ kind: 'sample.item', id: 'one' }, ['sample.enabled'], assistantContext)
+    expect(snapshot.ref).toEqual({ kind: 'sample.item', id: 'one' })
+  })
+
   /*
    * 「按名字找到那一个」是用户会原样说出口的话，以前脚本里写不出来。
    *

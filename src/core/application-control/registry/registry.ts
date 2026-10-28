@@ -2,6 +2,7 @@ import { objectDefaultsDescription, validateJsonValueShape } from './jsonValueSh
 import {
   applicationSchemaRefSchema,
   jsonValueSchema,
+  normalizeApplicationRefLabel,
   type ApplicationRef,
   type ApplicationSchemaRef,
   type JsonValue,
@@ -276,7 +277,8 @@ export class ApplicationReflectionRegistry {
       for (const ref of page.refs) {
         if (ref.kind !== entity.refKind) throw new Error(`INVALID_ENTITY_REF:${ref.kind}`)
       }
-      return page
+      // provider 常把名称或正文直接当 label，统一收敛到契约长度，避免一条超长就拒掉整页。
+      return { ...page, refs: page.refs.map(normalizeApplicationRefLabel) }
     }
     let result = await listPage(request)
     const whereEntries = Object.entries(projection?.where ?? {})
@@ -337,7 +339,11 @@ export class ApplicationReflectionRegistry {
         + '不要自己拼接或截断——多数实体的 id 带父级前缀）'
       )
     }
-    const snapshot = applicationEntitySnapshotSchema.parse(raw)
+    const snapshot = applicationEntitySnapshotSchema.parse(
+      raw && typeof raw === 'object' && 'ref' in raw && raw.ref && typeof raw.ref === 'object'
+        ? { ...raw, ref: normalizeApplicationRefLabel(raw.ref) }
+        : raw
+    )
     if (snapshot.entityType !== entity.id || snapshot.ref.kind !== entity.refKind) {
       throw new Error(`INVALID_ENTITY_SNAPSHOT:${entity.id}`)
     }

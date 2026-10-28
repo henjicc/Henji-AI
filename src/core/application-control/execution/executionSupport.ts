@@ -1,11 +1,32 @@
 import type { ApplicationChangePlan, ApplicationPlannedStep, ApplicationEffectReceipt, ApplicationTransactionMode, ApplicationEvidence } from '../transactions'
 import type { ApplicationReflectionRegistry } from '../registry'
 import { assertCollectionOperationAvailable } from './availability'
-import { ApplicationExecutionProgressFailure, ApplicationPersistenceBoundaryFailure } from './persistence'
+import { ApplicationExecutionProgressFailure, ApplicationPersistenceBoundaryFailure, normalizeEffectRefLabels } from './persistence'
 import type { ApplicationMutationExecutor, ApplicationCollectionExecutor, ApplicationSemanticOperationExecutor, ApplicationControlExecutionDependencies, ApplicationExecutionContext, ApplicationCompletedStepResult, ApplicationStepExecutionResult } from './types'
 import { resolveUndoExpectedAbsentMutations } from './undoRevisionProbe'
+import { normalizeApplicationRefLabel } from '../identifiers'
 
 function refKey(ref: { kind: string; id: string }): string { return `${ref.kind}\u0000${ref.id}` }
+/**
+ * 执行器返回的引用会进入 Effect、resultRefs 与证据，统一按契约校验；label 常是领域原样名称，
+ * 在引擎收到结果时收敛一次，避免某个名字超长或为空就让已执行的事务结果校验失败。
+ */
+function normalizeEvidenceRefLabels(evidence: ApplicationEvidence[]): ApplicationEvidence[] {
+  return evidence.map((item) => item.target ? { ...item, target: normalizeApplicationRefLabel(item.target) } : item)
+}
+function normalizeCompletedRefLabels(result: ApplicationCompletedStepResult): ApplicationCompletedStepResult {
+  return {
+    ...result,
+    directRefs: result.directRefs.map(normalizeApplicationRefLabel),
+    ...(result.directEffects ? { directEffects: result.directEffects.map(normalizeEffectRefLabels) } : {}),
+    ...(result.cascadeEffects ? { cascadeEffects: result.cascadeEffects.map(normalizeEffectRefLabels) } : {}),
+    evidence: normalizeEvidenceRefLabels(result.evidence),
+  }
+}
+function normalizeStepRefLabels(result: ApplicationStepExecutionResult): ApplicationStepExecutionResult {
+  if (result.status === 'completed') return normalizeCompletedRefLabels(result)
+  return result.status === 'submitted' ? { ...result, taskRef: normalizeApplicationRefLabel(result.taskRef) } : result
+}
 function mergeRevisions(target: Record<string, number>, source: Record<string, number>): void {
   for (const [scope, revision] of Object.entries(source)) target[scope] = revision
 }
@@ -313,20 +334,20 @@ export class ApplicationExecutionSupport {
       }
       const executor = this.mutationExecutors.get(step.entityType)
       if (!executor) throw new Error(`MUTATION_EXECUTOR_NOT_FOUND:${step.entityType}`)
-      return await executor.apply(step, context)
+      return normalizeStepRefLabels(await executor.apply(step, context))
     }
     if (step.kind === 'collection') {
       await this.assertCollectionAllowed(step, context)
       const executor = this.collectionExecutors.get(step.entityType)
       if (!executor) throw new Error(`COLLECTION_EXECUTOR_NOT_FOUND:${step.entityType}`)
-      return await executor.apply(step, context)
+      return normalizeStepRefLabels(await executor.apply(step, context))
     }
     const executor = this.getOperationExecutor(step.capabilityId, step.capabilityVersion)
     if (!executor) throw new Error(`OPERATION_EXECUTOR_NOT_FOUND:${step.capabilityId}`)
     if (!executor.requiredPermissions.every((permission) => context.permissions.has(permission))) {
       throw new Error(`PERMISSION_DENIED:${step.capabilityId}`)
     }
-    return await executor.execute(executor.normalizeInput(step.input), context)
+    return normalizeStepRefLabels(await executor.execute(executor.normalizeInput(step.input), context))
   }
 
   protected async readCurrentRevisions(
@@ -391,7 +412,7 @@ export class ApplicationExecutionSupport {
         ? this.collectionExecutors.get(step.entityType)
         : this.getOperationExecutor(step.capabilityId, step.capabilityVersion)
     if (!executor?.undo) throw new Error('UNDO_NOT_SUPPORTED')
-    return await executor.undo(undoToken, context)
+    return normalizeCompletedRefLabels(await executor.undo(undoToken, context))
   }
 
   protected async compensateStep(
@@ -402,16 +423,16 @@ export class ApplicationExecutionSupport {
     if (step.kind === 'mutation') {
       const executor = this.mutationExecutors.get(step.entityType)
       if (!executor?.compensate) throw new Error('COMPENSATION_NOT_SUPPORTED')
-      return await executor.compensate(step, result, context)
+      return normalizeEvidenceRefLabels(await executor.compensate(step, result, context))
     }
     if (step.kind === 'collection') {
       const executor = this.collectionExecutors.get(step.entityType)
       if (!executor?.compensate) throw new Error('COMPENSATION_NOT_SUPPORTED')
-      return await executor.compensate(step, result, context)
+      return normalizeEvidenceRefLabels(await executor.compensate(step, result, context))
     }
     const executor = this.getOperationExecutor(step.capabilityId, step.capabilityVersion)
     if (!executor?.compensate) throw new Error('COMPENSATION_NOT_SUPPORTED')
-    return await executor.compensate(step.input, result, context)
+    return normalizeEvidenceRefLabels(await executor.compensate(step.input, result, context))
   }
 
 
@@ -441,7 +462,7 @@ export class ApplicationExecutionSupport {
       const steps = plan.steps as Array<Extract<ApplicationPlannedStep, { kind: 'mutation' }>>
       const executor = this.mutationExecutors.get(steps[0].entityType)
       if (!executor?.applyAtomic) throw new Error('ATOMIC_GROUP_NOT_SUPPORTED')
-      const results = await executor.applyAtomic(steps, context)
+      const results = (await executor.applyAtomic(steps, context)).map(normalizeCompletedRefLabels)
       try {
         this.collectEffects(steps, results)
       } catch (error) {
@@ -474,7 +495,7 @@ export class ApplicationExecutionSupport {
       if (error instanceof ApplicationPersistenceBoundaryFailure) {
         // 失败的单步已发生部分修改；保留其正式事实，不能降成零步骤失败或重放。
         const offset = completed.length
-        throw new ApplicationPersistenceBoundaryFailure(error.failure, [...completed, ...error.completed], undefined,
+        throw new ApplicationPersistenceBoundaryFailure(error.failure, [...completed, ...error.completed.map(normalizeCompletedRefLabels)], undefined,
           error.receipts, [...completed.map((_, index) => index), ...error.completedStepIndexes.map((index) => offset + index)])
       }
       const original = error instanceof Error ? error.message : String(error)
