@@ -16,6 +16,8 @@ import { videoEditDocumentSchema } from '../../../../src/core/videoEdit/document
 import { CANVAS_LAYER_PACKAGE_VERSION, IMAGE_PACKAGE_VERSION, IMAGE_WORKING_VERSION, VIDEO_EDIT_DOCUMENT_VERSION } from '../../../../src/core/persistence/schemaVersions'
 import { ImageEditCommandHistoryV3 } from '../../../../src/core/imageEdit/v3/commandHistory'
 import type { ImageEditDocumentV3 } from '../../../../src/core/imageEdit/v3/documentTypes'
+import { upgradePersistenceContent } from '../../../../src/core/persistence/migrations'
+import { persistenceFormat } from '../../../../src/core/persistence/formats'
 
 let environment: TestEnvironment | undefined
 afterEach(async () => { await environment?.cleanup(); environment = undefined })
@@ -68,10 +70,12 @@ describe('正式读入口打开黄金归档与源码', () => {
         expect(layers[3]).toMatchObject({ type:'shape', content:{operands:[{operation:'replace'}]} })
         expect(imported.manifest.document.document).toMatchObject({ geometry: { orientation: { rotate: 90, mirrored: true }, crop: { x: 1, y: 2, width: 32, height: 40 } } })
         expect(imported.documentHeader).toBeDefined()
-        const header: unknown = JSON.parse(imported.documentHeader!.toString('utf8'))
-        expect(header).toMatchObject(id === 'canvas-layer-package'
-          ? { format: 'henji-canvas-layer', version: CANVAS_LAYER_PACKAGE_VERSION, documentId: 'golden-image' }
-          : { format: 'henji-image-document', version: 1, id: 'golden-image', summary: { width: 32, height: 40, layers: 5 } })
+        const header = JSON.parse(imported.documentHeader!.toString('utf8')) as { version?: number }
+        if (id === 'canvas-layer-package') {
+          // 导入原样保留归档里写入时的文档头；正式读取入口（canvas-layer-packages.ts）读它时再逐版本升级。
+          expect(header).toMatchObject({ format: 'henji-canvas-layer', version: Number(/^v(\d+)\./.exec(file)![1]), documentId: 'golden-image' })
+          expect(upgradePersistenceContent(persistenceFormat('canvas-layer-package'), header, header.version!)).toMatchObject({ format: 'henji-canvas-layer', version: CANVAS_LAYER_PACKAGE_VERSION, documentId: 'golden-image' })
+        } else expect(header).toMatchObject({ format: 'henji-image-document', version: 1, id: 'golden-image', summary: { width: 32, height: 40, layers: 5 } })
       } finally { await imported.resourceLease.release() }
       expect(await fsp.readFile(source)).toEqual(original)
   })
