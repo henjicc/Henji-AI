@@ -59,6 +59,7 @@ import { createMediaCacheApi } from './media-cache-api'
 import { createSceneDetectionApi } from './scene-detection-api'
 import { createWebReplayApi } from './web-replay-api'
 import { createMusicAnalysisApi } from './music-analysis-api'
+import { createVideoEditExportApi } from './video-edit-export-api'
 import { createGenerationHistoryApi, createPresetsApi, createSettingsApi } from './local-records-api'
 
 type IpcResultEnvelope<T> =
@@ -540,6 +541,7 @@ const api: HenjiNativeApi = {
   sceneDetection: createSceneDetectionApi(nativeInvoke, subscribeChannel),
   webReplay: createWebReplayApi(nativeInvoke, subscribeChannel),
   musicAnalysis: createMusicAnalysisApi(nativeInvoke, subscribeChannel),
+  videoEditExport: createVideoEditExportApi(nativeInvoke),
   screenRecording: createScreenRecordingApi(nativeInvoke, subscribeChannel),
 }
 

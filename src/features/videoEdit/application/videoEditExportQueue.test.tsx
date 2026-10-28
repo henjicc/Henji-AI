@@ -15,7 +15,7 @@ import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { runApplicationCloseGuards } from '@/core/applicationLifecycle/applicationCloseGuards'
 import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, deleteVideoEditSequence, videoEditExportRange, undoVideoEdit, setVideoEditTimelineView } from './videoEditService'
-import { VideoEditExportQueue, enqueueVideoEditExports, videoEditExportQueue, retryVideoEditExportJob, videoEditQueuedExportTask, type VideoEditExportJob } from './videoEditExportQueue'
+import { VideoEditExportQueue, cancelWaitingVideoEditExport, enqueueVideoEditExports, listWaitingVideoEditExports, restoreVideoEditExports, videoEditExportQueue, retryVideoEditExportJob, videoEditQueuedExportTask, type VideoEditExportJob } from './videoEditExportQueue'
 import { VideoEditExportPresetLibrary, videoEditExportPresetLibrary } from './videoEditExportPresets'
 import { videoEditNativeMediaProbe } from './videoEditMediaProbe'
 import { VideoEditExportProgress } from '../panels/VideoEditExportProgress'
@@ -731,4 +731,92 @@ it('默认导出没有十帧余量，包含字幕尾部并读回内容、入出�
       expect.objectContaining({ id: explicit.id, range: { startFrame: 2, endFrame: 4 }, rangeSource: 'explicit' }),
     ]))
   } finally { app.dispose() }
+})
+it('界面重载后从主进程登记恢复：排队项按原快照接着导出，中断项可重试，查询返回 interrupted', async () => {
+  const owner = await project(); const projectId = owner.document.id; const app = createApplicationHarness()
+  const registry = getPlatform().videoEditExport
+  const register = vi.spyOn(registry, 'register').mockImplementation(async request => request.jobs.map(job => ({ id: job.id, retained: true })))
+  const update = vi.spyOn(registry, 'update').mockResolvedValue(undefined); vi.spyOn(registry, 'remove').mockResolvedValue(undefined); vi.spyOn(registry, 'discardLeftovers').mockResolvedValue(undefined)
+  const created = vi.spyOn(registry, 'createOutput').mockResolvedValue(undefined); const published = vi.spyOn(registry, 'outputPublished').mockResolvedValue(undefined)
+  try {
+    const gate = deferred<void>(); encoding.finalize.mockImplementationOnce(() => gate.promise)
+    const [running, queued] = await enqueueVideoEditExports([{ projectId, path: file('running.mp4') }, { projectId, path: file('queued.mp4') }])
+    await vi.waitFor(() => expect(encoding.finalize).toHaveBeenCalledOnce())
+    // 输出文件由主进程创建，渲染层不再自己独占创建。
+    expect(created).toHaveBeenCalledWith(running.id, file('running.mp4'))
+    expect(vi.mocked(getPlatform().system.fs.writeFile).mock.calls.some(([, , options]) => options?.exclusive)).toBe(false)
+    const request = register.mock.calls[0][0]
+    expect(request.snapshots).toHaveLength(1); expect(request.jobs.map(value => [value.outputPaths, value.snapshotIndex])).toEqual([[[file('running.mp4')], 0], [[file('queued.mp4')], 0]])
+    // 模拟重载：旧页面的队列整体消失，只剩主进程登记。
+    for (const job of videoEditExportQueue.list()) videoEditExportQueue.cancel(job.id)
+    gate.resolve(); for (const job of videoEditExportQueue.list()) await videoEditExportQueue.wait(job.id)
+    videoEditExportQueue.clearFinished()
+    editVideoSequence(projectId, owner.activeSequenceId, sequence => ({ ...sequence, name: '重载后修改' }))
+    encoding.rendered = []; published.mockClear(); update.mockClear()
+    const record = (index: number, state: 'queued' | 'interrupted', id = request.jobs[index].id, projectRef = projectId) => ({ ...request.jobs[index], id, projectId: projectRef, snapshotJson: request.snapshots[0], payload: request.jobs[index].payload, state, progress: 0, outputPublished: false })
+    const closedId = (await createVideoEditProject())!.document.id; await closeVideoEditProject(closedId)
+    vi.spyOn(registry, 'restore').mockResolvedValueOnce([record(0, 'interrupted'), record(1, 'queued'), record(1, 'queued', 'waiting', closedId)])
+    await restoreVideoEditExports()
+    expect(videoEditExportQueue.list().map(job => [job.id, job.state, job.restored])).toEqual([[running.id, 'interrupted', true], [queued.id, 'running', true]])
+    // 原剪辑没打开的恢复项留在等待区，并占住它的输出路径。
+    expect(listWaitingVideoEditExports().map(value => value.id)).toEqual(['waiting'])
+    const queuedJob = await videoEditExportQueue.wait(queued.id)
+    expect(queuedJob.state).toBe('completed'); expect(encoding.rendered.length).toBeGreaterThan(0); expect(encoding.rendered.every(([name]) => name !== '重载后修改')).toBe(true)
+    expect(published).toHaveBeenCalledWith(queued.id)
+    await expect(enqueueVideoEditExports([{ projectId, path: file('queued.mp4') }])).rejects.toThrow('占用')
+    await app.requireResult('cancel_video_edit_export', { documentRef: { kind: 'video_edit.document', id: closedId }, taskId: 'waiting' })
+    // 助手调用会在后台打开原剪辑，等待项随之接回队列，再按队列项取消；登记同步为已取消（主进程据此移除并释放路径）。
+    expect(listWaitingVideoEditExports()).toEqual([]); expect(videoEditExportQueue.list().find(job => job.id === 'waiting')?.state).toBe('cancelled')
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ id: 'waiting', state: 'cancelled' }))
+    const read = await app.requireResult('query_video_edit_export', { documentRef: { kind: 'video_edit.document', id: projectId }, taskId: running.id })
+    expect((read.queue as Array<{ state: string }>)[0].state).toBe('interrupted')
+    await app.requireResult('export_video_edit', { documentRef: { kind: 'video_edit.document', id: projectId }, retryTaskId: running.id })
+    const retried = await videoEditExportQueue.wait(running.id)
+    expect(retried.state).toBe('completed'); expect(retried.path).toBe(file('running.mp4'))
+    expect(registry.discardLeftovers).toHaveBeenCalledWith(running.id)
+    // 登记拒绝保留的项在列表上标出。
+    register.mockImplementationOnce(async value => value.jobs.map(job => ({ id: job.id, retained: false, reason: 'snapshot_too_large' as const })))
+    const [large] = await enqueueVideoEditExports([{ projectId, path: file('large.mp4') }])
+    await vi.waitFor(() => expect(large.notRetained).toBe('snapshot_too_large'))
+    await videoEditExportQueue.wait(large.id)
+  } finally { app.dispose() }
+})
+it('恢复项的本地状态与登记不同（排队转为中断）时同步到主进程', async () => {
+  const owner = await project()
+  const mirror = { register: vi.fn(async () => undefined), update: vi.fn(), remove: vi.fn() }
+  const queue = new VideoEditExportQueue(async () => undefined, mirror)
+  const interrupted = { ...localJob(owner, 'held'), state: 'interrupted' as const }
+  const unchanged = { ...localJob(owner, 'same'), state: 'interrupted' as const }
+  queue.restore([{ job: interrupted, registeredState: 'queued' }, { job: unchanged, registeredState: 'interrupted' }])
+  expect(mirror.update.mock.calls.map(([job]) => [job.id, job.state])).toEqual([['held', 'interrupted']])
+})
+it('单次导出删不掉未完成文件时保留登记交给主进程兜底，删干净或已发布才撤销登记', async () => {
+  const owner = await project(); const projectId = owner.document.id
+  const registry = getPlatform().videoEditExport
+  vi.spyOn(registry, 'register').mockImplementation(async request => request.jobs.map(job => ({ id: job.id, retained: false })))
+  const update = vi.spyOn(registry, 'update').mockResolvedValue(undefined); const remove = vi.spyOn(registry, 'remove').mockResolvedValue(undefined)
+  const create = vi.spyOn(registry, 'createOutput').mockResolvedValue(undefined); vi.spyOn(registry, 'outputPublished').mockResolvedValue(undefined)
+  const options = () => ({ snapshot: structuredClone(getActiveVideoEditSequence(owner)), range: videoEditExportRange(owner), settings: { ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, loudness: null, addToLibrary: false, captionMode: 'none' as const } })
+  encoding.finalize.mockRejectedValueOnce(new Error('encode failed')); vi.mocked(getPlatform().system.fs.remove).mockRejectedValueOnce(new Error('busy'))
+  await expect(exportVideoEdit(projectId, file('transient-left.mp4'), false, undefined, undefined, options())).rejects.toThrow()
+  const leftId = create.mock.calls.at(-1)![0]
+  expect(remove.mock.calls.flat(2)).not.toContain(leftId)
+  expect(update).toHaveBeenLastCalledWith({ id: leftId, state: 'failed', progress: 0 })
+  encoding.finalize.mockRejectedValueOnce(new Error('encode failed'))
+  await expect(exportVideoEdit(projectId, file('transient-clean.mp4'), false, undefined, undefined, options())).rejects.toThrow()
+  expect(remove).toHaveBeenLastCalledWith([create.mock.calls.at(-1)![0]])
+  await expect(exportVideoEdit(projectId, file('transient-done.mp4'), false, undefined, undefined, options())).resolves.toBe(file('transient-done.mp4'))
+  expect(remove).toHaveBeenLastCalledWith([create.mock.calls.at(-1)![0]])
+})
+it('界面取消等待原剪辑打开的项：从登记移除并释放输出路径', async () => {
+  const owner = await project(); const projectId = owner.document.id
+  const registry = getPlatform().videoEditExport
+  const remove = vi.spyOn(registry, 'remove').mockResolvedValue(undefined)
+  const closedId = (await createVideoEditProject())!.document.id; await closeVideoEditProject(closedId)
+  vi.spyOn(registry, 'restore').mockResolvedValueOnce([{ id: 'waiting', projectId: closedId, name: '序列', presetName: '默认', outputPaths: [file('held.mp4')], snapshotJson: '{}', payload: {}, state: 'queued', progress: 0, outputPublished: false }])
+  await restoreVideoEditExports()
+  await expect(enqueueVideoEditExports([{ projectId, path: file('held.mp4') }])).rejects.toThrow('占用')
+  cancelWaitingVideoEditExport('waiting')
+  expect(listWaitingVideoEditExports()).toEqual([]); expect(remove).toHaveBeenCalledWith(['waiting'])
+  const [job] = await enqueueVideoEditExports([{ projectId, path: file('held.mp4') }]); await videoEditExportQueue.wait(job.id)
 })

@@ -36,6 +36,7 @@ import { createElectronMediaCache } from './mediaCache'
 import { createElectronSceneDetection } from './sceneDetection'
 import { createElectronWebReplay } from './webReplay'
 import { createElectronMusicAnalysis } from './musicAnalysis'
+import { createElectronVideoEditExport } from './videoEditExport'
 import { createElectronScreenRecording } from './screenRecording'
 import { withNativeErrorNames } from './nativeErrors'
 
@@ -81,5 +82,6 @@ export function createElectronPlatform(): PlatformRuntime {
     sceneDetection: createElectronSceneDetection(),
     webReplay: createElectronWebReplay(),
     musicAnalysis: createElectronMusicAnalysis(),
+    videoEditExport: createElectronVideoEditExport(),
   })
 }

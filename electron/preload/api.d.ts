@@ -40,6 +40,7 @@ import type { MediaCachePlatform } from '../../src/platform/contracts/mediaCache
 import type { SceneDetectionPlatform } from '../../src/platform/contracts/sceneDetection'
 import type { WebReplayPlatform } from '../../src/platform/contracts/webReplay'
 import type { MusicAnalysisPlatform } from '../../src/platform/contracts/musicAnalysis'
+import type { VideoEditExportPlatform } from '../../src/platform/contracts/videoEditExport'
 import type { ScreenRecordingPlatform } from '../../src/platform/contracts/screenRecording'
 import type { HenjiGenerationHistoryApi, HenjiPresetsApi, HenjiSettingsApi } from './api-local-records'
 
@@ -113,6 +114,7 @@ export interface HenjiNativeApi {
   sceneDetection: SceneDetectionPlatform
   webReplay: WebReplayPlatform
   musicAnalysis: MusicAnalysisPlatform
+  videoEditExport: VideoEditExportPlatform
 }
 
 declare global {

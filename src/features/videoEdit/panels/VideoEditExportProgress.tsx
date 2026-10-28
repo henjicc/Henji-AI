@@ -33,7 +33,7 @@ function ExportProgress({ job, onClose }: { job: ReturnType<typeof videoEditExpo
   }, [active])
   const elapsed = job.startedAt === undefined ? 0 : Math.max(0, (job.finishedAt ?? now) - job.startedAt)
   const remaining = progress >= .01 && elapsed >= 5000 ? elapsed * (1 - progress) / progress : undefined
-  const title = cancelling ? '正在取消导出' : job.state === 'running' ? '正在导出' : job.state === 'queued' ? '准备导出' : job.state === 'completed' ? '导出完成' : job.state === 'cancelled' ? '导出已取消' : '导出失败'
+  const title = cancelling ? '正在取消导出' : job.state === 'running' ? '正在导出' : job.state === 'queued' ? '准备导出' : job.state === 'completed' ? '导出完成' : job.state === 'cancelled' ? '导出已取消' : job.state === 'interrupted' ? '导出已中断' : '导出失败'
   return <UiModal isOpen title={title} dismissible={!active} onClose={onClose} footer={active
     ? confirmCancel
       ? <><UiButton variant="secondary" disabled={cancelling} onClick={() => setConfirmCancel(false)}>继续导出</UiButton><UiButton variant="dangerSolid" loading={cancelling} disabled={cancelling} onClick={() => videoEditExportQueue.cancel(job.id)}>确认取消导出</UiButton></>

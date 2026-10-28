@@ -15,6 +15,7 @@ import { collectVideoEditOutput, publishVideoEditOutput, type VideoEditOutputRec
 import { importVideoEditSources } from './videoEditMedia'
 import { waitVideoEditSmartRegions } from './videoEditSmartRegions'
 import { videoEditTrackResults, waitVideoEditTracking } from './videoEditTracking'
+import { transientVideoEditExportOutputs, type VideoEditExportOutputs } from './videoEditExportRegistry'
 
 const logger = createLogger('features.videoEdit.export')
 /**
@@ -38,6 +39,8 @@ export interface VideoEditExportOptions {
   signal?: AbortSignal
   onTask?: (task: VideoEditExportTask) => void
   loudnessRequested?: boolean
+  /** 输出文件由导出登记独占创建；省略时按单次导出临时登记，界面重载后只清理未完成文件。 */
+  outputs?: VideoEditExportOutputs
 }
 export async function exportVideoEdit(projectId: string, requestedPath?: string, background = false, submissionSignal?: AbortSignal, loudnessSettings?: VideoEditLoudnessSettings, options?: VideoEditExportOptions): Promise<string | null> {
   submissionSignal?.throwIfAborted()
@@ -72,6 +75,7 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
   options?.signal?.addEventListener('abort', abort, { once: true })
   if (options?.signal?.aborted) abort()
   options?.onTask?.(task)
+  const outputs = options?.outputs ?? transientVideoEditExportOutputs({ id: task.id, projectId, name: snapshot.name, outputPaths: videoEditExportPaths(path, settings) })
   const render = async (): Promise<string | null> => {
   let renderer: VideoEditRenderSession | undefined
   let soundSession: string | undefined
@@ -82,6 +86,8 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
   let captionCreated = false
   const captionPath = videoEditExportPaths(path, settings)[1]
   let published = false
+  /** 未完成文件没删掉：登记要留着，由主进程在界面离开时兜底清理。 */
+  let leftover = false
   // Layers a single-frame read decided (the sequential reader's picture was not exact), and where a frame failed.
   let singleFrameReads = 0
   let failedFrame: number | undefined
@@ -117,7 +123,7 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
       task.controller.signal.throwIfAborted()
     }
     output = new Output({ format: format === 'wav' ? new WavOutputFormat() : format === 'aac' ? new AdtsOutputFormat() : new Mp4OutputFormat(), target: new StreamTarget(new WritableStream({ write: async chunk => { task.controller.signal.throwIfAborted(); await platform.system.fs.writeFile(path, chunk.data, { position: chunk.position }) } }), { chunked: true, chunkSize: 1024 * 1024 }) })
-    await platform.system.fs.writeFile(path, new Uint8Array(), { exclusive: true }); created = true
+    await outputs.create(path); created = true
     const adapted = settings.videoEnabled ? new OffscreenCanvas(settings.width, settings.height) : undefined
     const geometry = videoEditExportGeometry(document.width, document.height, settings)
     task.controller.signal.throwIfAborted()
@@ -191,10 +197,11 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     if (captionPath && (settings.captionMode === 'srt' || settings.captionMode === 'vtt')) {
       const text = exportVideoEditCaptions(document, settings.captionMode, { ...range, clock: 'range' })
       task.controller.signal.throwIfAborted()
-      await platform.system.fs.writeFile(captionPath, new Uint8Array(), { exclusive: true }); captionCreated = true
+      await outputs.create(captionPath); captionCreated = true
       await platform.system.fs.writeFile(captionPath, new TextEncoder().encode(text), { position: 0 })
       if (await platform.system.fs.readTextFile(captionPath) !== text) throw new Error('字幕写入后回读不一致，请重新导出。')
     }
+    await outputs.published()
     published = true; task.state = 'completed'
     task.output = await publishVideoEditOutput({ owner: instance, sequenceId: document.id, revision: document.revision, path, name: `${snapshot.name} · ${format === 'mp4' ? '成片' : '声音'}`, kind: format === 'mp4' ? 'video' : 'audio' })
     const completedAt = Date.now()
@@ -221,8 +228,8 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
       throw new Error(task.error)
     }
     await output?.cancel().catch(() => undefined)
-    if (created) await platform.system.fs.remove(path).catch(cleanupError => logger.warn('清理未完成导出失败', { event: 'video_edit.export.cleanup_failed', error: cleanupError }))
-    if (captionCreated && captionPath) await platform.system.fs.remove(captionPath).catch(cleanupError => logger.warn('清理未完成字幕失败', { event: 'video_edit.export.cleanup_failed', error: cleanupError }))
+    if (created) await platform.system.fs.remove(path).catch(cleanupError => { leftover = true; logger.warn('清理未完成导出失败', { event: 'video_edit.export.cleanup_failed', error: cleanupError }) })
+    if (captionCreated && captionPath) await platform.system.fs.remove(captionPath).catch(cleanupError => { leftover = true; logger.warn('清理未完成字幕失败', { event: 'video_edit.export.cleanup_failed', error: cleanupError }) })
     const userError = videoEditExportAudioUserError(error, settings)
     task.state = task.controller.signal.aborted ? 'cancelled' : 'failed'; task.error = userError instanceof Error ? userError.message : '导出失败'
     if (task.controller.signal.aborted) logger.info('剪辑导出已取消', { event: 'video_edit.export.cancelled', context: { projectId, taskId: task.id } })
@@ -232,6 +239,7 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
   } finally {
     task.controller.signal.removeEventListener('abort', cancelSound)
     options?.signal?.removeEventListener('abort', abort)
+    outputs.finish?.(leftover)
     try { if (soundSession) await loudnessApi.close(soundSession) } finally { try { await renderer?.dispose() } finally { instance.busy = false; publishVideoEdit() } }
   }
   }

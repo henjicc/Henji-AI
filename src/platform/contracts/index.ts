@@ -34,6 +34,7 @@ import type { MediaCachePlatform } from './mediaCache'
 import type { SceneDetectionPlatform } from './sceneDetection'
 import type { WebReplayPlatform } from './webReplay'
 import type { MusicAnalysisPlatform } from './musicAnalysis'
+import type { VideoEditExportPlatform } from './videoEditExport'
 import type { ScreenRecordingPlatform } from './screenRecording'
 
 export interface PlatformRuntime {
@@ -77,6 +78,7 @@ export interface PlatformRuntime {
   sceneDetection: SceneDetectionPlatform
   webReplay: WebReplayPlatform
   musicAnalysis: MusicAnalysisPlatform
+  videoEditExport: VideoEditExportPlatform
 }
 
 export type {

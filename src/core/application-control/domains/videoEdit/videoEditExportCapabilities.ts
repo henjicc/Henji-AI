@@ -18,7 +18,7 @@ export const videoEditExportInputSchema = z.object({ documentRef, format: z.enum
 })
 export const videoEditExportJobSummarySchema = z.object({
   id: z.string(), documentRef, sequenceRef: ref('video_edit.sequence'), name: z.string(), presetName: z.string(),
-  state: z.enum(['queued', 'running', 'completed', 'failed', 'cancelled']), progress: z.number().min(0).max(1), range, settings: videoEditExportSettingsSchema,
+  state: z.enum(['queued', 'running', 'completed', 'failed', 'cancelled', 'interrupted']).describe('interrupted：界面重新加载时正在导出，未完成文件已清理，可用 retryTaskId 按原快照重试。'), progress: z.number().min(0).max(1), range, settings: videoEditExportSettingsSchema,
   path: z.string().optional(), completedAt: z.number().optional(), archived: z.boolean().optional(),
   rangeSource: z.enum(['explicit', 'in-out', 'content']).describe('区间来源：explicit 为调用指定，in-out 为序列入出点，content 为片段、字幕、标记的最远末尾；不加尾部余量。'),
   taskId: z.string().optional(), error: z.string().optional(), notice: z.string().optional(), outputReady: z.boolean(), assetRef: ref('asset').optional(), loudnessMeasurement: videoEditLoudnessMeasurementSchema.optional(),
@@ -38,7 +38,7 @@ export const videoEditExportQuerySchema = videoEditExportTaskInputSchema.extend(
 })
 const queryOutput = output.omit({ task: true }).extend({ queue: z.array(queryJob), total: z.number().int().nonnegative(), nextCursor: z.string().nullable() })
 const descriptions = {
-  export_video_edit: ['导出剪辑成片或字幕', '导出后用 query_video_edit_export 查完成。默认与序列一致；通用实体 video_edit.export_preset 提供预设，批量 exports 每项指定 presetRef/完整 settings，可用 documentRef/sequenceRef 选择原剪辑/序列。完整 settings 不支持则拒绝；预设/缺省设置按设备适配，queue.settings 回读实际值。followSequence 在提交时读取序列值；videoEnabled/audioEnabled 控制画面/声音，sampleRate 为 Hz，wav 为24位PCM；loudness=null 不标准化。captionMode 导出同名字幕，以导出入点为零；独立 srt/vtt 的 subtitleClock 默认 range，可选 sequence。useProxies 只用代理画面、声音用原片；importToProject 导入原项目；addToLibrary 默认 true，需 assets:write，否则设 false 再收录。range 为整数帧半开范围；省略用入出点，无标记则整序列。retryTaskId 只重试未发布文件的失败项。'],
+  export_video_edit: ['导出剪辑成片或字幕', '导出后用 query_video_edit_export 查完成。默认与序列一致；通用实体 video_edit.export_preset 提供预设，批量 exports 每项指定 presetRef/完整 settings，可用 documentRef/sequenceRef 选择原剪辑/序列。完整 settings 不支持则拒绝；预设/缺省设置按设备适配，queue.settings 回读实际值。followSequence 在提交时读取序列值；videoEnabled/audioEnabled 控制画面/声音，sampleRate 为 Hz，wav 为24位PCM；loudness=null 不标准化。captionMode 导出同名字幕，以导出入点为零；独立 srt/vtt 的 subtitleClock 默认 range，可选 sequence。useProxies 只用代理画面、声音用原片；importToProject 导入原项目；addToLibrary 默认 true，需 assets:write，否则设 false 再收录。range 为整数帧半开范围；省略用入出点，无标记则整序列。retryTaskId 按原快照重试未发布文件的失败项或 interrupted 项。'],
   query_video_edit_export: ['查询剪辑导出', '分页读取导出状态、进度、结果引用与必要错误。默认 compact；detail="full" 展开实际 settings、区间、预设和响度。activeOnly=true 只查排队或运行项；历史用 nextCursor 续读，保持筛选条件。taskId 接受 queue.id 或渲染编号，不存在时报 NOT_FOUND。resultRef 可直接作为本工具下一次查询参数；assetRef 可直接跨工作区复用。outputReady 表示已核验输出，当前会话可用 collect_video_edit_output 与 id/taskId 收录。只观察，不等待、不取消。'],
   cancel_video_edit_export: ['取消剪辑导出', 'taskId 指定此剪辑的单项导出（取 queue.id）；省略则取消此剪辑全部未完成项及旧导出。清理未完成文件，保留已发布文件。'],
 } as const

@@ -1,7 +1,7 @@
 import { VIDEO_EDIT_EXPORT_CAPABILITIES, videoEditExportInputSchema, videoEditExportQuerySchema, videoEditExportTaskInputSchema } from '@/core/application-control/domains/videoEdit/videoEditExportCapabilities'
 import type { CapabilityExecutionContext } from '@/features/application-control/capabilities/handlerTypes'
 import { cancelVideoEditExport, videoEditExportTask } from './videoEditExport'
-import { enqueueVideoEditExports, retryVideoEditExportJob, videoEditProjectOutputDirectory, videoEditExportQueue, type VideoEditExportJob } from './videoEditExportQueue'
+import { adoptRestoredVideoEditExports, enqueueVideoEditExports, listWaitingVideoEditExports, retryVideoEditExportJob, videoEditProjectOutputDirectory, videoEditExportQueue, type VideoEditExportJob } from './videoEditExportQueue'
 import { videoEditExportPresetLibrary } from './videoEditExportPresets'
 import { exportVideoEditSubtitles } from './videoEditTimedContent'
 import { requireVideoEditInstance } from './videoEditService'
@@ -12,9 +12,10 @@ import { videoEditComposition } from '@/core/videoEdit/document'
 import { adaptVideoEditExportPreset } from '../engine/videoEditExportEncoder'
 import { ApplicationWriteExecution } from '@/core/application-control/execution/writeExecution'
 
+const RESTORED_NOTICE = '按界面重新加载前提交时的内容导出。'
 export function videoEditExportJobSummary(job: VideoEditExportJob): Record<string, unknown> {
   return { id: job.id, documentRef: { kind: 'video_edit.document', id: job.owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${job.owner.document.id}:${job.snapshot.id}` }, name: job.name, presetName: job.presetName, state: job.state, progress: job.state === 'completed' ? 1 : job.task?.progress ?? 0, range: job.range, settings: job.settings,
-    rangeSource: job.rangeSource, outputReady: Boolean(job.task?.output), ...(job.task?.notice ? { notice: job.task.notice } : {}), ...(job.task?.assetRef ? { assetRef: job.task.assetRef } : {}), ...(job.task ? { taskId: job.task.id } : {}), ...(job.error ? { error: job.error } : {}), ...(job.task?.loudnessMeasurement ? { loudnessMeasurement: job.task.loudnessMeasurement } : {}) }
+    rangeSource: job.rangeSource, outputReady: Boolean(job.task?.output), ...(job.task?.notice ? { notice: job.task.notice } : job.restored ? { notice: RESTORED_NOTICE } : {}), ...(job.task?.assetRef ? { assetRef: job.task.assetRef } : {}), ...(job.task ? { taskId: job.task.id } : {}), ...(job.error ? { error: job.error } : {}), ...(job.task?.loudnessMeasurement ? { loudnessMeasurement: job.task.loudnessMeasurement } : {}) }
 }
 
 /** 能力调用没有人点保存对话框：默认放进剪辑所在项目的“导出”文件夹，也可指定已配置的快速下载/预设目录。 */
@@ -29,6 +30,7 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
   const parsed = id === 'export_video_edit' ? videoEditExportInputSchema.parse(raw) : id === 'query_video_edit_export' ? videoEditExportQuerySchema.parse(raw) : videoEditExportTaskInputSchema.parse(raw)
   const documentRef = parsed.documentRef
   const owner = requireVideoEditInstance(documentRef.id)
+  adoptRestoredVideoEditExports()
   let message = '已读取导出列表，提交不等于完成。'
   let verified = true
   let condition = '已从原剪辑回读导出列表。'
@@ -46,7 +48,7 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
       const job = videoEditExportQueue.require(input.retryTaskId)
       if (job.owner !== owner) throw new Error('导出项必须属于明确的原剪辑。')
       if (context.callerGrant && job.settings.addToLibrary && !context.callerGrant.permissions.includes('assets:write')) throw new Error('此导出设置要求加入资产库，需要 assets:write 授权；请调整连接授权后重试。')
-      context.signal?.throwIfAborted(); await execution.run(() => retryVideoEditExportJob(job.id)); message = '失败项已重新加入队列。'
+      context.signal?.throwIfAborted(); await execution.run(() => retryVideoEditExportJob(job.id)); message = '已按原快照重新加入队列。'
       submitted = [job]
     } else {
       const requests = input.exports ? await Promise.all(input.exports.map(async value => {
@@ -91,13 +93,16 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
     .map(({ sequenceId, ...entry }) => ({ ...entry, documentRef, sequenceRef: { kind: 'video_edit.sequence', id: `${documentRef.id}:${sequenceId}` }, state: 'completed', progress: 1, archived: true, outputReady: true }))
   const latestTask = videoEditExportTask(documentRef.id)
   const task = latestTask && (!filterId || latestTask.id === filterId || jobs.some(job => job.task === latestTask)) ? latestTask : undefined
-  if (filterId && !jobs.length && !archived.length && !task) throw new Error('EXPORT_TASK_NOT_FOUND:此剪辑没有匹配的导出任务或归档记录；请省略 taskId 查询可用导出。')
+  if (filterId && !jobs.length && !archived.length && !task && !listWaitingVideoEditExports(documentRef.id).some(record => record.id === filterId)) throw new Error('EXPORT_TASK_NOT_FOUND:此剪辑没有匹配的导出任务或归档记录；请省略 taskId 查询可用导出。')
   const queue = jobs.map(job => {
     const entry = owner.document.exportHistory?.find(entry => entry.taskId === job.task?.id)
     return { ...videoEditExportJobSummary(job), ...(entry ? { path: entry.path, completedAt: entry.completedAt, ...(entry.assetRef ? { assetRef: entry.assetRef } : {}) } : {}) }
   })
   if (query) {
-    const all: Record<string, unknown>[] = [...queue, ...archived]
+    // 还没接回队列的恢复项（原剪辑刚打开、登记尚在取回）同样可见，状态按排队报告。
+    const waiting = listWaitingVideoEditExports(documentRef.id).filter(record => !filterId || record.id === filterId)
+      .map(record => ({ id: record.id, documentRef, state: record.state, progress: record.progress, outputReady: false, notice: record.state === 'queued' ? '等原剪辑打开后按界面重新加载前提交的内容继续导出。' : RESTORED_NOTICE, ...(record.error ? { error: record.error } : {}) }))
+    const all: Record<string, unknown>[] = [...queue, ...archived, ...waiting]
     if (task && !all.some(item => item.id === task.id || item.taskId === task.id)) all.push({
       id: task.id, taskId: task.id, documentRef, state: task.state, progress: task.progress, outputReady: Boolean(task.output),
       ...(task.notice ? { notice: task.notice } : {}), ...(task.assetRef ? { assetRef: task.assetRef } : {}),
