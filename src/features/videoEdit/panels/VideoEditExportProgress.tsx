@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { UiButton, UiError, UiModal } from '@/components/ui'
 import { ProgressBar } from '@/components/ui/ProgressBar'
-import { videoEditExportQueue } from '../application/videoEditExportQueue'
+import { videoEditExportJobProgress, videoEditExportQueue } from '../application/videoEditExportQueue'
 import { subscribeVideoEdit, videoEditRevision } from '../application/videoEditService'
 
 function duration(milliseconds: number): string {
@@ -25,7 +25,7 @@ function ExportProgress({ job, onClose }: { job: ReturnType<typeof videoEditExpo
   const [confirmCancel, setConfirmCancel] = useState(false)
   const active = job.state === 'running' || job.state === 'queued'
   const cancelling = active && job.controller.signal.aborted
-  const progress = Math.max(0, Math.min(1, job.task?.progress ?? 0))
+  const progress = Math.max(0, Math.min(1, videoEditExportJobProgress(job)))
   useEffect(() => {
     if (!active) return
     const timer = setInterval(() => setNow(Date.now()), 1000)

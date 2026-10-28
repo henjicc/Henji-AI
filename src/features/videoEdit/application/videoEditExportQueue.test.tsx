@@ -19,6 +19,7 @@ import { VideoEditExportQueue, cancelWaitingVideoEditExport, enqueueVideoEditExp
 import { VideoEditExportPresetLibrary, videoEditExportPresetLibrary } from './videoEditExportPresets'
 import { videoEditNativeMediaProbe } from './videoEditMediaProbe'
 import { VideoEditExportProgress } from '../panels/VideoEditExportProgress'
+import { VideoEditExportQueueList } from '../panels/VideoEditExportQueueList'
 import { VideoEditExportDialog } from '../panels/VideoEditExportDialog'
 import { exportVideoEdit, videoEditExportTask } from './videoEditExport'
 import { applyVideoEditBuiltinEffect } from './videoEditCompositing'
@@ -753,7 +754,7 @@ it('界面重载后从主进程登记恢复：排队项按原快照接着导出�
     videoEditExportQueue.clearFinished()
     editVideoSequence(projectId, owner.activeSequenceId, sequence => ({ ...sequence, name: '重载后修改' }))
     encoding.rendered = []; published.mockClear(); update.mockClear()
-    const record = (index: number, state: 'queued' | 'interrupted', id = request.jobs[index].id, projectRef = projectId) => ({ ...request.jobs[index], id, projectId: projectRef, snapshotJson: request.snapshots[0], payload: request.jobs[index].payload, state, progress: 0, outputPublished: false })
+    const record = (index: number, state: 'queued' | 'interrupted', id = request.jobs[index].id, projectRef = projectId) => ({ ...request.jobs[index], id, projectId: projectRef, snapshotJson: request.snapshots[0], payload: request.jobs[index].payload, state, progress: state === 'interrupted' ? 0.129 : 0, outputPublished: false })
     const closedId = (await createVideoEditProject())!.document.id; await closeVideoEditProject(closedId)
     vi.spyOn(registry, 'restore').mockResolvedValueOnce([record(0, 'interrupted'), record(1, 'queued'), record(1, 'queued', 'waiting', closedId)])
     await restoreVideoEditExports()
@@ -770,6 +771,10 @@ it('界面重载后从主进程登记恢复：排队项按原快照接着导出�
     expect(update).toHaveBeenCalledWith(expect.objectContaining({ id: 'waiting', state: 'cancelled' }))
     const read = await app.requireResult('query_video_edit_export', { documentRef: { kind: 'video_edit.document', id: projectId }, taskId: running.id })
     expect((read.queue as Array<{ state: string }>)[0].state).toBe('interrupted')
+    // 中断项的进度来自登记（中断时导出到哪），不是还没开始的本页任务的 0。
+    expect((read.queue as Array<{ progress: number }>)[0].progress).toBe(0.129)
+    const list = render(<VideoEditExportQueueList />)
+    expect(list.getByText('已中断（导出到 13%）')).toBeTruthy(); list.unmount()
     await app.requireResult('export_video_edit', { documentRef: { kind: 'video_edit.document', id: projectId }, retryTaskId: running.id })
     const retried = await videoEditExportQueue.wait(running.id)
     expect(retried.state).toBe('completed'); expect(retried.path).toBe(file('running.mp4'))

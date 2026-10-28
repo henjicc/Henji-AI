@@ -1,7 +1,7 @@
 import { VIDEO_EDIT_EXPORT_CAPABILITIES, videoEditExportInputSchema, videoEditExportQuerySchema, videoEditExportTaskInputSchema } from '@/core/application-control/domains/videoEdit/videoEditExportCapabilities'
 import type { CapabilityExecutionContext } from '@/features/application-control/capabilities/handlerTypes'
 import { cancelVideoEditExport, videoEditExportTask } from './videoEditExport'
-import { adoptRestoredVideoEditExports, enqueueVideoEditExports, listWaitingVideoEditExports, retryVideoEditExportJob, videoEditProjectOutputDirectory, videoEditExportQueue, type VideoEditExportJob } from './videoEditExportQueue'
+import { adoptRestoredVideoEditExports, enqueueVideoEditExports, listWaitingVideoEditExports, retryVideoEditExportJob, videoEditProjectOutputDirectory, videoEditExportJobProgress, videoEditExportQueue, type VideoEditExportJob } from './videoEditExportQueue'
 import { videoEditExportPresetLibrary } from './videoEditExportPresets'
 import { exportVideoEditSubtitles } from './videoEditTimedContent'
 import { requireVideoEditInstance } from './videoEditService'
@@ -14,7 +14,7 @@ import { ApplicationWriteExecution } from '@/core/application-control/execution/
 
 const RESTORED_NOTICE = '按界面重新加载前提交时的内容导出。'
 export function videoEditExportJobSummary(job: VideoEditExportJob): Record<string, unknown> {
-  return { id: job.id, documentRef: { kind: 'video_edit.document', id: job.owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${job.owner.document.id}:${job.snapshot.id}` }, name: job.name, presetName: job.presetName, state: job.state, progress: job.state === 'completed' ? 1 : job.task?.progress ?? 0, range: job.range, settings: job.settings,
+  return { id: job.id, documentRef: { kind: 'video_edit.document', id: job.owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${job.owner.document.id}:${job.snapshot.id}` }, name: job.name, presetName: job.presetName, state: job.state, progress: videoEditExportJobProgress(job), range: job.range, settings: job.settings,
     rangeSource: job.rangeSource, outputReady: Boolean(job.task?.output), ...(job.task?.notice ? { notice: job.task.notice } : job.restored ? { notice: RESTORED_NOTICE } : {}), ...(job.task?.assetRef ? { assetRef: job.task.assetRef } : {}), ...(job.task ? { taskId: job.task.id } : {}), ...(job.error ? { error: job.error } : {}), ...(job.task?.loudnessMeasurement ? { loudnessMeasurement: job.task.loudnessMeasurement } : {}) }
 }
 

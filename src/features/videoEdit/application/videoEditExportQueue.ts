@@ -29,6 +29,8 @@ export interface VideoEditExportJob {
   outputPublished?: boolean
   /** 从界面重载前的登记接回：按当时提交的快照导出。 */
   restored?: boolean
+  /** 接回时登记里记着的进度（中断项停在哪）；本页重新开始导出这一项后以任务进度为准。 */
+  restoredProgress?: number
   /** 界面重载后不会保留这一项的原因；保留时为空。 */
   notRetained?: VideoEditExportNotRetainedReason
 }
@@ -82,7 +84,7 @@ export class VideoEditExportQueue {
     const job = this.require(id)
     if (!retryableVideoEditExportJob(job)) throw new Error('只可重试未发布文件的失败或中断项；已保存的成片请直接使用文件。')
     if (job.state === 'interrupted') logger.info('重试中断的导出', { event: 'video_edit.export_queue.interrupted_retry', context: { jobId: id, projectId: job.owner.document.id } })
-    job.controller = new AbortController(); job.release = release; job.task = undefined; job.error = undefined; job.startedAt = undefined; job.finishedAt = undefined; job.state = 'queued'
+    job.controller = new AbortController(); job.release = release; job.task = undefined; job.restoredProgress = undefined; job.error = undefined; job.startedAt = undefined; job.finishedAt = undefined; job.state = 'queued'
     // Explicit retries join the tail, preserving the order of already submitted work.
     this.jobs = [...this.jobs.filter(value => value !== job), job]; this.publish(); void this.drain()
   }
@@ -120,6 +122,10 @@ export class VideoEditExportQueue {
     } finally { this.draining = false }
   }
 }
+/** 导出项当前进度：本页任务的进度；接回后还没重新开始的，用中断时登记的进度。 */
+export function videoEditExportJobProgress(job: VideoEditExportJob): number {
+  return job.state === 'completed' ? 1 : job.task?.progress ?? job.restoredProgress ?? 0
+}
 export function retryableVideoEditExportJob(job: VideoEditExportJob): boolean {
   return (job.state === 'failed' || job.state === 'interrupted') && job.task?.state !== 'completed' && !job.outputPublished
 }
@@ -139,7 +145,7 @@ const videoEditExportJobRegistry: VideoEditExportJobMirror = {
     })))
     for (const job of jobs) { const reason = outcome.get(job.id); if (reason) job.notRetained = reason }
   },
-  update: job => syncVideoEditExportJob({ id: job.id, state: job.state, progress: job.state === 'completed' ? 1 : job.task?.progress ?? 0, ...(job.error ? { error: job.error } : {}) }),
+  update: job => syncVideoEditExportJob({ id: job.id, state: job.state, progress: videoEditExportJobProgress(job), ...(job.error ? { error: job.error } : {}) }),
   remove: ids => removeVideoEditExportJobs(ids),
 }
 export const videoEditExportQueue = new VideoEditExportQueue(async job => {
@@ -175,7 +181,7 @@ export function adoptRestoredVideoEditExports(): void {
     let release = (): void => undefined
     let state = record.state === 'queued' ? 'queued' as const : record.state === 'failed' ? 'failed' as const : 'interrupted' as const
     if (state === 'queued') { try { release = holdVideoEditActivity(owner.document.id, 'export') } catch { state = 'interrupted' } }
-    adopted.push({ registeredState: record.state, job: { id: record.id, owner, name: record.name, presetName: record.presetName, snapshot: snapshot.data, ...payload.data, state, release, controller: new AbortController(), restored: true, outputPublished: record.outputPublished, ...(record.error ? { error: record.error } : {}) } })
+    adopted.push({ registeredState: record.state, job: { id: record.id, owner, name: record.name, presetName: record.presetName, snapshot: snapshot.data, ...payload.data, state, release, controller: new AbortController(), restored: true, restoredProgress: record.progress, outputPublished: record.outputPublished, ...(record.error ? { error: record.error } : {}) } })
     return false
   })
   if (dropped.length) { logger.warn('导出队列登记的快照无法读取，已移除', { event: 'video_edit.export_queue.restore_dropped', context: { jobs: dropped.length } }); removeVideoEditExportJobs(dropped) }
