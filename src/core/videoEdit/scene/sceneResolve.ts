@@ -123,6 +123,8 @@ export interface ResolvedVideoEditSceneRecord {
   readonly end: number | undefined
   /** 所属素材（footage 沿 ref 一路找到的素材 ID）。 */
   readonly footage: string | undefined
+  /** 所属窗口，与录屏秒锚定共用同一套归属规则；没有可归属的窗口时 undefined。 */
+  readonly container: ResolvedVideoEditSceneRecord | undefined
   /** 挂在这条记录下的窗口内容时间表（它是窗口时），每类 role 为 shot 的记录一张。 */
   readonly timetables: readonly ResolvedVideoEditSceneTimetable[]
 }
@@ -205,7 +207,7 @@ export function resolveVideoEditScene(scene: VideoEditScene, schema: CodeSceneSc
 }
 
 type Values = Record<string, CodeSceneValue>
-interface MutableRecord extends Omit<ResolvedVideoEditSceneRecord, 'children' | 'end' | 'timetables'> { children: MutableRecord[]; end: number | undefined; timetables: ResolvedVideoEditSceneTimetable[] }
+interface MutableRecord extends Omit<ResolvedVideoEditSceneRecord, 'children' | 'end' | 'timetables' | 'container'> { children: MutableRecord[]; end: number | undefined; timetables: ResolvedVideoEditSceneTimetable[]; container: ResolvedVideoEditSceneRecord | undefined }
 interface MutableShot extends Omit<ResolvedVideoEditSceneShot, 'record'> { record: ResolvedVideoEditSceneRecord | undefined }
 interface ShotDraft { readonly source: VideoEditSceneRecord; readonly media: string; readonly image: boolean; readonly at: number; readonly src: number; readonly rate: number; readonly xf: number | undefined; readonly cursor: boolean; readonly continued: boolean }
 interface ShotTable { readonly containerId: string | undefined; readonly kind: string; readonly shots: MutableShot[]; readonly end: number }
@@ -451,11 +453,14 @@ function resolveScene(scene: VideoEditScene, schema: CodeSceneSchema, options: R
     // 开始留在剪切口一带不前移、结束却在前移区的记录，剪后结束会早于开始：收成开始那一刻。
     if (at !== undefined && end !== undefined) end = Math.max(at, end)
     if (shots) { at = shots[0].at; end = shots[shots.length - 1].end }
-    const item: MutableRecord = { id: record.id, kind: record.kind, source: record, parent, children: [], values, at, end, footage: kind.footage ? footageOf(record, raw, kinds) : undefined, timetables: [] }
+    const item: MutableRecord = { id: record.id, kind: record.kind, source: record, parent, children: [], values, at, end, footage: kind.footage ? footageOf(record, raw, kinds) : undefined, container: undefined, timetables: [] }
     for (const shot of shots ?? []) shot.record = item
     resolved.push(item); byId.set(item.id, item)
     parent?.children.push(item)
   }
+
+  // 窗口可能排在引用它的记录后面，全部记录就绪后再连接对象引用。
+  for (const item of resolved) item.container = byId.get(anchorContainer(item.source, raw, kinds, kinds[item.kind], id => containers.has(id)) ?? '')
 
   // untilNext 的结束：同一父记录下同类的下一条，最后一条到父记录结束（窗口内容已按时间表算好）。
   const groups = new Map<string, MutableRecord[]>()

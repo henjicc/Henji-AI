@@ -24,6 +24,9 @@ import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
 import type { CodeAuthorFrameObservation } from '@/core/videoEdit/codeAuthorProgram'
 import { videoEditMotionSpeedFacts, VIDEO_EDIT_MOTION_PACE_LIMITS } from '@/core/videoEdit/pictureReview'
 import { collectVideoEditTextSafety, type VideoEditTextMeasure } from '@/core/videoEdit/textSafetyReview'
+import { videoEditCodeSceneKeys } from '@/core/videoEdit/codeInputParameters'
+import { collectVideoEditSceneReview, readVideoEditSceneReviewPage, type VideoEditSceneReviewRecord } from './videoEditSceneReview'
+import { settleVideoEditCodeDeclarations, videoEditCodeDeclarationReader } from './videoEditCodeDeclarations'
 
 /** Same measuring path as the Program text overlay: the renderer document's loaded fonts. */
 function reviewTextMeasure(): VideoEditTextMeasure | undefined {
@@ -34,7 +37,15 @@ function reviewTextMeasure(): VideoEditTextMeasure | undefined {
   return (text, font) => { measuring.font = font; return measuring.measureText(text).width }
 }
 
-interface Snapshot { key: string; version: string; baseVersion: string; records: VideoEditReviewRecord[]; frames: number[]; warnings: string[]; sources: VideoEditMedia[] }
+type ReviewRecord = VideoEditReviewRecord | VideoEditSceneReviewRecord
+function isSceneRecord(record: ReviewRecord): record is VideoEditSceneReviewRecord { return record.motionEvidence?.basis === 'scene_data' }
+/** 抽帧器只需要区间与优先级；片子数据按普通结构事件取帧，不进入运动事件密度。 */
+function frameCandidates(records: readonly ReviewRecord[]): VideoEditReviewRecord[] {
+  return records.map(record => isSceneRecord(record)
+    ? { ...record, kind: 'effect', subjectType: 'video_edit.clip', motionEvidence: undefined } : record)
+}
+
+interface Snapshot { key: string; version: string; baseVersion: string; records: ReviewRecord[]; frames: number[]; warnings: string[]; sources: VideoEditMedia[] }
 const snapshots = new WeakMap<VideoEditInstance, Map<string, Snapshot>>()
 const logger = createLogger('features.videoEdit.review')
 /** Recheck the file snapshots used by pixel review before observing its plan. */
@@ -65,7 +76,7 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
     assertCurrent()
     const composition = videoEditComposition(owner.document, childId)
     const range = videoEditReviewRange(composition, input.from, input.to)
-    const key = JSON.stringify([childId, version, input.from, input.to, input.threshold, input.maxFrames, input.motion, input.motion ? fontGeneration : null])
+    const key = JSON.stringify([childId, version, input.from, input.to, input.threshold, input.maxFrames, input.motion, input.motion ? fontGeneration : null, input.scene])
     const saved = snapshots.get(owner) ?? new Map<string, Snapshot>(); snapshots.set(owner, saved)
     let id: string; let offset = 0; let snapshot: Snapshot
     if (input.cursor) {
@@ -75,7 +86,9 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
       if (!Number.isSafeInteger(offset) || offset >= snapshot.records.length) throw new Error('检查分页位置无效，请重新查询。')
     } else {
       id = crypto.randomUUID()
-      const { records, tracking } = collectVideoEditReviewStructure(composition, range)
+      const structure = collectVideoEditReviewStructure(composition, range)
+      const records: ReviewRecord[] = structure.records
+      const { tracking } = structure
       const results = videoEditTrackResults(composition)
       let sources: VideoEditMedia[] = []
       const warnings = ['检查点是结构候选和优先抽样，不证明实际像素可见或其余时段无问题。', '跟踪区间来自原始采样；渲染可能插值或借用附近有效位置，跟丢不等于画面空白。']
@@ -121,7 +134,7 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
         warnings.push(`画面检查：抖动按作者图层逐帧位姿判断（位移不小于1/256像素即像素会变），不含 draw 内部绘制与原视频；安全框与监视器安全框同一规则（标题90%、动作93%），只看停稳时刻，图形片段内文字未测量；速度上限为${VIDEO_EDIT_MOTION_PACE_LIMITS[input.motion.pace]}%画面宽/秒，不含原视频运动。均为复核依据，有意设计可保留。`)
         if (!measure) warnings.push('本次无法测量文字排版，原生文字与字幕的安全框未检查。')
         if (video) warnings.push('视频像素证据来自原片15fps低分辨率采样，速度以原片显示画幅宽度百分比/播放秒表示，已按当前放置时钟重算；并非精确PTS或最终合成，不排除采样间的短变化。代码视频输入及着色器内部仍须观察。')
-        for (const event of videoEditCrowdedReviewEvents(records, composition.fps, input.motion.minGapSeconds)) {
+        for (const event of videoEditCrowdedReviewEvents(records.filter((record): record is VideoEditReviewRecord => !isSceneRecord(record)), composition.fps, input.motion.minGapSeconds)) {
           assertVideoEditReviewBudget(records.length + 1)
           records.push({ kind: 'event_crowded', timeline: { from: event.from, to: Math.min(range.to, event.to) }, sequenceId: childId, path: [], subjectId: childId,
             motionEvidence: { basis: 'structural_events', gapSeconds: event.gapSeconds, suggestion: '核对这段是否有多个信息同时争抢注意力；按风格和阅读时间决定是否错开、合并或保留，不能只按间隔删减。' } })
@@ -158,20 +171,39 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
           }
         }
       }
+      if (input.scene) {
+        const sceneRecords = await settleVideoEditCodeDeclarations(() => {
+          // 在异步读录制页以前读齐声明，避免中途重试后重复 I/O。
+          const read = videoEditCodeDeclarationReader(owner)
+          visitVideoEditPictureInstances(composition, range, { sequence() {}, clip(local, entry) {
+            const code = entry.path.at(-1)!.clip.code
+            if (code && videoEditCodeSceneKeys(code).length) read(code)
+          } })
+          return read
+        })
+        assertCurrent()
+        records.push(...await collectVideoEditSceneReview(projectId, composition, range, input.scene, sceneRecords, context.signal, assertCurrent, records.length, warnings))
+        warnings.push('片子数据检查只说明数据与窗口内容的对应关系；作者代码可能主动淡掉错位的框，不能据此断言观众看见了框。鼠标日志缺失或隐藏时不判跳动；proposal 是可选改法，修改前读声明，写后读回并重新复核。')
+      }
       records.sort((a, b) => a.timeline.from - b.timeline.from || a.kind.localeCompare(b.kind) || a.subjectId.localeCompare(b.subjectId))
-      snapshot = { key, baseVersion: version, version: sources.length ? `${version}|review:${id}` : version, records, warnings, sources, frames: selectVideoEditReviewFrames(records, range, input.maxFrames, videoEditDuration(composition)) }
+      snapshot = { key, baseVersion: version, version: sources.length ? `${version}|review:${id}` : version, records, warnings, sources, frames: selectVideoEditReviewFrames(frameCandidates(records), range, input.maxFrames, videoEditDuration(composition)) }
       assertCurrent()
       while (saved.size >= 4) saved.delete(saved.keys().next().value!)
       saved.set(id, snapshot)
     }
     const ref = (kind: string, id: string) => ({ kind, id: `${projectId}:${id}` })
-    const records = snapshot.records.slice(offset, offset + input.limit).map(record => ({
-      kind: record.kind, timeline: { fromFrame: record.timeline.from, toFrame: record.timeline.to }, sequenceRef: ref('video_edit.sequence', record.sequenceId),
-      subjectRef: ref(record.kind === 'event_crowded' ? 'video_edit.sequence' : record.kind.startsWith('tracking_') ? 'video_edit.tracker' : record.kind === 'caption' ? 'video_edit.caption' : record.kind === 'transition' ? 'video_edit.transition' : record.subjectType ?? 'video_edit.clip', record.subjectId),
-      path: record.path.map(step => ({ sequenceRef: ref('video_edit.sequence', step.sequenceId), clipRef: ref('video_edit.clip', step.clipId) })),
-      ...(record.confidence === undefined ? {} : { confidence: record.confidence }), ...(record.source ? { source: { ...record.source } } : {}),
-      ...(record.motionEvidence ? { motionEvidence: { ...record.motionEvidence, ...(record.motionEvidence.elementPath ? { elementPath: [...record.motionEvidence.elementPath] } : {}), ...(record.motionEvidence.input ? { input: { ...record.motionEvidence.input, mediaRef: { ...record.motionEvidence.input.mediaRef } } } : {}) } } : {}),
-    }))
+    const page = snapshot.records.slice(offset, offset + input.limit)
+    const prepared = await readVideoEditSceneReviewPage(page.filter(isSceneRecord), context.signal, assertCurrent)
+    const records = page.map(original => {
+      const record = isSceneRecord(original) ? { ...original, motionEvidence: prepared.get(original) ?? original.motionEvidence } : original
+      return {
+        kind: record.kind, timeline: { fromFrame: record.timeline.from, toFrame: record.timeline.to }, sequenceRef: ref('video_edit.sequence', record.sequenceId),
+        subjectRef: isSceneRecord(record) ? { ...record.subjectRef } : ref(record.kind === 'event_crowded' ? 'video_edit.sequence' : record.kind.startsWith('tracking_') ? 'video_edit.tracker' : record.kind === 'caption' ? 'video_edit.caption' : record.kind === 'transition' ? 'video_edit.transition' : record.subjectType ?? 'video_edit.clip', record.subjectId),
+        path: record.path.map(step => ({ sequenceRef: ref('video_edit.sequence', step.sequenceId), clipRef: ref('video_edit.clip', step.clipId) })),
+        ...(record.confidence === undefined ? {} : { confidence: record.confidence }), ...(record.source ? { source: { ...record.source } } : {}),
+        ...(record.motionEvidence ? { motionEvidence: { ...record.motionEvidence, ...(record.motionEvidence.elementPath ? { elementPath: [...record.motionEvidence.elementPath] } : {}), ...(record.motionEvidence.input ? { input: { ...record.motionEvidence.input, mediaRef: { ...record.motionEvidence.input.mediaRef } } } : {}) } } : {}),
+      }
+    })
     await verifyVideoEditMotionSources(snapshot.sources, context.signal, assertCurrent)
     assertCurrent()
     logger.info('剪辑检查点查询完成', { event: 'video_edit.review.completed', requestId: context.requestId, context: { documentId: projectId, sequenceId: childId, total: snapshot.records.length, frames: snapshot.frames.length } })

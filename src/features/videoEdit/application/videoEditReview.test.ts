@@ -117,6 +117,16 @@ async function codeFixture(source = 'export default {name:"代码复核",width:1
   MotionWorker.instances = []; MotionWorker.automatic = true; vi.stubGlobal('Worker', MotionWorker)
   return data
 }
+it('片子数据检查条件参与分页身份，省略 scene 保持已有复核结果', async () => {
+  const { input } = await fixture()
+  const first = parse(await queryVideoEditReview({ ...input, scene: {}, limit: 1 }, context()))
+  const next = parse(await queryVideoEditReview({ ...input, scene: {}, limit: 1, cursor: first.nextCursor }, context()))
+  expect(next.total).toBe(first.total)
+  await expect(queryVideoEditReview({ ...input, scene: { minSeconds: .4 }, limit: 1, cursor: first.nextCursor }, context())).rejects.toThrow('分页已失效')
+  const plain = parse(await queryVideoEditReview(input, context()))
+  expect(plain.total).toBe(first.total)
+  expect(plain.documentVersion).toBe(first.documentVersion)
+})
 async function soundFixture(explicit = false) {
   const source = 'export default {name:"声音复核",width:1000,height:1000,durationSeconds:1000,params:[{key:"sound",type:"audio",title:"声音",default:null}],draw(){}}'
   const data = await codeFixture(source), { owner } = data
@@ -500,9 +510,9 @@ it('只读授权可查询；范围、完整序列引用和输出预算受公共�
   const grant = createApplicationCallerGrant({ callerId: 'review-read', capabilityIds: ['query_video_edit_review'], permissions: ['video_edit:read'], allowWrites: false, allowDestructive: false })
   const session = createApplicationCapabilitySession(grant)
   try {
-    const response = await session.execute({ id: 'query_video_edit_review', version: 1, input }, { ...context(), requestId: crypto.randomUUID() })
+    const response = await session.execute({ id: 'query_video_edit_review', version: queryVideoEditReviewCapability.version, input }, { ...context(), requestId: crypto.randomUUID() })
     expect(response).toMatchObject({ ok: true, data: { checkpoints: { selection: 'prioritized_sample' } } })
-    for (const patch of [{ maxFrames: 13 }, { threshold: -1 }, { limit: 51 }, { from: .5 }, { to: 0 }]) expect(queryVideoEditReviewCapability.inputSchema.safeParse({ ...input, ...patch }).success).toBe(false)
+    for (const patch of [{ maxFrames: 13 }, { threshold: -1 }, { limit: 51 }, { from: .5 }, { to: 0 }, { scene: { checks: [] } }, { scene: { cursorJumpRatio: -1 } }, { scene: { minSeconds: -1 } }]) expect(queryVideoEditReviewCapability.inputSchema.safeParse({ ...input, ...patch }).success).toBe(false)
     await expect(queryVideoEditReview({ ...input, documentRef: { ...input.documentRef, id: 'other' } }, context())).rejects.toThrow('必须属于')
     await expect(queryVideoEditReview({ ...input, from: 120, to: 150 }, context())).rejects.toThrow('序列时长')
   } finally { app.dispose() }

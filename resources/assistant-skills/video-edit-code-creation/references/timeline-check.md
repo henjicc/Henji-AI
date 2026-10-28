@@ -36,6 +36,28 @@
 
 处理批注读 annotations；修改源码新增固定版本，参数仍属于片段实例。不要用旧元素位置/旧版本帧评价新作品，也不要把编译成功当作像素验收。
 
+## 片子数据的检查与修正
+
+`query_video_edit_review` 传 `scene:{}` 启用三项，可用 checks 只选某项；省略 scene 不检查。minSeconds 默认 0.2 个播放秒（考虑片段速度、速度曲线、倒放与嵌套），查询边界保留阈值上下文；cursorJumpRatio 默认画面宽的 0.08。以下名称是结果 kind 值，不是工具名：
+
+- scene_box_stale：声明 footage 且有所属窗口的记录，生效时段内素材不在窗口最上层，或窗口 src 超出记录的 sourceTime 范围，连续达到 minSeconds 才报。
+- scene_cursor_jump：同窗口相邻项都画鼠标、src 不连续且叠化很短，录制坐标距离又超过 cursorJumpRatio 倍画面宽；跨剪切续放也查。日志、坐标缺失或鼠标隐藏时不判。
+- scene_issue：保留解析器 severity=user 的 message 与字段位置，不把普通整理提示升成画面错误。
+
+检查只读，不重新跟踪，不证明框可见；作者代码可能已把错位的框淡掉。
+
+结果 timeline 是查询序列的半开整数帧，subjectRef 通常是 `video_edit.scene_record`，path 保留完整嵌套放置；motionEvidence.basis 为 scene_data，suggestion 给出片子剪后时刻和字段。记录时刻属于引用片段的素材时间：“片子剪后”是扣除内部剪切后的秒数，start_cut/end_cut 接受剪后秒数，values 内时刻是未剪秒数，duration 是未剪长度，不能拿序列帧直接写秒数。span/untilNext 用起止并与父区间相交；neighbors 复用统一影响时段：上一落点到下一落点的结束，首尾延伸到最近有时段祖先并与父区间相交，不含 margin；不能靠改 duration 假装结束，应调整下一落点或新增落点。叠化结束前旧画面仍在，不算已换掉。每条 timeline 只覆盖对应问题区间，不含中间正常段，也不证明每个放置都已看图。
+
+proposal 形状为 [{ref,propertyId,value}]。先用 `describe_application_entities`（refs、propertyIds、detail="full"）核对可写性；同一 ref 的建议合成 `change_application_entities` 的 `set_properties`：target=ref、entityType=ref.kind、properties[propertyId]=value。写后用 `read_application_entity` 读回属性，再重查受影响区间。
+
+values 建议已带完整取值，不要只写 cursor。同一记录不同源区间、拆分两侧和每个续放接缝分别列出；只有同源区间重复引用才取最早放置。end_cut 只建议收短一直错位到实际生效结束的尾部，取这段连续尾部的开头；中段不给收短 proposal，须拆成多段或在错位前后各加正确落点，保留后续正常部分。同一尾部的重复建议执行一次后重查，其他中段问题仍需处理。
+
+上下文外已经开始的错位写“此前已开始”，不能把上下文边界当真实起点，也不给收短 proposal。手调过的结束字段、cursor 与带 {src} 锚定的时刻不给覆盖 proposal；按 suggestion 确认意图，直接写 start_cut/end_cut 可能改成固定秒数，需先确认或经 values 保持锚定。鼠标烘焙进画面时关闭 cursor 无效，应微调 src 或加叠化。没有 proposal 的先读声明与现值，核对 media/win、sourceTime 或按上述方式拆分；鼠标候选在未烘焙、未手调时可关闭 values.cursor，声明允许时加 xf 或微调 src。按意图选择，不自动改作者代码。
+
+建议仅为当前页按需准备，收短只校验该记录结束字段；按时间片让出并检查取消，后续分页复用候选与已有建议。分页保持原 scene 条件；编辑使旧分页与 documentVersion 失效，须重查后取帧。不可读引用以警告返回，其他结果照常；有警告的片段不能判已通过。候选为零只证明本轮数据检查通过，目标错位消除后仍须处理其他条目。计算预算与候选条数预算分开，超计算量按提示缩小范围，不静默截断。
+
+范围边界截在错位中间时，只能说“尚未确认是否延续到记录结束”，调整范围再查；已确认尾部但没有收短 proposal 时，按 suggestion 中手调、锚定、声明校验或剪切换算等原因处理。让出期间发生编辑会拒绝当前页。
+
 ## 撤销与保存
 
 - 写入成功后应用自动保存。
