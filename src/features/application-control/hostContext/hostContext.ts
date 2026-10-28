@@ -3,6 +3,7 @@ import { getAudioEditRevision } from '@/features/audioEdit/application/audioEdit
 import { getDocumentOperations } from '@/features/documents/documentOperations'
 import { activeVideoEditInstance, videoEditDomainRevision, subscribeVideoEdit } from '@/features/videoEdit/application/videoEditService'
 import { videoEditSelectedCodeElementContext } from '@/features/videoEdit/application/videoEditCodeElements'
+import { subscribeVideoEditSceneSelection, videoEditSelectedSceneRecordRef } from '@/features/videoEdit'
 import { videoEditCodeElementHostSummary } from '@/features/videoEdit/application/videoEditCodeElementSummary'
 import { videoEditPresetHostSummary, videoEditStyleHostSummary } from '@/features/videoEdit/application/videoEditStyles'
 import {
@@ -184,6 +185,8 @@ function startTracking(): () => void {
     getDocumentOperations().subscribe(() => { revision += 1; for (const listener of listeners) listener() }),
     // 编辑、选区和序列切换更新宿主上下文；逐帧播放只发布 view，不触发助手快照。
     subscribeVideoEdit(() => { revision += 1; for (const listener of listeners) listener() }),
+    // 时间线子轨道或片子数据面板里选中的记录：助手据此知道用户说的“这个框”是哪一条。
+    subscribeVideoEditSceneSelection(() => { revision += 1; for (const listener of listeners) listener() }),
   ]
   return () => {
     for (const unsubscribe of unsubscribers) unsubscribe()
@@ -223,7 +226,9 @@ export function captureHostSelection(summaryOnly = false): EmbeddedSelectionSnap
   const audio = useAudioEditStore.getState()
   // 高频宿主摘要只遍历首段；完整快照仅在发送时采集。
   const visibleIds = (ids: string[]) => summaryOnly ? ids.slice(0, 32) : ids
+  const sceneRecordRef = videoEdit && videoEditSelectedSceneRecordRef(videoEdit)
   const selectedRefs = [
+    ...(sceneRecordRef ? [sceneRecordRef] : []),
     ...(videoEdit?.selection ? [`video_edit.clip:${videoEdit.document.id}:${videoEdit.selection}`] : []),
     ...visibleIds(videoEdit?.selectedItemIds ?? []).map(id => `video_edit.item:${videoEdit!.document.id}:${id}`),
     ...(assets.selectedAsset ? [`asset:${assets.selectedAsset.id}`] : []),

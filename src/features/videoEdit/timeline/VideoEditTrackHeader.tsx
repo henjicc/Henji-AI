@@ -1,12 +1,16 @@
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, ChevronRight, Crosshair, Eye, EyeOff, Headphones, Link2, LockKeyhole, Unlink2, UnlockKeyhole, Volume2, VolumeX, type LucideIcon } from 'lucide-react'
+import { ChevronDown, ChevronRight, Crosshair, Database, Diamond, Eye, EyeOff, Headphones, Link2, LockKeyhole, Unlink2, UnlockKeyhole, Volume2, VolumeX, type LucideIcon } from 'lucide-react'
+import ContextMenu from '@/components/ContextMenu'
+import { useContextMenu } from '@/hooks/useContextMenu'
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { UiButton, UiIconButton, UiInput } from '@/components/ui'
 import { videoEditTrackHeaderButtons, type VideoEditTrackHeaderButtonId } from '@/core/videoEdit/trackHeaderButtons'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { VideoEditBarButtonSpec } from '../panels/VideoEditButtonBarEditor'
 import type { TimelineTrackRow } from './timelineGeometry'
 import { TIMELINE_HEADER_WIDTH } from './timelineGeometry'
+import type { VideoEditTrackLaneMode } from './keyframeLaneGeometry'
 
 type Track = TimelineTrackRow['track']
 type TrackPatch = Partial<Pick<Track, 'locked' | 'enabled' | 'muted' | 'solo' | 'syncLocked' | 'height'>>
@@ -30,7 +34,11 @@ interface Props {
   channelFormat?: 'mono' | 'stereo' | 'mixed'
   /** 轨道展开看关键帧（重要记录 019）：名称前的三角；不传时不显示。 */
   expanded?: boolean
+  /** 展开时显示的是什么（决定三角的名称）。 */
+  expandMode?: VideoEditTrackLaneMode
   onToggleExpanded?: () => void
+  /** 轨道上有引用片子数据的代码片段时传入：收起时点三角先选展开关键帧还是片子数据。 */
+  onExpandScene?: () => void
 }
 const CHANNEL_LABELS = { mono: '单声道', stereo: '立体声', mixed: '混合' } as const
 /** 轨道头按钮的无障碍短名（拼在轨道名后，如“视频 1锁定”）。 */
@@ -60,7 +68,7 @@ const DEFAULT_ON: ReadonlySet<VideoEditTrackHeaderButtonId> = new Set(['enabled'
  * 轨道头（PR）：编号与名称（点击设为目标）+ 按钮编辑器里选的开关按钮。默认按 PR 只放几个——视频轨：锁定、同步锁定、
  * 切换轨道输出；音频轨：锁定、静音、独奏。右键是 PR 的轨道头菜单。声道类型是名称下的次要信息。
  */
-export function VideoEditTrackHeader({ row, code, targeted, onTarget, onPatch, onResize, onContextMenu, renaming = false, onRename, onStartRename, channelFormat, caption = false, expanded = false, onToggleExpanded }: Props): React.ReactElement {
+export function VideoEditTrackHeader({ row, code, targeted, onTarget, onPatch, onResize, onContextMenu, renaming = false, onRename, onStartRename, channelFormat, caption = false, expanded = false, expandMode = 'keyframes', onToggleExpanded, onExpandScene }: Props): React.ReactElement {
   const { t } = useTranslation('ui')
   const { track } = row
   const name = track.name
@@ -68,8 +76,18 @@ export function VideoEditTrackHeader({ row, code, targeted, onTarget, onPatch, o
   // 字幕沿用视频轨的按钮列；不适用的操作保留同尺寸空位，避免锁与输出错列。
   const ids = videoEditTrackHeaderButtons(configured, track.kind)
   const specs = new Map(videoEditTrackHeaderButtonSpecs(track, targeted, onPatch, onTarget).map(spec => [spec.id, spec]))
+  const menu = useContextMenu()
+  const expandLabel = expanded ? `收起${name}${expandMode === 'scene' ? '片子数据' : '关键帧'}` : onExpandScene ? `展开${name}` : `展开${name}关键帧`
+  const toggle = (event: React.MouseEvent<HTMLElement>): void => {
+    if (expanded || !onExpandScene || !onToggleExpanded) { onToggleExpanded?.(); return }
+    menu.showMenuAt(event.currentTarget, [
+      { id: 'keyframes', label: '关键帧', icon: <Diamond size={UI_ICON_SIZE.sm} />, onClick: onToggleExpanded },
+      { id: 'scene', label: '片子数据', icon: <Database size={UI_ICON_SIZE.sm} />, onClick: onExpandScene },
+    ])
+  }
   return <div className={`sticky left-0 z-sticky flex h-full items-center gap-px border-r border-gap pl-1 pr-1.5 ${targeted ? 'bg-raised' : 'bg-panel'}`} style={{ width: TIMELINE_HEADER_WIDTH }} data-video-edit-track-header={track.id} onContextMenu={onContextMenu}>
-    {onToggleExpanded && <UiIconButton size="2xs" aria-expanded={expanded} aria-label={`${expanded ? '收起' : '展开'}${name}关键帧`} tooltip={expanded ? '收起关键帧' : '展开看关键帧'} onClick={onToggleExpanded}>{expanded ? <ChevronDown /> : <ChevronRight />}</UiIconButton>}
+    {onToggleExpanded && <UiIconButton size="2xs" aria-expanded={expanded} aria-label={expandLabel} tooltip={expanded ? expandMode === 'scene' ? '收起片子数据' : '收起关键帧' : onExpandScene ? '展开看关键帧或片子数据' : '展开看关键帧'} onClick={toggle}>{expanded ? <ChevronDown /> : <ChevronRight />}</UiIconButton>}
+    {onExpandScene && <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />}
     {caption ? <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1"><span className="w-5 shrink-0 text-left font-mono text-2xs font-semibold" data-video-edit-track-code>{code}</span><span className="truncate text-2xs">{name}</span></div> : renaming ? <TrackNameInput code={code} name={name} onDone={value => onRename?.(value)} />
       : <UiButton size="sm" className="min-w-0 flex-1 !justify-start" aria-label={`目标轨道 ${name}`} aria-pressed={targeted} onClick={onTarget} onDoubleClick={onStartRename} tooltip={channelFormat ? `${name}：${channelFormat === 'mixed' ? '既有单声道也有立体声片段' : `${CHANNEL_LABELS[channelFormat]}片段`}` : name}>
         <span className="w-5 shrink-0 text-left font-mono text-2xs font-semibold" data-video-edit-track-code>{code}</span>
