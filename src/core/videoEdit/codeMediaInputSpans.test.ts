@@ -2,7 +2,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { createVideoEditDocument, createVideoEditSequence, videoEditComposition, type VideoEditClip } from './document'
 import { addLegacyVideoEditTracks } from './testFixtures'
-import { codeMediaFrameParameters, codeMediaInputActive, codeMediaInputClipSeconds, codeMediaInputComposition, codeMediaInputKey, codeMediaInputNextFrame, codeMediaInputSeconds } from './codeMediaInput'
+import { codeMediaFrameParameters, codeMediaInputActive, codeMediaInputClipSeconds, codeMediaInputComposition, codeMediaInputKey, codeMediaInputNextFrame, codeMediaInputSeconds, CodeMediaInputReferenceError } from './codeMediaInput'
 import { codeImageReference, isCodeImageReference, type CodeImageReference, type CodeVideoSpan } from './codeMaterial/contract'
 import { codeMaterialImageReferenceSchema } from './codeMaterial/parameterValueSchema'
 import { CODE_VIDEO_SPAN_LIMIT } from './codeMaterial/videoSpans'
@@ -69,6 +69,8 @@ describe('视频参数取帧时间表 spans', () => {
       { ...valid, spans: [] },
       { ...valid, spans: Array.from({ length: CODE_VIDEO_SPAN_LIMIT + 1 }, (_, index) => ({ from: index, to: index + 1, src: 0 })) },
       { kind: 'image', mediaId: 'logo', spans: valid.spans },
+      { kind: 'image', mediaId: 'x'.repeat(101) },
+      { kind: 'video', mediaId: 'x'.repeat(101) },
     ]
     for (const value of invalid) {
       expect(() => codeImageReference(value, 'screen'), JSON.stringify(value).slice(0, 80)).toThrow()
@@ -113,8 +115,25 @@ describe('视频参数取帧时间表 spans', () => {
 
   it('作者代码这一帧的参数：段内是输入画面，段间为 null（和未绑定一样没有画面）', () => {
     const { clip: code } = fixture()
-    expect(codeMediaFrameParameters(code, { screen: timetable, label: '标题' }, frameAt(1.5), rate)).toEqual({ screen: { kind: 'image', mediaId: codeMediaInputKey(code.id, 'screen') }, label: '标题' })
-    expect(codeMediaFrameParameters(code, { screen: timetable, label: '标题' }, frameAt(3.5), rate)).toEqual({ screen: null, label: '标题' })
+    expect(codeMediaFrameParameters(code, { screen: timetable, label: '标题' }, frameAt(1.5), rate, new Set(['screen']))).toEqual({ parameters: { screen: { kind: 'image', mediaId: codeMediaInputKey(code.id, 'screen') }, label: '标题' }, images: new Map([['screen', codeMediaInputKey(code.id, 'screen')]]) })
+    expect(codeMediaFrameParameters(code, { screen: timetable, label: '标题' }, frameAt(3.5), rate, new Set(['screen']))).toEqual({ parameters: { screen: null, label: '标题' }, images: new Map() })
+  })
+
+  it('帧期画面绑定独立于持久引用：长派生键、静态图片和下方画面都明确绑定，损坏引用直接失败', () => {
+    const { clip: code } = fixture()
+    code.id = '12345678-1234-4abc-8def-123456789abc'
+    const mediaId = '089966db-89ab-4cde-8123-0123456789ab'
+    const parameter = `scene-input:${JSON.stringify(['yuanbao-film', 'win-demo', 'shot', mediaId, 0])}`
+    const key = codeMediaInputKey(code.id, parameter)
+    const result = codeMediaFrameParameters(code, { [parameter]: { kind: 'video', spans: timetable.spans, mediaId }, still: { kind: 'image', mediaId }, below: { kind: 'sequence', mediaId: 'below' } }, frameAt(1.5), rate, new Set([parameter, 'still', 'below']))
+    expect(key.length).toBeGreaterThan(100)
+    expect(result.images).toEqual(new Map([[parameter, key], ['still', mediaId], ['below', codeMediaInputKey(code.id, 'below')]]))
+    expect(result.parameters[parameter]).toEqual({ kind: 'image', mediaId: key })
+    expect(isCodeImageReference(result.parameters[parameter])).toBe(false)
+    expect(codeMaterialImageReferenceSchema.safeParse(result.parameters[parameter]).success).toBe(false)
+    for (const value of [{ kind: 'image' as const, mediaId: 'x'.repeat(101) }, { kind: 'video' as const, mediaId, time: -1 }]) {
+      expect(() => codeMediaFrameParameters(code, { [parameter]: value }, frameAt(1.5), rate, new Set([parameter]))).toThrow(CodeMediaInputReferenceError)
+    }
   })
 
   it('下一次参与的帧：跳到下一段的第一帧，跳过没有帧落进去的短段，超出上限为空', () => {

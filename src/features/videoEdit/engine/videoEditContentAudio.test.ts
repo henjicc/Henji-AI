@@ -57,7 +57,7 @@ it('音频默认只取下方轨道，指定媒体去掉片段处理；视频时�
   expect(fixed.document.width).toBe(64)
   expect(() => codeMediaInputComposition(composition, clip, { kind: 'video', mediaId: 'movie', time: 12 }, frame)).toThrow('超出')
   expect(codeMediaInputComposition(composition, clip, { kind: 'sequence', mediaId: 'below' }, frame)!.document.clips.map(clip => clip.id)).toEqual(['lower'])
-  expect(codeMediaFrameParameters(clip, { input: { kind: 'video', mediaId: 'movie' } }, frame, composition.frameRate)).toEqual({ input: { kind: 'image', mediaId: codeMediaInputKey(clip.id, 'input') } })
+  expect(codeMediaFrameParameters(clip, { input: { kind: 'video', mediaId: 'movie' } }, frame, composition.frameRate, new Set(['input']))).toEqual({ parameters: { input: { kind: 'image', mediaId: codeMediaInputKey(clip.id, 'input') } }, images: new Map([['input', codeMediaInputKey(clip.id, 'input')]]) })
 })
 it('visual-only changes reuse completed sound analysis while audible gain changes invalidate it', async () => {
   const { composition } = fixture(), create = vi.fn(() => ({ mixAudio: async (_start: number, duration: number) => [new Float32Array(Math.round(duration * composition.sampleRate)).fill(.25)], dispose: async () => {} }))

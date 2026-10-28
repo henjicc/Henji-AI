@@ -7,6 +7,8 @@ import { testAuthorBundle, testAuthorProgram } from './videoEditAuthorTestFixtur
 import type { CodeAuthorProgram as CodeMaterialProgram, CodeAuthorBundle } from '@/core/videoEdit/codeAuthorProgram'
 import { codeMaterialFilesKey, type CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import * as codeComponents from '@/core/videoEdit/codeMaterial/components'
+import * as inputHashes from '@/utils/save/hash'
+import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
 import { videoEditComposition, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import { VideoEditCodeSources, type PreparedVideoEditCodeEffect } from './videoEditCodeSources'
 import type { VideoEditCodeGpu } from './videoEditCodeGpu'
@@ -19,7 +21,8 @@ import { codeMediaInputKey } from '@/core/videoEdit/codeMediaInput'
 import { videoEditCodeInputs } from '@/core/videoEdit/codeInputParameters'
 import { GOLDEN_SCENE_DECLARATION, goldenScene } from '@/core/videoEdit/scene/sceneTestFixtures'
 
-vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), warn: vi.fn() }) }))
+const logWarn = vi.hoisted(() => vi.fn())
+vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), warn: logWarn }) }))
 function source(mode: 'static' | 'dynamic' = 'static', name = '新图形', kind = 'generator'): string {
   return `export default {name:"${name}",kind:"${kind}",mode:"${mode}",width:3840,height:2160,durationSeconds:10,params:[{key:"amount",type:"number",title:"强度",default:.5,min:0,max:1,step:.01}],${kind === 'filter' ? 'createWebGPU(){return {draw(){}};}' : `draw(ctx,t,p){ctx.fillStyle="rgba(255,0,0,.5)";ctx.fillRect(${mode === 'dynamic' ? 't*20+' : ''}p.amount*100,0,200,100);}`}}`
 }
@@ -76,9 +79,11 @@ it('片子数据参数（作者接口 v5）：params 拿到解析结果、派生
   const code = `export default {name:"片子",mode:"dynamic",width:64,height:64,durationSeconds:10,params:[{key:"film",type:"scene",title:"片子",schema:${JSON.stringify(GOLDEN_SCENE_DECLARATION)}}],draw(){}}`
   const document = fixture(code)
   document.codeMaterials![0].versions[0].apiVersion = 5
-  document.media = [{ id: 'screen', name: '录屏', kind: 'video', path: '/screen.mp4', durationSeconds: 60, width: 1920, height: 1080 }]
-  document.items.push({ id: 'screen', name: '录屏', kind: 'video', mediaId: 'screen' })
-  document.scenes = [goldenScene('screen')]
+  const mediaId = '089966db-89ab-4cde-8123-0123456789ab'
+  document.clips[0].id = '12345678-1234-4abc-8def-123456789abc'
+  document.media = [{ id: mediaId, name: '录屏', kind: 'video', path: '/screen.mp4', durationSeconds: 60, width: 1920, height: 1080 }]
+  document.items.push({ id: 'screen', name: '录屏', kind: 'video', mediaId })
+  document.scenes = [goldenScene(mediaId)]
   document.clips[0].code!.parameters = { film: { kind: 'scene', sceneId: 'golden-scene' } }
   document.clips[0].duration = 300
   const boundary = boundaries(document)
@@ -88,20 +93,30 @@ it('片子数据参数（作者接口 v5）：params 拿到解析结果、派生
     expect(boundary.sources.declarations(instance)).toBeUndefined()
     await boundary.sources.prepareScenes(document, document.clips)
     const film = videoEditCodeInputs(document, instance, value => boundary.sources.declarations(value))!.scenes.film
-    const input = film.timetables[0].shots[0].input, picture = codeMediaInputKey('clip', input)
-    const first = await boundary.sources.prepare(document, document.clips, 30, () => true, imageInputs(picture))
-    const [, , , , params, , , , , images = {}] = lastCall()
+    const input = film.timetables[0].shots[0].input, picture = codeMediaInputKey(document.clips[0].id, input)
+    expect(picture.length).toBeGreaterThan(100)
+    const decoded = new Map(await imageInputs(picture))
+    decoded.set(picture, { ...decoded.get(picture)!, texture: {} as VideoEditCodeImageInput['texture'] })
+    const first = await boundary.sources.prepare(document, document.clips, 30, () => true, Promise.resolve(decoded))
+    const [, , , , params, assets, , , , images = {}] = lastCall()
     expect(params.film).toBe(film)
     // 解析结果在各帧、各片段间共享，交给作者前已冻结
     expect(Object.isFrozen(film.records[0])).toBe(true)
     expect(() => { (film.byId as Map<string, unknown>).set('x', {}) }).toThrow()
     expect(Object.hasOwn(params, input)).toBe(false)
     expect(Object.keys(images)).toEqual([input])
+    expect(Object.keys(assets)).toEqual([input])
+    expect(assets[input]).toBe(decoded.get(picture)!.source)
+    expect(images[input].texture).toBe(decoded.get(picture)!.texture)
+    expect(images[input]).toMatchObject({ width: 100, height: 100 })
     expect(first.sceneIssues).toEqual([])
     await boundary.sources.prepare(document, document.clips, 31, () => true, imageInputs(picture))
     expect(lastCall()[4].film).toBe(film)
+    await expect(boundary.sources.prepare(document, document.clips, 32, () => true)).rejects.toThrow('没有可绘制的源画面')
+    await boundary.sources.prepare(document, document.clips, 33, () => true, imageInputs(picture))
+    expect(Object.keys(lastCall()[9]!)).toEqual([input])
     // 新的文档版本：重新解析；一条取帧车道超过上限（保留的段放到 5.12 秒）时，问题只随截断以后的帧交给渲染器呈现
-    const shots = Array.from({ length: 600 }, (_, index) => ({ id: `shot-${index}`, kind: 'shot', parent: 'win-demo', values: { at: index * 0.01, media: 'screen', src: index } }))
+    const shots = Array.from({ length: 600 }, (_, index) => ({ id: `shot-${index}`, kind: 'shot', parent: 'win-demo', values: { at: index * 0.01, media: mediaId, src: index } }))
     const next: VideoEditComposition = { ...document, revision: document.revision + 1, scenes: [{ ...document.scenes[0], records: [...document.scenes[0].records.filter(record => record.kind !== 'shot'), ...shots] }] }
     boundary.sources.updateDocument(next)
     const intact = await boundary.sources.prepare(next, next.clips, 30, () => true, imageInputs(picture))
@@ -110,6 +125,96 @@ it('片子数据参数（作者接口 v5）：params 拿到解析结果、派生
     const overflow = await boundary.sources.prepare(next, next.clips, Math.round(6 * next.fps), () => true)
     expect(overflow.sceneIssues).toHaveLength(1)
     expect(overflow.sceneIssues[0]).toContain(document.scenes[0].name)
+  } finally { await boundary.sources.dispose() }
+})
+
+it('损坏的画面引用让当前帧明确失败，结构化日志只含参数键摘要与原因', async () => {
+  const document = fixture('export default {name:"画面",params:[{key:"picture",type:"image",title:"画面",default:null}],draw(){}}')
+  document.clips[0].code!.parameters = { picture: { kind: 'image', mediaId: 'x'.repeat(101) } }
+  const boundary = boundaries(document)
+  logWarn.mockClear()
+  try {
+    await expect(boundary.sources.prepare(document, document.clips, 0, () => true)).rejects.toThrow('素材引用无效')
+    expect(boundary.generator).not.toHaveBeenCalled()
+    await vi.waitFor(() => expect(logWarn).toHaveBeenCalledOnce())
+    expect(logWarn.mock.lastCall![1]).toEqual({ event: 'video_edit.code_input.failed', context: { sequenceId: document.id, clipId: document.clips[0].id, frame: 0, parameter: { digest: expect.stringMatching(/^[a-f0-9]{64}$/), length: 7 }, reason: expect.stringContaining('mediaId') } })
+    expect(JSON.stringify(logWarn.mock.calls)).not.toContain('x'.repeat(101))
+    expect(JSON.stringify(logWarn.mock.calls)).not.toContain('picture')
+  } finally { await boundary.sources.dispose() }
+})
+
+it('滤镜的损坏画面引用按实例去重，通过问题呈现通道显示且不重复调用效果失败日志', async () => {
+  const document = fixture('export default {name:"滤镜",kind:"filter",params:[{key:"picture",type:"image",title:"画面",default:null}],createWebGPU(){return {draw(){}};}}')
+  const clip = document.clips[0]
+  const effect = { id: 'filter', name: '滤镜', enabled: true, amount: 1, code: { ...clip.code!, parameters: { picture: { kind: 'video' as const, mediaId: 'screen', time: -1 } } } }
+  document.clips = [{ ...clip, kind: 'video', code: undefined, effects: [effect] }]
+  const boundary = boundaries(document), onEffectError = vi.fn()
+  logWarn.mockClear()
+  try {
+    for (const frame of [0, 1, 2]) {
+      const prepared = await boundary.sources.prepare(document, document.clips, frame, () => true, undefined, { onEffectError })
+      expect(prepared.sceneIssues).toEqual([expect.stringContaining('素材引用无效')])
+    }
+    expect(onEffectError).not.toHaveBeenCalled()
+    await vi.waitFor(() => expect(logWarn).toHaveBeenCalledOnce())
+    expect(logWarn.mock.lastCall![1].context).toMatchObject({ sequenceId: document.id, clipId: clip.id, effectId: effect.id, frame: 0, reason: expect.stringContaining('.time') })
+    expect(boundary.generator).not.toHaveBeenCalled()
+  } finally { await boundary.sources.dispose() }
+})
+
+it('引用失败按片段与参数去重，原因变化或恢复后允许重新记录；摘要不阻塞旧帧清理', async () => {
+  const document = fixture('export default {name:"画面",params:[{key:"picture",type:"image",title:"画面",default:null}],draw(){}}')
+  const invalid = { kind: 'image' as const, mediaId: 'x'.repeat(101) }
+  document.clips[0].code!.parameters = { picture: invalid }
+  const boundary = boundaries(document), digests: Array<(digest: string) => void> = []
+  const hash = vi.spyOn(inputHashes, 'sha256HexString').mockImplementation(() => new Promise(resolve => digests.push(resolve)))
+  logWarn.mockClear()
+  try {
+    for (const frame of [0, 1, 2]) await expect(boundary.sources.prepare(document, document.clips, frame, () => true, Promise.resolve(new Map()))).rejects.toThrow('素材引用无效')
+    expect(hash).toHaveBeenCalledOnce()
+    expect(logWarn).not.toHaveBeenCalled()
+    expect(boundary.releaseUnused.mock.lastCall![0].size).toBe(0)
+    const prepareValue = async (picture: import('@/core/videoEdit/codeMaterial/contract').CodeParameterValue, frame: number, clipId = document.clips[0].id): Promise<void> => {
+      const next = { ...document, clips: [{ ...document.clips[0], id: clipId, code: { ...document.clips[0].code!, parameters: { picture } } }] }
+      boundary.sources.updateParameters(next)
+      await boundary.sources.prepare(next, next.clips, frame, () => true)
+    }
+    await expect(prepareValue({ kind: 'video', mediaId: 'screen', time: -1 }, 3)).rejects.toThrow('素材引用无效')
+    expect(hash).toHaveBeenCalledTimes(2)
+    await prepareValue(null, 4)
+    expect(boundary.pictures.size).toBe(1)
+    digests[0]('a'.repeat(64)); digests[1]('b'.repeat(64))
+    await vi.waitFor(() => expect(logWarn).toHaveBeenCalledTimes(2))
+    expect(boundary.pictures.size).toBe(1)
+    await expect(prepareValue(invalid, 5)).rejects.toThrow('素材引用无效')
+    await expect(prepareValue(invalid, 6, 'another-clip')).rejects.toThrow('素材引用无效')
+    expect(hash).toHaveBeenCalledTimes(4)
+    digests[2]('c'.repeat(64)); digests[3]('d'.repeat(64))
+    await vi.waitFor(() => expect(logWarn).toHaveBeenCalledTimes(4))
+    expect(logWarn.mock.calls.map(call => call[1].context.frame)).toEqual([0, 3, 5, 6])
+    expect(logWarn.mock.lastCall![1].context.clipId).toBe('another-clip')
+  } finally { digests.forEach(resolve => resolve('f'.repeat(64))); hash.mockRestore(); await boundary.sources.dispose() }
+})
+
+it('自定义结构含 kind 和 mediaId 字段也不决定媒体语义，不读素材且仍使用静态缓存', async () => {
+  const code = 'export default {name:"自定义",mode:"static",types:{content:{title:"内容",layout:"row",fields:{kind:{type:"text",title:"类别",maxLength:40,default:"image"},mediaId:{type:"text",title:"标识",maxLength:100,default:"missing-screen"}}}},params:[{key:"content",type:"content",title:"内容",default:{}}],draw(){}}'
+  const document = fixture(code), boundary = boundaries(document)
+  const lastCall = (): Parameters<VideoEditCodeGpu['authorGenerator']> => boundary.generator.mock.lastCall as unknown as Parameters<VideoEditCodeGpu['authorGenerator']>
+  logWarn.mockClear()
+  try {
+    for (const kind of ['image', 'video', 'sequence']) {
+      const next = { ...document, clips: [{ ...document.clips[0], code: { ...document.clips[0].code!, parameters: { content: { kind, mediaId: 'missing-screen' } } } }] }
+      boundary.sources.updateParameters(next)
+      await boundary.sources.prepare(next, next.clips, 0, () => true)
+      expect(lastCall()[4].content).toEqual({ kind, mediaId: 'missing-screen' })
+      expect(lastCall()[5]).toEqual({})
+      expect(lastCall()[9]).toEqual({})
+      const declarations = boundary.sources.declarations(next.clips[0].code!)!
+      expect(codeMaterialImageIds(next.clips[0].code, declarations)).toEqual(new Set())
+      expect(codeMaterialImageIds(next.clips[0].code, declarations, { 'scene-input:test': { kind: 'image', mediaId: 'screen' } })).toEqual(new Set(['screen']))
+      expect((await boundary.sources.prepare(next, next.clips, 1, () => true)).cacheHits).toBe(1)
+    }
+    expect(logWarn).not.toHaveBeenCalled()
   } finally { await boundary.sources.dispose() }
 })
 

@@ -1,4 +1,4 @@
-import { isCodeImageReference, type CodeParameterValues } from './codeMaterial/contract'
+import { CodeMaterialError, codeImageReference, type CodeParameterValues } from './codeMaterial/contract'
 import { codeVideoSpanAt, codeVideoSpanIndex } from './codeMaterial/videoSpans'
 import { type VideoEditComposition, type VideoEditClip } from './document'
 import type { CodeImageReference, CodeVideoSpan } from '../imaging/parameterTypes'
@@ -8,12 +8,33 @@ import { RECORDING_CURSOR_EFFECT } from './recordingCursor'
 type CodeMediaInputClip = Pick<VideoEditClip, 'start' | 'sourceInUs' | 'sourceRemainder'>
 
 export function codeMediaInputKey(clipId: string, parameter: string): string { return `code-input:${JSON.stringify([clipId, parameter])}` }
+export class CodeMediaInputReferenceError extends CodeMaterialError {
+  constructor(readonly parameter: string, readonly reason: string) { super('PARAMETERS', '代码画面参数的素材引用无效，请检查图片、视频或下方画面绑定。') }
+}
+/** 仅用于声明为画面的参数；未绑定时不参与，损坏引用不能当作普通参数跳过。 */
+export function codeMediaInputReference(value: unknown, parameter: string): CodeImageReference | undefined {
+  if (value === null || value === undefined) return undefined
+  try { return codeImageReference(value, '画面参数') }
+  catch (error) { throw new CodeMediaInputReferenceError(parameter, (error as CodeMaterialError).message) }
+}
+/** 只在帧期使用：输入键是合成器的资源别名，不能作为持久媒体 ID 重新校验或保存。 */
+export interface CodeMediaFrameParameters { parameters: CodeParameterValues; images: ReadonlyMap<string, string> }
 /**
  * 这一帧交给作者代码的参数：视频与下方画面换成这一帧的输入画面；带时间表的视频参数在不落在任何一段的帧里为 null
  * （和未绑定一样，`assets`/`inputs.images` 里没有这个键）。
  */
-export function codeMediaFrameParameters(clip: VideoEditClip, parameters: CodeParameterValues, frame: number, rate: VideoEditRatio): CodeParameterValues {
-  return Object.fromEntries(Object.entries(parameters).map(([key, value]) => [key, isCodeImageReference(value) && value.kind !== 'image' ? codeMediaInputActive(clip, value, frame, rate) ? { kind: 'image', mediaId: codeMediaInputKey(clip.id, key) } : null : value]))
+export function codeMediaFrameParameters(clip: VideoEditClip, parameters: CodeParameterValues, frame: number, rate: VideoEditRatio, imageParameters: ReadonlySet<string>): CodeMediaFrameParameters {
+  const images = new Map<string, string>()
+  const values = Object.fromEntries(Object.entries(parameters).map(([key, value]) => {
+    if (!imageParameters.has(key)) return [key, value]
+    const reference = codeMediaInputReference(value, key)
+    if (!reference) return [key, value]
+    if (reference.kind !== 'image' && !codeMediaInputActive(clip, reference, frame, rate)) return [key, null]
+    const input = reference.kind === 'image' ? reference.mediaId : codeMediaInputKey(clip.id, key)
+    images.set(key, input)
+    return [key, reference.kind === 'image' ? value : { kind: 'image', mediaId: input }]
+  }))
+  return { parameters: values, images }
 }
 /**
  * 视频参数的时间轴（秒）：片段入点加片段内时间，不经过代码片段的变速、倒放与时间重映射。等于作者代码的

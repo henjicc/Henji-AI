@@ -1,6 +1,6 @@
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 import { readAuthorMetadataCache, writeAuthorMetadataCache } from './videoEditAuthorMetadataCache'
-import { codeMediaFrameParameters, codeMediaInputClipSeconds } from '@/core/videoEdit/codeMediaInput'
+import { codeMediaFrameParameters, codeMediaInputClipSeconds, codeMediaInputReference, CodeMediaInputReferenceError } from '@/core/videoEdit/codeMediaInput'
 import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeMaterialContext } from '@/core/videoEdit/codeMaterial/contract'
 import { VideoEditRecordingCursorSource } from './videoEditRecordingCursorSource'
@@ -16,6 +16,7 @@ import { expandPinnedCodeComponents } from '@/core/videoEdit/codeMaterial/compon
 import { codeMaterialFilesKey, codeVersionContentKey, documentCodeSourceResolver, resolveCodeMaterialFiles, loadCodeSourceReferences } from '@/core/videoEdit/codeMaterial/sources'
 import { documentFontRevision } from '@/platform/fontFaces'
 import { createLogger } from '@/core/logging'
+import { sha256HexString } from '@/utils/save/hash'
 import { codeMaterialVersion as codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeParameterDeclaration, CodeParameterValues } from '@/core/videoEdit/codeMaterial/contract'
@@ -34,7 +35,7 @@ import { videoEditClipMedia, type VideoEditClip, type VideoEditComposition } fro
 import { VideoEditCodeCompiler } from './videoEditCodeCompiler'
 import type { VideoEditCodeGpu, VideoEditCodePicture } from './videoEditCodeGpu'
 import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
-import { codeMaterialImageIds, codeMaterialUsesAudio } from '@/core/videoEdit/codeMaterialResources'
+import { codeMaterialImageIds, codeMaterialImageParameterKeys, codeMaterialUsesAudio } from '@/core/videoEdit/codeMaterialResources'
 import { evaluateVideoEditGraphic, prepareVideoEditGraphic } from '@/core/videoEdit/graphics'
 import type { PreparedVideoEditGraphic, VideoEditGraphic, VideoEditGraphicDraw } from '@/core/videoEdit/graphics'
 import type { VideoEditBuiltinEffectInstance, VideoEditEffect } from '@/core/videoEdit/compositing'
@@ -57,18 +58,20 @@ interface KnownVersion { source: string; apiVersion: number; languageVersion: nu
 interface CachedProgram { source: string; program: CodeMaterialProgram; bytes: number }
 /**
  * `divisor`：这一帧代码生成器的回放分辨率缩小倍数，与缓存键一起取，画面与键始终一致。
- * `parameters`：这一帧的参数，视频与派生的取帧参数已换成输入画面的键（据此取 inputs.images / assets）；`author` 是交给作者代码的 params。
+ * `imageKeys` 是帧期画面绑定，资源别名不受持久媒体 ID 的长度限制；`author` 是交给作者代码的 params。
  */
-interface Plan { clip: VideoEditClip; key: string; static: boolean; program?: CodeMaterialProgram; draws?: VideoEditGraphicDraw[]; parameters: CodeParameterValues; author: Readonly<Record<string, unknown>>; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean; motion?: CodeMotionClock; divisor?: VideoEditRenderDivisor }
+interface Plan { clip: VideoEditClip; key: string; static: boolean; program?: CodeMaterialProgram; draws?: VideoEditGraphicDraw[]; parameters: CodeParameterValues; imageKeys: ReadonlyMap<string, string>; author: Readonly<Record<string, unknown>>; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean; motion?: CodeMotionClock; divisor?: VideoEditRenderDivisor }
 /** `parameters`：交给作者滤镜的 params（scene 参数已换成解析结果）。 */
 export interface PreparedVideoEditCodeEffect { effect: VideoEditEffect; builtin?: undefined; version: string; instanceKey: string; info: AuthorFrameInfo; program: CodeMaterialProgram; parameters: Readonly<Record<string, unknown>>; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean }
 /** 内置效果不需要编译源码，直接交给合成器的 GPU 实现（4.7）；`mask` 是这一帧的智能区域蒙版（4.7d）。 */
 export interface PreparedVideoEditBuiltinEffect { effect: VideoEditEffect; builtin: VideoEditBuiltinEffectInstance & RecordingCursorRenderInput & RecordingEffectsRenderInput; mask?: VideoEditSmartRegionMask }
 export type PreparedVideoEditEffect = PreparedVideoEditCodeEffect | PreparedVideoEditBuiltinEffect
-/** `sceneIssues`：这一帧用到的片子数据里需要用户处理的问题（画面会缺内容），由渲染器和效果错误一起呈现。 */
+/** `sceneIssues`：这一帧的片子数据或画面参数中需要用户处理的问题，由渲染器和效果错误一起呈现。 */
 export interface PreparedCodeSources { pictures: Map<string, VideoEditCodePicture | ImageBitmap>; effects: Map<string, PreparedVideoEditEffect[]>; sourceTimestamps: number[]; cacheHits: number; sceneIssues: string[] }
 export interface VideoEditCodePrepareOptions { preparationOnly?: boolean; transitions?: readonly VideoEditTransitionWindow[]; surfaceKeys?: ReadonlySet<string>; onEffectError?: (effect: VideoEditEffect, error: unknown) => void; audio?: (clip: VideoEditClip, program: CodeMaterialProgram, parameters: CodeParameterValues, signal: AbortSignal) => Promise<Pick<CodeMaterialContext, 'audio' | 'audioTime'>> }
 function identity(definitionId: string, versionId: string): string { return JSON.stringify([definitionId, versionId]) }
+interface InputFailureScope { sequenceId: string; clipId: string; effectId?: string; frame: number }
+function inputFailureInstance(scope: InputFailureScope): string { return JSON.stringify([scope.sequenceId, scope.clipId, scope.effectId ?? null]) }
 const frozenScenes = new WeakSet<object>()
 const readOnly = (): never => { throw new TypeError('片子数据的解析结果只读，请在自己的对象里保存派生数据。') }
 /**
@@ -118,10 +121,24 @@ export class VideoEditCodeSources {
   /** 已写过日志的片子数据问题：每次编辑都会重新解析，同一个问题只记一次。 */
   private readonly loggedSceneIssues = new Set<string>()
   private readonly loggedSceneInputs = new WeakSet<VideoEditCodeInputs>()
+  private readonly inputFailures = new Map<string, Map<string, string>>()
   private epoch = 0
   private disposed = false
   private protectedKeys = new Set<string>()
   private gpuWork: Promise<void> = Promise.resolve()
+  private clearInputFailure(scope: InputFailureScope, parameter: string): void {
+    const key = inputFailureInstance(scope), failures = this.inputFailures.get(key)
+    failures?.delete(parameter)
+    if (!failures?.size) this.inputFailures.delete(key)
+  }
+  private reportInputFailure(error: CodeMediaInputReferenceError, scope: InputFailureScope): void {
+    const key = inputFailureInstance(scope), failures = this.inputFailures.get(key) ?? new Map<string, string>()
+    if (failures.get(error.parameter) === error.reason) return
+    failures.set(error.parameter, error.reason); this.inputFailures.set(key, failures)
+    // 去重与帧归属同步确定，摘要计算不能延迟错误呈现或资源清理。
+    const report = (digest?: string): void => logger.warn('代码画面参数引用无效，当前帧准备失败', { event: 'video_edit.code_input.failed', context: { ...scope, parameter: { ...(digest ? { digest } : {}), length: error.parameter.length }, reason: error.reason } })
+    void sha256HexString(error.parameter).then(report, () => report())
+  }
   private releaseUnused(keys: ReadonlySet<string>): void {
     this.runtime?.releaseUnused(keys)
     for (const key of this.targetPictures.keys()) if (!keys.has(key)) this.targetPictures.delete(key)
@@ -146,6 +163,7 @@ export class VideoEditCodeSources {
   }
   async replaceContent(document: VideoEditComposition): Promise<void> {
     this.cancel(); await this.gpuWork
+    this.inputFailures.clear()
     this.protectedKeys.clear(); this.releaseUnused(this.protectedKeys)
     for (const bitmap of this.spilledPictures) bitmap.close()
     this.spilledPictures.clear(); this.targetPictures.clear(); this.staticPictures.clear()
@@ -280,17 +298,33 @@ export class VideoEditCodeSources {
     const pinned = new Set(clips.flatMap(clip => [...(clip.code ? [clip.code] : []), ...videoEditEffectCodes(activeVideoEditEffects(clip))].map(instance => identity(instance.definitionId, instance.versionId))))
     const transitionByClip = new Map(options.transitions?.flatMap(window => [[window.left.id, window], [window.right.id, window]] as const))
     /** `generator`：代码片段本身（只有它取派生的画面输入；附加滤镜的 scene 参数只换成解析结果）。 */
-    const animated = async (clip: VideoEditClip, instance: CodeMaterialInstance, program: CodeMaterialProgram, generator: boolean): Promise<Pick<Plan, 'context' | 'parameters' | 'author' | 'transitionHandles' | 'motion'>> => {
-      let animation = this.parameters.get(instance)
-      if (!animation || animation.program !== program) { animation = { program, prepared: prepareCodeMaterialParameters(program, instance) }; this.parameters.set(instance, animation) }
-      const window = transitionByClip.get(clip.id)
-      const context = window ? codeMaterialContextForTransitionFrame(clip, frame, document.frameRate, program, window, document) : codeMaterialContextForFrame(clip, frame, document.frameRate, program, document)
-      const parameters = evaluateCodeMaterialParameters(animation.prepared, videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, Boolean(window) && program.mode === 'static'))
-      Object.assign(context, await options.audio?.(clip, program, parameters, controller.signal)); assertCurrent()
-      const motion = undefined
-      const inputs = this.sceneInputs(document, clip, frame, instance, program, sceneIssues)
-      const frameParameters = codeMediaFrameParameters(clip, generator && inputs && Object.keys(inputs.derived).length ? { ...parameters, ...inputs.derived } : parameters, frame, document.frameRate)
-      return { context, parameters: frameParameters, author: videoEditCodeAuthorParameters(frameParameters, inputs), transitionHandles: Boolean(window), ...(motion ? { motion } : {}) }
+    const animated = async (clip: VideoEditClip, instance: CodeMaterialInstance, program: CodeMaterialProgram, generator: boolean, effectId?: string): Promise<Pick<Plan, 'context' | 'parameters' | 'imageKeys' | 'author' | 'transitionHandles' | 'motion'>> => {
+      const scope = { sequenceId: document.id, clipId: clip.id, ...(effectId ? { effectId } : {}), frame }
+      try {
+        let animation = this.parameters.get(instance)
+        if (!animation || animation.program !== program) {
+          // 在声明校验前识别损坏的画面引用，确保它也走同一个可观察的失败出口。
+          for (const key of codeMaterialImageParameterKeys(program.parameters)) {
+            codeMediaInputReference(instance.parameters[key], key); this.clearInputFailure(scope, key)
+          }
+          animation = { program, prepared: prepareCodeMaterialParameters(program, instance) }; this.parameters.set(instance, animation)
+        }
+        const window = transitionByClip.get(clip.id)
+        const context = window ? codeMaterialContextForTransitionFrame(clip, frame, document.frameRate, program, window, document) : codeMaterialContextForFrame(clip, frame, document.frameRate, program, document)
+        const parameters = evaluateCodeMaterialParameters(animation.prepared, videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, Boolean(window) && program.mode === 'static'))
+        Object.assign(context, await options.audio?.(clip, program, parameters, controller.signal)); assertCurrent()
+        const motion = undefined
+        const inputs = this.sceneInputs(document, clip, frame, instance, program, sceneIssues)
+        const derived = generator ? inputs?.derived : undefined
+        const imageParameters = codeMaterialImageParameterKeys(program.parameters, derived)
+        const frameParameters = codeMediaFrameParameters(clip, derived && Object.keys(derived).length ? { ...parameters, ...derived } : parameters, frame, document.frameRate, imageParameters)
+        this.inputFailures.delete(inputFailureInstance(scope))
+        return { context, parameters: frameParameters.parameters, imageKeys: frameParameters.images, author: videoEditCodeAuthorParameters(frameParameters.parameters, inputs), transitionHandles: Boolean(window), ...(motion ? { motion } : {}) }
+      } catch (error) {
+        assertCurrent()
+        if (error instanceof CodeMediaInputReferenceError) this.reportInputFailure(error, scope)
+        throw error
+      }
     }
     try {
       for (const clip of clips) {
@@ -333,15 +367,18 @@ export class VideoEditCodeSources {
             const key = identity(effect.code.definitionId, effect.code.versionId)
             const program = await this.program(key, codeMaterialSource(document, effect.code), controller.signal, pinned); assertCurrent()
             if (program.kind !== 'filter') throw new CodeMaterialError('TYPE', '附加效果必须使用单输入滤镜源码。')
-            const { author, ...animation } = await animated(clip, effect.code, program, false)
+            const { author, context, transitionHandles } = await animated(clip, effect.code, program, false, effect.id)
             // 回放分辨率降低时滤镜的输入、输出按序列缩小后的尺寸给出（任务 4.9），比例随 info 告诉作者。
             const divisor = this.runtime?.renderDivisor ?? 1
             const renderScale = divisor === 1 ? undefined : videoEditRenderSize(document.width, document.height, divisor).height / document.height
-            chain.push({ effect, version: key, instanceKey: `${clip.id}:${effect.id}`, info: { audio: animation.context.audio, audioTime: animation.context.audioTime, time: animation.context.time, frameDuration: 1 / document.fps, clip: { time: animation.context.localTime, duration: clip.duration / document.fps }, ...(renderScale ? { renderScale } : {}) }, program, ...animation, parameters: author })
+            chain.push({ effect, version: key, instanceKey: `${clip.id}:${effect.id}`, info: { audio: context.audio, audioTime: context.audioTime, time: context.time, frameDuration: 1 / document.fps, clip: { time: context.localTime, duration: clip.duration / document.fps }, ...(renderScale ? { renderScale } : {}) }, program, context, transitionHandles, parameters: author })
           } catch (error) {
             assertCurrent()
             if (!options.onEffectError) throw error
-            options.onEffectError(effect, error)
+            if (error instanceof CodeMediaInputReferenceError) {
+              const message = `效果“${effect.name}”无法应用：${error.message}`
+              if (!sceneIssues.includes(message)) sceneIssues.push(message)
+            } else options.onEffectError(effect, error)
           }
         }
         if (chain.length) effects.set(clip.id, chain)
@@ -354,7 +391,7 @@ export class VideoEditCodeSources {
           const moving = prepared.objects.some(object => object.parameters.curves.size > 0)
           const target = moving ? `graphic:dynamic:${clip.id}` : `graphic:static:${JSON.stringify([prepared.width, prepared.height, draws, draws.some(draw => draw.textStyle) ? documentFontRevision() : 0, videoEditTextResolution(Math.min(document.width / prepared.width, document.height / prepared.height) * clip.scale)])}`
           keys.add(target)
-          plans.push({ clip, key: target, static: !moving, draws, parameters: {}, author: {}, transitionHandles: transitionByClip.has(clip.id), context: { width: prepared.width, height: prepared.height, time: time.sourceInUs / 1e6 + time.sourceRemainder.numerator / time.sourceRemainder.denominator / 1e6, localTime: (frame - clip.start) / document.fps, sequenceTime: frame / document.fps, frame, fps: document.fps } })
+          plans.push({ clip, key: target, static: !moving, draws, parameters: {}, imageKeys: new Map(), author: {}, transitionHandles: transitionByClip.has(clip.id), context: { width: prepared.width, height: prepared.height, time: time.sourceInUs / 1e6 + time.sourceRemainder.numerator / time.sourceRemainder.denominator / 1e6, localTime: (frame - clip.start) / document.fps, sequenceTime: frame / document.fps, frame, fps: document.fps } })
           continue
         }
         if (clip.kind !== 'code') continue
@@ -363,17 +400,17 @@ export class VideoEditCodeSources {
         const key = identity(clip.code.definitionId, clip.code.versionId)
         const program = await this.program(key, version, controller.signal, pinned); assertCurrent()
         if (program.kind !== 'generator') throw new CodeMaterialError('TYPE', '单输入滤镜不能作为生成片段渲染。')
-        const { parameters, author, context, transitionHandles, motion } = await animated(clip, clip.code, program, true)
-        const imageSources = [...codeMaterialImageIds(clip.code)].map(id => { const media = document.media.find(media => media.id === id && ['image', 'video'].includes(media.kind)); if (!media) throw new Error('代码图片引用不存在。'); return [id, media.path, media.sourceRevision, media.width, media.height] })
+        const { parameters, imageKeys, author, context, transitionHandles, motion } = await animated(clip, clip.code, program, true)
+        const imageSources = [...codeMaterialImageIds(clip.code, program.parameters)].map(id => { const media = document.media.find(media => media.id === id && ['image', 'video'].includes(media.kind)); if (!media) throw new Error('代码图片引用不存在。'); return [id, media.path, media.sourceRevision, media.width, media.height] })
         const sourceTime = videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, transitionHandles && program.mode === 'static')
         const overrideValues = clip.elementOverrides ? Object.fromEntries(Object.entries(clip.elementOverrides).map(([id, value]) => [id, evaluateCodeElementOverride(value, sourceTime)])) : undefined
         // 引用片子数据的不做静态缓存：缓存键要整份序列化参数，而解析结果是带父子引用的对象图。
-        const isStatic = program.mode === 'static' && !codeMaterialUsesAudio(program) && !videoEditCodeSceneKeys(clip.code).length && !Object.values(clip.code.parameters).some(value => isCodeImageReference(value) && value.kind !== 'image')
+        const isStatic = program.mode === 'static' && !codeMaterialUsesAudio(program) && !videoEditCodeSceneKeys(clip.code).length && ![...codeMaterialImageParameterKeys(program.parameters)].some(key => { const value = clip.code!.parameters[key]; return isCodeImageReference(value) && value.kind !== 'image' })
         // 回放分辨率（任务 4.9）：缩小倍数进静态缓存键，切回完整分辨率时不会沿用缩小的画面。
         const divisor = this.runtime?.renderDivisor ?? 1
         const target = isStatic ? `code:static:${JSON.stringify([key, parameters, imageSources, documentFontRevision(), overrideValues, ...(divisor === 1 ? [] : [divisor])])}` : `code:dynamic:${clip.id}`
         keys.add(target)
-        plans.push({ clip, key: target, static: isStatic, program, parameters, author, context, transitionHandles, ...(motion ? { motion } : {}), ...(divisor === 1 ? {} : { divisor }) })
+        plans.push({ clip, key: target, static: isStatic, program, parameters, imageKeys, author, context, transitionHandles, ...(motion ? { motion } : {}), ...(divisor === 1 ? {} : { divisor }) })
       }
       assertCurrent(); if (!options.preparationOnly) this.protectedKeys = keys
       const result: PreparedCodeSources = { pictures: new Map(), effects, sourceTimestamps: plans.map(plan => plan.context.time), cacheHits: 0, sceneIssues }
@@ -420,8 +457,8 @@ export class VideoEditCodeSources {
             } else {
               // GPU 入口直接采样纹理；位图只在作者代码真读 assets 时才生成。
               const assets: Record<string, CanvasImageSource> = {}, images: Record<string, AuthorGpuImage> = {}
-              for (const [name, value] of Object.entries(plan.parameters)) if (isCodeImageReference(value)) {
-                const input = inputs?.get(value.mediaId)
+              for (const [name, key] of plan.imageKeys) {
+                const input = inputs?.get(key)
                 if (!input) throw new Error(`作者图片参数 ${name} 没有可绘制的源画面。`)
                 images[name] = { texture: input.texture, width: input.width, height: input.height }
                 Object.defineProperty(assets, name, { enumerable: true, get: () => {
@@ -475,7 +512,7 @@ export class VideoEditCodeSources {
   diagnostics() { return { programs: this.programs.size, programBytes: this.programBytes, staticPictures: this.staticPictures.size, seenVersions: this.known.size, seenManifestBytes: this.knownBytes, compiler: this.compiler.diagnostics?.() } }
   async dispose(): Promise<void> {
     if (this.disposed) return
-    this.disposed = true; this.cursorSources.clear(); this.zoomPointers.clear(); this.cancel(); this.compiler.dispose(); this.protectedKeys.clear()
+    this.disposed = true; this.cursorSources.clear(); this.zoomPointers.clear(); this.cancel(); this.compiler.dispose(); this.protectedKeys.clear(); this.inputFailures.clear()
     await Promise.allSettled([this.gpuWork])
     this.spilledPictures.forEach(bitmap => bitmap.close()); this.spilledPictures.clear(); this.targetPictures.clear()
     try { this.runtime?.releaseUnused(new Set()) }
