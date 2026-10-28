@@ -26,7 +26,7 @@ beforeEach(() => {
 afterEach(async () => { await closeAllVideoEdits(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 async function fixture() {
   const owner = await createVideoEditTestProject(); const sequenceId = owner.document.sequences[0].id
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media = [{ id: 'media', kind: 'video', name: '口播', path: path.resolve(path.sep, 'map-source.mp4'), width: 64, height: 64, durationSeconds: 30, hasAudio: true, assetContent: identity }]
     document.items = [{ id: 'item', kind: 'video', name: '口播', mediaId: 'media' }]
     const sequence = document.sequences[0]
@@ -72,7 +72,7 @@ it('分页有界、结果副本不污染缓存；改范围、筛选、剪辑或�
   expect(second.records[0].path[0].clipRef.id).not.toBe('polluted')
   await expect(queryVideoEditSourceMap({ ...input, to: 90, cursor: first.nextCursor }, context())).rejects.toThrow('失效')
   await expect(queryVideoEditSourceMap({ ...input, mediums: ['video'], cursor: first.nextCursor }, context())).rejects.toThrow('失效')
-  editVideoProject(owner.document.id, document => { document.sequences[0].clips[0].start = 0; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].clips[0].start = 0; return document })
   await expect(queryVideoEditSourceMap({ ...input, cursor: first.nextCursor }, context())).rejects.toThrow('失效')
   const fresh = parse(await queryVideoEditSourceMap({ ...input, limit: 1 }, context()))
   await reopenVideoEdit(owner.document.id)
@@ -96,7 +96,7 @@ it('只读权限可查询，内容读取尊重跨域权限；取消或核对期�
     const controller = new AbortController(); controller.abort()
     await expect(queryVideoEditSourceMap(input, { signal: controller.signal })).rejects.toThrow()
     vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockImplementationOnce(async () => {
-      editVideoProject(owner.document.id, document => { document.sequences[0].name = '人工修改'; return document }); return identity
+      editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].name = '人工修改'; return document }); return identity
     })
     await expect(queryVideoEditSourceMap({ ...input, includeContent: true }, context())).rejects.toThrow('内容改变')
     expect(owner.document.sequences[0].name).toBe('人工修改')

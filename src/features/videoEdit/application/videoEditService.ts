@@ -1,3 +1,6 @@
+import { jsonEqual } from '@/core/jsonEqual'
+import { parseVideoEditDocument as parseDocument, freezeVideoEditDocument } from '@/core/videoEdit/documentValidation'
+import { z } from 'zod'
 import type { ApplicationExecutionContext } from '@/core/application-control'
 import { getVideoEditSequenceDefaults } from './videoEditSequenceDefaults'
 import { beginVideoEditFirstFrame, countVideoEditTiming, endVideoEditTiming } from '../engine/videoEditFirstFrameTiming'
@@ -17,7 +20,7 @@ import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/appl
 import { registerApplicationCloseGuard } from '@/core/applicationLifecycle/applicationCloseGuards'
 import { rebindVideoEditProjectTextIdentities } from '@/core/videoEdit/textTranscript'
 import { inspectVideoEditMediaContent } from '../videoEditMediaContent'
-import { createVideoEditSequence, changeVideoEditSequenceSettings, videoEditComposition, videoEditDuration, videoEditDocumentSchema, videoEditClipSchema, type VideoEditClip, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence, type VideoEditMedia } from '@/core/videoEdit/document'
+import { createVideoEditSequence, changeVideoEditSequenceSettings, videoEditComposition, videoEditDuration, videoEditClipSchema, type VideoEditClip, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence, type VideoEditMedia } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { rescaleVideoEditFrame } from '@/core/videoEdit/time'
 import { assertVideoEditLockedTracks, assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
@@ -141,7 +144,7 @@ interface GestureState {
   validateFonts?: boolean
   validateParameters?: boolean
   /** 仅遮罩手势按触及的效果判断变化；其他写入仍沿用完整文档比较。 */
-  maskChanges?: Map<string, { before: string | undefined; changed: boolean }>
+  maskChanges?: Map<string, { before: VideoEditEffectMask | undefined; changed: boolean }>
   /** 遮罩快速路径最近发布的内容版本；其他内容写入使其回到完整比较。 */
   maskContentVersion?: number
 }
@@ -181,7 +184,10 @@ export function beginVideoEditGesture(projectId: string): VideoEditGesture {
   gestures.set(owner, { handle, before: owner.document, beforeContentVersion: owner.contentVersion, finished, release, maskChanges: new Map() })
   return handle
 }
-function sameDocumentContent(left: VideoEditDocument, right: VideoEditDocument): boolean { return JSON.stringify({ ...left, revision: 0, exportHistory: undefined, inPlaceGenerations: undefined, creativeIntents: undefined }) === JSON.stringify({ ...right, revision: 0, exportHistory: undefined, inPlaceGenerations: undefined, creativeIntents: undefined }) }
+export function parseVideoEditDocument(value: unknown, base?: VideoEditDocument): VideoEditDocument {
+  return parseDocument(value, base, error => logger.warn('剪辑增量校验异常，已退回完整校验', { event: 'video_edit.document.validation_fallback', error }))
+}
+function sameDocumentContent(left: VideoEditDocument, right: VideoEditDocument): boolean { return jsonEqual({ ...left, revision: 0, exportHistory: undefined, inPlaceGenerations: undefined, creativeIntents: undefined }, { ...right, revision: 0, exportHistory: undefined, inPlaceGenerations: undefined, creativeIntents: undefined }) }
 export function withVideoEditCurrentMetadata(document: VideoEditDocument, current: VideoEditDocument): VideoEditDocument {
   const next = { ...document }
   if (current.exportHistory) next.exportHistory = current.exportHistory
@@ -195,7 +201,7 @@ export function withVideoEditCurrentMetadata(document: VideoEditDocument, curren
 /** 内容恢复共用新快照，保留当前元数据并保持两种版本单调递增。 */
 function restoreVideoEditDocumentContent(owner: VideoEditInstance, snapshot: VideoEditDocument): void {
   const before = owner.document
-  owner.document = withVideoEditCurrentMetadata({ ...snapshot, id: before.id, name: before.name, revision: before.revision + 1 }, before)
+  owner.document = freezeVideoEditDocument(withVideoEditCurrentMetadata({ ...snapshot, id: before.id, name: before.name, revision: before.revision + 1 }, before))
   owner.version++; owner.contentVersion++
 }
 /** 页已封存后才发布头；采集不会产生作品撤销步，也不会清空重做。 */
@@ -205,7 +211,7 @@ export function updateVideoEditCreativeIntents(id: string, head: CreativeIntents
   const creativeIntents = creativeIntentsSchema.parse(head)
   if ([...creativeIntents.drafts, ...creativeIntents.sessions].some(draft => draft.ownerRef.kind !== 'document.video_edit' || draft.ownerRef.id !== id)) throw new Error('原稿归属与当前剪辑不符，请恢复原文件。')
   const previous = owner.document
-  owner.document = { ...previous, creativeIntents }; inheritVideoEditCompositions(previous, owner.document); owner.version++
+  owner.document = freezeVideoEditDocument({ ...previous, creativeIntents }); inheritVideoEditCompositions(previous, owner.document); owner.version++
   notifyVideoEditContent(owner); publishVideoEdit(true)
 }
 /** Irreversible privacy erasure traverses current, both history directions, and an in-flight gesture. */
@@ -214,7 +220,7 @@ export function purgeVideoEditExplanationSession(id: string, sessionId: string):
   const documents = [owner.document, ...owner.past, ...owner.future, ...(gesture ? [gesture.before] : [])]
   const ids = new Set(documents.flatMap(document => document.creativeIntents?.sessions.filter(s => s.id === sessionId).flatMap(s => [...s.pages, ...s.visualEvidenceRefs.map(v => v.resourceRef), ...(s.audio ? [s.audio] : []), ...(s.submittedPlanRef ? [s.submittedPlanRef] : [])]).map(r => r.resourceId) ?? []))
   const resources = new Map(documents.flatMap(document => document.creativeIntents?.resources.filter(r => ids.has(r.resourceId)).map(r => [r.resourceId, r] as const) ?? []))
-  const scrub = (document: VideoEditDocument): VideoEditDocument => document.creativeIntents ? { ...document, creativeIntents: { ...document.creativeIntents, sessions: document.creativeIntents.sessions.filter(s => s.id !== sessionId), resources: document.creativeIntents.resources.filter(r => !ids.has(r.resourceId)) } } : document
+  const scrub = (document: VideoEditDocument): VideoEditDocument => document.creativeIntents ? freezeVideoEditDocument({ ...document, creativeIntents: { ...document.creativeIntents, sessions: document.creativeIntents.sessions.filter(s => s.id !== sessionId), resources: document.creativeIntents.resources.filter(r => !ids.has(r.resourceId)) } }) : document
   owner.past = owner.past.map(scrub); owner.future = owner.future.map(scrub); if (gesture) gesture.before = scrub(gesture.before)
   updateVideoEditCreativeIntents(id, scrub(owner.document).creativeIntents ?? { drafts: [], sessions: [], resources: [] })
   return [...resources.values()]
@@ -226,7 +232,7 @@ export function recordVideoEditExport(id: string, entry: VideoEditExportHistoryE
   if (closing.has(owner) || owner.session.isEnded) throw new Error('原剪辑正在关闭，无法保存导出记录。')
   const exportHistory = videoEditExportHistorySchema.parse([...(owner.document.exportHistory ?? []).filter(value => value.taskId !== entry.taskId), entry])
   const previous = owner.document
-  owner.document = { ...previous, exportHistory }; inheritVideoEditCompositions(previous, owner.document)
+  owner.document = freezeVideoEditDocument({ ...previous, exportHistory }); inheritVideoEditCompositions(previous, owner.document)
   owner.version++; notifyVideoEditContent(owner); publishVideoEdit()
 }
 /** 任务元数据沿用会话保存屏障，不增加撤销步、不清空重做，也不推进剪辑内容版本。 */
@@ -236,11 +242,12 @@ export function updateVideoEditInPlaceMetadata(id: string, records: readonly Vid
   // 关闭已冻结会话内容；保留此前已保存的续接点，关闭完成后由新会话续查。
   if (closing.has(owner) || owner.session.isEnded) return
   const parsed = videoEditInPlaceRecordsSchema.parse(records)
-  if (JSON.stringify(owner.document.inPlaceGenerations ?? []) === JSON.stringify(parsed)) return
+  if (jsonEqual(owner.document.inPlaceGenerations ?? [], parsed)) return
   const previous = owner.document
-  owner.document = { ...previous }; inheritVideoEditCompositions(previous, owner.document)
-  if (parsed.length) owner.document.inPlaceGenerations = parsed
-  else delete owner.document.inPlaceGenerations
+  const next = { ...previous }
+  if (parsed.length) next.inPlaceGenerations = parsed
+  else delete next.inPlaceGenerations
+  owner.document = freezeVideoEditDocument(next); inheritVideoEditCompositions(previous, owner.document)
   owner.version++; notifyVideoEditContent(owner); publishVideoEdit()
 }
 export function updateVideoEditGesture(handle: VideoEditGesture, update: (document: VideoEditDocument) => VideoEditDocument): VideoEditDocument {
@@ -275,7 +282,7 @@ export function updateVideoEditMaskGesture(handle: VideoEditGesture, sequenceId:
   if (!sequence || !clip || !effect?.builtin) throw new Error('原内置效果已移除。')
   assertVideoEditClipsEditable(sequence, [clipId])
   assertVideoEditMaskTrackers(clip, mask ?? undefined)
-  if (JSON.stringify(effect.mask) === JSON.stringify(mask ?? undefined)) return owner.document
+  if (jsonEqual(effect.mask, mask ?? undefined)) return owner.document
   if (isSmartRegionMask(mask) && clip.kind !== 'video' && clip.kind !== 'image') throw new Error('智能区域只能用在视频、图片片段上。')
   const candidate = { ...effect }; delete candidate.mask
   if (mask) candidate.mask = mask
@@ -287,10 +294,10 @@ export function updateVideoEditMaskGesture(handle: VideoEditGesture, sequenceId:
     let change = state.maskChanges.get(key)
     if (!change) {
       const original = state.before.sequences.find(value => value.id === sequenceId)?.clips.find(value => value.id === clipId)?.effects?.find(value => value.id === effectId)
-      change = { before: JSON.stringify(original?.mask), changed: false }
+      change = { before: original?.mask, changed: false }
       state.maskChanges.set(key, change)
     }
-    change.changed = JSON.stringify(nextEffect.mask) !== change.before
+    change.changed = !jsonEqual(nextEffect.mask, change.before)
   }
   const nextClip = { ...clip, effects: clip.effects!.map(value => value === effect ? nextEffect : value) }
   const nextSequence = { ...sequence, clips: sequence.clips.map(value => value === clip ? nextClip : value) }
@@ -323,9 +330,11 @@ export function finishVideoEditGesture(handle: VideoEditGesture, commit = true):
   if (commit) assertApplicationWritesAllowed()
   if (commit && state.validateParameters) {
     try {
-      videoEditDocumentSchema.parse(owner.document)
-      assertVideoEditLockedTracks(state.before, owner.document)
-      validateCodeMaterialDocument(owner.document, readVideoEditCodeMetadata(owner, owner.document), changedCodeMaterialVersions(state.before, owner.document))
+      const normalized = normalizeVideoEditCaptionSources(parseVideoEditDocument(owner.document, state.before))
+      assertVideoEditLockedTracks(state.before, normalized)
+      validateCodeMaterialDocument(normalized, readVideoEditCodeMetadata(owner, normalized), changedCodeMaterialVersions(state.before, normalized))
+      // 规范化也可能改变画面内容，必须推进预览版本，让缓存和订阅者读到提交值。
+      if (!jsonEqual(owner.document, normalized)) publishVideoEditDocument(owner, normalized, false, true)
     } catch (error) { finishVideoEditGesture(handle, false); throw error }
   }
   if (commit && state.validateFonts) {
@@ -392,15 +401,15 @@ export function withVideoEditCommitBatch<T>(batch: VideoEditCommitBatch | undefi
   try { return write() } finally { activeCommitBatch = previous }
 }
 /** 确认介绍的意图回执只改保存标记，属于持久化恢复，不算作品修改、不留撤销步骤。 */
-function historyContent(document: VideoEditDocument): string {
-  return JSON.stringify({ ...document, revision: 0, creativeIntents: document.creativeIntents && { ...document.creativeIntents,
+function historyContent(document: VideoEditDocument): VideoEditDocument {
+  return ({ ...document, revision: 0, creativeIntents: document.creativeIntents && { ...document.creativeIntents,
     drafts: document.creativeIntents.drafts.map(draft => ({ ...draft, applications: draft.applications.map(application => ({ ...application, saved: false })) })) } })
 }
 export function endVideoEditCommitBatch(batch: VideoEditCommitBatch): void {
   if (batch.ended) return
   batch.ended = true
   const { instance } = batch
-  const unchanged = !batch.first || !batch.last || historyContent(batch.first) === historyContent(batch.last)
+  const unchanged = !batch.first || !batch.last || jsonEqual(historyContent(batch.first), historyContent(batch.last))
   const foreign = instance.past.filter(entry => !batch.own.has(entry))
   if (unchanged && foreign.length === batch.pastAtBegin.length && foreign.every((entry, index) => entry === batch.pastAtBegin[index])) {
     instance.past = [...batch.pastAtBegin]; instance.future = [...batch.futureAtBegin]
@@ -628,7 +637,7 @@ export async function waitVideoEditImportEdit(owner: VideoEditInstance, signal?:
 /** Apply only the import's changes to an older undo snapshot, preserving unrelated fields. */
 export function mergeVideoEditImportDocument(target: VideoEditDocument, before: VideoEditDocument, after: VideoEditDocument): VideoEditDocument {
   function merge(value: unknown, previous: unknown, next: unknown): unknown {
-    if (JSON.stringify(previous) === JSON.stringify(next)) return value
+    if (jsonEqual(previous, next)) return value
     if (Array.isArray(previous) && Array.isArray(next) && Array.isArray(value) && [...previous, ...next].every(entry => typeof entry === 'object' && entry !== null && 'id' in entry)) {
       const id = (entry: unknown): unknown => (entry as { id: unknown }).id
       const old = new Map(previous.map(entry => [id(entry), entry])); const added = new Map(next.map(entry => [id(entry), entry]))
@@ -667,7 +676,7 @@ export function editVideoEditImportGroup(group: VideoEditImportEditGroup, update
   if (boundary < 0) throw new Error('此次导入已被撤销，剩余文件不会写入。')
   assertApplicationWritesAllowed(); assertVideoEditWritable(owner)
   if (gestures.has(owner)) throw new Error('请先完成当前参数调整。')
-  const rebased = owner.past.map((snapshot, index) => index > boundary ? videoEditDocumentSchema.parse(update(structuredClone(snapshot))) : snapshot)
+  const rebased = owner.past.map((snapshot, index) => index > boundary ? parseVideoEditDocument(update(snapshot), snapshot) : snapshot)
   const next = applyVideoEditDocument(owner, update, false)
   for (const other of importEditGroups.get(owner) ?? []) if (other.boundary) {
     const index = owner.past.indexOf(other.boundary)
@@ -690,13 +699,13 @@ export function restoreVideoEditSnapshot(id: string, expected: VideoEditDocument
   return restored
 }
 function applyVideoEditDocument(instance: VideoEditInstance, update: (document: VideoEditDocument) => VideoEditDocument, recordHistory: boolean, restoring = false, preserveProgramAnchors: readonly string[] = []): VideoEditDocument {
-  const requested = update(structuredClone(instance.document))
+  const requested = update(instance.document)
   assertCodeSourcesUnchanged(instance.document, requested)
-  const next = normalizeVideoEditCaptionSources(videoEditDocumentSchema.parse(restoring ? requested : reconcileVideoEditTimedContent(instance.document, requested, preserveProgramAnchors)))
+  const next = normalizeVideoEditCaptionSources(parseVideoEditDocument(restoring ? requested : reconcileVideoEditTimedContent(instance.document, requested, preserveProgramAnchors), gestures.get(instance)?.before ?? instance.document))
   if (!restoring) assertVideoEditLockedTracks(instance.document, next)
   validateCodeMaterialDocument(next, readVideoEditCodeMetadata(instance, next), changedCodeMaterialVersions(instance.document, next))
   if (!restoring && !gestures.has(instance)) validateVideoEditFontChanges(instance.document, next, readVideoEditCodeMetadata(instance, instance.document), readVideoEditCodeMetadata(instance, next))
-  if (JSON.stringify(next) === JSON.stringify(instance.document)) return instance.document
+  if (jsonEqual(next, instance.document)) return instance.document
   return publishVideoEditDocument(instance, next, recordHistory)
 }
 function publishVideoEditDocument(instance: VideoEditInstance, next: VideoEditDocument, recordHistory: boolean, spatialOnly = false): VideoEditDocument {
@@ -706,7 +715,7 @@ function publishVideoEditDocument(instance: VideoEditInstance, next: VideoEditDo
   if (recordHistory) { instance.past = [...instance.past.slice(-49), instance.document]; instance.future = [] }
   const before = instance.document
   // 剪辑名就是文件名，由文档会话同步；内容修改不能改名
-  instance.document = { ...next, id: before.id, name: before.name, revision: instance.document.revision + 1 }
+  instance.document = freezeVideoEditDocument({ ...next, id: before.id, name: before.name, revision: instance.document.revision + 1 })
   if (recordHistory) {
     compensationHistories.set(instance.document, history)
     // Match the bounded public transaction receipts; weak keys with past arrays
@@ -887,9 +896,10 @@ export async function saveVideoEdit(id: string): Promise<void> {
 
 /** Source text is reference prose; edge whitespace is never a subtitle boundary. */
 function normalizeVideoEditCaptionSources(document: VideoEditDocument): VideoEditDocument {
-  return { ...document, sequences: document.sequences.map(sequence => sequence.captions?.some(caption => caption.sourceText !== undefined && caption.sourceText !== caption.sourceText.trim())
-    ? { ...sequence, captions: sequence.captions.map(caption => caption.sourceText === undefined ? caption : { ...caption, sourceText: caption.sourceText.trim() }) }
-    : sequence) }
+  const sequences = document.sequences.map(sequence => sequence.captions?.some(caption => caption.sourceText !== undefined && caption.sourceText !== caption.sourceText.trim())
+    ? { ...sequence, captions: sequence.captions.map(caption => caption.sourceText === undefined || caption.sourceText === caption.sourceText.trim() ? caption : { ...caption, sourceText: caption.sourceText.trim() }) }
+    : sequence)
+  return sequences.every((sequence, index) => sequence === document.sequences[index]) ? document : freezeVideoEditDocument({ ...document, sequences })
 }
 /** 文档内容（剪辑的持久部分）：去掉外壳表达的 format / version / id / name / revision。 */
 export function videoEditDocumentContent(document: VideoEditDocument): VideoEditDocumentContent {
@@ -899,15 +909,15 @@ export function videoEditDocumentContent(document: VideoEditDocument): VideoEdit
 /** 文档内容 → 剪辑（完整 schema 校验）；内容读不懂时报错，原文件不动。 */
 export function videoEditDocumentFromContent(content: unknown, meta: { id: string; name: string }, revision = 0): VideoEditDocument {
   const raw = { format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: meta.id, name: meta.name, revision, ...(typeof content === 'object' && content !== null ? content : {}) }
-  const parsed = videoEditDocumentSchema.safeParse(raw)
-  // schema 路径是诊断信息，不是用户语言，只进日志
-  if (!parsed.success) {
-    logger.warn('剪辑文件内容不完整', { event: 'video_edit.document.invalid', context: { docId: meta.id, format: 'document.video_edit', version: 1, issues: parsed.error.issues.slice(0, 10).map(issue => ({ path: issue.path.join('.'), message: issue.message })) } })
+  try { return normalizeVideoEditCaptionSources(parseVideoEditDocument(raw)) }
+  catch (error) {
+    if (!(error instanceof z.ZodError)) throw error
+    // schema 路径是诊断信息，不是用户语言，只进日志
+    logger.warn('剪辑文件内容不完整', { event: 'video_edit.document.invalid', context: { docId: meta.id, format: 'document.video_edit', version: 1, issues: error.issues.slice(0, 10).map(issue => ({ path: issue.path.join('.'), message: issue.message })) } })
     const versions: unknown[] = typeof content === 'object' && content !== null && 'codeMaterials' in content && Array.isArray(content.codeMaterials) ? content.codeMaterials.flatMap((value: unknown) => value && typeof value === 'object' && 'versions' in value && Array.isArray(value.versions) ? value.versions : []) : []
     const oldCode = versions.some(value => value && typeof value === 'object' && 'source' in value && !('files' in value))
     throw new Error(persistenceMessage(oldCode ? 'unsupported-version' : 'invalid-content', { format: '剪辑' }))
   }
-  return normalizeVideoEditCaptionSources(parsed.data)
 }
 
 /**
@@ -924,7 +934,7 @@ async function relocateProjectMedia(document: VideoEditDocument, projectRoot: st
     if (!normalize(item.path).startsWith(root)) return item
     const { assetId: _assetId, assetContent: previous, ...rest } = item
     const content = await inspectVideoEditMediaContent(item).catch(() => null)
-    if (!item.assetId && JSON.stringify(previous ?? null) === JSON.stringify(content)) return item
+    if (!item.assetId && jsonEqual(previous ?? null, content)) return item
     changed = true
     return content ? { ...rest, assetContent: content } : rest
   }))
@@ -947,8 +957,13 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
   if (existing && existing.session === session && !session.isEnded) { if (focus) focusVideoEdit(session.id); return existing }
   const loaded = videoEditDocumentFromContent(session.getContent(), session.documentMeta)
   const root = projectRootOf(session)
-  const [detached, lastSequenceId] = await Promise.all([root ? relocateProjectMedia(loaded, root) : null, readLastVideoEditSequence(session.id)])
-  const document = detached ?? loaded
+  const [document, lastSequenceId] = await Promise.all([
+    root ? relocateProjectMedia(loaded, root).then(detached => detached ? parseVideoEditDocument(detached, loaded) : loaded).catch(error => {
+      logger.warn('打开后项目素材身份未刷新', { event: 'video_edit.document.media_relocate_failed', error })
+      return loaded
+    }) : loaded,
+    readLastVideoEditSequence(session.id),
+  ])
   invalidateCodeSourceReads((document.codeMaterials ?? []).flatMap(definition => definition.versions))
   if (session.isEnded) throw new Error('剪辑在打开期间已关闭。')
   // 回到上次所在的序列；那条已被删掉时用第一条
@@ -982,7 +997,7 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
       invalidateCodeSourceReads((received.codeMaterials ?? []).flatMap(definition => definition.versions))
       if (receivedRoot) void relocateProjectMedia(received, receivedRoot).then(next => {
         if (!next || session.isEnded || instance.document !== received) return
-        instance.document = next; instance.version++; instance.contentVersion++
+        instance.document = parseVideoEditDocument(next, received); instance.version++; instance.contentVersion++
         notifyVideoEditContent(instance); publishVideoEdit(true)
       }).catch(error => logger.warn('重新载入后项目素材身份未刷新', { event: 'video_edit.document.media_relocate_failed', error }))
       instance.past = []; instance.future = []; instance.playing = false; instance.version++; instance.contentVersion++
@@ -1011,12 +1026,12 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
   const unsubscribe = session.subscribe(() => {
     if (session.isEnded) { dispose(); return }
     const name = session.documentMeta.name
-    if (instance.document.name !== name) { const previous = instance.document; instance.document = { ...previous, name }; inheritVideoEditCompositions(previous, instance.document); publishVideoEdit(true) } else publishVideoEdit()
+    if (instance.document.name !== name) { const previous = instance.document; instance.document = freezeVideoEditDocument({ ...previous, name }); inheritVideoEditCompositions(previous, instance.document); publishVideoEdit(true) } else publishVideoEdit()
   })
   disposers.set(instance, dispose)
   instances.set(session.id, instance)
   // 去掉了项目内素材的素材库关联：写回剪辑文件
-  if (detached) session.markChanged()
+  if (document !== loaded) session.markChanged()
   if (focus) activeId = session.id
   beginVideoEditFirstFrame(session.id, instance.activeSequenceId, 'open')
   publishVideoEdit(true)
@@ -1257,7 +1272,7 @@ export async function verifyVideoEditSaved(id: string, expected?: VideoEditDocum
   const saved = videoEditDocumentFromContent(read.content, meta)
   const snapshot = videoEditDocumentFromContent(videoEditDocumentContent(expected ?? instance.document), meta)
   // 结果回填只确认本次内容；并发元数据有自己的保存屏障，不能使已保存结果被误报为失败。
-  return options.contentOnly ? sameDocumentContent(saved, snapshot) : JSON.stringify(saved) === JSON.stringify(snapshot)
+  return options.contentOnly ? sameDocumentContent(saved, snapshot) : jsonEqual(saved, snapshot)
 }
 
 export function appendVideoEditMedia(id: string, media: VideoEditMedia): void {

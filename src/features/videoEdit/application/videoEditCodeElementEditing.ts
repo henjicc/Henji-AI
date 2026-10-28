@@ -38,7 +38,13 @@ export function readVideoEditCodeElementEdit(target: VideoEditCodeElementTarget)
 }
 function edit(target: VideoEditCodeElementTarget, change: (clip: ReturnType<typeof resolve>['clip']) => void, gesture?: VideoEditGesture): void {
   if (gesture && gesture.projectId !== target.projectId) throw new Error('元素调整不属于此剪辑。')
-  const update = (document: VideoEditDocument): VideoEditDocument => { const { clip } = resolve(target, document); change(clip); if (!Object.keys(clip.elementOverrides ?? {}).length) delete clip.elementOverrides; return document }
+  const update = (document: VideoEditDocument): VideoEditDocument => {
+    const { sequence, clip } = resolve(target, document)
+    const next = structuredClone(clip)
+    change(next)
+    if (!Object.keys(next.elementOverrides ?? {}).length) delete next.elementOverrides
+    return { ...document, sequences: document.sequences.map(value => value === sequence ? { ...sequence, clips: sequence.clips.map(value => value === clip ? next : value) } : value) }
+  }
   if (gesture) updateVideoEditGesture(gesture, update)
   else editVideoProject(target.projectId, update)
 }

@@ -20,6 +20,78 @@ import { beginVideoEditGesture, finishVideoEditGesture, updateVideoEditPicturePo
 import { createVideoEditGraphic } from '@/core/videoEdit/graphics'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { openVideoEditDocument, activeVideoEditInstance, closeVideoEditProject, subscribeVideoEditCommandFacts, beginVideoEditCommitBatch, endVideoEditCommitBatch, withVideoEditCommitBatch } from './videoEditService'
+import { updateVideoEditParameterGesture } from './videoEditService'
+import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
+import { GENERIC_FONT_FACES } from '@/core/fonts/catalog'
+import { loadFontLibrary } from '@/platform/fonts'
+import { clearLogEvents, getLogEvents } from '@/core/logging'
+
+it('参数手势提交无需规范化时保留当前文档引用和预览版本', async () => {
+  const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id
+  appendVideoEditClip(id)
+  const gesture = beginVideoEditGesture(id)
+  updateVideoEditParameterGesture(gesture, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, opacity: .5 })) })) }))
+  const current = owner.document; const version = owner.version; const contentVersion = owner.contentVersion
+  finishVideoEditGesture(gesture)
+  expect(owner.document).toBe(current)
+  expect(owner.version).toBe(version)
+  expect(owner.contentVersion).toBe(contentVersion)
+})
+
+it('仅字幕字体修改走字体校验；手势失败回滚，公共写入先加载字体库', async () => {
+  const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id
+  const style = videoEditSubtitleStyleSchema.parse({})
+  const writeFont = (fontFamily: string) => (document: typeof owner.document): typeof owner.document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, captions: [{ id: 'font-caption', text: '字幕', start: 0, duration: 30, style: { ...style, fontFamily } }] })) })
+  editVideoProject(id, writeFont('sans-serif'))
+  const before = owner.document; const history = owner.past.length
+  const list = vi.spyOn(getPlatform().fonts, 'list').mockResolvedValue({ revision: 1, faces: [] })
+  await loadFontLibrary(true)
+  expect(() => editVideoProject(id, writeFont('Totally Missing Font'))).toThrow(/可用候选/)
+  const gesture = beginVideoEditGesture(id)
+  updateVideoEditParameterGesture(gesture, writeFont('Totally Missing Font'))
+  expect(() => finishVideoEditGesture(gesture)).toThrow(/可用候选/)
+  expect(owner.document.sequences).toBe(before.sequences)
+  expect(owner.past).toHaveLength(history)
+  list.mockClear()
+  list.mockResolvedValue({ revision: 2, faces: [{ ...GENERIC_FONT_FACES[0], id: 'caption-font', family: 'Caption Test Font', fullName: 'Caption Test Font' }] })
+  const app = createApplicationHarness()
+  try {
+    const target = { kind: 'video_edit.caption', id: `${id}:font-caption` }
+    const baseline = await app.read(target)
+    const result = await app.call('change_application_entities', { summary: '修改字幕字体', changes: [{ kind: 'set_properties', entityType: target.kind, target, properties: { 'video_edit.caption.style': { ...style, fontFamily: 'Caption Test Font' } } }] }, baseline.revisions as Record<string, number>)
+    expect(result, JSON.stringify(result)).toMatchObject({ ok: true })
+    expect(list).toHaveBeenCalled()
+    expect(owner.document.sequences[0].captions![0].style).toMatchObject({ fontFamily: 'Caption Test Font' })
+  } finally { app.dispose() }
+})
+
+it.each(['open', 'reload'] as const)('项目素材 %s 时校验 IPC 内容身份，非法结果不能进入当前文档', async mode => {
+  const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id
+  const store = harnessDocumentStore(); const container = store.stored(id)!.meta.container
+  if (container.kind !== 'project') throw new Error('剪辑必须在项目里')
+  const path = `${store.projects.get(container.projectId)!.path}/素材/图.png`
+  appendVideoEditMedia(id, { id: 'relocated', name: '图', path, kind: 'image', durationSeconds: 0, width: 320, height: 180 })
+  await saveVideoEdit(id)
+  const inspect = vi.mocked(getPlatform().assetLibrary.inspectFileContent)
+  inspect.mockResolvedValue({ sizeBytes: -1, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) })
+  clearLogEvents()
+  if (mode === 'open') {
+    await closeVideoEditProject(id)
+    const opened = await openVideoEditDocument({ id })
+    expect(opened.document.media[0].assetContent).toBeUndefined()
+    expect(opened.dirty).toBe(false)
+  } else {
+    await owner.session.reload()
+    await vi.waitFor(() => expect(getLogEvents()).toEqual(expect.arrayContaining([expect.objectContaining({ event: 'video_edit.document.media_relocate_failed', level: 'warn' })])))
+    expect(owner.document.media[0].assetContent).toBeUndefined()
+  }
+  expect(getLogEvents()).toEqual(expect.arrayContaining([expect.objectContaining({ event: 'video_edit.document.media_relocate_failed', level: 'warn' })]))
+  await closeVideoEditProject(id)
+  inspect.mockResolvedValue({ sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) })
+  const reopened = await openVideoEditDocument({ id })
+  expect(reopened.document.media[0].assetContent?.sizeBytes).toBe(4096)
+  expect(Object.isFrozen(reopened.document.media[0].assetContent)).toBe(true)
+})
 
 it('并发后台打开复用唯一实例，前台打开仍聚焦；失败后可重试', async () => {
   const original = await createLegacyTrackVideoEditProject()
@@ -38,7 +110,7 @@ it('并发后台打开复用唯一实例，前台打开仍聚焦；失败后可�
 
 it('原生图形和调整范围独立持久，复制序列重映射转场，错误草稿不改变历史', async () => {
   const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const sequenceId = owner.activeSequenceId
-  editVideoProject(id, document => {
+  editVideoProject(id, document => { document = structuredClone(document);
     const sequence = document.sequences[0]
     document.items.push({ id: 'native-graphic', name: '图形', kind: 'graphic', graphic: createVideoEditGraphic('rect', 3840, 2160) }, { id: 'native-adjustment', name: '调整层', kind: 'adjustment' })
     const left = makeVideoEditItemClip(document, 'native-graphic', sequenceId, { frame: 0, duration: 30 })
@@ -58,11 +130,11 @@ it('原生图形和调整范围独立持久，复制序列重映射转场，错�
   const duplicate = owner.document.sequences.find(sequence => sequence.id === duplicateId)!
   expect(duplicate.transitions![0].id).not.toBe('native-transition')
   expect(duplicate.transitions![0].leftClipId).toBe(duplicate.clips[0].id)
-  editVideoSequence(id, duplicateId, sequence => { sequence.clips[0].graphic!.objects[0].parameters.x = 123; return sequence })
+  editVideoSequence(id, duplicateId, sequence => { sequence = structuredClone(sequence); sequence.clips[0].graphic!.objects[0].parameters.x = 123; return sequence })
   expect(owner.document.items[0].graphic!.objects[0].parameters.x).not.toBe(123)
   expect(owner.document.sequences[0].clips[0].graphic!.objects[0].parameters.x).not.toBe(123)
   const beforeReject = owner.document; const history = owner.past.length
-  expect(() => editVideoSequence(id, duplicateId, sequence => { sequence.transitions![0].durationFrames = 1000; return sequence })).toThrow('超出')
+  expect(() => editVideoSequence(id, duplicateId, sequence => { sequence = structuredClone(sequence); sequence.transitions![0].durationFrames = 1000; return sequence })).toThrow('超出')
   expect(owner.document).toBe(beforeReject); expect(owner.past).toHaveLength(history)
   await saveVideoEdit(id); const saved = structuredClone(owner.document)
   const reopened = await reopenVideoEdit(id)
@@ -90,7 +162,7 @@ it('受限画面位置草稿保留时间及锚定对象，保存等待释放并�
   expect(videoEditWrites()).toBe(writes + 1); expect(owner.past).toHaveLength(history + 1)
   expect(owner.past.at(-1)).toBe(before); expect(before.sequences[0].clips[0].x).toBe(0)
   expect(savedVideoEdit(owner).sequences[0].clips).toEqual(moved.clips)
-  editVideoSequence(id, sequenceId, draft => { draft.captions![0].text = '普通编辑'; return draft })
+  editVideoSequence(id, sequenceId, draft => { draft = structuredClone(draft); draft.captions![0].text = '普通编辑'; return draft })
   expect(moved.captions![0].text).toBe('跟随'); expect(sequence.captions![0].text).toBe('跟随')
   undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips).toEqual(moved.clips)
   undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips).toEqual(sequence.clips)
@@ -544,7 +616,7 @@ it('公共事务修改后台序列设置与片段为一步撤销，前台选区�
 it('正式事务撤销保留实体引用，帧率写入回执包含实际片段级联', async () => {
   const instance = (await createLegacyTrackVideoEditProject()); const id = instance.document.id
   appendVideoEditClip(id); const clipId = getActiveVideoEditSequence(instance).clips[0].id
-  editVideoSequence(id, instance.activeSequenceId, sequence => { sequence.clips[0].curves = { opacity: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 30, value: 1, interpolation: 'linear' }] }; return sequence })
+  editVideoSequence(id, instance.activeSequenceId, sequence => { sequence = structuredClone(sequence); sequence.clips[0].curves = { opacity: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 30, value: 1, interpolation: 'linear' }] }; return sequence })
   const originalCurves = structuredClone(getActiveVideoEditSequence(instance).clips[0].curves)
   const directCurves = [{ time: 0, value: 1, interpolation: 'hold' }]
   const engine = getApplicationControlExecutionEngine()
@@ -599,9 +671,30 @@ it('录制和生成元数据头保留同一呈现快照；真正作品编辑仍�
   updateVideoEditCreativeIntents(owner.document.id, { drafts: [], sessions: [session], resources: [] })
   expect(getActiveVideoEditSequence(owner)).toBe(before)
   // Clearing an existing generation receipt is also a metadata-only render change.
-  owner.document.inPlaceGenerations = [{ id: 'local-record', taskId: 'local-task', modelId: 'local-model', status: 'failed', request: { sequenceId: owner.activeSequenceId, intent: { action: 'generate_shot' }, prompt: '' }, plan: { action: 'generate_shot', mediaType: 'video', sequenceId: owner.activeSequenceId, frame: 0, duration: 30, fill: false, trackIndex: 1, placement: 'add', references: [], width: 1920, height: 1080, fps: 30 } }]
+  updateVideoEditInPlaceMetadata(owner.document.id, [{ id: 'local-record', taskId: 'local-task', modelId: 'local-model', status: 'failed', request: { sequenceId: owner.activeSequenceId, intent: { action: 'generate_shot' }, prompt: '' }, plan: { action: 'generate_shot', mediaType: 'video', sequenceId: owner.activeSequenceId, frame: 0, duration: 30, fill: false, trackIndex: 1, placement: 'add', references: [], width: 1920, height: 1080, fps: 30 } }])
   updateVideoEditInPlaceMetadata(owner.document.id, [])
   expect(getActiveVideoEditSequence(owner)).toBe(before)
   editVideoProject(owner.document.id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, name: '作品修改' })) }))
   expect(getActiveVideoEditSequence(owner)).not.toBe(before)
+})
+
+it('连续编辑与撤销重做共享未改子树，误写共享内容立即失败', async () => {
+  const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id
+  appendVideoEditClip(id); appendVideoEditClip(id)
+  const before = owner.document; const sequenceId = before.sequences[0].id
+  const untouched = before.sequences[0].clips[1]
+  for (let step = 1; step <= 4; step++) editVideoSequence(id, sequenceId, sequence => ({ ...sequence, clips: sequence.clips.map((clip, index) => index === 0 ? { ...clip, x: step / 10 } : clip) }))
+  for (const snapshot of [...owner.past.slice(-4), owner.document]) {
+    expect(snapshot.media).toBe(before.media)
+    expect(snapshot.items).toBe(before.items)
+    expect(snapshot.sequences[0].tracks).toBe(before.sequences[0].tracks)
+    expect(snapshot.sequences[0].annotations).toBe(before.sequences[0].annotations)
+    expect(snapshot.sequences[0].clips[1]).toBe(untouched)
+  }
+  expect(before.sequences[0].clips[0].x).toBe(0)
+  expect(() => { untouched.x = 99 }).toThrow(TypeError)
+  expect(() => { owner.past.at(-1)!.items.push(before.items[0]) }).toThrow(TypeError)
+  undoVideoEdit(id); expect(owner.document.sequences[0].clips[0].x).toBe(.3)
+  undoVideoEdit(id, true); expect(owner.document.sequences[0].clips[0].x).toBe(.4)
+  expect(owner.document.sequences[0].clips[1]).toBe(untouched)
 })

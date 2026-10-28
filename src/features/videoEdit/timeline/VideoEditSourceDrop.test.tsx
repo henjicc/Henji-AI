@@ -95,7 +95,7 @@ beforeEach(async () => {
   vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(900)
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ left: 100, top: 50, right: 1000, bottom: 350, width: 900, height: 300, x: 100, y: 50, toJSON: () => ({}) })
   owner = await createVideoEditTestProject()
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const sequence = document.sequences[0]; const template = sequence.tracks[0]
     sequence.frameRate = { numerator: 60, denominator: 1 }
     sequence.tracks = Array.from({ length: 8 }, (_, index) => ({ ...template, id: `source-drop-track-${index}`, index, kind: index === 0 || index === 2 || index === 7 ? 'audio' as const : 'video' as const, height: 32, name: `轨道 ${index}` }))

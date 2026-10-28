@@ -30,7 +30,7 @@ afterEach(async () => { for (const owner of listVideoEditInstances()) await clos
 async function fixture() {
   const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id
   appendVideoEditClip(id); appendVideoEditClip(id)
-  editVideoProject(id, document => { document.sequences[0].clips[1].start = 200; return document })
+  editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].clips[1].start = 200; return document })
   const [first, second] = getActiveVideoEditSequence(owner).clips.map(clip => clip.id)
   setVideoEditTimelineView(id, { selectedClipIds: [first] }, first)
   return { owner, id, first, second, sequence: getActiveVideoEditSequence(owner) }
@@ -116,14 +116,14 @@ it('Shift+E 整批切换所选片段启用，一步撤销；混合状态先全�
 })
 it('复制后菜单固定原剪贴板及目标轨道，跨序列按同类轨道相对顺序粘贴', async () => {
   const { owner, id, first, second, sequence } = await fixture()
-  editVideoProject(id, document => {
+  editVideoProject(id, document => { document = structuredClone(document);
     const current = document.sequences[0]
     current.tracks = [{ ...current.tracks[0], index: 0 }, { ...current.tracks[1], index: 1 }, { ...current.tracks[0], id: 'audio-2', index: 2 }, { ...current.tracks[1], id: 'video-3', index: 3 }]
     current.clips[1].track = 3; return document
   })
   copyVideoEditTimeline(id, sequence.id, [first, second])
   const next = appendVideoEditSequence(id, { frameRate: sequence.frameRate }); switchVideoEditSequence(id, next)
-  editVideoProject(id, document => { const current = document.sequences.find(value => value.id === next)!; current.tracks = [{ ...current.tracks[0], index: 0 }, { ...current.tracks[1], index: 1 }, { ...current.tracks[1], id: 'target-3', index: 3 }]; return document })
+  editVideoProject(id, document => { document = structuredClone(document); const current = document.sequences.find(value => value.id === next)!; current.tracks = [{ ...current.tracks[0], index: 0 }, { ...current.tracks[1], index: 1 }, { ...current.tracks[1], id: 'target-3', index: 3 }]; return document })
   const context = captureVideoEditCommandContext(id, 'timeline', { frame: 100 })
   const current = getActiveVideoEditSequence(owner)
   setVideoEditTimelineView(id, { targetTrackIds: [current.tracks.find(track => track.index === 3)!.id] }); setVideoEditView(id, { frame: 900 })
@@ -276,7 +276,7 @@ it('提升、提取与 Q/W 波纹修剪各是一步编辑；Alt 方向键微移�
 })
 it('Ctrl+D 在离播放头最近的编辑点应用默认视频过渡，Shift+D 应用到所选片段两端，选中过渡后 Delete 删除，各是一步撤销（4.3）', async () => {
   const { owner, id, first, second } = await fixture()
-  editVideoProject(id, document => { document.sequences[0].clips[1].start = 90; return document })
+  editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].clips[1].start = 90; return document })
   setVideoEditView(id, { frame: 80 })
   const history = owner.past.length
   const context = captureVideoEditCommandContext(id, 'timeline')

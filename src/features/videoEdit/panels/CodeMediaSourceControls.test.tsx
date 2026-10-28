@@ -79,7 +79,7 @@ beforeEach(async () => {
   owner = (await createVideoEditProject())!
   const program = compileCodeMaterial(source); const version = { id: 'v', ...testCodeManifest(source, owner.document), apiVersion: 4 as const, languageVersion: program.languageVersion }
   rememberVideoEditCodeMetadata(owner, 'd', version, program)
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.codeMaterials = [{ id: 'd', name: program.name, defaultVersionId: 'v', versions: [version] }]
     document.items.push({ id: 'i', name: program.name, kind: 'code', code: { definitionId: 'd', versionId: 'v', parameters: { logo: null, amount: 5 } } })
     document.sequences[0].clips.push(makeVideoEditItemClip(document, 'i', document.sequences[0].id, { frame: 0 }, readVideoEditCodeMetadata(owner, document)), makeVideoEditItemClip(document, 'i', document.sequences[0].id, { frame: 0 }, readVideoEditCodeMetadata(owner, document)))

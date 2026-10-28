@@ -24,7 +24,7 @@ async function fixture() {
   content.understanding.privacy.candidates = [{ id: 'private', mediaId: 'screen', kind: 'email', hint: '邮箱', fingerprint: 'a'.repeat(64), status: 'accepted', startUs: 4000000, endUs: 5000000, samples: [{ monoUs: 4000000, box: [.1, .2, .3, .1], confidence: 1 }] }]
   await getPlatform().documents.createDocument({ id, kind: 'screen_recording', name: '成片测试', container: { kind: 'user' }, content })
   const owner = await createVideoEditTestProject(), documentId = owner.document.id
-  editVideoProject(documentId, draft => {
+  editVideoProject(documentId, draft => { draft = structuredClone(draft);
     draft.media.push({ id: 'screen', path, name: '原片', kind: 'video', width: 1920, height: 1080, durationSeconds: 10, hasAudio: false, assetContent: fileContent })
     draft.items.push({ id: 'screen-item', mediaId: 'screen', name: '原片', kind: 'video' }); return draft
   })
@@ -56,7 +56,7 @@ it('取消和生成期间修改不落半份序列；保存失败仅恢复保存'
   await expect(generateRecordingMovie(id, options, controller.signal)).rejects.toThrow('取消')
   expect(owner.past).toHaveLength(history)
   await expect(generateRecordingMovie(id, options, new AbortController().signal, phase => {
-    if (phase === 'preparing') editVideoProject(options.documentId, draft => { draft.sequences[0].name = '用户编辑'; return draft })
+    if (phase === 'preparing') editVideoProject(options.documentId, draft => { draft = structuredClone(draft); draft.sequences[0].name = '用户编辑'; return draft })
   })).rejects.toThrow('已改变')
   expect(owner.document.sequences).toHaveLength(1)
   failVideoEditSaves(true)

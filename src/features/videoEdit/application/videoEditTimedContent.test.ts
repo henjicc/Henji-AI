@@ -24,7 +24,7 @@ beforeEach(() => {
 afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 async function fixture() {
   const owner = (await createVideoEditProject())!; const projectId = owner.document.id; const sequenceId = owner.activeSequenceId
-  editVideoProject(projectId, document => {
+  editVideoProject(projectId, document => { document = structuredClone(document);
     document.items.push({ id: 'text-item', name: '真实素材项', kind: 'text' })
     document.sequences[0].clips.push({ ...makeVideoEditItemClip(document, 'text-item', sequenceId, { frame: 0, track: 1 }), id: 'text-clip', duration: 90 })
     return document
@@ -121,7 +121,7 @@ it('锁定字幕/标记编辑拒绝，复制序列建立唯一内容ID，拆分�
   const duplicate = duplicateVideoEditSequence(projectId, sequenceId)
   const copied = owner.document.sequences.find(sequence => sequence.id === duplicate)!
   expect(copied.captions![0].id).not.toBe(captionId); expect(copied.captions![0].clipId).toBe(copied.clips[0].id)
-  editVideoProject(projectId, document => { document.sequences[0].tracks[1].locked = true; return document })
+  editVideoProject(projectId, document => { document = structuredClone(document); document.sequences[0].tracks[1].locked = true; return document })
   expect(() => updateVideoEditTimedContent(projectId, sequenceId, 'caption', captionId, { text: '试图写入' })).toThrow('锁定')
   expect(owner.document.sequences[0].captions![0].text).toBe('原片段字幕')
 })

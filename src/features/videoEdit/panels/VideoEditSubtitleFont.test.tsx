@@ -18,7 +18,7 @@ function Panel({ owner, onError }: { owner: VideoEditInstance; onError: (error: 
 }
 async function selectedCaption(): Promise<VideoEditInstance> {
   const instance = await createVideoEditTestProject()
-  editVideoProject(instance.document.id, document => { document.sequences[0].captions = [{ id: 'one', text: '第一句', start: 0, duration: 30 }, { id: 'two', text: '第二句', start: 30, duration: 30 }]; return document })
+  editVideoProject(instance.document.id, document => { document = structuredClone(document); document.sequences[0].captions = [{ id: 'one', text: '第一句', start: 0, duration: 30 }, { id: 'two', text: '第二句', start: 30, duration: 30 }]; return document })
   selectVideoEditSubtitle(instance.document.id, instance.activeSequenceId, 'one')
   return instance
 }
@@ -54,6 +54,6 @@ it('“全局样式”两处入口共用一份；关掉又没选中字幕、或�
   fireEvent.click(popover.getByRole('switch', { name: '全局样式' }))
   expect(view.getAllByRole('switch', { name: '全局样式' }).map(item => item.getAttribute('aria-checked'))).toEqual(['false', 'false'])
   expect(popover.getByText(/先选中一条字幕/)).toBeTruthy(); expect(popover.queryByLabelText('字幕字体')).toBeNull()
-  act(() => { editVideoProject(instance.document.id, document => { document.sequences[0].captionTrackLocked = true; return document }) })
+  act(() => { editVideoProject(instance.document.id, document => { document = structuredClone(document); document.sequences[0].captionTrackLocked = true; return document }) })
   expect(view.getAllByText('字幕轨道已锁定，请先解锁')).toHaveLength(2); expect(view.queryByLabelText('字幕字体')).toBeNull()
 })

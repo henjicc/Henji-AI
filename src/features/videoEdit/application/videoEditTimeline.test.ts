@@ -27,7 +27,7 @@ afterEach(async () => { for (const owner of listVideoEditInstances()) await clos
 async function fixture() {
   const owner = (await createVideoEditProject())!; const id = owner.document.id
   appendVideoEditClip(id); appendVideoEditClip(id)
-  editVideoProject(id, document => { document.sequences[0].clips[1].start = 200; return document })
+  editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].clips[1].start = 200; return document })
   const sequence = getActiveVideoEditSequence(owner); const ids = sequence.clips.map(clip => clip.id)
   setVideoEditTimelineView(id, { selectedClipIds: ids })
   return { owner, id, sequence, ids }
@@ -35,7 +35,7 @@ async function fixture() {
 it('节目拖入依真实32轨目标和素材类型落点，显式锁定落轨拒绝整个编辑', async () => {
   const { owner, id } = await fixture()
   appendVideoEditMedia(id, { id: 'sound', name: '原声音', path: 'D:/original.wav', kind: 'audio', width: 0, height: 0, durationSeconds: 2 })
-  editVideoProject(id, document => { document.sequences[0].tracks.push({ id: 'track-31', name: '视频 31', index: 31, kind: 'video', locked: false, enabled: true, muted: false, solo: false }); return document })
+  editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].tracks.push({ id: 'track-31', name: '视频 31', index: 31, kind: 'video', locked: false, enabled: true, muted: false, solo: false }); return document })
   const sequence = getActiveVideoEditSequence(owner); const audioItem = owner.document.items.find(item => item.kind === 'audio')!; const textItem = owner.document.items.find(item => item.kind === 'text')!
   setVideoEditTimelineView(id, { targetTrackIds: ['track-31', sequence.tracks[0].id] })
   await dropVideoEditInput(id, { kind: 'items', projectId: id, itemIds: [textItem.id, audioItem.id] }, { frame: 400 })

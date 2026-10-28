@@ -20,7 +20,7 @@ beforeEach(() => { installHarnessNativeStorage(); vi.spyOn(getPlatform().assetLi
 afterEach(async () => { await closeAllVideoEdits(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 async function fixture(count = 35) {
   const owner = await createVideoEditTestProject(); const documentId = owner.document.id; const sequenceId = owner.activeSequenceId
-  editVideoProject(documentId, document => {
+  editVideoProject(documentId, document => { document = structuredClone(document);
     document.media = [{ id: 'voice', kind: 'audio', name: '口播', path: path.resolve(path.sep, 'subtitle-correction.wav'), durationSeconds: count + 1, width: 0, height: 0, hasAudio: true, assetContent: identity }]
     document.items = [{ id: 'voice-item', kind: 'audio', name: '口播', mediaId: 'voice' }]
     const sequence = document.sequences[0]; sequence.frameRate = { numerator: 30, denominator: 1 }
@@ -85,11 +85,11 @@ it('坏词范围只失败本批，查询保留进度；修正后继续，成功�
 it('计划期间人工修改只阻断对应批，其他批能继续；初始人工字幕列为受保护', async () => {
   const { owner, input, query } = await fixture(); const app = createApplicationHarness()
   try {
-    editVideoProject(owner.document.id, document => { document.sequences[0].captions![0].text = '人工校对'; return document })
+    editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].captions![0].text = '人工校对'; return document })
     const plan = parse(await app.requireResult('query_video_edit_subtitle_correction', query))
     expect(plan.protected).toMatchObject([{ captionRef: { id: `${owner.document.id}:caption-0` }, reason: 'authored_text' }])
     const editedId = plan.batch!.packet!.baseline[0].captionId
-    editVideoProject(owner.document.id, document => { document.sequences[0].captions!.find(caption => caption.id === editedId)!.text = '后来手改'; return document })
+    editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].captions!.find(caption => caption.id === editedId)!.text = '后来手改'; return document })
     const later = parse(await app.requireResult('query_video_edit_subtitle_correction', { ...input, planId: plan.planId }))
     expect(later.conflicts).toBe(1); expect(later.batch!.index).toBe(1)
     await app.requireResult('apply_video_edit_subtitle_correction', { ...input, planId: plan.planId, batchIndex: 1, cues: resultCues(later.batch!) })
@@ -106,7 +106,7 @@ it('整句无需修改不会新增撤销；完成后用户改字不可被相同�
     const args = { ...input, planId: plan.planId, batchIndex: 0, cues: resultCues(plan.batch!, false) }
     expect(await app.requireResult('apply_video_edit_subtitle_correction', args)).toMatchObject({ changed: false, verified: true })
     expect(owner.past.length).toBe(history)
-    editVideoProject(owner.document.id, document => { document.sequences[0].captions![0].text = '保留手改'; return document })
+    editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].captions![0].text = '保留手改'; return document })
     expect((await app.call('apply_video_edit_subtitle_correction', args)).ok).toBe(false)
     expect(owner.document.sequences[0].captions![0].text).toBe('保留手改')
   } finally { app.dispose() }
@@ -121,10 +121,10 @@ it('来源变化、时序变化、取消和错误目标拒绝写入，锁轨阻�
     await expect(queryVideoEditSubtitleCorrection({ ...input, documentRef: { ...input.documentRef, id: 'other' }, planId: plan.planId }, context())).rejects.toThrow('必须属于')
     vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockResolvedValueOnce({ ...identity, contentIdentity: 'changed' })
     expect((await app.call('apply_video_edit_subtitle_correction', args)).ok).toBe(false); expect(owner.past.length).toBe(history)
-    editVideoProject(owner.document.id, document => { const sequence = document.sequences[0]; sequence.tracks.find(track => track.index === sequence.clips[0].track)!.locked = true; return document })
+    editVideoProject(owner.document.id, document => { document = structuredClone(document); const sequence = document.sequences[0]; sequence.tracks.find(track => track.index === sequence.clips[0].track)!.locked = true; return document })
     expect((await app.call('apply_video_edit_subtitle_correction', args)).ok).toBe(false)
-    editVideoProject(owner.document.id, document => { document.sequences[0].tracks.forEach(track => { track.locked = false }); return document })
-    editVideoProject(owner.document.id, document => { document.sequences[0].clips[0].sourceInUs = 100000; return document })
+    editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].tracks.forEach(track => { track.locked = false }); return document })
+    editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].clips[0].sourceInUs = 100000; return document })
     await expect(queryVideoEditSubtitleCorrection({ ...input, planId: plan.planId }, context())).rejects.toThrow('时序已改变')
   } finally { app.dispose() }
 })
@@ -173,7 +173,7 @@ it('规则首次传递后按计划复用，可显式重读；返回副本不会�
 it('受保护字幕有界分页，缓存淘汰后明确重查而非伪造已完成状态', async () => {
   const { owner, input, query } = await fixture(25); const app = createApplicationHarness()
   try {
-    editVideoProject(owner.document.id, document => { document.sequences[0].captions!.forEach(caption => { caption.text = '人工改写' }); return document })
+    editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].captions!.forEach(caption => { caption.text = '人工改写' }); return document })
     const plan = parse(await app.requireResult('query_video_edit_subtitle_correction', query))
     expect(plan).toMatchObject({ batchCount: 0, protectedCount: 25, protectedNextOffset: 20, batch: null })
     expect(plan.protected).toHaveLength(20)
@@ -207,7 +207,7 @@ it('等待来源核对期间的新修改拒绝迟到写入，保留人工修改�
     const plan = parse(await app.requireResult('query_video_edit_subtitle_correction', query))
     const captionId = plan.batch!.packet!.baseline[0].captionId
     vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockImplementationOnce(async () => {
-      editVideoProject(owner.document.id, document => { document.sequences[0].captions!.find(caption => caption.id === captionId)!.text = '核对期间手改'; return document })
+      editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].captions!.find(caption => caption.id === captionId)!.text = '核对期间手改'; return document })
       return identity
     })
     const result = await app.call('apply_video_edit_subtitle_correction', { ...input, planId: plan.planId, batchIndex: 0, cues: resultCues(plan.batch!) })

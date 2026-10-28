@@ -17,8 +17,10 @@ import { recordingMovieCursorSources } from './recordingMovieSources'
 /** Every track is cut to the shared recorded range and placed from its start. Pause/device gaps remain empty; audio latency is already compensated. */
 export function placeRecordingMedia(document: VideoEditDocument, recording: RecordingDocument, media: RecordingMedia[], itemIds: string[], target: RecordingDestination, events: readonly CaptureEvent[] = []): VideoEditDocument {
   if (!target.sequenceId) return document
-  const sequence = document.sequences.find(sequence => sequence.id === target.sequenceId)
-  if (!sequence) throw new Error('录制期间目标序列已移除，素材尚未导入；请选择其他序列重试')
+  const previous = document.sequences.find(sequence => sequence.id === target.sequenceId)
+  if (!previous) throw new Error('录制期间目标序列已移除，素材尚未导入；请选择其他序列重试')
+  const sequence = { ...previous, tracks: previous.tracks.map(track => ({ ...track })), clips: [...previous.clips] }
+  document = { ...document, sequences: document.sequences.map(value => value === previous ? sequence : value) }
   const fps = videoEditComposition(document, sequence.id).fps
   const origin = recordingRange(recording).startUs
   const trackIndices = new Map<string, number>()
@@ -78,7 +80,7 @@ export async function importRecordingToVideo(id: string, target: RecordingDestin
         if (item) item.name = `${{ screen: '屏幕', microphone: '麦克风', systemAudio: '系统声音', camera: '摄像头' }[source.kind]} ${count}`
       }
       const before = new Set(document.sequences.flatMap(sequence => sequence.clips.map(clip => clip.id)))
-      placeRecordingMedia(document, recording, media, ids, target, events)
+      document = placeRecordingMedia(document, recording, media, ids, target, events)
       if (target.sequenceId) {
         const microphoneItems = new Set(ids.filter((_, index) => media[index].kind === 'microphone'))
         const composition = videoEditComposition(document, target.sequenceId)

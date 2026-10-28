@@ -48,7 +48,7 @@ beforeEach(async () => {
     releasePointerCapture: { configurable: true, value: () => undefined },
   })
   owner = await createVideoEditTestProject()
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const sequence = document.sequences[0]; const base = sequence.tracks[0]
     sequence.tracks = Array.from({ length: 1000 }, (_, index) => ({ ...base, id: `track-${index}`, index, kind: index % 2 ? 'video' as const : 'audio' as const, name: `轨道${index}`, height: 32 + index % 3 * 8 }))
     return document
@@ -101,7 +101,7 @@ it('离屏后保留键盘焦点，焦点进入缓冲行时滚入可见区域，�
   const rect = buffer.getBoundingClientRect()
   expect(rect.top).toBeGreaterThanOrEqual(168); expect(rect.bottom).toBeLessThanOrEqual(300)
   expect(document.activeElement).toBe(buffer); expect(onError).not.toHaveBeenCalled()
-  act(() => editVideoProject(owner.document.id, document => { document.sequences[0].tracks[8].height = 160; return document }))
+  act(() => editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].tracks[8].height = 160; return document }))
   const separator = view.getByRole('separator', { name: '调整轨道8高度' })
   act(() => separator.focus())
   expect(separator.getBoundingClientRect().top).toBeGreaterThanOrEqual(168)

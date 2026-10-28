@@ -51,7 +51,7 @@ it('原生对象切换取消参数草稿，层序与删除空态消费同一对�
   const id = owner.document.id; const item = createVideoEditGraphicItem(id, { kind: 'rect' }); const [clipId] = appendVideoEditItems(id, [item], sequenceId, { frame: 0 })
   const first = getActiveVideoEditSequence(owner).clips.find(clip => clip.id === clipId)!.graphic!.objects[0].id
   const second = createVideoEditGraphicObject({ projectId: id, sequenceId, clipId }, { kind: 'ellipse', name: '顶层圆' })
-  editVideoProject(id, document => { document.sequences[0].frameRate = { numerator: 30000, denominator: 1001 }; return document })
+  editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].frameRate = { numerator: 30000, denominator: 1001 }; return document })
   setVideoEditView(id, { selection: clipId, frame: 1 })
   const view = render(<View />); const clip = () => getActiveVideoEditSequence(owner).clips.find(clip => clip.id === clipId)!
   const number = within(view.container.querySelector('[data-video-edit-code-parameter="x"]') as HTMLElement).getByRole('spinbutton', { name: '水平位置' })
@@ -120,7 +120,7 @@ beforeEach(async () => {
   const programs = [source, alternate].map(compileCodeMaterial)
   const persisted = await Promise.all([source, alternate].map(text => addressCodeMaterialFiles(text)))
   for (const [index, program] of programs.entries()) rememberVideoEditCodeMetadata(owner, `d${index}`, { id: `v${index}`, entry: persisted[index].entry, files: persisted[index].files, apiVersion: 4, languageVersion: 4 }, program)
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.codeMaterials = programs.map((program, index) => ({ id: `d${index}`, name: program.name, defaultVersionId: `v${index}`, versions: [{ id: `v${index}`, entry: persisted[index].entry, files: persisted[index].files, apiVersion: 4, languageVersion: 4 }] }))
     for (const [index, program] of programs.entries()) {
       document.items.push({ id: `i${index}`, name: program.name, kind: 'code', code: { definitionId: `d${index}`, versionId: `v${index}`, parameters: Object.fromEntries(program.parameters.map(parameter => [parameter.key, parameter.default])) } })
@@ -224,7 +224,7 @@ it('序列切换取消调整，原控件的失焦不能修改空序列或原片�
 })
 
 it('关键帧使用精确源时刻，未编辑 NTSC 余量不变，移动/值/插值/删除与重置真实写入', async () => {
-  editVideoProject(owner.document.id, document => { document.sequences[0].frameRate = { numerator: 30000, denominator: 1001 }; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].frameRate = { numerator: 30000, denominator: 1001 }; return document })
   setVideoEditView(owner.document.id, { frame: 1 })
   const expected = editor().sourceTime; const view = render(<View />)
   fireEvent.click(view.getByRole('button', { name: '为强度添加关键帧' }))
@@ -288,7 +288,7 @@ it('新角度和点位在实例/关键帧共用控件，自定义字体悬停回
   const program = compileCodeMaterial(rich); const persisted = await addressCodeMaterialFiles(rich)
   const version = { id: 'rich-version', entry: persisted.entry, files: persisted.files, apiVersion: 4 as const, languageVersion: 4 as const }
   rememberVideoEditCodeMetadata(owner, 'rich-definition', version, program)
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.codeMaterials!.push({ id: 'rich-definition', name: program.name, defaultVersionId: version.id, versions: [version] })
     document.items.push({ id: 'rich-item', name: program.name, kind: 'code', code: { definitionId: 'rich-definition', versionId: version.id, parameters: Object.fromEntries(program.parameters.map(parameter => [parameter.key, parameter.default])) } })
     document.sequences[0].clips.push(makeVideoEditItemClip(document, 'rich-item', sequenceId, { frame: 0 }, readVideoEditCodeMetadata(owner, document)))

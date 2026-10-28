@@ -34,7 +34,7 @@ beforeEach(async () => {
   const program = testAuthorProgram(testAuthorBundle({ entry: 'main.ts', files: { 'main.ts': source }, apiVersion: 5 }))
   const version = { id: 'v', ...testCodeManifest(source, owner.document), apiVersion: 5 as const, languageVersion: program.languageVersion }
   rememberVideoEditCodeMetadata(owner, 'd', version, program)
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media.push({ id: 'screen', name: '录屏', path: 'D:/screen.mp4', kind: 'video', durationSeconds: 20, width: 1920, height: 1080 })
     document.codeMaterials = [{ id: 'd', name: '片子', defaultVersionId: 'v', versions: [version] }]
     const scene = goldenScene('screen')
@@ -130,7 +130,7 @@ function visibleText(view: ReturnType<typeof render>): string {
 
 it('界面用记录名称与用户语言：没有名称的记录叫“类型 + 序号”，不能改的原因不露出协议文字', async () => {
   const nameless = 'ccac2339-6084-4e8e-b52a-0d88bcb33a29'
-  editVideoProject(owner.document.id, document => { document.scenes![0].records.push({ id: nameless, kind: 'focus', values: {} }); return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.scenes![0].records.push({ id: nameless, kind: 'focus', values: {} }); return document })
   const view = render(<View />)
   const inspector = await openRecord(view, nameless)
   expect(within(row(view, nameless)).getByText('2')).toBeTruthy()
@@ -138,7 +138,7 @@ it('界面用记录名称与用户语言：没有名称的记录叫“类型 + �
   await openRecord(view, 'fk-1')
   expectNoInternals(visibleText(view))
   // 没有代码片段再引用这份数据：说明用户能怎么办，不露出写给助手的做法
-  act(() => { editVideoProject(owner.document.id, document => { document.sequences[0].clips = []; document.items = []; return document }) })
+  act(() => { editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].clips = []; document.items = []; return document }) })
   await waitFor(() => expect(view.container.textContent).toContain('还没有代码片段使用这份数据'))
   expectNoInternals(visibleText(view))
 })
@@ -155,14 +155,14 @@ it('修改被拒时给用户看的原因不带记录 ID 与属性名；引用的
   expectNoInternals(message)
   expect(record('seg-switch').values.start).toBe(0.5)
   // fk-1 引用的窗口被删：直接改文档模拟旧数据，下拉显示“已删除的记录”而不是第一个窗口
-  act(() => { editVideoProject(owner.document.id, document => { document.scenes![0].records.find(item => item.id === 'fk-1')!.values.win = 'gone'; return document }) })
+  act(() => { editVideoProject(owner.document.id, document => { document = structuredClone(document); document.scenes![0].records.find(item => item.id === 'fk-1')!.values.win = 'gone'; return document }) })
   const fk = await openRecord(view, 'fk-1')
   expect(within(fk).getByLabelText('win').textContent).toContain('已删除的记录')
   expectNoInternals(visibleText(view))
 })
 
 it('素材与记录引用的问题用固定说法；正文里的数字不被当成记录 ID；序号按树里的顺序编', async () => {
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media.push({ id: 'shot-image', name: '截图', path: 'D:/shot.png', kind: 'image', durationSeconds: 5, width: 1920, height: 1080 })
     const records = document.scenes![0].records
     const at = (id: string) => records.find(item => item.id === id)!

@@ -67,11 +67,11 @@ export async function redubRecordingSentence(sessionId: string, options: Recordi
       const pathKey = (path: string) => path.replaceAll('\\', '/')
       const media = draft.media.find(v => pathKey(v.path) === pathKey(audio.path))!
       const still = stillPath ? draft.media.find(v => pathKey(v.path) === pathKey(stillPath!)) : undefined
-      const changed = replaceRecordingNarration(draft, target, media, options.text, still)
-      const gain = await prepareVideoEditAudioGain(videoEditComposition(draft, target.sequenceId), [changed], 'loudness', targetLufs, signal, current, true)
+      const { document, clip: changed } = replaceRecordingNarration(draft, target, media, options.text, still)
+      const gain = await prepareVideoEditAudioGain(videoEditComposition(document, target.sequenceId), [changed], 'loudness', targetLufs, signal, current, true)
       changed.gainDb = gain[0].gainDb
       current()
-      return videoEditDocumentSchema.parse(draft)
+      return videoEditDocumentSchema.parse(document)
     })
     context.execution?.report({ targetMutation: 'applied' })
     const expected = owner.document

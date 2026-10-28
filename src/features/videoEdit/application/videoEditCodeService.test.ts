@@ -161,7 +161,7 @@ it('公共图形效果转场实体原子增改删、精确回执、锁定与保�
   try {
     expect(await create('video_edit.item', project, [{ properties: { 'video_edit.item.kind': 'graphic', 'video_edit.item.graphic_kind': 'solid', 'video_edit.item.name': '公共纯色', 'video_edit.item.graphic_width': 3840, 'video_edit.item.graphic_height': 2160 } }])).toMatchObject({ ok: true })
     const item = owner.document.items[0]; const [left, right] = appendVideoEditItems(id, [item.id, item.id], seq)
-    editVideoProject(id, document => { document.sequences[0].clips[0].graphic!.objects[0].id = '对象:冒号'; return document })
+    editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].clips[0].graphic!.objects[0].id = '对象:冒号'; return document })
     const clipRef = { kind: 'video_edit.clip', id: `${id}:${left}` }; const objectRef = { kind: 'video_edit.graphic_object', id: `${id}:${videoEditGraphicObjectId(left, '对象:冒号')}` }
     expect(((await app.read(objectRef, ['video_edit.graphic_object.name'])).properties as Record<string, unknown>)['video_edit.graphic_object.name']).toBe('纯色')
     const before = owner.past.length
@@ -192,9 +192,9 @@ it('公共图形效果转场实体原子增改删、精确回执、锁定与保�
     expect((await app.change(effectRef, { 'video_edit.effect.parameters': { gain: .9 } })).ok).toBe(false)
     expect(owner.document).toBe(scalarBaseline); expect(owner.past).toHaveLength(history + 1)
     boundary.failTrial = false
-    editVideoSequence(id, seq, sequence => { sequence.tracks.find(track => track.index === 1)!.locked = true; return sequence })
+    editVideoSequence(id, seq, sequence => { sequence = structuredClone(sequence); sequence.tracks.find(track => track.index === 1)!.locked = true; return sequence })
     expect((await app.change(objectRef, { 'video_edit.graphic_object.name': '不应写入' })).ok).toBe(false)
-    editVideoSequence(id, seq, sequence => { sequence.tracks.find(track => track.index === 1)!.locked = false; return sequence })
+    editVideoSequence(id, seq, sequence => { sequence = structuredClone(sequence); sequence.tracks.find(track => track.index === 1)!.locked = false; return sequence })
     const retimed = await app.change(sequenceRef, { 'video_edit.sequence.frame_rate': { numerator: 60, denominator: 1 } })
     expect(retimed, JSON.stringify(retimed)).toMatchObject({ ok: true }); expect(getActiveVideoEditSequence(owner).transitions![0].durationFrames).toBe(24)
     expect(retimed.ok && retimed.data.effects).toEqual(expect.arrayContaining([expect.objectContaining({ entityType: 'video_edit.transition', origin: { kind: 'cascade', declarationId: 'video_edit.transition_update' } })]))
@@ -314,10 +314,10 @@ it('保存重开检查非默认滤镜固定版本，复制效果独立，滤镜�
   const duplicateId = duplicateVideoEditSequence(id, sequence.id)
   const duplicate = owner.document.sequences.find(value => value.id === duplicateId)!
   expect(duplicate.clips[0].effects![0].id).not.toBe('fixed-effect')
-  editVideoSequence(id, duplicateId, draft => { draft.clips[0].effects![0].code!.parameters.amount = .2; return draft })
+  editVideoSequence(id, duplicateId, draft => { draft = structuredClone(draft); draft.clips[0].effects![0].code!.parameters.amount = .2; return draft })
   expect(owner.document.sequences[0].clips[0].effects![0].code!.parameters.amount).toBe(.6)
   const before = owner.document; const past = owner.past.length
-  expect(() => editVideoSequence(id, duplicateId, draft => { draft.clips[0].effects![0].code!.parameters.amount = 4; return draft })).toThrow()
+  expect(() => editVideoSequence(id, duplicateId, draft => { draft = structuredClone(draft); draft.clips[0].effects![0].code!.parameters.amount = 4; return draft })).toThrow()
   expect(owner.document).toBe(before); expect(owner.past).toHaveLength(past)
   await saveVideoEdit(id); const saved = structuredClone(owner.document)
   const reopened = await reopenVideoEdit(id)
@@ -326,7 +326,7 @@ it('保存重开检查非默认滤镜固定版本，复制效果独立，滤镜�
   const invalid = structuredClone(document); invalid.id = 'wrong-effect-kind'; testSetCodeSource(invalid, invalid.codeMaterials![0].versions[1], source)
   const invalidOwner = await openSeededVideoEdit(invalid)
   await ensureVideoEditCodeParameterMetadata(invalidOwner, invalidOwner.document, 'filter', 'held')
-  expect(() => editVideoSequence(invalidOwner.document.id, invalidOwner.activeSequenceId, draft => { draft.clips[0].effects![0].code!.parameters.amount = .3; return draft })).toThrow('单输入滤镜')
+  expect(() => editVideoSequence(invalidOwner.document.id, invalidOwner.activeSequenceId, draft => { draft = structuredClone(draft); draft.clips[0].effects![0].code!.parameters.amount = .3; return draft })).toThrow('单输入滤镜')
   await closeVideoEditProject(invalidOwner.document.id)
   expect(listVideoEditInstances()).toEqual([reopened])
 })
@@ -432,10 +432,10 @@ it('试渲染晚到不能覆盖期间的手动修改，旧会话编译不能写�
 it('写入不允许原位改版本，磁盘中尚未使用的无效源码不阻塞打开', async () => {
   const instance = (await createLegacyTrackVideoEditProject()); const id = instance.document.id
   await createVideoEditCodeItems(id, [{ source }]); const original = instance.document
-  expect(() => editVideoProject(id, document => { testSetCodeSource(document, document.codeMaterials![0].versions[0], source.replace('100+t', '800+t')); return document })).toThrow('不可变')
+  expect(() => editVideoProject(id, document => { document = structuredClone(document); testSetCodeSource(document, document.codeMaterials![0].versions[0], source.replace('100+t', '800+t')); return document })).toThrow('不可变')
   expect(instance.document).toBe(original)
   editVideoProject(id, document => ({ ...document, items: [] }))
-  expect(() => editVideoProject(id, document => { testSetCodeSource(document, document.codeMaterials![0].versions[0], source.replace('100+t', '800+t')); return document })).toThrow('不可变')
+  expect(() => editVideoProject(id, document => { document = structuredClone(document); testSetCodeSource(document, document.codeMaterials![0].versions[0], source.replace('100+t', '800+t')); return document })).toThrow('不可变')
   await closeVideoEditProject(id)
   const raw = savedVideoEdit(instance); testSetCodeSource(raw, raw.codeMaterials![0].versions[0], 'export default {render(){while(true){}}}')
   replaceSavedVideoEdit(id, raw); const invalid = JSON.stringify(savedVideoEdit(instance))
@@ -474,7 +474,7 @@ it('候选显示迁移影响，确认后只绑定原片段一次撤销，明确�
   const [item] = await createVideoEditCodeItems(id, [{ source }])
   appendVideoEditItems(id, [item, item], owner.activeSequenceId, { frame: 0 })
   const first = getActiveVideoEditSequence(owner).clips[0]
-  editVideoProject(id, document => { document.sequences[0].clips[0].code!.curves = { amount: [{ id: 'curve', sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, value: .7, interpolation: 'linear' }] }; return document })
+  editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].clips[0].code!.curves = { amount: [{ id: 'curve', sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, value: .7, interpolation: 'linear' }] }; return document })
   const target = { projectId: id, sequenceId: owner.activeSequenceId, clipId: first.id, versionId: first.code!.versionId }
   const baseline = owner.document; const history = owner.past.length
   const candidate = await prepareVideoEditCodeCandidate(target, source.replaceAll('amount', 'opacity'))
@@ -653,7 +653,7 @@ it('批量候选绑定已有源码版本只检查选定原版本集合，不重�
   const definition = owner.document.codeMaterials![0]; const nextSource = source.replace('100+t', '1200+t')
   const [newVersion] = await createVideoEditCodeVersions(id, [{ definitionId: definition.id, source: nextSource }])
   const first = getActiveVideoEditSequence(owner).clips[0]
-  editVideoProject(id, document => {
+  editVideoProject(id, document => { document = structuredClone(document);
     document.sequences[0].clips.push(...Array.from({ length: 33 }, (_, index) => ({ ...first, id: `already-new-${index}`, start: (index + 2) * first.duration, code: { ...first.code!, versionId: newVersion } })))
     return document
   })
@@ -705,7 +705,7 @@ it('图层变换覆盖收录并导入为素材初始值，新片段独立复制�
   const asset = { ...codeAssetFixture(code), ...testCodeAssetSource(code), elementOverrides: { circle: { dx: 20, opacity: .7 } } }
   const created = await createVideoEditCodeAssetInstance(id, importPublication(asset))
   const [first, second] = appendVideoEditItems(id, [created.itemId!, created.itemId!], owner.activeSequenceId)
-  editVideoProject(id, document => { document.sequences[0].clips.find(clip => clip.id === first)!.elementOverrides!.circle.dx = 90; return document })
+  editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].clips.find(clip => clip.id === first)!.elementOverrides!.circle.dx = 90; return document })
   expect(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === second)!.elementOverrides!.circle.dx).toBe(20)
   expect(owner.document.items.find(item => item.id === created.itemId)!.elementOverrides!.circle.dx).toBe(20)
   const filePath = resolvePath(pathSeparator, 'element-overrides.henji-code')
@@ -1212,7 +1212,7 @@ it.each([
     await createVideoEditCodeMaterials(id, [{ projectEntry: 'entries/window.ts' }])
     const item = owner.document.items.find(value => value.code)!
     const [clipId] = appendVideoEditItems(id, [item.id], owner.activeSequenceId)
-    editVideoProject(id, document => {
+    editVideoProject(id, document => { document = structuredClone(document);
       // 素材条目只显式写了 slot，amount 跟随版本默认值；片段两个都写过。
       document.items.find(value => value.id === item.id)!.code!.parameters = { slot: 3 }
       document.sequences.flatMap(sequence => sequence.clips).find(clip => clip.id === clipId)!.code!.parameters.slot = 2

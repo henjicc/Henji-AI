@@ -1,3 +1,4 @@
+import { jsonEqual } from '@/core/jsonEqual'
 import { CODE_SOURCE_REVERIFY_MS, loadCodeSourceReferences } from '@/core/videoEdit/codeMaterial/sources'
 import type { VideoEditComposition, VideoEditDocument } from '@/core/videoEdit/document'
 import { collectVideoEditFonts, missingVideoEditFonts, type VideoEditFontUse } from '@/core/videoEdit/fonts'
@@ -44,10 +45,17 @@ export async function prepareVideoEditFonts(document: VideoEditDocument | VideoE
 /** Validate only newly written names. Existing missing fonts remain inspectable and editable. */
 export function changedVideoEditFonts(before: VideoEditDocument, next: VideoEditDocument, readBefore: CodeMaterialMetadataReader, readNext = readBefore): VideoEditFontUse[] {
   // 只读本次改动涉及的对象，避免改普通片段时顺带读取全工程代码参数。
-  const signature = (value: VideoEditDocument['items'][number] | VideoEditDocument['sequences'][number]['clips'][number]): string => JSON.stringify([value.code, value.graphic, 'textStyle' in value ? value.textStyle : undefined, 'effects' in value ? videoEditEffectCodes(value.effects) : []])
-  const old = new Map([...before.items, ...before.sequences.flatMap(sequence => sequence.clips)].map(value => [value.id, signature(value)]))
-  const changed = new Set([...next.items, ...next.sequences.flatMap(sequence => sequence.clips)].filter(value => old.get(value.id) !== signature(value)).map(value => value.id))
-  const scope = (document: VideoEditDocument): VideoEditDocument => ({ ...document, items: document.items.filter(item => changed.has(item.id)), sequences: document.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.filter(clip => changed.has(clip.id)) })) })
+  const signature = (value: VideoEditDocument['items'][number] | VideoEditDocument['sequences'][number]['clips'][number]): unknown[] => [value.code, value.graphic, 'textStyle' in value ? value.textStyle : undefined, 'effects' in value ? videoEditEffectCodes(value.effects) : []]
+  const old = new Map([...before.items, ...before.sequences.flatMap(sequence => sequence.clips)].map(value => [value.id, value]))
+  const changed = new Set([...next.items, ...next.sequences.flatMap(sequence => sequence.clips)].filter(value => old.get(value.id) !== value && (!old.has(value.id) || !jsonEqual(signature(old.get(value.id)!), signature(value)))).map(value => value.id))
+  const previousSequences = new Map(before.sequences.map(sequence => [sequence.id, sequence]))
+  const captionFonts = (sequence: VideoEditDocument['sequences'][number] | undefined): unknown[] => (sequence?.captions ?? []).map(caption => [caption.id, caption.style ? caption.style.fontFamily : 'sans-serif'])
+  const changedCaptions = new Set(next.sequences.filter(sequence => {
+    const previous = previousSequences.get(sequence.id)
+    return previous?.captions !== sequence.captions && !jsonEqual(captionFonts(previous), captionFonts(sequence))
+  }).map(sequence => sequence.id))
+  if (!changed.size && !changedCaptions.size) return []
+  const scope = (document: VideoEditDocument): VideoEditDocument => ({ ...document, items: document.items.filter(item => changed.has(item.id)), sequences: document.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.filter(clip => changed.has(clip.id)), captions: changedCaptions.has(sequence.id) ? sequence.captions : undefined })) })
   // 换版本时原版本可能已读不到（源码缺失或编译不过）：当作原先没有代码字体，新字体全部按新增核对。
   const tolerantBefore: CodeMaterialMetadataReader = instance => {
     try { return readBefore(instance) }

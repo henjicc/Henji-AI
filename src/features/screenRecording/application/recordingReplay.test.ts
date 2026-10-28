@@ -80,7 +80,7 @@ it('真实领域临时副本按脚本修改，原工程不变；失败清理且�
 })
 it('跨步骤拆分原片，只替换第二步，旁白、其他序列不变，整批一次撤销', async () => {
   const { owner, recording } = await fixture(), id = owner.document.id
-  editVideoProject(id, draft => {
+  editVideoProject(id, draft => { draft = structuredClone(draft);
     const screen = createVideoEditSequence('屏幕'), audio = createVideoEditSequence('旁白')
     screen.tracks = [{ id: 'video-track', name: '画面', kind: 'video', index: 0, enabled: true, locked: false, muted: false, solo: false }]
     audio.tracks = [{ id: 'audio-track', name: '旁白', kind: 'audio', index: 0, enabled: true, locked: false, muted: false, solo: false }]
@@ -96,8 +96,9 @@ it('跨步骤拆分原片，只替换第二步，旁白、其他序列不变，�
   })
   const before = structuredClone(owner.document), history = owner.past.length
   editVideoProject(id, draft => {
-    expect(replaceRecordingSteps(draft, recording, [{ step: recording.understanding.operationScript.steps[1], media: draft.media.find(v => v.id === 'new')! }])).toBe(1)
-    return videoEditDocumentSchema.parse(draft)
+    const result = replaceRecordingSteps(draft, recording, [{ step: recording.understanding.operationScript.steps[1], media: draft.media.find(v => v.id === 'new')! }])
+    expect(result.replaced).toBe(1)
+    return videoEditDocumentSchema.parse(result.document)
   })
   expect(owner.past).toHaveLength(history + 1)
   expect(owner.document.sequences[2]).toEqual(before.sequences[2])

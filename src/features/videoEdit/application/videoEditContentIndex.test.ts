@@ -36,7 +36,7 @@ afterEach(async () => {
 async function fixture(count = 70) {
   const owner = await createVideoEditTestProject()
   const sourcePath = path.resolve(path.sep, 'index-source.mp4')
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media = [{ id: 'media', name: '口播', kind: 'video', path: sourcePath, width: 64, height: 64, durationSeconds: 300, hasAudio: true, assetContent: identity }]
     document.items = [{ id: 'item', name: '口播', kind: 'video', mediaId: 'media' }, { id: 'other', name: '重复引用', kind: 'video', mediaId: 'media' }]
     const sequence = document.sequences[0]
@@ -60,7 +60,7 @@ it('公共入口按源时间分页且不识别、不写文档、不改变历史�
     const second = parse(await app.requireResult('query_video_edit_content', { ...input, cursor: first.nextCursor }))
     expect(second.records.map(record => record.text)).toEqual(['打开后台2', '打开后台3'])
     expect(owner.document).toEqual(before); expect(owner.past.length).toBe(past); expect(recognize).not.toHaveBeenCalled()
-    editVideoProject(owner.document.id, document => { document.sequences[0].captions = [{ id: 'caption', text: '人工校对', start: 0, duration: 15, clipId: 'clip' }]; return document })
+    editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].captions = [{ id: 'caption', text: '人工校对', start: 0, duration: 15, clipId: 'clip' }]; return document })
     await saveVideoEdit(owner.document.id); await reopenVideoEdit(owner.document.id)
     expect(parse(await app.requireResult('query_video_edit_content', { ...input, text: '人工校对', kinds: ['caption'] })).records).toMatchObject([{ basis: 'timeline', text: '人工校对' }])
   } finally { app.dispose() }
@@ -73,7 +73,7 @@ it('分页拒绝换目标、换条件、内容变化及关闭重开；输出不�
   expect(parse(await readVideoEditContentIndex({ ...input, cursor: `${first.nextCursor!.split(':')[0]}:0` }, context())).records[0].text).toBe('打开后台0')
   await expect(readVideoEditContentIndex({ ...input, itemRef: { ...input.itemRef, id: `${owner.document.id}:other` }, cursor: first.nextCursor }, context())).rejects.toThrow('失效')
   await expect(readVideoEditContentIndex({ ...input, text: '改变', cursor: first.nextCursor }, context())).rejects.toThrow('失效')
-  editVideoProject(owner.document.id, document => { document.sequences[0].name = '移动后'; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].name = '移动后'; return document })
   await expect(readVideoEditContentIndex({ ...input, cursor: first.nextCursor }, context())).rejects.toThrow('失效')
   const fresh = parse(await readVideoEditContentIndex(input, context()))
   expect(fresh.records[0].text).toBe('打开后台0')
@@ -86,11 +86,11 @@ it('文件被替换或查询期间被编辑均拒绝迟到结果；未绑定身�
   inspect.mockResolvedValueOnce({ ...identity, contentIdentity: 'changed' })
   await expect(readVideoEditContentIndex(input, context())).rejects.toThrow('原素材已改变')
   inspect.mockResolvedValueOnce(identity).mockImplementationOnce(async () => {
-    editVideoProject(owner.document.id, document => { document.sequences[0].name = '异步修改'; return document })
+    editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].name = '异步修改'; return document })
     return identity
   })
   await expect(readVideoEditContentIndex(input, context())).rejects.toThrow('关联内容已改变')
-  editVideoProject(owner.document.id, document => { document.media[0].assetContent = undefined; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.media[0].assetContent = undefined; return document })
   expect(parse(await readVideoEditContentIndex(input, context()))).toMatchObject({ sourceVerified: false, warnings: [expect.stringContaining('文件身份')] })
 })
 it('文件身份字段顺序不影响分页，查询期间文件变化会拒绝', async () => {
@@ -144,7 +144,7 @@ it('录制步骤与章节按同源媒体投影；改过的理解结果使分页�
 })
 it('显式声音分析检查全部声道路由的共同低谷；失败后可重新查询', async () => {
   const { owner, input } = await fixture()
-  editVideoProject(owner.document.id, document => { document.items[0].audioChannels = [{ format: 'mono', sources: [{ stream: 0, channel: 0 }] }, { format: 'mono', sources: [{ stream: 1, channel: 0 }] }]; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.items[0].audioChannels = [{ format: 'mono', sources: [{ stream: 0, channel: 0 }] }, { format: 'mono', sources: [{ stream: 1, channel: 0 }] }]; return document })
   const detect = vi.spyOn(getPlatform().audioEdit, 'detectSilence')
   const result = (startMs: number, endMs: number) => ({ revision: 0, suggestions: [], energy: { resolutionMs: 10, thresholdDb: -40, highThresholdDb: -45, pauses: [{ startMs, endMs, cutMs: (startMs + endMs) / 2 }] } })
   detect.mockResolvedValueOnce(result(1000, 2000)).mockResolvedValueOnce(result(1500, 2500))
@@ -213,14 +213,14 @@ it('输出最多五十条，子素材查询限制源范围且不接受跨文档�
   const { owner, input } = await fixture()
   expect(parse(await readVideoEditContentIndex({ ...input, limit: 50 }, context())).records).toHaveLength(50)
   expect(queryVideoEditContentCapability.inputSchema.safeParse({ ...input, limit: 51 }).success).toBe(false)
-  editVideoProject(owner.document.id, document => { document.items[0].sourceRange = { inUs: 2000000, outUs: 4000000 }; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.items[0].sourceRange = { inUs: 2000000, outUs: 4000000 }; return document })
   expect(parse(await readVideoEditContentIndex(input, context())).records.map(record => record.text)).toEqual(['打开后台2', '打开后台3'])
   await expect(readVideoEditContentIndex({ ...input, documentRef: { ...input.documentRef, id: 'another-document' } }, context())).rejects.toThrow('属于 documentRef')
 })
 
 it('静态图片可查询创作提示词，意图不冒充画面识别且不启动无效分析', async () => {
   const { owner, input } = await fixture()
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media.push({ id: 'image', name: '生成图', kind: 'image', path: path.resolve(path.sep, 'generated.png'), width: 64, height: 64, durationSeconds: 0, assetContent: identity, creativeSource: { type: 'generation', recordId: 'generation', outputIndex: 0, prompt: '打开后台的示意图' } })
     document.items.push({ id: 'image-item', name: '生成图', kind: 'image', mediaId: 'image' })
     return document
@@ -235,7 +235,7 @@ it('静态图片可查询创作提示词，意图不冒充画面识别且不启�
 
 it('已核实素材不吸收同路径未绑定的旧词源，显式查询旧项仍明确未核实', async () => {
   const { owner, input } = await fixture()
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media.push({ ...document.media[0], id: 'unverified-media', assetContent: undefined })
     document.items.push({ ...document.items[0], id: 'unverified-item', mediaId: 'unverified-media' })
     const sequence = document.sequences[0]
@@ -283,7 +283,7 @@ it('项目自动发现当前未保存口播；不把剪后导出音频当成原�
   expect(parse(await readVideoEditContentIndex({ ...query, cursor: first.nextCursor }, context())).records[0].text).toBe('口播校对1')
   editAudioEditProject(audio.document.id, document => ({ ...document, transcript: document.transcript.map(block => ({ ...block, text: '再次校对' })) }))
   await expect(readVideoEditContentIndex({ ...query, cursor: first.nextCursor }, context())).rejects.toThrow('失效')
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media[0].path = path.resolve(path.sep, 'edited-export.wav')
     document.media[0].creativeSource = { type: 'document', docRef: { docId: audio.document.id, path: audio.session.documentMeta.path } }
     return document
@@ -414,7 +414,7 @@ it('查询期间经正式素材属性读到真实阶段进度，查询完成不�
 it('文档扫描与声音声道路数进度可读，失败状态保留后原入口可重试', async () => {
   const { owner, input, sourcePath } = await fixture()
   seedRelatedRecording(owner, sourcePath)
-  editVideoProject(owner.document.id, document => { document.items[0].audioChannels = [{ format: 'mono', sources: [{ stream: 0, channel: 0 }] }, { format: 'mono', sources: [{ stream: 1, channel: 0 }] }]; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.items[0].audioChannels = [{ format: 'mono', sources: [{ stream: 0, channel: 0 }] }, { format: 'mono', sources: [{ stream: 1, channel: 0 }] }]; return document })
   const seen: ReturnType<typeof readVideoEditContentQueries> = []
   const unsubscribe = subscribeVideoEdit(() => { const last = readVideoEditContentQueries(owner, 'item').at(-1); if (last) seen.push(last) })
   const detect = vi.spyOn(getPlatform().audioEdit, 'detectSilence').mockImplementation(async () => {
@@ -449,7 +449,7 @@ it('取消与等待期间编辑立即阻断旧分析，迟到进度与结果不�
   const query = readVideoEditContentIndex({ ...input, text: undefined, kinds: ['scene'] }, { signal: controller.signal })
   const rejected = expect(query).rejects.toThrow('关联内容已改变')
   const requestId = await ready
-  editVideoProject(owner.document.id, document => { document.sequences[0].name = '人工修改'; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].name = '人工修改'; return document })
   expect(cancel).toHaveBeenCalledWith(requestId)
   const stopped = readVideoEditContentQueries(owner, 'item').at(-1)!
   expect(stopped.state).toBe('cancelled')

@@ -17,7 +17,7 @@ beforeEach(installHarnessNativeStorage)
 afterEach(async () => { await closeAllVideoEdits(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 async function fixture() {
   const owner = await createVideoEditProject()
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media = [{ id: 'media', name: '镜头', path: '/fixture/shot.mp4', kind: 'video', width: 64, height: 64, durationSeconds: 20, hasAudio: true }]
     document.items = [{ id: 'item', name: '镜头', kind: 'video', mediaId: 'media' }]
     const sequence = document.sequences[0]; const base = makeVideoEditItemClip(document, 'item', sequence.id, { frame: 30, duration: 60 })

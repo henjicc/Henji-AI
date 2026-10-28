@@ -55,7 +55,7 @@ it('正式创建入口解码并降采样共同声音，求偏移后一次提交�
 afterEach(async () => { cleanup(); await closeAllVideoEdits(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 async function fixture() {
   const owner = await createVideoEditProject()
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media = ['a', 'b'].map(id => ({ id: `media-${id}`, name: id, path: `/fixture/${id}.mp4`, kind: 'video', width: 64, height: 64, durationSeconds: 10, hasAudio: true }))
     document.items = document.media.map(media => ({ id: media.name, name: media.name, kind: 'video', mediaId: media.id }))
     return document
@@ -133,7 +133,7 @@ it('多机位网格单击和1–9只在本监视器命中；播放中保留播�
   fireEvent.click(screen.getByRole('button', { name: '切换到机位1 机位 1' }))
   expect(owner.document.sequences[0].clips).toHaveLength(2); expect(requireVideoEditInstance(owner.document.id).playing).toBe(true)
   const count = owner.past.length; fireEvent.keyDown(grid, { key: '9' }); expect(owner.past.length).toBe(count)
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const parent = document.sequences[0]
     parent.tracks.push({ id: 'title-track', name: '标题', index: 2, kind: 'video', enabled: true, muted: false, solo: false, locked: false })
     document.items.push({ id: 'title-item', name: '标题', kind: 'text' })

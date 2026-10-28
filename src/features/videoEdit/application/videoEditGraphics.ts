@@ -16,7 +16,8 @@ function edit(target: VideoEditGraphicClipTarget, change: (objects: VideoEditGra
     const clip = sequence.clips.find(clip => clip.id === target.clipId)
     if (clip?.kind !== 'graphic' || !clip.graphic) throw new Error('原图形片段已移除，请重新选择。')
     assertVideoEditClipsEditable(sequence, [clip.id])
-    clip.graphic.objects = change(clip.graphic.objects); return sequence
+    const next = { ...clip, graphic: { ...clip.graphic, objects: change(clip.graphic.objects) } }
+    return { ...sequence, clips: sequence.clips.map(value => value === clip ? next : value) }
   }, gesture)
 }
 export function updateVideoEditGraphicObject(target: VideoEditGraphicTarget, patch: { textStyle?: VideoEditTextStyle; visible?: boolean }, gesture?: VideoEditGesture): void {

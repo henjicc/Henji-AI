@@ -34,9 +34,10 @@ function place(document: VideoEditDocument, recording: ReturnType<typeof createR
 
 it('新项目复用最低空轨并改成语义名，多分片仍在同一轨', () => {
   const { document, recording } = fixture()
-  const sequence = document.sequences[0], originalIds = sequence.tracks.map(track => track.id)
+  let sequence = document.sequences[0]
+  const originalIds = sequence.tracks.map(track => track.id)
   recording.media.push({ ...recording.media[1], monoUs: 2_000_000 })
-  place(document, recording)
+  sequence = place(document, recording).sequences[0]
   expect(sequence.tracks.map(track => track.id)).toEqual(originalIds)
   expect(sequence.tracks.map(track => track.name)).toEqual(['麦克风', '屏幕'])
   const codes = videoEditTrackCodes(sequence)
@@ -45,10 +46,10 @@ it('新项目复用最低空轨并改成语义名，多分片仍在同一轨', (
 
 it('中间插入不占用已有片段的轨道，即使插入处为空；已有片段不移动', () => {
   const { document, recording } = fixture()
-  const sequence = document.sequences[0]
+  let sequence = document.sequences[0]
   sequence.clips = [makeVideoEditItemClip(document, 'microphone', sequence.id, { frame: 300, track: 0 }), makeVideoEditItemClip(document, 'screen', sequence.id, { frame: 300, track: 1 })]
   const before = structuredClone(sequence)
-  place(document, recording, 120)
+  sequence = place(document, recording, 120).sequences[0]
   expect(sequence.tracks.slice(0, 2)).toEqual(before.tracks)
   expect(sequence.clips.slice(0, 2)).toEqual(before.clips)
   expect(sequence.tracks).toHaveLength(4)
@@ -57,11 +58,11 @@ it('中间插入不占用已有片段的轨道，即使插入处为空；已有�
 
 it('空轨不足只补缺少的轨道，按编号而非数组位置分配并保留锁定轨', () => {
   const { document, recording } = fixture(['microphone', 'systemAudio', 'screen', 'camera'])
-  const sequence = document.sequences[0]
+  let sequence = document.sequences[0]
   const [extra] = videoEditEdgeTracks(sequence, 'video', 1)
   sequence.tracks.unshift(extra)
   sequence.tracks.find(track => track.kind === 'audio')!.locked = true
-  place(document, recording)
+  sequence = place(document, recording).sequences[0]
   expect(sequence.tracks).toHaveLength(5)
   expect(sequence.tracks.find(track => track.index === 0)).toMatchObject({ name: '音频 1', locked: true })
   expect(sequence.clips.map(clip => [clip.itemId, clip.track])).toEqual([['microphone', 3], ['systemAudio', 4], ['screen', 1], ['camera', 2]])

@@ -44,7 +44,7 @@ beforeEach(() => {
 afterEach(async () => { cleanup(); await closeAllVideoEdits(); vi.restoreAllMocks(); vi.clearAllMocks(); uninstallHarnessNativeStorage() })
 async function fixture() {
   const owner = await createVideoEditProject(); const id = owner.document.id
-  editVideoProject(id, document => {
+  editVideoProject(id, document => { document = structuredClone(document);
     document.media.push({ id: 'media', name: '采访', path: '/fixture/scene.mp4', kind: 'video', width: 1920, height: 1080, durationSeconds: 10, hasAudio: true })
     document.items.push({ id: 'item', name: '采访', kind: 'video', mediaId: 'media' })
     const sequence = document.sequences[0]; const base = makeVideoEditItemClip(document, 'item', sequence.id, { frame: 30, duration: 90, sourceInUs: 1000000, sourceOutUs: 4000000 })
@@ -111,7 +111,7 @@ it('复用有效场景切点而非跨镜头平滑；变速和倒放按正式源�
   const result = await reframeVideoEdit(target, { size: { width: 1080, height: 1920 }, settings })
   const points = owner.document.sequences.find(sequence => sequence.id === result.sequenceId)!.clips[0].curves!.x!
   expect(points.find(point => point.time === 14)?.interpolation).toBe('hold')
-  editVideoProject(id, document => { Object.assign(document.sequences[0].clips[0], { sourceInUs: 6000000, speed: { numerator: 2, denominator: 1 }, reverse: true }); return document })
+  editVideoProject(id, document => { document = structuredClone(document); Object.assign(document.sequences[0].clips[0], { sourceInUs: 6000000, speed: { numerator: 2, denominator: 1 }, reverse: true }); return document })
   vi.mocked(videoEditSmartRegionAttentionBox).mockClear()
   await reframeVideoEdit(target, { size: { width: 1080, height: 1920 }, settings })
   const calls = vi.mocked(videoEditSmartRegionAttentionBox).mock.calls
@@ -120,7 +120,7 @@ it('复用有效场景切点而非跨镜头平滑；变速和倒放按正式源�
 })
 it('绑定明确跟踪器完整结果；公共引用归属校验，返回新序列供现有导出消费', async () => {
   const { owner, id, target, input } = await fixture()
-  editVideoProject(id, document => { document.sequences[0].clips[0].trackers = [{ id: 'tracker', name: '主体', method: 'box', prompts: [{ timeUs: 1000000, box: [.4, .2, .1, .2] }] }]; return document })
+  editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].clips[0].trackers = [{ id: 'tracker', name: '主体', method: 'box', prompts: [{ timeUs: 1000000, box: [.4, .2, .1, .2] }] }]; return document })
   vi.spyOn(getPlatform().tracking, 'status').mockResolvedValue({ state: 'ready', result: { path: '/cache/tracker', startUs: 0, endUs: 10000000, fps: 30, summary: { tracked: 300, lost: 0 } } })
     const result = await executeVideoEditReframeCapability(reframeVideoEditCapability.inputSchema.parse({ ...input, settings: { attention: 'tracker', motion: 'default' }, trackerBindings: [{ clipRef: { kind: 'video_edit.clip', id: `${id}:clip` }, trackerRef: { kind: 'video_edit.tracker', id: `${id}:${videoEditTrackerEntityId('clip', 'tracker')}` } }] }))
     expect(result.verified).toBe(true); expect(result.resultRef).toMatchObject({ kind: 'video_edit.sequence' })
@@ -146,7 +146,7 @@ it('取消等待、分析失败和迟到编辑不创建半成品；失败保存�
   const controller = new AbortController()
   vi.mocked(getPlatform().smartRegions.ensure).mockImplementationOnce(async () => { controller.abort(new Error('取消')); return { state: 'analyzing', progress: 0 } })
   await expect(reframeVideoEdit(target, { size: { width: 1080, height: 1920 }, settings }, controller.signal)).rejects.toThrow('取消')
-  vi.mocked(analyzeVideoEditReframeOffThread).mockImplementationOnce(async request => { const result = await analyzeVideoEditReframe(request); editVideoProject(id, document => { document.sequences[0].name = '用户编辑'; return document }); return result })
+  vi.mocked(analyzeVideoEditReframeOffThread).mockImplementationOnce(async request => { const result = await analyzeVideoEditReframe(request); editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].name = '用户编辑'; return document }); return result })
   await expect(reframeVideoEdit(target, { size: { width: 1080, height: 1920 }, settings })).rejects.toThrow('已改变')
   expect(owner.document.sequences).toHaveLength(1)
   failVideoEditSaves(true)
@@ -157,7 +157,7 @@ it('取消等待、分析失败和迟到编辑不创建半成品；失败保存�
 })
 it('锁轨拒绝单片段修改；复制锁轨序列不改变原序列锁定，复制仍只占一步撤销', async () => {
   const { owner, target, id } = await fixture()
-  editVideoProject(id, document => { document.sequences[0].tracks.forEach(track => { track.locked = true }); return document })
+  editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].tracks.forEach(track => { track.locked = true }); return document })
   await expect(reframeVideoEdit({ ...target, clipId: 'clip' }, { settings })).rejects.toThrow('锁定')
   const result = await reframeVideoEdit(target, { size: { width: 1080, height: 1920 }, settings })
   expect(owner.document.sequences.find(sequence => sequence.id === result.sequenceId)!.tracks.every(track => track.locked)).toBe(true)

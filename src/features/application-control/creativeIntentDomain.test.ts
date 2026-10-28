@@ -235,7 +235,7 @@ it('作品后续手调后，正式候选应用拒绝过期结果并保留新状�
   try {
     const organized = await app.requireResult('organize_video_edit_intent', { draftRef })
     const candidate = (organized.candidateRefs as ApplicationRef[])[0]
-    editVideoProject(owner.document.id, document => { document.sequences[0].clips[0].x = .25; return document })
+    editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].clips[0].x = .25; return document })
     const history = owner.past.length
     const rejected = await app.change(candidate, { 'video_edit.intent_candidate.applied': true })
     expect(rejected.ok).toBe(false)

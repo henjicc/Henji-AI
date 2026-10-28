@@ -125,7 +125,7 @@ it('track_video_edit_recording：光标与窗口跟踪直接由录制事件换�
   const fixture = await recordingCursorFixture(4, { windows: true })
   vi.spyOn(getPlatform().system.fs, 'readFile').mockImplementation(async path => fixture.bytes.get(String(path))!)
   const { owner, id, sequenceId, video } = await project(); const app = createApplicationHarness()
-  editVideoProject(id, document => { document.media.find(media => media.id === 'media1')!.recordingCursor = fixture.source; return document })
+  editVideoProject(id, document => { document = structuredClone(document); document.media.find(media => media.id === 'media1')!.recordingCursor = fixture.source; return document })
   const clipRef = { kind: 'video_edit.clip', id: `${id}:${video.id}` }
   const cursor = await app.call('track_video_edit_recording', { documentRef: { kind: 'video_edit.document', id }, clipRef, target: 'cursor', frame: 30 })
   expect(cursor, JSON.stringify(cursor)).toMatchObject({ ok: true, data: { verification: { verified: true } } })

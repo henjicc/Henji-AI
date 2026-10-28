@@ -94,6 +94,11 @@ export function videoEditCompositeData(document: VideoEditDocument, type: VideoE
 /** Draft operations use the same factories and full domain validator as manual
  * creation. No publication or history occurs until the caller proves the draft. */
 export function updateVideoEditCompositeEntity(document: VideoEditDocument, type: VideoEditCompositeEntityType, childId: string, data: Data): VideoEditDocument {
+  const previous = videoEditCompositeOwner(document, type, childId)
+  const sequence = previous.kind === 'transition'
+    ? { ...previous.sequence, transitions: previous.sequence.transitions!.map(value => value === previous.transition ? structuredClone(value) : value) }
+    : { ...previous.sequence, clips: previous.sequence.clips.map(value => value === previous.clip ? structuredClone(value) : value) }
+  document = { ...document, sequences: document.sequences.map(value => value === previous.sequence ? sequence : value) }
   const owner = videoEditCompositeOwner(document, type, childId)
   if (owner.kind === 'tracker') {
     putVideoEditTracker(document, owner.clip, { id: owner.tracker.id, name: data.name, method: data.method, prompts: data.prompts, ...(owner.tracker.recording ? { recording: owner.tracker.recording } : {}) })
@@ -214,6 +219,7 @@ export function removeVideoEditCompositeEntities(document: VideoEditDocument, ty
   }
 }
 export function updateVideoEditClipStructure(clip: VideoEditClip, data: Data, keys: string[]): VideoEditClip {
+  clip = { ...clip, ...(clip.graphic ? { graphic: { ...clip.graphic } } : {}) }
   if (keys.includes('graphicObjectIds')) {
     if (!clip.graphic) throw new Error('此片段没有图形对象。')
     clip.graphic.objects = orderVideoEditGraphicObjects(clip.graphic.objects, data.graphicObjectIds as string[])

@@ -62,7 +62,7 @@ const tracker = { id: 'track1', name: '杯子', method: 'box' as const, prompts:
 it('嵌套导出等待子序列跟踪，按完整快照提供子跟踪结果', async () => {
   const { owner, id, sequenceId, video } = await project()
   editVideoEditTracker(id, sequenceId, video.id, tracker); await flush()
-  editVideoSequence(id, sequenceId, sequence => { sequence.clips.find(clip => clip.id === video.id)!.effects = [{ id: 'nested-effect', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'tracker', trackerId: tracker.id } }]; return sequence })
+  editVideoSequence(id, sequenceId, sequence => { sequence = structuredClone(sequence); sequence.clips.find(clip => clip.id === video.id)!.effects = [{ id: 'nested-effect', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'tracker', trackerId: tracker.id } }]; return sequence })
   nestVideoEditSelection({ projectId: id, sequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '含跟踪的子序列')
   const snapshot = getActiveVideoEditSequence(owner); const definition = status.mock.calls.at(-1)![0]
   let completed = false; const waiting = waitVideoEditTracking(snapshot, snapshot).then(() => { completed = true })
@@ -142,14 +142,14 @@ it('schema 拒绝非媒体跟踪、重复 ID、无提示；保存容许剪切后
 })
 it('新定义先查缓存、缺结果开始跟踪；同定义多片段合并素材范围，旧查询不复活删除的跟踪', async () => {
   const { owner, id, sequenceId, video } = await project()
-  editVideoSequence(id, sequenceId, sequence => { const source = sequence.clips.find(clip => clip.id === video.id)!; source.duration = 30; source.trackers = [tracker]; sequence.clips.push({ ...source, id: 'copy', start: 30, sourceInUs: 3_000_000 }); return sequence })
+  editVideoSequence(id, sequenceId, sequence => { sequence = structuredClone(sequence); const source = sequence.clips.find(clip => clip.id === video.id)!; source.duration = 30; source.trackers = [tracker]; sequence.clips.push({ ...source, id: 'copy', start: 30, sourceInUs: 3_000_000 }); return sequence })
   await flush()
   expect(status).toHaveBeenCalledTimes(1)
   expect(run).toHaveBeenCalledWith(expect.objectContaining({ method: 'box' }), { startUs: 0, endUs: 4_000_000 }, { direction: 'both' })
   resetVideoEditTrackingForTests()
   let finish!: (value: TrackingStatus) => void
   status.mockImplementation(() => new Promise(resolve => { finish = resolve })); run.mockClear(); startVideoEditTracking(); await flush()
-  editVideoSequence(id, sequenceId, sequence => { for (const clip of sequence.clips) delete clip.trackers; return sequence })
+  editVideoSequence(id, sequenceId, sequence => { sequence = structuredClone(sequence); for (const clip of sequence.clips) delete clip.trackers; return sequence })
   finish({ state: 'ready', result: result() }); await flush()
   expect(videoEditTrackResults()).toEqual({}); expect(run).not.toHaveBeenCalled(); expect(owner.document.sequences[0].clips[0].trackers).toBeUndefined()
 })
@@ -173,7 +173,7 @@ it('已有缓存直接复用；进度先到完成时迟到 run 回执不倒退�
 it('导出等待使用的跟踪；停止后仅续跟一次仍不满则按已有部分导出，失败与取消均结束等待', async () => {
   const { owner, id, sequenceId, video } = await project()
   editVideoEditTracker(id, sequenceId, video.id, tracker); await flush()
-  editVideoSequence(id, sequenceId, sequence => { sequence.clips.find(clip => clip.id === video.id)!.effects = [{ id: 'fx', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'tracker', trackerId: tracker.id } }]; return sequence })
+  editVideoSequence(id, sequenceId, sequence => { sequence = structuredClone(sequence); sequence.clips.find(clip => clip.id === video.id)!.effects = [{ id: 'fx', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'tracker', trackerId: tracker.id } }]; return sequence })
   const sequence = getActiveVideoEditSequence(owner); const request = videoEditTrackingRequest(owner.document, sequence.frameRate, sequence.clips[0], tracker)!
   let resolved = false
   const waiting = waitVideoEditTracking(sequence, sequence).then(() => { resolved = true }); await flush(); expect(resolved).toBe(false)
@@ -196,7 +196,7 @@ it('嵌套跟踪准备中停止：等待重跑一次，再停止则给出终态�
     applyVideoEditBuiltinEffect(id, sequenceId, [video.id], 'smart:face_mosaic')
     const nested = nestVideoEditSelection({ projectId: id, sequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '待分析的子序列')
     editVideoEditTracker(id, sequenceId, nested.clip.id, tracker)
-    editVideoSequence(id, sequenceId, sequence => { sequence.clips.find(clip => clip.id === nested.clip.id)!.effects = [{ id: 'fx', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'tracker', trackerId: tracker.id } }]; return sequence })
+    editVideoSequence(id, sequenceId, sequence => { sequence = structuredClone(sequence); sequence.clips.find(clip => clip.id === nested.clip.id)!.effects = [{ id: 'fx', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'tracker', trackerId: tracker.id } }]; return sequence })
     const snapshot = getActiveVideoEditSequence(owner)
     const request = videoEditTrackingRequest(owner.document, snapshot.frameRate, snapshot.clips.find(clip => clip.id === nested.clip.id)!, tracker)!
     expect(videoEditTrackingRequest(snapshot, snapshot.frameRate, snapshot.clips.find(clip => clip.id === nested.clip.id)!, tracker)!.definition).toEqual(request.definition)
@@ -228,14 +228,14 @@ it('嵌套准备等待智能区域时修改子序列，快照完成后取帧仍�
     applyVideoEditBuiltinEffect(id, sequenceId, [video.id], 'smart:face_mosaic')
     const nested = nestVideoEditSelection({ projectId: id, sequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '子序列')
     editVideoEditTracker(id, sequenceId, nested.clip.id, tracker)
-    editVideoSequence(id, sequenceId, sequence => { sequence.clips.find(clip => clip.id === nested.clip.id)!.effects = [{ id: 'fx', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'tracker', trackerId: tracker.id } }]; return sequence })
+    editVideoSequence(id, sequenceId, sequence => { sequence = structuredClone(sequence); sequence.clips.find(clip => clip.id === nested.clip.id)!.effects = [{ id: 'fx', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'tracker', trackerId: tracker.id } }]; return sequence })
     const snapshot = getActiveVideoEditSequence(owner)
     const request = videoEditTrackingRequest(owner.document, snapshot.frameRate, snapshot.clips.find(clip => clip.id === nested.clip.id)!, tracker)!
     expect(videoEditTrackingRequest(snapshot, snapshot.frameRate, snapshot.clips.find(clip => clip.id === nested.clip.id)!, tracker)!.definition).toEqual(request.definition)
     const waiting = waitVideoEditTracking(snapshot, snapshot, controller.signal)
     const settled = waiting.catch(() => {})
     await new Promise(resolve => setTimeout(resolve, 0))
-    editVideoSequence(id, nested.sequence.id, sequence => { for (const clip of sequence.clips) delete clip.effects; return sequence })
+    editVideoSequence(id, nested.sequence.id, sequence => { sequence = structuredClone(sequence); for (const clip of sequence.clips) delete clip.effects; return sequence })
     const issued = ensure.mock.calls.at(-1)![0]
     regionProgress({ request: issued, status: { state: 'ready', segment: { path: 'C:/cache/face.hsrg', startUs: issued.startUs, endUs: issued.endUs, still: false, model: 'yunet', summary: { value: 1, peak: 1 } } } })
     await vi.waitFor(() => expect(run).toHaveBeenCalledWith(request.definition, request.range, { direction: 'both' }))
@@ -287,7 +287,7 @@ it('助手同一正式事务创建、修改与回读跟踪，绑定与取消跟�
 it('导出等待保留原定义：用户删除跟踪不取消等待，结果仍按导出快照推送', async () => {
   const { owner, id, sequenceId, video } = await project()
   editVideoEditTracker(id, sequenceId, video.id, tracker); await flush()
-  editVideoSequence(id, sequenceId, sequence => { sequence.clips.find(clip => clip.id === video.id)!.effects = [{ id: 'fx', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'tracker', trackerId: tracker.id } }]; return sequence })
+  editVideoSequence(id, sequenceId, sequence => { sequence = structuredClone(sequence); sequence.clips.find(clip => clip.id === video.id)!.effects = [{ id: 'fx', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'tracker', trackerId: tracker.id } }]; return sequence })
   const snapshot = getActiveVideoEditSequence(owner); const definition = status.mock.calls.at(-1)![0]
   const waiting = waitVideoEditTracking(snapshot, snapshot)
   editVideoEditTracker(id, sequenceId, video.id, { remove: tracker.id })
@@ -357,7 +357,7 @@ it('助手通用实体在嵌套层新建/纠错/绑定，子序列变化停止�
     await waitFor(() => expect(status.mock.calls.at(-1)![0].prompts).toHaveLength(2))
     const corrected = status.mock.calls.at(-1)![0]
     await waitFor(() => expect(run).toHaveBeenCalledWith(corrected, expect.anything(), { direction: 'both' }))
-    editVideoSequence(id, nested.sequence.id, sequence => { sequence.clips[0].opacity = .5; return sequence })
+    editVideoSequence(id, nested.sequence.id, sequence => { sequence = structuredClone(sequence); sequence.clips[0].opacity = .5; return sequence })
     await waitFor(() => expect(status.mock.calls.at(-1)![0].source).not.toEqual(corrected.source))
     expect(getPlatform().tracking.stop).toHaveBeenCalledWith(corrected)
     progress({ definition: corrected, status: { state: 'ready', result: result() } })

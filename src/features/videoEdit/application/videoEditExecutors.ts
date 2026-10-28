@@ -3,7 +3,7 @@ import { withVideoEditCodeMetadata, ensureVideoEditChangedCodeMetadata, ensureVi
 import { getVideoEditRenderPreference, setVideoEditRenderPreference, type VideoEditRenderPreference } from './videoEditRenderCache'
 import { discardVideoEditCodeFiles, codePublicationFiles } from './videoEditCodeStorage'
 import { codePerformanceMessage, type CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
-import { videoEditTransactionBatch, withVideoEditCommitBatch } from './videoEditService'
+import { parseVideoEditDocument, videoEditTransactionBatch, withVideoEditCommitBatch } from './videoEditService'
 import { withVideoEditCurrentMetadata, saveVideoEdit, editVideoProject, restoreVideoEditSnapshot, requireVideoEditInstance, listVideoEditInstances, getVideoEditProjectView, setVideoEditProjectView, switchVideoEditSequence, getVideoEditTimelineView, setVideoEditTimelineView, validateVideoEditTimelineView, validateVideoEditProgramControl, setVideoEditView, videoEditProgramCommandIdentity, restoreVideoEditProgramCommandIdentity, subscribeVideoEditView, subscribeVideoEditDomain, videoEditDomainRevision as videoEditRevision, type VideoEditProjectView, type VideoEditTimelineView } from './videoEditService'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { assertVideoEditAnnotationTransition } from '@/core/videoEdit/annotations'
@@ -271,12 +271,12 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
     }
     const compositeWrite = ['video_edit.effect', 'video_edit.transition'].includes(this.entityType) || keys.some(key => ['video_edit.clip.effect_ids', 'video_edit.clip.adjustment_from_track'].includes(key))
     if (compositeWrite) {
-      const next = videoEditDocumentSchema.parse(reconcileVideoEditTimedContent(before, update(structuredClone(before))))
+      const next = parseVideoEditDocument(reconcileVideoEditTimedContent(before, update(before)), before)
       assertVideoEditLockedTracks(before, next)
       const target = VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === this.entityType) ? videoEditCompositeOwner(next, this.entityType as VideoEditCompositeEntityType, childId) : { sequence: next.sequences.find(sequence => sequence.clips.some(clip => clip.id === childId))!, clipIds: [childId] }
       if (videoEditIntroducesCodeEffects(before, next)) await trialVideoEditCodeDocument(owner, contentVersion, next, target.sequence.id, target.sequence.clips.find(clip => clip.id === target.clipIds[0])!.start, context?.signal, target.clipIds.map(clipId => ({ sequenceId: target.sequence.id, clipId })))
     } else if (this.entityType === 'video_edit.clip' && step.mutations.some(mutation => ['video_edit.clip.code_version_id', 'video_edit.clip.code_parameters'].includes(mutation.propertyId))) {
-      const next = videoEditDocumentSchema.parse(reconcileVideoEditTimedContent(before, update(structuredClone(before))))
+      const next = parseVideoEditDocument(reconcileVideoEditTimedContent(before, update(before)), before)
       const sequence = next.sequences.find(sequence => sequence.clips.some(clip => clip.id === childId))!
       const oldCode = before.sequences.flatMap(sequence => sequence.clips).find(clip => clip.id === childId)?.code
       const nextCode = sequence.clips.find(clip => clip.id === childId)?.code
@@ -288,7 +288,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
         await trialVideoEditCodeDocument(owner, contentVersion, next, sequence.id, Math.max(clip.start, Math.min(clip.start + clip.duration - 1, owner.frame)), context?.signal, [{ sequenceId: sequence.id, clipId: childId }])
       }
     }
-    const fontCandidate = update(structuredClone(before))
+    const fontCandidate = update(before)
     await ensureVideoEditChangedCodeMetadata(owner, before, fontCandidate, context?.signal)
     if (changedVideoEditFonts(before, fontCandidate, readVideoEditCodeMetadata(owner, before), readVideoEditCodeMetadata(owner, fontCandidate)).some(use => !GENERIC_FONT_FACES.some(face => face.family === use.font))) {
       await loadFontLibrary(true)
@@ -297,7 +297,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
     }
     let sourcePause: VideoEditSourcePause | undefined
     if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.program_playback') && (data.programPlayback as ProjectViewSnapshot['program']).playing) {
-      videoEditDocumentSchema.parse(update(structuredClone(before)))
+      parseVideoEditDocument(update(before), before)
       sourcePause = await pauseVideoEditSourceForProgram(projectId, context?.signal)
       try {
         context?.signal?.throwIfAborted()

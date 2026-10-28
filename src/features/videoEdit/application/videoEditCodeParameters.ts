@@ -1,3 +1,4 @@
+import { jsonEqual } from '@/core/jsonEqual'
 import { compareCodeMaterialTime, evaluateCodeMaterialParameters, prepareCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
 import type { CodeMaterialKeyframe } from '@/core/videoEdit/codeMaterialAnimation'
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
@@ -61,17 +62,17 @@ export function readVideoEditGraphicEditor(projectId: string, sequenceId: string
 }
 function edit(target: VideoEditParameterTarget, change: (document: VideoEditDocument, value: ReturnType<typeof resolve>) => void, gesture?: VideoEditGesture): void {
   if (gesture && gesture.projectId !== target.projectId) throw new Error('参数调整不属于此剪辑。')
-  const update = (document: VideoEditDocument): VideoEditDocument => { change(document, resolve(document, target)); return document }
-  if (gesture) updateVideoEditParameterGesture(gesture, document => {
+  const update = (document: VideoEditDocument): VideoEditDocument => {
     const { sequence, clip } = resolve(document, target)
     if (sequence.tracks.find(track => track.index === clip.track)?.locked) throw new Error('所属轨道已锁定，请先解锁。')
     const draft = structuredClone(clip)
     const next = { ...document, sequences: document.sequences.map(value => value === sequence ? { ...sequence, clips: sequence.clips.map(value => value === clip ? draft : value) } : value) }
-    update(next)
+    change(next, resolve(next, target))
     videoEditClipSchema.parse(draft)
-    if (JSON.stringify(draft) === JSON.stringify(clip)) return document
+    if (jsonEqual(draft, clip)) return document
     return next
-  })
+  }
+  if (gesture) updateVideoEditParameterGesture(gesture, update)
   else editVideoProject(target.projectId, update)
 }
 function declaration(target: VideoEditParameterTarget, key: string) {

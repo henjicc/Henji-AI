@@ -22,7 +22,7 @@ afterEach(async () => { disposers.splice(0).forEach(dispose => dispose()); await
 
 it('A 部分样式经正式属性写入后 verified，旧误判只读核对结案且不重放', async () => {
   const owner = await createVideoEditTestProject()
-  editVideoProject(owner.document.id, document => { document.sequences[0].captions = [{ id: 'caption', start: 0, duration: 50, text: '字幕' }]; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].captions = [{ id: 'caption', start: 0, duration: 50, text: '字幕' }]; return document })
   const app = createApplicationHarness(); disposers.push(app.dispose)
   const target = { kind: 'video_edit.caption', id: `${owner.document.id}:caption` }
   const style = { fontFamily: 'sans-serif', fontWeight: 400, fontStyle: 'normal', fontSize: 60, fill: { enabled: true, color: HEX_COLOR_EXAMPLE.toLowerCase() } }
@@ -55,7 +55,7 @@ it('A 部分样式经正式属性写入后 verified，旧误判只读核对结�
 
 it('B 三类属性值错误只说字段、约束和收到的值', async () => {
   const owner = await createVideoEditTestProject()
-  editVideoProject(owner.document.id, document => { document.sequences[0].captions = [{ id: 'caption', start: 0, duration: 50, text: '字幕' }]; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].captions = [{ id: 'caption', start: 0, duration: 50, text: '字幕' }]; return document })
   const app = createApplicationHarness(); disposers.push(app.dispose)
   const target = { kind: 'video_edit.caption', id: `${owner.document.id}:caption` }
   for (const [properties, expected] of [

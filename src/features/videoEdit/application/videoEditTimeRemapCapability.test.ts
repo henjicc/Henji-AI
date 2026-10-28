@@ -21,7 +21,7 @@ afterEach(async () => { await closeAllVideoEdits(); vi.restoreAllMocks(); uninst
 /** 30fps：画面+声音链接的 4 秒片段 a（源 0–4 秒），后面紧跟 c；节拍标记在第 45 帧（1.5 秒）。 */
 async function fixture() {
   const owner = await createVideoEditProject()
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media.push({ id: 'media', name: '跑步', path: '/fixture/run.mp4', kind: 'video', width: 64, height: 64, durationSeconds: 20, hasAudio: true })
     document.items.push({ id: 'item', name: '跑步', kind: 'video', mediaId: 'media' })
     const sequence = document.sequences[0]
@@ -74,7 +74,7 @@ it('通用属性写曲线与 null：时长随曲线变化、与常数速度互�
     expect(await app.change(target, { 'video_edit.clip.speed_percent': 50 })).toMatchObject({ ok: true })
     a = owner.document.sequences[0].clips.find(value => value.id === 'a')!
     expect(a.timeRemap).toBeUndefined(); expect(a.speed).toEqual({ numerator: 1, denominator: 2 })
-    editVideoProject(owner.document.id, document => { document.sequences[0].markers = []; return document })
+    editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].markers = []; return document })
     const refused = await app.call('ramp_video_edit_clip_speed', { ...refs(owner), ramps: [{ atSeconds: 1, speedPercent: 50 }], snap: 'beat' })
     expect(JSON.stringify(refused)).toContain('analyze_video_edit_beats')
   } finally { app.dispose() }

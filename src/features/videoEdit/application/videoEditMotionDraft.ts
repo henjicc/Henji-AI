@@ -636,11 +636,14 @@ export async function applyVideoMotion(id: string): Promise<void> {
   const transactionId = crypto.randomUUID()
   editVideoProject(id, document => {
     if (!isVideoEditContentCurrent(state.owner, contentVersion)) throw new Error('片段已有后续修改，请重新预览。')
-    const sequence = document.sequences.find(s => s.id === seq.id)!
-    for (const targetSequence of document.sequences) targetSequence.clips = targetSequence.clips.map(current => {
+    document = { ...document, sequences: document.sequences.map(targetSequence => {
+      const clips = targetSequence.clips.map(current => {
       const motions = candidate.motions.filter(motion => state.takeTargets?.[motion.takeId] === `${id}:${current.id}`)
       return motions.length ? mergeMotionClipCurves(current, motions) : current
-    })
+      })
+      return clips.every((clip, index) => clip === targetSequence.clips[index]) ? targetSequence : { ...targetSequence, clips }
+    }) }
+    const sequence = { ...document.sequences.find(s => s.id === seq.id)! }
     const ids = new Set(state.constraints?.annotations.filter(a => a.role !== 'text').map(a => a.id))
     sequence.annotations = sequence.annotations.map(mark => {
       if (!ids.has(mark.id)) return mark
@@ -649,7 +652,7 @@ export async function applyVideoMotion(id: string): Promise<void> {
       assertVideoEditAnnotationTransition(mark, open, 'agent'); assertVideoEditAnnotationTransition(open, next, 'agent')
       return next
     })
-    return document
+    return { ...document, sequences: document.sequences.map(value => value.id === sequence.id ? sequence : value) }
   })
   const applied = targetClip(state); state.appliedBaseDigest = await motionDigest(motionClipBase(applied))
   const application = { candidateRef: state.draft.selectedCandidateRef!, operationRef: { kind: 'creative_intent.application', id: transactionId }, receiptRef: { kind: 'video_edit.document', id }, saved: false }

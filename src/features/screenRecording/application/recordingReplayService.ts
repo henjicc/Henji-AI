@@ -154,12 +154,13 @@ export async function replaySession(id: string, options: ReplayOptions, context:
       }))
       await importVideoEditSources(owner.document.id, replacements.map(v => ({ path: v.source.path })), undefined, signal, async draft => {
         await current()
-        replaced = replaceRecordingSteps(draft, recording, replacements.map(v => {
+        const result = replaceRecordingSteps(draft, recording, replacements.map(v => {
           const media = draft.media.find(m => m.path.replaceAll('\\', '/') === v.source.path.replaceAll('\\', '/'))
           if (!media) throw new Error('重录素材未完整导入。')
           return { step: v.step, media }
         }))
-        return videoEditDocumentSchema.parse(draft)
+        replaced = result.replaced
+        return videoEditDocumentSchema.parse(result.document)
       })
       context.execution?.report({ targetMutation: 'applied' })
       const expected = owner.document

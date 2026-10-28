@@ -21,7 +21,7 @@ afterEach(async () => { await closeAllVideoEdits(); vi.restoreAllMocks(); vi.cle
 async function fixture() {
   const log = await screenAttentionFixture(); const owner = await createVideoEditTestProject(); const id = owner.document.id
   vi.mocked(analyzeVideoEditScreenAttentionOffThread).mockImplementation((request, signal) => analyzeVideoEditScreenAttention(request, signal, async page => log.bytes.get(page.path)!))
-  editVideoProject(id, document => {
+  editVideoProject(id, document => { document = structuredClone(document);
     document.media.push({ id: 'screen', path: '/fixture/screen.mp4', name: '原片', kind: 'video', width: 1920, height: 1080, durationSeconds: 10, hasAudio: true, recordingCursor: log.source })
     document.items.push({ id: 'item', mediaId: 'screen', name: '原片', kind: 'video' })
     const sequence = document.sequences[0]; const base = makeVideoEditItemClip(document, 'item', sequence.id, { frame: 30, duration: 300 })
@@ -69,16 +69,16 @@ it('画幅复制保留原序列、音画链接、字幕与共用原片，既有�
 it('锁轨/运动停用、引用归属、缺日志与越界段落拒绝，不留下半成品', async () => {
   const { owner, id, input, target } = await fixture()
   await expect(executeVideoEditScreenAttentionCapability({ ...input, clipRef: { kind: 'video_edit.clip', id: 'foreign:clip' } })).rejects.toThrow('documentRef')
-  editVideoProject(id, document => { document.sequences[0].tracks.forEach(t => { t.locked = true }); return document })
+  editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].tracks.forEach(t => { t.locked = true }); return document })
   await expect(generateVideoEditScreenAttention(target, { settings })).rejects.toThrow('锁定')
-  editVideoProject(id, document => { document.sequences[0].tracks.forEach(t => { t.locked = false }); return document })
-  editVideoProject(id, document => { document.sequences[0].clips[0].disabledIntrinsicSections = ['motion']; return document })
+  editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].tracks.forEach(t => { t.locked = false }); return document })
+  editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].clips[0].disabledIntrinsicSections = ['motion']; return document })
   await expect(generateVideoEditScreenAttention(target, { settings })).rejects.toThrow('启用')
-  editVideoProject(id, document => { delete document.sequences[0].clips[0].disabledIntrinsicSections; return document })
+  editVideoProject(id, document => { document = structuredClone(document); delete document.sequences[0].clips[0].disabledIntrinsicSections; return document })
   const history = owner.past.length
   await expect(generateVideoEditScreenAttention(target, { settings: { ...settings, sections: [{ startSeconds: 0, endSeconds: 11, strength: 'light' }] } })).rejects.toThrow('sections')
   expect(owner.past).toHaveLength(history)
-  editVideoProject(id, document => { delete document.media[0].recordingCursor; return document })
+  editVideoProject(id, document => { document = structuredClone(document); delete document.media[0].recordingCursor; return document })
   await expect(generateVideoEditScreenAttention(target, { settings })).rejects.toThrow('事件日志')
 })
 it('分析失败/取消/迟到修改不提交，保存失败只恢复保存；保留已有自动重构来源', async () => {
@@ -89,7 +89,7 @@ it('分析失败/取消/迟到修改不提交，保存失败只恢复保存；�
   await expect(generateVideoEditScreenAttention(target, { settings }, controller.signal)).rejects.toThrow('取消'); expect(owner.past).toHaveLength(history)
   vi.mocked(analyzeVideoEditScreenAttentionOffThread).mockImplementationOnce(async request => {
     const result = { clip: request.composition.clips[0], quietFrames: 0, impreciseCapabilities: 0 }
-    editVideoProject(id, document => { document.sequences[0].name = '用户修改'; return document }); return result
+    editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].name = '用户修改'; return document }); return result
   })
   await expect(generateVideoEditScreenAttention(target, { settings })).rejects.toThrow('已改变')
   failVideoEditSaves(true)

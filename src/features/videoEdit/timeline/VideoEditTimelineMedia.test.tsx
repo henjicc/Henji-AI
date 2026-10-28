@@ -40,7 +40,7 @@ beforeEach(async () => {
   vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(300)
   vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(900)
   owner = (await createVideoEditProject())!
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media.push({ id: 'media', name: '视频', path: 'D:/fixture/video.mp4', kind: 'video', width: 64, height: 64, durationSeconds: 90, hasAudio: true })
     document.items.push({ id: 'item', name: '视频', kind: 'video', mediaId: 'media' })
     const sequence = document.sequences[0]
@@ -58,7 +58,7 @@ it.each([
   { numerator: 2, denominator: 1, reverse: true, from: 5, to: 13 },
   { numerator: 1, denominator: 2, reverse: true, from: 11, to: 13 },
 ])('缩略帧与视频声音波形按 $numerator/$denominator、倒放 $reverse 映射源范围（4.13）', async ({ numerator, denominator, reverse, from, to }) => {
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     Object.assign(document.sequences[0].clips[0], { speed: { numerator, denominator }, ...(reverse ? { reverse: true } : {}), sourceInUs: reverse ? 13_000_000 : 5_000_000 })
     return document
   })
@@ -83,7 +83,7 @@ it.each([
 })
 
 it('滚动后的倒放音频片段与映射声道按可见源范围反转；方向切回不沿用倒放显示（4.13）', () => {
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     Object.assign(document.sequences[0].clips[0], { kind: 'audio', sourceComponent: 'audio', track: document.sequences[0].tracks.find(track => track.kind === 'audio')!.index, duration: 900, sourceInUs: 65_000_000, speed: { numerator: 2, denominator: 1 }, reverse: true, audioMapping: { format: 'stereo', sources: [{ stream: 0, channel: 0 }, { stream: 0, channel: 1 }] } })
     return document
   })
@@ -97,7 +97,7 @@ it('滚动后的倒放音频片段与映射声道按可见源范围反转；方�
     expect(wave.classList.contains('-scale-x-100')).toBe(true)
   }
   expect(view.container.querySelector('[data-video-edit-filmstrip]')).toBeNull()
-  act(() => editVideoProject(owner.document.id, document => { delete document.sequences[0].clips[0].reverse; document.sequences[0].clips[0].sourceInUs = 5_000_000; return document }))
+  act(() => editVideoProject(owner.document.id, document => { document = structuredClone(document); delete document.sequences[0].clips[0].reverse; document.sequences[0].clips[0].sourceInUs = 5_000_000; return document }))
   const forward = view.container.querySelector<HTMLElement>('[data-wave-start]')!
   expect(Number(forward.dataset.waveStart)).toBeCloseTo(23); expect(Number(forward.dataset.waveEnd)).toBeCloseTo(45.2666666667)
   expect(forward.classList.contains('-scale-x-100')).toBe(false); expect(onError).not.toHaveBeenCalled()

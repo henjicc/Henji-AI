@@ -46,6 +46,7 @@ export function assertVideoEditClipFollow(sequence: VideoEditSequence, clip: Vid
 export function editVideoEditTracker(projectId: string, sequenceId: string, clipId: string, value: VideoEditTracker | { remove: string }): void {
   const document = requireVideoEditInstance(projectId).document
   editVideoSequence(projectId, sequenceId, sequence => {
+    sequence = { ...sequence, clips: sequence.clips.map(value => value.id === clipId ? structuredClone(value) : value) }
     const clip = sequence.clips.find(entry => entry.id === clipId)
     if (!clip) throw new Error('跟踪片段已移除。')
     if ('remove' in value) clip.trackers = clip.trackers?.filter(entry => entry.id !== value.remove)
@@ -66,6 +67,7 @@ export function trackVideoEditMask(target: VideoEditCompositeTarget, effectId: s
   const composition = videoEditComposition(instance.document, target.sequenceId)
   const frame = instance.frame
   editVideoSequence(target.projectId, target.sequenceId, sequence => {
+    sequence = { ...sequence, clips: sequence.clips.map(value => value.id === target.clipId ? structuredClone(value) : value) }
     const clip = sequence.clips.find(clip => clip.id === target.clipId)
     const effect = clip?.effects?.find(effect => effect.id === effectId)
     if (!clip || !isShapesMask(effect?.mask)) throw new Error('请选择手绘遮罩。')
@@ -141,6 +143,7 @@ export async function bindVideoEditTracking(projectId: string, sequenceId: strin
   const follower = 'clipId' in target ? await readVideoEditTrackingPlacement(projectId, sequenceId, target.clipId, frame) : undefined
   if (!isVideoEditContentCurrent(instance, contentVersion) || at === undefined && instance.frame !== frame || instance.activeSequenceId !== sequenceId && at === undefined) throw new Error('画面已变化，请在当前帧重新绑定。')
   editVideoSequence(projectId, sequenceId, sequence => {
+    sequence = { ...sequence, clips: sequence.clips.map(value => value.id === ('clipId' in target ? target.clipId : sourceId) ? structuredClone(value) : value) }
     const source = sequence.clips.find(clip => clip.id === sourceId)!
     if ('clipId' in target) {
       const clip = sequence.clips.find(clip => clip.id === target.clipId)
@@ -204,6 +207,7 @@ export async function bakeVideoEditClipFollow(projectId: string, sequenceId: str
   if (!isVideoEditContentCurrent(instance, contentVersion)) throw new Error('剪辑在应用跟踪期间被修改，请重新应用。')
   const keyframes = { x: 0, y: 0, scale: 0, rotation: 0 }
   editVideoSequence(projectId, sequenceId, sequence => {
+    sequence = { ...sequence, clips: sequence.clips.map(value => value.id === clipId ? { ...value } : value) }
     const current = sequence.clips.find(entry => entry.id === clipId)
     if (!current?.follow) throw new Error('跟随已被取消。')
     const curves = { ...current.curves }
@@ -261,6 +265,7 @@ export async function createVideoEditRecordingTracker(projectId: string, sequenc
   const tracker: VideoEditTracker = { id: crypto.randomUUID(), name: input.name ?? (input.kind === 'cursor' ? '光标' : '窗口'), method: input.kind === 'cursor' ? 'point' : 'box', prompts: [prompt], recording }
   let created: VideoEditTracker | undefined
   editVideoSequence(projectId, sequenceId, sequence => {
+    sequence = { ...sequence, clips: sequence.clips.map(value => value.id === clipId ? { ...value } : value) }
     const current = sequence.clips.find(entry => entry.id === clipId)
     if (!current) throw new Error('片段已移除。')
     created = putVideoEditTracker(instance.document, current, tracker)

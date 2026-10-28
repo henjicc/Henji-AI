@@ -39,7 +39,7 @@ beforeEach(async () => {
   owner = await createVideoEditTestProject()
   const sequence = getActiveVideoEditSequence(owner)
   clipId = addVideoEditTextClipAt(owner.document.id, sequence.id, 0, 1)
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const target = document.sequences.find(value => value.id === sequence.id)!.clips.find(value => value.id === clipId)!
     target.curves = { x: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 20, value: 0.2, interpolation: 'linear' }], opacity: [{ time: 10, value: 0.5, interpolation: 'hold' }] }
     return document

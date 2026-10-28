@@ -11,7 +11,7 @@ afterEach(async () => { for (const owner of listVideoEditInstances()) await clos
 it('整批错峰进入一个正式历史，撤销恢复所有目标且保留源；失败无部分写入', async () => {
   const owner = await createVideoEditTestProject(), id = owner.document.id
   appendVideoEditClip(id); appendVideoEditClip(id); appendVideoEditClip(id)
-  editVideoProject(id, document => {
+  editVideoProject(id, document => { document = structuredClone(document);
     const sequence = document.sequences[0]
     const source = sequence.clips[0]
     source.curves = { x: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 10, value: .2, interpolation: 'linear' }] }
@@ -30,7 +30,7 @@ it('整批错峰进入一个正式历史，撤销恢复所有目标且保留源�
 it('助手经正式注册入口调用同一错峰事务并读回曲线；错误归属拒绝写入', async () => {
   const owner = await createVideoEditTestProject(), id = owner.document.id
   appendVideoEditClip(id); appendVideoEditClip(id)
-  editVideoProject(id, document => { document.sequences[0].clips[0].curves = { x: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 10, value: .2, interpolation: 'linear' }] }; return document })
+  editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].clips[0].curves = { x: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 10, value: .2, interpolation: 'linear' }] }; return document })
   const sequence = getActiveVideoEditSequence(owner), [source, target] = sequence.clips
   const app = createApplicationHarness()
   try {

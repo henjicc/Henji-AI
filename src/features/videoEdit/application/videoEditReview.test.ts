@@ -93,7 +93,7 @@ beforeEach(() => {
 afterEach(async () => { await closeAllVideoEdits(); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
 async function fixture() {
   const owner = await createVideoEditTestProject(); const sequenceId = owner.document.sequences[0].id
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media = [{ id: 'media', kind: 'video', name: '视频', path: path.resolve(path.sep, 'review.mp4'), width: 64, height: 64, durationSeconds: 10 }]
     document.items = [{ id: 'item', kind: 'video', name: '视频', mediaId: 'media' }]
     const sequence = document.sequences[0]
@@ -108,7 +108,7 @@ async function codeFixture(source = 'export default {name:"代码复核",width:1
   const data = await fixture(), { owner } = data
   const version = { id: 'code-v', apiVersion: 4 as const, languageVersion: 4 as const, ...testCodeManifest(source, owner.document) }
   rememberVideoEditCodeMetadata(owner, 'code-d', version, compileCodeMaterial(source))
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.codeMaterials = [{ id: 'code-d', name: '代码复核', defaultVersionId: version.id, versions: [version] }]
     document.items.push({ id: 'code-item', name: '代码复核', kind: 'code', code: { definitionId: 'code-d', versionId: version.id, parameters: {} } })
     document.sequences[0].clips.push(makeVideoEditItemClip(document, 'code-item', document.sequences[0].id, { frame: 0, duration: 120 }, readVideoEditCodeMetadata(owner, document)))
@@ -130,7 +130,7 @@ it('片子数据检查条件参与分页身份，省略 scene 保持已有复核
 async function soundFixture(explicit = false) {
   const source = 'export default {name:"声音复核",width:1000,height:1000,durationSeconds:1000,params:[{key:"sound",type:"audio",title:"声音",default:null}],draw(){}}'
   const data = await codeFixture(source), { owner } = data
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media[0].hasAudio = true
     const sequence = document.sequences[0], clip = sequence.clips.find(clip => clip.kind === 'code')!
     addLegacyVideoEditTracks(sequence)
@@ -166,9 +166,9 @@ it('public sound review reuses completed PCM analysis across pagination and visu
   await queryVideoEditReview({ ...query, cursor: first.nextCursor }, context())
   await queryVideoEditReview(query, context())
   expect(soundIO.documents).toHaveLength(1)
-  editVideoProject(owner.document.id, document => { document.sequences[0].clips[0].x = .8; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].clips[0].x = .8; return document })
   await queryVideoEditReview(query, context()); expect(soundIO.documents).toHaveLength(1)
-  editVideoProject(owner.document.id, document => { document.sequences[0].clips[0].volume = .5; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].clips[0].volume = .5; return document })
   const changed = parse(await queryVideoEditReview(query, context())); expect(soundIO.documents).toHaveLength(2)
   vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockResolvedValue({ contentIdentity: 'b'.repeat(64), sizeBytes: 1000, fileModifiedAt: 2000 })
   await expect(queryVideoEditReview({ ...query, cursor: changed.nextCursor }, context())).rejects.toThrow('重新定位')
@@ -181,7 +181,7 @@ it.each(['cancel', 'edit', 'close'] as const)('public pending sound review rejec
   const pending = queryVideoEditReview({ ...input, motion: {} }, { signal: controller.signal }), rejected = expect(pending).rejects.toThrow()
   await vi.waitFor(() => expect(soundIO.mix).toHaveBeenCalledOnce())
   if (action === 'cancel') controller.abort(new Error('取消声音复核'))
-  else if (action === 'edit') editVideoProject(owner.document.id, document => { document.sequences[0].clips[0].volume = .2; return document })
+  else if (action === 'edit') editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].clips[0].volume = .2; return document })
   else await closeAllVideoEdits()
   await rejected
   expect(soundIO.dispose).toHaveBeenCalledOnce(); expect(MotionWorker.instances).toHaveLength(0)
@@ -190,7 +190,7 @@ it.each(['cancel', 'edit', 'close'] as const)('public pending sound review rejec
 })
 it('sound review merges equivalent code audio and rejects excessive complete contexts before decoding', async () => {
   const { owner, input } = await soundFixture()
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const sequence = document.sequences[0], code = sequence.clips.find(clip => clip.kind === 'code')!
     sequence.clips.push({ ...code, id: 'same-sound', track: 3 })
     return document
@@ -198,7 +198,7 @@ it('sound review merges equivalent code audio and rejects excessive complete con
   await queryVideoEditReview({ ...input, motion: {} }, context())
   expect(soundIO.documents).toHaveLength(1)
   expect(Object.keys(MotionWorker.instances[0].request.audios!)).toHaveLength(2)
-  editVideoProject(owner.document.id, document => { document.sequences[0].clips.find(clip => clip.kind === 'code')!.duration = 301 * 30; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].clips.find(clip => clip.kind === 'code')!.duration = 301 * 30; return document })
   soundIO.mix.mockClear()
   await expect(queryVideoEditReview({ ...input, motion: {} }, context())).rejects.toThrow('300秒完整声音上下文')
   expect(soundIO.mix).not.toHaveBeenCalled()
@@ -210,7 +210,7 @@ it.each(['cancel', 'edit'] as const)('a first managed-file identity read stops o
   const pending = queryVideoEditReview({ ...input, motion: {} }, { signal: controller.signal }), rejected = expect(pending).rejects.toThrow()
   await vi.waitFor(() => expect(accept).toBeTypeOf('function'))
   if (action === 'cancel') controller.abort(new Error('取消来源核对'))
-  else editVideoProject(owner.document.id, document => { document.sequences[0].name = '编辑后的序列'; return document })
+  else editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].name = '编辑后的序列'; return document })
   await rejected
   expect(soundIO.mix).not.toHaveBeenCalled(); expect(MotionWorker.instances).toHaveLength(0)
   accept({ contentIdentity: 'a'.repeat(64), sizeBytes: 1000, fileModifiedAt: 1000 })
@@ -226,7 +226,7 @@ it('rejects sound evidence when the actual file is replaced during PCM productio
 })
 it('never combines old and new file identities across two complete sound contexts in one review', async () => {
   const { owner, input } = await soundFixture()
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const sequence = document.sequences[0], code = sequence.clips.find(clip => clip.kind === 'code')!
     sequence.clips.push({ ...code, id: 'later-sound', start: 30, duration: 90, track: 3 })
     return document
@@ -242,7 +242,7 @@ it('never combines old and new file identities across two complete sound context
 })
 it('rejects 33 distinct sound contexts before file inspection or PCM decoding', async () => {
   const { owner, input } = await soundFixture()
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const sequence = document.sequences[0], code = sequence.clips.find(clip => clip.kind === 'code')!
     sequence.clips = [...sequence.clips.filter(clip => clip.kind !== 'code'), ...Array.from({ length: 33 }, (_, i) => ({ ...code, id: `sound-${i}`, start: i, duration: 1 }))]
     return document
@@ -252,7 +252,7 @@ it('rejects 33 distinct sound contexts before file inspection or PCM decoding', 
 })
 async function pixelFixture() {
   const data = await fixture(), platform = getPlatform()
-  editVideoProject(data.owner.document.id, document => { document.media[0].assetContent = { contentIdentity: 'a'.repeat(64), sizeBytes: 1000, fileModifiedAt: 1000 }; document.sequences[0].clips[0].duration = 90; return document })
+  editVideoProject(data.owner.document.id, document => { document = structuredClone(document); document.media[0].assetContent = { contentIdentity: 'a'.repeat(64), sizeBytes: 1000, fileModifiedAt: 1000 }; document.sequences[0].clips[0].duration = 90; return document })
   vi.spyOn(platform.assetLibrary, 'inspectFileContent').mockResolvedValue({ contentIdentity: 'a'.repeat(64), sizeBytes: 1000, fileModifiedAt: 1000 })
   const unsubscribe = vi.fn(); vi.spyOn(platform.sceneDetection, 'onProgress').mockReturnValue(unsubscribe)
   const result = (from: number, to: number): VideoMotionScan => ({ startSeconds: from, endSeconds: to, samplingFps: 15, width: 320, height: 180, sampledFrames: Math.ceil((to - from) * 15),
@@ -267,7 +267,7 @@ async function inputPixelFixture(kind: 'video' | 'fixed' | 'sequence') {
   const source = 'export default {name:"输入复核",width:1000,height:1000,durationSeconds:10,params:[{key:"picture",type:"image",title:"画面",default:null}],draw(){}}'
   const version = { id: 'input-v', apiVersion: 4 as const, languageVersion: 4 as const, ...testCodeManifest(source, owner.document) }
   rememberVideoEditCodeMetadata(owner, 'input-d', version, compileCodeMaterial(source))
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const sequence = document.sequences[0]; addLegacyVideoEditTracks(sequence)
     document.codeMaterials = [{ id: 'input-d', name: '输入复核', defaultVersionId: version.id, versions: [version] }]
     document.items.push({ id: 'input-item', name: '输入复核', kind: 'code', code: { definitionId: 'input-d', versionId: version.id, parameters: { picture: kind === 'sequence' ? { kind: 'sequence', mediaId: 'below' } : { kind: 'video', mediaId: 'media', ...(kind === 'fixed' ? { time: .5 } : {}) } } } })
@@ -305,7 +305,7 @@ it('editing during background code-input mapping terminates the old worker befor
   const pending = queryVideoEditReview({ ...input, motion: { videoPixels: true } }, context()), rejected = expect(pending).rejects.toThrow()
   await vi.waitFor(() => expect(MotionWorker.instances).toHaveLength(1))
   expect(MotionWorker.instances[0].request.planInputsOnly).toBe(true)
-  editVideoProject(owner.document.id, document => { document.sequences[0].name = '新内容'; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].name = '新内容'; return document })
   await rejected
   expect(MotionWorker.instances[0].terminate).toHaveBeenCalledOnce(); expect(platform.sceneDetection.detect).not.toHaveBeenCalled()
   expect(readVideoEditContentQueries(owner, 'input-item')).toEqual(expect.arrayContaining([expect.objectContaining({ state: 'cancelled' })]))
@@ -331,7 +331,7 @@ it('public pixel review scans overlapping source use once, retains both placemen
 })
 it('fresh pixel analysis binds an unpinned project source only to its query snapshot and rejects changed files or malformed scans', async () => {
   const { owner, input, platform, result } = await pixelFixture()
-  editVideoProject(owner.document.id, document => { delete document.media[0].assetContent; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); delete document.media[0].assetContent; return document })
   const fresh = parse(await queryVideoEditReview({ ...input, motion: { videoPixels: true }, limit: 1 }, context()))
   expect(fresh.records.length).toBe(1)
   expect(owner.document.media[0].assetContent).toBeUndefined()
@@ -339,7 +339,7 @@ it('fresh pixel analysis binds an unpinned project source only to its query snap
   vi.mocked(platform.assetLibrary.inspectFileContent).mockResolvedValue({ contentIdentity: 'c'.repeat(64), sizeBytes: 1000, fileModifiedAt: 1000 })
   await expect(queryVideoEditReview({ ...input, motion: { videoPixels: true }, limit: 1, cursor: fresh.nextCursor }, context())).rejects.toThrow('重新定位')
   vi.mocked(platform.assetLibrary.inspectFileContent).mockResolvedValue({ contentIdentity: 'a'.repeat(64), sizeBytes: 1000, fileModifiedAt: 1000 })
-  editVideoProject(owner.document.id, document => { document.media[0].assetContent = { contentIdentity: 'a'.repeat(64), sizeBytes: 1000, fileModifiedAt: 1000 }; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.media[0].assetContent = { contentIdentity: 'a'.repeat(64), sizeBytes: 1000, fileModifiedAt: 1000 }; return document })
   vi.mocked(platform.sceneDetection.detect).mockImplementationOnce(async request => {
     vi.mocked(platform.assetLibrary.inspectFileContent).mockResolvedValue({ contentIdentity: 'c'.repeat(64), sizeBytes: 1000, fileModifiedAt: 1000 })
     return { cutsSeconds: [], contentIdentity: 'b'.repeat(64), motionScan: result(request.startSeconds, request.endSeconds) }
@@ -357,14 +357,14 @@ it.each(['cancel', 'edit'] as const)('a pending pixel scan %s cancels the shared
   const pending = queryVideoEditReview({ ...input, motion: { videoPixels: true } }, { signal: controller.signal }), rejected = expect(pending).rejects.toThrow()
   await started
   if (kind === 'cancel') controller.abort(new Error('取消视频像素分析'))
-  else editVideoProject(owner.document.id, document => { document.sequences[0].name = '已编辑'; return document })
+  else editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].name = '已编辑'; return document })
   expect(cancel).toHaveBeenCalledOnce()
   accept({ cutsSeconds: [], contentIdentity: 'b'.repeat(64), motionScan: result(0, 3) }); await rejected
   expect(unsubscribe).toHaveBeenCalledOnce(); expect(MotionWorker.instances).toHaveLength(0)
 })
 it.each([12000, 60001])('pixel budgets preflight the whole query before decoding: %s placed frames', async frames => {
   const { owner, input, platform } = await pixelFixture()
-  editVideoProject(owner.document.id, document => { document.media[0].durationSeconds = 10000; document.sequences[0].clips[0].duration = frames; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.media[0].durationSeconds = 10000; document.sequences[0].clips[0].duration = frames; return document })
   await expect(queryVideoEditReview({ ...input, to: frames, motion: { videoPixels: true } }, context())).rejects.toThrow(frames > 60000 ? '60000' : '300秒')
   expect(platform.sceneDetection.detect).not.toHaveBeenCalled()
 })
@@ -379,7 +379,7 @@ it('rejects a code review whose font set changed while the real domain calculati
 it('public native-motion review returns frame-bound evidence and local suggestions without editing the work, and pages reuse the finished computation', async () => {
   const { owner, input } = await fixture(); const app = createApplicationHarness()
   MotionWorker.instances = []; MotionWorker.automatic = true; vi.stubGlobal('Worker', MotionWorker)
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.sequences[0].clips[0].curves = { x: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 15, value: .5, interpolation: 'linear' }] }
     return document
   })
@@ -407,7 +407,7 @@ it('public picture checks judge speed by the requested pace and measured caption
   const { owner, input } = await fixture(); const app = createApplicationHarness()
   MotionWorker.instances = []; MotionWorker.automatic = true; vi.stubGlobal('Worker', MotionWorker)
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => ({ font: '', measureText: (text: string) => ({ width: text.length * 40 }) }) as unknown as CanvasRenderingContext2D)
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.sequences[0].clips[0].curves = { x: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 15, value: .5, interpolation: 'linear' }] }
     document.sequences[0].captions!.push({ id: 'long', text: '这一句字幕太长了，一行放不下，左右两边都会越过标题安全框，需要换行或者缩小字号才能完整看到'.repeat(2), start: 30, duration: 30 })
     return document
@@ -439,7 +439,7 @@ it.each(['changed', 'cancelled'] as const)('a pending native-motion query %s rej
   const controller = new AbortController(), pending = queryVideoEditReview({ ...input, motion: {} }, { signal: controller.signal })
   await vi.waitFor(() => expect(MotionWorker.instances).toHaveLength(1))
   const rejected = expect(pending).rejects.toThrow()
-  if (kind === 'changed') editVideoProject(owner.document.id, document => { document.sequences[0].name = '新的剪辑'; return document })
+  if (kind === 'changed') editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].name = '新的剪辑'; return document })
   else controller.abort(new Error('取消分析'))
   MotionWorker.instances[0].respond(); await rejected
 })
@@ -476,7 +476,7 @@ it('分页绑定文档、跟踪结果和查询条件，结果副本不能污染�
   await expect(queryVideoEditReview({ ...input, cursor: first.nextCursor }, context())).rejects.toThrow('失效')
   expect(videoEditObservationVersion(owner, owner.document.revision)).not.toBe(first.documentVersion)
   const fresh = parse(await queryVideoEditReview({ ...input, limit: 1 }, context()))
-  editVideoProject(owner.document.id, document => { document.sequences[0].captions![0].text = '已改'; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].captions![0].text = '已改'; return document })
   await expect(queryVideoEditReview({ ...input, cursor: fresh.nextCursor }, context())).rejects.toThrow('失效')
   const reopenedPlan = parse(await queryVideoEditReview({ ...input, limit: 1 }, context()))
   await reopenVideoEdit(owner.document.id)
@@ -501,7 +501,7 @@ it('查询取消、读取中编辑或跟踪结果更新，不交付旧计划', a
   })
   await expect(queryVideoEditReview(input, context())).rejects.toThrow('跟踪结果已改变')
   vi.mocked(trackReader.readVideoEditTrackReviewHeader).mockImplementationOnce(async () => {
-    editVideoProject(owner.document.id, document => { document.sequences[0].name = '已改'; return document }); return data()
+    editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].name = '已改'; return document }); return data()
   })
   await expect(queryVideoEditReview(input, context())).rejects.toThrow('已改变')
 })

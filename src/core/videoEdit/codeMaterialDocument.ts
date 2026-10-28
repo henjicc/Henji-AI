@@ -1,3 +1,4 @@
+import { jsonEqual } from '../jsonEqual'
 import { expandPinnedCodeComponents } from './codeMaterial/components'
 import { documentCodeSourceResolver, resolveCodeMaterialFiles, type CodeMaterialFiles } from './codeMaterial/sources'
 import type { VideoEditClip, VideoEditDocument } from './document'
@@ -150,10 +151,11 @@ export function validateCodeMaterialDocument(document: VideoEditDocument, read: 
 /** 写入时只检查实际变化涉及的版本，普通剪辑操作不唤醒无关源码。 */
 export function changedCodeMaterialVersions(before: VideoEditDocument, next: VideoEditDocument): Set<string> {
   const result = new Set<string>()
-  const signature = (value: VideoEditDocument['items'][number] | VideoEditDocument['sequences'][number]['clips'][number]): string => JSON.stringify([value.code, 'effects' in value ? videoEditEffectCodes(value.effects) : [], ...('start' in value ? [value.start, value.duration, value.sourceInUs, value.sourceRemainder, value.speed, value.reverse, value.timeRemap, value.frameHold] : [])])
-  const previous = new Map([...before.items, ...before.sequences.flatMap(sequence => sequence.clips)].map(value => [value.id, signature(value)]))
+  const signature = (value: VideoEditDocument['items'][number] | VideoEditDocument['sequences'][number]['clips'][number]): unknown[] => [value.code, 'effects' in value ? videoEditEffectCodes(value.effects) : [], ...('start' in value ? [value.start, value.duration, value.sourceInUs, value.sourceRemainder, value.speed, value.reverse, value.timeRemap, value.frameHold] : [])]
+  const previous = new Map([...before.items, ...before.sequences.flatMap(sequence => sequence.clips)].map(value => [value.id, value]))
   for (const value of [...next.items, ...next.sequences.flatMap(sequence => sequence.clips)]) {
-    if (previous.get(value.id) === signature(value)) continue
+    const old = previous.get(value.id)
+    if (old === value || old && jsonEqual(signature(old), signature(value))) continue
     if (value.code) result.add(value.code.versionId)
     if ('effects' in value) for (const code of videoEditEffectCodes(value.effects)) result.add(code.versionId)
   }
@@ -161,13 +163,14 @@ export function changedCodeMaterialVersions(before: VideoEditDocument, next: Vid
   for (const definition of next.codeMaterials ?? []) for (const version of definition.versions) if (!known.has(version.id)) result.add(version.id)
   for (const sequence of next.sequences) {
     const old = before.sequences.find(value => value.id === sequence.id)
-    if (JSON.stringify([old?.frameRate, old?.width, old?.height]) !== JSON.stringify([sequence.frameRate, sequence.width, sequence.height])) {
+    if (old === sequence && !result.size) continue
+    if (!jsonEqual([old?.frameRate, old?.width, old?.height], [sequence.frameRate, sequence.width, sequence.height])) {
       for (const clip of sequence.clips) for (const code of [clip.code, ...videoEditEffectCodes(clip.effects)]) if (code) result.add(code.versionId)
     }
     for (const transition of sequence.transitions ?? []) {
       const window = videoEditTransitionWindow(sequence, transition)
       const codes = [window.left, window.right].flatMap(clip => [...(clip.code ? [clip.code] : []), ...videoEditEffectCodes(clip.effects)])
-      if (JSON.stringify(old?.transitions?.find(value => value.id === transition.id)) !== JSON.stringify(transition) || codes.some(code => result.has(code.versionId))) for (const code of codes) result.add(code.versionId)
+      if (!jsonEqual(old?.transitions?.find(value => value.id === transition.id), transition) || codes.some(code => result.has(code.versionId))) for (const code of codes) result.add(code.versionId)
     }
   }
   return result

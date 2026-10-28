@@ -50,7 +50,7 @@ beforeEach(async () => {
   vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(300)
   vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(900)
   owner = (await createVideoEditProject())!
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media.push({ id: 'media', name: '视频', path: 'D:/fixture/video.mp4', kind: 'video', width: 64, height: 64, durationSeconds: 30, hasAudio: false })
     document.items.push({ id: 'video-item', name: '视频', kind: 'video', mediaId: 'media' })
     const sequence = document.sequences[0]
@@ -93,7 +93,7 @@ it('占位显示在原位置并可取消；取消后占位消失、生成任务�
 })
 
 it('参考来源逐项选择与取消，指定时间码传入同一生成入口；取消指定帧移除输入，非法时间码阻止提交', async () => {
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const sequence = document.sequences[0]; const first = sequence.clips[0]
     sequence.clips.push({ ...first, id: 'after', name: '后镜头', start: 90 })
     return document
@@ -130,7 +130,7 @@ it('重开面板时已消失的参考来源不阻止取消参考并继续提交'
 })
 
 it('公共准备入口按逐项选择给出真实参考清单，不取帧、不提交；取消和非法来源均按同一服务处理', async () => {
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const sequence = document.sequences[0]; sequence.clips.push({ ...sequence.clips[0], id: 'after', name: '后镜头', start: 90 }); return document
   })
   const model = registry.listAllModels().find(model => model.meta.type === 'video' && inPlaceService.videoEditInPlaceReferenceLimit(model.meta.id, registry.getDefaultValues(model.meta.id), 2) === 2)!

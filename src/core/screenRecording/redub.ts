@@ -20,10 +20,10 @@ export function redubExtension(target: RecordingRedubTarget, durationUs: number)
   const duration = Math.max(1, Math.floor(durationUs * target.fps / 1e6)), extra = Math.max(0, target.start + duration - target.end)
   return { duration, extra, hold: extra > 0 && (Boolean(target.holdId) || extra > (target.end - target.start) * .1) }
 }
-/** Detached draft only: new audio, caption, picture alignment and ripple are committed together. */
-export function replaceRecordingNarration(draft: VideoEditDocument, target: RecordingRedubTarget, media: VideoEditMedia, text: string, still?: VideoEditMedia): VideoEditClip {
+/** 新旁白、字幕与后续画面一起返回，保留调用方及撤销历史持有的原文档。 */
+export function replaceRecordingNarration(draft: VideoEditDocument, target: RecordingRedubTarget, media: VideoEditMedia, text: string, still?: VideoEditMedia): { document: VideoEditDocument; clip: VideoEditClip } {
   const extension = redubExtension(target, Math.round(media.durationSeconds * 1e6))
-  let sequence = draft.sequences.find(v => v.id === target.sequenceId)!
+  let sequence = { ...draft.sequences.find(v => v.id === target.sequenceId)! }
   const old = sequence.clips.find(v => v.id === target.clipId)!, item = draft.items.find(v => v.mediaId === media.id)
   if (!item || media.kind !== 'audio') throw new Error('新旁白素材尚未导入。')
   const picture = sequence.clips.find(v => v.id === target.pictureId)!
@@ -57,6 +57,5 @@ export function replaceRecordingNarration(draft: VideoEditDocument, target: Reco
     fadeInFrames: Math.max(1, Math.min(Math.round(target.fps * .03), Math.floor(extension.duration / 2))), fadeOutFrames: Math.max(1, Math.min(Math.round(target.fps * .03), Math.floor(extension.duration / 2))) }
   sequence.clips = sequence.clips.map(v => v.id === old.id ? clip : v)
   sequence.captions = sequence.captions?.map(caption => caption.clipId === old.id ? { ...caption, text, sourceText: text, duration: extension.duration, translation: undefined } : caption)
-  draft.sequences = draft.sequences.map(v => v.id === sequence.id ? sequence : v)
-  return clip
+  return { document: { ...draft, sequences: draft.sequences.map(v => v.id === sequence.id ? sequence : v) }, clip }
 }

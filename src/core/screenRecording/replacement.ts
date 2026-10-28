@@ -5,8 +5,9 @@ import type { RecordingScript } from './script'
 
 export interface RecordingReplacement { step: RecordingScript['steps'][number]; media: VideoEditMedia }
 const pathKey = (value: string): string => /^[a-z]:/i.test(value) ? value.replaceAll('\\', '/').toLowerCase() : value.replaceAll('\\', '/')
-/** Edits a detached import draft. Keep narration and all other lanes exactly where they were. */
-export function replaceRecordingSteps(draft: VideoEditDocument, recording: RecordingDocument, replacements: RecordingReplacement[]): number {
+/** 替换结果保留未改序列与旁白的引用，源文档仍可用于撤销。 */
+export function replaceRecordingSteps(draft: VideoEditDocument, recording: RecordingDocument, replacements: RecordingReplacement[]): { document: VideoEditDocument; replaced: number } {
+  draft = { ...draft, sequences: [...draft.sequences] }
   let replaced = 0
   for (const { step, media } of replacements) {
     const sourceMedia = recording.media.filter(v => v.kind === 'screen')
@@ -39,7 +40,7 @@ export function replaceRecordingSteps(draft: VideoEditDocument, recording: Recor
         const replacement = { ...clip, itemId: item.id, sourceInUs, speed: videoEditSpeedRatio((sourceOutUs - sourceInUs) * fps / (1e6 * clip.duration)), sourceRemainder: { numerator: 0, denominator: 1 },
           // Old cursor events and zoom regions use a different source timebase; never apply them to the new capture.
           effects: clip.effects?.filter(effect => effect.builtin?.id !== 'recording_cursor' && effect.builtin?.id !== 'recording_zoom') }
-        sequence.clips = sequence.clips.map(v => v === clip ? replacement : v)
+        sequence = { ...sequence, clips: sequence.clips.map(v => v === clip ? replacement : v) }
         stepReplaced++
       }
       draft.sequences[si] = sequence
@@ -47,5 +48,5 @@ export function replaceRecordingSteps(draft: VideoEditDocument, recording: Recor
     if (!stepReplaced) throw new Error(`时间线中没有“${step.title}”对应的原片段，请先将该会话生成成片或导入剪辑。`)
     replaced += stepReplaced
   }
-  return replaced
+  return { document: draft, replaced }
 }

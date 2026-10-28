@@ -13,7 +13,7 @@ afterEach(async () => { await closeAllVideoEdits(); uninstallHarnessNativeStorag
 it('内置效果的关键帧行：挪动与删除走效果的正式写入口，一次一步撤销；删光后留下被删那一帧的数值（重要记录 019）', async () => {
   const owner = await createVideoEditTestProject(); const id = owner.document.id; const sequence = getActiveVideoEditSequence(owner)
   const clipId = addVideoEditTextClipAt(id, sequence.id, 0, 1)
-  editVideoProject(id, document => {
+  editVideoProject(id, document => { document = structuredClone(document);
     const clip = document.sequences.find(value => value.id === sequence.id)!.clips.find(value => value.id === clipId)!
     clip.effects = [{ id: 'fx', name: '亮度与对比度', enabled: true, amount: 1, builtin: { id: 'brightness_contrast', params: { brightness: 0 }, curves: { brightness: [{ time: 0, value: 10, interpolation: 'linear' }, { time: 20, value: 40, interpolation: 'linear' }] } } }]
     return document

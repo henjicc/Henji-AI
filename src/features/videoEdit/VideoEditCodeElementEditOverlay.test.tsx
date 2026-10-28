@@ -60,7 +60,7 @@ beforeEach(async () => {
   vi.stubGlobal('OffscreenCanvas', class { getContext() { return { font: '', measureText(text: string) { const size = Number(this.font.match(/([\d.]+)px/)?.[1] ?? 16); return { width: text.length * size, actualBoundingBoxLeft: 0, actualBoundingBoxRight: text.length * size } } } } })
   owner = await createVideoEditTestProject()
   rememberVideoEditCodeMetadata(owner, 'definition', { id: 'version', ...testCodeManifest(source, owner.document), apiVersion: 4, languageVersion: 4 }, testAuthorProgram(testAuthorBundle(source)))
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.codeMaterials = [{ id: 'definition', name: '元素编辑', defaultVersionId: 'version', versions: [{ id: 'version', ...testCodeManifest(source, owner.document), apiVersion: 4, languageVersion: 4 }] }]
     document.items.push({ id: 'item', name: '元素编辑', kind: 'code', code: { definitionId: 'definition', versionId: 'version', parameters: {} } })
     const value = makeVideoEditItemClip(document, 'item', owner.activeSequenceId, { frame: 0 }, readVideoEditCodeMetadata(owner, document)); clipId = value.id; document.sequences[0].clips.push(value); return document
@@ -142,7 +142,7 @@ it('助手通用实体原子读写、拒绝无效值与锁定、撤销和保存�
     expect((await app.change(ref, { 'video_edit.clip.element_overrides': { box: patch } })).ok).toBe(false)
     expect(owner.past).toHaveLength(before + 1)
   }
-  editVideoProject(owner.document.id, document => { document.sequences[0].tracks.find(track => track.index === clip().track)!.locked = true; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].tracks.find(track => track.index === clip().track)!.locked = true; return document })
   expect((await app.change(ref, { 'video_edit.clip.element_overrides': {} })).ok).toBe(false); undoVideoEdit(owner.document.id)
   await saveVideoEdit(owner.document.id); owner = await reopenVideoEdit(owner.document.id); observe()
   expect(clip().elementOverrides?.box.dx).toBe(20); expect(videoEditCodeElementOverrideSummary(owner.document.id, owner.activeSequenceId, clipId).find(value => value.elementId === 'gone')).toMatchObject({ missing: false, visible: false })

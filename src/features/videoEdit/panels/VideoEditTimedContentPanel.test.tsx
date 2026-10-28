@@ -46,7 +46,7 @@ beforeEach(async () => {
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, text) => { files.set(path, text) })
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
   owner = (await createVideoEditProject())!
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.items = [{ id: 'text-item', kind: 'text', name: '真实文字素材项' }]
     document.sequences[0].clips = [{ ...makeVideoEditItemClip(document, 'text-item', document.sequences[0].id, { frame: 30, track: 1 }), id: 'clip', name: '片段一', duration: 90 }]
     return document
@@ -95,7 +95,7 @@ it('标记可改为序列锚定、编辑整数帧、定位和删除，一次操�
 
 it('锁定片段拒绝字幕写入，失败保留草稿和原剪辑', async () => {
   const id = createVideoEditCaption(owner.document.id, sequence().id, { clipId: 'clip', start: 40, duration: 20, text: '原字幕' })
-  editVideoProject(owner.document.id, document => { document.sequences[0].tracks[1].locked = true; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].tracks[1].locked = true; return document })
   const view = render(<View />); const history = owner.past.length
   fireEvent.click(await view.findByRole('button', { name: '字幕：原字幕' }))
   fireEvent.change(view.getByLabelText('字幕文字'), { target: { value: '锁定修改' } }); fireEvent.click(view.getByRole('button', { name: '保存修改' }))
@@ -158,20 +158,22 @@ it('字幕导出走实际文件写入和回读，输出保持序列帧边界', a
 })
 
 it('500段真实字幕只挂载可见行，节目逐帧观察不重新映射列表', async () => {
-  editVideoProject(owner.document.id, document => { document.sequences[0].captions = Array.from({ length: 500 }, (_, index) => ({ id: `cue-${index}`, start: index * 2, duration: 1, text: `字幕${index}` })); return document })
-  const mapped = vi.spyOn(sequence().captions!, 'map')
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].captions = Array.from({ length: 500 }, (_, index) => ({ id: `cue-${index}`, start: index * 2, duration: 1, text: `字幕${index}` })); return document })
+  const captions = sequence().captions!
+  const mapped = vi.spyOn(Array.prototype, 'map')
+  const mappedCalls = (): number => mapped.mock.instances.filter(value => value === captions).length
   const view = render(<View />)
   await view.findByRole('button', { name: '字幕：字幕0' })
   const rows = view.container.querySelectorAll('[data-video-edit-timed-entry]')
   expect(rows.length).toBeGreaterThan(0); expect(rows.length).toBeLessThan(30)
-  const calls = mapped.mock.calls.length
+  const calls = mappedCalls()
   act(() => { for (let frame = 100; frame < 160; frame++) setVideoEditView(owner.document.id, { frame, playing: true }, true) })
-  expect(mapped).toHaveBeenCalledTimes(calls); expect(sequence().captions).toHaveLength(500)
+  expect(mappedCalls()).toBe(calls); expect(sequence().captions).toHaveLength(500)
   mapped.mockRestore()
 })
 
 it('500与501条字幕和标记仍可新增，字幕仍可导入', async () => {
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.sequences[0].captions = Array.from({ length: 500 }, (_, index) => ({ id: `cue-${index}`, start: index * 2, duration: 1, text: `字幕${index}` }))
     document.sequences[0].markers = Array.from({ length: 500 }, (_, index) => ({ id: `marker-${index}`, frame: index, name: `标记${index}` }))
     return document

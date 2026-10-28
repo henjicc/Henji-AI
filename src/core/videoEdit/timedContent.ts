@@ -1,3 +1,4 @@
+import { jsonEqual } from '../jsonEqual'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS, VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from './time'
 import { z } from 'zod'
 import type { VideoEditClip, VideoEditSequence, VideoEditDocument } from './document'
@@ -87,33 +88,41 @@ export function retimeVideoEditContent(before: VideoEditSequence, after: VideoEd
 
 /** Raw property writes receive the same clip anchoring as manual timeline commands. */
 export function reconcileVideoEditTimedContent(before: VideoEditDocument, requested: VideoEditDocument, preserveProgramAnchors: readonly string[] = []): VideoEditDocument {
-  return { ...requested, sequences: requested.sequences.map(sequence => {
+  const sequences = requested.sequences.map(sequence => {
     const previous = before.sequences.find(value => value.id === sequence.id)
-    if (!previous || previous.frameRate.numerator * sequence.frameRate.denominator !== sequence.frameRate.numerator * previous.frameRate.denominator) return sequence
-    const annotations = sequence.annotations.flatMap(mark => {
+    if (!previous || previous === sequence || previous.frameRate.numerator * sequence.frameRate.denominator !== sequence.frameRate.numerator * previous.frameRate.denominator) return sequence
+    const mappedAnnotations = sequence.annotations.flatMap(mark => {
       const prior = previous.annotations.find(value => value.id === mark.id)
       if (!prior) return [mark]
       let mapped = mark
-      if (mark.clipId && prior.clipId === mark.clipId && prior.frame === mark.frame && prior.endFrame === mark.endFrame && JSON.stringify(prior.target) === JSON.stringify(mark.target)) {
+      if (mark.clipId && prior.clipId === mark.clipId && prior.frame === mark.frame && prior.endFrame === mark.endFrame && jsonEqual(prior.target, mark.target)) {
         const beforeClip = previous.clips.find(clip => clip.id === mark.clipId); const afterClip = sequence.clips.find(clip => clip.id === mark.clipId)
         if (beforeClip && !afterClip) return []
         if (beforeClip && afterClip && !preserveProgramAnchors.includes(mark.clipId) && beforeClip.itemId === afterClip.itemId) {
           const result = retimeVideoEditAnnotation(mark, beforeClip, afterClip, videoEditFps(sequence.frameRate)); if (!result) return []; mapped = result
         }
       }
-      if (mapped.target.kind === 'range' && prior.target.kind === 'range' && JSON.stringify(prior.target.clipIds) === JSON.stringify(mapped.target.clipIds) && JSON.stringify(prior.target.trackIds) === JSON.stringify(mapped.target.trackIds)) {
+      if (mapped.target.kind === 'range' && prior.target.kind === 'range' && jsonEqual(prior.target.clipIds, mapped.target.clipIds) && jsonEqual(prior.target.trackIds, mapped.target.trackIds)) {
         const clipIds = mapped.target.clipIds?.filter(id => sequence.clips.some(clip => clip.id === id)); const trackIds = mapped.target.trackIds?.filter(id => sequence.tracks.some(track => track.id === id))
         if (mapped.target.clipIds?.length && !clipIds?.length || mapped.target.trackIds?.length && !trackIds?.length) return []
         mapped = { ...mapped, target: { ...mapped.target, ...(clipIds ? { clipIds } : {}), ...(trackIds ? { trackIds } : {}) } }
       }
-      return [mapped]
+      return [jsonEqual(mark, mapped) ? mark : mapped]
     })
-    if (JSON.stringify(previous.clips) === JSON.stringify(sequence.clips)) return { ...sequence, annotations }
+    const annotations = mappedAnnotations.length === sequence.annotations.length && mappedAnnotations.every((mark, index) => mark === sequence.annotations[index]) ? sequence.annotations : mappedAnnotations
+    if (jsonEqual(previous.clips, sequence.clips)) return annotations === sequence.annotations ? sequence : { ...sequence, annotations }
     // Replacing a clip's source preserves its program anchors; it is not an in-trim.
     const replacementOrigins = new Map(sequence.clips.filter(clip => preserveProgramAnchors.includes(clip.id) || previous.clips.some(prior => prior.id === clip.id && prior.itemId !== clip.itemId)).map(clip => [clip.id, { originalId: clip.id, shift: 0 }]))
     const mapped = retimeVideoEditContent(previous, { ...sequence, annotations }, replacementOrigins)
-    return { ...sequence, clips: mapped.clips, annotations: mapped.annotations, ...(JSON.stringify(previous.markers) === JSON.stringify(sequence.markers) && mapped.markers ? { markers: mapped.markers } : {}), ...(JSON.stringify(previous.captions) === JSON.stringify(sequence.captions) && mapped.captions ? { captions: mapped.captions } : {}), ...(JSON.stringify(previous.transitions) === JSON.stringify(sequence.transitions) && mapped.transitions ? { transitions: mapped.transitions } : {}) }
-  }) }
+    return { ...sequence,
+      clips: jsonEqual(sequence.clips, mapped.clips) ? sequence.clips : mapped.clips,
+      annotations: jsonEqual(sequence.annotations, mapped.annotations) ? sequence.annotations : mapped.annotations,
+      ...(jsonEqual(previous.markers, sequence.markers) && mapped.markers ? { markers: jsonEqual(sequence.markers, mapped.markers) ? sequence.markers : mapped.markers } : {}),
+      ...(jsonEqual(previous.captions, sequence.captions) && mapped.captions ? { captions: jsonEqual(sequence.captions, mapped.captions) ? sequence.captions : mapped.captions } : {}),
+      ...(jsonEqual(previous.transitions, sequence.transitions) && mapped.transitions ? { transitions: jsonEqual(sequence.transitions, mapped.transitions) ? sequence.transitions : mapped.transitions } : {}),
+    }
+  })
+  return sequences.every((sequence, index) => sequence === requested.sequences[index]) ? requested : { ...requested, sequences }
 }
 
 export function importVideoEditCaptions(source: string, rate: VideoEditRatio, options: { offset?: number; clip?: VideoEditClip } = {}): VideoEditCaption[] {

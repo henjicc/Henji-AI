@@ -103,7 +103,7 @@ it('检查计划直接交给取帧，编辑后拒绝旧版本且不启动渲染'
     const observed = await app.requireResult('observe_video_edit_frame', input)
     expect(observed.documentVersion).toBe(plan.documentVersion)
     const rendered = render.calls.length
-    editVideoProject(owner.document.id, document => { document.sequences[0].name = '改变作品'; return document })
+    editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].name = '改变作品'; return document })
     const stale = await app.call('observe_video_edit_frame', input)
     expect(stale.ok).toBe(false); expect(JSON.stringify(stale)).toContain('重新查询检查点')
     expect(render.calls).toHaveLength(rendered); expect(owner.frame).toBe(12)
@@ -165,7 +165,7 @@ it('作品未编辑但已有跟踪结果更新时也拒绝旧观察计划，进�
   vi.spyOn(tracking, 'videoEditTrackingRevision').mockImplementation(() => revision)
   vi.spyOn(tracking, 'videoEditTrackResults').mockImplementation(() => handles)
   vi.spyOn(getPlatform().tracking, 'status').mockResolvedValue({ state: 'failed', reason: 'decode' })
-  editVideoProject(owner.document.id, document => { document.sequences[0].clips[0].trackers = [{ id: 't', name: '跟踪', method: 'box', prompts: [{ timeUs: 0, box: [.1, .1, .5, .5] }] }]; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].clips[0].trackers = [{ id: 't', name: '跟踪', method: 'box', prompts: [{ timeUs: 0, box: [.1, .1, .5, .5] }] }]; return document })
   const version = videoEditObservationVersion(owner, owner.document.revision)
   const documentRevision = owner.document.revision
   try {

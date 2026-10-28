@@ -102,7 +102,7 @@ it('多目标候选按各片段起点映射关键帧，整组应用只增加一�
   const owner = await setup(), id = owner.document.id
   appendVideoEditClip(id)
   const [first, second] = getActiveVideoEditSequence(owner).clips
-  editVideoProject(id, document => { document.sequences[0].clips.find(clip => clip.id === second.id)!.start = 100; return document })
+  editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].clips.find(clip => clip.id === second.id)!.start = 100; return document })
   for (const [clip, start] of [[first, 0], [second, 100]] as const) {
     setVideoEditView(id, { selection: clip.id, frame: start })
     await startVideoMotion(id); present(owner, start)
@@ -207,14 +207,14 @@ it('箭头无需伪造录制即可整理，标注变化拒绝旧候选，应用�
 it('参照改变拒绝旧候选，重新整理仍保留录制时的局部偏移且保存重开', async () => {
   const owner = await setup(); const id = owner.document.id; const target = getActiveVideoEditSequence(owner).clips[0]
   appendVideoEditClip(id); const reference = getActiveVideoEditSequence(owner).clips[1]
-  editVideoProject(id, document => { const c = document.sequences[0].clips[1]; c.start = 0; c.duration = target.duration; c.x = .1; return document })
+  editVideoProject(id, document => { document = structuredClone(document); const c = document.sequences[0].clips[1]; c.start = 0; c.duration = target.duration; c.x = .1; return document })
   setVideoEditView(id, { selection: target.id, frame: 0 }); await startVideoMotion(id, 'place')
   await configureVideoMotionConstraints(id, { referenceId: reference.id })
   const state = videoMotionState(owner)!; present(owner, 0)
   demonstrateVideoMotion(id, { ...state.pose, position: [.7, .5] }, 'down'); present(owner, 0)
   demonstrateVideoMotion(id, { ...state.pose, position: [.8, .5] }, 'up'); present(owner, 60)
   await stopVideoMotion(id); await optimizeVideoMotion(id)
-  editVideoProject(id, document => { document.sequences[0].clips[1].x = .2; return document })
+  editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].clips[1].x = .2; return document })
   await expect(applyVideoMotion(id)).rejects.toThrow('已变化')
   await optimizeVideoMotion(id); expect(state.candidates).toHaveLength(1)
   expect(motionClipPose(videoMotionComposition(owner)!.clips[0], 60).position[0]).toBeCloseTo(.9)
@@ -261,7 +261,7 @@ it('后续手调拒绝旧候选写入，损坏的页读回失败且原作品不�
   const state = videoMotionState(owner)!; demonstrateVideoMotion(id, state.pose, 'down'); present(owner, 0); owner.scrubbing = true
   demonstrateVideoMotion(id, { ...state.pose, position: [.7, .5] }, 'up'); present(owner, 30); owner.scrubbing = false
   await stopVideoMotion(id); await optimizeVideoMotion(id)
-  editVideoProject(id, doc => { doc.sequences[0].clips[0].x = .2; return doc })
+  editVideoProject(id, doc => { doc = structuredClone(doc); doc.sequences[0].clips[0].x = .2; return doc })
   await expect(applyVideoMotion(id)).rejects.toThrow('已修改'); expect(getActiveVideoEditSequence(owner).clips[0].x).toBe(.2)
   const page = owner.document.creativeIntents!.resources.find(r => r.kind === 'page')!; files.set(page.path, new TextEncoder().encode('{}'))
   await expect(reopenVideoMotion(id, state.draft.id)).rejects.toThrow('已被修改')

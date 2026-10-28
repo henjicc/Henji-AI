@@ -14,6 +14,7 @@ import { readVideoEditCodeMetadata, rememberVideoEditCodeMetadata } from './vide
 import { createVideoEditTestProject, reopenVideoEdit } from './videoEditDocumentTestKit'
 import { applyVideoEditSceneChanges, mergeVideoEditSceneRegeneration, videoEditSceneDeclarationState, writeVideoEditScene } from './videoEditScenes'
 import { closeVideoEditProject, editVideoProject, listVideoEditInstances, saveVideoEdit, subscribeVideoEditCommandFacts, undoVideoEdit, type VideoEditInstance } from './videoEditService'
+import { beginVideoEditGesture } from './videoEditService'
 
 vi.mock('./videoEditAuthorInspection', () => ({ inspectVideoEditAuthor: async (bundle: ReturnType<typeof testAuthorBundle>) => testAuthorProgram(bundle) }))
 
@@ -29,7 +30,7 @@ async function setup() {
   const program = testAuthorProgram(testAuthorBundle({ entry: 'main.ts', files: { 'main.ts': source }, apiVersion: 5 }))
   const version = { id: 'v', ...testCodeManifest(source, owner.document), apiVersion: 5 as const, languageVersion: program.languageVersion }
   rememberVideoEditCodeMetadata(owner, 'd', version, program)
-  editVideoProject(id, document => {
+  editVideoProject(id, document => { document = structuredClone(document);
     document.media.push({ id: 'screen', name: '录屏', path: 'D:/screen.mp4', kind: 'video', durationSeconds: 20, width: 1920, height: 1080 })
     document.codeMaterials = [{ id: 'd', name: '片子', defaultVersionId: 'v', versions: [version] }]
     document.scenes = [goldenScene('screen'), { id: 'loose', name: '未引用', schema: { id: GOLDEN_SCENE_DECLARATION.id, version: 1 }, records: [] }]
@@ -44,6 +45,25 @@ const recordRef = (id: string, recordId: string) => ({ kind: 'video_edit.scene_r
 const record = (owner: VideoEditInstance, recordId: string) => owner.document.scenes!.find(scene => scene.id === 'golden-scene')!.records.find(item => item.id === recordId)
 const P = (key: string) => `video_edit.scene_record.${key}`
 const RECORD_PROPERTIES = ['values', 'tuned', 'start', 'end', 'dropped', 'issues'].map(P)
+
+it('片子名称手势提交采用规范化结果，后续编辑、撤销重做和保存不保留草稿空格', async () => {
+  const { owner, id, app } = await setup()
+  try {
+    const before = owner.document
+    const gesture = beginVideoEditGesture(id)
+    const result = await writeVideoEditScene(id, 'loose', [{ kind: 'rename', name: '  未修剪  ' }], { gesture })
+    expect(result.scene.name).toBe('未修剪')
+    expect(owner.document.media).toBe(before.media)
+    editVideoProject(id, document => ({ ...document, posterFrame: { sequenceId: owner.activeSequenceId, frame: 3 } }))
+    expect(owner.document.scenes!.find(scene => scene.id === 'loose')!.name).toBe('未修剪')
+    undoVideoEdit(id); undoVideoEdit(id)
+    expect(owner.document.scenes!.find(scene => scene.id === 'loose')!.name).toBe('未引用')
+    undoVideoEdit(id, true)
+    await saveVideoEdit(id)
+    const reopened = await reopenVideoEdit(id)
+    expect(reopened.document.scenes!.find(scene => scene.id === 'loose')!.name).toBe('未修剪')
+  } finally { app.dispose() }
+})
 
 it('通过通用修改改一个框的留白：读回变化、改到的字段自动记手调、一步撤销、保存重开还在', async () => {
   const { owner, id, app } = await setup()
@@ -247,7 +267,7 @@ it('手调自动记入按规范化取值比较；tuned 要单独一次修改，�
 it('写入前就有的问题不挡改别处，同一字段换成另一个不合法值仍被拒；新建的 ID 与剪辑里别的标识冲突时点名', async () => {
   const { owner, id, app } = await setup()
   try {
-    editVideoProject(id, document => { document.scenes![0].records.find(item => item.id === 'fk-1')!.values.pad = 5; return document })
+    editVideoProject(id, document => { document = structuredClone(document); document.scenes![0].records.find(item => item.id === 'fk-1')!.values.pad = 5; return document })
     const values = ((await app.read(recordRef(id, 'fk-1'), [P('values')])).properties as Record<string, unknown>)[P('values')] as Record<string, unknown>
     expect(await app.change(recordRef(id, 'fk-1'), { [P('values')]: { ...values, dur: 0.7 } })).toMatchObject({ ok: true })
     const document = owner.document

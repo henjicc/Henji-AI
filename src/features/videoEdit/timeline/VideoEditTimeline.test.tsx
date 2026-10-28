@@ -116,7 +116,7 @@ it('速度对话框：持续时间反算速度，输入保护与取消不编辑�
 })
 
 it.each(['in', 'out'] as const)('R 比率拉伸拖 %s 边缘：吸附、实时预览、保留源范围，释放一步历史与撤销（4.13）', async edge => {
-  editVideoProject(owner.document.id, document => { document.sequences[0].clips[0].start = 30; document.sequences[0].clips[1].start = 90; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].clips[0].start = 30; document.sequences[0].clips[1].start = 90; return document })
   setVideoEditTimelineView(owner.document.id, { snapping: true }); setVideoEditView(owner.document.id, { frame: 45 })
   const view = render(<SpeedKeyboardView />); const host = view.getByRole('region', { name: '时间线编辑区域' })
   fireEvent.keyDown(host, { key: 'r', code: 'KeyR' }); await waitFor(() => expect(owner.tool).toBe('rate_stretch'))
@@ -200,7 +200,7 @@ beforeEach(async () => {
   owner = (await createVideoEditProject())!
   const program = compileCodeMaterial(source)
   rememberVideoEditCodeMetadata(owner, 'definition', { id: 'version', ...testCodeManifest(source, owner.document), apiVersion: 4, languageVersion: 4 }, program)
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media.push({ id: 'media', name: '视频', path: 'D:/fixture/video.mp4', kind: 'video', width: 64, height: 64, durationSeconds: 30, hasAudio: false })
     document.codeMaterials = [{ id: 'definition', name: '代码', defaultVersionId: 'version', versions: [{ id: 'version', ...testCodeManifest(source, owner.document), apiVersion: 4, languageVersion: 4 }] }]
     document.items.push({ id: 'video-item', name: '视频', kind: 'video', mediaId: 'media' }, { id: 'code-item', name: '代码', kind: 'code', code: { definitionId: 'definition', versionId: 'version', parameters: {} } })
@@ -368,7 +368,7 @@ it('吸附开启时修饰键拖动也吸附：Alt 复制的副本贴到原片段
 })
 
 it('新序列只有 V1/A1：片段拖到最上视频轨之上自动加轨，素材拖到那里也加轨，各一步撤销（2.4）', async () => {
-  editVideoProject(owner.document.id, document => { document.sequences[0].tracks = document.sequences[0].tracks.filter(track => track.index <= 1); return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].tracks = document.sequences[0].tracks.filter(track => track.index <= 1); return document })
   const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })
   expect(view.container.querySelectorAll('[data-video-edit-track]')).toHaveLength(2)
   const history = owner.past.length
@@ -470,7 +470,7 @@ it('时间线浮出到系统窗口（另一 realm 文档）后仍可点选、拖
 })
 
 it('高度只在释放提交一次，实际32轨道与高度用于纵向命中', () => {
-  editVideoProject(owner.document.id, document => { const track = document.sequences[0].tracks[1]; document.sequences[0].tracks = Array.from({ length: 32 }, (_, index) => ({ ...track, id: `track-${index}`, index, kind: index === 0 ? 'audio' as const : 'video' as const, name: `轨道${index}` })); return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); const track = document.sequences[0].tracks[1]; document.sequences[0].tracks = Array.from({ length: 32 }, (_, index) => ({ ...track, id: `track-${index}`, index, kind: index === 0 ? 'audio' as const : 'video' as const, name: `轨道${index}` })); return document })
   const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' }); const history = owner.past.length
   expect(current().tracks).toHaveLength(32)
   expect(view.container.querySelectorAll('[data-video-edit-track]').length).toBeLessThan(20)
@@ -557,7 +557,7 @@ it('拖动播放头中内容被改动或缩放变化，手势失效后 scrubbing
   expect(shown()).toBe(true)
   fireEvent.pointerDown(ruler, event(header + 40, 14)); fireEvent.pointerMove(host, event(header + 60, 14))
   expect(owner.scrubbing).toBe(true); expect(shown()).toBe(false)
-  act(() => { editVideoProject(owner.document.id, document => { document.items[0].name = '助手改名'; return document }) })
+  act(() => { editVideoProject(owner.document.id, document => { document = structuredClone(document); document.items[0].name = '助手改名'; return document }) })
   fireEvent.pointerUp(host, event(header + 70, 14))
   expect(owner.scrubbing).toBe(false); expect(shown()).toBe(true)
   fireEvent.pointerDown(ruler, event(header + 40, 14)); fireEvent.pointerMove(host, event(header + 60, 14))
@@ -572,7 +572,7 @@ it('拖动播放头中内容被改动或缩放变化，手势失效后 scrubbing
 })
 
 it('边缘持续滚动使用同一命中坐标，取消释放动画资源且无领域草稿', () => {
-  editVideoProject(owner.document.id, document => { document.sequences[0].clips[1].track = 2; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].clips[1].track = 2; return document })
   const callbacks = new Map<number, FrameRequestCallback>(); let token = 0
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { callbacks.set(++token, callback); return token })
   vi.stubGlobal('cancelAnimationFrame', (id: number) => callbacks.delete(id))
@@ -723,7 +723,7 @@ it('剃刀释放时固定最初点击片段，移动改变落点且切序列取�
 
 it('交错32轨道与500片段分成音画两区，各自纵向滚动，DOM仍有界', () => {
   const tracks = mixedTracks()
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const sequence = document.sequences[0]; const clip = sequence.clips[0]
     sequence.tracks = tracks
     sequence.clips = Array.from({ length: 500 }, (_, index) => ({ ...clip, id: `clip-${index}`, start: index * 100, duration: 10 }))
@@ -770,7 +770,7 @@ it('素材项拖放按重排后的原轨道命中，音画分界不产生伪落�
 })
 
 function linkedPair(): { picture: string; sound: string } {
-  editVideoProject(owner.document.id, document => { document.media[0].hasAudio = true; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.media[0].hasAudio = true; return document })
   executeVideoEditTimelineEdit(owner.document.id, current().id, { kind: 'separate_audio', clipIds: [ids[0]], audioTrack: 0 })
   setVideoEditTimelineView(owner.document.id, { selectedClipIds: [] })
   return { picture: ids[0], sound: current().clips.find(clip => clip.kind === 'audio')!.id }
@@ -848,7 +848,7 @@ it('声道映射片段按每个片段声道各画一条波形并按声音流与�
     return { version: `v${request.audioStream ?? 0}`, sampleRate: 48000, frameCount: 48000 * 30, startSeconds: 0, endSeconds: 30, amplitudeScale: 1, peakMax: .5, channelCount: 1, levels: [{ samplesPerBucket: 128, bucketCount: 11250, peak: [new Uint16Array(11250).fill(32768)], rms: [new Uint16Array(11250).fill(19660)] }] }
   })
   const { sound } = linkedPair()
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media[0].audioStreams = [{ channels: 1 }, { channels: 1 }]
     document.sequences[0].clips = document.sequences[0].clips.map(clip => clip.id === sound ? { ...clip, audioMapping: { format: 'stereo', sources: [{ stream: 0, channel: 0 }, { stream: 1, channel: 0 }] } } : clip)
     return document
@@ -871,7 +871,7 @@ it('视频片段显示缩略图条：首格取入点画面，只铺可见范围�
     requests.push({ timeUs, height })
     return { path: `${source}.${timeUs}.${height}.webp` }
   })
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const sequence = document.sequences[0]
     // A twenty-minute clip whose in point is 2.5s into the source; far wider than the viewport.
     sequence.clips = sequence.clips.map((clip, index) => index === 0 ? { ...clip, duration: 30 * 1200, sourceInUs: 2_500_000 } : { ...clip, start: 30 * 1200 + 10 })
@@ -942,7 +942,7 @@ it('轨道头右键：添加／删除单个轨道各一步撤销，重命名，�
   expect(onError).not.toHaveBeenCalled()
 })
 it('过渡块：点选即选中，拖右缘改时长、拖中间平移，实时预览且松手一步撤销；淡化手柄拖出淡入（4.3）', () => {
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const [video] = document.sequences[0].clips
     document.sequences[0].clips = [video, { ...video, id: 'next-video', start: 30, sourceInUs: 2_000_000 }]
     document.sequences[0].transitions = [{ id: 'dissolve', kind: 'cross_dissolve', leftClipId: video.id, rightClipId: 'next-video', durationFrames: 10 }]
@@ -1008,7 +1008,7 @@ it('标尺入出点区间：拖两端改入出点、拖中间平移，吸附时�
   expect(onError).not.toHaveBeenCalled()
 })
 it('拖动吸上时轨道上显示吸附提示线：片段移动、过渡块与 Shift 拖播放头共用同一条，松手收起（4.4）', () => {
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const [video] = document.sequences[0].clips
     document.sequences[0].transitions = [{ id: 'tail', kind: 'cross_dissolve', leftClipId: video.id, durationFrames: 10 }]
     return document
@@ -1058,7 +1058,7 @@ it('时间线统一开关：运动模糊（新建序列默认开）与帧混合�
 it('片段缩略图默认只在开头一张（入点那一帧）；改成首尾时出点帧贴右（重要记录 019）', async () => {
   const requests: number[] = []
   vi.spyOn(getPlatform().video, 'getFilmstripFrame').mockImplementation(async ({ source, timeUs, height }) => { requests.push(timeUs); return { path: `${source}.${timeUs}.${height}.webp` } })
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const sequence = document.sequences[0]
     sequence.clips = sequence.clips.map((clip, index) => index === 0 ? { ...clip, duration: 30 * 20, sourceInUs: 2_500_000 } : { ...clip, start: 30 * 20 + 10 })
     document.media[0].durationSeconds = 4000

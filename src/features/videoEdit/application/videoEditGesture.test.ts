@@ -104,14 +104,14 @@ it('字体预览不逐帧校验；提交校验一次，缺失字体回滚并释�
   const history = owner.past.length
   const validate = vi.spyOn(fontValidation, 'validateVideoEditFontChanges')
   const handle = beginVideoEditGesture(id)
-  for (const fontFamily of ['serif', 'monospace']) updateVideoEditGesture(handle, document => {
+  for (const fontFamily of ['serif', 'monospace']) updateVideoEditGesture(handle, document => { document = structuredClone(document);
     document.sequences[0].clips[0].textStyle = { ...defaultVideoEditTextStyle(1080), fontFamily }; return document
   })
   expect(validate).not.toHaveBeenCalled()
   finishVideoEditGesture(handle); expect(validate).toHaveBeenCalledTimes(1); expect(owner.past).toHaveLength(history + 1)
   validate.mockClear()
   const invalid = beginVideoEditGesture(id)
-  updateVideoEditGesture(invalid, document => { document.sequences[0].clips[0].textStyle!.fontFamily = 'T77 Missing Font'; return document })
+  updateVideoEditGesture(invalid, document => { document = structuredClone(document); document.sequences[0].clips[0].textStyle!.fontFamily = 'T77 Missing Font'; return document })
   const saving = saveVideoEdit(id)
   expect(() => finishVideoEditGesture(invalid)).toThrow('字体')
   await saving
@@ -119,7 +119,7 @@ it('字体预览不逐帧校验；提交校验一次，缺失字体回滚并释�
   expect(getActiveVideoEditSequence(owner).clips[0].textStyle?.fontFamily).toBe('monospace')
   expect(owner.past).toHaveLength(history + 1)
   const cancelled = beginVideoEditGesture(id)
-  updateVideoEditGesture(cancelled, document => { document.sequences[0].clips[0].textStyle!.fontFamily = 'Missing Again'; return document })
+  updateVideoEditGesture(cancelled, document => { document = structuredClone(document); document.sequences[0].clips[0].textStyle!.fontFamily = 'Missing Again'; return document })
   finishVideoEditGesture(cancelled, false)
   expect(validate).toHaveBeenCalledTimes(1)
 })

@@ -34,7 +34,7 @@ afterEach(async () => { for (const owner of listVideoEditInstances()) await clos
 async function setup(sourceText = source) {
   const owner = (await createVideoEditProject())!; const program = compileCodeMaterial(sourceText); const version = { id: 'v', ...testCodeManifest(sourceText, owner.document), apiVersion: program.apiVersion, languageVersion: program.languageVersion }
   rememberVideoEditCodeMetadata(owner, 'd', version, program)
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.codeMaterials = [{ id: 'd', name: program.name, defaultVersionId: 'v', versions: [version] }]
     document.items.push({ id: 'i', name: program.name, kind: 'code', code: { definitionId: 'd', versionId: 'v', parameters: validateCodeMaterialParameters(program) } })
     document.sequences[0].clips.push(makeVideoEditItemClip(document, 'i', document.sequences[0].id, { frame: 0 }, readVideoEditCodeMetadata(owner, document)))
@@ -82,7 +82,7 @@ it('code animation candidate is isolated, stale-safe, one undo and persists thro
 
 it('mask path candidate commits through the native effect and public read/write, saves/reopens and undoes', async () => {
   const { owner, target } = await setup(); const shape = { ...createVideoEditMaskShape('rect', 'shape'), feather: 0 }
-  editVideoProject(target.projectId, document => {
+  editVideoProject(target.projectId, document => { document = structuredClone(document);
     document.sequences[0].clips[0].effects = [{ id: 'mask-effect', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: videoEditBuiltinDefaults(requireVideoEditBuiltinEffect('gaussian_blur')) }, mask: { regionId: 'shapes', shapes: [shape] } }]
     return document
   })
@@ -137,7 +137,7 @@ it('v3新形状沿公共片段与素材项写入、校验、读回、撤销及�
   const src = "export default {name:\"参数化灯光\",kind:\"generator\",mode:\"dynamic\",width:3840,height:2160,durationSeconds:10,types:{light:{title:\"灯光\",layout:\"row\",fields:{power:{type:\"number\",title:\"强度\",default:1,min:0,max:2,step:.01},position:{type:\"point\",title:\"位置\",default:{x:.5,y:.5}},font:{type:\"font\",title:\"字体\",default:\"sans-serif\"}}}},params:[{key:\"enabled\",type:\"boolean\",title:\"启用\",default:true},{key:\"lamp\",type:\"light\",title:\"主光\",group:\"照明\",advanced:true,visibleWhen:{param:\"enabled\",equals:true},tooltip:\"调整主光\",description:\"主体照明\",default:{power:1.4},animatable:true},{key:\"curve\",type:\"curve\",title:\"映射\",default:[{x:0,y:0},{x:1,y:1}],animatable:true}],draw(ctx,t,p){ctx.fillRect(p.amount ?? 0,0,100,100);}}"
   const program = compileCodeMaterial(src); const version = { id: 'v3', ...testCodeManifest(src, owner.document), apiVersion: 4 as const, languageVersion: 4 as const }
   rememberVideoEditCodeMetadata(owner, 'v3d', version, program)
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.codeMaterials = [{ id: 'v3d', name: program.name, defaultVersionId: version.id, versions: [version] }]
     document.items.push({ id: 'v3item', name: program.name, kind: 'code', code: { definitionId: 'v3d', versionId: version.id, parameters: {} } })
     document.sequences[0].clips.push(makeVideoEditItemClip(document, 'v3item', document.sequences[0].id, { frame: 0 }, readVideoEditCodeMetadata(owner, document)))
@@ -193,7 +193,7 @@ it('对象树的增删命名排序同源持久，稳定引用不跟随顺序并�
   expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history)
   deleteVideoEditGraphicObjects(target, [firstId]); expect(() => setVideoEditCodeParameter({ ...target, objectId: firstId }, 'width', 20)).toThrow('已改变')
   undoVideoEdit(projectId); expect(readVideoEditGraphicEditor(projectId, sequenceId, clipId, firstId).parameters.width).toBe(100)
-  editVideoProject(projectId, document => { document.sequences[0].tracks.find(track => track.index === 1)!.locked = true; return document })
+  editVideoProject(projectId, document => { document = structuredClone(document); document.sequences[0].tracks.find(track => track.index === 1)!.locked = true; return document })
   expect(() => createVideoEditGraphicObject(target, { kind: 'text' })).toThrow('锁定')
 })
 
@@ -224,7 +224,7 @@ it('同片段多个效果按稳定id分别调参、动画和撤销，静态效�
   const program = compileCodeMaterial(text); const version = { id: 'filter-v', ...testCodeManifest(text, owner.document), apiVersion: 4 as const, languageVersion: 4 as const }
   rememberVideoEditCodeMetadata(owner, 'filter-d', version, program)
   const itemId = createVideoEditGraphicItem(id, { kind: 'solid' }); const [clipId] = appendVideoEditItems(id, [itemId], sequenceId)
-  editVideoProject(id, document => {
+  editVideoProject(id, document => { document = structuredClone(document);
     document.codeMaterials = [{ id: 'filter-d', name: '滤镜', defaultVersionId: 'filter-v', versions: [version] }]
     const clip = document.sequences[0].clips[0]; clip.sourceInUs = 3_600_000_000
     clip.effects = ['first', 'second'].map(id => ({ id, name: id, enabled: true, amount: 1, code: { definitionId: 'filter-d', versionId: 'filter-v', parameters: {} } })); return document
@@ -245,7 +245,7 @@ it('同片段多个效果按稳定id分别调参、动画和撤销，静态效�
 it('转场中的对象编辑沿实际序列帧和原源时钟，切点前不钳制到片段入点', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequenceId = owner.activeSequenceId
   const itemId = createVideoEditGraphicItem(id, { kind: 'rect' }); const [leftId, rightId] = appendVideoEditItems(id, [itemId, itemId], sequenceId, { frame: 0 })
-  editVideoProject(id, document => {
+  editVideoProject(id, document => { document = structuredClone(document);
     const sequence = document.sequences[0]; sequence.clips[0].duration = 30; sequence.clips[1].start = 30; sequence.clips[1].sourceInUs = 1e6
     sequence.transitions = [{ id: 'dissolve', kind: 'cross_dissolve', leftClipId: leftId, rightClipId: rightId, durationFrames: 10 }]; return document
   })

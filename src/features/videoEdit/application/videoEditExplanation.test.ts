@@ -85,12 +85,12 @@ it('超级关键帧默认麦克风、暂停续段、转写后引用交接，同�
 })
 it('起点重叠不阻止终点独立确认，轮廓还原指向时的位置而非后来移动的位置', async()=>{
   const owner=await setup(),id=owner.document.id
-  editVideoProject(id,doc=>{doc.sequences[0].clips.push({...doc.sequences[0].clips[0],id:'overlap',scale:.3});return doc})
+  editVideoProject(id,doc=>{ doc = structuredClone(doc);doc.sequences[0].clips.push({...doc.sequences[0].clips[0],id:'overlap',scale:.3});return doc})
   await startVideoExplanation(id,crypto.randomUUID());clock=200;present(owner,0);audio()
   const monitor=document.createElement('div');document.body.append(monitor)
   vi.spyOn(monitor,'getBoundingClientRect').mockReturnValue(new DOMRect(0,0,200,100))
   const point=(x:number)=>{const event=new MouseEvent('pointerdown',{clientX:x,clientY:50,bubbles:true});Object.defineProperty(event,'timeStamp',{value:clock});monitor.dispatchEvent(event);recordVideoExplanationPointer(owner,event as unknown as PointerEvent,monitor)}
-  clock=230;point(100);clock=250;editVideoProject(id,doc=>{doc.sequences[0].clips[0].x=.2;return doc});clock=260;present(owner,0);clock=290;point(180)
+  clock=230;point(100);clock=250;editVideoProject(id,doc=>{ doc = structuredClone(doc);doc.sequences[0].clips[0].x=.2;return doc});clock=260;present(owner,0);clock=290;point(180)
   videoExplanationState(owner)!.picture=undefined // Resume invalidates presentation until the next acknowledged draw.
   clock=400;await stopVideoExplanation(id)
   vi.mocked(getPlatform().audioEdit.recording.transcribe).mockImplementationOnce(async input=>({modelId:input.modelId,providerId:'groq',requestId:input.requestId,transcript:{unit:'ms',text:'从这里到那边',granularity:'word',words:[],segments:[{text:'从这里到那边',startMs:30,endMs:100,granularity:'segment',timing:'coarse',words:[{text:'从这里',startMs:30,endMs:40,granularity:'word',timing:'precise'},{text:'到那边',startMs:90,endMs:100,granularity:'word',timing:'precise'}]}]}}))
@@ -126,8 +126,8 @@ it('E01/E05 自主控制与正式undo链不重复应用；结束转写/校正/JS
   const bridge = installPaidApprovalTestBridge()
   const owner=await setup();const id=owner.document.id;const undoCount=owner.past.length
   await startVideoExplanation(id,crypto.randomUUID());expect(owner.playing).toBe(false);clock=200;present(owner,0);audio()
-  clock=300;editVideoProject(id,document=>{document.sequences[0].clips[0].x=.2;return document});clock=400;undoVideoEdit(id);clock=500;undoVideoEdit(id,true)
-  clock=600;expect(()=>editVideoProject(id,document=>{document.sequences[0].width=-1;return document})).toThrow()
+  clock=300;editVideoProject(id,document=>{ document = structuredClone(document);document.sequences[0].clips[0].x=.2;return document});clock=400;undoVideoEdit(id);clock=500;undoVideoEdit(id,true)
+  clock=600;expect(()=>editVideoProject(id,document=>{ document = structuredClone(document);document.sequences[0].width=-1;return document})).toThrow()
   clock=700;await stopVideoExplanation(id);expect(capture.stop).toHaveBeenCalledTimes(1);expect(getActiveVideoEditSequence(owner).clips[0].x).toBe(.2);expect(owner.past.length).toBe(undoCount+1)
   expect(getPlatform().audioEdit.recording.transcribe).not.toHaveBeenCalled();await transcribeVideoExplanation(id,crypto.randomUUID())
   expect([...bridge.records.values()]).toMatchObject([{ origin: { actor: 'user' }, state: 'completed', paidReservations: [{ category: 'recognition' }] }])
@@ -152,7 +152,7 @@ it('E09 设备拒绝/断开与恢复重新订阅，sealed页可恢复；保存�
   const owner=await setup();const id=owner.document.id;capture.deny=true;await expect(startVideoExplanation(id,crypto.randomUUID())).rejects.toThrow('PermissionDenied')
   expect(videoExplanationState(owner)!.collector.session.state).toBe('recoverable');capture.deny=false;clock=200;await resumeVideoExplanation(id);clock=300;present(owner,0);audio()
   clock=400;await pauseVideoExplanation(id);const sessionId=videoExplanationState(owner)!.collector.session.id
-  await reopenVideoExplanation(id,sessionId);clock=500;await resumeVideoExplanation(id);clock=600;present(owner,0);editVideoProject(id,document=>{document.sequences[0].clips[0].x=.3;return document})
+  await reopenVideoExplanation(id,sessionId);clock=500;await resumeVideoExplanation(id);clock=600;present(owner,0);editVideoProject(id,document=>{ document = structuredClone(document);document.sequences[0].clips[0].x=.3;return document})
   clock=700;await stopVideoExplanation(id);expect(videoExplanationState(owner)!.collector.session.clockSegments.some(c=>c.mode==='gap')).toBe(true)
   const lines=[];for await(const line of videoExplanationJsonl(id))lines.push(JSON.parse(line) as Record<string,unknown>);expect(lines.some(l=>l.type==='command')).toBe(true)
   expect(capture.stop).toHaveBeenCalledTimes(2)
@@ -176,7 +176,7 @@ it('会话元数据正式实体可读，私密词稿/指向/音频路径不进�
 it('迟到呈现回执保留提交时画面；关闭先封尾音，不提前取消采集',async()=>{
   const owner=await setup();const id=owner.document.id;await startVideoExplanation(id,crypto.randomUUID());clock=200
   const submitted=videoEditComposition(owner.document,owner.activeSequenceId)
-  editVideoProject(id,document=>{document.sequences[0].clips[0].x=.4;return document})
+  editVideoProject(id,document=>{ document = structuredClone(document);document.sequences[0].clips[0].x=.4;return document})
   recordVideoExplanationPresentation(owner,{frame:0,sequenceId:submitted.id,revision:submitted.revision,composition:submitted,at:clock})
   expect(videoExplanationState(owner)!.picture?.composition).toBe(submitted)
   const signal=videoExplanationState(owner)!.controller.signal
@@ -205,7 +205,7 @@ it('慢摘要背压暂停采集并完整封存操作，解除后不丢尾部',as
   const owner=await setup();const id=owner.document.id;await startVideoExplanation(id,crypto.randomUUID());clock=200;present(owner,0)
   let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve});const digest=crypto.subtle.digest.bind(crypto.subtle)
   vi.spyOn(crypto.subtle,'digest').mockImplementationOnce(async(algorithm,data)=>{await gate;return digest(algorithm,data)})
-  for(let i=1;i<=8;i++)editVideoProject(id,document=>{document.sequences[0].clips[0].x=i/100;return document})
+  for(let i=1;i<=8;i++)editVideoProject(id,document=>{ document = structuredClone(document);document.sequences[0].clips[0].x=i/100;return document})
   expect(videoExplanationState(owner)!.busy).toBe(true);await new Promise(resolve=>setTimeout(resolve,0));expect(capture.stop).toHaveBeenCalledTimes(1)
   release();clock=500;await stopVideoExplanation(id)
   const lines=[];for await(const line of videoExplanationJsonl(id))lines.push(JSON.parse(line) as Record<string,unknown>)

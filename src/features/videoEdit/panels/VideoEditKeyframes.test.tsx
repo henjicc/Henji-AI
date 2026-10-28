@@ -61,7 +61,7 @@ function Pen({ owner }: { owner: VideoEditInstance }): React.ReactElement {
 }
 it('转场面板参数关键帧与通用属性同源：按内部帧添加、求值、拒绝非法写入与读回', async () => {
   const { owner, id, clipId } = await project()
-  editVideoProject(id, document => {
+  editVideoProject(id, document => { document = structuredClone(document);
     document.sequences[0].transitions = [{ id: 'animated-wipe', kind: 'wipe', rightClipId: clipId, durationFrames: 11 }]
     return document
   })
@@ -99,7 +99,7 @@ it('转场面板参数关键帧与通用属性同源：按内部帧添加、求�
 
 it('贝塞尔属性手柄与时间线切线拖动共享曲线，一次撤销、取消不留历史，改数值保留控制点', async () => {
   const { owner, id, clip } = await project()
-  editVideoProject(id, document => { document.sequences[0].clips[0].curves = { opacity: [{ time: 0, value: 0, interpolation: 'bezier', bezier: [.2, .3, .8, .9] }, { time: 50, value: 1, interpolation: 'linear' }] }; return document })
+  editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].clips[0].curves = { opacity: [{ time: 0, value: 0, interpolation: 'bezier', bezier: [.2, .3, .8, .9] }, { time: 50, value: 1, interpolation: 'linear' }] }; return document })
   const panel = render(<Panel owner={owner} />)
   fireEvent.click(within(panel.container).getByRole('button', { name: '不透明度关键帧轨与插值' }))
   const handle = within(document.body).getByRole('slider', { name: '不透明度缓动手柄1' })
@@ -212,7 +212,7 @@ it('效果控件秒表/当前帧自动加点/导航/删除/关闭；拖动和取
 })
 it.each(['opacity', 'volume'] as const)('钢笔 P 编辑 %s：点击加点、拖动、Ctrl 删除、Esc 回退与标记可撤销', async key => {
   const { owner, id, clip } = await project()
-  if (key === 'volume') editVideoProject(id, document => {
+  if (key === 'volume') editVideoProject(id, document => { document = structuredClone(document);
     const next = structuredClone(document); const sequence = next.sequences[0]; const selected = sequence.clips[0]
     next.media.push({ id: 'keyframe-audio', name: '声音', path: path.resolve(path.sep, 'keyframe-audio.wav'), kind: 'audio', width: 0, height: 0, durationSeconds: 10 })
     next.items = next.items.map(item => item.id === selected.itemId ? { id: item.id, name: item.name, kind: 'audio', mediaId: 'keyframe-audio' } : item)
@@ -348,7 +348,7 @@ it('拖动效果头部显示插入位置、一次撤销；Esc取消不提交', a
 it('分区开关保留效果状态和固有参数关键帧；助手通用读写同字段', async () => {
   const { owner, id, sequenceId, clipId, clip } = await project()
   applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'gaussian_blur')
-  editVideoProject(id, draft => { const item = draft.sequences[0].clips[0]; item.effects![0].enabled = false; item.x = .3; item.curves = { x: [{ time: 0, value: .4, interpolation: 'linear' }] }; return draft })
+  editVideoProject(id, draft => { draft = structuredClone(draft); const item = draft.sequences[0].clips[0]; item.effects![0].enabled = false; item.x = .3; item.curves = { x: [{ time: 0, value: .4, interpolation: 'linear' }] }; return draft })
   const original = structuredClone(clip())
   const panel = render(<Panel owner={owner} />); const ui = within(panel.container)
   const count = owner.past.length

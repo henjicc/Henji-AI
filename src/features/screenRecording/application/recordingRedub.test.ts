@@ -31,7 +31,7 @@ it('按句关联普通录制文字稿；微变速保持源画面端点，字幕�
   const { document, sequence, clip, media } = fixture()
   const owner = await openVideoEditDocument({ id: seedVideoEditDocument(document) }), before = structuredClone(owner.document)
   const target = recordingRedubTarget(owner.document, clip.id)
-  editVideoProject(owner.document.id, draft => { replaceRecordingNarration(draft, target, media, '更新后的句子。'); return videoEditDocumentSchema.parse(draft) })
+  editVideoProject(owner.document.id, draft => replaceRecordingNarration(draft, target, media, '更新后的句子。').document)
   const after = owner.document.sequences.find(v => v.id === sequence.id)!
   expect(after.clips.find(v => v.id === clip.id)).toMatchObject({ duration: 156, text: '更新后的句子。', fadeInFrames: 1, fadeOutFrames: 1 })
   expect(after.captions?.[0]).toMatchObject({ text: '更新后的句子。', duration: 156, clipId: clip.id })
@@ -42,7 +42,9 @@ it('按句关联普通录制文字稿；微变速保持源画面端点，字幕�
   expect(owner.document.sequences).toEqual(before.sequences)
 })
 it('大幅延长用末帧停留并后移后续内容；锁轨与交叠声音在修改前拒绝', () => {
-  const { document, sequence, clip, media, still } = fixture()
+  const fixtureValue = fixture()
+  let { document } = fixtureValue
+  const { sequence, clip, media, still } = fixtureValue
   media.durationSeconds = 7
   const target = recordingRedubTarget(document, clip.id)
   const overlap = structuredClone(document)
@@ -50,14 +52,14 @@ it('大幅延长用末帧停留并后移后续内容；锁轨与交叠声音在�
   expect(() => replaceRecordingNarration(overlap, target, media, '延长时不能撞上另一声音', still)).toThrow('其他声音')
   const copy = structuredClone(document)
   expect(() => replaceRecordingNarration(copy, target, media, '更长的旁白。')).toThrow('停留')
-  replaceRecordingNarration(document, target, media, '更长的旁白。', still)
+  document = replaceRecordingNarration(document, target, media, '更长的旁白。', still).document
   const after = document.sequences.find(v => v.id === sequence.id)!
   expect(after.clips.find(v => v.itemId === 'istill')).toMatchObject({ start: 150, duration: 60 })
   expect(after.captions?.[1].start).toBe(210)
   expect(videoEditDocumentSchema.parse(document).sequences).toHaveLength(document.sequences.length)
   const again = recordingRedubTarget(document, clip.id)
   media.durationSeconds = 8
-  replaceRecordingNarration(document, again, media, '再次修改。')
+  document = replaceRecordingNarration(document, again, media, '再次修改。').document
   expect(document.sequences.find(v => v.id === sequence.id)!.clips.filter(v => v.itemId === 'istill')).toMatchObject([{ duration: 90 }])
   after.tracks[0].locked = true
   expect(() => recordingRedubTarget(document, clip.id)).toThrow('锁轨')

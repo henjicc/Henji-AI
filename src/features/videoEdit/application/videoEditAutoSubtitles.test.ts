@@ -65,7 +65,7 @@ beforeEach(async () => {
     return { project: { ...audio.document, transcript: [{ id: 'one', text: 'Hello world.', startFrame: 0, endFrame: 1000, included: true, locked: false, granularity: 'segment' }] }, modelId: 'test-asr', granularity: 'segment' }
   })
   owner = (await createVideoEditProject())!
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media.push({ id: 'audio', name: '声音', kind: 'audio', path: 'D:/voice.wav', durationSeconds: 12, width: 0, height: 0, assetContent: fileContent })
     document.items.push({ id: 'audio-item', name: '声音', kind: 'audio', mediaId: 'audio' })
     document.sequences[0].clips.push({ id: 'voice', itemId: 'audio-item', name: '声音', kind: 'audio', start: 0, duration: 300, track: 0, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' })
@@ -81,7 +81,7 @@ it.each(['metadata', 'content'] as const)('字幕整理期间写入 %s：元数�
   const baseline = owner.document; const version = owner.contentVersion
   vi.mocked(getPlatform().audioEdit.detectSilence).mockImplementationOnce(async () => {
     if (change === 'metadata') recordVideoEditExport(id, { id: 'metadata', taskId: 'metadata', sequenceId, name: '已导出', presetName: '默认', path: 'D:/metadata.mp4', completedAt: 1, rangeSource: 'content', settings: VIDEO_EDIT_EXPORT_PRESETS[0].settings, range: { startFrame: 0, endFrame: 30 } })
-    else editVideoProject(id, document => { document.sequences[0].captions![0].text = '用户已修改'; return document })
+    else editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].captions![0].text = '用户已修改'; return document })
     expect(owner.document).not.toBe(baseline)
     expect(owner.contentVersion === version).toBe(change === 'metadata')
     return { revision: 0, suggestions: [], energy: emptyEnergy }
@@ -100,7 +100,7 @@ it.each(['metadata', 'content'] as const)('字幕整理期间写入 %s：元数�
 it('免费整理在独立组词边界吸附后延长前条接续，生成路径也只保留零或至少500ms的间隔', async () => {
   const parts = ['它不只是会聊天还能帮你写代码！', '画图、做视频……', '下一句！']
   const items = parts.map((text, index) => ({ text, startMs: [235, 386, 486][index] / 60 * 1000, endMs: [374, 456, 556][index] / 60 * 1000 }))
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.sequences[0].frameRate = { numerator: 60, denominator: 1 }; document.sequences[0].clips[0].duration = 600
     document.media[0].creativeSource = { type: 'generation', recordId: 'gap', outputIndex: 0, prompt: parts.join('') }
     return document
@@ -159,7 +159,7 @@ it('免费跨段整理从生成原文及保存原句恢复行尾顿号，不覆�
   const original = '它不只是会聊天，还能帮你写代码、画图、做视频……'
   const parts = ['它', '不', '只是', '会', '聊天，', '还', '能', '帮', '你', '写', '代码、', '画图、', '做', '视频……']
   const items = parts.map((text, index) => ({ text, startMs: index * 300, endMs: index * 300 + 200 }))
-  editVideoProject(owner.document.id, document => { document.media[0].creativeSource = { type: 'generation', recordId: 'source', outputIndex: 0, prompt: original }; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.media[0].creativeSource = { type: 'generation', recordId: 'source', outputIndex: 0, prompt: original }; return document })
   vi.spyOn(getPlatform().aiRuntime, 'readSavedResult').mockResolvedValue({ status: 'completed', metadata: { outputTimings: [{ outputIndex: 0, timings: { granularity: 'word', items } }] } })
   appendAutoSubtitles(owner.document.id, sequence().id, [
     { id: 'left', clipId: 'voice', text: '它不只是会聊天\n还能帮你写代码', start: 0, duration: 99 },
@@ -169,7 +169,7 @@ it('免费跨段整理从生成原文及保存原句恢复行尾顿号，不覆�
   expect(sequence().captions?.map(caption => caption.text)).toEqual(['它不只是会聊天\n还能帮你写代码、画图、做视频……'])
   owner = await reopenVideoEdit(owner.document.id)
   expect(sequence().captions![0].sourceText).toBe(original)
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     delete document.media[0].creativeSource
     document.sequences[0].captions = [
       { id: 'saved-left', clipId: 'voice', text: '它不只是会聊天\n还能帮你写代码', sourceText: '它不只是会聊天，还能帮你写代码、', start: 0, duration: 99 },
@@ -188,13 +188,13 @@ it('免费跨段整理从生成原文及保存原句恢复行尾顿号，不覆�
 it('停顿图原生与已存词边界统一取整，不重叠且与字幕吸附一致', async () => {
   const items = [{ text: '这是。', startMs: 310, endMs: 725 }, { text: '第一。', startMs: 725, endMs: 1390 }, { text: '第二。', startMs: 4880, endMs: 5520 }, { text: '行。', startMs: 5520, endMs: 5890 }]
   const timings = { granularity: 'word' as const, items }
-  editVideoProject(owner.document.id, document => { document.media[0].creativeSource = { type: 'generation', recordId: 'fractional', outputIndex: 0, prompt: items.map(item => item.text).join('') }; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.media[0].creativeSource = { type: 'generation', recordId: 'fractional', outputIndex: 0, prompt: items.map(item => item.text).join('') }; return document })
   vi.spyOn(getPlatform().aiRuntime, 'readSavedResult').mockResolvedValue({ status: 'completed', metadata: { outputTimings: [{ outputIndex: 0, timings }] } })
   const captions = await buildSpeechSubtitles(items.map(item => item.text).join(''), timings, sequence().clips[0], sequence().frameRate, { maxCharacters: 2, maxLines: 1, minDurationSeconds: 0, maxReadingSpeed: 1000, joinGapMs: 0 })
   const fps = sequence().frameRate.numerator / sequence().frameRate.denominator
   const expected = items.map(item => ({ text: item.text, startFrame: Math.floor(item.startMs * fps / 1000), endFrame: Math.floor(item.endMs * fps / 1000) }))
   for (const saved of [false, true]) {
-    if (saved) editVideoProject(owner.document.id, document => {
+    if (saved) editVideoProject(owner.document.id, document => { document = structuredClone(document);
       const composition = videoEditComposition(document, sequence().id)
       document.sequences[0].textTranscription = { audioDocumentId: 'saved', sources: [{ itemId: 'audio-item', mediaIdentity: videoEditTextMediaIdentity(composition, 'audio-item'), silences: [], blocks: items.map((item, index) => ({ id: String(index), text: item.text, startFrame: item.startMs * 1000, endFrame: item.endMs * 1000, included: true, locked: false, granularity: 'word' })) }] }
       return document
@@ -210,7 +210,7 @@ it.each([1, 6])('native generation timestamps create readable frame/us captions 
   SpeechSubtitleTestWorker.instances = []; SpeechSubtitleTestWorker.autoRun = true
   vi.stubGlobal('Worker', SpeechSubtitleTestWorker)
   const duration = Math.max(60, Math.ceil(Array.from(original).length / 10) + 1)
-  editVideoProject(owner.document.id, document => { document.media[0].durationSeconds = duration; document.media[0].creativeSource = { type: 'generation', recordId: 'tts-result', outputIndex: 0, prompt: original }; document.sequences[0].clips[0].duration = duration * 30; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.media[0].durationSeconds = duration; document.media[0].creativeSource = { type: 'generation', recordId: 'tts-result', outputIndex: 0, prompt: original }; document.sequences[0].clips[0].duration = duration * 30; return document })
   vi.spyOn(getPlatform().aiRuntime, 'readSavedResult').mockResolvedValue({ status: 'completed', metadata: { outputTimings: [{ outputIndex: 0, timings: { granularity: 'char', items: Array.from(original).map((text, index) => ({ text, startMs: index * 100, endMs: (index + 1) * 100 })) } }] } })
   const past = owner.past.length
   const raw = await handleVideoEditSubtitleCapability('generate_video_edit_subtitles', { documentRef: { kind: 'video_edit.document', id: owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${owner.document.id}:${sequence().id}` }, clipRef: { kind: 'video_edit.clip', id: `${owner.document.id}:voice` }, timeSource: 'native' }, { signal: new AbortController().signal })
@@ -239,7 +239,7 @@ it.each(['cancel', 'changed'] as const)('long alignment %s cannot apply a stale 
   const original = '打开后台查看用户设置。'.repeat(80), duration = original.length / 10 + 1
   SpeechSubtitleTestWorker.instances = []; SpeechSubtitleTestWorker.autoRun = false
   vi.stubGlobal('Worker', SpeechSubtitleTestWorker)
-  editVideoProject(owner.document.id, document => { document.media[0].durationSeconds = duration; document.media[0].creativeSource = { type: 'generation', recordId: 'tts-result', outputIndex: 0, prompt: original }; document.sequences[0].clips[0].duration = duration * 30; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.media[0].durationSeconds = duration; document.media[0].creativeSource = { type: 'generation', recordId: 'tts-result', outputIndex: 0, prompt: original }; document.sequences[0].clips[0].duration = duration * 30; return document })
   vi.spyOn(getPlatform().aiRuntime, 'readSavedResult').mockResolvedValue({ status: 'completed', metadata: { outputTimings: [{ outputIndex: 0, timings: { granularity: 'char', items: Array.from(original).map((text, index) => ({ text, startMs: index * 100, endMs: (index + 1) * 100 })) } }] } })
   const controller = new AbortController()
   const pending = generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { timeSource: 'native' }, controller.signal)
@@ -247,7 +247,7 @@ it.each(['cancel', 'changed'] as const)('long alignment %s cannot apply a stale 
   const worker = SpeechSubtitleTestWorker.instances[0]
   expect(videoEditBusyReason(owner.document.id)).toBeTruthy()
   if (mode === 'cancel') controller.abort(new Error('取消长稿对齐'))
-  else editVideoProject(owner.document.id, document => { document.sequences[0].clips[0].start += 30; return document })
+  else editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].clips[0].start += 30; return document })
   const rejected = expect(pending).rejects.toThrow(mode === 'cancel' ? '取消长稿对齐' : '原片段已改变')
   await worker.respond(); await rejected
   expect(sequence().captions ?? []).toHaveLength(0)
@@ -261,7 +261,7 @@ it('native-only mode rejects missing timings without charging or creating a capt
   expect(sequence().captions ?? []).toHaveLength(0)
 })
 it('仅规范化所选字幕，复用片段范围内同名词的时间，不识别且一步撤销', async () => {
-  editVideoProject(owner.document.id, document => { document.media[0].creativeSource = { type: 'generation', recordId: 'existing', outputIndex: 0, prompt: '你好。你好。下一句。' }; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.media[0].creativeSource = { type: 'generation', recordId: 'existing', outputIndex: 0, prompt: '你好。你好。下一句。' }; return document })
   vi.spyOn(getPlatform().aiRuntime, 'readSavedResult').mockResolvedValue({ status: 'completed', metadata: { outputTimings: [{ outputIndex: 0, timings: { granularity: 'word', items: [
     { text: '你好。', startMs: 0, endMs: 700 }, { text: '你好。', startMs: 2000, endMs: 2700 }, { text: '下一句。', startMs: 4000, endMs: 4700 },
   ] } }] } })
@@ -276,7 +276,7 @@ it('仅规范化所选字幕，复用片段范围内同名词的时间，不识�
   undoVideoEdit(owner.document.id); expect(sequence().captions).toEqual(previous)
 })
 it('片段停顿图同时读取词时间与声音证据，clipRef静音路径无需序列转录', async () => {
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media[0].creativeSource = { type: 'generation', recordId: 'tts-pauses', outputIndex: 0, prompt: '你好 世界' }
     document.sequences[0].clips[0].start = 60
     document.sequences[0].clips[0].sourceInUs = 1_000_000
@@ -301,7 +301,7 @@ it('片段停顿图同时读取词时间与声音证据，clipRef静音路径无
   } finally { app.dispose() }
 })
 it('连续词时钟仍发现真实气口，公共入口返回目标附近切点且保持只读', async () => {
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media[0].creativeSource = { type: 'generation', recordId: 'continuous', outputIndex: 0, prompt: '你好世界' }
     return document
   })
@@ -317,14 +317,14 @@ it('连续词时钟仍发现真实气口，公共入口返回目标附近切点�
 })
 
 it('气口按倒放变速与片段修剪映射，取消和内容变化拒绝迟到结果', async () => {
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     Object.assign(document.sequences[0].clips[0], { start: 60, duration: 90, sourceInUs: 7_000_000, speed: { numerator: 2, denominator: 1 }, reverse: true })
     return document
   })
   vi.mocked(getPlatform().audioEdit.detectSilence).mockResolvedValue({ revision: 0, suggestions: [], energy: { ...emptyEnergy, pauses: [{ startMs: 6000, endMs: 6200, cutMs: 6100 }] } })
   expect(await getVideoEditClipPauseMap(owner.document.id, sequence().id, 'voice')).toMatchObject({ pauses: [{ startFrame: 72, endFrame: 75, cutFrame: 73 }] })
   vi.mocked(getPlatform().audioEdit.detectSilence).mockImplementationOnce(async () => {
-    editVideoProject(owner.document.id, document => { document.sequences[0].clips[0].start++; return document })
+    editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].clips[0].start++; return document })
     return { revision: 0, suggestions: [], energy: emptyEnergy }
   })
   await expect(getVideoEditClipPauseMap(owner.document.id, sequence().id, 'voice')).rejects.toThrow('片段已改变')
@@ -350,7 +350,7 @@ it('识别完成后片段变化保留计费事实和恢复引用，不写字幕�
   const original = vi.mocked(platform.transcribe).getMockImplementation()!
   vi.mocked(platform.transcribe).mockImplementation(async request => {
     const result = await original(request)
-    editVideoProject(owner.document.id, doc => { doc.sequences[0].clips[0].start += 1; return doc })
+    editVideoProject(owner.document.id, doc => { doc = structuredClone(doc); doc.sequences[0].clips[0].start += 1; return doc })
     return result
   })
   installPaidApprovalTestBridge('ask')
@@ -427,12 +427,12 @@ it('saved word recognition maps through later speed/trim edits and restores from
   const excerpt = await editVideoEditText(owner.document.id, sequence().id, { kind: 'text', text: '价格' }, 'extract')
   await restoreVideoEditText(owner.document.id, excerpt.sequenceId, audioId)
   expect(videoEditTranscriptWords(videoEditComposition(owner.document, excerpt.sequenceId))).toMatchObject([{ text: '价格', from: 0, to: 15 }])
-  editVideoProject(owner.document.id, document => { document.sequences[0].clips[0] = { ...document.sequences[0].clips[0], sourceInUs: 1000000, duration: 120, speed: { numerator: 2, denominator: 1 } }; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].clips[0] = { ...document.sequences[0].clips[0], sourceInUs: 1000000, duration: 120, speed: { numerator: 2, denominator: 1 } }; return document })
   expect(videoEditTranscriptWords(videoEditComposition(owner.document, sequence().id))).toMatchObject([{ from: 0, to: 8 }])
   await restoreVideoEditText(owner.document.id, sequence().id, audioId)
   expect(videoEditTranscriptWords(videoEditComposition(owner.document, sequence().id))).toMatchObject([{ from: 0, to: 8 }])
   expect(getPlatform().audioEdit.transcribe).toHaveBeenCalledTimes(1)
-  editVideoProject(owner.document.id, document => { document.media[0].path = 'D:/replaced.wav'; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.media[0].path = 'D:/replaced.wav'; return document })
   await restoreVideoEditText(owner.document.id, sequence().id, audioId)
   expect(videoEditTranscriptWords(videoEditComposition(owner.document, sequence().id))).toEqual([])
 })
@@ -518,12 +518,12 @@ it('整序列分块、选择范围、静音和错误轨道拒绝均不进入付�
   await prepareVideoEditSubtitleAudio(owner.document.id, sequence().id, 'sequence')
   expect(boundary.mixes).toEqual([{ start: 0, duration: 5 }, { start: 5, duration: 5 }])
   await expect(prepareVideoEditSubtitleAudio(owner.document.id, sequence().id, 'sequence', 'missing')).rejects.toMatchObject({ message: expect.stringContaining('移除'), execution: { notExecuted: true } })
-  editVideoProject(owner.document.id, doc => { doc.sequences[0].tracks[0].muted = true; return doc })
+  editVideoProject(owner.document.id, doc => { doc = structuredClone(doc); doc.sequences[0].tracks[0].muted = true; return doc })
   await expect(prepareVideoEditSubtitleAudio(owner.document.id, sequence().id, 'sequence')).rejects.toThrow('可听声音')
   expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
 })
 it('NTSC与44.1k混音按绝对采样边界分块，避免按小数帧块累积舍入', async () => {
-  editVideoProject(owner.document.id, document => { document.sequences[0].frameRate = { numerator: 30000, denominator: 1001 }; document.sequences[0].sampleRate = 44100; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].frameRate = { numerator: 30000, denominator: 1001 }; document.sequences[0].sampleRate = 44100; return document })
   await prepareVideoEditSubtitleAudio(owner.document.id, sequence().id, 'sequence')
   expect(boundary.mixes[0]).toEqual({ start: 0, duration: 5 })
   const duration = Math.round(300 * 44100 * 1001 / 30000) / 44100
@@ -539,7 +539,7 @@ it('识别等待保持原实例，声音修改后拒绝迟到回填且保留付�
   while (!release) await new Promise(resolve => setTimeout(resolve, 0))
   expect(videoEditBusyReason(owner.document.id)).toContain('字幕')
   await expect(closeVideoEditProject(owner.document.id)).rejects.toThrow('字幕')
-  editVideoProject(owner.document.id, document => { document.sequences[0].clips[0].volume = .5; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].clips[0].volume = .5; return document })
   release(); await rejected
   expect(sequence().captions).toBeUndefined(); expect((await loadAudioEditProject(id)).document.transcript).toHaveLength(1)
   expect(videoEditBusyReason(owner.document.id)).toBeNull()

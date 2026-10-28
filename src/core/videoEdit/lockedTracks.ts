@@ -1,3 +1,4 @@
+import { jsonEqual } from '../jsonEqual'
 import type { VideoEditDocument, VideoEditSequence } from './document'
 import { videoEditTransitionClipIds } from './transitions'
 import { videoEditCaptionClipIds } from './captionSpeech'
@@ -9,21 +10,22 @@ import { videoEditCaptionClipIds } from './captionSpeech'
 export function assertVideoEditLockedTracks(before: VideoEditDocument, after: VideoEditDocument): void {
   for (const sequence of before.sequences) {
     const target = after.sequences.find(value => value.id === sequence.id)
-    if (sequence.captionTrackLocked && (!target || JSON.stringify(sequence.captions ?? []) !== JSON.stringify(target.captions ?? []))) {
+    if (target === sequence) continue
+    if (sequence.captionTrackLocked && (!target || !jsonEqual(sequence.captions ?? [], target.captions ?? []))) {
       throw new Error('字幕轨道已锁定，请先解锁再编辑。')
     }
     for (const track of sequence.tracks.filter(value => value.locked)) {
       const nextTrack = target?.tracks.find(value => value.id === track.id)
       if (!target || !nextTrack || nextTrack.index !== track.index || nextTrack.kind !== track.kind) throw new Error(`轨道“${track.name}”已锁定，请先解锁再编辑。`)
-      const content = (value: VideoEditSequence): string => {
+      const content = (value: VideoEditSequence): unknown => {
         const clips = value.clips.filter(clip => clip.track === track.index).sort((a, b) => a.id.localeCompare(b.id))
         const ids = new Set(clips.map(clip => clip.id))
         const markers = (value.markers ?? []).filter(mark => mark.clipId && Boolean(mark.clipId && ids.has(mark.clipId))).sort((a, b) => a.id.localeCompare(b.id))
         const captions = (value.captions ?? []).filter(caption => videoEditCaptionClipIds(caption).some(id => ids.has(id))).sort((a, b) => a.id.localeCompare(b.id))
         const transitions = (value.transitions ?? []).filter(transition => videoEditTransitionClipIds(transition).some(id => ids.has(id))).sort((a, b) => a.id.localeCompare(b.id))
-        return JSON.stringify({ clips, markers, captions, transitions })
+        return { clips, markers, captions, transitions }
       }
-      if (content(sequence) !== content(target)) throw new Error(`轨道“${track.name}”已锁定，请先解锁再编辑。`)
+      if (!jsonEqual(content(sequence), content(target))) throw new Error(`轨道“${track.name}”已锁定，请先解锁再编辑。`)
     }
   }
 }

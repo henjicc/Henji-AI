@@ -285,7 +285,7 @@ it('直接路径导入固定文件身份，保存重开后内容查询可核实�
   const [itemId] = await importVideoEditSources(id, [{ path: sourcePath }])
   expect(owner.document.media[0]).toMatchObject({ path: sourcePath, assetContent: { sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) } })
   expect(owner.past.length).toBe(history + 1)
-  editVideoProject(id, document => {
+  editVideoProject(id, document => { document = structuredClone(document);
     document.sequences[0].textTranscription = { audioDocumentId: 'recognized', sources: [{ itemId, mediaIdentity: videoEditTextMediaIdentity(videoEditComposition(document, document.sequences[0].id), itemId), silences: [], blocks: [{ id: 'old-word', text: '旧句', startFrame: 0, endFrame: 1000000, granularity: 'word', included: true, locked: false }] }] }
     return document
   })

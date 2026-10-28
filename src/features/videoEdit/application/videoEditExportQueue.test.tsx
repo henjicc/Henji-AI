@@ -684,7 +684,7 @@ it('completed exports survive a fresh document instance and either ID resolves; 
 
 it('7.776秒声音在60fps占466帧，字幕到456不会裁短内容；修剪声音后新导出才到456', async () => {
   const owner = await project()
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media.push({ id: 'voice-media', kind: 'audio', name: '旁白', path: file('voice.mp3'), durationSeconds: 7.776, width: 0, height: 0 })
     document.items.push({ id: 'voice-item', kind: 'audio', name: '旁白', mediaId: 'voice-media' })
     const sequence = document.sequences[0]; sequence.frameRate = { numerator: 60, denominator: 1 }

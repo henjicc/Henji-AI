@@ -1,3 +1,4 @@
+import { jsonEqual } from '../../jsonEqual'
 import { codeLocationSchema } from '../../storage/gitCodeLocation'
 import { z } from 'zod'
 import { sha256HexString } from '../../../utils/save/hash'
@@ -165,8 +166,9 @@ export function withActualCodeSourceHashes<T extends { codeMaterials?: { version
   return { ...document, ...(document.codeMaterials ? { codeMaterials: document.codeMaterials.map(definition => ({ ...definition, versions: definition.versions.map(version => ({ ...version, files: version.files.map(file => ({ ...file, hash: locationHashes.get(file.location) ?? file.hash })), ...(version.imports ? { imports: version.imports.map(pin) } : {}) })) })) } : {}) }
 }
 export function assertCodeSourcesUnchanged(before: { codeMaterials?: { versions: { id: string }[] }[] }, after: { codeMaterials?: { versions: { id: string }[] }[] }): void {
-  const known = new Map(before.codeMaterials?.flatMap(definition => definition.versions.map(version => [version.id, JSON.stringify(version)])))
-  for (const definition of after.codeMaterials ?? []) for (const version of definition.versions) if (known.has(version.id) && known.get(version.id) !== JSON.stringify(version)) throw new CodeMaterialError('COMPATIBILITY', '不可变源码版本不能原位替换，请创建新版本。')
+  if (before.codeMaterials === after.codeMaterials) return
+  const known = new Map(before.codeMaterials?.flatMap(definition => definition.versions.map(version => [version.id, version])))
+  for (const definition of after.codeMaterials ?? []) for (const version of definition.versions) if (known.has(version.id) && !jsonEqual(known.get(version.id), version)) throw new CodeMaterialError('COMPATIBILITY', '不可变源码版本不能原位替换，请创建新版本。')
 }
 export async function addressCodeMaterialFiles(input: string | CodeMaterialFiles): Promise<{ entry: string; files: CodeFileReference[]; codeSources: CodeSource[] }> {
   const contents = normalizeCodeMaterialFiles(input); const sources = new Map<string, string>(); const files: CodeFileReference[] = []

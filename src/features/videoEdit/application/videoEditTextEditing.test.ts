@@ -28,7 +28,7 @@ beforeEach(() => {
 afterEach(async () => { await closeAllVideoEdits(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 async function fixture() {
   const owner = await createVideoEditProject()
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media = [{ id: 'm', name: '口播', kind: 'video', path: 'D:/voice.mp4', width: 64, height: 64, durationSeconds: 10, hasAudio: true, assetContent: fileContent }]
     document.items = [{ id: 'item', name: '口播', kind: 'video', mediaId: 'm' }]
     const sequence = document.sequences[0]
@@ -116,7 +116,7 @@ it('核对期间取消或编辑，不剪辑旧时间范围也不覆盖新编辑'
   finish(fileContent)
   expect(owner.document).toBe(before); expect(owner.past.length).toBe(history)
   vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockImplementationOnce(async () => {
-    editVideoProject(owner.document.id, document => { document.sequences[0].name = '新手动编辑'; return document })
+    editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].name = '新手动编辑'; return document })
     return fileContent
   })
   await expect(editVideoEditText(owner.document.id, sequenceId, { kind: 'fillers' }, 'delete')).rejects.toThrow('时间线已有修改')
@@ -133,7 +133,7 @@ it('嵌套父层候选沿真实叶子声音核对；没有身份的词源必须�
   expect(owner.document).toBe(before)
   expect(getPlatform().assetLibrary.inspectFileContent).toHaveBeenCalledWith(owner.document.media[0].path, 'video')
   const other = await fixture()
-  editVideoProject(other.document.id, document => {
+  editVideoProject(other.document.id, document => { document = structuredClone(document);
     document.media[0].assetContent = undefined
     const sequence = document.sequences[0]
     sequence.textTranscription!.sources[0].mediaIdentity = transcriptFunctions.videoEditTextMediaIdentity(videoEditComposition(document, sequence.id), 'item')
@@ -178,7 +178,7 @@ it('查询分页按原条件读回，跨序列、关闭重开、内容变化与�
   expect(() => readVideoEditTranscriptQuery(owner.document.id, sequence.id, { text: '改变条件' }, { limit: 1, cursor: first.nextCursor! })).toThrow('失效')
   await expect(editVideoEditText(owner.document.id, 'other-sequence', first.matches[0].selector!, 'delete')).rejects.toThrow()
   await expect(editVideoEditText(owner.document.id, sequence.id, { kind: 'match', matchId: 'made-up' }, 'delete')).rejects.toThrow('失效')
-  editVideoProject(owner.document.id, document => { document.sequences[0].name = '已修改'; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].name = '已修改'; return document })
   expect(() => readVideoEditTranscriptQuery(owner.document.id, sequence.id, {}, { limit: 1, cursor: first.nextCursor! })).toThrow('失效')
   await expect(editVideoEditText(owner.document.id, sequence.id, first.matches[0].selector!, 'delete')).rejects.toThrow('失效')
   const fresh = readVideoEditTranscriptQuery(owner.document.id, sequence.id, {}, { limit: 1 })
@@ -203,7 +203,7 @@ it('读取序列名字不计算转录与静音；局部检索条件拒绝纯标�
 
 it('长稿重复句分开分页，公共只读授权能查询且不能借候选写入', async () => {
   const owner = await fixture(); const sequence = owner.document.sequences[0]
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media[0].durationSeconds = 200
     for (const clip of document.sequences[0].clips) clip.duration = 6000
     document.sequences[0].textTranscription!.sources[0].blocks = Array.from({ length: 1200 }, (_, index) => ({
@@ -269,18 +269,18 @@ it('字幕拆并更新各自词源，锁定声音也保护未绑定单个片段�
   expect(owner.document.sequences[0].captions!.map(caption => caption.speech!.words.length)).toEqual([2, 1])
   mergeVideoEditSubtitles(id, sequenceId, owner.document.sequences[0].captions!.map(caption => caption.id))
   expect(owner.document.sequences[0].captions![0].speech!.words).toHaveLength(3)
-  editVideoProject(id, document => { document.sequences[0].captions![0].reviewReasons = ['translation']; return document })
+  editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].captions![0].reviewReasons = ['translation']; return document })
   const app = createApplicationHarness(); const captionRef = { kind: 'video_edit.caption', id: `${id}:cue` }
   try {
     expect(await app.change(captionRef, { 'video_edit.caption.review_reasons': [] })).toMatchObject({ ok: true })
-    editVideoProject(id, document => { document.sequences[0].tracks.find(track => track.kind === 'audio')!.locked = true; return document })
+    editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].tracks.find(track => track.kind === 'audio')!.locked = true; return document })
     expect(await app.change(captionRef, { 'video_edit.caption.text': '不能覆盖锁定声音的字幕' })).toMatchObject({ ok: false })
   } finally { app.dispose() }
 })
 
 it('公共片段属性直接用检索候选关联标签，源片段移动时同事务跟随并可撤销', async () => {
   const owner = await fixture(); const id = owner.document.id; const sequence = owner.document.sequences[0]
-  editVideoProject(id, document => {
+  editVideoProject(id, document => { document = structuredClone(document);
     document.items.push({ id: 'label-item', name: '强调标签', kind: 'text' })
     document.sequences[0].tracks.push({ ...document.sequences[0].tracks.find(track => track.kind === 'video')!, id: 'label-track', index: 2, name: '包装' })
     document.sequences[0].clips.push({ ...makeVideoEditItemClip(document, 'label-item', sequence.id, { frame: 0, duration: 30, track: 2 }), id: 'label', text: '九元' })
@@ -312,7 +312,7 @@ it('公共片段属性直接用检索候选关联标签，源片段移动时同�
 
 it('同一候选可关联多个包装，正文改变后拒绝旧候选；公共创建能就地建立关联', async () => {
   const owner = await fixture(); const id = owner.document.id; const sequence = owner.document.sequences[0]
-  editVideoProject(id, document => { document.items.push({ id: 'label-item', name: '强调', kind: 'text' }); return document })
+  editVideoProject(id, document => { document = structuredClone(document); document.items.push({ id: 'label-item', name: '强调', kind: 'text' }); return document })
   const app = createApplicationHarness()
   const documentRef = { kind: 'video_edit.document', id }; const sequenceRef = { kind: 'video_edit.sequence', id: `${id}:${sequence.id}` }
   try {
@@ -328,7 +328,7 @@ it('同一候选可关联多个包装，正文改变后拒绝旧候选；公共�
     const second = await create('促销'); expect(second, JSON.stringify(second)).toMatchObject({ ok: true })
     expect(owner.document.sequences[0].clips.filter(clip => clip.contentAnchor).map(clip => [clip.start, clip.duration])).toEqual([[27, 39], [27, 39]])
     const oldHistory = owner.past.length
-    editVideoProject(id, document => { document.sequences[0].textTranscription!.sources[0].blocks[1].text = '已改价'; return document })
+    editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].textTranscription!.sources[0].blocks[1].text = '已改价'; return document })
     const stale = await create('不应插入'); expect(stale).toMatchObject({ ok: false })
     expect(owner.past.length).toBe(oldHistory + 1)
   } finally { app.dispose() }
@@ -336,7 +336,7 @@ it('同一候选可关联多个包装，正文改变后拒绝旧候选；公共�
 
 it.each(['set', 'create', 'manual'] as const)('%s内容关联在文件替换后拒绝旧词源，不留下部分关联', async mode => {
   const owner = await fixture(); const id = owner.document.id; const sequenceId = owner.document.sequences[0].id
-  editVideoProject(id, document => {
+  editVideoProject(id, document => { document = structuredClone(document);
     document.items.push({ id: 'label-item', name: '重点', kind: 'text' })
     document.sequences[0].tracks.push({ ...document.sequences[0].tracks.find(track => track.kind === 'video')!, id: 'label-track', index: 2 })
     document.sequences[0].clips.push({ ...makeVideoEditItemClip(document, 'label-item', sequenceId, { frame: 0, duration: 30, track: 2 }), id: 'label', text: '重点' })
@@ -359,7 +359,7 @@ it.each(['set', 'create', 'manual'] as const)('%s内容关联在文件替换后�
 
 it('原文件失效也能解除已有内容关联，不再读取失效文件', async () => {
   const owner = await fixture(); const id = owner.document.id; const sequenceId = owner.document.sequences[0].id
-  editVideoProject(id, document => {
+  editVideoProject(id, document => { document = structuredClone(document);
     document.items.push({ id: 'label-item', name: '重点', kind: 'text' })
     document.sequences[0].tracks.push({ ...document.sequences[0].tracks.find(track => track.kind === 'video')!, id: 'label-track', index: 2 })
     document.sequences[0].clips.push({ ...makeVideoEditItemClip(document, 'label-item', sequenceId, { frame: 30, duration: 30, track: 2 }), id: 'label', text: '重点', contentAnchor: { ranges: [{ clipId: 'a', itemId: 'item', fromUs: 1000000, toUs: 2000000 }], startOffsetSeconds: 0, endOffsetSeconds: 0 } })
@@ -376,7 +376,7 @@ it('原文件失效也能解除已有内容关联，不再读取失效文件', a
 
 it('公共关联等待核对时的人工编辑保留，旧属性事务不覆盖新内容', async () => {
   const owner = await fixture(); const id = owner.document.id; const sequenceId = owner.document.sequences[0].id
-  editVideoProject(id, document => {
+  editVideoProject(id, document => { document = structuredClone(document);
     document.items.push({ id: 'label-item', name: '重点', kind: 'text' })
     document.sequences[0].tracks.push({ ...document.sequences[0].tracks.find(track => track.kind === 'video')!, id: 'label-track', index: 2 })
     document.sequences[0].clips.push({ ...makeVideoEditItemClip(document, 'label-item', sequenceId, { frame: 0, duration: 30, track: 2 }), id: 'label', text: '重点' })
@@ -384,7 +384,7 @@ it('公共关联等待核对时的人工编辑保留，旧属性事务不覆盖�
   })
   const history = owner.past.length; const app = createApplicationHarness()
   vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockImplementationOnce(async () => {
-    editVideoProject(id, document => { document.sequences[0].name = '核对期间人工编辑'; return document })
+    editVideoProject(id, document => { document = structuredClone(document); document.sequences[0].name = '核对期间人工编辑'; return document })
     return fileContent
   })
   try {

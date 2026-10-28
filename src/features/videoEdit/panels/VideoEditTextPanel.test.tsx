@@ -21,7 +21,7 @@ beforeEach(async () => {
   vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue(fileContent)
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
   owner = await createVideoEditProject()
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media = [{ id: 'm', name: '口播', kind: 'video', path: 'D:/voice.mp4', width: 64, height: 64, hasAudio: true, durationSeconds: 5, assetContent: fileContent }]
     document.items = [{ id: 'item', name: '口播', kind: 'video', mediaId: 'm' }]
     const sequence = document.sequences[0]; const clip = makeVideoEditItemClip(document, 'item', sequence.id, { frame: 0, duration: 150 })
@@ -57,7 +57,7 @@ it('timeline edits invalidate an existing text selection instead of deleting new
   const view = render(<View />)
   fireEvent.click(await view.findByRole('button', { name: '跳转到：价格' }))
   expect(view.getByRole('button', { name: '删除' }).hasAttribute('disabled')).toBe(false)
-  act(() => editVideoProject(owner.document.id, document => { document.sequences[0].clips[0].start = 15; return document }))
+  act(() => editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].clips[0].start = 15; return document }))
   expect(view.getByRole('button', { name: '删除' }).hasAttribute('disabled')).toBe(true)
   fireEvent.click(view.getByRole('button', { name: '跳转到：价格' })); expect(owner.frame).toBe(45)
 })
@@ -80,7 +80,7 @@ it('等待文件核对时可取消，迟到完成不剪辑，保留选词并可�
 })
 
 it('选中画面可关联文字并定位到词范围，一次撤销解除关联', async () => {
-  act(() => editVideoProject(owner.document.id, document => {
+  act(() => editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.items.push({ id: 'label-item', name: '强调', kind: 'text' })
     const sequence = document.sequences[0]
     sequence.tracks.push({ ...sequence.tracks.find(track => track.kind === 'video')!, id: 'label-track', index: 2 })

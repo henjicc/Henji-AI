@@ -121,7 +121,7 @@ it('无密钥安全拒绝；浮层提示并打开供应商设置，费用和默�
   await view.findByText('请先配置生成密钥')
   expectButtonDisabled(view.getByRole('button', { name: '生成图片' }))
   expect(submit).not.toHaveBeenCalled()
-  expect(view.getByTestId('model').textContent).toBe('kie-gpt-image-2'); expect(view.getByText('预计费用')).toBeTruthy()
+  expect((await view.findByTestId('model')).textContent).toBe('kie-gpt-image-2'); expect(view.getByText('预计费用')).toBeTruthy()
   fireEvent.click(view.getByRole('button', { name: '去设置' })); expect(useUiStore.getState().settingsTarget).toEqual({ tab: 'providers', sectionId: 'providers' })
 })
 it('进度取消走正式任务；迟到成功不导入、不绑定', async () => {
@@ -200,7 +200,7 @@ it('用户期间换图后拒绝覆盖；确认应用复用原完成结果', asyn
   expect(submit).toHaveBeenCalledTimes(2)
 })
 it('t102 同一视频调整固定时间也拒绝被晚到的生成结果覆盖', async () => {
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media.push({ id: 'movie', name: '视频', kind: 'video', path: 'D:/movie.mp4', width: 1920, height: 1080, durationSeconds: 10 })
     document.items.push({ id: 'movie-item', name: '视频', kind: 'video', mediaId: 'movie' })
     return document
@@ -230,7 +230,7 @@ it('提交未返回时取消，任务返回后仍请求正式取消', async () =
 })
 it('生成期间轨道锁定时不留下半导入或绑定', async () => {
   const job = await images.startCodeImageGeneration(request())
-  editVideoProject(owner.document.id, document => { document.sequences[0].tracks.find(track => track.index === document.sequences[0].clips[0].track)!.locked = true; return document })
+  editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].tracks.find(track => track.index === document.sequences[0].clips[0].track)!.locked = true; return document })
   await succeed(job); await waitFor(() => expect(job.status).toBe('failed'))
   expect(bound()).toBeNull(); expect(owner.document.media).toHaveLength(0)
 })

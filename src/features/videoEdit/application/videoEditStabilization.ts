@@ -19,8 +19,9 @@ export function setVideoEditClipStabilization(projectId: string, sequenceId: str
     const clip = sequence.clips.find(entry => entry.id === clipId)
     if (!clip) throw new Error('片段已移除。')
     if (parsed && clip.kind !== 'video' && clip.kind !== 'sequence') throw new Error('防抖只用于视频或嵌套序列片段。')
-    if (parsed) clip.stabilization = parsed; else delete clip.stabilization
-    return sequence
+    const next = { ...clip }
+    if (parsed) next.stabilization = parsed; else delete next.stabilization
+    return { ...sequence, clips: sequence.clips.map(value => value === clip ? next : value) }
   })
 }
 

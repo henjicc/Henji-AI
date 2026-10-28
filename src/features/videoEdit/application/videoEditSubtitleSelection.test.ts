@@ -12,7 +12,7 @@ afterEach(async () => { await closeAllVideoEdits(); vi.restoreAllMocks(); uninst
 
 async function captionProject(): Promise<VideoEditInstance> {
   const owner = await createVideoEditTestProject(); const id = owner.document.id
-  editVideoProject(id, document => {
+  editVideoProject(id, document => { document = structuredClone(document);
     document.items = [{ id: 'text-item', kind: 'text', name: '文字素材项' }]
     document.sequences[0].clips = [{ ...makeVideoEditItemClip(document, 'text-item', document.sequences[0].id, { frame: 0, track: 1 }), id: 'clip', duration: 90 }]
     document.sequences[0].captions = [{ id: 'one', text: '第一句', start: 12, duration: 30, clipId: 'clip' }]
