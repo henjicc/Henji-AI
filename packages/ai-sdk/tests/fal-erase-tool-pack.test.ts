@@ -67,12 +67,12 @@ function fastModel(model: ModelRuntimeDefinition): ModelRuntimeDefinition {
 }
 
 describe('Fal image erase optional tool packs', () => {
-  it('默认兼容目录为123，默认Fal pack不含3个可选工具', () => {
-    expect(catalog).toHaveLength(123)
+  it('默认兼容目录与默认 Fal pack 都不含可选擦除工具', () => {
     expect(models.map((model) => model.meta.id)).toEqual([
       'fal-flux-pro-erase', 'fal-bria-eraser', 'fal-finegrain-eraser',
     ])
-    expect(defaultFalPack.models).toHaveLength(42)
+    const toolIds = new Set(models.map((model) => model.meta.id))
+    expect(catalog.some((model) => toolIds.has(model.meta.id))).toBe(false)
     expect(defaultFalPack.models.some((model) => model.meta.tags?.includes('erase'))).toBe(false)
   })
 

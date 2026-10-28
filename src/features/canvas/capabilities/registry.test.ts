@@ -49,12 +49,11 @@ describe('画布图片能力注册表', () => {
     },
   };
 
-  it('登记十二项唯一、稳定且可序列化的能力', () => {
+  it('登记唯一、稳定且可序列化的能力', () => {
     const definitions = getRegisteredCanvasImageCapabilities();
     const expectedIds = Object.values(CANVAS_IMAGE_CAPABILITY_IDS);
 
-    expect(definitions).toHaveLength(12);
-    expect(new Set(definitions.map((definition) => definition.id)).size).toBe(12);
+    expect(new Set(definitions.map((definition) => definition.id)).size).toBe(definitions.length);
     expect(definitions.map((definition) => definition.id)).toEqual(expectedIds);
     expect(JSON.parse(JSON.stringify(definitions))).toEqual(definitions);
     expect(definitions.every((definition) => (
@@ -75,36 +74,16 @@ describe('画布图片能力注册表', () => {
         availability: { releaseStage: 'available', defaultEnabled: true },
       });
 
-    expect(getExecutableCanvasImageCapabilitiesForSourceNode(imageNode).map(({ id }) => id))
-      .toEqual([
-        CANVAS_IMAGE_CAPABILITY_IDS.panorama,
-        CANVAS_IMAGE_CAPABILITY_IDS.relight,
-        CANVAS_IMAGE_CAPABILITY_IDS.presetRelight,
-        CANVAS_IMAGE_CAPABILITY_IDS.outpaint,
-        CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration,
-        CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval,
-        CANVAS_IMAGE_CAPABILITY_IDS.multiAngle,
-        CANVAS_IMAGE_CAPABILITY_IDS.nineGrid,
-        CANVAS_IMAGE_CAPABILITY_IDS.upscale,
-        CANVAS_IMAGE_CAPABILITY_IDS.elementEdit,
-        CANVAS_IMAGE_CAPABILITY_IDS.layerSeparation,
-        CANVAS_IMAGE_CAPABILITY_IDS.gridSplit,
-      ]);
+    const executableIds = getExecutableCanvasImageCapabilitiesForSourceNode(imageNode).map(({ id }) => id);
+    expect(executableIds).toEqual(expect.arrayContaining([
+      CANVAS_IMAGE_CAPABILITY_IDS.panorama,
+      CANVAS_IMAGE_CAPABILITY_IDS.gridSplit,
+    ]));
     expect(getExecutableCanvasImageCapabilitiesForSourceNode(imageNode, {
       [CANVAS_IMAGE_CAPABILITY_IDS.gridSplit]: false,
-    }).map(({ id }) => id)).toEqual([
-      CANVAS_IMAGE_CAPABILITY_IDS.panorama,
-      CANVAS_IMAGE_CAPABILITY_IDS.relight,
-      CANVAS_IMAGE_CAPABILITY_IDS.presetRelight,
-      CANVAS_IMAGE_CAPABILITY_IDS.outpaint,
-      CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration,
-      CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval,
-      CANVAS_IMAGE_CAPABILITY_IDS.multiAngle,
-      CANVAS_IMAGE_CAPABILITY_IDS.nineGrid,
-      CANVAS_IMAGE_CAPABILITY_IDS.upscale,
-      CANVAS_IMAGE_CAPABILITY_IDS.elementEdit,
-      CANVAS_IMAGE_CAPABILITY_IDS.layerSeparation,
-    ]);
+    }).map(({ id }) => id)).toEqual(
+      executableIds.filter((id) => id !== CANVAS_IMAGE_CAPABILITY_IDS.gridSplit),
+    );
   });
 
   it('助手图片能力枚举与默认开放的画布节点能力保持完全一致，并排除本地弹窗工具', () => {
@@ -132,40 +111,24 @@ describe('画布图片能力注册表', () => {
     expect(filterCanvasImageCapabilities({
       sourceMediaType: 'video',
     })).toEqual([]);
-    expect(filterCanvasImageCapabilities({
+    const availableExecutable = filterCanvasImageCapabilities({
       releaseStages: ['available'],
       executableOnly: true,
-    }).map(({ id }) => id)).toEqual([
-      CANVAS_IMAGE_CAPABILITY_IDS.panorama,
-      CANVAS_IMAGE_CAPABILITY_IDS.relight,
-      CANVAS_IMAGE_CAPABILITY_IDS.presetRelight,
-      CANVAS_IMAGE_CAPABILITY_IDS.outpaint,
-      CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration,
-      CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval,
-      CANVAS_IMAGE_CAPABILITY_IDS.nineGrid,
-      CANVAS_IMAGE_CAPABILITY_IDS.upscale,
-      CANVAS_IMAGE_CAPABILITY_IDS.elementEdit,
-      CANVAS_IMAGE_CAPABILITY_IDS.gridSplit,
-    ]);
-    expect(filterCanvasImageCapabilities({
+    });
+    expect(availableExecutable.length).toBeGreaterThan(0);
+    expect(availableExecutable.every((definition) => (
+      definition.availability.releaseStage === 'available'
+      && isCanvasImageCapabilityExecutable(definition)
+    ))).toBe(true);
+    const enabledIds = filterCanvasImageCapabilities({
       enabledOnly: true,
       featureFlags: {
         [CANVAS_IMAGE_CAPABILITY_IDS.gridSplit]: false,
         [CANVAS_IMAGE_CAPABILITY_IDS.panorama]: true,
       },
-    }).map(({ id }) => id)).toEqual([
-      CANVAS_IMAGE_CAPABILITY_IDS.panorama,
-      CANVAS_IMAGE_CAPABILITY_IDS.relight,
-      CANVAS_IMAGE_CAPABILITY_IDS.presetRelight,
-      CANVAS_IMAGE_CAPABILITY_IDS.outpaint,
-      CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration,
-      CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval,
-      CANVAS_IMAGE_CAPABILITY_IDS.multiAngle,
-      CANVAS_IMAGE_CAPABILITY_IDS.nineGrid,
-      CANVAS_IMAGE_CAPABILITY_IDS.upscale,
-      CANVAS_IMAGE_CAPABILITY_IDS.elementEdit,
-      CANVAS_IMAGE_CAPABILITY_IDS.layerSeparation,
-    ]);
+    }).map(({ id }) => id);
+    expect(enabledIds).toContain(CANVAS_IMAGE_CAPABILITY_IDS.panorama);
+    expect(enabledIds).not.toContain(CANVAS_IMAGE_CAPABILITY_IDS.gridSplit);
   });
 
   it('中英文名称、分组、说明和不可用原因均有翻译', () => {

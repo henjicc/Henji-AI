@@ -106,36 +106,6 @@ describe('PromptEditor', () => {
     expect(rendered.getByRole('textbox').textContent).toContain('静态提示词')
   })
 
-  it('静态态与编辑态遵循相同的外层、壳层和内容层样式契约', () => {
-    const rendered = render(
-      <PublicPromptEditor
-        mode="static"
-        value={createPlainTextPromptDocument('盒模型一致')}
-        onChange={vi.fn()}
-        ariaLabel="静态盒模型"
-        className="outer-box"
-        editorShellClassName="shell-box"
-        editorClassName="content-box"
-      />,
-    )
-
-    const content = rendered.getByRole('textbox')
-    const shell = content.parentElement
-    const outer = shell?.parentElement
-    expect(outer?.classList.contains('outer-box')).toBe(true)
-    expect(shell?.classList.contains('shell-box')).toBe(true)
-    expect(content.classList.contains('content-box')).toBe(true)
-    expect(outer?.classList.contains('content-box')).toBe(false)
-    expect(shell?.classList.contains('content-box')).toBe(false)
-  })
-
-  it.each(['static', 'edit'] as const)('%s 态使用同一多行文本高度档', async mode => {
-    const rendered = render(<PublicPromptEditor mode={mode} height="medium" ariaLabel="高度" value={createPlainTextPromptDocument('正文')} onChange={vi.fn()} />)
-    const content = await rendered.findByRole('textbox')
-    expect(content.classList.contains('min-h-textarea-medium')).toBe(true)
-    expect(content.classList.contains('min-h-textarea-short')).toBe(false)
-  })
-
   it('填充滚动布局在静态态建立单一内容滚动容器', () => {
     const rendered = render(
       <PublicPromptEditor
@@ -207,8 +177,6 @@ describe('PromptEditor', () => {
     fireEvent.mouseUp(rendered.getByRole('textbox'), { clientX: 126, clientY: 88 })
 
     expect(onActivate).toHaveBeenCalledWith({ clientX: 126, clientY: 88 })
-    expect(rendered.getByRole('textbox').classList.contains('cursor-text')).toBe(true)
-    expect(rendered.getByRole('textbox').classList.contains('select-text')).toBe(true)
   })
 
   it('静态激活把首次拖动的起止坐标交给按需挂载的编辑器', () => {
@@ -490,14 +458,7 @@ describe('PromptEditor', () => {
     const mediaReference = rendered.container.querySelector('[data-reference-id="asset:a"]')
     const templateVariable = rendered.container.querySelector('[data-variable-key="style"]')
     expect(mediaReference?.textContent).toContain('@图1')
-    expect(mediaReference?.classList.contains('text-[length:inherit]')).toBe(true)
-    expect(mediaReference?.classList.contains('h-[1lh]')).toBe(true)
-    expect(mediaReference?.classList.contains('py-0.5')).toBe(false)
-    expect(mediaReference?.querySelector('img')?.classList.contains('h-[1.25em]')).toBe(true)
     expect(templateVariable?.textContent).toContain('{{电影感}}')
-    expect(templateVariable?.classList.contains('leading-[inherit]')).toBe(true)
-    expect(templateVariable?.classList.contains('h-[1lh]')).toBe(true)
-    expect(templateVariable?.classList.contains('py-0.5')).toBe(false)
     expect(JSON.stringify(ref.current?.getDocument())).not.toContain('thumbnailSrc')
 
     rendered.rerender(

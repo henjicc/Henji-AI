@@ -70,12 +70,6 @@ export function releaseCanvasGenerationResumeLease(
   if (projectLeases.size === 0) resumeTaskLeasesByProject.delete(normalizedProjectId)
 }
 
-/** 项目切换会让旧回调失去写入资格，并允许用户返回后重新接管任务。 */
-export function releaseCanvasGenerationResumeLeasesForProject(projectId: string): void {
-  const normalizedProjectId = normalizeLeaseIdentity(projectId)
-  if (normalizedProjectId) resumeTaskLeasesByProject.delete(normalizedProjectId)
-}
-
 /** 统一管理运行中任务的持久化、项目切换取消与恢复续查互斥。 */
 export function createCanvasGenerationTaskLifecycle(
   isContextCurrent: () => boolean,

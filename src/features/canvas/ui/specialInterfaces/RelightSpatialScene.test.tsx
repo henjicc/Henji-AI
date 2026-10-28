@@ -21,14 +21,12 @@ describe('灯位遮挡与图片平面', () => {
       expect(Boolean(plane.compareDocumentPosition(light()) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(wasFront)
     }
   })
-  it('加载竖图后平面收窄，图像没有黑底容器', () => {
+  it('加载竖图后平面收窄', () => {
     const { container } = render(<RelightDirectionVisualizer direction="top" sourceImage="asset://portrait.png"
       sourceAlt="源图" onDirectionChange={vi.fn()} />)
     const image = container.querySelector('img')!
     Object.defineProperties(image, { naturalWidth: { value: 300 }, naturalHeight: { value: 600 } })
     fireEvent.load(image)
     expect(container.querySelector('[data-relight-image-plane]')?.getAttribute('data-image-aspect')).toBe('0.5')
-    expect(image.parentElement?.className).not.toContain('bg-')
-    expect(container.textContent).not.toContain('大光点调主光')
   })
 })

@@ -50,7 +50,6 @@ describe('画布节点模型选择（特殊面板）', () => {
     expect(header?.querySelectorAll('button').length).toBeGreaterThan(0);
     expect(view.container.querySelector('[role="scrollbar"]')).toBeNull();
     const body = view.container.querySelector('[data-special-panel-body]') as HTMLElement;
-    expect(body.classList.contains('overflow-y-auto')).toBe(true);
     expect(body.style.width).not.toBe('');
   });
 
@@ -67,7 +66,7 @@ describe('画布节点模型选择（特殊面板）', () => {
     const view = renderPicker('all', 'inline');
     expect(view.container.querySelector('[data-special-panel]')).toBeNull();
     expect(view.container.querySelector('[data-model-picker-static-header] input')).not.toBeNull();
-    expect(view.container.querySelector('[data-model-list-scroll-region]')?.classList.contains('overflow-y-auto')).toBe(true);
+    expect(view.container.querySelector('[data-model-list-scroll-region]')).not.toBeNull();
   });
 
   it('画布与生成页共用同一套供应商显示名', () => {

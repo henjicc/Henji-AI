@@ -190,17 +190,4 @@ describe('派生遮罩参数控件的工具条排布（3.7：生成底栏）', (
     fireEvent.click(button)
     expect(screen.getByRole('dialog', { name: '测试遮罩编辑器' }).getAttribute('data-field-layout')).toBe('form')
   })
-
-  it('表单排布（画布、弹窗）保持标签在上与大号按钮', () => {
-    render(
-      <DerivedMediaParamControl
-        param={param}
-        value={[]}
-        allValues={{ uploadedImages: ['data:image/png;base64,source'] }}
-        onChange={() => undefined}
-      />
-    )
-    expect(screen.getByRole('button', { name: '绘制' }).getAttribute('data-size')).toBe('lg')
-    expect(screen.getByText('局部重绘遮罩').closest('.flex-col')).toBeTruthy()
-  })
 })

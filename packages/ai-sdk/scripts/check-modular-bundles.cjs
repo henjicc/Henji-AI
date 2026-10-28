@@ -159,8 +159,9 @@ const kiePack = bundle('KieProviderPack', [
 ].join('\n'), (inputs) => {
   const models = inputs.filter((input) => modelPattern.test(`/${input}`))
   const providers = inputs.filter((input) => providerPattern.test(`/${input}`))
-  if (models.length !== 32 || models.some((input) => !input.includes('/catalog/kie/'))) {
-    fail(`KIE provider pack 模型图异常：count=${models.length}`)
+  const kieModelFiles = fs.readdirSync(path.join(catalogRoot, 'kie')).filter((name) => name.endsWith('.model.ts')).length
+  if (models.length !== kieModelFiles || models.some((input) => !input.includes('/catalog/kie/'))) {
+    fail(`KIE provider pack 模型图异常：count=${models.length}，目录中有 ${kieModelFiles} 个模型文件`)
   }
   if (providers.length !== 1 || !providers[0].endsWith('/providers/kie.ts')) {
     fail(`KIE provider pack 含其他 provider：${providers.join(', ')}`)

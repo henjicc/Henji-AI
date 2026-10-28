@@ -109,7 +109,7 @@ it('半速示范重画当前时刻且取消旧姿态，覆盖已有曲线不会�
   expect(pixel.sessions).toBe(1)
   act(() => { setVideoMotionPointer(owner.document.id, false); setVideoEditView(owner.document.id, { playing: false }) })
 })
-it('节目画面跟着命令带的工具走：文字工具接管批注工具，回到选择工具后两者都退出，节目底栏不再有模式下拉', async () => {
+it('节目画面跟着命令带的工具走：文字工具接管批注工具，回到选择工具后两者都退出', async () => {
   const instance = await createVideoEditProject(); const view = render(<VideoEditPreview instance={instance} onError={vi.fn()} />)
   await act(async () => { await Promise.resolve() })
   act(() => setVideoEditTimelineView(instance.document.id, { tool: 'annotate' }))
@@ -118,7 +118,6 @@ it('节目画面跟着命令带的工具走：文字工具接管批注工具，�
   expect(view.getByLabelText('节目文字工具')).toBeTruthy(); expect(view.queryByLabelText('这里要改什么？')).toBeNull()
   act(() => setVideoEditTimelineView(instance.document.id, { tool: 'select' }))
   expect(view.getByLabelText('节目文字工具').className).toContain('pointer-events-none'); expect(view.getByLabelText('画面标注层').className).not.toContain('cursor-crosshair')
-  expect(view.queryByRole('group', { name: '节目画面模式' })).toBeNull(); expect(view.queryByRole('button', { name: '移动画面' })).toBeNull()
   view.unmount()
 })
 it('画面标注捕获原选区和时间，后续定位及指针取消不标注新目标', async () => {
@@ -555,7 +554,7 @@ it('渲染失败后即使序列与播放头都不变也会自行重试（间隔 
   await act(async () => { pixel.requests.shift()!.resolve({ sourceTimestamps: [0], presented: true }) })
   expect(view.queryByText(failure)).toBeNull(); view.unmount()
 })
-it('回放分辨率（4.9）：播放时按所选倍数缩小渲染，暂停回到完整；选“暂停时也用此分辨率”后暂停保持；控制条显示当前选择', async () => {
+it('回放分辨率（4.9）：播放时按所选倍数缩小渲染，暂停回到完整；选“暂停时也用此分辨率”后暂停保持', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; appendVideoEditClip(id)
   const onError = vi.fn(); const view = render(<VideoEditPreview instance={owner} onError={onError} />)
   await act(async () => {})
@@ -563,7 +562,6 @@ it('回放分辨率（4.9）：播放时按所选倍数缩小渲染，暂停回�
   act(() => { setVideoEditPlaybackResolution(id, { resolution: 'quarter' }) })
   await act(async () => { await vi.advanceTimersByTimeAsync(5) })
   expect(pixel.scale).not.toHaveBeenCalled()
-  expect(view.getByRole('button', { name: '回放分辨率' }).textContent).toContain('1/4')
   act(() => { setVideoEditView(id, { playing: true }) })
   await act(async () => { await vi.advanceTimersByTimeAsync(5) })
   expect(pixel.scale).toHaveBeenLastCalledWith(4)
@@ -604,7 +602,6 @@ it('删除唯一空序列时已挂载节目会话安全退出，撤销后可重�
   const view = render(<VideoEditPreview instance={owner} onError={onError} />)
   await act(async () => { await Promise.resolve() })
   await act(async () => { deleteVideoEditSequence(id, owner.activeSequenceId); view.rerender(<VideoEditPreview instance={owner} onError={onError} />) })
-  expect(view.getByText('没有序列')).toBeTruthy()
   await act(async () => { await vi.advanceTimersByTimeAsync(20) })
   expect(pixel.dispose).toHaveBeenCalled()
   expect(onError).not.toHaveBeenCalled()

@@ -1,8 +1,6 @@
 /**
- * 3D 镜头参考场景的两种外部形态：
- * - 文档内容（`.hjstg` 文件的 content，3.2 起的唯一持久形态）：`sceneToDocumentContent` / `sceneFromDocumentContent`；
- * - 场景 JSON 字符串（带 schemaVersion，只给后台渲染请求传场景投影用）：`serializeScene` / `deserializeScene`。
- * 两者读取时走同一套逐字段规范化（`normalizeSceneRecord`），派生动画始终从状态关键帧重新编译。
+ * 3D 镜头参考场景与文档内容（`.hjstg` 文件的 content）之间的转换：`sceneToDocumentContent` / `sceneFromDocumentContent`。
+ * 格式版本由文档外壳的 kindVersion 表达；读取时逐字段规范化（`normalizeSceneRecord`），派生动画始终从状态关键帧重新编译。
  */
 
 import { normalizeCharacterMotion } from './characterMotion'
@@ -15,11 +13,6 @@ import type { StageStateKeyframe } from './stateKeyframeTypes'
 import { compileStateKeyframesToAnimation } from './stateKeyframeCompiler'
 import type { StageCameraObject, StageCharacterObject, StageObject, StageSceneSettings } from './sceneTypes'
 
-/** 当前场景数据版本；结构不兼容变更时递增并补迁移分支 */
-export const CAMERA_STAGE_SCENE_SCHEMA_VERSION = 14
-
-export const UNSUPPORTED_CAMERA_STAGE_SCHEMA = 'UNSUPPORTED_CAMERA_STAGE_SCHEMA'
-
 export interface StageSceneSnapshotInput {
   objects: StageObject[]
   /** 当前取景摄像机（自由/摄像机视角切换用），无摄像机时为 null */
@@ -30,23 +23,9 @@ export interface StageSceneSnapshotInput {
   stateKeyframes: StageStateKeyframe[]
 }
 
-export interface StageSceneSnapshot extends StageSceneSnapshotInput {
-  schemaVersion: number
+export interface StageSceneRuntimeSnapshot extends StageSceneSnapshotInput {
   /** 由状态关键帧即时编译，只存在于运行态。 */
   animation: StageSceneAnimation
-}
-
-export type StageSceneRuntimeSnapshot = Omit<StageSceneSnapshot, 'schemaVersion'>
-
-export function serializeScene(input: StageSceneSnapshotInput): string {
-  const snapshot = {
-    schemaVersion: CAMERA_STAGE_SCENE_SCHEMA_VERSION,
-    objects: input.objects,
-    activeCameraId: input.activeCameraId,
-    sceneSettings: input.sceneSettings,
-    stateKeyframes: input.stateKeyframes,
-  }
-  return JSON.stringify(snapshot)
 }
 
 /** 宽松解析场景设置字段：结构缺失/非法时逐字段回退默认值 */
@@ -240,16 +219,7 @@ function withNormalizedCameraRotations(objects: StageObject[]): StageObject[] {
   })
 }
 
-export function isCurrentCameraStageScene(sceneJson: string): boolean {
-  try {
-    const parsed = JSON.parse(sceneJson) as Record<string, unknown> | null
-    return parsed !== null && Number(parsed.schemaVersion) === CAMERA_STAGE_SCENE_SCHEMA_VERSION
-  } catch {
-    return false
-  }
-}
-
-/** 文档里存的场景内容：持久字段，不含 schemaVersion（由文档外壳的 kindVersion 表达）与派生动画。 */
+/** 文档里存的场景内容：持久字段，不含版本号（由文档外壳的 kindVersion 表达）与派生动画。 */
 export type CameraStageSceneContent = StageSceneSnapshotInput
 
 export function sceneToDocumentContent(input: StageSceneSnapshotInput): CameraStageSceneContent {
@@ -273,7 +243,7 @@ export function isBlankSceneContent(snapshot: StageSceneSnapshotInput): boolean 
   return snapshot.objects.length === 0 && snapshot.stateKeyframes.length === 0
 }
 
-function normalizeSceneRecord(record: Record<string, unknown>): StageSceneSnapshot {
+function normalizeSceneRecord(record: Record<string, unknown>): StageSceneRuntimeSnapshot {
   let objects = Array.isArray(record.objects) ? (record.objects as StageObject[]) : []
   objects = withNormalizedCharacterMotion(objects)
   objects = withDefaultCameraEffectors(objects)
@@ -284,34 +254,10 @@ function normalizeSceneRecord(record: Record<string, unknown>): StageSceneSnapsh
   const animation = compileStateKeyframesToAnimation(stateKeyframes, objects)
 
   return {
-    schemaVersion: CAMERA_STAGE_SCENE_SCHEMA_VERSION,
     objects,
     activeCameraId,
     animation,
     sceneSettings,
     stateKeyframes,
   }
-}
-
-/** 只读取当前 schema；派生动画始终从状态关键帧重新编译。 */
-export function deserializeScene(sceneJson: string): StageSceneSnapshot {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(sceneJson)
-  } catch (error) {
-    throw new Error(`[cameraStage] 场景数据不是合法 JSON：${(error as Error).message}`)
-  }
-  if (!parsed || typeof parsed !== 'object') {
-    throw new Error('[cameraStage] 场景数据结构无效')
-  }
-
-  const record = parsed as Record<string, unknown>
-  const version = Number(record.schemaVersion)
-  if (!Number.isFinite(version) || version < 1) {
-    throw new Error('[cameraStage] 场景数据缺少有效的 schemaVersion')
-  }
-  if (version !== CAMERA_STAGE_SCENE_SCHEMA_VERSION) {
-    throw new Error(`${UNSUPPORTED_CAMERA_STAGE_SCHEMA}:${version}`)
-  }
-  return normalizeSceneRecord(record)
 }

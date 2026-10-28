@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { createCameraObject, createDefaultSceneSettings, pickDefaultColor } from './sceneDefaults'
-import { deserializeScene, serializeScene } from './sceneSerialization'
+import { sceneFromDocumentContent, sceneToDocumentContent } from './sceneSerialization'
 import { createStateKeyframe } from './stateKeyframeTypes'
 
 describe('当前状态关键帧空间路径持久化', () => {
-  it('v13 保存与加载保留空间路径并重新编译轨道', () => {
+  it('保存与加载保留空间路径并重新编译轨道', () => {
     const camera = createCameraObject('Camera', pickDefaultColor(0), {
       position: { x: 0, y: 2, z: 5 },
       target: { x: 0, y: 0, z: 0 },
@@ -20,12 +20,12 @@ describe('当前状态关键帧空间路径持久化', () => {
         endInTangent: { x: -1, y: 0, z: 0 },
       },
     }
-    const snapshot = deserializeScene(serializeScene({
+    const snapshot = sceneFromDocumentContent(JSON.parse(JSON.stringify(sceneToDocumentContent({
       objects: [camera],
       activeCameraId: camera.id,
       sceneSettings: createDefaultSceneSettings(),
       stateKeyframes: [stateKeyframeA, stateKeyframeB],
-    }))
+    }))))
     const path = snapshot.stateKeyframes[0].transition.perObject[camera.id].spatialPath
     expect(path?.source).toEqual({
       kind: 'preset',

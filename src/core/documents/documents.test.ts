@@ -1,4 +1,3 @@
-import { VIDEO_EDIT_CONTENT_VERSION } from '../persistence/schemaVersions'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -115,16 +114,17 @@ describe('项目说明', () => {
 })
 
 describe('文档类型登记', () => {
+  // 扩展名、存放文件夹与存储方式决定旧文件能否被找到和打开，钉死在这里；内容版本由持久格式兼容门禁与黄金样本守护，不在此抄写。
   it('文档类型的扩展名、独立存放文件夹与存储方式', () => {
-    const rows = DOCUMENT_KINDS.map((kind) => [kind.id, kind.extension, kind.standaloneFolderNames, kind.storage, kind.version])
+    const rows = DOCUMENT_KINDS.map((kind) => [kind.id, kind.extension, kind.standaloneFolderNames, kind.storage])
     expect(rows).toEqual([
-      ['video_edit', '.hjvid', null, 'json', VIDEO_EDIT_CONTENT_VERSION],
-      ['canvas', '.hjcvs', { zh: '画布', en: 'Canvases' }, 'json', 1],
-      ['audio_edit', '.hjaud', { zh: '口播', en: 'Voiceovers' }, 'json', 6],
-      ['camera_stage', '.hjstg', { zh: '镜头参考', en: 'Camera Stages' }, 'json', 1],
-      ['image_document', '.hjimg', { zh: '图片文档', en: 'Image Documents' }, 'package', 1],
-      ['screen_recording', '.hjrec', { zh: '录制会话', en: 'Recordings' }, 'json', 36],
-      ['web_recording', '.hjweb', null, 'folder', 3],
+      ['video_edit', '.hjvid', null, 'json'],
+      ['canvas', '.hjcvs', { zh: '画布', en: 'Canvases' }, 'json'],
+      ['audio_edit', '.hjaud', { zh: '口播', en: 'Voiceovers' }, 'json'],
+      ['camera_stage', '.hjstg', { zh: '镜头参考', en: 'Camera Stages' }, 'json'],
+      ['image_document', '.hjimg', { zh: '图片文档', en: 'Image Documents' }, 'package'],
+      ['screen_recording', '.hjrec', { zh: '录制会话', en: 'Recordings' }, 'json'],
+      ['web_recording', '.hjweb', null, 'folder'],
     ])
     expect(documentKindRegistry.forFileName('a.HenjiImg')?.id).toBe('image_document')
     expect(documentKindRegistry.forFileName('a.json')).toBeUndefined()

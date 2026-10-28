@@ -8,7 +8,6 @@ import {
 describe('快速模糊 GPU 配方', () => {
   it('零半径编译为直通，不创建无意义采样', () => {
     expect(compileFastBlurRecipe(0, 1_920, 1_080)).toMatchObject({
-      schemaVersion: 3,
       pyramidLevel: 0,
       sigmaAtPyramidLevel: 0,
       centerWeight: 1,

@@ -20,7 +20,7 @@ describe.skipIf(!process.versions.electron)('代码文件与原生作品索引',
       const component = await service.publishCodeComponent({ target, name: '共享', source: 'export const width=16;', description: '', imports: [], exports: ['width'] })
       const content = { media: [], bins: [], items: [], sequences: [], codeMaterials: [{ id: 'code', folder: stored.folder, versions: [{ files: stored.files, imports: [{ name: component.name, version: component.version, hash: component.hash, location: component.location, imports: [] }] }] }] }
       await service.saveDocument({ target, expectedRevision: 0, content })
-      expect(await fsp.readFile(created.meta.path, 'utf8')).toContain('henji:/代码/')
+      expect(await fsp.readFile(created.meta.path, 'utf8')).toContain(encodeURIComponent('henji:/代码'))
       const destination = await service.createProject({ name: '目标' })
       const copied = await service.duplicateDocument({ target, container: { kind: 'project', projectId: destination.id }, onConflict: 'keepBoth' }); expect(copied.copiedFiles).toBe(3)
       await service.moveDocument({ target, container: { kind: 'project', projectId: destination.id }, onConflict: 'keepBoth' })

@@ -1,14 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   DIFFUSION_QUALITY_CHARTS,
-  listDiffusionQualityCharts,
   renderDiffusionQualityChart,
 } from './diffusionCharts';
 
 describe('摄影柔光程序化质量测试图', () => {
   it('覆盖能量、PSF、边缘、色彩、透明和细节输入', () => {
-    expect(listDiffusionQualityCharts()).toHaveLength(8);
-    expect(new Set(DIFFUSION_QUALITY_CHARTS.map((chart) => chart.id)).size).toBe(8);
+    expect(new Set(DIFFUSION_QUALITY_CHARTS.map((chart) => chart.id)).size).toBe(DIFFUSION_QUALITY_CHARTS.length);
     const coverage = DIFFUSION_QUALITY_CHARTS.flatMap((chart) => chart.coverage).join(' ');
     expect(coverage).toContain('能量');
     expect(coverage).toContain('PSF');

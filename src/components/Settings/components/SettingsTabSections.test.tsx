@@ -22,12 +22,12 @@ vi.mock('../tabs/settingsSectionComponents', () => {
     PaidApprovalSection: Empty, AssistantMemorySection: () => <span>记忆内容</span>, McpSection: Empty } }
 })
 
+import { SETTINGS_DECLARATION } from '@/core/types/settingsDeclaration'
 import { SettingsTabSections } from './SettingsTabSections'
 
 it('只在声明增加复用组件的分区，Tab 无需补写分区即可实际渲染', () => {
   render(<SettingsTabSections tab="assistant" />)
   expect(screen.getByTestId('assistant-extra').textContent).toBe('记忆内容')
-  expect(screen.getAllByTestId(/^assistant-/).map(node => node.dataset.testid)).toEqual([
-    'assistant-models', 'assistant-preferences', 'assistant-memory', 'assistant-mcp', 'assistant-extra',
-  ])
+  expect(screen.getAllByTestId(/^assistant-/).map(node => node.dataset.testid))
+    .toEqual(SETTINGS_DECLARATION.assistant.sections.map(section => section.id))
 })

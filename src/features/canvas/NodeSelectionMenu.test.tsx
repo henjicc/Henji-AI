@@ -18,6 +18,7 @@ import {
 import {
   getSortedNodeMenuDefinitions,
   getUploadAccept,
+  NODE_MENU_SECTION_ORDER,
 } from './application/nodeMenuLayout'
 
 describe('NodeSelectionMenu', () => {
@@ -25,24 +26,15 @@ describe('NodeSelectionMenu', () => {
 
   it('按分区与顺序组织菜单，并把上传聚合为单项', () => {
     const items = getSortedNodeMenuDefinitions(nodeCatalog.getMenuDefinitions())
-    expect(items.map((item) => item.type)).toEqual([
-      CANVAS_NODE_TYPES.universalUpload,
-      CANVAS_NODE_TYPES.imageEdit,
-      CANVAS_NODE_TYPES.videoGen,
-      CANVAS_NODE_TYPES.audioGen,
-      CANVAS_NODE_TYPES.storyboardGen,
-      CANVAS_NODE_TYPES.panoramaViewer,
-      CANVAS_NODE_TYPES.textProcessing,
-      CANVAS_NODE_TYPES.textAnnotation,
-      CANVAS_NODE_TYPES.cameraStage,
-      CANVAS_NODE_TYPES.imageModelSelector,
-      CANVAS_NODE_TYPES.videoModelSelector,
-      CANVAS_NODE_TYPES.audioModelSelector,
-      CANVAS_NODE_TYPES.intSource,
-      CANVAS_NODE_TYPES.floatSource,
-      CANVAS_NODE_TYPES.stringSource,
-      CANVAS_NODE_TYPES.booleanSource,
-    ])
+    const sortKeys = items.map((item) => [
+      NODE_MENU_SECTION_ORDER.indexOf(item.menuSection ?? 'extensions'),
+      item.menuOrder ?? Number.MAX_SAFE_INTEGER,
+    ] as const)
+    for (let index = 1; index < sortKeys.length; index += 1) {
+      const [previousSection, previousOrder] = sortKeys[index - 1]
+      const [section, order] = sortKeys[index]
+      expect(section > previousSection || (section === previousSection && order >= previousOrder)).toBe(true)
+    }
     expect(items.filter((item) => item.menuAggregationKey === 'upload')).toHaveLength(1)
   })
 
@@ -141,7 +133,7 @@ describe('NodeSelectionMenu', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled())
   })
 
-  it('挂在共享浮层上：玻璃表面、登记浮层归属，点外收起后回调关闭且不选择', async () => {
+  it('挂在共享浮层上：登记浮层归属，点外收起后回调关闭且不选择', async () => {
     const onSelect = vi.fn()
     const onClose = vi.fn()
     const { getAllByRole } = render(
@@ -154,10 +146,7 @@ describe('NodeSelectionMenu', () => {
       />
     )
     const menu = getAllByRole('menu').at(-1)
-    const panel = menu?.closest('[data-ui-overlay-id]')
-    expect(panel?.className).toContain('ui-glass')
-    // 菜单项与右键菜单同一组件，不再有强调色图标块
-    expect(menu?.querySelector('[role="menuitem"] .text-accent')).toBeNull()
+    expect(menu?.closest('[data-ui-overlay-id]')).not.toBeNull()
     fireEvent.mouseDown(document.body, { button: 0 })
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
     expect(onSelect).not.toHaveBeenCalled()

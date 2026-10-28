@@ -1,16 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  getCanvasViewerSurfaceDefinition,
-  listCanvasViewerSurfaceDefinitions,
-} from './viewerSurfaceRegistry';
+import { getCanvasViewerSurfaceDefinition } from './viewerSurfaceRegistry';
 
 describe('viewerSurfaceRegistry', () => {
   it('为平面与全景模式提供稳定的懒加载路由', () => {
-    expect(listCanvasViewerSurfaceDefinitions().map((item) => item.mode)).toEqual([
-      'image',
-      'panorama',
-    ]);
     expect(getCanvasViewerSurfaceDefinition('panorama')).toMatchObject({
       mode: 'panorama',
       fallbackMode: null,

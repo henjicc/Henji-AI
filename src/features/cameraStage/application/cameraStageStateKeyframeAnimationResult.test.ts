@@ -16,7 +16,7 @@ import { applicationReflectionHandlers } from '@/features/application-control/ca
 
 import { createDefaultAnimation } from '../domain/animationTypes'
 import { createCameraObject, createDefaultSceneSettings, createPrimitiveObject, pickDefaultColor } from '../domain/sceneDefaults'
-import { deserializeScene, serializeScene } from '../domain/sceneSerialization'
+import { sceneFromDocumentContent, sceneToDocumentContent } from '../domain/sceneSerialization'
 import { applyAnimationAtTime } from '../store/playbackSampling'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import { CameraStageMutationExecutor } from './cameraStageControlExecutors'
@@ -119,12 +119,12 @@ describe('状态关键帧模式动画的正式反射结果', () => {
     expect([0, 1, 2].map((time) => applyAnimationAtTime(state.objects, state.animation, time)
       .find((object) => object.id === objectId)?.transform.position.y)).toEqual([0, 1.5, 0])
 
-    const reloaded = deserializeScene(serializeScene({
+    const reloaded = sceneFromDocumentContent(JSON.parse(JSON.stringify(sceneToDocumentContent({
       objects: state.objects,
       activeCameraId: state.activeCameraId,
       sceneSettings: state.sceneSettings,
       stateKeyframes: state.stateKeyframes,
-    }))
+    }))))
     expect(reloaded.stateKeyframes.map((item) => item.objectStates[objectId]?.transform.position.y))
       .toEqual([0, 1.5, 0])
     expect([0, 1, 2].map((time) => applyAnimationAtTime(reloaded.objects, reloaded.animation, time)

@@ -6,7 +6,6 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
   CANVAS_IMAGE_CAPABILITY_IDS,
   getCanvasImageCapability,
-  getRegisteredCanvasImageCapabilities,
 } from '@/features/canvas/capabilities'
 import { CANVAS_NODE_TYPES, NODE_TOOL_TYPES, type CanvasNode } from '@/features/canvas/domain/canvasNodes'
 import { getNodeToolPlugins } from '@/features/canvas/tools'
@@ -16,7 +15,6 @@ import {
 } from './CanvasImageCapabilityActions'
 import {
   excludeClaimedLocalTools,
-  partitionCanvasImageCapabilities,
   resolveCanvasImageCapabilityActionsForSourceNode,
   type CanvasImageCapabilityAction,
 } from './canvasImageCapabilityLayout'
@@ -75,20 +73,6 @@ describe('画布图片能力工具条入口', () => {
     expect(rendered.queryByRole('button', { name: 'nodeToolbar.moreImageCapabilities' })).toBeNull()
   })
 
-  it('能力较多时按容量直显，其余收进三个稳定分组', () => {
-    const actions = getRegisteredCanvasImageCapabilities().map((capability) => ({
-      capability,
-      disabledReasonKey: null,
-    }))
-    const partition = partitionCanvasImageCapabilities(actions, 2)
-
-    expect(partition.inline).toHaveLength(2)
-    expect(partition.overflowGroups.flatMap(({ actions: items }) => items))
-      .toHaveLength(actions.length - partition.inline.length)
-    expect(partition.overflowGroups.map(({ group }) => group))
-      .toEqual(['transformation', 'structure', 'local'])
-  })
-
   it('执行中禁用所有能力入口，阻止重复触发', () => {
     const onExecute = vi.fn()
     const capability = getCanvasImageCapability(CANVAS_IMAGE_CAPABILITY_IDS.gridSplit)
@@ -122,7 +106,8 @@ describe('画布图片能力工具条入口', () => {
 
     expect(actions.map(({ capability }) => capability.id))
       .toContain(CANVAS_IMAGE_CAPABILITY_IDS.gridSplit)
-    expect(remainingTools.map(({ type }) => type)).toEqual([NODE_TOOL_TYPES.edit])
+    expect(remainingTools.map(({ type }) => type)).toContain(NODE_TOOL_TYPES.edit)
+    expect(remainingTools.map(({ type }) => type)).not.toContain(NODE_TOOL_TYPES.splitStoryboard)
   })
 
   it('更多菜单暴露描述、实验状态与完整键盘导航', () => {

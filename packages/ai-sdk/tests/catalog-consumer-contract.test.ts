@@ -87,59 +87,30 @@ describe('catalog consumer contract', () => {
     expect(catalog.filter(model => model.meta.tags?.includes('reference-mode')).length).toBeGreaterThan(0)
   })
 
-  it('锁定真实 123 catalog 的 RuntimeParamDef type、数量与实际字段集合', () => {
-    const rows = new Map<string, { count: number; fields: Set<string> }>()
+  // 字段集合是消费方读取的公开形状，必须钉死；各类型的参数个数随模型增减变化，不在这里抄写。
+  it('锁定真实 catalog 的 RuntimeParamDef type 与实际字段集合', () => {
+    const rows = new Map<string, Set<string>>()
     for (const model of catalog) {
       for (const param of model.params) {
-        const row = rows.get(param.type) ?? { count: 0, fields: new Set<string>() }
-        row.count += 1
-        for (const field of Object.keys(param)) row.fields.add(field)
-        rows.set(param.type, row)
+        const fields = rows.get(param.type) ?? new Set<string>()
+        for (const field of Object.keys(param)) fields.add(field)
+        rows.set(param.type, fields)
       }
     }
 
-    expect(Object.fromEntries([...rows.entries()].sort().map(([type, row]) => [type, {
-      count: row.count,
-      fields: [...row.fields].sort(),
-    }]))).toEqual({
-      composite: {
-        count: 15,
-        fields: ['default', 'id', 'order', 'required', 'type', 'valueType', 'visible'],
-      },
-      dropdown: {
-        count: 330,
-        fields: ['apiField', 'default', 'id', 'options', 'order', 'required', 'transferKey', 'type', 'valueType', 'visible'],
-      },
-      'file-upload': {
-        count: 3,
-        fields: ['accept', 'default', 'id', 'maxCount', 'maxSize', 'order', 'required', 'type', 'valueType', 'visible'],
-      },
-      'image-upload': {
-        count: 6,
-        fields: ['accept', 'default', 'format', 'id', 'maxCount', 'maxSize', 'order', 'type', 'valueType', 'visible'],
-      },
-      number: {
-        count: 95,
-        fields: ['default', 'id', 'max', 'min', 'order', 'step', 'transferKey', 'type', 'valueType', 'visible'],
-      },
-      switch: {
-        count: 89,
-        fields: ['default', 'id', 'order', 'transferKey', 'type', 'valueType', 'visible'],
-      },
-      text: {
-        // 5.8（P-17）：删掉用户拿不到的“延续任务 ID”
-        count: 15,
-        fields: ['default', 'id', 'maxLength', 'order', 'required', 'type', 'visible'],
-      },
-      textarea: {
-        // 5.8（P-17）：删掉用户拿不到的 KIE 音频 / 角色资产 ID
-        count: 2,
-        fields: ['default', 'id', 'order', 'type', 'visible'],
-      },
+    expect(Object.fromEntries([...rows.entries()].sort().map(([type, fields]) => [type, [...fields].sort()]))).toEqual({
+      composite: ['default', 'id', 'order', 'required', 'type', 'valueType', 'visible'],
+      dropdown: ['apiField', 'default', 'id', 'options', 'order', 'required', 'transferKey', 'type', 'valueType', 'visible'],
+      'file-upload': ['accept', 'default', 'id', 'maxCount', 'maxSize', 'order', 'required', 'type', 'valueType', 'visible'],
+      'image-upload': ['accept', 'default', 'format', 'id', 'maxCount', 'maxSize', 'order', 'type', 'valueType', 'visible'],
+      number: ['default', 'id', 'max', 'min', 'order', 'step', 'transferKey', 'type', 'valueType', 'visible'],
+      switch: ['default', 'id', 'order', 'transferKey', 'type', 'valueType', 'visible'],
+      text: ['default', 'id', 'maxLength', 'order', 'required', 'type', 'visible'],
+      textarea: ['default', 'id', 'order', 'type', 'visible'],
     })
   })
 
-  it('client.catalog 的 6 个公开查询函数直接消费真实 123 catalog', () => {
+  it('client.catalog 的 6 个公开查询函数直接消费真实 catalog', () => {
     const client = createAIClient({ runtime })
     try {
       expect(client.catalog.listByType('image')).toHaveLength(64)

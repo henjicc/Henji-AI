@@ -1,23 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import { normalizeStageRenderStyle } from './renderStyles'
 import { createCameraObject, createDefaultSceneSettings, pickDefaultColor } from './sceneDefaults'
-import { deserializeScene, serializeScene } from './sceneSerialization'
+import { sceneFromDocumentContent, sceneToDocumentContent } from './sceneSerialization'
 
-function sceneJson(style: unknown, options: { omitRender?: boolean } = {}): string {
+function savedContent(style: unknown, options: { omitRender?: boolean } = {}): unknown {
   const camera = createCameraObject('主摄像机', pickDefaultColor(0))
   const sceneSettings = createDefaultSceneSettings()
-  const raw = JSON.parse(serializeScene({
+  const raw = JSON.parse(JSON.stringify(sceneToDocumentContent({
     objects: [camera],
     activeCameraId: camera.id,
     sceneSettings,
     stateKeyframes: [],
-  })) as { sceneSettings: Record<string, unknown> }
+  }))) as { sceneSettings: Record<string, unknown> }
   if (options.omitRender) {
     delete raw.sceneSettings.render
   } else {
     raw.sceneSettings.render = { style }
   }
-  return JSON.stringify(raw)
+  return raw
 }
 
 describe('渲染方式的持久化', () => {
@@ -28,11 +28,11 @@ describe('渲染方式的持久化', () => {
   })
 
   it('镜头参考读写保留渲染方式', () => {
-    expect(deserializeScene(sceneJson('lineart')).sceneSettings.render.style).toBe('lineart')
+    expect(sceneFromDocumentContent(savedContent('lineart')).sceneSettings.render.style).toBe('lineart')
   })
 
   it('没有渲染方式字段的旧镜头参考按彩色打开，不因此变成不可读镜头参考', () => {
-    const snapshot = deserializeScene(sceneJson(null, { omitRender: true }))
+    const snapshot = sceneFromDocumentContent(savedContent(null, { omitRender: true }))
 
     expect(snapshot.sceneSettings.render.style).toBe('beauty')
     expect(snapshot.objects).toHaveLength(1)

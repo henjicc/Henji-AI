@@ -81,16 +81,6 @@ describe('image edit application service', () => {
       operations: [{ kind: 'rotate_cw', degrees: 90 }],
     })
     const registrations = createImageEditReflectionRegistrations()
-    expect(registrations.map((item) => item.entity.id)).toEqual([
-      IMAGE_EDIT_ENTITY_TYPES.preview,
-      IMAGE_EDIT_ENTITY_TYPES.document,
-      IMAGE_EDIT_ENTITY_TYPES.layer,
-      IMAGE_EDIT_ENTITY_TYPES.group,
-      IMAGE_EDIT_ENTITY_TYPES.mask,
-      IMAGE_EDIT_ENTITY_TYPES.resource,
-      'image_edit.selection',
-      'image_edit.layer_filter',
-    ])
     const previewRegistration = registrations.find((item) => (
       item.entity.id === IMAGE_EDIT_ENTITY_TYPES.preview
     ))

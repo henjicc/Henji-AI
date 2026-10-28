@@ -167,8 +167,8 @@ console.log(client.catalog.list().map((model) => model.meta.id)) // ['kie-z-imag
 
 完整单模型 pack 同时携带该模型的唯一真实 schema、provider adapter 与 provider-scoped 媒体预处理/
 上传策略；宿主不需要知道内部上传模块。`@henjicc/ai-sdk/provider-packs/kie` 可一次装入 KIE 的全部
-29 个模型；`provider-adapters/kie` 只装入 KIE 执行与上传策略、不装任何模型。所有单模型路径和
-8 个供应商路径由 catalog 生成器自动产出并由 bundle 门禁穷举，新增模型不会靠手工维护 exports。
+模型；`provider-adapters/kie` 只装入 KIE 执行与上传策略、不装任何模型。所有单模型路径和
+供应商路径由 catalog 生成器自动产出并由 bundle 门禁穷举，新增模型不会靠手工维护 exports。
 
 每个 `models/<provider>/<model>` 子路径也导出名为 `model` 的低层定义，供目录分析或高级自定义组合；
 直接传裸 `model` 而不传同文件的 `pack` 不保证媒体上传或供应商执行完整，普通宿主应使用 `pack`。

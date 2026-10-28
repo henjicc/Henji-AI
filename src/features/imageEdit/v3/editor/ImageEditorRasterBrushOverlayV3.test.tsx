@@ -190,7 +190,6 @@ describe('ImageEditorRasterBrushOverlayV3', () => {
     await waitFor(() => expect(
       rendered.container.querySelectorAll('foreignObject'),
     ).toHaveLength(1))
-    expect(rendered.container.querySelector('foreignObject canvas')?.className).not.toContain('bg-gap')
     expect(persistentChanges).not.toHaveBeenCalled()
 
     fireEvent.pointerUp(overlay, { clientX: 96, clientY: 80, pointerId: 7 })

@@ -62,8 +62,9 @@ describe('三维应用反射注册', () => {
 
   it('全部正式实体和属性都能通过应用反射注册表严格校验', () => {
     const registry = new ApplicationReflectionRegistry('application-capabilities/v2')
+    const registrations = createCameraStageReflectionRegistrations(() => 7)
 
-    for (const registration of createCameraStageReflectionRegistrations(() => 7)) {
+    for (const registration of registrations) {
       registry.register(registration)
     }
 
@@ -71,8 +72,7 @@ describe('三维应用反射注册', () => {
       exposure: 'assistant',
       permissions: new Set(['camera_stage:read', 'camera_stage:write']),
       acceptedDataClasses: new Set(['C1']),
-      // 7 类：project / scene / object / camera / stateKeyframe / trajectory / playback
-    }).entities).toHaveLength(7)
+    }).entities).toHaveLength(registrations.length)
   })
 
   it('提供稳定引用、属性快照和镜头参考 revision', async () => {
@@ -116,7 +116,7 @@ describe('三维应用反射注册', () => {
     ])
     const validSnapshot = await mocks.readSnapshot()
     mocks.readSnapshot.mockImplementation(async (projectId: string) => {
-      if (projectId === 'old-project') throw new Error('UNSUPPORTED_CAMERA_STAGE_SCHEMA:12')
+      if (projectId === 'old-project') throw new Error('[cameraStage] 场景数据结构无效')
       return validSnapshot
     })
     const registration = createCameraStageReflectionRegistrations(() => 7)

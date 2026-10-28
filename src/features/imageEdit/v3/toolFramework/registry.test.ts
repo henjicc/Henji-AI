@@ -6,13 +6,11 @@ const tools = [...legacyTools, ...paintTools,...vectorTools]
 import { ToolRegistry } from './registry'
 
 describe('工具登记', () => {
-  it('所有当前工具声明入口、宿主、图标、光标和意图，并保留宿主工具顺序', () => {
+  it('当前全部工具可无冲突登记并保留登记顺序，共享叠加层只出现一次', () => {
     const registry = new ToolRegistry(tools)
-    expect(registry.list()).toHaveLength(28)
-    expect(registry.list().filter(tool => tool.profiles.includes('mask')).map(tool => tool.id)).toEqual([
-      'move', 'hand', 'zoom', 'select-rect', 'select-ellipse', 'select-lasso', 'raster-brush', 'eraser', 'mask-edit', 'paint-gradient', 'paint-fill',
-    ])
-    expect(registry.overlays().map(slot => slot.id)).toEqual(['crop', 'selection', 'raster', 'paint-fill','vector'])
+    expect(registry.list().map(tool => tool.id)).toEqual(tools.map(tool => tool.id))
+    const overlayIds = registry.overlays().map(slot => slot.id)
+    expect(new Set(overlayIds).size).toBe(overlayIds.length)
   })
   it('冲突登记整体拒绝，不以覆盖顺序悄悄选用一个实现', () => {
     expect(() => new ToolRegistry([tools[0], tools[0]])).toThrow('Duplicate tool id')

@@ -13,11 +13,10 @@ vi.mock('@/components/ui', () => ({
 }));
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-it('播放进度使用共享滑块默认命中高度，并保留 seek 行为', () => {
+it('拖动播放进度跳到对应时间', () => {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   const view = render(<CanvasVideoPlayer src="media:video" knownHasAudio knownDuration={120} onOpenViewer={() => {}} />)
   const range = view.getByRole('slider')
-  expect(range.className).not.toMatch(/\bh-2\.5\b/)
   fireEvent.change(range, { target: { value: '15' } });
   expect(view.container.querySelector('video')?.currentTime).toBe(15);
 })

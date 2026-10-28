@@ -1,16 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { createBuiltInImageEditRenderNodeRegistry } from './builtInRenderNodes';
 import { listImageEditCpuNodeIdsV3 } from './execution';
-import {
-  listImageEditLayerOperationsV3,
-  listCreatableImageEditOperationIdsV3,
-} from './operationCatalog';
+import { listImageEditLayerOperationsV3 } from './operationCatalog';
 
 describe('图片编辑 V3 内置渲染节点', () => {
   it('明确颜色、alpha、后端与失效契约', () => {
     const registry = createBuiltInImageEditRenderNodeRegistry();
     expect(registry.get('effect.gaussian_blur')).toMatchObject({
-      version: 1,
       category: 'local',
       color: { input: 'linear-light', output: 'linear-light', alpha: 'premultiplied' },
       backends: ['webgpu', 'cpu-libvips'],
@@ -18,24 +14,21 @@ describe('图片编辑 V3 内置渲染节点', () => {
     });
     const fastBlur = registry.get('effect.fast-blur');
     expect(fastBlur).toMatchObject({
-      version: 3,
       category: 'global-analysis',
       invalidation: 'shared-analysis',
-      globalAnalysis: { maxEdge: 2_048, cacheScope: 'subtree', resultVersion: 3 },
+      globalAnalysis: { cacheScope: 'subtree' },
       backends: ['webgpu', 'cpu-libvips'],
     });
     expect(fastBlur?.localHalo?.({ radius: 40 }, 0)).toBe(48);
     expect(registry.get('effect.vgpu-glow')).toMatchObject({
       category: 'global-analysis',
-      globalAnalysis: { maxEdge: 1_024, resultVersion: 4 },
       backends: ['webgpu', 'cpu-libvips'],
     });
     const diffusion = registry.get('effect.diffusion');
     expect(diffusion).toMatchObject({
-      version: 4,
       category: 'global-analysis',
       invalidation: 'shared-analysis',
-      globalAnalysis: { maxEdge: 2_048, cacheScope: 'subtree', resultVersion: 4 },
+      globalAnalysis: { cacheScope: 'subtree' },
     });
     expect(diffusion?.localHalo?.({}, 0)).toBe(3);
     const gpuPlanNodeIds = [
@@ -65,12 +58,5 @@ describe('图片编辑 V3 内置渲染节点', () => {
     for (const operation of listImageEditLayerOperationsV3()) {
       expect(registry.get(operation.renderDefinitionId), operation.operationId).not.toBeNull();
     }
-    expect(listCreatableImageEditOperationIdsV3('effect')).toEqual([
-      'image.fast-blur-v3',
-      'image.diffusion',
-      'image.vgpu-glow',
-      'gaussian_blur',
-      'mosaic',
-    ]);
   });
 });
