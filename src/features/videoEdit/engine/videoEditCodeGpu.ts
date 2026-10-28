@@ -1,5 +1,5 @@
 import { VideoEditGpuBitmapBridge } from './videoEditGpuBitmapBridge'
-import { recordVideoEditPreparation } from './videoEditPreparationTiming'
+import { recordVideoEditPreparation, videoEditGpuTimer } from './videoEditPreparationTiming'
 import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 import { codeLayerTotals, codeStructureCosts } from '@/core/videoEdit/codeMaterial/performance'
 import { VideoEditCodePicture } from './videoEditCodePicture'
@@ -115,10 +115,13 @@ export class VideoEditCodeGpu {
     const target = output ? this.surface(key, output.width, output.height, 'rgba8unorm', false, size) : this.surface(key, size.width, size.height)
     const started = performance.now()
     for (const image of Object.values(images)) this.assertInput(image.texture)
+    // 诊断会话在作者入口前后各提交一个空计时 pass，量作者代码在 GPU 上占的时间。
+    const timer = videoEditGpuTimer(this.device), timed = timer?.begin('author')
     // 完整分辨率按原样调用（不多传参数、不改 info），画面与之前逐像素相同。
     const layers = output
       ? await runtime.render(target.picture.texture, size.width, size.height, parameters, assets, { ...info, renderScale: output.height / size.height }, overrides, { frames: [], images }, motionBlur, output)
       : await runtime.render(target.picture.texture, size.width, size.height, parameters, assets, info, overrides, { frames: [], images }, motionBlur)
+    timer?.end(timed)
     const completed = this.trackPerformance(key, { frame: Math.floor(info.time / info.frameDuration), cpuMs: performance.now() - started, gpuMs: 0, budgetMs: info.frameDuration * 1000, ...(layers ? { layers } : {}) }, started, started, performance.now())
     this.pending = this.device.queue.onSubmittedWorkDone().then(completed); this.counts.generatorFrames++
     return target.picture
@@ -136,7 +139,9 @@ export class VideoEditCodeGpu {
     const target = this.surface(key, input.width, input.height, input.textureFormat)
     if (target.picture.texture === input.texture) throw new Error('作者滤镜输入输出不能使用同一纹理。')
     const started = performance.now()
+    const timer = videoEditGpuTimer(this.device), timed = timer?.begin('author')
     const layers = await runtime.render(target.picture.texture, input.width, input.height, parameters, {}, info, undefined, { current: input.texture, frames, images: {} })
+    timer?.end(timed)
     const completed = this.trackPerformance(key, { frame: Math.floor(info.time / info.frameDuration), cpuMs: performance.now() - started, gpuMs: 0, budgetMs: info.frameDuration * 1000, ...(layers ? { layers } : {}) }, started, started, performance.now())
     this.pending = this.device.queue.onSubmittedWorkDone().then(completed); this.counts.filterFrames++
     return target.picture

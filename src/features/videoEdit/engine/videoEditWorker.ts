@@ -4,7 +4,7 @@ import { VideoEditSharedCompilation, type SharedCompilationResponse } from './vi
 import { installAuthorMetadataCache } from './videoEditAuthorMetadataCache'
 import { installAuthorNativeModules } from './videoEditAuthorModules'
 import { setVideoEditCodeCompilerWorkerFactory } from './videoEditCodeCompiler'
-import { videoEditPreparationSnapshot, videoEditPreparationDelta, recordVideoEditPreparation } from './videoEditPreparationTiming'
+import { videoEditPreparationSnapshot, videoEditPreparationDelta, recordVideoEditPreparation, enableVideoEditRenderDiagnostics, videoEditRenderDiagnosticsEnabled, probeVideoEditTask, beginVideoEditGpuFrame, takeVideoEditGpuFrame, videoEditDeliveryStages, videoEditLagSummary } from './videoEditPreparationTiming'
 import type { VideoEditTimingContext } from './videoEditFirstFrameTiming'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import { VideoEditProxyFrames } from './videoEditProxyFrames'
@@ -34,7 +34,7 @@ export interface RenderDecodeOptions extends VideoEditDecodeSettings { localPath
 export type RenderRequest = { id: number } & (
   { kind: 'stopPlayback'; frame: number } |
   { kind: 'fonts'; fonts: FontPayload[]; availableIds: string[]; reset: boolean } |
-  { kind: 'init'; traceFrames?: boolean; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; previewWidth?: number; surface?: OffscreenCanvas; cacheBudgetBytes?: number; decode?: RenderDecodeOptions } | { kind: 'update'; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
+  { kind: 'init'; traceFrames?: boolean; /** 渲染诊断（GPU 时间戳与事件循环迟滞探针），只供基准与排障。 */ diagnostics?: boolean; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; previewWidth?: number; surface?: OffscreenCanvas; cacheBudgetBytes?: number; decode?: RenderDecodeOptions } | { kind: 'update'; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
   | { kind: 'replaceContent'; document: VideoEditComposition; codeSources?: Record<string, string>; localPaths: Record<string, string> }
   | { kind: 'invalidate'; revision: number }
   | { kind: 'parameters'; update: VideoEditParameterUpdate }
@@ -52,7 +52,8 @@ export type RenderRequest = { id: number } & (
   /** 已就绪的预渲染窗口与它们的本地文件；不进渲染队列，下一次正向播放的渲染即使用。 */
   | { kind: 'renderCache'; windows: import('./videoEditRenderer').VideoEditRenderCacheWindow[]; localPaths: Record<string, string> }
   | { kind: 'dispose' }
-  | { kind: 'render'; observeElements?: boolean; quality?: EffectQuality; frame: number; sequential: boolean; scrubbing?: import('./videoEditRenderer').VideoEditScrubMode; deadline?: number; readRgb?: { width: number; height: number }; history?: boolean }
+  /** `sentAt`：诊断时主线程发出请求的绝对时间（timeOrigin + now），用来算投递延迟。 */
+  | { kind: 'render'; sentAt?: number; observeElements?: boolean; quality?: EffectQuality; frame: number; sequential: boolean; scrubbing?: import('./videoEditRenderer').VideoEditScrubMode; deadline?: number; readRgb?: { width: number; height: number }; history?: boolean }
   | { kind: 'audio'; start: number; duration: number; retainIdle?: boolean }
   /** Acceptance probes only (task 2.7): high-precision counters and one row of the last high-precision composition. */
   | { kind: 'precision'; row?: number })
@@ -154,8 +155,17 @@ async function disposeRenderer(): Promise<void> {
   await nativeBackend?.settled(); router?.dispose()
   nativeBackend = undefined; router = undefined; decodeLookahead = undefined
 }
+let nativePort: MessagePort | undefined
+const labeledPorts = new WeakSet<MessagePort>()
+/** 诊断时给原生帧端口的消息处理打标签（端口可能在初始化前后接入，两处都调用）。 */
+function labelNativePort(): void {
+  const port = nativePort, handler = port?.onmessage
+  if (!port || !handler || labeledPorts.has(port) || !videoEditRenderDiagnosticsEnabled()) return
+  labeledPorts.add(port)
+  port.onmessage = event => probeVideoEditTask('nativeFrames.message', () => handler.call(port, event))
+}
 function handleNativeFrames(request: NativeFramesRequest): void {
-  if (request.kind === 'nativeFrames.attach') { void nativeFrames?.dispose(); nativeFrames = new VideoEditNativeFrameReceiver(request.port, undefined, (stage, durationMs) => timingEvent(`native.${stage}`, durationMs)); nativeDiagnostics = undefined; return }
+  if (request.kind === 'nativeFrames.attach') { void nativeFrames?.dispose(); nativeFrames = new VideoEditNativeFrameReceiver(request.port, undefined, (stage, durationMs) => timingEvent(`native.${stage}`, durationMs)); nativeDiagnostics = undefined; nativePort = request.port; labelNativePort(); return }
   const receiver = nativeFrames
   if (!receiver) { self.postMessage({ id: request.id, error: '原生帧通道尚未接入。' } satisfies NativeFramesResponse); return }
   // 渲染 Worker 按 IIFE 打包，不能按需拆分加载；诊断模块很小且只在收到诊断消息时实例化。
@@ -171,6 +181,10 @@ installCodeSourceReader(file => sharedCompilation.read(file))
 installAuthorMetadataCache({ read: key => sharedCompilation.metadata(key), write: async (key, metadata) => { await sharedCompilation.metadata(key, metadata) } })
 installAuthorNativeModules(files => sharedCompilation.modules(files))
 self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | SharedCompilationResponse>) => {
+  if (videoEditRenderDiagnosticsEnabled()) probeVideoEditTask(`message.${event.data.kind}`, () => receive(event))
+  else receive(event)
+}
+function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | SharedCompilationResponse>): void {
   if (event.data.kind === 'code.compiled' || event.data.kind === 'code.source' || event.data.kind === 'code.metadataResult' || event.data.kind === 'code.moduleUrls') { sharedCompilation.receive(event.data); return }
   if (event.data.kind === 'nativeFrames.attach' || event.data.kind === 'nativeFrames.diagnose') { handleNativeFrames(event.data); return }
   const request = event.data
@@ -191,7 +205,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
     for (const [id, skip] of queuedFrames) if (id < request.id) { queuedFrames.delete(id); skip() }
     if (!request.history && !request.readRgb) queuedFrames.set(request.id, () => { skipped = true; releaseForeground(); self.postMessage({ id: request.id, presented: false, skipped: true } satisfies RenderResponse) })
   }
-  if (request.kind === 'init') enableVideoEditFrameTrace(request.traceFrames === true)
+  if (request.kind === 'init') { enableVideoEditFrameTrace(request.traceFrames === true); enableVideoEditRenderDiagnostics(request.diagnostics === true); labelNativePort() }
 
   if (request.kind === 'preopen') { preopenMedia(request); return }
   // 连续快速点击：前一次点击的精确画面还在准备（长 GOP 原片可达一秒）时，新的远距离跳转不排在它后面，当场画常驻关键帧并
@@ -222,6 +236,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
       // 快速拖动时一幅实时画面可能在请求交回后继续在后台准备（渲染器先画了常驻关键帧）：改动渲染器的请求等它收尾。
       if (request.kind !== 'render') await renderer?.settled()
       if (request.kind === 'dispose') {
+        enableVideoEditRenderDiagnostics(false)
         fonts?.dispose(); fonts = undefined
         await disposeRenderer(); const codeResources = renderer?.codeDiagnostics(); renderer = undefined
         // Every borrowed native frame goes back before the session may terminate this worker (record 002).
@@ -251,7 +266,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
         self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'init') {
         await disposeRenderer(); direct = !!request.surface; renderer = new VideoEditRenderer(request.document, request.previewWidth, request.surface, request.cacheBudgetBytes, frameBackend(request.decode), undefined, [request.document.id], timingEvent)
-        renderer.onPlaybackIdle = () => { if (renderer && latestRender) decodeLookahead?.update(renderer.document, latestRender.frame, latestRender.sequential, renderCacheWindows) }
+        renderer.onPlaybackIdle = () => { if (renderer && latestRender) { const composition = renderer.document, { frame, sequential } = latestRender; probeVideoEditTask('lookahead.update', () => decodeLookahead?.update(composition, frame, sequential, renderCacheWindows)) } }
         renderer.setRenderCache(renderCacheWindows)
         self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'replaceContent') {
@@ -275,6 +290,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
         queuedFrames.delete(request.id)
         if (cancelledByStop()) { releaseForeground(); self.postMessage({ id: request.id, presented: false, skipped: true } satisfies RenderResponse); return }
         const renderStarted = performance.now()
+        beginVideoEditGpuFrame()
         const preparationBefore = videoEditPreparationSnapshot()
         traceVideoEditFrame('worker.queue', request.frame, receivedAt, renderStarted)
         let snapshot: Promise<ImageBitmap> | undefined
@@ -289,8 +305,11 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
         exactRendering = !request.scrubbing && !request.sequential
         const result = await renderer.render(request.frame, request.sequential, request.scrubbing, () => renderer?.document.revision === revision && !cancelledByStop(), request.deadline, undefined, request.quality, capture).catch(error => { if (snapshot) void snapshot.then(bitmap => bitmap.close(), () => {}); throw error }).finally(() => { exactRendering = false })
         const renderStages = videoEditPreparationDelta(preparationBefore)
+        // 本帧合成提交的 GPU 分段（诊断时才有）；下一帧开始前取走，不和后面的帧混在一起。
+        const gpuStages = takeVideoEditGpuFrame()
         releaseForeground()
-        if (result.presented) decodeLookahead?.update(renderer.document, request.frame, request.sequential === true, renderCacheWindows)
+        const composition = renderer.document
+        if (result.presented) probeVideoEditTask('lookahead.update', () => decodeLookahead?.update(composition, request.frame, request.sequential === true, renderCacheWindows))
         const readCodePerformance = renderer.captureCodePerformance()
         // 跳转先出的近似画面（预渲染的常驻关键帧）没有跑这一帧的代码：作者元素等随后的精确帧再读。
         const authorElements = request.observeElements && result.presented && !result.approximate ? renderer.observeAuthorElements(request.frame) : undefined
@@ -309,6 +328,13 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
           renderStages.presentComplete = performance.now() - start
           renderStages.decode = result.decodeMs
           renderStages.composite = Math.max(0, result.gpuMs - (renderStages.presentDeadline ?? 0))
+          if (videoEditRenderDiagnosticsEnabled()) {
+            // gpuMs 含等刷新时刻；诊断分开给出“等刷新时刻”“等 GPU 完成”与 GPU 时间戳量到的执行时间。
+            renderStages['gpu.waitDisplay'] = renderStages.presentDeadline ?? 0
+            renderStages['gpu.waitCompletion'] = renderStages.presentComplete
+            if (result.presented) Object.assign(renderStages, await gpuStages?.catch(() => undefined))
+            if (request.sentAt !== undefined) Object.assign(renderStages, videoEditDeliveryStages(request.sentAt, performance.timeOrigin + receivedAt))
+          }
           const transferStarted = performance.now()
           const pixels = snapshot ? await snapshot : undefined
           if (pixels) owned.add(pixels)
@@ -323,7 +349,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
           const bitmap = rgb || direct || !result.presented ? undefined : pixels
           traceVideoEditFrame('bitmap.prepare', request.frame, transferStarted)
           const postedAt = performance.now()
-          self.postMessage({ id: request.id, ...(result.superseded || !result.presented && cancelledByStop() ? { skipped: true } : {}), renderCached: result.renderCached, renderElapsedMs, renderStages, bitmap, history, rgb, authorElements, effectErrors: result.effectErrors, sourceTimestamps: result.sourceTimestamps, blankPictures: result.blankPictures, singleFrameReads: result.singleFrameReads, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, ...(result.approximate ? { approximate: true } : {}), decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics(), codePerformance: readCodePerformance(), preparationStages: videoEditPreparationSnapshot() } satisfies RenderResponse, { transfer: [...(rgb ? [rgb.buffer as ArrayBuffer] : bitmap ? [bitmap] : []), ...(history ? [history] : [])] })
+          probeVideoEditTask('render.post', () => self.postMessage({ id: request.id, ...(result.superseded || !result.presented && cancelledByStop() ? { skipped: true } : {}), renderCached: result.renderCached, renderElapsedMs, renderStages, bitmap, history, rgb, authorElements, effectErrors: result.effectErrors, sourceTimestamps: result.sourceTimestamps, blankPictures: result.blankPictures, singleFrameReads: result.singleFrameReads, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, ...(result.approximate ? { approximate: true } : {}), decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics(), codePerformance: readCodePerformance(), preparationStages: videoEditPreparationSnapshot() } satisfies RenderResponse, { transfer: [...(rgb ? [rgb.buffer as ArrayBuffer] : bitmap ? [bitmap] : []), ...(history ? [history] : [])] }))
           if (bitmap) owned.delete(bitmap)
           traceVideoEditFrame('worker.post', request.frame, postedAt)
           if (history) owned.delete(history)
@@ -332,7 +358,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
             throw error
           } finally {
             owned.forEach(bitmap => bitmap.close())
-            if (result.presented && renderer) decodeLookahead?.update(renderer.document, request.frame, request.sequential === true, renderCacheWindows)
+            if (result.presented && renderer) { const latest = renderer.document; probeVideoEditTask('lookahead.update', () => decodeLookahead?.update(latest, request.frame, request.sequential === true, renderCacheWindows)) }
             if (request.sequential && performance.now() - summaryAt >= 5000) lookaheadSummary('interval')
           }
         }
@@ -343,6 +369,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
         } else await finish()
       } else if (request.kind === 'stopPlayback') {
         lookaheadSummary('stop')
+        if (videoEditRenderDiagnosticsEnabled()) log('info', 'Worker 事件循环迟滞汇总', 'video_edit.worker.lag.summary', { sequenceId: renderer?.document.id, ...videoEditLagSummary() })
         await renderer?.stopPlayback()
         if (renderer) { decodeLookahead?.beforeFrame(renderer.document, request.frame, false); decodeLookahead?.update(renderer.document, request.frame, false, renderCacheWindows) }
       } else if (request.kind === 'prepareGpu') {

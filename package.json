@@ -72,6 +72,7 @@
     "check:node-test-ownership": "node scripts/run-node-tests.cjs --check",
     "test:performance": "vitest run --mode performance",
     "benchmark:speech-alignment": "node scripts/benchmark-speech-alignment.cjs",
+    "bench:video-edit": "node scripts/bench-video-edit.cjs",
     "test:reality": "node scripts/run-reality-tests.cjs",
     "test:assistant-persistence": "node scripts/test-assistant-persistence.cjs",
     "test:assistant-model-compat": "vitest run packages/ai-sdk/tests/llm/sdk/model-step.test.ts packages/ai-sdk/tests/llm/sdk/provider-error.test.ts packages/ai-sdk/tests/llm/sdk/provider-adapter.test.ts packages/ai-sdk/tests/llm/sdk/retry-policy.test.ts electron/main/services/llm/sdk/scripted-model-step.test.ts electron/main/services/llm/sdk/trace.test.ts src/services/llm/LlmConfigService.test.ts",

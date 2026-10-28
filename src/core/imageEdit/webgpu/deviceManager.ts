@@ -36,6 +36,8 @@ export interface ImageEditWebGpuDeviceManagerOptions {
   getProvider?: () => GpuProvider | null;
   now?: () => number;
   recovery?: Partial<ImageEditWebGpuRecoveryPolicy>;
+  /** 适配器支持才申请的可选特性；不传时设备描述与不带此选项时完全相同。 */
+  optionalFeatures?: readonly string[];
 }
 
 const DEFAULT_RECOVERY_POLICY: ImageEditWebGpuRecoveryPolicy = {
@@ -74,9 +76,11 @@ export class ImageEditWebGpuDeviceManager {
   private readonly getProvider: () => GpuProvider | null;
   private readonly now: () => number;
   private readonly recovery: ImageEditWebGpuRecoveryPolicy;
+  private readonly optionalFeatures: readonly string[];
 
   constructor(options: ImageEditWebGpuDeviceManagerOptions = {}) {
     this.getProvider = options.getProvider ?? getGpuProvider;
+    this.optionalFeatures = options.optionalFeatures ?? [];
     this.now = options.now ?? Date.now;
     this.recovery = {
       ...DEFAULT_RECOVERY_POLICY,
@@ -160,7 +164,13 @@ export class ImageEditWebGpuDeviceManager {
       const requiredLimits = Object.fromEntries(['maxStorageBuffersInVertexStage', 'maxStorageTexturesInVertexStage', 'maxStorageBuffersInFragmentStage', 'maxStorageTexturesInFragmentStage', 'maxComputeInvocationsPerWorkgroup', 'maxComputeWorkgroupSizeX', 'maxComputeWorkgroupSizeY', 'maxComputeWorkgroupStorageSize']
         .filter((key) => typeof supported[key] === 'number' && (supported[key] as number) > 0)
         .map((key) => [key, supported[key] as number]));
-      device = await adapter.requestDevice(Object.keys(requiredLimits).length ? { requiredLimits } : undefined);
+      const available = this.optionalFeatures.length ? new Set(adapter.features ?? []) : undefined;
+      const requiredFeatures = this.optionalFeatures.filter((name) => available?.has(name));
+      const descriptor = {
+        ...(Object.keys(requiredLimits).length ? { requiredLimits } : {}),
+        ...(requiredFeatures.length ? { requiredFeatures } : {}),
+      };
+      device = await adapter.requestDevice(Object.keys(descriptor).length ? descriptor : undefined);
       if (this.destroyed || this.lifecycle !== lifecycle) {
         throw new ImageEditWebGpuInitializationInvalidatedError();
       }

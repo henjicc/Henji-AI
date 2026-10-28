@@ -1,6 +1,6 @@
 import { VideoEditGpuBitmapBridge } from './videoEditGpuBitmapBridge'
 import { VideoEditGpuDeviceLostError } from './videoEditGpuFailure'
-import { recordVideoEditPreparation } from './videoEditPreparationTiming'
+import { recordVideoEditPreparation, videoEditGpuTimer, videoEditRenderDiagnosticsEnabled } from './videoEditPreparationTiming'
 import { traceVideoEditFrame } from './videoEditFrameTrace'
 import { documentFontRevision } from '@/platform/fontFaces'
 import { VideoSample } from 'mediabunny'
@@ -40,7 +40,8 @@ interface PresentationEncoder { copyTextureToBuffer(source: unknown, destination
  * on them) composes into one `rgba16float` target of the canvas size and is quantized to the canvas, with a fixed
  * dither, in a final pass of the same submission. */
 export class VideoEditGpuCompositor {
-  private readonly manager = new ImageEditWebGpuDeviceManager()
+  // 诊断会话申请 GPU 时间戳（适配器支持才申请），用来量合成与作者入口的 GPU 分段；正常会话设备描述不变。
+  private readonly manager = new ImageEditWebGpuDeviceManager(videoEditRenderDiagnosticsEnabled() ? { optionalFeatures: ['timestamp-query'] } : {})
   private readonly context
   private device!: VideoGpuDevice
   private video!: GpuRenderPipeline
@@ -533,6 +534,9 @@ export class VideoEditGpuCompositor {
     let historyBuffer: PresentationBuffer | undefined
     try {
       const encoder = device.createCommandEncoder()
+      // 上屏这一次提交是本帧在 GPU 上的最后一段：首尾打点，并在同一提交里解析本帧所有计时点。
+      const timer = target ? undefined : videoEditGpuTimer(device)
+      const timed = timer?.begin('composite', encoder)
       const canvas = target ? undefined : this.context.getCurrentTexture()
       const composed = present ? this.preciseTarget() : undefined
       const main = target?.texture ?? composed ?? canvas!
@@ -665,6 +669,7 @@ export class VideoEditGpuCompositor {
         quantize.draw(3); quantize.end()
         this.precision.frames++
       }
+      if (timer) { timer.end(timed, encoder); timer.finishFrame(encoder) }
       const capture = target ? undefined : this.capturePresentation?.()
       const bytesPerRow = Math.ceil(this.canvas.width * 4 / 256) * 256
       if (capture && !capture.gpu) {

@@ -163,4 +163,20 @@ describe('ImageEditWebGpuDeviceManager', () => {
     expect(gpu.destroy).toHaveBeenCalledOnce()
     await expect(manager.acquire()).rejects.toThrow('已销毁')
   })
+
+  it('可选特性只申请适配器支持的；不传时设备描述不变', async () => {
+    const plain = createProvider(async () => createDevice().device)
+    await new ImageEditWebGpuDeviceManager({ getProvider: () => plain.provider }).acquire()
+    expect(plain.adapter.requestDevice).toHaveBeenCalledWith(undefined)
+
+    const supported = createProvider(async () => createDevice().device)
+    Object.assign(supported.adapter, { features: new Set(['timestamp-query']) })
+    await new ImageEditWebGpuDeviceManager({ getProvider: () => supported.provider, optionalFeatures: ['timestamp-query', 'shader-f16'] }).acquire()
+    expect(supported.adapter.requestDevice).toHaveBeenCalledWith({ requiredFeatures: ['timestamp-query'] })
+
+    const unsupported = createProvider(async () => createDevice().device)
+    Object.assign(unsupported.adapter, { features: new Set<string>() })
+    await new ImageEditWebGpuDeviceManager({ getProvider: () => unsupported.provider, optionalFeatures: ['timestamp-query'] }).acquire()
+    expect(unsupported.adapter.requestDevice).toHaveBeenCalledWith(undefined)
+  })
 })

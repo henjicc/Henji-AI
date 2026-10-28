@@ -63,6 +63,7 @@ import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { VIDEO_EDIT_PLAYBACK_RESOLUTIONS, VIDEO_EDIT_PLAYBACK_RESOLUTION_LABELS, videoEditPreviewDivisor, type VideoEditPlaybackResolution, type VideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution'
 import { getVideoEditPlaybackResolution, setVideoEditPlaybackResolution } from './application/videoEditPlaybackResolution'
 import { flushVideoEditRenderPerformance } from './application/videoEditRenderPerformance'
+import { recordVideoEditPlaybackFrame } from './application/videoEditPlaybackStats'
 import { readyVideoEditRenderWindows, recordVideoEditProgramRender } from './application/videoEditRenderCache'
 
 const logger = createLogger('features.videoEdit.preview')
@@ -460,6 +461,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       if (result.presented !== false) recordVideoMotionPresentation(instance, { frame: target, revision, sequenceId: composition.id, at: performance.now(), scrubbing })
       if (result.presented === true) recordVideoExplanationPresentation(instance, { frame: target, revision: composition.revision, sequenceId: composition.id, composition, at: performance.now(), scrubbing })
       if (failedDocument === undefined) { setRenderFailure(null); failedRetryMs = 2000 }
+      recordVideoEditPlaybackFrame(instance, composition, target, result, requestedAt, scrubbing)
       return true
     }
     const unregisterCapture = registerVideoEditProgramCapture(instance, () => appliedDocument.id, async (request, signal) => {

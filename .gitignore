@@ -134,6 +134,9 @@ nul
 .reality/
 .mcp-paid/
 .pan-bench/
+# 剪辑播放基准台的结果与合成夹具生成物（npm run bench:video-edit）
+/.bench/
+/tests/fixtures/bench/video-edit/generated/
 .canvas-visual/
 /.starter-kit/
 /.artifacts/
