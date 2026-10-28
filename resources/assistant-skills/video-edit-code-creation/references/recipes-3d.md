@@ -48,3 +48,34 @@ export default {
 ```
 
 检查推进起中末的相对运动、近景是否盖住关键信息、所有图形是否仍在安全区。要真正侧转或人物绕行时改用三维／媒体路线，不能只给全片加缩放。
+
+## 用 three 画真实网格
+
+需要真实网格、透视和光照，又不想手写着色器时，用内置的 three（版本与导入路径见 [代码工程](code-project.md) 的“内置库”，作者接口 v5 起可用）。在 `createWebGL` 里把宿主给的上下文交给 three：`gl.canvas` 是宿主的 OffscreenCanvas，`canvas` 与 `context` 要一起传，否则 three 会另建一张宿主看不到的画布。每帧按 `time` 直接求值物体姿态，不累加上一帧；输出尺寸会变，`draw` 里按传入的宽高同步渲染器和摄像机。
+
+```ts
+import * as THREE from "three"
+export default {
+  name: "three 旋转方块", kind: "generator", mode: "dynamic", width: 1920, height: 1080, durationSeconds: 4,
+  createWebGL(gl: WebGL2RenderingContext) {
+    const renderer = new THREE.WebGLRenderer({ canvas: gl.canvas, context: gl, alpha: true, premultipliedAlpha: true })
+    const scene = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera(35, 16 / 9, 0.1, 100)
+    camera.position.set(0, 0, 6)
+    const cube = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.6, 1.6), new THREE.MeshStandardMaterial({ color: 0x24666e, roughness: 0.5 }))
+    const light = new THREE.DirectionalLight(0xffffff, 1.6)
+    light.position.set(3, 4, 5)
+    scene.add(cube, light, new THREE.AmbientLight(0xffffff, 0.4))
+    return {
+      draw(time: number, _params: AuthorParams, width: number, height: number) {
+        renderer.setSize(width, height, false)
+        camera.aspect = width / height
+        camera.updateProjectionMatrix()
+        cube.rotation.set(time * 0.6, time * 0.9, 0)
+        renderer.render(scene, camera)
+      },
+      dispose() { renderer.dispose() },
+    }
+  },
+}
+```

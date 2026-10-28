@@ -49,6 +49,9 @@ declare global {
   type AuthorAssets = Api.AuthorAssets
   type AuthorGpuInputs = Api.AuthorGpuInputs
   function ${MODULE_CHECK}<const P extends readonly Api.AuthorParamDeclaration[] = readonly Api.AuthorParamDeclaration[]>(module: Api.AuthorModule<P>): Api.AuthorModule<P>
+  // TypeScript 的 webworker 标准库漏了 WebGL 上下文的 canvas；宿主的 WebGL 上下文取自 OffscreenCanvas，
+  // three 接管它时要写 new WebGLRenderer({ canvas: gl.canvas, context: gl })。
+  interface WebGLRenderingContextBase { readonly canvas: OffscreenCanvas }
 }
 export {}
 `

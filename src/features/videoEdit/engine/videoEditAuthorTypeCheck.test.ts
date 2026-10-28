@@ -120,6 +120,19 @@ export const font = (bytes: ArrayBuffer) => parse(bytes).getPath("痕迹", 0, 0,
 export default { name: "x", draw() { void scene } }`)).toEqual([])
   })
 
+  it('three 接管宿主的 WebGL 上下文：gl.canvas 是 OffscreenCanvas，canvas 与 context 一起交给 WebGLRenderer', () => {
+    expect(libraryLines(`import * as THREE from "three"
+export default {
+  name: "x",
+  createWebGL(gl: WebGL2RenderingContext) {
+    const canvas: OffscreenCanvas = gl.canvas
+    const renderer = new THREE.WebGLRenderer({ canvas: gl.canvas, context: gl })
+    const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(50, canvas.width / canvas.height)
+    return { draw() { renderer.render(scene, camera) }, dispose() { renderer.dispose() } }
+  },
+}`)).toEqual([])
+  })
+
   it('库里的类型错误按原文行列报出；没随包的子路径照实报找不到模块', () => {
     const source = 'import * as THREE from "three"\nconst v = new THREE.Vector3()\nv.lenght()\nexport default { name: "x", draw() { void v } }'
     const [typo] = libraryChecker.check(normalizeCodeMaterialFiles(source), ['main.ts']).diagnostics
