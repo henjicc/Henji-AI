@@ -99,7 +99,7 @@ export async function handleVideoEditStyleCapability(id: string, raw: unknown, s
       const source = input.content.kind === 'clips' ? { kind: 'clips' as const, sequenceId: child(projectId, input.content.sequenceRef), clipIds: input.content.clipRefs.map(ref => child(projectId, ref)) } : input.content.kind === 'version' ? { kind: 'version' as const, versionId: input.content.versionId } : { kind: 'library' as const }
       const result = await updateVideoEditTemplate(projectId, childId, source, signal)
       const ok = await saved(projectId)
-      return { resultRef: input.templateRef, version: result.template.version, instanceCount: result.instances, verification: { verified: ok, condition: '已保存剪辑并回读模板与联动实例。' }, message: `“${result.template.name}”已更新到 v${result.template.version}，${result.instances} 处实例一起变了；逐个抽查定版帧，确认文字仍然放得下。` }
+      return { resultRef: input.templateRef, version: result.template.version, instanceCount: result.instances, codeInstances: result.codeInstances, verification: { verified: ok, condition: '已保存剪辑并回读模板与联动实例。' }, message: `“${result.template.name}”已更新到 v${result.template.version}，${result.instances} 处实例一起变了；逐个抽查定版帧，确认文字仍然放得下。` }
     }
     case detachVideoEditTemplateInstanceCapability.id: {
       const input = detachVideoEditTemplateInstanceCapability.inputSchema.parse(raw); const projectId = input.documentRef.id

@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { applicationRefSchema } from '../../applicationCapabilities'
 import { capabilityControl, defineApplicationCapability } from '../shared/defineApplicationCapability'
 import { codeMaterialParameterValueSchema } from '../../../videoEdit/codeMaterial/parameterValueSchema'
+import { videoEditCodeInstanceMigrationsSchema } from './videoEditCodeProjectCapabilities'
 
 /*
  * 风格包与模板的算法型操作（照搬 Frameflow 的 styles/templates 工具语义）。读、改、增、删与成员关系走通用实体
@@ -100,14 +101,14 @@ export const promoteVideoEditTemplateCapability = defineApplicationCapability({
 
 export const updateVideoEditTemplateCapability = defineApplicationCapability({
   ...common, id: 'update_video_edit_template', title: '更新模板并刷新实例', timeoutMs: 300000, supportsUndo: true, risk: 'R2',
-  description: '改工程模板的内容，并让所有联动实例一起变。调用前先读 video_edit.project_template.instance_refs，告诉用户会影响几处；用户只想改一处时先 detach_video_edit_template_instance。source：{kind:"version", versionId} 让代码模板改用它代码定义下的另一个源码版本（先在 video_edit.code_version 创建新版本）；{kind:"clips", sequenceRef, clipRefs} 用一组改好的原生实例作为新内容；{kind:"library", confirmed:true} 用风格库里更高版本覆盖工程副本（先告诉用户影响几处，用户同意再传）。内容变了版本加 1；改完逐个抽查实例的定版帧。一步撤销。',
+  description: '改工程模板的内容，并让所有联动实例一起变。调用前先读 video_edit.project_template.instance_refs，告诉用户会影响几处；用户只想改一处时先 detach_video_edit_template_instance。source：{kind:"version", versionId} 让代码模板改用它代码定义下的另一个源码版本（先在 video_edit.code_version 创建新版本）；{kind:"clips", sequenceRef, clipRefs} 用一组改好的原生实例作为新内容；{kind:"library", confirmed:true} 用风格库里更高版本覆盖工程副本（先告诉用户影响几处，用户同意再传）。内容变了版本加 1；代码模板换版本时 codeInstances 逐个列出各实例随新版本去掉、恢复默认的参数。改完逐个抽查实例的定版帧。一步撤销。',
   aliases: ['改模板', '升级模板', '刷新模板实例', 'update template'], acceptsRefs: ['video_edit.project_template', 'video_edit.code_version', 'video_edit.clip'], producesRefs: ['video_edit.project_template'],
   inputSchema: z.object({ templateRef: projectTemplateRef, content: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('version'), versionId: z.string().min(1).max(100).describe('代码定义下的源码版本 id（video_edit.code_version 引用的成员 id）。') }).strict(),
     z.object({ kind: z.literal('clips'), sequenceRef, clipRefs: z.array(clipRef).min(1).max(32) }).strict(),
     z.object({ kind: z.literal('library'), confirmed: z.literal(true).describe('必须先向用户确认：升级会改变工程里所有联动实例。') }).strict(),
   ]) }).strict(),
-  outputSchema: z.object({ resultRef: projectTemplateRef, version: z.number().int(), instanceCount: z.number().int(), message: z.string(), verification }).strict(),
+  outputSchema: z.object({ resultRef: projectTemplateRef, version: z.number().int(), instanceCount: z.number().int(), codeInstances: videoEditCodeInstanceMigrationsSchema, message: z.string(), verification }).strict(),
   concurrencyKey: 'video_edit', resolveConcurrencyKey: input => `video_edit:${input.templateRef.id.split(':')[0]}`, resolveOperationTargets: input => [input.templateRef], resolveOperationWriteTargets: input => [input.templateRef],
   control: capabilityControl('update', ['video_edit.project_template'], { cancelable: true, revisionScopes: ['video_edit'], alsoImpacts: [{ effect: 'update', entityTypes: ['video_edit.clip'] }] }),
   summarize: result => result.message, resolveObservedEffects: (_input, result) => [effect('update', ['video_edit.project_template'], [result.resultRef], result.verification), effect('update', ['video_edit.clip'], [], result.verification)],

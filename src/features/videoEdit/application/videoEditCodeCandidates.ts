@@ -6,8 +6,8 @@ import { withVideoEditCurrentMetadata, editVideoProject, requireVideoEditInstanc
 import { prepareCodeVersionPublication, discardVideoEditCodeFiles } from './videoEditCodeStorage'
 import { documentCodeSourceResolver, loadCodeSourceReferences, normalizeCodeMaterialFiles, type CodeMaterialFiles, type CodeFileReference } from '@/core/videoEdit/codeMaterial/sources'
 import { appendCodeMaterialVersion } from '@/core/videoEdit/codeMaterialVersions'
-import { proposeCodeMaterialMigration, type CodeMaterialMigrationImpact } from '@/core/videoEdit/codeMaterialAnimation'
-import { validateCodeMaterialDocument } from '@/core/videoEdit/codeMaterialDocument'
+import type { CodeMaterialMigrationImpact } from '@/core/videoEdit/codeMaterialAnimation'
+import { retargetCodeMaterialInstances, validateCodeMaterialDocument } from '@/core/videoEdit/codeMaterialDocument'
 import { videoEditComposition, videoEditDocumentSchema, type VideoEditDocument } from '@/core/videoEdit/document'
 import type { VideoEditCodeTarget } from './videoEditCodeParameters'
 import { compileVideoEditCode, forgetVideoEditCodeMetadata, readVideoEditCodeMetadata, rememberVideoEditCodeMetadata } from './videoEditCodeState'
@@ -69,35 +69,33 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
     await loadCodeSourceReferences(definition.versions.find(version => version.id === definition.defaultVersionId)!)
     const appended = await appendCodeMaterialVersion(definition, source, source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver(baseline), await prepareCodeVersionPublication(target.projectId, normalizeCodeMaterialFiles(source), undefined, undefined, createdFiles))
     controller.signal.throwIfAborted(); newVersion = appended.versionId
+    if (appended.kindUnverified) logger.warn('原有代码版本都读不到，新版本未核对素材种类', { event: 'video_edit.code.version.kind_unverified', context: { projectId: target.projectId, definitionId: definition.id, versionId: newVersion } })
     const version = appended.definition.versions.find(version => version.id === newVersion)!
     rememberVideoEditCodeMetadata(owner, definition.id, version, appended.program)
     await ensureVideoEditCodeParameterMetadata(owner, baseline, definition.id, target.versionId)
     const read = readVideoEditCodeMetadata(owner, baseline)
-    const impacts: VideoEditCodeCandidate['impacts'][number][] = []; let count = 0
     const selectedIds = new Set<string>()
     const selectedEffects = new Map<string, string[]>()
-    const document = videoEditDocumentSchema.parse({ ...baseline, codeMaterials: baseline.codeMaterials!.map(value => value.id === definition.id ? appended.definition : value), sequences: baseline.sequences.map(value => ({ ...value, clips: value.clips.map(clip => {
-      if (target.effectId) {
-        return { ...clip, effects: clip.effects?.map(effect => {
-          const selected = scope === 'single' ? value.id === target.sequenceId && clip.id === target.clipId && effect.id === target.effectId : effect.code?.definitionId === definition.id && effect.code.versionId === target.versionId
-          if (!selected || !effect.code) return effect
-          const migration = proposeCodeMaterialMigration(read(effect.code), appended.program, effect.code, appended.versionId)
-          count++; selectedIds.add(clip.id); impacts.push(...migration.impacts.map(impact => ({ ...impact, sequenceName: value.name, clipName: `${clip.name} · ${effect.name}` })))
-          selectedEffects.set(clip.id, [...(selectedEffects.get(clip.id) ?? []), effect.id])
-          return { ...effect, code: migration.instance }
-        }) }
-      }
-      const selected = scope === 'single' ? value.id === target.sequenceId && clip.id === target.clipId : clip.code?.definitionId === definition.id && clip.code.versionId === target.versionId
-      if (!selected || !clip.code) return clip
-      const migration = proposeCodeMaterialMigration(read(clip.code), appended.program, clip.code, appended.versionId)
-      count++; selectedIds.add(clip.id); impacts.push(...migration.impacts.map(impact => ({ ...impact, sequenceName: value.name, clipName: clip.name })))
-      const elementOverrides = { ...clip.elementOverrides }
-      if (scope === 'single') for (const id of options.clearElementOverrides ?? []) delete elementOverrides[id]
-        const next = { ...clip, code: migration.instance }
-        if (Object.keys(elementOverrides).length) next.elementOverrides = elementOverrides
-        else delete next.elementOverrides
-        return next
-    }) })) })
+    const moved = retargetCodeMaterialInstances({ ...baseline, codeMaterials: baseline.codeMaterials!.map(value => value.id === definition.id ? appended.definition : value) }, definition.id, appended.versionId, appended.program, read, { select: (instance, code) => {
+      if (instance.kind !== (target.effectId ? 'effect' : 'clip')) return false
+      if (scope === 'matching') return code.versionId === target.versionId
+      return instance.sequenceId === target.sequenceId && (instance.kind === 'effect' ? instance.clipId === target.clipId && instance.id === target.effectId : instance.id === target.clipId)
+    } })
+    const sequenceNames = new Map(baseline.sequences.map(sequence => [sequence.id, sequence.name]))
+    const impacts: VideoEditCodeCandidate['impacts'][number][] = moved.instances.flatMap(({ target: instance, impacts }) => {
+      if (instance.kind === 'item') return []
+      const clipId = instance.kind === 'effect' ? instance.clipId : instance.id
+      selectedIds.add(clipId)
+      if (instance.kind === 'effect') selectedEffects.set(clipId, [...(selectedEffects.get(clipId) ?? []), instance.id])
+      return impacts.map(impact => ({ ...impact, sequenceName: sequenceNames.get(instance.sequenceId)!, clipName: instance.label }))
+    })
+    const count = moved.instances.length
+    if (!target.effectId && scope === 'single' && options.clearElementOverrides?.length) {
+      const clip = moved.document.sequences.find(sequence => sequence.id === target.sequenceId)!.clips.find(clip => clip.id === target.clipId)!
+      for (const id of options.clearElementOverrides) delete clip.elementOverrides?.[id]
+      if (clip.elementOverrides && !Object.keys(clip.elementOverrides).length) delete clip.elementOverrides
+    }
+    const document = videoEditDocumentSchema.parse(moved.document)
     await ensureVideoEditChangedCodeMetadata(owner, baseline, document, controller.signal)
     validateCodeMaterialDocument(document, readVideoEditCodeMetadata(owner, document), changedCodeMaterialVersions(baseline, document))
     const requested = owner.activeSequenceId === target.sequenceId ? owner.frame : owner.sequenceViews.get(target.sequenceId)?.frame ?? original.start

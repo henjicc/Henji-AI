@@ -42,4 +42,17 @@ describe('剪辑源码文件引用契约', () => {
     const forged = { ...definition, versions: definition.versions.map(version => ({ ...version, languageVersion: 2 })) }
     expect(() => codeMaterialDefinitionsSchema.parse([forged])).toThrow()
   })
+  it('默认版本读不到时用其他历史版本核对种类；全部读不到才放行并标明未核对', async () => {
+    const { definition: first } = await makeCodeMaterialDefinition(source(), compile, publication)
+    const second = await appendCodeMaterialVersion(first, source(.7), compile, documentCodeSourceResolver(), publication)
+    const definition = { ...second.definition, defaultVersionId: second.versionId }
+    const failing = (...defaults: string[]) => async (files: CodeMaterialFiles) => {
+      if (Object.values(files.files).some(text => defaults.some(value => text.includes(`default:${value},`)))) throw new Error('模拟旧版本编译失败')
+      return compile(files)
+    }
+    const filter = 'export default {name:"滤镜",kind:"filter",mode:"static",width:3840,height:2160,durationSeconds:10,params:[],createWebGPU(){return {draw(){}}}}'
+    await expect(appendCodeMaterialVersion(definition, filter, failing('0.7'), documentCodeSourceResolver(), publication)).rejects.toThrow('不能在同一定义中互换')
+    expect(await appendCodeMaterialVersion(definition, source(.9), failing('0.7'), documentCodeSourceResolver(), publication)).not.toHaveProperty('kindUnverified')
+    expect(await appendCodeMaterialVersion(definition, source(.9), failing('0.5', '0.7'), documentCodeSourceResolver(), publication)).toMatchObject({ kindUnverified: true })
+  })
 })

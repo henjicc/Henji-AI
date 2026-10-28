@@ -1,10 +1,10 @@
 import { expandPinnedCodeComponents } from './codeMaterial/components'
 import { documentCodeSourceResolver, resolveCodeMaterialFiles, type CodeMaterialFiles } from './codeMaterial/sources'
-import type { VideoEditDocument } from './document'
+import type { VideoEditClip, VideoEditDocument } from './document'
 import type { CodeMaterialInstance, CodeMaterialVersion } from './codeMaterialPersistence'
 import type { CodeParameterDeclaration, CodeParameterTypeDefinition } from './codeMaterial/contract'
 import { CodeMaterialError } from './codeMaterial/contract'
-import { prepareCodeMaterialParameters } from './codeMaterialAnimation'
+import { prepareCodeMaterialParameters, proposeCodeMaterialMigration, type CodeMaterialMigrationImpact } from './codeMaterialAnimation'
 import { isCodeImageReference, isCodeAudioReference } from './codeMaterial/contract'
 import { codeMaterialContextForFrame, codeMaterialContextForTransitionFrame } from './codeMaterialTiming'
 import { validateVideoEditTransitions, videoEditTransitionWindow } from './transitions'
@@ -34,6 +34,50 @@ export function codeMaterialVersion(document: Pick<VideoEditDocument, 'codeMater
   if (!version) throw new CodeMaterialError('COMPATIBILITY', '固定代码版本不存在，请恢复原源码引用。')
   return version
 }
+export type CodeMaterialInstanceTarget = { kind: 'item'; id: string; label: string } | { kind: 'clip'; id: string; label: string; sequenceId: string } | { kind: 'effect'; id: string; label: string; sequenceId: string; clipId: string }
+const instanceKindNames = { item: '素材条目', clip: '片段', effect: '附加效果' } as const
+/** 代码参数错误补上用户能认出的实例名；读取中等非代码错误原样抛出，调用方据此等待重试。 */
+function withInstanceName<T>(target: CodeMaterialInstanceTarget, operation: () => T): T {
+  try { return operation() }
+  catch (error) { if (error instanceof CodeMaterialError) throw new CodeMaterialError(error.code, `${instanceKindNames[target.kind]}“${target.label}”：${error.message}`, error.sourceSpan); throw error }
+}
+const itemTarget = (item: VideoEditDocument['items'][number]): CodeMaterialInstanceTarget => ({ kind: 'item', id: item.id, label: item.name })
+const clipTarget = (sequenceId: string, clip: VideoEditClip): CodeMaterialInstanceTarget => ({ kind: 'clip', id: clip.id, label: clip.name, sequenceId })
+const effectTarget = (sequenceId: string, clip: VideoEditClip, effect: NonNullable<VideoEditClip['effects']>[number]): CodeMaterialInstanceTarget => ({ kind: 'effect', id: effect.id, label: `${clip.name} · ${effect.name}`, sequenceId, clipId: clip.id })
+
+export interface CodeMaterialRetargetedInstance { target: CodeMaterialInstanceTarget; removedParameters: string[]; resetParameters: string[]; impacts: CodeMaterialMigrationImpact[]; note?: string }
+export interface CodeMaterialRetargetOptions {
+  /** 省略时换掉全部未指向目标版本的实例。 */
+  select?: (target: CodeMaterialInstanceTarget, instance: CodeMaterialInstance) => boolean
+  /** 声明读不到的原版本（源码缺失或编译不过）；这些实例只按新版本声明核对。 */
+  unreadable?: ReadonlySet<string>
+}
+/**
+ * 把一个定义的实例换到另一版本的唯一入口：素材条目、片段与附加效果一样经迁移提案，
+ * 新版本不再声明的参数与曲线随换版本去掉，不再适用的值重置为默认，没写过的参数跟随新版本默认值。
+ * 返回新文档，不改原文档。read 读实例当前版本的声明，next 是目标版本的声明。
+ */
+export function retargetCodeMaterialInstances(document: VideoEditDocument, definitionId: string, versionId: string, next: CodeMaterialMetadata, read: CodeMaterialMetadataReader, options: CodeMaterialRetargetOptions = {}): { document: VideoEditDocument; instances: CodeMaterialRetargetedInstance[] } {
+  const { select = () => true, unreadable } = options
+  const result = structuredClone(document); const instances: CodeMaterialRetargetedInstance[] = []
+  const declared = new Set(next.parameters.map(parameter => parameter.key))
+  const migrate = (owner: { code?: CodeMaterialInstance }, target: CodeMaterialInstanceTarget): void => {
+    const code = owner.code
+    if (!code || code.definitionId !== definitionId || code.versionId === versionId || !select(target, code)) return
+    const fallback = unreadable?.has(code.versionId) ?? false
+    const proposal = withInstanceName(target, () => proposeCodeMaterialMigration(fallback ? undefined : read(code), next, code, versionId))
+    const removed = [...new Set([...Object.keys(code.parameters), ...Object.keys(code.curves ?? {})])].filter(key => !declared.has(key)).sort()
+    owner.code = proposal.instance
+    instances.push({ target, removedParameters: removed, resetParameters: [...new Set(proposal.impacts.filter(impact => declared.has(impact.key) && (impact.resetValue || impact.removeCurve)).map(impact => impact.key))].sort(), impacts: proposal.impacts, ...(fallback ? { note: '旧版本无法读取，按新版本声明处理' } : {}) })
+  }
+  for (const item of result.items) migrate(item, itemTarget(item))
+  for (const sequence of result.sequences) for (const clip of sequence.clips) {
+    migrate(clip, clipTarget(sequence.id, clip))
+    for (const effect of clip.effects ?? []) migrate(effect, effectTarget(sequence.id, clip, effect))
+  }
+  return { document: result, instances }
+}
+
 /** Metadata is checked against source by the host Worker, never trusted from the file. */
 export function validateCodeMaterialDocument(document: VideoEditDocument, read: CodeMaterialMetadataReader, versions?: ReadonlySet<string>): void {
   const selected = (instance: CodeMaterialInstance): boolean => !versions || versions.has(instance.versionId)
@@ -45,34 +89,47 @@ export function validateCodeMaterialDocument(document: VideoEditDocument, read: 
     }
   }
   for (const definition of document.codeMaterials ?? []) if (!versions || versions.has(definition.defaultVersionId)) read({ definitionId: definition.id, versionId: definition.defaultVersionId, parameters: {} })
-  for (const item of document.items) if (item.code && selected(item.code)) {
-    const program = read(item.code)
-    if (program.kind !== 'generator') throw new CodeMaterialError('TYPE', '单输入滤镜应作为附加效果使用，不能直接创建生成素材项。')
-    validate(item.code, program)
+  for (const item of document.items) {
+    const code = item.code
+    if (!code || !selected(code)) continue
+    withInstanceName(itemTarget(item), () => {
+      const program = read(code)
+      if (program.kind !== 'generator') throw new CodeMaterialError('TYPE', '单输入滤镜应作为附加效果使用，不能直接创建生成素材项。')
+      validate(code, program)
+    })
   }
   for (const sequence of document.sequences) {
     for (const clip of sequence.clips) {
-      if (clip.code && selected(clip.code)) {
-        const program = read(clip.code)
-        if (program.kind !== 'generator') throw new CodeMaterialError('TYPE', '代码片段需要生成素材。')
-        validate(clip.code, program)
-        codeMaterialContextForFrame(clip, clip.start + clip.duration - 1, sequence.frameRate, program, sequence)
-      }
-      for (const code of videoEditEffectCodes(clip.effects)) {
-        if (!selected(code)) continue
+      const code = clip.code
+      if (code && selected(code)) withInstanceName(clipTarget(sequence.id, clip), () => {
         const program = read(code)
-        if (program.kind !== 'filter') throw new CodeMaterialError('TYPE', '附加效果必须使用单输入滤镜源码。')
+        if (program.kind !== 'generator') throw new CodeMaterialError('TYPE', '代码片段需要生成素材。')
         validate(code, program)
         codeMaterialContextForFrame(clip, clip.start + clip.duration - 1, sequence.frameRate, program, sequence)
+      })
+      for (const effect of clip.effects ?? []) {
+        const code = effect.code
+        if (!code || !selected(code)) continue
+        withInstanceName(effectTarget(sequence.id, clip, effect), () => {
+          const program = read(code)
+          if (program.kind !== 'filter') throw new CodeMaterialError('TYPE', '附加效果必须使用单输入滤镜源码。')
+          validate(code, program)
+          codeMaterialContextForFrame(clip, clip.start + clip.duration - 1, sequence.frameRate, program, sequence)
+        })
       }
     }
     for (const transition of sequence.transitions ?? []) {
       const window = videoEditTransitionWindow(sequence, transition)
-      for (const clip of [window.left, window.right]) for (const instance of [...(clip.code ? [clip.code] : []), ...videoEditEffectCodes(clip.effects)]) {
-        if (!selected(instance)) continue
-        const program = read(instance)
-        codeMaterialContextForTransitionFrame(clip, window.start, sequence.frameRate, program, window, sequence)
-        codeMaterialContextForTransitionFrame(clip, window.end - 1, sequence.frameRate, program, window, sequence)
+      for (const clip of [window.left, window.right]) {
+        const uses = [...(clip.code ? [{ instance: clip.code, target: clipTarget(sequence.id, clip) }] : []), ...(clip.effects ?? []).flatMap(effect => effect.code ? [{ instance: effect.code, target: effectTarget(sequence.id, clip, effect) }] : [])]
+        for (const { instance, target } of uses) {
+          if (!selected(instance)) continue
+          withInstanceName(target, () => {
+            const program = read(instance)
+            codeMaterialContextForTransitionFrame(clip, window.start, sequence.frameRate, program, window, sequence)
+            codeMaterialContextForTransitionFrame(clip, window.end - 1, sequence.frameRate, program, window, sequence)
+          })
+        }
       }
     }
   }

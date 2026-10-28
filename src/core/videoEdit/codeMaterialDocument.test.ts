@@ -3,7 +3,7 @@ import { createVideoEditTestDocument as createVideoEditDocument } from './testFi
 import { describe, expect, it } from 'vitest'
 import { testAuthorBundle, testAuthorProgram } from '../../features/videoEdit/engine/videoEditAuthorTestFixtures'
 import { codeMaterialContextForFrame } from './codeMaterialTiming'
-import { codeMaterialSource, validateCodeMaterialDocument } from './codeMaterialDocument'
+import { codeMaterialSource, retargetCodeMaterialInstances, validateCodeMaterialDocument } from './codeMaterialDocument'
 import { videoEditDocumentSchema, videoEditComposition, splitVideoEditClip, adjustVideoEditClip } from './document'
 import { makeVideoEditItemClip, makeVideoEditItemSequence } from './projectItems'
 
@@ -57,5 +57,23 @@ describe('代码素材项与独立实例的剪辑约束', () => {
     expect(() => videoEditDocumentSchema.parse({ ...document, sequences: [{ ...document.sequences[0], clips: [{ ...clip, kind: 'text' }] }] })).toThrow('普通片段')
     expect(() => videoEditDocumentSchema.parse({ ...document, sequences: [{ ...document.sequences[0], clips: [{ ...clip, code: { ...clip.code!, definitionId: 'other' } }] }] })).toThrow('所属定义')
     expect(() => makeVideoEditItemClip(document, 'item', document.sequences[0].id, { frame: 0 })).toThrow('尚未完成')
+  })
+})
+describe('实例换版本', () => {
+  it('参数类型错误照旧拒绝，错误里带素材条目名', () => {
+    const { document, program, read } = setup()
+    document.items[0].code!.parameters.amount = '很强'
+    expect(() => validateCodeMaterialDocument(document, read)).toThrow(`素材条目“${program.name}”：`)
+    expect(() => retargetCodeMaterialInstances(document, 'definition', 'next', program, read)).toThrow(`素材条目“${program.name}”：`)
+  })
+  it('旧版本声明读不到时不挡住换版本：按新版本声明去掉未声明的键、不合规的值跟随默认，并注明', () => {
+    const { document, program } = setup()
+    document.items[0].code!.parameters = { amount: .9, slot: 2 }
+    const next = { ...program, parameters: program.parameters.map(parameter => parameter.type === 'number' ? { ...parameter, max: .5 } : parameter) }
+    const unreadable = (): never => { throw new Error('旧版本不应被读取') }
+    const moved = retargetCodeMaterialInstances(document, 'definition', 'next', next, unreadable, { unreadable: new Set(['version']), select: target => target.kind === 'item' })
+    expect(moved.instances).toEqual([expect.objectContaining({ target: expect.objectContaining({ kind: 'item', label: program.name }), removedParameters: ['slot'], resetParameters: ['amount'], note: '旧版本无法读取，按新版本声明处理' })])
+    expect(moved.document.items[0].code).toEqual({ definitionId: 'definition', versionId: 'next', parameters: {} })
+    expect(document.items[0].code!.versionId).toBe('version')
   })
 })

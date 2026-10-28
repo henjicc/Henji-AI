@@ -18,6 +18,11 @@ interface Checked { definitionId: string; source: string; apiVersion: number; la
 export type VideoEditCodeMetadata = Map<string, Checked>
 const states = new WeakMap<object, VideoEditCodeMetadata>()
 const releasedOwners = new WeakSet<object>()
+/** 正在进行的换版本操作已确认读不到的旧版本；操作期间读取它们直接报代码错误，不再进入“读取中”等待。 */
+const unreadableVersions = new WeakMap<object, Set<string>>()
+export class VideoEditCodeVersionUnreadable extends CodeMaterialError {
+  constructor() { super('COMPATIBILITY', '旧代码版本无法读取（源码缺失或编译不过）。') }
+}
 const checkedPrograms = new Map<string, CodeMaterialProgram>()
 let checkedProgramBytes = 0
 const compilingPrograms = new Map<string, Promise<CodeMaterialProgram>>()
@@ -74,11 +79,15 @@ export function readVideoEditCodeMetadata(owner: object, document: VideoEditDocu
       try { program = checkedPrograms.get(codeMaterialFilesKey(codeMaterialSource(document, instance).compilation)) } catch { /* 尚未读取的文件由下方按需入口处理。 */ }
       if (program) { rememberVideoEditCodeMetadata(owner, instance.definitionId, version, program); entry = states.get(owner)?.get(version.id) }
     }
-    if (!entry || entry.definitionId !== instance.definitionId || entry.source !== codeVersionContentKey(version) || entry.apiVersion !== version.apiVersion || entry.languageVersion !== version.languageVersion) throw new VideoEditCodeMetadataPending(ensureVideoEditCodeParameterMetadata(owner, document, instance.definitionId, instance.versionId))
+    if (!entry || entry.definitionId !== instance.definitionId || entry.source !== codeVersionContentKey(version) || entry.apiVersion !== version.apiVersion || entry.languageVersion !== version.languageVersion) {
+      if (unreadableVersions.get(owner)?.has(version.id)) throw new VideoEditCodeVersionUnreadable()
+      throw new VideoEditCodeMetadataPending(ensureVideoEditCodeParameterMetadata(owner, document, instance.definitionId, instance.versionId))
+    }
     return entry.metadata
   }
 }
 export function rememberVideoEditCodeMetadata(owner: object, definitionId: string, version: CodeMaterialVersion, program: CodeMaterialProgram): void {
+  unreadableVersions.get(owner)?.delete(version.id)
   const metadata = states.get(owner)
   if (!metadata) { const entries: VideoEditCodeMetadata = new Map(); states.set(owner, entries); put(entries, definitionId, version, program); return }
   put(metadata, definitionId, version, program)
@@ -97,6 +106,35 @@ export async function ensureVideoEditCodeDocumentMetadata(owner: object, documen
     signal?.throwIfAborted()
     await ensureVideoEditCodeParameterMetadata(owner, document, instance.definitionId, instance.versionId)
   }
+}
+/**
+ * 把一个定义的实例换到 targetVersionId 前，读好各实例原版本的声明。目标版本必须读得到（尚未创建时省略）；
+ * 旧版本源码缺失或编译不过不挡住换版本，返回这些版本，由调用方只按新版本声明处理。
+ */
+export async function ensureVideoEditRetargetMetadata(owner: object, document: VideoEditDocument, definitionId: string, targetVersionId?: string, signal?: AbortSignal): Promise<Set<string>> {
+  if (targetVersionId) await ensureVideoEditCodeParameterMetadata(owner, document, definitionId, targetVersionId)
+  const unreadable = new Set<string>()
+  for (const versionId of new Set(videoEditCodeReferences(document).filter(code => code.definitionId === definitionId && code.versionId !== targetVersionId).map(code => code.versionId))) {
+    signal?.throwIfAborted()
+    try { await ensureVideoEditCodeParameterMetadata(owner, document, definitionId, versionId) }
+    catch (error) {
+      signal?.throwIfAborted()
+      if (releasedOwners.has(owner)) throw error
+      unreadable.add(versionId)
+      logger.warn('旧代码版本无法读取，换版本按新版本声明处理', { event: 'video_edit.code.retarget.previous_unreadable', error, context: { definitionId, versionId } })
+    }
+  }
+  return unreadable
+}
+/**
+ * 换版本写入期间把读不到的旧版本标记出来，同步校验（如字体变化核对）据此不再等待它们。
+ * 标记只在这次操作里有效：失败可能是暂时的，之后读取照常重试。
+ */
+export async function withVideoEditUnreadableCodeVersions<T>(owner: object, versions: ReadonlySet<string>, operation: () => Promise<T>): Promise<T> {
+  const marked = unreadableVersions.get(owner) ?? new Set<string>(); unreadableVersions.set(owner, marked)
+  const added = [...versions].filter(version => !marked.has(version)); added.forEach(version => marked.add(version))
+  try { return await operation() }
+  finally { added.forEach(version => marked.delete(version)) }
 }
 export async function ensureVideoEditChangedCodeMetadata(owner: object, before: VideoEditDocument, next: VideoEditDocument, signal?: AbortSignal): Promise<void> {
   const versions = changedCodeMaterialVersions(before, next)

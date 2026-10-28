@@ -20,19 +20,26 @@ export async function makeCodeMaterialDefinition(source: string | CodeMaterialFi
   return { definition, program }
 }
 /** A resolver is required for the previous immutable version; t89 can replace its storage. */
-export async function appendCodeMaterialVersion(definition: CodeMaterialDefinition, source: string | CodeMaterialFiles, compile: CodeSourceCompiler, resolver: CodeSourceResolver, publication: CodeVersionPublication): Promise<CodeMaterialDefinitionResult & { versionId: string }> {
+export async function appendCodeMaterialVersion(definition: CodeMaterialDefinition, source: string | CodeMaterialFiles, compile: CodeSourceCompiler, resolver: CodeSourceResolver, publication: CodeVersionPublication): Promise<CodeMaterialDefinitionResult & { versionId: string; kindUnverified?: true }> {
   const previousVersion = definition.versions.find(version => version.id === definition.defaultVersionId)
   if (!previousVersion) throw new CodeMaterialError('COMPATIBILITY', '固定代码版本不存在。')
-  const previous = await compile(expandPinnedCodeComponents(resolveCodeMaterialFiles(previousVersion, resolver), previousVersion.imports ?? [], resolver))
-  if (previous.apiVersion !== previousVersion.apiVersion || previous.languageVersion !== previousVersion.languageVersion) throw new CodeMaterialError('COMPATIBILITY', '源码语言版本与固定版本不一致。')
+  // 原有版本用来核对种类与语言版本。默认版本源码缺失或编译不过时依次改用其他历史版本，
+  // 不挡住新版本；全部读不到才不核对种类（kindUnverified），由调用方记录。取消会在随后编译新版本时照常抛出。
+  let previous: CodeMaterialProgram | undefined
+  for (const version of [previousVersion, ...definition.versions.filter(value => value !== previousVersion).reverse()]) {
+    try { previous = await compile(expandPinnedCodeComponents(resolveCodeMaterialFiles(version, resolver), version.imports ?? [], resolver)) } catch { continue }
+    if (previous.apiVersion !== version.apiVersion || previous.languageVersion !== version.languageVersion) throw new CodeMaterialError('COMPATIBILITY', '源码语言版本与固定版本不一致。')
+    break
+  }
   const addressed = await addressCodeMaterialFiles(source)
   const existing = definition.versions.find(version => codeVersionContentKey(version) === codeVersionContentKey({ ...addressed, imports: publication.imports }))
   const result = await makeCodeMaterialDefinition(source, async files => {
     const program = await compile(files)
-    if (previous.kind !== program.kind) throw new CodeMaterialError('COMPATIBILITY', '生成素材与输入滤镜不能在同一定义中互换，请另建素材。')
+    if (previous && previous.kind !== program.kind) throw new CodeMaterialError('COMPATIBILITY', '生成素材与输入滤镜不能在同一定义中互换，请另建素材。')
     return program
   }, { ...publication, name: definition.name, ...(existing ? { write: async () => ({ files: existing.files, folder: definition.folder! }) } : {}) }, definition)
   const version = result.definition.versions[0]
-  if (existing) return { ...result, definition, versionId: existing.id }
-  return { ...result, definition: codeMaterialDefinitionSchema.parse({ ...definition, folder: result.definition.folder, versions: [...definition.versions, version] }), versionId: version.id }
+  const kind = previous ? {} : { kindUnverified: true as const }
+  if (existing) return { ...result, definition, versionId: existing.id, ...kind }
+  return { ...result, definition: codeMaterialDefinitionSchema.parse({ ...definition, folder: result.definition.folder, versions: [...definition.versions, version] }), versionId: version.id, ...kind }
 }

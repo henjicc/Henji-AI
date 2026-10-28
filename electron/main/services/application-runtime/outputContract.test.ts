@@ -34,7 +34,7 @@ const verification = (target = documentRef) => ({ verified: true, condition: mes
 // 来自第四轮外部成功回执及现有领域测试的代表性回执，禁止从待测 outputSchema 反推样本。
 const successData: Record<string, Record<string, unknown>> = {
   commit_video_edit_code_project: { resultRef: ref('video_edit.code_project', 'document'), commit: 'a'.repeat(40), verified: true, message },
-  upgrade_video_edit_code_materials: { commit: 'a'.repeat(40), upgrades: [{ materialRef: ref('video_edit.code_material', 'document:material'), oldVersion: 'v1', newVersion: 'v2', changedFiles: ['style/tokens.ts'], retargetedClips: 2 }], resultRefs: [ref('video_edit.code_material', 'document:material'), clipRef], verified: true, message },
+  upgrade_video_edit_code_materials: { commit: 'a'.repeat(40), upgrades: [{ materialRef: ref('video_edit.code_material', 'document:material'), oldVersion: 'v1', newVersion: 'v2', changedFiles: ['style/tokens.ts'], retargetedClips: 2 }], instances: [{ ref: clipRef, removedParameters: ['slot'], resetParameters: [] }], resultRefs: [ref('video_edit.code_material', 'document:material'), clipRef], verified: true, message },
   search_app_store_icons: { country: 'cn', candidates: [{ appId: '6480446430', name: '元宝', developer: '腾讯', platform: 'iphone', category: '工具' }], ...revisions },
   save_app_store_icon: { assetRef, projectId: 'project', name: '元宝', width: 1024, height: 1024, transparentCorners: true, verification: { verified: true, condition: message }, ...revisions },
   prepare_video_edit_subtitle_audio: { documentRef, audioDocumentRef, ...verified },
@@ -70,7 +70,7 @@ const successData: Record<string, Record<string, unknown>> = {
   apply_video_edit_template: { resultRef: documentRef, templateRef: ref('video_edit.project_template', 'document:card'), clipRefs: [clipRef], copied: true, message, verification: { verified: true, condition: '已保存' } },
   create_video_edit_template: { resultRef: ref('video_edit.project_template', 'document:card'), libraryRef: null, kind: 'native', instanceCount: 1, message, verification: { verified: true, condition: '已保存' } },
   promote_video_edit_template: { resultRef: ref('video_edit.template', 'card'), templateRef: ref('video_edit.project_template', 'document:card'), version: 1, message, verification: { verified: true, condition: '已回读' } },
-  update_video_edit_template: { resultRef: ref('video_edit.project_template', 'document:card'), version: 2, instanceCount: 3, message, verification: { verified: true, condition: '已保存' } },
+  update_video_edit_template: { resultRef: ref('video_edit.project_template', 'document:card'), version: 2, instanceCount: 3, codeInstances: [], message, verification: { verified: true, condition: '已保存' } },
   detach_video_edit_template_instance: { resultRef: documentRef, clipRefs: [clipRef], message, verification: { verified: true, condition: '已保存' } },
   get_current_application_context: { surface: { id: 'workspace.videoEdit', kind: 'workspace', focusedRef: null, selectedRefs: [] }, catalogRevision: 1, ready: true, externalContractVersion: EXTERNAL_CONTRACT_VERSION, ...revisions },
   read_application_entity: { ref: documentRef, entityType: documentRef.kind, properties: { name: '字幕项目', empty: '' }, revisions: { 'video_edit:document': 29 }, capturedAt: new Date(0).toISOString(), ...revisions },

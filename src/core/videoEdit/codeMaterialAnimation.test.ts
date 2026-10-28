@@ -4,6 +4,7 @@ import { codeMaterialCurvesSchema, evaluateCodeMaterialParameters, prepareCodeMa
 import type { CodeMaterialCurves, CodeMaterialKeyframe } from './codeMaterialAnimation'
 import type { CodeMaterialInstance } from './codeMaterialPersistence'
 import { offsetVideoEditSource } from './time'
+import { validateCodeMaterialParameters } from './codeMaterial/parameters'
 
 const program = testCodeMetadata({ name: '动画', width: 3840, height: 2160, durationSeconds: 10, parameters: { amount: { type: 'number', title: '强度', default: 5, min: 0, max: 10, step: 1, animatable: true }, ink: { type: 'color', title: '颜色', default: [0, 0, 0, 0], animatable: true }, flag: { type: 'boolean', title: '开关', default: false, animatable: true }, label: { type: 'text', title: '文字', default: '旧', maxLength: 20, animatable: true }, choice: { type: 'choice', title: '选项', default: 'a', options: ['a', 'b'], animatable: true } } })
 const time = (sourceInUs: number) => ({ sourceInUs, sourceRemainder: { numerator: 0, denominator: 1 } })
@@ -70,7 +71,7 @@ describe('源码迁移提案不静默丢值或曲线', () => {
     const previous = instance({ amount: [point('a', 0, 1), point('b', 2e6, 7)] }, { amount: 3, flag: true })
     const next = { ...program, parameters: [...program.parameters.filter(parameter => parameter.key !== 'flag'), { key: 'added', title: '新增', description: '', animatable: false, type: 'number' as const, min: 0, max: 20, step: 1, unit: '', default: 12 }] }
     const proposal = proposeCodeMaterialMigration(program, next, previous, 'new')
-    expect(proposal.instance.parameters).toMatchObject({ amount: 3, added: 12 })
+    expect(proposal.instance.parameters).toEqual({ amount: 3 }); expect(validateCodeMaterialParameters(next, proposal.instance.parameters).added).toBe(12)
     expect(proposal.instance.parameters).not.toHaveProperty('flag'); expect(proposal.instance.curves?.amount).toEqual(previous.curves?.amount)
     expect(proposal.impacts).toEqual([{ key: 'flag', title: '开关', reason: '参数已删除', resetValue: true, removeCurve: false }])
     expect(previous.versionId).toBe('v'); expect(previous.parameters.flag).toBe(true)
@@ -79,7 +80,7 @@ describe('源码迁移提案不静默丢值或曲线', () => {
     const previous = instance({ amount: [point('a', 0, 1), point('b', 8e6, 9)], flag: [point('c', 0, true, 'hold')] }, { amount: 9, flag: true })
     const next = { ...program, durationSeconds: 5, parameters: program.parameters.map(parameter => parameter.key === 'amount' && parameter.type === 'number' ? { ...parameter, max: 4, default: 2 } : parameter.key === 'flag' ? { ...parameter, animatable: false as const } : parameter) }
     const proposal = proposeCodeMaterialMigration(program, next, previous, 'new')
-    expect(proposal.instance.parameters.amount).toBe(2); expect(proposal.instance.curves).toBeUndefined()
+    expect(proposal.instance.parameters).not.toHaveProperty('amount'); expect(validateCodeMaterialParameters(next, proposal.instance.parameters).amount).toBe(2); expect(proposal.instance.curves).toBeUndefined()
     expect(proposal.impacts).toEqual(expect.arrayContaining([expect.objectContaining({ key: 'amount', resetValue: true, removeCurve: true }), expect.objectContaining({ key: 'flag', resetValue: false, removeCurve: true })]))
     const typeChanged = { ...program, parameters: program.parameters.map(parameter => parameter.key === 'amount' ? { key: 'amount', title: '强度', description: '', animatable: false, type: 'text' as const, default: '重置', maxLength: 10 } : parameter) }
     expect(proposeCodeMaterialMigration(program, typeChanged, previous, 'text').impacts).toContainEqual(expect.objectContaining({ key: 'amount', reason: '参数类型已改变', resetValue: true, removeCurve: true }))

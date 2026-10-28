@@ -10,7 +10,7 @@ import type { VideoEditProjectTemplate } from '@/core/videoEdit/document'
 import type { VideoEditTemplateBody } from '@/core/videoEdit/styles/templateSchemas'
 import { editVideoProject, getActiveVideoEditSequence, subscribeVideoEditDomain, videoEditDomainRevision, type VideoEditInstance } from '../application/videoEditService'
 import { videoEditStyleLibrary } from '../application/videoEditStyleLibrary'
-import { applyVideoEditTemplate, createVideoEditTemplate, detachVideoEditTemplateInstances, newerLibraryTemplateVersion, promoteVideoEditTemplate, unregisterVideoEditTemplates, updateVideoEditTemplate, videoEditClipTemplate, videoEditTemplateInstances, writeVideoEditTemplateDrag, type VideoEditTemplateScope } from '../application/videoEditTemplates'
+import { applyVideoEditTemplate, createVideoEditTemplate, detachVideoEditTemplateInstances, newerLibraryTemplateVersion, promoteVideoEditTemplate, unregisterVideoEditTemplates, updateVideoEditTemplate, videoEditClipTemplate, videoEditCodeParameterChangeSummary, videoEditTemplateInstances, writeVideoEditTemplateDrag, type VideoEditTemplateScope } from '../application/videoEditTemplates'
 import { VideoEditPresetPlayer } from './VideoEditPresetPlayer'
 
 const TILE = { width: 320, height: 180 }
@@ -54,7 +54,7 @@ function Panel({ instance, onError, visible = true }: { instance: VideoEditInsta
     { id: 'apply', label: '加到播放头', icon: <Play />, disabled: !sequence, onClick: () => { void apply(entry) } },
     ...(entry.project ? [
       { id: 'promote', label: entry.project.origin ? '更新全局模板' : '设为全局模板', icon: <Globe />, onClick: () => { void run(async () => { const result = await promoteVideoEditTemplate(projectId, entry.id); showNotification(`“${result.library.name}”已存为全局模板（v${result.library.version}）。`) }) } },
-      ...(entry.newer ? [{ id: 'upgrade', label: `升级到 v${entry.newer}（影响 ${videoEditTemplateInstances(instance.document, entry.project).length} 处）`, icon: <ArrowUpCircle />, onClick: () => { void run(async () => { const result = await updateVideoEditTemplate(projectId, entry.id, { kind: 'library' }); showNotification(`已升级“${result.template.name}”，${result.instances} 处实例一起更新。`) }) } }] : []),
+      ...(entry.newer ? [{ id: 'upgrade', label: `升级到 v${entry.newer}（影响 ${videoEditTemplateInstances(instance.document, entry.project).length} 处）`, icon: <ArrowUpCircle />, onClick: () => { void run(async () => { const result = await updateVideoEditTemplate(projectId, entry.id, { kind: 'library' }); showNotification(`已升级“${result.template.name}”，${result.instances} 处实例一起更新${videoEditCodeParameterChangeSummary(result.codeInstances)}。`) }) } }] : []),
       { id: 'rename', label: '重命名…', icon: <Pencil />, onClick: () => setNaming({ mode: 'rename', key: `project:${entry.id}`, name: entry.name, description: entry.description }) },
       { id: 'unregister', label: '取消登记（保留片段）', icon: <Trash2 />, divider: true, onClick: () => { void run(() => { editVideoProject(projectId, document => unregisterVideoEditTemplates(document, [entry.id])) }) } },
     ] : [

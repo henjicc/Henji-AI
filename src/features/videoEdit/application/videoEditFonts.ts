@@ -4,7 +4,7 @@ import { collectVideoEditFonts, missingVideoEditFonts, type VideoEditFontUse } f
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
 import { codeMaterialSource, codeMaterialVersion } from '@/core/videoEdit/codeMaterialDocument'
 import { fontLibrarySnapshot, loadFontLibrary, prepareFontPayloads, validateFontName, type FontPayload } from '@/platform/fonts'
-import { compileVideoEditCode } from './videoEditCodeState'
+import { compileVideoEditCode, VideoEditCodeVersionUnreadable } from './videoEditCodeState'
 import { mapWithConcurrency } from '@/utils/mapWithConcurrency'
 import { initializeVideoEditCodeSourceRuntime } from './videoEditCodeSourceRuntime'
 import { createLogger } from '@/core/logging'
@@ -48,7 +48,12 @@ export function changedVideoEditFonts(before: VideoEditDocument, next: VideoEdit
   const old = new Map([...before.items, ...before.sequences.flatMap(sequence => sequence.clips)].map(value => [value.id, signature(value)]))
   const changed = new Set([...next.items, ...next.sequences.flatMap(sequence => sequence.clips)].filter(value => old.get(value.id) !== signature(value)).map(value => value.id))
   const scope = (document: VideoEditDocument): VideoEditDocument => ({ ...document, items: document.items.filter(item => changed.has(item.id)), sequences: document.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.filter(clip => changed.has(clip.id)) })) })
-  const previous = new Map(collectVideoEditFonts(scope(before), readBefore).map(use => [use.ownerId, use.font]))
+  // 换版本时原版本可能已读不到（源码缺失或编译不过）：当作原先没有代码字体，新字体全部按新增核对。
+  const tolerantBefore: CodeMaterialMetadataReader = instance => {
+    try { return readBefore(instance) }
+    catch (error) { if (error instanceof VideoEditCodeVersionUnreadable) return { name: '', kind: 'generator', mode: 'static', seed: 0, parameters: [] }; throw error }
+  }
+  const previous = new Map(collectVideoEditFonts(scope(before), tolerantBefore).map(use => [use.ownerId, use.font]))
   return collectVideoEditFonts(scope(next), readNext).filter(use => previous.get(use.ownerId) !== use.font)
 }
 export function validateVideoEditFontChanges(before: VideoEditDocument, next: VideoEditDocument, readBefore: CodeMaterialMetadataReader, readNext = readBefore): void {

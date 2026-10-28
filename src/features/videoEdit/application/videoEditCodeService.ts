@@ -228,7 +228,8 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
     for (const input of inputs) {
       const definition = definitions.get(input.definitionId)
       if (!definition) throw new Error('代码素材定义不属于此剪辑。')
-      await loadCodeSourceReferences(definition.versions.find(version => version.id === definition.defaultVersionId)!)
+      // 原版本源码只用来核对种类，读不到不挡住新版本（见 appendCodeMaterialVersion）。
+      await loadCodeSourceReferences(definition.versions.find(version => version.id === definition.defaultVersionId)!).catch(() => undefined)
       const entry = definition.versions.find(version => version.id === definition.defaultVersionId)?.project?.entry
       if (input.projectCommit && !entry) throw new Error('project_commit 只适用于工程型素材。')
       if (entry && (input.files !== undefined || input.source !== undefined || input.entry !== undefined)) throw new Error('工程型素材从 project_commit（默认 HEAD）解析同一入口，不接受 source/files/entry。')
@@ -240,6 +241,7 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
       const result = await withVideoEditCodeTypeContext(() => appendCodeMaterialVersion(definition, contents, source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver(), publicationState), typeCheck ? [typeCheck] : [], controller.signal)
       controller.signal.throwIfAborted()
       if (definition.versions.some(version => version.id === result.versionId)) throw new Error('相同源码版本已存在，请直接使用原版本。')
+      if (result.kindUnverified) logger.warn('原有代码版本都读不到，新版本未核对素材种类', { event: 'video_edit.code.version.kind_unverified', context: { projectId, definitionId: definition.id, versionId: result.versionId } })
       definitions.set(definition.id, result.definition); added.push(result.versionId)
       rememberVideoEditCodeMetadata(owner, definition.id, result.definition.versions.find(version => version.id === result.versionId)!, result.program)
       trials.push(candidate({ ...result.definition, defaultVersionId: result.versionId }, result.program, {}))

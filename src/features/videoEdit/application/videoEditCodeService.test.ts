@@ -17,7 +17,7 @@ import { getPlatform } from '@/platform/runtime'
 import { openVideoEditDocument, closeVideoEditProject, listVideoEditInstances, saveVideoEdit, undoVideoEdit, editVideoProject, getActiveVideoEditSequence, appendVideoEditMedia, duplicateVideoEditSequence, editVideoSequence, updateVideoEditCreativeIntents } from './videoEditService'
 import { createVideoEditCodeItems, createVideoEditCodeMaterials, createVideoEditCodeVersions, createVideoEditFilterMaterials, createVideoEditCodeAssetInstance } from './videoEditCodeService'
 import { appendVideoEditItems, createVideoEditGraphicItem } from './videoEditProjectItems'
-import { ensureVideoEditCodeParameterMetadata, readVideoEditCodeMetadata } from './videoEditCodeState'
+import { ensureVideoEditCodeParameterMetadata, forgetVideoEditCodeMetadata, readVideoEditCodeMetadata, releaseVideoEditCodeCompiler } from './videoEditCodeState'
 import { VideoEditCollectionExecutor } from './videoEditExecutors'
 import { prepareVideoEditCodeCandidate, commitVideoEditCodeCandidate, disposeVideoEditCodeCandidate } from './videoEditCodeCandidates'
 import { bindVideoEditCodeImage, chooseVideoEditCodeImage } from './videoEditCodeImages'
@@ -485,7 +485,7 @@ it('候选显示迁移影响，确认后只绑定原片段一次撤销，明确�
   expect(() => commitVideoEditCodeCandidate({ ...candidate }, true)).toThrow('失效')
   const version = commitVideoEditCodeCandidate(candidate, true)
   expect(owner.past).toHaveLength(history + 1); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.code!.versionId)).toEqual([version, target.versionId])
-  expect(getActiveVideoEditSequence(owner).clips[0].code).toMatchObject({ parameters: { opacity: .5 } })
+  expect(getActiveVideoEditSequence(owner).clips[0].code!.parameters).toEqual({})
   expect(getActiveVideoEditSequence(owner).clips[0].code).not.toHaveProperty('curves')
   undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips[0].code!.curves!.amount).toHaveLength(1)
   const bulk = await prepareVideoEditCodeCandidate(target, source.replace('100+t', '800+t'), 'matching')
@@ -1166,5 +1166,57 @@ it('工程入口走真实 Git、正式创建与升级，闭包完整流入资产
     const asset = decodeCodeAsset(bytes.get(assetPath)!)
     expect(asset.sourceVersion.files.map(file => file.path)).toEqual(['entries/opening.ts', 'style/a.wgsl', 'style/tokens.ts'])
     expect(asset.codeSources).toHaveLength(3)
+  } finally { app.dispose(); spies.forEach(spy => spy.mockRestore()); await env.cleanup() }
+})
+
+it.each([
+  { title: '旧版本可读', oldUnreadable: false },
+  { title: '旧版本编译失败时按新版本声明处理并注明', oldUnreadable: true },
+])('工程素材新版本不再声明某个参数、改了默认值：升级照样成功，旧参数逐个列出，没写过的参数用新默认值（$title）', async ({ oldUnreadable }) => {
+  const env = createTestEnvironment(); const service = env.services.service
+  const project = await service.createProject({ name: '少参数工程' })
+  const disk = await service.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: project.id }, name: '剪辑' }); const target = { id: disk.meta.id }
+  const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id; const api = getPlatform().documents
+  const spies: Array<{ mockRestore(): void }> = [
+    vi.spyOn(api, 'resolveCodeProject').mockImplementation(request => service.resolveCodeProject({ ...request, target })),
+    vi.spyOn(api, 'readCodeProject').mockImplementation(() => service.readCodeProject(target)),
+    vi.spyOn(api, 'readCodeFile').mockImplementation(service.readCodeFile),
+    vi.spyOn(api, 'listCodeComponents').mockImplementation(() => service.listCodeComponents(target)),
+  ]
+  const app = createApplicationHarness(); const parent = { kind: 'video_edit.document', id }
+  try {
+    const withSlot = source.replace('params:[', 'params:[{key:"slot",type:"number",title:"取帧车道",default:1,min:0,max:4,step:1},')
+    await service.changeCodeProject({ target, message: '初稿', changes: [{ path: 'entries/window.ts', source: withSlot, expectedHash: null }] })
+    await createVideoEditCodeMaterials(id, [{ projectEntry: 'entries/window.ts' }])
+    const item = owner.document.items.find(value => value.code)!
+    const [clipId] = appendVideoEditItems(id, [item.id], owner.activeSequenceId)
+    editVideoProject(id, document => {
+      // 素材条目只显式写了 slot，amount 跟随版本默认值；片段两个都写过。
+      document.items.find(value => value.id === item.id)!.code!.parameters = { slot: 3 }
+      document.sequences.flatMap(sequence => sequence.clips).find(clip => clip.id === clipId)!.code!.parameters.slot = 2
+      return document
+    })
+    const entry = (await service.readCodeProject(target)).files.find(file => file.path === 'entries/window.ts')!
+    await service.changeCodeProject({ target, message: '去掉取帧车道并调默认透明度', changes: [{ path: entry.path, source: source.replace('default:.5', 'default:.8'), expectedHash: entry.hash }] })
+    if (oldUnreadable) {
+      // 让旧版本的声明只能重新编译，并让这次编译失败。
+      forgetVideoEditCodeMetadata(owner, item.code!.versionId); releaseVideoEditCodeCompiler()
+      const prepare = sharedCompiler.prepareVideoEditAuthorBundle
+      spies.push(vi.spyOn(sharedCompiler, 'prepareVideoEditAuthorBundle').mockImplementation((files, signal) => Object.values(files.files).some(text => text.includes('"slot"')) ? Promise.reject(new Error('模拟旧版本编译失败')) : prepare(files, signal)))
+    }
+    const upgraded = await app.requireResult('upgrade_video_edit_code_materials', { documentRef: parent })
+    expect(upgraded.upgrades).toHaveLength(1)
+    const note = oldUnreadable ? { note: '旧版本无法读取，按新版本声明处理' } : {}
+    expect(upgraded.instances).toEqual(expect.arrayContaining([
+      { ref: expect.objectContaining({ kind: 'video_edit.item', id: `${id}:${item.id}`, label: item.name }), removedParameters: ['slot'], resetParameters: [], ...note },
+      { ref: expect.objectContaining({ kind: 'video_edit.clip', id: `${id}:${clipId}` }), removedParameters: ['slot'], resetParameters: [], ...note },
+    ]))
+    const current = owner.document.codeMaterials![0].defaultVersionId
+    const upgradedItem = owner.document.items.find(value => value.id === item.id)!.code!
+    const upgradedClip = owner.document.sequences.flatMap(sequence => sequence.clips).find(clip => clip.id === clipId)!.code!
+    expect([upgradedItem.versionId, upgradedClip.versionId]).toEqual([current, current])
+    expect(upgradedItem.parameters).toEqual({}); expect(upgradedClip.parameters).not.toHaveProperty('slot')
+    expect(readVideoEditCodeMetadata(owner, owner.document)(upgradedItem).parameters.find(parameter => parameter.key === 'amount')!.default).toBe(.8)
+    expect(upgradedClip.parameters.amount).toBe(.5)
   } finally { app.dispose(); spies.forEach(spy => spy.mockRestore()); await env.cleanup() }
 })

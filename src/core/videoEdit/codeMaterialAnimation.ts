@@ -75,23 +75,33 @@ export function evaluateCodeMaterialParameters(prepared: PreparedCodeMaterialPar
 }
 
 export interface CodeMaterialMigrationImpact { key: string; title: string; reason: string; resetValue: boolean; removeCurve: boolean }
-/** Build an explicit proposal. The caller must show impacts before publishing;
- * existing valid values/curves survive even when declaration ranges narrow. */
-export function proposeCodeMaterialMigration(previous: CodeMaterialMetadata, next: CodeMaterialMetadata, instance: CodeMaterialInstance, versionId: string): { instance: CodeMaterialInstance; impacts: CodeMaterialMigrationImpact[] } {
-  prepareCodeMaterialParameters(previous, instance)
-  const parameters = validateCodeMaterialParameters(previous, instance.parameters)
+/**
+ * 换版本的迁移提案，调用方须先展示 impacts 再发布。只迁移实例显式写过的值与已有关键帧：
+ * 没写过的参数继续跟随新版本的默认值；有效值与曲线在声明范围收窄时照样保留。
+ * previous 为 undefined 表示原版本声明读不到，此时只能按新版本声明核对实例自身的值。
+ */
+export function proposeCodeMaterialMigration(previous: CodeMaterialMetadata | undefined, next: CodeMaterialMetadata, original: CodeMaterialInstance, versionId: string): { instance: CodeMaterialInstance; impacts: CodeMaterialMigrationImpact[] } {
+  const basis = previous ?? next
+  // 依据版本没声明的键是早先换版本的残留，无法核对，随换版本一起去掉。
+  const declared = new Set(basis.parameters.map(parameter => parameter.key))
+  const stale = [...new Set([...Object.keys(original.parameters), ...Object.keys(original.curves ?? {})])].filter(key => !declared.has(key))
+  const instance = stale.length ? { ...original, parameters: Object.fromEntries(Object.entries(original.parameters).filter(([key]) => declared.has(key))), curves: Object.fromEntries(Object.entries(original.curves ?? {}).filter(([key]) => declared.has(key))) } : original
+  if (previous) prepareCodeMaterialParameters(previous, instance)
+  const parameters: Record<string, unknown> = previous ? Object.fromEntries(Object.entries(validateCodeMaterialParameters(previous, instance.parameters)).filter(([key]) => Object.prototype.hasOwnProperty.call(instance.parameters, key))) : { ...instance.parameters }
   const curves = structuredClone(instance.curves ?? {})
-  const impacts: CodeMaterialMigrationImpact[] = []
-  for (const old of previous.parameters) {
+  const impacts: CodeMaterialMigrationImpact[] = stale.map(key => ({ key, title: next.parameters.find(parameter => parameter.key === key)?.title ?? key, reason: previous ? '原版本未声明此参数' : '新版本未声明此参数', resetValue: Object.prototype.hasOwnProperty.call(original.parameters, key), removeCurve: Boolean(original.curves?.[key]) }))
+  for (const old of basis.parameters) {
+    const set = Object.prototype.hasOwnProperty.call(parameters, old.key); const curved = Boolean(curves[old.key])
+    if (!set && !curved) continue
     const current = next.parameters.find(parameter => parameter.key === old.key)
     let reason = ''; let resetValue = false; let removeCurve = false
-    if (!current) { reason = '参数已删除'; resetValue = true; removeCurve = Boolean(curves[old.key]); delete parameters[old.key]; delete curves[old.key] }
+    if (!current) { reason = '参数已删除'; resetValue = set; removeCurve = curved; delete parameters[old.key]; delete curves[old.key] }
     else {
       if (current.type !== old.type) reason = '参数类型已改变'
       else if (old.type === 'number' && current.type === 'number' && (current.min > old.min || current.max < old.max)) reason = '数值范围缩小'
       else if (old.type === 'choice' && current.type === 'choice' && old.options.some(option => !current.options.includes(option))) reason = '部分选项已删除'
       else if (old.type === 'text' && current.type === 'text' && current.maxLength < old.maxLength) reason = '文字上限缩小'
-      try { parameters[old.key] = validateCodeMaterialParameterValue(current, parameters[old.key]) } catch { parameters[old.key] = structuredClone(current.default); resetValue = true }
+      if (set) try { parameters[old.key] = validateCodeMaterialParameterValue(current, parameters[old.key]) } catch { delete parameters[old.key]; resetValue = true }
     }
     if (reason || resetValue || removeCurve) impacts.push({ key: old.key, title: old.title, reason: reason || '实例值不再适用', resetValue, removeCurve })
   }
@@ -102,10 +112,10 @@ export function proposeCodeMaterialMigration(previous: CodeMaterialMetadata, nex
       delete curves[key]
       const impact = impacts.find(impact => impact.key === key)
       if (impact) { impact.removeCurve = true; impact.reason ||= '已有关键帧不再适用' }
-      else impacts.push({ key, title: previous.parameters.find(parameter => parameter.key === key)!.title, reason: '已有关键帧不再适用', resetValue: false, removeCurve: true })
+      else impacts.push({ key, title: basis.parameters.find(parameter => parameter.key === key)!.title, reason: '已有关键帧不再适用', resetValue: false, removeCurve: true })
     }
   }
-  const result = { ...instance, versionId, parameters: nextValues, ...(Object.keys(curves).length ? { curves } : {}) }
+  const result: CodeMaterialInstance = { ...instance, versionId, parameters: Object.fromEntries(Object.entries(nextValues).filter(([key]) => Object.prototype.hasOwnProperty.call(parameters, key))), ...(Object.keys(curves).length ? { curves } : {}) }
   if (!Object.keys(curves).length) delete result.curves
   prepareCodeMaterialParameters(next, result)
   return { instance: result, impacts }
