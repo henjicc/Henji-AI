@@ -1,7 +1,8 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { defaultVideoEditTextStyle } from '@/core/videoEdit/text'
 import { BLACK_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
-import { paintVideoEditText, rasterizeVideoEditText, videoEditTextResolution } from './videoEditTextSurface'
+import { paintText as paintVideoEditText } from '@/services/vectorContent/textRaster'
+import { rasterizeVideoEditText, videoEditTextResolution } from './videoEditTextSurface'
 
 function context() {
   const operations: Array<{ op: string; args: unknown[]; composite: string; width: number; alpha: number; filter: string; font: string }> = []

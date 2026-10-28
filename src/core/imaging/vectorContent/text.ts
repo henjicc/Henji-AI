@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import { BLACK_HEX, WHITE_HEX, HEX_COLOR_EXAMPLE } from '../../theme/colorTokens'
-import { layoutRichText } from './richText'
-import { textWidth } from './metrics'
-export { textFont, textCharacters, textAdvances, textWidth } from './metrics'
+import { layoutRichTextFlow } from './richText'
+import { textWidth, textBoxLayout, textAlignmentAnchor, scaleTextSpatialStyle } from './metrics'
+export { textFont, textCharacters, textAdvances, textWidth, textAlignmentAnchor } from './metrics'
 export interface TextFrame { width: number; height: number }
 
 const color = z.string().regex(/^#[\da-f]{6}$/i, `应为 6 位十六进制颜色，例如 ${HEX_COLOR_EXAMPLE}。`)
@@ -48,19 +48,13 @@ export function layoutText(clip: TextContent, frame: TextFrame, measure: (text: 
   const style = clip.textStyle ?? defaultTextStyle(frame.height)
   const lineWidth = (text: string): number => textWidth(text, style, measure)
   const fixedWidth = style.boxWidth * frame.width
-  const rich = layoutRichText({box:{x:0,y:0,width:fixedWidth,height:0},paragraphs:[{runs:[{text:clip.text,style}],align:'left',direction:'ltr',spaceBefore:0,spaceAfter:0}]},measure,{sourceVersion:'text-layout',time:{kind:'static'},referenceGrid:frame,quality:'final'})
+  const rich = layoutRichTextFlow({box:{x:0,y:0,width:fixedWidth,height:0},paragraphs:[{runs:[{text:clip.text,style}],align:'left',direction:'ltr',spaceBefore:0,spaceAfter:0}]},measure,{sourceVersion:'text-layout',time:{kind:'static'},referenceGrid:frame,quality:'final'})
   const lines = rich.lines.map(line => line.text)
-  const width = fixedWidth || lines.reduce((largest, line) => Math.max(largest, lineWidth(line)), style.fontSize)
-  const lineHeight = style.leading || style.fontSize * 1.25
-  const contentHeight = Math.max(lineHeight, lines.length * lineHeight)
-  const height = style.boxHeight ? style.boxHeight * frame.height : contentHeight
-  const top = frame.height / 2 - (style.verticalAlign === 'middle' ? height / 2 : style.verticalAlign === 'bottom' ? height : 0)
-  const contentTop = top + (style.verticalAlign === 'middle' ? (height - contentHeight) / 2 : style.verticalAlign === 'bottom' ? height - contentHeight : 0)
-  const left = frame.width / 2 - (style.align === 'center' || style.align === 'justify-center' ? width / 2 : style.align === 'right' || style.align === 'justify-right' ? width : 0)
-  return { lines, left, top, width, height, lineHeight, contentTop, style }
+  const contentWidth = lines.reduce((largest, line) => Math.max(largest, lineWidth(line)), 0)
+  return textBoxLayout(lines, style, contentWidth, { width: fixedWidth || undefined, height: style.boxHeight * frame.height || undefined, anchor: textAlignmentAnchor(style, frame.width / 2, frame.height / 2) })
 }
 /** Resize all spatial typography together when a template/caption changes its reference frame. */
 export function scaleTextStyle(style: TextStyle, factor: number): TextStyle {
-  return textStyleSchema.parse({ ...style, fontSize: Math.max(1, style.fontSize * factor), leading: style.leading * factor, baselineShift: style.baselineShift * factor, strokes: style.strokes.map(stroke => ({ ...stroke, width: stroke.width * factor })), background: { ...style.background, padding: style.background.padding * factor, radius: style.background.radius * factor }, shadows: style.shadows.map(shadow => ({ ...shadow, distance: shadow.distance * factor, size: shadow.size * factor, blur: shadow.blur * factor })) })
+  return textStyleSchema.parse(scaleTextSpatialStyle(style, factor))
 }
 

@@ -75,13 +75,13 @@ export function measureCodeText(request: CodeTextMeasureRequest): CodeTextLayout
     const probe = 'mmmmmmWWWWii汉字'
     if (Math.abs(advance(probe, `${base}, serif`) - advance(probe, `${base}, sans-serif`)) > .001) missingFont = request.fontFamily
   }
-  const layout = layoutCodeText(missingFont ? { ...request, fontFamily: 'sans-serif' } : request, advance, missingFont)
+  const layout = layoutCodeText(missingFont ? { ...request, fontFamily: 'sans-serif' } : request, (text, font, state) => {
+    context.font = font; context.fontKerning = state.fontKerning; context.direction = state.direction
+    context.textBaseline = state.textBaseline; context.textAlign = state.textAlign
+    return context.measureText(text)
+  }, { alphabeticPlacement: 'font', missingFont })
   // The glyph raster cache also sees this generation, including font changes with identical advance widths.
   layout.fontGeneration = fontGeneration
-  context.font = layout.font
-  const metrics = context.measureText('Hg汉')
-  const ascent = metrics.fontBoundingBoxAscent; const descent = metrics.fontBoundingBoxDescent
-  if (Number.isFinite(ascent) && Number.isFinite(descent)) layout.baselineOffset = (layout.fontSize * request.lineHeight - ascent - descent) / 2 + ascent
   if (layout.width > 8192 || layout.width * layout.height > MAX_PIXELS) throw new CodeMaterialError('BUDGET', '文字字形超出8192宽或四百万像素。')
   const bytes = key.length * 2 + layout.glyphs.length * 64 + 256
   while (layouts.size && (layouts.size >= 128 || layoutBytes + bytes > MAX_CACHE_BYTES)) { const oldest = layouts.keys().next().value!; layoutBytes -= layouts.get(oldest)!.bytes; layouts.delete(oldest) }

@@ -1,6 +1,8 @@
-import { layoutRichText, richTextContentSchema, vectorPathContentSchema, rasterizeVectorCoverage, traceVectorPath, type VectorEvaluationContext, type RichTextContent, type VectorPathContent } from '@/core/imaging/vectorContent';
+import { richTextContentSchema, vectorPathContentSchema, rasterizeVectorCoverage, traceVectorPath, type VectorEvaluationContext, type RichTextContent, type VectorPathContent } from '@/core/imaging/vectorContent';
 import { WHITE_HEX } from '@/core/theme/colorTokens';
-import { paintText } from './textRaster';
+import { createTextDrawPlan } from '@/core/imaging/vectorContent/textDrawPlan';
+import { canvasTextPlanMeasure, paintTextDrawPlan } from '@/core/imaging/vectorContent/textDrawPlanCanvas';
+import { defaultTextStyle } from '@/core/imaging/vectorContent/text';
 import { paintVectorAppearance } from './appearance';
 import { filterCoverage } from '@/core/imaging/regions/selectionAlgorithms/modify';
 
@@ -19,15 +21,9 @@ function renderVectorContent(value: unknown, region: VectorRasterRegion, evaluat
   const origin = { x: region.x / scale, y: region.y / scale };
   if (candidate.type === 'text') {
     const content = richTextContentSchema.parse(candidate.content);
-    const layout = layoutRichText(content, (text, font) => { context.font = font; return context.measureText(text).width; }, evaluation);
-    for (const run of layout.runs) {
-      evaluation.signal?.throwIfAborted();
-      const width = region.width / scale, height = region.height / scale;
-      context.direction = run.direction === 'auto' ? 'inherit' : run.direction;
-      const style = { ...run.style, align: 'left' as const, verticalAlign: 'top' as const, boxWidth: 0, boxHeight: 0 };
-      paintText(context, { text: run.text, textStyle: style }, width, height, undefined,
-        { lines: [run.text], left: run.x - origin.x, top: run.y - origin.y, contentTop: run.y - origin.y, width: run.width, height: run.lineHeight, lineHeight: run.lineHeight, style }, scale);
-    }
+    const style = content.paragraphs.find(paragraph => paragraph.runs.length)?.runs[0].style ?? defaultTextStyle(region.height / scale);
+    const plan = createTextDrawPlan(content, style, { signal: evaluation.signal }, canvasTextPlanMeasure(context));
+    paintTextDrawPlan(context, plan, { width: region.width / scale, height: region.height / scale, resolution: scale, x: -origin.x, y: -origin.y, signal: evaluation.signal }, paintVectorAppearance);
   } else {
     const content = vectorPathContentSchema.parse(candidate.content);
     const { paint } = content;
