@@ -19,7 +19,7 @@ interface JsonTreeProps {
 
 /**
  * 轻量 JSON 折叠树：按层级展开/折叠对象与数组，长字符串默认收起、点击展开。
- * 自实现，不依赖任何第三方 JSON 视图库（见 CLAUDE.md 与任务文件约束）。
+ * 自实现，不依赖任何第三方 JSON 视图库。
  */
 export function JsonTree({ value, label, defaultExpandDepth = DEFAULT_EXPAND_DEPTH }: JsonTreeProps): JSX.Element {
   return <JsonNode label={label} value={value} depth={0} expandDepth={defaultExpandDepth} />

@@ -2,7 +2,7 @@
 /**
  * 表面层级检查：找出业务组件里手写的"卡片表面"，防止卡片套卡片。
  *
- * 规则来源：CLAUDE.md「UI Primitive 单点落地」+ skill `henji-ui-surface`。
+ * 规则来源：docs/rules/architecture.md「单点落地约定」+ skill `henji-ui-surface`。
  * 核心铁律：同一层视觉深度只画一次边框/背景。
  *
  * 表面规则 A–E，加静态语法 S1–S5/S7–S10（S6 属于 check:icons）：
