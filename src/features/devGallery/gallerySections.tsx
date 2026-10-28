@@ -648,7 +648,7 @@ export function SizeLadderSection(): JSX.Element {
       <UiChipButton size={size}>标签</UiChipButton>
       <UiOptionButton size={size}>选项</UiOptionButton>
       <UiFontPicker size={size} value="sans-serif" onSelect={noop} ariaLabel={`字体 ${size}`} />
-      <PanelTrigger size={size} appearance="field" surface="solid" display={`面板 ${size}`} renderPanel={() => <span>面板内容</span>} />
+      <PanelTrigger size={size} appearance="field" surface="solid" display={`面板 ${size}`} panelPadding="content" renderPanel={() => <span>面板内容</span>} />
       <UiNumberStepper size={size} increaseLabel="增加" decreaseLabel="减少" canIncrease canDecrease onStep={noop} />
     </div>)}
     <GalleryMatrix rows={GALLERY_ICON_SIZES.map(size => ({ label: `图标 ${size}`, states: ['rest', 'hover', 'active', 'focus', 'selected', 'disabled', 'loading'], render: state => <UiIconButton size={size} on={state === 'selected'} disabled={state === 'disabled'} loading={state === 'loading'} aria-label={`添加 ${size} ${state}`} aria-busy={state === 'loading'}><Plus /></UiIconButton> }))} />
@@ -664,7 +664,7 @@ export function VariantSection(): JSX.Element {
     <GalleryRow label="特殊面板"><PanelTrigger panelSize="special" display="特殊面板" renderPanel={() => <UiSpecialPanel height="fit" header={<span>头部一行：搜索与筛选</span>} status="左边状态或出错原因" action={<UiButton variant="primary" size="sm">提交</UiButton>}>正文唯一滚动区</UiSpecialPanel>} /><PanelTrigger panelSize="special" display="带左栏、占满高度" renderPanel={() => <UiSpecialPanel height="fill" aside={<span>左栏</span>} bodyWidth={320}>长列表筛选时高度不跳</UiSpecialPanel>} /></GalleryRow>
     <GalleryRow label="表面"><Dropdown appearance="text" surface="solid" ariaLabel="静默下拉" value="a" options={[{ value: 'a', label: '静默' }]} onSelect={noop} /><Dropdown appearance="field" surface="glass" ariaLabel="玻璃下拉" value="a" options={[{ value: 'a', label: '玻璃' }]} onSelect={noop} /></GalleryRow>
     <GalleryRow label="字段"><UiInput frame="field" aria-label="外框输入" defaultValue="外框" /><UiInput frame="inner" aria-label="复合字段内层" defaultValue="内层" /><UiTextArea frame="field" aria-label="有框文本" defaultValue="文本" /><UiTextArea frame="none" aria-label="无框文本" defaultValue="原位编辑" /><UiFieldTrigger appearance="field">字段表面</UiFieldTrigger></GalleryRow>
-    <GalleryRow label="浮层"><PanelTrigger appearance="quiet" surface="glass" display="玻璃面板触发器" renderPanel={() => <span>玻璃面板</span>} /></GalleryRow>
+    <GalleryRow label="浮层"><PanelTrigger appearance="quiet" surface="glass" display="玻璃面板触发器" panelPadding="content" renderPanel={() => <span>玻璃面板</span>} /></GalleryRow>
     <ProgressBar progress={40} appearance="default" />
     <PromptEditor value={PROMPT_TEXT} onChange={noop} frame="field" ariaLabel="有框提示词" />
     <PromptEditor value={PROMPT_TEXT} onChange={noop} frame="none" ariaLabel="原位提示词" />

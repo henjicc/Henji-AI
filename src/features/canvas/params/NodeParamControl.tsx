@@ -224,6 +224,7 @@ function CompactTextControl({
         buttonClassName={`${COMPACT_TRIGGER_CLASS} max-w-32`}
         surface="glass"
         panelSize="compact"
+        panelPadding="none"
         alignment="aboveCenter"
         gap={8}
         closeOnPanelClick={false}
@@ -325,6 +326,7 @@ function CompactUploadControl({
       buttonClassName={COMPACT_TRIGGER_CLASS}
       surface="glass"
       panelSize="compact"
+      panelPadding="none"
       alignment="aboveCenter"
       gap={8}
       closeOnPanelClick={false}

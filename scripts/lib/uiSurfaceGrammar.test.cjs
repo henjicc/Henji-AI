@@ -9,6 +9,7 @@ const fixtures = [
   ['S3', '<div className="flex gap-2"><Dropdown label="方式"/><Dropdown label="属性"/></div>', '<div className="flex flex-col"><Dropdown label="方式"/><Dropdown label="属性"/></div>'],
   ['S4', '<div>{items.map(item => <div><h3>{item.title}</h3><p className="text-text2">{item.meta}</p></div>)}</div>', '<div>{items.map(item => <div className="border-b border-line"><h3>{item.title}</h3><p className="text-text2">{item.meta}</p></div>)}</div>'],
   ['S5', '<div><UiFormRow labelWidth={72} label="方式"/><UiFormRow labelWidth={96} label="属性"/></div>', '<UiGroup labelWidth={96}><UiFormRow label="方式"/><UiFormRow label="属性"/></UiGroup>'],
+  ['S10', '<PanelTrigger panelSize="compact" renderPanel={() => <UiGroup title="选项"/>}/>', '<PanelTrigger panelSize="compact" panelPadding="content" renderPanel={() => <UiGroup title="选项"/>}/>'],
 ]
 test('S1 分段最多五项，更多项改下拉；动态项数交给共享组件处理', () => {
   assert.equal(findUiSurfaceGrammar('<UiSegmented options={[1,2,3,4,5]} />').length, 0)
@@ -55,6 +56,11 @@ test('S9 计数同表面可共存主动作，不合并互斥分支或嵌套表�
   assert.equal(findUiSurfaceGrammar(`<UiModal>{flag ? ${button} : ${button}}</UiModal>`).length, 0)
   assert.equal(findUiSurfaceGrammar(`<UiModal>${button}<UiModal>${button}</UiModal></UiModal>`).length, 0)
   assert.equal(findUiSurfaceGrammar(`<UiToolbar variant="command">${button}<UiIconButton tone="accent"/></UiToolbar>`)[0]?.rule, 'S9')
+})
+
+test('S10 自定义浮层必须写明内边距；选项下拉与特殊面板不算', () => {
+  assert.equal(findUiSurfaceGrammar('<Dropdown renderPanel={() => <div/>}/>')[0]?.rule, 'S10')
+  for (const source of ['<Dropdown options={options}/>', '<Dropdown renderPanel={() => <div/>} panelPadding="none"/>', '<PanelTrigger panelSize="special" renderPanel={() => <UiSpecialPanel/>}/>', '<PanelTrigger {...props}/>']) assert.equal(findUiSurfaceGrammar(source).length, 0)
 })
 
 test('S5 列宽：继承、默认、别名、常量与不可静态判定的边界', () => {

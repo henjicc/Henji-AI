@@ -61,6 +61,7 @@ export function TextProcessingPromptTemplateSelector({
           <PanelTrigger
             display={display}
             panelSize="compact"
+            panelPadding="none"
             alignment="aboveCenter"
             gap={8}
             closeOnPanelClick={false}

@@ -246,6 +246,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
       <Dropdown<string> appearance="text" value={selectedTag ?? ''} options={[{ value: '', label: t('assetLibrary.allTags') }, ...availableTags.map((tag) => ({ value: tag, label: tag }))]} onSelect={(value) => setSelectedTag(value || null)} className="shrink-0" buttonClassName="w-auto max-w-40" minWidthStrategy="options" panelWidthStrategy="options" />
       <PanelTrigger
         panelSize="compact"
+        panelPadding="none"
         renderPanel={() => (
           <div data-asset-view-settings className="space-y-4 p-3">
             <div>

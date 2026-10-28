@@ -220,6 +220,7 @@ export function ImageEditorCropParametersV3({
       <PanelTrigger
         className="shrink-0"
         panelSize="compact"
+        panelPadding="none"
         closeOnPanelClick
         renderPanel={() => (
           <div

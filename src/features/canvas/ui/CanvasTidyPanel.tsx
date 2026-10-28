@@ -37,7 +37,7 @@ export function CanvasTidyPanel({ tidy, nodes }: Props) {
     </div>
     <UiGroup labelWidth={96}>
     <UiFormRow label={t('canvasTidy.pin')} density="compact">
-    <Dropdown surface="glass" ariaLabel={t('canvasTidy.pin')}
+    <Dropdown surface="glass" panelPadding="menu" ariaLabel={t('canvasTidy.pin')}
       display={pinned ? name(pinned) : t('canvasTidy.noPin')}
       renderPanel={() => <div className="h-60 w-64">
         <Virtuoso data={[null, ...choices]} itemContent={(_index, node) => <UiOptionButton variant="menu"

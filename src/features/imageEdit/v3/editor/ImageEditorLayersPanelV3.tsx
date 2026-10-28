@@ -291,6 +291,7 @@ export function ImageEditorLayersPanelV3({
         )}
         <PanelTrigger
           panelWidthLabels={creationChoiceLabels}
+          panelPadding="none"
           closeOnPanelClick
           renderPanel={() => (
             <div

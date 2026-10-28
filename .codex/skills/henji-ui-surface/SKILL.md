@@ -55,7 +55,7 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 | 骨架 | 一个视图一条命令带：`UiToolbar variant="command"`（左端 / `center` / `trailing` / `subordinate`），一个表面一个主动作 | 本文「页面骨架」 |
 | 字体 | 拉丁与数字 Geist，时间码与数值 Geist Mono（`UI_TEXT_TIMECODE_CLASS`），中文系统字体 | `references/typography-and-tokens.md` |
 
-这些约束大多已进门禁：`check:colors`（调色板/黑白/rgba/命名色/旧别名/未定义颜色类）、`check:surface:strict`（规则 A–E 与 S1–S5/S7–S9，E = 调用点覆盖组件外观）、`check:icons:strict`（规则 A–D、同行静态 S6）、`check:ui-residue`（任意值类与内联尺寸口径、私有样式、零引用、旧文案）、`check:ui-design`（间距/动效/死令牌）、ESLint 令牌规则；对比度、条带数、折行、截断、选中态差异、浮层裁切由 `check:ui-visual` 在真实 DOM 上判。
+这些约束大多已进门禁：`check:colors`（调色板/黑白/rgba/命名色/旧别名/未定义颜色类）、`check:surface:strict`（规则 A–E 与 S1–S5/S7–S10，E = 调用点覆盖组件外观）、`check:icons:strict`（规则 A–D、同行静态 S6）、`check:ui-residue`（任意值类与内联尺寸口径、私有样式、零引用、旧文案）、`check:ui-design`（间距/动效/死令牌）、ESLint 令牌规则；对比度、条带数、折行、截断、选中态差异、浮层裁切由 `check:ui-visual` 在真实 DOM 上判。
 
 ## 五级容器词汇表（先背这张表）
 
@@ -872,6 +872,7 @@ A–E：
 | S7 | UiActionGroup 子按钮逐项覆盖 variant/size | 动作层级 | error / surface |
 | S8 | 原生 title、手写 animate-spin/pulse；禁用缺原因、手写 alert | G5 / 状态 | 前两项 error，后两项 warning / surface |
 | S9 | 同一静态表面可共存主动作 >1，互斥分支取最大，嵌套表面另计 | 动作层级 | error / surface；动态值交 DOM |
+| S10 | PanelTrigger、带 renderPanel 的 Dropdown 没写 panelPadding（特殊面板与展开属性除外） | 浮层内边距 | error / surface；表单与说明 content、菜单列表 menu、内容自带内边距或要贴边写 none |
 
 surface 规则行内或上一行真实注释可写 `ui-surface-allow: S1 具体理由与接手任务`（替换为对应编号）；不得文件级放行。S6 只按 icons 的已登记边界判，尺寸 D 不接受注释豁免。G6 是证据选择，没有静态规则能证明目视完成；实际覆盖见 frontend-ui.md 表。
 
@@ -893,6 +894,6 @@ surface 规则行内或上一行真实注释可写 `ui-surface-allow: S1 具体�
 
 ### 5.2 自动语法与预算
 
-S1–S5/S7–S9 的判据与正反例见 `references/review.md` 第 7 节；S6 仍由 `check:icons:strict` 负责。UiModal、UiToolbar 与工作区根在开发态按最近表面计算可见主动作，超过一个告警并标 `data-primary-overflow`，不静默改动业务动作。动态/互斥分支最终由 DOM 的 multiplePrimary 检查。
+S1–S5/S7–S10 的判据与正反例见 `references/review.md` 第 7 节；S6 仍由 `check:icons:strict` 负责。UiModal、UiToolbar 与工作区根在开发态按最近表面计算可见主动作，超过一个告警并标 `data-primary-overflow`，不静默改动业务动作。动态/互斥分支最终由 DOM 的 multiplePrimary 检查。
 
 `smallTargets` 保持普通命中区 24px；唯一新增紧凑例外为正式 `UiIconButton size="2xs"`（20px），用于密集附属操作，需有 tooltip/可访问名称。只认 button.ui-btn + data-tone + data-size=2xs，低于 20px 仍报错；xs 已为 24px，不豁免。原生步进箭头、行内文本及画布缩放的既有边界不变。

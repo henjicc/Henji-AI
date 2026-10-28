@@ -11,7 +11,7 @@
 | 原生 button/input/select/textarea、role=button | ESLint JSX；仅 primitives.tsx 与测试替身豁免原生控件，颜色等其他规则仍生效 | 必跑 lint |
 | 颜色、旧别名、未定义颜色类 | check:colors；ESLint 拦其中的字面量与灰色板 | 必跑 |
 | 手写表面/弹窗/玻璃、调用点外观 | check:surface A–E；默认严格，--report 仅诊断 | 必跑严格 |
-| 分段、面板行、记录、列宽、动作组、状态反馈、主动作预算 | check:surface S1–S5/S7–S9；S8 部分仅告警；动态结构交 DOM | 必跑严格 |
+| 分段、面板行、记录、列宽、动作组、状态反馈、主动作预算 | check:surface S1–S5/S7–S10；S8 部分仅告警；动态结构交 DOM | 必跑严格 |
 | 图标与同行静态 size | check:icons A–D/S6 | 必跑严格 |
 | 任意值、私有样式、过期登记与旧文案 | check:ui-residue | 必跑 |
 | 间距/时长/缓动/布局动效/死令牌 | check:ui-design；transition-all 另由 ESLint 拦字面量与模板 | 必跑；不宣称 build 已接入 design |

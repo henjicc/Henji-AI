@@ -11,7 +11,7 @@ export function SelectionAdvancedOptionsV3({ tool, hasSelection }: { tool: strin
   const advanced = ['select-wand', 'select-color-range', 'select-focus'].includes(tool);
   const label = (key: string): string => t(`imageEditor.v3.selectionAdvanced.${key}`);
   return <div className="flex shrink-0 items-center gap-2" data-selection-advanced-options>
-    <PanelTrigger panelSize="compact" renderPanel={() => <UiGroup labelWidth={96} gap="stack" data-selection-advanced-settings>
+    <PanelTrigger panelSize="compact" panelPadding="content" renderPanel={() => <UiGroup labelWidth={96} gap="stack" data-selection-advanced-settings>
       {advanced && tool !== 'select-focus' ? <>
         <UiFormRow density="compact" label={label('tolerance')}><UiRangeInput aria-label={label('tolerance')} min={0} max={1} step={.01} value={view.tolerance} onChange={e => view.configure({ tolerance: Number(e.currentTarget.value) })} /></UiFormRow>
         {tool === 'select-wand' && <UiFormRow density="compact" label={label('contiguous')} inline><UiSwitch aria-label={label('contiguous')} checked={view.contiguous} onCheckedChange={contiguous => view.configure({ contiguous })} /></UiFormRow>}

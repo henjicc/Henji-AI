@@ -178,6 +178,7 @@ export function CanvasImageCapabilityActions({
           boundarySelector=".react-flow__renderer"
           gap={8}
           panelSize="compact"
+          panelPadding="none"
           zIndex={Z_LAYERS.dropdown}
           surface="glass"
           closeOnPanelClick={(target) => {

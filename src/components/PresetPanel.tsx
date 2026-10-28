@@ -135,6 +135,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
             disabled={disabled}
             className="w-auto"
             panelSize="wide"
+            panelPadding="none"
             alignment="aboveCenter"
             stableHeight={true}
             closeOnPanelClick={(target) => {

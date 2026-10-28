@@ -193,6 +193,7 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 | S7 | UiActionGroup 后代 UiButton 不允许写 variant/size，统一继承组属性 |
 | S8 | 原生 title、业务手写 animate-spin/pulse 阻断；非纯 busy/loading/pending/saving 的禁用未提供 disabledReason 时告警；原生危险色 alert 引导共享反馈（AST 不猜业务可用性） |
 | S9 | 一个静态表面可共存的多个主动作阻断，三元分支取最大值、嵌套表面另计；动态与子组件最终由 DOM 计预算 |
+| S10 | 自定义浮层（PanelTrigger、带 renderPanel 的 Dropdown）必须写明 panelPadding：外壳默认不留内边距，不写就是让表单贴边；特殊面板由 UiSpecialPanel 自带骨架不报，展开属性无法静态判定不报 |
 
 E 同时检查 UiModal.contentClassName 的 padding/overflow、PromptEditor.editorClassName 的高度、UiGroup/UiFormRow 私有列宽/间距。控件内部 padding/gap 走枚举；容器外部留白、选项内容排列、记录测量 transform 保留布局语义。高度约束移至 PromptEditor 外层布局，内层用 height。
 

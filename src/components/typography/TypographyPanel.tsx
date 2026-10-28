@@ -79,7 +79,7 @@ export function TypographyPanel({ style, onChange, onError, onBegin, onEnd, onFo
   </UiGroup>
   return <UiGroup labelWidth={120} className="min-w-0" gap="stack" data-typography>
     {fields !== 'appearance' && !library.loading && !currentFont && <UiError message={`字体“${style.fontFamily}”不可用。请选择已安装字体或导入原字体；作品保留原字体名称。`} /> }
-    {fields !== 'appearance' && <UiGroup title="文本" titleTone="compact" actions={<PanelTrigger panelWidth="content" renderPanel={() => <UiButton size="sm" onClick={() => write(defaultTextStyle(style.fontSize * 15))}>重置文字样式</UiButton>}>{({ togglePanel, open }) => <UiIconButton size="xs" aria-label="文本设置" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Wrench  /></UiIconButton>}</PanelTrigger>}>
+    {fields !== 'appearance' && <UiGroup title="文本" titleTone="compact" actions={<PanelTrigger panelWidth="content" panelPadding="menu" renderPanel={() => <UiButton size="sm" onClick={() => write(defaultTextStyle(style.fontSize * 15))}>重置文字样式</UiButton>}>{({ togglePanel, open }) => <UiIconButton size="xs" aria-label="文本设置" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Wrench  /></UiIconButton>}</PanelTrigger>}>
       {row('字体', fontPicker)}
       {row('字形样式', faces.length ? <Dropdown size="sm" ariaLabel="字形样式" value={selectedFace?.fullName ?? style.fontFamily} options={faces.map(face => ({ value: face.fullName, label: face.style }))} onSelect={value => {
         const face = faces.find(face => face.fullName === value); if (!face) return

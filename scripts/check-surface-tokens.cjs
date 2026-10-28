@@ -5,7 +5,7 @@
  * 规则来源：CLAUDE.md「UI Primitive 单点落地」+ skill `henji-ui-surface`。
  * 核心铁律：同一层视觉深度只画一次边框/背景。
  *
- * 表面规则 A–E，加静态语法 S1–S5/S7–S9（S6 属于 check:icons）：
+ * 表面规则 A–E，加静态语法 S1–S5/S7–S10（S6 属于 check:icons）：
  *   A. 手写面板表面（border + bg-panel + rounded）—— 那是 <UiPanel> 的活，任意数量即告警
  *   B. 同一文件出现 >= 2 处卡片表面 —— 高度疑似"卡片套卡片"
  *   C. 手写弹窗（同一元素 fixed inset-0 + 遮罩或模态语义，未由 UiModal/AlertDialog 承载）

@@ -88,7 +88,7 @@ export function VideoEditSubtitleStyleButton(props: Props): React.ReactElement {
   const sequence = props.instance.document.sequences.find(value => value.id === props.sequenceId)
   // 入口只看有没有字幕、轨道锁没锁；“全局样式”关着又没选中字幕时由浮层里说明，开关仍可在浮层里打开。
   const reason = unavailableReason(sequence, true, undefined)
-  return <PanelTrigger panelSize="compact" zIndex={Z_LAYERS.dropdown} disabled={Boolean(reason)} renderPanel={() => <div className="flex max-h-96 flex-col overflow-auto"><VideoEditSubtitleStyleFields {...props} /></div>}>
+  return <PanelTrigger panelSize="compact" panelPadding="content" zIndex={Z_LAYERS.dropdown} disabled={Boolean(reason)} renderPanel={() => <div className="flex max-h-96 flex-col overflow-auto"><VideoEditSubtitleStyleFields {...props} /></div>}>
     {({ open, togglePanel }) => <UiIconButton size="sm" aria-label="字幕样式" tooltip="字幕样式" disabled={Boolean(reason)} disabledReason={reason} aria-haspopup="dialog" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Palette /></UiIconButton>}
   </PanelTrigger>
 }

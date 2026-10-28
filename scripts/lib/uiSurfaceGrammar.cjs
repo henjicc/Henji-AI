@@ -10,6 +10,7 @@ const MESSAGES = {
   S7: 'UiActionGroup 内按钮继承组的 tier/size，不得逐项覆盖 variant/size。',
   S8: '状态反馈复用 UiSpinner/UiSkeleton；按钮说明用 tooltip，不可用原因用 disabledReason。',
   S9: '同一表面最多一个主动作；次级动作使用 secondary 或 quiet。',
+  S10: '自定义浮层写明 panelPadding：表单、说明用 content，菜单列表用 menu，内容自带内边距或要贴边时写 none。',
 }
 const CONTROLS = new Set(['Dropdown', 'NumberInput', 'UiRangeInput', 'UiSegmented', 'UiSelect'])
 
@@ -126,6 +127,9 @@ function findUiSurfaceGrammar(raw, fileName = 'surface.tsx') {
   function visit(node) {
     if (segment(node)) report('S1', node)
     if (surface(node) && primaryCount(node, node) > 1) report('S9', node)
+    // 浮层外壳默认不留内边距：不写就是让内容贴边，表单类浮层一再因此把控件顶到边缘。特殊面板由 UiSpecialPanel 自带骨架。
+    if ((name(node) === 'PanelTrigger' || (name(node) === 'Dropdown' && attribute(node, 'renderPanel'))) && !attribute(node, 'panelPadding')
+      && attrText(node, 'panelSize') !== 'special' && !opening(node).attributes.properties.some(ts.isJsxSpreadAttribute)) report('S10', node)
     if (name(node) === 'UiButton') {
       for (let parent = node.parent; parent; parent = parent.parent) {
         if (name(parent) !== 'UiActionGroup') continue

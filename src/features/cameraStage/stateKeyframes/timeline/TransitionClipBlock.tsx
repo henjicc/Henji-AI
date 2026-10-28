@@ -62,6 +62,7 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
       <PanelTrigger
         alignment="aboveCenter"
         panelSize="compact"
+        panelPadding="none"
         className="h-full w-full"
         renderPanel={() => (
           <TransitionPopover
