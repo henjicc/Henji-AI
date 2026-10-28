@@ -1,0 +1,29 @@
+{
+  "format": "henji-code-asset",
+  "version": 8,
+  "name": "代码标题",
+  "sourceVersion": {
+    "apiVersion": 4,
+    "languageVersion": 4,
+    "entry": "main.ts",
+    "files": [
+      {
+        "path": "main.ts",
+        "location": "git:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:henji%3A%2F%E4%BB%A3%E7%A0%81:%E7%B4%A0%E6%9D%90%2F%E6%A0%87%E9%A2%98%2Fmain.ts",
+        "hash": "1daaf924ce3a64d48dfa5afb91e04420ce15dec4f306fef78a77eacc7c62680f"
+      }
+    ],
+    "imports": []
+  },
+  "codeSources": [
+    {
+      "hash": "1daaf924ce3a64d48dfa5afb91e04420ce15dec4f306fef78a77eacc7c62680f",
+      "source": "export default {\n  name: \"黄金代码\", kind: \"generator\", mode: \"dynamic\", width: 1920, height: 1080, durationSeconds: 4,\n  motionBlur: { shutter: 180, maxSamples: 16 },\n  params: [{\"key\":\"nodes\",\"type\":\"table\",\"title\":\"节点数据\",\"rowKey\":\"id\",\"fields\":{\"id\":{\"type\":\"text\",\"title\":\"键\",\"default\":\"\",\"maxLength\":64},\"label\":{\"type\":\"text\",\"title\":\"文案\",\"default\":\"\",\"maxLength\":200}},\"default\":[{\"id\":\"node-0\",\"label\":\"首项\"}]},{\"key\":\"titleStyle\",\"type\":\"textStyle\",\"title\":\"文字样式\",\"layer\":\"golden-motion\",\"default\":{\"fontFamily\":\"sans-serif\",\"fontSize\":64}},{\"key\":\"label\",\"type\":\"text\",\"title\":\"标题\",\"default\":\"黄金样本\",\"maxLength\":200},{\"key\":\"size\",\"type\":\"number\",\"title\":\"字号\",\"default\":24,\"min\":1,\"max\":72,\"step\":1,\"unit\":\"px\"},{\"key\":\"screen\",\"type\":\"image\",\"title\":\"录屏\",\"default\":null}],\n  layers() {\n    return [{ id: \"golden-motion\", bounds: [0, 0, 100, 100], blurShape: \"lens\", pose: t => ({ x: t * 10, blur: 8 }), draw(ctx) { ctx.fillStyle = \"#000000\"; ctx.fillRect(0, 0, 100, 100) } }]\n  }\n}\n"
+    }
+  ],
+  "parameters": {
+    "label": "黄金样本"
+  },
+  "curves": {},
+  "images": []
+}

@@ -28,7 +28,7 @@ export interface CodeImageGenerationJob {
   bindingValue: string | null
 }
 const jobs = new Map<string, CodeImageGenerationJob>()
-function bindingIdentity(value: unknown): string | null { return isCodeImageReference(value) ? JSON.stringify([value.kind, value.mediaId, value.time ?? null]) : null }
+function bindingIdentity(value: unknown): string | null { return isCodeImageReference(value) ? JSON.stringify([value.kind, value.mediaId, value.time ?? null, ...(value.spans ? [value.spans] : [])]) : null }
 const controllers = new Map<string, AbortController>()
 const listeners = new Set<() => void>()
 let revision = 0

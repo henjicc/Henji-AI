@@ -1,5 +1,5 @@
 import { isCodeImageReference } from './codeMaterial/contract'
-import { codeMediaInputComposition, codeMediaInputSeconds } from './codeMediaInput'
+import { codeMediaInputComposition, codeMediaInputSample } from './codeMediaInput'
 import type { VideoEditComposition } from './document'
 import { VIDEO_EDIT_MOTION_STRUCTURE_SAMPLE_BUDGET } from './motionStructure'
 import type { VideoEditPixelMotionPlacement } from './pixelMotionReview'
@@ -28,16 +28,22 @@ export function videoEditCodeInputMotionPlacements(root: VideoEditComposition, r
       if (reference.kind === 'video') {
         const media = local.media.find(media => media.id === reference.mediaId && media.kind === 'video')
         if (!media || !local.items.some(item => item.mediaId === media.id)) throw new Error('视频图片参数引用的素材不存在。')
-        const times: number[] = []
+        // 带时间表的参数只记参与的帧，每一段单独成一条（段内取帧时刻单调：正常、快放或停住），段间空档与跳过不连成一条。
+        let times: number[] = [], from = owner.timeline.from, run: unknown
+        const flush = (): void => { append(owner, undefined, parameter, 'video', media.id, times, from, media.durationSeconds); times = [] }
         for (let frame = owner.timeline.from; frame < owner.timeline.to; frame++) {
           charge()
-          const seconds = codeMediaInputSeconds(clip, reference, videoEditSourceMapLocalFrame(owner, frame), local.frameRate)
-          if (seconds < 0 || seconds >= media.durationSeconds) throw new Error('视频图片参数的取帧时间超出素材范围。')
-          times.push(seconds)
+          const sample = codeMediaInputSample(clip, reference, videoEditSourceMapLocalFrame(owner, frame), local.frameRate)
+          if (!sample) { flush(); continue }
+          if (times.length && sample.span !== run) flush()
+          if (!times.length) from = frame
+          run = sample.span
+          if (sample.seconds < 0 || sample.seconds >= media.durationSeconds) throw new Error('视频图片参数的取帧时间超出素材范围。')
+          times.push(sample.seconds)
         }
-        append(owner, undefined, parameter, 'video', media.id, times, owner.timeline.from, media.durationSeconds)
+        flush()
       } else {
-        const below = codeMediaInputComposition(local, clip, reference, 0).document
+        const below = codeMediaInputComposition(local, clip, reference, 0)!.document
         const a = videoEditSourceMapLocalFrame(owner, owner.timeline.from), b = videoEditSourceMapLocalFrame(owner, owner.timeline.to - 1)
         const entries = new VideoEditSourceMapIndex().query(below, { from: Math.max(0, Math.min(a, b)), to: Math.max(a, b) + 1 }, ['video'])
         for (const entry of entries) {

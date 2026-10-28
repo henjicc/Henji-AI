@@ -1,0 +1,486 @@
+{
+  "version": 5,
+  "minReaderVersion": 1,
+  "content": {
+    "format": "henji-video-style",
+    "style": {
+      "id": "golden-style",
+      "name": "黄金风格",
+      "description": "用于持久格式样本的风格。",
+      "version": 2,
+      "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "updatedAt": "2026-10-09T00:00:00.000Z",
+      "imported": true,
+      "guide": "# 黄金风格\n\n> 冷静的科技讲解\n\n## 定位\n\n<!-- 2–4 句：给谁看、什么场合、要什么感觉、不要什么感觉；信息密度按用途（口播讲解像发布会一屏一个重点，课件教程才留要点）。可附风格坐标（克制↔张扬、精密↔手作、平面↔立体、冷静↔热闹、严肃↔好玩，各 1–5）。 -->\n\n## 不变量与自由度\n\n<!-- 不变量 3–5 条：一眼能认出这个风格、任何画面都不能丢的东西。自由度：哪些地方鼓励发挥。 -->\n\n## 色彩\n\n<!-- 按角色写：底色、主文字、次要文字、强调色、语义色、压在实拍上的处理；写清比例与用法。 -->\n\n## 字体与排版\n\n<!-- 标题、正文、数字各一条字体优先级链；字号阶梯与每档用途、字重档位，以画面高度为参照；字距、行距与中英混排；小字准入（只放编号、单位、来源、时间这类口播与画面里没有的信息，不放复述标题或口播的说明句）。 -->\n\n## 版式与构图\n\n<!-- 网格与对齐、留白、视觉焦点、信息密度、形状语言（圆角/直角、线条粗细）。 -->\n\n## 动效\n\n<!-- 运动性格一句话；入场、换位、离场的曲线；快中慢三档时长；谁先动、错峰规律。 -->\n\n## 镜头与转场\n\n<!-- 一镜到底还是分镜头；转场方式；镜头时长；景深、视差、摄像机运动。 -->\n\n## 质感\n\n<!-- 颗粒、阴影、辉光、描边、圆角、材质；哪些绝对不用。 -->\n\n## 声音\n\n<!-- 音效性格、动作和音效对点的规则、音乐类型与节奏；没有要求写“不限”。 -->\n\n## 组件\n\n<!-- 基础组件逐个写清怎么出现、停留时有什么、怎么离开、由哪几层细节构成：标题（标题框怎么搭建）、花字与关键词、图片与录屏容器、高亮、数据；人名条、来源标注、字幕、片尾按需补，不用写“不用”。再写它们共用的底板、入场与细节层。 -->\n\n## 画幅适配\n\n<!-- 横屏 16:9 与竖屏 9:16 怎么变：字号参照哪条边、版式怎么重排、竖屏避开的平台遮挡区。 -->\n\n## 设计原则\n\n<!-- 硬约束：不能违反的结构性原则。倾向：默认这样做，有理由可以不这样。 -->\n\n## 正反例\n\n<!-- 做：2–4 条典型的好做法。不做：2–4 条最容易犯、最伤风格的做法。 -->\n\n## 样片与代码\n\n<!-- 样片按标准分镜演示本风格；写明哪些函数可以照搬（缓动、排版、组件绘制），哪些只是样片内容。 -->\n",
+      "userPreferences": [
+        {
+          "id": "golden-style-memory",
+          "content": "标题少用装饰线。",
+          "source": "user",
+          "updatedAt": "2026-10-09T00:00:00.000Z",
+          "revision": 1
+        }
+      ],
+      "sample": {
+        "code": {
+          "entry": "index.js",
+          "files": {
+            "index.js": "// 风格样片：按标准分镜演示本风格的基础组件。整段时长、尺寸、锚点帧在风格的 sample 设置里。\n// 改风格时先改 STYLE 里的取值和下面各组件的画法；分镜与文案保持标准，方便不同风格并排比较。\n// 只能用相对导入（同目录内的文件），不访问网络、文件或 DOM；量字用 OffscreenCanvas。\n//\n// 分层写法（运行时据此做运动模糊，默认 180° 快门）：\n// - layers() 从后到前返回若干层；没有 pose 的层是静止层，按当前时刻 t 在画面坐标里画。\n// - 会动的元素各成一层：在本地坐标里画内容，bounds 给出本地内容范围，pose(t) 给出\n//   { x, y, rotation, scale / scaleX / scaleY, opacity }，不可见时返回 null。内容随时间变的（计数、逐字）照常在 draw 里按 t 画。\n// - 文字从遮罩里滑出这类效果：加 clip（画面坐标里的矩形），内容随 pose 移动，遮罩不跟着动。\n// 尺寸都以画面高度为单位（u = 高 / 720），换分辨率不改画面。\n\nconst STYLE = {\n  color: {\"bg\":\"#F4F2EE\", \"text\":\"#16181D\", \"muted\":\"#6B6F78\", \"accent\":\"#2F5BFF\", \"line\":\"#D9D6CF\"},\n  font: {\n    title: '\"HarmonyOS Sans SC\", \"Source Han Sans SC\", \"Microsoft YaHei\", sans-serif',\n    body: '\"HarmonyOS Sans SC\", \"Source Han Sans SC\", \"Microsoft YaHei\", sans-serif',\n    number: '\"DIN Alternate\", \"Bahnschrift\", \"Segoe UI\", sans-serif',\n  },\n};\n\n// 标准分镜（秒）：标题 → 花字 → 图片容器与高亮 → 数据 → 人名条 → 收尾。\n// 相邻两段略有重叠：旧内容向左退到一半时新内容从右边进来，版面不会撞在一起，任何一帧也都不空。\nconst SCENES = { title: [0, 2.0], keyword: [1.95, 3.7], media: [3.65, 6.3], data: [6.25, 8.2], name: [8.15, 9.6], end: [9.55, 99] };\nconst COPY = {\n  title: \"把想法变成画面\",\n  keyword: { lead: \"风格\", key: \"不走样\" },\n  media: \"示意画面\", // 容器里是代码画的示意，不冒充真实截图\n  data: { value: 87, unit: \"%\", label: \"一次通过率\" },\n  name: { name: \"痕继痕迹\", role: \"动效设计师\" },\n  end: \"一个风格，处处一致\",\n};\n\n// —— 运动规律：全片共用 ——\nconst clamp = (v) => Math.max(0, Math.min(1, v));\nconst expoOut = (v) => (v >= 1 ? 1 : 1 - Math.pow(2, -10 * clamp(v))); // 入场、落定：冲进来，长尾减速\nconst cubicIn = (v) => clamp(v) ** 3; // 离场：先慢后快，干脆离开\nconst cubicInOut = (v) => { v = clamp(v); return v < 0.5 ? 4 * v * v * v : 1 - Math.pow(-2 * v + 2, 3) / 2; };\nconst IN = 0.7, OUT = 0.35; // 入场 0.7 秒，离场是入场的一半\nconst font = (weight, size, family) => `${weight} ${Math.round(size)}px ${family}`;\n\n// 颜色只从 STYLE 换算：alpha 改透明度，mix 两色混合（渐变两端用同一 RGB 只改透明度）。\nconst rgb = (c) => (Array.isArray(c) ? c : [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)));\nconst alpha = (c, a) => `rgba(${rgb(c).join(\", \")}, ${a})`;\nconst mix = (a, b, k) => { const x = rgb(a), y = rgb(b); return `rgb(${x.map((v, i) => Math.round(v + (y[i] - v) * k)).join(\", \")})`; };\nconst WHITE = [255, 255, 255];\n\n// 承载运动：整个画面以中心为原点匀速缓推（每秒约 0.8%），从第一帧跑到最后一帧，不起停；入场位移叠在上面。\nconst PUSH = 0.008;\nfunction camera(t, w, h) {\n  const s = 1 + PUSH * t;\n  return { s, at: (x, y) => [w / 2 + (x - w / 2) * s, h / 2 + (y - h / 2) * s] };\n}\n\n// 场景进度：enter 入场（expoOut），leave 离场（cubicIn）；on 表示这一刻场景可见。\nfunction phase(t, [a, b], delay = 0, inDur = IN, outDur = OUT) {\n  return { enter: expoOut((t - a - delay) / inDur), leave: cubicIn((t - (b - outDur)) / outDur), on: t >= a + delay && t < b };\n}\n\n// 一个运动层：内容在本地坐标里画，(x, y) 是落点。入场从右侧带着速度滑进来减速落定，离场向左加速退出，\n// 全片同一个方向，像镜头一直在向右走；透明度在入场前段就完成，不做原地淡入。\nfunction mover(w, h, u, { scene, x, y, bounds, draw, delay = 0, inDur = IN, outDur = OUT, from = 56, to = 40, size }) {\n  return {\n    bounds, draw,\n    pose: (t) => {\n      const p = phase(t, scene, delay, inDur, outDur);\n      if (!p.on) return null;\n      const c = camera(t, w, h), k = size ? size(t) : 1;\n      const [px, py] = c.at(x + ((1 - p.enter) * from - p.leave * to) * u, y);\n      return { x: px, y: py, scale: c.s * k, opacity: Math.min(1, p.enter * 2.5) * (1 - p.leave) };\n    },\n  };\n}\n\n// 只用来量字宽（分层时还没有画布）。\nlet measurer = null;\nfunction measure(text, f) {\n  measurer ??= new OffscreenCanvas(1, 1).getContext(\"2d\");\n  measurer.font = f;\n  return measurer.measureText(text).width;\n}\n\nfunction roundRect(ctx, x, y, w, h, r) {\n  ctx.beginPath();\n  ctx.roundRect(x, y, w, h, r);\n}\n\n// —— 图片与录屏容器：代码画的示意画面（一个编辑界面：预览、属性栏、时间线）——\n// 本地坐标以容器中心为原点；高亮目标是右侧的“按钮”，位置由 MEDIA_TARGET 给出。\nconst MEDIA = { w: 760, h: 400, r: 14, bezel: 10 };\nconst MEDIA_TARGET = { x: 196, y: -44, w: 132, h: 34 };\nfunction mockScreen(ctx, u) {\n  const C = STYLE.color, W = MEDIA.w * u, H = MEDIA.h * u, b = MEDIA.bezel * u;\n  // 外框：深色边框像一块屏幕，柔和投影让它离开台面。\n  ctx.save();\n  ctx.shadowColor = alpha(C.text, 0.18); ctx.shadowBlur = 36 * u; ctx.shadowOffsetY = 14 * u;\n  ctx.fillStyle = C.text; roundRect(ctx, -W / 2, -H / 2, W, H, MEDIA.r * u); ctx.fill();\n  ctx.restore();\n  const x0 = -W / 2 + b, y0 = -H / 2 + b, iw = W - 2 * b, ih = H - 2 * b;\n  ctx.save();\n  roundRect(ctx, x0, y0, iw, ih, (MEDIA.r - 6) * u); ctx.clip();\n  ctx.fillStyle = mix(C.bg, WHITE, 0.6); ctx.fillRect(x0, y0, iw, ih);\n  // 标题栏\n  ctx.fillStyle = mix(C.bg, C.line, 0.5); ctx.fillRect(x0, y0, iw, 30 * u);\n  for (let i = 0; i < 3; i++) { ctx.fillStyle = C.line; ctx.beginPath(); ctx.arc(x0 + (18 + i * 16) * u, y0 + 15 * u, 4.5 * u, 0, Math.PI * 2); ctx.fill(); }\n  // 预览：一张示意风景（天空、太阳、两层山）\n  const px = x0 + 18 * u, py = y0 + 46 * u, pw = iw * 0.6, ph = ih * 0.56;\n  const sky = ctx.createLinearGradient(0, py, 0, py + ph);\n  sky.addColorStop(0, mix(C.bg, C.accent, 0.22)); sky.addColorStop(1, mix(C.bg, WHITE, 0.5));\n  ctx.fillStyle = sky; roundRect(ctx, px, py, pw, ph, 6 * u); ctx.fill();\n  ctx.save(); roundRect(ctx, px, py, pw, ph, 6 * u); ctx.clip();\n  ctx.fillStyle = alpha(C.accent, 0.85); ctx.beginPath(); ctx.arc(px + pw * 0.7, py + ph * 0.38, ph * 0.12, 0, Math.PI * 2); ctx.fill();\n  const hill = (k, color, lift) => {\n    ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(px, py + ph);\n    for (let i = 0; i <= 8; i++) ctx.lineTo(px + (pw * i) / 8, py + ph * (lift - 0.12 * Math.sin(i * 1.3 + k)));\n    ctx.lineTo(px + pw, py + ph); ctx.closePath(); ctx.fill();\n  };\n  hill(0.5, mix(C.bg, C.muted, 0.35), 0.72); hill(2.1, mix(C.bg, C.text, 0.55), 0.86);\n  ctx.restore();\n  // 属性栏：几条文字占位与一个按钮（高亮目标）\n  const sx = px + pw + 22 * u, sw = iw - pw - 58 * u;\n  [0.9, 0.6, 0.75, 0.5].forEach((k, i) => { ctx.fillStyle = mix(C.bg, C.line, 0.9); roundRect(ctx, sx, py + (8 + i * 26) * u, sw * k, 9 * u, 4.5 * u); ctx.fill(); });\n  const T = MEDIA_TARGET;\n  ctx.fillStyle = C.accent; roundRect(ctx, T.x * u - (T.w * u) / 2, T.y * u - (T.h * u) / 2, T.w * u, T.h * u, (T.h / 2) * u); ctx.fill();\n  ctx.fillStyle = alpha(WHITE, 0.85); roundRect(ctx, T.x * u - 34 * u, T.y * u - 4 * u, 68 * u, 8 * u, 4 * u); ctx.fill();\n  // 时间线：三条轨道上的片段\n  const ty = py + ph + 20 * u, lanes = [[0, 0.34, 0.36, 0.3], [0.08, 0.5, 0.62, 0.2], [0, 0.24, 0.28, 0.46], [0.16, 0.3, 0.5, 0.36]];\n  lanes.forEach((row, i) => {\n    for (let j = 0; j < row.length; j += 2) {\n      ctx.fillStyle = i === 1 ? mix(C.bg, C.accent, 0.35) : mix(C.bg, C.line, 1);\n      roundRect(ctx, px + (iw - 36 * u) * row[j], ty + i * 21 * u, (iw - 36 * u) * row[j + 1], 13 * u, 4 * u); ctx.fill();\n    }\n  });\n  ctx.restore();\n}\n\nfunction layers(_params, w, h, _assets, info) {\n  const u = h / 720, x = w * 0.1, C = STYLE.color, F = STYLE.font, out = [];\n  const now = info?.time ?? 0;\n  out.push({ draw: (ctx) => { ctx.fillStyle = C.bg; ctx.fillRect(0, 0, w, h); } });\n\n  // —— 标题：标题框 = 强调色竖条 + 一条底线。竖条先长出来，标题从竖条后面滑出（遮罩在竖条右侧），\n  // 底线随后向右展开托住标题；停留时只随缓推，离场整组向左退出。——\n  const title = SCENES.title, ty = h * 0.5, titleFont = font(700, 64 * u, F.title), titleW = measure(COPY.title, titleFont);\n  out.push({\n    bounds: [0, -46 * u, 6 * u, 46 * u],\n    pose: (t) => {\n      const p = phase(t, title, 0, 0.55);\n      if (!p.on || p.enter < 0.002) return null;\n      const c = camera(t, w, h), [px, py] = c.at(x - p.leave * 40 * u, ty);\n      return { x: px, y: py, scaleX: c.s, scaleY: c.s * p.enter, opacity: 1 - p.leave };\n    },\n    draw: (ctx) => { ctx.fillStyle = C.accent; ctx.fillRect(0, -46 * u, 6 * u, 92 * u); },\n  });\n  const tc = camera(now, w, h), [clipL, clipT] = tc.at(x + 20 * u, ty - 60 * u), [, clipB] = tc.at(0, ty + 40 * u);\n  out.push({\n    clip: [clipL, clipT, w, clipB],\n    bounds: [0, -56 * u, titleW, 16 * u],\n    pose: (t) => {\n      const p = phase(t, title, 0.12, 0.8);\n      if (!p.on) return null;\n      const c = camera(t, w, h), [px, py] = c.at(x + 26 * u - (1 - p.enter) * (titleW * 0.5) - p.leave * 40 * u, ty + 22 * u);\n      return { x: px, y: py, scale: c.s, opacity: 1 - p.leave };\n    },\n    draw: (ctx) => { ctx.fillStyle = C.text; ctx.font = titleFont; ctx.fillText(COPY.title, 0, 0); },\n  });\n  out.push({\n    bounds: [0, 0, 100, 2 * u],\n    pose: (t) => {\n      const p = phase(t, title, 0.3, 0.9), len = (titleW + 26 * u) * p.enter;\n      if (!p.on || len < 1) return null;\n      const c = camera(t, w, h), [px, py] = c.at(x + 26 * u - p.leave * 40 * u, ty + 46 * u);\n      return { x: px, y: py, scaleX: (len / 100) * c.s, scaleY: c.s, opacity: 1 - p.leave };\n    },\n    draw: (ctx) => { ctx.fillStyle = C.line; ctx.fillRect(0, 0, 100, 2 * u); },\n  });\n\n  // —— 花字与关键词：提炼成短语，“不走样”是重点：字更大更重，强调色色块从左向右垫在下半截。正着放，不倾斜。——\n  const kw = SCENES.keyword, leadFont = font(500, 40 * u, F.body), keyFont = font(800, 92 * u, F.title);\n  const leadW = measure(COPY.keyword.lead, leadFont), keyW = measure(COPY.keyword.key, keyFont), gap = 18 * u;\n  const kx = w / 2 - (leadW + gap + keyW) / 2, ky = h * 0.6;\n  out.push(mover(w, h, u, {\n    scene: kw, x: kx, y: ky, bounds: [0, -44 * u, leadW, 10 * u],\n    draw: (ctx) => { ctx.fillStyle = C.muted; ctx.font = leadFont; ctx.fillText(COPY.keyword.lead, 0, 0); },\n  }));\n  out.push(mover(w, h, u, {\n    scene: kw, x: kx + leadW + gap, y: ky, delay: 0.06, bounds: [-6 * u, -86 * u, keyW + 6 * u, 16 * u],\n    draw: (ctx, t) => {\n      const k = cubicInOut((t - kw[0] - 0.35) / 0.45);\n      if (k > 0) { ctx.fillStyle = alpha(C.accent, 0.22); ctx.fillRect(-6 * u, -30 * u, (keyW + 12 * u) * k, 34 * u); }\n      ctx.fillStyle = C.text; ctx.font = keyFont; ctx.fillText(COPY.keyword.key, 0, 0);\n    },\n  }));\n\n  // —— 图片与录屏容器 + 高亮：容器从下方带着速度升起、略放大落位，内容和容器是一个整体；\n  // 角上标“示意画面”。容器落定后，高亮压暗目标以外的区域，强调色细框收拢到目标上。——\n  const media = SCENES.media, mx = w / 2, my = h * 0.52, W = MEDIA.w * u, H = MEDIA.h * u;\n  const lift = (t) => { const p = phase(t, media, 0, 0.9); return { p, y: (1 - p.enter) * 70 * u, s: 0.94 + 0.06 * p.enter }; };\n  const mediaPose = (t) => {\n    const { p, y, s } = lift(t);\n    if (!p.on) return null;\n    const c = camera(t, w, h), [px, py] = c.at(mx - p.leave * 40 * u, my + y);\n    return { x: px, y: py, scale: c.s * s, opacity: Math.min(1, p.enter * 2.5) * (1 - p.leave) };\n  };\n  out.push({ bounds: [-W / 2 - 40 * u, -H / 2 - 30 * u, W / 2 + 40 * u, H / 2 + 60 * u], pose: mediaPose, draw: (ctx) => mockScreen(ctx, u) });\n  out.push(mover(w, h, u, {\n    scene: media, x: mx - W / 2, y: my - H / 2 - 16 * u, delay: 0.12, from: 24,\n    bounds: [0, -16 * u, 120 * u, 4 * u],\n    draw: (ctx) => { ctx.fillStyle = C.muted; ctx.font = font(500, 14 * u, F.body); ctx.fillText(COPY.media, 0, 0); },\n  }));\n  const hl = (t) => cubicInOut((t - media[0] - 1.15) / 0.6) * (1 - phase(t, media).leave);\n  const T = MEDIA_TARGET;\n  out.push({\n    bounds: [-W / 2, -H / 2, W / 2, H / 2], pose: (t) => { const k = hl(t), base = mediaPose(t); return base && k > 0 ? { ...base, opacity: k } : null; },\n    draw: (ctx) => {\n      ctx.save();\n      roundRect(ctx, -W / 2 + MEDIA.bezel * u, -H / 2 + MEDIA.bezel * u, W - 2 * MEDIA.bezel * u, H - 2 * MEDIA.bezel * u, (MEDIA.r - 6) * u);\n      ctx.roundRect(T.x * u - T.w * u / 2 - 10 * u, T.y * u - T.h * u / 2 - 10 * u, T.w * u + 20 * u, T.h * u + 20 * u, (T.h / 2 + 10) * u);\n      ctx.fillStyle = alpha(C.text, 0.24); ctx.fill(\"evenodd\");\n      ctx.restore();\n    },\n  });\n  out.push({\n    bounds: [-T.w * u, -T.h * u, T.w * u, T.h * u],\n    pose: (t) => {\n      const k = hl(t), base = mediaPose(t);\n      if (!base || k <= 0) return null;\n      const grow = 1 + 0.35 * (1 - k), c = camera(t, w, h), s = base.scale;\n      return { x: base.x + T.x * u * s, y: base.y + T.y * u * s, scale: s * grow, opacity: k };\n    },\n    draw: (ctx) => {\n      ctx.strokeStyle = C.accent; ctx.lineWidth = 3 * u;\n      roundRect(ctx, -T.w * u / 2 - 10 * u, -T.h * u / 2 - 10 * u, T.w * u + 20 * u, T.h * u + 20 * u, (T.h / 2 + 10) * u); ctx.stroke();\n    },\n  });\n\n  // —— 数据：数字从 0 计数到终值（expoOut，越接近越慢），单位用强调色；进度线跟着数字走。——\n  const data = SCENES.data, numFont = font(700, 150 * u, F.number), numW = measure(\"88\", numFont);\n  const count = (t) => COPY.data.value * expoOut((t - data[0] - 0.1) / 1.2);\n  out.push(mover(w, h, u, {\n    scene: data, x, y: h * 0.56, bounds: [0, -116 * u, numW + 90 * u, 60 * u],\n    draw: (ctx, t) => {\n      ctx.fillStyle = C.text; ctx.font = numFont; ctx.textAlign = \"right\";\n      ctx.fillText(String(Math.round(count(t))), numW, 0);\n      ctx.textAlign = \"left\"; ctx.fillStyle = C.accent; ctx.font = font(700, 60 * u, F.number); ctx.fillText(COPY.data.unit, numW + 14 * u, 0);\n      ctx.fillStyle = C.muted; ctx.font = font(500, 24 * u, F.body); ctx.fillText(COPY.data.label, 4 * u, 48 * u);\n    },\n  }));\n  out.push(mover(w, h, u, {\n    scene: data, x, y: h * 0.74, delay: 0.08, bounds: [0, 0, w * 0.8, 4 * u],\n    draw: (ctx, t) => {\n      ctx.fillStyle = C.line; ctx.fillRect(0, 0, w * 0.8, 4 * u);\n      ctx.fillStyle = C.accent; ctx.fillRect(0, 0, w * 0.8 * (count(t) / 100), 4 * u);\n    },\n  }));\n\n  // —— 人名条：强调色竖条长出来，名字和职位从竖条后面滑出（遮罩），一行写完。——\n  const name = SCENES.name, ny = h * 0.78, nameFont = font(700, 34 * u, F.title), nameW = measure(COPY.name.name, nameFont);\n  out.push({\n    bounds: [0, -34 * u, 6 * u, 34 * u],\n    pose: (t) => {\n      const p = phase(t, name, 0, 0.5);\n      if (!p.on || p.enter < 0.002) return null;\n      const c = camera(t, w, h), [px, py] = c.at(x - p.leave * 40 * u, ny);\n      return { x: px, y: py, scaleX: c.s, scaleY: c.s * p.enter, opacity: 1 - p.leave };\n    },\n    draw: (ctx) => { ctx.fillStyle = C.accent; ctx.fillRect(0, -34 * u, 6 * u, 68 * u); },\n  });\n  const nc = camera(now, w, h), [nClipL, nClipT] = nc.at(x + 18 * u, ny - 40 * u), [, nClipB] = nc.at(0, ny + 40 * u);\n  out.push({\n    clip: [nClipL, nClipT, w, nClipB],\n    bounds: [0, -30 * u, nameW + 24 * u + 140 * u, 10 * u],\n    pose: (t) => {\n      const p = phase(t, name, 0.1, 0.7);\n      if (!p.on) return null;\n      const c = camera(t, w, h), [px, py] = c.at(x + 24 * u - (1 - p.enter) * 160 * u - p.leave * 40 * u, ny + 11 * u);\n      return { x: px, y: py, scale: c.s, opacity: 1 - p.leave };\n    },\n    draw: (ctx) => {\n      ctx.fillStyle = C.text; ctx.font = nameFont; ctx.fillText(COPY.name.name, 0, 0);\n      ctx.fillStyle = C.muted; ctx.font = font(500, 20 * u, F.body); ctx.fillText(COPY.name.role, nameW + 24 * u, 0);\n    },\n  });\n\n  // —— 收尾：一句话居中滑入落定，强调色短线从中间向两边展开托住它。——\n  const end = SCENES.end, endFont = font(700, 50 * u, F.title), endW = measure(COPY.end, endFont);\n  out.push(mover(w, h, u, {\n    scene: end, x: w / 2 - endW / 2, y: h / 2 + 16 * u, inDur: 0.9, bounds: [0, -46 * u, endW, 12 * u],\n    draw: (ctx) => { ctx.fillStyle = C.text; ctx.font = endFont; ctx.fillText(COPY.end, 0, 0); },\n  }));\n  out.push({\n    bounds: [-50, 0, 50, 3 * u],\n    pose: (t) => {\n      const k = expoOut((t - end[0] - 0.35) / 0.8);\n      if (k <= 0.002) return null;\n      const c = camera(t, w, h), [px, py] = c.at(w / 2, h / 2 + 44 * u);\n      return { x: px, y: py, scaleX: c.s * k * 0.9, scaleY: c.s };\n    },\n    draw: (ctx) => { ctx.fillStyle = C.accent; ctx.fillRect(-50, 0, 100, 3 * u); },\n  });\n  return out;\n}\n\nexport default {\n  name: \"风格样片\", kind: \"generator\", mode: \"dynamic\",\n  nameEnglish: \"Style sample\",\n  params: [],\n  motionBlur: { shutter: 180 },\n  layers,\n};\n"
+          }
+        },
+        "width": 3840,
+        "height": 2160,
+        "durationSeconds": 24,
+        "fps": 60,
+        "thumbnail": 1.2,
+        "anchors": [
+          1.2,
+          3.2,
+          5.2,
+          6.4,
+          7.8,
+          12.4,
+          15,
+          18.2,
+          23.2
+        ]
+      }
+    },
+    "templates": [
+      {
+        "id": "golden-library-template",
+        "name": "黄金模板",
+        "description": "代码标题模板。",
+        "version": 3,
+        "contentHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "updatedAt": "2026-10-09T00:00:00.000Z",
+        "style": {
+          "id": "golden-style",
+          "version": 2
+        },
+        "body": {
+          "kind": "native",
+          "content": {
+            "width": 1920,
+            "height": 1080,
+            "fps": 30,
+            "clips": [
+              {
+                "name": "人名条",
+                "kind": "graphic",
+                "track": 0,
+                "start": 0,
+                "duration": 120,
+                "sourceInUs": 0,
+                "sourceRemainder": {
+                  "numerator": 0,
+                  "denominator": 1
+                },
+                "x": 0,
+                "y": 0,
+                "scale": 1,
+                "rotation": 0,
+                "opacity": 1,
+                "volume": 1,
+                "text": "",
+                "graphic": {
+                  "width": 1920,
+                  "height": 1080,
+                  "objects": [
+                    {
+                      "id": "b1ef2872-7a81-4c7b-a152-5514866070b5",
+                      "name": "矩形",
+                      "kind": "rect",
+                      "parameters": {
+                        "x": 153.6,
+                        "y": 810,
+                        "rotation": 0,
+                        "opacity": 1,
+                        "width": 960,
+                        "height": 162,
+                        "fill": [
+                          0,
+                          0.49411764705882355,
+                          1,
+                          1
+                        ],
+                        "radius": 10.8
+                      },
+                      "curves": {
+                        "opacity": [
+                          {
+                            "id": "89be204f-1c5d-41a3-99a0-23d21cdd8bd7",
+                            "sourceInUs": 0,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 0,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "212c806e-6373-401f-bd75-03d292fcd821",
+                            "sourceInUs": 600000,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 1,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "eba6f4a7-5f82-436f-84d7-47030316b234",
+                            "sourceInUs": 3366667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 1,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "c3dbd7bf-9f25-4bfa-a1ad-7024ed2e3140",
+                            "sourceInUs": 3966667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 0,
+                            "interpolation": "ease"
+                          }
+                        ],
+                        "x": [
+                          {
+                            "id": "e60dfe03-9f77-4007-a867-08bc300c5478",
+                            "sourceInUs": 0,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": -230.4,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "3f108478-da21-4c07-b8f3-7971dc445630",
+                            "sourceInUs": 600000,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 153.6,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "e6e6f892-a6a0-4075-9d5a-ab1dcd0277e8",
+                            "sourceInUs": 3366667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 153.6,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "1d9e35ce-baae-4abf-9bdc-22df49b1e49e",
+                            "sourceInUs": 3966667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 537.6,
+                            "interpolation": "ease"
+                          }
+                        ]
+                      },
+                      "visible": true
+                    },
+                    {
+                      "id": "1294a35b-4f72-41eb-b48f-c9b5b673165e",
+                      "name": "文字",
+                      "kind": "text",
+                      "parameters": {
+                        "x": 192,
+                        "y": 858.6,
+                        "rotation": 0,
+                        "opacity": 1,
+                        "scale": 1,
+                        "anchorX": 0,
+                        "anchorY": 0,
+                        "text": "姓名"
+                      },
+                      "curves": {
+                        "opacity": [
+                          {
+                            "id": "00e20e71-553b-4e4a-a374-f9159a8007c0",
+                            "sourceInUs": 0,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 0,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "bf99336a-1de4-4a54-a4fc-351c9e9775c4",
+                            "sourceInUs": 600000,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 1,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "0ad9ca42-e4f4-4f40-9d66-351a2e3090df",
+                            "sourceInUs": 3366667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 1,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "72a38ceb-ca7f-4122-8ba8-d4060e50e4d1",
+                            "sourceInUs": 3966667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 0,
+                            "interpolation": "ease"
+                          }
+                        ],
+                        "x": [
+                          {
+                            "id": "7f6311f2-5818-46d2-9729-8cc502a5c999",
+                            "sourceInUs": 0,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": -192,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "2d18d171-0efd-47b1-be8a-91e1842ba9d5",
+                            "sourceInUs": 600000,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 192,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "0c8dabf4-1e11-436b-884f-11d4ce7c07a3",
+                            "sourceInUs": 3366667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 192,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "cce7d997-f896-49c4-b455-ef632b815650",
+                            "sourceInUs": 3966667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 576,
+                            "interpolation": "ease"
+                          }
+                        ]
+                      },
+                      "textStyle": {
+                        "fontFamily": "sans-serif",
+                        "fontWeight": 400,
+                        "fontStyle": "normal",
+                        "fontSize": 60,
+                        "fauxBold": false,
+                        "fauxItalic": false,
+                        "allCaps": false,
+                        "smallCaps": false,
+                        "superscript": false,
+                        "subscript": false,
+                        "underline": false,
+                        "align": "left",
+                        "verticalAlign": "middle",
+                        "tracking": 0,
+                        "kerning": "auto",
+                        "leading": 0,
+                        "baselineShift": 0,
+                        "tsume": 0,
+                        "fill": {
+                          "enabled": true,
+                          "color": "#ffffff"
+                        },
+                        "strokes": [],
+                        "background": {
+                          "enabled": false,
+                          "color": "#000000",
+                          "opacity": 0.7,
+                          "padding": 12,
+                          "radius": 0
+                        },
+                        "shadows": [],
+                        "boxWidth": 0,
+                        "boxHeight": 0
+                      },
+                      "visible": true
+                    },
+                    {
+                      "id": "251a1e97-2a8c-4df0-a4fd-68b08347e55f",
+                      "name": "文字",
+                      "kind": "text",
+                      "parameters": {
+                        "x": 192,
+                        "y": 926.64,
+                        "rotation": 0,
+                        "opacity": 1,
+                        "scale": 1,
+                        "anchorX": 0,
+                        "anchorY": 0,
+                        "text": "职务"
+                      },
+                      "curves": {
+                        "opacity": [
+                          {
+                            "id": "a599f47b-1c8c-4bd7-84b2-4582b4c5eaed",
+                            "sourceInUs": 0,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 0,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "c416c816-129c-46a4-8a57-5af4b6c5c9c5",
+                            "sourceInUs": 600000,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 1,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "f06d9292-b1dc-486c-bc10-15256955f576",
+                            "sourceInUs": 3366667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 1,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "a2a855b6-33ff-4ba3-90ae-8577b932daf9",
+                            "sourceInUs": 3966667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 0,
+                            "interpolation": "ease"
+                          }
+                        ],
+                        "x": [
+                          {
+                            "id": "85f3a40f-2b52-4234-9091-fedeedf146cb",
+                            "sourceInUs": 0,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": -192,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "6778943f-354e-4cd5-89c2-19b079664d44",
+                            "sourceInUs": 600000,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 192,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "ca36ab52-f835-40f7-88b0-3ed2139185a2",
+                            "sourceInUs": 3366667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 192,
+                            "interpolation": "ease"
+                          },
+                          {
+                            "id": "55395a00-0559-42b2-a854-49005a94f95b",
+                            "sourceInUs": 3966667,
+                            "sourceRemainder": {
+                              "numerator": 0,
+                              "denominator": 1
+                            },
+                            "value": 576,
+                            "interpolation": "ease"
+                          }
+                        ]
+                      },
+                      "textStyle": {
+                        "fontFamily": "sans-serif",
+                        "fontWeight": 400,
+                        "fontStyle": "normal",
+                        "fontSize": 38.4,
+                        "fauxBold": false,
+                        "fauxItalic": false,
+                        "allCaps": false,
+                        "smallCaps": false,
+                        "superscript": false,
+                        "subscript": false,
+                        "underline": false,
+                        "align": "left",
+                        "verticalAlign": "middle",
+                        "tracking": 0,
+                        "kerning": "auto",
+                        "leading": 0,
+                        "baselineShift": 0,
+                        "tsume": 0,
+                        "fill": {
+                          "enabled": true,
+                          "color": "#ffffff"
+                        },
+                        "strokes": [],
+                        "background": {
+                          "enabled": false,
+                          "color": "#000000",
+                          "opacity": 0.7,
+                          "padding": 7.68,
+                          "radius": 0
+                        },
+                        "shadows": [],
+                        "boxWidth": 0,
+                        "boxHeight": 0
+                      },
+                      "visible": true
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "media": {
+      "thumbnail": "/9j/4AAQ",
+      "anchors": [
+        "/9j/4AAQ"
+      ]
+    }
+  }
+}

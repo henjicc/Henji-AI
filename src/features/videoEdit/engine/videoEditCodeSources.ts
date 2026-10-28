@@ -205,7 +205,7 @@ export class VideoEditCodeSources {
       const parameters = evaluateCodeMaterialParameters(animation.prepared, videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, Boolean(window) && program.mode === 'static'))
       Object.assign(context, await options.audio?.(clip, program, parameters, controller.signal)); assertCurrent()
       const motion = undefined
-      return { context, parameters: codeMediaFrameParameters(clip, parameters), transitionHandles: Boolean(window), ...(motion ? { motion } : {}) }
+      return { context, parameters: codeMediaFrameParameters(clip, parameters, frame, document.frameRate), transitionHandles: Boolean(window), ...(motion ? { motion } : {}) }
     }
     try {
       for (const clip of clips) {

@@ -25,7 +25,7 @@ it('finds an unplaced input and follows the clip in-point at the producer playba
   expect(input.entry.path.map(step => step.clipId)).toEqual(['code'])
   expect(input.sourceTimes).toHaveLength(120)
   for (let frame = 0; frame < 120; frame++) {
-    const rendered = codeMediaInputComposition(local, clip, { kind: 'video', mediaId: 'raw' }, frame).document.clips[0]
+    const rendered = codeMediaInputComposition(local, clip, { kind: 'video', mediaId: 'raw' }, frame)!.document.clips[0]
     expect(input.sourceTimes![frame]).toBeCloseTo((rendered.sourceInUs + rendered.sourceRemainder.numerator / rendered.sourceRemainder.denominator) / 1e6, 10)
   }
   // 裁掉的开头（入点 1 秒）算进视频时间；2 倍速与倒放不换算视频
@@ -33,7 +33,7 @@ it('finds an unplaced input and follows the clip in-point at the producer playba
 })
 it.each([undefined, .5])('video input fills its source canvas without a half-frame offset, fixed time=%s', time => {
   const { clip, composition } = fixture()
-  const input = codeMediaInputComposition(composition(), clip, { kind: 'video', mediaId: 'raw', ...(time === undefined ? {} : { time }) }, 30).document
+  const input = codeMediaInputComposition(composition(), clip, { kind: 'video', mediaId: 'raw', ...(time === undefined ? {} : { time }) }, 30)!.document
   expect(videoEditClipToFrame(input.clips[0], input, input, 0, 0)).toEqual({ x: 0, y: 0 })
   expect(videoEditClipToFrame(input.clips[0], input, input, 1, 1)).toEqual({ x: 1, y: 1 })
 })
@@ -48,7 +48,7 @@ it.each([false, true])('nested mixed-rate %s placements retain both paths and us
     if (entry.kind !== 'code') return
     const input = inputs.find(input => input.entry.path[0].clipId === entry.path[0].clipId)!
     for (let frame = entry.timeline.from; frame < entry.timeline.to; frame++) {
-      const rendered = codeMediaInputComposition(local, entry.path.at(-1)!.clip, { kind: 'video', mediaId: 'raw' }, videoEditSourceMapLocalFrame(entry, frame))
+      const rendered = codeMediaInputComposition(local, entry.path.at(-1)!.clip, { kind: 'video', mediaId: 'raw' }, videoEditSourceMapLocalFrame(entry, frame))!
       expect(input.sourceTimes![frame - entry.timeline.from]).toBeCloseTo(rendered.document.clips[0].sourceInUs / 1e6, 5)
     }
   } })
@@ -76,6 +76,16 @@ it('fixed input remains the same source frame and does not inherit raw movement 
   expect(records.every(record => record.detail?.includes('不证明代码实际绘制或最终可见'))).toBe(true)
   expect(() => collectVideoEditPixelMotion([{ ...input, sourceTimes: [.5], scan }], 30, {})).toThrow('采样时钟无效')
 })
+it('带取帧时间表的视频参数只记参与的帧：每一段单独一条（停住为 static），段间空档不记', () => {
+  const { clip, composition } = fixture()
+  // 片段时间 t = 1 + 帧 / 30：0–29 帧第一段，30–44 帧停住，45–59 帧空档，60–89 帧二倍速，90 帧起不在任何一段。
+  clip.code!.parameters.picture = { kind: 'video', mediaId: 'raw', spans: [{ from: 1, to: 2, src: 0 }, { from: 2, to: 2.5, src: 3, rate: 0 }, { from: 3, to: 4, src: 4, rate: 2 }] }
+  const inputs = videoEditCodeInputMotionPlacements(composition(), { from: 0, to: 120 })
+  expect(inputs.map(input => [input.entry.timeline, input.entry.source?.direction, input.sourceTimes?.length])).toEqual([[{ from: 0, to: 30 }, 'forward', 30], [{ from: 30, to: 45 }, 'static', 15], [{ from: 60, to: 90 }, 'forward', 30]])
+  expect(inputs[1].sourceTimes!.every(time => time === 3)).toBe(true)
+  expect(inputs[2].sourceTimes![0]).toBeCloseTo(4, 9); expect(inputs[2].sourceTimes![15]).toBeCloseTo(5, 9)
+  expect(new Set(inputs.map(input => input.entry.id)).size).toBe(3)
+})
 it('rejects out-of-range producer input and excessive frame instances instead of clamping or truncating evidence', () => {
   const { clip, document, composition } = fixture()
   clip.code!.parameters.picture = { kind: 'video', mediaId: 'raw', time: 10 }
@@ -98,6 +108,6 @@ it('raw input candidates do not count as extra attention events even when their 
 it.each([false, true])('网页重演录屏作为代码素材的视频参数时按录制光标重画鼠标；画面里已有鼠标（%s）时不重画', baked => {
   const { clip, composition } = fixture(), local = composition()
   local.media[0] = { ...local.media[0], recordingCursor: { cursorBakedIn: baked } as never }
-  const input = codeMediaInputComposition(local, clip, { kind: 'video', mediaId: 'raw' }, 0).document.clips[0]
+  const input = codeMediaInputComposition(local, clip, { kind: 'video', mediaId: 'raw' }, 0)!.document.clips[0]
   expect(input.effects?.map(effect => effect.builtin?.id) ?? []).toEqual(baked ? [] : ['recording_cursor'])
 })

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { textStyleSchema } from '../../imaging/vectorContent/text'
+import { CODE_VIDEO_SPAN_LIMIT, codeVideoSpansIssue } from './videoSpans'
 
 const finite = z.number().finite()
 const unit = finite.min(0).max(1)
@@ -14,6 +15,12 @@ export const codeMaterialBasicParameterValueSchema = z.union([finite, z.boolean(
 const structure = z.record(codeMaterialParameterKeySchema, codeMaterialBasicParameterValueSchema).refine(value => Object.keys(value).length >= 1 && Object.keys(value).length <= 16, '自定义参数结构必须有 1–16 个基础字段，不能嵌套。')
 export const codeMaterialTableValueSchema = z.array(z.record(codeMaterialParameterKeySchema, z.union([codeMaterialBasicParameterValueSchema, textStyleSchema])))
 export const codeMaterialAnimatedParameterValueSchema = z.union([codeMaterialBasicParameterValueSchema, structure, textStyleSchema, codeMaterialTableValueSchema])
-export const codeMaterialImageReferenceSchema = z.union([z.object({ kind: z.literal('image'), mediaId: z.string().min(1).max(100) }).strict(), z.object({ kind: z.literal('video'), mediaId: z.string().min(1).max(100), time: finite.nonnegative().optional() }).strict(), z.object({ kind: z.literal('sequence'), mediaId: z.literal('below') }).strict()])
+/** 视频参数的取帧时间表（语义见 CodeVideoSpan）：按 from 升序、互不重叠，与固定时刻 time 互斥。 */
+export const codeMaterialVideoSpansSchema = z.array(z.object({ from: finite, to: finite, src: finite.nonnegative(), rate: finite.nonnegative().optional(), cursor: z.boolean().optional() }).strict()).min(1).max(CODE_VIDEO_SPAN_LIMIT).superRefine((spans, context) => {
+  const issue = codeVideoSpansIssue(spans)
+  if (issue) context.addIssue({ code: 'custom', message: issue })
+})
+const videoReference = z.object({ kind: z.literal('video'), mediaId: z.string().min(1).max(100), time: finite.nonnegative().optional(), spans: codeMaterialVideoSpansSchema.optional() }).strict().refine(value => value.time === undefined || value.spans === undefined, '视频参数的 time 与 spans 不能同时给出。')
+export const codeMaterialImageReferenceSchema = z.union([z.object({ kind: z.literal('image'), mediaId: z.string().min(1).max(100) }).strict(), videoReference, z.object({ kind: z.literal('sequence'), mediaId: z.literal('below') }).strict()])
 export const codeMaterialAudioReferenceSchema = z.object({ kind: z.literal('audio'), mediaId: z.string().min(1).max(100) }).strict()
 export const codeMaterialParameterValueSchema = z.union([codeMaterialAnimatedParameterValueSchema, codeMaterialImageReferenceSchema, codeMaterialAudioReferenceSchema, z.null()])

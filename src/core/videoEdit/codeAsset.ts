@@ -9,7 +9,9 @@ import { PersistenceError, upgradePersistenceContent, type PersistenceContract }
 /** Bytes bound a serialized source manifest; image dependency count has no product ceiling. */
 export const CODE_ASSET_LIMITS = Object.freeze({ bytes: 512 * 1024 })
 export const CODE_ASSET_MIME = 'application/x-henji-code'
-export const CODE_ASSET_VERSION = 7
+export const CODE_ASSET_VERSION = 8
+/** 能读懂本程序写出的代码资产的最低版本：8 只给视频参数新增可选取帧时间表 spans。 */
+export const CODE_ASSET_MIN_READER_VERSION = 7
 export const codeAssetContentSchema = z.object({ sizeBytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), fileModifiedAt: z.number().finite().nonnegative(), contentIdentity: z.string().regex(/^[a-f0-9]{64}$/) }).strict()
 const image = z.object({
   id: z.string().min(1).max(100), path: z.string().min(1).max(4096).refine(value => !value.includes('\0') && /^(?:[a-z]:[\\/]|\\\\|\/)/i.test(value), '媒体依赖需要原文件绝对路径。'),
@@ -62,7 +64,7 @@ export function decodeCodeAsset(bytes: Uint8Array, backupPath?: string): CodeAss
 }
 export function encodeCodeAsset(input: CodeAsset): Uint8Array {
   const { format, version, minReaderVersion: _minReaderVersion, ...rest } = codeAssetSchema.parse(input)
-  const bytes = new TextEncoder().encode(JSON.stringify({ format, version, minReaderVersion: CODE_ASSET_VERSION, ...rest }))
+  const bytes = new TextEncoder().encode(JSON.stringify({ format, version, minReaderVersion: CODE_ASSET_MIN_READER_VERSION, ...rest }))
   if (bytes.byteLength > CODE_ASSET_LIMITS.bytes) throw new Error('代码素材清单最多512KiB。')
   return bytes
 }

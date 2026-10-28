@@ -1,0 +1,117 @@
+{
+  "format": "henji-video-presets",
+  "version": 7,
+  "items": [
+    {
+      "category": "style",
+      "preset": {
+        "guide": "## 定位\n请按当前作品填写。\n\n## 核心理念\n请按当前作品填写。\n\n## 视觉语言\n请按当前作品填写。\n\n## 动效语言\n请按当前作品填写。\n\n## 节奏与剪辑\n请按当前作品填写。\n\n## 文字与字幕\n请按当前作品填写。\n\n## 必须\n请按当前作品填写。\n\n## 避免\n请按当前作品填写。\n\n## 可以自由发挥\n请按当前作品填写。",
+        "examples": [
+          {
+            "id": "opener",
+            "title": "开场标题",
+            "note": "演示说明书里的错峰入场与字体层级。",
+            "source": "export default {\n  name: \"黄金代码\", kind: \"generator\", mode: \"dynamic\", width: 1920, height: 1080, durationSeconds: 4,\n  motionBlur: { shutter: 180, maxSamples: 16 },\n  params: [{\"key\":\"nodes\",\"type\":\"table\",\"title\":\"节点数据\",\"rowKey\":\"id\",\"fields\":{\"id\":{\"type\":\"text\",\"title\":\"键\",\"default\":\"\",\"maxLength\":64},\"label\":{\"type\":\"text\",\"title\":\"文案\",\"default\":\"\",\"maxLength\":200}},\"default\":[{\"id\":\"node-0\",\"label\":\"首项\"}]},{\"key\":\"titleStyle\",\"type\":\"textStyle\",\"title\":\"文字样式\",\"layer\":\"golden-motion\",\"default\":{\"fontFamily\":\"sans-serif\",\"fontSize\":64}},{\"key\":\"label\",\"type\":\"text\",\"title\":\"标题\",\"default\":\"黄金样本\",\"maxLength\":200},{\"key\":\"size\",\"type\":\"number\",\"title\":\"字号\",\"default\":24,\"min\":1,\"max\":72,\"step\":1,\"unit\":\"px\"}],\n  layers() {\n    return [{ id: \"golden-motion\", bounds: [0, 0, 100, 100], blurShape: \"lens\", pose: t => ({ x: t * 10, blur: 8 }), draw(ctx) { ctx.fillStyle = \"#000000\"; ctx.fillRect(0, 0, 100, 100) } }]\n  }\n}\n"
+          }
+        ],
+        "id": "golden-kit",
+        "name": "黄金风格",
+        "revision": 0
+      }
+    },
+    {
+      "category": "title",
+      "preset": {
+        "kind": "lower_third",
+        "parameters": {
+          "text": "姓名",
+          "subtitle": "身份 / 职务",
+          "color": "#007eff",
+          "textStyle": {
+            "fontFamily": "sans-serif",
+            "fontWeight": 400,
+            "fontStyle": "normal",
+            "fontSize": 60,
+            "fauxBold": false,
+            "fauxItalic": false,
+            "allCaps": false,
+            "smallCaps": false,
+            "superscript": false,
+            "subscript": false,
+            "underline": false,
+            "align": "center",
+            "verticalAlign": "middle",
+            "tracking": 0,
+            "kerning": "auto",
+            "leading": 0,
+            "baselineShift": 0,
+            "tsume": 0,
+            "fill": {
+              "enabled": true,
+              "color": "#ffffff"
+            },
+            "strokes": [],
+            "background": {
+              "enabled": false,
+              "color": "#000000",
+              "opacity": 0.7,
+              "padding": 12,
+              "radius": 0
+            },
+            "shadows": [],
+            "boxWidth": 0,
+            "boxHeight": 0
+          },
+          "durationSeconds": 5,
+          "entrance": "left",
+          "countFrom": 0,
+          "countTo": 100
+        },
+        "id": "golden-template",
+        "name": "黄金标题"
+      }
+    },
+    {
+      "category": "text",
+      "preset": {
+        "id": "golden-text",
+        "name": "黄金字型",
+        "style": {
+          "fontFamily": "sans-serif",
+          "fontWeight": 400,
+          "fontStyle": "normal",
+          "fontSize": 72,
+          "fauxBold": false,
+          "fauxItalic": false,
+          "allCaps": false,
+          "smallCaps": false,
+          "superscript": false,
+          "subscript": false,
+          "underline": false,
+          "align": "center",
+          "verticalAlign": "middle",
+          "tracking": 0,
+          "kerning": "auto",
+          "leading": 0,
+          "baselineShift": 0,
+          "tsume": 0,
+          "fill": {
+            "enabled": true,
+            "color": "#ffffff"
+          },
+          "strokes": [],
+          "background": {
+            "enabled": false,
+            "color": "#000000",
+            "opacity": 0.7,
+            "padding": 12,
+            "radius": 0
+          },
+          "shadows": [],
+          "boxWidth": 0,
+          "boxHeight": 0
+        }
+      }
+    }
+  ]
+}

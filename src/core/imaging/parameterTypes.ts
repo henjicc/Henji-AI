@@ -1,6 +1,11 @@
 import type { TextStyle } from './vectorContent/text'
 export type CodeColor = [number, number, number, number]
-export type CodeImageReference = { kind: 'image'; mediaId: string; time?: never } | { kind: 'video'; mediaId: string; time?: number } | { kind: 'sequence'; mediaId: 'below'; time?: never }
+/**
+ * 视频参数取帧时间表的一段：片段时间 t（片段入点 + 片段内时间，秒）落在 [from, to) 时取 src + (t − from) × rate（缺省 1，0 为停住）；
+ * cursor:false 时这一段不画录制鼠标与点击涟漪。
+ */
+export interface CodeVideoSpan { from: number; to: number; src: number; rate?: number; cursor?: boolean }
+export type CodeImageReference = { kind: 'image'; mediaId: string; time?: never; spans?: never } | { kind: 'video'; mediaId: string; time?: number; spans?: CodeVideoSpan[] } | { kind: 'sequence'; mediaId: 'below'; time?: never; spans?: never }
 export interface CodeAudioReference { kind: 'audio'; mediaId: string }
 export interface CodePoint { x: number; y: number }
 export interface CodeGrade { hue: number; strength: number; luminance: number }

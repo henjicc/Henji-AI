@@ -50,7 +50,7 @@ export interface AuthorFrameInfo {
 
 /** 参数值按 params.键名 读取；键名与取值形状由 params 声明推断，推断不出时为 any。 */
 export type AuthorParams = { readonly [key: string]: any }
-/** image 参数的画面，按参数键取；未绑定时没有该键。 */
+/** image 参数的画面，按参数键取；未绑定、或视频参数带取帧时间表（spans）而这一帧不在任何一段里时没有该键。 */
 export type AuthorAssets = { readonly [key: string]: CanvasImageSource }
 
 /** 变换作用在画布坐标上：先绕画布原点缩放、旋转（弧度），再平移 x/y。 */
@@ -134,7 +134,7 @@ export interface AuthorGpuInputs {
   /** 只有滤镜有：正在处理的画面。 */
   current?: GPUTexture
   frames: ReadonlyArray<{ offset: number; texture: GPUTexture; available: boolean }>
-  /** 图片、视频参数的纹理，键同参数名。直接采样它，不要读 assets：读 assets 会把这一帧拷成位图。 */
+  /** 图片、视频参数的纹理，键同参数名（没有画面的参数没有该键，同 AuthorAssets）。直接采样它，不要读 assets：读 assets 会把这一帧拷成位图。 */
   images: { readonly [key: string]: AuthorGpuImage }
 }
 export interface AuthorWebGPU<P extends readonly AuthorParamDeclaration[] = readonly AuthorParamDeclaration[]> {

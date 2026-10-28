@@ -50,14 +50,14 @@ it('音频默认只取下方轨道，指定媒体去掉片段处理；视频时�
   expect(explicit.start).toBe(0); expect(explicit.duration).toBe(10)
   expect(explicit.document.clips[0]).toMatchObject({ volume: 1, start: 0, sourceInUs: 0 })
   const frame = clip.start + 3
-  const follow = codeMediaInputComposition(composition, clip, { kind: 'video', mediaId: 'movie' }, frame)
+  const follow = codeMediaInputComposition(composition, clip, { kind: 'video', mediaId: 'movie' }, frame)!
   expect(follow.document.clips[0].sourceInUs).toBe(Math.floor(3 / composition.fps * 1e6))
-  const fixed = codeMediaInputComposition(composition, clip, { kind: 'video', mediaId: 'movie', time: .123456 }, frame)
+  const fixed = codeMediaInputComposition(composition, clip, { kind: 'video', mediaId: 'movie', time: .123456 }, frame)!
   expect(fixed.document.clips[0].sourceInUs).toBe(123456)
   expect(fixed.document.width).toBe(64)
   expect(() => codeMediaInputComposition(composition, clip, { kind: 'video', mediaId: 'movie', time: 12 }, frame)).toThrow('超出')
-  expect(codeMediaInputComposition(composition, clip, { kind: 'sequence', mediaId: 'below' }, frame).document.clips.map(clip => clip.id)).toEqual(['lower'])
-  expect(codeMediaFrameParameters(clip, { input: { kind: 'video', mediaId: 'movie' } })).toEqual({ input: { kind: 'image', mediaId: codeMediaInputKey(clip.id, 'input') } })
+  expect(codeMediaInputComposition(composition, clip, { kind: 'sequence', mediaId: 'below' }, frame)!.document.clips.map(clip => clip.id)).toEqual(['lower'])
+  expect(codeMediaFrameParameters(clip, { input: { kind: 'video', mediaId: 'movie' } }, frame, composition.frameRate)).toEqual({ input: { kind: 'image', mediaId: codeMediaInputKey(clip.id, 'input') } })
 })
 it('visual-only changes reuse completed sound analysis while audible gain changes invalidate it', async () => {
   const { composition } = fixture(), create = vi.fn(() => ({ mixAudio: async (_start: number, duration: number) => [new Float32Array(Math.round(duration * composition.sampleRate)).fill(.25)], dispose: async () => {} }))

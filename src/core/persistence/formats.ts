@@ -10,7 +10,7 @@ import { DOCUMENT_KINDS } from '../documents/kinds'
 import { documentEnvelopeSchema, documentEnvelopeContract } from '../documents/envelope'
 import { PROJECT_MANIFEST_VERSION, projectManifestSchema } from '../documents/projectManifest'
 import { videoEditDocumentSchema } from '../videoEdit/document'
-import { CODE_ASSET_VERSION, codeAssetSchema } from '../videoEdit/codeAsset'
+import { CODE_ASSET_MIN_READER_VERSION, CODE_ASSET_VERSION, codeAssetSchema } from '../videoEdit/codeAsset'
 import { CODE_AUTHOR_API_VERSION, CODE_MATERIAL_VERSION_RECORD, codeAuthorApiSchema, codeMaterialVersionSchema } from '../videoEdit/codeMaterialPersistence'
 import { codeComponentMetadataSchema } from '../videoEdit/codeMaterial/components'
 import { codeMaterialFilesSchema } from '../videoEdit/codeMaterial/sources'
@@ -69,20 +69,20 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   // 作者宿主接口：每个代码版本记录 apiVersion；宿主接口变化时升版本并按 apiVersion 保持旧代码的原行为，不迁移源码。
   format('code-author-api', '代码作者宿主接口', CODE_AUTHOR_API_VERSION, 'CodeMaterialVersion.apiVersion / CodeAsset.sourceVersion.apiVersion', 'src/features/videoEdit/engine/videoEditAuthorRuntime.ts', codeAuthorApiSchema),
   format('code-component', '项目组件说明', CODE_COMPONENT_SCHEMA_VERSION, '组件首行.schemaVersion（作品版本 version 与格式版本不同）', 'src/core/videoEdit/codeMaterial/components.ts::componentSourceMetadata', codeComponentMetadataSchema),
-  format('code-asset', '可编辑代码资产', CODE_ASSET_VERSION, 'CodeAsset.version', 'src/core/videoEdit/codeAsset.ts::decodeCodeAsset', codeAssetSchema),
+  { ...format('code-asset', '可编辑代码资产', CODE_ASSET_VERSION, 'CodeAsset.version', 'src/core/videoEdit/codeAsset.ts::decodeCodeAsset', codeAssetSchema), minReaderVersion: CODE_ASSET_MIN_READER_VERSION },
   // v15 只新增可选字段（实验性功能开关），旧版本程序仍能正确读取。
   { ...format('settings', '界面设置', SETTINGS_STORAGE_VERSION, 'settings-storage.version', 'src/stores/settingsStore.ts::persist', rendererSettingsSchema, 'local-storage'), minReaderVersion: 14 },
   format('theme', '主题选择', THEME_STORAGE_VERSION, 'theme-storage.version', 'src/stores/themeStore.ts::persist', z.object({ theme: z.enum(['dark', 'light']) }), 'local-storage'),
   // 2026-10-22 起停用：只读，风格库首次加载时把其中的个人风格与标题模板转存进新的风格库目录，原键不改写。
   format('style-kits', '本机风格包', LOCAL_LIBRARY_FORMATS['video-edit-style-kits'].version, 'video-edit-style-kits.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::readLegacyLibrary', z.array(legacyStyleKitSchema), 'local-storage'),
-  format('title-templates', '本机标题模板', LOCAL_LIBRARY_FORMATS['video-edit-title-templates'].version, 'video-edit-title-templates.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::readLegacyLibrary', z.array(legacyTitleTemplateSchema), 'local-storage'),
+  { ...format('title-templates', '本机标题模板', LOCAL_LIBRARY_FORMATS['video-edit-title-templates'].version, 'video-edit-title-templates.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::readLegacyLibrary', z.array(legacyTitleTemplateSchema), 'local-storage'), minReaderVersion: LOCAL_LIBRARY_FORMATS['video-edit-title-templates'].minReaderVersion },
   { ...format('video-style-library', '风格库中的风格', VIDEO_EDIT_STYLE_LIBRARY_VERSION, '风格库/styles/<id>/style.json.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::readStyleFile', videoEditStyleSchema), minReaderVersion: 1 },
-  format('video-template-library', '风格库中的模板', VIDEO_EDIT_TEMPLATE_LIBRARY_VERSION, '风格库/templates/<id>.json.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::readTemplateFile', videoEditTemplateSchema),
+  { ...format('video-template-library', '风格库中的模板', VIDEO_EDIT_TEMPLATE_LIBRARY_VERSION, '风格库/templates/<id>.json.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::readTemplateFile', videoEditTemplateSchema), minReaderVersion: 1 },
   { ...format('video-style-package', '可分享风格包', VIDEO_EDIT_STYLE_PACKAGE_VERSION, '.hjsty.version', 'src/features/videoEdit/application/videoEditStylePackages.ts::importVideoEditStylePackage', videoEditStylePackageSchema), minReaderVersion: 1 },
   format('text-presets', '本机文字和字幕预设', LOCAL_LIBRARY_FORMATS['video-edit-text-presets'].version, 'video-edit-text-presets.version', 'src/features/videoEdit/application/videoEditLocalLibrary.ts', z.array(videoEditTextPresetSchema), 'local-storage'),
   format('export-presets', '本机导出预设', LOCAL_LIBRARY_FORMATS['video-edit-export-presets'].version, 'video-edit-export-presets.version', 'src/features/videoEdit/application/videoEditExportPresets.ts', z.array(videoEditExportPresetSchema), 'local-storage'),
   format('preset-preferences', '预设评分与默认', LOCAL_LIBRARY_FORMATS['video-edit-preset-preferences'].version, 'video-edit-preset-preferences.version', 'src/features/videoEdit/application/videoEditPresetPreferences.ts', videoEditPresetPreferencesSchema, 'local-storage'),
-  format('video-preset-package', '可分享剪辑预设', VIDEO_EDIT_PRESET_PACKAGE_VERSION, 'henji-video-presets.version', 'src/features/videoEdit/application/videoEditPresetCatalog.ts::importVideoEditPresetPackage', videoEditPresetPackageSchema),
+  { ...format('video-preset-package', '可分享剪辑预设', VIDEO_EDIT_PRESET_PACKAGE_VERSION, 'henji-video-presets.version', 'src/features/videoEdit/application/videoEditPresetCatalog.ts::importVideoEditPresetPackage', videoEditPresetPackageSchema), minReaderVersion: 6 },
   format('voice-library', '克隆音色库', LOCAL_LIBRARY_FORMATS['voice_library_records'].version, 'settings.voice_library_records.version', 'src/services/voiceLibrary/VoiceLibraryService.ts::parseVoiceRecords', z.array(voiceLibraryRecordSchema)),
   format('sound-library-folders', '音效文件夹', SOUND_LIBRARY_FOLDERS_VERSION, 'settings.sound_library.folders.version', 'electron/main/services/sound-library/runtime.ts::readFolders', soundLibraryFoldersSchema),
   format('preset-export', '可分享生成预设', 1, 'PresetService export.version（1.0 → 1）', 'src/services/presets/PresetService.ts::importPreset', presetExportSchema),
@@ -91,7 +91,7 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   { ...format('recording-setup', '录制设置', RECORDING_SETUP_VERSION, 'henji-recording-setup.version', 'src/features/screenRecording/recordingSetupModel.ts::loadRecordingSetup', recordingSetupSchema, 'local-storage'), minReaderVersion: 3 },
   format('model-defaults', '默认生成与转写模型', MODEL_DEFAULTS_VERSION, 'ModelDefaultsState.version', 'src/features/settings/modelDefaultsManager.ts::loadState', modelDefaultsSchema, 'local-storage'),
   format('onboarding', '首次引导进度', ONBOARDING_VERSION, 'OnboardingStateV2.version', 'src/features/onboarding/application/onboardingManager.ts::loadState', onboardingSchema, 'local-storage'),
-  format('subtitle-manifest', '字幕回填记录', SUBTITLE_MANIFEST_VERSION, '字幕声音.subtitle.json.version', 'src/features/videoEdit/application/videoEditAutoSubtitles.ts::complete', videoEditSubtitleManifestSchema),
+  { ...format('subtitle-manifest', '字幕回填记录', SUBTITLE_MANIFEST_VERSION, '字幕声音.subtitle.json.version', 'src/features/videoEdit/application/videoEditAutoSubtitles.ts::complete', videoEditSubtitleManifestSchema), minReaderVersion: 20 },
   format('setting-records', '设置记录', SETTING_RECORD_VERSION, 'SETTING_RECORD_VERSION（记录独立内容版本；SQL 升级仍走既有账本）', 'electron/main/services/settings/store.ts::getEntry', settingRecordSchema, 'sqlite-ledger', { paidApproval: paidApprovalSettingsSchema }),
   format('asset-records', '素材库记录', ASSET_RECORD_VERSION, 'ASSET_RECORD_VERSION（记录独立内容版本；SQL 升级仍走既有账本）', 'electron/main/services/asset-library/index.ts', assetRecordSchema, 'sqlite-ledger'),
   format('generation-presets', '生成预设', GENERATION_PRESET_VERSION, 'GENERATION_PRESET_VERSION（记录独立内容版本；SQL 升级仍走既有账本）', 'electron/main/services/presets/store.ts', presetRecordSchema, 'sqlite-ledger'),

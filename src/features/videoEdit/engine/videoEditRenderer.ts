@@ -1,12 +1,12 @@
 import { videoEditGainMultiplier } from '@/core/videoEdit/loudness'
 import type { VideoEditContentTarget, VideoEditLookaheadScope } from './videoEditDecodeLookahead'
-import { codeMediaInputKey, codeMediaInputComposition } from '@/core/videoEdit/codeMediaInput'
+import { codeMediaInputKey, codeMediaInputComposition, codeMediaInputNextFrame, type CodeMediaInput } from '@/core/videoEdit/codeMediaInput'
 import { codeFilterInputComposition } from '@/core/videoEdit/codeFilterInput'
 import type { AuthorGpuInputs } from './videoEditAuthorModule'
 import type { PreparedVideoEditCodeEffect, PreparedVideoEditEffect } from './videoEditCodeSources'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 import { traceVideoEditFrame } from './videoEditFrameTrace'
-import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
+import { isCodeImageReference, type CodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
 import { codeMaterialUsesAudio } from '@/core/videoEdit/codeMaterialResources'
 import { VideoEditContentAudio } from './videoEditContentAudio'
 import { codeAudioComposition, codeAudioReferenceMediaId, codeAudioTime } from '@/core/videoEdit/codeAudio'
@@ -23,7 +23,7 @@ import { videoEditNestedFrame, videoEditNestedPictureFrame, videoEditNestedPictu
 import { assertVideoEditSequenceGraph, VIDEO_EDIT_MAX_SEQUENCE_DEPTH } from '@/core/videoEdit/sequenceGraph'
 import { VideoEditCodePicture } from './videoEditCodePicture'
 import { videoEditNestedAudio } from './videoEditNestedAudio'
-import { videoEditPictureSeconds } from '@/core/videoEdit/time'
+import { videoEditPictureSeconds, videoEditSourceSeconds } from '@/core/videoEdit/time'
 import { videoEditClipAudioMode, videoEditClipHeadRoomSeconds, videoEditClipSourceSecondsAtTime } from '@/core/videoEdit/clipSpeed'
 import { mixVideoEditRetimedSound, type VideoEditRetimedSoundRequest } from './videoEditRetimedAudio'
 import { mixVideoEditStretchedSound, VideoEditTimeStretcher } from './videoEditTimeStretch'
@@ -494,7 +494,7 @@ export class VideoEditRenderer {
     return frames
   }
   /** A still input's store key, source time and media (see `ensureStill`). */
-  private stillIdentity(input: ReturnType<typeof codeMediaInputComposition>): { still: string; time: number; media: VideoEditMedia } | undefined {
+  private stillIdentity(input: CodeMediaInput): { still: string; time: number; media: VideoEditMedia } | undefined {
     const clip = input.document.clips[0], media = clip && this.lookaheadOwner.clipMedia(input.document, clip)
     if (!input.still || !clip || media?.kind !== 'video') return undefined
     return { still: videoEditStillKey(media), time: videoEditPictureSeconds(clipSourceSeconds(clip, videoEditHandleFrame(clip, clip.start, input.document.fps, media.durationSeconds), input.document.fps)), media }
@@ -965,7 +965,7 @@ export class VideoEditRenderer {
    * `VideoEditClipFramesOptions`), and in preview keeps a few played pictures; a still keeps its one picture in the
    * tree's still store instead. A lower-tracks input is an ordinary export-quality composition of those tracks.
    */
-  private codeInputRenderer(input: Pick<ReturnType<typeof codeMediaInputComposition>, 'kind' | 'document' | 'still'>): VideoEditRenderer {
+  private codeInputRenderer(input: Pick<CodeMediaInput, 'kind' | 'document' | 'still'>): VideoEditRenderer {
     if (input.kind !== 'video') {
       const below = new VideoEditRenderer(input.document, undefined, undefined, 1, this.frames, this, this.sequencePath)
       below.exclusiveWhenShared = true
@@ -979,12 +979,14 @@ export class VideoEditRenderer {
     return renderer
   }
   /**
-   * The code video inputs of clips starting within `CODE_INPUT_PREWARM_SECONDS` of a playing frame, at the frame each
-   * clip first shows, nearest first, excluding inputs already showing: every still, and moving references up to
-   * `CODE_INPUT_PREWARM_REFERENCES`. Where pre-rendered windows draw their files the clip does not run, so it first
-   * shows where the windows covering it end (also for a clip already under way inside the window playing now).
+   * The code video inputs first showing within `CODE_INPUT_PREWARM_SECONDS` of a playing frame, at the frame each first
+   * shows, nearest first, excluding inputs already showing: every still, and moving references up to
+   * `CODE_INPUT_PREWARM_REFERENCES`. A reference shows from its clip's first frame, a timetabled one (`spans`) from the
+   * first frame of its next span (also inside a clip already under way). Where pre-rendered windows draw their files the
+   * clip does not run, so it first shows where the windows covering it end (also for a clip already under way inside the
+   * window playing now).
    */
-  private upcomingCodeInputs(document: VideoEditComposition, frame: number, showing: ReadonlySet<string>): Array<{ clip: VideoEditClip; first: number; source: ReturnType<typeof codeMediaInputComposition> }> {
+  private upcomingCodeInputs(document: VideoEditComposition, frame: number, showing: ReadonlySet<string>): Array<{ clip: VideoEditClip; first: number; source: CodeMediaInput }> {
     const visible = videoEditVisibleTracks(document)
     const horizon = frame + Math.ceil(document.fps * CODE_INPUT_PREWARM_SECONDS)
     const entering = (clip: VideoEditClip): number => {
@@ -995,22 +997,39 @@ export class VideoEditRenderer {
       }
       return first
     }
+    const live = (at: number, end: number): number => {
+      for (let window = this.cachedWindow(at); window && at < end; window = this.cachedWindow(at)) at = window.endFrame
+      return at
+    }
     const upcoming = document.clips.flatMap(clip => {
-      if (!clip.code || !visible.has(clip.track) || !Object.values(clip.code.parameters).some(reference => isCodeImageReference(reference) && reference.kind === 'video')) return []
+      if (!clip.code || !visible.has(clip.track)) return []
+      const references = Object.values(clip.code.parameters).filter((reference): reference is Extract<CodeImageReference, { kind: 'video' }> => isCodeImageReference(reference) && reference.kind === 'video')
+      if (!references.length) return []
       const end = clip.start + clip.duration
       let first = entering(clip)
-      // Under way already: upcoming only while its frames come from the window's file playing now.
-      if (first <= frame) { if (!this.cachedWindow(frame)) return []; first = frame + 1 }
-      for (let window = this.cachedWindow(first); window && first < end; window = this.cachedWindow(first)) first = window.endFrame
-      return first <= horizon && first < end ? [{ clip, first }] : []
+      // Under way already and drawn live now: its plain references are read by this frame; a timetabled one is upcoming
+      // where its next span starts. Under way inside the window playing now: upcoming where the windows end.
+      const underway = first <= frame && !this.cachedWindow(frame)
+      if (first <= frame) first = frame + 1
+      return references.flatMap(reference => {
+        if (underway && !reference.spans) return []
+        // The first frame drawn live where the reference takes part (pre-rendered windows in between draw their files).
+        for (let at = live(first, end); at < end && at <= horizon;) {
+          const next = codeMediaInputNextFrame(clip, reference, at, Math.min(end, horizon + 1), document.frameRate)
+          if (next === undefined) return []
+          const drawn = live(next, end)
+          if (drawn === next) return [{ clip, reference, first: next }]
+          at = drawn
+        }
+        return []
+      })
     }).sort((a, b) => a.first - b.first)
-    const inputs = new Map<string, { clip: VideoEditClip; first: number; source: ReturnType<typeof codeMediaInputComposition> }>()
+    const inputs = new Map<string, { clip: VideoEditClip; first: number; source: CodeMediaInput }>()
     let moving = 0
-    for (const { clip, first } of upcoming) for (const reference of Object.values(clip.code!.parameters)) {
-      if (!isCodeImageReference(reference) || reference.kind !== 'video') continue
+    for (const { clip, reference, first } of upcoming) {
       try {
         const source = codeMediaInputComposition(document, clip, reference, first)
-        if (showing.has(source.sessionKey) || inputs.has(source.sessionKey) || !source.still && moving >= CODE_INPUT_PREWARM_REFERENCES) continue
+        if (!source || showing.has(source.sessionKey) || inputs.has(source.sessionKey) || !source.still && moving >= CODE_INPUT_PREWARM_REFERENCES) continue
         inputs.set(source.sessionKey, { clip, first, source })
         if (!source.still) moving++
       } catch { /* 非法引用由进入片段时的正式渲染报告。 */ }
@@ -1024,7 +1043,7 @@ export class VideoEditRenderer {
    * steps on background turns, so the inputs being shown keep the decoder whenever they need it. Called after the
    * showing inputs' reads of this frame were issued.
    */
-  private prewarmCodeInputs(document: VideoEditComposition, frame: number, upcoming: ReadonlyArray<{ clip: VideoEditClip; first: number; source: ReturnType<typeof codeMediaInputComposition> }>): void {
+  private prewarmCodeInputs(document: VideoEditComposition, frame: number, upcoming: ReadonlyArray<{ clip: VideoEditClip; first: number; source: CodeMediaInput }>): void {
     for (const { clip, first, source } of upcoming) {
       if (source.still) { void this.ensureStill(source); continue }
       // Done well before the clip starts: four fifths of the time left until then.
@@ -1035,12 +1054,14 @@ export class VideoEditRenderer {
    * Opens the input session of a moving reference whose clip first shows at `first` and walks it to that picture
    * (`prewarmCodeInput`); an input already open is left as it is. Resolves whether the walk got there.
    */
-  private prewarmInput(document: VideoEditComposition, clip: VideoEditClip, first: number, source: ReturnType<typeof codeMediaInputComposition>, deadline?: number): Promise<boolean> {
+  private prewarmInput(document: VideoEditComposition, clip: VideoEditClip, first: number, source: CodeMediaInput, deadline?: number): Promise<boolean> {
     const key = source.sessionKey
     const existing = this.codeInputs.get(key)
     // An input opened ahead for another first picture (it was to show live after a pre-rendered window that has gone
-    // since) walks again to this one; reading it there would seek its decoder back to a key frame.
-    const stale = existing && this.prewarmedInputs.has(key) && existing.sourceKey !== source.sampleKey
+    // since) walks again to this one; reading it there would seek its decoder back to a key frame. So does a timetabled
+    // input kept between its spans whose next span does not continue a short step ahead of where its decoder stands
+    // (a skip or a jump back): its boundary frame would seek otherwise.
+    const stale = existing && existing.sourceKey !== source.sampleKey && (this.prewarmedInputs.has(key) || source.timetabled && !this.continuesInput(existing, source))
     if (existing && !stale) return existing.ahead ?? Promise.resolve(true)
     if (existing) {
       this.codeInputs.delete(key); this.prewarmedInputs.delete(key); existing.prewarm?.abort()
@@ -1059,13 +1080,20 @@ export class VideoEditRenderer {
     entry.ahead = walk.then(() => true, () => false)
     return entry.ahead
   }
+  /** Whether an open input's next picture is at most one long prewarm step ahead of the picture its decoder last read. */
+  private continuesInput(existing: CodeInputSession, source: CodeMediaInput): boolean {
+    const from = existing.renderer.document.clips[0], to = source.document.clips[0]
+    if (!from || !to) return false
+    const step = videoEditSourceSeconds(to) - videoEditSourceSeconds(from)
+    return step >= 0 && step <= CODE_INPUT_PREWARM_MAX_STEP_SECONDS
+  }
   /**
    * The idle lookahead's prewarm of a moving input (`prepareLookahead`): the walk belongs to the input session, so a
    * cancelled lookahead (a new frame, pressing play) only stops waiting for it; the renderer's own rules stop it (the
    * clip starts, playback stops, the playhead moves away and the input is no longer kept). A walk that failed (the
    * decoder budget had no room) gives its session back, so the lookahead's retry opens it again.
    */
-  private async prewarmAhead(document: VideoEditComposition, clip: VideoEditClip, first: number, source: ReturnType<typeof codeMediaInputComposition>, signal: AbortSignal): Promise<boolean> {
+  private async prewarmAhead(document: VideoEditComposition, clip: VideoEditClip, first: number, source: CodeMediaInput, signal: AbortSignal): Promise<boolean> {
     const key = source.sessionKey
     const ahead = this.prewarmInput(document, clip, first, source)
     const prepared = await new Promise<boolean>(resolve => {
@@ -1201,7 +1229,7 @@ export class VideoEditRenderer {
    * still is kept afterwards. Used ahead of playback and by the idle lookahead (`prepareLookahead`), which keeps the
    * stills `keep` returns when the picture enters the store.
    */
-  private ensureStill(input: ReturnType<typeof codeMediaInputComposition>, keep?: () => ReadonlySet<CachedVideoEditFrame>): Promise<boolean> {
+  private ensureStill(input: CodeMediaInput, keep?: () => ReadonlySet<CachedVideoEditFrame>): Promise<boolean> {
     const owner = this.lookaheadOwner
     const identity = owner.stillIdentity(input)
     if (!identity || owner.disposed) return Promise.resolve(false)
@@ -1339,7 +1367,12 @@ export class VideoEditRenderer {
    * no canvas readback, bitmap copy or external upload is required. `scrubbing`: a scrub or far jump accepts
    * approximate video input pictures (see `VideoEditScrubMode`). */
   private async prepareCodeInputs(document: VideoEditComposition, active: VideoEditClip[], frame: number, sequential: boolean, quality: EffectQuality, current: () => boolean, context: NestedFrameContext, path: string[], scrubbing: VideoEditScrubMode = false): Promise<Map<string, VideoEditCodePicture>> {
-    const requests = active.flatMap(clip => Object.entries(clip.code?.parameters ?? {}).flatMap(([parameter, reference]) => isCodeImageReference(reference) && reference.kind !== 'image' ? [{ clip, parameter, reference, source: codeMediaInputComposition(document, clip, reference, frame) }] : []))
+    // A timetabled video parameter between its spans takes no part in this frame: no read, no session, no budget.
+    const requests = active.flatMap(clip => Object.entries(clip.code?.parameters ?? {}).flatMap(([parameter, reference]) => {
+      if (!isCodeImageReference(reference) || reference.kind === 'image') return []
+      const source = codeMediaInputComposition(document, clip, reference, frame)
+      return source ? [{ clip, parameter, reference, source }] : []
+    }))
     const showing = new Set(requests.map(request => request.source.sessionKey))
     // A walk still under way stops after its current step; this frame's read continues the decoder from where it got.
     for (const key of showing) if (this.prewarmedInputs.delete(key)) this.codeInputs.get(key)?.prewarm?.abort()

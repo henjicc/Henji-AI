@@ -130,6 +130,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 35 → 36：代码视频参数新增可选取帧时间表 spans；旧内容原样有效，旧程序忽略它只会改按片段时间取帧，最低可读版本不变。
+    35: content => structuredClone(content),
     // 34 → 35：可选 project 固定工程提交与入口，原闭包 files 仍可独立读取。
     34: content => structuredClone(content),
     // 33 → 34：location 新增 Git 对象引用；普通打开保留旧路径，显式迁移才做 I/O。

@@ -39,6 +39,35 @@ it('工程入口元数据是可选增量；保留旧记录并读回新黄金样�
   }
 })
 
+it('视频参数取帧时间表是可选增量：嵌入它的格式只升版本、最低可读版本不变，旧样本原样升上来，新样本读回时间表', () => {
+  const versioned = (id: string) => PERSISTENCE_FORMATS.find(value => value.id === id)!
+  for (const [id, version, minimum, previous] of [['document.video_edit', 36, 34, 35], ['document.screen_recording', 39, 37, 38], ['code-asset', 8, 7, 7], ['title-templates', 7, 6, 6], ['video-preset-package', 7, 6, 6], ['video-template-library', 2, 1, 1], ['video-style-package', 5, 1, 4], ['subtitle-manifest', 21, 20, 20]] as const) {
+    const format = versioned(id)
+    expect([format.version, format.minReaderVersion]).toEqual([version, minimum])
+    const raw = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v${previous}.json`, 'utf8')) as { content?: unknown }
+    const content = id.startsWith('document.') ? parseDocumentText(JSON.stringify(raw)).content : ['title-templates', 'video-template-library', 'video-style-package'].includes(id) ? raw.content : raw
+    const upgraded = upgradePersistenceContent(format, structuredClone(content), previous)
+    expect(format.schema.safeParse(upgraded).success).toBe(true)
+    // 版本戳之外原样保留。
+    const unstamped = (value: unknown): unknown => { if (!value || typeof value !== 'object' || Array.isArray(value)) return value; const { version: _version, minReaderVersion: _minimum, ...rest } = value as Record<string, unknown>; return rest }
+    expect(unstamped(upgraded)).toEqual(unstamped(content))
+  }
+  const current = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v36.json', 'utf8'))
+  const parse = (content: unknown) => videoEditDocumentSchema.safeParse({ format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: 'golden', name: '黄金样本', revision: 0, ...(content as object) })
+  const parsed = parse(current.content)
+  expect(parsed.success).toBe(true)
+  expect(parsed.data?.sequences[0].clips[0].code?.parameters.screen).toEqual({ kind: 'video', mediaId: 'golden-screen', spans: [{ from: 0, to: 1, src: 0 }, { from: 1, to: 1.5, src: 1, rate: 0, cursor: false }, { from: 2, to: 2.5, src: 1, rate: 3 }] })
+  // 时间表与固定时刻互斥、必须按 from 升序且不重叠。
+  const withScreen = (screen: unknown): unknown => {
+    const content = structuredClone(current.content) as { sequences: Array<{ clips: Array<{ code?: { parameters: Record<string, unknown> } }> }> }
+    content.sequences[0].clips[0].code!.parameters.screen = screen
+    return content
+  }
+  expect(parse(withScreen({ kind: 'video', mediaId: 'golden-screen', time: 1, spans: [{ from: 0, to: 1, src: 0 }] })).success).toBe(false)
+  expect(parse(withScreen({ kind: 'video', mediaId: 'golden-screen', spans: [{ from: 0, to: 2, src: 0 }, { from: 1, to: 3, src: 0 }] })).success).toBe(false)
+  expect(parse(withScreen({ kind: 'video', mediaId: 'golden-screen', spans: [{ from: 0, to: 1, src: 0 }] })).success).toBe(true)
+})
+
 it('Git 引用格式提高最低可读版本；旧引用纯迁移不做 I/O、不丢文件位置或哈希', () => {
   const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
   const before = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v33.json', 'utf8'))
@@ -214,7 +243,7 @@ describe('所有登记格式的黄金样本', () => {
     expect(sequence.annotations.map(mark => mark.style?.weight ?? 'regular')).toEqual(['regular', 'bold', 'regular', 'regular', 'regular'])
     const manifest = PERSISTENCE_FORMATS.find(value => value.id === 'subtitle-manifest')!
     const v16 = JSON.parse(fs.readFileSync('tests/fixtures/persistence/subtitle-manifest/v16.json', 'utf8'))
-    expect(upgradePersistenceContent(manifest, v16, 16)).toEqual({ ...v16, version: 20 })
+    expect(upgradePersistenceContent(manifest, v16, 16)).toEqual({ ...v16, version: manifest.version })
   })
 
   it('剪辑 v29：音频编辑动态链接的字幕段与成品时间线是可选字段，最低可读版本不变；v28 原样升上来', () => {
@@ -262,7 +291,8 @@ describe('所有登记格式的黄金样本', () => {
     expect(upgradePersistenceContent(versioned('document.screen_recording'), recording.content, 34)).toEqual(recording.content)
     for (const id of ['video-style-library', 'video-style-package']) {
       const format = versioned(id)
-      expect([format.version, format.minReaderVersion]).toEqual([4, 1])
+      // 风格包 v5 起成员模板可带视频参数取帧时间表（见上方取帧时间表用例）。
+      expect(format.version).toBeGreaterThanOrEqual(4); expect(format.minReaderVersion).toBe(1)
       const previous = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v3.json`, 'utf8')) as { content: unknown }
       expect(upgradePersistenceContent(format, previous.content, 3)).toEqual(previous.content)
       const current = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v4.json`, 'utf8')) as { content: { sample?: unknown; style?: { sample: unknown } } }
@@ -272,8 +302,8 @@ describe('所有登记格式的黄金样本', () => {
 
   it('过渡加入 gl-transitions 转场：剪辑 v33、录制会话 v36 只放宽种类，最低可读版本不变；旧样本原样升上来', () => {
     const versioned = (id: string) => PERSISTENCE_FORMATS.find(value => value.id === id)!
-    expect([versioned('document.video_edit').version, versioned('document.video_edit').minReaderVersion]).toEqual([35, 34])
-    expect([versioned('document.screen_recording').version, versioned('document.screen_recording').minReaderVersion]).toEqual([38, 37])
+    expect([versioned('document.video_edit').version, versioned('document.video_edit').minReaderVersion]).toEqual([36, 34])
+    expect([versioned('document.screen_recording').version, versioned('document.screen_recording').minReaderVersion]).toEqual([39, 37])
     const v33 = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v33.json', 'utf8'))
     expect(v33).toMatchObject({ kindVersion: 33, kindMinReaderVersion: 31 })
     expect((v33.content as { sequences: Array<{ transitions: Array<{ kind: string }> }> }).sequences[0].transitions.map(item => item.kind)).toContain('gl.Cube')

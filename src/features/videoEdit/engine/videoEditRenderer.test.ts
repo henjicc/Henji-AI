@@ -423,6 +423,94 @@ it('两扇录屏窗口同时引用同一段录屏：每个引用独占自己的�
   } finally { await renderer.dispose() }
   expect(readers.every(reader => reader.closed)).toBe(true)
 })
+/**
+ * One code clip (60fps, frames 0–599) whose recording parameter takes frames by a timetable: plays 0–0.5 s, holds at
+ * 0.5 s until 1 s, takes no part from 1 s to 4.5 s, then plays from 12 s at four times speed until 5 s.
+ */
+function timetableFixture(): ReturnType<typeof fixture> {
+  const document = recordingWindowsFixture()
+  const code = { ...document.clips[0].code!, parameters: { screen: { kind: 'video' as const, mediaId: 'A', spans: [{ from: 0, to: .5, src: 0 }, { from: .5, to: 1, src: .5, rate: 0 }, { from: 4.5, to: 5, src: 12, rate: 4 }] } } }
+  document.clips = [{ ...document.clips[0], code, duration: 600 }]
+  return document
+}
+it('带取帧时间表的视频参数：段内按表取帧，停住不再读取，段间不参与（不读、不留会话、作者代码拿不到画面也不报错）；进入下一段前提前解到那一段的入点', async () => {
+  const { backend, readers } = inputReaders()
+  const renderer = new VideoEditRenderer(timetableFixture(), 3840, undefined, 8 * 1024 ** 3, backend)
+  const play = async (frame: number): Promise<number | undefined> => {
+    contentInputs.borrows = []
+    const result = await renderer.render(frame, true); await result.completion
+    expect(result.presented, `第 ${frame} 帧`).toBe(true)
+    return shownInputs().w1
+  }
+  try {
+    for (let frame = 0; frame < 30; frame++) expect(us([await play(frame)]), `第 ${frame} 帧`).toEqual(us([frame / 60]))
+    const input = readers.find(reader => reader.exclusive)!, played = input.times.length
+    // Holding: every frame shows the same picture, read once.
+    for (let frame = 30; frame < 60; frame++) expect(us([await play(frame)]), `第 ${frame} 帧`).toEqual(us([.5]))
+    expect(us(input.times.slice(played))).toEqual(us([videoEditPictureSeconds(.5)]))
+    // Between spans, farther than the prewarm horizon from the next one: no picture, no read, no session.
+    for (const frame of [60, 61, 80]) expect(await play(frame), `第 ${frame} 帧`).toBeUndefined()
+    expect(renderer.codeDiagnostics()).toMatchObject({ codeInputSessions: 0 }); expect(input.closed).toBe(true)
+    expect(readers.filter(reader => reader.exclusive)).toHaveLength(1)
+    // Three seconds before the next span (frame 270): its session opens ahead and decodes the span's first picture.
+    expect(await play(90)).toBeUndefined()
+    expect(renderer.codeDiagnostics()).toMatchObject({ codeInputSessions: 1, codeInputsPrewarmed: 1 })
+    const next = () => readers.filter(reader => reader.exclusive).at(-1)!
+    await vi.waitFor(() => expect(us(next().times)).toEqual(us([videoEditPictureSeconds(12)])))
+    for (let frame = 91; frame < 270; frame++) expect(await play(frame), `第 ${frame} 帧`).toBeUndefined()
+    // Entering the span reads nothing new; then four source pictures per frame on the same reader.
+    expect(us([await play(270)])).toEqual(us([12]))
+    expect(us([await play(271)])).toEqual(us([12 + 4 / 60]))
+    expect(us([await play(272)])).toEqual(us([12 + 8 / 60]))
+    expect(readers.filter(reader => reader.exclusive)).toHaveLength(2)
+    expect(us(next().times)).toEqual(us([12, 12 + 4 / 60, 12 + 8 / 60].map(videoEditPictureSeconds)))
+    // After the last span the parameter takes no part again.
+    expect(await play(300)).toBeUndefined()
+  } finally { await renderer.dispose() }
+})
+it.each([[10, 2], [.55, 1]])('段间短空档后下一段从源 %s 秒起：跳远的提前另开会话解到入点，紧接着往后的沿用原解码位置（读取器 %i 个）', async (src, expected) => {
+  const document = recordingWindowsFixture()
+  const code = { ...document.clips[0].code!, parameters: { screen: { kind: 'video' as const, mediaId: 'A', spans: [{ from: 0, to: .5, src: 0 }, { from: 1, to: 1.5, src }] } } }
+  document.clips = [{ ...document.clips[0], code, duration: 600 }]
+  const { backend, readers } = inputReaders()
+  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  try {
+    for (let frame = 0; frame < 60; frame++) await (await renderer.render(frame, true)).completion
+    const inputs = () => readers.filter(reader => reader.exclusive)
+    await vi.waitFor(() => expect(inputs()).toHaveLength(expected))
+    if (expected === 2) await vi.waitFor(() => expect(us(inputs()[1].times)).toEqual(us([videoEditPictureSeconds(src)])))
+    const reads = inputs().at(-1)!.times.length
+    for (const frame of [60, 61]) {
+      contentInputs.borrows = []; await (await renderer.render(frame, true)).completion
+      expect(us([shownInputs().w1])).toEqual(us([src + (frame - 60) / 60]))
+    }
+    expect(inputs()).toHaveLength(expected)
+    // Skipped far: entering reads nothing new (the walk got there); continuing: the old decoder reads on forward.
+    expect(us(inputs().at(-1)!.times.slice(reads))).toEqual(us((expected === 2 ? [src + 1 / 60] : [src, src + 1 / 60]).map(videoEditPictureSeconds)))
+  } finally { await renderer.dispose() }
+})
+it('暂停时前瞻提前打开即将进入下一段的带时间表视频参数：片段正在显示、参数在段间也列入；参数正在段内时由暂停帧自己读取', async () => {
+  const document = timetableFixture()
+  // Paused at frame 200 (between spans, 1.15 s before the next one at frame 270): the next span is ahead within 2 s.
+  const between = videoEditLookaheadTargets(document, 200, false).content.filter(target => target.kind === 'input')
+  expect(between.map(target => [target.clip.id, target.frame])).toEqual([['w1', 270]])
+  expect(between[0].input!.document.clips[0].sourceInUs).toBe(12_000_000)
+  // Paused inside a span: the paused frame reads the parameter itself.
+  expect(videoEditLookaheadTargets(document, 280, false).content.filter(target => target.kind === 'input')).toEqual([])
+  // Far from the next span: nothing to open yet.
+  expect(videoEditLookaheadTargets(document, 70, false).content.filter(target => target.kind === 'input')).toEqual([])
+  const { backend, readers } = inputReaders()
+  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  try {
+    await (await renderer.render(200)).completion
+    expect(renderer.codeDiagnostics()).toMatchObject({ codeInputSessions: 0 })
+    renderer.retainLookahead(between)
+    expect(await renderer.prepareLookahead(between[0], new AbortController().signal)).toBe(true)
+    expect(us(readers.filter(reader => reader.exclusive).flatMap(reader => reader.times))).toEqual(us([videoEditPictureSeconds(12)]))
+    await (await renderer.render(200)).completion
+    expect(renderer.codeDiagnostics()).toMatchObject({ codeInputSessions: 1, codeInputsPrewarmed: 1 })
+  } finally { await renderer.dispose() }
+})
 it('重新起播重复请求刚显示过的帧：代码视频输入取回保留的已播画面，不让解码器回到关键帧；导出不保留', async () => {
   const { backend, readers } = inputReaders()
   const renderer = new VideoEditRenderer(recordingWindowsFixture(), 3840, undefined, 8 * 1024 ** 3, backend)

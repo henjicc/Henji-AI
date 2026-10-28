@@ -2,8 +2,8 @@ import { activeVideoEditClips, clipSourceSeconds, videoEditClipMedia, videoEditN
 import { videoEditNestedPictureFrame, videoEditNestedPictureKey } from '@/core/videoEdit/nestedSequences'
 import { VIDEO_EDIT_MAX_SEQUENCE_DEPTH } from '@/core/videoEdit/sequenceGraph'
 import { activeVideoEditEffects } from '@/core/videoEdit/compositing'
-import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
-import { codeMediaInputComposition } from '@/core/videoEdit/codeMediaInput'
+import { isCodeImageReference, type CodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
+import { codeMediaInputComposition, type CodeMediaInput } from '@/core/videoEdit/codeMediaInput'
 import { videoEditHandleFrame, videoEditTransitionsAt } from '@/core/videoEdit/transitions'
 import { videoEditPictureSeconds } from '@/core/videoEdit/time'
 import type { VideoEditNativeFrames } from './videoEditNativeFrameSource'
@@ -22,20 +22,23 @@ export const VIDEO_EDIT_DECODE_NEIGHBOUR_SECONDS = 2
  */
 export const VIDEO_EDIT_STILL_LOOKAHEAD_SECONDS = 60
 /**
- * Moving code video inputs (a code clip's video parameter following the clip) of clips about to start are opened and
+ * Moving code video inputs (a code clip's video parameter following the clip, or taking frames by a timetable) of clips
+ * about to start, or about to enter their next span, are opened and
  * decoded to their first picture while paused or idle, nearest first and at most this many (one decoder session each),
  * within the paused neighbourhood ahead (`VIDEO_EDIT_DECODE_NEIGHBOUR_SECONDS`): pressing play then reaches them already
  * positioned. Farther ones the renderer prepares itself once playing (three seconds ahead, stepping between frames).
  */
 export const VIDEO_EDIT_INPUT_LOOKAHEAD_REFERENCES = 6
-export interface VideoEditLookaheadScope { document: VideoEditComposition; key: string; input?: ReturnType<typeof codeMediaInputComposition>; parent?: VideoEditComposition }
+export interface VideoEditLookaheadScope { document: VideoEditComposition; key: string; input?: CodeMediaInput; parent?: VideoEditComposition }
 export interface VideoEditDecodeTarget { media: VideoEditMedia; time: number; purpose: 'playback' | 'seek'; distance: number; clipId?: string }
 /**
  * `still`: a code video input fixed at one time; `input` is its input composition (decoded into the renderer's still
  * store). `input`: a moving code video input of a clip not showing yet; the last scope is the input itself.
  */
-export interface VideoEditContentTarget { kind: 'image' | 'code' | 'still' | 'input'; key: string; scopes: VideoEditLookaheadScope[]; document: VideoEditComposition; clip: VideoEditClip; frame: number; media?: VideoEditMedia; distance: number; input?: ReturnType<typeof codeMediaInputComposition> }
+export interface VideoEditContentTarget { kind: 'image' | 'code' | 'still' | 'input'; key: string; scopes: VideoEditLookaheadScope[]; document: VideoEditComposition; clip: VideoEditClip; frame: number; media?: VideoEditMedia; distance: number; input?: CodeMediaInput }
 export interface VideoEditLookaheadTargets { video: VideoEditDecodeTarget[]; content: VideoEditContentTarget[] }
+/** A video parameter taking frames by a timetable (`spans`): it takes part only inside its spans. */
+const timetabled = (reference: unknown): reference is Extract<CodeImageReference, { kind: 'video' }> => isCodeImageReference(reference) && reference.kind === 'video' && !!reference.spans
 const keyOf = (target: VideoEditDecodeTarget): string => `${target.media.path}\0${target.media.sourceRevision ?? ''}\0${target.purpose}`
 
 /** 与节目共用嵌套映射、转场余量和输入合成；逐帧扫描以免漏掉变速后的短镜头。 */
@@ -78,17 +81,27 @@ export function videoEditLookaheadTargets(document: VideoEditComposition, frame:
       for (const code of codes) for (const reference of Object.values(code.parameters)) {
         if (!isCodeImageReference(reference) || reference.kind !== 'sequence') continue
         try {
-          const input = codeMediaInputComposition(doc, clip, reference, at)
+          const input = codeMediaInputComposition(doc, clip, reference, at)!
           visit(input.document, input.frame, distance, false, [...scopes, { document: input.document, key: input.sessionKey, input, parent: doc }], inputs)
         } catch { /* 非法引用由正式渲染报告。 */ }
       }
-      // Paused: a moving video input of a clip that starts ahead (found first at the frame it enters, the nearest).
+      // Paused: a moving video input of a clip that starts ahead (found first at the frame it enters, the nearest), or a
+      // timetabled one whose next span starts ahead (its session by its own key: the paused frame reads it only when it
+      // takes part there).
       const shownKey = `${scopeKey}\0${clip.id}`
-      if (distance === 0) showing.add(shownKey)
-      if (inputs && clip.code && !showing.has(shownKey)) for (const reference of Object.values(clip.code.parameters)) {
+      if (distance === 0) {
+        showing.add(shownKey)
+        for (const reference of Object.values(clip.code?.parameters ?? {})) if (timetabled(reference)) {
+          try { const input = codeMediaInputComposition(doc, clip, reference, at); if (input) showing.add(`${scopeKey}\0${input.sessionKey}`) } catch { /* 非法引用由正式渲染报告。 */ }
+        }
+      }
+      if (inputs && clip.code) for (const reference of Object.values(clip.code.parameters)) {
         if (!isCodeImageReference(reference) || reference.kind !== 'video' || reference.time !== undefined || movingInputs >= VIDEO_EDIT_INPUT_LOOKAHEAD_REFERENCES) continue
+        if (!reference.spans && showing.has(shownKey)) continue
         try {
           const input = codeMediaInputComposition(doc, clip, reference, at)
+          // Between spans here: it takes part from a later frame (found there).
+          if (!input || showing.has(`${scopeKey}\0${input.sessionKey}`)) continue
           const key = `${scopeKey}:input:${input.sessionKey}`
           if (content.has(key)) continue
           content.set(key, { kind: 'input', key, scopes: [...scopes, { document: input.document, key: input.sessionKey, input, parent: doc }], document: doc, clip, frame: at, distance, input })
@@ -129,7 +142,7 @@ export function videoEditLookaheadTargets(document: VideoEditComposition, frame:
       for (const reference of Object.values(clip.code.parameters)) {
         if (!isCodeImageReference(reference) || reference.kind !== 'video' || reference.time === undefined) continue
         try {
-          const input = codeMediaInputComposition(doc, clip, reference, start)
+          const input = codeMediaInputComposition(doc, clip, reference, start)!
           const media = input.document.media.find(item => item.id === reference.mediaId)
           const key = `still:${media?.path}:${media?.sourceRevision ?? ''}:${reference.time}`
           const distance = distanceAt(start)

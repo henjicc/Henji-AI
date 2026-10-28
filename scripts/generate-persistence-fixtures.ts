@@ -51,6 +51,8 @@ const parameters = {
   titleStyle: { type: 'textStyle', title: '文字样式', layer: 'golden-motion', default: { fontFamily: 'sans-serif', fontSize: 64 } },
   label: { type: 'text', title: '标题', default: '黄金样本', maxLength: 200 },
   size: { type: 'number', title: '字号', default: 24, min: 1, max: 72, step: 1, unit: 'px' },
+  // 剪辑内容 v36：视频参数可按取帧时间表取帧（见下方片段的 screen）。
+  screen: { type: 'image', title: '录屏', default: null },
 }
 const source = `export default {
   name: "黄金代码", kind: "generator", mode: "dynamic", width: 1920, height: 1080, durationSeconds: 4,
@@ -111,6 +113,8 @@ document.media.push({ id: 'golden-screen', name: '屏幕原片', path: '/persist
   pages: [{ path: '/persistence-project/素材/events.capture.json', sha256: 'b'.repeat(64), recordingSpanUs: [0, 3000000], seqSpan: [0, 255] }],
 } })
 document.items.push({ id: 'golden-screen-item', name: '屏幕原片', kind: 'video', mediaId: 'golden-screen' })
+// 剪辑内容 v36：代码视频参数的取帧时间表——正常播放、停住并关掉录制鼠标、段间空档不参与、三倍速快放。
+clip.code!.parameters.screen = { kind: 'video', mediaId: 'golden-screen', spans: [{ from: 0, to: 1, src: 0 }, { from: 1, to: 1.5, src: 1, rate: 0, cursor: false }, { from: 2, to: 2.5, src: 1, rate: 3 }] }
 const cursorClip = makeVideoEditItemClip(document, 'golden-screen-item', sequence.id, { frame: 90, duration: 90 })
 cursorClip.id = 'golden-cursor-clip'
 cursorClip.effects = [{ id: 'golden-cursor', name: '录制光标', enabled: true, amount: 1, builtin: { id: 'recording_cursor', params: { size: 3, smoothing: 40, click_style: 'ripple' } } },
