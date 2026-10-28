@@ -1,9 +1,8 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Copy, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
-import { ICON_ASSET_CODE, UI_ICON_SIZE } from '@/core/theme/icons'
-import { Z_LAYERS } from '@/core/theme/zLayers'
-import { Dropdown, PanelTrigger, UiButton, UiError, UiFormRow, UiIconButton, UiLoading, UiOptionButton, UiToolbar } from '@/components/ui'
+import { ICON_ASSET_CODE, ICON_EFFECT_DISABLED, ICON_EFFECT_ENABLED, UI_ICON_SIZE } from '@/core/theme/icons'
+import { Dropdown, UiButton, UiError, UiFormRow, UiIconButton, UiLoading, UiOptionButton, UiToolbar, type UiPanelFooterTool } from '@/components/ui'
 import { UI_PROPERTY_INSET_CLASS } from '@/components/ui/styleTokens'
 import NumberInput from '@/components/ui/NumberInput'
 import type { VideoEditClip, VideoEditSequence } from '@/core/videoEdit/document'
@@ -13,7 +12,7 @@ import { requireVideoEditInstance, type VideoEditInstance } from '../application
 import { CodeParameterPanel } from './CodeParameterPanel'
 import { VideoEditCodeCreateDialog } from './VideoEditCodeCreateDialog'
 import { useVideoEditCompositeAction } from './useVideoEditCompositeAction'
-import { EffectSection, EffectToggle } from '@/components/effects/EffectSection'
+import { EffectSection } from '@/components/effects/EffectSection'
 import { useReorderDrag } from '@/components/ui/fileUploader/useReorderDrag'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { videoEditKeyboardCommand } from '../application/videoEditKeyboard'
@@ -114,23 +113,21 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
   })
   const CodeIcon = ICON_ASSET_CODE
   const menuItem = 'gap-2'
-  const tools = <>
-    {!sound && <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" alignment="bottomRight" renderPanel={() => <div className="flex flex-col gap-1" role="menu" aria-label="添加效果">
+  const busyReason = '正在检查混合画面，请稍候。'
+  const tools: UiPanelFooterTool[] = [
+    ...(!sound ? [{ kind: 'menu', id: 'add', label: '添加效果', icon: Plus, tooltip: '添加代码滤镜；内置效果从“效果”面板拖到片段上', disabled: action.busy, disabledReason: busyReason, menu: () => <>
       {definitions.loading && <UiLoading size="xs" message="正在读取代码效果…" />}
       {definitions.error ? <UiError size="xs" message={definitions.error instanceof Error ? definitions.error.message : '剪辑滤镜暂不可用。'} /> : null}
       {definitions.items.map(definition => <UiOptionButton key={definition.id} role="menuitem" variant="menu" size="sm" disabled={action.busy} onClick={() => { void action.run(signal => createVideoEditEffect(target, { definitionId: definition.id, versionId: definition.versionId }, signal), setSelectedId) }}>{definition.name}</UiOptionButton>)}
       <UiOptionButton role="menuitem" variant="menu" size="sm" className={menuItem} disabled={action.busy} onClick={() => setCreatingFilter(true)}><CodeIcon size={UI_ICON_SIZE.sm} />编写新滤镜源码</UiOptionButton>
-    </div>}>
-      {({ open, togglePanel }) => <UiIconButton size="sm" aria-label="添加效果" tooltip="添加代码滤镜；内置效果从“效果”面板拖到片段上" aria-expanded={open} disabled={action.busy} data-panel-trigger-button onClick={togglePanel}><Plus /></UiIconButton>}
-    </PanelTrigger>}
-    {sources.length > 0 && <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" alignment="bottomRight" renderPanel={() => <div className="flex flex-col gap-1" role="menu" aria-label="复制其他片段的效果">
+    </> }] satisfies UiPanelFooterTool[] : []),
+    ...(sources.length > 0 ? [{ kind: 'menu', id: 'copy', label: '复制其他片段的效果', icon: Copy, tooltip: `复制另一个片段的整条效果链（连同关键帧），替换这里已有的${effectsLabel}`, disabled: action.busy, disabledReason: busyReason, menu: () => <>
       {sources.map(source => <UiOptionButton key={source.value} role="menuitem" variant="menu" size="sm" disabled={action.busy} onClick={() => { void action.run(signal => copyVideoEditEffects(target, { sequenceId: source.sequenceId, clipId: source.clipId }, signal), () => setSelectedId(''), false) }}>{source.label}</UiOptionButton>)}
-    </div>}>
-      {({ open, togglePanel }) => <UiIconButton size="sm" aria-label="复制其他片段的效果" tooltip={`复制另一个片段的整条效果链（连同关键帧），替换这里已有的${effectsLabel}`} aria-expanded={open} disabled={action.busy} data-panel-trigger-button onClick={togglePanel}><Copy /></UiIconButton>}
-    </PanelTrigger>}
-    <UiIconButton size="sm" aria-label="保存为预设" tooltip="保存为预设" disabled={action.busy || !savableEffects.length} onClick={() => setSavingPreset(structuredClone(savableEffects))}><Save /></UiIconButton>
-    {effects.length > 0 && <EffectToggle size="sm" enabled={master} label={`${master ? '停用' : '启用'}所有${effectsLabel}`} tooltip={master ? `停用所有${effectsLabel}（保留参数与关键帧）` : `启用所有${effectsLabel}`} onChange={setMaster} />}
-  </>
+    </> }] satisfies UiPanelFooterTool[] : []),
+    { kind: 'action', id: 'preset', label: '保存为预设', icon: Save, disabled: action.busy || !savableEffects.length, disabledReason: action.busy ? busyReason : `还没有可保存的${effectsLabel}`, onSelect: () => setSavingPreset(structuredClone(savableEffects)) },
+    // 名称随状态写成“停用 / 启用”动作；全部启用是默认状态，用 pressed 只表达开关、不着色（同 EffectToggle）
+    ...(effects.length > 0 ? [{ kind: 'action', id: 'master', pressed: master, label: `${master ? '停用' : '启用'}所有${effectsLabel}`, icon: master ? ICON_EFFECT_ENABLED : ICON_EFFECT_DISABLED, tooltip: master ? `停用所有${effectsLabel}（保留参数与关键帧）` : `启用所有${effectsLabel}`, onSelect: () => setMaster(!master) }] satisfies UiPanelFooterTool[] : []),
+  ]
   return <div ref={root}>
     {clip.kind === 'adjustment' && <AdjustmentRange target={target} sequence={sequence} clip={clip} action={action} />}
     <div ref={chain} className={master ? 'flex flex-col' : 'flex flex-col opacity-50'} data-video-edit-effect-chain={clipId} tabIndex={-1}>
@@ -164,7 +161,7 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
     </div>
     {createdFilter && <p className={`py-1 text-2xs text-text3 ${UI_PROPERTY_INSET_CLASS}`}>滤镜源码已创建，从底栏的“添加效果”加到片段。</p>}
     {action.busy && <div className={`flex items-center gap-2 py-1 ${UI_PROPERTY_INSET_CLASS}`}><UiLoading size="xs" message="正在检查混合画面" /><UiButton size="sm" onClick={action.cancel}>取消检查</UiButton></div>}
-    {footer && createPortal(<UiToolbar variant="footer" aria-label={`${effectsLabel}工具`} trailing={tools}>{effects.length ? `${effects.length} 个${effectsLabel}` : `没有${effectsLabel}`}</UiToolbar>, footer)}
+    {footer && createPortal(<UiToolbar variant="footer" aria-label={`${effectsLabel}工具`} tools={tools}>{effects.length ? `${effects.length} 个${effectsLabel}` : `没有${effectsLabel}`}</UiToolbar>, footer)}
     {creatingFilter && <VideoEditCodeCreateDialog projectId={projectId} mode="filter" onClose={() => setCreatingFilter(false)} onCreated={() => { if (requireVideoEditInstance(projectId) === instance) setCreatedFilter(true) }} />}
     {savingPreset && <VideoEditEffectPresetDialog effects={savingPreset} initialName={savingPreset.length === 1 ? savingPreset[0].name : `${clip.name}效果`} onClose={() => setSavingPreset(null)} />}
   </div>

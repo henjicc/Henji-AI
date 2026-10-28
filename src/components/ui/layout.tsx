@@ -14,12 +14,16 @@
  *   Card     UiPanel               唯一允许画完整卡片的一层（浮层/弹窗/侧栏/画布节点）
  */
 import { createContext, useContext, useId, useLayoutEffect, useRef, type HTMLAttributes, type ReactNode } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Check, MoreHorizontal, type LucideIcon } from 'lucide-react';
+import { UI_ICON_SIZE } from '@/core/theme/icons';
+import { Z_LAYERS } from '@/core/theme/zLayers';
+import PanelTrigger from './PanelTrigger';
+import { UiOverflowRow, type UiOverflowRowItem } from './UiOverflowRow';
 import Tooltip, { type TooltipPlacement } from './Tooltip';
 import { UiFormRowLabelContext } from './formRowLabel';
 import { useUiFieldLayout } from './fieldLayout';
 import { UiFieldMessage } from './states';
-import { UiIconButton } from './primitives';
+import { UiButton, UiIconButton, UiOptionButton } from './primitives';
 import { actionGroupContext, useUiPrimaryBudget } from './actionPriority';
 import type { UiControlSize } from './primitiveInternals';
 import {
@@ -135,14 +139,15 @@ interface UiFormRowProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
 const FormLabelWidthContext = createContext<UiFormRowProps['labelWidth']>(undefined);
 const FORM_LABEL_WIDTH_CLASS = { 72: 'w-[72px]', 96: 'w-24', 120: 'w-[120px]' } as const;
 
-interface UiToolbarProps extends HTMLAttributes<HTMLDivElement> {
+interface UiToolbarBaseProps extends HTMLAttributes<HTMLDivElement> {
   /**
    * - `plain`（默认）：横向排布容器，无边框无背景。
    * - `command`：工具页骨架的**命令带**（skill `henji-ui-surface`「页面骨架：横向条带」A 类）：
    *   44 高、面板底、下边一条间隙色发丝线。一个视图只有一条；返回、标题/文件上下文、主工具组、
    *   导出/保存全部进这一条，内层功能组件不得再长自己的头带（用 props 注入）。
    * - `footer`：停靠面板的**底栏**（重要记录 018/019）：32 高、上边一条发丝线；`children` 是左端只读计数或状态
-   *   （辅助文字，放不下就截断），`trailing` 是这个面板自己的工具（静默图标按钮）。标签行不放面板工具。
+   *   （辅助文字），`tools` 是这个面板自己的工具。标签行不放面板工具。面板变窄时状态文字先截断到下限，
+   *   再把工具从右往左收进“更多”，变宽时按相反顺序放回（skill `henji-ui-surface`「放不下怎么办」）。
    */
   variant?: 'plain' | 'command' | 'footer';
   /** 行内动作的间距；默认 command 用 control，plain 用 group。 */
@@ -166,8 +171,15 @@ interface UiToolbarProps extends HTMLAttributes<HTMLDivElement> {
    * 此时中间区内容应靠左排（`justify-start`），视觉上仍落在左端内容与右端之间的正中。
    */
   leadingLayout?: 'content' | 'share';
-  /** 右侧内容（command：次要动作 + 唯一主动作） */
-  trailing?: ReactNode;
+  /** 仅 footer：面板工具，按数组顺序从左到右排，放不下时从右往左收进“更多”。 */
+  tools?: readonly UiPanelFooterTool[];
+  /**
+   * 仅 footer：面板自己的低频操作，总放在“更多”里（排在收起的工具之后）。底栏有它就不要再自己放“更多”按钮，
+   * 否则窄了会出现两个“更多”。
+   */
+  more?: ReactNode;
+  /** 仅 footer：“更多”按钮的名称，默认“更多工具”。 */
+  moreLabel?: string;
   /**
    * 仅 command：从属参数带（B 类）——只随当前工具变化的参数，紧贴命令带下方，
    * 与命令带共用同一块底色和同一条下边框，自身不画底色与边框。
@@ -176,6 +188,79 @@ interface UiToolbarProps extends HTMLAttributes<HTMLDivElement> {
   /** 仅 command：命令带那一行的附加属性（如 `data-*` 状态），不用于改外观。 */
   barProps?: HTMLAttributes<HTMLDivElement> & Record<`data-${string}`, string | number | undefined>;
 }
+
+// 底栏的工具只能经 `tools` 进来：写在 trailing 里的控件不会收进“更多”，面板一窄就被挤出底栏
+type UiToolbarProps = UiToolbarBaseProps & (
+  | { variant: 'footer'; trailing?: never }
+  | {
+    variant?: 'plain' | 'command';
+    /** 右侧内容（command：次要动作 + 唯一主动作） */
+    trailing?: ReactNode;
+    tools?: never;
+    more?: never;
+    moreLabel?: never;
+  }
+);
+
+interface UiPanelFooterToolBase {
+  id: string;
+  /** 名称：底栏按钮的可访问名称与默认悬停说明，收进“更多”后的菜单文字 */
+  label: string;
+  /** 越大越晚收起；同档按位置从右往左收。默认 0。 */
+  priority?: number;
+}
+
+/** 底栏工具：立刻执行的动作或开关。底栏里是静默图标按钮，收进“更多”后是同名同图标的菜单项。 */
+export interface UiPanelFooterAction extends UiPanelFooterToolBase {
+  kind: 'action';
+  icon: LucideIcon;
+  onSelect: () => void;
+  tooltip?: string;
+  disabled?: boolean;
+  /** 禁用原因：底栏按钮与菜单项都会显示 */
+  disabledReason?: string;
+  /** 开关的开启状态；菜单项里显示为勾选 */
+  on?: boolean;
+  /**
+   * 只表达开关语义、不着色的开启状态：底栏按钮写 `aria-pressed`，菜单里显示勾选。开着就是默认状态的开关
+   * （“全部效果启用”）用它；偏离默认才该着色的开关用 `on`。
+   */
+  pressed?: boolean;
+  /** 一组视图切换里的当前项（中性抬起底），同 `UiIconButton selection="mode"` */
+  selection?: 'mode';
+  tone?: 'danger';
+  /**
+   * 底栏里的样子：`icon`（默认）只画图标，给大家都认得的通用动作；`text` 画“图标 + 名称”的静默按钮，
+   * 给这个对象特有、图标说不清的动作（skill「通用动作用图标，特有的事用文字」，同组按整组判断）。
+   */
+  display?: 'icon' | 'text';
+}
+
+/** 底栏工具：点开一个菜单。底栏里是图标按钮 + 弹出菜单；收进“更多”后这份菜单内容作为同名的一节直接列出。 */
+export interface UiPanelFooterMenu extends UiPanelFooterToolBase {
+  kind: 'menu';
+  icon: LucideIcon;
+  /** 菜单内容（`UiOptionButton variant="menu"` 等），两处共用同一份 */
+  menu: () => ReactNode;
+  tooltip?: string;
+  disabled?: boolean;
+  disabledReason?: string;
+  /** 浮层宽度档，默认 menu */
+  panelSize?: 'menu' | 'compact';
+}
+
+/**
+ * 底栏工具：调用方自己画的控件（滑杆、带状态的组件）。给了 `overflow` 才能收起，收起后在“更多”里显示为
+ * “图标 + 名称”小标题下的这段内容；不给就永不收起——自带进行中任务或对话框状态的组件卸载会丢掉它们。
+ */
+export interface UiPanelFooterCustom extends UiPanelFooterToolBase {
+  kind: 'custom';
+  node: ReactNode;
+  icon?: LucideIcon;
+  overflow?: ReactNode;
+}
+
+export type UiPanelFooterTool = UiPanelFooterAction | UiPanelFooterMenu | UiPanelFooterCustom;
 
 interface UiTooltipTextProps {
   /** 给用户看的说明（参数 `tooltip`、设置项 `info`）；为空时只渲染普通文字，不制造伪交互。 */
@@ -499,6 +584,9 @@ export function UiToolbar({
   centerLayout = 'fill',
   leadingLayout = 'content',
   trailing,
+  tools,
+  more,
+  moreLabel,
   subordinate,
   barProps,
   ...props
@@ -533,10 +621,13 @@ export function UiToolbar({
     );
   }
   if (variant === 'footer') {
+    const hasStatus = children !== undefined && children !== null && children !== false && children !== '';
     return (
       <div ref={budgetRef} role="toolbar" data-panel-footer className={`flex ${UI_BAND_HEIGHT_CLASS.tab} shrink-0 items-center ${UI_INLINE_GAP_CLASS.control} whitespace-nowrap border-t border-line pl-3 pr-1.5 ${className}`} {...props}>
-        <div data-panel-footer-status className="min-w-0 flex-1 truncate text-xs text-text3">{children}</div>
-        {trailing ? <div data-panel-footer-tools className={`flex shrink-0 items-center ${UI_INLINE_GAP_CLASS.micro}`}>{trailing}</div> : null}
+        {/* 状态按 0 起算、只分剩余宽度：工具先拿到自己的宽度，状态截断到下限后才轮到工具收进“更多”。
+            data-overflow-yield 让收纳行把状态超出下限的部分算作可用宽度，面板变宽时工具才放得回来。 */}
+        <div data-panel-footer-status data-overflow-yield className={`${hasStatus ? 'min-w-16' : 'min-w-0'} flex-1 truncate text-xs text-text3`}>{children}</div>
+        {tools?.length || more ? <PanelFooterTools tools={tools ?? []} more={more} moreLabel={moreLabel ?? '更多工具'} /> : null}
       </div>
     );
   }
@@ -545,5 +636,126 @@ export function UiToolbar({
       <div className={`flex min-w-0 items-center ${gapClass}`}>{children}</div>
       {trailing ? <div className={`flex shrink-0 items-center ${gapClass}`}>{trailing}</div> : null}
     </div>
+  );
+}
+
+function footerToolButton(tool: UiPanelFooterAction | UiPanelFooterMenu, extra: { open?: boolean; onClick: () => void }): JSX.Element {
+  const Icon = tool.icon;
+  const isAction = tool.kind === 'action';
+  return (
+    <UiIconButton
+      size="sm"
+      aria-label={tool.label}
+      tooltip={tool.tooltip ?? tool.label}
+      tone={isAction ? tool.tone : undefined}
+      on={isAction ? tool.on : undefined}
+      aria-pressed={isAction && tool.on === undefined ? tool.pressed : undefined}
+      selection={isAction ? tool.selection : undefined}
+      disabled={tool.disabled}
+      disabledReason={tool.disabled ? tool.disabledReason : undefined}
+      aria-expanded={isAction ? undefined : extra.open}
+      data-panel-trigger-button={isAction ? undefined : true}
+      onClick={extra.onClick}
+    >
+      <Icon />
+    </UiIconButton>
+  );
+}
+
+function renderFooterTool(tool: UiPanelFooterTool): ReactNode {
+  if (tool.kind === 'custom') return tool.node;
+  if (tool.kind === 'action' && tool.display === 'text') {
+    const Icon = tool.icon;
+    return (
+      <UiButton size="sm" variant={tool.tone === 'danger' ? 'danger' : 'quiet'} tooltip={tool.tooltip} disabled={tool.disabled} aria-pressed={tool.pressed}
+        disabledReason={tool.disabled ? tool.disabledReason : undefined} onClick={tool.onSelect}>
+        <Icon />{tool.label}
+      </UiButton>
+    );
+  }
+  if (tool.kind === 'action') return footerToolButton(tool, { onClick: tool.onSelect });
+  return (
+    <PanelTrigger panelSize={tool.panelSize ?? 'menu'} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" alignment="bottomRight" disabled={tool.disabled}
+      renderPanel={() => <div className="flex flex-col gap-1" role="group" aria-label={tool.label}>{tool.menu()}</div>}>
+      {({ open, togglePanel }) => footerToolButton(tool, { open, onClick: togglePanel })}
+    </PanelTrigger>
+  );
+}
+
+/** 收进“更多”的一节：图标 + 名称作小标题，下面是这件工具的菜单或控件。 */
+function FooterOverflowSection({ label, icon: Icon, children }: { label: string; icon?: LucideIcon; children: ReactNode }): JSX.Element {
+  return (
+    <div className="flex flex-col gap-1" role="group" aria-label={label} data-panel-footer-overflow-section>
+      <div className={`flex items-center gap-1.5 px-2 pt-1 ${UI_TEXT_META_CLASS}`}>{Icon ? <Icon size={UI_ICON_SIZE.xs} /> : null}{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function renderFooterOverflowEntry(tool: UiPanelFooterTool): ReactNode {
+  if (tool.kind === 'action') {
+    const Icon = tool.icon;
+    // 开关、视图切换里的当前项和不着色的开关在菜单里一律是勾选项（同 ContextMenu 的勾选槽）
+    const checked = tool.on ?? tool.pressed;
+    const danger = tool.tone === 'danger' && !tool.disabled;
+    return (
+      <UiOptionButton key={tool.id} variant="menu" size="sm" className="w-full gap-2"
+        role={checked === undefined ? 'menuitem' : 'menuitemcheckbox'} aria-checked={checked}
+        tooltip={tool.tooltip} disabled={tool.disabled} disabledReason={tool.disabled ? tool.disabledReason : undefined}
+        onClick={tool.onSelect}>
+        {checked === undefined ? null : <span aria-hidden="true" className="flex w-3.5 shrink-0 justify-center">{checked ? <Check size={UI_ICON_SIZE.sm} /> : null}</span>}
+        <span className={`flex min-w-0 flex-1 items-center gap-2 ${danger ? 'text-danger-text' : ''}`}><Icon size={UI_ICON_SIZE.sm} /><span className="min-w-0 flex-1 truncate">{tool.label}</span></span>
+      </UiOptionButton>
+    );
+  }
+  if (tool.kind === 'menu') {
+    const Icon = tool.icon;
+    if (tool.disabled) {
+      return <UiOptionButton key={tool.id} variant="menu" size="sm" className="w-full gap-2" role="menuitem" disabled disabledReason={tool.disabledReason}><Icon size={UI_ICON_SIZE.sm} />{tool.label}</UiOptionButton>;
+    }
+    return <FooterOverflowSection key={tool.id} label={tool.label} icon={Icon}>{tool.menu()}</FooterOverflowSection>;
+  }
+  return <FooterOverflowSection key={tool.id} label={tool.label} icon={tool.icon}>{tool.overflow}</FooterOverflowSection>;
+}
+
+/** 点到菜单项、按钮才收起“更多”；拖滑杆、点小标题不收。 */
+function closesFooterOverflow(target: Node): boolean {
+  const element = target.nodeType === 1 ? target as Element : target.parentElement;
+  return Boolean(element?.closest('button, [role="menuitem"], [role="menuitemcheckbox"]'));
+}
+
+/**
+ * 底栏右侧的工具交给 `UiOverflowRow` 收纳。可用宽度借用父级空余宽度（`growIntoParent`）与状态文字超出下限的部分
+ * （`data-overflow-yield`）：收起几项后行宽只剩内容宽度，不借就测不到面板又变宽了，工具放不回来。
+ */
+function PanelFooterTools({ tools, more, moreLabel }: { tools: readonly UiPanelFooterTool[]; more?: ReactNode; moreLabel: string }): JSX.Element {
+  const items: UiOverflowRowItem[] = tools.map((tool) => ({
+    id: tool.id,
+    priority: tool.priority ?? 0,
+    pinned: tool.kind === 'custom' && tool.overflow === undefined,
+    node: renderFooterTool(tool),
+  }));
+  return (
+    <UiOverflowRow
+      growIntoParent
+      alwaysShowOverflow={Boolean(more)}
+      className={`shrink ${UI_INLINE_GAP_CLASS.micro}`}
+      items={items}
+      renderOverflow={(hiddenIds) => {
+        const hidden = tools.filter((tool) => hiddenIds.includes(tool.id));
+        return (
+          <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick={closesFooterOverflow} panelPadding="menu" alignment="bottomRight"
+            renderPanel={() => (
+              <div className="flex flex-col gap-1" role="menu" aria-label={moreLabel} data-panel-footer-overflow>
+                {hidden.map(renderFooterOverflowEntry)}
+                {hidden.length && more ? <div className={`my-1 ${UI_DIVIDER_CLASS}`} /> : null}
+                {more}
+              </div>
+            )}>
+            {({ open, togglePanel }) => <UiIconButton size="sm" aria-label={moreLabel} tooltip={moreLabel} aria-expanded={open} data-panel-trigger-button data-panel-footer-more onClick={togglePanel}><MoreHorizontal /></UiIconButton>}
+          </PanelTrigger>
+        );
+      }}
+    />
   );
 }

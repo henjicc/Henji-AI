@@ -153,6 +153,8 @@ macOS 用同一份菜单模型生成**系统菜单栏**，窗口内不画菜单�
 停靠工作区（剪辑、音频编辑、3D 镜头参考、图片编辑）里，每个面板分三区：标签行、内容、底栏（重要记录 018）。
 - **标签行只放标签**：面板标签、当前标签旁的面板菜单、面板组最大化。面板工具不进标签行：工具和标签抢同一行时，面板组一窄，标签就被挤进「+N」。
 - **面板专属工具放底栏右侧**（视图切换、新建、导入、选区操作等）：底栏 32 高、上边一条 `border-line` 发丝线、静默 `UiIconButton`；底栏左端只放只读计数或状态（如“8 项 · 已选 1”）。放不下时从右往左收进「更多」，不折行、不另起一行。
+  - 写法：`UiToolbar variant="footer"` 的 `tools` 传工具描述，不要自己拼按钮放进 `trailing`。`kind: 'action'`（立刻执行或开关：`label` `icon` `onSelect` `disabled` `disabledReason`；偏离默认才着色的开关用 `on`，默认就开着的开关用不着色的 `pressed`）由底栏画成图标按钮（对象特有、图标说不清的整组动作加 `display: 'text'` 画成“图标 + 文字”，外观不为收纳改），收起后是同名同图标的菜单项，禁用原因照旧；`kind: 'menu'`（`menu: () => 菜单项`）底栏里点开弹出菜单，收起后同一份菜单作为“图标 + 名称”下的一节列出；`kind: 'custom'` 是自己画的控件，给 `overflow` 才能收起，不给就永不收起——自带进行中任务或对话框状态的组件（自动字幕、文档按钮）卸载会丢状态，必须不给。
+  - 收纳顺序：面板变窄时左端状态先截断到下限（约 64px），再把工具按位置从右往左收（`priority` 越大越晚收）；变宽时按相反顺序放回。面板自己的低频操作传 `more`（加 `moreLabel` 命名），和收起的工具共用同一个“更多”，不要再自己放一个“更多”按钮。底栏不接受 `trailing`（类型上禁止）。
 - 面板内容区不再单开工具行；面板专属工具也不塞进工作区命令带。
 - 时间线：时间码和吸附、链接等开关放轨道头上方的角落格（轨道头列 × 标尺行），缩放放底栏右侧，不再单占一条工具行。
 - 时间线这类“面板内容有名字”的面板，标签直接显示内容名（序列名），不写面板类型名。
@@ -167,7 +169,8 @@ macOS 用同一份菜单模型生成**系统菜单栏**，窗口内不画菜单�
 裁切和遮挡几乎都出在“面板被挤窄、压矮”或“内容比预想的长”时，组件本身没错。所以布局要**先写清楚放不下时怎么变**，再画默认样子：
 - **停靠面板声明最小宽高**：写在工作区面板定义里（`VIDEO_EDIT_PANELS` 这类，类型 `WorkspacePanelDefinition`），停靠布局强制执行，保存过的旧布局按当前定义改写；同一组标签取一致的值，默认布局在 960×640 窗口里同时放得下各面板的最小值。新增面板不声明就是缺陷。
 - **放不下只有三种对策**：收进“更多”（`UiOverflowRow`、命令带收纳）、截断后悬停看全（`truncate` + tooltip / 可访问名称）、滚动（`overflow-auto`）。不允许让 `overflow-hidden` 把控件或文字硬裁掉一截，也不允许定位层盖住可点的控件。
-- **收起后要能放回**：收纳行收起几项后宽度只剩内容宽度，单看自己测不到窗口又变宽了。行后面还有控件、行自己不能拉宽时（命令带左端的快速添加），给 `UiOverflowRow growIntoParent`，命令带配 `leadingLayout="share"`（左端与中间区按内容起算、平分剩余宽度，中间区内容靠左排）。`UiSegmented` 实际放不下时自动换成同一组选项的下拉，宽度够了换回，调用点不用判断。
+- **收起后要能放回**：收纳行收起几项后宽度只剩内容宽度，单看自己测不到窗口又变宽了。行后面还有控件、行自己不能拉宽时（命令带左端的快速添加），给 `UiOverflowRow growIntoParent`，命令带配 `leadingLayout="share"`（左端与中间区按内容起算、平分剩余宽度，中间区内容靠左排）。`UiSegmented` 实际放不下时自动换成同一组选项的下拉，宽度够了换回，调用点不用判断。旁边的兄弟元素只分剩余宽度、可以截断时（底栏状态文字）标 `data-overflow-yield`，收纳行把它超出 `min-width` 的部分也算作可用宽度；停靠面板底栏已内置，调用点不用写。
+- **不收起的控件由面板最小宽度兜底**：底栏里永不收起的控件（不给 `overflow` 的 `custom`）和收纳行里的 `pinned` 项，在面板最小宽度下必须放得下“它们 + 更多”；放不下就调大面板定义的最小宽度，不要指望收纳。
 - **自绘滚动与有意例外要标出来**：自己实现滚动的区域（如时间线轨道区）标 `data-layout-scroll-region`；确属设计的裁切或覆盖（跑马灯、拖动中的虚影）在最近的容器上写 `data-layout-allow="clip|occlude"` 和 `data-layout-allow-reason="理由"`，没有理由不生效。
 - **设计稿写缩放规则**：除了默认尺寸，还要写最小多大、窄了先收什么、矮了先藏什么；没写的设计稿不算完成。
 - 判定只有一份实现 `src/core/uiAudit/layoutAudit.ts`：巡检规则 `controlClipped` / `controlOccluded` 与运行时布局守卫共用。开了 `--dev-checks` 或 `--dev-layout-guard` 时问题元素会被描红边并记进日志（`ui.layout_issue.detected`），默认不运行；界面改动收尾前至少开一次。验收方法见 `references/review.md` 第 9 节。
@@ -689,7 +692,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 特殊面板（参数里点开的那块浮层：比例与分辨率、模型、音色、音色克隆、高级选项、魔搭自定义模型、画布节点的比例与模型） | `UiSpecialPanel`（`header` 一行搜索与筛选、`aside` 左栏、正文唯一滚动区、`status` / `action` 底部操作行、`bodyWidth`、`height` fit/fill）配 `PanelTrigger panelSize="special"`：宽度量最宽的内容、夹在 240–760，高度上限 440；网格列数用 `useSpecialPanelColumns` 与 `specialPanelGridWidth`（重要记录 021） | 浮层里自己拼头部、滚动区与底栏；按窗口百分比定宽；一行内容撑成半屏宽 |
 | 浮层归属（点外关闭、Escape） | `useUiOverlayLayer` + `UiOverlayLayerProvider` + `resolveUiOverlayTarget` / `isTopmostUiOverlay`（`@/components/ui/overlayOwnership`，语义同 Floating UI FloatingTree）：子浮层里的点击不关父层，Escape 只关最上层，模态层（查看器、弹窗）打开期间祖先层不响应点外；不在同一 React 树的浮层根节点写 `data-ui-overlay-detached` | 每个浮层各写一份 portal 选择器白名单或只认自身 refs |
 | 右键菜单、按钮弹出的动作菜单、锚定外部元素或指针的浮层 | 动作列表用 `ContextMenu` + `useContextMenu`（`showMenu` 跟随指针，`showMenuAt` 贴按钮右缘；压在画布/媒体上传 `surface="glass"`；菜单项是 `UiOptionButton variant="menu"`，方向键与 Enter 可用，宽度按内容）；需要表单内容的锚定浮层用 `PanelTrigger` 的 `anchor`（元素或矩形）+ `open` / `onOpenChange`，自定义触发器用 children 渲染函数（任务 5.9） | 自己 `createPortal` 画菜单或面板、手算视口夹取、各写一份点外关闭与 Escape、用私有 CSS 画菜单项 |
-| 一行放不下就收进“更多” | `UiOverflowRow`（`items` 带 `priority`/`pinned`，`renderOverflow`，`alwaysShowOverflow`，`growIntoParent` 借父级空余宽度；收起项不挂载）；生成底栏由 `ParameterPanel` 在 `toolbar` 排布下接入 | 让参数条 `flex-wrap` 换成两行；收起项留在 DOM 里只隐藏 |
+| 一行放不下就收进“更多” | `UiOverflowRow`（`items` 带 `priority`/`pinned`，`renderOverflow`，`alwaysShowOverflow`，`growIntoParent` 借父级空余宽度；收起项不挂载）；生成底栏由 `ParameterPanel` 在 `toolbar` 排布下接入；停靠面板底栏用 `UiToolbar variant="footer" tools`（内部就是它） | 让参数条 `flex-wrap` 换成两行；收起项留在 DOM 里只隐藏 |
 | 统一分段单选（设置页 `SettingsSegmented` 仅重导出同一实现） | `UiSegmented ariaLabel options value onChange size="sm" / "md" / "lg" fullWidth disabled onPreview`；选项支持 `disabled/title/ariaLabel`；内部复用唯一内嵌 `UiOptionButton variant="segment"`，等宽分段、radiogroup/radio、单一 Tab 停靠点、左右方向键循环切换；中性抬起底 `bg-segment-selected` 与强文字选中态由 primitive 维护；≤5 项且每项 ≤4 个汉字（英文 ≤12 字符）；含汉字的混合标签按四个 Unicode 字符计，否则转完整下拉 | 调用点手写并排选项与轨道间距；新增分段优先复用统一容器 |
 | 内容格适配 | `UiOptionButton variant="card"`（现有内容选项格，静息 raised、选中中性选中底）；新二维选项优先 `grid` | 把 card 当成面板外壳或新增卡片套卡片 |
 | 分段 / 网格 / 小样 / 色样选择 | `UiSegmented` / `UiOptionButton variant="grid"` / `tile` / `swatch`；网格格子要等大时用 `gridCell`（`ratio` 78×92、`tier` 78×42、`tier-detail` 78×52、`preset` 120×52） | 手写 `bg-veil-faint` 格子、强调色实底的分段；用内联 `style={{ height }}` 定格子高度 |

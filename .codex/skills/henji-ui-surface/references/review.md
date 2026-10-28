@@ -276,6 +276,7 @@ npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --matrix review --a
 
 - 停靠面板在工作区面板定义里声明 `minimumWidth` / `minimumHeight`（`WorkspacePanelDefinition`），由 `parseWorkspaceDockLayout` 写进布局、`workspacePanelConstraints` 用于 `addPanel`；同组标签取一致的值；默认布局在 960×640 下要放得下各面板最小值。
 - 放不下只用三种对策：收进“更多”、截断后悬停看全、滚动。主 SKILL.md“放不下怎么办”一节是唯一口径。
+- 停靠面板底栏的工具一律经 `UiToolbar variant="footer" tools` 传入：窄了自动收进“更多”、宽了放回；底栏不接受 `trailing`，自己拼的按钮行不会收纳，面板一窄就被挤出底栏。
 - 自绘滚动区标 `data-layout-scroll-region`；有意的裁切或覆盖写 `data-layout-allow="clip|occlude"` + `data-layout-allow-reason`（≥ 4 字理由）。不要为了让规则通过而加声明：声明只用于确属设计的效果（跑马灯、拖动虚影、媒体画面里的裁切框）。
 - 设计稿写缩放规则（最小尺寸、窄了先收什么、矮了先藏什么）。
 

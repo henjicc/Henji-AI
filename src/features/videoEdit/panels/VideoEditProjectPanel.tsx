@@ -374,34 +374,29 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
           </div>}
     </div>
     {/* 面板工具在右下角底栏（重要记录 018/019）：标签行只放标签，左端是数量 */}
-    <UiToolbar variant="footer" aria-label="素材工具" trailing={<>
-      <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
+    <UiToolbar variant="footer" aria-label="素材工具" tools={[
+      { kind: 'menu', id: 'view', label: '视图与排序', icon: view === 'grid' ? Grid2X2 : List, menu: () => <>
         <UiOptionButton variant="menu" size="sm" className="gap-2" active={view === 'list'} onClick={() => setView('list')}><List size={UI_ICON_SIZE.sm} />列表视图</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" active={view === 'grid'} onClick={() => setView('grid')}><Grid2X2 size={UI_ICON_SIZE.sm} />缩略图视图</UiOptionButton>
         <div className={`my-1 ${UI_DIVIDER_CLASS}`} />
         {SORT_OPTIONS.map(option => <UiOptionButton key={option.value} variant="menu" size="sm" active={sort.key === option.value} onClick={() => setSort({ key: option.value, direction: 'asc' })}>按{option.label}排序</UiOptionButton>)}
-      </div>}>
-        {({ open, togglePanel }) => <UiIconButton size="sm" aria-label="视图与排序" tooltip="视图与排序" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}>{view === 'grid' ? <Grid2X2 /> : <List />}</UiIconButton>}
-      </PanelTrigger>
-      <UiIconButton size="sm" aria-label="资产库" tooltip="资产库：拖入素材" onClick={() => openAssetLibrary('floating')}><AssetLibraryIcon /></UiIconButton>
-      <VideoEditProjectDocumentsButton instance={instance} onError={onError} />
-      <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
+      </> },
+      { kind: 'action', id: 'assets', label: '资产库', icon: AssetLibraryIcon, tooltip: '资产库：拖入素材', onSelect: () => openAssetLibrary('floating') },
+      // 文档按钮自己持有“其他位置的文档”对话框，收起会把打开的对话框一起卸掉，所以不收
+      { kind: 'custom', id: 'documents', label: '文档', node: <VideoEditProjectDocumentsButton instance={instance} onError={onError} /> },
+      { kind: 'menu', id: 'create', label: '新建素材项', icon: Plus, tooltip: '新建素材箱、序列、代码素材、图形与调整图层', menu: () => <>
         <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => setEdit({ kind: 'createBin', parentId: binId })}><FolderPlus size={UI_ICON_SIZE.sm} />新建素材箱</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={newSequence}><SequenceIcon size={UI_ICON_SIZE.sm} />新建序列</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => setCreatingCode(true)}><Code2 size={UI_ICON_SIZE.sm} />新建代码素材</UiOptionButton>
         <div className={`my-1 ${UI_DIVIDER_CLASS}`} />
         {graphicMenu().map(item => <UiOptionButton key={item.id} variant="menu" size="sm" className="gap-2" onClick={item.onClick}><GraphicIcon size={UI_ICON_SIZE.sm} />{item.label}</UiOptionButton>)}
-      </div>}>
-        {({ open, togglePanel }) => <UiIconButton size="sm" aria-label="新建素材项" tooltip="新建素材箱、序列、代码素材、图形与调整图层" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Plus /></UiIconButton>}
-      </PanelTrigger>
-      <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
+      </> },
+      { kind: 'menu', id: 'import', label: '导入', icon: Import, tooltip: '导入文件或文件夹', menu: () => <>
         <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={choose}><Import size={UI_ICON_SIZE.sm} />导入文件</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={chooseFolders}><FolderInput size={UI_ICON_SIZE.sm} />导入文件夹</UiOptionButton>
         <UiFormRow label="自动创建代理" info="导入高于 1080p 的视频时，自动创建用于流畅预览的代理。" inline density="compact"><UiSwitch checked={getVideoEditProxyPreference(projectId).autoCreate} onCheckedChange={autoCreate => setVideoEditProxyPreference(projectId, { autoCreate })} /></UiFormRow>
-      </div>}>
-        {({ open, togglePanel }) => <UiIconButton size="sm" aria-label="导入" tooltip="导入文件或文件夹" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Import /></UiIconButton>}
-      </PanelTrigger>
-          </>}>{footerStatus}</UiToolbar>
+      </> },
+    ]}>{footerStatus}</UiToolbar>
     <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />
     {labelPicker && <PanelTrigger anchor={labelPicker.anchor} open onOpenChange={open => { if (!open) setLabelPicker(null) }} panelSize="menu" zIndex={Z_LAYERS.dropdown} panelPadding="content" closeOnPanelClick
       renderPanel={() => <div className="flex flex-col gap-2" aria-label="颜色标签">

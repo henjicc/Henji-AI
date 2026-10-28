@@ -199,10 +199,10 @@ export function VideoEditCodeProjectPanel({ instance, onError, visible }: { inst
     {state && changes.size > 0 && <Notice text={`外部改了 ${changes.size} 个文件，还没提交`} detail={changedPaths.join('\n')} action={<UiButton size="sm" variant="secondary" loading={busy === 'commit'} disabled={!!busy} onClick={() => { void commitWorkspace() }}>提交</UiButton>} />}
     {state && outdated.length > 0 && <Notice text={`${outdated.length} 个素材用的是旧版本代码`} detail={outdated.map(value => `${value.name}：${value.changedPaths.join('、')}`).join('\n')} action={<UiButton size="sm" variant="secondary" loading={busy === 'upgrade'} disabled={!!busy || changes.size > 0} disabledReason={changes.size > 0 ? '先提交外部修改' : undefined} tooltip="升级到最新提交，正在用旧版本的片段一并更新" onClick={() => { void upgrade() }}>升级</UiButton>} />}
     {body()}
-    <UiToolbar variant="footer" aria-label="代码工具" trailing={<>
-      <UiIconButton size="sm" aria-label="只看所选片段用到的文件" tooltip="只看所选片段用到的文件" on={view.onlySelection} aria-pressed={view.onlySelection} disabled={!used.size && !view.onlySelection} disabledReason={!used.size && !view.onlySelection ? '先在时间线上选一个代码片段' : undefined} onClick={() => setView({ onlySelection: !view.onlySelection, mode: 'files', openPath: null })}><ListFilter /></UiIconButton>
-      <UiIconButton size="sm" aria-label="文件" tooltip="文件" on={view.mode === 'files'} selection="mode" aria-pressed={view.mode === 'files'} onClick={() => setView({ mode: 'files' })}><FolderTree /></UiIconButton>
-      <UiIconButton size="sm" aria-label="提交记录" tooltip="提交记录" on={view.mode === 'history'} selection="mode" aria-pressed={view.mode === 'history'} onClick={() => setView({ mode: 'history' })}><History /></UiIconButton>
-    </>}>{status}</UiToolbar>
+    <UiToolbar variant="footer" aria-label="代码工具" tools={[
+      { kind: 'action', id: 'only-selection', label: '只看所选片段用到的文件', icon: ListFilter, on: view.onlySelection, disabled: !used.size && !view.onlySelection, disabledReason: '先在时间线上选一个代码片段', onSelect: () => setView({ onlySelection: !view.onlySelection, mode: 'files', openPath: null }) },
+      { kind: 'action', id: 'files', label: '文件', icon: FolderTree, on: view.mode === 'files', selection: 'mode', onSelect: () => setView({ mode: 'files' }) },
+      { kind: 'action', id: 'history', label: '提交记录', icon: History, on: view.mode === 'history', selection: 'mode', onSelect: () => setView({ mode: 'history' }) },
+    ]}>{status}</UiToolbar>
   </div>
 }

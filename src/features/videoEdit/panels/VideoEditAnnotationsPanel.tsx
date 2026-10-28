@@ -1,10 +1,9 @@
 import { memo, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Virtuoso } from 'react-virtuoso'
-import { Check, CircleDot, Copy, CornerUpLeft, MoreHorizontal, Send, Trash2, Undo2 } from 'lucide-react'
-import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiIconButton, UiInput, UiOptionButton, UiOverflowRow, UiTextArea, UiToolbar } from '@/components/ui'
+import { Check, CircleDot, Copy, CornerUpLeft, Send, Trash2, Undo2 } from 'lucide-react'
+import { Dropdown, UiButton, UiEmpty, UiIconButton, UiInput, UiOptionButton, UiOverflowRow, UiTextArea, UiToolbar, type UiPanelFooterAction, type UiPanelFooterTool } from '@/components/ui'
 import { UI_DIVIDER_CLASS } from '@/components/ui/styleTokens'
 import { VIDEO_EDIT_ANNOTATION_COLORS } from '@/core/theme/colorTokens'
-import { Z_LAYERS } from '@/core/theme/zLayers'
 import { VIDEO_EDIT_ANNOTATION_STATUS_LABELS, videoEditAnnotationColor, type VideoEditAnnotation } from '@/core/videoEdit/annotations'
 import type { VideoEditCommandId } from '@/core/videoEdit/commands'
 import { videoEditFps } from '@/core/videoEdit/time'
@@ -118,27 +117,22 @@ export const VideoEditAnnotationsPanel = memo(function VideoEditAnnotationsPanel
   }
   // 面板里的点选不经过节目画面跳转时，快捷键（Ctrl+A、Delete）也要落到批注上
   const claimKeyboard = (): void => { if (instance.activePanel !== 'annotations') focusVideoEditPanel(projectId, 'annotations', { reveal: false }) }
-  const commandButton = (id: VideoEditCommandId, label: string, tooltip: string, icon: React.ReactNode, tone?: 'danger') => {
+  const commandTool = (id: VideoEditCommandId, label: string, tooltip: string, icon: UiPanelFooterAction['icon'], tone?: 'danger'): UiPanelFooterAction => {
     const state = available(id)
-    return <UiIconButton size="sm" tone={tone} aria-label={label} tooltip={tooltip} disabled={!state.enabled} disabledReason={state.reason} onClick={() => command(id)}>{icon}</UiIconButton>
+    return { kind: 'action', id, label, tooltip, icon, tone, disabled: !state.enabled, disabledReason: state.reason, onSelect: () => command(id) }
   }
   const commandMenu = (items: readonly { id: VideoEditCommandId; label: string }[]) => items.map(item => { const state = available(item.id); return <UiOptionButton key={item.id} variant="menu" size="sm" disabled={!state.enabled} disabledReason={state.reason} onClick={() => command(item.id)}>{item.label}</UiOptionButton> })
-  const tools = <>
-    {chosen.length > 0 && <>
-      {commandButton('annotations_resolve', '确认选中批注', '确认选中的已改完批注', <Check />)}
-      {commandButton('annotations_reject', '驳回选中批注', '没改好，退回给助手重改', <CornerUpLeft />)}
-      <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1" role="group" aria-label="改状态">{commandMenu(STATUS_COMMANDS)}</div>}>
-        {({ open, togglePanel }) => <UiIconButton size="sm" aria-label="改状态" tooltip="把选中的批注改成某个状态" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><CircleDot /></UiIconButton>}
-      </PanelTrigger>
-      {commandButton('delete', '删除选中批注', '删除选中的批注', <Trash2 />, 'danger')}
-    </>}
-    <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1" role="group" aria-label="更多批注操作">
-      {commandMenu(MORE_COMMANDS.slice(0, 2))}
-      <div className={`my-1 ${UI_DIVIDER_CLASS}`} />
-      {commandMenu(MORE_COMMANDS.slice(2))}
-    </div>}>
-      {({ open, togglePanel }) => <UiIconButton size="sm" aria-label="更多批注操作" tooltip="更多批注操作" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><MoreHorizontal /></UiIconButton>}
-    </PanelTrigger>
+  const tools: UiPanelFooterTool[] = chosen.length > 0 ? [
+    commandTool('annotations_resolve', '确认选中批注', '确认选中的已改完批注', Check),
+    commandTool('annotations_reject', '驳回选中批注', '没改好，退回给助手重改', CornerUpLeft),
+    { kind: 'menu', id: 'status', label: '改状态', tooltip: '把选中的批注改成某个状态', icon: CircleDot, menu: () => commandMenu(STATUS_COMMANDS) },
+    commandTool('delete', '删除选中批注', '删除选中的批注', Trash2, 'danger'),
+  ] : []
+  // 面板自己的低频操作与收起的工具共用底栏这一个“更多”
+  const moreCommands = <>
+    {commandMenu(MORE_COMMANDS.slice(0, 2))}
+    <div className={`my-1 ${UI_DIVIDER_CLASS}`} />
+    {commandMenu(MORE_COMMANDS.slice(2))}
   </>
   const send = async (external: boolean): Promise<void> => { if (!sequence) return; setSending(true); try { await sendVideoEditAnnotations(projectId, sequence.id, note, external); setNote('') } catch (error) { onError(error) } finally { setSending(false) } }
   const addRange = (): void => {
@@ -166,7 +160,7 @@ export const VideoEditAnnotationsPanel = memo(function VideoEditAnnotationsPanel
     <div className="min-h-0 flex-1">{entries.length ? <Virtuoso className="h-full" data={entries} computeItemKey={(_index, entry) => entry.mark.id} itemContent={(_index, entry) => <AnnotationRow instance={instance} onError={onError} expanded={chosen.length <= 1 && selected === entry.mark.id} picked={chosen.length > 1 && chosenIds.has(entry.mark.id)} onPick={pick} {...entry} />} />
       : total ? <UiEmpty size="xs" title="暂无批注" description={filter === 'active' ? '都确认过了，已确认的在“已确认”筛选里。' : '换一个筛选看看。'} />
         : <UiEmpty size="xs" title="还没有批注" description="在命令带选批注工具，直接在画面上画。" />}</div>
-    {total > 0 && <UiToolbar variant="footer" aria-label="批注工具" trailing={tools}>
+    {total > 0 && <UiToolbar variant="footer" aria-label="批注工具" tools={tools} more={moreCommands} moreLabel="更多批注操作">
       {/* 面板压窄时先让出“已选”，只留条数 */}
       <UiOverflowRow items={[{ id: 'count', priority: 2, pinned: true, node: <span>{entries.length} 条</span> }, ...(chosen.length ? [{ id: 'selection', priority: 1, node: <span>&nbsp;· 已选 {chosen.length}</span> }] : [])]} renderOverflow={() => null} />
     </UiToolbar>}

@@ -1,6 +1,6 @@
 import { VideoEditEmptyTimeline } from './panels/VideoEditEmptyTimeline'
 import { Link, Magnet, Minus, Plus } from 'lucide-react'
-import { UiIconButton, UiRangeInput, UiToolbar } from '@/components/ui'
+import { UiIconButton, UiRangeInput, UiToolbar, type UiPanelFooterAction } from '@/components/ui'
 import { ICON_FRAME_BLEND, ICON_MOTION_BLUR } from '@/core/theme/icons'
 import type { VideoEditCommandId } from '@/core/videoEdit/commands'
 import { getActiveVideoEditSequence, setVideoEditTimelineView, type VideoEditInstance } from './application/videoEditService'
@@ -32,6 +32,11 @@ function VideoEditTimelineContent({ instance, onError, visible = true }: { insta
   const motionBlur = presentation('toggle_motion_blur')
   const frameBlend = presentation('toggle_frame_blend')
   const MotionBlurIcon = ICON_MOTION_BLUR, FrameBlendIcon = ICON_FRAME_BLEND
+  const zoomButton = (id: 'zoom_in' | 'zoom_out', label: string, icon: UiPanelFooterAction['icon']): UiPanelFooterAction => {
+    const state = presentation(id)
+    return { kind: 'action', id, label, icon, tooltip: state.label, disabled: !state.enabled, disabledReason: state.reason, onSelect: () => execute(id) }
+  }
+  const zoomSlider = <UiRangeInput aria-label="时间线缩放" min={ZOOM_MIN} max={ZOOM_MAX} step={0.1} value={instance.zoom} onChange={event => run(() => setVideoEditTimelineView(instance.document.id, { zoom: Number(event.target.value) }))} />
   const corner = <div className="flex min-w-0 flex-1 flex-col">
     <div className="flex min-h-0 flex-1 items-center"><VideoEditTimecode instance={instance} label="当前时间码" className="px-1.5 text-base" /></div>
     <div className="flex h-6 shrink-0 items-center gap-0.5" role="toolbar" aria-label="时间线开关">
@@ -44,11 +49,12 @@ function VideoEditTimelineContent({ instance, onError, visible = true }: { insta
   </div>
   return <div className="flex h-full min-h-0 select-none flex-col bg-panel" aria-label="剪辑时间线" data-video-edit-timeline>
     <VideoEditTimelineCanvas key={JSON.stringify([instance.document.id, sequence.id])} instance={instance} sequence={sequence} pixels={60 * instance.zoom / sequence.fps} onError={onError} visible={visible} corner={corner} />
-    <UiToolbar variant="footer" aria-label="时间线缩放" trailing={<>
-      <UiIconButton size="xs" aria-label="缩小时间线" tooltip={presentation('zoom_out').tooltip} disabled={!presentation('zoom_out').enabled} onClick={() => execute('zoom_out')}><Minus /></UiIconButton>
-      <div className="flex w-24 items-center"><UiRangeInput aria-label="时间线缩放" min={ZOOM_MIN} max={ZOOM_MAX} step={0.1} value={instance.zoom} onChange={event => run(() => setVideoEditTimelineView(instance.document.id, { zoom: Number(event.target.value) }))} /></div>
-      <UiIconButton size="xs" aria-label="放大时间线" tooltip={presentation('zoom_in').tooltip} disabled={!presentation('zoom_in').enabled} onClick={() => execute('zoom_in')}><Plus /></UiIconButton>
-    </>} />
+    <UiToolbar variant="footer" aria-label="时间线缩放" moreLabel="更多缩放控制" tools={[
+      zoomButton('zoom_out', '缩小时间线', Minus),
+      // 面板变窄先收滑杆（最宽），缩小、放大按钮留到最后
+      { kind: 'custom', id: 'zoom', label: '时间线缩放', priority: -1, node: <div className="flex w-24 items-center">{zoomSlider}</div>, overflow: <div className="flex w-40 items-center px-2 pb-1">{zoomSlider}</div> },
+      zoomButton('zoom_in', '放大时间线', Plus),
+    ]} />
   </div>
 }
 

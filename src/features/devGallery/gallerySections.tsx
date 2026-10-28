@@ -73,6 +73,7 @@ import {
   UI_COVER_FRAME_CLASS,
   UI_MODAL_SIZE_CLASS,
   type UiModalSize,
+  type UiPanelFooterTool,
 } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import { ProgressBar } from '@/components/ui/ProgressBar'
@@ -439,6 +440,13 @@ const OVERFLOW_ITEMS = ['模型', '比例', '时长', '分辨率', '数量'].map
   node: <UiFieldTrigger size="sm" appearance="quiet">{label}</UiFieldTrigger>,
 }))
 
+const FOOTER_TOOLS: UiPanelFooterTool[] = [
+  { kind: 'action', id: 'view', label: '视图与排序', icon: List, onSelect: noop },
+  { kind: 'action', id: 'link', label: '链接选择', icon: Link, on: true, onSelect: noop },
+  { kind: 'action', id: 'remove', label: '删除选中项', icon: Trash2, tone: 'danger', disabled: true, disabledReason: '先选中一项', onSelect: noop },
+  { kind: 'action', id: 'create', label: '新建', icon: Plus, onSelect: noop },
+]
+
 export function ToolbarSection(): JSX.Element {
   const [mode, setMode] = useState('edit')
   return (
@@ -454,9 +462,10 @@ export function ToolbarSection(): JSX.Element {
           <span data-user-content className="w-24 text-13 text-text1"><UiMarqueeText text="很长的文件名会滚动显示.mp4" className="w-full" /></span>
         </UiToolbar>
       </UiPanel>
-      <UiPanel variant="bare" className="w-80 overflow-hidden">
-        <UiToolbar variant="footer" aria-label="面板底栏" trailing={<><UiIconButton size="sm" aria-label="视图与排序"><List /></UiIconButton><UiIconButton size="sm" aria-label="新建"><Plus /></UiIconButton></>}>8 项 · 已选 1</UiToolbar>
-      </UiPanel>
+      {/* 同一组底栏工具放在宽、窄两种面板里：窄的先截断状态文字，再从右往左收进“更多” */}
+      {['w-80', 'w-40'].map((width) => <UiPanel key={width} variant="bare" className={`${width} overflow-hidden`}>
+        <UiToolbar variant="footer" aria-label="面板底栏" tools={FOOTER_TOOLS}>8 项 · 已选 1</UiToolbar>
+      </UiPanel>)}
       <UiOverflowRow
         items={OVERFLOW_ITEMS}
         renderOverflow={(hidden) => <UiFieldTrigger size="sm" appearance="quiet">更多 {hidden.length}</UiFieldTrigger>}

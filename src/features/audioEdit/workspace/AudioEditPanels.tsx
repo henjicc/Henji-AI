@@ -151,11 +151,13 @@ function TranscriptSelectionBar(): React.ReactElement | null {
   const selectedIds = [...workspace.selectedBlockIds]
   const seconds = selectedBlocks.reduce((total, block) => total + Math.max(0, block.endFrame - block.startFrame), 0) / project.source.sampleRate
   const allLocked = selectedBlocks.every((block) => block.locked)
-  return <UiToolbar variant="footer" aria-label="所选文字" trailing={<>
-    <UiButton size="sm" variant="danger" disabled={workspace.disabled} onClick={() => workspace.setBlocksIncluded(selectedIds, false)}><Trash2 />删除声音</UiButton>
-    <UiButton size="sm" disabled={workspace.disabled} onClick={() => workspace.setBlocksIncluded(selectedIds, true)}><RotateCcw />恢复</UiButton>
-    <UiButton size="sm" disabled={workspace.disabled} onClick={() => update({ transcript: project.transcript.map((block) => selectedIds.includes(block.id) ? { ...block, locked: !allLocked } : block) })}>{allLocked ? <LockOpen /> : <Lock />}{allLocked ? '解锁' : '锁定'}</UiButton>
-  </>}>{`已选 ${selectedBlocks.length} 个词 · ${seconds.toFixed(1)} 秒`}</UiToolbar>
+  const busyReason = '正在处理或录音，结束后再操作。'
+  // 删除声音、恢复是文字稿剪辑特有的事（删的是这几个词的声音，不是删词），图标说不清，整组保留文字
+  return <UiToolbar variant="footer" aria-label="所选文字" tools={[
+    { kind: 'action', id: 'remove', label: '删除声音', display: 'text', icon: Trash2, tone: 'danger', disabled: workspace.disabled, disabledReason: busyReason, onSelect: () => workspace.setBlocksIncluded(selectedIds, false) },
+    { kind: 'action', id: 'restore', label: '恢复', display: 'text', icon: RotateCcw, disabled: workspace.disabled, disabledReason: busyReason, onSelect: () => workspace.setBlocksIncluded(selectedIds, true) },
+    { kind: 'action', id: 'lock', label: allLocked ? '解锁' : '锁定', display: 'text', icon: allLocked ? LockOpen : Lock, disabled: workspace.disabled, disabledReason: busyReason, onSelect: () => update({ transcript: project.transcript.map((block) => selectedIds.includes(block.id) ? { ...block, locked: !allLocked } : block) }) },
+  ]}>{`已选 ${selectedBlocks.length} 个词 · ${seconds.toFixed(1)} 秒`}</UiToolbar>
 }
 
 /** 交付：导出格式与附带内容（导出按钮在命令带）。面板最窄约 220px，导出格式的触发器只写格式名，用途写在菜单选项里。 */
