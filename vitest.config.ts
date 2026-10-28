@@ -3,6 +3,7 @@ import path from 'path'
 import { configDefaults, defineConfig } from 'vitest/config'
 import testSuites from './scripts/lib/testSuites.cjs'
 import CostSequencer from './scripts/lib/costSequencer.mjs'
+import { videoEditRenderEngineVersion } from './scripts/vite/renderEngineVersion.mjs'
 
 /**
  * 主进程模块在 Windows 按 LOCALAPPDATA 定位程序目录（日志、数据库、缓存），测试一律指到仓库临时目录，
@@ -28,7 +29,7 @@ export default defineConfig(({ mode }) => {
         if (!filename.endsWith('.wgsl')) return null
         return `export default ${JSON.stringify(readFileSync(filename, 'utf8'))}`
       },
-    }],
+    }, videoEditRenderEngineVersion({ fixed: 'test' })],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),

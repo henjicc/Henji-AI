@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
-const state = vi.hoisted(() => ({ value: '', set: vi.fn(), warn: vi.fn() }))
+const state = vi.hoisted(() => ({ value: '', set: vi.fn(), delete: vi.fn(async (_key: string) => {}), warn: vi.fn() }))
 vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ settings: {
   get: async () => state.value ? { value: state.value } : undefined,
-  set: state.set,
+  set: state.set, delete: state.delete,
 } }) }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ warn: state.warn }) }))
 beforeEach(() => { vi.resetModules(); state.value = ''; state.warn.mockClear(); state.set.mockReset().mockImplementation(async (_key: string, value: string) => { state.value = value }); vi.useFakeTimers() })
@@ -12,6 +12,7 @@ afterEach(() => { vi.useRealTimers() })
 it('按内容指纹保存和重开，内容变化不复用旧观测，样本数量有界', async () => {
   const cache = await import('./videoEditRenderPerformance')
   await cache.loadVideoEditRenderPerformance()
+  expect(state.delete).toHaveBeenCalledWith('cache.video-edit.render-performance.v6.shown')
   for (let frame = 0; frame < 650; frame++) cache.recordVideoEditRenderPerformance('content', 60, frame < 50 ? 100 : 5)
   expect(cache.readVideoEditRenderPerformance('content')).toEqual({ sampleFrames: 600, droppedFrames: 0, p90Ms: 5 })
   expect(state.set).not.toHaveBeenCalled()

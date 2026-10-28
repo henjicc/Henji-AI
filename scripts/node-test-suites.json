@@ -70,7 +70,8 @@
     "scripts/mcp-paid-generation-check.test.cjs",
     "scripts/lib/uiDocumentation.test.cjs",
     "scripts/lib/uiDocumentationChecks.test.cjs",
-    "scripts/lib/uiFindings.test.cjs"
+    "scripts/lib/uiFindings.test.cjs",
+    "scripts/vite/renderEngineVersion.test.mjs"
   ],
   "native": [
     "scripts/lib/nativePersistenceRunner.test.cjs"

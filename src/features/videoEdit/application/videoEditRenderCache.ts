@@ -43,6 +43,11 @@ const RENDER_AFTER_INTERACTION_MAX_MS = 60_000
 const RENDER_EARLY_PREEMPT_MS = 30_000
 /** 订阅之外的兜底轮询：不经视图发布的状态变化也能及时让出。 */
 const PROGRAM_ACTIVITY_POLL_MS = 100
+/**
+ * 自动预渲染的占空比：每渲完一帧（含编码）歇同样长的时间，显卡最多占一半。空闲时连续渲染实测占显卡 17–35%，
+ * 与暂停画面、拖动争抢；歇着的时候节目一有操作就随让出信号立即结束，用户或助手发起的预渲染不歇。
+ */
+const AUTO_RENDER_REST_RATIO = 1
 
 export interface VideoEditRenderPreference { autoRender: boolean }
 const preferenceSchema = z.object({ autoRender: z.boolean() }).strict()
@@ -475,9 +480,11 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
         assertOwner()
         attemptSignal.throwIfAborted()
         if (attempt) attempt.frame = frame
+        const frameStarted = performance.now()
         // 让出时会话随即释放，不再等在途这一帧算完。
         await abortable(renderer.render(frame, true), attemptSignal)
         await video.add((frame - window.startFrame) / composition.fps, 1 / composition.fps)
+        if (job.auto) await rest((performance.now() - frameStarted) * AUTO_RENDER_REST_RATIO, attemptSignal)
       }
       await output.finalize()
       assertOwner()
@@ -532,6 +539,16 @@ function watchProgramActivity(onActive: (reason: ProgramActivity) => void, inter
   const unsubscribe = subscribeVideoEditView(() => { check() })
   const timer = setInterval(check, PROGRAM_ACTIVITY_POLL_MS)
   return { check, idleFor: () => performance.now() - lastActiveAt, interactionIdleFor: () => performance.now() - lastInteractionAt, dispose: () => { unsubscribe(); clearInterval(timer) } }
+}
+/** 等 `ms` 毫秒；信号一中止就以它的原因结束。 */
+function rest(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.reject(signal.reason)
+  if (!(ms > 0)) return Promise.resolve()
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = (): void => { clearTimeout(timer); reject(signal.reason) }
+    const timer = setTimeout(() => { signal.removeEventListener('abort', onAbort); resolve() }, ms)
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
 }
 /** 在途请求随信号立即结束；原请求迟到的结果被吞掉，不成为未处理的拒绝。 */
 function abortable<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {

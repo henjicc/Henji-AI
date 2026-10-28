@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_RENDER_ENGINE_VERSION } from 'virtual:video-edit-render-engine'
 import { activeVideoEditEffects } from './compositing'
 import { VIDEO_EDIT_FRAME_INTERPOLATION_ENGINE } from './timeRemap'
 import { videoEditTransitionWindow, videoEditTransitionMedium } from './transitions'
@@ -15,13 +16,6 @@ import { videoEditDuration, videoEditVisibleTracks, type VideoEditClip, type Vid
  */
 export const VIDEO_EDIT_RENDER_WINDOW_SECONDS = 5
 export const VIDEO_EDIT_RENDER_MIN_SECONDS = 0.5
-/**
- * 渲染管线输出或窗口指纹的构成变化（合成、解码、编码设置）时递增，旧预览文件全部失效。3：运动模糊取样与代码图层绘制；
- * 4：代码视频参数计入片段入点；5：作者代码的随机数与时钟按帧定种子（2026-10-27）；
- * 6：指纹只计入实际用到的代码版本和序列绑定的风格，引用对象以短指纹参与（2026-10-28）。
- */
-export const VIDEO_EDIT_RENDER_CACHE_VERSION = 6
-
 export interface VideoEditRenderWindow { index: number; startFrame: number; endFrame: number; key: string; heavy: boolean }
 
 /** 两个不同种子的 53 位字符串散列拼成 106 位，足够区分同一工程里的窗口内容。 */
@@ -146,8 +140,9 @@ export function videoEditRenderWindowSet(document: VideoEditComposition, depende
     .map(transition => videoEditTransitionWindow(document, transition)).filter(window => visible.has(window.left.track))
   const visibleCaptions = document.captionTrackEnabled === false ? [] : document.captions ?? []
   const { id: _id, binId: _bin, label: _label, textTranscription: _transcription, tracks: _tracks, sampleRate: _rate, channels: _channels, captionTrackLocked: _locked, clips: _clips, transitions: _transitions, captions: _captions, annotations: _annotations, markers: _markers, name: _name, media: _media, items: _items, sequences: _sequences, codeMaterials: _codeMaterials, colorLuts: _luts, styles: _styles, revision: _revision, ...settings } = document
+  // 渲染引擎版本由合成、指纹与编码相关源码在构建时散列得出（scripts/vite/renderEngineVersion.mjs），引擎实现一变旧窗口全部失效。
   // 速度曲线与补帧方式随片段进入窗口指纹；补帧实现换版本（如光流接入）时旧窗口失效。公共部分整份只散列一次。
-  const base = hash(JSON.stringify([VIDEO_EDIT_RENDER_CACHE_VERSION, VIDEO_EDIT_FRAME_INTERPOLATION_ENGINE, settings, context.style(document.styleId), dependencies.fontRevision, dependencies.analysis]))
+  const base = hash(JSON.stringify([VIDEO_EDIT_RENDER_ENGINE_VERSION, VIDEO_EDIT_FRAME_INTERPOLATION_ENGINE, settings, context.style(document.styleId), dependencies.fontRevision, dependencies.analysis]))
   // 隐藏的跟踪来源仍会改变跟随片段的位置；它只参与依赖，不制造可见剪辑点。
   const followSources = (clips: readonly VideoEditClip[]): VideoEditClip[] => {
     const result = [...clips]

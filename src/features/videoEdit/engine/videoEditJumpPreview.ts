@@ -1,4 +1,5 @@
 import type { VideoEditMedia } from '@/core/videoEdit/document'
+import { createLogger } from '@/core/logging'
 import type { VideoEditClipFrames, VideoEditDecodedPicture, VideoEditFrameBackend } from './videoEditFrameSource'
 import type { VideoEditGpuFrame } from './videoEditGpuFrame'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
@@ -22,6 +23,7 @@ export const VIDEO_EDIT_JUMP_PREVIEW_DIVISOR = 4
 const KEY_SECONDS = 1
 /** 读不到（预算不够、文件已被清理）后隔这么久再试。 */
 const RETRY_MS = 2000
+const logger = createLogger('features.videoEdit.jumpPreview')
 
 /** One pre-rendered file (`key`, its content fingerprint); a repeated section shows the same file at several `spans`. */
 interface Entry { key: string; media: VideoEditMedia; seconds: number; fps: number; spans: Array<{ startFrame: number; endFrame: number }>; pictures: Array<{ time: number; picture: VideoEditGpuFrame }>; next: number; done: boolean; active: boolean }
@@ -38,6 +40,10 @@ export class VideoEditJumpPreview {
   /** Draws still reading a picture on the GPU (`lease`); pictures dropped meanwhile close once none is left. */
   private leases = 0
   private readonly retired: VideoEditGpuFrame[] = []
+  /** 这一轮补帧：从第一步做事起，到再无可补或预算用满为止（中途被节目打断不算结束）；workMs 是各步本身的耗时。 */
+  private fillRun?: { startedAt: number; steps: number; workMs: number }
+  /** 本实例补满过一次没有：第一次即冷启动。 */
+  private filledOnce = false
 
   constructor(private readonly frames: VideoEditFrameBackend, private readonly snapshot: (picture: VideoEditDecodedPicture) => Promise<VideoEditGpuFrame>, private readonly budgetBytes = VIDEO_EDIT_JUMP_PREVIEW_BYTES) {}
 
@@ -96,9 +102,11 @@ export class VideoEditJumpPreview {
     const distance = (entry: Entry): number => Math.min(...entry.spans.map(span => around < span.startFrame ? span.startFrame - around : around >= span.endFrame ? around - span.endFrame + 1 : 0))
     const pending = [...this.entries.values()].filter(entry => entry.active && !entry.done).sort((a, b) => distance(a) - distance(b))
     const target = pending[0]
-    if (!target) { this.closeReader(); return false }
-    if (this.bytes >= this.budgetBytes && !this.evictFarther(distance, distance(target))) { this.closeReader(); return false }
+    if (!target) { this.closeReader(); this.finishFill('complete', around, distance); return false }
+    if (this.bytes >= this.budgetBytes && !this.evictFarther(distance, distance(target))) { this.closeReader(); this.finishFill('budget', around, distance); return false }
     const started = performance.now()
+    this.fillRun ??= { startedAt: started, steps: 0, workMs: 0 }
+    this.fillRun.steps++
     try {
       if (this.reader?.key !== target.key) {
         this.closeReader()
@@ -127,7 +135,28 @@ export class VideoEditJumpPreview {
       // 预算不够、文件已被清理或解码失败：这一轮不再补，稍后从这里重试（读不到的窗口跳过这一幅）。
       this.closeReader(); target.next++; this.blockedUntil = performance.now() + RETRY_MS
       return false
+    } finally {
+      if (this.fillRun) this.fillRun.workMs += performance.now() - started
     }
+  }
+
+  /**
+   * 补满一轮时记一条：冷启动要多久才补够，是决定要不要先补播放头附近的依据。
+   * coveredFrames：离播放头多少帧之内的窗口全部补好（全片补好时为最远一帧的距离）。
+   */
+  private finishFill(reason: 'complete' | 'budget', around: number, distance: (entry: Entry) => number): void {
+    const run = this.fillRun
+    if (!run) return
+    this.fillRun = undefined
+    const active = [...this.entries.values()].filter(entry => entry.active)
+    const unfilled = active.filter(entry => !entry.done || !entry.pictures.length).map(distance)
+    const farthest = Math.max(0, ...active.flatMap(entry => entry.spans.map(span => Math.max(Math.abs(span.startFrame - around), Math.abs(span.endFrame - 1 - around)))))
+    const coveredFrames = unfilled.length ? Math.max(0, Math.min(...unfilled) - 1) : farthest
+    logger.info('常驻关键帧已补满', { event: 'video_edit.jump_preview.filled', context: {
+      reason, cold: !this.filledOnce, elapsedMs: Math.round(performance.now() - run.startedAt), workMs: Math.round(run.workMs), steps: run.steps,
+      pictures: this.pictureCount, megabytes: Math.round(this.bytes / 1024 ** 2), windows: active.length, filledWindows: active.length - unfilled.length, aroundFrame: around, coveredFrames,
+    } })
+    this.filledOnce = true
   }
 
   /** 为更近的窗口腾出预算：丢掉比 `limit` 更远的窗口里最远的一个。 */

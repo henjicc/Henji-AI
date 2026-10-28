@@ -24,7 +24,7 @@ vi.mock('@/core/logging', () => ({ createLogger: () => {
 vi.mock('@/services/mediaCache/mediaCacheSettings', () => ({ getMediaCacheSettings: () => ({}), subscribeMediaCacheSettings: () => () => {} }))
 vi.mock('@/services/mediaCache/hardwareCapabilities', () => ({ resolveRenderCacheCodec: () => 'h264' }))
 vi.mock('@/core/videoEdit/renderBitrate', () => ({ videoEditRenderEncoding: () => ({ profile: 'test', codec: 'h264' }) }))
-vi.mock('@/core/videoEdit/renderCache', () => ({ VIDEO_EDIT_RENDER_CACHE_VERSION: 2, videoEditRenderWindowSet: (...args: unknown[]) => state.windowSet(...args) }))
+vi.mock('@/core/videoEdit/renderCache', () => ({ videoEditRenderWindowSet: (...args: unknown[]) => state.windowSet(...args) }))
 vi.mock('@/platform/fonts', () => ({ fontLibrarySnapshot: () => ({ revision: 0 }) }))
 vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ settings: { get: async () => undefined, set: async () => {} }, mediaCache: {
   renderList: async () => [], renderRemove: async () => 0, renderBegin: async () => 'temporary', renderCommit: state.commit, renderDiscard: state.discard,
@@ -209,6 +209,42 @@ it('自动预渲染：用户停播后 10 秒内不开始，以免刚开始就撞
   await vi.advanceTimersByTimeAsync(100)
   expect(state.commit).toHaveBeenCalledOnce()
   state.instances = []; await vi.advanceTimersByTimeAsync(1000)
+})
+it('自动预渲染每渲完一帧歇同样长的时间；歇着时跳转播放头立即让出', async () => {
+  useFakeClock()
+  vi.resetModules()
+  const fresh = await import('./videoEditRenderCache')
+  const owner = state.instances[0]
+  state.render.mockImplementation(() => new Promise<void>(resolve => setTimeout(resolve, 40)))
+  const pending = fresh.renderVideoEditRenderCache(owner.document.id, { scope: 'all', auto: true })
+  // 第一帧 0–40 毫秒，随后歇到 80 毫秒才开始第二帧。
+  await vi.advanceTimersByTimeAsync(70)
+  expect(state.render).toHaveBeenCalledTimes(1)
+  await vi.advanceTimersByTimeAsync(20)
+  expect(state.render).toHaveBeenCalledTimes(2)
+  // 第二帧 120 毫秒渲完，歇着的时候用户跳转。
+  await vi.advanceTimersByTimeAsync(40)
+  owner.frame = 90; publishView()
+  await vi.advanceTimersByTimeAsync(0)
+  expect(state.events).toContain('video_edit.render_cache.preempted')
+  expect(state.discard).toHaveBeenCalledOnce(); expect(state.dispose).toHaveBeenCalledOnce()
+  await vi.advanceTimersByTimeAsync(1000)
+  expect(state.render).toHaveBeenCalledTimes(2)
+  state.instances = []; await vi.advanceTimersByTimeAsync(200)
+  expect(await pending).toMatchObject({ cancelled: true, renderedWindows: 0 })
+})
+it('自动预渲染歇着时取消：任务结束，不再渲染下一帧', async () => {
+  useFakeClock()
+  vi.resetModules()
+  const fresh = await import('./videoEditRenderCache')
+  const owner = state.instances[0], controller = new AbortController()
+  state.render.mockImplementation(() => new Promise<void>(resolve => setTimeout(resolve, 40)))
+  const pending = fresh.renderVideoEditRenderCache(owner.document.id, { scope: 'all', auto: true }, controller.signal)
+  await vi.advanceTimersByTimeAsync(60)
+  controller.abort()
+  await vi.advanceTimersByTimeAsync(1000)
+  expect(await pending).toMatchObject({ cancelled: true, renderedWindows: 0 })
+  expect(state.render).toHaveBeenCalledTimes(1); expect(state.commit).not.toHaveBeenCalled(); expect(state.discard).toHaveBeenCalledOnce()
 })
 
 
