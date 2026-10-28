@@ -4,15 +4,15 @@ import type { VideoEditScene } from './sceneSchema'
 export const GOLDEN_SCENE_DECLARATION = {
   id: 'golden.film', version: 1, title: '黄金片子',
   kinds: {
-    segment: { title: '段落', at: 'start', end: 'end', influence: 'span', lane: { style: 'bar', label: 'name' }, fields: { name: { type: 'text', title: '名字', maxLength: 80 }, start: { type: 'time' }, end: { type: 'time' } } },
+    segment: { title: '段落', role: 'segment', at: 'start', end: 'end', influence: 'span', lane: { style: 'bar', label: 'name' }, fields: { name: { type: 'text', title: '名字', maxLength: 80 }, start: { type: 'time' }, end: { type: 'time' } } },
     window: { title: '窗口', footage: 'media', fields: { name: { type: 'text', maxLength: 80 }, rect: { type: 'deskRect' }, media: { type: 'media', accept: ['video'] } } },
-    shot: { title: '窗口内容', parent: ['window'], at: 'at', influence: 'untilNext', footage: 'media', lane: { style: 'block' }, fields: { at: { type: 'time' }, media: { type: 'media', accept: ['video'] }, src: { type: 'sourceTime' }, rate: { type: 'number', min: 0, max: 16, default: 1 } } },
+    shot: { title: '窗口内容', role: 'shot', parent: ['window'], at: 'at', influence: 'untilNext', footage: 'media', lane: { style: 'block' }, fields: { at: { type: 'time' }, media: { type: 'media', accept: ['video'] }, src: { type: 'sourceTime' }, rate: { type: 'number', min: 0, max: 16, default: 1 } } },
     focus: { title: '高亮', fields: { name: { type: 'text', maxLength: 80, optional: true } } },
     focusKey: {
       title: '镜头落点', parent: ['focus'], at: 'at', duration: 'dur', influence: 'neighbors', margin: { before: 0.3 }, footage: 'win', lane: { style: 'key' }, cues: { land: { at: 'at', title: '落定' } },
       fields: { at: { type: 'time', anchor: 'footage' }, dur: { type: 'duration', max: 10 }, win: { type: 'ref', to: ['window'] }, target: { type: 'windowRegion' }, pad: { type: 'number', min: 0, max: 1, default: 0.2 }, track: { type: 'uiTrack', optional: true } },
     },
-    cut: { title: '剪切', at: 'from', end: 'to', influence: 'span', lane: { style: 'cut' }, fields: { from: { type: 'time' }, to: { type: 'time' }, enabled: { type: 'boolean', default: true } } },
+    cut: { title: '剪切', role: 'cut', at: 'from', end: 'to', influence: 'span', lane: { style: 'cut' }, fields: { from: { type: 'time' }, to: { type: 'time' }, enabled: { type: 'boolean', default: true } } },
   },
 }
 

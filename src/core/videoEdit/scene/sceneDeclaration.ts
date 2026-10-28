@@ -14,10 +14,14 @@ export const CODE_SCENE_FIELD_TYPES = ['time', 'duration', 'sourceTime', 'media'
 export const CODE_SCENE_LANE_STYLES = ['bar', 'block', 'key', 'row', 'cut'] as const
 export const CODE_SCENE_INFLUENCES = ['span', 'untilNext', 'neighbors'] as const
 export const CODE_SCENE_MEDIA_KINDS = ['video', 'image', 'audio'] as const
+export const CODE_SCENE_ROLES = ['cut', 'segment', 'shot'] as const
+/** 窗口内容（role 'shot'）的约定字段与类型：倍速、叠化进来的时长、是否画录制鼠标。 */
+export const CODE_SCENE_SHOT_FIELDS = Object.freeze({ rate: 'number', xf: 'duration', cursor: 'boolean' } as const)
 export type CodeSceneFieldType = typeof CODE_SCENE_FIELD_TYPES[number]
 export type CodeSceneLaneStyle = typeof CODE_SCENE_LANE_STYLES[number]
 export type CodeSceneInfluence = typeof CODE_SCENE_INFLUENCES[number]
 export type CodeSceneMediaKind = typeof CODE_SCENE_MEDIA_KINDS[number]
+export type CodeSceneRole = typeof CODE_SCENE_ROLES[number]
 export type CodeSceneValue = null | boolean | number | string | CodeSceneValue[] | { [key: string]: CodeSceneValue }
 
 /**
@@ -56,6 +60,15 @@ export type CodeSceneListDeclaration = { type: 'list'; of: CodeSceneValueDeclara
 export type CodeSceneFieldDeclaration = (CodeSceneValueDeclaration | CodeSceneListDeclaration) & { title?: string; description?: string; optional: boolean; default?: CodeSceneValue }
 export interface CodeSceneKindDeclaration {
   title?: string
+  /**
+   * 软件在解析片子数据时给这类记录的特殊处理。role 是特殊语义的唯一来源：不写就没有任何特殊语义，lane、influence
+   * 等显示与时段声明不会被当成剪切、段落或窗口内容；未写 role 的旧声明（包括已发布黄金样本里的写法）按普通记录解析。
+   * - cut：剪切。at 到结束这一段从片段时间里剪掉，之后的记录前移；可选布尔字段 enabled 为 false 时不生效。
+   * - segment：段落。挂在它下面的记录随它一起被剪掉；{src} 锚定只在所在段落里找。须有起止。
+   * - shot：窗口内容。同一父记录下同类的几项组成一张取帧时间表，软件据此取帧、默认叠化。须是 untilNext、声明 footage、
+   *   恰好一个 sourceTime 字段（从素材第几秒放）；约定字段 rate（number）、xf（duration）、cursor（boolean）写了就要是这些类型。
+   */
+  role?: CodeSceneRole
   /** 允许的父记录类型：声明了就必须有父记录，没声明就不能有。 */
   parent?: string[]
   fields: Record<string, CodeSceneFieldDeclaration>
@@ -147,7 +160,7 @@ function parseField(raw: unknown, label: string, kinds: readonly string[], foota
 
 function parseKind(raw: unknown, label: string, kinds: readonly string[]): CodeSceneKindDeclaration {
   const item = declarationObject(raw, label)
-  declarationFields(item, ['title', 'parent', 'fields', 'at', 'end', 'duration', 'influence', 'margin', 'footage', 'lane', 'cues'], label)
+  declarationFields(item, ['title', 'role', 'parent', 'fields', 'at', 'end', 'duration', 'influence', 'margin', 'footage', 'lane', 'cues'], label)
   const entries = Object.entries(declarationObject(item.fields, `${label}.fields`))
   if (!entries.length || entries.length > CODE_SCENE_LIMITS.fields) declarationFail(`${label}.fields`, `1–${CODE_SCENE_LIMITS.fields} 个字段`)
   const fields: Record<string, CodeSceneFieldDeclaration> = {}
@@ -191,6 +204,17 @@ function parseKind(raw: unknown, label: string, kinds: readonly string[]): CodeS
       assertCodeMaterialKey(name)
       const cue = declarationObject(value, `${label}.cues.${name}`); declarationFields(cue, ['at', 'title'], `${label}.cues.${name}`)
       kind.cues[name] = { at: field(cue.at, `${label}.cues.${name}.at`, ['time'], false), ...(cue.title === undefined ? {} : { title: declarationText(cue.title, `${label}.cues.${name}.title`, 80) }) }
+    }
+  }
+  if (item.role !== undefined) {
+    kind.role = declarationEnum(item.role, CODE_SCENE_ROLES, `${label}.role`)
+    const require = (ok: boolean, expected: string): void => { if (!ok) declarationFail(`${label}.role`, `${kind.role} 记录类型${expected}`) }
+    if (kind.role !== 'shot') require(Boolean(kind.at && (kind.end || kind.duration)), '声明 at 与 end 或 duration（起止）')
+    if (kind.role === 'cut') require(!Object.hasOwn(fields, 'enabled') || fields.enabled.type === 'boolean', '的 enabled 字段是 boolean')
+    if (kind.role === 'shot') {
+      require(kind.influence === 'untilNext' && kind.footage !== undefined, '声明 influence: untilNext 与 footage')
+      require(Object.values(fields).filter(value => value.type === 'sourceTime').length === 1, '恰好有一个 sourceTime 字段')
+      for (const [name, type] of Object.entries(CODE_SCENE_SHOT_FIELDS)) require(!Object.hasOwn(fields, name) || fields[name].type === type, `的 ${name} 字段是 ${type}`)
     }
   }
   return kind

@@ -33,6 +33,18 @@ describe('片子数据', () => {
     expect(() => parseCodeSceneSchema({ ...GOLDEN_SCENE_DECLARATION, kinds: { ...GOLDEN_SCENE_DECLARATION.kinds, window } })).toThrow('focusKey.footage')
   })
 
+  it('role 的前提不满足就拒绝：段落与剪切要有起止，剪切的 enabled 是布尔，窗口内容要 untilNext、footage、唯一的源时间与约定字段类型', () => {
+    const kinds = GOLDEN_SCENE_DECLARATION.kinds
+    const broken = (name: keyof typeof kinds, patch: Record<string, unknown>) => () => parseCodeSceneSchema({ ...GOLDEN_SCENE_DECLARATION, kinds: { ...kinds, [name]: { ...kinds[name], ...patch } } })
+    expect(parseCodeSceneSchema(GOLDEN_SCENE_DECLARATION).kinds.shot.role).toBe('shot')
+    expect(broken('segment', { end: undefined, influence: undefined })).toThrow('segment.role')
+    expect(broken('cut', { fields: { ...kinds.cut.fields, enabled: { type: 'number', min: 0, max: 1, default: 1 } } })).toThrow('cut.role')
+    expect(broken('shot', { influence: undefined })).toThrow('shot.role')
+    expect(broken('shot', { fields: { ...kinds.shot.fields, from: { type: 'sourceTime' } } })).toThrow('shot.role')
+    expect(broken('shot', { fields: { ...kinds.shot.fields, rate: { type: 'text', maxLength: 8, default: '1' } } })).toThrow('shot.role')
+    expect(broken('focus', { role: 'window' })).toThrow('focus.role')
+  })
+
   it('剪辑文档：父记录悬空、代码参数引用不存在的片子数据都被拒', () => {
     expect(parseDocument(golden()).success).toBe(true)
     const dangling = golden()
