@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createVideoEditSequence } from '@/core/videoEdit/document'
-import type { ReloadResumeView } from '@/features/documents/rendererReloadResume'
+import type { ReloadResumeView } from '@/core/documents/reloadResumeViews'
 import { harnessDocumentStore, installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { closeAllVideoEdits, createVideoEditTestProject, reopenVideoEdit, replaceSavedVideoEdit, savedVideoEdit } from './videoEditDocumentTestKit'
 import { switchVideoEditSequence } from './videoEditService'
 
 const reload = vi.hoisted(() => ({ view: null as ReloadResumeView | null }))
-vi.mock('@/features/documents/rendererReloadResume', () => ({ registerReloadResumeView: (_kind: string, view: ReloadResumeView) => { reload.view = view; return () => {} } }))
+vi.mock('@/core/documents/reloadResumeViews', () => ({ registerReloadResumeView: (_kind: string, view: ReloadResumeView) => { reload.view = view; return () => {} } }))
 
 beforeEach(() => installHarnessNativeStorage())
 afterEach(async () => { await closeAllVideoEdits(); uninstallHarnessNativeStorage() })

@@ -40,7 +40,7 @@ import { VIDEO_EDIT_FOCUSABLE_PANELS, type VideoEditFocusablePanel } from '@/cor
 
 import { initializeVideoEditCodeSourceRuntime } from './videoEditCodeSourceRuntime'
 import { readDocumentSessionState, writeDocumentSessionState } from '@/commands/documents'
-import { registerReloadResumeView } from '@/features/documents/rendererReloadResume'
+import { registerReloadResumeView } from '@/core/documents/reloadResumeViews'
 
 const logger = createLogger('features.videoEdit')
 export interface VideoEditTimelineView {

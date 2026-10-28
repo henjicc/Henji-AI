@@ -1,6 +1,7 @@
 import { createLogger } from '@/core/logging'
 import { isSafeRendererRecovery } from '@/core/applicationLifecycle/rendererRecovery'
 import type { DocumentKindId } from '@/core/documents/types'
+import { listReloadResumeViews, reloadResumeView } from '@/core/documents/reloadResumeViews'
 import { isStartupWorkspaceId } from '@/core/types/workspace'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { currentDocumentContext } from './currentDocumentContext'
@@ -29,21 +30,6 @@ interface ReloadResumeState {
   views: Record<string, unknown>
 }
 
-/** 工具登记的文档内视图：重新加载前记下、文档重新打开后切回。 */
-export interface ReloadResumeView {
-  /** 此刻打开着的这类文档各自的视图，按文档 ID。 */
-  capture(): Record<string, unknown>
-  /** 文档重新打开后调用；记下的内容对不上当前文档（序列已删）时跳过对不上的部分。 */
-  restore(documentId: string, view: unknown): void
-}
-
-const viewHandlers = new Map<DocumentKindId, ReloadResumeView>()
-
-export function registerReloadResumeView(kind: DocumentKindId, handler: ReloadResumeView): () => void {
-  viewHandlers.set(kind, handler)
-  return () => { if (viewHandlers.get(kind) === handler) viewHandlers.delete(kind) }
-}
-
 function readSaved(): ReloadResumeState | null {
   try {
     const value = JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? 'null') as Partial<ReloadResumeState> | null
@@ -60,7 +46,7 @@ function capture(documents: Record<string, string>): ReloadResumeState {
   for (const [key, id] of Object.entries(documents)) if (!registry.get(id)) delete documents[key]
   const open = new Set(Object.values(documents))
   const views: Record<string, unknown> = {}
-  for (const handler of viewHandlers.values()) for (const [id, view] of Object.entries(handler.capture())) if (open.has(id)) views[id] = view
+  for (const handler of listReloadResumeViews()) for (const [id, view] of Object.entries(handler.capture())) if (open.has(id)) views[id] = view
   return { workspace, documents: { ...documents }, focusedDocumentId, views }
 }
 
@@ -128,7 +114,7 @@ async function resume(saved: ReloadResumeState): Promise<void> {
         // 打开方式自己会切到文档所在的工作区，此后的位置算恢复做的
         expected = position()
         const view = saved.views[documentId]
-        if (view !== undefined) viewHandlers.get(document.kind)?.restore(documentId, view)
+        if (view !== undefined) reloadResumeView(document.kind)?.restore(documentId, view)
         reopened++
       } catch (error) {
         if (error instanceof UserTookOver || error instanceof OpenerTimeout) throw error

@@ -32,7 +32,8 @@ it.each([
 ])('重新加载后回到原文档与剪辑视图；崩溃后的安全恢复（%s）什么都不恢复', async (search, resumes) => {
   window.history.replaceState(null, '', `/${search}`)
   // 安全恢复的结果按页面记一次，每个用例换一份新模块。
-  const { installRendererReloadResume, registerReloadResumeView } = await import('./rendererReloadResume')
+  const { installRendererReloadResume } = await import('./rendererReloadResume')
+  const { registerReloadResumeView } = await import('@/core/documents/reloadResumeViews')
   const restore = vi.fn()
   registerReloadResumeView('video_edit', { capture: () => ({}), restore })
   state.operations!.registerOpener('video_edit', () => {})
@@ -46,7 +47,8 @@ it.each([
 })
 
 it('打开方式晚于恢复时机登记也能回去；恢复做完之前不拿半途的状态覆盖记下的位置', async () => {
-  const { installRendererReloadResume, registerReloadResumeView } = await import('./rendererReloadResume')
+  const { installRendererReloadResume } = await import('./rendererReloadResume')
+  const { registerReloadResumeView } = await import('@/core/documents/reloadResumeViews')
   const restore = vi.fn()
   registerReloadResumeView('video_edit', { capture: () => ({ cut: { sequenceId: 'main', frame: 7 } }), restore })
   sessionStorage.setItem(KEY, JSON.stringify(saved))
