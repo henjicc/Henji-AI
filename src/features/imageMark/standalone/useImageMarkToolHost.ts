@@ -29,19 +29,19 @@ import {
   type ImageEditPersistenceV3Status,
 } from '@/features/imageEdit/v3/application/imageEditPersistenceQueue'
 import {
-  createImageMarkToolV3RequestId,
-  useImageMarkToolV3Actions,
-  type ImageMarkToolV3ActionsController,
-} from './useImageMarkToolV3Actions'
+  createImageMarkToolRequestId,
+  useImageMarkToolActions,
+  type ImageMarkToolActionsController,
+} from './useImageMarkToolActions'
 
 const logger = createLogger('features.imageMark.v3_host')
 
-export interface ImageMarkToolV3HostProps {
-  /** 正在编辑的图片文档（3.5）：编辑器从它的工作副本载入，保存与写回由文档会话负责。 */
+export interface ImageMarkToolHostProps {
+  /** 编辑器读取文档工作副本，保存与写回由文档会话统一负责。 */
   document: OpenImageDocument
   /** 文档名（文件名），导出图片时作建议文件名。 */
   sourceName: string
-  /** Present when the image came from a video-edit program frame. */
+  /** 保留剪辑回填目标，使保存后的图片能够送回来源位置。 */
   videoEditReturn?: string
   onBack?: () => void
   onOpenFile: () => void | Promise<void>
@@ -51,7 +51,7 @@ export interface ImageMarkToolV3HostProps {
   onSaveAs: () => Promise<void>
 }
 
-export type ImageMarkV3BootstrapState =
+export type ImageMarkBootstrapState =
   | { kind: 'loading' }
   | { kind: 'failed' }
   | {
@@ -62,10 +62,10 @@ export type ImageMarkV3BootstrapState =
       resourceDescriptors: ImageEditorV3ResourceDescriptor[]
     }
 
-export type { ImageMarkV3RasterExportUiState } from './useImageMarkToolV3Actions'
+export type { ImageMarkRasterExportUiState } from './useImageMarkToolActions'
 
-export interface ImageMarkToolV3HostController extends ImageMarkToolV3ActionsController {
-  bootstrap: ImageMarkV3BootstrapState
+export interface ImageMarkToolHostController extends ImageMarkToolActionsController {
+  bootstrap: ImageMarkBootstrapState
   /** 底层原图的受管媒体地址（单图层直显用）。 */
   sourceImageUrl: string
   persistenceHost: ImageEditPersistenceHostV3
@@ -77,14 +77,14 @@ export interface ImageMarkToolV3HostController extends ImageMarkToolV3ActionsCon
   handlePackageThumbnailChange: (thumbnail: ImageEditorV3PackageThumbnailSnapshot) => void
 }
 
-export function useImageMarkToolV3Host(
-  props: ImageMarkToolV3HostProps,
-): ImageMarkToolV3HostController {
+export function useImageMarkToolHost(
+  props: ImageMarkToolHostProps,
+): ImageMarkToolHostController {
   const { document: openDocument, sourceName } = props
   const { t } = useTranslation('ui')
   const { showNotification } = useNotification()
   const repository = useMemo(() => new ImageEditorV3CommandRepository(), [])
-  const [bootstrap, setBootstrap] = useState<ImageMarkV3BootstrapState>({ kind: 'loading' })
+  const [bootstrap, setBootstrap] = useState<ImageMarkBootstrapState>({ kind: 'loading' })
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0)
   const [persistenceStatus, setPersistenceStatus] = useState<ImageEditPersistenceV3Status | null>(null)
   const [sourceImageUrl, setSourceImageUrl] = useState(() => openDocument.working().sourceUrl ?? '')
@@ -143,7 +143,7 @@ export function useImageMarkToolV3Host(
           resourceDescriptors = current.resourceDescriptors
         } else {
           const snapshot = await loadImageEditorV3Document({
-            requestId: createImageMarkToolV3RequestId('document-load'),
+            requestId: createImageMarkToolRequestId('document-load'),
             documentRef: working.documentRef,
           }, controller.signal)
           if (!snapshot || snapshot.document.id !== documentId || snapshot.revision !== snapshot.document.revision) {
@@ -279,7 +279,7 @@ export function useImageMarkToolV3Host(
     packageThumbnailRef.current = thumbnail
   }, [])
 
-  const actions = useImageMarkToolV3Actions({
+  const actions = useImageMarkToolActions({
     document: bootstrap.kind === 'ready' ? bootstrap.document : null,
     sourceName,
     flushPending,

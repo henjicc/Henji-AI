@@ -16,7 +16,7 @@ import type {
   ImageEditorV3DocumentSnapshot,
   ImageEditorV3ManagedSource,
 } from '@/platform/contracts/imageEditorV3'
-import { ImageMarkToolV3Host } from './ImageMarkToolV3Host'
+import { ImageMarkToolHost } from './ImageMarkToolHost'
 
 const mocks = vi.hoisted(() => ({
   save: vi.fn(),
@@ -48,17 +48,17 @@ vi.mock('@/commands/imageEditorV3', () => ({
   readImageEditorV3BrushTiles: mocks.readBrushTiles,
 }))
 
-vi.mock('./imageMarkV3RasterExport', () => ({
-  exportImageMarkV3Raster: mocks.exportRaster,
-  imageMarkV3RasterExportExtension: (format: string) => format === 'jpeg' ? 'jpg' : 'png',
-  isImageMarkV3RasterExportAbort: (error: unknown) => (
+vi.mock('./imageMarkRasterExport', () => ({
+  exportImageMarkRaster: mocks.exportRaster,
+  imageMarkRasterExportExtension: (format: string) => format === 'jpeg' ? 'jpg' : 'png',
+  isImageMarkRasterExportAbort: (error: unknown) => (
     error instanceof Error && error.name === 'AbortError'
   ),
-  listImageMarkV3RasterExportFormats: mocks.listExportFormats,
-  resolveImageMarkV3RasterExportFailureReason: (error: unknown) => (
+  listImageMarkRasterExportFormats: mocks.listExportFormats,
+  resolveImageMarkRasterExportFailureReason: (error: unknown) => (
     error instanceof Error ? { reason: error.message } : {}
   ),
-  resolveImageMarkV3RasterExportReadiness: mocks.resolveExportReadiness,
+  resolveImageMarkRasterExportReadiness: mocks.resolveExportReadiness,
 }))
 
 class ResizeObserverStub {
@@ -144,7 +144,7 @@ function renderHost(options: {
   const host = (
     <NotificationProvider>
       <div style={{ width: 1_200, height: 800 }}>
-        <ImageMarkToolV3Host
+        <ImageMarkToolHost
           document={options.document ?? fakeOpenDocument()}
           sourceName="source.png"
           onOpenFile={() => undefined}
@@ -172,7 +172,7 @@ async function findLayerOpacity(
   return screen.findByRole('slider', { name: opacityLabel })
 }
 
-describe('ImageMarkToolV3Host', () => {
+describe('ImageMarkToolHost', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('zh-CN')
     vi.stubGlobal('ResizeObserver', ResizeObserverStub)

@@ -10,11 +10,11 @@ import { createLogger } from '@/core/logging'
 import { createImageDocument, type OpenImageDocument } from '@/features/imageEdit/documents/imageDocumentRuntime'
 import type { DocumentContainerRef } from '@/core/documents/types'
 
-import { createImageMarkV3ColorMode, prepareImageEditSourceLocatorV3 } from './imageMarkV3Source'
+import { createImageMarkColorMode, prepareImageEditSourceLocator } from './imageMarkSource'
 
 /*
- * 从一张图片新建图片文档（3.5）：打开图片 / 新建空白图片 / 粘贴 / 拖入 / 从其他工具传来。
- * 图片先导入程序目录的内容寻址资源库，按它建一份工作副本（V3 文档 ID 就是新文档的 ID），
+ * 所有图片来源共用文档创建流程，保证工作副本与草稿的身份一致。
+ * 图片先导入程序目录的内容寻址资源库，按它建一份工作副本（工作副本与文档共用 ID），
  * 再写出草稿 `.hjimg`。空白图片记下创建时的版本：之后没有任何编辑就算空草稿，离开时直接删除。
  */
 
@@ -23,7 +23,7 @@ const logger = createLogger('features.imageMark.document_source')
 export interface ImageDocumentSource {
   /** 本地路径、http(s) 或 data: 地址。 */
   url: string
-  /** 从其他工具传来时带着的标注（V3 图层文档）。 */
+  /** 携带图层文档，以保留来源工具的可编辑标注。 */
   document?: ImageEditDocumentV3
   /** 新建空白图片。 */
   blank?: boolean
@@ -46,14 +46,14 @@ export async function createImageDocumentFromSource(
   } else {
     const managed = await ingestImageEditorV3Source({
       requestId: createImageEditorV3RequestId('image-document-source'),
-      source: await prepareImageEditSourceLocatorV3(source.url),
+      source: await prepareImageEditSourceLocator(source.url),
     })
     document = createImageEditDocumentV3({
         width: managed.metadata.width,
         height: managed.metadata.height,
         sourceResourceId: managed.resource.resourceRef,
         documentId,
-        color: createImageMarkV3ColorMode(managed.metadata),
+        color: createImageMarkColorMode(managed.metadata),
       })
   }
   const history = new ImageEditCommandHistoryV3()

@@ -11,7 +11,7 @@ import {
   type ImageEditExportTargetViewV3,
 } from '@/core/imageEdit/v3'
 import { splitImageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
-import { createImageMarkV3RasterExportSpec } from '@/features/imageMark/standalone/imageMarkV3RasterExportSpec'
+import { createImageMarkRasterExportSpec } from '@/features/imageMark/standalone/imageMarkRasterExportSpec'
 import { getPlatform } from '@/platform/runtime'
 import { loadCanvasImageEditExportRenderer } from './loadCanvasImageEditExportRenderer'
 
@@ -102,8 +102,7 @@ function normalizeTargetError(error: unknown): never {
 }
 
 /**
- * 3.1 的唯一导出窄适配器。1.2 组装完整 documentPort 时必须复用这两个方法，
- * 禁止再从会话选中状态或 React DOM 构造另一条导出路径。
+ * 导出必须消费权威文档快照，不能从会话选中状态或 React DOM 重建内容。
  */
 export function createMultiLayerDocumentExportPort(
   dependencies: AdapterDependencies = {},
@@ -160,7 +159,7 @@ export function createMultiLayerDocumentExportPort(
         new Set(snapshot.resources.map((resource) => resource.resourceRef)),
       )
       const format = pngFormat(view.document.color.bitDepth)
-      const spec = createImageMarkV3RasterExportSpec(view.document, view.displayName, {
+      const spec = createImageMarkRasterExportSpec(view.document, view.displayName, {
         format,
         suggestedName: `${view.displayName}.png`,
       })

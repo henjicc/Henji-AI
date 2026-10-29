@@ -12,7 +12,7 @@ import {
   type LayerStackDocumentV1,
   type LayerStackMediaResourceV1,
 } from '../domain/layerStack'
-import { createImageMarkV3ColorMode } from '@/features/imageMark/standalone/imageMarkV3Source'
+import { createImageMarkColorMode } from '@/features/imageMark/standalone/imageMarkSource'
 
 export const CANVAS_EDIT_V3_LAYER_STACK_OPTION = 'layerStackDocumentV1'
 
@@ -97,21 +97,21 @@ export async function importLayerStackV1AsImageEditDocumentV3(
   let documentColor: ImageEditColorModeV3 | null = null
 
   for (const layer of ordered) {
-    const legacyResource = requireReadyResource(resources, layer.resourceId)
+    const sourceResource = requireReadyResource(resources, layer.resourceId)
     const managed = await ingest({
       requestId: `image-editor-v3:layer-stack:${options.documentId}:${layer.sourceOutputIndex}`,
-      source: { kind: 'local-path', filePath: legacyResource.filePath as string },
+      source: { kind: 'local-path', filePath: sourceResource.filePath as string },
     }, options.signal)
     if (
-      managed.metadata.width !== legacyResource.width
-      || managed.metadata.height !== legacyResource.height
+      managed.metadata.width !== sourceResource.width
+      || managed.metadata.height !== sourceResource.height
     ) {
       throw new LayerStackV1ImportError(`图层资源尺寸已变化：${layer.name}`)
     }
     if (layer.role === 'content' && !managed.metadata.hasAlpha) {
       throw new LayerStackV1ImportError(`内容图层已丢失透明通道：${layer.name}`)
     }
-    const color = createImageMarkV3ColorMode(managed.metadata)
+    const color = createImageMarkColorMode(managed.metadata)
     if (
       color.workingSpace !== 'srgb'
       || color.transferFunction !== 'srgb'

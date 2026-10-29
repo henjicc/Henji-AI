@@ -11,15 +11,15 @@ import { VideoEditSendMenu } from '@/features/videoEdit/panels/VideoEditSendMenu
 import { readVideoEditImageReturn } from '@/features/videoEdit/application/videoEditFrameEdit'
 import { videoEditDocumentRef } from '@/features/videoEdit/application/videoEditSourceRefs'
 import type {
-  ImageMarkToolV3HostController,
-  ImageMarkToolV3HostProps,
-} from './useImageMarkToolV3Host'
+  ImageMarkToolHostController,
+  ImageMarkToolHostProps,
+} from './useImageMarkToolHost'
 
-interface ImageMarkToolV3ToolbarActionsProps extends Pick<
-  ImageMarkToolV3HostProps,
+interface ImageMarkToolToolbarActionsProps extends Pick<
+  ImageMarkToolHostProps,
   'onOpenFile' | 'onPasteFromClipboard' | 'onCreateBlank' | 'onSave' | 'onSaveAs' | 'videoEditReturn'
 > {
-  host: ImageMarkToolV3HostController
+  host: ImageMarkToolHostController
 }
 
 function rasterExportFormatLabel(
@@ -39,7 +39,7 @@ function rasterExportFormatLabel(
   }
 }
 
-export function ImageMarkToolV3ToolbarActions({
+export function ImageMarkToolToolbarActions({
   host,
   onOpenFile,
   onPasteFromClipboard,
@@ -47,7 +47,7 @@ export function ImageMarkToolV3ToolbarActions({
   onSave,
   onSaveAs,
   videoEditReturn,
-}: ImageMarkToolV3ToolbarActionsProps): JSX.Element {
+}: ImageMarkToolToolbarActionsProps): JSX.Element {
   const { t } = useTranslation('ui')
   const { showNotification } = useNotification()
   const boundReturn = readVideoEditImageReturn(videoEditReturn)
@@ -105,8 +105,7 @@ export function ImageMarkToolV3ToolbarActions({
         notify={showNotification}
         boundTarget={boundReturn}
         resolveSource={async () => {
-          // The edit lands from the saved revision; later strokes need a new send.
-          // 来源 = 这份图片文档（4.1）：放进剪辑后保持链接，保存后剪辑自动重新渲染。
+          // 引用已保存的文档版本，剪辑才能读取一致的图片内容。
           const reference = await host.flushPending()
           return { type: 'document', docRef: await videoEditDocumentRef(reference.documentId), revision: reference.revision }
         }}

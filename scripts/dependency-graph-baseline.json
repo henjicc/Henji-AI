@@ -1215,9 +1215,9 @@
     },
     {
       "from": "src/features/canvas/imageEditV3/layerStackV1Adapter.ts",
-      "to": "src/features/imageMark/standalone/imageMarkV3Source.ts",
+      "to": "src/features/imageMark/standalone/imageMarkSource.ts",
       "kind": "static",
-      "specifier": "@/features/imageMark/standalone/imageMarkV3Source",
+      "specifier": "@/features/imageMark/standalone/imageMarkSource",
       "line": 15,
       "cell": "canvas → imageMark"
     },
@@ -1263,9 +1263,9 @@
     },
     {
       "from": "src/features/canvas/imageEditV3/multiLayerDocumentExportAdapter.ts",
-      "to": "src/features/imageMark/standalone/imageMarkV3RasterExportSpec.ts",
+      "to": "src/features/imageMark/standalone/imageMarkRasterExportSpec.ts",
       "kind": "static",
-      "specifier": "@/features/imageMark/standalone/imageMarkV3RasterExportSpec",
+      "specifier": "@/features/imageMark/standalone/imageMarkRasterExportSpec",
       "line": 14,
       "cell": "canvas → imageMark"
     },
@@ -1782,7 +1782,7 @@
       "cell": "imageMark → imageEdit"
     },
     {
-      "from": "src/features/imageMark/standalone/ImageMarkToolV3Host.tsx",
+      "from": "src/features/imageMark/standalone/ImageMarkToolHost.tsx",
       "to": "src/features/documents/embeddedDocuments.ts",
       "kind": "static",
       "specifier": "@/features/documents/embeddedDocuments",
@@ -1790,7 +1790,7 @@
       "cell": "imageMark → documents"
     },
     {
-      "from": "src/features/imageMark/standalone/ImageMarkToolV3Host.tsx",
+      "from": "src/features/imageMark/standalone/ImageMarkToolHost.tsx",
       "to": "src/features/imageEdit/v3/editor/index.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/editor",
@@ -1798,7 +1798,7 @@
       "cell": "imageMark → imageEdit"
     },
     {
-      "from": "src/features/imageMark/standalone/ImageMarkToolV3ToolbarActions.tsx",
+      "from": "src/features/imageMark/standalone/ImageMarkToolToolbarActions.tsx",
       "to": "src/features/imageEdit/v3/editor/readinessPresentationV3.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/editor/readinessPresentationV3",
@@ -1806,7 +1806,7 @@
       "cell": "imageMark → imageEdit"
     },
     {
-      "from": "src/features/imageMark/standalone/ImageMarkToolV3ToolbarActions.tsx",
+      "from": "src/features/imageMark/standalone/ImageMarkToolToolbarActions.tsx",
       "to": "src/features/videoEdit/application/videoEditFrameEdit.ts",
       "kind": "static",
       "specifier": "@/features/videoEdit/application/videoEditFrameEdit",
@@ -1814,7 +1814,7 @@
       "cell": "imageMark → videoEdit"
     },
     {
-      "from": "src/features/imageMark/standalone/ImageMarkToolV3ToolbarActions.tsx",
+      "from": "src/features/imageMark/standalone/ImageMarkToolToolbarActions.tsx",
       "to": "src/features/videoEdit/application/videoEditSourceRefs.ts",
       "kind": "static",
       "specifier": "@/features/videoEdit/application/videoEditSourceRefs",
@@ -1822,7 +1822,7 @@
       "cell": "imageMark → videoEdit"
     },
     {
-      "from": "src/features/imageMark/standalone/ImageMarkToolV3ToolbarActions.tsx",
+      "from": "src/features/imageMark/standalone/ImageMarkToolToolbarActions.tsx",
       "to": "src/features/videoEdit/panels/VideoEditSendMenu.tsx",
       "kind": "static",
       "specifier": "@/features/videoEdit/panels/VideoEditSendMenu",
@@ -1830,7 +1830,7 @@
       "cell": "imageMark → videoEdit"
     },
     {
-      "from": "src/features/imageMark/standalone/imageMarkV3RasterExport.ts",
+      "from": "src/features/imageMark/standalone/imageMarkRasterExport.ts",
       "to": "src/features/imageEdit/v3/export/index.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/export",
@@ -1838,7 +1838,7 @@
       "cell": "imageMark → imageEdit"
     },
     {
-      "from": "src/features/imageMark/standalone/imageMarkV3RasterExportSpec.ts",
+      "from": "src/features/imageMark/standalone/imageMarkRasterExportSpec.ts",
       "to": "src/features/imageEdit/v3/application/imageEditRasterExportSpecV3.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/application/imageEditRasterExportSpecV3",
@@ -1846,7 +1846,7 @@
       "cell": "imageMark → imageEdit"
     },
     {
-      "from": "src/features/imageMark/standalone/imageMarkV3Source.ts",
+      "from": "src/features/imageMark/standalone/imageMarkSource.ts",
       "to": "src/features/imageEdit/v3/application/imageEditSourceV3.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/application/imageEditSourceV3",
@@ -1854,7 +1854,7 @@
       "cell": "imageMark → imageEdit"
     },
     {
-      "from": "src/features/imageMark/standalone/useImageMarkToolV3Actions.ts",
+      "from": "src/features/imageMark/standalone/useImageMarkToolActions.ts",
       "to": "src/features/imageEdit/v3/application/imageEditorHostProfiles.ts",
       "kind": "type",
       "specifier": "@/features/imageEdit/v3/application/imageEditorHostProfiles",
@@ -1862,7 +1862,7 @@
       "cell": "imageMark → imageEdit"
     },
     {
-      "from": "src/features/imageMark/standalone/useImageMarkToolV3Actions.ts",
+      "from": "src/features/imageMark/standalone/useImageMarkToolActions.ts",
       "to": "src/features/imageEdit/v3/editor/readinessPresentationV3.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/editor/readinessPresentationV3",
@@ -1870,7 +1870,7 @@
       "cell": "imageMark → imageEdit"
     },
     {
-      "from": "src/features/imageMark/standalone/useImageMarkToolV3Host.ts",
+      "from": "src/features/imageMark/standalone/useImageMarkToolHost.ts",
       "to": "src/features/imageEdit/documents/imageDocumentRuntime.ts",
       "kind": "type",
       "specifier": "@/features/imageEdit/documents/imageDocumentRuntime",
@@ -1878,7 +1878,7 @@
       "cell": "imageMark → imageEdit"
     },
     {
-      "from": "src/features/imageMark/standalone/useImageMarkToolV3Host.ts",
+      "from": "src/features/imageMark/standalone/useImageMarkToolHost.ts",
       "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
@@ -1886,7 +1886,7 @@
       "cell": "imageMark → imageEdit"
     },
     {
-      "from": "src/features/imageMark/standalone/useImageMarkToolV3Host.ts",
+      "from": "src/features/imageMark/standalone/useImageMarkToolHost.ts",
       "to": "src/features/imageEdit/v3/application/imageEditorResourceDescriptorsV3.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/application/imageEditorResourceDescriptorsV3",
@@ -1894,7 +1894,7 @@
       "cell": "imageMark → imageEdit"
     },
     {
-      "from": "src/features/imageMark/standalone/useImageMarkToolV3Host.ts",
+      "from": "src/features/imageMark/standalone/useImageMarkToolHost.ts",
       "to": "src/features/imageEdit/v3/application/imageEditPersistenceOperations.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/application/imageEditPersistenceOperations",
@@ -1902,7 +1902,7 @@
       "cell": "imageMark → imageEdit"
     },
     {
-      "from": "src/features/imageMark/standalone/useImageMarkToolV3Host.ts",
+      "from": "src/features/imageMark/standalone/useImageMarkToolHost.ts",
       "to": "src/features/imageEdit/v3/application/imageEditPersistenceOwner.ts",
       "kind": "type",
       "specifier": "@/features/imageEdit/v3/application/imageEditPersistenceOwner",
@@ -1910,7 +1910,7 @@
       "cell": "imageMark → imageEdit"
     },
     {
-      "from": "src/features/imageMark/standalone/useImageMarkToolV3Host.ts",
+      "from": "src/features/imageMark/standalone/useImageMarkToolHost.ts",
       "to": "src/features/imageEdit/v3/application/imageEditPersistenceQueue.ts",
       "kind": "type",
       "specifier": "@/features/imageEdit/v3/application/imageEditPersistenceQueue",
@@ -1918,7 +1918,7 @@
       "cell": "imageMark → imageEdit"
     },
     {
-      "from": "src/features/imageMark/standalone/useImageMarkToolV3Host.ts",
+      "from": "src/features/imageMark/standalone/useImageMarkToolHost.ts",
       "to": "src/features/imageEdit/v3/editor/types.ts",
       "kind": "type",
       "specifier": "@/features/imageEdit/v3/editor/types",
@@ -2447,9 +2447,9 @@
     },
     {
       "from": "src/features/videoEdit/application/videoEditCreativeSources.ts",
-      "to": "src/features/imageMark/standalone/imageMarkV3RasterExportSpec.ts",
+      "to": "src/features/imageMark/standalone/imageMarkRasterExportSpec.ts",
       "kind": "static",
-      "specifier": "@/features/imageMark/standalone/imageMarkV3RasterExportSpec",
+      "specifier": "@/features/imageMark/standalone/imageMarkRasterExportSpec",
       "line": 14,
       "cell": "videoEdit → imageMark"
     },
@@ -3081,7 +3081,7 @@
       "changes": [
         "跨 feature 非 index 导入 canvas → imageEdit：23 > 基线 20；走公开 index 入口或提取纯契约。新增候选：src/features/canvas/imageEditV3/CanvasEditToolEditorV3Host.tsx:17 → src/features/imageEdit/v3/editor/index.ts (static)；src/features/canvas/imageEditV3/canvasEditV3Materialization.ts:3 → src/features/imageEdit/v3/export/index.ts (static)；src/features/canvas/imageEditV3/multiLayerDocumentExportAdapter.ts:14 → src/features/imageEdit/v3/export/index.ts (static)",
         "跨 feature 非 index 导入 canvas → navigation：2 > 基线 1；走公开 index 入口或提取纯契约。新增候选：src/features/canvas/application/multiLayerDocumentNodeEditorApplicationService.ts:3 → src/features/navigation/application/index.ts (static)",
-        "跨 feature 非 index 导入 imageMark → imageEdit：40 > 基线 38；走公开 index 入口或提取纯契约。新增候选：src/features/imageMark/standalone/ImageMarkToolV3Host.tsx:12 → src/features/imageEdit/v3/editor/index.ts (static)；src/features/imageMark/standalone/imageMarkV3RasterExport.ts:3 → src/features/imageEdit/v3/export/index.ts (static)",
+        "跨 feature 非 index 导入 imageMark → imageEdit：40 > 基线 38；走公开 index 入口或提取纯契约。新增候选：src/features/imageMark/standalone/ImageMarkToolHost.tsx:12 → src/features/imageEdit/v3/editor/index.ts (static)；src/features/imageMark/standalone/imageMarkRasterExport.ts:3 → src/features/imageEdit/v3/export/index.ts (static)",
         "跨 feature 非 index 导入 maskEditor → imageEdit：6 > 基线 5；走公开 index 入口或提取纯契约。新增候选：src/features/maskEditor/v3/MaskEditorV3Host.tsx:32 → src/features/imageEdit/v3/editor/index.ts (static)",
         "跨 feature 非 index 导入 videoEdit → imageEdit：6 > 基线 5；走公开 index 入口或提取纯契约。新增候选：src/features/videoEdit/application/videoEditCreativeSources.ts:15 → src/features/imageEdit/v3/export/index.ts (static)"
       ]

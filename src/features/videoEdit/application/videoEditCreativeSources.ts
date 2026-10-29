@@ -15,7 +15,7 @@ import { assetApplicationService } from '@/features/assets/application/assetAppl
 import { flushAudioEditProject, getAudioEditProjectInstance, loadAudioEditProject } from '@/features/audioEdit/application/audioEditProjectInstances'
 import { loadImageEditorV3Document, createImageEditorV3RequestId } from '@/commands/imageEditorV3'
 import { materializeImageEditorV3StandaloneRaster } from '@/commands/imageEditorV3Export'
-import { createImageMarkV3RasterExportSpec } from '@/features/imageMark/standalone/imageMarkV3RasterExportSpec'
+import { createImageMarkRasterExportSpec } from '@/features/imageMark/standalone/imageMarkRasterExportSpec'
 import { ensureImageDocumentOpenInBackground } from '@/features/imageEdit/documents/imageDocumentRuntime'
 import { getPlatform } from '@/platform/runtime'
 import { getDocumentOperations } from '@/features/documents/documentOperations'
@@ -26,7 +26,7 @@ import { sameVideoEditAssetContent } from './videoEditAssetReferences'
 import type { VideoEditCreativeResult } from './videoEditResultTarget'
 
 /*
- * 把其他工具的结果准备成剪辑可以引用的媒体（4.1 起来源统一为“文档 + 部位”与“生成记录 + 序号”两种）：
+ * 剪辑引用需要稳定定位来源，使用“文档 + 部位”或“生成记录 + 序号”：
  * - 生成记录：取第几个结果的本地文件。
  * - 文档：按跨文档引用找到文档（先位置后 ID），再按它的类型取成品——画布节点的正式完成结果、
  *   图片文档的受管渲染、口播导出的剪后声音与字幕。其他类型（镜头参考、剪辑）没有直接的成品，如实拒绝。
@@ -151,7 +151,7 @@ async function imageSource(meta: DocumentMeta, revision: number | undefined, opt
   const snapshot = await guarded(options, read)
   if (!snapshot || snapshot.documentRef !== documentRef || revision !== undefined && snapshot.revision !== revision || snapshot.document.id !== meta.id) conflict()
   const fingerprint = snapshot.sourceFingerprint
-  const spec = createImageMarkV3RasterExportSpec(snapshot.document, meta.name)
+  const spec = createImageMarkRasterExportSpec(snapshot.document, meta.name)
   if (!IMAGE_EDIT_VIDEO_FORMATS.has(spec.format)) throw new Error('此图片文档为高位深或 HDR，需要先在图片编辑中导出为 PNG 后再加入剪辑。')
   const { prepareImageEditorV3ExportRender, renderImageEditorV3ExportTilesWithGpu } = await guarded(options, async () => {
     try { return await import('@/features/imageEdit/v3/export') }
@@ -228,7 +228,7 @@ export async function prepareVideoEditCreativeResult(input: VideoEditCreativeSou
     mark('produced')
     const output = published
     await guarded(options, output.recheck)
-    // 复制进目标项目的“生成结果”后引用副本：项目文件夹拷走也带着结果（重要记录 006）
+    // 引用项目内的生成结果副本，保证移动项目文件夹时媒体仍然可用。
     const filePath = options.place ? await guarded(options, () => options.place!(output.path)) : output.path
     if (!sameVideoEditMediaPath(filePath, output.path)) mark('placed')
     const parent = await guarded(options, () => platform.system.paths.dirname(filePath))

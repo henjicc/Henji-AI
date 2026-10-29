@@ -36,9 +36,9 @@ import { createBlankImageDataUrl, type BlankImageSpec } from './blankImage';
 import { createImageDocumentFromSource, type ImageDocumentSource } from './imageDocumentFromSource';
 import { readDevelopmentLaunchOptions } from '@/core/development/developmentLaunch';
 
-const ImageMarkToolV3Host = lazy(async () => {
-  const module = await import('./ImageMarkToolV3Host');
-  return { default: module.ImageMarkToolV3Host };
+const ImageMarkToolHost = lazy(async () => {
+  const module = await import('./ImageMarkToolHost');
+  return { default: module.ImageMarkToolHost };
 });
 
 const logger = createLogger('features.imageMark');
@@ -75,12 +75,12 @@ function initialShown(): ShownDocument | null {
 }
 
 export interface ImageMarkToolProps {
-  /** 返回“工具”首页。本工具自带命令带,返回按钮由它自己渲染,外层不再画标题带。 */
+  /** 返回动作由图片工具的命令带承载，保持导航入口唯一。 */
   onBack?: () => void;
 }
 
 /**
- * 工具箱“图片编辑”（3.5 图片文档）：
+ * 图片文档统一交给文档会话管理，以保证保存与关闭使用相同的工作副本：
  * - 列表页：全部图片文档（含项目里的），新建来源“打开图片 / 新建空白图片 / 粘贴”，也可拖入图片；
  *   新建即草稿 `.hjimg`，图片作为文档内容。
  * - 编辑器：命令带左端返回列表（草稿离开三选一），右端“保存 / 另存为 / 导出”。
@@ -327,13 +327,13 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
         }}
       >
         <Suspense fallback={<UiLoading message={t('imageEditor.v3.host.loading')} className="h-full" />}>
-          <ImageMarkToolV3Host
+          <ImageMarkToolHost
             key={shown.document.id}
             document={shown.document}
             sourceName={shown.document.session.documentMeta.name}
             videoEditReturn={shown.returnTo}
             onBack={() => void exclusive('leaveFailed', async () => {
-              // 从剪辑里打开的图片文档（4.1 嵌入模式）离开后回到剪辑；其余回到列表
+              // 保留嵌入来源，使离开图片文档时能返回原剪辑
               await returnFromEmbedded(shown.document.id, async () => (await leaveShown() ? 'closed' : 'cancelled'));
             })}
             onOpenFile={handleOpenFile}

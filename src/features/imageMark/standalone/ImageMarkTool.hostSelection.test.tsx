@@ -65,8 +65,8 @@ vi.mock('@/features/documents/DocumentLibraryPage', () => ({
   ),
 }))
 
-vi.mock('./ImageMarkToolV3Host', () => ({
-  ImageMarkToolV3Host: ({ document, onBack, onSave }: { document: { id: string }; onBack: () => void; onSave: () => void }) => (
+vi.mock('./ImageMarkToolHost', () => ({
+  ImageMarkToolHost: ({ document, onBack, onSave }: { document: { id: string }; onBack: () => void; onSave: () => void }) => (
     <div data-testid="v3-image-editor" data-document-id={document.id}>
       <button type="button" onClick={onBack}>back</button>
       <button type="button" onClick={onSave}>save</button>

@@ -12,18 +12,18 @@ import {
 } from '@/components/ui'
 import { ImageEditorV3 } from '@/features/imageEdit/v3/editor'
 import { useEmbeddedHost } from '@/features/documents/embeddedDocuments'
-import { ImageMarkToolV3ToolbarActions } from './ImageMarkToolV3ToolbarActions'
+import { ImageMarkToolToolbarActions } from './ImageMarkToolToolbarActions'
 import {
-  useImageMarkToolV3Host,
-  type ImageMarkToolV3HostProps,
-} from './useImageMarkToolV3Host'
+  useImageMarkToolHost,
+  type ImageMarkToolHostProps,
+} from './useImageMarkToolHost'
 
-export type { ImageMarkToolV3HostProps } from './useImageMarkToolV3Host'
+export type { ImageMarkToolHostProps } from './useImageMarkToolHost'
 
-export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Element {
+export function ImageMarkToolHost(props: ImageMarkToolHostProps): JSX.Element {
   const { t } = useTranslation('ui')
-  const host = useImageMarkToolV3Host(props)
-  // 从剪辑里打开（4.1 嵌入模式）：命令带左端的返回换成“返回剪辑 · 项目名”
+  const host = useImageMarkToolHost(props)
+  // 嵌入文档的返回动作需要携带剪辑名称，避免混淆导航目标。
   const embeddedHost = useEmbeddedHost(props.document.id)
   const {
     onBack,
@@ -100,7 +100,7 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
       recoveryKey={props.document.id}
       toolbarLeading={backButton}
       toolbarActions={(
-        <ImageMarkToolV3ToolbarActions
+        <ImageMarkToolToolbarActions
           host={host}
           onOpenFile={onOpenFile}
           onPasteFromClipboard={onPasteFromClipboard}
