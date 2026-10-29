@@ -10,7 +10,7 @@ import type { RecordingVoice } from '@/core/screenRecording/director'
 import type { CapabilityExecutionContext } from '@/features/application-control'
 import { openVideoEditDocument, importVideoEditSources, requireVideoEditInstance, holdVideoEditActivity, saveVideoEdit, verifyVideoEditSaved, prepareVideoEditAudioGain, measureVideoEditClips, observeVideoEditFrame } from '@/features/videoEdit'
 import { readRecordingUnderstanding } from './recordingUnderstandingService'
-import { generateRecordingNarration, narrationIdentity } from './recordingNarration'
+import { generateRecordingNarration, narrationIdentity, recordingNarrationTaskId } from './recordingNarration'
 import { replaySession } from './recordingReplayService'
 
 const logger = createLogger('features.screenRecording.redub')
@@ -42,7 +42,7 @@ export async function redubRecordingSentence(sessionId: string, options: Recordi
     let revision = read.meta.revision
     const saveReceipt = async () => { const saved = await getPlatform().documents.saveDocument({ target: { id: sessionId }, expectedRevision: revision, content: read.content }); revision = saved.meta.revision; defaultDocumentOperationChanges.changed(); context.execution?.report({ targetMutation: 'applied' }) }
     const entry = take
-    const audio = take.path && take.durationUs ? { path: take.path, durationUs: take.durationUs } : await generateRecordingNarration(options.text, voice, options.documentId, context, { taskId: take.taskId, dispatched: async taskId => { entry.taskId = taskId; await saveReceipt() } })
+    const audio = take.path && take.durationUs ? { path: take.path, durationUs: take.durationUs } : await generateRecordingNarration(options.text, voice, options.documentId, context, { taskId: take.taskId, operationId: recordingNarrationTaskId([sessionId, options.documentId, options.clipId], options.text, voice), dispatched: async taskId => { entry.taskId = taskId; await saveReceipt() } })
     Object.assign(take, audio); await saveReceipt(); current()
     if (options.rerecord) {
       await replaySession(sessionId, { stepId: step!.id, destinationId: options.documentId, sourceId: z.string().parse(await getPlatform().screenRecording.capture({ operation: 'application-source', sessionId })) }, context)

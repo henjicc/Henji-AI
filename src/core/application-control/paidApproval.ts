@@ -28,6 +28,7 @@ export const paidApprovalRequestSchema = z.object({
   project: paidProjectSchema.optional(),
   estimatedCny: z.number().finite().nonnegative().nullable(),
   generationTaskIds: z.array(z.string().uuid()).nonempty().optional(),
+  generationTaskEstimates: z.array(z.object({ taskId: z.string().uuid(), estimatedCny: z.number().finite().nonnegative().nullable() }).strict()).nonempty().optional(),
 }).strict()
 export type PaidApprovalRequest = z.infer<typeof paidApprovalRequestSchema>
 /** Trusted UI operations; this map is internal and is not part of the public tool catalog. */
@@ -80,11 +81,17 @@ export const paidApprovalReceiptSchema = z.object({ decision: z.enum(['auto', 'u
 export type PaidApprovalReceipt = z.infer<typeof paidApprovalReceiptSchema>
 export const paidOperationReceiptSchema = z.object({ operationId: z.string().uuid(), callerId: z.string().uuid() }).strict()
 export type PaidOperationReceipt = z.infer<typeof paidOperationReceiptSchema>
-export const paidReservationSchema = paidApprovalRequestSchema.extend({
+// 逐任务估价只用于审批分配；落盘仍使用既有预留结构。
+export const paidReservationSchema = paidApprovalRequestSchema.omit({ generationTaskEstimates: true }).extend({
   generationRequest: z.object({ id: z.string().min(1), digest: z.string().min(1) }).strict().optional(),
   generationRequests: z.array(z.object({ id: z.string().min(1), digest: z.string().min(1) }).strict()).optional(),
   reservedAt: z.number(), approval: paidApprovalReceiptSchema,
 }).strict()
+export type PaidReservation = z.infer<typeof paidReservationSchema>
+export function generationReservationKey(reservation: PaidReservation): string | undefined {
+  return reservation.category === 'generation' && reservation.generationTaskIds?.length
+    ? JSON.stringify([...new Set(reservation.generationTaskIds)].sort()) : undefined
+}
 export interface PaidApprovalDisplay {
   estimatedCny: number | null
   dailySpentCny: number

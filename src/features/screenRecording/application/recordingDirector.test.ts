@@ -98,3 +98,65 @@ it('明确接受一次总费用后逐句生成；采集失败保留已完成配�
     expect(useAlertDialogStore.getState().queue).toHaveLength(0)
   } finally { app.dispose() }
 })
+
+it('部分旁白完成后恢复，未开始的句子复用整批预留，不重复占用每日额度', async () => {
+  const { id, app } = await prepared(), owner = await createVideoEditTestProject()
+  try {
+    const bridge = installPaidApprovalTestBridge()
+    vi.mocked(generateRecordingNarration)
+      .mockResolvedValueOnce({ path: '/fixture/first.wav', durationUs: 2e6 })
+      .mockRejectedValueOnce(new Error('第二句开始前中断'))
+      .mockResolvedValue({ path: '/fixture/second.wav', durationUs: 2e6 })
+    vi.spyOn(getPlatform().screenRecording, 'capture').mockRejectedValue(new Error('测试采集不可用'))
+    const run = () => startRecordingDirector(id, owner.document.id, { signal: new AbortController().signal })
+    await expect(run()).rejects.toThrow('第二句开始前中断')
+    expect(bridge.store.generationSpendSince(0)).toBe(.02)
+    await expect(run()).rejects.toThrow('测试采集不可用')
+    expect(generateRecordingNarration).toHaveBeenCalledTimes(3)
+    expect(bridge.store.generationSpendSince(0)).toBe(.02)
+  } finally { app.dispose() }
+})
+
+it('导演提交后保存任务关联失败，重新读取会话仍使用原提交身份', async () => {
+  const { id, app } = await prepared(), owner = await createVideoEditTestProject()
+  try {
+    const bridge = installPaidApprovalTestBridge(), submissions = new Set<string>()
+    vi.mocked(generateRecordingNarration).mockImplementation(async (_text, _voice, _id, _context, task) => {
+      const taskId = task!.operationId!
+      submissions.add(taskId)
+      await task!.dispatched(taskId)
+      return { taskId, path: `/fixture/${taskId}.wav`, durationUs: 2e6 }
+    })
+    const api = getPlatform().documents
+    const save = api.saveDocument.bind(api)
+    vi.spyOn(api, 'saveDocument').mockRejectedValueOnce(new Error('任务关联保存失败')).mockImplementation(save)
+    vi.spyOn(getPlatform().screenRecording, 'capture').mockRejectedValue(new Error('测试采集不可用'))
+    const run = () => startRecordingDirector(id, owner.document.id, { signal: new AbortController().signal })
+    await expect(run()).rejects.toThrow('任务关联保存失败')
+    expect((await readRecordingUnderstanding(id)).content.directorRun?.takes).toEqual([])
+    await expect(run()).rejects.toThrow('测试采集不可用')
+    expect(submissions.size).toBe(2)
+    expect(generateRecordingNarration).toHaveBeenCalledTimes(3)
+    expect(bridge.store.generationSpendSince(0)).toBe(.02)
+  } finally { app.dispose() }
+})
+
+it('恢复时混合已预留的句子与改写的新句，只为新句增加额度', async () => {
+  const { id, app } = await prepared(), owner = await createVideoEditTestProject()
+  try {
+    const bridge = installPaidApprovalTestBridge()
+    vi.mocked(generateRecordingNarration)
+      .mockResolvedValueOnce({ path: '/fixture/first.wav', durationUs: 2e6 })
+      .mockRejectedValueOnce(new Error('第二句开始前中断'))
+      .mockResolvedValue({ path: '/fixture/changed.wav', durationUs: 2e6 })
+    vi.spyOn(getPlatform().screenRecording, 'capture').mockRejectedValue(new Error('测试采集不可用'))
+    const run = () => startRecordingDirector(id, owner.document.id, { signal: new AbortController().signal })
+    await expect(run()).rejects.toThrow('第二句开始前中断')
+    const read = await readRecordingUnderstanding(id)
+    read.content.understanding.director!.narration[0].text = '更新后的第一句。'
+    await getPlatform().documents.saveDocument({ target: { id }, expectedRevision: read.meta.revision, content: read.content })
+    await expect(run()).rejects.toThrow('测试采集不可用')
+    expect(bridge.store.generationSpendSince(0)).toBeCloseTo(.03)
+    expect(generateRecordingNarration).toHaveBeenCalledTimes(4)
+  } finally { app.dispose() }
+})

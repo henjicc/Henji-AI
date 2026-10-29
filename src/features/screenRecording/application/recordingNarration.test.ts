@@ -13,6 +13,8 @@ import { generateRecordingNarration } from './recordingNarration'
 
 const ports = vi.hoisted(() => ({ applicationControl: { complete: vi.fn() }, audioEdit: { probeSource: vi.fn() } }))
 const generation = vi.hoisted(() => ({ prepare: vi.fn(), submit: vi.fn(), wait: vi.fn(), read: vi.fn() }))
+const history = vi.hoisted(() => new Map<string, { id: string }>())
+vi.mock('@/services/database', () => ({ databaseService: { getHistoryById: async (id: string) => history.get(id) ?? null } }))
 vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => true, getPlatform: () => ports }))
 vi.mock('@/features/documents/documentOperations', () => ({ getDocumentOperations: () => ({ findDocument: async () => ({ container: { kind: 'user' } }) }) }))
 vi.mock('@/contexts/NotificationContext', () => ({ notifyUser: vi.fn() }))
@@ -23,6 +25,7 @@ const voice = { modelId: 'narration-fixture', options: {} }
 let bridge: ReturnType<typeof installPaidApprovalTestBridge>
 beforeEach(() => {
   vi.clearAllMocks()
+  history.clear()
   bridge = installPaidApprovalTestBridge({ singleLimitCny: 0 })
   useAlertDialogStore.setState({ queue: [] })
   configureGenerationSubmissionConfirmation(requestAlertConfirmation)
@@ -33,6 +36,7 @@ beforeEach(() => {
   generation.prepare.mockReturnValue({ priceEstimate: { comparableCnyAmount: .5 } })
   generation.submit.mockImplementation(async (input: GenerationPreparationInput, operationId: string) => {
     await service.generate(input.modelId, { prompt: input.prompt, ...input.options }, undefined, { requestId: operationId })
+    history.set(operationId, { id: operationId })
     return { taskId: operationId }
   })
   vi.mocked(aiGenerate).mockImplementation(async request => {
@@ -42,6 +46,18 @@ beforeEach(() => {
   generation.wait.mockResolvedValue({ ok: true })
   generation.read.mockResolvedValue({ source: '/fixture/narration.wav' })
   ports.audioEdit.probeSource.mockResolvedValue({ durationFrames: 48000, sampleRate: 48000 })
+})
+
+it('任务关联保存失败后用同一操作身份恢复，只提交和记账一次', async () => {
+  bridge.setSettings({ unlimited: true })
+  const operationId = crypto.randomUUID()
+  const dispatched = vi.fn().mockRejectedValueOnce(new Error('任务关联保存失败')).mockResolvedValue(undefined)
+  const run = () => generateRecordingNarration('旁白', voice, 'recording', { signal: new AbortController().signal }, { operationId, dispatched })
+  await expect(run()).rejects.toThrow('任务关联保存失败')
+  await expect(run()).resolves.toMatchObject({ taskId: operationId })
+  expect(generation.submit).toHaveBeenCalledOnce()
+  expect(aiGenerate).toHaveBeenCalledOnce()
+  expect(bridge.store.generationSpendSince(0)).toBe(.5)
 })
 afterEach(() => { registry.unregister(voice.modelId); vi.restoreAllMocks(); useAlertDialogStore.setState({ queue: [] }) })
 
@@ -56,7 +72,7 @@ it('旁白把一次确认的收据交给 GenerationService，只记一次费用�
   expect(aiGenerate).toHaveBeenCalledOnce()
   expect(bridge.records.size).toBe(1)
   const record = [...bridge.records.values()][0]
-  expect(record).toMatchObject({ state: 'completed', paidReservations: [{ generationRequest: { id: result.taskId } }] })
+  expect(record).toMatchObject({ state: 'completed', paidReservations: [{ generationRequests: [{ id: result.taskId }] }] })
   expect(vi.mocked(aiGenerate).mock.calls[0][0].paidReceipt).toEqual({ operationId: record.operationId, callerId: record.callerId })
   expect(bridge.store.generationSpendSince(0)).toBe(.5)
   await generateRecordingNarration('旁白', voice, 'recording', { signal: new AbortController().signal }, { taskId: result.taskId, dispatched })

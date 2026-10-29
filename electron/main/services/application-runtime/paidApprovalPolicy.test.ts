@@ -23,7 +23,7 @@ it('确认恰好到期后拒绝 approve，不产生额度预留', () => {
   vi.useFakeTimers()
   preferences.value = JSON.stringify({ ...DEFAULT_PAID_APPROVAL_SETTINGS, singleLimitCny: 0 })
   let record: OperationRecord | undefined
-  const store = { get: () => record, save: (value: OperationRecord) => { record = value }, prepare: (value: OperationRecord) => (record = value), generationSpendSince: () => 0 }
+  const store = { get: () => record, save: (value: OperationRecord) => { record = value }, prepare: (value: OperationRecord) => (record = value), generationSpendSince: () => 0, generationTaskReservations: () => [] }
   const reply: LocalHostReply = { requestId: 'expired', rendererEpoch: 'renderer', result: {}, uiPaidApproval: { capabilityId: 'ui_generate_title', action: 'prepare', request: { category: 'title', estimatedCny: 1 } } }
   expect(handleUiPaidApproval(store, reply)).toMatchObject({ expiresAt: Date.now() + USER_CONFIRMATION_TIMEOUT_MS })
   vi.advanceTimersByTime(USER_CONFIRMATION_TIMEOUT_MS)
@@ -34,6 +34,7 @@ const project = { id: 'project', name: '测试项目' }
 it.each(['not_charged', 'submitted', 'completed', 'unknown', undefined] as const)('UI 失败 billing=%s 仅明确未计费时释放预留', billing => {
   let record: OperationRecord | undefined
   const store = { get: () => record, save: (value: OperationRecord) => { record = value }, prepare: (value: OperationRecord) => (record = value),
+    generationTaskReservations: () => [],
     generationSpendSince: () => record?.state === 'not_executed' ? 0 : (record?.paidReservations ?? []).reduce((sum, item) => sum + (item.estimatedCny ?? 0), 0) }
   const reply: LocalHostReply = { requestId: 'bill', rendererEpoch: 'renderer', result: {}, uiPaidApproval: { capabilityId: 'ui_generate_title', action: 'prepare', request: { category: 'title', estimatedCny: 1 } } }
   handleUiPaidApproval(store, reply)
@@ -60,8 +61,9 @@ it('同一操作账本同步预留，第二次请求不能穿透每日额度，�
   const records = new Map<string, OperationRecord>()
   const store = {
     get: (id: string) => records.get(id), save: (record: OperationRecord) => { records.set(record.operationId, record) },
+    generationTaskReservations: () => [],
     generationSpendSince: (since: number) => [...records.values()].filter(record => record.state !== 'not_executed').reduce((sum, record) => sum + (record.paidReservations ?? []).reduce((total, value) => total + (value.reservedAt >= since ? value.estimatedCny ?? 0 : 0), 0), 0),
-  } as Pick<ApplicationOperationStore, 'get' | 'save' | 'generationSpendSince'>
+  } as Pick<ApplicationOperationStore, 'get' | 'save' | 'generationSpendSince' | 'generationTaskReservations'>
   const record = (id: string): OperationRecord => ({ operationId: id, callerId: 'caller', capabilityId: 'transcribe_audio_edit', input: {}, inputDigest: id, state: 'executing' })
   preferences.value = JSON.stringify({ ...DEFAULT_PAID_APPROVAL_SETTINGS, dailyLimitCny: 2 })
   const first = record('first'), second = record('second'); store.save(first); store.save(second)
@@ -80,6 +82,7 @@ it('讲解授权绑定原请求：拒绝不记费，确认不能重放，执行�
   const store = {
     get: (id: string) => records.get(id), save: (record: OperationRecord) => { records.set(record.operationId, record) },
     prepare: (record: OperationRecord) => { records.set(record.operationId, record); return record },
+    generationTaskReservations: () => [],
     generationSpendSince: () => [...records.values()].filter(record => record.state !== 'not_executed').reduce((sum, record) => sum + (record.paidReservations ?? []).reduce((total, value) => total + (value.estimatedCny ?? 0), 0), 0),
   }
   const send = (id: string, action: NonNullable<LocalHostReply['uiPaidApproval']>['action'], amount = 1) => handleUiPaidApproval(store, {
@@ -105,7 +108,7 @@ it('讲解授权绑定原请求：拒绝不记费，确认不能重放，执行�
 
 it('generation and recognition share unknown/estimated decisions and disclose upper-bound approval', () => {
   let record: OperationRecord = { operationId: 'estimate', callerId: 'caller', capabilityId: 'create_visible_generation_task', input: {}, inputDigest: '', state: 'preparing' }
-  const store = { get: () => record, save: (value: OperationRecord) => { record = value }, generationSpendSince: () => 0 }
+  const store = { get: () => record, save: (value: OperationRecord) => { record = value }, generationSpendSince: () => 0, generationTaskReservations: () => [] }
   reserveGenerationBudget(store, record, { ok: true, data: { preparation: { priceEstimate: { comparableCnyAmount: null } } } })
   expect(approvePaidOperation(store, record, { category: 'generation', estimatedCny: record.paidGenerationEstimate! }).decision).toBe('ask')
   reserveGenerationBudget(store, record, { ok: true, data: { preparation: { priceEstimate: { comparableCnyAmount: .01, estimateKind: 'upper-bound' } } } })

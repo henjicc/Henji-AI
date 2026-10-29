@@ -14,7 +14,7 @@ import { reserveGenerationBudget } from './generationBudget'
 import { ApplicationToolDispatcher } from './applicationToolDispatcher'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import { applicationUserConfirmation } from '../../../../src/core/application-control/userConfirmation'
-import { handleUiPaidApproval } from './paidApprovalPolicy'
+import { assertGenerationPaidReceipt, handleUiPaidApproval } from './paidApprovalPolicy'
 
 // 普通 Node 不具备 Electron SQLite ABI；CI 的原生运行器仍要求全部用例执行、零跳过。
 if (!process.versions.electron) process.stderr.write('[operationStore] 跳过：需要 Electron SQLite 运行环境。请运行 npm run test:assistant-persistence -- electron/main/services/application-runtime/operationStore.test.ts\n')
@@ -36,6 +36,46 @@ function input(baselineId: string): Record<string, unknown> {
 }
 
 describe.skipIf(!process.versions.electron)('应用原生操作记录与恢复', () => {
+  it('整批预留后部分完成，换宿主与跨日恢复剩余任务只复用一次额度', () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date(2026, 9, 29, 12))
+      const f = fixture(), tasks = [randomUUID(), randomUUID()]
+      const send = (id: string, taskIds: string[], amount: number, action: 'prepare' | 'start' | 'failed' | 'complete', epoch = f.rendererEpoch) => handleUiPaidApproval(f.store, {
+        requestId: id, rendererEpoch: epoch, result: {}, uiPaidApproval: { action, capabilityId: 'ui_generate_text', request: { category: 'generation', estimatedCny: amount, generationTaskIds: taskIds, generationTaskEstimates: taskIds.map(taskId => ({ taskId, estimatedCny: amount / taskIds.length })) } },
+      })
+      send('first', tasks, .02, 'prepare'); send('first', tasks, .02, 'start')
+      const request = { requestId: tasks[0], modelId: 'tts', params: { prompt: '第一句' } }
+      assertGenerationPaidReceipt(f.store, { operationId: 'first', callerId: f.rendererEpoch }, request)
+      send('first', tasks, .02, 'failed')
+      const epoch = randomUUID()
+      expect(send('resume', [tasks[1]], .01, 'prepare', epoch)).toMatchObject({ decision: 'auto', estimatedCny: 0 })
+      send('resume', [tasks[1]], .01, 'start', epoch)
+      assertGenerationPaidReceipt(f.store, { operationId: 'resume', callerId: epoch }, { ...request, requestId: tasks[1], params: { prompt: '第二句' } })
+      send('resume', [tasks[1]], .01, 'complete', epoch)
+      expect(f.store.generationSpendSince(0)).toBe(.02)
+      vi.setSystemTime(new Date(2026, 9, 30, 12))
+      f.store.recoverInterrupted()
+      expect(f.store.get('first', f.rendererEpoch)).toBeDefined()
+      expect(send('next-day', tasks, .02, 'prepare', epoch)).toMatchObject({ estimatedCny: 0 })
+      expect(f.store.generationSpendSince(0)).toBe(.02)
+      expect(f.store.generationSpendSince(new Date(2026, 9, 30).getTime())).toBe(0)
+    } finally { vi.useRealTimers() }
+  })
+  it('复用准备中的任务后原操作撤回，恢复收据仍持有实际预留且不会漏账', () => {
+    const f = fixture(), taskId = randomUUID()
+    const request = { category: 'generation' as const, estimatedCny: .5, generationTaskIds: [taskId] }
+    const send = (id: string, action: 'prepare' | 'reject' | 'start') => handleUiPaidApproval(f.store, {
+      requestId: id, rendererEpoch: f.rendererEpoch, result: {}, uiPaidApproval: { action, capabilityId: 'ui_generate_text', request },
+    })
+    send('original', 'prepare')
+    expect(send('recovery', 'prepare')).toMatchObject({ estimatedCny: 0 })
+    expect(f.store.generationSpendSince(0)).toBe(.5)
+    send('original', 'reject'); send('recovery', 'start')
+    assertGenerationPaidReceipt(f.store, { operationId: 'recovery', callerId: f.rendererEpoch }, { requestId: taskId, modelId: 'tts', params: { prompt: '旁白' } })
+    expect(f.store.generationSpendSince(0)).toBe(.5)
+    expect(f.store.get('recovery', f.rendererEpoch)?.paidReservations).toMatchObject([{ estimatedCny: .5 }])
+  })
   it('正式费用失败回执在原生账本释放明确未计费额度，重启后未知费用仍保留', () => {
     const f = fixture(), now = Date.now()
     const request = { category: 'generation' as const, estimatedCny: 1 }

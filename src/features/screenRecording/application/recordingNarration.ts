@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { getPlatform } from '@/platform'
 import { createLogger } from '@/core/logging'
+import { applicationGenerationTaskId } from '@/core/application-control/operationIdentity'
+import { databaseService } from '@/services/database'
 import type { RecordingVoice } from '@/core/screenRecording/director'
 import { withPaidOperation } from '@/services/paidApproval'
 import { generationApplicationService, readGenerationResultMedia, waitForGenerationCompletion } from '@/features/generation'
@@ -18,6 +20,9 @@ export function installRecordingNarrationFixture(value: Fixture): void {
   fixture = value
 }
 export function narrationIdentity(text: string, voice: RecordingVoice): string { return JSON.stringify([text, voice.modelId, Object.entries(voice.options).sort(([a], [b]) => a.localeCompare(b))]) }
+export function recordingNarrationTaskId(scope: readonly string[], text: string, voice: RecordingVoice): string {
+  return applicationGenerationTaskId(JSON.stringify(['recording-narration', scope, narrationIdentity(text, voice)]))
+}
 export function recordingNarrationCost(text: string, voice: RecordingVoice): number | null {
   if (fixture) return 0
   assertSpeechModel(voice)
@@ -31,18 +36,24 @@ function assertSpeechModel(voice: RecordingVoice): void {
 export async function generateRecordingNarration(text: string, voice: RecordingVoice, documentId: string, context: CapabilityExecutionContext, task?: { taskId?: string; operationId?: string; dispatched(id: string): Promise<void> }): Promise<RecordingNarrationResult> {
   const signal = context.signal
   signal.throwIfAborted()
-  logger.info('准备录制旁白', { event: 'recording.narration.start', context: { documentId, modelId: voice.modelId, requestId: context.requestId } })
+  const operationId = task?.operationId ?? task?.taskId ?? crypto.randomUUID()
+  let taskId = task?.taskId
+  logger.info('准备录制旁白', { event: 'recording.narration.start', context: { documentId, modelId: voice.modelId, requestId: operationId } })
   try {
     if (fixture) return await fixture(text, signal)
     assertSpeechModel(voice)
     const input = { modelId: voice.modelId, prompt: text, mediaType: 'audio' as const, options: voice.options }
-    let taskId = task?.taskId
+    // 任务历史先于供应商提交落盘；文档关联保存失败时仍可按确定身份找回。
+    if (!taskId && await databaseService.getHistoryById(operationId)) {
+      taskId = operationId
+      await task?.dispatched(taskId)
+      logger.info('复用原旁白任务', { event: 'recording.narration.recovered', context: { documentId, taskId, requestId: operationId } })
+    }
     if (!taskId) {
       const prepared = generationApplicationService.prepare(input)
       const price = z.object({ comparableCnyAmount: z.number().nonnegative().nullable() }).parse(prepared.priceEstimate)
-      await withPaidOperation({ category: 'generation', documentId, estimatedCny: price.comparableCnyAmount }, async approvedSignal => {
+      await withPaidOperation({ category: 'generation', documentId, estimatedCny: price.comparableCnyAmount, generationTaskIds: [operationId] }, async approvedSignal => {
         approvedSignal.throwIfAborted()
-        const operationId = task?.operationId ?? crypto.randomUUID()
         const releaseApproval = transferGenerationPaidApproval(operationId, approvedSignal)
         let submitted = false
         try {
@@ -69,7 +80,7 @@ export async function generateRecordingNarration(text: string, voice: RecordingV
     const source = await getPlatform().audioEdit.probeSource(result.source, crypto.randomUUID())
     const durationUs = Math.round(source.durationFrames / source.sampleRate * 1e6)
     if (!Number.isSafeInteger(durationUs) || durationUs <= 0) throw new Error('配音没有有效时长。')
-    logger.info('录制旁白已生成', { event: 'recording.narration.completed', context: { documentId, taskId, durationUs } })
+    logger.info('录制旁白已生成', { event: 'recording.narration.completed', context: { documentId, requestId: operationId, taskId, durationUs } })
     return { path: result.source, durationUs, taskId }
-  } catch (error) { logger.error('录制旁白未完成', error, { event: signal.aborted ? 'recording.narration.cancelled' : 'recording.narration.failed', context: { documentId, taskId: task?.taskId } }); throw error }
+  } catch (error) { logger.error('录制旁白未完成', error, { event: signal.aborted ? 'recording.narration.cancelled' : 'recording.narration.failed', context: { documentId, requestId: operationId, taskId } }); throw error }
 }

@@ -79,6 +79,7 @@ export interface PaidOperationOptions {
   documentId?: string | ApplicationRef
   estimatedCny?: number | null
   generationTaskIds?: string[]
+  generationTaskEstimates?: PaidApprovalRequest['generationTaskEstimates']
   titleKey?: string
   messageKey?: string
   capabilityId?: NonNullable<LocalHostReply['uiPaidApproval']>['capabilityId']
@@ -118,6 +119,7 @@ export async function withPaidOperation<T>(options: PaidOperationOptions, work: 
   if (signal && hasApplicationPaidApproval(signal, options.category)) return work(signal)
   const request = await applicationPaidRequest(options.category, options.documentId, signal, options.estimatedCny ?? null)
   if (options.generationTaskIds) request.generationTaskIds = options.generationTaskIds
+  if (options.generationTaskEstimates) request.generationTaskEstimates = options.generationTaskEstimates
   const { requestAlertConfirmation } = await import('@/stores/alertDialogStore')
   const title = i18n.t(options.titleKey ?? `paidApproval.categories.${options.category}`, { ns: 'common' })
   const message = i18n.t(options.messageKey ?? 'paidApproval.operationContent', { ns: 'common' })

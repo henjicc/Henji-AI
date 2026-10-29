@@ -14,7 +14,7 @@ import { replaySession } from './recordingReplayService'
 import { waitRecordingStep } from './recordingWait'
 import { startRecording, controlRecording, recordingView, readRecordingDocument } from './recordingService'
 import { pointDirectorCursor, clearDirectorCursor } from './recordingDirectorCursor'
-import { generateRecordingNarration, narrationIdentity, recordingNarrationCost } from './recordingNarration'
+import { generateRecordingNarration, narrationIdentity, recordingNarrationCost, recordingNarrationTaskId } from './recordingNarration'
 import { withPaidOperation } from '@/services/paidApproval'
 import { inheritApplicationConfirmation } from '@/core/application-control/userConfirmation'
 import { generateRecordingMovie } from './recordingMovieService'
@@ -85,7 +85,7 @@ export async function startRecordingDirector(id: string, documentId: string, con
     const director = content.understanding.director!
     const run = content.directorRun ??= { takes: [] }
     const pending = director.narration.filter(narration => !run.takes.some(take => take.stepId === narration.stepId && take.identity === narrationIdentity(narration.text, director.voice) && (take.taskId || take.path && take.durationUs)))
-    const generationTasks = new Map(pending.map(narration => [narration.stepId, crypto.randomUUID()]))
+    const generationTasks = new Map(pending.map(narration => [narration.stepId, recordingNarrationTaskId([id, narration.stepId], narration.text, director.voice)]))
     const costs = pending.map(narration => recordingNarrationCost(narration.text, director.voice))
     const estimatedCny = costs.some(v => v === null) ? null : costs.reduce<number>((total, cost) => total + (cost ?? 0), 0)
     const synthesize = async (paidSignal: AbortSignal) => {
@@ -100,7 +100,7 @@ export async function startRecordingDirector(id: string, documentId: string, con
         Object.assign(entry, result); await save()
       }
     }
-    if (pending.length) await withPaidOperation({ category: 'generation', documentId: id, estimatedCny, generationTaskIds: [...generationTasks.values()] }, synthesize, signal)
+    if (pending.length) await withPaidOperation({ category: 'generation', documentId: id, estimatedCny, generationTaskIds: [...generationTasks.values()], generationTaskEstimates: pending.map((narration, index) => ({ taskId: generationTasks.get(narration.stepId)!, estimatedCny: costs[index] })) }, synthesize, signal)
     else await synthesize(signal)
     await current()
     let recordingId = run.recordingId

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 export { operationDigest } from '../application-control/operationDigest'
 import type Database from 'better-sqlite3'
-import { UI_PAID_CAPABILITIES } from '../../../../src/core/application-control/paidApproval'
+import { UI_PAID_CAPABILITIES, generationReservationKey, type PaidReservation } from '../../../../src/core/application-control/paidApproval'
 
 // UI 费用收据没有业务目标或派发身份；未知账单不能进入助手的修改核对流程。
 const uiPaidCapabilities = Object.keys(UI_PAID_CAPABILITIES)
@@ -121,6 +121,7 @@ export class ApplicationOperationStore {
     if (this.prunedPaidDay === since) return
     this.db.prepare(`DELETE FROM application_invocations WHERE state IN ('completed','not_executed','unknown')
       AND updated_at < ? AND (${uiPaidReceiptSql})
+      AND NOT EXISTS (SELECT 1 FROM json_each(record_json, '$.paidReservations') WHERE json_array_length(json_extract(value, '$.generationTaskIds')) > 0)
       AND NOT EXISTS (SELECT 1 FROM json_each(record_json, '$.paidReservations') WHERE json_extract(value, '$.reservedAt') >= ?)`)
       .run(since, ...uiPaidCapabilities, since)
     this.prunedPaidDay = since
@@ -128,10 +129,29 @@ export class ApplicationOperationStore {
   /** 持久预算按所有 Agent 共用的自然日范围统计，换会话或重启不会重置。 */
   generationSpendSince(since: number): number {
     const rows = this.db.prepare("SELECT record_json FROM application_invocations WHERE state != 'not_executed' AND updated_at >= ?").all(since) as Array<{ record_json: string }>
+    const seen = new Set<string>()
     return rows.reduce((sum, row) => {
       const record = JSON.parse(row.record_json) as OperationRecord
-      return sum + (record.paidReservations ?? []).reduce((total, value) => total + (value.reservedAt >= since ? value.estimatedCny ?? 0 : 0), 0)
+      return sum + (record.paidReservations ?? []).reduce((total, value) => {
+        if (value.reservedAt < since) return total
+        const key = generationReservationKey(value)
+        if (key && seen.has(key)) return total
+        if (key) seen.add(key)
+        return total + (value.estimatedCny ?? 0)
+      }, 0)
     }, 0)
+  }
+  /** 任务预留跨自然日保留；失败或断线不能让同一批生成再次占用额度。 */
+  generationTaskReservations(): PaidReservation[] {
+    const rows = this.db.prepare("SELECT record_json FROM application_invocations WHERE state != 'not_executed'").iterate() as Iterable<{ record_json: string }>
+    const reservations: PaidReservation[] = []
+    for (const row of rows) {
+      const record = JSON.parse(row.record_json) as OperationRecord
+      for (const reservation of record.paidReservations ?? []) {
+        if (generationReservationKey(reservation)) reservations.push(reservation)
+      }
+    }
+    return reservations
   }
   prepare(record: OperationRecord): OperationRecord {
     this.pruneUiPaidReceipts()
