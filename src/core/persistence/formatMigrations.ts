@@ -36,7 +36,8 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   // 8 → 9：源码版本新增可选内置库 libraries 并接受作者接口 v5；资产不携带片子数据，不能引用它。旧资产原样有效，最低可读版本仍为 7。
   // 9 → 10：资产可携带作者接口 v6；只升容器版本，保留 sourceVersion。
   // 10 → 11：源码长度不设产品上限，保留所有源码与最低可读版本。
-  'code-asset': { 10: value => ({ ...value as object, version: 11 }), 6: value => ({ ...structuredClone(value) as object, version: 7, minReaderVersion: 7 }), 7: value => ({ ...structuredClone(value) as object, version: 8, minReaderVersion: 7 }), 8: value => ({ ...structuredClone(value) as object, version: 9, minReaderVersion: 7 }), 9: value => ({ ...structuredClone(value) as object, version: 10, minReaderVersion: 10 }) },
+  // 11 → 12：代码图片参数新增网页画面引用 {kind:'web'}，旧资产原样有效，最低可读版本不变。
+  'code-asset': { 11: value => ({ ...value as object, version: 12 }), 10: value => ({ ...value as object, version: 11 }), 6: value => ({ ...structuredClone(value) as object, version: 7, minReaderVersion: 7 }), 7: value => ({ ...structuredClone(value) as object, version: 8, minReaderVersion: 7 }), 8: value => ({ ...structuredClone(value) as object, version: 9, minReaderVersion: 7 }), 9: value => ({ ...structuredClone(value) as object, version: 10, minReaderVersion: 10 }) },
   // 2 → 3：新增可选外来来源，历史工程保持本机身份。
   project: { 1: value => ({ ...value as object, version: 2, minReaderVersion: 1 }), 2: value => ({ ...value as object, version: 3 }) },
   // 2 → 3：样片画布放宽到 3840×2160、60 帧，旧内容原样有效。
@@ -49,16 +50,19 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   // 旧内容原样有效；旧程序会把停用的模板片段当成启用，最低可读版本提高到 3。
   // 3 → 4：新增可选 foreign，已有 imported 不转成外来代码标记。
   // 4 → 5：模板中的源码与组件依赖取消容量和深度上限。
-  'video-template-library': { 4: value => structuredClone(value), 1: value => value, 2: value => value, 3: value => structuredClone(value) },
+  // 5 → 6：模板里的代码图片参数新增网页画面引用 {kind:'web'}，旧内容原样有效。
+  'video-template-library': { 5: value => structuredClone(value), 4: value => structuredClone(value), 1: value => value, 2: value => value, 3: value => structuredClone(value) },
   // 6 → 7：本机标题模板里的代码视频参数新增可选取帧时间表 spans，旧内容原样有效。
   // 7 → 8：代码参数值新增片子数据引用 {kind:'scene'}（标题模板不携带片子数据，实际不会出现），旧内容原样有效。
-  'title-templates': { 6: value => value, 7: value => value },
+  // 8 → 9：代码图片参数新增网页画面引用 {kind:'web'}，旧内容原样有效。
+  'title-templates': { 6: value => value, 7: value => value, 8: value => value },
   // 4 → 5：成员模板里的代码视频参数新增可选取帧时间表 spans，旧内容原样有效。
   // 5 → 6：成员原生模板的片段新增可选 enabled:false；代码参数值新增片子数据引用 {kind:'scene'}（风格包不携带片子数据，实际不会出现）。
   // 旧内容原样有效；旧程序会把停用的模板片段当成启用，最低可读版本提高到 6。
   // 6 → 7：嵌套风格和模板新增可选来源；导入宿主负责生成标记，包内标记不表示批准。
   // 7 → 8：分享包中的源码与组件依赖取消容量和深度上限。
-  'video-style-package': { 7: value => structuredClone(value), 1: value => value, 2: value => value, 3: value => value, 4: value => value, 5: value => value, 6: value => structuredClone(value) },
+  // 8 → 9：成员模板里的代码图片参数新增网页画面引用 {kind:'web'}，旧内容原样有效。
+  'video-style-package': { 8: value => structuredClone(value), 7: value => structuredClone(value), 1: value => value, 2: value => value, 3: value => value, 4: value => value, 5: value => value, 6: value => structuredClone(value) },
   'recording-setup': { 1: value => value, 2: value => { const { microphoneId: _legacyDevice, ...rest } = value as Record<string, unknown>; return rest }, 3: value => value, 4: value => value },
   'screen-capture': { 1: value => ({ ...value as object, version: 2, minReaderVersion: 1 }) },
   'audio-capture-recovery': { 1: value => ({ ...value as object, version: 2 }) },
@@ -71,7 +75,8 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   // 6 → 7：代码视频参数新增可选取帧时间表 spans，旧内容原样有效。
   // 7 → 8：代码参数值新增片子数据引用 {kind:'scene'}（预设不携带片子数据，实际不会出现），旧内容原样有效。
   // 8 → 9：嵌入的源码不设长度上限。
-  'video-preset-package': { 8: value => ({ ...value as object, version: 9 }), 5: value => ({ ...migrateEmbeddedVideoColorGradesV1(value) as object, version: 6 }), 6: value => ({ ...value as object, version: 7 }), 7: value => ({ ...value as object, version: 8 }) },
+  // 9 → 10：代码图片参数新增网页画面引用 {kind:'web'}，旧内容原样有效。
+  'video-preset-package': { 9: value => ({ ...value as object, version: 10 }), 8: value => ({ ...value as object, version: 9 }), 5: value => ({ ...migrateEmbeddedVideoColorGradesV1(value) as object, version: 6 }), 6: value => ({ ...value as object, version: 7 }), 7: value => ({ ...value as object, version: 8 }) },
   'image-working-copy': { 14: value => migrateImageWorkingCopyColorGrades(value, 15) },
   'image-package': { 12: value => ({ ...value as object, packageVersion: 13, document: migrateImageWorkingCopyColorGrades((value as { document?: unknown }).document, 15) }) },
   'canvas-layer-package': { 12: value => ({ ...value as object, version: 13 }) },
@@ -81,7 +86,8 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   // 非等比缩放（2026-10-24）：字幕回填记录里的声音片段只新增可选的 scaleAspect。
   // 代码视频参数取帧时间表（2026-10-28）：声音片段的代码参数只新增可选的 spans。
   // 片段启用开关（2026-10-28）：声音片段新增可选 enabled:false，代码参数值新增片子数据引用；旧记录原样有效。
-  'subtitle-manifest': { 21: value => ({ ...value as object, version: 22 }), 20: value => ({ ...value as object, version: 21 }), 19: value => ({ ...value as object, version: 20 }), 18: value => ({ ...value as object, version: 19 }), 17: value => ({ ...value as object, version: 18 }), 16: value => ({ ...value as object, version: 17 }), 15: value => ({ ...value as object, version: 16 }), 11: value => ({ ...value as object, version: 12 }), 12: value => ({ ...value as object, version: 13 }), 13: value => ({ ...value as object, version: 14 }), 14: value => ({ ...value as object, version: 15 }) },
+  // 网页画面（2026-10-30）：声音片段的代码图片参数新增网页画面引用 {kind:'web'}；旧记录原样有效。
+  'subtitle-manifest': { 22: value => ({ ...value as object, version: 23 }), 21: value => ({ ...value as object, version: 22 }), 20: value => ({ ...value as object, version: 21 }), 19: value => ({ ...value as object, version: 20 }), 18: value => ({ ...value as object, version: 19 }), 17: value => ({ ...value as object, version: 18 }), 16: value => ({ ...value as object, version: 17 }), 15: value => ({ ...value as object, version: 16 }), 11: value => ({ ...value as object, version: 12 }), 12: value => ({ ...value as object, version: 13 }), 13: value => ({ ...value as object, version: 14 }), 14: value => ({ ...value as object, version: 15 }) },
 }
 /** Image layers (any depth, including smart-object documents): every `color_grade` adjustment layer's params. */
 function migrateImageColorGradeLayers(value: unknown): unknown {

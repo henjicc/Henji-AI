@@ -46,7 +46,7 @@ draw(ctx, time, params, width, height, assets) {
 }
 ```
 
-参数值支持 `{kind:"image",mediaId}`、`{kind:"video",mediaId,time?:number,spans?:[...]}`、`{kind:"sequence",mediaId:"below"}`。视频 `time` 是源素材非负秒数，省略时从片段入点起随片段本地时间（裁掉开头时视频也跟着往后，不经过代码片段的变速与倒放换算）；超出视频范围明确失败。`below` 是当前序列帧中更低轨道的合成画面，排除当前及更高轨道与字幕覆盖，避免循环。代码没有路径或 URL 访问权，所有输入走工程媒体引用、正式解码与合成；同一来源与取样时刻复用同一画面。需要逐像素处理下方画面时写滤镜（author-shaders）。
+参数值支持 `{kind:"image",mediaId}`、`{kind:"video",mediaId,time?:number,spans?:[...]}`、`{kind:"sequence",mediaId:"below"}`，以及本地网页 `{kind:"web",path,...}`（见下文“网页画面”）。视频 `time` 是源素材非负秒数，省略时从片段入点起随片段本地时间（裁掉开头时视频也跟着往后，不经过代码片段的变速与倒放换算）；超出视频范围明确失败。`below` 是当前序列帧中更低轨道的合成画面，排除当前及更高轨道与字幕覆盖，避免循环。代码没有路径或 URL 访问权，所有输入走工程媒体引用、正式解码与合成；同一来源与取样时刻复用同一画面。需要逐像素处理下方画面时写滤镜（author-shaders）。
 
 ### 视频取帧时间表 spans
 
@@ -62,3 +62,44 @@ draw(ctx, time, params, width, height, assets) {
 ```
 
 同一片段可以带很多视频参数（如每扇窗口一个），只有落在段内（或三秒内要进入下一段）的参数占解码会话。整个节目同一时刻的视频输入超过 7 路时，多出的改为共用素材的解码会话，画面照常但播放变慢；超过 32 路直接报错。
+
+## 网页画面
+
+图片参数可绑定本地网页：浏览器在隔离的离屏页面里真正排版绘制（HTML、CSS、JS、React 都行），按页面时间出这一刻的画面，与视频参数一样从 `assets` / `inputs.images` 取。
+
+**什么时候用**：默认用显卡画法——普通标题、花字、字幕式文字、简单表格、数据卡用内置排版库算位置、显卡直接画，没有额外进程，推近按矢量重画始终清楚，每个字都能做特效。网页画面只用在显卡画法做不好或做不像的地方：复刻真实网页应用界面、依赖大量 CSS 的富排版、本来就是网页的内容。它每个来源多开一个隔离页面，每帧 seek、排版绘制再交给合成，成本明显更高。
+
+**网页文件夹**放项目里（如 `素材/网页/知多少/`，构建好的静态文件）。站点根是入口所在文件夹，页面只能取到这里的文件，别的网址照常联网，拿不到痕迹的任何接口；文件改了打开着的页面自动重新载入。页面实现时间约定，确定性由页面负责（CSS 动画、过渡在 seek 里 `pause()` 后设 `currentTime`，不滚动整个文档）：
+
+```text
+window.henjiWeb = { ready /* Promise：资源字体就绪 */, duration /* 秒 */,
+  async seek(t) {} /* 摆成第 t 秒，可任意前后跳 */, boxes(selectors) {} /* 可选：{选择器: [x,y,w,h]|null} */ }
+```
+
+**绑定值**（参数照常声明 `type: "image"`，用通用实体工具写片段代码参数）：
+
+```text
+{ kind: "web", path: "<项目>/素材/网页/知多少/index.html",  // 入口 html 或含 index.html 的文件夹
+  width: 1920, height: 1080,       // 视口 CSS 像素，默认 1920×1080
+  region: [640, 360, 640, 360],    // 只渲染这一块，默认整个视口
+  scale: 6,                        // 每 CSS 像素几个画面像素，默认 2
+  spans: [{ from: 0, to: 4, src: 0 }],  // 页面时间，time / spans 同视频参数；都不给随片段时间
+  boxes: ["#send"] }               // 每帧读矩形的选择器
+```
+
+**清晰度**：画面是 region 宽高 × scale，每边最多 8192；页面始终按整个视口排版，取景只决定画哪块。不推近时 scale = 输出宽 ÷ 视口宽；推近 N 倍时 region 取露出的 1/N、scale = 输出宽 ÷ region 宽（4K 推近 3 倍：640×360、6 倍），每个输出像素都有设备像素，成本按画面像素算、推多近不涨。一段推近里取景与倍率不变（变了会重新栅格、文字抖）；幅度很大就分远景、近景两个参数各用 spans，交接处叠化。
+
+**元素矩形**：`info.web[key]` 是 `{ time, width, height, region, scale, duration, boxes }`，`boxes[选择器]` 为视口 CSS 像素 `[x, y, w, h]` 或 null，换到画面像素 `(x - region[0]) * scale`：
+
+```text
+draw(ctx, time, params, width, height, assets, info) {
+  if (!assets.app) return
+  ctx.drawImage(assets.app, 0, 0, width, height)
+  const web = info.web?.app, box = web?.boxes["#send"]
+  if (!box) return
+  const sx = width / web.region[2], sy = height / web.region[3]
+  ctx.strokeRect((box[0] - web.region[0]) * sx, (box[1] - web.region[1]) * sy, box[2] * sx, box[3] * sy)
+}
+```
+
+页面打不开、没有 `window.henjiWeb`、seek 超过 30 秒或取不到画面时这一帧报错，不会换成旧画面。

@@ -24,6 +24,8 @@ import {
   type VideoFrameStreamInfo,
   type VideoFrameTarget,
 } from '../services/video-decoder'
+import { getWebSourcePages, parseWebSourceCaptureRequest, parseWebSourceOpenRequest, parseWebSourcePath } from '../services/web-source'
+import type { WebSourceCaptureRequest, WebSourceCaptureResult, WebSourceInfo, WebSourceOpenRequest } from '../../../src/platform/contracts/videoFrameTypes'
 import { parseStringField, parseVoid, registerIpcHandler } from './registry'
 
 /**
@@ -99,13 +101,19 @@ export function registerVideoFramesIpc(): void {
   })
   registerIpcHandler<VideoAudioReadRequest, VideoAudioReadResult>('videoFrames:readAudio', parseVideoAudioReadRequest, (request, event) => getVideoAudioSessions().read(event.sender.id, request))
   registerIpcHandler<string, boolean>('videoFrames:closeAudio', parseVideoAudioCloseRequest, (audioId, event) => getVideoAudioSessions().close(audioId, event.sender.id))
-  // 通道断开（preload disconnect）时关闭该通道上仍打开的会话（画面与声音）：消费方 Worker 被终止时可能来不及自行关闭。
+  // 网页来源：离屏页面按页面时间出画面，画面与解码帧走同一条通道；页面归属打开它的窗口与通道。
+  registerIpcHandler<WebSourceOpenRequest, WebSourceInfo>('videoFrames:openWeb', parseWebSourceOpenRequest, (request, event) => getWebSourcePages().open(webContentsFrameTarget(event.sender), request))
+  registerIpcHandler<WebSourceCaptureRequest, WebSourceCaptureResult>('videoFrames:captureWeb', parseWebSourceCaptureRequest, (request, event) => getWebSourcePages().capture(event.sender.id, request))
+  registerIpcHandler<string, boolean>('videoFrames:closeWeb', (input) => parseStringField(input, 'streamId'), (streamId, event) => getWebSourcePages().close(event.sender.id, streamId))
+  registerIpcHandler<string, string>('videoFrames:webContent', parseWebSourcePath, (path) => getWebSourcePages().contentHash(path))
+  // 通道断开（preload disconnect）时关闭该通道上仍打开的会话（画面、声音与网页）：消费方 Worker 被终止时可能来不及自行关闭。
   registerIpcHandler<string, number>(
     'videoFrames:closeRoute',
     (input) => parseStringField(input, 'route'),
     async (route, event) => {
+      const pages = getWebSourcePages().closeRoute(event.sender.id, route)
       const [streams, sounds] = await Promise.all([getVideoFrameBridge().closeRoute(event.sender.id, route), getVideoAudioSessions().closeRoute(event.sender.id, route)])
-      return streams + sounds
+      return streams + sounds + pages
     },
   )
   registerIpcHandler<void, VideoFrameBridgeStats>('videoFrames:stats', parseVoid, () => getVideoFrameBridge().stats())

@@ -66,7 +66,7 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 | 三维镜头参考、代码视差 | [空间配方](references/recipes-3d.md) |
 | 模块契约、绘制、图层 | [作者接口](references/author-api.md) |
 | 预览卡顿、成本反馈 | [性能](references/performance.md) |
-| 音乐响度节拍、视频画面输入 | [音频与画面输入](references/author-api-media.md) |
+| 音乐节拍、视频与网页画面 | [音频与画面输入](references/author-api-media.md) |
 | 文字参数与样式、量字、逐字、缓动 | [文字动效接口](references/author-text-motion.md) |
 | WebGPU、WebGL、滤镜、相邻帧 | [GPU 接口](references/author-shaders.md) |
 | 查内置 shaders 组件名称与角色 | [纹理](references/shader-components-textures.md)／[续](references/shader-components-textures-2.md)、[图形材质](references/shader-components-shapes.md)／[续](references/shader-components-shapes-2.md)、[模糊扭曲调色](references/shader-components-filters.md)、[风格化转场](references/shader-components-stylize.md) |

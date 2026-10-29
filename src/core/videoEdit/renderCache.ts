@@ -3,7 +3,7 @@ import { activeVideoEditEffects, videoEditEffectCodes } from './compositing'
 import { videoEditClipRetimed } from './clipSpeed'
 import { codeMediaInputClipSeconds } from './codeMediaInput'
 import { videoEditCodeInputs, videoEditCodeSceneKeys, type VideoEditCodeDeclarationReader } from './codeInputParameters'
-import type { CodeSceneReference } from './codeMaterial/contract'
+import { isCodeImageReference, type CodeSceneReference } from './codeMaterial/contract'
 import type { CodeMaterialInstance } from './codeMaterialPersistence'
 import { videoEditSceneFootprints, videoEditSceneRecordsInRange } from './scene/sceneFootprint'
 import type { ResolvedVideoEditScene, ResolvedVideoEditSceneRecord } from './scene/sceneResolve'
@@ -59,6 +59,8 @@ export interface VideoEditRenderDependencies {
    * 按整份片子数据计入它所在的每一段（改任何一条记录，这个片段的所有段都失效）。
    */
   codeDeclarations?: VideoEditCodeDeclarationReader
+  /** 网页参数引用的网页文件夹内容指纹（按引用里的路径）：网页文件改了，用到它的窗口失效。 */
+  webContent?: (path: string) => string
 }
 
 /** 片子数据与解析后记录的短指纹按对象身份缓存：文档快照不可变，没改的片子数据跨编辑复用。 */
@@ -88,7 +90,7 @@ class DigestContext {
   private readonly visiting = new Set<string>()
   private readonly sceneWholes = new WeakMap<VideoEditScene, readonly string[]>()
   private mediaById?: ReadonlyMap<string, VideoEditComposition['media'][number]>
-  constructor(private readonly document: VideoEditComposition, private readonly declarations?: VideoEditCodeDeclarationReader) {}
+  constructor(private readonly document: VideoEditComposition, private readonly declarations?: VideoEditCodeDeclarationReader, private readonly webContent?: (path: string) => string) {}
   digest(value: object): string {
     let digest = this.digests.get(value)
     if (digest === undefined) { digest = hash(JSON.stringify(value)); this.digests.set(value, digest) }
@@ -118,6 +120,9 @@ class DigestContext {
     }
     for (const media of this.document.media) if (text.includes(media.id)) parts.push(`media:${this.digest(media)}`)
     for (const lut of this.document.colorLuts ?? []) if (text.includes(lut.id)) parts.push(`lut:${this.digest(lut)}`)
+    for (const instance of [clip.code, ...videoEditEffectCodes(activeVideoEditEffects(clip))]) for (const value of Object.values(instance?.parameters ?? {})) {
+      if (isCodeImageReference(value) && value.kind === 'web') parts.push(`web:${this.webContent?.(value.path) ?? 'unknown'}`)
+    }
     this.clips.set(clip, parts)
     return parts
   }
@@ -209,7 +214,7 @@ export function videoEditRenderWindows(document: VideoEditComposition, dependenc
 export function videoEditRenderWindowSet(document: VideoEditComposition, dependencies: VideoEditRenderDependencies, previous?: VideoEditRenderWindowSet): VideoEditRenderWindowSet {
   const duration = videoEditDuration(document)
   const size = Math.max(1, Math.round(document.fps * VIDEO_EDIT_RENDER_WINDOW_SECONDS))
-  const context = new DigestContext(document, dependencies.codeDeclarations)
+  const context = new DigestContext(document, dependencies.codeDeclarations, dependencies.webContent)
   const minimum = Math.max(1, Math.round(document.fps * VIDEO_EDIT_RENDER_MIN_SECONDS))
   const visible = videoEditVisibleTrackIndexes(document); const picture = videoEditPictureFilter(document)
   // 停用片段的首尾仍作切点：开关一个片段只让与它重叠的窗口失效，别处的切段与已渲染文件不变。

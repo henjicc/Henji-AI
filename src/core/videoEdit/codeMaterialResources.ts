@@ -15,7 +15,7 @@ export function codeMaterialUsesAudio(program: CodeAuthorProgram): boolean {
 export function codeMaterialImageIds(instance?: CodeMaterialInstance, declarations?: readonly CodeParameterDeclaration[], derived: Readonly<Record<string, CodeImageReference>> = {}): Set<string> {
   const parameters = { ...instance?.parameters, ...derived }
   const keys = declarations ? codeMaterialImageParameterKeys(declarations, derived) : Object.keys(parameters)
-  return new Set([...keys].flatMap(key => { const value = parameters[key]; return isCodeImageReference(value) && value.kind !== 'sequence' ? [value.mediaId] : [] }))
+  return new Set([...keys].flatMap(key => { const value = parameters[key]; return isCodeImageReference(value) && (value.kind === 'image' || value.kind === 'video') ? [value.mediaId] : [] }))
 }
 
 export function codeMaterialMediaIds(instance?: CodeMaterialInstance): Set<string> {

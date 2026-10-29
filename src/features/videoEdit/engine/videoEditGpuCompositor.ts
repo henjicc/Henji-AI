@@ -10,6 +10,8 @@ import { VIDEO_EDIT_PRECISE_FORMAT, VideoEditGpuFrame, videoEditGpuFrameFormat, 
 import { VIDEO_EDIT_CACHED_YUV_SHADER, VIDEO_EDIT_COPY_SHADER, VIDEO_EDIT_FRAME_BLEND_SHADER, VIDEO_EDIT_PRESENT_SHADER, VIDEO_EDIT_READBACK_USAGE, readVideoEditPreciseRow, videoEditDownscaleCopyShader, videoEditLayerShader } from './videoEditGpuShaders'
 import type { VideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution'
 import { VideoEditNativePicture } from './videoEditNativePicture'
+import type { NativeVideoFrame } from './videoEditNativeFrames'
+import { VideoEditWebPicture } from './videoEditWebInputs'
 import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/document'
 import { ImageEditWebGpuDeviceManager } from '@/core/imageEdit/webgpu/deviceManager'
 import { getWebGpuContext, type GpuDevice, type GpuTexture, type GpuBuffer, type GpuRenderPipeline } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
@@ -345,6 +347,33 @@ export class VideoEditGpuCompositor {
     } catch (error) { texture.destroy(); chroma?.destroy(); throw error } finally { if (!retained) closeFrame() }
   }
   /**
+   * 网页画面：把借来的共享纹理帧左上角 width×height 原样拷进本设备的 rgba8unorm 纹理（网页内容与图片、Canvas 一样按
+   * sRGB 数值使用，不做转换），提交后交回帧。传入同尺寸的 `target` 时原地覆盖：同一队列上更早读它的工作都已提交。
+   */
+  async copyWebFrame(native: NativeVideoFrame, width: number, height: number, target?: GpuTexture): Promise<{ texture: GpuTexture; owner: GpuDevice }> {
+    try {
+      await this.ready
+      if (this.disposed) throw new Error('剪辑预览已关闭。')
+      this.assertDevice()
+    } catch (error) { native.release(); throw error }
+    const texture = target ?? this.device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: 0x04 | 0x10 })
+    try {
+      const encoder = this.device.createCommandEncoder()
+      const resource = this.device.importExternalTexture({ source: native.frame })
+      const pass = encoder.beginRenderPass({ colorAttachments: [{ view: texture.createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] })
+      pass.setPipeline(this.copyRgba)
+      pass.setBindGroup(0, this.device.createBindGroup({ layout: this.copyRgba.getBindGroupLayout(0), entries: [{ binding: 0, resource }] }))
+      pass.draw(3); pass.end()
+      this.device.queue.submit([encoder.finish()])
+    } catch (error) {
+      if (!target) texture.destroy()
+      native.release()
+      throw error
+    }
+    native.release(this.device)
+    return { texture, owner: this.device }
+  }
+  /**
    * A transparent owned picture for a video layer without a picture at its source time. One shared 1×1 texture
    * (WebGPU zero-initializes it); releasing the frame never destroys it.
    */
@@ -485,7 +514,7 @@ export class VideoEditGpuCompositor {
     }
     return new Map<string, VideoEditCodeImageInput>([...pictures].map(([mediaId, picture]): [string, VideoEditCodeImageInput] => {
       if (picture instanceof VideoEditCodePicture) {
-        const input: VideoEditCodeImageInput = { texture: picture.texture, width: picture.width, height: picture.height, owner: this.device, premultiplied: true }
+        const input: VideoEditCodeImageInput = { texture: picture.texture, width: picture.width, height: picture.height, owner: this.device, premultiplied: true, ...(picture instanceof VideoEditWebPicture ? { web: picture.web } : {}) }
         Object.defineProperty(input, 'source', { enumerable: true, get: () => bitmapOf(picture) })
         return [mediaId, input]
       }

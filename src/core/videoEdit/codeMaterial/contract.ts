@@ -2,8 +2,9 @@ import type { AudioContentAnalysis } from '../../audioAnalysis/contentAnalysis'
 /** Host safety bounds for structured graphics, component graphs and glyph requests; author JS has no language budget. */
 export const CODE_MATERIAL_LIMITS = Object.freeze({ stringLength: 4096, textCharacters: 8192, pathPoints: 4096 })
 export type { CodeColor, CodeImageReference, CodeVideoSpan, CodeAudioReference, CodeSceneReference, CodePoint, CodeGrade, CodeGradientStop, CodeRange, CodeEasing, CodeBasicParameterValue, CodeParameterObject, CodeParameterValue, CodeParameterValues, CodeParameterVisibility, CodeBasicParameterDeclaration, CodeParameterTypeDefinition, CodeParameterDeclaration } from '../../imaging/parameterTypes'
-import type { CodeColor, CodeImageReference, CodeVideoSpan } from '../../imaging/parameterTypes'
+import type { CodeColor, CodeImageReference, CodeVideoSpan, CodeWebReference } from '../../imaging/parameterTypes'
 import { CODE_VIDEO_SPAN_LIMIT, codeVideoSpansIssue } from './videoSpans'
+import { codeWebBoxesIssue, codeWebViewIssue } from './webSource'
 export const CODE_PARAMETER_TYPES = ['number', 'angle', 'point', 'range', 'color', 'gradient', 'curve', 'grade', 'choice', 'boolean', 'text', 'textStyle', 'table', 'font', 'image', 'audio', 'easing', 'seed', 'scene'] as const
 export interface CodeMaterialContext { time: number; localTime: number; sequenceTime: number; width: number; height: number; frame: number; fps: number; seed?: number; audio?: AudioContentAnalysis; audioTime?: number }
 export interface CodeSourceSpan { file: string; start: number; end: number; startLine: number; startColumn: number; endLine: number; endColumn: number }
@@ -28,7 +29,7 @@ export type CodeDrawCommand = CodeDrawMetadata & (
   | { kind: 'ellipse'; x: number; y: number; width: number; height: number; fill: CodeColor }
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number; width: number; color: CodeColor }
   | { kind: 'text'; x: number; y: number; text: string; fontSize: number; color: CodeColor; fontFamily: string; align: 'left' | 'center' | 'right'; fontWeight?: number; fontStyle?: string; baseline?: string; letterSpacing?: number; lineHeight?: number; maxWidth?: number; wrap?: boolean; maxLines?: number; layout?: CodeTextLayout }
-  | { kind: 'image'; source: CodeImageReference; x: number; y: number; width: number; height: number; opacity: number }
+  | { kind: 'image'; source: Exclude<CodeImageReference, CodeWebReference>; x: number; y: number; width: number; height: number; opacity: number }
 )
 export type CodeMaterialErrorCode = 'SOURCE_LIMIT' | 'SYNTAX' | 'TYPE' | 'BUDGET' | 'PARAMETERS' | 'COMPATIBILITY' | 'CONTEXT' | 'NON_FINITE'
 export class CodeMaterialError extends Error {
@@ -83,13 +84,39 @@ function codeVideoSpans(value: unknown, label: string): CodeVideoSpan[] {
 export function codeImageReference(value: unknown, label: string): CodeImageReference {
   if (typeof value !== 'object' || value === null || Array.isArray(value) || ![null, Object.prototype].includes(Object.getPrototypeOf(value))) throw new CodeMaterialError('PARAMETERS', `${label}必须是明确的剪辑图片引用。`)
   const fields = plainFields(value)
-  if (!fields || Object.keys(fields).some(key => !['kind', 'mediaId', 'time', 'spans'].includes(key)) || !['image', 'video', 'sequence'].includes(fields.kind?.value) || typeof fields.mediaId?.value !== 'string' || fields.mediaId.value.length < 1 || fields.mediaId.value.length > 100 || fields.kind.value === 'sequence' && (fields.mediaId.value !== 'below' || fields.time || fields.spans)) throw new CodeMaterialError('PARAMETERS', `${label}需要图片/视频 mediaId 或 {kind:'sequence',mediaId:'below'}。`)
+  if (fields?.kind?.value === 'web') return codeWebReference(fields, label)
+  if (!fields || Object.keys(fields).some(key => !['kind', 'mediaId', 'time', 'spans'].includes(key)) || !['image', 'video', 'sequence'].includes(fields.kind?.value) || typeof fields.mediaId?.value !== 'string' || fields.mediaId.value.length < 1 || fields.mediaId.value.length > 100 || fields.kind.value === 'sequence' && (fields.mediaId.value !== 'below' || fields.time || fields.spans)) throw new CodeMaterialError('PARAMETERS', `${label}需要图片/视频 mediaId、{kind:'sequence',mediaId:'below'} 或 {kind:'web',path}。`)
   const time = fields.time?.value
   if (fields.time && (typeof time !== 'number' || !Number.isFinite(time) || time < 0 || fields.kind.value !== 'video')) throw new CodeMaterialError('PARAMETERS', `${label}.time 仅支持视频的非负秒数。`)
   if (fields.spans && fields.kind.value !== 'video') throw new CodeMaterialError('PARAMETERS', `${label}.spans 仅支持视频。`)
   if (fields.spans && fields.time) throw new CodeMaterialError('PARAMETERS', `${label}的 time 与 spans 不能同时给出。`)
   const spans = fields.spans ? codeVideoSpans(fields.spans.value, label) : undefined
   return { kind: fields.kind.value, mediaId: fields.mediaId.value, ...(time === undefined ? {} : { time }), ...(spans ? { spans } : {}) }
+}
+const WEB_FIELDS = ['kind', 'path', 'width', 'height', 'region', 'scale', 'time', 'spans', 'boxes']
+function codeWebReference(fields: Record<string, PropertyDescriptor>, label: string): CodeWebReference {
+  const fail = (detail: string): never => { throw new CodeMaterialError('PARAMETERS', `${label}${detail}`) }
+  const unknown = Object.keys(fields).filter(key => !WEB_FIELDS.includes(key))
+  if (unknown.length) fail(`（网页）不认识的字段：${unknown.join('、')}；可用 ${WEB_FIELDS.slice(1).join('、')}。`)
+  const path = fields.path?.value
+  if (typeof path !== 'string' || !path.length || path.length > 4096 || path.includes('\0')) fail('.path 需要网页入口 html 或网页文件夹的路径。')
+  const plain = (key: string): unknown => fields[key]?.value
+  const region = plain('region')
+  if (region !== undefined && (!Array.isArray(region) || Object.getPrototypeOf(region) !== Array.prototype)) fail('.region 需要 [x, y, 宽, 高]。')
+  const view = { width: plain('width') as number | undefined, height: plain('height') as number | undefined, region: region === undefined ? undefined : [...region as unknown[]] as number[], scale: plain('scale') as number | undefined }
+  const viewIssue = codeWebViewIssue(view)
+  if (viewIssue) fail(`：${viewIssue}`)
+  const time = plain('time')
+  if (time !== undefined && (typeof time !== 'number' || !Number.isFinite(time) || time < 0)) fail('.time 需要非负秒数。')
+  if (fields.spans && time !== undefined) fail('的 time 与 spans 不能同时给出。')
+  const spans = fields.spans ? codeVideoSpans(fields.spans.value, label) : undefined
+  const boxes = plain('boxes')
+  if (boxes !== undefined) {
+    if (!Array.isArray(boxes) || Object.getPrototypeOf(boxes) !== Array.prototype) fail('.boxes 需要 CSS 选择器数组。')
+    const issue = codeWebBoxesIssue([...boxes as unknown[]])
+    if (issue) fail(`：${issue}`)
+  }
+  return { kind: 'web', path: path as string, ...(view.width === undefined ? {} : { width: view.width }), ...(view.height === undefined ? {} : { height: view.height }), ...(view.region ? { region: view.region as [number, number, number, number] } : {}), ...(view.scale === undefined ? {} : { scale: view.scale }), ...(time === undefined ? {} : { time: time as number }), ...(spans ? { spans } : {}), ...(boxes ? { boxes: [...boxes as string[]] } : {}) }
 }
 export function isCodeImageReference(value: unknown): value is CodeImageReference {
   try { codeImageReference(value, '图片'); return true } catch { return false }

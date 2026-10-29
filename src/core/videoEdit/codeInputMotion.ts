@@ -26,7 +26,8 @@ export function videoEditCodeInputMotionPlacements(root: VideoEditComposition, r
     const clip = owner.path.at(-1)!.clip
     if (clip.kind !== 'code' || !clip.code) return
     for (const [parameter, reference] of Object.entries(videoEditCodeInputParameters(local, clip.code, declarations))) {
-      if (!isCodeImageReference(reference) || reference.kind === 'image') continue
+      // 网页画面不来自工程素材，没有源素材运动可映射。
+      if (!isCodeImageReference(reference) || reference.kind === 'image' || reference.kind === 'web') continue
       if (reference.kind === 'video') {
         const media = local.media.find(media => media.id === reference.mediaId && media.kind === 'video')
         if (!media || !local.items.some(item => item.mediaId === media.id)) throw new Error('视频图片参数引用的素材不存在。')

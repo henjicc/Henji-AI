@@ -7,7 +7,7 @@ import { formatMigrations } from '../persistence/formatMigrations'
 import { PersistenceError, upgradePersistenceContent, type PersistenceContract } from '../persistence/migrations'
 
 export const CODE_ASSET_MIME = 'application/x-henji-code'
-export const CODE_ASSET_VERSION = 11
+export const CODE_ASSET_VERSION = 12
 /** v10 可携带作者接口 v6；旧程序不能正确执行排版库，必须明确要求升级。 */
 export const CODE_ASSET_MIN_READER_VERSION = 10
 export const codeAssetContentSchema = z.object({ sizeBytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), fileModifiedAt: z.number().finite().nonnegative(), contentIdentity: z.string().regex(/^[a-f0-9]{64}$/) }).strict()
@@ -31,10 +31,10 @@ export const codeAssetSchema = z.object({
   if (Object.values(value.parameters).some(isCodeSceneReference)) context.addIssue({ code: 'custom', message: '代码资产不携带片子数据，片子数据参数须为空。' })
   const ids = value.images.map(image => image.id)
   if (new Set(ids).size !== ids.length) context.addIssue({ code: 'custom', message: '代码素材媒体依赖标识重复。' })
-  const references = Object.values(value.parameters).flatMap(value => (isCodeImageReference(value) && value.kind !== 'sequence' || isCodeAudioReference(value)) ? [value.mediaId] : [])
+  const references = Object.values(value.parameters).flatMap(value => (isCodeImageReference(value) && (value.kind === 'image' || value.kind === 'video') || isCodeAudioReference(value)) ? [value.mediaId] : [])
   if (references.some(id => !ids.includes(id)) || ids.some(id => !references.includes(id))) context.addIssue({ code: 'custom', message: '媒体参数与固定依赖清单不一致。' })
   for (const parameter of Object.values(value.parameters)) {
-    if (!isCodeAudioReference(parameter) && !isCodeImageReference(parameter) || parameter.kind === 'sequence') continue
+    if (!isCodeAudioReference(parameter) && !isCodeImageReference(parameter) || parameter.kind === 'sequence' || parameter.kind === 'web') continue
     const dependency = value.images.find(media => media.id === parameter.mediaId)
     if (dependency && (parameter.kind === 'audio' ? !['audio', 'video'].includes(dependency.kind) : parameter.kind !== dependency.kind)) context.addIssue({ code: 'custom', message: '媒体参数与依赖种类不一致。' })
   }

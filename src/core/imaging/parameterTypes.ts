@@ -6,7 +6,14 @@ export type CodeColor = [number, number, number, number]
  * cursor:false 时这一段不画录制鼠标与点击涟漪。
  */
 export interface CodeVideoSpan { from: number; to: number; src: number; rate?: number; cursor?: boolean }
-export type CodeImageReference = { kind: 'image'; mediaId: string; time?: never; spans?: never } | { kind: 'video'; mediaId: string; time?: number; spans?: CodeVideoSpan[] } | { kind: 'sequence'; mediaId: 'below'; time?: never; spans?: never }
+/**
+ * 网页画面：本地网页（入口 html，或含 index.html 的文件夹，`path` 是本机绝对路径）在隔离的离屏页面里排版绘制。
+ * 视口 `width`×`height`（CSS 像素，默认 1920×1080），只渲染 `region`（[x, y, 宽, 高]，默认整个视口），每 CSS 像素
+ * `scale` 个设备像素（默认 2）；取帧时刻 `time`/`spans` 与视频参数同义，是页面时间（交给 `henjiWeb.seek`）。
+ * `boxes` 是每帧要读矩形的 CSS 选择器。语义与限制见 `codeMaterial/webSource.ts`。
+ */
+export interface CodeWebReference { kind: 'web'; path: string; width?: number; height?: number; region?: [number, number, number, number]; scale?: number; time?: number; spans?: CodeVideoSpan[]; boxes?: string[]; mediaId?: never }
+export type CodeImageReference = { kind: 'image'; mediaId: string; time?: never; spans?: never } | { kind: 'video'; mediaId: string; time?: number; spans?: CodeVideoSpan[] } | { kind: 'sequence'; mediaId: 'below'; time?: never; spans?: never } | CodeWebReference
 export interface CodeAudioReference { kind: 'audio'; mediaId: string }
 /** 片子数据参数的值：引用同一剪辑 scenes 里的一份（作者接口 v5 起）。 */
 export interface CodeSceneReference { kind: 'scene'; sceneId: string }

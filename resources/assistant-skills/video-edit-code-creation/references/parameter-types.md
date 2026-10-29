@@ -34,7 +34,7 @@
 | seed | 无 | 0–4294967295 的整数 | 种子输入 + 随机 |
 | textStyle | 无，默认值可只写部分字段 | 文字样式对象，见 author-text-motion | 文字样式面板 |
 | table | `fields`（字段为基础类型或 textStyle），`rowKey` 推荐 | 行对象数组 | 数据表 |
-| image | 仅生成器，不可动画 | 引用；代码从 `assets[key]` 取画面，见 author-api-media | 图片选择 |
+| image | 仅生成器，不可动画 | 引用；代码从 `assets[key]` 取画面，见 author-api-media（含绑定本地网页） | 图片选择 |
 | audio | 不可动画 | 引用；分析结果在 `info.audio` | 声音选择 |
 
 font 参数的值是字体族名，作为 textStyle 的 `fontFamily` 传给 layoutText；用户机器缺字体时剪辑会提示，先查 font 实体挑已安装的字体。

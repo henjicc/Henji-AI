@@ -46,6 +46,28 @@ export interface AuthorFrameInfo {
    * WebGPU / WebGL 的 target 与 width/height 已是缩小后的像素，按像素写的长度乘 `info.renderScale ?? 1`。
    */
   renderScale?: number
+  /** 绑定了网页的图片参数在这一帧的页面信息，按参数名；没有网页参数时不存在。 */
+  web?: { readonly [key: string]: AuthorWebFrame }
+}
+
+/**
+ * 网页参数这一帧的页面信息。画面（assets / inputs.images 同名键）是视口里 region 这一块，每 CSS 像素 scale 个像素。
+ * boxes 的矩形是视口 CSS 像素，换到画面像素：(x - region[0]) * scale。
+ */
+export interface AuthorWebFrame {
+  /** 页面时间（秒），即交给页面 henjiWeb.seek 的时刻。 */
+  time: number
+  /** 页面视口（CSS 像素）。 */
+  width: number
+  height: number
+  /** 画面对应的视口区域 [x, y, 宽, 高]（CSS 像素）。 */
+  region: [number, number, number, number]
+  /** 每 CSS 像素的画面像素数。 */
+  scale: number
+  /** 页面声明的总时长（秒），没有声明为 null。 */
+  duration: number | null
+  /** boxes 里各选择器的元素矩形 [x, y, 宽, 高]，找不到为 null。 */
+  boxes: { readonly [selector: string]: [number, number, number, number] | null }
 }
 
 /** 参数值按 params.键名 读取；键名与取值形状由 params 声明推断，推断不出时为 any。 */

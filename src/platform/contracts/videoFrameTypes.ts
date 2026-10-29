@@ -213,6 +213,58 @@ export interface VideoAudioReadResult {
 export const VIDEO_AUDIO_MAX_READ_FRAMES = 2 * 192_000
 
 /**
+ * 网页来源：本地网页（入口 html，或含 index.html 的文件夹）在隔离的离屏页面里排版绘制，按页面时间取画面。
+ * 页面布局按 `width`×`height`（CSS 像素）的视口；只渲染其中 `region`（视口 CSS 像素 [x, y, w, h]）这一块，
+ * 每 CSS 像素 `scale` 个设备像素，画面是 `round(w·scale)`×`round(h·scale)`。画面经帧通道送到发起的通道。
+ */
+export interface WebSourceOpenRequest {
+  route: string
+  path: string
+  width: number
+  height: number
+  region: [number, number, number, number]
+  scale: number
+}
+
+export interface WebSourceInfo {
+  streamId: string
+  route: string
+  /** 网页文件夹内容的指纹（全部文件的 SHA-256 汇总），文件变化时页面重新载入、指纹随之改变。 */
+  contentHash: string
+  /** 页面声明的总时长（秒）；没有声明时为 null。 */
+  duration: number | null
+  /** 画面像素尺寸（与送来的帧可见区左上角对齐；帧本身可能多出一两个像素，按这个尺寸取）。 */
+  pixelWidth: number
+  pixelHeight: number
+}
+
+export interface WebSourceCaptureRequest {
+  streamId: string
+  /** 页面时间（秒），交给页面的 `henjiWeb.seek`。 */
+  time: number
+  ticket: string
+  /** 要读取矩形的选择器。 */
+  boxes?: string[]
+}
+
+/** 元素在视口里的矩形 [x, y, w, h]（CSS 像素）；找不到为 null。 */
+export type WebSourceBox = [number, number, number, number] | null
+
+export interface WebSourceCaptureResult {
+  /** 帧随 `request: { kind: 'frame_at', id: ticket }` 经帧通道到达。没有请求选择器时为 null。 */
+  boxes: Record<string, WebSourceBox> | null
+  contentHash: string
+}
+
+/** 网页文件夹内容变化（按渲染层查询过的路径通知）。 */
+export interface WebSourceContentChange {
+  path: string
+  contentHash: string
+}
+
+export const WEB_SOURCE_CONTENT_CHANGED_CHANNEL = 'videoFrames:webContentChanged'
+
+/**
  * 消费方（渲染 Worker）经帧通道端口直接发起的解码会话请求：preload 转为对应 IPC，打开的会话归属该端口的通道，
  * 不经页面主线程。请求与帧、计划事件共用同一端口；`id` 由消费方分配，响应原样带回。
  */
@@ -228,6 +280,9 @@ export type VideoFramePortCall =
   | { method: 'openAudio'; params: Omit<VideoAudioOpenRequest, 'route'> }
   | { method: 'readAudio'; params: VideoAudioReadRequest }
   | { method: 'closeAudio'; params: { audioId: string } }
+  | { method: 'openWeb'; params: Omit<WebSourceOpenRequest, 'route'> }
+  | { method: 'captureWeb'; params: WebSourceCaptureRequest }
+  | { method: 'closeWeb'; params: { streamId: string } }
 
 export interface VideoFramePortCallResults {
   stats: VideoFrameBridgeStats
@@ -242,6 +297,9 @@ export interface VideoFramePortCallResults {
   /** 到达 Worker 时 `data` 一定是 ArrayBuffer（preload 已转换并 transfer）。 */
   readAudio: VideoAudioReadResult & { data: ArrayBuffer }
   closeAudio: boolean
+  openWeb: WebSourceInfo
+  captureWeb: WebSourceCaptureResult
+  closeWeb: boolean
 }
 
 export interface VideoFramePortRequestMessage {

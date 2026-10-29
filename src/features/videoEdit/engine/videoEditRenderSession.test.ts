@@ -389,16 +389,17 @@ it('原生可用时先把帧通道端口交给 Worker 再初始化，并附上�
   expect(workers[0].terminate).toHaveBeenCalledOnce(); expect(platform.disconnect).toHaveBeenCalledWith('vf-route-1')
 })
 
-it('诊断强制浏览器或原生不可用时不建立通道；建立失败记警告并只用后备解码', async () => {
+it('诊断强制浏览器时仍接帧通道（网页画面经它到达）但不用原生解码；建立失败记警告并只用后备解码', async () => {
   platform.status.mockResolvedValue({ available: true, forcedBackend: 'browser' })
   const forced = new VideoEditRenderSession(composition()); await forced.present(0)
-  expect(platform.connect).not.toHaveBeenCalled()
-  expect(workers[0].messages[0].message).toMatchObject({ kind: 'init', decode: { nativeAvailable: false, forced: 'browser' } })
+  expect(platform.connect).toHaveBeenCalledOnce()
+  expect(workers[0].messages[0].message).toMatchObject({ kind: 'nativeFrames.attach' })
+  expect(workers[0].messages[1].message).toMatchObject({ kind: 'init', decode: { nativeAvailable: false, forced: 'browser' } })
   platform.status.mockResolvedValue({ available: true, forcedBackend: null }); platform.connect.mockRejectedValue(new Error('显卡帧通道建立超时。'))
   const failed = new VideoEditRenderSession(composition()); await failed.present(0)
   expect(workers[1].messages[0].message).toMatchObject({ kind: 'init', decode: { nativeAvailable: false } })
   expect(platform.logs.filter(entry => entry.level === 'warn')).toEqual([expect.objectContaining({ level: 'warn', meta: expect.objectContaining({ event: 'video_edit.decode.native.channel_failed' }) })])
-  await Promise.all([forced.dispose(), failed.dispose()]); expect(platform.disconnect).not.toHaveBeenCalled()
+  await Promise.all([forced.dispose(), failed.dispose()]); expect(platform.disconnect).toHaveBeenCalledOnce()
 })
 
 it('Worker 的结构化日志经会话写入应用日志，不当作请求回执', async () => {

@@ -56,6 +56,8 @@ const parameters = {
   size: { type: 'number', title: '字号', default: 24, min: 1, max: 72, step: 1, unit: 'px' },
   // 剪辑内容 v36：视频参数可按取帧时间表取帧（见下方片段的 screen）。
   screen: { type: 'image', title: '录屏', default: null },
+  // 剪辑内容 v41：图片参数可绑定网页画面（见下方片段的 page）。
+  page: { type: 'image', title: '网页', default: null },
   // 剪辑内容 v37 / 作者接口 v5：片子数据参数，声明记录种类与字段含义（见下方 document.scenes 与片段的 film）。
   film: { type: 'scene', title: '片子数据', schema: GOLDEN_SCENE_DECLARATION },
 }
@@ -121,6 +123,8 @@ document.media.push({ id: 'golden-screen', name: '屏幕原片', path: '/persist
 document.items.push({ id: 'golden-screen-item', name: '屏幕原片', kind: 'video', mediaId: 'golden-screen' })
 // 剪辑内容 v36：代码视频参数的取帧时间表——正常播放、停住并关掉录制鼠标、段间空档不参与、三倍速快放。
 clip.code!.parameters.screen = { kind: 'video', mediaId: 'golden-screen', spans: [{ from: 0, to: 1, src: 0 }, { from: 1, to: 1.5, src: 1, rate: 0, cursor: false }, { from: 2, to: 2.5, src: 1, rate: 3 }] }
+// 剪辑内容 v41：网页画面——项目里的网页文件夹，1920×1080 视口只渲染推近后露出的 640×360，6 倍栅格；按时间表取页面时间并读按钮矩形。
+clip.code!.parameters.page = { kind: 'web', path: '/persistence-project/素材/网页/知多少/index.html', width: 1920, height: 1080, region: [640, 360, 640, 360], scale: 6, spans: [{ from: 0, to: 2, src: 0 }, { from: 2, to: 3, src: 2, rate: 0 }], boxes: ['#send'] }
 // 剪辑内容 v37：片子数据存在文档里，代码参数只引用它。
 document.scenes = [goldenScene('golden-screen')]
 clip.code!.parameters.film = { kind: 'scene', sceneId: 'golden-scene' }
@@ -295,7 +299,8 @@ const values: Record<string, unknown> = {
   'code-version': { id: 'code-version', ...projectSourceVersion },
   'code-author-api': { apiVersion: CODE_AUTHOR_API_VERSION },
   'code-component': { schemaVersion: 1, name: '组件', version: 1, description: '黄金组件', exports: ['value'], imports: [] },
-  'code-asset': codeAssetSchema.parse({ format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: '代码标题', sourceVersion, codeSources: [{ hash, source }], parameters: { label: '黄金样本' }, curves: {}, images: [] }),
+  // 代码资产 v12：网页参数随资产带上网页路径（不打包网页文件夹）。
+  'code-asset': codeAssetSchema.parse({ format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: '代码标题', sourceVersion, codeSources: [{ hash, source }], parameters: { label: '黄金样本', page: { kind: 'web', path: '/persistence-project/素材/网页/知多少/index.html', time: 1.5 } }, curves: {}, images: [] }),
   'image-header': { format: 'henji-image-document', version: 1, id: image.id, revision: 0, kindVersion: 1, createdAt: timestamp, updatedAt: timestamp, contentRevision: 0, emptyUntilRevision: 0, summary: { width: 32, height: 40, layers: image.layers.length } },
   'image-package': { packageFormat: 'henjiimg', packageVersion: IMAGE_PACKAGE_VERSION, createdAt: timestamp, document: working, resources: [...image.creativeIntents.resources.map(r=>({resourceId:r.resourceId,sha256:r.digest.slice(7),byteLength:r.bytes,path:r.path,mediaType:'application/vnd.henji.layout+json'})),{resourceId:historyId,sha256:historyId.slice(7),byteLength:historyBytes.byteLength,path:`resources/${historyId.slice(7)}`,mediaType:'application/vnd.henji.image-history+json'}] },
   'image-working-copy': working,

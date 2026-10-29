@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>网页画面验收页</title>
+<!--
+  网页画面（代码素材 kind:'web'）的验收页：实现 window.henjiWeb 约定，seek(t) 把页面摆成第 t 秒，任意前后跳都确定。
+  含 CSS 动画、CSS 过渡、逐字出现的文字、模糊滤镜与毛玻璃；右上角的时间条码把 round(t·1000) 编成 16 格黑白块，
+  验收脚本据此核对每一帧取的是不是这一刻。
+-->
+<style>
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #101418; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
+  #backdrop { position: absolute; inset: 0; background: conic-gradient(from 40deg at 30% 40%, #ff6b6b, #ffd166, #06d6a0, #118ab2, #8338ec, #ff6b6b); }
+  #glass { position: absolute; left: 160px; top: 140px; width: 1100px; height: 700px; border-radius: 40px; background: rgba(255, 255, 255, 0.16); backdrop-filter: blur(28px) saturate(1.4); border: 1px solid rgba(255, 255, 255, 0.4); }
+  #title { position: absolute; left: 230px; top: 210px; font-size: 96px; font-weight: 700; color: #fff; letter-spacing: 2px; white-space: nowrap; }
+  #title span { opacity: 0; display: inline-block; transform: translateY(24px); }
+  #body { position: absolute; left: 232px; top: 360px; width: 960px; font-size: 40px; line-height: 1.5; color: rgba(255, 255, 255, 0.92); }
+  #card { position: absolute; left: 1360px; top: 220px; width: 400px; height: 300px; border-radius: 28px; background: #ffffff; box-shadow: 0 30px 60px rgba(0, 0, 0, 0.35); animation: card-in 1.2s cubic-bezier(.2, .8, .2, 1) 0.5s both; }
+  #card p { margin: 40px; font-size: 34px; color: #1d2733; }
+  @keyframes card-in { from { opacity: 0; transform: translateY(80px) scale(.92); } to { opacity: 1; transform: none; } }
+  #blurred { position: absolute; left: 1360px; top: 600px; width: 400px; height: 120px; border-radius: 60px; background: #06d6a0; color: #0b1f17; font-size: 40px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  #send { position: absolute; left: 980px; top: 740px; width: 220px; height: 72px; border-radius: 36px; background: #1d2733; color: #fff; font-size: 32px; display: flex; align-items: center; justify-content: center; transition: transform 0.8s cubic-bezier(.3, 1.4, .5, 1), background-color 0.8s linear; }
+  #send.pressed { transform: translateX(-420px) scale(1.15); background-color: #ef476f; }
+  #code { position: absolute; right: 0; top: 0; display: flex; }
+  #code i { width: 24px; height: 24px; background: #000; }
+  #code i.on { background: #fff; }
+</style>
+</head>
+<body>
+<div id="backdrop"></div>
+<div id="glass"></div>
+<div id="title"></div>
+<div id="body">浏览器自己排版和绘制：自动换行、字距、毛玻璃与模糊都和真网页一样，镜头推近到三倍文字依然清楚。</div>
+<div id="card"><p>卡片用 CSS 动画进场，页面时间决定它在哪一刻。</p></div>
+<div id="blurred">模糊滤镜</div>
+<div id="send">发送</div>
+<div id="code"></div>
+<script>
+  const TITLE = '网页画面逐字出现 Web'
+  const DURATION = 6
+  const title = document.getElementById('title')
+  for (const char of TITLE) { const span = document.createElement('span'); span.textContent = char === ' ' ? ' ' : char; title.appendChild(span) }
+  const code = document.getElementById('code')
+  for (let bit = 0; bit < 16; bit++) code.appendChild(document.createElement('i'))
+  const blurred = document.getElementById('blurred')
+  const send = document.getElementById('send')
+  const card = document.getElementById('card')
+
+  /** 逐字出现：第 i 个字在 0.2 + 0.08·i 秒开始，0.25 秒内淡入上移。 */
+  function typewriter(t) {
+    title.querySelectorAll('span').forEach((span, index) => {
+      const p = Math.min(1, Math.max(0, (t - 0.2 - index * 0.08) / 0.25))
+      span.style.opacity = String(p)
+      span.style.transform = `translateY(${(1 - p) * 24}px)`
+    })
+  }
+  /** 过渡：2 秒时按下“发送”，过渡从这一刻开始；先无过渡复位，再按需触发并把过渡停在 t 对应的位置。 */
+  function pressed(t) {
+    send.style.transition = 'none'
+    send.classList.remove('pressed')
+    void send.offsetWidth
+    send.style.transition = ''
+    if (t < 2) return
+    send.classList.add('pressed')
+    for (const animation of send.getAnimations()) { animation.pause(); animation.currentTime = (t - 2) * 1000 }
+  }
+
+  window.henjiWeb = {
+    ready: document.fonts.ready.then(() => undefined),
+    duration: DURATION,
+    async seek(t) {
+      typewriter(t)
+      for (const animation of card.getAnimations()) { animation.pause(); animation.currentTime = t * 1000 }
+      blurred.style.filter = `blur(${(Math.sin(t * Math.PI / 3) * 0.5 + 0.5) * 12}px)`
+      pressed(t)
+      const ms = Math.round(t * 1000)
+      code.querySelectorAll('i').forEach((cell, bit) => cell.classList.toggle('on', ((ms >> (15 - bit)) & 1) === 1))
+    },
+  }
+</script>
+</body>
+</html>

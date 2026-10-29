@@ -54,5 +54,7 @@ export function createElectronVideoFrames(): VideoFramesPlatform {
     closeStream: (streamId) => getNativeVideoFrames().closeStream(streamId),
     stats: () => getNativeVideoFrames().stats(),
     onStreamEnded: (listener) => getNativeVideoFrames().onStreamEnded(listener),
+    webContent: (path) => getNativeVideoFrames().webContent(path),
+    onWebContentChanged: (listener) => getNativeVideoFrames().onWebContentChanged(listener),
   }
 }

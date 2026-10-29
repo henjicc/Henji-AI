@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { textStyleSchema } from '../../imaging/vectorContent/text'
 import { CODE_VIDEO_SPAN_LIMIT, codeVideoSpansIssue } from './videoSpans'
+import { CODE_WEB_BOX_LIMIT, CODE_WEB_SELECTOR_LENGTH, codeWebBoxesIssue, codeWebViewIssue } from './webSource'
 
 const finite = z.number().finite()
 const unit = finite.min(0).max(1)
@@ -21,7 +22,20 @@ export const codeMaterialVideoSpansSchema = z.array(z.object({ from: finite, to:
   if (issue) context.addIssue({ code: 'custom', message: issue })
 })
 const videoReference = z.object({ kind: z.literal('video'), mediaId: z.string().min(1).max(100), time: finite.nonnegative().optional(), spans: codeMaterialVideoSpansSchema.optional() }).strict().refine(value => value.time === undefined || value.spans === undefined, '视频参数的 time 与 spans 不能同时给出。')
-export const codeMaterialImageReferenceSchema = z.union([z.object({ kind: z.literal('image'), mediaId: z.string().min(1).max(100) }).strict(), videoReference, z.object({ kind: z.literal('sequence'), mediaId: z.literal('below') }).strict()])
+/**
+ * 网页画面（剪辑内容第 41 版）：本地网页的路径（内存里是绝对路径，落盘按位置写法换成项目相对）、视口、取景与倍率、
+ * 取帧时刻与要读矩形的选择器。取景规则见 webSource.ts。
+ */
+const webReference = z.object({
+  kind: z.literal('web'), path: z.string().min(1).max(4096).refine(value => !value.includes('\0'), '网页路径不能含空字符。'),
+  width: z.number().int().optional(), height: z.number().int().optional(), region: z.tuple([z.number().int(), z.number().int(), z.number().int(), z.number().int()]).optional(), scale: finite.optional(),
+  time: finite.nonnegative().optional(), spans: codeMaterialVideoSpansSchema.optional(),
+  boxes: z.array(z.string().min(1).max(CODE_WEB_SELECTOR_LENGTH)).max(CODE_WEB_BOX_LIMIT).optional(),
+}).strict().superRefine((value, context) => {
+  const issue = codeWebViewIssue(value) ?? (value.time !== undefined && value.spans !== undefined ? '网页参数的 time 与 spans 不能同时给出。' : undefined) ?? (value.boxes ? codeWebBoxesIssue(value.boxes) : undefined)
+  if (issue) context.addIssue({ code: 'custom', message: issue })
+})
+export const codeMaterialImageReferenceSchema = z.union([z.object({ kind: z.literal('image'), mediaId: z.string().min(1).max(100) }).strict(), videoReference, z.object({ kind: z.literal('sequence'), mediaId: z.literal('below') }).strict(), webReference])
 export const codeMaterialAudioReferenceSchema = z.object({ kind: z.literal('audio'), mediaId: z.string().min(1).max(100) }).strict()
 /** 片子数据参数的值（剪辑内容第 37 版，作者接口 v5）：引用同一剪辑 scenes 里的一份，引用须存在由剪辑文档校验。 */
 export const codeMaterialSceneReferenceSchema = z.object({ kind: z.literal('scene'), sceneId: z.string().min(1).max(100) }).strict()

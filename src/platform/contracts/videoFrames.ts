@@ -23,6 +23,7 @@ import type {
   VideoFrameStreamInfo,
   VideoFramesPreloadStats,
   VideoFrameTestStreamRequest,
+  WebSourceContentChange,
 } from './videoFrameTypes'
 
 /** preload → 消费方端口的消息。 */
@@ -75,4 +76,7 @@ export interface VideoFramesPlatform {
   closeStream(streamId: string): Promise<boolean>
   stats(): Promise<VideoFrameBridgeStats & { preload: VideoFramesPreloadStats }>
   onStreamEnded(listener: (payload: VideoFrameStreamEndedPayload) => void): () => void
+  /** 网页来源文件夹的内容指纹（开始监视它，变化经 `onWebContentChanged` 通知）。 */
+  webContent(path: string): Promise<string>
+  onWebContentChanged(listener: (change: WebSourceContentChange) => void): () => void
 }

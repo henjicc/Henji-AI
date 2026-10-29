@@ -10,6 +10,8 @@ import {
   type VideoFrameStreamEndedPayload,
   type VideoFramesPortWindowMessage,
   type VideoFramesPreloadStats,
+  type WebSourceContentChange,
+  WEB_SOURCE_CONTENT_CHANGED_CHANNEL,
 } from '../../src/platform/contracts/videoFrameTypes'
 import type { HenjiVideoFramesApi } from './api-video-frames'
 
@@ -53,10 +55,13 @@ const PORT_CALL_CHANNELS: Record<VideoFramePortCall['method'], string> = {
   openAudio: 'videoFrames:openAudio',
   readAudio: 'videoFrames:readAudio',
   closeAudio: 'videoFrames:closeAudio',
+  openWeb: 'videoFrames:openWeb',
+  captureWeb: 'videoFrames:captureWeb',
+  closeWeb: 'videoFrames:closeWeb',
 }
 
 /** 会话归属本通道的请求：preload 填入本通道的 route（忽略消费方给的值）。 */
-const ROUTED_CALLS: ReadonlySet<VideoFramePortCall['method']> = new Set(['openDecoder', 'openAudio'])
+const ROUTED_CALLS: ReadonlySet<VideoFramePortCall['method']> = new Set(['openDecoder', 'openAudio', 'openWeb'])
 
 /**
  * 声音读取结果里的 PCM：IPC 送来的是字节数组，转为独占的 ArrayBuffer 后 transfer 给 Worker（这一跳不再拷贝）。
@@ -215,6 +220,14 @@ export function createVideoFramesApi(nativeInvoke: NativeInvoke): HenjiVideoFram
       ipcRenderer.on('videoFrames:streamEnded', listener)
       return () => {
         ipcRenderer.removeListener('videoFrames:streamEnded', listener)
+      }
+    },
+    webContent: (path) => nativeInvoke('videoFrames:webContent', { path }),
+    onWebContentChanged: (handler) => {
+      const listener = (_event: Electron.IpcRendererEvent, change: WebSourceContentChange): void => handler(change)
+      ipcRenderer.on(WEB_SOURCE_CONTENT_CHANGED_CHANNEL, listener)
+      return () => {
+        ipcRenderer.removeListener(WEB_SOURCE_CONTENT_CHANGED_CHANNEL, listener)
       }
     },
   }

@@ -170,12 +170,13 @@ export class VideoEditRenderTransport {
       const platform = getPlatform()
       const status = await this.timed('native_status', () => platform.videoDecoder.status())
       forced = status.forcedBackend ?? undefined
-      if (!status.available || forced === 'browser' || this.disposed) return { nativeAvailable: false, ...(forced ? { forced } : {}) }
+      if (this.disposed) return { nativeAvailable: false }
+      // 帧通道同时送网页画面（离屏页面的共享纹理），原生解码不可用或强制浏览器解码时也接上。
       const channel = await this.timed('native_connect', () => platform.videoFrames.connect())
       if (this.disposed) { platform.videoFrames.disconnect(channel.route); return { nativeAvailable: false } }
       this.route = channel.route
       this.worker.postMessage({ kind: 'nativeFrames.attach', port: channel.port } satisfies NativeFramesRequest, [channel.port])
-      return { nativeAvailable: true, ...(forced ? { forced } : {}) }
+      return { nativeAvailable: status.available && forced !== 'browser', ...(forced ? { forced } : {}) }
     } catch (error) {
       logger.warn('原生解码通道不可用，剪辑预览只用后备解码', { event: 'video_edit.decode.native.channel_failed', error })
       return { nativeAvailable: false, ...(forced ? { forced } : {}) }

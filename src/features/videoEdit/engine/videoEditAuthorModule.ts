@@ -18,6 +18,22 @@ export interface AuthorFrameInfo {
    * Canvas 图层由宿主缩放，坐标不变；WebGPU / WebGL 拿到的 target 与 width/height 已是缩小后的像素，按像素写的常数乘它。
    */
   renderScale?: number
+  /** 绑定了网页的图片参数在这一帧的页面信息，按参数名；没有网页参数时没有这一项。 */
+  web?: Readonly<Record<string, AuthorWebFrame>>
+}
+/**
+ * 网页参数这一帧的页面信息。`time` 是页面时间（秒）；页面按 `width`×`height` 的视口排版，画面只含 `region`
+ * （[x, y, 宽, 高]）这一块，每 CSS 像素 `scale` 个画面像素；`boxes` 是 boxes 里各选择器的元素矩形 [x, y, 宽, 高]
+ * （视口 CSS 像素，找不到为 null）。`duration` 是页面声明的总时长。
+ */
+export interface AuthorWebFrame {
+  time: number
+  width: number
+  height: number
+  region: [number, number, number, number]
+  scale: number
+  duration: number | null
+  boxes: Readonly<Record<string, [number, number, number, number] | null>>
 }
 export type AuthorParameters = Readonly<Record<string, unknown>>
 export type AuthorAssets = Readonly<Record<string, CanvasImageSource>>

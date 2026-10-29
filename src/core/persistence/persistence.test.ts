@@ -20,6 +20,8 @@ import { PersistenceError, upgradePersistenceContent } from './migrations'
 import { persistenceSchemaStructure } from './fingerprint'
 import { parseDocumentEnvelope, parseDocumentText } from '../documents/envelope'
 import { videoEditDocumentSchema } from '../videoEdit/document'
+import { codeImageReference } from '../videoEdit/codeMaterial/contract'
+import { codeMaterialImageReferenceSchema } from '../videoEdit/codeMaterial/parameterValueSchema'
 import { decodeCodeAsset, encodeCodeAsset } from '../videoEdit/codeAsset'
 import { parseVersionedPersistenceJson, readLocalPersistenceJson, readStoredPersistenceJson } from './versionedJson'
 import { backupPersistenceSnapshot, persistenceBackupLocation } from './backup'
@@ -100,6 +102,31 @@ it('视频参数取帧时间表是可选增量：嵌入它的格式只升版本�
   expect(parse(withScreen({ kind: 'video', mediaId: 'golden-screen', spans: [{ from: 0, to: 1, src: 0 }] })).success).toBe(true)
 })
 
+it('剪辑内容 v41：网页画面引用是可选增量，v40 样本原样升上来；新样本读回网页引用，落盘 schema 与运行时校验对非法取景一致拒绝', () => {
+  const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
+  const v40 = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v40.json', 'utf8'))
+  expect(upgradePersistenceContent(format, structuredClone(v40.content), 40)).toEqual(v40.content)
+  const v41 = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v41.json', 'utf8'))
+  const parse = (content: unknown) => videoEditDocumentSchema.safeParse({ format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: 'golden', name: '黄金样本', revision: 0, ...(content as object) })
+  const parsed = parse(v41.content)
+  expect(parsed.success).toBe(true)
+  expect(parsed.data?.sequences[0].clips[0].code?.parameters.page).toEqual({ kind: 'web', path: '/persistence-project/素材/网页/知多少/index.html', width: 1920, height: 1080, region: [640, 360, 640, 360], scale: 6, spans: [{ from: 0, to: 2, src: 0 }, { from: 2, to: 3, src: 2, rate: 0 }], boxes: ['#send'] })
+  // 文档里参数值的联合也接受普通结构值，非法引用在那里不报错；这里核对图片引用自身的 schema 与运行时校验。
+  const agree = (page: unknown): boolean => {
+    const stored = codeMaterialImageReferenceSchema.safeParse(page).success
+    let runtime = true
+    try { codeImageReference(page, '网页') } catch { runtime = false }
+    expect(runtime).toBe(stored)
+    return stored
+  }
+  // 4K 推近 3 倍（取景 640 宽、6 倍）合法；整幅 6 倍超出纹理上限、取景出视口、time 与 spans 同给、混入素材 ID 都拒绝。
+  expect(agree({ kind: 'web', path: '/p/index.html', region: [1280, 0, 640, 360], scale: 6, time: 1 })).toBe(true)
+  expect(agree({ kind: 'web', path: '/p/index.html', scale: 6 })).toBe(false)
+  expect(agree({ kind: 'web', path: '/p/index.html', region: [1500, 0, 640, 360] })).toBe(false)
+  expect(agree({ kind: 'web', path: '/p/index.html', time: 1, spans: [{ from: 0, to: 1, src: 0 }] })).toBe(false)
+  expect(agree({ kind: 'web', path: '/p/index.html', mediaId: 'golden-screen' })).toBe(false)
+})
+
 it('剪辑内容 v37：片段停用、片子数据与内置库，旧样本原样升上来；新样本经内容外形与完整 schema 读回不丢字段', () => {
   const versioned = (id: string) => PERSISTENCE_FORMATS.find(value => value.id === id)!
   const unstamped = (value: unknown): unknown => { if (!value || typeof value !== 'object' || Array.isArray(value)) return value; const { version: _version, minReaderVersion: _minimum, ...rest } = value as Record<string, unknown>; return rest }
@@ -121,7 +148,7 @@ it('剪辑内容 v37：片段停用、片子数据与内置库，旧样本原样
   const recording = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.screen_recording/v40.json', 'utf8'))
   expect(recording).toMatchObject({ kindVersion: 40, kindMinReaderVersion: 40 })
   expect(JSON.stringify(versioned('document.screen_recording').schema.parse(recording.content))).toContain('"libraries":{"three":"0.186.1"}')
-  expect((versioned('subtitle-manifest').schema.parse(read('subtitle-manifest', 22)) as { soundClips: Array<{ enabled?: boolean }> }).soundClips[0].enabled).toBe(false)
+  expect((versioned('subtitle-manifest').schema.parse(upgradePersistenceContent(versioned('subtitle-manifest'), read('subtitle-manifest', 22), 22)) as { soundClips: Array<{ enabled?: boolean }> }).soundClips[0].enabled).toBe(false)
   const record = read('code-version', 4) as Record<string, unknown>
   expect(versioned('code-version').schema.parse(record)).toEqual(record)
   // 内置库从作者接口 v5 起才有；空对象与省略同义，读入即规范成省略。

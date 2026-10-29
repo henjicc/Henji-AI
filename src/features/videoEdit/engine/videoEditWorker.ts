@@ -14,6 +14,7 @@ import { VideoEditDecodeLookahead } from './videoEditDecodeLookahead'
 import { VideoEditRenderer } from './videoEditRenderer'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { VideoEditNativeFrameReceiver } from './videoEditNativeFrames'
+import { installVideoEditWebChannel } from './videoEditWebInputs'
 import { NativeFrameDiagnostics, type NativeFrameDiagnosticsRequest, type NativeFrameDiagnosticsResult } from './videoEditNativeFrameDiagnostics'
 import { VideoEditBrowserFrames } from './videoEditBrowserFrames'
 import { VideoEditNativeFrames } from './videoEditNativeFrameSource'
@@ -188,6 +189,7 @@ setVideoEditCodeCompilerWorkerFactory(() => sharedCompilation.worker())
 installCodeSourceReader(file => sharedCompilation.read(file))
 installAuthorMetadataCache({ read: key => sharedCompilation.metadata(key), write: async (key, metadata) => { await sharedCompilation.metadata(key, metadata) } })
 installAuthorNativeModules(files => sharedCompilation.modules(files))
+installVideoEditWebChannel(() => nativeFrames)
 self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | SharedCompilationResponse>) => {
   if (videoEditRenderDiagnosticsEnabled()) probeVideoEditTask(`message.${event.data.kind}`, () => receive(event))
   else receive(event)

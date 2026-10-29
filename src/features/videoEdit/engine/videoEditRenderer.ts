@@ -1,6 +1,8 @@
 import { videoEditGainMultiplier } from '@/core/videoEdit/loudness'
 import type { VideoEditContentTarget, VideoEditLookaheadScope } from './videoEditDecodeLookahead'
-import { codeMediaInputKey, codeMediaInputComposition, codeMediaInputNextFrame, type CodeMediaInput } from '@/core/videoEdit/codeMediaInput'
+import { codeMediaInputKey, codeMediaInputComposition, codeMediaInputNextFrame, codeMediaInputSample, type CodeMediaInput } from '@/core/videoEdit/codeMediaInput'
+import { codeWebView } from '@/core/videoEdit/codeMaterial/webSource'
+import { VideoEditWebInputs, videoEditWebSourceKey, type VideoEditWebFrameCopy } from './videoEditWebInputs'
 import { codeFilterInputComposition } from '@/core/videoEdit/codeFilterInput'
 import type { AuthorGpuInputs } from './videoEditAuthorModule'
 import type { PreparedVideoEditCodeEffect, PreparedVideoEditEffect } from './videoEditCodeSources'
@@ -441,6 +443,9 @@ export class VideoEditRenderer {
   onPlaybackIdle?: () => void
   private speculativeImageLoads = 0
   private get lookaheadOwner(): VideoEditRenderer { return this.nestedOwner?.lookaheadOwner ?? this }
+  /** 网页页面归整棵渲染器树的根（嵌套序列与代码输入里的网页参数共用页面）。 */
+  private webInputs?: VideoEditWebInputs
+  private get webOwner(): VideoEditRenderer { return this.nestedOwner?.webOwner ?? this }
   private lookaheadRenderers(): VideoEditRenderer[] {
     const renderers = new Set<VideoEditRenderer>([this])
     for (const renderer of renderers) for (const entry of [...renderer.nestedPictures.values(), ...renderer.codeInputs.values(), ...renderer.filterInputs.values()]) renderers.add(entry.renderer)
@@ -1425,11 +1430,18 @@ export class VideoEditRenderer {
    * approximate video input pictures (see `VideoEditScrubMode`). */
   private async prepareCodeInputs(document: VideoEditComposition, active: VideoEditClip[], frame: number, sequential: boolean, quality: EffectQuality, current: () => boolean, context: NestedFrameContext, path: string[], scrubbing: VideoEditScrubMode = false): Promise<Map<string, VideoEditCodePicture>> {
     // A timetabled video parameter between its spans takes no part in this frame: no read, no session, no budget.
-    const requests = active.flatMap(clip => Object.entries(videoEditCodeInputParameters(document, clip.code, instance => this.codeSources?.declarations(instance))).flatMap(([parameter, reference]) => {
-      if (!isCodeImageReference(reference) || reference.kind === 'image') return []
+    const parameters = active.flatMap(clip => Object.entries(videoEditCodeInputParameters(document, clip.code, instance => this.codeSources?.declarations(instance))).map(([parameter, reference]) => ({ clip, parameter, reference })))
+    const requests = parameters.flatMap(({ clip, parameter, reference }) => {
+      if (!isCodeImageReference(reference) || reference.kind === 'image' || reference.kind === 'web') return []
       const source = codeMediaInputComposition(document, clip, reference, frame)
       return source ? [{ clip, parameter, reference, source }] : []
-    }))
+    })
+    // 网页画面由离屏页面按页面时间出画面（取帧时刻与视频参数同一套：固定、跟随片段或时间表）。
+    const webRequests = parameters.flatMap(({ clip, parameter, reference }) => {
+      if (!isCodeImageReference(reference) || reference.kind !== 'web') return []
+      const sample = codeMediaInputSample(clip, reference, frame, document.frameRate)
+      return sample ? [{ clip, parameter, reference, seconds: sample.seconds }] : []
+    })
     const showing = new Set(requests.map(request => request.source.sessionKey))
     // A walk still under way stops after its current step; this frame's read continues the decoder from where it got.
     for (const key of showing) if (this.prewarmedInputs.delete(key)) this.codeInputs.get(key)?.prewarm?.abort()
@@ -1495,6 +1507,27 @@ export class VideoEditRenderer {
       // Observed here; a rejection still fails the frame through the await below.
       void picture.catch(() => undefined)
       pending.push([codeMediaInputKey(clip.id, parameter), picture])
+    }
+    if (webRequests.length || this.webOwner.webInputs) {
+      const owner = this.webOwner
+      const webs = owner.webInputs ??= new VideoEditWebInputs()
+      const compositor = this.ensureCompositor()
+      const copy: VideoEditWebFrameCopy = (borrowed, width, height, target) => compositor.copyWebFrame(borrowed, width, height, target)
+      for (const { clip, parameter, reference, seconds } of webRequests) {
+        if (!current()) throw new DOMException('网页取帧已取消。', 'AbortError')
+        const key = JSON.stringify(['web', videoEditWebSourceKey(reference), seconds, reference.boxes ?? []])
+        let picture = shared.get(key)
+        if (!picture) {
+          const view = codeWebView(reference)
+          context.bytes += Math.round(view.region[2] * view.scale) * Math.round(view.region[3] * view.scale) * 4
+          if (context.bytes > 512 * 1024 ** 2) throw new Error('当前网页画面、视频输入与嵌套画面超过显存预算，请缩小网页取景或倍率。')
+          picture = webs.picture(reference, seconds, context, copy)
+          shared.set(key, picture)
+        }
+        void picture.catch(() => undefined)
+        pending.push([codeMediaInputKey(clip.id, parameter), picture])
+      }
+      webs.trim(new Set(webRequests.map(({ reference }) => videoEditWebSourceKey(reference))))
     }
     this.prewarmCodeInputs(document, frame, upcoming)
     const inputs = new Map<string, VideoEditCodePicture>()
@@ -2443,6 +2476,7 @@ export class VideoEditRenderer {
     this.nestedPictures.clear(); this.nestedSounds.clear()
     await this.disposeCodeInputs()
     await this.disposeCodeInputs(new Set(), this.filterInputs)
+    this.webInputs?.dispose(); this.webInputs = undefined
     this.cancelPresentation(); await Promise.allSettled([this.codeSources?.dispose(), this.disposePlayback()])
     await Promise.allSettled([...this.seekers.values()].map(seeker => seeker.dispose())); this.seekers.clear(); this.frameCache.clear()
     await Promise.allSettled([...this.stillDecodes.values()].map(decode => decode.done)); this.stills?.clear()

@@ -83,7 +83,8 @@ const imageShader = `${shapeShader}
 }`
 
 /** Borrowed from the compositor; this runtime never decodes, uploads, caches or destroys these textures. */
-export interface VideoEditCodeImageInput { texture: GpuTexture; width: number; height: number; owner: GpuDevice; premultiplied: boolean; source?: CanvasImageSource }
+/** `web`：网页参数这一帧的页面信息（作者代码的 `info.web[参数名]`）。 */
+export interface VideoEditCodeImageInput { texture: GpuTexture; width: number; height: number; owner: GpuDevice; premultiplied: boolean; source?: CanvasImageSource; web?: import('./videoEditAuthorModule').AuthorWebFrame }
 
 interface Surface { picture: VideoEditCodePicture; bytes: number; buffers: GpuBuffer[]; filterBuffer?: GpuBuffer; mixBuffer?: GpuBuffer; maskData?: Uint8Array; maskRgba?: Uint8Array }
 export class VideoEditCodeGpu {

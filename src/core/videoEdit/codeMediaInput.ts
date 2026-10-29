@@ -113,6 +113,8 @@ export interface CodeMediaInput { kind: 'video' | 'sequence'; still: boolean; ti
  * `still`：固定时刻的视频参数（定格帧），整段只显示这一幅，解出一次即可。`timetabled`：按时间表取帧（段间不参与）。
  */
 export function codeMediaInputComposition(document: VideoEditComposition, clip: VideoEditClip, reference: CodeImageReference, frame: number): CodeMediaInput | undefined {
+  // 网页画面不经合成，由网页来源按页面时间取帧（渲染器单独准备），不占解码会话。
+  if (reference.kind === 'web') return undefined
   if (reference.kind === 'sequence') {
     const clips = document.clips.filter(candidate => candidate.track < clip.track)
     const ids = new Set(clips.map(candidate => candidate.id))

@@ -128,7 +128,7 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
         if (inputs.length !== 1 || program.apiVersion !== publication.asset.sourceVersion.apiVersion || program.languageVersion !== publication.asset.sourceVersion.languageVersion) throw new Error('代码资产固定源码与语言版本不一致。')
         definition.versions[0].assetOrigin = publication.origin
         const parameters = structuredClone(publication.asset.parameters)
-        for (const [key, value] of Object.entries(parameters)) if (isCodeImageReference(value) && value.kind !== 'sequence' || isCodeAudioReference(value)) {
+        for (const [key, value] of Object.entries(parameters)) if (isCodeImageReference(value) && (value.kind === 'image' || value.kind === 'video') || isCodeAudioReference(value)) {
           const mediaId = publication.mediaIds.get(value.mediaId)
           if (!mediaId) throw new Error('代码资产媒体依赖未完成映射。')
           parameters[key] = { ...value, mediaId }

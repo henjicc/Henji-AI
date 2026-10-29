@@ -136,6 +136,9 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 40 → 41：代码图片参数新增网页画面引用 {kind:'web'}（本机网页的路径、视口、取景、倍率、取帧时刻与要读矩形的选择器）；
+    // 旧内容原样有效，最低可读版本不变。
+    40: content => structuredClone(content),
     // 39 → 40：作者源码与固定组件依赖不设容量或深度上限，内容原样保留。
     39: content => structuredClone(content),
     38: content => structuredClone(content),

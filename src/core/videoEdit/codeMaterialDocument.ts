@@ -88,7 +88,7 @@ export function validateCodeMaterialDocument(document: VideoEditDocument, read: 
   const validate = (instance: CodeMaterialInstance, program: CodeMaterialMetadata): void => {
     prepareCodeMaterialParameters(program, instance)
     for (const value of Object.values(instance.parameters)) {
-      if (isCodeImageReference(value) && value.kind !== 'sequence' && !document.media.some(media => media.id === value.mediaId && media.kind === value.kind)) throw new CodeMaterialError('PARAMETERS', '图片或视频参数引用与剪辑素材类型不一致。')
+      if (isCodeImageReference(value) && (value.kind === 'image' || value.kind === 'video') && !document.media.some(media => media.id === value.mediaId && media.kind === value.kind)) throw new CodeMaterialError('PARAMETERS', '图片或视频参数引用与剪辑素材类型不一致。')
       if (isCodeAudioReference(value) && !document.media.some(media => media.id === value.mediaId && ['audio', 'video'].includes(media.kind))) throw new CodeMaterialError('PARAMETERS', '音频参数须引用剪辑中的音频或视频。')
     }
   }

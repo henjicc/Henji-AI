@@ -18,6 +18,7 @@ import { videoEditMeasuredRenderState, type VideoEditRenderPerformance } from '@
 import { loadVideoEditRenderPerformance, readVideoEditRenderPerformance, recordVideoEditRenderPerformance } from './videoEditRenderPerformance'
 import { VideoEditCodeMetadataPending } from './videoEditCodeState'
 import { settleVideoEditCodeDeclarations, subscribeVideoEditCodeDeclarations, videoEditCodeDeclarationReader } from './videoEditCodeDeclarations'
+import { subscribeVideoEditWebContent, videoEditWebContentIdentity } from './videoEditWebContent'
 import type { RenderResponse } from '../engine/videoEditWorker'
 
 /**
@@ -170,6 +171,8 @@ subscribeVideoEditTracking(() => { analysisRevision++ })
 subscribeVideoEditSmartRegions(() => { analysisRevision++ })
 // 读不出的代码声明在后台重读成功：引用片子数据的段从整份计入换回按时段计入，和分析结果一样让窗口重算并通知界面。
 subscribeVideoEditCodeDeclarations(() => { analysisRevision++; barRevision++; for (const listener of barListeners) listener(); publishVideoEdit() })
+// 网页文件夹的内容指纹取到或变化：用到它的窗口指纹随之改变。
+subscribeVideoEditWebContent(() => { analysisRevision++; barRevision++; for (const listener of barListeners) listener(); publishVideoEdit() })
 const windowMemo = new WeakMap<VideoEditComposition, { revision: number; fontRevision: number; windows: VideoEditRenderWindow[] }>()
 /**
  * 每条序列上一次算出的窗口与输入签名。每次编辑都会产生新的文档快照，按对象缓存必然落空；
@@ -189,7 +192,7 @@ export function videoEditRenderCacheWindows(owner: VideoEditInstance, compositio
   const fontRevision = fontLibrarySnapshot().revision
   const memo = windowMemo.get(composition)
   if (memo?.revision === analysisRevision && memo.fontRevision === fontRevision) return memo.windows
-  const dependencies = { fontRevision, analysis: JSON.stringify([videoEditTrackResults(composition), videoEditSmartRegionSegments()]), codeDeclarations: videoEditCodeDeclarationReader(owner) }
+  const dependencies = { fontRevision, analysis: JSON.stringify([videoEditTrackResults(composition), videoEditSmartRegionSegments()]), codeDeclarations: videoEditCodeDeclarationReader(owner), webContent: videoEditWebContentIdentity }
   const set = videoEditRenderWindowSet(composition, dependencies, lastWindowSets.get(composition.id))
   lastWindowSets.delete(composition.id); lastWindowSets.set(composition.id, set)
   if (lastWindowSets.size > LAST_WINDOW_SET_LIMIT) lastWindowSets.delete(lastWindowSets.keys().next().value!)

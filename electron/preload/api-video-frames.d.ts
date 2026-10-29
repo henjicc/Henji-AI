@@ -10,6 +10,7 @@ import type {
   VideoFrameStreamInfo,
   VideoFramesPreloadStats,
   VideoFrameTestStreamRequest,
+  WebSourceContentChange,
 } from '../../src/platform/contracts/videoFrameTypes'
 
 /**
@@ -27,4 +28,7 @@ export interface HenjiVideoFramesApi {
   closeStream: (streamId: string) => Promise<boolean>
   stats: () => Promise<VideoFrameBridgeStats & { preload: VideoFramesPreloadStats }>
   onStreamEnded: (handler: (payload: VideoFrameStreamEndedPayload) => void) => () => void
+  /** 网页来源文件夹的内容指纹（预渲染的窗口指纹用它）；开始监视，变化经 `onWebContentChanged` 通知。 */
+  webContent: (path: string) => Promise<string>
+  onWebContentChanged: (handler: (change: WebSourceContentChange) => void) => () => void
 }

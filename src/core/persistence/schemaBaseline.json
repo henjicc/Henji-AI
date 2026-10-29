@@ -126,8 +126,8 @@
       "minReaderVersion": 1
     },
     "document.video_edit": {
-      "version": 40,
-      "fingerprint": "399834865e605678a7b178e2cfc25577cac9396cd7ecf1cfd172a88c6b6e1045",
+      "version": 41,
+      "fingerprint": "76b5b2e916102e2d14edc8d72c4fd127b3a9311ff2f484d07c86d1c60eae1dcc",
       "supportedFrom": 17,
       "minReaderVersion": 38
     },
@@ -156,8 +156,8 @@
       "minReaderVersion": 1
     },
     "document.screen_recording": {
-      "version": 43,
-      "fingerprint": "32111fab05d2fecfe4e7f3b7271b297503fdaed1af4e8ae31d749f040730bb46",
+      "version": 44,
+      "fingerprint": "48b7f5535fe72db402acb06cc1e8babef5491ee6765a21040070081e9871e504",
       "supportedFrom": 19,
       "minReaderVersion": 41
     },
@@ -192,8 +192,8 @@
       "minReaderVersion": 1
     },
     "code-asset": {
-      "version": 11,
-      "fingerprint": "7674bd014e675c16f1145a18896bbe732c2cc4e42249dda211d4892df6eb51fc",
+      "version": 12,
+      "fingerprint": "71dc0d3bf96a69fdb45dd6b6dab3c6eb222d98586bc07af8c5a682571a5e927b",
       "supportedFrom": 6,
       "minReaderVersion": 10
     },
@@ -216,8 +216,8 @@
       "minReaderVersion": 3
     },
     "title-templates": {
-      "version": 8,
-      "fingerprint": "e8ffeb413de664301c6c8748cd83010ba0d9192f57542804ec39463b33f78045",
+      "version": 9,
+      "fingerprint": "c1fa1e2d8924e3a910034c3b24f202b697edfd99b40ed68afc918bf9a71d5bb5",
       "supportedFrom": 6,
       "minReaderVersion": 6
     },
@@ -240,8 +240,8 @@
       "minReaderVersion": 1
     },
     "video-preset-package": {
-      "version": 9,
-      "fingerprint": "1dd491890403f99f52c010dd702ee2e6bc600931aff80d2f5b76378df437fc89",
+      "version": 10,
+      "fingerprint": "00a323a10e9768f905af091555abca03f7ef13ae8a632438b1676c5a89edd8fd",
       "supportedFrom": 5,
       "minReaderVersion": 6
     },
@@ -288,8 +288,8 @@
       "minReaderVersion": 2
     },
     "subtitle-manifest": {
-      "version": 22,
-      "fingerprint": "6a41e0d0cc2da6286dada12e46d451d69a19793f6034296d40a48fecad8dfc47",
+      "version": 23,
+      "fingerprint": "28a93aa13c6abeadd719c40e9992637218b4051d1fc14a1328cf0859d435c9fb",
       "supportedFrom": 11,
       "minReaderVersion": 22
     },
@@ -330,14 +330,14 @@
       "minReaderVersion": 1
     },
     "video-template-library": {
-      "version": 5,
-      "fingerprint": "f18032dc647acc54e3ccfa6417ce5cc6dde9f30719e22eb748cb4aa838df744a",
+      "version": 6,
+      "fingerprint": "600184286bb17fec3df88aa946ca107e01c18ab8d803e636ea5139a2cb8878f8",
       "supportedFrom": 1,
       "minReaderVersion": 3
     },
     "video-style-package": {
-      "version": 8,
-      "fingerprint": "2dffa9d144a3132a282b6ec62c9cb47aac6bc01064bba25b7730743d2581648b",
+      "version": 9,
+      "fingerprint": "72fd53ff1a8f48bb699f9b4bbe6baca5ecd684ba64b932b21e09576ca55cb54b",
       "supportedFrom": 1,
       "minReaderVersion": 6
     },
