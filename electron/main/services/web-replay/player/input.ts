@@ -9,16 +9,20 @@ const BUTTONS = ['left', 'middle', 'right', 'back', 'forward'] as const
 type Cdp = (method: string, params?: Record<string, unknown>) => Promise<unknown>
 
 /**
- * Turns behavior events into trusted browser input through the DevTools protocol. Presses and
- * wheel go to the element the recording named (its current position plus the in-element
- * offset); moves keep their recorded path. The pointer position is tracked for later presses.
- * A director script's input comes through the same path: `moveTo` (rewritten pointer paths),
- * `insertText` (typing one character at a time), and events without a target at a given point.
+ * 把行为轨事件经调试协议变成浏览器的可信输入。按下与滚轮落在录制点名的元素上（元素此刻的位置加元素内偏移），
+ * 移动沿录制路径；按住期间的移动与松开整体带上按下时的落点偏移（见 held）。导演稿的输入走同一条路：
+ * `moveTo`（改写的鼠标路径）、`insertText`（逐字输入），以及没有目标、直接给坐标的事件。
  */
 export class InputDispatcher {
   private x = 0
   private y = 0
   private buttons = 0
+  /**
+   * 按下的落点相对录制坐标的偏移。重演的布局可能和录制差几像素（字形度量不同，整体布局随之移动），按下按元素重新定位后，
+   * 按住时的移动与松开都要跟着平移：松开若按录制坐标或松开时碰巧在指针下的元素另算，点击会变成一段拖动，
+   * 超过页面的拖动阈值就成了平移画布而不是点击。
+   */
+  private held = { dx: 0, dy: 0 }
   private tempDir: string | null = null
   misses = 0
 
@@ -54,10 +58,19 @@ export class InputDispatcher {
   async dispatch(event: WebRecordingBehaviorEvent): Promise<{ x: number; y: number } | null> {
     switch (event.kind) {
       case 'pointer': {
-        if (event.type === 'move') { this.buttons = event.buttons; await this.move(event.x, event.y, event.mods); return { x: event.x, y: event.y } }
-        const point = await this.pointFor(event.target, event)
+        if (event.type === 'move') {
+          this.buttons = event.buttons
+          if (!this.buttons) this.held = { dx: 0, dy: 0 }
+          const point = { x: event.x + this.held.dx, y: event.y + this.held.dy }
+          await this.move(point.x, point.y, event.mods)
+          return point
+        }
+        const holding = this.buttons !== 0
+        const point = holding ? { x: event.x + this.held.dx, y: event.y + this.held.dy } : await this.pointFor(event.target, event)
+        if (!holding) this.held = { dx: point.x - event.x, dy: point.y - event.y }
         if (Math.abs(point.x - this.x) > 0.5 || Math.abs(point.y - this.y) > 0.5) await this.move(point.x, point.y, event.mods)
         this.buttons = event.buttons
+        if (!this.buttons) this.held = { dx: 0, dy: 0 }
         await this.cdp('Input.dispatchMouseEvent', {
           type: event.type === 'down' ? 'mousePressed' : 'mouseReleased', x: point.x, y: point.y, modifiers: event.mods,
           button: BUTTONS[event.button] ?? 'left', buttons: event.buttons, clickCount: Math.max(1, event.clickCount),
@@ -71,11 +84,13 @@ export class InputDispatcher {
       }
       case 'key': {
         if (event.composing) return null // the committed text arrives as a `text` event
-        const printable = event.key.length === 1 && !(event.mods & (2 | 4))
+        // 回车和可打印键一样带字符：表单的隐式提交与文本框换行都发生在 keypress 里，只有带 text 的 keyDown
+        // 才会产生 keypress；rawKeyDown 只有 keydown，在输入框里按回车就提交不了表单。
+        const text = event.key === 'Enter' ? '\r' : event.key.length === 1 && !(event.mods & (2 | 4)) ? event.key : undefined
         const base = { key: event.key, code: event.code, windowsVirtualKeyCode: event.keyCode, nativeVirtualKeyCode: event.keyCode, location: event.location, autoRepeat: event.repeat, modifiers: event.mods }
         if (event.type === 'up') await this.cdp('Input.dispatchKeyEvent', { type: 'keyUp', ...base })
-        else if (printable) await this.cdp('Input.dispatchKeyEvent', { type: 'keyDown', ...base, text: event.key, unmodifiedText: event.key })
-        else await this.cdp('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base, ...(event.key === 'Enter' ? { text: '\r' } : {}) })
+        else if (text) await this.cdp('Input.dispatchKeyEvent', { type: 'keyDown', ...base, text, unmodifiedText: text })
+        else await this.cdp('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base })
         return null
       }
       case 'text': await this.insertText(event.data); return null
