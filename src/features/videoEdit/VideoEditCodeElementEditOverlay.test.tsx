@@ -153,7 +153,7 @@ it('可选写回附真实截图和局部源码，等待助手处理时覆盖长�
   expect(await bakeVideoEditCodeElement(target())).toBe('assistant')
   expect(clip().code!.versionId).toBe('version'); expect(testCodeSource(owner.document, owner.document.codeMaterials![0].versions[0])).toBe(source)
   expect(clip().elementOverrides?.box.dx).toBe(20)
-  expect(observation.snapshot).toHaveBeenCalledWith(owner.document.id, { kind: 'program', sequenceId: owner.activeSequenceId, frame: 0 }, 1920, undefined)
+  expect(observation.snapshot).toHaveBeenCalledWith(owner.document.id, { kind: 'program', sequenceId: owner.activeSequenceId, frame: 0 }, 1920, undefined, undefined, { saveToAssets: true })
   expect(observation.assistant).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ attachments: [{ attachment: { id: 'frame', displayUrl: 'blob:frame' }, previewSrc: 'blob:frame' }], context: expect.stringContaining('局部源码') }))
   const mark = getActiveVideoEditSequence(owner).annotations.at(-1)!; expect(mark.text).toContain('请把这些覆盖写回源码'); expect(mark.target).toMatchObject({ kind: 'element', elementId: 'box' }); expect(clip().elementOverrides?.box.scale).toBe(2)
 })

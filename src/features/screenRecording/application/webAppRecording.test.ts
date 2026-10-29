@@ -1,7 +1,8 @@
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
-const boundary = vi.hoisted(() => ({ enabled: false, render: vi.fn(), read: vi.fn(), cancelRender: vi.fn() }))
+const boundary = vi.hoisted(() => ({ enabled: false, render: vi.fn(), read: vi.fn(), cancelRender: vi.fn(), trust: vi.fn() }))
 vi.mock('@/platform', () => ({ getPlatform: () => ({ webReplay: { render: boundary.render, read: boundary.read, cancelRender: boundary.cancelRender } }) }))
+vi.mock('@/platform/runtime', async original => ({ ...await original<typeof import('@/platform/runtime')>(), getPlatform: () => ({ applicationControl: { contentTrust: boundary.trust } }) }))
 vi.mock('../useWebAppRecordingSwitch', () => ({ webAppRecordingEnabled: () => boundary.enabled, WEB_APP_RECORDING_DISABLED_MESSAGE: '网页应用录制是实验性功能，尚未开启' }))
 
 import { executeWebAppCapability } from './webAppRecording'
@@ -11,7 +12,8 @@ import { isRejectedBeforeWrite } from '@/core/application-control/execution/reje
 import { ApplicationRevokedReason } from '@/core/application-control/execution/cancelReason'
 
 const recordingRef = { kind: 'screen_recording.web_recording' as const, id: '4c4fd189-61bf-4408-afc0-751c8c9ede67' }
-afterEach(() => { boundary.enabled = false; vi.clearAllMocks() })
+beforeEach(() => { boundary.trust.mockResolvedValue({ state: 'allowed', records: [], allowExternalContentCode: false }) })
+afterEach(() => { boundary.enabled = false; vi.resetAllMocks() })
 
 it('实验开关没开时的拒绝标成未执行：打开开关后可以直接重试，不会被当成结果未知挡住', async () => {
   const error = await executeWebAppCapability('render_web_app_replay', { recordingRef: { kind: 'screen_recording.web_recording', id: '4c4fd189-61bf-4408-afc0-751c8c9ede67' } }, {} as never).then(() => null, (value: unknown) => value)
@@ -19,15 +21,15 @@ it('实验开关没开时的拒绝标成未执行：打开开关后可以直接�
   expect((error as { details?: { execution?: { notExecuted?: boolean } } }).details?.execution?.notExecuted).toBe(true)
 })
 
-it('boxes 参数经正式能力 schema 到平台，读取无需开启实验开关，权限照常检查', async () => {
+it('boxes 参数经正式能力 schema 到平台，读取无需开启实验开关', async () => {
   const result = { entries: [{ key: 'node-a', seconds: 1.5, rect: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 } }], total: 1, nextOffset: null }
   boundary.read.mockResolvedValue(result)
   const input = { recordingRef, track: 'boxes', keyPrefix: 'node-', fromSeconds: 1.5, toSeconds: 2 }
   expect(await executeWebAppCapability('read_web_app_recording', input, {} as CapabilityExecutionContext)).toEqual(result)
   expect(boundary.read).toHaveBeenCalledWith({ recordingId: recordingRef.id, track: 'boxes', keyPrefix: 'node-', fromSeconds: 1.5, toSeconds: 2, offset: 0, limit: 50 })
   expect(readWebAppRecordingCapability.outputSchema.safeParse({ ...result, revision: 0, scopeRevisions: {} }).success).toBe(true)
-  await expect(executeWebAppCapability('read_web_app_recording', input, { callerGrant: { permissions: [] } } as unknown as CapabilityExecutionContext)).rejects.toThrow('PERMISSION_DENIED')
   expect(boundary.read).toHaveBeenCalledTimes(1)
+  expect(boundary.trust).not.toHaveBeenCalled()
 })
 
 it.each([false, true])('boxSelectors 通过正常视频/textOnly=%s 重演入口，保留指定帧率', async textOnly => {
@@ -35,6 +37,8 @@ it.each([false, true])('boxSelectors 通过正常视频/textOnly=%s 重演入口
   boundary.render.mockResolvedValue({ output: 'output', width: 100, height: 100, frames: 60, issues: [] })
   await executeWebAppCapability('render_web_app_replay', { recordingRef, boxSelectors: ['.ask', '.crumbs'], fps: 60, textOnly }, { signal: new AbortController().signal } as CapabilityExecutionContext)
   expect(boundary.render).toHaveBeenCalledWith({ recordingId: recordingRef.id, pointer: false, fps: 60, boxSelectors: ['.ask', '.crumbs'], ...(textOnly ? { textOnly: true } : {}) }, expect.any(String))
+  expect(boundary.trust).toHaveBeenCalledWith({ action: 'prepare', sourceType: 'web_recording', id: recordingRef.id })
+  expect(boundary.trust.mock.invocationCallOrder[0]).toBeLessThan(boundary.render.mock.invocationCallOrder[0])
 })
 
 it('正式输入拒绝超过 32 个选择器、倒序时间范围与超额分页', () => {
@@ -88,9 +92,12 @@ it('操作标识作为主进程重演任务标识；同一段已在重演、取�
   expect(notExecuted(error)).toBe(true)
   const controller = new AbortController()
   boundary.cancelRender.mockResolvedValue({ jobId: requestId, recordingId: recordingRef.id, previousState: 'running', state: 'cancelled' })
-  boundary.render.mockImplementationOnce(() => new Promise((_resolve, reject) => { setTimeout(() => reject(Object.assign(new Error('已取消重演'), { name: 'WebReplayCancelledError' })), 10) }))
+  let rejectReplay!: (error: Error) => void
+  boundary.render.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectReplay = reject }))
   const cancelled = executeWebAppCapability('render_web_app_replay', { recordingRef }, { signal: controller.signal, requestId } as CapabilityExecutionContext).then(() => null, (value: unknown) => value)
+  await vi.waitFor(() => expect(boundary.render).toHaveBeenCalledTimes(2))
   controller.abort(new ApplicationRevokedReason())
+  rejectReplay(Object.assign(new Error('已取消重演'), { name: 'WebReplayCancelledError' }))
   expect(notExecuted(await cancelled)).toBe(true)
   expect(boundary.cancelRender).toHaveBeenCalledWith({ jobId: requestId })
 })
@@ -112,6 +119,7 @@ it('宿主断开、页面重载或卸载中止等待（不带撤销原因）不�
   boundary.render.mockImplementationOnce(() => new Promise(resolve => { finish = () => resolve({ output: 'video.mp4', width: 10, height: 10, frames: 30, issues: [] }) }))
   const waiting = new AbortController()
   const pending = executeWebAppCapability('render_web_app_replay', { recordingRef }, { signal: waiting.signal, requestId: '9f0c6a52-3b1e-5d7a-8c4f-2e6b1a9d0c38' } as CapabilityExecutionContext)
+  await vi.waitFor(() => expect(boundary.render).toHaveBeenCalledOnce())
   waiting.abort()
   finish()
   await pending

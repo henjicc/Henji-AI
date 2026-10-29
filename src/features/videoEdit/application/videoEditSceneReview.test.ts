@@ -40,7 +40,7 @@ const schema = { ...GOLDEN_SCENE_DECLARATION, kinds: {
 const event = (src: number, x: number): CaptureEvent => ({ kind: 'cursor', eventId: `e${src}`, monoUs: 0, seq: Math.round(src * 100), clockSegmentRef: 'clock', recordingUs: Math.round((src + 1) * 1e6), timeline: null, point: [x, 100], shape: 'arrow' })
 const cursorEvents = [event(16.18, 100), event(20, 1000), event(26.75, 1600), event(34.83, 100)]
 function attachRecording(owner: VideoEditInstance, baked = false): void {
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     for (const media of document.media) media.recordingCursor = { ownerRef: { kind: 'screen_recording.document', id: 'recording' }, sourceDigest: `sha256:${'a'.repeat(64)}`, cursorBakedIn: baked, recordingStartUs: 1_000_000, width: 1920, height: 1080,
       pages: [{ path: path.resolve(path.sep, 'events.json'), sha256: 'a'.repeat(64), recordingSpanUs: [0, 400_000_000], seqSpan: [0, 10] }] }
     return document
@@ -53,7 +53,7 @@ async function fixture(minDuration = 0, influence = 'span') {
   const program = testAuthorProgram(testAuthorBundle({ entry: 'main.ts', files: { 'main.ts': source }, apiVersion: 5 }))
   const version = { id: 'v', ...testCodeManifest(source, owner.document), apiVersion: 5 as const, languageVersion: program.languageVersion }
   rememberVideoEditCodeMetadata(owner, 'd', version, program)
-  editVideoProject(id, document => {
+  editVideoProject(id, document => { document = structuredClone(document);
     document.media = ['A', 'B'].map(mediaId => ({ id: mediaId, name: `录屏 ${mediaId}`, kind: 'video' as const, path: path.resolve(path.sep, `${mediaId}.mp4`), durationSeconds: 400, width: 1920, height: 1080 }))
     document.codeMaterials = [{ id: 'd', name: '片子', defaultVersionId: 'v', versions: [version] }]
     document.scenes = [{ id: 'film', name: '片子', schema: { id: schema.id, version: 1 }, records: [
@@ -130,7 +130,7 @@ it('鼠标续放与拼接按录制起点读坐标、按画面宽判距离；prop
 
 it('嵌套、修剪与倒放用正式源映射，区间外记录不报；预算超限拒绝且不截断', async () => {
   const { owner } = await fixture()
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const child = document.sequences[0], clip = child.clips[0]
     child.clips = [{ ...clip, reverse: true, sourceInUs: 320_000_000, duration: 600 }]
     const parent: VideoEditSequence = { ...child, id: 'parent', name: '父序列', tracks: child.tracks.map(track => ({ ...track, id: `parent-${track.id}` })), clips: [], transitions: [] }
@@ -152,7 +152,7 @@ it('嵌套、修剪与倒放用正式源映射，区间外记录不报；预算�
 
 it('解析器 user 问题保留原文，只在取帧截断开始之后返回', async () => {
   const { owner } = await fixture()
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const scene = document.scenes![0]
     scene.records = [scene.records[0], ...Array.from({ length: 520 }, (_, index) => ({ id: `shot-${index}`, kind: 'shot', parent: 'win', values: { at: index / 20, src: index / 10, media: 'A', cursor: false } }))]
     return document
@@ -184,7 +184,7 @@ it('收短会违反声明最短时长时保留错位依据，不给不可写的 
 it('中文、空格、百分号和斜杠 ID 使用正式引用，proposal 写回不产生未声明级联', async () => {
   const { owner, input } = await fixture(), app = createApplicationHarness()
   const sceneId = '片子 数据%/一', recordId = '落点 数据%/二'
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.scenes![0].id = sceneId
     document.scenes![0].records.find(record => record.id === 'box')!.id = recordId
     for (const clip of document.sequences[0].clips) clip.code!.parameters.film = { kind: 'scene', sceneId }
@@ -209,7 +209,7 @@ it('中文、空格、百分号和斜杠 ID 使用正式引用，proposal 写回
 
 it('300 项内容与 250 个框的全片查询不触发候选预算，重复引用共用分析结果', async () => {
   const { owner, input } = await fixture(), app = createApplicationHarness()
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const records = document.scenes![0].records
     const box = records.find(record => record.id === 'box')!
     document.scenes![0].records = [records[0], records[3],
@@ -229,7 +229,7 @@ it('300 项内容与 250 个框的全片查询不触发候选预算，重复引�
 
 it('分开的中段错位保留全部区间，不用收短建议删除中间正常部分', async () => {
   const { owner, input } = await fixture(), app = createApplicationHarness()
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const scene = document.scenes![0], box = scene.records.find(record => record.id === 'box')!
     scene.records = [scene.records[0], scene.records[3], { ...box, values: { ...box.values, at: 0, dur: 50 } },
       ...[0, 10, 20, 30, 40].map((at, i) => ({ id: `s${i}`, kind: 'shot', parent: 'win', values: { at, src: 0, media: i % 2 ? 'B' : 'A', xf: 0, cursor: false } })),
@@ -250,7 +250,7 @@ it('分开的中段错位保留全部区间，不用收短建议删除中间正�
 
 it('中段与尾部同时错位时只建议收短尾部，写回后保留中间正常部分', async () => {
   const { owner, input } = await fixture(), app = createApplicationHarness()
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const scene = document.scenes![0], box = scene.records.find(record => record.id === 'box')!
     scene.records = [scene.records[0], scene.records[3], { ...box, values: { ...box.values, at: 300, dur: 30 } },
       ...[300, 305, 310, 325].map((at, i) => ({ id: `s${i}`, kind: 'shot', parent: 'win', values: { at, src: 0, media: i % 2 ? 'B' : 'A', xf: 0, cursor: false } })),
@@ -286,7 +286,7 @@ it('查询上下文之外已经开始的错位不把上下文边界写成真实�
 
 it.each(['query', 'clip'] as const)('%s 范围截在错位中间时说明尾部尚未确认，不宣称是中段错位', async scope => {
   const { owner, input } = await fixture()
-  if (scope === 'clip') editVideoProject(owner.document.id, document => {
+  if (scope === 'clip') editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.sequences[0].clips = [{ ...document.sequences[0].clips[0], duration: 9500 }]
     return document
   })
@@ -300,7 +300,7 @@ it.each(['query', 'clip'] as const)('%s 范围截在错位中间时说明尾部�
 
 async function manyStaleBoxes() {
   const result = await fixture()
-  editVideoProject(result.owner.document.id, document => {
+  editVideoProject(result.owner.document.id, document => { document = structuredClone(document);
     const records = document.scenes![0].records, box = records.find(record => record.id === 'box')!
     document.scenes![0].records = [records[0], records[3],
       { id: 'a', kind: 'shot', parent: 'win', values: { at: 0, src: 0, media: 'A', xf: 0, cursor: false } },
@@ -358,7 +358,7 @@ it('准备分页建议让出期间编辑文档，当前页拒绝返回且旧分�
   let checked = 0, edited = false
   vi.spyOn(sceneDeclaration, 'validateCodeSceneRecords').mockImplementation((...args) => {
     if (args[1].records.length === 1 && ++checked === 1) setTimeout(() => {
-      editVideoProject(owner.document.id, document => { document.scenes![0].name = '准备建议期间编辑'; return document })
+      editVideoProject(owner.document.id, document => { document = structuredClone(document); document.scenes![0].name = '准备建议期间编辑'; return document })
       edited = true
     }, 0)
     return original(...args)
@@ -373,7 +373,7 @@ it('准备分页建议让出期间编辑文档，当前页拒绝返回且旧分�
 it('一项内容跨两刀的鼠标续放接缝分别报告', async () => {
   const { owner } = await fixture()
   attachRecording(owner)
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const records = document.scenes![0].records
     document.scenes![0].records = [records[0], { ...records[1], values: { at: 0, src: 0, media: 'A' } },
       { id: 'cut-1', kind: 'cut', values: { from: 10, to: 12 } }, { id: 'cut-2', kind: 'cut', values: { from: 20, to: 22 } }]
@@ -387,7 +387,7 @@ it('一项内容跨两刀的鼠标续放接缝分别报告', async () => {
 
 it('同一段连续错位跨片段拆分点，拆分两侧的序列帧区间都保留', async () => {
   const { owner } = await fixture()
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const clip = document.sequences[0].clips[0]
     document.sequences[0].clips = [{ ...clip, duration: 9450 }, { ...clip, id: 'split', start: 9450, sourceInUs: 315_000_000, duration: 2550 }]
     return document
@@ -401,7 +401,7 @@ it('同一段连续错位跨片段拆分点，拆分两侧的序列帧区间都�
 it.each(['tuned', 'anchored', 'baked'] as const)('%s 值不给覆盖建议，文案说明原因', async mode => {
   const { owner } = await fixture()
   if (mode === 'baked') attachRecording(owner, true)
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const record = document.scenes![0].records.find(record => record.id === 'box')!
     if (mode === 'tuned') record.tuned = ['dur']
     if (mode === 'anchored') record.values.at = { src: 10 }
@@ -423,7 +423,7 @@ it.each(['tuned', 'anchored', 'baked'] as const)('%s 值不给覆盖建议，文
 it('手调 cursor 保留跳动依据，既不给 proposal 也不建议直接关闭', async () => {
   const { owner } = await fixture()
   attachRecording(owner)
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     for (const record of document.scenes![0].records.filter(record => record.kind === 'shot')) { record.values.cursor = true; record.tuned = ['cursor'] }
     return document
   })
@@ -446,7 +446,7 @@ it('不可读引用变成警告，其他引用结果照常返回', async () => {
 
 it.each([false, true])('minSeconds 使用播放秒，正确处理%s曲线变速', async remap => {
   const { owner } = await fixture()
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const records = document.scenes![0].records, box = records.find(record => record.id === 'box')!
     document.scenes![0].records = [records[0], records[3], { ...box, values: { ...box.values, at: 0, dur: 3 } },
       ...[0, 1, 1.3].map((at, i) => ({ id: `s${i}`, kind: 'shot', parent: 'win', values: { at, src: 0, media: i === 1 ? 'B' : 'A', xf: 0, cursor: false } })),
@@ -473,7 +473,7 @@ it('neighbors 建议调整相邻或新增落点，不以移动本落点开头冒
 
 it('59.996 秒的建议时间码正确进位为 1:00.00', async () => {
   const { owner } = await fixture()
-  editVideoProject(owner.document.id, document => {
+  editVideoProject(owner.document.id, document => { document = structuredClone(document);
     const records = document.scenes![0].records, box = records.find(record => record.id === 'box')!
     document.scenes![0].records = [records[0], records[3], { ...box, values: { ...box.values, at: 50, dur: 20 } },
       { ...records[1], values: { at: 0, src: 0, media: 'A', cursor: false } }, { ...records[2], values: { at: 59.996, src: 0, media: 'B', xf: 0, cursor: false } }]

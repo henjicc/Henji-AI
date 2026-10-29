@@ -58,6 +58,8 @@ vi.mock('./videoEditCodeSources', () => ({ VideoEditCodeSources: class {
   cancel() {}
   dispose() {}
   updateDocument() {}
+  async prepareScenes() {}
+  declarations() { return [] }
   async prepare(document: VideoEditComposition, clips: VideoEditClip[], frame: number, _current: unknown, images: Promise<unknown>) {
     await images
     const effects = new Map<string, PreparedVideoEditEffect[]>()
@@ -65,7 +67,7 @@ vi.mock('./videoEditCodeSources', () => ({ VideoEditCodeSources: class {
       const program: CodeAuthorProgram = { apiVersion: 4, languageVersion: 4, name: effect.name, kind: 'filter', mode: 'dynamic', seed: 0, parameters: [], types: {}, frames: effect.name === 'first' ? [] : [-1, -.5, .5], hexColors: [], bundle: { code: '', map: '', locations: { layers: {} } } }
       return { effect, program, instanceKey: `${clip.id}:${effect.id}`, version: effect.id, parameters: {}, context: { time: frame / 60, localTime: frame / 60, sequenceTime: frame / 60, frame, fps: 60, width: document.width, height: document.height }, transitionHandles: false, info: { time: frame / 60, frameDuration: 1 / 60, clip: { time: frame / 60, duration: clip.duration / 60 } } }
     }))
-    return { pictures: new Map(clips.filter(clip => clip.kind === 'code').map(clip => [clip.id, picture(document.width, document.height, clip.id === 'outside' ? 1000 : frame + 1)])), effects, sourceTimestamps: [], cacheHits: 0 }
+    return { pictures: new Map(clips.filter(clip => clip.kind === 'code').map(clip => [clip.id, picture(document.width, document.height, clip.id === 'outside' ? 1000 : frame + 1)])), effects, sceneIssues: [], sourceTimestamps: [], cacheHits: 0 }
   }
 } }))
 

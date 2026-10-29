@@ -13,6 +13,12 @@ function renamedThumbnail(row: Record<string, unknown>): Record<string, unknown>
   return { ...rest, thumbnail_name: thumbnail ?? null }
 }
 
+/** 精确核对迁移前的全部列；其他迁移追加的列不属于这项数据保留契约。 */
+function readPreservedAssets(db: Database.Database, before: Record<string, unknown>): unknown[] {
+  const columns = Object.keys(before).map(name => `"${name.replaceAll('"', '""')}"`).join(', ')
+  return db.prepare(`SELECT ${columns} FROM assets`).all()
+}
+
 function ledgerVersion(db: Database.Database): number {
   return (db.prepare('SELECT max(version) AS version FROM schema_migrations').get() as { version: number }).version
 }
@@ -31,7 +37,9 @@ it('旧资产库进入账本时补内容身份列，保留原资产、标签和�
     db.prepare('INSERT INTO asset_tag_items (tag_id,asset_id) VALUES (?,?)').run('tag', 'original')
     const before = db.prepare('SELECT * FROM assets').get() as Record<string, unknown>
     initializeSchema(db, options)
-    expect(db.prepare('SELECT * FROM assets').get()).toEqual({ ...renamedThumbnail(before), content_identity: null })
+    const expected = { ...renamedThumbnail(before), content_identity: null }
+    expect(readPreservedAssets(db, expected)).toEqual([expected])
+    expect(db.prepare('SELECT foreign_json FROM assets').get()).toEqual({ foreign_json: null })
     expect(db.prepare('SELECT * FROM asset_library_items').all()).toHaveLength(1)
     expect(db.prepare('SELECT * FROM asset_tag_items').all()).toHaveLength(1)
     db.prepare('UPDATE assets SET content_identity=? WHERE id=?').run('a'.repeat(64), 'original')
@@ -55,7 +63,8 @@ it.each(['source', 'media_type'] as const)('升级旧%s约束保留真实附加�
     db.prepare('INSERT INTO asset_tag_items (tag_id,asset_id) VALUES (?,?)').run('tag', 'original')
     const before = (db.prepare('SELECT * FROM assets').all() as Array<Record<string, unknown>>).map(renamedThumbnail)
     initializeSchema(db, options)
-    expect(db.prepare('SELECT * FROM assets').all()).toEqual(before)
+    expect(readPreservedAssets(db, before[0])).toEqual(before)
+    expect(db.prepare('SELECT foreign_json FROM assets').get()).toEqual({ foreign_json: null })
     expect(db.prepare('SELECT * FROM asset_names_outer').get()).toMatchObject({ id: 'original', retained_note: '必须保留' })
     expect(db.prepare('SELECT * FROM asset_library_items').all()).toHaveLength(1); expect(db.prepare('SELECT * FROM asset_tag_items').all()).toHaveLength(1)
     expect(db.prepare('SELECT * FROM asset_audit').all()).toEqual([{ asset_id: 'original' }])
