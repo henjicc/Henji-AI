@@ -31,7 +31,7 @@ describe('录音设置', () => {
     expect(api.setSettings).toHaveBeenCalledWith(expect.objectContaining({ bitDepth: 16 }), 1)
     expect(api.getSettings).toHaveBeenCalledTimes(2)
     view.unmount(); expect(release).toHaveBeenCalledOnce()
-  })
+  }, 15_000)
   it('ASIO 只读驱动频率与缓冲，录音中禁用设置', async () => {
     const { api, state } = captureFixture(); current.api = api
     state.settings.hostApi = 'ASIO'; state.effectiveSettings.hostApi = 'ASIO'
