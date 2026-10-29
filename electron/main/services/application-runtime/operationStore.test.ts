@@ -16,6 +16,10 @@ import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/ap
 import { applicationUserConfirmation } from '../../../../src/core/application-control/userConfirmation'
 import { assertGenerationPaidReceipt, handleUiPaidApproval } from './paidApprovalPolicy'
 
+// Electron Node 模式没有 app.getPath；账本测试只隔离宿主设置与日志，不读取用户目录。
+vi.mock('../settings/store', () => ({ getSettingsStore: () => ({ get: () => null }) }))
+vi.mock('../logging', () => ({ createMainLogger: () => ({ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
+
 // 普通 Node 不具备 Electron SQLite ABI；CI 的原生运行器仍要求全部用例执行、零跳过。
 if (!process.versions.electron) process.stderr.write('[operationStore] 跳过：需要 Electron SQLite 运行环境。请运行 npm run test:assistant-persistence -- electron/main/services/application-runtime/operationStore.test.ts\n')
 
