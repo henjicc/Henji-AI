@@ -1808,7 +1808,6 @@
       "missing": "文件不存在",
       "missingFolder": "文件夹不存在"
     },
-    "projectDocumentCount": "{{count}} 份文档",
     "card": {
       "open": "打开",
       "rename": "重命名",

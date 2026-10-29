@@ -24,6 +24,8 @@ export function ProjectCardHoverScrub({ load, children }: { load: ProjectCardHov
   const [preview, setPreview] = useState<((fraction: number) => DocumentCoverSource | null) | null>(null);
   const [fraction, setFraction] = useState<number | null>(null);
   const loading = useRef(false);
+  // 新位置的缩略帧还没解出来时沿用上一幅，避免拖动中闪回封面
+  const shown = useRef<string | null>(null);
   const release = useRef<(() => void) | null>(null);
   useFilmstripFramesRevision();
   const height = filmstripHeightBucket(180 * (typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1));
@@ -47,7 +49,10 @@ export function ProjectCardHoverScrub({ load, children }: { load: ProjectCardHov
   };
   const step = fraction === null ? null : Math.min(STEPS - 1, Math.floor(fraction * STEPS));
   const source = preview && step !== null ? preview((step + 0.5) / STEPS) : null;
-  const frame = source?.sourceKind === 'video' ? nearestFilmstripFrame(frameRef(source, height)) : source?.source;
+  const ready = source?.sourceKind === 'video' ? nearestFilmstripFrame(frameRef(source, height)) : source?.source;
+  if (fraction === null) shown.current = null;
+  else if (ready) shown.current = ready;
+  const frame = fraction === null ? null : shown.current;
 
   return (
     <span

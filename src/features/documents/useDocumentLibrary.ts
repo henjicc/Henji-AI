@@ -211,17 +211,14 @@ export function toProjectCardItems(projects: readonly ProjectSummary[], t: TFunc
   for (const project of projects) nameCounts.set(entryNameKey(project.name), (nameCounts.get(entryNameKey(project.name)) ?? 0) + 1)
   return projects.map((project) => {
     const duplicated = (nameCounts.get(entryNameKey(project.name)) ?? 0) > 1
-    const detail = t('documentLibrary.projectDocumentCount', { count: project.documentCount })
     const parts = [
       duplicated ? parentFolderOf(project.path) : null,
-      detail,
       new Date(project.createdAt).toLocaleDateString(),
     ].filter((part): part is string => Boolean(part))
     return {
       id: project.id,
       name: project.name,
       metaLine: parts.join(' · '),
-      detail,
       ...(project.missing ? { status: t('documentLibrary.status.missingFolder') } : {}),
       createdAt: project.createdAt,
       ...(project.lastOpenedAt !== null ? { openedAt: project.lastOpenedAt } : {}),

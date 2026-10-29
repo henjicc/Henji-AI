@@ -2,7 +2,7 @@ import { createLogger } from '@/core/logging'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { getPlatform } from '@/platform/runtime'
 import { editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, requireVideoEditInstance, videoEditProgramCommandIdentity, type VideoEditInstance } from './videoEditService'
-import { saveVideoEditPosterCover } from './videoEditProjectCover'
+import { registerVideoEditProgramCoverCapture, saveVideoEditPosterCover } from './videoEditProjectCover'
 import { publishVideoEditOutput, verifyVideoEditOutput, type VideoEditOutputReceipt } from './videoEditOutputs'
 
 const logger = createLogger('features.videoEdit.programCapture')
@@ -92,6 +92,27 @@ export async function setVideoEditPosterFrame(projectId: string, signal?: AbortS
   editVideoProject(projectId, value => ({ ...value, posterFrame: { sequenceId: document.id, frame: target } }))
   logger.info('已设为项目封面', { event: 'video_edit.poster_frame.set', context: { projectId, frame: target } })
 }
+
+/** 自动封面：节目面板开着、没在播放时，取当前呈现的合成画面；拿不到就返回 null，交给原始画面兜底。 */
+async function captureProgramCover(projectId: string): Promise<string | null> {
+  const owner = listVideoEditInstances().find(instance => instance.document.id === projectId)
+  if (!owner || owner.playing) return null
+  const document = getActiveVideoEditSequence(owner)
+  const provider = providers.get(owner)
+  if (!provider || providerSequence(provider) !== document.id) return null
+  const target = owner.frame, contentVersion = owner.contentVersion
+  const assertCurrent = (): void => {
+    if (!listVideoEditInstances().includes(owner) || owner.contentVersion !== contentVersion || owner.activeSequenceId !== document.id || owner.frame !== target || owner.playing) throw new Error('节目画面已变化。')
+  }
+  const blob = await provider.capture({ document, frame: target, assertCurrent })
+  if (!blob.size) return null
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(reader.error ?? new Error('读取节目画面失败。'))
+    reader.readAsDataURL(blob)
+  })
+}
+registerVideoEditProgramCoverCapture(captureProgramCover)
 
 /** 取消固定封面：去掉封面帧，下次保存按内容自动更新封面。 */
 export function clearVideoEditPosterFrame(projectId: string): void {

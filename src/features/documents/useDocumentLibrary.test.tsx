@@ -25,7 +25,7 @@ describe('useProjectLibrary', () => {
     const { result } = renderHook(() => useProjectLibrary({ operations }))
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.items.map((item) => item.name)).toEqual(['宣传片'])
-    expect(result.current.items[0].metaLine).toContain('0 份文档')
+    expect(result.current.items[0].metaLine).not.toContain('份文档')
     await waitFor(() => expect(kit.commands.refreshCount).toBe(1))
 
     await act(async () => { await operations.createProject('短片') })

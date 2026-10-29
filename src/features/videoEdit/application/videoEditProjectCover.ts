@@ -10,7 +10,8 @@ import type { DocumentCoverSource } from '@/core/documents/types'
  * - 用户“设为项目封面”过：用当时节目监视器的实际画面（截图直接存成封面），之后自动更新不覆盖；
  * - 否则取第一条序列约 1/3 处最上层的画面片段（开头常是黑场或片头）；那一帧没有画面时退回最早出现的画面片段。
  * 视频由主进程按片段里的源时间取一帧，图片直接用原图，存成通用文档封面（程序目录，按文档 ID）。
- * 保存或离开剪辑时更新；画面没变（同一来源、同一时间）不重复生成；没有画面片段时不动，卡片保持占位图。
+ * 保存或离开剪辑时更新；剪辑开着时优先用节目面板的合成画面，最多每 10 分钟一次；
+ * 原始画面没变（同一来源、同一时间）不重复生成；两种都取不到时不动，卡片保持占位图。
  */
 
 const logger = createLogger('features.videoEdit.projectCover')
@@ -56,9 +57,38 @@ export function videoEditFrameSourceAt(document: VideoEditDocument, fraction: nu
   return null
 }
 
-/** 按剪辑当前内容更新封面；用户指定过封面帧时不自动覆盖。失败只记日志，不影响保存与离开。 */
+/** 节目面板开着时取当前合成画面（data URL）；节目没开、正在播放或画面变了时为 null。由节目选帧模块登记。 */
+type ProgramCoverCapture = (docId: string) => Promise<string | null>
+let programCoverCapture: ProgramCoverCapture | null = null
+export function registerVideoEditProgramCoverCapture(capture: ProgramCoverCapture): void { programCoverCapture = capture }
+/** 合成画面封面最多这么久更新一次：保存很频繁（含自动保存），每次都重画整帧不值得。 */
+const PROGRAM_COVER_INTERVAL_MS = 10 * 60_000
+const programCoverAt = new Map<string, number>()
+
+/** 剪辑打开时用节目面板的合成画面做封面：代码片段、调色、字幕都在画面里，纯代码做的片子也有封面。 */
+async function updateProgramCover(docId: string): Promise<boolean> {
+  if (!programCoverCapture || Date.now() - (programCoverAt.get(docId) ?? 0) < PROGRAM_COVER_INTERVAL_MS) return false
+  try {
+    const dataUrl = await programCoverCapture(docId)
+    if (!dataUrl) return false
+    await saveDocumentCover({ docId, sources: [{ source: dataUrl, sourceKind: 'image' }] })
+    programCoverAt.set(docId, Date.now())
+    lastSources.delete(docId)
+    notifyDocumentCoverChanged(docId)
+    return true
+  } catch (error) {
+    logger.debug('节目画面封面未更新', { event: 'video_edit.document.cover.program_skipped', context: { docId }, error: String(error) })
+    return false
+  }
+}
+
+/**
+ * 按剪辑当前内容更新封面；用户指定过封面帧时不自动覆盖。剪辑开着时优先用节目的合成画面（隔一段时间更新一次），
+ * 否则取最上层画面片段的原始画面。失败只记日志，不影响保存与离开。
+ */
 export async function updateVideoEditProjectCover(document: VideoEditDocument): Promise<void> {
   if (document.posterFrame) return
+  if (await updateProgramCover(document.id) || programCoverAt.has(document.id)) return
   const source = videoEditCoverSource(document)
   if (!source) return
   const key = `${source.sourceKind}:${source.source}@${source.atSeconds ?? 0}`
