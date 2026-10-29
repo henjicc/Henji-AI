@@ -281,7 +281,7 @@ export interface VirtualClockControl {
    * last rendered one (no timer, frame callback, running animation, DOM change, input, load, scroll or
    * answered call) is not rendered: its picture is the previous one.
    */
-  frame(toMs: number, beforeCommit?: () => void, allowQuiet?: boolean): Promise<FrameReport>
+  frame(toMs: number, beforeCommit?: () => void, allowQuiet?: boolean, tick?: boolean, render?: boolean): Promise<FrameReport>
   /** Resolves after the next real rendering update (delivers input the browser holds for the frame). */
   realFrame(): Promise<void>
   /** Page time holds still until `work` settles (recorded calls, storage). */
@@ -384,7 +384,7 @@ export function installVirtualClock(startMs: number, report: (message: string) =
       const timers = await scheduler.advanceTo(toMs, between)
       return { now: scheduler.now, timers, nextDue: scheduler.nextDue() }
     },
-    async frame(toMs, beforeCommit, allowQuiet = false) {
+    async frame(toMs, beforeCommit, allowQuiet = false, tick = true, render = true) {
       await settle()
       const timers = await scheduler.advanceTo(toMs, between)
       if (timers) touch()
@@ -393,9 +393,16 @@ export function installVirtualClock(startMs: number, report: (message: string) =
       if (allowQuiet && !active && !animating && scheduler.pendingFrames === 0) return { now: scheduler.now, timers, frameCallbacks: 0, animations: 0, quiet: true }
       let frameCallbacks = 0
       let live = 0
+      // 补帧只推进页面逻辑，不等待显示器或复制像素；输入由宿主先交付，异步边界仍在每步之间结算。
+      if (!render) {
+        frameCallbacks = await scheduler.runFrame(microtask)
+        animations.scan()
+        await between()
+        return { now: scheduler.now, timers, frameCallbacks, animations: animations.running, quiet: false }
+      }
       await new Promise<void>((resolve, reject) => realRaf(() => {
         // Everything below lands in this real frame: callbacks, newly started animations, the token.
-        scheduler.runFrame(microtask).then(count => {
+        (tick ? scheduler.runFrame(microtask) : Promise.resolve(0)).then(count => {
           frameCallbacks = count
           animations.scan()
           live = animations.running

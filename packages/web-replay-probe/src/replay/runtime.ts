@@ -208,10 +208,11 @@ export function installReplayRuntime(host: ReplayHost): void {
     now: clock.now,
     advance: toMs => clock.advance(toMs),
     realFrame: clock.realFrame,
+    tick: async toMs => ({ ...await clock.frame(toMs, undefined, true, true, false), samples: {} }),
     defineSampler: (name, read) => { samplers.set(name, read) },
     async frame(toMs, options = {}) {
       const show = options.token
-      const report = await clock.frame(toMs, show === undefined ? undefined : () => token.show(show), options.allowQuiet)
+      const report = await clock.frame(toMs, show === undefined ? undefined : () => token.show(show), options.allowQuiet, options.tick)
       const samples: ReplayFrameReport['samples'] = {}
       // A quiet frame shows the same state as the last one: nothing new to sample.
       for (const name of report.quiet ? [] : options.samples ?? []) {

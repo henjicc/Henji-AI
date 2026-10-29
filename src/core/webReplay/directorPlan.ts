@@ -6,15 +6,15 @@ import type { WebRecordingBehaviorEvent } from './schema'
  * 把录制的行为轨与导演稿排成一条按输出时间先后的执行清单：录制事件、逐字输入、改写的鼠标移动、注入的操作、
  * 不出画面的页面帧，以及要出画面的帧。重演引擎只按清单逐条执行。
  *
- * 排序键（输出时间、页面时间、类别、登记顺序）：输出时间与页面时间都只增不减（剪掉的区间输出时间不动、
+ * 排序键（页面时间、类别、输出时间、登记顺序）：页面时间只增不减（剪掉的区间输出时间不动、
  * 页面时间前进；停住打字时录制时间不动、两者前进），同一刻先派发输入、再推进页面、最后出帧。
  */
 
 /**
  * 页面帧的节奏（页面时间）。页面的帧回调、浏览器攒着的鼠标移动与滚轮都按渲染的次数走：画布的平滑、惯性与
  * 滚轮缩放按帧数计算，渲染次数随倍速变化，结果就随倍速变化。所以页面总按这个节奏渲染，与倍速、输出帧率无关；
- * 两个输出帧之间页面走过的每一格补一个不出画面的页面帧（advance），剪掉的区间也一样。离输出帧不到半格的格点
- * 让给那一帧：1 倍速 60fps 不多出页面帧，整数倍速下各倍速渲染的页面时刻完全相同。
+ * 两个输出帧之间页面走过的每一格补一个不出画面的页面帧（advance），剪掉的区间也一样。
+ * 只有恰好落在格点上的输出帧才执行页面回调，其他输出帧只采集画面，避免变速与剪辑接缝改变动画步长。
  */
 export const PAGE_FRAME_US = 1e6 / 60
 /** typewriter.at 与文字输入的录制时刻最多差这么多。 */
@@ -47,7 +47,7 @@ export type PlanOp =
   | (OpBase & { kind: 'text'; text: string })
   | (OpBase & { kind: 'move'; point: PlanPoint })
   | (OpBase & { kind: 'advance' })
-  | (OpBase & { kind: 'frame'; index: number })
+  | (OpBase & { kind: 'frame'; index: number; tick: boolean })
 
 export interface DirectorPlan {
   timeline: DirectorTimeline
@@ -308,14 +308,14 @@ export function planWebReplay(input: PlanInput): DirectorPlan {
   // 每个页面帧（出画面的帧与不出画面的 advance）：改写的鼠标先移到这一刻的位置，再渲染
   let lastMove = ''
   for (const at of pageFrames(timeline)) {
-    const override = overrideAt(at.recUs)
+    const override = at.tick ? overrideAt(at.recUs) : null
     if (override) {
       const position = override.at(at.recUs)
       const key = JSON.stringify(position)
       if (key !== lastMove) { push({ kind: 'move', point: position, outUs: at.outUs, pageUs: at.pageUs, recUs: at.recUs, visible: at.visible, step: override.step }, 0); lastMove = key }
-    } else lastMove = ''
+    } else if (at.tick) lastMove = ''
     if (at.index === undefined) push({ kind: 'advance', outUs: at.outUs, pageUs: at.pageUs, recUs: at.recUs, visible: at.visible }, 1)
-    else push({ kind: 'frame', index: at.index, outUs: at.outUs, pageUs: at.pageUs, recUs: at.recUs, visible: true }, 2)
+    else push({ kind: 'frame', index: at.index, tick: at.tick, outUs: at.outUs, pageUs: at.pageUs, recUs: at.recUs, visible: true }, 2)
   }
   // 改写区间的终点正好落在两帧之间时，补一步到终点
   for (const o of overrides) {
@@ -324,15 +324,15 @@ export function planWebReplay(input: PlanInput): DirectorPlan {
     push({ kind: 'move', point: o.at(o.toUs), outUs: place.outUs, pageUs: timeline.pageOfRec(o.toUs), recUs: o.toUs, visible: true, step: o.step }, 0)
   }
 
-  list.sort((a, b) => a.op.outUs - b.op.outUs || a.op.pageUs - b.op.pageUs || a.phase - b.phase || a.seq - b.seq)
+  // 格点与输出帧的浮点换算不同；先按录制精度的页面时刻排序，同刻输入始终在帧回调之前。
+  list.sort((a, b) => a.op.pageUs - b.op.pageUs || a.phase - b.phase || a.op.outUs - b.op.outUs || a.seq - b.seq)
   return { timeline, ops: list.map(entry => entry.op), anchors, glides, notes, steps }
 }
 
-interface PageFrame { outUs: number; pageUs: number; recUs: number; visible: boolean; /** 出画面的帧的序号；不出画面的页面帧没有。 */ index?: number }
+interface PageFrame { outUs: number; pageUs: number; recUs: number; visible: boolean; tick: boolean; /** 出画面的帧的序号；不出画面的页面帧没有。 */ index?: number }
 
 /**
- * 按页面时间先后的全部页面帧：输出帧，加上页面时间上每一格（PAGE_FRAME_US 的整数倍）附近没有输出帧的格点。
- * 每个格点管 [格点 − 半格, 格点 + 半格)，落在里面的输出帧代替它。
+ * 页面回调只在固定格点执行；输出帧只在微秒取整后重合时才合并，避免输出采样改变页面的演进。
  * 页面时间与录制时间取整到微秒（与录制的时刻同一精度）：同一个页面时刻在各倍速下由不同的浮点算式得出，
  * 取整后才是同一个值，鼠标改写等按时刻判断的结果才不随倍速变。
  */
@@ -340,20 +340,20 @@ function pageFrames(timeline: DirectorTimeline): PageFrame[] {
   const frames: PageFrame[] = Array.from({ length: timeline.frames }, (_, index) => {
     const outUs = timeline.frameOutUs(index)
     const { recUs, pageUs } = timeline.at(outUs)
-    return { index, outUs, recUs: Math.round(recUs), pageUs: Math.round(pageUs), visible: true }
+    return { index, outUs, recUs: Math.round(recUs), pageUs: Math.round(pageUs), visible: true, tick: false }
   })
-  const half = PAGE_FRAME_US / 2
   const list: PageFrame[] = []
   let next = 0
   // 最后一个输出帧之后的页面帧不影响版本，不排
-  for (let n = 1; ; n += 1) {
+  for (let n = 0; ; n += 1) {
     const gridUs = n * PAGE_FRAME_US
-    while (next < frames.length && frames[next].pageUs < gridUs - half) list.push(frames[next++])
+    const rounded = Math.round(gridUs)
+    while (next < frames.length && frames[next].pageUs < rounded) list.push(frames[next++])
     if (next === frames.length) return list
-    if (frames[next].pageUs < gridUs + half) continue
+    if (frames[next].pageUs === rounded) { list.push({ ...frames[next++], tick: true }); continue }
     // 输出位置按未取整的格点算，与输出帧（按帧序号算）一样，同一刻的事件在各倍速下排在它同一侧
     const place = timeline.placePage(gridUs)
-    list.push({ outUs: place.outUs, pageUs: Math.round(gridUs), recUs: Math.round(timeline.recOfPage(gridUs)), visible: place.visible })
+    list.push({ outUs: place.outUs, pageUs: rounded, recUs: Math.round(timeline.recOfPage(gridUs)), visible: place.visible, tick: true })
   }
 }
 

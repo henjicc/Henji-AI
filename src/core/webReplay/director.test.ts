@@ -239,12 +239,12 @@ describe('页面帧节奏与倍速无关', () => {
   it('各倍速跑的页面帧时刻相同，改写的鼠标每个页面帧移一次；1 倍速 60fps 不多跑页面帧', () => {
     const drag = [{ kind: 'drag', at: 3.4, target: { x: 200, y: 200 }, to: { x: 400, y: 260 }, duration: 0.3, approach: 0.2 }]
     // 只比到 16 倍速最后一帧（3.9 秒）：之后不出画面，各倍速收尾的位置本来就不同
-    const pageFrames = (plan: DirectorPlan): number[] => plan.ops.filter(op => (op.kind === 'advance' || op.kind === 'frame') && op.pageUs <= 3.9 * S).map(op => Math.round(op.pageUs))
+    const pageFrames = (plan: DirectorPlan): number[] => plan.ops.filter(op => (op.kind === 'advance' || (op.kind === 'frame' && op.tick)) && op.pageUs <= 3.9 * S).map(op => Math.round(op.pageUs))
     const round = (value: unknown): unknown => JSON.parse(JSON.stringify(value), (_key, v: unknown) => (typeof v === 'number' ? Math.round(v * 1e6) / 1e6 : v))
     const moves = (plan: DirectorPlan): unknown[] => plan.ops.flatMap(op => (op.kind === 'move' ? [[Math.round(op.pageUs), round(op.point)]] : []))
     const base = planAt(1, drag)
     // 每 1/60 秒一个页面帧，剪掉的 0–1.5 秒与留下的部分一样
-    expect(pageFrames(base)).toEqual(Array.from({ length: 234 }, (_, n) => Math.round((n + 1) * PAGE_FRAME_US)))
+    expect(pageFrames(base)).toEqual(Array.from({ length: 235 }, (_, n) => Math.round(n * PAGE_FRAME_US)))
     expect(moves(base).length).toBeGreaterThan(30)
     for (const speed of SPEEDS) {
       const plan = planAt(speed, drag)
@@ -268,7 +268,7 @@ describe('页面帧节奏与倍速无关', () => {
       const none = async (): Promise<void> => {}
       for (const op of plan.ops) {
         await clock.advanceTo(op.pageUs / 1000, none)
-        if (op.kind === 'advance' || op.kind === 'frame') { await clock.runFrame(none); continue }
+        if (op.kind === 'advance' || (op.kind === 'frame' && op.tick)) { await clock.runFrame(none); continue }
         if (op.kind !== 'event') continue
         const event = op.event
         if (event.kind === 'wheel') wheelDy += event.dy

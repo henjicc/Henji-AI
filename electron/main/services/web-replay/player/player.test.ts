@@ -10,7 +10,7 @@ import { CAPTURE_TOKEN_COLORS } from '../../../../../packages/web-replay-probe/s
  * engine calls advance/frame. Each window has its own page; a frame paints a picture carrying its token.
  */
 /** log：出画面的帧（按页面时刻）；pageFrames：不出画面的页面帧（请求的页面时刻）。frames 只数出画面的帧。 */
-interface FakePage { id: number; pageNow: number; frames: number; log: string[]; pageFrames: number[]; dispatched: Array<{ kind: string; at: number }>; paint: null | ((event: unknown, dirty: unknown, image: unknown) => void) }
+interface FakePage { id: number; pageNow: number; frames: number; log: string[]; pageFrames: number[]; inputFrames: number[]; dispatched: Array<{ kind: string; at: number }>; paint: null | ((event: unknown, dirty: unknown, image: unknown) => void) }
 interface FakeEncoder { output: string; writes: number[]; finished: number[] }
 const fake = vi.hoisted(() => ({
   handlers: new Map<string, (...args: unknown[]) => void>(),
@@ -41,18 +41,17 @@ function evaluate(page: FakePage) {
   return async (code: string): Promise<unknown> => {
     let m: RegExpMatchArray | null
     if ((m = code.match(/\.advance\(([\d.]+)\)/))) {
+    if ((m = code.match(/\.tick\(([\d.]+)\)/))) {
+      page.pageNow = Math.max(page.pageNow, Number(m[1]))
+      page.pageFrames.push(Number(m[1]))
+      return { now: page.pageNow, timers: 0, frameCallbacks: 0, animations: 0, quiet: false, samples: {} }
+    }
       page.pageNow = Math.max(page.pageNow, Number(m[1]))
       return { now: page.pageNow, timers: 0, nextDue: Infinity }
     }
     if ((m = code.match(/\.frame\(([\d.]+), (\{.*\})\)/))) {
       const t = Number(m[1])
       const options = JSON.parse(m[2]) as { token?: number; samples?: string[] }
-      // 出画面的帧都带采样；不带的是两帧之间的页面帧
-      if (!options.samples) {
-        page.pageNow = Math.max(page.pageNow, t)
-        page.pageFrames.push(t)
-        return { now: page.pageNow, timers: 0, frameCallbacks: 0, animations: 0, quiet: false, samples: {} }
-      }
       const index = page.frames++
       if (index === fake.failAtFrame) throw new Error('页面崩了')
       page.pageNow = Math.max(page.pageNow, t)
@@ -70,7 +69,7 @@ function evaluate(page: FakePage) {
       for (const name of options.samples ?? []) samples[name] = { ok: true, value: { width: 10, height: 10, items: [[name === 'boxes' ? 'node-a' : 'hello', page.pageNow, 0, 1, 1]] } }
       return { now: page.pageNow, timers: 0, frameCallbacks: 0, animations: 0, quiet: false, samples }
     }
-    if (code.includes('.realFrame()')) return code.includes('viewport') ? { width: 10, height: 10 } : undefined
+    if (code.includes('.realFrame()')) { page.inputFrames.push(page.pageNow); return code.includes('viewport') ? { width: 10, height: 10 } : undefined }
     if (code.includes('.resolveTarget(')) return code.includes('missing') ? null : { x: 40, y: 50 }
     return true
   }
@@ -81,7 +80,7 @@ vi.mock('electron', () => ({
   session: { fromPartition: () => ({ clearStorageData: async () => {}, protocol: { unhandle: vi.fn() } }) },
   nativeImage: { createFromBitmap: () => ({ toJPEG: () => Buffer.from('jpeg') }) },
   BrowserWindow: class {
-    private readonly page: FakePage = { id: fake.nextId++, pageNow: 0, frames: 0, log: [], pageFrames: [], dispatched: [], paint: null }
+    private readonly page: FakePage = { id: fake.nextId++, pageNow: 0, frames: 0, log: [], pageFrames: [], inputFrames: [], dispatched: [], paint: null }
     webContents = {
       id: this.page.id,
       page: this.page,
@@ -307,3 +306,14 @@ it('bootstrap preload 失败立即带原因拒绝，不等待存储恢复超时'
   fake.bootstrapFails = true
   await expect(new WebRecordingPlayer(recordingStore(root)).render({ output: path.join(root, 'video.mp4'), video: false })).rejects.toThrow('重演运行时注入失败：bootstrap fixture failure')
 }, 2000)
+it('移动与滚轮在各自输入时刻交付浏览器，不能等到后续定时器或输出帧再交付', async () => {
+  root = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-replay-input-time-'))
+  const behavior = [
+    { kind: 'pointer', type: 'move', t: 40_000, x: 3, y: 3, button: -1, buttons: 1, clickCount: 0, pointerType: 'mouse', mods: 0 },
+    { kind: 'wheel', t: 45_000, x: 3, y: 3, dx: 0, dy: -100, mods: 2 },
+  ]
+  const director = parseWebReplayDirector({ version: 1, timeline: { segments: [{ from: 0, to: 1, speed: 16 }] } })
+  await new WebRecordingPlayer(recordingStore(root, behavior, 1_000_000)).render({ output: path.join(root, 'input.mp4'), fps: 60, video: false, director })
+  expect(fake.pages[0].inputFrames).toEqual([40, 45])
+})
+

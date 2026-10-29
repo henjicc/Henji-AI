@@ -381,7 +381,6 @@ export class WebRecordingPlayer {
       const take = options.director ? new TakeTrack(input) : null
       // Pointer moves and wheel reach the page with its next rendering update; hold timers until then.
       let heldInput = false
-      let nextDue = Infinity
       // Input dispatched since the last rendered frame: the next frame must render.
       let inputSinceFrame = true
       // A cut was rendered through since the last captured picture: the next frame must be captured.
@@ -430,8 +429,9 @@ export class WebRecordingPlayer {
       logger.info('开始逐帧重演', { event: 'web_replay.replay.lockstep_start', context: { recordingId: this.manifest.id, fps, frames: frameCount, dpr, video, events: this.behavior.length, ops: plan.ops.length, cuts: plan.timeline.cuts.length, director: plan.steps, selectors: options.boxSelectors?.length ?? 0 } })
 
       // Held input reaches the page before a timer due after it (the order it had while recording).
-      const flushHeld = async (atMs: number): Promise<void> => {
-        if (heldInput && nextDue <= atMs) await page(`${control}.realFrame()`)
+      const flushHeld = async (): Promise<void> => {
+        // 浏览器可能攒着 move/wheel 等下一次绘制才派发；必须在输入原时刻交付，避免被输出帧或倍速改变合并方式。
+        if (heldInput) await page(`${control}.realFrame()`)
         heldInput = false
       }
       for (const op of plan.ops) {
@@ -441,21 +441,18 @@ export class WebRecordingPlayer {
         if (op.step) this.activeStep = { label: op.step, untilPageUs: op.pageUs + STEP_BLAME_US }
         else if (op.kind === 'event' && op.event.kind !== 'resize' && op.event.kind !== 'focus' && op.event.kind !== 'action' && !(op.event.kind === 'pointer' && op.event.type === 'move')) this.activeStep = null
         if (op.kind === 'advance') {
-          // A page frame between pictures (a cut, or a fast stretch): it renders for real, so frame callbacks run and
-          // the input the browser holds, resize notifications and scroll events reach the page; nothing is captured.
-          await flushHeld(atMs)
+          await flushHeld()
           if (site.inFlight()) await loaded()
-          const report = await page<ReplayFrameReport>(`${control}.frame(${atMs}, ${JSON.stringify({ allowQuiet: !inputSinceFrame })})`)
+          const report = await page<ReplayFrameReport>(`${control}.tick(${atMs})`)
           stats.pageFrames += 1
           this.pageMs = report.now
-          nextDue = Infinity
-          if (!report.quiet) { inputSinceFrame = false; renderedSinceCapture = true }
+          if (!report.quiet) renderedSinceCapture = true
           continue
         }
         if (op.kind !== 'frame') {
           if (op.kind === 'event' && (op.event.kind === 'focus' || op.event.kind === 'action')) { take?.record(op, null); continue }
-          if (heldInput && nextDue <= atMs) { await page(`${control}.realFrame()`); heldInput = false }
-          nextDue = (await advance(atMs)).nextDue
+          await flushHeld()
+          await advance(atMs)
           if (op.kind === 'event' && op.event.kind === 'resize') {
             win.setContentSize(Math.round(op.event.width), Math.round(op.event.height))
             await waitViewport(Math.round(op.event.width), Math.round(op.event.height))
@@ -479,17 +476,16 @@ export class WebRecordingPlayer {
         }
         const i = op.index
         const tUs = Math.round(op.outUs)
-        await flushHeld(atMs)
+        await flushHeld()
         take?.frame(op)
 
         const samples = text && i % textEvery === 0 ? ['boxes', 'text'] : ['boxes']
         const frameStarted = Date.now()
         if (site.inFlight()) await loaded()
-        const report = await page<ReplayFrameReport>(`${control}.frame(${atMs}, ${JSON.stringify({ token: video ? tokenIndex(i) : undefined, samples, allowQuiet: quietFrames && !inputSinceFrame && !renderedSinceCapture && i > 0 })})`)
+        const report = await page<ReplayFrameReport>(`${control}.frame(${atMs}, ${JSON.stringify({ token: video ? tokenIndex(i) : undefined, samples, tick: op.tick, allowQuiet: quietFrames && !inputSinceFrame && !renderedSinceCapture && i > 0 })})`)
         stats.steps += 1
         stats.pageMs += Date.now() - frameStarted
         this.pageMs = report.now
-        nextDue = Infinity
         if (report.quiet) {
           // Nothing in the page could have changed: the picture and the tracks stay as they were.
           stats.quiet += 1

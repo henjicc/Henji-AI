@@ -91,11 +91,13 @@ export interface ReplayControl {
   advance(toMs: number): Promise<{ now: number; timers: number; nextDue: number }>
   /** Resolves after the next real rendering update (input the browser holds for the frame is delivered). */
   realFrame(): Promise<void>
+  /** 固定页面节拍的逻辑帧：推进动画与帧回调，不等待绘制、不采样。 */
+  tick(toMs: number): Promise<ReplayFrameReport>
   /**
    * Renders the page at `toMs`: timers, animations and animation-frame callbacks, the capture token
    * `token` (if given) in that same frame, then the named samplers read that state.
    */
-  frame(toMs: number, options?: { token?: number; samples?: string[]; allowQuiet?: boolean }): Promise<ReplayFrameReport>
+  frame(toMs: number, options?: { token?: number; samples?: string[]; allowQuiet?: boolean; tick?: boolean }): Promise<ReplayFrameReport>
   defineSampler(name: string, read: () => unknown): void
   viewport(): { width: number; height: number }
   /** Repaints the current capture token (same token) so a dropped capture comes again. */
