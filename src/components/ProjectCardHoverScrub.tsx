@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useRafCallback } from '@/hooks/useRafCallback';
 import type { DocumentCoverSource } from '@/core/documents/types';
 import { FILMSTRIP_GRID_US, filmstripHeightBucket } from '@/core/media/filmstripFrames';
 import { useFilmstripFramesRevision } from '@/hooks/useFilmstripFrames';
-import { resolveImageDisplayUrl } from '@/services/imageSource';
+import { loadImageElement, resolveImageDisplayUrl } from '@/services/imageSource';
 import { acquireFilmstripFrames, nearestFilmstripFrame, type FilmstripFrameRef } from '@/services/videoFilmstrip/filmstripFrameService';
 
 /** 位置 → 画面来源（悬停预览取法）；第一次悬停时才加载。 */
@@ -23,19 +24,24 @@ function frameRef(source: DocumentCoverSource, height: FilmstripFrameRef['height
 export function ProjectCardHoverScrub({ load, children }: { load: ProjectCardHoverPreviewLoader; children: React.ReactNode }): React.ReactElement {
   const [preview, setPreview] = useState<((fraction: number) => DocumentCoverSource | null) | null>(null);
   const [fraction, setFraction] = useState<number | null>(null);
+  const [imageReady, setImageReady] = useState<string | null>(null);
   const loading = useRef(false);
+  const generation = useRef(0);
   // 新位置的缩略帧还没解出来时沿用上一幅，避免拖动中闪回封面
   const shown = useRef<string | null>(null);
   const release = useRef<(() => void) | null>(null);
   useFilmstripFramesRevision();
   const height = filmstripHeightBucket(180 * (typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1));
 
-  useEffect(() => () => { release.current?.(); release.current = null; }, []);
+  useEffect(() => () => { generation.current++; release.current?.(); release.current = null; }, []);
+  const move = useRafCallback((next: number) => setFraction(next));
 
   const enter = (): void => {
     if (preview || loading.current) return;
     loading.current = true;
+    const current = ++generation.current;
     void load().then((previewer) => {
+      if (current !== generation.current) return;
       loading.current = false;
       if (!previewer) return;
       setPreview(() => previewer);
@@ -47,9 +53,17 @@ export function ProjectCardHoverScrub({ load, children }: { load: ProjectCardHov
       release.current = refs.length ? acquireFilmstripFrames(refs) : null;
     });
   };
-  const step = fraction === null ? null : Math.min(STEPS - 1, Math.floor(fraction * STEPS));
-  const source = preview && step !== null ? preview((step + 0.5) / STEPS) : null;
-  const ready = source?.sourceKind === 'video' ? nearestFilmstripFrame(frameRef(source, height)) : source?.source;
+  const selected = preview && fraction !== null ? preview(fraction) : null;
+  // 原视频仍共用预取的 16 档；合成图片按自身位置查找，不丢掉较密档位。
+  const source = selected?.sourceKind === 'video' && preview && fraction !== null ? preview((Math.min(STEPS - 1, Math.floor(fraction * STEPS)) + 0.5) / STEPS) : selected;
+  const image = source?.sourceKind === 'image' ? source.source : null;
+  useEffect(() => {
+    if (!image) return;
+    let current = true;
+    void loadImageElement(image).then(() => { if (current) setImageReady(image); }, () => {});
+    return () => { current = false; };
+  }, [image]);
+  const ready = source?.sourceKind === 'video' ? nearestFilmstripFrame(frameRef(source, height)) : imageReady === image ? image : null;
   if (fraction === null) shown.current = null;
   else if (ready) shown.current = ready;
   const frame = fraction === null ? null : shown.current;
@@ -58,8 +72,8 @@ export function ProjectCardHoverScrub({ load, children }: { load: ProjectCardHov
     <span
       className="absolute inset-0 block"
       onPointerEnter={enter}
-      onPointerMove={(event) => { const rect = event.currentTarget.getBoundingClientRect(); if (rect.width > 0) setFraction(Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width))); }}
-      onPointerLeave={() => setFraction(null)}
+      onPointerMove={(event) => { const rect = event.currentTarget.getBoundingClientRect(); if (rect.width > 0) move.schedule(Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width))); }}
+      onPointerLeave={() => { move.cancel(); generation.current++; loading.current = false; setFraction(null); setPreview(null); setImageReady(null); release.current?.(); release.current = null; }}
     >
       {children}
       {frame ? <img src={resolveImageDisplayUrl(frame)} alt="" aria-hidden="true" draggable={false} className="absolute inset-0 h-full w-full object-cover" /> : null}

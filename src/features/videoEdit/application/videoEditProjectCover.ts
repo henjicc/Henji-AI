@@ -45,16 +45,20 @@ export function videoEditCoverSource(document: VideoEditDocument): DocumentCover
   return null
 }
 
-/** 悬停预览（项目卡片上左右移动看整条片子）：第一条序列在 fraction（0–1）处最上层的画面；那一刻没有画面时为 null。 */
+/** 没有合成预览时从已导入素材稳定取样；时间线空隙或纯代码片段也能退回素材箱。 */
 export function videoEditFrameSourceAt(document: VideoEditDocument, fraction: number): DocumentCoverSource | null {
-  const sequence = document.sequences[0]
-  if (!sequence) return null
-  const fps = videoEditFps(sequence.frameRate)
-  const picture = videoEditPictureFilter(sequence)
-  const frame = Math.floor(Math.max(0, Math.min(0.999, fraction)) * videoEditDuration(sequence))
-  const atFrame = sequence.clips.filter(clip => (clip.kind === 'video' || clip.kind === 'image') && picture.has(clip) && frame >= clip.start && frame < clip.start + clip.duration).sort((left, right) => right.track - left.track)
-  for (const clip of atFrame) { const source = clipCoverSource(document, clip, frame, fps); if (source) return source }
-  return null
+  const position = Math.max(0, Math.min(0.999, fraction))
+  const pictures = document.sequences.flatMap(sequence => sequence.clips
+    .filter(clip => clip.kind === 'video' || clip.kind === 'image')
+    .map(clip => ({ clip, fps: videoEditFps(sequence.frameRate) })))
+    .filter(({ clip }) => !!videoEditClipMedia(document, clip))
+  if (pictures.length) {
+    const offset = position * pictures.length, { clip, fps } = pictures[Math.floor(offset)]
+    return clipCoverSource(document, clip, clip.start + Math.floor((offset % 1) * clip.duration), fps)
+  }
+  const media = document.media.filter(item => item.kind === 'video' || item.kind === 'image')
+  const offset = position * media.length, item = media[Math.floor(offset)]
+  return item ? { source: item.path, sourceKind: item.kind as 'image' | 'video', ...(item.kind === 'video' ? { atSeconds: (offset % 1) * Math.max(0, item.durationSeconds - 0.1) } : {}) } : null
 }
 
 /** 节目面板开着时取当前合成画面（data URL）；节目没开、正在播放或画面变了时为 null。由节目选帧模块登记。 */

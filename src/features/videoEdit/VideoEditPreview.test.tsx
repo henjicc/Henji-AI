@@ -18,12 +18,13 @@ const stopNotification = vi.hoisted(() => vi.fn())
 const pixel = vi.hoisted(() => ({ preopen: vi.fn(), arm: vi.fn(async () => undefined), requests: [] as Array<{ frame: number; sequential?: boolean; scrubbing?: boolean | 'fast'; deadline?: number; submitted?: () => void; resolve: (value: { sourceTimestamps: number[]; presented?: boolean; history?: ImageBitmap; approximate?: boolean; skipped?: boolean }) => void; reject: (error: Error) => void }>, sessions: 0, update: vi.fn(), invalidate: vi.fn(), dispose: vi.fn(), mixAudio: vi.fn(), scale: vi.fn() }))
 const scrub = vi.hoisted(() => ({ request: vi.fn(), stop: vi.fn() }))
 vi.mock('./engine/videoEditAudioScrub', async importOriginal => ({ ...await importOriginal<typeof import('./engine/videoEditAudioScrub')>(), VideoEditAudioScrubber: class { request = scrub.request; stop = scrub.stop } }))
-vi.mock('./application/videoEditProjectCover', () => ({ saveVideoEditPosterCover: vi.fn(async () => undefined), updateVideoEditProjectCover: vi.fn(async () => undefined) }))
+vi.mock('./application/videoEditProjectCover', () => ({ registerVideoEditProgramCoverCapture: vi.fn(), saveVideoEditPosterCover: vi.fn(async () => undefined), updateVideoEditProjectCover: vi.fn(async () => undefined) }))
 vi.mock('./engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   terminalError?: Error
   get terminated() { return !!this.terminalError }
   setTracks() {}
   async prepareGpu() {}
+  async captureHoverFrame() { return undefined }
   adoptProject() {}
   preopenSequence = pixel.preopen
   constructor() { pixel.sessions++ }

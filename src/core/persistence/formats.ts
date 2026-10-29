@@ -105,6 +105,7 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
 
 /** Deliberate scope boundary: rebuildable projections and external formats are not user-project migrations. */
 export const PERSISTENCE_EXCLUSIONS = [
+  { id: 'document-hover-frames', readEntry: 'electron/main/services/documents/covers.ts::getHoverFrames', reason: '程序目录中的低清合成序列帧及其索引可从剪辑重建；只添加可选缓存，不改变通用静态封面或作品文件。' },
   { id: 'assistant-skill-source', readEntry: 'electron/main/services/assistant/skills/frontmatter.ts::parseSkillFrontmatter', reason: 'SKILL.md 是外部 Agent Skills 标准文本；安装只添加可选的 henji-foreign 标记，旧文件没有标记即为本机内容，不改写正文或其他字段。' },
   { id: 'web-replay-take-outputs', readEntry: 'electron/main/services/web-replay/takes.ts', reason: '录制文件夹 takes/<名字>/ 下的视频、boxes.jsonl、text.jsonl、behavior.json、timemap.json、take.json 与 edit-events 都由同目录已登记的 director.json（web-replay-director）和录制本身重演生成，可用 render_web_app_replay 原样重建；不保存用户编辑，录制原件不受影响。读不了的版本只是不列出。' },
   { id: 'web-recording-boxes-track', readEntry: 'electron/main/services/web-replay/boxTrackReader.ts', reason: 'boxes.jsonl 是重演从已登记网页录制的前端资源、数据与行为生成的可选位置投影，可用 render_web_app_replay（含 textOnly）重建；不保存用户编辑，不改变 recording.json 或原始轨道。旧录制缺少此文件仍可读，不提高录制格式版本或最低可读版本。' },

@@ -316,6 +316,19 @@ export interface DocumentCoverResult {
   coverPath: string | null
 }
 
+/** 可重建的合成预览缓存，不属于作品内容。 */
+export interface DocumentHoverFrames {
+  contentKey: string
+  frames: Array<{ position: number; path: string }>
+}
+
+export interface WriteDocumentHoverFrameRequest {
+  docId: string
+  contentKey: string
+  /** 省略时开启这一内容的缓存；内容不同则清除旧帧。 */
+  frame?: { position: number; bytes: Uint8Array }
+}
+
 /**
  * 文档会话状态（3.4）：撤销记录、视口这类不写进文档的会话状态，按文档 ID 存在程序目录，随时可丢。
  * key 由工具自己约定（如 `canvas.history`），文档移到回收站、删除或从列表移除时一并清掉。

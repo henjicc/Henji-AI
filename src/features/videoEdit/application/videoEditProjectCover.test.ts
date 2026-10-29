@@ -71,12 +71,13 @@ it('写成通用封面；画面来源没变时不重复生成，没有画面时�
   expect(save).toHaveBeenCalledTimes(1)
 })
 
-it('悬停预览按位置取那一刻最上层的画面，没有画面时为空', () => {
+it('悬停回退稳定抽时间线素材，时间线没有画面时抽素材箱，两者都没有时为空', () => {
   const document = withClips([
     clip({ id: 'img', itemId: 'i-image', kind: 'image', track: 1, start: 0, duration: 50 }),
     clip({ id: 'vid', itemId: 'i-video', kind: 'video', track: 2, start: 50, duration: 50 }),
   ])
   expect(videoEditFrameSourceAt(document, 0.1)).toEqual({ source: 'D:/素材/海报.png', sourceKind: 'image' })
   expect(videoEditFrameSourceAt(document, 0.9)?.source).toBe('D:/素材/镜头.mp4')
-  expect(videoEditFrameSourceAt(withClips([]), 0.5)).toBeNull()
+  expect(videoEditFrameSourceAt(withClips([]), 0.9)?.source).toBe('D:/素材/海报.png')
+  expect(videoEditFrameSourceAt({ ...withClips([]), media: [] }, 0.5)).toBeNull()
 })

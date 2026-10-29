@@ -143,6 +143,12 @@ export const documentLinkSchema: z.ZodType<DocumentLink> = z.object({
   path: pathSchema,
 }).strict()
 
+export const writeDocumentHoverFrameRequestSchema = z.object({
+  docId: documentIdSchema,
+  contentKey: z.string().regex(/^[a-f0-9]{64}$/),
+  frame: z.object({ position: z.number().finite().min(0).max(1), bytes: z.instanceof(Uint8Array) }).strict().optional(),
+}).strict()
+
 export const saveDocumentCoverRequestSchema: z.ZodType<SaveDocumentCoverRequest> = z.object({
   docId: documentIdSchema,
   sources: z.array(z.object({

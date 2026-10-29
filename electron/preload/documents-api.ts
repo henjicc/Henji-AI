@@ -37,6 +37,8 @@ export function createDocumentsApi(invoke: NativeInvoke): DocumentsPlatform {
     resolveDocumentLink: (link) => invoke(c.resolveDocumentLink, link),
     checkName: (request) => invoke(c.checkName, request),
     getDocumentCover: (docId) => invoke(c.getDocumentCover, { docId }),
+    getDocumentHoverFrames: (docId) => invoke(c.getDocumentHoverFrames, { docId }),
+    writeDocumentHoverFrame: (request) => invoke(c.writeDocumentHoverFrame, request),
     saveDocumentCover: (request) => invoke(c.saveDocumentCover, request),
     refreshIndex: () => invoke(c.refreshIndex),
     readSessionState: (request) => invoke(c.readSessionState, request),

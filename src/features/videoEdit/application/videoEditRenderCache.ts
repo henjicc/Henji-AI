@@ -133,6 +133,8 @@ function ensureAutoRender(): void {
 }
 const jobs = new WeakMap<VideoEditInstance, Job>()
 
+export function videoEditRenderCacheBusy(owner: VideoEditInstance): boolean { return jobs.has(owner) }
+
 export type VideoEditRenderWindowState = 'ready' | 'rendering' | 'dropped' | 'predicted' | 'realtime'
 export interface VideoEditRenderCacheView {
   windows: Array<{ startFrame: number; endFrame: number; state: VideoEditRenderWindowState; performance?: VideoEditRenderPerformance }>

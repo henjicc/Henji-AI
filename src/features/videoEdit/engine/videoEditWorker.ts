@@ -55,12 +55,14 @@ export type RenderRequest = { id: number } & (
   /** 已就绪的预渲染窗口与它们的本地文件；不进渲染队列，下一次正向播放的渲染即使用。 */
   | { kind: 'renderCache'; windows: import('./videoEditRenderer').VideoEditRenderCacheWindow[]; localPaths: Record<string, string> }
   | { kind: 'dispose' }
+  | { kind: 'hoverFrame'; document: VideoEditComposition; frame: number; allowRender: boolean }
+  | { kind: 'cancelHoverFrame' }
   /** `sentAt`：诊断时主线程发出请求的绝对时间（timeOrigin + now），用来算投递延迟。 */
   | { kind: 'render'; sentAt?: number; observeElements?: boolean; quality?: EffectQuality; frame: number; sequential: boolean; scrubbing?: import('./videoEditRenderer').VideoEditScrubMode; deadline?: number; readRgb?: { width: number; height: number }; history?: boolean }
   | { kind: 'audio'; start: number; duration: number; retainIdle?: boolean }
   /** Acceptance probes only (task 2.7): high-precision counters and one row of the last high-precision composition. */
   | { kind: 'precision'; row?: number })
-export type RenderResponse = { /** A program scrub frame answered without rendering: a newer frame request had already arrived. */ skipped?: boolean; renderCached?: boolean; renderElapsedMs?: number; renderStages?: Record<string, number>; approximate?: boolean; gpuDeviceLost?: string; authorElements?: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation; authorMetadata?: import('./videoEditAuthorParameters').AuthorEffectMetadata; elements?: import('./videoEditAuthorElements').AuthorElementObservation[]; preparationStages?: ReturnType<typeof videoEditPreparationSnapshot>; codePerformance?: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[]; id: number; phase?: 'submitted'; error?: string; contentTrust?: import('@/core/contentTrust').ContentTrustFailure; /** 效果错误，后接 sceneIssues（节目监视器按这一项提示用户）。 */ effectErrors?: string[]; /** 片子数据里会让画面缺内容的问题，也已在 effectErrors 里：试渲染等据此不把它们当成失败。 */ sceneIssues?: string[]; bitmap?: ImageBitmap; history?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
+export type RenderResponse = { hoverBytes?: Uint8Array; /** A program scrub frame answered without rendering: a newer frame request had already arrived. */ skipped?: boolean; renderCached?: boolean; renderElapsedMs?: number; renderStages?: Record<string, number>; approximate?: boolean; gpuDeviceLost?: string; authorElements?: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation; authorMetadata?: import('./videoEditAuthorParameters').AuthorEffectMetadata; elements?: import('./videoEditAuthorElements').AuthorElementObservation[]; preparationStages?: ReturnType<typeof videoEditPreparationSnapshot>; codePerformance?: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[]; id: number; phase?: 'submitted'; error?: string; contentTrust?: import('@/core/contentTrust').ContentTrustFailure; /** 效果错误，后接 sceneIssues（节目监视器按这一项提示用户）。 */ effectErrors?: string[]; /** 片子数据里会让画面缺内容的问题，也已在 effectErrors 里：试渲染等据此不把它们当成失败。 */ sceneIssues?: string[]; bitmap?: ImageBitmap; history?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
 /** Structured log entries the worker cannot write itself; the render session forwards them to the application log. */
 export interface RenderLogMessage { kind: 'log'; level: 'debug' | 'info' | 'warn'; message: string; event: string; context: Record<string, unknown> }
 /** 原生显卡帧通道（preload 交来的端口）。不进入渲染队列；渲染器经它读取原生解码帧，诊断只供真实性测试。 */
@@ -100,6 +102,8 @@ function preopenMedia(request: Extract<RenderRequest, { kind: 'preopen' }>): voi
 let effectWarnings = new Set<string>()
 // 排队或正在准备的前台帧优先；GPU 呈现回执后仅在 Worker 队列空档发起准备。
 let foregroundFrames = 0
+let hoverRequest: AbortController | undefined
+let hoverEpoch = 0
 let latestRender: { frame: number; sequential: boolean } | undefined
 /**
  * Paused program frames (non-sequential, no pixels read back) queued and not started yet, by request id: a newer frame
@@ -192,6 +196,10 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
   if (event.data.kind === 'code.trustResult' || event.data.kind === 'code.compiled' || event.data.kind === 'code.source' || event.data.kind === 'code.metadataResult' || event.data.kind === 'code.moduleUrls') { sharedCompilation.receive(event.data); return }
   if (event.data.kind === 'nativeFrames.attach' || event.data.kind === 'nativeFrames.diagnose') { handleNativeFrames(event.data); return }
   const request = event.data
+  if (request.kind === 'cancelHoverFrame') { hoverEpoch++; hoverRequest?.abort(); return }
+  // 前台请求到达即取消后台解码，不等它排到队首。
+  if (request.kind !== 'hoverFrame' && request.kind !== 'renderCache') { hoverEpoch++; hoverRequest?.abort() }
+  const requestedHoverEpoch = hoverEpoch
   const receivedAt = performance.now()
   let foregroundPending = request.kind === 'render'
   const releaseForeground = (): void => { if (foregroundPending) { foregroundPending = false; foregroundFrames-- } }
@@ -250,6 +258,12 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
         // Every borrowed native frame goes back before the session may terminate this worker (record 002).
         await nativeFrames?.dispose(); nativeFrames = undefined; nativeDiagnostics = undefined
         self.postMessage({ id: request.id, codeResources } satisfies RenderResponse)
+      } else if (request.kind === 'hoverFrame') {
+        const controller = new AbortController(); hoverRequest = controller
+        try {
+          const hoverBytes = requestedHoverEpoch === hoverEpoch && foregroundFrames === 0 && renderer ? await renderer.captureHoverFrame(request.document, request.frame, request.allowRender, controller.signal) : undefined
+          self.postMessage({ id: request.id, hoverBytes: controller.signal.aborted ? undefined : hoverBytes } satisfies RenderResponse)
+        } finally { if (hoverRequest === controller) hoverRequest = undefined }
       } else if (request.kind === 'authorRelease') {
         await renderer?.releaseAuthor(request.url)
         self.postMessage({ id: request.id } satisfies RenderResponse)

@@ -1,9 +1,11 @@
+import { randomUUID } from 'node:crypto'
 import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import { z } from 'zod'
 
 import { DOCUMENT_ID_PATTERN } from '../../../../src/core/documents/envelope'
-import type { DocumentCoverResult, DocumentCoverSource, SaveDocumentCoverRequest } from '../../../../src/core/documents/types'
+import type { DocumentCoverResult, DocumentCoverSource, SaveDocumentCoverRequest, DocumentHoverFrames, WriteDocumentHoverFrameRequest } from '../../../../src/core/documents/types'
 import { writeBufferAtomically } from '../fs/atomic-file'
 import { KeyedSerialExecutor } from '../image-editor-v3/serial-executor'
 import type { MainLogger } from '../logging/main-logger'
@@ -24,6 +26,7 @@ export interface DocumentCoverStoreOptions {
 }
 
 const COVER_EXTENSION = '.webp'
+const hoverIndexSchema = z.object({ contentKey: z.string(), frames: z.array(z.object({ position: z.number().min(0).max(1), name: z.string().regex(/^[a-f0-9-]+\.webp$/) })) })
 
 export class DocumentCoverStore {
   private readonly executor = new KeyedSerialExecutor()
@@ -83,7 +86,7 @@ export class DocumentCoverStore {
         const names = (await fsp.readdir(folder).catch(() => [] as string[])).filter((name) => path.join(folder, name) !== target).sort()
         const previous = names.filter((name) => name.endsWith(COVER_EXTENSION)).at(-1)
         await Promise.all(names
-          .filter((name) => name !== previous)
+          .filter((name) => name.endsWith(COVER_EXTENSION) && name !== previous)
           .map((name) => removeUnmanagedCachePath(path.join(folder, name), { force: true }).catch(() => undefined)))
         ;(await this.loadCache()).set(request.docId, target)
         logger.info('文档封面已更新', {
@@ -94,6 +97,44 @@ export class DocumentCoverStore {
       } catch (error) {
         logger.error('文档封面更新失败', { event: 'documents.cover.save.failed', context: { documentId: request.docId }, error })
         throw error
+      }
+    })
+  }
+
+  private async hoverIndex(docId: string): Promise<z.infer<typeof hoverIndexSchema> | null> {
+    try { return hoverIndexSchema.parse(JSON.parse(await fsp.readFile(path.join(this.folder(docId), 'hover', 'index.json'), 'utf8'))) }
+    catch (error) {
+      if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) {
+        this.options.logger.warn('读取文档预览缓存失败', { event: 'documents.hover.read.failed', context: { docId }, error })
+      }
+      return null
+    }
+  }
+
+  async getHoverFrames(docId: string): Promise<DocumentHoverFrames | null> {
+    return this.executor.run(docId, async () => {
+      const index = await this.hoverIndex(docId)
+      return index ? { contentKey: index.contentKey, frames: index.frames.map(({ position, name }) => ({ position, path: path.join(this.folder(docId), 'hover', name) })) } : null
+    })
+  }
+
+  async writeHoverFrame(request: WriteDocumentHoverFrameRequest): Promise<void> {
+    const folder = path.join(this.folder(request.docId), 'hover')
+    await this.executor.run(request.docId, async () => {
+      let index = await this.hoverIndex(request.docId)
+      if (request.frame) {
+        // 迟到的旧内容写入不能让已失效的画面复活。
+        if (index?.contentKey !== request.contentKey) return
+        const name = `${randomUUID()}.webp`
+        await writeBufferAtomically(path.join(folder, name), Buffer.from(request.frame.bytes))
+        const previous = index.frames.find(item => item.position === request.frame!.position)
+        index.frames = [...index.frames.filter(item => item.position !== request.frame!.position), { position: request.frame.position, name }]
+        await writeBufferAtomically(path.join(folder, 'index.json'), Buffer.from(JSON.stringify(index)))
+        if (previous) await removeUnmanagedCachePath(path.join(folder, previous.name), { force: true })
+      } else if (index?.contentKey !== request.contentKey) {
+        await removeUnmanagedCachePath(folder, { recursive: true, force: true })
+        index = { contentKey: request.contentKey, frames: [] }
+        await writeBufferAtomically(path.join(folder, 'index.json'), Buffer.from(JSON.stringify(index)))
       }
     })
   }

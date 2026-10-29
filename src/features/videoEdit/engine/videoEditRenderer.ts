@@ -351,6 +351,7 @@ export class VideoEditRenderer {
   private readonly seekers = new Map<string, VideoEditFrameSeeker>()
   readonly canvas: OffscreenCanvas
   private compositor?: VideoEditGpuCompositor
+  private sharedCompositor?: VideoEditGpuCompositor
   private capturePresentation?: (pixels: Promise<ImageBitmap>) => void
   private codeSources?: VideoEditCodeSources
   private readonly contentAudio = new VideoEditContentAudio(document => new VideoEditRenderer(document, 1, undefined, 1, this.frames))
@@ -362,6 +363,7 @@ export class VideoEditRenderer {
   private jumpPreview?: VideoEditJumpPreview
   private jumpFill?: ReturnType<typeof setTimeout>
   private jumpFilling = false
+  private hoverRenderer?: VideoEditRenderer
   /** The last top-level frame presented (live or from `jumpPreview`). */
   private shownFrame?: number
   /** A live top-level frame still being prepared after its request returned with a jump preview (see `render`). */
@@ -430,7 +432,7 @@ export class VideoEditRenderer {
   }
   private ensureCompositor(): VideoEditGpuCompositor {
     if (this.disposed) throw new DOMException('剪辑渲染已关闭。', 'AbortError')
-    if (!this.compositor) { this.compositor = this.nestedOwner?.compositor?.fork(this.canvas, () => this.capturePresentation) ?? new VideoEditGpuCompositor(this.canvas, undefined, () => this.capturePresentation, (durationMs, stage = 'ready') => this.timing?.(`compositor.${stage}`, durationMs), () => this.onPlaybackIdle?.()); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor) }
+    if (!this.compositor) { this.compositor = (this.sharedCompositor ?? this.nestedOwner?.compositor)?.fork(this.canvas, () => this.capturePresentation) ?? new VideoEditGpuCompositor(this.canvas, undefined, () => this.capturePresentation, (durationMs, stage = 'ready') => this.timing?.(`compositor.${stage}`, durationMs), () => this.onPlaybackIdle?.()); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor) }
     return this.compositor!
   }
   /** Image media decoded ahead for code clips about to start; kept until those clips draw them (or the warm-up expires). */
@@ -673,6 +675,7 @@ export class VideoEditRenderer {
     return source
   }
   private image(media: VideoEditMedia, speculative = false, signal?: AbortSignal): Promise<ImageBitmap> {
+    signal?.throwIfAborted()
     let image = this.images.get(media.id)
     if (!image) {
       const controller = new AbortController()
@@ -1614,6 +1617,59 @@ export class VideoEditRenderer {
   abandonPausedFrame(): void { this.pausedLive?.abort.abort() }
   /** Whether a resident key frame covers `frame` (see `presentJumpPreviewNow`). */
   hasJumpPreview(frame: number): boolean { return !!this.jumpPreviewPicture(frame) }
+
+  /** 缩略预览共用 GPU，画到自己的低清画布，不能改动节目表面或播放头。 */
+  async captureHoverFrame(document: VideoEditComposition, frame: number, allowRender: boolean, signal: AbortSignal): Promise<Uint8Array | undefined> {
+    const current = (): boolean => !this.disposed && !signal.aborted && this.foregroundFrames === 0
+    if (!current()) return undefined
+    const resident = document.id === this.document.id && document.revision === this.document.revision ? this.jumpPreviewPicture(frame) : undefined
+    if (!resident && !allowRender) return undefined
+    if (this.hoverRenderer && (this.hoverRenderer.document.id !== document.id || this.hoverRenderer.document.revision !== document.revision)) {
+      await this.hoverRenderer.dispose(); this.hoverRenderer = undefined
+    }
+    if (!current()) return undefined
+    const preview = this.hoverRenderer ??= new VideoEditRenderer(document, 320, undefined, 16 * 1024 ** 2, this.frames)
+    // GPU 可以共用，嵌套序列、解码位置和播放准备必须由后台自己的资源树持有。
+    preview.sharedCompositor = this.ensureCompositor()
+    // 复用暂停/回放的低清渲染尺寸，文字、效果与嵌套序列随同一比例缩放。
+    preview.setRenderDivisor(([8, 4, 2, 1] as const).find(divisor => document.width / divisor >= 320) ?? 1)
+    const cancel = (): void => {
+      preview.cancelPresentation()
+      for (const image of preview.images.values()) if (!image.ready) image.controller.abort()
+    }
+    signal.addEventListener('abort', cancel, { once: true })
+    let pixels: Promise<ImageBitmap> | undefined
+    const capture = (bitmap: Promise<ImageBitmap>): void => { pixels = bitmap; void bitmap.catch(() => undefined) }
+    try {
+      if (resident) {
+        const release = this.jumpPreview!.lease()
+        preview.capturePresentation = capture
+        try {
+          const result = await preview.ensureCompositor().draw(preview.drawDocument(document), [resident.window.clip], [resident.picture], current)
+          await result.completion
+        } finally { release() }
+      } else {
+        const result = await preview.renderFrame(frame, false, false, current, undefined, undefined, 'interactive', capture, signal)
+        await result.completion
+        if (result.effectErrors?.length || result.sceneIssues?.length || result.blankPictures) throw new Error('合成预览画面不完整。')
+      }
+      const bitmap = await pixels
+      pixels = undefined
+      if (!bitmap) return undefined
+      try {
+        if (!current()) return undefined
+        const width = Math.min(320, document.width)
+        const canvas = new OffscreenCanvas(width, Math.max(1, Math.round(document.height * width / document.width)))
+        canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+        const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.72 })
+        return current() ? new Uint8Array(await blob.arrayBuffer()) : undefined
+      } finally { bitmap.close() }
+    } catch (error) {
+      if (pixels) (await pixels.catch(() => undefined))?.close()
+      if (current()) throw error
+      return undefined
+    } finally { signal.removeEventListener('abort', cancel) }
+  }
   /** Resolves once no top-level frame is being prepared in the background (callers changing the renderer wait for it). */
   settled(): Promise<void> { return this.detachedLive ?? Promise.resolve() }
   /** The resident key frame `presentJumpPreview` would draw for `frame`, if any. */
@@ -1763,6 +1819,7 @@ export class VideoEditRenderer {
       this.codeSources ??= new VideoEditCodeSources(document, () => this.compositor!.code(), undefined, () => { this.lookaheadOwner.lookaheadMetrics.codeHits++ })
     }
     // 片子数据派生的取帧参数（视频与截图）按代码声明解析：先读好引用片子数据的代码，取帧、图片与代码准备才看到同一份合成参数。
+    readSignal?.throwIfAborted()
     const scenesReady = this.codeSources?.prepareScenes(document, active)
     if (scenesReady) await scenesReady
     const declarations = (instance: CodeMaterialInstance): readonly CodeParameterDeclaration[] | undefined => this.codeSources?.declarations(instance)
@@ -1780,7 +1837,7 @@ export class VideoEditRenderer {
     }
     for (const id of this.images.keys()) if (!imageIds.has(id) && !this.warmImages.has(id)) this.releaseImage(id)
     const imagesReady = (async () => {
-      const inputs = new Map<string, ImageBitmap | VideoEditCodePicture>(await Promise.all(imageMedia.map(async media => [media.id, await this.image(media)] as const)))
+      const inputs = new Map<string, ImageBitmap | VideoEditCodePicture>(await Promise.all(imageMedia.map(async media => [media.id, await this.image(media, false, readSignal)] as const)))
       for (const [key, picture] of await this.prepareCodeInputs(sourceDocument, active, frame, sequential, quality, canPresent, nestedContext, path, _scrubbing)) inputs.set(key, picture)
       return await this.compositor!.prepareImages(inputs, canPresent, new Set(active.filter(clip => clip.kind === 'text').map(clip => clip.id)), new Set(active.map(clip => clip.id)))
     })()
@@ -1865,7 +1922,7 @@ export class VideoEditRenderer {
         return picture
       }
       if (!media) throw new Error(`找不到素材 ${clip.name}`)
-      if (media.kind === 'image') return this.image(media)
+      if (media.kind === 'image') return this.image(media, false, readSignal)
       // 转场让片段越过源素材首尾时重复首尾帧（PR“媒体不足”）。
       const originalTime = clipSourceSeconds(clip, videoEditHandleFrame(clip, frame, document.fps, media.durationSeconds), document.fps)
       // Every picture lookup (schedule, seek, export read) uses the same picture time: the source time plus the container
@@ -2392,6 +2449,7 @@ export class VideoEditRenderer {
     await Promise.allSettled([...this.sources.values()].map(async pending => { const source = await pending; source.current?.close(); await source.iterator?.return(); this.release(source) }))
     for (const key of this.images.keys()) this.releaseImage(key)
     this.jumpPreview?.dispose(); this.jumpPreview = undefined
+    await this.hoverRenderer?.dispose(); this.hoverRenderer = undefined
     this.contentAudio.clear(); this.sources.clear(); this.images.clear(); await this.compositor?.dispose(); this.canvas.width = 1; this.canvas.height = 1
     for (const chain of this.audioChains.values()) chain.dispose()
     this.audioChains.clear(); this.stretchers.clear()

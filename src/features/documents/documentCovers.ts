@@ -62,11 +62,16 @@ export async function ensureDocumentCover(docId: string, kind: DocumentKindId): 
  */
 export type DocumentHoverPreview = (read: DocumentReadResult, fraction: number) => DocumentCoverSource | null
 const hoverPreviews = new Map<DocumentKindId, DocumentHoverPreview>()
+const hoverLoaders = new Map<DocumentKindId, (read: DocumentReadResult) => ReturnType<typeof loadDocumentHoverPreview>>()
 const hoverReads = new Map<string, Promise<DocumentReadResult | null>>()
 
-export function registerDocumentHoverPreview(kind: DocumentKindId, preview: DocumentHoverPreview): () => void {
+export function invalidateDocumentHoverRead(docId: string): void { hoverReads.delete(docId) }
+
+export function registerDocumentHoverPreview(kind: DocumentKindId, preview: DocumentHoverPreview, load?: (read: DocumentReadResult) => ReturnType<typeof loadDocumentHoverPreview>): () => void {
   hoverPreviews.set(kind, preview)
-  return () => { if (hoverPreviews.get(kind) === preview) hoverPreviews.delete(kind) }
+  if (load) hoverLoaders.set(kind, load)
+  else hoverLoaders.delete(kind)
+  return () => { if (hoverPreviews.get(kind) === preview) { hoverPreviews.delete(kind); hoverLoaders.delete(kind) } }
 }
 
 export function hasDocumentHoverPreview(kind: DocumentKindId): boolean {
@@ -85,8 +90,13 @@ export async function loadDocumentHoverPreview(docId: string, kind: DocumentKind
     })
     hoverReads.set(docId, pending)
     // 内容会变：短时间内复用，之后重读
-    setTimeout(() => hoverReads.delete(docId), 60_000)
+    const current = pending
+    setTimeout(() => { if (hoverReads.get(docId) === current) hoverReads.delete(docId) }, 60_000)
   }
   const read = await pending
+  if (read && hoverLoaders.has(kind)) {
+    try { return await hoverLoaders.get(kind)!(read) }
+    catch (error) { logger.warn('读取合成悬停预览失败', { event: 'documents.hover_preview.load_failed', context: { docId, kind }, error: String(error) }) }
+  }
   return read ? (fraction) => { try { return preview(read, fraction) } catch { return null } } : null
 }

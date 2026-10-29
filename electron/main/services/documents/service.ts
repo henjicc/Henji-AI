@@ -8,6 +8,8 @@ import type {
   CreateDocumentRequest,
   CreateProjectRequest,
   DocumentCoverResult,
+  DocumentHoverFrames,
+  WriteDocumentHoverFrameRequest,
   DocumentIndexScanReport,
   DocumentLink,
   DocumentLinkResolution,
@@ -229,6 +231,14 @@ export class DocumentService implements DocumentsPlatform {
 
   checkName(request: NameCheckRequest): Promise<NameCheckResult> {
     return this.parts.repository.checkName(request)
+  }
+
+  getDocumentHoverFrames(docId: string): Promise<DocumentHoverFrames | null> {
+    return this.parts.covers.getHoverFrames(docId)
+  }
+
+  writeDocumentHoverFrame(request: WriteDocumentHoverFrameRequest): Promise<void> {
+    return this.parts.covers.writeHoverFrame(request)
   }
 
   getDocumentCover(docId: string): Promise<string | null> {

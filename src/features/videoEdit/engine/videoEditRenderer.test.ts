@@ -119,6 +119,93 @@ it('font refresh preserves paused decoded pictures on the same compositor device
     expect(boundary.pictures.length).toBeGreaterThan(0)
   } finally { await renderer.dispose() }
 })
+
+it('后台合成复用低清渲染和独立表面：仅缓存模式不渲染，补帧不改变节目尺寸，取消后不再取帧', async () => {
+  const draws: Array<[number, number]> = []
+  vi.stubGlobal('OffscreenCanvas', class {
+    constructor(public width: number, public height: number) {}
+    getContext() { return { drawImage: () => draws.push([this.width, this.height]) } }
+    async convertToBlob() { return new Blob([new Uint8Array([1, 2])], { type: 'image/webp' }) }
+  })
+  const document = fixture()
+  document.clips = [{ ...document.clips[0], kind: 'text', text: '合成文字' }]
+  const renderer = new VideoEditRenderer(document, document.width)
+  const controller = new AbortController()
+  try {
+    expect(await renderer.captureHoverFrame(document, 0, false, controller.signal)).toBeUndefined()
+    expect(boundary.draws).toHaveLength(0)
+    expect(await renderer.captureHoverFrame(document, 0, true, controller.signal)).toEqual(new Uint8Array([1, 2]))
+    expect(draws[0][0]).toBe(320)
+    expect([renderer.canvas.width, renderer.canvas.height]).toEqual([document.width, document.height])
+    expect(contentInputs.closed).toBe(1)
+    controller.abort()
+    const rendered = boundary.draws.length
+    expect(await renderer.captureHoverFrame(document, 1, true, controller.signal)).toBeUndefined()
+    expect(boundary.draws).toHaveLength(rendered)
+  } finally { await renderer.dispose() }
+})
+
+it('后台先渲染的嵌套序列不占用节目的资源树，节目随后仍按完整尺寸合成', async () => {
+  vi.stubGlobal('OffscreenCanvas', class {
+    constructor(public width: number, public height: number) {}
+    getContext() { return { drawImage: vi.fn() } }
+    async convertToBlob() { return new Blob([new Uint8Array([1])], { type: 'image/webp' }) }
+  })
+  const document = fixture()
+  const text = { ...document.clips[0], id: 'child-text', kind: 'text' as const, text: '子序列文字' }
+  const child = { ...document.sequences![0], id: 'child', clips: [text] }
+  document.items.push({ id: 'nested', kind: 'sequence', name: '嵌套', sequenceId: child.id })
+  document.sequences = [...document.sequences!, child]
+  document.clips = [{ ...document.clips[0], kind: 'sequence', itemId: 'nested' }]
+  const renderer = new VideoEditRenderer(document, document.width)
+  try {
+    await renderer.captureHoverFrame(document, 0, true, new AbortController().signal)
+    boundary.draws = []
+    await renderer.render(0)
+    expect(boundary.draws.filter(draw => draw.offscreen).map(draw => draw.size)).toEqual([[document.width, document.height]])
+  } finally { await renderer.dispose() }
+})
+
+it('已有常驻关键帧时只复制合成画面，不重新解码或执行代码素材', async () => {
+  vi.useFakeTimers()
+  vi.stubGlobal('OffscreenCanvas', class {
+    constructor(public width: number, public height: number) {}
+    getContext() { return { drawImage: vi.fn() } }
+    async convertToBlob() { return new Blob([new Uint8Array([1])], { type: 'image/webp' }) }
+  })
+  const document = fixture(), renderer = new VideoEditRenderer(document, document.width)
+  try {
+    renderer.setRenderCache([{ key: 'cached', startFrame: 0, endFrame: 60, url: 'cache.mp4', width: document.width, height: document.height, fps: document.fps }])
+    await vi.advanceTimersByTimeAsync(600)
+    expect(renderer.hasJumpPreview(30)).toBe(true)
+    const decoded = boundary.snapshotCalls.length
+    const bytes = await renderer.captureHoverFrame(document, 30, false, new AbortController().signal)
+    expect(bytes).toEqual(new Uint8Array([1]))
+    expect(boundary.snapshotCalls).toHaveLength(decoded)
+    expect(boundary.generatorCalls).toBe(0)
+    expect(boundary.draws.at(-1)?.ids[0]).toContain('render-cache:cached')
+  } finally { await renderer.dispose(); vi.useRealTimers() }
+})
+
+it('后台等待图片时取消立即让出，不等无法中断的图片解码，迟到位图得到释放', async () => {
+  const document = fixture()
+  document.media[0] = { ...document.media[0], kind: 'image' }
+  document.clips = [{ ...document.clips[0], kind: 'image' }]
+  const close = vi.fn()
+  let finish!: (bitmap: { width: number; height: number; close: () => void }) => void
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, blob: async () => new Blob() })))
+  const decode = vi.fn(() => new Promise(resolve => { finish = resolve }))
+  vi.stubGlobal('createImageBitmap', decode)
+  const renderer = new VideoEditRenderer(document, document.width), controller = new AbortController()
+  try {
+    const pending = renderer.captureHoverFrame(document, 0, true, controller.signal)
+    await vi.waitFor(() => expect(decode).toHaveBeenCalledOnce())
+    controller.abort()
+    expect(await pending).toBeUndefined()
+    finish({ width: 32, height: 32, close })
+    await vi.waitFor(() => expect(close).toHaveBeenCalledOnce())
+  } finally { await renderer.dispose() }
+})
 it('真实转场窗口准备两端原视频余量，不改片段时钟，禁用轨道不产生转场或额外解码', async () => {
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
   document.media = document.media.map(media => ({ ...media, durationSeconds: 3 }))

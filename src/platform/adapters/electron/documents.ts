@@ -44,6 +44,8 @@ export function createElectronDocuments(): DocumentsPlatform {
     resolveDocumentLink: (link) => getNativeDocuments().resolveDocumentLink(link),
     checkName: (request) => getNativeDocuments().checkName(request),
     getDocumentCover: (docId) => getNativeDocuments().getDocumentCover(docId),
+    getDocumentHoverFrames: (docId) => getNativeDocuments().getDocumentHoverFrames(docId),
+    writeDocumentHoverFrame: (request) => getNativeDocuments().writeDocumentHoverFrame(request),
     saveDocumentCover: (request) => getNativeDocuments().saveDocumentCover(request),
     refreshIndex: () => getNativeDocuments().refreshIndex(),
     readSessionState: (request) => getNativeDocuments().readSessionState(request),

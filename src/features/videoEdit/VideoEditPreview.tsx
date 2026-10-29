@@ -1,3 +1,4 @@
+import { startVideoEditHoverFrames } from './application/videoEditHoverFrames'
 import { codeMaterialTrustContext } from '@/core/videoEdit/codeMaterialDocument'
 import { installVideoEditCodeElements } from './application/videoEditCodeElements'
 import { subscribeContentTrustContext, runForeignContent } from '@/services/contentTrust'
@@ -67,7 +68,7 @@ import { VIDEO_EDIT_PLAYBACK_RESOLUTIONS, VIDEO_EDIT_PLAYBACK_RESOLUTION_LABELS,
 import { getVideoEditPlaybackResolution, setVideoEditPlaybackResolution } from './application/videoEditPlaybackResolution'
 import { flushVideoEditRenderPerformance } from './application/videoEditRenderPerformance'
 import { recordVideoEditPlaybackFrame } from './application/videoEditPlaybackStats'
-import { readyVideoEditRenderWindows, recordVideoEditProgramRender } from './application/videoEditRenderCache'
+import { videoEditRenderCacheBusy, readyVideoEditRenderWindows, recordVideoEditProgramRender } from './application/videoEditRenderCache'
 
 const logger = createLogger('features.videoEdit.preview')
 /** 节目控制条低于这个宽度时不显示时间码：时间码 112 + 默认按钮 ~360 + 显示比例 ~70 + 回放分辨率 ~56 + 更多 28 + 间距 */
@@ -476,6 +477,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       recordVideoEditPlaybackFrame(instance, composition, target, result, requestedAt, scrubbing)
       return true
     }
+    const stopHoverFrames = startVideoEditHoverFrames(instance, renderer, () => !stopped && !videoEditRenderCacheBusy(instance) && captureFull === 0 && framesInFlight === 0 && lastFrame === instance.frame && appliedDocument === videoMotionComposition(instance), surface.ownerDocument.defaultView ?? window)
     const unregisterCapture = registerVideoEditProgramCapture(instance, () => appliedDocument.id, async (request, signal) => {
       const picture = videoMotionComposition(instance)
       const current = (): void => {
@@ -834,7 +836,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     stopCurrent = (): void => {
       if (retired) return
       void flushVideoEditRenderPerformance()
-      retired = true; pauseSettled.current = () => Promise.resolve(); releaseSettleWaiters(); for (const event of idleEvents) window.removeEventListener(event, interaction, true); unregisterCapture(); unsubscribe(); unsubscribeView(); unsubscribeScrub(); unsubscribeMotion(); unsubscribeRegions(); unsubscribeTracks(); clearTimeout(timer); immediate.port1.close(); clearInterval(meterTimer); instance.playing = false; stopAudio(); scrubber.stop()
+      retired = true; pauseSettled.current = () => Promise.resolve(); releaseSettleWaiters(); for (const event of idleEvents) window.removeEventListener(event, interaction, true); stopHoverFrames(); unregisterCapture(); unsubscribe(); unsubscribeView(); unsubscribeScrub(); unsubscribeMotion(); unsubscribeRegions(); unsubscribeTracks(); clearTimeout(timer); immediate.port1.close(); clearInterval(meterTimer); instance.playing = false; stopAudio(); scrubber.stop()
       const closeAudio = (): Promise<void> | undefined => { meter?.dispose(); return audio?.close() }
       programReleases.set(instance, Promise.allSettled([meter ? finishVideoEditAudioFade().then(closeAudio) : closeAudio(), renderer.dispose(), audioRenderer?.dispose()]))
       retainExplanationPixels(surface, -1)

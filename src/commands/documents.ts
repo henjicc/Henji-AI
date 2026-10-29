@@ -5,6 +5,8 @@ import type {
   CreateDocumentRequest,
   CreateProjectRequest,
   DocumentCoverResult,
+  DocumentHoverFrames,
+  WriteDocumentHoverFrameRequest,
   DocumentIndexScanReport,
   DocumentLink,
   DocumentLinkResolution,
@@ -121,6 +123,14 @@ export async function checkDocumentName(request: NameCheckRequest): Promise<Name
 
 export async function getDocumentCover(docId: string): Promise<string | null> {
   return await documents().getDocumentCover(docId)
+}
+
+export async function getDocumentHoverFrames(docId: string): Promise<DocumentHoverFrames | null> {
+  return documents().getDocumentHoverFrames(docId)
+}
+
+export async function writeDocumentHoverFrame(request: WriteDocumentHoverFrameRequest): Promise<void> {
+  return documents().writeDocumentHoverFrame(request)
 }
 
 export async function saveDocumentCover(request: SaveDocumentCoverRequest): Promise<DocumentCoverResult> {

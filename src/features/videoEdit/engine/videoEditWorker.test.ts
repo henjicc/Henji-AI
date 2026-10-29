@@ -6,10 +6,11 @@ import type { VideoEditPresentationCapture } from './videoEditGpuCompositor'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 
-const state = vi.hoisted(() => ({ render: vi.fn(), readRgb: vi.fn(), performance: [] as CodeFramePerformance[], jump: vi.fn(), hasJump: false, supersede: vi.fn(), abandon: vi.fn() }))
+const state = vi.hoisted(() => ({ hover: vi.fn(), render: vi.fn(), readRgb: vi.fn(), performance: [] as CodeFramePerformance[], jump: vi.fn(), hasJump: false, supersede: vi.fn(), abandon: vi.fn() }))
 vi.mock('./videoEditRenderer', () => ({ VideoEditRenderer: class {
   constructor(readonly document: unknown) {}
   render = state.render
+  captureHoverFrame = state.hover
   async dispose() {}
   cancelPresentation() {}
   setRenderCache() {}
@@ -48,7 +49,7 @@ async function init(direct = false): Promise<void> {
 beforeEach(async () => {
   vi.stubGlobal('self', worker)
   vi.stubGlobal('createImageBitmap', vi.fn(async () => bitmap()))
-  postMessage.mockClear(); state.render.mockReset(); state.jump.mockReset(); state.supersede.mockReset(); state.abandon.mockReset(); state.hasJump = false; messages.length = 0; state.performance = []
+  postMessage.mockClear(); state.hover.mockReset(); state.render.mockReset(); state.jump.mockReset(); state.supersede.mockReset(); state.abandon.mockReset(); state.hasJump = false; messages.length = 0; state.performance = []
   state.readRgb.mockReset().mockReturnValue(new Uint8Array([1, 2, 3]))
   await import('./videoEditWorker')
   await init()
@@ -65,6 +66,20 @@ function render(pixels: ImageBitmap, completion: Promise<void> = Promise.resolve
   })
 }
 const request = { kind: 'render', frame: 15, sequential: false } as const
+
+it('前台帧到达立即取消后台合成，迟到字节不交回卡片', async () => {
+  let finish!: () => void
+  let signal!: AbortSignal
+  state.hover.mockImplementation(async (_document, _frame, _allow, abort: AbortSignal) => { signal = abort; await new Promise<void>(resolve => { finish = resolve }); return new Uint8Array([1]) })
+  const id = ++nextId
+  worker.onmessage({ data: { id, kind: 'hoverFrame', document: composition, frame: 0, allowRender: true } })
+  await vi.waitFor(() => expect(state.hover).toHaveBeenCalledOnce())
+  render(bitmap())
+  const foreground = send(request)
+  expect(signal.aborted).toBe(true)
+  finish(); await foreground
+  expect(messages.find(message => message.id === id)?.hoverBytes).toBeUndefined()
+})
 
 it('渲染 Worker 入口显式注册未捕获异常与未处理拒绝的监听', () => {
   expect(worker.addEventListener).toHaveBeenCalledWith('error', expect.any(Function))

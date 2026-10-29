@@ -7,6 +7,8 @@ import type {
   CreateDocumentRequest,
   CreateProjectRequest,
   DocumentCoverResult,
+  DocumentHoverFrames,
+  WriteDocumentHoverFrameRequest,
   DocumentIndexScanReport,
   DocumentLink,
   DocumentLinkResolution,
@@ -101,6 +103,8 @@ export interface DocumentsPlatform {
   resolveDocumentLink(link: DocumentLink): Promise<DocumentLinkResolution>
   /** 名称检查：只在同一个文件夹里查重，返回可用 / 重名 / 非法。 */
   checkName(request: NameCheckRequest): Promise<NameCheckResult>
+  getDocumentHoverFrames(docId: string): Promise<DocumentHoverFrames | null>
+  writeDocumentHoverFrame(request: WriteDocumentHoverFrameRequest): Promise<void>
   getDocumentCover(docId: string): Promise<string | null>
   saveDocumentCover(request: SaveDocumentCoverRequest): Promise<DocumentCoverResult>
   /** 扫描作品目录与外部位置，更新作品索引；返回本轮统计。 */
@@ -168,6 +172,8 @@ export const DOCUMENT_IPC_CHANNELS = {
   resolveProjectFiles: 'documents:projects:resolveFiles',
   resolveDocumentLink: 'documents:resolveLink',
   checkName: 'documents:checkName',
+  getDocumentHoverFrames: 'documents:cover:hover:get',
+  writeDocumentHoverFrame: 'documents:cover:hover:write',
   getDocumentCover: 'documents:cover:get',
   saveDocumentCover: 'documents:cover:save',
   refreshIndex: 'documents:index:refresh',

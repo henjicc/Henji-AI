@@ -28,6 +28,7 @@ import {
   renameProjectRequestSchema,
   resolveProjectFilesRequestSchema,
   saveDocumentCoverRequestSchema,
+  writeDocumentHoverFrameRequestSchema,
   saveDocumentRequestSchema,
   setProjectMainDocumentRequestSchema,
   writeDocumentSessionStateRequestSchema,
@@ -78,6 +79,8 @@ export function registerDocumentsIpc(): void {
   registerIpcHandler(c.resolveProjectFiles, parseWith(resolveProjectFilesRequestSchema), (request) => service().resolveProjectFiles(request))
   registerIpcHandler(c.resolveDocumentLink, parseWith(documentLinkSchema), (link) => service().resolveDocumentLink(link))
   registerIpcHandler(c.checkName, parseWith(nameCheckRequestSchema), (request) => service().checkName(request))
+  registerIpcHandler(c.getDocumentHoverFrames, parseWith(documentIdRequestSchema), ({ docId }) => service().getDocumentHoverFrames(docId))
+  registerIpcHandler(c.writeDocumentHoverFrame, parseWith(writeDocumentHoverFrameRequestSchema), request => service().writeDocumentHoverFrame(request))
   registerIpcHandler(c.getDocumentCover, parseWith(documentIdRequestSchema), ({ docId }) => service().getDocumentCover(docId))
   registerIpcHandler(c.saveDocumentCover, parseWith(saveDocumentCoverRequestSchema), (request) => service().saveDocumentCover(request))
   registerIpcHandler(c.refreshIndex, parseVoid, () => service().refreshIndex())

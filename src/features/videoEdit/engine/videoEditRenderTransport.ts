@@ -98,7 +98,7 @@ export class VideoEditRenderTransport {
   private fontScope = ''
   private fontDocument?: VideoEditComposition
   /** 字体声明只取当前帧画出来的片段。嵌套序列使用对应源时间，转场两侧同时保留（停用的一侧除外）。 */
-  private fontsDocument(document: VideoEditComposition): VideoEditComposition {
+  private fontsDocument(document: VideoEditComposition, frame = this.frame): VideoEditComposition {
     const sequences: NonNullable<VideoEditComposition['sequences']> = []
     const visit = (sequence: VideoEditComposition, frame: number, seen: Set<string>): VideoEditComposition['clips'] => {
       if (seen.has(sequence.id)) return []
@@ -117,7 +117,7 @@ export class VideoEditRenderTransport {
       }
       return clips
     }
-    const clips = visit(document, this.frame, new Set())
+    const clips = visit(document, frame, new Set())
     return { ...document, clips, items: [], sequences }
   }
   /** The view schedules font redraws through its existing frame loop, never an independent request stream. */
@@ -403,6 +403,32 @@ export class VideoEditRenderTransport {
       logger.debug('遮罩更新出画', { event: 'video_edit.mask.present.completed', context: { sequenceId: document.id, revision: document.revision, frame, durationMs, displayFrames: durationMs * document.fps / 1000, gpuMs: result.gpuMs } })
     }
     return result
+  }
+  async captureHoverFrame(document: VideoEditComposition, frame: number, allowRender: boolean, signal: AbortSignal): Promise<Uint8Array | undefined> {
+    await this.ready
+    if (signal.aborted || this.pending.size) return undefined
+    const cancel = (): void => { if (!this.disposed) this.worker.postMessage({ kind: 'cancelHoverFrame', id: 0 } satisfies RenderRequest) }
+    signal.addEventListener('abort', cancel, { once: true })
+    try {
+      if (allowRender) {
+        // 后台只补它缺的字体，保留节目字体和重画修订，不能因预览取样让节目自行重画。
+        await this.fontSync
+        const fonts = await this.host.fonts(this.fontsDocument(document, frame))
+        if (signal.aborted || this.disposed || this.pending.size) return undefined
+        await Promise.all(fonts.map(loadDocumentFont))
+        if (signal.aborted || this.disposed || this.pending.size) return undefined
+        const additions = fonts.filter(payload => !this.fontIds.has(payload.face.id))
+        if (additions.length) {
+          const ids = new Set([...this.fontIds, ...fonts.map(payload => payload.face.id)])
+          pinDocumentFonts(this, [...ids])
+          await this.request({ kind: 'fonts', fonts: additions, availableIds: [...ids], reset: false })
+          this.fontIds = ids
+        }
+      }
+      if (signal.aborted || this.disposed || this.pending.size) return undefined
+      const result = await this.request({ kind: 'hoverFrame', document: this.mediaDocument(document), frame, allowRender })
+      return signal.aborted ? undefined : result.hoverBytes
+    } finally { signal.removeEventListener('abort', cancel) }
   }
   async renderBitmap(frame: number, sequential = false, scrubbing = false, quality: EffectQuality = 'interactive'): Promise<RenderResponse & { bitmap: ImageBitmap }> {
     const result = await this.present(frame, sequential, scrubbing, undefined, undefined, undefined, quality)

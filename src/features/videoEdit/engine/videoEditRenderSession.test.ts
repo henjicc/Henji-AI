@@ -10,6 +10,7 @@ import { addLegacyVideoEditTracks, createVideoEditTestDocument } from '@/core/vi
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { VideoEditRenderTransport } from './videoEditRenderTransport'
 import { VideoEditRenderBusyError, VideoEditRenderWorkerError } from './videoEditGpuFailure'
+import { GENERIC_FONT_FACES } from '@/core/fonts/catalog'
 
 const proxyState = vi.hoisted(() => ({ sources: {} as Record<string, import('@/core/videoEdit/proxy').VideoProxyResult> }))
 vi.mock('../application/videoEditProxy', () => ({ verifiedVideoEditProxySources: async () => proxyState.sources }))
@@ -76,6 +77,29 @@ beforeEach(() => {
   platform.dirname.mockClear()
 })
 afterEach(() => { vi.useRealTimers() })
+
+it('后台字体补充保留节目的字体，不推进节目重画修订或改动当前帧的字体范围', async () => {
+  const project = createVideoEditTestDocument('后台字体')
+  project.items = [{ id: 'text', name: '文字', kind: 'text' }]
+  const sequence = project.sequences[0]
+  const base = makeVideoEditItemClip(project, 'text', sequence.id, { frame: 0, duration: 20 })
+  sequence.clips = [{ ...base, id: 'front' }, { ...base, id: 'back', start: 60 }]
+  const fonts = vi.fn(async (document: VideoEditComposition) => document.clips.map(clip => ({ face: { ...GENERIC_FONT_FACES[0], id: clip.id }, bytes: new Uint8Array([1]) })))
+  const document = videoEditComposition(project, sequence.id)
+  const session = new VideoEditRenderTransport({ fonts, proxies: async () => ({}), maskUpdateTime: () => undefined }, document)
+  try {
+    await session.prepareGpu(); await session.present(0)
+    const before = session.fontPresentationRevision
+    await session.captureHoverFrame(document, 60, true, new AbortController().signal)
+    expect(session.fontPresentationRevision).toBe(before)
+    const requests = workers[0].messages.map(item => item.message).filter((message): message is Extract<RenderRequest, { kind: 'fonts' }> => message.kind === 'fonts')
+    expect(requests.at(-1)?.availableIds).toEqual(expect.arrayContaining(['front', 'back']))
+    expect(requests.at(-1)?.reset).toBe(false)
+    const calls = fonts.mock.calls.length
+    await session.present(1)
+    expect(fonts).toHaveBeenCalledTimes(calls)
+  } finally { await session.dispose() }
+})
 
 it('字体范围展开嵌套序列时不沿用外层转场', async () => {
   const project = createVideoEditTestDocument('嵌套转场字体')
