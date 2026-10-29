@@ -8,6 +8,14 @@ import { migrateColorGradeParamsV1 } from '../imaging/adjustments/colorGradeMigr
  * 2026-10-21 兼容起点：此前的开发期版本不再读取，表从空开始；之后每次升版本必须在这里补对应步骤。
  */
 export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> = {
+  // 1 → 2：转写选择缺省为空，保留供应商及全部已有模型选择；只读迁移不改写原键。
+  'model-defaults': { 1: value => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return value
+    const record = value as Record<string, unknown>
+    if (!record.models || typeof record.models !== 'object' || Array.isArray(record.models)) return value
+    const models = record.models as Record<string, unknown>
+    return { ...record, version: 2, models: { ...models, transcription: models.transcription === undefined ? '' : models.transcription } }
+  } },
   // 版本位置支持 git:；纯格式迁移保留已有位置，磁盘导入由显式项目操作执行。
   // 3 → 4：新增可选内置库 libraries，并接受作者接口 v5；旧记录原样有效，没有 libraries 的按第一套内置库运行。
   // 4 → 5：接受作者接口 v6；旧记录的源码、接口与库版本原样保留。

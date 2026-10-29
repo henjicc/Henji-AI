@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "providerId": "kie",
+  "models": {
+    "image": "gpt-image-2.5",
+    "video": "",
+    "audio": ""
+  }
+}

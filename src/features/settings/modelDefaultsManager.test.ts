@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { ModelDefinition } from '@/core/types'
 import modelsV2 from '../../../tests/fixtures/persistence/model-defaults/v2.json'
+import modelsV1 from '../../../tests/fixtures/persistence/model-defaults/v1.json'
 
 import {
   MODEL_DEFAULTS_STORAGE_KEY,
@@ -54,6 +55,19 @@ function catalog(models: ModelDefinition[]): ModelDefaultsCatalog {
 }
 
 describe('ModelDefaultsManager', () => {
+  it.each([modelsV1, { ...modelsV1, models: { ...modelsV1.models, image: '' } }])('恢复已存的默认模型，读取只备份，明确保存后可再次加载', fixture => {
+    const storage = new MemoryStorage()
+    const text = JSON.stringify(fixture)
+    storage.setItem(MODEL_DEFAULTS_STORAGE_KEY, text)
+    const manager = new ModelDefaultsManager(storage, catalog([]))
+    expect(manager.getSnapshot()).toEqual({ ...fixture, version: 2, models: { ...fixture.models, transcription: '' } })
+    expect(storage.getItem(MODEL_DEFAULTS_STORAGE_KEY)).toBe(text)
+    expect(storage.getItem(`${MODEL_DEFAULTS_STORAGE_KEY}:backup:v1`)).toBe(text)
+    manager.setProvider('fal')
+    expect(new ModelDefaultsManager(storage, catalog([])).getSnapshot()).toEqual(manager.getSnapshot())
+    expect(storage.getItem(`${MODEL_DEFAULTS_STORAGE_KEY}:backup:v1`)).toBe(text)
+  })
+
   it('当前版本黄金样本原样加载，用户修改保存为当前版本并可再次加载', () => {
     const storage = new MemoryStorage()
     const text = JSON.stringify(modelsV2)

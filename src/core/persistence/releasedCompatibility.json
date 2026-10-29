@@ -1003,7 +1003,8 @@
         "2": 2
       },
       "samples": {
-        "v2.json": "5e27e8a8e93c42d50e075e2df263e050c58ce546082af4f3d20542c3783aa12b"
+        "v2.json": "5e27e8a8e93c42d50e075e2df263e050c58ce546082af4f3d20542c3783aa12b",
+        "v1.json": "b2520c0f1d5028bd64698723c5fb02b5037208511b69de357982c4882c1c0fec"
       }
     },
     "onboarding": {

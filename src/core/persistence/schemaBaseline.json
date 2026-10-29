@@ -278,7 +278,7 @@
     "model-defaults": {
       "version": 2,
       "fingerprint": "f710d12e9bd7be5bf8374cd318a9ad9c1f97df3ba5828e1c52e0a3d586ac3c6f",
-      "supportedFrom": 2,
+      "supportedFrom": 1,
       "minReaderVersion": 2
     },
     "onboarding": {
@@ -390,5 +390,20 @@
       "minReaderVersion": 1
     }
   },
-  "devBreaks": []
+  "devBreaks": [],
+  "compatibilityRestorations": [
+    {
+      "at": "2026-10-28T18:31:59.154Z",
+      "format": "model-defaults",
+      "version": 2,
+      "previousSupportedFrom": 2,
+      "supportedFrom": 1,
+      "reason": "恢复本机正式版和开发版仍保存的默认模型 v1，逐版本补转写默认值并保留生成模型选择",
+      "previousFingerprint": "f710d12e9bd7be5bf8374cd318a9ad9c1f97df3ba5828e1c52e0a3d586ac3c6f",
+      "fingerprint": "f710d12e9bd7be5bf8374cd318a9ad9c1f97df3ba5828e1c52e0a3d586ac3c6f",
+      "migrationVersions": [
+        1
+      ]
+    }
+  ]
 }
