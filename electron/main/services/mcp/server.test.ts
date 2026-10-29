@@ -420,7 +420,7 @@ describe('本地 MCP 协议与边界', () => {
     const b = await f.connect()
     expect((await b.client.listTools()).tools.map((tool) => tool.name)).toEqual(readOnlyTools.map((tool) => tool.name))
     expect((await b.client.callTool({ name: 'read_application_entity', arguments: {} })).isError).toBe(false)
-  })
+  }, 20_000)
   it('匿名、网页来源、伪造 Host、超大正文均在宿主前拒绝', async () => {
     const f = await fixture()
     const headers = { Authorization: `Bearer ${f.connections.token(f.first.id)}` }

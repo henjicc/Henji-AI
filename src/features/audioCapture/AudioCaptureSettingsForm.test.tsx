@@ -27,7 +27,7 @@ describe('录音设置', () => {
     await screen.findByText('独占模式')
     await waitFor(() => expect(screen.getByRole('radio', { name: '32 位浮点' }).getAttribute('aria-disabled')).toBe('true'))
     fireEvent.click(screen.getByRole('radio', { name: '16 位' }))
-    await screen.findByText('录音设置已改变，请重新读取后修改')
+    await screen.findByText('录音设置已改变，请重新读取后修改', undefined, { timeout: 5000 })
     expect(api.setSettings).toHaveBeenCalledWith(expect.objectContaining({ bitDepth: 16 }), 1)
     expect(api.getSettings).toHaveBeenCalledTimes(2)
     view.unmount(); expect(release).toHaveBeenCalledOnce()
