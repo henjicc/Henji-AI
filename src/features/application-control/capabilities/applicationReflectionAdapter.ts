@@ -434,22 +434,36 @@ export const applicationReflectionHandlers = {
   },
 
   async readEntity(
-    input: { ref: { kind: string; id: string }; propertyIds?: string[] },
+    input: { ref: { kind: string; id: string }; propertyIds?: string[]; textPage?: { propertyId: string; offset: number; limit: number } },
     context: CapabilityExecutionContext
   ) {
     if (context.callerGrant) assertCompleteRef(input.ref)
     const snapshot = await getApplicationReflectionRegistry().readEntity(
       input.ref,
-      input.propertyIds,
+      input.textPage ? [input.textPage.propertyId] : input.propertyIds,
       executionContext(context),
     )
     rememberRefs(context.requestId ?? 'renderer', [snapshot.ref])
+    let properties = snapshot.properties as Record<string, unknown>
+    let textPage: { propertyId: string; offset: number; total: number; nextOffset: number | null } | undefined
+    if (input.textPage) {
+      const { propertyId, offset, limit } = input.textPage
+      const value = properties[propertyId]
+      if (typeof value !== 'string') throw new Error(`INVALID_INPUT:textPage.propertyId ${propertyId} 必须是可读的文本属性。`)
+      if (offset > value.length) throw new Error('INVALID_INPUT:textPage.offset 超出文本长度。')
+      // 偏移以 UTF-16 单位计；页边界落在代理对中间时向后取完整字符，拼接后仍是原文。
+      let end = Math.min(value.length, offset + limit)
+      if (end < value.length && /[\uD800-\uDBFF]/.test(value[end - 1])) end++
+      properties = { [propertyId]: value.slice(offset, end) }
+      textPage = { propertyId, offset, total: value.length, nextOffset: end < value.length ? end : null }
+    }
     return {
       ref: snapshot.ref,
       entityType: snapshot.entityType,
-      properties: snapshot.properties as Record<string, unknown>,
+      properties,
       revisions: snapshot.revisions,
       capturedAt: snapshot.capturedAt,
+      ...(textPage ? { textPage } : {}),
     }
   },
 

@@ -15,7 +15,6 @@ export interface VideoEditExportRegistryFiles {
   identify(path: string): Promise<VideoEditExportFileIdentity | null>
   remove(path: string): Promise<void>
 }
-export interface VideoEditExportRegistryLimits { jobs: number; snapshotBytes: number; totalSnapshotBytes: number; payloadChars: number }
 
 interface Entry {
   id: string; projectId: string; name: string; presetName: string; outputPaths: string[]
@@ -26,13 +25,11 @@ interface Entry {
   created: Map<string, VideoEditExportFileIdentity>
 }
 
-const DEFAULT_LIMITS: VideoEditExportRegistryLimits = { jobs: 200, snapshotBytes: 32 * 1024 * 1024, totalSnapshotBytes: 256 * 1024 * 1024, payloadChars: 1024 * 1024 }
 const pathKey = (value: string): string => { const resolved = path.resolve(value); return process.platform === 'win32' ? resolved.toLowerCase() : resolved }
 const samePage = (a: VideoEditExportPage | undefined, b: VideoEditExportPage): boolean => Boolean(a && a.senderId === b.senderId && a.pageId === b.pageId)
 const sameFile = (a: VideoEditExportFileIdentity, b: VideoEditExportFileIdentity): boolean => a.dev === b.dev && a.ino === b.ino && a.birthtimeNs === b.birthtimeNs
 const INTERRUPTED_AFTER_PUBLISH = '成片已保存，但界面重新加载时收尾未完成；请从导出位置使用文件。'
-type Snapshot = { key: string; bytes: number; json: string } | NonNullable<VideoEditExportRegistrationResult['reason']>
-function serializedLength(value: unknown): number | undefined { try { return JSON.stringify(value ?? null).length } catch { return undefined } }
+type Snapshot = { key: string; json: string }
 
 /**
  * 导出队列在主进程的内存登记（不落盘，应用退出即清空）。渲染层负责编码；这里替它独占创建输出文件，
@@ -40,49 +37,44 @@ function serializedLength(value: unknown): number | undefined { try { return JSO
  */
 export class VideoEditExportJobRegistry {
   private readonly entries = new Map<string, Entry>()
-  private readonly snapshots = new Map<string, { json: string; bytes: number; refs: number }>()
-  private snapshotBytes = 0
-  constructor(private readonly files: VideoEditExportRegistryFiles, private readonly limits: VideoEditExportRegistryLimits = DEFAULT_LIMITS) {}
+  private readonly snapshots = new Map<string, { json: string; refs: number }>()
+  private leaving: Promise<void> = Promise.resolve()
+  constructor(private readonly files: VideoEditExportRegistryFiles) {}
 
   register(page: VideoEditExportPage, request: VideoEditExportRegistrationRequest): VideoEditExportRegistrationResult[] {
-    for (const job of request.jobs) if (this.entries.has(job.id)) throw new Error('导出项已登记。')
-    // 先按字节数判断单份与本批合计，超限的不解析、不算哈希；其余按内容去重，同一序列的多个格式只存一份。
-    let batchBytes = 0
-    const snapshots = request.snapshots.map((json): Snapshot => {
-      const bytes = Buffer.byteLength(json, 'utf8')
-      if (bytes > this.limits.snapshotBytes) return 'snapshot_too_large'
-      batchBytes += bytes
-      if (batchBytes > this.limits.totalSnapshotBytes) return 'registry_full'
-      return { key: createHash('sha256').update(json).digest('hex'), bytes, json }
-    })
-    return request.jobs.map(job => this.registerOne(page, job, job.snapshotIndex === undefined ? 'snapshot_too_large' : snapshots[job.snapshotIndex]))
+    if (new Set(request.jobs.map(job => job.id)).size !== request.jobs.length) throw new Error('同一批导出项编号不能重复。')
+    if (request.jobs.some(job => job.restorable && (job.snapshotIndex === undefined || !request.snapshots[job.snapshotIndex]))) throw new Error('可恢复的导出必须包含原序列快照。')
+    // 同一序列导出多种格式时共用快照，不因工程大小或队列长度放弃恢复信息。
+    const snapshots = request.snapshots.map((json): Snapshot => ({ key: createHash('sha256').update(json).digest('hex'), json }))
+    for (const job of request.jobs) {
+      const entry = this.entries.get(job.id)
+      if (!entry) continue
+      const snapshot = job.snapshotIndex === undefined ? undefined : snapshots[job.snapshotIndex]
+      // IPC 回执丢失后可重新确认同一次提交，但不能把已登记的编号绑定到另一份导出。
+      if (!samePage(entry.owner, page) || entry.projectId !== job.projectId || entry.name !== job.name || entry.presetName !== job.presetName
+        || entry.snapshotKey !== snapshot?.key || JSON.stringify(entry.outputPaths) !== JSON.stringify(job.outputPaths) || JSON.stringify(entry.payload) !== JSON.stringify(job.payload)) throw new Error('导出项已登记，内容或所属页面不一致。')
+    }
+    return request.jobs.map(job => this.registerOne(page, job, job.snapshotIndex === undefined ? undefined : snapshots[job.snapshotIndex]))
   }
 
-  private registerOne(page: VideoEditExportPage, job: VideoEditExportJobRegistration, snapshot: Snapshot): VideoEditExportRegistrationResult {
-    if (this.entries.size >= this.limits.jobs) return this.notRetained(job, 'registry_full')
+  private registerOne(page: VideoEditExportPage, job: VideoEditExportJobRegistration, snapshot?: Snapshot): VideoEditExportRegistrationResult {
+    const existing = this.entries.get(job.id)
+    if (existing) return { id: job.id, retained: existing.restorable }
     const entry: Entry = { id: job.id, projectId: job.projectId, name: job.name, presetName: job.presetName, outputPaths: [...job.outputPaths], restorable: false, state: 'queued', progress: 0, outputPublished: false, owner: page, created: new Map() }
     this.entries.set(job.id, entry)
     if (!job.restorable) return { id: job.id, retained: false }
-    const payloadChars = serializedLength(job.payload)
-    if (typeof snapshot === 'string') return this.notRetained(job, snapshot)
-    if (payloadChars === undefined || payloadChars > this.limits.payloadChars) return this.notRetained(job, 'snapshot_too_large')
+    if (!snapshot) throw new Error('导出快照缺失。')
     const stored = this.snapshots.get(snapshot.key)
-    if (!stored && this.snapshotBytes + snapshot.bytes > this.limits.totalSnapshotBytes) return this.notRetained(job, 'registry_full')
     if (stored) stored.refs++
-    else { this.snapshots.set(snapshot.key, { json: snapshot.json, bytes: snapshot.bytes, refs: 1 }); this.snapshotBytes += snapshot.bytes }
+    else this.snapshots.set(snapshot.key, { json: snapshot.json, refs: 1 })
     entry.restorable = true; entry.snapshotKey = snapshot.key; entry.payload = job.payload
     return { id: job.id, retained: true }
-  }
-
-  private notRetained(job: VideoEditExportJobRegistration, reason: NonNullable<VideoEditExportRegistrationResult['reason']>): VideoEditExportRegistrationResult {
-    logger.warn('导出项不会在界面重载后保留', { event: 'video_edit_export.register.not_retained', context: { jobId: job.id, projectId: job.projectId, reason, jobs: this.entries.size, snapshotBytes: this.snapshotBytes } })
-    return { id: job.id, retained: false, reason }
   }
 
   update(page: VideoEditExportPage, update: VideoEditExportJobUpdate): void {
     const entry = this.owned(page, update.id)
     if (!entry) return
-    if (update.state === 'completed' || update.state === 'cancelled') {
+    if (!entry.restorable && (update.state === 'completed' || update.state === 'cancelled')) {
       // 还有本项创建、未发布的文件记录（渲染层可能没删掉）：留到界面离开时按身份核对后清理，不再恢复。
       if (!entry.created.size || entry.outputPublished) { this.delete(entry); return }
       entry.restorable = false
@@ -119,6 +111,8 @@ export class VideoEditExportJobRegistry {
 
   /** 新页面取回无主的导出项并接管；同一 webContents 上一页面遗留的项先按离开处理。 */
   async restore(page: VideoEditExportPage): Promise<VideoEditExportJobRecord[]> {
+    // 崩溃事件中的文件回收可能仍在进行，接管后开始重试前必须等旧文件清理结束。
+    await this.leaving
     await this.release(entry => entry.owner?.senderId === page.senderId && entry.owner.pageId !== page.pageId, 'page_replaced')
     const restored: VideoEditExportJobRecord[] = []
     for (const entry of this.entries.values()) {
@@ -132,7 +126,9 @@ export class VideoEditExportJobRegistry {
 
   /** 渲染进程退出或 webContents 销毁。页面导航不在这里判断：被拦下的导航不应中断导出，换页由 restore 识别。 */
   leave(senderId: number, reason: string): Promise<void> {
-    return this.release(entry => entry.owner?.senderId === senderId, reason)
+    const cleanup = this.release(entry => entry.owner?.senderId === senderId, reason)
+    this.leaving = Promise.all([this.leaving, cleanup]).then(() => undefined)
+    return this.leaving
   }
 
   list(): VideoEditExportJobRecord[] { return [...this.entries.values()].map(entry => this.record(entry)) }
@@ -149,7 +145,7 @@ export class VideoEditExportJobRegistry {
   private delete(entry: Entry): void {
     this.entries.delete(entry.id)
     const stored = entry.snapshotKey ? this.snapshots.get(entry.snapshotKey) : undefined
-    if (stored && --stored.refs === 0) { this.snapshots.delete(entry.snapshotKey!); this.snapshotBytes -= stored.bytes }
+    if (stored && --stored.refs === 0) this.snapshots.delete(entry.snapshotKey!)
   }
 
   private async release(match: (entry: Entry) => boolean, reason: string): Promise<void> {

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
 
-const state = vi.hoisted(() => ({ launchQuery: {} as Record<string, string>, events: [] as string[], urls: [] as string[], beginSession: vi.fn(), error: vi.fn(), showMessageBox: vi.fn() }))
+const state = vi.hoisted(() => ({ launchQuery: {} as Record<string, string>, events: [] as string[], urls: [] as string[], beginSession: vi.fn(), info: vi.fn(), error: vi.fn(), showMessageBox: vi.fn() }))
 vi.mock('electron', () => ({
   app: { getPath: () => '/nonexistent-crash-dumps' },
   dialog: { showMessageBox: state.showMessageBox },
@@ -23,7 +23,7 @@ vi.mock('electron', () => ({
 }))
 vi.mock('./app-icon', () => ({ resolveAppIconPath: () => undefined }))
 vi.mock('./ipc/window', () => ({ bindWindowStateEvents: () => state.beginSession }))
-vi.mock('./services/logging/main-logger', () => ({ createMainLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: state.error }) }))
+vi.mock('./services/logging/main-logger', () => ({ createMainLogger: () => ({ info: state.info, warn: vi.fn(), error: state.error }) }))
 vi.mock('./services/video/frame-export', () => ({ cleanupAllVideoFrameExports: vi.fn() }))
 vi.mock('./windows/log-window', () => ({ closeLogWindow: vi.fn() }))
 vi.mock('./windows/video-edit-popout', () => ({ createVideoEditPopoutHost: () => ({ handleWindowOpen: (details: { url: string }) => details.url === 'about:blank' ? { action: 'allow' } : undefined }) }))
@@ -117,6 +117,7 @@ describe('渲染进程崩溃后的恢复', () => {
     crash(win, 'oom')
     await vi.advanceTimersByTimeAsync(500)
     expect(state.urls[1]).toBe('http://127.0.0.1:5173/?henjiDevSkipOnboarding=1&henjiRecovery=safe')
+    expect(state.info).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ event: 'window.renderer.load_completed', context: { safeRecovery: true } }))
     state.showMessageBox.mockReturnValue(new Promise(() => undefined))
     crash(win)
     await vi.advanceTimersByTimeAsync(5_000)

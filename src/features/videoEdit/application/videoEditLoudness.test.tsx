@@ -46,6 +46,7 @@ beforeEach(() => {
   installHarnessNativeStorage(); pcm.clear(); boundary.encoded = []; boundary.normalized = false; boundary.mixes.mockClear()
   vi.stubGlobal('OffscreenCanvas', class { constructor(readonly width: number, readonly height: number) {} getContext() { return { fillRect() {}, drawImage() {}, fillStyle: '' } } })
   const platform = getPlatform()
+  vi.spyOn(platform.videoEditExport, 'register').mockImplementation(async request => request.jobs.map(job => ({ id: job.id, retained: job.restorable })))
   vi.spyOn(platform.system.fs, 'writeTextFile').mockResolvedValue(undefined)
   vi.spyOn(platform.system.fs, 'exists').mockResolvedValue(false)
   vi.spyOn(platform.system.fs, 'writeFile').mockResolvedValue(undefined)

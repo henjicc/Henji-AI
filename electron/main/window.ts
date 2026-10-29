@@ -211,7 +211,9 @@ export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
         })
         return win.loadURL(rendererUrl.toString())
       })()
-    loaded.catch((error: unknown) => {
+    void loaded.then(() => {
+      logger.info('应用界面加载完成', { event: 'window.renderer.load_completed', context: { safeRecovery } })
+    }).catch((error: unknown) => {
       logger.error('加载应用界面失败', { event: 'window.renderer.load_failed', error, context: { safeRecovery } })
     })
   }

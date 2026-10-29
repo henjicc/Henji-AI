@@ -28,7 +28,7 @@ export function VideoEditExportQueueList(): React.ReactElement | null {
           </p>}
           {job.error && <UiError size="xs" align="start" message={job.error} />}</div>
         {['queued', 'running'].includes(job.state) && <UiButton size="sm" onClick={() => videoEditExportQueue.cancel(job.id)}>取消</UiButton>}
-        {retryableVideoEditExportJob(job) && <UiButton size="sm" onClick={() => { try { retryVideoEditExportJob(job.id); setError('') } catch (reason) { setError(videoEditUserErrorMessage(reason)) } }}>重试</UiButton>}
+        {retryableVideoEditExportJob(job) && <UiButton size="sm" onClick={() => { try { void retryVideoEditExportJob(job.id).then(() => setError('')).catch(reason => setError(videoEditUserErrorMessage(reason))) } catch (reason) { setError(videoEditUserErrorMessage(reason)) } }}>重试</UiButton>}
         {job.task?.assetRef && <p className="text-xs text-text2">已加入资产库</p>}
         {job.task?.output && !job.task.assetRef && <UiButton loading={collecting === job.id} size="sm" disabled={collecting !== null} onClick={() => {
           setCollecting(job.id); setError(''); setNotice('')

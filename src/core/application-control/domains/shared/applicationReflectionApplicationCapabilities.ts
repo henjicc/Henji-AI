@@ -111,7 +111,7 @@ const listEntities = defineApplicationCapability({
 
 const readEntity = defineApplicationCapability({
   id: 'read_application_entity', version: 1, title: '读取应用实体属性',
-  description: '按稳定引用读取一个实体实例的属性值和并发基线。省略 propertyIds 时返回当前授权及数据等级允许读取的全部已登记属性；显式传 [] 只返回实体与基线，传属性列表则仅返回指定的可读属性。大属性可用 propertyIds 按需选择。',
+  description: '按稳定引用读取一个实体实例的属性值和并发基线。省略 propertyIds 时读取全部可读属性；[] 只返回实体与基线。长文本用 textPage={propertyId,offset,limit} 单独分段读取，从 offset=0 开始，按返回的 nextOffset 续读至 null；每页 revisions 应保持一致，变化时重新从头读取。',
   domain: 'application',
   aliases: ['读取属性', '看看这个对象', 'read entity'],
   readOnly: true, risk: 'R0', dataClasses: ['C1'], permission: 'application:read',
@@ -120,6 +120,7 @@ const readEntity = defineApplicationCapability({
   inputSchema: z.object({
     ref: refSchema,
     propertyIds: z.array(z.string().min(1)).max(64).optional(),
+    textPage: z.object({ propertyId: z.string().min(1), offset: z.number().int().nonnegative().default(0), limit: z.number().int().positive().default(4000) }).strict().optional(),
   }).strict(),
   outputSchema: capabilityOutputSchema({
     ref: refSchema,
@@ -127,6 +128,7 @@ const readEntity = defineApplicationCapability({
     properties: z.record(z.string(), z.unknown()),
     revisions: z.record(z.string(), z.number().int().nonnegative()),
     capturedAt: z.string(),
+    textPage: z.object({ propertyId: z.string(), offset: z.number(), total: z.number(), nextOffset: z.number().nullable() }).strict().optional(),
   }),
   resolveConcurrencyKey: (input) => `application:read:${input.ref.kind}`,
   resolveTargetIds: (input) => ({ entityId: input.ref.id }),

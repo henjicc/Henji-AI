@@ -13,6 +13,32 @@ import { appendVideoEditClip, closeVideoEditProject, getActiveVideoEditSequence,
 
 beforeEach(() => { installHarnessNativeStorage(); vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/annotations.hjvid'); vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined) })
 afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); useAssistantUiStore.getState().setPendingGoal(null); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
+it('长草稿批注经通用列表分页、上下文摘要与文本分页可完整读取并直接处理', async () => {
+  const owner = await createVideoEditTestProject(); const id = owner.document.id
+  const text = '较长批注😀'.repeat(100)
+  const first = createVideoEditAnnotation(id, owner.activeSequenceId, { frame: 0, target: { kind: 'point', x: .5, y: .5 }, text, status: 'draft' })
+  createVideoEditAnnotation(id, owner.activeSequenceId, { frame: 1, target: { kind: 'point', x: .5, y: .5 }, text: '待处理', status: 'open' })
+  useNavigationStore.getState().setActiveWorkspace('videoEdit')
+  const app = createApplicationHarness(); const ref = { kind: 'video_edit.annotation', id: `${id}:${first}` }
+  try {
+    const listed = await app.requireResult('list_application_entities', { entityType: ref.kind, limit: 1 })
+    expect(listed.refs).toHaveLength(1); expect(listed.nextCursor).toEqual(expect.any(String))
+    const second = await app.requireResult('list_application_entities', { entityType: ref.kind, limit: 1, cursor: listed.nextCursor })
+    for (const item of [...listed.refs as Array<{ label?: string }>, ...second.refs as Array<{ label?: string }>]) expect(item.label!.length).toBeLessThanOrEqual(200)
+    const context = await app.requireResult('get_current_application_context', {})
+    expect(context.videoEdit).toMatchObject({ draftAnnotations: { count: 1, items: [{ truncated: true }] }, openAnnotations: { count: 1 } })
+    let offset: number | null = 0; let full = ''
+    while (offset !== null) {
+      const page = await app.requireResult('read_application_entity', { ref, textPage: { propertyId: 'video_edit.annotation.text', offset, limit: 83 } })
+      const fragment = (page.properties as Record<string, string>)['video_edit.annotation.text']
+      expect(fragment).not.toMatch(/^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/)
+      full += fragment; offset = (page.textPage as { nextOffset: number | null }).nextOffset
+    }
+    expect(full).toBe(text)
+    expect((await app.change(ref, { 'video_edit.annotation.status': 'addressed', 'video_edit.annotation.thread': [{ id: 'reply', author: { kind: 'assistant', name: '助手' }, createdAt: '2026-10-29T00:00:00.000Z', text: '已处理' }] })).ok).toBe(true)
+    expect(getActiveVideoEditSequence(owner).annotations.find(mark => mark.id === first)?.status).toBe('addressed')
+  } finally { app.dispose() }
+})
 it('外部 Agent 用 mutate append 追加一条回复，保留已有讨论', async () => {
   const owner = await createVideoEditTestProject(); const id = owner.document.id
   const markId = createVideoEditAnnotation(id, owner.activeSequenceId, { frame: 0, target: { kind: 'arrow', from: { x: .2, y: .2 }, to: { x: .6, y: .5 } }, text: '沿箭头移动', status: 'open' })

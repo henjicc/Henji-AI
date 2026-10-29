@@ -3,8 +3,7 @@ import { getPlatform } from '@/platform/runtime'
 import type { VideoEditExportJobRegistration, VideoEditExportPlatform, VideoEditExportRegistrationResult } from '@/platform/contracts/videoEditExport'
 
 /*
- * 渲染层到主进程导出登记的唯一入口。登记只保护“重载后能恢复、未完成文件能清理”，不影响导出本身：
- * 登记失败照常导出，只是这一项重载后不会保留。
+ * 渲染层到主进程导出登记的唯一入口。正式队列必须登记成功才开始导出，确保提交后始终能恢复。
  */
 const logger = createLogger('features.videoEdit.exportRegistry')
 
@@ -50,18 +49,18 @@ export async function registerVideoEditExportJobs(jobs: ReadonlyArray<Omit<Video
     })
     results = await call(platform => platform.register({ snapshots, jobs: registrations }))
   } catch (error) {
-    if (error instanceof RegistryUnavailable) return new Map()
     for (const job of jobs) logger.warn('导出项未登记，界面重新加载后不会保留', { event: 'video_edit.export_registry.register_failed', error, context: { jobId: job.id, projectId: job.projectId } })
-    return new Map(jobs.filter(job => job.restorable).map(job => [job.id, 'failed']))
+    throw error
   }
   const outcome = new Map<string, VideoEditExportNotRetainedReason | null>()
   for (const result of results) {
     const job = jobs.find(value => value.id === result.id)
     if (!job?.restorable) continue
     const reason = result.retained ? null : result.reason ?? 'failed'
-    if (reason) logger.warn('导出项不会在界面重新加载后保留', { event: 'video_edit.export_registry.not_retained', context: { jobId: result.id, projectId: job.projectId, reason } })
+    if (reason) throw new Error(VIDEO_EDIT_EXPORT_NOT_RETAINED_REASONS[reason])
     outcome.set(result.id, reason)
   }
+  if (jobs.some(job => job.restorable && !outcome.has(job.id))) throw new Error('没能保留完整导出队列，请重试。')
   return outcome
 }
 
@@ -108,7 +107,7 @@ export function videoEditExportOutputs(id: string, onPublished?: () => void): Vi
  * 已知限制：清理靠新页面加载时取回登记或渲染进程退出触发；重载后新页面一直加载失败时，要等窗口销毁才清理。
  */
 export function transientVideoEditExportOutputs(job: { id: string; projectId: string; name: string; outputPaths: string[] }): VideoEditExportOutputs {
-  void registerVideoEditExportJobs([{ ...job, presetName: '', restorable: false }])
+  void registerVideoEditExportJobs([{ ...job, presetName: '', restorable: false }]).catch(syncFailed(job.id, 'video_edit.export_registry.register_failed'))
   syncVideoEditExportJob({ id: job.id, state: 'running', progress: 0 })
   return { ...videoEditExportOutputs(job.id), finish: leftover => { if (leftover) syncVideoEditExportJob({ id: job.id, state: 'failed', progress: 0 }); else removeVideoEditExportJobs([job.id]) } }
 }

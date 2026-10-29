@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { VideoEditExportJobRegistry, watchVideoEditExportSender, type VideoEditExportPage, type VideoEditExportRegistryLimits } from './jobRegistry'
+import { VideoEditExportJobRegistry, watchVideoEditExportSender, type VideoEditExportPage } from './jobRegistry'
 
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 
@@ -17,7 +17,7 @@ const files = {
   },
   remove: (target: string) => fs.rm(target),
 }
-const registry = (limits?: VideoEditExportRegistryLimits): VideoEditExportJobRegistry => new VideoEditExportJobRegistry(files, limits)
+const registry = (): VideoEditExportJobRegistry => new VideoEditExportJobRegistry(files)
 const job = (id: string, outputs: string[], snapshotIndex: number | undefined = 0, restorable = true) => ({ id, projectId: 'project', name: '序列', presetName: '默认', outputPaths: outputs, restorable, snapshotIndex, payload: { settings: id } })
 const exists = (target: string): Promise<boolean> => fs.access(target).then(() => true, () => false)
 beforeEach(async () => { root = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-export-registry-')) })
@@ -97,20 +97,20 @@ it('创建进行中页面离开：创建完成后立刻清理；重试前清掉�
   expect(await exists(late)).toBe(false)
 })
 
-it('快照先按字节数判断单份与本批合计，其余按内容去重；超限的项不保留但输出文件仍受保护', async () => {
-  const exports = registry({ jobs: 10, snapshotBytes: 100, totalSnapshotBytes: 200, payloadChars: 1000 })
-  const medium = JSON.stringify({ text: 'y'.repeat(80) })
-  const results = exports.register(oldPage, { snapshots: [medium, medium, JSON.stringify({ text: 'x'.repeat(200) }), JSON.stringify({ text: 'z'.repeat(80) })], jobs: [job('a', [path.join(root, 'a.mp4')], 0), job('b', [path.join(root, 'b.mp4')], 1), job('c', [path.join(root, 'c.mp4')], 2), job('d', [path.join(root, 'd.mp4')], 3)] })
-  expect(results).toEqual([{ id: 'a', retained: true }, { id: 'b', retained: true }, { id: 'c', retained: false, reason: 'snapshot_too_large' }, { id: 'd', retained: false, reason: 'registry_full' }])
-  const output = path.join(root, 'c.mp4')
-  exports.update(oldPage, { id: 'c', state: 'running', progress: 0 })
-  await exports.createOutput(oldPage, 'c', output)
-  await exports.leave(oldPage.senderId, 'destroyed')
-  expect(await exists(output)).toBe(false)
-  expect((await exports.restore(newPage)).map(value => value.id)).toEqual(['a', 'b'])
+it('大型快照与超过两百项的队列完整保留，完成和失败记录重载后仍可查', async () => {
+  const exports = registry()
+  const snapshot = JSON.stringify({ text: 'x'.repeat(33 * 1024 * 1024) })
+  const jobs = Array.from({ length: 201 }, (_, index) => job(String(index), [path.join(root, `${index}.mp4`)]))
+  expect(exports.register(oldPage, { snapshots: [snapshot], jobs }).every(item => item.retained)).toBe(true)
+  exports.update(oldPage, { id: '0', state: 'completed', progress: 1 })
+  exports.update(oldPage, { id: '1', state: 'failed', progress: .42, error: '编码失败' })
+  const restored = await exports.restore(newPage)
+  expect(restored).toHaveLength(201)
+  expect(restored[0]).toMatchObject({ state: 'completed', progress: 1, snapshotJson: snapshot })
+  expect(restored[1]).toMatchObject({ state: 'failed', progress: .42, error: '编码失败' })
 })
 
-it('取消后仍有本项未删掉的文件：保留登记，界面离开时按身份清理且不再恢复', async () => {
+it('取消后仍有本项未删掉的文件：界面离开时清理并保留取消记录', async () => {
   const exports = registry()
   const output = path.join(root, 'cancelled.mp4')
   exports.register(oldPage, { snapshots: ['{}'], jobs: [job('a', [output])] })
@@ -118,6 +118,30 @@ it('取消后仍有本项未删掉的文件：保留登记，界面离开时按�
   await exports.createOutput(oldPage, 'a', output)
   exports.update(oldPage, { id: 'a', state: 'cancelled', progress: .3 })
   expect(exports.list().map(value => value.id)).toEqual(['a'])
-  expect(await exports.restore(newPage)).toEqual([])
-  expect(await exists(output)).toBe(false); expect(exports.list()).toEqual([])
+  expect(await exports.restore(newPage)).toMatchObject([{ id: 'a', state: 'cancelled', progress: .3 }])
+  expect(await exists(output)).toBe(false)
+})
+it('登记回执丢失后可重新确认同一次提交，不能更换快照或在别的页面重用编号', () => {
+  const exports = registry(); const request = { snapshots: ['{}'], jobs: [job('a', [path.join(root, 'a.mp4')])] }
+  exports.register(oldPage, request)
+  exports.update(oldPage, { id: 'a', state: 'failed', progress: .3 })
+  expect(exports.register(oldPage, request)).toEqual([{ id: 'a', retained: true }])
+  expect(exports.list()).toHaveLength(1); expect(exports.list()[0].progress).toBe(.3)
+  expect(() => exports.register(newPage, request)).toThrow('不一致')
+  expect(() => exports.register(oldPage, { ...request, snapshots: ['{"changed":true}'] })).toThrow('不一致')
+})
+it('崩溃清理尚未结束时新页面等待清理，避免重试与旧文件回收并发', async () => {
+  let finish!: () => void
+  const gate = new Promise<void>(resolve => { finish = resolve })
+  const exports = new VideoEditExportJobRegistry({ ...files, remove: async target => { await gate; await files.remove(target) } })
+  const output = path.join(root, 'cleanup.mp4')
+  exports.register(oldPage, { snapshots: ['{}'], jobs: [job('a', [output])] })
+  exports.update(oldPage, { id: 'a', state: 'running', progress: .5 }); await exports.createOutput(oldPage, 'a', output)
+  const leaving = exports.leave(oldPage.senderId, 'crashed')
+  let restored = false
+  const restore = exports.restore(newPage).then(records => { restored = true; return records })
+  await Promise.resolve(); expect(restored).toBe(false)
+  finish(); await leaving
+  expect(await restore).toMatchObject([{ id: 'a', state: 'interrupted', progress: .5 }])
+  expect(await exists(output)).toBe(false)
 })

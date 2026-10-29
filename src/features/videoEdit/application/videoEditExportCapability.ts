@@ -1,7 +1,7 @@
 import { VIDEO_EDIT_EXPORT_CAPABILITIES, videoEditExportInputSchema, videoEditExportQuerySchema, videoEditExportTaskInputSchema } from '@/core/application-control/domains/videoEdit/videoEditExportCapabilities'
 import type { CapabilityExecutionContext } from '@/features/application-control/capabilities/handlerTypes'
 import { cancelVideoEditExport, videoEditExportTask } from './videoEditExport'
-import { adoptRestoredVideoEditExports, enqueueVideoEditExports, listWaitingVideoEditExports, retryVideoEditExportJob, videoEditProjectOutputDirectory, videoEditExportJobProgress, videoEditExportQueue, type VideoEditExportJob } from './videoEditExportQueue'
+import { adoptRestoredVideoEditExports, cancelWaitingVideoEditExport, enqueueVideoEditExports, listWaitingVideoEditExports, retryVideoEditExportJob, videoEditProjectOutputDirectory, videoEditExportJobProgress, videoEditExportQueue, waitForVideoEditExportRestore, type VideoEditExportJob } from './videoEditExportQueue'
 import { videoEditExportPresetLibrary } from './videoEditExportPresets'
 import { exportVideoEditSubtitles } from './videoEditTimedContent'
 import { requireVideoEditInstance } from './videoEditService'
@@ -27,6 +27,7 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
   if (!definition) return undefined
   const execution = new ApplicationWriteExecution()
   try {
+  await waitForVideoEditExportRestore()
   const parsed = id === 'export_video_edit' ? videoEditExportInputSchema.parse(raw) : id === 'query_video_edit_export' ? videoEditExportQuerySchema.parse(raw) : videoEditExportTaskInputSchema.parse(raw)
   const documentRef = parsed.documentRef
   const owner = requireVideoEditInstance(documentRef.id)
@@ -71,7 +72,9 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
     }
   } else if (id === 'cancel_video_edit_export') {
     const taskId = 'taskId' in parsed ? parsed.taskId : undefined
-    if (taskId) {
+    if (taskId && listWaitingVideoEditExports(documentRef.id).some(record => record.id === taskId)) {
+      await execution.run(() => cancelWaitingVideoEditExport(taskId))
+    } else if (taskId) {
       // 队列项与渲染任务各有编号，查询结果两者都给，调用方传哪个都应认
       const job = videoEditExportQueue.list().find(item => item.id === taskId || item.task?.id === taskId) ?? videoEditExportQueue.require(taskId)
       if (job.owner !== owner) throw new Error('导出项必须属于明确的原剪辑。')
@@ -79,6 +82,7 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
     } else {
       await execution.run(() => {
         for (const job of videoEditExportQueue.list().filter(job => job.owner === owner)) videoEditExportQueue.cancel(job.id)
+        for (const record of listWaitingVideoEditExports(documentRef.id)) cancelWaitingVideoEditExport(record.id)
         cancelVideoEditExport(documentRef.id)
       })
     }
@@ -95,8 +99,8 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
   const task = latestTask && (!filterId || latestTask.id === filterId || jobs.some(job => job.task === latestTask)) ? latestTask : undefined
   if (filterId && !jobs.length && !archived.length && !task && !listWaitingVideoEditExports(documentRef.id).some(record => record.id === filterId)) throw new Error('EXPORT_TASK_NOT_FOUND:此剪辑没有匹配的导出任务或归档记录；请省略 taskId 查询可用导出。')
   const queue = jobs.map(job => {
-    const entry = owner.document.exportHistory?.find(entry => entry.taskId === job.task?.id)
-    return { ...videoEditExportJobSummary(job), ...(entry ? { path: entry.path, completedAt: entry.completedAt, ...(entry.assetRef ? { assetRef: entry.assetRef } : {}) } : {}) }
+    const entry = owner.document.exportHistory?.find(entry => entry.id === job.id || entry.taskId === job.task?.id)
+    return { ...videoEditExportJobSummary(job), ...(entry ? { outputReady: true, path: entry.path, completedAt: entry.completedAt, ...(entry.assetRef ? { assetRef: entry.assetRef } : {}) } : {}) }
   })
   if (query) {
     // 还没接回队列的恢复项（原剪辑刚打开、登记尚在取回）同样可见，状态按排队报告。

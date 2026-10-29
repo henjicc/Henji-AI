@@ -47,29 +47,42 @@ export class VideoEditExportQueue {
   private revision = 0
   private listeners = new Set<() => void>()
   private synced = new WeakMap<VideoEditExportJob, VideoEditExportJob['state']>()
+  private registering = new Set<VideoEditExportJob>()
+  private registered = new WeakSet<VideoEditExportJob>()
   constructor(private run: (job: VideoEditExportJob) => Promise<void>, private mirror?: VideoEditExportJobMirror) {}
   subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => this.listeners.delete(listener) }
   version = (): number => this.revision
   list(): readonly VideoEditExportJob[] { return this.jobs }
   private publish(): void {
     this.revision++
-    for (const job of this.jobs) if (this.synced.get(job) !== job.state) { this.synced.set(job, job.state); this.mirror?.update(job) }
+    for (const job of this.jobs) if (!this.registering.has(job) && this.synced.get(job) !== job.state) { this.synced.set(job, job.state); this.mirror?.update(job) }
     for (const listener of this.listeners) listener(); publishVideoEdit()
   }
-  append(jobs: VideoEditExportJob[]): void {
-    for (const job of jobs) this.synced.set(job, job.state)
-    void this.mirror?.register(jobs).then(() => this.publish(), () => undefined)
-    this.jobs = this.jobs.concat(jobs); this.publish(); void this.drain()
+  append(jobs: VideoEditExportJob[]): Promise<void> {
+    for (const job of jobs) { this.synced.set(job, job.state); this.registering.add(job) }
+    this.jobs = this.jobs.concat(jobs); this.publish()
+    return this.registerAndStart(jobs)
+  }
+  private async registerAndStart(jobs: VideoEditExportJob[]): Promise<void> {
+    try {
+      // 主进程确认接收快照以后才能开始写文件，也才能对调用方确认提交成功。
+      if (this.mirror) await this.mirror.register(jobs)
+      for (const job of jobs) this.registered.add(job)
+    } catch (error) {
+      for (const job of jobs) { if (job.state !== 'cancelled') { job.state = 'failed'; job.error = '没能登记导出，请重试。'; job.release() } }
+      throw error
+    } finally { for (const job of jobs) this.registering.delete(job); this.publish(); void this.drain() }
   }
   /** 接回主进程登记里上一页面留下的项：已登记过，不再重复登记；本地状态与登记不同的随即同步过去。 */
   restore(entries: ReadonlyArray<{ job: VideoEditExportJob; registeredState: VideoEditExportJob['state'] }>): void {
-    for (const { job, registeredState } of entries) this.synced.set(job, registeredState)
+    for (const { job, registeredState } of entries) { this.synced.set(job, registeredState); this.registered.add(job) }
     this.jobs = this.jobs.concat(entries.map(entry => entry.job)); this.publish(); void this.drain()
   }
   pending(projectId?: string): boolean { return this.jobs.some(job => (!projectId || job.owner.document.id === projectId) && ['queued', 'running'].includes(job.state)) }
   clearFinished(): void {
-    const removed = this.jobs.filter(job => !['queued', 'running'].includes(job.state)).map(job => job.id)
-    this.jobs = this.jobs.filter(job => ['queued', 'running'].includes(job.state))
+    const keep = (job: VideoEditExportJob): boolean => this.registering.has(job) || ['queued', 'running'].includes(job.state)
+    const removed = this.jobs.filter(job => !keep(job)).map(job => job.id)
+    this.jobs = this.jobs.filter(keep)
     if (removed.length) this.mirror?.remove(removed)
     this.publish()
   }
@@ -80,13 +93,15 @@ export class VideoEditExportQueue {
     if (job.state === 'queued') { job.state = 'cancelled'; job.release() }
     logger.info('取消导出项', { event: 'video_edit.export_queue.cancelled', context: { jobId: id } }); this.publish()
   }
-  retry(id: string, release: () => void): void {
+  retry(id: string, release: () => void): Promise<void> {
     const job = this.require(id)
     if (!retryableVideoEditExportJob(job)) throw new Error('只可重试未发布文件的失败或中断项；已保存的成片请直接使用文件。')
     if (job.state === 'interrupted') logger.info('重试中断的导出', { event: 'video_edit.export_queue.interrupted_retry', context: { jobId: id, projectId: job.owner.document.id } })
     job.controller = new AbortController(); job.release = release; job.task = undefined; job.restoredProgress = undefined; job.error = undefined; job.startedAt = undefined; job.finishedAt = undefined; job.state = 'queued'
     // Explicit retries join the tail, preserving the order of already submitted work.
-    this.jobs = [...this.jobs.filter(value => value !== job), job]; this.publish(); void this.drain()
+    this.jobs = [...this.jobs.filter(value => value !== job), job]
+    if (!this.registered.has(job)) { this.registering.add(job); this.publish(); return this.registerAndStart([job]) }
+    this.publish(); void this.drain(); return Promise.resolve()
   }
   require(id: string): VideoEditExportJob { const job = this.jobs.find(value => value.id === id); if (!job) throw new Error('原导出项已移除，请重新查询导出列表。'); return job }
   async wait(id: string, signal?: AbortSignal): Promise<VideoEditExportJob> {
@@ -105,7 +120,7 @@ export class VideoEditExportQueue {
     this.draining = true
     try {
       let job: VideoEditExportJob | undefined
-      while ((job = this.jobs.find(value => value.state === 'queued'))) {
+      while ((job = this.jobs.find(value => value.state === 'queued' && !this.registering.has(value)))) {
         const current = job; current.state = 'running'; current.startedAt = Date.now(); this.publish()
         logger.info('开始队列导出', { event: 'video_edit.export_queue.start', context: { jobId: current.id, projectId: current.owner.document.id } })
         const progress = this.mirror ? setInterval(() => this.mirror?.update(current), PROGRESS_SYNC_MS) : undefined
@@ -172,19 +187,25 @@ export function adoptRestoredVideoEditExports(): void {
   if (!waitingRestore.length) return
   const instances = listVideoEditInstances()
   const adopted: Array<{ job: VideoEditExportJob; registeredState: VideoEditExportJob['state'] }> = []
-  const dropped: string[] = []
   waitingRestore = waitingRestore.filter(record => {
     const owner = instances.find(instance => instance.document.id === record.projectId)
     if (!owner) return true
     const payload = restorePayloadSchema.safeParse(record.payload); const snapshot = restoredSnapshotSchema.safeParse(parseSnapshotJson(record.snapshotJson))
-    if (!payload.success || !snapshot.success) { dropped.push(record.id); return false }
+    if (!payload.success || !snapshot.success) {
+      const error = '导出恢复信息无法读取，请按原设置重新提交，或移除这条失败记录。'
+      if (record.state !== 'failed' || record.error !== error) {
+        record.state = 'failed'; record.error = error
+        syncVideoEditExportJob({ id: record.id, state: 'failed', progress: record.progress, error })
+        logger.warn('导出恢复信息无法读取，保留失败记录', { event: 'video_edit.export_queue.restore_failed', context: { jobId: record.id, projectId: record.projectId } })
+      }
+      return true
+    }
     let release = (): void => undefined
-    let state = record.state === 'queued' ? 'queued' as const : record.state === 'failed' ? 'failed' as const : 'interrupted' as const
+    let state = record.state === 'running' ? 'interrupted' as const : record.state
     if (state === 'queued') { try { release = holdVideoEditActivity(owner.document.id, 'export') } catch { state = 'interrupted' } }
     adopted.push({ registeredState: record.state, job: { id: record.id, owner, name: record.name, presetName: record.presetName, snapshot: snapshot.data, ...payload.data, state, release, controller: new AbortController(), restored: true, restoredProgress: record.progress, outputPublished: record.outputPublished, ...(record.error ? { error: record.error } : {}) } })
     return false
   })
-  if (dropped.length) { logger.warn('导出队列登记的快照无法读取，已移除', { event: 'video_edit.export_queue.restore_dropped', context: { jobs: dropped.length } }); removeVideoEditExportJobs(dropped) }
   if (!adopted.length) return
   logger.info('恢复界面重新加载前的导出队列', { event: 'video_edit.export_queue.restored', context: { jobs: adopted.length, queued: adopted.filter(entry => entry.job.state === 'queued').length, interrupted: adopted.filter(entry => entry.job.state === 'interrupted').length } })
   videoEditExportQueue.restore(adopted)
@@ -197,9 +218,11 @@ export async function restoreVideoEditExports(): Promise<void> {
   adoptRestoredVideoEditExports(); publishVideoEdit()
 }
 subscribeVideoEdit(adoptRestoredVideoEditExports)
-void restoreVideoEditExports()
+const initialRestore = restoreVideoEditExports()
+export function waitForVideoEditExportRestore(): Promise<void> { return initialRestore }
 /** Validate the whole batch and obtain local paths before committing any item. */
 export async function enqueueVideoEditExports(requests: readonly VideoEditExportRequest[], signal?: AbortSignal): Promise<VideoEditExportJob[]> {
+  await waitForVideoEditExportRestore()
   assertApplicationWritesAllowed(); signal?.throwIfAborted()
   if (!requests.length) throw new Error('请选择要导出的序列。')
   const releases: Array<() => void> = []
@@ -264,7 +287,8 @@ export async function enqueueVideoEditExports(requests: readonly VideoEditExport
     assertApplicationWritesAllowed()
     const occupied = new Set([...videoEditExportQueue.list().filter(value => ['queued', 'running'].includes(value.state)).flatMap(value => videoEditExportPaths(value.path, value.settings)), ...waitingRestore.flatMap(record => record.outputPaths)].map(videoEditMediaPathKey))
     if ([...paths].some(key => occupied.has(key))) throw new Error('输出位置已被另一个导出占用，请选择不同文件名。')
-    videoEditExportQueue.append(jobs); return jobs
+    releases.length = 0
+    await videoEditExportQueue.append(jobs); return jobs
   } catch (error) { for (const release of releases) release(); throw error }
 }
 /** 剪辑所在项目的“导出”文件夹：助手与外部智能体的产物默认放这里，不弹保存对话框。 */
@@ -289,12 +313,12 @@ export function joinVideoEditOutputPath(directory: string, name: string): string
   const separator = directory.includes('\\') && !directory.includes('/') ? '\\' : '/'
   return `${directory.replace(/[\\/]+$/, '')}${separator}${name}`
 }
-export function retryVideoEditExportJob(id: string): void {
+export function retryVideoEditExportJob(id: string): Promise<void> {
   assertApplicationWritesAllowed()
   const job = videoEditExportQueue.require(id)
   if (!listVideoEditInstances().includes(job.owner)) throw new Error('原剪辑已关闭，请重新加入导出。')
   const release = holdVideoEditActivity(job.owner.document.id, 'export')
-  try { videoEditExportQueue.retry(id, release) } catch (error) { release(); throw error }
+  try { return videoEditExportQueue.retry(id, release) } catch (error) { release(); throw error }
 }
 export function videoEditQueuedExportTask(projectId: string, id: string): VideoEditExportTask | undefined {
   const owner = requireVideoEditInstance(projectId)
