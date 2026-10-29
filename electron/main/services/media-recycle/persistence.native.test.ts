@@ -5,6 +5,7 @@ import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 
 const state = vi.hoisted(() => ({ db: undefined as Database.Database | undefined, user: '', program: '' }))
+vi.mock('electron', () => ({ shell: { trashItem: (file: string) => fs.rename(file, `${file}.trashed`) } }))
 vi.mock('../db', () => ({ getDb: () => state.db! }))
 vi.mock('../appPaths', () => ({
   getProgramDataDir: () => state.program,
@@ -67,7 +68,7 @@ describe.skipIf(!process.versions.electron)('SQLite 21 media retirement', () => 
       const db = state.db
       runSchemaMigrations(db, SCHEMA_MIGRATIONS.slice(0, 20))
       runSchemaMigrations(db)
-      expect(() => assertMediaStorageCoverage(db)).not.toThrow()
+      assertMediaStorageCoverage(db)
       db.exec('CREATE TABLE unregistered_media (file_path TEXT)')
       expect(() => assertMediaStorageCoverage(db)).toThrow('Missing media reference provider')
       db.exec('DROP TABLE unregistered_media')

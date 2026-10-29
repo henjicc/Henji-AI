@@ -1,3 +1,8 @@
+/** 静默窗口只提供有限处理时间，未完成的候选留在持久队列，下一次静默窗口继续。 */
+export class MediaRecycleDeadline extends Error {
+  constructor() { super('Media reclamation time slice ended'); this.name = 'MediaRecycleDeadline' }
+}
+
 /** A window is a possible unsaved session until the existing save/close guard succeeds.
  * No renderer reference snapshots participate in reclamation. */
 export class MediaRecycleLifecycle {
@@ -25,7 +30,7 @@ export class MediaRecycleLifecycle {
     try {
       await Promise.race([
         sweep(controller.signal),
-        new Promise<void>(resolve => { timer = setTimeout(() => { controller.abort(new Error('Startup media reclamation timed out')); resolve() }, 3_000) }),
+        new Promise<void>(resolve => { timer = setTimeout(() => { controller.abort(new MediaRecycleDeadline()); resolve() }, 3_000) }),
       ])
     } finally { clearTimeout(timer); controller.abort(); this.phase = 'active' }
   }
@@ -39,7 +44,7 @@ export class MediaRecycleLifecycle {
       return await Promise.race([
         sweep(controller.signal).then(() => 'completed' as const),
         new Promise<'timeout'>(resolve => {
-          timer = setTimeout(() => { controller.abort(); resolve('timeout') }, timeoutMs)
+          timer = setTimeout(() => { controller.abort(new MediaRecycleDeadline()); resolve('timeout') }, timeoutMs)
         }),
       ])
     } finally { clearTimeout(timer); controller.abort() }

@@ -1,9 +1,25 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import os from 'node:os'
 import { afterEach, expect, it, vi } from 'vitest'
-import { canonicalPath, isWindowsNetworkPath, pathKey } from './paths'
+import { canonicalPath, createPathCanonicalizer, isWindowsNetworkPath, pathKey } from './paths'
 
 afterEach(() => { vi.restoreAllMocks() })
+
+it('一万余条重复及缺失引用复用本轮解析，下一轮重新读取路径', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-reference-paths-'))
+  try {
+    const missing = path.join(root, 'missing', 'file.png')
+    const realpath = vi.spyOn(fs, 'realpath')
+    const resolve = createPathCanonicalizer()
+    const keys = await Promise.all(Array.from({ length: 11_263 }, () => resolve(missing)))
+    expect(new Set(keys)).toEqual(new Set([pathKey(missing)]))
+    expect(realpath.mock.calls.filter(([file]) => file === missing)).toHaveLength(1)
+    expect(realpath.mock.calls.filter(([file]) => file === root)).toHaveLength(1)
+    await createPathCanonicalizer()(missing)
+    expect(realpath.mock.calls.filter(([file]) => file === missing)).toHaveLength(2)
+  } finally { await fs.rm(root, { recursive: true, force: true }) }
+})
 
 it('区分 Windows 网络路径与本机设备路径', () => {
   expect(isWindowsNetworkPath('\\\\nas\\media\\a.mp4')).toBe(true)

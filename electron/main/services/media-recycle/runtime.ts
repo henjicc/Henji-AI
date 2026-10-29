@@ -1,5 +1,6 @@
 import path from 'node:path'
-import { setImmediate as yieldToIO } from 'node:timers/promises'
+import { performance } from 'node:perf_hooks'
+import { shell } from 'electron'
 import { getDb } from '../db'
 import { databaseLocationContext } from '../db-locations'
 import { createMainLogger } from '../logging/main-logger'
@@ -10,6 +11,9 @@ import { collectUnreferencedMedia, type MediaReferenceProvider, type RecycleCand
 import { managedMediaRoots } from './queue'
 import { collectDocumentReferences, collectSqlReferences, decodeReferenceValues, recordReferences, releaseDocumentSubmissionReferences } from './providers'
 import { assertMediaStorageCoverage, MEDIA_REFERENCE_TABLES } from './schema'
+import { MediaRecycleDeadline } from './lifecycle'
+import { createRecycleStore, type RecycleRow } from './store'
+import type { LocationContext } from '../../../../src/core/storage/locationCodec'
 
 const logger = createMainLogger('main.media_recycle')
 const providers: MediaReferenceProvider[] = [
@@ -19,58 +23,60 @@ const providers: MediaReferenceProvider[] = [
     const paths = new Set<string>()
     for (const row of getDb().prepare('SELECT owner FROM media_recycle_retained').all() as Array<{ owner: string }>) {
       signal.throwIfAborted()
-      for (const value of await collectDocumentReferences(signal, row.owner)) paths.add(value)
+      const document = await collectDocumentReferences(signal, row.owner)
+      for (const value of [...document.references, ...document.protection]) paths.add(value)
     }
     return paths
   } },
   { id: 'managed-leases', collect: async () => [...listManagedMediaFileLeases(), ...listUploadImageLeases()] },
 ]
 
-async function* candidates(): AsyncIterable<RecycleCandidate> {
-  let cursor = 0
-  const context = databaseLocationContext(getDb())
-  for (;;) {
-    const rows = getDb().prepare('SELECT id, source, payload FROM media_recycle_candidates WHERE id > ? ORDER BY id LIMIT 128').all(cursor) as Array<{ id: number; source: string; payload: string }>
-    if (!rows.length) return
-    for (const row of rows) {
-      cursor = row.id
-      const raw: unknown = JSON.parse(row.payload)
-      const direct = raw as { paths: string[]; protectedBy: string[] }
-      const paths = row.source === 'paths' ? decodeReferenceValues(direct.paths, context) : recordReferences(row.source, raw as Record<string, unknown>, context)
-      // Legacy history thumbnails are named after the primary file, in two resolutions.
-      const derivedFrom: Record<string, string[]> = {}
-      for (const file of paths) {
-        const name = path.basename(file).replace(/\.[^.]+$/, '.webp')
-        for (const derived of [path.join(getProgramStoreDir('thumbnails'), name), path.join(getProgramStoreDir('thumbnails'), '540', name)]) (derivedFrom[derived] ??= []).push(file)
-      }
-      yield { id: row.id, paths: [...new Set([...paths, ...Object.keys(derivedFrom)])], derivedFrom, protectedBy: row.source === 'paths' ? decodeReferenceValues(direct.protectedBy, context) : [] }
-    }
-    await yieldToIO()
+function decodeCandidate(row: RecycleRow, context: LocationContext): RecycleCandidate {
+  const raw: unknown = JSON.parse(row.payload)
+  const direct = raw as { paths: string[]; protectedBy: string[] }
+  const paths = row.source === 'paths' ? decodeReferenceValues(direct.paths, context) : recordReferences(row.source, raw as Record<string, unknown>, context)
+  // 历史缩略图沿用主文件名，两个尺寸都受主文件引用保护。
+  const derivedFrom: Record<string, string[]> = {}
+  for (const file of paths) {
+    const name = path.basename(file).replace(/\.[^.]+$/, '.webp')
+    for (const derived of [path.join(getProgramStoreDir('thumbnails'), name), path.join(getProgramStoreDir('thumbnails'), '540', name)]) (derivedFrom[derived] ??= []).push(file)
   }
+  return { id: row.id, paths: [...new Set([...paths, ...Object.keys(derivedFrom)])], derivedFrom, protectedBy: row.source === 'paths' ? decodeReferenceValues(direct.protectedBy, context) : [] }
 }
 
 export async function runMediaRecycle(signal: AbortSignal): Promise<void> {
   let candidateCount = 0
   try {
-    candidateCount = (getDb().prepare('SELECT count(*) AS n FROM media_recycle_candidates').get() as { n: number }).n
+    signal.throwIfAborted()
+    const db = getDb()
+    candidateCount = (db.prepare('SELECT count(*) AS n FROM media_recycle_candidates').get() as { n: number }).n
     if (!candidateCount) return
-    assertMediaStorageCoverage(getDb())
+    assertMediaStorageCoverage(db)
+    const referencesStartedAt = performance.now()
     logger.info('开始读取持久媒体引用', { event: 'media_recycle.references.start', context: { candidates: candidateCount } })
     const documents = await collectDocumentReferences(signal)
-    await releaseDocumentSubmissionReferences(documents, signal)
-    logger.info('持久媒体引用读取完成', { event: 'media_recycle.references.completed', context: { candidates: candidateCount } })
-    await collectUnreferencedMedia({
-      providers: [...providers, { id: 'documents-and-saved-history', collect: async () => documents }],
+    await releaseDocumentSubmissionReferences(documents.references, signal)
+    signal.throwIfAborted()
+    const context = databaseLocationContext(db)
+    const queue = createRecycleStore(db, signal, row => decodeCandidate(row, context))
+    try { await collectUnreferencedMedia({
+      providers: [...providers, { id: 'documents-and-saved-history', collect: async () => [...documents.references, ...documents.protection] }],
       roots: async () => managedMediaRoots(),
-      revision: () => String((getDb().prepare('SELECT total_changes() AS n').get() as { n: number }).n),
-      store: {
-        count: () => (getDb().prepare('SELECT count(*) AS n FROM media_recycle_candidates').get() as { n: number }).n,
-        candidates,
-        identity: file => (getDb().prepare('SELECT identity FROM media_recycle_owned WHERE path = ?').get(file) as { identity: string } | undefined)?.identity,
-        protector: file => (getDb().prepare('SELECT source_path FROM media_recycle_owned WHERE path = ?').get(file) as { source_path?: string } | undefined)?.source_path,
-        forget: id => { getDb().prepare('DELETE FROM media_recycle_candidates WHERE id = ?').run(id) },
+      revision: queue.revision,
+      referencesReady: references => {
+        queue.referencesReady(references)
+        logger.info('持久媒体引用读取完成', { event: 'media_recycle.references.completed', context: { candidates: candidateCount, references: references.size, durationMs: performance.now() - referencesStartedAt } })
       },
-      log: (phase, summary, error) => logger[phase === 'failed' ? 'warn' : 'info']('媒体回收', { event: `media_recycle.sweep.${phase}`, context: { ...summary }, ...(error ? { error } : {}) }),
-    }, signal)
-  } catch (error) { logger.warn('媒体回收未完成，保留候选', { event: 'media_recycle.sweep.failed', context: { candidates: candidateCount, deleted: 0, freedBytes: 0, retained: { 'documents-or-handoff': candidateCount } }, error }) }
+      trashItem: file => shell.trashItem(file),
+      store: queue.store,
+      log: (phase, summary, error) => {
+        const failure = error ?? queue.checkpointError()
+        logger[phase === 'failed' || phase === 'deferred' || failure ? 'warn' : 'info']('媒体回收', { event: `media_recycle.sweep.${failure ? 'failed' : phase}`, context: { ...summary, remaining: queue.remaining() }, ...(failure ? { error: failure } : {}) })
+      },
+    }, signal) } finally { queue.dispose() }
+  } catch (error) {
+    if (error === signal.reason && error instanceof MediaRecycleDeadline) {
+      logger.warn('引用普查未完成，候选留待下次静默窗口', { event: 'media_recycle.references.deferred', context: { candidates: candidateCount, deleted: 0 } })
+    } else logger.warn('媒体回收未完成，保留候选', { event: 'media_recycle.sweep.failed', context: { candidates: candidateCount, deleted: 0, recycledBytes: 0, retained: { 'reference-scan-incomplete': candidateCount } }, error })
+  }
 }

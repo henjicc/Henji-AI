@@ -10,6 +10,13 @@ const path = require('node:path');
 const yauzl = require(workerData.yauzl);
 const visited = new Set();
 const files = new Set();
+const skippedLinks = [];
+const unreadableLinks = [];
+function skipLink(target, error) {
+  skippedLinks.push(target);
+  // 离线磁盘和共享目录也会返回不存在，只有循环链接能确定无需读取目标作品。
+  if (error.code !== 'ELOOP') unreadableLinks.push(target);
+}
 function key(value) { const resolved = path.resolve(value); return process.platform === 'win32' ? resolved.toLowerCase() : resolved; }
 function excluded(target, exclusions) { const value = key(target); return exclusions.some(root => value === key(root) || value.startsWith(key(root) + path.sep)); }
 function refs(value) {
@@ -55,31 +62,55 @@ async function zip(file, bytes) {
     });
   } finally { archive.close(); }
 }
-async function scan(target, optional, extensions, exclusions) {
+async function scan(target, optional, extensions, exclusions, entry, resolved) {
   if (excluded(target, exclusions)) return;
-  let stat;
-  try { stat = await fs.lstat(target); } catch (error) { if (optional && error.code === 'ENOENT') return; throw error; }
-  // Resolve links locally. Broken links remain unprovable; unrelated links do not
-  // poison the whole census. Read linked documents too: they may protect media.
-  if (stat.isSymbolicLink()) stat = await fs.stat(target);
+  let stat = entry;
+  if (!stat) {
+    try { stat = await fs.lstat(target); } catch (error) { if (optional && error.code === 'ENOENT') return; throw error; }
+  }
+  // Windows 目录项也把云占位与去重重解析点标成链接，先用 lstat 区分普通文件和真正的链接。
+  if (entry && stat.isSymbolicLink()) {
+    try { stat = await fs.lstat(target); } catch (error) { skipLink(target, error); return; }
+  }
+  if (stat.isFile() && !extensions.includes(path.extname(target).toLowerCase())) return;
+  const linked = stat.isSymbolicLink();
+  if (stat.isSymbolicLink()) {
+    try { stat = await fs.stat(target); resolved = await fs.realpath(target); }
+    catch (error) { skipLink(target, error); return; }
+  }
+  const canonical = resolved || await fs.realpath(target);
+  try { await scanContent(target, stat, canonical, extensions, exclusions); }
+  catch (error) {
+    // 链接已解析成功，后代 I/O 失败不能证明整棵目录已失效，未读到的作品仍须保护媒体。
+    if (linked && error.code) { skippedLinks.push(target); unreadableLinks.push(target); return; }
+    throw error;
+  }
+}
+async function scanContent(target, stat, canonical, extensions, exclusions) {
   if (stat.isDirectory()) {
-    const identity = key(await fs.realpath(target)) + ':' + extensions.join(',');
+    const identity = key(canonical) + ':' + extensions.join(',') + ':' + exclusions.map(key).sort().join(',');
     if (visited.has(identity)) return;
     visited.add(identity);
     const dir = await fs.opendir(target);
-    for await (const entry of dir) await scan(path.join(target, entry.name), false, extensions, exclusions);
+    // 目录项已携带类型，无关文件无需逐个查询元数据；链接仍须解析，不能漏掉链接内的作品。
+    for await (const entry of dir) {
+      if (entry.isFile() && !extensions.includes(path.extname(entry.name).toLowerCase())) continue;
+      await scan(path.join(target, entry.name), false, extensions, exclusions, entry, path.join(canonical, entry.name));
+    }
   } else if (extensions.includes(path.extname(target).toLowerCase())) {
-    const identity = key(await fs.realpath(target));
+    const identity = key(canonical);
     if (files.has(identity)) return;
     files.add(identity);
     const handle = await fs.open(target, 'r');
     const signature = Buffer.alloc(4);
-    try { await handle.read(signature, 0, 4, 0); } finally { await handle.close(); }
-    if (signature[0] === 80 && signature[1] === 75) await zip(target);
-    else await send(target, JSON.parse(await fs.readFile(target, 'utf8')));
+    try {
+      await handle.read(signature, 0, 4, 0);
+      if (signature[0] === 80 && signature[1] === 75) await zip(target);
+      else await send(target, JSON.parse(await handle.readFile('utf8')));
+    } finally { await handle.close(); }
   }
 }
-(async () => { for (const root of workerData.roots) await scan(root.path, root.optional, root.extensions || workerData.extensions, root.exclude || []); parentPort.postMessage({ done: true }); })()
+(async () => { for (const root of workerData.roots) await scan(root.path, root.optional, root.extensions || workerData.extensions, root.exclude || []); parentPort.postMessage({ done: true, skippedLinks, unreadableLinks }); })()
   .catch(error => { parentPort.postMessage({ error: String(error.stack || error) }); });
 `
 
@@ -87,19 +118,20 @@ export interface ReferenceScanRoot { path: string; optional?: boolean; extension
 export async function scanReferenceFiles(
   roots: readonly ReferenceScanRoot[], extensions: readonly string[], signal: AbortSignal,
   accept: (file: string, paths: string[]) => Promise<void>,
-): Promise<void> {
+): Promise<{ skippedLinks: string[]; unreadableLinks: string[] }> {
   signal.throwIfAborted()
   const resolver = createRequire(__filename)
   const worker = new Worker(SOURCE, { eval: true, workerData: { roots, extensions, yauzl: resolver.resolve('yauzl') } })
   try {
-    await new Promise<void>((resolve, reject) => {
+    return await new Promise<{ skippedLinks: string[]; unreadableLinks: string[] }>((resolve, reject) => {
       const abort = (): void => reject(signal.reason ?? new Error('Reference scan cancelled'))
       signal.addEventListener('abort', abort, { once: true })
       worker.once('error', reject)
       worker.once('exit', code => { signal.removeEventListener('abort', abort); if (code !== 0) reject(new Error(`Reference worker exited: ${code}`)) })
-      worker.on('message', (message: { done?: boolean; error?: string; file?: string; paths?: string[] }) => {
+      worker.on('message', (message: { done?: boolean; error?: string; file?: string; paths?: string[]; skippedLinks?: string[]; unreadableLinks?: string[] }) => {
+        if (signal.aborted) return
         if (message.error) reject(new Error(message.error))
-        else if (message.done) { signal.removeEventListener('abort', abort); resolve() }
+        else if (message.done) { signal.removeEventListener('abort', abort); resolve({ skippedLinks: message.skippedLinks ?? [], unreadableLinks: message.unreadableLinks ?? [] }) }
         else if (message.file && message.paths) {
           void accept(message.file, message.paths).then(() => worker.postMessage('next'), reject)
         }

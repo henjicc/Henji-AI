@@ -26,8 +26,26 @@ export function isWindowsNetworkPath(value: string): boolean {
 }
 
 export async function canonicalPath(value: string): Promise<string | null> {
+  return resolveCanonicalPath(value)
+}
+
+/** 一轮引用普查内复用同一路径及缺失路径的父目录解析；新一轮重新解析，避免保存后沿用失效别名。 */
+export function createPathCanonicalizer(): (value: string) => Promise<string | null> {
+  const cache = new Map<string, Promise<string | null>>()
+  return value => resolveCanonicalPath(value, cache)
+}
+
+async function resolveCanonicalPath(value: string, cache?: Map<string, Promise<string | null>>): Promise<string | null> {
   const local = localMediaPath(value)
   if (!local) return null
+  const existing = cache?.get(local)
+  if (existing) return existing
+  const result = resolveLocalPath(local, cache)
+  cache?.set(local, result)
+  return result
+}
+
+async function resolveLocalPath(local: string, cache?: Map<string, Promise<string | null>>): Promise<string> {
   // Network paths compare as written: resolving one means name resolution and an SMB connection, and text that merely
   // looks like `//host/...` (base64, protocol-relative URLs) would hold the file thread pool for minutes.
   if (process.platform === 'win32' && isWindowsNetworkPath(local)) return pathKey(local)
@@ -37,7 +55,7 @@ export async function canonicalPath(value: string): Promise<string | null> {
     // Resolve existing ancestors too: an absent file below a junction is still an alias.
     const parent = path.dirname(local)
     if (parent === local) return pathKey(local)
-    return pathKey(path.join((await canonicalPath(parent))!, path.basename(local)))
+    return pathKey(path.join((await resolveCanonicalPath(parent, cache))!, path.basename(local)))
   }
 }
 

@@ -9,7 +9,7 @@ import { databaseLocationContext } from '../db-locations'
 import { getProgramDataDir, getProgramStoreDir, getUserModelsLocation, getUserRootDir } from '../appPaths'
 import { MEDIA_REFERENCE_TABLES } from './schema'
 import { scanReferenceFiles, type ReferenceScanRoot } from './file-scanner'
-import { canonicalPath, within } from './paths'
+import { createPathCanonicalizer, within } from './paths'
 import { managedMediaRoots, overlapsManagedMediaRoot } from './queue'
 import { createMainLogger } from '../logging/main-logger'
 
@@ -20,19 +20,23 @@ const logger = createMainLogger('main.media_recycle')
 export async function recordDocumentMediaPublished(file: string): Promise<void> {
   if (!getDb().prepare("SELECT 1 FROM generation_submissions WHERE media_released = 0 AND phase = 'completed' AND json_array_length(response_json, '$.filePaths') > 0 LIMIT 1").get()) return
   const signal = new AbortController().signal
-  await releaseDocumentSubmissionReferences(await collectDocumentReferences(signal, file), signal)
+  await releaseDocumentSubmissionReferences((await collectDocumentReferences(signal, file)).references, signal)
 }
 
 /** Documents can receive results without a history row. Record that handoff before
  * the sweep so a later document deletion does not resurrect receipt ownership. */
 export async function releaseDocumentSubmissionReferences(references: readonly string[], signal: AbortSignal): Promise<void> {
+  signal.throwIfAborted()
+  const db = getDb()
+  if (!db.prepare("SELECT 1 FROM generation_submissions WHERE media_released = 0 AND phase = 'completed' LIMIT 1").get()) return
   const held = new Set<string>()
+  const canonicalize = createPathCanonicalizer()
   for (const value of references) {
     signal.throwIfAborted()
-    const key = await canonicalPath(value)
+    const key = await canonicalize(value)
+    signal.throwIfAborted()
     if (key) held.add(key)
   }
-  const db = getDb()
   const context = databaseLocationContext(db)
   let cursor = 0
   for (;;) {
@@ -44,7 +48,7 @@ export async function releaseDocumentSubmissionReferences(references: readonly s
       const response = JSON.parse(row.response_json ?? 'null') as { filePaths?: unknown } | null
       const outputs = decodeReferenceValues(response?.filePaths, context)
       if (!outputs.length) continue
-      const keys = await Promise.all(outputs.map(canonicalPath))
+      const keys = await Promise.all(outputs.map(canonicalize))
       signal.throwIfAborted()
       if (keys.every(key => key && held.has(key))) db.prepare('UPDATE generation_submissions SET media_released = 1 WHERE request_id = ?').run(row.request_id)
     }
@@ -53,7 +57,8 @@ export async function releaseDocumentSubmissionReferences(references: readonly s
 }
 
 export function decodeReferenceValues(values: unknown, context: LocationContext, source = 'paths', rowId?: string): string[] {
-  const result = createLocationCodec(context).decodeContent(values)
+  // 只换算引用字符串，避免为回执中的源码、时间线与识别结果克隆整棵内容树。
+  const result = createLocationCodec(context).decodeContent(collectMediaReferences(values))
   const unresolved = result.report.unresolved
   if (unresolved.some(item => item.reason !== 'unknown_project')) throw new Error('Unresolved stored media locations')
   if (unresolved.length) {
@@ -86,6 +91,7 @@ export function recordReferences(source: string, raw: Record<string, unknown>, c
 }
 
 export async function collectSqlReferences(source: keyof typeof MEDIA_REFERENCE_TABLES, signal: AbortSignal): Promise<string[]> {
+  signal.throwIfAborted()
   const refs = new Set<string>()
   const context = databaseLocationContext(getDb())
   // Keyset pages bound scheduling cost, not product size. No synchronous iterator held over awaits.
@@ -101,7 +107,8 @@ export async function collectSqlReferences(source: keyof typeof MEDIA_REFERENCE_
 }
 
 /** Enumerate disk roots as well as the index: index refresh can be stale or partial. */
-export async function collectDocumentReferences(signal: AbortSignal, onlyRoot?: string): Promise<string[]> {
+export async function collectDocumentReferences(signal: AbortSignal, onlyRoot?: string): Promise<{ references: string[]; protection: string[] }> {
+  signal.throwIfAborted()
   const db = getDb()
   const context = databaseLocationContext(db)
   const refs = new Set<string>()
@@ -117,10 +124,14 @@ export async function collectDocumentReferences(signal: AbortSignal, onlyRoot?: 
     { path: path.join(getProgramStoreDir('imageEditor'), 'documents'), optional: true },
   ]
   const extensions = [...documentExtensions, '.json']
-  await scanReferenceFiles(roots, extensions, signal, async (file, values) => {
+  const scan = await scanReferenceFiles(roots, extensions, signal, async (file, values) => {
     const project = [...context.projects].sort((a, b) => b.root.length - a.root.length).find(project => within(project.root, file))
     const fileContext: LocationContext = { ...context, container: project ? { kind: 'project', projectId: project.id } : { kind: 'user' } }
     for (const value of decodeReferenceValues(values, fileContext)) refs.add(value)
   })
-  return [...refs]
+  signal.throwIfAborted()
+  // 无法判断可读性的真实链接可能仍保护任意托管媒体；普查继续，但本轮保守保护全部已登记文件。
+  const protection = scan.unreadableLinks.length ? (db.prepare('SELECT path FROM media_recycle_owned').all() as Array<{ path: string }>).map(row => row.path) : []
+  if (scan.skippedLinks.length) logger.warn('媒体引用普查跳过无法跟随的链接', { event: 'media_recycle.references.link_skipped', context: { paths: scan.skippedLinks, protectOwnedMedia: scan.unreadableLinks.length > 0 } })
+  return { references: [...refs], protection }
 }
