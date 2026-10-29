@@ -9500,11 +9500,6 @@
         "count": 1
       },
       {
-        "file": "src/components/ui/booleanAppearance.ts",
-        "fingerprint": "60e0f3d275737785f0afe6636b785e386fdd93baab35dfac4b7f586542e7d13b",
-        "count": 1
-      },
-      {
         "file": "src/components/ui/designTokens.test.ts",
         "fingerprint": "06f5f91515c641187994b997ebd5d69cc2fe813926b633afdbe595041171f975",
         "count": 1
