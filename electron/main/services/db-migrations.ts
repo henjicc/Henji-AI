@@ -119,6 +119,36 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
 
 export const SCHEMA_MIGRATIONS_TABLE = 'schema_migrations'
 
+/**
+ * 只在开发版里短暂存在、从未随提交发布的迁移：开发机的真实资料目录可能已经执行过它们，
+ * 账本里留下的名字与正式迁移对不上，会让整个数据库打不开。这里先备份，再删掉它们建出的表与账本记录，
+ * 交给正式迁移重新执行；被淘汰的数据（逐条信任记录）在正式方案里没有对应含义。
+ */
+const RETIRED_DEVELOPMENT_MIGRATIONS = [
+  { version: 23, name: 'foreign_content_trust', tables: ['content_trust_bindings', 'content_trust', 'content_local_origins'] },
+] as const
+
+function retireDevelopmentMigrations(db: Database.Database, options: SchemaMigrationOptions): string | null {
+  const select = db.prepare(`SELECT 1 FROM ${SCHEMA_MIGRATIONS_TABLE} WHERE version = ? AND name = ?`)
+  const retired = RETIRED_DEVELOPMENT_MIGRATIONS.filter(item => select.get(item.version, item.name))
+  if (!retired.length) return null
+  let backupPath: string | null = null
+  if (!db.memory && options.backupDirectory) {
+    try { backupPath = backupDatabase(db, options.backupDirectory, retired[0].version) } catch (error) {
+      getLogger().error('撤回开发版迁移前备份失败，未做改动', { event: 'db.migrations.backup.failed', context: { version: retired[0].version, name: retired[0].name }, error })
+      throw error
+    }
+  }
+  db.transaction(() => {
+    for (const item of retired) {
+      for (const table of item.tables) db.exec(`DROP TABLE IF EXISTS ${table}`)
+      db.prepare(`DELETE FROM ${SCHEMA_MIGRATIONS_TABLE} WHERE version = ? AND name = ?`).run(item.version, item.name)
+    }
+  })()
+  getLogger().warn('已撤回开发版遗留的数据库迁移', { event: 'db.migrations.retired_development', context: { migrations: retired.map(item => `${item.version}:${item.name}`), backupPath } })
+  return backupPath
+}
+
 /** Read-only preflight: reject a newer ledger before any initialization writes. */
 export function assertDatabaseVersionSupported(
   db: Database.Database,
@@ -208,6 +238,7 @@ export function runSchemaMigrations(
       applied_at INTEGER NOT NULL
     )
   `)
+  const retiredBackupPath = retireDevelopmentMigrations(db, options)
   const rows = db.prepare(`SELECT version, name FROM ${SCHEMA_MIGRATIONS_TABLE} ORDER BY version`).all() as Array<{ version: number; name: string }>
   const appliedVersions = new Set<number>()
   for (const row of rows) {
@@ -224,8 +255,8 @@ export function runSchemaMigrations(
   const context = createContext(options)
   const insert = db.prepare(`INSERT INTO ${SCHEMA_MIGRATIONS_TABLE} (version, name, applied_at) VALUES (?, ?, ?)`)
   const applied: number[] = []
-  let backupPath: string | null = null
-  let backupChecked = false
+  let backupPath: string | null = retiredBackupPath
+  let backupChecked = retiredBackupPath !== null
   for (const migration of migrations) {
     if (appliedVersions.has(migration.version)) continue
     if (!backupChecked && migration.backupWhen?.(db)) {

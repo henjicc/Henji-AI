@@ -173,6 +173,27 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
     } finally { db.close() }
   })
 
+  it('开发版遗留的 23 号迁移：先备份，再撤回它建的表与账本记录，接着执行正式的 23 号及之后迁移', () => {
+    const db = new Database(path.join(base, 'henji-dev-v23.db'))
+    try {
+      runSchemaMigrations(db, SCHEMA_MIGRATIONS.slice(0, 22), { locationContext: () => context })
+      db.pragma('foreign_keys = ON')
+      db.exec(`CREATE TABLE content_trust (id TEXT PRIMARY KEY, record_json TEXT NOT NULL);
+        CREATE TABLE content_trust_bindings (subject TEXT NOT NULL, trust_id TEXT NOT NULL REFERENCES content_trust(id), PRIMARY KEY(subject, trust_id));
+        CREATE INDEX content_trust_binding_record ON content_trust_bindings(trust_id);
+        CREATE TABLE content_local_origins (location TEXT PRIMARY KEY);
+        INSERT INTO content_trust VALUES ('t', '{}'); INSERT INTO content_trust_bindings VALUES ('s', 't'); INSERT INTO content_local_origins VALUES ('l');`)
+      db.prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (23, ?, 1)').run('foreign_content_trust')
+      const backupDirectory = path.join(base, 'backups')
+      const result = runSchemaMigrations(db, undefined, { locationContext: () => context, backupDirectory })
+      expect(result.applied).toEqual(ALL_VERSIONS.filter(version => version >= 23))
+      expect(ledger(db)).toEqual(ALL_VERSIONS)
+      expect(db.prepare("SELECT name FROM sqlite_master WHERE name LIKE 'content_%'").all()).toEqual([])
+      expect(fs.readdirSync(backupDirectory)).toEqual([expect.stringMatching(/-before-v23\.db$/)])
+      expect(runSchemaMigrations(db, undefined, { locationContext: () => context, backupDirectory }).applied).toEqual([])
+    } finally { db.close() }
+  })
+
   it('镜头参考退役（第 15 项）：已在第 14 项的库先备份再删旧工程表、清空旧回执；之前的回执换算照常', () => {
     const file = path.join(base, 'henji-v14.db')
     const db = new Database(file)
