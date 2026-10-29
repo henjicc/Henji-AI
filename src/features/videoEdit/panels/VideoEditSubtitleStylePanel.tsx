@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Palette } from 'lucide-react'
-import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiFormRow, UiIconButton, UiSwitch, UI_TEXT_META_CLASS } from '@/components/ui'
+import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiFormRow, UiGroup, UiIconButton, UiSwitch, UI_TEXT_META_CLASS } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import { UI_PROPERTY_INSET_CLASS } from '@/components/ui/styleTokens'
 import { EffectSection } from '@/components/effects/EffectSection'
@@ -70,16 +70,19 @@ export function VideoEditSubtitleStyleFields({ instance, sequenceId, selectedCap
   const endTypography = (commit: boolean): void => { typographyGesture.end(commit); const baseline = typographyBaseline.current; typographyBaseline.current = undefined; if (!commit && baseline) setStyle(baseline) }
   const applyStyle = (value: VideoEditSubtitleStyle): void => { if (!applicable) return; try { styleVideoEditSubtitles(instance.document.id, sequenceId, value, targets) } catch (error) { onError(error) } }
   const changeStyle = (value: VideoEditSubtitleStyle): void => { setPresetId(''); setStyle(value) }
+  // 字幕自己的三行与下面的排版面板共用 120 标签列（与 TypographyPanel 同档），浮层与效果控件里都是标签在左、控件左缘对齐。
   return <div className="flex flex-col gap-2" data-video-edit-subtitle-style>
+    <UiGroup labelWidth={120} gap="stack">
     <UiFormRow label="全局样式" info="开着时改动作用于这条序列的全部字幕；关掉后只改选中的字幕。" density="compact" inline><UiSwitch aria-label="全局样式" checked={global} disabled={!sequence.captions?.length || sequence.captionTrackLocked} onCheckedChange={value => writeScope(instance, sequenceId, { global: value })} /></UiFormRow>
-    {reason ? <UiEmpty size="sm" title={reason} /> : <>
+    {!reason && <>
     <UiFormRow label="样式预设" density="compact"><Dropdown ariaLabel="字幕样式预设" size="sm" value={presetId} options={[{ value: '', label: '自定义样式' }, ...presets.map(preset => ({ value: preset.id, label: preset.name }))]} onSelect={id => { setPresetId(id); const preset = presets.find(preset => preset.id === id); if (preset) { setStyle(preset.style); applyStyle(preset.style) } }} /></UiFormRow>
-    <VideoEditTypographyPanel key={`${instance.document.id}:${scope}`} onBegin={beginTypography} onEnd={endTypography} style={scaleVideoEditTextStyle(typography, sequence.height / 1080)} fontLabel="字幕字体" onError={onError} onFontPreview={previewFont} projectFonts={collectVideoEditFonts(instance.document).map(use => use.font)} onChange={typography => {
+    <UiFormRow label="底部安全区（%）" density="compact"><NumberInput ariaLabel="字幕底部安全区百分比" size="sm" widthClassName="w-20" value={style.bottomMargin * 100} min={0} max={100} step={1} onChange={value => { const next = { ...style, bottomMargin: value / 100 }; changeStyle(next); applyStyle(next) }} /></UiFormRow>
+    </>}
+    </UiGroup>
+    {reason ? <UiEmpty size="sm" title={reason} /> : <VideoEditTypographyPanel key={`${instance.document.id}:${scope}`} onBegin={beginTypography} onEnd={endTypography} style={scaleVideoEditTextStyle(typography, sequence.height / 1080)} fontLabel="字幕字体" onError={onError} onFontPreview={previewFont} projectFonts={collectVideoEditFonts(instance.document).map(use => use.font)} onChange={typography => {
       const next = videoEditSubtitleStyleSchema.parse({ ...scaleVideoEditTextStyle(typography, 1080 / sequence.height), bottomMargin: style.bottomMargin })
       if (applicable) styleVideoEditSubtitles(instance.document.id, sequenceId, next, targets, typographyGesture.handle.current); changeStyle(next)
-    }} />
-    <UiFormRow label="底部安全区（%）" density="compact"><NumberInput ariaLabel="字幕底部安全区百分比" size="sm" value={style.bottomMargin * 100} min={0} max={100} step={1} onChange={value => { const next = { ...style, bottomMargin: value / 100 }; changeStyle(next); applyStyle(next) }} /></UiFormRow>
-    </>}
+    }} />}
   </div>
 }
 

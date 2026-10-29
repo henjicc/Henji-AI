@@ -2,7 +2,7 @@ import { createVideoEditTestProject as createVideoEditProject } from '../applica
 // @vitest-environment jsdom
 import { useSyncExternalStore } from 'react'
 import { VirtuosoMockContext } from 'react-virtuoso'
-import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
@@ -209,6 +209,23 @@ it('500与501条字幕和标记仍可新增，字幕仍可导入', async () => {
     fireEvent.click(view.getByRole('button', { name: '添加' }))
   }
   expect(onError).not.toHaveBeenCalled()
+})
+
+it('字幕页底栏有单独的“字幕样式”入口，改动写回全部字幕；“自动字幕”浮层只留转录设置', async () => {
+  createVideoEditCaption(owner.document.id, sequence().id, { start: 0, duration: 30, text: '第一句' })
+  createVideoEditCaption(owner.document.id, sequence().id, { start: 30, duration: 30, text: '第二句' })
+  const view = render(<View />); const history = owner.past.length
+  const footer = view.getByRole('toolbar', { name: '字幕工具' })
+  fireEvent.click(within(footer).getByRole('button', { name: '自动字幕' }))
+  await view.findByRole('button', { name: '转录并生成字幕' })
+  expect(view.queryByRole('switch', { name: '全局样式' })).toBeNull(); expect(view.queryByLabelText('字幕字体')).toBeNull()
+  fireEvent.click(within(footer).getByRole('button', { name: '自动字幕' }))
+  fireEvent.click(within(footer).getByRole('button', { name: '字幕样式' }))
+  expect((await view.findByRole('switch', { name: '全局样式' })).getAttribute('aria-checked')).toBe('true')
+  const margin = view.getByLabelText('字幕底部安全区百分比')
+  act(() => margin.focus()); fireEvent.change(margin, { target: { value: '20' } }); fireEvent.keyDown(margin, { key: 'Enter' })
+  await waitFor(() => expect(sequence().captions?.map(cue => cue.style ? cue.style.bottomMargin : undefined)).toEqual([.2, .2]))
+  expect(owner.past).toHaveLength(history + 1); expect(onError).not.toHaveBeenCalled()
 })
 
 it('字幕浮层区分模型加载、失败重试和未配置，每次重开刷新配置', async () => {
