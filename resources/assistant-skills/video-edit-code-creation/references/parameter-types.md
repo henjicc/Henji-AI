@@ -44,6 +44,7 @@ font 参数的值是字体族名，作为 textStyle 的 `fontFamily` 传给 layo
 - 参数按 `params.键名` 读取，已应用当前帧关键帧：`params.pos.x * width`。
 - 渐变取色、曲线取值、缓动求值都是普通函数，按值形状自己实现（线性插值色标、分段线性曲线、贝塞尔反解），或放进项目组件复用。
 - table 的行就是普通数组；动态图层用 `rowKey` 字段组成 id，并以 `data: { parameter, keyField, key }` 绑定，选中图层即可改那一行。
+- table 声明的 `fields` 是按字段名索引的对象：`fields: { label: { type: "text", title: "标签", default: "指标", maxLength: 60 } }`；字段里不放 key，也不写成数组。只有 params 和 table.default 的行数据是数组。完整数据卡见 recipes-text-data。
 
 ## 自定义组件类型
 

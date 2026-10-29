@@ -120,7 +120,7 @@ export default {
 
 花字只强调一句短语。竖向 48px 错峰进场，浅色外描边、轻辉光（textStyle 的 shadows）与深底构成层次，避免每个字同时跳动。
 
-图集下层先画全部发光/外描边，上层画各字填色及其内/居中描边，外描边不遮住正文；底板和装饰线保持整段，默认首字可见就显示。样例用 `backgroundAndDecorationOpacity` 让整段层一起淡入淡出。字素簇会失去字素间连写；回到默认姿态时直接用静态整段位图，落定后像素一致。
+容器先滑入，字素稍晚跟随，不做原地淡入上浮；分层、连写与缓存规则见 author-text-motion。
 
 <!-- skill-example: stagger-title -->
 ```ts
@@ -142,12 +142,12 @@ export default {
     }, { maxWidth: 1600, maxLines: 1, fit: { minFontSize: 56 }, anchor: { x: 960, y: 540, horizontal: .5, vertical: .5 } })
     return [
       { id: "background", draw(ctx) { ctx.fillStyle = "#06080e"; ctx.fillRect(0, 0, width, height) } },
-      { id: "headline", bounds: [160, 440, 1760, 640], draw(ctx, time) {
+      { id: "headline", bounds: [160, 440, 1760, 640], pose: t => ({ x: (1 - expoOut(clamp01(t / .7))) * -120 }), draw(ctx, time) {
         const out = 1 - clamp01((time - 3.6) / .4)
         drawText(ctx, layout, { backgroundAndDecorationOpacity: clamp01(time / .28) * out, graphemes: (g, i) => {
-          const start = i * Math.min(.045, .6 / Math.max(1, layout.graphemes.length - 1))
+          const start = .06 + i * Math.min(.012, .18 / Math.max(1, layout.graphemes.length - 1))
           const elapsed = time - start, p = expoOut(clamp01(elapsed / .55))
-          return { y: (1 - p) * 48, opacity: clamp01(elapsed / .28) * out }
+          return { y: (1 - p) * 14, opacity: clamp01(elapsed / .28) * out }
         } })
       } }
     ]

@@ -7,20 +7,21 @@ import type * as TextLibrary from './text'
 import type * as PlanLibrary from '../../../core/imaging/vectorContent/textDrawPlan'
 import type * as CanvasLibrary from '../../../core/imaging/vectorContent/textDrawPlanCanvas'
 import type * as AppearanceLibrary from '../../../services/vectorContent/appearance'
+import type * as RecorderLibrary from '../engine/videoEditAuthorCanvasRecorder'
 
 interface Difference { changed: number; maximum: number; mean: number }
 interface StrokeLayerResult { position: 'outside' | 'inside' | 'center'; fill: boolean; difference: Difference; strokePixels: number; damagedStrokePixels: number }
-let results: { resting: Difference; background: Difference; firstBackground: Difference; hiddenBackground: number; overlap: Difference; italic: Difference; sharpness: { static: number; graphemes: number }; fillDamage: number; strokeLayers: StrokeLayerResult[] }
+let results: { resting: Difference; background: Difference; firstBackground: Difference; hiddenBackground: number; overlap: Difference; italic: Difference; sharpness: { static: number; graphemes: number }; fillDamage: number; strokeLayers: StrokeLayerResult[]; settling: Array<{ raster: number; scale: number; difference: Difference }> }
 
 // 指令替身不能发现字素之间的覆盖或二次采样；独立无界面 Chromium 使用真实 OffscreenCanvas 读回像素。
 beforeAll(async () => {
-  const bundle = await build({ stdin: { contents: `export * from './src/features/videoEdit/authorLibraries/text'; export * from './src/core/imaging/vectorContent/textDrawPlan'; export * from './src/core/imaging/vectorContent/textDrawPlanCanvas'; export * from './src/services/vectorContent/appearance'`, resolveDir: process.cwd() }, bundle: true, write: false, format: 'iife', globalName: 'textPixels', platform: 'browser' })
+  const bundle = await build({ stdin: { contents: `export * from './src/features/videoEdit/authorLibraries/text'; export * from './src/core/imaging/vectorContent/textDrawPlan'; export * from './src/core/imaging/vectorContent/textDrawPlanCanvas'; export * from './src/services/vectorContent/appearance'; export * from './src/features/videoEdit/engine/videoEditAuthorCanvasRecorder'`, resolveDir: process.cwd() }, bundle: true, write: false, format: 'iife', globalName: 'textPixels', platform: 'browser' })
   const browser = await chromium.launch({ headless: true, ...(existsSync(chromium.executablePath()) ? {} : { channel: 'chrome' }) })
   try {
     const page = await browser.newPage()
     await page.addScriptTag({ content: bundle.outputFiles[0].text })
     results = await page.evaluate(colors => {
-      const { layoutText, drawText, createTextDrawPlan, canvasTextPlanMeasure, paintTextDrawPlan, paintVectorAppearance } = (globalThis as unknown as { textPixels: typeof TextLibrary & typeof PlanLibrary & typeof CanvasLibrary & typeof AppearanceLibrary }).textPixels
+      const { layoutText, drawText, createTextDrawPlan, canvasTextPlanMeasure, paintTextDrawPlan, paintVectorAppearance, recordAuthorCanvas, replayAuthorCanvas } = (globalThis as unknown as { textPixels: typeof TextLibrary & typeof PlanLibrary & typeof CanvasLibrary & typeof AppearanceLibrary & typeof RecorderLibrary }).textPixels
       const width = 512, height = 192
       const surface = () => new OffscreenCanvas(width, height).getContext('2d', { willReadFrequently: true })!
       const read = (ctx: OffscreenCanvasRenderingContext2D) => ctx.getImageData(0, 0, width, height).data
@@ -33,7 +34,7 @@ beforeAll(async () => {
       const options = { forceGraphemes: true, anchor: { x: 80, y: 48, horizontal: 0, vertical: 0 } }
       const layout = layoutText('HMMH', style, options)
       const staticContext = surface(), restingContext = surface()
-      drawText(staticContext, layout); drawText(restingContext, layout, { graphemes: () => ({ x: 0, y: 0, scale: 1, rotate: 0, opacity: 1 }) })
+      drawText(staticContext, layout, { graphemes: () => ({ x: 1e-10 }) }); drawText(restingContext, layout, { graphemes: () => ({ x: 0, y: 0, scale: 1, rotate: 0, opacity: 1 }) })
       const staticPixels = read(staticContext), restingPixels = read(restingContext)
 
       // 隐藏正文但显式显示整段层，与各自采样的完整底板/装饰计划逐像素核对。
@@ -71,6 +72,9 @@ beforeAll(async () => {
       overlapAnimated.clearRect(0, 0, width, height)
       overlapAnimated.fillStyle = colors.black; overlapAnimated.fillRect(0, 0, width, height)
       drawText(overlapAnimated, overlapLayout, { graphemes: () => ({}) })
+      overlapStatic.clearRect(0, 0, width, height)
+      overlapStatic.fillStyle = colors.black; overlapStatic.fillRect(0, 0, width, height)
+      drawText(overlapStatic, overlapLayout, { graphemes: () => ({ x: 1e-10 }) })
 
       // 只画第一个斜体字，改变紧邻字符不应改变任何像素（不能从整行裁片）。
       const italicStyle = { fontFamily: 'monospace', fontSize: 64, fauxItalic: true, tracking: -500, align: 'left' as const }
@@ -104,18 +108,37 @@ beforeAll(async () => {
         }
         strokeLayers.push({ position, fill, difference: difference(expected, actual), strokePixels, damagedStrokePixels })
       }
-      return { resting: difference(staticPixels, restingPixels), background: difference(read(background), read(expectedBackground)), firstBackground: difference(read(firstBackground), read(fullBackground)), hiddenBackground: read(hiddenBackground).reduce((sum, value) => sum + value, 0), overlap: difference(reference, read(overlapAnimated)), italic: difference(read(italicA), read(italicB)), sharpness: { static: edgeEnergy(staticPixels), graphemes: edgeEnergy(restingPixels) }, fillDamage, strokeLayers }
+      const settling = []
+      const title = layoutText('信息越多，越难判断\nAI 帮你做减法 2026', { fontFamily: 'HarmonyOS Sans SC', fontWeight: 700, fontSize: 104, leading: 136, align: 'center', fill: { color: colors.white }, strokes: [{ color: colors.red, width: 3, position: 'outside' }], background: { enabled: true, color: colors.background, opacity: .92, padding: 56, radius: 18 } }, { maxWidth: 1560, maxLines: 3, anchor: { x: 960, y: 500, horizontal: .5, vertical: .5 } })
+      for (const raster of [1, 2]) for (const scale of [.5, .73, 1.125]) {
+        const frames = [1e-10, 0].map(offset => {
+          const matrix: [number, number, number, number, number, number] = [raster, 0, 0, raster, .25, .375]
+          const recording = recordAuthorCanvas({ width: 1920, height: 1080 }, surface(), matrix, ctx => {
+            ctx.scale(scale, scale)
+            drawText(ctx, title, { graphemes: (_g, i) => ({ y: i === title.graphemes.length - 1 ? offset : 0 }) })
+          })
+          const target = new OffscreenCanvas(1920, 1080).getContext('2d')!
+          replayAuthorCanvas(recording, target, () => { throw new Error('无外部素材') }, matrix)
+          return target.getImageData(0, 0, 1920, 1080).data
+        })
+        settling.push({ raster, scale, difference: difference(frames[0], frames[1]) })
+      }
+      return { resting: difference(staticPixels, restingPixels), background: difference(read(background), read(expectedBackground)), firstBackground: difference(read(firstBackground), read(fullBackground)), hiddenBackground: read(hiddenBackground).reduce((sum, value) => sum + value, 0), overlap: difference(read(overlapStatic), read(overlapAnimated)), italic: difference(read(italicA), read(italicB)), sharpness: { static: edgeEnergy(staticPixels), graphemes: edgeEnergy(restingPixels) }, fillDamage, strokeLayers, settling }
     }, { white: WHITE_HEX, black: BLACK_HEX, red: VIDEO_EDIT_ANNOTATION_COLORS.red, blue: VIDEO_EDIT_ANNOTATION_COLORS.blue, background: STYLE_SAMPLE_COLORS.text })
     process.stdout.write(`文字真实 Canvas 像素指标 ${JSON.stringify(results)}\n`)
   } finally { await browser.close() }
 }, 30000)
 
 describe('逐字分层真实 Canvas 像素', () => {
-  it('底板、描边、发光全开时默认姿态与静态逐像素一致', () => expect(results.resting.changed).toBe(0))
+  it('底板、描边、发光全开时接近落定与落定逐像素一致', () => expect(results.resting.changed).toBe(0))
   it('底板和装饰线只保留整段层，首字出现时完整显示底板', () => { expect(results.background.changed).toBe(0); expect(results.firstBackground.changed).toBe(0); expect(results.hiddenBackground).toBe(0) })
   it('揭示完成且落定时描边发光零像素差，动画期间相邻字填色内部零污染', () => { expect(results.fillDamage).toBe(0); expect(results.overlap.maximum).toBe(0) })
   it('斜体负字距隐藏邻字后无串像素', () => expect(results.italic.changed).toBe(0))
-  it('1× 静止逐字的边缘能量与静态相等，无额外模糊', () => { expect(results.sharpness.static).toBeGreaterThan(0); expect(results.sharpness.graphemes / results.sharpness.static).toBe(1) })
+  it('1× 逐字落定的边缘能量无跳变', () => { expect(results.sharpness.static).toBeGreaterThan(0); expect(results.sharpness.graphemes / results.sharpness.static).toBe(1) })
+  it('作者录制重放的运动栅格与非整数缩放下，最后字素落定不改变抗锯齿', () => {
+    expect(results.settling).toHaveLength(6)
+    for (const sample of results.settling) expect(sample.difference.changed, JSON.stringify(sample)).toBe(0)
+  })
   it.each([['outside', true], ['inside', true], ['center', true], ['inside', false], ['center', false]] as const)('非默认透明度的 %s 描边保留整段外观顺序，填色=%s', (position, fill) => {
     const row = results.strokeLayers.find(row => row.position === position && row.fill === fill)!
     expect(row.strokePixels).toBeGreaterThan(0)

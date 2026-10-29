@@ -24,6 +24,13 @@ it('未登记的库、子路径与越出登记目录的路径都不解析', () =
   expect(authorLibraryImportTable(undefined, 5).directories).toContainEqual(['three/addons/', 'henji-media://author-lib/three/0.186.1/examples/jsm/'])
 })
 
+it('新代码选择兼容最新版，历史默认与显式冻结版本保持独立', () => {
+  expect(latestAuthorLibraryVersions(6)['henji-layout']).toBe('1.2.0')
+  expect(latestAuthorLibraryVersions(5)['henji-layout']).toBeUndefined()
+  expect(resolveAuthorLibraryModule('henji-layout/text')?.version).toBe('1.0.0')
+  expect(resolveAuthorLibraryModule('henji-layout/text', { 'henji-layout': '1.1.0' })?.version).toBe('1.1.0')
+})
+
 describe('追加新版本与改默认版本', () => {
   // 模拟以后随包加入 three 新版本并把新代码的默认版本改过去。
   const three = AUTHOR_LIBRARIES.three as Record<string, AuthorLibraryRelease>

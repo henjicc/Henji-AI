@@ -46,6 +46,8 @@ fps = `video_edit.sequence.frame_rate` 的 numerator ÷ denominator。新插入�
 
 源码版本不可原地改写。要改已经在用的源码：
 
+新版本创建在剪辑文档下（parentRef 为 documentRef），不能挂在旧版本或代码素材下面；文件改完后还须创建版本并改绑片段，已有引用才会使用新代码。
+
 1. 在剪辑下 `create_items`，`entityType` 为 `video_edit.code_version`，属性 `video_edit.code_version.source`（新源码）和 `video_edit.code_version.definition_id`（`video_edit.code_material` 引用 id 冒号后的部分）。应用会检查并试渲染；与已有版本完全相同的源码会被拒绝。
 2. 拿到新版本返回的引用后，另一次事务把 `video_edit.clip.code_version_id`（或 `video_edit.effect.version_id`）设为该引用 id 冒号后的版本部分，并一起写入符合新声明的参数和关键帧。新版本不会自动替换实例；先列举/检查同定义调用方，只替换本次授权的实例。
 

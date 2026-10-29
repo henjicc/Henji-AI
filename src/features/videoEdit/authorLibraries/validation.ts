@@ -17,8 +17,8 @@ const flexStyleShape = {
   flexGrow: nonnegative.optional(), flexShrink: nonnegative.optional(), flexBasis: automaticLength.optional(),
   gap: nonnegative.optional(), rowGap: nonnegative.optional(), columnGap: nonnegative.optional(),
   padding: edges(nonnegative).optional(), margin: edges(finite).optional(),
-  alignItems: z.enum(['start', 'flex-start', 'center', 'end', 'flex-end', 'stretch']).optional(),
-  alignSelf: z.enum(['auto', 'start', 'flex-start', 'center', 'end', 'flex-end', 'stretch']).optional(),
+  alignItems: z.enum(['start', 'flex-start', 'center', 'end', 'flex-end', 'stretch', 'baseline']).optional(),
+  alignSelf: z.enum(['auto', 'start', 'flex-start', 'center', 'end', 'flex-end', 'stretch', 'baseline']).optional(),
   justifyContent: z.enum(['start', 'flex-start', 'center', 'end', 'flex-end', 'space-between', 'space-around', 'space-evenly']).optional(),
 }
 const flexStyleSchema = z.object(flexStyleShape).strict() satisfies z.ZodType<FlexStyle>

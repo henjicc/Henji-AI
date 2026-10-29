@@ -101,7 +101,7 @@ it.each<TextOptions>([{ maxWidth: 0 }, { wrapWidth: 0 }, { box: { width: 0 } }])
 
 it.each([
   [{ flexDirection: 'horizontal' }, 'row、column'],
-  [{ alignSelf: 'baseline' }, '可用值'],
+  [{ alignSelf: 'first-baseline' }, '可用值'],
   [{ position: 'absolute' }, '未知字段：position'],
   [{ gap: -5 }, '有限非负数'],
   [{ width: 'abc' }, '非负百分比'],
@@ -116,9 +116,9 @@ it.each([
 })
 
 it('常见 CSS 对齐写法遵循 flex-end 与 space-between 语义，负 margin 合法', () => {
-  const boxes = layoutBoxes({ id: 'root', style: { justifyContent: 'flex-end', alignItems: 'flex-end' }, children: [{ id: 'child', style: { width: 20, height: 10, margin: -2 } }] }, { width: 100, height: 50 })
+  const boxes = layoutBoxes({ id: 'root', style: { width: '100%', height: '100%', justifyContent: 'flex-end', alignItems: 'flex-end' }, children: [{ id: 'child', style: { width: 20, height: 10, margin: -2 } }] }, { width: 100, height: 50 })
   expect(boxes.child).toMatchObject({ x: 82, y: 42 })
-  const spaced = layoutBoxes({ id: 'root', style: { justifyContent: 'space-between' }, children: [{ id: 'a', style: { width: 20 } }, { id: 'b', style: { width: 20 } }] }, { width: 100, height: 50 })
+  const spaced = layoutBoxes({ id: 'root', style: { width: '100%', height: '100%', justifyContent: 'space-between' }, children: [{ id: 'a', style: { width: 20 } }, { id: 'b', style: { width: 20 } }] }, { width: 100, height: 50 })
   expect(spaced.b.x).toBe(80)
 })
 

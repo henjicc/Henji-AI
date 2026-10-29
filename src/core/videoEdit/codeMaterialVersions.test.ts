@@ -22,7 +22,12 @@ describe('作者接口与内置库版本保持一致', () => {
   it('逐库解析明确、继承、历史缺省和新增导入；无记录旧源码原样保存复用', async () => {
     const text = 'import "henji-layout/text";' + source()
     const created = await makeCodeMaterialDefinition(text, compile, publication)
-    expect(created.definition.versions[0].libraries).toEqual({ 'henji-layout': '1.1.0' })
+    expect(created.definition.versions[0].libraries).toEqual({ 'henji-layout': '1.2.0' })
+    const frozen = structuredClone(created.definition)
+    frozen.versions[0].libraries = { 'henji-layout': '1.1.0' }
+    const preserved = await appendCodeMaterialVersion(frozen, text, compile, documentCodeSourceResolver(), publication)
+    expect(preserved.versionId).toBe(frozen.defaultVersionId)
+    expect(preserved.program.bundle.libraries).toEqual({ 'henji-layout': '1.1.0' })
     const old = structuredClone(created.definition); delete old.versions[0].libraries
     const saved = await appendCodeMaterialVersion(old, text, compile, documentCodeSourceResolver(), publication)
     expect(saved.versionId).toBe(old.defaultVersionId)
@@ -34,7 +39,7 @@ describe('作者接口与内置库版本保持一致', () => {
     expect(upgraded.definition.versions.at(-1)?.libraries).toEqual({ 'henji-layout': '1.1.0' })
     const three = await makeCodeMaterialDefinition('import "three";' + source(), compile, publication)
     const added = await appendCodeMaterialVersion(three.definition, 'import "three";' + text, compile, documentCodeSourceResolver(), publication)
-    expect(added.definition.versions.at(-1)?.libraries).toEqual({ three: '0.186.1', 'henji-layout': '1.1.0' })
+    expect(added.definition.versions.at(-1)?.libraries).toEqual({ three: '0.186.1', 'henji-layout': '1.2.0' })
     const unchanged = await appendCodeMaterialVersion(three.definition, 'import "three";' + source(), compile, documentCodeSourceResolver(), publication)
     expect(unchanged.versionId).toBe(three.definition.defaultVersionId)
   })

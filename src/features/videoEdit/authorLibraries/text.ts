@@ -19,7 +19,7 @@ export interface GraphemePose { x?: number; y?: number; scale?: number; rotate?:
  * graphemes 为前 N 个字素、索引集合或逐字动画回调（null 表示隐藏）。
  * 字素模式独立栅格化字素簇，会失去字素之间的连写与字距塑形；整段静态绘制保留原生塑形。
  * 先画整段底板，再画所有字素的阴影/外描边、填色及其内/居中描边，最后画整段装饰线；上下层共用姿态。
- * 图集最低 2×（纹理尺寸超限仍会降档）；默认姿态全部落定时复用静态整段位图。
+ * 图集最低 2×（纹理尺寸超限仍会降档）；有 graphemes 的调用全程使用图集，落定时不切换抗锯齿路径。
  * 回调针对实际排出的字素；截断遗漏仍属于整段布局事实，不需要为遗漏字符构造动画。
  */
 export interface TextDrawOptions {
@@ -167,10 +167,11 @@ export function drawText(context: OffscreenCanvasRenderingContext2D, layout: Tex
   const complete = !poses || poses.every(Boolean)
   const blockOpacity = options.backgroundAndDecorationOpacity ?? (poses && !poses.some(Boolean) ? 0 : 1)
   if (!Number.isFinite(blockOpacity) || blockOpacity < 0 || blockOpacity > 1) throw new Error('backgroundAndDecorationOpacity 必须在 0..1 之间。')
-  // 回到默认姿态后直接复用整段位图，保留原生塑形、外观叠放和 1× 抗锯齿的精确结果。
-  const resting = complete && blockOpacity === 1 && poses?.every(pose => pose && !(pose.x ?? 0) && !(pose.y ?? 0) && (pose.scale ?? 1) === 1 && !(pose.rotate ?? 0) && (pose.opacity ?? 1) === 1)
-  if (poses && !resting && !state.atlas) state.atlas = createGraphemeAtlas(plan, canvasTextPlanMeasure(measurement!))
-  const atlas = poses && !resting ? state.atlas : undefined
+  // 逐字与整段路径的塑形、对齐和分辨率不同；揭示落定仍沿用图集，避免一次性改变所有字的边缘。
+  if (poses && !state.atlas) state.atlas = createGraphemeAtlas(plan, canvasTextPlanMeasure(measurement!))
+  const atlas = poses ? state.atlas : undefined
+  const settled = !!poses && complete && poses.every(pose => pose && !(pose.x ?? 0) && !(pose.y ?? 0) && (pose.scale ?? 1) === 1 && !(pose.rotate ?? 0) && Math.min(1, pose.opacity ?? 1) === 1)
+  let settledInk: TextDrawFact['inkBounds'] = null
   const rasterContext = context as OffscreenCanvasRenderingContext2D & TextRasterProvider
   const bounds = atlas ?? plan.rasterBounds
   if (bounds.width && bounds.height && (!poses || poses.some(Boolean) || blockOpacity > 0)) {
@@ -192,20 +193,35 @@ export function drawText(context: OffscreenCanvasRenderingContext2D, layout: Tex
         context.save(); context.globalAlpha *= blockOpacity; drawCell(cell); context.restore()
       }
       drawBlock(atlas.background)
+      const placed = atlas.glyphs.map((glyph, i) => {
+        const g = plan.graphemes[i]
+        let x = g.x!, y = g.baseline
+        // 在最终设备坐标取整，再施加作者位移；墨迹证据与实际绘制共用这份定位。
+        const determinant = a * d - b * c
+        if (Math.abs(determinant) > 1e-12) {
+          const left = x + glyph.fill.offsetX, top = y + glyph.fill.offsetY
+          const px = a * left + c * top + e, py = b * left + d * top + f
+          const dx = Math.round(px) - px, dy = Math.round(py) - py
+          x += (d * dx - c * dy) / determinant; y += (a * dy - b * dx) / determinant
+        }
+        return { glyph, x, y }
+      })
+      if (settled) {
+        const include = (rect: NonNullable<TextDrawFact['inkBounds']>): void => {
+          if (!settledInk) { settledInk = rect; return }
+          const x = Math.min(settledInk.x, rect.x), y = Math.min(settledInk.y, rect.y)
+          settledInk = { x, y, width: Math.max(settledInk.x + settledInk.width, rect.x + rect.width) - x, height: Math.max(settledInk.y + settledInk.height, rect.y + rect.height) - y }
+        }
+        for (const { glyph, x, y } of placed) {
+          const ink = glyph.fill.plan.inkBounds, bounds = glyph.fill.plan.rasterBounds
+          if (ink) include({ ...ink, x: x + glyph.fill.offsetX + ink.x - bounds.x, y: y + glyph.fill.offsetY + ink.y - bounds.y })
+        }
+        if (blockOpacity > 0) for (const batch of plan.batches) for (const row of batch.rows) if (row.underline) include(row.underline)
+      }
       for (const part of ['underlay', 'fill'] as const) {
-        for (const [i, glyph] of atlas.glyphs.entries()) {
+        for (const [i, { glyph, x, y }] of placed.entries()) {
           const pose = poses[i]
           if (!pose) continue
-          const g = plan.graphemes[i]
-          let x = g.x!, y = g.baseline
-          // 在最终设备坐标取整，再施加作者位移；缩放、旋转及图层合成都使用同一物理矩阵。
-          const determinant = a * d - b * c
-          if (Math.abs(determinant) > 1e-12) {
-            const left = x + glyph.fill.offsetX, top = y + glyph.fill.offsetY
-            const px = a * left + c * top + e, py = b * left + d * top + f
-            const dx = Math.round(px) - px, dy = Math.round(py) - py
-            x += (d * dx - c * dy) / determinant; y += (a * dy - b * dx) / determinant
-          }
           context.save()
           context.globalAlpha *= Math.min(1, pose.opacity ?? 1)
           context.translate(x + (pose.x ?? 0), y + (pose.y ?? 0))
@@ -225,7 +241,7 @@ export function drawText(context: OffscreenCanvasRenderingContext2D, layout: Tex
     state.fact = { layoutId: state.id, sourceText, box, constraint: state.constraint, contentSize, visibleContentSize, inkBounds, appearanceBounds, boundsKind, overflow, truncated, omittedRanges, totalLines, fit, actualLines: plan.lines.length, bodyCoverage, paintKey: JSON.stringify([plan.style, plan.groups.map(group => group.style)]) }
   }
   // 全部行被截断或揭示尚未开始也要上报这次绘制，不能把它误当成未调用 drawText。
-  if (observe) observe({ ...state.fact!, revealComplete: complete, ...(atlas ? { animatedGraphemes: true } : {}) })
+  if (observe) observe({ ...state.fact!, revealComplete: complete, ...(atlas ? settled ? { inkBounds: settledInk, boundsKind: atlas.glyphs.every(glyph => glyph.fill.plan.boundsKind === 'measured') ? 'measured' : 'estimated' } : { animatedGraphemes: true } : {}) })
 }
 
 function raster(state: LayoutState, key: string, width: number, height: number, resolution: number, colorSpace: 'srgb' | 'display-p3', atlas?: GraphemeAtlas): ImageBitmap {

@@ -6,7 +6,7 @@
 
 ## 打字机与光标
 
-底板默认从首个字素出现时就整段显示，不逐字切成小底板；用 `backgroundAndDecorationOpacity`（0–1）单独控制整段底板与装饰线的显隐或淡入。阴影和外描边置于下层，填色后再画内描边与居中描边。打完后默认姿态直接使用静态整段位图；动画图集独立绘制字素簇，会失去字素之间的连写。
+底板默认从首个字素出现时就整段显示，不逐字切成小底板；用 `backgroundAndDecorationOpacity`（0–1）单独控制整段底板与装饰线的显隐或淡入。阴影和外描边置于下层，填色后再画内描边与居中描边。打完后仍沿用同一图集；动画图集独立绘制字素簇，会失去字素之间的连写。
 
 可见字数由时间直接求：`Math.floor(progress * n)`，n 是整句排版结果的字素数。整句用 `layoutText` 定下折行与光标位置，再用 `drawText(ctx, full, { graphemes: shown })` 显示前 shown 个字素，不重新排版前缀、不另排单字。同内容布局与字素图集跨帧复用，绘制事实保留整句约束和遗漏。光标放在最后一个已显示字素的 `x + advance`、所在行的 `y` 与 `height` 上；用矩形，不用字体里的方块符号。时间决定显隐，随机寻帧不会重打字。输入中常亮，结束后每秒 2 次闪烁。需要平滑错峰入场时用 recipes-text 的字素动画回调。
 
@@ -46,3 +46,42 @@ export default {
 左对齐随位数增长会挤单位：用 `layoutText` 的 `anchor` 把数字右锚（`horizontal: 1`），或先排终值、取它的 `box.width` 作固定盒宽（`box: { width }` 配 `align: "right"`），不让单位每帧随数宽抖动。数字选等宽字体。千分号、小数点、负号与单位分开排版时，按各自 `lines[0].alphabeticBaseline` 对齐字母基线（`baseline` 默认是中线，字号不同时对不齐）。
 
 停留帧复查目标值和单位；开始、位数跨越、最后一帧检查跳动；数字落定对齐说到该数据的配音重音。价格／人名／统计量不得用样例默认值替代用户事实。
+
+## 内容自适应的数据卡
+
+根只给宽度，高度随可见行数；同一行用 baseline 对齐不同字号。表格字段按名字索引，default 才是行数组。容器先整体滑入，文字随容器走。
+
+```ts
+import { drawText } from "henji-layout/text"
+import { layoutBoxes } from "henji-layout/flex"
+const clamp01 = v => Math.min(1, Math.max(0, v))
+export default {
+  name: "基线数据卡", kind: "generator", mode: "dynamic", width: 1920, height: 1080,
+  params: [{ key: "rows", type: "table", title: "数据", rowKey: "id", fields: {
+    id: { type: "text", title: "标识", default: "row", maxLength: 40 },
+    label: { type: "text", title: "标签", default: "指标", maxLength: 80 },
+    value: { type: "text", title: "数值", default: "0", maxLength: 20 },
+    unit: { type: "text", title: "单位", default: "%", maxLength: 12 }
+  }, default: [{ id: "accuracy", label: "识别准确率", value: "98.6", unit: "%" }] }],
+  layers(params, width, height) {
+    const text = (content, fontSize) => ({ content, style: { fontSize, align: "left" as const, fill: { color: "#f2f3f5" } }, options: { maxLines: 1 } })
+    const boxes = layoutBoxes({ id: "card", style: { width: 960, padding: 48, gap: 28, flexDirection: "column" }, children: params.rows.map(row => ({
+      id: row.id, style: { alignItems: "baseline" as const, gap: 24 }, children: [
+        { id: row.id + "-label", style: { flexGrow: 1 }, text: text(row.label, 36) },
+        { id: row.id + "-value", style: { width: 200 }, text: text(row.value, 72) },
+        { id: row.id + "-unit", style: { width: 100 }, text: text(row.unit, 36) }
+      ]
+    })) }, { width, height })
+    const card = boxes.card
+    return [{ id: "card", bounds: [0, 0, card.width, card.height],
+      pose: t => ({ x: (width - card.width) / 2, y: (height - card.height) / 2 + (1 - clamp01(t / .7)) ** 3 * 96 }),
+      draw(ctx) {
+        ctx.fillStyle = "#17191d"; ctx.beginPath(); ctx.roundRect(0, 0, card.width, card.height, 20); ctx.fill()
+        for (const box of Object.values(boxes)) if (box.text) {
+          ctx.save(); ctx.translate(box.contentBox.x, box.contentBox.y); drawText(ctx, box.text); ctx.restore()
+        }
+      }
+    }]
+  }
+}
+```

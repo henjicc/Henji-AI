@@ -67,6 +67,12 @@ export const AUTHOR_LIBRARIES: Readonly<Record<string, Readonly<Record<string, A
       modules: { 'henji-layout/text': 'text.mjs', 'henji-layout/flex': 'flex.mjs' },
       types: { mount: 'henji-layout', license: 'Apache-2.0', source: 'frozen' },
     },
+    '1.2.0': {
+      license: 'Apache-2.0', minApiVersion: 6,
+      frozen: 'resources/video-edit-author/frozen/henji-layout/1.2.0',
+      modules: { 'henji-layout/text': 'text.mjs', 'henji-layout/flex': 'flex.mjs' },
+      types: { mount: 'henji-layout', license: 'Apache-2.0', source: 'frozen' },
+    },
   },
 }
 

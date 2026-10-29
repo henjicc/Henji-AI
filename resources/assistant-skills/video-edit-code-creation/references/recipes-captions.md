@@ -58,7 +58,7 @@ export default {
     const rows = [{ id: "name", text: { content: params.name, style: params.nameStyle } }]
     if (params.role !== "") rows.push({ id: "role", text: { content: params.role, style: params.roleStyle } })
     const boxes = layoutBoxes({
-      id: "root", style: { flexDirection: "column", justifyContent: "end", alignItems: "start", padding: { left: width * .06, bottom: height * .22 } },
+      id: "root", style: { width: "100%", height: "100%", flexDirection: "column", justifyContent: "end", alignItems: "start", padding: { left: width * .06, bottom: height * .22 } },
       children: [{ id: "card", style: { flexDirection: "column", gap: s * .3, padding: { left: pad, right: pad, top: pad * .5, bottom: pad * .5 }, maxWidth: width * .72 }, children: rows }]
     }, { width, height })
     const card = boxes.card

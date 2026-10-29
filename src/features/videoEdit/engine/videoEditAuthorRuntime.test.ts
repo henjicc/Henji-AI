@@ -15,6 +15,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { VideoEditAuthorRuntime } from './videoEditAuthorRuntime'
 import { drawText, layoutText } from '../authorLibraries/text'
+import { layoutBoxes, ready as flexReady } from '../authorLibraries/flex'
 const { layerDraw } = vi.hoisted(() => ({ layerDraw: vi.fn() }))
 
 vi.mock('./videoEditAuthorGpu', () => ({ VideoEditAuthorGpu: class {
@@ -306,10 +307,12 @@ it('layers 每帧排版的独立字素动画只栅格一次，重放沿用同一
   const { device, calls, text } = canvasHarness()
   const runtime = new VideoEditAuthorRuntime(device, { name: '字素动画', layers() {
     const layout = layoutText('甲乙丙', { fontSize: 20 })
-    return [{ id: 'title', draw(ctx, time) { drawText(ctx, layout, { graphemes: (_g, i) => ({ y: (1 - time) * i, opacity: .5 + time }) }) } }]
+    return [{ id: 'title', draw(ctx, time) { drawText(ctx, layout, { graphemes: (_g, i) => ({ y: Math.max(0, 1 - time) * i, opacity: Math.min(1, .5 + time) }) }) } }]
   } })
   try {
     for (let frame = 0; frame < 10; frame++) await runtime.render(output, 100, 50, {}, {}, frameInfo(frame))
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(60))
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(61))
     expect(text(0, '甲')).toBe(1); expect(text(0, '乙')).toBe(1); expect(text(0, '丙')).toBe(1)
     const images = calls.filter(call => call.name === 'drawImage' && call.args[0] instanceof ImageBitmap)
     expect(images.length).toBeGreaterThan(3)
@@ -479,6 +482,23 @@ it('未绘制的整段布局向查询传递身份，不在每帧生成警告；�
   const blank = new VideoEditAuthorRuntime(device, { name: '背景', layers: () => [{ id: 'background', draw(ctx) { ctx.fillRect(0, 0, 10, 10) } }] })
   try { await blank.render(output, 100, 50, {}, {}, frameInfo(0)); expect(blank.observeElements()[0].textUncovered).toEqual([]) } finally { await blank.dispose() }
 })
+
+it('flex 测量与基线参考计划不混入作者运行时的待绘制集合', async () => {
+  await flexReady
+  const { device } = canvasHarness()
+  const runtime = new VideoEditAuthorRuntime(device, { name: '数据卡', layers() {
+    const boxes = layoutBoxes({ id: 'card', style: { width: 80, padding: 4, alignItems: 'baseline' }, children: [{ id: 'title', text: { content: '中文标题\n第二行', style: { fontSize: 20 }, options: { maxLines: 1 } } }] }, { width: 100, height: 50 })
+    return [{ id: 'title', draw(ctx) { drawText(ctx, boxes.title.text!) } }]
+  } })
+  try {
+    for (let frame = 0; frame < 2; frame++) {
+      await runtime.render(output, 100, 50, {}, {}, frameInfo(frame))
+      const element = runtime.observeElements()[0]
+      expect(new Set([...element.textLayouts ?? [], ...element.unassignedTextLayouts ?? []])).toEqual(new Set(element.textDraws?.map(draw => draw.layoutId)))
+      expect(element.textDraws?.[0].truncated).toBe(true)
+    }
+  } finally { await runtime.dispose() }
+})
 it('save/restore 不成对导致合并时，排版事实仍归到正确图层并沿用', async () => {
   const { device } = canvasHarness()
   const runtime = new VideoEditAuthorRuntime(device, { name: '合并文字', layers: () => [
@@ -518,8 +538,8 @@ it('新建源码版本显式固定新版库，经冻结模块实际绘制后复�
   const publication = { imports: [], async write(id: string, _name: string, files: import('@/core/videoEdit/codeMaterial/sources').CodeMaterialFiles) { return { folder: id, files: (await addressCodeMaterialFiles(files)).files } } }
   const { definition, program } = await makeCodeMaterialDefinition(source, compile, publication)
   const version = definition.versions[0]
-  expect(version.libraries?.['henji-layout']).toBe('1.1.0')
-  expect(program.bundle.libraries?.['henji-layout']).toBe('1.1.0')
+  expect(version.libraries?.['henji-layout']).toBe('1.2.0')
+  expect(program.bundle.libraries?.['henji-layout']).toBe('1.2.0')
   const runtime = new VideoEditAuthorRuntime(device, effect!, undefined, true, version.apiVersion)
   const document = createVideoEditDocument('新建源码复核'), sequence = createVideoEditSequence('主')
   sequence.width = 100; sequence.height = 50; addLegacyVideoEditTracks(sequence); document.sequences = [sequence]; document.codeMaterials = [definition]

@@ -78,7 +78,7 @@ layers(params, width, height, assets, info) => Layer[]
 
 draw 里的坐标始终是画布像素，`setTransform`、`resetTransform`、`getTransform` 也一样（运动层的栅格缩放由宿主叠上）。渐变、图案对象（含图案的 `setTransform`）可以缓存到模块变量跨帧复用；预先画好、反复贴的图块缓存成 `transferToImageBitmap()` 得到的 ImageBitmap，不要缓存 OffscreenCanvas。
 
-`layoutText` 按内容、样式、选项与字体代次复用只读布局，可在 `layers()` 中调用。逐字入场用一次 `drawText(ctx, layout, { graphemes: (g, i) => ({ opacity, x, y, scale, rotate }) })`，null 隐藏。图集下层为发光/外描边，上层为填色及内/居中描边；底板和装饰线保持整段，默认首字可见就显示，可传 `backgroundAndDecorationOpacity` 控制。动画参数不重画图集；字素间连写会丢失，全部默认姿态时复用静态位图。Canvas、pose 和字素缩放自动选分辨率（图集最低 2×，尺寸超限降档）；每布局最多 4 张位图。各字素透明度大于 0 后复核超框与遗漏。详见 author-text-motion。
+`layoutText` 按内容、样式、选项与字体代次复用只读布局，可在 `layers()` 中调用。逐字用一次 `drawText` 的 `graphemes` 回调返回位移与透明度，null 隐藏。图集全程沿用，落定不换路径；底板和装饰线保持整段，用 `backgroundAndDecorationOpacity` 控制。分层、连写、档位和 flex 内容尺寸、截断、基线规则见 author-text-motion；表格字段对象与数据卡见 recipes-text-data。
 
 ```ts
 import { layoutText, drawText } from "henji-layout/text"

@@ -9,7 +9,7 @@ import { runAuthorDeterministic } from '../engine/videoEditAuthorDeterminism'
 import { drawText, layoutText, type RichTextContent } from './text'
 import { layoutBoxes, ready, type FlexNode } from './flex'
 import { recordAuthorCanvas, replayAuthorCanvas } from '../engine/videoEditAuthorCanvasRecorder'
-import type { TextRasterProvider } from '../../../core/videoEdit/textDrawObservation'
+import { observeTextLayouts, textRectCorners, type TextRasterProvider } from '../../../core/videoEdit/textDrawObservation'
 import { videoEditTextOverflowFacts } from '../../../core/videoEdit/textOverflowReview'
 
 beforeAll(async () => { await ready })
@@ -90,7 +90,7 @@ it('富文本校验保留共享 run 样式的连写身份，结果与文字工�
 })
 
 it('Yoga 行列、gap、padding 和对齐返回全树坐标', () => {
-  const boxes = layoutBoxes({ id: 'root', style: { padding: 10, gap: 8, alignItems: 'center' }, children: [{ id: 'a', style: { width: 40, height: 20 } }, { id: 'b', style: { flexGrow: 1, height: 60, flexDirection: 'column', gap: 4, padding: 5 }, children: [{ id: 'c', style: { height: 10 } }, { id: 'd', style: { flexGrow: 1 } }] }] }, { width: 200, height: 100 })
+  const boxes = layoutBoxes({ id: 'root', style: { width: '100%', height: '100%', padding: 10, gap: 8, alignItems: 'center' }, children: [{ id: 'a', style: { width: 40, height: 20 } }, { id: 'b', style: { flexGrow: 1, height: 60, flexDirection: 'column', gap: 4, padding: 5 }, children: [{ id: 'c', style: { height: 10 } }, { id: 'd', style: { flexGrow: 1 } }] }] }, { width: 200, height: 100 })
   expect(boxes.a).toMatchObject({ x: 10, y: 40, width: 40, height: 20 })
   expect(boxes.b).toMatchObject({ x: 58, y: 20, width: 132, height: 60 })
   expect(boxes.c).toMatchObject({ x: 63, y: 25, width: 122, height: 10 })
@@ -124,6 +124,72 @@ it('零内容框保留遗漏与超框事实', () => {
   const collapsed = layoutBoxes({ id: 'root', children: [{ id: 'title', style: { width: 20, height: 20, padding: 10 }, text }] }, { width: 100, height: 100 })
   expect(collapsed.title.contentBox).toMatchObject({ width: 0, height: 0 })
   expect(collapsed.title.text).toMatchObject({ truncated: true, lines: [], overflow: { full: { width: true, height: true } } })
+})
+
+it('根未声明尺寸时按内容收缩，显式百分比根才铺满画幅', () => {
+  fixtureCanvas()
+  const children = [{ id: 'child', style: { width: 80, height: 30 } }]
+  const natural = layoutBoxes({ id: 'root', style: { padding: 10 }, children }, { width: 640, height: 360 })
+  expect(natural.root).toMatchObject({ width: 100, height: 50 })
+  const full = layoutBoxes({ id: 'root', style: { width: '100%', height: '100%', padding: 10 }, children }, { width: 640, height: 360 })
+  expect(full.root).toMatchObject({ width: 640, height: 360 })
+})
+
+it('maxLines 测量仅占实际显示高度，最终布局仍报告完整行数和遗漏', () => {
+  fixtureCanvas()
+  const boxes = layoutBoxes({ id: 'card', style: { width: 60, padding: 5, flexDirection: 'column' }, children: [{ id: 'title', text: { content: '中文标题中文标题', style: { fontSize: 20 }, options: { maxLines: 1 } } }] }, { width: 300, height: 300 })
+  const title = boxes.title.text!
+  expect(title.totalLines).toBeGreaterThan(1)
+  expect(title.lines).toHaveLength(1)
+  expect(title.truncated).toBe(true)
+  expect(title.omittedRanges.length).toBeGreaterThan(0)
+  expect(boxes.title.height).toBeCloseTo(title.visibleContentSize.height)
+  expect(boxes.card.height).toBeCloseTo(boxes.title.height + 10)
+})
+
+it('flex 的中间测量布局不进入待绘制集合，最终布局与实际绘制一一对应', () => {
+  const { Canvas } = fixtureCanvas(), observed = new Set<string>()
+  const boxes = observeTextLayouts(id => observed.add(id), () => layoutBoxes({ id: 'card', style: { width: 75, padding: 8 }, children: [{ id: 'title', text: { content: '中文标题中文标题', style: { fontSize: 20 }, options: { maxLines: 1 } } }] }, { width: 300, height: 200 }))
+  const context = new Canvas(300, 200).getContext(); context.reset = vi.fn()
+  const recording = recordAuthorCanvas({ width: 300, height: 200 }, context, [1, 0, 0, 1, 0, 0], ctx => drawText(ctx, boxes.title.text!))
+  expect([...observed]).toEqual(recording.textDraws.map(draw => draw.layoutId))
+})
+
+it.each([false, true])('基线由首行字母基线提供，大小字号与嵌套容器对齐：nested=%s', nested => {
+  fixtureCanvas()
+  const value: FlexNode = { id: 'value', text: { content: '98.6', style: { fontSize: 80 } } }
+  const boxes = layoutBoxes({ id: 'row', style: { alignItems: 'baseline', padding: 7, gap: 12 }, children: [
+    { id: 'label', text: { content: '准确率\n说明', style: { fontSize: 20 } } },
+    nested ? { id: 'valueBox', style: { padding: 4 }, children: [value] } : value,
+    { id: 'unit', text: { content: '%', style: { fontSize: 32, leading: 55 } } },
+  ] }, { width: 640, height: 360 })
+  const baseline = (id: string) => boxes[id].contentBox.y + boxes[id].text!.lines[0].alphabeticBaseline
+  expect(baseline('label')).toBeCloseTo(baseline('value'), 4)
+  expect(baseline('unit')).toBeCloseTo(baseline('value'), 4)
+  expect(Object.keys(boxes).length).toBe(nested ? 5 : 4)
+})
+
+it('alignSelf baseline 与受限换行、maxLines 共用最终基线，观察集合只有最终布局', () => {
+  fixtureCanvas()
+  const observed = new Set<string>()
+  const boxes = observeTextLayouts(id => observed.add(id), () => layoutBoxes({ id: 'row', style: { width: 220, alignItems: 'start', gap: 10 }, children: [
+    { id: 'label', style: { width: 60, alignSelf: 'baseline' }, text: { content: '很长的标签文字', style: { fontSize: 20 }, options: { maxLines: 1 } } },
+    { id: 'value', style: { alignSelf: 'baseline' }, text: { content: '98.6', style: { fontSize: 60 } } },
+  ] }, { width: 640, height: 360 }))
+  expect(boxes.label.text!.truncated).toBe(true)
+  expect(boxes.label.text!.lines).toHaveLength(1)
+  expect(boxes.label.contentBox.y + boxes.label.text!.lines[0].alphabeticBaseline).toBeCloseTo(boxes.value.contentBox.y + boxes.value.text!.lines[0].alphabeticBaseline, 4)
+  expect(observed.size).toBe(2)
+})
+
+it.each([-30, 30])('基线偏移 %s 越过行框时，参考节点不改变文字高度或反馈移动基线', baselineShift => {
+  fixtureCanvas()
+  const boxes = layoutBoxes({ id: 'row', style: { alignItems: 'baseline' }, children: [
+    { id: 'label', text: { content: 'A', style: { fontSize: 20, baselineShift } } },
+    { id: 'value', text: { content: 'B', style: { fontSize: 80 } } },
+  ] }, { width: 640, height: 360 })
+  expect(boxes.label.height).toBeCloseTo(boxes.label.text!.visibleContentSize.height, 4)
+  expect(boxes.label.contentBox.y + boxes.label.text!.lines[0].alphabeticBaseline).toBeCloseTo(boxes.value.contentBox.y + boxes.value.text!.lines[0].alphabeticBaseline, 4)
 })
 
 it('只有实际 drawText 才向录制通道送事实，并关联当次矩阵、矩形 clip、未知路径及空绘制截断', () => {
@@ -245,6 +311,20 @@ it('同帧底稿、字素揭示和两档分辨率共存，超过四档才关闭�
   expect(close).not.toHaveBeenCalled()
   drawText(ctx, layout, { graphemes: () => ({ opacity: .5 }) })
   expect(close).toHaveBeenCalledOnce(); expect(transfer).toHaveBeenCalledTimes(5)
+})
+
+it('落定图集以独立字素实际墨迹恢复裁切复核，运动期间仍说明未覆盖', () => {
+  const { Canvas } = fixtureCanvas(), context = new Canvas(100, 100).getContext()
+  context.reset = vi.fn()
+  const layout = layoutText('AVf', { fontSize: 20, fauxItalic: true }, { anchor: { x: 85.3, y: 20.2, horizontal: 0, vertical: 0 } })
+  const record = (moving: boolean) => recordAuthorCanvas({ width: 100, height: 100 }, context, [1, 0, 0, 1, 0, 0], ctx => drawText(ctx, layout, { graphemes: () => moving ? { x: .1 } : {} }))
+  const motion = record(true).textDraws[0], settled = record(false).textDraws[0]
+  expect(motion.animatedGraphemes).toBe(true)
+  expect(settled.animatedGraphemes).toBeUndefined()
+  expect(settled.uncovered).not.toContain('独立字素动画的墨迹裁切')
+  expect(settled.inkBounds).not.toEqual(layout.inkBounds)
+  const samples = Array.from({ length: 20 }, (_, frame) => ({ frame, drawIndex: 0, draw: settled, inkQuad: textRectCorners(settled.inkBounds!), effectiveClips: [], frameClips: [textRectCorners({ x: 0, y: 0, width: 100, height: 100 })], opacity: 1 }))
+  expect(videoEditTextOverflowFacts(samples, 30, { sequenceId: 's', path: [], subjectId: 'title', elementPath: ['title'] }).map(record => record.kind)).toEqual(['text_clipped'])
 })
 
 it('支持字体事件的宿主只读代次，增删和加载通知才失效', () => {
