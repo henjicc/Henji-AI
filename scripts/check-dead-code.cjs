@@ -2,6 +2,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const { spawnSync } = require('node:child_process')
+const { checkNaming } = require('./lib/codeNaming.cjs')
 
 const baselinePath = path.join(__dirname, 'dead-code-baseline.json')
 
@@ -55,13 +56,24 @@ if (require.main === module) {
   try {
     const root = path.resolve(__dirname, '..')
     const initialize = process.argv.indexOf('--initialize')
-    if (initialize !== -1) {
+    const initializeNaming = process.argv.indexOf('--initialize-naming')
+    if (initializeNaming !== -1) {
+      const reason = process.argv[initializeNaming + 1]?.trim()
+      if (!reason || reason.startsWith('--')) throw new Error('首次命名基线登记须提供理由')
+      const result = checkNaming(root, { initialize: reason })
+      for (const message of result.messages) console.log(message)
+      console.log(`命名基线已初始化：${result.naming.files.length} 文件 / ${result.naming.exports.length} 导出 / ${result.naming.comments.length} 注释指纹`)
+    } else if (initialize !== -1) {
       const reason = process.argv[initialize + 1]?.trim()
       if (!reason || fs.existsSync(baselinePath)) throw new Error('首次登记须提供理由，且不得覆盖已有基线')
       const current = runKnip(root)
       fs.writeFileSync(baselinePath, `${JSON.stringify({ version: 1, reason, files: current.files, dependencies: current.dependencies }, null, 2)}\n`)
       console.log(`登记基线: ${current.files.length} 文件 / ${current.dependencies.length} 依赖`)
     } else {
+      const naming = checkNaming(root, { write: process.argv.includes('--write') })
+      for (const message of naming.messages) console.log(message)
+      console.log(`命名检查：${naming.sourceCount} 源文件 / ${naming.exempt} 长期例外；存量 ${naming.naming.files.length} 文件 / ${naming.naming.exports.length} 导出 / ${naming.naming.comments.length} 注释指纹`)
+      if (naming.errors.length) throw new Error(naming.errors.join('\n'))
       const result = check(root, baselinePath, process.argv.includes('--write'))
       console.log(`Knip: ${result.files.length} 存量未使用文件 / ${result.dependencies.length} 存量未使用依赖；${result.exports} 导出/类型仅报告`)
       for (const diagnostic of result.diagnostics) console.log(diagnostic)

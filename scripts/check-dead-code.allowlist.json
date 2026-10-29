@@ -1,0 +1,245 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "category": "migration",
+      "file": "electron/main/services/ai-runtime/schema.ts",
+      "name": "createAiRuntimeTablesV1",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "migration",
+      "file": "electron/main/services/ai-runtime/schema.ts",
+      "name": "createGenerationSubmissionsTableV1",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "migration",
+      "file": "electron/main/services/ai-runtime/schema.ts",
+      "name": "createPendingTaskResultsTableV1",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "migration",
+      "file": "electron/main/services/application-runtime/operationStore.ts",
+      "name": "createApplicationOperationTablesV1",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "migration",
+      "file": "electron/main/services/application-runtime/operationStore.ts",
+      "name": "migrateApplicationReviewsV20",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "migration",
+      "file": "electron/main/services/asset-library/schema.ts",
+      "name": "createAssetLibraryTablesV1",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "migration",
+      "file": "electron/main/services/assistant/storageSchema.ts",
+      "name": "createAssistantMemoryTablesV1",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "migration",
+      "file": "electron/main/services/assistant/storageSchema.ts",
+      "name": "replaceAssistantMemoryTablesV22",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "migration",
+      "file": "electron/main/services/camera-stage-render-task-schema.ts",
+      "name": "createCameraStageRenderTaskTableV1",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "migration",
+      "file": "electron/main/services/custom-models-schema.ts",
+      "name": "createCustomModelsTableV1",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "migration",
+      "file": "electron/main/services/documents/index-schema.ts",
+      "name": "addDocumentIndexLastOpenedV1",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "migration",
+      "file": "electron/main/services/documents/index-schema.ts",
+      "name": "createDocumentIndexSchemaV1",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "migration",
+      "file": "electron/main/services/generation-history/schema.ts",
+      "name": "createGenerationHistoryTablesV1",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "format",
+      "file": "electron/main/services/image-editor-v3/brush-tile-codec.ts",
+      "name": "IMAGE_EDIT_BRUSH_TILE_CODEC_VERSION_V3",
+      "reason": "版本用于校验持久数据或跨线程协议兼容性，不能作为实现迭代名称删除"
+    },
+    {
+      "category": "migration",
+      "file": "electron/main/services/logging/traceSchema.ts",
+      "name": "createModelTraceTablesV1",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "migration",
+      "file": "electron/main/services/media-recycle/schema.ts",
+      "name": "createMediaRecycleTablesV21",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "migration",
+      "file": "electron/main/services/presets/schema.ts",
+      "name": "createPresetsTableV1",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "migration",
+      "file": "electron/main/services/settings/schema.ts",
+      "name": "createSettingsTableV1",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "migration",
+      "file": "electron/main/services/stored-locations-migration.ts",
+      "name": "upgradeStoredLocationsV1",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "interface",
+      "file": "packages/ai-sdk/src/types/runtime.ts",
+      "name": "StructuredGenerationBoundingBoxV1",
+      "reason": "SDK 对外结构化生成 DTO 的接口版本，公开契约保持不变"
+    },
+    {
+      "category": "interface",
+      "file": "packages/ai-sdk/src/types/runtime.ts",
+      "name": "StructuredGenerationLayerStackV1",
+      "reason": "SDK 对外结构化生成 DTO 的接口版本，公开契约保持不变"
+    },
+    {
+      "category": "interface",
+      "file": "packages/ai-sdk/src/types/runtime.ts",
+      "name": "StructuredGenerationLayerV1",
+      "reason": "SDK 对外结构化生成 DTO 的接口版本，公开契约保持不变"
+    },
+    {
+      "category": "format",
+      "file": "src/core/imageEdit/v3/commandHistoryCodec.ts",
+      "name": "IMAGE_EDIT_HISTORY_LEGACY_SNAPSHOT_VERSION_V3",
+      "reason": "版本用于校验持久数据或跨线程协议兼容性，不能作为实现迭代名称删除"
+    },
+    {
+      "category": "format",
+      "file": "src/core/imageEdit/v3/commandHistoryCodec.ts",
+      "name": "IMAGE_EDIT_HISTORY_SNAPSHOT_VERSION_V3",
+      "reason": "版本用于校验持久数据或跨线程协议兼容性，不能作为实现迭代名称删除"
+    },
+    {
+      "category": "format",
+      "file": "src/core/imageEdit/v3/documentTypes.ts",
+      "name": "IMAGE_EDIT_DOCUMENT_VERSION_V3",
+      "reason": "版本用于校验持久数据或跨线程协议兼容性，不能作为实现迭代名称删除"
+    },
+    {
+      "category": "format",
+      "file": "src/core/imageEdit/v3/historyPaging/schema.ts",
+      "name": "IMAGE_EDIT_HISTORY_CHECKPOINT_VERSION_V3",
+      "reason": "版本用于校验持久数据或跨线程协议兼容性，不能作为实现迭代名称删除"
+    },
+    {
+      "category": "migration",
+      "file": "src/core/imaging/adjustments/colorGradeMigration.ts",
+      "name": "COLOR_GRADE_V1_REMOVED_KEYS",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "migration",
+      "file": "src/core/imaging/adjustments/colorGradeMigration.ts",
+      "name": "migrateColorGradeParamsV1",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "migration",
+      "file": "src/core/videoEdit/colorGradeMigration.ts",
+      "name": "migrateEmbeddedVideoColorGradesV1",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "migration",
+      "file": "src/core/videoEdit/colorGradeMigration.ts",
+      "name": "migrateVideoColorGradeInstanceV1",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "migration",
+      "file": "src/features/canvas/imageEditV3/layerStackV1Adapter.test.ts",
+      "name": "layerStackV1Adapter.test.ts",
+      "reason": "读取图层包 V1 并投影到图片文档格式，名称标识迁移的源格式与目标格式"
+    },
+    {
+      "category": "migration",
+      "file": "src/features/canvas/imageEditV3/layerStackV1Adapter.ts",
+      "name": "ImportedLayerStackV1DocumentV3",
+      "reason": "读取图层包 V1 并投影到图片文档格式，名称标识迁移的源格式与目标格式"
+    },
+    {
+      "category": "migration",
+      "file": "src/features/canvas/imageEditV3/layerStackV1Adapter.ts",
+      "name": "importLayerStackV1AsImageEditDocumentV3",
+      "reason": "读取图层包 V1 并投影到图片文档格式，名称标识迁移的源格式与目标格式"
+    },
+    {
+      "category": "migration",
+      "file": "src/features/canvas/imageEditV3/layerStackV1Adapter.ts",
+      "name": "layerStackV1Adapter.ts",
+      "reason": "读取图层包 V1 并投影到图片文档格式，名称标识迁移的源格式与目标格式"
+    },
+    {
+      "category": "migration",
+      "file": "src/features/canvas/imageEditV3/layerStackV1Adapter.ts",
+      "name": "LayerStackV1ImportError",
+      "reason": "读取图层包 V1 并投影到图片文档格式，名称标识迁移的源格式与目标格式"
+    },
+    {
+      "category": "migration",
+      "file": "src/features/canvas/imageEditV3/layerStackV1Adapter.ts",
+      "name": "readLayerStackV1ImageEditorOption",
+      "reason": "读取图层包 V1 并投影到图片文档格式，名称标识迁移的源格式与目标格式"
+    },
+    {
+      "category": "migration",
+      "file": "src/features/canvas/imageEditV3/layerStackV1Adapter.ts",
+      "name": "serializeLayerStackV1ForImageEditor",
+      "reason": "读取图层包 V1 并投影到图片文档格式，名称标识迁移的源格式与目标格式"
+    },
+    {
+      "category": "interface",
+      "file": "src/features/imageEdit/v3/gpu/imageEditorGpuSceneProtocolV3.ts",
+      "name": "IMAGE_EDITOR_GPU_SCENE_PROTOCOL_VERSION_V3",
+      "reason": "版本用于校验持久数据或跨线程协议兼容性，不能作为实现迭代名称删除"
+    },
+    {
+      "category": "format",
+      "file": "tests/fixtures/persistence/code-component/v1.ts",
+      "name": "v1.ts",
+      "reason": "已发布格式的不可变源码黄金样本，文件名表示数据格式版本"
+    },
+    {
+      "category": "format",
+      "file": "tests/fixtures/persistence/code-version/v1.ts",
+      "name": "v1.ts",
+      "reason": "已发布格式的不可变源码黄金样本，文件名表示数据格式版本"
+    }
+  ]
+}

@@ -103,6 +103,8 @@ jobs:
         run: npm run lint:electron
 
       - name: 主进程导入与依赖图门禁
+        env:
+          HENJI_CODE_NAMING_BASE_REF: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || 'HEAD^' }}
         run: |
           npm run check:main-imports
           npm run check:renderer-output-names
