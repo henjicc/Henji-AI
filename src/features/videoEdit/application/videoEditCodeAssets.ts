@@ -1,4 +1,4 @@
-import { addMediaReferenceToLibrary } from '@/features/assets/services/assetCollectionService'
+import { addMediaReferenceToLibrary } from '@/features/assets'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { backupPersistenceSnapshot } from '@/core/persistence/backup'
 import { PersistenceError } from '@/core/persistence/migrations'

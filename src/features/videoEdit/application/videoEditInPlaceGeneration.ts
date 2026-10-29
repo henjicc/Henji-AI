@@ -307,7 +307,7 @@ async function referenceFiles(job: VideoEditInPlaceJob, references: VideoEditInP
   for (const reference of references) {
     const target = reference.role === 'specified_time' ? { kind: 'program' as const, sequenceId: reference.sequenceId, frame: reference.frame } : { kind: 'source' as const, itemId: reference.itemId, timeUs: reference.sourceTimeUs }
     const observed = await observeVideoEditFrame(job.projectId, target, 1920, signal)
-    paths.push(observed.asset.filePath)
+    paths.push(observed.image.filePath)
   }
   return paths
 }

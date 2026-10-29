@@ -269,6 +269,7 @@ it('效果源码候选只迁移指定稳定实例，并检查转场边界后单�
   expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history)
   expect(new Set(boundary.presentedFrames)).toEqual(new Set([90, 179, 85, 94]))
   commitVideoEditCodeCandidate(candidate)
+  expect(owner.document.codeMaterials!.find(value => value.versions.some(version => version.id === candidate.versionId))!.defaultVersionId).toBe(candidate.versionId)
   expect(owner.past).toHaveLength(history + 1)
   expect(readVideoEditCodeEditor(projectId, sequenceId, rightClipId, first).target.versionId).toBe(editor.target.versionId)
   expect(readVideoEditCodeEditor(projectId, sequenceId, rightClipId, second).target.versionId).toBe(candidate.versionId)
@@ -281,7 +282,7 @@ it('原创滤镜先完整试渲染后只发布源码定义，追加滤镜版本�
   expect(owner.document.items).toEqual([]); expect(owner.document.media).toEqual([]); expect(owner.past).toHaveLength(history + 1)
   const original = owner.document.codeMaterials![0]; expect(original.id).toBe(definitionId)
   const [versionId] = await createVideoEditCodeVersions(id, [{ definitionId, source: filterSource.replace('default:.5', 'default:.7') }])
-  expect(owner.document.codeMaterials![0].defaultVersionId).toBe(original.defaultVersionId)
+  expect(owner.document.codeMaterials![0].defaultVersionId).toBe(versionId)
   expect(owner.document.codeMaterials![0].versions).toHaveLength(2); expect(versionId).not.toBe(original.defaultVersionId)
   const stable = owner.document; const count = owner.past.length
   await expect(createVideoEditCodeVersions(id, [{ definitionId, source }])).rejects.toThrow('不能在同一定义中互换')
@@ -530,8 +531,13 @@ it('MCP只追加检查后的不可变版本，显式版本/参数/曲线事务�
     const created = await app.call('change_application_entities', { summary: '检查并保存新源码版本', changes: [{ kind: 'create_items', entityType: 'video_edit.code_version', parent, items: [{ properties: { 'video_edit.code_version.source': source.replace('max:1', 'max:2'), 'video_edit.code_version.definition_id': definition.id } }] }] }, read.revisions as Record<string, number>)
     expect(created, JSON.stringify(created)).toMatchObject({ ok: true })
     const version = owner.document.codeMaterials![0].versions[1].id
-    expect(owner.document.codeMaterials![0].defaultVersionId).toBe(definition.defaultVersionId); expect(getActiveVideoEditSequence(owner).clips[0].code!.versionId).toBe(clip.code!.versionId)
+    expect(owner.document.codeMaterials![0].defaultVersionId).toBe(version); expect(getActiveVideoEditSequence(owner).clips[0].code!.versionId).toBe(clip.code!.versionId)
     const curves = { amount: [{ id: 'public-curve', sourceInUs: 1001, sourceRemainder: { numerator: 1, denominator: 3 }, value: 1.5, interpolation: 'ease' }] }
+    const latest = await app.read(parent)
+    const kept = await app.call('change_application_entities', { summary: '保留当前默认版本', changes: [{ kind: 'create_items', entityType: 'video_edit.code_version', parent, items: [{ properties: { 'video_edit.code_version.source': source.replace('max:1', 'max:3'), 'video_edit.code_version.definition_id': definition.id, 'video_edit.code_version.is_default': false } }] }] }, latest.revisions as Record<string, number>)
+    expect(kept, JSON.stringify(kept)).toMatchObject({ ok: true })
+    expect(owner.document.codeMaterials![0].defaultVersionId).toBe(version)
+    forgetVideoEditCodeMetadata(owner, version); forgetVideoEditCodeMetadata(owner, clip.code!.versionId)
     const changed = await app.change(ref, { 'video_edit.clip.code_version_id': version, 'video_edit.clip.code_parameters': { amount: 1.2 }, 'video_edit.clip.code_curves': curves })
     expect(changed, JSON.stringify(changed)).toMatchObject({ ok: true })
     expect((await app.read(ref, ['video_edit.clip.code_version_id', 'video_edit.clip.code_curves'])).properties).toEqual({ 'video_edit.clip.code_version_id': version, 'video_edit.clip.code_curves': curves })
@@ -928,10 +934,10 @@ it('公共多文件创建与追加保留旧版本、哈希去重，保存清理�
     const {bytes}=collectionBoundary()
     await collectVideoEditCodeAsset(id,{kind:'definition',definitionId:definition.id},{path:'D:/t88-multi.henji-code'})
     const manifest=decodeCodeAsset(bytes.get('D:/t88-multi.henji-code')!)
-    expect(resolveCodeMaterialFiles(manifest.sourceVersion,documentCodeSourceResolver(manifest))).toEqual({entry:'main.ts',files})
+    expect(resolveCodeMaterialFiles(manifest.sourceVersion,documentCodeSourceResolver(manifest))).toEqual({entry:'main.ts',files:nextFiles})
     const imported=await createVideoEditCodeAssetInstance(id,importPublication(manifest))
     const importedVersion=reopened.document.codeMaterials!.find(value=>value.id===imported.definitionId)!.versions[0]
-    expect(resolveCodeMaterialFiles(importedVersion,documentCodeSourceResolver(reopened.document))).toEqual({entry:'main.ts',files})
+    expect(resolveCodeMaterialFiles(importedVersion,documentCodeSourceResolver(reopened.document))).toEqual({entry:'main.ts',files:nextFiles})
   } finally {app.dispose()}
 })
 

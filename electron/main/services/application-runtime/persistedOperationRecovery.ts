@@ -7,9 +7,45 @@ import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/ap
 import { capabilityVerificationEnvelope } from '../../../../src/core/application-control/capabilityVerification'
 import { webReplayRenderOutput } from '../../../../src/core/webReplay/renderResult'
 import { REJECTED_BEFORE_WRITE_ERROR_NAMES } from '../../../../src/core/application-control/execution/rejectionErrors'
+import type { VideoEditExportJobRecord } from '../../../../src/platform/contracts/videoEditExport'
 
 /** 宿主当前的修订号；恢复回执沿用它，避免对外发出缺字段的结果。 */
 export interface HostRevisionSnapshot { revision: number; scopeRevisions: Record<string, number> }
+
+/** 导出提交的回执与编码任务分开：查询时用主进程登记刷新队列，重载不重提导出。 */
+export function recoverPersistedVideoEditExportOperation(
+  listJobs: () => VideoEditExportJobRecord[], record: OperationRecord,
+  currentRevisions?: () => HostRevisionSnapshot | undefined,
+  rendererAwaiting?: (record: OperationRecord) => boolean,
+): OperationRecord | undefined {
+  if (record.capabilityId !== 'export_video_edit' || !['unknown', 'executing', 'completed'].includes(record.state)) return undefined
+  if (record.state === 'executing' && rendererAwaiting?.(record)) return undefined
+  const previous = object(record.result?.data)
+  const rows = Array.isArray(previous.queue) ? previous.queue.map(object) : []
+  const jobs = listJobs().filter(job => job.invocationIds?.includes(applicationInvocationId(record.callerId, record.operationId)) || rows.some(row => row.id === job.id))
+  const revisions = resolveRevisions(record, currentRevisions)
+  if (!jobs.length || !revisions) return undefined
+  const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('export_video_edit')!
+  const input = definition.inputSchema.safeParse(record.input)
+  if (!input.success) return undefined
+  const documentRef = record.input.documentRef
+  const queue = jobs.map(job => {
+    const payload = object(job.payload)
+    const { error: _error, notice: _notice, ...previousRow } = rows.find(row => row.id === job.id) ?? {}
+    let snapshot: Record<string, unknown> = {}
+    try { snapshot = object(JSON.parse(job.snapshotJson ?? '{}')) } catch { /* 缺失快照时由正式输出契约拒绝恢复。 */ }
+    return { ...previousRow, id: job.id, documentRef: { kind: 'video_edit.document', id: job.projectId }, sequenceRef: { kind: 'video_edit.sequence', id: `${job.projectId}:${snapshot.id}` },
+      name: job.name, presetName: job.presetName, state: job.state, progress: job.progress, range: payload.range, settings: payload.settings, rangeSource: payload.rangeSource,
+      outputReady: job.outputPublished, ...(job.outputPublished ? { path: payload.path } : {}), ...(job.error ? { error: job.error } : {}),
+      ...(job.state === 'interrupted' ? { notice: `已中断，可用 retryTaskId=${job.id} 按原快照重试。` } : {}) }
+  })
+  const output = definition.outputSchema.safeParse({ resultRef: documentRef, queue, message: queue.some(job => job.state === 'interrupted') ? '导出已中断，可按原快照重试。' : queue.every(job => job.state === 'completed') ? '导出已完成。' : '已从主进程登记读取导出状态。',
+    verification: { verified: true, target: documentRef, condition: '已从主进程导出登记核对原任务。' } })
+  if (!output.success) return undefined
+  const data = capabilityVerificationEnvelope(definition, input.data, { ...object(output.data), ...revisions })
+  return { ...record, state: 'completed', verificationState: 'verified', confirmation: undefined,
+    result: { ok: true, data, resultingRevision: revisions.revision, resultingScopeRevisions: revisions.scopeRevisions } }
+}
 
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}

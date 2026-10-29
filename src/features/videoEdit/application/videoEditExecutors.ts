@@ -1,4 +1,5 @@
 import { getVideoEditSequenceDefaults } from './videoEditSequenceDefaults'
+import { z } from 'zod'
 import { withVideoEditCodeMetadata, ensureVideoEditChangedCodeMetadata, ensureVideoEditCodeParameterMetadata } from './videoEditCodeState'
 import { getVideoEditRenderPreference, setVideoEditRenderPreference, type VideoEditRenderPreference } from './videoEditRenderCache'
 import { discardVideoEditCodeFiles, codePublicationFiles } from './videoEditCodeStorage'
@@ -58,9 +59,14 @@ function sameProjectView(current: ProjectViewSnapshot, expected: ProjectViewSnap
   return current.programCommand === expected.programCommand && JSON.stringify(comparable(current)) === JSON.stringify(comparable(expected))
 }
 const undo = new Map<string, { owner: object; before: VideoEditDocument; after: VideoEditDocument; refs: ApplicationRef[]; viewBefore?: ProjectViewSnapshot; viewAfter?: ProjectViewSnapshot; sourcePause?: VideoEditSourcePause }>()
+const CODE_DEFAULT_CASCADE = { declarationId: 'video_edit.code_version_default', effect: 'update' as const, entityType: 'video_edit.code_material', propertyIds: ['video_edit.code_material.default_version_id'], revisionScopes: ['video_edit'] }
 function sourcePauseEffect(projectId: string): ApplicationEffectReceipt { return { effect: 'update', entityType: VIDEO_EDIT_PROGRAM_SOURCE_CASCADE.entityType, propertyIds: VIDEO_EDIT_PROGRAM_SOURCE_CASCADE.propertyIds, refs: [{ kind: 'video_edit.source', id: `${projectId}:source` }], origin: { kind: 'cascade', declarationId: VIDEO_EDIT_PROGRAM_SOURCE_CASCADE.declarationId } } }
 function cascades(before: VideoEditDocument, after: VideoEditDocument): ApplicationEffectReceipt[] {
   const effects: ApplicationEffectReceipt[] = []
+  for (const definition of after.codeMaterials ?? []) {
+    const previous = before.codeMaterials?.find(value => value.id === definition.id)
+    if (previous && previous.defaultVersionId !== definition.defaultVersionId) effects.push({ effect: CODE_DEFAULT_CASCADE.effect, entityType: CODE_DEFAULT_CASCADE.entityType, propertyIds: CODE_DEFAULT_CASCADE.propertyIds, refs: [{ kind: 'video_edit.code_material', id: `${after.id}:${definition.id}` }], origin: { kind: 'cascade', declarationId: CODE_DEFAULT_CASCADE.declarationId } })
+  }
   const oldClips = before.sequences.flatMap(sequence => sequence.clips); const newClips = after.sequences.flatMap(sequence => sequence.clips)
   const oldById = new Map(oldClips.map(clip => [clip.id, clip])); const newById = new Map(newClips.map(clip => [clip.id, clip]))
   for (const effect of ['create', 'update', 'delete'] as const) {
@@ -269,14 +275,17 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
         return sequence
       }) }
     }
+    // 换版本本身也要读声明，先等候选构造完成，再进入同步校验与试渲染。
+    const fontCandidate = await withVideoEditCodeMetadata(() => update(before))
+    if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('读取代码参数期间剪辑已修改，请重读当前状态。')
     const compositeWrite = ['video_edit.effect', 'video_edit.transition'].includes(this.entityType) || keys.some(key => ['video_edit.clip.effect_ids', 'video_edit.clip.adjustment_from_track'].includes(key))
     if (compositeWrite) {
-      const next = parseVideoEditDocument(reconcileVideoEditTimedContent(before, update(before)), before)
+      const next = parseVideoEditDocument(reconcileVideoEditTimedContent(before, fontCandidate), before)
       assertVideoEditLockedTracks(before, next)
       const target = VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === this.entityType) ? videoEditCompositeOwner(next, this.entityType as VideoEditCompositeEntityType, childId) : { sequence: next.sequences.find(sequence => sequence.clips.some(clip => clip.id === childId))!, clipIds: [childId] }
       if (videoEditIntroducesCodeEffects(before, next)) await trialVideoEditCodeDocument(owner, contentVersion, next, target.sequence.id, target.sequence.clips.find(clip => clip.id === target.clipIds[0])!.start, context?.signal, target.clipIds.map(clipId => ({ sequenceId: target.sequence.id, clipId })))
     } else if (this.entityType === 'video_edit.clip' && step.mutations.some(mutation => ['video_edit.clip.code_version_id', 'video_edit.clip.code_parameters'].includes(mutation.propertyId))) {
-      const next = parseVideoEditDocument(reconcileVideoEditTimedContent(before, update(before)), before)
+      const next = parseVideoEditDocument(reconcileVideoEditTimedContent(before, fontCandidate), before)
       const sequence = next.sequences.find(sequence => sequence.clips.some(clip => clip.id === childId))!
       const oldCode = before.sequences.flatMap(sequence => sequence.clips).find(clip => clip.id === childId)?.code
       const nextCode = sequence.clips.find(clip => clip.id === childId)?.code
@@ -288,7 +297,6 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
         await trialVideoEditCodeDocument(owner, contentVersion, next, sequence.id, Math.max(clip.start, Math.min(clip.start + clip.duration - 1, owner.frame)), context?.signal, [{ sequenceId: sequence.id, clipId: childId }])
       }
     }
-    const fontCandidate = update(before)
     await ensureVideoEditChangedCodeMetadata(owner, before, fontCandidate, context?.signal)
     if (changedVideoEditFonts(before, fontCandidate, readVideoEditCodeMetadata(owner, before), readVideoEditCodeMetadata(owner, fontCandidate)).some(use => !GENERIC_FONT_FACES.some(face => face.family === use.font))) {
       await loadFontLibrary(true)
@@ -341,7 +349,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
   readonly effectContract: ApplicationEffectContract
   constructor(readonly entityType: 'video_edit.sequence' | 'video_edit.bin' | 'video_edit.item' | 'video_edit.clip' | 'video_edit.annotation' | 'video_edit.code_material' | 'video_edit.code_version' | 'video_edit.marker' | 'video_edit.caption' | 'video_edit.track' | VideoEditCompositeEntityType) {
     this.effectContract = { direct: [], cascades: entityType === 'video_edit.sequence' ? (['create', 'delete'] as const).map(effect => ({ declarationId: `video_edit.sequence_tracks_${effect}`, effect, entityType: 'video_edit.track', propertyIds: [], revisionScopes: ['video_edit'] })) : entityType === 'video_edit.code_material' ? (['create', 'delete'] as const).flatMap(effect => (['video_edit.item', 'video_edit.code_version'] as const).map(type => ({ declarationId: `video_edit.code_${type.split('.').at(-1)}_${effect}`, effect, entityType: type, propertyIds: [], revisionScopes: ['video_edit'] }))) : entityType === 'video_edit.item' ? (['create', 'delete'] as const).map(effect => ({ declarationId: `video_edit.item_media_${effect}`, effect, entityType: 'video_edit.media', propertyIds: [], revisionScopes: ['video_edit'] })) : entityType === 'video_edit.clip' ? VIDEO_EDIT_CLIP_CONTENT_CASCADES : [] }
-    this.effectContract = { ...this.effectContract, cascades: [...this.effectContract.cascades, ...VIDEO_EDIT_COMPOSITE_CASCADES, ...(entityType === 'video_edit.track' ? [{ declarationId: 'video_edit.track_clips_delete', effect: 'delete' as const, entityType: 'video_edit.clip', propertyIds: [], revisionScopes: ['video_edit'] }] : [])] }
+    this.effectContract = { ...this.effectContract, cascades: [...this.effectContract.cascades, ...VIDEO_EDIT_COMPOSITE_CASCADES, ...(entityType === 'video_edit.code_version' ? [CODE_DEFAULT_CASCADE] : []), ...(entityType === 'video_edit.track' ? [{ declarationId: 'video_edit.track_clips_delete', effect: 'delete' as const, entityType: 'video_edit.clip', propertyIds: [], revisionScopes: ['video_edit'] }] : [])] }
   }
   async apply(step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const clipChild = ['video_edit.graphic_object', 'video_edit.effect', 'video_edit.tracker'].includes(this.entityType)
@@ -356,8 +364,8 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
       if (step.operation.kind !== 'create') throw new Error('源码版本不可删除或原位改写，请创建新候选。')
       const inputs = step.operation.items.map(item => {
         const values = item.properties
-        if (Object.keys(values).some(key => !['video_edit.code_version.source', 'video_edit.code_version.files', 'video_edit.code_version.entry', 'video_edit.code_version.project_commit', 'video_edit.code_version.definition_id'].includes(key)) || typeof values['video_edit.code_version.definition_id'] !== 'string') throw new Error('创建源码版本只接受作者源码和所属素材定义。')
-        return { source: values['video_edit.code_version.source'] as string | undefined, files: values['video_edit.code_version.files'] as Record<string, string> | undefined, entry: values['video_edit.code_version.entry'] as string | undefined, projectCommit: values['video_edit.code_version.project_commit'] as string | undefined, definitionId: values['video_edit.code_version.definition_id'] }
+        if (Object.keys(values).some(key => !['video_edit.code_version.is_default', 'video_edit.code_version.source', 'video_edit.code_version.files', 'video_edit.code_version.entry', 'video_edit.code_version.project_commit', 'video_edit.code_version.definition_id'].includes(key)) || typeof values['video_edit.code_version.definition_id'] !== 'string') throw new Error('创建源码版本只接受作者源码、所属素材定义和 is_default。')
+        return { makeDefault: values['video_edit.code_version.is_default'] === undefined ? undefined : z.boolean().parse(values['video_edit.code_version.is_default']), source: values['video_edit.code_version.source'] as string | undefined, files: values['video_edit.code_version.files'] as Record<string, string> | undefined, entry: values['video_edit.code_version.entry'] as string | undefined, projectCommit: values['video_edit.code_version.project_commit'] as string | undefined, definitionId: values['video_edit.code_version.definition_id'] }
       })
       const typeReports: CodeTypeCheckReport[] = []
       const ids = await createVideoEditCodeVersions(before.id, inputs, context?.signal, measurements, typeReports)

@@ -80,12 +80,12 @@ export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
   {
     name: 'read_application_media', tier: 'any', readOnly: true,
     outputSchema: projectToolOutputSchema(z.toJSONSchema(publicMediaOutputSchema, { io: 'output' }), 'read_application_media'),
-    description: '按稳定结果引用读取已落盘媒体。图片默认返回 image（MCP 标准图片，无需拼接 base64），默认长边 1600、JPEG 至多 600 KiB；查看细字、颗粒、渐变时可传更大的 maxEdge / maxBytes，最高长边 3840、1.5 MiB。mode="chunk" 用于读取原件字节；音视频默认分块读取；image_edit.preview 是尚未保存的中间产物，不可直接读取，先 commit_image_edit 落盘。outputIndex 为结果或节点关联媒体（含输入、预览）去重后的顺序，从零开始。每块最多 256 KiB；不接受文件路径或网址。只支持文本的客户端可以只消费 totalBytes／eof／错误码。',
+    description: '按结果引用读取已落盘媒体，observation.image 可直接读取剪辑观察缓存，缓存被清理后重新取帧。图片默认返回 image（MCP 标准图片，无需拼接 base64），默认长边 1600、JPEG 至多 600 KiB；查看细字、颗粒、渐变时可传更大的 maxEdge / maxBytes，最高长边 3840、1.5 MiB。mode="chunk" 用于读取原件字节；音视频默认分块读取；image_edit.preview 是尚未保存的中间产物，不可直接读取，先 commit_image_edit 落盘。outputIndex 为结果或节点关联媒体（含输入、预览）去重后的顺序，从零开始。每块最多 256 KiB；传入工具返回的完整 ref，不另传路径或网址。只支持文本的客户端可以只消费 totalBytes／eof／错误码。',
     inputSchema: { type: 'object', properties: { ref: { type: 'object', properties: { kind: { type: 'string', enum: [...APPLICATION_READABLE_MEDIA_KINDS] }, id: { type: 'string' } }, required: ['kind', 'id'], additionalProperties: false }, mode: { type: 'string', enum: ['chunk', 'image'], description: '图片默认 image 直接查看；chunk 读取原件字节，音视频默认 chunk。' }, maxEdge: { type: 'integer', minimum: 1, maximum: 3840, default: APPLICATION_IMAGE_DEFAULT_EDGE, description: '图片预览的长边像素上限。' }, maxBytes: { type: 'integer', minimum: 1024, maximum: APPLICATION_IMAGE_MAX_BYTES, default: APPLICATION_IMAGE_DEFAULT_BYTES, description: 'JPEG 字节上限，自动降低质量或尺寸；不改原件。' }, outputIndex: { type: 'integer', minimum: 0 }, offset: { type: 'integer', minimum: 0 }, length: { type: 'integer', minimum: 1, maximum: EXTERNAL_LIMITS.mediaChunkBytes } }, required: ['ref'], additionalProperties: false },
   },
   {
     name: 'get_application_operation', tier: 'any', readOnly: true, requiresOperations: true,
-    description: '读取本连接操作的持久事实；未知状态不会重放修改。断线、超时或换客户端后用原 operationId 查询，不要换标识重试。批量结果用 resultRef.operationId、resultRef.field 作为 operationId、resultField，携带 nextCursor 继续分页。',
+    description: '读取本连接操作的持久事实；未知状态不会重放修改。剪辑导出的 result.queue 从主进程登记刷新，包含已完成或已中断、可按 retryTaskId 重试的状态；操作完成表示提交完成，成片是否完成看队列。断线、超时或换客户端后用原 operationId 查询，不要换标识重试。批量结果用 resultRef.operationId、resultRef.field 作为 operationId、resultField，携带 nextCursor 继续分页。',
     inputSchema: { ...z.toJSONSchema(operationReadInputSchema, { io: 'input' }), properties: { ...z.toJSONSchema(operationReadInputSchema, { io: 'input' }).properties, ...RESULT_DETAIL_FIELDS } },
   },
   {

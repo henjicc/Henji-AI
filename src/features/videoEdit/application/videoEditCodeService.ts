@@ -35,7 +35,7 @@ import { inheritApplicationConfirmation } from '@/core/application-control/userC
 
 const logger = createLogger('features.videoEdit.code')
 export interface VideoEditCodeInput { trustContext?: ContentTrustReference[]; projectEntry?: string; source?: string; files?: Record<string, string>; entry?: string; name?: string; binId?: string }
-export interface VideoEditCodeVersionInput { trustContext?: ContentTrustReference[]; libraries?: Readonly<Record<string, string>>; projectCommit?: string; source?: string; files?: Record<string, string>; entry?: string; definitionId: string }
+export interface VideoEditCodeVersionInput { makeDefault?: boolean; trustContext?: ContentTrustReference[]; libraries?: Readonly<Record<string, string>>; projectCommit?: string; source?: string; files?: Record<string, string>; entry?: string; definitionId: string }
 interface Candidate { definition: CodeMaterialDefinition; item: VideoEditItem; filter?: CodeMaterialInstance }
 interface CodeAssetPublication {
   asset: CodeAsset; foreign?: ContentTrustReference | null; media: VideoEditMedia[]; mediaIds: ReadonlyMap<string, string>; origin: { assetId: string; contentIdentity: string }
@@ -220,8 +220,7 @@ export async function createVideoEditCodeAssetInstance(projectId: string, public
   }
 }
 
-/** Append checked immutable versions. Existing defaults, items and clips keep
- * their fixed bindings; an explicit domain property edit binds a new version. */
+/** 新版本默认用于后续放置；已有素材项与片段仍保持各自固定的版本。 */
 export async function createVideoEditCodeVersions(projectId: string, inputs: VideoEditCodeVersionInput[], signal?: AbortSignal, measurements?: CodeFramePerformance[], typeReports?: CodeTypeCheckReport[], afterCreate?: (document: VideoEditDocument, versionIds: string[]) => VideoEditDocument): Promise<string[]> {
   signal?.throwIfAborted()
   if (!inputs.length) throw new Error('请提供要创建的源码版本。')
@@ -252,7 +251,7 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
       controller.signal.throwIfAborted()
       if (definition.versions.some(version => version.id === result.versionId)) throw new Error('相同源码版本已存在，请直接使用原版本。')
       if (result.kindUnverified) logger.warn('原有代码版本都读不到，新版本未核对素材种类', { event: 'video_edit.code.version.kind_unverified', context: { projectId, definitionId: definition.id, versionId: result.versionId } })
-      definitions.set(definition.id, result.definition); added.push(result.versionId)
+      definitions.set(definition.id, input.makeDefault === false ? { ...result.definition, defaultVersionId: definition.defaultVersionId } : result.definition); added.push(result.versionId)
       rememberVideoEditCodeMetadata(owner, definition.id, result.definition.versions.find(version => version.id === result.versionId)!, result.program)
       trials.push(candidate({ ...result.definition, defaultVersionId: result.versionId }, result.program, {}))
     }

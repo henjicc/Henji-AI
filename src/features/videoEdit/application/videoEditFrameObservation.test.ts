@@ -5,6 +5,9 @@ import { createVideoEditTestProject as createVideoEditProject } from './videoEdi
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { Blob as NativeBlob } from 'node:buffer'
+import { webcrypto } from 'node:crypto'
+import path from 'node:path'
+import os from 'node:os'
 import { getPlatform } from '@/platform/runtime'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
@@ -44,7 +47,15 @@ beforeEach(() => {
   vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {}
     getContext() { return { imageSmoothingQuality: 'low', drawImage: (_image: unknown, ...args: number[]) => drawn.push(args), save: vi.fn(), restore: vi.fn(), setLineDash: vi.fn(), beginPath: vi.fn(), arc: vi.fn(), stroke: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), strokeRect: (...args: number[]) => pixels.rectangles.push(args), fillRect: vi.fn(), measureText: (text: string) => ({ width: text.length * 14 }), fillText: (text: string) => pixels.labels.push(text) } }
     async convertToBlob() { encodedSize = { width: this.width, height: this.height }; return new NativeBlob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }) } })
+  vi.stubGlobal('crypto', webcrypto)
+  const cached = new Map<string, Uint8Array>()
   const platform = getPlatform(); let size = { width: 0, height: 0 }
+  vi.spyOn(platform.system.paths, 'tempDir').mockResolvedValue(os.tmpdir())
+  vi.spyOn(platform.system.paths, 'join').mockImplementation(async (...parts) => path.join(...parts))
+  vi.spyOn(platform.system.fs, 'mkdir').mockResolvedValue(undefined)
+  vi.spyOn(platform.system.fs, 'exists').mockImplementation(async file => cached.has(file))
+  vi.spyOn(platform.system.fs, 'writeFile').mockImplementation(async (file, bytes) => { cached.set(file, bytes) })
+  vi.spyOn(platform.system.fs, 'readFile').mockImplementation(async file => cached.get(file)!)
   vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/observe.hjvid')
   vi.spyOn(platform.system.fs, 'writeTextFile').mockResolvedValue(undefined)
   vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue('D:/managed')
@@ -61,18 +72,18 @@ beforeEach(() => {
 })
 afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); useAssistantUiStore.getState().setPendingGoal(null); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
 
-it('联系表经公共能力输出按时间顺序的网格和时间码，只发布一张资产，非法范围点名字段', async () => {
+it('联系表经公共能力输出按时间顺序的网格和时间码，只缓存一张图片，非法范围点名字段', async () => {
   const owner = await createVideoEditProject(); const id = owner.document.id; const app = createApplicationHarness()
   appendVideoEditMedia(id, { id: 'sheet-media', name: '原片', path: 'D:/sheet.mp4', kind: 'video', width: 1920, height: 1080, durationSeconds: 10 })
   appendVideoEditClip(id, 'sheet-media'); setVideoEditView(id, { frame: 7 })
   const input = { documentRef: { kind: 'video_edit.document', id }, target: { kind: 'contact_sheet', startFrame: 0, endFrame: 120, frameCount: 5 }, maxWidth: 960 }
   try {
     const result = await app.requireResult('observe_video_edit_frame', input)
-    expect(result).toMatchObject({ width: 960, height: 360, contactSheet: { frames: [0, 30, 60, 90, 120], columns: 3, rows: 2 }, resultRef: { kind: 'asset' } })
+    expect(result).toMatchObject({ width: 960, height: 360, contactSheet: { frames: [0, 30, 60, 90, 120], columns: 3, rows: 2 }, resultRef: { kind: 'observation.image' }, storage: 'cache', reused: false })
     expect(render.calls.map(call => call.frame)).toEqual([0, 30, 60, 90, 120])
     expect(drawn).toEqual([[0, 0, 320, 180], [320, 0, 320, 180], [640, 0, 320, 180], [0, 180, 320, 180], [320, 180, 320, 180]])
     expect(pixels.labels).toEqual(['00:00:00:00', '00:00:01:00', '00:00:02:00', '00:00:03:00', '00:00:04:00'])
-    expect(assets.size).toBe(1); expect(owner.frame).toBe(7)
+    expect(assets.size).toBe(0); expect(owner.frame).toBe(7)
     const composition = videoEditComposition(owner.document, owner.activeSequenceId)
     const portrait = videoEditContactSheetLayout({ ...composition, width: 4320, height: 7680 }, { startFrame: 0, endFrame: 120, frameCount: 12 }, 3840)
     expect(portrait.columns).toBe(4); expect(portrait.rows).toBe(3)
@@ -263,8 +274,8 @@ it('单帧与联系表都拒绝渲染期间改变的作品，取消及落盘期�
     }
     const controller = new AbortController(); controller.abort(new Error('取消观察'))
     await expect(observeVideoEditFrame(id, { kind: 'program', frame: 0 }, 960, controller.signal)).rejects.toThrow('取消观察')
-    vi.mocked(getPlatform().image.persistImageBinary).mockImplementationOnce(async () => {
-      editVideoProject(id, document => ({ ...document, name: document.name + '落盘修改' })); return '/late.png'
+    vi.mocked(getPlatform().system.fs.writeFile).mockImplementationOnce(async () => {
+      editVideoProject(id, document => ({ ...document, name: document.name + '落盘修改' }))
     })
     expect((await app.call('observe_video_edit_frame', { documentRef, target: { kind: 'program', frame: 0 } })).ok).toBe(false)
     expect(assets.size).toBe(0)
@@ -299,12 +310,12 @@ it('公共观察按固定剪辑版本取指定合成帧与源时间画面，不�
   const item = owner.document.items.find(item => item.mediaId === 'clip-media')!
   const app = createApplicationHarness()
   try {
-    const program = await app.requireResult('observe_video_edit_frame', { documentRef: { kind: 'video_edit.document', id }, target: { kind: 'program', frame: 42 }, maxWidth: 960 })
+    const program = await app.requireResult('observe_video_edit_frame', { documentRef: { kind: 'video_edit.document', id }, target: { kind: 'program', frame: 42 }, maxWidth: 960, saveToAssets: true })
     expect(render.calls[0]).toMatchObject({ frame: 42, document: { id: owner.activeSequenceId, revision: owner.document.revision } })
     expect(program).toMatchObject({ width: 960, height: 540, sourceWidth: 1920, sourceHeight: 1080, documentRevision: owner.document.revision, resultRef: { kind: 'asset', id: 'asset-1' } })
     expect(program.byteLength).toBe(4)
     expect(owner.frame).toBe(3)
-    const source = await app.requireResult('observe_video_edit_frame', { documentRef: { kind: 'video_edit.document', id }, target: { kind: 'source', itemRef: { kind: 'video_edit.item', id: `${id}:${item.id}` }, timeUs: 2_500_000 } })
+    const source = await app.requireResult('observe_video_edit_frame', { documentRef: { kind: 'video_edit.document', id }, target: { kind: 'source', itemRef: { kind: 'video_edit.item', id: `${id}:${item.id}` }, timeUs: 2_500_000 }, saveToAssets: true })
     expect(render.calls[1]).toMatchObject({ frame: 0, document: { width: 3840, height: 2160, fps: 60, clips: [{ sourceInUs: 2_500_000, start: 0, duration: 1 }] } })
     expect(source).toMatchObject({ width: 1920, height: 1080, sourceWidth: 3840, sourceHeight: 2160, target: { kind: 'source', timeUs: 2_500_000 } })
     expect(assets.get('asset-2')).toMatchObject({ source: 'video-edit', mediaType: 'image' })
@@ -382,6 +393,33 @@ it('超预算帧测量与最重源码结构经公共能力schema读回', async (
   try {
     const result = await app.requireResult('observe_video_edit_frame', { documentRef: { kind: 'video_edit.document', id: owner.document.id }, target: { kind: 'program', frame: 0 } })
     expect(result.performance).toEqual(render.performance)
-    expect(result.resultRef).toMatchObject({kind:'asset'})
+    expect(result.resultRef).toMatchObject({kind:'observation.image'})
+  } finally { app.dispose() }
+})
+
+it('源码检查超时经公共入口返回可重试，未创建观察素材', async () => {
+  const owner = await createVideoEditProject(), app = createApplicationHarness()
+  try {
+    vi.mocked(trialVideoEditCodeFrames).mockRejectedValueOnce(Object.assign(new Error('源码检查超过时限'), { name: 'VideoEditCodeCompileTimeoutError' }))
+    expect(await app.call('observe_video_edit_frame', { documentRef: { kind: 'video_edit.document', id: owner.document.id }, target: { kind: 'program', frame: 0 } })).toMatchObject({ ok: false, error: { recoverable: true } })
+    expect(assets.size).toBe(0)
+  } finally { app.dispose() }
+})
+
+it('相同内容复用可读缓存引用，只有显式要求才收录为素材', async () => {
+  const owner = await createVideoEditProject(), app = createApplicationHarness()
+  const input = { documentRef: { kind: 'video_edit.document', id: owner.document.id }, target: { kind: 'program', frame: 0 } }
+  try {
+    const first = await app.requireResult('observe_video_edit_frame', input)
+    const same = await app.requireResult('observe_video_edit_frame', input)
+    expect(first).toMatchObject({ storage: 'cache', reused: false, resultRef: { kind: 'observation.image' } })
+    expect(same).toMatchObject({ storage: 'cache', reused: true, resultRef: first.resultRef })
+    expect(same.message).toContain((first.resultRef as { id: string }).id)
+    expect(getPlatform().system.fs.writeFile).toHaveBeenCalledOnce(); expect(assets.size).toBe(0)
+    expect(await app.requireResult('observe_video_edit_frame', { ...input, saveToAssets: true })).toMatchObject({ storage: 'assets', resultRef: { kind: 'asset' } })
+    expect(assets.size).toBe(1)
+    vi.mocked(getPlatform().system.fs.readFile).mockResolvedValueOnce(new Uint8Array([137]))
+    expect(await app.requireResult('observe_video_edit_frame', input)).toMatchObject({ storage: 'cache', reused: false, resultRef: first.resultRef })
+    expect(getPlatform().system.fs.writeFile).toHaveBeenCalledTimes(2)
   } finally { app.dispose() }
 })

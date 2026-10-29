@@ -113,7 +113,7 @@ export async function askAssistantForVideoEditCodeElement(target: VideoEditCodeE
   if (!current.element || !current.entry) throw new Error('此元素当前不可见，请选择可见元素。')
   if (current.owner.playing) throw new Error('请先暂停画面，再告诉助手要改哪里。')
   const at = current.owner.frame, contentVersion = current.owner.contentVersion
-  const frame = await observeVideoEditFrame(target.projectId, { kind: 'program', sequenceId: target.sequenceId, frame: at }, 1920, signal)
+  const frame = await observeVideoEditFrame(target.projectId, { kind: 'program', sequenceId: target.sequenceId, frame: at }, 1920, signal, undefined, { saveToAssets: true })
   signal?.throwIfAborted()
   if (!isVideoEditContentCurrent(current.owner, contentVersion) || current.owner.frame !== at || current.owner.playing || current.owner.activeSequenceId !== target.sequenceId) throw new Error('原画面已改变，请重新选择元素。')
   const span = current.element.sourceSpan

@@ -17,6 +17,7 @@ export interface VideoEditExportRegistryFiles {
 }
 
 interface Entry {
+  invocationIds: Set<string>
   id: string; projectId: string; name: string; presetName: string; outputPaths: string[]
   restorable: boolean; snapshotKey?: string; payload?: unknown
   state: VideoEditExportJobRecord['state']; progress: number; error?: string; outputPublished: boolean
@@ -59,8 +60,8 @@ export class VideoEditExportJobRegistry {
 
   private registerOne(page: VideoEditExportPage, job: VideoEditExportJobRegistration, snapshot?: Snapshot): VideoEditExportRegistrationResult {
     const existing = this.entries.get(job.id)
-    if (existing) return { id: job.id, retained: existing.restorable }
-    const entry: Entry = { id: job.id, projectId: job.projectId, name: job.name, presetName: job.presetName, outputPaths: [...job.outputPaths], restorable: false, state: 'queued', progress: 0, outputPublished: false, owner: page, created: new Map() }
+    if (existing) { if (job.invocationId) existing.invocationIds.add(job.invocationId); return { id: job.id, retained: existing.restorable } }
+    const entry: Entry = { invocationIds: new Set(job.invocationId ? [job.invocationId] : []), id: job.id, projectId: job.projectId, name: job.name, presetName: job.presetName, outputPaths: [...job.outputPaths], restorable: false, state: 'queued', progress: 0, outputPublished: false, owner: page, created: new Map() }
     this.entries.set(job.id, entry)
     if (!job.restorable) return { id: job.id, retained: false }
     if (!snapshot) throw new Error('导出快照缺失。')
@@ -79,6 +80,7 @@ export class VideoEditExportJobRegistry {
       if (!entry.created.size || entry.outputPublished) { this.delete(entry); return }
       entry.restorable = false
     }
+    if (update.invocationId) entry.invocationIds.add(update.invocationId)
     entry.state = update.state; entry.progress = Math.min(1, Math.max(0, update.progress)); entry.error = update.error
   }
 
@@ -134,7 +136,7 @@ export class VideoEditExportJobRegistry {
   list(): VideoEditExportJobRecord[] { return [...this.entries.values()].map(entry => this.record(entry)) }
 
   private record(entry: Entry): VideoEditExportJobRecord {
-    return { id: entry.id, projectId: entry.projectId, name: entry.name, presetName: entry.presetName, outputPaths: [...entry.outputPaths], snapshotJson: entry.snapshotKey ? this.snapshots.get(entry.snapshotKey)?.json : undefined, payload: entry.payload, state: entry.state, progress: entry.progress, ...(entry.error ? { error: entry.error } : {}), outputPublished: entry.outputPublished }
+    return { invocationIds: [...entry.invocationIds], id: entry.id, projectId: entry.projectId, name: entry.name, presetName: entry.presetName, outputPaths: [...entry.outputPaths], snapshotJson: entry.snapshotKey ? this.snapshots.get(entry.snapshotKey)?.json : undefined, payload: entry.payload, state: entry.state, progress: entry.progress, ...(entry.error ? { error: entry.error } : {}), outputPublished: entry.outputPublished }
   }
 
   private owned(page: VideoEditExportPage, id: string): Entry | undefined {

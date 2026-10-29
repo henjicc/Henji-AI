@@ -64,7 +64,7 @@ export async function registerVideoEditExportJobs(jobs: ReadonlyArray<Omit<Video
   return outcome
 }
 
-export function syncVideoEditExportJob(update: { id: string; state: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted'; progress: number; error?: string }): void {
+export function syncVideoEditExportJob(update: { invocationId?: string; id: string; state: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted'; progress: number; error?: string }): void {
   call(platform => platform.update(update)).catch(syncFailed(update.id, 'video_edit.export_registry.update_failed'))
 }
 export function removeVideoEditExportJobs(ids: readonly string[]): void {

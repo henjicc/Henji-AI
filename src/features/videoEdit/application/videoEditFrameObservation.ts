@@ -7,7 +7,7 @@ import { videoEditFps } from '@/core/videoEdit/time'
 import { clampVideoEditSequenceSize } from '@/core/videoEdit/sequenceSize'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { getPlatform } from '@/platform/runtime'
-import { collectObservationImage } from '@/features/assets'
+import { addMediaReferenceToLibrary, OBSERVATION_ASSET_TAG } from '@/features/assets'
 import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
 import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
 import { requireVideoEditInstance } from './videoEditService'
@@ -27,13 +27,17 @@ export type VideoEditFrameObservationTarget =
   | { kind: 'frames'; sequenceId?: string; frames: number[] }
   | { kind: 'near_cut'; sequenceId?: string; cutFrame: number; before: number; after: number }
 export interface VideoEditFrameObservationOptions extends VideoEditAnnotationObservationOptions {
+  saveToAssets?: boolean
   documentVersion?: string
   cropRegion?: VideoEditObservationRegion
   reference?: { itemId: string; offsetUs: number }
 }
 export interface VideoEditFrameObservation {
   performance?: CodeFramePerformance[]
-  asset: AssetRecord
+  asset?: AssetRecord
+  image: { filePath: string; displayUrl: string; displayName: string }
+  resultRef: { kind: 'asset' | 'observation.image'; id: string }
+  reused: boolean
   width: number
   height: number
   byteLength: number
@@ -67,9 +71,10 @@ export function videoEditSourceComposition(document: VideoEditDocument, itemId: 
 }
 
 /**
- * Renders one fixed-revision Program frame or Source time offscreen and publishes it as a library image.
- * The user's playhead, selection and Program surface are untouched; the bounded production trial queue is reused.
+ * 观察图默认留在临时缓存；明确要作为创作素材使用时才登记到素材库。
  */
+export function observeVideoEditFrame(projectId: string, target: VideoEditFrameObservationTarget, maxWidth: number | null | undefined, signal: AbortSignal | undefined, snapshot: VideoEditComposition | undefined, annotations: VideoEditFrameObservationOptions & { saveToAssets: true }): Promise<VideoEditFrameObservation & { asset: AssetRecord }>
+export function observeVideoEditFrame(projectId: string, target: VideoEditFrameObservationTarget, maxWidth?: number | null, signal?: AbortSignal, snapshot?: VideoEditComposition, annotations?: VideoEditFrameObservationOptions): Promise<VideoEditFrameObservation>
 export async function observeVideoEditFrame(projectId: string, target: VideoEditFrameObservationTarget, maxWidth: number | null = VIDEO_EDIT_OBSERVATION_DEFAULT_WIDTH, signal: AbortSignal = new AbortController().signal, snapshot?: VideoEditComposition, annotations: VideoEditFrameObservationOptions = {}): Promise<VideoEditFrameObservation> {
   // null 仅供工作区流转保存完整画幅；助手观察仍由公开 schema 限制尺寸预算。
   if (maxWidth !== null && (!Number.isSafeInteger(maxWidth) || maxWidth < 256 || maxWidth > 3840)) throw new Error('观察宽度须为256到3840之间的整数像素。')
@@ -138,10 +143,10 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
       } } : {}),
     })
     await verifyReference(); await verifyReviewSources()
-    const asset = await publishObservationImage(sheet.bytes, sheet.width, sheet.height, `${document.name} · ${composition.name} · ${reference ? '参考比较' : '联系表'}`, signal, assertCurrent)
+    const published = await publishObservationImage(sheet.bytes, sheet.width, sheet.height, `${document.name} · ${composition.name} · ${reference ? '参考比较' : '联系表'}`, signal, assertCurrent, annotations.saveToAssets)
     await verifyReference(); await verifyReviewSources()
-    logger.info('剪辑联系表观察完成', { event: 'video_edit.frame_observation.completed', context: { projectId, kind: target.kind, assetId: asset.id, width: sheet.width, height: sheet.height, durationMs: Math.round(performance.now() - started) } })
-    return { ...(measurements.length ? { performance: measurements } : {}), asset, width: sheet.width, height: sheet.height, byteLength: sheet.bytes.byteLength, sourceWidth: composition.width, sourceHeight: composition.height,
+    logger.info('剪辑联系表观察完成', { event: 'video_edit.frame_observation.completed', context: { projectId, kind: target.kind, imageRef: published.resultRef, reused: published.reused, width: sheet.width, height: sheet.height, durationMs: Math.round(performance.now() - started) } })
+    return { ...(measurements.length ? { performance: measurements } : {}), ...published, width: sheet.width, height: sheet.height, byteLength: sheet.bytes.byteLength, sourceWidth: composition.width, sourceHeight: composition.height,
       documentRevision: document.revision, documentVersion, sequenceId: composition.id, contactSheet: { frames: sheet.frames, columns: sheet.columns, rows: sheet.rows },
       ...(reference ? { comparison: { referenceItemId: reference.itemId, referenceTimesUs } } : {}) }
   }
@@ -184,22 +189,50 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
   const label = target.kind === 'program' ? `帧 ${frame}` : `源 ${(target.timeUs / 1e6).toFixed(3)} 秒`
   assertCurrent()
   await verifyReviewSources()
-  const asset = await publishObservationImage(bytes, width, height, `${document.name} · ${composition.name} · ${label} 观察`, signal, assertCurrent)
+  const published = await publishObservationImage(bytes, width, height, `${document.name} · ${composition.name} · ${label} 观察`, signal, assertCurrent, annotations.saveToAssets)
   await verifyReviewSources()
-  logger.info('剪辑指定画面观察完成', { event: 'video_edit.frame_observation.completed', context: { projectId, kind: target.kind, assetId: asset.id, width, height, durationMs: Math.round(performance.now() - started) } })
-  return { ...(measurements.length ? { performance: measurements } : {}), asset, width, height, byteLength: bytes.byteLength, sourceWidth, sourceHeight, documentRevision: document.revision, documentVersion, ...(target.kind === 'program' ? { sequenceId: composition.id, frame } : { timeUs: target.timeUs }) }
+  logger.info('剪辑指定画面观察完成', { event: 'video_edit.frame_observation.completed', context: { projectId, kind: target.kind, imageRef: published.resultRef, reused: published.reused, width, height, durationMs: Math.round(performance.now() - started) } })
+  return { ...(measurements.length ? { performance: measurements } : {}), ...published, width, height, byteLength: bytes.byteLength, sourceWidth, sourceHeight, documentRevision: document.revision, documentVersion, ...(target.kind === 'program' ? { sequenceId: composition.id, frame } : { timeUs: target.timeUs }) }
 }
 
-async function publishObservationImage(bytes: Uint8Array, width: number, height: number, displayName: string, signal: AbortSignal, assertCurrent: () => void): Promise<AssetRecord> {
+const imageWrites = new Map<string, Promise<boolean>>()
+async function publishObservationImage(bytes: Uint8Array, width: number, height: number, displayName: string, signal: AbortSignal, assertCurrent: () => void, saveToAssets = false): Promise<Pick<VideoEditFrameObservation, 'asset' | 'image' | 'resultRef' | 'reused'>> {
   signal.throwIfAborted()
   const platform = getPlatform()
+  if (!saveToAssets) {
+    const { fs, paths } = platform.system
+    const digest = await crypto.subtle.digest('SHA-256', new Uint8Array(bytes))
+    const hash = Array.from(new Uint8Array(digest), value => value.toString(16).padStart(2, '0')).join('')
+    const directory = await paths.join(await paths.tempDir(), 'henji-observations')
+    const filePath = await paths.join(directory, `${hash}.png`)
+    const pending = imageWrites.get(filePath)
+    let reused = true
+    if (pending) await pending
+    else {
+      // 同内容的并发观察共享一次写入，读取引用时不会碰到只写了一半的图片。
+      const write = (async () => {
+        if (await fs.exists(filePath)) {
+          const cached = await fs.readFile(filePath)
+          if (cached.byteLength === bytes.byteLength && cached.every((value, index) => value === bytes[index])) return true
+        }
+        // 中断写入可能留下不完整缓存；只复用完整内容，损坏的派生图可直接重建。
+        await fs.mkdir(directory, { recursive: true }); await fs.writeFile(filePath, bytes); return false
+      })()
+      imageWrites.set(filePath, write)
+      try { reused = await write } finally { if (imageWrites.get(filePath) === write) imageWrites.delete(filePath) }
+    }
+    assertCurrent()
+    return { image: { filePath, displayUrl: platform.media.toDisplaySrc(filePath), displayName }, resultRef: { kind: 'observation.image', id: filePath }, reused }
+  }
   const path = await platform.image.persistImageBinary(bytes, 'png')
   assertCurrent()
   await platform.media.allowRoot(await platform.system.paths.dirname(path))
   assertCurrent()
-  const created = await collectObservationImage({ filePath: path, source: 'video-edit', displayName })
+  const created = await addMediaReferenceToLibrary({ filePath: path, mediaType: 'image', source: 'video-edit', displayName: `${displayName} · 截帧` })
+  // 显式保存代表用户要留下它；复用历史观察图时也退出自动清理。
+  if (created.tags.includes(OBSERVATION_ASSET_TAG)) await assetApplicationService.replaceTags(created.id, created.tags.filter(tag => tag !== OBSERVATION_ASSET_TAG))
   const asset = await assetApplicationService.inspect(created.id)
   assertCurrent()
   if (asset.inspectionStatus !== 'ready' || asset.width !== width || asset.height !== height) throw new Error('观察图片没有通过资产检查，请重试。')
-  return asset
+  return { asset, image: asset, resultRef: { kind: 'asset', id: asset.id }, reused: created.wasExisting === true }
 }

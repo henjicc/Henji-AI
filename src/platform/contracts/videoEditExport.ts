@@ -18,6 +18,7 @@ export const VIDEO_EDIT_EXPORT_CHANNELS = {
 export type VideoEditExportJobState = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
 
 export interface VideoEditExportJobRegistration {
+  invocationId?: string
   id: string
   projectId: string
   name: string
@@ -46,6 +47,7 @@ export interface VideoEditExportRegistrationResult {
 }
 
 export interface VideoEditExportJobUpdate {
+  invocationId?: string
   id: string
   state: VideoEditExportJobState
   progress: number
@@ -53,6 +55,7 @@ export interface VideoEditExportJobUpdate {
 }
 
 export interface VideoEditExportJobRecord {
+  invocationIds?: string[]
   id: string
   projectId: string
   name: string

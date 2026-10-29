@@ -27,7 +27,7 @@ const generation = vi.hoisted(() => ({
   getTask: vi.fn(() => { if (state.liveMissing) throw new Error('TASK_NOT_FOUND'); return { ...state.task } }),
   cancelTask: vi.fn(async () => ({})),
 }))
-const observe = vi.hoisted(() => vi.fn(async (_projectId: string, target: { kind: 'source'; itemId: string; timeUs: number } | { kind: 'program'; sequenceId?: string; frame: number }) => ({ asset: { filePath: target.kind === 'source' ? `/frames/${target.itemId}-${target.timeUs}.png` : `/frames/program-${target.frame}.png` } })))
+const observe = vi.hoisted(() => vi.fn(async (_projectId: string, target: { kind: 'source'; itemId: string; timeUs: number } | { kind: 'program'; sequenceId?: string; frame: number }) => ({ image: { filePath: target.kind === 'source' ? `/frames/${target.itemId}-${target.timeUs}.png` : `/frames/program-${target.frame}.png` } })))
 const imports = vi.hoisted(() => vi.fn())
 const saves = vi.hoisted(() => vi.fn(async () => { if (state.saveError) throw new Error('保存失败') }))
 vi.mock('@/services/database', () => ({ databaseService: { getHistoryById: vi.fn(async () => state.history ?? (state.task.status === 'success' ? { status: 'success' } : null)) } }))

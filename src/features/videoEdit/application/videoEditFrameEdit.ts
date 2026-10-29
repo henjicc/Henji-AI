@@ -22,7 +22,7 @@ export function readVideoEditImageReturn(sessionRef: string | undefined): VideoE
 export async function editVideoEditProgramFrame(projectId: string, signal?: AbortSignal): Promise<string | null> {
   const bound = captureVideoEditSendTarget({ mediaKind: 'image', mode: 'add', above: true, duration: 1 }, projectId)
   const owner = requireVideoEditInstance(projectId)
-  const output = await observeVideoEditFrame(projectId, { kind: 'program', sequenceId: bound.target.sequenceId, frame: owner.frame }, null, signal)
+  const output = await observeVideoEditFrame(projectId, { kind: 'program', sequenceId: bound.target.sequenceId, frame: owner.frame }, null, signal, undefined, { saveToAssets: true })
   assertVideoEditResultTarget(bound.target, signal)
   const sessionRef = `video-edit-frame:${crypto.randomUUID()}`
   returns.delete(sessionRef); returns.set(sessionRef, { ...bound, assetRef: { kind: 'asset', id: output.asset.id } })

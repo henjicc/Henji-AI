@@ -14,11 +14,11 @@ import { videoEditMediaPathKey } from './videoEditMedia'
 import { adaptVideoEditExportPreset, assertVideoEditExportSupported } from '../engine/videoEditExportEncoder'
 
 const logger = createLogger('features.videoEdit.exportQueue')
-export interface VideoEditExportRequest { projectId: string; sequenceId?: string; presetId?: string; settings?: VideoEditExportSettings; loudnessRequested?: boolean; range?: { startFrame: number; endFrame: number }; path?: string; fileName?: string
+export interface VideoEditExportRequest { invocationId?: string; projectId: string; sequenceId?: string; presetId?: string; settings?: VideoEditExportSettings; loudnessRequested?: boolean; range?: { startFrame: number; endFrame: number }; path?: string; fileName?: string
   /** 助手/外部智能体调用：校验通过后在此目录自动取不重名文件，不弹本机保存对话框（无人可点时会一直等待）。 */
   outputDirectory?: () => Promise<string> }
 export interface VideoEditExportJob {
-  id: string; owner: VideoEditInstance; name: string; presetName: string; snapshot: VideoEditComposition; settings: VideoEditExportSettings
+  id: string; invocationId?: string; owner: VideoEditInstance; name: string; presetName: string; snapshot: VideoEditComposition; settings: VideoEditExportSettings
   range: { startFrame: number; endFrame: number }; rangeSource: 'explicit' | 'in-out' | 'content'; path: string
   /** interrupted：界面重新加载时正在导出，未完成文件已清理，可按原快照重试。 */
   state: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted'; error?: string; task?: VideoEditExportTask
@@ -93,9 +93,10 @@ export class VideoEditExportQueue {
     if (job.state === 'queued') { job.state = 'cancelled'; job.release() }
     logger.info('取消导出项', { event: 'video_edit.export_queue.cancelled', context: { jobId: id } }); this.publish()
   }
-  retry(id: string, release: () => void): Promise<void> {
+  retry(id: string, release: () => void, invocationId?: string): Promise<void> {
     const job = this.require(id)
     if (!retryableVideoEditExportJob(job)) throw new Error('只可重试未发布文件的失败或中断项；已保存的成片请直接使用文件。')
+    if (invocationId) job.invocationId = invocationId
     if (job.state === 'interrupted') logger.info('重试中断的导出', { event: 'video_edit.export_queue.interrupted_retry', context: { jobId: id, projectId: job.owner.document.id } })
     job.controller = new AbortController(); job.release = release; job.task = undefined; job.restoredProgress = undefined; job.error = undefined; job.startedAt = undefined; job.finishedAt = undefined; job.state = 'queued'
     // Explicit retries join the tail, preserving the order of already submitted work.
@@ -155,12 +156,12 @@ const restoredSnapshotSchema = z.custom<VideoEditComposition>(value => typeof va
 const videoEditExportJobRegistry: VideoEditExportJobMirror = {
   async register(jobs) {
     const outcome = await registerVideoEditExportJobs(jobs.map(job => ({
-      id: job.id, projectId: job.owner.document.id, name: job.name, presetName: job.presetName, outputPaths: videoEditExportPaths(job.path, job.settings), restorable: true, snapshot: job.snapshot,
+      invocationId: job.invocationId, id: job.id, projectId: job.owner.document.id, name: job.name, presetName: job.presetName, outputPaths: videoEditExportPaths(job.path, job.settings), restorable: true, snapshot: job.snapshot,
       payload: { settings: job.settings, path: job.path, range: job.range, rangeSource: job.rangeSource, loudnessRequested: job.loudnessRequested ?? false } satisfies z.infer<typeof restorePayloadSchema>,
     })))
     for (const job of jobs) { const reason = outcome.get(job.id); if (reason) job.notRetained = reason }
   },
-  update: job => syncVideoEditExportJob({ id: job.id, state: job.state, progress: videoEditExportJobProgress(job), ...(job.error ? { error: job.error } : {}) }),
+  update: job => syncVideoEditExportJob({ invocationId: job.invocationId, id: job.id, state: job.state, progress: videoEditExportJobProgress(job), ...(job.error ? { error: job.error } : {}) }),
   remove: ids => removeVideoEditExportJobs(ids),
 }
 export const videoEditExportQueue = new VideoEditExportQueue(async job => {
@@ -245,7 +246,7 @@ export async function enqueueVideoEditExports(requests: readonly VideoEditExport
       const rangeSource: VideoEditExportJob['rangeSource'] = request.range ? 'explicit' : marks?.inFrame != null || marks?.outFrame != null ? 'in-out' : 'content'
       if (!Number.isSafeInteger(range.startFrame) || !Number.isSafeInteger(range.endFrame) || range.startFrame < 0 || range.endFrame <= range.startFrame || range.endFrame > videoEditDuration(snapshot)) throw new Error('导出范围必须是序列内有效的整数帧入出点（出点不包含）。')
       const release = holdVideoEditActivity(request.projectId, 'export'); releases.push(release)
-      return { id: crypto.randomUUID(), owner, name: snapshot.name, presetName: preset?.name ?? '自定义导出', snapshot, settings, loudnessRequested: request.loudnessRequested ?? Boolean(request.settings?.loudness || request.presetId && request.presetId !== VIDEO_EDIT_DEFAULT_EXPORT_PRESET_ID && preset?.settings.loudness), range, rangeSource, path: request.path ?? '', state: 'queued' as const, controller: new AbortController(), release }
+      return { id: crypto.randomUUID(), invocationId: request.invocationId, owner, name: snapshot.name, presetName: preset?.name ?? '自定义导出', snapshot, settings, loudnessRequested: request.loudnessRequested ?? Boolean(request.settings?.loudness || request.presetId && request.presetId !== VIDEO_EDIT_DEFAULT_EXPORT_PRESET_ID && preset?.settings.loudness), range, rangeSource, path: request.path ?? '', state: 'queued' as const, controller: new AbortController(), release }
     })
     for (const [index, job] of jobs.entries()) {
       signal?.throwIfAborted()
@@ -313,12 +314,12 @@ export function joinVideoEditOutputPath(directory: string, name: string): string
   const separator = directory.includes('\\') && !directory.includes('/') ? '\\' : '/'
   return `${directory.replace(/[\\/]+$/, '')}${separator}${name}`
 }
-export function retryVideoEditExportJob(id: string): Promise<void> {
+export function retryVideoEditExportJob(id: string, invocationId?: string): Promise<void> {
   assertApplicationWritesAllowed()
   const job = videoEditExportQueue.require(id)
   if (!listVideoEditInstances().includes(job.owner)) throw new Error('原剪辑已关闭，请重新加入导出。')
   const release = holdVideoEditActivity(job.owner.document.id, 'export')
-  try { return videoEditExportQueue.retry(id, release) } catch (error) { release(); throw error }
+  try { return videoEditExportQueue.retry(id, release, invocationId) } catch (error) { release(); throw error }
 }
 export function videoEditQueuedExportTask(projectId: string, id: string): VideoEditExportTask | undefined {
   const owner = requireVideoEditInstance(projectId)

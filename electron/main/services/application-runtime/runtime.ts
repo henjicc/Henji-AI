@@ -5,7 +5,8 @@ import { createMainLogger } from '../logging'
 import { ApplicationToolDispatcher } from './applicationToolDispatcher'
 import { ApplicationOperationCoordinator } from './operationCoordinator'
 import { ApplicationOperationStore } from './operationStore'
-import { recoverPersistedGenerationOperation, recoverPersistedTranscriptionOperation, recoverPersistedWebReplayOperation, webReplayJobIdOf } from './persistedOperationRecovery'
+import { recoverPersistedGenerationOperation, recoverPersistedTranscriptionOperation, recoverPersistedWebReplayOperation, recoverPersistedVideoEditExportOperation, webReplayJobIdOf } from './persistedOperationRecovery'
+import { videoEditExportJobRegistry } from '../video-edit-export/registry'
 import { webReplayRenderJobs } from '../web-replay/renderJobs'
 import { getAudioEditStoredTask } from '../audio-edit/task-store'
 import type { ApplicationAccess } from './toolCatalog'
@@ -31,6 +32,7 @@ export function initializeApplicationRuntime() {
   }
   const operations: ApplicationOperationCoordinator = new ApplicationOperationCoordinator(new ApplicationOperationStore(getDb()),
     record => recoverPersistedTranscriptionOperation(getAudioEditStoredTask, record)
+      ?? recoverPersistedVideoEditExportOperation(() => videoEditExportJobRegistry.list(), record, currentRevisions, original => host.ready && host.rendererEpoch === original.rendererEpoch)
       // 渲染层还连着、仍在等这次调用时以它的回执为准；主进程用登记重建只在它不在时兜底
       ?? recoverPersistedWebReplayOperation(id => webReplayRenderJobs.get(id), record, currentRevisions, original => host.ready && host.rendererEpoch === original.rendererEpoch)
       ?? recoverPersistedGenerationOperation(id => getGenerationHistoryStore().getStatus(id), record, currentRevisions),

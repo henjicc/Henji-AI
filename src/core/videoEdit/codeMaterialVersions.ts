@@ -90,5 +90,5 @@ export async function appendCodeMaterialVersion(definition: CodeMaterialDefiniti
   const kind = previous ? {} : { kindUnverified: true as const }
   const existing = found.version
   if (existing) return { ...result, definition, versionId: existing.id, ...kind }
-  return { ...result, definition: codeMaterialDefinitionSchema.parse({ ...definition, folder: result.definition.folder, versions: [...definition.versions, version] }), versionId: version.id, ...kind }
+  return { ...result, definition: codeMaterialDefinitionSchema.parse({ ...definition, folder: result.definition.folder, defaultVersionId: version.id, versions: [...definition.versions, version] }), versionId: version.id, ...kind }
 }

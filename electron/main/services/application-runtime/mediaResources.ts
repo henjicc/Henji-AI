@@ -30,6 +30,7 @@ const inputSchema = z.object({
 }).strict()
 
 async function sources(ref: z.infer<typeof inputSchema>['ref']): Promise<string[]> {
+  if (ref.kind === 'observation.image') return [ref.id]
   // 参数只作为完整业务主键交给各自的仓库，绝不作为文件路径或 SQL 片段；仓库返回已换回的绝对路径。
   if (ref.kind === 'asset') {
     const filePath = getAssetFilePath(ref.id)

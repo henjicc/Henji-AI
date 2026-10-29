@@ -82,10 +82,10 @@ export async function sendVideoEditToCanvas(input: VideoEditCanvasTransfer, sign
       throw new Error('已生成媒体的内容已改变，请再次发送以重新取帧或导出。')
     }
     if (!asset) {
-      if (input.source.kind === 'frame') asset = (await observeVideoEditFrame(input.projectId, { kind: 'program', sequenceId: input.sequenceId, frame: input.source.frame }, null, signal)).asset
+      if (input.source.kind === 'frame') asset = (await observeVideoEditFrame(input.projectId, { kind: 'program', sequenceId: input.sequenceId, frame: input.source.frame }, null, signal, undefined, { saveToAssets: true })).asset
       else {
         const prepared = videoEditClipTransferSnapshot(baseline, input.sequenceId, input.source.clipId)
-        if (prepared.kind === 'image') asset = (await observeVideoEditFrame(input.projectId, { kind: 'program', sequenceId: input.sequenceId, frame: prepared.range.startFrame }, null, signal, prepared.snapshot)).asset
+        if (prepared.kind === 'image') asset = (await observeVideoEditFrame(input.projectId, { kind: 'program', sequenceId: input.sequenceId, frame: prepared.range.startFrame }, null, signal, prepared.snapshot, { saveToAssets: true })).asset
         else {
           const platform = getPlatform(); const folder = await outputFolder(owner)
           assertSource(); await platform.system.fs.mkdir(folder, { recursive: true }); assertSource()

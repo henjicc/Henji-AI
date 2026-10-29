@@ -26,6 +26,14 @@ vi.mock('../../protocol', () => ({
 import { readApplicationMediaResource } from './mediaResources'
 
 let directory: string
+it('观察缓存引用无需登记素材即可读回实际图片', async () => {
+  const filename = path.join(state.root, 'observation.png')
+  await sharp({ create: { width: 32, height: 18, channels: 3, background: 'black' } }).png().toFile(filename)
+  const image = await readApplicationMediaResource({ ref: { kind: 'observation.image', id: filename }, mode: 'image' })
+  expect(image).toMatchObject({ mode: 'image', width: 32, height: 18, mimeType: 'image/jpeg' })
+  expect((await sharp(Buffer.from(image.base64, 'base64')).metadata()).width).toBe(32)
+  expect(state.rows.size).toBe(0)
+})
 beforeAll(async () => { directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-mcp-media-')); state.root = path.join(directory, 'allowed'); await fs.mkdir(state.root) })
 afterAll(async () => { await fs.rm(directory, { recursive: true, force: true }) })
 beforeEach(() => { state.rows.clear(); state.results.clear(); state.project = null })

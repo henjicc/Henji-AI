@@ -45,6 +45,13 @@ it('换页时正在跑的项标成中断并只删主进程替本项创建的文�
   expect(await exports.restore({ senderId: 2, pageId: 'another' })).toEqual([])
 })
 
+it('同一次登记的回执丢失后重试登记，保留所有已接受操作的身份', () => {
+  const exports = registry(), entry = job('export', [path.join(root, 'movie.mp4')])
+  exports.register(oldPage, { snapshots: ['snapshot'], jobs: [{ ...entry, invocationId: 'first' }] })
+  exports.register(oldPage, { snapshots: ['snapshot'], jobs: [{ ...entry, invocationId: 'retry' }] })
+  expect(exports.list()[0].invocationIds).toEqual(['first', 'retry'])
+})
+
 it('被拦下的导航不触发中断；只有渲染进程退出或销毁才算离开', async () => {
   const exports = registry(); const sender = new EventEmitter()
   watchVideoEditExportSender(sender, oldPage.senderId, exports)

@@ -150,13 +150,13 @@ export class CodeProjectRepository extends CodeGitRepository {
       if (!state.changes.length) throw new Error('工程没有未提交的工作区修改。')
       for (const change of state.changes) codeProjectPathSchema.parse(change.path)
       await this.initialize()
-      const divergent = (await git.statusMatrix(this.options)).filter(([, head, work, stage]) => stage !== head && stage !== work).map(([file]) => file)
-      if (divergent.length) throw new Error(`暂存内容与工作区不同：${divergent.join('、')}；请先在外部编辑器中保存或恢复暂存内容，再提交工作区。`)
+      const matrix = await git.statusMatrix(this.options)
       const indexPath = path.join(this.dir, '.git/index')
       const index = await fsp.readFile(indexPath).catch(error => { if (error.code === 'ENOENT') return null; throw error })
       try {
-        for (const change of state.changes) if (change.kind === 'deleted') await git.remove({ ...this.options, filepath: change.path })
-        const additions = state.changes.filter(change => change.kind !== 'deleted').map(change => change.path)
+        // 提交工作区的当前内容，包括撤回过的暂存修改，避免把旧暂存内容夹进这次提交。
+        for (const [file, head, work, stage] of matrix) if (!work && (head || stage)) await git.remove({ ...this.options, filepath: file })
+        const additions = matrix.filter(([, head, work, stage]) => work && (head !== work || stage !== work)).map(([file]) => file)
         if (additions.length) await git.add({ ...this.options, filepath: additions, parallel: true })
         return await git.commit({ ...this.options, author, message })
       } catch (error) {

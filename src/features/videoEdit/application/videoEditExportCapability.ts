@@ -49,7 +49,7 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
       const job = videoEditExportQueue.require(input.retryTaskId)
       if (job.owner !== owner) throw new Error('导出项必须属于明确的原剪辑。')
       if (context.callerGrant && job.settings.addToLibrary && !context.callerGrant.permissions.includes('assets:write')) throw new Error('此导出设置要求加入资产库，需要 assets:write 授权；请调整连接授权后重试。')
-      context.signal?.throwIfAborted(); await execution.run(() => retryVideoEditExportJob(job.id)); message = '已按原快照重新加入队列。'
+      context.signal?.throwIfAborted(); await execution.run(() => retryVideoEditExportJob(job.id, context.requestId)); message = '已按原快照重新加入队列。'
       submitted = [job]
     } else {
       const requests = input.exports ? await Promise.all(input.exports.map(async value => {
@@ -65,7 +65,7 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
         return { projectId, loudnessRequested: Boolean(value.settings?.loudness || value.presetRef && value.presetRef.id !== 'builtin:sequence' && preset?.settings.loudness), sequenceId: sequenceId?.slice(projectId.length + 1), presetId: preset?.id, range: value.range, settings: value.fit ? { ...settings, fit: value.fit } : settings, outputDirectory: () => videoEditCapabilityOutputDirectory(projectId, input.destination) }
       })) : [{ projectId: documentRef.id, loudnessRequested: Boolean(input.loudness || input.settings?.loudness), range: input.range, settings: input.settings ?? await adaptVideoEditExportPreset(patchVideoEditExportSettings(videoEditSequenceExportSettings(videoEditComposition(owner.document, owner.activeSequenceId)), { ...(input.loudness ? { loudness: input.loudness } : {}), ...(input.format ? { format: input.format as 'mp4' | 'aac' | 'wav' } : {}) })), outputDirectory: () => videoEditCapabilityOutputDirectory(documentRef.id, input.destination) }]
       if (context.callerGrant && requests.some(value => value.settings.addToLibrary) && !context.callerGrant.permissions.includes('assets:write')) throw new Error('加入资产库需要 assets:write 授权；请在导出 settings 中设 addToLibrary=false，或调整连接授权后重试。')
-      const jobs = await execution.run(() => enqueueVideoEditExports(requests, context.signal))
+      const jobs = await execution.run(() => enqueueVideoEditExports(requests.map(request => ({ ...request, invocationId: context.requestId })), context.signal))
       submitted = jobs
       verified = jobs.length > 0; message = verified ? `已加入 ${jobs.length} 项导出，请查询队列确认完成。` : '已取消文件选择，未加入任何导出。'
       condition = verified ? '全部输出路径已确认，原序列快照已一次提交到正式队列。' : '用户取消文件选择，未提交任务。'

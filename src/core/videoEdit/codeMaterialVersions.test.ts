@@ -33,6 +33,7 @@ describe('作者接口与内置库版本保持一致', () => {
     expect(saved.versionId).toBe(old.defaultVersionId)
     expect(saved.program.bundle.libraries).toEqual({ 'henji-layout': '1.0.0' })
     const edited = await appendCodeMaterialVersion(old, text + '\n// 改动', compile, documentCodeSourceResolver(), publication)
+    expect(edited.definition.defaultVersionId).toBe(edited.versionId)
     expect(edited.definition.versions.at(-1)?.libraries).toEqual({ 'henji-layout': '1.0.0' })
     const upgraded = await appendCodeMaterialVersion(old, text, compile, documentCodeSourceResolver(), { ...publication, libraries: { 'henji-layout': '1.1.0' } })
     expect(upgraded.versionId).not.toBe(old.defaultVersionId)
@@ -133,7 +134,7 @@ describe('剪辑源码文件引用契约', () => {
   it('源码版本追加不可变，保存重读不跟随默认版本或保存IR', async () => {
     const { definition } = await makeCodeMaterialDefinition(source(), compile, publication)
     const published = await appendCodeMaterialVersion(definition, source(.7), compile, documentCodeSourceResolver(), publication)
-    expect(published.definition.defaultVersionId).toBe(definition.defaultVersionId)
+    expect(published.definition.defaultVersionId).toBe(published.versionId)
     expect(definition.versions).toHaveLength(1); expect(published.definition.versions).toHaveLength(2)
     const document = createVideoEditDocument('内嵌源码剪辑')
     const json = JSON.stringify({ ...document, codeMaterials: [{ ...published.definition, defaultVersionId: published.versionId }] })

@@ -59,7 +59,7 @@ export async function redubRecordingSentence(sessionId: string, options: Recordi
       if (!item.sequenceId) throw new Error('画面来源不可读，请先恢复录制成片。')
       const screen = owner.document.sequences.find(v => v.id === item.sequenceId)!, fps = screen.frameRate.numerator / screen.frameRate.denominator
       const frame = Math.floor(videoEditClipSourceSecondsAt(picture, target.end - 1, target.fps) * fps)
-      const image = await observeVideoEditFrame(options.documentId, { kind: 'program', sequenceId: screen.id, frame }, null, signal, { ...videoEditComposition(owner.document, screen.id), captions: [] })
+      const image = await observeVideoEditFrame(options.documentId, { kind: 'program', sequenceId: screen.id, frame }, null, signal, { ...videoEditComposition(owner.document, screen.id), captions: [] }, { saveToAssets: true })
       stillPath = image.asset.filePath; current()
     }
     await importVideoEditSources(options.documentId, [{ path: audio.path }, ...(stillPath ? [{ path: stillPath }] : [])], undefined, signal, async draft => {

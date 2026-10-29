@@ -22,8 +22,9 @@ interface Pending { resolve: (response: CodeCompilerResponse) => void; reject: (
 export class VideoEditCodeCompiler {
   private worker?: CodeCompilerWorker
   private readonly pending = new Map<number, Pending>()
-  private readonly jobs = new Set<number>()
-  private readonly capacityWaiters = new Set<() => void>()
+  private readonly jobs = new Map<number, { files: CodeMaterialFiles; kind: 'author.bundle' }>()
+  private active?: number
+  private timer?: ReturnType<typeof setTimeout>
   private next = 0
   private disposed = false
   private cacheHits = 0
@@ -36,42 +37,37 @@ export class VideoEditCodeCompiler {
     worker.onmessage = event => {
       if (this.worker !== worker) return
       const response = event.data
-      if (!this.jobs.delete(response.id)) return
-      this.wakeCapacityWaiters()
+      if (this.active !== response.id || !this.jobs.delete(response.id)) return
+      clearTimeout(this.timer); this.timer = undefined; this.active = undefined
       const pending = this.pending.get(response.id)
-      if (!pending) return
-      this.pending.delete(response.id); pending.clean()
-      if ('error' in response) pending.reject(restoreContentTrustError(new CodeMaterialError(response.error.code, response.error.message, response.error.sourceSpan), response.error.contentTrust))
-      else { if (response.cacheHit) this.cacheHits++; pending.resolve(response) }
+      if (pending) {
+        this.pending.delete(response.id); pending.clean()
+        if ('error' in response) pending.reject(restoreContentTrustError(new CodeMaterialError(response.error.code, response.error.message, response.error.sourceSpan), response.error.contentTrust))
+        else { if (response.cacheHit) this.cacheHits++; pending.resolve(response) }
+      }
+      this.startNext()
     }
     worker.onerror = event => { event.preventDefault?.(); if (this.worker === worker) this.reset(new Error(`源码检查线程失败：${event.message}`)) }
     worker.onmessageerror = () => { if (this.worker === worker) this.reset(new Error('源码检查结果无法读取，请重试。')) }
     return worker
   }
   private reset(error: Error): void {
+    clearTimeout(this.timer); this.timer = undefined; this.active = undefined
     this.worker?.terminate(); this.worker = undefined
     for (const pending of this.pending.values()) { pending.clean(); pending.reject(error) }
     this.pending.clear()
     this.jobs.clear()
-    this.wakeCapacityWaiters()
   }
-  private wakeCapacityWaiters(): void { for (const wake of [...this.capacityWaiters]) wake() }
-  /** Shared preparation waits for the existing eight-job limit. It must not
-   * turn independent sessions into a new user-visible global budget failure. */
-  async bundleQueued(files: CodeMaterialFiles, signal?: AbortSignal): Promise<AuthorBundle> {
-    if (!directAuthorBundle(files)) await this.waitForCapacity(signal)
-    return this.bundle(files, signal)
-  }
-  private async waitForCapacity(signal?: AbortSignal): Promise<void> {
-    while (this.jobs.size >= 8 && !this.disposed) {
-      signal?.throwIfAborted()
-      await new Promise<void>((resolve, reject) => {
-        const clean = (): void => { this.capacityWaiters.delete(wake); signal?.removeEventListener('abort', abort) }
-        const wake = (): void => { clean(); resolve() }
-        const abort = (): void => { clean(); reject(signal?.reason) }
-        this.capacityWaiters.add(wake); signal?.addEventListener('abort', abort, { once: true })
-      })
-    }
+  /** 单个编译线程按到达顺序处理，排队时间不占源码执行时限。 */
+  bundleQueued(files: CodeMaterialFiles, signal?: AbortSignal): Promise<AuthorBundle> { return this.bundle(files, signal) }
+  private startNext(): void {
+    if (this.active !== undefined || this.disposed) return
+    const next = this.jobs.entries().next().value
+    if (!next) return
+    const [id, job] = next
+    this.active = id
+    this.timer = setTimeout(() => this.reset(Object.assign(new Error('源码检查超过时限，已释放线程；最后有效版本保留，请重试。'), { name: 'VideoEditCodeCompileTimeoutError' })), this.timeoutMs)
+    try { this.acquire().postMessage({ id, ...job }) } catch (error) { this.reset(error instanceof Error ? error : new Error(String(error))) }
   }
   bundle(files: CodeMaterialFiles, signal?: AbortSignal): Promise<AuthorBundle> {
     if (this.disposed) return Promise.reject(new Error('源码读取会话已关闭。'))
@@ -84,23 +80,18 @@ export class VideoEditCodeCompiler {
   private request(files: CodeMaterialFiles, kind: 'author.bundle', signal?: AbortSignal): Promise<CodeCompilerResponse> {
     if (this.disposed) return Promise.reject(new Error('源码检查会话已关闭。'))
     if (signal?.aborted) return Promise.reject(new DOMException('源码检查已取消。', 'AbortError'))
-    if (this.jobs.size >= 8) return Promise.reject(new CodeMaterialError('BUDGET', '源码检查队列已满，请等待当前检查完成。'))
-    let worker: CodeCompilerWorker
-    try { worker = this.acquire() } catch (error) { return Promise.reject(error) }
     const id = ++this.next
     return new Promise((resolve, reject) => {
       const abort = (): void => {
         const pending = this.pending.get(id)
         if (!pending) return
-        // Only this observer stops waiting. The worker finishes the build into its cache, so the next request for the
-        // same source (the next frame of a scrub across a new section, a jump back to it) is a cache hit instead of a
-        // cold worker rebuilding every section; the job keeps its queue slot until its receipt arrives.
+        // 已开始的检查继续写入线程缓存；尚未开始的取消请求无需再编译。
         this.pending.delete(id); pending.clean(); pending.reject(new DOMException('源码检查已取消。', 'AbortError'))
+        if (this.active !== id) this.jobs.delete(id)
       }
-      const timer = setTimeout(() => { if (this.pending.has(id)) this.reset(new Error('源码检查超过时限，已释放线程；最后有效版本保留，请重试。')) }, this.timeoutMs)
-      const clean = (): void => { clearTimeout(timer); signal?.removeEventListener('abort', abort) }
-      this.jobs.add(id); this.pending.set(id, { resolve, reject, clean }); signal?.addEventListener('abort', abort, { once: true })
-      try { worker.postMessage({ id, files, kind }) } catch (error) { this.reset(error instanceof Error ? error : new Error(String(error))) }
+      const clean = (): void => { signal?.removeEventListener('abort', abort) }
+      this.jobs.set(id, { files, kind }); this.pending.set(id, { resolve, reject, clean }); signal?.addEventListener('abort', abort, { once: true })
+      this.startNext()
     })
   }
   dispose(): void { this.disposed = true; this.reset(new Error('源码检查会话已关闭。')) }

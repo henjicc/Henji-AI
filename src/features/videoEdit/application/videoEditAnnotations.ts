@@ -223,10 +223,10 @@ export async function askAssistantAtVideoEditFrame(projectId: string, point?: { 
   if (owner.playing) throw new Error('请先暂停画面，再告诉助手要改哪里。')
   const before = owner.document; const contentVersion = owner.contentVersion; const sequenceId = owner.activeSequenceId; const at = owner.frame; const selection = owner.selection; const selectedClips = owner.selectedClipIds
   const chosen = point ? undefined : before.sequences.find(sequence => sequence.id === sequenceId)?.annotations.find(mark => mark.id === selectedVideoEditAnnotation(projectId) && mark.frame === at && mark.status !== 'resolved')
-  const frame = await observeVideoEditFrame(projectId, { kind: 'program', sequenceId, frame: at }, 1920, undefined, undefined, { overlayAnnotations: true })
+  const frame = await observeVideoEditFrame(projectId, { kind: 'program', sequenceId, frame: at }, 1920, undefined, undefined, { overlayAnnotations: true, saveToAssets: true })
   const attachments = [{ attachment: assetToAgentAttachment(frame.asset), previewSrc: frame.asset.displayUrl }]
   if (chosen && ['region', 'ellipse', 'arrow', 'stroke'].includes(chosen.target.kind)) {
-    const crop = await observeVideoEditFrame(projectId, { kind: 'program', sequenceId, frame: at }, 1920, undefined, undefined, { annotationIds: [chosen.id], cropAnnotationId: chosen.id }); attachments.push({ attachment: assetToAgentAttachment(crop.asset), previewSrc: crop.asset.displayUrl })
+    const crop = await observeVideoEditFrame(projectId, { kind: 'program', sequenceId, frame: at }, 1920, undefined, undefined, { annotationIds: [chosen.id], cropAnnotationId: chosen.id, saveToAssets: true }); attachments.push({ attachment: assetToAgentAttachment(crop.asset), previewSrc: crop.asset.displayUrl })
   }
   if (!isVideoEditContentCurrent(owner, contentVersion) || owner.activeSequenceId !== sequenceId || owner.frame !== at || owner.playing || owner.selection !== selection || owner.selectedClipIds !== selectedClips) throw new Error('原画面已改变，请暂停后重新发送。')
   const id = createVideoEditAnnotation(projectId, sequenceId, { frame: at, ...(chosen?.endFrame !== undefined ? { endFrame: chosen.endFrame } : {}), ...(chosen?.clipId || owner.selection ? { clipId: chosen?.clipId ?? owner.selection! } : {}), target: point ? { kind: 'point', ...point } : chosen?.target ?? { kind: 'point', x: 0.5, y: 0.5 }, text: '请修改这里（等待用户说明）。', status: 'open' })

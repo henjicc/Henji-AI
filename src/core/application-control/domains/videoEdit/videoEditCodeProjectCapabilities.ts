@@ -6,7 +6,7 @@ import type { CodeMaterialRetargetedInstance } from '../../../videoEdit/codeMate
 const documentRef = applicationRefSchema.extend({ kind: z.literal('video_edit.document') }).strict()
 export const commitVideoEditCodeProjectCapability = defineApplicationCapability({
   id: 'commit_video_edit_code_project', version: 1, domain: 'video_edit', title: '提交代码工程外部修改',
-  description: '把外部编辑器修改后的代码工程工作区保存为一次 Git 提交；读取 changes 不会提交。提交后素材仍固定原版本，需创建版本或升级素材。', aliases: ['提交工程源码', 'commit code project'],
+  description: '自动暂存代码工程工作区的全部当前改动并保存为一次 Git 提交，无需先 git add；已有暂存内容以工作区当前内容为准。读取 changes 不会提交。提交后素材仍固定原版本，需创建版本或升级素材。', aliases: ['提交工程源码', 'commit code project'],
   readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write', idempotent: true, destructive: false, timeoutMs: 60000, supportsPreview: false, supportsUndo: false,
   requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document'], producesRefs: ['video_edit.code_project'],
   inputSchema: z.object({ documentRef, message: z.string().trim().min(1).max(2000) }).strict(),

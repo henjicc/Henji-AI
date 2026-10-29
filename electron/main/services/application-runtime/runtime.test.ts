@@ -8,6 +8,9 @@ import { initializeApplicationRuntime, createEmbeddedApplicationClient } from '.
 import { webReplayRenderJobs } from '../web-replay/renderJobs'
 import { webReplayJobIdOf } from './persistedOperationRecovery'
 import type { HostContextSnapshot } from '../../../../src/core/application-control/hostContracts'
+import { videoEditExportJobRegistry } from '../video-edit-export/registry'
+import { applicationInvocationId } from '../../../../src/core/application-control/operationIdentity'
+import { VIDEO_EDIT_EXPORT_PRESETS } from '../../../../src/core/videoEdit/exportPresets'
 
 vi.mock('electron', () => ({ app: { isPackaged: false }, dialog: { showMessageBox: vi.fn() } }))
 vi.mock('../db', () => ({ getDb: () => undefined }))
@@ -86,4 +89,30 @@ it('网页重演结束时：发起它的页面还在等就以页面回执为准�
   host.register({ rendererEpoch: randomUUID(), attachmentSequence: 4, ready: true, tools: [], domains: [] }, { send: vi.fn() })
   host.publishContext({ revision: 3, scopeRevisions: { screen_recording: 0 } } as unknown as HostContextSnapshot)
   expect(operations.store.get(orphan.operationId, orphan.callerId)).toMatchObject({ state: 'completed', result: { ok: true, resultingRevision: 3, data: { video: replayResult.output } } })
+})
+
+it('渲染层重载后操作查询从导出登记恢复中断与完成状态，回执丢失也不丢任务', async () => {
+  const { host, operations } = initializeApplicationRuntime()
+  const callerId = randomUUID(), documentRef = { kind: 'video_edit.document', id: randomUUID() }
+  const record: OperationRecord = { operationId: randomUUID(), callerId, capabilityId: 'export_video_edit', inputDigest: 'export', input: { documentRef }, state: 'unknown', rendererEpoch: 'departed' }
+  const page = { senderId: 1, pageId: randomUUID() }, restored = { senderId: 1, pageId: randomUUID() }, id = randomUUID()
+  videoEditExportJobRegistry.register(page, { snapshots: [JSON.stringify({ id: 'sequence' })], jobs: [{ invocationId: applicationInvocationId(callerId, record.operationId), id, projectId: documentRef.id, name: '成片', presetName: '母版', restorable: true, snapshotIndex: 0, outputPaths: ['D:/exports/movie.mp4'],
+    payload: { path: 'D:/exports/movie.mp4', settings: VIDEO_EDIT_EXPORT_PRESETS[0].settings, range: { startFrame: 0, endFrame: 30 }, rangeSource: 'content' } }] })
+  videoEditExportJobRegistry.update(page, { id, state: 'running', progress: 0.4 })
+  operations.store.save(record)
+  await videoEditExportJobRegistry.restore(restored)
+  host.register({ rendererEpoch: randomUUID(), attachmentSequence: 5, ready: true, tools: [], domains: [] }, { send: vi.fn() })
+  host.publishContext({ revision: 9, scopeRevisions: { video_edit: 2 } } as unknown as HostContextSnapshot)
+  const client = createEmbeddedApplicationClient(callerId, { allowWrites: true, allowPaid: false, allowDestructive: false })
+  try {
+    const query = () => client.call('get_application_operation', { operationId: record.operationId }, new AbortController().signal)
+    expect(await query()).toMatchObject({ executionState: 'completed', result: { ok: true, data: { queue: [{ id, state: 'interrupted', outputReady: false, notice: expect.stringContaining('retryTaskId') }] } } })
+    const retry = { ...record, operationId: randomUUID(), state: 'unknown' as const }
+    operations.store.save(retry)
+    videoEditExportJobRegistry.update(restored, { id, invocationId: applicationInvocationId(callerId, retry.operationId), state: 'running', progress: 0 })
+    expect(await client.call('get_application_operation', { operationId: retry.operationId }, new AbortController().signal)).toMatchObject({ executionState: 'completed', result: { data: { queue: [{ id, state: 'running' }] } } })
+    videoEditExportJobRegistry.outputPublished(restored, id)
+    videoEditExportJobRegistry.update(restored, { id, state: 'completed', progress: 1 })
+    expect(await query()).toMatchObject({ result: { data: { queue: [{ id, state: 'completed', outputReady: true, path: 'D:/exports/movie.mp4' }], message: '导出已完成。' } } })
+  } finally { client.close(); videoEditExportJobRegistry.remove(restored, [id]); host.disconnect() }
 })

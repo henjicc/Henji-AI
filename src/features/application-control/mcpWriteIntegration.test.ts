@@ -117,7 +117,7 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
       expect(useNavigationStore.getState().activeWorkspace).toBe('nodes')
       expect(video.activeVideoEditInstance()).toBeUndefined()
       const asset = { id: 'mcp-observed-frame', filePath: path.join(os.tmpdir(), 'private', 'frame.png'), displayUrl: '', mediaType: 'image' as const, displayName: '观察画面', source: 'video-edit' as const, mimeType: 'image/png', sizeBytes: 4, width: 320, height: 180, durationSeconds: 0, thumbnailPath: null, thumbnailUrl: null, inspectionStatus: 'ready' as const, inspectionError: null, fileModifiedAt: 1, contentIdentity: 'd'.repeat(64), lastUsedAt: null, createdAt: 1, updatedAt: 1, tags: [], libraryIds: [] }
-      const observe = vi.spyOn(observation, 'observeVideoEditFrame').mockResolvedValue({ asset, byteLength: 4, width: 320, height: 180, sourceWidth: 320, sourceHeight: 180, documentRevision: 0, documentVersion: 'renderer:document:0' })
+      const observe = vi.spyOn(observation, 'observeVideoEditFrame').mockResolvedValue({ asset, image: asset, resultRef: { kind: 'asset', id: asset.id }, reused: false, byteLength: 4, width: 320, height: 180, sourceWidth: 320, sourceHeight: 180, documentRevision: 0, documentVersion: 'renderer:document:0' })
       const inspect = vi.spyOn(getPlatform().assetLibrary, 'inspectAsset').mockResolvedValue(asset)
       const jpeg = await (await import('sharp')).default({ create: { width: 32, height: 18, channels: 3, background: { r: 0, g: 0, b: 0 } } }).jpeg().toBuffer()
       const media = vi.spyOn(mediaResources, 'readApplicationMediaResource').mockResolvedValue({ mode: 'image', mimeType: 'image/jpeg', base64: jpeg.toString('base64'), width: 32, height: 18, offset: 0, byteLength: jpeg.length, totalBytes: jpeg.length, eof: true })
