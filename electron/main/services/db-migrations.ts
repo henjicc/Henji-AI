@@ -19,10 +19,10 @@ import {
   audioEditProjectsNeedBackup,
   cameraStageProjectsNeedBackup,
   canvasProjectsNeedBackup,
-  retireAudioEditProjectsV1,
-  retireCameraStageProjectsV1,
-  retireCanvasProjectsV1,
-} from './legacy-project-tables'
+  retireAudioEditProjects,
+  retireCameraStageProjects,
+  retireCanvasProjects,
+} from './project-table-retirement'
 import { createMainLogger, type MainLogger } from './logging/main-logger'
 import { createModelTraceTablesV1 } from './logging/traceSchema'
 import { createPresetsTableV1 } from './presets/schema'
@@ -30,7 +30,7 @@ import { createSettingsTableV1 } from './settings/schema'
 import { storedLocationsNeedBackup, upgradeStoredLocationsV1 } from './stored-locations-migration'
 
 /*
- * henji.db 的统一版本化迁移账本（实施方案 2.9；存储底座 2.2 建立，2.3 数据库收口把全部老表并入）。
+ * henji.db 的统一版本化迁移账本，保证每个结构变更只执行一次。
  *
  * - 账本表 `schema_migrations` 记录已执行的迁移（版本号、名称、执行时间）。
  * - 迁移按版本号严格递增，默认各自在独立事务里执行并同时写账本，失败整体回滚、下次启动重试。
@@ -38,17 +38,17 @@ import { storedLocationsNeedBackup, upgradeStoredLocationsV1 } from './stored-lo
  *   这类迁移必须可以重复执行（中途退出后下次启动会再跑一遍）。
  * - 有破坏性步骤（重建表、改写已有数据）的迁移声明 `backupWhen`：库里确有要改的数据时，
  *   执行前先把整库复制一份到程序目录 `backups/`（`VACUUM INTO`，一致快照）；备份失败不执行迁移。
- * - 需要位置换算（实施方案 2.5）的迁移经 `context.locations()` 取作品目录与项目，只有真的有数据要换时才取，
+ * - 需要位置换算的迁移经 `context.locations()` 取作品目录与项目，只有真的有数据要换时才取，
  *   全新安装不会因为迁移提前确定作品目录。
  * - 追加迁移：在 SCHEMA_MIGRATIONS 末尾加一项（版本号 +1、名称唯一），建表 / 改表函数放在拥有该表的仓库旁边。
  *   已发布的迁移不得修改或删除（账本按版本号核对名称，不一致即拒绝启动，避免静默分叉）。
  * - 数据库由更新版本的程序写过（账本里有未知的更高版本）时只记日志，不回退、不报错。
  *
- * 2.3 之前的库没有账本里的第 2 项起：这些迁移用 `IF NOT EXISTS` 建表并补齐当时散写的补列，
+ * 未接入账本的库需要用 `IF NOT EXISTS` 建表并补齐缺列，
  * 已有的表与数据原样保留，就地进入账本。
  *
- * 被文档文件取代的旧工程表（镜头参考、口播、画布）已在 3.x 各工具接入时用退役迁移删除
- * （legacy-project-tables.ts，第 15–17 项）；此后 henji.db 的全部表都由本账本管理。
+ * 工程表退役由独立迁移函数管理，避免在账本外变更数据库结构。
+ * 迁移函数位于 project-table-retirement.ts，对应第 15–17 项。
  */
 
 export interface SchemaMigrationContext {
@@ -83,12 +83,12 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   { version: 12, name: 'camera_stage_render_tasks', up: createCameraStageRenderTaskTableV1 },
   { version: 13, name: 'model_traces', up: createModelTraceTablesV1 },
   { version: 14, name: 'stored_locations', up: upgradeStoredLocationsV1, backupWhen: storedLocationsNeedBackup },
-  // 3.2 镜头参考接入文档文件：删旧工程表，渲染回执改引用文档 ID（旧回执清空，不迁移内容）
-  { version: 15, name: 'retire_camera_stage_projects', up: retireCameraStageProjectsV1, backupWhen: cameraStageProjectsNeedBackup },
-  // 3.3 口播接入文档文件：删旧工程表，处理任务表重建为按文档 ID 归属（旧回执清空，不迁移内容）
-  { version: 16, name: 'retire_audio_edit_projects', up: retireAudioEditProjectsV1, backupWhen: audioEditProjectsNeedBackup },
-  // 3.4 画布接入文档文件：删两张旧画布工程表（不迁移内容）；此后 henji.db 的全部表都由账本管理
-  { version: 17, name: 'retire_canvas_projects', up: retireCanvasProjectsV1, backupWhen: canvasProjectsNeedBackup },
+  // 删除 camera_stage_projects，清空工程回执；新回执的 cameraStageDocumentId 指向文档 ID，工程内容不迁移。
+  { version: 15, name: 'retire_camera_stage_projects', up: retireCameraStageProjects, backupWhen: cameraStageProjectsNeedBackup },
+  // 删除 audio_edit_projects，将 audio_edit_tasks 整表重建为按 document_id 归属；清空工程回执，不迁移内容。
+  { version: 16, name: 'retire_audio_edit_projects', up: retireAudioEditProjects, backupWhen: audioEditProjectsNeedBackup },
+  // 删除 storyboard_projects 与 canvas_projects，不迁移内容；henji.db 的全部表由迁移账本管理。
+  { version: 17, name: 'retire_canvas_projects', up: retireCanvasProjects, backupWhen: canvasProjectsNeedBackup },
   // 作品索引记最近打开时间（只是索引元数据，可重建）
   { version: 18, name: 'document_index_last_opened', up: addDocumentIndexLastOpenedV1 },
   // TEXT state/record_json need no DDL. Register the new durable confirmation state semantics

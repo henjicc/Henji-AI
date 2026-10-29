@@ -2,7 +2,7 @@ import Database from 'better-sqlite3'
 import os from 'node:os'
 import { describe, expect, it } from 'vitest'
 import { initializeSchema } from '../db'
-import { createLegacyDatabase } from '../db-legacy-schema.test-support'
+import { createDatabaseMigrationFixture } from '../db-migration-fixture.test-support'
 import { testLocationContext } from '../db.test-support'
 
 const options = { locationContext: () => testLocationContext(os.tmpdir()) }
@@ -22,7 +22,7 @@ describe.skipIf(!process.versions.electron)('正式SQLite资产库迁移（迁�
 it('旧资产库进入账本时补内容身份列，保留原资产、标签和集合；之后的初始化不再改动', () => {
   const db = new Database(':memory:')
   try {
-    createLegacyDatabase(db)
+    createDatabaseMigrationFixture(db)
     db.exec('ALTER TABLE assets DROP COLUMN content_identity')
     db.prepare("INSERT INTO assets (id,media_type,display_name,file_path,source,inspection_status,size_bytes,file_modified_at,created_at,updated_at) VALUES (?,?,?,?,?,'ready',?,?,?,?)").run('original', 'video', '原片', 'D:/original.mp4', 'imported', 4096, 1000, 1, 2)
     db.prepare('INSERT INTO asset_libraries (id,name,created_at,updated_at) VALUES (?,?,?,?)').run('library', '原库', 1, 2)
@@ -43,7 +43,7 @@ it('旧资产库进入账本时补内容身份列，保留原资产、标签和�
 it.each(['source', 'media_type'] as const)('升级旧%s约束保留真实附加列、库/标签关系、索引、触发器和依赖视图，并恢复外键约束', missing => {
   const db = new Database(':memory:')
   try {
-    createLegacyDatabase(db)
+    createDatabaseMigrationFixture(db)
     const sql = (db.prepare("SELECT sql FROM sqlite_schema WHERE name='assets' AND type='table'").get() as { sql: string }).sql.replace(missing === 'source' ? ", 'video-edit'" : ", 'code'", '')
     db.exec('DROP TABLE assets'); db.exec(sql); db.pragma('foreign_keys=ON')
     db.exec('ALTER TABLE assets ADD COLUMN retained_note TEXT; CREATE INDEX idx_retained_note ON assets(retained_note); CREATE TABLE asset_audit (asset_id TEXT); CREATE TRIGGER asset_insert_audit AFTER INSERT ON assets BEGIN INSERT INTO asset_audit VALUES (NEW.id); END; CREATE VIEW asset_names AS SELECT id,display_name,retained_note FROM assets; CREATE VIEW asset_names_outer AS SELECT * FROM asset_names')
@@ -75,7 +75,7 @@ it.each(['source', 'media_type'] as const)('升级旧%s约束保留真实附加�
 it('来源迁移核验失败时回滚原表、关系和schema，账本停在上一项，并恢复调用前的外键设置', () => {
   const db = new Database(':memory:')
   try {
-    createLegacyDatabase(db)
+    createDatabaseMigrationFixture(db)
     const sql = (db.prepare("SELECT sql FROM sqlite_schema WHERE name='assets' AND type='table'").get() as { sql: string }).sql.replace(", 'video-edit'", '')
     db.exec('DROP TABLE assets'); db.exec(sql)
     db.prepare('INSERT INTO asset_libraries (id,name,created_at,updated_at) VALUES (?,?,?,?)').run('library', '原库', 1, 2)

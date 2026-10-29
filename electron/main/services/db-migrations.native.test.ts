@@ -13,7 +13,7 @@ vi.mock('./logging/main-logger', () => ({
 }))
 
 import { initializeSchema } from './db'
-import { createLegacyDatabase } from './db-legacy-schema.test-support'
+import { createDatabaseMigrationFixture } from './db-migration-fixture.test-support'
 import { runSchemaMigrations, SCHEMA_MIGRATIONS } from './db-migrations'
 import { testDatabaseLocations, testLocationContext } from './db.test-support'
 import { GenerationHistoryStore } from './generation-history/store'
@@ -21,7 +21,7 @@ import { PresetStore } from './presets/store'
 import { SettingsStore } from './settings/store'
 
 /*
- * 存储底座 2.3：旧库就地进入迁移账本、数据保留、生成记录结果改数组、路径换成位置写法、重复执行幂等；
+ * 迁移账本必须保留旧库数据并支持重复执行：旧库就地进入迁移账本、数据保留、生成记录结果改数组、路径换成位置写法、重复执行幂等；
  * 以及各仓库按位置写法存取（换作品目录后记录不用改写）。原生驱动使用 Electron ABI，
  * 登记在 scripts/lib/testSuites.cjs 的原生清单里，由 test:assistant-persistence 执行。
  */
@@ -50,7 +50,7 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
   })
 
   function seedLegacy(db: Database.Database): { userFile: string; externalFile: string; thumbnail: string } {
-    createLegacyDatabase(db)
+    createDatabaseMigrationFixture(db)
     const userFile = path.join(context.userRoot, '生成结果', 'a.png')
     const externalFile = path.join(base, '外部', 'b.mp4')
     const thumbnail = path.join(context.programRoots![0]!, 'Thumbnails', `${'c'.repeat(64)}.webp`)
@@ -81,11 +81,11 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
     return { userFile, externalFile, thumbnail }
   }
 
-  it('旧库（含 2.2 账本第 1 项）进入账本：数据保留、结果改数组、路径换写法、缩略图只存文件名，再次执行不改动', () => {
+  it('旧库（已执行首个迁移）进入账本：数据保留、结果改数组、路径换写法、缩略图只存文件名，再次执行不改动', () => {
     const db = new Database(':memory:')
     try {
       const { userFile, externalFile } = seedLegacy(db)
-      // 2.2 已经执行过第 1 项的库。
+      // 已有账本记录的库也必须能继续升级，不能重复执行已完成的迁移。
       runSchemaMigrations(db, SCHEMA_MIGRATIONS.slice(0, 1))
       const resolver = vi.fn(() => context)
       initializeSchema(db, { locationContext: resolver })
@@ -127,14 +127,14 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
       expect(columns(db, 'generation_submissions')).toEqual(expect.arrayContaining(['phase', 'model_id']))
       expect(db.prepare('SELECT phase FROM generation_submissions').get()).toEqual({ phase: 'provider' })
       expect(JSON.parse((db.prepare('SELECT response_json FROM generation_submissions').get() as { response_json: string }).response_json)).toMatchObject({ filePath: 'henji://user/生成结果/a.png' })
-      // 3.2 第 15 项：镜头参考旧工程表删除，引用旧工程 ID 的渲染回执清空（不迁移内容，重要记录 008）。
+      // 工程回执无法映射文档 ID，必须随退役表一起清理。
       expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'camera_stage_projects'").get()).toBeUndefined()
-      // 3.4 第 17 项：两张旧画布工程表删除。
+      // 退役的画布工程表不能被初始化入口重新创建。
       expect(db.prepare("SELECT name FROM sqlite_master WHERE name IN ('storyboard_projects', 'canvas_projects')").all()).toEqual([])
       expect(db.prepare('SELECT * FROM camera_stage_render_tasks').all()).toEqual([])
       expect(fs.existsSync(userFile)).toBe(false) // 只改记录，不碰文件
 
-      // 再次初始化：账本已满，不再执行，也不再解析作品目录。
+      // 已登记的迁移必须幂等，避免重复初始化触发作品目录解析。
       const snapshot = db.prepare('SELECT * FROM history ORDER BY id').all()
       initializeSchema(db, { locationContext: resolver })
       expect(resolver).toHaveBeenCalledTimes(1)
@@ -201,7 +201,7 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
     try {
       seedLegacy(db)
       runSchemaMigrations(db, SCHEMA_MIGRATIONS.slice(0, 15), { locationContext: () => context, backupDirectory: path.join(base, 'backups-15') })
-      // 2.3 之前每次启动由 initializeLegacyProjectTables 建的两张旧表（带级联外键）。
+      // 夹具保留工程表的级联外键，验证重建任务表时能解除工程归属。
       db.exec(`
         CREATE TABLE audio_edit_projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, document_json TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
         CREATE INDEX idx_audio_edit_projects_updated_at ON audio_edit_projects(updated_at DESC);
@@ -220,7 +220,7 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
       expect(columns(db, 'audio_edit_tasks')).toContain('document_id')
       expect(columns(db, 'audio_edit_tasks')).not.toContain('project_id')
       expect(db.prepare('SELECT * FROM audio_edit_tasks').all()).toEqual([])
-      // 新表不再引用工程表：按文档 ID 直接写入
+      // 任务归属只依赖文档 ID，避免工程表外键阻止写入。
       db.prepare("INSERT INTO audio_edit_tasks (request_id,document_id,kind,state,input_digest,created_at,updated_at) VALUES ('t2','doc-1','silence','queued','d',1,1)").run()
       const copy = new Database(path.join(backupDirectory, fs.readdirSync(backupDirectory)[0]!), { readonly: true })
       try {

@@ -11,7 +11,7 @@ import { persistenceMinReaderVersion } from '@/core/persistence/migrations'
 import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
 import { videoEditStyleContentHash, videoEditStyleSchema, videoEditTemplateContentHash, type VideoEditStyle } from '@/core/videoEdit/styles/styleSchemas'
 import { videoEditTemplateSchema, type VideoEditTemplate } from '@/core/videoEdit/styles/templateSchemas'
-import { convertLegacyStyleKit, convertLegacyTitleTemplate, legacyStyleKitSchema, legacyTitleTemplateSchema } from '@/core/videoEdit/styles/legacyStyles'
+import { migrateStyleKit, migrateTitleTemplate, styleKitMigrationSchema, titleTemplateMigrationSchema } from '@/core/videoEdit/styles/styleTemplateMigration'
 import { z } from 'zod'
 import { appLocalDataDir, exists, getBundledResourcePath, join, mkdir, readDir, readFile, readTextFile, remove, writeFile, writeTextFile } from '@/platform/desktopApi'
 import { publishVideoEdit } from './videoEditService'
@@ -21,7 +21,7 @@ const STYLE_FORMAT = PERSISTENCE_FORMATS.find(format => format.id === 'video-sty
 const TEMPLATE_FORMAT = PERSISTENCE_FORMATS.find(format => format.id === 'video-template-library')!
 /** 内置风格按“克制 → 热闹 → 纪实”排列（与 Frameflow 档位表同序）。 */
 export const BUILTIN_STYLE_IDS = ['restrained', 'tech-info', 'explainer', 'variety', 'promo', 'warm-documentary'] as const
-const LEGACY_KEYS = { styles: 'video-edit-style-kits', templates: 'video-edit-title-templates' } as const
+const MIGRATION_STORAGE_KEYS = { styles: 'video-edit-style-kits', templates: 'video-edit-title-templates' } as const
 
 /** 样片派生的媒体文件（本机绝对路径）；没有渲染过时为空。 */
 export interface VideoEditStyleMedia { preview?: string; thumbnail?: string; anchors: string[] }
@@ -73,10 +73,10 @@ export class VideoEditStyleLibrary {
   private loading?: Promise<void>
   private queue: Promise<unknown> = Promise.resolve()
   private error = ''
-  constructor(private io: VideoEditStyleLibraryIo = desktopStyleLibraryIo, private legacy: Pick<Storage, 'getItem' | 'setItem'> | undefined = typeof localStorage === 'undefined' ? undefined : localStorage, private readonly publish: () => void = () => publishVideoEdit(true)) {}
+  constructor(private io: VideoEditStyleLibraryIo = desktopStyleLibraryIo, private migrationStorage: Pick<Storage, 'getItem' | 'setItem'> | undefined = typeof localStorage === 'undefined' ? undefined : localStorage, private readonly publish: () => void = () => publishVideoEdit(true)) {}
   /** 换一个资料目录重新读取（隔离测试与切换资料目录时用）。 */
-  reset(io: VideoEditStyleLibraryIo = desktopStyleLibraryIo, legacy?: Pick<Storage, 'getItem' | 'setItem'>): void {
-    this.io = io; this.legacy = legacy; this.loading = undefined; this.error = ''; this.styles = new Map(); this.templates = new Map(); this.queue = Promise.resolve()
+  reset(io: VideoEditStyleLibraryIo = desktopStyleLibraryIo, migrationStorage?: Pick<Storage, 'getItem' | 'setItem'>): void {
+    this.io = io; this.migrationStorage = migrationStorage; this.loading = undefined; this.error = ''; this.styles = new Map(); this.templates = new Map(); this.queue = Promise.resolve()
   }
 
   ready(): Promise<void> { this.loading ??= this.load().then(() => { this.error = '' }, error => { this.loading = undefined; this.error = `风格库读取失败，原文件已保留：${error instanceof Error ? error.message : String(error)}`; throw error }); return this.loading }
@@ -207,28 +207,28 @@ export class VideoEditStyleLibrary {
     }
     this.styles = styles; this.templates = templates
     if (problems.length) logger.warn('load.partial', '部分风格或模板无法读取', { context: { count: problems.length } })
-    try { await this.importLegacy(root) } catch (error) { logger.error('legacy.import_failed', '旧本机风格与标题模板转存失败，下次启动重试', { error }) }
+    try { await this.importStoredStyleKits(root) } catch (error) { logger.error('legacy.import_failed', '旧本机风格与标题模板转存失败，下次启动重试', { error }) }
     logger.info('load.completed', '风格库已读取', { context: { styles: styles.size, templates: templates.size } })
     this.publish()
   }
   /** 旧本机风格库与标题模板（localStorage）只读：第一次加载时转存成文件，原键保持不变，再次加载不重复转存。 */
-  private async importLegacy(root: string): Promise<void> {
-    if (!this.legacy) return
+  private async importStoredStyleKits(root: string): Promise<void> {
+    if (!this.migrationStorage) return
     const marker = await this.io.join(root, 'legacy-import.json')
     if (await this.io.exists(marker)) return
-    const read = <T>(key: string, schema: z.ZodType<T[]>): T[] => { const text = this.legacy!.getItem(key); if (!text) return []; try { return schema.parse(readLocalPersistenceJson(text, key, localLibraryContract(key, schema), this.legacy!)) } catch (error) { logger.error('legacy.read_failed', '旧本机库读取失败，原数据已保留', { error, context: { key } }); throw error } }
-    const kits = read(LEGACY_KEYS.styles, z.array(legacyStyleKitSchema)); const titles = read(LEGACY_KEYS.templates, z.array(legacyTitleTemplateSchema))
+    const read = <T>(key: string, schema: z.ZodType<T[]>): T[] => { const text = this.migrationStorage!.getItem(key); if (!text) return []; try { return schema.parse(readLocalPersistenceJson(text, key, localLibraryContract(key, schema), this.migrationStorage!)) } catch (error) { logger.error('legacy.read_failed', '旧本机库读取失败，原数据已保留', { error, context: { key } }); throw error } }
+    const kits = read(MIGRATION_STORAGE_KEYS.styles, z.array(styleKitMigrationSchema)); const titles = read(MIGRATION_STORAGE_KEYS.templates, z.array(titleTemplateMigrationSchema))
     const now = new Date().toISOString(); const imported = { styles: [] as string[], templates: [] as string[] }
     await this.io.mkdir(root)
     for (const kit of kits) {
-      const style = convertLegacyStyleKit(kit, now)
+      const style = migrateStyleKit(kit, now)
       if (this.styles.has(style.id)) continue
       const dir = await this.io.join(root, 'styles', style.id); await this.io.mkdir(dir)
       await this.io.writeText(await this.io.join(dir, 'style.json'), container(STYLE_FORMAT, style))
       this.styles.set(style.id, { style, builtin: false, dir, media: { anchors: [] }, stale: true }); imported.styles.push(style.id)
     }
     for (const title of titles) {
-      const template = convertLegacyTitleTemplate(title, now)
+      const template = migrateTitleTemplate(title, now)
       if (this.templates.has(template.id)) continue
       await this.putTemplate(template); imported.templates.push(template.id)
     }

@@ -3,12 +3,10 @@ import type Database from 'better-sqlite3'
 import { createAssistantMemoryTablesV1 } from './assistant/storageSchema'
 
 /*
- * 2.3 数据库收口之前的 henji.db 结构快照（只给迁移测试用）：当时 db.ts 用 IF NOT EXISTS 建的老表，
- * 加上当时第一次使用才建的生成提交账本（还没有补列）与镜头渲染任务表。
- * 用它造“旧库”，验证就地进入迁移账本、数据保留、结果数组与位置换写法。不要随正式结构修改这份快照。
- * 旧工程表（镜头参考、口播、画布）结构没变；画布两张按当时 initializeLegacyProjectTables 的样子一并建出。
+ * 冻结未接入迁移账本的数据库结构，用于证明迁移保留原始数据并补齐结果与位置字段。
+ * 夹具必须独立于当前建表逻辑，否则同源结构变更会掩盖迁移缺陷。
  */
-export const LEGACY_SCHEMA_SQL = `
+export const MIGRATION_FIXTURE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS history (
     id TEXT PRIMARY KEY, provider_id TEXT NOT NULL, model_id TEXT NOT NULL, type TEXT NOT NULL, prompt TEXT,
     params TEXT NOT NULL, file_path TEXT, task_id TEXT, status TEXT NOT NULL, error_message TEXT, cost REAL,
@@ -85,7 +83,7 @@ export const LEGACY_SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_canvas_projects_updated_at ON canvas_projects(updated_at DESC);
 `
 
-export function createLegacyDatabase(db: Database.Database): void {
-  db.exec(LEGACY_SCHEMA_SQL)
+export function createDatabaseMigrationFixture(db: Database.Database): void {
+  db.exec(MIGRATION_FIXTURE_SCHEMA_SQL)
   createAssistantMemoryTablesV1(db)
 }

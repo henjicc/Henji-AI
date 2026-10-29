@@ -3,7 +3,7 @@ import { PERSISTENCE_FORMATS } from '@/core/persistence/formats'
 import { upgradePersistenceContent } from '@/core/persistence/migrations'
 import type { VideoEditStyleSample } from '@/core/videoEdit/styles/styleSchemas'
 import type { VideoEditTemplateBody } from '@/core/videoEdit/styles/templateSchemas'
-import { convertLegacyStyleKit, convertLegacyTitleTemplate } from '@/core/videoEdit/styles/legacyStyles'
+import { migrateStyleKit, migrateTitleTemplate } from '@/core/videoEdit/styles/styleTemplateMigration'
 import { VIDEO_EDIT_TRANSITION_PRESETS, type VideoEditTransitionKind } from '@/core/videoEdit/transitions'
 import type { VideoEditEffectPreset } from '@/core/videoEdit/effectPresets'
 import { VIDEO_EDIT_PRESET_CATEGORY_LABELS, VIDEO_EDIT_PRESET_PACKAGE_VERSION, VIDEO_EDIT_PRESET_PANEL_CATEGORIES, videoEditPresetPackageSchema, type VideoEditPresetCategory, type VideoEditPresetPackageItem } from '@/core/videoEdit/presetPackage'
@@ -112,12 +112,12 @@ export async function importVideoEditPresetPackage(text: string): Promise<Array<
     const taken = raw(item.category).map(value => value.name)
     if (item.category === 'style') {
       await videoEditStyleLibrary.ready()
-      const converted = convertLegacyStyleKit(item.preset, new Date().toISOString())
+      const converted = migrateStyleKit(item.preset, new Date().toISOString())
       const style = (await videoEditStyleLibrary.saveStyle({ ...converted, id: crypto.randomUUID(), name: unique(converted.name, videoEditStyleLibrary.listStyles().map(entry => entry.style.name)).slice(0, 80) })).style
       added.push({ category: 'style', id: style.id, name: style.name })
     } else if (item.category === 'title') {
       await videoEditStyleLibrary.ready()
-      const converted = convertLegacyTitleTemplate(item.preset, new Date().toISOString())
+      const converted = migrateTitleTemplate(item.preset, new Date().toISOString())
       const template = (await videoEditStyleLibrary.saveTemplate({ ...converted, id: crypto.randomUUID(), name: unique(converted.name, videoEditStyleLibrary.listTemplates().map(entry => entry.template.name)).slice(0, 80) })).template
       added.push({ category: 'title', id: template.id, name: template.name })
     }

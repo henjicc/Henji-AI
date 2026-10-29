@@ -15,11 +15,11 @@ export async function uploadToFal(
   return await uploadToFalWithTransport(
     apiKey,
     prepared,
-    transport ?? createLegacyHostTransport()
+    transport ?? createHostFetchTransport()
   )
 }
 
-function createLegacyHostTransport(): Transport {
+function createHostFetchTransport(): Transport {
   return {
     async fetch(url, init) {
       const hostFetch = globalThis.fetch

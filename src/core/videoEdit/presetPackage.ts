@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { legacyStyleKitSchema, legacyTitleTemplateSchema } from './styles/legacyStyles'
+import { styleKitMigrationSchema, titleTemplateMigrationSchema } from './styles/styleTemplateMigration'
 import { videoEditEffectPresetSchema } from './effectPresets'
 import { videoEditTextPresetSchema } from '../persistence/storedSchemas'
 import { henjiExtension } from '../fileExtensions'
@@ -35,8 +35,8 @@ export const videoEditPresetPreferencesSchema = z.array(videoEditPresetPreferenc
 export const VIDEO_EDIT_PRESET_PACKAGE_VERSION = 8
 export const videoEditPresetPackageItemSchema = z.discriminatedUnion('category', [
   // 风格与标题条目只出现在 2026-10-22 之前导出的文件里，导入时转成新的风格与原生模板；新导出不再写这两类。
-  z.object({ category: z.literal('style'), preset: legacyStyleKitSchema }).strict(),
-  z.object({ category: z.literal('title'), preset: legacyTitleTemplateSchema }).strict(),
+  z.object({ category: z.literal('style'), preset: styleKitMigrationSchema }).strict(),
+  z.object({ category: z.literal('title'), preset: titleTemplateMigrationSchema }).strict(),
   z.object({ category: z.literal('text'), preset: videoEditTextPresetSchema }).strict(),
   z.object({ category: z.literal('effect'), preset: videoEditEffectPresetSchema }).strict(),
 ])

@@ -1,6 +1,6 @@
 import { henjiExtension, henjiLegacyExtensions } from '../../fileExtensions'
 import type { DocumentKindDescriptor } from './registry'
-import { migrateEmbeddedVideoEditStyles } from '../../videoEdit/styles/legacyStyles'
+import { migrateEmbeddedVideoEditStyles } from '../../videoEdit/styles/styleTemplateMigration'
 import { migrateEmbeddedVideoEditMotionBlurMaster } from '../../videoEdit/motionBlurMigration'
 import { createRecordingDocument, recordingDocumentSchema, type RecordingDocument } from '../../screenRecording/document'
 
