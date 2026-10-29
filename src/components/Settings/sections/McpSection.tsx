@@ -48,7 +48,7 @@ export default function McpSection(): React.JSX.Element {
   return <>
     {error && <UiError size="xs" align="start" title={error} message="" onRetry={() => void act(refresh)} />}
     {!status ? <UiLoading size="sm" message={t('mcp.loading')} /> : <>
-      <UiFormRow label={t('mcp.enable')} inline>
+      <UiFormRow label={t('mcp.enable')} hint={status.enabled && status.issue ? t(status.issue === 'port_in_use' ? 'mcp.issuePortInUse' : 'mcp.issueConnecting') : undefined} inline>
         <UiSwitch checked={status.enabled} disabled={busy} onCheckedChange={(enabled) => void act(() => getMcpConnectionService().configure({ enabled, port }))} />
       </UiFormRow>
       <UiFormRow label={t('mcp.port')} info={t('mcp.portHint')} inline>

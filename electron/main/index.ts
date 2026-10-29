@@ -258,7 +258,7 @@ app.whenReady().then(async () => {
           createMainLogger('main.media_recycle').error('启动媒体回收失败，本次跳过', { event: 'media_recycle.startup.failed', error })
         })
         // External clients and document indexing share the renderer admission gate.
-        registerMcpIpc({ relay: true })
+        registerMcpIpc({ resident: true })
         scheduleStartupDocumentIndexScan()
         void purgeRecycledItems().catch(error => {
           createMainLogger('main.recycle').warn('最近删除过期清理失败，保留内容供重试', { event: 'recycle.purge.failed', error })

@@ -1,36 +1,43 @@
 import { spawn } from 'node:child_process'
-import { request as httpRequest, type ClientRequest, type IncomingMessage } from 'node:http'
-import { createServer, type Server, type Socket } from 'node:net'
+import { request as httpRequest, type ClientRequest, type IncomingMessage, type Server as HttpServer } from 'node:http'
+import type { Socket } from 'node:net'
+import { tmpdir } from 'node:os'
 import type { MainLogger } from '../logging'
 import {
-  RELAY_CHALLENGE_HEADER, RELAY_CONTROL_PATH, RELAY_PORT_ENV, RELAY_PROTOCOL, RELAY_RETIRE_PATH, RELAY_SECRET_ENV,
-  createRelayChallenge, isRelayChallenge, readHandshakeLine, relayBuildOf, relayProof, relayProofMatches,
-  type RelayControlMessage, type RelayHello,
+  RELAY_CONTROL_PATH, RELAY_PORT_ENV, RELAY_PROTOCOL, RELAY_RETIRE_PATH, RELAY_SECRET_ENV,
+  createRelayChallenge, isRelayChallenge, probeRelay, readHandshakeLine, relayBuildOf, relayProof, relayProofMatches,
+  type RelayControlMessage, type RelayHello, type RelayProbe, type RelayRetireMode,
 } from './relayProtocol'
 
 /**
- * 痕迹这一侧的接线：在本机随机端口开内部入口，向对外端口上的接线员登记，并保持一条控制连接。
- * 接线员没在跑就拉起；代码版本不同且没有别的痕迹在用时替换；控制连接断了就重新接上。
+ * 痕迹这一侧的接线。对外端口的归属按下面的顺序决定，并在整个运行期间自己维持：
+ * - 端口上是自己的接线员：登记上去（版本不同且无人使用时先换成当前版本）；
+ * - 端口空着：常驻模式下拉起接线员再登记；拉不起来、或临时进程（助手命令行、隔离资料目录）不拉起时，由痕迹直接监听；
+ * - 端口被别的程序或凭据不同的接线员占着、接线员暂时答不上：不抢端口，持续重试，状态如实报给设置界面。
+ * 直接监听失败、控制连接断开都回到重试；只有确认端口空着才直接监听。
  */
+export type RelayLinkState = 'serving' | 'standby' | 'direct' | 'connecting' | 'port_in_use'
+
 export interface RelayLink {
-  /** `release` 为真时请接线员一并退出，让对外端口立即空出来（关闭外部连接时用）。 */
+  state: () => RelayLinkState
+  /** `release` 为真时请接线员一并退出（还有别的痕迹在用时它会拒绝），让对外端口空出来。 */
   stop: (options?: { release?: boolean }) => Promise<void>
 }
 
-/** 返回 undefined 表示接线员不可用，调用方退回由痕迹直接监听对外端口。 */
-export type McpRelayConnector = (publicPort: number, serve: (socket: Socket) => void) => Promise<RelayLink | undefined>
+/** 接管 `http` 的监听：经接线员时在本机随机端口接收握手过的连接，直接监听时在对外端口。 */
+export type McpRelayConnector = (publicPort: number, http: HttpServer) => Promise<RelayLink>
 
 interface RelayConnectorOptions {
   /** 构建出的接线员入口文件。 */
   script: string
+  /** 每次接线都从存储重新读取：另一个痕迹实例可能刚写入了不同的值。 */
   secret: () => string
   logger: MainLogger
   /** 接线员自身的事件经控制连接送回，写进这个 logger。 */
   relayLogger: MainLogger
+  /** 拉起接线员；不提供表示本进程是临时的，只登记到已有接线员，不拉起也不替换。 */
   launch?: (script: string, port: number, secret: string) => Promise<void>
 }
-
-type Probe = { kind: 'absent' } | { kind: 'foreign' } | { kind: 'relay'; hello: RelayHello }
 
 /**
  * 启动器只负责拉起接线员后立即退出：接线员的父进程随之消失，结束痕迹的进程树（开发版重启、崩溃）时不会连带结束它。
@@ -41,10 +48,11 @@ const { spawn } = require('node:child_process');
 spawn(process.execPath, [process.argv[1]], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
 `
 
-function launchRelay(script: string, port: number, secret: string): Promise<void> {
+/** 工作目录放在系统临时目录：接线员常驻，不能占住开发目录或安装目录。 */
+export function launchRelay(script: string, port: number, secret: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const launcher = spawn(process.execPath, ['-e', LAUNCHER, script], {
-      stdio: 'ignore', windowsHide: true,
+      cwd: tmpdir(), stdio: 'ignore', windowsHide: true,
       env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', [RELAY_PORT_ENV]: String(port), [RELAY_SECRET_ENV]: secret },
     })
     launcher.once('error', reject)
@@ -53,34 +61,12 @@ function launchRelay(script: string, port: number, secret: string): Promise<void
 }
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+const HANDSHAKE_MS = 10_000
 
-function probe(port: number, secret: string): Promise<Probe> {
-  return new Promise(resolve => {
-    const challenge = createRelayChallenge()
-    const request = httpRequest({ host: '127.0.0.1', port, path: RELAY_CONTROL_PATH, method: 'GET', headers: { [RELAY_CHALLENGE_HEADER]: challenge }, timeout: 2_000 }, response => {
-      const chunks: Buffer[] = []
-      response.on('data', (chunk: Buffer) => chunks.push(chunk))
-      response.on('error', () => resolve({ kind: 'foreign' }))
-      response.on('end', () => {
-        try {
-          const hello = JSON.parse(Buffer.concat(chunks).toString('utf8')) as RelayHello
-          if (response.statusCode === 200 && relayProofMatches(relayProof(secret, 'relay', challenge), hello.proof) && isRelayChallenge(hello.challenge)) {
-            return resolve({ kind: 'relay', hello })
-          }
-        } catch { /* 不是接线员的回应 */ }
-        resolve({ kind: 'foreign' })
-      })
-    })
-    request.on('timeout', () => request.destroy(new Error('timeout')))
-    request.on('error', error => resolve((error as NodeJS.ErrnoException).code === 'ECONNREFUSED' ? { kind: 'absent' } : { kind: 'foreign' }))
-    request.end()
-  })
-}
-
-async function probeUntil(port: number, secret: string, settled: (probe: Probe) => boolean, timeoutMs: number): Promise<Probe> {
+async function probeUntil(port: number, secret: string, settled: (probe: RelayProbe) => boolean, timeoutMs: number): Promise<RelayProbe> {
   const deadline = Date.now() + timeoutMs
   for (;;) {
-    const found = await probe(port, secret)
+    const found = await probeRelay(port, secret)
     if (settled(found) || Date.now() >= deadline) return found
     await sleep(100)
   }
@@ -94,91 +80,99 @@ function post(port: number, path: string, body: unknown): { request: ClientReque
   return { request, response }
 }
 
+async function retireRelay(port: number, secret: string, hello: RelayHello, mode: RelayRetireMode, session = ''): Promise<number | undefined> {
+  const { response } = post(port, RELAY_RETIRE_PATH, { challenge: hello.challenge, mode, session, proof: relayProof(secret, 'retire', hello.challenge, mode, session) })
+  return response.then(reply => { reply.resume(); return reply.statusCode }, () => undefined)
+}
+
+function listen(http: HttpServer, port: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const fail = (error: Error) => { http.removeListener('listening', done); reject(error) }
+    const done = () => { http.removeListener('error', fail); resolve() }
+    http.once('error', fail)
+    http.once('listening', done)
+    http.listen(port, '127.0.0.1')
+  })
+}
+
+function close(http: HttpServer): Promise<void> {
+  return new Promise(resolve => { http.close(() => resolve()); http.closeAllConnections() })
+}
+
 export function createRelayConnector(options: RelayConnectorOptions): McpRelayConnector {
   const { logger, relayLogger } = options
-  const launch = options.launch ?? launchRelay
-  return async (publicPort, serve) => {
-    let build: string
-    let secret: string
-    try {
-      build = relayBuildOf(options.script)
-      secret = options.secret()
-    } catch (error) {
-      logger.warn('接线员程序或凭据不可用，改由痕迹直接监听', { event: 'mcp.relay.unavailable', error })
-      return undefined
+  return async (publicPort, http) => {
+    // HTTP 服务自带的连接处理（解析、超时、关闭时逐个断开）保持不变，只在它前面加一道握手。
+    const [accept] = http.listeners('connection') as Array<(socket: Socket) => void>
+    let secret = ''
+    /** 当前登记的会话及登记时用的凭据；握手只认这一对，换登记即作废。 */
+    let registration: { session: string; secret: string } | undefined
+    const acceptRelayed = (socket: Socket) => {
+      readHandshakeLine(socket, HANDSHAKE_MS).then(line => {
+        const [challenge, dial] = line.split(' ')
+        const current = registration
+        if (!current || !isRelayChallenge(challenge) || !relayProofMatches(relayProof(current.secret, 'dial', current.session, challenge), dial)) return void socket.destroy()
+        socket.write(`${relayProof(current.secret, 'connect', current.session, challenge)}\n`)
+        socket.setNoDelay(true)
+        accept.call(http, socket)
+      }, () => undefined)
+    }
+    const acceptVia = (relayed: boolean) => {
+      http.removeAllListeners('connection')
+      http.on('connection', relayed ? acceptRelayed : accept)
     }
 
-    // 握手只让接线员确认对面是痕迹；别的程序直接连内部入口也照样要过痕迹 HTTP 层的鉴权、Host 与 Origin 校验。
-    const sockets = new Set<Socket>()
-    const internal: Server = createServer(socket => {
-      sockets.add(socket)
-      socket.once('close', () => sockets.delete(socket))
-      readHandshakeLine(socket).then(challenge => {
-        if (!isRelayChallenge(challenge)) return void socket.destroy()
-        socket.write(`${relayProof(secret, 'connect', challenge)}\n`)
-        socket.setNoDelay(true)
-        serve(socket)
-      }, () => undefined)
-    })
-    await new Promise<void>((resolve, reject) => {
-      internal.once('error', reject)
-      internal.listen(0, '127.0.0.1', () => { internal.removeListener('error', reject); resolve() })
-    })
-    const address = internal.address()
-    const internalPort = address && typeof address !== 'string' ? address.port : 0
+    let mode: 'relay' | 'direct' = 'relay'
+    let state: RelayLinkState = 'connecting'
     let stopped = false
     let channel: ClientRequest | undefined
-    let active: boolean | undefined
-
-    const closeInternal = () => {
-      internal.close()
-      for (const socket of sockets) socket.destroy()
+    let internalPort = 0
+    let build = ''
+    let launch = options.launch
+    let maintaining = false
+    let queue: Promise<unknown> = Promise.resolve()
+    /** 探测、拉起、替换、登记与关闭时请接线员退出互斥，关闭之后不会再拉起。 */
+    const exclusive = <T>(task: () => Promise<T>): Promise<T> => {
+      const run = queue.then(task, task)
+      queue = run.catch(() => undefined)
+      return run
+    }
+    const setState = (next: RelayLinkState, context?: Record<string, unknown>) => {
+      if (next === state) return
+      state = next
+      const meta = { event: 'mcp.relay.state', context: { state: next, port: publicPort, ...context } }
+      if (next === 'port_in_use' || next === 'connecting') logger.warn('外部连接暂时无法对外服务，正在重试', meta)
+      else logger.info('外部连接已可以对外服务', meta)
     }
 
-    /** 找到可登记的接线员，返回它的问候；失败返回原因。 */
-    const ensureRelay = async (startup: boolean): Promise<RelayHello | string> => {
-      let found = await probe(publicPort, secret)
-      // 版本替换只在本进程启动时做：重连时也替换的话，两个不同版本的痕迹会互相把对方的接线员换掉。
-      if (startup && found.kind === 'relay' && found.hello.build !== build && (found.hello.backends === 0 || found.hello.protocol < RELAY_PROTOCOL)) {
-        const previous = found.hello
-        const { response } = post(publicPort, RELAY_RETIRE_PATH, { challenge: previous.challenge, proof: relayProof(secret, 'retire', previous.challenge) })
-        const status = await response.then(reply => { reply.resume(); return reply.statusCode }, () => undefined)
-        if (status === 202) {
-          logger.info('已让旧版本接线员退出，换用当前版本', { event: 'mcp.relay.replaced', context: { from: previous.build, to: build, pid: previous.pid } })
-          found = await probeUntil(publicPort, secret, next => !(next.kind === 'relay' && next.hello.pid === previous.pid), 5_000)
-        }
-      }
-      if (found.kind === 'absent') {
-        try {
-          await launch(options.script, publicPort, secret)
-          logger.info('已拉起接线员', { event: 'mcp.relay.spawned', context: { build, port: publicPort } })
-        } catch (error) {
-          logger.warn('拉起接线员失败', { event: 'mcp.relay.spawn_failed', error })
-          return 'spawn_failed'
-        }
-        found = await probeUntil(publicPort, secret, next => next.kind !== 'absent', 5_000)
-      }
-      if (found.kind !== 'relay') return found.kind === 'foreign' ? 'port_in_use' : 'not_started'
-      if (found.hello.protocol !== RELAY_PROTOCOL) return 'protocol_mismatch'
-      return found.hello
+    const listenRelayed = async () => {
+      acceptVia(true)
+      await listen(http, 0)
+      const address = http.address()
+      internalPort = address && typeof address !== 'string' ? address.port : 0
     }
 
     const handle = (message: RelayControlMessage) => {
       if (message.type === 'log') return relayLogger[message.level](message.message, { event: message.event, context: { ...message.context, occurredAt: message.at } })
-      if (message.active === active) return
-      active = message.active
-      logger.info(active ? '接线员已把外部请求交给本进程' : '接线员已接上，另一个痕迹正在服务，本进程待命', { event: 'mcp.relay.attached', context: { active, port: publicPort } })
+      setState(message.active ? 'serving' : 'standby')
+      onState?.()
     }
+    let onState: (() => void) | undefined
 
-    const attach = async (hello: RelayHello) => {
+    const attach = async (hello: RelayHello): Promise<boolean> => {
+      const nextSession = createRelayChallenge()
       const { request, response } = post(publicPort, RELAY_CONTROL_PATH, {
-        challenge: hello.challenge, proof: relayProof(secret, 'attach', hello.challenge, internalPort), port: internalPort, build, pid: process.pid,
+        challenge: hello.challenge, session: nextSession, port: internalPort, build, pid: process.pid,
+        proof: relayProof(secret, 'attach', hello.challenge, internalPort, nextSession),
       })
-      const reply = await response
-      if (reply.statusCode !== 200) { reply.resume(); throw new Error(`接线员拒绝登记：${reply.statusCode}`) }
-      if (stopped) return void request.destroy()
+      // 先认下新会话再发登记：接线员可能一登记就把挂起的请求转过来。
+      registration = { session: nextSession, secret }
+      const reply = await response.catch(() => undefined)
+      if (reply?.statusCode !== 200 || stopped) { reply?.resume(); request.destroy(); return false }
       channel = request
-      active = undefined
+      // 等接线员告知本进程是在服务还是待命，登记才算完成，调用方此后读到的状态就是真实状态。
+      let settled!: (attached: boolean) => void
+      const ready = new Promise<boolean>(resolve => { settled = resolve })
       let buffer = ''
       reply.setEncoding('utf8')
       reply.on('data', (text: string) => {
@@ -189,54 +183,113 @@ export function createRelayConnector(options: RelayConnectorOptions): McpRelayCo
           try { handle(JSON.parse(line) as RelayControlMessage) } catch { /* 忽略无法解析的行 */ }
         }
       })
+      onState = () => { onState = undefined; settled(true) }
       reply.on('error', () => undefined)
       request.on('error', () => undefined)
       reply.once('close', () => {
+        settled(false)
         if (channel !== request) return
         channel = undefined
-        if (!stopped) void reconnect()
+        if (stopped) return
+        setState('connecting', { reason: 'channel_closed' })
+        void maintain()
       })
+      return ready
     }
 
-    const reconnect = async () => {
-      logger.warn('与接线员的连接断开，正在重新接上', { event: 'mcp.relay.reconnecting', context: { port: publicPort } })
-      let reported = false
-      for (let delay = 500; !stopped; delay = Math.min(delay * 2, 5_000)) {
-        await sleep(delay)
-        if (stopped) return
-        const hello = await ensureRelay(false)
-        let reason = typeof hello === 'string' ? hello : ''
-        if (typeof hello !== 'string') {
-          try { await attach(hello); return } catch (error) { reason = error instanceof Error ? error.message : 'attach_failed' }
-        }
-        if (!reported) {
-          reported = true
-          logger.warn('暂时接不上接线员，继续重试', { event: 'mcp.relay.reconnect_failed', context: { reason } })
+    /** 一轮接线：登记成功返回 attached；端口空着且不再拉起返回 absent；其余返回占用原因，稍后重试。 */
+    const settle = (startup: boolean) => exclusive(async (): Promise<'attached' | 'absent' | 'port_in_use' | 'connecting'> => {
+      if (stopped) return 'connecting'
+      secret = options.secret()
+      let found = await probeRelay(publicPort, secret)
+      if (launch && startup && found.kind === 'relay' && found.hello.build !== build && (found.hello.backends === 0 || found.hello.protocol < RELAY_PROTOCOL)) {
+        // 版本替换只在本进程启动时做：重连时也替换的话，两个不同版本的痕迹会互相把对方的接线员换掉。
+        const previous = found.hello
+        if (await retireRelay(publicPort, secret, previous, 'replace') === 202) {
+          logger.info('已让旧版本接线员退出，换用当前版本', { event: 'mcp.relay.replaced', context: { from: previous.build, to: build, pid: previous.pid } })
+          found = await probeUntil(publicPort, secret, next => !(next.kind === 'relay' && next.hello.instance === previous.instance), 10_000)
         }
       }
+      if (found.kind === 'absent' && launch && !stopped) {
+        try {
+          await launch(options.script, publicPort, secret)
+          logger.info('已拉起接线员', { event: 'mcp.relay.spawned', context: { build, port: publicPort } })
+          found = await probeUntil(publicPort, secret, next => next.kind !== 'absent', 10_000)
+        } catch (error) {
+          logger.warn('拉起接线员失败', { event: 'mcp.relay.spawn_failed', error })
+        }
+      }
+      if (found.kind === 'absent') return 'absent'
+      if (found.kind === 'foreign') return 'port_in_use'
+      if (found.hello.protocol !== RELAY_PROTOCOL) return 'port_in_use'
+      if (stopped) return 'connecting'
+      return await attach(found.hello) ? 'attached' : 'connecting'
+    })
+
+    /** 只在确认端口空着时直接监听；失败（接线员恰好起来了）就回到经接线员的模式继续重试。 */
+    const tryDirect = () => exclusive(async (): Promise<boolean> => {
+      if (stopped) return false
+      await close(http)
+      acceptVia(false)
+      try {
+        await listen(http, publicPort)
+        mode = 'direct'
+        registration = undefined
+        setState('direct')
+        logger.warn('接线员不可用，改由痕迹直接监听', { event: 'mcp.relay.direct', context: { port: publicPort } })
+        return true
+      } catch (error) {
+        logger.warn('直接监听对外端口失败，继续尝试接线员', { event: 'mcp.relay.direct_failed', context: { port: publicPort }, error })
+        await listenRelayed()
+        return false
+      }
+    })
+
+    const round = async (startup: boolean): Promise<boolean> => {
+      const outcome = await settle(startup)
+      if (outcome === 'attached') return true
+      if (outcome === 'absent' && await tryDirect()) return true
+      if (!stopped) setState(outcome === 'port_in_use' ? 'port_in_use' : 'connecting', { reason: outcome })
+      return false
     }
 
-    const fallback = (reason: string, error?: unknown) => {
-      logger.warn('接线员不可用，改由痕迹直接监听', { event: 'mcp.relay.unavailable', context: { reason, port: publicPort }, error })
-      closeInternal()
-      return undefined
+    const maintain = async () => {
+      if (maintaining) return
+      maintaining = true
+      try {
+        for (let delay = 500; !stopped && mode === 'relay' && !channel; delay = Math.min(delay * 2, 5_000)) {
+          await sleep(delay)
+          if (stopped || await round(false)) return
+        }
+      } finally { maintaining = false }
     }
-    const hello = await ensureRelay(true)
-    if (typeof hello === 'string') return fallback(hello)
-    try { await attach(hello) } catch (error) { return fallback('attach_failed', error) }
+
+    try { build = relayBuildOf(options.script) } catch (error) {
+      // 找不到接线员程序（只会出现在构建不完整时）：仍按同样的规则登记或直接监听，只是不拉起。
+      logger.warn('找不到接线员程序，不拉起接线员', { event: 'mcp.relay.script_missing', error })
+      launch = undefined
+    }
+    await listenRelayed()
+    if (!await round(true)) void maintain()
 
     return {
+      state: () => state,
       stop: async ({ release = false } = {}) => {
         stopped = true
         channel?.destroy()
         channel = undefined
-        closeInternal()
-        if (!release) return
-        const found = await probe(publicPort, secret)
-        if (found.kind !== 'relay') return
-        const { response } = post(publicPort, RELAY_RETIRE_PATH, { challenge: found.hello.challenge, proof: relayProof(secret, 'retire', found.hello.challenge) })
-        await response.then(reply => { reply.resume(); logger.info('已关闭接线员', { event: 'mcp.relay.released', context: { port: publicPort } }) }, () => undefined)
-        await probeUntil(publicPort, secret, next => next.kind !== 'relay', 5_000)
+        await exclusive(async () => {
+          if (!release || mode !== 'relay') return
+          const found = await probeRelay(publicPort, secret)
+          if (found.kind !== 'relay') return
+          const status = await retireRelay(publicPort, secret, found.hello, 'release', registration?.session)
+          if (status === 202) {
+            logger.info('已关闭接线员', { event: 'mcp.relay.released', context: { port: publicPort } })
+            await probeUntil(publicPort, secret, next => next.kind !== 'relay', 5_000)
+          } else {
+            logger.info('接线员仍有别的痕迹在用，保留', { event: 'mcp.relay.release_skipped', context: { port: publicPort, status } })
+          }
+        })
       },
     }
   }

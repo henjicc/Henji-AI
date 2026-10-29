@@ -6,7 +6,7 @@ import { createMcpHandler, Server, type McpHttpHandler, type AuthInfo } from '@m
 import { toNodeHandler } from '@modelcontextprotocol/node'
 import { EXTERNAL_SERVER_INFO } from '../../../../src/core/application-control/localHostContracts'
 import type { McpConnections } from './connections'
-import type { McpRelayConnector, RelayLink } from './relayLink'
+import type { McpRelayConnector, RelayLink, RelayLinkState } from './relayLink'
 import type { ApplicationHostBridge } from '../application-runtime/applicationHostBridge'
 import type { ApplicationOperationCoordinator } from '../application-runtime/operationCoordinator'
 import { ApplicationToolDispatcher } from '../application-runtime/applicationToolDispatcher'
@@ -34,9 +34,11 @@ export class LocalMcpServer {
     private readonly onRequest: (info: { callerId: string }) => void = () => {},
     private readonly onRejected: (info: { reason: 'invalid_token' }) => void = () => {},
     private readonly memory?: Pick<MemoryEntryStore, 'onMemoryChange' | 'read'>,
-    /** 有接线员时由它占住对外端口，痕迹重启期间外部请求不断；接线员不可用才直接监听。 */
+    /** 有接线员时由它占住对外端口，痕迹重启期间外部请求不断；监听位置与重试由接线决定。 */
     private readonly relay?: McpRelayConnector) {}
   get listening(): boolean { return this.relayLink !== undefined || this.http?.listening === true }
+  /** 对外是否真的在服务；没有接线员时以直接监听为准。 */
+  get availability(): RelayLinkState | undefined { return this.relayLink?.state() ?? (this.http?.listening ? 'direct' : undefined) }
   get listeningPort(): number { return this.port }
   async start(port: number): Promise<void> {
     if (this.http) throw new Error('服务已经启用，请先关闭再更换端口。')
@@ -109,8 +111,11 @@ export class LocalMcpServer {
     http.headersTimeout = 10_000
     this.http = http
     try {
-      this.relayLink = await this.relay?.(port, socket => http.emit('connection', socket))
-      if (this.relayLink) { this.port = port; return }
+      if (this.relay) {
+        this.port = port
+        this.relayLink = await this.relay(port, http)
+        return
+      }
       // 重启应用时旧实例可能尚未释放端口：EADDRINUSE 短暂退避重试，避免外部连接整轮掉线。
       for (let attempt = 0; ; attempt++) {
         try {

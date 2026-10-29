@@ -100,6 +100,8 @@ nsis:
   perMachine: false
   allowToChangeInstallationDirectory: true
   artifactName: henji-ai-setup-${version}.${ext}
+  # 安装、卸载前结束外部智能体连接的接线员（常驻的痕迹AI Node 模式进程），不让它被当成正在运行的应用。
+  include: resources/installer/installer.nsh
 msi:
   artifactName: henji-ai-${version}-${arch}.${ext}
 mac:

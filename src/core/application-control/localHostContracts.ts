@@ -102,7 +102,8 @@ export interface McpConnectionInfo { id: string; name: string }
 export const mcpPreferencesSchema = z.object({ enabled: z.boolean(), port: z.number().int().min(1024).max(65535) }).strict()
 export type McpPreferences = z.infer<typeof mcpPreferencesSchema>
 export const DEFAULT_MCP_PREFERENCES: McpPreferences = { enabled: true, port: 43821 }
-export interface McpStatus { enabled: boolean; ready: boolean; port: number; connections: McpConnectionInfo[] }
+/** `issue`：已启用但暂时没能对外服务——还在接上接线员，或端口被别的程序占用；后台会持续重试。 */
+export interface McpStatus { enabled: boolean; issue?: 'connecting' | 'port_in_use'; ready: boolean; port: number; connections: McpConnectionInfo[] }
 export interface McpPlatform {
   status(): Promise<McpStatus>
   configure(input: McpPreferences): Promise<McpStatus>

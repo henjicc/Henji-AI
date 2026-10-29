@@ -1,6 +1,6 @@
 {
   "recordingShortcuts": { "title": "屏幕录制快捷键", "info": "仅在录制会话存在时生效，系统占用冲突会在录制控制条提示。", "toggle": "开始 / 暂停录制", "mark": "录制添加标记", "stop": "停止录制", "change": "修改{{action}}快捷键", "capture": "按下快捷键，Esc 取消", "unset": "未设置", "clear": "清除", "reset": "恢复录制默认快捷键", "invalid": "请使用 Ctrl、Command 或 Alt 搭配字母、数字或功能键", "duplicate": "这组快捷键已用于其他录制操作，请换一组" },
-  "mcp": {"loading": "正在读取连接设置…", "enable": "允许外部智能体连接", "port": "连接端口", "portHint": "关闭外部连接后才能修改端口。", "newConnectionTitle": "新建连接", "connectionsTitle": "已授权的连接", "noConnections": "还没有授权任何连接。", "name": "连接名称", "namePlaceholder": "例如：Codex", "authorize": "创建授权", "copy": "复制连接配置", "revoke": "撤销"},
+  "mcp": {"loading": "正在读取连接设置…", "enable": "允许外部智能体连接", "port": "连接端口", "portHint": "关闭外部连接后才能修改端口。", "issueConnecting": "正在接通，外部智能体暂时连不上，会自动重试。", "issuePortInUse": "端口被其他程序占用，外部智能体暂时连不上，会自动重试。", "newConnectionTitle": "新建连接", "connectionsTitle": "已授权的连接", "noConnections": "还没有授权任何连接。", "name": "连接名称", "namePlaceholder": "例如：Codex", "authorize": "创建授权", "copy": "复制连接配置", "revoke": "撤销"},
   "title": "设置",
   "language": "语言",
   "theme": "主题",

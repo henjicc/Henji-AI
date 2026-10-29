@@ -18,6 +18,20 @@ describe('连接授权持久化', () => {
     expect(new McpConnections(storage).authenticate(aToken)).toEqual({ status: 'unknown' })
     expect(new McpConnections(storage).authenticate(bToken)).toMatchObject({ status: 'valid', connectionId: b.id })
   })
+  it('两个实例共用同一份授权：一方的新授权与撤销另一方立即生效，各自新增不互相抹掉', () => {
+    let saved: string | null = null
+    const storage = { read: () => saved, write: (value: string) => { saved = value } }
+    const serving = new McpConnections(storage)
+    const other = new McpConnections(storage)
+    expect(serving.list()).toEqual([])
+    const a = other.create('甲')
+    expect(serving.authenticate(other.token(a.id))).toMatchObject({ status: 'valid', connectionId: a.id })
+    const b = serving.create('乙')
+    expect(other.list().map(item => item.id)).toEqual([a.id, b.id])
+    other.revoke(a.id)
+    expect(() => serving.assertActive(a.id)).toThrow()
+    expect(serving.list().map(item => item.id)).toEqual([b.id])
+  })
   it('保存失败不发出未持久化的新授权；非法存储不得默认授权', () => {
     const failing = new McpConnections({ read: () => null, write: () => { throw new Error('disk full') } })
     expect(() => failing.create('甲')).toThrow('disk full')

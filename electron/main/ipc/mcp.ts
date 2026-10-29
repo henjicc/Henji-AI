@@ -10,7 +10,7 @@ import { createMainLogger } from '../services/logging'
 import { McpConnections } from '../services/mcp/connections'
 import { ApplicationHostBridge } from '../services/application-runtime/applicationHostBridge'
 import { LocalMcpServer } from '../services/mcp/server'
-import { createRelayConnector } from '../services/mcp/relayLink'
+import { createRelayConnector, launchRelay } from '../services/mcp/relayLink'
 import { getAgentMemoryStore } from '../services/assistant/memory'
 import { parseVoid, registerIpcHandler } from './registry'
 
@@ -23,28 +23,35 @@ let preferences = structuredClone(DEFAULT_MCP_PREFERENCES)
 let changing = false
 
 const trusted = assertTrustedApplicationSender
-function status(): McpStatus { return { enabled: server.listening, ready: host.ready, port: configuredPort, connections: connections.list() } }
-
-/** 接线员登记凭据：与连接令牌一样用 safeStorage 保存；开发版与正式版共用同一资料目录，也就共用同一个接线员。 */
-function relaySecret(): string {
-  const saved = getKey('mcp', 'relaySecret')
-  if (saved) return saved
-  const created = randomBytes(32).toString('hex')
-  setKey('mcp', 'relaySecret', created)
-  return created
+function status(): McpStatus {
+  const availability = server.availability
+  const issue = availability === 'connecting' || availability === 'port_in_use' ? availability : undefined
+  return { enabled: server.listening, ...(issue ? { issue } : {}), ready: host.ready, port: configuredPort, connections: connections.list() }
 }
 
 /**
- * `relay` 只给正常运行的应用：助手命令行是一次性进程，不该留下常驻的接线员。
- * 自动化的隔离资料目录有自己的凭据，接不上用户真实资料目录的接线员，也不能在用户的端口上留下自己的接线员，所以照旧直接监听。
+ * 接线员登记凭据：用 safeStorage 保存；开发版与正式版共用同一资料目录，也就共用同一个接线员。
+ * 两个实例同时首次生成时以存储里最终留下的为准，接线每一轮都重新读取，对不上的一方下一轮自然对上。
  */
-export function registerMcpIpc(options: { relay?: boolean } = {}): void {
+function relaySecret(): string {
+  const saved = getKey('mcp-relay', 'secret')
+  if (saved) return saved
+  setKey('mcp-relay', 'secret', randomBytes(32).toString('hex'))
+  const stored = getKey('mcp-relay', 'secret')
+  if (!stored) throw new Error('接线员凭据保存失败')
+  return stored
+}
+
+/**
+ * `resident` 只给正常运行的应用：由它拉起和替换常驻接线员。助手命令行是一次性进程，
+ * 自动化的隔离资料目录有自己的凭据，二者都只登记到已有的接线员或在端口空着时直接监听，不在用户端口上留下常驻进程。
+ */
+export function registerMcpIpc(options: { resident?: boolean } = {}): void {
   const { host: applicationHost, operations } = getApplicationRuntime()
   host = applicationHost
   registerExternalApplicationAuthority((id) => connections.assertActive(id), (id) => connections.list().find(item => item.id === id)?.name)
-  const relay = options.relay && !process.env['HENJI_ISOLATED_APP_DATA']
-    ? createRelayConnector({ script: path.join(__dirname, 'mcp-relay.cjs'), secret: relaySecret, logger, relayLogger: createMainLogger('main.mcp_relay') })
-    : undefined
+  const resident = options.resident === true && !process.env['HENJI_ISOLATED_APP_DATA']
+  const relay = createRelayConnector({ script: path.join(__dirname, 'mcp-relay.cjs'), secret: relaySecret, logger, relayLogger: createMainLogger('main.mcp_relay'), launch: resident ? launchRelay : undefined })
   server = new LocalMcpServer(connections, host, (error) => logger.error('外部连接请求失败', { event: 'mcp.request.failed', error }), operations,
     (info) => logger.info('外部请求已通过授权', { event: 'mcp.request.authorized', context: { callerId: info.callerId } }),
     (info) => logger.warn('外部连接认证失败', { event: 'mcp.request.rejected', context: info }), getAgentMemoryStore(), relay)
@@ -101,3 +108,5 @@ export function registerMcpIpc(options: { relay?: boolean } = {}): void {
   }, trusted)
 }
 export async function disposeMcp(): Promise<void> { await server?.stop() }
+/** 安装更新前连同接线员一起关闭：安装程序会结束安装目录里所有正在运行的进程，接线员也在其中。 */
+export async function releaseMcpForUpdate(): Promise<void> { await server?.stop({ releasePort: true }) }

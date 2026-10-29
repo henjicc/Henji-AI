@@ -1,8 +1,8 @@
 import { createServer, request as httpRequest, type IncomingHttpHeaders, type IncomingMessage, type OutgoingHttpHeaders, type ServerResponse } from 'node:http'
 import { connect, type Socket } from 'node:net'
 import {
-  RELAY_CHALLENGE_HEADER, RELAY_CONTROL_PATH, RELAY_PROTOCOL, RELAY_RETIRE_PATH, createRelayChallenge, isRelayChallenge,
-  readHandshakeLine, relayProof, relayProofMatches, type RelayControlMessage, type RelayHello, type RelayLogEntry,
+  RELAY_CHALLENGE_HEADER, RELAY_CONTROL_PATH, RELAY_PROTOCOL, RELAY_RETIRE_PATH, createRelayChallenge, isRelayChallenge, probeRelay,
+  readHandshakeLine, relayProof, relayProofMatches, type RelayControlMessage, type RelayHello, type RelayLogEntry, type RelayRetireMode,
 } from './relayProtocol'
 
 /**
@@ -19,19 +19,25 @@ interface RelayOptions {
   waitMs?: number
   /** 没有后端、也没有请求持续多久后自行退出。 */
   idleMs?: number
-  onExit?: (reason: 'replaced' | 'idle') => void
+  onExit?: () => void
 }
 
 export interface RelayHandle { port: number; close: () => Promise<void> }
 
-interface Backend { port: number; build: string; pid: number; channel: ServerResponse }
+interface Backend { port: number; session: string; build: string; pid: number; channel: ServerResponse }
 
 const WAIT_MS = 90_000
 const IDLE_MS = 30 * 60_000
+/** 拉起后一直没有后端登记上（拉起者随即崩溃，或凭据对不上）就早点退出，让下一次启动的痕迹重新拉起。 */
+const NEVER_ATTACHED_MS = 2 * 60_000
+/** 与后端握手的耐心：痕迹主进程短暂卡顿不该被当成离开，后端是否还在由控制连接判断。 */
+const HANDSHAKE_MS = 10_000
 /** 逐跳头只属于单条连接，转发时去掉，由各自的连接重新决定。 */
 const HOP_BY_HOP = new Set(['connection', 'keep-alive', 'proxy-connection', 'transfer-encoding', 'te', 'trailer', 'upgrade'])
 /** 后端一直缺席时积压的日志只留最近这些，等下一个后端登记时补交。 */
 const PENDING_LOG_LIMIT = 200
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 function forwardable(headers: IncomingHttpHeaders): OutgoingHttpHeaders {
   const listed = new Set(String(headers.connection ?? '').split(',').map(name => name.trim().toLowerCase()).filter(Boolean))
@@ -68,13 +74,18 @@ function reject(response: ServerResponse, status: number): void { response.write
 export async function startRelay(options: RelayOptions): Promise<RelayHandle> {
   const waitMs = options.waitMs ?? WAIT_MS
   const idleMs = options.idleMs ?? IDLE_MS
+  const startedAt = Date.now()
+  const instance = createRelayChallenge()
   const backends: Backend[] = []
   const waiters = new Set<() => void>()
   const challenges = new Map<string, number>()
   const pendingLogs: RelayLogEntry[] = []
   let port = options.port
   let inflight = 0
-  let lastActivity = Date.now()
+  let lastActivity = startedAt
+  let everAttached = false
+  /** 退出方式定下后不再接受登记：换版本时挂起的请求转交新接线员，其余情况立即回 503。 */
+  let retiring: RelayRetireMode | undefined
   let closing: Promise<void> | undefined
 
   const send = (backend: Backend, message: RelayControlMessage) => {
@@ -117,18 +128,32 @@ export async function startRelay(options: RelayOptions): Promise<RelayHandle> {
     return expiresAt !== undefined && expiresAt > Date.now()
   }
 
-  /** 先要后端证明知道凭据，再把带令牌的请求发过去。 */
-  const connectBackend = async (backendPort: number): Promise<Socket> => {
-    const socket = connect(backendPort, '127.0.0.1')
+  /** 先出示本次登记的 dial 证明，再要后端回 connect 证明，两边都对上才把带令牌的请求发过去。 */
+  const connectBackend = async (backend: Backend): Promise<Socket> => {
+    const socket = connect(backend.port, '127.0.0.1')
     const challenge = createRelayChallenge()
-    socket.once('connect', () => socket.write(`${challenge}\n`))
-    const proof = await readHandshakeLine(socket)
-    if (!relayProofMatches(relayProof(options.secret, 'connect', challenge), proof)) {
+    socket.once('connect', () => socket.write(`${challenge} ${relayProof(options.secret, 'dial', backend.session, challenge)}\n`))
+    const proof = await readHandshakeLine(socket, HANDSHAKE_MS)
+    if (!relayProofMatches(relayProof(options.secret, 'connect', backend.session, challenge), proof)) {
       socket.destroy()
       throw new Error('后端未能证明身份')
     }
     socket.setNoDelay(true)
     return socket
+  }
+
+  /** 换版本时把请求转给对外端口上的新接线员；先用问候确认它知道同一凭据，再发带令牌的请求。 */
+  const connectSuccessor = async (deadline: number): Promise<Socket | undefined> => {
+    while (Date.now() < deadline) {
+      const found = await probeRelay(port, options.secret)
+      if (found.kind === 'relay' && found.hello.instance !== instance) {
+        const socket = connect(port, '127.0.0.1')
+        const ready = await new Promise<boolean>(resolve => { socket.once('connect', () => resolve(true)); socket.once('error', () => resolve(false)) })
+        if (ready) { socket.setNoDelay(true); return socket }
+      }
+      await sleep(200)
+    }
+    return undefined
   }
 
   const waitForBackend = (deadline: number, response: ServerResponse) => new Promise<void>(resolve => {
@@ -138,7 +163,10 @@ export async function startRelay(options: RelayOptions): Promise<RelayHandle> {
     response.once('close', done)
   })
 
-  /** 请求与响应都按块直通，不攒整段；任一端断开都切断另一端，后端借此取消正在执行的调用。 */
+  /**
+   * 请求与响应都按块直通，不攒整段；任一端断开都切断另一端，后端借此取消正在执行的调用。
+   * 调用方已确认客户端此刻还连着，这里同步挂上关闭监听，不会错过关闭事件。
+   */
   const proxy = (request: IncomingMessage, response: ServerResponse, socket: Socket) => new Promise<void>(resolve => {
     const upstream = httpRequest({ method: request.method, path: request.url, headers: forwardable(request.headers), createConnection: () => socket })
     upstream.on('response', reply => {
@@ -158,19 +186,28 @@ export async function startRelay(options: RelayOptions): Promise<RelayHandle> {
   const forward = async (request: IncomingMessage, response: ServerResponse) => {
     inflight++
     lastActivity = Date.now()
-    const startedAt = Date.now()
-    const deadline = startedAt + waitMs
+    let closed = false
+    response.once('close', () => { closed = true })
+    const begunAt = Date.now()
+    const deadline = begunAt + waitMs
     let waited = false
+    let slowReported = false
     try {
       for (;;) {
-        if (response.destroyed) return
+        if (closed) return
+        if (retiring === 'release') return unavailable(response, 30, '外部智能体连接已在痕迹AI 中关闭。')
+        if (Date.now() >= deadline) {
+          log({ level: 'warn', event: 'mcp_relay.request.timeout', message: '痕迹AI 未在等待时间内回来，已让外部请求稍后重试', context: { waitedMs: Date.now() - begunAt } })
+          return unavailable(response, 30, '痕迹AI 暂时没有运行，请打开痕迹AI 后重试。')
+        }
+        if (retiring === 'replace') {
+          const socket = await connectSuccessor(deadline)
+          if (closed) return void socket?.destroy()
+          if (!socket) continue
+          return await proxy(request, response, socket)
+        }
         const backend = backends[0]
         if (!backend) {
-          if (closing) return unavailable(response, 1, '痕迹AI 的连接正在切换，请重试。')
-          if (Date.now() >= deadline) {
-            log({ level: 'warn', event: 'mcp_relay.request.timeout', message: '痕迹AI 未在等待时间内回来，已让外部请求稍后重试', context: { waitedMs: Date.now() - startedAt } })
-            return unavailable(response, 30, '痕迹AI 暂时没有运行，请打开痕迹AI 后重试。')
-          }
           if (!waited) {
             waited = true
             log({ level: 'info', event: 'mcp_relay.request.waiting', message: '痕迹AI 暂时不在，外部请求挂起等待', context: { waitMs } })
@@ -179,16 +216,24 @@ export async function startRelay(options: RelayOptions): Promise<RelayHandle> {
           continue
         }
         let socket: Socket
-        try { socket = await connectBackend(backend.port) } catch {
-          // 后端内部端口连不上或答不出证明：视同已经离开，等下一次登记。
-          if (backends.includes(backend)) {
+        try { socket = await connectBackend(backend) } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ETIMEDOUT') {
+            // 后端还登记着、只是一时没答上：不注销，稍后再试。
+            if (!slowReported) {
+              slowReported = true
+              log({ level: 'warn', event: 'mcp_relay.backend.slow', message: '痕迹后端一时没有回应握手，稍后重试', context: { pid: backend.pid } })
+            }
+            await sleep(Math.min(500, Math.max(0, deadline - Date.now())))
+          } else if (backends.includes(backend)) {
+            // 内部入口已关闭或对面答不出证明：视同已经离开，等下一次登记。
             log({ level: 'warn', event: 'mcp_relay.backend.unreachable', message: '登记的痕迹后端无法连接，已注销', context: { pid: backend.pid } })
             detach(backend)
             backend.channel.destroy()
           }
           continue
         }
-        if (waited) log({ level: 'info', event: 'mcp_relay.request.resumed', message: '痕迹AI 已回来，挂起的外部请求继续转发', context: { waitedMs: Date.now() - startedAt } })
+        if (closed) return void socket.destroy()
+        if (waited) log({ level: 'info', event: 'mcp_relay.request.resumed', message: '痕迹AI 已回来，挂起的外部请求继续转发', context: { waitedMs: Date.now() - begunAt } })
         return await proxy(request, response, socket)
       }
     } finally {
@@ -200,7 +245,7 @@ export async function startRelay(options: RelayOptions): Promise<RelayHandle> {
   const hello = (request: IncomingMessage, response: ServerResponse) => {
     const challenge = request.headers[RELAY_CHALLENGE_HEADER]
     if (!isRelayChallenge(challenge)) return reject(response, 400)
-    const body: RelayHello = { protocol: RELAY_PROTOCOL, build: options.build, pid: process.pid, backends: backends.length, challenge: issueChallenge(), proof: relayProof(options.secret, 'relay', challenge) }
+    const body: RelayHello = { protocol: RELAY_PROTOCOL, build: options.build, pid: process.pid, instance, backends: backends.length, challenge: issueChallenge(), proof: relayProof(options.secret, 'relay', challenge) }
     response.writeHead(200, { 'Content-Type': 'application/json' })
     response.end(JSON.stringify(body))
   }
@@ -208,22 +253,41 @@ export async function startRelay(options: RelayOptions): Promise<RelayHandle> {
   const attach = async (request: IncomingMessage, response: ServerResponse) => {
     const body = await readJson(request)
     const backendPort = body?.port
-    if (!redeemChallenge(body?.challenge) || typeof backendPort !== 'number' || !Number.isInteger(backendPort)
-      || !relayProofMatches(relayProof(options.secret, 'attach', body.challenge as string, backendPort), body?.proof)) {
+    const session = body?.session
+    if (!redeemChallenge(body?.challenge) || typeof backendPort !== 'number' || !Number.isInteger(backendPort) || !isRelayChallenge(session)
+      || !relayProofMatches(relayProof(options.secret, 'attach', body.challenge as string, backendPort, session), body?.proof)) {
       log({ level: 'warn', event: 'mcp_relay.backend.rejected', message: '拒绝了未能证明身份的后端登记' })
       return reject(response, 403)
     }
-    const backend: Backend = { port: backendPort, build: String(body.build ?? ''), pid: Number(body.pid ?? 0), channel: response }
+    if (retiring) return reject(response, 503)
+    const backend: Backend = { port: backendPort, session, build: String(body.build ?? ''), pid: Number(body.pid ?? 0), channel: response }
     response.writeHead(200, { 'Content-Type': 'application/x-ndjson' })
     response.flushHeaders()
     request.socket.setNoDelay(true)
     backends.push(backend)
+    everAttached = true
     lastActivity = Date.now()
     const standby = backends.length > 1
     if (standby) send(backend, { type: 'state', active: false })
     else promote()
     log({ level: 'info', event: 'mcp_relay.backend.attached', message: standby ? '痕迹后端已登记，排队待命' : '痕迹后端已登记', context: { pid: backend.pid, build: backend.build, standby } })
     response.once('close', () => detach(backend))
+  }
+
+  const retire = async (request: IncomingMessage, response: ServerResponse) => {
+    const body = await readJson(request)
+    const mode = body?.mode
+    const session = typeof body?.session === 'string' ? body.session : ''
+    if ((mode !== 'replace' && mode !== 'release') || !redeemChallenge(body?.challenge)
+      || !relayProofMatches(relayProof(options.secret, 'retire', body.challenge as string, mode, session), body?.proof)) return reject(response, 403)
+    // 退出前再核对一次：请求方以外还有痕迹登记着，就继续为它服务。
+    const others = backends.filter(backend => backend.session !== session)
+    if (others.length > 0) {
+      log({ level: 'info', event: 'mcp_relay.retire.refused', message: '还有痕迹后端在使用，接线员不退出', context: { mode, backends: others.length } })
+      return reject(response, 409)
+    }
+    response.writeHead(202)
+    response.end(() => { void shutdown(mode) })
   }
 
   const server = createServer((request, response) => {
@@ -233,36 +297,39 @@ export async function startRelay(options: RelayOptions): Promise<RelayHandle> {
     if (request.url === '/mcp') return void forward(request, response)
     if (request.url === RELAY_CONTROL_PATH && request.method === 'GET') return hello(request, response)
     if (request.url === RELAY_CONTROL_PATH && request.method === 'POST') return void attach(request, response)
-    if (request.url === RELAY_RETIRE_PATH && request.method === 'POST') {
-      return void readJson(request).then(body => {
-        if (!redeemChallenge(body?.challenge) || !relayProofMatches(relayProof(options.secret, 'retire', body.challenge as string), body?.proof)) return reject(response, 403)
-        response.writeHead(202)
-        response.end(() => { void shutdown('replaced') })
-      })
-    }
+    if (request.url === RELAY_RETIRE_PATH && request.method === 'POST') return void retire(request, response)
     reject(response, 404)
   })
   // 挂起期间不读请求体；整段请求的超时要留出等待时间。
   server.requestTimeout = waitMs + 30_000
   server.headersTimeout = 10_000
 
-  const shutdown = (reason: 'replaced' | 'idle' | 'closed'): Promise<void> => {
+  const shutdown = (mode: RelayRetireMode | 'closed'): Promise<void> => {
     closing ??= (async () => {
+      retiring = mode === 'replace' ? 'replace' : 'release'
       clearInterval(idleTimer)
+      // 停止接受新连接，端口立即空出来给新接线员；已连着的客户端照常走 forward。
       server.close()
-      // 先让挂起的请求回 503，再断开其余连接（含后端控制连接与在途转发）。
-      wakeWaiters()
-      await new Promise(resolve => setImmediate(resolve))
       for (const backend of backends.splice(0)) backend.channel.destroy()
+      wakeWaiters()
+      if (mode === 'replace') {
+        log({ level: 'info', event: 'mcp_relay.replaced', message: '接线员正在换成新版本，挂起的请求转交新接线员' })
+        const drainBy = Date.now() + waitMs
+        while (inflight > 0 && Date.now() < drainBy) await sleep(100)
+      } else {
+        await new Promise(resolve => setImmediate(resolve))
+      }
       server.closeAllConnections()
-      if (reason !== 'closed') options.onExit?.(reason)
+      if (mode !== 'closed') options.onExit?.()
     })()
     return closing
   }
 
   const idleTimer = setInterval(() => {
-    if (backends.length === 0 && inflight === 0 && Date.now() - lastActivity >= idleMs) void shutdown('idle')
-  }, Math.min(60_000, idleMs))
+    if (inflight > 0 || backends.length > 0) return
+    const now = Date.now()
+    if (now - lastActivity >= idleMs || (!everAttached && now - startedAt >= NEVER_ATTACHED_MS)) void shutdown('release')
+  }, Math.min(15_000, idleMs))
 
   try {
     await new Promise<void>((resolve, fail) => {
