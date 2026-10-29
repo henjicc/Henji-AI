@@ -50,6 +50,8 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, 'electron/main/index.ts'),
           'pi-agent-utility': resolve(__dirname, 'electron/main/pi-agent-utility.ts'),
+          // 外部智能体连接的接线员：独立常驻进程，痕迹重启期间替它占住对外端口。
+          'mcp-relay': resolve(__dirname, 'electron/main/mcp-relay.ts'),
           'image-color-lut-worker': resolve(__dirname, 'electron/main/image-color-lut-worker.ts'),
           'image-registration-worker': resolve(__dirname, 'electron/main/image-registration-worker.ts'),
           'audio-edit-mask-worker': resolve(__dirname, 'electron/main/services/audio-edit/mask-worker.ts'),

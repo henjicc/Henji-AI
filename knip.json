@@ -10,6 +10,7 @@
         "electron/preload/index.ts",
         "electron/main/*-utility.ts",
         "electron/main/*-worker.ts",
+        "electron/main/mcp-relay.ts",
         "electron/main/services/audio/waveform-worker.ts",
         "electron/main/services/fonts/worker.ts",
         "src/**/*{Worker,worker}.ts",

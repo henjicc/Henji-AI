@@ -6,6 +6,7 @@ import { createMcpHandler, Server, type McpHttpHandler, type AuthInfo } from '@m
 import { toNodeHandler } from '@modelcontextprotocol/node'
 import { EXTERNAL_SERVER_INFO } from '../../../../src/core/application-control/localHostContracts'
 import type { McpConnections } from './connections'
+import type { McpRelayConnector, RelayLink } from './relayLink'
 import type { ApplicationHostBridge } from '../application-runtime/applicationHostBridge'
 import type { ApplicationOperationCoordinator } from '../application-runtime/operationCoordinator'
 import { ApplicationToolDispatcher } from '../application-runtime/applicationToolDispatcher'
@@ -21,7 +22,9 @@ export class LocalMcpServer {
   private handler: McpHttpHandler | undefined
   /** 在途的 HTTP 响应：撤销授权时逐个切断。`listen` 是长期挂着的订阅流，不占普通请求的并发名额。 */
   private active = new Map<ServerResponse, { callerId: string; listen: boolean }>()
+  /** 对外地址的端口：经接线员转发时是接线员的端口，直接监听时是本服务的端口。 */
   private port = 0
+  private relayLink?: RelayLink
   private detach?: () => void
   private detachMemory?: () => void
   private authorizationTimer?: ReturnType<typeof setInterval>
@@ -30,8 +33,10 @@ export class LocalMcpServer {
     private readonly onError: (error: unknown) => void = () => {}, private readonly operations?: ApplicationOperationCoordinator,
     private readonly onRequest: (info: { callerId: string }) => void = () => {},
     private readonly onRejected: (info: { reason: 'invalid_token' }) => void = () => {},
-    private readonly memory?: Pick<MemoryEntryStore, 'onMemoryChange' | 'read'>) {}
-  get listening(): boolean { return this.http?.listening === true }
+    private readonly memory?: Pick<MemoryEntryStore, 'onMemoryChange' | 'read'>,
+    /** 有接线员时由它占住对外端口，痕迹重启期间外部请求不断；接线员不可用才直接监听。 */
+    private readonly relay?: McpRelayConnector) {}
+  get listening(): boolean { return this.relayLink !== undefined || this.http?.listening === true }
   get listeningPort(): number { return this.port }
   async start(port: number): Promise<void> {
     if (this.http) throw new Error('服务已经启用，请先关闭再更换端口。')
@@ -104,6 +109,8 @@ export class LocalMcpServer {
     http.headersTimeout = 10_000
     this.http = http
     try {
+      this.relayLink = await this.relay?.(port, socket => http.emit('connection', socket))
+      if (this.relayLink) { this.port = port; return }
       // 重启应用时旧实例可能尚未释放端口：EADDRINUSE 短暂退避重试，避免外部连接整轮掉线。
       for (let attempt = 0; ; attempt++) {
         try {
@@ -122,9 +129,13 @@ export class LocalMcpServer {
     } catch (error) { await this.stop(); throw error }
   }
 
-  async stop(): Promise<void> {
+  /** `releasePort` 为真时连同接线员一起关闭（用户关掉外部连接）；应用退出时保留接线员替外部客户端等下一次启动。 */
+  async stop(options: { releasePort?: boolean } = {}): Promise<void> {
     const http = this.http
     this.http = undefined
+    const relayLink = this.relayLink
+    this.relayLink = undefined
+    await relayLink?.stop({ release: options.releasePort })
     this.detach?.()
     this.detach = undefined
     this.detachMemory?.()
