@@ -1,7 +1,8 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { createContentTrustTestSession } from '../../content-trust/test-support'
 import type { WebRecordingStore } from '../store'
 import { CAPTURE_TOKEN_COLORS } from '../../../../../packages/web-replay-probe/src/replay/types'
 
@@ -40,12 +41,12 @@ function image(token: number, value = token): unknown {
 function evaluate(page: FakePage) {
   return async (code: string): Promise<unknown> => {
     let m: RegExpMatchArray | null
-    if ((m = code.match(/\.advance\(([\d.]+)\)/))) {
     if ((m = code.match(/\.tick\(([\d.]+)\)/))) {
       page.pageNow = Math.max(page.pageNow, Number(m[1]))
       page.pageFrames.push(Number(m[1]))
       return { now: page.pageNow, timers: 0, frameCallbacks: 0, animations: 0, quiet: false, samples: {} }
     }
+    if ((m = code.match(/\.advance\(([\d.]+)\)/))) {
       page.pageNow = Math.max(page.pageNow, Number(m[1]))
       return { now: page.pageNow, timers: 0, nextDue: Infinity }
     }
@@ -160,7 +161,10 @@ import { BOX_TRACK_FILE } from '../boxTrack'
 import { TEXT_TRACK_FILE } from '../textTrack'
 
 let root = ''
+let trust: ReturnType<typeof createContentTrustTestSession>
+beforeEach(() => { trust = createContentTrustTestSession() })
 afterEach(async () => {
+  trust.dispose()
   fake.pages = []
   fake.encoders = []
   fake.aborted.mockClear()
@@ -177,13 +181,34 @@ afterEach(async () => {
   if (root) await fs.rm(root, { recursive: true, force: true })
 })
 
-function recordingStore(directory: string, behavior: unknown[] = [], durationUs = 0): WebRecordingStore {
+function recordingStore(directory: string, behavior: unknown[] = [], durationUs = 0, foreign = false): WebRecordingStore {
   return {
     directory,
-    readManifest: async () => ({ id: 'recording', status: 'complete', durationUs, env: { url: 'https://example.test/', viewport: { width: 10, height: 10, dpr: 1 } } }),
+    readManifest: async () => ({ ...(foreign ? { foreign: { id: 'foreign-recording', sourceName: '外部录制', sourceType: 'web_recording' } } : {}), id: 'recording', status: 'complete', durationUs, env: { url: 'https://example.test/', viewport: { width: 10, height: 10, dpr: 1 } } }),
     readData: async () => ({ calls: [], external: [], callbacks: [], random: { math: [], uuid: [], bytes: [] }, clipboard: [] }), readBehavior: async () => behavior, readStorage: async () => ({}), readResources: async () => ({ entries: [] }),
   } as unknown as WebRecordingStore
 }
+
+it('外部网页录制在窗口创建与网页脚本求值前等待信任；拒绝不运行，仅这一次后重演，重启再次拦下', async () => {
+  root = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-foreign-replay-'))
+  const foreign = recordingStore(root, [], 0, true)
+  const manifest = await foreign.readManifest()
+  const player = new WebRecordingPlayer(foreign)
+  const options = { output: path.join(root, 'video.mp4'), fps: 4 }
+  await expect(player.render(options)).rejects.toThrow('等待用户确认')
+  expect(fake.pages).toHaveLength(0)
+  const query = { contents: [manifest.foreign!] }
+  trust.session.decide(trust.session.check(query).challenge!, 'deny')
+  await expect(player.render(options)).rejects.toThrow('尚未运行')
+  expect(fake.pages).toHaveLength(0)
+  trust.session.retry(query.contents)
+  trust.session.decide(trust.session.check(query).challenge!, 'once')
+  expect((await player.render(options)).frames).toBeGreaterThan(0)
+  trust.restart()
+  const before = fake.pages.length
+  await expect(player.render(options)).rejects.toThrow('等待用户确认')
+  expect(fake.pages).toHaveLength(before)
+})
 
 const readTrack = async (file: string): Promise<Array<{ t: number; items: unknown[][] }>> => (await fs.readFile(file, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { t: number; items: unknown[][] })
 
@@ -287,6 +312,17 @@ it('导演稿：剪掉的区间与快放都按页面帧节奏推进、不出帧�
   await expect(fs.access(path.join(root, BOX_TRACK_FILE))).rejects.toThrow()
 })
 
+it('移动与滚轮在各自输入时刻交付浏览器，不能等到后续定时器或输出帧再交付', async () => {
+  root = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-replay-input-time-'))
+  const behavior = [
+    { kind: 'pointer', type: 'move', t: 40_000, x: 3, y: 3, button: -1, buttons: 1, clickCount: 0, pointerType: 'mouse', mods: 0 },
+    { kind: 'wheel', t: 45_000, x: 3, y: 3, dx: 0, dy: -100, mods: 2 },
+  ]
+  const director = parseWebReplayDirector({ version: 1, timeline: { segments: [{ from: 0, to: 1, speed: 16 }] } })
+  await new WebRecordingPlayer(recordingStore(root, behavior, 1_000_000)).render({ output: path.join(root, 'input.mp4'), fps: 60, video: false, director })
+  expect(fake.pages[0].inputFrames).toEqual([40, 45])
+})
+
 it('注入失败立即拒绝重演并关闭弹窗入口', async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-replay-injection-'))
   fake.injectionFails = true
@@ -306,14 +342,3 @@ it('bootstrap preload 失败立即带原因拒绝，不等待存储恢复超时'
   fake.bootstrapFails = true
   await expect(new WebRecordingPlayer(recordingStore(root)).render({ output: path.join(root, 'video.mp4'), video: false })).rejects.toThrow('重演运行时注入失败：bootstrap fixture failure')
 }, 2000)
-it('移动与滚轮在各自输入时刻交付浏览器，不能等到后续定时器或输出帧再交付', async () => {
-  root = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-replay-input-time-'))
-  const behavior = [
-    { kind: 'pointer', type: 'move', t: 40_000, x: 3, y: 3, button: -1, buttons: 1, clickCount: 0, pointerType: 'mouse', mods: 0 },
-    { kind: 'wheel', t: 45_000, x: 3, y: 3, dx: 0, dy: -100, mods: 2 },
-  ]
-  const director = parseWebReplayDirector({ version: 1, timeline: { segments: [{ from: 0, to: 1, speed: 16 }] } })
-  await new WebRecordingPlayer(recordingStore(root, behavior, 1_000_000)).render({ output: path.join(root, 'input.mp4'), fps: 60, video: false, director })
-  expect(fake.pages[0].inputFrames).toEqual([40, 45])
-})
-

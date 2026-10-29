@@ -42,7 +42,7 @@ export async function renderVideoEditStyle(styleId: string, signal: AbortSignal,
   // 只有最后保存进风格库才写入；在那之前失败（样片代码编译不过、某帧没有画面、取消）什么都没改，可以修正后直接重试。
   let saving = false
   try {
-    const timeline = await styleSampleTimeline(style.sample, signal)
+    const timeline = await styleSampleTimeline(style.sample, signal, style.foreign ? [style.foreign] : [])
     const size = fit(style.sample.width, style.sample.height, PREVIEW_LONG_EDGE)
     const thumbnailSize = { width: THUMBNAIL_WIDTH, height: Math.max(2, Math.round(THUMBNAIL_WIDTH * style.sample.height / style.sample.width / 2) * 2) }
     const canvas = new OffscreenCanvas(size.width, size.height); const context = canvas.getContext('2d')!

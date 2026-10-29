@@ -25,6 +25,7 @@ import { createMainLogger } from '../../logging'
 import { parseSkillFrontmatter } from './frontmatter'
 import { getBuiltinSkillsDir, getUserSkillsDir, resolveSkillFilePath } from './paths'
 import { readDisabledSkillNames } from './state'
+import { contentTrust } from '../../content-trust/runtime'
 
 const logger = createMainLogger('main.assistant_skills')
 
@@ -141,6 +142,7 @@ async function scanSkillFolder(
   return {
     dir: skillDir,
     metadata: {
+      ...(source === 'user' && parsed.foreign ? { foreign: parsed.foreign } : {}),
       name: parsed.name,
       description: parsed.description,
       source,
@@ -186,10 +188,11 @@ export async function scanAssistantSkills(dirs: SkillDirectorySet): Promise<Assi
   }
   // 同名时用户技能整个文件夹覆盖内置，不做文件级合并。
   for (const [name, scanned] of user.skills) {
+
     merged.set(name, {
       ...scanned.metadata,
       overridesBuiltin: builtin.skills.has(name),
-      enabled: !disabled.has(name),
+      enabled: !disabled.has(name) && contentTrust().allows({ contents: scanned.metadata.foreign ? [scanned.metadata.foreign] : [] }),
     })
   }
 
@@ -255,6 +258,10 @@ export async function loadAssistantSkillFrom(
   const skillName = parsedName.data
 
   const located = await locateSkillDir(dirs, skillName)
+  if (located.source === 'user') {
+    const parsed = parseSkillFrontmatter(await fs.readFile(path.join(located.dir, ASSISTANT_SKILL_ENTRY_FILE), 'utf8'))
+    contentTrust().assert({ contents: parsed.foreign ? [parsed.foreign] : [] })
+  }
   if (dirs.disabledNames.some((disabled) => normalizeAssistantSkillName(disabled) === skillName)) {
     throw new AssistantSkillError('SKILL_DISABLED', `技能已被停用：${skillName}`)
   }

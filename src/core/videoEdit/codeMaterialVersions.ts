@@ -1,3 +1,4 @@
+import type { ContentTrustReference } from '../contentTrust'
 import { CODE_AUTHOR_API_VERSION, CODE_AUTHOR_LIBRARIES_MIN_API_VERSION, codeMaterialDefinitionSchema } from './codeMaterialPersistence'
 import type { CodeMaterialDefinition, CodeMaterialVersion } from './codeMaterialPersistence'
 import { CodeMaterialError } from './codeMaterial/contract'
@@ -49,24 +50,27 @@ export function codeVersionInheritance(version: CodeMaterialVersion, resolver: C
 export async function makeCodeMaterialDefinition(source: string | CodeMaterialFiles, compile: CodeSourceCompiler, publication: CodeVersionPublication, identity?: { id: string; folder?: string }): Promise<CodeMaterialDefinitionResult> {
   const addressed = await addressCodeMaterialFiles(source)
   const contents = resolveCodeMaterialFiles(addressed, documentCodeSourceResolver())
-  const program = await compile(codeVersionCompilation(expandPinnedCodeComponents(contents, publication.imports, documentCodeSourceResolver()), publication))
+  const trustContext = (typeof source === 'string' ? undefined : source.trustContext) ?? []
+  const program = await compile({ ...codeVersionCompilation(expandPinnedCodeComponents(contents, publication.imports, documentCodeSourceResolver()), publication), trustContext })
   const id = identity?.id ?? crypto.randomUUID(); const name = publication.name ?? program.name
   const libraries = versionLibraries(publication, program)
   const stored = await publication.write(id, name, contents, identity?.folder)
-  const version = { id: crypto.randomUUID(), apiVersion: program.apiVersion, languageVersion: program.languageVersion, entry: addressed.entry, files: stored.files, ...(publication.project ? { project: publication.project } : {}), ...(publication.imports.length ? { imports: publication.imports } : {}), ...(libraries ? { libraries: { ...libraries } } : {}) }
+  const version = { id: crypto.randomUUID(), ...(trustContext[0] ? { foreign: trustContext[0] } : {}), apiVersion: program.apiVersion, languageVersion: program.languageVersion, entry: addressed.entry, files: stored.files, ...(publication.project ? { project: publication.project } : {}), ...(publication.imports.length ? { imports: publication.imports } : {}), ...(libraries ? { libraries: { ...libraries } } : {}) }
   const definition = codeMaterialDefinitionSchema.parse({ id, name, ...(stored.folder ? { folder: stored.folder } : {}), defaultVersionId: version.id, versions: [version] })
   return { definition, program }
 }
 /** 历史源码由解析器读取，版本比较不能依赖素材目录的位置。 */
-export async function appendCodeMaterialVersion(definition: CodeMaterialDefinition, source: string | CodeMaterialFiles, compile: CodeSourceCompiler, resolver: CodeSourceResolver, publication: CodeVersionPublication): Promise<CodeMaterialDefinitionResult & { versionId: string; kindUnverified?: true }> {
+export async function appendCodeMaterialVersion(definition: CodeMaterialDefinition, source: string | CodeMaterialFiles, compile: CodeSourceCompiler, resolver: CodeSourceResolver, publication: CodeVersionPublication, previousTrustContext?: ContentTrustReference[]): Promise<CodeMaterialDefinitionResult & { versionId: string; kindUnverified?: true }> {
   const previousVersion = definition.versions.find(version => version.id === definition.defaultVersionId)
   if (!previousVersion) throw new CodeMaterialError('COMPATIBILITY', '固定代码版本不存在。')
   // 原有版本用来核对种类与语言版本。默认版本源码缺失或编译不过时依次改用其他历史版本，
   // 不挡住新版本；全部读不到才不核对种类（kindUnverified），由调用方记录。取消会在随后编译新版本时照常抛出。
   let previous: CodeMaterialProgram | undefined
+  const locallyAuthored = typeof source === 'string' || !source.trustContext?.length
   for (const version of [previousVersion, ...definition.versions.filter(value => value !== previousVersion).reverse()]) {
+    if (locallyAuthored && version.foreign) continue
     // 已有版本按它自己的记录编译，v4 记录照旧按 v4 读取。
-    try { previous = await compile({ ...expandPinnedCodeComponents(resolveCodeMaterialFiles(version, resolver), version.imports ?? [], resolver), apiVersion: version.apiVersion as CodeAuthorApiVersion, ...(version.libraries ? { libraries: version.libraries } : {}) }) } catch { continue }
+    try { previous = await compile({ trustContext: previousTrustContext ?? (version.foreign ? [version.foreign] : []), ...expandPinnedCodeComponents(resolveCodeMaterialFiles(version, resolver), version.imports ?? [], resolver), apiVersion: version.apiVersion as CodeAuthorApiVersion, ...(version.libraries ? { libraries: version.libraries } : {}) }) } catch { continue }
     if (previous.apiVersion !== version.apiVersion || previous.languageVersion !== version.languageVersion) throw new CodeMaterialError('COMPATIBILITY', '源码语言版本与固定版本不一致。')
     break
   }

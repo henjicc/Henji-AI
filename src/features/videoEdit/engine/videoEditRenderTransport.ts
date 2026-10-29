@@ -22,11 +22,15 @@ import { videoEditNestedFrame } from '@/core/videoEdit/nestedSequences'
 import { activeVideoEditEffects } from '@/core/videoEdit/compositing'
 import type { AuthorModuleUrls } from './videoEditAuthorModules'
 import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
+import { ensureContentTrust, executeContentTrust, subscribeContentTrust } from '@/services/contentTrust'
+import { authorTrustContext } from './videoEditAuthorTrust'
+import { readContentTrustFailure, restoreContentTrustError } from '@/core/contentTrust'
 
 const logger = createLogger('features.videoEdit.render')
 /** 一个渲染会话同时排着的请求上限（Worker 串行执行，排得越多停止与跳转越慢）。 */
 const VIDEO_EDIT_RENDER_QUEUE_LIMIT = 4
 const activeTransports = new Set<VideoEditRenderTransport>()
+subscribeContentTrust(command => { if (command.action === 'set-policy' && !command.allow) for (const transport of activeTransports) transport.denyForeignContent() })
 // 整页刷新由窗口负责；页面确实离开后统一关闭会话，释放还在主进程持有的帧通道。
 if (typeof window !== 'undefined') window.addEventListener('pagehide', () => {
   for (const session of activeTransports) void session.dispose(true)
@@ -56,6 +60,8 @@ export interface VideoEditRenderHost {
 }
 
 export class VideoEditRenderTransport {
+  private readonly contentTrustIds = new Set<string>()
+  denyForeignContent(): void { if (this.contentTrustIds.size) void this.dispose(true) }
   private readonly compilations = new Map<number, AbortController>()
   private readonly moduleGraphs = new Map<number, AuthorModuleUrls>()
   private readonly worker = new Worker(new URL('./videoEditWorker.ts', import.meta.url), { type: 'module' })
@@ -202,6 +208,19 @@ export class VideoEditRenderTransport {
       if ('kind' in event.data && event.data.kind === 'code.releaseModules') {
         this.moduleGraphs.get(event.data.token)?.dispose(); this.moduleGraphs.delete(event.data.token); return
       }
+      if ('kind' in event.data && event.data.kind === 'code.trust') {
+        const { token, request } = event.data
+        const context = request.context ?? (request.url ? authorTrustContext(request.url) : undefined)
+        const checked = context ? ensureContentTrust({ contents: context }).then(async () => {
+          const { records } = await executeContentTrust({ action: 'check', query: { contents: context } })
+          for (const record of records) this.contentTrustIds.add(record.id)
+          
+        }) : Promise.reject(new Error('代码来源无法确认，代码尚未运行。'))
+        void checked.then(() => ({}), error => ({ error: error instanceof Error ? error.message : String(error), contentTrust: readContentTrustFailure(error) })).then(result => {
+          if (!this.disposed) this.worker.postMessage({ kind: 'code.trustResult', token, ...result } satisfies SharedCompilationResponse)
+        })
+        return
+      }
       if ('kind' in event.data && event.data.kind === 'code.modules') {
         const { token, files } = event.data
         const prepared = this.host.loadCodeModules ? this.host.loadCodeModules(files) : Promise.reject(new Error('此会话未提供循环模块加载入口。'))
@@ -209,7 +228,7 @@ export class VideoEditRenderTransport {
           if (this.disposed) { modules.dispose(); return }
           this.moduleGraphs.set(token, modules)
           this.worker.postMessage({ kind: 'code.moduleUrls', token, url: modules.url } satisfies SharedCompilationResponse)
-        }, error => { if (!this.disposed) this.worker.postMessage({ kind: 'code.moduleUrls', token, error: error instanceof Error ? error.message : String(error) } satisfies SharedCompilationResponse) })
+        }, error => { if (!this.disposed) this.worker.postMessage({ kind: 'code.moduleUrls', token, error: error instanceof Error ? error.message : String(error), contentTrust: readContentTrustFailure(error) } satisfies SharedCompilationResponse) })
         return
       }
       if ('kind' in event.data && event.data.kind === 'code.metadata') {
@@ -222,7 +241,7 @@ export class VideoEditRenderTransport {
         const { token, file } = event.data
         void (file.location.startsWith('memory:') ? Promise.resolve(documentCodeSourceResolver().read(file.hash, file.location, file.path)) : getPlatform().documents.readCodeFile(file)).then(
           source => ({ kind: 'code.source' as const, token, source }),
-          error => ({ kind: 'code.source' as const, token, error: error instanceof Error ? error.message : String(error) }),
+          error => ({ kind: 'code.source' as const, token, error: error instanceof Error ? error.message : String(error), contentTrust: readContentTrustFailure(error) }),
         ).then(result => { if (!this.disposed) this.worker.postMessage(result satisfies SharedCompilationResponse) })
         return
       }
@@ -236,7 +255,7 @@ export class VideoEditRenderTransport {
         const prepared = prepareVideoEditAuthorBundle(files, controller.signal).then(bundle => ({ id: token, bundle }))
         void prepared.then(
           result => result,
-          error => ({ id: token, error: { code: error instanceof CodeMaterialError ? error.code : 'CONTEXT' as const, message: error instanceof Error ? error.message : String(error), ...(error instanceof CodeMaterialError ? { sourceSpan: error.sourceSpan } : {}) } }),
+          error => ({ id: token, error: { code: error instanceof CodeMaterialError ? error.code : 'CONTEXT' as const, message: error instanceof Error ? error.message : String(error), contentTrust: readContentTrustFailure(error), ...(error instanceof CodeMaterialError ? { sourceSpan: error.sourceSpan } : {}) } }),
         ).then(result => {
           this.compilations.delete(token)
           if (!this.disposed && !controller.signal.aborted) this.worker.postMessage({ kind: 'code.compiled', token, result } satisfies SharedCompilationResponse)
@@ -258,7 +277,7 @@ export class VideoEditRenderTransport {
       this.pending.delete(value.id)
       if (!pending) { value.bitmap?.close(); value.history?.close(); return }
       clearTimeout(pending.timer)
-      if (value.error) pending.reject(value.gpuDeviceLost !== undefined ? new VideoEditGpuDeviceLostError(value.gpuDeviceLost) : new Error(value.error)); else pending.resolve(value)
+      if (value.error) pending.reject(value.gpuDeviceLost !== undefined ? new VideoEditGpuDeviceLostError(value.gpuDeviceLost) : restoreContentTrustError(new Error(value.error), value.contentTrust)); else pending.resolve(value)
     }
     this.worker.onerror = event => {
       event.preventDefault?.()

@@ -9,7 +9,7 @@ import type Database from 'better-sqlite3'
 import type { LocationContext } from '../../../src/core/storage/locationCodec'
 import { createApplicationOperationTablesV1 } from './application-runtime/operationStore'
 import { createAiRuntimeTablesV1, createGenerationSubmissionsTableV1, createPendingTaskResultsTableV1 } from './ai-runtime/schema'
-import { createAssetLibraryTablesV1 } from './asset-library/schema'
+import { createAssetLibraryTablesV1, addAssetForeignMarker } from './asset-library/schema'
 import { createAssistantMemoryTablesV1, replaceAssistantMemoryTablesV22, assistantMemoryNeedsBackup } from './assistant/storageSchema'
 import { createCameraStageRenderTaskTableV1 } from './camera-stage-render-task-schema'
 import { createCustomModelsTableV1 } from './custom-models-schema'
@@ -97,7 +97,8 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   { version: 20, name: 'application_operation_persistent_review', up: migrateApplicationReviewsV20,
     backupWhen: db => !!db.prepare("SELECT 1 FROM application_invocations WHERE json_extract(record_json, '$.confirmation.purpose') = 'review' LIMIT 1").get() },
   { version: 21, name: 'global_media_recycle', up: createMediaRecycleTablesV21 },
-  { version: SQLITE_SCHEMA_VERSION, name: 'replace_assistant_memory_user_authorized_reset', up: replaceAssistantMemoryTablesV22, backupWhen: assistantMemoryNeedsBackup },
+  { version: 22, name: 'replace_assistant_memory_user_authorized_reset', up: replaceAssistantMemoryTablesV22, backupWhen: assistantMemoryNeedsBackup },
+  { version: SQLITE_SCHEMA_VERSION, name: 'asset_foreign_marker', up: addAssetForeignMarker },
 ]
 
 export const SCHEMA_MIGRATIONS_TABLE = 'schema_migrations'

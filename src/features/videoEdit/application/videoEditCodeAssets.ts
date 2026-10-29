@@ -1,3 +1,4 @@
+import { addMediaReferenceToLibrary } from '@/features/assets/services/assetCollectionService'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { backupPersistenceSnapshot } from '@/core/persistence/backup'
 import { PersistenceError } from '@/core/persistence/migrations'
@@ -84,7 +85,7 @@ export async function collectVideoEditCodeAsset(projectId: string, target: Video
     const selected = binding(owner, target)
     const fixed = baseline.codeMaterials!.find(definition => definition.id === selected.code.definitionId)!.versions.find(version => version.id === selected.code.versionId)!
     await loadCodeSourceReferences(fixed)
-    await ensureVideoEditCodeParameterMetadata(owner, baseline, selected.code.definitionId, selected.code.versionId)
+    await ensureVideoEditCodeParameterMetadata(owner, baseline, selected.code.definitionId, selected.code.versionId, signal)
     const source = codeMaterialSource(baseline, selected.code)
     prepareCodeMaterialParameters(readVideoEditCodeMetadata(owner, baseline)(selected.code), selected.code)
     const { parameters, detached } = detachCodeAssetScenes(structuredClone(selected.code.parameters))
@@ -92,6 +93,7 @@ export async function collectVideoEditCodeAsset(projectId: string, target: Video
     const cached = latest.get(owner)
     if (typeof options.path !== 'string' && cached?.document === baseline && cached.target === targetKey) {
       await verifyVideoEditOutput(cached.receipt); assertOwner(owner, contentVersion, signal)
+      if (source.foreign) await addMediaReferenceToLibrary({ filePath: cached.receipt.path, mediaType: 'code', source: 'video-edit', foreign: source.foreign, displayName: selected.name })
       return { asset: await collectVideoEditOutput(cached.receipt, options, signal), detachedSceneParameters: detached }
     }
     if (options.libraryId) await assetApplicationService.inspectLibrary(options.libraryId)
@@ -115,6 +117,7 @@ export async function collectVideoEditCodeAsset(projectId: string, target: Video
     await platform.system.fs.writeFile(path, bytes, { exclusive: true })
     const receipt = await publishVideoEditOutput({ owner, sequenceId: selected.sequenceId, revision: baseline.revision, path, name: manifest.name, kind: 'code' })
     latest.set(owner, { document: baseline, target: targetKey, receipt })
+    if (source.foreign) await addMediaReferenceToLibrary({ filePath: path, mediaType: 'code', source: 'video-edit', foreign: source.foreign, displayName: manifest.name })
     assertOwner(owner, contentVersion, signal)
     return { asset: await collectVideoEditOutput(receipt, options, signal), detachedSceneParameters: detached }
   } catch (error) { logger.warn('可编辑代码素材未完成收录', { event: 'video_edit.code_asset.collect.failed', error, context: { projectId } }); throw error }
@@ -149,7 +152,7 @@ export async function importVideoEditCodeAsset(projectId: string, assetId: strin
     if (!sameVideoEditAssetContent(asset, await assetApplicationService.inspect(assetId))) throw new Error('代码资产在导入检查期间已改变，请重新导入。')
     assertOwner(owner, contentVersion, signal)
   }
-  const result = await createVideoEditCodeAssetInstance(projectId, { asset: manifest, media, mediaIds, origin: { assetId, contentIdentity: videoEditAssetContentSnapshot(asset).contentIdentity }, beforePublish, ...options }, options.binId, signal)
+  const result = await createVideoEditCodeAssetInstance(projectId, { asset: manifest, foreign: asset.foreign ?? null, media, mediaIds, origin: { assetId, contentIdentity: videoEditAssetContentSnapshot(asset).contentIdentity }, beforePublish, ...options }, options.binId, signal)
   logger.info('可编辑代码资产已导入原剪辑', { event: 'video_edit.code_asset.import.completed', context: { projectId, assetId, ...result } })
   return result
 }

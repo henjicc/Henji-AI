@@ -7,6 +7,8 @@ export function createElectronApplicationControl(): ApplicationHostPlatform {
     return api
   }
   return {
+    contentTrust: command => native().contentTrust(command),
+    onContentTrust: handler => native().onContentTrust(handler),
     reviewOperations: input => native().reviewOperations(input),
     onReviews: handler => native().onReviews(handler),
     publishContext: input => native().publishContext(input),

@@ -19,7 +19,8 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   // 版本位置支持 git:；纯格式迁移保留已有位置，磁盘导入由显式项目操作执行。
   // 3 → 4：新增可选内置库 libraries，并接受作者接口 v5；旧记录原样有效，没有 libraries 的按第一套内置库运行。
   // 4 → 5：接受作者接口 v6；旧记录的源码、接口与库版本原样保留。
-  'code-version': { 1: value => structuredClone(value), 2: value => structuredClone(value), 3: value => structuredClone(value), 4: value => structuredClone(value) },
+  // 5 → 6：新增可选外来来源，历史版本保持没有标记的本机身份。
+  'code-version': { 1: value => structuredClone(value), 2: value => structuredClone(value), 3: value => structuredClone(value), 4: value => structuredClone(value), 5: value => structuredClone(value) },
   // 作者宿主接口 4 → 5：v5 起可声明片子数据参数与使用内置库；宿主按 apiVersion 保持 v4 代码原行为，不迁移源码。
   // 5 → 6：新增版本化排版库；迁移不把旧素材提升到新作者接口。
   'code-author-api': { 4: value => structuredClone(value), 5: value => structuredClone(value) },
@@ -27,21 +28,25 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   // 8 → 9：源码版本新增可选内置库 libraries 并接受作者接口 v5；资产不携带片子数据，不能引用它。旧资产原样有效，最低可读版本仍为 7。
   // 9 → 10：资产可携带作者接口 v6；只升容器版本，保留 sourceVersion。
   'code-asset': { 6: value => ({ ...structuredClone(value) as object, version: 7, minReaderVersion: 7 }), 7: value => ({ ...structuredClone(value) as object, version: 8, minReaderVersion: 7 }), 8: value => ({ ...structuredClone(value) as object, version: 9, minReaderVersion: 7 }), 9: value => ({ ...structuredClone(value) as object, version: 10, minReaderVersion: 10 }) },
-  project: { 1: value => ({ ...value as object, version: 2, minReaderVersion: 1 }) },
+  // 2 → 3：新增可选外来来源，历史工程保持本机身份。
+  project: { 1: value => ({ ...value as object, version: 2, minReaderVersion: 1 }), 2: value => ({ ...value as object, version: 3 }) },
   // 2 → 3：样片画布放宽到 3840×2160、60 帧，旧内容原样有效。
   // 3 → 4：样片时长放宽到 30 秒、锚点 10 张，旧内容原样有效。
-  'video-style-library': { 1: value => value, 2: value => value, 3: value => value },
+  // 4 → 5：新增可选 foreign，已有 imported 只表示文字来源，不赋予代码来源。
+  'video-style-library': { 1: value => value, 2: value => value, 3: value => value, 4: value => structuredClone(value) },
   // 1 → 2：模板里的代码视频参数新增可选取帧时间表 spans，旧内容原样有效。
   // 2 → 3：原生模板片段新增可选 enabled:false；代码参数值新增片子数据引用 {kind:'scene'}（模板不携带片子数据，实际不会出现）。
   // 旧内容原样有效；旧程序会把停用的模板片段当成启用，最低可读版本提高到 3。
-  'video-template-library': { 1: value => value, 2: value => value },
+  // 3 → 4：新增可选 foreign，已有 imported 不转成外来代码标记。
+  'video-template-library': { 1: value => value, 2: value => value, 3: value => structuredClone(value) },
   // 6 → 7：本机标题模板里的代码视频参数新增可选取帧时间表 spans，旧内容原样有效。
   // 7 → 8：代码参数值新增片子数据引用 {kind:'scene'}（标题模板不携带片子数据，实际不会出现），旧内容原样有效。
   'title-templates': { 6: value => value, 7: value => value },
   // 4 → 5：成员模板里的代码视频参数新增可选取帧时间表 spans，旧内容原样有效。
   // 5 → 6：成员原生模板的片段新增可选 enabled:false；代码参数值新增片子数据引用 {kind:'scene'}（风格包不携带片子数据，实际不会出现）。
   // 旧内容原样有效；旧程序会把停用的模板片段当成启用，最低可读版本提高到 6。
-  'video-style-package': { 1: value => value, 2: value => value, 3: value => value, 4: value => value, 5: value => value },
+  // 6 → 7：嵌套风格和模板新增可选来源；导入宿主负责生成标记，包内标记不表示批准。
+  'video-style-package': { 1: value => value, 2: value => value, 3: value => value, 4: value => value, 5: value => value, 6: value => structuredClone(value) },
   'recording-setup': { 1: value => value, 2: value => { const { microphoneId: _legacyDevice, ...rest } = value as Record<string, unknown>; return rest }, 3: value => value, 4: value => value },
   'screen-capture': { 1: value => ({ ...value as object, version: 2, minReaderVersion: 1 }) },
   'audio-capture-recovery': { 1: value => ({ ...value as object, version: 2 }) },

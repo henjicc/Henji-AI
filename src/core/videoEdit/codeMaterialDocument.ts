@@ -31,7 +31,7 @@ export function codeMaterialSource(document: Pick<VideoEditDocument, 'codeMateri
   const resolver = documentCodeSourceResolver(document); const contents = resolveCodeMaterialFiles(version, resolver)
   // 编译按版本记录的作者接口与内置库版本；记录的 apiVersion 已由 schema 限定在 4–5。
   const options = { apiVersion: version.apiVersion as CodeAuthorApiVersion, ...(version.libraries ? { libraries: version.libraries } : {}) }
-  return { ...version, contents, compilation: { ...expandPinnedCodeComponents(contents, version.imports ?? [], resolver), ...options } }
+  return { ...version, contents, compilation: { ...expandPinnedCodeComponents(contents, version.imports ?? [], resolver), ...options, trustContext: version.foreign ? [version.foreign] : [] } }
 }
 export function codeMaterialVersion(document: Pick<VideoEditDocument, 'codeMaterials'>, instance: CodeMaterialInstance): CodeMaterialVersion {
   const version = document.codeMaterials?.find(definition => definition.id === instance.definitionId)?.versions.find(version => version.id === instance.versionId)
@@ -174,4 +174,10 @@ export function changedCodeMaterialVersions(before: VideoEditDocument, next: Vid
     }
   }
   return result
+}
+
+export function codeMaterialTrustContext(document: Pick<VideoEditDocument, 'codeMaterials'>, instance: { definitionId: string; versionId?: string }) {
+  const definition = document.codeMaterials?.find(value => value.id === instance.definitionId)
+  const version = definition?.versions.find(value => value.id === (instance.versionId ?? definition.defaultVersionId))
+  return version?.foreign ? [version.foreign] : []
 }

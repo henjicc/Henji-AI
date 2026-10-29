@@ -1,3 +1,4 @@
+import type { ContentTrustReference } from '../../contentTrust'
 import { z } from 'zod'
 import { documentTargetSchema } from '../../documents/requests'
 import { codeFilePathSchema, codeSourceTextSchema } from './sources'
@@ -17,7 +18,7 @@ export const codeProjectChangeSchema = z.object({
 export const codeProjectCommitSchema = z.object({ target: documentTargetSchema, message: z.string().trim().min(1).max(2000) }).strict()
 export const codeProjectResolveSchema = z.object({ target: documentTargetSchema, entry: codeFilePathSchema, commit: z.string().regex(/^[a-f0-9]{40}$/).optional() }).strict()
 export type CodeProjectResolve = z.infer<typeof codeProjectResolveSchema>
-export interface CodeProjectClosure { commit: string; entry: string; files: CodeFileReference[] }
+export interface CodeProjectClosure { foreign?: ContentTrustReference; commit: string; entry: string; files: CodeFileReference[] }
 export type CodeProjectChange = z.infer<typeof codeProjectChangeSchema>
 export interface CodeProjectFile { path: string; source: string; hash: string; bytes: number }
 export interface CodeProjectState {

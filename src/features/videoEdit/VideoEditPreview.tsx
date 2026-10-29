@@ -1,4 +1,7 @@
+import { codeMaterialTrustContext } from '@/core/videoEdit/codeMaterialDocument'
 import { installVideoEditCodeElements } from './application/videoEditCodeElements'
+import { subscribeContentTrustContext, runForeignContent } from '@/services/contentTrust'
+import { readContentTrustFailure, type ContentTrustFailure } from '@/core/contentTrust'
 import { VideoEditGpuDeviceLostError, VideoEditRenderBusyError, VideoEditRenderWorkerError, VideoEditRenderRecovery } from './engine/videoEditGpuFailure'
 import { createVideoEditProgramSurface as createProgramSurface, retainVideoEditProgramWarmup, takeVideoEditProgram } from './engine/videoEditProgramPool'
 import { recordVideoEditFirstFrame } from './engine/videoEditFirstFrameTiming'
@@ -190,10 +193,13 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
   /** 本次挂载的渲染器是否已有画面上屏；之前显示“正在准备画面”，避免打开工程时只看到一块黑。 */
   const [pictureReady, setPictureReady] = useState(false)
   const [retry, setRetry] = useState(0)
+  useEffect(() => subscribeContentTrustContext(() => (instance.document.codeMaterials ?? []).flatMap(definition => definition.versions.map(version => ({ contents: codeMaterialTrustContext(instance.document, { definitionId: definition.id, versionId: version.id }) }))), () => setRetry(value => value + 1), onError), [instance, onError])
   const recovery = useRef(new VideoEditRenderRecovery())
   const recoveryPending = useRef(false)
   const [effectFailure, setEffectFailure] = useState<string | null>(null)
   const [renderFailure, setRenderFailure] = useState<string | null>(null)
+  const [trustFailure, setTrustFailure] = useState<ContentTrustFailure>()
+  const [trustPending, setTrustPending] = useState(false)
   const [collecting, setCollecting] = useState(false)
   /** 正在拖入时指针所在的落点区；替换区在播放头下没有片段时不可用。 */
   const [dropZone, setDropZone] = useState<{ mode: VideoEditDropMode; replaceable: boolean; frame: { left: number; top: number; width: number; height: number } } | null>(null)
@@ -212,7 +218,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     const recovering = recoveryPending.current; recoveryPending.current = false
     if (!visible) { setVideoEditView(instance.document.id, { playing: false }, true); setPreparing(false); setLevels([]); return }
     const previousRelease = programReleases.get(instance) ?? Promise.resolve()
-    setRenderFailure(null); setEffectFailure(null); setPictureReady(false)
+    setRenderFailure(null); setEffectFailure(null); setTrustFailure(undefined); setPictureReady(false)
     let pictureShown = false
     let stopped = false
     let recoveryTimer: ReturnType<typeof setTimeout> | undefined
@@ -466,7 +472,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       surface.dataset.presentedRevision = String(revision); surface.dataset.renderDivisor = String(appliedDivisor)
       if (result.presented !== false) recordVideoMotionPresentation(instance, { frame: target, revision, sequenceId: composition.id, at: performance.now(), scrubbing })
       if (result.presented === true) recordVideoExplanationPresentation(instance, { frame: target, revision: composition.revision, sequenceId: composition.id, composition, at: performance.now(), scrubbing })
-      if (failedDocument === undefined) { setRenderFailure(null); failedRetryMs = 2000 }
+      if (failedDocument === undefined) { setRenderFailure(null); setTrustFailure(undefined); failedRetryMs = 2000 }
       recordVideoEditPlaybackFrame(instance, composition, target, result, requestedAt, scrubbing)
       return true
     }
@@ -790,6 +796,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         wake(current.playing ? 0 : 2)
       } catch (error) {
         if (stopped || !listVideoEditInstances().includes(instance)) return
+        setTrustFailure(readContentTrustFailure(error))
         if (error instanceof VideoEditRenderBusyError) {
           // 文档、分辨率或预热请求没排上同样是背压：下一步按最新状态重试，不停播、不提示失败。
           logger.debug('节目渲染队列已满，稍后重试', { event: 'video_edit.preview.render_backpressure', context: { projectId: instance.document.id, playing: instance.playing } })
@@ -836,7 +843,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     }
     void step()
     }
-    void initialize().catch(error => { if (!stopped) onError(error) })
+    void initialize().catch(error => { if (!stopped) { setTrustFailure(readContentTrustFailure(error)); setRenderFailure(error instanceof Error ? error.message : String(error)); onError(error) } })
     return () => { clearTimeout(recoveryTimer); stop() }
   }, [instance, onError, retry, visible])
   const busy = collecting || preparing
@@ -945,6 +952,10 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       {(renderFailure || effectFailure) && <div className="pointer-events-none absolute inset-x-6 bottom-3 flex justify-center">
         <UiPanel className="pointer-events-auto max-w-md px-3 py-2">
           {renderFailure ? <UiError title="节目画面无法显示" message={renderFailure} /> : <UiError title="部分效果已跳过" message={effectFailure ?? ''} />}
+          {!!trustFailure?.records.length && <UiButton variant="quiet" disabled={trustPending} onClick={() => {
+            setTrustPending(true)
+            void runForeignContent(trustFailure.records).catch(onError).finally(() => setTrustPending(false))
+          }}>运行</UiButton>}
         </UiPanel>
       </div>}
       {dropZone && <div className="pointer-events-none absolute grid grid-cols-4 grid-rows-5 bg-media-scrim" style={dropZone.frame} aria-hidden>

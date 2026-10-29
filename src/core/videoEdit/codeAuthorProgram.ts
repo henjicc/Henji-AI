@@ -1,3 +1,4 @@
+import type { ContentTrustReference } from '../contentTrust'
 import type { CodeMaterialMetadata } from './codeMaterialDocument'
 import type { CodeMatrix, CodeSourceSpan } from './codeMaterial/contract'
 
@@ -34,6 +35,8 @@ export interface CodeAuthorSourceLocations {
   fallback?: CodeSourceSpan
 }
 export interface CodeAuthorBundle {
+  /** 导入标记随可重建产物传递；运行许可始终由宿主判断。 */
+  trustContext?: ContentTrustReference[]
   code: string
   map: string
   locations: CodeAuthorSourceLocations

@@ -13,6 +13,8 @@ import {
 } from '../../../../../src/core/assistant/skills'
 import { installAssistantSkillTo, uninstallAssistantSkillFrom, type SkillInstallTarget } from './install'
 import { scanAssistantSkills } from './registry'
+import { createContentTrustTestSession } from '../../content-trust/test-support'
+let trust: ReturnType<typeof createContentTrustTestSession>
 
 let rootDir = ''
 let target: SkillInstallTarget
@@ -142,6 +144,7 @@ async function listUserDir(): Promise<string[]> {
 }
 
 beforeEach(async () => {
+  trust = createContentTrustTestSession()
   rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-skill-install-'))
   target = { builtinDir: path.join(rootDir, 'builtin'), userDir: path.join(rootDir, 'user') }
   sourceDir = path.join(rootDir, 'source')
@@ -151,6 +154,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  trust.dispose()
   await fs.rm(rootDir, { recursive: true, force: true })
 })
 

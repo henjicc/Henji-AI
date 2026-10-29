@@ -33,6 +33,7 @@ export const voiceLibraryRecordSchema = z.object({
 export const settingRecordSchema = z.object({ key: z.string(), value: z.string(), type: z.enum(['string', 'number', 'boolean', 'json']) })
 export const presetRecordSchema = z.object({ id: z.string(), name: z.string(), description: z.string().nullable(), model_id: z.string().nullable(), params: z.string(), is_favorite: z.number(), use_count: z.number(), created_at: z.string(), updated_at: z.string() })
 export const assetRecordSchema = z.object({
+  foreign_json: z.string().nullable().optional(),
   id: z.string(), media_type: z.enum(['image', 'video', 'audio', 'code']), display_name: z.string(), file_path: z.string(),
   source: z.enum(['generated', 'canvas', 'camera-stage', 'imported', 'external', 'video-edit']), mime_type: z.string().nullable(),
   size_bytes: z.number().nullable(), width: z.number().nullable(), height: z.number().nullable(), duration_seconds: z.number().nullable(),

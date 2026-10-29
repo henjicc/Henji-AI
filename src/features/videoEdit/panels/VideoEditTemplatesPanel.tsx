@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
-import { ArrowUpCircle, Globe, Pencil, Play, Trash2 } from 'lucide-react'
+import { ArrowUpCircle, Globe, Pencil, Play, Trash2, ShieldCheck } from 'lucide-react'
+import { executeContentTrust, runForeignContent } from '@/services/contentTrust'
+import type { ContentTrustReference } from '@/core/contentTrust'
 import ContextMenu from '@/components/ContextMenu'
 import { useContextMenu, type MenuItem } from '@/hooks/useContextMenu'
 import { UI_COVER_FRAME_CLASS, UI_TEXT_META_CLASS, UiActionGroup, UiButton, UiEmpty, UiFormRow, UiGroup, UiInput, UiModal, UiOptionButton, UiSearchInput } from '@/components/ui'
 import { useNotification } from '@/contexts/NotificationContext'
-import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
+import { codeMaterialSource, codeMaterialTrustContext } from '@/core/videoEdit/codeMaterialDocument'
 import { portableCodeComponentFiles } from '@/core/videoEdit/codeMaterial/components'
 import type { VideoEditProjectTemplate } from '@/core/videoEdit/document'
 import type { VideoEditTemplateBody } from '@/core/videoEdit/styles/templateSchemas'
@@ -14,16 +16,17 @@ import { applyVideoEditTemplate, createVideoEditTemplate, detachVideoEditTemplat
 import { VideoEditPresetPlayer } from './VideoEditPresetPlayer'
 
 const TILE = { width: 320, height: 180 }
-interface Entry { scope: VideoEditTemplateScope; id: string; name: string; meta: string; description: string; body: VideoEditTemplateBody | null; project?: VideoEditProjectTemplate; newer: number | null }
+interface Entry { scope: VideoEditTemplateScope; id: string; name: string; meta: string; description: string; body: VideoEditTemplateBody | null; project?: VideoEditProjectTemplate; foreign?: ContentTrustReference; newer: number | null }
 function projectBody(instance: VideoEditInstance, template: VideoEditProjectTemplate): VideoEditTemplateBody | null {
   if (template.body.kind === 'native') return template.body
   const definition = instance.document.codeMaterials?.find(value => value.id === (template.body as { definitionId: string }).definitionId)
   if (!definition) return null
   try { return { kind: 'code', code: portableCodeComponentFiles(codeMaterialSource(instance.document, { definitionId: definition.id, versionId: definition.defaultVersionId, parameters: {} }).compilation) } } catch { return null }
 }
-function TemplatePicture({ body, playing, label }: { body: VideoEditTemplateBody | null; playing: boolean; label: string }): React.ReactElement {
-  const source = useMemo(() => body ? { category: 'template' as const, body } : undefined, [body])
-  return source ? <VideoEditPresetPlayer source={source} size={TILE} playing={playing} label={label} /> : <span className="flex h-full w-full items-center justify-center text-xs text-text3">没有预览</span>
+const trustContext = (entry: Entry, instance: VideoEditInstance): ContentTrustReference[] => entry.project?.body.kind === 'code' ? codeMaterialTrustContext(instance.document, { definitionId: entry.project.body.definitionId }) : entry.foreign ? [entry.foreign] : []
+function TemplatePicture({ body, playing, label, context }: { context: ContentTrustReference[]; body: VideoEditTemplateBody | null; playing: boolean; label: string }): React.ReactElement {
+  const source = useMemo(() => body ? { category: 'template' as const, body, trustContext: context } : undefined, [body, context])
+  return source ? <VideoEditPresetPlayer source={source} size={TILE} playing={playing} label={label} trustAction={false} /> : <span className="flex h-full w-full items-center justify-center text-xs text-text3">没有预览</span>
 }
 
 /**
@@ -43,15 +46,16 @@ function Panel({ instance, onError, visible = true }: { instance: VideoEditInsta
   const projectEntries = useMemo<Entry[]>(() => (instance.document.templates ?? []).map(template => ({ scope: 'project', id: template.id, name: template.name, description: template.description, body: projectBody(instance, template), project: template, newer: newerLibraryTemplateVersion(template),
     meta: [`${videoEditTemplateInstances(instance.document, template).length} 处`, template.style ? styles.get(template.style.id) : '', `v${template.version}`].filter(Boolean).join(' · ') })), [instance.document]) // eslint-disable-line react-hooks/exhaustive-deps -- styles derive from the same document and library revision
   const copied = new Set((instance.document.templates ?? []).flatMap(template => template.origin ? [template.origin.id] : []))
-  const libraryEntries: Entry[] = videoEditStyleLibrary.listTemplates().filter(entry => !copied.has(entry.template.id)).map(entry => ({ scope: 'library', id: entry.template.id, name: entry.template.name, description: entry.template.description, body: entry.template.body, newer: null,
+  const libraryEntries: Entry[] = videoEditStyleLibrary.listTemplates().filter(entry => !copied.has(entry.template.id)).map(entry => ({ scope: 'library', ...(entry.template.foreign ? { foreign: entry.template.foreign } : {}), id: entry.template.id, name: entry.template.name, description: entry.template.description, body: entry.template.body, newer: null,
     meta: [entry.template.style ? styles.get(entry.template.style.id) ?? '风格已删除' : '单独模板', `v${entry.template.version}`].join(' · ') }))
   const match = (entry: Entry): boolean => !query.trim() || `${entry.name} ${entry.description} ${entry.meta}`.toLowerCase().includes(query.trim().toLowerCase())
   const run = async (action: () => Promise<void> | void): Promise<void> => { setBusy(true); try { await action() } catch (reason) { onError(reason) } finally { setBusy(false) } }
   const apply = (entry: Entry): Promise<void> => run(async () => { if (!sequence) throw new Error('先打开一个序列。'); const result = await applyVideoEditTemplate(projectId, sequence.id, entry.scope, entry.id); showNotification(`已在播放头加入“${result.template.name}”${result.copied ? '，并登记为本工程模板' : ''}。`) })
   const selectedClips = sequence?.clips.filter(clip => instance.selectedClipIds.includes(clip.id)) ?? []
   const selectedInstances = selectedClips.filter(clip => videoEditClipTemplate(instance.document, clip))
-  const items = (entry: Entry): MenuItem[] => [
+  const items = (entry: Entry, blocked: ContentTrustReference[]): MenuItem[] => [
     { id: 'apply', label: '加到播放头', icon: <Play />, disabled: !sequence, onClick: () => { void apply(entry) } },
+    ...(blocked.length ? [{ id: 'trust', label: '运行', icon: <ShieldCheck />, onClick: () => { void run(() => runForeignContent(blocked)) } }] : []),
     ...(entry.project ? [
       { id: 'promote', label: entry.project.origin ? '更新全局模板' : '设为全局模板', icon: <Globe />, onClick: () => { void run(async () => { const result = await promoteVideoEditTemplate(projectId, entry.id); showNotification(`“${result.library.name}”已存为全局模板（v${result.library.version}）。`) }) } },
       ...(entry.newer ? [{ id: 'upgrade', label: `升级到 v${entry.newer}（影响 ${videoEditTemplateInstances(instance.document, entry.project).length} 处）`, icon: <ArrowUpCircle />, onClick: () => { void run(async () => { const result = await updateVideoEditTemplate(projectId, entry.id, { kind: 'library' }); showNotification(`已升级“${result.template.name}”，${result.instances} 处实例一起更新${videoEditCodeParameterChangeSummary(result.codeInstances)}。`) }) } }] : []),
@@ -62,11 +66,18 @@ function Panel({ instance, onError, visible = true }: { instance: VideoEditInsta
       { id: 'delete', label: '删除全局模板', icon: <Trash2 />, divider: true, onClick: () => { void run(() => videoEditStyleLibrary.removeTemplate(entry.id)) } },
     ]),
   ]
+  const openMenu = async (event: React.MouseEvent, entry: Entry): Promise<void> => {
+    event.preventDefault(); event.stopPropagation()
+    try {
+      const checked = entry.body?.kind === 'code' ? await executeContentTrust({ action: 'check', query: { contents: trustContext(entry, instance) } }) : { records: [] }
+      menu.showMenu(event, items(entry, 'state' in checked && checked.state !== 'allowed' ? checked.records : []))
+    } catch (reason) { onError(reason) }
+  }
   const tile = (entry: Entry): React.ReactElement => <div role="listitem" key={`${entry.scope}:${entry.id}`} className="min-w-0">
     <UiOptionButton variant="cover" className="w-full min-w-0" data-video-edit-template={`${entry.scope}:${entry.id}`} draggable onDragStart={event => writeVideoEditTemplateDrag(event.dataTransfer, entry.scope, entry.id)}
       onPointerEnter={() => setHovered(`${entry.scope}:${entry.id}`)} onPointerLeave={() => setHovered(null)} onClick={() => { void apply(entry) }}
-      onContextMenu={event => { event.preventDefault(); menu.showMenu(event, items(entry)) }} tooltip={entry.description || undefined} aria-label={`${entry.name}，${entry.meta}，单击加到播放头，可拖到时间线，右键更多操作`}>
-      <span className={`${UI_COVER_FRAME_CLASS} block aspect-video w-full overflow-hidden`}>{visible && <TemplatePicture body={entry.body} playing={hovered === `${entry.scope}:${entry.id}`} label={`${entry.name}预览`} />}</span>
+      onContextMenu={event => { void openMenu(event, entry) }} tooltip={entry.description || undefined} aria-label={`${entry.name}，${entry.meta}，单击加到播放头，可拖到时间线，右键更多操作`}>
+      <span className={`${UI_COVER_FRAME_CLASS} block aspect-video w-full overflow-hidden`}>{visible && <TemplatePicture context={trustContext(entry, instance)} body={entry.body} playing={hovered === `${entry.scope}:${entry.id}`} label={`${entry.name}预览`} />}</span>
       <span className="block w-full min-w-0 px-0.5">
         <span className="block truncate text-xs text-text1">{entry.name}</span>
         <span className={`block truncate ${UI_TEXT_META_CLASS}`}>{entry.newer ? `有更新 v${entry.newer} · ` : ''}{entry.meta}</span>

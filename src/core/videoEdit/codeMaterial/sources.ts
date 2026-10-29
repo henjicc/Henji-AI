@@ -1,3 +1,4 @@
+import type { ContentTrustReference } from '../../contentTrust'
 import { jsonEqual } from '../../jsonEqual'
 import { codeLocationSchema } from '../../storage/gitCodeLocation'
 import { z } from 'zod'
@@ -11,7 +12,7 @@ import type { CodeAuthorApiVersion } from '../codeAuthorProgram'
  * 一次编译的输入。`apiVersion`：按哪一版作者接口编译，省略即 4（第一个作者 JS 接口）。
  * `libraries`：代码版本记录的内置库版本，省略的库按第一套解析。
  */
-export interface CodeMaterialFiles { entry: string; files: Record<string, string>; resolvedImports?: Record<string, Record<string, string>>; apiVersion?: CodeAuthorApiVersion; libraries?: AuthorLibraryVersions }
+export interface CodeMaterialFiles { trustContext?: ContentTrustReference[]; entry: string; files: Record<string, string>; resolvedImports?: Record<string, Record<string, string>>; apiVersion?: CodeAuthorApiVersion; libraries?: AuthorLibraryVersions }
 export interface CodeSourceResolver { read(hash: string, location?: string, path?: string): string; contentKey?(hash: string, location: string): string }
 export interface CodeSource { hash: string; source: string }
 export interface CodeFileReference { path: string; location: string; hash: string }
@@ -53,9 +54,10 @@ export const codeSourcesSchema = z.array(z.object({ hash: codeSourceHashSchema, 
 export function normalizeCodeMaterialFiles(input: string | CodeMaterialFiles): CodeMaterialFiles {
   const raw = typeof input === 'string' ? { entry: 'main.ts', files: { 'main.ts': input } } : input
   if (raw && typeof raw === 'object' && raw.files && typeof raw.files === 'object') for (const [path, source] of Object.entries(raw.files)) if (typeof source === 'string' && (source.length > CODE_AUTHOR_SOURCE_MAX_BYTES || !withinSourceBytes(source))) throw new CodeMaterialError('SOURCE_LIMIT', `${path} 源码最多16MiB。`)
-  const parsed = codeMaterialFilesSchema.safeParse(raw)
+  const { trustContext, ...source } = raw
+  const parsed = codeMaterialFilesSchema.safeParse(source)
   if (!parsed.success) throw new CodeMaterialError('SYNTAX', parsed.error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('；'))
-  return parsed.data
+  return { ...parsed.data, ...(trustContext ? { trustContext } : {}) }
 }
 export function codeFilesFromInput(input: { source?: string; files?: Record<string, string>; entry?: string }): CodeMaterialFiles {
   if ((input.source === undefined) === (input.files === undefined)) throw new CodeMaterialError('SYNTAX', 'source 与 files 必须提供且只能提供其中一个。')

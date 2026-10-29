@@ -7,11 +7,12 @@ import type { HostContextSnapshot } from '../../../../src/core/application-contr
 import { externalWritableEntityTypes, type LocalDomainSurface, type LocalHostRegistration, type LocalHostRegistrationInput, type LocalHostReply, type LocalHostRequest, type LocalTool } from '../../../../src/core/application-control/localHostContracts'
 import type { ApplicationOperationCoordinator } from './operationCoordinator'
 import type { OperationRecord } from './operationStore'
+import { operationDigest } from './operationStore'
 import { approvePaidOperation, handleUiPaidApproval } from './paidApprovalPolicy'
 import type { PaidApprovalDecision, PaidApprovalRequest } from '../../../../src/core/application-control/paidApproval'
 
 export interface LocalHostTransport { send(channel: string, payload: unknown): void }
-type Pending = { callerId: string; rendererEpoch: string; committed: boolean; waiting: boolean; allowPaid: boolean; paidRequest?: PaidApprovalRequest; resolve(value: Record<string, unknown>): void; reject(error: Error): void; cleanup(): void }
+type Pending = { callerId: string; rendererEpoch: string; capabilityId: LocalHostRequest['capabilityId']; input: Record<string, unknown>; committed: boolean; waiting: boolean; allowPaid: boolean; paidRequest?: PaidApprovalRequest; resolve(value: Record<string, unknown>): void; reject(error: Error): void; cleanup(): void }
 
 class ApplicationHostDisconnectedError extends Error {}
 
@@ -170,11 +171,18 @@ export class ApplicationHostBridge {
         pending.paidRequest = decision.decision === 'ask' && !consent ? request : undefined
         return decision
       }
+      // 读取代码声明也可能运行作者模块；首次人工确认时才把这次读取登记为可轮询操作。
+      if (!pending.committed && reply.progress.phase === 'awaiting_user_confirmation') {
+        if (!this.operations) throw new Error('操作账本不可用，代码尚未运行。')
+        const operation = this.operations.store.prepare({ operationId: randomUUID(), callerId: pending.callerId, capabilityId: pending.capabilityId, input: pending.input, inputDigest: operationDigest(pending.input), state: 'prepared' })
+        this.operations.dispatched(operation, reply.requestId, reply.rendererEpoch)
+        pending.committed = true
+      }
       this.operations?.complete(reply)
       // Release the network/model waiter while retaining invocation ownership for revoke/disconnect.
       pending.cleanup()
       pending.waiting = false
-      if (reply.progress.phase === 'awaiting_user_confirmation') pending.resolve({ ok: false, executionState: reply.progress.phase, confirmation: reply.progress.confirmation })
+      if (reply.progress.phase === 'awaiting_user_confirmation') pending.resolve({ ok: false, operationId: this.operations?.store.byRequest(reply.requestId, reply.rendererEpoch)?.operationId, executionState: reply.progress.phase, verificationState: 'unresolved', confirmation: reply.progress.confirmation })
       return
     }
     // 即使 HTTP 已断线/授权已撤销，已发生的执行事实仍须入账；不再向撤销者披露。
@@ -227,7 +235,7 @@ export class ApplicationHostBridge {
         const pending = this.pending.get(requestId)
         if (pending) pending.waiting = false
         // 等待者退出不取消已派发修改；保留执行关联以处理宿主断开和迟到回执。
-        if (!options.operation) {
+        if (!pending?.committed) {
           host.transport.send('application:host:cancel', requestId)
           this.pending.delete(requestId)
         }
@@ -235,7 +243,7 @@ export class ApplicationHostBridge {
       }
       const timer = setTimeout(cancel, Math.max(30_000, (BUILTIN_APPLICATION_CAPABILITIES.find(item => item.id === capabilityId)?.timeoutMs ?? 0) + 1_000))
       signal.addEventListener('abort', cancel, { once: true })
-      this.pending.set(requestId, { callerId, rendererEpoch: host.registration.rendererEpoch, committed: Boolean(options.operation), waiting: true, allowPaid: options.allowPaid === true, resolve, reject, cleanup: () => { clearTimeout(timer); signal.removeEventListener('abort', cancel) } })
+      this.pending.set(requestId, { callerId, capabilityId, input, rendererEpoch: host.registration.rendererEpoch, committed: Boolean(options.operation), waiting: true, allowPaid: options.allowPaid === true, resolve, reject, cleanup: () => { clearTimeout(timer); signal.removeEventListener('abort', cancel) } })
       try {
         this.assertAuthorized(callerId)
         if (options.operation) this.operations?.dispatched(options.operation, requestId, host.registration.rendererEpoch)

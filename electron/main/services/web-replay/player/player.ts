@@ -21,6 +21,7 @@ import { InputDispatcher } from './input'
 import { BOOTSTRAP_PATH, installReplaySite } from './site'
 import { TEXT_SAMPLE_INTERVAL_US, TEXT_SAMPLE_SCRIPT, TextTrackWriter, type TextSample } from '../textTrack'
 import { BOX_TRACK_FILE, boxSampleScript, BoxTrackWriter, type BoxSample } from '../boxTrack'
+import { contentTrust } from '../../content-trust/runtime'
 
 const logger = createMainLogger('main.web_replay.player')
 const TAIL_MS = 1500
@@ -225,6 +226,8 @@ export class WebRecordingPlayer {
   private pointer = true
 
   async render(options: ReplayOptions): Promise<ReplayResult> {
+    const manifest = await this.store.readManifest()
+    contentTrust().assert({ contents: manifest.foreign ? [manifest.foreign] : [] })
     try {
       return await this.renderOnce(options)
     } catch (error) {

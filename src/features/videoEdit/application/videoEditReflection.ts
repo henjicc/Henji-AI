@@ -159,7 +159,7 @@ class VideoEditProvider implements ApplicationEntityProvider {
       const { projectId, childId } = splitVideoEditRef(ref); const owner = requireVideoEditInstance(projectId)
       const definition = owner.document.codeMaterials?.find(definition => this.entityType === 'video_edit.code_material' ? definition.id === childId : definition.versions.some(version => version.id === childId))
       if (!definition) throw new Error('NOT_FOUND：代码素材或固定源码版本不存在。')
-      await ensureVideoEditCodeParameterMetadata(owner, owner.document, definition.id, this.entityType === 'video_edit.code_material' ? definition.defaultVersionId : childId)
+      await ensureVideoEditCodeParameterMetadata(owner, owner.document, definition.id, this.entityType === 'video_edit.code_material' ? definition.defaultVersionId : childId, context?.signal)
     }
     const fields = request.propertyIds?.length ? VIDEO_EDIT_FIELDS[this.entityType].filter(field => request.propertyIds!.includes(field.propertyId)) : VIDEO_EDIT_FIELDS[this.entityType]
     const data = fieldReadValues(fields, readVideoEditData(ref, needsMetadata, request.propertyIds, context?.permissions))

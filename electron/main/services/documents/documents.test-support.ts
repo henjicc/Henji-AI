@@ -19,6 +19,7 @@ import type {
 } from './catalog'
 import { createDocumentServices, type DocumentServices } from './create-services'
 import type { PackageAdapterRegistry } from './package-adapters'
+import { createContentTrustTestSession } from '../content-trust/test-support'
 
 /*
  * 文档底座单元测试的共用夹具（只被 *.test.ts 引用）：临时作品目录、内存版作品索引、假的回收站。
@@ -203,6 +204,7 @@ export function createTestEnvironment(options: TestEnvironmentOptions = {}): Tes
   const hidden: string[] = []
   const ids: string[] = []
   let counter = 0
+  const trust = createContentTrustTestSession()
   const services = createDocumentServices({
     style: HOST_STYLE,
     layout: () => ({
@@ -236,7 +238,7 @@ export function createTestEnvironment(options: TestEnvironmentOptions = {}): Tes
   })
   return {
     base, workRoot, programRoot, outside, catalog, services, trashed, revealed, granted, hidden, ids,
-    cleanup: async () => { await fsp.rm(base, { recursive: true, force: true }) },
+    cleanup: async () => { trust.dispose(); await fsp.rm(base, { recursive: true, force: true }) },
   }
 }
 

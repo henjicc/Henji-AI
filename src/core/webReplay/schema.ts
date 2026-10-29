@@ -1,3 +1,4 @@
+import { foreignContentSchema } from '../contentTrust'
 import { z } from 'zod'
 
 /**
@@ -7,7 +8,7 @@ import { z } from 'zod'
  */
 
 /** v2: element locators may name the enclosing data-replay-id container (`act.scope`). */
-export const WEB_RECORDING_VERSION = 3
+export const WEB_RECORDING_VERSION = 4
 export const WEB_RECORDING_MIN_READER_VERSION = 1
 /** Manifest N → N+1. Shared by the file format and the `.hjweb` document kind, which reads the same manifest. */
 export const WEB_RECORDING_MIGRATIONS: Readonly<Record<number, (value: unknown) => unknown>> = {
@@ -15,6 +16,8 @@ export const WEB_RECORDING_MIGRATIONS: Readonly<Record<number, (value: unknown) 
   1: value => ({ ...value as object, version: 2 }),
   // v3（2026-10-23）：只新增可选的 title。
   2: value => ({ ...value as object, version: 3 }),
+  // v4：仅导入的录制添加外来标记，历史录制保持本机身份。
+  3: value => ({ ...value as object, version: 4 }),
 }
 
 const us = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
@@ -117,6 +120,7 @@ export type ProbeMessageValue = z.infer<typeof probeMessageSchema>
 
 const warning = z.object({ t: us, kind: z.enum(['boundary', 'error', 'resource']), message: z.string() }).strict()
 export const webRecordingManifestSchema = z.object({
+  foreign: foreignContentSchema.optional(),
   version: z.number().int().positive(), minReaderVersion: z.number().int().positive(),
   id: session, status: z.enum(['recording', 'complete', 'interrupted']), createdAt: z.string().datetime(),
   /** v3: the name the user gave the recording; absent means app name plus time. */

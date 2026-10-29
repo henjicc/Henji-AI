@@ -1,4 +1,5 @@
 import type { DocumentKindId, DocumentListSummary } from '../../../../src/core/documents/types'
+import type { ContentTrustReference } from '../../../../src/core/contentTrust'
 
 /*
  * 单文件包类型（图片文档 `.hjimg`）与文件夹类型（网页录制 `.hjweb`）的头信息适配接口。
@@ -25,6 +26,7 @@ export interface PackageDocumentHeaderPatch {
   id?: string
   name?: string
   draft?: boolean
+  foreign?: ContentTrustReference
 }
 
 export interface PackageDocumentAdapter {

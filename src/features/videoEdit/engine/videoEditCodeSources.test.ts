@@ -20,8 +20,33 @@ import { createVideoEditMaskShape } from '@/core/videoEdit/effectMasks'
 import { codeMediaInputKey } from '@/core/videoEdit/codeMediaInput'
 import { videoEditCodeInputs } from '@/core/videoEdit/codeInputParameters'
 import { GOLDEN_SCENE_DECLARATION, goldenScene } from '@/core/videoEdit/scene/sceneTestFixtures'
+import { installAuthorTrustGate, assertAuthorTrust } from './videoEditAuthorTrust'
+import { createContentTrustTestSession } from '../../../../electron/main/services/content-trust/test-support'
 
 const logWarn = vi.hoisted(() => vi.fn())
+it('真实前瞻预热携带来源，在询问与拒绝状态都不求值，允许后才执行作者模块', async () => {
+  const document = fixture('globalThis.__aheadTrustExecutions=(globalThis.__aheadTrustExecutions||0)+1;' + source())
+  const foreign = { id: 'ahead-external', sourceType: 'template' as const, sourceName: '外来预热模板' }
+  document.codeMaterials![0].versions[0].foreign = foreign
+  const trust = createContentTrustTestSession()
+  installAuthorTrustGate(async request => trust.session.assert({ contents: request.context ?? [] }))
+  const compiler = { bundle: async (files: CodeMaterialFiles) => ({ ...testAuthorBundle(files), trustContext: files.trustContext }), dispose() {} }
+  const inspectAuthor = async (bundle: CodeAuthorBundle) => { await assertAuthorTrust({ context: bundle.trustContext }); return testAuthorProgram(bundle) }
+  const runtime = { inspectAuthor, releaseUnused() {} } as unknown as VideoEditCodeGpu
+  const sources = new VideoEditCodeSources(document, async () => runtime, compiler)
+  const signal = new AbortController().signal
+  try {
+    await expect(sources.prepareAhead(document, document.clips, signal)).rejects.toThrow('等待用户确认')
+    expect(Reflect.get(globalThis, '__aheadTrustExecutions')).toBeUndefined()
+    trust.session.decide(trust.session.check({ contents: [foreign] }).challenge!, 'deny')
+    await expect(sources.prepareAhead(document, document.clips, signal)).rejects.toThrow('尚未运行')
+    expect(Reflect.get(globalThis, '__aheadTrustExecutions')).toBeUndefined()
+    trust.session.retry([foreign])
+    trust.session.decide(trust.session.check({ contents: [foreign] }).challenge!, 'once')
+    await sources.prepareAhead(document, document.clips, signal)
+    expect(Reflect.get(globalThis, '__aheadTrustExecutions')).toBeGreaterThan(0)
+  } finally { await sources.dispose(); installAuthorTrustGate(async () => { throw new Error('代码信任检查尚未就绪') }); trust.dispose(); Reflect.deleteProperty(globalThis, '__aheadTrustExecutions') }
+})
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), warn: logWarn }) }))
 function source(mode: 'static' | 'dynamic' = 'static', name = '新图形', kind = 'generator'): string {
   return `export default {name:"${name}",kind:"${kind}",mode:"${mode}",width:3840,height:2160,durationSeconds:10,params:[{key:"amount",type:"number",title:"强度",default:.5,min:0,max:1,step:.01}],${kind === 'filter' ? 'createWebGPU(){return {draw(){}};}' : `draw(ctx,t,p){ctx.fillStyle="rgba(255,0,0,.5)";ctx.fillRect(${mode === 'dynamic' ? 't*20+' : ''}p.amount*100,0,200,100);}`}}`

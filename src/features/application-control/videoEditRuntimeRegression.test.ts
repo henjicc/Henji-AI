@@ -60,6 +60,7 @@ function runtime() {
   const bridge: ApplicationHostBridge = new ApplicationHostBridge(() => undefined, coordinator)
   let request: (value: LocalHostRequest) => void = () => undefined
   const platform: ApplicationHostPlatform = {
+    contentTrust: async () => { throw new Error('此用例不调用代码信任存储') }, onContentTrust: () => () => {},
     registerHost: async registration => { bridge.register(registration, { send: (_channel, payload) => request(payload as LocalHostRequest) }) },
     complete: async reply => { bridge.complete(reply) },
     publishContext: async snapshot => { bridge.publishContext(snapshot) },

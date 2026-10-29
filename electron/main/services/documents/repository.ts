@@ -1,3 +1,5 @@
+import { markForeignVideoDocument } from './foreign-content'
+import type { ContentTrustReference } from '../../../../src/core/contentTrust'
 import fsp from 'node:fs/promises'
 import { parseGitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
 import { persistenceForwardFields } from '../../../../src/core/persistence/migrations'
@@ -184,6 +186,17 @@ export class DocumentRepository {
   }
 
   // ==================== 公共操作 ====================
+
+  async markForeign(target: DocumentTarget, foreign: ContentTrustReference): Promise<void> {
+    const file = await this.locate(target)
+    if (file.kind.id === 'web_recording') {
+      await this.options.adapters.get(file.kind.id)!.writeHeader(file.path, { foreign })
+      return
+    }
+    if (file.kind.id !== 'video_edit' || !file.envelope) return
+    const envelope = markForeignVideoDocument(file, foreign, await this.workspace.containerForPath(file.path), this.workspace)
+    await writeBufferAtomically(file.path, this.bytes(envelope))
+  }
 
   async read(target: DocumentTarget): Promise<DocumentReadResult> {
     try {

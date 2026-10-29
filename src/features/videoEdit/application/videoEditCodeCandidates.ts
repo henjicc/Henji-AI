@@ -1,3 +1,4 @@
+import { codeMaterialTrustContext } from '@/core/videoEdit/codeMaterialDocument'
 import { changedCodeMaterialVersions } from '@/core/videoEdit/codeMaterialDocument'
 import { ensureVideoEditChangedCodeMetadata, ensureVideoEditCodeParameterMetadata } from './videoEditCodeState'
 import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
@@ -14,6 +15,8 @@ import { compileVideoEditCode, forgetVideoEditCodeMetadata, readVideoEditCodeMet
 import { trialVideoEditCodeFrames, videoEditCodeValidationFrames } from './videoEditCodeTrial'
 import { videoEditTransitionsAt } from '@/core/videoEdit/transitions'
 import { createLogger } from '@/core/logging'
+import { inheritApplicationConfirmation } from '@/core/application-control/userConfirmation'
+
 
 const logger = createLogger('features.videoEdit.codeCandidates')
 export type VideoEditCodeApplyScope = 'single' | 'matching'
@@ -48,6 +51,7 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
   const definition = baseline.codeMaterials!.find(definition => definition.id === originalCode.definitionId)!
   preparing.set(owner, (preparing.get(owner) ?? 0) + 1)
   const controller = new AbortController()
+  const unbindConfirmation = signal ? inheritApplicationConfirmation(signal, controller.signal) : () => undefined
   const cancel = (): void => { controller.abort(signal?.reason ?? new Error('源码候选已取消。')); if (candidate) disposeVideoEditCodeCandidate(candidate) }
   signal?.addEventListener('abort', cancel, { once: true })
   let candidate: VideoEditCodeCandidate | undefined; let newVersion: string | undefined; let bitmap: ImageBitmap | undefined
@@ -69,12 +73,12 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
   logger.info('检查源码候选', { event: 'video_edit.code.candidate.start', context: { projectId: target.projectId, clipId: target.clipId, scope } })
   try {
     await loadCodeSourceReferences(definition.versions.find(version => version.id === definition.defaultVersionId)!)
-    const appended = await appendCodeMaterialVersion(definition, source, source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver(baseline), await prepareCodeVersionPublication(target.projectId, normalizeCodeMaterialFiles(source), undefined, undefined, createdFiles))
+    const appended = await appendCodeMaterialVersion(definition, { ...normalizeCodeMaterialFiles(source), trustContext: [] }, source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver(baseline), await prepareCodeVersionPublication(target.projectId, normalizeCodeMaterialFiles(source), undefined, undefined, createdFiles), codeMaterialTrustContext(baseline, { definitionId: definition.id }))
     controller.signal.throwIfAborted(); newVersion = appended.versionId
     if (appended.kindUnverified) logger.warn('原有代码版本都读不到，新版本未核对素材种类', { event: 'video_edit.code.version.kind_unverified', context: { projectId: target.projectId, definitionId: definition.id, versionId: newVersion } })
     const version = appended.definition.versions.find(version => version.id === newVersion)!
     rememberVideoEditCodeMetadata(owner, definition.id, version, appended.program)
-    await ensureVideoEditCodeParameterMetadata(owner, baseline, definition.id, target.versionId)
+    await ensureVideoEditCodeParameterMetadata(owner, baseline, definition.id, target.versionId, controller.signal)
     const read = readVideoEditCodeMetadata(owner, baseline)
     const selectedIds = new Set<string>()
     const selectedEffects = new Map<string, string[]>()
@@ -113,7 +117,7 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
     logger.info('源码候选已生成', { event: 'video_edit.code.candidate.ready', context: { projectId: target.projectId, count, impacts: impacts.length } })
     return candidate
   } catch (error) { await discardVideoEditCodeFiles(createdFiles); createdFiles.length = 0; clean(); logger.debug('源码候选未完成', { event: 'video_edit.code.candidate.failed', error, context: { projectId: target.projectId } }); throw error }
-  finally { preparing.set(owner, Math.max(0, (preparing.get(owner) ?? 1) - 1)) }
+  finally { unbindConfirmation(); preparing.set(owner, Math.max(0, (preparing.get(owner) ?? 1) - 1)) }
 }
 export function disposeVideoEditCodeCandidate(candidate: VideoEditCodeCandidate): void { candidates.get(candidate)?.clean() }
 export function commitVideoEditCodeCandidate(candidate: VideoEditCodeCandidate, confirmMigration = false): string {

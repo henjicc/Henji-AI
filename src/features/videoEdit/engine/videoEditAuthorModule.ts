@@ -1,7 +1,9 @@
+import type { ContentTrustReference } from '@/core/contentTrust'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import type { CodeSourceSpan } from '@/core/videoEdit/codeMaterial/contract'
 import { deterministicAuthorModule, importAuthorDeterministic } from './videoEditAuthorDeterminism'
 import { authorModuleTextLayouts } from '../../../core/videoEdit/textDrawObservation'
+import { assertAuthorTrust } from './videoEditAuthorTrust'
 
 /** Executable ES module contract. These functions never cross a worker boundary. */
 export interface AuthorFrameInfo {
@@ -90,7 +92,8 @@ const importNativeModule = new Function('url', 'return import(url)') as (url: st
 
 /** Native import resolves relative dependencies and cycles using standard ESM semantics.
  * Every entry runs with seeded randomness and frame-derived clocks (see videoEditAuthorDeterminism). */
-export async function loadAuthorModule(url: string): Promise<AuthorModule> {
+export async function loadAuthorModule(url: string, context?: ContentTrustReference[]): Promise<AuthorModule> {
+  await assertAuthorTrust({ url, context })
   try {
     const layouts = new Set<string>()
     const loaded = await importAuthorDeterministic(() => importNativeModule(url), id => layouts.add(id))

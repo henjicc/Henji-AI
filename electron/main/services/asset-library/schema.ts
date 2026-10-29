@@ -1,4 +1,9 @@
 import type Database from 'better-sqlite3'
+
+/** 历史素材保持无标记；只有此后发生的代码导入写入来源。 */
+export function addAssetForeignMarker(conn: Database.Database): void {
+  if (!assetColumns(conn).includes('foreign_json')) conn.exec('ALTER TABLE assets ADD COLUMN foreign_json TEXT')
+}
 import { createMainLogger } from '../logging/main-logger'
 
 /*

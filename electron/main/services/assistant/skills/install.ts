@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { shell } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -259,7 +260,15 @@ async function writePreparedSkill(rootDir: string, skill: PreparedSkill): Promis
   for (const file of skill.files) {
     const target = path.join(skillDir, ...file.relativePath.split('/'))
     await fs.mkdir(path.dirname(target), { recursive: true })
-    await fs.writeFile(target, file.content)
+    let content = file.content
+    if (file.relativePath === ASSISTANT_SKILL_ENTRY_FILE) {
+      const lines = content.toString('utf8').replace(/\r\n?/g, '\n').split('\n')
+      const end = lines.findIndex((line, index) => index > 0 && line.trim() === '---')
+      const header = lines.slice(1, end).filter(line => !line.startsWith('henji-foreign:'))
+      const foreign = { id: randomUUID(), sourceName: skill.name, sourceType: 'skill' }
+      content = Buffer.from(['---', ...header, 'henji-foreign: ' + JSON.stringify(foreign), ...lines.slice(end)].join('\n'))
+    }
+    await fs.writeFile(target, content)
   }
   return skillDir
 }

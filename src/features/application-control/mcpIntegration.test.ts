@@ -22,6 +22,7 @@ it('真实 MCP → 中立桥 → Session → 领域注册表读取正式设置�
   const bridge = new ApplicationHostBridge((id) => connections.assertActive(id))
   let handler: (request: LocalHostRequest) => void = () => {}
   const platform: ApplicationHostPlatform = {
+    contentTrust: async () => { throw new Error('此用例不调用代码信任存储') }, onContentTrust: () => () => {},
     publishContext: async snapshot => bridge.publishContext(snapshot),
     onRequest: (value) => { handler = value; return () => {} }, reviewOperations: async () => ({ items: [] }), onReviews: () => () => {}, onCancel: () => () => {}, onRevoke: () => () => {},
     registerHost: async (registration) => bridge.register(registration, { send: (channel, payload) => { if (channel === 'application:host:request') handler(payload as LocalHostRequest) } }),

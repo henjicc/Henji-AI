@@ -1,0 +1,51 @@
+{
+  "foreign": {
+    "id": "golden-import",
+    "sourceType": "web_recording",
+    "sourceName": "分享工程"
+  },
+  "version": 4,
+  "minReaderVersion": 1,
+  "id": "00000000-0000-4000-8000-0000000000a1",
+  "status": "complete",
+  "createdAt": "2026-10-09T00:00:00.000Z",
+  "title": "提问演示",
+  "app": {
+    "name": "知多少",
+    "version": "0.1.0"
+  },
+  "probe": {
+    "version": "0.1.0",
+    "protocol": 1
+  },
+  "host": "tauri",
+  "env": {
+    "url": "http://tauri.localhost/",
+    "viewport": {
+      "width": 1280,
+      "height": 820,
+      "dpr": 1.5
+    },
+    "colorScheme": "light",
+    "reducedMotion": false,
+    "locale": "zh-CN",
+    "timeZone": "Asia/Shanghai",
+    "userAgent": "golden"
+  },
+  "wallAtZeroMs": 1791504000000,
+  "durationUs": 15688200,
+  "clock": {
+    "monoAtZeroUs": 140618465380,
+    "uncertaintyUs": 223
+  },
+  "fonts": [
+    "Microsoft YaHei"
+  ],
+  "warnings": [
+    {
+      "t": 7400,
+      "kind": "boundary",
+      "message": "xhr: GET /x"
+    }
+  ]
+}

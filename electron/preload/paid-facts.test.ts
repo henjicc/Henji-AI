@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HenjiNativeApi } from './api'
 import { readPaidFailureFacts } from '../../src/core/application-control/paidApproval'
 import { unwrapIpcResult } from '../../src/platform/adapters/electron/ipcResult'
+import { ContentTrustRequiredError, readContentTrustFailure } from '../../src/core/contentTrust'
+import { restoreNativeErrorName } from '../../src/core/nativeErrors'
 import type { HenjiIpcResultEnvelope } from './api-assistant'
 import { registerIpcHandler, parseRecord } from '../main/ipc/registry'
 
@@ -49,6 +51,13 @@ async function roundtrip<T>(call: () => Promise<HenjiIpcResultEnvelope<T>>): Pro
   return unwrapIpcResult(await crossBridge(call))
 }
 const stepOptions = { runId: 'run', stepId: 'step', output: { mode: 'text' as const }, capabilities: { image: false, video: false, audio: false, streaming: true, toolCall: false, parallelTools: false, structuredOutputMode: 'none' as const, reasoning: false, sampling: true, usage: true } }
+it('外来代码拦截经主进程封装和 contextBridge 后仍带稳定引用', async () => {
+  const original = new ContentTrustRequiredError('denied', [{ id: 'foreign', sourceType: 'skill', sourceName: '分享技能' }])
+  registerIpcHandler('application:content-trust', parseRecord, () => { throw original })
+  const crossed = await crossBridge(() => native().applicationControl.contentTrust({ action: 'policy' })).catch((error: unknown) => restoreNativeErrorName(error))
+  expect(crossed).toMatchObject({ name: original.name, message: original.message })
+  expect(readContentTrustFailure(crossed)).toEqual(original.contentTrust)
+})
 
 describe('生成 IPC 计费事实往返', () => {
   it.each(['not_charged', 'submitted', 'completed', 'unknown'] as const)('生成错误经两次序列化后保留 %s', async billing => {

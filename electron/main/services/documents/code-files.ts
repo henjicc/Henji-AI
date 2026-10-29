@@ -55,7 +55,12 @@ export class DocumentCodeFiles {
   constructor(private readonly workspace: DocumentWorkspace, private readonly repository: DocumentRepository, private readonly logger: MainLogger,
     private readonly kinds: Pick<DocumentKindRegistry, 'get'>) {}
   migrate(projectId: string) { return migrateProjectCodeStorage(projectId, this.workspace, this.repository, this.kinds, this.logger) }
-  async resolveProject(request: CodeProjectResolve): Promise<CodeProjectClosure> { return new CodeProjectRepository(path.join(await this.root(request.target), '代码')).resolve(request.entry, request.commit) }
+  async resolveProject(request: CodeProjectResolve): Promise<CodeProjectClosure> {
+    const root = await this.root(request.target)
+    const closure = await new CodeProjectRepository(path.join(root, '代码')).resolve(request.entry, request.commit)
+    const manifest = await this.workspace.readManifest(root)
+    return { ...closure, ...(manifest?.foreign ? { foreign: manifest.foreign } : {}) }
+  }
   async readProject(target: DocumentTarget): Promise<CodeProjectState> { return new CodeProjectRepository(path.join(await this.root(target), '代码')).state() }
   async changeProject(request: CodeProjectChange): Promise<string> {
     const root = await this.root(request.target); await this.workspace.ensureInternalFolder(root)

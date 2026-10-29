@@ -1,3 +1,5 @@
+import { readContentTrustFailure, type ContentTrustFailure } from '@/core/contentTrust'
+
 /** Device loss invalidates every texture and pipeline in the session; decoder fallback cannot repair it. */
 export class VideoEditGpuDeviceLostError extends Error {
   readonly code = 'video-edit-gpu-device-lost'
@@ -75,9 +77,10 @@ export function installVideoEditWorkerErrorReporting(scope: WorkerErrorScope): v
   })
 }
 
-export function videoEditRenderFailure(error: unknown): { error: string; gpuDeviceLost?: string } {
+export function videoEditRenderFailure(error: unknown): { error: string; gpuDeviceLost?: string; contentTrust?: ContentTrustFailure } {
   return { error: error instanceof Error ? error.message : String(error),
-    ...(error instanceof VideoEditGpuDeviceLostError ? { gpuDeviceLost: error.detail } : {}) }
+    ...(error instanceof VideoEditGpuDeviceLostError ? { gpuDeviceLost: error.detail } : {}),
+    ...(readContentTrustFailure(error) ? { contentTrust: readContentTrustFailure(error) } : {}) }
 }
 
 /**

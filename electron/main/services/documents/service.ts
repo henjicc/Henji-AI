@@ -279,8 +279,15 @@ export class DocumentService implements DocumentsPlatform {
     return this.parts.projects.trash(projectId)
   }
 
-  registerExternalProject(folderPath: string): Promise<ProjectSummary> {
-    return this.parts.projects.registerExternal(folderPath)
+  async registerExternalProject(folderPath: string): Promise<ProjectSummary> {
+    const known = this.parts.workspace.catalog.getProjectByPath(path.resolve(folderPath))
+    const project = await this.parts.projects.registerExternal(folderPath)
+    const manifest = await this.parts.workspace.readManifest(project.path)
+    if (!known && manifest?.foreign) {
+      await this.parts.scanner.refresh()
+      for (const row of this.parts.workspace.catalog.listDocuments({ projectId: project.id })) await this.parts.repository.markForeign({ id: row.id, path: row.path }, manifest.foreign)
+    }
+    return project
   }
 
   /**
@@ -289,11 +296,20 @@ export class DocumentService implements DocumentsPlatform {
    */
   async registerExternalDocument(filePath: string): Promise<DocumentSummary> {
     const { workspace, projects, scanner, kinds } = this.parts
+    const known = new Set(workspace.catalog.listDocuments({}).map(row => row.id))
     await projects.registerExternalDocumentFolder(filePath, (fileName) => Boolean(kinds.forFileName(fileName)))
     await scanner.refresh()
     const row = workspace.catalog.getDocumentByPath(path.resolve(filePath))
     const found = row ? (await this.listDocuments({ includeDrafts: true, includeMissing: false })).find((document) => document.id === row.id) : undefined
     if (!found) throw new DocumentLocationError('没能识别这个文档文件，它可能已损坏或来自更新版本的痕迹AI。')
+      const project = found.container.kind === 'project' ? workspace.catalog.getProject(found.container.projectId) : undefined
+      const projectForeign = project ? (await workspace.readManifest(project.path))?.foreign : undefined
+    for (const document of workspace.catalog.listDocuments({})) {
+        if (known.has(document.id)) continue
+        const inImportedProject = projectForeign && document.projectId === project!.id
+        if (!inImportedProject && path.dirname(document.path) !== path.dirname(path.resolve(filePath))) continue
+        await this.parts.repository.markForeign({ id: document.id, path: document.path }, inImportedProject ? projectForeign : { id: document.id, sourceName: document.name, sourceType: 'document_package' })
+    }
     return found
   }
 

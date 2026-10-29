@@ -1,3 +1,4 @@
+import { executeContentTrust } from '@/services/contentTrust'
 import { type ApplicationEntityProvider, type ApplicationEntityRegistration, type ApplicationPropertyDescriptor, type ApplicationPropertyValue, type ApplicationRef, unrestrictedCollectionAvailability } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import { z } from 'zod'
@@ -53,6 +54,7 @@ function settingProperty(definition: ApplicationSettingDefinition): ApplicationP
     requiredPermissions: { read: ['settings:read'], write: ['settings:write'] },
     revisionScopes: ['settings'],
     schemaRef: propertySchemaRef(definition.id),
+    ...(definition.readOnlyReason ? { readOnlyReason: definition.readOnlyReason } : {}),
   }
 }
 
@@ -76,6 +78,7 @@ class SettingsReflectionProvider implements ApplicationEntityProvider {
   }> {
     if (ref.kind !== SETTINGS_ENTITY_TYPE || ref.id !== SETTINGS_REF.id) throw new Error('NOT_FOUND')
     const requested = request.propertyIds ? new Set(request.propertyIds) : undefined
+    if (!requested || requested.has('general.allow_external_content_code')) await executeContentTrust({ action: 'policy' })
     const definitions = listApplicationSettingDefinitions()
       .filter((definition) => !definition.sensitive)
       .filter((definition) => !requested || requested.has(definition.id))
@@ -104,8 +107,8 @@ class SettingsReflectionProvider implements ApplicationEntityProvider {
       return {
         propertyId,
         readable: !definition.sensitive,
-        writable: !definition.sensitive,
-        reasons: definition.sensitive ? ['敏感设置值不进入内部观察结果'] : [],
+        writable: !definition.sensitive && !definition.readOnlyReason,
+        reasons: definition.readOnlyReason ? [definition.readOnlyReason] : definition.sensitive ? ['敏感设置值不进入内部观察结果'] : [],
         requiredPermissions: ['settings:read'],
         revisions: { settings: getSettingsRegistryRevision() },
       }

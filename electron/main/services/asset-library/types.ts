@@ -1,4 +1,5 @@
 export type AssetMediaType = 'image' | 'video' | 'audio' | 'code'
+import type { ContentTrustReference } from '../../../../src/core/contentTrust'
 export type AssetSource = 'generated' | 'canvas' | 'camera-stage' | 'imported' | 'external' | 'video-edit'
 export type AssetInspectionStatus = 'pending' | 'ready' | 'missing' | 'failed'
 export interface AssetFileContent { sizeBytes: number; fileModifiedAt: number; contentIdentity: string }
@@ -6,6 +7,7 @@ export interface AssetFileContent { sizeBytes: number; fileModifiedAt: number; c
 export interface AssetDto {
   id: string
   wasExisting?: boolean
+  foreign?: ContentTrustReference
   mediaType: AssetMediaType
   displayName: string
   filePath: string
@@ -32,6 +34,6 @@ export interface AssetDto {
 export interface AssetLibraryDto { id: string; name: string; createdAt: number; updatedAt: number }
 export interface AssetLibrarySnapshotDto extends AssetLibraryDto { assetIds: string[] }
 export interface AssetPageDto { items: AssetDto[]; total: number; page: number; pageSize: number }
-export interface CreateAssetRequest { filePath: string; mediaType: AssetMediaType; displayName?: string; source: AssetSource; libraryIds?: string[] }
+export interface CreateAssetRequest { filePath: string; mediaType: AssetMediaType; displayName?: string; source: AssetSource; foreign?: ContentTrustReference; libraryIds?: string[] }
 export interface UpdateAssetRequest { id: string; displayName: string }
 export interface AssetQuery { mediaType?: AssetMediaType; libraryId?: string; tag?: string; keyword?: string; page: number; pageSize: number; sort?: 'created' | 'recent' }

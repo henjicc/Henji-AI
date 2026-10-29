@@ -10,6 +10,7 @@ import { AssistantMemorySection } from '@/features/assistant/memory/AssistantMem
 import AgentUserInstructionsSection from '../sections/AgentUserInstructionsSection'
 import McpSection from '../sections/McpSection'
 import PaidApprovalSection from '../sections/PaidApprovalSection'
+import ContentTrustSection from '../sections/ContentTrustSection'
 import CanvasSection from '../sections/CanvasSection'
 import AssetLibrarySection from '../sections/AssetLibrarySection'
 import VideoEditSection from '../sections/VideoEditSection'
@@ -56,6 +57,7 @@ export const SETTINGS_SECTION_COMPONENTS: Record<SettingsComponentKey, React.Com
   AssistantModelsSection,
   AgentUserInstructionsSection,
   PaidApprovalSection,
+  ContentTrustSection,
   AssistantMemorySection,
   McpSection,
   AgentSkillsSection,

@@ -1,3 +1,4 @@
+import { foreignContentSchema, type ContentTrustReference } from '../../../../../src/core/contentTrust'
 import {
   ASSISTANT_SKILL_MAX_DESCRIPTION_LENGTH,
   ASSISTANT_SKILL_MAX_NAME_LENGTH,
@@ -18,6 +19,7 @@ import {
  */
 
 export interface ParsedSkillFrontmatter {
+  foreign?: ContentTrustReference
   name: string
   description: string
   /** 去掉 frontmatter 之后的正文。 */
@@ -100,6 +102,7 @@ export function parseSkillFrontmatter(source: string): ParsedSkillFrontmatter {
     throw invalid(lines.length, 'frontmatter 缺少结束的 ---')
   }
 
+  let foreign: ContentTrustReference | undefined
   let name: string | null = null
   let description: string | null = null
   let skippingUnknownKey = false
@@ -108,6 +111,9 @@ export function parseSkillFrontmatter(source: string): ParsedSkillFrontmatter {
     const raw = lines[index] ?? ''
     const line = index + 1
     const trimmed = raw.trim()
+    if (raw.startsWith('henji-foreign:')) {
+      try { const parsed = foreignContentSchema.safeParse(JSON.parse(raw.slice('henji-foreign:'.length))); if (parsed.success) foreign = parsed.data } catch { /* 无效的可选标记不改变技能正文。 */ }
+    }
     if (!trimmed || trimmed.startsWith('#')) {
       continue
     }
@@ -154,5 +160,5 @@ export function parseSkillFrontmatter(source: string): ParsedSkillFrontmatter {
   }
 
   const body = lines.slice(closingIndex + 1).join('\n').replace(/^\n+/, '').trimEnd()
-  return { name, description, body }
+  return { ...(foreign ? { foreign } : {}), name, description, body }
 }

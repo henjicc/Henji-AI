@@ -1,3 +1,4 @@
+import { markForeignVideoDocument } from './foreign-content'
 import { GitCodePackageSnapshot } from './code-git-transfer'
 import { parseGitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
 import { ZipArchive } from 'archiver'
@@ -427,6 +428,7 @@ export class DocumentPackageService {
         onConflict: 'keepBoth',
         newId: 'whenTaken',
       })
+      await this.options.repository.markForeign({ id: result.meta.id, path: result.meta.path }, { id: result.meta.id, sourceName: manifest.name, sourceType: 'document_package' })
       return { type: 'document', meta: result.meta, copiedFiles: result.copiedFiles }
     } finally {
       await fsp.rm(staging, { recursive: true, force: true }).catch(() => undefined)
@@ -438,7 +440,7 @@ export class DocumentPackageService {
     const staging = path.join(projectsDir, `.henji-new-${randomUUID()}`)
     let published: string | null = null
     try {
-      await this.extract(source, staging)
+      const extractedFiles = await this.extract(source, staging)
       const catalog = this.workspace.catalog
       // 项目说明：包里没有时按包说明补一份；ID 已被占用（同一个项目导入第二次）时换新
       const existing = await this.workspace.readManifest(staging)
@@ -449,21 +451,29 @@ export class DocumentPackageService {
         draft: false,
       })
       if (catalog.getProject(projectManifest.id)) projectManifest = { ...projectManifest, id: this.workspace.randomId() }
+      projectManifest = { ...projectManifest, foreign: { id: projectManifest.id, sourceName: manifest.name, sourceType: 'project' } }
       // 文档 ID：已被占用或包里重复的换新，再改写文档之间的 { docId, path } 引用与主剪辑
       const idMap = new Map<string, string>()
       const seen = new Set<string>()
       const documents: Array<{ path: string; file: LoadedDocumentFile }> = []
       const unreadable: string[] = []
       const stagedContainer = this.workspace.containerOfProject(staging, projectManifest)
-      for (const entry of manifest.documents) {
-        const absolute = path.join(staging, ...entry.path.split('/'))
+      const documentPaths = new Set(manifest.documents.map(entry => entry.path))
+      // 只看此次解包的条目；文件夹文档的目录可能没有单列在包清单中。
+      for (const relative of extractedFiles) {
+        const segments = relative.split('/')
+        const folder = segments.findIndex(segment => this.options.kinds.forFileName(segment)?.id === 'web_recording')
+        if (folder >= 0) documentPaths.add(segments.slice(0, folder + 1).join('/'))
+      }
+      for (const relative of documentPaths) {
+        const absolute = path.join(staging, ...relative.split('/'))
         let file: LoadedDocumentFile
         try {
           file = await loadDocumentFile(absolute, this.fileDependencies())
           if (file.envelope) decodeDocumentContent(file, stagedContainer, this.workspace)
         } catch (error) {
-          unreadable.push(entry.path)
-          this.options.logger.warn('项目包文档无法读取', { event: 'documents.package.document_read.failed', context: { path: entry.path, source }, error })
+          unreadable.push(relative)
+          this.options.logger.warn('项目包文档无法读取', { event: 'documents.package.document_read.failed', context: { path: relative, source }, error })
           continue
         }
         const id = file.header.id
@@ -475,15 +485,17 @@ export class DocumentPackageService {
       for (const { path: filePath, file } of documents) {
         const nextId = idMap.get(file.header.id)
         if (file.envelope) {
-          const linked = idMap.size ? remapDocumentLinks(file.envelope.content, idMap) : file.envelope.content
+          const importedEnvelope = file.kind.id === 'video_edit' ? markForeignVideoDocument(file, projectManifest.foreign!, stagedContainer, this.workspace) : file.envelope
+          const imported = importedEnvelope.content
+          const linked = idMap.size ? remapDocumentLinks(imported, idMap) : imported
           const content = nextId && file.kind.id === 'video_edit' ? await rehomeVideoMotionResources(linked, file.header.id, nextId, staging) : linked
           if (!nextId && content === file.envelope.content) continue
-          const envelope = carryDocumentEnvelopeForward(file.envelope, buildDocumentEnvelope({ ...file.envelope, draft: file.envelope.draft === true, id: nextId ?? file.envelope.id, content }))
+          const envelope = carryDocumentEnvelopeForward(importedEnvelope, buildDocumentEnvelope({ ...importedEnvelope, draft: importedEnvelope.draft === true, id: nextId ?? importedEnvelope.id, content }))
           await writeBufferAtomically(filePath, Buffer.from(serializeDocumentEnvelope(envelope), 'utf8'))
-        } else if (nextId) {
+        } else if (nextId || file.kind.id === 'web_recording') {
           const adapter = this.options.adapters.get(file.kind.id)
           if (!adapter) throw new DocumentFormatError('包里有暂不支持的文档类型。')
-          await adapter.writeHeader(filePath, { id: nextId })
+          await adapter.writeHeader(filePath, { ...(nextId ? { id: nextId } : {}), ...(file.kind.id === 'web_recording' ? { foreign: projectManifest.foreign! } : {}) })
         }
       }
       const mainId = projectManifest.mainVideoEditId
@@ -559,11 +571,12 @@ export class DocumentPackageService {
   }
 
   /** 把 content/ 下的条目解到 target（不存在时新建）；逐条校验位置、总大小与条目数。 */
-  private async extract(source: string, target: string): Promise<void> {
+  private async extract(source: string, target: string): Promise<string[]> {
     await fsp.mkdir(target, { recursive: true })
     const archive = await openZip(source)
     let count = 0
     let total = 0
+    const files: string[] = []
     try {
       for await (const entry of formatErrors(iterateEntries(archive))) {
         if (entry.fileName === MANIFEST_ENTRY) continue
@@ -581,10 +594,12 @@ export class DocumentPackageService {
         await fsp.mkdir(path.dirname(destination), { recursive: true })
         const stream = await openEntryReadStream(archive, entry, entry.fileName)
         await pipeline(stream, fs.createWriteStream(destination, { flags: 'wx' }))
+        files.push(relative)
       }
     } finally {
       archive.close()
     }
+    return files
   }
 
   // ==================== 内部 ====================

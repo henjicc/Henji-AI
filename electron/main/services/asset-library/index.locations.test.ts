@@ -2,7 +2,7 @@ import path from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createCountedSqlite } from '../documents/sqlite.test-support'
 import { createDocumentIndexSchemaV1, addDocumentIndexLastOpenedV1 } from '../documents/index-schema'
-import { createAssetLibraryTablesV1 } from './schema'
+import { createAssetLibraryTablesV1, addAssetForeignMarker } from './schema'
 import { DocumentIndexStore } from '../documents/index-store'
 
 const state = vi.hoisted(() => ({ getDb: vi.fn() }))
@@ -15,7 +15,7 @@ vi.mock('../media/rootGrants', () => ({ persistMediaRootGrant: vi.fn(), restoreP
 vi.mock('../image-editor-v3/resource-media-url', () => ({ IMAGE_EDITOR_V3_MEDIA_HOST: 'image-editor-v3', resolveImageEditorV3ResourceMediaUrl: vi.fn() }))
 vi.mock('./mediaInspection', () => ({ inspectMedia: vi.fn(), normalizeAssetPath: (value: string) => value }))
 vi.mock('./thumbnailService', () => ({ ensureAssetThumbnail: vi.fn() }))
-import { deleteAsset, getAssetFilePath, inspectAsset, queryAssets, relocateAsset } from './index'
+import { createAsset, deleteAsset, getAssetFilePath, inspectAsset, queryAssets, relocateAsset } from './index'
 
 let fixture: ReturnType<typeof createCountedSqlite>
 let catalog: DocumentIndexStore
@@ -30,6 +30,17 @@ beforeEach(() => {
   insert.run('normal', '正常素材', path.resolve('normal.png'))
 })
 afterEach(() => fixture.native.close())
+
+it('历史 imported 代码资产保持本机身份，只有新导入和派生资产记录来源', () => {
+  fixture.db.prepare("INSERT INTO assets(id,media_type,display_name,file_path,source,inspection_status,created_at,updated_at) VALUES ('history','code','历史代码',?,'imported','ready',1,1)").run(path.resolve('history.henji-code'))
+  addAssetForeignMarker(fixture.db)
+  expect(createAsset({ filePath: path.resolve('history.henji-code'), mediaType: 'code', source: 'imported' }).foreign).toBeUndefined()
+  const external = createAsset({ filePath: path.resolve('shared.henji-code'), mediaType: 'code', source: 'imported' })
+  expect(external.foreign).toMatchObject({ id: external.id, sourceType: 'code_asset' })
+  expect(createAsset({ filePath: external.filePath, mediaType: 'code', source: 'video-edit' }).foreign).toEqual(external.foreign)
+  expect(createAsset({ filePath: path.resolve('derived.henji-code'), mediaType: 'code', source: 'video-edit', foreign: external.foreign }).foreign).toEqual(external.foreign)
+  expect(createAsset({ filePath: path.resolve('authored.henji-code'), mediaType: 'code', source: 'video-edit' }).foreign).toBeUndefined()
+})
 
 it('重新定位接受现有本地媒体引用，撤销可恢复失联项目原串，拒绝越界位置', async () => {
   catalog.removeProject(project.id)

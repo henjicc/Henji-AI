@@ -4,6 +4,17 @@ import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { PERSISTENCE_FORMATS } from './formats'
+
+it('历史 imported 风格及模板升级只保留原数据，不赋予外来代码标记', () => {
+  for (const [id, version] of [['video-style-library', 4], ['video-template-library', 3]] as const) {
+    const format = PERSISTENCE_FORMATS.find(value => value.id === id)!
+    const raw = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v${version}.json`, 'utf8')) as { content: Record<string, unknown> }
+    const previous = { ...raw.content, imported: true }
+    const current = upgradePersistenceContent(format, previous, version)
+    expect(current).toEqual(previous)
+    expect(current).not.toHaveProperty('foreign')
+  }
+})
 import baseline from './schemaBaseline.json'
 import { PersistenceError, upgradePersistenceContent } from './migrations'
 import { persistenceSchemaStructure } from './fingerprint'

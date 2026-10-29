@@ -1,3 +1,4 @@
+import { foreignContentSchema } from '../../../../src/core/contentTrust'
 import crypto from 'node:crypto'
 import { validateLocalMediaSource } from '../media-import/sourceValidation'
 import { generatedMediaName } from '../../../../src/core/documents/generatedMediaName'
@@ -15,7 +16,7 @@ import { ensureAssetThumbnail } from './thumbnailService'
 import type { AssetDto, AssetFileContent, AssetLibraryDto, AssetLibrarySnapshotDto, AssetPageDto, AssetQuery, CreateAssetRequest, UpdateAssetRequest } from './types'
 
 const logger = createMainLogger('main.asset-library')
-type AssetRow = { id: string; media_type: AssetDto['mediaType']; display_name: string; file_path: string; source: AssetDto['source']; mime_type: string | null; size_bytes: number | null; width: number | null; height: number | null; duration_seconds: number | null; thumbnail_path: string | null; inspection_status: AssetDto['inspectionStatus']; inspection_error: string | null; file_modified_at: number | null; content_identity?: string | null; last_used_at: number | null; created_at: number; updated_at: number }
+type AssetRow = { id: string; media_type: AssetDto['mediaType']; display_name: string; file_path: string; source: AssetDto['source']; mime_type: string | null; size_bytes: number | null; width: number | null; height: number | null; duration_seconds: number | null; thumbnail_path: string | null; inspection_status: AssetDto['inspectionStatus']; inspection_error: string | null; file_modified_at: number | null; foreign_json?: string | null; content_identity?: string | null; last_used_at: number | null; created_at: number; updated_at: number }
 type LibraryRow = { id: string; name: string; created_at: number; updated_at: number }
 /** 表里的原始行：文件位置是位置写法（实施方案 2.5），缩略图只存文件名（迁移账本第 8、14 项）。 */
 type StoredAssetRow = Omit<AssetRow, 'thumbnail_path'> & { thumbnail_name: string | null }
@@ -58,7 +59,7 @@ function loadAssetRelations(ids: readonly string[]): Map<string, AssetRelations>
 function mapAsset(row: AssetRow, relations?: AssetRelations): AssetDto {
   const tags = relations?.tags ?? (getDb().prepare('SELECT t.name FROM asset_tags t JOIN asset_tag_items ati ON ati.tag_id=t.id WHERE ati.asset_id=? ORDER BY t.name COLLATE NOCASE').all(row.id) as Array<{ name: string }>).map((item) => item.name)
   const libraryIds = relations?.libraryIds ?? (getDb().prepare('SELECT library_id FROM asset_library_items WHERE asset_id=?').all(row.id) as Array<{ library_id: string }>).map((item) => item.library_id)
-  return { id: row.id, mediaType: row.media_type, displayName: row.display_name, filePath: row.file_path, displayUrl: mediaUrl(row.file_path), source: row.source, mimeType: row.mime_type, sizeBytes: row.size_bytes, width: row.width, height: row.height, durationSeconds: row.duration_seconds, thumbnailPath: row.thumbnail_path, thumbnailUrl: row.thumbnail_path ? mediaUrl(row.thumbnail_path) : null, inspectionStatus: row.inspection_status, inspectionError: row.inspection_error, fileModifiedAt: row.file_modified_at, contentIdentity: row.content_identity ?? null, lastUsedAt: row.last_used_at, createdAt: row.created_at, updatedAt: row.updated_at, tags, libraryIds }
+  return { ...(row.foreign_json ? { foreign: foreignContentSchema.parse(JSON.parse(row.foreign_json)) } : {}), id: row.id, mediaType: row.media_type, displayName: row.display_name, filePath: row.file_path, displayUrl: mediaUrl(row.file_path), source: row.source, mimeType: row.mime_type, sizeBytes: row.size_bytes, width: row.width, height: row.height, durationSeconds: row.duration_seconds, thumbnailPath: row.thumbnail_path, thumbnailUrl: row.thumbnail_path ? mediaUrl(row.thumbnail_path) : null, inspectionStatus: row.inspection_status, inspectionError: row.inspection_error, fileModifiedAt: row.file_modified_at, contentIdentity: row.content_identity ?? null, lastUsedAt: row.last_used_at, createdAt: row.created_at, updatedAt: row.updated_at, tags, libraryIds }
 }
 function getAssetRow(id: string): AssetRow | undefined {
   const row = getDb().prepare('SELECT * FROM assets WHERE id = ?').get(id) as StoredAssetRow | undefined
@@ -204,7 +205,10 @@ export function createAsset(input: CreateAssetRequest): AssetDto {
   const transaction = getDb().transaction(() => {
     const existing = getDb().prepare('SELECT id FROM assets WHERE file_path = ?').get(storedPath) as { id: string } | undefined
     const id = existing?.id ?? crypto.randomUUID()
-      if (!existing) getDb().prepare('INSERT INTO assets (id, media_type, display_name, file_path, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, input.mediaType, generatedMediaName(input.displayName || path.basename(filePath), '素材'), storedPath, input.source, now, now)
+    if (!existing) {
+      const foreign = input.foreign ?? (input.mediaType === 'code' && ['imported', 'external'].includes(input.source) ? { id, sourceType: 'code_asset' as const, sourceName: input.displayName || path.basename(filePath) } : undefined)
+      getDb().prepare('INSERT INTO assets (id, media_type, display_name, file_path, source, foreign_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, input.mediaType, generatedMediaName(input.displayName || path.basename(filePath), '素材'), storedPath, input.source, foreign ? JSON.stringify(foreignContentSchema.parse(foreign)) : null, now, now)
+    }
     const insertItem = getDb().prepare('INSERT OR IGNORE INTO asset_library_items (library_id, asset_id, added_at) VALUES (?, ?, ?)')
     for (const libraryId of input.libraryIds ?? []) insertItem.run(libraryId, id, now)
     return { id, wasExisting: Boolean(existing) }

@@ -1,3 +1,4 @@
+import type { ContentTrustReference } from '@/core/contentTrust'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { getPlatform } from '@/platform/runtime'
 import { parseGitCodeLocation } from '@/core/storage/gitCodeLocation'
@@ -53,13 +54,13 @@ export async function prepareCodeVersionPublication(projectId: string, files: Co
   } }
 }
 /** Validate imports and module initialization through the same author worker as effects. */
-export async function publishProjectCodeComponent(projectId: string, input: { name: string; source: string; description?: string }, signal?: AbortSignal, keepBoth = false): Promise<CodeComponentVersion> {
+export async function publishProjectCodeComponent(projectId: string, input: { name: string; source: string; description?: string }, signal?: AbortSignal, keepBoth = false, trustContext: ContentTrustReference[] = []): Promise<CodeComponentVersion> {
   const name = codeComponentNameSchema.parse(input.name)
   const owner = requireVideoEditInstance(projectId); const contentVersion = owner.contentVersion
   const source = input.source.startsWith('// henji-component ') ? componentSourceMetadata(input.source).source : input.source
   const { codeComponentExportNames } = await import('@/core/videoEdit/codeMaterial/componentValidation')
   const exports = codeComponentExportNames(source)
-  const contents: CodeMaterialFiles = { entry: '__check.js', files: { '__check.js': 'import * as component from "./component.js"; export default {name:"组件检查",mode:"static",draw(){void component;}}', 'component.js': source } }
+  const contents: CodeMaterialFiles = { trustContext, entry: '__check.js', files: { '__check.js': 'import * as component from "./component.js"; export default {name:"组件检查",mode:"static",draw(){void component;}}', 'component.js': source } }
   const imports = pinCodeComponentImports(contents, await projectCodeComponents(projectId), name)
   initializeVideoEditCodeSourceRuntime()
   await loadCodeSourceReferences({ files: [], imports }); signal?.throwIfAborted()
@@ -106,7 +107,7 @@ export async function codeComponentReferences(projectId: string, name?: string, 
   }
   return [...references.values()]
 }
-export async function importAssetCodeComponents(projectId: string, asset: CodeAsset, signal?: AbortSignal): Promise<CodeAsset> {
+export async function importAssetCodeComponents(projectId: string, asset: CodeAsset, signal?: AbortSignal, trustContext: ContentTrustReference[] = []): Promise<CodeAsset> {
   const resolver = assetCodeSourceResolver(asset); const imported = new Map<string, CodeComponentVersion>()
   const visit = async (pin: CodeComponentPin, chain: string[]): Promise<CodeComponentVersion> => {
     const key = `${pin.name}@${pin.version}:${pin.hash}`
@@ -117,7 +118,7 @@ export async function importAssetCodeComponents(projectId: string, asset: CodeAs
     for (const child of pin.imports) dependencies.push(await visit(child, [...chain, key]))
     const { source, metadata } = componentSourceMetadata(resolver.read(pin.hash, pin.location, `@组件/${pin.name}`))
     const rewritten = rewriteCodeComponentImports(source, pin.imports, dependencies)
-    const result = await publishProjectCodeComponent(projectId, { name: pin.name, source: rewritten, description: metadata.description }, signal, true)
+    const result = await publishProjectCodeComponent(projectId, { name: pin.name, source: rewritten, description: metadata.description }, signal, true, trustContext)
     imported.set(key, result); return result
   }
   const imports: CodeComponentVersion[] = []
@@ -136,6 +137,7 @@ export async function prepareProjectCodePublication(projectId: string, entry: st
   const closure = await getPlatform().documents.resolveCodeProject({ target: { id: projectId, path: owner.session.documentMeta.path }, entry, commit })
   initializeVideoEditCodeSourceRuntime(); await loadCodeSourceReferences(closure)
   const contents = resolveCodeMaterialFiles(closure, documentCodeSourceResolver())
+  contents.trustContext = closure.foreign ? [closure.foreign] : []
   const imports = pinCodeComponentImports(contents, await projectCodeComponents(projectId))
   await loadCodeSourceReferences({ files: [], imports })
   return { contents, publication: { name, imports, project: { commit: closure.commit, entry }, async write() { return { files: closure.files } } } }

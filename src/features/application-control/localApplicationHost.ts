@@ -16,6 +16,7 @@ import { creativeIntentPrivateAccess } from './creativeIntentAuthorization'
 import { bindApplicationConfirmation } from '@/core/application-control/userConfirmation'
 import { assertApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { agentEditDocumentIds, beginAgentEdit } from './agentEditing'
+import { ensureContentTrust } from '@/services/contentTrust'
 
 const logger = createLogger('features.application_control.host')
 // 与宿主附件生命周期分开；发送回执失败或同一渲染器重新连接后，核对仍读原执行事实。
@@ -43,7 +44,7 @@ export function attachLocalApplicationHost(platform: ApplicationHostPlatform, re
     const action = readOnly ? 'read' : 'write'
     const controller = new AbortController()
     active.set(requestId, controller)
-    const unbindConfirmation = !readOnly ? bindApplicationConfirmation(controller.signal, async progress => {
+    const unbindConfirmation = bindApplicationConfirmation(controller.signal, async progress => {
       if (progress.phase === 'executing') {
         controller.signal.throwIfAborted()
         const grant = grants.get(requestId)
@@ -55,7 +56,7 @@ export function attachLocalApplicationHost(platform: ApplicationHostPlatform, re
       operationReceipts.set(requestId, { callerId, reply })
       await platform.complete(reply)
       logger.info('应用操作确认状态变化', { event: 'application.confirmation.progress', context: { requestId, phase: progress.phase } })
-    }) : () => undefined
+    })
     const execute = async (): Promise<void> => {
       logger.info(readOnly ? '开始读取应用内容' : '开始修改应用内容', { event: `mcp.${action}.start`, context: { requestId, capabilityId } })
       let result: Record<string, unknown>
@@ -131,11 +132,14 @@ export function attachLocalApplicationHost(platform: ApplicationHostPlatform, re
     void execute().catch((error) => logger.error('发送操作结果失败', error, { event: `mcp.${action}.reply.failed` })).finally(() => { unbindConfirmation(); active.delete(requestId); grants.delete(requestId) })
   })
   const unsubscribeCancel = platform.onCancel((id) => active.get(id)?.abort())
+  const unsubscribeTrust = platform.onContentTrust(request => {
+    void ensureContentTrust(request.query).catch(error => { if (!(error instanceof Error) || error.name !== 'ContentTrustRequiredError') logger.warn('外来内容信任询问未完成', { event: 'content_trust.prompt.failed', error }) })
+  })
   const unsubscribeRevoke = platform.onRevoke((id) => { for (const [key, grant] of grants) if (grant.callerId === id) { revokeApplicationCallerGrant(grant); active.get(key)?.abort(new ApplicationRevokedReason()); grants.delete(key) } })
   void platform.registerHost({ rendererEpoch, attachmentSequence, ready, tools, domains }).catch((error) => logger.error('连接应用宿主失败', error, { event: 'mcp.host.register.failed' }))
   return () => {
     disposed = true
-    unsubscribeRequest(); unsubscribeCancel(); unsubscribeRevoke()
+    unsubscribeRequest(); unsubscribeCancel(); unsubscribeRevoke(); unsubscribeTrust()
     for (const controller of active.values()) controller.abort()
     for (const grant of grants.values()) revokeApplicationCallerGrant(grant)
     void platform.registerHost({ rendererEpoch, attachmentSequence, ready: false, tools: [], domains: [] }).catch((error) => logger.error('断开应用宿主失败', error, { event: 'mcp.host.disconnect.failed' }))

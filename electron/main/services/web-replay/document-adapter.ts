@@ -1,7 +1,11 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { webRecordingDocumentKind } from '../../../../src/core/documents/kinds/webRecording'
-import { WEB_RECORDING_FILES } from '../../../../src/core/webReplay/schema'
+import { WEB_RECORDING_FILES, WEB_RECORDING_VERSION, WEB_RECORDING_MIGRATIONS, webRecordingManifestSchema, type WebRecordingManifest } from '../../../../src/core/webReplay/schema'
+import { persistenceForwardFields, upgradePersistenceContent } from '../../../../src/core/persistence/migrations'
+import { restoreForwardFields } from '../../../../src/core/persistence/forwardCompat'
+import { backupBeforePersistenceUpgrade } from '../persistence/file-upgrade'
+import { writeBufferAtomically } from '../fs/atomic-file'
 import type { PackageDocumentAdapter } from '../documents/package-adapters'
 import { WebRecordingStore } from './store'
 
@@ -22,10 +26,16 @@ export function createWebRecordingDocumentAdapter(): PackageDocumentAdapter {
       }
     },
     async writeHeader(directory, patch) {
-      const store = new WebRecordingStore(directory)
-      const { title, ...manifest } = await store.readManifest()
+      const filePath = path.join(directory, WEB_RECORDING_FILES.manifest)
+      const original = await fs.readFile(filePath, 'utf8')
+      const raw = JSON.parse(original) as { version: number; minReaderVersion: number }
+      const contract = { id: 'web-recording', name: '网页录制', version: WEB_RECORDING_VERSION, schema: webRecordingManifestSchema, migrations: WEB_RECORDING_MIGRATIONS }
+      const backupPath = raw.version < contract.version ? await backupBeforePersistenceUpgrade(filePath, contract, raw.version, original) : undefined
+      const upgraded = upgradePersistenceContent(contract, raw, raw.version, backupPath, raw.minReaderVersion) as WebRecordingManifest
+      const { title, ...manifest } = upgraded
       const name = patch.name?.slice(0, 120) ?? title
-      await store.writeManifest({ ...manifest, ...(patch.id ? { id: patch.id } : {}), ...(name ? { title: name } : {}) })
+      const value = restoreForwardFields({ ...manifest, version: Math.max(raw.version, contract.version), ...(patch.id ? { id: patch.id } : {}), ...(name ? { title: name } : {}), ...(patch.foreign ? { foreign: patch.foreign } : {}) }, persistenceForwardFields(upgraded))
+      await writeBufferAtomically(filePath, Buffer.from(JSON.stringify(value)))
     },
     isEmpty: async () => false,
   }

@@ -1,5 +1,7 @@
+import { ContentTrustSession, installContentTrustSession } from '../../../../electron/main/services/content-trust/runtime'
 import fsp from 'node:fs/promises'
 import { CODE_AUTHOR_API_VERSION } from '@/core/videoEdit/codeMaterialPersistence'
+import { latestAuthorLibraryVersions } from '@/core/videoEdit/codeMaterial/authorLibraries'
 import path from 'node:path'
 import { createTestEnvironment } from '../../../../electron/main/services/documents/documents.test-support'
 import { createElement } from 'react'
@@ -44,6 +46,7 @@ import { videoEditOffscreenPool } from '../engine/videoEditOffscreenPool'
 import * as sharedCompiler from '../engine/videoEditSharedCompiler'
 import { createAuthorTypeChecker } from '../engine/videoEditAuthorTypeCheck'
 import { AUTHOR_TYPE_ENVIRONMENT } from '../engine/videoEditAuthorTypeEnvironment'
+import { useAlertDialogStore } from '@/stores/alertDialogStore'
 
 /** 短活共用的离屏会话按设计常驻；回收它之后不应再有任何渲染器存活。 */
 async function expectRenderersReleased(): Promise<void> { await videoEditOffscreenPool.dispose(); expect(boundary.activeRenderers).toBe(0) }
@@ -149,7 +152,8 @@ function collectionBoundary() {
   vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)
   vi.spyOn(platform.assetLibrary, 'inspectFileContent').mockImplementation(async path => ({ sizeBytes: bytes.get(path)?.length ?? 10, fileModifiedAt: 20, contentIdentity: 'a'.repeat(64) }))
   vi.spyOn(platform.assetLibrary, 'createAsset').mockImplementation(async input => {
-    const asset: AssetRecord = { id: `asset-${assets.size}`, mediaType: input.mediaType, filePath: input.filePath, displayName: input.displayName ?? '代码素材', displayUrl: 'henji-media://local/code', thumbnailUrl: null, thumbnailPath: null, source: input.source, mimeType: 'application/x-henji-code', sizeBytes: bytes.get(input.filePath)!.length, fileModifiedAt: 20, contentIdentity: 'a'.repeat(64), inspectionStatus: 'ready', inspectionError: null, width: null, height: null, durationSeconds: null, tags: [], libraryIds: [], createdAt: 1, updatedAt: 2, lastUsedAt: null }
+    const existing = [...assets.values()].find(asset => asset.filePath === input.filePath); if (existing) return existing
+    const asset: AssetRecord = { ...(input.foreign ? { foreign: input.foreign } : {}), id: `asset-${assets.size}`, mediaType: input.mediaType, filePath: input.filePath, displayName: input.displayName ?? '代码素材', displayUrl: 'henji-media://local/code', thumbnailUrl: null, thumbnailPath: null, source: input.source, mimeType: 'application/x-henji-code', sizeBytes: bytes.get(input.filePath)!.length, fileModifiedAt: 20, contentIdentity: 'a'.repeat(64), inspectionStatus: 'ready', inspectionError: null, width: null, height: null, durationSeconds: null, tags: [], libraryIds: [], createdAt: 1, updatedAt: 2, lastUsedAt: null }
     assets.set(asset.id, asset); return asset
   })
   vi.spyOn(platform.assetLibrary, 'inspectAsset').mockImplementation(async id => assets.get(id)!)
@@ -331,14 +335,17 @@ it('保存重开检查非默认滤镜固定版本，复制效果独立，滤镜�
   await closeVideoEditProject(invalidOwner.document.id)
   expect(listVideoEditInstances()).toEqual([reopened])
 })
+let stopTrustPrompt: () => void
 beforeEach(() => {
+  stopTrustPrompt = useAlertDialogStore.subscribe(state => { if (state.queue[0]?.cancelLabel === '不运行') queueMicrotask(() => useAlertDialogStore.getState().confirmCurrent()) })
   installHarnessNativeStorage(); files.clear()
   Object.assign(boundary, { compileGate: undefined, trialGate: undefined, compileCalls: 0, trialCalls: 0, failTrial: false, proveFilters: false, filterProofs: 0, activeRenderers: 0, disposedCompilers: 0, dimensions: [], presentedFrames: [] })
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/code-project.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, value) => { files.set(path, value) })
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
 })
-afterEach(async () => { await videoEditOffscreenPool.dispose(); for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
+afterEach(async () => { stopTrustPrompt(); await videoEditOffscreenPool.dispose(); for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
+
 
 it('离屏会话回收时释放失败只记录，后续试渲染换新会话照常完成', async () => {
   const owner = (await createLegacyTrackVideoEditProject())
@@ -723,7 +730,7 @@ it('内置库升级通过正式描述、能力调用和读回，源码不变也�
     expect(result.upgrades).toEqual([expect.objectContaining({ oldVersion: first, changedFiles: [], retargetedClips: 1 })])
     expect(result.verified).toBe(true)
     const disk = savedVideoEdit(id), definition = disk.codeMaterials![0], latest = definition.versions.find(version => version.id === definition.defaultVersionId)!
-    expect(latest.libraries).toEqual({ 'henji-layout': '1.1.0' })
+    expect(latest.libraries).toEqual({ 'henji-layout': latestAuthorLibraryVersions(CODE_AUTHOR_API_VERSION)['henji-layout'] })
     expect(latest.files.map(({ path, hash }) => ({ path, hash }))).toEqual(definition.versions[0].files.map(({ path, hash }) => ({ path, hash })))
     const clipRef = { kind: 'video_edit.clip', id: `${id}:${clipId}` }
     expect((await app.read(clipRef, ['video_edit.clip.code_version_id'])).properties).toEqual({ 'video_edit.clip.code_version_id': latest.id })
@@ -1205,6 +1212,12 @@ it('工程入口走真实 Git、正式创建与升级，闭包完整流入资产
     const [clipId] = appendVideoEditItems(id, items.map(item => item.id), owner.activeSequenceId)
     const before = (await service.readCodeProject(target)).files.find(file => file.path === 'style/tokens.ts')!
     await service.changeCodeProject({ target, message: '修改风格', changes: [{ path: before.path, source: 'export const x=200', expectedHash: before.hash }] })
+    const manifest = (await env.services.workspace.readManifest(project.path))!
+    const foreign = { id: project.id, sourceName: project.name, sourceType: 'project' as const }
+    await env.services.workspace.writeManifest(project.path, { ...manifest, foreign })
+    const [projectVersion] = await createVideoEditCodeVersions(id, [{ definitionId: definition.id, projectCommit: (await service.readCodeProject(target)).log[0].oid }])
+    expect(owner.document.codeMaterials!.find(value => value.id === definition.id)!.versions.find(value => value.id === projectVersion)!.foreign).toEqual(foreign)
+    undoVideoEdit(id)
     const upgraded = await app.requireResult('upgrade_video_edit_code_materials', { documentRef: parent })
     expect(upgraded.upgrades).toEqual(originalDefaults.map(oldVersion => expect.objectContaining({ oldVersion, changedFiles: ['style/tokens.ts'], retargetedClips: 1 })))
     const current = owner.document.codeMaterials![0].defaultVersionId
@@ -1276,4 +1289,31 @@ it.each([
     expect(readVideoEditCodeMetadata(owner, owner.document)(upgradedItem).parameters.find(parameter => parameter.key === 'amount')!.default).toBe(.8)
     expect(upgradedClip.parameters.amount).toBe(.5)
   } finally { app.dispose(); spies.forEach(spy => spy.mockRestore()); await env.cleanup() }
+})
+
+
+it('派生代码的新版本沿用来源，编辑器显式另存本机版本可清除标记', async () => {
+  const owner = await createLegacyTrackVideoEditProject()
+  const created = await createVideoEditCodeAssetInstance(owner.document.id, importPublication())
+  const definition = owner.document.codeMaterials!.find(value => value.id === created.definitionId)!
+  expect(definition.versions[0].foreign).toMatchObject({ id: 'fixed-asset', sourceType: 'code_asset' })
+  const [inheritedId] = await createVideoEditCodeVersions(owner.document.id, [{ definitionId: definition.id, source: source.replace('100+t', '121+t') }])
+  expect(owner.document.codeMaterials!.find(value => value.id === definition.id)!.versions.find(value => value.id === inheritedId)!.foreign).toEqual(definition.versions[0].foreign)
+  const session = new ContentTrustSession(() => false, () => undefined)
+  session.decide(session.check({ contents: [definition.versions[0].foreign!] }).challenge!, 'deny')
+  const restore = installContentTrustSession(session); stopTrustPrompt()
+  try {
+    const [versionId] = await createVideoEditCodeVersions(owner.document.id, [{ definitionId: definition.id, source: source.replace('100+t', '123+t'), trustContext: [] }])
+    const current = owner.document.codeMaterials!.find(value => value.id === definition.id)!
+    expect(current.versions.find(version => version.id === versionId)?.foreign).toBeUndefined()
+    expect(current.versions[0].foreign).toEqual(definition.versions[0].foreign)
+    expect(useAlertDialogStore.getState().queue).toHaveLength(0)
+  } finally { restore() }
+})
+it('本机创作的代码资产导入仍是本机内容，不发起确认', async () => {
+  stopTrustPrompt()
+  const owner = await createLegacyTrackVideoEditProject()
+  const result = await createVideoEditCodeAssetInstance(owner.document.id, { ...importPublication(), foreign: null })
+  expect(owner.document.codeMaterials!.find(value => value.id === result.definitionId)!.versions[0].foreign).toBeUndefined()
+  expect(useAlertDialogStore.getState().queue).toHaveLength(0)
 })

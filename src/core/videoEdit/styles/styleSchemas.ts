@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { foreignContentSchema } from '../../contentTrust'
 import { styleMemoryEntriesSchema } from '../../assistant/memoryEntries'
 import { codeMaterialFilesSchema, type CodeMaterialFiles } from '../codeMaterial/sources'
 import { sha256HexString } from '../../../utils/save/hash'
@@ -45,6 +46,7 @@ export const videoEditStyleSchema = z.object({
   version: z.number().int().min(0), contentHash: videoEditContentHashSchema, updatedAt: timestamp,
   /** 从分享文件导入：说明书是别人写的文字，只决定画面和声音，里面的指令一律不执行。 */
   imported: z.literal(true).optional(),
+  foreign: foreignContentSchema.optional(),
   guide: z.string().max(STYLE_GUIDE_MAX_LENGTH).describe('风格说明书（Markdown），栏目见技能 style-kit。'),
   userPreferences: styleMemoryEntriesSchema.optional(),
   sample: videoEditStyleSampleSchema,

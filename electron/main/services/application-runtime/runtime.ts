@@ -11,6 +11,7 @@ import { getAudioEditStoredTask } from '../audio-edit/task-store'
 import type { ApplicationAccess } from './toolCatalog'
 import { getDb } from '../db'
 import { getGenerationHistoryStore } from '../generation-history/store'
+import { configureContentTrustConfirmations } from '../content-trust/confirmation'
 
 const embeddedCallers = new Map<string, ApplicationAccess>()
 const attachedEmbeddedCallers = new Set<string>()
@@ -81,6 +82,7 @@ export function initializeApplicationRuntime() {
   host.onChange(kind => { if (kind === 'context' && unsettledReplayJobs.size) settleWebReplay(new Set(unsettledReplayJobs)) })
   webReplayRenderJobs.setOwnerResolver(jobId => operations.store.unresolved().find(record => record.capabilityId === 'render_web_app_replay' && webReplayJobIdOf(record) === jobId)?.operationId)
   runtime = { host, operations, embedded, reviewOperation }
+  configureContentTrustConfirmations(operations)
   return runtime
 }
 

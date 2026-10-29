@@ -1,3 +1,4 @@
+import type { ContentTrustReference } from '../../../../src/core/contentTrust'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -11,6 +12,7 @@ import { ReplayRenderQueue } from './renderQueue'
 import { webReplayRenderJobs } from './renderJobs'
 import { WEB_REPLAY_PORT, WebReplayServer } from './server'
 import { webRecordingsRoot, WebRecordingStore } from './store'
+import { createWebRecordingDocumentAdapter } from './document-adapter'
 import { forgetActiveWebRecording, listWebRecordingLocations, rememberActiveWebRecording, resolveWebRecordingDirectory, resolveWebRecordingLocation, webRecordingIdTaken } from './locations'
 import { getDocumentService } from '../documents/runtime'
 import { stripHenjiExtension } from '../../../../src/core/fileExtensions'
@@ -25,6 +27,7 @@ import type { WebRecordingTakeInfo } from '../../../../src/platform/contracts/we
 import { listWebReplayTakes, readWebReplayTake, readWebReplayTakeBehavior, renderWebReplayTake, TAKE_FILES, TAKES_DIRECTORY, type WebReplayTakeSummary } from './takes'
 
 const logger = createMainLogger('main.web_replay')
+const importedRecordingSources = new Map<string, ContentTrustReference>()
 const MAX_EXTERNAL_BYTES = 32 * 1024 * 1024
 
 async function fetchExternal(url: string, userAgent: string): Promise<{ status: number; contentType: string; bytes: Uint8Array }> {
@@ -101,7 +104,10 @@ export function defaultProjectRecordingTitle(app: string, at: Date): string {
  */
 export async function startWebRecording(connectionId: string, backup: WebRecordingBackupOptions | null, destination: WebRecordingDestination | null = null): Promise<WebRecordingManifest> {
   const hub = requireServer()
-  if (!destination) return hub.startRecording(connectionId, backup)
+  if (!destination) {
+    const manifest = await hub.startRecording(connectionId, backup)
+    return manifest
+  }
   const app = hub.connectedApp(connectionId)
   const id = crypto.randomUUID()
   const documents = getDocumentService()
@@ -136,16 +142,18 @@ export async function importWebRecordingToProject(request: WebRecordingImportReq
   const source = await notImported(async () => request.recordingId ? await resolveWebRecordingDirectory(request.recordingId) : path.resolve(request.source!))
   if (!(await fs.stat(source).catch(() => null))?.isDirectory()) throw notImportedError(new Error('录制文件夹不存在'))
   const manifest = await notImported(() => new WebRecordingStore(source).readManifest())
+  const managed = request.recordingId ? source : await resolveWebRecordingDirectory(manifest.id).catch(() => undefined)
+  const own = managed && path.resolve(managed).toLowerCase() === source.toLowerCase()
+  const id = await webRecordingIdTaken(manifest.id) ? crypto.randomUUID() : manifest.id
+  const foreign = own ? manifest.foreign : importedRecordingSources.get(source) ?? { id: crypto.randomUUID(), sourceName: manifest.title ?? manifest.app.name, sourceType: 'web_recording' as const }
+  if (!own && foreign) importedRecordingSources.set(source, foreign)
   if (manifest.status === 'recording') throw notImportedError(new Error('这段网页录制还没有保存完整（仍标记为录制中），不能放进项目'))
   const documents = getDocumentService()
   const title = request.name?.trim() || manifest.title || (stripHenjiExtension('web_recording', path.basename(source)) ?? path.basename(source)) || defaultProjectRecordingTitle(manifest.app.name, new Date(manifest.createdAt))
   const created = await notImported(() => documents.createFolderDocumentLocation({ kind: 'web_recording', container: { kind: 'project', projectId: request.projectId }, name: webRecordingFileName(title) }))
   try {
     await copyDirectoryContentsNoOverwrite(source, created.path, from => path.basename(from) !== 'edit-events')
-    const id = await webRecordingIdTaken(manifest.id) ? crypto.randomUUID() : manifest.id
-    const store = new WebRecordingStore(created.path)
-    const { title: _old, ...rest } = await store.readManifest()
-    await store.writeManifest({ ...rest, id, title: created.name })
+    await createWebRecordingDocumentAdapter().writeHeader(created.path, { id, name: created.name, ...(foreign ? { foreign } : {}) })
     await documents.indexDocumentAt(created.path)
   } catch (error) {
     // 副本整个删干净才算“没有放进项目”；删不掉时项目里留了半份，如实报原错误，由调用方核对。

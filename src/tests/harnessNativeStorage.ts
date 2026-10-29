@@ -43,6 +43,9 @@ import type { RecordingControlSnapshot } from '@/core/screenRecording/contracts'
 import type { CapabilityCapture } from '@/core/captureLog/events'
 import { audioEditProjectToDocumentContent } from '@/core/audioEdit/documentContent'
 import { DEFAULT_AUDIO_CAPTURE_SETTINGS, type AudioCaptureSettings } from '@/core/audioCapture/contracts'
+import { createContentTrustTestSession } from '../../electron/main/services/content-trust/test-support'
+import { executeContentTrust } from '../../electron/main/services/content-trust/commands'
+import type { ContentTrustCommand } from '@/core/contentTrust'
 
 const FIX_HINT = '替身只负责存储：要用到新方法，就在 src/tests/harnessNativeStorage.ts 里补一段'
   + '**只存不判断**的实现，不要返回空值糊过去——那等于伪造业务结果。'
@@ -241,6 +244,7 @@ const memoryListeners = new Set<() => void>()
 let captureSettings: { settings: AudioCaptureSettings; revision: number } = { settings: { ...DEFAULT_AUDIO_CAPTURE_SETTINGS }, revision: 0 }
 const captureState = () => wire({ settings: captureSettings.settings, effectiveSettings: captureSettings.settings, notice: null, revision: captureSettings.revision })
 const NAMESPACES: Record<string, object> = {
+  applicationControl: { contentTrust: (command: ContentTrustCommand) => executeContentTrust(command) },
   audioCapture: {
     async enumerate() { return { hostApis: [], devices: [] } },
     async getSettings() { return captureState() },
@@ -397,9 +401,11 @@ export function installHarnessNativeStorage(): void {
   resetHarnessNativeStorage()
   ;(window as unknown as { henjiNative?: unknown }).henjiNative = createNativeBridge()
 }
+let trustStorage: ReturnType<typeof createContentTrustTestSession> | undefined
 
 /** 清空全部存储。用例之间必须调，否则上一条用例造的素材集合会漏进下一条。 */
 export function resetHarnessNativeStorage(): void {
+  trustStorage?.dispose(); trustStorage = createContentTrustTestSession()
   memoryState = emptyMemorySnapshot()
   publishHarnessRecordingControl(null); recordedCapabilities.splice(0)
   fontCatalog = { faces: [], revision: 0 }
@@ -415,4 +421,5 @@ export function resetHarnessNativeStorage(): void {
 export function uninstallHarnessNativeStorage(): void {
   delete (window as unknown as { henjiNative?: unknown }).henjiNative
   resetHarnessNativeStorage()
+  trustStorage?.dispose(); trustStorage = undefined
 }

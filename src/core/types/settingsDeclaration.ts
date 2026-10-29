@@ -34,7 +34,7 @@ export const SETTINGS_DECLARATION = {
     surface: { id: 'settings.general', surfaceOrder: 1, schemaOrder: 1 },
     sections: [
       section({
-        id: 'general-basic', surfaceId: 'settings.general.basic', componentKeys: ['LanguageSection', 'StartupSection', 'OnboardingSection'],
+        id: 'general-basic', surfaceId: 'settings.general.basic', componentKeys: ['LanguageSection', 'StartupSection', 'OnboardingSection', 'ContentTrustSection'],
         surfaceOrder: 2, schemaOrder: 2,
         search: [
           ...searchRows(1, [

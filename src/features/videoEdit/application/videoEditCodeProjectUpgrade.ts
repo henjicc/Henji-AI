@@ -14,7 +14,7 @@ import { prepareProjectCodePublication } from './videoEditCodeStorage'
 import { createVideoEditCodeVersions } from './videoEditCodeService'
 import { requireVideoEditInstance, editVideoProject, saveVideoEdit, verifyVideoEditSaved } from './videoEditService'
 import { compileVideoEditCode, ensureVideoEditChangedCodeMetadata, ensureVideoEditRetargetMetadata, readVideoEditCodeMetadata, withVideoEditUnreadableCodeVersions } from './videoEditCodeState'
-import { validateCodeMaterialDocument, changedCodeMaterialVersions, retargetCodeMaterialInstances, videoEditCodeReferences } from '@/core/videoEdit/codeMaterialDocument'
+import { validateCodeMaterialDocument, codeMaterialTrustContext, changedCodeMaterialVersions, retargetCodeMaterialInstances, videoEditCodeReferences } from '@/core/videoEdit/codeMaterialDocument'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 type Input = z.infer<typeof upgradeVideoEditCodeMaterialsCapability.inputSchema>
 type Output = z.infer<typeof upgradeVideoEditCodeMaterialsCapability.outputSchema>
@@ -36,7 +36,7 @@ export async function upgradeVideoEditCodeMaterials(input: Input, signal?: Abort
     await loadCodeSourceReferences(old).catch(() => undefined)
     const resolver = documentCodeSourceResolver()
     const project = old.project ? await prepareProjectCodePublication(id, old.project.entry, commit!) : undefined
-    const contents = project?.contents ?? resolveCodeMaterialFiles(old, resolver)
+    const contents = { ...(project?.contents ?? resolveCodeMaterialFiles(old, resolver)), trustContext: codeMaterialTrustContext(owner.document, { definitionId: definition.id, versionId: old.id }) }
     const imports = project?.publication.imports ?? old.imports ?? []
     const libraries = input.upgradeLibraries ? latestAuthorLibraryVersions(old.apiVersion) : project?.publication.libraries
     const compilation = codeVersionCompilation(expandPinnedCodeComponents(contents, imports, resolver), { ...codeVersionInheritance(old, resolver), ...project?.publication, libraries, apiVersion: old.apiVersion as CodeAuthorApiVersion })

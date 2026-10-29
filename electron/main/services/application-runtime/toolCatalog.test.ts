@@ -124,11 +124,11 @@ describe('对外工具目录的投影与授权过滤', () => {
 
   it('目录按授权档过滤，被挡住的工具指名道姓说明缺哪一档', () => {
     expect(names(READ_ONLY).filter((name) => APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === name))).toEqual([])
-    expect(names(READ_ONLY)).not.toContain('get_application_operation')
+    expect(names(READ_ONLY)).toContain('get_application_operation')
     expect(names(READ_ONLY)).not.toContain('review_application_operation')
     expect(names(WRITE)).toContain('review_application_operation')
     expect(catalog(READ_ONLY).hidden.map((item) => item.name).sort())
-      .toEqual([...APPLICATION_WRITE_CAPABILITY_IDS, 'get_application_operation', 'review_application_operation', 'retry_application_operation_save'].sort())
+      .toEqual([...APPLICATION_WRITE_CAPABILITY_IDS, 'review_application_operation', 'retry_application_operation_save'].sort())
     expect(catalog(READ_ONLY).hidden.find((item) => item.name === 'create_visible_generation_task')?.tier).toBe('paid')
 
     // 改权限：写工具出现，付费工具仍然缺席，并且缺席原因写明缺付费档而不是缺修改档。

@@ -1,3 +1,4 @@
+import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
 import { codeMaterialSize } from '@/core/videoEdit/codeMaterialTiming'
 import { videoEditCodeElementFrames } from './videoEditCodeElements'
 import { registry } from '@/core/ModelRegistry'
@@ -51,7 +52,7 @@ export async function prepareCodeImageGenerationContext(target: VideoEditCodeTar
   if (editor.target.versionId !== target.versionId) throw new Error('原代码版本已改变，请重新打开生成面板。')
   const parameter = editor.metadata.parameters.find(parameter => parameter.key === key && parameter.type === 'image')
   if (!parameter) throw new Error('此参数不是图片引用。')
-  const program = await compileVideoEditCode(editor.files, signal)
+  const program = await compileVideoEditCode(codeMaterialSource(requireVideoEditInstance(target.projectId).document, editor.code).compilation, signal)
   signal?.throwIfAborted()
   const owner = requireVideoEditInstance(target.projectId)
   const sequence = owner.document.sequences.find(sequence => sequence.id === target.sequenceId)!

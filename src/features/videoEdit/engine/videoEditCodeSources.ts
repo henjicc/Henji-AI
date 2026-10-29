@@ -259,7 +259,7 @@ export class VideoEditCodeSources {
     await loadCodeSourceReferences(version); signal.throwIfAborted()
     const resolver = documentCodeSourceResolver()
     // 按版本记录编译：作者接口版本与内置库版本都跟着记录走，默认库版本以后变了也不影响这一版。记录的 apiVersion 已由 schema 限定在 4–5。
-    const files = { ...expandPinnedCodeComponents(resolveCodeMaterialFiles(version, resolver), version.imports ?? [], resolver), apiVersion: version.apiVersion as CodeAuthorApiVersion, ...(version.libraries ? { libraries: version.libraries } : {}) }
+    const files = { ...expandPinnedCodeComponents(resolveCodeMaterialFiles(version, resolver), version.imports ?? [], resolver), apiVersion: version.apiVersion as CodeAuthorApiVersion, ...(version.libraries ? { libraries: version.libraries } : {}), trustContext: version.foreign ? [version.foreign] : [] }
     const source = codeMaterialFilesKey(files)
     logger.debug('可见代码源码检查开始', { event: 'video_edit.code.compile.start', context: { sequenceId: this.document.id, version: key } })
     try {

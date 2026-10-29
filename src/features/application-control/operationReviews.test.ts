@@ -10,7 +10,7 @@ it('核对沿现有弹窗队列；稍后处理保留入口，自动结案移除�
   const item = { operationId: crypto.randomUUID(), callerId: crypto.randomUUID(), title: '这次修改生效了吗？', message: '当前有三条字幕', targets: [{ kind: 'video_edit.document', id: 'video' }] }
   let receive!: (snapshot: OperationReviewSnapshot) => void
   const reviewOperations = vi.fn().mockResolvedValue({ items: [item] })
-  const platform: ApplicationHostPlatform = { reviewOperations, onReviews: handler => { receive = handler; return () => {} },
+  const platform: ApplicationHostPlatform = { contentTrust: async () => { throw new Error('此用例不调用代码信任存储') }, onContentTrust: () => () => {}, reviewOperations, onReviews: handler => { receive = handler; return () => {} },
     publishContext: async () => {}, registerHost: async () => {}, complete: async () => {}, onRequest: () => () => {}, onCancel: () => () => {}, onRevoke: () => () => {} }
   const detach = attachOperationReviews(platform)
   try {

@@ -355,8 +355,17 @@ const values: Record<string, unknown> = {
   'asset-records': { id: 'golden-asset', media_type: 'code', display_name: '代码标题', file_path: '/persistence-project/代码/标题.henjicode', source: 'video-edit', mime_type: 'application/x-henji-code', size_bytes: 100, width: null, height: null, duration_seconds: null, thumbnail_name: null, inspection_status: 'pending', inspection_error: null, file_modified_at: null, content_identity: null, last_used_at: null, created_at: 1791504000000, updated_at: 1791504000000 },
   'generation-presets': { id: 'golden-preset', name: '黄金生成预设', description: null, model_id: null, params: '{}', is_favorite: 0, use_count: 0, created_at: timestamp, updated_at: timestamp },
   'assistant-memory': emptyMemorySnapshot(),
-  sqlite: { version: 22, name: 'replace_assistant_memory_user_authorized_reset', applied_at: 1791504000000 },
+  sqlite: { version: 23, name: 'asset_foreign_marker', applied_at: 1791504000000 },
 }
+
+const foreignSample = { id: 'golden-import', sourceType: 'project', sourceName: '分享工程' }
+values['video-style-library'] = { ...values['video-style-library'] as object, foreign: foreignSample }
+values['video-template-library'] = { ...values['video-template-library'] as object, foreign: foreignSample }
+values['asset-records'] = { ...values['asset-records'] as object, foreign_json: JSON.stringify(foreignSample) }
+values['code-version'] = { ...values['code-version'] as object, foreign: foreignSample }
+values['document.video_edit'] = { ...values['document.video_edit'] as object, foreign: foreignSample }
+values.project = { ...values.project as object, foreign: foreignSample }
+values['web-recording'] = { ...values['web-recording'] as object, version: 4, foreign: { ...foreignSample, sourceType: 'web_recording' } }
 
 /** Immutable layout bodies used by the official ZIP fixture authoring tool. */
 export function getImageLayoutFixtureResources(): readonly unknown[] {

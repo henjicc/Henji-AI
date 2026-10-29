@@ -27,10 +27,10 @@ function meta(entry: VideoEditLibraryStyle, isDefault: boolean, bound: boolean):
 }
 /** 卡片画面：有缩略图就用渲染好的缩略图，没有就实时画样片的缩略图时刻。 */
 function StylePicture({ entry, size, playing, label }: { entry: VideoEditLibraryStyle; size: typeof TILE; playing: boolean; label: string }): React.ReactElement {
-  const source = useMemo(() => ({ category: 'style' as const, sample: entry.style.sample }), [entry.style.sample])
+  const source = useMemo(() => ({ category: 'style' as const, sample: entry.style.sample, trustContext: entry.style.foreign ? [entry.style.foreign] : [] }), [entry.style.sample, entry.style.foreign])
   if (entry.media.thumbnail && !playing) return <img className="block h-full w-full object-cover" src={toDisplaySrc(entry.media.thumbnail)} alt={label} draggable={false} />
   if (entry.media.preview && playing) return <video className="block h-full w-full object-cover" src={toDisplaySrc(entry.media.preview)} aria-label={label} autoPlay loop muted playsInline />
-  return <VideoEditPresetPlayer source={source} size={size} playing={playing} label={label} />
+  return <VideoEditPresetPlayer source={source} size={size} playing={playing} label={label} trustAction={size === DETAIL} />
 }
 
 /** 风格详情：样片预览、锚点帧、说明书与成员模板；绑定是这里唯一的主动作。 */

@@ -1,4 +1,5 @@
 import type { AssistantPlatform } from '@/platform/contracts/assistant'
+import { contentTrustConfirmation } from '../../contentTrustConfirmation'
 
 const DOMAIN = 'assistant'
 
@@ -16,9 +17,9 @@ export function createElectronAssistant(): AssistantPlatform {
     openUserInstructionsFile: () => getNativeAssistant().openUserInstructionsFile(),
     listSkills: () => getNativeAssistant().listSkills(),
     readSkill: (request) => getNativeAssistant().readSkill(request),
-    installSkill: (request) => getNativeAssistant().installSkill(request),
+    installSkill: request => getNativeAssistant().installSkill(request),
     uninstallSkill: (name) => getNativeAssistant().uninstallSkill(name),
-    setSkillEnabled: (update) => getNativeAssistant().setSkillEnabled(update),
+    setSkillEnabled: async update => { if (update.enabled) await contentTrustConfirmation().prepare('skill', update.name); return getNativeAssistant().setSkillEnabled(update) },
     openSkillsDirectory: () => getNativeAssistant().openSkillsDirectory(),
     onMemoryChange: handler => getNativeAssistant().onMemoryChange(handler),
     getMemoryState: () => getNativeAssistant().getMemoryState(),

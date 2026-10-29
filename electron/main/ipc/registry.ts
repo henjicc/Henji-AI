@@ -2,6 +2,7 @@ import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { readTranscriptionFacts, type TranscriptionFacts } from '../../../src/core/audioEdit/transcriptionFailure'
 import { readPaidFailureFacts, type PaidFailureFacts } from '../../../src/core/application-control/paidApproval'
 import { redactLogCredentials } from '../../../src/core/logging/sanitize'
+import { readContentTrustFailure, type ContentTrustFailure } from '../../../src/core/contentTrust'
 
 export interface IpcErrorEnvelope {
   name: string
@@ -10,6 +11,7 @@ export interface IpcErrorEnvelope {
   stack?: string
   transcriptionFacts?: TranscriptionFacts
   paidFailureFacts?: PaidFailureFacts
+  contentTrust?: ContentTrustFailure
 }
 
 export type IpcResultEnvelope<T> =
@@ -66,6 +68,7 @@ function normalizeError(error: unknown): IpcErrorEnvelope {
       stack: error.stack,
       ...(readTranscriptionFacts(error) ? { transcriptionFacts: readTranscriptionFacts(error) } : {}),
       paidFailureFacts: readPaidFailureFacts(error),
+      ...(readContentTrustFailure(error) ? { contentTrust: readContentTrustFailure(error) } : {}),
     }
   }
 

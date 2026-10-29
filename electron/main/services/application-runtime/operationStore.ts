@@ -27,7 +27,7 @@ export interface OperationRecord {
   state: OperationState
   verificationState?: 'verified' | 'unresolved'
   recoveryOf?: string
-  capabilityId: import('../../../../src/core/application-control/localHostContracts').LocalHostRequest['capabilityId']
+  capabilityId: import('../../../../src/core/application-control/localHostContracts').LocalHostRequest['capabilityId'] | 'load_assistant_skill'
   targetRefs?: Array<{ kind: string; id: string }>
   recoveryVerification?: import('../../../../src/core/application-control/localHostContracts').LocalHostRequest['recoveryVerification']
   recoveryOperation?: import('../../../../src/core/application-control/localHostContracts').LocalHostRequest['recoveryOperation']

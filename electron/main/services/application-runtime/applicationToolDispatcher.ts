@@ -118,7 +118,7 @@ export class ApplicationToolDispatcher {
       if (name === 'load_assistant_skill' && this.callerKind === 'external') {
         // 与内置 Pi 同一准入名单与注册表：停用、未准入、越界路径都在这里拒绝，不经渲染宿主。
         let result: ApplicationResult
-        try { result = await loadAgentSkill(args ?? {}, signal, 'external') } catch (error) {
+        try { result = await loadAgentSkill(args ?? {}, signal, 'external', callerId) } catch (error) {
           if (signal.aborted) return applicationFailure('ABORTED:技能读取已取消。')
           result = applicationFailure(this.inputError(callerId, name, error, args ?? {}) ?? (isAssistantSkillError(error) ? `${error.code}:${error.message}` : '技能读取失败，请稍后重试。'))
         }

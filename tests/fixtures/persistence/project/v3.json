@@ -1,0 +1,27 @@
+{
+  "format": "henji-project",
+  "version": 3,
+  "minReaderVersion": 1,
+  "id": "golden-project",
+  "createdAt": "2026-10-09T00:00:00.000Z",
+  "locale": "zh",
+  "folders": {
+    "generated": "生成结果",
+    "materials": "素材"
+  },
+  "mainVideoEditId": "golden-video",
+  "memories": [
+    {
+      "id": "brand",
+      "content": "这期品牌色用红色。",
+      "source": "user",
+      "updatedAt": "2026-10-09T00:00:00.000Z",
+      "revision": 1
+    }
+  ],
+  "foreign": {
+    "id": "golden-import",
+    "sourceType": "project",
+    "sourceName": "分享工程"
+  }
+}

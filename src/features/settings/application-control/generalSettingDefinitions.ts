@@ -1,3 +1,4 @@
+import { externalContentCodeAllowed } from '@/services/contentTrust'
 import { settingsTarget } from '@/core/types/settingsNavigation'
 import {
   PRICE_ESTIMATE_CURRENCY_MODE_STORAGE_KEY,
@@ -36,6 +37,11 @@ const DEFAULT_MODEL_ID_SCHEMA = z.enum([
 ] as [string, ...string[]])
 
 export const GENERAL_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefinition[] = [
+  storeSetting({
+    id: 'general.allow_external_content_code', title: '允许运行外来内容里的代码', description: '打开后所有带外来标记的代码都可直接运行；仅用户能在界面里改变此选择。',
+    aliases: ['外来代码', '代码信任'], schema: z.boolean(), defaultValue: false, target: settingsTarget('general-basic'), requiresReload: false, requiresRestart: false, sensitive: false,
+    readOnlyReason: '外来代码属于安全底线，只允许用户在应用界面中选择；助手不能修改或代为批准。',
+  }, externalContentCodeAllowed, () => { throw new Error('此开关只允许用户在界面里修改。') }),
   storeSetting({
     id: 'transcription.default_model', title: '默认转写模型',
     description: '设置录制讲解使用的带词、字或句时间的转写模型；使用完整模型标识。只允许已配置且能处理本地录音的模型。auto 优先默认供应商，再选择可用模型；明确选择失效时必须重选。修改不影响已开始的转写。',

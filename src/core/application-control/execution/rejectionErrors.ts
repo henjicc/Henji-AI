@@ -10,6 +10,7 @@
  * 主进程账本恢复按同一张表判断登记里失败的重演。
  */
 export const REJECTED_BEFORE_WRITE_ERROR_NAMES: ReadonlySet<string> = new Set([
+  'ContentTrustRequiredError',
   'DocumentLocationError',
   'DocumentNameConflictError',
   'DocumentNameInvalidError',

@@ -94,7 +94,7 @@ export class ApplicationOperationCoordinator {
   /** 只识别旧通用事务入口的已知前置拒绝，不以缺少回执或目标当前值相等推断。 */
   private recoverPreflight(record: OperationRecord): OperationRecord {
     const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(record.capabilityId)
-    if (definition && !requiresMutationReview(definition) && ['unknown', 'partial', 'awaiting_user_confirmation'].includes(record.state)) {
+    if (record.capabilityId !== 'load_assistant_skill' && definition && !(definition.readOnly && record.state === 'awaiting_user_confirmation') && !requiresMutationReview(definition) && ['unknown', 'partial', 'awaiting_user_confirmation'].includes(record.state)) {
       const recovered: OperationRecord = { ...record, state: 'not_executed', verificationState: 'verified', confirmation: undefined }
       this.store.save(recovered)
       return recovered
@@ -385,7 +385,7 @@ export class ApplicationOperationCoordinator {
     const executionPartial = execution.billing === 'submitted' || execution.billing === 'completed' || execution.targetMutation === 'applied'
     const state = reply.result.ok === true ? 'completed' : reviewExempt ? 'not_executed' : persistence ? 'partial'
       : executionPartial ? 'partial' : execution.billing === 'unknown' ? 'unknown' : rolledBack ? 'rolled_back' : changed ? 'partial' : cleanFailure ? 'not_executed' : 'unknown'
-    const verified = state === 'not_executed' || state === 'rolled_back' || object(object(reply.result.data).verification).verified === true
+    const verified = state === 'not_executed' || state === 'rolled_back' || definition?.readOnly === true && state === 'completed' || object(object(reply.result.data).verification).verified === true
     this.store.save({ ...record, state, confirmation: undefined, targetRefs: [...record.targetRefs ?? [], ...resultRefs(reply.result)], verificationState: verified ? 'verified' : 'unresolved', result: reply.result })
     if (record.recoveryOf && reply.result.ok === true) {
       const original = this.store.get(record.recoveryOf, record.callerId)

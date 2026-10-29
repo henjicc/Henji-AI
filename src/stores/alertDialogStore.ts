@@ -20,9 +20,12 @@ export interface AlertDialogRequest {
   paidDetails?: PaidApprovalDisplay
   title: string
   message: string
+  contentTrustChallenge?: string
+  cancelLabel?: string
+  onDecision?: (accepted: boolean) => Promise<void>
   type?: AlertDialogType
   /** 只有用户点击明确的确认按钮才接受；关闭、Escape、取消均拒绝。tone=danger 用于删除等破坏性确认（危险实底按钮）。 */
-  confirmation?: { label: string; tone?: 'default' | 'danger'; paid?: boolean; project?: boolean; resolve: (confirmed: boolean, project?: boolean) => void }
+  confirmation?: { label: string; tone?: 'default' | 'danger'; paid?: boolean; project?: boolean; projectLabel?: string; resolve: (confirmed: boolean, project?: boolean) => void }
   /** 有值时渲染设置动作并定位到该分节；API 密钥分节会显示「去配置」 */
   settingsTarget?: SettingsNavigationTarget
   /** 有值时渲染「复制错误详情」按钮；放完整技术信息（堆栈、响应体等） */
@@ -64,7 +67,7 @@ export function showAlertDialog(request: AlertDialogRequest): void {
 
 /** 一次性的人机确认；任务中止时精确移除自己的弹窗，不影响其他排队提示。 */
 export async function requestAlertConfirmation(
-  request: Omit<AlertDialogRequest, 'confirmation'> & { confirmLabel: string; confirmTone?: 'default' | 'danger'; paid?: PaidApprovalRequest; paidConfirmation?: boolean; projectConfirmation?: boolean; onProject?: () => void },
+  request: Omit<AlertDialogRequest, 'confirmation'> & { confirmLabel: string; confirmTone?: 'default' | 'danger'; paid?: PaidApprovalRequest; paidConfirmation?: boolean; projectConfirmation?: boolean; projectLabel?: string; onProject?: () => void },
   signal?: AbortSignal,
 ): Promise<boolean> {
   if (request.paid && hasApplicationConfirmation(signal)) {
@@ -100,12 +103,12 @@ export async function requestAlertConfirmation(
 }
 
 function showAlertConfirmation(
-  request: Omit<AlertDialogRequest, 'confirmation'> & { confirmLabel: string; confirmTone?: 'default' | 'danger'; paidConfirmation?: boolean; projectConfirmation?: boolean; onProject?: () => void },
+  request: Omit<AlertDialogRequest, 'confirmation'> & { confirmLabel: string; confirmTone?: 'default' | 'danger'; paidConfirmation?: boolean; projectConfirmation?: boolean; projectLabel?: string; onProject?: () => void },
   signal?: AbortSignal,
   expiresAt?: number,
 ): Promise<boolean> {
   if (signal?.aborted) return Promise.resolve(false)
-  return new Promise(resolve => {
+  return new Promise<boolean>(resolve => {
     let settled = false
     const finish = (confirmed: boolean, project?: boolean): void => {
       if (settled) return
@@ -113,14 +116,17 @@ function showAlertConfirmation(
       confirmed = confirmed && !signal?.aborted && (expiresAt === undefined || Date.now() < expiresAt)
       if (confirmed && project) request.onProject?.()
       signal?.removeEventListener('abort', abort)
-      useAlertDialogStore.setState(state => ({ queue: state.queue.filter(item => item !== entry) }))
+      useAlertDialogStore.setState(state => ({ queue: state.queue.filter(item => item.confirmation !== entry.confirmation) }))
       resolve(confirmed && !signal?.aborted)
     }
     const abort = (): void => finish(false)
-    const { confirmLabel, confirmTone, paidConfirmation, projectConfirmation, onProject: _onProject, ...rest } = request
-    const entry: AlertDialogRequest = { ...rest, confirmation: { label: confirmLabel, tone: confirmTone, paid: paidConfirmation, project: projectConfirmation, resolve: finish } }
+    const { confirmLabel, confirmTone, paidConfirmation, projectConfirmation, projectLabel, onProject: _onProject, ...rest } = request
+    const entry: AlertDialogRequest = { ...rest, confirmation: { label: confirmLabel, tone: confirmTone, paid: paidConfirmation, project: projectConfirmation, projectLabel, resolve: finish } }
     signal?.addEventListener('abort', abort, { once: true })
     showAlertDialog(entry)
     if (signal?.aborted) abort()
+  }).then(async accepted => {
+    if (!signal?.aborted) await request.onDecision?.(accepted)
+    return accepted
   })
 }

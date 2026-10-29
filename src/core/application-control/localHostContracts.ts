@@ -118,6 +118,8 @@ export interface McpPlatform {
   connectionConfig(input: { id: string }): Promise<string>
 }
 export interface ApplicationHostPlatform {
+  contentTrust(command: import('../contentTrust').ContentTrustCommand): Promise<import('../contentTrust').ContentTrustCheck>
+  onContentTrust(handler: (request: import('../contentTrust').ContentTrustPrompt) => void): () => void
   reviewOperations(input: OperationReviewCommand): Promise<OperationReviewSnapshot>
   onReviews(handler: (snapshot: OperationReviewSnapshot) => void): () => void
   publishContext(snapshot: HostContextSnapshot): Promise<void>

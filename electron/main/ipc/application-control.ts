@@ -6,6 +6,9 @@ import { registerIpcHandler } from './registry'
 import { hostContextSnapshotSchema } from '../../../src/core/application-control/hostContracts'
 import { operationReviewCommandSchema } from '../../../src/core/application-control/operationReview'
 import { createMainLogger } from '../services/logging'
+import { contentTrustCommandSchema } from '../../../src/core/contentTrust'
+import { executeContentTrust } from '../services/content-trust/commands'
+import { resumeContentTrustConfirmations } from '../services/content-trust/confirmation'
 export function assertTrustedApplicationSender(event: IpcMainInvokeEvent): void {
   const window = getMainWindow()
   if (!window || window.isDestroyed() || BrowserWindow.fromWebContents(event.sender) !== window || event.senderFrame !== event.sender.mainFrame) throw new Error('不可信的连接管理请求。')
@@ -34,6 +37,11 @@ export function watchApplicationHostRenderer(contents: Electron.WebContents, opt
 }
 
 export function registerApplicationControlIpc(): void {
+  registerIpcHandler('application:content-trust', value => contentTrustCommandSchema.parse(value), async command => {
+    const result = await executeContentTrust(command)
+    if (command.action === 'decide' || command.action === 'set-policy') void resumeContentTrustConfirmations().catch(error => logger.warn('外来内容确认续接失败', { event: 'content_trust.resume.failed', error }))
+    return result
+  }, trusted)
   const { host, operations, reviewOperation } = initializeApplicationRuntime()
   registerIpcHandler('application:host:context', value => hostContextSnapshotSchema.parse(value), input => host.publishContext(input), trusted)
   registerIpcHandler('application:host:register', (value) => localHostRegistrationSchema.parse(value), (input, event) => {

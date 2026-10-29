@@ -1,4 +1,5 @@
 import type { WebReplayPlatform } from '../../contracts/webReplay'
+import { contentTrustConfirmation } from '../../contentTrustConfirmation'
 
 function native(): WebReplayPlatform {
   const api = window.henjiNative?.webReplay as WebReplayPlatform | undefined
@@ -16,7 +17,7 @@ export function createElectronWebReplay(): WebReplayPlatform {
     remove: id => native().remove(id),
     restore: id => native().restore(id),
     onRenderProgress: listener => native().onRenderProgress(listener),
-    render: (request, jobId) => native().render(request, jobId),
+    render: async (request, jobId) => { await contentTrustConfirmation().prepare('web_recording', request.recordingId); return native().render(request, jobId) },
     cancelRender: target => native().cancelRender(target),
     read: request => native().read(request),
     reveal: (id, file) => native().reveal(id, file),

@@ -159,7 +159,7 @@ export function planApplicationSettingsChange(
     if (seen.has(change.id)) throw new Error('INVALID_INPUT')
     seen.add(change.id)
     const definition = definitionMap.get(change.id)
-    if (!definition || definition.sensitive) throw new Error('NOT_FOUND')
+    if (!definition || definition.sensitive || definition.readOnlyReason) throw new Error('NOT_FOUND')
     const parsed = definition.schema.safeParse(change.value)
     if (!parsed.success) throw new Error('INVALID_INPUT')
     return {

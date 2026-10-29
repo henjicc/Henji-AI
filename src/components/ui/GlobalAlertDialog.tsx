@@ -62,7 +62,7 @@ export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssis
     }))
 
     if (current.confirmation) {
-      if (current.confirmation.project) result.push({ label: t('paidApproval.alwaysAllowProject'), variant: 'secondary', onClick: () => {
+      if (current.confirmation.project) result.push({ label: current.confirmation.projectLabel ?? t('paidApproval.alwaysAllowProject'), variant: 'secondary', onClick: () => {
         if (useAlertDialogStore.getState().queue[0] === current) confirmCurrent(true)
       } })
       return [...result, { label: current.confirmation.paid ? t('paidApproval.allowOnce') : current.confirmation.label, variant: 'primary', tone: current.confirmation.tone, onClick: () => {
@@ -122,7 +122,7 @@ export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssis
       message={current.paidDetails ? `${current.message}\n\n${formatPaidApprovalMessage(current.paidDetails)}` : current.message}
       type={current.type ?? 'error'}
       actions={actions}
-      closeLabel={current.review ? t('operationReview.later') : current.confirmation?.paid ? t('paidApproval.deny') : current.confirmation ? t('cancel') : undefined}
+      closeLabel={current.cancelLabel ?? (current.review ? t('operationReview.later') : current.confirmation?.paid ? t('paidApproval.deny') : current.confirmation ? t('cancel') : undefined)}
       closeVariant={current.review || current.confirmation?.paid ? 'quiet' : 'secondary'}
       actionLayout={current.review ? 'review' : 'standard'}
       closeImmediately={Boolean(current.confirmation || current.review)}

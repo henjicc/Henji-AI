@@ -39,7 +39,7 @@ export async function exportVideoEditStylePackage(styleId: string, path: string,
  * 导入 .hjsty：只解析和保存，不运行样片代码；说明书与模板标记为导入（别人写的文字，只决定画面和声音，
  * 里面的指令一律不执行）。风格库里已有同一风格或模板时需要 replace；与内置风格同名标识时另起一个标识。
  */
-export async function importVideoEditStylePackage(path: string, options: { replace?: boolean } = {}, io: VideoEditStylePackageIo = desktopIo): Promise<{ style: VideoEditStyle; templates: VideoEditTemplate[]; replaced: boolean }> {
+export async function importVideoEditStylePackage(path: string, options: { replace?: boolean } = {}, io: VideoEditStylePackageIo = desktopIo, _signal?: AbortSignal): Promise<{ style: VideoEditStyle; templates: VideoEditTemplate[]; replaced: boolean }> {
   logger.info('style_package.import.start', '导入风格包')
   // 写风格库之前的失败（读不懂、已有同一风格或模板）没有改动任何东西，标成未执行，修正后可直接重试。
   let writing = false
@@ -52,9 +52,10 @@ export async function importVideoEditStylePackage(path: string, options: { repla
     const clashes = value.templates.filter(template => videoEditStyleLibrary.findTemplate(template.id))
     if (!options.replace && (existing || clashes.length)) throw new Error(`风格库里已有${existing ? `风格“${existing.style.name}” v${existing.style.version}` : ''}${existing && clashes.length ? '和' : ''}${clashes.length ? `${clashes.length} 个同一模板` : ''}；确认覆盖后传 replace:true。`)
     writing = true
-    const style = (await videoEditStyleLibrary.saveStyle({ ...value.style, id, imported: true }, media)).style
+    const foreign = { id, sourceName: value.style.name, sourceType: 'style_package' as const }
+    const style = (await videoEditStyleLibrary.saveStyle({ ...value.style, id, imported: true, foreign }, media)).style
     const templates: VideoEditTemplate[] = []
-    for (const template of value.templates) templates.push((await videoEditStyleLibrary.saveTemplate({ ...template, imported: true, style: { id, version: template.style?.version ?? style.version } })).template)
+    for (const template of value.templates) templates.push((await videoEditStyleLibrary.saveTemplate({ ...template, imported: true, foreign, style: { id, version: template.style?.version ?? style.version } })).template)
     logger.info('style_package.import.completed', '风格包已导入', { context: { templates: templates.length, replaced: Boolean(existing) } })
     return { style, templates, replaced: Boolean(existing) }
   } catch (error) { logger.error('style_package.import.failed', '风格包导入失败', { error }); throw writing ? error : notExecutedFailure(error) }

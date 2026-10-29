@@ -1,13 +1,14 @@
 import type { SearchAppStoreIconsInput, SaveAppStoreIconInput, AppStoreIconSearchResult, SavedAppStoreIcon } from '../../core/appStoreIcons'
+import type { ContentTrustReference } from '../../core/contentTrust'
 
 export type AssetMediaType = 'image' | 'video' | 'audio' | 'code'
 export type AssetSource = 'generated' | 'canvas' | 'camera-stage' | 'imported' | 'external' | 'video-edit'
 export type AssetInspectionStatus = 'pending' | 'ready' | 'missing' | 'failed'
 export interface AssetFileContent { sizeBytes: number; fileModifiedAt: number; contentIdentity: string }
-export interface AssetRecord { id: string; wasExisting?: boolean; mediaType: AssetMediaType; displayName: string; filePath: string; displayUrl: string; source: AssetSource; mimeType: string | null; sizeBytes: number | null; width: number | null; height: number | null; durationSeconds: number | null; thumbnailPath: string | null; thumbnailUrl: string | null; inspectionStatus: AssetInspectionStatus; inspectionError: string | null; fileModifiedAt: number | null; contentIdentity?: string | null; lastUsedAt: number | null; createdAt: number; updatedAt: number; tags: string[]; libraryIds: string[] }
+export interface AssetRecord { id: string; wasExisting?: boolean; foreign?: ContentTrustReference; mediaType: AssetMediaType; displayName: string; filePath: string; displayUrl: string; source: AssetSource; mimeType: string | null; sizeBytes: number | null; width: number | null; height: number | null; durationSeconds: number | null; thumbnailPath: string | null; thumbnailUrl: string | null; inspectionStatus: AssetInspectionStatus; inspectionError: string | null; fileModifiedAt: number | null; contentIdentity?: string | null; lastUsedAt: number | null; createdAt: number; updatedAt: number; tags: string[]; libraryIds: string[] }
 export interface AssetLibraryRecord { id: string; name: string; createdAt: number; updatedAt: number }
 export interface AssetLibrarySnapshot extends AssetLibraryRecord { assetIds: string[] }
-export interface CreateAssetInput { filePath: string; mediaType: AssetMediaType; displayName?: string; source: AssetSource; libraryIds?: string[] }
+export interface CreateAssetInput { filePath: string; mediaType: AssetMediaType; displayName?: string; source: AssetSource; foreign?: ContentTrustReference; libraryIds?: string[] }
 export interface AssetQueryInput { mediaType?: AssetMediaType; libraryId?: string; tag?: string; keyword?: string; page?: number; pageSize?: number; sort?: 'created' | 'recent' }
 export interface AssetPage { items: AssetRecord[]; total: number; page: number; pageSize: number }
 export interface AssetLibraryPlatform {

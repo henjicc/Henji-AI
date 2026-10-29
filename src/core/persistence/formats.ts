@@ -1,3 +1,5 @@
+import { formatMigrations } from './formatMigrations'
+import { foreignContentSchema } from '../contentTrust'
 import { gitCodeLocationSchema } from '../storage/gitCodeLocation'
 import { memorySnapshotSchema } from '../assistant/memoryEntries'
 import { workspaceLayoutEnvelopeSchema, WORKSPACE_LAYOUT_VERSION } from '../workspaceLayouts/schema'
@@ -24,7 +26,6 @@ import { assetRecordSchema, packageManifestSchema, PACKAGE_VERSION, presetRecord
 import type { PersistenceContract } from './migrations'
 import { rendererSettingsSchema, SETTINGS_STORAGE_VERSION } from './settingsSchema'
 import { audioCaptureSettingsEnvelopeSchema, AUDIO_CAPTURE_SETTINGS_VERSION, audioCaptureRecoverySchema } from '../audioCapture/contracts'
-import { formatMigrations } from './formatMigrations'
 import { LOCAL_LIBRARY_FORMATS } from './versionedJson'
 import { presetExportSchema, themePayloadSchema } from './auxiliarySchemas'
 import { SOUND_LIBRARY_FOLDERS_VERSION, soundLibraryFoldersSchema } from '../soundLibrary/soundLibraryFolders'
@@ -95,8 +96,8 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   format('onboarding', '首次引导进度', ONBOARDING_VERSION, 'OnboardingStateV2.version', 'src/features/onboarding/application/onboardingManager.ts::loadState', onboardingSchema, 'local-storage'),
   // 22：声音片段新增 enabled:false（停用），旧程序忽略后会把停用的声音当成在发声，最低可读版本提高到 22。
   { ...format('subtitle-manifest', '字幕回填记录', SUBTITLE_MANIFEST_VERSION, '字幕声音.subtitle.json.version', 'src/features/videoEdit/application/videoEditAutoSubtitles.ts::complete', videoEditSubtitleManifestSchema), minReaderVersion: 22 },
-  format('setting-records', '设置记录', SETTING_RECORD_VERSION, 'SETTING_RECORD_VERSION（记录独立内容版本；SQL 升级仍走既有账本）', 'electron/main/services/settings/store.ts::getEntry', settingRecordSchema, 'sqlite-ledger', { paidApproval: paidApprovalSettingsSchema }),
-  format('asset-records', '素材库记录', ASSET_RECORD_VERSION, 'ASSET_RECORD_VERSION（记录独立内容版本；SQL 升级仍走既有账本）', 'electron/main/services/asset-library/index.ts', assetRecordSchema, 'sqlite-ledger'),
+  { ...format('setting-records', '设置记录', SETTING_RECORD_VERSION, 'SETTING_RECORD_VERSION（记录独立内容版本；SQL 升级仍走既有账本）', 'electron/main/services/settings/store.ts::getEntry', settingRecordSchema, 'sqlite-ledger', { paidApproval: paidApprovalSettingsSchema }), minReaderVersion: 21 },
+  { ...format('asset-records', '素材库记录', ASSET_RECORD_VERSION, 'ASSET_RECORD_VERSION（记录独立内容版本；SQL 升级仍走既有账本）', 'electron/main/services/asset-library/index.ts', assetRecordSchema, 'sqlite-ledger', { foreign: foreignContentSchema }), minReaderVersion: 21 },
   format('generation-presets', '生成预设', GENERATION_PRESET_VERSION, 'GENERATION_PRESET_VERSION（记录独立内容版本；SQL 升级仍走既有账本）', 'electron/main/services/presets/store.ts', presetRecordSchema, 'sqlite-ledger'),
   format('assistant-memory', '三层记忆与修改历史', 1, 'assistant_memory.state_json（SQLite账本v22）', 'electron/main/services/assistant/entry-store.ts::getState', memorySnapshotSchema, 'sqlite-ledger'),
   format('sqlite', '应用数据库', SQLITE_SCHEMA_VERSION, 'SCHEMA_MIGRATIONS / schema_migrations', 'electron/main/services/db-migrations.ts::runSchemaMigrations', z.object({ version: z.number().int().positive(), name: z.string(), applied_at: z.number() }), 'sqlite-ledger', { operationOrigin: operationOriginSchema.optional(), operationState: applicationOperationStateSchema, userConfirmation: applicationUserConfirmationSchema, paidGenerationEstimateKind: z.enum(['upper-bound', 'estimate']).optional(), paidReservation: paidReservationSchema, paidApproval: paidApprovalReceiptSchema }),
@@ -104,6 +105,7 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
 
 /** Deliberate scope boundary: rebuildable projections and external formats are not user-project migrations. */
 export const PERSISTENCE_EXCLUSIONS = [
+  { id: 'assistant-skill-source', readEntry: 'electron/main/services/assistant/skills/frontmatter.ts::parseSkillFrontmatter', reason: 'SKILL.md 是外部 Agent Skills 标准文本；安装只添加可选的 henji-foreign 标记，旧文件没有标记即为本机内容，不改写正文或其他字段。' },
   { id: 'web-replay-take-outputs', readEntry: 'electron/main/services/web-replay/takes.ts', reason: '录制文件夹 takes/<名字>/ 下的视频、boxes.jsonl、text.jsonl、behavior.json、timemap.json、take.json 与 edit-events 都由同目录已登记的 director.json（web-replay-director）和录制本身重演生成，可用 render_web_app_replay 原样重建；不保存用户编辑，录制原件不受影响。读不了的版本只是不列出。' },
   { id: 'web-recording-boxes-track', readEntry: 'electron/main/services/web-replay/boxTrackReader.ts', reason: 'boxes.jsonl 是重演从已登记网页录制的前端资源、数据与行为生成的可选位置投影，可用 render_web_app_replay（含 textOnly）重建；不保存用户编辑，不改变 recording.json 或原始轨道。旧录制缺少此文件仍可读，不提高录制格式版本或最低可读版本。' },
   { id: 'screen-recording-standard-exports', readEntry: 'src/features/screenRecording/application/recordingProductService.ts', reason: 'Markdown/HTML 与 PNG/GIF 是面向用户交付的外部标准文件，回读只验证发布字节，不作为项目数据解释；可编辑产物复用已登记的 image-edit-v3 与 image-document-package。运行期导出记录不落盘。' },

@@ -1,9 +1,14 @@
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import { getUserSkillsDir } from './paths'
+import { parseSkillFrontmatter } from './frontmatter'
 import {
   ASSISTANT_SKILL_DISABLED_SETTING_KEY,
   assistantSkillNameSchema,
 } from '../../../../../src/core/assistant/skills'
 import { getSettingsStore } from '../../settings/store'
 import { createMainLogger } from '../../logging'
+import { contentTrust } from '../../content-trust/runtime'
 
 const logger = createMainLogger('main.assistant_skills')
 
@@ -48,6 +53,9 @@ export function setAssistantSkillEnabled(name: string, enabled: boolean): string
   const skillName = assistantSkillNameSchema.parse(name)
   const current = new Set(readDisabledSkillNames())
   if (enabled) {
+    const raw = (() => { try { return readFileSync(path.join(getUserSkillsDir(), skillName, 'SKILL.md'), 'utf8') } catch { return undefined } })()
+    const foreign = raw ? parseSkillFrontmatter(raw).foreign : undefined
+    contentTrust().assert({ contents: foreign ? [foreign] : [] })
     current.delete(skillName)
   } else {
     current.add(skillName)

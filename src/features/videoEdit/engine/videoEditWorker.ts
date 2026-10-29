@@ -3,6 +3,7 @@ import { enableVideoEditFrameTrace, traceVideoEditFrame } from './videoEditFrame
 import { VideoEditSharedCompilation, type SharedCompilationResponse } from './videoEditSharedCompilation'
 import { installAuthorMetadataCache } from './videoEditAuthorMetadataCache'
 import { installAuthorNativeModules } from './videoEditAuthorModules'
+import { installAuthorTrustGate } from './videoEditAuthorTrust'
 import { setVideoEditCodeCompilerWorkerFactory } from './videoEditCodeCompiler'
 import { videoEditPreparationSnapshot, videoEditPreparationDelta, recordVideoEditPreparation, enableVideoEditRenderDiagnostics, videoEditRenderDiagnosticsEnabled, probeVideoEditTask, beginVideoEditGpuFrame, takeVideoEditGpuFrame, videoEditDeliveryStages, videoEditLagSummary } from './videoEditPreparationTiming'
 import type { VideoEditTimingContext } from './videoEditFirstFrameTiming'
@@ -59,7 +60,7 @@ export type RenderRequest = { id: number } & (
   | { kind: 'audio'; start: number; duration: number; retainIdle?: boolean }
   /** Acceptance probes only (task 2.7): high-precision counters and one row of the last high-precision composition. */
   | { kind: 'precision'; row?: number })
-export type RenderResponse = { /** A program scrub frame answered without rendering: a newer frame request had already arrived. */ skipped?: boolean; renderCached?: boolean; renderElapsedMs?: number; renderStages?: Record<string, number>; approximate?: boolean; gpuDeviceLost?: string; authorElements?: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation; authorMetadata?: import('./videoEditAuthorParameters').AuthorEffectMetadata; elements?: import('./videoEditAuthorElements').AuthorElementObservation[]; preparationStages?: ReturnType<typeof videoEditPreparationSnapshot>; codePerformance?: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[]; id: number; phase?: 'submitted'; error?: string; /** 效果错误，后接 sceneIssues（节目监视器按这一项提示用户）。 */ effectErrors?: string[]; /** 片子数据里会让画面缺内容的问题，也已在 effectErrors 里：试渲染等据此不把它们当成失败。 */ sceneIssues?: string[]; bitmap?: ImageBitmap; history?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
+export type RenderResponse = { /** A program scrub frame answered without rendering: a newer frame request had already arrived. */ skipped?: boolean; renderCached?: boolean; renderElapsedMs?: number; renderStages?: Record<string, number>; approximate?: boolean; gpuDeviceLost?: string; authorElements?: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation; authorMetadata?: import('./videoEditAuthorParameters').AuthorEffectMetadata; elements?: import('./videoEditAuthorElements').AuthorElementObservation[]; preparationStages?: ReturnType<typeof videoEditPreparationSnapshot>; codePerformance?: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[]; id: number; phase?: 'submitted'; error?: string; contentTrust?: import('@/core/contentTrust').ContentTrustFailure; /** 效果错误，后接 sceneIssues（节目监视器按这一项提示用户）。 */ effectErrors?: string[]; /** 片子数据里会让画面缺内容的问题，也已在 effectErrors 里：试渲染等据此不把它们当成失败。 */ sceneIssues?: string[]; bitmap?: ImageBitmap; history?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
 /** Structured log entries the worker cannot write itself; the render session forwards them to the application log. */
 export interface RenderLogMessage { kind: 'log'; level: 'debug' | 'info' | 'warn'; message: string; event: string; context: Record<string, unknown> }
 /** 原生显卡帧通道（preload 交来的端口）。不进入渲染队列；渲染器经它读取原生解码帧，诊断只供真实性测试。 */
@@ -178,6 +179,7 @@ function handleNativeFrames(request: NativeFramesRequest): void {
 }
 // 只按当前帧和播放头前三秒预热，不在初始化时扫描整条序列。
 const sharedCompilation = new VideoEditSharedCompilation(message => self.postMessage(message))
+installAuthorTrustGate(request => sharedCompilation.trust(request))
 setVideoEditCodeCompilerWorkerFactory(() => sharedCompilation.worker())
 installCodeSourceReader(file => sharedCompilation.read(file))
 installAuthorMetadataCache({ read: key => sharedCompilation.metadata(key), write: async (key, metadata) => { await sharedCompilation.metadata(key, metadata) } })
@@ -187,7 +189,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
   else receive(event)
 }
 function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | SharedCompilationResponse>): void {
-  if (event.data.kind === 'code.compiled' || event.data.kind === 'code.source' || event.data.kind === 'code.metadataResult' || event.data.kind === 'code.moduleUrls') { sharedCompilation.receive(event.data); return }
+  if (event.data.kind === 'code.trustResult' || event.data.kind === 'code.compiled' || event.data.kind === 'code.source' || event.data.kind === 'code.metadataResult' || event.data.kind === 'code.moduleUrls') { sharedCompilation.receive(event.data); return }
   if (event.data.kind === 'nativeFrames.attach' || event.data.kind === 'nativeFrames.diagnose') { handleNativeFrames(event.data); return }
   const request = event.data
   const receivedAt = performance.now()

@@ -30,9 +30,10 @@ export class VideoEditAuthorPrograms {
     const known = this.modules.get(bundle)
     if (known) return known.module
     let release = (): void => undefined
-    const module = prepareAuthorModuleUrls(bundle).then(urls => {
+    const module = prepareAuthorModuleUrls(bundle).then(async urls => {
       release = urls.dispose
-      return loadAuthorModule(urls.url)
+      const context = bundle.trustContext ?? bundle.modules?.trustContext ?? []
+      return loadAuthorModule(urls.url, context)
     }).catch(error => {
       this.modules.delete(bundle)
       release()

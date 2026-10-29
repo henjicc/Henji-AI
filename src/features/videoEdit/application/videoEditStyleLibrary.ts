@@ -203,7 +203,10 @@ export class VideoEditStyleLibrary {
     if (await this.io.exists(templatesDir)) for (const entry of await this.io.list(templatesDir)) {
       if (entry.isDirectory || !entry.name.endsWith('.json')) continue
       const file = await this.io.join(templatesDir, entry.name)
-      try { const template = decode<VideoEditTemplate>(TEMPLATE_FORMAT, await this.io.readText(file), file); templates.set(template.id, { template, file }) } catch (error) { problems.push(entry.name); logger.error('load.template_failed', '模板读取失败，原文件已保留', { error, context: { file: entry.name } }) }
+      try {
+        const template = decode<VideoEditTemplate>(TEMPLATE_FORMAT, await this.io.readText(file), file)
+        templates.set(template.id, { template, file })
+      } catch (error) { problems.push(entry.name); logger.error('load.template_failed', '模板读取失败，原文件已保留', { error, context: { file: entry.name } }) }
     }
     this.styles = styles; this.templates = templates
     if (problems.length) logger.warn('load.partial', '部分风格或模板无法读取', { context: { count: problems.length } })

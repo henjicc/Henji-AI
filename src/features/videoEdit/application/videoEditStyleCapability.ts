@@ -39,7 +39,7 @@ export async function handleVideoEditStyleCapability(id: string, raw: unknown, s
     }
     case importVideoEditStylePackageCapability.id: {
       const input = importVideoEditStylePackageCapability.inputSchema.parse(raw)
-      const result = await importVideoEditStylePackage(input.path, { replace: input.replace })
+      const result = await importVideoEditStylePackage(input.path, { replace: input.replace }, undefined, signal)
       const back = videoEditStyleLibrary.findStyle(result.style.id)
       return { resultRef: { kind: 'video_edit.style', id: result.style.id }, templateRefs: result.templates.map(template => ({ kind: 'video_edit.template', id: template.id })), replaced: result.replaced,
         verification: { verified: Boolean(back && back.style.version === result.style.version && result.templates.every(template => videoEditStyleLibrary.findTemplate(template.id))), condition: '已从风格库目录回读导入的风格与模板。' },

@@ -3,6 +3,9 @@ import { AssistantSkillError, isAssistantSkillError, type AssistantSkillMetadata
 import { createMainLogger } from '../../logging'
 import { wrapSkillContent } from './content'
 import { listEnabledAssistantSkills, loadAssistantSkill } from './registry'
+import { executeContentTrust } from '../../content-trust/commands'
+import { withNativeContentTrust } from '../../content-trust/confirmation'
+import type { ApplicationResult } from '../../../../../src/core/application-control/invocation'
 
 const logger = createMainLogger('main.assistant_skills')
 
@@ -46,7 +49,10 @@ async function withRecovery(error: unknown, name: string): Promise<unknown> {
 }
 
 /** 按需读取技能正文或单份参考；每次都经正式注册表核对启用状态与路径边界。 */
-export async function loadAgentSkill(input: unknown, signal: AbortSignal, caller: AgentSkillCaller) {
+export type AgentSkillResult = { ok: true; data: Awaited<ReturnType<typeof loadAssistantSkill>> & Record<string, unknown> }
+export function loadAgentSkill(input: unknown, signal: AbortSignal, caller: AgentSkillCaller): Promise<AgentSkillResult>
+export function loadAgentSkill(input: unknown, signal: AbortSignal, caller: AgentSkillCaller, callerId: string): Promise<ApplicationResult<AgentSkillResult['data']>>
+export async function loadAgentSkill(input: unknown, signal: AbortSignal, caller: AgentSkillCaller, callerId?: string): Promise<ApplicationResult<AgentSkillResult['data']>> {
   signal.throwIfAborted()
   const args = loadAssistantSkillInputSchema.parse(input)
   const context = { caller, name: args.name, path: args.path ?? 'SKILL.md', reason: args.reason }
@@ -54,6 +60,11 @@ export async function loadAgentSkill(input: unknown, signal: AbortSignal, caller
   try {
     if (!AGENT_SKILL_NAMES.has(args.name)) {
       throw new AssistantSkillError('SKILL_NOT_FOUND', `技能 ${args.name} 尚未适配智能体`)
+    }
+    if (callerId) {
+      const checked = await executeContentTrust({ action: 'prepare', sourceType: 'skill', id: args.name })
+      const query = { contents: checked.records }
+      if (checked.state !== 'allowed') return withNativeContentTrust(callerId, query, args, () => loadAgentSkill(args, signal, caller))
     }
     const loaded = await loadAssistantSkill(args.name, args.path)
     signal.throwIfAborted()

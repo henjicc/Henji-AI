@@ -1,5 +1,6 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../appPaths', () => ({ getUserFolderDir: () => '/unused' }))
@@ -96,8 +97,47 @@ describe('文件夹类型文档（.hjweb）', () => {
     const renamed = await service.renameDocument({ target: { id: ID }, name: '新名' })
     const target = path.join(root, '素材', '录屏', '新名.hjweb')
     expect(renamed.path).toBe(target)
-    expect(await listFiles(target)).toEqual(['blobs/nested.hjcvs', 'recording.json'])
+    const files = await listFiles(target)
+    expect(files.filter(file => !file.startsWith('.henji/'))).toEqual(['blobs/nested.hjcvs', 'recording.json'])
+    const backup = files.find(file => file.startsWith('.henji/backups/recording.json.v3.'))!
+    expect(JSON.parse(await fsp.readFile(path.join(target, backup), 'utf8'))).toEqual(manifest(ID, '旧名'))
     expect(JSON.parse(await fsp.readFile(path.join(target, 'recording.json'), 'utf8'))).toMatchObject({ id: ID, title: '新名' })
     await expect(fsp.access(directory)).rejects.toThrow()
+  })
+
+  it('网页录制经工程包、文档包及外部工程进入时覆盖包内来源标记', async () => {
+    const { service } = env.services
+    vi.spyOn(env.services.workspace, 'randomId').mockImplementation(randomUUID)
+    const project = await service.createProject({ name: '录制工程' })
+    const directory = path.join(project.path, '素材', '录屏', '演示.hjweb')
+    await writeRecording(directory)
+    await service.refreshIndex()
+    const documentPackage = await service.exportDocumentPackage({ target: { id: ID }, destination: path.join(env.outside, '录制文档包') })
+    const projectPackage = await service.exportProjectPackage({ projectId: project.id, destination: path.join(env.outside, '录制工程包') })
+    const refresh = vi.spyOn(env.services.scanner, 'refresh').mockRejectedValueOnce(new Error('索引暂不可用'))
+    const importedProject = await service.importPackage({ source: projectPackage.path })
+    if (importedProject.type !== 'project') throw new Error('应为工程包')
+    const stagedRecording = path.join(importedProject.project.path, '素材', '录屏', '演示.hjweb', 'recording.json')
+    expect(JSON.parse(await fsp.readFile(stagedRecording, 'utf8'))).toMatchObject({ version: 4, foreign: { sourceType: 'project' } })
+    refresh.mockRestore()
+    await service.refreshIndex()
+    const recording = (await service.listDocuments({ kind: 'web_recording', container: { kind: 'project', projectId: importedProject.project.id } }))[0]
+    expect(JSON.parse(await fsp.readFile(path.join(recording.path, 'recording.json'), 'utf8')).foreign).toMatchObject({ sourceType: 'project' })
+    const importedDocument = await service.importPackage({ source: documentPackage.path, container: { kind: 'project', projectId: project.id } })
+    if (importedDocument.type !== 'document') throw new Error('应为文档包')
+    expect(JSON.parse(await fsp.readFile(path.join(importedDocument.meta.path, 'recording.json'), 'utf8')).foreign).toMatchObject({ sourceType: 'document_package', id: importedDocument.meta.id })
+    const externalPath = path.join(env.outside, '外部工程')
+    await fsp.cp(project.path, externalPath, { recursive: true })
+    const external = await service.registerExternalProject(externalPath)
+    for (const row of await service.listDocuments({ kind: 'web_recording', container: { kind: 'project', projectId: external.id } })) {
+      expect(JSON.parse(await fsp.readFile(path.join(row.path, 'recording.json'), 'utf8')).foreign).toMatchObject({ sourceType: 'project', id: external.id })
+    }
+  })
+
+  it('兼容读取的新清单写头时保留版本及未知字段', async () => {
+    const directory = path.join(env.outside, '较新录制.hjweb')
+    await writeRecording(directory, { ...manifest(), version: 5, futureField: { retained: true } })
+    await createWebRecordingDocumentAdapter().writeHeader(directory, { foreign: { id: ID, sourceName: '较新录制', sourceType: 'web_recording' } })
+    expect(JSON.parse(await fsp.readFile(path.join(directory, 'recording.json'), 'utf8'))).toMatchObject({ version: 5, futureField: { retained: true }, foreign: { id: ID } })
   })
 })

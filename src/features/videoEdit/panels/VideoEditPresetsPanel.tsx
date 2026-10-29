@@ -25,7 +25,7 @@ function status(entry: VideoEditPresetEntry): string[] {
 function PresetPicture({ entry, size, playing, label }: { entry: VideoEditPresetEntry; size: typeof TILE_SIZE; playing: boolean; label: string }): React.ReactElement {
   const source = useMemo(() => videoEditPresetSource(entry.category, entry.id), [entry.category, entry.id])
   if (source.category === 'effect' && source.preset.media === 'audio') return <span className="flex h-full w-full items-center justify-center text-xs text-text3">声音效果</span>
-  return <VideoEditPresetPlayer source={source} size={size} playing={playing} label={label} />
+  return <VideoEditPresetPlayer source={source} size={size} playing={playing} label={label} trustAction={size === DETAIL_SIZE} />
 }
 function PresetDetail({ entry, instance, onClose, onError }: { entry: VideoEditPresetEntry; instance: VideoEditInstance; onClose: () => void; onError: (reason: unknown) => void }): React.ReactElement {
   const { showNotification } = useNotification()

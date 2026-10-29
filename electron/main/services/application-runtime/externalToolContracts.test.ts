@@ -7,6 +7,7 @@ import type { OperationRecord } from './operationStore'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import { applicationOutputValidator } from './outputContract'
 import { readApplicationMediaResource } from './mediaResources'
+import { applicationUserConfirmation } from '../../../../src/core/application-control/userConfirmation'
 
 vi.mock('electron', () => ({ app: { isPackaged: false } }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info() {}, warn() {}, error() {} }) }))
@@ -15,6 +16,16 @@ vi.mock('./mediaResources', () => ({ readApplicationMediaResource: vi.fn(), Appl
 const access = { allowWrites: true, allowPaid: true, allowDestructive: true }
 const connections = { assertActive: vi.fn(), access: () => access }
 const signal = new AbortController().signal
+
+it('只读连接的声明读取可以返回人工信任等待，公开目录提供原操作续查且输出契约接受等待', async () => {
+  const host = new ApplicationHostBridge(() => {})
+  const waiting = { ok: false, operationId: randomUUID(), executionState: 'awaiting_user_confirmation', verificationState: 'unresolved', confirmation: applicationUserConfirmation({ title: '分享素材', message: '这份内容包含代码，是否信任并允许运行？', confirmLabel: '信任' }) }
+  vi.spyOn(host, 'execute').mockResolvedValue(waiting)
+  const rememberRead = vi.fn((_caller: string, result: typeof waiting) => result)
+  const dispatcher = new ApplicationToolDispatcher({ assertActive() {}, access: () => ({ allowWrites: false, allowDestructive: false, allowPaid: false }) }, host, { rememberRead } as unknown as ApplicationOperationCoordinator)
+  expect(dispatcher.catalog('reader').tools.some(tool => tool.name === 'get_application_operation')).toBe(true)
+  expect(await dispatcher.call('reader', 'read_application_entity', { ref: { kind: 'video_edit.code_material', id: 'material' } }, signal)).toMatchObject(waiting)
+})
 
 it('口播十一工具与共用剪辑输入只接受自身字段，真实必填项在公开 schema 中可见', () => {
   const host = new ApplicationHostBridge(() => {})

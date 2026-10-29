@@ -8,6 +8,8 @@ export function createApplicationControlApi(invoke: <T>(channel: string, payload
     return () => { ipcRenderer.removeListener(channel, listener) }
   }
   return {
+    contentTrust: command => invoke('application:content-trust', command),
+    onContentTrust: handler => listen('application:content-trust:request', handler),
     reviewOperations: input => invoke('application:host:review', input),
     onReviews: handler => listen('application:host:reviews', handler),
     publishContext: input => invoke('application:host:context', input),

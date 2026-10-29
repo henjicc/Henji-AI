@@ -1,4 +1,4 @@
-import { changedCodeMaterialVersions } from '@/core/videoEdit/codeMaterialDocument'
+import { changedCodeMaterialVersions, codeMaterialTrustContext } from '@/core/videoEdit/codeMaterialDocument'
 import { ensureVideoEditChangedCodeMetadata } from './videoEditCodeState'
 import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
@@ -30,13 +30,15 @@ import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { codeMaterialSize } from '@/core/videoEdit/codeMaterialTiming'
 import type { CodeTypeCheckReport } from '@/core/videoEdit/codeMaterial/typeDiagnostics'
 import { settleVideoEditCodeTypeChecks, startVideoEditCodeTypeCheck, withVideoEditCodeTypeContext } from './videoEditCodeTypeCheck'
+import type { ContentTrustReference } from '@/core/contentTrust'
+import { inheritApplicationConfirmation } from '@/core/application-control/userConfirmation'
 
 const logger = createLogger('features.videoEdit.code')
-export interface VideoEditCodeInput { projectEntry?: string; source?: string; files?: Record<string, string>; entry?: string; name?: string; binId?: string }
-export interface VideoEditCodeVersionInput { libraries?: Readonly<Record<string, string>>; projectCommit?: string; source?: string; files?: Record<string, string>; entry?: string; definitionId: string }
+export interface VideoEditCodeInput { trustContext?: ContentTrustReference[]; projectEntry?: string; source?: string; files?: Record<string, string>; entry?: string; name?: string; binId?: string }
+export interface VideoEditCodeVersionInput { trustContext?: ContentTrustReference[]; libraries?: Readonly<Record<string, string>>; projectCommit?: string; source?: string; files?: Record<string, string>; entry?: string; definitionId: string }
 interface Candidate { definition: CodeMaterialDefinition; item: VideoEditItem; filter?: CodeMaterialInstance }
 interface CodeAssetPublication {
-  asset: CodeAsset; media: VideoEditMedia[]; mediaIds: ReadonlyMap<string, string>; origin: { assetId: string; contentIdentity: string }
+  asset: CodeAsset; foreign?: ContentTrustReference | null; media: VideoEditMedia[]; mediaIds: ReadonlyMap<string, string>; origin: { assetId: string; contentIdentity: string }
   filterTarget?: { sequenceId: string; clipId: string }
   afterImport?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument
   beforePublish(): Promise<void>
@@ -92,6 +94,7 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
   const owner = requireVideoEditInstance(projectId)
   const baseline = owner.document; const contentVersion = owner.contentVersion
   const controller = new AbortController()
+  const unbindConfirmation = signal ? inheritApplicationConfirmation(signal, controller.signal) : () => undefined
   const cancel = (): void => { controller.abort(signal?.reason ?? new Error('代码素材创建已取消。')) }
   signal?.addEventListener('abort', cancel, { once: true })
   const unsubscribe = subscribeVideoEditDomain(() => {
@@ -106,7 +109,7 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
     for (const input of inputs) {
       if (input.projectEntry && (input.files !== undefined || input.source !== undefined || input.entry !== undefined)) throw new Error('project_entry 不能与 source/files/entry 同时提供。')
       const project = input.projectEntry ? await prepareProjectCodePublication(projectId, input.projectEntry, undefined, input.name) : undefined
-      const contents = project?.contents ?? codeFilesFromInput(input)
+      const contents = { ...(project?.contents ?? codeFilesFromInput(input)), trustContext: publication ? publication.foreign === null ? [] : [publication.foreign ?? { id: publication.origin.assetId, sourceName: publication.asset.name, sourceType: 'code_asset' as const }] : input.trustContext ?? project?.contents.trustContext ?? [] }
       const prepared = project?.publication ?? await prepareCodeVersionPublication(projectId, contents, input.name, publication?.asset.sourceVersion.imports, createdFiles)
       const libraries = publication?.asset.sourceVersion.libraries
       // 代码资产按它记录的作者接口与内置库重建，v4 资产导入后仍是 v4。
@@ -178,7 +181,7 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
     for (const candidate of candidates) forgetVideoEditCodeMetadata(owner, candidate.definition.defaultVersionId)
     logger.debug('代码素材检查未完成', { event: 'video_edit.code.create.failed', error, context: { projectId } })
     throw error
-  } finally { unsubscribe(); signal?.removeEventListener('abort', cancel) }
+  } finally { unsubscribe(); unbindConfirmation(); signal?.removeEventListener('abort', cancel) }
   // 已提交：类型结论只作诊断，等不到也不改变创建结果。
   if (typeReports) typeReports.push(...await settleVideoEditCodeTypeChecks(typeChecks))
   return candidates
@@ -201,8 +204,9 @@ export async function createVideoEditFilterMaterials(projectId: string, inputs: 
 
 /** Asset imports reuse the source creation transaction with a complete instance. */
 export async function createVideoEditCodeAssetInstance(projectId: string, publication: CodeAssetPublication, binId?: string, signal?: AbortSignal): Promise<{ definitionId: string; itemId?: string }> {
+  const foreign = publication.foreign === null ? [] : [publication.foreign ?? { id: publication.origin.assetId, sourceName: publication.asset.name, sourceType: 'code_asset' as const }]
   await verifyCodeSourceReferences({ files: [...publication.asset.sourceVersion.files, ...componentFileReferences(publication.asset.sourceVersion.imports)] }, assetCodeSourceResolver(publication.asset))
-  publication = { ...publication, asset: await importAssetCodeComponents(projectId, publication.asset, signal) }
+  publication = { ...publication, asset: await importAssetCodeComponents(projectId, publication.asset, signal, foreign) }
   try {
   rememberCodeAssetSources(publication.asset)
   signal?.throwIfAborted()
@@ -223,6 +227,7 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
   if (!inputs.length) throw new Error('请提供要创建的源码版本。')
   const owner = requireVideoEditInstance(projectId); const baseline = owner.document; const contentVersion = owner.contentVersion
   const controller = new AbortController(); const cancel = (): void => controller.abort(signal?.reason ?? new Error('源码版本创建已取消。'))
+  const unbindConfirmation = signal ? inheritApplicationConfirmation(signal, controller.signal) : () => undefined
   signal?.addEventListener('abort', cancel, { once: true })
   const off = subscribeVideoEditDomain(() => { if (!isVideoEditContentCurrent(owner, contentVersion)) controller.abort(new Error('原剪辑已关闭或内容已改变，候选已取消。')) })
   const definitions = new Map((baseline.codeMaterials ?? []).map(definition => [definition.id, definition])); const added: string[] = []; const trials: Candidate[] = []; const createdFiles: CodeFileReference[] = []
@@ -238,12 +243,12 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
       if (input.projectCommit && !entry) throw new Error('project_commit 只适用于工程型素材。')
       if (entry && (input.files !== undefined || input.source !== undefined || input.entry !== undefined)) throw new Error('工程型素材从 project_commit（默认 HEAD）解析同一入口，不接受 source/files/entry。')
       const project = entry ? await prepareProjectCodePublication(projectId, entry, input.projectCommit) : undefined
-      const contents = project?.contents ?? codeFilesFromInput(input)
+      const contents = { ...(project?.contents ?? codeFilesFromInput(input)), trustContext: input.trustContext ?? project?.contents.trustContext ?? codeMaterialTrustContext(baseline, { definitionId: definition.id }) }
       const prepared = project?.publication ?? await prepareCodeVersionPublication(projectId, contents, undefined, undefined, createdFiles)
       const publicationState = { ...codeVersionInheritance(definition.versions.find(version => version.id === definition.defaultVersionId)!, documentCodeSourceResolver()), ...prepared, ...(input.libraries ? { libraries: input.libraries } : {}) }
       const typeCheck = typeReports ? startVideoEditCodeTypeCheck(codeVersionCompilation(contents, publicationState), publicationState.imports, typeAbort.signal) : undefined
       if (typeCheck) typeChecks.push(typeCheck)
-      const result = await withVideoEditCodeTypeContext(() => appendCodeMaterialVersion(definition, contents, source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver(), publicationState), typeCheck ? [typeCheck] : [], controller.signal)
+      const result = await withVideoEditCodeTypeContext(() => appendCodeMaterialVersion(definition, contents, source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver(), publicationState, codeMaterialTrustContext(baseline, { definitionId: definition.id })), typeCheck ? [typeCheck] : [], controller.signal)
       controller.signal.throwIfAborted()
       if (definition.versions.some(version => version.id === result.versionId)) throw new Error('相同源码版本已存在，请直接使用原版本。')
       if (result.kindUnverified) logger.warn('原有代码版本都读不到，新版本未核对素材种类', { event: 'video_edit.code.version.kind_unverified', context: { projectId, definitionId: definition.id, versionId: result.versionId } })
@@ -263,7 +268,7 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
     if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('源码版本检查期间原剪辑已改变。')
     editVideoProject(projectId, current => withVideoEditCurrentMetadata(document, current))
   } catch (error) { typeAbort.abort(); await discardVideoEditCodeFiles(createdFiles); added.forEach(version => forgetVideoEditCodeMetadata(owner, version)); throw error }
-  finally { off(); signal?.removeEventListener('abort', cancel) }
+  finally { off(); unbindConfirmation(); signal?.removeEventListener('abort', cancel) }
   if (typeReports) typeReports.push(...await settleVideoEditCodeTypeChecks(typeChecks))
   return added
 }

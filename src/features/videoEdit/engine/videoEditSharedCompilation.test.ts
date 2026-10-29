@@ -1,6 +1,9 @@
 import { expect, it, vi } from 'vitest'
 import { VideoEditSharedCompilation } from './videoEditSharedCompilation'
 import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
+import { ContentTrustRequiredError, restoreContentTrustError } from '@/core/contentTrust'
+import { videoEditRenderFailure } from './videoEditGpuFailure'
+import { VideoEditCodeCompiler } from './videoEditCodeCompiler'
 
 it('直接执行模块通过共享通道打包并返回源码定位', () => {
   const send = vi.fn(); const transport = new VideoEditSharedCompilation(send)
@@ -12,6 +15,22 @@ it('直接执行模块通过共享通道打包并返回源码定位', () => {
   const bundle = { code: 'export default {}', map: '{}', locations: { layers: {} } }
   transport.receive({ kind: 'code.compiled', token, result: { id: 1, bundle } })
   expect(worker.onmessage).toHaveBeenCalledWith({ data: { id: 7, bundle } })
+})
+it('信任和编译拦截跨 Worker 往返保留错误类型及来源引用', async () => {
+  const original = new ContentTrustRequiredError('denied', [{ id: 'foreign', sourceType: 'project', sourceName: '外部工程' }])
+  const send = vi.fn(); const shared = new VideoEditSharedCompilation(send)
+  const trust = shared.trust({ context: [{ id: 'foreign', sourceType: 'project', sourceName: '外部工程' }] })
+  const rejected = expect(trust).rejects.toMatchObject({ name: original.name, contentTrust: original.contentTrust })
+  shared.receive(structuredClone({ kind: 'code.trustResult', token: send.mock.lastCall![0].token, ...videoEditRenderFailure(original) }))
+  await rejected
+  const compiler = new VideoEditCodeCompiler(() => shared.worker())
+  const compilation = compiler.bundle({ entry: 'main.ts', files: { 'main.ts': 'export default {}' } })
+  const compilationRejected = expect(compilation).rejects.toBeInstanceOf(ContentTrustRequiredError)
+  shared.receive(structuredClone({ kind: 'code.compiled', token: send.mock.lastCall![0].token, result: { id: 1, error: { code: 'CONTEXT', message: '任意文案', contentTrust: original.contentTrust } } }))
+  await compilationRejected
+  const response = structuredClone(videoEditRenderFailure(original))
+  expect(restoreContentTrustError(new Error(response.error), response.contentTrust)).toMatchObject({ name: original.name, contentTrust: original.contentTrust })
+  compiler.dispose()
 })
 
 it('sessions multiplex independent ids and cancellation only removes that owner', () => {

@@ -24,6 +24,7 @@ import { editVideoProject, requireVideoEditInstance, undoVideoEdit } from './vid
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { readVideoEditCodeMetadata, releaseVideoEditCodeCompiler } from './videoEditCodeState'
 import { BLACK_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
+import { useAlertDialogStore } from '@/stores/alertDialogStore'
 
 vi.mock('../engine/videoEditCodeCompiler', async () => {
  const { testAuthorBundle } = await import('../engine/videoEditAuthorTestFixtures')
@@ -111,6 +112,9 @@ it('库模板：内容变了版本加 1，只改名称或所属风格不升；�
 })
 
 it('风格包往返：导出带说明书、样片、成员模板与预览，导入只解析和保存，标记为导入，冲突要确认覆盖', async () => {
+  const stop = useAlertDialogStore.subscribe(state => { if (state.queue[0]?.confirmation) queueMicrotask(() => useAlertDialogStore.getState().confirmCurrent()) })
+  // 这条往返用例明确模拟用户同意；拒绝与等待由信任状态机用例验证。
+  const detach = () => { stop(); useAlertDialogStore.setState({ queue: [] }) }
   await videoEditStyleLibrary.ready()
   const source = videoEditStyleLibrary.requireStyle('restrained')
   await videoEditStyleLibrary.saveStyle({ ...source.style, id: 'shared', name: '分享风格' }, await videoEditStyleLibrary.readStyleMedia('restrained'))
@@ -128,6 +132,8 @@ it('风格包往返：导出带说明书、样片、成员模板与预览，导�
   const other = createTestStyleLibraryIo(); videoEditStyleLibrary.reset(other, undefined)
   try {
     const imported = await importVideoEditStylePackage('D:/out/分享风格.hjsty', {}, fileIo)
+    expect(imported.style.foreign).toMatchObject({ id: 'shared', sourceType: 'style_package' })
+    expect(imported.templates[0].foreign).toEqual(imported.style.foreign)
     expect(imported.style).toMatchObject({ id: 'shared', version, imported: true, contentHash: source.style.contentHash })
     const entry = videoEditStyleLibrary.requireStyle('shared')
     expect(entry.stale).toBe(false); expect(entry.media.anchors).toHaveLength(source.style.sample.anchors.length)
@@ -145,7 +151,7 @@ it('风格包往返：导出带说明书、样片、成员模板与预览，导�
     videoEditStyleLibrary.reset(other, undefined)
     const copy = await importVideoEditStylePackage('D:/out/克制.hjsty', {}, fileIo)
     expect(copy.style.id).not.toBe('restrained'); expect(videoEditStyleLibrary.requireStyle('restrained').builtin).toBe(true)
-  } finally { other.dispose() }
+  } finally { other.dispose(); detach() }
 })
 
 it('绑定风格：复制进工程并绑定，换风格与降级要确认，库里更新后提示并可升级；宿主上下文给出说明书与默认风格', async () => {
@@ -255,6 +261,13 @@ it('代码模板：固化代码片段并设为全局；别的工程第一次应�
     // 设为全局（更新来源）：库模板版本按内容变化。
     const promoted = await promoteVideoEditTemplate(otherId, a.template.id)
     expect(promoted.library.id).toBe(created.library!.id)
+    const foreign = { id: 'imported-template', sourceType: 'template' as const, sourceName: '分享模板' }
+    await getPlatform().applicationControl.contentTrust({ action: 'set-policy', allow: true })
+    const [foreignItem] = await createVideoEditCodeItems(otherId, [{ files: { 'index.js': CARD }, entry: 'index.js', name: '分享模板', trustContext: [foreign] }])
+    const foreignClip = makeVideoEditItemClip(otherDoc(), foreignItem, other.activeSequenceId, { frame: 0 }, readVideoEditCodeMetadata(requireVideoEditInstance(otherId), otherDoc()))
+    editVideoProject(otherId, current => ({ ...current, sequences: current.sequences.map(sequence => sequence.id === other.activeSequenceId ? { ...sequence, clips: [...sequence.clips, foreignClip] } : sequence) }))
+    const foreignCopy = await createVideoEditTemplate(otherId, other.activeSequenceId, [foreignClip.id], { name: '派生库模板', global: true })
+    expect(foreignCopy.library!.foreign).toEqual(foreign)
   } finally { app.dispose() }
 })
 

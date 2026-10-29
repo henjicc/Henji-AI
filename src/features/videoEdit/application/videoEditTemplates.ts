@@ -1,3 +1,4 @@
+import { readContentTrustFailure } from '@/core/contentTrust'
 import { z } from 'zod'
 import { createLogger } from '@/core/logging'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
@@ -163,7 +164,7 @@ export async function applyVideoEditTemplate(projectId: string, sequenceId: stri
         const body = library.body; let registered: VideoEditProjectTemplate | undefined
         const placement = { frame: owner.activeSequenceId === sequenceId ? owner.frame : 0, ...options.placement }
         external()
-        await createVideoEditPlacedCodeItems(projectId, [{ files: body.code.files, entry: body.code.entry, name: library.name }], (document, itemIds) => {
+        await createVideoEditPlacedCodeItems(projectId, [{ files: body.code.files, entry: body.code.entry, name: library.name, trustContext: library.foreign ? [library.foreign] : [] }], (document, itemIds) => {
           const item = document.items.find(value => value.id === itemIds[0])!
           registered = videoEditProjectTemplateSchema.parse({ ...meta, contentHash: '', body: { kind: 'code', definitionId: item.code!.definitionId } })
           const next = { ...document, templates: [...(document.templates ?? []), registered] }
@@ -235,7 +236,8 @@ async function promoteTemplate(projectId: string, templateId: string, mode: 'upd
   const document = requireVideoEditInstance(projectId).document; const template = requireProjectTemplate(document, templateId)
   const body = template.body.kind === 'native' ? template.body : { kind: 'code' as const, code: portableCodeComponentFiles(codeMaterialSource(document, { definitionId: template.body.definitionId, versionId: defaultVersion(document, template.body.definitionId).id, parameters: {} }).compilation) }
   const target = mode === 'update' && template.origin ? videoEditStyleLibrary.findTemplate(template.origin.id)?.template : undefined
-  const draft = videoEditTemplateSchema.parse({ id: target?.id ?? newId(), name: template.name, description: template.description, version: target?.version ?? 1, contentHash: target?.contentHash ?? '', updatedAt: new Date().toISOString(), style: template.style, body })
+  const foreign = template.body.kind === 'code' ? defaultVersion(document, template.body.definitionId).foreign : undefined
+  const draft = videoEditTemplateSchema.parse({ id: target?.id ?? newId(), name: template.name, description: template.description, foreign, version: target?.version ?? 1, contentHash: target?.contentHash ?? '', updatedAt: new Date().toISOString(), style: template.style, body })
   external()
   const saved = (await videoEditStyleLibrary.saveTemplate(draft)).template
   const next = { ...template, origin: { id: saved.id, version: saved.version } }
@@ -305,7 +307,8 @@ export function updateVideoEditTemplate(projectId: string, templateId: string, s
       origin = { id: library.id, version: library.version }
       if (library.body.kind === 'code') {
         external()
-        const [versionId] = await createVideoEditCodeVersions(projectId, [{ definitionId: (template.body as { definitionId: string }).definitionId, files: library.body.code.files, entry: library.body.code.entry }], signal).catch(async (error: unknown) => {
+        const [versionId] = await createVideoEditCodeVersions(projectId, [{ definitionId: (template.body as { definitionId: string }).definitionId, files: library.body.code.files, entry: library.body.code.entry, trustContext: library.foreign ? [library.foreign] : [] }], signal).catch(async (error: unknown) => {
+          if (readContentTrustFailure(error)) throw error
           // 源码与工程里已有的某个版本完全相同：直接改用那个版本。
           const match = await findSameVersion(requireVideoEditInstance(projectId).document, (template.body as { definitionId: string }).definitionId, library.body.kind === 'code' ? library.body.code : undefined)
           if (match) return [match]; throw error
@@ -369,7 +372,7 @@ export function detachVideoEditTemplateInstances(projectId: string, sequenceId: 
     for (const { clip } of linked.filter(entry => entry.template!.body.kind === 'code')) {
       const files = portableCodeComponentFiles(codeMaterialSource(requireVideoEditInstance(projectId).document, clip.code!).compilation)
       external()
-      await createVideoEditPlacedCodeItems(projectId, [{ files: files.files, entry: files.entry, name: `${clip.name}（已分离）` }], (document, itemIds) => {
+      await createVideoEditPlacedCodeItems(projectId, [{ files: files.files, entry: files.entry, name: `${clip.name}（已分离）`, trustContext: codeMaterialSource(requireVideoEditInstance(projectId).document, clip.code!).compilation.trustContext }], (document, itemIds) => {
         const item = document.items.find(value => value.id === itemIds[0])!
         return { ...document, sequences: document.sequences.map(value => value.id === sequenceId ? { ...value, clips: value.clips.map(current => current.id === clip.id ? { ...current, itemId: item.id, name: item.name, code: { ...item.code!, parameters: current.code!.parameters, ...(current.code!.curves ? { curves: current.code!.curves } : {}) } } : current) } : value) }
       }, signal)

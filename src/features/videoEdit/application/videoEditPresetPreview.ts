@@ -1,3 +1,4 @@
+import type { ContentTrustReference } from '@/core/contentTrust'
 import { VIDEO_EDIT_DOCUMENT_VERSION } from '@/core/persistence/schemaVersions'
 import { VIDEO_EDIT_AUTHOR_CONTENT_COLORS } from '@/core/theme/colorTokens'
 import { addressCodeMaterialFiles, normalizeCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
@@ -85,7 +86,7 @@ async function codeClip(builder: Builder, source: Parameters<typeof normalizeCod
   const { codeSources: _sources, ...manifest } = await addressCodeMaterialFiles(files)
   const program = await compileVideoEditCode(files, signal); signal.throwIfAborted()
   const versionId = crypto.randomUUID(); const definitionId = crypto.randomUUID(); const itemId = crypto.randomUUID()
-  builder.document.codeMaterials!.push({ id: definitionId, name: '预设样片', defaultVersionId: versionId, versions: [{ id: versionId, ...manifest, apiVersion: 4, languageVersion: 4 }] })
+  builder.document.codeMaterials!.push({ id: definitionId, name: '预设样片', defaultVersionId: versionId, versions: [{ id: versionId, ...manifest, ...(files.trustContext?.[0] ? { foreign: files.trustContext[0] } : {}), apiVersion: 4, languageVersion: 4 }] })
   // A personal copy may have dropped a parameter the reel sets; pass only what the component declares.
   const declared = Object.fromEntries(Object.entries(parameters).filter(([key]) => program.parameters.some(value => value.key === key)))
   builder.document.items.push({ id: itemId, name: '预设样片', kind: 'code', code: { definitionId, versionId, parameters: declared } })
@@ -99,19 +100,19 @@ async function codeClip(builder: Builder, source: Parameters<typeof normalizeCod
   builder.sequence.clips.push(clip); return clip.id
 }
 /** 风格样片：只放样片代码本身（它自己画满不透明的底），按样片的帧率与时长。 */
-async function styleSample(sample: VideoEditStyleSample, size: { width: number; height: number }, signal: AbortSignal, fps = PRESET_PREVIEW_FPS): Promise<Builder> {
+async function styleSample(sample: VideoEditStyleSample, size: { width: number; height: number }, signal: AbortSignal, fps = PRESET_PREVIEW_FPS, trustContext: ContentTrustReference[] = []): Promise<Builder> {
   const builder = start(size, fps)
   // A sample may declare a shorter durationSeconds hint; the style's own sample setting is authoritative.
-  await codeClip(builder, sample.code, {}, { frame: 0, track: 1, seconds: sample.durationSeconds }, signal)
+  await codeClip(builder, { ...sample.code, trustContext }, {}, { frame: 0, track: 1, seconds: sample.durationSeconds }, signal)
   return builder
 }
 async function build(source: VideoEditPresetSource, size: { width: number; height: number }, signal: AbortSignal): Promise<Builder> {
   switch (source.category) {
-    case 'style': return styleSample(source.sample, size, signal)
+    case 'style': return styleSample(source.sample, size, signal, PRESET_PREVIEW_FPS, source.trustContext)
     case 'template': {
       const builder = start(size)
       await backdropClip(builder, 4)
-      if (source.body.kind === 'code') { await codeClip(builder, source.body.code, {}, { frame: 0, track: 2, seconds: source.body.durationSeconds ?? 4 }, signal); return builder }
+      if (source.body.kind === 'code') { await codeClip(builder, { ...source.body.code, trustContext: source.trustContext }, {}, { frame: 0, track: 2, seconds: source.body.durationSeconds ?? 4 }, signal); return builder }
       for (const snapshot of instantiateNativeTemplate(source.body.content, builder.sequence)) {
         const itemId = crypto.randomUUID(); const track = 2 + snapshot.track
         builder.document.items.push({ id: itemId, name: snapshot.name, kind: snapshot.kind, ...(snapshot.graphic ? { graphic: structuredClone(snapshot.graphic) } : {}) })
@@ -207,8 +208,8 @@ class PresetRenderer {
 
 const renderer = new PresetRenderer()
 /** 渲染风格样片用：按样片自己的帧率逐帧取画面（预览视频、缩略图与锚点帧）。 */
-export async function styleSampleTimeline(sample: VideoEditStyleSample, signal: AbortSignal): Promise<PresetPreviewTimeline & { fps: number }> {
-  const builder = await styleSample(sample, { width: sample.width, height: sample.height }, signal, sample.fps)
+export async function styleSampleTimeline(sample: VideoEditStyleSample, signal: AbortSignal, trustContext: ContentTrustReference[] = []): Promise<PresetPreviewTimeline & { fps: number }> {
+  const builder = await styleSample(sample, { width: sample.width, height: sample.height }, signal, sample.fps, trustContext)
   const frames = Math.max(1, ...builder.sequence.clips.map(clip => clip.start + clip.duration))
   return { composition: videoEditComposition(builder.document, builder.sequence.id), frames, poster: Math.min(frames - 1, Math.round(sample.thumbnail * sample.fps)), fps: sample.fps }
 }

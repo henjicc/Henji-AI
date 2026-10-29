@@ -14,6 +14,7 @@ import { WEB_APP_RECORDING_DISABLED_MESSAGE, webAppRecordingEnabled } from '../u
 
 import { WEB_RECORDING_LIBRARY_TYPE, WEB_RECORDING_TYPE } from './webAppRecordingCollectionExecutor'
 import { WEB_RECORDING_NAME, webAppSchemaRef, webRecordingDisplayName, webRecordingFields } from './webAppRecordingFields'
+import { prepareContentTrust } from '@/services/contentTrust'
 
 const logger = createLogger('features.screenRecording.web_app_capability')
 const APP = 'screen_recording.web_app'
@@ -164,6 +165,7 @@ export async function executeWebAppCapability(id: string, input: unknown, contex
   }
   const parsed = renderWebAppReplayCapability.inputSchema.parse(input)
   context.signal.throwIfAborted()
+  await prepareContentTrust('web_recording', parsed.recordingRef.id, context.signal)
   const longEdge = { recorded: undefined, '1080p': 1920, '1440p': 2560, '4k': 3840 }[parsed.resolution]
   const director = { ...(parsed.director ? { director: parsed.director } : {}), ...(parsed.directorFile ? { directorFile: parsed.directorFile } : {}), ...(parsed.take ? { take: parsed.take } : {}) }
   // 主进程按操作标识登记这次重演：渲染层重载后账本凭它找回结果。只有撤销授权会停下重演；宿主断开、

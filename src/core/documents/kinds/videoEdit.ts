@@ -42,6 +42,7 @@ const sequenceSchema = z.looseObject({
 })
 
 export const videoEditContentSchema = z.object({
+  foreign: videoEditDocumentSchema.shape.foreign,
   exportHistory: videoEditDocumentSchema.shape.exportHistory,
   creativeIntents: creativeIntentsSchema.optional(),
   styles: videoEditDocumentSchema.shape.styles,
@@ -135,6 +136,7 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    38: content => structuredClone(content),
     // 37 → 38：只接受新作者接口；旧源码、apiVersion 与固定库版本原样保留。
     37: content => structuredClone(content),
     // 36 → 37：片段新增可选 enabled:false，文档新增可选片子数据 scenes，代码参数可引用片子数据，代码版本新增可选内置库 libraries 并接受作者接口 v5；

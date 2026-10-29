@@ -1,3 +1,4 @@
+import { foreignContentSchema } from '../contentTrust'
 import { videoEditGainDbSchema } from './loudness'
 import { videoEditExportSettingsSchema } from './exportPresets'
 import { videoEditAnnotationSchema, mapVideoEditAnnotationTime } from './annotations'
@@ -179,6 +180,7 @@ export const videoEditExportHistorySchema = z.array(z.object({
 }).strict())
 export type VideoEditExportHistoryEntry = z.infer<typeof videoEditExportHistorySchema>[number]
 export const videoEditDocumentSchema = z.object({
+  foreign: foreignContentSchema.optional(),
   exportHistory: videoEditExportHistorySchema.optional(),
   creativeIntents: creativeIntentsSchema.optional(),
   /** 工程风格副本：绑定时从风格库复制，与库里同一 id；库里有更新版本时只提示，用户同意后才升级。 */

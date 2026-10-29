@@ -1,9 +1,30 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { ApplicationHostBridge, ApplicationHostNotReadyError } from './applicationHostBridge'
 import { ApplicationOperationCoordinator } from './operationCoordinator'
-import { ApplicationOperationStore, type OperationRecord } from './operationStore'
+import { ApplicationOperationStore, createApplicationOperationTablesV1, type OperationRecord } from './operationStore'
+import { createContentTrustTestSession } from '../content-trust/test-support'
 import type { LocalHostRequest } from '../../../../src/core/application-control/localHostContracts'
 import { applicationUserConfirmation } from '../../../../src/core/application-control/userConfirmation'
+
+it('读取作者声明需要人工信任时登记可轮询操作，等待期间不结案，完成后保存原读取结果', async () => {
+  const database = createContentTrustTestSession()
+  createApplicationOperationTablesV1(database.db)
+  const operations = new ApplicationOperationCoordinator(new ApplicationOperationStore(database.db))
+  const bridge = new ApplicationHostBridge(() => undefined, operations)
+  let request: LocalHostRequest | undefined
+  bridge.register({ rendererEpoch: '00000000-0000-4000-8000-000000000001', attachmentSequence: 1, ready: true, tools: [], domains: [] }, { send(channel, value) { if (channel === 'application:host:request') request = value as LocalHostRequest } })
+  try {
+    const invocation = bridge.execute('reader', 'read_application_entity', { ref: { kind: 'video_edit.code_material', id: 'material' } }, new AbortController().signal)
+    bridge.complete({ ...request!, result: { ok: false }, progress: { phase: 'awaiting_user_confirmation', confirmation: applicationUserConfirmation({ title: '分享素材', message: '包含代码，是否信任？', confirmLabel: '信任' }) } })
+    const waiting = await invocation
+    expect(waiting).toMatchObject({ executionState: 'awaiting_user_confirmation', operationId: expect.any(String) })
+    const saved = operations.store.get(String(waiting.operationId), 'reader')!
+    expect(operations.result(saved)).toMatchObject({ executionState: 'awaiting_user_confirmation' })
+    bridge.complete({ ...request!, result: { ok: false }, progress: { phase: 'executing' } })
+    bridge.complete({ ...request!, result: { ok: true, data: { properties: { parameters: [] } } } })
+    expect(operations.result(operations.store.get(saved.operationId, 'reader')!)).toMatchObject({ executionState: 'completed', verificationState: 'verified', result: { ok: true, data: { properties: { parameters: [] } } } })
+  } finally { bridge.disconnect(); database.dispose() }
+})
 
 it.each(['confirmation', 'release', 'abort'] as const)('八个已派发写操作释放等待后不阻塞其他调用方读取：%s', async mode => {
   const bridge = new ApplicationHostBridge(() => undefined)

@@ -9,6 +9,8 @@ import {
   isAssistantSkillError,
 } from '../../../../../src/core/assistant/skills'
 import { scanAssistantSkills, readAssistantSkillFrom, type SkillDirectorySet } from './registry'
+import { createContentTrustTestSession } from '../../content-trust/test-support'
+let trust: ReturnType<typeof createContentTrustTestSession>
 
 let rootDir = ''
 let builtinDir = ''
@@ -46,6 +48,7 @@ async function expectSkillError(action: () => Promise<unknown>): Promise<string>
 }
 
 beforeEach(async () => {
+  trust = createContentTrustTestSession()
   rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-skills-'))
   builtinDir = path.join(rootDir, 'builtin')
   userDir = path.join(rootDir, 'user')
@@ -54,6 +57,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  trust.dispose()
   await fs.rm(rootDir, { recursive: true, force: true })
 })
 

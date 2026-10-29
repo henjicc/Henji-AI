@@ -1,3 +1,4 @@
+import type { ContentTrustReference } from '@/core/contentTrust'
 import { createLogger } from '@/core/logging'
 import { PERSISTENCE_FORMATS } from '@/core/persistence/formats'
 import { upgradePersistenceContent } from '@/core/persistence/migrations'
@@ -17,8 +18,8 @@ const logger = createLogger('features.videoEdit.presetCatalog')
 const PRESET_PACKAGE_FORMAT = PERSISTENCE_FORMATS.find(format => format.id === 'video-preset-package')!
 /** What a preview renders: a style sample, a template, or a panel preset (one resolver for the panel, the assistant entity and export). */
 export type VideoEditPresetSource =
-  | { category: 'style'; sample: VideoEditStyleSample }
-  | { category: 'template'; body: VideoEditTemplateBody }
+  | { category: 'style'; trustContext?: ContentTrustReference[]; sample: VideoEditStyleSample }
+  | { category: 'template'; trustContext?: ContentTrustReference[]; body: VideoEditTemplateBody }
   | { category: 'text'; preset: VideoEditSubtitlePreset }
   | { category: 'effect'; preset: VideoEditEffectPreset }
   | { category: 'transition'; kind: VideoEditTransitionKind }
@@ -113,12 +114,14 @@ export async function importVideoEditPresetPackage(text: string): Promise<Array<
     if (item.category === 'style') {
       await videoEditStyleLibrary.ready()
       const converted = migrateStyleKit(item.preset, new Date().toISOString())
-      const style = (await videoEditStyleLibrary.saveStyle({ ...converted, id: crypto.randomUUID(), name: unique(converted.name, videoEditStyleLibrary.listStyles().map(entry => entry.style.name)).slice(0, 80) })).style
+      const id = crypto.randomUUID()
+      const style = (await videoEditStyleLibrary.saveStyle({ ...converted, imported: true, foreign: { id, sourceName: converted.name, sourceType: 'style_package' }, id, name: unique(converted.name, videoEditStyleLibrary.listStyles().map(entry => entry.style.name)).slice(0, 80) })).style
       added.push({ category: 'style', id: style.id, name: style.name })
     } else if (item.category === 'title') {
       await videoEditStyleLibrary.ready()
       const converted = migrateTitleTemplate(item.preset, new Date().toISOString())
-      const template = (await videoEditStyleLibrary.saveTemplate({ ...converted, id: crypto.randomUUID(), name: unique(converted.name, videoEditStyleLibrary.listTemplates().map(entry => entry.template.name)).slice(0, 80) })).template
+      const id = crypto.randomUUID()
+      const template = (await videoEditStyleLibrary.saveTemplate({ ...converted, imported: true, foreign: { id, sourceName: converted.name, sourceType: 'template' }, id, name: unique(converted.name, videoEditStyleLibrary.listTemplates().map(entry => entry.template.name)).slice(0, 80) })).template
       added.push({ category: 'title', id: template.id, name: template.name })
     }
     else if (item.category === 'text') { const preset = videoEditTextPresetLibrary.save(unique(item.preset.name, taken), item.preset.style); added.push({ category: 'text', id: preset.id, name: preset.name }) }

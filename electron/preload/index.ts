@@ -73,7 +73,7 @@ async function nativeInvoke<T>(channel: string, payload?: unknown): Promise<T> {
   }
 
   // contextBridge 复制错误时丢掉 name：编进 message，平台层还原（src/core/nativeErrors.ts）
-  const error = new Error(encodeNativeErrorMessage(result.error.name, result.error.message))
+  const error = new Error(encodeNativeErrorMessage(result.error.name, result.error.message, result.error.contentTrust))
   error.name = result.error.name
   throw error
 }

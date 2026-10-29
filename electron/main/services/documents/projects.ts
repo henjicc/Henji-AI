@@ -210,6 +210,10 @@ export class ProjectService {
           this.options.logger.info('拷贝出来的项目已换新 ID', { event: 'documents.projects.id_reassigned', context: { root, previousId: existing.id, projectId: manifest.id } })
         }
       }
+      if (!catalog.getProjectByPath(root)) {
+        manifest = { ...manifest, foreign: { id: manifest.id, sourceName: path.basename(root), sourceType: 'project' } }
+        await this.workspace.writeManifest(root, manifest)
+      }
       const project = await this.workspace.describeProject(root, manifest)
       catalog.upsertProject(project)
       if (project.external) {

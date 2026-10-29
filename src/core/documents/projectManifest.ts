@@ -1,9 +1,10 @@
+import { foreignContentSchema, type ContentTrustReference } from '../contentTrust'
+import { formatMigrations } from '../persistence/formatMigrations'
 import { z } from 'zod'
 import { projectMemoryEntriesSchema, type MemoryEntry } from '../assistant/memoryEntries'
 
 import { documentIdSchema } from './envelope'
 import type { FolderLocale } from './types'
-import { formatMigrations } from '../persistence/formatMigrations'
 import { migratePersistenceContent, persistenceForwardFields, upgradePersistenceContent, type PersistenceContract } from '../persistence/migrations'
 import { restoreForwardFields } from '../persistence/forwardCompat'
 
@@ -15,7 +16,7 @@ import { restoreForwardFields } from '../persistence/forwardCompat'
  */
 
 export const PROJECT_MANIFEST_FORMAT = 'henji-project' as const
-export const PROJECT_MANIFEST_VERSION = 2 as const
+export const PROJECT_MANIFEST_VERSION = 3 as const
 /** 项目与作品目录里的内部文件夹（项目说明与内部资源），Windows 上设为隐藏。 */
 export const INTERNAL_FOLDER_NAME = '.henji'
 export const PROJECT_MANIFEST_FILE_NAME = 'project.json'
@@ -42,6 +43,7 @@ export interface ProjectManifest {
   draft?: true
   mainVideoEditId?: string
   memories?: MemoryEntry[]
+  foreign?: ContentTrustReference
 }
 
 const folderNameSchema = z.string().min(1).max(120).refine(
@@ -60,6 +62,7 @@ export const projectManifestSchema = z.object({
   draft: z.boolean().optional(),
   mainVideoEditId: documentIdSchema.optional(),
   memories: projectMemoryEntriesSchema.optional(),
+  foreign: foreignContentSchema.optional(),
 }).strict()
 
 export class ProjectManifestError extends Error {
@@ -77,6 +80,7 @@ export interface ProjectManifestFields {
   draft: boolean
   mainVideoEditId?: string | null
   memories?: MemoryEntry[]
+  foreign?: ContentTrustReference
 }
 
 /** 按固定字段顺序组装项目说明；草稿标记与主剪辑只在有值时写出。 */
@@ -88,6 +92,7 @@ export function buildProjectManifest(fields: ProjectManifestFields): ProjectMani
     id: fields.id,
     createdAt: fields.createdAt,
     locale: fields.locale,
+    ...(fields.foreign ? { foreign: fields.foreign } : {}),
     folders: { ...(fields.folders ?? PROJECT_FOLDER_NAMES[fields.locale]) },
     ...(fields.memories ? { memories: projectMemoryEntriesSchema.parse(fields.memories) } : {}),
     ...(fields.draft ? { draft: true as const } : {}),

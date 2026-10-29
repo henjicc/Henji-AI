@@ -1,3 +1,4 @@
+import type { ContentTrustReference } from '@/core/contentTrust'
 import { redactMediaError } from '@/core/media/localMediaImportSafety'
 import { createAsset } from '@/commands/assetLibrary'
 import { createLogger } from '@/core/logging'
@@ -7,6 +8,7 @@ import type { AssetMediaType, AssetRecord, AssetSource } from '@/platform/contra
 const logger = createLogger('features.assets.collection')
 
 export interface CollectMediaReferenceInput {
+  foreign?: ContentTrustReference
   filePath: string
   mediaType: AssetMediaType
   source: AssetSource

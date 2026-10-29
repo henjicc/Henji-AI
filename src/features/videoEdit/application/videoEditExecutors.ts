@@ -209,7 +209,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
     const viewBefore = writesView ? projectViewSnapshot(projectId) : undefined
     if (this.entityType === 'video_edit.code_material' || this.entityType === 'video_edit.code_version') {
       const definition = before.codeMaterials?.find(value => value.id === childId || value.versions.some(version => version.id === childId))
-      if (definition) await ensureVideoEditCodeParameterMetadata(owner, before, definition.id, this.entityType === 'video_edit.code_version' ? childId : definition.defaultVersionId)
+      if (definition) await ensureVideoEditCodeParameterMetadata(owner, before, definition.id, this.entityType === 'video_edit.code_version' ? childId : definition.defaultVersionId, context?.signal)
     }
     const data = await withVideoEditCodeMetadata(() => readVideoEditData(step.target))
     await applyWriterTable(fieldWriterTable(VIDEO_EDIT_FIELDS[this.entityType]), data, step.mutations)

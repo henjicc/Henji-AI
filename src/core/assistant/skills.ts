@@ -1,3 +1,4 @@
+import { foreignContentSchema } from '../contentTrust'
 import { z } from 'zod'
 
 /** 页面只提供软信号，不参与技能准入或任务触发过滤。 */
@@ -117,6 +118,7 @@ export const assistantSkillReferencePathSchema = z.string()
 export const assistantSkillSourceSchema = z.enum(['builtin', 'user'])
 
 export const assistantSkillMetadataSchema = z.object({
+  foreign: foreignContentSchema.optional(),
   name: assistantSkillNameSchema,
   description: z.string().min(1).max(ASSISTANT_SKILL_MAX_DESCRIPTION_LENGTH),
   source: assistantSkillSourceSchema,

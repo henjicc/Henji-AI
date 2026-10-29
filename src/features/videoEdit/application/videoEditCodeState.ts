@@ -12,6 +12,7 @@ import type { VideoEditDocument } from '@/core/videoEdit/document'
 import type { CodeMaterialVersion } from '@/core/videoEdit/codeMaterialPersistence'
 import { readCodeMetadataCache, writeCodeMetadataCache } from './videoEditCodeMetadataCache'
 import { createLogger } from '@/core/logging'
+import { ensureCodeContentTrust, subscribeContentTrust } from '@/services/contentTrust'
 const logger = createLogger('features.videoEdit.codeMetadata')
 
 interface Checked { definitionId: string; source: string; apiVersion: number; languageVersion: number; metadata: CodeMaterialMetadata; program: CodeMaterialProgram; bytes: number }
@@ -24,6 +25,7 @@ export class VideoEditCodeVersionUnreadable extends CodeMaterialError {
   constructor() { super('COMPATIBILITY', '旧代码版本无法读取（源码缺失或编译不过）。') }
 }
 const checkedPrograms = new Map<string, CodeMaterialProgram>()
+subscribeContentTrust(command => { if (command.action === 'set-policy' && !command.allow) releaseVideoEditCodeCompiler() })
 let checkedProgramBytes = 0
 const compilingPrograms = new Map<string, Promise<CodeMaterialProgram>>()
 let compilerGeneration = 0
@@ -41,7 +43,8 @@ export async function compileVideoEditCode(source: string | CodeMaterialFiles, s
   // 作者接口与内置库版本是编译选项，不属于源码内容（内容按持久格式严格校验），先分开再合回。
   const { apiVersion, libraries, ...contents } = typeof source === 'string' ? { entry: 'main.ts', files: { 'main.ts': source } } as CodeMaterialFiles : source
   const files: CodeMaterialFiles = { ...normalizeCodeMaterialFiles(contents), ...(apiVersion !== undefined ? { apiVersion } : {}), ...(libraries ? { libraries } : {}) }
-  const key = codeMaterialFilesKey(files)
+  await ensureCodeContentTrust(files, signal)
+  const key = JSON.stringify([codeMaterialFilesKey(files), files.trustContext ?? []])
   const generation = compilerGeneration
   const cached = checkedPrograms.get(key)
   if (cached) { checkedPrograms.delete(key); checkedPrograms.set(key, cached); return cached }
@@ -79,7 +82,7 @@ export function readVideoEditCodeMetadata(owner: object, document: VideoEditDocu
     if (!entry && codeSourceReferencesLoaded(version)) {
       // 当前帧准备字体时已取得同一内容的元数据，直接接入实例，避免元素编辑再读一次。
       let program: CodeMaterialProgram | undefined
-      try { program = checkedPrograms.get(codeMaterialFilesKey(codeMaterialSource(document, instance).compilation)) } catch { /* 尚未读取的文件由下方按需入口处理。 */ }
+      try { program = checkedPrograms.get(JSON.stringify([codeMaterialFilesKey(codeMaterialSource(document, instance).compilation), codeMaterialSource(document, instance).compilation.trustContext ?? []])) } catch { /* 尚未读取的文件由下方按需入口处理。 */ }
       if (program) { rememberVideoEditCodeMetadata(owner, instance.definitionId, version, program); entry = states.get(owner)?.get(version.id) }
     }
     if (!entry || entry.definitionId !== instance.definitionId || entry.source !== codeVersionContentKey(version) || entry.apiVersion !== version.apiVersion || entry.languageVersion !== version.languageVersion) {
@@ -107,7 +110,7 @@ export async function ensureVideoEditCodeDocumentMetadata(owner: object, documen
   for (const instance of videoEditCodeReferences(document)) {
     if (versions && !versions.has(instance.versionId)) continue
     signal?.throwIfAborted()
-    await ensureVideoEditCodeParameterMetadata(owner, document, instance.definitionId, instance.versionId)
+    await ensureVideoEditCodeParameterMetadata(owner, document, instance.definitionId, instance.versionId, signal)
   }
 }
 /**
@@ -115,11 +118,11 @@ export async function ensureVideoEditCodeDocumentMetadata(owner: object, documen
  * 旧版本源码缺失或编译不过不挡住换版本，返回这些版本，由调用方只按新版本声明处理。
  */
 export async function ensureVideoEditRetargetMetadata(owner: object, document: VideoEditDocument, definitionId: string, targetVersionId?: string, signal?: AbortSignal): Promise<Set<string>> {
-  if (targetVersionId) await ensureVideoEditCodeParameterMetadata(owner, document, definitionId, targetVersionId)
+  if (targetVersionId) await ensureVideoEditCodeParameterMetadata(owner, document, definitionId, targetVersionId, signal)
   const unreadable = new Set<string>()
   for (const versionId of new Set(videoEditCodeReferences(document).filter(code => code.definitionId === definitionId && code.versionId !== targetVersionId).map(code => code.versionId))) {
     signal?.throwIfAborted()
-    try { await ensureVideoEditCodeParameterMetadata(owner, document, definitionId, versionId) }
+    try { await ensureVideoEditCodeParameterMetadata(owner, document, definitionId, versionId, signal) }
     catch (error) {
       signal?.throwIfAborted()
       if (releasedOwners.has(owner)) throw error
@@ -177,11 +180,15 @@ export function readVideoEditCodeParameterMetadata(owner: object, document: Vide
 }
 /** 参数查询按需读取历史版本，与画面复用内容缓存，不改变文档。 */
 const pendingMetadata = new WeakMap<object, Map<string, Promise<void>>>()
-export async function ensureVideoEditCodeParameterMetadata(owner: object, document: VideoEditDocument, definitionId: string, versionId: string): Promise<void> {
+export async function ensureVideoEditCodeParameterMetadata(owner: object, document: VideoEditDocument, definitionId: string, versionId: string, signal?: AbortSignal): Promise<void> {
   if (releasedOwners.has(owner)) throw new Error('剪辑已关闭，请重新打开后读取代码参数。')
   if (!states.has(owner)) states.set(owner, new Map())
   const state = states.get(owner)!
   const manifest = codeMaterialVersion(document, { definitionId, versionId, parameters: {} })
+  if (signal) {
+    await loadCodeSourceReferences(manifest, { reuseVerifiedWithinMs: CODE_SOURCE_REVERIFY_MS })
+    await ensureCodeContentTrust(codeMaterialSource(document, { definitionId, versionId, parameters: {} }).compilation, signal)
+  }
   const known = states.get(owner)?.get(versionId)
   if (known && known.source === codeVersionContentKey(manifest) && known.definitionId === definitionId && known.apiVersion === manifest.apiVersion && known.languageVersion === manifest.languageVersion) return
   let jobs = pendingMetadata.get(owner)
@@ -195,7 +202,7 @@ export async function ensureVideoEditCodeParameterMetadata(owner: object, docume
     try {
       await loadCodeSourceReferences(manifest, { reuseVerifiedWithinMs: CODE_SOURCE_REVERIFY_MS })
       const version = codeMaterialSource(document, { definitionId, versionId, parameters: {} })
-      const program = await compileVideoEditCode(version.compilation)
+      const program = await compileVideoEditCode(version.compilation, signal)
       if (states.get(owner) !== state) return
       rememberVideoEditCodeMetadata(owner, definitionId, version, program)
       logger.debug('代码参数读取完成', { event: 'video_edit.code.metadata.completed', context: { versionId } })

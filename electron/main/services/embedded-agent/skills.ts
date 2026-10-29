@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { loadAssistantSkillCapability, loadAssistantSkillInputSchema } from '../../../../src/core/application-control/domains/assistantSkill/assistantSkillApplicationCapabilities'
-import { agentSkillIndex, loadAgentSkill } from '../assistant/skills/agentSkills'
+import { agentSkillIndex, loadAgentSkill, type AgentSkillResult } from '../assistant/skills/agentSkills'
+import type { ApplicationResult } from '../../../../src/core/application-control/invocation'
 import type { EmbeddedTool } from './contracts'
 
 // 准入名单、启停核对与路径边界都在 assistant/skills/agentSkills.ts，与外部 MCP 共用同一份。
@@ -16,6 +17,8 @@ export async function embeddedSkillCatalog(): Promise<{ tools: EmbeddedTool[]; i
   }
 }
 
-export async function callEmbeddedSkill(input: Record<string, unknown>, signal: AbortSignal) {
-  return loadAgentSkill(input, signal, 'embedded')
+export function callEmbeddedSkill(input: Record<string, unknown>, signal: AbortSignal): Promise<AgentSkillResult>
+export function callEmbeddedSkill(input: Record<string, unknown>, signal: AbortSignal, callerId: string): Promise<ApplicationResult<AgentSkillResult['data']>>
+export async function callEmbeddedSkill(input: Record<string, unknown>, signal: AbortSignal, callerId?: string): Promise<ApplicationResult<AgentSkillResult['data']>> {
+  return callerId ? loadAgentSkill(input, signal, 'embedded', callerId) : loadAgentSkill(input, signal, 'embedded')
 }

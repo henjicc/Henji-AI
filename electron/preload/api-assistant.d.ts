@@ -24,6 +24,7 @@ export interface HenjiIpcErrorEnvelope {
   message: string
   code: string
   stack?: string
+  contentTrust?: import('../../src/core/contentTrust').ContentTrustFailure
   paidFailureFacts?: import('../../src/core/application-control/paidApproval').PaidFailureFacts
 }
 

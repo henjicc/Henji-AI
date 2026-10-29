@@ -6,11 +6,14 @@
  * 预加载层把错误名编进 message 前缀（不可见分隔符包住），平台层在每次调用失败时还原 name 与原文。
  * 主进程与预加载、渲染层共用本文件，不引用别名或 DOM。
  */
+import { ContentTrustRequiredError, readContentTrustFailure, type ContentTrustFailure } from './contentTrust'
+
 const MARK = '\u2063'
 
 /** 预加载层：给带具体名字的错误把名字编进 message；普通 Error 原样返回 */
-export function encodeNativeErrorMessage(name: string, message: string): string {
-  return name && name !== 'Error' ? `${MARK}${name}${MARK}${message}` : message
+export function encodeNativeErrorMessage(name: string, message: string, contentTrust?: ContentTrustFailure): string {
+  const identity = contentTrust ? JSON.stringify({ name, contentTrust }).replaceAll(MARK, '\\u2063') : name
+  return identity && identity !== 'Error' ? `${MARK}${identity}${MARK}${message}` : message
 }
 
 /** 平台层：还原 name 与原文（就地修改并返回同一个错误）；不是编码过的错误原样返回 */
@@ -18,7 +21,19 @@ export function restoreNativeErrorName<T>(error: T): T {
   if (!(error instanceof Error) || !error.message.startsWith(MARK)) return error
   const end = error.message.indexOf(MARK, MARK.length)
   if (end <= MARK.length) return error
-  const name = error.message.slice(MARK.length, end)
+  const identity = error.message.slice(MARK.length, end)
+  let name = identity
+  if (identity.startsWith('{')) {
+    try {
+      const detail: unknown = JSON.parse(identity)
+      const failure = readContentTrustFailure(detail)
+      if (failure) {
+        name = 'ContentTrustRequiredError'
+        Object.setPrototypeOf(error, ContentTrustRequiredError.prototype)
+        Object.assign(error, { contentTrust: failure, state: failure.state })
+      }
+    } catch { return error }
+  }
   const encoded = error.message
   const message = encoded.slice(end + MARK.length)
   error.name = name

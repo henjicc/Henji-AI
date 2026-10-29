@@ -4,8 +4,9 @@ import type { CodeMaterialErrorCode, CodeSourceSpan } from '@/core/videoEdit/cod
 import type { AuthorBundle } from './videoEditAuthorBundle'
 import { directAuthorBundle } from './videoEditAuthorModules'
 import { authorJsLocations } from './videoEditAuthorJsLocations'
+import { restoreContentTrustError, type ContentTrustFailure } from '@/core/contentTrust'
 
-export type CodeCompilerResponse = { id: number; cacheHit?: boolean } & ({ bundle: AuthorBundle } | { error: { code: CodeMaterialErrorCode; message: string; sourceSpan?: CodeSourceSpan } })
+export type CodeCompilerResponse = { id: number; cacheHit?: boolean } & ({ bundle: AuthorBundle } | { error: { code: CodeMaterialErrorCode; message: string; sourceSpan?: CodeSourceSpan; contentTrust?: ContentTrustFailure } })
 export interface CodeCompilerWorker {
   onmessage: ((event: MessageEvent<CodeCompilerResponse>) => void) | null
   onerror: ((event: ErrorEvent) => void) | null
@@ -40,7 +41,7 @@ export class VideoEditCodeCompiler {
       const pending = this.pending.get(response.id)
       if (!pending) return
       this.pending.delete(response.id); pending.clean()
-      if ('error' in response) pending.reject(new CodeMaterialError(response.error.code, response.error.message, response.error.sourceSpan))
+      if ('error' in response) pending.reject(restoreContentTrustError(new CodeMaterialError(response.error.code, response.error.message, response.error.sourceSpan), response.error.contentTrust))
       else { if (response.cacheHit) this.cacheHits++; pending.resolve(response) }
     }
     worker.onerror = event => { event.preventDefault?.(); if (this.worker === worker) this.reset(new Error(`源码检查线程失败：${event.message}`)) }

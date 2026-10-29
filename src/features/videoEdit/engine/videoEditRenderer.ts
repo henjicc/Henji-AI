@@ -1746,6 +1746,9 @@ export class VideoEditRenderer {
     const gpu = this.ensureCompositor()
     const effectErrors: string[] = [], sceneIssues: string[] = []
     const onEffectError = (effect: VideoEditEffect, error: unknown): void => {
+      // 信任拦截需要由监视器提供原地批准入口，不能降成普通滤镜跳过提示。
+      const trust = readContentTrustFailure(error)
+      if (trust) throw restoreContentTrustError(new Error(), trust)
       const message = `效果“${effect.name}”无法应用，已跳过；请重置参数或修改滤镜源码。`
       if (!effectErrors.includes(message)) effectErrors.push(message)
       logger.warn(message, { event: 'video_edit.effect.render_failed', error, context: { sequenceId: document.id, effectId: effect.id, frame } })
@@ -2395,3 +2398,4 @@ export class VideoEditRenderer {
     this.blendedPictures.clear()
   }
 }
+import { readContentTrustFailure, restoreContentTrustError } from '@/core/contentTrust'

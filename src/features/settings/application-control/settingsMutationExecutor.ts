@@ -55,7 +55,7 @@ export class SettingsMutationExecutor implements ApplicationMutationExecutor {
    */
   get writableProperties(): ReadonlySet<string> {
     return new Set(listApplicationSettingDefinitions()
-      .filter((definition) => !definition.sensitive)
+      .filter((definition) => !definition.sensitive && !definition.readOnlyReason)
       .map((definition) => definition.id))
   }
 
@@ -93,7 +93,7 @@ export class SettingsMutationExecutor implements ApplicationMutationExecutor {
         for (const mutation of step.mutations) {
           if (mutation.operation !== 'set') throw new Error('INVALID_MUTATION_OPERATION')
           const definition = definitions.get(mutation.propertyId)
-          if (!definition || definition.sensitive) throw new Error('NOT_FOUND')
+          if (!definition || definition.sensitive || definition.readOnlyReason) throw new Error('NOT_FOUND')
           const value = definition.schema.parse(mutation.value)
           if (definition.id === 'general.primary_provider') {
             for (const [propertyId, before] of defaultModelsBefore) {

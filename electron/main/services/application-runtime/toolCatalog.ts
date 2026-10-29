@@ -16,7 +16,7 @@ import { projectToolOutputSchema, RESULT_DETAIL_FIELDS, resultDetailFields } fro
 import { capabilityPublicOutputSchema } from '../../../../src/core/application-control/capabilityVerification'
 import { applicationUserConfirmationSchema } from '../../../../src/core/application-control/userConfirmation'
 
-const confirmationGuidance = '付费操作按用户的 AI 付费授权自动放行或请求确认；返回 awaiting_user_confirmation 时请用户在痕迹AI确认对话框核对，确认后自动继续，用原 operationId 查 get_application_operation，勿重复提交。'
+const confirmationGuidance = '付费操作按用户的 AI 付费授权自动放行或请求确认；外来代码首次运行前由用户在应用内选择信任。返回 awaiting_user_confirmation 时请用户在痕迹AI确认对话框核对，确认后自动继续，用原 operationId 查 get_application_operation，勿重复提交。'
 const waitingOutput = z.object({ ok: z.literal(false), operationId: z.string().uuid(), executionState: z.literal('awaiting_user_confirmation'),
   verificationState: z.literal('unresolved'), confirmation: applicationUserConfirmationSchema }).passthrough()
 
@@ -84,7 +84,7 @@ export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
     inputSchema: { type: 'object', properties: { ref: { type: 'object', properties: { kind: { type: 'string', enum: [...APPLICATION_READABLE_MEDIA_KINDS] }, id: { type: 'string' } }, required: ['kind', 'id'], additionalProperties: false }, mode: { type: 'string', enum: ['chunk', 'image'], description: '图片默认 image 直接查看；chunk 读取原件字节，音视频默认 chunk。' }, maxEdge: { type: 'integer', minimum: 1, maximum: 3840, default: APPLICATION_IMAGE_DEFAULT_EDGE, description: '图片预览的长边像素上限。' }, maxBytes: { type: 'integer', minimum: 1024, maximum: APPLICATION_IMAGE_MAX_BYTES, default: APPLICATION_IMAGE_DEFAULT_BYTES, description: 'JPEG 字节上限，自动降低质量或尺寸；不改原件。' }, outputIndex: { type: 'integer', minimum: 0 }, offset: { type: 'integer', minimum: 0 }, length: { type: 'integer', minimum: 1, maximum: EXTERNAL_LIMITS.mediaChunkBytes } }, required: ['ref'], additionalProperties: false },
   },
   {
-    name: 'get_application_operation', tier: 'write', readOnly: true, requiresOperations: true,
+    name: 'get_application_operation', tier: 'any', readOnly: true, requiresOperations: true,
     description: '读取本连接操作的持久事实；未知状态不会重放修改。断线、超时或换客户端后用原 operationId 查询，不要换标识重试。批量结果用 resultRef.operationId、resultRef.field 作为 operationId、resultField，携带 nextCursor 继续分页。',
     inputSchema: { ...z.toJSONSchema(operationReadInputSchema, { io: 'input' }), properties: { ...z.toJSONSchema(operationReadInputSchema, { io: 'input' }).properties, ...RESULT_DETAIL_FIELDS } },
   },
@@ -182,7 +182,7 @@ function buildCapabilityTool(tool: LocalTool, definition: CapabilityDefinition):
     inputSchema: { ...schema, properties: { ...schema.properties as Record<string, unknown>, ...resultDetailFields(tool.id) }, type: 'object' },
     ...(definition ? { outputSchema: { type: 'object', ...projectToolOutputSchema(z.toJSONSchema(write
       ? z.union([z.object({ ok: z.literal(true), result: z.object({ ok: z.literal(true), data: capabilityPublicOutputSchema(definition) }).passthrough() }).passthrough(), waitingOutput])
-      : z.object({ ok: z.literal(true), data: capabilityPublicOutputSchema(definition) }).passthrough(),
+      : z.union([z.object({ ok: z.literal(true), data: capabilityPublicOutputSchema(definition) }).passthrough(), waitingOutput]),
     { io: 'output', reused: 'ref' }), tool.id) } as Tool['inputSchema'] } : {}),
     annotations: { readOnlyHint: !write, destructiveHint: tool.id === 'change_application_entities' || Boolean(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(tool.id)?.destructive), openWorldHint: false },
   }
@@ -200,7 +200,7 @@ export function assistantSkillTool(): Tool {
     description: `${definition.description} 外部连接先从 describe_application_contract 的 skills 取得可用技能名和适用条件；不支持读取 references/ 以外的文件。`,
     inputSchema: { ...z.toJSONSchema(definition.inputSchema, { io: 'input' }), properties: { ...z.toJSONSchema(definition.inputSchema, { io: 'input' }).properties, ...RESULT_DETAIL_FIELDS }, type: 'object' } as Tool['inputSchema'],
     // 技能名与路径的 NFC 归一化是输入变换，输出侧按普通字符串描述。
-    outputSchema: z.toJSONSchema(z.object({ ok: z.literal(true), data: definition.outputSchema }).passthrough(), { io: 'output', unrepresentable: 'any' }) as Tool['inputSchema'],
+    outputSchema: z.toJSONSchema(z.union([z.object({ ok: z.literal(true), data: definition.outputSchema }).passthrough(), waitingOutput]), { io: 'output', unrepresentable: 'any' }) as Tool['inputSchema'],
     annotations: { readOnlyHint: true, openWorldHint: false },
   }
 }

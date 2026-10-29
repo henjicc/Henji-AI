@@ -15,6 +15,7 @@ export interface ApplicationSettingDefinition {
   requiresReload: boolean
   requiresRestart: boolean
   sensitive: boolean
+  readOnlyReason?: string
   read: () => SettingValue
   write: (value: SettingValue) => void
   /** 仅用于内部回滚/撤销；恢复已存在的值，不重新判断资源是否可用。 */
