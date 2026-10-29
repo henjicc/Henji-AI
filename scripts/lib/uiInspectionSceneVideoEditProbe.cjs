@@ -164,7 +164,7 @@ function createVideoEditProbeScene() {
         assert.equal((await savedProject(page, projectPath, document => document.sequences[0].clips.length === original.sequences[0].clips.length, `撤销拖入 ${drop.kind} 保存`)).sequences[0].clips.length, original.sequences[0].clips.length)
       }
       evidence.materialDrag = drops.map(({ kind, track }) => ({ kind, track, originalPathPreserved: true, undoVerified: true }))
-      const identity = await authorizeMcpConnection(page, { name: '剪辑真实回环', allowWrites: true, allowDestructive: true })
+      const identity = await authorizeMcpConnection(page, { name: '剪辑真实回环' })
       const client = await connectMcpClient(identity.config, 'Henji video edit Reality')
       try {
         const projectRef = { kind: 'video_edit.document', id: original.id }

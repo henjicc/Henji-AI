@@ -66,7 +66,6 @@ beforeEach(() => {
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, value) => { files.set(path, value) })
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
   vi.spyOn(getPlatform().system.paths, 'dirname').mockResolvedValue('D:/media')
-  vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined)
 })
 afterEach(async () => { for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
 async function fixture() {

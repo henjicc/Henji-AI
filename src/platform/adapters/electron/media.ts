@@ -34,12 +34,6 @@ async function readBlob(localPath: string, mimeHint?: string): Promise<Blob> {
 export function createElectronMedia(): MediaPlatform {
   return {
     enqueueRecycle: (paths, protectedBy) => getNative().media.enqueueRecycle(paths, protectedBy),
-    async allowRoot(rootPath: string): Promise<void> {
-      await getNative().media.allowRoot(rootPath)
-    },
-    async isPathAllowed(targetPath: string): Promise<boolean> {
-      return await getNative().media.isPathAllowed(targetPath)
-    },
     toDisplaySrc(localPath: string) {
       return isDisplayUrl(localPath) ? localPath : toMediaUrl(localPath)
     },

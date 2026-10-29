@@ -28,7 +28,7 @@ function links(document: VideoEditDocument, id?: string) {
 }
 async function durableAudio(projectId: string, rendered: Awaited<ReturnType<typeof renderAudioEdit>>, name: string, linkedTimeline?: VideoEditLinkedTimeline): Promise<VideoEditMedia> {
   const container = requireVideoEditInstance(projectId).session.documentMeta.container
-  const path = container.kind === 'project' ? (await videoEditDocumentOperations().importFile({ container, sourcePath: rendered.audioPath, folder: 'generated' })).path : rendered.audioPath
+  const path = (await videoEditDocumentOperations().importFile({ container, sourcePath: rendered.audioPath, folder: 'generated' })).path
   return { id: crypto.randomUUID(), name, kind: 'audio', path, durationSeconds: rendered.durationFrames / rendered.sampleRate, width: 0, height: 0, hasAudio: true, ...(linkedTimeline ? { linkedTimeline } : {}) }
 }
 /** 成品文件按内容命名（finished-<内容键>.wav）：剪辑里已有同一份成品（复制进项目时只可能多一个序号后缀）就直接沿用，不再复制一遍。 */
@@ -196,8 +196,7 @@ export async function openAudioDocumentInMultitrack(audioDocumentId: string): Pr
   const audio = getAudioEditProjectInstance(audioDocumentId)
   if (!audio) throw new Error('请先打开这份音频作品。')
   const container = audio.session.documentMeta.container
-  if (container.kind !== 'project') throw new Error('多轨剪辑只能放在项目里：请先把这份音频作品移到一个项目中再打开多轨。')
-  // 多轨剪辑没打开（例如重启之后）：在同一项目里找链接着这份作品的剪辑，找到就打开它，不重复新建。
+  // 多轨剪辑没打开（例如重启之后）：在同一容器里找链接着这份作品的剪辑，找到就打开它，不重复新建。
   for (const summary of await operations.listDocuments({ kind: 'video_edit', container, includeDrafts: false, includeMissing: false })) {
     const read = await operations.readDocument({ id: summary.id, path: summary.path }).catch(() => undefined)
     const content = read?.content as Partial<VideoEditDocument> | undefined

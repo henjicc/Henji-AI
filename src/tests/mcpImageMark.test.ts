@@ -7,7 +7,7 @@ let releaseSession: (() => void) | undefined
 let bus: ImageEditCommandBusV3
 function createSession(id = 'mcp-mark-session') { const document = createImageEditDocumentV3({ width: 800, height: 600, documentId: id }); document.layers.push(createImageEditPathLayerV3('marks', '标注')); bus = new ImageEditCommandBusV3(document); releaseSession = registerPersistedImageEditTestSession(id, bus); }
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
-import { createApplicationCapabilitySession, listApplicationCapabilities } from '@/features/application-control/applicationCapabilityService'
+import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
 import { retainHostContextTracking } from '@/features/application-control/hostContext/hostContext'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from './harnessNativeStorage'
 
@@ -16,10 +16,8 @@ beforeEach(() => { installHarnessNativeStorage(); releaseSession?.(); releaseSes
 afterEach(() => { dispose(); vi.restoreAllMocks(); releaseSession?.(); releaseSession = undefined; uninstallHarnessNativeStorage() })
 const parent = { kind: 'image_edit.document', id: 'v3:mcp-mark-session' }
 const documentRef = { kind: 'image_edit.document', id: 'v3:mcp-mark-session' }
-function client(write = true, destructive = true) {
-  return createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'mcp-mark',
-    capabilityIds: listApplicationCapabilities().map((value) => value.id), allowWrites: true, allowDestructive: destructive,
-    permissions: ['application:read', 'application:write', 'image_edit:read', ...(write ? ['image_edit:write'] : [])] }))
+function client(_write = true, _destructive = true) {
+  return createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'mcp-mark' }))
 }
 const request = () => ({ requestId: crypto.randomUUID(), signal: new AbortController().signal })
 async function read(target: ReturnType<typeof client>, ref = parent, propertyIds = ['image_edit.document.orientation_rotate']) {
@@ -62,15 +60,7 @@ it('独立Session通过正式图层执行器增改删及文档修改，正式回
   expect(end.ok && end.data.refs).toEqual([{kind:'image_edit.layer',id:'v3:mcp-mark-session:marks'}])
 })
 
-it('缺图片写权限时拒绝，正式会话内容和提交次数均不变', async () => {
-  createSession()
-  const before = bus.getSnapshot().document
-  const commit = vi.spyOn(bus, 'dispatch')
-  const result = await change(client(false), [create])
-  expect(result.ok, JSON.stringify(result)).toBe(false)
-  expect(commit).not.toHaveBeenCalled()
-  expect(bus.getSnapshot().document).toEqual(before)
-})
+
 
 it('原会话消失后旧基线不能写入，也不借其他会话', async () => {
   createSession()

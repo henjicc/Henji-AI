@@ -43,7 +43,6 @@ export interface ProjectServiceOptions {
   trashItem(target: string): Promise<void>
   retainDetachedMediaLocation?(target: string): void
   showItemInFolder(target: string): void
-  grantMediaRoots(directories: readonly string[]): void
   /** 项目移到回收站后清掉其中文档的封面。 */
   removeCovers?(docIds: readonly string[]): Promise<void>
   /** 索引里找不到项目时刷新后重试。 */
@@ -143,7 +142,6 @@ export class ProjectService {
         this.workspace.assertWritableLocation(request.parentFolder)
         parent = path.resolve(request.parentFolder)
         if (isPathInside(this.workspace.style, project.path, parent)) throw new DocumentLocationError('不能把项目移到它自己的文件夹里。')
-        if (await this.workspace.findProjectRoot(parent)) throw new DocumentLocationError('不能把项目放在另一个项目里。')
       }
       return await this.relocate(project, path.join(parent, name), { draft: false })
     })))
@@ -195,10 +193,6 @@ export class ProjectService {
       const root = path.resolve(folderPath)
       const stat = await fsp.stat(root).catch(() => null)
       if (!stat?.isDirectory()) throw new DocumentLocationError('请选择一个文件夹。')
-      const layout = this.workspace.layout()
-      if (isPathInside(this.workspace.style, root, layout.root)) throw new DocumentLocationError('不能把作品目录本身作为项目打开。')
-      const parentProject = await this.workspace.findProjectRoot(path.dirname(root))
-      if (parentProject) throw new DocumentLocationError('这个文件夹在另一个项目里，不能单独作为项目打开。')
       let { manifest } = await this.workspace.ensureManifest(root)
       const catalog = this.workspace.catalog
       const existing = catalog.getProject(manifest.id)
@@ -218,7 +212,6 @@ export class ProjectService {
       catalog.upsertProject(project)
       if (project.external) {
         catalog.addExternalLocation(root, 'project')
-        this.options.grantMediaRoots([root])
       }
       this.options.scheduleIndexRefresh?.()
       return this.summary(project, this.countDocuments(project.id))
@@ -245,7 +238,6 @@ export class ProjectService {
       }
       if (!this.workspace.isScannedDocumentFolder(folder)) {
         this.workspace.catalog.addExternalLocation(folder, 'folder')
-        this.options.grantMediaRoots([folder])
       }
     })
   }
@@ -327,6 +319,17 @@ export class ProjectService {
         throw error
       }
       catalog.rebaseDocuments(project.path, target)
+      // 嵌套项目随父目录一起搬移，项目身份与外部定位记录也必须同步。
+      for (const child of catalog.listProjects()) {
+        if (child.id === project.id || !isPathInside(this.workspace.style, project.path, child.path)) continue
+        const rebased = path.join(target, path.relative(project.path, child.path))
+        catalog.upsertProject({ ...child, path: rebased, external: !samePath(this.workspace.style, path.dirname(rebased), this.workspace.layout().projectsDir) })
+      }
+      for (const location of catalog.listExternalLocations()) {
+        if (samePath(this.workspace.style, project.path, location.path) || !isPathInside(this.workspace.style, project.path, location.path)) continue
+        catalog.removeExternalLocation(location.path)
+        catalog.addExternalLocation(path.join(target, path.relative(project.path, location.path)), location.kind)
+      }
     }
     const current = await this.workspace.readManifest(target)
     if (!current) throw new ProjectNotFoundError(project.id)
@@ -337,7 +340,6 @@ export class ProjectService {
     if (project.external) catalog.removeExternalLocation(project.path)
     if (updated.external) {
       catalog.addExternalLocation(target, 'project')
-      this.options.grantMediaRoots([target])
     }
     return this.summary(updated, this.countDocuments(updated.id))
   }

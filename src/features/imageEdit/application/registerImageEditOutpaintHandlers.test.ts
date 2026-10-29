@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { executeApplicationCapabilityResult } from '@/features/application-control/capabilities/registry';
-import { createApplicationCallerGrant } from '@/core/application-control/callerContext';
+
 import { applicationGenerationTaskId } from '@/core/application-control/operationIdentity';
 import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory';
 import { ImageEditCommandBusV3 } from '../v3/application/imageEditCommandBus';
@@ -42,14 +42,12 @@ describe('扩图正式公共执行与读回（生成服务替身，不付费）'
       expect((await execute('get_image_edit_outpaint', target)).ok).toBe(false);
     } finally { dispose(); bus.dispose(); }
   });
-  it('未授权生成或缺可信操作身份时不会调用生成服务', async () => {
+  it('缺可信操作身份时不会调用生成服务', async () => {
     const document = createImageEditDocumentV3({ width: 100, height: 80, documentId: crypto.randomUUID() });
     const bus = new ImageEditCommandBusV3(document), dispose = registerPersistedImageEditTestSession('outpaint-denied', bus);
     const invocation = { id: 'generate_image_edit_outpaint', version: 1, input: { documentRef: imageEditV3DocumentRef(document.id), margins: { right: .25, bottom: 0 }, prompt: '延续背景' } };
     try {
       const signal = new AbortController().signal;
-      const grant = createApplicationCallerGrant({ callerId: 'readonly', capabilityIds: [invocation.id], permissions: ['image_edit:read'], allowWrites: false, allowDestructive: false });
-      expect((await executeApplicationCapabilityResult(invocation, { signal, callerGrant: grant, taskId: 'trusted' })).ok).toBe(false);
       expect((await executeApplicationCapabilityResult(invocation, { signal })).ok).toBe(false);
       expect(fixture.start).not.toHaveBeenCalled();
     } finally { dispose(); bus.dispose(); }

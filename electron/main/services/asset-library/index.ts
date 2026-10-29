@@ -1,10 +1,10 @@
+import { RecycleStore, softDelete } from '../recycle/store'
 import { foreignContentSchema } from '../../../../src/core/contentTrust'
 import crypto from 'node:crypto'
 import { validateLocalMediaSource } from '../media-import/sourceValidation'
 import { generatedMediaName } from '../../../../src/core/documents/generatedMediaName'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { allowMediaRoot, isPathWithinAllowedMediaRoots } from '../../protocol'
 import { getProgramStoreDir } from '../appPaths'
 import { getDb } from '../db'
 import { databaseLocations, databaseLocationContext } from '../db-locations'
@@ -50,7 +50,7 @@ function loadAssetRelations(ids: readonly string[]): Map<string, AssetRelations>
     const batch = ids.slice(start, start + RELATION_BATCH_SIZE)
     const placeholders = batch.map(() => '?').join(',')
     const tags = db.prepare(`SELECT ati.asset_id, t.name FROM asset_tags t JOIN asset_tag_items ati ON ati.tag_id=t.id WHERE ati.asset_id IN (${placeholders}) ORDER BY t.name COLLATE NOCASE`).all(...batch) as Array<{ asset_id: string; name: string }>
-    const libraries = db.prepare(`SELECT asset_id, library_id FROM asset_library_items WHERE asset_id IN (${placeholders}) ORDER BY library_id`).all(...batch) as Array<{ asset_id: string; library_id: string }>
+    const libraries = db.prepare(`SELECT asset_id, library_id FROM asset_library_items JOIN asset_libraries l ON l.id=library_id AND l.deleted_at IS NULL WHERE asset_id IN (${placeholders}) ORDER BY library_id`).all(...batch) as Array<{ asset_id: string; library_id: string }>
     for (const tag of tags) result.get(tag.asset_id)?.tags.push(tag.name)
     for (const library of libraries) result.get(library.asset_id)?.libraryIds.push(library.library_id)
   }
@@ -58,11 +58,11 @@ function loadAssetRelations(ids: readonly string[]): Map<string, AssetRelations>
 }
 function mapAsset(row: AssetRow, relations?: AssetRelations): AssetDto {
   const tags = relations?.tags ?? (getDb().prepare('SELECT t.name FROM asset_tags t JOIN asset_tag_items ati ON ati.tag_id=t.id WHERE ati.asset_id=? ORDER BY t.name COLLATE NOCASE').all(row.id) as Array<{ name: string }>).map((item) => item.name)
-  const libraryIds = relations?.libraryIds ?? (getDb().prepare('SELECT library_id FROM asset_library_items WHERE asset_id=?').all(row.id) as Array<{ library_id: string }>).map((item) => item.library_id)
+  const libraryIds = relations?.libraryIds ?? (getDb().prepare('SELECT library_id FROM asset_library_items JOIN asset_libraries l ON l.id=library_id AND l.deleted_at IS NULL WHERE asset_id=?').all(row.id) as Array<{ library_id: string }>).map((item) => item.library_id)
   return { ...(row.foreign_json ? { foreign: foreignContentSchema.parse(JSON.parse(row.foreign_json)) } : {}), id: row.id, mediaType: row.media_type, displayName: row.display_name, filePath: row.file_path, displayUrl: mediaUrl(row.file_path), source: row.source, mimeType: row.mime_type, sizeBytes: row.size_bytes, width: row.width, height: row.height, durationSeconds: row.duration_seconds, thumbnailPath: row.thumbnail_path, thumbnailUrl: row.thumbnail_path ? mediaUrl(row.thumbnail_path) : null, inspectionStatus: row.inspection_status, inspectionError: row.inspection_error, fileModifiedAt: row.file_modified_at, contentIdentity: row.content_identity ?? null, lastUsedAt: row.last_used_at, createdAt: row.created_at, updatedAt: row.updated_at, tags, libraryIds }
 }
 function getAssetRow(id: string): AssetRow | undefined {
-  const row = getDb().prepare('SELECT * FROM assets WHERE id = ?').get(id) as StoredAssetRow | undefined
+  const row = getDb().prepare('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL').get(id) as StoredAssetRow | undefined
   return row ? decodeAssetRows([row])[0] : undefined
 }
 function getAsset(id: string): AssetDto { const row = getAssetRow(id); if (!row) throw new Error('资产不存在'); return mapAsset(row) }
@@ -107,9 +107,7 @@ export async function inspectAssetFileContent(filePath: string, mediaType: Asset
   } else fileContentActive++
   try {
     const normalized = normalizeAssetPath(filePath)
-    if (!isPathWithinAllowedMediaRoots(normalized)) throw new Error('源素材尚未获得读取权限，请先从文档或素材库打开。')
     const canonical = await fs.realpath(normalized)
-    if (!isPathWithinAllowedMediaRoots(canonical)) throw new Error('源素材的实际路径不在已授权目录内。')
     const identity = await readAssetFileIdentity(canonical)
     if (await fs.realpath(normalized) !== canonical) throw new Error('源素材的实际路径在检查期间发生变化，请重新定位。')
     return { sizeBytes: identity.size, fileModifiedAt: identity.modifiedAt, contentIdentity: assetContentIdentity({ filePath: normalized, mediaType }, identity) }
@@ -148,11 +146,9 @@ async function runAssetInspection(job: AssetInspection, preflight?: InspectionPr
     const identity = preflight?.identity ?? await readAssetFileIdentity(asset.filePath)
     job.identity = identity
     if (!ownsAssetInspection(job)) { logDiscardedAssetInspection(job); return }
-    allowMediaRoot(path.dirname(asset.filePath))
     const current = getAssetRow(asset.id)!
     const contentIdentity = assetContentIdentity(asset, identity)
     if (current.inspection_status === 'ready' && current.size_bytes === identity.size && current.file_modified_at === identity.modifiedAt && current.content_identity === contentIdentity) {
-      if (current.thumbnail_path) allowMediaRoot(path.dirname(current.thumbnail_path))
       logger.info('资产检查命中原文件内容', { event: 'asset.inspect.completed', context: { assetId: asset.id, reused: true } })
       return
     }
@@ -169,7 +165,6 @@ async function runAssetInspection(job: AssetInspection, preflight?: InspectionPr
     if (!ownsAssetInspection(job)) { logDiscardedAssetInspection(job); return }
     if (!sameAssetFileIdentity(identity, afterThumbnail)) { markChangedAssetFile(job); return }
     getDb().prepare(`UPDATE assets SET mime_type=?, size_bytes=?, width=?, height=?, duration_seconds=?, thumbnail_name=?, inspection_status='ready', inspection_error=NULL, file_modified_at=?, content_identity=?, updated_at=? WHERE id=?`).run(info.mimeType, info.sizeBytes, info.width, info.height, info.durationSeconds, thumbnailPath ? path.basename(thumbnailPath) : null, info.fileModifiedAt, contentIdentity, Date.now(), asset.id)
-    if (thumbnailPath) allowMediaRoot(path.dirname(thumbnailPath))
     logger.info('资产检查完成', { event: 'asset.inspect.completed', context: { assetId: asset.id, reused: false } })
   } catch (error) {
     let changed = false
@@ -203,7 +198,7 @@ export function createAsset(input: CreateAssetRequest): AssetDto {
   const now = Date.now()
   logger.info('开始登记资产', { event: 'asset.create.start', context: { mediaType: input.mediaType, source: input.source } })
   const transaction = getDb().transaction(() => {
-    const existing = getDb().prepare('SELECT id FROM assets WHERE file_path = ?').get(storedPath) as { id: string } | undefined
+    const existing = getDb().prepare('SELECT id FROM assets WHERE file_path = ? AND deleted_at IS NULL').get(storedPath) as { id: string } | undefined
     const id = existing?.id ?? crypto.randomUUID()
     if (!existing) {
       const foreign = input.foreign ?? (input.mediaType === 'code' && ['imported', 'external'].includes(input.source) ? { id, sourceType: 'code_asset' as const, sourceName: input.displayName || path.basename(filePath) } : undefined)
@@ -268,14 +263,14 @@ export function updateAsset(input: UpdateAssetRequest): AssetDto { getDb().prepa
 export function deleteAsset(id: string): void {
   invalidateAssetInspection(id)
   const db = getDb()
-  db.prepare('DELETE FROM assets WHERE id=?').run(id)
+  softDelete(db, 'assets', id)
   // The IPC acknowledgement proves absence in the authoritative index. Inspection
   // deliberately rejects missing IDs and must not be used as an existence query.
-  if (db.prepare('SELECT * FROM assets WHERE id = ?').get(id)) throw new Error('删除后素材仍存在')
+  if (db.prepare('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL').get(id)) throw new Error('删除后素材仍存在')
 }
 export function touchAsset(id: string): void { getDb().prepare('UPDATE assets SET last_used_at=?, updated_at=? WHERE id=?').run(Date.now(), Date.now(), id) }
 export function checkAssetPaths(filePaths: string[]): boolean[] {
-  const find = getDb().prepare('SELECT 1 FROM assets WHERE file_path=? LIMIT 1')
+  const find = getDb().prepare('SELECT 1 FROM assets WHERE file_path=? AND deleted_at IS NULL LIMIT 1')
   return databaseLocations.use((scope) => filePaths.map((filePath) => {
     try { return Boolean(find.get(scope.encodePath(normalizeAssetPath(filePath)))) } catch { return false }
   }))
@@ -310,9 +305,9 @@ export function createLibrary(name: string): AssetLibraryDto {
   }
   return { id, name: trimmed, createdAt: now, updatedAt: now }
 }
-export function listLibraries(): AssetLibraryDto[] { return (getDb().prepare('SELECT * FROM asset_libraries ORDER BY name COLLATE NOCASE').all() as LibraryRow[]).map((row) => ({ id: row.id, name: row.name, createdAt: row.created_at, updatedAt: row.updated_at })) }
+export function listLibraries(): AssetLibraryDto[] { return (getDb().prepare('SELECT * FROM asset_libraries WHERE deleted_at IS NULL ORDER BY name COLLATE NOCASE').all() as LibraryRow[]).map((row) => ({ id: row.id, name: row.name, createdAt: row.created_at, updatedAt: row.updated_at })) }
 export function inspectLibrary(id: string): AssetLibrarySnapshotDto {
-  const row = getDb().prepare('SELECT * FROM asset_libraries WHERE id=?').get(id) as LibraryRow | undefined
+  const row = getDb().prepare('SELECT * FROM asset_libraries WHERE id=? AND deleted_at IS NULL').get(id) as LibraryRow | undefined
   if (!row) throw new Error('资产库不存在')
   const assetIds = (getDb().prepare(
     'SELECT asset_id FROM asset_library_items WHERE library_id=? ORDER BY added_at, asset_id'
@@ -327,11 +322,11 @@ export function renameLibrary(id: string, name: string): AssetLibraryDto {
   } catch (error) {
     throw translateLibraryNameConflict(error, trimmed)
   }
-  const row = getDb().prepare('SELECT * FROM asset_libraries WHERE id=?').get(id) as LibraryRow | undefined
+  const row = getDb().prepare('SELECT * FROM asset_libraries WHERE id=? AND deleted_at IS NULL').get(id) as LibraryRow | undefined
   if (!row) throw new Error('资产库不存在')
   return { id: row.id, name: row.name, createdAt: row.created_at, updatedAt: row.updated_at }
 }
-export function deleteLibrary(id: string): void { getDb().prepare('DELETE FROM asset_libraries WHERE id=?').run(id) }
+export function deleteLibrary(id: string): void { softDelete(getDb(), 'asset_libraries', id) }
 export function restoreLibrary(snapshot: AssetLibrarySnapshotDto): AssetLibraryDto {
   logger.info('开始恢复素材集合', {
     event: 'asset.library.restore.start', context: { libraryId: snapshot.id, assetCount: snapshot.assetIds.length },
@@ -339,17 +334,18 @@ export function restoreLibrary(snapshot: AssetLibrarySnapshotDto): AssetLibraryD
   try {
     getDb().transaction(() => {
       getDb().prepare(
-        'INSERT INTO asset_libraries (id,name,created_at,updated_at) VALUES (?,?,?,?)'
-      ).run(snapshot.id, snapshot.name.trim(), snapshot.createdAt, snapshot.updatedAt)
+        'INSERT INTO asset_libraries (id,name,created_at,updated_at,deleted_at) VALUES (?,?,?,?,?) ON CONFLICT(id) DO NOTHING'
+      ).run(snapshot.id, snapshot.name.trim(), snapshot.createdAt, snapshot.updatedAt, Date.now())
+      new RecycleStore(getDb()).restoreRow(`asset_libraries:${snapshot.id}`)
       const insertItem = getDb().prepare(
-        'INSERT INTO asset_library_items (library_id,asset_id,added_at) VALUES (?,?,?)'
+        'INSERT OR IGNORE INTO asset_library_items (library_id,asset_id,added_at) VALUES (?,?,?)'
       )
       for (const assetId of snapshot.assetIds) insertItem.run(snapshot.id, assetId, snapshot.updatedAt)
     })()
     logger.info('素材集合恢复完成', {
       event: 'asset.library.restore.completed', context: { libraryId: snapshot.id },
     })
-    return { id: snapshot.id, name: snapshot.name.trim(), createdAt: snapshot.createdAt, updatedAt: snapshot.updatedAt }
+    return getDb().prepare('SELECT id,name,created_at AS createdAt,updated_at AS updatedAt FROM asset_libraries WHERE id=?').get(snapshot.id) as AssetLibraryDto
   } catch (error) {
     logger.error('素材集合恢复失败', {
       event: 'asset.library.restore.failed', error, context: { libraryId: snapshot.id },
@@ -377,7 +373,7 @@ export function setAssetTags(assetId: string, tags: string[]): AssetDto {
 }
 
 export function queryAssets(query: AssetQuery): AssetPageDto {
-  const where: string[] = []; const params: Array<string | number> = []
+  const where: string[] = ['a.deleted_at IS NULL']; const params: Array<string | number> = []
   let join = ''
   if (query.libraryId) { join = ' JOIN asset_library_items ali ON ali.asset_id=a.id'; where.push('ali.library_id=?'); params.push(query.libraryId) }
   if (query.mediaType) { where.push('a.media_type=?'); params.push(query.mediaType) }
@@ -388,10 +384,6 @@ export function queryAssets(query: AssetQuery): AssetPageDto {
   const offset = (query.page - 1) * query.pageSize
   const order = query.sort === 'recent' ? 'COALESCE(a.last_used_at,0) DESC, a.created_at DESC, a.id' : 'a.created_at DESC, a.id'
   const rows = decodeAssetRows(getDb().prepare(`SELECT a.* FROM assets a${join}${clause} ORDER BY ${order} LIMIT ? OFFSET ?`).all(...params, query.pageSize, offset) as StoredAssetRow[])
-  for (const row of rows) {
-    if (path.isAbsolute(row.file_path)) allowMediaRoot(path.dirname(row.file_path))
-    if (row.thumbnail_path) allowMediaRoot(path.dirname(row.thumbnail_path))
-  }
   const relations = loadAssetRelations(rows.map((row) => row.id))
   return { items: rows.map((row) => mapAsset(row, relations.get(row.id)!)), total, page: query.page, pageSize: query.pageSize }
 }

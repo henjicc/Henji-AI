@@ -11,7 +11,7 @@ export const generateVideoEditAudioDuckingCapability = defineApplicationCapabili
   id: 'generate_video_edit_audio_ducking', title: '对话出现时自动压低背景音乐',
   description: '在明确音乐片段上自动生成音量回避关键帧，可一步撤销。targetRole 指定对话 dialogue 或音效 sound_effect；分析同时间可听目标片段的非静音区间，不是语义识别，目标中残留音乐或噪声也可能触发。reductionDb 为降低分贝（12 常用，越大越低），sensitivity 0–100（越高越能捕获轻声），fadeSeconds 为语音前压低及结束后恢复的时长。重新生成只替换回避生成的点，用户点保留且同帧优先；需保护原手动曲线时先试听。静音目标或无重叠目标会清除旧回避点。只分析本地声音，未调用付费模型。',
   version: 1, domain: 'video_edit', aliases: ['回避', '自动闪避', 'audio ducking', '基本声音'],
-  readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write', idempotent: false, destructive: false,
+  readOnly: false, dataClasses: ['C1'], permission: 'video_edit:write', idempotent: false, destructive: false,
   timeoutMs: 600000, supportsPreview: false, supportsUndo: true, requiredScopes: ['video_edit'],
   acceptsRefs: ['video_edit.document', 'video_edit.clip'], producesRefs: ['video_edit.document', 'video_edit.clip'],
   inputSchema: input, outputSchema: output, concurrencyKey: 'video_edit', resolveConcurrencyKey: parsed => `video_edit:${parsed.documentRef.id}`,

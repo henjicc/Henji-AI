@@ -116,13 +116,11 @@ const UUID = z.string().uuid()
 /** Handlers for the web app recording capabilities; all real work happens in the main-process service. */
 export async function executeWebAppCapability(id: string, input: unknown, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {
   const platform = getPlatform().webReplay
-  const permissions = context.callerGrant?.permissions
   // Reading saved recordings stays available; recording and replay need the experimental switch.
   // 开关没开是执行前的拒绝：明确标成未执行，打开开关后可以直接重试，不必核对
   if (!WORKS_WHEN_DISABLED.has(id) && !webAppRecordingEnabled()) throw notExecutedFailure(new Error(WEB_APP_RECORDING_DISABLED_MESSAGE))
   if (id === startWebAppRecordingCapability.id) {
     const parsed = startWebAppRecordingCapability.inputSchema.parse(input)
-    if (parsed.projectId && permissions && !permissions.includes('documents:write')) throw new Error('PERMISSION_DENIED:存进项目还需要 documents:write 权限')
     // The backup screen recording follows the choices on the recording page.
     const backup = loadRecordingSetup().setup.webAppBackup ?? DEFAULT_WEB_APP_BACKUP
     const manifest = await platform.start(parsed.appRef.id, webAppBackupOptions(backup, backup.enabled && backup.range === 'screen' ? await getPlatform().screenRecording.sources() : []), parsed.projectId ? { projectId: parsed.projectId, ...(parsed.name ? { name: parsed.name } : {}) } : null)
@@ -131,13 +129,11 @@ export async function executeWebAppCapability(id: string, input: unknown, contex
     return { resultRef: { kind: RECORDING, id: manifest.id }, directory: saved?.directory ?? '', verified: Boolean(saved) }
   }
   if (id === importWebRecordingCapability.id) {
-    if (permissions && !permissions.includes('screen_recording:read')) throw new Error('PERMISSION_DENIED:导入剪辑需要 screen_recording:read 权限')
     const parsed = importWebRecordingCapability.inputSchema.parse(input)
     const result = await importWebRecordingToVideo(parsed.recordingRef.id, parsed.destination, parsed.video, context.signal, parsed.take)
     return { resultRef: { kind: 'video_edit.document', id: parsed.destination.documentId }, ...result, verified: result.itemIds.length > 0 && (!parsed.destination.sequenceId || result.clipIds.length > 0) }
   }
   if (id === importWebRecordingToProjectCapability.id) {
-    if (permissions && !permissions.includes('screen_recording:read')) throw new Error('PERMISSION_DENIED:读取网页录制需要 screen_recording:read 权限')
     const parsed = importWebRecordingToProjectCapability.inputSchema.parse(input)
     const summary = await platform.importToProject({ projectId: parsed.projectId, ...(parsed.recordingRef ? { recordingId: parsed.recordingRef.id } : {}), ...(parsed.path ? { source: parsed.path } : {}), ...(parsed.name ? { name: parsed.name } : {}) })
       .catch((error: unknown) => { throw error instanceof Error && error.name === 'WebRecordingNotImportedError' ? notExecutedFailure(error) : error })
@@ -158,7 +154,6 @@ export async function executeWebAppCapability(id: string, input: unknown, contex
     return { resultRef: parsed.recordingRef, previousState: cancelled.previousState, state: cancelled.state, verified: cancelled.state === 'cancelled' }
   }
   if (id === readWebAppRecordingCapability.id) {
-    if (permissions && !permissions.includes('screen_recording:read')) throw new Error('PERMISSION_DENIED:读取网页录制需要 screen_recording:read 权限')
     const parsed = readWebAppRecordingCapability.inputSchema.parse(input)
     const { recordingRef, ...request } = parsed
     return { ...await platform.read({ recordingId: recordingRef.id, ...request }) }

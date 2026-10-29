@@ -1,5 +1,3 @@
-import { creativeIntentLiveResources, type CreativeIntents } from '../../creativeIntent/persistence';
-import { collectImageEditCommandResourceReferencesV3 } from './commandTypes';
 import {
   withImageEditCommandRevisionV3,
   mergeImageEditHistoryResourceReferencesV3,
@@ -319,56 +317,6 @@ export class ImageEditCommandHistoryV3 {
     }
     if (this.cold) this.cold = { ...this.cold, position };
     this.track(document);
-  }
-
-  /** Privacy deletion rewrites both directions, including uncached pages, before publishing. */
-  async eraseExplanationSession(document: ImageEditDocumentV3, sessionId: string, signal?: AbortSignal): Promise<ImageEditDocumentV3> {
-    this.assertHead(document);
-    const snapshot = this.createSnapshot(), state = this.getState();
-    const clean = (head: CreativeIntents | null | undefined): typeof head => {
-      if (!head) return head;
-      const next = { ...head, sessions: head.sessions.filter(session => session.id !== sessionId) };
-      return { ...next, resources: creativeIntentLiveResources([next]) };
-    };
-    const command = (value: ImageEditCommandV3): ImageEditCommandV3 => {
-      if (value.type === 'document.atomic') return { ...value, commands: value.commands.map(value => command(value) as import('./commandTypes').ImageEditLeafCommandV3) };
-      if (value.type !== 'document.set-creative-intents') return value;
-      const intents = clean(value.intents) ?? null;
-      return { ...value, intents, resources: creativeIntentLiveResources([intents ?? undefined]).map(resource => ({ resourceId: resource.resourceId, byteSize: resource.bytes })).sort((a, b) => a.resourceId.localeCompare(b.resourceId)) };
-    };
-    const entries: ImageEditHistoryEntrySnapshotV3[] = [];
-    for (let index = 0; index < state.undoCount + state.redoCount; index++) {
-      signal?.throwIfAborted();
-      const entry = await this.readEntryAt(index, signal);
-      if (!entry) throw new Error('历史页缺失，无法完成私密讲解擦除');
-      const pair = (forward: ImageEditCommandV3, inverse: ImageEditCommandV3): [ImageEditCommandV3, ImageEditCommandV3] => {
-        if (forward.type === 'document.atomic' && inverse.type === 'document.atomic') {
-          const pairs = forward.commands.map((child, index) => pair(child, inverse.commands[inverse.commands.length - 1 - index]));
-          return [{ ...forward, commands: pairs.map(value => value[0] as import('./commandTypes').ImageEditLeafCommandV3) },
-            { ...inverse, commands: pairs.map(value => value[1] as import('./commandTypes').ImageEditLeafCommandV3).reverse() }];
-        }
-        if (forward.type === 'document.set-creative-intents' && inverse.type === 'document.set-creative-intents') {
-          const resources = creativeIntentLiveResources([forward.intents ?? undefined, inverse.intents ?? undefined]).map(resource => ({ resourceId: resource.resourceId, byteSize: resource.bytes })).sort((a, b) => a.resourceId.localeCompare(b.resourceId));
-          return [{ ...forward, resources }, { ...inverse, resources }];
-        }
-        return [forward, inverse];
-      };
-      const [nextForward, nextInverse] = pair(command(entry.forward), command(entry.inverse));
-      const resources = mergeImageEditHistoryResourceReferencesV3([...collectImageEditCommandResourceReferencesV3(nextForward), ...collectImageEditCommandResourceReferencesV3(nextInverse)]);
-      entries.push({ forward: nextForward, inverse: nextInverse, resources, metadataBytes: new TextEncoder().encode(JSON.stringify([nextForward, nextInverse])).byteLength });
-      if (index % 64 === 63) await new Promise<void>(resolve => setTimeout(resolve, 0));
-    }
-    signal?.throwIfAborted();
-    this.assertHead(document);
-    if (JSON.stringify(this.createSnapshot()) !== JSON.stringify(snapshot)) throw new Error('历史已变化，请重试删除讲解');
-    const next = { ...document, revision: document.revision + 1, creativeIntents: clean(document.creativeIntents) ?? undefined };
-    const retainedBefore = this.resourceMap();
-    this.undoEntries.length = 0; this.redoEntries.length = 0;
-    for (let index = 0; index < state.undoCount; index++) this.undoEntries.push(entries[index]);
-    for (let index = entries.length - 1; index >= state.undoCount; index--) this.redoEntries.push(entries[index]);
-    this.cold = undefined; this.pages.clear(); this.track(next);
-    this.notifyReleased(retainedBefore, 'clear');
-    return next;
   }
 
   clear(document?: ImageEditDocumentV3): void {

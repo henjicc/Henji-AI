@@ -11,7 +11,7 @@ vi.mock('../../electron/main/services/settings/store', () => ({ getSettingsStore
 vi.mock('../../electron/main/services/logging', () => ({ createMainLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 
 /** Real approval policy and state machine, with only the IPC/storage boundary replaced. */
-export function installPaidApprovalTestBridge(mode: PaidApprovalSettings['mode'] = 'bypass') {
+export function installPaidApprovalTestBridge(initial: Partial<PaidApprovalSettings> = { unlimited: true }) {
   const records = new Map<string, OperationRecord>()
   const store = {
     get: (id: string) => records.get(id),
@@ -20,7 +20,7 @@ export function installPaidApprovalTestBridge(mode: PaidApprovalSettings['mode']
     generationSpendSince: (since: number) => [...records.values()].filter(record => record.state !== 'not_executed')
       .reduce((sum, record) => sum + (record.paidReservations ?? []).reduce((total, reservation) => total + (reservation.reservedAt >= since ? reservation.estimatedCny ?? 0 : 0), 0), 0),
   }
-  const setSettings = (value: Partial<PaidApprovalSettings>): void => { settings.value = JSON.stringify({ ...DEFAULT_PAID_APPROVAL_SETTINGS, mode, ...value }) }
+  const setSettings = (value: Partial<PaidApprovalSettings>): void => { settings.value = JSON.stringify({ ...DEFAULT_PAID_APPROVAL_SETTINGS, ...initial, ...value }) }
   setSettings({})
   const complete = vi.spyOn(getPlatform().applicationControl, 'complete').mockImplementation(async reply => {
     if (!reply.uiPaidApproval) throw new Error('测试桥仅处理付费授权')

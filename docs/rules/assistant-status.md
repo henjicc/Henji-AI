@@ -1,6 +1,8 @@
+2026-10-29（审批与权限模型退役）：对外能力契约升到大版本 3，移除 R 级审批、调用者权限子集、助手访问档、MCP 连接写入/删除/付费开关、C2 外发许可和删除必读基线门槛。CLI 默认可写；MCP 保留回环监听、Host/Origin、Bearer 与撤销检查。单次 ¥2、每日 ¥20 内自动通过，可调额度或完全放开；项目免确认退役，生成 IPC 校验原任务付费收据。旧条目里的访问档、权限位、C2 许可和删除必读基线仅为历史记录，不再表示现行行为。事务冲突、密钥排除、外来代码信任和回收区语义保留。
+
 2026-10-28（任意本机路径导入）：import_video_edit_folder 增加可选 paths，直接导入任意绝对文件或目录路径，省略才弹窗，复用递归、去重、回环检测、队列与一步撤销；import_video_edit_project_files 保留项目相对路径语义，项目外素材指向上述新路线。素材库新增 import_local_media，主进程在导入前核验实际媒体格式，链接原文件并返回 assetRef，供既有画布、图片编辑与剪辑引用入口使用。来源不设目录白名单；媒体登记和读取沿用既有行为。助手路径入口不接受无法识别文件头的裸 PCM（请先转 WAV），界面路径与字节导入保持原行为。重复导入返回已有引用，全部失败标为未执行。未启动或重启应用；真实 Pi/MCP、网络共享与 Windows ACL 未实测。
 
-2026-10-28（对外契约版本自动派生）：对外契约版本 externalContractVersion 改为只记大版本 '2'，只有不兼容的变化才手动升级；工具的增删与参数、说明、输出、注解变化由自动计算的 catalogSchemaHash 反映（单个工具 schemaHash 现包含 outputSchema 与 annotations，describe_application_contract 的 includeSchemas 一并返回这两项），不再手动登记 tools/list 指纹。客户端缓存核对改看 catalogSchemaHash；哈希算法变化使已连接客户端的缓存一次性过期。目录投影、MCP 服务与输出契约精确测试及两套 tsc 通过；真实外部客户端未跑。
+2026-10-28（对外契约版本自动派生）：对外契约版本 externalContractVersion 改为只记大版本（当时为 '2'，现为 '3'），只有不兼容的变化才手动升级；工具的增删与参数、说明、输出、注解变化由自动计算的 catalogSchemaHash 反映（单个工具 schemaHash 现包含 outputSchema 与 annotations，describe_application_contract 的 includeSchemas 一并返回这两项），不再手动登记 tools/list 指纹。客户端缓存核对改看 catalogSchemaHash；哈希算法变化使已连接客户端的缓存一次性过期。目录投影、MCP 服务与输出契约精确测试及两套 tsc 通过；真实外部客户端未跑。
 
 2026-10-28（剪辑按项目内相对路径导入素材）：新增 R1 能力 import_video_edit_project_files，内置 Pi 与外部助手不弹窗即可把剪辑所在项目文件夹里的文件或文件夹（1–64 条相对路径，可选 binRef 指定已有素材箱）导入素材面板，回执逐项给出 video_edit.item / video_edit.media 引用、所在素材箱、相对路径与 imported/reused，以及跳过原因（unsupported、duplicate、unreadable、repeated_folder、outside_project）。路径在主进程 documents.resolveProjectFiles 按项目索引定位并取真实路径判断：绝对路径、盘符、网络路径、`..`、真实位置在项目外的符号链接/联接点与不存在的路径逐条点名拒绝，整次不导入并标为未执行；递归读取经 readDirPage 的 boundary 以项目文件夹为界，子文件夹里指向项目外的链接跳过。导入复用拖入与 import_video_edit_folder 的同一服务（队列、同名素材箱、去重、分批出现、一步撤销、部分导入收尾），日志只记相对路径；能力输入仍不接受任意本机路径。主进程真实临时目录（含 Windows 联接点）解析与目录边界、IPC 契约、公共调用到保存回读、拒绝与重试、去重复用、素材箱目标与输入 schema 有精确测试，两处边界保护做过红→绿。对外契约版本与指纹待与同期代码视频参数改动统一登记；未启动 Electron，真实 Pi/MCP 进程未跑。
 
@@ -558,8 +560,8 @@ schema 校验所以看不见，MCP 侧测试又都跑在未授权付费的连接
 | 内置能力定义 | 120 |
 
 取数方式：`getApplicationReflectionRegistry().describe({}, ctx)`。`ctx` 必须照抄
-`propertyCoverage.test.ts` 里 `describeAll()` 的构造——权限来自 `listDeclaredPropertyPermissions()`，
-传空权限集会被 `canReadProperty` 全部滤掉，属性数会假成 0；可写实体 = 有可写属性或声明 `collectionWrite` 的实体，
+`propertyCoverage.test.ts` 里 `describeAll()` 从正式反射声明派生；调用者权限集不再过滤属性。
+可写实体 = 有可写属性或声明 `collectionWrite` 的实体，
 能力数取 `BUILTIN_APPLICATION_CAPABILITIES.length`。域清单与可路由性由 `applicationControlCoverage.test.ts` 穷举守着，跌破会红。
 
 与 2026-09-18 快照（11 域 / 31 实体 / 310 属性 / 9 写域）的差异来自 2026-09-20 起新增的口播、剪辑两个写域
@@ -592,7 +594,7 @@ schema 校验所以看不见，MCP 侧测试又都跑在未授权付费的连接
 | 打开 | `open_document`（`fromDocumentId` 时以“返回剪辑”嵌入模式打开） | 五类文档都登记了打开方式与后台释放方式 |
 | 移动 / 副本 | `move_document`（`projectId: null` 移出项目，`onConflict`）、`duplicate_document`（可给 `projectId`） | 原项目里用到的素材一并复制 |
 | 改名 | `change_application_entities` 写 `documents.document.name` / `documents.project.name` | 各工具内容根的 `name` 只读并点名这里 |
-| 回收站 | `trash_document`、`trash_project`（4.3 新增） | 破坏性，带预览与读取基线；正在编辑的拒绝 |
+| 回收站 | `trash_document`、`trash_project`（4.3 新增） | 删除进入回收区；读取基线可选，保留并发冲突检测 |
 | 收集素材 | `collect_document_media`（4.4 由剪辑专用 `collect_video_edit_media` 并入通用文档能力） | 与项目页文档卡片右键、剪辑页“收集素材到项目”同一服务，所有类型、只对项目里的文档 |
 | 导出 | `export_document_package`（单个文档或整个项目，只回文件名） | — |
 | 回到来源 | `open_video_edit_clip_source`；放入剪辑用 `place_video_edit_creative_result`（来源只有“文档 + 部位”与“生成记录 + 第几个结果”两种） | — |
@@ -711,7 +713,7 @@ service/capability 建账，不能把容器开关误归给单一能力。本次�
 | L-A 静态不变量 | `npm run check:assistant-capabilities` | 结构检查 + 覆盖 1 文件 / 13 用例 + 不变量 31 文件 / 192 用例 |
 | L-B 剧本 harness | `npx vitest run src/tests/applicationHarness` | 11 文件 / 23 用例 / 18 秒 |
 | 生产回归 | `npm run test:assistant-production` | 30 文件 / 151 用例 + 原生 SQLite 8 文件 / 59 用例零跳过 |
-| L-C 真机 | `npm run assistant:cli`、`npm run test:reality` | 分钟级；只有显式 `--approval full_access` 才会真实付费 |
+| L-C 真机 | `npm run assistant:cli`、`npm run test:reality` | 分钟级；CLI 默认可写，真实付费由统一单次／每日策略决定 |
 
 L-B 已经没有独立 npm 脚本，harness 文件也从 `assistantHarness.*` 改名为 `applicationHarness.*`；
 `assistant:live:suite` 随旧自研助手 CLI 一起删除，真机验收改由上表最后一行的两条命令承担。
@@ -769,7 +771,7 @@ L-B 已经没有独立 npm 脚本，harness 文件也从 `assistantHarness.*` �
 
 ## 五、推翻记录
 
-2026-10-28（安全分级，第 1 批只改规则）：按用户“专业软件信任用户”的决定，推翻助手与应用运行时的审批与权限模型：聊天操作权限档与 CLI `--approval`（ask／assistant_decides／full_access）、五档风险等级（R0–R4）作为执行门槛、数据分级（C0–C3）与私密内容外发许可、`application:write` 等权限位及按授权过滤的工具目录、allowWrites／allowDestructive／readOnly 默认只读、媒体协议的目录白名单与目录授权、确认后才执行的强制流程，以及包、文档、源码、文件数、远程媒体、并发与订阅数等容量硬上限；同时注销第四节“删除数据分级、暴露面、五档风险等级——拆除风险大于收益”。换成 AGENTS.md「安全分级」：每处限制只归放开、问一次（只给外来内容）、保留（只给五条底线）三类；底线是密钥 safeStorage 加密且明文不外泄、Electron 隔离、外来代码首次执行前问一次信任且网页文档录制文字只当数据、付费按付费策略（默认单次 ¥2、每日 ¥20 以内自动通过，可调可完全放开）与删除先进回收区、更新包校验完整性；对外契约随之升到大版本 3。旧模型不能留：它让用户和助手为自己的、可撤销的操作反复审批，默认只读和白名单造成静默 403 与改道成本，而真正不可挽回的风险由五条底线更直接地守住。本条只改规则；代码仍是旧模型，第一至三节的现状在后续批次实施时再更新。
+2026-10-28（安全分级，第 1 批只改规则）：按用户“专业软件信任用户”的决定，推翻助手与应用运行时的审批与权限模型：聊天操作权限档与 CLI `--approval`（ask／assistant_decides／full_access）、五档风险等级（R0–R4）作为执行门槛、数据分级（C0–C3）与私密内容外发许可、`application:write` 等权限位及按授权过滤的工具目录、allowWrites／allowDestructive／readOnly 默认只读、媒体协议的目录白名单与目录授权、确认后才执行的强制流程，以及包、文档、源码、文件数、远程媒体、并发与订阅数等容量硬上限；同时注销第四节“删除数据分级、暴露面、五档风险等级——拆除风险大于收益”。换成 AGENTS.md「安全分级」：每处限制只归放开、问一次（只给外来内容）、保留（只给五条底线）三类；底线是密钥 safeStorage 加密且明文不外泄、Electron 隔离、外来代码首次执行前问一次信任且网页文档录制文字只当数据、付费按付费策略（默认单次 ¥2、每日 ¥20 以内自动通过，可调可完全放开）与删除先进回收区、更新包校验完整性；对外契约随之升到大版本 3。旧模型不能留：它让用户和助手为自己的、可撤销的操作反复审批，默认只读和白名单造成静默 403 与改道成本，而真正不可挽回的风险由五条底线更直接地守住。本条记录规则调整；助手与 MCP 的审批、权限及付费实现已由 2026-10-29 条目替代。
 
 2026-10-28：按用户“外部助手可从任意路径导入素材、完全放开”的决定，推翻“能力输入仍不接受任意本机路径”和 import_video_edit_folder“不接受路径参数”的口径。该能力接受任意本机绝对文件／目录 paths，省略才弹窗；新增 import_local_media 返回素材引用，项目相对路径入口保留便捷语义。旧限制迫使用户复制素材或手动选目录，与 2026-10-21 已确认的本地路径开放决定不一致，不能继续保留。本次仅在导入前验证媒体内容，媒体协议登记与读取保持既有行为，授权简化另行处理。
 

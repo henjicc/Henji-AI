@@ -24,7 +24,7 @@ export function VideoEditExplanationControls({ owner, onError }: { owner: VideoE
   const run = (work: () => Promise<void>, title = '讲解未完成'): void => { setFailed(false); void Promise.resolve().then(work).catch(reason => { error(reason); retryWork.current = work; setFailureTitle(title) }) }
   const transcribe = (): void => run(async () => {
     await preflightVideoExplanation(id)
-    run(() => transcribeVideoExplanation(id, crypto.randomUUID(), videoExplanationState(owner)?.collector.session.state === 'recoverable'), '转写失败')
+    run(() => transcribeVideoExplanation(id, videoExplanationState(owner)?.collector.session.state === 'recoverable'), '转写失败')
   }, '转写预检失败')
   const read = useCallback((entry: TranscriptEntry, mentionId?: string) => readVideoExplanationReview(id, entry, mentionId, !!mentionId), [id])
   const bind = useCallback((entry: TranscriptEntry, binding: ExplanationBinding) => correctVideoExplanationBinding(id, entry, binding), [id])

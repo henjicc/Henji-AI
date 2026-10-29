@@ -62,7 +62,7 @@ export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssis
     }))
 
     if (current.confirmation) {
-      if (current.confirmation.project) result.push({ label: current.confirmation.projectLabel ?? t('paidApproval.alwaysAllowProject'), variant: 'secondary', onClick: () => {
+      if (current.contentTrustChallenge && current.confirmation.alwaysAllowLabel) result.push({ label: current.confirmation.alwaysAllowLabel, variant: 'secondary', onClick: () => {
         if (useAlertDialogStore.getState().queue[0] === current) confirmCurrent(true)
       } })
       return [...result, { label: current.confirmation.paid ? t('paidApproval.allowOnce') : current.confirmation.label, variant: 'primary', tone: current.confirmation.tone, onClick: () => {

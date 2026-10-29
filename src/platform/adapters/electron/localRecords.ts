@@ -39,6 +39,10 @@ export function createElectronPresets(): PresetsPlatform {
 
 export function createElectronSettings(): SettingsPlatform {
   return {
+    listDeleted: () => getNative('settings').listDeleted(),
+    restoreDeleted: (id) => getNative('settings').restoreDeleted(id),
+    preserveFile: (path, name) => getNative('settings').preserveFile(path, name),
+    trashFile: (path, name) => getNative('settings').trashFile(path, name),
     get: (key) => getNative('settings').get(key),
     set: (key, value, type) => getNative('settings').set(key, value, type),
     delete: (key) => getNative('settings').delete(key),

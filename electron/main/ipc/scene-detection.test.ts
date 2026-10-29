@@ -36,7 +36,7 @@ beforeEach(() => {
 })
 afterEach(() => { for (const emitter of senders.splice(0)) emitter.emit('destroyed') })
 
-it('可信窗口、严格参数和真实文件授权在后台调用前检查；验证使用同一授权', async () => {
+it('可信窗口、严格参数和真实文件定位在后台调用前检查；验证使用同一路径', async () => {
   const event = sender()
   await expect(invoke('detect', { ...request, extra: true }, event)).rejects.toThrow()
   for (const invalid of [{ endSeconds: VIDEO_EDIT_MAX_SEQUENCE_SECONDS + 1 }, { endSeconds: request.startSeconds }, { sensitivity: 101 }, { endSeconds: Infinity }]) {
@@ -44,18 +44,12 @@ it('可信窗口、严格参数和真实文件授权在后台调用前检查；�
   }
   mocks.trusted.mockImplementationOnce(() => { throw new Error('untrusted') })
   await expect(invoke('detect', request, event)).rejects.toThrow('untrusted')
-  mocks.allowed.mockReturnValueOnce(false)
-  await expect(invoke('detect', request, event)).rejects.toThrow('权限')
-  mocks.allowed.mockReturnValueOnce(true).mockReturnValueOnce(false)
-  await expect(invoke('detect', request, event)).rejects.toThrow('实际位置')
   expect(mocks.detect).not.toHaveBeenCalled()
   for (const endSeconds of [1802, VIDEO_EDIT_MAX_SEQUENCE_SECONDS]) {
     await expect(invoke('detect', { ...request, endSeconds }, event)).resolves.toMatchObject({ cutsSeconds: [2] })
   }
   await expect(invoke('validate', { source, contentIdentity: 'a'.repeat(64) }, event)).resolves.toBe(true)
   await expect(invoke('validate', { source, contentIdentity: 'b'.repeat(64) }, event)).resolves.toBe(false)
-  mocks.allowed.mockReturnValueOnce(false)
-  await expect(invoke('validate', { source, contentIdentity: 'a'.repeat(64) }, event)).rejects.toThrow('权限')
 })
 
 it('取消仅归原窗口，重复与每窗口上限拒绝；主导航取消任务，进度仅回原窗口', async () => {

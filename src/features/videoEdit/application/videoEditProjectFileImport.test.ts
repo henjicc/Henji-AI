@@ -21,7 +21,7 @@ vi.mock('mediabunny', () => ({
   },
 }))
 
-// 主进程按真实路径解析后的项目文件夹；目录读取替身按 boundary 标出指向项目外的联接点。
+// 主进程按真实路径解析后的项目文件夹；目录链接仍进入同一递归导入链路。
 const root = resolve(sep, 'projects', '演示项目')
 const at = (...parts: string[]): string => join(root, ...parts)
 const tree: Record<string, Array<{ name: string; isDirectory: boolean; outside?: boolean }>> = {
@@ -48,13 +48,12 @@ beforeEach(() => {
   installHarnessNativeStorage()
   vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue({ sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) })
   vi.spyOn(getPlatform().system.paths, 'dirname').mockResolvedValue(root)
-  vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined)
   vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(new Uint8Array([0x70, 0x6e, 0x67])))
   vi.stubGlobal('createImageBitmap', async () => ({ width: 800, height: 600, close() {} }))
   vi.spyOn(getPlatform().system.fs, 'readDirPage').mockImplementation(async (path, options) => {
     if (options?.close) return { entries: [], realPath: path }
-    if (!tree[path]) throw new Error('ENOTDIR')
-    return { realPath: path, entries: tree[path].map(({ outside, ...entry }) => ({ ...entry, ...(outside && options?.boundary ? { outside } : {}) })) }
+    if (!tree[path]) throw new Error(/\.(png|mp4)$/.test(path) ? 'ENOTDIR' : 'ENOENT')
+    return { realPath: path, entries: tree[path].map(({ name, isDirectory }) => ({ name, isDirectory })) }
   })
   // 坏.mp4 与 坏掉.mp4 读不出：探测失败按跳过汇总，不让整次导入失败
   vi.spyOn(getPlatform().system.fs, 'exists').mockImplementation(async path => !path.includes('坏'))
@@ -62,7 +61,7 @@ beforeEach(() => {
 })
 afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
 
-it('按项目内相对路径导入文件与文件夹：主进程解析、以项目为边界递归，回执列出素材项、媒体与跳过原因，一步撤销', async () => {
+it('按项目内相对路径导入文件与文件夹：主进程解析、递归跟随目录链接，回执列出素材项、媒体与跳过原因，一步撤销', async () => {
   const owner = await createVideoEditProject(); const id = owner.document.id; const history = owner.past.length
   const resolve = vi.spyOn(getPlatform().documents, 'resolveProjectFiles').mockImplementation(async request => resolution(request))
   const app = createApplicationHarness()
@@ -73,7 +72,7 @@ it('按项目内相对路径导入文件与文件夹：主进程解析、以项�
     if (!result.ok) throw new Error('导入失败')
     const projectId = owner.session.documentMeta.container.kind === 'project' ? owner.session.documentMeta.container.projectId : ''
     expect(resolve).toHaveBeenCalledWith({ projectId, paths })
-    expect(getPlatform().system.fs.readDirPage).toHaveBeenCalledWith(at('素材', '录屏'), { boundary: root })
+    expect(getPlatform().system.fs.readDirPage).toHaveBeenCalledWith(at('素材', '录屏'), undefined)
     const data = result.data as { items: Array<Record<string, unknown>>; skipped: Array<Record<string, unknown>>; importedCount: number; reusedCount: number; skippedCount: number; verification: { verified: boolean } }
     const bin = owner.document.bins.find(value => value.name === '录屏')!
     const itemOf = (name: string) => owner.document.items.find(item => item.name === name)!
@@ -82,7 +81,7 @@ it('按项目内相对路径导入文件与文件夹：主进程解析、以项�
       { itemRef: { kind: 'video_edit.item', id: `${id}:${itemOf('a.mp4').id}` }, mediaRef: { kind: 'video_edit.media', id: `${id}:${itemOf('a.mp4').mediaId}` }, binRef: { kind: 'video_edit.bin', id: `${id}:${bin.id}` }, relativePath: '素材/录屏/a.mp4', status: 'imported' },
     ])
     expect(data.skipped.map(value => [value.relativePath, value.reason])).toEqual(expect.arrayContaining([
-      ['素材/说明.txt', 'unsupported'], ['素材/录屏/notes.txt', 'unsupported'], ['素材/录屏/外链', 'outside_project'], ['素材/录屏/坏.mp4', 'unreadable'], ['素材/坏掉.mp4', 'unreadable'],
+      ['素材/说明.txt', 'unsupported'], ['素材/录屏/notes.txt', 'unsupported'], ['素材/录屏/外链', 'unreadable'], ['素材/录屏/坏.mp4', 'unreadable'], ['素材/坏掉.mp4', 'unreadable'],
     ]))
     expect(data).toMatchObject({ importedCount: 2, reusedCount: 0, skippedCount: 5, verification: { verified: true } })
     expect(owner.document.items).toHaveLength(2); expect(owner.past).toHaveLength(history + 1)

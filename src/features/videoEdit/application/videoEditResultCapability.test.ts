@@ -38,7 +38,6 @@ beforeEach(() => {
   vi.spyOn(platform.system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
   vi.spyOn(platform.system.fs, 'exists').mockResolvedValue(true)
   vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue('D:/generated')
-  vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)
   vi.spyOn(platform.image, 'persistImageBinary').mockResolvedValue(framePath)
   vi.spyOn(platform.assetLibrary, 'inspectFileContent').mockResolvedValue(content)
   vi.spyOn(platform.assetLibrary, 'createAsset').mockImplementation(async input => {

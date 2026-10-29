@@ -52,10 +52,10 @@ export class ApplicationResourceSubscriptions implements ServerEventBus {
       _meta: z.object({ 'io.modelcontextprotocol/protocolVersion': z.literal(EXTERNAL_PROTOCOL_VERSIONS[0]) }).passthrough(),
     }).passthrough() }).passthrough().safeParse(body)
     const request = z.object({ method: z.string(), params: z.object({
-      notifications: z.object({ resourceSubscriptions: z.array(z.string()).max(128).optional() }).passthrough().optional(),
+      notifications: z.object({ resourceSubscriptions: z.array(z.string()).optional() }).passthrough().optional(),
     }).passthrough().optional() }).passthrough().safeParse(body)
     // 协议格式错误交给官方 handler；只有有效的订阅才需要额外领域授权。
-    if (envelope.success && !request.success) throw new Error('INVALID_INPUT:资源订阅参数不合法或超过 128 项。')
+    if (envelope.success && !request.success) throw new Error('INVALID_INPUT:资源订阅参数不合法。')
     const uris = envelope.success && request.success && request.data.method === 'subscriptions/listen'
       ? [...new Set(request.data.params?.notifications?.resourceSubscriptions ?? [])] : []
     const resources = new Map<string, ResourceState>()

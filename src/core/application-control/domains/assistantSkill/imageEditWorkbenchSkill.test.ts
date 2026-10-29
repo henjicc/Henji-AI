@@ -104,7 +104,6 @@ describe('图片编辑工作台技能的渐进披露与真实契约', () => {
     expect(all).toContain('公开目录没有 V3 图片专用撤销工具')
     expect(all).toContain('只收创建预览返回的previewRef')
     expect(all).toContain('轻微错位')
-    expect(all).toContain('不代替用户批准')
     expect(all).toContain('取消识别只丢本次迟到结果，不擅停共享下载')
   })
 })

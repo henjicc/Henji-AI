@@ -1,3 +1,4 @@
+import { softDelete } from '../recycle/store'
 import type Database from 'better-sqlite3'
 
 import type { PresetInsertDto, PresetQuery, PresetRecordDto, PresetUpdateDto } from '../../../../src/core/localRecords/types'
@@ -55,7 +56,7 @@ export class PresetStore {
   ) {}
 
   list(query: PresetQuery = {}): PresetRecordDto[] {
-    const where: string[] = []
+    const where: string[] = ['deleted_at IS NULL']
     const params: Array<string | number> = []
     if (query.modelId !== undefined) {
       if (query.modelId === null) where.push('model_id IS NULL')
@@ -75,7 +76,7 @@ export class PresetStore {
   }
 
   get(id: string): PresetRecordDto | null {
-    const row = this.database().prepare('SELECT * FROM presets WHERE id = ?').get(id) as PresetRow | undefined
+    const row = this.database().prepare('SELECT * FROM presets WHERE id = ? AND deleted_at IS NULL').get(id) as PresetRow | undefined
     return row ? this.locations.use((scope) => toRecord(row, scope)) : null
   }
 
@@ -113,7 +114,7 @@ export class PresetStore {
   }
 
   delete(id: string): void {
-    this.database().prepare('DELETE FROM presets WHERE id = ?').run(id)
+    softDelete(this.database(), 'presets', id)
   }
 
   incrementUsage(id: string): void {

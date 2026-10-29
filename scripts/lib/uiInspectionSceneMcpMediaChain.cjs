@@ -99,7 +99,7 @@ function createMcpMediaChainScenes(context) {
       const nodesInA = await page.locator('.react-flow__node').count()
       await capture('editing-a')
 
-      const identity = await authorizeMcpConnection(page, { name: `链路验收-${projectB.slice(0, 8)}`, allowWrites: true, allowPaid: true })
+      const identity = await authorizeMcpConnection(page, { name: `链路验收-${projectB.slice(0, 8)}` })
       const client = await connectMcpClient(identity.config, 'Henji media chain Reality')
       try {
         // ——— 1. 图片生成：真实提交，目标是从未打开的 B ———

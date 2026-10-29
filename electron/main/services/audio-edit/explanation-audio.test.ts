@@ -13,7 +13,7 @@ import { invokeAudioWorker } from './audio-worker-client'
 const ledger = vi.hoisted(() => new Map<string, AudioEditStoredTask & { document_id: string }>())
 const failures = vi.hoisted(() => ({ completion: false }))
 vi.mock('../keystore', () => ({ getAiProviderApiKey: () => undefined }))
-vi.mock('../ai-runtime/native-file-upload', () => ({ scopedUploadFile: vi.fn() }))
+vi.mock('../ai-runtime/native-file-upload', () => ({ resolveUploadFile: vi.fn(async (ref: string) => ref), scopedUploadFile: vi.fn() }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), error: vi.fn() }) }))
 vi.mock('../ai-runtime/sdk-runtime', () => ({ sdkRuntimeContext: { transport: { fetch: async () => { throw new Error('REAL_NETWORK_FORBIDDEN') } }, credentials: { get: () => undefined } } }))
 vi.mock('./timestamped-asr', async importOriginal => ({ ...await importOriginal<typeof import('./timestamped-asr')>(), timestampedAsrService: undefined }))
@@ -32,7 +32,7 @@ vi.mock('./task-store', () => ({
 let root: string
 const sessionId = crypto.randomUUID(); const chunkId = crypto.randomUUID()
 const synthetic = () => Float32Array.from({length:4800},(_,i)=>Math.sin(i*.1)*.2)
-const request = (): Extract<RecordingAudioRequest,{action:'transcribe'}> => ({action:'transcribe',sessionId,chunkId,requestId:chunkId,modelId:'fixture.speech-recognition.asr',audioUploadReceipt:crypto.randomUUID(),resume:false})
+const request = (): Extract<RecordingAudioRequest,{action:'transcribe'}> => ({ action:'transcribe', sessionId, chunkId, requestId:chunkId, modelId:'fixture.speech-recognition.asr', resume:false })
 const dto = normalizeTimestampedTranscript({text:'本地夹具',segments:[{text:'本地夹具',startMs:0,endMs:100}]},100,'word')
 function fixtureAsr(): Pick<TimestampedAsrService,'prepare'|'execute'|'preflight'> {
   return {preflight:vi.fn(async input=>({modelId:input.modelId!,cost:{status:'unknown' as const,amount:null,currency:null}})),prepare: input=>Object.freeze({modelId:input.modelId!,providerId:'fixture',audioPath:input.audioPath,durationMs:input.durationMs,language:'zh',cost:{status:'unknown' as const,amount:null,currency:null}}),execute:vi.fn(async()=>dto)}
@@ -109,7 +109,7 @@ describe('E06/E09 零网络录音与转写生命周期',()=>{
   })
   it('确认前检查媒体与宿主可执行性，不登记收费任务、不执行识别',async()=>{
     const asr=fixtureAsr(); const service=new ExplanationAudioService(root,asr)
-    const { audioUploadReceipt: _receipt, ...rest } = request(); const preflight={...rest,action:'preflight' as const}
+    const rest = request(); const preflight={...rest,action:'preflight' as const}
     await expect(service.preflight(preflight)).rejects.toThrow()
     await service.write({action:'write',sessionId,chunkId,sampleRate:48000,samples:synthetic()})
     vi.mocked(asr.preflight).mockRejectedValueOnce(new Error('native_upload_unsupported'))
@@ -117,11 +117,10 @@ describe('E06/E09 零网络录音与转写生命周期',()=>{
     expect(asr.execute).not.toHaveBeenCalled(); expect(ledger.size).toBe(0)
     await service.preflight(preflight); expect(asr.preflight).toHaveBeenLastCalledWith(expect.objectContaining({sourcePath:path.join(root,sessionId,`${chunkId}.wav`),durationMs:100}))
   })
-  it('分块写入幂等；字节错误拒绝；未授权外发不执行；已完成回执不重新转写',async()=>{
+  it('分块写入幂等；字节错误拒绝；已完成回执不重新转写',async()=>{
     const asr=fixtureAsr(); const service=new ExplanationAudioService(root,asr)
     const write={action:'write' as const,sessionId,chunkId,sampleRate:48000,samples:synthetic()}; await service.write(write); await service.write(write)
     await expect(service.write({...write,samples:new Float32Array([1])})).rejects.toThrow('内容不同')
-    await expect(service.transcribe({...request(),audioUploadReceipt:''})).rejects.toThrow('确认')
     expect(asr.execute).not.toHaveBeenCalled(); const result=await service.transcribe(request()); expect(result.transcript).toEqual(dto)
     await service.transcribe(request()); expect(asr.execute).toHaveBeenCalledTimes(1)
     const pathToAudio=path.join(root,sessionId,`${chunkId}.wav`);const tampered=Buffer.from(await service.read(sessionId,chunkId));tampered[44]^=1;await fs.writeFile(pathToAudio,tampered)

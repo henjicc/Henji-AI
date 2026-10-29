@@ -148,7 +148,6 @@ function createVideoEditMediaProbeScene() {
 
         // 1. 平台层原生探测与同版本 ffprobe 对照。
         for (const sample of [...samples, { file: CONTROL }]) {
-          await page.evaluate((dir) => window.henjiNative.media.allowRoot(dir), path.dirname(sample.file))
           const outcome = await page.evaluate((file) => window.henjiNative.videoDecoder.probe(`reality-${Date.now()}`, file), sample.file)
           assert.equal(outcome.status, 'probed', `${sample.file} 原生探测失败：${JSON.stringify(outcome)}`)
           const reference = ffprobe(sample.file)

@@ -12,7 +12,7 @@ import { normalizeTimestampedTranscript, type TimestampedTranscript } from '../.
 import { getAiProviderApiKey } from '../keystore'
 import { sdkRuntimeContext } from '../ai-runtime/sdk-runtime'
 import { createMainLogger } from '../logging'
-import { scopedUploadFile } from '../ai-runtime/native-file-upload'
+import { resolveUploadFile } from '../ai-runtime/native-file-upload'
 import { assertElectronHostCapabilities } from '../ai-runtime/host-capabilities'
 import type { TranscriptionFacts, TranscriptionPreflight } from '../../../../src/core/audioEdit/transcriptionFailure'
 
@@ -117,7 +117,7 @@ export async function executeTimestampedAsrWithReceipt(
   }
 }
 
-export function createTimestampedAsrService(runtime: RuntimeContext, isConfigured: (providerId: string) => boolean, checkMedia: (ref: string) => Promise<unknown> = scopedUploadFile): TimestampedAsrService {
+export function createTimestampedAsrService(runtime: RuntimeContext, isConfigured: (providerId: string) => boolean, checkMedia: (ref: string) => Promise<unknown> = resolveUploadFile): TimestampedAsrService {
   const client = createCapabilityClient({ runtime, modules: [
     ...bailianNonRealtimeAsrPresets.map((preset) => createBailianAsrModule(preset)),
     createGroqAsrModule(groqWhisperLargeV3Turbo), createGroqAsrModule(groqWhisperLargeV3),

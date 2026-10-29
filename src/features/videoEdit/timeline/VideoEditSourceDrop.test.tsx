@@ -54,7 +54,6 @@ it('先经导入文件对话框与实际探测链路导入，再从该源监视�
   vi.spyOn(getPlatform().system.fs, 'readDirPage').mockRejectedValue(new Error('ENOTDIR'))
   vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
   vi.spyOn(getPlatform().system.paths, 'dirname').mockResolvedValue(resolve('fixture'))
-  vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined)
   vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue(undefined)
   const probe = vi.spyOn(videoEditNativeMediaProbe, 'probe').mockResolvedValue({ status: 'unavailable' })
   const ids = await chooseVideoEditMedia(owner.document.id)

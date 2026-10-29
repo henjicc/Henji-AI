@@ -42,7 +42,7 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
             renderTask: null, imageExporting: false, videoExporting: false, outputKind: 'image' } }
         await window.henjiNative.testFixtures.createCanvas({ id: projectId, name: 'MCP三维后台画布', nodes: [node], replace: true })
       }, { projectId, stageId, nodeId })
-      const identity = await authorizeMcpConnection(page, { name: '三维渲染验收', allowWrites: true, allowDestructive: true })
+      const identity = await authorizeMcpConnection(page, { name: '三维渲染验收' })
       const client = await connectMcpClient(identity.config, 'Henji camera render Reality')
       try {
         const projectRef = { kind: 'canvas.document', id: projectId }
@@ -136,7 +136,7 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
         }, { historyId, projectId, mediaPath })
         await page.reload()
         await setupSettings(page)
-        const identity = await authorizeMcpConnection(page, { name: `结果落图-${historyId}`, allowWrites: true })
+        const identity = await authorizeMcpConnection(page, { name: `结果落图-${historyId}` })
         client = await connectMcpClient(identity.config, 'Henji generation canvas Reality')
         const projectRef = { kind: 'canvas.document', id: projectId }
         const resultRef = { kind: 'generation.result', id: historyId }
@@ -185,7 +185,7 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
       await setupSettings(page)
       await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
       const nonce = marker()
-      const identity = await authorizeMcpConnection(page, { name: `领域边界验收-${nonce}`, allowWrites: true })
+      const identity = await authorizeMcpConnection(page, { name: `领域边界验收-${nonce}` })
       const client = await connectMcpClient(identity.config, 'Henji domain Reality')
       const historyBefore = await page.evaluate(() => window.henjiNative.generationHistory.count())
       try {
@@ -238,11 +238,11 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
         assert.equal(stageEntity.data.properties['camera_stage.document.name'], renamed, '三维实体读到的名称与文档不一致')
         /*
          * 三维后台任务不是反射实体，只能由 render_camera_stage_output 产生并按返回的稳定引用查询；
-         * 客户端拿不到"自己编一个任务引用去列举"的口子。这里核对三件工具都在修改档目录里。
+         * 客户端拿不到"自己编一个任务引用去列举"的口子。这里核对三件工具都在完整目录里。
          */
         const stageTools = (await client.listTools()).tools.map((tool) => tool.name)
         for (const required of ['render_camera_stage_output', 'get_camera_stage_render_task', 'cancel_camera_stage_render_task']) {
-          assert.ok(stageTools.includes(required), `修改档连接缺少三维任务工具 ${required}`)
+          assert.ok(stageTools.includes(required), `连接缺少三维任务工具 ${required}`)
         }
 
         // 4. 图片编辑：没有活动编辑会话时必须拒绝并指出恢复入口，不能伪造后台可用。
@@ -261,7 +261,7 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
 
         // 5. 生成任务状态：查询工具对外可见，但发起任务必须缺席——本连接没有付费授权。
         assert.ok(stageTools.includes('get_generation_task') && stageTools.includes('prepare_generation_task'),
-          `生成任务状态查询必须对修改档连接可见：${stageTools.join('、')}`)
+          `生成任务状态查询必须对连接可见：${stageTools.join('、')}`)
         assert.equal(stageTools.includes('create_visible_generation_task'), false, '未授权付费的连接不得看到发起生成的工具')
         const hidden = contract.data.access.hiddenTools.find((item) => item.name === 'create_visible_generation_task')
         assert.equal(hidden?.tier, 'paid', `缺席工具必须说得出缺哪一档：${JSON.stringify(contract.data.access.hiddenTools)}`)
@@ -286,8 +286,8 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
       await setupSettings(page)
       await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
       const nonce = marker()
-      const first = await authorizeMcpConnection(page, { name: `注入验收甲-${nonce}`, allowWrites: true })
-      const second = await authorizeMcpConnection(page, { name: `注入验收乙-${nonce}`, allowWrites: true })
+      const first = await authorizeMcpConnection(page, { name: `注入验收甲-${nonce}` })
+      const second = await authorizeMcpConnection(page, { name: `注入验收乙-${nonce}` })
       const clientA = await connectMcpClient(first.config, 'Henji inject A')
       const clientB = await connectMcpClient(second.config, 'Henji inject B')
       // 3.4 起画布名就是文档名：并发改名落在画布文档（documents.document.name）上

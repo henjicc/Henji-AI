@@ -29,7 +29,6 @@ const recordingKey = (documentRef: ApplicationRef, sessionId: string, context: C
 function recordingSource(documentRef: ApplicationRef, sessionId: string, context: CapabilityExecutionContext) {
   const host = intentHost(documentRef), session = host.read().sessions.find(s => s.id === sessionId)
   if (!session) throw new Error('讲解记录不存在，请重新读取原文档。')
-  if (!session.consent?.textUpload) throw new Error('PERMISSION_DENIED:请先在录制宿主确认讲解文字外发。')
   const baseline = JSON.stringify(session)
   const assertCurrent = () => {
     if (context.callerGrant) assertApplicationCallerGrant(context.callerGrant)
@@ -98,7 +97,6 @@ export const creativeIntentApplicationDomain: ApplicationDomainModule = {
             const batches = semanticVisualBatches(source.session, resolutions)
             const batch = batches[input.imageOffset]
             if (batch) {
-              if (!source.session.consent?.imageUpload) throw new Error('PERMISSION_DENIED:本段讲解需要历史画面，请先确认图片外发或手动绑定对象。')
               const provider = intentProvider(domain)
               if (!provider.readVisual) throw new Error('历史画面不可用，请手动确认指代。')
               for (const visual of batch) {

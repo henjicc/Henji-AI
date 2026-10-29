@@ -9,8 +9,8 @@ import { isVideoEditDuckingKeyframe } from '@/core/videoEdit/keyframes'
 import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
-import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
-import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
+
+
 import { generateVideoEditAudioDucking, setVideoEditAudioRoles } from './videoEditAudioDucking'
 import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, subscribeVideoEditView, undoVideoEdit, videoEditViewRevision } from './videoEditService'
 import { updateVideoEditClipKeyframes } from './videoEditClipProperties'
@@ -86,8 +86,7 @@ it('声音角色可批量一步撤销；正式 describe/change/read、null 恢�
     const result = await app.requireResult('generate_video_edit_audio_ducking', input); expect(result.verified).toBe(true); expect(owner.past).toHaveLength(history + 1)
     expect(JSON.stringify((await app.read(input.musicClipRefs[0], ['video_edit.clip.volume.keyframes'])).properties)).toContain('ducking')
     undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips[0].curves?.volume).toBeUndefined()
-    const denied = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'read-only', capabilityIds: ['generate_video_edit_audio_ducking'], permissions: ['video_edit:read'], allowWrites: false, allowDestructive: false }))
-    await expect(denied.execute({ id: 'generate_video_edit_audio_ducking', version: 1, input }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })).rejects.toThrow('PERMISSION_DENIED')
+
     expect((await app.call('generate_video_edit_audio_ducking', { ...input, musicClipRefs: [{ kind: 'video_edit.clip', id: `foreign:${target.clipIds[0]}` }] })).ok).toBe(false)
   } finally { app.dispose() }
 })

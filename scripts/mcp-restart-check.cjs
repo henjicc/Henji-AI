@@ -137,14 +137,14 @@ async function main() {
     try {
       await seedCanvasFixture(first.page, 'MCP重启夹具', generationTasks)
       evidence.firstRun.historyBefore = await readHistoryCount(first.page)
-      const identity = await authorizeMcpConnection(first.page, { name: `重启验收-${nonce}`, allowWrites: true })
+      const identity = await authorizeMcpConnection(first.page, { name: `重启验收-${nonce}` })
       connectionId = identity.id
       token = identity.config.headers.Authorization
       await first.page.evaluate(async (targetPort) => {
         const state = await window.henjiNative.mcp.status()
         if (state.port !== targetPort) {
           await window.henjiNative.mcp.configure({ enabled: false, port: state.port })
-          await window.henjiNative.mcp.configure({ enabled: true, port: targetPort, defaultAccess: { allowWrites: true, allowDestructive: false, allowPaid: false } })
+          await window.henjiNative.mcp.configure({ enabled: true, port: targetPort })
         }
       }, port)
       await waitMcpReady(first.page)
@@ -217,7 +217,6 @@ async function main() {
       evidence.secondRun.status = { enabled: status.enabled, connections: status.connections.length }
       assert.equal(status.enabled, true, '应用重启后应恢复之前启用的连接服务')
       assert.equal(status.port, port)
-      assert.deepEqual(status.defaultAccess, { allowWrites: true, allowDestructive: false, allowPaid: false })
       assert.ok(status.connections.some((connection) => connection.id === connectionId), '重启后原授权连接丢失，客户端将被迫重新授权')
       assert.equal(await readProjectName(second.page), renamed, '重启后业务存储里的写入结果丢失')
 

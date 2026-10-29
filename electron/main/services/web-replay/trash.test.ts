@@ -2,9 +2,27 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { expect, it } from 'vitest'
-import { markWebRecordingTrashed, purgeExpiredWebRecordingTrash, WEB_RECORDING_TRASH_RETENTION_MS } from './trash'
+import { markWebRecordingTrashed, purgeExpiredWebRecordingTrash, vacateWebRecordingTrash, WEB_RECORDING_TRASH_RETENTION_MS } from './trash'
 
 const exists = (file: string): Promise<boolean> => fs.access(file).then(() => true, () => false)
+
+it('同 ID 再次回收保留旧副本及恢复位置，不延长旧副本保留期', async () => {
+  const trash = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-web-trash-'))
+  try {
+    await fs.mkdir(path.join(trash, 'same'))
+    await fs.writeFile(path.join(trash, 'same', 'body'), '第一次内容')
+    await fs.writeFile(path.join(trash, 'same.origin.json'), '{"directory":"first"}')
+    await markWebRecordingTrashed(trash, 'same', new Date(12345))
+    await vacateWebRecordingTrash(trash, 'same')
+    await fs.mkdir(path.join(trash, 'same'))
+    await fs.writeFile(path.join(trash, 'same', 'body'), '第二次内容')
+    const [archived] = (await fs.readdir(trash, { withFileTypes: true })).filter(item => item.isDirectory() && item.name !== 'same')
+    expect(await fs.readFile(path.join(trash, archived.name, 'body'), 'utf8')).toBe('第一次内容')
+    expect(await fs.readFile(path.join(trash, `${archived.name}.origin.json`), 'utf8')).toBe('{"directory":"first"}')
+    expect(await fs.readFile(path.join(trash, `${archived.name}.deleted-at`), 'utf8')).toBe(new Date(12345).toISOString())
+    expect(await fs.readFile(path.join(trash, 'same', 'body'), 'utf8')).toBe('第二次内容')
+  } finally { await fs.rm(trash, { recursive: true, force: true }) }
+})
 
 it('回收区按删除时刻清理：满 30 天的连同原位置记录删掉，未满的、没有删除时刻的旧录制都留下', async () => {
   const trash = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-web-trash-'))

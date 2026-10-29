@@ -3,8 +3,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { resolve, sep } from 'node:path'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
-import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
-import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
+
+
 import { getPlatform } from '@/platform'
 import { createRecordingDocument, recordingDocumentSchema } from '@/core/screenRecording/document'
 import { createVideoEditSequence, videoEditDocumentSchema } from '@/core/videoEdit/document'
@@ -105,18 +105,4 @@ it('跨步骤拆分原片，只替换第二步，旁白、其他序列不变，�
   expect(owner.document.sequences[1].clips.map(v => [v.itemId, v.start, v.duration])).toEqual([['old-item', 0, 90], ['new-item', 90, 90], ['old-item', 180, 90]])
   undoVideoEdit(id)
   expect(owner.document.sequences).toEqual(before.sequences)
-})
-
-it('脚本生成需要读取权限，重放不能扩大调用者的能力授权', async () => {
-  const { id, owner } = await fixture(), original = structuredClone(owner.document)
-  const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: crypto.randomUUID(), capabilityIds: ['generate_screen_recording_script', 'replay_screen_recording_script'], permissions: ['screen_recording:write', 'video_edit:write', 'documents:write'], allowWrites: true, allowDestructive: false }))
-  const input = { sessionRef: { kind: 'screen_recording.session', id } }
-  const denied = await session.execute({ id: 'generate_screen_recording_script', version: 1, input }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })
-  expect(denied.ok).toBe(false)
-  const limited = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: crypto.randomUUID(), capabilityIds: ['replay_screen_recording_script'], permissions: ['screen_recording:read', 'screen_recording:write', 'video_edit:write', 'documents:write'], allowWrites: true, allowDestructive: false }))
-  const failed = await limited.execute({ id: 'replay_screen_recording_script', version: 1, input }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })
-  expect(failed.ok).toBe(false)
-  expect(JSON.stringify(failed)).toContain('PERMISSION_DENIED')
-  expect(owner.document).toEqual(original)
-  expect((await getPlatform().documents.listProjects()).some(v => v.name.startsWith('重放临时-'))).toBe(false)
 })

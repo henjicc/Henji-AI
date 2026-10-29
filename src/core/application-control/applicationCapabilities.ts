@@ -12,7 +12,6 @@ import {
 import type { ApplicationDataClass, ApplicationCapabilityPreview, ApplicationUndoReference } from './capabilityMetadata'
 import type { ApplicationObservedEffect } from './observedEffect'
 
-const applicationCapabilityRiskSchema = z.enum(['R0', 'R1', 'R2', 'R3', 'R4'])
 const applicationCapabilityDataClassSchema = z.enum(['C0', 'C1', 'C2', 'C3'])
 
 export const APPLICATION_CAPABILITY_CATALOG_VERSION = 'application-capabilities/v2' as const
@@ -37,7 +36,6 @@ export const applicationCapabilityDescriptorSchema = z.object({
   aliases: z.array(z.string().min(1).max(120)).max(20),
   side: z.enum(['frontend', 'backend']),
   readOnly: z.boolean(),
-  risk: applicationCapabilityRiskSchema,
   dataClasses: z.array(applicationCapabilityDataClassSchema).min(1).max(4),
   permission: z.string().min(1).max(120),
   idempotent: z.boolean(),
@@ -49,7 +47,7 @@ export const applicationCapabilityDescriptorSchema = z.object({
   requiredScopes: z.array(z.string().min(1).max(120)).max(16),
   availability: z.array(z.string().min(1).max(300)).max(12),
   prerequisites: z.array(z.string().min(1).max(500)).max(12),
-  // 跨领域定位需要完整列出支持的实体类型；这是目录元数据，授权仍由 permission / Gateway 控制。
+  // 跨领域定位需要完整列出支持的实体类型。
   acceptsRefs: z.array(z.string().min(1).max(80)).max(32),
   producesRefs: z.array(z.string().min(1).max(80)).max(12),
   successEvidence: z.array(z.string().min(1).max(500)).min(1).max(12),

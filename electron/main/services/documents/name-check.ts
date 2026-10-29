@@ -53,8 +53,7 @@ async function resolveFolder(
     return { folder: path.dirname(existing), exclude: existing }
   }
   if (request.subject.type === 'project') {
-    if (location.container.kind !== 'user') throw new DocumentLocationError('项目不能放在另一个项目里。')
-    return { folder: workspace.layout().projectsDir }
+    return { folder: location.container.kind === 'user' ? workspace.layout().projectsDir : (await workspace.resolveContainer(location.container)).root }
   }
   const kind = kinds.require(request.subject.kind)
   const container = await workspace.resolveContainer(location.container)

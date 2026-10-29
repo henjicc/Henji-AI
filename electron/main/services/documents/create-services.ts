@@ -27,10 +27,10 @@ export interface DocumentEnvironment {
   storeDirectory: string
   logger(domain: string): MainLogger
   trashItem(target: string): Promise<void>
+  preserveFile?(target: string): Promise<void>
   retainDetachedMediaLocation?(target: string): void
   mediaPublished?(target: string): Promise<void>
   showItemInFolder(target: string): void
-  grantMediaRoots(directories: readonly string[]): void
   renderCover(sources: readonly DocumentCoverSource[]): Promise<{ bytes: Buffer; selected: DocumentCoverSource[] }>
   hideDirectory?(directory: string): Promise<void>
   kinds?: DocumentKindRegistry
@@ -91,10 +91,10 @@ export function createDocumentServices(environment: DocumentEnvironment): Docume
     logger: environment.logger('main.documents'),
     lockDirectory: path.join(environment.storeDirectory, 'locks'),
     trashItem: environment.trashItem,
+    preserveFile: environment.preserveFile,
     retainDetachedMediaLocation: environment.retainDetachedMediaLocation,
     mediaPublished: environment.mediaPublished,
     showItemInFolder: environment.showItemInFolder,
-    grantMediaRoots: environment.grantMediaRoots,
     removeCover: removeProgramState,
     refreshProjects,
   })
@@ -104,7 +104,6 @@ export function createDocumentServices(environment: DocumentEnvironment): Docume
     trashItem: environment.trashItem,
     retainDetachedMediaLocation: environment.retainDetachedMediaLocation,
     showItemInFolder: environment.showItemInFolder,
-    grantMediaRoots: environment.grantMediaRoots,
     removeCovers: async (docIds) => { await Promise.all(docIds.map((docId) => removeProgramState(docId))) },
     refreshProjects,
     scheduleIndexRefresh: () => { void scanner.refresh().catch(() => undefined) },

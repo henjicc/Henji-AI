@@ -96,7 +96,7 @@ function createVideoEditPopoutScene() {
         await observeWorkers(page); observed = true
         await button(page, '剪辑').first().click()
         await dialogs(app, [file], file); await openVideoEditFile(page, file); await presented(page, 0)
-        const identity = await authorizeMcpConnection(page, { name: '独立浮窗验收', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji popout Reality')
+        const identity = await authorizeMcpConnection(page, { name: '独立浮窗验收' }); client = await connectMcpClient(identity.config, 'Henji popout Reality')
         await playback(0, false); await presented(page, 0)
 
         phase('effects-popout')

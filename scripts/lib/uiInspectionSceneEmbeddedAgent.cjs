@@ -100,7 +100,7 @@ function createEmbeddedAgentScenes(context) {
           await page.getByRole('button', { name: '新建对话', exact: true }).click()
           await panel.getByText('从当前工作开始', { exact: true }).waitFor()
         }
-        const memoryIdentity = await authorizeMcpConnection(page, { name: '共享记忆验收', allowWrites: true })
+        const memoryIdentity = await authorizeMcpConnection(page, { name: '共享记忆验收' })
         const memoryClient = await connectMcpClient(memoryIdentity.config, 'Shared memory fixture')
         try {
           await callTool(memoryClient, 'read_application_entity', { ref: { kind: 'assistant.shared_memory', id: 'singleton' } })

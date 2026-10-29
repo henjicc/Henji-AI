@@ -116,6 +116,7 @@ export interface ImageDocumentServiceOptions {
   /** 与通用文档仓库同一个锁目录（程序目录 DocumentStore/locks），写回与改名、移动互斥。 */
   lockDirectory: string
   logger: MainLogger
+  preserveFile?(filePath: string, sourcePath?: string): Promise<void>
   /** 校验工作副本能被编辑器读取（与 V3 IPC 的快照校验相同）。 */
   validateDocument(envelope: ImageEditDocumentEnvelope): void
   /** 封面来源：资源库里某个资源的本地文件（只用于在程序目录生成封面，不进文档）。 */
@@ -190,7 +191,7 @@ export class ImageDocumentService {
 
   // ==================== 公共操作 ====================
 
-  /** 打开：按需解包到工作副本；有没写回的修改时先返回 recovery，由渲染层询问后带着选择再打开。 */
+  /** 打开保留未写回的工作，磁盘版本先进入统一回收区。 */
   async open(target: DocumentTarget, recovery: ImageDocumentRecoveryChoice): Promise<ImageDocumentOpenResult | ImageDocumentRecoveryRequired> {
     await this.touch(target.id)
     const located = await this.locate(target)
@@ -199,12 +200,17 @@ export class ImageDocumentService {
     const link = await this.options.links.read(id)
     const working = await this.loadWorking(id)
     const uncommitted = Boolean(working && link && working.revision > link.committedWorkingRevision)
-    if (uncommitted && working && recovery === 'ask') {
-      this.logger.info('图片文档有未写回的修改，等待用户选择', { event: 'image_document.open.recovery_required', context: { documentId: id } })
-      return { status: 'recovery', meta: this.metaOf(located), workingSavedAt: toTimestamp(working.updatedAt), fileSavedAt: toTimestamp(located.header.updatedAt) }
+    if (uncommitted && working && recovery === 'discard') {
+      // 工作副本封成正式文档再回收，恢复会走当前图片会话的停写与重新加载。
+      const staging = stagedPackagePathFor(located.path)
+      try {
+        await this.options.packages.writeStaged({ document: working, documentHeader: serializeImageDocumentHeader({ ...located.header, contentRevision: working.revision }) }, staging)
+        await this.options.preserveFile?.(located.path, staging)
+      } finally { await fsp.rm(staging, { force: true }) }
     }
-    if (uncommitted && working && link && recovery === 'restore') {
-      // 用工作副本继续：记下文件当前的样子，下一次写回按它核对（用户已选择用工作副本覆盖文件）。
+    if (uncommitted && working && link && recovery !== 'discard') {
+      if (link.packageRevision !== located.header.revision || link.fileSize !== located.fileSize || link.fileModifiedAt !== located.fileModifiedAt) await this.options.preserveFile?.(located.path)
+      // 工作副本继续编辑，文件原版本已保留；后续保存仍核对文件是否再次变化。
       await this.options.links.write({ ...link, packageRevision: located.header.revision, fileSize: located.fileSize, fileModifiedAt: located.fileModifiedAt })
       this.logger.info('图片文档按工作副本恢复', { event: 'image_document.open.restored', context: { documentId: id, workingRevision: working.revision } })
       return { status: 'ready', read: this.readResult(located, working), working: await this.workingReference(working), imported: false }
@@ -372,6 +378,7 @@ export class ImageDocumentService {
             return { retry: current }
           }
           request.signal?.throwIfAborted()
+          if (!link || current.header.revision !== link.packageRevision || current.fileSize !== link.fileSize || current.fileModifiedAt !== link.fileModifiedAt) await this.options.preserveFile?.(current.path)
           await replaceFileAtomically(stagedPath, current.path)
           return { retry: null }
         })

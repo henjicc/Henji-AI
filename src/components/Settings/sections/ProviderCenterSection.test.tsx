@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LlmProviderConfig } from '@henjicc/ai-sdk'
 import type { UseLlmSettingsResult } from '../hooks/useLlmSettings'
@@ -110,13 +110,11 @@ describe('供应商中心：同步模型（5.6 第二批）', () => {
 })
 
 describe('供应商中心：右键编辑与删除', () => {
-  it('自定义供应商右键出现编辑连接与删除；确认后删除', async () => {
+  it('自定义供应商右键出现编辑连接与删除；直接删除', async () => {
     render(<ProviderCenterSection llm={llm} />)
     fireEvent.contextMenu(await screen.findByRole('button', { name: '测试中转' }))
     expect(await screen.findByRole('menuitem', { name: /providerCenter.actions.editConnection/ })).toBeTruthy()
     fireEvent.click(screen.getByRole('menuitem', { name: /providerCenter.actions.deleteProvider/ }))
-    const dialog = await screen.findByRole('dialog')
-    fireEvent.click(within(dialog).getByRole('button', { name: 'providerCenter.actions.deleteProvider' }))
     await waitFor(() => expect(llm.deleteProviderSettings).toHaveBeenCalledWith('custom-relay'))
   })
 })

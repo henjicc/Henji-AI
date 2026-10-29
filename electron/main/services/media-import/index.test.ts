@@ -116,7 +116,6 @@ describe('main media import service', () => {
 
     expect(result.fullPath).toBe(sourcePath)
     expect(result.ownership).toBe('referenced')
-    expect(mocks.allowMediaRoot).toHaveBeenCalledWith(path.dirname(sourcePath))
   })
 
   it('导入目录联接中的文件保留原引用和既有目录登记，不复制原件', async () => {
@@ -126,7 +125,6 @@ describe('main media import service', () => {
     const link = path.join(project, 'link'); await fsp.symlink(outside, link, process.platform === 'win32' ? 'junction' : 'dir')
     const sourcePath = path.join(link, 'voice.mp3')
     expect(await importMediaFromPath({ importId: 'link-import', verifyContent: true, sourcePath, expectedKind: 'audio', ownership: 'referenced' })).toMatchObject({ fullPath: sourcePath, ownership: 'referenced' })
-    expect(mocks.allowMediaRoot).toHaveBeenCalledWith(path.dirname(sourcePath))
     expect(await fsp.readdir(path.join(mocks.root, 'Uploads'))).toEqual([])
   })
 

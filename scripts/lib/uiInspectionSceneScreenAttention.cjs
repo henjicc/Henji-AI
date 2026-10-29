@@ -23,7 +23,7 @@ function createScreenAttentionScene() {
       let client; const evidence = {}
       try {
         await assignIsolatedMcpPort(page)
-        client = await connectMcpClient((await authorizeMcpConnection(page, { name: '注意力推近免费验收', allowWrites: true, allowDestructive: true })).config)
+        client = await connectMcpClient((await authorizeMcpConnection(page, { name: '注意力推近免费验收' })).config)
         const documentRef = { kind: 'video_edit.document', id: seeded.documentId }
         const clipRef = { kind: 'video_edit.clip', id: `${seeded.documentId}:screen-clip` }
         const read = (ref, propertyIds) => callTool(client, 'read_application_entity', { ref, propertyIds })

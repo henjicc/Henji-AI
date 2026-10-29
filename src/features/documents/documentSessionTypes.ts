@@ -151,8 +151,6 @@ export interface DocumentConflictPromptInfo {
 
 /** 会话需要用户决定时的提示接口；正式运行由 DocumentSessionDialogs 渲染，测试换成替身。 */
 export interface DocumentSessionPrompter {
-  chooseLeaveAction(info: DocumentLeavePromptInfo): Promise<DocumentLeaveChoice>
   /** 起名对话框；保存成功返回 true，取消返回 false。 */
   askSaveName(info: DocumentSaveNamePromptInfo): Promise<boolean>
-  resolveConflict(info: DocumentConflictPromptInfo): Promise<DocumentConflictChoice>
 }

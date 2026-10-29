@@ -45,5 +45,5 @@ it('preload/PAL语义走原跟踪IPC，主进程只向原窗口拉帧且拒绝�
   await api.replyFrames(reply); await expect(read).resolves.toEqual(reply.frames)
   api.onFrameRequest(() => {}); expect(subscribe).toHaveBeenCalledWith(TRACKING_IPC_CHANNELS.frames, expect.any(Function))
   controller.abort(); expect(events.at(-1)).toEqual({ kind: 'release', jobId: 'job' })
-  await expect(api.run({ ...parseTrackingRun(input).definition, source: '/outside/media.mp4' }, input.range, { direction: 'both' })).rejects.toThrow('权限')
+  await expect(api.run({ ...parseTrackingRun(input).definition, source: '/outside/media.mp4' }, input.range, { direction: 'both' })).rejects.toThrow('ENOENT')
 })

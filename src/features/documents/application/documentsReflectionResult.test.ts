@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
+import { installHarnessNativeStorage, uninstallHarnessNativeStorage, registerHarnessRecycledFile } from '@/tests/harnessNativeStorage'
+import type { ApplicationRef } from '@/core/application-control'
 import type { FakeDocumentCommands as FakeCommands } from '../documentSessionTestKit'
 
 /*
@@ -28,7 +30,11 @@ vi.mock('@/commands/documents', () => {
     finalizeDocument: call('finalizeDocument'),
     moveDocument: call('moveDocument'),
     duplicateDocument: call('duplicateDocument'),
-    trashDocument: call('trashDocument'),
+    trashDocument: async (target: { id: string }) => {
+      const fake = holder.fake!, saved = fake.documents.get(target.id)!
+      await fake.trashDocument(target)
+      registerHarnessRecycledFile(saved.meta.path, saved.meta.name, async () => { fake.documents.set(target.id, saved) })
+    },
     deleteEmptyDraft: call('deleteEmptyDraft'),
     revealDocument: call('revealDocument'),
     forgetDocument: call('forgetDocument'),
@@ -38,7 +44,12 @@ vi.mock('@/commands/documents', () => {
     createProject: call('createProject'),
     renameProject: call('renameProject'),
     finalizeProject: call('finalizeProject'),
-    trashProject: call('trashProject'),
+    trashProject: async (id: string) => {
+      const fake = holder.fake!, project = fake.projects.get(id)!
+      const documents = [...fake.documents].filter(([, value]) => value.meta.container.kind === 'project' && value.meta.container.projectId === id)
+      await fake.trashProject(id)
+      registerHarnessRecycledFile(project.path, project.name, async () => { fake.projects.set(id, project); for (const [key, value] of documents) fake.documents.set(key, value) })
+    },
     revealProject: call('revealProject'),
     collectDocumentMedia: call('collectDocumentMedia'),
     migrateCodeStorage: call('migrateCodeStorage'),
@@ -64,11 +75,14 @@ const { useNavigationStore } = await import('@/stores/navigationStore')
 let fake: FakeCommands
 
 beforeEach(() => {
+  installHarnessNativeStorage()
   fake = new FakeDocumentCommands()
   holder.fake = fake
 })
 
-afterEach(() => { holder.fake = null })
+afterEach(() => { holder.fake = null; uninstallHarnessNativeStorage() })
+
+const remove = (app: ReturnType<typeof createApplicationHarness>, target: ApplicationRef) => app.call('change_application_entities', { summary: '移到回收区', changes: [{ kind: 'remove_items', entityType: target.kind, parent: target, targets: [target] }] })
 
 it('正式项目迁移能力走临时目录的真实存储服务并可幂等重跑', async () => {
   const { createTestEnvironment } = await import('../../../../electron/main/services/documents/documents.test-support')
@@ -197,13 +211,14 @@ it('新建项目、把文档移进去、创建副本再移到回收站，作品�
     expect(copy.verification.verified).toBe(true)
     expect(fake.stored(copy.resultRef.id)?.meta.container).toEqual({ kind: 'project', projectId })
 
-    // 移到回收站是破坏性操作：必须带上读取目标时拿到的基线
-    const baseline = await app.read({ kind: 'documents.document', id: copy.resultRef.id }, ['documents.document.name'])
-    const trashed = await app.requireResult('trash_document', { documentId: copy.resultRef.id }, baseline.revisions as Record<string, number>) as { status: string } & Verified
-    expect(trashed.status).toBe('trashed')
-    expect(trashed.verification.verified).toBe(true)
+    const trashed = await remove(app, { kind: 'documents.document', id: copy.resultRef.id })
+    expect(trashed.ok, JSON.stringify(trashed)).toBe(true)
     expect(fake.trashed).toContain(copy.resultRef.id)
     expect(fake.stored(copy.resultRef.id)).toBeUndefined()
+    if (!trashed.ok || typeof trashed.data.undoRef !== 'string') throw new Error('删除回执缺少撤销')
+    const restored = await app.call('undo_application_changes', { undoRef: trashed.data.undoRef })
+    expect(restored.ok, JSON.stringify(restored)).toBe(true)
+    expect(fake.stored(copy.resultRef.id)?.content).toEqual({ items: ['a'] })
   } finally {
     app.dispose()
   }
@@ -215,21 +230,23 @@ it('把整个项目移到回收站（4.3）：项目与里面的文档从作品�
   const outside = fake.seed({ name: '独立画布', content: { items: [] } })
   const app = createApplicationHarness()
   try {
-    // 破坏性操作：带上读取项目时拿到的基线
-    const baseline = await app.read({ kind: 'documents.project', id: project.id }, ['documents.project.name'])
-    const trashed = await app.requireResult('trash_project', { projectId: project.id }, baseline.revisions as Record<string, number>) as { status: string; name: string; verification: { verified: boolean } }
-    expect(trashed).toMatchObject({ status: 'trashed', name: '旧项目', verification: { verified: true } })
+    const trashed = await remove(app, { kind: 'documents.project', id: project.id })
+    expect(trashed.ok, JSON.stringify(trashed)).toBe(true)
     expect(fake.trashed).toContain(project.id)
     expect(fake.projects.has(project.id)).toBe(false)
     expect(fake.stored(inside.id)).toBeUndefined()
     expect(fake.stored(outside.id)).toBeDefined()
+    if (!trashed.ok || typeof trashed.data.undoRef !== 'string') throw new Error('删除回执缺少撤销')
+    const restored = await app.call('undo_application_changes', { undoRef: trashed.data.undoRef })
+    expect(restored.ok, JSON.stringify(restored)).toBe(true)
+    expect(fake.projects.get(project.id)?.name).toBe(project.name)
+    expect(fake.stored(inside.id)?.content).toEqual({ items: ['a'] })
 
     const missing = fake.seedProject({ name: '找不到的项目' })
     fake.projects.set(missing.id, { ...fake.projects.get(missing.id)!, missing: true })
-    const missingBaseline = await app.read({ kind: 'documents.project', id: missing.id }, ['documents.project.name'])
-    const refused = await app.call('trash_project', { projectId: missing.id }, missingBaseline.revisions as Record<string, number>)
+    const refused = await remove(app, { kind: 'documents.project', id: missing.id })
     expect(refused.ok).toBe(false)
-    expect(JSON.stringify(refused)).toContain('从列表移除')
+    expect(JSON.stringify(refused)).toContain('找不到')
     expect(fake.trashed).not.toContain(missing.id)
   } finally {
     app.dispose()

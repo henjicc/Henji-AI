@@ -186,7 +186,7 @@ function createVideoEditMonitorScene() {
         await observeNativeWaveforms(app); nativeObserved = true
         await button(page, '剪辑').click(); await open(file)
         evidence.trackBanks = { mixed: await trackBanks(page) }
-        const identity = await authorizeMcpConnection(page, { name: '源监视器音画与字幕回环', allowWrites: true, allowDestructive: true })
+        const identity = await authorizeMcpConnection(page, { name: '源监视器音画与字幕回环' })
         client = await connectMcpClient(identity.config, 'Henji monitor Reality')
         const projectRef = { kind: 'video_edit.document', id: project.id }; const sequenceRef = { kind: 'video_edit.sequence', id: `${project.id}:${sequence.id}` }; const sourceRef = { kind: 'video_edit.source', id: `${project.id}:source` }
         const read = (ref, propertyIds) => callTool(client, 'read_application_entity', { ref, propertyIds })

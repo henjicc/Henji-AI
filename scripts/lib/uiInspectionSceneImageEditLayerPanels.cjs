@@ -67,7 +67,7 @@ function createImageEditLayerPanelsScene(context) {
         await shoot('dense-tree')
         await host().locator('[data-layer-id="dense"]').getByRole('button', { name: '折叠图层组', exact: true }).click()
         await host().locator('[data-layer-id="original"]').getByRole('button', { name: '展开图层组', exact: true }).click()
-        const identity = await authorizeMcpConnection(page, { name: '图层通道验收', allowWrites: true })
+        const identity = await authorizeMcpConnection(page, { name: '图层通道验收' })
         client = await connectMcpClient(identity.config, '图层通道验收')
         const ref = { kind: 'image_edit.document', id: 'v3:reality-layer-panels' }
         const read = async ids => (await callTool(client, 'read_application_entity', { ref, propertyIds: ids })).data.properties

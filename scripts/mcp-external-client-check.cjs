@@ -267,7 +267,7 @@ async function main() {
     await waitForApp(app.page)
     const config = await app.page.evaluate(async ({ targetPort, connectionName }) => {
       await window.henjiNative.mcp.configure({ enabled: true, port: targetPort })
-      const identity = await window.henjiNative.mcp.authorize({ name: connectionName, allowWrites: true, allowDestructive: false, allowPaid: false })
+      const identity = await window.henjiNative.mcp.authorize({ name: connectionName })
       const deadline = Date.now() + 15000
       while (Date.now() < deadline) {
         if ((await window.henjiNative.mcp.status()).ready) break
@@ -276,7 +276,7 @@ async function main() {
       const raw = await window.henjiNative.mcp.connectionConfig({ id: identity.id })
       return { id: identity.id, ...JSON.parse(raw).mcpServers.henji }
     }, { targetPort: port, connectionName: `外部客户端验收-${randomUUID().slice(0, 8)}` })
-    console.log(`应用已就绪，连接端点 ${config.url}（修改档，未授权删除与付费）`)
+    console.log(`应用已就绪，连接端点 ${config.url}（费用由应用统一策略决定）`)
     for (const client of options.clients) {
       results.push(await runClient(client, { page: app.page, config, outDir, timeoutMs: options.timeoutMs }))
     }

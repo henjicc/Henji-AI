@@ -91,7 +91,7 @@ it('转写重试读取当前恢复状态，不按首次闭包重复新建转写�
   expect(document.body.textContent).not.toContain('转写预检失败')
   await act(async () => button('重试').click())
   expect(control.transcribe).toHaveBeenCalledTimes(2)
-  expect(control.transcribe.mock.calls[0][2]).toBe(false); expect(control.transcribe.mock.calls[1][2]).toBe(true)
+  expect(control.transcribe.mock.calls[0][1]).toBe(false); expect(control.transcribe.mock.calls[1][1]).toBe(true)
 })
 it('私密绑定更新只递增宿主版本时，也刷新审阅摘要', async () => {
   const entry = transcriptEventSchema.parse({ kind: 'transcript', eventId: 'event', seq: 1, monoUs: 0, timeline: null, unavailableReason: 'static', clockSegmentRef: 'clock', utteranceId: 'utterance', text: '移动这个', audioSegmentRef: 'audio', startSample: 0, endSample: 48, monoSpanUs: [0, 1000], timelineSpans: [], granularity: 'segment', alignmentQuality: 'unavailable', source: 'asr' })

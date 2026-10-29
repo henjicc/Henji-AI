@@ -9,7 +9,7 @@ import { ApplicationHostBridge } from '../../../electron/main/services/applicati
 import { APPLICATION_WRITE_CAPABILITY_IDS, type ApplicationHostPlatform, type LocalHostRequest } from '@/core/application-control/localHostContracts'
 const { JSDOM } = createRequire(import.meta.url)('jsdom') as { JSDOM: new (html: string, options: { url: string }) => { window: Window } }
 
-it('真实 MCP → 中立桥 → Session → 领域注册表读取正式设置，禁止内部实体与写入', async () => {
+it('真实 MCP → 中立桥 → Session → 领域注册表读取正式设置，业务写入可发现且内部实体排除', async () => {
   const dom = new JSDOM('', { url: 'http://localhost' })
   vi.stubGlobal('window', dom.window)
   vi.stubGlobal('document', dom.window.document)
@@ -34,11 +34,10 @@ it('真实 MCP → 中立桥 → Session → 领域注册表读取正式设置�
   try {
     await server.start(0)
     await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${server.listeningPort}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${connections.token(identity.id)}` } } }))
-    // 只读连接可见的每个工具都必须是读取工具；写能力一个都不许出现在清单里。
+    // 连接可发现正式读写能力，内部实体仍不公开。
     const listed = (await client.listTools()).tools
     expect(listed.map((tool) => tool.name)).toEqual(expect.arrayContaining(['describe_application_entities', 'list_application_entities', 'read_application_entity']))
-    expect(listed.filter((tool) => tool.annotations?.readOnlyHint !== true).map((tool) => tool.name)).toEqual([])
-    expect(listed.map((tool) => tool.name).filter((name) => APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === name))).toEqual([])
+    expect(listed.map((tool) => tool.name)).toEqual(expect.arrayContaining(APPLICATION_WRITE_CAPABILITY_IDS))
     const result = await client.callTool({ name: 'read_application_entity', arguments: { ref: { kind: 'settings.registry', id: 'singleton' }, propertyIds: ['interface.theme_contrast'] } })
     expect(result.isError, JSON.stringify(result)).toBe(false)
     expect(result.structuredContent).toMatchObject({ ok: true, data: { properties: { 'interface.theme_contrast': useSettingsStore.getState().themeSelection.contrast } } })

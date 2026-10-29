@@ -19,8 +19,6 @@ describe('voice library application reflection', () => {
     const before = await registry.readEntity(ref, undefined, context)
     expect(before.properties).toMatchObject({ 'generation.voice.voice_id': voice.voiceId, 'generation.voice.status': 'ready' })
     expect(JSON.stringify(before)).not.toContain(voice.previewPath)
-    const noPermission = await registry.readEntity(ref, undefined, { ...context, permissions: new Set() })
-    expect(noPermission.properties).toEqual({})
     const engine = new ApplicationControlExecutionEngine(registry, { now: () => new Date(), createOpaqueRef: kind => `${kind}:${crypto.randomUUID()}` })
     engine.registerCollectionExecutor(new VoiceLibraryCollectionExecutor())
     const plan = await engine.plan({ summary: '移除本地音色', transactionMode: 'compensatable', steps: [{

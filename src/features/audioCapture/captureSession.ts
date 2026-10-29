@@ -28,7 +28,7 @@ export class CaptureSession {
   private leaveRequest: Promise<boolean> | undefined
   private unlock: (() => void) | undefined
   private imported = new Set<string>()
-  constructor(private readonly api: AudioCapturePlatform, private readonly importMedia: (path: string) => Promise<unknown>, private readonly confirm: (discard: boolean) => Promise<boolean>, private readonly editor?: {
+  constructor(private readonly api: AudioCapturePlatform, private readonly importMedia: (path: string) => Promise<unknown>, private readonly editor?: {
     lock: (id: string, expectedRevision?: number) => () => void
     commit: (path: string, placement: AudioCapturePlacement) => Promise<unknown>
     progress: (placement: AudioCapturePlacement, seconds: number) => void
@@ -167,7 +167,6 @@ export class CaptureSession {
   }
   async discard(outputPath = this.store.getState().outputPath): Promise<void> {
     await this.run('discard', async () => {
-      if (!await this.confirm(true)) return
       await this.stopCapture()
       this.unlock?.(); this.unlock = undefined
       if (outputPath) await this.api.trashFile(outputPath)
@@ -180,7 +179,6 @@ export class CaptureSession {
     if (this.leaveRequest) return this.leaveRequest
     this.leaveRequest = (async () => {
       if (this.operation) { try { await this.operation } catch { return false } }
-      if (this.active && !await this.confirm(false)) return false
       try { await this.run('leave', async () => {
         const state = this.store.getState()
         if (state.phase === 'interrupted' && state.outputPath) await this.api.recover(state.outputPath)

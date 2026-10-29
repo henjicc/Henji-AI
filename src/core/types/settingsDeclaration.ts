@@ -202,11 +202,13 @@ export const SETTINGS_DECLARATION = {
     sections: [
       section({
         id: 'files-storage', surfaceId: 'settings.storage', componentKeys: ['DataPathSection'],
+        acceptedRefKinds: ['settings.deleted_item'],
         surfaceOrder: 13, schemaOrder: 13,
         sensitive: true,
         search: [
           ...searchRows(10, [
             ['sections.dataPath.pathLabel', ['作品目录', '数据目录', '保存位置', '更换位置', '存储', 'works folder', 'storage', 'folder']],
+            ['recentlyDeleted.title', ['最近删除', '回收站', '恢复', '删除记录', 'recycle', 'restore']],
           ]),
         ],
       }),
@@ -293,8 +295,8 @@ export const SETTINGS_DECLARATION = {
         sensitive: true,
         search: [
           ...searchRows(17, [
-            ['paidApproval.title', ['付费', '授权', '单次', '每日上限', '始终允许', 'auto', 'bypass', 'payment']],
-            'paidApproval.mode',
+            ['paidApproval.title', ['付费', '授权', '单次', '每日上限', '完全放开', 'payment']],
+            'paidApproval.unlimited',
             'paidApproval.single',
             'paidApproval.daily',
             ['agentInstructions.label', ['指令', '偏好', '提示词', 'instructions']],
@@ -316,12 +318,8 @@ export const SETTINGS_DECLARATION = {
           ...searchRows(19, [
             ['mcp.enable', ['MCP', 'Codex', 'Claude', '外部', '连接']],
             ['mcp.port', ['端口', 'port']],
-            'mcp.allowWrites',
-            'mcp.allowDelete',
-            ['mcp.allowPaid', ['付费']],
             ['mcp.connectionsTitle', ['授权', 'authorization']],
             'mcp.name',
-            ['mcp.edit', ['修改权限', '修改配置', 'permission']],
           ]),
         ],
       }),

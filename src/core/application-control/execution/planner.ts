@@ -11,17 +11,12 @@ import type {
   ApplicationExecutionContext,
   ApplicationMutationExecutor,
   ApplicationPlanRequest,
-  ApplicationRisk,
   ApplicationSemanticOperationExecutor,
 } from './types'
 import { assertCollectionOperationAvailable } from './availability'
 import { acceptedPropertyOperations } from './writerTable'
 
-const RISK_RANK: Record<ApplicationRisk, number> = { R0: 0, R1: 1, R2: 2, R3: 3, R4: 4 }
 
-function highestRisk(left: ApplicationRisk, right: ApplicationRisk): ApplicationRisk {
-  return RISK_RANK[left] >= RISK_RANK[right] ? left : right
-}
 
 function jsonEqual(left: JsonValue, right: JsonValue): boolean {
   return JSON.stringify(left) === JSON.stringify(right)
@@ -172,7 +167,6 @@ export class ApplicationPlanBuilder {
   ): Promise<ApplicationChangePlan> {
     if (!request.summary.trim()) throw new Error('PLAN_SUMMARY_REQUIRED')
     if (request.steps.length === 0 || request.steps.length > 256) throw new Error('INVALID_PLAN_STEPS')
-    let risk: ApplicationRisk = 'R0'
     const normalizedSteps: ApplicationPlannedStep[] = []
     const requestedVerificationConditions: ApplicationVerificationCondition[] = [
       ...(request.verificationConditions ?? []),
@@ -185,7 +179,6 @@ export class ApplicationPlanBuilder {
         const prepared = await this.prepareMutation(step, context, normalizedSteps, workingValues)
         if (prepared.step.mutations.length) normalizedSteps.push(prepared.step)
         generatedVerificationConditions.push(...prepared.conditions)
-        risk = highestRisk(risk, 'R1')
       } else if (step.kind === 'collection') {
         const descriptor = this.dependencies.registry.describe(
           { entityTypes: [step.entityType] }, context,
@@ -225,18 +218,13 @@ export class ApplicationPlanBuilder {
             target,
           })))
         }
-        risk = highestRisk(risk, 'R1')
       } else {
         const executor = this.dependencies.getOperationExecutor(step.capabilityId, step.capabilityVersion)
         if (!executor) throw new Error(`OPERATION_EXECUTOR_NOT_FOUND:${step.capabilityId}`)
-        if (!executor.requiredPermissions.every((permission) => context.permissions.has(permission))) {
-          throw new Error(`PERMISSION_DENIED:${step.capabilityId}`)
-        }
         const input = executor.normalizeInput(step.input)
         const revisions = await executor.getCurrentRevisions(input)
         assertRevisions(step.expectedRevisions, revisions, Object.keys(revisions))
         normalizedSteps.push({ ...step, input })
-        risk = highestRisk(risk, executor.risk)
       }
     }
     this.assertTransactionMode(request.transactionMode, normalizedSteps)
@@ -249,8 +237,6 @@ export class ApplicationPlanBuilder {
       contractVersion: 'application-control/v2',
       planRef: this.dependencies.createPlanRef(),
       summary: request.summary.trim(),
-      risk,
-      requiresApproval: RISK_RANK[risk] >= RISK_RANK.R2,
       atomic: request.transactionMode === 'atomic',
       transactionMode: request.transactionMode,
       steps: normalizedSteps,
@@ -314,7 +300,6 @@ export class ApplicationPlanBuilder {
       const descriptor = this.dependencies.registry.getProperty(mutation.propertyId)
       if (!descriptor) throw new Error(`PROPERTY_NOT_FOUND:${mutation.propertyId}`)
       const staticallyWritable = !descriptor.readOnlyReason
-        && descriptor.requiredPermissions.write.every((permission) => context.permissions.has(permission))
       const canDependOnEarlierSteps = propertyAvailability
         ? stateBlocksCanBeSatisfied(
             propertyAvailability.blocks ?? [], earlierSteps,

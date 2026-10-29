@@ -45,7 +45,6 @@ beforeEach(async () => {
   vi.spyOn(getPlatform().system.fs, 'readDirPage').mockRejectedValue(new Error('ENOTDIR'))
   vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
   vi.spyOn(getPlatform().system.paths, 'dirname').mockResolvedValue(root)
-  vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined)
   vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue(undefined)
   vi.spyOn(videoEditNativeMediaProbe, 'probe').mockResolvedValue({ status: 'unavailable' })
   owner = await createVideoEditTestProject()

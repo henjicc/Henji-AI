@@ -12,7 +12,7 @@ export const recordingAudioRequestSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('release'), sessionId: recordingAudioSessionIdSchema }).strict(),
   z.object({ action: z.literal('archive'), sessionId: recordingAudioSessionIdSchema }).strict(),
   z.object({ action: z.literal('restore'), sessionId: recordingAudioSessionIdSchema, path: z.string().min(1), digest: z.string().regex(/^sha256:[a-f0-9]{64}$/), bytes: z.number().int().positive().max(Number.MAX_SAFE_INTEGER) }).strict(),
-  z.object({ action: z.literal('transcribe'), ...scope, modelId: z.string().min(1), requestId: id, audioUploadReceipt: id, resume: z.boolean().default(false) }).strict(),
+  z.object({ action: z.literal('transcribe'), ...scope, modelId: z.string().min(1), requestId: id, resume: z.boolean().default(false) }).strict(),
   z.object({ action: z.literal('preflight'), ...scope, modelId: z.string().min(1), requestId: id, resume: z.boolean().default(false) }).strict(),
   z.object({ action: z.literal('cancel'), sessionId: recordingAudioSessionIdSchema }).strict(),
 ])

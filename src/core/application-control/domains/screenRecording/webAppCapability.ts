@@ -7,7 +7,7 @@ export const webAppRefSchema = z.object({ kind: z.literal('screen_recording.web_
 export const webRecordingRefSchema = z.object({ kind: z.literal('screen_recording.web_recording'), id: z.string().uuid() }).strict()
 
 // Web recordings keep everything the app saw, credentials included; the user chose full visibility for the assistant.
-const common = { version: 1, domain: 'screen_recording', readOnly: false, risk: 'R1' as const, dataClasses: ['C1' as const], permission: 'screen_recording:write', idempotent: false, destructive: false,
+const common = { version: 1, domain: 'screen_recording', readOnly: false, dataClasses: ['C1' as const], permission: 'screen_recording:write', idempotent: false, destructive: false,
   timeoutMs: 120000, supportsPreview: false, supportsUndo: false, requiredScopes: [], concurrencyKey: 'screen_recording.web' }
 
 export const startWebAppRecordingCapability = defineApplicationCapability({ ...common,
@@ -42,7 +42,7 @@ export const stopWebAppRecordingCapability = defineApplicationCapability({ ...co
 export const readWebAppRecordingCapability = defineApplicationCapability({ ...common,
   id: 'read_web_app_recording', title: '读取网页应用录制',
   description: '分页读取网页录制的数据轨、行为轨、文字轨或界面元素位置轨，内容完整未脱敏。给 take（版本名）时读按导演稿重演出的那个版本自己的 behavior、text、boxes（时刻是版本视频的秒数），timemap 是版本输出时间与录制时间的对照（每段的输出/录制起止 µs 与速度，以及剪掉的区间）；data 轨总是录制本身的。offset 从 0 开始，按 nextOffset 续读。boxes 每条是一个元素的变化点 {key, seconds, rect}，只返回位置变化、出现与消失（rect=null）；seconds 是录制时间秒数，rect 的 x/y/width/height 按视口宽高归一化，左上为原点，出视口部分裁切到 0–1。可按键、键前缀和时间范围过滤；补上范围起点已有的位置。按时间排序，同刻按采样元素顺序，每页最多 200 条，total 是过滤后变化点数。',
-  aliases: ['读网页录制', '查看录制请求'], readOnly: true, risk: 'R0', permission: 'screen_recording:read', idempotent: true,
+  aliases: ['读网页录制', '查看录制请求'], readOnly: true, permission: 'screen_recording:read', idempotent: true,
   inputSchema: z.object({ recordingRef: webRecordingRefSchema,
     track: z.enum(['data', 'behavior', 'text', 'boxes', 'timemap']).describe('data 网络请求与宿主调用；behavior 鼠标键盘与应用动作；text 画面文字轨；boxes 界面元素位置轨；timemap 只用于 take：版本的时间对照。没有 text 或 boxes 时先用 render_web_app_replay 重演一遍（可 textOnly=true）'),
     take: webReplayTakeNameSchema.optional().describe('可选：版本名（render_web_app_replay 按导演稿出的 takes/<名字>）；给了就读这个版本的轨道'),
@@ -99,7 +99,7 @@ const destinationSchema = z.object({
 
 export const importWebRecordingCapability = defineApplicationCapability({ ...common,
   id: 'import_web_recording', title: '将网页录制导入剪辑', permission: 'video_edit:write', supportsUndo: true, timeoutMs: 300000,
-  description: '把网页录制作为一段普通视频导入剪辑：默认用最新的重演视频（干净、不带鼠标），没有时用备份录屏；给 take 时用按导演稿出的那个版本的视频与它自己的鼠标轨迹。录制里的鼠标与按键按视频时间换算成光标事件，片段自动带上鼠标效果（重新画鼠标与点击）和按点击建议的自动缩放，可在检查器里调整。给 sequenceId 时放到 frame 处的空视频轨，否则只进素材库。没有视频时先用 render_web_app_replay 重演出视频。需要网页录制读取与剪辑写入权限。',
+  description: '把网页录制作为一段普通视频导入剪辑：默认用最新的重演视频（干净、不带鼠标），没有时用备份录屏；给 take 时用按导演稿出的那个版本的视频与它自己的鼠标轨迹。录制里的鼠标与按键按视频时间换算成光标事件，片段自动带上鼠标效果（重新画鼠标与点击）和按点击建议的自动缩放，可在检查器里调整。给 sequenceId 时放到 frame 处的空视频轨，否则只进素材库。没有视频时先用 render_web_app_replay 重演出视频。',
   aliases: ['网页录制进剪辑', '网页录屏导入剪辑', 'web recording to edit'],
   inputSchema: z.object({
     recordingRef: webRecordingRefSchema, destination: destinationSchema,

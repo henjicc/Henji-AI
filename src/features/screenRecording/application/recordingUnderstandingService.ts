@@ -34,7 +34,6 @@ export async function saveRecordingUnderstanding(id: string, value: RecordingUnd
     if (!prior.director) throw new Error('请通过规划导演录制创建脚本。')
     assertDirectorTargets(plan, read.content.scriptCapture)
     if ((read.content.sessionId || read.content.directorRun?.recordingId) && directorPlanIdentity(plan) !== directorPlanIdentity({ director: prior.director, operationScript: prior.operationScript })) throw new Error('此脚本已形成录制，请在成片中补录旁白，或重新规划一份教程。')
-    if (plan.director.confirmed && directorPlanIdentity(plan) !== directorPlanIdentity({ director: prior.director, operationScript: prior.operationScript })) throw new Error('脚本有修改，请先以未确认状态保存，再确认最新脚本。')
   } else if (read.content.understanding.director) throw new Error('不能移除导演脚本归属。')
   else if (understanding.operationScript.steps.length) assertRecordedScriptEdits(understanding.operationScript, await recordedScriptSource(id, { ...read.content, understanding }))
   const active = read.content.media.filter(v => v.kind === 'screen').map(v => ({ startUs: v.monoUs, endUs: v.monoUs + v.durationUs }))

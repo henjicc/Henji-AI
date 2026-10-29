@@ -48,6 +48,6 @@ describe('剪辑类型登记', () => {
     expect(parsed.sequences[0]).toMatchObject({ futureField: { keep: true }, width: 1920 })
     expect(parsed.sequences[0].clips[0]).toMatchObject({ futureClipField: 1 })
     expect(videoEditDocumentKind.contentSchema.safeParse({ ...empty, sequences: [] }).success).toBe(true)
-    expect(videoEditDocumentKind.standaloneFolderNames).toBeNull()
+    expect(videoEditDocumentKind.standaloneFolderNames).toBeDefined()
   })
 })

@@ -2,7 +2,6 @@ import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useEffect, useMemo, useState, type MouseEvent } from 'react'
 import { Lock, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import ContextMenu from '@/components/ContextMenu'
-import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import {
   UI_TEXT_BODY_CLASS,
@@ -80,7 +79,6 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
   const [syncProvider, setSyncProvider] = useState<LlmProviderConfig | null>(null)
   const [syncDiscovered, setSyncDiscovered] = useState<DiscoveredModelDraft[]>([])
   const providerMenu = useContextMenu()
-  const [deleting, setDeleting] = useState<{ providerId: string; name: string } | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
 
   const groups = useMemo(() => buildProviderCenterGroups({
@@ -256,20 +254,18 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
       }] : []),
       ...(deletable ? [{
         id: 'delete', label: t('providerCenter.actions.deleteProvider'), icon: <Trash2 className={`${UI_ICON_SIZE_CLASS.md}`} />,
-        onClick: () => setDeleting({ providerId: provider.providerId, name: group.displayName }),
+        onClick: () => void deleteProvider(provider.providerId),
       }] : []),
     ])
   }
 
-  const confirmDelete = async (): Promise<void> => {
-    if (!deleting) return
+  const deleteProvider = async (providerId: string): Promise<void> => {
+    if (deleteBusy) return
     setDeleteBusy(true)
     try {
-      await llm.deleteProviderSettings(deleting.providerId)
-      setDeleting(null)
+      await llm.deleteProviderSettings(providerId)
     } catch (error) {
-      logger.warn('删除供应商失败', { event: 'provider_center.delete_provider.failed', error, context: { providerId: deleting.providerId } })
-      setDeleting(null)
+      logger.warn('删除供应商失败', { event: 'provider_center.delete_provider.failed', error, context: { providerId: providerId } })
       setFetchError(error instanceof Error && error.message ? error.message : t('llmProvider.errors.deleteFailed'))
     } finally {
       setDeleteBusy(false)
@@ -428,16 +424,6 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
         onDelete={async providerId => { await llm.deleteProviderSettings(providerId) }}
       />
       <ContextMenu items={providerMenu.menuItems} position={providerMenu.menuPosition} onClose={providerMenu.hideMenu} visible={providerMenu.menuVisible} />
-      <DeleteConfirmDialog
-        isOpen={deleting !== null}
-        title={t('providerCenter.deleteTitle', { name: deleting?.name ?? '' })}
-        message={t('providerCenter.deleteMessage')}
-        cancelLabel={t('llmProvider.actions.cancel')}
-        confirmLabel={t('providerCenter.actions.deleteProvider')}
-        busy={deleteBusy}
-        onCancel={() => setDeleting(null)}
-        onConfirm={() => void confirmDelete()}
-      />
       <LlmModelDialog isOpen={modelDialogOpen} model={modelDraft} onChange={setModelDraft} onClose={() => setModelDialogOpen(false)} onSave={saveModel} />
       <ModelSyncDialog
         open={syncProvider !== null}

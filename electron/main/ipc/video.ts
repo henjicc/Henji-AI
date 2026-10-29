@@ -25,7 +25,6 @@ import { clearLegacyVideoPreviewCache } from '../services/video/preview-cache'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { ensureAssetThumbnail } from '../services/asset-library/thumbnailService'
-import { allowMediaRoot, isPathWithinAllowedMediaRoots } from '../protocol'
 import { normalizeLocalSource } from '../services/image/source'
 import { filmstripService } from '../services/video/filmstrip'
 import { FILMSTRIP_MAX_TIME_US, isFilmstripHeight, type FilmstripHeight } from '../../../src/core/media/filmstripFrames'
@@ -99,8 +98,8 @@ export function registerVideoIpc(): void {
       try {
         if (frame) {
           // 片段缩略图条（任务 2.4）：按时间点与高度取一帧，结果缓存在磁盘，渲染层按路径显示。
-          const cachePath = await filmstripService().frame({ source: await authorizedVideoPath(source), timeUs: frame.timeUs, height: frame.height }, controller.signal)
-          allowMediaRoot(path.dirname(cachePath))
+          const cachePath = await filmstripService().frame({ source: await resolveVideoPath(source), timeUs: frame.timeUs, height: frame.height }, controller.signal)
+
           return { bytes: new Uint8Array(), cachePath }
         }
         if (cache) {
@@ -109,7 +108,7 @@ export function registerVideoIpc(): void {
           controller.signal.throwIfAborted()
           const cachePath = await ensureAssetThumbnail(filePath, 'video', info.mtimeMs, controller.signal)
           if (!cachePath) throw new Error('未能生成视频缩略图。')
-          allowMediaRoot(path.dirname(cachePath))
+
           return { bytes: new Uint8Array(), cachePath }
         }
         return { bytes: await generateVideoThumbnailBytes(source, maxSize, controller.signal) }
@@ -200,11 +199,10 @@ interface ThumbnailBytesPayload {
   requestId?: string
 }
 
-async function authorizedVideoPath(source: string): Promise<string> {
+async function resolveVideoPath(source: string): Promise<string> {
   const normalized = normalizeLocalSource(source)
-  if (!path.isAbsolute(normalized) || !isPathWithinAllowedMediaRoots(normalized)) throw new Error('视频素材尚未获得读取权限，请从素材库导入。')
+  if (!path.isAbsolute(normalized)) throw new Error('请使用本地文件的绝对路径。')
   const canonical = await fs.realpath(normalized)
-  if (!isPathWithinAllowedMediaRoots(canonical)) throw new Error('视频素材的实际路径不在已授权目录内。')
   return canonical
 }
 

@@ -80,7 +80,6 @@
     "describeTitle": "Generate a title from a description",
     "alignSpeech": "Transcribe audio and align the original text",
     "allowOnce": "Allow once",
-    "alwaysAllowProject": "Always allow in this project",
     "deny": "Deny",
     "categories": {
       "generation": "Generation",
@@ -94,8 +93,8 @@
     "unknownCost": "Cost cannot be estimated yet; actual model charges apply.",
     "estimatedCost": "Estimated cost: CNY {{amount}}",
     "dailySpent": "Spent today: CNY {{amount}}",
-    "sendExplanation": "Send this explanation to AI?",
-    "explanationContent": "Send the explanation text and {{count}} images to {{modelName}}."
+    "sendExplanation": "AI explanation",
+    "explanationContent": "{{modelName}} will process the explanation and {{count}} images at its billing rates."
   },
   "operationReview": {
     "executedTitle": "Review the changes already made",

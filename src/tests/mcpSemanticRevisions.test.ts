@@ -3,14 +3,14 @@ import { setCanvasTestProjectState, seedCanvasTestProject } from '@/tests/canvas
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
-import { createApplicationCapabilitySession, listApplicationCapabilities } from '@/features/application-control/applicationCapabilityService'
+import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
 import { replaceGenerationTaskStatusSnapshots, type GenerationTaskStatusSnapshot } from '@/features/generation/application/generationTaskStatusRegistry'
 import { registerVisibleGenerationTaskHandler } from '@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand'
 import { getCanvasNode, getCanvasProject, readPersistedCanvasProjectSnapshot } from '@/features/canvas/application/canvasQueryService'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from './harnessNativeStorage'
 import { registry } from '@/core/ModelRegistry'
 import { databaseService } from '@/services/database/DatabaseService'
-import { APPLICATION_CAPABILITY_IDS, APPLICATION_READ_PERMISSIONS, APPLICATION_WRITE_PERMISSIONS } from '@/core/application-control/localHostContracts'
+
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { loadRealModelsIntoRegistry } from './loadRealModels'
@@ -33,9 +33,7 @@ beforeEach(() => {
 afterEach(() => { dispose(); replaceGenerationTaskStatusSnapshots([]); uninstallHarnessNativeStorage(); vi.restoreAllMocks(); vi.clearAllMocks() })
 const request = () => ({ requestId: crypto.randomUUID(), signal: new AbortController().signal })
 function client() {
-  return createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'mcp-revisions',
-    capabilityIds: listApplicationCapabilities().map((entry) => entry.id), allowWrites: true, allowDestructive: true,
-    permissions: ['application:read', 'generation:read', 'generation:cancel', 'canvas:read', 'canvas:write'] }))
+  return createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'mcp-revisions' }))
 }
 async function baseline(session: ReturnType<typeof client>) {
   const result = await session.execute({ id: 'read_application_entity', version: 1,
@@ -84,10 +82,7 @@ it('没有项目时可创建并验证持久化，再打开同一画布项目', a
   const previousNavigation = useNavigationStore.getState()
   try {
     setCanvasTestProjectState({ currentProjectId: null, currentProject: null })
-    const session = createApplicationCapabilitySession(createApplicationCallerGrant({
-      callerId: 'mcp-creative-create', capabilityIds: [...APPLICATION_CAPABILITY_IDS], allowWrites: true, allowDestructive: false,
-      permissions: [...APPLICATION_READ_PERMISSIONS, ...APPLICATION_WRITE_PERMISSIONS],
-    }))
+    const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'mcp-creative-create' }))
     // 画布是通用文档（3.4）：create_document 新建、open_document 打开到画布页
     const created = await session.execute({ id: 'create_document', version: 1, input: { kind: 'canvas', name: '短剧画布' } }, request())
     expect(created).toMatchObject({ ok: true, data: { verification: { verified: true } } })
@@ -106,10 +101,7 @@ it('没有项目时可创建并验证持久化，再打开同一画布项目', a
 })
 
 it('创作文本经 MCP 保存后新会话按需读回，局部返修保留其他镜头和依赖', async () => {
-  const creativeClient = () => createApplicationCapabilitySession(createApplicationCallerGrant({
-    callerId: 'mcp-drama', capabilityIds: [...APPLICATION_CAPABILITY_IDS], allowWrites: true, allowDestructive: false,
-    permissions: [...APPLICATION_READ_PERMISSIONS, ...APPLICATION_WRITE_PERMISSIONS],
-  }))
+  const creativeClient = () => createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'mcp-drama' }))
   const projectId = 'mcp-drama-resume'
   const nodes = ['character', 'shot-one', 'shot-two'].map((id, index) => ({
     id, type: CANVAS_NODE_TYPES.textAnnotation, position: { x: index * 300, y: 0 },
@@ -173,9 +165,7 @@ it('MCP 实际授权可发现、创建和配置图片节点，并从原工程存
       coverPath: null, nodes: [source], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, history: { past: [], future: [] } }
     useCanvasStore.getState().setCanvasData([source], [], project.history)
     setCanvasTestProjectState({ currentProjectId: projectId, currentProject: project })
-    const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'mcp-image-tools',
-      capabilityIds: [...APPLICATION_CAPABILITY_IDS], allowWrites: true, allowDestructive: false,
-      permissions: [...APPLICATION_READ_PERMISSIONS, ...APPLICATION_WRITE_PERMISSIONS] }))
+    const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'mcp-image-tools' }))
     expect(session.list().map((definition) => definition.id)).toContain('apply_canvas_image_capability')
     const result = await session.execute({ id: 'apply_canvas_image_capability', version: 1,
       input: { documentId: projectId, sourceNodeId: source.id, capabilityId: 'image.background-removal' } }, request())
@@ -256,10 +246,10 @@ it('外部语义操作使用正式实体读取的版本，不与助手界面计�
   expect(cancel).toHaveBeenCalledWith(task.taskId, '验收取消')
 })
 
-it('不可撤销的任务取消仍需核对原任务，不能省略基线', async () => {
+it('任务取消可省略读取基线，仍调用正式任务服务', async () => {
   const result = await client().execute(invocation(undefined), request())
-  expect(result.ok).toBe(false)
-  expect(cancel).not.toHaveBeenCalled()
+  expect(result.ok).toBe(true)
+  expect(cancel).toHaveBeenCalledOnce()
 })
 
 it('无需读取模型基线即可通过正式注册表、参数准备与领域提交创建任务', async () => {
@@ -270,8 +260,7 @@ it('无需读取模型基线即可通过正式注册表、参数准备与领域�
   dispose()
   dispose = registerVisibleGenerationTaskHandler({ create, get: () => null, getResult: () => null, list: () => [], cancel })
   vi.spyOn(databaseService, 'getHistoryById').mockResolvedValue(null)
-  const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'submit', allowWrites: true, allowDestructive: false,
-    capabilityIds: listApplicationCapabilities().map((entry) => entry.id), permissions: ['application:read', 'models:read', 'generation:read', 'generation:create'] }))
+  const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'submit' }))
   const result = await session.execute({ id: 'create_visible_generation_task', version: 1,
     input: { modelId: 'mcp-submit-fixture', prompt: '生成快递员', mediaType: 'image', params: {} } }, request())
   expect(result.ok, JSON.stringify(result)).toBe(true)

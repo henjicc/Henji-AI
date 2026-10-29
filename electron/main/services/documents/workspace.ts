@@ -297,7 +297,7 @@ export class DocumentWorkspace {
 
   /** 独立存放的类型文件夹（作品目录下，按作品目录语言命名）。 */
   standaloneFolder(kind: DocumentKindDescriptor): string {
-    if (!kind.standaloneFolderNames) throw new DocumentLocationError('这种文档只能放在项目里。')
+    if (!kind.standaloneFolderNames) throw new DocumentLocationError('文档类型未设置独立存放目录。')
     const layout = this.layout()
     return path.join(layout.root, kind.standaloneFolderNames[layout.locale])
   }
@@ -330,13 +330,8 @@ export class DocumentWorkspace {
 
   // ==================== 位置判断 ====================
 
-  isInsideProgramRoots(target: string): boolean {
-    return this.programRoots().some((root) => isPathInside(this.style, root, target))
-  }
-
   assertWritableLocation(target: string): void {
     if (!path.isAbsolute(target) || target.includes('\0')) throw new DocumentLocationError('位置无效，请选择一个文件夹。')
-    if (this.isInsideProgramRoots(target)) throw new DocumentLocationError('不能把作品放在程序内部数据目录里，请换一个位置。')
   }
 
   /**

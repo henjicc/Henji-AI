@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { normalizeLocalSource } from '../services/image/source'
-import { isPathWithinAllowedMediaRoots } from '../protocol'
 import { extractAudioSamples, extractAudioWaveformPyramid, extractAudioWaveformRange, disposeAudioWaveformService, validateAudioWaveformPyramid, validateAudioWaveformRange } from '../services/audio/ops'
 import type { AudioWaveformPyramidRequest, AudioWaveformRangeRequest } from '../services/audio/types'
 import { assertTrustedApplicationSender } from './application-control'
@@ -52,11 +51,10 @@ function watch(sender: WebContents): void {
   sender.once('destroyed', () => abortSender(sender.id))
   sender.on('did-start-navigation', (_event, _url, _inPlace, mainFrame) => { if (mainFrame) abortSender(sender.id) })
 }
-async function authorizedLocalPath(source: string): Promise<string> {
+async function resolveLocalPath(source: string): Promise<string> {
   const normalized = normalizeLocalSource(source)
-  if (!path.isAbsolute(normalized) || !isPathWithinAllowedMediaRoots(normalized)) throw new Error('音频素材尚未获得读取权限，请从素材库导入。')
+  if (!path.isAbsolute(normalized)) throw new Error('请使用本地文件的绝对路径。')
   const canonical = await fs.realpath(normalized)
-  if (!isPathWithinAllowedMediaRoots(canonical)) throw new Error('音频素材的实际路径不在已授权目录内。')
   return canonical
 }
 async function extract(payload: SamplesPayload, event: IpcMainInvokeEvent): Promise<unknown> {
@@ -70,10 +68,10 @@ async function extract(payload: SamplesPayload, event: IpcMainInvokeEvent): Prom
   owned.set(id, controller)
   try {
     // Install ownership before filesystem awaits so an immediate cancel cannot be lost.
-    // Remote http(s) audio (legacy overview and pyramid only) is downloaded by the service; local paths must be authorized.
+    // 远程音频由服务下载；本地素材按真实文件位置读取。
     const source = payload.mode !== 'range' && isRemote(payload.source)
       ? payload.source
-      : await authorizedLocalPath(payload.source)
+      : await resolveLocalPath(payload.source)
     controller.signal.throwIfAborted()
     const selection = payload.mode === 'legacy' ? {} : { channels: payload.channels, ...(payload.sourceRevision !== undefined ? { sourceRevision: payload.sourceRevision } : {}), ...(payload.audioStream !== undefined ? { audioStream: payload.audioStream } : {}), ...(payload.audioChannel !== undefined ? { audioChannel: payload.audioChannel } : {}) }
     const result = payload.mode === 'range'

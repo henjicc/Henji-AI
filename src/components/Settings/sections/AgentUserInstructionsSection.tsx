@@ -28,7 +28,6 @@ import {
 } from '@/core/inputs/promptDocument'
 import { createLogger } from '@/core/logging'
 import { useI18n } from '@/hooks/useI18n'
-import SettingsDialog from '../components/SettingsDialog'
 
 const logger = createLogger('components.Settings.AgentUserInstructionsSection')
 
@@ -46,7 +45,6 @@ export default function AgentUserInstructionsSection(): JSX.Element {
   const [loaded, setLoaded] = useState(false)
   const retry = useRef<() => Promise<void>>(async () => {})
   const [status, setStatus] = useState<StatusLine>(() => info(t('agentInstructions.reading')))
-  const [confirmReset, setConfirmReset] = useState(false)
   const content = useMemo(() => toModelPromptText(document), [document])
   const warnings = useMemo(
     () => getAssistantUserInstructionsWarnings(content),
@@ -115,6 +113,8 @@ export default function AgentUserInstructionsSection(): JSX.Element {
     setStatus(info(''))
     setBusy(true)
     try {
+      // 编辑中的文字也先交给同一个文件回收链路，清空不会丢掉尚未点保存的内容。
+      if (content) await updateAssistantUserInstructions({ content })
       const instructions = await resetAssistantUserInstructions()
       setDocument(createPlainTextPromptDocument(instructions.content))
       setStatus(info(t('agentInstructions.cleared')))
@@ -179,22 +179,11 @@ export default function AgentUserInstructionsSection(): JSX.Element {
           <ExternalLink  />
           {t('agentInstructions.openFile')}
         </UiButton>
-        {/* 清空会丢掉已写的全部指令：危险档（静息静默、悬停显红），点后二次确认 */}
-        <UiButton type="button" variant="danger" disabled={busy || !loaded} onClick={() => setConfirmReset(true)}>
+        <UiButton type="button" variant="danger" disabled={busy || !loaded} onClick={() => void reset()}>
           <RotateCcw  />
           {t('agentInstructions.clear')}
         </UiButton>
       </div>
-      <SettingsDialog
-        open={confirmReset}
-        title={t('agentInstructions.clearTitle')}
-        description={t('agentInstructions.clearDescription')}
-        onClose={() => setConfirmReset(false)}
-        actions={[
-          { label: t('agentInstructions.cancel'), onClick: () => setConfirmReset(false), variant: 'secondary' },
-          { label: t('agentInstructions.clearConfirm'), variant: 'danger', onClick: () => { setConfirmReset(false); void reset() } },
-        ]}
-      />
     </div>
   )
 }

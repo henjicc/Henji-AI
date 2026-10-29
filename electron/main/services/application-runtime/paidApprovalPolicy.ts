@@ -1,4 +1,7 @@
-import { UI_PAID_CAPABILITIES, PAID_OPERATION_LABELS, paidApprovalSettingsSchema, PAID_APPROVAL_SETTING_KEY, type PaidApprovalSettings, type PaidApprovalRequest, type PaidApprovalDecision, type PaidApprovalReceipt } from '../../../../src/core/application-control/paidApproval'
+import type { AiGenerateRequestDto } from '@henjicc/ai-sdk'
+import { operationDigest } from '../application-control/operationDigest'
+import type { PaidOperationReceipt } from '../../../../src/core/application-control/paidApproval'
+import { UI_PAID_CAPABILITIES, PAID_OPERATION_LABELS, readPaidApprovalSettingsValue, PAID_APPROVAL_SETTING_KEY, type PaidApprovalSettings, type PaidApprovalRequest, type PaidApprovalDecision, type PaidApprovalReceipt } from '../../../../src/core/application-control/paidApproval'
 import type { ApplicationOperationStore, OperationRecord } from './operationStore'
 import { getSettingsStore } from '../settings/store'
 import { createMainLogger } from '../logging'
@@ -9,34 +12,28 @@ const logger = createMainLogger('main.application_runtime.paid_approval')
 export function localDayStart(now: number): number {
   const date = new Date(now); date.setHours(0, 0, 0, 0); return date.getTime()
 }
-/** All callers share these limits; only official application estimates enter this service. */
-export function decidePaidApproval(settings: PaidApprovalSettings, request: PaidApprovalRequest, dailySpentCny: number, allowPaid: boolean, estimateKind?: 'upper-bound' | 'estimate'): PaidApprovalDecision {
+/** 所有入口共享额度，估价由正式准备服务提供。 */
+export function decidePaidApproval(settings: PaidApprovalSettings, request: PaidApprovalRequest, dailySpentCny: number, estimateKind?: 'upper-bound' | 'estimate'): PaidApprovalDecision {
   const base = { estimatedCny: request.estimatedCny, dailySpentCny }
   const decision = (decision: PaidApprovalDecision['decision'], reason: string): PaidApprovalDecision => ({ ...base, decision, reason })
-  if (!allowPaid) return decision('deny', '此连接没有付费操作授权。')
-  const granted = request.project && settings.projects.some(value => value.id === request.project!.id && value.category === request.category)
-  if (settings.mode === 'ask' && !granted) return decision('ask', '每次询问')
+  if (settings.unlimited) return decision('auto', '完全放开')
+  if (request.estimatedCny === 0) return decision('auto', '本次费用为零')
   if (dailySpentCny + (request.estimatedCny ?? 0) > settings.dailyLimitCny) return decision('ask', `今日已用 ¥${dailySpentCny.toFixed(2)}，超出每日上限 ¥${settings.dailyLimitCny}`)
-  if (settings.mode === 'bypass') return decision('auto', '全部放行')
   if (request.estimatedCny === null) return decision('ask', '费用暂无法预估')
   if (request.estimatedCny > settings.singleLimitCny) return decision('ask', `超出单次自动通过额度 ¥${settings.singleLimitCny}`)
   const cost = `${estimateKind === 'upper-bound' ? '按上限估算' : '预计'} ¥${request.estimatedCny.toFixed(4)}`
-  return decision('auto', `${cost}，${granted ? '项目已授权且费用在额度内' : '费用在自动通过额度内'}`)
+  return decision('auto', `${cost}，费用在额度内`)
 }
 export function readPaidApprovalSettings(): PaidApprovalSettings {
   const raw = getSettingsStore().get(PAID_APPROVAL_SETTING_KEY)
-  return paidApprovalSettingsSchema.parse(raw ? JSON.parse(raw) : {})
+  return readPaidApprovalSettingsValue(raw ? JSON.parse(raw) : {})
 }
-/** Synchronous decision + reservation prevents concurrent operations overspending the shared allowance. */
+/** 同步决策与预留，防止并发任务同时花掉同一份额度。 */
 export function approvePaidOperation(store: Pick<ApplicationOperationStore, 'get' | 'save' | 'generationSpendSince'>, record: OperationRecord, request: PaidApprovalRequest,
-  allowPaid: boolean, consent?: 'once' | 'project', now = Date.now()): PaidApprovalDecision {
+  consent?: 'once', now = Date.now()): PaidApprovalDecision {
   const settings = readPaidApprovalSettings()
-  const decision = decidePaidApproval(settings, request, store.generationSpendSince(localDayStart(now)), allowPaid, request.category === 'generation' ? record.paidGenerationEstimateKind : undefined)
+  const decision = decidePaidApproval(settings, request, store.generationSpendSince(localDayStart(now)), request.category === 'generation' ? record.paidGenerationEstimateKind : undefined)
   if (decision.decision === 'deny') return decision
-  if (consent === 'project' && request.project) {
-    const projects = settings.projects.filter(value => value.id !== request.project!.id || value.category !== request.category)
-    getSettingsStore().set(PAID_APPROVAL_SETTING_KEY, JSON.stringify({ ...settings, projects: [...projects, { ...request.project, category: request.category }] }), 'json')
-  }
   if (decision.decision === 'auto' || consent) {
     const approval: PaidApprovalReceipt = { decision: consent ? 'user' : 'auto', reason: consent ? '用户确认' : decision.reason }
     const current = store.get(record.operationId, record.callerId)!
@@ -56,7 +53,7 @@ export function handleUiPaidApproval(store: Pick<ApplicationOperationStore, 'get
     if (record) throw new Error('此付费请求已登记，请继续原请求。')
     record = store.prepare({ operationId: reply.requestId, callerId, capabilityId: command.capabilityId,
       input: { paid: command.request }, inputDigest: JSON.stringify(command.request), state: 'preparing', origin: { at: Date.now(), actor: 'user' } })
-    const decision = approvePaidOperation(store, record, command.request, true)
+    const decision = approvePaidOperation(store, record, command.request)
     const current = store.get(record.operationId, callerId)!
     const confirmation = decision.decision === 'ask' ? applicationUserConfirmation({ title: PAID_OPERATION_LABELS[command.request.category], message: '你发起的操作将使用已配置的模型，按模型计费。', confirmLabel: '允许本次', paid: decision }) : undefined
     store.save({ ...current, state: confirmation ? 'awaiting_user_confirmation' : 'preparing', confirmation })
@@ -65,7 +62,7 @@ export function handleUiPaidApproval(store: Pick<ApplicationOperationStore, 'get
   if (!record || record.capabilityId !== command.capabilityId || record.inputDigest !== JSON.stringify(command.request)) throw new Error('付费请求与原授权不一致。')
   if (command.action === 'approve') {
     if (record.state !== 'awaiting_user_confirmation' || !record.confirmation || record.confirmation.expiresAt === null || record.confirmation.expiresAt <= Date.now()) throw new Error('付费确认已结束，请重新发起。')
-    const decision = approvePaidOperation(store, record, command.request, true, command.projectConsent ? 'project' : 'once')
+    const decision = approvePaidOperation(store, record, command.request, 'once')
     store.save({ ...store.get(record.operationId, callerId)!, state: 'preparing', confirmation: undefined })
     return decision
   }
@@ -85,4 +82,26 @@ export function handleUiPaidApproval(store: Pick<ApplicationOperationStore, 'get
     logger.info('AI 付费执行事实已记录', { event: 'application.paid_approval.settled', requestId: record.operationId,
       context: { outcome: completed ? 'completed' : notCharged ? 'not_charged' : 'unknown', category: command.request.category } })
   }
+}
+
+/** IPC 提交只消费正式账本收据；同一任务的续查与结果恢复不经过这道提交闸。 */
+export function assertGenerationPaidReceipt(store: Pick<ApplicationOperationStore, 'get' | 'save'>, receipt: PaidOperationReceipt | undefined, request: AiGenerateRequestDto): void {
+  if (!receipt || !request.requestId) throw new Error('PAID_CONFIRMATION_REQUIRED:请先通过应用付费策略确认本次生成。')
+  const record = store.get(receipt.operationId, receipt.callerId)
+  if (!record || !record.approval || !['executing', 'completed'].includes(record.state)) throw new Error('PAID_CONFIRMATION_REQUIRED:本次生成的付费收据无效或已取消。')
+  const { requestId, ...input } = request
+  const digest = operationDigest(input)
+  const reservations = [...record.paidReservations ?? []]
+  const existing = reservations.flatMap(item => [...item.generationRequests ?? [], ...item.generationRequest ? [item.generationRequest] : []]).find(item => item.id === requestId)
+  if (existing) {
+    if (existing.digest !== digest) throw new Error('GENERATION_INPUT_CONFLICT:原生成标识已绑定其他输入。')
+    return
+  }
+  const index = reservations.findIndex(item => item.category === 'generation' && (item.generationTaskIds ? item.generationTaskIds.includes(requestId) : !item.generationRequest))
+  if (index < 0) throw new Error('PAID_CONFIRMATION_REQUIRED:付费收据已用于另一项生成。')
+  const reservation = reservations[index]
+  reservations[index] = reservation.generationTaskIds
+    ? { ...reservation, generationRequests: [...reservation.generationRequests ?? [], { id: requestId, digest }] }
+    : { ...reservation, generationRequest: { id: requestId, digest } }
+  store.save({ ...record, paidReservations: reservations })
 }

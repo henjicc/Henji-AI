@@ -106,9 +106,8 @@ function upgradeAssetThumbnailNames(conn: Database.Database): void {
   })()
 }
 
-/** Change only the known asset CHECKs; preserve every existing column and row. */
+/** 只调整来源和类型约束，完整保留列与关联。 */
 export function upgradeAssetSources(conn: Database.Database): void {
-  const logger = createMainLogger('main.asset-library')
   const existing = conn.prepare("SELECT sql FROM sqlite_schema WHERE type='table' AND name='assets'").get() as { sql: string }
   const constraint = /\bsource\s+TEXT\s+NOT\s+NULL\s+CHECK\s*\(\s*source\s+IN\s*\(([^)]*)\)\s*\)/i
   const values = existing.sql.match(constraint)?.[1]
@@ -116,11 +115,23 @@ export function upgradeAssetSources(conn: Database.Database): void {
   const mediaValues = existing.sql.match(mediaConstraint)?.[1]
   if (!values || !mediaValues) throw new Error('资产类型或来源约束无法识别，未修改素材库。')
   if (values.includes("'video-edit'") && mediaValues.includes("'code'")) return
-  if (conn.inTransaction) throw new Error('资产来源升级需要独立事务，未修改素材库。')
-  const replacement = existing.sql.replace(/^CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(?:"assets"|assets)\s*\(/i, 'CREATE TABLE assets_source_upgrade (')
-    .replace(constraint, `source TEXT NOT NULL CHECK (source IN (${values}${values.includes("'video-edit'") ? '' : ", 'video-edit'"}))`)
+  const replacement = existing.sql.replace(constraint, `source TEXT NOT NULL CHECK (source IN (${values}${values.includes("'video-edit'") ? '' : ", 'video-edit'"}))`)
     .replace(mediaConstraint, `media_type TEXT NOT NULL CHECK (media_type IN (${mediaValues}${mediaValues.includes("'code'") ? '' : ", 'code'"}))`)
-  if (!replacement.startsWith('CREATE TABLE assets_source_upgrade ')) throw new Error('资产表结构无法识别，未修改素材库。')
+  rebuildAssetsTable(conn, replacement)
+}
+
+export function restrictAssetPathUniquenessToActive(conn: Database.Database): void {
+  const { sql } = conn.prepare("SELECT sql FROM sqlite_schema WHERE type='table' AND name='assets'").get() as { sql: string }
+  const replacement = sql.replace(/(\bfile_path\s+TEXT\s+NOT\s+NULL)\s+UNIQUE/i, '$1')
+  if (replacement !== sql) rebuildAssetsTable(conn, replacement)
+  conn.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_assets_active_file_path ON assets(file_path) WHERE deleted_at IS NULL')
+}
+
+function rebuildAssetsTable(conn: Database.Database, sql: string): void {
+  const logger = createMainLogger('main.asset-library')
+  if (conn.inTransaction) throw new Error('资产表升级需要独立事务，未修改素材库。')
+  const replacement = sql.replace(/^CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(?:"assets"|assets)\s*\(/i, 'CREATE TABLE assets_migration (')
+  if (!replacement.startsWith('CREATE TABLE assets_migration ')) throw new Error('资产表结构无法识别，未修改素材库。')
   const objects = conn.prepare("SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE sql IS NOT NULL AND type IN ('index','trigger','view')").all() as Array<{ type: string; name: string; tbl_name: string; sql: string }>
   const names = new Set(['assets'])
   const mentions = (sql: string): boolean => [...names].some(name => new RegExp(`(?:^|[^\\w])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:[^\\w]|$)`, 'i').test(sql))
@@ -133,13 +144,12 @@ export function upgradeAssetSources(conn: Database.Database): void {
   conn.pragma('foreign_keys=OFF')
   try {
     conn.transaction(() => {
-      // DROP VIEW also removes its INSTEAD OF triggers. Drop triggers first so
-      // schema creation order cannot make a later DROP target disappear.
+      // 视图删除会连带删除触发器，因此先移除触发器以免依赖顺序影响重建。
       for (const object of related.filter(object => object.type === 'trigger')) conn.exec(`DROP TRIGGER "${object.name.replaceAll('"', '""')}"`)
       for (const object of related.filter(object => object.type === 'view')) conn.exec(`DROP VIEW "${object.name.replaceAll('"', '""')}"`)
       conn.exec(replacement)
-      conn.exec(`INSERT INTO assets_source_upgrade (${columns}) SELECT ${columns} FROM assets`)
-      conn.exec('DROP TABLE assets; ALTER TABLE assets_source_upgrade RENAME TO assets')
+      conn.exec(`INSERT INTO assets_migration (${columns}) SELECT ${columns} FROM assets`)
+      conn.exec('DROP TABLE assets; ALTER TABLE assets_migration RENAME TO assets')
       for (const object of [...related.filter(object => object.type !== 'trigger'), ...related.filter(object => object.type === 'trigger')]) conn.exec(object.sql)
       if ((conn.pragma('foreign_key_check') as unknown[]).length) throw new Error('资产来源升级的关联核验失败，原记录已保留。')
     })()

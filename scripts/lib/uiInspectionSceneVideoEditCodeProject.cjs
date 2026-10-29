@@ -80,7 +80,7 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
         let document = await saved(page, file, document => document.media.length === 3)
         const projectRef = { kind: 'video_edit.document', id: document.id }
         const sequenceRef = { kind: 'video_edit.sequence', id: `${document.id}:${document.sequences[0].id}` }
-        const identity = await authorizeMcpConnection(page, { name: '原创代码素材回环', allowWrites: true, allowDestructive: true })
+        const identity = await authorizeMcpConnection(page, { name: '原创代码素材回环' })
         client = await connectMcpClient(identity.config, 'Henji native code Reality')
         const change = async changes => {
           const refs = [...new Map(changes.map(change => { const ref = change.target ?? change.parent; return [`${ref.kind}:${ref.id}`, ref] })).values()]

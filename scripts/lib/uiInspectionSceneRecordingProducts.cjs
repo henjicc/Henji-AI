@@ -60,7 +60,7 @@ function createRecordingProductsScene() {
         content.understanding.privacy.candidates = [{ id: 'confirmed', mediaId: screen.id, kind: 'email', hint: '邮箱', fingerprint: 'a'.repeat(64), startUs: begin, endUs: end, status: 'accepted', samples: [{ monoUs: begin, box: [.04, .08, .7, .12], confidence: 1 }] }]
         await page.evaluate(async ({ id, revision, content }) => window.henjiNative.documents.saveDocument({ target: { id }, expectedRevision: revision, content }), { id: session.id, revision: recorded.meta.revision, content })
         await assignIsolatedMcpPort(page)
-        client = await connectMcpClient((await authorizeMcpConnection(page, { name: '多产物隔离验收', allowWrites: true, allowDestructive: true })).config)
+        client = await connectMcpClient((await authorizeMcpConnection(page, { name: '多产物隔离验收' })).config)
         // 9f7b554df 移除工作台产物弹窗；四类产物的正式能力仍保留。
         evidence.flow = { basis: '9f7b554df / screenRecording/application/productCapability.ts', removed: '工作台产物弹窗与文件夹选择', assertions: '保留图文内容、真实 HTML 呈现、GIF 帧数、日志与可编辑图层' }
         const sessionRef = { kind: 'screen_recording.session', id: session.id }

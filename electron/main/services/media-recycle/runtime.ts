@@ -1,10 +1,11 @@
 import path from 'node:path'
+import fs from 'node:fs/promises'
 import { performance } from 'node:perf_hooks'
-import { shell } from 'electron'
+import { trashUserFile } from '../recycle/runtime'
 import { getDb } from '../db'
 import { databaseLocationContext } from '../db-locations'
 import { createMainLogger } from '../logging/main-logger'
-import { getProgramStoreDir } from '../appPaths'
+import { getProgramDataDir, getProgramStoreDir } from '../appPaths'
 import { listManagedMediaFileLeases } from '../image/managed-media-leases'
 import { listUploadImageLeases } from '../image/path-utils'
 import { collectUnreferencedMedia, type MediaReferenceProvider, type RecycleCandidate } from './collector'
@@ -67,7 +68,14 @@ export async function runMediaRecycle(signal: AbortSignal): Promise<void> {
         queue.referencesReady(references)
         logger.info('持久媒体引用读取完成', { event: 'media_recycle.references.completed', context: { candidates: candidateCount, references: references.size, durationMs: performance.now() - referencesStartedAt } })
       },
-      trashItem: file => shell.trashItem(file),
+      trashItem: async file => {
+        const cacheRoots = [getProgramStoreDir('thumbnails'), path.join(getProgramDataDir(), 'EditStates')]
+        if (cacheRoots.some(root => { const relative = path.relative(root, file); return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative) })) {
+          // media-recycle-allow: 缓存已通过本回收器的归属、文件身份和引用核验。
+          await fs.rm(file, { force: true })
+        }
+        else await trashUserFile(file, undefined, undefined, queue.acknowledgeBackup)
+      },
       store: queue.store,
       log: (phase, summary, error) => {
         const failure = error ?? queue.checkpointError()

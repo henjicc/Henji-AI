@@ -117,8 +117,17 @@ export class SoundLibraryService {
 
   async getState(): Promise<SoundLibraryState> {
     await this.load()
+    const records = await this.deps.readFolders()
+    const ids = new Set(records.map(record => record.id))
+    for (const id of this.folders.keys()) if (!ids.has(id)) this.folders.delete(id)
+    for (const record of records) if (!this.folders.has(record.id)) this.folders.set(record.id, { record, files: new Map(), status: 'not_indexed', progress: null, indexedAt: null, lastError: null })
     this.listeningReady = (await this.deps.clapModels().catch(() => null)) !== null
     return this.snapshot()
+  }
+
+  async reloadFolders(): Promise<void> {
+    await this.getState()
+    this.publish()
   }
 
   /** 给了路径直接登记；没给时弹出系统选择框，用户取消返回 null。 */

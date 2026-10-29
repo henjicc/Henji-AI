@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import { subscribeRestored } from '@/services/recycle'
 import { replaceModelscopeCustomModels } from '@henjicc/ai-sdk'
 import { databaseService } from '@/services/database'
 import type { CustomModelRecord } from '@/services/database'
@@ -201,3 +202,4 @@ class ModelscopeCustomModelService {
 }
 
 export const modelscopeCustomModelService = new ModelscopeCustomModelService()
+subscribeRestored(async item => { if (item.id.startsWith('custom_models:')) await modelscopeCustomModelService.loadModelsToRegistry() })

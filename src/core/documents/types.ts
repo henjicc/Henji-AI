@@ -84,7 +84,7 @@ export interface DocumentReadResult {
   content: unknown
   /** 引用到但磁盘上找不到的文件（绝对路径）。 */
   missingPaths: string[]
-  /** 引用到的外部文件所在目录（已授权媒体协议读取）。 */
+  /** 引用到的外部文件所在目录。 */
   externalDirectories: string[]
   /** 无法解析的位置（项目不在、写法损坏），原样保留在内容里。 */
   unresolved: DocumentUnresolvedLocation[]
@@ -379,7 +379,7 @@ export interface PackageExportResult {
 export interface ImportPackageRequest {
   /** 包文件（绝对路径）。 */
   source: string
-  /** 文档包放进哪个容器；省略时为作品目录（只能放在项目里的类型须给项目）。项目包总是放进“项目”文件夹。 */
+  /** 文档包放进哪个容器；省略时为作品目录。项目包总是放进“项目”文件夹。 */
   container?: DocumentContainerRef
 }
 

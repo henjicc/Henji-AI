@@ -13,16 +13,15 @@ vi.mock('electron', () => ({ app: { isPackaged: false } }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info() {}, warn() {}, error() {} }) }))
 vi.mock('./mediaResources', () => ({ readApplicationMediaResource: vi.fn(), ApplicationMediaResourceError: class extends Error {} }))
 
-const access = { allowWrites: true, allowPaid: true, allowDestructive: true }
-const connections = { assertActive: vi.fn(), access: () => access }
+const connections = { assertActive: vi.fn() }
 const signal = new AbortController().signal
 
-it('只读连接的声明读取可以返回人工信任等待，公开目录提供原操作续查且输出契约接受等待', async () => {
+it('声明读取可以返回人工信任等待，公开目录提供原操作续查且输出契约接受等待', async () => {
   const host = new ApplicationHostBridge(() => {})
   const waiting = { ok: false, operationId: randomUUID(), executionState: 'awaiting_user_confirmation', verificationState: 'unresolved', confirmation: applicationUserConfirmation({ title: '分享素材', message: '这份内容包含代码，是否信任并允许运行？', confirmLabel: '信任' }) }
   vi.spyOn(host, 'execute').mockResolvedValue(waiting)
   const rememberRead = vi.fn((_caller: string, result: typeof waiting) => result)
-  const dispatcher = new ApplicationToolDispatcher({ assertActive() {}, access: () => ({ allowWrites: false, allowDestructive: false, allowPaid: false }) }, host, { rememberRead } as unknown as ApplicationOperationCoordinator)
+  const dispatcher = new ApplicationToolDispatcher({ assertActive() {} }, host, { rememberRead } as unknown as ApplicationOperationCoordinator)
   expect(dispatcher.catalog('reader').tools.some(tool => tool.name === 'get_application_operation')).toBe(true)
   expect(await dispatcher.call('reader', 'read_application_entity', { ref: { kind: 'video_edit.code_material', id: 'material' } }, signal)).toMatchObject(waiting)
 })
@@ -91,7 +90,7 @@ it('媒体每块只读最小实体属性核验授权，不创建内部读取基�
   vi.mocked(readApplicationMediaResource).mockResolvedValue({ mimeType: 'video/mp4', base64: '', offset: 0, byteLength: 0, totalBytes: 0, eof: true })
   const ref = { kind: 'asset', id: 'asset' }
   for (const offset of [0, 262144]) expect((await dispatcher.readMedia('caller', { ref, offset }, signal)).ok).toBe(true)
-  expect(execute).toHaveBeenCalledWith('caller', 'read_application_entity', { ref, propertyIds: [] }, signal, access)
+  expect(execute).toHaveBeenCalledWith('caller', 'read_application_entity', { ref, propertyIds: [] }, signal)
   expect(rememberRead).not.toHaveBeenCalled()
   execute.mockResolvedValueOnce({ ok: false, error: { code: 'PERMISSION_DENIED', message: '已撤销' } })
   const calls = vi.mocked(readApplicationMediaResource).mock.calls.length

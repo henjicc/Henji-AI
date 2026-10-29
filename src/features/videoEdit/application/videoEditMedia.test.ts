@@ -70,7 +70,6 @@ beforeEach(() => {
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, content) => { files.set(path, content) })
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
   vi.spyOn(getPlatform().system.paths, 'dirname').mockResolvedValue('D:/media')
-  vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined)
 })
 afterEach(async () => {
   for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id)

@@ -16,7 +16,7 @@ export const screenAttentionVideoEditCapability = defineApplicationCapability<z.
   id: 'generate_video_edit_screen_attention', title: '生成或重算录屏注意力推近',
   description: '根据屏幕原片的录制事件自动推近并跟随关注区域：能力调用优先，再是持续打字、点击、滚动、光标停留和窗口切换；没有信号时平滑退回全景（竖版保留覆盖画幅的全景取景）。strength light/medium/strong 表示轻/中/强；minimumStaySeconds 最短关注停留，transitionSeconds 过渡时长。settings.sections 可按片段内秒指定段落力度，升序、不重叠且不能超出片段。clipRef 处理单片段，sequenceRef 处理序列里的屏幕原片；targetSize 复制多画幅序列，省略则原位重算。所有生成点可通过片段 x/y/scale.keyframes 读写，修改后归人所有，重算保留；一步撤销。需要原片已绑定录制事件日志；打字区域没有精确捕获框时用近期文本光标或点击位置估计，能力没有捕获时的目标框时用近期光标/点击或窗口估计并返回 impreciseCapabilities，不能声称识别了输入框或历史DOM。不付费、不切页。',
   version: 1, domain: 'video_edit', aliases: ['录屏推近', '注意力跟随', '重算推近', 'screen attention', '自动缩放录屏'],
-  readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write', idempotent: false, destructive: false,
+  readOnly: false, dataClasses: ['C1'], permission: 'video_edit:write', idempotent: false, destructive: false,
   timeoutMs: 600000, supportsPreview: false, supportsUndo: true, requiredScopes: ['video_edit'],
   acceptsRefs: ['video_edit.document', 'video_edit.clip', 'video_edit.sequence'], producesRefs: ['video_edit.clip', 'video_edit.sequence'],
   inputSchema: input, outputSchema: output, concurrencyKey: 'video_edit', resolveConcurrencyKey: value => `video_edit:${value.documentRef.id}`,

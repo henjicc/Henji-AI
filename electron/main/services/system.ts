@@ -186,9 +186,6 @@ export async function showOpenDialog(options?: DialogOpenOptionsDto): Promise<st
 
 export async function openExternalUrl(url: string): Promise<void> {
   const parsed = new URL(url)
-  if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
-    throw new Error(`Unsupported external URL protocol: ${parsed.protocol}`)
-  }
   await shell.openExternal(parsed.toString())
 }
 

@@ -9,7 +9,7 @@ vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), error: 
 vi.mock('./project-store', () => ({ requireAudioEditProject: mock.project }))
 vi.mock('./media', () => ({ verifyAudioEditSource: mock.verify, prepareAudioEditAudio: mock.prepareAudio }))
 vi.mock('../keystore', () => ({ getAiProviderApiKey: () => undefined }))
-vi.mock('../ai-runtime/native-file-upload', () => ({ scopedUploadFile: vi.fn() }))
+vi.mock('../ai-runtime/native-file-upload', () => ({ resolveUploadFile: vi.fn(async (ref: string) => ref), scopedUploadFile: vi.fn() }))
 vi.mock('../ai-runtime/sdk-runtime', () => ({ sdkRuntimeContext: { transport: { fetch: async () => { throw new Error('REAL_NETWORK_FORBIDDEN') } }, credentials: { get: () => undefined } } }))
 vi.mock('./timestamped-asr', async importOriginal => ({ ...await importOriginal<typeof import('./timestamped-asr')>(), timestampedAsrService: {
   client: { get: () => ({ descriptor: { features: ['resume-task'] } }) }, listModels: () => [],

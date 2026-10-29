@@ -1,8 +1,8 @@
 import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
-import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
+
+
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
@@ -15,7 +15,6 @@ import type { ApplicationPlannedStep } from '@/core/application-control'
 const result: VideoProxyResult = { path: 'D:/cache/proxy.mp4', key: 'a'.repeat(64), contentIdentity: 'b'.repeat(64), preset: '720p', width: 1280, height: 720, bytes: 1234 }
 beforeEach(() => {
   installHarnessNativeStorage(); localStorage.clear(); resetVideoEditProxyPreferenceCache(); vi.clearAllMocks()
-  vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined)
   vi.spyOn(getPlatform().videoProxy, 'create').mockResolvedValue(result)
   vi.spyOn(getPlatform().videoProxy, 'lookup').mockResolvedValue(result)
   vi.spyOn(getPlatform().videoProxy, 'cancel').mockResolvedValue(undefined)
@@ -46,8 +45,7 @@ it('助手同源创建、状态通用读取、切换通用修改、权限与事�
   const step = { kind: 'mutation', entityType: 'video_edit.document', target: documentRef, expectedRevisions: {}, mutations: [{ propertyId: 'video_edit.document.proxy_preference', operation: 'set', value: { enabled: false, autoCreate: false } }] } satisfies Extract<ApplicationPlannedStep, { kind: 'mutation' }>
   const changed = await executor.apply(step); await executor.undo(changed.undoToken!)
   expect(getVideoEditProxyPreference(id)).toEqual({ enabled: true, autoCreate: true })
-  const readOnly = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'proxy-reader', capabilityIds: ['generate_video_edit_proxy'], permissions: ['video_edit:read'], allowWrites: false, allowDestructive: false }))
-  await expect(Promise.resolve().then(() => readOnly.execute({ id: 'generate_video_edit_proxy', version: 1, input: { documentRef, mediaRef } }, { requestId: 'proxy-denied', signal: new AbortController().signal }))).rejects.toThrow('PERMISSION_DENIED')
+
 })
 it('取消转发、进度可读、换源拒绝迟到代理、关闭拒绝迟到结果', async () => {
   const { id, mediaId } = await fixture()

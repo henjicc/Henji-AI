@@ -105,7 +105,7 @@ it('文件身份字段顺序不影响分页，查询期间文件变化会拒绝'
 it('公共只读授权可查询，但不能越权读取关联口播或录制', async () => {
   const { input } = await fixture()
   const app = createApplicationHarness()
-  const grant = createApplicationCallerGrant({ callerId: 'index-read', capabilityIds: ['query_video_edit_content'], permissions: ['video_edit:read'], allowWrites: false, allowDestructive: false })
+  const grant = createApplicationCallerGrant({ callerId: 'index-read' })
   const session = createApplicationCapabilitySession(grant)
   const call = (extra: Record<string, unknown>) => session.execute({ id: 'query_video_edit_content', version: 1, input: { ...input, ...extra } }, { requestId: crypto.randomUUID(), ...context() })
   try {
@@ -308,17 +308,6 @@ it('冷口播加载后可继续翻页，关闭重开同版本实例使旧分页�
   await expect(readVideoEditContentIndex({ ...query, cursor: first.nextCursor }, context())).rejects.toThrow('失效')
 })
 
-it('只有录制只读授权时仅发现录制，不读取口播目录或正文', async () => {
-  const { owner, input, sourcePath } = await fixture()
-  seedRelatedRecording(owner, sourcePath)
-  harnessDocumentStore().seed({ kind: 'audio_edit', name: '无授权口播', content: { source: { sourcePath } }, projectId: owner.session.documentMeta.container.kind === 'project' ? owner.session.documentMeta.container.projectId : undefined })
-  const list = vi.spyOn(getPlatform().documents, 'listDocumentsPage')
-  const callerGrant = createApplicationCallerGrant({ callerId: 'recording-read', capabilityIds: ['query_video_edit_content'], permissions: ['video_edit:read', 'screen_recording:read'], allowWrites: false, allowDestructive: false })
-  const result = parse(await readVideoEditContentIndex({ ...input, text: '自动发现' }, { ...context(), callerGrant }))
-  expect(result).toMatchObject({ total: 3, discovery: { complete: false, scannedDocuments: 1, matchedDocuments: 1 } })
-  expect(list.mock.calls.every(([request]) => request?.kind === 'screen_recording')).toBe(true)
-})
-
 it('关联目录按页扫描，不重复读取未改变的无关正文；新增、删除和改动使分页失效', async () => {
   const { owner, input, sourcePath } = await fixture()
   const target = seedRelatedRecording(owner, sourcePath)
@@ -342,15 +331,10 @@ it('关联目录按页扫描，不重复读取未改变的无关正文；新增�
   await expect(readVideoEditContentIndex({ ...query, cursor: next.nextCursor }, context())).rejects.toThrow('失效')
 })
 
-it('缺跨域权限不扫描正文，自动发现损坏文档明确不完整且修复后可重试', async () => {
+it('自动发现损坏文档明确不完整且修复后可重试', async () => {
   const { owner, input, sourcePath } = await fixture()
   const recording = seedRelatedRecording(owner, sourcePath)
-  const read = vi.spyOn(getPlatform().documents, 'readDocument')
-  const list = vi.spyOn(getPlatform().documents, 'listDocumentsPage')
-  const callerGrant = createApplicationCallerGrant({ callerId: 'index-limited', capabilityIds: ['query_video_edit_content'], permissions: ['video_edit:read'], allowWrites: false, allowDestructive: false })
   const query = { ...input, text: '自动发现' }
-  expect(parse(await readVideoEditContentIndex(query, { ...context(), callerGrant }))).toMatchObject({ total: 0, discovery: { complete: false, scannedDocuments: 0 }, warnings: [expect.stringContaining('口播'), expect.stringContaining('录制')] })
-  expect(read).not.toHaveBeenCalled(); expect(list).not.toHaveBeenCalled()
   const stored = harnessDocumentStore().stored(recording.id)!; const content = stored.content
   stored.content = { media: 'broken' }
   expect(parse(await readVideoEditContentIndex(query, context()))).toMatchObject({ total: 0, discovery: { complete: false }, warnings: [expect.stringContaining('不完整')] })
@@ -397,8 +381,6 @@ it('查询期间经正式素材属性读到真实阶段进度，查询完成不�
     report({ requestId, progress: .4 })
     const result = await read()
     expect(result).toMatchObject({ properties: { 'video_edit.item.content_queries': [{ state: 'running', phase: 'analyzing_video', phaseProgress: .4, totalUnits: null }] } })
-    const reader = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'progress-video-only', capabilityIds: ['read_application_entity'], permissions: ['application:read', 'video_edit:read'], allowWrites: false, allowDestructive: false }))
-    expect(await reader.execute({ id: 'read_application_entity', version: 1, input: { ref: input.itemRef, propertyIds: ['video_edit.item.content_queries'] } }, { ...context(), requestId: crypto.randomUUID() })).toMatchObject({ ok: true, data: { properties: { 'video_edit.item.content_queries': [] } } })
     const rejected = await app.call('change_application_entities', { summary: '伪造进度', changes: [{ kind: 'set_properties', target: input.itemRef, entityType: 'video_edit.item', properties: { 'video_edit.item.content_queries': [] } }] })
     expect(rejected.ok).toBe(false)
     accept({ cutsSeconds: [1], contentIdentity: 'a'.repeat(64) })
@@ -468,7 +450,7 @@ it('进度只保留有界副本且按素材项隔离；读取授权撤销不交�
   statuses[0].message = 'polluted'
   expect(readVideoEditContentQueries(owner, 'item')[0].message).not.toBe('polluted')
   expect(readVideoEditContentQueries(owner, 'other')).toEqual([])
-  const grant = createApplicationCallerGrant({ callerId: 'revoked-content', capabilityIds: ['query_video_edit_content'], permissions: ['video_edit:read'], allowWrites: false, allowDestructive: false })
+  const grant = createApplicationCallerGrant({ callerId: 'revoked-content' })
   const session = createApplicationCapabilitySession(grant)
   vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockImplementationOnce(async () => { revokeApplicationCallerGrant(grant); return identity })
   expect(await session.execute({ id: 'query_video_edit_content', version: 1, input: { ...input, discoveryScope: 'none' } }, { ...context(), requestId: crypto.randomUUID() })).toMatchObject({ ok: false })

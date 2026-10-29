@@ -6,7 +6,7 @@ import { noopLogger, noopTracer } from '@henjicc/ai-sdk'
 import { createNativeStreamFetch } from '../ai-runtime/native-stream-fetch'
 
 vi.mock('../keystore', () => ({ getAiProviderApiKey: () => undefined }))
-vi.mock('../ai-runtime/native-file-upload', () => ({ scopedUploadFile: vi.fn(async (ref: string) => ref) }))
+vi.mock('../ai-runtime/native-file-upload', () => ({ resolveUploadFile: vi.fn(async (ref: string) => ref), scopedUploadFile: vi.fn(async (ref: string) => ref) }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), error: vi.fn() }) }))
 vi.mock('../ai-runtime/sdk-runtime', () => ({ sdkRuntimeContext: { transport: { fetch: async () => { throw new Error('REAL_NETWORK_FORBIDDEN') } }, credentials: { get: () => undefined }, media: { read: async () => { throw new Error('REAL_MEDIA_FORBIDDEN') } } } }))
 

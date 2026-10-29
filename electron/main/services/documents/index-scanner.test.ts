@@ -71,3 +71,23 @@ it('权限/I/O 故障保留原索引并拒绝扫描；只有确定不存在才�
     expect(env.catalog.getDocument(doc.meta.id)?.missing).toBe(true)
   } finally { vi.restoreAllMocks(); await env.cleanup() }
 })
+
+it('嵌套项目随父项目搬移后身份、文档与外部定位保持一致，重建不重复认领', async () => {
+  const env = createTestEnvironment()
+  try {
+    const { service, scanner } = env.services
+    const parent = await service.createProject({ name: '父项目' })
+    const childPath = path.join(parent.path, '子项目')
+    await fsp.mkdir(childPath)
+    const child = await service.registerExternalProject(childPath)
+    const document = await service.createDocument({ kind: 'canvas', container: { kind: 'project', projectId: child.id }, name: '分镜' })
+    const moved = await service.renameProject({ projectId: parent.id, name: '改名父项目' })
+    const destination = path.join(moved.path, '子项目')
+    expect(env.catalog.getProject(child.id)?.path).toBe(destination)
+    expect(env.catalog.listExternalLocations()).toContainEqual(expect.objectContaining({ path: destination, kind: 'project' }))
+    expect((await service.readDocument({ id: document.meta.id })).meta).toMatchObject({ path: path.join(destination, '分镜.hjcvs'), container: { kind: 'project', projectId: child.id } })
+    await scanner.rebuild()
+    expect(env.catalog.listDocuments()).toHaveLength(1)
+    expect(env.catalog.getDocument(document.meta.id)?.projectId).toBe(child.id)
+  } finally { await env.cleanup() }
+})

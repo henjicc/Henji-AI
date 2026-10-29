@@ -6,8 +6,7 @@ vi.mock('../services/embedded-agent/service', () => ({ EmbeddedAgentService: cla
 } }))
 import { runEmbeddedCli } from './embedded-runner'
 import type { AssistantCliOptions } from './arguments'
-const options: AssistantCliOptions = { goal: '读取项目', approvalMode: 'assistant_decides', captureMode: 'summary',
-  visible: false, timeoutMs: 1000 }
+const options: AssistantCliOptions = { goal: '读取项目', captureMode: 'summary', visible: false, timeoutMs: 1000 }
 beforeEach(() => {
   vi.resetAllMocks()
   mocks.models.mockResolvedValue([{ providerId: 'test', modelId: 'configured' }])
@@ -17,15 +16,15 @@ describe('Pi CLI 正式服务边界', () => {
   it('默认只读，传递宿主上下文并明确回复完成不等于业务验收', async () => {
     const write = vi.fn()
     expect(await runEmbeddedCli(options, '{"workspace":{"id":"nodes"}}', write)).toBe(0)
-    expect(mocks.prompt).toHaveBeenCalledWith(expect.objectContaining({ access: 'read', model: { providerId: 'test', modelId: 'configured' }, context: '{"workspace":{"id":"nodes"}}' }), expect.any(String))
+    expect(mocks.prompt).toHaveBeenCalledWith(expect.objectContaining({ model: { providerId: 'test', modelId: 'configured' }, context: '{"workspace":{"id":"nodes"}}' }), expect.any(String))
     expect(write.mock.calls[0][0].runId).toBe(mocks.prompt.mock.calls[0][1])
     expect(write).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'completed', businessVerified: false, threadId: 'session' }))
     expect(mocks.dispose).toHaveBeenCalledOnce()
   })
   it('显式授权才传递完整权限，续聊使用官方会话标识', async () => {
-    await runEmbeddedCli({ ...options, approvalMode: 'full_access', threadId: 'existing' }, '', vi.fn())
+    await runEmbeddedCli({ ...options, threadId: 'existing' }, '', vi.fn())
     expect(mocks.navigate).toHaveBeenCalledWith({ action: 'open', input: 'existing' })
-    expect(mocks.prompt).toHaveBeenCalledWith(expect.objectContaining({ access: 'full' }), expect.any(String))
+    expect(mocks.prompt).toHaveBeenCalledWith(expect.objectContaining({  }), expect.any(String))
   })
   it('新对话输出的 threadId 可直接续聊，未知线程拒绝时不开始任务', async () => {
     const write = vi.fn()

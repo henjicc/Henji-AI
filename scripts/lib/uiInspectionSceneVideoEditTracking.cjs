@@ -70,7 +70,7 @@ function createVideoEditTrackingScene() {
       let client
       const evidence = {}
       try {
-        const auth = await authorizeMcpConnection(page, { name: '跟踪与防抖免费验收', allowWrites: true, allowDestructive: true })
+        const auth = await authorizeMcpConnection(page, { name: '跟踪与防抖免费验收' })
         client = await connectMcpClient(auth.config)
         const documentRef = { kind: 'video_edit.document', id: seeded.documentId }
         const clipRef = id => ({ kind: 'video_edit.clip', id: `${seeded.documentId}:${id}` })

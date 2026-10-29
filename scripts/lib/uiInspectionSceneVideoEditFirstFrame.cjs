@@ -57,7 +57,7 @@ function createVideoEditFirstFrameScene() {
       if (!coldOnly) {
       let client
       try {
-        const auth = await authorizeMcpConnection(page, { name: '首帧巡检', allowWrites: true })
+        const auth = await authorizeMcpConnection(page, { name: '首帧巡检' })
         client = await connectMcpClient(auth.config)
         const projectRef = { kind: 'video_edit.document', id: seeded.documentId }
         const read = ref => callTool(client, 'read_application_entity', { ref })

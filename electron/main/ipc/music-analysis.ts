@@ -5,7 +5,6 @@ import { z } from 'zod'
 import { MUSIC_ANALYSIS_CHANNELS, type MusicAnalysisProgress } from '../../../src/platform/contracts/musicAnalysis'
 import { registerIpcHandler } from './registry'
 import { assertTrustedApplicationSender } from './application-control'
-import { isPathWithinAllowedMediaRoots } from '../protocol'
 import { normalizeLocalSource } from '../services/image/source'
 import { createMainLogger } from '../services/logging'
 import { getMusicAnalysisService } from '../services/music-analysis/runtime'
@@ -17,11 +16,10 @@ const requestSchema = z.object({ requestId: z.string().min(1).max(100), source: 
 
 function release(senderId: number): void { for (const controller of tasks.get(senderId)?.values() ?? []) controller.abort(new Error('音乐分析已取消。')); tasks.delete(senderId) }
 
-async function authorizedSource(source: string): Promise<string> {
+async function resolveSource(source: string): Promise<string> {
   const local = normalizeLocalSource(source)
-  if (!path.isAbsolute(local) || !isPathWithinAllowedMediaRoots(local)) throw new Error('音频尚未获得读取权限，请从素材面板导入。')
+  if (!path.isAbsolute(local)) throw new Error('请使用本地文件的绝对路径。')
   const canonical = await fs.realpath(local)
-  if (!isPathWithinAllowedMediaRoots(canonical)) throw new Error('音频实际位置不在已授权目录内，请重新导入。')
   return canonical
 }
 
@@ -38,7 +36,7 @@ export function registerMusicAnalysisHandlers(): void {
     const controller = new AbortController(); owned.set(request.requestId, controller)
     logger.info('开始音乐结构分析', { event: 'music_analysis.analyze.start', requestId: request.requestId })
     try {
-      const canonical = await authorizedSource(request.source)
+      const canonical = await resolveSource(request.source)
       const result = await getMusicAnalysisService().analyze(canonical, controller.signal, progress => {
         if (!sender.isDestroyed()) sender.send(MUSIC_ANALYSIS_CHANNELS.progress, { requestId: request.requestId, ...progress } satisfies MusicAnalysisProgress)
       })

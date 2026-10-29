@@ -1,4 +1,5 @@
 import { writeMemory } from '@/services/assistantMemory/memoryService'
+import { subscribeRestored } from '@/services/recycle'
 import { registerStyleMemoryStorage } from '@/services/assistantMemory/styleMemoryStorage'
 import { applyMemoryWrite } from '@/core/assistant/memoryOperations'
 import { getPlatform } from '@/platform/runtime'
@@ -13,7 +14,7 @@ import { videoEditStyleContentHash, videoEditStyleSchema, videoEditTemplateConte
 import { videoEditTemplateSchema, type VideoEditTemplate } from '@/core/videoEdit/styles/templateSchemas'
 import { migrateStyleKit, migrateTitleTemplate, styleKitMigrationSchema, titleTemplateMigrationSchema } from '@/core/videoEdit/styles/styleTemplateMigration'
 import { z } from 'zod'
-import { appLocalDataDir, exists, getBundledResourcePath, join, mkdir, readDir, readFile, readTextFile, remove, writeFile, writeTextFile } from '@/platform/desktopApi'
+import { appLocalDataDir, exists, getBundledResourcePath, join, mkdir, readDir, readFile, readTextFile, writeFile, writeTextFile, remove } from '@/platform/desktopApi'
 import { publishVideoEdit } from './videoEditService'
 
 const logger = createLogger('features.videoEdit.styleLibrary')
@@ -45,13 +46,17 @@ export interface VideoEditStyleLibraryIo {
   writeBytes(path: string, bytes: Uint8Array): Promise<void>
   list(path: string): Promise<Array<{ name: string; isDirectory: boolean }>>
   mkdir(path: string): Promise<void>
-  remove(path: string): Promise<void>
+  remove(path: string, name?: string): Promise<void>
+  preserve?(path: string, name?: string): Promise<void>
+  removeCache?(path: string): Promise<void>
 }
 export const desktopStyleLibraryIo: VideoEditStyleLibraryIo = {
   root: async () => join(await appLocalDataDir(), 'video-edit-styles'),
   builtinRoot: async () => { const index = await getBundledResourcePath('video-edit-styles/index.json'); return index ? index.replace(/[\\/]index\.json$/, '') : null },
   join, exists, readText: readTextFile, writeText: writeTextFile, readBytes: readFile, writeBytes: writeFile,
-  list: path => readDir(path), mkdir: path => mkdir(path, { recursive: true }), remove: path => remove(path, { recursive: true }),
+  list: path => readDir(path), mkdir: path => mkdir(path, { recursive: true }),
+  removeCache: path => remove(path, { recursive: true }),
+  remove: (path, name) => getPlatform().settings.trashFile(path, name), preserve: (path, name) => getPlatform().settings.preserveFile(path, name),
 }
 
 function container(format: typeof STYLE_FORMAT, content: unknown): string { return `${JSON.stringify({ version: format.version, minReaderVersion: persistenceMinReaderVersion(format), content: format.schema.parse(content) }, null, 2)}\n` }
@@ -80,6 +85,7 @@ export class VideoEditStyleLibrary {
   }
 
   ready(): Promise<void> { this.loading ??= this.load().then(() => { this.error = '' }, error => { this.loading = undefined; this.error = `风格库读取失败，原文件已保留：${error instanceof Error ? error.message : String(error)}`; throw error }); return this.loading }
+  async reload(): Promise<void> { await this.queue; this.loading = undefined; await this.ready() }
   loaded(): boolean { return Boolean(this.loading) && !this.error }
   loadError(): string { return this.error }
   /** 个人风格在前（最近修改优先），内置风格按固定顺序在后。 */
@@ -104,7 +110,7 @@ export class VideoEditStyleLibrary {
       const dir = await this.io.join(await this.io.root(), 'styles', value.id); await this.io.mkdir(dir)
       let current = this.styles.get(value.id)?.media ?? { anchors: [] }
       if (media) {
-        await this.io.remove(await this.io.join(dir, 'anchors')).catch(() => undefined)
+        await (this.io.removeCache ?? this.io.remove)(await this.io.join(dir, 'anchors')).catch(() => undefined)
         current = { anchors: [] }
         if (media.preview) { current.preview = await this.io.join(dir, 'preview.mp4'); await this.io.writeBytes(current.preview, media.preview) }
         if (media.thumbnail) { current.thumbnail = await this.io.join(dir, 'thumbnail.jpg'); await this.io.writeBytes(current.thumbnail, media.thumbnail) }
@@ -117,14 +123,14 @@ export class VideoEditStyleLibrary {
       this.styles.set(value.id, entry); return structuredClone(entry)
     })
   }
+  preserveStyle(id: string): Promise<void> { return this.write('style.preserve', async () => { const entry = this.styles.get(id); if (entry && !entry.builtin) await this.io.preserve?.(entry.dir, entry.style.name) }) }
+  preserveTemplate(id: string): Promise<void> { return this.write('template.preserve', async () => { const entry = this.templates.get(id); if (entry) await this.io.preserve?.(entry.file, entry.template.name) }) }
   removeStyle(id: string): Promise<void> {
     return this.write('style.remove', async () => {
       const entry = this.styles.get(id)
       if (!entry || entry.builtin) throw new Error('只能删除风格库里的个人风格，内置风格只读。')
-      await this.io.remove(entry.dir); this.styles.delete(id)
-      if (rememberedDefault('style').value?.key === 'style' && (rememberedDefault('style').value as { id: string }).id === id) await this.setDefaultStyle(null)
-      // 模板可以单独存在：风格删掉后成员模板保留，只去掉所属关系。
-      for (const template of [...this.templates.values()].filter(value => value.template.style?.id === id)) await this.putTemplate({ ...template.template, style: null })
+      await this.io.remove(entry.dir, entry.style.name); this.styles.delete(id)
+      // 归属与默认偏好保留，风格恢复后仍能接回；查找时只使用当前存在的风格。
     })
   }
   async setDefaultStyle(id: string | null, actor: 'user' | 'assistant' = 'user'): Promise<void> {
@@ -139,7 +145,7 @@ export class VideoEditStyleLibrary {
   /** 写入模板：内容摘要变了版本加 1，只改名称、说明或所属风格不升版本。 */
   saveTemplate(template: VideoEditTemplate): Promise<VideoEditLibraryTemplate> { return this.write('template.save', () => this.putTemplate(template)) }
   removeTemplate(id: string): Promise<void> {
-    return this.write('template.remove', async () => { const entry = this.templates.get(id); if (!entry) throw new Error('风格库里没有这个模板。'); await this.io.remove(entry.file); this.templates.delete(id) })
+    return this.write('template.remove', async () => { const entry = this.templates.get(id); if (!entry) throw new Error('风格库里没有这个模板。'); await this.io.remove(entry.file, entry.template.name); this.templates.delete(id) })
   }
   /** 媒体文件的字节（导出分享文件时用）。 */
   async readStyleMedia(id: string): Promise<VideoEditStyleMediaBytes> {
@@ -240,6 +246,9 @@ export class VideoEditStyleLibrary {
   }
 }
 export const videoEditStyleLibrary = new VideoEditStyleLibrary()
+subscribeRestored(async item => {
+  if (item.path?.replaceAll('\\', '/').includes('/video-edit-styles/')) await videoEditStyleLibrary.reload()
+})
 
 // 由风格领域提供存储，记忆服务只依赖此端口；全局默认风格仍走同一记忆写入队列。
 registerStyleMemoryStorage({

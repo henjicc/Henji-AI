@@ -76,8 +76,7 @@ function setup({ holdNavigation = false } = {}) {
   mocks.resolveModel.mockResolvedValue({})
   mocks.prepare.mockResolvedValue([])
   const service = new EmbeddedAgentService()
-  const send = (text: string, delivery: EmbeddedAgentPrompt['delivery'] = 'wait') => service.prompt({ text, delivery,
-    model: { providerId: 'test', modelId: 'fixture' }, access: 'read', context: '' })
+  const send = (text: string, delivery: EmbeddedAgentPrompt['delivery'] = 'wait') => service.prompt({ text, delivery, model: { providerId: 'test', modelId: 'fixture' }, context: '' })
   const finish = () => { if (active) { reply(active); active = undefined } }
   const finishNavigation = () => { const id = navigations.shift(); if (id) reply(id) }
   return { service, send, prompts, finish, child, navigations, finishNavigation, finishCancel: () => { finish(); if (cancelId) { reply(cancelId); cancelId = undefined } } }
@@ -151,7 +150,7 @@ describe('内置助手消息调度', () => {
     mocks.readDocument.mockResolvedValue({ meta: { kind: 'video_edit', container: { kind: 'project', projectId: 'project-a' } }, content: { sequences: [{ id: 'main', styleId: 'soft' }], styles: [{ id: 'soft', userPreferences: [{ content: '旧偏好' }] }] } })
     mocks.projectMemory.mockResolvedValue([{ content: '这期品牌色用红色。' }])
     const context = JSON.stringify({ documentId: 'document-a', videoEdit: { sequenceRef: 'video_edit.sequence:document-a:main', currentStyle: { userPreferences: [{ content: '当前未保存偏好' }] } } })
-    const prompt = () => f.service.prompt({ text: '开始', access: 'read', model: { providerId: 'test', modelId: 'fixture' }, context })
+    const prompt = () => f.service.prompt({ text: '开始', model: { providerId: 'test', modelId: 'fixture' }, context })
     await prompt(); await vi.waitFor(() => expect(f.prompts).toHaveLength(1))
     const contexts = () => calls.mock.calls.flatMap(([value]) => value.command.action === 'prompt' ? [JSON.parse(value.command.input.context)] : [])
     expect(contexts()[0].memory).toMatchObject({ projectId: 'project-a', project: [{ content: '这期品牌色用红色。' }], style: [{ content: '当前未保存偏好' }] })
@@ -209,7 +208,7 @@ describe('内置助手消息调度', () => {
     mocks.loadSkill.mockResolvedValue({ ok: true, data: { content: '技能正文' } })
     f.child.emit('message', { type: 'tool', id: 'skill', name: 'load_assistant_skill', input: { name: 'prompt-optimization', reason: '图片' } })
     await vi.waitFor(() => expect(f.child.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'toolResult', id: 'skill' })))
-    expect(mocks.loadSkill).toHaveBeenCalledWith({ name: 'prompt-optimization', reason: '图片' }, expect.any(AbortSignal))
+    expect(mocks.loadSkill).toHaveBeenCalledWith({ name: 'prompt-optimization', reason: '图片' }, expect.any(AbortSignal), null)
     expect(mocks.call).not.toHaveBeenCalled()
     f.child.postMessage = original
     f.finish()

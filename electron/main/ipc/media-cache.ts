@@ -5,7 +5,6 @@ import { mediaCacheCategorySchema, mediaCacheSettingsSchema } from '../../../src
 import { videoRenderCacheBeginSchema, videoRenderCacheCommitSchema, videoRenderCacheRemoveSchema } from '../../../src/core/videoEdit/renderCacheStore'
 import { registerIpcHandler, parseVoid } from './registry'
 import { assertTrustedApplicationSender } from './application-control'
-import { allowMediaRoot } from '../protocol'
 import { getMediaCacheManager } from '../services/media/media-cache-runtime'
 import { getVideoRenderCacheService } from '../services/video/render-cache-runtime'
 import { createMainLogger } from '../services/logging'
@@ -18,15 +17,14 @@ const projectRequest = z.object({ projectId: z.string().regex(/^[\w-]+$/).max(10
 export function registerMediaCacheIpc(): void {
   const manager = getMediaCacheManager()
   const render = getVideoRenderCacheService()
-  const allowRender = (): void => { const directory = manager.categoryDirectory('render'); if (directory) allowMediaRoot(directory) }
   manager.onChange(() => { for (const window of BrowserWindow.getAllWindows()) if (!window.isDestroyed()) window.webContents.send(MEDIA_CACHE_CHANNELS.changed) })
   registerIpcHandler(MEDIA_CACHE_CHANNELS.settings, parseVoid, () => manager.readSettings(), assertTrustedApplicationSender)
   registerIpcHandler(MEDIA_CACHE_CHANNELS.setSettings, value => mediaCacheSettingsSchema.partial().strict().parse(value), patch => manager.writeSettings(patch), assertTrustedApplicationSender)
   registerIpcHandler(MEDIA_CACHE_CHANNELS.usage, parseVoid, () => manager.usage(), assertTrustedApplicationSender)
   registerIpcHandler(MEDIA_CACHE_CHANNELS.clear, value => z.object({ category: z.union([mediaCacheCategorySchema, z.literal('all')]) }).strict().parse(value), ({ category }) => manager.clear(category), assertTrustedApplicationSender)
-  registerIpcHandler(MEDIA_CACHE_CHANNELS.renderList, value => projectRequest.parse(value), async ({ projectId }) => { allowRender(); return render.list(projectId) }, assertTrustedApplicationSender)
+  registerIpcHandler(MEDIA_CACHE_CHANNELS.renderList, value => projectRequest.parse(value), async ({ projectId }) => { return render.list(projectId) }, assertTrustedApplicationSender)
   registerIpcHandler(MEDIA_CACHE_CHANNELS.renderBegin, value => videoRenderCacheBeginSchema.parse(value), request => render.begin(request.projectId, request.windowKey, request.profile), assertTrustedApplicationSender)
-  registerIpcHandler(MEDIA_CACHE_CHANNELS.renderCommit, value => videoRenderCacheCommitSchema.parse(value), async request => { const entry = await render.commit(request.temporaryPath, request.entry); allowRender(); return entry }, assertTrustedApplicationSender)
+  registerIpcHandler(MEDIA_CACHE_CHANNELS.renderCommit, value => videoRenderCacheCommitSchema.parse(value), async request => { const entry = await render.commit(request.temporaryPath, request.entry); return entry }, assertTrustedApplicationSender)
   registerIpcHandler(MEDIA_CACHE_CHANNELS.renderDiscard, value => z.object({ temporaryPath: z.string().min(1).max(32768) }).strict().parse(value), ({ temporaryPath }) => render.discard(temporaryPath), assertTrustedApplicationSender)
   registerIpcHandler(MEDIA_CACHE_CHANNELS.renderRemove, value => videoRenderCacheRemoveSchema.parse(value), async request => {
     const removed = await render.remove(request)

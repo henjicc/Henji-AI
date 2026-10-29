@@ -24,24 +24,14 @@ describe('连接授权持久化', () => {
     expect(failing.list()).toEqual([])
     expect(() => new McpConnections({ read: () => '{"connections":[]}', write: () => {} }).list()).toThrow()
   })
-  it('旧版带到期时间的授权迁移为永久有效，令牌和权限不变', () => {
+  it('旧版带到期时间的授权迁移为永久有效，令牌不变并移除权限位', () => {
     const token = 'a'.repeat(64)
     let saved: string | null = JSON.stringify({ version: 1, connections: [{ id: '00000000-0000-4000-8000-000000000001', name: '旧连接', expiresAt: 1, token, allowWrites: true, allowDestructive: true, allowPaid: false, reminders: { expiresAt: 1, states: ['expired'] } }] })
     const connections = new McpConnections({ read: () => saved, write: (value) => { saved = value } })
     expect(connections.authenticate(token)).toEqual({ status: 'valid', connectionId: '00000000-0000-4000-8000-000000000001' })
-    expect(JSON.parse(saved!)).toEqual({ version: 2, connections: [{ id: '00000000-0000-4000-8000-000000000001', name: '旧连接', token, allowWrites: true, allowDestructive: true, allowPaid: false }] })
+    expect(JSON.parse(saved!).version).toBe(1)
+    connections.create('另一个客户端')
+    expect(JSON.parse(saved!).connections[0]).toEqual({  id: '00000000-0000-4000-8000-000000000001', name: '旧连接', token })
   })
-  it('修改已有连接权限保留令牌，关闭修改时一并收回删除与付费', () => {
-    let saved: string | null = null
-    const storage = { read: () => saved, write: (value: string) => { saved = value } }
-    const connections = new McpConnections(storage)
-    const connection = connections.create('权限', { allowWrites: true, allowDestructive: true, allowPaid: true })
-    const token = connections.token(connection.id)
-    expect(connections.update(connection.id, { allowWrites: true, allowDestructive: false, allowPaid: true })).toMatchObject({ allowDestructive: false, allowPaid: true })
-    expect(new McpConnections(storage).access(connection.id)).toEqual({ allowWrites: true, allowDestructive: false, allowPaid: true })
-    expect(connections.update(connection.id, { allowWrites: false, allowDestructive: true, allowPaid: true })).toMatchObject({ allowWrites: false, allowDestructive: false, allowPaid: false })
-    expect(connections.token(connection.id)).toBe(token)
-    connections.revoke(connection.id)
-    expect(() => connections.update(connection.id, { allowWrites: true, allowDestructive: false, allowPaid: false })).toThrow('已撤销')
-  })
+
 })

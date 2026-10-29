@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { ApplicationPreflightFailure } from './execution/transactionFailure'
-import { paidApprovalDecisionSchema, paidApprovalRequestSchema, type PaidApprovalRequest, type PaidApprovalDecision } from './paidApproval'
+import { type PaidOperationReceipt, paidApprovalDecisionSchema, paidApprovalRequestSchema, type PaidApprovalRequest, type PaidApprovalDecision } from './paidApproval'
 
 // Human response deadline, not a limit on document size or task execution time.
 export const USER_CONFIRMATION_TIMEOUT_MS = 5 * 60_000
@@ -16,16 +16,25 @@ export type ApplicationUserConfirmation = z.infer<typeof applicationUserConfirma
 export type ApplicationConfirmationProgress =
   | { phase: 'awaiting_user_confirmation'; confirmation: ApplicationUserConfirmation }
   | { phase: 'executing' }
-  | { phase: 'paid_approval'; request: PaidApprovalRequest; consent?: 'once' | 'project' }
-export const paidApprovalProgressSchema = z.object({ phase: z.literal('paid_approval'), request: paidApprovalRequestSchema, consent: z.enum(['once', 'project']).optional() }).strict()
+  | { phase: 'paid_approval'; request: PaidApprovalRequest; consent?: 'once' }
+export const paidApprovalProgressSchema = z.object({ phase: z.literal('paid_approval'), request: paidApprovalRequestSchema, consent: z.literal('once').optional() }).strict()
 type ProgressSink = (progress: ApplicationConfirmationProgress) => Promise<unknown>
+const receipts = new WeakMap<AbortSignal, PaidOperationReceipt>()
+export function bindPaidOperationReceipt(signal: AbortSignal, receipt: PaidOperationReceipt, category: PaidApprovalRequest['category']): () => void {
+  receipts.set(signal, receipt)
+  paidApprovals.set(signal, new Set([category]))
+  return () => { receipts.delete(signal); paidApprovals.delete(signal) }
+}
+export function applicationPaidOperationReceipt(signal: AbortSignal): PaidOperationReceipt | undefined { return receipts.get(signal) }
+
 const scopes = new WeakMap<AbortSignal, ProgressSink>()
 const paidApprovals = new WeakMap<AbortSignal, Set<PaidApprovalRequest['category']>>()
 
 /** Scope by the trusted invocation signal; concurrent UI actions never inherit another caller. */
-export function bindApplicationConfirmation(signal: AbortSignal, sink: ProgressSink): () => void {
+export function bindApplicationConfirmation(signal: AbortSignal, sink: ProgressSink, receipt?: PaidOperationReceipt): () => void {
   scopes.set(signal, sink)
-  return () => { scopes.delete(signal); paidApprovals.delete(signal) }
+  if (receipt) receipts.set(signal, receipt)
+  return () => { scopes.delete(signal); paidApprovals.delete(signal); receipts.delete(signal) }
 }
 export function hasApplicationPaidApproval(signal: AbortSignal, category: PaidApprovalRequest['category']): boolean {
   return !signal.aborted && !!paidApprovals.get(signal)?.has(category)
@@ -34,9 +43,9 @@ export function hasApplicationConfirmation(signal?: AbortSignal): boolean { retu
 /** A cancellable domain subtask keeps its parent's trusted approval sink, never a UI fallback. */
 export function inheritApplicationConfirmation(parent: AbortSignal, child: AbortSignal): () => void {
   const sink = scopes.get(parent)
-  return sink ? bindApplicationConfirmation(child, sink) : () => undefined
+  return sink ? bindApplicationConfirmation(child, sink, receipts.get(parent)) : () => undefined
 }
-export async function requestApplicationPaidApproval(signal: AbortSignal, request: PaidApprovalRequest, consent?: 'once' | 'project'): Promise<PaidApprovalDecision> {
+export async function requestApplicationPaidApproval(signal: AbortSignal, request: PaidApprovalRequest, consent?: 'once'): Promise<PaidApprovalDecision> {
   signal.throwIfAborted()
   const sink = scopes.get(signal)
   if (!sink) throw new ApplicationPreflightFailure('付费授权所属的调用已结束。')

@@ -104,7 +104,7 @@ describe('生成 IPC 计费事实往返', () => {
       () => roundtrip(() => llm.chatStream(request, vi.fn())),
       () => roundtrip(() => llm.modelStep({ ...request, ...stepOptions }, vi.fn())),
       () => roundtrip(() => llm.verifyModelCapabilities({ ...request, structuredOutputMode: 'json' })),
-      () => roundtrip(() => native().audio.recording.transcribe({ action: 'transcribe', sessionId: crypto.randomUUID(), chunkId: crypto.randomUUID(), requestId: crypto.randomUUID(), audioUploadReceipt: crypto.randomUUID(), modelId: 'test', resume: false })),
+      () => roundtrip(() => native().audio.recording.transcribe({ action: 'transcribe', sessionId: crypto.randomUUID(), chunkId: crypto.randomUUID(), requestId: crypto.randomUUID(), modelId: 'test', resume: false })),
     ]
     for (const call of calls) {
       const failure = await call().catch((error: unknown) => error)

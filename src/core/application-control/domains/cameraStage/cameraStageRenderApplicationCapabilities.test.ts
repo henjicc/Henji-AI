@@ -13,7 +13,7 @@ describe('cameraStageRenderApplicationCapabilities', () => {
     const get = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(GET_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID)
     const cancel = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(CANCEL_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID)
 
-    expect(render).toMatchObject({ completionKind: 'submitted', risk: 'R1', requiredScopes: ['canvas'] })
+    expect(render).toMatchObject({ completionKind: 'submitted', requiredScopes: ['canvas'] })
     expect(render?.inputSchema.safeParse({
       canvasRef: { kind: 'canvas.document', id: 'canvas-1' },
       nodeRef: { kind: 'canvas.node', id: 'canvas-1:stage-node' },
@@ -34,9 +34,9 @@ describe('cameraStageRenderApplicationCapabilities', () => {
     expect(render?.control.impacts.map((impact) => impact.effect)).toEqual(['execute', 'create'])
     expect(render?.producesRefs).toEqual(['camera_stage.render_task'])
 
-    expect(get).toMatchObject({ readOnly: true, risk: 'R0', requiredScopes: [] })
+    expect(get).toMatchObject({ readOnly: true, requiredScopes: [] })
     expect(get?.acceptsRefs).toEqual(['camera_stage.render_task'])
-    expect(cancel).toMatchObject({ readOnly: false, risk: 'R2', supportsPreview: true })
+    expect(cancel).toMatchObject({ readOnly: false, supportsPreview: true })
     expect(cancel?.acceptsRefs).toEqual(['camera_stage.render_task'])
     const cancelInput = cancel?.inputSchema.parse({
       taskRef: { kind: 'camera_stage.render_task', id: 'internal-opaque-task-ref' },

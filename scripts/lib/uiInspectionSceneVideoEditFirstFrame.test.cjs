@@ -2,16 +2,15 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const { summarize } = require('./uiInspectionSceneVideoEditFirstFrame.cjs')
 const { authorizeMcpConnection } = require('./uiInspectionMcpClient.cjs')
-test('巡检读取正式连接说明内的 JSON 配置，不把整段说明当 JSON', async () => {
+test('巡检读取正式客户端 JSON 配置', async () => {
   const previous = global.window
   global.window = { henjiNative: { mcp: {
     status: async () => ({ enabled: true, ready: true }),
     authorize: async input => ({ id: 'fixture', ...input }),
-    connectionConfig: async () => '连接说明\n```json\n{"mcpServers":{"henji":{"type":"http","url":"http://127.0.0.1:3000/mcp","headers":{"Authorization":"Bearer fixture"}}}}\n```',
+    connectionConfig: async () => '{"mcpServers":{"henji":{"type":"http","url":"http://127.0.0.1:3000/mcp","headers":{"Authorization":"Bearer fixture"}}}}',
   } } }
   try {
-    const identity = await authorizeMcpConnection({ evaluate: (fn, input) => fn(input) }, { name: 'fixture', allowWrites: true })
-    assert.equal(identity.allowWrites, true)
+    const identity = await authorizeMcpConnection({ evaluate: (fn, input) => fn(input) }, { name: 'fixture' })
     assert.equal(identity.config.url, 'http://127.0.0.1:3000/mcp')
   } finally { global.window = previous }
 })

@@ -5,7 +5,6 @@ import { matchesVideoEditAnnotationFilter, VIDEO_EDIT_ANNOTATION_HANDLED_STATUSE
 import type { VideoEditCommandId } from '@/core/videoEdit/commands'
 import { videoEditDuration } from '@/core/videoEdit/document'
 import { videoEditFps } from '@/core/videoEdit/time'
-import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 import { openAssistant } from '@/features/assistant/store/assistantUiStore'
 import { assetToAgentAttachment } from '@/features/assistant/conversation/assistantAttachments'
 import { getPlatform } from '@/platform/runtime'
@@ -158,20 +157,16 @@ export function videoEditAnnotationCommandState(owner: VideoEditInstance, id: Vi
     case 'annotations_clear_all': return ready(owner.document.sequences.some(sequence => sequence.annotations.length) ? 1 : 0, '没有批注。')
   }
 }
-/** 删除与清除先确认；确认弹窗的危险按钮写明删几条。 */
-async function confirmRemoval(title: string, count: number): Promise<boolean> {
-  return requestAlertConfirmation({ title, message: `将删除 ${count} 条批注，可以撤销。`, type: 'warning', confirmLabel: '删除', confirmTone: 'danger' })
-}
 export async function executeVideoEditAnnotationCommand(owner: VideoEditInstance, id: VideoEditAnnotationBatchCommand): Promise<void> {
   const projectId = owner.document.id; const chosen = selectedVideoEditAnnotations(owner)
   switch (id) {
     case 'select_all': { const ids = videoEditAnnotationList(owner).map(entry => entry.mark.id); const primary = selectedVideoEditAnnotation(projectId); setVideoEditAnnotationSelection(projectId, ids, primary && ids.includes(primary) ? primary : ids[0]); return }
-    case 'delete': if (await confirmRemoval('删除选中的批注', chosen.length)) removeVideoEditAnnotations(projectId, { ids: chosen.map(entry => entry.mark.id) }, VIDEO_EDIT_ANNOTATION_USER); return
+    case 'delete': removeVideoEditAnnotations(projectId, { ids: chosen.map(entry => entry.mark.id) }, VIDEO_EDIT_ANNOTATION_USER); return
     case 'annotations_resolve': case 'annotations_reject': reviewVideoEditAnnotations(projectId, eligibleFor(chosen, BATCH_STATUS[id]), id === 'annotations_resolve'); return
     case 'annotations_mark_addressed': updateVideoEditAnnotationStatuses(projectId, eligibleFor(chosen, 'addressed').map(id => ({ id, status: 'addressed', reply: REVIEW_REPLIES.addressed })), VIDEO_EDIT_ANNOTATION_USER, { linkChange: false }); return
     case 'annotations_select_in_out': case 'annotations_select_clips': setVideoEditAnnotationSelection(projectId, matchedByTimeline(owner, id === 'annotations_select_in_out' ? 'in_out' : 'clips').ids); return
-    case 'annotations_clear_handled': if (await confirmRemoval('清除已处理的批注', handledCount(owner))) clearHandledVideoEditAnnotations(projectId); return
-    case 'annotations_clear_all': if (await confirmRemoval('清除全部批注', owner.document.sequences.reduce((sum, sequence) => sum + sequence.annotations.length, 0))) removeVideoEditAnnotations(projectId, { filter: {} }, VIDEO_EDIT_ANNOTATION_USER); return
+    case 'annotations_clear_handled': clearHandledVideoEditAnnotations(projectId); return
+    case 'annotations_clear_all': removeVideoEditAnnotations(projectId, { filter: {} }, VIDEO_EDIT_ANNOTATION_USER); return
   }
 }
 export function jumpToVideoEditAnnotation(projectId: string, id: string): void {

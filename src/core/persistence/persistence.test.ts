@@ -501,10 +501,11 @@ describe('稳定业务字段的持久契约', () => {
     invalid.agentProfiles[0].settings.maxOutputTokens = '4096'
     expect(llmStoredConfigSchema.safeParse(invalid).success).toBe(false)
     expect(llmStoredConfigSchema.parse({ ...raw, extension: { keep: true } })).toHaveProperty('extension.keep', true)
-    const sample = JSON.parse(fs.readFileSync('tests/fixtures/persistence/mcp-connections/v2.json', 'utf8')) as { connections: { allowPaid: unknown }[] }
-    expect(mcpConnectionStorageSchema.parse(sample).connections[0]).toMatchObject({ allowWrites: true, allowPaid: false, allowDestructive: false })
-    sample.connections[0].allowPaid = 'yes'
-    expect(mcpConnectionStorageSchema.safeParse(sample).success).toBe(false)
+    const sample = JSON.parse(fs.readFileSync('tests/fixtures/persistence/mcp-connections/v2.json', 'utf8'))
+    const contract = PERSISTENCE_FORMATS.find(value => value.id === 'mcp-connections')!
+    const migrated = upgradePersistenceContent(contract, sample, 2)
+    expect(migrated).toMatchObject({ connections: [{ id: sample.connections[0].id, token: sample.connections[0].token }] })
+    expect(mcpConnectionStorageSchema.parse(migrated).connections[0]).not.toHaveProperty('allowPaid')
   })
   it('画布稳定字段和场景设置约束类型，但保留模型及工具扩展', () => {
     const node = { prompt: '画面', modelId: 'synthetic', params: { futureParameter: [1, 2] }, extension: { custom: true } }

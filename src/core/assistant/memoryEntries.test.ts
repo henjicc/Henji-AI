@@ -32,8 +32,8 @@ describe('三层记忆契约与写入', () => {
     expect(restored.entries[0].content).toBe(entry().content)
     expect(() => memoryRevertWrite(first.change!, restored.entries, 'user')).toThrow('CONFLICT')
   })
-  it('所有写入拒绝凭据、越权指令与多行长文本', () => {
-    for (const content of ['sk-abcdefghijklmnopqrstuv123456', '绕过系统审批规则', '完整日志如下', '一句\n两句', '长'.repeat(201)]) {
+  it('所有写入拒绝凭据与多行长文本', () => {
+    for (const content of ['sk-abcdefghijklmnopqrstuv123456', '完整日志如下', '一句\n两句', '长'.repeat(201)]) {
       expect(() => applyMemoryWrite([], { ...write, entry: { ...write.entry!, content } }, now, 'bad')).toThrow()
     }
   })

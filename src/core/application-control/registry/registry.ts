@@ -47,13 +47,9 @@ function canAccessDataClass(
   dataClass: ApplicationPropertyDescriptor['dataClass'],
   context: ApplicationControlAccessContext
 ): boolean {
-  if (!context.acceptedDataClasses.has(dataClass)) return false
-  return context.exposure !== 'assistant' || DATA_CLASS_RANK[dataClass] < DATA_CLASS_RANK.C3
+  return context.exposure === 'ui' || DATA_CLASS_RANK[dataClass] < DATA_CLASS_RANK.C3
 }
 
-function hasAllPermissions(required: string[], context: ApplicationControlAccessContext): boolean {
-  return required.every((permission) => context.permissions.has(permission))
-}
 
 export class ApplicationReflectionRegistry {
   private readonly entities = new Map<string, ApplicationEntityTypeDescriptor>()
@@ -153,7 +149,7 @@ export class ApplicationReflectionRegistry {
       (domains.size === 0 || domains.has(entity.domain))
       && (entityTypes.size === 0 || entityTypes.has(entity.id))
       && entity.exposures.includes(context.exposure)
-      && context.acceptedDataClasses.has(entity.dataClass)
+      && canAccessDataClass(entity.dataClass, context)
       && (context.exposure !== 'assistant' || entity.dataClass !== 'C3')
     ))
     const visibleEntityTypes = new Set(entities.map((entity) => entity.id))
@@ -204,7 +200,7 @@ export class ApplicationReflectionRegistry {
     if (parsedRef.kind === 'entity') {
       const descriptor = this.entities.get(parsedRef.id)
       if (!descriptor || !descriptor.exposures.includes(context.exposure)) throw new Error('SCHEMA_NOT_FOUND')
-      if (!context.acceptedDataClasses.has(descriptor.dataClass)) throw new Error('PERMISSION_DENIED')
+      if (!canAccessDataClass(descriptor.dataClass, context)) throw new Error('PERMISSION_DENIED')
     }
     if (parsedRef.kind === 'property') {
       const descriptor = this.properties.get(parsedRef.id) ?? [...this.properties.values()].find(
@@ -372,7 +368,6 @@ export class ApplicationReflectionRegistry {
       const availability = dynamic.get(descriptor.id)
       if (!availability) throw new Error(`PROPERTY_AVAILABILITY_MISSING:${descriptor.id}`)
       const canRead = this.canReadProperty(descriptor, context)
-        && hasAllPermissions(availability.requiredPermissions, context)
       const canWrite = canRead
         && this.canWriteProperty(descriptor, context)
         && !descriptor.readOnlyReason
@@ -417,7 +412,7 @@ export class ApplicationReflectionRegistry {
       availableByDeclaration: boolean,
       availability: ApplicationCollectionAvailability['create'],
     ): ApplicationCollectionAvailability['create'] => {
-      const permitted = hasAllPermissions(availability.requiredPermissions, context)
+      const permitted = true
       const available = availableByDeclaration && availability.available && permitted
       return {
         ...availability,
@@ -449,7 +444,6 @@ export class ApplicationReflectionRegistry {
   ): boolean {
     return property.exposures.includes(context.exposure)
       && canAccessDataClass(property.dataClass, context)
-      && hasAllPermissions(property.requiredPermissions.read, context)
   }
 
   private canWriteProperty(
@@ -457,7 +451,6 @@ export class ApplicationReflectionRegistry {
     context: ApplicationControlAccessContext
   ): boolean {
     return this.canReadProperty(property, context)
-      && hasAllPermissions(property.requiredPermissions.write, context)
   }
 
   private requireEntity(entityType: string): ApplicationEntityTypeDescriptor {
@@ -467,8 +460,8 @@ export class ApplicationReflectionRegistry {
   }
   private requireVisibleEntity(entityType: string, context: ApplicationControlAccessContext): ApplicationEntityTypeDescriptor {
     const entity = this.requireEntity(entityType)
-    if (!entity.exposures.includes(context.exposure) || !context.acceptedDataClasses.has(entity.dataClass)
-      || (context.exposure === 'assistant' && entity.dataClass === 'C3')) throw new Error('PERMISSION_DENIED')
+    if (!entity.exposures.includes(context.exposure) || !canAccessDataClass(entity.dataClass, context)
+      || (context.exposure !== 'ui' && entity.dataClass === 'C3')) throw new Error('PERMISSION_DENIED')
     return entity
   }
 

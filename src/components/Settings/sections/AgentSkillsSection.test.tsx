@@ -84,31 +84,12 @@ describe('AgentSkillsSection', () => {
     expect(screen.queryByLabelText('删除技能 image-generation')).toBeNull()
   })
 
-  it('停用内置技能要二次确认，取消后不写入', async () => {
+  it('停用内置技能直接生效', async () => {
     render(<AgentSkillsSection />)
     await screen.findByText('image-generation')
-
     fireEvent.click(screen.getByLabelText('启用技能 image-generation'))
-    await screen.findByText('停用内置技能「image-generation」')
-    expect(setSkillEnabled).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByText('取消'))
-    await waitFor(() => expect(screen.queryByText('停用内置技能「image-generation」')).toBeNull())
-    expect(setSkillEnabled).not.toHaveBeenCalled()
-  })
-
-  it('确认后才真正停用内置技能', async () => {
-    render(<AgentSkillsSection />)
-    await screen.findByText('image-generation')
-
-    fireEvent.click(screen.getByLabelText('启用技能 image-generation'))
-    await screen.findByText('停用内置技能「image-generation」')
-    fireEvent.click(screen.getByText('停用'))
-
-    await waitFor(() => expect(setSkillEnabled).toHaveBeenCalledWith({
-      name: 'image-generation',
-      enabled: false,
-    }))
+    await waitFor(() => expect(setSkillEnabled).toHaveBeenCalledWith({ name: 'image-generation', enabled: false }))
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('停用用户技能不弹窗，直接生效', async () => {
@@ -123,15 +104,10 @@ describe('AgentSkillsSection', () => {
     expect(screen.queryByText(/停用内置技能/)).toBeNull()
   })
 
-  it('删除用户技能需要确认', async () => {
+  it('卸载用户技能直接交给可恢复的存储入口', async () => {
     render(<AgentSkillsSection />)
     await screen.findByText('my-workflow')
-
     fireEvent.click(screen.getByLabelText('删除技能 my-workflow'))
-    await screen.findByText('删除技能「my-workflow」')
-    expect(uninstallSkill).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByText('删除'))
     await waitFor(() => expect(uninstallSkill).toHaveBeenCalledWith('my-workflow'))
   })
 
@@ -164,28 +140,18 @@ describe('AgentSkillsSection', () => {
     await screen.findByText(/new-skill\/setup.py/)
     expect(installSkill).toHaveBeenCalledWith({
       sourcePath: 'D:/downloads/new-skill.zip',
-      overwrite: false,
     })
   })
 
-  it('同名冲突时弹确认，确认后带 overwrite 重试', async () => {
-    installSkill
-      .mockRejectedValueOnce(new Error('同名技能已存在：new-skill'))
-      .mockResolvedValueOnce({ installed: ['new-skill'], replaced: ['new-skill'], skippedFiles: [] })
+  it('安装交给同一可恢复替换入口，不通过确认后重试', async () => {
+    installSkill.mockResolvedValueOnce({ installed: ['my-workflow'], replaced: ['my-workflow'], skippedFiles: [] })
     const { openDialog } = await import('@/platform/desktopApi')
-    vi.mocked(openDialog).mockResolvedValue('D:/downloads/new-skill.zip')
-
+    vi.mocked(openDialog).mockResolvedValue('/downloads/skill.zip')
     render(<AgentSkillsSection />)
     await screen.findByText('my-workflow')
     fireEvent.click(screen.getByText('选择文件安装'))
-
-    await screen.findByText('替换同名技能')
-    fireEvent.click(screen.getByText('替换'))
-
-    await waitFor(() => expect(installSkill).toHaveBeenLastCalledWith({
-      sourcePath: 'D:/downloads/new-skill.zip',
-      overwrite: true,
-    }))
+    await waitFor(() => expect(installSkill).toHaveBeenCalledOnce())
+    expect(installSkill).toHaveBeenCalledWith({ sourcePath: '/downloads/skill.zip' })
   })
 })
 

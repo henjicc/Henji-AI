@@ -4,7 +4,7 @@ import { useI18n } from '@/hooks/useI18n'
 import { currentDocumentContext, getDocumentSessionRegistry } from '@/features/documents'
 import { useNavigationStore } from '@/stores/navigationStore'
 import {
-  isAgentEditingSession, releaseAgentDocument, takeOverAgentDocument, useAgentEditingStore, type AgentEditingCaller,
+  isAgentEditingSession, takeOverAgentDocument, useAgentEditingStore, type AgentEditingCaller,
 } from './agentEditing'
 
 type Translate = ReturnType<typeof useI18n>['t']
@@ -22,7 +22,6 @@ function documentName(id: string): string | undefined {
 function useCurrentDocumentId(): string | undefined {
   useNavigationStore((state) => `${state.activeWorkspace}:${state.activeToolId ?? ''}`)
   useAgentEditingStore((state) => state.sessions)
-  useAgentEditingStore((state) => state.takenOver)
   return currentDocumentContext().documentId
 }
 
@@ -92,13 +91,11 @@ export function AgentEditingGuard({ containerRef }: { containerRef: RefObject<HT
   )
 }
 
-/** 标题栏里的状态：在任何页面都能看到助手正在改哪份文档，随时接管；接管后可以交还。 */
+/** 标题栏里的状态：在任何页面都能看到助手正在改哪份文档，随时接管。 */
 export function AgentEditingStatus(): JSX.Element | null {
   const { t } = useI18n('ui')
   const sessions = useAgentEditingStore((state) => state.sessions)
-  const takenOver = useAgentEditingStore((state) => state.takenOver)
   const editing = Object.values(sessions).find((session) => isAgentEditingSession(session) && documentName(session.documentId))
-  const held = Object.keys(takenOver).find((id) => documentName(id))
   if (editing) {
     const name = documentName(editing.documentId)!
     return (
@@ -109,11 +106,5 @@ export function AgentEditingStatus(): JSX.Element | null {
       </div>
     )
   }
-  if (!held) return null
-  return (
-    <div className="flex min-w-0 items-center gap-2 pl-2 pr-1 text-xs text-text2" role="status">
-      <span className="min-w-0 truncate">{t('agentEditing.takenOver', { document: documentName(held)! })}</span>
-      <UiButton size="sm" className="shrink-0" tooltip={t('agentEditing.releaseHint')} onClick={() => releaseAgentDocument(held)}>{t('agentEditing.release')}</UiButton>
-    </div>
-  )
+  return null
 }

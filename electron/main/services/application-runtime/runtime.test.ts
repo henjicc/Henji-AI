@@ -29,7 +29,7 @@ vi.mock('./operationStore', async original => ({ ...await original<typeof import
 it('Pi 回合关闭后，已登记的等待操作仍能确认执行；终态释放授权，下一回合沿原调用者查询', async () => {
   const { host, operations } = initializeApplicationRuntime()
   const callerId = randomUUID(), rendererEpoch = randomUUID()
-  const client = createEmbeddedApplicationClient(callerId, { allowWrites: true, allowPaid: true, allowDestructive: false })
+  const client = createEmbeddedApplicationClient(callerId)
   let request!: LocalHostRequest
   host.register({ rendererEpoch, attachmentSequence: 1, ready: true, tools: [], domains: [] }, { send: (channel, payload) => {
     if (channel !== 'application:host:request') return
@@ -45,7 +45,7 @@ it('Pi 回合关闭后，已登记的等待操作仍能确认执行；终态释�
   host.complete({ ...request, result: { ok: true, data: { verification: { verified: true } } } })
   expect(operations.store.get(operation.operationId, callerId)?.state).toBe('completed')
   expect(() => client.catalog()).toThrow('授权已结束')
-  const next = createEmbeddedApplicationClient(callerId, { allowWrites: true, allowPaid: false, allowDestructive: false })
+  const next = createEmbeddedApplicationClient(callerId)
   client.close() // Closing an old handle twice cannot release a new turn's access.
   expect(await next.call('get_application_operation', { operationId: operation.operationId }, new AbortController().signal)).toMatchObject({ executionState: 'completed' })
   next.close(); host.disconnect()
@@ -103,7 +103,7 @@ it('渲染层重载后操作查询从导出登记恢复中断与完成状态，�
   await videoEditExportJobRegistry.restore(restored)
   host.register({ rendererEpoch: randomUUID(), attachmentSequence: 5, ready: true, tools: [], domains: [] }, { send: vi.fn() })
   host.publishContext({ revision: 9, scopeRevisions: { video_edit: 2 } } as unknown as HostContextSnapshot)
-  const client = createEmbeddedApplicationClient(callerId, { allowWrites: true, allowPaid: false, allowDestructive: false })
+  const client = createEmbeddedApplicationClient(callerId)
   try {
     const query = () => client.call('get_application_operation', { operationId: record.operationId }, new AbortController().signal)
     expect(await query()).toMatchObject({ executionState: 'completed', result: { ok: true, data: { queue: [{ id, state: 'interrupted', outputReady: false, notice: expect.stringContaining('retryTaskId') }] } } })

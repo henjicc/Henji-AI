@@ -7,8 +7,8 @@ import { BeatAnalyzer } from '@/core/audioAnalysis/beatAnalysis'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
-import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
-import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
+
+
 import { createVideoEditTestProject, failVideoEditSaves, reopenVideoEdit } from './videoEditDocumentTestKit'
 import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit, updateVideoEditCreativeIntents } from './videoEditService'
 import { analyzeVideoEditBeats, cancelVideoEditBeatAnalysis, videoEditBeatTask } from './videoEditBeatAnalysis'
@@ -130,8 +130,7 @@ it('正式公共算法 → marker 通用读回与保存重开；通用开关读�
     const before = owner.document
     const result = await app.call('analyze_video_edit_beats', { ...input, sequenceRef: { ...input.sequenceRef, id: 'other:sequence' } })
     expect(result.ok).toBe(false); expect(owner.document).toBe(before)
-    const denied = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'read-only', capabilityIds: ['analyze_video_edit_beats'], permissions: ['video_edit:read'], allowWrites: false, allowDestructive: false }))
-    await expect(denied.execute({ id: 'analyze_video_edit_beats', version: 1, input }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })).rejects.toThrow('PERMISSION_DENIED')
+
     const expected = structuredClone(getActiveVideoEditSequence(owner).markers)
     const reopened = await reopenVideoEdit(id); expect(getActiveVideoEditSequence(reopened).markers).toEqual(expected)
   } finally { app.dispose() }

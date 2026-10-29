@@ -198,6 +198,7 @@ export class GenerationService {
         modelId,
         params: runtimeParams,
         requestId,
+        paidReceipt: paidExecution?.receipt ?? paidApproved,
         ...(options.outputContainer ? { outputContainer: options.outputContainer } : {}),
       }))
       providerResponded = true

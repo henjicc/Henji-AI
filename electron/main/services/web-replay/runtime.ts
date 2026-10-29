@@ -18,7 +18,7 @@ import { getDocumentService } from '../documents/runtime'
 import { stripHenjiExtension } from '../../../../src/core/fileExtensions'
 import { copyDirectoryContentsNoOverwrite } from '../fs/no-overwrite'
 import { moveWebRecordingDirectory } from './moveDirectory'
-import { forgetWebRecordingTrashMark, markWebRecordingTrashed, purgeExpiredWebRecordingTrash } from './trash'
+import { forgetWebRecordingTrashMark, markWebRecordingTrashed, purgeExpiredWebRecordingTrash, vacateWebRecordingTrash } from './trash'
 import { readTextTrack, searchTextTrack, TEXT_TRACK_FILE } from './textTrack'
 import { readBoxTrack } from './boxTrackReader'
 import { newestReplayName, REPLAY_CLEAN_SUFFIX } from '../../../../src/core/webReplay/replayVideos'
@@ -214,8 +214,7 @@ export async function removeWebRecording(recordingId: string): Promise<void> {
   const location = await resolveWebRecordingLocation(recordingId)
   const trash = path.join(webRecordingsRoot(), TRASH)
   await fs.mkdir(trash, { recursive: true })
-  await fs.rm(path.join(trash, recordingId), { recursive: true, force: true })
-  await fs.rm(trashOrigin(recordingId), { force: true })
+  await vacateWebRecordingTrash(trash, recordingId)
   // A project recording leaves its project for the app-data trash too, so deleting can be undone the same way.
   if (location.documentId) await fs.writeFile(trashOrigin(recordingId), JSON.stringify({ directory: location.directory }))
   await moveWebRecordingDirectory(location.directory, path.join(trash, recordingId))
@@ -234,6 +233,24 @@ export async function restoreWebRecording(recordingId: string): Promise<void> {
   await forgetWebRecordingTrashMark(path.dirname(trashed), recordingId)
   if (origin) { await getDocumentService().indexDocumentAt(target); await fs.rm(trashOrigin(recordingId), { force: true }) }
   logger.info('网页录制已恢复', { event: 'web_replay.recording.restored', context: { recordingId } })
+}
+
+/** 回收副本使用自己的目录身份，重复删除同一录制也能分别找到。 */
+export async function listDeletedWebRecordings(): Promise<import('../../../../src/core/localRecords/recycle').RecycledItem[]> {
+  const trash = path.join(webRecordingsRoot(), TRASH)
+  const entries = await fs.readdir(trash, { withFileTypes: true }).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+    throw error
+  })
+  return Promise.all(entries.filter(entry => entry.isDirectory()).map(async entry => {
+    const manifest = await new WebRecordingStore(path.join(trash, entry.name)).readManifest()
+    const marker = await fs.readFile(path.join(trash, `${entry.name}.deleted-at`), 'utf8').catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return new Date().toISOString()
+      throw error
+    })
+    const deletedAt = Date.parse(marker)
+    return { id: `web-recording:${entry.name}`, name: webRecordingTitle(manifest), category: '网页录制', deletedAt }
+  }))
 }
 
 /** 启动时在后台清掉回收区里删除满 30 天的网页录制；失败只记日志，录制留到下次再清。 */
@@ -346,7 +363,6 @@ export async function readWebRecording(request: WebReplayReadRequest): Promise<W
 export async function revealWebRecording(recordingId: string, file?: string): Promise<void> {
   const directory = await resolveWebRecordingDirectory(recordingId)
   const target = file ? path.resolve(file) : directory
-  if (target !== directory && !target.startsWith(directory + path.sep)) throw new Error('只能打开这段录制自己的文件')
   if (file) shell.showItemInFolder(target)
   else { const error = await shell.openPath(target); if (error) throw new Error(error) }
 }

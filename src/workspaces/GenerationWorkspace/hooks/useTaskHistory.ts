@@ -1,4 +1,5 @@
 import type React from 'react'
+import { subscribeRestored } from '@/services/recycle'
 import { useCallback, useEffect } from 'react'
 import { createLogger } from '@/core/logging'
 import { databaseService } from '@/services/database/DatabaseService'
@@ -9,7 +10,7 @@ import type { GenerationTask } from '../types'
 import { createHistoryMediaResolver } from '../application/historyMediaResolver'
 import { readGenerationTasks } from '../application/generationTaskProjection'
 import { mapHistoryRecordToTask } from '../application/generationTaskHistory'
-export { awaitGenerationTaskPersistence, persistGenerationTask, createPersistedGenerationTask, deletePersistedGenerationTask } from '../application/generationTaskHistory'
+export { awaitGenerationTaskPersistence, persistGenerationTask, createPersistedGenerationTask, deletePersistedGenerationTask, deletePersistedGenerationTasks } from '../application/generationTaskHistory'
 const logger = createLogger('workspaces.GenerationWorkspace.hooks.useTaskHistory')
 
 async function loadHistoryWithRetries(): Promise<HistoryRecord[]> {
@@ -72,6 +73,7 @@ export function useLoadTaskHistory({
   // 更换作品目录后应用会重新启动（任务 4.2），不需要在运行中重新载入。
   useEffect(() => {
     void load()
+    return subscribeRestored(async item => { if (item.id.startsWith('history:')) await load() })
   }, [load])
 }
 

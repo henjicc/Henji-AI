@@ -22,7 +22,6 @@ export type AssistantUserInstructionsUpdate = z.infer<typeof assistantUserInstru
 
 export type AssistantUserInstructionsWarning =
   | '可能包含敏感凭据'
-  | '包含无法覆盖的安全或审批规则'
 
 export function normalizeAssistantUserInstructionsContent(content: string): string {
   return instructionContentSchema.parse(content.replace(/\r\n?/g, '\n').trim())
@@ -46,9 +45,6 @@ export function getAssistantUserInstructionsWarnings(
   if (/\b(?:api[\s_-]?key|authorization|access[_-]?token|refresh[_-]?token|token|secret|password)\s*[:=]\s*[A-Za-z0-9._/+~-]{12,}|Bearer\s+[A-Za-z0-9._-]{12,}|\b(?:sk|pk|rk|key)-[A-Za-z0-9_-]{12,}\b/i.test(normalized)
     || /\b(?=[A-Za-z0-9_-]{32,}\b)(?=[A-Za-z0-9_-]*[a-z])(?=[A-Za-z0-9_-]*[A-Z])(?=[A-Za-z0-9_-]*\d)[A-Za-z0-9_-]+\b/.test(normalized)) {
     warnings.push('可能包含敏感凭据')
-  }
-  if (/(?:忽略|绕过|覆盖).{0,16}(?:系统|安全|权限|审批|规则)|(?:自动|无需).{0,8}(?:批准|审批|确认)|ignore.{0,16}(?:system|safety|permission|approval)/i.test(normalized)) {
-    warnings.push('包含无法覆盖的安全或审批规则')
   }
   return warnings
 }

@@ -166,7 +166,10 @@ class AssetReflectionProvider implements ApplicationEntityProvider {
   }
 
   private async readAsset(assetId: string): Promise<Record<string, JsonValue>> {
-    const asset = await assetApplicationService.read(assetId)
+    const asset = await assetApplicationService.read(assetId).catch((error: unknown) => {
+      if (error instanceof Error && error.message === '资产不存在') throw new Error('NOT_FOUND:资产不存在', { cause: error })
+      throw error
+    })
     return {
       ...fieldReadValues(ASSET_FIELDS, asset),
       'asset.media_type': String(asset.mediaType),
@@ -210,10 +213,11 @@ export function createAssetReflectionRegistrations(
       refKind: entityType,
       dataClass: 'C1',
       exposures: ['ui', 'assistant', 'local_adapter'],
-      parentTypes: entityType === ASSET_ENTITY_TYPES.library ? [ASSET_ENTITY_TYPES.catalog] : [],
+      parentTypes: entityType === ASSET_ENTITY_TYPES.library || entityType === ASSET_ENTITY_TYPES.asset ? [ASSET_ENTITY_TYPES.catalog] : [],
       revisionScopes: ['assets'],
       queryCapabilityIds: [entityType === ASSET_ENTITY_TYPES.asset ? 'get_asset' : 'list_asset_libraries'],
       schemaRef: schemaRef('entity', entityType),
+      ...(entityType === ASSET_ENTITY_TYPES.asset ? { collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [], maxItemsPerChange: 64 } } : {}),
       ...(entityType === ASSET_ENTITY_TYPES.library ? {
         collectionWrite: {
           creatable: true,

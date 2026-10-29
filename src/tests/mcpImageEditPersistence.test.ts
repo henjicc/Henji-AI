@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
-import { createApplicationCapabilitySession, listApplicationCapabilities } from '@/features/application-control/applicationCapabilityService'
+import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
 import { getHostScopeRevisions, retainHostContextTracking } from '@/features/application-control/hostContext/hostContext'
 import { ImageEditorV3CommandRepository } from '@/commands/imageEditorV3'
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
@@ -16,9 +16,7 @@ const disposers: Array<() => void> = []
 beforeEach(() => { installHarnessNativeStorage(); disposers.push(retainHostContextTracking()) })
 afterEach(() => { disposers.splice(0).reverse().forEach((dispose) => dispose()); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 function session() {
-  return createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'mcp-image-test',
-    capabilityIds: listApplicationCapabilities().map((item) => item.id), allowWrites: true, allowDestructive: false,
-    permissions: ['application:read', 'application:write', 'image_edit:read', 'image_edit:write', 'canvas:read', 'canvas:write', 'canvas:project_write'] }))
+  return createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'mcp-image-test' }))
 }
 const request = () => ({ requestId: crypto.randomUUID(), signal: new AbortController().signal })
 async function edit(target: ReturnType<typeof session>, documentId: string) {

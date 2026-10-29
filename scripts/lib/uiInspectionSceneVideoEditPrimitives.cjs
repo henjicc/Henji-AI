@@ -33,7 +33,7 @@ function createVideoEditPrimitivesScene() {
           await api.saveDocument({ target: { id }, expectedRevision: read.meta.revision, content: read.content })
         }, { source, projectId: seeded.projectId, id: seeded.documentId })
         await openVideoEditProjectCard(page, seeded.projectId); await presented(0)
-        const identity = await authorizeMcpConnection(page, { name: '动作原语免费验收', allowWrites: true, allowDestructive: true })
+        const identity = await authorizeMcpConnection(page, { name: '动作原语免费验收' })
         client = await connectMcpClient(identity.config, 'Henji primitives Reality')
         const projectRef = { kind: 'video_edit.document', id: seeded.documentId }; const clipRef = { kind: 'video_edit.clip', id: seeded.documentId + ':motion-clip' }
         const read = async (ref, propertyIds) => callTool(client, 'read_application_entity', { ref, propertyIds })

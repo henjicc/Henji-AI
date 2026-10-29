@@ -149,7 +149,6 @@ function collectionBoundary() {
   vi.spyOn(platform.system.fs, 'writeFile').mockImplementation(async (path, value, options) => { if (options?.exclusive && bytes.has(path)) throw new Error('exists'); bytes.set(path, value) })
   vi.spyOn(platform.system.fs, 'readFile').mockImplementation(async path => bytes.get(path)!)
   vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue('D:/')
-  vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)
   vi.spyOn(platform.assetLibrary, 'inspectFileContent').mockImplementation(async path => ({ sizeBytes: bytes.get(path)?.length ?? 10, fileModifiedAt: 20, contentIdentity: 'a'.repeat(64) }))
   vi.spyOn(platform.assetLibrary, 'createAsset').mockImplementation(async input => {
     const existing = [...assets.values()].find(asset => asset.filePath === input.filePath); if (existing) return existing
@@ -621,7 +620,6 @@ it('图片参数引用原媒体，经同一候选检查后写入；失败无半�
     vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
     vi.spyOn(getPlatform().system.paths, 'dirname').mockResolvedValue('D:/')
     vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue({ sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) })
-    vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined)
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob() }))
     const close = vi.fn(); vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue({ width: 3840, height: 2160, close }))
     const original = owner.document; boundary.failTrial = true
@@ -804,17 +802,17 @@ it.each(['cancel', 'edit', 'identity'] as const)('代码资产最终%s检查不�
   expect(owner.document.items).toHaveLength(0); expect(owner.document.codeMaterials ?? []).toHaveLength(0); await expectRenderersReleased()
   if (action !== 'edit') { expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(0) } else expect(owner.document.sequences[0].name).toBe('后续手工修改')
 })
-it('代码资产未授权图片在任何媒体探测之前被拒绝，原目标零改动', async () => {
+it('代码资产图片读取失败时不派发媒体探测，原目标零改动', async () => {
   const owner = (await createLegacyTrackVideoEditProject()); const baseline = owner.document
   const imageSource = "export default {name:\"图片资产\",kind:\"generator\",mode:\"static\",width:3840,height:2160,durationSeconds:4,params:[{key:\"logo\",type:\"image\",title:\"徽标\",default:null,animatable:false}],draw(ctx,t,p){ctx.fillRect(100+t*20,100,500,500)}}"
   const manifest = { ...codeAssetFixture(imageSource), parameters: { logo: { kind: 'image' as const, mediaId: 'original' } }, curves: undefined, images: [{ id: 'original', kind: 'image' as const, path: 'D:/unauthorized/original.png', content: { sizeBytes: 10, fileModifiedAt: 20, contentIdentity: 'b'.repeat(64) } }] }
   const bytes = encodeCodeAsset(manifest)
   vi.spyOn(assetApplicationService, 'inspect').mockResolvedValue({ id: 'code-asset', mediaType: 'code', filePath: 'D:/asset.henji-code', inspectionStatus: 'ready', sizeBytes: bytes.length, fileModifiedAt: 20, contentIdentity: 'a'.repeat(64) } as AssetRecord)
   vi.spyOn(getPlatform().system.fs, 'readFile').mockResolvedValue(bytes)
-  vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockRejectedValue(new Error('未获得读取权限'))
-  const probe = vi.spyOn(mediaService, 'inspectVideoEditMedia'); const allow = vi.spyOn(getPlatform().media, 'allowRoot')
-  await expect(importVideoEditCodeAsset(owner.document.id, 'code-asset')).rejects.toThrow('读取权限')
-  expect(probe).not.toHaveBeenCalled(); expect(allow).not.toHaveBeenCalled(); expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(0)
+  vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockRejectedValue(new Error('图片读取失败'))
+  const probe = vi.spyOn(mediaService, 'inspectVideoEditMedia')
+  await expect(importVideoEditCodeAsset(owner.document.id, 'code-asset')).rejects.toThrow('图片读取失败')
+  expect(probe).not.toHaveBeenCalled(); expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(0)
 })
 
 it('代码资产收录失败保留清单；重试不再选路径、写文件、编译或生成历史，保存的是原参数与曲线', async () => {

@@ -1,4 +1,6 @@
+import { readPaidApprovalSettingsValue } from '../../../src/core/application-control/paidApproval'
 import { SQLITE_SCHEMA_VERSION } from '../../../src/core/persistence/schemaVersions'
+import { createRecycleSchema } from './recycle/store'
 import { createMediaRecycleTablesV21 } from './media-recycle/schema'
 import { PersistenceError } from '../../../src/core/persistence/migrations'
 import { migrateApplicationReviewsV20 } from './application-runtime/operationStore'
@@ -9,7 +11,7 @@ import type Database from 'better-sqlite3'
 import type { LocationContext } from '../../../src/core/storage/locationCodec'
 import { createApplicationOperationTablesV1 } from './application-runtime/operationStore'
 import { createAiRuntimeTablesV1, createGenerationSubmissionsTableV1, createPendingTaskResultsTableV1 } from './ai-runtime/schema'
-import { createAssetLibraryTablesV1, addAssetForeignMarker } from './asset-library/schema'
+import { createAssetLibraryTablesV1, addAssetForeignMarker, restrictAssetPathUniquenessToActive } from './asset-library/schema'
 import { createAssistantMemoryTablesV1, replaceAssistantMemoryTablesV22, assistantMemoryNeedsBackup } from './assistant/storageSchema'
 import { createCameraStageRenderTaskTableV1 } from './camera-stage-render-task-schema'
 import { createCustomModelsTableV1 } from './custom-models-schema'
@@ -98,7 +100,21 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
     backupWhen: db => !!db.prepare("SELECT 1 FROM application_invocations WHERE json_extract(record_json, '$.confirmation.purpose') = 'review' LIMIT 1").get() },
   { version: 21, name: 'global_media_recycle', up: createMediaRecycleTablesV21 },
   { version: 22, name: 'replace_assistant_memory_user_authorized_reset', up: replaceAssistantMemoryTablesV22, backupWhen: assistantMemoryNeedsBackup },
-  { version: SQLITE_SCHEMA_VERSION, name: 'asset_foreign_marker', up: addAssetForeignMarker },
+  { version: 23, name: 'asset_foreign_marker', up: addAssetForeignMarker },
+  { version: 24, name: 'user_data_recycle', up: createRecycleSchema,
+    backupWhen: db => !!db.prepare('SELECT 1 FROM asset_libraries LIMIT 1').get() },
+  // 24 → 25：保留用户额度与完全放开选择，移除项目许可和连接权限；收据绑定生成请求为可选元数据。
+  { version: 25, name: 'shared_paid_policy', up: db => {
+    const paid = db.prepare('SELECT value FROM settings WHERE key = ?').get('ai.paid_approval') as { value: string } | undefined
+    if (paid) db.prepare('UPDATE settings SET value = ? WHERE key = ?').run(JSON.stringify(readPaidApprovalSettingsValue(JSON.parse(paid.value))), 'ai.paid_approval')
+    const mcp = db.prepare('SELECT value FROM settings WHERE key = ?').get('mcp.preferences') as { value: string } | undefined
+    if (mcp) {
+      const { defaultAccess: _access, ...preferences } = JSON.parse(mcp.value) as Record<string, unknown>
+      db.prepare('UPDATE settings SET value = ? WHERE key = ?').run(JSON.stringify(preferences), 'mcp.preferences')
+    }
+  } },
+  { version: SQLITE_SCHEMA_VERSION, name: 'active_asset_path_uniqueness', up: restrictAssetPathUniquenessToActive, transaction: false,
+    backupWhen: db => !!db.prepare('SELECT 1 FROM assets LIMIT 1').get() },
 ]
 
 export const SCHEMA_MIGRATIONS_TABLE = 'schema_migrations'

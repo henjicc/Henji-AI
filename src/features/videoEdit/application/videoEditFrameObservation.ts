@@ -226,7 +226,6 @@ async function publishObservationImage(bytes: Uint8Array, width: number, height:
   }
   const path = await platform.image.persistImageBinary(bytes, 'png')
   assertCurrent()
-  await platform.media.allowRoot(await platform.system.paths.dirname(path))
   assertCurrent()
   const created = await addMediaReferenceToLibrary({ filePath: path, mediaType: 'image', source: 'video-edit', displayName: `${displayName} · 截帧` })
   // 显式保存代表用户要留下它；复用历史观察图时也退出自动清理。

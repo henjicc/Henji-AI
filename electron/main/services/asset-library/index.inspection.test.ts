@@ -4,14 +4,13 @@ import type { MediaInspectionResult } from './mediaInspection'
 import { PROJECT_ASSET_MISSING } from '../documents/index-store'
 
 const mocks = vi.hoisted(() => ({
-  getDb: vi.fn(), stat: vi.fn(), realpath: vi.fn(), allowed: vi.fn(), probe: vi.fn(), thumbnail: vi.fn(), allowRoot: vi.fn(),
+  getDb: vi.fn(), stat: vi.fn(), realpath: vi.fn(), allowed: vi.fn(), probe: vi.fn(), thumbnail: vi.fn(),
   info: vi.fn(), warn: vi.fn(), error: vi.fn(),
 }))
 vi.mock('node:fs/promises', () => ({ default: { stat: mocks.stat, realpath: mocks.realpath } }))
 vi.mock('../db', () => ({ getDb: mocks.getDb }))
 vi.mock('../db-locations', async () => ({ databaseLocations: (await import('../db-locations-identity.test-support')).identityDatabaseLocations }))
 vi.mock('../appPaths', () => ({ getProgramStoreDir: () => '/program/thumbnails' }))
-vi.mock('../../protocol', () => ({ allowMediaRoot: mocks.allowRoot, isPathWithinAllowedMediaRoots: mocks.allowed }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: mocks.info, warn: mocks.warn, error: mocks.error }) }))
 vi.mock('./mediaInspection', () => ({ inspectMedia: mocks.probe, normalizeAssetPath: (value: string) => value }))
 vi.mock('./thumbnailService', () => ({ ensureAssetThumbnail: mocks.thumbnail }))
@@ -23,13 +22,13 @@ interface TestAssetRow {
   mime_type: string | null; size_bytes: number | null; width: number | null; height: number | null;
   duration_seconds: number | null; thumbnail_name: string | null; inspection_status: string;
   inspection_error: string | null; file_modified_at: number | null; content_identity: string | null; last_used_at: number | null;
-  created_at: number; updated_at: number;
+  created_at: number; updated_at: number; deleted_at: number | null;
 }
 function assetRow(): TestAssetRow {
   return { id: 'asset-1', media_type: 'video', display_name: '素材', file_path: 'D:/a.mp4', source: 'imported',
     mime_type: null, size_bytes: null, width: null, height: null, duration_seconds: null,
     thumbnail_name: null, inspection_status: 'pending', inspection_error: null,
-    file_modified_at: null, content_identity: null, last_used_at: null, created_at: 1, updated_at: 1 }
+    file_modified_at: null, content_identity: null, last_used_at: null, created_at: 1, updated_at: 1, deleted_at: null }
 }
 class InspectionDb {
   readonly rows = new Map<string, TestAssetRow>([['asset-1', assetRow()]])
@@ -37,7 +36,7 @@ class InspectionDb {
   prepare(sql: string) {
     if (sql.startsWith('SELECT * FROM assets')) return { get: (id: string) => {
       const row = this.rows.get(id)
-      return row ? { ...row } : undefined
+      return row && (!sql.includes('deleted_at IS NULL') || row.deleted_at === null) ? { ...row } : undefined
     } }
     if (sql.startsWith('SELECT t.name') || sql.startsWith('SELECT library_id')) return { all: () => [] }
     if (sql.startsWith('DELETE FROM assets')) return { run: (id: string) => this.rows.delete(id) }
@@ -50,7 +49,7 @@ class InspectionDb {
       for (const assignment of assignments) {
         const [key, expression] = assignment.split('=')
         if (!key || !expression) throw new Error(`UNSUPPORTED_ASSIGNMENT:${assignment}`)
-        patch[key.trim()] = expression === '?' ? values[offset++] : expression === 'NULL' ? null : expression.replace(/^'|'$/g, '')
+        patch[key.trim()] = expression.trim() === '?' ? values[offset++] : expression.trim() === 'NULL' ? null : expression.replace(/^'|'$/g, '')
       }
       Object.assign(row, patch)
       this.writes.push(sql)
@@ -97,14 +96,7 @@ describe('资产检查与原文件内容归属', () => {
     expect((await inspectAssetFileContent(original.filePath, original.mediaType)).contentIdentity).toBe(original.contentIdentity)
     expect(mocks.probe).toHaveBeenCalledTimes(1)
   })
-  it('固定原路径核验拒绝未授权和symlink越界，在授权内的链接保持原路径摘要', async () => {
-    mocks.allowed.mockReturnValue(false)
-    await expect(inspectAssetFileContent('D:/a.mp4', 'video')).rejects.toThrow('读取权限')
-    expect(mocks.stat).not.toHaveBeenCalled()
-    mocks.allowed.mockImplementation((filePath: string) => !filePath.includes('outside'))
-    mocks.realpath.mockResolvedValueOnce('D:/outside/secret.mp4')
-    await expect(inspectAssetFileContent('D:/a.mp4', 'video')).rejects.toThrow('实际路径')
-    expect(mocks.stat).not.toHaveBeenCalled()
+  it('目录链接保持原路径摘要与内容身份', async () => {
     const registered = await inspectAsset('asset-1')
     mocks.realpath.mockResolvedValue('D:/b.mp4'); mocks.stat.mockResolvedValue(fileStat())
     expect((await inspectAssetFileContent('D:/a.mp4', 'video')).contentIdentity).toBe(registered.contentIdentity)
@@ -116,8 +108,8 @@ describe('资产检查与原文件内容归属', () => {
     await vi.waitFor(() => expect(mocks.stat).toHaveBeenCalledTimes(2))
     finish[0](fileStat()); await vi.waitFor(() => expect(mocks.stat).toHaveBeenCalledTimes(3))
     finish[1](fileStat()); finish[2](fileStat()); expect(await Promise.all(checks)).toHaveLength(3)
-    mocks.allowed.mockReturnValueOnce(false)
-    await expect(inspectAssetFileContent('D:/a.mp4', 'video')).rejects.toThrow('读取权限')
+    mocks.stat.mockRejectedValueOnce(new Error('读取失败'))
+    await expect(inspectAssetFileContent('D:/a.mp4', 'video')).rejects.toThrow('读取失败')
     mocks.stat.mockResolvedValue(fileStat()); await expect(inspectAssetFileContent('D:/a.mp4', 'video')).resolves.toMatchObject({ sizeBytes: 100 })
   })
   let database: InspectionDb
@@ -158,7 +150,6 @@ describe('资产检查与原文件内容归属', () => {
     expect(mocks.stat).toHaveBeenCalledTimes(1)
     expect(mocks.probe).not.toHaveBeenCalled()
     expect(mocks.thumbnail).not.toHaveBeenCalled()
-    expect(mocks.allowRoot).toHaveBeenCalledWith(path.dirname('D:/a.mp4'))
     expect(mocks.info).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ event: 'asset.inspect.completed', context: { assetId: 'asset-1', reused: true } }))
   })
 
@@ -203,7 +194,7 @@ describe('资产检查与原文件内容归属', () => {
     deleteAsset('asset-1')
     probe.resolve(mediaInfo())
     await Promise.all([rejectedFirst, rejectedSecond])
-    expect(database.rows.has('asset-1')).toBe(false)
+    expect(database.rows.get('asset-1')?.deleted_at).toEqual(expect.any(Number))
   })
 
   it('旧成功晚到不能覆盖重新定位后的媒体', async () => {
@@ -372,7 +363,7 @@ describe('资产检查与原文件内容归属', () => {
     deleteAsset('asset-1')
     probe.resolve(mediaInfo())
     await rejected
-    expect(database.rows.has('asset-1')).toBe(false)
+    expect(database.rows.get('asset-1')?.deleted_at).toEqual(expect.any(Number))
     expect(mocks.thumbnail).not.toHaveBeenCalled()
   })
 

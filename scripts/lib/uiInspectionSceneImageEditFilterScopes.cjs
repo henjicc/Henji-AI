@@ -104,7 +104,7 @@ function createImageEditFilterScopesScene(context, { injectSelectionFailure = fa
         await host().getByRole('button', { name: '更多图层操作', exact: true }).click()
         await shoot('canvas-height-layer-toolbar')
         await page.keyboard.press('Escape')
-        const identity = await authorizeMcpConnection(page, { name: '局部滤镜验收', allowWrites: true, allowDestructive: true })
+        const identity = await authorizeMcpConnection(page, { name: '局部滤镜验收' })
         client = await connectMcpClient(identity.config, '局部滤镜验收')
         const ref = { kind: 'image_edit.document', id: 'v3:reality-filter-scopes' }
         const selectionRef = { ...ref, kind: 'image_edit.selection' }

@@ -54,7 +54,7 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         await observeWorkers(page); observed = true; await button(page, '剪辑').click()
         const open = async target => { await dialogs(app, [target], target); await openVideoEditFile(page, target); await presented(page, 0) }
         if (!pressureOnly) await open(file)
-        const identity = await authorizeMcpConnection(page, { name: '原生图形滤镜转场验收', allowWrites: true, allowDestructive: true })
+        const identity = await authorizeMcpConnection(page, { name: '原生图形滤镜转场验收' })
         client = await connectMcpClient(identity.config, 'Henji composite Reality')
         const read = (ref, propertyIds) => callTool(client, 'read_application_entity', { ref, propertyIds })
         const ref = (kind, projectId, id) => ({ kind, id: id ? `${projectId}:${id}` : projectId })

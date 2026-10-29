@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import { useI18n } from '@/hooks/useI18n'
 import { UI_TEXT_BODY_CLASS, UI_TEXT_TITLE_CLASS, UiButton, UiModal } from '@/components/ui'
 import { Trash2, TriangleAlert } from 'lucide-react'
@@ -12,15 +12,7 @@ export interface ClearHistoryDialogProps {
 
 export function ClearHistoryDialog({ open, onClose, onClearFailed, onClearAll }: ClearHistoryDialogProps): JSX.Element {
   const { t } = useI18n()
-  // 「全部删除」需要点两次：第一次进入待确认态，第二次才真正执行
-  const [needsConfirm, setNeedsConfirm] = useState(false)
-
-  useEffect(() => {
-    if (!open) setNeedsConfirm(false)
-  }, [open])
-
   const close = (): void => {
-    setNeedsConfirm(false)
     onClose()
   }
 
@@ -47,18 +39,14 @@ export function ClearHistoryDialog({ open, onClose, onClearFailed, onClearAll }:
           {t('ui:workspace.clearDialog.failedOnly')}
         </UiButton>
 
-        <UiButton size="lg" variant={needsConfirm ? 'dangerSolid' : 'danger'}
+        <UiButton size="lg" variant="danger"
           onClick={async () => {
-            if (needsConfirm) {
-              await onClearAll()
-              close()
-              return
-            }
-            setNeedsConfirm(true)
+            await onClearAll()
+            close()
           }}
         >
           <Trash2  />
-          {needsConfirm ? t('ui:workspace.clearDialog.confirmDelete') : t('ui:workspace.clearDialog.deleteAll')}
+          {t('ui:workspace.clearDialog.deleteAll')}
         </UiButton>
 
         <UiButton size="lg" onClick={close}>

@@ -1,6 +1,6 @@
 import { createLogger } from '@/core/logging'
 import React, { useState, useEffect } from 'react'
-import { requestAlertConfirmation, showAlertDialog } from '@/stores/alertDialogStore'
+import { showAlertDialog } from '@/stores/alertDialogStore'
 import { UI_ICON_SIZE_CLASS, UiButton, UiEmpty, UiIconButton, UiInput, UiOptionButton, UiSegmented } from '@/components/ui'
 import { openExternal as open } from '@/platform/desktopApi'
 import { useI18n } from '@/hooks/useI18n'
@@ -135,24 +135,13 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
     }
   }
   const handleDelete = async (id: string): Promise<void> => {
-    // 走应用统一的确认弹窗（随主题），不用浏览器原生 confirm()
-    const confirmed = await requestAlertConfirmation({
-      title: t('modelscopeCustomModel.actions.deleteTitle'),
-      message: t('modelscopeCustomModel.confirmDelete'),
-      type: 'warning',
-      confirmLabel: t('common:delete'),
-      confirmTone: 'danger',
-    })
-    if (confirmed) {
-      try {
-        await modelscopeCustomModelService.deleteModel(id)
-        await loadModels()
-        await notifyModelsChange()
-      } catch (e) {
-        logger.error('Failed to delete custom model:', e)
-        // 删除失败原来只记日志，列表看起来没变化、用户不知道发生了什么（任务 5.8）
-        showAlert(t('modelscopeCustomModel.alerts.deleteFailed.title'), t('modelscopeCustomModel.alerts.deleteFailed.message'), 'error')
-      }
+    try {
+      await modelscopeCustomModelService.deleteModel(id)
+      await loadModels()
+      await notifyModelsChange()
+    } catch (error) {
+      logger.error('Failed to delete custom model:', error)
+      showAlert(t('modelscopeCustomModel.alerts.deleteFailed.title'), t('modelscopeCustomModel.alerts.deleteFailed.message'), 'error')
     }
   }
   const handleStartEdit = (model: ModelscopeCustomModelEntry) => {

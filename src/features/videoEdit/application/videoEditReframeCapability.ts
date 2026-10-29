@@ -23,8 +23,7 @@ export async function queueVideoEditReframe(projectId: string, sequenceId: strin
     return jobs.length ? { exportJobIds: jobs.map(job => job.id) } : { exportJobIds: [], exportIssue: '已取消输出文件选择，重构结果已保留。' }
   } catch (error) { return { exportJobIds: [], exportIssue: `重构结果已保留，加入导出失败：${error instanceof Error ? error.message : String(error)}。请用现有导出入口重试导出。` } }
 }
-export async function executeVideoEditReframeCapability(input: z.infer<typeof reframeVideoEditCapability.inputSchema>, signal?: AbortSignal, permissions?: readonly string[]): Promise<z.infer<typeof reframeVideoEditCapability.outputSchema>> {
-  if (input.exportPresetRef && permissions && !permissions.includes('assets:write') && videoEditExportPresetLibrary.list().find(value => value.id === input.exportPresetRef!.id)?.settings.addToLibrary) throw new Error('此预设导出后加入资产库，需要 assets:write 授权；请先重构，再使用 addToLibrary=false 的完整导出设置。')
+export async function executeVideoEditReframeCapability(input: z.infer<typeof reframeVideoEditCapability.inputSchema>, signal?: AbortSignal): Promise<z.infer<typeof reframeVideoEditCapability.outputSchema>> {
   const id = input.documentRef.id; const owner = requireVideoEditInstance(id)
   const target = splitVideoEditRef(input.sequenceRef ?? input.clipRef!)
   if (target.projectId !== id) throw new Error('目标引用必须属于 documentRef。')

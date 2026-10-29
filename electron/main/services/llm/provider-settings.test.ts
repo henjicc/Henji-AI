@@ -246,8 +246,8 @@ describe('LlmProviderSettingsService', () => {
     const result = await service.delete({ providerId: provider.providerId, baselineConfig: initial })
     expect(state.config?.providers).toEqual([])
     expect(state.config?.models).toEqual([])
-    expect(state.credentials.has('custom-one-credential')).toBe(false)
-    expect(result.credentialAction).toBe('removed')
+    expect(state.credentials.has('custom-one-credential')).toBe(true)
+    expect(result.credentialAction).toBe('unchanged')
   })
 
   it('共享 credential 被其他供应商使用时只删配置并保留密钥', async () => {
@@ -430,4 +430,25 @@ describe('LlmProviderSettingsService', () => {
     expect(state.credentials.get('slot')).toBe('encrypted:old')
     expect(state.journal).toBeNull()
   })
+  it('恢复只合并被删供应商及模型，后续配置和同 ID 的当前内容完整保留', async () => {
+    const deleted = customProvider('same'), changed = { ...deleted, displayName: '后续改名' }
+    const { service, state } = createHarness({ ...emptyConfig(), providers: [changed, customProvider('added')] })
+    await service.restoreDeleted({ provider: deleted, models: [] })
+    expect(state.config!.providers.slice(0, 2)).toEqual([changed, customProvider('added')])
+    expect(state.config!.providers[2]).toMatchObject({ displayName: `${deleted.displayName}（恢复）`, credentialId: deleted.credentialId })
+    expect(state.config!.providers[2].providerId).not.toBe('same')
+  })
+
+  it('不同供应商的同名模型不冲突，同一供应商的不同配置恢复时保持真实模型名', async () => {
+    const provider = customProvider('p'), another = customProvider('q')
+    const model = { providerId: 'p', modelId: 'gpt-4o', displayName: '当前配置', adapter: 'openai', enabled: true, capabilities: { text: true, image: false, video: false, audio: false, streaming: true, toolCall: false, parallelTools: false, jsonOutput: false, structuredOutputMode: 'none' as const, reasoning: false, sampling: true, contextWindow: null, maxOutputTokens: null, usage: true } }
+    const { service, state } = createHarness({ ...emptyConfig(), providers: [provider], models: [model] })
+    await service.restoreDeleted({ provider: another, models: [{ ...model, providerId: 'q' }] })
+    expect(state.config!.models.map(value => [value.providerId, value.modelId])).toEqual([['p', 'gpt-4o'], ['q', 'gpt-4o']])
+    await service.restoreDeleted({ models: [{ ...model, displayName: '被删配置' }] })
+    expect(state.config!.models[0]).toEqual(model)
+    expect(state.config!.models[2]).toMatchObject({ modelId: 'gpt-4o', displayName: '被删配置' })
+    expect(state.config!.models[2].providerId).not.toBe('p')
+  })
+
 })

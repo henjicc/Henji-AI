@@ -47,7 +47,6 @@ export class CameraStagePlacementOperationExecutor implements ApplicationSemanti
   readonly effectContract = { direct: [], cascades: [] }
   readonly capabilityId = 'place_camera_stage_object'
   readonly capabilityVersion = 1
-  readonly risk = 'R1' as const
   readonly requiredPermissions = ['camera_stage:write']
   readonly supportsAtomic = true
 

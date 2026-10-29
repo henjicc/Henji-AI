@@ -1,13 +1,27 @@
+import { RECYCLE_RETENTION_MS } from '../../../../src/core/localRecords/recycle'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 
 /** 删除的网页录制在回收区里留多久：期间随时可以恢复，满期后启动时彻底删掉。 */
-export const WEB_RECORDING_TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
+export const WEB_RECORDING_TRASH_RETENTION_MS = RECYCLE_RETENTION_MS
 
 const DELETED_AT = '.deleted-at'
 const ORIGIN = '.origin.json'
 
 const deletedAtFile = (trash: string, id: string): string => path.join(trash, `${id}${DELETED_AT}`)
+
+/** 同一录制再次删除时给旧副本独立身份，保留原来的恢复位置和保留期限。 */
+export async function vacateWebRecordingTrash(trash: string, id: string): Promise<void> {
+  try { await fs.access(path.join(trash, id)) } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return; throw error }
+  const archived = randomUUID()
+  for (const suffix of [DELETED_AT, ORIGIN]) {
+    try { await fs.copyFile(path.join(trash, `${id}${suffix}`), path.join(trash, `${archived}${suffix}`)) }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
+  }
+  await fs.rename(path.join(trash, id), path.join(trash, archived))
+  for (const suffix of [DELETED_AT, ORIGIN]) await fs.rm(path.join(trash, `${id}${suffix}`), { force: true })
+}
 
 /** 记下移进回收区的时刻。目录挪动不改它自己的修改时间，所以不能拿目录时间当删除时间。 */
 export async function markWebRecordingTrashed(trash: string, id: string, at = new Date()): Promise<void> {

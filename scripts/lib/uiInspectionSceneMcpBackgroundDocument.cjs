@@ -57,7 +57,7 @@ function createMcpBackgroundDocumentScenes(context) {
       await setupCanvas(page)
       step('冷启动重载完成')
 
-      const identity = await authorizeMcpConnection(page, { name: '未打开文档跨工程编辑', allowWrites: true })
+      const identity = await authorizeMcpConnection(page, { name: '未打开文档跨工程编辑' })
       const client = await connectMcpClient(identity.config, 'Henji background document Reality')
       try {
         // A：另建一个工程并真的打开它，之后所有后台写入都不得把界面从这里带走。
@@ -236,7 +236,7 @@ function createMcpResourceScenes({ setupSettings, canvasFixtureProjectId }) {
     id: 'mcp-resources-subscription', surface: '设置', name: '外部连接-资源目录与变化订阅', writesUserData: true,
     setup: async (page) => {
       await setupSettings(page)
-      const identity = await authorizeMcpConnection(page, { name: '资源与订阅验收', allowWrites: true })
+      const identity = await authorizeMcpConnection(page, { name: '资源与订阅验收' })
       const client = await connectMcpClient(identity.config, 'Henji resources Reality')
       try {
         // 3.4 起画布是通用文档：盯画布文档本身（改名走 documents.document.name）

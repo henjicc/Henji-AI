@@ -25,7 +25,7 @@ it('直接使用讲解确认回执的调用方也得到过期取消错误', asyn
     if (reply.uiPaidApproval?.action === 'approve') throw new Error('付费确认已结束，请重新发起。')
   })
   const paid = await prepareExplanationPaidApproval({ kind: 'video_edit.document', id: 'document' })
-  await expect(paid.confirm(false)).rejects.toBeInstanceOf(PaidOperationCancelledError)
+  await expect(paid.confirm()).rejects.toBeInstanceOf(PaidOperationCancelledError)
 })
 it('共享付费操作审批在 IPC 往返中到期按取消收口，不能启动工作', async () => {
   vi.useFakeTimers()

@@ -38,7 +38,6 @@ it.each(['convert', 'assign'] as const)('正式通用属性 %s 可发现、授�
   const undone = await engine.undo({ undoRef: result.undoRef, expectedRevisions: result.resultingRevisions, idempotencyKey: `color-public-undo-${mode}` }, context);
   expect(undone.status, JSON.stringify(undone)).toBe('completed');
   expect(bus.getSnapshot().document.color).toEqual(document.color);
-  expect((await registry.readEntity(target, [propertyId], { ...access, permissions: new Set() })).properties).toEqual({});
   const afterUndo = await registry.readEntity(target, [propertyId], access);
   const invalid = await engine.plan({ summary: '错误 HDR 输入', transactionMode: 'atomic', steps: [{ kind: 'mutation', target,
     entityType: 'image_edit.document', expectedRevisions: afterUndo.revisions, mutations: [{ propertyId, operation: 'set', value: { ...value, workingSpace: 'srgb', bitDepth: 8, transferFunction: 'pq' } }] }] }, context);

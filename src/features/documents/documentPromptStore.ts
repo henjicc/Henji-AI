@@ -1,10 +1,6 @@
 import { create } from 'zustand'
 
 import type {
-  DocumentConflictChoice,
-  DocumentConflictPromptInfo,
-  DocumentLeaveChoice,
-  DocumentLeavePromptInfo,
   DocumentSaveNamePromptInfo,
   DocumentSessionPrompter,
 } from './documentSessionTypes'
@@ -15,9 +11,7 @@ import type {
  */
 
 export type DocumentPromptRequest =
-  | { key: number; type: 'leave'; info: DocumentLeavePromptInfo; resolve: (choice: DocumentLeaveChoice) => void }
   | { key: number; type: 'saveName'; info: DocumentSaveNamePromptInfo; resolve: (saved: boolean) => void }
-  | { key: number; type: 'conflict'; info: DocumentConflictPromptInfo; resolve: (choice: DocumentConflictChoice) => void }
 
 interface DocumentPromptState {
   queue: DocumentPromptRequest[]
@@ -50,7 +44,5 @@ function push<T>(request: DistributiveOmit<DocumentPromptRequest, 'key' | 'resol
 
 /** 默认提示实现：排进队列，由 DocumentSessionDialogs 渲染。 */
 export const dialogDocumentSessionPrompter: DocumentSessionPrompter = {
-  chooseLeaveAction: (info) => push<DocumentLeaveChoice>({ type: 'leave', info }),
   askSaveName: (info) => push<boolean>({ type: 'saveName', info }),
-  resolveConflict: (info) => push<DocumentConflictChoice>({ type: 'conflict', info }),
 }

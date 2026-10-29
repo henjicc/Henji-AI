@@ -15,7 +15,6 @@ beforeEach(() => {
   vi.spyOn(platform.system.fs, 'writeFile').mockResolvedValue(undefined)
   vi.spyOn(platform.system.dialog, 'save').mockResolvedValue(resolve('fixture', 'frame.png'))
   vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue(resolve('fixture'))
-  vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)
   vi.spyOn(platform.assetLibrary, 'inspectFileContent').mockResolvedValue({ contentIdentity: 'a'.repeat(64), sizeBytes: 4, fileModifiedAt: 1 })
 })
 afterEach(async () => { await closeAllVideoEdits(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })

@@ -4,15 +4,14 @@ import type { ApplicationRef } from '@/core/application-control'
 import { z } from 'zod'
 import { createApplicationCallerGrant, revokeApplicationCallerGrant, type ApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { ApplicationRevokedReason } from '@/core/application-control/execution/cancelReason'
-import { localHostRequestSchema, APPLICATION_CAPABILITY_IDS, APPLICATION_READ_CAPABILITY_IDS, APPLICATION_READ_PERMISSIONS, APPLICATION_WRITE_PERMISSIONS, type ApplicationHostPlatform, type LocalTool } from '@/core/application-control/localHostContracts'
+import { localHostRequestSchema, APPLICATION_CAPABILITY_IDS, APPLICATION_READ_CAPABILITY_IDS, type ApplicationHostPlatform, type LocalTool } from '@/core/application-control/localHostContracts'
 import { createLogger } from '@/core/logging'
 import { applicationCallerAccess } from '@/core/application-control/callerContext'
 import { getApplicationControlExecutionEngine } from '@/features/application-control/capabilities/applicationControlRegistry'
 import { createApplicationCapabilitySession, listApplicationCapabilities } from './applicationCapabilityService'
-import { buildExternalCapabilityInventory, externalReflectionPermissions } from './externalCapabilityInventory'
+import { buildExternalCapabilityInventory } from './externalCapabilityInventory'
 import { rendererEpoch } from './rendererIdentity'
 import { APPLICATION_DOMAINS } from './applicationDomains'
-import { creativeIntentPrivateAccess } from './creativeIntentAuthorization'
 import { bindApplicationConfirmation } from '@/core/application-control/userConfirmation'
 import { assertApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { agentEditDocumentIds, beginAgentEdit } from './agentEditing'
@@ -35,11 +34,10 @@ export function attachLocalApplicationHost(platform: ApplicationHostPlatform, re
   }))
   // 按域发现与通用写入范围都从真实反射声明派生；宿主注册是它唯一的对外出口。
   const domains = buildExternalCapabilityInventory()
-  const permissions = externalReflectionPermissions()
   const unsubscribeRequest = platform.onRequest((raw) => {
     const request = localHostRequestSchema.safeParse(raw)
     if (!request.success || request.data.rendererEpoch !== rendererEpoch || disposed) return
-    const { requestId, callerId, capabilityId, input, allowWrites = false, allowDestructive = false, allowPaid = false, expectedRevisions } = request.data
+    const { requestId, callerId, capabilityId, input, expectedRevisions } = request.data
     const readOnly = APPLICATION_READ_CAPABILITY_IDS.some((id) => id === capabilityId)
     const action = readOnly ? 'read' : 'write'
     const controller = new AbortController()
@@ -56,16 +54,14 @@ export function attachLocalApplicationHost(platform: ApplicationHostPlatform, re
       operationReceipts.set(requestId, { callerId, reply })
       await platform.complete(reply)
       logger.info('应用操作确认状态变化', { event: 'application.confirmation.progress', context: { requestId, phase: progress.phase } })
-    })
+    }, request.data.paidReceipt)
     const execute = async (): Promise<void> => {
       logger.info(readOnly ? '开始读取应用内容' : '开始修改应用内容', { event: `mcp.${action}.start`, context: { requestId, capabilityId } })
       let result: Record<string, unknown>
       let dispatched = false
       try {
-        if (definitions.find(item => item.id === capabilityId)?.paidGenerationPreparation && !allowPaid) throw new Error('此连接没有付费生成授权。')
         if (!ready) throw new Error('应用尚未就绪，请稍后重试。')
-        const grant = createApplicationCallerGrant({ callerId, capabilityIds: allowWrites ? [...APPLICATION_CAPABILITY_IDS] : [...APPLICATION_READ_CAPABILITY_IDS], permissions: [...APPLICATION_READ_PERMISSIONS, ...permissions.read, ...(allowWrites ? [...APPLICATION_WRITE_PERMISSIONS, ...permissions.write] : [])], allowWrites, allowDestructive,
-          privateAccess: creativeIntentPrivateAccess(capabilityId, input) })
+        const grant = createApplicationCallerGrant({ callerId })
         grants.set(requestId, grant)
         const definition = definitions.find((item) => item.id === capabilityId)
         if (!definition) throw new Error('此读取工具不可用，请重新连接。')
@@ -77,7 +73,7 @@ export function attachLocalApplicationHost(platform: ApplicationHostPlatform, re
           await requestAlertConfirmation({ title: definition.title, message: '将使用已配置的模型生成内容。', confirmLabel: '允许本次',
             paid: await applicationPaidRequest('generation', documentId, controller.signal, request.data.paidGenerationEstimate ?? null) }, controller.signal)
         }
-        // 助手动手的那份文档在界面上标出并暂时锁住；用户已接管时直接拒绝，不进入执行
+        // 编辑提示标出助手当前处理的文档；冲突由领域事务核对。
         const endAgentEdit = !readOnly && request.data.caller
           ? beginAgentEdit(agentEditDocumentIds(definition, input, request.data.operationId ?? requestId), request.data.caller) : undefined
         dispatched = true

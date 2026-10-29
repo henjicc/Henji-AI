@@ -279,7 +279,6 @@ beforeEach(() => {
   const platform = getPlatform()
   vi.spyOn(platform.system.fs, 'readDirPage').mockRejectedValue(new Error('ENOTDIR'))
   vi.spyOn(platform.system.paths, 'dirname').mockImplementation(async path => path.replace(/[\\/][^\\/]+$/, ''))
-  vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)
 })
 afterEach(async () => { await closeAllVideoEdits(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 

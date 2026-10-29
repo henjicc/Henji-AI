@@ -28,7 +28,7 @@ async function runAuthorTimeline(page, app, { capture, root, spec, project, sour
   const sequenceRef = { kind: 'video_edit.sequence', id: `${seeded.documentId}:${project.sequences[0].id}` }
   let client
   try {
-    const identity = await authorizeMcpConnection(page, { name: '作者 JS 正式链路', allowWrites: true, allowDestructive: true })
+    const identity = await authorizeMcpConnection(page, { name: '作者 JS 正式链路' })
     client = await connectMcpClient(identity.config, 'Henji author timeline Reality')
     const change = async changes => {
       const refs = [...new Map(changes.map(change => { const ref = change.target ?? change.parent; return [`${ref.kind}:${ref.id}`, ref] })).values()]

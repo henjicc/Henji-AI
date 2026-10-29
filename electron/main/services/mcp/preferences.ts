@@ -5,7 +5,9 @@ const KEY = 'mcp.preferences'
 
 export function readMcpPreferences(): McpPreferences {
   const value = getSettingsStore().get(KEY)
-  return value ? mcpPreferencesSchema.parse(JSON.parse(value)) : structuredClone(DEFAULT_MCP_PREFERENCES)
+  if (!value) return structuredClone(DEFAULT_MCP_PREFERENCES)
+  const { defaultAccess: _access, ...preferences } = JSON.parse(value) as Record<string, unknown>
+  return mcpPreferencesSchema.parse(preferences)
 }
 
 export function writeMcpPreferences(value: McpPreferences): void {

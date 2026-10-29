@@ -14,10 +14,8 @@ import { resetAudioEditProjectInstancesForTests } from '@/features/audioEdit/app
 
 beforeEach(() => { installHarnessNativeStorage() })
 afterEach(async () => { await resetAudioEditProjectInstancesForTests(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
-function app(read = true, write = true) {
-  const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: crypto.randomUUID(), capabilityIds: listApplicationCapabilities().map(v => v.id),
-    permissions: ['application:read', 'application:write', ...(read ? ['screen_recording:read'] : []), ...(write ? ['screen_recording:write'] : [])], allowWrites: write, allowDestructive: false,
-  }))
+function app() {
+  const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: crypto.randomUUID() }))
   const call = (id: string, input: unknown, expectedRevisions?: Record<string, number>) => session.execute({ id, version: listApplicationCapabilities().find(v => v.id === id)!.version, input, expectedRevisions }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })
   const requireResult = async (id: string, input: unknown, revisions?: Record<string, number>) => { const result = await call(id, input, revisions); if (!result.ok) throw new Error(JSON.stringify(result.error)); return result.data }
   return { call, requireResult }
@@ -54,12 +52,10 @@ it('正式能力生成→读回→人工校正→通用撤销；生成也在同�
   await api.requireResult('undo_application_changes', { undoRef: second.undoRef })
   expect((await readRecordingUnderstanding(id)).content.understanding.candidates).toHaveLength(2)
 })
-it('C1 会话不泄露正文；读未授权/写未授权/未读基线/越界修改被拒绝', async () => {
+it('会话元数据与理解正文分开，越界修改被拒绝', async () => {
   const { id, ref, sessionRef } = await fixture()
-  expect((await app(false).call('understand_screen_recording', { sessionRef })).ok).toBe(false)
-  await expect(app(true, false).call('understand_screen_recording', { sessionRef })).rejects.toThrow('PERMISSION_DENIED')
   const api = app(); await api.requireResult('understand_screen_recording', { sessionRef })
-  const metadata = await app(true, false).requireResult('read_application_entity', { ref: sessionRef, propertyIds: [] })
+  const metadata = await app().requireResult('read_application_entity', { ref: sessionRef, propertyIds: [] })
   expect(JSON.stringify(metadata)).not.toContain('录制步骤')
   const saved = await readRecordingUnderstanding(id), value = structuredClone(saved.content.understanding)
   value.steps[0].endUs = 14000000
@@ -86,6 +82,7 @@ it('已有模拟转写按声音分段起点映射到录制时钟，停顿使用�
 })
 it('显式转写复用付费审批，拒绝后零识别派发并保留口播恢复引用', async () => {
   const { id } = await fixture(), read = await readRecordingUnderstanding(id), path = resolve(sep, 'fixture', 'paid.wav')
+
   await getPlatform().documents.saveDocument({ target: { id }, expectedRevision: read.meta.revision, content: { ...read.content, devices: { microphone: {}, systemAudio: false }, media: [...read.content.media, { id: 'mic', kind: 'microphone', path, monoUs: 3000000, durationUs: 10000000 }] } })
   vi.spyOn(getPlatform().audioEdit, 'probeSource').mockResolvedValue({ mediaType: 'audio', sourcePath: path, audioPath: path, durationFrames: 480000, sampleRate: 48000, channels: 1 })
   vi.spyOn(getPlatform().audioEdit, 'preflightTranscription').mockResolvedValue({ modelId: 'offline-fixture', requiresConfirmation: true })
@@ -100,6 +97,7 @@ it('显式转写复用付费审批，拒绝后零识别派发并保留口播恢�
 })
 it('导演会话重新理解保留已知旁白和确认脚本，不为 TTS 再付费转写或伪造音频文档', async () => {
   const { id } = await fixture(), read = await readRecordingUnderstanding(id), path = resolve(sep, 'fixture', 'tts.wav')
+
   const content = read.content
   content.media.push({ id: 'mic', kind: 'microphone', path, monoUs: 3000000, durationUs: 2000000 })
   content.understanding.director = { goal: '演示设置', confirmed: true, voice: { modelId: 'mock', options: {} }, narration: [{ stepId: 's', text: '打开设置。', picture: '设置界面' }] }
@@ -114,6 +112,12 @@ it('导演会话重新理解保留已知旁白和确认脚本，不为 TTS 再�
   expect(result.understanding).toMatchObject({ director: content.understanding.director, operationScript: content.understanding.operationScript, transcript: content.understanding.transcript, steps: content.understanding.steps })
   expect(asr).not.toHaveBeenCalled(); expect(gate).not.toHaveBeenCalled()
   expect(result.audioUpdates).toEqual([])
+  const api = app()
+  const saved = await api.requireResult('understand_screen_recording', { sessionRef: { kind: 'screen_recording.session', id }, transcribe: true, detectVisuals: false })
+  expect(saved.verified).toBe(true)
+  const value = await api.requireResult('read_application_entity', { ref: { kind: UNDERSTANDING_ENTITY, id }, propertyIds: [UNDERSTANDING_PROPERTY] })
+  expect(JSON.stringify(value.properties)).not.toContain('confirmed')
+
 })
 it('取消、保存失败与分析期间修改不覆盖原结果，不启动转写', async () => {
   const { id, sessionRef } = await fixture(), api = app()

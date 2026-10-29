@@ -5,14 +5,13 @@ import { getOcrPrivacyService } from '../services/smart-regions/runtime'
 import path from 'node:path'
 import { SMART_REGIONS_IPC_CHANNELS, type SmartRegionRequest } from '../../../src/platform/contracts/smartRegions'
 import { SMART_REGION_ANALYSIS_KINDS, type SmartRegionAnalysisKind } from '../../../src/core/videoEdit/smartRegions'
-import { isPathWithinAllowedMediaRoots } from '../protocol'
 import { normalizeLocalSource } from '../services/image/source'
 import { getSmartRegionService } from '../services/smart-regions/runtime'
 import { parseRecord, registerIpcHandler } from './registry'
 
 /*
- * 智能区域 IPC（任务 4.7d）：渲染层经 preload `henjiNative.smartRegions` → PAL → `src/commands/smartRegions.ts` 调用。
- * 素材路径必须在已授权目录内（与缩略帧、解码同一规则）；分析进度经 `smartRegions:progress` 推给所有窗口。
+ * 智能区域 IPC：渲染层经 preload `henjiNative.smartRegions` → PAL → `src/commands/smartRegions.ts` 调用。
+ * 素材使用本地文件路径；分析进度经 `smartRegions:progress` 推给所有窗口。
  */
 
 /** 素材时间上限：24 小时（微秒）。 */
@@ -30,11 +29,10 @@ export function parseSmartRegionRequest(input: unknown): SmartRegionRequest {
   return { source, kind: kind as SmartRegionAnalysisKind, startUs, endUs, still }
 }
 
-async function authorized(request: SmartRegionRequest): Promise<SmartRegionRequest> {
+async function resolveRequest(request: SmartRegionRequest): Promise<SmartRegionRequest> {
   const normalized = normalizeLocalSource(request.source)
-  if (!path.isAbsolute(normalized) || !isPathWithinAllowedMediaRoots(normalized)) throw new Error('素材尚未获得读取权限，请从素材库导入。')
-  const canonical = await fs.realpath(normalized)
-  if (!isPathWithinAllowedMediaRoots(canonical)) throw new Error('素材的实际路径不在已授权目录内。')
+  if (!path.isAbsolute(normalized)) throw new Error('请使用本地文件的绝对路径。')
+  await fs.realpath(normalized)
   // 保留调用方的路径写法：进度事件按原请求匹配，内容身份由服务按真实路径计算。
   return { ...request, source: normalized }
 }
@@ -47,7 +45,7 @@ export function registerSmartRegionsIpc(): void {
     const owner = { senderId: event.sender.id, cancelled: false }; owners.set(request.requestId, owner)
     const closed = (): void => { owner.cancelled = true; getOcrPrivacyService().cancel(request.requestId) }
     event.sender.once('destroyed', closed)
-    try { const checked = await authorized({ source: request.source, kind: 'text', startUs: request.startUs, endUs: request.endUs, still: false }); if (owner.cancelled || event.sender.isDestroyed()) throw new Error('敏感信息识别已取消。'); return await getOcrPrivacyService().detect({ ...request, source: checked.source }) }
+    try { const checked = await resolveRequest({ source: request.source, kind: 'text', startUs: request.startUs, endUs: request.endUs, still: false }); if (owner.cancelled || event.sender.isDestroyed()) throw new Error('敏感信息识别已取消。'); return await getOcrPrivacyService().detect({ ...request, source: checked.source }) }
     finally { owners.delete(request.requestId); event.sender.removeListener('destroyed', closed) }
   })
   registerIpcHandler(c.cancelSensitiveText, raw => z.object({ requestId: z.string().uuid() }).strict().parse(raw), (request, event) => {
@@ -56,6 +54,6 @@ export function registerSmartRegionsIpc(): void {
     if (owner) owner.cancelled = true
     getOcrPrivacyService().cancel(request.requestId)
   })
-  registerIpcHandler(c.ensure, parseSmartRegionRequest, async request => getSmartRegionService().ensure(await authorized(request)))
-  registerIpcHandler(c.cancel, parseSmartRegionRequest, async request => getSmartRegionService().cancel(await authorized(request)))
+  registerIpcHandler(c.ensure, parseSmartRegionRequest, async request => getSmartRegionService().ensure(await resolveRequest(request)))
+  registerIpcHandler(c.cancel, parseSmartRegionRequest, async request => getSmartRegionService().cancel(await resolveRequest(request)))
 }

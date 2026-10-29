@@ -1,6 +1,6 @@
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React, { useState } from 'react'
-import { Check, Clock3, FileAudio, Film, Folder, Image as ImageIcon, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Check, Clock3, FileAudio, Film, Folder, Image as ImageIcon, Pencil, Plus, Trash2 } from 'lucide-react'
 import { ICON_ASSET_CODE, ICON_ASSET_LIBRARY } from '@/core/theme/icons'
 import { UI_GLASS_ADAPTIVE_DIVIDER_CLASS, UI_GLASS_ADAPTIVE_SURFACE_CLASS, UI_TEXT_META_CLASS, UiIconButton, UiInput, UiNavButton } from '@/components/ui'
 import type { AssetLibraryRecord, AssetMediaType } from '@/platform/contracts/assetLibrary'
@@ -57,7 +57,6 @@ export const AssetLibrarySidebar: React.FC<Props> = ({
   const [draft, setDraft] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
-  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const submitCreate = async (): Promise<void> => {
     const name = draft.trim()
@@ -121,21 +120,12 @@ export const AssetLibrarySidebar: React.FC<Props> = ({
                 {/* 名称按钮占满整行，静息态不为悬浮操作预留宽度——那两个图标按钮是覆盖在它之上的同级元素。
                     悬停 / 聚焦时名称让出右侧位置（截断提前），操作按钮直接落在行自己的底色上：
                     原来用中性悬停色的渐隐遮罩垫底，压在当前分类的淡强调底上是一块灰色色差（5.6 第二批 B-37）。 */}
-                <UiNavButton active={activeId === library.id} onClick={() => onSelect(library.id)} size="md" className={`w-full ${deletingId === library.id ? 'pr-16' : 'group-hover:pr-16 group-focus-within:pr-16'}`}>
+                <UiNavButton active={activeId === library.id} onClick={() => onSelect(library.id)} size="md" className={`w-full group-hover:pr-16 group-focus-within:pr-16`}>
                   <Folder className={`${UI_ICON_SIZE_CLASS.md} shrink-0`} /><span className="truncate" title={library.name}>{library.name}</span>
                 </UiNavButton>
-                <div className={`pointer-events-none absolute right-1 top-1/2 flex -translate-y-1/2 ${deletingId === library.id ? 'pointer-events-auto opacity-100' : 'opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100'}`}>
-                  {deletingId === library.id ? (
-                    <>
-                      <UiIconButton size="xs" tone="danger" tooltip={labels.confirmDelete} aria-label={labels.confirmDelete} onClick={() => { void onDelete(library); setDeletingId(null) }}><Check  /></UiIconButton>
-                      <UiIconButton size="xs" tooltip={labels.cancel} aria-label={labels.cancel} onClick={() => setDeletingId(null)}><X  /></UiIconButton>
-                    </>
-                  ) : (
-                    <>
+                <div className={`pointer-events-none absolute right-1 top-1/2 flex -translate-y-1/2 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100`}>
                       <UiIconButton size="xs" tooltip={labels.rename} aria-label={labels.rename} onClick={() => { setEditingId(library.id); setEditingName(library.name) }}><Pencil  /></UiIconButton>
-                      <UiIconButton size="xs" tone="danger" tooltip={labels.delete} aria-label={labels.delete} onClick={() => setDeletingId(library.id)}><Trash2  /></UiIconButton>
-                    </>
-                  )}
+                      <UiIconButton size="xs" tone="danger" tooltip={labels.delete} aria-label={labels.delete} onClick={() => void onDelete(library)}><Trash2  /></UiIconButton>
                 </div>
               </>
             )}

@@ -168,7 +168,6 @@ beforeEach(() => {
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, value) => { files.set(path, value) })
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
   vi.spyOn(getPlatform().system.paths, 'dirname').mockResolvedValue('D:/media')
-  vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined)
 })
 it('外部取消传播到真实宿主，迟到确认不成功；旧宿主注销不能关闭重开的会话', async () => {
   const instance = await fixture(); const id = instance.document.id

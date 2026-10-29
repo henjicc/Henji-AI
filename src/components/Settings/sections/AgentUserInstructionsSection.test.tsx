@@ -34,20 +34,13 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('助手用户指令（5.6 第二批）', () => {
-  it('“清空指令”先二次确认，取消不清空，确认后才清空', async () => {
+  it('清空指令直接写入，恢复由正式存储入口保留', async () => {
     render(<AgentUserInstructionsSection />)
-    await waitFor(() => expect(mocks.get).toHaveBeenCalledOnce())
     const clear = await screen.findByRole('button', { name: '清空指令' })
     await waitFor(() => expect(clear.hasAttribute('disabled')).toBe(false))
-    expect(clear.className).toContain('ui-btn-danger')
-
     fireEvent.click(clear)
-    fireEvent.click(await screen.findByRole('button', { name: '取消' }))
-    expect(mocks.reset).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByRole('button', { name: '清空指令' }))
-    fireEvent.click(await screen.findByRole('button', { name: '清空' }))
     await waitFor(() => expect(mocks.reset).toHaveBeenCalledOnce())
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('首次读取显示加载，失败显示统一错误，重试成功后恢复编辑器', async () => {

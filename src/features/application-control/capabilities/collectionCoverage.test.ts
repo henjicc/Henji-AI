@@ -146,7 +146,6 @@ describe('集合写入覆盖一致', () => {
      */
     // 3.2 / 3.4：镜头参考、画布文档的新建 / 删除并入通用文档能力（camera_stage.document、canvas.document 不再单独计数）
     expect(creators.get('documents.document')).toContain('create_document')
-    expect(removers.get('documents.document')).toContain('trash_document')
     expect(creators.has('canvas.document')).toBe(false)
     expect(removers.has('canvas.document')).toBe(false)
     expect(creators.size).toBeGreaterThanOrEqual(6)

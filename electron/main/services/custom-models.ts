@@ -1,3 +1,4 @@
+import { RecycleStore, softDelete } from './recycle/store'
 import { getDb } from './db'
 
 type JsonObject = Record<string, unknown>
@@ -65,10 +66,17 @@ function rowToRecord(row: CustomModelRow): CustomModelRecordDto {
 }
 
 export function insertCustomModel(model: InsertCustomModelDto): void {
-  getDb().prepare(
+  const db = getDb()
+  db.transaction(() => {
+  const deleted = db.prepare('SELECT deleted_at FROM custom_models WHERE id = ?').get(model.id) as { deleted_at: number | null } | undefined
+  if (deleted?.deleted_at != null) new RecycleStore(db).preserveRow('custom_models', model.id)
+  db.prepare(
     `INSERT INTO custom_models (
       id, name, provider_id, base_model, config, is_enabled
-    ) VALUES (?, ?, ?, ?, ?, ?)`
+    ) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET
+      name=excluded.name, provider_id=excluded.provider_id, base_model=excluded.base_model,
+      config=excluded.config, is_enabled=excluded.is_enabled, deleted_at=NULL, updated_at=CURRENT_TIMESTAMP
+      WHERE custom_models.deleted_at IS NOT NULL`
   ).run(
     model.id,
     model.name,
@@ -77,6 +85,7 @@ export function insertCustomModel(model: InsertCustomModelDto): void {
     JSON.stringify(model.config),
     model.isEnabled ? 1 : 0
   )
+  })()
 }
 
 export function listCustomModels(providerId?: string): CustomModelRecordDto[] {
@@ -85,13 +94,13 @@ export function listCustomModels(providerId?: string): CustomModelRecordDto[] {
     ? db.prepare(
       `SELECT id, name, provider_id, base_model, config, is_enabled, created_at, updated_at
        FROM custom_models
-       WHERE provider_id = ?
+       WHERE provider_id = ? AND deleted_at IS NULL
        ORDER BY created_at DESC`
     ).all(providerId) as CustomModelRow[]
     : db.prepare(
       `SELECT id, name, provider_id, base_model, config, is_enabled, created_at, updated_at
        FROM custom_models
-       ORDER BY created_at DESC`
+       WHERE deleted_at IS NULL ORDER BY created_at DESC`
     ).all() as CustomModelRow[]
   return rows.map(rowToRecord)
 }
@@ -100,7 +109,7 @@ export function getCustomModel(modelId: string): CustomModelRecordDto | null {
   const row = getDb().prepare(
     `SELECT id, name, provider_id, base_model, config, is_enabled, created_at, updated_at
      FROM custom_models
-     WHERE id = ?
+     WHERE id = ? AND deleted_at IS NULL
      LIMIT 1`
   ).get(modelId) as CustomModelRow | undefined
   return row ? rowToRecord(row) : null
@@ -134,5 +143,5 @@ export function updateCustomModel(modelId: string, updates: UpdateCustomModelDto
 }
 
 export function deleteCustomModel(modelId: string): void {
-  getDb().prepare('DELETE FROM custom_models WHERE id = ?').run(modelId)
+  softDelete(getDb(), 'custom_models', modelId)
 }

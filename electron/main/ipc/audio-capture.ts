@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import fs from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
@@ -6,7 +6,6 @@ import { audioCaptureRequestSchema } from '../../../src/core/audioCapture/contra
 import { AUDIO_CAPTURE_CHANNEL, AUDIO_CAPTURE_EVENT_CHANNEL } from '../../../src/platform/contracts/audioCapture'
 import { assertTrustedApplicationSender } from './application-control'
 import { registerIpcHandler } from './registry'
-import { isRealPathWithinAllowedMediaRoots } from '../protocol'
 import { mediaPermissions } from '../services/media-permissions'
 import { AudioCaptureService } from '../services/audio-capture/service'
 import { AudioCaptureError } from '../services/audio-capture/protocol'
@@ -16,17 +15,13 @@ import { isTrustedMainRendererUrl } from '../security/main-renderer-url'
 import { AudioCaptureFiles } from '../services/audio-capture/files'
 import { getUserRootDir } from '../services/appPaths'
 import { getSettingsStore } from '../services/settings/store'
+import { trashUserFile } from '../services/recycle/runtime'
 
-/** 调用方提供文件位置，父目录必须已经由作品/媒体路径通道授权；原生端 create_new 禁止覆盖。 */
-export async function authorizedCapturePath(target: string, existing = false): Promise<string> {
-  if (!path.isAbsolute(target) || target.includes('\0') || path.extname(target).toLowerCase() !== '.wav') throw new AudioCaptureError('PATH_DENIED', '请使用已授权目录内的 WAV 文件位置')
+/** 原生端使用 create_new，避免覆盖同名文件。 */
+export async function resolveCapturePath(target: string): Promise<string> {
+  if (!path.isAbsolute(target) || target.includes('\0') || path.extname(target).toLowerCase() !== '.wav') throw new AudioCaptureError('PATH_DENIED', '请使用 WAV 文件的绝对路径')
   const parent = await fs.realpath(path.dirname(target))
-  const temp = await fs.realpath(app.getPath('temp'))
-  const relative = path.relative(temp, parent)
-  const inTemp = !relative.startsWith('..') && !path.isAbsolute(relative)
-  if (!inTemp && !await isRealPathWithinAllowedMediaRoots(parent)) throw new AudioCaptureError('PATH_DENIED', '录音位置尚未授权，请先选择作品目录或保存目录')
   const resolved = path.join(parent, path.basename(target))
-  if (existing && (await fs.lstat(resolved)).isSymbolicLink()) throw new AudioCaptureError('PATH_DENIED', '不能通过符号链接恢复录音文件')
   return resolved
 }
 export function audioCaptureExecutablePath(): string {
@@ -42,7 +37,7 @@ export function registerAudioCaptureIpc(): void {
     for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed() && !win.webContents.isDestroyed() && isTrustedMainRendererUrl(win.webContents.getURL()) && (owner === undefined || win.webContents.id === owner)) win.webContents.send(AUDIO_CAPTURE_EVENT_CHANNEL, event)
   })
   const watched = new Set<number>()
-  const files = new AudioCaptureFiles(getUserRootDir, getSettingsStore, target => shell.trashItem(target))
+  const files = new AudioCaptureFiles(getUserRootDir, getSettingsStore, (file, placement) => trashUserFile(file, undefined, placement))
   app.once('before-quit', () => service.dispose())
   registerIpcHandler(AUDIO_CAPTURE_CHANNEL, raw => audioCaptureRequestSchema.parse(raw), async (request, event) => {
     const owner = event.sender.id
@@ -71,14 +66,14 @@ export function registerAudioCaptureIpc(): void {
         case 'setSettings': return service.setSettings(request.settings, request.expectedRevision)
         case 'probe': return service.probe(request.settings)
         case 'start': {
-          const outputPath = await authorizedCapturePath(request.request.outputPath)
+          const outputPath = await resolveCapturePath(request.request.outputPath)
           await mediaPermissions.requestAccess(['microphone'])
           assertTrustedApplicationSender(event)
           return service.start(owner, { ...request.request, outputPath })
         }
         case 'pause': case 'resume': case 'stop': case 'status': return service.control(owner, request.action, request.sessionId)
         case 'asioPanel': return service.openAsioPanel(request.settings)
-        case 'recover': return service.recover(await authorizedCapturePath(request.outputPath, true))
+        case 'recover': return service.recover(await resolveCapturePath(request.outputPath))
       }
     })
   }, assertTrustedApplicationSender)

@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import sharp from 'sharp'
 import path from 'node:path'
 import { z } from 'zod'
-import { inferMimeFromPath, isPathWithinAllowedMediaRoots } from '../../protocol'
+import { inferMimeFromPath } from '../../protocol'
 import { getAssetFilePath } from '../asset-library'
 import { getGenerationHistoryStore } from '../generation-history/store'
 import { getDataRootDir } from '../image/path-utils'
@@ -72,9 +72,7 @@ export async function readApplicationMediaResource(input: {
     if (/^(?:https?:|data:|blob:)/i.test(source)) failure('MEDIA_NOT_LOCAL', '媒体尚未由应用保存到本地，请先完成原任务保存。')
     const normalized = normalizeLocalSource(source)
     const local = path.isAbsolute(normalized) ? normalized : path.resolve(getDataRootDir(), normalized)
-    if (!isPathWithinAllowedMediaRoots(local)) failure('MEDIA_ACCESS_DENIED', '媒体不在应用已授权目录内。')
     const real = await fs.realpath(local)
-    if (!isPathWithinAllowedMediaRoots(real)) failure('MEDIA_ACCESS_DENIED', '媒体链接指向未授权目录。')
     const mimeType = inferMimeFromPath(real)
     if (!/^(?:image|video|audio)\//.test(mimeType)) failure('UNSUPPORTED_MEDIA_TYPE', '此资源不是可读取的图片、视频或音频。')
     const file = await fs.open(real, 'r')

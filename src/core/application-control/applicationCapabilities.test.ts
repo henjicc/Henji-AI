@@ -42,7 +42,6 @@ function capability(
         revisionScopes: [], verificationRequired: false,
       }],
     },
-    risk: 'R0',
     dataClasses: ['C0'],
     permission: 'test:read',
     idempotent: true,

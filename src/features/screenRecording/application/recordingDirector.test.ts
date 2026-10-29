@@ -25,22 +25,21 @@ afterEach(async () => { await closeAllVideoEdits(); vi.restoreAllMocks(); useAle
 async function prepared() {
   const id = await planRecordingDirector(input(), { signal: new AbortController().signal }), app = createApplicationHarness()
   const read = await readRecordingUnderstanding(id)
-  const changed = await app.change({ kind: 'screen_recording.understanding', id }, { 'screen_recording.understanding.result': { ...read.content.understanding, director: { ...read.content.understanding.director!, confirmed: true } } })
+  const changed = await app.change({ kind: 'screen_recording.understanding', id }, { 'screen_recording.understanding.result': { ...read.content.understanding, director: { goal: read.content.understanding.director!.goal, voice: read.content.understanding.director!.voice, narration: read.content.understanding.director!.narration } } })
   expect(changed.ok).toBe(true)
   return { id, app }
 }
-it('正式规划入口保存可读脚本；结构限制、确认与再次编辑不能复用旧确认', async () => {
+it('正式规划入口保存可读脚本；结构限制保留，编辑后可以直接执行', async () => {
   const app = createApplicationHarness()
   try {
     const result = await app.requireResult('plan_screen_recording_director', input())
     const id = (result.resultRef as { id: string }).id, read = await readRecordingUnderstanding(id)
-    expect(read.content.understanding.director).toMatchObject({ confirmed: false, narration: [{ text: '先打开设置。' }, { text: '选择纸白主题。' }] })
+    expect(read.content.understanding.director).toMatchObject({ narration: [{ text: '先打开设置。' }, { text: '选择纸白主题。' }] })
     expect(recordingDirectorPlanSchema.safeParse({ director: read.content.understanding.director, operationScript: read.content.understanding.operationScript }).success).toBe(true)
-    const edited = structuredClone(read.content.understanding); edited.director!.narration[0].text = '改动'; edited.director!.confirmed = true
-    expect((await app.change({ kind: 'screen_recording.understanding', id }, { 'screen_recording.understanding.result': edited })).ok).toBe(false)
-    expect((await readRecordingUnderstanding(id)).content).toEqual(read.content)
+    const edited = structuredClone(read.content.understanding); edited.director!.narration[0].text = '改动'; delete (edited.director as Partial<typeof edited.director>)!.confirmed
+    expect((await app.change({ kind: 'screen_recording.understanding', id }, { 'screen_recording.understanding.result': edited })).ok).toBe(true)
+    expect((await readRecordingUnderstanding(id)).content.understanding.director?.narration[0].text).toBe('改动')
     expect(recordingOperationSchema.safeParse({ target: { kind: 'settings.registry', id: 'singleton' }, properties: { 'security.allow_paid': true } }).success).toBe(false)
-    await expect(startRecordingDirector(id, 'missing', { signal: new AbortController().signal })).rejects.toThrow('确认')
     expect(generateRecordingNarration).not.toHaveBeenCalled()
   } finally { app.dispose() }
 })
@@ -64,7 +63,7 @@ it('复用重放执行设置操作，完成/失败/取消都恢复原主题', as
 it('询问费用拒绝与执行中取消均不提交配音、不开始采集；总估价覆盖全部新句', async () => {
   const { id, app } = await prepared(), owner = await createVideoEditTestProject()
   try {
-    const bridge = installPaidApprovalTestBridge('ask')
+    const bridge = installPaidApprovalTestBridge({ singleLimitCny: 0 })
     const pending = startRecordingDirector(id, owner.document.id, { signal: new AbortController().signal })
     const assertion = expect(pending).rejects.toThrow()
     await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
@@ -82,7 +81,7 @@ it('询问费用拒绝与执行中取消均不提交配音、不开始采集；�
 it('明确接受一次总费用后逐句生成；采集失败保留已完成配音，重试不重付', async () => {
   const { id, app } = await prepared(), owner = await createVideoEditTestProject()
   try {
-    const bridge = installPaidApprovalTestBridge('ask')
+    const bridge = installPaidApprovalTestBridge({ singleLimitCny: 0 })
     vi.mocked(generateRecordingNarration).mockImplementation(async text => ({ path: `/fixture/${text.length}.wav`, durationUs: 2e6 }))
     vi.spyOn(getPlatform().screenRecording, 'capture').mockRejectedValue(new Error('测试采集不可用'))
     const pending = startRecordingDirector(id, owner.document.id, { signal: new AbortController().signal })

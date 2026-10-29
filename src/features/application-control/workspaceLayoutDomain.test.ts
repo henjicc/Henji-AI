@@ -44,10 +44,9 @@ describe('工作区布局正式应用能力', () => {
     expect(controller.getSnapshot().activeId).not.toBe(before)
     await applicationReflectionHandlers.undoEntities({ undoRef: changed.undoRef! }, context())
     expect(controller.getSnapshot().activeId).toBe(before)
-    const grant = createApplicationCallerGrant({ callerId: 'layout-reader', capabilityIds: ['change_application_entities'], permissions: ['settings:read'], allowWrites: false, allowDestructive: false })
-    await expect(applicationReflectionHandlers.changeEntities({ summary: '未授权写入', changes }, { ...context(), callerGrant: grant })).rejects.toThrow()
+
     expect(controller.getSnapshot().activeId).toBe(before)
-    const writer = createApplicationCallerGrant({ callerId: 'layout-writer', capabilityIds: ['change_application_entities'], permissions: ['settings:read', 'settings:write'], allowWrites: true, allowDestructive: true })
+    const writer = createApplicationCallerGrant({ callerId: 'layout-writer' })
     await expect(applicationReflectionHandlers.changeEntities({ summary: '过期写入', changes }, { ...context(), expectedRevisions: { workspace_layout: 0 }, callerGrant: writer })).rejects.toThrow()
     expect(controller.getSnapshot().activeId).toBe(before)
   })

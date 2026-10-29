@@ -17,8 +17,6 @@ import type { ApplicationRef, JsonValue } from '../identifiers'
 import type { ApplicationMutationOperation } from './writerTable'
 import type { ApplicationPersistenceResolver } from './persistence'
 
-export type ApplicationRisk = 'R0' | 'R1' | 'R2' | 'R3' | 'R4'
-
 export interface ApplicationPlanRequest {
   summary: string
   transactionMode: ApplicationTransactionMode
@@ -153,7 +151,6 @@ export interface ApplicationCollectionExecutor {
 export interface ApplicationSemanticOperationExecutor {
   readonly capabilityId: string
   readonly capabilityVersion: number
-  readonly risk: ApplicationRisk
   readonly requiredPermissions: string[]
   readonly supportsAtomic: boolean
   readonly effectContract: ApplicationEffectContract

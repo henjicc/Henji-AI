@@ -83,7 +83,7 @@ it('多选（单击、Shift 连选、Ctrl 加选、全选当前筛选）后批�
   expect(getActiveVideoEditSequence(owner).annotations[0].thread.at(-1)?.text).toBe('请重新处理。')
   act(() => undoVideoEdit(id)); expect(statuses(owner)).toEqual(['addressed', 'addressed', 'addressed', 'addressed'])
 })
-it('按入出点、按选中片段选出一批；删除与清除先确认，取消不动，确认后一步撤销；清除已处理不动待发送与待处理', async () => {
+it('按入出点、按选中片段选出一批；删除与清除直接执行且一步撤销；清除已处理不动待发送与待处理', async () => {
   const owner = await createVideoEditTestProject(); const id = owner.document.id; appendVideoEditClip(id)
   const clip = getActiveVideoEditSequence(owner).clips[0]
   const make = (frame: number, status: 'draft' | 'open', clipId?: string) => createVideoEditAnnotation(id, owner.activeSequenceId, { frame, target: { kind: 'point', x: .5, y: .5 }, text: `第 ${frame} 帧`, status, ...(clipId ? { clipId } : {}) })
@@ -95,15 +95,10 @@ it('按入出点、按选中片段选出一批；删除与清除先确认，取�
   await menuItem(view, '更多批注操作', '按入出点选'); expect(footer(view)).toContain('已选 2')
   act(() => setVideoEditTimelineView(id, { selectedClipIds: [clip.id] }))
   await menuItem(view, '更多批注操作', '按选中片段选'); expect(footer(view)).toContain('已选 2')
-  // 删除：取消就不动，确认才删，一步撤销
-  fireEvent.click(view.getByRole('button', { name: '删除选中批注' })); await waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
-  act(() => useAlertDialogStore.getState().dismissCurrent()); await waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(0)); expect(statuses(owner)).toHaveLength(4)
-  fireEvent.click(view.getByRole('button', { name: '删除选中批注' })); await waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
-  act(() => useAlertDialogStore.getState().confirmCurrent()); await waitFor(() => expect(getActiveVideoEditSequence(owner).annotations.map(mark => mark.id)).toEqual([draft, open]))
+  fireEvent.click(view.getByRole('button', { name: '删除选中批注' })); await waitFor(() => expect(getActiveVideoEditSequence(owner).annotations.map(mark => mark.id)).toEqual([draft, open]))
   act(() => undoVideoEdit(id)); expect(statuses(owner)).toEqual(['draft', 'open', 'addressed', 'resolved'])
-  await menuItem(view, '更多批注操作', '清除已处理'); await waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
-  expect(statuses(owner)).toHaveLength(4)
-  act(() => useAlertDialogStore.getState().confirmCurrent()); await waitFor(() => expect(statuses(owner)).toEqual(['draft', 'open']))
+  await menuItem(view, '更多批注操作', '清除已处理'); await waitFor(() => expect(statuses(owner)).toEqual(['draft', 'open']))
+  expect(useAlertDialogStore.getState().queue).toHaveLength(0)
   act(() => undoVideoEdit(id)); expect(statuses(owner)).toHaveLength(4)
 })
 it('手动标为已改完：只选待发送时说明先发送；标完写明是手动标的、不关联修改，不出现“撤销这次修改”', async () => {

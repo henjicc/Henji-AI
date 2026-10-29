@@ -52,7 +52,6 @@ async function checkNativeBridge(page) {
       throw new Error(`unexpected image info: ${info.width}x${info.height}`)
     }
 
-    await native.media.allowRoot(workDir)
     const mediaPath = await native.paths.join(workDir, 'media.txt')
     await native.fs.writeTextFile(mediaPath, 'media-protocol-ok')
     const mediaResponse = await fetch(`henji-media://local/${encodeURIComponent(mediaPath)}`, {

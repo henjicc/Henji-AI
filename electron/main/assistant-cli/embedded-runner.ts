@@ -13,8 +13,8 @@ export async function runEmbeddedCli(options: AssistantCliOptions, context: stri
   const runId = randomUUID()
   try {
     if (options.threadId) await service.navigate({ action: 'open', input: options.threadId })
-    await service.prompt({ text: options.goal, model, context, access: options.approvalMode === 'full_access' ? 'full' : 'read' }, runId)
-    write({ type: 'started', engine: 'pi', runId, access: options.approvalMode === 'full_access' ? 'full' : 'read', threadId: service.snapshot().sessionId })
+    await service.prompt({ text: options.goal, model, context }, runId)
+    write({ type: 'started', engine: 'pi', runId, threadId: service.snapshot().sessionId })
     while (service.snapshot().busy) {
       if (Date.now() - startedAt >= options.timeoutMs) {
         await service.cancel()

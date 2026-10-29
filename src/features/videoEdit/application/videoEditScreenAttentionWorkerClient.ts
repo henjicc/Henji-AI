@@ -1,18 +1,8 @@
 import type { VideoEditScreenAttentionRequest, VideoEditScreenAttentionResult } from '../engine/videoEditScreenAttentionAnalysis'
-import { getPlatform } from '@/platform/runtime'
 import { toFetchableMediaUrl } from '@/services/imageSource'
 
-/** Authorize original local page paths once at this Worker boundary, then convert only the Worker copy. */
+/** 只在 Worker 的副本里转换为可 fetch 的 URL，文档继续保留原始路径。 */
 export async function analyzeVideoEditScreenAttentionOffThread(request: VideoEditScreenAttentionRequest, signal: AbortSignal): Promise<VideoEditScreenAttentionResult> {
-  const directories = new Set<string>()
-  for (const media of request.composition.media) for (const page of media.recordingCursor?.pages ?? []) {
-    signal.throwIfAborted()
-    const normalized = page.path.replace(/\\/g, '/')
-    const key = normalized.slice(0, normalized.lastIndexOf('/'))
-    if (!directories.has(key)) {
-      await getPlatform().media.allowRoot(await getPlatform().system.paths.dirname(page.path)); directories.add(key)
-    }
-  }
   signal.throwIfAborted()
   const composition = { ...request.composition, media: request.composition.media.map(media => ({ ...media, ...(media.recordingCursor ? { recordingCursor: { ...media.recordingCursor, pages: media.recordingCursor.pages.map(page => ({ ...page, path: toFetchableMediaUrl(page.path) })) } } : {}) })) }
   const worker = new Worker(new URL('../engine/videoEditScreenAttentionWorker.ts', import.meta.url), { type: 'module' })

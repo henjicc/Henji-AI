@@ -70,7 +70,7 @@ function createRecordingMovieScene() {
         }
         await page.evaluate(async ({ id, revision, content }) => window.henjiNative.documents.saveDocument({ target: { id }, expectedRevision: revision, content }), { id: session.id, revision: recorded.meta.revision, content })
         await assignIsolatedMcpPort(page)
-        client = await connectMcpClient((await authorizeMcpConnection(page, { name: '成片隔离验收', allowWrites: true, allowDestructive: true })).config)
+        client = await connectMcpClient((await authorizeMcpConnection(page, { name: '成片隔离验收' })).config)
         const read = (ref, propertyIds = []) => callTool(client, 'read_application_entity', { ref, propertyIds })
         // 9f7b554df 移除录制工作台；隐私确认与成片仍由正式能力承载。
         evidence.flow = { basis: '9f7b554df / screenRecording/application/applicationDomain.ts', removed: '工作台隐私页、配方页', assertions: '保留确认隔离、成片、播放、导出与一步撤销' }

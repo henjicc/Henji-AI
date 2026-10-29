@@ -1,7 +1,7 @@
-import { mcpConnectionRecordSchema as recordSchema, mcpConnectionStorageSchema as storageSchema, migrateMcpConnectionStorageV1 } from '../../../../src/core/persistence/mcpConnectionSchema'
+import { mcpConnectionRecordSchema as recordSchema, mcpConnectionStorageSchema as storageSchema, migrateMcpConnectionStorageV1, migrateMcpConnectionIdentity } from '../../../../src/core/persistence/mcpConnectionSchema'
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { z } from 'zod'
-import type { McpConnectionAccess, McpConnectionInfo } from '../../../../src/core/application-control/localHostContracts'
+import type { McpConnectionInfo } from '../../../../src/core/application-control/localHostContracts'
 
 type Connection = z.infer<typeof recordSchema>
 export interface ConnectionStorage { read(): string | null; write(value: string): void }
@@ -17,40 +17,23 @@ export class McpConnections {
       if (!saved) this.records = []
       else {
         const raw = JSON.parse(saved) as { version?: unknown }
-        const legacy = raw.version === 1
-        const parsed = storageSchema.parse(legacy ? migrateMcpConnectionStorageV1(raw) : raw).connections
-        if (legacy) this.save(parsed)
+        const parsed = storageSchema.parse(raw.version === 1 ? migrateMcpConnectionIdentity(migrateMcpConnectionStorageV1(raw)) : raw.version === 2 ? migrateMcpConnectionIdentity(raw) : raw).connections
         this.records = parsed
       }
     }
     return this.records
   }
   private save(records: Connection[]): void {
-    this.storage.write(JSON.stringify({ version: 2, connections: records }))
+    this.storage.write(JSON.stringify({ version: 3, connections: records }))
     this.records = records
   }
-  private info({ id, name, allowWrites, allowDestructive, allowPaid }: Connection): McpConnectionInfo { return { id, name, allowWrites, allowDestructive, allowPaid } }
-  private normalize(access: Partial<McpConnectionAccess>): McpConnectionAccess {
-    const allowWrites = access.allowWrites ?? false
-    return { allowWrites, allowPaid: allowWrites && access.allowPaid === true, allowDestructive: allowWrites && access.allowDestructive === true }
-  }
+  private info({ id, name }: Connection): McpConnectionInfo { return { id, name } }
   list(): McpConnectionInfo[] { return this.load().map(record => this.info(record)) }
-  access(id: string): McpConnectionAccess {
-    this.assertActive(id)
-    return this.normalize(this.load().find((item) => item.id === id)!)
-  }
-  create(name: string, access: Partial<McpConnectionAccess> = {}): McpConnectionInfo {
+  create(name: string): McpConnectionInfo {
     const records = this.load()
-    const record = recordSchema.parse({ id: randomUUID(), name: name.trim(), token: randomBytes(32).toString('hex'), ...this.normalize(access) })
+    const record = recordSchema.parse({ id: randomUUID(), name: name.trim(), token: randomBytes(32).toString('hex') })
     this.save([...records, record])
     return this.info(record)
-  }
-  /** 用户在可信设置页修改已有连接的权限；令牌不变，下一次请求即按新权限执行。 */
-  update(id: string, access: McpConnectionAccess): McpConnectionInfo {
-    this.assertActive(id)
-    const records = this.load().map(record => record.id === id ? { ...record, ...this.normalize(access) } : record)
-    this.save(records)
-    return this.info(records.find(record => record.id === id)!)
   }
   assertActive(id: string): void {
     if (!this.load().some((record) => record.id === id)) throw new Error('连接已撤销，请在应用中重新授权。')

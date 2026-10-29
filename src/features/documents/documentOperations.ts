@@ -1,6 +1,7 @@
 import type { ListPage, ListPageRequest } from '@/core/documents/pagination'
 import type { MigrateCodeStorageResult } from '@/core/videoEdit/codeMaterial/storageContract'
 import * as documentCommands from '@/commands/documents'
+import { subscribeRestored } from '@/services/recycle'
 import { documentKindRegistry, type DocumentKindRegistry } from '@/core/documents/kinds'
 import type {
   DocumentContainerRef,
@@ -729,6 +730,7 @@ export class DocumentOperations {
 }
 
 let defaultOperations: DocumentOperations | null = null
+subscribeRestored(async item => { if (item.path && defaultOperations) await defaultOperations.refreshIndex() })
 
 /** 应用里唯一的通用文档操作服务（页面与助手共用）。 */
 export function getDocumentOperations(): DocumentOperations {

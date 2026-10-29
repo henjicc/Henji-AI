@@ -31,6 +31,7 @@ beforeEach(()=>{
   vi.spyOn(getPlatform().system.fs,'readFile').mockImplementation(async path=>{if(!files.has(path))throw new Error('missing');return files.get(path)!})
   vi.spyOn(getPlatform().system.fs,'remove').mockImplementation(async path=>{files.delete(path)})
   vi.spyOn(getPlatform().documents,'importFile').mockImplementation(async request=>{const path=`D:/materials/${crypto.randomUUID()}.json`;files.set(path,files.get(request.sourcePath)!);return{path,copied:true}})
+  vi.spyOn(getPlatform().settings,'preserveFile').mockResolvedValue()
   const api=getPlatform().audioEdit.recording
   vi.spyOn(api,'write').mockImplementation(async input=>{chunks.set(input.chunkId,input.samples)})
   vi.spyOn(api,'erase').mockImplementation(async()=>{chunks.clear()});vi.spyOn(api,'release').mockImplementation(async()=>{chunks.clear()});vi.spyOn(api,'cancel').mockResolvedValue();vi.spyOn(api,'restore').mockResolvedValue()
@@ -94,7 +95,7 @@ it('起点重叠不阻止终点独立确认，轮廓还原指向时的位置而�
   videoExplanationState(owner)!.picture=undefined // Resume invalidates presentation until the next acknowledged draw.
   clock=400;await stopVideoExplanation(id)
   vi.mocked(getPlatform().audioEdit.recording.transcribe).mockImplementationOnce(async input=>({modelId:input.modelId,providerId:'groq',requestId:input.requestId,transcript:{unit:'ms',text:'从这里到那边',granularity:'word',words:[],segments:[{text:'从这里到那边',startMs:30,endMs:100,granularity:'segment',timing:'coarse',words:[{text:'从这里',startMs:30,endMs:40,granularity:'word',timing:'precise'},{text:'到那边',startMs:90,endMs:100,granularity:'word',timing:'precise'}]}]}}))
-  await transcribeVideoExplanation(id,crypto.randomUUID())
+  await transcribeVideoExplanation(id)
   const entry=(await readVideoExplanationPage(id,0))[0];if(entry.kind!=='transcript')throw new Error('missing')
   const review=await readVideoExplanationReview(id,entry),source=review.resolution.mentions.find(m=>m.slot==='source')!,destination=review.resolution.mentions.find(m=>m.slot==='destination')!
   expect(source.selected).toBeUndefined();expect(destination.candidates.length).toBeGreaterThan(0);expect(review.plan.issues).toContain('差异目标尚未确认')
@@ -116,7 +117,7 @@ it('真实词级结果后出现句级块不会降级已有词时刻，每条仍�
   capture.block!({firstFrame:4800,samples:new Float32Array(4800).fill(.2),sampleRate:48000,monoStartUs:400_000,uncertaintyUs:10_000})
   clock=600;await stopVideoExplanation(id)
   vi.mocked(getPlatform().audioEdit.recording.transcribe).mockImplementationOnce(async input=>({modelId:input.modelId,providerId:'groq',requestId:input.requestId,transcript:normalizeTimestampedTranscript({text:'这里',segments:[{text:'这里',startMs:0,endMs:100,words:[{text:'这里',startMs:0,endMs:50}]}]},100,'word')}))
-  await transcribeVideoExplanation(id,crypto.randomUUID())
+  await transcribeVideoExplanation(id)
   expect(getPlatform().audioEdit.recording.transcribe).toHaveBeenCalledTimes(2)
   expect(videoExplanationState(owner)!.collector.session.asr?.granularity).toBe('word')
   expect(await readVideoExplanationPage(id,0)).toMatchObject([{granularity:'word',monoSpanUs:[100_000,150_000]}])
@@ -129,7 +130,7 @@ it('E01/E05 自主控制与正式undo链不重复应用；结束转写/校正/JS
   clock=300;editVideoProject(id,document=>{ document = structuredClone(document);document.sequences[0].clips[0].x=.2;return document});clock=400;undoVideoEdit(id);clock=500;undoVideoEdit(id,true)
   clock=600;expect(()=>editVideoProject(id,document=>{ document = structuredClone(document);document.sequences[0].width=-1;return document})).toThrow()
   clock=700;await stopVideoExplanation(id);expect(capture.stop).toHaveBeenCalledTimes(1);expect(getActiveVideoEditSequence(owner).clips[0].x).toBe(.2);expect(owner.past.length).toBe(undoCount+1)
-  expect(getPlatform().audioEdit.recording.transcribe).not.toHaveBeenCalled();await transcribeVideoExplanation(id,crypto.randomUUID())
+  expect(getPlatform().audioEdit.recording.transcribe).not.toHaveBeenCalled();await transcribeVideoExplanation(id)
   expect([...bridge.records.values()]).toMatchObject([{ origin: { actor: 'user' }, state: 'completed', paidReservations: [{ category: 'recognition' }] }])
   const original=(await readVideoExplanationPage(id,0))[0];expect(original.kind).toBe('transcript');if(original.kind!=='transcript')throw new Error('missing')
   expect(original.granularity).toBe('segment');await correctVideoExplanationText(id,original,'往左移')
@@ -146,7 +147,7 @@ it('E01/E05 自主控制与正式undo链不重复应用；结束转写/校正/JS
   const pendingPreview=videoExplanationJsonl(id);await pendingPreview.next()
   await eraseVideoExplanation(id);expect(savedVideoEdit(owner).creativeIntents!.sessions).toHaveLength(0);undoVideoEdit(id)
   await expect(pendingPreview.next()).rejects.toThrow('删除')
-  expect(owner.document.creativeIntents?.sessions.some(s=>s.id===sessionId)).toBe(false);expect(files.size).toBe(0)
+  expect(owner.document.creativeIntents?.sessions.some(s=>s.id===sessionId)).toBe(false);expect(files.size).toBeGreaterThan(0)
 })
 it('E09 设备拒绝/断开与恢复重新订阅，sealed页可恢复；保存失败不丢尾音',async()=>{
   const owner=await setup();const id=owner.document.id;capture.deny=true;await expect(startVideoExplanation(id,crypto.randomUUID())).rejects.toThrow('PermissionDenied')
@@ -170,7 +171,7 @@ it('会话元数据正式实体可读，私密词稿/指向/音频路径不进�
   // Provider uses only live heads; erasure makes the stable reference unavailable.
   const {createVideoEditExplanationRegistration}=await import('./videoEditExplanationReflection');const registration=createVideoEditExplanationRegistration();expect(registration.entity.writeExclusion?.reason).toContain('本机');const provider=registration.provider!
   const refs=await provider.listEntities({limit:10});const value=await provider.readEntity(refs.refs[0],{})
-  expect(Object.keys(value.properties)).toEqual(['video_edit.explanation_session.state','video_edit.explanation_session.audio_retention','video_edit.explanation_session.audio_upload_allowed'])
+  expect(Object.keys(value.properties)).toEqual(['video_edit.explanation_session.state','video_edit.explanation_session.audio_retention'])
   await eraseVideoExplanation(owner.document.id);await expect(provider.readEntity(refs.refs[0],{})).rejects.toThrow('已经删除')
 })
 it('迟到呈现回执保留提交时画面；关闭先封尾音，不提前取消采集',async()=>{
@@ -183,12 +184,12 @@ it('迟到呈现回执保留提交时画面；关闭先封尾音，不提前取�
   capture.stop.mockImplementationOnce(async()=>{expect(signal.aborted).toBe(false);audio()})
   clock=400;await closeVideoEditProject(id);expect(getPlatform().audioEdit.recording.write).toHaveBeenCalledTimes(1);expect(signal.aborted).toBe(true)
 })
-it('彻底擦除失败仍保留待清路径，重试会完成而不会复活历史',async()=>{
+it('回收副本失败不删除正文，重试保存副本后才移出当前文档',async()=>{
   const owner=await setup();const id=owner.document.id;await startVideoExplanation(id,crypto.randomUUID());clock=300;await stopVideoExplanation(id)
   const sessionId=videoExplanationState(owner)!.collector.session.id;expect(files.size).toBeGreaterThan(0)
-  vi.mocked(getPlatform().system.fs.remove).mockRejectedValueOnce(new Error('temporarily locked'))
-  await expect(eraseVideoExplanation(id)).rejects.toThrow('temporarily locked');expect(owner.document.creativeIntents!.sessions).toHaveLength(0)
-  await eraseVideoExplanation(id);expect(files.size).toBe(0);undoVideoEdit(id);expect(owner.document.creativeIntents?.sessions.some(s=>s.id===sessionId)).toBe(false)
+  vi.mocked(getPlatform().settings.preserveFile).mockRejectedValueOnce(new Error('temporarily locked'))
+  await expect(eraseVideoExplanation(id)).rejects.toThrow('temporarily locked');expect(owner.document.creativeIntents!.sessions).toHaveLength(1)
+  await eraseVideoExplanation(id);expect(files.size).toBeGreaterThan(0);undoVideoEdit(id);expect(owner.document.creativeIntents?.sessions.some(s=>s.id===sessionId)).toBe(false)
 })
 it('指向使用实际呈现几何和正式workspace引用；菜单外点不指画面，敏感区不采',async()=>{
   const owner=await setup();const id=owner.document.id;await startVideoExplanation(id,crypto.randomUUID());clock=200;present(owner,0)
@@ -213,7 +214,7 @@ it('慢摘要背压暂停采集并完整封存操作，解除后不丢尾部',as
 })
 it('开始下一次和切换已封讲解先清临时原音，保留旧词稿并阻止并发开始',async()=>{
   const owner=await setup();const id=owner.document.id;await startVideoExplanation(id,crypto.randomUUID());clock=200;present(owner,0);audio();clock=300;await stopVideoExplanation(id)
-  await transcribeVideoExplanation(id,crypto.randomUUID());const first=videoExplanationState(owner)!.collector.session.id
+  await transcribeVideoExplanation(id);const first=videoExplanationState(owner)!.collector.session.id
   let release!:()=>void;vi.mocked(getPlatform().audioEdit.recording.release).mockImplementationOnce(()=>new Promise<void>(resolve=>{release=()=>{chunks.clear();resolve()}}))
   const starting=startVideoExplanation(id,crypto.randomUUID());await expect(startVideoExplanation(id,crypto.randomUUID())).rejects.toThrow('完成当前');release();await starting
   expect(chunks.size).toBe(0);expect(owner.document.creativeIntents!.sessions.find(s=>s.id===first)).toMatchObject({retentionStatus:'deleted',state:'reviewing'})
@@ -226,7 +227,7 @@ it('粗时间人工校正不伪造历史画面，当前节目点选要求实际�
   const owner = await setup(), id = owner.document.id
   await startVideoExplanation(id, crypto.randomUUID()); clock = 200; present(owner, 0); audio(); clock = 300; await stopVideoExplanation(id)
   vi.mocked(getPlatform().audioEdit.recording.transcribe).mockImplementationOnce(async input => ({ modelId: input.modelId, providerId: 'groq', requestId: input.requestId, transcript: normalizeTimestampedTranscript({ text: '这个', segments: [{ text: '这个', startMs: 0, endMs: 100 }] }, 100, 'word') }))
-  await transcribeVideoExplanation(id, crypto.randomUUID())
+  await transcribeVideoExplanation(id)
   const entry = (await readVideoExplanationPage(id, 0))[0]; if (entry.kind !== 'transcript') throw new Error('missing')
   const mention = (await readVideoExplanationReview(id, entry)).resolution.mentions[0]
   const target = { kind: 'video_edit.clip', id: `${id}:${getActiveVideoEditSequence(owner).clips[0].id}`, label: '主图' }

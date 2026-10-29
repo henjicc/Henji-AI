@@ -6,8 +6,8 @@ import { harnessDocumentStore, installHarnessNativeStorage, uninstallHarnessNati
 import { createRecordingDocument } from '@/core/screenRecording/document'
 import { getPlatform } from '@/platform'
 import type { ApplicationRef } from '@/core/application-control'
-import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
-import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
+
+
 
 const pixels = vi.hoisted(() => ({ frames: [] as number[], blockAt: 0, release: undefined as (() => void) | undefined, disposed: vi.fn() }))
 // 只隔离媒体解码和像素合成；授权、领域处理器、编译、发布、取消及回读均为正式实现。
@@ -64,15 +64,6 @@ function fixture(twoSteps = false) {
 it('公开导出能力经授权写文件、正式结果实体读回，并保持源会话持久内容', async () => {
   const { id, sessionRef, content } = fixture(), app = createApplicationHarness()
   try {
-    const readonly = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: crypto.randomUUID(), capabilityIds: ['export_screen_recording_product'],
-      permissions: ['application:read', 'screen_recording:read'], allowWrites: false, allowDestructive: false }))
-    await expect(readonly.execute({ id: 'export_screen_recording_product', version: 1, input: { sessionRef, product: 'steps' } },
-      { requestId: crypto.randomUUID(), signal: new AbortController().signal })).rejects.toThrow('PERMISSION_DENIED')
-    const noDocumentsWrite = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: crypto.randomUUID(), capabilityIds: ['export_screen_recording_product'],
-      permissions: ['application:read', 'application:write', 'screen_recording:read', 'screen_recording:write'], allowWrites: true, allowDestructive: false }))
-    expect(await noDocumentsWrite.execute({ id: 'export_screen_recording_product', version: 1, input: { sessionRef, product: 'image_document' } },
-      { requestId: crypto.randomUUID(), signal: new AbortController().signal })).toMatchObject({ ok: false, error: { code: 'CAPABILITY_REJECTED', message: expect.stringContaining('documents:write') } })
-    expect(files.size).toBe(0); expect(pixels.frames).toEqual([])
     const result = await app.requireResult('export_screen_recording_product', { sessionRef, product: 'steps' })
     expect(result).toMatchObject({ state: 'completed', verified: true, files: ['step-001.png', 'steps.md', 'steps.html'] })
     const ref = result.resultRef as ApplicationRef

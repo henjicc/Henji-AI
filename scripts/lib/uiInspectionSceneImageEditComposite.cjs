@@ -79,7 +79,7 @@ function createImageEditCompositeScene(context) {
       await context.settlePage(page, 300)
       assert.equal(await editor.locator('[role="treeitem"]').count(), 4, '背景、组和两个子图层均应可见')
       await capture('combined')
-      const identity = await authorizeMcpConnection(page, { name: '图片共同模型验收', allowWrites: true })
+      const identity = await authorizeMcpConnection(page, { name: '图片共同模型验收' })
       const client = await connectMcpClient(identity.config, '图片共同模型验收')
       try {
         const baseRef = { kind: 'image_edit.layer', id: 'v3:reality-composite-contract:base' }

@@ -24,11 +24,11 @@ import type { ApplicationRef } from '@/core/application-control/identifiers'
 import type { ApplicationSurfaceId } from '@/core/application-control/applicationSurfaces'
 import { motionDigest, storeMotionResource, storeMotionResourceBytes, motionPageRef, readMotionResource, readMotionResourceBytes } from './videoEditMotionResources'
 import { subscribeVideoMotion, videoMotionState, proposeVideoExplanationMotion, pauseVideoMotion } from './videoEditMotionDraft'
-import { getActiveVideoEditSequence, requireVideoEditInstance, updateVideoEditCreativeIntents, purgeVideoEditExplanationSession, subscribeVideoEditCommandFacts, subscribeVideoEditView, registerVideoEditClosePreparation, saveVideoEdit, type VideoEditInstance, type VideoEditCommandFact } from './videoEditService'
+import { getActiveVideoEditSequence, requireVideoEditInstance, updateVideoEditCreativeIntents, subscribeVideoEditCommandFacts, subscribeVideoEditView, registerVideoEditClosePreparation, saveVideoEdit, type VideoEditInstance, type VideoEditCommandFact } from './videoEditService'
 
 const logger = createLogger('features.videoEdit.explanation')
 export interface VideoExplanationState { microphoneEnabled?: boolean; collector: RecordingCollector; originMs: number; elapsedUs: number; message?: string; busy: boolean; erased: boolean; microphone?: MicrophoneCapture; controller: AbortController; picture?: { frame: number; sequenceId: string; revision: number; composition: VideoEditComposition }; reviewComposition?: VideoEditComposition; uncertaintyUs: number[] }
-interface Runtime { transcription?: AbortController; generation?: PreparedExplanationGeneration; releaseBody?: () => void; state: VideoExplanationState; write: Promise<void>; partial: CapturedAudioBlock[]; samples: number; pendingAudio: Map<string, () => Promise<void>>; queued?: number; erasePaths?: Set<string>; lastBlock?: CapturedAudioBlock; pausing?: Promise<void>; installed?: boolean; viewKey?: string; geometry?: { key: string; id: string }; release: () => void; timer?: ReturnType<typeof setInterval> }
+interface Runtime { transcription?: AbortController; generation?: PreparedExplanationGeneration; releaseBody?: () => void; state: VideoExplanationState; write: Promise<void>; partial: CapturedAudioBlock[]; samples: number; pendingAudio: Map<string, () => Promise<void>>; queued?: number; lastBlock?: CapturedAudioBlock; pausing?: Promise<void>; installed?: boolean; viewKey?: string; geometry?: { key: string; id: string }; release: () => void; timer?: ReturnType<typeof setInterval> }
 const states = new WeakMap<VideoEditInstance, Runtime>()
 const listeners = new Set<() => void>(); let revision = 0
 export function subscribeVideoExplanation(listener: () => void): () => void { listeners.add(listener); return () => { listeners.delete(listener) } }
@@ -260,11 +260,10 @@ export async function preflightVideoExplanation(id: string): Promise<void> {
     assertCurrent(owner, state)
   }
 }
-export async function transcribeVideoExplanation(id: string, audioUploadReceipt: string, resume = false): Promise<void> {
+export async function transcribeVideoExplanation(id: string, resume = false): Promise<void> {
   const owner = requireVideoEditInstance(id); const runtime = states.get(owner); if (!runtime) throw new Error('请先打开讲解。')
   const state = runtime.state; const session = state.collector.session
   if (!['reviewing', 'recoverable'].includes(session.state) || state.busy) throw new Error('请先结束录制。')
-  if (!audioUploadReceipt) throw new Error('请先确认音频外发与转写费用。')
   const transcription = new AbortController(); runtime.transcription = transcription
   const abort = (): void => transcription.abort()
   state.controller.signal.addEventListener('abort', abort, { once: true })
@@ -285,7 +284,7 @@ export async function transcribeVideoExplanation(id: string, audioUploadReceipt:
         if (alignedIds.has(audio.audioSegmentRef)) continue
         assertCurrent(owner, state); transcription.signal.throwIfAborted()
         if (session.state !== 'transcribing') throw new Error('讲解转写已取消。')
-        const result = await getPlatform().audioEdit.recording.transcribe({ action: 'transcribe', sessionId: session.id, chunkId: audio.audioSegmentRef, modelId, requestId: audio.audioSegmentRef, audioUploadReceipt, resume })
+        const result = await getPlatform().audioEdit.recording.transcribe({ action: 'transcribe', sessionId: session.id, chunkId: audio.audioSegmentRef, modelId, requestId: audio.audioSegmentRef, resume })
         assertCurrent(owner, state)
         if (session.state !== 'transcribing') throw new Error('讲解转写已取消。')
         const aligned = alignRecordingTranscript(result.transcript, audio, await clockReceipts(owner, session, audio.monoSpanUs), state.collector.nextSeq, suffix => `${audio.audioSegmentRef}/${suffix}`)
@@ -451,7 +450,6 @@ export async function prepareVideoExplanationGeneration(id: string): Promise<Exp
     session: () => videoExplanationState(owner)?.collector.session,
     drafts: () => head(owner).drafts,
     read: async resourceId => { const resource = head(owner).resources.find(r => r.resourceId === resourceId); if (!resource) throw new Error('讲解页已删除。'); return readMotionResource(resource) },
-    consent: async consent => { assertCurrent(owner, state); state.collector.session.consent = consent; installHead(owner, state); await saveVideoEdit(id); publish() },
     assertCurrent: () => assertCurrent(owner, state),
   })
   return runtime.generation.request
@@ -587,13 +585,13 @@ export async function eraseVideoExplanation(id: string): Promise<void> {
   const owner = requireVideoEditInstance(id); const runtime = states.get(owner); if (!runtime) return
   const state = runtime.state; state.erased = true; state.controller.abort(); await state.microphone?.stop(); await getPlatform().audioEdit.recording.cancel(state.collector.session.id); await runtime.write; runtime.pendingAudio.clear(); await state.collector.flush()
   const sessionId = state.collector.session.id
-  const resources = purgeVideoEditExplanationSession(id, sessionId)
-  eraseExplanationBody(explanationBodyRef({ kind: 'video_edit.document', id }, sessionId))
-  runtime.erasePaths ??= new Set()
-  for (const resource of resources) runtime.erasePaths.add(resource.path)
   await saveVideoEdit(id)
-  await getPlatform().audioEdit.recording.erase(sessionId)
-  for (const path of runtime.erasePaths) { await getPlatform().system.fs.remove(path); runtime.erasePaths.delete(path) }
+  await getPlatform().settings.preserveFile(owner.session.documentMeta.path)
+  const current = head(owner)
+  updateVideoEditCreativeIntents(id, { ...current, sessions: current.sessions.filter(session => session.id !== sessionId) })
+  eraseExplanationBody(explanationBodyRef({ kind: 'video_edit.document', id }, sessionId))
+  await saveVideoEdit(id)
+  await getPlatform().audioEdit.recording.release(sessionId)
   await runtime.generation?.cancel(); runtime.generation = undefined
   runtime.releaseBody?.(); runtime.release(); states.delete(owner); publish(); logger.info('私密讲解已删除', { event: 'explanation.erase.completed', context: { documentId: id } })
 }

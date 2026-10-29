@@ -20,8 +20,8 @@ import { settingsTarget } from '@/core/types/settingsNavigation'
 export const PROTECTED_APPLICATION_SETTING_DEFINITIONS: Record<string, Record<string, unknown>> = {
   'security.paid_approval': {
     id: 'security.paid_approval', title: 'AI 付费授权',
-    description: '付费授权模式、额度和项目授权只能由用户在设置或确认弹窗中修改；允许助手修改会让付费调用方自行提升权限。可用 open_application_surface 打开智能助手设置，由用户调整。',
-    aliases: ['AI 付费', '自动通过额度', '每日上限', '项目授权'], target: settingsTarget('assistant-preferences'), sensitive: true, writable: false,
+    description: '单次上限、每日上限与完全放开只能由用户在设置中修改；超出额度时由用户在确认弹窗中允许本次费用。可用 open_application_surface 打开智能助手设置，由用户调整。',
+    aliases: ['AI 付费', '单次上限', '每日上限', '完全放开'], target: settingsTarget('assistant-preferences'), sensitive: true, writable: false,
   },
   'security.provider_keys': {
     id: 'security.provider_keys', title: '服务密钥',

@@ -9,7 +9,6 @@ import { getPlatform } from '@/platform/runtime'
 export async function recoverVideoEditPlacement(request: NonNullable<LocalHostRequest['recoveryOperation']>, context: ApplicationExecutionContext): Promise<Record<string, unknown> | undefined> {
   const proof = request.atomicPlacement
   if (!proof) return undefined
-  if (!context.permissions.has('video_edit:read')) throw new Error('PERMISSION_DENIED:核对原剪辑需要读取授权。')
   context.signal?.throwIfAborted()
   const owner = await openVideoEditDocument({ id: proof.documentId }, { focus: false })
   const baseline = owner.document; const contentVersion = owner.contentVersion

@@ -6,7 +6,7 @@ const clipRef = applicationRefSchema.extend({ kind: z.literal('video_edit.clip')
 const audioRef = applicationRefSchema.extend({ kind: z.literal('audio_edit.document') }).strict()
 export const sendVideoEditAudioCapability = defineApplicationCapability({
   id: 'send_video_edit_clip_to_audio_edit', title: '把片段送到音频编辑', description: '将明确音频片段或视频的声音按源入出点建立音频编辑作品并保持动态链接。已有链接直接复用；后台执行不切页面。音频保存后自动刷新剪辑，变短只截短结尾不移动后续片段，变长不自动延长。',
-  version: 1, domain: 'video_edit', aliases: ['音频精修', '编辑片段声音'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write', idempotent: true, destructive: false, timeoutMs: 600000, supportsPreview: false, supportsUndo: true,
+  version: 1, domain: 'video_edit', aliases: ['音频精修', '编辑片段声音'], readOnly: false, dataClasses: ['C1'], permission: 'video_edit:write', idempotent: true, destructive: false, timeoutMs: 600000, supportsPreview: false, supportsUndo: true,
   requiredScopes: ['video_edit', 'audio_edit'], acceptsRefs: ['video_edit.document', 'video_edit.clip'], producesRefs: ['audio_edit.document', 'video_edit.clip'],
   inputSchema: z.object({ documentRef, clipRef }).strict(),
   outputSchema: z.object({ resultRef: documentRef, audioDocumentRef: audioRef, clipRef, created: z.boolean(), message: z.string(), verified: z.boolean() }).strict(),

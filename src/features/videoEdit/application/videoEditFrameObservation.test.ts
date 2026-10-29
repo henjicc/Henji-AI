@@ -59,7 +59,6 @@ beforeEach(() => {
   vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/observe.hjvid')
   vi.spyOn(platform.system.fs, 'writeTextFile').mockResolvedValue(undefined)
   vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue('D:/managed')
-  vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)
   vi.spyOn(platform.image, 'persistImageBinary').mockImplementation(async () => { size = encodedSize; return `D:/managed/observe-${drawn.length}.png` })
   vi.spyOn(platform.assetLibrary, 'createAsset').mockImplementation(async input => {
     const value: AssetRecord = { id: `asset-${assets.size + 1}`, filePath: input.filePath, mediaType: 'image', displayName: input.displayName ?? '', displayUrl: '', source: input.source, mimeType: 'image/png', sizeBytes: 4, width: size.width, height: size.height, durationSeconds: 0, thumbnailPath: null, thumbnailUrl: null, inspectionStatus: 'ready', inspectionError: null, fileModifiedAt: 1, contentIdentity: 'd'.repeat(64), lastUsedAt: null, createdAt: 1, updatedAt: 1, tags: [], libraryIds: [] }

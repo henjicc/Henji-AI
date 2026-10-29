@@ -42,7 +42,6 @@ const SKIP_MESSAGES: Record<VideoEditImportSkipReason, string> = {
   duplicate: '同一文件在本次请求里重复出现，只导入一次。',
   unreadable: '读不出或无法解码，已跳过。',
   repeated_folder: '目录回环或同一目录重复给出，已跳过。',
-  outside_project: '真实位置不在项目文件夹内（符号链接或联接点指向项目外），已跳过。',
 }
 
 /** 项目文件夹（真实路径）以内的位置写成 `/` 分隔的相对路径；不在其中时只给文件名，不外露绝对路径。 */
@@ -53,9 +52,9 @@ function projectRelative(root: string, path: string): string {
 }
 
 /**
- * 助手导入项目文件夹里的素材：渲染层只传项目内相对路径，主进程按真实路径判断是否仍在项目内并换成真实路径，
+ * 相对路径以项目目录为基准，主进程解析绝对路径与链接后交给同一个素材导入服务，
  * 随后交给拖入与文件夹导入共用的正式导入服务（同一队列、素材箱规则、去重、分批出现与一步撤销）；
- * 递归读取以项目文件夹为边界，子文件夹里指向项目外的链接与联接点跳过。日志只记相对路径。
+ * 递归读取按真实路径识别目录回环，日志只记相对路径。
  */
 export async function importVideoEditProjectFiles(raw: unknown, signal: AbortSignal): Promise<Output> {
   const input = importVideoEditProjectFilesCapability.inputSchema.parse(raw)
@@ -93,7 +92,7 @@ export async function importVideoEditProjectFiles(raw: unknown, signal: AbortSig
     let itemIds: string[] = []
     if (paths.length) {
       try {
-        itemIds = (await importVideoEditPathsAndFolders(id, paths, binId, undefined, { signal, boundary: resolution.root, skipUnreadableFiles: true, onSkipped: value => skips.push(value) })).itemIds
+        itemIds = (await importVideoEditPathsAndFolders(id, paths, binId, undefined, { signal, skipUnreadableFiles: true, onSkipped: value => skips.push(value) })).itemIds
       } catch (error) { await settleVideoEditPartialImport(error, owner, documentRef) }
     }
     await saveVideoEdit(id)

@@ -27,7 +27,6 @@ beforeEach(() => {
   installHarnessNativeStorage(); assets.clear(); links.prepare.mockReset(); links.load.mockReset(); links.ensure.mockReset(); links.ensure.mockResolvedValue(undefined)
   for (const value of [asset(), asset({ id: 'render-2', filePath: 'D:/作品/项目/短片/生成结果/海报-2.png', contentIdentity: 'b'.repeat(64), width: 1280, height: 720 })]) assets.set(value.id, value)
   vi.spyOn(getPlatform().assetLibrary, 'inspectAsset').mockImplementation(async id => structuredClone(assets.get(id)!))
-  vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined)
   vi.spyOn(getPlatform().system.paths, 'dirname').mockResolvedValue('D:/作品/项目/短片/生成结果')
 })
 afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })

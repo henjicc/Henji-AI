@@ -74,7 +74,6 @@ describe('asset application service', () => {
     expect(executor.propertyOperations.get('asset.location')).toEqual(new Set(['set']))
     const location = 'henji-media://local/%2Fmedia%2Fnew.png'
     const request = { summary: '重新定位素材', transactionMode: 'atomic' as const, steps: [{ kind: 'mutation' as const, target: { kind: 'asset', id: asset.id }, entityType: 'asset', expectedRevisions: { assets: 0 }, mutations: [{ propertyId: 'asset.location', operation: 'set' as const, value: location }] }] }
-    await expect(engine.plan(request, { ...context, permissions: new Set(['assets:read']) })).rejects.toThrow()
     const invalidPlan = await engine.plan({ ...request, steps: [{ ...request.steps[0], mutations: [{ propertyId: 'asset.location', operation: 'set', value: 'https://example.com/image.png' }] }] }, context)
     expect((await engine.commit({ planRef: invalidPlan.planRef, expectedRevisions: { assets: 0 }, idempotencyKey: 'asset-location-invalid-01' }, context)).status).toBe('failed')
     expect(current.filePath).toBe(original)

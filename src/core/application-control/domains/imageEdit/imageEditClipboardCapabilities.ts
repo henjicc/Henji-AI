@@ -8,8 +8,7 @@ export const imageEditClipboardCapability = defineApplicationCapability({
   description: '复制图片文档指定图层或合成结果到系统剪贴板，当前选区会限制复制范围；或把系统剪贴板图片粘贴为新图层。编辑器内部复制保留可编辑图层。复制需要 layerRefs；copy_merged 不需要。粘贴可一次撤销。',
   domain: 'image_edit', side: 'frontend', aliases: ['复制图片', '粘贴图片', '复制合成结果'], readOnly: false,
   control: capabilityControl('execute', ['image_edit.document'], { revisionScopes: ['image_edit'], cancelable: true,
-    alsoImpacts: [{ effect: 'create', entityTypes: ['image_edit.layer'] }] }),
-  risk: 'R1', dataClasses: ['C1'], permission: 'image_edit:write', idempotent: false, destructive: false,
+    alsoImpacts: [{ effect: 'create', entityTypes: ['image_edit.layer'] }] }), dataClasses: ['C1'], permission: 'image_edit:write', idempotent: false, destructive: false,
   timeoutMs: 120_000, supportsPreview: false, supportsUndo: true, requiredScopes: ['image_edit'],
   acceptsRefs: ['image_edit.document', 'image_edit.layer'], producesRefs: ['image_edit.document', 'image_edit.layer'],
   inputSchema: z.object({ documentRef, action: z.enum(['copy', 'copy_merged', 'paste']), layerRefs: z.array(layerRef).optional() }).strict()

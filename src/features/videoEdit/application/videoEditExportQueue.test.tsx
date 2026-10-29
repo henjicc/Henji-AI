@@ -63,7 +63,6 @@ beforeEach(() => {
   vi.spyOn(platform.system.fs, 'mkdir').mockResolvedValue(undefined)
   vi.spyOn(platform.system.dialog, 'save').mockResolvedValue(file('output.mp4'))
   vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue(file(''))
-  vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)
   const assets = new Map<string, AssetRecord>()
   vi.spyOn(platform.assetLibrary, 'createAsset').mockImplementation(async input => { const asset: AssetRecord = { id: crypto.randomUUID(), filePath: input.filePath, mediaType: input.mediaType, displayName: input.displayName ?? '成片', displayUrl: 'henji-media://local/output', source: 'video-edit', mimeType: 'video/mp4', sizeBytes: 5, fileModifiedAt: 1, contentIdentity: 'a'.repeat(64), width: 1920, height: 1080, durationSeconds: 1, thumbnailPath: null, thumbnailUrl: null, inspectionStatus: 'ready', inspectionError: null, createdAt: 1, updatedAt: 1, lastUsedAt: null, tags: [], libraryIds: [] }; assets.set(asset.id, asset); return asset })
   vi.spyOn(platform.assetLibrary, 'inspectAsset').mockImplementation(async id => assets.get(id)!)
@@ -430,11 +429,9 @@ it('4K60硬件拒绝：面板禁用硬件并说明原因，AAC禁用64/256/320�
   } finally { app.dispose() }
 })
 
-it('无资产写授权拒绝自动收录；显式关闭后仍能通过正式公共能力导出', async () => {
-  const owner = await project(); const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'export-only', capabilityIds: ['export_video_edit'], permissions: ['video_edit:write', 'video_edit:read'], allowWrites: true, allowDestructive: false }))
+it('显式关闭自动收录后，正式公共能力导出不写入素材库', async () => {
+  const owner = await project(); const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'export-only' }))
   const input = { documentRef: { kind: 'video_edit.document', id: owner.document.id } }; const context = { requestId: crypto.randomUUID(), signal: new AbortController().signal }
-  const denied = await session.execute({ id: 'export_video_edit', version: 1, input }, context)
-  expect(denied.ok).toBe(false); expect(JSON.stringify(denied)).toContain('assets:write'); expect(getPlatform().system.dialog.save).not.toHaveBeenCalled()
   const allowed = await session.execute({ id: 'export_video_edit', version: 1, input: { ...input, settings: { ...videoEditSequenceExportSettings(getActiveVideoEditSequence(owner)), addToLibrary: false } } }, context)
   expect(allowed.ok).toBe(true); await videoEditExportQueue.wait(videoEditExportQueue.list()[0].id)
   expect(getPlatform().assetLibrary.createAsset).not.toHaveBeenCalled()

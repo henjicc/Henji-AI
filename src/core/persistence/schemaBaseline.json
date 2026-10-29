@@ -60,10 +60,10 @@
       "minReaderVersion": 1
     },
     "mcp-connections": {
-      "version": 2,
-      "fingerprint": "f6e809a60ecfcb39ddd70f0d4f3d6529f7d0834ba79bc5c24e6f8fb2b79bc9ee",
+      "version": 3,
+      "fingerprint": "23f24f98c2a34eae261d00fbe0cb9d9c7989bfe2ca6230a1705a2b3b17d54228",
       "supportedFrom": 2,
-      "minReaderVersion": 2
+      "minReaderVersion": 3
     },
     "image-history-checkpoint": {
       "version": 2,
@@ -294,10 +294,10 @@
       "minReaderVersion": 22
     },
     "setting-records": {
-      "version": 21,
-      "fingerprint": "b39613f1df0b90dad1bc50c9589fa5232084b5cdeeaf58e97228768b2f9bf785",
+      "version": 22,
+      "fingerprint": "7a2ee6e56dac56ca7ad36608876f5e308eb3af13a7a05a8183a99083ddec5cb7",
       "supportedFrom": 21,
-      "minReaderVersion": 21
+      "minReaderVersion": 22
     },
     "asset-records": {
       "version": 22,
@@ -312,10 +312,10 @@
       "minReaderVersion": 21
     },
     "sqlite": {
-      "version": 23,
-      "fingerprint": "b6eff11f5e95a171e12a13cc774f391e3f2ee757f75da4d6e8aa4ff1f2feb1d8",
+      "version": 26,
+      "fingerprint": "86dc58c581e2f83661d9d1669da03784b7abae828c9c14f3da4e2454b67e41a7",
       "supportedFrom": 21,
-      "minReaderVersion": 23
+      "minReaderVersion": 26
     },
     "sound-library-folders": {
       "version": 1,

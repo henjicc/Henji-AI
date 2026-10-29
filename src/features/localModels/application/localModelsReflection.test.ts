@@ -49,7 +49,7 @@ beforeEach(() => {
 })
 
 const context = () => ({
-  callerGrant: createApplicationCallerGrant({ callerId: 'external-agent', capabilityIds: ['change_application_entities', 'read_application_entity'], permissions: ['application:write', 'settings:read', 'settings:write'], allowWrites: true, allowDestructive: false }),
+  callerGrant: createApplicationCallerGrant({ callerId: 'external-agent' }),
   signal: new AbortController().signal,
   requestId: crypto.randomUUID(),
   expectedRevisions: { local_models: fake.revision },

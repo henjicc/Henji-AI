@@ -46,15 +46,14 @@ it('使用真实 WOFF2 解析真实命名字重；重启沿用缓存，文件变
   await expect(scanner.read(first.faces[0])).rejects.toThrow('发生变化')
   const changed = await scanner.scan(); expect(changed.faces[0].face.id).not.toBe(first.faces[0].face.id); expect(parse).toHaveBeenCalledTimes(2)
 })
-it('导入按内容去重，路径只在内部保留；删除导入文件移除所有样式，系统字体不能删除', async () => {
+it('导入按内容去重，路径只在内部保留；文件移除后扫描不再返回其中的样式', async () => {
   const { root, source, library } = await setup(); const scanner = new FontScanner(library, async () => [source])
   const renamed = path.join(root, 'renamed.woff2'); await copyFile(source, renamed)
   await scanner.importFile(source); await scanner.importFile(renamed)
   expect((await readdir(library)).filter(name => name.endsWith('.woff2'))).toHaveLength(1)
   const result = await scanner.scan(); const imported = result.faces.find(value => value.face.imported)!
   expect(imported.face).not.toHaveProperty('path'); expect(await scanner.read(imported)).toEqual(new Uint8Array(await readFile(source)))
-  await expect(scanner.remove(result.faces.find(value => !value.face.imported)!)).rejects.toThrow('只能删除')
-  await scanner.remove(imported); expect((await scanner.scan()).faces.some(value => value.face.imported)).toBe(false)
+  await rm(imported.path); expect((await scanner.scan()).faces.some(value => value.face.imported)).toBe(false)
   await mkdir(path.join(root, 'bad')); await expect(scanner.importFile(path.join(root, 'bad.txt'))).rejects.toThrow('请选择')
 })
 it('TTC 提取保留表，重新计算独立 sfnt 的偏移和校验；非法索引拒绝', () => {

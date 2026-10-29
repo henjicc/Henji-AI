@@ -1,6 +1,6 @@
 {
   "recordingShortcuts": { "title": "Screen recording shortcuts", "info": "Active only during a recording session. System conflicts appear in the recording controls.", "toggle": "Start / pause recording", "mark": "Add recording marker", "stop": "Stop recording", "change": "Change shortcut for {{action}}", "capture": "Press shortcut, Esc to cancel", "unset": "Not set", "clear": "Clear", "reset": "Restore recording shortcuts", "invalid": "Use Ctrl, Command or Alt with a letter, digit or function key", "duplicate": "This shortcut is used by another recording action. Choose a different one." },
-  "mcp": {"loading": "Loading connections…", "enable": "Allow external agents", "readOnly": "Connections stay valid until revoked. The service switch, port and new-connection permissions are saved and restored after restart. The built-in assistant uses the permissions in its chat composer.", "port": "Connection port", "portHint": "Turn off external connections before changing the port.", "newConnectionTitle": "New connection", "connectionsTitle": "Authorized connections", "noConnections": "No connections authorized yet.", "name": "Connection name", "namePlaceholder": "For example: Codex", "authorize": "Create authorization", "copy": "Copy connection prompt", "revoke": "Revoke", "allowWrites": "Allow changes", "allowDelete": "Allow deletion", "writeScope": "Settings, model visibility, assets and canvas only. Paid generation is excluded.", "accessRead": "Read only", "accessWrite": "Can modify", "accessDelete": "Can modify and delete", "allowPaid": "Allow paid generation", "paidScope": "Allow image, video and audio generation with configured providers. Provider charges apply.", "accessPaid": "Paid generation allowed", "edit": "Edit permissions", "editDone": "Done"},
+  "mcp": {"loading": "Loading connections…", "enable": "Allow external agents", "port": "Connection port", "portHint": "Turn off external connections before changing the port.", "newConnectionTitle": "New connection", "connectionsTitle": "Authorized connections", "noConnections": "No connections authorized yet.", "name": "Connection name", "namePlaceholder": "For example: Codex", "authorize": "Create authorization", "copy": "Copy connection config", "revoke": "Revoke"},
   "title": "Settings",
   "language": "Language",
   "theme": "Theme",
@@ -974,16 +974,9 @@
   },
   "paidApproval": {
     "title": "AI payments",
-    "mode": "Approval mode",
-    "modeHint": "Ask every time: confirm before each paid operation.\nAutomatic: approve estimates within the per-operation and daily limits; ask when cost is unknown.\nBypass: approve within the daily limit, including unknown costs.",
-    "ask": "Ask every time",
-    "auto": "Automatic (recommended)",
-    "bypass": "Bypass",
-    "single": "Automatic approval limit",
+    "single": "Per task limit",
     "daily": "Daily limit",
     "unit": "CNY",
-    "projects": "Always-allowed projects",
-    "revoke": "Revoke",
     "loadFailed": "Unable to load AI payment settings. Reopen settings to retry.",
     "saveFailed": "Unable to save. Please try again.",
     "categories": {
@@ -992,7 +985,8 @@
       "translation": "Translation",
       "title": "Titles",
       "explanation": "Send explanation"
-    }
+    },
+    "unlimited": "No limits"
   },
   "memory": {
     "finishEditing": "Finish the entry you are editing first",
@@ -1031,5 +1025,6 @@
     "history": "Change history",
     "undo": "Undo",
     "before": "Before"
-  }
+  },
+  "recentlyDeleted": {"title": "Recently deleted", "empty": "No recently deleted items", "restore": "Restore", "failed": "Could not restore", "retention": "Deleted content and previous versions are kept for 30 days"}
 }

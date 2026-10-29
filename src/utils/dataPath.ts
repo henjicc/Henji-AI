@@ -1,5 +1,4 @@
 import { createLogger } from '@/core/logging'
-import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 import i18n from 'i18next'
 import type { AppDirectories } from '@/platform/contracts/system'
 import { appDirectories, join, mkdir } from '@/platform/desktopApi'
@@ -66,10 +65,6 @@ export async function getUploadsPath(): Promise<string> {
  */
 export async function initializeDataDirectory(rootPath: string): Promise<void> {
   try {
-    if (isDesktopRuntime()) {
-      await getPlatform().media.allowRoot(rootPath)
-    }
-
     await mkdir(rootPath, { recursive: true })
     const { folderNames } = await getAppDirectories()
     for (const name of Object.values(folderNames)) {

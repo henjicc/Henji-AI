@@ -10,10 +10,12 @@ import { ApplicationHostBridge } from '../application-runtime/applicationHostBri
 
 // 与内置 Pi 的技能测试相同：使用仓库内正式技能目录，只把停用名单换成可控值。
 const state = vi.hoisted(() => ({ disabled: [] as string[] }))
+vi.mock('../settings/store', () => ({ getSettingsStore: () => ({ get: () => null }) }))
 vi.mock('../assistant/skills/registry', async importOriginal => {
   const actual = await importOriginal<typeof import('../assistant/skills/registry')>()
   const dirs = () => ({ builtinDir: path.resolve('resources/assistant-skills'), userDir: '', disabledNames: state.disabled })
   return { ...actual,
+    listAssistantSkills: () => actual.scanAssistantSkills(dirs()),
     listEnabledAssistantSkills: async () => (await actual.scanAssistantSkills(dirs())).skills.filter(skill => skill.enabled),
     loadAssistantSkill: (name: string, relativePath?: string) => actual.loadAssistantSkillFrom(dirs(), name, relativePath),
   }

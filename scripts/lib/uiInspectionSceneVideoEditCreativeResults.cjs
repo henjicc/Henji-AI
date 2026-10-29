@@ -122,7 +122,7 @@ function createVideoEditCreativeResultsScene(context) {
         await openEdit(); if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await observeWorkers(page); observed = true
         await openVideoEditProjectCard(page, editProject.projectId); await presented(page, 0)
-        const identity = await authorizeMcpConnection(page, { name: '创作结果回填验收', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji creative results Reality')
+        const identity = await authorizeMcpConnection(page, { name: '创作结果回填验收' }); client = await connectMcpClient(identity.config, 'Henji creative results Reality')
         evidence.trackBanks = await trackBanks(page)
 
         phase('generation-page-add')

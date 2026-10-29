@@ -5,7 +5,7 @@ import { capabilityControl, defineApplicationCapability } from '../shared/define
 const ref = <K extends string>(kind: K) => applicationRefSchema.extend({ kind: z.literal(kind) }).strict()
 const documentRef = ref('video_edit.document'); const sequenceRef = ref('video_edit.sequence'); const clipRef = ref('video_edit.clip'); const itemRef = ref('video_edit.item')
 const output = z.object({ resultRef: documentRef, sequenceRef, itemRef: itemRef.optional(), clipRefs: z.array(clipRef), message: z.string(), verification: z.object({ verified: z.boolean(), target: documentRef, condition: z.string() }).strict() }).strict()
-const shared = { version: 1, domain: 'video_edit', readOnly: false, risk: 'R1' as const, dataClasses: ['C1' as const], permission: 'video_edit:write', idempotent: false, destructive: false, timeoutMs: 600000, supportsPreview: false, supportsUndo: true, requiredScopes: ['video_edit'], producesRefs: ['video_edit.sequence', 'video_edit.item', 'video_edit.clip'], outputSchema: output,
+const shared = { version: 1, domain: 'video_edit', readOnly: false, dataClasses: ['C1' as const], permission: 'video_edit:write', idempotent: false, destructive: false, timeoutMs: 600000, supportsPreview: false, supportsUndo: true, requiredScopes: ['video_edit'], producesRefs: ['video_edit.sequence', 'video_edit.item', 'video_edit.clip'], outputSchema: output,
   control: capabilityControl('execute', ['video_edit.document', 'video_edit.sequence', 'video_edit.item', 'video_edit.clip'], { cancelable: true, revisionScopes: ['video_edit'] }),
   verificationContract: { kind: 'effect_receipt' as const, requireEffects: true, requireVerifiedEffects: true },
 }

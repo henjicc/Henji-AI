@@ -1,3 +1,5 @@
+import { RecycleStore } from '../recycle/store'
+import { softDelete } from '../recycle/store'
 import type Database from 'better-sqlite3'
 
 import type {
@@ -99,7 +101,7 @@ export class GenerationHistoryStore {
   ) {}
 
   list(query: GenerationHistoryQuery = {}): GenerationHistoryRecordDto[] {
-    const where: string[] = []
+    const where: string[] = ['deleted_at IS NULL']
     const params: SqlValue[] = []
     if (query.providerId) { where.push('provider_id = ?'); params.push(query.providerId) }
     if (query.modelId) { where.push('model_id = ?'); params.push(query.modelId) }
@@ -127,20 +129,20 @@ export class GenerationHistoryStore {
   }
 
   get(id: string): GenerationHistoryRecordDto | null {
-    const row = this.database().prepare('SELECT * FROM history WHERE id = ?').get(id) as HistoryRow | undefined
+    const row = this.database().prepare('SELECT * FROM history WHERE id = ? AND deleted_at IS NULL').get(id) as HistoryRow | undefined
     return row ? this.locations.use((scope) => toRecord(row, scope)) : null
   }
 
   getStatus(id: string): GenerationHistoryStatusDto | null {
     const row = this.database()
-      .prepare('SELECT id, model_id, prompt, status, task_id, result_paths FROM history WHERE id = ?')
+      .prepare('SELECT id, model_id, prompt, status, task_id, result_paths FROM history WHERE id = ? AND deleted_at IS NULL')
       .get(id) as Pick<HistoryRow, 'id' | 'model_id' | 'prompt' | 'status' | 'task_id' | 'result_paths'> | undefined
     if (!row) return null
     return { id: row.id, modelId: row.model_id, prompt: row.prompt, status: row.status, taskId: row.task_id, hasResult: parseStoredPaths(row.result_paths).length > 0 }
   }
 
   count(): number {
-    return (this.database().prepare('SELECT COUNT(*) AS total FROM history').get() as { total: number }).total
+    return (this.database().prepare('SELECT COUNT(*) AS total FROM history WHERE deleted_at IS NULL').get() as { total: number }).total
   }
 
   insert(record: GenerationHistoryInsertDto): void {
@@ -197,20 +199,24 @@ export class GenerationHistoryStore {
   }
 
   delete(id: string): void {
-    this.database().prepare('DELETE FROM history WHERE id = ?').run(id)
+    softDelete(this.database(), 'history', id)
   }
 
   deleteMany(ids: readonly string[]): number {
     const db = this.database()
-    const statement = db.prepare('DELETE FROM history WHERE id = ?')
-    return db.transaction(() => ids.reduce((total, id) => total + statement.run(id).changes, 0))()
+    const statement = db.prepare('UPDATE history SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL')
+    return db.transaction(() => {
+      const removed = ids.filter(id => statement.run(Date.now(), id).changes > 0)
+      if (removed.length > 1) new RecycleStore(db).snapshot('rows', 'history', `生成历史（${removed.length} 条）`, JSON.stringify(removed), `history:batch-${crypto.randomUUID()}`)
+      return removed.length
+    })()
   }
 
   clear(olderThan?: string): number {
-    const statement = olderThan
-      ? this.database().prepare('DELETE FROM history WHERE created_at < ?')
-      : this.database().prepare('DELETE FROM history')
-    return (olderThan ? statement.run(olderThan) : statement.run()).changes
+    const rows = (olderThan
+      ? this.database().prepare('SELECT id FROM history WHERE deleted_at IS NULL AND created_at < ?').all(olderThan)
+      : this.database().prepare('SELECT id FROM history WHERE deleted_at IS NULL').all()) as Array<{ id: string }>
+    return this.deleteMany(rows.map(row => row.id))
   }
 }
 

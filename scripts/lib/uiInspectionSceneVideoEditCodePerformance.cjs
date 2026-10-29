@@ -59,7 +59,7 @@ function createVideoEditCodePerformanceScene() {
           server.listen(0, '127.0.0.1', () => { const port = server.address().port; server.close(error => error ? reject(error) : resolve(port)) })
         })
         await page.evaluate(port => window.henjiNative.mcp.configure({ enabled: true, port }), port)
-        const identity = await authorizeMcpConnection(page, { name: '代码播放性能验收', allowWrites: true })
+        const identity = await authorizeMcpConnection(page, { name: '代码播放性能验收' })
         client = await connectMcpClient(identity.config, 'Henji code performance')
         const change = async (ref, entry) => {
           const read = await callTool(client, 'read_application_entity', { ref })

@@ -11,12 +11,10 @@ const net = require('node:net')
 const { Client } = require('@modelcontextprotocol/client')
 const { StreamableHTTPClientTransport } = require('@modelcontextprotocol/client')
 
-/** mcp:config's official result is connection instructions containing one JSON configuration block. */
+/** mcp:config 返回客户端直接使用的 JSON 配置。 */
 function parseMcpConnectionInstructions(instructions) {
-  const block = /^```json\s*\r?\n([\s\S]*?)\r?\n```/m.exec(instructions)
-  if (!block) throw new Error('连接说明缺少 JSON 配置块')
   let raw
-  try { raw = JSON.parse(block[1]) } catch { throw new Error('连接说明中的 JSON 配置无法解析') }
+  try { raw = JSON.parse(instructions) } catch { throw new Error('连接配置无法解析') }
   const config = raw?.mcpServers?.henji
   if (config?.type !== 'http' || typeof config.url !== 'string' || typeof config.headers?.Authorization !== 'string') throw new Error('连接说明缺少 henji HTTP 地址或授权头')
   return config
@@ -41,21 +39,14 @@ async function assignIsolatedMcpPort(page) {
   return port
 }
 
-/** 直接经可信 IPC 开启服务并授权一条连接；权限档位仍然只能由应用侧决定。 */
-async function authorizeMcpConnection(page, { name, allowWrites = false, allowDestructive = false, allowPaid = false }) {
+/** 通过可信设置入口配置客户端，令牌不进入模型上下文或日志。 */
+async function authorizeMcpConnection(page, { name }) {
   const identity = await page.evaluate(async (input) => {
     const before = await window.henjiNative.mcp.status()
     if (!before.enabled) await window.henjiNative.mcp.configure({ enabled: true, port: before.port })
     const connection = await window.henjiNative.mcp.authorize(input)
-    const raw = await window.henjiNative.mcp.connectionConfig({ id: connection.id })
-    return { id: connection.id, allowWrites: connection.allowWrites === true, allowDestructive: connection.allowDestructive === true,
-      allowPaid: connection.allowPaid === true, instructions: raw }
-  }, { name, allowWrites, allowDestructive, allowPaid })
-  assert.equal(identity.allowWrites, allowWrites, `连接 ${name} 的修改授权与请求不一致`)
-  assert.equal(identity.allowDestructive, allowDestructive, `连接 ${name} 的删除授权与请求不一致`)
-  assert.equal(identity.allowPaid, allowPaid, `连接 ${name} 的付费授权与请求不一致`)
-  identity.config = parseMcpConnectionInstructions(identity.instructions)
-  delete identity.instructions
+    return { id: connection.id, config: JSON.parse(await window.henjiNative.mcp.connectionConfig({ id: connection.id })).mcpServers.henji }
+  }, { name })
   await waitMcpReady(page)
   return identity
 }

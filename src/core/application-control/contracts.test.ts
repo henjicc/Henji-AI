@@ -89,8 +89,6 @@ describe('application-control contracts', () => {
       contractVersion: 'application-control/v2',
       planRef: `plan:${'a'.repeat(20)}`,
       summary: '调整摄像机位置。',
-      risk: 'R1',
-      requiresApproval: false,
       atomic: true,
       transactionMode: 'atomic',
       steps: [{

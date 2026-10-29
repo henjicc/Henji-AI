@@ -1,4 +1,4 @@
-import { readFile, stat, readdir, mkdir, writeFile, rename, unlink } from 'node:fs/promises'
+import { readFile, stat, readdir, mkdir, writeFile, rename } from 'node:fs/promises'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { discoverSystemFonts, FONT_FILE_EXTENSION, type FontDiscovery } from './discovery'
@@ -49,11 +49,6 @@ export class FontScanner {
     const existing = (await readdir(this.library)).find(name => name.startsWith(`${hash}.`))
     if (existing) return
     await writeFile(path.join(this.library, `${hash}${path.extname(source).toLowerCase()}`), bytes, { flag: 'wx' })
-  }
-  async remove(face: InternalFace): Promise<void> {
-    if (!face.face.imported || path.dirname(face.path) !== this.library) throw new Error('只能删除已导入的字体，系统字体请在系统设置中管理。')
-    await unlink(face.path)
-    delete this.cache[face.path]
   }
   async read(face: InternalFace): Promise<Uint8Array> {
     const info = await stat(face.path)

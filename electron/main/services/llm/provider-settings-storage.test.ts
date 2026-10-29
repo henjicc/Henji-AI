@@ -6,6 +6,7 @@ import type { LlmConfigState } from '@henjicc/ai-sdk'
 
 const state = vi.hoisted(() => ({ root: '' }))
 vi.mock('../appPaths', () => ({ getProgramDataDir: () => state.root }))
+vi.mock('../recycle/runtime', () => ({ preserveUserFile: vi.fn(async () => {}) }))
 import { createProviderSettingsFileStorage } from './provider-settings-storage'
 
 beforeEach(async () => { state.root = await fsp.mkdtemp(path.join(os.tmpdir(), 'henji-config-persistence-')) })

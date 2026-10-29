@@ -3,7 +3,9 @@ import { createWriteStream } from 'node:fs'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('../../recycle/runtime', () => ({ trashUserFile: vi.fn(async (target: string) => { await fs.rename(target, path.join(rootDir, `recycled-${crypto.randomUUID()}`)) }) }))
 
 import {
   ASSISTANT_SKILL_MAX_BODY_BYTES,
@@ -121,8 +123,8 @@ async function writeMarkdownSource(fileName: string, content: string): Promise<s
   return filePath
 }
 
-async function install(sourcePath: string, overwrite = false) {
-  return installAssistantSkillTo(target, { sourcePath, overwrite })
+async function install(sourcePath: string) {
+  return installAssistantSkillTo(target, { sourcePath })
 }
 
 async function expectErrorCode(action: () => Promise<unknown>): Promise<string> {
@@ -329,16 +331,14 @@ describe('installAssistantSkillTo', () => {
     expect(await listUserDir()).toEqual([])
   })
 
-  it('同名用户技能不静默覆盖，overwrite 后整体替换', async () => {
+  it('同名用户技能保留回收副本后直接整体替换', async () => {
     const first = await writeMarkdownSource('v1.md', skillMarkdown('demo-skill', '第一版', '旧正文'))
     await install(first)
     await fs.mkdir(path.join(target.userDir, 'demo-skill', 'references'), { recursive: true })
     await fs.writeFile(path.join(target.userDir, 'demo-skill', 'references', 'old.md'), '旧引用', 'utf8')
 
     const second = await writeMarkdownSource('v2.md', skillMarkdown('demo-skill', '第二版', '新正文'))
-    expect(await expectErrorCode(() => install(second))).toBe('SKILL_ALREADY_EXISTS')
-
-    const result = await install(second, true)
+    const result = await install(second)
     expect(result).toMatchObject({ installed: ['demo-skill'], replaced: ['demo-skill'] })
     const manifest = await scanAssistantSkills({ ...target, disabledNames: [] })
     expect(manifest.skills[0]?.description).toBe('第二版')

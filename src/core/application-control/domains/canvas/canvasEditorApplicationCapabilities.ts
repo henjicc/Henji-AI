@@ -45,7 +45,6 @@ const openMultiLayerDocumentNodeEditor = defineApplicationCapability({
     'canvas.node',
     'application.surface',
   ]),
-  risk: 'R0',
   dataClasses: ['C1'],
   permission: 'canvas:focus',
   idempotent: true,
@@ -112,7 +111,6 @@ const retryLayerStackResult = defineApplicationCapability({
   control: capabilityControl('execute', ['canvas.node'], {
     revisionScopes: ['canvas'], resultState: 'submitted', verificationRequired: false,
   }),
-  risk: 'R1',
   dataClasses: ['C1'],
   permission: 'canvas:write',
   idempotent: true,

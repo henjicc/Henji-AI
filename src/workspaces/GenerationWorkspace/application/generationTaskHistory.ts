@@ -1,4 +1,6 @@
+import { deleteGenerationHistoryRecords } from '@/commands/generationHistory'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
+import { subscribeRestored } from '@/services/recycle'
 import { aiReadSavedResult } from '@/commands/aiRuntime'
 import { createLogger } from '@/core/logging'
 import { databaseService } from '@/services/database/DatabaseService'
@@ -160,6 +162,13 @@ export function awaitGenerationTaskPersistence(id: string): Promise<void> {
   return taskSaves.get(id) ?? Promise.resolve()
 }
 const deletedTaskIds = new Set<string>()
+subscribeRestored(async item => {
+  if (!item.id.startsWith('history:')) return
+  for (const id of item.recordIds ?? [item.id.slice('history:'.length)]) {
+    deletedTaskIds.delete(id)
+    await publishPersistedGenerationTask(id)
+  }
+})
 
 export function persistGenerationTask(task: GenerationTask): Promise<void> {
   const save = historySaveTail.then(() => deletedTaskIds.has(task.id) ? undefined : writeGenerationTask(task))
@@ -236,6 +245,15 @@ export function deletePersistedGenerationTask(id: string): Promise<void> {
   deletedTaskIds.add(id)
   const save = historySaveTail.then(async () => { if (isDesktop()) await databaseService.deleteHistory(id) })
   taskSaves.set(id, save)
+  historySaveTail = save.catch(() => undefined)
+  return save
+}
+
+export function deletePersistedGenerationTasks(ids: string[]): Promise<void> {
+  if (ids.length === 1) return deletePersistedGenerationTask(ids[0])
+  for (const id of ids) deletedTaskIds.add(id)
+  const save = historySaveTail.then(async () => { if (isDesktop()) await deleteGenerationHistoryRecords(ids) })
+  for (const id of ids) taskSaves.set(id, save)
   historySaveTail = save.catch(() => undefined)
   return save
 }

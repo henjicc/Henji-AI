@@ -1,8 +1,8 @@
 import i18n from '@/i18n'
 import { getI18nText } from '@/core/types/I18nText'
 import type { ModelDefinition } from '@/core/types/ModelDefinition'
-import { hasApplicationPaidApproval } from '../application-control/userConfirmation'
-import { paidApprovalMessage, isPaidConfirmationExpired, type PaidApprovalDisplay } from '../application-control/paidApproval'
+import { applicationPaidOperationReceipt, hasApplicationPaidApproval } from '../application-control/userConfirmation'
+import { paidApprovalMessage, isPaidConfirmationExpired, type PaidOperationReceipt, type PaidApprovalDisplay } from '../application-control/paidApproval'
 import { prepareGenerationPaidApproval } from '@/services/paidApproval'
 
 export interface GenerationSubmissionConfirmationRequest {
@@ -12,8 +12,6 @@ export interface GenerationSubmissionConfirmationRequest {
   confirmLabel: string
   paidDetails?: PaidApprovalDisplay
   paidConfirmation?: boolean
-  projectConfirmation?: boolean
-  onProject?: () => void
 }
 
 export type GenerationSubmissionConfirm = (
@@ -23,14 +21,18 @@ export type GenerationSubmissionConfirm = (
 
 let requestConfirmation: GenerationSubmissionConfirm | undefined
 // 从已授权的调用向其异步生成任务单次移交回执；工具参数不能创建该回执。
-const approvedTasks = new Set<string>()
+const approvedTasks = new Map<string, PaidOperationReceipt>()
 export function transferGenerationPaidApproval(taskId: string, signal: AbortSignal): () => void {
-  if (hasApplicationPaidApproval(signal, 'generation')) approvedTasks.add(taskId)
+  const receipt = applicationPaidOperationReceipt(signal)
+  if (receipt && hasApplicationPaidApproval(signal, 'generation')) approvedTasks.set(taskId, receipt)
   return () => { approvedTasks.delete(taskId) }
 }
-export function consumeGenerationPaidApproval(taskId: string): boolean { return approvedTasks.delete(taskId) }
+export function consumeGenerationPaidApproval(taskId: string): PaidOperationReceipt | undefined {
+  const receipt = approvedTasks.get(taskId); approvedTasks.delete(taskId); return receipt
+}
 
 export interface GenerationPaidExecution {
+  receipt: PaidOperationReceipt
   start(): Promise<unknown>
   complete(): Promise<unknown>
   failed(error?: unknown): Promise<unknown>
@@ -58,17 +60,15 @@ export async function confirmGenerationSubmission(model: ModelDefinition, params
   signal.throwIfAborted()
   if (paid.decision.decision === 'deny') throw new GenerationSubmissionCancelledError()
   if (paid.decision.decision === 'auto') return paid
-  let project = false
   const accepted = await requestConfirmation({
     type: 'warning',
     title: confirmation ? getI18nText(confirmation.title, i18n.language) : i18n.t('paidApproval.generateContent', { ns: 'common' }),
     message: confirmation ? getI18nText(confirmation.message, i18n.language) : i18n.t('paidApproval.operationContent', { ns: 'common' }),
     paidDetails: paidApprovalMessage(paid.decision, 'generation', getI18nText(model.meta.name, i18n.language)),
-    confirmLabel: i18n.t('paidApproval.allowOnce', { ns: 'common' }), paidConfirmation: true, projectConfirmation: !!paid.project,
-    onProject: () => { project = true },
+    confirmLabel: i18n.t('paidApproval.allowOnce', { ns: 'common' }), paidConfirmation: true,
   }, signal)
   if (!accepted || signal.aborted) throw new GenerationSubmissionCancelledError()
-  try { await paid.confirm(project) }
+  try { await paid.confirm() }
   catch (error) {
     // IPC 往返期间刚好越过账本期限，仍属于未提交的取消。
     if (isPaidConfirmationExpired(error)) throw new GenerationSubmissionCancelledError()

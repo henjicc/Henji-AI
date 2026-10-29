@@ -4,7 +4,7 @@ const { Client } = require('@modelcontextprotocol/client')
 const { StreamableHTTPClientTransport } = require('@modelcontextprotocol/client')
 const { parseMcpConnectionInstructions } = require('./uiInspectionMcpClient.cjs')
 
-// 只读连接必须始终看得到的读取工具，以及任何情况下都不得出现在只读清单里的写入工具。
+// 同一连接可发现完整的读写工具目录。
 const REQUIRED_READ_TOOLS = ['describe_application_contract', 'describe_application_entities', 'list_application_entities', 'read_application_entity', 'read_application_media']
 const WRITE_TOOLS = ['change_application_entities', 'create_visible_generation_task', 'cancel_generation_task',
   'render_camera_stage_output', 'cancel_camera_stage_render_task', 'add_generation_result_to_canvas',
@@ -16,26 +16,13 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
     if ((await control.getAttribute('aria-checked')) !== String(value)) await control.click()
     await page.waitForFunction(({ index, value }) => document.querySelectorAll('#assistant-mcp [role="switch"]')[index]?.getAttribute('aria-checked') === String(value), { index, value })
   }
-  /** 进场前的默认授权快照；收尾要原样还回去。 */
-  const captureDefaultAccess = (page) => page.evaluate(async () => (await window.henjiNative.mcp.status()).defaultAccess)
-  /**
-   * 收尾：关掉对外服务，并把「默认授权」还原成本场景开始前的样子。
-   *
-   * 多个窗口尺寸共用同一份隔离资料目录，场景按同一顺序再跑一遍。本文件里三个场景都会改
-   * 默认授权开关，却只在收尾关服务、不还原这三项；于是第二个尺寸里 mcp-read-lifecycle
-   * 断言「出厂默认三项全开」时，读到的是上一轮别的场景留下的值，确定性失败。
-   * 还原成进场前的值之后，断言一个字都不用改。
-   */
-  const closeMcpRestoringAccess = (page, defaultAccess) => page.evaluate(async (restore) => {
+  const closeMcp = (page) => page.evaluate(async () => {
     const state = await window.henjiNative.mcp.status()
-    // 连接也要收掉。每个场景都会新建授权却没人撤销，跨尺寸重跑时它们会一直堆积：
-    // 第二个尺寸里「复制连接配置」按钮涨到 9 个，按名字定位的严格匹配当场失败。
-    // 在隔离资料目录里，场景本来就不该留下任何连接。
     for (const connection of state.connections ?? []) {
       await window.henjiNative.mcp.revoke({ id: connection.id })
     }
-    await window.henjiNative.mcp.configure({ enabled: false, port: state.port, ...(restore ? { defaultAccess: restore } : {}) })
-  }, defaultAccess)
+    await window.henjiNative.mcp.configure({ enabled: false, port: state.port })
+  })
   const waitReady = async (page) => {
     const deadline = Date.now() + 15000
     while (Date.now() < deadline) {
@@ -44,12 +31,11 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
     }
     throw new Error('应用宿主未在限定时间内就绪')
   }
-  /** 用名单而不是数量断言：新增读取工具不该让验收变红，写入工具泄漏必须红。 */
-  const assertReadOnlyTools = (names) => {
-    for (const required of REQUIRED_READ_TOOLS) assert.ok(names.includes(required), `只读连接缺少读取工具 ${required}：${names.join('、')}`)
-    for (const write of WRITE_TOOLS) assert.equal(names.includes(write), false, `只读连接不能看到写入工具 ${write}`)
+  const assertTools = (names) => {
+    for (const required of REQUIRED_READ_TOOLS) assert.ok(names.includes(required), `连接缺少读取工具 ${required}：${names.join('、')}`)
+    for (const write of WRITE_TOOLS) assert.ok(names.includes(write), `连接缺少写入工具 ${write}`)
   }
-  return [{ id: 'mcp-read-lifecycle', surface: '设置', name: '外部连接-只读与重载', writesUserData: true,
+  return [{ id: 'mcp-read-lifecycle', surface: '设置', name: '外部连接-工具发现与重载', writesUserData: true,
     setup: async (page) => {
       /*
        * 同名已存在就直接复用，不能无条件创建。
@@ -67,16 +53,12 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
       await setupSettings(page)
       await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
       const initial = await page.evaluate(() => window.henjiNative.mcp.status())
-      const enteringAccess = initial.defaultAccess
-      assert.deepEqual(initial.defaultAccess, { allowWrites: true, allowDestructive: true, allowPaid: true })
       const section = page.locator('#assistant-mcp')
       if (!initial.enabled) await section.getByRole('switch').first().click()
-      await setSwitch(page, 1, false)
       await page.keyboard.press('Escape')
       await page.getByRole('dialog', { name: /设置|Settings/ }).waitFor({ state: 'hidden' })
       await setupSettings(page)
       await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
-      assert.equal(await section.getByRole('switch').nth(1).isChecked(), false)
       await section.getByPlaceholder('例如：Codex').fill('协议验收客户端')
       await section.getByRole('button', { name: '创建授权' }).click()
       await section.getByRole('button', { name: '复制连接配置' }).waitFor()
@@ -94,7 +76,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
       }
       let client = await connect()
       try {
-        assertReadOnlyTools((await client.listTools()).tools.map((tool) => tool.name))
+        assertTools((await client.listTools()).tools.map((tool) => tool.name))
         const described = await client.callTool({ name: 'describe_application_entities', arguments: { entityTypes: ['settings.registry', 'asset.library', 'canvas.document', 'generation.model'] } })
         assert.equal(described.isError, false, JSON.stringify(described))
         for (const entityType of ['settings.registry', 'asset.library', 'canvas.document', 'generation.model']) {
@@ -114,20 +96,20 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
         await page.reload()
         console.log('[MCP Reality] 等待重载宿主')
         await waitReady(page)
-        assertReadOnlyTools((await client.listTools()).tools.map((tool) => tool.name))
+        assertTools((await client.listTools()).tools.map((tool) => tool.name))
         const after = await client.callTool({ name: 'read_application_entity', arguments: { ref: { kind: 'settings.registry', id: 'singleton' }, propertyIds: ['interface.theme_contrast'] } })
         assert.equal(after.isError, false)
         await client.close()
         console.log('[MCP Reality] 同页面关闭再开启')
         await page.evaluate(async () => { const state = await window.henjiNative.mcp.status(); await window.henjiNative.mcp.configure({ enabled: false, port: state.port }); await window.henjiNative.mcp.configure({ enabled: true, port: state.port }) })
         client = await connect()
-        assertReadOnlyTools((await client.listTools()).tools.map((tool) => tool.name))
+        assertTools((await client.listTools()).tools.map((tool) => tool.name))
         await page.evaluate((id) => window.henjiNative.mcp.revoke({ id }), connection.id)
         const denied = await fetch(connection.config.url, { headers: connection.config.headers })
         assert.equal(denied.status, 401)
       } finally {
         await client.close()
-        await closeMcpRestoringAccess(page, enteringAccess)
+        await closeMcp(page)
       }
       await setupSettings(page)
       await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
@@ -139,10 +121,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
       await setupSettings(page)
       await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
       const section = page.locator('#assistant-mcp')
-      const enteringAccess = await captureDefaultAccess(page)
       await setSwitch(page, 0, true)
-      await setSwitch(page, 1, true)
-      await setSwitch(page, 2, true)
       await section.getByPlaceholder('例如：Codex').fill('受控写入验收')
       await section.getByRole('button', { name: '创建授权' }).click()
       await waitReady(page)
@@ -229,7 +208,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
           properties: { 'generation.model.hidden': !hidden } }], [await read(modelRef, ['generation.model.hidden', 'generation.model.provider_id'])])
       } finally {
         await client.close()
-        await closeMcpRestoringAccess(page, enteringAccess)
+        await closeMcp(page)
       }
       await setupSettings(page)
       await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
@@ -240,24 +219,16 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
       await setupSettings(page)
       await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
       const section = page.locator('#assistant-mcp')
-      const enteringAccess = await captureDefaultAccess(page)
-      // 只开「修改」，不开删除、不开付费生成：本场景禁止任何供应商请求。
       await setSwitch(page, 0, true)
-      await setSwitch(page, 1, true)
-      await setSwitch(page, 2, false)
-      await setSwitch(page, 3, false)
       await section.getByPlaceholder('例如：Codex').fill('后台跨域验收')
       await section.getByRole('button', { name: '创建授权' }).click()
       await waitReady(page)
       const identity = await page.evaluate(async () => {
         const state = await window.henjiNative.mcp.status()
         const connection = state.connections.find((item) => item.name === '后台跨域验收')
-        return { allowPaid: connection.allowPaid === true, allowDestructive: connection.allowDestructive === true,
-          config: await window.henjiNative.mcp.connectionConfig({ id: connection.id }) }
+        return { config: await window.henjiNative.mcp.connectionConfig({ id: connection.id }) }
       })
       identity.config = parseMcpConnectionInstructions(identity.config)
-      assert.equal(identity.allowPaid, false, '本场景必须使用未授权付费的连接')
-      assert.equal(identity.allowDestructive, false)
       const client = new Client({ name: 'Henji background Reality', version: '1' }, { versionNegotiation: { mode: { pin: '2026-07-28' } } })
       const call = async (name, args) => {
         const result = await client.callTool({ name, arguments: args })
@@ -276,12 +247,6 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
           'read_application_media', 'get_generation_task', 'get_camera_stage_render_task']) {
           assert.ok(tools.includes(required), `写入连接缺少工具 ${required}：${tools.join('、')}`)
         }
-        assert.equal(tools.includes('create_visible_generation_task'), false, '未授权付费的连接不得看到付费生成工具')
-        /*
-         * 按域发现要经过真实 preload／IPC 才算数：域清单在渲染层从反射注册表派生，随宿主注册
-         * 跨进程送到 MCP 服务。这里核对八个业务写域确实到达了外部契约，并且缺席的付费工具
-         * 说得出缺哪一档——"清单里没有"不能被读成"应用没有这个能力"。
-         */
         const contract = await call('describe_application_contract', {})
         const writableDomains = contract.data.domains.filter((domain) => domain.writable).map((domain) => domain.id).sort()
         for (const domain of ['assets', 'camera_stage', 'canvas', 'generation', 'image_edit', 'models', 'settings', 'memory']) {
@@ -289,12 +254,8 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
         }
         assert.equal(contract.data.domains.some((domain) => domain.id === 'assistant_runtime'), false, '助手内部运行目录不得出现在外部契约')
         for (const name of ['create_visible_generation_task', 'submit_canvas_node_generation']) {
-          assert.equal(tools.includes(name), false, `未授权付费的连接不得看到 ${name}`)
-          assert.equal(contract.data.access.hiddenTools.find((item) => item.name === name)?.tier, 'paid')
+          assert.ok(tools.includes(name), `连接缺少生成工具 ${name}`)
         }
-        // 未授权付费时直接点名调用也必须被拒；拒绝发生在派发之前，不产生供应商请求。
-        const paid = await client.callTool({ name: 'create_visible_generation_task', arguments: { operationId: require('node:crypto').randomUUID(), baselineIds: [require('node:crypto').randomUUID()], modelId: 'fixture', prompt: '不应发出', mediaType: 'image' } }).catch((error) => ({ isError: true, thrown: String(error) }))
-        assert.equal(paid.isError, true, JSON.stringify(paid))
 
         // 跨工程目标：克隆夹具工程得到一个当前界面完全没有打开的后台工程。
         const backgroundProjectId = await page.evaluate(async (sourceId) => {
@@ -339,7 +300,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
         assert.equal(afterReload.name, 'MCP后台已保存')
       } finally {
         await client.close()
-        await closeMcpRestoringAccess(page, enteringAccess)
+        await closeMcp(page)
       }
       await setupSettings(page)
       await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()

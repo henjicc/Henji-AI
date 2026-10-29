@@ -48,7 +48,6 @@ beforeEach(() => {
     if (existing) return existing
     const copied = { ...asset, id: 'asset-copy', filePath: input.filePath }; assets.set(copied.id, copied); return copied
   })
-  vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined)
   vi.spyOn(getPlatform().system.paths, 'dirname').mockResolvedValue('D:/generated')
   vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
 })
@@ -68,8 +67,7 @@ function runtime() {
     reviewOperations: async () => ({ items: [] }), onReviews: () => () => {}, onCancel: () => () => undefined, onRevoke: () => () => undefined,
   }
   const dispose = attachLocalApplicationHost(platform, true)
-  const access = { allowWrites: true, allowDestructive: true, allowPaid: false }
-  const dispatcher = new ApplicationToolDispatcher({ assertActive: () => undefined, access: () => access }, bridge, coordinator)
+  const dispatcher = new ApplicationToolDispatcher({ assertActive: () => undefined }, bridge, coordinator)
   const caller = crypto.randomUUID()
   const call = (name: string, input: Record<string, unknown>) => dispatcher.call(caller, name, input, new AbortController().signal)
   return { store, coordinator, caller, call, dispose }
@@ -159,10 +157,11 @@ it('风格与模板能力：写入前的拒绝记为未执行、不留锁；风�
     // 每一条都在写入之前就被拒绝：结果是“未执行”，账本里不留待核对的操作，剪辑一点没变。
     await expectNotExecuted('create_video_edit_template', { documentRef, sequenceRef, clipRefs: [clip(first)], name: '重复登记' }, '已经是模板')
     await expectNotExecuted('apply_video_edit_template', { documentRef, sequenceRef, frame: 0, templateRef, trackRef: { kind: 'video_edit.track', id: `${projectId}:${audio.id}` } }, '视频轨')
-    await expectNotExecuted('update_video_edit_template', { templateRef, content: { kind: 'library', confirmed: true } }, '没有可升级的来源')
+    await expectNotExecuted('update_video_edit_template', { templateRef, content: { kind: 'library' } }, '没有可升级的来源')
     await expectNotExecuted('export_video_edit_style_package', { styleRef: { kind: 'video_edit.style', id: styleId }, path: 'D:/风格.txt' }, '.hjsty')
     expect((await call('bind_video_edit_style', { documentRef, sequenceRef, styleRef: { kind: 'video_edit.style', id: styleId } })).ok).toBe(true)
-    await expectNotExecuted('bind_video_edit_style', { documentRef, sequenceRef, styleRef: { kind: 'video_edit.style', id: otherId } }, 'replace:true')
+    expect((await call('bind_video_edit_style', { documentRef, sequenceRef, styleRef: { kind: 'video_edit.style', id: otherId } })).ok).toBe(true)
+    expect(savedVideoEdit(owner).sequences[0].styleId).toBe(otherId)
     expect((await call('detach_video_edit_template_instance', { documentRef, sequenceRef, clipRefs: [clip(first)] })).ok).toBe(true)
     await expectNotExecuted('detach_video_edit_template_instance', { documentRef, sequenceRef, clipRefs: [clip(first)] }, '不属于任何模板')
     await expectNotExecuted('update_video_edit_template', { templateRef, content: { kind: 'clips', sequenceRef, clipRefs: [clip(first)] } }, '实例片段')
@@ -176,6 +175,7 @@ it('风格与模板能力：写入前的拒绝记为未执行、不留锁；风�
     videoEditStyleLibrary.reset(io, undefined); expect(videoEditStyleLibrary.loaded()).toBe(false)
     const registered = await call('create_video_edit_template', { documentRef, sequenceRef, clipRefs: [clip(first)], name: '出场人名条', styleId: otherId })
     expect(registered, JSON.stringify(registered)).toMatchObject({ ok: true, executionState: 'completed', verificationState: 'verified' })
+    await videoEditStyleLibrary.ready()
     expect(savedVideoEdit(owner).templates?.find(value => value.name === '出场人名条')?.style).toMatchObject({ id: otherId, version: videoEditStyleLibrary.requireStyle(otherId).style.version })
     // 通用属性 project_template.style_id 同一语义：风格库没读过时写库风格 id 也能找到。
     videoEditStyleLibrary.reset(io, undefined)

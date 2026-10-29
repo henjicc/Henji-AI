@@ -1,6 +1,8 @@
+import type { OperationRecord } from '../services/application-runtime/operationStore'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  record: undefined as OperationRecord | undefined,
   handlers: new Map<string, (event: unknown, input: unknown) => Promise<unknown>>(),
   generate: vi.fn(),
   continuePolling: vi.fn(),
@@ -24,6 +26,8 @@ vi.mock('electron', () => ({
     },
   },
 }))
+
+vi.mock('../services/application-runtime/runtime', () => ({ getApplicationRuntime: () => ({ operations: { store: { get: () => mocks.record, save: (record: OperationRecord) => { mocks.record = record } } } }) }))
 
 vi.mock('../services/ai-runtime/runtime', () => ({
   cancelRuntimeTask: vi.fn(),
@@ -83,6 +87,7 @@ function handler(channel: string) {
 }
 
 beforeEach(() => {
+  mocks.record = { operationId: '00000000-0000-4000-8000-000000000001', callerId: '00000000-0000-4000-8000-000000000002', capabilityId: 'create_visible_generation_task', state: 'completed', input: {}, inputDigest: '', approval: { decision: 'auto', reason: '额度内' }, paidReservations: [{ category: 'generation', estimatedCny: 1, reservedAt: Date.now(), generationTaskIds: ['request-a', 'r1', 'r3'], approval: { decision: 'auto', reason: '额度内' } }] }
   mocks.handlers.clear()
   vi.clearAllMocks()
   registerAiRuntimeIpc()
@@ -144,6 +149,7 @@ describe('AI/LLM IPC 契约', () => {
     const event = { sender: { send: vi.fn() } }
 
     await expect(handler('ai:generate')(event, {
+      paidReceipt: { operationId: '00000000-0000-4000-8000-000000000001', callerId: '00000000-0000-4000-8000-000000000002' },
       modelId: 'model-a',
       params: { prompt: 'hello' },
       requestId: 'request-a',
@@ -178,7 +184,7 @@ describe('AI/LLM IPC 契约', () => {
     mocks.generate.mockResolvedValue({ status: 'completed', url: 'u' })
     mocks.continuePolling.mockResolvedValue({ status: 'completed', url: 'u' })
     mocks.resolveContainerGeneratedFolder.mockResolvedValueOnce('/work/项目/海报/生成结果')
-    await handler('ai:generate')(event, { modelId: 'model-a', params: {}, requestId: 'r1', outputContainer: { kind: 'project', projectId: 'proj_1' } })
+    await handler('ai:generate')(event, { modelId: 'model-a', params: {}, requestId: 'r1', paidReceipt: { operationId: '00000000-0000-4000-8000-000000000001', callerId: '00000000-0000-4000-8000-000000000002' }, outputContainer: { kind: 'project', projectId: 'proj_1' } })
     expect(mocks.resolveContainerGeneratedFolder).toHaveBeenCalledWith({ kind: 'project', projectId: 'proj_1' })
     expect(mocks.generate).toHaveBeenLastCalledWith({ modelId: 'model-a', params: {}, requestId: 'r1' }, { outputDirectory: '/work/项目/海报/生成结果' })
     mocks.resolveContainerGeneratedFolder.mockRejectedValueOnce(Object.assign(new Error('missing'), { name: 'ProjectNotFoundError' }))
@@ -186,7 +192,7 @@ describe('AI/LLM IPC 契约', () => {
     expect(mocks.continuePolling).toHaveBeenLastCalledWith({ modelId: 'model-a', taskId: 't', params: undefined, requestId: 'r2' }, {})
     // 作品目录本身不用解析
     mocks.resolveContainerGeneratedFolder.mockClear()
-    await handler('ai:generate')(event, { modelId: 'model-a', params: {}, requestId: 'r3', outputContainer: { kind: 'user' } })
+    await handler('ai:generate')(event, { modelId: 'model-a', params: {}, requestId: 'r3', paidReceipt: { operationId: '00000000-0000-4000-8000-000000000001', callerId: '00000000-0000-4000-8000-000000000002' }, outputContainer: { kind: 'user' } })
     expect(mocks.resolveContainerGeneratedFolder).not.toHaveBeenCalled()
     await expect(handler('ai:generate')(event, { modelId: 'model-a', params: {}, outputContainer: { kind: 'project' } })).resolves.toMatchObject({ ok: false })
   })

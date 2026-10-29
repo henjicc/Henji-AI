@@ -20,7 +20,7 @@ export interface DocumentKindDescriptor<TContent = unknown> {
   readonly extension: string
   /** 仍可读取的旧扩展名：扫描与打开都认，改名、移动或保存时换成当前扩展名。 */
   readonly legacyExtensions?: readonly string[]
-  /** 独立存放（不属于任何项目）时所在的作品目录子文件夹名；null 表示只能放在项目里（剪辑）。 */
+  /** 独立存放（不属于任何项目）时所在的作品目录子文件夹名；null 表示该类型没有默认独立存放目录。 */
   readonly standaloneFolderNames: Readonly<Record<FolderLocale, string>> | null
   /** 放在项目里时默认在素材文件夹下的这个子文件夹（如网页录制的“录屏”）；省略时放在项目根目录。 */
   readonly projectMaterialsFolderNames?: Readonly<Record<FolderLocale, string>>

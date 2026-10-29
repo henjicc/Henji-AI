@@ -86,7 +86,7 @@ describe('通用数据源', () => {
     expect(kit.commands.trashed).toEqual([])
   })
 
-  it('遗留草稿带标记排在最前，只出现一次；单击走同一个打开入口，菜单移到回收站经确认', async () => {
+  it('遗留草稿带标记排在最前，只出现一次；单击走同一个打开入口，菜单直接移到回收站', async () => {
     const kit = createTestRegistry()
     const saved = kit.commands.seed({ name: '已保存', content: { items: [] } })
     const draft = kit.commands.seed({ name: '未命名测试 1', content: { items: ['x'] }, draft: true })
@@ -102,8 +102,6 @@ describe('通用数据源', () => {
     await waitFor(() => expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: draft.id })))
     fireEvent.contextMenu(card(draft.id))
     fireEvent.click(within(document.querySelector('[data-context-menu]') as HTMLElement).getByText('移到回收站'))
-    const dialog = await screen.findByRole('dialog')
-    fireEvent.click(within(dialog).getByRole('button', { name: '移到回收站' }))
     await waitFor(() => expect(card(draft.id)).toBeNull())
     expect(kit.commands.trashed).toEqual([draft.id])
   })
@@ -175,9 +173,6 @@ describe('卡片右键', () => {
 
     await openMenu(standalone.id)
     fireEvent.click(await screen.findByText('移到回收站'))
-    const dialog = await screen.findByRole('dialog')
-    expect(dialog.textContent).toContain('可以从系统回收站找回')
-    fireEvent.click(within(dialog).getByRole('button', { name: '移到回收站' }))
     await waitFor(() => expect(commands.trashed).toContain(standalone.id))
   })
 })

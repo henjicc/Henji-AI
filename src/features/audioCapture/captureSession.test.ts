@@ -5,8 +5,8 @@ import { audioCaptureFileName } from '@/core/audioCapture/fileName'
 import { captureTimecode, CaptureWaveform } from './captureLiveModel'
 
 function fixture() {
-  const platform = captureFixture(), imported = vi.fn(async () => 'draft'), confirm = vi.fn(async () => true)
-  return { ...platform, imported, confirm, session: new CaptureSession(platform.api, imported, confirm) }
+  const platform = captureFixture(), imported = vi.fn(async () => 'draft')
+  return { ...platform, imported, session: new CaptureSession(platform.api, imported) }
 }
 describe('录音会话', () => {
   it('开始、暂停、继续、停止后按原文件导入一次，并清除恢复记录', async () => {
@@ -27,14 +27,11 @@ describe('录音会话', () => {
     expect(api.start).toHaveBeenCalledTimes(1)
     expect(session.store.getState()).toMatchObject({ phase: 'idle', busy: false, error: '设备被占用' })
   })
-  it('取消离开和放弃不停止；确认离开只保留文件，放弃才进入回收站', async () => {
-    const { session, confirm, api, imported } = fixture()
+  it('离开直接停止并保留文件，放弃直接进入回收站', async () => {
+    const { session, api, imported } = fixture()
     await session.open(); await session.start()
-    confirm.mockResolvedValue(false)
-    expect(await session.leave()).toBe(false); await session.discard()
-    expect(api.stop).not.toHaveBeenCalled(); expect(api.trashFile).not.toHaveBeenCalled()
-    confirm.mockResolvedValue(true)
     expect(await session.leave()).toBe(true)
+    expect(api.stop).toHaveBeenCalledOnce(); expect(api.trashFile).not.toHaveBeenCalled()
     expect(imported).not.toHaveBeenCalled(); expect(api.completeFile).not.toHaveBeenCalled()
     await session.discard(); expect(api.trashFile).toHaveBeenCalledTimes(1)
   })
@@ -75,7 +72,7 @@ it('本地日期命名、毫秒时间码与有界实时波形', () => {
 it('编辑器暂停结束 take 并提交，释放锁后可编辑，继续使用新播放头位置', async () => {
   const { api } = captureFixture()
   const release = vi.fn(), lock = vi.fn(() => release), commit = vi.fn(async (_path: string, _placement: import('@/core/audioCapture/contracts').AudioCapturePlacement) => undefined)
-  const session = new CaptureSession(api, vi.fn(), async () => true, { lock, commit, progress: vi.fn(), rate: () => 48000 })
+  const session = new CaptureSession(api, vi.fn(), { lock, commit, progress: vi.fn(), rate: () => 48000 })
   const placement = { projectId: 'p', startFrame: 100, endFrame: 100, revision: 1, spliceId: 'eced7817-a431-49e0-8890-5bf4b08ecb44' }
   await session.start(placement)
   expect(api.prepareFile).toHaveBeenCalledWith(placement)
@@ -96,7 +93,7 @@ it('编辑器暂停结束 take 并提交，释放锁后可编辑，继续使用�
 it('覆盖录音到达末尾自动结束，启动失败释放编辑锁', async () => {
   const { api, emit, status } = captureFixture()
   const release = vi.fn(), commit = vi.fn(async () => undefined)
-  const session = new CaptureSession(api, vi.fn(), async () => true, { lock: () => release, commit, progress: vi.fn(), rate: () => 48000 })
+  const session = new CaptureSession(api, vi.fn(), { lock: () => release, commit, progress: vi.fn(), rate: () => 48000 })
   const placement = { projectId: 'p', startFrame: 0, endFrame: 48000, revision: 1, spliceId: 'eced7817-a431-49e0-8890-5bf4b08ecb44' }
   vi.mocked(api.getSettings).mockRejectedValueOnce(new Error('设备不可用'))
   await expect(session.start(placement)).rejects.toThrow('设备不可用')
@@ -110,7 +107,7 @@ it('覆盖录音到达末尾自动结束，启动失败释放编辑锁', async (
 it('设备中断后离开先修复文件并提交；失败保留会话，不能删掉待恢复的空草稿', async () => {
   const { api, emit, status } = captureFixture()
   const release = vi.fn(), commit = vi.fn(async () => undefined)
-  const session = new CaptureSession(api, vi.fn(), async () => true, { lock: () => release, commit, progress: vi.fn(), rate: () => 48000 })
+  const session = new CaptureSession(api, vi.fn(), { lock: () => release, commit, progress: vi.fn(), rate: () => 48000 })
   await session.start({ projectId: 'p', startFrame: 0, endFrame: 0, revision: 1, spliceId: 'eced7817-a431-49e0-8890-5bf4b08ecb44' })
   emit({ event: 'interrupted', sessionId: status.sessionId, outputPath: status.outputPath, writtenBytes: 432000, error: { code: 'DISCONNECTED', message: '设备拔出', recoverable: true } })
   commit.mockRejectedValueOnce(new Error('保存失败'))

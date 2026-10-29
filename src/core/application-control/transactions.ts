@@ -168,8 +168,6 @@ export const applicationChangePlanSchema = z.object({
   contractVersion: z.literal('application-control/v2'),
   planRef: applicationOpaqueRefSchema,
   summary: z.string().min(1).max(2_000),
-  risk: z.enum(['R0', 'R1', 'R2', 'R3', 'R4']),
-  requiresApproval: z.boolean(),
   atomic: z.boolean(),
   transactionMode: applicationTransactionModeSchema,
   steps: z.array(applicationPlannedStepSchema).min(1).max(256),
@@ -186,7 +184,6 @@ export const applicationCommitRequestSchema = z.object({
   planRef: applicationOpaqueRefSchema,
   expectedRevisions: applicationRevisionSetSchema,
   idempotencyKey: z.string().min(16).max(256),
-  approvedRisk: z.enum(['R0', 'R1', 'R2', 'R3']).optional(),
 }).strict()
 export type ApplicationCommitRequest = z.infer<typeof applicationCommitRequestSchema>
 

@@ -80,14 +80,14 @@ it('机位配置隐藏二维选项，候选预览与钉住走同源回调', () =
   fireEvent.click(screen.getByRole('button', { name: '应用' })); expect(p.onApply).toHaveBeenCalledOnce()
 })
 
-it('整理通过共享外发确认预检，取消不生成，发送后只生成一次', async () => {
-  const p = props(), confirm = vi.fn(async () => {}), prepareGeneration = vi.fn(async () => ({ paidDetails: { estimatedCny: null, dailySpentCny: 0, category: 'explanation' as const }, hasProject: true, cancel: vi.fn(async () => {}), modelName: '实际模型', imageCount: 2, confirm }))
+it('整理通过共享付费预检，取消不生成，发送后只生成一次', async () => {
+  const p = props(), confirm = vi.fn(async () => {}), prepareGeneration = vi.fn(async () => ({ paidDetails: { estimatedCny: null, dailySpentCny: 0, category: 'explanation' as const }, cancel: vi.fn(async () => {}), modelName: '实际模型', imageCount: 2, confirm }))
   render(<CreativeIntentControls {...p} contextKey="session" prepareGeneration={prepareGeneration} />)
   fireEvent.click(screen.getByRole('button', { name: '重新整理' }))
   await screen.findByRole('alertdialog'); expect(p.onOptimize).not.toHaveBeenCalled()
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: '拒绝' })) }); expect(confirm).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: '重新整理' })); await screen.findByRole('alertdialog')
-  const allow = screen.getByRole('button', { name: '本项目始终允许' }); fireEvent.click(allow); fireEvent.click(allow)
+  const allow = screen.getByRole('button', { name: '允许本次' }); fireEvent.click(allow); fireEvent.click(allow)
   await waitFor(() => expect(p.onOptimize).toHaveBeenCalledOnce())
-  expect(confirm).toHaveBeenCalledOnce(); expect(confirm).toHaveBeenCalledWith(true)
+  expect(confirm).toHaveBeenCalledOnce(); expect(confirm).toHaveBeenCalledWith()
 })

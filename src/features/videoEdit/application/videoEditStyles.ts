@@ -22,12 +22,11 @@ export function newerLibraryStyleVersion(style: Pick<VideoEditStyle, 'id' | 'ver
   return library && library.style.version > style.version ? library.style.version : null
 }
 
-export class VideoEditStyleConflict extends Error {}
 /**
  * 把风格库里的风格复制进工程并绑定到序列（Frameflow bind 语义）：同一风格再次绑定即升级副本；
- * 序列已绑定别的风格、或工程副本比库里的版本更高时，需要用户确认后传 replace。不改时间线上的任何东西。
+ * 风格替换与降级同样进入工程撤销历史。
  */
-export async function bindVideoEditStyle(projectId: string, sequenceId: string, styleId: string, options: { replace?: boolean } = {}): Promise<{ style: VideoEditStyle; previous?: { id: string; version: number }; upgraded: boolean }> {
+export async function bindVideoEditStyle(projectId: string, sequenceId: string, styleId: string): Promise<{ style: VideoEditStyle; previous?: { id: string; version: number }; upgraded: boolean }> {
   await videoEditStyleLibrary.ready()
   const source = videoEditStyleLibrary.requireStyle(styleId).style
   const owner = requireVideoEditInstance(projectId)
@@ -35,8 +34,6 @@ export async function bindVideoEditStyle(projectId: string, sequenceId: string, 
   if (!sequence) throw new Error('原序列不存在。')
   const current = sequence.styleId ? owner.document.styles?.find(value => value.id === sequence.styleId) : undefined
   const copy = owner.document.styles?.find(value => value.id === styleId)
-  if (!options.replace && current && current.id !== styleId) throw new VideoEditStyleConflict(`序列已绑定“${current.name}” v${current.version}；确认换成“${source.name}”后传 replace:true。`)
-  if (!options.replace && copy && copy.version > source.version) throw new VideoEditStyleConflict(`工程里的“${copy.name}”是 v${copy.version}，比风格库的 v${source.version} 新；确认降级后传 replace:true。`)
   logger.info('style.bind.start', '绑定风格到序列', { context: { projectId, sequenceId, styleId } })
   const value = videoEditStyleSchema.parse(structuredClone(source))
   editVideoProject(projectId, document => ({

@@ -1,4 +1,6 @@
 import path from 'node:path'
+import fs from 'node:fs/promises'
+import { INTERNAL_FOLDER_NAME, PROJECT_MANIFEST_FILE_NAME, parseProjectManifestText } from '../../../../src/core/documents/projectManifest'
 import { setImmediate as yieldToIO } from 'node:timers/promises'
 import { collectMediaReferences } from '../../../../src/core/media/mediaReferences'
 import { createLocationCodec, type LocationContext } from '../../../../src/core/storage/locationCodec'
@@ -12,6 +14,8 @@ import { scanReferenceFiles, type ReferenceScanRoot } from './file-scanner'
 import { createPathCanonicalizer, within } from './paths'
 import { managedMediaRoots, overlapsManagedMediaRoot } from './queue'
 import { createMainLogger } from '../logging/main-logger'
+import { recycleBackupRoot } from '../recycle/runtime'
+import { RecycleStore } from '../recycle/store'
 
 const logger = createMainLogger('main.media_recycle')
 
@@ -122,11 +126,26 @@ export async function collectDocumentReferences(signal: AbortSignal, onlyRoot?: 
     // Orphan edit states are candidates, not independent reference owners.
     ...(db.prepare('SELECT id FROM history').all() as Array<{ id: string }>).map(row => ({ path: path.join(getProgramDataDir(), 'EditStates', `${row.id}.json`), optional: true })),
     { path: path.join(getProgramStoreDir('imageEditor'), 'documents'), optional: true },
+    { path: recycleBackupRoot(), optional: true },
   ]
   const extensions = [...documentExtensions, '.json']
+  const recycledFiles = new RecycleStore(db).files()
+  const projects = [...context.projects]
+  // 项目删除会移除作品索引；备份中的项目说明仍是相对引用的归属依据。
+  for (const item of recycledFiles) {
+    const manifest = await fs.readFile(path.join(item.payload, INTERNAL_FOLDER_NAME, PROJECT_MANIFEST_FILE_NAME), 'utf8').catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return null
+      throw error
+    })
+    if (!manifest) continue
+    const project = parseProjectManifestText(manifest)
+    if (!projects.some(value => value.id === project.id)) projects.push({ id: project.id, root: item.target })
+  }
   const scan = await scanReferenceFiles(roots, extensions, signal, async (file, values) => {
-    const project = [...context.projects].sort((a, b) => b.root.length - a.root.length).find(project => within(project.root, file))
-    const fileContext: LocationContext = { ...context, container: project ? { kind: 'project', projectId: project.id } : { kind: 'user' } }
+    const recycled = recycledFiles.find(item => item.payload === file || within(item.payload, file))
+    const source = recycled ? path.join(recycled.target, path.relative(recycled.payload, file)) : file
+    const project = [...projects].sort((a, b) => b.root.length - a.root.length).find(project => within(project.root, source))
+    const fileContext: LocationContext = { ...context, projects, container: project ? { kind: 'project', projectId: project.id } : { kind: 'user' } }
     for (const value of decodeReferenceValues(values, fileContext)) refs.add(value)
   })
   signal.throwIfAborted()

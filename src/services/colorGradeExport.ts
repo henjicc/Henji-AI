@@ -1,3 +1,4 @@
+import { getPlatform } from '@/platform/runtime'
 import { createLogger } from '@/core/logging'
 import { CDL_MAX_MEAN_DELTA_E, ColorGradeExportRejection, measureColorGradeExport, type AscCdl, type ColorGradeExportAccuracy, type ColorGradeExportBuild, type ColorGradeExportFormat, type ColorGradeLutSize } from '@/core/imaging/lut/colorGradeExport'
 import type { CubeLut } from '@/core/imaging/lut/cube'
@@ -54,7 +55,7 @@ function buildOffThread(request: ColorGradeExportWorkerRequest, signal?: AbortSi
 }
 
 /**
- * 写入前的失败（扩展名不对、目标已存在、CDL 表达不了、计算失败）一律抛 `ColorGradeExportRejection`，调用方可直接修正重试；
+ * 写入前的失败（扩展名不对、CDL 表达不了、计算失败）一律抛 `ColorGradeExportRejection`，调用方可直接修正重试；
  * 写入之后的失败保持原错误。
  */
 export async function exportColorGradeFile(request: ColorGradeExportRequest): Promise<ColorGradeExportFileResult> {
@@ -64,7 +65,6 @@ export async function exportColorGradeFile(request: ColorGradeExportRequest): Pr
   let written = false
   try {
     if (!request.path.toLowerCase().endsWith(`.${extension}`)) throw new ColorGradeExportRejection(`文件扩展名需要是 .${extension}。`)
-    if (!request.overwrite && await exists(request.path)) throw new ColorGradeExportRejection('目标文件已存在；确认覆盖后传 overwrite=true，或换一个文件名。')
     let build: ColorGradeExportBuild
     try {
       build = await buildOffThread({ params: request.params, format: request.format, title: request.title, lutSize: request.lutSize, luts: [...request.luts ?? []], omitted: request.omitted }, request.signal)
@@ -73,6 +73,7 @@ export async function exportColorGradeFile(request: ColorGradeExportRequest): Pr
       throw new ColorGradeExportRejection(`调色导出计算失败：${error instanceof Error ? error.message : String(error)}`, { cause: error })
     }
     request.signal?.throwIfAborted()
+    if (await exists(request.path)) await getPlatform().settings.preserveFile(request.path)
     written = true
     await writeTextFile(request.path, build.text)
     const accuracy = measureColorGradeExport(request.format, await readTextFile(request.path), build.check)
@@ -100,7 +101,7 @@ export function describeColorGradeExport(result: ColorGradeExportFileResult): st
   return `${head}${notes.length ? `；${notes.join('；')}` : ''}。`
 }
 
-/** 界面导出入口的保存对话框；系统对话框负责覆盖确认，所以界面路径随后以 overwrite 写入。 */
+/** 界面导出入口的保存对话框；覆盖前的文件由通用回收机制保留。 */
 export async function chooseColorGradeExportPath(format: ColorGradeExportFormat, baseName: string): Promise<string | null> {
   const extension = COLOR_GRADE_EXPORT_EXTENSIONS[format]
   const name = baseName.replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || '调色'

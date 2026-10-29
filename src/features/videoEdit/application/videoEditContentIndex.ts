@@ -28,16 +28,11 @@ export async function readVideoEditContentIndex(raw: unknown, context: Pick<Capa
   const input = queryVideoEditContentCapability.inputSchema.parse(raw)
   const { projectId, childId } = splitVideoEditRef(input.itemRef)
   if (projectId !== input.documentRef.id || !childId) throw new Error('itemRef 必须属于 documentRef，请使用完整素材引用。')
-  const permissions = context.callerGrant?.permissions
-  if (input.audioDocumentRef && permissions && !permissions.includes('audio_edit:read')) throw new Error('PERMISSION_DENIED:读取关联口播需要 audio_edit:read。')
-  if (input.recordingRef && permissions && !permissions.includes('screen_recording:read')) throw new Error('PERMISSION_DENIED:读取关联录制需要 screen_recording:read。')
   const owner = requireVideoEditInstance(projectId); const document = owner.document; const version = owner.contentVersion
   const item = document.items.find(item => item.id === childId)
   const media = document.media.find(media => media.id === item?.mediaId)
   if (!item || !media) throw new Error('请选择引用原始图片、视频或声音文件的素材项；嵌套序列须查询其原始素材。')
-  const queryPermissions = ['video_edit:read', ...(['audio_edit:read', 'screen_recording:read'] as const).filter(permission =>
-    (permission === 'audio_edit:read' ? input.audioDocumentRef : input.recordingRef) || input.discoveryScope !== 'none' && (!permissions || permissions.includes(permission)))]
-  const platform = getPlatform(); const task = beginVideoEditContentQuery(owner, childId, context.signal, queryPermissions); const signal = task.signal
+  const platform = getPlatform(); const task = beginVideoEditContentQuery(owner, childId, context.signal); const signal = task.signal
   const warnings: string[] = []
   logger.info('素材内容索引查询开始', { event: 'video_edit.content_index.query.start', requestId: context.requestId, context: { projectId, itemId: childId } })
   try {

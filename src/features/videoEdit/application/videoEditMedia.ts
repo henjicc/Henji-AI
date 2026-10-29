@@ -49,7 +49,6 @@ async function inspectMedia(path: string, signal?: AbortSignal, verifyImport = f
   signal?.throwIfAborted()
   const platform = getPlatform()
   if (!await platform.system.fs.exists(path)) throw new Error('源文件已移动或丢失，请重新定位素材。')
-  await platform.media.allowRoot(await platform.system.paths.dirname(path))
   // The file kind is only known after probing. A fixed kind gives the before/after stat identity
   // the same namespace, including for audio-only containers and still images.
   const before = await (verifyImport ? platform.assetLibrary.inspectFileContent(path, 'video', true) : platform.assetLibrary.inspectFileContent(path, 'video'))

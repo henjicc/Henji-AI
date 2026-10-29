@@ -1,8 +1,8 @@
 import { UI_ICON_SIZE } from '@/core/theme/icons'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { RotateCcw, Undo2 } from 'lucide-react'
 import ContextMenu from '@/components/ContextMenu'
-import { AlertDialog, UiIconButton } from '@/components/ui'
+import { UiIconButton } from '@/components/ui'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { hasAudioEditModifications } from '@/core/audioEdit/baseline'
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
@@ -18,24 +18,22 @@ export function AudioEditUndoButton({ project, canUndo, disabled, onUndo, onRest
   const timer = useRef<ReturnType<typeof setTimeout>>()
   const longPressed = useRef(false)
   const restoring = useRef(false)
-  const [confirmation, setConfirmation] = useState<{ id: string; version: number } | null>(null)
   const canReset = useMemo(() => hasAudioEditModifications(project), [project])
   const cancelPress = () => clearTimeout(timer.current)
   useEffect(() => () => clearTimeout(timer.current), [])
-  useEffect(() => { setConfirmation(null); hideMenu(); clearTimeout(timer.current) }, [project.id, hideMenu])
+  useEffect(() => { hideMenu(); clearTimeout(timer.current) }, [project.id, hideMenu])
   const showMenu = (event: React.MouseEvent) => menu.showMenu(event, [{
     id: 'reset', label: '撤销所有修改', icon: <RotateCcw size={UI_ICON_SIZE.md} />, disabled: disabled || !canReset,
     onClick: () => {
       menu.hideMenu()
       const instance = getAudioEditProjectInstance(project.id)
-      if (instance) setConfirmation({ id: project.id, version: instance.version })
+      if (instance) void restore(instance.version)
     },
   }])
-  const restore = async () => {
-    if (!confirmation || restoring.current) return
+  const restore = async (version: number) => {
+    if (restoring.current) return
     restoring.current = true
-    setConfirmation(null)
-    try { await undoAllAudioEditChanges(confirmation.id, confirmation.version); onRestored() }
+    try { await undoAllAudioEditChanges(project.id, version); onRestored() }
     catch (error) { onError(error) }
     finally { restoring.current = false }
   }
@@ -52,8 +50,5 @@ export function AudioEditUndoButton({ project, canUndo, disabled, onUndo, onRest
       <Undo2  />
     </UiIconButton>
     <ContextMenu visible={menu.menuVisible} position={menu.menuPosition} items={menu.menuItems} onClose={menu.hideMenu} />
-    <AlertDialog isOpen={Boolean(confirmation)} title="撤销所有修改？" type="warning" closeLabel="取消"
-      message={`将恢复全部声音和初始字幕，撤销删除、静音、分段、锁定及声音处理设置。项目名、参考稿和显示偏好保留；本次恢复仍可撤销。${project.editBaseline?.kind !== 'original' ? '\n此旧项目未保存最初识别原文，只能恢复至本版本保留的文字，早期改写无法追回。' : ''}`}
-      onClose={() => setConfirmation(null)} actions={[{ label: '确认撤销所有修改', variant: 'primary', onClick: () => void restore() }]} />
   </>
 }

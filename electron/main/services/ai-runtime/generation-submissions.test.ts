@@ -34,6 +34,7 @@ function openSubmissions(): Database.Database {
 function openHistory(): { db: Database.Database; store: GenerationHistoryStore; find: (id: string) => ReturnType<GenerationHistoryStore['getStatus']> } {
   const db = new Database(':memory:')
   createGenerationHistoryTablesV1(db)
+  db.exec('ALTER TABLE history ADD COLUMN deleted_at INTEGER')
   const store = new GenerationHistoryStore(() => db, identityDatabaseLocations)
   return { db, store, find: (id) => store.getStatus(id) }
 }
@@ -120,17 +121,14 @@ describe('原生生成提交事实', () => {
     const coordinator = new ApplicationOperationCoordinator(store)
     const baseline = store.baseline('caller', [{ kind: 'generation.model', id: 'model' }], { generation: 1 }, 'host')
     const input = { operationId: crypto.randomUUID(), baselineIds: [baseline.id], modelId: 'model', prompt: 'test', mediaType: 'image' }
-    const access = { allowWrites: true, allowDestructive: false, allowPaid: true }
-    const original = coordinator.prepare('caller', input, 'host', access, 'create_visible_generation_task')
+
+    const original = coordinator.prepare('caller', input, 'host', 'create_visible_generation_task')
     coordinator.dispatched({ ...original, approval: { decision: 'auto', reason: '夹具' } }, 'request', 'host')
     coordinator.interrupted('request', 'host')
-    expect(coordinator.prepare('caller', input, 'host', access, 'create_visible_generation_task').state).toBe('unknown')
-    expect(() => coordinator.prepare('caller', { ...input, operationId: crypto.randomUUID() },
-      'host', access, 'create_visible_generation_task')).toThrow('RECOVERY_REQUIRED')
-    const fresh = coordinator.prepare('caller', { ...input, prompt: 'another independent image', operationId: crypto.randomUUID() },
-      'host', access, 'create_visible_generation_task')
+    expect(coordinator.prepare('caller', input, 'host', 'create_visible_generation_task').state).toBe('unknown')
+    expect(() => coordinator.prepare('caller', { ...input, operationId: crypto.randomUUID() }, 'host', 'create_visible_generation_task')).toThrow('RECOVERY_REQUIRED')
+    const fresh = coordinator.prepare('caller', { ...input, prompt: 'another independent image', operationId: crypto.randomUUID() }, 'host', 'create_visible_generation_task')
     expect(fresh.state).toBe('prepared')
     expect(fresh.targetRefs).not.toEqual(original.targetRefs)
-    expect(() => coordinator.prepare('caller', { ...input, operationId: crypto.randomUUID() }, 'host', { ...access, allowPaid: false }, 'create_visible_generation_task')).toThrow('PERMISSION_DENIED')
   })
 })

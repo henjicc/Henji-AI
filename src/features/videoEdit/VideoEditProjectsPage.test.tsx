@@ -58,7 +58,7 @@ describe('剪辑项目页', () => {
     expect(ensureCover).toHaveBeenCalledWith('saved-edit')
   })
 
-  it('已保存项目点开交回项目；草稿项目带标记排在最前，可继续编辑或经确认整个移到回收站', async () => {
+  it('已保存项目点开交回项目；草稿项目带标记排在最前，可继续编辑或直接整个移到回收站', async () => {
     const { kit, actions, view } = setup()
     const saved = kit.commands.seedProject({ name: '旅行 Vlog' })
     const draft = kit.commands.seedProject({ name: '未命名项目 1', draft: true })
@@ -75,7 +75,6 @@ describe('剪辑项目页', () => {
     expect(actions.onOpen).toHaveBeenLastCalledWith(expect.objectContaining({ id: draft.id }))
     fireEvent.contextMenu(draftCard)
     fireEvent.click(within(document.querySelector('[data-context-menu]') as HTMLElement).getByText('移到回收站'))
-    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '移到回收站' }))
     await waitFor(() => expect(kit.commands.trashed).toContain(draft.id))
     await waitFor(() => expect(document.querySelector(`[data-project-id="${draft.id}"]`)).toBeNull())
   })
@@ -108,8 +107,6 @@ describe('剪辑项目页', () => {
 
     fireEvent.contextMenu(document.querySelector(`[data-project-id="${project.id}"]`)!)
     fireEvent.click(await screen.findByText('移到回收站'))
-    expect(await screen.findByText(/整个文件夹移到回收站/)).toBeTruthy()
-    fireEvent.click(screen.getAllByRole('button', { name: '移到回收站' }).at(-1)!)
     await waitFor(() => expect(kit.commands.trashed).toContain(project.id))
 
     fireEvent.contextMenu(document.querySelector(`[data-project-id="${external.id}"]`)!)

@@ -1,3 +1,4 @@
+import { recordingDirectorSchema } from '@/core/screenRecording/director'
 import { z } from 'zod'
 import { fieldDescriptors, fieldReadValues, fieldWriterTable, unrestrictedCollectionAvailability, type ApplicationEntityRegistration, type ApplicationFieldDefinition, type ApplicationSchemaRef, type JsonValue } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
@@ -8,26 +9,33 @@ import { readRecordingUnderstanding } from './recordingUnderstandingService'
 export const UNDERSTANDING_ENTITY = 'screen_recording.understanding'
 export const UNDERSTANDING_PROPERTY = `${UNDERSTANDING_ENTITY}.result`
 export function understandingSchemaRef(kind: 'entity' | 'property', id: string): ApplicationSchemaRef {
-  const hash = [...`${id}:4`].reduce((v, c) => (v * 33 + c.charCodeAt(0)) >>> 0, 5381).toString(16)
-  return { catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION, kind, id, version: 4, digest: `sha256:${hash.padEnd(64, hash).slice(0, 64)}` }
+  const hash = [...`${id}:5`].reduce((v, c) => (v * 33 + c.charCodeAt(0)) >>> 0, 5381).toString(16)
+  return { catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION, kind, id, version: 5, digest: `sha256:${hash.padEnd(64, hash).slice(0, 64)}` }
+}
+const editableUnderstandingSchema = z.object({ ...recordingUnderstandingSchema.shape, director: recordingDirectorSchema.omit({ confirmed: true }).optional() }).strict()
+export function editableRecordingUnderstanding(value: RecordingUnderstanding): z.infer<typeof editableUnderstandingSchema> {
+  if (!value.director) return value
+  const { confirmed: _confirmed, ...director } = value.director
+  return { ...value, director }
 }
 export const understandingFields: ApplicationFieldDefinition<RecordingUnderstanding, { value?: RecordingUnderstanding }>[] = [{
   propertyId: UNDERSTANDING_PROPERTY, storeActions: [],
-  descriptor: { id: UNDERSTANDING_PROPERTY, entityType: UNDERSTANDING_ENTITY, version: 4, title: '文字稿、步骤、剪辑与打码候选',
-    description: '先读取完整结果，再 set 校正标题、说明、时间、章节及剪辑候选 pending/accepted/rejected；privacy.candidates 是敏感信息候选，status accepted 表示确认打码，rejected 表示忽略，pending 尚未确认。支持逐条或全部确认，保留完整其余字段。微秒时间与原录制同钟，确认不会删除原片。operationScript 保存可编辑的录制操作脚本；只能修改已捕获步骤的标题、受支持属性参数和停留时间，不可移除阻断或扩大目标范围。导演会话还含 director.goal、narration（逐步旁白与预计画面）、voice 与 confirmed；修改脚本或音色先设 confirmed=false 保存，再另一次写入 true 审阅确认。只能使用有限脚本属性，不接受代码。可用返回的 undoRef 撤销。',
+  descriptor: { id: UNDERSTANDING_PROPERTY, entityType: UNDERSTANDING_ENTITY, version: 5, title: '文字稿、步骤、剪辑与打码候选',
+    description: '先读取完整结果，再 set 校正标题、说明、时间、章节及剪辑候选 pending/accepted/rejected；privacy.candidates 是敏感信息候选，status accepted 表示确认打码，rejected 表示忽略，pending 尚未确认。支持逐条或全部确认，保留完整其余字段。微秒时间与原录制同钟，确认不会删除原片。operationScript 保存可编辑的录制操作脚本；只能修改已捕获步骤的标题、受支持属性参数和停留时间，不可移除阻断或扩大目标范围。导演会话还含 director.goal、narration（逐步旁白与预计画面）与 voice；修改脚本或音色保存后即可直接执行。只能使用有限脚本属性，不接受代码。可用返回的 undoRef 撤销。',
     value: { kind: 'json', schemaRef: understandingSchemaRef('property', `${UNDERSTANDING_PROPERTY}.value`) }, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'],
     requiredPermissions: { read: ['screen_recording:read'], write: ['screen_recording:write'] }, revisionScopes: ['screen_recording'], requiresReadBaseline: true, schemaRef: understandingSchemaRef('property', UNDERSTANDING_PROPERTY),
   },
-  read: value => value,
-  writer: { write: (draft, mutation) => { draft.value = recordingUnderstandingSchema.parse(mutation.value) } },
+  read: editableRecordingUnderstanding,
+  // 文档字段保留既有落盘含义；公开写入只表达编辑内容。
+  writer: { write: (draft, mutation) => { const { director, ...value } = editableUnderstandingSchema.parse(mutation.value); draft.value = recordingUnderstandingSchema.parse({ ...value, ...(director ? { director: { ...director, confirmed: true } } : {}) }) } },
 }]
 export const understandingWriterTable = fieldWriterTable(understandingFields)
 export function recordingUnderstandingRegistration(): ApplicationEntityRegistration {
   const entityType = UNDERSTANDING_ENTITY
   return {
-    entity: { id: entityType, domain: 'screen_recording', version: 4, title: '录制理解结果', description: '已保存会话的文字稿、可编辑步骤与敏感信息候选；引用 id 与录制会话一致。', refKind: entityType, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: [], revisionScopes: ['screen_recording'], queryCapabilityIds: ['read_application_entity'], schemaRef: understandingSchemaRef('entity', entityType) },
+    entity: { id: entityType, domain: 'screen_recording', version: 5, title: '录制理解结果', description: '已保存会话的文字稿、可编辑步骤与敏感信息候选；引用 id 与录制会话一致。', refKind: entityType, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: [], revisionScopes: ['screen_recording'], queryCapabilityIds: ['read_application_entity'], schemaRef: understandingSchemaRef('entity', entityType) },
     properties: fieldDescriptors(understandingFields),
-    schemaDocuments: [{ ref: understandingSchemaRef('property', `${UNDERSTANDING_PROPERTY}.value`), value: z.toJSONSchema(recordingUnderstandingSchema) as JsonValue }],
+    schemaDocuments: [{ ref: understandingSchemaRef('property', `${UNDERSTANDING_PROPERTY}.value`), value: z.toJSONSchema(editableUnderstandingSchema) as JsonValue }],
     provider: {
       entityType,
       async listEntities(request) {

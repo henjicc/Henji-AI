@@ -22,7 +22,7 @@ let catalog: DocumentIndexStore
 const project = { id: 'project_1', path: path.resolve('test-user/project'), name: '项目', locale: 'zh' as const, folders: { generated: 'generated', materials: 'materials' }, draft: false, mainVideoEditId: null, createdAt: 1, external: false, missing: false, manifestModifiedAt: 1, manifestSize: 1, folderCreatedAt: 1, lastOpenedAt: null }
 beforeEach(() => {
   fixture = createCountedSqlite(); state.getDb.mockReturnValue(fixture.db)
-  createDocumentIndexSchemaV1(fixture.db); addDocumentIndexLastOpenedV1(fixture.db); createAssetLibraryTablesV1(fixture.db)
+  createDocumentIndexSchemaV1(fixture.db); addDocumentIndexLastOpenedV1(fixture.db); createAssetLibraryTablesV1(fixture.db); fixture.db.exec('ALTER TABLE assets ADD COLUMN deleted_at INTEGER; ALTER TABLE asset_libraries ADD COLUMN deleted_at INTEGER')
   catalog = new DocumentIndexStore(fixture.db, process.platform === 'win32' ? 'win32' : 'posix')
   catalog.upsertProject(project)
   const insert = fixture.db.prepare("INSERT INTO assets(id,media_type,display_name,file_path,source,inspection_status,created_at,updated_at) VALUES (?,'image',?,?,'imported','ready',1,1)")

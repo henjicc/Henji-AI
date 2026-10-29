@@ -3,7 +3,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Clock3, FilePen, Folder, Layers, LayoutGrid, List, Plus } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import ContextMenu from '@/components/ContextMenu';
-import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
 import {
   ProjectCardGrid,
   type ProjectCardGridExtraAction,
@@ -137,7 +136,7 @@ interface ProjectLibraryPageProps {
   loadingMore?: boolean;
   /** 意外退出留下的未保存草稿：排在最前，左栏多一个「未保存草稿」分类 */
   drafts?: ProjectCardGridItem[];
-  /** 草稿移到回收站（经过同一个确认对话框） */
+  /** 草稿移到回收站 */
   onDiscardDraft?: (item: ProjectCardGridItem) => void | Promise<void>;
   icon?: LucideIcon;
   emptyIcon?: React.ReactNode;
@@ -197,9 +196,9 @@ function isTypingTarget(target: EventTarget | null): boolean {
  *
  * 状态：读取中 / 读取失败时主区只有加载或错误；没有项目时主区只有一句邀请（支持拖入时加拖放提示），
  * 不重复放新建按钮。草稿排在列表最前，带“草稿”标记，单击继续编辑，菜单里可以移到回收站。
- * 键盘：Enter 打开焦点所在项，Delete 移到回收站（多选时针对所选，照常确认），F2 重命名，Ctrl+N 新建。
+ * 键盘：Enter 打开焦点所在项，Delete 移到回收站（多选时针对所选），F2 重命名，Ctrl+N 新建。
  *
- * 收口的是**页面骨架加接线**：滚动容器、左栏、页头、视图切换、多选、新建/重命名对话框、删除确认、右键菜单、快捷键。
+ * 收口的是**页面骨架加接线**：滚动容器、左栏、页头、视图切换、多选、新建/重命名对话框、删除、右键菜单、快捷键。
  * 调用方只提供数据来源、能力（新建方式、是否可重命名/删除）与场景专属动作，不开放样式覆盖口子。
  */
 export function ProjectLibraryPage({
@@ -232,7 +231,6 @@ export function ProjectLibraryPage({
   filter,
 }: ProjectLibraryPageProps): JSX.Element {
   const [nameDialog, setNameDialog] = useState<NameDialogState>(null);
-  const [pendingDelete, setPendingDelete] = useState<ProjectCardGridItem[] | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const dragDepthRef = useRef(0);
@@ -319,25 +317,24 @@ export function ProjectLibraryPage({
     }
   }, [create, showMenuAt]);
 
-  const confirmDelete = async (): Promise<void> => {
-    if (!pendingDelete) return;
+  const deleteItems = async (targets: ProjectCardGridItem[]): Promise<void> => {
+    if (deleting) return;
     setDeleting(true);
     try {
-      const draftTargets = pendingDelete.filter((item) => item.draft);
-      const savedTargets = pendingDelete.filter((item) => !item.draft);
+      const draftTargets = targets.filter((item) => item.draft);
+      const savedTargets = targets.filter((item) => !item.draft);
       for (const item of draftTargets) await onDiscardDraft?.(item);
       if (savedTargets.length) await onDelete?.(savedTargets);
       // 删完所选就退出多选：否则删光后页头仍是“已选择 0 项”工具条
       if (selection.active) selection.exit();
     } finally {
       setDeleting(false);
-      setPendingDelete(null);
     }
   };
 
   const manageable = (item: ProjectCardGridItem): boolean => !item.draft && (canManage?.(item) ?? true);
   const canTrash = (item: ProjectCardGridItem): boolean => (item.draft ? Boolean(onDiscardDraft) : Boolean(onDelete) && manageable(item));
-  const dialogOpen = nameDialog !== null || pendingDelete !== null;
+  const dialogOpen = nameDialog !== null || deleting;
 
   // Delete / F2：作用于键盘焦点所在的那一项；多选时 Delete 针对所选
   const handleKeyDown = (event: React.KeyboardEvent): void => {
@@ -351,7 +348,7 @@ export function ProjectLibraryPage({
         : focused && canTrash(focused) ? [focused] : [];
       if (!targets.length) return;
       event.preventDefault();
-      setPendingDelete(targets);
+      void deleteItems(targets);
       return;
     }
     if (focused && onRename && manageable(focused) && !selection.active) {
@@ -482,7 +479,7 @@ export function ProjectLibraryPage({
     <ProjectSelectionToolbar
       selection={selection}
       labels={labels.selection}
-      onDeleteSelected={() => setPendingDelete(visibleItems.filter((item) => !item.draft && selection.isSelected(item.id)))}
+      onDeleteSelected={() => void deleteItems(visibleItems.filter((item) => !item.draft && selection.isSelected(item.id)))}
     />
   ) : (
     <>
@@ -573,8 +570,8 @@ export function ProjectLibraryPage({
             emptyTitle={listEmptyTitle}
             onOpen={onOpen}
             onRename={onRename ? (item) => setNameDialog({ mode: 'rename', item }) : undefined}
-            onDeleteRequest={onDelete ? (targets) => setPendingDelete(targets) : undefined}
-            onDiscardDraftRequest={onDiscardDraft ? (item) => setPendingDelete([item]) : undefined}
+            onDeleteRequest={onDelete ? (targets) => void deleteItems(targets) : undefined}
+            onDiscardDraftRequest={onDiscardDraft ? (item) => void deleteItems([item]) : undefined}
             extraActions={extraActions}
             canManage={canManage}
             showMenu={showMenu}
@@ -593,24 +590,6 @@ export function ProjectLibraryPage({
         validate={dialogValidate}
       />
 
-      {onDelete || onDiscardDraft ? (
-        <DeleteConfirmDialog
-          isOpen={!!pendingDelete}
-          title={labels.deleteTitle ?? ''}
-          message={
-            pendingDelete
-              ? pendingDelete.length === 1
-                ? labels.deleteConfirmSingle?.(pendingDelete[0].name) ?? ''
-                : labels.deleteConfirmMultiple?.(pendingDelete.length) ?? ''
-              : ''
-          }
-          cancelLabel={labels.cancel}
-          confirmLabel={labels.confirmDelete ?? ''}
-          busy={deleting}
-          onCancel={() => setPendingDelete(null)}
-          onConfirm={() => void confirmDelete()}
-        />
-      ) : null}
 
       <ContextMenu items={menuItems} position={menuPosition} onClose={hideMenu} visible={menuVisible} />
     </div>

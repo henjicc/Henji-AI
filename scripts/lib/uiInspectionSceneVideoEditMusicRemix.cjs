@@ -91,10 +91,9 @@ function createVideoEditMusicRemixScene() {
       const store = () => fs.writeFileSync(path.join(ROOT, 'evidence.json'), JSON.stringify(evidence, null, 2))
       let client
       try {
-        await page.evaluate(dir => window.henjiNative.media.allowRoot(dir), ROOT)
         await page.getByRole('button', { name: '剪辑', exact: true }).click()
         if (await page.getByRole('button', { name: '关闭项目', exact: true }).isVisible()) await page.getByRole('button', { name: '关闭项目', exact: true }).click()
-        const identity = await authorizeMcpConnection(page, { name: '音频重构验收', allowWrites: true, allowDestructive: true })
+        const identity = await authorizeMcpConnection(page, { name: '音频重构验收' })
         client = await connectMcpClient(identity.config, 'Henji music remix Reality')
         for (const [index, song] of list.entries()) {
           const { file, value } = project(song, index)

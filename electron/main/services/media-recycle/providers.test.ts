@@ -15,6 +15,21 @@ import * as scanner from './file-scanner'
 import { MediaRecycleDeadline } from './lifecycle'
 import { collectUnreferencedMedia } from './collector'
 import { canonicalPath, fileIdentity } from './paths'
+import { buildProjectManifest } from '../../../../src/core/documents/projectManifest'
+
+it('项目已从索引移除后，回收副本仍按原项目解码相对媒体引用', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-recycle-project-')); directories.push(root)
+  const backup = path.join(root, 'backup'), target = path.join(root, 'project')
+  await fs.mkdir(path.join(backup, '.henji'), { recursive: true })
+  await fs.writeFile(path.join(backup, '.henji', 'project.json'), JSON.stringify(buildProjectManifest({ id: 'recovered-project', createdAt: new Date().toISOString(), locale: 'zh', draft: false })))
+  mocks.getDb.mockReturnValue({ prepare: (sql: string) => ({ all: () => sql.includes("kind = 'file'") ? [{ payload: backup, target }] : [] }) })
+  vi.mocked(databaseLocationContext).mockReturnValue({ style: process.platform === 'win32' ? 'win32' : 'posix', userRoot: path.join(root, 'user'), projects: [] })
+  vi.spyOn(scanner, 'scanReferenceFiles').mockImplementationOnce(async (_roots, _extensions, _signal, consume) => {
+    await consume(path.join(backup, '剪辑.hjvideo'), ['henji:/素材/旁白.wav'])
+    return { skippedLinks: [], unreadableLinks: [] }
+  })
+  expect((await collectDocumentReferences(new AbortController().signal)).references).toEqual([path.join(target, '素材', '旁白.wav')])
+})
 
 const context = { style: 'win32' as const, userRoot: 'D:/user', projects: [] }
 const directories: string[] = []

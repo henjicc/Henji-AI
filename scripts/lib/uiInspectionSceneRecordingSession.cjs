@@ -173,7 +173,7 @@ function createRecordingSessionScene() {
         assert.equal(editing.edit.meta.id, toolbox.edit.meta.id, '从剪辑发起的录制没有回到原剪辑')
         fs.writeFileSync(path.join(output, 'editing-document.json'), JSON.stringify(editing.edit, null, 2))
         await assignIsolatedMcpPort(page)
-        const identity = await authorizeMcpConnection(page, { name: '录制会话回读', allowWrites: true })
+        const identity = await authorizeMcpConnection(page, { name: '录制会话回读' })
         client = await connectMcpClient(identity.config, 'Henji recording session')
         const events = await callTool(client, 'read_screen_recording_events', { sessionRef: { kind: 'screen_recording.session', id: editing.meta.id }, limit: 2 })
         assert(events.data.events.length === 2 && events.data.nextOffset !== null, 'MCP 事件分页失败')

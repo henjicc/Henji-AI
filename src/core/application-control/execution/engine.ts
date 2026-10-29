@@ -26,11 +26,9 @@ import type {
   ApplicationExecutionContext,
   ApplicationMutationExecutor,
   ApplicationPlanRequest,
-  ApplicationRisk,
   ApplicationSemanticOperationExecutor,
 } from './types'
 
-const RISK_RANK: Record<ApplicationRisk, number> = { R0: 0, R1: 1, R2: 2, R3: 3, R4: 4 }
 
 interface UndoRecord {
   steps: ApplicationPlannedStep[]
@@ -184,8 +182,6 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
     if (new Date(stored.plan.expiresAt).getTime() <= this.now().getTime()) {
       return failure('INVALID_PLAN', '计划已过期，请重新读取状态并规划。', true)
     }
-    const approvalFailure = this.checkApproval(stored.plan, request)
-    if (approvalFailure) return approvalFailure
     const transactionRef = this.createOpaqueRef('transaction')
     const expected = planRevisions(stored.plan)
     const persistenceReceipts: ApplicationPersistenceReceipt[] = []
@@ -324,14 +320,14 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
     const persistenceReceipts: ApplicationPersistenceReceipt[] = []
     let executionStarted = false
     try {
-      await this.assertUndoPermissions(record.steps, context)
+      await this.assertUndoWritable(record.steps, context)
       const current = await this.readUndoCurrentRevisions(record.steps, record.results, context)
       const resultingRevisions: Record<string, number> = {}
       record.results.forEach((result) => mergeRevisions(resultingRevisions, result.resultingRevisions))
       assertExpectedRevisions(resultingRevisions, request.expectedRevisions)
       assertExpectedRevisions(request.expectedRevisions, current)
       assertOwnership(Object.keys(current))
-      const assertPermissions = await this.assertUndoPermissions(record.steps, context)
+      const assertPermissions = await this.assertUndoWritable(record.steps, context)
       const checked = await this.readUndoCurrentRevisions(record.steps, record.results, context)
       assertExpectedRevisions(request.expectedRevisions, checked)
       assertOwnership(Object.keys(checked))
@@ -419,17 +415,6 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
     }
   }
 
-  private checkApproval(
-    plan: ApplicationChangePlan,
-    request: ApplicationCommitRequest
-  ): ApplicationTransactionResult | undefined {
-    if (plan.risk === 'R4') return failure('PERMISSION_DENIED', '该计划风险等级禁止执行。', false)
-    if (!plan.requiresApproval) return undefined
-    if (!request.approvedRisk || RISK_RANK[request.approvedRisk] < RISK_RANK[plan.risk]) {
-      return failure('PERMISSION_DENIED', '计划需要匹配风险等级的明确批准。', true)
-    }
-    return undefined
-  }
 
   private forgetUndoRecord(undoRef: string): void {
     const record = this.undoRecords.get(undoRef)

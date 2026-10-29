@@ -12,7 +12,7 @@ import { approvePaidOperation, handleUiPaidApproval } from './paidApprovalPolicy
 import type { PaidApprovalDecision, PaidApprovalRequest } from '../../../../src/core/application-control/paidApproval'
 
 export interface LocalHostTransport { send(channel: string, payload: unknown): void }
-type Pending = { callerId: string; rendererEpoch: string; capabilityId: LocalHostRequest['capabilityId']; input: Record<string, unknown>; committed: boolean; waiting: boolean; allowPaid: boolean; paidRequest?: PaidApprovalRequest; resolve(value: Record<string, unknown>): void; reject(error: Error): void; cleanup(): void }
+type Pending = { callerId: string; rendererEpoch: string; capabilityId: LocalHostRequest['capabilityId']; input: Record<string, unknown>; committed: boolean; waiting: boolean; paidRequest?: PaidApprovalRequest; resolve(value: Record<string, unknown>): void; reject(error: Error): void; cleanup(): void }
 
 class ApplicationHostDisconnectedError extends Error {}
 
@@ -167,7 +167,7 @@ export class ApplicationHostBridge {
         // Generation amounts come from the official preparation result in the main-process ledger.
         const official = request.category === 'generation' && record.paidGenerationEstimate !== undefined
           ? { ...request, estimatedCny: record.paidGenerationEstimate } : request
-        const decision = approvePaidOperation(this.operations.store, record, official, pending.allowPaid, consent)
+        const decision = approvePaidOperation(this.operations.store, record, official, consent)
         pending.paidRequest = decision.decision === 'ask' && !consent ? request : undefined
         return decision
       }
@@ -199,7 +199,7 @@ export class ApplicationHostBridge {
     this.pending.delete(reply.requestId)
   }
   async execute(callerId: string, capabilityId: LocalHostRequest['capabilityId'], input: Record<string, unknown>, signal: AbortSignal,
-    options: { reviewTarget?: boolean; operation?: OperationRecord; recoveryVerification?: OperationRecord['recoveryVerification']; recoveryOperation?: LocalHostRequest['recoveryOperation']; allowWrites?: boolean; allowDestructive?: boolean; allowPaid?: boolean } = {}): Promise<Record<string, unknown>> {
+    options: { reviewTarget?: boolean; operation?: OperationRecord; recoveryVerification?: OperationRecord['recoveryVerification']; recoveryOperation?: LocalHostRequest['recoveryOperation']; } = {}): Promise<Record<string, unknown>> {
     const readOnly = !options.operation && BUILTIN_APPLICATION_CAPABILITIES.find(item => item.id === capabilityId)?.readOnly === true
     // 只读才可重新派发；写操作的未知执行事实仍交给原账本恢复。
     let reconnectDeadline: number | undefined
@@ -215,7 +215,7 @@ export class ApplicationHostBridge {
     }
   }
   private async dispatch(callerId: string, capabilityId: LocalHostRequest['capabilityId'], input: Record<string, unknown>, signal: AbortSignal,
-    options: { reviewTarget?: boolean; operation?: OperationRecord; recoveryVerification?: OperationRecord['recoveryVerification']; recoveryOperation?: LocalHostRequest['recoveryOperation']; allowWrites?: boolean; allowDestructive?: boolean; allowPaid?: boolean }, reconnectDeadline?: number): Promise<Record<string, unknown>> {
+    options: { reviewTarget?: boolean; operation?: OperationRecord; recoveryVerification?: OperationRecord['recoveryVerification']; recoveryOperation?: LocalHostRequest['recoveryOperation']; }, reconnectDeadline?: number): Promise<Record<string, unknown>> {
     this.assertAuthorized(callerId)
     if (this.unavailable) throw new ApplicationHostNotReadyError(this.unavailable)
     if (!this.ready || !this.host) {
@@ -226,7 +226,6 @@ export class ApplicationHostBridge {
       if (!this.ready || !this.host) throw new ApplicationHostNotReadyError(this.unavailable)
     }
     if (signal.aborted) return Promise.reject(new Error('请求已取消。'))
-    if ([...this.pending.values()].filter(pending => pending.waiting).length >= 8) return Promise.reject(new Error('应用正忙，请稍后重试。'))
     const host = this.host
     const requestId = randomUUID()
     return new Promise((resolve, reject) => {
@@ -243,12 +242,12 @@ export class ApplicationHostBridge {
       }
       const timer = setTimeout(cancel, Math.max(30_000, (BUILTIN_APPLICATION_CAPABILITIES.find(item => item.id === capabilityId)?.timeoutMs ?? 0) + 1_000))
       signal.addEventListener('abort', cancel, { once: true })
-      this.pending.set(requestId, { callerId, capabilityId, input, rendererEpoch: host.registration.rendererEpoch, committed: Boolean(options.operation), waiting: true, allowPaid: options.allowPaid === true, resolve, reject, cleanup: () => { clearTimeout(timer); signal.removeEventListener('abort', cancel) } })
+      this.pending.set(requestId, { callerId, capabilityId, input, rendererEpoch: host.registration.rendererEpoch, committed: Boolean(options.operation), waiting: true, resolve, reject, cleanup: () => { clearTimeout(timer); signal.removeEventListener('abort', cancel) } })
       try {
         this.assertAuthorized(callerId)
         if (options.operation) this.operations?.dispatched(options.operation, requestId, host.registration.rendererEpoch)
         host.transport.send('application:host:request', { requestId, rendererEpoch: host.registration.rendererEpoch, callerId, capabilityId, input,
-          allowWrites: options.allowWrites, allowDestructive: options.allowDestructive, allowPaid: options.allowPaid,
+          paidReceipt: options.operation ? { operationId: options.operation.operationId, callerId } : undefined,
           operationId: options.operation ? applicationInvocationId(callerId, options.operation.operationId) : undefined, expectedRevisions: options.operation?.expectedRevisions,
           paidGenerationEstimate: options.operation?.paidGenerationEstimate,
           reviewTarget: options.reviewTarget, caller: this.describeCaller?.(callerId), recoveryVerification: options.operation?.recoveryVerification ?? options.recoveryVerification, recoveryOperation: options.operation?.recoveryOperation ?? options.recoveryOperation } satisfies LocalHostRequest)

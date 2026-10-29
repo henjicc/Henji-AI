@@ -5,7 +5,6 @@ import { createLogger } from '@/core/logging'
 import { formatMediaCacheBytes, MEDIA_CACHE_CATEGORIES, MEDIA_CACHE_RETENTION_DAYS, type MediaCacheCategory, type MediaCacheRetentionDays, type MediaCacheUsage } from '@/core/media/mediaCache'
 import { getPlatform } from '@/platform/runtime'
 import { getMediaCacheSettings, subscribeMediaCacheSettings, updateMediaCacheSettings } from '@/services/mediaCache/mediaCacheSettings'
-import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 import SettingsSegmented from '../components/SettingsSegmented'
 
 const logger = createLogger('settings.mediaCache')
@@ -35,7 +34,6 @@ const MediaCacheSection: React.FC = () => {
   }, [refresh])
 
   const clear = async (category: MediaCacheCategory | 'all'): Promise<void> => {
-    if (category === 'all' && !await requestAlertConfirmation({ title: t('sections.mediaCache.clearAllTitle'), message: t('sections.mediaCache.clearAllMessage'), confirmLabel: t('sections.mediaCache.clearAll'), confirmTone: 'danger' })) return
     setBusy(category); setError('')
     try { await getPlatform().mediaCache.clear(category) } catch (reason) {
       logger.warn('缓存清除失败', { event: 'media_cache.clear.failed', error: reason, context: { category } })

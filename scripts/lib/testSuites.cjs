@@ -40,6 +40,7 @@ const NATIVE_TEST_FILES = [
   'electron/main/services/logging/agent-trace-store.test.ts',
   'electron/main/services/documents/index.native.test.ts',
   'electron/main/services/db-migrations.native.test.ts',
+  'electron/main/services/recycle/runtime.native.test.ts',
   'electron/main/services/db-recovery.native.test.ts',
 ]
 // 真实 FFmpeg CLI 兼容层（任务 3.7）：用已就绪的随包 ffmpeg/ffprobe 实跑与核对全仓参数，不进普通单测。
@@ -89,7 +90,8 @@ function testSuiteOptions(mode, defaultExcludes = []) {
     pool: 'forks', minWorkers: 1, maxWorkers: 1, fileParallelism: false,
   }
   if (mode === 'ffmpeg-cli') return { include: FFMPEG_CLI_TEST_FILES }
-  return { include: ALL_TEST_PATTERNS, poolMatchGlobs: FORK_POOL_MATCH_GLOBS }
+  // Electron ABI 的 SQLite 用例由 npm test 后续的正式原生验收器执行。
+  return { include: ALL_TEST_PATTERNS, exclude: [...defaultExcludes, ...NATIVE_TEST_FILES], poolMatchGlobs: FORK_POOL_MATCH_GLOBS }
 }
 
 module.exports = { PERFORMANCE_TEST_FILES, GPU_TEST_FILES, IMAGE_EXPORT_TEST_FILES, NATIVE_TEST_FILES, FFMPEG_CLI_TEST_FILES, FORK_POOL_TEST_FILES, FORK_POOL_MATCH_GLOBS, ALL_TEST_PATTERNS, testSuiteForFile, testSuiteOptions }

@@ -3,11 +3,10 @@ import { videoEditSchemaRef } from './videoEditFields'
 import { listVideoEditInstances, requireVideoEditInstance, videoEditDomainRevision } from './videoEditService'
 
 const entityType = 'video_edit.explanation_session'
-const reason = '麦克风采集需用户在本机阅读范围并授权；音频、词稿、指向原稿由正式录制服务维护，不能通过属性写入伪造或复制。此实体只读非私密会话状态。音频外发需独立确认；文字与图像尚未授权外发，不经助手读取。'
+const reason = '会话阶段与原音留存由本机录制服务维护，不能通过属性写入伪造。讲解正文通过 explanation_body 实体读取和校正。'
 const fields = [
   { key: 'state', title: '讲解阶段', value: { kind: 'string' as const } },
   { key: 'audio_retention', title: '原音留存选择', value: { kind: 'string' as const } },
-  { key: 'audio_upload_allowed', title: '已确认音频外发', value: { kind: 'boolean' as const } },
 ]
 export function createVideoEditExplanationRegistration(): ApplicationEntityRegistration {
   const revisions = () => ({ video_edit: videoEditDomainRevision() })
@@ -29,7 +28,7 @@ export function createVideoEditExplanationRegistration(): ApplicationEntityRegis
         return { refs: refs.slice(offset,offset+request.limit), nextCursor:offset+request.limit<refs.length?String(offset+request.limit):null,revisions:revisions() }
       },
       async readEntity(ref,request) {
-        const session = requireSession(ref); const values: Record<string,JsonValue> = { [`${entityType}.state`]:session.state,[`${entityType}.audio_retention`]:session.retentionStatus,[`${entityType}.audio_upload_allowed`]:session.consent?.audioUpload??false }
+        const session = requireSession(ref); const values: Record<string,JsonValue> = { [`${entityType}.state`]:session.state,[`${entityType}.audio_retention`]:session.retentionStatus }
         return { ref,entityType,revisions:revisions(),properties:request.propertyIds?.length?Object.fromEntries(Object.entries(values).filter(([key])=>request.propertyIds!.includes(key))):values,capturedAt:new Date().toISOString() }
       },
       async getPropertyAvailability(ref,ids) { requireSession(ref); return ids.map(propertyId=>{ if (!properties.some(p=>p.id===propertyId)) throw new Error(`未知讲解属性：${propertyId}`); return {propertyId,readable:true,writable:false,reasons:[reason],requiredPermissions:['video_edit:read'],revisions:revisions()} }) },

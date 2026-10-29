@@ -84,7 +84,7 @@ describe('文件夹类型文档（.hjweb）', () => {
     await writeRecording(first.path, manifest(ID, first.name))
     const meta = await service.indexDocumentAt(first.path)
     expect(meta).toMatchObject({ id: ID, kind: 'web_recording', name: '开头演示', container: { kind: 'project', projectId: project.id } })
-    await expect(service.createFolderDocumentLocation({ kind: 'web_recording', container: { kind: 'user' }, name: 'x' })).rejects.toThrow('只能放在项目里')
+    await expect(service.createFolderDocumentLocation({ kind: 'web_recording', container: { kind: 'user' }, name: 'x' })).resolves.toMatchObject({ path: path.join(env.workRoot, '网页录制', 'x.hjweb') })
   })
 
   it('改名移动整个文件夹并把标题写进 recording.json；里面的文件原样保留', async () => {

@@ -167,6 +167,12 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
     scrollRef.current?.scrollTo({ top: 0 })
     void loadAssets(1, true)
   }, [loadAssets])
+  useEffect(() => subscribeRestored(async item => {
+    if (item.id.startsWith('assets:') || item.id.startsWith('asset_libraries:')) {
+      await refreshLibraries()
+      await loadAssets(1, true)
+    }
+  }), [refreshLibraries, loadAssets])
   useEffect(() => {
     const root = scrollRef.current
     const target = loadMoreRef.current
@@ -425,3 +431,4 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
     </div>
   )
 }
+import { subscribeRestored } from '@/services/recycle'

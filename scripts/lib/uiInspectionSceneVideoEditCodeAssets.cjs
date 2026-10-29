@@ -47,7 +47,7 @@ function createVideoEditCodeAssetsScene() {
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1')); await observeWorkers(page); observed = true; await button(page, '剪辑').click()
         const open = async file => { await dialogs(app, [file], file); await openVideoEditFile(page, file); await presented(page, 0) }
         await open(originFile)
-        const identity = await authorizeMcpConnection(page, { name: '代码资产真实工程验收', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji editable code assets Reality')
+        const identity = await authorizeMcpConnection(page, { name: '代码资产真实工程验收' }); client = await connectMcpClient(identity.config, 'Henji editable code assets Reality')
         const change = async changes => {
           const refs = [...new Map(changes.map(change => { const ref = change.target ?? change.parent; return [`${ref.kind}:${ref.id}`, ref] })).values()]; const baselines = []
           for (const ref of refs) baselines.push(await callTool(client, 'read_application_entity', { ref }))

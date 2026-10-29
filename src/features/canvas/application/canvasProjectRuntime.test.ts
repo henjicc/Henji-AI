@@ -86,14 +86,16 @@ describe('画布文档实例', () => {
     spy.mockRestore();
   });
 
-  it.each(['close', 'open'] as const)('离开对话框期间 %s 抢占打开 B 时释放 B 并返回 false', async (action) => {
+  it.each(['close', 'open'] as const)('草稿保存期间 %s 抢占打开 B 时释放 B 并返回 false', async (action) => {
     await useProjectStore.getState().createCanvasDraft();
     useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.textAnnotation, { x: 0, y: 0 }, { content: '草稿' });
     const b = project('superseded-b');
     const c = project('superseding-c');
     seedCanvasTestProject(b); seedCanvasTestProject(c);
     let decide!: () => void;
-    vi.spyOn(canvasTestRegistry().prompter, 'chooseLeaveAction').mockImplementation(() => new Promise(resolve => { decide = () => resolve('discard') }));
+    const commands = canvasTestRegistry().commands;
+    const finalize = commands.saveDocument.bind(commands);
+    vi.spyOn(commands, 'saveDocument').mockImplementationOnce(async (...args) => { await new Promise<void>(resolve => { decide = resolve }); return finalize(...args) });
     const opening = useProjectStore.getState().openCanvasDocument({ id: b.id });
     await vi.waitFor(() => expect(decide).toBeTypeOf('function'));
     const next = action === 'close' ? useProjectStore.getState().closeProject() : useProjectStore.getState().openCanvasDocument({ id: c.id });
@@ -112,7 +114,9 @@ describe('画布文档实例', () => {
     const b = project('same-target-b');
     seedCanvasTestProject(b);
     let decide!: () => void;
-    vi.spyOn(canvasTestRegistry().prompter, 'chooseLeaveAction').mockImplementation(() => new Promise(resolve => { decide = () => resolve('discard') }));
+    const commands = canvasTestRegistry().commands;
+    const finalize = commands.saveDocument.bind(commands);
+    vi.spyOn(commands, 'saveDocument').mockImplementationOnce(async (...args) => { await new Promise<void>(resolve => { decide = resolve }); return finalize(...args) });
     const first = useProjectStore.getState().openCanvasDocument({ id: b.id });
     await vi.waitFor(() => expect(decide).toBeTypeOf('function'));
     const second = useProjectStore.getState().openCanvasDocument({ id: b.id });
@@ -329,8 +333,8 @@ describe('画布文档实例', () => {
     expect(commands.calls.filter((call) => call === 'readDocument').length - reads).toBe(1)
   })
 
-  it('草稿离开：空草稿直接删除；有内容时取消留在原处，不保存移到回收站', async () => {
-    const { prompter, commands } = canvasTestRegistry()
+  it('草稿离开：空草稿清理，有内容自动保存并保留恢复身份', async () => {
+    const { commands } = canvasTestRegistry()
     const empty = await useProjectStore.getState().createCanvasDraft()
     expect(commands.stored(empty!)?.meta.draft).toBe(true)
     expect(await useProjectStore.getState().closeProject()).toBe('discarded')
@@ -338,12 +342,10 @@ describe('画布文档实例', () => {
 
     const draft = await useProjectStore.getState().createCanvasDraft()
     useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.textAnnotation, { x: 0, y: 0 }, { content: '有内容' })
-    prompter.leaveChoices.push('cancel')
-    expect(await useProjectStore.getState().closeProject()).toBe('cancelled')
-    expect(useProjectStore.getState().currentProjectId).toBe(draft)
-    prompter.leaveChoices.push('discard')
-    expect(await useProjectStore.getState().closeProject()).toBe('discarded')
-    expect(commands.trashed).toContain(draft)
+    expect(await useProjectStore.getState().closeProject()).toBe('saved')
+    expect(commands.stored(draft!)?.meta.draft).toBe(true)
+    expect(commands.stored(draft!)?.content).toMatchObject({ nodes: [expect.objectContaining({ data: expect.objectContaining({ content: '有内容' }) })] })
+    expect(commands.trashed).not.toContain(draft)
     expect(useProjectStore.getState().currentProjectId).toBeNull()
   })
 })

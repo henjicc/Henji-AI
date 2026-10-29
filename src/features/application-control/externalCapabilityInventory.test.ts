@@ -55,8 +55,6 @@ describe('外部能力面派生自真实注册表', () => {
 
   it('助手内部运行目录不透传给外部', () => {
     for (const id of NEVER_EXPOSED_DOMAINS) expect(byId.has(id), `${id} 不应出现在外部能力面`).toBe(false)
-    expect(domains.flatMap(domain => domain.entities.map(entity => entity.id)).filter(type => type.startsWith('assistant.')).sort()).toEqual(['assistant.memory', 'assistant.memory_settings'])
-    expect(externalWritableEntityTypes(domains).filter(type => type.startsWith('assistant.'))).toEqual(['assistant.memory', 'assistant.memory_settings'])
   })
 
   it('公开写入范围与 writeExclusion 声明一致，排除项一个都不放行', () => {
@@ -66,7 +64,7 @@ describe('外部能力面派生自真实注册表', () => {
       expect(writable.has(type), `${type} 应属于公开业务写入范围`).toBe(true)
     }
     // 声明了 writeExclusion 的实体一律在范围外，通用读改增删不能落到它们身上。
-    for (const type of ['generation.task', 'generation.result', 'generation.record', 'image_edit.preview', 'image_edit.resource', 'asset.catalog', 'storyboard.card', 'storyboard.document', 'toolbox.tool', 'canvas.document', 'camera_stage.document']) {
+    for (const type of ['generation.task', 'generation.result', 'image_edit.preview', 'image_edit.resource', 'asset.catalog', 'storyboard.card', 'storyboard.document', 'toolbox.tool', 'canvas.document', 'camera_stage.document']) {
       expect(writable.has(type), `${type} 已声明有意只读，不能出现在公开写入范围`).toBe(false)
     }
   })

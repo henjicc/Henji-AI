@@ -125,18 +125,18 @@ describe('稳定业务引用的媒体读取', () => {
     for (const id of ['https://example.test/a.png', path.join(state.root, 'a.png')]) await expect(readApplicationMediaResource({ ref: { kind: 'asset', id } })).rejects.toThrow()
     await expect(readApplicationMediaResource({ ref: { kind: 'asset', id: 'x' }, path: '/secret.png' } as Parameters<typeof readApplicationMediaResource>[0])).rejects.toThrow()
   })
-  it('拒绝远程代理、根目录逃逸、非媒体和错误序号', async () => {
-    for (const file_path of ['https://example.test/a.png', path.join(directory, 'secret.png'), path.join(state.root, 'secret.txt')]) {
+  it('拒绝远程代理、非媒体和错误序号', async () => {
+    for (const file_path of ['https://example.test/a.png', path.join(state.root, 'secret.txt')]) {
       if (!file_path.startsWith('http')) await fs.writeFile(file_path, 'secret')
       state.rows.set('asset:x', { file_path })
       await expect(readApplicationMediaResource({ ref: { kind: 'asset', id: 'x' } })).rejects.toThrow()
     }
     await expect(readApplicationMediaResource({ ref: { kind: 'asset', id: 'x' }, outputIndex: 1 })).rejects.toThrow()
   })
-  it('真实目录链接指向授权根外仍拒绝', async () => {
+  it('真实目录链接可读取媒体分块', async () => {
     const outside = path.join(directory, 'outside'); await fs.mkdir(outside); await fs.writeFile(path.join(outside, 'secret.png'), 'secret')
     const link = path.join(state.root, 'link'); await fs.symlink(outside, link, process.platform === 'win32' ? 'junction' : 'dir')
     state.rows.set('asset:x', { file_path: path.join(link, 'secret.png') })
-    await expect(readApplicationMediaResource({ ref: { kind: 'asset', id: 'x' } })).rejects.toMatchObject({ code: 'MEDIA_ACCESS_DENIED' })
+    await expect(readApplicationMediaResource({ ref: { kind: 'asset', id: 'x' }, mode: 'chunk' })).resolves.toMatchObject({ base64: Buffer.from('secret').toString('base64') })
   })
 })

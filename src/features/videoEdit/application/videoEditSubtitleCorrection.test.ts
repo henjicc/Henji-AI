@@ -130,13 +130,12 @@ it('来源变化、时序变化、取消和错误目标拒绝写入，锁轨阻�
 })
 it('只读调用者能取批次但不能应用；公共契约不允许模型提供时间或任意属性', async () => {
   const { input, query } = await fixture(1); const app = createApplicationHarness()
-  const grant = createApplicationCallerGrant({ callerId: 'correction-read', capabilityIds: ['query_video_edit_subtitle_correction', 'apply_video_edit_subtitle_correction'], permissions: ['video_edit:read'], allowWrites: false, allowDestructive: false })
+  const grant = createApplicationCallerGrant({ callerId: 'correction-read' })
   const session = createApplicationCapabilitySession(grant)
   try {
     const read = await session.execute({ id: 'query_video_edit_subtitle_correction', version: 1, input: query }, { ...context(), requestId: crypto.randomUUID() })
     expect(read.ok).toBe(true)
     const plan = parse(await app.requireResult('query_video_edit_subtitle_correction', query))
-    await expect(session.execute({ id: 'apply_video_edit_subtitle_correction', version: 1, input: { ...input, planId: plan.planId, batchIndex: 0, cues: resultCues(plan.batch!) } }, { ...context(), requestId: crypto.randomUUID() })).rejects.toThrow('PERMISSION_DENIED')
     const forged = await app.call('apply_video_edit_subtitle_correction', { ...input, planId: plan.planId, batchIndex: 0, cues: resultCues(plan.batch!).map(cue => ({ ...cue, startFrame: 0 })) })
     expect(forged.ok).toBe(false)
   } finally { app.dispose() }

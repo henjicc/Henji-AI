@@ -1,11 +1,11 @@
 /**
  * 外部连接的真实付费生成闭环核对。
  *
- * 默认只排练凭据、权限拒绝和既有媒体读取。明确指定 --paid 且已获授权时，
+ * 默认只排练凭据、工具发现和既有媒体读取。明确指定 --paid 且已获授权时，
  * 使用真实应用资料目录完成一次生成；隔离资料目录不能证明真实凭据可解密。
  *
- *   未授权付费的连接 → 工具缺席 + 点名调用在派发前 PERMISSION_DENIED + 零供应商请求
- *   授权付费的连接   → create_visible_generation_task 真实提交 → get_generation_task 轮询到完成
+ *   未已连接客户端 → 工具缺席 + 点名调用在派发前 PERMISSION_DENIED + 零供应商请求
+ *   已连接客户端   → create_visible_generation_task 真实提交 → get_generation_task 轮询到完成
  *                    → read_application_media 分块读回并与磁盘 SHA256 对齐
  *                    → add_generation_result_to_canvas 进画布并沿原引用回读
  *                    → 同 operationId 重传只拿回原回执，**不产生第二次供应商请求**
@@ -17,7 +17,7 @@
  * 用户既有工程、素材、设置一律不动。
  *
  * 用法：
- *   node scripts/mcp-paid-generation-check.cjs --probe   # 只验证凭据与未授权拒绝，零费用
+ *   node scripts/mcp-paid-generation-check.cjs --probe   # 只验证凭据与工具发现，零费用
  *   node scripts/mcp-paid-generation-check.cjs --paid    # 已获授权后，发起 1 次真实付费生成
  */
 const assert = require('node:assert/strict')
@@ -28,7 +28,7 @@ const fsp = require('node:fs/promises')
 const path = require('node:path')
 const { randomUUID } = require('node:crypto')
 const { launchElectronApp, waitForApp } = require('./lib/electronLaunch.cjs')
-const { authorizeMcpConnection, callTool, connectMcpClient, expectToolRefusal, operationEnvelope, readAllMedia, waitMcpReady } = require('./lib/uiInspectionMcpClient.cjs')
+const { authorizeMcpConnection, callTool, connectMcpClient, operationEnvelope, readAllMedia, waitMcpReady } = require('./lib/uiInspectionMcpClient.cjs')
 
 const ROOT = path.resolve(__dirname, '..')
 const MAIN_ENTRY = path.join(ROOT, 'out/main/index.cjs')
@@ -147,9 +147,9 @@ async function main() {
     const providerBefore = await countProviderRequests(page, evidence.startedAt)
     evidence.baseline = { historyCount: historyBefore, providerRequests: providerBefore }
 
-    // ——— 2. 未授权付费的连接：工具缺席 + 点名调用在派发前被拒 + 零供应商请求 ———
-    const unpaid = await authorizeMcpConnection(page, { name: `付费验收-未授权-${nonce}`, allowWrites: true })
-    created.connections.push(unpaid.id)
+    // 连接共享完整目录，费用仍由统一付费策略决定。
+    const identity = await authorizeMcpConnection(page, { name: `付费验收-${nonce}` })
+    created.connections.push(identity.id)
     await page.evaluate(async (targetPort) => {
       const state = await window.henjiNative.mcp.status()
       if (state.port !== targetPort) {
@@ -158,28 +158,13 @@ async function main() {
       }
     }, port)
     await waitMcpReady(page)
-    const config = (identity) => ({ url: `http://127.0.0.1:${port}/mcp`, headers: identity.config.headers })
-    const unpaidClient = await connectMcpClient(config(unpaid), 'Henji paid unpaid')
+    const config = () => ({ url: `http://127.0.0.1:${port}/mcp`, headers: identity.config.headers })
+    const discovery = await connectMcpClient(config(), 'Henji paid discovery')
     try {
-      const tools = (await unpaidClient.listTools()).tools.map((tool) => tool.name)
-      assert.equal(tools.includes('create_visible_generation_task'), false, '未授权付费的连接看到了发起生成的工具')
-      const contract = await callTool(unpaidClient, 'describe_application_contract', { domains: ['generation'] })
-      assert.equal(contract.data.access.hiddenTools.find((item) => item.name === 'create_visible_generation_task')?.tier, 'paid',
-        `缺席工具必须说得出缺哪一档：${JSON.stringify(contract.data.access.hiddenTools)}`)
-      // 缺席不等于拒绝：点名调用必须在派发前拒绝，而不是"清单里没有所以调不到"。
-      const modelRef = { kind: 'generation.model', id: chosen.modelId }
-      const modelRead = await callTool(unpaidClient, 'read_application_entity', { ref: modelRef, propertyIds: [] })
-      const refusal = await expectToolRefusal(unpaidClient, 'create_visible_generation_task', operationEnvelope([modelRead], {
-        modelId: chosen.modelId, prompt: PROMPT, mediaType: 'image', params: chosen.params,
-      }))
-      assert.ok(/PERMISSION_DENIED/.test(refusal), `未授权付费的点名调用没有被拒绝：${refusal}`)
-      assert.ok(/付费/.test(refusal), `拒绝没有说清缺的是付费授权：${refusal}`)
-      evidence.unpaid = { toolHidden: true, refusal }
-    } finally { await unpaidClient.close().catch(() => undefined) }
-    const providerAfterUnpaid = await countProviderRequests(page, evidence.startedAt)
-    assert.deepEqual(providerAfterUnpaid, providerBefore, '未授权付费的连接期间发生了供应商请求')
-    assert.equal(await readHistoryCount(page), historyBefore, '未授权付费的连接期间生成历史发生了变化')
-    evidence.unpaid.providerRequests = providerAfterUnpaid
+      assert.ok((await discovery.listTools()).tools.some(tool => tool.name === 'create_visible_generation_task'))
+    } finally { await discovery.close() }
+    assert.deepEqual(await countProviderRequests(page, evidence.startedAt), providerBefore)
+    assert.equal(await readHistoryCount(page), historyBefore)
 
     if (options.probe) {
       /*
@@ -197,7 +182,7 @@ async function main() {
         const diskPath = toAbsoluteMediaPath(dataRoot, sample.resultPaths[0])
         evidence.rehearsal.diskPath = diskPath
         if (fs.existsSync(diskPath)) {
-          const probeClient = await connectMcpClient(config(unpaid), 'Henji paid rehearsal')
+          const probeClient = await connectMcpClient(config(), 'Henji paid rehearsal')
           try {
             const media = await readAllMedia(probeClient, { kind: 'generation.result', id: sample.id })
             const diskBytes = await fsp.readFile(diskPath)
@@ -207,17 +192,13 @@ async function main() {
           } finally { await probeClient.close().catch(() => undefined) }
         } else evidence.rehearsal.diskMissing = true
       }
-      evidence.probeOnly = '只验证凭据可用、未授权拒绝与落盘路径解析，未发起任何付费生成'
-      console.log(`[MCP 付费] --probe：凭据与未授权拒绝已核对；媒体排练${evidence.rehearsal.mediaMatches ? '通过' : '未取证（无可读取的成功样本）'}，未发起供应商请求。`)
+      evidence.probeOnly = '只验证凭据可用、工具发现与落盘路径解析，未发起任何付费生成'
+      console.log(`[MCP 付费] --probe：凭据与工具发现已核对；媒体排练${evidence.rehearsal.mediaMatches ? '通过' : '未取证（无可读取的成功样本）'}，未发起供应商请求。`)
     } else {
-      // ——— 3. 授权付费的连接：真实提交 ———
-      const paid = await authorizeMcpConnection(page, { name: `付费验收-已授权-${nonce}`, allowWrites: true, allowPaid: true })
-      created.connections.push(paid.id)
-      await waitMcpReady(page)
-      const client = await connectMcpClient(config(paid), 'Henji paid')
+      const client = await connectMcpClient(config(), 'Henji paid')
       try {
         const tools = (await client.listTools()).tools.map((tool) => tool.name)
-        assert.ok(tools.includes('create_visible_generation_task'), '授权付费的连接没有拿到发起生成的工具')
+        assert.ok(tools.includes('create_visible_generation_task'), '连接没有拿到发起生成的工具')
 
         // 提交前先过参数校验；这一步是只读的，不产生费用。
         const preparation = await callTool(client, 'prepare_generation_task', {

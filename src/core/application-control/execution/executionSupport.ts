@@ -57,22 +57,16 @@ export class ApplicationExecutionSupport {
     }
     return [...scopes]
   }
-  /** 撤销检查写权限，不把原集合动作的动态 availability 当成反向动作的准入。 */
-  protected async assertUndoPermissions(steps: readonly ApplicationPlannedStep[], context: ApplicationExecutionContext): Promise<() => void> {
-    const permissions = new Set<string>()
-    for (const step of steps) {
-      const required = step.kind === 'operation' ? this.requireOperationExecutor(step).requiredPermissions
-        : step.kind === 'mutation' ? step.mutations.flatMap((mutation) => this.registry.getProperty(mutation.propertyId)?.requiredPermissions.write ?? [])
-          : (await this.registry.getCollectionAvailability(step.parent, step.entityType, context))[
-            step.operation.kind === 'create' ? 'remove' : 'create'].requiredPermissions
-      if (step.kind === 'mutation' && step.mutations.some((mutation) => {
+  /** 撤销仍需确保属性存在且具备正式写入实现。 */
+  protected async assertUndoWritable(steps: readonly ApplicationPlannedStep[], _context: ApplicationExecutionContext): Promise<() => void> {
+    const assertWritable = (): void => {
+      for (const step of steps) if (step.kind === 'mutation' && step.mutations.some(mutation => {
         const descriptor = this.registry.getProperty(mutation.propertyId)
         return !descriptor || Boolean(descriptor.readOnlyReason)
-      })) throw new Error('PERMISSION_DENIED:撤销所需属性不再可写')
-      if (required.some((permission) => !context.permissions.has(permission))) throw new Error('PERMISSION_DENIED:撤销需要原操作的写入权限')
-      required.forEach((permission) => permissions.add(permission))
+      })) throw new Error('PROPERTY_NOT_WRITABLE:撤销所需属性不再可写')
     }
-    return () => { if ([...permissions].some((permission) => !context.permissions.has(permission))) throw new Error('PERMISSION_DENIED:撤销写入权限已变化') }
+    assertWritable()
+    return assertWritable
   }
   protected collectEffects(
     steps: ApplicationPlannedStep[],
@@ -276,7 +270,6 @@ export class ApplicationExecutionSupport {
           const previousEffects = this.potentialEffects(steps.slice(0, stepIndex))
           return descriptor !== undefined
             && !descriptor.readOnlyReason
-            && descriptor.requiredPermissions.write.every((permission) => context.permissions.has(permission))
             && stateBlocks.length > 0
             && stateBlocks.every((block) => previousEffects.some((effect) => (
               block.affectedEntityTypes.includes(effect.entityType)
@@ -300,9 +293,6 @@ export class ApplicationExecutionSupport {
         continue
       }
       const executor = this.requireOperationExecutor(step)
-      if (!executor.requiredPermissions.every((permission) => context.permissions.has(permission))) {
-        throw new Error(`PERMISSION_DENIED:${step.capabilityId}`)
-      }
       executor.normalizeInput(step.input)
     }
   }
@@ -344,9 +334,6 @@ export class ApplicationExecutionSupport {
     }
     const executor = this.getOperationExecutor(step.capabilityId, step.capabilityVersion)
     if (!executor) throw new Error(`OPERATION_EXECUTOR_NOT_FOUND:${step.capabilityId}`)
-    if (!executor.requiredPermissions.every((permission) => context.permissions.has(permission))) {
-      throw new Error(`PERMISSION_DENIED:${step.capabilityId}`)
-    }
     return normalizeStepRefLabels(await executor.execute(executor.normalizeInput(step.input), context))
   }
 
@@ -365,7 +352,7 @@ export class ApplicationExecutionSupport {
             : (await this.registry.readEntity(step.parent, [], context)).revisions
           : await this.requireOperationExecutor(step).getCurrentRevisions(step.input)
       mergeRevisions(revisions, current)
-      // 集合版本不能代替条目版本：删除须核对每个目标自己的读取基线。
+      // 集合版本不能代替条目版本：删除提交前核对每个目标当前修订。
       if (includeRemovalTargets && step.kind === 'collection' && step.operation.kind === 'remove') {
         for (const target of step.operation.targets) mergeRevisions(revisions, (await this.registry.readEntity(target, [], context)).revisions)
       }

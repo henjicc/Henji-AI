@@ -142,7 +142,6 @@ function createVideoEditHighPrecisionScene() {
       try {
         const status = await page.evaluate(() => window.henjiNative.videoDecoder.status())
         assert.equal(status.available, true, '本机原生解码服务应可用')
-        await page.evaluate(dir => window.henjiNative.media.allowRoot(dir), ROOT)
         const prepared = new Map()
         let revision = 0
         for (const definition of SAMPLES) {

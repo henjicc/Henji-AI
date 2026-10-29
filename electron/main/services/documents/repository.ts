@@ -93,11 +93,10 @@ export interface DocumentRepositoryOptions {
   /** 跨进程文档锁所在目录（程序目录）。 */
   lockDirectory: string
   trashItem(filePath: string): Promise<void>
+  preserveFile?(filePath: string): Promise<void>
   retainDetachedMediaLocation?(target: string): void
   mediaPublished?(target: string): Promise<void>
   showItemInFolder(filePath: string): void
-  /** 授权媒体协议读取这些目录（作品目录始终已授权）。 */
-  grantMediaRoots(directories: readonly string[]): void
   /** 文档移到回收站或删除后清掉通用封面。 */
   removeCover?(docId: string): Promise<void>
   /** 索引里找不到项目时先刷新项目再重试（索引可能落后于磁盘）。 */
@@ -205,7 +204,6 @@ export class DocumentRepository {
       const container = await this.workspace.containerForPath(file.path)
       const decoded = await this.decode(file, container)
       const references = await this.inspectReferences(decoded.report)
-      this.grantReferences(container, decoded.report, references.externalDirectories)
       this.warnProgramReferences('read', file, decoded.report)
       this.logger.debug('文档已读取', {
         event: 'documents.read.completed',
@@ -230,7 +228,6 @@ export class DocumentRepository {
     if (kind.storage !== 'json') throw new DocumentUnsupportedError('这种文档请在它自己的编辑器里新建。')
     return await this.logged('create', { kind: kind.id, container: request.container }, async () => {
       const container = await this.resolveContainer(request.container)
-      if (container.ref.kind === 'user' && !kind.standaloneFolderNames) throw new DocumentLocationError('这种文档只能放在项目里。')
       const folder = this.workspace.defaultDocumentFolder(kind, container)
       const content = this.validateContent(kind, request.content === undefined ? kind.createEmptyContent() : request.content)
       const userName = request.name === undefined ? null : requireEntryName(request.name)
@@ -245,7 +242,6 @@ export class DocumentRepository {
       const file = await describeWrittenDocument(kind, written.path, written.envelope)
       this.workspace.catalog.upsertDocument(indexedFromFile(file, container, kind.summarize(content)))
       const references = await this.inspectReferences(encoded.report)
-      this.grantReferences(container, encoded.report, references.externalDirectories)
       this.warnProgramReferences('create', file, encoded.report)
       return {
         meta: metaFromFile(file, container),
@@ -288,6 +284,7 @@ export class DocumentRepository {
           revision: file.header.revision + 1,
           content: encoded.content,
         })
+        if (request.force && file.header.revision !== request.expectedRevision) await this.options.preserveFile?.(file.path)
         await writeBufferAtomically(file.path, this.bytes(envelope))
         await this.options.mediaPublished?.(file.path)
         const saved = await describeWrittenDocument(file.kind, file.path, envelope)
@@ -339,7 +336,6 @@ export class DocumentRepository {
       const destination = await this.resolveContainer(request.container)
       const source = await this.workspace.containerForPath(file.path)
       if (sameContainer(source.ref, destination.ref)) return { meta: metaFromFile(file, source), copiedFiles: 0, missingPaths: [] }
-      if (destination.ref.kind === 'user' && !file.kind.standaloneFolderNames) throw new DocumentLocationError('这种文档只能放在项目里。')
       const name = documentNameOf(file.kind, file.path)
       return await this.relocate(file, this.workspace.defaultDocumentFolder(file.kind, destination), {
         naming: request.onConflict === 'keepBoth' ? { mode: 'keepBoth', name } : { mode: 'exact', name },
@@ -409,7 +405,6 @@ export class DocumentRepository {
     destination: ResolvedContainer,
     options: { name?: string; onConflict: 'fail' | 'keepBoth'; newId: 'always' | 'whenTaken' },
   ): Promise<DocumentTransferResult> {
-    if (destination.ref.kind === 'user' && !file.kind.standaloneFolderNames) throw new DocumentLocationError('这种文档只能放在项目里。')
     const name = options.name ?? documentNameOf(file.kind, file.path)
     const naming: NamingMode = options.onConflict === 'keepBoth' ? { mode: 'keepBoth', name } : { mode: 'exact', name }
     const folder = this.workspace.defaultDocumentFolder(file.kind, destination)
@@ -444,7 +439,6 @@ export class DocumentRepository {
       adopted = await loadDocumentFile(await this.copyPackage(file, folder, naming, { id, draft: false }), this.fileDependencies(), id)
     }
     this.workspace.catalog.upsertDocument(indexedFromFile(adopted, destination, summarizeFile(adopted, destination, this.workspace)))
-    if (!isPathInside(this.workspace.style, this.workspace.layout().root, destination.root)) this.options.grantMediaRoots([destination.root])
     this.logger.info('文档已复制进容器', {
       event: 'documents.adopt.completed',
       context: { documentId: id, previousId: file.header.id, to: destination.ref, copiedFiles, missing: missingPaths.length },
@@ -590,7 +584,6 @@ export class DocumentRepository {
         throw new DocumentLocationError('素材分类文件夹指向项目外部，请移除该目录链接后重试。')
       }
       const result = await copyKeepingBoth(source, path.join(folder, path.basename(source)), request.reuseIdentical)
-      if (!isPathInside(this.workspace.style, this.workspace.layout().root, container.root)) this.options.grantMediaRoots([container.root])
       return result
     })
   }
@@ -604,7 +597,6 @@ export class DocumentRepository {
     if (kind.storage !== 'folder') throw new DocumentUnsupportedError('只有文件夹类型的文档能这样新建。')
     return await this.logged('create_folder', { kind: kind.id, container: request.container }, async () => {
       const container = await this.resolveContainer(request.container)
-      if (container.ref.kind === 'user' && !kind.standaloneFolderNames) throw new DocumentLocationError('这种文档只能放在项目里。')
       const folder = this.workspace.defaultDocumentFolder(kind, container)
       await fsp.mkdir(folder, { recursive: true })
       const name = requireEntryName(request.name)
@@ -612,7 +604,6 @@ export class DocumentRepository {
         const target = await this.pickTarget(folder, kind.extension, { mode: 'keepBoth', name })
         try {
           await createDirectoryExclusively(target.path)
-          if (!isPathInside(this.workspace.style, this.workspace.layout().root, container.root)) this.options.grantMediaRoots([container.root])
           return target
         } catch (error) {
           if (!(error instanceof EntryExistsError)) throw error
@@ -774,19 +765,6 @@ export class DocumentRepository {
     }
     await Promise.all(Array.from({ length: Math.min(REFERENCE_CHECK_CONCURRENCY, queue.length) }, worker))
     return { missingPaths, externalDirectories: [...directories.values()] }
-  }
-
-  /** 授权媒体协议读取外部引用目录、引用到的外部项目与文档所在的外部项目（作品目录始终已授权）。 */
-  private grantReferences(container: ResolvedContainer, report: LocationReport, externalDirectories: readonly string[]): void {
-    const roots = new Set(externalDirectories)
-    const userRoot = this.workspace.layout().root
-    if (!isPathInside(this.workspace.style, userRoot, container.root)) roots.add(container.root)
-    for (const reference of report.references) {
-      if (reference.scope !== 'project' || !reference.projectId) continue
-      const project = this.workspace.catalog.getProject(reference.projectId)
-      if (project && !isPathInside(this.workspace.style, userRoot, project.path)) roots.add(project.path)
-    }
-    if (roots.size) this.options.grantMediaRoots([...roots])
   }
 
   private warnProgramReferences(action: string, file: LoadedDocumentFile, report: LocationReport): void {
@@ -1004,7 +982,6 @@ export class DocumentRepository {
   private async relocate(file: LoadedDocumentFile, folder: string, options: RelocateOptions): Promise<DocumentTransferResult> {
     const source = await this.workspace.containerForPath(file.path)
     const destination = options.destination ?? await this.workspace.containerForFolder(folder)
-    if (destination.ref.kind === 'user' && !file.kind.standaloneFolderNames) throw new DocumentLocationError('这种文档只能放在项目里。')
     let copiedFiles = 0
     let missingPaths: string[] = []
     let moved: LoadedDocumentFile
@@ -1041,7 +1018,6 @@ export class DocumentRepository {
     }
     this.workspace.catalog.upsertDocument(indexedFromFile(moved, destination, summarizeFile(moved, destination, this.workspace)))
     if (options.registerExternal) await this.registerLocation(folder, destination)
-    if (!isPathInside(this.workspace.style, this.workspace.layout().root, destination.root)) this.options.grantMediaRoots([destination.root])
     this.logger.info('文档已换位置', {
       event: 'documents.relocate.completed',
       context: { documentId: file.header.id, from: source.ref, to: destination.ref, copiedFiles, missing: missingPaths.length },

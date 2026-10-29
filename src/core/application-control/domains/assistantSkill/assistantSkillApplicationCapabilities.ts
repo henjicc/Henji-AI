@@ -36,7 +36,6 @@ export const loadAssistantSkillCapability = defineApplicationCapability({
   side: 'backend',
   readOnly: true,
   control: capabilityControl('observe', ['assistant.skill']),
-  risk: 'R0',
   dataClasses: ['C1'],
   permission: 'application:read',
   idempotent: true,

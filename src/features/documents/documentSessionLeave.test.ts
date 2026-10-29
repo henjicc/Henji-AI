@@ -15,7 +15,7 @@ beforeEach(() => { vi.useFakeTimers() })
 afterEach(() => { vi.useRealTimers() })
 
 describe('真实提示队列的冲突屏障', () => {
-  it.each(['save', 'leave', 'project'] as const)('%s 在起名前解决已存在的冲突', async action => {
+  it.each(['save', 'leave', 'project'] as const)('%s 自动处理已存在的冲突，不要求选择版本', async action => {
     const { commands } = createTestRegistry()
     const registry = new DocumentSessionRegistry({ commands, prompter: dialogDocumentSessionPrompter, kinds: { require: () => testDocumentKind as unknown as DocumentKindDescriptor } })
     const project = commands.seedProject({ name: '草稿项目', draft: true })
@@ -24,31 +24,20 @@ describe('真实提示队列的冲突屏障', () => {
     session.update({ items: ['本地'] })
     commands.modifyExternally(meta.id, { items: ['外部'] })
     await vi.advanceTimersByTimeAsync(800)
-    const initial = useDocumentPromptStore.getState().queue[0]
-    if (initial.type !== 'conflict') throw new Error('缺少冲突提示')
-    initial.resolve('later')
-    await vi.advanceTimersByTimeAsync(0)
-    const pending = (action === 'save' ? registry.save(meta.id) : action === 'leave' ? registry.leave(meta.id) : registry.leaveProject({ project, isEmpty: false })).catch(error => error as Error)
-    if (action !== 'save') {
-      const leave = useDocumentPromptStore.getState().queue[0]
-      if (leave.type !== 'leave') throw new Error('缺少离开提示')
-      leave.resolve('save')
-    }
-    await vi.advanceTimersByTimeAsync(0)
-    try {
-      const front = useDocumentPromptStore.getState().queue[0]
-      expect(front.type).toBe('conflict')
-      if (front.type === 'conflict') front.resolve('later')
-      expect(await pending).toMatchObject({ name: 'DocumentSessionConflictError' })
-      expect(session.getContent()).toEqual({ items: ['本地'] })
-    } finally {
-      for (const prompt of useDocumentPromptStore.getState().queue) {
-        if (prompt.type === 'saveName') prompt.resolve(false)
-        else if (prompt.type === 'conflict') prompt.resolve('later')
-      }
-      await pending
-      await session.discard()
-    }
+    expect(useDocumentPromptStore.getState().queue).toEqual([])
+    expect(commands.stored(meta.id)?.content).toEqual({ items: ['本地'] })
+    if (action === 'save') {
+      const pending = registry.save(meta.id)
+      await vi.advanceTimersByTimeAsync(0)
+      const prompt = useDocumentPromptStore.getState().queue[0]
+      if (prompt.type !== 'saveName') throw new Error('缺少起名提示')
+      await prompt.info.submit('正式', null); prompt.resolve(true)
+      expect(await pending).toBe(true)
+      await session.close()
+    } else if (action === 'leave') expect(await registry.leave(meta.id)).toBe('saved')
+    else expect(await registry.leaveProject({ project, isEmpty: false })).toBe('saved')
+    expect(useDocumentPromptStore.getState().queue).toEqual([])
+    expect(registry.get(meta.id)).toBeUndefined()
   })
 
   it('起名 submit 才撞冲突时直接结束提交，不把冲突排在起名后面', async () => {
@@ -70,7 +59,6 @@ describe('真实提示队列的冲突屏障', () => {
       expect(await submit).toMatchObject({ name: 'DocumentSessionConflictError' })
       expect(useDocumentPromptStore.getState().queue.map(item => item.type)).toEqual(['saveName'])
     } finally {
-      for (const item of useDocumentPromptStore.getState().queue) if (item.type === 'conflict') item.resolve('later')
       await submit
       prompt.resolve(false)
       await saving
@@ -111,13 +99,12 @@ describe('离开文档', () => {
     expect(registry.get(session.id)).toBeUndefined()
   })
 
-  it('被别处引用的空草稿（4.1）：离开时询问，不直接删除', async () => {
+  it('被别处引用的空草稿直接保留，不删除、不要求起名', async () => {
     const { registry, commands, prompter } = createTestRegistry()
     const session = await registry.create({ kind: 'canvas', container: { kind: 'user' } })
     session.markInUse()
-    prompter.leaveChoices.push('cancel')
-    expect(await registry.leave(session.id)).toBe('cancelled')
-    expect(prompter.log).toEqual(['leave:document:未命名测试 1'])
+    expect(await registry.leave(session.id)).toBe('saved')
+    expect(prompter.log).toEqual([])
     expect(commands.calls).not.toContain('deleteEmptyDraft')
     expect(commands.stored(session.id)?.meta.draft).toBe(true)
   })
@@ -131,27 +118,18 @@ describe('离开文档', () => {
     expect(commands.stored(session.id)).toBeUndefined()
   })
 
-  it('有内容的草稿选“取消”：留在原处，会话与文件都在', async () => {
+  it('有内容的草稿离开时保存并保留草稿，下次可继续编辑', async () => {
     const { registry, commands, prompter, session } = await draftWithContent()
-    prompter.leaveChoices.push('cancel')
-    expect(await registry.leave(session.id)).toBe('cancelled')
-    expect(prompter.log).toEqual(['leave:document:未命名测试 1'])
-    expect(registry.get(session.id)).toBe(session)
+    expect(await registry.leave(session.id)).toBe('saved')
+    expect(prompter.log).toEqual([])
+    expect(commands.trashed).toEqual([])
+    expect(commands.stored(session.id)?.content).toEqual({ items: ['内容'] })
     expect(commands.stored(session.id)?.meta.draft).toBe(true)
-  })
-
-  it('有内容的草稿选“不保存”：移到回收站，不再写入', async () => {
-    const { registry, commands, prompter, session, tool } = await draftWithContent()
-    prompter.leaveChoices.push('discard')
-    expect(await registry.leave(session.id)).toBe('discarded')
-    expect(commands.trashed).toEqual([session.id])
     expect(registry.get(session.id)).toBeUndefined()
-    tool.edit('之后')
-    await vi.advanceTimersByTimeAsync(5000)
-    expect(commands.calls).not.toContain('saveDocument')
+    expect((await registry.open({ id: session.id })).getContent()).toEqual({ items: ['内容'] })
   })
 
-  it('有内容的草稿选“保存”：起名时重名与非法都不能保存，换名后转正并关闭', async () => {
+  it('主动保存草稿：起名时重名与非法都不能保存，换名后转正并关闭', async () => {
     const { registry, commands, prompter, session } = await draftWithContent()
     commands.seed({ name: '已有作品', content: { items: [] } })
     prompter.leaveChoices.push('save')
@@ -169,7 +147,8 @@ describe('离开文档', () => {
       await info.submit('新海报', null)
       return true
     }
-    expect(await registry.leave(session.id)).toBe('saved')
+    expect(await registry.save(session.id)).toBe(true)
+    await session.close()
     expect(checks).toEqual(['duplicate', 'duplicate', 'invalid', 'invalid', 'available', 'available'])
     expect(commands.stored(session.id)?.meta).toMatchObject({ name: '新海报', draft: false, path: `${TEST_DOCUMENT_ROOT}/新海报.henji-test` })
     expect(commands.stored(session.id)?.content).toEqual({ items: ['内容'] })
@@ -186,7 +165,8 @@ describe('离开文档', () => {
       await info.submit('另一个名字', null)
       return true
     }
-    expect(await registry.leave(session.id)).toBe('saved')
+    expect(await registry.save(session.id)).toBe(true)
+    await session.close()
     expect(commands.stored(session.id)?.meta.name).toBe('另一个名字')
   })
 
@@ -199,7 +179,8 @@ describe('离开文档', () => {
       await info.submit('外部', 'E:/别处')
       return true
     }
-    expect(await registry.leave(session.id)).toBe('saved')
+    expect(await registry.save(session.id)).toBe(true)
+    await session.close()
     expect(commands.stored(session.id)?.meta).toMatchObject({ path: 'E:/别处/外部.henji-test', draft: false })
     expect(tool.received.at(-1)).toEqual({ items: ['内容', '已复制素材'] })
   })
@@ -208,7 +189,7 @@ describe('离开文档', () => {
     const { registry, commands, prompter, session } = await draftWithContent()
     prompter.leaveChoices.push('save')
     prompter.saveName = async () => false
-    expect(await registry.leave(session.id)).toBe('cancelled')
+    expect(await registry.save(session.id)).toBe(false)
     expect(registry.get(session.id)).toBe(session)
     expect(commands.stored(session.id)?.meta.draft).toBe(true)
   })
@@ -223,32 +204,16 @@ describe('草稿项目', () => {
     expect(commands.trashed).toEqual([project.id])
   })
 
-  it('保存草稿项目：起名、另选父文件夹，已打开的文档跟着更新位置', async () => {
+  it('有内容的草稿项目离开时保留整组草稿和文档内容', async () => {
     const { registry, commands, prompter } = createTestRegistry()
     const project = await registry.createProject()
     const document = await registry.create({ kind: 'canvas', container: { kind: 'project', projectId: project.id }, name: '剪辑' })
     document.update({ items: ['片段'] })
-    prompter.leaveChoices.push('save')
-    prompter.saveName = async (info) => {
-      expect(info.subject).toEqual({ type: 'project' })
-      await info.submit('旅行', 'E:/别处')
-      return true
-    }
     expect(await registry.leaveProject({ project, isEmpty: false })).toBe('saved')
-    expect(prompter.log[0]).toBe('leave:project:未命名项目 1')
-    expect(commands.projects.get(project.id)).toMatchObject({ name: '旅行', draft: false, path: 'E:/别处/旅行' })
-    expect(commands.stored(document.id)).toMatchObject({ meta: { path: 'E:/别处/旅行/剪辑.henji-test' }, content: { items: ['片段'] } })
-    expect(registry.get(document.id)).toBeUndefined()
-  })
-
-  it('不保存草稿项目：项目连同已打开的文档一起移到回收站', async () => {
-    const { registry, commands, prompter } = createTestRegistry()
-    const project = await registry.createProject()
-    const document = await registry.create({ kind: 'canvas', container: { kind: 'project', projectId: project.id } })
-    document.update({ items: ['x'] })
-    prompter.leaveChoices.push('discard')
-    expect(await registry.leaveProject({ project, isEmpty: false })).toBe('discarded')
-    expect(commands.trashed).toEqual([project.id])
+    expect(prompter.log).toEqual([])
+    expect(commands.projects.get(project.id)?.draft).toBe(true)
+    expect(commands.stored(document.id)?.content).toEqual({ items: ['片段'] })
+    expect(commands.trashed).toEqual([])
     expect(registry.get(document.id)).toBeUndefined()
   })
 })

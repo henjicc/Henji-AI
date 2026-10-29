@@ -31,7 +31,6 @@ beforeEach(() => {
   vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
   vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue('browser')
   vi.spyOn(getPlatform().system.paths, 'dirname').mockResolvedValue('D:/音效')
-  vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined)
   vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue({ sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) })
 })
 afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })

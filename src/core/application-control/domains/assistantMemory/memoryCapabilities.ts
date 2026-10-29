@@ -4,7 +4,7 @@ import { memoryWriteSchema } from '../../../assistant/memoryOperations'
 import { MEMORY_RULES } from '../../../assistant/memoryEntries'
 const root = { kind: 'assistant.memory_settings', id: 'singleton' }
 const outputSchema = z.object({ resultRef: z.object({ kind: z.literal('assistant.memory_settings'), id: z.literal('singleton') }), changed: z.number().int().nonnegative(), message: z.string(), verification: z.object({ verified: z.boolean(), condition: z.string() }).strict() }).strict()
-const common = { version: 1, aliases: ['助手记忆'], domain: 'memory', readOnly: false, risk: 'R1' as const, dataClasses: ['C1' as const], permission: 'settings:write' as const, idempotent: false, destructive: false, timeoutMs: 60000, supportsPreview: false, supportsUndo: false, requiredScopes: ['assistant_memory'], producesRefs: [root.kind], outputSchema,
+const common = { version: 1, aliases: ['助手记忆'], domain: 'memory', readOnly: false, dataClasses: ['C1' as const], permission: 'settings:write' as const, idempotent: false, destructive: false, timeoutMs: 60000, supportsPreview: false, supportsUndo: false, requiredScopes: ['assistant_memory'], producesRefs: [root.kind], outputSchema,
   resolveConcurrencyKey: () => 'assistant:memory', resolveOperationTargets: () => [root], resolveOperationWriteTargets: () => [root],
   control: capabilityControl('execute', [root.kind], { revisionScopes: ['assistant_memory'] }),
   summarize: (output: z.infer<typeof outputSchema>) => output.message,

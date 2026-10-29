@@ -39,14 +39,14 @@ placement.mode=library 只进素材面板；replace 给 clipRef；insert/overwri
 - 进入图片编辑后从实际宿主／文档目录取得图片文档引用，经其通用实体编辑并保存；保留返回的原剪辑 documentRef、sequenceRef、frameEditSessionRef、returnPlacement。回填 `place_video_edit_creative_result` 用保存图片的 documents.document 来源，并原样带 frameEditSessionRef 与 returnPlacement（作为 placement）；时长恰为1帧，不能用普通图片默认时长。不要把返回的剪辑 documentRef 冒充图片文档。
 - 只是看画面用 `observe_video_edit_frame`，取 program 目标 sequenceRef/frame 或 source 目标itemRef/timeUs，随后 `read_application_media(mode="image")`；无需打开图片编辑。收录选帧用 `collect_video_edit_output` 的 kind=frame，依赖当前节目已暂停和定位。
 
-## 原地生成：计划、审批、等待、落位
+## 原地生成：计划、付费、等待、落位
 
 1. 优先查已有产物。确需新镜头／配音／音乐，用 `prepare_video_edit_in_place_generation` 固定 documentRef、sequenceRef，target.action 为 generate_shot/replace_shot/extend_shot/generate_audio，prompt 为内容。新镜头用 startSeconds/durationSeconds，可给 trackRef；替换／续接用 clipRef；声音给 startSeconds 或 clipRef 二选一。
 2. 准备校验落点、参考、参数及费用信息，不取帧、不生成、不改剪辑。模型字段按 `get_model_schema`，不编造时长／比例。referenceRoles 从返回规划选择，referenceTimeSeconds 可给指定节目时刻；仅用指定帧时 referenceRoles=[]。useReferenceFrames=false 不能同时指定参考，声音不接受参考帧。
-3. 有正式付费授权后 `generate_video_edit_in_place` 用相同业务参数提交；不可由助手替用户批准。占位出现不等于已生成。已知目标要精确长度就显式给 durationSeconds，省略时规划常用5秒但落位取实际生成长度。
+3. `generate_video_edit_in_place` 用相同业务参数提交并走统一付费策略；超额费用由用户确认。占位出现不等于已生成。已知目标要精确长度就显式给 durationSeconds，省略时规划常用5秒但落位取实际生成长度。
 4. 返回 taskRef 后 `wait_generation_task` 等终态，再 `get_video_edit_in_place_generation` 给 documentRef/taskRef 查落位；生成完成不等于已放入时间线。用户取消时 `cancel_generation_task` 撤回占位，取消等待不等于取消任务。
 5. 读返回 clipRef、位置、实际时长和声音；原位置被占可落新轨，说明实际位置。替换保留旧 take，需切回时读 `video_edit.clip.takes` 再 `restore_video_edit_clip_take`，takeIndex 用真实序号。
 
-免费准备／本地跨工作区处理与付费提交分开说明。未知结果先查原操作和任务，失败后不重新生成来掩盖保存或落位问题；真实审批、任务恢复与来源身份优先于任何配方。
+免费准备／本地跨工作区处理与付费提交分开说明。未知结果先查原操作和任务，失败后不重新生成来掩盖保存或落位问题；付费策略、任务恢复与来源身份优先于任何配方。
 
 放入返回 partial 且保存未确认时，使用 `retry_application_operation_save`，将原调用 operationId 传给 originalOperationId；恢复会核对原 item、clip 和媒体文件内容并保存，成功后查原操作 completed/verified。`save_video_edit` 不是绕过原操作保护的入口。prepare 的 prepared=true 不保证供应商可用，canSubmit=false 时先配置供应商或改用已配置模型，不提交付费任务。

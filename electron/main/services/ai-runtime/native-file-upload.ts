@@ -1,15 +1,15 @@
 import { constants, openAsBlob } from 'node:fs'
 import { access, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
+import { normalizeMediaImportPath } from '../../../../src/core/media/localMediaImportSafety'
 import { AiRuntimeError, assertMediaSize, inferMimeFromPath, normalizeLocalSource, type Transport } from '@henjicc/ai-sdk'
-import { isPathWithinAllowedMediaRoots, isRealPathWithinAllowedMediaRoots } from '../../protocol'
 
-/** Resolve both the reference and symlink destination within the existing media grants. */
-export async function scopedUploadFile(ref: string): Promise<string> {
+/** 在主进程解析原文件及目录链接，后续上传流直接读取真实位置。 */
+export async function resolveUploadFile(ref: string): Promise<string> {
   const local = normalizeLocalSource(ref.trim())
-  if (!local || !isPathWithinAllowedMediaRoots(local)) throw new AiRuntimeError('media_scope_denied', '素材不在已授权的文件范围内')
+  if (!local) throw new AiRuntimeError('invalid_media_path', '素材路径无效')
+  normalizeMediaImportPath(local, process.platform === 'win32')
   const resolved = await realpath(local)
-  if (!(await isRealPathWithinAllowedMediaRoots(resolved))) throw new AiRuntimeError('media_scope_denied', '素材实际位置不在已授权的文件范围内')
   await access(resolved, constants.R_OK)
   if (!(await stat(resolved)).isFile()) throw new AiRuntimeError('invalid_media', '上传素材必须是可读文件')
   return resolved
@@ -22,7 +22,7 @@ export function createNativeFileUpload(send: Transport['fetch']): NonNullable<Tr
     const endpoint = new URL(url)
     if (!['http:', 'https:'].includes(endpoint.protocol)) throw new AiRuntimeError('invalid_media_url', '上传地址必须使用 HTTP(S)')
     if (!Number.isSafeInteger(input.maxBytes) || input.maxBytes <= 0) throw new AiRuntimeError('invalid_upload_limit', '上传大小限制无效')
-    const file = await scopedUploadFile(input.ref)
+    const file = await resolveUploadFile(input.ref)
     const before = await stat(file)
     if (!before.isFile()) throw new AiRuntimeError('invalid_media', '上传素材必须是文件')
     const mimeType = inferMimeFromPath(file)

@@ -42,7 +42,7 @@ function setup(names: readonly string[] = ['a', 'b', 'c']) {
   }
   const confirm = vi.fn(async () => {})
   const microphone = vi.fn(async (_origin: number, onBlock: (block: CapturedAudioBlock) => void) => { feed = onBlock; return { stop } })
-  const adapter = new ImageEditExplanation(bus, { eraseResources: async ids => { for (const id of ids) values.delete(id) }, audio, microphone, model: () => 'fixture.asr', confirm, release: vi.fn(async () => {}),
+  const adapter = new ImageEditExplanation(bus, { audio, microphone, model: () => 'fixture.asr', confirm, release: vi.fn(async () => {}),
     store: async (value, kind) => { const digest = await imageLayoutDigest(value); values.set(digest, structuredClone(value)); return { resourceId: digest, digest, bytes: new TextEncoder().encode(JSON.stringify(value)).byteLength, path: `resources/${digest.slice(7)}`, kind } },
     read: async resource => values.get(resource.resourceId), readVisual: async () => new Uint8Array([1, 2, 3]) })
   const block = (length = 48000): void => feed({ firstFrame: 0, sampleRate: 48000, samples: new Float32Array(length), monoStartUs: 0, uncertaintyUs: 1000 })
@@ -67,7 +67,7 @@ describe('图片静态讲解宿主', () => {
   })
   it('删除包含多页资源的讲解后可重新录制，目录顺序不影响命令资源契约', async () => {
     const f=setup();await f.adapter.start('consent');f.block();f.point();wall=1200
-    await f.adapter.stop();await f.adapter.transcribe('upload')
+    await f.adapter.stop();await f.adapter.transcribe()
     const document=f.bus.getSnapshot().document,head=structuredClone(document.creativeIntents!)
     head.resources.sort((a,b)=>b.resourceId.localeCompare(a.resourceId))
     f.bus.dispatch({type:'document.set-creative-intents',commandId:'reverse-directory',expectedRevision:document.revision,intents:head,resources:head.resources.map(resource=>({resourceId:resource.resourceId,byteSize:resource.bytes})).sort((a,b)=>a.resourceId.localeCompare(b.resourceId))})
@@ -79,7 +79,7 @@ describe('图片静态讲解宿主', () => {
   })
   it('同名图片自动用图层位置区分，不改变稳定引用', async () => {
     const f = setup(['主图', '主图', 'c']); await f.adapter.start('consent'); f.block(); f.point(); wall = 1200
-    await f.adapter.stop(); await f.adapter.transcribe('upload')
+    await f.adapter.stop(); await f.adapter.transcribe()
     const review = await f.adapter.readReview((await f.adapter.transcript())[0])
     expect(review.objects?.map(object => object.label)).toEqual(['主图 · 上层', '主图 · 下层', 'c'])
     expect(review.objects?.map(object => object.ref.id)).toEqual(['a', 'b', 'c'].map(id => imageEditV3LayerRef('record-image', id).id))
@@ -88,7 +88,7 @@ describe('图片静态讲解宿主', () => {
   it('墙钟采集、分页持久化、本地转写、选中目标进入唯一随手摆服务', async () => {
     const bridge = installPaidApprovalTestBridge()
     const f = setup(); await f.adapter.start('user-consent'); f.block(); f.point(); wall = 1200
-    await f.adapter.stop(); await f.adapter.transcribe('upload-consent')
+    await f.adapter.stop(); await f.adapter.transcribe()
     expect([...bridge.records.values()]).toMatchObject([{ origin: { actor: 'user' }, state: 'completed', paidReservations: [{ category: 'recognition' }] }])
     const session = explanationSessionSchema.parse(f.bus.getSnapshot().document.creativeIntents!.sessions[0])
     expect(session.mode).toBe('static'); expect(session.clockSegments.every(c => !c.start && !c.end)).toBe(true)
@@ -100,7 +100,7 @@ describe('图片静态讲解宿主', () => {
     const before = structuredClone(f.bus.getSnapshot().document.layers)
     await f.adapter.organize(entries[0]); expect(organize).toHaveBeenCalledWith(['a', 'b', 'c'], 'distribute')
     expect(f.bus.getSnapshot().document.layers).toEqual(before)
-    expect(f.audio.transcribe).toHaveBeenCalledTimes(1); await f.adapter.transcribe('upload-consent'); expect(f.audio.transcribe).toHaveBeenCalledTimes(1)
+    expect(f.audio.transcribe).toHaveBeenCalledTimes(1); await f.adapter.transcribe(); expect(f.audio.transcribe).toHaveBeenCalledTimes(1)
     await f.adapter.close(); expect(f.stop).toHaveBeenCalledTimes(1)
   })
   it('暂停、恢复保留 gap，不录制暂停期间的指向，关闭释放音轨', async () => {
@@ -114,19 +114,20 @@ describe('图片静态讲解宿主', () => {
     const f = setup(); await f.adapter.start('consent'); f.block(); wall = 1200
     f.confirm.mockRejectedValueOnce(new Error('disk'))
     await expect(f.adapter.stop()).rejects.toThrow('disk'); await f.adapter.stop()
-    await f.adapter.transcribe('upload'); expect(await f.adapter.transcript()).toHaveLength(1)
+    await f.adapter.transcribe(); expect(await f.adapter.transcript()).toHaveLength(1)
     expect(f.audio.write).toHaveBeenCalledTimes(1); await f.adapter.close()
   })
-  it('没有人工同意不打开麦克风，转写前不调用供应商', async () => {
-    const f = setup(); await expect(f.adapter.start('')).rejects.toThrow('确认'); expect(f.microphone).not.toHaveBeenCalled()
+  it('录制范围必须给出，采集与停止不自动调用转写供应商', async () => {
+    const f = setup(); await expect(f.adapter.start('')).rejects.toThrow('录制范围')
+    expect(f.microphone).not.toHaveBeenCalled()
     await f.adapter.start('consent'); f.block(); wall = 1200; await f.adapter.stop()
-    expect(f.audio.transcribe).not.toHaveBeenCalled(); await expect(f.adapter.transcribe('')).rejects.toThrow('授权'); await f.adapter.close()
+    expect(f.audio.transcribe).not.toHaveBeenCalled(); await f.adapter.close()
   })
   it('把这个放到那边按词级墙钟生成位置计划，不修改作品或调用付费意图模型', async () => {
     const f = setup()
     vi.mocked(f.audio.transcribe).mockResolvedValueOnce({ modelId: 'fixture.asr', providerId: 'fixture', requestId: 'fixture', transcript: { unit: 'ms', text: '把这个放到那边', granularity: 'word', words: [], segments: [{ text: '把这个放到那边', startMs: 200, endMs: 2200, granularity: 'segment', timing: 'coarse', words: [{ text: '把这个', startMs: 200, endMs: 400, granularity: 'word', timing: 'precise' }, { text: '放到那边', startMs: 2000, endMs: 2200, granularity: 'word', timing: 'precise' }] }] } })
     await f.adapter.start('consent'); f.block(144000); f.point(); f.point([.8, .5], [], 2100); wall = 3200
-    await f.adapter.stop(); await f.adapter.transcribe('upload')
+    await f.adapter.stop(); await f.adapter.transcribe()
     const entry = (await f.adapter.transcript())[0], before = structuredClone(f.bus.getSnapshot().document.layers)
     const review = await f.adapter.readReview(entry)
     expect(review.plan.status).toBe('review'); expect(review.plan.changes).toHaveLength(1)
@@ -140,7 +141,7 @@ describe('图片静态讲解宿主', () => {
   it('没有历史指向时人工点选可以确认对象，校正没有历史画面；取消与关闭释放点选等待', async () => {
     const f = setup()
     vi.mocked(f.audio.transcribe).mockResolvedValueOnce({ modelId: 'fixture.asr', providerId: 'fixture', requestId: 'fixture', transcript: { unit: 'ms', text: '这个', words: [], granularity: 'segment', segments: [{ text: '这个', startMs: 100, endMs: 700, granularity: 'segment', timing: 'coarse' }] } })
-    await f.adapter.start('consent'); f.block(); wall = 1200; await f.adapter.stop(); await f.adapter.transcribe('upload')
+    await f.adapter.start('consent'); f.block(); wall = 1200; await f.adapter.stop(); await f.adapter.transcribe()
     const entry = (await f.adapter.transcript())[0], review = await f.adapter.readReview(entry)
     const picking = f.adapter.pick(entry, review.resolution.mentions[0]); expect(f.adapter.hasPendingPick()).toBe(true)
     f.adapter.acceptPick([.6, .5], [{ ...imageEditV3LayerRef('record-image', 'a'), label: 'a' }], [])
@@ -153,7 +154,7 @@ describe('图片静态讲解宿主', () => {
   it('粗时间的这几个需确认完整集合，不能偷偷裁成一个图层', async () => {
     const f = setup()
     vi.mocked(f.audio.transcribe).mockResolvedValueOnce({ modelId: 'fixture.asr', providerId: 'fixture', requestId: 'fixture', transcript: { unit: 'ms', text: '这几个等距', words: [], granularity: 'segment', segments: [{ text: '这几个等距', startMs: 100, endMs: 700, granularity: 'segment', timing: 'coarse' }] } })
-    await f.adapter.start('consent'); f.block(); f.point(); wall = 1200; await f.adapter.stop(); await f.adapter.transcribe('upload')
+    await f.adapter.start('consent'); f.block(); f.point(); wall = 1200; await f.adapter.stop(); await f.adapter.transcribe()
     const entry = (await f.adapter.transcript())[0], review = await f.adapter.readReview(entry)
     expect(review.layout).toBeUndefined()
     const mention = review.resolution.mentions[0]
@@ -167,7 +168,7 @@ describe('图片静态讲解宿主', () => {
 
 it('词稿校正只改文字；保存重开和原历史撤销不会被 collector 覆盖', async () => {
   const f = setup(); await f.adapter.start('consent'); f.block(); f.point(); wall = 1200
-  await f.adapter.stop(); await f.adapter.transcribe('upload')
+  await f.adapter.stop(); await f.adapter.transcribe()
   const original = (await f.adapter.transcript())[0]
   const before = structuredClone(f.adapter.snapshot().session!)
   await f.adapter.correctText(original, '这几个对齐')
@@ -187,13 +188,13 @@ it('词稿校正只改文字；保存重开和原历史撤销不会被 collector
   await f.adapter.close()
 })
 
-it.each([false, true])('删除讲解擦除两向历史和历史画面，冷页=%s，重开也不能恢复', async cold => {
+it.each([false, true])('删除讲解保留正文资源并支持撤销重做，冷页=%s', async cold => {
   const f = setup(); await f.adapter.start('consent'); f.block()
   const visualId = `sha256:${'e'.repeat(64)}`; f.values.set(visualId, new Uint8Array([1, 2, 3]))
   f.point([.4, .4], [imageEditV3LayerRef('record-image', 'a')], 300, async () => ({ resource: { resourceId: visualId, digest: visualId, bytes: 3, path: `resources/${visualId.slice(7)}`, kind: 'visual' }, size: [100, 100], point: [.4, .4] }))
-  wall = 1200; await f.adapter.stop(); await f.adapter.transcribe('upload')
+  wall = 1200; await f.adapter.stop(); await f.adapter.transcribe()
   const original = (await f.adapter.transcript())[0]
-  await f.adapter.correctText(original, '绝不能恢复的私密正文')
+  await f.adapter.correctText(original, '可恢复的讲解正文')
   const session = f.adapter.snapshot().session!, privateRefs = [...session.pages.map(page => page.resourceId), ...session.visualEvidenceRefs.map(visual => visual.resourceRef.resourceId)]
   const atomicHead = structuredClone(f.bus.getSnapshot().document.creativeIntents!)
   atomicHead.sessions[0].consent!.userReceiptRef = 'atomic-consent'
@@ -211,23 +212,20 @@ it.each([false, true])('删除讲解擦除两向历史和历史画面，冷页=%
     prefixLength: entries.length, position: saved.history.undo.length, commandIds: entries.map(entry => entry.forward.commandId), resourceRoles: { images: [], sparse: [] },
   } } : saved.history
   const bus = new ImageEditCommandBusV3(saved.document, { historySnapshot: history, history: { readPage: async () => structuredClone(entries) } })
-  const erased = await bus.eraseExplanationSession(session.id)
-  for (const id of privateRefs) expect(erased).toContain(id)
-  if (cold) expect(erased).toContain(pageId)
-  const assertErased = (): void => { expect(JSON.stringify(bus.getPersistenceSnapshot())).not.toContain(session.id); expect(bus.getSnapshot().document.creativeIntents?.sessions ?? []).toEqual([]) }
-  assertErased()
-  const total = bus.getHistoryView().total
-  for (let index = 0; index <= total; index++) { await bus.jumpToHistory(index); assertErased(); expect(JSON.stringify(await bus.readHistoryDocument(index))).not.toContain(session.id) }
-  expect(bus.getSnapshot().document.layers[0].name).toBe('保留作品编辑')
-  const clean = bus.getPersistenceSnapshot(), reopened = new ImageEditCommandBusV3(clean.document, { historySnapshot: clean.history })
-  while (await reopened.undo()) expect(JSON.stringify(reopened.getSnapshot().document)).not.toContain(session.id)
-  while (await reopened.redo()) expect(JSON.stringify(reopened.getSnapshot().document)).not.toContain(session.id)
+  expect(await bus.eraseExplanationSession(session.id)).toEqual([])
+  expect(bus.getSnapshot().document.creativeIntents?.sessions).toEqual([])
+  expect(await bus.undo()).toBe(true)
+  expect(bus.getSnapshot().document.creativeIntents?.sessions[0].id).toBe(session.id)
+  expect(await bus.redo()).toBe(true)
+  expect(bus.getSnapshot().document.creativeIntents?.sessions).toEqual([])
+  const retained = bus.getPersistenceSnapshot().retainedResources.map(ref => ref.resourceId)
+  for (const id of privateRefs) expect(retained).toContain(id)
   await f.adapter.close()
 })
 
 it('删除保存失败后重试不会把 collector 正文重新写回', async () => {
   const f = setup(); await f.adapter.start('consent'); f.block(); f.point(); wall = 1200
-  await f.adapter.stop(); await f.adapter.transcribe('upload')
+  await f.adapter.stop(); await f.adapter.transcribe()
   const session = f.adapter.snapshot().session!, original = (await f.adapter.transcript())[0]
   f.confirm.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('save failed'))
   await expect(f.adapter.remove()).rejects.toThrow('save failed')
@@ -235,7 +233,7 @@ it('删除保存失败后重试不会把 collector 正文重新写回', async ()
   await expect(f.adapter.correctText(original, '不能复活')).rejects.toThrow()
   await f.adapter.remove()
   expect(f.adapter.snapshot().session).toBeUndefined()
-  expect(JSON.stringify(f.bus.getPersistenceSnapshot())).not.toContain(session.id)
-  for (const ref of session.pages) expect(f.values.has(ref.resourceId)).toBe(false)
+  expect(f.bus.getSnapshot().document.creativeIntents?.sessions).toEqual([])
+  for (const ref of session.pages) expect(f.values.has(ref.resourceId)).toBe(true)
   await f.adapter.close()
 })

@@ -95,17 +95,11 @@ export interface HenjiHttpApi {
 
 export interface HenjiMediaApi {
   enqueueRecycle(paths: string[], protectedBy?: string[]): Promise<void>
-  allowRoot(rootPath: string): Promise<void>
-  /** 判断某个绝对路径是否在 henji-media:// 协议允许读取的根目录范围内
-   *  （应用本地数据目录/系统下载目录/系统临时目录/已动态注册的根目录）。
-   *  用于在复用 getPathForFile 返回的原始路径前确认协议真的能读到它，
-   *  避免出现"路径有效但协议 403 拒绝"的静默失败。 */
-  isPathAllowed(targetPath: string): Promise<boolean>
   /** 直接拿渲染层 File 对象对应的本地文件系统路径（webUtils.getPathForFile），
    *  文件不是来自真实磁盘文件（如剪贴板生成的合成 Blob）时返回空字符串。 */
   getPathForFile(file: File): string
   /** 解析 resources/ 下随应用分发的内置只读资源（如3D 镜头参考角色 GLB）的绝对路径，
-   *  并把所在根目录注册进 henji-media:// 白名单；文件不存在或越界时返回 null。 */
+   *  文件不存在或不属于此命名空间时返回 null。 */
   getBundledResourcePath(relativePath: string): Promise<string | null>
   /** 受控渲染层媒体导入：路径只在主进程校验、复制和探测，不把文件内容送过 IPC。 */
   importFromPath(request: import('../../src/core/media/localMediaImportContracts').ImportMediaFromPathRequest): Promise<import('../../src/core/media/localMediaImportContracts').LocalMediaImportResult>

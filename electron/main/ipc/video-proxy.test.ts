@@ -34,20 +34,14 @@ beforeEach(() => {
 })
 afterEach(() => { for (const emitter of senders.splice(0)) emitter.emit('destroyed') })
 
-it('可信窗口、严格参数和真实文件授权在后台调用前检查；验证使用同一授权', async () => {
+it('可信窗口、严格参数和真实文件定位在后台调用前检查；验证使用同一路径', async () => {
   const event = sender()
   await expect(invoke('create', { ...request, extra: true }, event)).rejects.toThrow()
   await expect(invoke('create', { ...request, preset: '4K' }, event)).rejects.toThrow()
   mocks.trusted.mockImplementationOnce(() => { throw new Error('untrusted') })
   await expect(invoke('create', request, event)).rejects.toThrow('untrusted')
-  mocks.allowed.mockReturnValueOnce(false)
-  await expect(invoke('create', request, event)).rejects.toThrow('权限')
-  mocks.allowed.mockReturnValueOnce(true).mockReturnValueOnce(false)
-  await expect(invoke('create', request, event)).rejects.toThrow('实际位置')
   expect(mocks.create).not.toHaveBeenCalled()
   await expect(invoke('lookup', { source, preset: '720p' }, event)).resolves.toBeNull()
-  mocks.allowed.mockReturnValueOnce(false)
-  await expect(invoke('lookup', { source, preset: '720p' }, event)).rejects.toThrow('权限')
 })
 
 it('取消仅归原窗口，重复与每窗口上限拒绝；主导航取消任务，进度仅回原窗口', async () => {

@@ -26,7 +26,7 @@ function createRecordingCursorScene() {
       const evidence = {}
       try {
         await assignIsolatedMcpPort(page)
-        const auth = await authorizeMcpConnection(page, { name: '录制光标免费验收', allowWrites: true, allowDestructive: true })
+        const auth = await authorizeMcpConnection(page, { name: '录制光标免费验收' })
         client = await connectMcpClient(auth.config)
         const documentRef = { kind: 'video_edit.document', id: seeded.documentId }
         const read = (ref, propertyIds) => callTool(client, 'read_application_entity', { ref, propertyIds })

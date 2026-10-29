@@ -62,7 +62,7 @@ function createVideoEditAgentLoopScene() {
         projectRef.id = PROJECT_ID; sequenceRef.id = `${PROJECT_ID}:main`
         await observeWorkers(page); observed = true
         await openVideoEditProjectCard(page, seeded.projectId); await presented(page, 0)
-        const identity = await authorizeMcpConnection(page, { name: '智能体剪辑回环', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji agent loop Reality')
+        const identity = await authorizeMcpConnection(page, { name: '智能体剪辑回环' }); client = await connectMcpClient(identity.config, 'Henji agent loop Reality')
 
         phase('mcp-discover')
         const tools = (await client.listTools()).tools.map(tool => tool.name)
@@ -119,17 +119,6 @@ function createVideoEditAgentLoopScene() {
 
         phase('permission')
         // A read-only connection may observe but never write; the refusal must leave the saved project untouched.
-        const readOnly = await authorizeMcpConnection(page, { name: '只读剪辑观察', allowWrites: false }); const viewer = await connectMcpClient(readOnly.config, 'Henji read-only viewer')
-        try {
-          const before = JSON.stringify(readVideoEditFile(file))
-          const viewed = await callTool(viewer, 'observe_video_edit_frame', { documentRef: projectRef, target: { kind: 'program', sequenceRef, frame: 60 }, maxWidth: 256 })
-          assert.equal((viewed.result?.data ?? viewed.data).verification.verified, true)
-          const readClip = await callTool(viewer, 'read_application_entity', { ref: clipRef })
-          evidence.readOnlyRefusal = await expectToolRefusal(viewer, 'change_application_entities', operationEnvelope([readClip], { summary: '只读连接越权调参', changes: [{ kind: 'set_properties', entityType: 'video_edit.clip', target: clipRef, properties: { 'video_edit.clip.code_parameters': { red: 0.1 } } }] }))
-          assert.equal(JSON.stringify(readVideoEditFile(file)), before, '只读连接的拒绝不得改变工程')
-        } finally { await viewer.close() }
-        evidence.phases.push('只读MCP连接可观察指定帧，写入被权限拒绝且工程不变')
-
         phase('manual-undo-save')
         await button(page, '撤销').click()
         const undone = await (async () => { for (let attempt = 0; attempt < 100; attempt++) { const value = readProject(file).sequences[0].clips.find(c => c.id === clip.id); if (value.code.parameters.red === 0.2) return value; await page.waitForTimeout(100) } throw new Error('手动撤销没有恢复 MCP 调参并静默保存') })()

@@ -10,8 +10,8 @@ import { findCanvasProjectInstance, releaseCanvasProjectInstance, requireCanvasP
 import { requireImageEditDocumentInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 import { imageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 import { useProjectStore } from '@/stores/projectStore'
-import { createApplicationCapabilitySession, listApplicationCapabilities } from '@/features/application-control/applicationCapabilityService'
-import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
+
+
 import { createImageEditPathLayerV3, createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
 import { ANNOTATION_DEFAULT_STROKE_HEX } from '@/core/theme/colorTokens'
@@ -61,22 +61,6 @@ it('从目录发现未打开文档，通过正式公共入口修改后恢复原�
     expect(requireCanvasProjectInstance(visibleId).store.getState().nodes).toEqual([])
     expect(boundary.saveProjection).toHaveBeenCalledOnce()
   } finally { harness.dispose() }
-})
-
-it('恢复的画布关联参与权限预检，没有原画布写权限时不修改图片', async () => {
-  const { fixture } = await setup()
-  const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'image-only',
-    capabilityIds: listApplicationCapabilities().map((definition) => definition.id),
-    permissions: ['application:read', 'application:write', 'image_edit:read', 'image_edit:write'],
-    allowWrites: true, allowDestructive: false }))
-  const result = await session.execute({ id: 'change_application_entities', version: 2, input: {
-    summary: '尝试修改无画布写权限的图片', changes: [{ kind: 'set_properties', entityType: 'image_edit.layer',
-      target: imageEditV3LayerRef(fixture.document.id, 'effect'), properties: { 'image_edit.layer.opacity': 0.6 } }],
-  } }, { requestId: 'deny-projection', signal: new AbortController().signal })
-  expect(result.ok).toBe(false)
-  expect(requireImageEditDocumentInstanceV3(fixture.document.id).bus.getSnapshot().document.revision).toBe(0)
-  expect(readHarnessImageEditDocument(fixture.document.id)?.document.revision).toBe(0)
-  expect(boundary.saveProjection).not.toHaveBeenCalled()
 })
 
 it('直接发现未打开文档中的标注，无需先列出图片图层或打开编辑器', async () => {

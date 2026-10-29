@@ -27,7 +27,7 @@ vi.mock('@/platform', () => ({ getPlatform: () => ({ soundLibrary: {
 beforeEach(() => { fake.revision = 1; fake.folders = [folder('f1', '转场'), folder('f2', 'MG音效')]; fake.requests = []; fake.chosen = null })
 
 const context = () => ({
-  callerGrant: createApplicationCallerGrant({ callerId: 'external-agent', capabilityIds: ['change_application_entities', 'read_application_entity'], permissions: ['application:write', 'settings:read', 'settings:write', 'video_edit:read'], allowWrites: true, allowDestructive: true }),
+  callerGrant: createApplicationCallerGrant({ callerId: 'external-agent' }),
   signal: new AbortController().signal, requestId: crypto.randomUUID(), expectedRevisions: { sound_library: fake.revision },
 })
 const library = { kind: 'sound_library.library', id: 'singleton' }

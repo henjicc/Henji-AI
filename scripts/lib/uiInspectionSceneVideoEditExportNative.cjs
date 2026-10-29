@@ -258,7 +258,6 @@ function createVideoEditExportNativeScene() {
         }
         evidence.samples = Object.values(samples).map(sample => ({ file: sample.path, bytes: fs.statSync(sample.path).size, video: sample.probe.streams.filter(stream => stream.codec_type === 'video').map(stream => ({ codec: stream.codec_name, profile: stream.profile, pixFmt: stream.pix_fmt, width: stream.width, height: stream.height, rate: stream.r_frame_rate })), audio: sample.audio.map(stream => ({ codec: stream.codec_name, channels: stream.channels, sampleRate: Number(stream.sample_rate) })) }))
         store()
-        await page.evaluate(dir => window.henjiNative.media.allowRoot(dir), ROOT)
 
         phase('导入并经“添加到当前序列”得到正式放置')
         await button(page, '剪辑').click()
@@ -270,7 +269,7 @@ function createVideoEditExportNativeScene() {
         await dialogs(app, Object.values(samples).map(sample => sample.path), importFile)
         await button(page, '新建项目').click(); await adoptNewVideoEditProject(page, importFile); await chooseVideoEditImportFiles(page)
         const imported = await saved(page, importFile, value => value.media.length === Object.keys(samples).length, '样本未全部导入')
-        const identity = await authorizeMcpConnection(page, { name: '导出验收', allowWrites: true })
+        const identity = await authorizeMcpConnection(page, { name: '导出验收' })
         client = await connectMcpClient(identity.config, 'Henji export Reality')
         const itemOf = sample => { const media = imported.media.find(media => same(media.path, sample.path)); return imported.items.find(item => item.mediaId === media.id) }
         const placements = {}

@@ -62,7 +62,6 @@ export const embeddedAgentPromptSchema = z.object({
   creativeIntent: embeddedIntentRequestSchema.optional(),
   text: z.string().trim().min(1).max(32000),
   model: z.object({ providerId: z.string().min(1), modelId: z.string().min(1) }).strict(),
-  access: z.enum(['read', 'write', 'full']),
   context: z.string().max(EMBEDDED_CONTEXT_MAX_CHARACTERS),
   selectionSnapshot: embeddedSelectionSnapshotSchema.optional(),
   attachments: agentAttachmentsSchema.optional(),

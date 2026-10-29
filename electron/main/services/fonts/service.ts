@@ -1,4 +1,5 @@
 import { Worker } from 'node:worker_threads'
+import { trashUserFile } from '../recycle/runtime'
 import { watch, type FSWatcher } from 'node:fs'
 import path from 'node:path'
 import { fontDirectories } from './discovery'
@@ -76,7 +77,12 @@ export class FontService {
   async remove(id: string): Promise<FontCatalog> {
     const face = await this.requireFace(id)
     logger.info('开始删除导入字体', { event: 'fonts.remove.start', context: { font: face.face.fullName } })
-    try { const catalog = this.apply(await this.request({ kind: 'remove', face })); logger.info('导入字体已删除', { event: 'fonts.remove.completed', context: { font: face.face.fullName } }); return catalog }
+    try {
+      if (!face.face.imported || path.dirname(face.path) !== this.library) throw new Error('只能删除已导入的字体，系统字体请在系统设置中管理。')
+      await trashUserFile(face.path, face.face.localizedFamily || face.face.family)
+      const catalog = this.apply(await this.request({ kind: 'scan' }))
+      logger.info('导入字体已删除', { event: 'fonts.remove.completed', context: { font: face.face.fullName } }); return catalog
+    }
     catch (error) { logger.error('导入字体删除失败', { event: 'fonts.remove.failed', error }); throw error }
   }
   dispose(): void { clearTimeout(this.changeTimer); for (const watcher of this.watchers) watcher.close(); this.watchers = []; this.watched.clear(); void this.worker?.terminate(); this.worker = undefined; for (const item of this.pending.values()) item.reject(new Error('字体服务已关闭。')); this.pending.clear() }

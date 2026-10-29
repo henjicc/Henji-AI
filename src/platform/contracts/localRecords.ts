@@ -1,3 +1,4 @@
+import type { RecyclePlatform } from '../../core/localRecords/recycle'
 import type {
   GenerationHistoryInsertDto,
   GenerationHistoryQuery,
@@ -44,7 +45,7 @@ export interface PresetsPlatform {
   incrementUsage(id: string): Promise<void>
 }
 
-export interface SettingsPlatform {
+export interface SettingsPlatform extends RecyclePlatform {
   get(key: string): Promise<SettingEntryDto | null>
   set(key: string, value: string, type?: SettingValueType): Promise<void>
   delete(key: string): Promise<void>
@@ -76,4 +77,4 @@ export const SETTINGS_IPC_CHANNELS = {
   get: 'appSettings:get',
   set: 'appSettings:set',
   delete: 'appSettings:delete',
-} as const satisfies Record<keyof SettingsPlatform, string>
+} as const satisfies Record<Exclude<keyof SettingsPlatform, keyof RecyclePlatform>, string>

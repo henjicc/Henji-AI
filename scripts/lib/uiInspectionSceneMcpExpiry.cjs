@@ -15,15 +15,15 @@ function createMcpExpiryScene({ setupSettings, settlePage }) {
         const now = Date.now()
         const day = 86400_000
         const connections = [
-          { id: '00000000-0000-4000-8000-000000000001', name: '创作工作台', expiresAt: now + 30 * day, allowWrites: true },
-          { id: '00000000-0000-4000-8000-000000000002', name: 'Codex · 即将到期', expiresAt: now + 3 * day - 1000, allowWrites: true, allowDestructive: true },
-          { id: '00000000-0000-4000-8000-000000000003', name: 'Claude · 已到期', expiresAt: now - day, allowWrites: false },
+          { id: '00000000-0000-4000-8000-000000000001', name: '创作工作台', expiresAt: now + 30 * day },
+          { id: '00000000-0000-4000-8000-000000000002', name: 'Codex · 即将到期', expiresAt: now + 3 * day - 1000 },
+          { id: '00000000-0000-4000-8000-000000000003', name: 'Claude · 已到期', expiresAt: now - day },
         ]
         const fixture = { originals: channels.map(channel => [channel, ipcMain._invokeHandlers.get(channel)]), connections, acked: 0, renewed: 0 }
         globalThis.__henjiMcpExpiryFixture = fixture
         for (const channel of channels) ipcMain.removeHandler(channel)
         ipcMain.handle('mcp:status', () => ({ ok: true, data: { enabled: true, ready: true, port: 43821,
-          defaultAccess: { allowWrites: true, allowDestructive: false, allowPaid: false }, connections } }))
+          connections } }))
         ipcMain.handle('mcp:renew', (_event, input) => {
           const connection = connections.find(item => item.id === input.id)
           connection.expiresAt = Date.now() + 30 * day

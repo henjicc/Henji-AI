@@ -9,7 +9,7 @@ import { mapContentStrings, type LocationReference } from '../../../../src/core/
 import { parseAbsolutePath, pathKey, relativeSegments, type PathStyle } from '../../../../src/core/storage/pathSyntax'
 import { copyFileNoOverwrite, EntryExistsError } from '../fs/no-overwrite'
 import type { ResolvedContainer } from './workspace'
-import { ensureCodeLocation } from './code-paths'
+import { ensureCodeCollectionTarget } from './code-paths'
 import { parseGitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
 import { transferGitCode } from './code-git-transfer'
 
@@ -127,14 +127,14 @@ export async function codeGroupDestinations(files: readonly string[], to: Resolv
     const owner = group.component ? null : await fsp.readFile(path.join(group.source, '.definition'), 'utf8').catch(() => null)
     for (let ordinal = 1; ; ordinal++) {
       const candidate = ordinal === 1 ? group.desired : `${group.desired} (${ordinal})`
-      await ensureCodeLocation(to.root, path.join(candidate, '.probe'), path.sep === '\\' ? 'win32' : 'posix')
+      await ensureCodeCollectionTarget(to.root, path.join(candidate, '.probe'), path.sep === '\\' ? 'win32' : 'posix')
       if (reserved.has(candidate.toLocaleLowerCase())) continue
       const targetOwner = group.component ? null : await fsp.readFile(path.join(candidate, '.definition'), 'utf8').catch(() => null)
       if (owner !== null && targetOwner !== null && owner !== targetOwner) continue
       let conflict = false
       for (const file of group.files) {
         const target = path.join(candidate, ...file.tail)
-        await ensureCodeLocation(to.root, target, path.sep === '\\' ? 'win32' : 'posix')
+        await ensureCodeCollectionTarget(to.root, target, path.sep === '\\' ? 'win32' : 'posix')
         const existingFile = await fsp.stat(target).catch(() => null)
         if (existingFile && !(await sameFileContent(file.source, target))) { conflict = true; break }
         if (existingFile && group.component) {

@@ -106,7 +106,7 @@ export class ApplicationTransactionVerifier {
       } catch (error) {
         if (condition.kind === 'entity_absent') {
           const message = error instanceof Error ? error.message : String(error)
-          if (/(?:^|[_:])NOT_FOUND(?::|$)|ENTITY_NOT_FOUND/i.test(message)) {
+          if (/(?:^|[_:])NOT_FOUND(?:[:：]|$)|ENTITY_NOT_FOUND/i.test(message)) {
             evidence.push({
               kind: 'operation_result',
               target: condition.target,

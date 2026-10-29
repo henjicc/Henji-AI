@@ -55,7 +55,7 @@ function createVideoEditStylesScene() {
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1'))
         await dialogs(app, [file], file); await openVideoEditFile(page, file); await presented(page, 0)
         await assignIsolatedMcpPort(page)
-        const identity = await authorizeMcpConnection(page, { name: '风格与模板', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji styles Reality')
+        const identity = await authorizeMcpConnection(page, { name: '风格与模板' }); client = await connectMcpClient(identity.config, 'Henji styles Reality')
 
         // 1. 风格面板：六张内置卡片都显示渲染好的缩略图。
         await dock('风格')

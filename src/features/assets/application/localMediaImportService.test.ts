@@ -37,6 +37,7 @@ vi.mock('mediabunny', () => ({ ALL_FORMATS: [], UrlSource: class {}, Input: clas
 
 let root: string
 beforeEach(async () => {
+  vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(process.platform === 'win32' ? 'Windows' : process.platform === 'darwin' ? 'Macintosh' : 'Linux')
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-local-import-result-'))
   await fs.mkdir(path.join(root, 'project')); await fs.mkdir(path.join(root, 'outside'))
   installHarnessNativeStorage()
@@ -47,7 +48,6 @@ beforeEach(async () => {
   vi.spyOn(getPlatform().system.fs, 'readDirPage').mockImplementation((target, options) => readDirectoryPage(target, options ?? {}, 123))
   vi.spyOn(getPlatform().system.fs, 'exists').mockImplementation(async target => { try { await fs.access(target); return true } catch { return false } })
   vi.spyOn(getPlatform().system.paths, 'dirname').mockImplementation(async target => path.dirname(target))
-  vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined)
   vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockImplementation(async (file, _kind, verifyImport) => {
     if (verifyImport) await validateLocalMediaSource(file, undefined, false)
     return { sizeBytes: 8, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) }
@@ -77,7 +77,10 @@ it('发现正式声明后按项目外路径导入资产，按稳定引用回读�
     await fs.writeFile(target, 'private text')
     expect(await app.call('import_local_media', { path: target })).toMatchObject({ ok: false, error: { details: { execution: { notExecuted: true } }, message: expect.stringContaining('MEDIA_FORMAT_UNSUPPORTED') } })
     expect(create).not.toHaveBeenCalled()
-    expect(await app.call('import_local_media', { path: target + ' ' })).toMatchObject({ ok: false, error: { message: expect.stringContaining('MEDIA_PATH_TRAILING_CHARACTER') } })
+    const userAgent = vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Windows')
+    try {
+      expect(await app.call('import_local_media', { path: 'C:/media/voice.mp3 ' })).toMatchObject({ ok: false, error: { message: expect.stringContaining('MEDIA_PATH_TRAILING_CHARACTER') } })
+    } finally { userAgent.mockReturnValue(process.platform === 'win32' ? 'Windows' : process.platform === 'darwin' ? 'Macintosh' : 'Linux') }
     expect(getPlatform().media.importFromPath).toHaveBeenLastCalledWith(expect.objectContaining({ verifyContent: true }))
     await fs.writeFile(target, Buffer.from('ID3media'))
     const result = await app.call('import_local_media', { path: target })

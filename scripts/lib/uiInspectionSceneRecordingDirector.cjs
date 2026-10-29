@@ -31,7 +31,7 @@ function createRecordingDirectorScene() {
         const probe = net.createServer(); await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve))
         const port = probe.address().port; await new Promise(resolve => probe.close(resolve))
         await page.evaluate(port => window.henjiNative.mcp.configure({ enabled: false, port }), port)
-        client = await connectMcpClient((await authorizeMcpConnection(page, { name: '导演录制免费验收', allowWrites: true, allowDestructive: true, allowPaid: true })).config)
+        client = await connectMcpClient((await authorizeMcpConnection(page, { name: '导演录制免费验收' })).config)
         const read = (ref, propertyIds = []) => callTool(client, 'read_application_entity', { ref, propertyIds })
         const invoke = async (name, input, observations = []) => {
           const output = await callTool(client, name, operationEnvelope(observations, input))

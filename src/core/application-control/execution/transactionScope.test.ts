@@ -51,33 +51,3 @@ it('排队撤销取消不使用 token；释放后原 token 仍可撤销', async 
   expect(executor.undo).toHaveBeenCalledTimes(1)
   expect(fixture.revisions.value).toBe(2)
 })
-
-it('等待scope期间撤销写权限被撤回，锁内拒绝且不使用undo token', async () => {
-  const fixture = createFixture(), gate = deferred(), entered = deferred()
-  const engine = new ApplicationControlExecutionEngine(fixture.registry)
-  const executor = new FixtureMutationExecutor(fixture)
-  engine.registerMutationExecutor(executor)
-  const undo = vi.spyOn(executor, 'undo')
-  const plan = await engine.plan({ summary: '待撤销修改', transactionMode: 'compensatable', steps: [mutationStep('one', 6)] }, context())
-  const applied = await engine.commit({ planRef: plan.planRef, expectedRevisions: { 'sample.scope': 0 }, idempotencyKey: 'permission-undo-apply' }, context())
-  if (applied.status !== 'completed' || !applied.undoRef) throw new Error('missing undo')
-  engine.registerOperationExecutor({ capabilityId: 'hold_scope', capabilityVersion: 1, risk: 'R0', requiredPermissions: [], supportsAtomic: true,
-    effectContract: { direct: [], cascades: [] }, normalizeInput: (input) => input,
-    getCurrentRevisions: async () => ({ 'sample.scope': fixture.revisions.value }),
-    execute: async () => { entered.resolve(); await gate.promise; return { status: 'completed', directRefs: [],
-      resultingRevisions: { 'sample.scope': fixture.revisions.value }, evidence: [{ kind: 'operation_result', fact: '读取完成', capturedAt: new Date().toISOString() }] } } })
-  const barrier = await engine.plan({ summary: '同scope执行中', transactionMode: 'atomic', steps: [{ kind: 'operation', capabilityId: 'hold_scope',
-    capabilityVersion: 1, input: {}, expectedRevisions: applied.resultingRevisions }] }, context())
-  const holding = engine.commit({ planRef: barrier.planRef, expectedRevisions: applied.resultingRevisions, idempotencyKey: 'permission-undo-block' }, context())
-  await entered.promise
-  const undoContext = context()
-  const input = { undoRef: applied.undoRef, expectedRevisions: applied.resultingRevisions, idempotencyKey: 'permission-undo-wait' }
-  const waiting = engine.undo(input, undoContext)
-  ;(undoContext.permissions as Set<string>).delete('sample:write')
-  gate.resolve(); await holding
-  expect(await waiting).toMatchObject({ status: 'failed', code: 'PERMISSION_DENIED' })
-  expect(undo).not.toHaveBeenCalled()
-  expect(fixture.values.get('one')).toBe(6)
-  expect(fixture.revisions.value).toBe(1)
-  expect(await engine.undo({ ...input, idempotencyKey: 'permission-undo-restored' }, context())).toMatchObject({ status: 'completed' })
-})

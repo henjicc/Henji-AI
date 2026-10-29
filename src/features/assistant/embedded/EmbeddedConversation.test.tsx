@@ -20,7 +20,7 @@ import { EmbeddedConversation } from './EmbeddedConversation'
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 beforeEach(() => {
   installPaidApprovalTestBridge()
-  useAssistantUiStore.setState({ pendingGoal: null, pendingGoalOptions: null, embeddedAccess: 'read' })
+  useAssistantUiStore.setState({ pendingGoal: null, pendingGoalOptions: null })
   mocks.snapshot.value = emptyEmbeddedAgentSnapshot()
   mocks.models.mockResolvedValue([{ providerId: 'test', modelId: 'test', inputModalities: [] }])
   mocks.prompt.mockResolvedValue(undefined)
@@ -70,7 +70,7 @@ it('显式自动发送沿正式入口只提交一次，保留点击时上下文�
   render(<StrictMode><EmbeddedConversation /></StrictMode>)
   await waitFor(() => expect(mocks.prompt).toHaveBeenCalledTimes(1))
   await waitFor(() => expect([...bridge.records.values()]).toMatchObject([{ origin: { actor: 'user' }, state: 'completed', paidReservations: [{ category: 'generation' }] }]))
-  expect(mocks.prompt.mock.calls[0][0]).toMatchObject({ text: '请直接优化口播', context, access: 'read', delivery: 'wait', attachments: [] })
+  expect(mocks.prompt.mock.calls[0][0]).toMatchObject({ text: '请直接优化口播', context, delivery: 'wait', attachments: [] })
   expect(useAssistantUiStore.getState().pendingGoal).toBeNull()
 })
 

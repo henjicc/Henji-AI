@@ -31,7 +31,7 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
   const { attachLocalApplicationHost } = await import('./localApplicationHost')
   const { useSettingsStore } = await import('@/stores/settingsStore')
   const connections = new McpConnections({ read: () => null, write: () => {} })
-  const identity = connections.create('受控集成客户端', { allowWrites: true })
+  const identity = connections.create('受控集成客户端')
   const db = new Database(':memory:')
   createApplicationOperationTablesV1(db)
   // 写入范围经真实宿主注册从反射注册表派生，主进程不再维护 entityType 前缀白名单。
@@ -266,7 +266,7 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
 
 it('关闭现代 HTTP 监听只结束等待，已登记写入仍可完成并从原账本查询', async () => {
   const connections = new McpConnections({ read: () => null, write: () => {} })
-  const caller = connections.create('断线写入验收', { allowWrites: true })
+  const caller = connections.create('断线写入验收')
   const db = new Database(':memory:')
   createApplicationOperationTablesV1(db)
   const operations = new ApplicationOperationCoordinator(new ApplicationOperationStore(db), undefined, () => new Set(['settings.registry']))
@@ -320,7 +320,6 @@ it('t82：超长素材名的零提交拒绝不锁文档；丢失回执可只读�
   vi.spyOn(platform.system.fs, 'readTextFile').mockImplementation(async file => files.get(file)!)
   vi.spyOn(platform.system.fs, 'exists').mockResolvedValue(true)
   vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue('D:/generated')
-  vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)
   vi.spyOn(platform.assetLibrary, 'inspectFileContent').mockResolvedValue(content)
   vi.spyOn(platform.assetLibrary, 'createAsset').mockImplementation(async input => {
     const existing = [...assets.values()].find(asset => asset.filePath === input.filePath)
@@ -349,7 +348,7 @@ it('t82：超长素材名的零提交拒绝不锁文档；丢失回执可只读�
     },
   }
   const detach = attachLocalApplicationHost(hostPlatform, true)
-  const dispatcher = new ApplicationToolDispatcher({ assertActive: () => undefined, access: () => ({ allowWrites: true, allowDestructive: false, allowPaid: false }) }, bridge, operations)
+  const dispatcher = new ApplicationToolDispatcher({ assertActive: () => undefined }, bridge, operations)
   const input = { documentRef: { kind: 'video_edit.document', id }, sequenceRef: { kind: 'video_edit.sequence', id: `${id}:${owner.activeSequenceId}` }, placement: { mode: 'library' }, result: { type: 'generation', resultRef: { kind: 'generation.result', id: 't82-result' }, outputIndex: 0 } }
   try {
     // 故障注入复现旧生产方把全文当名称；仍经真实副本schema、Session和SQLite回执。
@@ -454,7 +453,7 @@ it.each(['external', 'embedded'] as const)('%s：真实字幕能力弹窗不挂�
     return { project: { ...project.document, transcript: [{ id: 'word', text: 'Hello', startFrame: 0, endFrame: 1000, included: true, locked: false, granularity: 'word' }] }, modelId: 'test-asr', granularity: 'word' }
   })
   const connections = new McpConnections({ read: () => null, write: () => {} })
-  const identity = connections.create('确认回执测试', { allowWrites: true, allowPaid: true })
+  const identity = connections.create('确认回执测试')
   const db = new Database(':memory:'); createApplicationOperationTablesV1(db)
   const operations = new ApplicationOperationCoordinator(new ApplicationOperationStore(db), undefined, () => bridge.writableEntityTypes())
   const bridge: ApplicationHostBridge = new ApplicationHostBridge(id => connections.assertActive(id), operations)
@@ -478,7 +477,7 @@ it.each(['external', 'embedded'] as const)('%s：真实字幕能力弹窗不挂�
       return result
     },
   }, true)
-  const dispatcher = new ApplicationToolDispatcher({ assertActive: id => connections.assertActive(id), access: id => connections.access(id) }, bridge, operations, 0, callerKind)
+  const dispatcher = new ApplicationToolDispatcher({ assertActive: id => connections.assertActive(id) }, bridge, operations, 0, callerKind)
   const server = new LocalMcpServer(connections, bridge, undefined, operations)
   const client = new Client({ name: '确认测试', version: '1' }, { versionNegotiation: { mode: { pin: '2026-07-28' } } })
   try {

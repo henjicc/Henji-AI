@@ -116,56 +116,7 @@ const LEDGERS: LedgerCase[] = [
   { ledger: GENERATION_DRAFT_STORE_LEDGER, state: () => useGenerationDraftStore.getState() },
 ]
 
-/**
- * 人机差集的燃尽基线：账上仍标为 gap 的动作总数。
- *
- * 这是个棘轮——新缺口进不来（超过基线就红），各期补齐把它往下调。降到 0 就是
- * 「助手能做的事等于人在界面上能做的事」。改这个数字只有两种正当理由：
- * 补齐了某项（调小），或者界面新增了一个确实还做不了的功能（连同 gap 理由一起说明）。
- *
- * 建账当天 21 项。播放控制 5 项已补齐（注册成 camera_stage.playback 单例实体，零新增工具），
- * 2.1 又烧掉状态关键帧增删排序 3 项（removeShot/removeShots 接到集合写入，reorderShot 绑到已可写
- * 的 time 属性，专用能力 add_camera_stage_shot 一并下线）。2.2 烧掉状态关键帧状态捕获 1 项
- * （captureIntoSelectedShot 绑到新增的 capture_object_refs 属性，不依赖选中态）。2.3 烧掉编辑
- * 模式切换与烘焙 2 项——读代码发现"专业→简易无约束"的假设不成立（store 直接拒绝这个方向），
- * setEditorMode 只是新建工程的内部步骤、已被 create_camera_stage_project 覆盖，改绑 excluded；
- * bakeToProMode 注册为带审批的语义能力 bake_camera_stage_to_pro。2.4 烧掉姿态直接写入 2 项——
- * updatePoseJoint 并入 63 条 animatable.* 逐分量属性（方案 C：轨道无关键帧写静态值，有关键帧
- * 等价于当前时间点打点，只在专业模式下可写），applyPosePreset 绑到新增的 pose_preset 枚举属性。
- * 2.5 烧掉三维最后 3 项——clearTrack 接到集合删除的轨道级引用（工程:对象:属性路径，不带时间）；
- * setShotSpatialPath/setShotPathAnchor 绑到 camera_stage.trajectory 新增的 5 条可写属性
- * （knots 等三条整条路径替换，start_position/end_position 挪相邻状态关键帧快照）。**三维 11 项
- * 缺口全部归零**。3.1 烧掉画布 3 项——clearCanvas/ungroupNode/redo 均注册为专用能力
- * （clear_canvas/ungroup_canvas_node/redo_canvas_change），与 undo_canvas_change/
- * group_canvas_nodes 同属工程级整体状态操作，不勉强表达成集合写入。3.2 烧掉最后 2 项——
- * updateStoryboardFrame/reorderStoryboardFrame 都绑到新增的 canvas.node.storyboard_frames
- * 属性（分镜格子没有独立于画布节点的身份，内容与排序都是按 id 定点写 note/order 字段）。
- * **画布 5 项缺口全部归零，本任务范围内 GAP_BASELINE 降到 0**——助手能做的事等于人在
- * 界面上能做的事。往后每新增一个界面动作，先在这里加一条账目，只能降不能升。
- *
- * 第四阶段开始给 `src/stores/*` 一类未建账的 store 补账，这里预期会盘出新缺口——4.1 只是把
- * 门禁的清点范围扩大到全部 store，不代表这些 store 之前就有对应能力。4.2 建 projectStore（10
- * 动作，零新增 gap）/ navigationStore（2 动作，零新增 gap）/ uiStore（2 动作，零新增 gap）/
- * themeStore（2 动作，零新增 gap——顺带发现这个 store 是死代码，全仓库没有调用方）/
- * settingsStore（31 动作，新增 2 个 gap）。这 2 个 gap 都对应 protected 设置：
- * `setProviderApiKey`（security.provider_keys）与 `setDownloadPresetPaths`
- * （storage.download_paths）——反射层还没把 7 项 protected 设置注册成正规属性，4.4 负责
- * 松绑其中 2 项、改写其余 5 项的只读理由，到时候回来把这两条 gap 改绑定。（这两个 store 方法
- * 本身在全仓库里也找不到除自身定义外的调用方，是死代码，但归类交给 4.4 统一判断，不在这里
- * 自行排除。）**GAP_BASELINE 0 → 2**。
- *
- * 4.3 给剩下 11 个 store 建账（4.1 复核后的准确总数，19/19 全覆盖）：三维三个视图态 store
- * （tool/viewport/session）与画布/生成两个进度投影 store 全部零新增 gap。图片编辑面板、图片
- * 交接中转态、助手自身面板、两个全局弹窗队列（alertDialogStore/largeUploadPolicy）同样零新增
- * gap——assistantUiStore.setApprovalMode 按任务文档要求单独归为 user_only（审批模式是用户对
- * 助手的授权开关，改它等于自我提权）。唯一有实质缺口的是 generationHistoryFilterStore（8 个
- * 动作，非最初估的 16）：核对 list_generation_history 的 inputSchema 后发现它只覆盖
- * mediaType（还有 status/limit，界面上没有对应筛选项），界面上另外 6 个筛选维度——keyword
- * （关键词）、providerId（供应商）、modelId（模型）、timePreset/startDate/endDate（时间范围）
- * ——助手完全没有对应查询入口，不是视图态，如实登记为 6 个新 gap；resetFilters 只清空这些
- * 筛选框的本地状态，没有对应"重置查询"的语义，归为 view_state。**GAP_BASELINE 2 → 8**，
- * 4.1 白名单里的 store 条目全部清空，19/19 全覆盖达成。
- */
+/** Store 动作必须绑定正式属性、集合或能力；有意排除与尚未覆盖均由账本声明。 */
 const GAP_BASELINE = 0
 
 function actionNames(state: object): string[] {

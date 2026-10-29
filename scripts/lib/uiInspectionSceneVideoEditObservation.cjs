@@ -67,7 +67,7 @@ function createVideoEditObservationScene() {
           await documents.saveDocument({ target: { id }, expectedRevision: read.meta.revision, content: read.content })
         }, { source: videoReferencePath, sound: soundPath, projectId: seeded.projectId, id: seeded.documentId })
         await openVideoEditProjectCard(page, seeded.projectId)
-        const identity = await authorizeMcpConnection(page, { name: '定向观察验收', allowWrites: true, allowDestructive: true })
+        const identity = await authorizeMcpConnection(page, { name: '定向观察验收' })
         client = await connectMcpClient(identity.config, 'Henji observation Reality')
         const documentRef = { kind: 'video_edit.document', id: seeded.documentId }
         const sequenceRef = { kind: 'video_edit.sequence', id: `${seeded.documentId}:main` }

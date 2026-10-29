@@ -37,6 +37,6 @@
 ## 跨工作区直接复用
 
 - 画布原位编辑沿原文档保存与节点预览更新；派生单层/组节点走上述导出桥梁，保持来源关联，不手动搬路径。
-- 图片文档进剪辑用 `place_video_edit_creative_result`：result.type=document，result.documentRef 为保存图片的目录文档引用；placement=library 只放素材库，其他落位按剪辑schema。返回后读实际项目项/片段与关联媒体，取得可读媒体引用再检查。需要素材库/时间线写权限；不要只为截图创建无关剪辑。
+- 图片文档进剪辑用 `place_video_edit_creative_result`：result.type=document，result.documentRef 为保存图片的目录文档引用；placement=library 只放素材库，其他落位按剪辑schema。返回后读实际项目项/片段与关联媒体，取得可读媒体引用再检查。不要只为截图创建无关剪辑。
 - 剪辑节目帧用 `edit_video_edit_program_frame` 打开图片编辑，保留原 frameEditSessionRef/returnPlacement；保存图片后由 `place_video_edit_creative_result` 用目录文档来源及原样返回的单帧落位回填。普通时间线操作按需读 video-edit-workbench，写代码画面另读 video-edit-code-creation。
 - 若原操作保留修改但保存未确认，用 `retry_application_operation_save`，新operationId标识保存恢复、originalOperationId指原编辑调用；不新建文件/工程、重复图层或重新修补来绕过保护。取回图后检查整体、细边缘、接缝与透明背景，报告实际落位和未验部分。

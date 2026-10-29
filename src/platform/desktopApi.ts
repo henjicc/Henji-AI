@@ -13,18 +13,6 @@ export function toDisplaySrc(localPath: string): string {
 }
 
 /**
- * 授权某个目录进入 henji-media:// 协议可读根目录范围。
- * 用户从任意磁盘位置打开/拖入的媒体默认不在白名单内,直接用 henji-media:// 引用会 403,
- * 引用其原始路径前需先授权其所在目录。
- */
-export async function allowMediaRoot(rootPath: string): Promise<void> {
-  if (!isDesktopRuntime()) {
-    return
-  }
-  await getPlatform().media.allowRoot(rootPath)
-}
-
-/**
  * 渲染层 File 对象若来自真实磁盘文件（文件选择器/拖拽），直接拿到它的文件系统路径，
  * 不需要再读字节、算哈希、写一份新文件——只有合成 Blob（如剪贴板生成）才会返回空字符串。
  */
@@ -36,20 +24,8 @@ export function getPathForFile(file: File): string {
 }
 
 /**
- * 确认某个绝对路径是否在 henji-media:// 协议允许读取的范围内——复用 getPathForFile
- * 拿到的原始磁盘路径前必须先过这一关，否则可能出现"路径有效但协议 403 拒绝"的
- * 静默失败（<video src> 既不显示缩略图也放不了）。
- */
-export async function isPathAllowedForMedia(targetPath: string): Promise<boolean> {
-  if (!isDesktopRuntime()) {
-    return false
-  }
-  return await getPlatform().media.isPathAllowed(targetPath)
-}
-
-/**
  * 拿随应用分发的内置只读资源（resources/ 下相对路径）的可展示 URL：
- * 主进程解析绝对路径并放行媒体协议后，转成 henji-media:// URL 返回。
+ * 主进程解析绝对路径后，转成 henji-media:// URL 返回。
  * 非桌面运行时（裸浏览器 Vite 调试）或资源不存在时返回 null。
  */
 export async function getBundledResourceUrl(relativePath: string): Promise<string | null> {

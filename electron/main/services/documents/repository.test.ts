@@ -49,12 +49,12 @@ describe('文档仓库：新建与草稿', () => {
     expect(env.catalog.getDocument(first.meta.id)?.path).toBe(first.meta.path)
   })
 
-  it('英文作品目录用英文文件夹与自动名；剪辑不能独立存放；图片文档的读写留给专用编辑器', async () => {
+  it('英文作品目录用英文文件夹与自动名；剪辑可独立存放；图片文档的读写留给专用编辑器', async () => {
     await env.cleanup()
     env = createTestEnvironment({ locale: 'en' })
     const created = await env.services.service.createDocument({ kind: 'camera_stage', container: { kind: 'user' } })
     expect(created.meta.path).toBe(path.join(env.workRoot, 'Camera Stages', 'Untitled Camera Stage 1.hjstg'))
-    await expect(env.services.service.createDocument({ kind: 'video_edit', container: { kind: 'user' } })).rejects.toMatchObject({ name: 'DocumentLocationError' })
+    await expect(env.services.service.createDocument({ kind: 'video_edit', container: { kind: 'user' } })).resolves.toMatchObject({ meta: { container: { kind: 'user' }, path: path.join(env.workRoot, 'Video Edits', 'Untitled Edit 1.hjvid') } })
     await expect(env.services.service.createDocument({ kind: 'image_document', container: { kind: 'user' } })).rejects.toMatchObject({ name: 'DocumentUnsupportedError' })
   })
 
@@ -105,7 +105,6 @@ describe('文档仓库：保存、读取与位置换算', () => {
     expect(read.content).toEqual({ ...content, nodes: [{ imageUrl: inProject, preview: inProject }, { image: inOther }, { audio: inWork, video: external }] })
     expect(read.missingPaths).toEqual([])
     expect(read.externalDirectories).toEqual([env.outside])
-    expect(env.granted).toContain(env.outside)
   })
 
   it('核对版本：过期版本报冲突且文件不变；内容没变不写文件；选择覆盖时跳过核对', async () => {
@@ -194,7 +193,7 @@ describe('文档仓库：改名、转正、移动、副本、删除', () => {
     expect(env.catalog.listExternalLocations()).toEqual([expect.objectContaining({ path: env.outside, kind: 'folder' })])
     expect((await readStored(result.meta.path)).json.content).toEqual({ media: 'henji:/生成结果/a.png' })
     expect((await service.readDocument({ id: draft.meta.id })).content).toEqual({ media })
-    await expect(service.finalizeDocument({ target: { id: draft.meta.id }, name: 'x', folder: path.join(env.programRoot, 'x') })).rejects.toMatchObject({ name: 'DocumentLocationError' })
+    await expect(service.finalizeDocument({ target: { id: draft.meta.id }, name: 'x', folder: path.join(env.programRoot, 'x') })).resolves.toMatchObject({ meta: { path: path.join(env.programRoot, 'x', 'x.hjcvs') } })
   })
 
   it('移入项目：原容器里用到的素材复制过去（原处保留）并改写引用，外部与其他项目的不动', async () => {
@@ -249,7 +248,7 @@ describe('文档仓库：改名、转正、移动、副本、删除', () => {
     expect(fs.existsSync(path.join(env.workRoot, '.henji', 'layers', 'l1.png'))).toBe(true)
   })
 
-  it('移动遇到重名：默认报错，两个都保留时自动加序号；剪辑不能移出项目', async () => {
+  it('移动遇到重名：默认报错，两个都保留时自动加序号；剪辑可移出项目', async () => {
     const { service } = env.services
     const first = await service.createProject({ name: '一' })
     const second = await service.createProject({ name: '二' })
@@ -261,7 +260,7 @@ describe('文档仓库：改名、转正、移动、副本、删除', () => {
     const moved = await service.moveDocument({ target: { id: source.meta.id }, container: destination, onConflict: 'keepBoth' })
     expect(moved.meta.name).toBe('同名 (2)')
     const edit = await service.createDocument({ kind: 'video_edit', container: destination })
-    await expect(service.moveDocument({ target: { id: edit.meta.id }, container: { kind: 'user' } })).rejects.toMatchObject({ name: 'DocumentLocationError' })
+    await expect(service.moveDocument({ target: { id: edit.meta.id }, container: { kind: 'user' } })).resolves.toMatchObject({ meta: { container: { kind: 'user' } } })
   })
 
   it('创建副本：新 ID、非草稿、版本从 0 开始，同名时按要求报错或加序号', async () => {
@@ -340,15 +339,15 @@ describe('名称检查', () => {
     expect(await service.checkName({ subject: { type: 'document', kind: 'canvas' }, name: 'DEMO', location: { renaming: doc.meta.path } })).toMatchObject({ status: 'available' })
     expect(await service.checkName({ subject: { type: 'document', kind: 'canvas' }, name: 'Demo', location: { folder: env.outside } })).toMatchObject({ status: 'available', path: path.join(env.outside, 'Demo.hjcvs') })
     expect(await service.checkName({ subject: { type: 'document', kind: 'canvas' }, name: 'NUL', location })).toMatchObject({ status: 'invalid', reason: 'reserved' })
-    expect(await service.checkName({ subject: { type: 'document', kind: 'video_edit' }, name: 'x', location })).toMatchObject({ status: 'invalid', reason: 'location' })
+    expect(await service.checkName({ subject: { type: 'document', kind: 'video_edit' }, name: 'x', location })).toMatchObject({ status: 'available' })
   })
 
-  it('项目查同级文件夹名；项目不能放进项目', async () => {
+  it('项目查目标文件夹中的同级名称', async () => {
     const { service } = env.services
     const project = await service.createProject({ name: '短片' })
     expect(await service.checkName({ subject: { type: 'project' }, name: '短片', location: { container: { kind: 'user' } } })).toMatchObject({ status: 'duplicate', existingPath: project.path })
     expect(await service.checkName({ subject: { type: 'project' }, name: '短片', location: { folder: env.outside } })).toMatchObject({ status: 'available' })
-    expect(await service.checkName({ subject: { type: 'project' }, name: 'x', location: { container: { kind: 'project', projectId: project.id } } })).toMatchObject({ status: 'invalid', reason: 'location' })
+    expect(await service.checkName({ subject: { type: 'project' }, name: 'x', location: { container: { kind: 'project', projectId: project.id } } })).toMatchObject({ status: 'available' })
   })
 })
 

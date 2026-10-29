@@ -10,8 +10,7 @@ import { returnFromEmbedded } from '@/features/documents/embeddedDocuments';
 import { ICON_TOOL_IMAGE_EDIT } from '@/core/theme/icons';
 import { importLocalMedia, readClipboardImageSource } from '@/services/localMediaImport';
 import { useNotification } from '@/contexts/NotificationContext';
-import { allowMediaRoot, dirname, openDialog } from '@/platform/desktopApi';
-import { isLikelyLocalImagePath } from '@/services/imageSource';
+import { openDialog } from '@/platform/desktopApi';
 import { useImageEditorHandoffStore } from '@/features/imageEdit/store/imageEditorHandoffStore';
 import {
   findOpenImageDocument,
@@ -152,12 +151,6 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
 
   const createFrom = useCallback((source: ImageDocumentSource, returnTo?: string) => exclusive('createFailed', async () => {
     if (!await leaveShown()) return;
-    // 打开/拖入的本地图片可能在媒体协议默认白名单之外，先授权其所在目录。
-    if (isLikelyLocalImagePath(source.url)) {
-      await allowMediaRoot(await dirname(source.url)).catch((error: unknown) => {
-        logger.warn('image_mark.standalone.allow_root.failed', { error: errorMessage(error) });
-      });
-    }
     const document = await createImageDocumentFromSource(source);
     if (returnTo) videoEditReturns.set(document.id, returnTo);
     show({ document, ...(returnTo ? { returnTo } : {}) });

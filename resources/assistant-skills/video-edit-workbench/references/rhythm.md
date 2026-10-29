@@ -39,7 +39,7 @@
 
 进度读素材项只读属性 `video_edit.item.content_queries`：phaseProgress 是实测阶段比例，null 表示未知；取消原请求或编辑/关闭剪辑会取消旧查询。失败沿原入口重试，进度不保存。
 
-优先用 `query_video_edit_transcript` 按 text 或 from/to 局部查已有口播与校对字幕，可限定 clipRef（含链接声音）或 itemRef。from/to 是半开序列帧；matchSource 可选 asr/caption/all；limit 为1–50，contextWords 为0–20。分页时重复原条件并带 nextCursor，不把整份长稿读进上下文。没有转录时走 captions 的准备与审批流程。
+优先用 `query_video_edit_transcript` 按 text 或 from/to 局部查已有口播与校对字幕，可限定 clipRef（含链接声音）或 itemRef。from/to 是半开序列帧；matchSource 可选 asr/caption/all；limit 为1–50，contextWords 为0–20。分页时重复原条件并带 nextCursor，不把整份长稿读进上下文。没有转录时走 captions 的准备与付费流程。
 
 - `ripple_delete_video_edit_text` 删除匹配并闭合全轨时间；`extract_video_edit_text` 复制到紧凑新序列，name 只用于此操作；`insert_video_edit_text` 复制插入，frame 必填且为序列帧。
 - 优先直接使用查询命中的 selector（kind=match）；候选包含必要上下文、序列位置和源微秒，剪辑改变、关闭或被最近查询回收后须重新查。校对字幕命中标为 precision=caption，不能冒充精确词源；editable=false 不可直接剪。

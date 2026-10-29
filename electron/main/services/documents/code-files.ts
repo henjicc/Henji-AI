@@ -1,6 +1,5 @@
 import { CodeProjectRepository } from './code-project'
 import type { CodeProjectResolve, CodeProjectClosure, CodeProjectChange, CodeProjectState } from '../../../../src/core/videoEdit/codeMaterial/projectContract'
-import { ensureCodeLocation } from './code-paths'
 import { migrateProjectCodeStorage } from './code-git-migration'
 import { createHash } from 'node:crypto'
 import fsp from 'node:fs/promises'
@@ -94,24 +93,15 @@ export class DocumentCodeFiles {
     }
     return root
   }
-  private async safe(root: string, target: string, create = false, created?: string[]): Promise<void> {
-    await ensureCodeLocation(root, target, this.workspace.style, create, created)
-  }
   async read(file: CodeFileReference): Promise<string> {
     const reference = parseGitCodeLocation(file.location)
     if (reference) {
-      const roots = [this.workspace.layout().root, ...this.workspace.catalog.listProjects().filter(project => !project.missing).map(project => project.path)]
-      const root = roots.find(root => path.resolve(reference.repository) === path.join(root, '代码'))
-      if (!root) throw new Error(`${file.path} 的源码位置无效，请重新打开原项目。`)
       try { return await new CodeGitRepository(reference.repository).read(file.location, file.hash) }
       catch (error) { this.logger.warn('源码版本读取失败', { event: 'documents.code.read.failed', error, context: { file: file.path } }); throw error }
     }
     const location = path.resolve(file.location)
-    const roots = [this.workspace.layout().root, ...this.workspace.catalog.listProjects().filter(project => !project.missing).map(project => project.path)]
-    const root = roots.filter(root => isPathInside(this.workspace.style, path.join(root, '代码'), location)).sort((a, b) => b.length - a.length)[0]
-    if (!path.isAbsolute(file.location) || !root) throw new Error(`${file.path} 的源码位置无效，请重新打开原项目。`)
+    if (!path.isAbsolute(file.location)) throw new Error(`${file.path} 的源码位置必须是绝对路径。`)
     try {
-      await this.safe(root, location)
       const stat = await fsp.stat(location)
       if (!stat.isFile() || stat.size > CODE_AUTHOR_SOURCE_MAX_BYTES) throw new Error(`${file.path} 不是可读取的源码文件或超过16MiB，请恢复原文件。`)
       const bytes = await fsp.readFile(location); const hash = createHash('sha256').update(bytes).digest('hex')
@@ -138,13 +128,12 @@ export class DocumentCodeFiles {
       for (const file of Object.keys(request.contents.files)) codeFilePathSchema.parse(file)
       const repository = new CodeGitRepository(path.join(root, '代码'))
       let folder = request.folder
-      if (folder && (folder !== codeFolderName(folder) || ['组件库', '.', '..'].includes(folder))) throw new Error('素材目录越界或名称无效。')
+      if (folder && (folder !== codeFolderName(folder) || ['.', '..'].includes(folder))) throw new Error('素材目录越界或名称无效。')
       const stem = codeFolderName(request.name)
       for (let suffix = 1; ; suffix++) {
         const candidate = folder ?? (suffix === 1 ? stem : `${stem} (${suffix})`)
         const marker = path.join(root, '代码', codeWorkingPrefix('素材', candidate), '.definition')
-        await this.safe(root, marker)
-        const oldMarker = path.join(root, '代码', '素材', candidate, '.definition'); await this.safe(root, oldMarker)
+        const oldMarker = path.join(root, '代码', '素材', candidate, '.definition')
         const owner = await fsp.readFile(marker, 'utf8').catch(async error => { if (error.code === 'ENOENT') return fsp.readFile(oldMarker, 'utf8').catch(error => { if (error.code === 'ENOENT') return null; throw error }); throw error })
         if (owner && owner !== request.definitionId) {
           if (folder) throw new Error('素材目录属于另一份代码定义，请重新创建素材。')
@@ -158,7 +147,6 @@ export class DocumentCodeFiles {
       }
       const versions = (await repository.versions('素材')).filter(value => value.name === folder)
       const legacyDirectory = path.join(root, '代码', folder)
-      await this.safe(root, path.join(legacyDirectory, '.probe'))
       const legacy = await fsp.readdir(legacyDirectory).catch(error => { if (error.code === 'ENOENT') return []; throw error })
       const ordinal = Math.max(0, ...versions.map(value => value.version), ...legacy.map(value => /^v\d+$/.test(value) ? Number(value.slice(1)) : 0)) + 1
       const result = await repository.writeLocked({ kind: '素材', name: folder, version: ordinal, files: { ...request.contents.files, '.definition': request.definitionId } })
@@ -180,13 +168,18 @@ export class DocumentCodeFiles {
     const directories = await fsp.readdir(library, { withFileTypes: true }).catch(error => { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []; throw error })
     const records: Array<{ location: string; source: string; hash: string; previousHash: string | null; name: string; metadata: ReturnType<typeof componentSourceMetadata>['metadata'] }> = []
     for (const directory of directories) {
-      if (!directory.isDirectory() || directory.isSymbolicLink()) continue
-      for (const file of await fsp.readdir(path.join(library, directory.name))) {
+      const directoryPath = path.join(library, directory.name)
+      const stat = await fsp.stat(directoryPath).catch(error => {
+        this.logger.warn('组件目录无法读取，已跳过', { event: 'documents.code.component.skipped', error, context: { directory: directoryPath } })
+        return null
+      })
+      if (!stat?.isDirectory()) continue
+      for (const file of await fsp.readdir(directoryPath)) {
         if (!/^v\d+(?: \(\d+\))?\.ts$/.test(file)) continue
-        const location = path.join(library, directory.name, file); await this.safe(root, location)
+        const location = path.join(library, directory.name, file);
         const stat = await fsp.stat(location); if (stat.size > CODE_AUTHOR_SOURCE_MAX_BYTES) throw new Error('项目组件源码超过16MiB，请恢复原文件。')
         const source = await fsp.readFile(location, 'utf8'); const hash = digest(source)
-        const integrity = `${location}.sha256`; await this.safe(root, integrity)
+        const integrity = `${location}.sha256`;
         const expected = await fsp.readFile(integrity, 'utf8').catch(() => null)
         if (expected !== hash) throw new Error(`项目组件 ${directory.name} 内容校验失败，请恢复原组件后重试。`)
         const { metadata } = componentSourceMetadata(source)
@@ -222,7 +215,7 @@ export class DocumentCodeFiles {
     const groups = new Map<string, CodeComponentVersion[]>()
     for (const record of records) {
       if (parseGitCodeLocation(record.location)) { if (await repository.isWithdrawn(record.location)) continue }
-      else { const withdrawn = `${record.location}.withdrawn`; await this.safe(root, withdrawn); if (await fsp.stat(withdrawn).catch(() => null)) continue }
+      else { const withdrawn = `${record.location}.withdrawn`; if (await fsp.stat(withdrawn).catch(() => null)) continue }
       const versions = groups.get(record.name) ?? []; versions.push({ ...pin(record, []), name: record.name, source: record.source, exports: record.metadata.exports, description: record.metadata.description }); groups.set(record.name, versions)
     }
     return [...groups].map(([name, versions]) => ({ name, latestVersion: versions.reduce((latest, value) => Math.max(latest, value.version), 0), versions: versions.sort((a, b) => a.version - b.version) }))
@@ -238,7 +231,6 @@ export class DocumentCodeFiles {
       const repository = new CodeGitRepository(path.join(root, '代码'))
       const versions = (await repository.versions('组件')).filter(value => value.name === name)
       const directory = path.join(root, '代码', '组件库', name)
-      await this.safe(root, path.join(directory, '.probe'))
       const legacy = await fsp.readdir(directory).catch(error => { if (error.code === 'ENOENT') return []; throw error })
       const version = Math.max(0, ...versions.map(value => value.version), ...legacy.map(value => Number(/^v(\d+)\.ts/.exec(value)?.[1] ?? 0))) + 1
       const source = packageComponentSource(request.source, { name, version, exports: request.exports, description: request.description, imports: request.imports.map(({ name, version, hash }) => ({ name, version, hash })) })
@@ -254,10 +246,9 @@ export class DocumentCodeFiles {
       if (parseGitCodeLocation(request.location)) { await new CodeGitRepository(path.join(root, '代码')).withdrawLocked(request.location, request.hash); return }
       const libraryRoot = path.join(root, '代码', '组件库')
       if (!isPathInside(this.workspace.style, libraryRoot, request.location)) throw new Error('只能撤回本项目的组件发布。')
-      await this.safe(root, request.location)
       const source = await this.read({ path: path.basename(request.location), location: request.location, hash: request.hash })
       componentSourceMetadata(source)
-      const marker = `${request.location}.withdrawn`; await this.safe(root, marker)
+      const marker = `${request.location}.withdrawn`;
       if (!(await fsp.stat(marker).catch(() => null))) await createFileExclusively(marker, Buffer.from(request.hash))
     })
   }

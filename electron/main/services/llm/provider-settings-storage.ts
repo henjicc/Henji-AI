@@ -1,3 +1,5 @@
+import { getDb } from '../db'
+import { RecycleStore } from '../recycle/store'
 import { LLM_CONFIG_VERSION, LLM_JOURNAL_VERSION } from '../../../../src/core/persistence/schemaVersions'
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
@@ -108,7 +110,19 @@ export function createProviderSettingsFileStorage(): ProviderSettingsStorage {
       const backupPath = version > 0 ? await backupBeforePersistenceUpgrade(paths().config, contract, version, text) : undefined
       return parseVersionedPersistenceJson(raw, contract, backupPath) as LlmConfigState
     },
-    writeConfig: async config => await writeJsonAtomic(paths().config, JSON.parse(serializeVersionedPersistenceJson({ id: 'llm-config', name: '助手模型配置', version: LLM_CONFIG_VERSION, schema: llmStoredConfigSchema, migrations: formatMigrations('llm-config') }, config)) as unknown),
+    writeConfig: async config => {
+      const stored = await readJson(paths().config)
+      const raw = stored?.raw as { content?: LlmConfigState; providers?: LlmConfigState['providers']; models?: LlmConfigState['models'] } | undefined
+      const previous = raw?.content ?? raw
+      const removed = previous?.providers?.filter(provider => !config.providers.some(next => next.providerId === provider.providerId)) ?? []
+      const snapshots: string[] = []
+      let recycle: RecycleStore | undefined
+      const backup = (target: string, name: string, payload: string): string => (recycle ??= new RecycleStore(getDb())).snapshot('member', target, name, payload)
+      for (const provider of removed) snapshots.push(backup('llm-provider', provider.displayName, JSON.stringify({ provider, models: previous?.models?.filter(model => model.providerId === provider.providerId) ?? [] })))
+      for (const model of previous?.models ?? []) if (!removed.some(provider => provider.providerId === model.providerId) && !config.models.some(next => next.modelId === model.modelId && next.providerId === model.providerId)) snapshots.push(backup('llm-model', model.displayName, JSON.stringify({ models: [model], fallbackProvider: previous?.providers?.find(provider => provider.providerId === model.providerId) })))
+      try { await writeJsonAtomic(paths().config, JSON.parse(serializeVersionedPersistenceJson({ id: 'llm-config', name: '助手模型配置', version: LLM_CONFIG_VERSION, schema: llmStoredConfigSchema, migrations: formatMigrations('llm-config') }, config)) as unknown) }
+      catch (error) { for (const id of snapshots) recycle?.forget(id); throw error }
+    },
     removeConfig: async () => await removeAtomicState(paths().config),
     readJournal: async () => {
       const stored = await readJson(paths().journal)

@@ -5,6 +5,7 @@ import type { RecordingVoice } from '@/core/screenRecording/director'
 import { withPaidOperation } from '@/services/paidApproval'
 import { generationApplicationService, readGenerationResultMedia, waitForGenerationCompletion } from '@/features/generation'
 import { registry } from '@/core/ModelRegistry'
+import { transferGenerationPaidApproval } from '@/core/services/generationSubmissionConfirmation'
 import type { CapabilityExecutionContext } from '@/features/application-control'
 
 const logger = createLogger('features.screenRecording.narration')
@@ -27,7 +28,7 @@ function assertSpeechModel(voice: RecordingVoice): void {
   const model = registry.getModel(voice.modelId)
   if (!model || model.meta.type !== 'audio' || !model.params.some(param => 'panel' in param && param.panel === 'voice-selector')) throw new Error('请选择支持音色参数的语音合成模型。')
 }
-export async function generateRecordingNarration(text: string, voice: RecordingVoice, documentId: string, context: CapabilityExecutionContext, task?: { taskId?: string; dispatched(id: string): Promise<void> }): Promise<RecordingNarrationResult> {
+export async function generateRecordingNarration(text: string, voice: RecordingVoice, documentId: string, context: CapabilityExecutionContext, task?: { taskId?: string; operationId?: string; dispatched(id: string): Promise<void> }): Promise<RecordingNarrationResult> {
   const signal = context.signal
   signal.throwIfAborted()
   logger.info('准备录制旁白', { event: 'recording.narration.start', context: { documentId, modelId: voice.modelId, requestId: context.requestId } })
@@ -41,14 +42,23 @@ export async function generateRecordingNarration(text: string, voice: RecordingV
       const price = z.object({ comparableCnyAmount: z.number().nonnegative().nullable() }).parse(prepared.priceEstimate)
       await withPaidOperation({ category: 'generation', documentId, estimatedCny: price.comparableCnyAmount }, async approvedSignal => {
         approvedSignal.throwIfAborted()
-        const submit = () => generationApplicationService.submit(input)
-        const submitted = context.execution ? await context.execution.paid(submit) : await submit()
-        taskId = submitted.taskId
-        // Remember identity before waiting. A disconnect must not create a second paid task.
-        await task?.dispatched(taskId)
-        const outcome = await waitForGenerationCompletion(taskId, approvedSignal)
-        if (!outcome.ok) throw new Error(outcome.error)
+        const operationId = task?.operationId ?? crypto.randomUUID()
+        const releaseApproval = transferGenerationPaidApproval(operationId, approvedSignal)
+        let submitted = false
+        try {
+          const submit = () => generationApplicationService.submit(input, operationId)
+          const result = context.execution ? await context.execution.paid(submit) : await submit()
+          taskId = result.taskId
+          submitted = true
+          // 先记住任务，断线恢复只等待原任务，避免再次付费。
+          await task?.dispatched(taskId)
+        } finally {
+          // 排队任务仍须消费原收据，停止等待不能让它重新发起付费确认。
+          if (!submitted) releaseApproval()
+        }
       }, signal)
+      const outcome = await waitForGenerationCompletion(taskId!, signal)
+      if (!outcome.ok) throw new Error(outcome.error)
     } else {
       const outcome = await waitForGenerationCompletion(taskId, signal, true)
       if (!outcome.ok) throw new Error(outcome.error)

@@ -6,21 +6,28 @@ export const paidOperationCategorySchema = z.enum(['generation', 'recognition', 
 export type PaidOperationCategory = z.infer<typeof paidOperationCategorySchema>
 /** 仅用于主进程操作账本的确认元数据；界面类别文案由 i18n 格式化。 */
 export const PAID_OPERATION_LABELS: Record<PaidOperationCategory, string> = {
-  generation: '生成', recognition: '识别', translation: '翻译', title: '标题', explanation: '讲解外发',
+  generation: '生成', recognition: '识别', translation: '翻译', title: '标题', explanation: '讲解',
 }
 export const paidProjectSchema = z.object({ id: z.string().min(1), name: z.string().min(1) }).strict()
 export const paidApprovalSettingsSchema = z.object({
-  mode: z.enum(['ask', 'auto', 'bypass']).default('auto'),
+  version: z.literal(2).default(2),
   singleLimitCny: z.number().finite().nonnegative().default(2),
   dailyLimitCny: z.number().finite().nonnegative().default(20),
-  projects: z.array(paidProjectSchema.extend({ category: paidOperationCategorySchema })).default([]),
+  unlimited: z.boolean().default(false),
 }).strict()
 export type PaidApprovalSettings = z.infer<typeof paidApprovalSettingsSchema>
 export const DEFAULT_PAID_APPROVAL_SETTINGS: PaidApprovalSettings = paidApprovalSettingsSchema.parse({})
+/** 迁移保留用户的每次询问与完全放开选择。 */
+export function readPaidApprovalSettingsValue(value: unknown): PaidApprovalSettings {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return paidApprovalSettingsSchema.parse(value)
+  const { mode, projects: _projects, ...settings } = value as Record<string, unknown>
+  return paidApprovalSettingsSchema.parse({ ...settings, ...(mode === undefined ? {} : { unlimited: mode === 'bypass' }), ...(mode === 'ask' ? { singleLimitCny: 0 } : {}) })
+}
 export const paidApprovalRequestSchema = z.object({
   category: paidOperationCategorySchema,
   project: paidProjectSchema.optional(),
   estimatedCny: z.number().finite().nonnegative().nullable(),
+  generationTaskIds: z.array(z.string().uuid()).nonempty().optional(),
 }).strict()
 export type PaidApprovalRequest = z.infer<typeof paidApprovalRequestSchema>
 /** Trusted UI operations; this map is internal and is not part of the public tool catalog. */
@@ -59,7 +66,6 @@ export const uiPaidApprovalSchema = z.object({
   action: z.enum(['prepare', 'approve', 'start', 'complete', 'reject', 'failed']),
   request: paidApprovalRequestSchema,
   capabilityId: z.enum(Object.keys(UI_PAID_CAPABILITIES) as [keyof typeof UI_PAID_CAPABILITIES, ...(keyof typeof UI_PAID_CAPABILITIES)[]]),
-  projectConsent: z.boolean().optional(),
   failureFacts: paidFailureFactsSchema.optional(),
 }).strict()
 export const paidApprovalDecisionSchema = z.object({
@@ -72,7 +78,11 @@ export type PaidApprovalDecision = z.infer<typeof paidApprovalDecisionSchema>
 export const uiPaidApprovalDecisionSchema = paidApprovalDecisionSchema.extend({ expiresAt: z.number().finite().nullable() })
 export const paidApprovalReceiptSchema = z.object({ decision: z.enum(['auto', 'user']), reason: z.string() }).strict()
 export type PaidApprovalReceipt = z.infer<typeof paidApprovalReceiptSchema>
+export const paidOperationReceiptSchema = z.object({ operationId: z.string().uuid(), callerId: z.string().uuid() }).strict()
+export type PaidOperationReceipt = z.infer<typeof paidOperationReceiptSchema>
 export const paidReservationSchema = paidApprovalRequestSchema.extend({
+  generationRequest: z.object({ id: z.string().min(1), digest: z.string().min(1) }).strict().optional(),
+  generationRequests: z.array(z.object({ id: z.string().min(1), digest: z.string().min(1) }).strict()).optional(),
   reservedAt: z.number(), approval: paidApprovalReceiptSchema,
 }).strict()
 export interface PaidApprovalDisplay {

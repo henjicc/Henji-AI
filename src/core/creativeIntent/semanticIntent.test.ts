@@ -48,11 +48,8 @@ describe('语义意图封闭计划与授权', () => {
     await expect(requestSemanticIntent({ draft, resolutions: [], lines: lines(), signal: controller.signal, authorize: async () => true, propose: async () => { controller.abort(); throw new Error('cancelled') }, local })).rejects.toThrow()
     expect(local).not.toHaveBeenCalled()
   })
-  it('正文授权前不读任何资源；纯文本投影不包含原音和图片', async () => {
+  it('纯文本投影不包含原音和图片', async () => {
     const session = recordingFixtureSession(), read = vi.fn()
-    expect(() => semanticRecordingInput(session, read, [1920, 1080])).toThrow('PERMISSION_DENIED')
-    expect(read).not.toHaveBeenCalled()
-    session.consent!.textUpload = true
     session.audio = { resourceId: 'secret-audio', digest: session.sourceDigest, bytes: 48 }
     const output: string[] = []
     for await (const line of semanticRecordingInput(session, read, [1920, 1080])) output.push(line)

@@ -28,13 +28,13 @@ import type {
 } from './documentSessionTypes'
 
 /*
- * 一份已打开文档的会话（存储底座 2.4，实施方案 2.8）。
+ * 一份已打开文档的会话。
  *
  * 异步落盘的约定：
  * - 内容变化只是内存变化：标脏后防抖保存，期间的多次修改合并成一次写入。
  * - 只有保存成功（含主进程判定 unchanged）才算保存确认；同一文档的写入严格串行。
  * - 关闭、切换与应用退出都等同一个屏障（flush）：取消防抖、等正在写的那次、再写最后一次。
- * - 写入失败保留内存修改，按退避自动重试，也可手动 retry；冲突时暂停自动保存，等用户选择“重新载入 / 覆盖”。
+ * - 写入失败保留内存修改，按退避自动重试，也可手动 retry；冲突时先保留磁盘版本，再保存当前修改。
  */
 
 const MAX_FLUSH_ROUNDS = 5
@@ -90,13 +90,12 @@ export class DocumentSession {
   private conflictPrompt: Promise<void> | null = null
   private closing: Promise<void> | null = null
   private ended = false
-  /** 结果已被别处（剪辑片段）引用：草稿离开时不再按“空”直接删除，改走询问（4.1）。 */
+  /** 引用中的草稿需要保留，避免剪辑片段失去来源。 */
   private inUse = false
   private readonly listeners = new Set<() => void>()
   private snapshot: DocumentSessionState
   private readonly persistence: DocumentPersistence
   private readonly commands: Pick<DocumentSessionCommands, 'readDocument'>
-  private readonly prompter: () => DocumentSessionPrompter
   private readonly timing: DocumentSessionTiming
   private readonly logger: Logger
   private readonly onEnded: (session: DocumentSession) => void
@@ -110,7 +109,6 @@ export class DocumentSession {
     this.unresolved = init.read.unresolved
     this.persistence = init.persistence
     this.commands = init.commands
-    this.prompter = init.prompter
     this.timing = init.timing
     this.logger = init.logger.withContext({ docId: this.id, kind: this.kind.id })
     this.onEnded = init.onEnded
@@ -159,7 +157,7 @@ export class DocumentSession {
 
   /**
    * 标记这份文档的结果已经放进别处（如剪辑片段引用了它）。只导入了素材、没做修改的草稿
-   * 在类型上算“空”，但被引用后直接删除会让引用断开，所以离开时改为询问保存。
+   * 类型为空的草稿也可能已被引用，离开时需要保留这类内容。
    */
   markInUse(): void {
     this.inUse = true
@@ -196,7 +194,7 @@ export class DocumentSession {
     if (this.status !== 'conflict' && !this.suspended) this.scheduleAutosave(this.timing.autosaveDelayMs)
   }
 
-  /** 保存屏障：取消防抖，等正在写的那次完成，再把剩余修改写完。冲突时先请用户选择。 */
+  /** 保存屏障等待全部修改落盘，冲突由存储层保留双方版本。 */
   async flush(options: { promptOnConflict?: boolean } = {}): Promise<void> {
     if (this.ended) return
     this.clearAutosave()
@@ -208,7 +206,7 @@ export class DocumentSession {
       try {
         await this.enqueueSave(false, options.promptOnConflict !== false)
       } catch (error) {
-        // 写入时才发现冲突：下一轮等用户选择后再继续。
+        // 冲突后的强制写入由存储层先备份磁盘版本。
         if (this.status === 'conflict') continue
         throw error
       }
@@ -428,7 +426,7 @@ export class DocumentSession {
         this.status = 'conflict'
         this.logger.warn('文档已在别处被修改', { event: 'documents.session.save.conflict', error })
         this.emit()
-        // 自动保存撞上冲突时直接请用户选择；flush 路径会等同一个提示。
+        // 自动保存与 flush 共用恢复过程，失败仍保留脏状态。
         if (promptOnConflict) void this.promptConflict().catch(() => undefined)
       } else {
         this.status = 'failed'
@@ -469,12 +467,7 @@ export class DocumentSession {
 
   private promptConflict(): Promise<void> {
     if (!this.conflictPrompt) {
-      const prompt = (async () => {
-        const choice = await this.prompter().resolveConflict({ name: this.meta.name })
-        this.logger.info('冲突处理', { event: 'documents.session.conflict.resolved', context: { choice } })
-        if (choice === 'later') throw new DocumentSessionConflictError(this.meta.name)
-        await this.resolveConflict(choice)
-      })()
+      const prompt = this.resolveConflict('overwrite')
       this.conflictPrompt = prompt
       void prompt.finally(() => { if (this.conflictPrompt === prompt) this.conflictPrompt = null }).catch(() => undefined)
     }

@@ -18,7 +18,6 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
 
 beforeEach(() => {
   installHarnessNativeStorage()
-  vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined)
   resetVideoEditSmartRegionsForTests()
   vi.spyOn(getPlatform().smartRegions, 'ensure').mockResolvedValue({ state: 'failed', reason: 'model' })
   vi.spyOn(getPlatform().smartRegions, 'cancel').mockResolvedValue(undefined)

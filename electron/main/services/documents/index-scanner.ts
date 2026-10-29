@@ -250,17 +250,17 @@ export class DocumentIndexScanner {
         await this.collect(path.join(container.materialsDir, name), container, candidates, { depth: 0, skipTop: [] }, report)
       }
     }
-    const user = this.workspace.userContainerNow()
-    for (const folder of this.standaloneFolders()) await this.collect(folder, user, candidates, { depth, skipTop: [] }, report)
+    for (const folder of this.standaloneFolders()) await this.collect(folder, await this.workspace.containerForFolder(folder), candidates, { depth, skipTop: [] }, report)
     for (const location of this.workspace.catalog.listExternalLocations()) {
-      if (location.kind === 'folder') await this.collect(location.path, user, candidates, { depth: 0, skipTop: [] }, report)
+      if (location.kind === 'folder') await this.collect(location.path, await this.workspace.containerForFolder(location.path), candidates, { depth: 0, skipTop: [] }, report)
     }
 
     const catalog = this.workspace.catalog
     const claimed = new Set<string>()
     const changed: ScanCandidate[] = []
     // 第一轮：位置与修改时间、大小都没变的文件直接认领原 ID，不重新读取。
-    for (const candidate of candidates) {
+    // 项目可以包含作品目录或其他登记位置，同一物理文件只认领一次。
+    for (const candidate of new Map(candidates.map(candidate => [pathKey(this.workspace.style, candidate.path), candidate])).values()) {
       const row = catalog.getDocumentByPath(candidate.path)
       const projectId = candidate.container.ref.kind === 'project' ? candidate.container.ref.projectId : null
       if (!this.rebuilding && row && !row.missing && !claimed.has(row.id) && row.fileModifiedAt === candidate.mtimeMs

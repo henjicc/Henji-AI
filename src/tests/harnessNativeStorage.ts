@@ -1,3 +1,6 @@
+import type { LlmConfigState } from '@henjicc/ai-sdk'
+import { createEmptyAssistantSkillManifest } from '@/core/assistant/skills'
+import type { RecycledItem } from '@/core/localRecords/recycle'
 import { emptyMemorySnapshot, MEMORY_HISTORY_LIMIT, type MemoryHistoryEntry, type MemorySettings } from '@/core/assistant/memoryEntries'
 import { applyMemoryWrite, type MemoryWrite } from '@/core/assistant/memoryOperations'
 /**
@@ -225,6 +228,12 @@ const documentsStorage = Object.fromEntries(DOCUMENT_METHODS.map((method) => [
 
 /* ── 装配与安装 ─────────────────────────────────────────────────────────── */
 let fontCatalog: FontCatalog = { faces: [], revision: 0 }
+const recycledFiles = new Map<string, { item: RecycledItem; restore(): Promise<void> }>()
+export function registerHarnessRecycledFile(file: string, name: string, restore: () => Promise<void>): string {
+  const id = uuidv4()
+  recycledFiles.set(id, { item: { id, name, path: file, category: '文件', deletedAt: Date.now() }, restore })
+  return id
+}
 const settings = new Map<string, SettingEntryDto>()
 let recordingSnapshot: RecordingControlSnapshot | null = null
 const recordingListeners = new Set<(snapshot: RecordingControlSnapshot | null) => void>()
@@ -238,6 +247,8 @@ export function readHarnessRecordedCapabilities(): typeof recordedCapabilities {
 /** Font metadata at the IPC boundary only; parsing and filesystem discovery remain real service tests. */
 export function seedHarnessFonts(value: FontCatalog): void { fontCatalog = wire(value) }
 
+let llmConfig: LlmConfigState | null = null
+let skillManifest = createEmptyAssistantSkillManifest()
 let memoryState = emptyMemorySnapshot()
 const memoryListeners = new Set<() => void>()
 /** 录音偏好只按版本号存取（与主进程同样的乐观并发）；设备列表是本机没有录音设备时的真实空清单，不模拟设备回退。 */
@@ -254,7 +265,12 @@ const NAMESPACES: Record<string, object> = {
       return captureState()
     },
   },
+  llm: {
+    async readConfig() { return wire(llmConfig) },
+    async writeConfig(config: LlmConfigState) { llmConfig = wire(config) },
+  },
   assistant: {
+    async listSkills() { return wire(skillManifest) },
     async markMemoryOrganized(changes: number) {
       memoryState.changesSinceOrganization = Math.max(0, memoryState.changesSinceOrganization - changes)
       memoryState.lastOrganizedAt = new Date().toISOString()
@@ -290,6 +306,8 @@ const NAMESPACES: Record<string, object> = {
   },
   fonts: { async list() { return wire(fontCatalog) }, onChanged() { return () => undefined } },
   settings: {
+    async listDeleted() { return wire([...recycledFiles.values()].map(value => value.item)) },
+    async restoreDeleted(id: string) { const value = recycledFiles.get(id); if (!value) throw new Error('回收项不存在'); await value.restore(); recycledFiles.delete(id) },
     async get(key: string) { return settings.has(key) ? wire(settings.get(key)!) : null },
     async set(key: string, value: string, type: SettingValueType = 'string') { settings.set(key, { key, value, type }) },
     async delete(key: string) { settings.delete(key) },
@@ -406,10 +424,13 @@ let trustStorage: ReturnType<typeof createContentTrustTestSession> | undefined
 /** 清空全部存储。用例之间必须调，否则上一条用例造的素材集合会漏进下一条。 */
 export function resetHarnessNativeStorage(): void {
   trustStorage?.dispose(); trustStorage = createContentTrustTestSession()
+  llmConfig = null
+  skillManifest = createEmptyAssistantSkillManifest()
   memoryState = emptyMemorySnapshot()
   publishHarnessRecordingControl(null); recordedCapabilities.splice(0)
   fontCatalog = { faces: [], revision: 0 }
   settings.clear()
+  recycledFiles.clear()
   captureSettings = { settings: { ...DEFAULT_AUDIO_CAPTURE_SETTINGS }, revision: 0 }
   imageDocuments.clear()
   imageLayoutResources.clear(); imageLayoutLeases.clear()

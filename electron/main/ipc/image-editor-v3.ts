@@ -1,3 +1,5 @@
+import { preserveUserFile, readRecycledJsonContents } from '../services/recycle/runtime'
+import { collectImageEditJsonResourceIdsV3 } from '../../../src/core/imageEdit/v3/resourceReferences'
 import { registerImageEditorV3SubjectIpc } from './image-editor-v3-subject'
 import { BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import type { ImageEditDocumentV3 } from '../../../src/core/imageEdit/v3/documentTypes'
@@ -136,6 +138,7 @@ function getRuntime(): ImageEditorV3Runtime {
       },
       lockDirectory: path.join(getProgramStoreDir('documentStore'), 'locks'),
       logger: createMainLogger('main.image_editor_v3.image_document'),
+      preserveFile: (target, source) => preserveUserFile(target, undefined, source),
       validateDocument: (document) => { validateSnapshotDocument(document) },
       resourceFilePath: imageEditorV3ResourceObjectPath,
       resourceMediaUrl: (resourceId) => readImageEditorV3SourceMediaUrl(resourceId, sources),
@@ -530,6 +533,7 @@ export function registerImageEditorV3Ipc(): void {
             for (const resourceRef of document.resourceRefs) live.add(resourceRef)
             if (document.previewRef) live.add(document.previewRef)
           }
+          for await (const content of readRecycledJsonContents(() => { live.has = () => true })) for (const ref of collectImageEditJsonResourceIdsV3(content)) live.add(ref as ResourceId)
           return live
         },
       })

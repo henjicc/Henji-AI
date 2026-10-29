@@ -30,7 +30,7 @@ it('重演已在主进程跑完：用登记的结果重建回执，记为完成�
   const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('render_web_app_replay')!
   expect(definition.outputSchema.safeParse(recovered.result!.data).success).toBe(true)
   const host = new ApplicationHostBridge(() => {})
-  const tool = buildApplicationToolCatalog({ tools: host.tools(), access: { allowWrites: true, allowPaid: true, allowDestructive: true }, operationsEnabled: true, includeSkillTool: true }).tools.find(item => item.name === 'render_web_app_replay')!
+  const tool = buildApplicationToolCatalog({ tools: host.tools(), includeSkillTool: true }).tools.find(item => item.name === 'render_web_app_replay')!
   const raw = { ok: true, operationId: record.operationId, executionState: 'completed' as const, verificationState: recovered.verificationState, result: recovered.result, ...revisions() }
   for (const options of [{}, { includeRevisions: true, includeEvidence: true, includeDetails: true }]) {
     const checked = applicationOutputValidator.getValidator(tool.outputSchema!)(toMcpResult(projectApplicationToolResult('render_web_app_replay', input, raw, options)).structuredContent)

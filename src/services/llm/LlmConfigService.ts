@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import { subscribeRestored } from '@/services/recycle'
 import {
   DEFAULT_DEEPSEEK_BASE_URL,
   DEFAULT_DEEPSEEK_PROVIDER_ID,
@@ -316,6 +317,7 @@ function emitConfigChanged(): void {
   if (typeof window === 'undefined') return
   window.dispatchEvent(new CustomEvent(LLM_CONFIG_CHANGED_EVENT))
 }
+subscribeRestored(item => { if (item.id.startsWith('llm-provider:') || item.id.startsWith('llm-model:') || item.path?.replaceAll('\\', '/').endsWith('/llm-config.json')) emitConfigChanged() })
 
 function removeDeprecatedBuiltInModels(models: LlmModelConfig[]): LlmModelConfig[] {
   return models.filter(model => !(

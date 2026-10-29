@@ -43,7 +43,6 @@ beforeEach(() => {
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/drop/folders.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
   vi.spyOn(getPlatform().system.paths, 'dirname').mockResolvedValue('D:/drop')
-  vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined)
   vi.spyOn(getPlatform().system.fs, 'readDirPage').mockImplementation(async (path, options) => { if (options?.close) return { entries: [], realPath: path }; if (!tree[path]) throw new Error('ENOTDIR'); const offset = Number(options?.cursor ?? 0); const entries = tree[path].slice(offset, offset + 256); return { entries, realPath: path, ...(offset + entries.length < tree[path].length ? { cursor: String(offset + entries.length) } : {}) } })
   vi.spyOn(getPlatform().system.fs, 'exists').mockImplementation(async path => !path.includes('missing'))
   vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue('browser')

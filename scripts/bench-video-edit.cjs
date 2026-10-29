@@ -179,7 +179,7 @@ async function main(options) {
     result.runtime = await app.evaluate(async ({ app }) => ({ electron: process.versions.electron, chrome: process.versions.chrome, gpu: await app.getGPUInfo('basic') }))
 
     await assignIsolatedMcpPort(page)
-    const identity = await authorizeMcpConnection(page, { name: '播放基准台', allowWrites: true })
+    const identity = await authorizeMcpConnection(page, { name: '播放基准台' })
     client = await connectMcpClient(identity.config, 'Henji video edit bench')
     const change = async (ref, entry, summary) => {
       const read = await callTool(client, 'read_application_entity', { ref })

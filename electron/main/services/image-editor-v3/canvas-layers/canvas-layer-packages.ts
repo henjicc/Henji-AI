@@ -1,3 +1,4 @@
+import { trashUserFile } from '../../recycle/runtime'
 import { CANVAS_LAYER_PACKAGE_VERSION } from '../../../../../src/core/persistence/schemaVersions'
 import { parsePersistenceJson, upgradeStoredFile } from '../../persistence/stored-file'
 import { createHash } from 'node:crypto'
@@ -299,10 +300,10 @@ export class CanvasLayerPackageService {
         const link = await this.links.read(id)
         if (!link || link.ownerCanvasId !== canvasId) continue
         const working = await this.loadWorking(id)
-        if (working && !await this.options.documents.deleteIfRevision(id, working.revision)) continue
+        if (working && !await this.options.documents.deleteIfRevision(id, working.revision, true)) continue
         if (link.packagePath) {
           const header = await this.readHeader(link.packagePath)
-          if (header?.documentId === id) await fsp.rm(link.packagePath, { force: true })
+          if (header?.documentId === id) await trashUserFile(link.packagePath)
         }
         await this.links.remove(id)
         released += 1

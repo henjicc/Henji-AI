@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 import '@/tests/canvasProjectFixture'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { applicationCallerAccess, createApplicationCallerGrant, revokeApplicationCallerGrant } from '@/core/application-control/callerContext'
-import { SettingsMutationExecutor } from '@/features/settings/application-control/settingsMutationExecutor'
+import { afterEach, describe, expect, it } from 'vitest'
+import { createApplicationCallerGrant, revokeApplicationCallerGrant } from '@/core/application-control/callerContext'
+
 import { useSettingsStore } from '@/stores/settingsStore'
 import { getSettingsRegistryRevision } from '@/features/settings/application-control/settingsApplicationService'
 import { getApplicationReflectionRegistry } from '@/features/application-control/capabilities/applicationControlRegistry'
 import { retainHostContextTracking } from '@/features/application-control/hostContext/hostContext'
-import { executeApplicationCapabilityResult } from '@/features/application-control/capabilities/registry'
-import { createApplicationCapabilitySession, listApplicationCapabilities } from './applicationCapabilityService'
+
+import { createApplicationCapabilitySession } from './applicationCapabilityService'
 import { APPLICATION_READ_PERMISSIONS, APPLICATION_WRITE_PERMISSIONS } from '@/core/application-control/localHostContracts'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { useProjectStore } from '@/stores/projectStore'
@@ -21,11 +21,8 @@ import { clearLogEvents, getLogEvents } from '@/core/logging'
 const originalContrast = useSettingsStore.getState().themeSelection.contrast
 afterEach(() => useSettingsStore.getState().setThemeContrast(originalContrast))
 
-function grant(permissions = ['application:read', 'settings:read'], writes = false) {
-  return createApplicationCallerGrant({
-    callerId: 'local-test', permissions, allowWrites: writes, allowDestructive: false,
-    capabilityIds: listApplicationCapabilities().map((value) => value.id),
-  })
+function grant(_permissions = ['application:read', 'settings:read'], _writes = false) {
+  return createApplicationCallerGrant({ callerId: 'local-test' })
 }
 const request = (requestId: string) => ({ requestId, signal: new AbortController().signal })
 const read = { id: 'read_application_entity', version: 1, input: {
@@ -104,47 +101,9 @@ describe('独立应用调用入口', () => {
     } finally { dispose() }
   })
 
-  it('只读授权拒绝写入；工具参数不能伪造权限', async () => {
-    const session = createApplicationCapabilitySession(grant())
-    await expect(session.execute(write('soft'), request('deny-write'))).rejects.toThrow(/application:write.*应用/)
-    await expect(session.execute({ ...read, callerGrant: grant(['application:write'], true) }, request('forge'))).rejects.toThrow()
-    expect(useSettingsStore.getState().themeSelection.contrast).toBe(originalContrast)
-  })
 
-  it('有能力写权限但缺少属性权限时由事务内核再次拒绝', async () => {
-    const permissions = ['application:read', 'application:write', 'settings:read']
-    const deniedGrant = grant(permissions, true)
-    const apply = vi.spyOn(SettingsMutationExecutor.prototype, 'applyAtomic')
-    const dispose = retainHostContextTracking()
-    const target = originalContrast === 'soft' ? 'strong' : 'soft'
-    const before = localStorage.getItem('settings-storage')
-    try {
-      const registry = getApplicationReflectionRegistry()
-      const availability = await registry.getPropertyAvailability(read.input.ref, read.input.propertyIds,
-        applicationCallerAccess(deniedGrant, 'deny-property', request('deny-property').signal))
-      expect(availability[0]).toMatchObject({ readable: true, writable: false, blocks: expect.arrayContaining([{ kind: 'permission' }]) })
-      const result = await createApplicationCapabilitySession(deniedGrant).execute(write(target), request('deny-property'))
-      expect(result.ok).toBe(false)
-      if (!result.ok) {
-        expect(result.error.message).toBe('PROPERTY_NOT_WRITABLE:interface.theme_contrast')
-        expect(result.error.details).toMatchObject({ execution: { notExecuted: true } })
-      }
-      expect(apply).not.toHaveBeenCalled()
-      expect(useSettingsStore.getState().themeSelection.contrast).toBe(originalContrast)
-      expect(localStorage.getItem('settings-storage')).toBe(before)
 
-      // 唯一授权差异为属性所需的 settings:write；相同目标和值必须可通过原执行器。
-      const allowedGrant = grant([...permissions, 'settings:write'], true)
-      const allowed = await registry.getPropertyAvailability(read.input.ref, read.input.propertyIds,
-        applicationCallerAccess(allowedGrant, 'allow-property', request('allow-property').signal))
-      expect(allowed[0].writable).toBe(true)
-      const accepted = await createApplicationCapabilitySession(allowedGrant).execute(write(target), request('allow-property'))
-      expect(accepted.ok, JSON.stringify(accepted)).toBe(true)
-      expect(apply).toHaveBeenCalledTimes(1)
-      expect(useSettingsStore.getState().themeSelection.contrast).toBe(target)
-      expect(JSON.parse(localStorage.getItem('settings-storage') ?? '{}').state.themeSelection.contrast).toBe(target)
-    } finally { apply.mockRestore(); dispose() }
-  })
+
 
   it('对象克隆和已撤销的授权均不可执行', async () => {
     const authorized = grant()
@@ -154,26 +113,17 @@ describe('独立应用调用入口', () => {
     await expect(session.execute(read, request('revoked'))).rejects.toThrow(/重新授权/)
   })
 
-  it('语义处理器共享执行端也拒绝无权限调用', async () => {
-    const definition = listApplicationCapabilities().find((value) => value.id === 'open_application_surface')!
-    const result = await executeApplicationCapabilityResult({ id: definition.id, version: definition.version,
-      input: { surfaceId: 'workspace.canvas' },
-    }, { ...request('deny-navigation'), callerGrant: grant() })
-    expect(result.ok).toBe(false)
-    if (!result.ok) expect(result.error.message).toContain(definition.permission)
-  })
 
-  it('描述不开放助手运行、敏感属性及密钥', async () => {
+
+  it('描述遵守实体公开声明，不开放助手内部运行目录', async () => {
     const session = createApplicationCapabilitySession(grant())
     const result = await session.execute({ id: 'describe_application_entities', version: 1, input: {} }, request('describe'))
     expect(result.ok).toBe(true)
     if (result.ok) {
-      const entities = result.data.entities as Array<{ id: string }>
-      expect(entities.filter(value => value.id.startsWith('assistant.')).map(value => value.id).sort()).toEqual(['assistant.memory', 'assistant.memory_settings'])
       const properties = result.data.properties as Array<{ id: string; entityType: string }>
       const registry = getApplicationReflectionRegistry()
       expect(properties.every((value) => registry.listProperties(value.entityType)
-        .some((entry) => entry.id === value.id && ['C0', 'C1'].includes(entry.dataClass)))).toBe(true)
+        .some((entry) => entry.id === value.id && entry.exposures.includes('assistant')))).toBe(true)
     }
     const internal = getApplicationReflectionRegistry().describe({ domains: ['assistant_runtime'] }, {
       exposure: 'local_adapter', permissions: new Set(['application:read']), acceptedDataClasses: new Set(['C0', 'C1']),

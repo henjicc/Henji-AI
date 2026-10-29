@@ -406,7 +406,7 @@ describe('ImageEditDocumentRepository', () => {
 })
 
 
-it('私密讲解从真实冷历史擦除后，旧历史页和正文画面物理删除，重开撤销不能恢复', async () => {
+it('讲解删除进入冷历史，正文画面免于回收，重开后能撤销和重做', async () => {
   const resources = new ContentAddressedResourceStore(path.join(rootDir, 'resources'))
   const repository = new ImageEditDocumentRepository(path.join(rootDir, 'documents'), { resources })
   const body = await resources.putBuffer(Buffer.from('private transcript'))
@@ -428,18 +428,21 @@ it('私密讲解从真实冷历史擦除后，旧历史页和正文画面物理�
   const cold = new ImageEditCommandHistoryV3({ readPage: (checkpoint, index) => repository.readHistoryPage(checkpoint, index) })
   cold.restore(reopened.document as ImageEditDocumentV3, reopened.history)
   const obsolete = new Set(reopened.resourceRefs)
-  const clean = await cold.eraseExplanationSession(reopened.document as ImageEditDocumentV3, session.id)
+  const clean = cold.execute(reopened.document as ImageEditDocumentV3, { type: 'document.set-creative-intents', commandId: 'remove-explanation', expectedRevision: (reopened.document as ImageEditDocumentV3).revision,
+    intents: { drafts: [], sessions: [], resources: [] }, resources: refs.map(ref => ({ resourceId: ref.resourceId, byteSize: ref.bytes })).sort((a, b) => a.resourceId.localeCompare(b.resourceId)) })
   await repository.save({ documentId: clean.id, expectedRevision: saved.revision, nextRevision: clean.revision, document: clean, history: cold.createSnapshot(), resourceRefs: [] })
   const live = new Set((await repository.list()).flatMap(value => value.resourceRefs))
   const erased = await resources.garbageCollect(live, { minimumAgeMs: 0, onlyResourceIds: obsolete })
-  expect(erased.deleted).toContain(body.id); expect(erased.deleted).toContain(visual.id)
-  for (const ref of obsolete) if (!live.has(ref)) expect(await resources.has(ref)).toBe(false)
+  expect(erased.deleted).not.toContain(body.id); expect(erased.deleted).not.toContain(visual.id)
+  expect(await resources.has(body.id)).toBe(true); expect(await resources.has(visual.id)).toBe(true)
   const persisted = await repository.loadPaged(clean.id)
   const final = new ImageEditCommandHistoryV3({ readPage: (checkpoint, index) => repository.readHistoryPage(checkpoint, index) })
   final.restore(persisted.document as ImageEditDocumentV3, persisted.history)
   let current = persisted.document as ImageEditDocumentV3
-  while (final.getState().undoCount) { await final.readEntryAt(final.getState().undoCount - 1); current = final.undo(current).document }
-  while (final.getState().redoCount) { await final.readEntryAt(final.getState().undoCount); current = final.redo(current).document }
+  await final.readEntryAt(final.getState().undoCount - 1)
+  current = final.undo(current).document
+  expect(JSON.stringify(current)).toContain(session.id)
+  current = final.redo(current).document
   expect(JSON.stringify(current)).not.toContain(session.id)
   expect(current.layers).toEqual(initial.layers)
 })

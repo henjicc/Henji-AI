@@ -4,14 +4,13 @@ import { z } from 'zod'
 import type { IpcMainInvokeEvent } from 'electron'
 import { TRACKING_IPC_CHANNELS, TRACKING_FRAME_MAX_BYTES, TRACKING_FRAME_MAX_COUNT, type TrackingCandidatesRequest, type TrackingDefinition, type TrackingRange, type TrackingRunOptions, type TrackingSource, type TrackingFrameProvider, type TrackingFrameReply } from '../../../src/platform/contracts/tracking'
 import { videoEditTrackPointSchema, videoEditTrackPromptSchema, VIDEO_EDIT_TRACK_METHODS, VIDEO_EDIT_MAX_TRACK_PROMPTS } from '../../../src/core/videoEdit/tracking'
-import { isPathWithinAllowedMediaRoots } from '../protocol'
 import { normalizeLocalSource } from '../services/image/source'
 import { getTrackingService } from '../services/tracking/runtime'
 import { parseRecord, registerIpcHandler } from './registry'
 import { TrackingFrameBroker } from '../services/tracking/frameBroker'
 
 /*
- * 跟踪 IPC（任务 4.10）：渲染层经 preload `henjiNative.tracking` → PAL 调用。素材路径必须在已授权目录内（与智能区域同一规则）。
+ * 跟踪 IPC：渲染层经 preload `henjiNative.tracking` → PAL 调用。素材使用本地文件路径。
  */
 
 const MAX_TIME_US = 24 * 3600 * 1e6
@@ -74,20 +73,19 @@ export function parseTrackingCandidates(input: unknown): TrackingCandidatesReque
   return { source: parseSource(record.source), timeUs: record.timeUs, points: record.points.map(point => videoEditTrackPointSchema.parse(point) as [number, number, 0 | 1]) }
 }
 
-async function authorizedSource(source: TrackingSource): Promise<void> {
-  if (typeof source !== 'string') return // 只消费调用窗口合成后的像素，不扩大本地文件权限。
+async function resolveSource(source: TrackingSource): Promise<void> {
+  if (typeof source !== 'string') return // 合成源由调用窗口提供像素，不需要文件路径。
   const normalized = normalizeLocalSource(source)
-  if (!path.isAbsolute(normalized) || !isPathWithinAllowedMediaRoots(normalized)) throw new Error('素材尚未获得读取权限，请从素材库导入。')
-  const canonical = await fs.realpath(normalized)
-  if (!isPathWithinAllowedMediaRoots(canonical)) throw new Error('素材的实际路径不在已授权目录内。')
+  if (!path.isAbsolute(normalized)) throw new Error('请使用本地文件的绝对路径。')
+  await fs.realpath(normalized)
 }
 
 export function registerTrackingIpc(): void {
   const c = TRACKING_IPC_CHANNELS
   // 保留调用方的路径写法：进度事件按原定义匹配，内容身份由服务按真实路径计算。
-  registerIpcHandler(c.status, parseDefinition, async definition => { await authorizedSource(definition.source); return getTrackingService().status(definition) })
-  registerIpcHandler(c.run, parseTrackingRun, async ({ definition, range, options }, event) => { await authorizedSource(definition.source); return getTrackingService().run(definition, range, options, frameProvider(definition.source, event)) })
-  registerIpcHandler(c.stop, parseDefinition, async definition => { await authorizedSource(definition.source); getTrackingService().stop(definition) })
-  registerIpcHandler(c.candidates, parseTrackingCandidates, async (request, event) => { await authorizedSource(request.source); return getTrackingService().candidates(request, frameProvider(request.source, event)) })
+  registerIpcHandler(c.status, parseDefinition, async definition => { await resolveSource(definition.source); return getTrackingService().status(definition) })
+  registerIpcHandler(c.run, parseTrackingRun, async ({ definition, range, options }, event) => { await resolveSource(definition.source); return getTrackingService().run(definition, range, options, frameProvider(definition.source, event)) })
+  registerIpcHandler(c.stop, parseDefinition, async definition => { await resolveSource(definition.source); getTrackingService().stop(definition) })
+  registerIpcHandler(c.candidates, parseTrackingCandidates, async (request, event) => { await resolveSource(request.source); return getTrackingService().candidates(request, frameProvider(request.source, event)) })
   registerIpcHandler(c.framesReply, parseTrackingFrameReply, (reply, event) => { frames.reply(event.sender.id, reply) })
 }

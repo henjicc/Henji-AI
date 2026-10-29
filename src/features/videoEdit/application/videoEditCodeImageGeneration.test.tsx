@@ -91,7 +91,6 @@ beforeEach(async () => {
   vi.spyOn(platform.system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
   vi.spyOn(platform.system.fs, 'exists').mockResolvedValue(true)
   vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue('D:/generated')
-  vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)
   vi.spyOn(platform.assetLibrary, 'inspectFileContent').mockResolvedValue({ sizeBytes: 4096, fileModifiedAt: 1, contentIdentity: 'a'.repeat(64) })
   vi.spyOn(platform.assetLibrary, 'createAsset').mockImplementation(async input => {
     const existing = [...assets.values()].find(asset => asset.filePath === input.filePath); if (existing) return existing

@@ -4,10 +4,10 @@ import { afterEach, expect, it, vi } from 'vitest'
 import type { GenerationTask } from '../types'
 import type { GenerationHistoryFilterState } from '@/stores/generationHistoryFilterStore'
 
-const persistence = vi.hoisted(() => ({ save: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) }))
+const persistence = vi.hoisted(() => ({ save: vi.fn(async () => undefined), remove: vi.fn(async (_id: string) => undefined) }))
 const locale = vi.hoisted(() => ({ currentLanguage: 'zh' }))
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => locale }))
-vi.mock('./useTaskHistory', () => ({ persistGenerationTask: persistence.save, deletePersistedGenerationTask: persistence.remove }))
+vi.mock('./useTaskHistory', () => ({ persistGenerationTask: persistence.save, deletePersistedGenerationTasks: async (ids: string[]) => { for (const id of ids) await persistence.remove(id) } }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ error: vi.fn() }) }))
 vi.mock('../application/visibleGenerationTaskCommand', () => ({ publishVisibleGenerationTaskStatus: vi.fn() }))
 vi.mock('@/utils/modelHelpers', () => ({ getModelDisplayName: vi.fn((id: string) => `模型 ${id}`) }))

@@ -3,7 +3,7 @@ import { CodeGitRepository } from './code-git'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createTestEnvironment, type TestEnvironment } from './documents.test-support'
+import { createTestEnvironment, silentLogger, type TestEnvironment } from './documents.test-support'
 
 let env: TestEnvironment
 beforeEach(() => { env = createTestEnvironment() })
@@ -42,6 +42,10 @@ it('工程闭包跨项目收集、单文档包和整项目包带齐源码并重�
   const imported = await service.importPackage({ source: single.path, container: { kind: 'project', projectId: destination.id } })
   expect(imported.type).toBe('document')
   for (const document of await service.listDocuments({ container: { kind: 'project', projectId: destination.id } })) await verify(document.id)
+  const standalone = await service.importPackage({ source: single.path })
+  if (standalone.type !== 'document') throw new Error('应导入独立文档')
+  expect(standalone.meta.container).toEqual({ kind: 'user' })
+  await verify(standalone.meta.id)
   const full = await service.exportProjectPackage({ projectId: project.id, destination: path.join(env.outside, '源码工程包') })
   const importedProject = await service.importPackage({ source: full.path })
   if (importedProject.type !== 'project') throw new Error('应导入项目')
@@ -64,7 +68,7 @@ describe('项目源码 Git 仓库', () => {
     expect(await service.readCodeFile(first.files[0])).toBe('export default {}')
     expect((await write('other')).folder).toBe('霓虹_标题 (2)')
   })
-  it('拒绝路径越界、伪造素材目录与目录链接', async () => {
+  it('保留 Git 路径与发布归属，源码目录链接可使用', async () => {
     const { service, target, write, project } = await setup()
     const contents = { entry: 'main.ts', files: { 'main.ts': 'x' } }
     await expect(service.writeCodeVersion({ target, definitionId: 'x', name: 'x', folder: '../outside', contents })).rejects.toThrow('越界')
@@ -73,7 +77,7 @@ describe('项目源码 Git 仓库', () => {
     await expect(service.writeCodeVersion({ target, definitionId: 'x', name: 'x', contents: { entry: 'main.ts', files: { '../outside.ts': 'x' } } })).rejects.toThrow('相对')
     await fsp.mkdir(path.join(project.path, '代码', 'legacy', 'materials', '链接'), { recursive: true }); await fsp.rm(path.join(project.path, '代码', 'legacy', 'materials', '链接'), { recursive: true })
     await fsp.symlink(env.outside, path.join(project.path, '代码', 'legacy', 'materials', '链接'), 'junction')
-    await expect(service.writeCodeVersion({ target, definitionId: 'x', name: '链接', contents })).rejects.toThrow('链接')
+    expect(await service.readCodeFile((await service.writeCodeVersion({ target, definitionId: 'x', name: '链接', contents })).files[0])).toBe('x')
   })
   it('按提交内容缓存，修改和删除工作区文件不影响固定版本', async () => {
     const { service, target, write } = await setup(); const { files } = await write(); const file = files[0]
@@ -84,7 +88,8 @@ describe('项目源码 Git 仓库', () => {
     expect(await service.readCodeFile(file)).toBe('export default {}')
     await fsp.rm(worktreePath(file.location))
     expect(await service.readCodeFile(file)).toBe('export default {}')
-    await expect(service.readCodeFile({ ...file, location: path.join(env.outside, 'outside.ts') })).rejects.toThrow('源码位置无效')
+    await fsp.writeFile(path.join(env.outside, 'outside.ts'), 'export default {}')
+    expect(await service.readCodeFile({ ...file, location: path.join(env.outside, 'outside.ts') })).toBe('export default {}')
   })
   it('同项目的不同剪辑共用组件，各版本与钉住的依赖完整读回', async () => {
     const { service, target, project } = await setup()
@@ -241,4 +246,21 @@ it('从单个外部文档打开工程时，工程其他目录的代码也带来�
   expect(rows).toHaveLength(2)
   for (const row of rows) expect((await service.readDocument({ id: row.id })).content).toMatchObject({ codeMaterials: [{ versions: [{ foreign: { sourceType: 'project', id: opened.container.projectId } }] }] })
   expect((await service.readDocument(target)).content).not.toHaveProperty('foreign')
+})
+
+it('组件目录存在失效联接点时记录警告并继续返回正常组件', async () => {
+  await env.cleanup()
+  const warn = vi.fn()
+  env = createTestEnvironment({ logger: { ...silentLogger(), warn } })
+  const { service, target, project } = await setup()
+  const component = await service.publishCodeComponent({ target, name: '颜色', source: 'export const color=1;', description: '', exports: ['color'], imports: [] })
+  const library = path.join(project.path, '代码', '组件库')
+  const missing = path.join(env.outside, '已移走的组件')
+  await fsp.mkdir(library, { recursive: true })
+  await fsp.mkdir(missing)
+  const linked = path.join(library, '失效组件')
+  await fsp.symlink(missing, linked, process.platform === 'win32' ? 'junction' : 'dir')
+  await fsp.rmdir(missing)
+  expect(await service.listCodeComponents(target)).toEqual([expect.objectContaining({ name: '颜色', versions: [expect.objectContaining({ hash: component.hash })] })])
+  expect(warn).toHaveBeenCalledWith('组件目录无法读取，已跳过', expect.objectContaining({ event: 'documents.code.component.skipped', error: expect.objectContaining({ code: 'ENOENT' }), context: { directory: linked } }))
 })

@@ -231,8 +231,6 @@ export async function prepareVideoEditCreativeResult(input: VideoEditCreativeSou
     // 引用项目内的生成结果副本，保证移动项目文件夹时媒体仍然可用。
     const filePath = options.place ? await guarded(options, () => options.place!(output.path)) : output.path
     if (!sameVideoEditMediaPath(filePath, output.path)) mark('placed')
-    const parent = await guarded(options, () => platform.system.paths.dirname(filePath))
-    await guarded(options, () => platform.media.allowRoot(parent))
     const content = await guarded(options, () => platform.assetLibrary.inspectFileContent(filePath, output.mediaType))
     await guarded(options, output.recheck)
     const created = await guarded(options, () => addMediaReferenceToLibrary({ filePath, mediaType: output.mediaType, source: output.librarySource, displayName: output.name }))

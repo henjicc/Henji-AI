@@ -19,7 +19,7 @@ const applyCameraMove = defineApplicationCapability({
   resolveOperationTargets: input => [{ kind: 'camera_stage.document', id: input.documentId }], version: 1, title: '应用摄像机语义运镜',
   description: '按摄像机、注视目标、时间、方向、距离和缓动应用环绕、推拉、横移或升降轨迹。', domain: 'camera_stage',
   aliases: ['环绕主体', '推近拉远', '横移镜头', '升降镜头', 'orbit', 'dolly', 'truck', 'crane', 'camera move'],
-  readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'camera_stage:write', idempotent: true, destructive: false,
+  readOnly: false, dataClasses: ['C1'], permission: 'camera_stage:write', idempotent: true, destructive: false,
   timeoutMs: 20_000, supportsPreview: false, supportsUndo: true, requiredScopes: ['camera_stage'],
   acceptsRefs: ['camera_stage.document', 'camera_stage.camera', 'camera_stage.object', 'camera_stage.state_keyframe'],
   producesRefs: ['camera_stage.camera', 'camera_stage.state_keyframe', 'camera_stage.trajectory'],
@@ -55,7 +55,7 @@ const verifyScene = defineApplicationCapability({
   // observe_application_surface 取真实截图。
   id: 'verify_camera_stage_scene', version: 2, title: '验证 3D 场景结果',
   description: '一次结构化验证对象、边界盒、活动摄像机、状态关键帧采样值与播放状态；动画任务把所有预期时间点放进 expectedStateSamples，不必逐枚读取关键帧。构图是否好看需另行观察界面截图判断。',
-  domain: 'camera_stage', aliases: ['验证三维场景', '检查运镜结果', '检查构图', 'verify 3D scene'], readOnly: true, risk: 'R0', dataClasses: ['C1'],
+  domain: 'camera_stage', aliases: ['验证三维场景', '检查运镜结果', '检查构图', 'verify 3D scene'], readOnly: true, dataClasses: ['C1'],
   permission: 'camera_stage:read', idempotent: true, destructive: false, timeoutMs: 15_000, supportsPreview: true, supportsUndo: false,
   requiredScopes: ['camera_stage'], acceptsRefs: ['camera_stage.document', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.trajectory', 'camera_stage.state_keyframe', 'camera_stage.playback'],
   producesRefs: ['camera_stage.document', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.trajectory', 'camera_stage.state_keyframe', 'camera_stage.playback'],

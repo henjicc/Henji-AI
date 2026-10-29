@@ -85,7 +85,6 @@ export class VideoEditRenderTransport {
   readonly canvas: OffscreenCanvas
   get previewPreparationMs(): number { return 0 }
   get previewBytes(): number { return 0 }
-  private readonly lutRoots = new Set<string>()
   private fontsRevision = -1
   private fontIds = new Set<string>()
   private stopFonts?: () => void
@@ -152,17 +151,6 @@ export class VideoEditRenderTransport {
     this.fontScope = key
     this.fontDocument = document
     if (additions.length || removed || changed) this.fontPresentationRevision++
-  }
-  private async authorizeLuts(document: VideoEditComposition): Promise<void> {
-    for (const asset of [...(document.colorLuts ?? []), ...document.media.flatMap(media => media.recordingCursor?.pages ?? [])]) {
-      // Capture logs may contain thousands of pages under one authorized directory.
-      const normalized = asset.path.replace(/\\/g, '/')
-      const directoryKey = normalized.slice(0, normalized.lastIndexOf('/'))
-      if (this.lutRoots.has(directoryKey)) continue
-      const platform = getPlatform()
-      await platform.media.allowRoot(await platform.system.paths.dirname(asset.path))
-      this.lutRoots.add(directoryKey)
-    }
   }
   private proxies: Record<string, VideoProxyResult> = {}
   private async selectProxies(original = false): Promise<void> { this.proxies = this.proxyProjectId && !original ? await this.host.proxies(this.proxyProjectId, this.exportProxies) : {} }
@@ -287,7 +275,7 @@ export class VideoEditRenderTransport {
     }
     this.worker.onmessageerror = () => this.fail(new VideoEditRenderWorkerError('剪辑画面结果无法读取，请重新加载预览。'))
     // Verify original media before dependent code/font preparation or opening a decoder channel.
-    this.ready = this.timed('content', () => this.content.check(document)).then(() => Promise.all([this.timed('proxies', () => this.selectProxies()), this.connectNative(), this.timed('luts', () => this.authorizeLuts(document)), this.timed('fonts', () => this.syncFonts(document))])).then(async ([, decode]) => { const codeSources = await this.timed('code', () => this.codeSources(document)); return this.timed('init', () => this.request({ kind: 'init', timing: this.timing, document: this.mediaDocument(document), codeSources, previewWidth, surface, cacheBudgetBytes, decode: { ...decode, localPaths: this.localPaths(document), proxies: this.proxySources() } }, surface ? [surface] : [])) })
+    this.ready = this.timed('content', () => this.content.check(document)).then(() => Promise.all([this.timed('proxies', () => this.selectProxies()), this.connectNative(), this.timed('fonts', () => this.syncFonts(document))])).then(async ([, decode]) => { const codeSources = await this.timed('code', () => this.codeSources(document)); return this.timed('init', () => this.request({ kind: 'init', timing: this.timing, document: this.mediaDocument(document), codeSources, previewWidth, surface, cacheBudgetBytes, decode: { ...decode, localPaths: this.localPaths(document), proxies: this.proxySources() } }, surface ? [surface] : [])) })
     void this.ready.then(() => { this.readySettled = true }, () => undefined)
     this.stopFonts = subscribeFontLibrary(() => {
       if (this.disposed || this.fontRefresh || fontLibrarySnapshot().revision === this.fontsRevision) return
@@ -357,7 +345,7 @@ export class VideoEditRenderTransport {
     }
     const started = performance.now(); const steps: Record<string, number> = {}
     const step = async (name: string, work: Promise<unknown>): Promise<void> => { const at = performance.now(); await work; steps[name] = Math.round(performance.now() - at); if (this.timing) videoEditTimingEvent(this.timing, `render.update.${name}`, { durationMs: steps[name] }) }
-    await step('proxies', this.selectProxies(original)); await step('content', this.content.check(document)); await step('luts', this.authorizeLuts(document)); await step('fonts', this.syncFonts(document))
+    await step('proxies', this.selectProxies(original)); await step('content', this.content.check(document)); await step('fonts', this.syncFonts(document))
     let codeSources: Record<string, string> = {}
     await step('code', this.codeSources(document).then(value => { codeSources = value }))
     await step('worker', this.request({ kind: 'update', timing: this.timing, document: this.mediaDocument(document), codeSources, localPaths: this.localPaths(document), proxies: this.proxySources() })); this.document = document
@@ -367,7 +355,6 @@ export class VideoEditRenderTransport {
   async replaceContent(document: VideoEditComposition): Promise<void> {
     await this.ready
     await this.content.check(document)
-    await this.authorizeLuts(document)
     await this.syncFonts(document)
     const codeSources = await this.codeSources(document)
     await this.request({ kind: 'replaceContent', document: this.mediaDocument(document), codeSources, localPaths: this.localPaths(document) })

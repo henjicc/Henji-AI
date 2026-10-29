@@ -212,7 +212,6 @@ function createVideoEditMultitrackScene() {
         const originals = Object.values(samples).map(sample => ({ file: sample.path, hash: hash(sample.path) }))
         const status = await page.evaluate(() => window.henjiNative.videoDecoder.status())
         assert.equal(status.available, true, '本机原生解码服务应可用')
-        await page.evaluate(dir => window.henjiNative.media.allowRoot(dir), ROOT)
 
         phase('导入：素材记录全部声音流')
         await button(page, '剪辑').click()
@@ -231,7 +230,7 @@ function createVideoEditMultitrackScene() {
         }
         evidence.media = project.media; evidence.phases.push('导入记录全部声音流（与 ffprobe 一致）'); store()
 
-        const identity = await authorizeMcpConnection(page, { name: '多音轨验收', allowWrites: true })
+        const identity = await authorizeMcpConnection(page, { name: '多音轨验收' })
         client = await connectMcpClient(identity.config, 'Henji multitrack Reality')
         const projectRef = { kind: 'video_edit.document', id: project.id }
         const read = (ref, propertyIds) => callTool(client, 'read_application_entity', { ref, propertyIds })

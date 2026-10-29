@@ -10,7 +10,7 @@ vi.mock('@/stores/alertDialogStore', () => ({ requestAlertConfirmation: dependen
 vi.mock('./importCapturedAudio', () => ({ importCapturedAudio: vi.fn() }))
 
 describe('录音离开屏障接入', () => {
-  it('取消工作区切换和关闭保留录音，确认关闭先停止并保留恢复文件', async () => {
+  it('切换与关闭直接停止并保留恢复文件，不要求二次确认', async () => {
     const { api } = captureFixture(); dependencies.api = api
     dependencies.confirm.mockResolvedValue(false)
     const session = getAudioCaptureSession()
@@ -18,14 +18,15 @@ describe('录音离开屏障接入', () => {
     const proceed = vi.fn()
     expect(allowNavigation({ workspace: 'tools', toolId: 'audioEdit' }, proceed)).toBe(true)
     expect(allowNavigation({ workspace: 'tools', toolId: null }, proceed)).toBe(false)
-    await vi.waitFor(() => expect(dependencies.confirm).toHaveBeenCalledOnce())
-    await expect(runApplicationCloseGuards()).rejects.toThrow('已取消关闭')
-    expect(proceed).not.toHaveBeenCalled()
-    expect(api.stop).not.toHaveBeenCalled()
-    dependencies.confirm.mockResolvedValue(true)
-    await runApplicationCloseGuards()
-    expect(api.stop).toHaveBeenCalledOnce()
+    await vi.waitFor(() => expect(proceed).toHaveBeenCalledOnce())
+    expect(dependencies.confirm).not.toHaveBeenCalled()
     expect(api.trashFile).not.toHaveBeenCalled()
+    await session.discard()
+    expect(api.trashFile).toHaveBeenCalledOnce()
+    await session.open(); await session.start()
+    await runApplicationCloseGuards()
+    expect(api.stop).toHaveBeenCalledTimes(2)
+    expect(dependencies.confirm).not.toHaveBeenCalled()
     expect(api.completeFile).not.toHaveBeenCalled()
     expect(session.store.getState().visible).toBe(false)
   })

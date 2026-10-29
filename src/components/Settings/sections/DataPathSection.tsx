@@ -3,6 +3,7 @@ import { UiButton, UiFormRow, UiInput } from '@/components/ui'
 import DataPathDialogs from '../components/DataPathDialogs'
 import { useDataPath } from '../hooks/useDataPath'
 import { useI18n } from '@/hooks/useI18n'
+import { RecentlyDeleted } from './RecentlyDeleted'
 
 /**
  * 作品目录（默认“文档/痕迹AI”）：项目、各类文档、生成结果、上传素材、导出、助手技能。
@@ -58,6 +59,7 @@ const DataPathSection: React.FC = () => {
       </UiFormRow>
 
       <DataPathDialogs dataPath={dataPath} />
+      <RecentlyDeleted />
     </>
   )
 }

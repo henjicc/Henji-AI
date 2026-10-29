@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ error: vi.fn(), info: vi.fn(), warn: vi.fn(), debug: vi.fn() }))
@@ -26,23 +27,16 @@ describe('Electron SDK media reader', () => {
     expect(electronCredentialStore.get('speech-recognition', 'fal')).toBe('generation-fixture-key')
     expect(electronCredentialStore.get('llm', 'shared-slot')).toBe('llm-fixture-key')
   })
-  it.each(['lexical', 'real'] as const)('拒绝 %s 授权检查失败的路径且不读取字节', async boundary => {
-    if (boundary === 'lexical') grants.lexical.mockReturnValue(false)
-    else grants.real.mockResolvedValue(false)
-    const read = vi.spyOn(fs.promises, 'readFile').mockResolvedValue(Buffer.from('private'))
-    await expect(electronMediaReader.read('/private/secret.png')).rejects.toMatchObject({ code: 'media_scope_denied' })
-    expect(read).not.toHaveBeenCalled()
-  })
   it('actual assembled runtime provides every enabled host hook without invoking adapters', () => {
     expect(inspectElectronHostCapabilities(sdkRuntimeContext)).toEqual({ missing: [], affectedCapabilities: [] })
   })
   it('本地 reader 异步读取并保持公共 DTO 的字节、MIME 和文件名', async () => {
     const bytes = Buffer.from([0, 255, 128, 1])
     const read = vi.spyOn(fs.promises, 'readFile').mockResolvedValue(bytes)
-    const result = await electronMediaReader.read(' /media/input.png ')
+    const result = await electronMediaReader.read(` ${path.resolve(path.sep, 'media', 'input.png')} `)
     expect(result).toEqual({ bytes, mimeType: 'image/png', filename: 'input.png' })
     expect(result.bytes).toBe(bytes)
-    expect(read).toHaveBeenCalledWith('/media/input.png')
+    expect(read).toHaveBeenCalledWith(path.resolve(path.sep, 'media', 'input.png'))
   })
 
   it('内嵌媒体保持 DTO，且不读取文件系统', async () => {
@@ -58,7 +52,7 @@ describe('Electron SDK media reader', () => {
   it('读取失败保留原始错误并进入既有日志入口', async () => {
     const error = Object.assign(new Error('not found'), { code: 'ENOENT' })
     vi.spyOn(fs.promises, 'readFile').mockRejectedValue(error)
-    await expect(electronMediaReader.read('/media/missing.png')).rejects.toBe(error)
+    await expect(electronMediaReader.read(path.resolve(path.sep, 'media', 'missing.png'))).rejects.toBe(error)
     expect(mocks.error).toHaveBeenCalledWith('读取 SDK 本地媒体失败', { event: 'sdk.media.read.failed', error })
   })
 })

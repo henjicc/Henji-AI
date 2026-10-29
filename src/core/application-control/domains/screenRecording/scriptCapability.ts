@@ -4,7 +4,7 @@ import { capabilityControl, defineApplicationCapability } from '../shared/define
 const sessionRef = z.object({ kind: z.literal('screen_recording.session'), id: z.string().uuid() }).strict()
 const resultRef = z.object({ kind: z.literal('screen_recording.understanding'), id: z.string() }).strict()
 const documentRef = z.object({ kind: z.literal('video_edit.document'), id: z.string().min(1) }).strict()
-const common = { version: 1, domain: 'screen_recording', readOnly: false, risk: 'R1' as const, dataClasses: ['C1' as const], permission: 'screen_recording:write',
+const common = { version: 1, domain: 'screen_recording', readOnly: false, dataClasses: ['C1' as const], permission: 'screen_recording:write',
   idempotent: false, destructive: false, timeoutMs: 600000, supportsPreview: false, requiredScopes: [], concurrencyKey: 'screen_recording',
 }
 export const generateRecordingScriptCapability = defineApplicationCapability({ ...common,

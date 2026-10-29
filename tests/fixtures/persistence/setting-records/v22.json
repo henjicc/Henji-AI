@@ -1,0 +1,5 @@
+{
+  "key": "ai.paid_approval",
+  "value": "{\"version\": 2, \"singleLimitCny\": 2, \"dailyLimitCny\": 20, \"unlimited\": false}",
+  "type": "json"
+}

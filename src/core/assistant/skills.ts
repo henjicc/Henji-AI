@@ -152,7 +152,6 @@ export const assistantSkillManifestSchema = z.object({
 export const assistantSkillInstallRequestSchema = z.object({
   sourcePath: z.string().min(1).max(4_096),
   /** 同名用户技能已存在时是否整体替换；缺省为 false，服务层返回 SKILL_ALREADY_EXISTS。 */
-  overwrite: z.boolean().default(false),
 }).strict()
 
 export const assistantSkillSkippedFileSchema = z.object({

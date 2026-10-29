@@ -35,6 +35,7 @@ let resources: ContentAddressedResourceStore
 let documents: ImageEditDocumentRepository
 let packages: HenjiImagePackageCodec
 let service: ImageDocumentService
+const preserved = new Map<string, Buffer>()
 let refreshes = 0
 
 async function listPackages(directory: string): Promise<string[]> {
@@ -70,6 +71,7 @@ beforeEach(async () => {
   documents = new ImageEditDocumentRepository(path.join(programDir, 'documents'))
   packages = new HenjiImagePackageCodec(resources)
   refreshes = 0
+  preserved.clear()
   service = new ImageDocumentService({
     documents,
     packages,
@@ -83,6 +85,7 @@ beforeEach(async () => {
     },
     lockDirectory: path.join(root, '程序目录', 'DocumentStore', 'locks'),
     logger: createMainLogger('test.image_document'),
+    preserveFile: async (target, source = target) => { preserved.set(target, await fsp.readFile(source)) },
     validateDocument: () => undefined,
     resourceFilePath: (resourceId) => path.join(programDir, 'resources', resourceId),
     resourceMediaUrl: async () => null,
@@ -313,16 +316,18 @@ describe('图片文档写回与恢复', () => {
     expect(committed.meta).toMatchObject({ path: renamed, name: '海报', revision: 1 })
   })
 
-  it('意外退出后工作副本比文件新：打开时先提示恢复；恢复用工作副本，放弃按文件重新解包', async () => {
+  it('意外退出后工作副本比文件新：打开直接使用工作副本；显式放弃按文件重新解包', async () => {
     const doc = await createSaved('doc-a')
     await editWorkingCopy('doc-a')
     // 没有写回就“退出”了
     const asked = await service.open({ id: 'doc-a', path: doc.path }, 'ask')
-    expect(asked.status).toBe('recovery')
+    expect(asked.status).toBe('ready')
+    expect(preserved.size).toBe(0)
 
     const restored = ready(await service.open({ id: 'doc-a', path: doc.path }, 'restore'))
     expect(restored.imported).toBe(false)
     expect(restored.working.revision).toBe(1)
+    expect(preserved.size).toBe(0)
     // 恢复后写回不报冲突
     const committed = await service.commit({ target: { id: 'doc-a', path: doc.path }, expectedRevision: restored.read.meta.revision })
     expect(committed.meta.revision).toBe(1)
@@ -332,6 +337,10 @@ describe('图片文档写回与恢复', () => {
     expect(discarded.imported).toBe(true)
     expect(discarded.working.revision).toBe(1)
     expect((await documents.load('doc-a')).revision).toBe(1)
+    expect([...preserved.keys()]).toEqual([doc.path])
+    await fsp.writeFile(doc.path, preserved.get(doc.path)!)
+    const recovered = ready(await service.open({ id: 'doc-a', path: doc.path }, 'ask'))
+    expect(recovered.working.revision).toBe(2)
     // 一致后再打开直接复用工作副本，不提示
     const reused = ready(await service.open({ id: 'doc-a', path: doc.path }, 'ask'))
     expect(reused.imported).toBe(false)

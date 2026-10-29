@@ -10,6 +10,7 @@ import { registerScreenRecordingIpc } from './ipc/screen-recording'
 import { closeRecordingControl } from './services/screen-recording/runtime'
 import { registerWebReplayIpc } from './ipc/web-replay'
 import { cleanWebRecordingTrash, stopWebReplayService } from './services/web-replay/runtime'
+import { purgeRecycledItems } from './services/recycle/runtime'
 import { registerAssetLibraryIpc } from './ipc/asset-library'
 import { registerAssistantIpc } from './ipc/assistant'
 import { registerCameraStageRenderIpc } from './ipc/camera-stage-render'
@@ -56,7 +57,7 @@ import { registerEmbeddedAgentIpc, disposeEmbeddedAgent } from './ipc/embedded-a
 import { registerMcpIpc, disposeMcp } from './ipc/mcp'
 import { configureChromiumDevelopmentCache } from './chromium-development-cache'
 import { configureWebGpuRuntime, registerWebGpuDiagnostics } from './webgpu-runtime'
-import { registerMediaProtocolHandler, registerMediaProtocolScheme, restoreAllowedMediaRoots } from './protocol'
+import { registerMediaProtocolHandler, registerMediaProtocolScheme } from './protocol'
 import { configureMacDockIcon } from './app-icon'
 import { sdkRuntimeContext } from './services/ai-runtime/sdk-runtime'
 import { runElectronHostSelfCheck } from './services/ai-runtime/host-capabilities'
@@ -156,7 +157,6 @@ app.whenReady().then(async () => {
   }
   configureMacDockIcon()
   registerMediaProtocolHandler()
-  restoreAllowedMediaRoots()
   runElectronHostSelfCheck(sdkRuntimeContext)
   registerAiRuntimeIpc()
   registerAudioIpc()
@@ -260,6 +260,9 @@ app.whenReady().then(async () => {
         // External clients and document indexing share the renderer admission gate.
         registerMcpIpc()
         scheduleStartupDocumentIndexScan()
+        void purgeRecycledItems().catch(error => {
+          createMainLogger('main.recycle').warn('最近删除过期清理失败，保留内容供重试', { event: 'recycle.purge.failed', error })
+        })
         void cleanWebRecordingTrash().catch(error => {
           createMainLogger('main.web_replay').warn('网页录制回收区清理失败，本次跳过', { event: 'web_replay.trash.purge_failed', error })
         })

@@ -1,3 +1,4 @@
+import { RECYCLE_IPC_CHANNELS } from '../../src/core/localRecords/recycle'
 import {
   GENERATION_HISTORY_IPC_CHANNELS,
   PRESETS_IPC_CHANNELS,
@@ -42,6 +43,10 @@ export function createPresetsApi(invoke: NativeInvoke): PresetsPlatform {
 export function createSettingsApi(invoke: NativeInvoke): SettingsPlatform {
   const c = SETTINGS_IPC_CHANNELS
   return {
+    listDeleted: () => invoke(RECYCLE_IPC_CHANNELS.listDeleted),
+    restoreDeleted: (id) => invoke(RECYCLE_IPC_CHANNELS.restoreDeleted, { id }),
+    preserveFile: (path, name) => invoke(RECYCLE_IPC_CHANNELS.preserveFile, { path, name }),
+    trashFile: (path, name) => invoke(RECYCLE_IPC_CHANNELS.trashFile, { path, name }),
     get: (key) => invoke(c.get, { key }),
     set: (key, value, type) => invoke(c.set, type === undefined ? { key, value } : { key, value, type }),
     delete: (key) => invoke(c.delete, { key }),

@@ -1,20 +1,18 @@
 import { app, protocol } from 'electron'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
-import os from 'node:os'
 import path from 'node:path'
 import { Readable } from 'node:stream'
-import { CONTENT_ADDRESSED_FOLDER_NAMES, getAppBaseDir, getUserRootDir } from './services/appPaths'
+import { CONTENT_ADDRESSED_FOLDER_NAMES } from './services/appPaths'
 import {
   IMAGE_EDITOR_V3_MEDIA_HOST,
   resolveImageEditorV3ResourceMediaUrl,
 } from './services/image-editor-v3/resource-media-url'
-import { persistMediaRootGrant, restorePersistedMediaRoots } from './services/media/rootGrants'
+import { normalizeMediaImportPath } from '../../src/core/media/localMediaImportSafety'
 import { AUTHOR_LIBRARY_HOST } from '../../src/core/videoEdit/codeMaterial/authorLibraries'
 
 const MEDIA_SCHEME = 'henji-media'
 const MEDIA_HOST = 'local'
-const allowedMediaRoots = new Set<string>()
 
 interface ByteRange {
   start: number
@@ -76,92 +74,8 @@ function assertValidMediaPath(targetPath: string): void {
   if (targetPath.includes('\0')) {
     throw new MediaProtocolError(400, 'Media path contains invalid null byte')
   }
-  if (!path.isAbsolute(targetPath)) {
-    throw new MediaProtocolError(400, 'Media path must be absolute')
-  }
-}
-
-function isInsideRoot(targetPath: string, rootPath: string): boolean {
-  const relative = path.relative(path.resolve(rootPath), path.resolve(targetPath))
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
-}
-
-function getAllowedMediaRoots(): string[] {
-  const roots = [
-    getAppBaseDir(),
-    app.getPath('downloads'),
-    app.getPath('temp') || os.tmpdir(),
-    ...allowedMediaRoots,
-    // 用户目录：默认“文档/痕迹AI”，或设置里指定的数据目录
-    getUserRootDir(),
-  ]
-  return roots
-}
-
-/**
- * 不抛错的布尔版本，供渲染层在选用"直接复用原文件路径"这类快路径之前
- * 先确认 henji-media:// 协议真的能读到这个路径——否则会出现"路径有效但协议
- * 403 拒绝"的静默失败（典型表现：<video src> 既不显示缩略图也放不了）。
- */
-export function isPathWithinAllowedMediaRoots(targetPath: string): boolean {
-  try {
-    assertValidMediaPath(targetPath)
-  } catch {
-    return false
-  }
-  return getAllowedMediaRoots().some((rootPath) => isInsideRoot(targetPath, rootPath))
-}
-
-/**
- * 目标已解析为真实位置时，白名单目录也要按真实位置比较。
- * 例如从 MSIX 打包应用（如 Claude 桌面）启动时，系统把 AppData\Local 重定向到
- * Packages\…\LocalCache\Local，目录链接（junction）同理；只比字面路径会把自己的程序缓存误判为越界。
- */
-export async function isRealPathWithinAllowedMediaRoots(realTargetPath: string): Promise<boolean> {
-  if (isPathWithinAllowedMediaRoots(realTargetPath)) return true
-  for (const rootPath of getAllowedMediaRoots()) {
-    try {
-      if (isInsideRoot(realTargetPath, await fsp.realpath(rootPath))) return true
-    } catch {
-      // 尚未创建或不可访问的白名单目录不参与比较
-    }
-  }
-  return false
-}
-
-function assertAllowedMediaPath(targetPath: string): void {
-  assertValidMediaPath(targetPath)
-
-  if (!getAllowedMediaRoots().some((rootPath) => isInsideRoot(targetPath, rootPath))) {
-    throw new MediaProtocolError(403, 'Media path is outside allowed roots')
-  }
-}
-
-export function allowMediaRoot(rootPath: string): void {
-  assertValidMediaPath(rootPath)
-  const resolved = path.resolve(rootPath)
-  if (allowedMediaRoots.has(resolved)) {
-    return
-  }
-  // 默认根目录之外的授权持久化落盘，重启后自动恢复；
-  // 否则重启后项目里直接引用原位置媒体文件的节点会静默 403。
-  const isCoveredByDefaults = getAllowedMediaRoots().some((existing) => isInsideRoot(resolved, existing))
-  allowedMediaRoots.add(resolved)
-  if (!isCoveredByDefaults) {
-    persistMediaRootGrant(resolved)
-  }
-}
-
-/** 启动时恢复持久化的授权目录（只进内存，不再重复写盘） */
-export function restoreAllowedMediaRoots(): void {
-  restorePersistedMediaRoots((rootPath) => {
-    try {
-      assertValidMediaPath(rootPath)
-      allowedMediaRoots.add(path.resolve(rootPath))
-    } catch {
-      // 非法路径直接丢弃
-    }
-  })
+  try { normalizeMediaImportPath(targetPath, process.platform === 'win32') }
+  catch (error) { throw new MediaProtocolError(400, error instanceof Error ? error.message : 'Invalid media path') }
 }
 
 function resolveMediaRequestTarget(url: string): MediaRequestTarget {
@@ -193,8 +107,8 @@ function authorLibraryRoot(): string {
 }
 
 /**
- * 代码效果内置库：只读、只在随包目录内。地址里的每一段都按字面拼接，真实路径必须与拼接结果一致，
- * 所以 `..`、编码后的分隔符、绝对路径与目录内的符号链接都到不了目录外。文件按版本目录常驻、内容不变，可长期缓存。
+ * author-lib 命名空间定位随包资源，路径段保持相对定位语义；目录链接照常跟随。
+ * 文件按版本目录常驻、内容不变，可长期缓存。
  */
 async function resolveAuthorLibraryTarget(parsed: URL): Promise<MediaRequestTarget> {
   if (parsed.username || parsed.password || parsed.port || parsed.search) {
@@ -217,10 +131,7 @@ async function resolveAuthorLibraryTarget(parsed: URL): Promise<MediaRequestTarg
   } catch {
     throw new MediaProtocolError(404, 'Not found')
   }
-  if (targetPath !== path.join(rootPath, ...segments) || !isInsideRoot(targetPath, rootPath)) {
-    throw new MediaProtocolError(403, 'Author library path is outside its root')
-  }
-  return { targetPath, immutable: true, crossOrigin: true }
+    return { targetPath, immutable: true, crossOrigin: true }
 }
 
 function parseRangeHeader(rangeHeader: string | null, size: number): ByteRange | null {
@@ -269,7 +180,7 @@ function streamFile(targetPath: string, range: ByteRange | null): ReadableStream
 
 /**
  * 生成结果/上传素材/缩略图目录下的文件名是内容哈希派生的，同路径不会被替换成不同内容，
- * 可以放心长期缓存；其他来源（如用户自定义授权目录）路径可能被外部编辑，保持不缓存。
+ * 可以放心长期缓存；其他来源（用户原文件）路径可能被外部编辑，保持不缓存。
  */
 function isContentAddressedPath(targetPath: string): boolean {
   const segments = targetPath.split(/[\\/]/)
@@ -288,7 +199,7 @@ function createHeaders(
   headers.set('Accept-Ranges', 'bytes')
   headers.set('Content-Type', mediaType ?? inferMimeFromPath(targetPath))
   headers.set('X-Content-Type-Options', 'nosniff')
-  // 作者模块由已授权目录提供，渲染 Worker 可跨协议原生加载循环 ESM 图。
+  // 作者模块由本地文件提供，渲染 Worker 可跨协议原生加载循环 ESM 图。
   if (crossOrigin || inferMimeFromPath(targetPath) === 'text/javascript') headers.set('Access-Control-Allow-Origin', '*')
   headers.set(
     'Cache-Control',
@@ -320,7 +231,7 @@ async function handleMediaRequest(request: Request): Promise<Response> {
       target = await resolveAuthorLibraryTarget(parsed)
     } else {
       target = resolveMediaRequestTarget(request.url)
-      assertAllowedMediaPath(target.targetPath)
+      assertValidMediaPath(target.targetPath)
     }
     const { targetPath } = target
 

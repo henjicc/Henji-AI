@@ -158,7 +158,6 @@ export interface TestEnvironment {
   services: DocumentServices
   trashed: string[]
   revealed: string[]
-  granted: string[]
   /** 被设为隐藏的内部文件夹。 */
   hidden: string[]
   /** 测试用的 ID 生成器：可预测，便于断言。 */
@@ -200,7 +199,6 @@ export function createTestEnvironment(options: TestEnvironmentOptions = {}): Tes
   const catalog = options.catalog ?? new MemoryDocumentCatalog()
   const trashed: string[] = []
   const revealed: string[] = []
-  const granted: string[] = []
   const hidden: string[] = []
   const ids: string[] = []
   let counter = 0
@@ -224,7 +222,6 @@ export function createTestEnvironment(options: TestEnvironmentOptions = {}): Tes
       await fsp.rm(target, { recursive: true, force: true })
     },
     showItemInFolder: (target) => { revealed.push(target) },
-    grantMediaRoots: (directories) => { granted.push(...directories) },
     renderCover: async (sources) => ({ bytes: Buffer.from(`cover:${sources.length}`), selected: [...sources] }),
     hideDirectory: async (directory) => { hidden.push(directory) },
     kinds: options.kinds ?? GENERIC_TEST_DOCUMENT_KINDS,
@@ -237,7 +234,7 @@ export function createTestEnvironment(options: TestEnvironmentOptions = {}): Tes
     },
   })
   return {
-    base, workRoot, programRoot, outside, catalog, services, trashed, revealed, granted, hidden, ids,
+    base, workRoot, programRoot, outside, catalog, services, trashed, revealed, hidden, ids,
     cleanup: async () => { trust.dispose(); await fsp.rm(base, { recursive: true, force: true }) },
   }
 }

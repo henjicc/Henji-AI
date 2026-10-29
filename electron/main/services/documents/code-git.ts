@@ -5,6 +5,7 @@ import path from 'node:path'
 import git from 'isomorphic-git'
 import { gitCodeLocation, parseGitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
 import { withFileLock } from '../fs/file-lock'
+import { ensureCodeCollectionTarget } from './code-paths'
 
 export const codeDigest = (source: string | Uint8Array): string => createHash('sha256').update(source).digest('hex')
 const author = { name: '痕迹AI', email: 'code@henji.local' }
@@ -23,7 +24,7 @@ export const codeVersionTag = (kind: GitCodeVersion['kind'], name: string, versi
 /** All Git operations stay in the main-process storage service; no executable Git is needed. */
 export class CodeGitRepository {
   readonly dir: string
-  constructor(directory: string) { this.dir = path.resolve(directory) }
+  constructor(directory: string, private readonly collectionRoot?: string) { this.dir = path.resolve(directory) }
   protected get options() { return { fs, dir: this.dir } }
 
   async exclusive<T>(operation: () => Promise<T>): Promise<T> {
@@ -31,22 +32,33 @@ export class CodeGitRepository {
     const previous = queues.get(key) ?? Promise.resolve()
     const pending = previous.catch(() => undefined).then(async () => {
       await this.safePath('.git/HEAD')
-      await new CodeGitRepository(path.dirname(this.dir)).safePath('.henji/code-git.lock')
-      return withFileLock(path.join(path.dirname(this.dir), '.henji', 'code-git.lock'), operation, { timeoutMs: 60_000 })
+      await new CodeGitRepository(path.dirname(this.dir), this.collectionRoot).safePath('.henji/code-git.lock')
+      return withFileLock(path.join(path.dirname(this.dir), '.henji', 'code-git.lock'), async () => {
+        if (this.collectionRoot) {
+          // Git 库会自行生成对象与引用路径，收集前检查现有元数据，避免内部写入跟随链接。
+          const pending = ['.git']
+          while (pending.length) {
+            const directory = pending.pop()!
+            await this.safePath(directory)
+            const entries = await fsp.readdir(path.join(this.dir, directory), { withFileTypes: true }).catch(error => { if (error.code === 'ENOENT') return []; throw error })
+            for (const entry of entries) {
+              const relative = `${directory}/${entry.name}`
+              await this.safePath(relative)
+              if (entry.isDirectory()) pending.push(relative)
+            }
+          }
+        }
+        return operation()
+      }, { timeoutMs: 60_000 })
     })
     queues.set(key, pending)
     try { return await pending } finally { if (queues.get(key) === pending) queues.delete(key) }
   }
 
-  /** Reject symlinks/junctions, including .git and object paths. */
+  /** Git 对象和索引中的路径始终相对当前仓库。 */
   async safePath(relative: string): Promise<void> {
     if (!relative || relative.split('/').some(part => !part || part === '..' || part === '.' || /[\\:\0]/.test(part))) throw new Error('代码仓库路径越界。')
-    let current = path.parse(this.dir).root
-    for (const part of [...this.dir.slice(current.length).split(path.sep), ...relative.split('/')]) {
-      current = path.join(current, part)
-      const stat = await fsp.lstat(current).catch(error => { if (error.code === 'ENOENT') return null; throw error })
-      if (stat?.isSymbolicLink()) throw new Error('代码仓库包含链接，请移除链接后重试。')
-    }
+    if (this.collectionRoot) await ensureCodeCollectionTarget(this.collectionRoot, path.join(this.dir, relative), path.sep === '\\' ? 'win32' : 'posix')
   }
 
   async exists(): Promise<boolean> {
@@ -305,9 +317,10 @@ export class CodeGitRepository {
         await this.safePath(file)
         backups.set(file, await fsp.readFile(path.join(this.dir, file)).catch(error => { if (error.code === 'ENOENT') return null; throw error }))
       }
-      for (const file of oldFiles.filter(file => !targetFiles.has(file))) { await fsp.unlink(path.join(this.dir, file)); await git.remove({ ...this.options, filepath: file }) }
+      for (const file of oldFiles.filter(file => !targetFiles.has(file))) { await this.safePath(file); await fsp.unlink(path.join(this.dir, file)); await git.remove({ ...this.options, filepath: file }) }
       for (const [file, source] of entries) {
         const filepath = `${prefix}/${file}`
+        await this.safePath(filepath)
         await fsp.mkdir(path.dirname(path.join(this.dir, filepath)), { recursive: true })
         await fsp.writeFile(path.join(this.dir, filepath), source, 'utf8')
         await git.add({ ...this.options, filepath })
@@ -317,6 +330,7 @@ export class CodeGitRepository {
       return oid
     } catch (error) {
       if (!committed) for (const [file, bytes] of backups) {
+        await this.safePath(file)
         if (bytes === null) { await fsp.unlink(path.join(this.dir, file)).catch(err => { if (err.code !== 'ENOENT') throw err }); await git.remove({ ...this.options, filepath: file }) }
         else { await fsp.writeFile(path.join(this.dir, file), bytes); await git.add({ ...this.options, filepath: file }) }
       }

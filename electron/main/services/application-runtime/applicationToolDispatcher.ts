@@ -1,8 +1,8 @@
 import { applicationFailure, type ApplicationResult } from '../../../../src/core/application-control/invocation'
 import { z } from 'zod'
 import { acceptedInputFields, commonToolInputSchema } from '../../../../src/core/application-control/inputValidation'
-import { EXTERNAL_CONTRACT_VERSION, EXTERNAL_LIMITS, APPLICATION_READ_CAPABILITY_IDS, APPLICATION_WRITE_CAPABILITY_IDS } from '../../../../src/core/application-control/localHostContracts'
-import { applicationCatalogSchemaHash, buildApplicationContract, buildApplicationToolCatalog, describeContractInputSchema, invalidInputMessage, operationReadInputSchema, readMediaInputSchema, type ApplicationAccess } from './toolCatalog'
+import { EXTERNAL_CONTRACT_VERSION, APPLICATION_READ_CAPABILITY_IDS, APPLICATION_WRITE_CAPABILITY_IDS } from '../../../../src/core/application-control/localHostContracts'
+import { applicationCatalogSchemaHash, buildApplicationContract, buildApplicationToolCatalog, describeContractInputSchema, invalidInputMessage, operationReadInputSchema, readMediaInputSchema } from './toolCatalog'
 import { readApplicationMediaResource, ApplicationMediaResourceError } from './mediaResources'
 import type { ApplicationHostBridge } from './applicationHostBridge'
 import { ApplicationHostNotReadyError } from './applicationHostBridge'
@@ -16,18 +16,18 @@ import { projectApplicationToolResult, type ResultDetailOptions } from './result
 import { validateApplicationToolOutput } from './outputContract'
 import { beginHostCapabilityCapture } from '../../../../src/core/captureLog/capability'
 import { randomUUID } from 'node:crypto'
-const MAX_RESULT = EXTERNAL_LIMITS.resultBytes
+const RESULT_PAGE_BYTES = 1024 * 1024
 const logger = createMainLogger('main.application_runtime')
 
 /** 协议与内置 Agent 共用的受控执行入口；调用者身份仅由宿主提供。 */
 export class ApplicationToolDispatcher {
-  constructor(private readonly connections: { assertActive(id: string): void; access(id: string): ApplicationAccess },
+  constructor(private readonly connections: { assertActive(id: string): void },
     private readonly host: ApplicationHostBridge, private readonly operations?: ApplicationOperationCoordinator,
     private readonly port = 0, private readonly callerKind: 'external' | 'embedded' = 'external') {}
   catalog(callerId: string) {
     this.connections.assertActive(callerId)
     // 内置 Pi 的技能工具随 skills_index 层注入；外部连接在同一目录里得到唯一只读技能入口。
-    return buildApplicationToolCatalog({ tools: this.host.tools(), access: this.connections.access(callerId), operationsEnabled: Boolean(this.operations), includeSkillTool: this.callerKind === 'external' })
+    return buildApplicationToolCatalog({ tools: this.host.tools(), includeSkillTool: this.callerKind === 'external' })
   }
   private inputError(callerId: string, name: string, error: unknown, input: unknown, schema?: z.ZodType): string | null {
     if (!(error instanceof z.ZodError)) return null
@@ -45,7 +45,7 @@ export class ApplicationToolDispatcher {
     this.connections.assertActive(callerId)
     try {
       const input = readMediaInputSchema.parse(args)
-      const authorized = await this.host.execute(callerId, 'read_application_entity', { ref: input.ref, propertyIds: [] }, signal, this.connections.access(callerId))
+      const authorized = await this.host.execute(callerId, 'read_application_entity', { ref: input.ref, propertyIds: [] }, signal)
       this.connections.assertActive(callerId)
       if (!authorized.ok) return { ...authorized, ok: false }
       if (signal.aborted) return applicationFailure('ABORTED:媒体读取已取消。')
@@ -105,7 +105,7 @@ export class ApplicationToolDispatcher {
           const { domains, detail, names, includeSchemas } = describeContractInputSchema.parse(args ?? {})
           const skills = this.callerKind === 'external' ? await agentSkillIndex() : undefined
           this.connections.assertActive(callerId)
-          const data = buildApplicationContract({ domains: this.host.domains(), access: this.connections.access(callerId), catalog: this.catalog(callerId), port: this.port, requestedDomains: domains, callerKind: this.callerKind, skills, detail, names, includeSchemas })
+          const data = buildApplicationContract({ domains: this.host.domains(), catalog: this.catalog(callerId), port: this.port, requestedDomains: domains, callerKind: this.callerKind, skills, detail, names, includeSchemas })
           const result = { ok: true, data }
           return result
         } catch (error) {
@@ -134,14 +134,13 @@ export class ApplicationToolDispatcher {
         if (operation) {
           try { await this.reconcileVerification(callerId, operation, signal) } catch { /* 核实不可用时保留原事实与屏障。 */ }
           if (name === 'review_application_operation') {
-            if (!this.connections.access(callerId).allowWrites) return applicationFailure('PERMISSION_DENIED:此连接没有修改授权。')
             try {
               await this.operations.review(this.operations.store.get(operation.operationId, callerId)!, this.host.rendererEpoch, async ref => {
-                const result = await this.host.execute(callerId, 'read_application_entity', { ref }, signal, { ...this.connections.access(callerId), reviewTarget: true })
+                const result = await this.host.execute(callerId, 'read_application_entity', { ref }, signal, { reviewTarget: true })
                 this.connections.assertActive(callerId)
                 signal.throwIfAborted()
                 return result
-              }, () => { this.connections.assertActive(callerId); if (!this.connections.access(callerId).allowWrites) throw new Error('PERMISSION_DENIED:修改授权已撤销。') })
+              }, () => { this.connections.assertActive(callerId) })
             } catch (error) { return applicationFailure(error instanceof Error ? error.message : '操作核对未完成。') }
           }
         }
@@ -159,10 +158,9 @@ export class ApplicationToolDispatcher {
             let bytes = 0
             for (let index = start; index < values.length && items.length < page.limit; index++) {
               const itemBytes = Buffer.byteLength(JSON.stringify(values[index]))
-              if (bytes + itemBytes > MAX_RESULT / 2) break
+              if (items.length > 0 && bytes + itemBytes > RESULT_PAGE_BYTES) break
               items.push(values[index]); bytes += itemBytes
             }
-            if (!items.length && start < values.length) return applicationFailure('RESULT_TOO_LARGE:单项结果超出传输预算，请读取目标实体核对；操作已执行，禁止重放。')
             return { ok: true, data: { resultRef: { operationId: record.operationId, field: page.resultField }, total: values.length, items,
               nextCursor: start + items.length < values.length ? String(start + items.length) : null } }
           }
@@ -172,13 +170,12 @@ export class ApplicationToolDispatcher {
       }
       if ([...APPLICATION_WRITE_CAPABILITY_IDS, 'retry_application_operation_save'].some((id) => id === name) && this.operations) {
         try {
-          const access = this.connections.access(callerId)
           const writeId = APPLICATION_WRITE_CAPABILITY_IDS.find(id => id === name)
-          if (!this.host.ready && access.allowWrites && writeId) {
+          if (!this.host.ready && writeId) {
             const result = this.operations.result(this.operations.rejectBeforeDispatch(callerId, args ?? {}, writeId, 1000, this.host.hostUnavailable))
             return { ...result, ok: result.ok === true }
           }
-          if (name === 'change_application_entities' && access.allowWrites && Array.isArray(args?.changes)) {
+          if (name === 'change_application_entities' && Array.isArray(args?.changes)) {
             const targets = args.changes.map(change => change && typeof change === 'object' ? (change as { target?: unknown }).target : undefined)
             for (const unresolved of this.operations.store.unresolved()) {
               if (unresolved.state !== 'partial' || !unresolved.targetRefs?.some(ref => targets.some(target => {
@@ -190,8 +187,8 @@ export class ApplicationToolDispatcher {
             }
           }
           const operation = name === 'retry_application_operation_save'
-            ? this.operations.prepareSaveRecovery(callerId, args ?? {}, this.host.rendererEpoch, access)
-            : this.operations.prepare(callerId, args ?? {}, this.host.rendererEpoch, access, APPLICATION_WRITE_CAPABILITY_IDS.find((id) => id === name), this.callerKind)
+            ? this.operations.prepareSaveRecovery(callerId, args ?? {}, this.host.rendererEpoch)
+            : this.operations.prepare(callerId, args ?? {}, this.host.rendererEpoch, APPLICATION_WRITE_CAPABILITY_IDS.find((id) => id === name), this.callerKind)
           if (operation.state === 'prepared' && this.operations.store.beginPreparation(operation)) {
             this.connections.assertActive(callerId)
             const preparationId = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(operation.capabilityId)?.paidGenerationPreparation
@@ -200,7 +197,7 @@ export class ApplicationToolDispatcher {
                 const preparationCapability = APPLICATION_READ_CAPABILITY_IDS.find(id => id === preparationId)
                 if (!preparationCapability) throw new Error('付费生成的准备入口尚未向当前连接开放。')
                 logger.info('检查生成参数与费用', { event: 'application.generation_preflight.start', requestId: operation.operationId })
-                const preparation = await this.host.execute(callerId, preparationCapability, operation.input, signal, access)
+                const preparation = await this.host.execute(callerId, preparationCapability, operation.input, signal)
                 this.connections.assertActive(callerId)
                 if (signal.aborted) throw new Error('操作已取消。')
                 reserveGenerationBudget(this.operations.store, operation, preparation)
@@ -215,7 +212,7 @@ export class ApplicationToolDispatcher {
               }
             }
             if (this.operations.store.get(operation.operationId, callerId)?.state === 'preparing') {
-              try { await this.host.execute(callerId, operation.capabilityId, operation.input, signal, { operation, ...access }) } catch (error) {
+              try { await this.host.execute(callerId, operation.capabilityId, operation.input, signal, { operation }) } catch (error) {
                 const current = this.operations.store.get(operation.operationId, callerId)!
                 // 尚未派发的宿主拒绝是明确零执行；已派发后的等待失败保留执行事实。
                 if (current.state === 'preparing') this.operations.store.save({ ...current, state: 'not_executed', result: {
@@ -231,13 +228,11 @@ export class ApplicationToolDispatcher {
         } catch (error) { return applicationFailure(this.inputError(callerId, name, error, args ?? {}) ?? (error instanceof Error ? error.message : '写入未完成。')) }
       }
       const id = APPLICATION_READ_CAPABILITY_IDS.find((value) => value === name)
-      if (!id) return applicationFailure('此连接只允许读取。请用 tools/list 查看可用工具。')
+      if (!id) return applicationFailure('工具不存在，请用 tools/list 查看可用工具。')
       try {
-        const raw = await this.host.execute(callerId, id, args ?? {}, signal, this.connections.access(callerId))
+        const raw = await this.host.execute(callerId, id, args ?? {}, signal)
         const result = this.operations ? this.operations.rememberRead(callerId, raw, typeof raw.revisionEpoch === 'string' ? raw.revisionEpoch : this.host.rendererEpoch) : raw
         this.connections.assertActive(callerId)
-        const text = JSON.stringify(result)
-        if (Buffer.byteLength(text) > MAX_RESULT) throw new Error('读取结果过大，请缩小字段或分页读取。')
         return { ...result, ok: result.ok === true }
       } catch (error) {
         if (error instanceof ApplicationHostNotReadyError) return { ok: false, error: error.failure() }
@@ -247,7 +242,7 @@ export class ApplicationToolDispatcher {
   async reconcileVerification(callerId: string, record: import('./operationStore').OperationRecord, signal: AbortSignal): Promise<void> {
     await this.operations?.reconcileReceipt(record, async original => {
       const result = await this.host.execute(callerId, 'get_current_application_context', {}, signal,
-        { ...this.connections.access(callerId), recoveryOperation: original })
+        { recoveryOperation: original })
       this.connections.assertActive(callerId)
       if (signal.aborted) throw new Error('核实已取消。')
       return result
@@ -255,7 +250,7 @@ export class ApplicationToolDispatcher {
     record = this.operations?.store.get(record.operationId, record.callerId) ?? record
     await this.operations?.reconcileVerification(record, async proof => {
       const result = await this.host.execute(callerId, 'get_current_application_context', {}, signal,
-        { ...this.connections.access(callerId), recoveryVerification: proof })
+        { recoveryVerification: proof })
       this.connections.assertActive(callerId)
       if (signal.aborted) throw new Error('核实已取消。')
       logger.info('原事务最终状态已重新核对', { event: 'application.operation.verification_rechecked', context: { verified: (result.data as { verification?: { verified?: boolean } } | undefined)?.verification?.verified === true } })

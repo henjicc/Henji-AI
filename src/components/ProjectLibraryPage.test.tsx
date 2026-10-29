@@ -111,7 +111,7 @@ describe('ProjectLibraryPage', () => {
     expect(within(menu).getByText('删除项目')).toBeTruthy();
   });
 
-  it('多选删除确认后退出多选，页头回到常规动作', async () => {
+  it('多选删除后退出多选，页头回到常规动作', async () => {
     const onDelete = vi.fn();
     render(
       <ProjectLibraryPage persistKey="test" title="项目管理" items={items} labels={labels} onOpen={vi.fn()} create={{ kind: 'named', onCreate: vi.fn() }} onRename={vi.fn()} onDelete={onDelete} />,
@@ -120,7 +120,6 @@ describe('ProjectLibraryPage', () => {
     fireEvent.click(within(document.querySelector('[data-context-menu]') as HTMLElement).getByText('多选'));
     fireEvent.click(await screen.findByRole('button', { name: '全选' }));
     fireEvent.click(screen.getByRole('button', { name: '删除所选' }));
-    fireEvent.click(await screen.findByRole('button', { name: '删除' }));
     await waitFor(() => expect(onDelete).toHaveBeenCalledOnce());
     await waitFor(() => expect(screen.queryByText(/已选择/)).toBeNull());
     expect(screen.getByRole('button', { name: '新建项目' })).toBeTruthy();
@@ -206,7 +205,7 @@ describe('ProjectLibraryPage', () => {
     expect(screen.queryByRole('textbox', { name: '搜索项目' })).toBeNull();
   });
 
-  it('草稿排在最前并带标记；左栏多出未保存草稿；单击继续编辑，菜单移到回收站经确认', async () => {
+  it('草稿排在最前并带标记；左栏多出未保存草稿；单击继续编辑，菜单直接移到回收站', async () => {
     const onOpen = vi.fn();
     const onDiscardDraft = vi.fn();
     const onDelete = vi.fn();
@@ -233,7 +232,6 @@ describe('ProjectLibraryPage', () => {
     const menu = document.querySelector('[data-context-menu]') as HTMLElement;
     expect(within(menu).queryByText('重命名')).toBeNull();
     fireEvent.click(within(menu).getByText('移到回收站'));
-    fireEvent.click(await screen.findByRole('button', { name: '删除' }));
     await waitFor(() => expect(onDiscardDraft).toHaveBeenCalledWith(expect.objectContaining({ id: 'd1' })));
     expect(onDelete).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: /未保存草稿/ }));
@@ -272,7 +270,7 @@ describe('ProjectLibraryPage', () => {
     expect(await screen.findByText('重命名项目')).toBeTruthy();
   });
 
-  it('键盘：Delete 经确认删除焦点项，Ctrl+N 新建', async () => {
+  it('键盘：Delete 直接删除焦点项，Ctrl+N 新建', async () => {
     const onDelete = vi.fn();
     const onCreate = vi.fn();
     render(
@@ -283,7 +281,6 @@ describe('ProjectLibraryPage', () => {
     const card = document.querySelector('[data-project-id="p1"]') as HTMLElement;
     card.focus();
     fireEvent.keyDown(card, { key: 'Delete' });
-    fireEvent.click(await screen.findByRole('button', { name: '删除' }));
     await waitFor(() => expect(onDelete).toHaveBeenCalledWith([items[0]]));
   });
 });

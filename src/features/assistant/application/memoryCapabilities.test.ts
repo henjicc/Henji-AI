@@ -83,7 +83,7 @@ it('整理在参数/内容校验失败后可纠正重试，整批预检不留下
 
 it('真实授权信封：父基线可新增，条目基线可删除/撤销，旧条目基线不能删除新内容', async () => {
   const app = createApplicationHarness()
-  const callerGrant = createApplicationCallerGrant({ callerId: 'memory-public-test', capabilityIds: ['change_application_entities', 'undo_application_changes'], permissions: ['application:write', 'application:read', 'settings:write', 'settings:read'], allowWrites: true, allowDestructive: true })
+  const callerGrant = createApplicationCallerGrant({ callerId: 'memory-public-test' })
   const call = (id: string, input: Record<string, unknown>, expectedRevisions?: Record<string, number>) => executeApplicationCapabilityResult({ id, version: BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(id)!.version, input, expectedRevisions }, { callerGrant, requestId: crypto.randomUUID(), signal: new AbortController().signal })
   const content = { section: 'creative', content: '中文默认思源黑体。', source: 'assistant' }
   try {

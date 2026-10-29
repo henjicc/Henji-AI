@@ -23,7 +23,7 @@ beforeEach(async () => {
   vi.clearAllMocks(); useAlertDialogStore.setState({ queue: [] })
   ports.findDocument.mockResolvedValue({ container: { kind: 'project', projectId: 'project' } })
   ports.findProject.mockResolvedValue({ id: 'project', name: '作品' })
-  bridge = installPaidApprovalTestBridge('auto')
+  bridge = installPaidApprovalTestBridge({})
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks(); useAlertDialogStore.setState({ queue: [] }) })
 
@@ -39,7 +39,7 @@ it.each(Object.entries(UI_PAID_CAPABILITIES))('界面入口 %s 共用策略、us
 })
 
 it('ask 取消 / 等待时中止：零模型执行、零费用', async () => {
-  bridge.setSettings({ mode: 'ask' })
+  bridge.setSettings({ singleLimitCny: 0, unlimited: false })
   const work = vi.fn(async () => undefined)
   for (const cancel of ['dismiss', 'abort'] as const) {
     const controller = new AbortController()
@@ -56,12 +56,10 @@ it('ask 取消 / 等待时中止：零模型执行、零费用', async () => {
   expect([...bridge.records.values()].every(record => record.state === 'not_executed')).toBe(true)
 })
 
-it('项目同意与并发每日额度共用，超额仍询问，未知价格不伪装零元', async () => {
-  bridge.setSettings({ mode: 'ask', dailyLimitCny: 2 })
+it('所有项目共用每日额度，超额仍询问，未知价格不伪装零元', async () => {
+  bridge.setSettings({ singleLimitCny: 2, dailyLimitCny: 2, unlimited: false })
   const run = () => withPaidOperation({ category: 'translation', documentId: 'doc', estimatedCny: 1 }, async () => undefined)
-  const first = run()
-  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
-  useAlertDialogStore.getState().confirmCurrent(true); await first
+  await run()
   await run()
   const third = run(); const rejected = expect(third).rejects.toThrow()
   await vi.waitFor(() => expect(useAlertDialogStore.getState().queue[0].paidDetails).toMatchObject({ estimatedCny: 1, dailySpentCny: 2, category: 'translation' }))
@@ -92,7 +90,7 @@ it('助手仍走原调用上下文，不创建 user 副账本', async () => {
 })
 
 it.each(['文本处理 / 提示词优化', '模型能力测试'])('%s 的正式命令在统一确认拒绝后不发出模型请求', async entry => {
-  bridge.setSettings({ mode: 'ask' })
+  bridge.setSettings({ singleLimitCny: 0, unlimited: false })
   const pending = entry === '模型能力测试'
     ? llmVerifyModelCapabilities({} as Parameters<typeof llmVerifyModelCapabilities>[0])
     : llmChatStream({} as Parameters<typeof llmChatStream>[0], () => {})
@@ -112,7 +110,7 @@ it('受控图片工具模型与普通生成共用正式估价，保持隐藏模�
 })
 
 it('提示词优化在等待费用确认时取消，撤下弹窗且不发模型请求', async () => {
-  bridge.setSettings({ mode: 'ask' })
+  bridge.setSettings({ singleLimitCny: 0, unlimited: false })
   const pending = llmChatStream({ requestId: 'optimizer' } as Parameters<typeof llmChatStream>[0], () => {})
   const rejected = expect(pending).rejects.toThrow()
   await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
@@ -125,7 +123,7 @@ it('提示词优化在等待费用确认时取消，撤下弹窗且不发模型�
 
 it.each(['generation', 'recognition', 'translation', 'title', 'explanation'] as const)('%s 共用英文结构化费用展示，拒绝不派发', async category => {
   await i18n.changeLanguage('en-US')
-  bridge.setSettings({ mode: 'ask' })
+  bridge.setSettings({ singleLimitCny: 0, unlimited: false })
   const work = vi.fn(async () => undefined)
   const pending = withPaidOperation({ category, estimatedCny: category === 'title' ? null : 1.25 }, work)
   const rejected = expect(pending).rejects.toThrow()

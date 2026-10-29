@@ -43,7 +43,6 @@ interface ExplanationPorts {
   assertCurrent?: () => void
   confirmStep?: (context: ApplicationExecutionContext | undefined, settled: () => Promise<void>) => Promise<void>
   confirm: (context?: ApplicationExecutionContext) => Promise<unknown>; model: () => string | Promise<string>
-  eraseResources: (resourceIds: string[]) => Promise<void>
   readVisual: (resourceId: string) => Promise<Uint8Array>
 }
 /** Document-owned static host. No timeline, provider, or second layout solver is introduced here. */
@@ -51,7 +50,6 @@ export class ImageEditExplanation {
   private state: ImageExplanationState = { busy: false, elapsedUs: 0, generation: 0 }
   private listeners = new Set<() => void>()
   private collector?: RecordingCollector
-  private eraseResources = new Set<string>()
   private erasedSessionId?: string
   private generation?: PreparedExplanationGeneration
   private controller = new AbortController()
@@ -311,9 +309,9 @@ export class ImageEditExplanation {
       this.assert(collector)
     }
   }
-  async transcribe(receipt: string): Promise<void> {
+  async transcribe(): Promise<void> {
     const collector = this.require(), session = collector.session
-    if (!receipt || this.state.busy || !['reviewing', 'recoverable'].includes(session.state)) throw new Error('请结束录制并确认转写授权。')
+    if (this.state.busy || !['reviewing', 'recoverable'].includes(session.state)) throw new Error('请先结束录制。')
     const resume = session.state === 'recoverable'
     const transcription = new AbortController(); this.transcription = transcription
     const abort = (): void => transcription.abort()
@@ -333,7 +331,7 @@ export class ImageEditExplanation {
         if (audio.kind !== 'audio' || completed.has(audio.audioSegmentRef)) continue
         transcription.signal.throwIfAborted(); this.assert(collector)
         if (session.state !== 'transcribing') throw new Error('转写已取消。')
-        const result = await this.ports.audio.transcribe({ action: 'transcribe', sessionId: session.id, chunkId: audio.audioSegmentRef, modelId, requestId: audio.audioSegmentRef, audioUploadReceipt: receipt, resume })
+        const result = await this.ports.audio.transcribe({ action: 'transcribe', sessionId: session.id, chunkId: audio.audioSegmentRef, modelId, requestId: audio.audioSegmentRef, resume })
         this.assert(collector); if (session.state !== 'transcribing') throw new Error('转写已取消。')
         const aligned = alignRecordingTranscript(result.transcript, audio, session.clockSegments, collector.nextSeq, suffix => `${audio.audioSegmentRef}/${suffix}`)
         for (const entry of aligned.entries) collector.append(transcriptEventSchema.parse(entry))
@@ -435,7 +433,6 @@ export class ImageEditExplanation {
       session: () => this.collector?.session,
       drafts: () => this.bus.getSnapshot().document.creativeIntents?.drafts ?? [],
       read: async id => { const resource = this.bus.getSnapshot().document.creativeIntents?.resources.find(r => r.resourceId === id); if (!resource) throw new Error('讲解页已删除。'); return this.ports.read(resource) },
-      consent: async consent => { this.assert(collector); collector.session.consent = consent; await this.save(); this.publish() },
       assertCurrent: () => this.assert(collector),
     })
     return this.generation.request
@@ -492,13 +489,13 @@ export class ImageEditExplanation {
     try {
     await this.generation?.cancel(); this.generation = undefined
     if (this.erasedSessionId !== collector.session.id) {
-    await this.finishReview(); await this.ports.audio.erase(collector.session.id)
+    await this.finishReview(); await this.ports.audio.release(collector.session.id)
     const document = this.bus.getSnapshot().document
-    for (const resource of await this.bus.eraseExplanationSession(collector.session.id)) this.eraseResources.add(resource)
+    await this.bus.eraseExplanationSession(collector.session.id)
     this.erasedSessionId = collector.session.id
     eraseExplanationBody(explanationBodyRef(imageEditV3DocumentRef(document.id), collector.session.id))
     }
-    await this.ports.confirm(); await this.ports.release(collector.session.id); await this.ports.eraseResources([...this.eraseResources]); this.eraseResources.clear(); this.resources = []; this.collector = undefined; this.publish({ message: undefined })
+    await this.ports.confirm(); await this.ports.release(collector.session.id); this.resources = []; this.collector = undefined; this.publish({ message: undefined })
     logger.info('图片讲解已删除', { event: 'image_edit.explanation.remove.completed' })
     } catch (error) { logger.warn('图片讲解删除未完成', { event: 'image_edit.explanation.remove.failed', error }); throw error }
   }
@@ -536,7 +533,6 @@ export function imageEditExplanation(bus: ImageEditCommandBusV3): ImageEditExpla
       assertCurrent: () => { const owner = findImageEditDocumentInstanceV3(bus.getSnapshot().document.id)?.persistenceOwner; if (!owner) throw new Error('图片尚不能保存，请保留当前页面。'); owner.assertCurrent() },
       confirmStep: async (context, settled) => { const owner = findImageEditDocumentInstanceV3(bus.getSnapshot().document.id)?.persistenceOwner; if (!owner) throw new Error('图片尚不能保存，请保留当前页面。'); owner.acceptCurrent(); await owner.confirmStep(context, settled) },
       confirm: async context => { const owner = findImageEditDocumentInstanceV3(bus.getSnapshot().document.id)?.persistenceOwner; if (!owner) throw new Error('图片尚不能保存，请保留当前页面。'); owner.acceptCurrent(); return context ? owner.confirmStep(context, async () => {}) : owner.confirm(true) },
-      eraseResources: async resourceIds => { await getPlatform().imageEditorV3.collectGarbage({ requestId: crypto.randomUUID(), retainedResourceRefs: [], eraseResourceRefs: resourceIds as `sha256:${string}`[] }) },
       readVisual: async resourceId => {
         const proxy = await getPlatform().imageEditorV3.readFastProxy({ requestId: crypto.randomUUID(), resourceRef: resourceId as `sha256:${string}`, maxDimension: 1280 })
         const bitmap = await createImageBitmap(new Blob([proxy.bytes], { type: proxy.mediaType }))

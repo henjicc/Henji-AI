@@ -9,6 +9,5 @@ export function createElectronMcp(): McpPlatform {
   return {
     status: () => native().status(), configure: (input) => native().configure(input), authorize: (input) => native().authorize(input),
     revoke: (input) => native().revoke(input), connectionConfig: (input) => native().connectionConfig(input),
-    update: (input) => native().update(input),
   }
 }

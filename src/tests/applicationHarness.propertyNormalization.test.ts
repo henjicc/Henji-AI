@@ -11,13 +11,12 @@ import { ApplicationOperationCoordinator } from '../../electron/main/services/ap
 import type { ApplicationOperationStore, OperationRecord } from '../../electron/main/services/application-runtime/operationStore'
 import type { ApplicationExecutionContext } from '@/core/application-control/execution/types'
 import { HEX_COLOR_EXAMPLE } from '@/core/theme/colorTokens'
-import { getPlatform } from '@/platform/runtime'
 import { videoEditExportSettingsSchema, VIDEO_EDIT_EXPORT_PRESETS } from '@/core/videoEdit/exportPresets'
 import { VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from '@/core/videoEdit/time'
 
 const access: ApplicationExecutionContext = { exposure: 'assistant', permissions: new Set(['video_edit:read', 'video_edit:write']), acceptedDataClasses: new Set(['C0', 'C1']), signal: new AbortController().signal, requestId: 'test' }
 const disposers: Array<() => void> = []
-beforeEach(() => { installHarnessNativeStorage(); vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined) })
+beforeEach(() => { installHarnessNativeStorage(); })
 afterEach(async () => { disposers.splice(0).forEach(dispose => dispose()); await closeAllVideoEdits(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 
 it('A 部分样式经正式属性写入后 verified，旧误判只读核对结案且不重放', async () => {

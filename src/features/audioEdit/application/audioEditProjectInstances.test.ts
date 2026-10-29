@@ -176,17 +176,13 @@ describe('口播草稿', () => {
     expect(prompter.log).toEqual([])
   })
 
-  it('有内容的草稿离开时询问：取消留下，保存起名后转正', async () => {
+  it('有内容的草稿离开时静默保存并保留草稿', async () => {
     const instance = await createAudioEditDraft(source)
     const id = instance.document.id
     editAudioEditProject(id, (document) => ({ ...document, referenceScript: '参考稿' }))
-    prompter.leaveChoices.push('cancel')
-    expect(await leaveAudioEditProject(id)).toBe('cancelled')
-    expect(getAudioEditProjectInstance(id)).toBe(instance)
-    prompter.leaveChoices.push('save')
-    prompter.saveName = async (info) => { await info.submit('第一期口播', null); return true }
     expect(await leaveAudioEditProject(id)).toBe('saved')
-    expect(commands.stored(id)!.meta).toMatchObject({ name: '第一期口播', draft: false })
+    expect(prompter.log).toEqual([])
+    expect(commands.stored(id)!.meta).toMatchObject({ name: '未命名音频 1', draft: true })
     expect(stored(id).referenceScript).toBe('参考稿')
     expect(getAudioEditProjectInstance(id)).toBeUndefined()
   })

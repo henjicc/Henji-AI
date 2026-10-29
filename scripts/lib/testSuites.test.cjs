@@ -45,8 +45,8 @@ test('普通/真实 GPU/大图/原生 SQLite/FFmpeg CLI 互斥且覆盖完整清
   for (const file of special) assert.ok(files.includes(file), `专项文件不存在：${file}`)
   assert.deepEqual(testSuiteOptions('unit'), { include: ALL_TEST_PATTERNS, exclude: special, poolMatchGlobs: FORK_POOL_MATCH_GLOBS })
   assert.deepEqual(testSuiteOptions('unit', ['**/node_modules/**']).exclude, ['**/node_modules/**', ...special])
-  assert.deepEqual(testSuiteOptions('test'), { include: ALL_TEST_PATTERNS, poolMatchGlobs: FORK_POOL_MATCH_GLOBS })
-  assert.equal(scripts.test, 'vitest run')
+  assert.deepEqual(testSuiteOptions('test'), { include: ALL_TEST_PATTERNS, exclude: NATIVE_TEST_FILES, poolMatchGlobs: FORK_POOL_MATCH_GLOBS })
+  assert.equal(scripts.test, 'node scripts/run-tests.mjs')
   for (const file of files) {
     const matching = ['unit', 'gpu', 'image-export', 'native', 'ffmpeg-cli'].filter((suite) => {
       const options = testSuiteOptions(suite)
@@ -144,4 +144,21 @@ test('性能专项显式启用，普通层保留同文件正确性', () => {
   const performance = require('yaml').parse(read('.github/workflows/performance.yml'))
   assert.deepEqual(Object.keys(performance.on), ['workflow_dispatch'])
   assert.doesNotMatch(workflow, /test:performance|performance\.yml/)
+})
+
+test('默认测试入口保留 Vitest 筛选参数，SQLite 仅交给正式原生清单', async () => {
+  const { createTestRunPlan } = await import('../run-tests.mjs')
+  assert.deepEqual(createTestRunPlan([]).nativeFiles, NATIVE_TEST_FILES)
+  const args = ['src/core/application-control/execution/engine.test.ts', '--reporter=json', '-t', '删除验证']
+  assert.deepEqual(createTestRunPlan(args), { vitestArgs: ['run', ...args], nativeFiles: [] })
+  const file = NATIVE_TEST_FILES[0]
+  assert.deepEqual(createTestRunPlan([file]), { vitestArgs: null, nativeFiles: [file] })
+  assert.deepEqual(createTestRunPlan(['--mode', 'unit']).nativeFiles, [])
+  assert.deepEqual(createTestRunPlan([file.toUpperCase()]), { vitestArgs: null, nativeFiles: [file] })
+  const mixed = createTestRunPlan([args[0], file.toUpperCase()])
+  assert.deepEqual(mixed.nativeFiles, [file])
+  assert.ok(mixed.vitestArgs.includes(args[0]))
+  for (const option of [['-t', '不存在'], ['--reporter=json'], ['--outputFile=report.json'], ['--exclude=**/*.native.test.ts'], ['--shard=1/2']]) {
+    assert.throws(() => createTestRunPlan([file, ...option]), /原生 SQLite 验收必须整文件执行/)
+  }
 })

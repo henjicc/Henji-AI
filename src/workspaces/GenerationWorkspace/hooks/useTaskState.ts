@@ -1,7 +1,7 @@
 import type React from 'react'
 import { useCallback, useSyncExternalStore } from 'react'
 import { createLogger } from '@/core/logging'
-import { persistGenerationTask, deletePersistedGenerationTask } from './useTaskHistory'
+import { persistGenerationTask, deletePersistedGenerationTasks } from './useTaskHistory'
 import type { GenerationTask, ResultImageDimensions } from '../types'
 import { useGenerationTaskProgressStore } from '@/stores/generationTaskProgressStore'
 import { readGenerationTasks, replaceGenerationTasks, subscribeGenerationTasks } from '../application/generationTaskProjection'
@@ -34,7 +34,8 @@ export function useTaskState(): UseTaskStateReturn {
     const ids = new Set(next.map((task) => task.id))
     const report = (error: unknown): void => createLogger('features.generation.persistence').error('生成任务保存失败，保留内存结果', error, { event: 'generation.history.failed' })
     for (const task of next) if (!previousTasks.has(task)) void persistGenerationTask(task).catch(report)
-    for (const task of previous) if (!ids.has(task.id)) void deletePersistedGenerationTask(task.id).catch(report)
+    const removed = previous.filter(task => !ids.has(task.id)).map(task => task.id)
+    if (removed.length) void deletePersistedGenerationTasks(removed).catch(report)
     replaceGenerationTasks(next)
   }, [])
 

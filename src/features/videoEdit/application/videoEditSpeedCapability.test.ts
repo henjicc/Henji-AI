@@ -3,8 +3,8 @@ import { createVideoEditTestProject as createVideoEditProject } from './videoEdi
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
-import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
-import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
+
+
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { videoEditClipSourceRange } from '@/core/videoEdit/clipSpeed'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS, videoEditFps } from '@/core/videoEdit/time'
@@ -90,8 +90,7 @@ it('持续时间保持源内容；多目标的小数变速按正式算法舍入�
 it('锁定链接音轨、越界、混合文档引用、冲突基线和超长波纹均在整组发布前拒绝', async () => {
   const owner = await fixture(); const app = createApplicationHarness()
   try {
-    const denied = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'reader', capabilityIds: ['ripple_video_edit_clip_speed'], permissions: ['video_edit:read'], allowWrites: false, allowDestructive: false }))
-    await expect(denied.execute({ id: 'ripple_video_edit_clip_speed', version: 1, input: input(owner) }, { requestId: 'denied', signal: new AbortController().signal })).rejects.toThrow('PERMISSION_DENIED')
+
     editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].tracks.find(track => track.kind === 'audio')!.locked = true; return document })
     const before = owner.document; const past = owner.past.length
     const locked = await app.call('ripple_video_edit_clip_speed', input(owner))

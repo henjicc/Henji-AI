@@ -283,7 +283,7 @@ function completedTransaction(
  *
  * 注册表的完整描述服务于门禁、UI 与本地适配器，里面大半对模型毫无意义：每条属性都带一个
  * 64 字符的 sha256 digest、一份权限名清单、exposures 与 revisionScopes——这些既不影响它怎么
- * 写参数，也不构成它能做的判断（权限由网关强制、revision 由信封填、digest 只用于版本比对）。
+ * 写参数，也不构成它能做的判断（可写性来自正式执行器、revision 由信封填、digest 只用于版本比对）。
  * 实测一次 4 实体 81 属性的描述回了 62KB（≈3.1 万 token），占整轮输入的近一半。
  *
  * 保留原则只有一条：**模型据此决定"能不能写、写什么、值怎么填"的字段才留**。
@@ -308,11 +308,9 @@ function describedEntity(entity: Record<string, unknown>): Record<string, unknow
   }
 }
 
-function describedProperty(property: Record<string, unknown>, context?: CapabilityExecutionContext): Record<string, unknown> {
+function describedProperty(property: Record<string, unknown>, _context?: CapabilityExecutionContext): Record<string, unknown> {
   const permissions = property.requiredPermissions as { write?: string[] } | undefined
   const writable = (permissions?.write?.length ?? 0) > 0
-    && (!context?.callerGrant || (context.callerGrant.allowWrites
-      && permissions?.write?.every((permission) => context.callerGrant?.permissions.includes(permission))))
   const operations = writable
     ? getApplicationControlExecutionEngine().getAcceptedPropertyOperations(
         property.entityType as string,
@@ -330,7 +328,7 @@ function describedProperty(property: Record<string, unknown>, context?: Capabili
     ...(property.requiresReadBaseline ? { requiresReadBaseline: true } : {}),
     ...(property.nullable === true ? { nullable: true } : {}),
     ...(property.defaultValue !== undefined ? { defaultValue: property.defaultValue } : {}),
-    // 权限名对模型没有用，它只需要知道这一条能不能写；能不能通过由网关判定。
+    // 模型只需要知道属性是否具备正式写入实现。
     writable,
     ...(operations.length > 0 ? { writeOperations: operations } : {}),
     ...(operations.includes('set')
@@ -499,7 +497,6 @@ export const applicationReflectionHandlers = {
     const baselines = await captureMutationBaselines(changes, appContext).catch((error) => { throw new ApplicationPreflightFailure(error) })
     // 空基线与省略基线一致，需要自动读取集合可用性。
     if (context.callerGrant && Object.keys(expected).length === 0) {
-      if (changes.some((change) => change.kind === 'remove_items')) throw new ApplicationPreflightFailure(new Error('BASELINE_REQUIRED:删除前请读取目标并提供 baselineIds。批量删除时，list_application_entities 返回的 baselineId 覆盖整页 refs，不必逐条读取。'))
       const current = await refreshedRevisionsIfTargetsUnchanged(baselines, changes, appContext).catch(error => { throw new ApplicationPreflightFailure(error) })
       if (!current) throw new ApplicationPreflightFailure(new Error('CONFLICT:目标正在变化，请稍后重试。'))
       expected = current

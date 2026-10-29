@@ -3,7 +3,6 @@ import type { AssistantAttachmentDraft } from '../conversation/assistantAttachme
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-import type { EmbeddedAgentPrompt } from '@/core/assistant/embeddedAgent'
 
 export type AssistantDockMode = 'left' | 'right' | 'floating'
 
@@ -35,8 +34,6 @@ interface AssistantUiState {
   size: AssistantPanelSize
   pendingGoal: string | null
   pendingGoalOptions: AssistantGoalOptions | null
-  embeddedAccess: EmbeddedAgentPrompt['access']
-  setEmbeddedAccess: (access: EmbeddedAgentPrompt['access']) => void
   setOpen: (open: boolean) => void
   toggleOpen: () => void
   setMode: (mode: AssistantDockMode) => void
@@ -55,8 +52,6 @@ export const useAssistantUiStore = create<AssistantUiState>()(
       size: { width: UI_PANEL_WIDTH.assistant.default, height: 680 },
       pendingGoal: null,
       pendingGoalOptions: null,
-      embeddedAccess: 'full',
-      setEmbeddedAccess: (embeddedAccess) => set({ embeddedAccess }),
       setOpen: (open) => set({ open }),
       toggleOpen: () => set((state) => ({ open: !state.open })),
       setMode: (mode) => set({ mode }),
@@ -75,11 +70,11 @@ export const useAssistantUiStore = create<AssistantUiState>()(
         mode: state.mode,
         floatingPosition: state.floatingPosition,
         size: state.size,
-        embeddedAccess: state.embeddedAccess,
       }),
       merge: (persisted, current) => {
         const { open: _open, ...rest } = (persisted ?? {}) as Partial<AssistantUiState>
-        return { ...current, ...rest }
+        const { embeddedAccess: _access, ...layout } = rest as Partial<AssistantUiState> & { embeddedAccess?: unknown }
+        return { ...current, ...layout }
       },
     }
   )

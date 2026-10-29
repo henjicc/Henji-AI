@@ -1,3 +1,4 @@
+import { editableRecordingUnderstanding } from './application/recordingUnderstandingFields'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Check, Sparkles } from 'lucide-react'
@@ -65,22 +66,21 @@ export function RecordingDirectorScript({ sessionId, recording }: { sessionId: s
     if (!result.ok) throw new Error(result.error.message)
     return result.data
   }
-  // Consent belongs to an exact plan: edits are first saved unconfirmed, then confirmed by a separate write.
-  const save = async (confirmed: boolean): Promise<void> => {
+  const save = async (): Promise<void> => {
     const read = await readRecordingUnderstanding(sessionId)
     const current = read.content.understanding.director
     if (!current) throw new Error(t('recording.scriptConflict'))
     const ref = { kind: 'screen_recording.understanding', id: sessionId }
-    const value = { ...read.content.understanding, director: { ...current, narration, voice: recordingVoiceSchema.parse({ modelId, options }), confirmed } }
-    const result = await executeUiApplicationCapability({ id: 'change_application_entities', version: 2, expectedRevisions: { screen_recording: read.meta.revision }, input: { summary: t(confirmed ? 'recording.directorConfirm' : 'recording.directorSave'), changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties: { 'screen_recording.understanding.result': value } }] } }, new AbortController().signal)
+    const value = { ...editableRecordingUnderstanding(read.content.understanding), director: { goal: current.goal, narration, voice: recordingVoiceSchema.parse({ modelId, options }) } }
+    const result = await executeUiApplicationCapability({ id: 'change_application_entities', version: 2, expectedRevisions: { screen_recording: read.meta.revision }, input: { summary: t('recording.directorSave'), changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties: { 'screen_recording.understanding.result': value } }] } }, new AbortController().signal)
     if (!result.ok) throw new Error(result.error.message)
     await showRecordingDocument(sessionId)
   }
-  const persist = (): void => { if (changed && !busy) void save(false).catch(failure => setError(failure instanceof Error ? failure.message : String(failure))) }
+  const persist = (): void => { if (changed && !busy) void save().catch(failure => setError(failure instanceof Error ? failure.message : String(failure))) }
   const start = async (): Promise<void> => {
     setBusy(true); setError(''); running.current = new AbortController()
     try {
-      if (changed || saved.confirmed === false) { if (changed) await save(false); await save(true) }
+      if (changed) await save()
       const destination = await createVideoEditProject()
       const output = await invoke('start_screen_recording_director', { sessionRef: { kind: 'screen_recording.session', id: sessionId }, documentRef: { kind: 'video_edit.document', id: destination.document.id } }, running.current.signal)
       const refs = output.sequenceRefs as Array<{ id: string }>

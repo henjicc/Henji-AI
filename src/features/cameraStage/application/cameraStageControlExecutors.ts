@@ -314,7 +314,6 @@ export class CameraStageMotionOperationExecutor implements ApplicationSemanticOp
   }
   readonly capabilityId = 'apply_camera_stage_camera_move'
   readonly capabilityVersion = 1
-  readonly risk = 'R1' as const
   readonly requiredPermissions = ['camera_stage:write']
   readonly supportsAtomic = true
 

@@ -84,7 +84,7 @@ function createVideoEditAssetReferencesScene() {
         await shot('asset-trusted-drag-original-4k-source-and-program')
         evidence.phases.push('真实陈旧卡片拖入按ID读取当前路径、源与节目出画')
         phase('同源公共MCP导入及固定资产内容保存')
-        const identity = await authorizeMcpConnection(page, { name: '可信资产引用验收', allowWrites: true })
+        const identity = await authorizeMcpConnection(page, { name: '可信资产引用验收' })
         client = await connectMcpClient(identity.config, 'Henji asset reference Reality')
         const projectRef = { kind: 'video_edit.document', id: fixture.id }
         const baseline = await callTool(client, 'read_application_entity', { ref: projectRef })

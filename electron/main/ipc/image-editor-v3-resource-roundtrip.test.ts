@@ -10,6 +10,7 @@ import { ContentAddressedResourceStore } from '../services/image-editor-v3/resou
 
 const state = vi.hoisted(() => ({
   root: '',
+  recycledJson: [] as unknown[],
   handlers: new Map<string, (input: unknown, event: IpcMainInvokeEvent) => unknown>(),
 }))
 vi.mock('electron', () => ({
@@ -18,6 +19,7 @@ vi.mock('electron', () => ({
   dialog: { showOpenDialog: vi.fn(), showSaveDialog: vi.fn() },
   ipcMain: { handle: vi.fn(), on: vi.fn() },
 }))
+vi.mock('../services/recycle/runtime', () => ({ readRecycledJsonContents: async function* () { yield* state.recycledJson } }))
 vi.mock('../window', () => ({ getMainWindow: vi.fn() }))
 vi.mock('../services/logging', () => ({ createMainLogger: () => ({
   info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), trace: vi.fn(),

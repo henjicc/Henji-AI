@@ -54,7 +54,6 @@ beforeEach(async () => {
   vi.spyOn(platform.system.fs, 'mkdir').mockResolvedValue(undefined)
   vi.spyOn(platform.system.paths, 'dirname').mockImplementation(async value => path.dirname(value))
   vi.spyOn(platform.system.paths, 'join').mockImplementation(async (...parts) => path.join(...parts))
-  vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)
   vi.spyOn(platform.image, 'persistImageBinary').mockImplementation(async () => path.join(mediaRoot, `frame-${drawn.length}.png`))
   vi.spyOn(platform.assetLibrary, 'inspectFileContent').mockResolvedValue(content)
   vi.spyOn(platform.assetLibrary, 'createAsset').mockImplementation(async input => {
@@ -87,7 +86,6 @@ it('正式助手发送完整节目帧到指定画布：裸本地引用经 PAL、
     expect(drawn).toEqual([[4096, 2160]])
     const node = readCanvasTestProject(canvasId)!.nodes[0]
     expect(node).toMatchObject({ type: CANVAS_NODE_TYPES.upload, data: { imageUrl: path.join(mediaRoot, 'frame-1.png'), aspectRatio: '4096:2160' } })
-    expect(getPlatform().media.allowRoot).toHaveBeenCalledWith(mediaRoot)
     expect(owner.frame).toBe(7)
     expect(useCanvasStore.getState().history.past).toHaveLength(1)
     await undoCanvasChange(canvasId, String(result.undoRef))

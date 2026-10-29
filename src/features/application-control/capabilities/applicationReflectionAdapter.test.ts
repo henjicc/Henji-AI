@@ -52,7 +52,7 @@ const context = { signal: new AbortController().signal, requestId: 'reflection-a
 
 describe('应用反射通用能力适配器', () => {
   it.each<Record<string, number>>([{}, { memory_settings: 7 }])('公开新增使用集合版本，父基线 %j 不阻止补齐缺失作用域', async expectedRevisions => {
-    const callerGrant = createApplicationCallerGrant({ callerId: 'test', capabilityIds: ['change_application_entities'], permissions: ['settings:write'], allowWrites: true, allowDestructive: false })
+    const callerGrant = createApplicationCallerGrant({ callerId: 'test' })
     mocks.getCollectionAvailability.mockResolvedValue({ revisions: { assistant_memory: 0 } })
     mocks.plan.mockResolvedValueOnce({ planRef: 'create-plan' })
     mocks.commit.mockResolvedValueOnce({ status: 'completed', resultRefs: [], resultingRevisions: {}, effects: [], evidence: [] })
@@ -61,7 +61,7 @@ describe('应用反射通用能力适配器', () => {
     expect(mocks.plan).toHaveBeenLastCalledWith(expect.objectContaining({ steps: [expect.objectContaining({ expectedRevisions: { assistant_memory: 0 } })] }), expect.anything())
   })
   it('公开追加不会覆盖调用者提供的旧集合版本', async () => {
-    const callerGrant = createApplicationCallerGrant({ callerId: 'test', capabilityIds: [], permissions: [], allowWrites: true, allowDestructive: false })
+    const callerGrant = createApplicationCallerGrant({ callerId: 'test' })
     mocks.getCollectionAvailability.mockResolvedValue({ revisions: { assistant_memory: 5 } })
     mocks.plan.mockRejectedValueOnce(new Error('REVISION_CONFLICT'))
     await expect(applicationReflectionHandlers.changeEntities({ summary: '追加', changes: [{ kind: 'create_items', parent: { kind: 'assistant.memory_settings', id: 'singleton' }, entityType: 'assistant.memory', items: [] }] }, { ...context, expectedRevisions: { assistant_memory: 2 }, callerGrant })).rejects.toThrow('REVISION_CONFLICT')

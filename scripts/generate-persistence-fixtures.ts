@@ -1,4 +1,5 @@
 import { gitCodeLocation } from '../src/core/storage/gitCodeLocation'
+import { SCHEMA_MIGRATIONS } from '../electron/main/services/db-migrations'
 import { emptyMemorySnapshot } from '../src/core/assistant/memoryEntries'
 import { createWorkspaceLayoutEnvelope } from '../src/core/workspaceLayouts/schema'
 import { defaultCameraStageLayout } from '../src/features/cameraStage/layout/dockLayout'
@@ -338,7 +339,7 @@ const values: Record<string, unknown> = {
     ],
   }),
   'llm-config': llmStoredConfigSchema.parse({ providers: [{ providerId: 'synthetic', displayName: '合成测试供应商', adapter: 'openai', enabled: false }], models: [], promptProfiles: [], textProcessingPromptTemplates: [], agentProfiles: [{ id: 'golden-agent', name: '测试助手', primary: { providerId: 'synthetic', modelId: 'test' }, settings: { timeoutMs: 60000, maxRetries: 0, maxOutputTokens: 4096, contextWindowBudget: 64000 }, verifications: [], createdAt: timestamp, updatedAt: timestamp }], tools: [], policy: { allowedTools: [], requireHumanConfirmation: true }, memory: { longTermNamespace: 'golden' } }),
-  'mcp-connections': mcpConnectionStorageSchema.parse({ version: 2, connections: [{ id: '00000000-0000-4000-8000-000000000001', name: '合成测试连接', token: '0'.repeat(64), allowWrites: true, allowPaid: false, allowDestructive: false }] }),
+  'mcp-connections': mcpConnectionStorageSchema.parse({ version: 3, connections: [{ id: '00000000-0000-4000-8000-000000000001', name: '合成测试连接', token: '0'.repeat(64) }] }),
   'document-envelope': buildDocumentEnvelope({ kind: 'canvas', kindVersion: 1, id: 'golden-envelope', name: '外壳样本', createdAt: timestamp, updatedAt: timestamp, revision: 0, draft: false, content: { nodes: [], edges: [] } }),
   'llm-config-journal': { version: 1, configBefore: null },
   'node-defaults': { imageGen: { modelId: 'golden-model', params: { quality: 'high' } } },
@@ -355,7 +356,7 @@ const values: Record<string, unknown> = {
   'asset-records': { id: 'golden-asset', media_type: 'code', display_name: '代码标题', file_path: '/persistence-project/代码/标题.henjicode', source: 'video-edit', mime_type: 'application/x-henji-code', size_bytes: 100, width: null, height: null, duration_seconds: null, thumbnail_name: null, inspection_status: 'pending', inspection_error: null, file_modified_at: null, content_identity: null, last_used_at: null, created_at: 1791504000000, updated_at: 1791504000000 },
   'generation-presets': { id: 'golden-preset', name: '黄金生成预设', description: null, model_id: null, params: '{}', is_favorite: 0, use_count: 0, created_at: timestamp, updated_at: timestamp },
   'assistant-memory': emptyMemorySnapshot(),
-  sqlite: { version: 23, name: 'asset_foreign_marker', applied_at: 1791504000000 },
+  sqlite: { version: SCHEMA_MIGRATIONS[SCHEMA_MIGRATIONS.length - 1].version, name: SCHEMA_MIGRATIONS[SCHEMA_MIGRATIONS.length - 1].name, applied_at: 1791504000000 },
 }
 
 const foreignSample = { id: 'golden-import', sourceType: 'project', sourceName: '分享工程' }

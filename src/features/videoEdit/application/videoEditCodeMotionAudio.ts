@@ -50,7 +50,7 @@ export async function readVideoEditCodeMotionAudio(owner: VideoEditInstance, com
     assertCurrent()
     const entries = new VideoEditSourceMapIndex().query(source.document, { from: Math.floor(source.start * source.document.fps), to: Math.max(1, Math.ceil((source.start + source.duration) * source.document.fps)) }, ['audio'])
     const ids = new Set(entries.map(entry => entry.mediaId))
-    const task = beginVideoEditContentQuery(owner, itemId, signal, ['video_edit:read'])
+    const task = beginVideoEditContentQuery(owner, itemId, signal)
     try {
       const pinned = await pinVideoEditMotionSources(source.document.media.filter(media => ids.has(media.id)), task.signal, assertCurrent)
       for (const media of pinned) {

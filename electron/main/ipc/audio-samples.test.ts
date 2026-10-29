@@ -67,12 +67,9 @@ describe('waveform IPC ownership and permissions', () => {
     await expect(invoke('audio:extractSamples', { ...payload, requestId: 'unknown', audioTrack: 1 }, a.event)).rejects.toThrow('未知的音频范围字段')
     a.emitter.emit('destroyed')
   })
-  it('checks canonical grants and trusted callers, rejects new range remote inputs, and preserves legacy remote routing', async () => {
+  it('checks trusted callers, rejects new range remote inputs, and preserves legacy remote routing', async () => {
     const a = owner(104)
-    mocks.realpath.mockResolvedValueOnce(localMedia('outside', 'linked.wav'))
-    mocks.allowed.mockImplementation((source: string) => !source.includes('outside'))
-    await expect(invoke('audio:extractSamples', payload, a.event)).rejects.toThrow('实际路径')
-    for (const source of ['https://example.test/a.wav', 'relative.wav', 'data:audio/wav']) await expect(invoke('audio:extractSamples', { ...payload, source }, a.event)).rejects.toThrow('读取权限')
+    for (const source of ['https://example.test/a.wav', 'relative.wav', 'data:audio/wav']) await expect(invoke('audio:extractSamples', { ...payload, source }, a.event)).rejects.toThrow('绝对路径')
     expect(mocks.range).not.toHaveBeenCalled()
     mocks.legacy.mockResolvedValue({ peak: [], rms: [], durationSeconds: 1 })
     await invoke('audio:extractSamples', { source: 'https://example.test/a.wav', bucketCount: 96 }, a.event)
@@ -82,7 +79,7 @@ describe('waveform IPC ownership and permissions', () => {
     await expect(invoke('audio:extractSamples', payload, a.event)).rejects.toThrow('untrusted')
     a.emitter.emit('destroyed')
   })
-  it('routes whole-source pyramid requests with the same channel selection, authorization and closed field set (task 2.3)', async () => {
+  it('routes whole-source pyramid requests with the same channel selection and closed field set (task 2.3)', async () => {
     const a = owner(106)
     mocks.pyramid.mockResolvedValue({ notModified: true, version: 'v' })
     const request = { mode: 'pyramid', requestId: 'p1', source: payload.source, channels: 1, audioStream: 2, audioChannel: 0, maxBuckets: 4096, ifNoneMatch: 'v' }
@@ -90,8 +87,6 @@ describe('waveform IPC ownership and permissions', () => {
     expect(mocks.validatePyramid).toHaveBeenCalled()
     expect(mocks.pyramid.mock.calls[0][0]).toEqual({ source: payload.source, channels: 1, audioStream: 2, audioChannel: 0, maxBuckets: 4096, ifNoneMatch: 'v' })
     await expect(invoke('audio:extractSamples', { ...request, requestId: 'p2', startUs: 0 }, a.event)).rejects.toThrow('未知的音频波形字段')
-    mocks.allowed.mockReturnValue(false)
-    await expect(invoke('audio:extractSamples', { ...request, requestId: 'p3' }, a.event)).rejects.toThrow('读取权限')
     // Remote audio keeps the legacy route through the service's own download.
     await invoke('audio:extractSamples', { ...request, requestId: 'p4', source: 'https://example.test/a.wav' }, a.event)
     expect(mocks.pyramid.mock.calls.at(-1)![0].source).toBe('https://example.test/a.wav')

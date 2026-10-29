@@ -201,7 +201,7 @@ it('读取序列名字不计算转录与静音；局部检索条件拒绝纯标�
   } finally { app.dispose() }
 })
 
-it('长稿重复句分开分页，公共只读授权能查询且不能借候选写入', async () => {
+it('长稿重复句分开分页，公共查询不改变历史', async () => {
   const owner = await fixture(); const sequence = owner.document.sequences[0]
   editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media[0].durationSeconds = 200
@@ -212,9 +212,7 @@ it('长稿重复句分开分页，公共只读授权能查询且不能借候选�
     return document
   })
   const history = owner.past.length
-  const session = createApplicationCapabilitySession(createApplicationCallerGrant({
-    callerId: crypto.randomUUID(), capabilityIds: ['query_video_edit_transcript', 'extract_video_edit_text'], permissions: ['video_edit:read'], allowWrites: false, allowDestructive: false,
-  }))
+  const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: crypto.randomUUID() }))
   const input = { documentRef: { kind: 'video_edit.document', id: owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${owner.document.id}:${sequence.id}` }, text: '打开，后台', matchSource: 'asr', limit: 50 }
   const request = () => ({ requestId: crypto.randomUUID(), signal: new AbortController().signal })
   const first = await session.execute({ id: 'query_video_edit_transcript', version: 1, input }, request())
@@ -229,7 +227,6 @@ it('长稿重复句分开分页，公共只读授权能查询且不能借候选�
   if (!second.ok) throw new Error(JSON.stringify(second.error))
   const next = queryVideoEditTranscriptCapability.outputSchema.parse(second.data)
   expect(next.matches[0].from).toBe(page.matches.at(-1)!.to)
-  await expect(session.execute({ id: 'extract_video_edit_text', version: 1, input: { documentRef: input.documentRef, sequenceRef: input.sequenceRef, selector: page.matches[0].selector } }, request())).rejects.toThrow()
   expect(owner.past.length).toBe(history)
 })
 

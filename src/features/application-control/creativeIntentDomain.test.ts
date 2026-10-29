@@ -12,7 +12,7 @@ import { appendVideoEditClip, getActiveVideoEditSequence, setVideoEditView, clos
 import { startVideoMotion, stopVideoMotion, demonstrateVideoMotion, recordVideoMotionPresentation, videoMotionComposition, videoMotionState } from '@/features/videoEdit/application/videoEditMotionDraft'
 import { getPlatform } from '@/platform/runtime'
 import { optimizeMotionDraft } from '@/core/creativeIntent/candidates'
-import { optimizeVideoEditMotionOffThread } from '@/features/videoEdit/application/videoEditMotionWorkerClient'
+
 import { intentRef, registerCreativeIntentHost } from './creativeIntentHost'
 import type { ApplicationRef } from '@/core/application-control'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
@@ -28,7 +28,6 @@ import { imageCreativeIntentProvider } from '@/features/imageEdit/v3/application
 import { requireImageEditPersistenceOwnerV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOperations'
 import { createImageLayoutCandidates } from '@/core/imageEdit/v3/layoutCandidates'
 import { explanationSessionSchema } from '@/core/creativeIntent/schema'
-import { creativeIntentPrivateAccess } from './creativeIntentAuthorization'
 import { applicationTransactionFailureFactsSchema } from '@/core/application-control/applicationTransactionFailureFacts'
 import { readVideoMotionGroup } from '@/features/videoEdit/application/videoEditMotionGroup'
 import { removeSuperKeyframeTake } from '@/features/videoEdit/application/videoEditSuperKeyframes'
@@ -77,8 +76,8 @@ it('整组分页保留全部目标采样与时间；删除段落后正式读取�
     expect(videoMotionState(owner)!.recent.some(sample => sample.takeRef === take.id)).toBe(false)
   } finally { app.dispose() }
 })
-it('外部发现最近整组并走同一读取能力，讲解授权撤销后不能继续读取', async () => {
-  const { owner, state, draftRef } = await setup(), app = createApplicationHarness(), id = owner.document.id
+it('外部发现最近整组并走同一读取能力，正文无需外发许可', async () => {
+  const { owner, state } = await setup(), app = createApplicationHarness(), id = owner.document.id
   try {
     const first = recordingFixtureSession(), second = recordingFixtureSession()
     first.id = superKeyframeSessionId(state.draft.id); first.ownerRef.id = id; first.consent!.textUpload = true
@@ -86,15 +85,16 @@ it('外部发现最近整组并走同一读取能力，讲解授权撤销后不�
     updateVideoEditCreativeIntents(id, { ...owner.document.creativeIntents!, drafts: [...owner.document.creativeIntents!.drafts, { ...structuredClone(state.draft), id: 'newest' }], sessions: [second, first] })
     const listed = await app.requireResult('list_application_entities', { entityType: 'video_edit.intent_draft', limit: 10 })
     expect((listed.refs as ApplicationRef[])[0].id).toBe(`${id}:newest`)
-    const input = { draftRef }, privateAccess = creativeIntentPrivateAccess('read_video_edit_super_keyframes', input)
-    const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'external-super-keyframes', capabilityIds: ['read_video_edit_super_keyframes'], permissions: ['video_edit:read'], allowWrites: false, allowDestructive: false, privateAccess }))
+
+    const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'external-super-keyframes' }))
+    const input = { draftRef: intentRef({ kind: 'video_edit.document', id }, 'intent_draft', state.draft.id) }
     const invoke = () => session.execute({ id: 'read_video_edit_super_keyframes', version: 1, input }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })
     const result = await invoke()
     expect(result.ok, JSON.stringify(result)).toBe(true)
     if (result.ok) expect((result.data.lines as string[]).join('\n')).toContain(state.recent[0].sampleId)
     const head = structuredClone(owner.document.creativeIntents!); head.sessions.find(value => value.id === first.id)!.consent!.textUpload = false
     updateVideoEditCreativeIntents(id, head)
-    await expect(invoke()).rejects.toThrow('授权已变化')
+    expect((await invoke()).ok).toBe(true)
   } finally { app.dispose() }
 })
 it('AI 给定多目标、多属性曲线走一次正式通用事务，一步作品撤销恢复整组', async () => {
@@ -198,10 +198,6 @@ it('权限拒绝先于 provider；已关闭实例不写入；保存失败只恢�
   const { owner, draftRef } = await setup(), app = createApplicationHarness()
   try {
     await expect(app.read({ ...draftRef, id: `${draftRef.id}:extra` })).rejects.toThrow('引用无效')
-    const denied = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'denied', capabilityIds: ['organize_video_edit_intent'], permissions: ['video_edit:read'], allowWrites: false, allowDestructive: false }))
-    await expect(denied.execute({ id: 'organize_video_edit_intent', version: 1, input: { draftRef } }, { requestId: 'denied', signal: new AbortController().signal })).rejects.toThrow('PERMISSION_DENIED')
-    expect(optimizeVideoEditMotionOffThread).not.toHaveBeenCalled()
-    expect(owner.document.creativeIntents!.drafts[0].candidateRefs).toHaveLength(0)
     failVideoEditSaves(true)
     const failed = await app.change(draftRef, { 'video_edit.intent_draft.label': '保存待恢复' })
     expect(failed.ok).toBe(false); expect(owner.document.creativeIntents!.drafts[0].label).toBe('保存待恢复')
@@ -267,11 +263,9 @@ it('正式 C2 讲解读取与封闭计划：未授权拒绝、连续输入回执
     consent: { noticeDigest: `sha256:${'b'.repeat(64)}`, userReceiptRef: 'user-consent', capture: true, keepAudio: false, audioUpload: false, textUpload: false, imageUpload: false } })
   updateVideoEditCreativeIntents(owner.document.id, { ...owner.document.creativeIntents!, sessions: [session] })
   const raw = { documentRef, sessionId: session.id, offset: 0, imageOffset: 0 }
-  expect(() => creativeIntentPrivateAccess('read_video_edit_intent_recording', raw)).toThrow('PERMISSION_DENIED')
   session.consent!.textUpload = true
   updateVideoEditCreativeIntents(owner.document.id, { ...owner.document.creativeIntents!, sessions: [session] })
-  const createSession = (capabilityId: string, input: unknown) => createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'private-caller', capabilityIds: [capabilityId],
-    permissions: ['video_edit:read', 'video_edit:write'], allowWrites: true, allowDestructive: false, privateAccess: creativeIntentPrivateAccess(capabilityId, input) }))
+  const createSession = (_capabilityId: string, _input: unknown) => createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'private-caller' }))
   const read = createSession('read_video_edit_intent_recording', raw)
   const result = await read.execute({ id: 'read_video_edit_intent_recording', version: 1, input: raw }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })
   expect(result.ok, JSON.stringify(result)).toBe(true)
@@ -287,7 +281,7 @@ it('正式 C2 讲解读取与封闭计划：未授权拒绝、连续输入回执
   expect(replay.ok).toBe(false)
   session.consent!.textUpload = false
   updateVideoEditCreativeIntents(owner.document.id, { ...owner.document.creativeIntents!, sessions: [session] })
-  await expect(read.execute({ id: 'read_video_edit_intent_recording', version: 1, input: raw }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })).rejects.toThrow('PERMISSION_DENIED')
+  expect((await read.execute({ id: 'read_video_edit_intent_recording', version: 1, input: raw }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })).ok).toBe(true)
 })
 it('图片正式保真度、钉点、应用保存失败恢复和公共撤销共用原布局服务，无事务互等', async () => {
   const document = createImageEditDocumentV3({ documentId: 'image-intent-transaction', width: 1000, height: 600 })
@@ -351,7 +345,7 @@ it.each(['video_edit', 'image_edit'] as const)('%s 冷宿主通过公共 C2 正�
   else bus.dispatch({ type: 'document.set-creative-intents', commandId: 'cold-head', expectedRevision: 0, intents: head, resources: [] })
   const ref = explanationBodyRef(documentRef, session.id)
   const invoke = async (id: string, input: unknown) => {
-    const caller = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'cold-editor', capabilityIds: [id], permissions: ['application:read', 'application:write', `${domain}:read`, `${domain}:write`], allowWrites: true, allowDestructive: false, privateAccess: creativeIntentPrivateAccess(id, input) }))
+    const caller = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'cold-editor' }))
     const definition = caller.list().find(capability => capability.id === id)
     if (!definition) throw new Error('能力未授权')
     return caller.execute({ id, version: definition.version, input }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })

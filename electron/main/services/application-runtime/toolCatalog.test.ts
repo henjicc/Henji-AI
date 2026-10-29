@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
-import { applicationCatalogSchemaHash, applicationToolSchemaHash, buildApplicationContract, buildApplicationToolCatalog, EXCLUDED_TOOLS, PROTOCOL_TOOL_SPECS, toolTier } from './toolCatalog'
+import { applicationCatalogSchemaHash, applicationToolSchemaHash, buildApplicationContract, buildApplicationToolCatalog, EXCLUDED_TOOLS, PROTOCOL_TOOL_SPECS } from './toolCatalog'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import { RESULT_DETAIL_FIELDS, resultDetailFields } from './resultProjection'
 import {
@@ -22,21 +22,18 @@ const hostTools: LocalTool[] = APPLICATION_CAPABILITY_IDS.map((id) => {
   }
 })
 
-const READ_ONLY = { allowWrites: false, allowDestructive: false, allowPaid: false }
-const WRITE = { allowWrites: true, allowDestructive: false, allowPaid: false }
-const PAID = { allowWrites: true, allowDestructive: true, allowPaid: true }
-const catalog = (access: typeof READ_ONLY, operationsEnabled = true) => buildApplicationToolCatalog({ tools: hostTools, access, operationsEnabled })
-const names = (access: typeof READ_ONLY, operationsEnabled = true) => catalog(access, operationsEnabled).tools.map((tool) => tool.name)
+const catalog = () => buildApplicationToolCatalog({ tools: hostTools })
+const names = () => catalog().tools.map((tool) => tool.name)
 
 const domains: LocalDomainSurface[] = [
   { id: 'settings', readable: true, writable: true, entities: [{ id: 'settings.registry', title: '应用设置', writableProperties: 53, creatable: false, removable: false }] },
   { id: 'storyboard', readable: true, writable: false, entities: [{ id: 'storyboard.card', title: '分镜卡', writableProperties: 0, creatable: false, removable: false, readOnlyReason: '分镜是画布工程的只读摘要投影。' }] },
 ]
 
-describe('对外工具目录的投影与授权过滤', () => {
-  it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {
-    for (const access of [READ_ONLY, WRITE, PAID]) {
-      const tool = catalog(access).tools.find(item => item.name === 'read_application_media')!
+describe('对外工具目录的同源投影', () => {
+  it('媒体 mode 的枚举与说明经过目录投影仍完整保留', () => {
+    {
+      const tool = catalog().tools.find(item => item.name === 'read_application_media')!
       expect((tool.inputSchema.properties as Record<string, unknown>).mode).toEqual({ type: 'string', enum: ['chunk', 'image'], description: expect.stringContaining('图片默认 image') })
       expect(tool.inputSchema.additionalProperties).toBe(false)
       expect(tool.description).toContain('图片默认返回 image')
@@ -44,16 +41,14 @@ describe('对外工具目录的投影与授权过滤', () => {
       expect((tool.inputSchema.properties as Record<string, unknown>).maxBytes).toMatchObject({ default: 614400, maximum: 1572864 })
     }
   })
-  it('新增付费入口只需领域声明，目录自动要求付费授权', () => {
+  it('新增付费入口只需领域声明，目录自动公开并使用统一付费策略', () => {
     const original = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get.bind(BUILTIN_APPLICATION_CAPABILITY_REGISTRY)
     const spy = vi.spyOn(BUILTIN_APPLICATION_CAPABILITY_REGISTRY, 'get').mockImplementation(id => {
       const value = original(id)
       return id === 'apply_canvas_image_capability' && value ? { ...value, paidGenerationPreparation: 'prepare_generation_task' } : value
     })
     try {
-      expect(toolTier('apply_canvas_image_capability')).toBe('paid')
-      expect(names(WRITE)).not.toContain('apply_canvas_image_capability')
-      expect(names(PAID)).toContain('apply_canvas_image_capability')
+      expect(names()).toContain('apply_canvas_image_capability')
     } finally { spy.mockRestore() }
   })
   it('所有公开生成创建能力都有可调用的只读费用准备入口', () => {
@@ -67,19 +62,16 @@ describe('对外工具目录的投影与授权过滤', () => {
       expect(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(definition.paidGenerationPreparation)?.readOnly, id).toBe(true)
     }
   })
-  it('公开语义写入均有持久目标声明，创建图片能力节点无需付费权限', () => {
+  it('公开语义写入均有持久目标声明，创建图片能力节点使用统一付费策略', () => {
     for (const id of APPLICATION_WRITE_CAPABILITY_IDS) {
       if (id === 'change_application_entities') continue
       expect(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(id)?.resolveOperationTargets, id).toBeTypeOf('function')
     }
-    expect(names(WRITE)).toContain('apply_canvas_image_capability')
-    expect(names(READ_ONLY)).not.toContain('apply_canvas_image_capability')
+    expect(names()).toContain('apply_canvas_image_capability')
     for (const id of ['create_image_edit_preview', 'commit_image_edit']) {
-      expect(names(WRITE)).toContain(id)
-      expect(names(READ_ONLY)).not.toContain(id)
+      expect(names()).toContain(id)
     }
-    expect(names(WRITE)).toContain('resume_canvas_generation_task')
-    expect(names(READ_ONLY)).not.toContain('resume_canvas_generation_task')
+    expect(names()).toContain('resume_canvas_generation_task')
   })
   /**
    * 验收线：**工具 schema 与领域约束同源**。
@@ -88,7 +80,7 @@ describe('对外工具目录的投影与授权过滤', () => {
    * MCP"的开始。读取工具必须逐字节等于能力定义的 Zod 输入投影；写入工具只允许多出协议信封。
    */
   it('能力工具的参数表逐字节来自能力定义，MCP 侧不存在第二份字段表', () => {
-    const listed = new Map(catalog(PAID).tools.map((tool) => [tool.name, tool]))
+    const listed = new Map(catalog().tools.map((tool) => [tool.name, tool]))
     for (const tool of hostTools) {
       if (EXCLUDED_TOOLS.some((excluded) => excluded.name === tool.id)) continue
       const projected = listed.get(tool.id)
@@ -110,7 +102,7 @@ describe('对外工具目录的投影与授权过滤', () => {
   })
 
   it('operationId 必填、普通操作基线可省略，expectedRevisions 一律不对外', () => {
-    const listed = catalog(PAID).tools.filter((tool) => APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === tool.name))
+    const listed = catalog().tools.filter((tool) => APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === tool.name))
     expect(listed.map((tool) => tool.name).sort()).toEqual([...APPLICATION_WRITE_CAPABILITY_IDS].sort())
     for (const tool of listed) {
       const required = tool.inputSchema.required as string[]
@@ -122,50 +114,27 @@ describe('对外工具目录的投影与授权过滤', () => {
     }
   })
 
-  it('目录按授权档过滤，被挡住的工具指名道姓说明缺哪一档', () => {
-    expect(names(READ_ONLY).filter((name) => APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === name))).toEqual([])
-    expect(names(READ_ONLY)).toContain('get_application_operation')
-    expect(names(READ_ONLY)).not.toContain('review_application_operation')
-    expect(names(WRITE)).toContain('review_application_operation')
-    expect(catalog(READ_ONLY).hidden.map((item) => item.name).sort())
-      .toEqual([...APPLICATION_WRITE_CAPABILITY_IDS, 'review_application_operation', 'retry_application_operation_save'].sort())
-    expect(catalog(READ_ONLY).hidden.find((item) => item.name === 'create_visible_generation_task')?.tier).toBe('paid')
 
-    // 改权限：写工具出现，付费工具仍然缺席，并且缺席原因写明缺付费档而不是缺修改档。
-    expect(names(WRITE)).toEqual(expect.arrayContaining(['change_application_entities', 'get_application_operation', 'review_application_operation', 'retry_application_operation_save']))
-    expect(names(WRITE)).not.toContain('create_visible_generation_task')
-    expect(catalog(WRITE).hidden).toEqual(['create_visible_generation_task', 'submit_canvas_node_generation', 'generate_image_edit_outpaint', 'generate_video_edit_in_place']
-      .map(name => ({ name, tier: 'paid', requires: '本连接未获「允许付费生成」授权' })))
-    expect(names(PAID)).toContain('create_visible_generation_task')
-    expect(catalog(PAID).hidden).toEqual([])
-  })
 
-  it('删除授权不改变目录，只在调用时校验；两条恢复能力任何档位都不作为独立工具出现', () => {
-    expect(names({ allowWrites: true, allowDestructive: true, allowPaid: false })).toEqual(names(WRITE))
-    for (const access of [READ_ONLY, WRITE, PAID]) {
-      for (const excluded of EXCLUDED_TOOLS) expect(names(access), excluded.name).not.toContain(excluded.name)
+  it('恢复能力沿原操作执行，不作为独立工具出现', () => {
+    {
+      for (const excluded of EXCLUDED_TOOLS) expect(names(), excluded.name).not.toContain(excluded.name)
     }
   })
 
-  it('没有操作账本时写入与账本工具整体缺席，只读工具不受影响', () => {
-    expect(names(PAID, false).filter((name) => APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === name))).toEqual([])
-    expect(names(PAID, false)).not.toContain('get_application_operation')
-    expect(names(PAID, false)).not.toContain('review_application_operation')
-    expect(names(PAID, false)).toEqual(expect.arrayContaining([...APPLICATION_READ_CAPABILITY_IDS, 'read_application_media', 'describe_application_contract']))
-  })
+
 
   it('协议工具的参数表在服务端只声明一次，目录与解析共用', () => {
-    const listed = new Map(catalog(PAID).tools.map((tool) => [tool.name, tool]))
+    const listed = new Map(catalog().tools.map((tool) => [tool.name, tool]))
     for (const spec of PROTOCOL_TOOL_SPECS) {
       expect(listed.get(spec.name)?.inputSchema, spec.name).toEqual({ ...spec.inputSchema, properties: { ...spec.inputSchema.properties as Record<string, unknown>, ...RESULT_DETAIL_FIELDS } })
-      expect(toolTier(spec.name), spec.name).toBe(spec.tier)
     }
   })
 })
 
 describe('契约发现的投影', () => {
   it('schema 哈希不受对象键和目录顺序影响，变化可按 names 取服务端完整 schema', () => {
-    const current = catalog(WRITE)
+    const current = catalog()
     const tool = current.tools.find(item => item.name === 'get_video_edit_clip_pauses')!
     const reordered = (value: unknown): unknown => Array.isArray(value) ? value.map(reordered)
       : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).reverse().map(([key, item]) => [key, reordered(item)])) : value
@@ -178,22 +147,22 @@ describe('契约发现的投影', () => {
     expect(tool.outputSchema).toBeDefined()
     const outputOnly = { ...current, tools: current.tools.map(item => item === tool ? { ...item, outputSchema: { ...item.outputSchema!, required: ['changed'] } } : item) }
     expect(applicationCatalogSchemaHash(outputOnly)).not.toBe(applicationCatalogSchemaHash(current))
-    const contract = buildApplicationContract({ domains, access: WRITE, catalog: current, port: 0, requestedDomains: [], names: [tool.name], includeSchemas: true })
+    const contract = buildApplicationContract({ domains, catalog: current, port: 0, requestedDomains: [], names: [tool.name], includeSchemas: true })
     expect(contract.toolSchemas).toEqual([{ name: tool.name, schemaHash: applicationToolSchemaHash(tool), description: tool.description, inputSchema: tool.inputSchema, outputSchema: tool.outputSchema ?? null, annotations: tool.annotations ?? null }])
     // 客户端只凭 describe 返回的字段就能按声明的算法重算出同一个 schemaHash。
     const [described] = contract.toolSchemas as Array<Parameters<typeof applicationToolSchemaHash>[0] & { schemaHash: string }>
     expect(applicationToolSchemaHash(described)).toBe(described.schemaHash)
     expect(contract.catalogSchemaHash).toBe(applicationCatalogSchemaHash(current))
-    expect(buildApplicationContract({ domains, access: READ_ONLY, catalog: catalog(READ_ONLY), port: 0, requestedDomains: [], names: ['change_application_entities'], includeSchemas: true }).toolSchemas).toEqual([])
+    expect(buildApplicationContract({ domains, catalog: catalog(), port: 0, requestedDomains: [], names: ['change_application_entities'], includeSchemas: true }).toolSchemas).toHaveLength(1)
   })
   it('域级摘要默认不展开实体；点名的域才展开，避免一次注入全部属性', () => {
-    const summary = buildApplicationContract({ domains, access: PAID, catalog: catalog(PAID), port: 43821, requestedDomains: [] })
+    const summary = buildApplicationContract({ domains, catalog: catalog(), port: 43821, requestedDomains: [] })
     const listed = summary.domains as Array<Record<string, unknown>>
     expect(listed.every((domain) => !('entities' in domain))).toBe(true)
     expect(listed.find((domain) => domain.id === 'settings')).toMatchObject({ readable: true, writable: true, entityTypes: 1, writableEntityTypes: 1 })
     expect(listed.find((domain) => domain.id === 'storyboard')).toMatchObject({ writable: false, writableEntityTypes: 0 })
 
-    const expanded = buildApplicationContract({ domains, access: PAID, catalog: catalog(PAID), port: 43821, requestedDomains: ['storyboard'] })
+    const expanded = buildApplicationContract({ domains, catalog: catalog(), port: 43821, requestedDomains: ['storyboard'] })
     const storyboard = (expanded.domains as Array<Record<string, unknown>>).find((domain) => domain.id === 'storyboard')!
     expect(expanded.access).toHaveProperty('alternativeRoutes')
     expect((storyboard.entities as Array<{ readOnlyReason?: string }>)[0].readOnlyReason).toContain('只读摘要投影')
@@ -201,7 +170,7 @@ describe('契约发现的投影', () => {
   })
 
   it('契约固定版本矩阵，并把"清单里没有"与"调用被拒"讲清楚', () => {
-    const contract = buildApplicationContract({ domains, access: WRITE, catalog: catalog(WRITE), port: 43821, requestedDomains: [], detail: 'full' })
+    const contract = buildApplicationContract({ domains, catalog: catalog(), port: 43821, requestedDomains: [], detail: 'full' })
     expect(contract.contract).toMatchObject({
       externalContractVersion: EXTERNAL_CONTRACT_VERSION,
       applicationCapabilityCatalog: 'application-capabilities/v2',
@@ -210,29 +179,25 @@ describe('契约发现的投影', () => {
       server: { name: 'henji', version: '2.0.0' },
     })
     expect((contract.contract as { transport: { url: string } }).transport.url).toBe('http://127.0.0.1:43821/mcp')
-    const access = contract.access as { paid: boolean; note: string; hiddenTools: Array<{ name: string }>; excludedTools: Array<{ reason: string }> }
-    expect(access.paid).toBe(false)
-    expect(access.hiddenTools.map((item) => item.name)).toEqual(['create_visible_generation_task', 'submit_canvas_node_generation', 'generate_image_edit_outpaint', 'generate_video_edit_in_place'])
-    expect(access.note).toContain('PERMISSION_DENIED')
+    const access = contract.access as { excludedTools: Array<{ reason: string }> }
     expect(access.excludedTools).toHaveLength(EXCLUDED_TOOLS.length)
     expect(access.excludedTools.every((item) => item.reason.length > 10)).toBe(true)
     // 降级路径必须写在契约里：通知改轮询、资源读取保留工具入口、审批留在应用内。
     const workflows = (contract.workflows as string[]).join('\n')
     expect(workflows).toContain('不需要客户端支持通知扩展')
     expect(workflows).toContain('read_application_media')
-    expect(workflows).toContain('痕迹 AI')
     expect((contract.tools as Array<{ name: string; envelope: string }>).filter((tool) => tool.envelope === 'operationId+baselineIds').map((tool) => tool.name))
-      .toEqual(names(WRITE).filter((name) => APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === name)))
+      .toEqual(names().filter((name) => APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === name)))
   })
 
   it('契约本身足够小，不会挤占单次结果上限', () => {
-    const contract = buildApplicationContract({ domains, access: PAID, catalog: catalog(PAID), port: 43821, requestedDomains: domains.map((domain) => domain.id) })
+    const contract = buildApplicationContract({ domains, catalog: catalog(), port: 43821, requestedDomains: domains.map((domain) => domain.id) })
     expect(Buffer.byteLength(JSON.stringify(contract))).toBeLessThan(64 * 1024)
   })
-  it('内置助手契约指向对话权限，不让用户创建 MCP 连接；全权限可发现付费生成', () => {
-    const contract = buildApplicationContract({ domains, access: PAID, catalog: catalog(PAID), port: 0, requestedDomains: [], callerKind: 'embedded', detail: 'full' })
+  it('内置助手契约无需 MCP 连接，可发现付费生成', () => {
+    const contract = buildApplicationContract({ domains, catalog: catalog(), port: 0, requestedDomains: [], callerKind: 'embedded', detail: 'full' })
     expect(contract.contract).toMatchObject({ transport: { kind: 'embedded', requiresExternalConnection: false } })
-    expect(contract.access).toMatchObject({ paid: true, destructive: true, note: expect.stringContaining('助手操作权限') })
+    expect(contract.access).not.toHaveProperty('paid')
     expect(contract.tools).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'create_visible_generation_task' })]))
   })
 })

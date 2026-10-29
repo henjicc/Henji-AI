@@ -3,11 +3,7 @@ import { z } from 'zod'
 import { createHash } from 'node:crypto'
 export { invalidInputMessage } from '../../../../src/core/application-control/inputValidation'
 import type { ApplicationToolDescriptor as Tool } from '../../../../src/core/application-control/capabilityMetadata'
-import {
-  EXTERNAL_CONTRACT_VERSION, EXTERNAL_DEPRECATION_POLICY, EXTERNAL_LIMITS, EXTERNAL_PROTOCOL_VERSIONS,
-  EXTERNAL_SDK_VERSION, EXTERNAL_SERVER_INFO, APPLICATION_READ_CAPABILITY_IDS, APPLICATION_WRITE_CAPABILITY_IDS,
-  type LocalDomainSurface, type LocalTool,
-} from '../../../../src/core/application-control/localHostContracts'
+import { EXTERNAL_CONTRACT_VERSION, EXTERNAL_DEPRECATION_POLICY, EXTERNAL_LIMITS, EXTERNAL_PROTOCOL_VERSIONS, EXTERNAL_SDK_VERSION, EXTERNAL_SERVER_INFO, APPLICATION_WRITE_CAPABILITY_IDS, type LocalDomainSurface, type LocalTool } from '../../../../src/core/application-control/localHostContracts'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '../../../../src/core/application-control/applicationCapabilities'
 import { APPLICATION_READABLE_MEDIA_KINDS, APPLICATION_IMAGE_DEFAULT_EDGE, APPLICATION_IMAGE_DEFAULT_BYTES, APPLICATION_IMAGE_MAX_BYTES } from '../../../../src/core/application-control/mediaReferenceKinds'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
@@ -20,32 +16,13 @@ const confirmationGuidance = '付费操作按用户的 AI 付费授权自动放�
 const waitingOutput = z.object({ ok: z.literal(false), operationId: z.string().uuid(), executionState: z.literal('awaiting_user_confirmation'),
   verificationState: z.literal('unresolved'), confirmation: applicationUserConfirmationSchema }).passthrough()
 
-/**
- * 对外目录的唯一投影处。
- *
- * 三类工具在这里合流，**投影规则只写一次**：
- *
- * 1. 能力工具（读 8 + 写 6）——参数 schema 由渲染宿主从 `ApplicationCapabilityDefinition` 的 Zod
- *    输入直接投影后随注册送来，这里只做协议信封与授权过滤，不重写任何业务字段。
- * 2. 协议工具（操作账本、媒体分块、契约发现）——它们描述的是协议本身而非业务字段，参数表在
- *    本文件声明一次，服务端解析与目录展示共用同一份，不存在"清单一份、解析一份"。
- * 3. 有意排除的内部能力——带理由列进契约，让"没实现"和"有意不开放"在机器上可区分。
- *
- * **缺席与拒绝是两件事**：工具不在 `tools/list` 里只代表本连接缺该档授权（契约的 `hiddenTools`
- * 会指名道姓地说缺哪一档），应用本身仍有该能力；工具在清单里而调用返回 `PERMISSION_DENIED`
- * 才代表授权够了但这次的目标不允许。客户端不能把"清单里没有"当成"应用没有这个能力"。
- */
-
-export type ToolTier = 'any' | 'read' | 'write' | 'paid'
-export interface ApplicationAccess { allowWrites: boolean; allowDestructive: boolean; allowPaid: boolean }
-
+/** 对外工具与内置助手共用正式能力声明。 */
 /** 协议信封：所有写工具共用，不只是 change_application_entities。 */
 const OPERATION_ID_FIELD = { type: 'string', format: 'uuid', description: '调用者范围内唯一的幂等键；调用前生成并保存，丢响应后复用此值查询，不得重新生成重放。' }
-const BASELINE_IDS_FIELD = { type: 'array', items: { type: 'string', format: 'uuid' }, maxItems: 32, description: '普通修改、新增和生成可省略，由应用自动核对当前目标。删除时必须提供每个被删除实体经 read_application_entity 读取返回的 baselineId，相关文档或集合父对象的 baselineId 可选。需要严格按旧状态修改时也可显式提供，仅包含相关目标。' }
+const BASELINE_IDS_FIELD = { type: 'array', items: { type: 'string', format: 'uuid' }, maxItems: 32, description: '普通修改、新增和生成可省略，由应用自动核对当前目标。删除也可省略，由应用在执行前读取当前基线。需要严格按旧状态修改时也可显式提供，仅包含相关目标。' }
 
 export interface ProtocolToolSpec {
   name: string
-  tier: ToolTier
   readOnly: boolean
   description: string
   inputSchema: Record<string, unknown>
@@ -73,28 +50,28 @@ const publicMediaOutputSchema = z.object({ ok: z.literal(true), data: z.union([
 
 export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
   {
-    name: 'describe_application_contract', tier: 'any', readOnly: true,
-    description: '发现协议、授权、限制、业务域与可用技能。domains 点名才展开实体；detail="full" 查询工具授权清单、排除理由与弃用策略。toolSchemas 返回每个工具的 name/schemaHash，可用 names 过滤；names 配合 includeSchemas=true 获取完整 description/inputSchema。本地缓存与 schemaHash 不一致时，以 describe 返回的 schema 为准并按其参数调用。catalogSchemaHash 可与 get_current_application_context 的目录哈希比较。',
-    inputSchema: { type: 'object', properties: { domains: { type: 'array', items: { type: 'string', minLength: 1 }, maxItems: 16, description: '要展开实体清单的业务域；留空只看域级摘要。' }, detail: { type: 'string', enum: ['compact', 'full'], default: 'compact' }, names: { type: 'array', items: { type: 'string', minLength: 1 }, description: '仅返回这些已授权工具的 schema 摘要；省略时返回全部摘要。' }, includeSchemas: { type: 'boolean', default: false, description: '配合 names 返回完整 description/inputSchema，按需分批查询。' } }, additionalProperties: false },
+    name: 'describe_application_contract', readOnly: true,
+    description: '发现协议、付费策略、业务域与可用技能。domains 点名才展开实体；detail="full" 查询完整工具清单、排除理由与弃用策略。toolSchemas 返回每个工具的 name/schemaHash，可用 names 过滤；names 配合 includeSchemas=true 获取完整 description/inputSchema。本地缓存与 schemaHash 不一致时，以 describe 返回的 schema 为准并按其参数调用。catalogSchemaHash 可与 get_current_application_context 的目录哈希比较。',
+    inputSchema: { type: 'object', properties: { domains: { type: 'array', items: { type: 'string', minLength: 1 }, maxItems: 16, description: '要展开实体清单的业务域；留空只看域级摘要。' }, detail: { type: 'string', enum: ['compact', 'full'], default: 'compact' }, names: { type: 'array', items: { type: 'string', minLength: 1 }, description: '仅返回这些工具的 schema 摘要；省略时返回全部摘要。' }, includeSchemas: { type: 'boolean', default: false, description: '配合 names 返回完整 description/inputSchema，按需分批查询。' } }, additionalProperties: false },
   },
   {
-    name: 'read_application_media', tier: 'any', readOnly: true,
+    name: 'read_application_media', readOnly: true,
     outputSchema: projectToolOutputSchema(z.toJSONSchema(publicMediaOutputSchema, { io: 'output' }), 'read_application_media'),
     description: '按结果引用读取已落盘媒体，observation.image 可直接读取剪辑观察缓存，缓存被清理后重新取帧。图片默认返回 image（MCP 标准图片，无需拼接 base64），默认长边 1600、JPEG 至多 600 KiB；查看细字、颗粒、渐变时可传更大的 maxEdge / maxBytes，最高长边 3840、1.5 MiB。mode="chunk" 用于读取原件字节；音视频默认分块读取；image_edit.preview 是尚未保存的中间产物，不可直接读取，先 commit_image_edit 落盘。outputIndex 为结果或节点关联媒体（含输入、预览）去重后的顺序，从零开始。每块最多 256 KiB；传入工具返回的完整 ref，不另传路径或网址。只支持文本的客户端可以只消费 totalBytes／eof／错误码。',
     inputSchema: { type: 'object', properties: { ref: { type: 'object', properties: { kind: { type: 'string', enum: [...APPLICATION_READABLE_MEDIA_KINDS] }, id: { type: 'string' } }, required: ['kind', 'id'], additionalProperties: false }, mode: { type: 'string', enum: ['chunk', 'image'], description: '图片默认 image 直接查看；chunk 读取原件字节，音视频默认 chunk。' }, maxEdge: { type: 'integer', minimum: 1, maximum: 3840, default: APPLICATION_IMAGE_DEFAULT_EDGE, description: '图片预览的长边像素上限。' }, maxBytes: { type: 'integer', minimum: 1024, maximum: APPLICATION_IMAGE_MAX_BYTES, default: APPLICATION_IMAGE_DEFAULT_BYTES, description: 'JPEG 字节上限，自动降低质量或尺寸；不改原件。' }, outputIndex: { type: 'integer', minimum: 0 }, offset: { type: 'integer', minimum: 0 }, length: { type: 'integer', minimum: 1, maximum: EXTERNAL_LIMITS.mediaChunkBytes } }, required: ['ref'], additionalProperties: false },
   },
   {
-    name: 'get_application_operation', tier: 'any', readOnly: true, requiresOperations: true,
+    name: 'get_application_operation', readOnly: true, requiresOperations: true,
     description: '读取本连接操作的持久事实；未知状态不会重放修改。剪辑导出的 result.queue 从主进程登记刷新，包含已完成或已中断、可按 retryTaskId 重试的状态；操作完成表示提交完成，成片是否完成看队列。断线、超时或换客户端后用原 operationId 查询，不要换标识重试。批量结果用 resultRef.operationId、resultRef.field 作为 operationId、resultField，携带 nextCursor 继续分页。',
     inputSchema: { ...z.toJSONSchema(operationReadInputSchema, { io: 'input' }), properties: { ...z.toJSONSchema(operationReadInputSchema, { io: 'input' }).properties, ...RESULT_DETAIL_FIELDS } },
   },
   {
-    name: 'retry_application_operation_save', tier: 'write', readOnly: false, requiresOperations: true,
+    name: 'retry_application_operation_save', readOnly: false, requiresOperations: true,
     description: '按原操作记录仅重试保存并核对原条件；不会重放业务修改，必须保留原编辑会话。',
     inputSchema: { type: 'object', properties: { operationId: { type: 'string', format: 'uuid' }, originalOperationId: { type: 'string', format: 'uuid' }, ...RESULT_DETAIL_FIELDS }, required: ['operationId', 'originalOperationId'], additionalProperties: false },
   },
   {
-    name: 'review_application_operation', tier: 'write', readOnly: false, requiresOperations: true,
+    name: 'review_application_operation', readOnly: false, requiresOperations: true,
     description: '先自动核对原执行回执与领域读回证明；可判定就直接结案。仍无法确认时，在痕迹AI应用内打开“这次修改生效了吗？”面板并立即返回 awaiting_user_confirmation。用户已收到提示，可在应用中处理；没有生效、已经生效、稍后处理是三个独立选择。待处理项不过期，关闭或稍后处理保留保护。只修正本连接账本，不重放修改；智能体不能代替用户确认。',
     inputSchema: { type: 'object', properties: { operationId: { type: 'string', format: 'uuid' } }, required: ['operationId'], additionalProperties: false },
   },
@@ -129,24 +106,6 @@ export const EXCLUDED_TOOLS = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.list()
   .filter(definition => definition.external?.kind === 'recovery')
   .map(definition => ({ name: definition.id, reason: definition.external!.reason }))
 
-export function toolTier(name: string): ToolTier {
-  if (BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(name)?.paidGenerationPreparation) return 'paid'
-  if (APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === name)) return 'write'
-  if (APPLICATION_READ_CAPABILITY_IDS.some((id) => id === name)) return 'read'
-  return PROTOCOL_TOOL_SPECS.find((spec) => spec.name === name)?.tier ?? 'read'
-}
-
-function tierGranted(tier: ToolTier, access: ApplicationAccess): boolean {
-  if (tier === 'write') return access.allowWrites
-  if (tier === 'paid') return access.allowWrites && access.allowPaid
-  return true
-}
-
-const TIER_REQUIREMENT: Record<Exclude<ToolTier, 'any' | 'read'>, string> = {
-  write: '本连接未获「允许修改内容」授权',
-  paid: '本连接未获「允许付费生成」授权',
-}
-
 type CapabilityDefinition = ReturnType<typeof BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get>
 
 /**
@@ -178,7 +137,7 @@ function buildCapabilityTool(tool: LocalTool, definition: CapabilityDefinition):
     if (tool.id === 'create_visible_generation_task') schema.required = [...new Set([...schema.required as string[], 'modelId', 'prompt', 'mediaType'])]
   }
   return {
-    name: tool.id, title: tool.title, description: tool.description + (definition && (definition.paidGenerationPreparation || definition.mayRequirePaidConfirmation) ? ' 费用与内容发送确认流程见 describe_application_contract；等待确认后查询原 operationId，不重复提交。' : '') + (tool.id === 'list_application_entities' ? ' items 与 refs 按索引对应，默认不重复 items.ref；includeDetails=true 可读取完整元数据。' : ''),
+    name: tool.id, title: tool.title, description: tool.description + (definition && (definition.paidGenerationPreparation || definition.mayRequirePaidConfirmation) ? ' 付费确认流程见 describe_application_contract；等待确认后查询原 operationId，不重复提交。' : '') + (tool.id === 'list_application_entities' ? ' items 与 refs 按索引对应，默认不重复 items.ref；includeDetails=true 可读取完整元数据。' : ''),
     inputSchema: { ...schema, properties: { ...schema.properties as Record<string, unknown>, ...resultDetailFields(tool.id) }, type: 'object' },
     ...(definition ? { outputSchema: { type: 'object', ...projectToolOutputSchema(z.toJSONSchema(write
       ? z.union([z.object({ ok: z.literal(true), result: z.object({ ok: z.literal(true), data: capabilityPublicOutputSchema(definition) }).passthrough() }).passthrough(), waitingOutput])
@@ -207,7 +166,6 @@ export function assistantSkillTool(): Tool {
 
 export interface ApplicationToolCatalog {
   tools: Tool[]
-  hidden: Array<{ name: string; tier: ToolTier; requires: string }>
 }
 
 /** 仅规范化对象键；数组顺序保留，schema 内容变化仍会改变哈希。 */
@@ -236,49 +194,39 @@ export function applicationCatalogSchemaHash(catalog: ApplicationToolCatalog): s
  * 每次 `tools/list` 都按当前注册重新计算，所以渲染层重载、重新注册或撤销后再次列举就是最新目录；
  * MCP 适配器负责变更通知；Pi 与其他调用面直接消费同一目录。
  */
-export function buildApplicationToolCatalog(input: { tools: readonly LocalTool[]; access: ApplicationAccess; operationsEnabled: boolean; includeSkillTool?: boolean }): ApplicationToolCatalog {
+export function buildApplicationToolCatalog(input: { tools: readonly LocalTool[]; includeSkillTool?: boolean }): ApplicationToolCatalog {
   const tools: Tool[] = []
-  const hidden: ApplicationToolCatalog['hidden'] = []
-  // 缺席永远带理由：静默消失会让调用方把"本次没授权"读成"应用没有这个能力"。
-  const consider = (name: string, tier: ToolTier, ledgerBound: boolean, build: () => Tool): void => {
-    if (ledgerBound && !input.operationsEnabled) hidden.push({ name, tier, requires: '操作账本不可用，本次连接整体关闭写入' })
-    else if (tierGranted(tier, input.access)) tools.push(build())
-    else hidden.push({ name, tier, requires: TIER_REQUIREMENT[tier as 'write' | 'paid'] })
-  }
   for (const tool of input.tools) {
-    if (EXCLUDED_TOOLS.some((excluded) => excluded.name === tool.id)) continue
-    const tier = toolTier(tool.id)
-    // 写工具还需要操作账本可用：没有持久身份就不能对外开放写入。
-    consider(tool.id, tier, tier !== 'read' && tier !== 'any', () => capabilityTool(tool))
+    if (EXCLUDED_TOOLS.some(excluded => excluded.name === tool.id)) continue
+    tools.push(capabilityTool(tool))
   }
   for (const spec of PROTOCOL_TOOL_SPECS) {
-    consider(spec.name, spec.tier, spec.requiresOperations === true, () => ({
+    tools.push({
       name: spec.name, description: spec.description, inputSchema: { ...spec.inputSchema, type: 'object', properties: { ...spec.inputSchema.properties as Record<string, unknown>, ...RESULT_DETAIL_FIELDS } } as Tool['inputSchema'],
       ...(spec.outputSchema ? { outputSchema: spec.outputSchema as Tool['inputSchema'] } : {}),
       annotations: { readOnlyHint: spec.readOnly, ...(spec.readOnly ? { openWorldHint: false } : { destructiveHint: false }) },
-    }))
+    })
   }
-  if (input.includeSkillTool) consider(loadAssistantSkillCapability.id, 'read', false, assistantSkillTool)
-  return { tools: tools.sort((a, b) => a.name.localeCompare(b.name, 'en')), hidden }
+  if (input.includeSkillTool) tools.push(assistantSkillTool())
+  return { tools: tools.sort((a, b) => a.name.localeCompare(b.name, 'en')) }
 }
 
 const WORKFLOWS = [
   confirmationGuidance,
   '发现：describe_application_contract → describe_application_entities（按域过滤）→ list_application_entities（cursor/limit 分页，where 按属性等值定位）。',
-  '读取：按任务需要读取实体，获取真实引用和属性；普通操作不需要额外读取来拼接基线。删除前才必须逐个读取目标与集合父对象。',
-  '修改：把 operationId（客户端生成的 UUID）连同业务参数传给写工具。普通操作省略 baselineIds，由应用自动核对；删除或要求严格按旧状态写入时提供相关 baselineIds。勿传 expectedRevisions。同一 operationId 重传返回原事实，不会重复执行。',
+  '读取：按任务需要读取实体，获取真实引用和属性；普通操作不需要额外读取来拼接基线。删除也由应用核对当前目标。',
+  '修改：把 operationId（客户端生成的 UUID）连同业务参数传给写工具。普通操作省略 baselineIds，由应用自动核对；要求严格按旧状态写入时提供相关 baselineIds。勿传 expectedRevisions。同一 operationId 重传返回原事实，不会重复执行。',
   MEMORY_RULES,
   '查任务：生成默认用 wait_generation_task 等待终态，用户主动询问即时进度才用 get_generation_task，三维渲染用 get_camera_stage_render_task，写操作事实用 get_application_operation；等待工具由宿主跟进，其他即时查询按需调用，不需要客户端支持通知扩展。可用 subscriptions/listen 订阅工具目录变更；收到 notifications/tools/list_changed 后重新 tools/list。',
   '取结果：看图用 read_application_media(mode="image") 直接取得图片内容；其他媒体按 offset 分块读到 eof；不支持富媒体的客户端只消费 totalBytes／eof／错误码也能理解状态并继续。',
   '失败恢复：执行状态 unknown 时禁止换标识重试，用原 operationId 查询；partial 且账本登记了仅保存恢复入口时调 retry_application_operation_save，它不会重放业务修改。',
   '前置条件：写入被会话挡住时，对目标 ref 调 describe_application_entities，propertyAvailability 的 reasons 与 recoveries 就是声明层给出的前置条件和恢复入口。',
-  '审批与授权：一律在痕迹 AI 内完成，协议侧没有提权通道；客户端自报权限、名称或"已批准"无效。',
+  '所有调用者使用同一套能力；超出付费策略与执行外来代码时在痕迹AI 内确认。',
 ]
 
 export function buildApplicationContract(input: {
   callerKind?: 'external' | 'embedded'
   domains: readonly LocalDomainSurface[]
-  access: ApplicationAccess
   catalog: ApplicationToolCatalog
   port: number
   requestedDomains: readonly string[]
@@ -302,7 +250,7 @@ export function buildApplicationContract(input: {
       server: EXTERNAL_SERVER_INFO,
       protocolVersions: [...EXTERNAL_PROTOCOL_VERSIONS],
       sdkVersion: EXTERNAL_SDK_VERSION,
-      transport: input.callerKind === 'embedded' ? { kind: 'embedded', authorization: '助手对话中的操作权限', requiresExternalConnection: false } : { kind: 'streamable-http', url: `http://127.0.0.1:${input.port}/mcp`, authorization: 'Bearer <连接令牌>', json: true, serverSentEvents: true, listChangedNotifications: true, subscriptions: 'subscriptions/listen', listChangedPolicy: '订阅 toolsListChanged 后，仅工具定义或契约版本真实变化才发送 notifications/tools/list_changed，客户端据此重新 tools/list；普通上下文更新与同目录重连不发。连接权限变更时向该连接发送 tools/resources 的 list_changed，需重读目录；撤销连接关闭旧订阅。应用重启关闭旧连接，重连后重新订阅并读取目录。' },
+      transport: input.callerKind === 'embedded' ? { kind: 'embedded', identity: '当前助手会话', requiresExternalConnection: false } : { kind: 'streamable-http', url: `http://127.0.0.1:${input.port}/mcp`, authorization: 'Bearer <连接令牌>', json: true, serverSentEvents: true, listChangedNotifications: true, subscriptions: 'subscriptions/listen', listChangedPolicy: '订阅 toolsListChanged 后，仅工具定义或契约版本真实变化才发送 notifications/tools/list_changed，客户端据此重新 tools/list；普通上下文更新与同目录重连不发。撤销连接关闭旧订阅。应用重启关闭旧连接，重连后重新订阅并读取目录。' },
       limits: EXTERNAL_LIMITS,
       deprecationPolicy: EXTERNAL_DEPRECATION_POLICY,
     },
@@ -310,15 +258,11 @@ export function buildApplicationContract(input: {
     schemaHashAlgorithm: 'SHA-256(键排序 JSON{name,description,inputSchema,outputSchema,annotations}，缺省字段记为 null) 前16位；目录哈希为按 name 排序的 [{name,schemaHash}] 同算法。',
     ...(toolSchemas ? { toolSchemas } : { toolSchemasHint: '按 names 查询各工具 schemaHash；加 includeSchemas:true 取完整参数。' }),
     access: {
-      read: true, write: input.access.allowWrites, destructive: input.access.allowDestructive, paid: input.access.allowPaid,
-      hiddenTools: input.catalog.hidden,
       excludedTools: EXCLUDED_TOOLS.map((excluded) => ({ ...excluded })),
       alternativeRoutes: BUILTIN_APPLICATION_CAPABILITY_REGISTRY.list()
         .filter(definition => definition.side === 'frontend' && definition.external && requested.has(definition.domain))
         .map(definition => ({ name: definition.id, ...definition.external })),
-      note: input.callerKind === 'embedded'
-        ? '你是内置助手，操作权限来自当前对话输入框的「助手操作权限」。权限不足时请用户在此选择「允许修改、删除和付费生成」，下一轮生效。不需要开启 MCP 服务或新建外部连接，外部智能体连接设置不会改变你的权限。仅执行用户请求范围内的操作。'
-        : '工具不在 tools/list 里 = 本连接缺对应授权档，应用本身仍有该能力；工具在清单里而调用返回 PERMISSION_DENIED = 授权够了但这次目标不允许。删除授权不影响工具是否出现，只在调用含 remove_items 或破坏性能力时校验。授权只能在痕迹 AI 的设置里调整，调整范围需要新建连接。',
+      note: '人和助手共用业务能力；付费按统一策略，外来代码首次运行需信任确认，删除进入回收区。',
     },
     domains: input.domains.map((domain) => ({
       id: domain.id, readable: domain.readable, writable: domain.writable,
@@ -327,9 +271,9 @@ export function buildApplicationContract(input: {
       ...(requested.has(domain.id) ? { entities: domain.entities } : {}),
     })),
     tools: input.catalog.tools.map((tool) => ({
-      name: tool.name, tier: toolTier(tool.name), readOnly: tool.annotations?.readOnlyHint === true,
+      name: tool.name, readOnly: tool.annotations?.readOnlyHint === true,
       envelope: APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === tool.name) ? 'operationId+baselineIds' : 'none',
-      ...(APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === tool.name) ? { baselinePolicy: '普通操作可省略 baselineIds，破坏性操作必填。' } : {}),
+      ...(APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === tool.name) ? { baselinePolicy: '所有操作均可省略 baselineIds；显式提供时核对原状态。' } : {}),
     })),
     ...(input.skills ? { skills: {
       tool: loadAssistantSkillCapability.id,
@@ -345,15 +289,12 @@ export function buildApplicationContract(input: {
     catalogSchemaHash: full.catalogSchemaHash,
     schemaHashAlgorithm: full.schemaHashAlgorithm,
     toolSchemas,
-    access: { read: true, write: input.access.allowWrites, destructive: input.access.allowDestructive, paid: input.access.allowPaid,
-      ...(input.requestedDomains.length ? { alternativeRoutes: full.access.alternativeRoutes } : {}),
-      note: input.callerKind === 'embedded' ? '授权来自对话框的「助手操作权限」，不需要 MCP 连接。仅执行用户请求范围内的操作。'
-        : '授权仅在痕迹 AI 内调整。工具缺席表示缺授权档；PERMISSION_DENIED 表示本次目标不允许。' },
+    access: { ...(input.requestedDomains.length ? { alternativeRoutes: full.access.alternativeRoutes } : {}), note: full.access.note },
     domains: full.domains,
     ...(full.skills ? { skills: { tool: full.skills.tool, index: full.skills.index } } : {}),
     workflows: [
       '发现：describe_application_entities 按域查属性；list_application_entities 用分页/where 定位；read_application_entity 读属性与 baselineId。tools/list 查工具，契约 detail="full" 查排除与弃用。',
-      '写入：生成 UUID operationId，重传同 ID 返回原事实。baselineIds 普通修改/新增可省略，记忆条目修改和删除须读基线；删除先读目标及集合父对象。勿传 expectedRevisions。includeRevisions/includeEvidence=true 展开修订/证据。',
+      '写入：生成 UUID operationId，重传同 ID 返回原事实。baselineIds 普通修改/新增可省略，显式提交基线时会检测冲突。勿传 expectedRevisions。includeRevisions/includeEvidence=true 展开修订/证据。',
       '恢复：unknown 查 get_application_operation，沿原 operationId，禁止重放；partial 仅恢复保存。前置拒绝用 describe_application_entities(refs) 查条件。',
       '结果：wait_generation_task 等生成终态；read_application_media(mode="image") 看图，其他媒体读至 eof。load_assistant_skill 按适用条件读主文件和单份参考。',
       confirmationGuidance,

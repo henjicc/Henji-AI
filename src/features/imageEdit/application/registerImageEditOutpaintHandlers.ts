@@ -2,19 +2,18 @@ import { applicationGenerationTaskId } from '@/core/application-control/operatio
 import { applicationWritePreflight } from '@/core/application-control/execution/writeExecution';
 import { generateImageEditOutpaintCapability, getImageEditOutpaintCapability, prepareImageEditOutpaintCapability, recoverImageEditOutpaintCapability } from '@/core/application-control/domains/imageEdit/imageEditOutpaintCapabilities';
 import type { ApplicationCapabilityHandlerRegistrar, CapabilityExecutionContext } from '@/features/application-control';
-import { applicationCallerAccess } from '@/core/application-control/callerContext';
+
 import { ensureImageEditDocumentInstanceV3 } from '../v3/application/imageEditDocumentLoading';
 import { imageEditV3LayerRef, splitImageEditV3DocumentRef } from '../v3/application/imageEditDocumentRefs';
 import { requireImageEditPersistenceOwnerV3 } from '../v3/application/imageEditPersistenceOperations';
 import { prepareImageEditOutpaintV3, readImageEditOutpaintJobV3, recoverImageEditOutpaintV3, startImageEditOutpaintV3, type ImageEditOutpaintJobV3 } from '../v3/application/imageEditOutpaintServiceV3';
 
-async function assertHost(documentId: string, context: CapabilityExecutionContext, write: boolean): Promise<void> {
+async function assertHost(documentId: string, context: CapabilityExecutionContext, _write: boolean): Promise<void> {
   context.signal.throwIfAborted();
   await ensureImageEditDocumentInstanceV3(documentId);
   const owner = requireImageEditPersistenceOwnerV3(documentId);
   owner.assertCurrent();
-  const access = context.callerGrant ? applicationCallerAccess(context.callerGrant, context.requestId ?? 'image-outpaint', context.signal) : undefined;
-  if (write && access && owner.projection?.requiredPermissions.some(permission => !access.permissions.has(permission))) throw new Error('PERMISSION_DENIED:图片文档节点保存需要原画布的写入权限');
+
 }
 function status(job: ImageEditOutpaintJobV3, documentRef: { kind: 'image_edit.document'; id: string }) {
   return { documentRef, taskRef: { kind: 'generation.task', id: job.taskId }, status: job.status, progress: job.progress,

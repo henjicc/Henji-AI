@@ -14,7 +14,6 @@ import type {
   LocalMediaImportResult,
   LocalMediaKind,
 } from '../../../../src/core/media/localMediaImportContracts'
-import { allowMediaRoot } from '../../protocol'
 import { getProgramStoreDir } from '../appPaths'
 import { getUploadsDir } from '../image/path-utils'
 import { loadSharp } from '../image/sharp-loader'
@@ -359,7 +358,6 @@ export async function importMediaFromPath(request: ImportMediaFromPathRequest): 
         ? { fullPath: validated.sourcePath, sizeBytes: validated.sizeBytes,
             cacheKey: referencedCacheKey(validated.sourcePath, validated.sizeBytes, validated.mtimeMs), cacheHit: true }
         : await storePathManaged(validated.realPath, validated.format)
-      if (request.ownership === 'referenced') allowMediaRoot(path.dirname(validated.sourcePath))
       return { format: validated.format, stored, validationMs, persistenceMs: roundMs(performance.now() - persistenceStarted) }
     })
   } catch (error) { throw redactMediaError(error, [request.sourcePath]) }

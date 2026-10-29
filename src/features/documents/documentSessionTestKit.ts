@@ -442,6 +442,8 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
 
   async trashProject(projectId: string): Promise<void> {
     this.calls.push('trashProject')
+    const project = this.projects.get(projectId)
+    if (!project || project.missing) throw namedError('ProjectNotFoundError', '找不到项目。')
     this.projects.delete(projectId)
     for (const [id, stored] of this.documents) {
       if (stored.meta.container.kind === 'project' && stored.meta.container.projectId === projectId) this.documents.delete(id)
@@ -736,18 +738,11 @@ export function createScriptedPrompter(): ScriptedPrompter {
     conflictChoices: [],
     saveName: null,
     log: [],
-    chooseLeaveAction: async (info) => {
-      prompter.log.push(`leave:${info.subject}:${info.name}`)
-      return prompter.leaveChoices.shift() ?? 'cancel'
-    },
     askSaveName: async (info) => {
       prompter.log.push(`saveName:${info.initialName}`)
       return prompter.saveName ? await prompter.saveName(info) : false
     },
-    resolveConflict: async (info) => {
-      prompter.log.push(`conflict:${info.name}`)
-      return prompter.conflictChoices.shift() ?? 'later'
-    },
+
   }
   return prompter
 }

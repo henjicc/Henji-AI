@@ -38,7 +38,7 @@ it('多内容共用三选一询问；仅这一次后不再问，助手能轮询�
   await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
   const second = ensureContentTrust({ contents: [{ ...content, id: 'other', sourceName: '另一模板' }] })
   await vi.waitFor(() => expect(useAlertDialogStore.getState().queue[0].title).toContain('另一模板'))
-  expect(useAlertDialogStore.getState().queue[0]).toMatchObject({ cancelLabel: '不运行', confirmation: { label: '仅这一次', projectLabel: '始终允许' } })
+  expect(useAlertDialogStore.getState().queue[0]).toMatchObject({ cancelLabel: '不运行', confirmation: { label: '仅这一次', alwaysAllowLabel: '始终允许' } })
   expect(phases).toContain('awaiting_user_confirmation')
   useAlertDialogStore.getState().confirmCurrent()
   await Promise.all([first, second]); unbind()

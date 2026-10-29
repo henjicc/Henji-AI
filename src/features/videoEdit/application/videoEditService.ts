@@ -214,17 +214,6 @@ export function updateVideoEditCreativeIntents(id: string, head: CreativeIntents
   owner.document = freezeVideoEditDocument({ ...previous, creativeIntents }); inheritVideoEditCompositions(previous, owner.document); owner.version++
   notifyVideoEditContent(owner); publishVideoEdit(true)
 }
-/** Irreversible privacy erasure traverses current, both history directions, and an in-flight gesture. */
-export function purgeVideoEditExplanationSession(id: string, sessionId: string): import('@/core/creativeIntent/persistence').StoredCreativeIntentResource[] {
-  const owner = requireVideoEditInstance(id); const gesture = gestures.get(owner)
-  const documents = [owner.document, ...owner.past, ...owner.future, ...(gesture ? [gesture.before] : [])]
-  const ids = new Set(documents.flatMap(document => document.creativeIntents?.sessions.filter(s => s.id === sessionId).flatMap(s => [...s.pages, ...s.visualEvidenceRefs.map(v => v.resourceRef), ...(s.audio ? [s.audio] : []), ...(s.submittedPlanRef ? [s.submittedPlanRef] : [])]).map(r => r.resourceId) ?? []))
-  const resources = new Map(documents.flatMap(document => document.creativeIntents?.resources.filter(r => ids.has(r.resourceId)).map(r => [r.resourceId, r] as const) ?? []))
-  const scrub = (document: VideoEditDocument): VideoEditDocument => document.creativeIntents ? freezeVideoEditDocument({ ...document, creativeIntents: { ...document.creativeIntents, sessions: document.creativeIntents.sessions.filter(s => s.id !== sessionId), resources: document.creativeIntents.resources.filter(r => !ids.has(r.resourceId)) } }) : document
-  owner.past = owner.past.map(scrub); owner.future = owner.future.map(scrub); if (gesture) gesture.before = scrub(gesture.before)
-  updateVideoEditCreativeIntents(id, scrub(owner.document).creativeIntents ?? { drafts: [], sessions: [], resources: [] })
-  return [...resources.values()]
-}
 /** Completed output facts share document persistence but are not undone with timeline edits. */
 export function recordVideoEditExport(id: string, entry: VideoEditExportHistoryEntry): void {
   assertApplicationWritesAllowed()

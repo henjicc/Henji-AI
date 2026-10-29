@@ -7,7 +7,6 @@ import type {
   LocalMediaKind,
   LocalMediaOwnership,
 } from '../../../src/core/media/localMediaImportContracts'
-import { allowMediaRoot, isPathWithinAllowedMediaRoots } from '../protocol'
 import { resolveBundledResourcePath } from '../services/media/bundledResources'
 import { captureApplicationSurface } from '../services/media/surfaceCapture'
 import { importMediaFromBytes, importMediaFromPath } from '../services/media-import'
@@ -22,14 +21,6 @@ import { enqueueMediaCandidates } from '../services/media-recycle/queue'
 function parsePaths(input: unknown): string[] {
   if (!Array.isArray(input) || !input.every(value => typeof value === 'string')) throw new Error('Invalid media paths')
   return input
-}
-
-interface AllowRootPayload {
-  rootPath: string
-}
-
-interface IsPathAllowedPayload {
-  targetPath: string
 }
 
 interface BundledResourcePayload {
@@ -92,24 +83,6 @@ function parseImportFromBytesPayload(input: unknown): ImportMediaFromBytesReques
   }
 }
 
-function parseAllowRootPayload(input: unknown): AllowRootPayload {
-  const record = parseRecord(input)
-  const rootPath = record.rootPath
-  if (typeof rootPath !== 'string' || rootPath.length === 0) {
-    throw new Error('Expected non-empty string field "rootPath"')
-  }
-  return { rootPath }
-}
-
-function parseIsPathAllowedPayload(input: unknown): IsPathAllowedPayload {
-  const record = parseRecord(input)
-  const targetPath = record.targetPath
-  if (typeof targetPath !== 'string' || targetPath.length === 0) {
-    throw new Error('Expected non-empty string field "targetPath"')
-  }
-  return { targetPath }
-}
-
 function parseBundledResourcePayload(input: unknown): BundledResourcePayload {
   const record = parseRecord(input)
   const relativePath = record.relativePath
@@ -127,14 +100,6 @@ export function registerMediaIpc(): void {
   }, report => {
     enqueueMediaCandidates(report.paths, report.protectedBy)
   }, assertTrustedMainRenderer)
-  registerIpcHandler<AllowRootPayload, void>('media:allowRoot', parseAllowRootPayload, ({ rootPath }) => {
-    allowMediaRoot(rootPath)
-  })
-
-  registerIpcHandler<IsPathAllowedPayload, boolean>('media:isPathAllowed', parseIsPathAllowedPayload, ({ targetPath }) => {
-    return isPathWithinAllowedMediaRoots(targetPath)
-  })
-
   registerIpcHandler<BundledResourcePayload, string | null>(
     'media:getBundledResourcePath',
     parseBundledResourcePayload,

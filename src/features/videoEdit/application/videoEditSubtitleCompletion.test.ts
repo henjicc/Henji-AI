@@ -19,7 +19,7 @@ import { VideoEditTextPresetLibrary, videoEditTextPresetLibrary, VIDEO_EDIT_TEXT
 import { videoEditTextStyleSchema } from '@/core/videoEdit/text'
 import { generateVideoEditBilingualSubtitles, confirmVideoEditBilingualSubtitles } from './videoEditBilingualSubtitles'
 import { splitVideoEditSubtitle, mergeVideoEditSubtitles, segmentVideoEditSubtitles } from './videoEditAutoSubtitles'
-import { translateVideoEditSubtitleCapability } from '@/core/application-control/domains/videoEdit/videoEditSubtitleCapabilities'
+
 
 vi.mock('@/commands/llmRuntime', async original => ({ ...await original<typeof import('@/commands/llmRuntime')>(), llmChatStream: vi.fn(), llmCancelTask: vi.fn(async () => undefined) }))
 let owner: VideoEditInstance
@@ -163,7 +163,7 @@ it('双语取消传给现有LLM取消入口，任务期间旧字幕被改拒绝�
 })
 
 it('手动双语先费用确认，取消不调用LLM；助手能力按R2，经公共入口保存并通用读写译文', async () => {
-  const bridge = installPaidApprovalTestBridge('ask')
+  const bridge = installPaidApprovalTestBridge({ singleLimitCny: 0 })
   const id = createVideoEditCaption(owner.document.id, sequence().id, { start: 0, duration: 30, text: '原文' })
   const confirmation = confirmVideoEditBilingualSubtitles(owner.document.id, sequence().id, { targetLanguage: 'en' })
   await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
@@ -171,8 +171,7 @@ it('手动双语先费用确认，取消不调用LLM；助手能力按R2，经�
   useAlertDialogStore.getState().dismissCurrent(); await confirmation
   expect(llmChatStream).not.toHaveBeenCalled()
   expect([...bridge.records.values()]).toMatchObject([{ state: 'not_executed' }])
-  bridge.setSettings({ mode: 'bypass' })
-  expect(translateVideoEditSubtitleCapability.risk).toBe('R2')
+  bridge.setSettings({ unlimited: true })
   const app = createApplicationHarness()
   try {
     const result = await app.requireResult('translate_video_edit_subtitles', { documentRef: { kind: 'video_edit.document', id: owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${owner.document.id}:${sequence().id}` }, targetLanguage: 'en' })
@@ -187,7 +186,7 @@ it('手动双语先费用确认，取消不调用LLM；助手能力按R2，经�
 })
 
 it('手动双语确认后才调用模型，整批共用一次费用授权', async () => {
-  const bridge = installPaidApprovalTestBridge('ask')
+  const bridge = installPaidApprovalTestBridge({ singleLimitCny: 0 })
   Array.from({ length: 13 }, (_, index) => createVideoEditCaption(owner.document.id, sequence().id, { start: index * 30, duration: 30, text: `原文${index}` }))
   const pending = confirmVideoEditBilingualSubtitles(owner.document.id, sequence().id, { targetLanguage: 'en' })
   await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))

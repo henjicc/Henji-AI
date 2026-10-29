@@ -76,8 +76,7 @@ export function registerImageEditCapabilityHandlers(registrar: ApplicationCapabi
     const { documentId, layerId } = splitImageEditV3LayerRef(parsed.targetRef)
     const access = context.callerGrant ? applicationCallerAccess(context.callerGrant, context.requestId ?? 'paint-image', context.signal) : undefined
     return runImageEditPersistedOperationV3(documentId, access, async () => {
-      const { bus, persistenceOwner } = requireImageEditDocumentInstanceV3(documentId)
-      if (access && persistenceOwner?.projection?.requiredPermissions.some(permission => !access.permissions.has(permission))) throw new Error('PERMISSION_DENIED:图片文档节点保存需要原画布的写入权限')
+      const { bus } = requireImageEditDocumentInstanceV3(documentId)
       const commandId = await paintImageEditTargetV3(bus, layerId, parsed.destination, parsed.operation, context.signal)
       const current = findImageEditV3LiveLayer(bus.getSnapshot().document, layerId)
       const head = (await bus.readHistoryHead())
@@ -93,8 +92,7 @@ export function registerImageEditCapabilityHandlers(registrar: ApplicationCapabi
     const { documentId, layerId } = target
     const access = context.callerGrant ? applicationCallerAccess(context.callerGrant, context.requestId ?? 'convert-filter', context.signal) : undefined
     return runImageEditPersistedOperationV3(documentId, access, async () => {
-      const { bus, persistenceOwner } = requireImageEditDocumentInstanceV3(documentId)
-      if (access && persistenceOwner?.projection?.requiredPermissions.some(p => !access.permissions.has(p))) throw new Error('PERMISSION_DENIED:图片文档节点保存需要原画布的写入权限')
+      const { bus } = requireImageEditDocumentInstanceV3(documentId)
       context.signal?.throwIfAborted()
       const location = findImageEditLayerLocationV3(bus.getSnapshot().document.layers, layerId)
       if (!location) throw new Error('图层不存在，请重新读取')
@@ -116,8 +114,7 @@ export function registerImageEditCapabilityHandlers(registrar: ApplicationCapabi
     const { documentId, layerId } = splitImageEditV3LayerRef(parsed.targetRef)
     const access = context.callerGrant ? applicationCallerAccess(context.callerGrant, context.requestId ?? 'compute-selection', context.signal) : undefined
     return runImageEditPersistedOperationV3(documentId, access, async () => {
-      const { bus, persistenceOwner } = requireImageEditDocumentInstanceV3(documentId)
-      if (access && persistenceOwner?.projection?.requiredPermissions.some(p => !access.permissions.has(p))) throw new Error('PERMISSION_DENIED:图片文档节点保存需要原画布的写入权限')
+      const { bus } = requireImageEditDocumentInstanceV3(documentId)
       const preview = await previewImageEditSelectionIntentV3(bus, layerId, parsed.operation, parsed.combine, { signal: context.signal })
       applyImageEditSelectionPreviewV3(bus, preview)
       return { ref: { ...imageEditV3DocumentRef(documentId), kind: 'image_edit.selection' }, verification: { verified: JSON.stringify(bus.getSnapshot().selection) === JSON.stringify(preview.result) } }
@@ -128,8 +125,7 @@ export function registerImageEditCapabilityHandlers(registrar: ApplicationCapabi
     const { documentId, layerId } = splitImageEditV3LayerRef(parsed.targetRef)
     const access = context.callerGrant ? applicationCallerAccess(context.callerGrant, context.requestId ?? 'select-region', context.signal) : undefined
     return runImageEditPersistedOperationV3(documentId, access, async () => {
-      const { bus, persistenceOwner } = requireImageEditDocumentInstanceV3(documentId)
-      if (access && persistenceOwner?.projection?.requiredPermissions.some(permission => !access.permissions.has(permission))) throw new Error('PERMISSION_DENIED:图片文档节点保存需要原画布的写入权限')
+      const { bus } = requireImageEditDocumentInstanceV3(documentId)
       const result = await selectImageEditRegionV3(bus, layerId, { region: parsed.region, candidateId: parsed.candidateId, combine: parsed.combine, signal: context.signal })
       const ref = { ...imageEditV3DocumentRef(documentId), kind: 'image_edit.selection' as const }
       return { ref, status: result.status, candidates: result.candidates,
@@ -176,8 +172,7 @@ export function registerImageEditCapabilityHandlers(registrar: ApplicationCapabi
     if (parsed.region.kind === 'selection' && parsed.region.ref.id !== imageEditV3DocumentRef(documentId).id) throw new Error('选区引用与目标图层不在同一个图片文档，请读取目标文档的选区引用')
     const access = context.callerGrant ? applicationCallerAccess(context.callerGrant, context.requestId ?? 'repair-region', context.signal) : undefined
     return runImageEditPersistedOperationV3(documentId, access, async () => {
-      const { bus, persistenceOwner } = requireImageEditDocumentInstanceV3(documentId)
-      if (access && persistenceOwner?.projection?.requiredPermissions.some(permission => !access.permissions.has(permission))) throw new Error('PERMISSION_DENIED:图片文档节点保存需要原画布的写入权限')
+      const { bus } = requireImageEditDocumentInstanceV3(documentId)
       const result = await repairImageEditRegionV3(bus, layerId, { action: capability.id === 'remove_image_edit_region' ? 'remove' : 'repair', quality: parsed.quality, method: 'method' in parsed && (parsed.method === 'texture' || parsed.method === 'auto') ? parsed.method : undefined,
         ...(parsed.region.kind === 'subject' || parsed.region.kind === 'portrait' ? { semanticRegion: parsed.region.kind, candidateId: parsed.region.candidateId } : {}),
         ...(parsed.region.kind === 'rectangle' ? { rectangle: { x: parsed.region.x, y: parsed.region.y, width: parsed.region.width, height: parsed.region.height } } : {}),
@@ -195,8 +190,7 @@ export function registerImageEditCapabilityHandlers(registrar: ApplicationCapabi
     const executionContext = context.callerGrant ? applicationCallerAccess(context.callerGrant, context.requestId ?? 'selection-apply', context.signal) : undefined
     return runImageEditPersistedOperationV3(documentId, executionContext, async () => {
       const { bus } = requireImageEditDocumentInstanceV3(documentId)
-      const owner = requireImageEditDocumentInstanceV3(documentId).persistenceOwner
-      if (executionContext && owner?.projection?.requiredPermissions.some(p => !executionContext.permissions.has(p))) throw new Error('PERMISSION_DENIED:图片文档节点保存需要原画布的写入权限')
+
       if ('filterId' in target && typeof target.filterId === 'string') {
         const commandId = await snapshotImageEditFilterSelectionV3(bus, layerId, target.filterId, context.signal)
         return { ref: imageEditV3FilterRef(documentId, layerId, target.filterId), commandId,

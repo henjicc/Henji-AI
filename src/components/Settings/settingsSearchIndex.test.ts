@@ -35,7 +35,7 @@ describe('设置搜索索引', () => {
     }
     expect(missing).toEqual([])
   })
-  it.each(['素材箱', '重复文件', '触发边缘', '唤起前等待', '移出后等待', '授权方式', '单次自动通过', '全部第三方组件', '连接名称'])('可以搜索 %s 且不显示插值占位符', query => {
+  it.each(['素材箱', '重复文件', '触发边缘', '唤起前等待', '移出后等待', '每日上限', '单次上限', '全部第三方组件', '连接名称'])('可以搜索 %s 且不显示插值占位符', query => {
     const results = searchSettings(query, translate('zh'))
     expect(results.length).toBeGreaterThan(0)
     expect(results.every(item => !item.label.includes('{{'))).toBe(true)

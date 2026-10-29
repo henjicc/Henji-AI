@@ -4,6 +4,8 @@ import { GENERIC_FONT_FACES } from '../../../../src/core/fonts/catalog'
 import type { InternalFace } from './scanner'
 import type { FontWorkerRequest } from './worker'
 import { FontService } from './service'
+import { trashUserFile } from '../recycle/runtime'
+vi.mock('../recycle/runtime', () => ({ trashUserFile: vi.fn(async () => { boundary.faces = [] }) }))
 const boundary = vi.hoisted(() => ({ faces: [] as InternalFace[], failures: [] as string[], debug: vi.fn(), warn: vi.fn(), error: vi.fn(), requests: [] as FontWorkerRequest[], watchers: new Map<string, (event: string, name: string) => void>(), workers: [] as Array<Map<string, (reply: unknown) => void>>, send: vi.fn(), close: vi.fn(), terminate: vi.fn(), failedImport: false }))
 vi.mock('electron', () => ({ app: { getPath: () => 'unused' }, BrowserWindow: { getAllWindows: () => [{ webContents: { send: boundary.send } }] } }))
 vi.mock('node:fs', () => ({ watch: (directory: string, _options: unknown, callback: (event: string, name: string) => void) => { boundary.watchers.set(directory, callback); return { on: vi.fn(), close: boundary.close } } }))
@@ -27,6 +29,17 @@ beforeEach(() => {
   service = new FontService(library)
 })
 afterEach(() => { service.dispose(); vi.useRealTimers() })
+it('主进程回收导入字体再让 Worker 扫描，系统字体不进入回收服务', async () => {
+  await expect(service.remove(boundary.faces[0].face.id)).rejects.toThrow('系统字体')
+  expect(trashUserFile).not.toHaveBeenCalled()
+  boundary.faces[0].face.imported = true
+  boundary.faces[0].face.localizedFamily = 'TestFont'
+  boundary.faces[0].path = path.join(library, 'imported.ttf')
+  await service.importFiles([])
+  const id = boundary.faces[0].face.id
+  expect((await service.remove(id)).faces).toEqual([])
+  expect(trashUserFile).toHaveBeenCalledWith(path.join(library, 'imported.ttf'), 'TestFont')
+})
 it('目录缓存在主线程复用；目录新增和字体修改防抖刷新，缓存文件不会触发重扫', async () => {
   const first = await service.list(); expect(first.faces[0]).not.toHaveProperty('path'); await service.list(); expect(boundary.requests).toHaveLength(1)
   boundary.watchers.get(library)!('change', 'catalog-cache.json'); await service.list(); expect(boundary.requests).toHaveLength(1)

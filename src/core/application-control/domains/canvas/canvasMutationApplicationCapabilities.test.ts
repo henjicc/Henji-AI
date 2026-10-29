@@ -72,7 +72,7 @@ describe('export_image_edit_target_to_canvas contract', () => {
 
   it('声明权限、非幂等重复语义、并发键、撤销与双 create Effect', () => {
     expect(exportCapability).toMatchObject({
-      domain: 'image_edit', permission: 'canvas:write', risk: 'R1', version: 1,
+      domain: 'image_edit', permission: 'canvas:write', version: 1,
       idempotent: false, parallelSafe: false, supportsUndo: true,
       acceptsRefs: expect.arrayContaining(['canvas.document', 'canvas.node', 'image_edit.layer']),
       producesRefs: ['canvas.node', 'canvas.edge'],

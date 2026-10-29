@@ -1,25 +1,22 @@
 /** @vitest-environment jsdom */
 
 import React from 'react'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import i18n from '@/i18n/config'
 import type { NameCheckResult } from '@/core/documents/types'
 
 import { DocumentSaveNameDialog } from './DocumentSaveNameDialog'
-import { DocumentSessionDialogs } from './DocumentSessionDialogs'
-import { dialogDocumentSessionPrompter, useDocumentPromptStore } from './documentPromptStore'
 import type { DocumentSaveNamePromptInfo } from './documentSessionTypes'
 
 /*
- * 文档会话的界面：离开提示、冲突提示、起名对话框（实时检查、重名 / 非法不能保存、更改位置）、遗留草稿区块。
+ * 起名对话框保留实时检查、重名和非法名称校验、更改位置与保存失败恢复。
  */
 
 beforeAll(async () => { await i18n.changeLanguage('zh-CN') })
 afterEach(() => {
   cleanup()
-  useDocumentPromptStore.setState({ queue: [] })
 })
 
 function nameInfo(overrides: Partial<DocumentSaveNamePromptInfo> = {}): DocumentSaveNamePromptInfo {
@@ -125,29 +122,5 @@ describe('起名对话框', () => {
     render(<DocumentSaveNameDialog info={nameInfo()} onDone={onDone} />)
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
     expect(onDone).toHaveBeenCalledWith(false)
-  })
-})
-
-describe('提示宿主', () => {
-  it('离开提示三个选择：取消 / 不保存 / 保存，“保存”是唯一主动作', async () => {
-    render(<DocumentSessionDialogs />)
-    let choice: Promise<string> = Promise.resolve('')
-    act(() => { choice = dialogDocumentSessionPrompter.chooseLeaveAction({ subject: 'document', name: '未命名画布 2' }) })
-    expect(await screen.findByText('要保存“未命名画布 2”吗？')).toBeTruthy()
-    expect(screen.getByText('不保存的话，这份草稿会移到回收站。')).toBeTruthy()
-    expect(screen.getByRole('button', { name: '保存' }).getAttribute('data-variant')).toBe('primary')
-    expect(screen.getByRole('button', { name: '取消' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: '不保存' }))
-    await expect(choice).resolves.toBe('discard')
-    await waitFor(() => expect(screen.queryByText('要保存“未命名画布 2”吗？')).toBeNull())
-  })
-
-  it('冲突提示：重新载入 / 覆盖 / 稍后处理', async () => {
-    render(<DocumentSessionDialogs />)
-    let choice: Promise<string> = Promise.resolve('')
-    act(() => { choice = dialogDocumentSessionPrompter.resolveConflict({ name: '海报' }) })
-    expect(await screen.findByText('文件已在别处被修改')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: '覆盖' }))
-    await expect(choice).resolves.toBe('overwrite')
   })
 })

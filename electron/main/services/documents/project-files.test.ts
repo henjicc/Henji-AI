@@ -29,27 +29,22 @@ it('项目内相对路径按真实路径解析出文件与文件夹，两种分�
   ])
 })
 
-it('绝对路径、盘符、网络路径、.. 与空路径逐条拒绝并点名原因，不碰文件系统之外的位置', async () => {
+it('绝对路径与项目外相对路径按所指位置解析，空路径仍拒绝', async () => {
   const { project, outside } = await fixture()
-  const inputs = [path.join(outside, '机密.png'), 'C:/Windows/win.ini', 'D:素材', '\\\\server\\share\\a.png', '/etc/passwd', '../项目外/机密.png', '素材/../../项目外/机密.png', '', '  ', '.', '素材/a\u0000.png']
-  const result = await resolveProjectRelativePaths(project, inputs, style)
-  expect(result.entries.map(entry => entry.status === 'rejected' ? entry.reason : entry.status)).toEqual([
-    'absolute_path', 'absolute_path', 'absolute_path', 'absolute_path', 'absolute_path', 'parent_segment', 'parent_segment', 'invalid_path', 'invalid_path', 'invalid_path', 'invalid_path',
+  const file = path.join(outside, '机密.png')
+  const result = await resolveProjectRelativePaths(project, [file, '../项目外/机密.png', '', '  ', '.', '素材/a\u0000.png'], style)
+  expect(result.entries.slice(0, 2)).toEqual([
+    { input: file, status: 'resolved', relativePath: '../项目外/机密.png', path: await fs.realpath(file), kind: 'file' },
+    { input: '../项目外/机密.png', status: 'resolved', relativePath: '../项目外/机密.png', path: await fs.realpath(file), kind: 'file' },
   ])
-  for (const [index, entry] of result.entries.entries()) {
-    expect(entry.input).toBe(inputs[index])
-    if (entry.status === 'rejected') expect(entry.message).toContain(`“${inputs[index]}”`)
-  }
-  // 消息只回显原样输入，不另外带出项目文件夹的绝对位置
-  const real = await fs.realpath(project)
-  expect(result.entries.some(entry => entry.status === 'rejected' && entry.message.replace(`“${entry.input}”`, '').includes(real))).toBe(false)
+  expect(result.entries.slice(2).every(entry => entry.status === 'rejected' && entry.reason === 'invalid_path')).toBe(true)
 })
 
-it('联接点或符号链接把真实位置带出项目时拒绝为 outside_project；项目里不存在的报 not_found', async () => {
+it('联接点与符号链接按真实位置解析；不存在的报 not_found', async () => {
   const { project, outside } = await fixture()
   await fs.symlink(outside, path.join(project, '素材', '外链'), process.platform === 'win32' ? 'junction' : 'dir')
   const result = await resolveProjectRelativePaths(project, ['素材/外链', '素材/外链/机密.png', '素材/没有这个.png'], style)
-  expect(result.entries.map(entry => entry.status === 'rejected' ? entry.reason : entry.status)).toEqual(['outside_project', 'outside_project', 'not_found'])
+  expect(result.entries.map(entry => entry.status === 'rejected' ? entry.reason : entry.status)).toEqual(['resolved', 'resolved', 'not_found'])
 })
 
 it('指回项目文件夹本身的链接不算项目里的文件', async () => {

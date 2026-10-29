@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { DocumentSessionConflictError } from './documentErrors'
 import { createTestRegistry, TestToolInstance, type TestContent } from './documentSessionTestKit'
 
 /*
@@ -91,47 +90,18 @@ describe('自动保存', () => {
 })
 
 describe('版本冲突', () => {
-  it('重新载入：放弃本地修改，把磁盘内容交给工具实例，不触发新的保存', async () => {
-    const { commands, prompter, session, tool, meta } = await openWithTool()
-    commands.modifyExternally(meta.id, { items: ['别处'] })
-    prompter.conflictChoices.push('reload')
-    tool.edit('本地')
-    await vi.advanceTimersByTimeAsync(800)
-    await vi.advanceTimersByTimeAsync(0)
-    expect(prompter.log).toEqual(['conflict:海报'])
-    expect(tool.content).toEqual({ items: ['别处'] })
-    expect(session.getState()).toMatchObject({ status: 'saved', dirty: false })
-    await vi.advanceTimersByTimeAsync(5000)
-    expect(commands.writes).toBe(0)
-    expect(commands.stored(meta.id)?.content).toEqual({ items: ['别处'] })
-  })
-
-  it('覆盖：跳过版本核对写入本地内容', async () => {
-    const { commands, prompter, session, tool, meta } = await openWithTool()
-    commands.modifyExternally(meta.id, { items: ['别处'] })
-    prompter.conflictChoices.push('overwrite')
-    tool.edit('本地')
-    await vi.advanceTimersByTimeAsync(800)
-    await vi.advanceTimersByTimeAsync(0)
-    expect(commands.stored(meta.id)?.content).toEqual({ items: ['a', '本地'] })
-    expect(session.getState()).toMatchObject({ status: 'saved', dirty: false })
-  })
-
-  it('稍后处理：保持冲突、暂停自动保存，关闭被阻止；之后仍可选择覆盖', async () => {
+  it('冲突后自动保存本地修改，不排入选择弹窗；关闭仍等待保存完成', async () => {
     const { commands, prompter, session, tool, meta, registry } = await openWithTool()
     commands.modifyExternally(meta.id, { items: ['别处'] })
     tool.edit('本地')
     await vi.advanceTimersByTimeAsync(800)
-    expect(session.getState().status).toBe('conflict')
+    await session.flush()
+    expect(prompter.log).toEqual([])
+    expect(commands.stored(meta.id)?.content).toEqual({ items: ['a', '本地'] })
+    expect(session.getState()).toMatchObject({ status: 'saved', dirty: false })
     tool.edit('再改')
-    await vi.advanceTimersByTimeAsync(5000)
-    expect(commands.calls.filter((call) => call === 'saveDocument')).toHaveLength(1)
-    await expect(session.close()).rejects.toBeInstanceOf(DocumentSessionConflictError)
-    expect(registry.get(meta.id)).toBe(session)
-    expect(prompter.log).toHaveLength(2)
-    await session.resolveConflict('overwrite')
-    expect(commands.stored(meta.id)?.content).toEqual({ items: ['a', '本地', '再改'] })
     await session.close()
+    expect(commands.stored(meta.id)?.content).toEqual({ items: ['a', '本地', '再改'] })
     expect(registry.get(meta.id)).toBeUndefined()
   })
 })

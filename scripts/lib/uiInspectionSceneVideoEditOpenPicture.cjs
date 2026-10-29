@@ -109,7 +109,7 @@ async function measurePlayback(page, ms, after) {
 /** 可选预渲染验收：正式公共能力只写工程副本的预览缓存，随后核对节目真实命中及段边界。 */
 async function measureRenderedSegment(page, documentId) {
   const { authorizeMcpConnection, connectMcpClient, callTool, operationEnvelope, disableMcp } = require('./uiInspectionMcpClient.cjs')
-  const identity = await authorizeMcpConnection(page, { name: '分段预渲染免费验收', allowWrites: true })
+  const identity = await authorizeMcpConnection(page, { name: '分段预渲染免费验收' })
   const client = await connectMcpClient(identity.config, 'Henji render segment Reality')
   const ref = { kind: 'video_edit.document', id: documentId }, property = 'video_edit.document.render_cache'
   try {

@@ -14,7 +14,6 @@ export async function readVideoMotionGroup(id: string, draftId: string, offset: 
   const draft = head?.drafts.find(value => value.id === draftId)
   if (!head || !draft) throw new Error('超级关键帧组已不存在，请重新读取草稿列表。')
   const session = head.sessions.find(value => value.id === superKeyframeSessionId(draftId))
-  if (session && !session.consent?.textUpload) throw new Error('PERMISSION_DENIED:这组讲解尚未授权读取。')
   const assertCurrent = (): void => {
     signal.throwIfAborted()
     if (requireVideoEditInstance(id) !== owner || owner.document.creativeIntents !== head) throw new Error('超级关键帧组已变化，请从第一页重新读取。')

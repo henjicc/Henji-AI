@@ -3,6 +3,7 @@ import fsp from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { gitCodeLocation, parseGitCodeLocation, type GitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
 import { CodeGitRepository, codeDigest, type GitCodeVersion } from './code-git'
+import { ensureCodeCollectionTarget } from './code-paths'
 
 interface VersionCopy { original: GitCodeVersion; files: Record<string, string>; withdrawn: boolean }
 interface TransferGroup { repository: CodeGitRepository; prefix: string; references: Array<{ location: string; parsed: GitCodeLocation }> }
@@ -30,10 +31,11 @@ export async function transferGitCode(locations: readonly string[], destination:
     const group = groups.get(key) ?? { repository: new CodeGitRepository(parsed.repository), prefix, references: [] }
     group.references.push({ location, parsed }); groups.set(key, group)
   }
+  if (groups.size || projectGroups.size) await ensureCodeCollectionTarget(path.dirname(destination), path.join(destination, '.git', 'HEAD'), path.sep === '\\' ? 'win32' : 'posix')
   for (const group of projectGroups.values()) {
     const files: Record<string, string> = {}
     for (const reference of group.references) files[reference.parsed.filepath] = await group.repository.sourceAt(reference.parsed.oid, reference.parsed.filepath)
-    const target = new CodeGitRepository(destination)
+    const target = new CodeGitRepository(destination, path.dirname(destination))
     const oid = await target.exclusive(() => target.importSnapshotLocked(files))
     for (const reference of group.references) mapping.set(reference.location, gitCodeLocation({ repository: target.dir, oid, filepath: reference.parsed.filepath }))
   }
@@ -53,7 +55,7 @@ export async function transferGitCode(locations: readonly string[], destination:
     copies.sort((a, b) => a.original.version - b.original.version)
     prepared.push({ group, copies })
   }
-  const target = new CodeGitRepository(destination)
+  const target = new CodeGitRepository(destination, path.dirname(destination))
   await target.exclusive(async () => {
     for (const { group, copies } of prepared) {
       const original = copies[0].original
@@ -108,10 +110,7 @@ export class GitCodePackageSnapshot {
     const repository = new CodeGitRepository(path.join(this.containerRoot, '代码'))
     if (this.wholeProject && await repository.exists()) await repository.exclusive(async () => {
       // A project export also retains unreferenced versions and users' worktree edits.
-      await fsp.cp(repository.dir, this.directory, { recursive: true, filter: async source => {
-        if ((await fsp.lstat(source)).isSymbolicLink()) throw new Error('代码仓库包含链接，请移除链接后导出。')
-        return !source.endsWith('.lock')
-      } })
+      await fsp.cp(repository.dir, this.directory, { recursive: true, dereference: true, filter: source => !source.endsWith('.lock') })
     })
   }
   async collect(locations: readonly string[]): Promise<Map<string, string>> {
@@ -134,7 +133,6 @@ export class GitCodePackageSnapshot {
     const result: Array<{ name: string; source: string }> = []
     const visit = async (directory: string): Promise<void> => {
       for (const entry of await fsp.readdir(directory, { withFileTypes: true })) {
-        if (entry.isSymbolicLink()) throw new Error('代码仓库包含链接，不能导出。')
         const source = path.join(directory, entry.name)
         if (entry.isDirectory()) await visit(source)
         else if (entry.isFile() && !entry.name.endsWith('.lock')) result.push({ name: path.relative(this.root, source).split(path.sep).join('/'), source })

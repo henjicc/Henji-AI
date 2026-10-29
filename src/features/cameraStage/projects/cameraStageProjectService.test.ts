@@ -12,7 +12,6 @@ import { useCameraStageSessionStore } from '../store/cameraStageSessionStore'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import {
   applyProjectEnvironmentImage,
-  CameraStageLeaveCancelledError,
   createDraftCameraStageDocument,
   createNamedCameraStageDocument,
   duplicateCameraStageDocument,
@@ -89,20 +88,16 @@ describe('镜头参考文档入口', () => {
     expect(useCameraStageSessionStore.getState()).toMatchObject({ appView: 'list', lastDocumentId: null })
   })
 
-  it('新建草稿进入编辑器；打开另一份时先离开草稿，取消则留在原处；返回列表时空草稿直接删除', async () => {
+  it('新建草稿进入编辑器；打开另一份时静默保存草稿；返回列表时空草稿直接删除', async () => {
     commands.seed({ kind: 'camera_stage', id: 'other', name: '另一份', content: sceneContent() })
     const draft = await createDraftCameraStageDocument()
     expect(useCameraStageSessionStore.getState()).toMatchObject({ appView: 'editor', lastDocumentId: draft.id })
     expect(useCameraStageStore.getState().currentProjectId).toBe(draft.id)
 
     useCameraStageStore.getState().addPrimitive('box')
-    prompter.leaveChoices.push('cancel')
-    await expect(openCameraStageDocument({ id: 'other' })).rejects.toBeInstanceOf(CameraStageLeaveCancelledError)
-    expect(useCameraStageStore.getState().currentProjectId).toBe(draft.id)
-
-    prompter.leaveChoices.push('discard')
     await openCameraStageDocument({ id: 'other' })
-    expect(commands.trashed).toEqual([draft.id])
+    expect(commands.trashed).toEqual([])
+    expect(commands.stored(draft.id)!.meta.draft).toBe(true)
     expect(useCameraStageStore.getState().currentProjectId).toBe('other')
     expect(useCameraStageSessionStore.getState().lastDocumentId).toBe('other')
 

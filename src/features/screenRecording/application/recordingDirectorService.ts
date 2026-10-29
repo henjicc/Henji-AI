@@ -33,7 +33,7 @@ export async function planRecordingDirector(input: z.infer<typeof planDirectorIn
     at += Math.max(2, step.narration.length / 4) * 1e6
     return { id, title: step.title, startUs: Math.round(startUs), endUs: Math.round(at), operations: step.operations, narrationIds: [id], wait: { kind: 'capability_completed' as const, settleMs: step.settleMs }, blockedReason: null }
   })
-  const plan = recordingDirectorPlanSchema.parse({ operationScript: { steps }, director: { goal: parsed.goal, voice: parsed.voice, confirmed: false, narration: parsed.steps.map((v, i) => ({ stepId: steps[i].id, text: v.narration, picture: v.picture })) } })
+  const plan = recordingDirectorPlanSchema.parse({ operationScript: { steps }, director: { goal: parsed.goal, voice: parsed.voice, confirmed: true, narration: parsed.steps.map((v, i) => ({ stepId: steps[i].id, text: v.narration, picture: v.picture })) } })
   Object.assign(content.understanding, plan)
   content.directorRun = { takes: [] }
   const ids = [...new Set(steps.flatMap(v => v.operations.filter(o => o.target.kind !== 'settings.registry').map(o => o.target.id.split(':')[0])))]
@@ -53,7 +53,6 @@ export async function startRecordingDirector(id: string, documentId: string, con
   if (runs.size || recordingView().snapshot) throw new Error('请先结束当前导演录制或屏幕录制。')
   const read = await readRecordingUnderstanding(id)
   const plan = recordingDirectorPlanSchema.parse({ director: read.content.understanding.director, operationScript: read.content.understanding.operationScript })
-  if (!plan.director.confirmed) throw new Error('请先确认最新的脚本、旁白和音色。')
   assertDirectorTargets(plan, read.content.scriptCapture)
   if (read.content.directorRun?.movie) throw new Error('这份脚本已有成片提交记录，请打开目标剪辑核对或恢复保存，不要再次录制。')
   const controller = new AbortController(), signal = controller.signal
@@ -75,7 +74,7 @@ export async function startRecordingDirector(id: string, documentId: string, con
   const current = async (): Promise<void> => {
     signal.throwIfAborted()
     const latest = await readRecordingUnderstanding(id)
-    if (latest.meta.revision !== revision || directorPlanIdentity({ director: latest.content.understanding.director!, operationScript: latest.content.understanding.operationScript }) !== originalIdentity) throw new Error('导演脚本已变化，请重新确认。')
+    if (latest.meta.revision !== revision || directorPlanIdentity({ director: latest.content.understanding.director!, operationScript: latest.content.understanding.operationScript }) !== originalIdentity) throw new Error('导演脚本已变化，请重新开始录制。')
   }
   logger.info('开始导演录制', { event: 'recording.director.start', context: { documentId: id, destinationId: documentId, steps: plan.operationScript.steps.length } })
   try {
@@ -86,6 +85,7 @@ export async function startRecordingDirector(id: string, documentId: string, con
     const director = content.understanding.director!
     const run = content.directorRun ??= { takes: [] }
     const pending = director.narration.filter(narration => !run.takes.some(take => take.stepId === narration.stepId && take.identity === narrationIdentity(narration.text, director.voice) && (take.taskId || take.path && take.durationUs)))
+    const generationTasks = new Map(pending.map(narration => [narration.stepId, crypto.randomUUID()]))
     const costs = pending.map(narration => recordingNarrationCost(narration.text, director.voice))
     const estimatedCny = costs.some(v => v === null) ? null : costs.reduce<number>((total, cost) => total + (cost ?? 0), 0)
     const synthesize = async (paidSignal: AbortSignal) => {
@@ -96,11 +96,11 @@ export async function startRecordingDirector(id: string, documentId: string, con
         if (take?.path && take.durationUs) continue
         if (!take) { take = { stepId: narration.stepId, identity }; run.takes = [...run.takes.filter(v => v.stepId !== narration.stepId), take] }
         const entry = take
-        const result = await generateRecordingNarration(narration.text, director.voice, id, { ...context, signal: paidSignal }, { taskId: entry.taskId, dispatched: async taskId => { entry.taskId = taskId; await save() } })
+        const result = await generateRecordingNarration(narration.text, director.voice, id, { ...context, signal: paidSignal }, { taskId: entry.taskId, operationId: generationTasks.get(narration.stepId), dispatched: async taskId => { entry.taskId = taskId; await save() } })
         Object.assign(entry, result); await save()
       }
     }
-    if (pending.length) await withPaidOperation({ category: 'generation', documentId: id, estimatedCny }, synthesize, signal)
+    if (pending.length) await withPaidOperation({ category: 'generation', documentId: id, estimatedCny, generationTaskIds: [...generationTasks.values()] }, synthesize, signal)
     else await synthesize(signal)
     await current()
     let recordingId = run.recordingId

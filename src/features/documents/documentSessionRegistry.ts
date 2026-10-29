@@ -1,4 +1,6 @@
 import { registerApplicationCloseGuard } from '@/core/applicationLifecycle/applicationCloseGuards'
+import { registerRecycleRestorePreparation } from '@/services/recycle'
+import { isPathInside } from '@/core/storage/pathSyntax'
 import * as documentCommands from '@/commands/documents'
 import { documentKindRegistry, type DocumentKindRegistry } from '@/core/documents/kinds'
 import type {
@@ -163,7 +165,7 @@ export class DocumentSessionRegistry {
    * 离开文档（关闭、返回列表、切换文档）：
    * - 已保存过的文档：等最后一次保存完成后关闭，不询问。
    * - 空草稿：直接删除。
-   * - 有内容的草稿：询问“保存 / 不保存 / 取消”。保存进入起名对话框；不保存移到回收站；取消留在原处。
+   * - 有内容的草稿：写完后保留在草稿列表，不要求起名。
    * 失败时抛错，会话保持打开、修改保留。
    */
   async leave(id: string, options: LeaveDocumentOptions = {}): Promise<DocumentLeaveOutcome> {
@@ -180,14 +182,6 @@ export class DocumentSessionRegistry {
     }
     if (session.isEmpty() && await this.deleteEmptyDraft(session)) return 'discarded'
 
-    const choice = await this.prompter.chooseLeaveAction({ subject: 'document', name: session.documentMeta.name })
-    this.logger.info('草稿离开选择', { event: 'documents.session.leave.choice', context: { docId: id, choice } })
-    if (choice === 'cancel') return 'cancelled'
-    if (choice === 'discard') {
-      await this.trashDraft(session)
-      return 'discarded'
-    }
-    if (!await this.promptFinalize(session)) return 'cancelled'
     await finish()
     return 'saved'
   }
@@ -230,7 +224,7 @@ export class DocumentSessionRegistry {
   }
 
   /**
-   * 离开草稿项目：已保存的项目不询问；空项目直接移到回收站；有内容询问“保存 / 不保存 / 取消”。
+   * 离开草稿项目：已保存的项目不询问；空项目直接移到回收站；有内容时写完并保留草稿。
    * 保存时可另选父文件夹（整个项目文件夹移过去）。项目里已打开的文档由本函数一并处理。
    */
   async leaveProject(request: LeaveProjectRequest): Promise<DocumentLeaveOutcome> {
@@ -247,35 +241,6 @@ export class DocumentSessionRegistry {
       await this.trashProject(project, sessions)
       return 'discarded'
     }
-    const choice = await this.prompter.chooseLeaveAction({ subject: 'project', name: project.name })
-    this.logger.info('草稿项目离开选择', { event: 'documents.session.leave_project.choice', context: { projectId: project.id, choice } })
-    if (choice === 'cancel') return 'cancelled'
-    if (choice === 'discard') {
-      await this.trashProject(project, sessions)
-      return 'discarded'
-    }
-    for (const session of sessions) await session.suspend()
-    let saved: boolean
-    try {
-      for (const session of sessions) await session.flush()
-      saved = await this.prompter.askSaveName({
-        subject: { type: 'project' },
-        initialName: project.name,
-        defaultFolder: parentFolderOf(project.path),
-        check: (name, folder) => this.commands.checkName({
-          subject: { type: 'project' },
-          name,
-          location: folder ? { folder } : { renaming: project.path },
-        }),
-        submit: async (name, folder) => {
-          for (const session of sessions) await session.prepareTransfer({ promptOnConflict: false })
-          await this.commands.finalizeProject({ projectId: project.id, name, ...(folder ? { parentFolder: folder } : {}) })
-          for (const session of sessions) await session.relocate()
-          this.logger.info('草稿项目已保存', { event: 'documents.session.finalize_project.completed', context: { projectId: project.id, movedFolder: Boolean(folder) } })
-        },
-      })
-    } finally { for (const session of sessions) session.resume() }
-    if (!saved) return 'cancelled'
     for (const session of sessions) await session.close()
     return 'saved'
   }
@@ -386,19 +351,6 @@ export class DocumentSessionRegistry {
     return true
   }
 
-  private async trashDraft(session: DocumentSession): Promise<void> {
-    await session.suspend()
-    try {
-      await this.commands.trashDocument(session.target)
-    } catch (error) {
-      session.resume()
-      this.logger.warn('草稿移到回收站失败', { event: 'documents.session.leave.trash_failed', error: toError(error), context: { docId: session.id } })
-      throw error
-    }
-    await session.discard()
-    this.logger.info('草稿已移到回收站', { event: 'documents.session.leave.trashed', context: { docId: session.id } })
-  }
-
   private async trashProject(project: ProjectSummary, sessions: DocumentSession[]): Promise<void> {
     for (const session of sessions) await session.suspend()
     try {
@@ -431,6 +383,21 @@ let defaultRegistry: DocumentSessionRegistry | null = null
 export function getDocumentSessionRegistry(): DocumentSessionRegistry {
   if (!defaultRegistry) {
     const registry = new DocumentSessionRegistry()
+    registerRecycleRestorePreparation(async item => {
+      const path = item.path
+      const sessions = path ? registry.list().filter(session => {
+        const style = /^[A-Za-z]:[\\/]|^[\\/]{2}/.test(path) ? 'win32' : 'posix'
+        return isPathInside(style, path, session.documentMeta.path)
+      }) : []
+      const suspended: DocumentSession[] = []
+      try {
+        for (const session of sessions) { await session.suspend(); suspended.push(session); await session.commit('save') }
+      } catch (error) { for (const session of suspended) session.resume(); throw error }
+      return async restored => {
+        try { if (restored) for (const session of sessions) await session.reload() }
+        finally { for (const session of sessions) session.resume() }
+      }
+    })
     registerApplicationCloseGuard(() => registry.prepareApplicationClose())
     defaultRegistry = registry
   }

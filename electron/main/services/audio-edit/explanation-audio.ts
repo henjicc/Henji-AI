@@ -135,7 +135,6 @@ export class ExplanationAudioService {
     await this.asr.preflight({ modelId: request.modelId, sourcePath: audioPath, durationMs })
   }
   async transcribe(request: Extract<RecordingAudioRequest, { action: 'transcribe' }>): Promise<RecordingAudioResult> {
-    if (!request.audioUploadReceipt) throw new Error('请先确认音频外发与转写费用。')
     if (this.active.has(request.sessionId)) throw new Error('这次讲解正在转写，请等待或取消。')
     const controller = new AbortController(); this.active.set(request.sessionId, controller)
     try {
@@ -146,7 +145,6 @@ export class ExplanationAudioService {
     } finally { this.active.delete(request.sessionId) }
   }
   private async performTranscription(request: Extract<RecordingAudioRequest, { action: 'transcribe' }>, controller: AbortController, processedPath?: string): Promise<RecordingAudioResult> {
-    if (!request.audioUploadReceipt) throw new Error('请先确认音频外发与转写费用。')
     const { audioPath: originalPath, durationMs, projectId, inputDigest, sourceDigest, existing, prior, neverSubmitted } = await this.prepareRecording(request)
     const audioPath = processedPath ?? originalPath
     if (prior?.output) return prior.output

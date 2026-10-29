@@ -1,4 +1,3 @@
-type AssistantCliApprovalMode = 'ask' | 'assistant_decides' | 'full_access'
 import type { AgentTraceCaptureMode } from '../../../src/core/assistant/trace'
 
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1_000
@@ -6,7 +5,6 @@ const MAX_TIMEOUT_MS = 60 * 60 * 1_000
 
 export interface AssistantCliOptions {
   goal: string
-  approvalMode: AssistantCliApprovalMode
   captureMode: AgentTraceCaptureMode
   visible: boolean
   timeoutMs: number
@@ -25,10 +23,6 @@ function requireValue(args: string[], index: number, name: string): string {
   return value
 }
 
-function parseApprovalMode(value: string): AssistantCliApprovalMode {
-  if (value === 'ask' || value === 'assistant_decides' || value === 'full_access') return value
-  throw new Error('参数 --approval 仅支持 ask、assistant_decides 或 full_access')
-}
 
 function parseCaptureMode(value: string): AgentTraceCaptureMode {
   if (value === 'summary' || value === 'detailed') return value
@@ -52,7 +46,6 @@ export function parseAssistantCliArguments(argv: string[] = process.argv.slice(1
   if (argv.includes('--help') || argv.includes('-h')) return { help: true }
 
   let goal: string | undefined
-  let approvalMode: AssistantCliApprovalMode = 'assistant_decides'
   let captureMode: AgentTraceCaptureMode = 'summary'
   let visible = false
   let timeoutMs = DEFAULT_TIMEOUT_MS
@@ -65,10 +58,6 @@ export function parseAssistantCliArguments(argv: string[] = process.argv.slice(1
         break
       case '--goal':
         goal = requireValue(argv, index, argument).trim()
-        index += 1
-        break
-      case '--approval':
-        approvalMode = parseApprovalMode(requireValue(argv, index, argument))
         index += 1
         break
       case '--trace':
@@ -96,7 +85,7 @@ export function parseAssistantCliArguments(argv: string[] = process.argv.slice(1
   if (threadId && threadId.length > 200) throw new Error('参数 --thread 不能超过 200 个字符')
 
   return {
-    goal, approvalMode, captureMode, visible,
+    goal, captureMode, visible,
     timeoutMs, ...(threadId ? { threadId } : {}),
   }
 }
@@ -106,13 +95,12 @@ export function formatAssistantCliHelp(): string {
     '用法：npm run assistant:cli -- --goal "任务描述" [选项]',
     '',
     '选项：',
-    '  --approval <ask|assistant_decides|full_access>  审批策略，默认 assistant_decides',
     '  --trace <summary|detailed>                      追踪捕获级别，使用统一日志',
     '  --visible                                       显示真实 Electron 窗口，便于观察执行过程',
     '  --timeout <毫秒>                                最长运行时间，默认 600000，最大 3600000',
     '  --thread <标识>                                 续聊上一轮输出的 threadId；省略则新建对话',
     '  --help                                          显示本帮助',
     '',
-    '输出为 JSONL；finished 的 threadId 可用于下一轮 --thread，不能自行编造新标识。Pi 默认只读，回复完成不代表业务结果验收；用 runId 查询统一日志。',
+    '输出为 JSONL；finished 的 threadId 可用于下一轮 --thread，不能自行编造新标识。CLI 默认可写，付费遵守统一策略，回复完成不代表业务结果验收；用 runId 查询统一日志。',
   ].join('\n')
 }

@@ -29,17 +29,12 @@ const activeToken = (value: DocumentSummary): unknown => {
 export async function readVideoEditContentDocuments(options: Options, container: DocumentContainerRef, mediaPath: string,
   context: Pick<CapabilityExecutionContext, 'signal' | 'callerGrant' | 'requestId'>, onProgress?: (update: MediaContentQueryProgressUpdate) => void) {
   const platform = getPlatform(); const signal = context.signal
-  const permissions = context.callerGrant?.permissions
-  const permitted = (permission: 'audio_edit:read' | 'screen_recording:read'): boolean => !permissions || permissions.includes(permission)
-  if (options.audioDocumentRef && !permitted('audio_edit:read')) throw new Error('PERMISSION_DENIED:读取关联口播需要 audio_edit:read。')
-  if (options.recordingRef && !permitted('screen_recording:read')) throw new Error('PERMISSION_DENIED:读取关联录制需要 screen_recording:read。')
   const warnFailure = (id: string, error: unknown): void => {
     logger.warn('素材关联文档发现不完整', { event: 'video_edit.content_index.discovery.incomplete', requestId: context.requestId, context: { documentId: id }, error })
   }
   const catalog = async (report = true): Promise<Catalog> => {
     const entries: DocumentSummary[] = []; const warnings: string[] = []; const failures: string[] = []
-    if (options.discoveryScope !== 'none') for (const [kind, permission] of [['audio_edit', 'audio_edit:read'], ['screen_recording', 'screen_recording:read']] as const) {
-      if (!permitted(permission)) { warnings.push(`没有${kind === 'audio_edit' ? '口播' : '录制'}读取权限，未发现这类关联文档。`); failures.push(kind); continue }
+    if (options.discoveryScope !== 'none') for (const kind of ['audio_edit', 'screen_recording'] as const) {
       let cursor: string | undefined
       const seen = new Set<string>()
       try {

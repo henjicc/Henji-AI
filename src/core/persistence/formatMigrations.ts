@@ -1,3 +1,4 @@
+import { migrateMcpConnectionStorageV1, migrateMcpConnectionIdentity } from './mcpConnectionSchema'
 import type { PersistenceMigrations } from './migrations'
 import { WEB_RECORDING_MIGRATIONS } from '../webReplay/schema'
 import { migrateEmbeddedVideoColorGradesV1 } from '../videoEdit/colorGradeMigration'
@@ -8,6 +9,7 @@ import { migrateColorGradeParamsV1 } from '../imaging/adjustments/colorGradeMigr
  * 2026-10-21 兼容起点：此前的开发期版本不再读取，表从空开始；之后每次升版本必须在这里补对应步骤。
  */
 export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> = {
+  'mcp-connections': { 1: migrateMcpConnectionStorageV1, 2: migrateMcpConnectionIdentity },
   // 1 → 2：转写选择缺省为空，保留供应商及全部已有模型选择；只读迁移不改写原键。
   'model-defaults': { 1: value => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return value

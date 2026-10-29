@@ -45,7 +45,7 @@ export function imageEditPersistencePermissionsV3(ref: ApplicationRef): readonly
 /** 由 core 单入口调用；跨图层/组/蒙版/标注按同一 owner 去重。 */
 export function resolveImageEditPersistenceParticipantsV3(
   steps: readonly ApplicationPlannedStep[],
-  context: ApplicationExecutionContext,
+  _context: ApplicationExecutionContext,
 ): ApplicationPersistenceParticipant[] {
   const owners = new Map<string, ApplicationPersistenceParticipant>()
   for (const step of steps) {
@@ -55,9 +55,6 @@ export function resolveImageEditPersistenceParticipantsV3(
     const id = imageEditPersistenceDocumentId(step.kind === 'mutation' ? step.target : step.parent)
     if (!id) continue
     const owner = requireImageEditPersistenceOwnerV3(id)
-    if (owner.projection?.requiredPermissions.some((permission) => !context.permissions.has(permission))) {
-      throw new Error('PERMISSION_DENIED:图片文档节点保存需要原画布的写入权限')
-    }
     owners.set(owner.key, owner)
   }
   return [...owners.values()]
@@ -67,7 +64,7 @@ export function resolveImageEditPersistenceParticipantsV3(
 export async function runImageEditPersistedOperationV3<T>(
   documentId: string,
   context: ApplicationExecutionContext | undefined,
-  execute: (context: ApplicationExecutionContext | undefined) => Promise<T>,
+  execute: (_context: ApplicationExecutionContext | undefined) => Promise<T>,
 ): Promise<T> {
   return withImageEditDocumentInstanceV3(documentId, async () => {
     const owner = requireImageEditPersistenceOwnerV3(documentId)

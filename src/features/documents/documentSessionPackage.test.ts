@@ -139,12 +139,11 @@ describe('单文件包会话', () => {
   })
 
   it('重新定位与冲突后重新载入都由保存策略读取', async () => {
-    const { registry, persistence, seeded, prompter } = setup()
+    const { registry, persistence, seeded } = setup()
     const session = await registry.open({ id: seeded.id }, { persistence })
     await session.relocate()
     expect(persistence.log).toContain('read:relocate')
 
-    prompter.conflictChoices.push('reload')
     const save = persistence.save.bind(persistence)
     let failed = false
     persistence.save = async (request) => {
@@ -157,6 +156,7 @@ describe('单文件包会话', () => {
     session.markChanged()
     await vi.advanceTimersByTimeAsync(800)
     await vi.runOnlyPendingTimersAsync()
+    await session.resolveConflict('reload')
     expect(persistence.log).toContain('read:reload')
   })
 })

@@ -39,7 +39,7 @@ export async function handleVideoEditStyleCapability(id: string, raw: unknown, s
     }
     case importVideoEditStylePackageCapability.id: {
       const input = importVideoEditStylePackageCapability.inputSchema.parse(raw)
-      const result = await importVideoEditStylePackage(input.path, { replace: input.replace }, undefined, signal)
+      const result = await importVideoEditStylePackage(input.path)
       const back = videoEditStyleLibrary.findStyle(result.style.id)
       return { resultRef: { kind: 'video_edit.style', id: result.style.id }, templateRefs: result.templates.map(template => ({ kind: 'video_edit.template', id: template.id })), replaced: result.replaced,
         verification: { verified: Boolean(back && back.style.version === result.style.version && result.templates.every(template => videoEditStyleLibrary.findTemplate(template.id))), condition: '已从风格库目录回读导入的风格与模板。' },
@@ -47,14 +47,14 @@ export async function handleVideoEditStyleCapability(id: string, raw: unknown, s
     }
     case exportVideoEditStylePackageCapability.id: {
       const input = exportVideoEditStylePackageCapability.inputSchema.parse(raw)
-      const result = await exportVideoEditStylePackage(input.styleRef.id, input.path, { overwrite: input.overwrite })
+      const result = await exportVideoEditStylePackage(input.styleRef.id, input.path)
       return { resultRef: input.styleRef, path: result.path, templateCount: result.templates.length, bytes: result.bytes, verification: { verified: result.bytes > 0, condition: '已写出风格包文件。' },
         message: `已导出“${result.style.name}” v${result.style.version}${result.templates.length ? `（含 ${result.templates.length} 个模板）` : ''}到 ${result.path}；不含字体，告诉对方需要装说明书里写的字体。` }
     }
     case bindVideoEditStyleCapability.id: {
       const input = bindVideoEditStyleCapability.inputSchema.parse(raw); const projectId = input.documentRef.id
       const sequenceId = child(projectId, input.sequenceRef)
-      const result = await bindVideoEditStyle(projectId, sequenceId, input.styleRef.id, { replace: input.replace })
+      const result = await bindVideoEditStyle(projectId, sequenceId, input.styleRef.id)
       const ok = await saved(projectId) && requireVideoEditInstance(projectId).document.sequences.find(value => value.id === sequenceId)?.styleId === result.style.id
       return { resultRef: { kind: 'video_edit.project_style', id: `${projectId}:${result.style.id}` }, sequenceRef: input.sequenceRef, version: result.style.version, upgraded: result.upgraded, previous: result.previous ?? null,
         verification: { verified: ok, condition: '已保存剪辑并回读序列绑定与工程风格副本。' },

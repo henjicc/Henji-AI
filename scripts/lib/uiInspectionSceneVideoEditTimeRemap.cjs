@@ -70,7 +70,7 @@ function createVideoEditTimeRemapScene() {
         await button(page, '剪辑').first().click(); if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await observeWorkers(page); observed = true
         await dialogs(app, [file], file); await openVideoEditFile(page, file); await presented(page, 0)
-        const identity = await authorizeMcpConnection(page, { name: '时间重映射', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji time remap Reality')
+        const identity = await authorizeMcpConnection(page, { name: '时间重映射' }); client = await connectMcpClient(identity.config, 'Henji time remap Reality')
         // 片段先拉到 12 秒原速，再在 3 秒处做 30% 慢放（保持 1.5 秒）、在 9 秒处加速到 200%。
         let read = await callTool(client, 'read_application_entity', { ref: clipRef })
         const widened = await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: '拉长片段', changes: [{ kind: 'set_properties', entityType: 'video_edit.clip', target: clipRef, properties: { 'video_edit.clip.duration': 720 } }, { kind: 'set_properties', entityType: 'video_edit.clip', target: { kind: 'video_edit.clip', id: `${PROJECT_ID}:ramp-audio` }, properties: { 'video_edit.clip.duration': 720 } }] }))

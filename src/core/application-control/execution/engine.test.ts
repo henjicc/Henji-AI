@@ -1,7 +1,16 @@
+import { ApplicationTransactionVerifier } from './verifier'
 import { describe, expect, it, vi } from 'vitest'
 import { createFixture, createEngine, context, mutationStep, collectionStep, removalStep } from './engineTestFixture'
 
 describe('ApplicationControlExecutionEngine', () => {
+  it.each([['NOT_FOUND：已移到回收区', true], ['索引读取失败', false]] as const)('删除验证识别领域缺失，拒绝将读取失败当成删除成功：%s', async (message, verified) => {
+    const fixture = createFixture()
+    vi.spyOn(fixture.registry, 'readEntity').mockRejectedValue(new Error(message))
+    const result = await new ApplicationTransactionVerifier(fixture.registry).verify([
+      { kind: 'entity_absent', target: { kind: 'sample.item', id: 'removed' } },
+    ], [], context(), new Date())
+    expect(result.verified).toBe(verified)
+  })
   it('计划中删除后不再对同一目标使用旧快照写属性', async () => {
     const { engine } = createEngine(createFixture())
     await expect(engine.plan({ summary: '删除后再写', transactionMode: 'non_reversible', steps: [removalStep('one'), mutationStep('one', 6)] }, context())).rejects.toThrow('PROPERTY_OPERATION_CONFLICT')
@@ -9,7 +18,7 @@ describe('ApplicationControlExecutionEngine', () => {
 
   it('两次属性写入中间有语义操作时拒绝沿用计划内旧值', async () => {
     const { engine } = createEngine(createFixture())
-    engine.registerOperationExecutor({ capabilityId: 'transform_sample_item', capabilityVersion: 1, risk: 'R1', requiredPermissions: ['sample:write'], supportsAtomic: false,
+    engine.registerOperationExecutor({ capabilityId: 'transform_sample_item', capabilityVersion: 1, requiredPermissions: ['sample:write'], supportsAtomic: false,
       effectContract: { direct: [], cascades: [] }, normalizeInput: input => input, getCurrentRevisions: async () => ({ 'sample.scope': 0 }),
       execute: vi.fn(),
     })
@@ -84,7 +93,7 @@ describe('ApplicationControlExecutionEngine', () => {
     const undo = async () => completed()
     engine.registerCollectionExecutor({ entityType: 'sample.item', effectContract: { direct: [], cascades: [] },
       apply: async () => { fixture.values.delete('one'); return execute() }, undo, forget })
-    engine.registerOperationExecutor({ capabilityId: 'release_sample', capabilityVersion: 1, risk: 'R1', requiredPermissions: ['sample:write'], supportsAtomic: false,
+    engine.registerOperationExecutor({ capabilityId: 'release_sample', capabilityVersion: 1, requiredPermissions: ['sample:write'], supportsAtomic: false,
       effectContract: { direct: [], cascades: [] }, normalizeInput: input => input, getCurrentRevisions: async () => ({ 'sample.scope': 0 }), execute, undo, forget })
     let latest = ''
     for (let index = 0; index < 257; index++) {
@@ -218,21 +227,7 @@ describe('ApplicationControlExecutionEngine', () => {
     expect(executor.applyCount).toBe(0)
   })
 
-  it('计划后写权限被收回时拒绝提交', async () => {
-    const fixture = createFixture()
-    const { engine, executor } = createEngine(fixture)
-    const plan = await engine.plan({
-      summary: '更新数值', transactionMode: 'atomic', steps: [mutationStep('one', 6)],
-    }, context())
-    const denied = await engine.commit({
-      planRef: plan.planRef,
-      expectedRevisions: { 'sample.scope': 0 },
-      idempotencyKey: 'idempotency-permission-01',
-    }, context(['sample:read']))
-    expect(denied.status === 'failed' && denied.code).toBe('PERMISSION_DENIED')
-    expect(executor.applyCount).toBe(0)
-    expect(fixture.values.get('one')).toBe(2)
-  })
+
 
   it('提交具备幂等、结构化验证和可逆撤销', async () => {
     const fixture = createFixture()
@@ -385,14 +380,13 @@ describe('ApplicationControlExecutionEngine', () => {
     expect(fixture.values.get('one')).toBe(2)
   })
 
-  it('语义操作风险来自注册执行器且提交需要明确批准', async () => {
+  it('语义操作直接提交并验证正式结果', async () => {
     const fixture = createFixture()
     const { engine } = createEngine(fixture)
     engine.registerOperationExecutor({
       effectContract: { direct: [], cascades: [] },
       capabilityId: 'publish_sample_item',
       capabilityVersion: 1,
-      risk: 'R2',
       requiredPermissions: ['sample:write'],
       supportsAtomic: true,
       normalizeInput: (input) => input,
@@ -416,18 +410,10 @@ describe('ApplicationControlExecutionEngine', () => {
         expectedRevisions: { 'sample.scope': 0 },
       }],
     }, context())
-    expect(plan).toMatchObject({ risk: 'R2', requiresApproval: true })
-    const denied = await engine.commit({
-      planRef: plan.planRef,
-      expectedRevisions: { 'sample.scope': 0 },
-      idempotencyKey: 'idempotency-denied-001',
-    }, context())
-    expect(denied.status === 'failed' && denied.code).toBe('PERMISSION_DENIED')
     const completed = await engine.commit({
       planRef: plan.planRef,
       expectedRevisions: { 'sample.scope': 0 },
       idempotencyKey: 'idempotency-approved-1',
-      approvedRisk: 'R2',
     }, context())
     expect(completed.status).toBe('completed')
   })

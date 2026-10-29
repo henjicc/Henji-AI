@@ -15,7 +15,6 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 beforeEach(() => {
   installHarnessNativeStorage()
   vi.spyOn(getPlatform().system.paths, 'dirname').mockImplementation(async path => path.replace(/[\\/][^\\/]+$/, ''))
-  vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined)
 })
 it('公共查询在完成占位清理后重开仍从持久来源与镜头版本读回，撤销删除后不谎报已落位', async () => {
   const owner = await createVideoEditProject(); const id = owner.document.id

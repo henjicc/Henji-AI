@@ -149,7 +149,7 @@ function createVideoEditPictureGestureScene() {
         const canvas = page.getByLabel('剪辑画面', { exact: true })
         evidence.firstDecode = { openToPresentedMs: performance.now() - openedAt, ...(await canvas.evaluate(canvas => ({ width: canvas.width, height: canvas.height, ...canvas.dataset }))) }
         assert.equal(evidence.firstDecode.width, 3840); assert.equal(evidence.firstDecode.height, 2160)
-        const identity = await authorizeMcpConnection(page, { name: '原4K画面移动回环', allowWrites: true, allowDestructive: true })
+        const identity = await authorizeMcpConnection(page, { name: '原4K画面移动回环' })
         client = await connectMcpClient(identity.config, 'Henji picture gesture Reality')
         const projectRef = { kind: 'video_edit.document', id: project.id }; const clipRef = { kind: 'video_edit.clip', id: `${project.id}:${target.id}` }
         const read = (ref, propertyIds) => callTool(client, 'read_application_entity', { ref, propertyIds })

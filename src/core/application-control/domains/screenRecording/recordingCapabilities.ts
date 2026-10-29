@@ -25,7 +25,7 @@ export const startRecordingInputSchema = z.object({
 }).strict()
 const output = capabilityOutputSchema({ resultRef: recordingRefSchema, verified: z.boolean() })
 // These operations expose user document metadata and sanitized event facts, never pixels, audio or typed text.
-const common = { version: 1, domain: RECORDING_DOMAIN, readOnly: false, risk: 'R1' as const, dataClasses: ['C1' as const], permission: 'screen_recording:write', idempotent: false, destructive: false,
+const common = { version: 1, domain: RECORDING_DOMAIN, readOnly: false, dataClasses: ['C1' as const], permission: 'screen_recording:write', idempotent: false, destructive: false,
   timeoutMs: 60000, supportsPreview: false, supportsUndo: false, requiredScopes: [], concurrencyKey: 'screen_recording', outputSchema: output }
 const start = defineApplicationCapability({ ...common, id: 'start_screen_recording', title: '开始屏幕录制',
   description: '录制所选显示器、窗口或比例区域，同时采集选定声音、摄像头和操作事件。倒计时后后台录制，切页不会中断。需要屏幕及所选设备的系统权限，不收费。返回录制会话引用，通用读取其 phase/elapsed_ms；用 stop_screen_recording 保存或 cancel_screen_recording 中止。',
@@ -52,12 +52,12 @@ export const RECORDING_CAPABILITIES = [start, ...WEB_APP_RECORDING_CAPABILITIES,
   control: capabilityControl('execute', ['screen_recording.session']), summarize: () => `${title}已完成。`,
 })), defineApplicationCapability({
   ...common, id: 'read_screen_recording_events', title: '读取录制事件', description: '分页校验并读取已封存的录制事件或标记。offset 从 0 开始，按返回的 nextOffset 续读；暂停期间无虚构事件，按键只有类别。',
-  aliases: ['读录屏日志', '录制标记'], readOnly: true, risk: 'R0', permission: 'screen_recording:read', idempotent: true,
+  aliases: ['读录屏日志', '录制标记'], readOnly: true, permission: 'screen_recording:read', idempotent: true,
   inputSchema: z.object({ sessionRef: recordingRefSchema, offset: z.number().int().nonnegative().default(0), limit: z.number().int().min(1).max(256).default(100), markersOnly: z.boolean().default(false) }).strict(),
   outputSchema: capabilityOutputSchema({ events: z.array(captureEventSchema), nextOffset: z.number().int().nonnegative().nullable() }),
   acceptsRefs: ['screen_recording.session'], control: capabilityControl('observe', ['screen_recording.session']), summarize: result => `已读取 ${result.events.length} 条事件。`,
 }), defineApplicationCapability({
-  ...common, id: 'import_screen_recording', permission: 'video_edit:write', title: '将录制导入剪辑', description: '把已保存或恢复的会话原片引用导入指定剪辑素材库；给 sequenceId 时按同一时钟放到 frame 处，保留暂停与缺帧空档，一步撤销。无需复制文件。需要录制读取与剪辑写入权限。',
+  ...common, id: 'import_screen_recording', permission: 'video_edit:write', title: '将录制导入剪辑', description: '把已保存或恢复的会话原片引用导入指定剪辑素材库；给 sequenceId 时按同一时钟放到 frame 处，保留暂停与缺帧空档，一步撤销。无需复制文件。',
   aliases: ['录屏进剪辑', '录制素材导入'], supportsUndo: true,
   inputSchema: z.object({ sessionRef: recordingRefSchema, destination: recordingDestinationSchema }).strict(),
   outputSchema: capabilityOutputSchema({ resultRef: z.object({ kind: z.literal('video_edit.document'), id: z.string() }).strict(), itemIds: z.array(z.string()), verified: z.boolean() }),

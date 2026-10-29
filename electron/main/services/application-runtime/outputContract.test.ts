@@ -100,8 +100,6 @@ const successData: Record<string, Record<string, unknown>> = {
   create_project: { resultRef: ref('documents.project', 'project'), name: '创作项目', ...revisions },
   migrate_project_code_storage: { resultRef: ref('documents.project', 'project'), relocatedFiles: 2, importedVersions: 3, archivedFolders: 2, retainedFolders: 0, ...revisions },
   register_external_project: { resultRef: ref('documents.project', 'project'), name: '元宝搜索', external: true, documentCount: 0, ...revisions },
-  trash_document: { resultRef: ref('documents.document'), name: '字幕项目', status: 'trashed', ...revisions },
-  trash_project: { resultRef: ref('documents.project', 'project'), name: '创作项目', status: 'trashed', ...revisions },
   export_document_package: { fileName: '字幕项目.henji', files: 1, missingFiles: 0, ...revisions },
   list_toolbox_tools: { tools: [{ id: 'image_edit', title: '图片编辑' }], ...revisions },
   get_toolbox_state: { state: { currentToolId: 'image_edit' }, ...revisions },
@@ -115,7 +113,6 @@ const successData: Record<string, Record<string, unknown>> = {
   list_asset_libraries: { libraries: [{ id: 'library', name: '素材' }], ...revisions },
   list_asset_tags: { tags: ['镜头'], ...revisions },
   select_asset: { assetId: 'asset', ...revisions },
-  delete_asset: { assetId: 'asset', status: 'deleted', ...revisions },
   switch_workspace: { workspace: 'videoEdit', ...revisions },
   open_application_surface: { ...revisions },
   close_application_surface: { ...revisions },
@@ -281,7 +278,7 @@ for (const name of ['create_video_edit_multicam', 'auto_switch_video_edit_multic
 }
 // 正式文档处理器的 verifyDocument/项目回执及生成取消回执已自行核实，并带 target。
 // 它们属于 passthrough 领域输出，公共桥接须保留，公共 schema 也必须明确声明。
-for (const name of ['create_document', 'open_document', 'move_document', 'duplicate_document', 'collect_document_media', 'trash_document', 'create_project', 'register_external_project', 'trash_project', 'export_document_package', 'cancel_generation_task']) {
+for (const name of ['create_document', 'open_document', 'move_document', 'duplicate_document', 'collect_document_media', 'create_project', 'register_external_project', 'export_document_package', 'cancel_generation_task']) {
   const data = successData[name]
   const target = name === 'cancel_generation_task' ? ref('generation.task', 'task')
     : name === 'export_document_package' ? ref('documents.document') : data.resultRef as { kind: string; id: string }
@@ -295,7 +292,7 @@ for (const name of ['reset_audio_edit', 'format_audio_edit_subtitles', 'quick_pr
 }
 
 const host = new ApplicationHostBridge(() => {})
-const tools = buildApplicationToolCatalog({ tools: host.tools(), access: { allowWrites: true, allowPaid: true, allowDestructive: true }, operationsEnabled: true, includeSkillTool: true }).tools
+const tools = buildApplicationToolCatalog({ tools: host.tools(), includeSkillTool: true }).tools
 const validator = applicationOutputValidator
 // 本轮有 outputSchema 的工具均有回执；未来不可构造的工具必须逐个登记具体原因，不能按域豁免。
 const uncoveredTools: Record<string, string> = {}
@@ -351,7 +348,7 @@ describe('外部客户端成功输出 JSON Schema 契约', () => {
     }
   })
   it.each(['external', 'embedded'] as const)('%s 的真实派发出口拒绝投影后多余字段', async kind => {
-    const dispatcher = new ApplicationToolDispatcher({ assertActive() {}, access: () => ({ allowWrites: true, allowPaid: true, allowDestructive: true }) }, host, undefined, 0, kind)
+    const dispatcher = new ApplicationToolDispatcher({ assertActive() {} }, host, undefined, 0, kind)
     const execute = vi.spyOn(host, 'execute').mockResolvedValueOnce({ ok: true, data: { ...successData.read_application_entity, ref: { ...documentRef, unexpected: true } } })
     try {
       await expect(dispatcher.call('fixture', 'read_application_entity', { ref: documentRef }, new AbortController().signal)).rejects.toThrow('APPLICATION_OUTPUT_CONTRACT')

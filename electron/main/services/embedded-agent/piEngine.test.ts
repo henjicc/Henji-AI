@@ -94,13 +94,13 @@ async function fixture(capabilities: Partial<LlmModelConfig['capabilities']> = {
   return { engine, requests, headers, events, tool, directory, configuration, setUsage: (value: Record<string, unknown>) => { usage = value }, setMode: (value: typeof mode) => { mode = value },
     setToolPlan: (value: typeof toolPlan) => { toolPlan = value } }
 }
-function applicationCatalog(allowWrites = true) {
+function applicationCatalog() {
     const tools = APPLICATION_CAPABILITY_IDS.map(id => {
       const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(id)!
       return { id, version: definition.version, title: definition.title, description: definition.description,
         inputSchema: z.toJSONSchema(definition.inputSchema, { io: 'input' }) as Record<string, unknown> }
     })
-    return buildApplicationToolCatalog({ tools, access: { allowWrites, allowDestructive: allowWrites, allowPaid: allowWrites }, operationsEnabled: true })
+    return buildApplicationToolCatalog({ tools })
 }
 
 describe('Pi official SDK engine', () => {
@@ -136,9 +136,9 @@ describe('Pi official SDK engine', () => {
     expect(f.requests.at(-1)?.reasoning_effort).toBe('low')
   })
 
-  it('剪辑创作首轮给出核心创作工具，名称都在正式目录，保留授权过滤，切回顺序不变', () => {
-    for (const allowWrites of [true, false]) {
-      const catalog = applicationCatalog(allowWrites).tools
+  it('剪辑创作首轮给出核心创作工具，名称都在正式目录，切回顺序不变', () => {
+    {
+      const catalog = applicationCatalog().tools
       let active: string[] = []
       const session = { getActiveToolNames: () => active, setActiveToolsByName: (names: string[]) => { active = names } } as AgentSession
       const tools: ToolDefinition[] = catalog.map(tool => ({ ...tool, label: tool.name, description: tool.description ?? tool.name,
@@ -149,8 +149,7 @@ describe('Pi official SDK engine', () => {
       expect(first).toEqual([...first].sort())
       expect(first).toEqual(expect.arrayContaining(videoEditCreativeTools().filter(name => catalog.some(tool => tool.name === name))))
       expect(first).toEqual(expect.arrayContaining(['observe_video_edit_frame', 'read_application_media', 'analyze_video_edit_color']))
-      if (allowWrites) expect(first).toEqual(expect.arrayContaining(['change_application_entities', ...videoEditCreativeTools()]))
-      else expect(first).not.toContain('generate_video_edit_in_place')
+      expect(first).toEqual(expect.arrayContaining(['change_application_entities', ...videoEditCreativeTools()]))
       expect(first).not.toContain('apply_video_edit_template')
       disclosure.prepareContext('{"surface":{"id":"workspace.canvas"}}')
       disclosure.prepareContext('{"surface":{"id":"workspace.video_edit"}}')
@@ -354,7 +353,7 @@ describe('Pi official SDK engine', () => {
     }
   })
 
-  it('画布一次加载生成闭环，跨界面不携带旧工具，回到原界面和冷恢复可复用且降权有效', async () => {
+  it('画布一次加载生成闭环，跨界面不携带旧工具，回到原界面和冷恢复可复用', async () => {
     const f = await fixture()
     const configuration = { ...f.configuration, tools: applicationCatalog().tools }
     const canvas = '{"surface":{"id":"workspace.canvas"},"project":{"id":"origin"}}'
@@ -390,16 +389,16 @@ describe('Pi official SDK engine', () => {
     await restored.command({ action: 'prompt', input: { text: '继续', context: canvas } })
     expect(names(-1)).toContain('create_visible_generation_task')
     expect(byName(f.requests.at(-1)!.tools)).toEqual(byName(loadedTools))
-    await restored.command({ action: 'configure', input: { ...configuration, tools: applicationCatalog(false).tools } })
+    await restored.command({ action: 'configure', input: { ...configuration, tools: applicationCatalog().tools } })
     await restored.command({ action: 'prompt', input: { text: '只读', context: canvas } })
-    expect(names(-1)).not.toContain('create_visible_generation_task')
-    expect(names(-1)).not.toContain('change_application_entities')
+    expect(names(-1)).toContain('create_visible_generation_task')
+    expect(names(-1)).toContain('change_application_entities')
   })
 
   it.each([
     { name: 'create_image_edit_preview', arguments: {} },
     { name: 'duplicate_canvas_node', arguments: { domains: ['canvas'] } },
-  ])('官方 SDK 按需加载 $name 后可调用，冷恢复保留状态且降权不恢复无权工具', async ({ name, arguments: loadArguments }) => {
+  ])('官方 SDK 按需加载 $name 后可调用，冷恢复保留状态', async ({ name, arguments: loadArguments }) => {
     const f = await fixture()
     const configuration = { ...f.configuration, tools: [...f.configuration.tools,
       { name, description: '待加载业务工具', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false } }] }

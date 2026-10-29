@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-interface LibraryRow { id: string; name: string; created_at: number; updated_at: number }
+interface LibraryRow { id: string; name: string; created_at: number; updated_at: number; deleted_at?: number | null }
 interface ItemRow { library_id: string; asset_id: string; added_at: number }
 
 class FakeAssetLibraryDb {
@@ -10,8 +10,12 @@ class FakeAssetLibraryDb {
 
   prepare(sql: string) {
     if (sql.startsWith('SELECT * FROM asset_libraries')) {
-      return { get: (id: string) => this.libraries.get(id) }
+      return { get: (id: string) => { const row = this.libraries.get(id); return sql.includes('deleted_at IS NULL') && row?.deleted_at != null ? undefined : row } }
     }
+    if (sql.startsWith('UPDATE asset_libraries SET deleted_at')) return { run: (at: number, id: string) => { const row = this.libraries.get(id); if (!row || row.deleted_at != null) return { changes: 0 }; row.deleted_at = at; return { changes: 1 } } }
+    if (sql.startsWith('SELECT 1 FROM asset_libraries')) return { get: (name: string, id: string) => [...this.libraries.values()].find(row => row.id !== id && row.deleted_at == null && row.name.toLowerCase() === name.toLowerCase()) }
+    if (sql.startsWith('UPDATE asset_libraries SET name')) return { run: (name: string, id: string) => { const row = this.libraries.get(id)!; row.name = name; row.deleted_at = null } }
+    if (sql.startsWith('SELECT id,name,created_at AS createdAt')) return { get: (id: string) => { const row = this.libraries.get(id)!; return { id: row.id, name: row.name, createdAt: row.created_at, updatedAt: row.updated_at } } }
     if (sql.startsWith('SELECT asset_id FROM asset_library_items')) {
       return { all: (libraryId: string) => this.items.filter((item) => item.library_id === libraryId) }
     }
@@ -24,18 +28,18 @@ class FakeAssetLibraryDb {
       } }
     }
     if (sql.startsWith('INSERT INTO asset_libraries')) {
-      return { run: (id: string, name: string, createdAt: number, updatedAt: number) => {
-        if (this.libraries.has(id)) throw new Error('UNIQUE constraint failed')
+      return { run: (id: string, name: string, createdAt: number, updatedAt: number, deletedAt?: number) => {
+        if (this.libraries.has(id)) { if (sql.includes('ON CONFLICT')) return; throw new Error('UNIQUE constraint failed') }
         for (const row of this.libraries.values()) {
-          if (row.name === name) throw new Error('UNIQUE constraint failed: asset_libraries.name')
+          if (row.name === name && row.deleted_at == null && deletedAt == null) throw new Error('UNIQUE constraint failed: asset_libraries.name')
         }
-        this.libraries.set(id, { id, name, created_at: createdAt, updated_at: updatedAt })
+        this.libraries.set(id, { id, name, created_at: createdAt, updated_at: updatedAt, deleted_at: deletedAt })
       } }
     }
-    if (sql.startsWith('INSERT INTO asset_library_items')) {
+    if (sql.startsWith('INSERT INTO asset_library_items') || sql.startsWith('INSERT OR IGNORE INTO asset_library_items')) {
       return { run: (libraryId: string, assetId: string, addedAt: number) => {
         if (!this.libraries.has(libraryId) || !this.assets.has(assetId)) throw new Error('FOREIGN KEY constraint failed')
-        this.items.push({ library_id: libraryId, asset_id: assetId, added_at: addedAt })
+        if (!this.items.some(item => item.library_id === libraryId && item.asset_id === assetId)) this.items.push({ library_id: libraryId, asset_id: assetId, added_at: addedAt })
       } }
     }
     throw new Error(`UNSUPPORTED_SQL:${sql}`)

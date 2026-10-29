@@ -43,7 +43,7 @@ export async function ensureContentTrust(query: ContentTrustQuery, signal?: Abor
     entry.promise = (async () => {
       let decision: 'once' | 'always' = 'once'
       await requestAlertConfirmation({ title, message: '这份内容包含代码，是否允许运行？', type: 'info', contentTrustChallenge: challenge,
-        confirmLabel: '仅这一次', cancelLabel: '不运行', projectConfirmation: true, projectLabel: '始终允许', onProject: () => { decision = 'always' },
+        confirmLabel: '仅这一次', cancelLabel: '不运行', alwaysAllowLabel: '始终允许', onAlwaysAllow: () => { decision = 'always' },
         onDecision: async accepted => { await executeContentTrust({ action: 'decide', challenge, decision: accepted ? decision : 'deny' }) },
       }, entry.controller.signal)
     })().finally(() => { entry.settled = true; if (prompts.get(challenge) === entry) prompts.delete(challenge) })

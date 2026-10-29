@@ -106,9 +106,7 @@ it.each(['model', 'tool'] as const)('宿主调度经官方 Pi SDK 在 %s 阶段�
   const service = new EmbeddedAgentService()
   cleanup.push(() => { finishOriginal(); finishInserted(); service.dispose() })
   const requestIds = { original: randomUUID(), waiting: randomUUID(), inserted: randomUUID() }
-  const send = (text: string, project: keyof typeof requestIds, delivery: EmbeddedAgentPrompt['delivery'] = 'wait') => service.prompt({ text, delivery,
-    model: { providerId: 'test', modelId: 'fixture' }, access: 'full',
-    context: JSON.stringify({ workspace: { id: 'nodes' }, canvas: { id: project, selectedNodeId: `${project}-reference`, selectedNodeIsReference: project !== 'waiting' } }) }, requestIds[project])
+  const send = (text: string, project: keyof typeof requestIds, delivery: EmbeddedAgentPrompt['delivery'] = 'wait') => service.prompt({ text, delivery, model: { providerId: 'test', modelId: 'fixture' }, context: JSON.stringify({ workspace: { id: 'nodes' }, canvas: { id: project, selectedNodeId: `${project}-reference`, selectedNodeIsReference: project !== 'waiting' } }) }, requestIds[project])
   await send('原请求', 'original')
   await vi.waitFor(() => expect(requests[0]).toBe('原请求'), { timeout: 15000 })
   const originalCalls = stage === 'tool' ? 1 : 0

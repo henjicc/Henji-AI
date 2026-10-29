@@ -11,7 +11,7 @@ import { openApplicationSurface } from '@/features/navigation'
 import { openVideoEditDocument, closeVideoEditProject, videoEditDocumentContent, activeVideoEditInstance, switchVideoEditSequence, setVideoEditView, importVideoEditSources, saveVideoEdit, verifyVideoEditSaved, holdVideoEditActivity, requireVideoEditInstance } from '@/features/videoEdit'
 import { assertRecordingEditable, readRecordingUnderstanding } from './recordingUnderstandingService'
 import { recordingView, startRecording, controlRecording, readRecordingDocument } from './recordingService'
-import { UNDERSTANDING_ENTITY, UNDERSTANDING_PROPERTY } from './recordingUnderstandingFields'
+import { editableRecordingUnderstanding, UNDERSTANDING_ENTITY, UNDERSTANDING_PROPERTY } from './recordingUnderstandingFields'
 import { recordedScriptSource, assertRecordedScriptEdits } from './recordingScriptSource'
 
 const logger = createLogger('features.screenRecording.replay')
@@ -19,7 +19,6 @@ let running = false
 export function recordingReplayBusy(): boolean { return running }
 export async function generateSessionScript(id: string, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {
   if (!context.commitProperties) throw new Error('录制脚本事务尚未就绪。')
-  if (context.callerGrant && !context.callerGrant.permissions.includes('screen_recording:read')) throw new Error('PERMISSION_DENIED:生成脚本需要 screen_recording:read 权限。')
   const read = await readRecordingUnderstanding(id)
   assertRecordingEditable(read.content)
   if (!read.content.understanding.steps.length) throw new Error('请先理解录制，生成步骤后再生成操作脚本。')
@@ -28,7 +27,7 @@ export async function generateSessionScript(id: string, context: CapabilityExecu
   context.signal.throwIfAborted()
   const understanding = { ...read.content.understanding, operationScript }
   const ref = { kind: UNDERSTANDING_ENTITY, id }
-  const committed = await context.commitProperties(ref, { [UNDERSTANDING_PROPERTY]: understanding }, { screen_recording: read.meta.revision }, '生成录制操作脚本')
+  const committed = await context.commitProperties(ref, { [UNDERSTANDING_PROPERTY]: editableRecordingUnderstanding(understanding) }, { screen_recording: read.meta.revision }, '生成录制操作脚本')
   return { resultRef: ref, steps: operationScript.steps.length, blocked: operationScript.steps.filter(v => v.blockedReason).length, ...(committed.undoRef ? { undoRef: committed.undoRef } : {}), verified: JSON.stringify((await readRecordingUnderstanding(id)).content.understanding.operationScript) === JSON.stringify(operationScript) }
 }
 const wait = waitRecordingStep
@@ -46,7 +45,6 @@ export async function replaySession(id: string, options: ReplayOptions, context:
   assertRecordingEditable(recording)
   const script = recordingScriptSchema.parse(recording.understanding.operationScript)
   if (!recording.understanding.director) assertRecordedScriptEdits(script, await recordedScriptSource(id, recording, signal))
-  else if (!recording.understanding.director.confirmed) throw new Error('请先确认导演脚本。')
   const through = options.stepId ? script.steps.findIndex(v => v.id === options.stepId) : script.steps.length - 1
   if (through < 0) throw new Error('请先生成脚本并选择存在的步骤。')
   const planned = script.steps.slice(0, through + 1)

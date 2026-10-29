@@ -107,7 +107,7 @@ function createVideoEditNativeSoakScene() {
         await button(page, '剪辑').first().click(); if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await observeWorkerCount(page)
         await dialogs(app, [file], file); await openVideoEditFile(page, file); await presented(page, 0)
-        const identity = await authorizeMcpConnection(page, { name: '长时资源曲线', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji soak Reality')
+        const identity = await authorizeMcpConnection(page, { name: '长时资源曲线' }); client = await connectMcpClient(identity.config, 'Henji soak Reality')
         const startedAt = Date.now()
         for (let segment = 0; segment < SEGMENTS; segment++) {
           await countPresented(page)

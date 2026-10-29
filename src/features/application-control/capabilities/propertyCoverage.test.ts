@@ -32,7 +32,7 @@ function mutationExecutors(): Map<string, ApplicationMutationExecutor> {
  * 两个必须照抄的细节，抄错门禁会静默空转：
  * - 用 describe() 而不是 listProperties()：后者不过滤 exposures / dataClass，会把只给界面看的
  *   敏感设置项算成"声明可写"，误报一批不存在的缺口。
- * - permissions 必须来自 listDeclaredPropertyPermissions()：空权限集会被 canReadProperty 全滤掉，
+ * - permissions 仅为属性写入声明的元数据，调用者身份不按权限子集过滤，
  *   门禁于是永远拿到空数组、永远绿。
  */
 function describeAll() {

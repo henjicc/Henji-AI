@@ -2,15 +2,15 @@ import type { MediaContentQueryProgress, MediaContentQueryProgressUpdate } from 
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { publishVideoEdit, subscribeVideoEdit, type VideoEditInstance } from './videoEditService'
 
-interface Entry { itemId: string; value: MediaContentQueryProgress; settled: boolean; requiredPermissions: readonly string[] }
+interface Entry { itemId: string; value: MediaContentQueryProgress; settled: boolean }
 const entries = new WeakMap<VideoEditInstance, Map<string, Entry>>()
 
-export function readVideoEditContentQueries(owner: VideoEditInstance, itemId: string, permissions?: ReadonlySet<string>): MediaContentQueryProgress[] {
-  return structuredClone([...(entries.get(owner)?.values() ?? [])].filter(entry => entry.itemId === itemId && (!permissions || entry.requiredPermissions.every(permission => permissions.has(permission)))).map(entry => entry.value))
+export function readVideoEditContentQueries(owner: VideoEditInstance, itemId: string): MediaContentQueryProgress[] {
+  return structuredClone([...(entries.get(owner)?.values() ?? [])].filter(entry => entry.itemId === itemId).map(entry => entry.value))
 }
 
 /** The original read owns this task. No detached operation, new IPC, or persisted task truth. */
-export function beginVideoEditContentQuery(owner: VideoEditInstance, itemId: string, outerSignal: AbortSignal, requiredPermissions: readonly string[]) {
+export function beginVideoEditContentQuery(owner: VideoEditInstance, itemId: string, outerSignal: AbortSignal) {
   outerSignal.throwIfAborted()
   let retained = entries.get(owner)
   if (!retained) { retained = new Map(); entries.set(owner, retained) }
@@ -21,7 +21,7 @@ export function beginVideoEditContentQuery(owner: VideoEditInstance, itemId: str
   }
   const id = crypto.randomUUID(); const version = owner.contentVersion
   const controller = new AbortController()
-  const entry: Entry = { itemId, settled: false, requiredPermissions: [...requiredPermissions], value: { id, state: 'running', phase: 'checking_source', message: '核对原素材', completedUnits: 0, totalUnits: null, phaseProgress: null, updatedAt: new Date().toISOString() } }
+  const entry: Entry = { itemId, settled: false, value: { id, state: 'running', phase: 'checking_source', message: '核对原素材', completedUnits: 0, totalUnits: null, phaseProgress: null, updatedAt: new Date().toISOString() } }
   retained.set(id, entry)
   let lastPublished = 0
   const publish = (immediate = true): void => {

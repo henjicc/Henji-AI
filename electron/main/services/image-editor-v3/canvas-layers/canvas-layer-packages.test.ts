@@ -5,6 +5,9 @@ import path from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const recycled = new Map<string, string>()
+vi.mock('../../recycle/runtime', () => ({ trashUserFile: async (target: string) => { const backup = `${target}.trashed`; await fsp.rename(target, backup); recycled.set(target, backup) } }))
+
 import {
   createImageEditDocumentV3,
   createImageEditRasterLayerV3,
@@ -54,6 +57,7 @@ function createService(): CanvasLayerPackageService {
 }
 
 beforeEach(async () => {
+  recycled.clear()
   root = await fsp.mkdtemp(path.join(os.tmpdir(), 'henji-canvas-layers-'))
   programDir = path.join(root, '程序目录', 'ImageEditorV3')
   resources = new ContentAddressedResourceStore(path.join(programDir, 'resources'))

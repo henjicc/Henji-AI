@@ -24,7 +24,6 @@ beforeEach(() => {
   vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/fixture/commands.hjvid')
   vi.spyOn(platform.system.fs, 'writeTextFile').mockResolvedValue(undefined)
   vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue('D:/fixture')
-  vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)
 })
 afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 async function fixture() {
@@ -305,15 +304,15 @@ it('Ctrl+D 在离播放头最近的编辑点应用默认视频过渡，Shift+D �
   undoVideoEdit(id)
   expect(getActiveVideoEditSequence(owner).transitions).toEqual([])
 })
-it('批注作用域里 Ctrl+A、Delete 作用于批注：全选当前筛选、确认后删除选中批注，时间线上选中的片段不动', async () => {
+it('批注作用域里 Ctrl+A、Delete 作用于批注：全选当前筛选、直接删除选中批注，时间线上选中的片段不动', async () => {
   const { owner, id, first } = await fixture()
   const key = (code: string, ctrlKey = false) => matchVideoEditShortcut({ code, key: code, ctrlKey, metaKey: false, altKey: false, shiftKey: false, repeat: false, isComposing: false, defaultPrevented: false }, 'annotations', {})
   expect([key('KeyA', true), key('Delete')]).toEqual(['select_all', 'delete'])
   for (const frame of [0, 5]) createVideoEditAnnotation(id, owner.activeSequenceId, { frame, target: { kind: 'point', x: .5, y: .5 }, text: `第 ${frame} 帧`, status: 'open' })
   await executeVideoEditCommand(captureVideoEditCommandContext(id, 'annotations'), 'select_all')
   const removing = executeVideoEditCommand(captureVideoEditCommandContext(id, 'annotations'), 'delete')
-  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
-  useAlertDialogStore.getState().confirmCurrent(); await removing
+  await removing
+  expect(useAlertDialogStore.getState().queue).toHaveLength(0)
   expect(getActiveVideoEditSequence(owner).annotations).toEqual([]); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.id)).toContain(first)
   expect(videoEditCommandState(captureVideoEditCommandContext(id, 'annotations'), 'delete')).toEqual({ enabled: false, reason: '请先选中批注。' })
 })

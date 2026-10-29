@@ -4,7 +4,7 @@ import { ApplicationResourceSubscriptions } from './resourceSubscriptions'
 import { createServer, type IncomingMessage, type ServerResponse, type Server as HttpServer } from 'node:http'
 import { createMcpHandler, Server, type McpHttpHandler, type AuthInfo } from '@modelcontextprotocol/server'
 import { toNodeHandler } from '@modelcontextprotocol/node'
-import { EXTERNAL_LIMITS, EXTERNAL_SERVER_INFO } from '../../../../src/core/application-control/localHostContracts'
+import { EXTERNAL_SERVER_INFO } from '../../../../src/core/application-control/localHostContracts'
 import type { McpConnections } from './connections'
 import type { ApplicationHostBridge } from '../application-runtime/applicationHostBridge'
 import type { ApplicationOperationCoordinator } from '../application-runtime/operationCoordinator'
@@ -29,15 +29,10 @@ export class LocalMcpServer {
   constructor(private readonly connections: McpConnections, private readonly host: ApplicationHostBridge,
     private readonly onError: (error: unknown) => void = () => {}, private readonly operations?: ApplicationOperationCoordinator,
     private readonly onRequest: (info: { callerId: string }) => void = () => {},
-    private readonly onRejected: (info: { reason: 'invalid_token' } | { reason: 'too_many_requests'; requests: number; listening: number }) => void = () => {},
+    private readonly onRejected: (info: { reason: 'invalid_token' }) => void = () => {},
     private readonly memory?: Pick<MemoryEntryStore, 'onMemoryChange' | 'read'>) {}
   get listening(): boolean { return this.http?.listening === true }
   get listeningPort(): number { return this.port }
-  accessChanged(callerId: string): void {
-    this.subscriptions?.publishTo(callerId, { kind: 'tools_list_changed' })
-    this.subscriptions?.publishTo(callerId, { kind: 'resources_list_changed' })
-  }
-
   async start(port: number): Promise<void> {
     if (this.http) throw new Error('服务已经启用，请先关闭再更换端口。')
     const subscriptions = new ApplicationResourceSubscriptions(id => this.connections.assertActive(id),
@@ -76,10 +71,10 @@ export class LocalMcpServer {
         return toMcpResult(result)
       })
       return server
-    }, { legacy: 'reject', onerror: this.onError, maxSubscriptions: 16, bus: subscriptions })
+    }, { legacy: 'reject', onerror: this.onError, maxSubscriptions: Infinity, bus: subscriptions })
     this.handler = handler
     const directorySignature = () => JSON.stringify({ version: EXTERNAL_CONTRACT_VERSION,
-      tools: buildApplicationToolCatalog({ tools: this.host.tools(), access: { allowWrites: true, allowDestructive: true, allowPaid: true }, operationsEnabled: Boolean(this.operations), includeSkillTool: true }).tools })
+      tools: buildApplicationToolCatalog({ tools: this.host.tools(), includeSkillTool: true }).tools })
     let signature = directorySignature()
     this.detach = this.host.onChange(kind => {
       if (kind === 'catalog') {
@@ -149,16 +144,6 @@ export class LocalMcpServer {
     for (const [response, owner] of this.active) if (owner.callerId === callerId) response.destroy()
   }
 
-  /** 普通请求（不含订阅流）达到并发上限时回 429，并记下当时的占用，便于从日志看出名额被谁占满。 */
-  private tooManyRequests(response: ServerResponse): boolean {
-    let requests = 0
-    for (const entry of this.active.values()) if (!entry.listen) requests++
-    if (requests < EXTERNAL_LIMITS.concurrentRequests) return false
-    this.onRejected({ reason: 'too_many_requests', requests, listening: this.active.size - requests })
-    this.reject(response, 429)
-    return true
-  }
-
   private reject(response: ServerResponse, status: number): void { response.writeHead(status, { 'Cache-Control': 'no-store' }); response.end() }
   private async handle(request: IncomingMessage & { auth?: AuthInfo }, response: ServerResponse, dispatch: ReturnType<typeof toNodeHandler>): Promise<void> {
     response.setHeader('Cache-Control', 'no-store')
@@ -176,19 +161,14 @@ export class LocalMcpServer {
     const callerId = authentication.connectionId
     if (request.method !== 'POST') return this.reject(response, 405)
     if (request.headers['mcp-session-id'] !== undefined) return this.reject(response, 400)
-    if (this.tooManyRequests(response)) return
     if (!request.headers['content-type']?.startsWith('application/json')) return this.reject(response, 415)
-    if (Number(request.headers['content-length']) > EXTERNAL_LIMITS.requestBytes) return this.reject(response, 413)
     const entry = { callerId, listen: false }
     this.active.set(response, entry)
     response.once('close', () => this.active.delete(response))
     try {
       const chunks: Buffer[] = []
-      let length = 0
       for await (const chunk of request) {
         const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string)
-        length += buffer.length
-        if (length > EXTERNAL_LIMITS.requestBytes) return this.reject(response, 413)
         chunks.push(buffer)
       }
       let body: unknown
@@ -201,8 +181,6 @@ export class LocalMcpServer {
       const controller = new AbortController()
       response.once('close', () => controller.abort())
       try {
-        // 订阅流交给 SDK 之后才不占普通名额：它的条数由 maxSubscriptions 限定。逐个地址的授权读取发生在这之前，
-        // 仍按普通请求计。算进普通名额的话，几个客户端各挂一条订阅、再有一个长调用（例如网页重演）在途，新握手和取消就都没有名额。
         await this.subscriptions!.run(callerId, body, controller.signal, () => { entry.listen = listen; return dispatch(request, response, body) })
       } catch (error) {
         if (response.headersSent || response.destroyed) throw error

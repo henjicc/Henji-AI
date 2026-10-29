@@ -10,8 +10,7 @@ export function registerImageEditGeometryHandlers(registrar: ApplicationCapabili
     const parsed = resampleImageEditCapability.inputSchema.parse(input), { documentId } = splitImageEditV3DocumentRef(parsed.documentRef);
     const access = context.callerGrant ? applicationCallerAccess(context.callerGrant, context.requestId ?? 'resample-image', context.signal) : undefined;
     return runImageEditPersistedOperationV3(documentId, access, async () => {
-      const { bus, persistenceOwner } = requireImageEditDocumentInstanceV3(documentId);
-      if (access && persistenceOwner?.projection?.requiredPermissions.some(permission => !access.permissions.has(permission))) throw new Error('PERMISSION_DENIED:图片文档节点保存需要原画布的写入权限');
+      const { bus } = requireImageEditDocumentInstanceV3(documentId);
       const draft = await prepareDocumentGeometryV3(bus, { width: parsed.width, height: parsed.height, mode: parsed.method, protectSelection: parsed.protectSelection }, { signal: context.signal });
       const removedLayers = collectImageEditV3LiveLayers(draft.original).map(({ layer }) => imageEditV3LayerRef(documentId, layer.id));
       let commandId: string;

@@ -374,7 +374,7 @@ export function createGenerationReflectionRegistrations(): ApplicationEntityRegi
       revisionScopes: ['generation'],
       queryCapabilityIds: ['list_generation_history'],
       schemaRef: schemaRef('entity', GENERATION_ENTITY_TYPES.record),
-      writeExclusion: { reason: '生成历史由正式生成链路维护，只能通过历史查询读取。' },
+      collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [], maxItemsPerChange: 64 },
     },
     properties: properties[GENERATION_ENTITY_TYPES.record],
     provider: new GenerationHistoryReflectionProvider(),

@@ -1,3 +1,4 @@
+import { trashUserFile } from '../recycle/runtime'
 import { imageWorkingCopySchema } from '../../../../src/core/persistence/imageSchemas'
 import crypto from 'node:crypto'
 import { parsePersistenceJson, upgradeStoredFile } from '../persistence/stored-file'
@@ -454,7 +455,7 @@ export class ImageEditDocumentRepository {
    * 仅供跨文件事务补偿：只有文档仍处于调用方刚写入的 revision 时才删除，
    * 避免回滚覆盖随后发生的用户编辑。
    */
-  async deleteIfRevision(documentIdOrRef: string, expectedRevision: number): Promise<boolean> {
+  async deleteIfRevision(documentIdOrRef: string, expectedRevision: number, recoverable = false): Promise<boolean> {
     const documentId = documentIdOrRef.startsWith(IMAGE_EDIT_DOCUMENT_REF_PREFIX)
       ? parseDocumentRef(documentIdOrRef)
       : validateDocumentId(documentIdOrRef)
@@ -470,7 +471,8 @@ export class ImageEditDocumentRepository {
         throw error
       }
       if (current.revision !== expectedRevision) return false
-      await fsp.rm(this.documentPath(documentId), { force: true })
+      if (recoverable) await trashUserFile(this.documentPath(documentId))
+      else await fsp.rm(this.documentPath(documentId), { force: true })
       return true
     }))
   }

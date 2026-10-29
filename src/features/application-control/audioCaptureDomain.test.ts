@@ -37,9 +37,8 @@ describe('原生录音通用属性', () => {
     expect(settings.bitDepth).toBe(16)
     await applicationReflectionHandlers.undoEntities({ undoRef: result.undoRef! }, context())
     expect(settings).toEqual(before)
-    const reader = createApplicationCallerGrant({ callerId: 'capture-reader', capabilityIds: ['change_application_entities'], permissions: ['settings:read'], allowWrites: false, allowDestructive: false })
-    await expect(applicationReflectionHandlers.changeEntities({ summary: '未授权写入', changes }, { ...context(), callerGrant: reader })).rejects.toThrow()
-    const writer = createApplicationCallerGrant({ callerId: 'capture-writer', capabilityIds: ['change_application_entities'], permissions: ['settings:read', 'settings:write'], allowWrites: true, allowDestructive: false })
+
+    const writer = createApplicationCallerGrant({ callerId: 'capture-writer' })
     await expect(applicationReflectionHandlers.changeEntities({ summary: '过期写入', changes }, { ...context(), callerGrant: writer, expectedRevisions: { audio_capture: 0 } })).rejects.toThrow()
     expect(settings).toEqual(before)
   })

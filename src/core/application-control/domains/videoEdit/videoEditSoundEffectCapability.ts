@@ -26,7 +26,7 @@ const placed = z.object({ clipRef, soundRef, startFrame: z.number().int().nonneg
 export const placeVideoEditSoundEffectsCapability = defineApplicationCapability({
   id: 'place_video_edit_sound_effects', version: 1, domain: 'video_edit', title: '把音效卡点放进剪辑',
   description: '把音效库里的音效放进明确的剪辑序列，并让音效的击中点（或起音点）精确对齐到指定帧、标记（如节拍）或片段切点；声音在击中点之前的部分若放不下（目标太靠近开头）会自动裁掉开头，对齐精度到微秒。一次最多 64 个，全部进同一步撤销；片段标为“音效”声音类型，自动找空闲音频轨道，没有就新建。音效引用文件夹里的原文件，不复制。完成后保存并回读核对每个音效的击中点时刻。先用 search_sound_effects 挑音效；不会发起付费生成。',
-  aliases: ['加音效', '音效卡点', '转场音效', 'add sound effect', 'sfx sync'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write', idempotent: false, destructive: false,
+  aliases: ['加音效', '音效卡点', '转场音效', 'add sound effect', 'sfx sync'], readOnly: false, dataClasses: ['C1'], permission: 'video_edit:write', idempotent: false, destructive: false,
   timeoutMs: 600000, supportsPreview: false, supportsUndo: true, requiredScopes: ['video_edit', 'sound_library'],
   acceptsRefs: ['video_edit.document', 'video_edit.sequence', 'video_edit.marker', 'video_edit.clip', 'video_edit.track', 'sound_library.sound'], producesRefs: ['video_edit.clip'],
   inputSchema: z.object({ documentRef, sequenceRef: ref('video_edit.sequence'), placements: z.array(videoEditSoundEffectPlacementSchema).min(1).max(64) }).strict(),

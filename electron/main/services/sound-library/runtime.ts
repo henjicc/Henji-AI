@@ -1,18 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import { BrowserWindow } from 'electron'
-import { formatMigrations } from '../../../../src/core/persistence/formatMigrations'
-import { readStoredPersistenceJson, serializeVersionedPersistenceJson } from '../../../../src/core/persistence/versionedJson'
-import type { PersistenceContract } from '../../../../src/core/persistence/migrations'
-import { SOUND_LIBRARY_FOLDERS_SETTING_KEY, SOUND_LIBRARY_FOLDERS_VERSION, soundLibraryFoldersSchema, type SoundLibraryFolderRecord } from '../../../../src/core/soundLibrary/soundLibraryFolders'
+import { readSoundLibraryFolders, writeSoundLibraryFolders, onSoundLibraryFoldersRestored } from './registry'
+export { SOUND_LIBRARY_FOLDERS_CONTRACT } from './registry'
 import { SOUND_LIBRARY_IPC_CHANNELS, type SoundLibraryState } from '../../../../src/platform/contracts/soundLibrary'
 import { getProgramStoreDir } from '../appPaths'
 import { createMainLogger } from '../logging'
 import { createContentDiskCache } from '../media/content-disk-cache'
-import { allowMediaRoot } from '../../protocol'
 import { executionProviderOrder } from '../local-inference/providers'
 import type { SoundClapModels } from '../local-inference/sound/protocol'
 import { getLocalModelService } from '../local-models/runtime'
-import { getSettingsStore } from '../settings/store'
 import { getLocalInferenceHost } from '../smart-regions/runtime'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { SoundLibraryService } from './service'
@@ -20,17 +16,10 @@ import { showOpenDialog } from '../dialogs'
 
 /*
  * 音效库的进程内单例：设置表（登记的文件夹）、系统文件夹选择框、本地推理后台进程、听音模型与窗口广播。
- * 用户在选择框里选中的文件夹同时授权媒体协议读取（与导入素材同一授权），剪辑才能直接引用原文件。
  */
 
 const logger = createMainLogger('main.sound_library')
-export const SOUND_LIBRARY_FOLDERS_CONTRACT: PersistenceContract = { id: 'sound-library-folders', name: '音效文件夹', version: SOUND_LIBRARY_FOLDERS_VERSION, schema: soundLibraryFoldersSchema, migrations: formatMigrations('sound-library-folders') }
 const CLAP_FILES = { audioModelPath: 'larger_clap_general_audio_fp16.onnx', textModelPath: 'larger_clap_general_text_fp16.onnx', tokenizerPath: 'tokenizer.json', tokenizerConfigPath: 'tokenizer_config.json' } as const
-
-const settings = {
-  getItem: async (key: string) => getSettingsStore().get(key),
-  setItem: async (key: string, value: string) => getSettingsStore().set(key, value, 'json'),
-}
 
 function broadcast(state: SoundLibraryState): void {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -57,22 +46,16 @@ export function getSoundLibraryService(): SoundLibraryService {
   const inference = getLocalInferenceHost()
   const providers = executionProviderOrder(process.platform)
   service = new SoundLibraryService({
-    readFolders: async () => {
-      const text = await settings.getItem(SOUND_LIBRARY_FOLDERS_SETTING_KEY)
-      const folders = text === null ? [] : await readStoredPersistenceJson(text, SOUND_LIBRARY_FOLDERS_SETTING_KEY, SOUND_LIBRARY_FOLDERS_CONTRACT, settings) as SoundLibraryFolderRecord[]
-      for (const folder of folders) { try { allowMediaRoot(folder.path) } catch { /* 非法路径在整理时报告 */ } }
-      return folders
-    },
-    writeFolders: async folders => settings.setItem(SOUND_LIBRARY_FOLDERS_SETTING_KEY, serializeVersionedPersistenceJson(SOUND_LIBRARY_FOLDERS_CONTRACT, folders)),
+    readFolders: readSoundLibraryFolders,
+    writeFolders: writeSoundLibraryFolders,
     chooseFolder: async () => {
       const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
       const options = { title: '选择音效文件夹', properties: ['openDirectory' as const] }
       const selection = await showOpenDialog(window, options)
       const chosen = selection.canceled ? null : selection.filePaths[0] ?? null
-      if (chosen) allowMediaRoot(chosen)
       return chosen
     },
-    allowFolder: folderPath => { allowMediaRoot(folderPath); return folderPath },
+    allowFolder: folderPath => folderPath,
     analyze: async (files, clap, progress) => inference.analyzeSounds({ id: randomUUID(), ffmpegPath: await loadFfmpegPath(), files: files.map(path => ({ path })), ...(clap ? { clap } : {}), providers }, progress),
     embedText: async (clap, texts) => (await inference.embedSoundText({ id: randomUUID(), clap, texts, providers })).embeddings,
     clapModels,
@@ -80,5 +63,6 @@ export function getSoundLibraryService(): SoundLibraryService {
     emit: broadcast,
     log: (level, message, event, context, error) => logger[level](message, { event, context, ...(error === undefined ? {} : { error }) }),
   })
+  onSoundLibraryFoldersRestored(() => service!.reloadFolders())
   return service
 }

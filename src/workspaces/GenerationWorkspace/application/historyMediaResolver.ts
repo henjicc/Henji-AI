@@ -1,10 +1,9 @@
 import { exists, toDisplaySrc } from '@/platform/desktopApi'
-import { grantMediaAccessForReference } from '@/services/largeUploadPolicy'
 import { getHistoryThumbnailCachePath } from '@/utils/historyThumbnail'
 
 type MediaKind = 'image' | 'video' | 'audio'
 
-/** 一次历史加载共享结果；下次加载重新检查文件、权限和缩略图目录。 */
+/** 一次历史加载共享结果；下次加载重新检查文件和缩略图目录。 */
 export function createHistoryMediaResolver(thumbnailsDir: string) {
   const resolutions = new Map<string, Promise<string | null>>()
   let active = 0
@@ -16,7 +15,6 @@ export function createHistoryMediaResolver(thumbnailsDir: string) {
     try {
       if (!await exists(filePath)) return null
       try {
-        await grantMediaAccessForReference(filePath)
         if (kind === 'image') {
           try {
             const cachePath = await getHistoryThumbnailCachePath(filePath, thumbnailsDir)

@@ -49,7 +49,7 @@ export async function readVideoEditPixelMotion(owner: VideoEditInstance, composi
   } })
   let inputs: VideoEditPixelMotionPlacement[] = []
   if (inputItemId) {
-    const task = beginVideoEditContentQuery(owner, inputItemId, signal, ['video_edit:read'])
+    const task = beginVideoEditContentQuery(owner, inputItemId, signal)
     try {
       task.report({ phase: 'analyzing_video', message: '定位代码使用的画面来源' })
       // 读不出声明的代码版本不派生画面输入（只看片段上存的参数），与预渲染分段的退路一致，不让整个审查失败。
@@ -91,7 +91,7 @@ export async function readVideoEditPixelMotion(owner: VideoEditInstance, composi
   const verifiedSources = await pinVideoEditMotionSources([...sources.values()], signal, assertCurrent)
   for (const plan of plans) {
     assertCurrent()
-    const task = beginVideoEditContentQuery(owner, plan.placements[0].entry.path.at(-1)!.itemId, signal, ['video_edit:read']), requestId = crypto.randomUUID()
+    const task = beginVideoEditContentQuery(owner, plan.placements[0].entry.path.at(-1)!.itemId, signal), requestId = crypto.randomUUID()
     let unsubscribe = (): void => undefined
     const cancel = (): void => { void platform.sceneDetection.cancel(requestId).catch(error => logger.warn('取消视频运动分析失败', { event: 'video_edit.review.motion.cancel_failed', error })) }
     task.signal.addEventListener('abort', cancel, { once: true })

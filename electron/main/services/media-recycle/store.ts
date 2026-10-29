@@ -11,6 +11,7 @@ export function createRecycleStore(db: Database.Database, signal: AbortSignal, d
   store: RecycleStore
   revision(): string
   referencesReady(references: ReadonlySet<string>): void
+  acknowledgeBackup(): void
   remaining(): number
   checkpointError(): unknown
   dispose(): void
@@ -57,6 +58,8 @@ export function createRecycleStore(db: Database.Database, signal: AbortSignal, d
     remaining: () => remaining,
     checkpointError: () => checkpointError,
     dispose: () => signal.removeEventListener('abort', cancelled),
+    // 仅抵消本轮已知的副本登记，其他写入仍使引用普查失效。
+    acknowledgeBackup: () => { ownChanges++ },
     revision: () => String((changes.get() as { n: number }).n - ownChanges),
     referencesReady: values => {
       const signature = createHash('sha256').update(JSON.stringify([...values].sort())).digest('hex')

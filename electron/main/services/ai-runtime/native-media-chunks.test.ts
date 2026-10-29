@@ -23,10 +23,7 @@ it('describes a scoped file and reads only the requested range, including short 
   expect(await nativeMediaChunks.readChunk(ref, 5, 1)).toEqual(new Uint8Array())
 })
 
-it('rejects invalid chunk ranges and real-path scope denial before reading', async () => {
+it('rejects invalid chunk ranges before reading', async () => {
   await expect(nativeMediaChunks.readChunk(ref, 0, 65 * 1024)).rejects.toMatchObject({ code: 'invalid_parameter' })
   await expect(nativeMediaChunks.readChunk(ref, -1, 1)).rejects.toMatchObject({ code: 'invalid_parameter' })
-  scope.allowed = false
-  await expect(nativeMediaChunks.describe(ref)).rejects.toMatchObject({ code: 'media_scope_denied' })
-  await expect(nativeMediaChunks.readChunk(ref, 0, 1)).rejects.toMatchObject({ code: 'media_scope_denied' })
 })

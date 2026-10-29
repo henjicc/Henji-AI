@@ -43,7 +43,7 @@ function StyleDetail({ entry, instance, onClose, onError }: { entry: VideoEditLi
   const sections = parseStyleGuide(entry.style.guide).filter(section => section.body.replace(/<!--[\s\S]*?-->/g, '').trim())
   return <UiModal isOpen title={`${entry.style.name}${entry.style.version ? ` v${entry.style.version}` : ''}`} size="editor" onClose={onClose} footer={<>
     <UiButton variant="secondary" disabled={busy} onClick={() => { void run(async () => { await exportStyle(entry, showNotification) }) }}>导出</UiButton>
-    <UiButton variant="primary" loading={busy} disabled={!sequenceId} disabledReason={!sequenceId ? '先打开一个序列' : undefined} onClick={() => { void run(async () => { const result = await bindVideoEditStyle(instance.document.id, sequenceId!, entry.style.id, { replace: true }); showNotification(`本序列之后按风格“${result.style.name}” v${result.style.version} 创作。`); onClose() }) }}>绑定到当前序列</UiButton>
+    <UiButton variant="primary" loading={busy} disabled={!sequenceId} disabledReason={!sequenceId ? '先打开一个序列' : undefined} onClick={() => { void run(async () => { const result = await bindVideoEditStyle(instance.document.id, sequenceId!, entry.style.id); showNotification(`本序列之后按风格“${result.style.name}” v${result.style.version} 创作。`); onClose() }) }}>绑定到当前序列</UiButton>
   </>}>
     <div className="grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(16rem,2fr)]" data-video-edit-style-detail={entry.style.id}>
       <div className="flex min-w-0 flex-col gap-4">
@@ -77,7 +77,7 @@ function StyleDetail({ entry, instance, onClose, onError }: { entry: VideoEditLi
 }
 async function exportStyle(entry: VideoEditLibraryStyle, notify: (message: string) => void): Promise<void> {
   const path = await saveDialog({ defaultPath: `${entry.style.name}.${VIDEO_EDIT_STYLE_PACKAGE_EXTENSION}`, filters: FILTERS }); if (!path) return
-  const result = await exportVideoEditStylePackage(entry.style.id, path, { overwrite: true })
+  const result = await exportVideoEditStylePackage(entry.style.id, path)
   notify(`已导出“${result.style.name}”${result.templates.length ? `（含 ${result.templates.length} 个模板）` : ''}。`)
 }
 
@@ -99,7 +99,7 @@ function Panel({ instance, onError, visible = true }: { instance: VideoEditInsta
   const entries = videoEditStyleLibrary.listStyles().filter(entry => !query.trim() || `${entry.style.name} ${entry.style.description}`.toLowerCase().includes(query.trim().toLowerCase()))
   const detail = open ? videoEditStyleLibrary.findStyle(open) : undefined
   const run = async (key: string, action: () => Promise<void> | void): Promise<void> => { setBusy(key); try { await action() } catch (reason) { onError(reason) } finally { setBusy(null) } }
-  const bind = (id: string, replace = true): Promise<void> => run(id, async () => { if (!sequence) throw new Error('先打开一个序列。'); const result = await bindVideoEditStyle(instance.document.id, sequence.id, id, { replace }); showNotification(`本序列之后按风格“${result.style.name}” v${result.style.version} 创作。`) })
+  const bind = (id: string): Promise<void> => run(id, async () => { if (!sequence) throw new Error('先打开一个序列。'); const result = await bindVideoEditStyle(instance.document.id, sequence.id, id); showNotification(`本序列之后按风格“${result.style.name}” v${result.style.version} 创作。`) })
   const items = (entry: VideoEditLibraryStyle): MenuItem[] => [
     { id: 'bind', label: '绑定到当前序列', icon: <Link2 />, disabled: !sequence, onClick: () => { void bind(entry.style.id) } },
     { id: 'default', label: defaultId === entry.style.id ? '取消默认' : '设为默认', icon: <Star />, onClick: () => { void run(entry.style.id, () => videoEditStyleLibrary.setDefaultStyle(defaultId === entry.style.id ? null : entry.style.id)) } },
@@ -113,9 +113,7 @@ function Panel({ instance, onError, visible = true }: { instance: VideoEditInsta
   const importFile = async (): Promise<void> => {
     const selected = await openDialog({ multiple: false, filters: OPEN_FILTERS }); const path = Array.isArray(selected) ? selected[0] : selected; if (!path) return
     await run('import', async () => {
-      let result
-      try { result = await importVideoEditStylePackage(path) }
-      catch (error) { if (!(error instanceof Error) || !error.message.includes('replace')) throw error; result = await importVideoEditStylePackage(path, { replace: true }) }
+      const result = await importVideoEditStylePackage(path)
       showNotification(`已导入风格“${result.style.name}” v${result.style.version}${result.templates.length ? `和 ${result.templates.length} 个模板` : ''}。`); setOpen(result.style.id)
     })
   }

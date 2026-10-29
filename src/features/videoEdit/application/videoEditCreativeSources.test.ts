@@ -54,7 +54,6 @@ beforeEach(() => {
   producers.ensureImage.mockResolvedValue(undefined)
   const platform = getPlatform()
   vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue('D:/results')
-  vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)
   vi.spyOn(platform.assetLibrary, 'inspectFileContent').mockResolvedValue(content)
   vi.spyOn(platform.image, 'releaseManagedGenerationMedia').mockResolvedValue(undefined)
 })

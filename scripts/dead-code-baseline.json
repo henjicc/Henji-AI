@@ -7460,21 +7460,6 @@
         "count": 1
       },
       {
-        "file": "electron/main/ipc/smart-regions.ts",
-        "fingerprint": "b84cc4fcca5fe052764d55dc0d8326b2ab2dae0610bfcdc2008d38b767f44396",
-        "count": 1
-      },
-      {
-        "file": "electron/main/ipc/tracking.ts",
-        "fingerprint": "2441cc4093961612e74d161a659cebed0d8f613ac62719820751587ae4efd793",
-        "count": 1
-      },
-      {
-        "file": "electron/main/ipc/video-frames.ts",
-        "fingerprint": "e2f370fa4597b5c135ec2f72725ffc9211d8a27eb556455daff5a4061d33ce87",
-        "count": 1
-      },
-      {
         "file": "electron/main/ipc/video.ts",
         "fingerprint": "93617a7ae59c3e8057c617677ef70c3aa38f97a78805dcba8b9eba0b189362de",
         "count": 1
@@ -7902,11 +7887,6 @@
       {
         "file": "electron/main/services/logging/traceSchema.ts",
         "fingerprint": "f4be5c0dc68ab8c7537c171fd1c81beed6d7ad96700f2377787bb773822ecd36",
-        "count": 1
-      },
-      {
-        "file": "electron/main/services/media/bundledResources.ts",
-        "fingerprint": "31338bbed1adce83969b27206748bf39fb3c26d7e5374cd41dadb41c71cabaad",
         "count": 1
       },
       {
@@ -9065,11 +9045,6 @@
         "count": 1
       },
       {
-        "file": "src/components/MediaGenerator/components/ModelscopeCustomModelManager.tsx",
-        "fingerprint": "96528d3d77ea4219445aa49ed432d17bc2a55e733911c0cec2abec8a0d4c93b9",
-        "count": 1
-      },
-      {
         "file": "src/components/MediaGenerator/components/ParameterPanel.tsx",
         "fingerprint": "3e6abfcbe5414276a10fe017282441ae41e55de29d7d6ca92c161315a6d6ba9b",
         "count": 1
@@ -9117,11 +9092,6 @@
       {
         "file": "src/components/MediaGenerator/state/useUIState.ts",
         "fingerprint": "4bb85982aa8e58ee479c6d0add72cfbf2d6efa43630d0e70e7d1e18b34c8c965",
-        "count": 1
-      },
-      {
-        "file": "src/components/PresetPanel.tsx",
-        "fingerprint": "2864610b70a2f0a28b32de23e8f2d39fdb0a28d349e0df2ff56efacde6192341",
         "count": 1
       },
       {
@@ -10305,11 +10275,6 @@
         "count": 1
       },
       {
-        "file": "src/features/application-control/capabilities/storeActionCoverage.test.ts",
-        "fingerprint": "d9cad6ccf96a86b56f5bfb4641505f056505a22e7366ef7af115f664c413056f",
-        "count": 1
-      },
-      {
         "file": "src/features/application-control/hostContext/hostScopeRevisions.test.ts",
         "fingerprint": "d301e98df708b5ab0e8bd6ad2584c1de5adfd75aa04dfde4a79a77d862c73b0a",
         "count": 1
@@ -11162,16 +11127,6 @@
       {
         "file": "src/features/documents/documentPersistence.ts",
         "fingerprint": "9f1032523b516fdbd38ac9b99911af29857390438c62bfb3837fa944cbd5ae13",
-        "count": 1
-      },
-      {
-        "file": "src/features/documents/documentSession.ts",
-        "fingerprint": "0b14e33f273e6b4b970a97d10942ab3c3d2c0c9dae3a17dfe95c2656d07d4af7",
-        "count": 1
-      },
-      {
-        "file": "src/features/documents/documentSession.ts",
-        "fingerprint": "a7cd52fcaec3e937e296a40f790e5b7aaeee541ead524b1d303a13d6b611051f",
         "count": 1
       },
       {

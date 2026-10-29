@@ -1,9 +1,13 @@
+import { preserveUserFile, trashUserFile } from '../recycle/runtime'
 import { shell } from 'electron'
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import { documentKindRegistry } from '../../../../src/core/documents/kinds'
+import { INTERNAL_FOLDER_NAME, PROJECT_MANIFEST_FILE_NAME } from '../../../../src/core/documents/projectManifest'
 import { retainDetachedMediaLocation } from '../media-recycle/queue'
 import { recordDocumentMediaPublished } from '../media-recycle/providers'
 import { execFile } from 'node:child_process'
 
-import { allowMediaRoot } from '../../protocol'
 import { getProgramDataDir, getProgramStoreDir, getUserDataLayout } from '../appPaths'
 import { renderCoverImage } from '../covers/cover-render'
 import { readUserDataRootSettings } from '../dataRoot'
@@ -21,7 +25,7 @@ import type { WorkspaceLayout } from './workspace'
 
 /*
  * 文档底座的正式运行环境：作品目录来自 appPaths，作品索引在 henji.db，
- * 回收站、在文件夹中显示用 Electron shell，媒体授权沿用 henji-media 协议的授权机制。
+ * 回收站、在文件夹中显示用 Electron shell。
  */
 
 const STYLE = process.platform === 'win32' ? 'win32' : 'posix'
@@ -51,16 +55,6 @@ async function hideDirectory(directory: string): Promise<void> {
   })
 }
 
-function grantMediaRoots(directories: readonly string[]): void {
-  for (const directory of directories) {
-    try {
-      allowMediaRoot(directory)
-    } catch (error) {
-      logger.warn('媒体目录授权失败', { event: 'documents.media_grant.failed', context: { directory }, error })
-    }
-  }
-}
-
 function getServices(): DocumentServices {
   services ??= createDocumentServices({
     style: STYLE,
@@ -69,11 +63,11 @@ function getServices(): DocumentServices {
     catalog: new DocumentIndexStore(getDb(), STYLE),
     storeDirectory: getProgramStoreDir('documentStore'),
     logger: createMainLogger,
-    trashItem: target => shell.trashItem(target),
+    trashItem: trashUserFile,
+    preserveFile: preserveUserFile,
     retainDetachedMediaLocation,
     mediaPublished: recordDocumentMediaPublished,
     showItemInFolder: (target) => shell.showItemInFolder(target),
-    grantMediaRoots,
     renderCover: renderCoverImage,
     hideDirectory,
     // 单文件包与文件夹类型的适配器登记处：图片文档 .hjimg（3.5）、网页录制 .hjweb。
@@ -84,6 +78,28 @@ function getServices(): DocumentServices {
 
 export function getDocumentService(): DocumentService {
   return getServices().service
+}
+
+/** 回收区恢复沿用原有来源标记，外部位置只重新登记，不当成一次新导入。 */
+export async function restoreDocumentLocation(target: string): Promise<void> {
+  const document = documentKindRegistry.forFileName(path.basename(target))
+  const manifest = path.join(target, INTERNAL_FOLDER_NAME, PROJECT_MANIFEST_FILE_NAME)
+  const project = await fs.access(manifest).then(() => true, (error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return false
+    throw error
+  })
+  if (!document && !project) return
+  const { workspace, scanner } = getServices()
+  if (project) {
+    const header = await workspace.readManifest(target)
+    if (header && (await workspace.describeProject(target, header)).external) workspace.catalog.addExternalLocation(target, 'project')
+  } else {
+    const containing = await workspace.findProjectRoot(path.dirname(target))
+    if (containing) {
+      if ((await workspace.describeProject(containing.root, containing.manifest)).external) workspace.catalog.addExternalLocation(containing.root, 'project')
+    } else if (!workspace.isScannedDocumentFolder(path.dirname(target))) workspace.catalog.addExternalLocation(path.dirname(target), 'folder')
+  }
+  await scanner.refresh()
 }
 
 /**

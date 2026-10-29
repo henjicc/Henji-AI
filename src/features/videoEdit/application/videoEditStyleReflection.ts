@@ -1,3 +1,5 @@
+import { captureRecycledRemoval } from '@/features/application-control'
+import { restoreDeleted } from '@/services/recycle'
 import { z } from 'zod'
 import { fieldDescriptors, fieldReadValues, fieldWriterTable, unrestrictedCollectionAvailability, type ApplicationFieldDefinition, type ApplicationEntityRegistration, type ApplicationMutationExecutor, type ApplicationCollectionExecutor, type ApplicationPlannedStep, type ApplicationCompletedStepResult, type ApplicationExecutionContext, type ApplicationEvidence, type ApplicationRef, type JsonValue } from '@/core/application-control'
 import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control/execution/writerTable'
@@ -218,7 +220,7 @@ export function createVideoEditStyleRegistrations(): ApplicationEntityRegistrati
 }
 
 function done(refs: ApplicationRef[], fact: string, undoToken?: string): ApplicationCompletedStepResult { return { status: 'completed', resultingRevisions: revisions(), directRefs: refs, evidence: [{ kind: 'entity_state', fact, capturedAt: new Date().toISOString() }], ...(undoToken ? { undoToken } : {}) } }
-interface LibraryUndo { styles: Array<{ id: string; before?: VideoEditStyle; after?: VideoEditStyle }>; templates: Array<{ id: string; before?: VideoEditTemplate; after?: VideoEditTemplate }>; defaultBefore?: string | null; refs: ApplicationRef[] }
+interface LibraryUndo { styles: Array<{ id: string; before?: VideoEditStyle; recycleId?: string; after?: VideoEditStyle }>; templates: Array<{ id: string; before?: VideoEditTemplate; recycleId?: string; after?: VideoEditTemplate }>; defaultBefore?: string | null; refs: ApplicationRef[] }
 /** 风格库的写入撤销：恢复写入前的记录；有后续修改时拒绝，避免覆盖别人的改动。 */
 class LibraryExecutor {
   readonly effectContract = { direct: [], cascades: [] }
@@ -226,13 +228,17 @@ class LibraryExecutor {
   protected remember(state: LibraryUndo): string { const token = crypto.randomUUID(); this.undos.set(token, state); if (this.undos.size > 64) this.undos.delete(this.undos.keys().next().value!); return token }
   async undo(token: string): Promise<ApplicationCompletedStepResult> {
     const state = this.undos.get(token); if (!state) throw new Error('风格库撤销记录不存在。')
-    for (const change of state.styles) {
+    while (state.styles.length) {
+      const change = state.styles[state.styles.length - 1]
       const current = videoEditStyleLibrary.findStyle(change.id)?.style
       if (JSON.stringify(current ? { ...current, updatedAt: '' } : null) !== JSON.stringify(change.after ? { ...change.after, updatedAt: '' } : null)) throw new Error('风格库已有后续修改，请重新读取。')
-      if (change.before) await videoEditStyleLibrary.saveStyle(change.before); else await videoEditStyleLibrary.removeStyle(change.id)
+      if (change.recycleId) await restoreDeleted(change.recycleId); else if (change.before) await videoEditStyleLibrary.saveStyle(change.before); else await videoEditStyleLibrary.removeStyle(change.id)
+      state.styles.pop()
     }
-    for (const change of state.templates) {
-      if (change.before) await videoEditStyleLibrary.saveTemplate(change.before); else if (videoEditStyleLibrary.findTemplate(change.id)) await videoEditStyleLibrary.removeTemplate(change.id)
+    while (state.templates.length) {
+      const change = state.templates[state.templates.length - 1]
+      if (change.recycleId) await restoreDeleted(change.recycleId); else if (change.before) await videoEditStyleLibrary.saveTemplate(change.before); else if (videoEditStyleLibrary.findTemplate(change.id)) await videoEditStyleLibrary.removeTemplate(change.id)
+      state.templates.pop()
     }
     if (state.defaultBefore !== undefined) await videoEditStyleLibrary.setDefaultStyle(state.defaultBefore && videoEditStyleLibrary.findStyle(state.defaultBefore) ? state.defaultBefore : null, 'assistant')
     this.undos.delete(token); return done(state.refs, '已恢复风格库写入前的记录。')
@@ -268,11 +274,13 @@ export class VideoEditStyleCollectionExecutor extends LibraryExecutor implements
       if (ref.kind !== this.entityType) throw new Error(`请使用 ${this.entityType} 引用。`)
       if (this.entityType === STYLE_ENTITY) {
         const entry = videoEditStyleLibrary.requireStyle(ref.id); if (entry.builtin) throw new Error('内置风格只读，不能删除。')
-        const members = videoEditStyleLibrary.listTemplates(ref.id).map(value => value.template)
-        if (videoEditStyleLibrary.defaultStyleId() === ref.id) state.defaultBefore = ref.id
-        await videoEditStyleLibrary.removeStyle(ref.id); state.styles.push({ id: ref.id, before: entry.style })
-        state.templates.push(...members.map(template => ({ id: template.id, before: template })))
-      } else { const before = videoEditStyleLibrary.requireTemplate(ref.id).template; await videoEditStyleLibrary.removeTemplate(ref.id); state.templates.push({ id: ref.id, before }) }
+        const recycleId = await captureRecycledRemoval(() => videoEditStyleLibrary.removeStyle(ref.id), item => item.path === entry.dir)
+        state.styles.push({ id: ref.id, before: entry.style, recycleId })
+      } else {
+        const entry = videoEditStyleLibrary.requireTemplate(ref.id)
+        const recycleId = await captureRecycledRemoval(() => videoEditStyleLibrary.removeTemplate(ref.id), item => item.path === entry.file)
+        state.templates.push({ id: ref.id, before: entry.template, recycleId })
+      }
       state.refs.push(ref)
     }
     return done(state.refs, '已从风格库目录回读。', this.remember(state))

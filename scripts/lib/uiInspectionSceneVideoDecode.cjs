@@ -241,7 +241,6 @@ async function runExperiment(page, evidence, store) {
       { label: 'transfer-srgb', options: { transfer: 'srgb' } },
       { label: 'transfer-bt709', options: { transfer: 'bt709' } },
     ]
-    await page.evaluate((dir) => window.henjiNative.media.allowRoot(dir), path.dirname(item.file))
     const first = await openDecoder(page, { path: item.file, purpose: 'seek' })
     await closeStream(page, first.streamId)
     if (first.format === 'nv12') variants.push({ label: 'rgbaf16-default', options: { format: 'rgbaf16' } }, { label: 'rgbaf16-srgb', options: { format: 'rgbaf16', transfer: 'srgb' } }, { label: 'rgbaf16-bt709', options: { format: 'rgbaf16', transfer: 'bt709' } })
@@ -297,7 +296,6 @@ async function runPixels(page, evidence, store) {
   evidence.pixels = []
   for (const sample of SAMPLE_LIST) {
     if (!fs.existsSync(sample.file)) { evidence.pixels.push({ id: sample.id, skipped: '样本缺失' }); continue }
-    await page.evaluate((dir) => window.henjiNative.media.allowRoot(dir), path.dirname(sample.file))
     const { timeBase, frames } = probeFrames(sample.file)
     const sorted = frames.map((frame) => frame.pts).sort((a, b) => a - b)
     // 帧标志按呈现顺序（ffprobe 输出即呈现顺序）。
@@ -344,7 +342,6 @@ async function runSeek(page, evidence, store) {
   evidence.seek = []
   for (const sample of SAMPLE_LIST) {
     if (!fs.existsSync(sample.file)) continue
-    await page.evaluate((dir) => window.henjiNative.media.allowRoot(dir), path.dirname(sample.file))
     const { timeBase, frames } = probeFrames(sample.file)
     const sorted = frames.map((frame) => frame.pts).sort((a, b) => a - b)
     const start = toSeconds(sorted[0], timeBase)
@@ -392,7 +389,6 @@ async function runSchedule(page, evidence, store) {
   evidence.schedule = []
   for (const sample of SAMPLE_LIST) {
     if (!fs.existsSync(sample.file)) continue
-    await page.evaluate((dir) => window.henjiNative.media.allowRoot(dir), path.dirname(sample.file))
     const { timeBase, frames } = probeFrames(sample.file)
     const sorted = frames.map((frame) => frame.pts).sort((a, b) => a - b)
     const start = toSeconds(sorted[0], timeBase)
@@ -431,7 +427,6 @@ async function runLoad(page, app, evidence, store) {
   evidence.loads = []
   for (const sample of LOAD_LIST) {
     if (!fs.existsSync(sample.file)) { evidence.loads.push({ id: sample.id, skipped: '样本缺失' }); continue }
-    await page.evaluate((dir) => window.henjiNative.media.allowRoot(dir), path.dirname(sample.file))
     const info = await openDecoder(page, { path: sample.file, purpose: 'playback' })
     const start = info.startSeconds ?? 0
     const end = info.endSeconds ?? start + 7
@@ -488,7 +483,6 @@ async function runSoak(page, app, evidence, store) {
   // 基线取在“同样的会话各开关过一次”之后：硬件解码设备、着色器、解码库与线程池是进程内一次性初始化，
   // 不属于播放期间的资源增长（单独跑本阶段时服务还未启动，冷基线会把它们算成未回收）。
   for (const file of files) {
-    await page.evaluate((dir) => window.henjiNative.media.allowRoot(dir), path.dirname(file))
     const warm = await openDecoder(page, { path: file, purpose: 'playback' })
     await diagnose(page, { action: 'pace', streamId: warm.streamId, scheduleId: 'warm', count: 30, fps: 0 })
     await page.evaluate((request) => window.henjiNative.videoFrames.schedule(request), { streamId: warm.streamId, scheduleId: 'warm', times: Array.from({ length: 30 }, (_, index) => (warm.startSeconds ?? 0) + index / 60) })
@@ -500,7 +494,6 @@ async function runSoak(page, app, evidence, store) {
   evidence.soak = { baseline: await resourceSnapshot(app, page), samples: [] }
   const sessions = []
   for (const file of files) {
-    await page.evaluate((dir) => window.henjiNative.media.allowRoot(dir), path.dirname(file))
     const info = await openDecoder(page, { path: file, purpose: 'playback' })
     const times = loopTimes(info.startSeconds ?? 0, info.endSeconds ?? 63, 60, SOAK_SECONDS)
     const scheduleId = `soak-${sessions.length}`

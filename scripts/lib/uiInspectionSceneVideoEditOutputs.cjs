@@ -38,7 +38,7 @@ function createVideoEditOutputsScene({ canvasFixtureProjectId }) {
         await button(page, '生成').click(); previousLayout = await page.evaluate(() => localStorage.getItem('henji.videoEdit.dockLayout.v1'))
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1')); await observeWorkers(page); observed = true; await button(page, '剪辑').click()
         await dialogs(app, [file], file); await openVideoEditFile(page, file); await presented(page, 0)
-        const identity = await authorizeMcpConnection(page, { name: '剪辑输出收录验收', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji output collection Reality')
+        const identity = await authorizeMcpConnection(page, { name: '剪辑输出收录验收' }); client = await connectMcpClient(identity.config, 'Henji output collection Reality')
         const projectRef = { kind: 'video_edit.document', id: fixture.id }
         const baseline = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.document.program_playback'] })
         await callTool(client, 'change_application_entities', operationEnvelope([baseline], { summary: '定位真实节目选帧', changes: [{ kind: 'set_properties', entityType: 'video_edit.document', target: projectRef, properties: { 'video_edit.document.program_playback': { frame: 90, playing: false, playbackDirection: 1 } } }] }))

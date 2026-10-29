@@ -31,7 +31,6 @@ import type {
 import { createLogger } from '@/core/logging'
 import { useI18n } from '@/hooks/useI18n'
 import { extname, getPathForFile, openDialog } from '@/platform/desktopApi'
-import SettingsDialog from '../components/SettingsDialog'
 
 const logger = createLogger('components.Settings.AgentSkillsSection')
 const BUILTIN_DESCRIPTION_KEYS: Readonly<Record<string, string>> = {
@@ -48,14 +47,6 @@ const EMPTY_MANIFEST: AssistantSkillManifest = {
   schemaVersion: 'assistant-skill/v1',
   skills: [],
   invalid: [],
-}
-
-interface PendingConfirm {
-  kind: 'overwrite' | 'disable-builtin' | 'uninstall'
-  title: string
-  description: string
-  confirmLabel: string
-  run: () => Promise<void>
 }
 
 function describeInstallResult(result: AssistantSkillInstallResult, t: TFunction): string {
@@ -78,7 +69,6 @@ export default function AgentSkillsSection(): JSX.Element {
   const [dragging, setDragging] = useState(false)
   const [status, setStatus] = useState<StatusLine>(() => info(t('agentSkills.reading')))
   const [skipped, setSkipped] = useState<AssistantSkillInstallResult['skippedFiles']>([])
-  const [confirm, setConfirm] = useState<PendingConfirm | null>(null)
 
   const userSkills = useMemo(
     () => manifest.skills.filter((skill) => skill.source === 'user'),
@@ -110,8 +100,8 @@ export default function AgentSkillsSection(): JSX.Element {
     void load()
   }, [load])
 
-  const runInstall = useCallback(async (sourcePath: string, overwrite: boolean): Promise<void> => {
-    retry.current = () => runInstall(sourcePath, overwrite)
+  const runInstall = useCallback(async (sourcePath: string): Promise<void> => {
+    retry.current = () => runInstall(sourcePath)
     setBusy(true)
     setSkipped([])
     setStatus(info(t('agentSkills.installing')))
@@ -120,7 +110,7 @@ export default function AgentSkillsSection(): JSX.Element {
       context: { extension: extname(sourcePath) },
     })
     try {
-      const result = await installAssistantSkill({ sourcePath, overwrite })
+      const result = await installAssistantSkill({ sourcePath })
       setSkipped(result.skippedFiles)
       setStatus(info(describeInstallResult(result, t)))
       await load()
@@ -130,17 +120,6 @@ export default function AgentSkillsSection(): JSX.Element {
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : t('agentSkills.installFailed')
-      if (message.includes('同名技能已存在')) {
-        setStatus(info(''))
-        setConfirm({
-          kind: 'overwrite',
-          title: t('agentSkills.overwriteTitle'),
-          description: t('agentSkills.overwriteDescription'),
-          confirmLabel: t('agentSkills.overwriteConfirm'),
-          run: () => runInstall(sourcePath, true),
-        })
-        return
-      }
       setStatus(failure(message))
       logger.error('安装助手技能失败', error, { event: 'settings.agent_skills.install.failed' })
     } finally {
@@ -154,7 +133,7 @@ export default function AgentSkillsSection(): JSX.Element {
     })
     const sourcePath = Array.isArray(selected) ? selected[0] : selected
     if (!sourcePath) return
-    await runInstall(sourcePath, false)
+    await runInstall(sourcePath)
   }, [runInstall, t])
 
   const handleDrop = useCallback((event: React.DragEvent<HTMLDivElement>): void => {
@@ -167,7 +146,7 @@ export default function AgentSkillsSection(): JSX.Element {
       setStatus(failure(t('agentSkills.dropPathFailed')))
       return
     }
-    void runInstall(sourcePath, false)
+    void runInstall(sourcePath)
   }, [runInstall, t])
 
   const toggleSkill = useCallback((skill: AssistantSkillMetadata): void => {
@@ -184,43 +163,22 @@ export default function AgentSkillsSection(): JSX.Element {
         setBusy(false)
       }
     }
-    // 只有"停用内置技能"需要二次确认：内置技能承载助手在该领域的核心操作流程，
-    // 误关之后助手会在对应场景明显变笨，而用户未必能把这个现象和自己关过的开关联系起来。
-    // 启用和停用自己的技能都不弹窗——反向操作不会造成能力缺失，不该打扰用户。
-    if (skill.enabled && skill.source === 'builtin') {
-      setConfirm({
-        kind: 'disable-builtin',
-        title: t('agentSkills.disableBuiltinTitle', { name: skill.name }),
-        description: t('agentSkills.disableBuiltinDescription'),
-        confirmLabel: t('agentSkills.disableConfirm'),
-        run: apply,
-      })
-      return
-    }
     void apply()
   }, [t])
 
   const removeSkill = useCallback((skill: AssistantSkillMetadata): void => {
-    setConfirm({
-      kind: 'uninstall',
-      title: t('agentSkills.uninstallTitle', { name: skill.name }),
-      description: t('agentSkills.uninstallDescription'),
-      confirmLabel: t('agentSkills.uninstallConfirm'),
-      run: async function remove() {
-        retry.current = remove
-        setStatus(info(''))
-        setBusy(true)
-        try {
-          await uninstallAssistantSkill(skill.name)
-          setStatus(info(t('agentSkills.uninstalled', { name: skill.name })))
-          await load()
-        } catch (error) {
-          setStatus(failure(error instanceof Error ? error.message : t('agentSkills.uninstallFailed')))
-        } finally {
-          setBusy(false)
-        }
-      },
-    })
+    const remove = async (): Promise<void> => {
+      retry.current = remove
+      setStatus(info('')); setBusy(true)
+      try {
+        await uninstallAssistantSkill(skill.name)
+        setStatus(info(t('agentSkills.uninstalled', { name: skill.name })))
+        await load()
+      } catch (error) {
+        setStatus(failure(error instanceof Error ? error.message : t('agentSkills.uninstallFailed')))
+      } finally { setBusy(false) }
+    }
+    void remove()
   }, [load, t])
 
   const openDirectory = useCallback(async (): Promise<void> => {
@@ -344,24 +302,6 @@ export default function AgentSkillsSection(): JSX.Element {
         ) : null}
       </UiGroup>
 
-      <SettingsDialog
-        open={confirm !== null}
-        title={confirm?.title ?? ''}
-        description={confirm?.description ?? ''}
-        onClose={() => setConfirm(null)}
-        actions={[
-          { label: t('agentSkills.cancel'), onClick: () => setConfirm(null), variant: 'secondary' },
-          {
-            label: confirm?.confirmLabel ?? t('agentSkills.confirm'),
-            variant: confirm?.kind === 'uninstall' ? 'danger' : 'primary',
-            onClick: () => {
-              const pending = confirm
-              setConfirm(null)
-              if (pending) void pending.run()
-            },
-          },
-        ]}
-      />
     </div>
   )
 }

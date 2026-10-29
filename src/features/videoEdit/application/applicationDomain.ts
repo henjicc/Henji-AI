@@ -223,7 +223,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       const scenes = await handleVideoEditSceneCapability(definition.id, raw, context)
       if (scenes) return scenes
       if (definition.id === screenAttentionVideoEditCapability.id) return executeVideoEditScreenAttentionCapability(screenAttentionVideoEditCapability.inputSchema.parse(raw), context.signal)
-      if (definition.id === reframeVideoEditCapability.id) return executeVideoEditReframeCapability(reframeVideoEditCapability.inputSchema.parse(raw), context.signal, context.callerGrant?.permissions)
+      if (definition.id === reframeVideoEditCapability.id) return executeVideoEditReframeCapability(reframeVideoEditCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === generateVideoEditAudioDuckingCapability.id) return executeVideoEditAudioDuckingCapability(generateVideoEditAudioDuckingCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === analyzeVideoEditColorGradeCapability.id) {
         const input = analyzeVideoEditColorGradeCapability.inputSchema.parse(raw)

@@ -23,7 +23,6 @@ const collections = new WeakSet<VideoEditOutputReceipt>()
 /** Called only after the formal encoder/file writer has published a complete file. */
 export async function publishVideoEditOutput(input: Omit<VideoEditOutputReceipt, 'id' | 'content'>): Promise<VideoEditOutputReceipt> {
   const platform = getPlatform()
-  await platform.media.allowRoot(await platform.system.paths.dirname(input.path))
   const content = await platform.assetLibrary.inspectFileContent(input.path, input.kind)
   return Object.freeze({ ...input, id: crypto.randomUUID(), content: Object.freeze(content) })
 }

@@ -8,7 +8,7 @@ import { LocalMcpServer } from './server'
 import { McpConnections } from './connections'
 import { ApplicationResourceSubscriptions } from './resourceSubscriptions'
 import { ApplicationHostBridge } from '../application-runtime/applicationHostBridge'
-import { EXTERNAL_CONTRACT_VERSION, EXTERNAL_PROTOCOL_VERSIONS, EXTERNAL_LIMITS, type LocalHostRequest } from '../../../../src/core/application-control/localHostContracts'
+import { EXTERNAL_CONTRACT_VERSION, EXTERNAL_PROTOCOL_VERSIONS, type LocalHostRequest } from '../../../../src/core/application-control/localHostContracts'
 import { readApplicationMediaResource } from '../application-runtime/mediaResources'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import { z } from 'zod'
@@ -116,29 +116,7 @@ describe('本地 MCP 协议与边界', () => {
     await f.server.stop()
     expect(detach).toHaveBeenCalledOnce()
   })
-  it('连接权限变更只通知所属流，重新发现可见新增写工具与撤回结果', async () => {
-    // 本用例只发现目录，不执行或登记写入；账本不能被意外调用。
-    const operations = new Proxy({} as ApplicationOperationCoordinator, { get() { throw new Error('目录发现不应调用操作账本') } })
-    const f = await fixture({ operations })
-    const a = await f.connect(); const b = await f.connect(f.second.id)
-    const toolsA = vi.fn(); const resourcesA = vi.fn(); const toolsB = vi.fn(); const resourcesB = vi.fn()
-    a.client.setNotificationHandler('notifications/tools/list_changed', toolsA)
-    a.client.setNotificationHandler('notifications/resources/list_changed', resourcesA)
-    b.client.setNotificationHandler('notifications/tools/list_changed', toolsB)
-    b.client.setNotificationHandler('notifications/resources/list_changed', resourcesB)
-    await a.client.listen({ toolsListChanged: true, resourcesListChanged: true })
-    await b.client.listen({ toolsListChanged: true, resourcesListChanged: true })
-    expect((await a.client.listTools()).tools.some(tool => tool.name === 'change_application_entities')).toBe(false)
-    f.connections.update(f.first.id, { allowWrites: true, allowDestructive: true, allowPaid: true })
-    f.server.accessChanged(f.first.id)
-    await vi.waitFor(() => { expect(toolsA).toHaveBeenCalledOnce(); expect(resourcesA).toHaveBeenCalledOnce() })
-    expect((await a.client.listTools()).tools.some(tool => tool.name === 'change_application_entities')).toBe(true)
-    f.connections.update(f.first.id, { allowWrites: false, allowDestructive: false, allowPaid: false })
-    f.server.accessChanged(f.first.id)
-    await vi.waitFor(() => expect(toolsA).toHaveBeenCalledTimes(2))
-    expect((await a.client.listTools()).tools.some(tool => tool.name === 'change_application_entities')).toBe(false)
-    expect(toolsB).not.toHaveBeenCalled(); expect(resourcesB).not.toHaveBeenCalled()
-  })
+
   it('纯选区与导航上下文变化不广播资源目录也不授权回读', async () => {
     const f = await fixture()
     const { client } = await f.connect()
@@ -225,7 +203,7 @@ describe('本地 MCP 协议与边界', () => {
   })
   it('重载期间在途截帧与新发上下文读取都等待新渲染器后成功', async () => {
     const options = { pending: true, reply: (request: LocalHostRequest) => ({ ok: true, data: request.capabilityId === 'observe_video_edit_frame'
-      ? { byteLength: 8, resultRef: { kind: 'asset', id: 'new-renderer' }, documentRef: request.input.documentRef, target: request.input.target,
+      ? { byteLength: 8, reused: false, storage: 'assets', resultRef: { kind: 'asset', id: 'new-renderer' }, documentRef: request.input.documentRef, target: request.input.target,
         width: 1280, height: 720, sourceWidth: 1920, sourceHeight: 1080, documentRevision: 1, documentVersion: 'new-renderer',
         message: 'new-renderer', verification: { verified: true, condition: '已保存合成帧', target: { kind: 'asset', id: 'new-renderer' } } }
       : { surface: { id: 'workspace.videoEdit', kind: 'workspace', focusedRef: 'new-renderer', selectedRefs: [] }, catalogRevision: 1, ready: true, revision: 0 } }) }
@@ -304,7 +282,6 @@ describe('本地 MCP 协议与边界', () => {
     const uri = 'henji://entity/settings.registry/singleton'
     await expect(b.client.listen({ resourceSubscriptions: [uri] })).rejects.toThrow('PERMISSION_DENIED')
     await expect(a.client.listen({ resourceSubscriptions: ['file:///secret'] })).rejects.toThrow()
-    await expect(a.client.listen({ resourceSubscriptions: Array.from({ length: 129 }, () => uri) })).rejects.toThrow('128')
     const eventsA: string[] = []; const eventsB: string[] = []
     a.client.setNotificationHandler('notifications/resources/updated', event => { eventsA.push(event.params.uri) })
     b.client.setNotificationHandler('notifications/resources/updated', event => { eventsB.push(event.params.uri) })
@@ -384,31 +361,33 @@ describe('本地 MCP 协议与边界', () => {
     f.host.complete({ ...embeddedRequest, result: { ok: true, data: { name: '内置读取继续完成' } } })
     await expect(embedded).resolves.toMatchObject({ ok: true, data: { name: '内置读取继续完成' } })
   })
-  it('订阅流不占普通请求的并发名额：各客户端挂着订阅、再有长调用在途时，新握手与调用照常；普通请求满了才回 429 并记下占用', async () => {
+  it('订阅流不占普通请求的并发名额：各客户端挂着订阅、再有长调用在途时，新握手与调用照常；超过原并发限制仍接受请求', async () => {
     const f = await fixture({ pending: true })
-    for (let index = 0; index < EXTERNAL_LIMITS.concurrentRequests; index++) await (await f.connect()).client.listen({ toolsListChanged: true })
+    for (let index = 0; index < 20; index++) await (await f.connect()).client.listen({ toolsListChanged: true })
     const owner = await f.connect()
     const long = owner.client.callTool({ name: 'read_application_entity', arguments: {} }).catch(() => ({ isError: true }))
     await vi.waitFor(() => expect(f.calls).toHaveLength(1))
     const fresh = await f.connect()
     expect((await fresh.client.listTools()).tools.length).toBeGreaterThan(0)
-    const pending = Array.from({ length: EXTERNAL_LIMITS.concurrentRequests - 1 }, () => fresh.client.callTool({ name: 'read_application_entity', arguments: {} }).catch(() => ({ isError: true })))
-    await vi.waitFor(() => expect(f.calls).toHaveLength(EXTERNAL_LIMITS.concurrentRequests))
-    const discover = await fetch(f.url(), { method: 'POST', headers: { Authorization: `Bearer ${f.connections.token(f.first.id)}`, 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'server/discover', params: {} }) })
-    expect(discover.status).toBe(429)
-    expect(f.rejected).toHaveBeenLastCalledWith({ reason: 'too_many_requests', requests: EXTERNAL_LIMITS.concurrentRequests, listening: EXTERNAL_LIMITS.concurrentRequests })
+    // 直接发送标准请求，避免客户端目录缓存的探测合并影响服务端并发验证。
+    const failures: string[] = []
+    const pending = Array.from({ length: 12 - 1 }, (_, index) => fresh.client.request({ method: 'tools/call', params: { name: 'read_application_entity', arguments: { ref: { kind: 'settings.registry', id: `parallel-${index}` } } } }).catch(error => { failures.push(String(error)); return { isError: true } }))
+    await vi.waitFor(() => { expect(failures).toEqual([]); expect(f.calls).toHaveLength(12) })
+    const discover = await f.connect()
+    expect((await discover.client.listTools()).tools.length).toBeGreaterThan(0)
+    expect(f.rejected).not.toHaveBeenCalled()
     await f.server.stop()
     await Promise.all([long, ...pending])
   })
-  it('订阅还在逐个地址授权读取时仍占普通名额：同时发起的订阅不能绕开并发上限', async () => {
+  it('订阅仍在逐个地址读取时，同时发起多条订阅仍能发现服务', async () => {
     const f = await fixture({ pending: true })
     const uris = Array.from({ length: 128 }, () => 'henji://entity/settings.registry/singleton')
-    const clients = await Promise.all(Array.from({ length: EXTERNAL_LIMITS.concurrentRequests }, () => f.connect()))
+    const clients = await Promise.all(Array.from({ length: 12 }, () => f.connect()))
     const listening = clients.map(({ client }) => client.listen({ resourceSubscriptions: uris }).catch(() => undefined))
-    await vi.waitFor(() => expect(f.calls).toHaveLength(EXTERNAL_LIMITS.concurrentRequests))
-    const discover = await fetch(f.url(), { method: 'POST', headers: { Authorization: `Bearer ${f.connections.token(f.first.id)}`, 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'server/discover', params: {} }) })
-    expect(discover.status).toBe(429)
-    expect(f.rejected).toHaveBeenLastCalledWith({ reason: 'too_many_requests', requests: EXTERNAL_LIMITS.concurrentRequests, listening: 0 })
+    await vi.waitFor(() => expect(f.calls).toHaveLength(12))
+    const discover = await f.connect()
+    expect((await discover.client.listTools()).tools.length).toBeGreaterThan(0)
+    expect(f.rejected).not.toHaveBeenCalled()
     await f.server.stop()
     await Promise.all(listening)
   })
@@ -426,11 +405,11 @@ describe('本地 MCP 协议与边界', () => {
   it('现代发现与调用；关闭再开启不丢失根宿主', async () => {
     const f = await fixture()
     const a = await f.connect()
-    // 只读连接：宿主登记的读取工具 + 服务自带的协议工具；写工具一个都不出现。
-    // 按语义断言而不是数量，扩容目录不会误报，权限泄漏仍然必红。
+    // 连接使用完整业务目录，内部恢复沿原操作执行。
+    // 按语义断言而不是数量，扩容目录不会误报，内部能力仍须排除。
     const readOnlyTools = (await a.client.listTools()).tools
     expect(readOnlyTools.map((tool) => tool.name)).toEqual(expect.arrayContaining(['read_application_entity', 'read_application_media', 'describe_application_contract']))
-    expect(readOnlyTools.filter((tool) => tool.annotations?.readOnlyHint !== true)).toEqual([])
+    expect(readOnlyTools.map(tool => tool.name)).toContain('change_application_entities')
     expect((await a.client.callTool({ name: 'read_application_entity', arguments: {} })).structuredContent).toEqual({ ok: true, revision: 0, revisionEpoch: f.host.rendererEpoch, data: { ref: { kind: 'settings.registry', id: 'singleton' }, entityType: 'settings.registry', properties: { name: '隔离工程' }, revisions: { settings: 0 }, capturedAt: new Date(0).toISOString() } })
     expect((await a.client.callTool({ name: 'change_application_entities', arguments: {} })).isError).toBe(true)
     expect(f.calls).toHaveLength(1)
@@ -449,7 +428,6 @@ describe('本地 MCP 协议与边界', () => {
     expect((await fetch(f.url(), { headers: { ...headers, Origin: 'http://evil.test' } })).status).toBe(403)
     const badHostStatus = await new Promise<number | undefined>((resolve, reject) => { const request = httpRequest(f.url(), { headers: { ...headers, Host: 'evil.test' } }, (response) => { response.resume(); resolve(response.statusCode) }); request.on('error', reject); request.end() })
     expect(badHostStatus).toBe(403)
-    expect((await fetch(f.url(), { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: 'x'.repeat(EXTERNAL_LIMITS.requestBytes + 1) })).status).toBe(413)
     expect(f.calls).toHaveLength(0)
   })
   it('无协议会话；撤销和到期逐请求生效', async () => {
@@ -513,7 +491,7 @@ describe('本地 MCP 协议与边界', () => {
     f.host.register({ rendererEpoch: randomUUID(), attachmentSequence: 2, ready: false, tools: [], domains: [] }, { send: () => {} })
     expect(f.host.ready).toBe(true)
   })
-  it('契约发现按授权档回答，并说明缺席与被拒的区别', async () => {
+  it('契约发现使用完整目录，并说明内部能力的替代路线', async () => {
     const f = await fixture()
     // 宿主登记了写工具，但本连接只有读授权：写工具应当"缺席且说明缺哪一档"。
     f.host.register({ rendererEpoch: randomUUID(), attachmentSequence: 9, ready: true, domains: [], tools: [
@@ -526,10 +504,7 @@ describe('本地 MCP 协议与边界', () => {
     const data = (result.structuredContent as { data: Record<string, unknown> }).data
     expect((data.contract as { externalContractVersion: string }).externalContractVersion).toBe(EXTERNAL_CONTRACT_VERSION)
     expect((data.contract as { transport: { url: string } }).transport.url).toBe(`http://127.0.0.1:${f.server.listeningPort}/mcp`)
-    const access = data.access as { write: boolean; hiddenTools: Array<{ name: string; requires: string }>; note: string }
-    expect(access.write).toBe(false)
-    expect(access.hiddenTools.map((item) => item.name)).toContain('change_application_entities')
-    expect(access.note).toContain('PERMISSION_DENIED')
+
     // 缺席的工具直接点名调用：得到的是拒绝，而不是"没有这个能力"。
     const denied = await a.client.callTool({ name: 'change_application_entities', arguments: {} })
     expect(denied.isError).toBe(true)
@@ -548,7 +523,7 @@ describe('本地 MCP 协议与边界', () => {
     expect(a.client.getServerCapabilities()?.tools).toEqual({ listChanged: true })
   })
 
-  it('协议工具拒绝未知字段并指名字段，超限结果不落到调用方', async () => {
+  it('协议工具拒绝未知字段并指名字段，大结果按正式契约返回', async () => {
     const validation = await fixture()
     const unknownField = await validation.connect()
     const rejected = await unknownField.client.callTool({ name: 'read_application_media', arguments: { ref: { kind: 'asset', id: 'x' }, unexpected: 1 } })
@@ -577,12 +552,11 @@ describe('本地 MCP 协议与边界', () => {
     const meta = await unknownField.client.callTool({ name: 'describe_application_contract', arguments: {}, _meta: { progressToken: 'p1' } })
     expect(meta.isError, JSON.stringify(meta)).toBe(false)
 
-    const oversized = await fixture({ result: { ok: true, data: { blob: 'x'.repeat(3 * 1024 * 1024) } } })
+    const oversized = await fixture({ result: { ok: true, data: { ref: { kind: 'settings.registry', id: 'singleton' }, entityType: 'settings.registry', properties: { blob: 'x'.repeat(3 * 1024 * 1024) }, revisions: {}, capturedAt: new Date(0).toISOString() } } })
     const b = await oversized.connect()
     const big = await b.client.callTool({ name: 'read_application_entity', arguments: {} })
-    expect(big.isError).toBe(true)
-    expect(JSON.stringify(big)).not.toContain('xxxxxxxxxx')
-    expect(JSON.stringify(big)).toContain('分页')
+    expect(big.isError).toBe(false)
+    expect(JSON.stringify(big)).toContain('xxxxxxxxxx')
   })
 
   it('客户端取消通过真实协议中止宿主等待', async () => {

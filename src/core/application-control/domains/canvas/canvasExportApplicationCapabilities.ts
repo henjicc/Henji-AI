@@ -25,7 +25,6 @@ const downloadCanvasMedia = defineApplicationCapability({
   aliases: ['批量下载画布节点', '下载节点媒体', 'download canvas media'],
   readOnly: false,
   control: capabilityControl('execute', ['canvas.node'], { verificationRequired: false }),
-  risk: 'R2',
   dataClasses: ['C1'],
   permission: 'canvas:export',
   idempotent: false,

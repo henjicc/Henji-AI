@@ -306,8 +306,6 @@ const httpApi: HenjiHttpApi = {
 
 const mediaApi: HenjiMediaApi = {
   enqueueRecycle: (paths, protectedBy = []) => nativeInvoke('media:enqueueRecycle', { paths, protectedBy }),
-  allowRoot: (rootPath) => nativeInvoke('media:allowRoot', { rootPath }),
-  isPathAllowed: (targetPath) => nativeInvoke('media:isPathAllowed', { targetPath }),
   getPathForFile: (file) => webUtils.getPathForFile(file),
   getBundledResourcePath: (relativePath) => nativeInvoke('media:getBundledResourcePath', { relativePath }),
   importFromPath: (request) => nativeInvoke('media:importFromPath', request),

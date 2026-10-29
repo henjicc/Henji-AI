@@ -80,22 +80,21 @@
     "describeTitle": "描述生成标题",
     "alignSpeech": "识别声音并对齐原文",
     "allowOnce": "允许本次",
-    "alwaysAllowProject": "本项目始终允许",
     "deny": "拒绝",
     "categories": {
       "generation": "生成",
       "recognition": "识别",
       "translation": "翻译",
       "title": "标题",
-      "explanation": "讲解外发"
+      "explanation": "讲解"
     },
     "operation": "本次操作：{{category}}",
     "operationWithModel": "本次操作：{{category}} · {{modelName}}",
     "unknownCost": "费用暂无法预估，按模型实际计费",
     "estimatedCost": "预计 ¥{{amount}}",
     "dailySpent": "今日已用 ¥{{amount}}",
-    "sendExplanation": "发送讲解给 AI？",
-    "explanationContent": "将发送讲解文字和 {{count}} 张画面给 {{modelName}}。"
+    "sendExplanation": "AI 讲解",
+    "explanationContent": "{{modelName}} 将处理讲解文字和 {{count}} 张画面，按模型计费。"
   },
   "operationReview": {
     "executedTitle": "请核对已执行的修改",

@@ -91,12 +91,12 @@ export function ExplanationPanel({ entries, stage, elapsedUs, busy, loading, has
   }
   const paragraph = (entry: TranscriptEntry): JSX.Element => <ExplanationReview {...review} onRead={read} onBind={bind} onPick={review.onPick ? pick : undefined} entry={entry} initiallyOpen showTrigger={false} onResult={report} focusedMentionId={focused} focusedMentionRequest={focusRequest} />
   const transcribing = stage === 'transcribing', recording = stage === 'recording' || stage === 'paused'
-  const generate = (confirm?: ExplanationSendRequest, project = false): void => {
+  const generate = (confirm?: ExplanationSendRequest): void => {
     if (!onGenerate || generatingRef.current) return
     const expected = generationScope
     generatingRef.current = true; setGenerating(true)
     void (async () => {
-      if (confirm) await confirm.confirm(project)
+      if (confirm) await confirm.confirm()
       else {
         const request = await prepareGeneration?.()
         if (currentScope.current !== expected) { await request?.cancel(); return }
@@ -128,6 +128,6 @@ export function ExplanationPanel({ entries, stage, elapsedUs, busy, loading, has
       {entries.length ? <UiButton variant="primary" loading={generating} disabledReason={reason || (!onGenerate ? '当前内容暂不支持生成候选' : undefined)} disabled={busy || generating || !!reason || !onGenerate} onClick={() => generate()}>生成候选</UiButton> : <UiButton variant="primary" disabled={busy || loading} onClick={onTranscribe}>转写并审阅</UiButton>}
     </div>}
     <ExplanationSendConfirmation request={sendRequest?.scope === generationScope ? sendRequest.request : undefined} generating={generating}
-      onCancel={() => { if (!generatingRef.current) { void sendRequest?.request.cancel().catch(review.onError); setSendRequest(undefined) } }} onSend={project => { if (sendRequest?.scope === generationScope) generate(sendRequest.request, project) }} />
+      onCancel={() => { if (!generatingRef.current) { void sendRequest?.request.cancel().catch(review.onError); setSendRequest(undefined) } }} onSend={() => { if (sendRequest?.scope === generationScope) generate(sendRequest.request) }} />
   </section>
 }

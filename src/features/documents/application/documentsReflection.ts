@@ -51,7 +51,10 @@ class DocumentsReflectionProvider implements ApplicationEntityProvider {
   }
 
   async readEntity(ref: ApplicationRef, request: ApplicationEntityReadRequest): Promise<ApplicationEntitySnapshot> {
-    const values = await this.readValues(ref)
+    const values = await this.readValues(ref).catch((error: unknown) => {
+      if (error instanceof Error && ['DocumentNotFoundError', 'ProjectNotFoundError'].includes(error.name)) throw new Error(`NOT_FOUND:${error.message}`, { cause: error })
+      throw error
+    })
     return {
       ref, entityType: this.entityType, revisions: documentsRevisions(this.operations()),
       properties: pick(values.values, request.propertyIds), capturedAt: new Date().toISOString(),
@@ -93,7 +96,7 @@ class DocumentsReflectionProvider implements ApplicationEntityProvider {
 const ENTITY_META: Record<DocumentsEntityType, { title: string; description: string }> = {
   [DOCUMENTS_ENTITY_TYPES.document]: {
     title: '文档',
-    description: '剪辑、画布、口播、镜头参考、图片文档等作品文件；名称可改，位置用 move_document、副本用 duplicate_document、收集素材进项目用 collect_document_media、删除用 trash_document。',
+    description: '剪辑、画布、口播、镜头参考、图片文档等作品文件；集合 remove 删除到最近删除，可恢复；位置用 move_document、副本用 duplicate_document、收集素材进项目用 collect_document_media。',
   },
   [DOCUMENTS_ENTITY_TYPES.project]: {
     title: '项目',
@@ -108,6 +111,7 @@ export function createDocumentsReflectionRegistrations(operations: () => Documen
       description: ENTITY_META[entityType].description, refKind: entityType,
       dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: [],
       revisionScopes: ['documents'], queryCapabilityIds: ['read_application_entity'], schemaRef: documentsSchemaRef('entity', entityType),
+      collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [], maxItemsPerChange: 64 },
     },
     properties: entityType === DOCUMENTS_ENTITY_TYPES.document ? fieldDescriptors(DOCUMENT_FIELDS) : fieldDescriptors(PROJECT_FIELDS),
     provider: new DocumentsReflectionProvider(entityType, operations),

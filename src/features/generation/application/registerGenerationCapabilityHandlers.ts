@@ -175,7 +175,7 @@ export function registerGenerationCapabilityHandlers(
     return {
       preparation: { ...preparation, providerConfigured, canSubmit: providerConfigured && !unavailable,
         ...(unavailable ? { errorCode: unavailable.code, retryAfterMs: Math.max(0, unavailable.expiresAt - Date.now()) } : {}),
-        message: unavailable?.message ?? (providerConfigured ? '参数已通过校验，供应商已配置；提交仍需费用与权限确认。' : '参数已通过校验，但供应商未配置，不能提交。请先配置该供应商凭据，或选择已配置供应商的模型。') },
+        message: unavailable?.message ?? (providerConfigured ? '参数已通过校验，供应商已配置；提交按统一付费策略执行。' : '参数已通过校验，但供应商未配置，不能提交。请先配置该供应商凭据，或选择已配置供应商的模型。') },
     }
   })
 

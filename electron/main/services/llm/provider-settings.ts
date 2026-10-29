@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import {
   DEFAULT_DEEPSEEK_BASE_URL,
   DEFAULT_PPIO_BASE_URL,
@@ -274,6 +275,30 @@ export class LlmProviderSettingsService {
     })
   }
 
+  async restoreDeleted(record: { provider?: LlmProviderConfig; fallbackProvider?: LlmProviderConfig; models: LlmModelConfig[] }): Promise<void> {
+    await this.exclusive(async () => {
+      await this.recoverIfNeeded()
+      const current = await this.dependencies.storage.readConfig()
+      if (!current) throw new Error('请先初始化供应商配置再恢复。')
+      const providers = [...current.providers], models = [...current.models]
+      for (const providerId of new Set([...(record.provider ? [record.provider.providerId] : []), ...record.models.map(model => model.providerId)])) {
+        const existing = providers.find(provider => provider.providerId === providerId)
+        const parent = record.provider?.providerId === providerId ? record.provider : existing ?? record.fallbackProvider
+        if (!parent) throw new Error('请先恢复模型所属的供应商。')
+        const members = record.models.filter(model => model.providerId === providerId)
+        const conflict = existing && (JSON.stringify(existing) !== JSON.stringify(parent) || members.some(model => {
+          const present = models.find(value => value.providerId === providerId && value.modelId === model.modelId)
+          return present && JSON.stringify(present) !== JSON.stringify(model)
+        }))
+        // 模型名直接参与供应商请求；配置冲突只能分出供应商身份，不能改模型名。
+        const restored: LlmProviderConfig = conflict ? { ...parent, providerId: `restored-${randomUUID()}`, displayName: `${parent.displayName}（恢复）`, ...(parent.setup?.kind === 'preset' ? { setup: { ...parent.setup, lifecycle: 'user' } } : {}) } : parent
+        if (!existing || conflict) providers.push(restored)
+        for (const model of members) if (!models.some(value => value.providerId === restored.providerId && value.modelId === model.modelId)) models.push({ ...model, providerId: restored.providerId })
+      }
+      await this.dependencies.storage.writeConfig(requireConfigShape({ ...current, providers, models }))
+    })
+  }
+
   async writeConfig(config: LlmConfigState): Promise<void> {
     await this.exclusive(async () => {
       await this.recoverIfNeeded()
@@ -385,7 +410,7 @@ export class LlmProviderSettingsService {
       })
       await this.dependencies.storage.writeJournal(journal)
       try {
-        if (!shared) this.dependencies.credentials.remove(credentialId)
+        // 配置可以恢复，凭据继续留在 safeStorage 中，不进入回收数据。
         await this.dependencies.storage.writeConfig(next)
         await this.dependencies.storage.removeJournal()
       } catch (error) {
@@ -410,9 +435,9 @@ export class LlmProviderSettingsService {
         config: next,
         providerId,
         credentialId,
-        configured: shared && this.dependencies.credentials.configured(credentialId),
+        configured: this.dependencies.credentials.configured(credentialId),
         apiKeyUrl: null,
-        credentialAction: shared ? 'preserved_shared' : 'removed',
+        credentialAction: shared ? 'preserved_shared' : 'unchanged',
         rollbackStatus: 'not-needed',
       }
       logger.info('自定义供应商设置已删除', {

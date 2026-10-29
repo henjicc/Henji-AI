@@ -2,7 +2,6 @@ import { registerApplicationCloseGuard } from '@/core/applicationLifecycle/appli
 import { registerNavigationGuard } from '@/core/applicationLifecycle/navigationGuards'
 import { importCapturedAudio } from './importCapturedAudio'
 import { getPlatform } from '@/platform/runtime'
-import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 import { CaptureSession } from './captureSession'
 import { getAudioEditProjectInstance, lockAudioEditRecording, restoreAudioEditTake, useAudioEditPlaybackStore } from '@/features/audioEdit'
 
@@ -13,11 +12,7 @@ export function readAudioCaptureSession(): { visible: boolean; phase: string; du
 }
 export function getAudioCaptureSession(): CaptureSession {
   if (session) return session
-  const current = new CaptureSession(getPlatform().audioCapture, importCapturedAudio, discard => requestAlertConfirmation({
-    title: discard ? '放弃录音？' : '停止录音并离开？',
-    message: discard ? '录音文件将移到回收站。' : '已录内容会保留，可以在音频编辑首页恢复并打开。',
-    confirmLabel: discard ? '放弃录音' : '停止并保留', confirmTone: discard ? 'danger' : 'default', type: 'warning',
-  }), {
+  const current = new CaptureSession(getPlatform().audioCapture, importCapturedAudio, {
     lock: lockAudioEditRecording,
     commit: (outputPath, placement) => restoreAudioEditTake({ outputPath, name: '', placement }, true),
     rate: id => getAudioEditProjectInstance(id)?.document.source.sampleRate ?? 48000,

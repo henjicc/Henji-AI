@@ -105,7 +105,7 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
         if (!targets?.length && !writes?.length) throw new Error('INVALID_INPUT:此操作缺少正式目标声明，无法核对读取基线。')
         const access = applicationCallerAccess(context.callerGrant, context.requestId ?? 'renderer', context.signal)
         const expected = invocation.expectedRevisions ?? {}
-        const automatic = invocation.expectedRevisions === undefined && !definition.destructive
+        const automatic = invocation.expectedRevisions === undefined
         const observed = new Set<string>()
         for (const ref of targets) {
           if (ref.kind === 'application.navigation' && isNavigationOnlyCapability(definition)) continue

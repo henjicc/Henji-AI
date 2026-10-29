@@ -118,7 +118,7 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   id: 'video_edit',
   extension: henjiExtension('video_edit'),
   legacyExtensions: henjiLegacyExtensions('video_edit'),
-  standaloneFolderNames: null,
+  standaloneFolderNames: { zh: '剪辑', en: 'Video Edits' },
   untitledNames: { zh: '未命名剪辑', en: 'Untitled Edit' },
   storage: 'json',
   // 版本 1 = 旧剪辑文件第 2 版的持久字段（去掉 format / version / id / name / revision，由外壳表达）。

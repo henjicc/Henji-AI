@@ -12,7 +12,7 @@ const KEY = 'audio_capture.pending_files'
 const logger = createMainLogger('main.audio_capture.files')
 /** 与录音命令共用串行队列。先持久登记，再开始采集；失败不会把用户录音变成无人认领的文件。 */
 export class AudioCaptureFiles {
-  constructor(private readonly root: () => string, private readonly store: () => CaptureSettingsStore, private readonly trash: (path: string) => Promise<void>) {}
+  constructor(private readonly root: () => string, private readonly store: () => CaptureSettingsStore, private readonly trash: (path: string, placement?: AudioCapturePlacement) => Promise<void>) {}
   private read(): { version: 2; minReaderVersion: 1; files: string[]; placements?: Record<string, AudioCapturePlacement> } {
     const raw = this.store().get(KEY)
     if (!raw) return { version: 2, minReaderVersion: 1, files: [] }
@@ -73,11 +73,17 @@ export class AudioCaptureFiles {
     const placements = { ...previous.placements }; delete placements[name]
     this.write({ ...previous, placements, files: previous.files.filter(item => item !== name) })
   }
+  restore(outputPath: string, placement?: AudioCapturePlacement): void {
+    const name = path.basename(outputPath)
+    if (path.resolve(outputPath) !== path.resolve(this.file(name).outputPath)) return
+    const current = this.read()
+    this.write({ ...current, files: [...new Set([...current.files, name])], ...(placement ? { placements: { ...current.placements, [name]: placement } } : {}) })
+  }
   async discard(outputPath: string): Promise<void> {
     this.assertManaged(outputPath)
     logger.info('录音移到回收站', { event: 'audio_capture.file.trash.start' })
     try {
-      if (await this.exists(outputPath)) await this.trash(outputPath)
+      if (await this.exists(outputPath)) await this.trash(outputPath, this.read().placements?.[path.basename(outputPath)])
       await this.complete(outputPath)
       logger.info('录音已移到回收站', { event: 'audio_capture.file.trash.completed' })
     } catch (error) { logger.warn('录音回收失败，恢复记录已保留', { event: 'audio_capture.file.trash.failed', error }); throw error }

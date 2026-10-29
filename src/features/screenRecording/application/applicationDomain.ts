@@ -51,15 +51,13 @@ export const screenRecordingApplicationDomain: ApplicationDomainModule = {
       if (WEB_APP_CAPABILITY_IDS.has(definition.id)) return executeWebAppCapability(definition.id, input, context)
       if (definition.id === redubRecordingCapability.id) {
         const parsed = redubRecordingCapability.inputSchema.parse(input)
-        for (const permission of ['screen_recording:read', 'video_edit:write', 'generation:create', 'documents:write', ...(parsed.rerecord ? ['application:write', 'settings:write', 'navigation:write'] : [])]) if (context.callerGrant && !context.callerGrant.permissions.includes(permission)) throw new Error(`PERMISSION_DENIED:旁白补录需要 ${permission}。`)
         const [documentId, clipId, extra] = parsed.clipRef.id.split(':')
         if (!documentId || !clipId || extra) throw new Error('请选择有效的旁白片段引用。')
         const result = await redubRecordingSentence(parsed.sessionRef.id, { documentId, clipId, text: parsed.text, voice: parsed.voice, rerecord: parsed.rerecord }, context)
         return { resultRef: parsed.clipRef, verified: result.verified, undoSteps: result.undoSteps }
       }
       if ([planRecordingDirectorCapability.id, startRecordingDirectorCapability.id, cancelRecordingDirectorCapability.id].includes(definition.id)) {
-        const required = definition.id === cancelRecordingDirectorCapability.id ? ['screen_recording:read'] : definition.id === planRecordingDirectorCapability.id ? ['documents:write', 'video_edit:read'] : ['screen_recording:read', 'documents:write', 'video_edit:write', 'generation:create', 'application:write', 'settings:write', 'navigation:write']
-        for (const permission of required) if (context.callerGrant && !context.callerGrant.permissions.includes(permission)) throw new Error(`PERMISSION_DENIED:导演录制需要 ${permission}。`)
+
         if (definition.id === planRecordingDirectorCapability.id) return { resultRef: { kind: 'screen_recording.session', id: await planRecordingDirector(planRecordingDirectorCapability.inputSchema.parse(input), context) }, verified: true }
         if (definition.id === cancelRecordingDirectorCapability.id) {
           const parsed = cancelRecordingDirectorCapability.inputSchema.parse(input)
@@ -71,8 +69,6 @@ export const screenRecordingApplicationDomain: ApplicationDomainModule = {
         return { resultRef: parsed.documentRef, sessionRef: { kind: 'screen_recording.session', id: result.sessionId }, sequenceRefs: result.sequenceIds.map(id => ({ kind: 'video_edit.sequence', id: `${parsed.documentRef.id}:${id}` })), verified: result.verified }
       }
       if ([generateRecordingScriptCapability.id, replayRecordingCapability.id, rerecordRecordingCapability.id].includes(definition.id)) {
-        const permissions = context.callerGrant?.permissions
-        for (const permission of ['screen_recording:read', ...(definition.id === generateRecordingScriptCapability.id ? [] : ['video_edit:write', 'documents:write'])]) if (permissions && !permissions.includes(permission)) throw new Error(`PERMISSION_DENIED:此操作还需要 ${permission}。`)
         if (definition.id === generateRecordingScriptCapability.id) return generateSessionScript(generateRecordingScriptCapability.inputSchema.parse(input).sessionRef.id, context)
         if (recordingReplayBusy()) throw new Error('请等待当前重放结束。')
         if (definition.id === rerecordRecordingCapability.id) {
@@ -85,8 +81,6 @@ export const screenRecordingApplicationDomain: ApplicationDomainModule = {
       if (definition.id === 'understand_screen_recording') return executeRecordingUnderstanding(input, context)
       if (definition.id === 'export_screen_recording_product') {
         const parsed = recordingProductInputSchema.parse(input)
-        if (context.callerGrant && !context.callerGrant.permissions.includes('screen_recording:read')) throw new Error('PERMISSION_DENIED:导出需要 screen_recording:read 权限。')
-        if (parsed.product === 'image_document' && context.callerGrant && !context.callerGrant.permissions.includes('documents:write')) throw new Error('PERMISSION_DENIED:创建图片文档还需要 documents:write 权限。')
         const result = await exportRecordingProduct(parsed.sessionRef.id, { product: parsed.product, stepIds: parsed.stepIds, ...(parsed.destination ? { directory: await resolveConfiguredDestination(parsed.destination) } : {}) }, context.signal)
         return { resultRef: { kind: 'screen_recording.export', id: result.id }, state: result.state, files: result.files, documentRefs: result.documentRefs, warnings: result.warnings, verified: result.verified }
       }
@@ -97,7 +91,6 @@ export const screenRecordingApplicationDomain: ApplicationDomainModule = {
       }
       if (definition.id === generateRecordingMovieCapability.id) {
         const parsed = generateRecordingMovieCapability.inputSchema.parse(input)
-        if (context.callerGrant && !context.callerGrant.permissions.includes('screen_recording:read')) throw new Error('PERMISSION_DENIED:生成成片需要 screen_recording:read 权限。')
         const prefix = `${parsed.documentRef.id}:`
         if (parsed.sequenceRef && !parsed.sequenceRef.id.startsWith(prefix)) throw new Error('sequenceRef 必须属于 documentRef。')
         const owner = await openVideoEditDocument({ id: parsed.documentRef.id }, { focus: false })
@@ -109,7 +102,6 @@ export const screenRecordingApplicationDomain: ApplicationDomainModule = {
       if (definition.id === 'detect_screen_recording_sensitive_text') return executeRecordingPrivacy(input, context)
       if (definition.id === 'start_screen_recording') {
         const parsed = startRecordingInputSchema.parse(input)
-        if (parsed.destination && context.callerGrant && !context.callerGrant.permissions.includes('video_edit:write')) throw new Error('PERMISSION_DENIED:录制到剪辑还需要 video_edit:write 权限')
         const options = captureOptionsSchema.parse({ ...recordingEncoding({ ...loadRecordingSetup().setup, width: parsed.width, height: parsed.height, fps: parsed.fps }), sourceId: parsed.sourceRef.id, width: parsed.width, height: parsed.height, fps: parsed.fps, ...(parsed.region ? { region: parsed.region } : {}) })
         const id = await startRecording(options, { name: parsed.name, tracks: parsed.tracks, ...(parsed.projectId ? { projectId: parsed.projectId } : {}) }, parsed.destination, context.signal)
         return { resultRef: { kind: 'screen_recording.session', id }, verified: (await readRecordingDocument(id)).sessionId === id }
@@ -119,7 +111,6 @@ export const screenRecordingApplicationDomain: ApplicationDomainModule = {
         return recordingEvents(parsed.sessionRef.id, parsed.offset, parsed.limit, parsed.markersOnly)
       }
       if (definition.id === 'import_screen_recording') {
-        if (context.callerGrant && !context.callerGrant.permissions.includes('screen_recording:read')) throw new Error('PERMISSION_DENIED:导入剪辑需要 screen_recording:read 权限')
         const parsed = parseCapabilityInput<{ sessionRef: z.infer<typeof recordingRefSchema>; destination: z.infer<typeof recordingDestinationSchema> }>(definition.id, input)
         const itemIds = await importRecordingToVideo(parsed.sessionRef.id, parsed.destination, context.signal)
         return { resultRef: { kind: 'video_edit.document', id: parsed.destination.documentId }, itemIds, verified: itemIds.length > 0 }

@@ -7,7 +7,7 @@ import { createPriceEstimate } from '@/features/generation/application/generatio
 import { getControlledExecutionModel } from '@/core/modelCatalog/controlledExecutionModels'
 import type { TranscriptionPreparation } from '@/core/audioEdit/transcriptionFailure'
 import { getDocumentOperations } from '@/features/documents/documentOperations'
-import { hasApplicationConfirmation, hasApplicationPaidApproval } from '@/core/application-control/userConfirmation'
+import { bindPaidOperationReceipt, hasApplicationConfirmation, hasApplicationPaidApproval } from '@/core/application-control/userConfirmation'
 import type { PaidApprovalRequest, PaidOperationCategory, PaidFailureFacts } from '@/core/application-control/paidApproval'
 import { uiPaidApprovalDecisionSchema, paidApprovalMessage, isPaidConfirmationExpired, readPaidFailureFacts } from '@/core/application-control/paidApproval'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
@@ -58,12 +58,12 @@ export async function prepareGenerationPaidApproval(modelId: string, params: Dyn
 
 export async function prepareUiPaidApproval(request: PaidApprovalRequest, capabilityId: NonNullable<LocalHostReply['uiPaidApproval']>['capabilityId']) {
   const requestId = crypto.randomUUID()
-  const send = (action: NonNullable<LocalHostReply['uiPaidApproval']>['action'], projectConsent?: boolean, failureFacts?: PaidFailureFacts) => getPlatform().applicationControl.complete({
-    requestId, rendererEpoch, result: {}, uiPaidApproval: { action, request, capabilityId, projectConsent, ...(failureFacts ? { failureFacts } : {}) },
+  const send = (action: NonNullable<LocalHostReply['uiPaidApproval']>['action'], failureFacts?: PaidFailureFacts) => getPlatform().applicationControl.complete({
+    requestId, rendererEpoch, result: {}, uiPaidApproval: { action, request, capabilityId, ...(failureFacts ? { failureFacts } : {}) },
   })
   const decision = uiPaidApprovalDecisionSchema.parse(await send('prepare'))
-  return { decision, project: request.project, confirm: async (project: boolean) => {
-    try { return await send('approve', project) }
+  return { receipt: { operationId: requestId, callerId: rendererEpoch }, decision, project: request.project, confirm: async () => {
+    try { return await send('approve') }
     catch (error) {
       if (isPaidConfirmationExpired(error)) throw new PaidOperationCancelledError(error)
       throw error
@@ -71,19 +71,19 @@ export async function prepareUiPaidApproval(request: PaidApprovalRequest, capabi
   }, start: async () => {
     await send('start')
     if (decision.decision === 'auto') notifyUser(decision.estimatedCny === null ? notificationMessage('autoApprovedMetered') : notificationMessage('autoApprovedEstimate', { amount: decision.estimatedCny.toFixed(2) }))
-  }, complete: () => send('complete'), reject: () => send('reject'), failed: (error?: unknown) => send('failed', undefined, readPaidFailureFacts(error)) }
+  }, complete: () => send('complete'), reject: () => send('reject'), failed: (error?: unknown) => send('failed', readPaidFailureFacts(error)) }
 }
 
 export interface PaidOperationOptions {
   category: PaidOperationCategory
   documentId?: string | ApplicationRef
   estimatedCny?: number | null
+  generationTaskIds?: string[]
   titleKey?: string
   messageKey?: string
   capabilityId?: NonNullable<LocalHostReply['uiPaidApproval']>['capabilityId']
 }
 // Receipts only live for this call. They cannot be supplied by tools or carried to another UI action.
-const activeApprovals = new WeakMap<AbortSignal, PaidOperationCategory>()
 const uiCapabilities = { generation: 'ui_generate_text', recognition: 'transcribe_audio_edit', translation: 'ui_translate_subtitles', title: 'ui_generate_title', explanation: 'interpret_video_edit_intent' } as const
 
 export class PaidOperationCancelledError extends ApplicationPreflightFailure {}
@@ -115,8 +115,9 @@ export function isUserCancellation(error: unknown): boolean {
 /** Authorize before dispatch; failure after dispatch retains the reservation as an unknown bill. */
 export async function withPaidOperation<T>(options: PaidOperationOptions, work: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> {
   signal?.throwIfAborted()
-  if (signal && (activeApprovals.get(signal) === options.category || hasApplicationPaidApproval(signal, options.category))) return work(signal)
+  if (signal && hasApplicationPaidApproval(signal, options.category)) return work(signal)
   const request = await applicationPaidRequest(options.category, options.documentId, signal, options.estimatedCny ?? null)
+  if (options.generationTaskIds) request.generationTaskIds = options.generationTaskIds
   const { requestAlertConfirmation } = await import('@/stores/alertDialogStore')
   const title = i18n.t(options.titleKey ?? `paidApproval.categories.${options.category}`, { ns: 'common' })
   const message = i18n.t(options.messageKey ?? 'paidApproval.operationContent', { ns: 'common' })
@@ -130,22 +131,22 @@ export async function withPaidOperation<T>(options: PaidOperationOptions, work: 
   const abort = (): void => controller.abort(signal?.reason)
   signal?.addEventListener('abort', abort, { once: true })
   if (signal?.aborted) abort()
+  let releaseReceipt: (() => void) | undefined
   let started = false
   let workCompleted = false
   try {
     controller.signal.throwIfAborted()
     if (paid.decision.decision === 'deny') throw new ApplicationPreflightFailure(paid.decision.reason)
     if (paid.decision.decision === 'ask') {
-      let project = false
       const accepted = await requestAlertConfirmation({ title, message, paidDetails: paidApprovalMessage(paid.decision, options.category), confirmLabel: i18n.t('paidApproval.allowOnce', { ns: 'common' }),
-        paidConfirmation: true, projectConfirmation: !!paid.project, onProject: () => { project = true } }, controller.signal)
+        paidConfirmation: true }, controller.signal)
       if (!accepted) throw new PaidOperationCancelledError('已取消，未执行本次操作，也未提交付费请求。')
       controller.signal.throwIfAborted()
-      await paid.confirm(project)
+      await paid.confirm()
     }
     controller.signal.throwIfAborted()
     await paid.start(); started = true
-    activeApprovals.set(controller.signal, options.category)
+    releaseReceipt = bindPaidOperationReceipt(controller.signal, paid.receipt, options.category)
     const result = await work(controller.signal)
     workCompleted = true
     await paid.complete()
@@ -154,7 +155,7 @@ export async function withPaidOperation<T>(options: PaidOperationOptions, work: 
     await (started ? paid.failed(workCompleted ? { paidFailureFacts: { billing: 'completed' }, cause: error } : error) : paid.reject())
     throw error
   } finally {
-    activeApprovals.delete(controller.signal)
+    releaseReceipt?.()
     signal?.removeEventListener('abort', abort)
   }
 }

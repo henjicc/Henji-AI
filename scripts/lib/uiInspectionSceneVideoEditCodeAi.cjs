@@ -166,8 +166,8 @@ function createVideoEditCodeAiScene() {
               frame: Number(node.dataset.presentedFrame), requestedAt: Number(node.dataset.requestedAt), renderMs: Number(node.dataset.renderMs) }))
             window.__codeAiFrames.observe(node, { attributes: true, attributeFilter: ['data-requested-at'] })
           })
-          const identity = await authorizeMcpConnection(page, { name: '代码画面协作外部 Agent 验收', allowWrites: true, allowPaid: false })
-          authorized = true; item.allowPaid = identity.allowPaid
+          const identity = await authorizeMcpConnection(page, { name: '代码画面协作外部 Agent 验收' })
+          authorized = true
           client = await connectMcpClient(identity.config, 'Henji code AI Reality external Agent')
         })
         await step('02-code-v3', '创建并呈现 v3 极光标题', async item => {

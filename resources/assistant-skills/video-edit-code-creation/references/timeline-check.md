@@ -70,4 +70,4 @@ values 建议已带完整取值，不要只写 cursor。同一记录不同源区
 - 「检查期间剪辑已修改」「原剪辑已关闭」：重新读取目标后再提交。
 - 属性或实体写错：错误会列出可用项，按列出的改，不要换名乱试。
 - 结果未知或断线：外部连接用 `get_application_operation` 按原 operationId 查询，不要换标识重做；部分完成且提示可只重试保存时用 `retry_application_operation_save`。
-- 删除片段或素材属于破坏性操作，需要用户明确同意，并按要求提供 baselineIds。
+- 删除按用户任务范围执行；baselineIds 可省略，显式提供时用于冲突检测。

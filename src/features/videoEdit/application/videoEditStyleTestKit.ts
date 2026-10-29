@@ -1,3 +1,4 @@
+import { registerHarnessRecycledFile } from '@/tests/harnessNativeStorage'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -5,7 +6,15 @@ import type { VideoEditStyleLibraryIo } from './videoEditStyleLibrary'
 
 /** 测试用风格库目录：真实文件读写落在临时目录，内置风格读仓库里随包分发的 resources/video-edit-styles。 */
 export function createTestStyleLibraryIo(options: { builtin?: boolean } = {}): VideoEditStyleLibraryIo & { root: () => Promise<string>; dispose(): void } {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'henji-style-library-'))
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'henji-style-library-'))
+  const root = path.join(temporary, 'video-edit-styles'); fs.mkdirSync(root)
+  const preserve = async (target: string, name = path.basename(target), remove = false): Promise<void> => {
+    if (!fs.existsSync(target)) return
+    const backup = path.join(temporary, crypto.randomUUID())
+    fs.cpSync(target, backup, { recursive: true })
+    if (remove) fs.rmSync(target, { recursive: true, force: true })
+    registerHarnessRecycledFile(target, name, async () => { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.cpSync(backup, target, { recursive: true }); fs.rmSync(backup, { recursive: true, force: true }) })
+  }
   const builtin = path.resolve('resources/video-edit-styles')
   return {
     root: async () => root,
@@ -18,8 +27,10 @@ export function createTestStyleLibraryIo(options: { builtin?: boolean } = {}): V
     writeBytes: async (file, bytes) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes) },
     list: async dir => fs.readdirSync(dir, { withFileTypes: true }).map(entry => ({ name: entry.name, isDirectory: entry.isDirectory() })),
     mkdir: async dir => { fs.mkdirSync(dir, { recursive: true }) },
-    remove: async target => { fs.rmSync(target, { recursive: true, force: true }) },
-    dispose: () => fs.rmSync(root, { recursive: true, force: true }),
+    remove: (target, name) => preserve(target, name, true),
+    preserve,
+    removeCache: async target => { fs.rmSync(target, { recursive: true, force: true }) },
+    dispose: () => fs.rmSync(temporary, { recursive: true, force: true }),
   }
 }
 

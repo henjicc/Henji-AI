@@ -60,7 +60,7 @@
     "preview": "vite preview",
     "lint": "eslint src --ext ts,tsx --cache --cache-location node_modules/.eslintcache --report-unused-disable-directives --max-warnings 0",
     "lint:electron": "eslint electron --ext ts --cache --cache-location node_modules/.eslintcache-electron --report-unused-disable-directives --max-warnings 0",
-    "test": "vitest run",
+    "test": "node scripts/run-tests.mjs",
     "test:unit": "vitest run --mode unit",
     "test:gpu": "vitest run --mode gpu",
     "test:image-export": "vitest run --mode image-export",

@@ -118,13 +118,13 @@ describe('文档类型登记', () => {
   it('文档类型的扩展名、独立存放文件夹与存储方式', () => {
     const rows = DOCUMENT_KINDS.map((kind) => [kind.id, kind.extension, kind.standaloneFolderNames, kind.storage])
     expect(rows).toEqual([
-      ['video_edit', '.hjvid', null, 'json'],
+      ['video_edit', '.hjvid', { zh: '剪辑', en: 'Video Edits' }, 'json'],
       ['canvas', '.hjcvs', { zh: '画布', en: 'Canvases' }, 'json'],
       ['audio_edit', '.hjaud', { zh: '口播', en: 'Voiceovers' }, 'json'],
       ['camera_stage', '.hjstg', { zh: '镜头参考', en: 'Camera Stages' }, 'json'],
       ['image_document', '.hjimg', { zh: '图片文档', en: 'Image Documents' }, 'package'],
       ['screen_recording', '.hjrec', { zh: '录制会话', en: 'Recordings' }, 'json'],
-      ['web_recording', '.hjweb', null, 'folder'],
+      ['web_recording', '.hjweb', { zh: '网页录制', en: 'Web Recordings' }, 'folder'],
     ])
     expect(documentKindRegistry.forFileName('a.HenjiImg')?.id).toBe('image_document')
     expect(documentKindRegistry.forFileName('a.json')).toBeUndefined()

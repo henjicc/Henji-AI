@@ -6,6 +6,8 @@ import { AssetLibraryCollectionExecutor } from './assetLibraryCollectionExecutor
 import { registerAssetCapabilityHandlers } from './registerAssetCapabilityHandlers'
 
 import { dependencies } from './assetControlDependencies'
+import { RecyclableCollectionExecutor } from '@/features/application-control'
+import { assetApplicationService } from './assetApplicationService'
 export { configureAssetMutationDependencies } from './assetControlDependencies'
 
 export const assetsApplicationDomain: ApplicationDomainModule = {
@@ -16,6 +18,11 @@ export const assetsApplicationDomain: ApplicationDomainModule = {
     engine.registerMutationExecutor(new AssetMutationExecutor(current))
     engine.registerMutationExecutor(new AssetLibraryMutationExecutor(current))
     engine.registerCollectionExecutor(new AssetLibraryCollectionExecutor(current))
+    engine.registerCollectionExecutor(new RecyclableCollectionExecutor('asset', {
+      read: ref => assetApplicationService.read(ref.id),
+      remove: async ref => { await assetApplicationService.delete(ref.id); return `assets:${ref.id}` },
+      revisions: () => ({ assets: dependencies.readRevision() }), changed: () => { dependencies.bumpRevision() },
+    }))
   },
   registerCapabilities(registrar) {
     registerAssetCapabilityHandlers(registrar)

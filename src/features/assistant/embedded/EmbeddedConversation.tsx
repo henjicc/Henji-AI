@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { RotateCcw, Sparkles } from 'lucide-react'
 import { Dropdown, UiButton, UiEmpty, UiError } from '@/components/ui'
 import { createEmptyPromptDocument, createPlainTextPromptDocument, toModelPromptText } from '@/core/inputs/promptDocument'
-import { buildEmbeddedPromptContext, type EmbeddedAgentModel, type EmbeddedAgentPrompt } from '@/core/assistant/embeddedAgent'
+import { buildEmbeddedPromptContext, type EmbeddedAgentModel } from '@/core/assistant/embeddedAgent'
 import { getPlatform } from '@/platform/runtime'
 import { useUiStore } from '@/stores/uiStore'
 import { useAssistantUiStore, type AssistantGoalOptions } from '../store/assistantUiStore'
@@ -21,9 +21,6 @@ import { AssistantComposer } from '../conversation/AssistantComposer'
 import type { AssistantAttachmentDraft } from '../conversation/assistantAttachments'
 import { AudioEditAssistantAction } from '@/features/audioEdit/AudioEditAssistantAction'
 
-const accessOptions: Array<{ value: EmbeddedAgentPrompt['access']; label: string }> = [
-  { value: 'read', label: '只读访问' }, { value: 'write', label: '允许修改' }, { value: 'full', label: '完全访问' },
-]
 export function EmbeddedConversation(): JSX.Element {
   const state = useEmbeddedAgent()
   const [document, setDocument] = useState(createEmptyPromptDocument)
@@ -31,12 +28,9 @@ export function EmbeddedConversation(): JSX.Element {
   const [modelsLoaded, setModelsLoaded] = useState(false)
   const pendingGoal = useAssistantUiStore(store => store.pendingGoal)
   const [delivery, setDelivery] = useState<'wait' | 'interrupt'>('wait')
-  const access = useAssistantUiStore(store => store.embeddedAccess)
-  const setAccess = useAssistantUiStore(store => store.setEmbeddedAccess)
   const [submitting, setSubmitting] = useState(false)
   const [preparedRequest, setPreparedRequest] = useState<AssistantGoalOptions | undefined>()
   const [attachments, setAttachments] = useState<AssistantAttachmentDraft[]>([])
-  const [importing, setImporting] = useState(false)
   const scroll = useConversationAutoScroll(state.sessionId)
   const [revertedMemories, setRevertedMemories] = useState<string[]>([])
   const [optimistic, setOptimistic] = useState<{ id: string; text: string; attachments: AgentAttachment[] } | null>(null)
@@ -57,7 +51,7 @@ export function EmbeddedConversation(): JSX.Element {
   const switching = state.switching === true
   useEffect(() => {
     if (previousSession.current && previousSession.current !== state.sessionId && !busy) {
-      setDocument(createEmptyPromptDocument()); setAttachments([]); setImporting(false)
+      setDocument(createEmptyPromptDocument()); setAttachments([])
     }
     previousSession.current = state.sessionId
   }, [state.sessionId, busy])
@@ -73,7 +67,7 @@ export function EmbeddedConversation(): JSX.Element {
     const sentAttachments = attachments
     if (!request) { setDocument(createEmptyPromptDocument()); setAttachments([]) }
     const context = createHostContextSnapshot()
-    void withPaidOperation({ category: 'generation', titleKey: 'paidApproval.assistantChat', capabilityId: 'ui_assistant_chat', messageKey: 'paidApproval.assistantChatContent' }, () => getPlatform().embeddedAgent.prompt({ text, clientMessageId, model: { providerId: selectedModel.providerId, modelId: selectedModel.modelId }, access,
+    void withPaidOperation({ category: 'generation', titleKey: 'paidApproval.assistantChat', capabilityId: 'ui_assistant_chat', messageKey: 'paidApproval.assistantChatContent' }, () => getPlatform().embeddedAgent.prompt({ text, clientMessageId, model: { providerId: selectedModel.providerId, modelId: selectedModel.modelId },
       ...(prepared?.context === undefined ? { selectionSnapshot: captureHostSelection() } : {}),
       context: prepared?.context ?? buildEmbeddedPromptContext(context), attachments: submittedAttachments, delivery: request || switching ? 'wait' : delivery }))
       .then(() => { setPreparedRequest(undefined) })
@@ -83,7 +77,7 @@ export function EmbeddedConversation(): JSX.Element {
         reportEmbeddedAgentError(error)
       })
       .finally(() => { setOptimistic(null); setSubmitting(false) })
-  }, [access, attachments, delivery, document, preparedRequest, scroll, selectedModel, submitting, switching])
+  }, [attachments, delivery, document, preparedRequest, scroll, selectedModel, submitting, switching])
   useEffect(() => {
     if (!pendingGoal || !modelsLoaded || submitting) return
     const pending = useAssistantUiStore.getState()
@@ -140,10 +134,9 @@ export function EmbeddedConversation(): JSX.Element {
     <AssistantComposer key={state.sessionId ?? 'new'} value={document} onChange={setDocument} onSubmit={send} attachments={attachments} onAttachmentsChange={setAttachments}
       inputModalities={selectedModel?.inputModalities ?? []} attachmentsDisabled={submitting || !selectedModel} disabled={submitting || !selectedModel}
       busy={busy} submitting={submitting}
-      onImportingChange={setImporting}
       onCancel={replying ? () => { void getPlatform().embeddedAgent.cancel().catch(reportEmbeddedAgentError) } : undefined}
       sendLabel={busy ? replying && delivery === 'interrupt' ? '打断发送' : '等待发送' : '发送'}
-      controls={<><Dropdown value={access} options={accessOptions} onSelect={setAccess} disabled={busy || importing} ariaLabel="助手操作权限" appearance="text" size="sm" className="min-w-0" buttonClassName="w-auto max-w-full" panelWidthStrategy="options" />
+      controls={<>
         {replying ? <Dropdown value={delivery} options={[{ value: 'wait', label: '等待' }, { value: 'interrupt', label: '打断' }]} onSelect={setDelivery} ariaLabel="发送方式" appearance="text" size="sm" className="min-w-0" buttonClassName="w-auto max-w-full" panelWidthStrategy="options" /> : null}</>} />
   </div>
 }

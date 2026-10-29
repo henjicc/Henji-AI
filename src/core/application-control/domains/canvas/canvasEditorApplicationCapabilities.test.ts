@@ -41,7 +41,6 @@ describe('open_multi_layer_document_node_editor contract', () => {
     expect(capability).toMatchObject({
       version: 1,
       domain: 'canvas',
-      risk: 'R0',
       idempotent: true,
       supportsUndo: false,
       requiredScopes: expect.arrayContaining(['navigation', 'canvas']),

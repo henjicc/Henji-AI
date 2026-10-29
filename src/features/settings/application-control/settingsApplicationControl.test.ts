@@ -98,8 +98,8 @@ describe('settings application control adapter', () => {
       expect(definition.writable).toBe(false)
       const description = String(definition.description)
       expect(description).toContain('open_application_surface')
-      // 理由要落到技术事实（明文密钥 / 整体搬迁并重启 / 自行提权），不是含糊的"安全"表态。
-      expect(/明文|密钥|整体移动|自行提升权限/.test(description)).toBe(true)
+      // 理由要落到技术事实（密钥隔离、整体搬迁与用户付费策略），不是含糊的"安全"表态。
+      expect(/明文|密钥|整体移动|只能由用户/.test(description)).toBe(true)
     }
   })
 })

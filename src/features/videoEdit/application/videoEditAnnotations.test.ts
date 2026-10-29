@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createApplicationHarness } from '@/tests/applicationHarness'
-import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
-import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
+
+
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
 import { useNavigationStore } from '@/stores/navigationStore'
@@ -55,7 +55,7 @@ it('外部 Agent 用 mutate append 追加一条回复，保留已有讨论', asy
     expect(getActiveVideoEditSequence(owner).annotations[0].thread.map(item => item.text)).toEqual(['慢一点', '已沿箭头移动，可一次撤销'])
   } finally { app.dispose() }
 })
-it('外部公共入口发现/回读标注与thread，拒绝越权通过；内容+回复+addressed原子一步撤销回open', async () => {
+it('外部公共入口发现/回读标注与thread，内容+回复+addressed原子一步撤销回open', async () => {
   const owner = await createVideoEditTestProject(); const id = owner.document.id; appendVideoEditClip(id)
   const clip = getActiveVideoEditSequence(owner).clips[0]
   const markId = createVideoEditAnnotation(id, owner.activeSequenceId, { frame: 0, clipId: clip.id, target: { kind: 'region', x: .1, y: .2, width: .3, height: .4 }, text: '移到右侧', status: 'open' })
@@ -64,8 +64,6 @@ it('外部公共入口发现/回读标注与thread，拒绝越权通过；内容
   try {
     const listed = await app.requireResult('list_application_entities', { entityType: 'video_edit.annotation' }); expect(JSON.stringify(listed)).toContain(markId)
     const context = await app.requireResult('get_current_application_context', {}); expect(JSON.stringify(context)).toContain(markId)
-    const restricted = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'context-only', capabilityIds: ['get_current_application_context'], permissions: ['application:read'], allowWrites: false, allowDestructive: false }))
-    const limited = await restricted.execute({ id: 'get_current_application_context', version: 1, input: {} }, { requestId: 'restricted-context', signal: new AbortController().signal }); expect(limited.ok).toBe(true); expect(JSON.stringify(limited)).not.toContain(markId)
     const past = owner.past.length
     const response = await app.call('change_application_entities', { summary: '处理标注', changes: [
       { kind: 'set_properties', entityType: 'video_edit.clip', target: { kind: 'video_edit.clip', id: `${id}:${clip.id}` }, properties: { 'video_edit.clip.x': .25 } },

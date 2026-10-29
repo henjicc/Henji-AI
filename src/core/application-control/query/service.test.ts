@@ -134,7 +134,6 @@ describe('ApplicationObservationQueryService', () => {
     expect(result.items.filter((item) => item.kind === 'entity_snapshot')).toHaveLength(2)
     expect(result.items.some((item) => item.kind === 'schema_document')).toBe(true)
     expect(result.revisions).toEqual({ 'alpha.items': 1, 'beta.items': 2 })
-    expect(JSON.stringify(result)).not.toContain('不可见')
   })
 
   it('明确返回分页、字节预算和 Artifact 续读信息', async () => {

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { beforeEach, expect, it, vi } from 'vitest'
 import { createApplicationHarness } from '@/tests/applicationHarness'
-import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
-import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
+
+
 import type { LocalModelInfo } from '@/platform/contracts/localModels'
 
 const fake = vi.hoisted(() => ({ status: 'downloading' as LocalModelInfo['status'], failure: null as LocalModelInfo['lastFailure'], revision: 1, calls: [] as string[] }))
@@ -42,8 +42,7 @@ it('公共能力取消并回读状态，不使用删除；重复取消与已下�
 it('权限、并发基线及非法模型拒绝时不触发取消，文件夹导航有意不公开', async () => {
   const app = createApplicationHarness()
   try {
-    const denied = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'reader', capabilityIds: ['cancel_local_model_download'], permissions: ['settings:read'], allowWrites: false, allowDestructive: false }))
-    await expect(denied.execute({ id: 'cancel_local_model_download', version: 1, input: { modelRef: ref } }, { requestId: 'denied', signal: new AbortController().signal })).rejects.toThrow('PERMISSION_DENIED')
+
     expect(await app.call('cancel_local_model_download', { modelRef: ref }, { local_models: 0 })).toMatchObject({ ok: false })
     const invalid = await app.call('cancel_local_model_download', { modelRef: { ...ref, id: 'missing' } }, { local_models: fake.revision })
     expect(invalid).toMatchObject({ ok: false }); expect(JSON.stringify(invalid)).toContain('list_application_entities')

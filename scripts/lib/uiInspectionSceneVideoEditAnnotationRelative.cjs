@@ -55,7 +55,7 @@ function createVideoEditAnnotationRelativeScene() {
           await api.saveDocument({ target: { id }, expectedRevision: read.meta.revision, content: read.content })
         }, { source, projectId: seeded.projectId, id: seeded.documentId })
         await openVideoEditProjectCard(page, seeded.projectId); await presented(0)
-        const identity = await authorizeMcpConnection(page, { name: '批注闭环免费验收', allowWrites: true, allowDestructive: true })
+        const identity = await authorizeMcpConnection(page, { name: '批注闭环免费验收' })
         client = await connectMcpClient(identity.config, 'Henji annotation loop Reality')
         const documentRef = { kind: 'video_edit.document', id: seeded.documentId }
         const clipRef = { kind: 'video_edit.clip', id: seeded.documentId + ':motion-clip' }

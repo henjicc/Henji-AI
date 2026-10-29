@@ -1,13 +1,12 @@
 import path from 'node:path'
 import type { NativeMediaProbeOutcome, NativeMediaProbeRequest, NativeVideoDecoderStatus } from '../../../src/platform/contracts/videoDecoderTypes'
-import { isPathWithinAllowedMediaRoots } from '../protocol'
 import { createMainLogger } from '../services/logging/main-logger'
 import { getVideoDecoderService } from '../services/video-decoder'
 import { nativeVideoDecoderStatus, probeNativeMedia, videoDecoderForcedBackend } from '../services/video-decoder/media-probe'
 import { parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
 
 /**
- * 原生视频解码服务的素材探测与状态 IPC。探测只读已授权媒体目录内的本地文件（与 henji-media 协议同一授权），
+ * 原生视频解码服务的素材探测与状态 IPC。探测读取本地文件，
  * 渲染层可按请求标识取消；服务故障返回 `unavailable`，由渲染层回到后备探测。
  */
 
@@ -26,7 +25,6 @@ function parseProbeRequest(input: unknown): NativeMediaProbeRequest {
 
 export function registerVideoDecoderIpc(): void {
   registerIpcHandler<NativeMediaProbeRequest, NativeMediaProbeOutcome>('videoDecoder:probe', parseProbeRequest, async (request, event) => {
-    if (!isPathWithinAllowedMediaRoots(request.path)) return { status: 'unreadable', message: '素材所在目录尚未授权读取' }
     const key = `${event.sender.id}:${request.requestId}`
     const controller = new AbortController()
     inflight.get(key)?.abort()

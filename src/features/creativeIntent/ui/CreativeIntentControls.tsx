@@ -77,13 +77,13 @@ export function CreativeIntentControls(props: CreativeIntentControlsProps): Reac
   const finishFidelity = (commit: boolean): void => { if (commit && pending.current !== null && pending.current !== props.fidelity) props.onFidelity(pending.current); pending.current = null; setFidelity(null) }
   const [request, setRequest] = useState<{ key?: string; value: ExplanationSendRequest }>(), [generating, setGenerating] = useState(false)
   const pendingGeneration = useRef(false), currentKey = useRef(props.contextKey); currentKey.current = props.contextKey
-  const optimize = (confirmation?: ExplanationSendRequest, project = false): void => {
+  const optimize = (confirmation?: ExplanationSendRequest): void => {
     if (pendingGeneration.current) return
     if (!props.prepareGeneration && !confirmation) { try { void Promise.resolve(props.onOptimize()).catch(error => props.onError?.(error)) } catch (error) { props.onError?.(error) } return }
     pendingGeneration.current = true; setGenerating(true)
     const key = props.contextKey
     void (async () => {
-      if (confirmation) await confirmation.confirm(project)
+      if (confirmation) await confirmation.confirm()
       else { const prepared = await props.prepareGeneration?.(); if (currentKey.current !== key) { await prepared?.cancel(); return } if (prepared) { setRequest({ key, value: prepared }); return } }
       if (currentKey.current !== key) return
       setRequest(undefined); await props.onOptimize()
@@ -183,6 +183,6 @@ export function CreativeIntentControls(props: CreativeIntentControlsProps): Reac
         <UiButton variant={demonstration && !reviewing && !props.needsSave ? 'secondary' : 'primary'} size="sm" disabled={props.status === 'idle'} disabledReason={t('creativeIntent.idleHint', { defaultValue: '先示范一次运动' })} onClick={apply || props.needsSave ? props.onApply : () => optimize()}>{props.needsSave ? t('creativeIntent.retrySave', { defaultValue: '重试保存' }) : apply ? t('creativeIntent.apply', { defaultValue: '应用' }) : t('creativeIntent.organize', { defaultValue: '整理' })}</UiButton>
       </>}
     </div>}
-    <ExplanationSendConfirmation request={request?.key === props.contextKey ? request?.value : undefined} generating={generating} onCancel={() => { if (!pendingGeneration.current) { void request?.value.cancel().catch(props.onError); setRequest(undefined) } }} onSend={project => { if (request?.key === props.contextKey) optimize(request?.value, project) }} />
+    <ExplanationSendConfirmation request={request?.key === props.contextKey ? request?.value : undefined} generating={generating} onCancel={() => { if (!pendingGeneration.current) { void request?.value.cancel().catch(props.onError); setRequest(undefined) } }} onSend={() => { if (request?.key === props.contextKey) optimize(request?.value) }} />
   </div>
 }

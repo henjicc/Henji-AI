@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
@@ -37,27 +37,9 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 
-describe('魔搭自定义模型管理：删除确认（5.6 第二批）', () => {
-  it('删除走应用统一确认弹窗而不是浏览器原生 confirm()，取消时不删除', async () => {
-    const nativeConfirm = vi.fn(() => true)
-    vi.stubGlobal('confirm', nativeConfirm)
-    mocks.confirm.mockResolvedValueOnce(false).mockResolvedValueOnce(true)
-    render(<ModelscopeCustomModelManager />)
-    const remove = await screen.findByRole('button', { name: 'common:delete' })
-
-    fireEvent.click(remove)
-    await waitFor(() => expect(mocks.confirm).toHaveBeenCalledOnce())
-    expect(mocks.confirm).toHaveBeenCalledWith(expect.objectContaining({
-      title: 'modelscopeCustomModel.actions.deleteTitle',
-      message: 'modelscopeCustomModel.confirmDelete',
-      confirmLabel: 'common:delete',
-      confirmTone: 'danger',
-    }))
-    expect(mocks.remove).not.toHaveBeenCalled()
-
-    fireEvent.click(remove)
-    await waitFor(() => expect(mocks.remove).toHaveBeenCalledWith('owner/my-model'))
-    expect(nativeConfirm).not.toHaveBeenCalled()
-    vi.unstubAllGlobals()
-  })
+it('删除自定义模型直接调用正式删除入口，不二次确认', async () => {
+  render(<ModelscopeCustomModelManager />)
+  fireEvent.click(await screen.findByRole('button', { name: 'common:delete' }))
+  await waitFor(() => expect(mocks.remove).toHaveBeenCalledWith('owner/my-model'))
+  expect(mocks.confirm).not.toHaveBeenCalled()
 })

@@ -13,6 +13,7 @@ export interface ProviderKeyStatusDto {
 export type { ProviderConnectionTestResultDto } from '@/platform/contracts/aiRuntime'
 
 export interface AiGenerateRequestDto {
+  paidReceipt?: import('../core/application-control/paidApproval').PaidOperationReceipt
   modelId: string
   params: DynamicValueMap
   requestId?: string

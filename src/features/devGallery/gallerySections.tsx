@@ -531,7 +531,7 @@ export function DialogSection(): JSX.Element {
       <UiGroup title="测试夹具：仅核对付费确认弹窗，不提交生成" titleTone="compact" data-gallery-fixture="paid-approval">
         <UiButton data-paid-approval-fixture onClick={() => { void requestAlertConfirmation({
           title: t('paidApproval.sendExplanation'), message: t('paidApproval.explanationContent', { count: 2, modelName: 'Example model' }),
-          confirmLabel: t('paidApproval.allowOnce'), paidConfirmation: true, projectConfirmation: true,
+          confirmLabel: t('paidApproval.allowOnce'), paidConfirmation: true,
           paidDetails: { estimatedCny: 1.25, dailySpentCny: 3, category: 'explanation', modelName: 'Example model' },
         }) }}>{t('paidApproval.allowOnce')}</UiButton>
       </UiGroup>

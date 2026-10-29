@@ -94,7 +94,6 @@ function createEngine(
     effectContract: { direct: [], cascades: [] },
     capabilityId: 'sample_operation',
     capabilityVersion: 1,
-    risk: 'R1',
     requiredPermissions: [],
     supportsAtomic: true,
     normalizeInput: (input) => input,
@@ -105,13 +104,7 @@ function createEngine(
 }
 
 function context(): ApplicationExecutionContext {
-  return {
-    requestId: 'request-failure-reporting',
-    exposure: 'assistant',
-    permissions: new Set<string>(),
-    acceptedDataClasses: new Set(['C0', 'C1', 'C2', 'C3']),
-    approvalMode: 'auto',
-  } as ApplicationExecutionContext
+  return { requestId: 'request-failure-reporting', exposure: 'assistant', permissions: new Set<string>(), acceptedDataClasses: new Set(['C0', 'C1', 'C2', 'C3']) } as ApplicationExecutionContext
 }
 
 async function commitFailingPlan(fail: () => never) {
@@ -128,7 +121,6 @@ async function commitFailingPlan(fail: () => never) {
     planRef: plan.planRef,
     expectedRevisions: { [SCOPE]: 0 },
     idempotencyKey: 'idempotency-failure-0001',
-    approvedRisk: 'R1',
   }, context())
 }
 
@@ -195,7 +187,7 @@ describe('事务失败报告', () => {
     }, context())
     const result = await engine.commit({
       planRef: plan.planRef, expectedRevisions: { [SCOPE]: 0 },
-      idempotencyKey: 'idempotency-dead-end-001', approvedRisk: 'R1',
+      idempotencyKey: 'idempotency-dead-end-001',
     }, context())
 
     expect(result.status).toBe('failed')

@@ -70,7 +70,7 @@ function createOcrPrivacyScene() {
           media: [{ id: 'screen', name: '屏幕原片', path: source, kind: 'video', width: 3840, height: 2160, durationSeconds: duration, hasAudio: false }],
           clips: [{ id: 'clip', mediaId: 'screen', name: '隐私录制', kind: 'video', track: 1, start: 0, duration: Math.floor(duration * 30), sourceInUs: 0, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }], annotations: [] })
         const seeded = await seedVideoEditProject(page, fixtureProject); await openVideoEditProjectCard(page, seeded.projectId)
-        client = await connectMcpClient((await authorizeMcpConnection(page, { name: 'OCR免费验收', allowWrites: true, allowDestructive: true })).config)
+        client = await connectMcpClient((await authorizeMcpConnection(page, { name: 'OCR免费验收' })).config)
         const documentRef = { kind: 'video_edit.document', id: seeded.documentId }, clipRef = { kind: 'video_edit.clip', id: `${seeded.documentId}:clip` }
         const read = (ref, propertyIds) => callTool(client, 'read_application_entity', { ref, propertyIds })
         const change = async (ref, properties) => {
@@ -115,7 +115,6 @@ function createOcrPrivacyScene() {
           const long = process.env.HENJI_OCR_LONG_SOURCE ? path.resolve(process.env.HENJI_OCR_LONG_SOURCE) : path.join(root, 'loop-600s.mp4')
           if (!process.env.HENJI_OCR_LONG_SOURCE) execFileSync(ffmpegPath, ['-v', 'error', '-y', '-stream_loop', '-1', '-i', source, '-t', '600', '-c', 'copy', long], { windowsHide: true })
           const cursor = process.env.HENJI_OCR_LONG_CURSOR ? JSON.parse(fs.readFileSync(process.env.HENJI_OCR_LONG_CURSOR, 'utf8')) : undefined
-          await page.evaluate(root => window.henjiNative.media.allowRoot(root), path.dirname(long))
           let finished = false; const samples = []; const started = Date.now()
           const pending = page.evaluate(async ({ source, cursor }) => window.henjiNative.smartRegions.detectSensitiveText({ requestId: crypto.randomUUID(), source, mediaId: 'benchmark', startUs: 0, endUs: 600000000, originUs: 0, ...(cursor ? { cursor } : {}) }), { source: long, cursor }).finally(() => { finished = true })
           while (!finished) { samples.push(await app.evaluate(({ app }) => app.getAppMetrics().filter(m => m.name === '痕迹AI本地推理').map(m => ({ pid: m.pid, workingSetKiB: m.memory.workingSetSize })))); await page.waitForTimeout(1000) }

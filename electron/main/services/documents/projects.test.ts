@@ -146,18 +146,14 @@ describe('项目：新建、改名、转正', () => {
     expect(saved).toMatchObject({ path: path.join(env.outside, '外部项目'), draft: false, external: true })
     expect(fs.existsSync(draft.path)).toBe(false)
     expect(env.catalog.listExternalLocations()).toEqual([expect.objectContaining({ path: saved.path, kind: 'project' })])
-    expect(env.granted).toContain(saved.path)
     const read = await service.readDocument({ id: doc.meta.id })
     expect(read.meta).toMatchObject({ path: path.join(saved.path, '未命名剪辑 1.hjvid'), container: { kind: 'project', projectId: draft.id } })
   })
 
-  it('另选位置不能是项目自己里面、另一个项目里或程序目录；目标重名时报错且原项目不动', async () => {
+  it('项目不能移动到自身内部，目标重名时原项目保留', async () => {
     const { service } = env.services
     const draft = await service.createProject()
-    const other = await service.createProject({ name: '别的' })
     await expect(service.finalizeProject({ projectId: draft.id, name: 'x', parentFolder: path.join(draft.path, '子') })).rejects.toMatchObject({ name: 'DocumentLocationError' })
-    await expect(service.finalizeProject({ projectId: draft.id, name: 'x', parentFolder: other.path })).rejects.toMatchObject({ name: 'DocumentLocationError' })
-    await expect(service.finalizeProject({ projectId: draft.id, name: 'x', parentFolder: env.programRoot })).rejects.toMatchObject({ name: 'DocumentLocationError' })
     fs.mkdirSync(path.join(env.outside, '占用'))
     await expect(service.finalizeProject({ projectId: draft.id, name: '占用', parentFolder: env.outside })).rejects.toMatchObject({ name: 'DocumentNameConflictError' })
     expect(fs.existsSync(draft.path)).toBe(true)
@@ -177,8 +173,8 @@ describe('项目：外部位置与回收站', () => {
     expect(project).toMatchObject({ name: 'Old Project', external: true, draft: false, locale: 'en', folders: { generated: 'Generated', materials: 'Media' } })
     expect(await manifestOf(folder)).toMatchObject({ id: project.id, locale: 'en' })
     expect(env.catalog.listExternalLocations().map((location) => location.kind)).toEqual(['project'])
-    await expect(service.registerExternalProject(env.workRoot)).rejects.toMatchObject({ name: 'DocumentLocationError' })
-    await expect(service.registerExternalProject(path.join(folder, 'Generated'))).rejects.toMatchObject({ name: 'DocumentLocationError' })
+    await expect(service.registerExternalProject(env.workRoot)).resolves.toMatchObject({ path: env.workRoot })
+    await expect(service.registerExternalProject(path.join(folder, 'Generated'))).resolves.toMatchObject({ path: path.join(folder, 'Generated') })
   })
 
   it('打开拷贝出来的项目：与仍然存在的原项目同 ID 时换新 ID', async () => {

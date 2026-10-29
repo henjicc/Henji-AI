@@ -141,7 +141,7 @@ async function main() {
      * 没有这层保护，后台落图排的保存会在删除之后把文件写回来（曾在真实库里留下夹具工程，
      * 而每次清理都因为"删完当场读不到"而报了成功）。
      */
-    const paid = await authorizeMcpConnection(page, { name: `链路付费验收-${randomUUID().slice(0, 8)}`, allowWrites: true, allowDestructive: true, allowPaid: true })
+    const paid = await authorizeMcpConnection(page, { name: `链路付费验收-${randomUUID().slice(0, 8)}` })
     created.connections.push(paid.id)
     await waitMcpReady(page)
     const client = await connectMcpClient({ url: `http://127.0.0.1:${port}/mcp`, headers: paid.config.headers }, 'Henji chain paid')

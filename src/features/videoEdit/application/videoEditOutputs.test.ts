@@ -61,7 +61,6 @@ beforeEach(() => {
   vi.spyOn(platform.system.fs, 'writeFile').mockImplementation(async (path, bytes, options) => { if (options?.exclusive && media.has(path)) throw new Error('exists'); media.set(path, bytes) })
   vi.spyOn(platform.system.fs, 'remove').mockImplementation(async path => { media.delete(path) })
   vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue('D:/')
-  vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)
   vi.spyOn(platform.assetLibrary, 'inspectFileContent').mockResolvedValue(content)
   vi.spyOn(platform.assetLibrary, 'createAsset').mockImplementation(async input => { const value = record(input.filePath, input.mediaType as 'image' | 'video'); value.libraryIds = input.libraryIds ?? []; assets.set(value.id, value); return value })
   vi.spyOn(platform.assetLibrary, 'inspectAsset').mockImplementation(async id => { const value = assets.get(id); if (!value) throw new Error('missing asset'); return structuredClone(value) })
@@ -127,7 +126,7 @@ it('无节目宿主、非当前整数帧、取消和已存在路径都不会写�
 it('仅资产写权限的公共选帧不暂停节目，播放中拒绝且没有文件或素材副作用', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id
   setVideoEditView(id, { playing: true })
-  const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'asset-only', capabilityIds: ['collect_video_edit_output'], permissions: ['assets:write'], allowWrites: true, allowDestructive: false }))
+  const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'asset-only' }))
   const result = await session.execute({ id: 'collect_video_edit_output', version: 1, input: { documentRef: { kind: 'video_edit.document', id }, kind: 'frame' } }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })
   expect(result.ok).toBe(false); expect(JSON.stringify(result)).toContain('先暂停'); expect(owner.playing).toBe(true); expect(getPlatform().system.fs.writeFile).not.toHaveBeenCalled(); expect(getPlatform().assetLibrary.createAsset).not.toHaveBeenCalled()
   setVideoEditView(id, { playing: false })

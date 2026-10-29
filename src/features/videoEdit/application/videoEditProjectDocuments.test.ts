@@ -48,33 +48,21 @@ describe('新建项目与离开', () => {
     expect(prompter.log).toEqual([]); expect(commands.trashed).toContain(projectId); expect(listVideoEditInstances()).toEqual([])
   })
 
-  it('有内容时询问：取消留在剪辑里；保存时起名，主剪辑随项目改名；保存过的项目再离开不询问', async () => {
+  it('有内容的草稿离开时保存内容并保留名称，再打开可以继续编辑', async () => {
     const instance = await createVideoEditProject(); const id = instance.document.id; const projectId = containerOf(id)
     appendVideoEditSequence(id, { frameRate: { numerator: 30, denominator: 1 } })
     appendVideoEditClip(id)
-    prompter.leaveChoices.push('cancel')
-    expect(await leaveVideoEditProject(id)).toBe('cancelled')
-    expect(listVideoEditInstances()).toEqual([instance])
-    prompter.leaveChoices.push('save')
-    prompter.saveName = async (info) => { await info.submit('旅行短片', null); return true }
     expect(await leaveVideoEditProject(id)).toBe('saved')
-    expect(project(projectId)).toMatchObject({ draft: false, name: '旅行短片' })
-    expect(commands.stored(id)!.meta.name).toBe('旅行短片')
+    expect(prompter.log).toEqual([])
+    expect(project(projectId)).toMatchObject({ draft: true, name: '未命名项目 1' })
+    expect(commands.stored(id)!.meta.name).toBe('未命名项目 1')
     expect(commands.stored(id)!.content).toMatchObject({ sequences: [{ clips: [{ kind: 'text' }] }] })
     const reopened = await openVideoEditProject(project(projectId))
-    expect(reopened.document).toMatchObject({ id, name: '旅行短片' })
+    expect(reopened.document).toMatchObject({ id, name: '未命名项目 1' })
     prompter.log.length = 0
-    expect(await leaveVideoEditProject(id)).toBe('closed'); expect(prompter.log).toEqual([])
+    expect(await leaveVideoEditProject(id)).toBe('saved'); expect(prompter.log).toEqual([])
   })
 
-  it('不保存：整个项目文件夹移到回收站', async () => {
-    const instance = await createVideoEditProject(); const projectId = containerOf(instance.document.id)
-    appendVideoEditSequence(instance.document.id, { frameRate: { numerator: 30, denominator: 1 } })
-    appendVideoEditClip(instance.document.id)
-    prompter.leaveChoices.push('discard')
-    expect(await leaveVideoEditProject(instance.document.id)).toBe('discarded')
-    expect(commands.trashed).toContain(projectId); expect(commands.stored(instance.document.id)).toBeUndefined()
-  })
 
   it('编辑静默自动保存进剪辑文件，撤销同样写回', async () => {
     const instance = await createVideoEditProject(); const id = instance.document.id

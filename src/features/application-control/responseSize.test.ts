@@ -21,23 +21,22 @@ afterEach(() => registry.clear())
 
 /** 正式目录/技能/模型 + 确定性领域回执，无模型请求或用户工程写入。 */
 it('代表性调用序列与 tools/list 的字符预算可重复测量', async () => {
-  const access = { allowWrites: true, allowDestructive: true, allowPaid: true }
   const hostTools: LocalTool[] = APPLICATION_CAPABILITY_IDS.map(id => {
     const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(id)!
     return { id, version: definition.version, title: definition.title, description: definition.description,
       inputSchema: z.toJSONSchema(definition.inputSchema, { io: 'input' }) }
   })
-  const catalog = buildApplicationToolCatalog({ tools: hostTools, access, operationsEnabled: true, includeSkillTool: true })
+  const catalog = buildApplicationToolCatalog({ tools: hostTools, includeSkillTool: true })
   const domains = buildExternalCapabilityInventory()
   const skills = (await scanAssistantSkills({ builtinDir: path.resolve('resources/assistant-skills'), userDir: '', disabledNames: [] })).skills
     .filter(skill => skill.enabled && AGENT_SKILL_NAMES.has(skill.name)).map(({ name, description }) => ({ name, description }))
-  const contractInput = { domains, skills, access, catalog, port: 43821, requestedDomains: [] }
+  const contractInput = { domains, skills, catalog, port: 43821, requestedDomains: [] }
   const contractBefore = { ok: true, data: buildApplicationContract({ ...contractInput, detail: 'full' }) }
   const contractAfter = { ok: true, data: buildApplicationContract(contractInput) }
   // 2026-10-21 调色技能与音效库领域加入后约 4.2k；2026-10-25 口播剪辑技能加入后约 4.55k；仍是一屏以内的契约摘要。
   expect(JSON.stringify(contractAfter).length).toBeLessThan(4700)
-  for (const kind of ['external', 'embedded'] as const) for (const grants of [access, { allowWrites: false, allowDestructive: false, allowPaid: false }]) {
-    expect(JSON.stringify({ ok: true, data: buildApplicationContract({ ...contractInput, callerKind: kind, access: grants }) }).length).toBeLessThan(4700)
+  for (const kind of ['external', 'embedded'] as const) {
+    expect(JSON.stringify({ ok: true, data: buildApplicationContract({ ...contractInput, callerKind: kind }) }).length).toBeLessThan(4700)
   }
   expect(skills).toHaveLength(8)
 

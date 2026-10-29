@@ -6,7 +6,7 @@ const modelRef = applicationRefSchema.extend({ kind: z.literal('local_model.item
 export const cancelLocalModelDownloadCapability = defineApplicationCapability({
   id: 'cancel_local_model_download', version: 1, domain: 'local_models', title: '取消本地模型下载',
   description: '停止指定本地模型正在进行的下载，保留已经下载的部分，下次下载可续传。与设置页的取消按钮共用下载服务；不删除模型文件。没有正在进行的下载时返回当前状态，不重新下载。模型引用取自 local_model.item 列表，取消后可读 status 与 last_failure 核对。',
-  aliases: ['停止模型下载', '取消下载模型'], readOnly: false, risk: 'R1', dataClasses: ['C0'],
+  aliases: ['停止模型下载', '取消下载模型'], readOnly: false, dataClasses: ['C0'],
   permission: 'settings:write', idempotent: true, destructive: false, timeoutMs: 60000,
   supportsPreview: false, supportsUndo: false, requiredScopes: ['local_models'],
   acceptsRefs: ['local_model.item'], producesRefs: ['local_model.item'],

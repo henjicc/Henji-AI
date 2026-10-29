@@ -1,3 +1,4 @@
+import { preserveUserFile } from '../recycle/runtime'
 import { shell } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -97,6 +98,7 @@ export async function resetAssistantUserInstructions(): Promise<AssistantUserIns
     event: 'assistant_user_instructions.reset.start',
   })
   try {
+    await preserveUserFile(getAssistantUserInstructionsFilePath(), '助手用户指令')
     const instructions = await persistInstructions('')
     logger.info('清空智能助手用户指令完成', {
       event: 'assistant_user_instructions.reset.completed',

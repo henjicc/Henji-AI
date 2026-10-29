@@ -101,7 +101,7 @@ function createVideoEditExplanationScene() {
         }, { source, projectId: seeded.projectId, id: seeded.documentId })
         await openVideoEditProjectCard(page, seeded.projectId)
         await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '0')
-        const identity = await authorizeMcpConnection(page, { name: '讲解受控验收', allowWrites: true, allowDestructive: true })
+        const identity = await authorizeMcpConnection(page, { name: '讲解受控验收' })
         client = await connectMcpClient(identity.config, 'Henji explanation Reality')
         const ref = { kind: 'video_edit.document', id: seeded.documentId }
         const playback = async (frame, playing = false) => {

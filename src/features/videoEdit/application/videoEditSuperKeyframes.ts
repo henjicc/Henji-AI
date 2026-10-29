@@ -76,7 +76,7 @@ export async function finishSuperKeyframes(id: string): Promise<void> {
   try {
     if (session?.id === superKeyframeSessionId(draftId) && session.pages.some(page => page.kind === 'audio')) {
       await preflightVideoExplanation(id)
-      await transcribeVideoExplanation(id, `super-keyframes:${draftId}`, session.state === 'recoverable')
+      await transcribeVideoExplanation(id, session.state === 'recoverable')
     }
     openVideoSuperKeyframesInAssistant(id, draftId)
     logger.info('超级关键帧已放入助手草稿', { event: 'video_edit.super_keyframes.handoff.completed', context: { documentId: id, draftId } })

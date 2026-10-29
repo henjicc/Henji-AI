@@ -218,11 +218,13 @@ describe('通用单文件包（4.1）', () => {
     await expect(env.services.service.importPackage({ source: notPackage })).rejects.toMatchObject({ name: 'DocumentFormatError' })
   })
 
-  it('剪辑这类只能放在项目里的文档包不能导入到作品目录', async () => {
+  it('剪辑文档包可导入作品目录并按独立文档读取', async () => {
     const project = await env.services.service.createProject({ name: '剪辑项目' })
     const edit = await env.services.service.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: project.id }, name: '主剪辑' })
     const exported = await env.services.service.exportDocumentPackage({ target: { id: edit.meta.id } })
-    await expect(env.services.service.importPackage({ source: exported.path })).rejects.toMatchObject({ name: 'DocumentLocationError' })
+    const result = await env.services.service.importPackage({ source: exported.path })
+    expect(result.type).toBe('document')
+    if (result.type === 'document') expect(result.meta.container).toEqual({ kind: 'user' })
   })
 
   it('复制进另一个容器（复制进本项目）：新 ID、素材一并复制', async () => {

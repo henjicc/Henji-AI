@@ -137,7 +137,7 @@ function createVideoEditProjectSourceScene() {
         assert.equal(evidence.sourceVideo.width, 3840); assert.equal(evidence.sourceVideo.height, 2160)
         const seekAt = performance.now(); await sourceSeek(page, 0.5, native, FRAME); evidence.sourceSeekMs = performance.now() - seekAt
         await capture('video-project-source-4k60')
-        const identity = await authorizeMcpConnection(page, { name: '项目源回环', allowWrites: true, allowDestructive: true })
+        const identity = await authorizeMcpConnection(page, { name: '项目源回环' })
         client = await connectMcpClient(identity.config, 'Video project source Reality')
         const ref = { kind: 'video_edit.source', id: `${document.id}:source` }
         const baseline = await callTool(client, 'read_application_entity', { ref, propertyIds: ['video_edit.source.time_us', 'video_edit.source.presented_time_us'] })

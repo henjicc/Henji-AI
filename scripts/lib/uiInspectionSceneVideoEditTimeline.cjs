@@ -50,7 +50,7 @@ function createVideoEditTimelineScene() {
       await observeWorkers(page)
       try {
         await button(page, '剪辑').click(); await open(file)
-        const identity = await authorizeMcpConnection(page, { name: '剪辑命令回环', allowWrites: true, allowDestructive: true })
+        const identity = await authorizeMcpConnection(page, { name: '剪辑命令回环' })
         client = await connectMcpClient(identity.config, 'Henji timeline Reality')
         const projectRef = { kind: 'video_edit.document', id: project.id }
         const read = async (ref, propertyIds) => callTool(client, 'read_application_entity', { ref, propertyIds })

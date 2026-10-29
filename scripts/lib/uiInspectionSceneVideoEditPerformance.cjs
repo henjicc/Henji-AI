@@ -165,7 +165,7 @@ function createVideoEditPerformanceScene() {
         await button(page, '剪辑').first().click(); if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await observeWorkers(page); observed = true
         await dialogs(app, [file], file); await openVideoEditFile(page, file); await presented(page, 0)
-        const identity = await authorizeMcpConnection(page, { name: '性能负载', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji performance Reality')
+        const identity = await authorizeMcpConnection(page, { name: '性能负载' }); client = await connectMcpClient(identity.config, 'Henji performance Reality')
         await create('video_edit.code_material', projectRef, [{ 'video_edit.code_material.source': GENERATOR }, { 'video_edit.code_material.source': FILTER }])
         let document = readProject(); const generatorItem = document.items.find(item => item.code && document.codeMaterials.find(definition => definition.id === item.code.definitionId)?.name === '持续动态标题条')
         const filterDefinition = document.codeMaterials.find(definition => definition.name === '受控暖色')

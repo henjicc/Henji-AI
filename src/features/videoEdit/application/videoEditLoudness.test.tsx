@@ -7,8 +7,8 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
 import { matchVideoEditShortcut } from '@/core/videoEdit/commands'
-import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
-import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
+
+
 import { videoEditComposition, type VideoEditComposition } from '@/core/videoEdit/document'
 import { assertVideoEditSequenceGraph } from '@/core/videoEdit/sequenceGraph'
 import type { VideoEditLoudnessMeasurement } from '@/core/videoEdit/loudness'
@@ -51,7 +51,6 @@ beforeEach(() => {
   vi.spyOn(platform.system.fs, 'exists').mockResolvedValue(false)
   vi.spyOn(platform.system.fs, 'writeFile').mockResolvedValue(undefined)
   vi.spyOn(platform.system.fs, 'remove').mockResolvedValue(undefined)
-  vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)
   vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue(path.resolve(path.sep, 'fixture'))
   vi.spyOn(platform.assetLibrary, 'inspectFileContent').mockResolvedValue({ sizeBytes: 5, fileModifiedAt: 1, contentIdentity: 'a'.repeat(64) })
   const api = platform.audioEdit.loudness
@@ -108,8 +107,7 @@ it('测量只读；助手标准化经正式公共能力写音量、回读、保�
     expect(((await app.read(input.clipRefs[0], ['video_edit.clip.gain_db'])).properties as Record<string, unknown>)['video_edit.clip.gain_db']).toBe(-3)
     undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.volume)).toEqual([1, 1])
     expect((await app.call('normalize_video_edit_loudness', { ...input, clipRefs: [{ kind: 'video_edit.clip', id: `foreign:${target.clipIds[0]}` }], targetLufs: -23 })).ok).toBe(false)
-    const denied = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'read-only', capabilityIds: ['normalize_video_edit_loudness'], permissions: ['video_edit:read'], allowWrites: false, allowDestructive: false }))
-    await expect(denied.execute({ id: 'normalize_video_edit_loudness', version: 2, input: { ...input, targetLufs: -23 } }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })).rejects.toThrow('PERMISSION_DENIED')
+
     const baseline = await app.read(input.clipRefs[0])
     editVideoSequence(id, target.sequenceId, sequence => ({ ...sequence, name: '后续修改' }))
     expect((await app.call('normalize_video_edit_loudness', { ...input, targetLufs: -23 }, baseline.revisions as Record<string, number>)).ok).toBe(false)

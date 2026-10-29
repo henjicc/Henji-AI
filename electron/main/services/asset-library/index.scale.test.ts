@@ -13,20 +13,21 @@ import { deleteAsset, queryAssets, setAssetTags } from './index'
 
 describe('素材列表规模与标签完整性', () => {
   it('删除确认读取权威索引，触发器阻止删除时不得报告成功', () => {
-    fixture.db.exec("CREATE TRIGGER refuse_delete BEFORE DELETE ON assets BEGIN SELECT RAISE(IGNORE); END")
+    fixture.db.exec("CREATE TRIGGER refuse_delete BEFORE UPDATE OF deleted_at ON assets BEGIN SELECT RAISE(IGNORE); END")
     expect(() => deleteAsset('a0000')).toThrow('删除后素材仍存在')
     fixture.db.exec('DROP TRIGGER refuse_delete')
     deleteAsset('a0000')
-    expect(fixture.db.prepare('SELECT * FROM assets WHERE id=?').get('a0000')).toBeUndefined()
+    expect(fixture.db.prepare('SELECT * FROM assets WHERE id=? AND deleted_at IS NULL').get('a0000')).toBeUndefined()
+    expect(fixture.db.prepare('SELECT deleted_at FROM assets WHERE id=?').get('a0000')).toMatchObject({ deleted_at: expect.any(Number) })
   })
   let fixture: ReturnType<typeof createCountedSqlite>
   beforeEach(() => {
     fixture = createCountedSqlite()
-    createAssetLibraryTablesV1(fixture.db)
+    createAssetLibraryTablesV1(fixture.db); fixture.db.exec('ALTER TABLE assets ADD COLUMN deleted_at INTEGER; ALTER TABLE asset_libraries ADD COLUMN deleted_at INTEGER')
     mocks.getDb.mockReturnValue(fixture.db)
     const insert = fixture.db.prepare("INSERT INTO assets(id,media_type,display_name,file_path,source,created_at,updated_at) VALUES (?,'image',?,?,'imported',1,1)")
     for (let index = 0; index < 1200; index++) insert.run(`a${index.toString().padStart(4, '0')}`, `素材${index}`, path.resolve(path.sep, 'media', `${index}.png`))
-    fixture.db.prepare("INSERT INTO asset_libraries VALUES ('library','集合',1,1)").run()
+    fixture.db.prepare("INSERT INTO asset_libraries(id,name,created_at,updated_at) VALUES ('library','集合',1,1)").run()
     fixture.db.prepare("INSERT INTO asset_library_items(library_id,asset_id,added_at) VALUES ('library','a0000',1)").run()
     fixture.queries.length = 0
   })

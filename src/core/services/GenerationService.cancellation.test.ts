@@ -18,7 +18,7 @@ vi.mock('@/commands/aiRuntime', () => ({
   aiCancelTask: vi.fn(async () => undefined), aiGenerate: vi.fn(), aiContinuePolling: vi.fn(),
   aiGetProgressEstimate: vi.fn(async () => null), aiRecordProgressSample: vi.fn(async () => null),
 }))
-const paid = vi.hoisted(() => ({ prepare: vi.fn(), confirm: vi.fn(), start: vi.fn(), complete: vi.fn(), failed: vi.fn(), reject: vi.fn() }))
+const paid = vi.hoisted(() => ({ receipt: { operationId: '00000000-0000-4000-8000-000000000001', callerId: '00000000-0000-4000-8000-000000000002' }, prepare: vi.fn(), confirm: vi.fn(), start: vi.fn(), complete: vi.fn(), failed: vi.fn(), reject: vi.fn() }))
 vi.mock('@/services/paidApproval', () => ({ prepareGenerationPaidApproval: paid.prepare }))
 const service = GenerationService.getInstance()
 beforeEach(() => {
@@ -170,13 +170,14 @@ it('克隆采用统一 auto 策略，人工模式使用现有付费弹窗，记�
 it('外部操作已通过统一授权的异步克隆只消费原回执，不再单独确认或重复预留', async () => {
   enableConfirmation()
   const controller = new AbortController()
-  const unbind = bindApplicationConfirmation(controller.signal, async () => ({ decision: 'auto', reason: '额度内', estimatedCny: 0.1, dailySpentCny: 0 }))
+  const unbind = bindApplicationConfirmation(controller.signal, async () => ({ decision: 'auto', reason: '额度内', estimatedCny: 0.1, dailySpentCny: 0 }), paid.receipt)
   await requestApplicationPaidApproval(controller.signal, { category: 'generation', estimatedCny: 0.1 })
   transferGenerationPaidApproval('approved-clone', controller.signal)
   unbind()
   vi.mocked(aiGenerate).mockResolvedValue({ status: 'completed', urls: [], filePaths: [] })
   await service.generate('cancel-fixture', { volcIclMode: 'clone' }, undefined, { requestId: 'approved-clone' })
   expect(paid.prepare).not.toHaveBeenCalled()
+  expect(aiGenerate).toHaveBeenCalledWith(expect.objectContaining({ paidReceipt: paid.receipt }))
   expect(useAlertDialogStore.getState().queue).toHaveLength(0)
   expect(aiGenerate).toHaveBeenCalledOnce()
 })

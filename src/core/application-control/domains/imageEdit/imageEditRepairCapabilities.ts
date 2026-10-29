@@ -20,8 +20,7 @@ export const imageEditRepairInputSchema = baseInput.extend({ region: repairRegio
 const output = capabilityOutputSchema({ ref: layerRef, documentRef: z.object({ kind: z.literal('image_edit.document'), id: z.string() }).strict(), commandId: z.string(), verification: z.object({ verified: z.boolean() }).strict() })
 const shared = {
   version: 1, domain: 'image_edit' as const, side: 'frontend' as const, readOnly: false,
-  control: capabilityControl('update', ['image_edit.layer'], { revisionScopes: ['image_edit'], cancelable: true }),
-  risk: 'R1' as const, dataClasses: ['C1' as const], permission: 'image_edit:write', idempotent: false, destructive: false,
+  control: capabilityControl('update', ['image_edit.layer'], { revisionScopes: ['image_edit'], cancelable: true }), dataClasses: ['C1' as const], permission: 'image_edit:write', idempotent: false, destructive: false,
   timeoutMs: 600_000, supportsPreview: false, supportsUndo: true, requiredScopes: ['image_edit' as const], acceptsRefs: ['image_edit.layer', 'image_edit.selection'], producesRefs: ['image_edit.layer', 'image_edit.document'],
   outputSchema: output,
   successEvidence: ['补丁已进入原文档瓦片与命令历史；原图资源不变，可撤销，并通过文档观察或既有导出回读合成图。'],

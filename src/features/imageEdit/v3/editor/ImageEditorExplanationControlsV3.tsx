@@ -23,7 +23,7 @@ export function ImageEditorExplanationControlsV3({ bus, controller, onGenerated 
   const run = (work: () => Promise<void>, title = '讲解未完成'): void => { setFailed(false); void Promise.resolve().then(work).catch(() => { onError(); retryWork.current = work; setFailureTitle(title) }) }
   const transcribe = (): void => run(async () => {
     await adapter.preflightTranscription()
-    run(() => adapter.transcribe(crypto.randomUUID()), '转写失败')
+    run(() => adapter.transcribe(), '转写失败')
   }, '转写预检失败')
   const onRead = useCallback((entry: TranscriptEntry, mentionId?: string) => adapter.readReview(entry, mentionId, !!mentionId), [adapter])
   const onBind = useCallback((entry: TranscriptEntry, binding: ExplanationBinding) => adapter.bind(entry, binding), [adapter])

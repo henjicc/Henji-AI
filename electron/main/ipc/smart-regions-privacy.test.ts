@@ -23,10 +23,11 @@ it('原始路径与realpath都校验；跨窗口取消拒绝，授权完成前�
   await invoke(channels.cancelSensitiveText, { requestId: request.requestId }, owner); release(source)
   await expect(pending).rejects.toThrow('取消'); expect(boundary.detect).not.toHaveBeenCalled()
   boundary.realpath.mockResolvedValueOnce(path.resolve(path.sep, 'outside', 'source.mp4'))
-  await expect(invoke(channels.detectSensitiveText, request, owner)).rejects.toThrow('实际路径')
-  expect(boundary.detect).not.toHaveBeenCalled()
+  boundary.detect.mockResolvedValue({ regions: [] })
+  await invoke(channels.detectSensitiveText, request, owner)
+  expect(boundary.detect.mock.calls.at(-1)?.[0]).toMatchObject({ source })
 })
-it('宿主销毁在权限准备期间结束任务，未知字段和范围反转被严格拒绝', async () => {
+it('宿主销毁在路径解析期间结束任务，未知字段和范围反转被严格拒绝', async () => {
   let release!: (v: string) => void; boundary.realpath.mockImplementationOnce(() => new Promise<string>(resolve => { release = resolve }))
   const owner = sender(1), pending = invoke(channels.detectSensitiveText, request, owner)
   owner.emit('destroyed'); release(source); await expect(pending).rejects.toThrow('取消')

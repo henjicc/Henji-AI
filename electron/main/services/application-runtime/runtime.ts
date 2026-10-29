@@ -9,12 +9,11 @@ import { recoverPersistedGenerationOperation, recoverPersistedTranscriptionOpera
 import { videoEditExportJobRegistry } from '../video-edit-export/registry'
 import { webReplayRenderJobs } from '../web-replay/renderJobs'
 import { getAudioEditStoredTask } from '../audio-edit/task-store'
-import type { ApplicationAccess } from './toolCatalog'
 import { getDb } from '../db'
 import { getGenerationHistoryStore } from '../generation-history/store'
 import { configureContentTrustConfirmations } from '../content-trust/confirmation'
 
-const embeddedCallers = new Map<string, ApplicationAccess>()
+const embeddedCallers = new Set<string>()
 const attachedEmbeddedCallers = new Set<string>()
 const retainedCallers = new Map<string, () => void>()
 let externalAuthority: ((id: string) => void) | undefined
@@ -44,12 +43,10 @@ export function initializeApplicationRuntime() {
   }, operations, id => embeddedCallers.has(id) ? { kind: 'embedded' } : { kind: 'external', ...(externalName?.(id) ? { name: externalName(id)!.slice(0, 80) } : {}) })
   const embedded = new ApplicationToolDispatcher({
     assertActive: id => { if (!embeddedCallers.has(id)) throw new Error('助手操作授权已结束。') },
-    access: id => { const access = embeddedCallers.get(id); if (!access) throw new Error('助手操作授权已结束。'); return access },
   }, host, operations, 0, 'embedded')
   // 本地用户的只读核验身份由宿主生成，不依赖已经结束的外部连接，也不准许写入或计费。
   const reviewCaller = randomUUID()
-  const reviewAccess = { allowWrites: false, allowDestructive: false, allowPaid: false }
-  embeddedCallers.set(reviewCaller, reviewAccess)
+  embeddedCallers.add(reviewCaller)
   const reviewOperation = async (record: OperationRecord, open = true): Promise<void> => {
     const signal = AbortSignal.timeout(30_000)
     try { await embedded.reconcileVerification(reviewCaller, record, signal) }
@@ -57,7 +54,7 @@ export function initializeApplicationRuntime() {
     if (open) {
       const epoch = host.rendererEpoch
       await operations.review(operations.store.get(record.operationId, record.callerId)!, epoch,
-        ref => host.execute(reviewCaller, 'read_application_entity', { ref }, signal, { ...reviewAccess, reviewTarget: true }),
+        ref => host.execute(reviewCaller, 'read_application_entity', { ref }, signal, { reviewTarget: true }),
         () => { if (!host.ready || host.rendererEpoch !== epoch) throw new Error('应用正在重新连接，请稍后重试。') })
     }
   }
@@ -95,12 +92,12 @@ export function getApplicationRuntime() {
 
 export function registerExternalApplicationAuthority(authorize: (id: string) => void, name?: (id: string) => string | undefined): void { externalAuthority = authorize; externalName = name }
 
-export function createEmbeddedApplicationClient(callerId: string, access: ApplicationAccess) {
+export function createEmbeddedApplicationClient(callerId: string) {
   const { host, embedded, operations } = getApplicationRuntime()
   if (attachedEmbeddedCallers.has(callerId)) throw new Error('调用者身份已在使用。')
   retainedCallers.get(callerId)?.(); retainedCallers.delete(callerId)
   attachedEmbeddedCallers.add(callerId)
-  embeddedCallers.set(callerId, access)
+  embeddedCallers.add(callerId)
   let closed = false
   const assertOpen = () => { if (closed) throw new Error('助手操作授权已结束。') }
   return {

@@ -124,7 +124,6 @@ describe('多图层下载失败原任务恢复', () => {
     const capability = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('retry_layer_stack_result')!
     const input = { canvasRef: { kind: 'canvas.document', id: 'project' }, nodeRef: { kind: 'canvas.node', id: 'project:result' } }
     expect(capability.completionKind).toBe('submitted')
-    expect(capability.risk).toBe('R1')
     expect(capability.aiInputSchema.additionalProperties).toBe(false)
     expect(capability.inputSchema.safeParse({ ...input, serverTaskId: 'injected' }).success).toBe(false)
     const result = await handlers.get(capability.id)!(input, { signal: new AbortController().signal })

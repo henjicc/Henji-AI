@@ -1,3 +1,4 @@
+import { trashUserFile } from '../../recycle/runtime'
 import { randomUUID } from 'node:crypto'
 import { shell } from 'electron'
 import fs from 'node:fs/promises'
@@ -279,8 +280,7 @@ async function writePreparedSkill(rootDir: string, skill: PreparedSkill): Promis
  */
 async function commitPreparedSkills(
   target: SkillInstallTarget,
-  prepared: PreparedSkill[],
-  overwrite: boolean
+  prepared: PreparedSkill[]
 ): Promise<{ installed: string[]; replaced: string[] }> {
   const manifest = await scanAssistantSkills({ ...target, disabledNames: [] })
   const knownNames = new Set(manifest.skills.map((skill) => skill.name))
@@ -292,15 +292,11 @@ async function commitPreparedSkills(
   const replaced: string[] = []
   for (const skill of prepared) {
     if (!(await pathExists(path.join(target.userDir, skill.name)))) continue
-    if (!overwrite) {
-      throw new AssistantSkillError('SKILL_ALREADY_EXISTS', `同名技能已存在：${skill.name}`)
-    }
     replaced.push(skill.name)
   }
 
   await fs.mkdir(target.userDir, { recursive: true })
   const stagingDir = await fs.mkdtemp(path.join(target.userDir, '.install-'))
-  const trashDirs: string[] = []
   try {
     for (const skill of prepared) {
       await writePreparedSkill(stagingDir, skill)
@@ -308,14 +304,11 @@ async function commitPreparedSkills(
     for (const skill of prepared) {
       const destination = path.join(target.userDir, skill.name)
       if (await pathExists(destination)) {
-        const trash = path.join(stagingDir, `.replaced-${skill.name}`)
-        await fs.rename(destination, trash)
-        trashDirs.push(trash)
+        await trashUserFile(destination)
       }
       await fs.rename(path.join(stagingDir, skill.name), destination)
     }
   } finally {
-    for (const trash of trashDirs) await fs.rm(trash, { recursive: true, force: true })
     await fs.rm(stagingDir, { recursive: true, force: true })
   }
   return { installed: prepared.map((skill) => skill.name), replaced }
@@ -330,7 +323,7 @@ export async function installAssistantSkillTo(
   logger.info('安装智能助手技能开始', {
     event: 'assistant_skill.install.start',
     // 只记录来源类型，不记录用户源文件的绝对路径。
-    context: { sourceExtension: extension, overwrite: parsedRequest.overwrite },
+    context: { sourceExtension: extension },
   })
   try {
     if (!(ASSISTANT_SKILL_SOURCE_EXTENSIONS as readonly string[]).includes(extension)) {
@@ -343,7 +336,7 @@ export async function installAssistantSkillTo(
     const prepared = extension === '.zip'
       ? await prepareFromArchive(parsedRequest.sourcePath, skippedFiles)
       : await prepareFromMarkdown(parsedRequest.sourcePath)
-    const committed = await commitPreparedSkills(target, prepared, parsedRequest.overwrite)
+    const committed = await commitPreparedSkills(target, prepared)
     const result: AssistantSkillInstallResult = { ...committed, skippedFiles }
     logger.info('安装智能助手技能完成', {
       event: 'assistant_skill.install.completed',
@@ -386,7 +379,7 @@ export async function uninstallAssistantSkillFrom(
       }
       throw new AssistantSkillError('SKILL_NOT_FOUND', `技能不存在：${skillName}`)
     }
-    await fs.rm(userSkillDir, { recursive: true, force: true })
+    await trashUserFile(userSkillDir)
     logger.info('卸载智能助手技能完成', {
       event: 'assistant_skill.uninstall.completed',
       context: { skill: name },

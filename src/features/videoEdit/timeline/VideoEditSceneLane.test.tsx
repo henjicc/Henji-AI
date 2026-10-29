@@ -15,7 +15,7 @@ import { testAuthorBundle, testAuthorProgram } from '../engine/videoEditAuthorTe
 import { readVideoEditCodeMetadata, rememberVideoEditCodeMetadata } from '../application/videoEditCodeState'
 import { createVideoEditTestProject } from '../application/videoEditDocumentTestKit'
 import { selectedVideoEditSceneRecord, selectVideoEditSceneRecord } from '../application/videoEditSceneSelection'
-import { closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, subscribeVideoEdit, videoEditCommittedDocument, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
+import { closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, subscribeVideoEdit, undoVideoEdit, videoEditCommittedDocument, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
 import { VideoEditTimelineCanvas } from './VideoEditTimelineCanvas'
 import { TIMELINE_HEADER_WIDTH } from './timelineGeometry'
 import { keyframeLaneHeight, KEYFRAME_LANE_HEADER, KEYFRAME_LANE_ROW, sceneLaneRowCount } from './keyframeLaneGeometry'
@@ -218,7 +218,7 @@ it('拖动按帧预览、只预览不提交；Esc 取消回到原样', async () 
   expect(onError).not.toHaveBeenCalled()
 })
 
-it('Delete 只删这里显示的选中记录；连同子记录时先确认', async () => {
+it('Delete 只删这里显示的选中记录，子记录一起删除且可以撤销', async () => {
   const view = render(<View />)
   const lane = await openLane(view)
   const history = owner.past.length
@@ -235,22 +235,15 @@ it('Delete 只删这里显示的选中记录；连同子记录时先确认', asy
   expect(selectedVideoEditSceneRecord(owner)).toBeUndefined()
   expect(owner.past).toHaveLength(history + 1)
 
-  // 段落下挂着备注：先确认，取消就不删
   fireEvent.pointerDown(item('seg-switch'), { pointerId: 2, button: 0, clientX: x(1) })
   fireEvent.pointerUp(lane, { pointerId: 2, clientX: x(1) })
   fireEvent.keyDown(lane, { key: 'Delete' })
-  await waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
-  expect(useAlertDialogStore.getState().queue[0].message).toContain('连同下面 1 条记录一起删除')
-  act(() => useAlertDialogStore.getState().dismissCurrent())
-  await act(async () => { await Promise.resolve() })
-  expect(record('seg-switch')).toBeDefined()
-  fireEvent.keyDown(lane, { key: 'Delete' })
-  await waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
-  // 确认弹窗期间子记录被别处删掉：确认后按当时的数据重取要删的集合，照样删掉，不整笔报错
-  act(() => { editVideoProject(owner.document.id, document => ({ ...document, scenes: [{ ...document.scenes![0], records: document.scenes![0].records.filter(value => value.id !== 'no-1') }] })) })
-  act(() => useAlertDialogStore.getState().confirmCurrent())
   await waitFor(() => expect(record('seg-switch')).toBeUndefined())
   expect(record('no-1')).toBeUndefined()
-  expect(owner.past).toHaveLength(history + 3)
+  expect(useAlertDialogStore.getState().queue).toEqual([])
+  expect(owner.past).toHaveLength(history + 2)
+  act(() => { undoVideoEdit(owner.document.id) })
+  expect(record('seg-switch')).toBeDefined()
+  expect(record('no-1')).toBeDefined()
   expect(onError).not.toHaveBeenCalled()
 })

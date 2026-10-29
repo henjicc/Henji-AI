@@ -24,6 +24,7 @@ const files = new Map<string, string>()
 beforeEach(() => {
   installHarnessNativeStorage(); files.clear()
   vi.stubGlobal('Worker', InlineColorGradeExportWorker)
+  vi.spyOn(getPlatform().settings, 'preserveFile').mockResolvedValue(undefined)
   const fs = getPlatform().system.fs
   vi.spyOn(fs, 'exists').mockImplementation(async path => files.has(path))
   vi.spyOn(fs, 'writeTextFile').mockImplementation(async (path, text) => { files.set(path, text) })
@@ -43,11 +44,12 @@ it('写出 .cube 后读回核对，回执带格点、未包含项与验证结论
   expect(receipt.message).toContain('未包含晕影')
 })
 
-it('写入前的问题都在写文件之前拒绝：扩展名不符、目标已存在、CDL 表达不了', async () => {
+it('写入前的问题都在写文件之前拒绝：扩展名不符、CDL 表达不了', async () => {
   await expect(exportColorGradeFile({ params, format: 'cube', path: 'D:/out/a.cdl', title: 'a' })).rejects.toBeInstanceOf(ColorGradeExportRejection)
   files.set('D:/out/a.cube', 'old')
-  await expect(exportColorGradeFile({ params, format: 'cube', path: 'D:/out/a.cube', title: 'a' })).rejects.toThrow('overwrite')
-  expect(files.get('D:/out/a.cube')).toBe('old')
+  await exportColorGradeFile({ params, format: 'cube', path: 'D:/out/a.cube', title: 'a' })
+  expect(getPlatform().settings.preserveFile).toHaveBeenCalledWith('D:/out/a.cube')
+  expect(files.get('D:/out/a.cube')).toContain('LUT_3D_SIZE 33')
   const selective = { ...colorGradeDefaults(), mixer_red_hue: 100, mixer_red_saturation: 100, mixer_blue_hue: -100, mixer_green_saturation: -100, mixer_yellow_luminance: -100, contrast: 60 }
   await expect(exportColorGradeFile({ params: selective, format: 'cdl', path: 'D:/out/b.cdl', title: 'b' })).rejects.toBeInstanceOf(ColorGradeExportRejection)
   expect(files.has('D:/out/b.cdl')).toBe(false)

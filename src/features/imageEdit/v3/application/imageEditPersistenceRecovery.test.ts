@@ -44,18 +44,6 @@ it('文档已保存但节点存储拒绝，失败回执保留双域事实且恢�
   expect(await engine.commit({ ...request, idempotencyKey: 'do-not-replay-failed-save' }, context)).toMatchObject({ status: 'failed', code: 'INVALID_PLAN' })
 })
 
-it('附着节点缺少现有 canvas:write 权限时计划阶段拒绝，文档与节点均不修改', async () => {
-  const fixture = await createAttachedImageEditPersistenceFixture()
-  dispose = fixture.dispose
-  const target = imageEditV3LayerRef(fixture.document.id, 'effect')
-  const restricted = { ...context, permissions: new Set(['image_edit:read', 'image_edit:write']) }
-  const snapshot = await getApplicationReflectionRegistry().readEntity(target, [], restricted)
-  await expect(getApplicationControlExecutionEngine().plan({ summary: '缺少节点权限', transactionMode: 'atomic', steps: [{ kind: 'mutation',
-    entityType: 'image_edit.layer', target, expectedRevisions: snapshot.revisions,
-    mutations: [{ propertyId: 'image_edit.layer.opacity', operation: 'set', value: 0.42 }] }] }, restricted)).rejects.toThrow('PROPERTY_NOT_WRITABLE')
-  expect(fixture.bus.getSnapshot().document.revision).toBe(0)
-  expect(fixture.materialize).not.toHaveBeenCalled()
-})
 
 it('附着双字段撤销遇画布拒写，失败回执记录原步骤逆序和实际撤销双域效果', async () => {
   const fixture = await createAttachedImageEditPersistenceFixture()

@@ -23,10 +23,10 @@ describe('付费 PAL 错误恢复', () => {
       () => ai.generate({ modelId: 'test', params: {} }),
       () => ai.continuePolling({ modelId: 'test', taskId: 'task' }),
       () => llm.chatStream(request, vi.fn()),
-      () => createElectronEmbeddedAgent().prompt({ text: 'test', context: '', access: 'read', model: { providerId: 'test', modelId: 'test' } }),
+      () => createElectronEmbeddedAgent().prompt({ text: 'test', context: '', model: { providerId: 'test', modelId: 'test' } }),
       () => llm.modelStep({ ...request, runId: 'run', stepId: 'step', output: { mode: 'text' }, capabilities: { image: false, video: false, audio: false, streaming: true, toolCall: false, parallelTools: false, structuredOutputMode: 'none', reasoning: false, sampling: true, usage: true } }, vi.fn()),
       () => llm.verifyModelCapabilities({ ...request, structuredOutputMode: 'json' }),
-      () => createElectronAudioEdit().recording.transcribe({ action: 'transcribe', sessionId: crypto.randomUUID(), chunkId: crypto.randomUUID(), requestId: crypto.randomUUID(), audioUploadReceipt: crypto.randomUUID(), modelId: 'test', resume: false }),
+      () => createElectronAudioEdit().recording.transcribe({ action: 'transcribe', sessionId: crypto.randomUUID(), chunkId: crypto.randomUUID(), requestId: crypto.randomUUID(), modelId: 'test', resume: false }),
     ]
     for (const call of calls) {
       const error = await call().catch((error: unknown) => error)

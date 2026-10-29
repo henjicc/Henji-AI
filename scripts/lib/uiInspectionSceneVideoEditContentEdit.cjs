@@ -57,7 +57,7 @@ function createVideoEditContentEditScene() {
         const { id: _id, name: _name, revision: _revision, format: _format, version: _version, ...content } = authored
         await page.evaluate(async ({ id, revision, content }) => window.henjiNative.documents.saveDocument({ target: { id }, expectedRevision: revision, content }), { id: seeded.documentId, revision: imported.revision, content })
         await openVideoEditProjectCard(page, seeded.projectId)
-        const identity = await authorizeMcpConnection(page, { name: '内容剪辑联动验收', allowWrites: true, allowDestructive: true })
+        const identity = await authorizeMcpConnection(page, { name: '内容剪辑联动验收' })
         client = await connectMcpClient(identity.config, 'Henji content editing Reality')
         const invoke = async (name, input) => {
           const start = performance.now(), result = await callTool(client, name, input)

@@ -1,8 +1,6 @@
 import { create } from 'zustand'
 
 import { createLogger } from '@/core/logging'
-import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
-import { dirname } from '@/platform/desktopApi'
 import { useSettingsStore, type LargeUploadStrategy } from '@/stores/settingsStore'
 
 const logger = createLogger('services.largeUploadPolicy')
@@ -78,16 +76,4 @@ export async function resolveLargeUploadAction(
     })
   }
   return action
-}
-
-/**
- * 引用原文件路径前授权其所在目录给 henji-media 协议。
- * 授权在主进程持久化（allowed-media-roots.json），重启后仍可访问。
- */
-export async function grantMediaAccessForReference(directPath: string): Promise<void> {
-  if (!isDesktopRuntime()) {
-    return
-  }
-  const dir = await dirname(directPath)
-  await getPlatform().media.allowRoot(dir)
 }

@@ -86,7 +86,7 @@ function createVideoEditLinksScene() {
         await button(page, '剪辑').click()
         if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await dialogs(app, [file], file); await openVideoEditFile(page, file); await presented(page, 0)
-        const identity = await authorizeMcpConnection(page, { name: '剪辑链接验收', allowWrites: false, allowDestructive: false })
+        const identity = await authorizeMcpConnection(page, { name: '剪辑链接验收' })
         client = await connectMcpClient(identity.config, 'Henji links Reality')
         const view = async () => (await callTool(client, 'read_application_entity', { ref: { kind: 'video_edit.document', id: project.id }, propertyIds: ['video_edit.document.timeline_view'] })).data.properties['video_edit.document.timeline_view']
         const clips = () => readProject(file).sequences[0].clips

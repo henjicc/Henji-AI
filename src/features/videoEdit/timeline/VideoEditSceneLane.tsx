@@ -10,7 +10,6 @@ import { videoEditSceneMedia } from '@/core/videoEdit/scene/sceneMedia'
 import type { ResolvedVideoEditScene } from '@/core/videoEdit/scene/sceneResolve'
 import type { VideoEditScene } from '@/core/videoEdit/scene/sceneSchema'
 import { useRafCallback } from '@/hooks/useRafCallback'
-import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 import { ownerWindowOf } from '@/utils/crossRealmDom'
 import { applyVideoEditSceneChanges, previewVideoEditSceneGesture, resolveVideoEditSceneView, VideoEditSceneRejection, writeVideoEditScene, type VideoEditSceneChange, type VideoEditSceneDeclarationState, type VideoEditSceneWriteContext } from '../application/videoEditScenes'
 import { selectedVideoEditSceneRecord, selectVideoEditSceneRecord, subscribeVideoEditSceneSelection, videoEditSceneSelectionVersion } from '../application/videoEditSceneSelection'
@@ -194,17 +193,13 @@ export function VideoEditSceneLane({ instance, sequence, trackName, locked, scen
     return gone
   }
   /**
-   * 选中的记录此刻显示在这条子轨道上（有条目且落在某条片段的可见源时间里）时才删；连同子记录时先确认。
+   * 选中的记录此刻显示在这条子轨道上（有条目且落在某条片段的可见源时间里）时才删，并保留撤销。
    * 取舍：只要求子轨道显示着这条记录，不要求它在横向视野里——用户刚点选、随后滚开的记录照样能删，单条也不再确认（可以撤销）。
-   * 确认期间数据可能变了（撤销、助手增删子记录）：确认后按当时的数据重新取要删的集合，并重新检查轨道锁定。
    */
   const remove = async (recordId: string): Promise<void> => {
     const item = lanes && laneItemsOf(lanes).get(recordId)
     if (!committedScene || !editable || !item || !draggableKind(schema?.kinds[item.record.kind])) return
     if (!clips.some(clip => { const range = videoEditClipSourceRange(clip, fps); return !clip.frameHold && item.end >= range.from && item.at <= range.to })) return
-    const planned = subtree(committedScene, recordId)
-    const name = naming.name(item.record.source)
-    if (planned.size > 1 && !await requestAlertConfirmation({ title: '删除记录', message: `将删除“${name}”，连同下面 ${planned.size - 1} 条记录一起删除，可以撤销。`, type: 'warning', confirmLabel: '删除', confirmTone: 'danger' })) return
     const now = videoEditCommittedDocument(instance).scenes?.find(scene => scene.id === sceneId)
     if (!now?.records.some(record => record.id === recordId) || !latest.current.editable || latest.current.locked) return
     try { await writeVideoEditScene(projectId, sceneId, [{ kind: 'remove', recordIds: [...subtree(now, recordId)] }]) } catch (reason) { report(reason); return }

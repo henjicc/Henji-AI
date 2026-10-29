@@ -3,7 +3,7 @@ import type { HostContextSnapshot } from './hostContracts'
 import { applicationVerificationConditionSchema, applicationEvidenceSchema } from './transactions'
 import { EXTERNAL_APPLICATION_CAPABILITIES } from './externalCapabilityPolicy'
 import { applicationUserConfirmationSchema, paidApprovalProgressSchema } from './userConfirmation'
-import { uiPaidApprovalSchema, type PaidApprovalDecision } from './paidApproval'
+import { uiPaidApprovalSchema, paidOperationReceiptSchema, type PaidApprovalDecision } from './paidApproval'
 import type { OperationReviewCommand, OperationReviewSnapshot } from './operationReview'
 
 export const APPLICATION_READ_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.read.map(definition => definition.id)
@@ -14,11 +14,12 @@ export const APPLICATION_READ_PERMISSIONS = [...new Set(EXTERNAL_APPLICATION_CAP
 export const localHostRequestSchema = z.object({
   requestId: z.string().uuid(), rendererEpoch: z.string().uuid(), callerId: z.string().uuid(),
   capabilityId: z.enum(APPLICATION_CAPABILITY_IDS), input: z.record(z.string(), z.unknown()),
-  allowWrites: z.boolean().optional(), allowDestructive: z.boolean().optional(), allowPaid: z.boolean().optional(), operationId: z.string().uuid().optional(),
+  operationId: z.string().uuid().optional(),
   expectedRevisions: z.record(z.string(), z.number()).optional(),
   reviewTarget: z.boolean().optional(),
   /** 谁在操作：供界面标出“助手正在编辑”；内置助手只有类型，外部连接带用户起的名字。不参与授权。 */
   caller: z.object({ kind: z.enum(['embedded', 'external']), name: z.string().min(1).max(80).optional() }).strict().optional(),
+  paidReceipt: paidOperationReceiptSchema.optional(),
   paidGenerationEstimate: z.number().nonnegative().nullable().optional(),
   recoveryVerification: z.object({ conditions: z.array(applicationVerificationConditionSchema).max(256), evidence: z.array(applicationEvidenceSchema).max(256) }).optional(),
   /** 可信宿主只读核对：取回原执行回执，不重放业务。 */
@@ -89,32 +90,26 @@ export function externalWritableEntityTypes(domains: readonly LocalDomainSurface
  *
  * 当前只支持新应用契约，不提供旧工具或旧协议兼容入口。
  */
-export const EXTERNAL_CONTRACT_VERSION = '2' as const
+export const EXTERNAL_CONTRACT_VERSION = '3' as const
 /** 正式支持的现代协议；旧握手和其他版本拒绝，不降级。 */
 export const EXTERNAL_PROTOCOL_VERSIONS = ['2026-07-28'] as const
 export const EXTERNAL_SDK_VERSION = '2.0.0' as const
 export const EXTERNAL_SERVER_INFO = { name: 'henji', version: '2.0.0' } as const
 export const EXTERNAL_LIMITS = {
-  // Author modules may include bundled libraries; allow source plus JSON framing.
-  requestBytes: 32 * 1024 * 1024, resultBytes: 2 * 1024 * 1024, mediaChunkBytes: 256 * 1024,
-  concurrentRequests: 8, requestTimeoutMs: 30_000,
+  mediaChunkBytes: 256 * 1024, requestTimeoutMs: 30_000,
 } as const
-export const EXTERNAL_DEPRECATION_POLICY = '当前仅支持 application contract 2 与 MCP 2026-07-28；旧工具接口和旧协议不兼容，客户端需按当前声明调用。'
+export const EXTERNAL_DEPRECATION_POLICY = '当前仅支持 application contract 3 与 MCP 2026-07-28；旧工具接口和旧协议不兼容，客户端需按当前声明调用。'
 
-export interface McpConnectionAccess { allowWrites: boolean; allowDestructive: boolean; allowPaid: boolean }
-export interface McpConnectionInfo extends McpConnectionAccess { id: string; name: string }
-export const mcpDefaultAccessSchema = z.object({ allowWrites: z.boolean(), allowDestructive: z.boolean(), allowPaid: z.boolean() }).strict()
-export const mcpPreferencesSchema = z.object({ enabled: z.boolean(), port: z.number().int().min(1024).max(65535), defaultAccess: mcpDefaultAccessSchema }).strict()
+export interface McpConnectionInfo { id: string; name: string }
+export const mcpPreferencesSchema = z.object({ enabled: z.boolean(), port: z.number().int().min(1024).max(65535) }).strict()
 export type McpPreferences = z.infer<typeof mcpPreferencesSchema>
-export const DEFAULT_MCP_PREFERENCES: McpPreferences = { enabled: true, port: 43821, defaultAccess: { allowWrites: true, allowDestructive: true, allowPaid: true } }
-export interface McpStatus { enabled: boolean; ready: boolean; port: number; connections: McpConnectionInfo[]; defaultAccess?: McpPreferences['defaultAccess'] }
+export const DEFAULT_MCP_PREFERENCES: McpPreferences = { enabled: true, port: 43821 }
+export interface McpStatus { enabled: boolean; ready: boolean; port: number; connections: McpConnectionInfo[] }
 export interface McpPlatform {
   status(): Promise<McpStatus>
-  configure(input: { enabled: boolean; port: number; defaultAccess?: McpPreferences['defaultAccess'] }): Promise<McpStatus>
-  authorize(input: { name: string; allowWrites?: boolean; allowDestructive?: boolean; allowPaid?: boolean }): Promise<McpConnectionInfo>
+  configure(input: McpPreferences): Promise<McpStatus>
+  authorize(input: { name: string }): Promise<McpConnectionInfo>
   revoke(input: { id: string }): Promise<void>
-  /** 用户在可信设置页修改已有连接的权限；外部智能体不能修改自己的授权。 */
-  update(input: { id: string; access: McpConnectionAccess }): Promise<McpConnectionInfo>
   connectionConfig(input: { id: string }): Promise<string>
 }
 export interface ApplicationHostPlatform {

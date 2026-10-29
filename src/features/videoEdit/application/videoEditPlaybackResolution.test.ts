@@ -3,7 +3,6 @@ import { createVideoEditTestProject as createVideoEditProject } from './videoEdi
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
-import { getPlatform } from '@/platform/runtime'
 import { closeVideoEditProject, listVideoEditInstances } from './videoEditService'
 import { getVideoEditPlaybackResolution, resetVideoEditPlaybackResolutionCache, setVideoEditPlaybackResolution } from './videoEditPlaybackResolution'
 import { VideoEditMutationExecutor } from './videoEditExecutors'
@@ -11,7 +10,6 @@ import type { ApplicationPlannedStep } from '@/core/application-control'
 
 beforeEach(() => {
   installHarnessNativeStorage(); localStorage.clear(); resetVideoEditPlaybackResolutionCache()
-  vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined)
 })
 afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 

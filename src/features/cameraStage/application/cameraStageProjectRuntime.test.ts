@@ -273,26 +273,16 @@ describe('离开与回收站', () => {
     expect(findCameraStageProjectInstance(instance.id)).toBeUndefined()
   })
 
-  it('有内容的草稿离开时询问：取消留在原处；保存时起名转正；离开等进行中的后台操作结束且期间拒绝新操作', async () => {
+  it('有内容草稿静默保存；离开等待后台操作且期间拒绝新操作', async () => {
     const instance = await createCameraStageDraftRuntime()
     instance.store.getState().addPrimitive('box')
-    prompter.leaveChoices.push('cancel')
-    expect(await leaveCameraStageProject(instance.id)).toBe('cancelled')
-    expect(findCameraStageProjectInstance(instance.id)).toBe(instance)
-
     const release = await leaseCameraStageProjectRuntime(instance.id)
-    prompter.leaveChoices.push('save')
-    prompter.saveName = async (info) => {
-      expect(await info.check('镜头一', null)).toMatchObject({ status: 'available' })
-      await info.submit('镜头一', null)
-      return true
-    }
     const leaving = leaveCameraStageProject(instance.id)
     await expect(leaseCameraStageProjectRuntime(instance.id)).rejects.toThrow('PROJECT_CLOSING')
-    expect(prompter.log.filter((entry) => entry.startsWith('leave:'))).toHaveLength(1)
+    expect(prompter.log).toEqual([])
     release()
     expect(await leaving).toBe('saved')
-    expect(commands.stored(instance.id)!.meta).toMatchObject({ name: '镜头一', draft: false })
+    expect(commands.stored(instance.id)!.meta).toMatchObject({ name: '未命名镜头参考 1', draft: true })
     expect((commands.stored(instance.id)!.content as CameraStageSceneContent).objects.length).toBeGreaterThan(1)
     expect(findCameraStageProjectInstance(instance.id)).toBeUndefined()
   })

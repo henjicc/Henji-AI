@@ -1,4 +1,8 @@
-import type { z } from 'zod'
+import { restoreDocumentLocation } from '../services/documents/runtime'
+import { listDeletedWebRecordings, restoreWebRecording } from '../services/web-replay/runtime'
+import { z } from 'zod'
+import { RECYCLE_IPC_CHANNELS } from '../../../src/core/localRecords/recycle'
+import { listRecycledItems, restoreRecycledItem, preserveUserFile, trashUserFile } from '../services/recycle/runtime'
 
 import {
   generationHistoryClearRequestSchema,
@@ -36,6 +40,11 @@ function parseWith<T>(schema: z.ZodType<T>, optional = false): (input: unknown) 
 }
 
 export function registerLocalRecordsIpc(): void {
+  const integrations = { listDeletedWebRecordings, restoreWebRecording, restoreDocumentLocation }
+  registerIpcHandler(RECYCLE_IPC_CHANNELS.listDeleted, parseVoid, () => listRecycledItems(integrations))
+  registerIpcHandler(RECYCLE_IPC_CHANNELS.restoreDeleted, parseWith(z.object({ id: z.string().min(1) })), ({ id }) => restoreRecycledItem(id, integrations))
+  registerIpcHandler(RECYCLE_IPC_CHANNELS.preserveFile, parseWith(z.object({ path: z.string().min(1), name: z.string().optional() })), ({ path, name }) => preserveUserFile(path, name))
+  registerIpcHandler(RECYCLE_IPC_CHANNELS.trashFile, parseWith(z.object({ path: z.string().min(1), name: z.string().optional() })), ({ path, name }) => trashUserFile(path, name))
   const history = GENERATION_HISTORY_IPC_CHANNELS
   registerIpcHandler(history.list, parseWith(generationHistoryQuerySchema, true), (query) => getGenerationHistoryStore().list(query))
   registerIpcHandler(history.get, parseWith(generationHistoryIdRequestSchema), ({ id }) => getGenerationHistoryStore().get(id))

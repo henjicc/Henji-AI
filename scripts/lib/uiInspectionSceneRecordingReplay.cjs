@@ -31,7 +31,7 @@ function createRecordingReplayScene() {
         await new Promise(resolve => portProbe.listen(0, '127.0.0.1', resolve))
         const port = portProbe.address().port; await new Promise(resolve => portProbe.close(resolve))
         await page.evaluate(port => window.henjiNative.mcp.configure({ enabled: false, port }), port)
-        client = await connectMcpClient((await authorizeMcpConnection(page, { name: '操作脚本免费验收', allowWrites: true, allowDestructive: true })).config)
+        client = await connectMcpClient((await authorizeMcpConnection(page, { name: '操作脚本免费验收' })).config)
         const read = (ref, propertyIds = []) => callTool(client, 'read_application_entity', { ref, propertyIds })
         const invoke = async (name, input) => {
           const execution = await callTool(client, name, operationEnvelope([], input))

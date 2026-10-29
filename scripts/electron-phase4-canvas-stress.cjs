@@ -72,7 +72,6 @@ async function injectStressNodes(page, projectName, nodes, edges, viewport, samp
     const videoPath = await native.paths.join(workDir, 'plain_video.mp4')
     const videoBytes = Uint8Array.from(atob(samplePngVideoBase64), (c) => c.charCodeAt(0))
     await native.fs.writeFile(videoPath, videoBytes)
-    await native.media.allowRoot(workDir)
 
     const resolvedNodes = nodes.map((node) => {
       if (node.type === 'uploadNode') {

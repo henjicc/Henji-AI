@@ -1,3 +1,6 @@
+import { paidOperationReceiptSchema, type PaidOperationReceipt } from '../../../src/core/application-control/paidApproval'
+import { assertGenerationPaidReceipt } from '../services/application-runtime/paidApprovalPolicy'
+import { getApplicationRuntime } from '../services/application-runtime/runtime'
 import { redactRegisteredSecrets } from '../../../src/core/logging/sanitize'
 import {
   cancelRuntimeTask,
@@ -34,7 +37,7 @@ import { parseRecord, parseStringField, parseVoid, registerIpcHandler } from './
 const logger = createMainLogger('main.ipc.ai_runtime')
 
 /** 宿主自己的请求字段：结果放进哪个容器的“生成结果”（不进 SDK 请求）。 */
-interface HostOutput { outputContainer?: DocumentContainerRef }
+interface HostOutput { outputContainer?: DocumentContainerRef; paidReceipt?: PaidOperationReceipt }
 
 function parseOutputContainer(record: Record<string, unknown>): HostOutput {
   return record.outputContainer === undefined ? {} : { outputContainer: containerRefSchema.parse(record.outputContainer) }
@@ -43,6 +46,7 @@ function parseOutputContainer(record: Record<string, unknown>): HostOutput {
 function parseGenerateRequest(input: unknown): AiGenerateRequestDto & HostOutput {
   const record = parseRecord(input)
   return {
+    paidReceipt: record.paidReceipt === undefined ? undefined : paidOperationReceiptSchema.parse(record.paidReceipt),
     modelId: readString(record, 'modelId'),
     params: parseJsonObject(record.params ?? {}, 'params'),
     requestId: readOptionalString(record, 'requestId'),
@@ -111,7 +115,8 @@ export function registerAiRuntimeIpc(): void {
     (modelId) => listTtsVoices(modelId, sdkRuntimeContext)
   )
 
-  registerIpcHandler<AiGenerateRequestDto & HostOutput, HostGenerateResponse>('ai:generate', parseGenerateRequest, async ({ outputContainer, ...request }) => {
+  registerIpcHandler<AiGenerateRequestDto & HostOutput, HostGenerateResponse>('ai:generate', parseGenerateRequest, async ({ outputContainer, paidReceipt, ...request }) => {
+    assertGenerationPaidReceipt(getApplicationRuntime().operations.store, paidReceipt, request)
     return await generate(request, await resolveOutput(outputContainer, request.requestId))
   })
 

@@ -16,7 +16,7 @@ const target = z.discriminatedUnion('kind', [
 export const remixVideoEditMusicCapability = defineApplicationCapability({
   id: 'remix_video_edit_music', version: 1, domain: 'video_edit', title: '音频重构到时长',
   description: '对标 PR“重新混合”：把一段音乐自动重新拼接到目标时长（可加长也可缩短，精确到帧）。先用节拍模型分析拍与小节（首次自动下载约 190 MB，失败时退回较粗的节拍估计；结果按文件内容缓存），再在小节位置相同、前后都相似的拍之间找跳转点，保留前奏与尾奏，结果替换为同一轨道上的一组子片段，接缝放在起音前并加 2 帧恒定功率交叉淡化，多出的不足一小节在结尾截掉并淡出。整次一步撤销。clipRef 为音频片段；已重构过的子片段再次调用会按记录的原始范围用新参数重算整组。repetition 0 尽量不让同一小段反复出现（循环取长），1 允许短循环；granularity beat 可在任意拍跳转（接缝多、最贴近目标），bar 只在小节线跳转（默认），phrase 只在乐句起点跳转、至少隔 4 小节（接缝最少）。seed 换不同的变体。自由节奏（散板、rubato、氛围铺底）会被拒绝并说明原因，不硬剪。返回每个接缝的帧位置与把握（0–1，越高越不易听出），也可沿 video_edit.clip.remix 读回；结构摘要沿 video_edit.media.music_structure 读取。片段须未链接画面、无变速和关键帧，结果范围内同轨不能有其他片段。仅本地计算，不调用付费模型。',
-  aliases: ['重新混合', '音乐重构', '音乐时长', '拼接到时长', '对齐音乐长度', 'remix', 'music retarget'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write', idempotent: false, destructive: false,
+  aliases: ['重新混合', '音乐重构', '音乐时长', '拼接到时长', '对齐音乐长度', 'remix', 'music retarget'], readOnly: false, dataClasses: ['C1'], permission: 'video_edit:write', idempotent: false, destructive: false,
   timeoutMs: 600000, supportsPreview: false, supportsUndo: true, requiredScopes: ['video_edit'],
   acceptsRefs: ['video_edit.document', 'video_edit.sequence', 'video_edit.clip'], producesRefs: ['video_edit.clip'],
   inputSchema: z.object({

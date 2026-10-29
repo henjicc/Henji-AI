@@ -151,7 +151,6 @@ describe('ImageMarkTool（图片文档）', () => {
     const editor = await screen.findByTestId('v3-image-editor')
     expect(editor.getAttribute('data-document-id')).toBe('doc-1')
     expect(mocks.createFromSource).toHaveBeenCalledWith({ url: '/private/tmp/source.png' })
-    expect(mocks.allowMediaRoot).toHaveBeenCalledWith('/private/tmp')
     expect(getImageDocumentWorkspace().current).toBe('doc-1')
   })
 

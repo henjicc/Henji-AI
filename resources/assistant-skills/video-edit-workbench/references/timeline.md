@@ -28,7 +28,7 @@
 | 意图 | 操作与回读 |
 | --- | --- |
 | 单切点拆片段 | `split_video_edit` 给 documentRef、clipRef、frame；回读前后片段和音画关联 |
-| 删除片段，保留空隙 | `remove_items`；先读片段及父集合，检查关联，删除后核对其他轨道 |
+| 删除片段，保留空隙 | `remove_items`；检查关联，删除后核对其他轨道 |
 | 波纹、滚动、外滑、内滑修剪 | `trim_video_edit_clip` 给 documentRef、clipRef、mode、frames；ripple/roll 给 edge=in/out。正 frames 向右；slip 正值换播放顺序更晚内容。回执实际帧数可能因余量收紧 |
 | 普通倍速／倒放 | `video_edit.clip.speed_percent`（100原速）、`video_edit.clip.reverse`、`video_edit.clip.preserve_pitch`；链接音画要分别写。长出来的内容可能受后方空白限制 |
 | 保持源内容、改时长并移动后续片段 | `ripple_video_edit_clip_speed`：clipRefs 与 speedPercent 或 durationFrames 二选一；linked 控制关联展开。只移动目标所在轨道后续片段，不将其他同步轨道自动外推 |

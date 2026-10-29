@@ -1,4 +1,5 @@
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
+import { subscribeRestored } from '@/services/recycle'
 import { createLogger } from '@/core/logging'
 import React, { useState, useEffect, useCallback } from 'react'
 import { Preset, PresetSaveMode } from '../types/preset'
@@ -38,12 +39,11 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
     const [isSaving, setIsSaving] = useState(false)
     const [saveMode, setSaveMode] = useState<PresetSaveMode | null>(null)
     const [presetName, setPresetName] = useState('')
-    // 删除确认是预设面板里的子浮层（共享 PanelTrigger，任务 5.9）：在它里面点击不会关掉预设面板
-    const [deletingPresetId, setDeletingPresetId] = useState<string | null>(null)
     const loadPresetsData = useCallback(async (): Promise<void> => {
         const data = await loadPresets()
         setPresets(data)
     }, [])
+    useEffect(() => subscribeRestored(async item => { if (item.id.startsWith('presets:')) await loadPresetsData() }), [loadPresetsData])
     useEffect(() => {
         void loadPresetsData().catch(error => {
             logger.error('读取预设失败，原库已保留', { event: 'presets.read.failed', error })
@@ -108,7 +108,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
         setSaveMode(null)
         setPresetName('')
     }
-    const handleConfirmDelete = async () => {
+    const handleDelete = async (deletingPresetId: string) => {
         if (!deletingPresetId) return
         const preset = presets.find(p => p.id === deletingPresetId)
         if (!preset) return
@@ -126,8 +126,6 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                 type: 'error',
                 detail: error instanceof Error ? error.message : String(error),
             })
-        } finally {
-            setDeletingPresetId(null)
         }
     }
     return (
@@ -139,10 +137,9 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
             alignment="aboveCenter"
             stableHeight={true}
             closeOnPanelClick={(target) => {
-                if (deletingPresetId) return false
                 if (isSaving) return false
                 const element = target as HTMLElement
-                // 点删除按钮是打开确认，不是选用预设
+                // 删除操作不能冒泡成选用预设。
                 if (element.closest('[data-preset-delete]')) return false
                 return !!element.closest('[data-preset-item]')
             }}
@@ -271,60 +268,10 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                                 <span className="text-xs text-text3">
                                                     {formatTimeAgo(preset.updatedAt)}
                                                 </span>
-                                                {/* 删除按钮与确认浮层 */}
-                                                <PanelTrigger
-                                                    className="flex"
-                                                    open={deletingPresetId === preset.id}
-                                                    onOpenChange={(open) => setDeletingPresetId((current) => open ? preset.id : (current === preset.id ? null : current))}
-                                                    panelSize="menu"
-                                                    panelPadding="content"
-                                                    alignment="aboveCenter"
-                                                    gap={8}
-                                                    renderPanel={() => (
-                                                        // 浮层经 portal 挂到 body，但 React 事件仍沿组件树冒泡：拦下，避免触发“选用预设”
-                                                        <div onClick={(e) => e.stopPropagation()}>
-                                                            <div className="mb-3 text-13 text-text1">
-                                                                {t('ui:presets.confirmDelete')}
-                                                            </div>
-                                                            <div className="flex gap-2">
-                                                                <UiButton
-                                                                    type="button"
-                                                                    variant="dangerSolid"
-                                                                    onClick={() => { void handleConfirmDelete() }}
-                                                                    className="flex-1"
-                                                                >
-                                                                    {t('common:delete')}
-                                                                </UiButton>
-                                                                <UiButton
-                                                                    type="button"
-                                                                    variant="secondary"
-                                                                    onClick={() => setDeletingPresetId(null)}
-                                                                    className="flex-1"
-                                                                >
-                                                                    {t('common:cancel')}
-                                                                </UiButton>
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                >
-                                                    {({ open }) => (
-                                                        <UiIconButton
-                                                            type="button"
-                                                            tone="danger"
-                                                            data-preset-delete
-                                                            data-panel-trigger-button
-                                                            aria-expanded={open}
-                                                            onClick={(e) => {
-                                                                e.stopPropagation()
-                                                                setDeletingPresetId(open ? null : preset.id)
-                                                            }}
-                                                            className={`transition-opacity duration-180 group-hover:opacity-100 focus-visible:opacity-100 ${open ? 'opacity-100' : 'opacity-0'}`}
-                                                            tooltip={t('ui:presets.deleteTitle')}
-                                                        >
-                                                            <Trash2  />
-                                                        </UiIconButton>
-                                                    )}
-                                                </PanelTrigger>
+                                                <UiIconButton type="button" tone="danger" data-preset-delete
+                                                    onClick={(event) => { event.stopPropagation(); void handleDelete(preset.id) }}
+                                                    className="opacity-0 transition-opacity duration-180 group-hover:opacity-100 focus-visible:opacity-100"
+                                                    tooltip={t('ui:presets.deleteTitle')}><Trash2 /></UiIconButton>
                                             </div>
                                         </div>
                                         {/* 预览信息 */}

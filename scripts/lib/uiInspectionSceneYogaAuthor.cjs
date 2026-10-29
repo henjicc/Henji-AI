@@ -65,7 +65,7 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
       await disableMcp(page)
       await page.evaluate(port => window.henjiNative.mcp.configure({ enabled: true, port }), spec.mcpPort)
     }
-    const identity = await authorizeMcpConnection(page, { name: 'YOGA 完整时间线验收', allowWrites: true, allowDestructive: false })
+    const identity = await authorizeMcpConnection(page, { name: 'YOGA 完整时间线验收' })
     client = await connectMcpClient(identity.config, 'Henji YOGA author timeline')
     const documentRef = { kind: 'video_edit.document', id: created.documentId }
     const sequenceRef = { kind: 'video_edit.sequence', id: `${created.documentId}:${model.sequences[0].id}` }

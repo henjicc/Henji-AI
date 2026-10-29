@@ -550,7 +550,7 @@ it('查询取消、读取中编辑或跟踪结果更新，不交付旧计划', a
 })
 it('只读授权可查询；范围、完整序列引用和输出预算受公共契约约束', async () => {
   const { input } = await fixture(); const app = createApplicationHarness()
-  const grant = createApplicationCallerGrant({ callerId: 'review-read', capabilityIds: ['query_video_edit_review'], permissions: ['video_edit:read'], allowWrites: false, allowDestructive: false })
+  const grant = createApplicationCallerGrant({ callerId: 'review-read' })
   const session = createApplicationCapabilitySession(grant)
   try {
     const response = await session.execute({ id: 'query_video_edit_review', version: queryVideoEditReviewCapability.version, input }, { ...context(), requestId: crypto.randomUUID() })
