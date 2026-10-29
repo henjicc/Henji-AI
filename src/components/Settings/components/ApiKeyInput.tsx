@@ -97,7 +97,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
         </UiButton> : null}
       </div> : null}
       <div className="flex items-center gap-2">
-        <div className="relative min-w-0 flex-1">
+        <div className="relative min-w-0 grow">
           <UiInput
             id={inputId}
             type={visible ? 'text' : 'password'}
