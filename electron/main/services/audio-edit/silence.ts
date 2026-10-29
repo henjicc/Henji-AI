@@ -1,5 +1,5 @@
-import type { AudioEditRange, AudioEditSilenceRequest, AudioEditSilenceResult, AudioEditSuggestion } from '../../../../src/core/audioEdit/types'
-import { subtractRanges } from '../../../../src/core/audioEdit/edits'
+import type { AudioEditRange, AudioEditSilenceRequest, AudioEditSilenceResult } from '../../../../src/core/audioEdit/types'
+import { audioEditSilenceSuggestions } from '../../../../src/core/audioEdit/silence'
 import { requireAudioEditProject } from './project-store'
 import { probeAudioEditImport, verifyAudioEditSource } from './media'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
@@ -34,7 +34,8 @@ async function detectRegisteredSilence(request: AudioEditSilenceRequest, control
     if (energy) intervals.push(...energy.pauses.map(pause => ({ startFrame: Math.ceil(pause.startMs * project.source.sampleRate / 1000), endFrame: Math.floor(pause.endMs * project.source.sampleRate / 1000) })))
     else await runAudioEditProcess(await loadFfmpegPath(), ['-hide_banner', '-nostats', '-i', project.source.audioPath,
       '-map', project.source.ownership === 'external' ? `0:${project.source.audioStreamIndex ?? 0}` : '0:a:0',
-      '-af', `asetpts=PTS-STARTPTS,silencedetect=noise=${settings.noiseDb}dB:d=${settings.silenceThresholdMs / 1000}`, '-vn', '-f', 'null', '-'], signal, (line) => {
+      // 接缝两边的短停顿也要采集，是否够长在投影到成片后判断。
+      '-af', `asetpts=PTS-STARTPTS,silencedetect=noise=${settings.noiseDb}dB:d=0.01`, '-vn', '-f', 'null', '-'], signal, (line) => {
       const began = /silence_start: ([\d.e+-]+)/.exec(line)
       const ended = /silence_end: ([\d.e+-]+)/.exec(line)
       if (began) start = Math.max(0, Math.round(Number(began[1]) * project.source.sampleRate))
@@ -46,13 +47,7 @@ async function detectRegisteredSilence(request: AudioEditSilenceRequest, control
       }
     })
     if (start !== undefined) intervals.push({ startFrame: start, endFrame: project.source.durationFrames })
-    // ASR speech blocks are conservative exclusion zones, including unlocked speech.
-    const safe = subtractRanges(intervals, project.transcript.filter((block) => block.included || block.locked))
-    const threshold = settings.silenceThresholdMs * project.source.sampleRate / 1000
-    const suggestions: AudioEditSuggestion[] = safe.filter((range) => range.endFrame - range.startFrame >= threshold
-      && (settings.trimEdges || (range.startFrame > 0 && range.endFrame < project.source.durationFrames))
-      && (!request.range || (range.startFrame >= request.range.startFrame && range.endFrame <= request.range.endFrame)))
-      .map((range) => ({ ...range, id: `silence:${range.startFrame}:${range.endFrame}`, kind: 'long_silence', evidence: 'audio', title: '压缩停顿', detail: `保留 ${settings.retainedSilenceMs} 毫秒气口`, blockIds: [], confidence: 'high', status: 'pending' }))
+    const suggestions = audioEditSilenceSuggestions(project, intervals, settings, request.range)
     signal.throwIfAborted()
     await verifyAudioEditSource(project, true, signal)
     return { revision: project.revision, suggestions, ...(energy ? { energy } : {}) }

@@ -98,6 +98,13 @@ describe('呼吸声按上下文处理', () => {
     const muted = applyAudioEditBreathPolicy(document, breaths, 'mute').document
     expect(muted.cuts?.map((cut) => cut.mode)).toEqual(['mute', 'mute'])
     const deleted = applyAudioEditBreathPolicy(document, breaths, 'delete').document
+    for (const policy of ['attenuate', 'mute'] as const) {
+      const softened = applyAudioEditBreathPolicy(document, breaths, policy).document
+      const switched = applyAudioEditBreathPolicy(softened, breaths, 'delete').document
+      expect(switched.cuts).toEqual(deleted.cuts)
+      expect(switched.gainRegions).toEqual(deleted.gainRegions)
+      expect(applyAudioEditBreathPolicy(switched, breaths, 'delete').document).toEqual(switched)
+    }
     const kept = applyAudioEditBreathPolicy(deleted, breaths, 'keep').document
     expect(kept.cuts).toEqual([])
     expect(kept.gainRegions).toEqual([])

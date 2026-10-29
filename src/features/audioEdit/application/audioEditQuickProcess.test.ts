@@ -6,10 +6,10 @@ import { audioEditProjectToDocumentContent } from '@/core/audioEdit/documentCont
 import { DocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
 import { createScriptedPrompter, FakeDocumentCommands } from '@/features/documents/documentSessionTestKit'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
-import { cleanProjectAudioEditRetakes, quickProcessAudioEdit } from './audioEditApplicationService'
+import { cleanProjectAudioEditRetakes, processProjectAudioEditBreaths, quickProcessAudioEdit } from './audioEditApplicationService'
 import { loadAudioEditProject, resetAudioEditProjectInstancesForTests, setAudioEditDocumentRegistryForTests, undoAudioEditProject } from './audioEditProjectInstances'
 import { setAudioEditBlocks } from '@/core/audioEdit/edits'
-import type { AudioEditTranscriptBlock } from '@/core/audioEdit/types'
+import type { AudioEditProjectDocument, AudioEditTranscriptBlock } from '@/core/audioEdit/types'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
 
 afterEach(async () => { vi.restoreAllMocks(); await resetAudioEditProjectInstancesForTests(); setAudioEditDocumentRegistryForTests(null); uninstallHarnessNativeStorage() })
@@ -80,4 +80,42 @@ it('快速处理在有逐词转写时先去掉重念，再压缩停顿，整批�
   expect(result.retakeCount).toBe(1)
   expect(instance.past).toHaveLength(1)
   expect(instance.document.suggestions.map((item) => [item.kind, item.status])).toEqual([['retake', 'applied']])
+})
+
+it('词块手改后删呼吸不撤回已有的 3.9 秒删除，缺少电平时也不恢复；手写同前缀剪切原样保留', async () => {
+  installHarnessNativeStorage()
+  const commands = new FakeDocumentCommands()
+  setAudioEditDocumentRegistryForTests(new DocumentSessionRegistry({ commands, prompter: createScriptedPrompter(), kinds: documentKindRegistry }))
+  const document: AudioEditProjectDocument = {
+    id: 'breath-rerun', name: '口播', source: { mediaType: 'audio', sourcePath: 'voice.wav', audioPath: 'voice.wav', sampleRate: 1000, channels: 1, durationFrames: 7000 },
+    referenceScript: '', suggestions: [], revision: 1, createdAt: 1, updatedAt: 1,
+    transcript: [
+      { id: 'a', text: '词。', startFrame: 0, endFrame: 1000, included: true, locked: false, granularity: 'word' },
+      // 用户调整的词时间盖住旧自动删除：删除仍是独立决定，重算不能靠清空剪切恢复它。
+      { id: 'b', text: '词', startFrame: 2000, endFrame: 4900, included: true, locked: false, granularity: 'word' },
+      { id: 'c', text: '词', startFrame: 5000, endFrame: 7000, included: true, locked: false, granularity: 'word' },
+    ],
+    cuts: [
+      { id: 'gap:1000', startFrame: 1000, endFrame: 4900, enabled: true, reason: 'silence' },
+      { id: 'gap:5100', startFrame: 5100, endFrame: 5200, enabled: true, reason: 'manual', mode: 'mute' },
+      { id: 'breath:5300', startFrame: 5300, endFrame: 5400, enabled: false, reason: 'manual' },
+    ],
+  }
+  commands.seed({ kind: 'audio_edit', id: document.id, name: document.name, content: audioEditProjectToDocumentContent(document) })
+  const instance = await loadAudioEditProject(document.id)
+  vi.spyOn(getPlatform().audioEdit, 'detectBreaths').mockResolvedValue({ version: 2, model: 'respiro-en', durationMs: 7000, breaths: [] })
+  const detect = vi.spyOn(getPlatform().audioEdit, 'detectSilence').mockImplementation(async () => ({
+    revision: instance.session.documentMeta.revision, suggestions: [], energy: { resolutionMs: 10, thresholdDb: -48, highThresholdDb: -72, pauses: [], levels: { wideDb: Array(700).fill(-30) } },
+  }))
+  const manual = instance.document.cuts!.filter((cut) => cut.reason === 'manual')
+  expect((await processProjectAudioEditBreaths(document.id)).shortenedMs).toBe(0)
+  const once = instance.document.cuts
+  expect(editedDurationFrames(buildProjectAudioEditTimeline(instance.document))).toBe(3100)
+  expect((await processProjectAudioEditBreaths(document.id)).shortenedMs).toBe(0)
+  expect(instance.document.cuts).toEqual(once)
+  detect.mockResolvedValueOnce({ revision: instance.session.documentMeta.revision, suggestions: [] })
+  expect((await processProjectAudioEditBreaths(document.id)).shortenedMs).toBe(0)
+  expect(instance.document.cuts).toEqual(once)
+  await processProjectAudioEditBreaths(document.id, 'keep')
+  expect(instance.document.cuts!.filter((cut) => cut.reason === 'manual')).toEqual(manual)
 })

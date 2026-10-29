@@ -23,12 +23,12 @@ export function audioEditSuggestionState(project: AudioEditProjectDocument, sugg
   }
   const retained = Math.round((project.batchSettings ?? DEFAULT_AUDIO_EDIT_SETTINGS).retainedSilenceMs * project.source.sampleRate / 1000)
   const ranges = suggestion.kind === 'long_silence'
-    ? [{ startFrame: suggestion.startFrame + Math.floor(retained / 2), endFrame: suggestion.endFrame - Math.ceil(retained / 2) }]
+    ? silenceCutRanges(project, suggestion, retained)
     : targets.map((block) => ({ startFrame: block.startFrame, endFrame: block.endFrame }))
   if (suggestion.kind === 'long_silence' && suggestion.evidence !== 'audio') return 'stale'
   if (ranges.some((range) => range.endFrame <= range.startFrame || range.startFrame < 0 || range.endFrame > project.source.durationFrames)) return 'stale'
   if (project.transcript.some((block) => block.locked && ranges.some((range) => block.startFrame < range.endFrame && block.endFrame > range.startFrame))) return 'locked'
-  const inaudible = [...project.transcript.filter((block) => !block.included && !block.locked), ...(project.cuts ?? []).filter((cut) => cut.enabled)]
+  const inaudible = [...project.transcript.filter((block) => !block.included && !block.locked), ...(project.cuts ?? []).filter((cut) => cut.enabled && cut.mode !== 'mute')]
   if (!subtractRanges(ranges, inaudible).length) return 'removed'
   if (suggestion.status === 'dismissed') return 'dismissed'
   // If the user restores any part of a previously applied edit, do not propose deleting it again.
@@ -128,6 +128,30 @@ export function subtractRanges(ranges: readonly AudioEditRange[], protectedRange
   }), [...ranges])
 }
 
+/** 保留长度按成片累计，避免把剪掉的词和停顿算进两头要留的气口。 */
+function silenceCutRanges(project: AudioEditProjectDocument, range: AudioEditRange, retained: number): AudioEditRange[] {
+  const heard = subtractRanges([range], [
+    ...project.transcript.filter((block) => !block.included && !block.locked),
+    ...(project.cuts ?? []).filter((cut) => cut.enabled && cut.mode !== 'mute'),
+  ]).sort((a, b) => a.startFrame - b.startFrame)
+  const length = heard.reduce((total, part) => total + part.endFrame - part.startFrame, 0)
+  return sliceAudioEditRanges(heard, Math.floor(retained / 2), length - Math.ceil(retained / 2))
+}
+
+/** 区间之间已删的内容不占时间；from/to 是这些区间拼接后的偏移。 */
+export function sliceAudioEditRanges(ranges: readonly AudioEditRange[], from: number, to: number): AudioEditRange[] {
+  const result: AudioEditRange[] = []
+  let cursor = 0
+  for (const range of ranges) {
+    const length = range.endFrame - range.startFrame
+    const start = Math.max(from, cursor), end = Math.min(to, cursor + length)
+    if (end > start) result.push({ startFrame: range.startFrame + start - cursor, endFrame: range.startFrame + end - cursor })
+    cursor += length
+    if (cursor >= to) break
+  }
+  return result
+}
+
 export function setAudioEditBlocks(project: AudioEditProjectDocument, ids: readonly string[], included: boolean): AudioEditProjectDocument {
   const selected = new Set(ids)
   const transcript = project.transcript.map((block) => selected.has(block.id) && !block.locked ? { ...block, included } : block)
@@ -157,15 +181,15 @@ export function applyAudioEditSuggestion(project: AudioEditProjectDocument, id: 
     if (suggestion.evidence !== 'audio') return project
     const settings = project.batchSettings ?? DEFAULT_AUDIO_EDIT_SETTINGS
     const retained = Math.round(settings.retainedSilenceMs * project.source.sampleRate / 1000)
-    const range = { startFrame: suggestion.startFrame + Math.floor(retained / 2), endFrame: suggestion.endFrame - Math.ceil(retained / 2) }
-    if (range.endFrame <= range.startFrame) return project
+    const ranges = silenceCutRanges(project, suggestion, retained)
+    if (!ranges.length) return project
     // Suggestions intersecting protected speech cannot claim successful application.
-    if (project.transcript.some((block) => block.locked && block.startFrame < range.endFrame && block.endFrame > range.startFrame)) return project
+    if (project.transcript.some((block) => block.locked && ranges.some((range) => block.startFrame < range.endFrame && block.endFrame > range.startFrame))) return project
     const cuts = project.cuts ?? []
     if (cuts.some((cut) => cut.id === id && cut.enabled)) return project
-    const fresh = subtractRanges([range], [...cuts.filter((cut) => cut.enabled), ...project.transcript.filter((block) => !block.included)])
+    const fresh = ranges
     if (!fresh.length) return project
-    next = { ...project, cuts: [...cuts.filter((cut) => cut.id !== id), ...fresh.map((part, index) => ({ ...part, id: index ? `${id}:${part.startFrame}` : id, reason: 'silence' as const, enabled: true }))] }
+    next = { ...project, cuts: [...cuts.filter((cut) => cut.id !== id || cut.reason === 'manual'), ...fresh.map((part, index) => ({ ...part, id: index ? `${id}:${part.startFrame}` : id, reason: 'silence' as const, enabled: true }))] }
   } else {
     const targets = project.transcript.filter((block) => suggestion.blockIds.includes(block.id))
     if (suggestion.kind === 'filler' && targets.some((block) => block.granularity !== 'word')) return project

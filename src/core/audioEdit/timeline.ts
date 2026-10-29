@@ -91,6 +91,30 @@ export function editedDurationFrames(spans: readonly AudioEditTimelineSpan[]): n
   return spans.at(-1)?.outputEndFrame ?? 0
 }
 
+/** 词块即使标成保留，也可能整段落在手写剪切里，不能再拿它当接缝的声音边界。 */
+export function retainedAudioEditWords(blocks: readonly AudioEditTranscriptBlock[], spans: readonly AudioEditTimelineSpan[]): AudioEditTranscriptBlock[] {
+  let index = 0
+  return blocks.filter((block) => block.included || block.locked).sort((a, b) => a.startFrame - b.startFrame).filter((block) => {
+    while (index < spans.length && spans[index].sourceEndFrame <= block.startFrame) index++
+    return index < spans.length && spans[index].sourceStartFrame < block.endFrame
+  })
+}
+
+/** 删过整词的接缝需要连同遗留的字尾碎片清理，普通词间停顿仍只依声学证据判断。 */
+export function audioEditWordGaps(blocks: readonly AudioEditTranscriptBlock[], spans: readonly AudioEditTimelineSpan[]): Array<{
+  previous: AudioEditTranscriptBlock; next: AudioEditTranscriptBlock; seam: boolean
+}> {
+  const words = retainedAudioEditWords(blocks, spans)
+  const retained = new Set(words.map((word) => word.id))
+  const removed = blocks.filter((block) => !block.locked && !retained.has(block.id)).sort((a, b) => a.startFrame - b.startFrame)
+  let index = 0
+  return words.slice(0, -1).map((previous, i) => {
+    const next = words[i + 1]
+    while (index < removed.length && removed[index].startFrame < previous.endFrame) index++
+    return { previous, next, seam: index < removed.length && removed[index].endFrame <= next.startFrame }
+  })
+}
+
 export function outputFrameToSourceFrame(
   outputFrame: number,
   spans: readonly AudioEditTimelineSpan[],

@@ -107,25 +107,27 @@ describe('字间气口清理', () => {
     expect(heardBetween(cleanAudioEditGaps(tail, [], loudTail).document, 1000, 1400)).toEqual({ heard: 120, silent: 100 })
   })
 
-  it('与删呼吸连用时先撤上一次的清理再判断呼吸：重跑结果不变', () => {
+  it('与删呼吸连用时沿当前成片继续处理：重跑结果不变', () => {
     const document = documentOf([['一件事。', 0, 1000], ['每个', 1600, 3000]])
     const breaths = [{ startMs: 1150, endMs: 1450, peak: 1 }]
     const levels = levelsOf([[0, 1020], [1600, 3000]], [[1150, 1450, -45]])
     const pipeline = (current: AudioEditProjectDocument): AudioEditProjectDocument =>
-      cleanAudioEditGaps(applyAudioEditBreathPolicy(clearAudioEditGaps(current), breaths, 'delete').document, breaths, levels).document
+      cleanAudioEditGaps(applyAudioEditBreathPolicy(current, breaths, 'delete').document, breaths, levels).document
     const once = pipeline(document)
     expect(heardBetween(once, 1020, 1600)).toMatchObject({ heard: 200 })
     expect(pipeline(once).cuts).toEqual(once.cuts)
   })
 
-  it('不用删的气口被已有删除隔成好几段时，中间零碎的几段并进删除，只留紧挨两边字的静音', () => {
+  it('接缝已短于目标时只静音残留，不能为了并拢源区间再缩短气口', () => {
     // 元宝。0–1000 | 残留 1000–1080 | 已删 1080–1170 | 30 ms | 已删 1200–1260 | 1260–1300 | 腾讯
     const document = documentOf([['元宝。', 0, 1000], ['腾讯', 1300, 3000]], { cuts: [
       { id: 'breath:1080', startFrame: 1080, endFrame: 1170, reason: 'silence', enabled: true },
       { id: 'cut', startFrame: 1200, endFrame: 1260, reason: 'manual', enabled: true }] })
     const { document: next } = cleanAudioEditGaps(document, [], levelsOf([[0, 1000], [1300, 3000]], [[1000, 1080, -60]]))
     const gaps = next.cuts!.filter((cut) => cut.id.startsWith('gap:')).map((cut) => [cut.mode ?? 'delete', cut.startFrame, cut.endFrame])
-    expect(gaps).toEqual([['mute', 1010, 1080], ['delete', 1080, 1260], ['mute', 1260, 1290]])
+    expect(gaps).toEqual([['mute', 1010, 1080], ['mute', 1170, 1200], ['mute', 1260, 1290]])
+    expect(heardBetween(next, 1000, 1300).heard).toBe(150)
+    expect(cleanAudioEditGaps(next, [], levelsOf([[0, 1000], [1300, 3000]], [[1000, 1080, -60]])).document.cuts).toEqual(next.cuts)
   })
 
   it('夹在残留里的几十毫秒声响一并静音；重跑替换上一次；逐处恢复过的不动；锁定的不动', () => {

@@ -1,6 +1,6 @@
 import type { AudioBreath } from '../audioAnalysis/breath/respiro'
 import type { AudioEditGainRegion } from './regions'
-import { buildProjectAudioEditTimeline } from './timeline'
+import { buildProjectAudioEditTimeline, retainedAudioEditWords } from './timeline'
 import type { AudioEditCut, AudioEditProjectDocument, AudioEditRange, AudioEditTimelineSpan, AudioEditTranscriptBlock } from './types'
 
 /*
@@ -61,7 +61,7 @@ interface Placement {
 }
 
 const breathId = (startFrame: number): string => `${AUDIO_EDIT_BREATH_ID_PREFIX}${startFrame}`
-export const isAudioEditBreathEdit = (item: { id: string }): boolean => item.id.startsWith(AUDIO_EDIT_BREATH_ID_PREFIX)
+export const isAudioEditBreathEdit = (item: { id: string; reason?: string }): boolean => item.reason !== 'manual' && item.id.startsWith(AUDIO_EDIT_BREATH_ID_PREFIX)
 
 /** 声音能量检测到的安静区间（毫秒），与停顿压缩、去重念共用 */
 export interface AudioEditQuietRange { startMs: number; endMs: number }
@@ -79,10 +79,10 @@ interface PlacementState {
 }
 
 function placementState(document: AudioEditProjectDocument, quiet?: FrameRange[]): PlacementState {
-  const byStart = (a: AudioEditTranscriptBlock, b: AudioEditTranscriptBlock): number => a.startFrame - b.startFrame
+  const heard = buildProjectAudioEditTimeline(document)
   return {
-    document, heard: buildProjectAudioEditTimeline(document), quiet,
-    words: document.transcript.filter((block) => block.included).sort(byStart),
+    document, heard, quiet,
+    words: retainedAudioEditWords(document.transcript, heard),
     removedWords: document.transcript.filter((block) => !block.included && !block.locked),
   }
 }
@@ -211,7 +211,7 @@ function overlapsLocked(document: AudioEditProjectDocument, range: { startFrame:
 }
 
 /**
- * 按策略处理呼吸声：替换此前的呼吸处理（用户逐处恢复过的保留不动），返回新文档与各类计数。
+ * 按策略处理呼吸声：删除沿当前成片补充，切换策略才撤回自动处理；用户逐处恢复过的不动。
  * range 只处理落在其中的呼吸；pauses 是声音能量检测到的安静区间，给了就只把真正安静的部分算作气口。
  */
 export function applyAudioEditBreathPolicy(
@@ -220,11 +220,13 @@ export function applyAudioEditBreathPolicy(
   const { sampleRate } = document.source
   const inRange = (item: { startFrame: number; endFrame: number }): boolean => !range || (item.startFrame >= range.startFrame && item.endFrame <= range.endFrame)
   const restored = new Set([...(document.cuts ?? []), ...(document.gainRegions ?? [])].filter((item) => isAudioEditBreathEdit(item) && !item.enabled).map((item) => item.id))
-  // 先撤掉范围内此前的呼吸处理，再按当前剪辑状态重新判断
+  // 删除不能恢复旧删除；词块或其他剪切已改变时，重新分配气口会把剪掉的声音带回来。
+  const processed = policy === 'delete' ? new Set((document.cuts ?? [])
+    .filter((item) => item.enabled && item.mode !== 'mute' && isAudioEditBreathEdit(item)).map((item) => item.id)) : new Set<string>()
   const base: AudioEditProjectDocument = {
     ...document,
-    cuts: (document.cuts ?? []).filter((item) => !(isAudioEditBreathEdit(item) && item.enabled && inRange(item))),
-    gainRegions: (document.gainRegions ?? []).filter((item) => !(isAudioEditBreathEdit(item) && item.enabled && inRange(item))),
+    cuts: (document.cuts ?? []).filter((item) => !((policy !== 'delete' || item.mode === 'mute') && isAudioEditBreathEdit(item) && item.enabled && inRange(item))),
+    gainRegions: (document.gainRegions ?? []).filter((item) => !(policy !== 'delete' && isAudioEditBreathEdit(item) && item.enabled && inRange(item))),
   }
   const counts = { deleted: 0, attenuated: 0, muted: 0, kept: 0 }
   // 按时间逐口处理，每删一口就按新的剪辑重算：同一处空当里的后一口气看得到前一口已经删掉
@@ -233,13 +235,14 @@ export function applyAudioEditBreathPolicy(
   let state = placementState(working, quiet)
   for (const breath of [...breaths].sort((a, b) => a.startMs - b.startMs)) {
     const placement = placeBreath(state, breath)
-    if (!inRange(placement) || restored.has(placement.id)) continue
+    if (!inRange(placement) || restored.has(placement.id) || processed.has(placement.id)) continue
     const region = placement.region
     const decision = region && !overlapsLocked(base, region) ? decideAudioEditBreath(placement.context, policy) : 'keep'
     if (decision === 'keep' || !region) { if (placement.context !== 'removed') counts.kept++; continue }
     const edits = breathEdits(placement, decision, sampleRate)
     counts[edits.handling]++
-    working = { ...working, cuts: [...(working.cuts ?? []), ...edits.cuts], gainRegions: [...(working.gainRegions ?? []), ...edits.gains] }
+    working = { ...working, cuts: [...(working.cuts ?? []), ...edits.cuts],
+      gainRegions: [...(working.gainRegions ?? []).filter((item) => item.id !== placement.id), ...edits.gains] }
     if (edits.cuts.length) state = placementState(working, quiet)
   }
   return { document: working, counts }

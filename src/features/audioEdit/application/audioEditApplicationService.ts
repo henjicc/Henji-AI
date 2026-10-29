@@ -144,7 +144,7 @@ export async function compressAudioEditSilence(projectId: string, range?: AudioE
       for (const suggestion of suggestions) draft = applyAudioEditSuggestion(draft, suggestion.id)
       if (includeFillers) draft = cleanAudioEditFillers(draft, settings.fillers, range)
       if (breaths) {
-        const processed = applyAudioEditBreathPolicy(clearAudioEditGaps(draft, range), breaths, 'delete', range, detected.energy?.pauses); draft = processed.document; breathCounts = processed.counts
+        const processed = applyAudioEditBreathPolicy(draft, breaths, 'delete', range, detected.energy?.pauses); draft = processed.document; breathCounts = processed.counts
         const levels = energyLevels(detected.energy)
         if (levels) { const cleaned = cleanAudioEditGaps(draft, breaths, levels, range); draft = cleaned.document; gapCount = cleaned.count }
       }
@@ -186,10 +186,10 @@ export async function processProjectAudioEditBreaths(projectId: string, policy: 
       let counts = { deleted: 0, attenuated: 0, muted: 0, kept: 0 }
       let gaps = 0
       const next = commit((document) => {
-        // 先撤掉上一次的气口清理再判断呼吸：旧的删除会让呼吸看起来“已被剪掉”，重跑结果就不一致了
-        const processed = applyAudioEditBreathPolicy(clearAudioEditGaps(document, range), breaths, policy, range, energy?.pauses); counts = processed.counts
+        const base = policy === 'delete' ? document : clearAudioEditGaps(document, range)
+        const processed = applyAudioEditBreathPolicy(base, breaths, policy, range, energy?.pauses); counts = processed.counts
         // 快节奏删除时连带把字间气口清成静音；改为减弱、静音或保留时撤掉此前的清理，不把保留的呼吸静音掉
-        if (policy !== 'delete' || !energy?.levels) return clearAudioEditGaps(processed.document, range)
+        if (policy !== 'delete' || !energy?.levels) return processed.document
         const cleaned = cleanAudioEditGaps(processed.document, breaths, energy.levels, range); gaps = cleaned.count
         return cleaned.document
       })

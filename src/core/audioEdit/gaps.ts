@@ -1,6 +1,7 @@
 import type { AudioBreath } from '../audioAnalysis/breath/respiro'
 import { isAudioEditBreathEdit } from './breaths'
-import { buildProjectAudioEditTimeline } from './timeline'
+import { audioEditWordGaps, buildProjectAudioEditTimeline } from './timeline'
+import { sliceAudioEditRanges, subtractRanges } from './edits'
 import type { AudioEditCut, AudioEditProjectDocument, AudioEditRange } from './types'
 
 /*
@@ -23,7 +24,7 @@ import type { AudioEditCut, AudioEditProjectDocument, AudioEditRange } from './t
  */
 
 export const AUDIO_EDIT_GAP_ID_PREFIX = 'gap:'
-export const isAudioEditGapEdit = (item: { id: string }): boolean => item.id.startsWith(AUDIO_EDIT_GAP_ID_PREFIX)
+export const isAudioEditGapEdit = (item: { id: string; reason?: string }): boolean => item.reason !== 'manual' && item.id.startsWith(AUDIO_EDIT_GAP_ID_PREFIX)
 
 /** 逐帧全频与高频电平（dBFS），与停顿压缩、去重念同一分析 */
 export interface AudioEditLevels { resolutionMs: number; wideDb: readonly number[]; highDb?: readonly number[] }
@@ -48,15 +49,8 @@ interface Run { quiet: boolean; parts: Part[]; length: number }
 
 /** 按在成片里的先后取一段连续时长（offset 从这段开头算起）对应的源区间。 */
 function sliceParts(parts: readonly Part[], from: number, to: number): Part[] {
-  const out: Part[] = []
-  let cursor = 0
-  for (const [start, end] of parts) {
-    const length = end - start
-    const a = Math.max(from, cursor), b = Math.min(to, cursor + length)
-    if (b > a) out.push([start + a - cursor, start + b - cursor])
-    cursor += length
-  }
-  return out
+  return sliceAudioEditRanges(parts.map(([startFrame, endFrame]) => ({ startFrame, endFrame })), from, to)
+    .map(({ startFrame, endFrame }) => [startFrame, endFrame])
 }
 
 function percentile(values: readonly number[], ratio: number): number {
@@ -67,7 +61,7 @@ function percentile(values: readonly number[], ratio: number): number {
 const within = (range: AudioEditRange | undefined, item: { startFrame: number; endFrame: number }): boolean => !range || (item.startFrame >= range.startFrame && item.endFrame <= range.endFrame)
 
 /**
- * 清理字与字之间的气口：替换此前的气口清理（用户逐处恢复过的保留不动），返回新文档与处理的处数。
+ * 清理字与字之间的气口：只处理当前成片里仍多余的部分，用户逐处恢复过的保留不动。
  * 应在去重念、停顿压缩、呼吸声处理之后调用；range 只处理两个字都落在其中的气口。
  */
 export function cleanAudioEditGaps(
@@ -75,7 +69,7 @@ export function cleanAudioEditGaps(
 ): { document: AudioEditProjectDocument; count: number } {
   const { sampleRate } = document.source
   const restored = (document.cuts ?? []).filter((cut) => isAudioEditGapEdit(cut) && !cut.enabled)
-  const base = clearAudioEditGaps(document, range)
+  const base = document
   const frames = (ms: number): number => Math.round(ms * sampleRate / 1000)
   const cellFrames = levels.resolutionMs * sampleRate / 1000
   const speech = percentile(levels.wideDb, 0.8)
@@ -100,13 +94,10 @@ export function cleanAudioEditGaps(
   // 高于底噪的轻声（送气、擦音）：全频高出几 dB，或高频明显高出
   const audible = (cell: number): boolean => levels.wideDb[cell] >= wideFloor + ABOVE_FLOOR_DB || (levels.highDb?.[cell] ?? -Infinity) >= highFloor + HIGH_ABOVE_FLOOR_DB
   const spans = buildProjectAudioEditTimeline(base)
-  const words = base.transcript.filter((block) => block.included).sort((a, b) => a.startFrame - b.startFrame)
-  const removedWords = base.transcript.filter((block) => !block.included && !block.locked)
   const locked = base.transcript.filter((block) => block.locked)
   const cuts: AudioEditCut[] = []
   let count = 0
-  for (let index = 0; index + 1 < words.length; index++) {
-    const previous = words[index], next = words[index + 1]
+  for (const { previous, next, seam } of audioEditWordGaps(base.transcript, spans)) {
     if (!within(range, previous) || !within(range, next)) continue
     const a = Math.max((previous.startFrame + previous.endFrame) / 2, previous.endFrame - frames(EDGE_MS))
     const b = Math.min((next.startFrame + next.endFrame) / 2, next.startFrame + frames(EDGE_MS))
@@ -124,7 +115,8 @@ export function cleanAudioEditGaps(
       if (span.muted) { push(true, Math.round(from), Math.round(to)); continue }
       for (let start = Math.round(from); start < to;) {
         const end = Math.min(Math.round(to), Math.floor((Math.floor(start / cellFrames) + 1) * cellFrames))
-        push(quietAt(start), start, Math.max(start + 1, end))
+        // 重念已删的词之间留下的零碎字尾属于被放弃的那遍，不能把它们当有声岛拆开接缝。
+        push(quietAt(start) || (seam && start >= previous.endFrame && start < next.startFrame), start, Math.max(start + 1, end))
         start = Math.max(start + 1, end)
       }
     }
@@ -154,12 +146,13 @@ export function cleanAudioEditGaps(
     const tail = frames(TAIL_GUARD_MS), onset = frames(ONSET_GUARD_MS) + Math.round(Math.min(lead, frames(ONSET_SEARCH_MS)))
     const muteLength = gap.length - tail - onset
     if (muteLength <= 0) continue
-    const seam = removedWords.some((word) => word.startFrame >= previous.endFrame && word.endFrame <= next.startFrame)
     const sentence = /[。？！；…!?;]$/.test(previous.text.trim())
     const marked = sentence || seam || /[，、：,:]$/.test(previous.text.trim())
       || breaths.some((breath) => breath.startMs * sampleRate / 1000 < next.startFrame && breath.endMs * sampleRate / 1000 > previous.endFrame)
     if (!marked && gap.length < frames(UNMARKED_PAUSE_MS)) continue
     const target = frames(sentence || seam ? SENTENCE_GAP_MS : CLAUSE_GAP_MS)
+    // 已经达到目标的自动清理原样保留，避免重跑继续蚕食两端保护与重复叠加静音。
+    if (gap.length <= target && (base.cuts ?? []).some((cut) => cut.enabled && isAudioEditGapEdit(cut) && touches(cut))) continue
     const deleteLength = Math.min(muteLength, Math.max(0, gap.length - target))
     const deleteFrom = tail + Math.floor((muteLength - deleteLength) / 2)
     if (!deleteLength) {
@@ -173,30 +166,21 @@ export function cleanAudioEditGaps(
     const add = (parts: Part[], mode: 'delete' | 'mute'): void => {
       for (const [startFrame, endFrame] of parts) {
         if (endFrame <= startFrame) continue
-        cuts.push({ id: piece ? `${id}:${piece}` : id, startFrame, endFrame, reason: 'silence', enabled: true, ...(mode === 'mute' ? { mode: 'mute' as const } : {}) })
-        piece++
+        const protectedRanges = (base.cuts ?? []).filter((cut) => cut.enabled && (cut.mode !== 'mute' || mode === 'mute'))
+        for (const part of subtractRanges([{ startFrame, endFrame }], protectedRanges)) {
+          const candidate = piece ? `${id}:${piece}` : id
+          const cutId = (base.cuts ?? []).some((cut) => cut.id === candidate) ? `${id}:${mode}:${part.startFrame}:${part.endFrame}` : candidate
+          cuts.push({ id: cutId, ...part, reason: 'silence', enabled: true, ...(mode === 'mute' ? { mode: 'mute' as const } : {}) })
+          piece++
+        }
       }
     }
-    if (gap.parts.length > 1) {
-      // 被已有删除隔成几段：静音只留在紧挨前一个字的那段开头和紧挨后一个字的那段末尾，中间整段删除（含已删的部分），
-      // 不穿插成一条条；两头放不下要留的长度时宁可气口短一点
-      const first = gap.parts[0], last = gap.parts.at(-1)!
-      const keep = Math.max(0, muteLength - deleteLength)
-      const firstRoom = Math.max(0, first[1] - first[0] - tail), lastRoom = Math.max(0, last[1] - last[0] - onset)
-      let keepTail = Math.min(lastRoom, keep - Math.min(firstRoom, Math.floor(keep / 2)))
-      const keepHead = Math.min(firstRoom, keep - keepTail)
-      keepTail = Math.min(lastRoom, keep - keepHead)
-      const muteStart = Math.min(first[1], first[0] + tail), headEnd = Math.min(first[1], muteStart + keepHead)
-      const tailEnd = Math.max(last[0], last[1] - onset), tailStart = Math.max(last[0], tailEnd - keepTail)
-      add([[muteStart, headEnd]], 'mute')
-      add([[headEnd, tailStart]], 'delete')
-      add([[tailStart, tailEnd]], 'mute')
-    } else if (deleteLength) {
+    if (deleteLength) {
       add(sliceParts(gap.parts, tail, deleteFrom), 'mute')
       add(sliceParts(gap.parts, deleteFrom, deleteFrom + deleteLength), 'delete')
       add(sliceParts(gap.parts, deleteFrom + deleteLength, gap.length - onset), 'mute')
     } else add(sliceParts(gap.parts, tail, gap.length - onset), 'mute')
-    count++
+    if (piece) count++
   }
   return { document: { ...base, cuts: [...(base.cuts ?? []), ...cuts] }, count }
 }
