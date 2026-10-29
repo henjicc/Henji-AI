@@ -36,6 +36,8 @@ import { decodeDocumentContent, loadDocumentFile, type LoadedDocumentFile } from
 import { DocumentFormatError, DocumentLocationError, ProjectNotFoundError } from './errors'
 import type { DocumentIndexScanner } from './index-scanner'
 import { codeGroupDestinations, sameFileContent, rewriteContentPaths } from './media-transfer'
+import { contentWebReferences, existingWebFolder, webReferenceIn } from './web-folders'
+import { webSourceFiles } from '../web-source/site'
 import { readEntryNameKeys } from './name-check'
 import { formatMigrations } from '../../../../src/core/persistence/formatMigrations'
 import { persistenceForwardFields, upgradePersistenceContent } from '../../../../src/core/persistence/migrations'
@@ -98,6 +100,12 @@ interface PackageEntry {
 class EntryNames {
   private readonly taken = new Set<string>()
   has(relative: string): boolean { return this.taken.has(this.key(relative)) }
+  /** 包里已有这个文件夹下的条目。 */
+  hasFolder(relative: string): boolean {
+    const prefix = `${this.key(relative)}/`
+    for (const taken of this.taken) if (taken.startsWith(prefix)) return true
+    return false
+  }
   add(relative: string): void { this.taken.add(this.key(relative)) }
   private key(relative: string): string { return relative.split('/').map((segment) => entryNameKey(segment)).join('/') }
 }
@@ -248,10 +256,37 @@ export class DocumentPackageService {
       .filter(reference => parseAbsolutePath(style, reference.path) !== null)
       .map(reference => reference.path), container, false)
     for (const [source, target] of await options.codeSnapshot.collect(decoded.report.references.map(reference => reference.path))) mapping.set(source, target)
+    // 网页画面引用的整个网页文件夹进包：容器里的保持相对位置，容器之外的放进包里的“素材”。
+    const webKeys = new Set<string>()
+    for (const web of contentWebReferences(decoded.content)) {
+      const key = pathKey(style, web.reference)
+      if (!key || webKeys.has(key)) continue
+      webKeys.add(key)
+      const folder = await existingWebFolder(web)
+      if (!folder) { if (!missingPaths.includes(web.reference)) missingPaths.push(web.reference); continue }
+      const parsedFolder = parseAbsolutePath(style, folder)
+      const inside = parsedFolder ? relativeSegments(style, root, parsedFolder) : null
+      const files = await webSourceFiles(folder)
+      if (inside) {
+        if (!options.includeContainerFiles) continue
+        for (const item of files) {
+          const relative = [...inside, item.relative].join('/')
+          if (!names.has(relative)) { names.add(relative); entries.push({ name: relative, source: item.file }) }
+        }
+        continue
+      }
+      const stem = keepBothEntryName(path.basename(folder), (candidate) => names.has(`${materials}/${candidate}`) || names.hasFolder(`${materials}/${candidate}`))
+      const relativeFolder = `${materials}/${stem}`
+      for (const item of files) {
+        names.add(`${relativeFolder}/${item.relative}`)
+        entries.push({ name: `${relativeFolder}/${item.relative}`, source: item.file })
+      }
+      mapping.set(key, webReferenceIn(web, path.join(container.root, ...relativeFolder.split('/'))))
+    }
     for (const reference of decoded.report.references) {
       if (parseGitCodeLocation(reference.path)) continue
       const key = pathKey(style, reference.path) ?? reference.path
-      if (mapping.has(key) || this.options.kinds.forFileName(path.basename(reference.path))) continue
+      if (mapping.has(key) || webKeys.has(key) || this.options.kinds.forFileName(path.basename(reference.path))) continue
       const parsed = parseAbsolutePath(style, reference.path)
       const stat = parsed ? await fsp.stat(reference.path).catch(() => null) : null
       if (!stat?.isFile()) {

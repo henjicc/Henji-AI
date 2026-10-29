@@ -12,6 +12,7 @@ import type { ResolvedContainer } from './workspace'
 import { ensureCodeCollectionTarget } from './code-paths'
 import { parseGitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
 import { transferGitCode } from './code-git-transfer'
+import { contentWebReferences, copyWebFolder, existingWebFolder, webReferenceIn } from './web-folders'
 
 /*
  * 文档换容器时带走它用到的素材（实施方案 2.11）：原容器里被引用的文件复制到新容器，原处保留；
@@ -37,6 +38,8 @@ export interface MediaTransferOptions {
   style: PathStyle
   /** 原容器换算内容时得到的引用（scope 为 container 的才是原容器里的文件）。 */
   references: readonly LocationReference[]
+  /** 换算后的文档内容（找出网页画面引用的网页文件夹）。 */
+  content: unknown
   from: ResolvedContainer
   to: ResolvedContainer
   /** 文档文件不复制。 */
@@ -167,9 +170,26 @@ export async function transferContainerMedia(options: MediaTransferOptions): Pro
   const codeTargets = await codeGroupDestinations(options.references.filter(reference => reference.scope === 'container' && !options.isDocumentFile(reference.path)).map(reference => reference.path), to)
   const gitTransfers = await transferGitCode(options.references.filter(reference => reference.scope === 'container').map(reference => reference.path), path.join(to.root, '代码'))
   for (const [source, target] of gitTransfers) { mapping.set(source, target); if (source !== target) copied++ }
+  // 原容器里的网页文件夹整个带过去；容器外的照常换算。
+  const webKeys = new Set<string>()
+  for (const web of contentWebReferences(options.content)) {
+    const key = pathKey(style, web.reference)
+    const parsedFolder = parseAbsolutePath(style, web.folder)
+    const rest = parsedFolder ? relativeSegments(style, fromRoot, parsedFolder) : null
+    if (!key || !rest) continue
+    webKeys.add(key)
+    const folder = await existingWebFolder(web)
+    if (!folder) { missingPaths.push(web.reference); continue }
+    if (!rest.length) throw new Error(`网页文件夹就是原位置本身，没法单独带上：${folder}。请把网页放进单独的文件夹后再试。`)
+    if (rest[0] === INTERNAL_FOLDER_NAME) await options.prepareInternalFolder?.(to.root)
+    const result = await copyWebFolder(style, folder, targetFor(rest, from, to))
+    mapping.set(key, webReferenceIn(web, result.path))
+    copied += result.copied
+  }
   for (const reference of options.references) {
     if (parseGitCodeLocation(reference.path)) continue
     if (reference.scope !== 'container' || options.isDocumentFile(reference.path)) continue
+    if (webKeys.has(pathKey(style, reference.path) ?? '')) continue
     const parsed = parseAbsolutePath(style, reference.path)
     const rest = parsed ? relativeSegments(style, fromRoot, parsed) : null
     if (!rest?.length) continue
@@ -230,6 +250,8 @@ export interface MediaCollectOptions {
   references: readonly LocationReference[]
   /** 落在程序目录里的路径（文档里本不该出现），能读到的文件一并收集。 */
   programReferences: readonly string[]
+  /** 换算后的文档内容（找出网页画面引用的网页文件夹）。 */
+  content: unknown
   to: ResolvedContainer
   isDocumentFile(filePath: string): boolean
 }
@@ -252,6 +274,20 @@ export async function collectContainerMedia(options: MediaCollectOptions): Promi
   const codeTargets = await codeGroupDestinations(candidates.filter(source => parseAbsolutePath(style, source) !== null && !options.isDocumentFile(source)), to)
   const gitTransfers = await transferGitCode(candidates, path.join(to.root, '代码'))
   for (const [source, target] of gitTransfers) { mapping.set(source, target); if (source !== target) copied++ }
+  // 容器之外的网页文件夹整个收进“素材”。
+  const toRoot = parseAbsolutePath(style, to.root)
+  const webKeys = new Set<string>()
+  for (const web of contentWebReferences(options.content)) {
+    const key = pathKey(style, web.reference)
+    const parsedFolder = parseAbsolutePath(style, web.folder)
+    if (!key || !parsedFolder || (toRoot && relativeSegments(style, toRoot, parsedFolder))) continue
+    webKeys.add(key)
+    const folder = await existingWebFolder(web)
+    if (!folder) { if (!missingPaths.includes(web.reference)) missingPaths.push(web.reference); continue }
+    const result = await copyWebFolder(style, folder, path.join(to.materialsDir, path.basename(folder)))
+    mapping.set(key, webReferenceIn(web, result.path))
+    copied += result.copied
+  }
   for (const source of candidates) {
     if (parseGitCodeLocation(source)) continue
     const key = pathKey(style, source)
@@ -260,7 +296,7 @@ export async function collectContainerMedia(options: MediaCollectOptions): Promi
       if (!missingPaths.includes(source)) missingPaths.push(source)
       continue
     }
-    if (mapping.has(key)) continue
+    if (mapping.has(key) || webKeys.has(key)) continue
     const stat = await fsp.stat(source).catch(() => null)
     if (!stat) {
       if (!missingPaths.includes(source)) missingPaths.push(source)

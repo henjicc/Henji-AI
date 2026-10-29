@@ -419,6 +419,7 @@ export class DocumentRepository {
       const transfer = await transferContainerMedia({
         style: this.workspace.style,
         references: decoded.report.references,
+        content: decoded.content,
         from: source,
         to: destination,
         isDocumentFile: (candidate) => Boolean(this.options.kinds.forFileName(path.basename(candidate))),
@@ -508,6 +509,7 @@ export class DocumentRepository {
         style: this.workspace.style,
         references: decoded.report.references,
         programReferences: decoded.report.programReferences,
+        content: decoded.content,
         to: container,
         isDocumentFile: (candidate) => Boolean(this.options.kinds.forFileName(path.basename(candidate))),
       })
@@ -995,6 +997,7 @@ export class DocumentRepository {
         const transfer = await transferContainerMedia({
           style: this.workspace.style,
           references: decoded.report.references,
+          content: decoded.content,
           from: source,
           to: destination,
           isDocumentFile: (candidate) => Boolean(this.options.kinds.forFileName(path.basename(candidate))),

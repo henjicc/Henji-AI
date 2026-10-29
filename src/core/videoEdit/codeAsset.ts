@@ -45,6 +45,10 @@ export function detachCodeAssetScenes(parameters: CodeAsset['parameters']): { pa
   const detached = Object.keys(parameters).filter(key => isCodeSceneReference(parameters[key]))
   return { parameters: { ...parameters, ...Object.fromEntries(detached.map(key => [key, null])) }, detached }
 }
+/** 网页画面参数记的是网页文件夹在本机的位置，文件夹不随资产带走：返回这些参数名，收录时如实告知。 */
+export function codeAssetWebParameters(parameters: CodeAsset['parameters']): string[] {
+  return Object.keys(parameters).filter(key => { const value = parameters[key]; return isCodeImageReference(value) && value.kind === 'web' })
+}
 /** Archive payloads carry text; ordinary documents never do. Verification precedes import publication. */
 export function assetCodeSourceResolver(asset: CodeAsset): CodeSourceResolver {
   const sources = new Map(asset.codeSources.map(value => [value.hash, value.source]))

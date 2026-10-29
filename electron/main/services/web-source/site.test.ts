@@ -25,8 +25,17 @@ it('站点只提供网页文件夹里的文件：越出根目录的路径（含�
   for (const pathname of ['/../secret.txt', '/%2e%2e/secret.txt', '/assets/..%2f..%2fsecret.txt', '/%2e%2e%5csecret.txt', '/assets/%2e%2e%5c%2e%2e%5csecret.txt', '/missing.js']) {
     expect(await webSourceFile(root, pathname), pathname).toBeUndefined()
   }
-  expect(await resolveWebSourceFolder(root)).toEqual({ root, entry: 'index.html' })
-  expect(await resolveWebSourceFolder(path.join(root, 'index.html'))).toEqual({ root, entry: 'index.html' })
+  fs.writeFileSync(path.join(root, '..cache.js'), 'export {}')
+  expect(await webSourceFile(root, '/..cache.js')).toBe(real('..cache.js'))
+})
+
+it('网页来源只认专门的网页文件夹：写文件夹或其中的 index.html，零散的 html 文件与没有 index.html 的文件夹都不行', async () => {
+  const { base, root } = site()
+  expect(await resolveWebSourceFolder(root)).toEqual({ root })
+  expect(await resolveWebSourceFolder(path.join(root, 'index.html'))).toEqual({ root })
+  fs.writeFileSync(path.join(base, 'page.html'), '<!doctype html>')
+  await expect(resolveWebSourceFolder(path.join(base, 'page.html'))).rejects.toThrow('网页文件夹')
+  await expect(resolveWebSourceFolder(path.join(root, 'assets'))).rejects.toThrow('index.html')
 })
 
 it('内容指纹随文件内容变化，内容不变时不变', async () => {

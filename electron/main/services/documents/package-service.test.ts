@@ -141,6 +141,42 @@ describe('通用单文件包（4.1）', () => {
     expect((await service.readDocument({ id: created.meta.id })).meta.path).toBe(created.meta.path)
   })
 
+  it('网页画面引用的网页文件夹整个带走：打包、导入与收集素材都复制整个文件夹，引用写法（文件夹或 index.html）不变', async () => {
+    const { service } = env.services
+    const source = await service.createProject({ name: '网页短片' })
+    const created = await service.createDocument({ kind: 'canvas', container: { kind: 'project', projectId: source.id }, name: '界面' })
+    const inner = path.join(source.path, '素材', '网页', '知多少')
+    write(path.join(inner, 'index.html'), 'inner'); write(path.join(inner, 'assets', 'app.js'), 'inner-app')
+    const outer = path.join(env.outside, '演示站')
+    write(path.join(outer, 'index.html'), 'outer'); write(path.join(outer, 'assets', 'app.js'), 'outer-app')
+    const gone = path.join(env.outside, '已删除的站')
+    await service.saveDocument({
+      target: { id: created.meta.id, path: created.meta.path },
+      expectedRevision: 0,
+      content: { nodes: [{ page: { kind: 'web', path: path.join(inner, 'index.html') } }, { page: { kind: 'web', path: outer } }, { page: { kind: 'web', path: gone } }] },
+    })
+
+    const exported = await service.exportDocumentPackage({ target: { id: created.meta.id } })
+    expect(exported.missingPaths).toEqual([gone])
+    const target = await service.createProject({ name: '接收' })
+    const imported = await service.importPackage({ source: exported.path, container: { kind: 'project', projectId: target.id } })
+    if (imported.type !== 'document') throw new Error('应为文档包')
+    expect(await listFiles(target.path)).toEqual([
+      '.henji/project.json',
+      '界面.hjcvs',
+      '素材/演示站/assets/app.js',
+      '素材/演示站/index.html',
+      '素材/网页/知多少/assets/app.js',
+      '素材/网页/知多少/index.html',
+    ])
+    expect((await readJson(imported.meta.path)).content).toEqual({ nodes: [{ page: { kind: 'web', path: 'henji:/素材/网页/知多少/index.html' } }, { page: { kind: 'web', path: 'henji:/素材/演示站' } }, { page: { kind: 'web', path: gone } }] })
+
+    const collected = await service.collectDocumentMedia({ id: created.meta.id })
+    expect(collected.missingPaths).toEqual([gone])
+    expect(fs.readFileSync(path.join(source.path, '素材', '演示站', 'assets', 'app.js'), 'utf8')).toBe('outer-app')
+    expect((await readJson(created.meta.path)).content).toEqual({ nodes: [{ page: { kind: 'web', path: 'henji:/素材/网页/知多少/index.html' } }, { page: { kind: 'web', path: 'henji:/素材/演示站' } }, { page: { kind: 'web', path: gone } }] })
+  })
+
   it('整个项目：导入两次得到两个项目，第二次项目与文档换新 ID、文档间引用跟着改、文件夹名加序号', async () => {
     const { service } = env.services
     const project = await service.createProject({ name: '旅行' })

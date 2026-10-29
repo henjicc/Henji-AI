@@ -222,7 +222,7 @@ export function videoEditRenderWindowSet(document: VideoEditComposition, depende
   const visual = placed.filter(videoEditClipEnabled)
   const transitionWindows = videoEditPictureTransitionWindows(document)
   const visibleCaptions = document.captionTrackEnabled === false ? [] : document.captions ?? []
-  const { id: _id, binId: _bin, label: _label, textTranscription: _transcription, tracks: _tracks, sampleRate: _rate, channels: _channels, captionTrackLocked: _locked, clips: _clips, transitions: _transitions, captions: _captions, annotations: _annotations, markers: _markers, name: _name, media: _media, items: _items, sequences: _sequences, codeMaterials: _codeMaterials, colorLuts: _luts, styles: _styles, scenes: _scenes, revision: _revision, ...settings } = document
+  const { id: _id, binId: _bin, label: _label, textTranscription: _transcription, tracks: _tracks, sampleRate: _rate, channels: _channels, captionTrackLocked: _locked, clips: _clips, transitions: _transitions, captions: _captions, annotations: _annotations, markers: _markers, name: _name, media: _media, items: _items, sequences: _sequences, codeMaterials: _codeMaterials, colorLuts: _luts, styles: _styles, scenes: _scenes, revision: _revision, foreign: _foreign, ...settings } = document
   // 渲染引擎版本由合成、指纹与编码相关源码在构建时散列得出（scripts/vite/renderEngineVersion.mjs），引擎实现一变旧窗口全部失效。
   // 速度曲线与补帧方式随片段进入窗口指纹；补帧实现换版本（如光流接入）时旧窗口失效。公共部分整份只散列一次。
   const base = hash(JSON.stringify([VIDEO_EDIT_RENDER_ENGINE_VERSION, VIDEO_EDIT_FRAME_INTERPOLATION_ENGINE, settings, context.style(document.styleId), dependencies.fontRevision, dependencies.analysis]))

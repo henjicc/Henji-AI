@@ -7,7 +7,7 @@ export type CodeColor = [number, number, number, number]
  */
 export interface CodeVideoSpan { from: number; to: number; src: number; rate?: number; cursor?: boolean }
 /**
- * 网页画面：本地网页（入口 html，或含 index.html 的文件夹，`path` 是本机绝对路径）在隔离的离屏页面里排版绘制。
+ * 网页画面：本地网页文件夹（`path` 是文件夹或其中 index.html 的本机绝对路径）在隔离的离屏页面里排版绘制。
  * 视口 `width`×`height`（CSS 像素，默认 1920×1080），只渲染 `region`（[x, y, 宽, 高]，默认整个视口），每 CSS 像素
  * `scale` 个设备像素（默认 2）；取帧时刻 `time`/`spans` 与视频参数同义，是页面时间（交给 `henjiWeb.seek`）。
  * `boxes` 是每帧要读矩形的 CSS 选择器。语义与限制见 `codeMaterial/webSource.ts`。

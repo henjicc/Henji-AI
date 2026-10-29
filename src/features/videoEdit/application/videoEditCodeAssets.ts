@@ -4,7 +4,7 @@ import { backupPersistenceSnapshot } from '@/core/persistence/backup'
 import { PersistenceError } from '@/core/persistence/migrations'
 import { componentFileReferences, documentCodeSourceResolver, loadCodeSourceReferences, type CodeComponentPin } from '@/core/videoEdit/codeMaterial/sources'
 import { createLogger } from '@/core/logging'
-import { CODE_ASSET_VERSION, codeAssetSchema, codeAssetContract, parseCodeAssetBytes, decodeCodeAsset, detachCodeAssetScenes, encodeCodeAsset, type CodeAsset } from '@/core/videoEdit/codeAsset'
+import { CODE_ASSET_VERSION, codeAssetSchema, codeAssetContract, parseCodeAssetBytes, decodeCodeAsset, detachCodeAssetScenes, codeAssetWebParameters, encodeCodeAsset, type CodeAsset } from '@/core/videoEdit/codeAsset'
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
 import { codeMaterialMediaIds } from '@/core/videoEdit/codeMaterialResources'
 import { prepareCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
@@ -73,8 +73,11 @@ export async function readVideoEditCodeAsset(assetId: string, signal?: AbortSign
   return { asset, manifest }
 }
 
-/** `detachedSceneParameters`：片子数据没有随资产带走、在资产里被置空的参数名。 */
-export interface VideoEditCodeAssetCollection { asset: AssetRecord; detachedSceneParameters: string[] }
+/**
+ * `detachedSceneParameters`：片子数据没有随资产带走、在资产里被置空的参数名。
+ * `webParameters`：网页画面参数，资产里仍指向本机的网页文件夹，文件夹本身没有带走。
+ */
+export interface VideoEditCodeAssetCollection { asset: AssetRecord; detachedSceneParameters: string[]; webParameters: string[] }
 /** Save the raw fixed instance, never the currently evaluated animation values. */
 export async function collectVideoEditCodeAsset(projectId: string, target: VideoEditCodeAssetTarget, options: { libraryId?: string; path?: string | (() => Promise<string>) } = {}, signal?: AbortSignal): Promise<VideoEditCodeAssetCollection | null> {
   const owner = requireVideoEditInstance(projectId); const baseline = owner.document; const contentVersion = owner.contentVersion; const targetKey = JSON.stringify(target)
@@ -90,11 +93,13 @@ export async function collectVideoEditCodeAsset(projectId: string, target: Video
     prepareCodeMaterialParameters(readVideoEditCodeMetadata(owner, baseline)(selected.code), selected.code)
     const { parameters, detached } = detachCodeAssetScenes(structuredClone(selected.code.parameters))
     if (detached.length) logger.info('片子数据不随代码资产带走，资产里的片子数据参数置空', { event: 'video_edit.code_asset.scenes_detached', context: { projectId, parameters: detached } })
+    const webParameters = codeAssetWebParameters(parameters)
+    if (webParameters.length) logger.info('网页文件夹不随代码资产带走，资产里的网页参数仍指向本机位置', { event: 'video_edit.code_asset.web_not_carried', context: { projectId, parameters: webParameters } })
     const cached = latest.get(owner)
     if (typeof options.path !== 'string' && cached?.document === baseline && cached.target === targetKey) {
       await verifyVideoEditOutput(cached.receipt); assertOwner(owner, contentVersion, signal)
       if (source.foreign) await addMediaReferenceToLibrary({ filePath: cached.receipt.path, mediaType: 'code', source: 'video-edit', foreign: source.foreign, displayName: selected.name })
-      return { asset: await collectVideoEditOutput(cached.receipt, options, signal), detachedSceneParameters: detached }
+      return { asset: await collectVideoEditOutput(cached.receipt, options, signal), detachedSceneParameters: detached, webParameters }
     }
     if (options.libraryId) await assetApplicationService.inspectLibrary(options.libraryId)
     const images: CodeAsset['images'] = []
@@ -119,7 +124,7 @@ export async function collectVideoEditCodeAsset(projectId: string, target: Video
     latest.set(owner, { document: baseline, target: targetKey, receipt })
     if (source.foreign) await addMediaReferenceToLibrary({ filePath: path, mediaType: 'code', source: 'video-edit', foreign: source.foreign, displayName: manifest.name })
     assertOwner(owner, contentVersion, signal)
-    return { asset: await collectVideoEditOutput(receipt, options, signal), detachedSceneParameters: detached }
+    return { asset: await collectVideoEditOutput(receipt, options, signal), detachedSceneParameters: detached, webParameters }
   } catch (error) { logger.warn('可编辑代码素材未完成收录', { event: 'video_edit.code_asset.collect.failed', error, context: { projectId } }); throw error }
   finally { collecting.delete(owner) }
 }

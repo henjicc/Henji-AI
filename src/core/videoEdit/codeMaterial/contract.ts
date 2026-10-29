@@ -4,7 +4,7 @@ export const CODE_MATERIAL_LIMITS = Object.freeze({ stringLength: 4096, textChar
 export type { CodeColor, CodeImageReference, CodeVideoSpan, CodeAudioReference, CodeSceneReference, CodePoint, CodeGrade, CodeGradientStop, CodeRange, CodeEasing, CodeBasicParameterValue, CodeParameterObject, CodeParameterValue, CodeParameterValues, CodeParameterVisibility, CodeBasicParameterDeclaration, CodeParameterTypeDefinition, CodeParameterDeclaration } from '../../imaging/parameterTypes'
 import type { CodeColor, CodeImageReference, CodeVideoSpan, CodeWebReference } from '../../imaging/parameterTypes'
 import { CODE_VIDEO_SPAN_LIMIT, codeVideoSpansIssue } from './videoSpans'
-import { codeWebBoxesIssue, codeWebViewIssue } from './webSource'
+import { codeWebBoxesIssue, codeWebFolderOf, codeWebViewIssue } from './webSource'
 export const CODE_PARAMETER_TYPES = ['number', 'angle', 'point', 'range', 'color', 'gradient', 'curve', 'grade', 'choice', 'boolean', 'text', 'textStyle', 'table', 'font', 'image', 'audio', 'easing', 'seed', 'scene'] as const
 export interface CodeMaterialContext { time: number; localTime: number; sequenceTime: number; width: number; height: number; frame: number; fps: number; seed?: number; audio?: AudioContentAnalysis; audioTime?: number }
 export interface CodeSourceSpan { file: string; start: number; end: number; startLine: number; startColumn: number; endLine: number; endColumn: number }
@@ -99,7 +99,7 @@ function codeWebReference(fields: Record<string, PropertyDescriptor>, label: str
   const unknown = Object.keys(fields).filter(key => !WEB_FIELDS.includes(key))
   if (unknown.length) fail(`（网页）不认识的字段：${unknown.join('、')}；可用 ${WEB_FIELDS.slice(1).join('、')}。`)
   const path = fields.path?.value
-  if (typeof path !== 'string' || !path.length || path.length > 4096 || path.includes('\0')) fail('.path 需要网页入口 html 或网页文件夹的路径。')
+  if (typeof path !== 'string' || !path.length || path.length > 4096 || path.includes('\0') || codeWebFolderOf(path) === undefined) fail('.path 需要网页文件夹（含 index.html）或其中 index.html 的路径。')
   const plain = (key: string): unknown => fields[key]?.value
   const region = plain('region')
   if (region !== undefined && (!Array.isArray(region) || Object.getPrototypeOf(region) !== Array.prototype)) fail('.region 需要 [x, y, 宽, 高]。')

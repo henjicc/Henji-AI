@@ -1,7 +1,8 @@
 import { videoEditGainMultiplier } from '@/core/videoEdit/loudness'
 import type { VideoEditContentTarget, VideoEditLookaheadScope } from './videoEditDecodeLookahead'
 import { codeMediaInputKey, codeMediaInputComposition, codeMediaInputNextFrame, codeMediaInputSample, type CodeMediaInput } from '@/core/videoEdit/codeMediaInput'
-import { codeWebView } from '@/core/videoEdit/codeMaterial/webSource'
+import { codeWebPixelSize, codeWebView } from '@/core/videoEdit/codeMaterial/webSource'
+import { codeMaterialTrustContext } from '@/core/videoEdit/codeMaterialDocument'
 import { VideoEditWebInputs, videoEditWebSourceKey, type VideoEditWebFrameCopy } from './videoEditWebInputs'
 import { codeFilterInputComposition } from '@/core/videoEdit/codeFilterInput'
 import type { AuthorGpuInputs } from './videoEditAuthorModule'
@@ -1508,30 +1509,32 @@ export class VideoEditRenderer {
       void picture.catch(() => undefined)
       pending.push([codeMediaInputKey(clip.id, parameter), picture])
     }
-    if (webRequests.length || this.webOwner.webInputs) {
-      const owner = this.webOwner
-      const webs = owner.webInputs ??= new VideoEditWebInputs()
+    if (webRequests.length) {
+      const webs = this.webOwner.webInputs ??= new VideoEditWebInputs()
       const compositor = this.ensureCompositor()
       const copy: VideoEditWebFrameCopy = (borrowed, width, height, target) => compositor.copyWebFrame(borrowed, width, height, target)
       for (const { clip, parameter, reference, seconds } of webRequests) {
         if (!current()) throw new DOMException('网页取帧已取消。', 'AbortError')
-        const key = JSON.stringify(['web', videoEditWebSourceKey(reference), seconds, reference.boxes ?? []])
+        // 外来剪辑或外来代码里的网页和外来代码一样，先过信任确认，确认之前不开页面。
+        const trust = [...codeMaterialTrustContext(document, clip.code!), ...(document.foreign ? [document.foreign] : [])].filter((value, index, all) => all.findIndex(other => other.id === value.id) === index)
+        const key = JSON.stringify(['web', videoEditWebSourceKey(reference), seconds, reference.boxes ?? [], trust.map(value => value.id)])
         let picture = shared.get(key)
         if (!picture) {
-          const view = codeWebView(reference)
-          context.bytes += Math.round(view.region[2] * view.scale) * Math.round(view.region[3] * view.scale) * 4
+          const pixels = codeWebPixelSize(codeWebView(reference))
+          context.bytes += pixels.width * pixels.height * 4
           if (context.bytes > 512 * 1024 ** 2) throw new Error('当前网页画面、视频输入与嵌套画面超过显存预算，请缩小网页取景或倍率。')
-          picture = webs.picture(reference, seconds, context, copy)
+          picture = webs.picture(reference, seconds, context, copy, trust)
           shared.set(key, picture)
         }
         void picture.catch(() => undefined)
         pending.push([codeMediaInputKey(clip.id, parameter), picture])
       }
-      webs.trim(new Set(webRequests.map(({ reference }) => videoEditWebSourceKey(reference))))
     }
     this.prewarmCodeInputs(document, frame, upcoming)
     const inputs = new Map<string, VideoEditCodePicture>()
     for (const [key, picture] of pending) inputs.set(key, await picture)
+    // 网页页面归整棵树：只由根在自己这一帧的输入读完后清理（树上别处在用、刚用过的不关）。
+    if (!this.nestedOwner) this.webInputs?.trim()
     await retiring
     // This frame's inputs are read: background walks may take one step while the frame draws.
     if (pending.length) this.grantFrameTurns()

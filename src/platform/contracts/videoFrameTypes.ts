@@ -213,9 +213,9 @@ export interface VideoAudioReadResult {
 export const VIDEO_AUDIO_MAX_READ_FRAMES = 2 * 192_000
 
 /**
- * 网页来源：本地网页（入口 html，或含 index.html 的文件夹）在隔离的离屏页面里排版绘制，按页面时间取画面。
+ * 网页来源：专门的网页文件夹（含 index.html；也可写其中的 index.html）在隔离的离屏页面里排版绘制，按页面时间取画面。
  * 页面布局按 `width`×`height`（CSS 像素）的视口；只渲染其中 `region`（视口 CSS 像素 [x, y, w, h]）这一块，
- * 每 CSS 像素 `scale` 个设备像素，画面是 `round(w·scale)`×`round(h·scale)`。画面经帧通道送到发起的通道。
+ * 每 CSS 像素 `scale` 个设备像素，画面是 `floor(w·scale)`×`floor(h·scale)`。画面经帧通道送到发起的通道。
  */
 export interface WebSourceOpenRequest {
   route: string
@@ -253,6 +253,8 @@ export type WebSourceBox = [number, number, number, number] | null
 export interface WebSourceCaptureResult {
   /** 帧随 `request: { kind: 'frame_at', id: ticket }` 经帧通道到达。没有请求选择器时为 null。 */
   boxes: Record<string, WebSourceBox> | null
+  /** 页面当前声明的总时长（网页文件改动重新载入后可能变化）。 */
+  duration: number | null
   contentHash: string
 }
 

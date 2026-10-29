@@ -147,6 +147,22 @@ function createVideoEditWebSourceScene() {
         assert.ok(Math.abs(before.x - (980 * 2 - 12)) < 6 && Math.abs(before.y - (740 * 2 - 12)) < 6, `按下前的框位置不对：${JSON.stringify(before)}`)
         assert.ok(before.x - after.x > 700, `框没有跟着按钮左移：${JSON.stringify({ before, after })}`)
 
+        // 页面进程崩溃后不永久失败：下一次取帧自动重新载入页面，取到的仍是这一刻。
+        const webLogs = () => page.evaluate(async () => (await window.henjiNative.logging.queryLogEvents({ date: new Date().toISOString().slice(0, 10), domainPrefix: 'main.web_source', limit: 200 })).events.map(event => event.event))
+        const goneBefore = (await webLogs()).filter(event => event === 'web_source.page.gone').length
+        const crashed = await app.evaluate(({ webContents }) => {
+          let count = 0
+          for (const contents of webContents.getAllWebContents()) if (contents.isOffscreen() && contents.getURL().startsWith('https://web-source.henji.invalid')) { contents.forcefullyCrashRenderer(); count++ }
+          return count
+        })
+        assert.ok(crashed > 0, '没有找到网页来源的离屏页面')
+        for (let attempt = 0; attempt < 40 && (await webLogs()).filter(event => event === 'web_source.page.gone').length <= goneBefore; attempt++) await page.waitForTimeout(250)
+        const recovered = await shoot(45, 'preview-after-crash')
+        recovered.timeCode = await readTimeCode(recovered.file)
+        evidence.crash = { crashed, ...recovered }
+        store()
+        assert.equal(recovered.timeCode, 1500, `页面进程崩溃后取到的不是这一刻：${recovered.timeCode}ms`)
+
         for (const frame of [FULL_FRAMES + 15, FULL_FRAMES + 45]) {
           const shot = await shoot(frame, `zoom-${frame}`)
           evidence.zoom.push(shot); store()

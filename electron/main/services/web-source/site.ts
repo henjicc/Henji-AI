@@ -2,25 +2,32 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import { codeWebFolderOf } from '../../../../src/core/videoEdit/codeMaterial/webSource'
 import { inferMimeFromPath } from '../../protocol'
 
 /** 网页来源在离屏页面里的站点：只由处理器从网页文件夹提供，不对应任何真实主机。 */
 export const WEB_SOURCE_ORIGIN = 'https://web-source.henji.invalid'
 
-/** 网页文件夹与入口（站点根下的 POSIX 相对路径）。 */
-export interface WebSourceFolder { root: string; entry: string }
+/** 网页文件夹（站点根）；入口固定是其中的 index.html。 */
+export interface WebSourceFolder { root: string }
 
-/** 入口 html 文件所在的文件夹就是站点根；给的是文件夹时入口为其中的 index.html。 */
+/**
+ * 网页来源必须是专门的网页文件夹：引用写文件夹本身或其中的 index.html。不接受零散的 html 文件，免得把它所在的
+ * 整个目录（下载、桌面）当成站点去散列、监视和打包。
+ */
 export async function resolveWebSourceFolder(target: string): Promise<WebSourceFolder> {
-  const stat = await fsp.stat(target).catch(() => null)
-  if (!stat) throw new Error(`网页来源不存在：${target}`)
-  if (!stat.isDirectory()) return { root: path.dirname(target), entry: path.basename(target) }
-  if (!(await fsp.stat(path.join(target, 'index.html')).catch(() => null))?.isFile()) throw new Error(`网页文件夹里没有 index.html：${target}`)
-  return { root: target, entry: 'index.html' }
+  const root = codeWebFolderOf(target)
+  if (!root) throw new Error(`网页来源需要网页文件夹（含 index.html）或其中的 index.html：${target}`)
+  if (!(await fsp.stat(root).catch(() => null))?.isDirectory()) throw new Error(`网页文件夹不存在：${root}`)
+  if (!(await fsp.stat(path.join(root, 'index.html')).catch(() => null))?.isFile()) throw new Error(`网页文件夹里没有 index.html：${root}`)
+  return { root }
 }
 
-export function webSourceEntryUrl(folder: WebSourceFolder): string {
-  return `${WEB_SOURCE_ORIGIN}/${folder.entry.split(/[\\/]/).map(encodeURIComponent).join('/')}`
+export const WEB_SOURCE_ENTRY_URL = `${WEB_SOURCE_ORIGIN}/index.html`
+
+/** 相对路径是否落在根外（按路径段判断，不把以“..”开头的文件名当成越界）。 */
+function outside(relative: string): boolean {
+  return path.isAbsolute(relative) || relative.split(/[\\/]/)[0] === '..'
 }
 
 const WEB_TYPES: Readonly<Record<string, string>> = {
@@ -42,7 +49,7 @@ export async function webSourceFile(root: string, pathname: string): Promise<str
   const [realRoot, realFile] = await Promise.all([fsp.realpath(root), fsp.realpath(file).catch(() => null)])
   if (!realFile) return undefined
   const relative = path.relative(realRoot, realFile)
-  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return undefined
+  if (!relative || outside(relative)) return undefined
   return (await fsp.stat(realFile).catch(() => null))?.isFile() ? realFile : undefined
 }
 
@@ -66,7 +73,8 @@ async function fileHash(file: string, size: number, mtimeMs: number): Promise<st
   return hash
 }
 
-export async function webSourceContentHash(root: string): Promise<string> {
+/** 网页文件夹里的全部文件（相对路径用正斜杠，按路径排序）；散列与打包、复制共用。 */
+export async function webSourceFiles(root: string): Promise<Array<{ relative: string; file: string; size: number; mtimeMs: number }>> {
   const files: Array<{ relative: string; file: string; size: number; mtimeMs: number }> = []
   const walk = async (directory: string): Promise<void> => {
     for (const entry of await fsp.readdir(directory, { withFileTypes: true })) {
@@ -77,8 +85,11 @@ export async function webSourceContentHash(root: string): Promise<string> {
     }
   }
   await walk(root)
-  files.sort((a, b) => (a.relative < b.relative ? -1 : a.relative > b.relative ? 1 : 0))
+  return files.sort((a, b) => (a.relative < b.relative ? -1 : a.relative > b.relative ? 1 : 0))
+}
+
+export async function webSourceContentHash(root: string): Promise<string> {
   const digest = crypto.createHash('sha256')
-  for (const item of files) digest.update(`${item.relative}\0${await fileHash(item.file, item.size, item.mtimeMs)}\n`)
+  for (const item of await webSourceFiles(root)) digest.update(`${item.relative}\0${await fileHash(item.file, item.size, item.mtimeMs)}\n`)
   return digest.digest('hex')
 }
