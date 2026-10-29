@@ -619,7 +619,7 @@ it('正式事务撤销保留实体引用，帧率写入回执包含实际片段�
   const originalCurves = structuredClone(getActiveVideoEditSequence(instance).clips[0].curves)
   const directCurves = [{ time: 0, value: 1, interpolation: 'hold' }]
   const engine = getApplicationControlExecutionEngine()
-  const context: ApplicationExecutionContext = { requestId: crypto.randomUUID(), exposure: 'assistant', permissions: new Set(['video_edit:read', 'video_edit:write']), acceptedDataClasses: new Set(['C1']) }
+  const context: ApplicationExecutionContext = { requestId: crypto.randomUUID(), exposure: 'assistant', acceptedDataClasses: new Set(['C1']) }
   for (const [target, propertyId, value] of [
     [{ kind: 'video_edit.clip', id: `${id}:${clipId}` }, 'video_edit.clip.text', '正式撤销'],
     [{ kind: 'video_edit.sequence', id: `${id}:${instance.activeSequenceId}` }, 'video_edit.sequence.frame_rate', { numerator: 60, denominator: 1 }],

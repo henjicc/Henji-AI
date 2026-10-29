@@ -41,7 +41,7 @@ describe('cameraStageRenderApplicationCapabilities', () => {
     const cancelInput = cancel?.inputSchema.parse({
       taskRef: { kind: 'camera_stage.render_task', id: 'internal-opaque-task-ref' },
     })
-    if (!cancel || !cancelInput || !cancel.preview) throw new Error('取消能力缺少审批预览')
+    if (!cancel || !cancelInput || !cancel.preview) throw new Error('取消能力缺少操作预览')
     expect(cancel.preview(cancelInput).summary).not.toContain('internal-opaque-task-ref')
   })
 })

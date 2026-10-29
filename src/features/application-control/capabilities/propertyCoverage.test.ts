@@ -39,7 +39,6 @@ function describeAll() {
   const registry = getApplicationReflectionRegistry()
   return registry.describe({}, {
     exposure: 'assistant' as const,
-    permissions: new Set(registry.listDeclaredPropertyPermissions()),
     acceptedDataClasses: new Set(['C0', 'C1', 'C2'] as const),
   })
 }

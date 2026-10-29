@@ -50,7 +50,6 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
     const definition = this.definitions.get(id)
     if (!definition) throw new Error(`应用能力定义不存在：${id}`)
     if (this.handlers.has(id)) throw new Error(`应用能力处理器重复：${id}`)
-    if (!definition.permission.trim()) throw new Error(`应用能力未声明权限：${id}`)
     if (definition.successEvidence.length === 0) throw new Error(`应用能力缺少成功证据：${id}`)
     const invoke: CapabilityHandler = async (input, context) => {
       const result = await handler(input, context)
@@ -288,7 +287,7 @@ function projectFailure(error: unknown): ApplicationCapabilityFailure {
   if (message === 'PERMISSION_DENIED' || message.startsWith('PROPERTY_NOT_WRITABLE:')) {
     return { ok: false, error: {
       code: 'CAPABILITY_REJECTED',
-      message: `${message}：当前连接无所需权限或属性不可写，请读取属性可用性并在应用中核对连接授权。`,
+      message: `${message}：目标不可用或属性不可写，请读取属性可用性并按返回原因处理。`,
       recoverable: true,
     } }
   }

@@ -3,7 +3,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 
 import { pathKey, type PathStyle } from '../../../../src/core/storage/pathSyntax'
-import { writeBufferAtomically } from './atomic-file'
+import { renameWithRetry, writeBufferAtomically } from './atomic-file'
 
 /*
  * 不覆盖的文件系统操作（实施方案 2.8 同名检测：真正创建 / 改名 / 移动时原子复查）。
@@ -40,7 +40,7 @@ export function isSameLocation(left: string, right: string, style: PathStyle = H
  * 以不覆盖的方式创建文件：暂存完整内容后排他发布，已有目标则失败；
  * 发布和回退共用原子落盘实现，外部盘（exFAT、网络位置）同样可用。
  */
-export async function createFileExclusively(target: string, content: Uint8Array): Promise<void> {
+export async function createFileExclusively(target: string, content: Uint8Array | AsyncIterable<string | Uint8Array>): Promise<void> {
   try {
     await writeBufferAtomically(target, content, undefined, { exclusive: true })
   } catch (error) {
@@ -149,16 +149,21 @@ async function copyDirectoryThenRemove(source: string, target: string): Promise<
  */
 export async function moveDirectoryNoOverwrite(source: string, target: string): Promise<void> {
   if (isSameLocation(source, target)) {
-    await fsp.rename(source, target)
+    await renameWithRetry(source, target)
     return
   }
   await fsp.mkdir(path.dirname(target), { recursive: true })
   if (process.platform === 'win32') {
     try {
-      await fsp.rename(source, target)
+      await renameWithRetry(source, target, async (from, to) => {
+        try { await fsp.rename(from, to) }
+        catch (error) {
+          if (await exists(to)) throw new EntryExistsError(to)
+          throw error
+        }
+      })
       return
     } catch (error) {
-      if (await exists(target)) throw new EntryExistsError(target)
       if (errorCode(error) !== 'EXDEV') throw error
     }
     await createDirectoryExclusively(target)
@@ -167,7 +172,7 @@ export async function moveDirectoryNoOverwrite(source: string, target: string): 
   }
   await createDirectoryExclusively(target)
   try {
-    await fsp.rename(source, target)
+    await renameWithRetry(source, target)
   } catch (error) {
     if (errorCode(error) !== 'EXDEV') {
       await fsp.rmdir(target).catch(() => undefined)

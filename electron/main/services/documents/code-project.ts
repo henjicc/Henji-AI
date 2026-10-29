@@ -3,7 +3,6 @@ import path from 'node:path'
 import git from 'isomorphic-git'
 import { CodeGitRepository, codeDigest } from './code-git'
 import { codeProjectPathSchema, type CodeProjectChange, type CodeProjectState } from '../../../../src/core/videoEdit/codeMaterial/projectContract'
-import { CODE_AUTHOR_SOURCE_MAX_BYTES } from '../../../../src/core/videoEdit/codeMaterial/sources'
 import { resolveCodeProjectClosure } from '../../../../src/core/videoEdit/codeMaterial/projectClosure'
 import { gitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
 import type { CodeProjectClosure } from '../../../../src/core/videoEdit/codeMaterial/projectContract'
@@ -70,7 +69,6 @@ export class CodeProjectRepository extends CodeGitRepository {
         const file = prefix + entry.name; await this.safePath(file)
         if (entry.isDirectory()) await visit(`${file}/`)
         else if (entry.isFile()) {
-          if ((await fsp.stat(path.join(this.dir, file))).size > CODE_AUTHOR_SOURCE_MAX_BYTES) throw new Error(`${file} 超过16MiB，请拆分后重试。`)
           result.set(file, await fsp.readFile(path.join(this.dir, file)))
         }
       }

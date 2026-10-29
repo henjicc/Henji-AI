@@ -36,7 +36,7 @@ export async function readDetectedMediaFormat(file: FileHandle, fileName: string
     try {
       const sharp = (await import('sharp')).default
       // HEIF 容器可被识别并不代表本机具备 HEVC 解码器，实际试解码才能决定能否继续制作预览。
-      await sharp(realPath).resize(1, 1).raw().toBuffer()
+      await sharp(realPath, { limitInputPixels: false }).resize(1, 1).raw().toBuffer()
     } catch (error) {
       const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined
       if (code !== undefined || error instanceof Error && error.name === 'AbortError') throw error

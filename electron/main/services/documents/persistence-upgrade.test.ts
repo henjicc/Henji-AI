@@ -36,6 +36,20 @@ describe('文档升级的真实文件边界', () => {
     expect(JSON.parse(await fsp.readFile(filePath, 'utf8'))).toMatchObject({ kindVersion: 2, revision: 1, content: { title: '原内容' } })
     expect(await fsp.readFile(path.join(backups, files[0]), 'utf8')).toBe(text)
   })
+  it('非法 UTF-8 按原始字节核验备份，解码替换字符不误报并发修改', async () => {
+    const { env, filePath, text } = await setup()
+    const [start, end] = text.split('原内容')
+    const bytes = Buffer.concat([Buffer.from(start), Buffer.from([255]), Buffer.from(end)])
+    await fsp.writeFile(filePath, bytes)
+    const read = await env.services.service.readDocument({ id: 'upgrade', path: filePath })
+    expect(read.content).toEqual({ title: '\ufffd' })
+    const backups = path.join(path.dirname(filePath), '.henji/backups')
+    const files = await fsp.readdir(backups)
+    expect(files).toHaveLength(1)
+    expect(await fsp.readFile(path.join(backups, files[0]))).toEqual(bytes)
+    expect(await fsp.readFile(filePath)).toEqual(bytes)
+  })
+
   it('迁移失败包含步骤和备份位置，原文件不变；缺迁移明确提示旧格式', async () => {
     const { env, filePath, text } = await setup(true)
     await expect(env.services.service.readDocument({ id: 'upgrade', path: filePath })).rejects.toMatchObject({ name: 'PersistenceError', code: 'migration-failed', fromVersion: 1, toVersion: 2, backupPath: expect.stringContaining('backups') })

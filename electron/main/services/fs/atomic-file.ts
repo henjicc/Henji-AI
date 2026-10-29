@@ -65,20 +65,28 @@ export async function replaceFileAtomically(
   targetPath: string,
   operations: AtomicFileOperations = DEFAULT_OPERATIONS,
 ): Promise<void> {
+  await renameWithRetry(stagedPath, targetPath, (from, to) => operations.rename(from, to))
+  await syncPublishedDirectory(targetPath, operations)
+}
+
+export async function renameWithRetry(
+  source: string,
+  target: string,
+  rename: AtomicFileOperations['rename'] = (from, to) => fs.rename(from, to),
+): Promise<void> {
   // Windows 上杀毒/索引器短暂占用目标会让替换报 EPERM/EBUSY；短退避重试，原件始终留在原路径。
   for (let attempt = 0; ; attempt++) {
-    try { await operations.rename(stagedPath, targetPath); break } catch (error) {
+    try { await rename(source, target); return } catch (error) {
       const code = error instanceof Error && 'code' in error ? String(error.code) : ''
       if (attempt >= 4 || !['EPERM', 'EBUSY', 'EACCES'].includes(code)) throw error
       await new Promise(resolve => setTimeout(resolve, 50 * 2 ** attempt))
     }
   }
-  await syncPublishedDirectory(targetPath, operations)
 }
 
 export async function writeBufferAtomically(
   targetPath: string,
-  content: Uint8Array,
+  content: Uint8Array | AsyncIterable<string | Uint8Array>,
   operations: AtomicFileOperations = DEFAULT_OPERATIONS,
   options: { exclusive?: boolean; signal?: AbortSignal; validate?: (stagedPath: string) => Promise<void> } = {},
 ): Promise<void> {
@@ -91,7 +99,11 @@ export async function writeBufferAtomically(
     options.signal?.throwIfAborted()
     const handle = await fs.open(stagedPath, 'wx', 0o600)
     try {
-      await handle.writeFile(content, { signal: options.signal })
+      if (ArrayBuffer.isView(content)) await handle.writeFile(content, { signal: options.signal })
+      else for await (const chunk of content) {
+        options.signal?.throwIfAborted()
+        await handle.writeFile(chunk, { signal: options.signal })
+      }
       await handle.sync()
     } finally {
       await handle.close()

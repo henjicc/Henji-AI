@@ -209,7 +209,7 @@ async function prepareImage(
 ): Promise<{ previewPath: string; aspectRatio: string; cacheHit: boolean }> {
   return await withMediaHeavyTask(async () => {
     const sharp = await loadSharp()
-    const metadata = await sharp(stored.fullPath).metadata()
+    const metadata = await sharp(stored.fullPath, { limitInputPixels: false }).metadata()
     const width = Math.max(1, metadata.width ?? 1)
     const height = Math.max(1, metadata.height ?? 1)
     if (Math.max(width, height) <= IMAGE_PREVIEW_MAX_SIZE) {
@@ -218,7 +218,7 @@ async function prepareImage(
     const thumbnailsDir = getProgramStoreDir('thumbnails')
     const previewPath = path.join(thumbnailsDir, `image-${stored.cacheKey}.jpg`)
     const cacheHit = await writeOwnedMediaPreview(previewPath, stored.fullPath, async pending => {
-      await sharp(stored.fullPath)
+      await sharp(stored.fullPath, { limitInputPixels: false })
         .resize(IMAGE_PREVIEW_MAX_SIZE, IMAGE_PREVIEW_MAX_SIZE, { fit: 'inside' })
         .jpeg({ quality: 86 })
         .toFile(pending)

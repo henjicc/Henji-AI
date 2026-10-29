@@ -1,7 +1,7 @@
 import { testCodeAssetSource } from './codeMaterial/sourceTestFixtures'
 import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { describe, expect, it } from 'vitest'
-import { CODE_ASSET_VERSION, CODE_ASSET_LIMITS, decodeCodeAsset, detachCodeAssetScenes, encodeCodeAsset, type CodeAsset } from './codeAsset'
+import { CODE_ASSET_VERSION, decodeCodeAsset, detachCodeAssetScenes, encodeCodeAsset, type CodeAsset } from './codeAsset'
 import { videoEditDocumentSchema } from './document'
 
 const content = { sizeBytes: 123, fileModifiedAt: 456, contentIdentity: 'a'.repeat(64) }
@@ -40,17 +40,14 @@ describe('可编辑代码资产文件契约', () => {
     const input = fixture()
     for (const images of [[], [...input.images, ...input.images], [{ ...input.images[0], id: 'unused' }], [{ ...input.images[0], path: 'https://example.org/p.png' }]]) expect(() => encodeCodeAsset({ ...input, images })).toThrow()
   })
-  it('按UTF-8源字节、整体文件、声明及曲线预算拒绝越界', () => {
+  it('源码、声明及曲线集合按实际内容往返', () => {
     const input = fixture()
-    expect(() => encodeCodeAsset({ ...input, ...testCodeAssetSource('汉'.repeat(200_000)) })).toThrow('512KiB')
-    expect(() => decodeCodeAsset(new Uint8Array(CODE_ASSET_LIMITS.bytes + 1))).toThrow()
+    const source = '汉'.repeat(200_000)
+    expect(decodeCodeAsset(encodeCodeAsset({ ...input, ...testCodeAssetSource(source) })).codeSources[0].source).toBe(source)
     const parameters = { ...input.parameters, ...Object.fromEntries(Array.from({ length: 100 }, (_, index) => [`p${index}`, index])) }
     expect(decodeCodeAsset(encodeCodeAsset({ ...input, parameters })).parameters).toEqual(parameters)
     const curves = { size: Array.from({ length: 257 }, (_, index) => ({ ...input.curves!.size[0], id: `key${index}`, sourceInUs: index })) }
     expect(decodeCodeAsset(encodeCodeAsset({ ...input, curves })).curves).toEqual(curves)
-    // 曲线数量无限制，单份资产仍须满足真实的序列化字节预算。
-    const oversizedCurves = { size: Array.from({ length: Math.floor(CODE_ASSET_LIMITS.bytes / 256) + 1 }, (_, index) => ({ ...input.curves!.size[0], id: `key${index}`, sourceInUs: index, value: 'x'.repeat(256) })) }
-    expect(() => encodeCodeAsset({ ...input, curves: oversizedCurves })).toThrow('512KiB')
   })
   it('拒绝无效UTF-8、JSON和文件版本', () => {
     for (const bytes of [new Uint8Array(), new Uint8Array([255]), new TextEncoder().encode('{'), new TextEncoder().encode(JSON.stringify({ ...fixture(), version: CODE_ASSET_VERSION + 1 }))]) expect(() => decodeCodeAsset(bytes)).toThrow()

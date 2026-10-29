@@ -9,7 +9,6 @@ import { getApplicationReflectionRegistry } from '@/features/application-control
 import { retainHostContextTracking } from '@/features/application-control/hostContext/hostContext'
 
 import { createApplicationCapabilitySession } from './applicationCapabilityService'
-import { APPLICATION_READ_PERMISSIONS, APPLICATION_WRITE_PERMISSIONS } from '@/core/application-control/localHostContracts'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { useProjectStore } from '@/stores/projectStore'
 import { getCanvasProjectInstance } from '@/features/canvas/application/canvasProjectInstances'
@@ -21,7 +20,7 @@ import { clearLogEvents, getLogEvents } from '@/core/logging'
 const originalContrast = useSettingsStore.getState().themeSelection.contrast
 afterEach(() => useSettingsStore.getState().setThemeContrast(originalContrast))
 
-function grant(_permissions = ['application:read', 'settings:read'], _writes = false) {
+function grant() {
   return createApplicationCallerGrant({ callerId: 'local-test' })
 }
 const request = (requestId: string) => ({ requestId, signal: new AbortController().signal })
@@ -39,7 +38,7 @@ describe('独立应用调用入口', () => {
     installHarnessNativeStorage()
     const beforeWorkspace = useNavigationStore.getState().activeWorkspace
     try {
-      const session = createApplicationCapabilitySession(grant([...APPLICATION_READ_PERMISSIONS, ...APPLICATION_WRITE_PERMISSIONS], true))
+      const session = createApplicationCapabilitySession(grant())
       const call = async (id: string, input: Record<string, unknown>) => {
         const definition = session.list().find(item => item.id === id)!
         expect(definition, id).toBeDefined()
@@ -75,7 +74,7 @@ describe('独立应用调用入口', () => {
     expect((await session.execute(read, request('resumed'))).ok).toBe(true)
   })
   it('普通修改省略基线时自动读取当前状态，仍经正式事务写入', async () => {
-    const session = createApplicationCapabilitySession(grant(['application:read', 'application:write', 'settings:read', 'settings:write'], true))
+    const session = createApplicationCapabilitySession(grant())
     const target = originalContrast === 'soft' ? 'strong' : 'soft'
     const result = await session.execute({ ...write(target), expectedRevisions: undefined }, request('automatic-contrast'))
     expect(result.ok, JSON.stringify(result)).toBe(true)
@@ -90,7 +89,7 @@ describe('独立应用调用入口', () => {
   it('有权内存事务经原执行器写入，再从正式状态读回', async () => {
     const dispose = retainHostContextTracking()
     try {
-      const session = createApplicationCapabilitySession(grant(['application:read', 'application:write', 'settings:read', 'settings:write'], true))
+      const session = createApplicationCapabilitySession(grant())
       const target = originalContrast === 'soft' ? 'strong' : 'soft'
       const result = await session.execute(write(target), request('write-contrast'))
       expect(result.ok, JSON.stringify(result)).toBe(true)
@@ -126,7 +125,7 @@ describe('独立应用调用入口', () => {
         .some((entry) => entry.id === value.id && entry.exposures.includes('assistant')))).toBe(true)
     }
     const internal = getApplicationReflectionRegistry().describe({ domains: ['assistant_runtime'] }, {
-      exposure: 'local_adapter', permissions: new Set(['application:read']), acceptedDataClasses: new Set(['C0', 'C1']),
+      exposure: 'local_adapter', acceptedDataClasses: new Set(['C0', 'C1']),
     })
     expect(internal.entities).toEqual([])
     for (const entityType of ['assistant.run', 'assistant.artifact']) {
@@ -139,7 +138,7 @@ describe('独立应用调用入口', () => {
   it('引用不存在按可自纠的 NOT_FOUND 分类，日志不记成应用错误', async () => {
     installHarnessNativeStorage()
     try {
-    const session = createApplicationCapabilitySession(grant(['application:read', 'settings:read']))
+    const session = createApplicationCapabilitySession(grant())
     clearLogEvents()
     const missing = await session.execute(
       { ...read, input: { ref: { kind: 'canvas.document', id: 'not-persisted-project' }, propertyIds: ['canvas.document.name'] } },
@@ -165,7 +164,7 @@ describe('独立应用调用入口', () => {
   })
 
   it('截断引用和过期并发基线不会被外部适配器自动修复', async () => {
-    const session = createApplicationCapabilitySession(grant(['application:read', 'application:write', 'settings:read', 'settings:write'], true))
+    const session = createApplicationCapabilitySession(grant())
     const truncated = await session.execute({ ...read, input: { ...read.input, ref: { kind: 'settings.registry', id: 'single...' } } }, request('truncated'))
     expect(truncated.ok).toBe(false)
     if (!truncated.ok) expect(truncated.error.message).toContain('完整稳定引用')

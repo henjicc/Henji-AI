@@ -10,7 +10,6 @@ import { ensureCodeCollectionTarget } from './code-paths'
 export const codeDigest = (source: string | Uint8Array): string => createHash('sha256').update(source).digest('hex')
 const author = { name: '痕迹AI', email: 'code@henji.local' }
 const queues = new Map<string, Promise<unknown>>()
-const MAX_SOURCE_BYTES = 16 * 1024 ** 2
 const cache = new Map<string, { source: string; hash: string }>()
 let cacheBytes = 0
 const recovery = '代码仓库无法使用，请保留“代码”文件夹并从备份恢复仓库；未保存的源码不要删除。'
@@ -124,7 +123,6 @@ export class CodeGitRepository {
     try {
       await this.safePath('.git/objects')
       const { blob } = await git.readBlob({ ...this.options, oid: reference.oid, filepath: reference.filepath })
-      if (blob.byteLength > MAX_SOURCE_BYTES) throw new Error('源码超过16MiB，请拆分文件。')
       const hash = codeDigest(blob)
       if (expectedHash !== undefined && hash !== expectedHash) throw new Error(mismatch)
       const source = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(blob)
@@ -220,8 +218,8 @@ export class CodeGitRepository {
     if (!Number.isSafeInteger(input.version) || input.version < 1 || !input.name || /[/\\:\0]/.test(input.name) || ['.', '..', '.git'].includes(input.name.toLowerCase())) throw new Error('代码版本名称或序号无效。')
     const prefix = codeWorkingPrefix(input.kind, input.name)
     const entries = Object.entries(input.files)
+    for (const [file] of entries) await this.safePath(`${prefix}/${file}`)
     if (!entries.length) throw new Error('代码版本不能为空。')
-    for (const [file, source] of entries) { await this.safePath(`${prefix}/${file}`); if (Buffer.byteLength(source) > MAX_SOURCE_BYTES) throw new Error('源码超过16MiB。') }
     await this.initialize()
     const tag = codeVersionTag(input.kind, input.name, input.version)
     let existing = (await this.versions(input.kind)).find(value => value.tag === tag)

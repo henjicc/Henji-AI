@@ -25,7 +25,7 @@ export function listApplicationCapabilities(): ApplicationCapabilityDefinition[]
   ))
 }
 
-/** 授权来自宿主，调用参数不含任何权限、审批或助手运行字段。 */
+/** 调用身份来自宿主，调用参数不含助手运行字段。 */
 export function createApplicationCapabilitySession(grant: ApplicationCallerGrant): {
   list: () => ApplicationCapabilityDefinition[]
   execute: (input: unknown, request: { requestId: string; signal: AbortSignal }) => ReturnType<typeof executeApplicationCapabilityResult>

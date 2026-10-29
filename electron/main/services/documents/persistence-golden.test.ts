@@ -94,13 +94,13 @@ describe('正式读入口打开黄金归档与源码', () => {
     // 归档可读还必须能进入剪辑的完整 schema，不能只通过主进程的外层校验。
     const parsed = videoEditDocumentSchema.parse({ format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: read.meta.id, name: read.meta.name, revision: read.meta.revision, ...(read.content as object) })
     expect(parsed.sequences[0].clips.find(clip => clip.kind === 'code')).toMatchObject({ effects: [{ builtin: { id: 'color_grade' } }, { builtin: { id: 'gaussian_blur' } }], contentAnchor: { ranges: [{ clipId: 'golden-sound-clip', itemId: 'golden-sound-item' }] } })
-    expect(parsed.sequences[0].captions).toMatchObject([{ translation: 'Golden caption', speech: { words: [
+    expect(parsed.sequences[0].captions?.find(caption => caption.id === 'golden-caption')).toMatchObject({ translation: 'Golden caption', speech: { words: [
       { clipId: 'golden-sound-clip', text: '字幕', startUs: 166667, endUs: 700000 },
       { clipId: 'golden-sound-clip', text: '原文', startUs: 700000, endUs: 1500000 },
-    ] } }])
-    const code = read.content as { codeMaterials: { versions: { files: { location: string; hash: string }[] }[] }[] }
+    ] } })
+    const code = read.content as { codeMaterials: { versions: { files: { path: string; location: string; hash: string }[] }[] }[] }
     const file = code.codeMaterials[0].versions[0].files[0]
-    expect(codeSourceHash(await fsp.readFile(file.location, 'utf8'))).toBe(file.hash)
+    expect(codeSourceHash(await environment.services.service.readCodeFile(file))).toBe(file.hash)
     expect(await fsp.readFile(source)).toEqual(original)
   })
   it('组件说明头与源码版本来自正式打包函数且源码摘要一致', async () => {

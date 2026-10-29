@@ -6,7 +6,7 @@ import { readImageInfo } from '../image/ops'
 import { loadFfprobePath } from '../video/ffmpeg-loader'
 import { readVideoInfo } from '../video/ops'
 import type { AssetMediaType } from './types'
-import { CODE_ASSET_LIMITS, CODE_ASSET_MIME, codeAssetContract, parseCodeAssetBytes, decodeCodeAsset } from '../../../../src/core/videoEdit/codeAsset'
+import { CODE_ASSET_MIME, codeAssetContract, parseCodeAssetBytes, decodeCodeAsset } from '../../../../src/core/videoEdit/codeAsset'
 import { readFileBytes } from '../system'
 import { IMPORT_EXTENSION_FORMATS } from '../media-import/format'
 
@@ -45,7 +45,7 @@ export async function inspectMedia(filePath: string, mediaType: AssetMediaType):
   let height: number | null = null
   let durationSeconds: number | null = null
   if (mediaType === 'code') {
-    const bytes = await readFileBytes(filePath, { maxBytes: CODE_ASSET_LIMITS.bytes })
+    const bytes = await readFileBytes(filePath)
     const raw = parseCodeAssetBytes(bytes)
     const version = raw && typeof raw === 'object' && 'version' in raw && typeof raw.version === 'number' ? raw.version : 0
     const backup = await backupBeforePersistenceUpgrade(filePath, codeAssetContract(), version, Buffer.from(bytes))

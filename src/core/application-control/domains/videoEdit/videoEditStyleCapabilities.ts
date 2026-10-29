@@ -15,7 +15,7 @@ const projectStyleRef = ref('video_edit.project_style'); const trackRef = ref('v
 const verification = z.object({ verified: z.boolean(), condition: z.string() }).strict()
 const path = z.string().trim().min(1).max(4096)
 const effect = (kind: 'create' | 'update' | 'execute', entityTypes: string[], refs: Array<{ kind: string; id: string }>, verified: { verified: boolean; condition: string }, propertyIds: string[] = []) => ({ effect: kind, entityTypes, propertyIds, targetRefs: refs, count: Math.max(1, refs.length), verified: verified.verified, evidence: verified.verified ? [verified.condition] : [] })
-const common = { version: 1, domain: 'video_edit' as const, readOnly: false, dataClasses: ['C1'] as ['C1'], permission: 'video_edit:write', idempotent: false, destructive: false, supportsPreview: false, requiredScopes: ['video_edit'] as ['video_edit'], verificationContract: { kind: 'effect_receipt' as const, requireEffects: true, requireVerifiedEffects: true } }
+const common = { version: 1, domain: 'video_edit' as const, readOnly: false, dataClasses: ['C1'] as ['C1'], idempotent: false, destructive: false, supportsPreview: false, requiredScopes: ['video_edit'] as ['video_edit'], verificationContract: { kind: 'effect_receipt' as const, requireEffects: true, requireVerifiedEffects: true } }
 
 export const renderVideoEditStyleCapability = defineApplicationCapability({
   ...common, id: 'render_video_edit_style', title: '渲染风格样片', timeoutMs: 600000, supportsUndo: false,

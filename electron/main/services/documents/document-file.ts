@@ -1,10 +1,10 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import { createHash } from 'node:crypto'
+import { readJsonFile } from '../fs/json-file'
 
 import {
   DocumentFormatError,
-  MAX_DOCUMENT_FILE_BYTES,
-  parseDocumentRawText,
   documentEnvelopeContract,
   documentEnvelopeMinReaderVersion,
   documentEnvelopeVersion,
@@ -106,9 +106,14 @@ export async function loadDocumentFile(
       packageSummary: header.summary,
     }
   }
-  if (stat.size > MAX_DOCUMENT_FILE_BYTES) throw new DocumentFormatError('文档文件超过可读取的大小。')
-  const originalText = await fsp.readFile(filePath, 'utf8')
-  const raw = parseDocumentRawText(originalText)
+  const hash = createHash('sha256')
+  let raw: unknown
+  try { raw = await readJsonFile(filePath, chunk => { hash.update(chunk) }) }
+  catch (error) {
+    if (!(error instanceof SyntaxError)) throw error
+    throw new DocumentFormatError('文档文件已损坏，无法读取。', { cause: error })
+  }
+  const fingerprint = hash.digest('hex')
   const fromEnvelopeVersion = documentEnvelopeVersion(raw)
   const envelopeMinReader = documentEnvelopeMinReaderVersion(raw)
   const upgradingEnvelope = fromEnvelopeVersion < documentEnvelopeContract.version
@@ -117,7 +122,7 @@ export async function loadDocumentFile(
   let envelope: DocumentEnvelope
   try {
     assertPersistenceVersion(documentEnvelopeContract, fromEnvelopeVersion, envelopeMinReader)
-    envelopeBackup = upgradingEnvelope ? await backupBeforePersistenceUpgrade(filePath, documentEnvelopeContract, fromEnvelopeVersion, originalText) : undefined
+    envelopeBackup = upgradingEnvelope ? await backupBeforePersistenceUpgrade(filePath, documentEnvelopeContract, fromEnvelopeVersion, undefined, false, fingerprint) : undefined
     if (upgradingEnvelope) logger.info('开始升级文档外壳', { event: 'documents.envelope.upgrade.start', context: { fromVersion: fromEnvelopeVersion, toVersion: documentEnvelopeContract.version, backupPath: envelopeBackup } })
     envelope = upgradeDocumentEnvelope(raw, envelopeBackup)
     if (upgradingEnvelope) logger.info('文档外壳升级完成，等待首次保存', { event: 'documents.envelope.upgrade.completed', context: { fromVersion: fromEnvelopeVersion, toVersion: documentEnvelopeContract.version, backupPath: envelopeBackup } })
@@ -129,7 +134,7 @@ export async function loadDocumentFile(
   const contract = documentPersistenceContract(kind)
   try {
     assertPersistenceVersion(contract, envelope.kindVersion, envelope.kindMinReaderVersion)
-    const backupPath = (envelope.kindVersion < contract.version ? await backupBeforePersistenceUpgrade(filePath, contract, envelope.kindVersion, originalText) : undefined) ?? envelopeBackup
+    const backupPath = (envelope.kindVersion < contract.version ? await backupBeforePersistenceUpgrade(filePath, contract, envelope.kindVersion, undefined, false, fingerprint) : undefined) ?? envelopeBackup
     return { kind, path: filePath, stat, header: headerFromEnvelope(envelope), envelope, packageSummary: null, backupPath }
   } catch (error) {
     createMainLogger('main.documents').warn('文档格式读取失败', { event: 'documents.load.failed', context: { format: contract.id, fromVersion: envelope.kindVersion, toVersion: kind.version }, error })

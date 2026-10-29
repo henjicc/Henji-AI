@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { fieldDescriptors, fieldReadValues, unrestrictedCollectionAvailability, type ApplicationEntityRegistration, type ApplicationFieldDefinition, type ApplicationCollectionExecutor, type ApplicationPlannedStep, type ApplicationExecutionContext, type ApplicationCompletedStepResult, type ApplicationEvidence, type ApplicationRef, type JsonValue } from '@/core/application-control'
 import type { CodeComponent } from '@/core/videoEdit/codeMaterial/components'
 import { codeComponentNameSchema, componentSourceMetadata } from '@/core/videoEdit/codeMaterial/components'
-import { CODE_AUTHOR_SOURCE_MAX_BYTES, codeSourceTextSchema, componentFileReferences } from '@/core/videoEdit/codeMaterial/sources'
+import { codeSourceTextSchema, componentFileReferences } from '@/core/videoEdit/codeMaterial/sources'
 import { videoEditSchemaRef } from './videoEditFields'
 import { listVideoEditInstances, openVideoEditDocument, videoEditDomainRevision } from './videoEditService'
 import { projectCodeComponents, publishProjectCodeComponent, refuseCodeComponentRemoval, discardProjectCodeComponents, withdrawProjectCodeComponents, codeComponentReferences, type CodeComponentReference } from './videoEditCodeStorage'
@@ -10,7 +10,7 @@ import type { CodeComponentPin } from '@/core/videoEdit/codeMaterial/sources'
 
 export const CODE_COMPONENT_ENTITY = 'video_edit.code_component'
 const type = CODE_COMPONENT_ENTITY
-const reason = '项目组件每次发布创建不可变版本，现有素材固定引用原版本。修改请以相同 name 和新 source 再创建；此集合不删除已发布文件，删除整个组件需要单独的破坏性授权。'
+const reason = '项目组件每次发布创建不可变版本，现有素材固定引用原版本。修改请以相同 name 和新 source 再创建；此集合用于读取和发布，不删除已发布的源码文件。'
 const creation = { name: codeComponentNameSchema, source: codeSourceTextSchema, description: z.string().max(10000).default('') }
 interface ComponentReadData extends CodeComponent { references: CodeComponentReference[] }
 const field = (key: string, title: string, value: ApplicationFieldDefinition<ComponentReadData, ComponentReadData>['descriptor']['value'], read: (component: ComponentReadData) => JsonValue): ApplicationFieldDefinition<ComponentReadData, ComponentReadData> => ({
@@ -20,7 +20,7 @@ const field = (key: string, title: string, value: ApplicationFieldDefinition<Com
 const latest = (component: CodeComponent) => component.versions.find(version => version.version === component.latestVersion)!
 const fields = [
   field('name', '组件名称', { kind: 'string', maxLength: 200 }, component => component.name),
-  field('source', '源码', { kind: 'string', maxLength: CODE_AUTHOR_SOURCE_MAX_BYTES }, component => componentSourceMetadata(latest(component).source).source),
+  field('source', '源码', { kind: 'string' }, component => componentSourceMetadata(latest(component).source).source),
   field('description', '说明', { kind: 'string' }, component => latest(component).description),
   field('latest_version', '最新版本', { kind: 'number', hardRange: { min: 1, step: 1 } }, component => component.latestVersion),
   field('exports', '导出名称', { kind: 'json', schemaRef: videoEditSchemaRef('property', `${type}.exports.value`) }, component => latest(component).exports),

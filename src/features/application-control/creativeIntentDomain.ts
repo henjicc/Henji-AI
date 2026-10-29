@@ -132,7 +132,7 @@ export const creativeIntentApplicationDomain: ApplicationDomainModule = {
         }
         const review = await applicationWritePreflight(context, async () => {
         if ('semanticPlan' in input) {
-          if (!('sessionId' in input) || typeof input.sessionId !== 'string' || !input.sessionId) throw new Error('语义计划需要已授权的原讲解 sessionId；不能伪造绑定或否定保护。')
+          if (!('sessionId' in input) || typeof input.sessionId !== 'string' || !input.sessionId) throw new Error('语义计划需要原讲解 sessionId；不能伪造绑定或否定保护。')
           const source = recordingSource(record.documentRef, input.sessionId, context)
           const reads = recordingReads(source.host.owner)
           const progress = reads.get(recordingKey(record.documentRef, input.sessionId, context))

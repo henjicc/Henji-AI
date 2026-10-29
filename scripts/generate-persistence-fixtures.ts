@@ -1,3 +1,4 @@
+import { PACKAGE_VERSION } from '../src/core/persistence/storedSchemas'
 import { gitCodeLocation } from '../src/core/storage/gitCodeLocation'
 import { SCHEMA_MIGRATIONS } from '../electron/main/services/db-migrations'
 import { emptyMemorySnapshot } from '../src/core/assistant/memoryEntries'
@@ -289,7 +290,7 @@ const values: Record<string, unknown> = {
   'document.camera_stage': { objects: [{ id: 'camera', name: '主摄影机', type: 'camera', position: [0, 1, 5] }], activeCameraId: 'camera', sceneSettings: { sky: {} }, stateKeyframes: [{ id: 'key', time: 0, objects: {} }] },
   'document.image_document': { workingRevision: 0, emptyUntilRevision: 0, width: 32, height: 40, layers: image.layers.length },
   project: buildProjectManifest({ id: 'golden-project', createdAt: timestamp, locale: 'zh', draft: false, mainVideoEditId: document.id, memories: [{ id: 'brand', content: '这期品牌色用红色。', source: 'user', revision: 1, updatedAt: timestamp }] }),
-  'project-package': { format: 'henji-package', version: 1, type: 'project', name: '黄金项目', exportedAt: timestamp, folders: { generated: '生成结果', materials: '素材' }, documents: [{ id: document.id, path: '黄金剪辑.henji-video' }] },
+  'project-package': { format: 'henji-package', version: PACKAGE_VERSION, minReaderVersion: 1, type: 'project', name: '黄金项目', exportedAt: timestamp, folders: { generated: '生成结果', materials: '素材' }, documents: [{ id: document.id, path: '黄金剪辑.henji-video' }] },
   'code-git-location': sourceVersion.files[0].location,
   'code-version': { id: 'code-version', ...projectSourceVersion },
   'code-author-api': { apiVersion: CODE_AUTHOR_API_VERSION },

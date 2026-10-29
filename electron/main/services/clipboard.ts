@@ -8,7 +8,6 @@ import { createMainLogger } from './logging/main-logger'
 import { readFileBytes } from './system'
 
 const logger = createMainLogger('main.clipboard')
-const MAX_CLIPBOARD_FILE_BYTES = 16 * 1024 * 1024
 
 export interface ClipboardFileEntryDto {
   path: string
@@ -133,11 +132,7 @@ export async function readClipboardImage(): Promise<ClipboardImageDto | null> {
     try {
       const stat = await fs.stat(filePath)
       if (!stat.isFile()) continue
-      if (stat.size > MAX_CLIPBOARD_FILE_BYTES) {
-        logger.warn('剪贴板图片超过读取预算，请通过文件导入入口添加', { event: 'clipboard.image_read.limit', context: { sizeBytes: stat.size } })
-        continue
-      }
-      const bytes = Buffer.from(await readFileBytes(filePath, { maxBytes: MAX_CLIPBOARD_FILE_BYTES }))
+      const bytes = Buffer.from(await readFileBytes(filePath))
       return { dataUrl: `data:${mimeType};base64,${bytes.toString('base64')}`, name: path.basename(filePath), origin: 'file' }
     } catch (error) {
       logger.warn('剪贴板图片读取失败', { event: 'clipboard.image_read.failed', error, context: { pathCount: filePaths.length } })
@@ -167,7 +162,7 @@ async function writeClipboardImage(readBytes: () => Promise<Buffer>, inputKind: 
     context.sourceBytes = bytes.length
     stage = 'decode'
     const sharp = await loadSharp()
-    const pngBytes = await sharp(bytes).png().toBuffer()
+    const pngBytes = await sharp(bytes, { limitInputPixels: false }).png().toBuffer()
     context.pngBytes = pngBytes.length
     stage = 'native_image'
     logger.info('图片转换完成，开始创建剪贴板位图', {

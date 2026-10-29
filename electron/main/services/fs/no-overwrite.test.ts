@@ -27,6 +27,39 @@ beforeEach(() => { logWarn.mockClear(); root = fs.mkdtempSync(path.join(os.tmpdi
 afterEach(() => { vi.restoreAllMocks(); fs.rmSync(root, { recursive: true, force: true }) })
 
 describe('不覆盖的文件操作', () => {
+  it('目录短暂占用时退避重试并完整改名；重试期间出现目标也不覆盖', async () => {
+    const source = path.join(root, 'source')
+    const target = path.join(root, 'target')
+    await fsp.mkdir(source)
+    await fsp.writeFile(path.join(source, 'document'), '完整内容')
+    const rename = fsp.rename.bind(fsp)
+    const spy = vi.spyOn(fsp, 'rename')
+      .mockRejectedValueOnce(Object.assign(new Error('busy'), { code: 'EPERM' }))
+      .mockRejectedValueOnce(Object.assign(new Error('busy'), { code: 'EPERM' }))
+      .mockImplementation(rename)
+    await moveDirectoryNoOverwrite(source, target)
+    expect(spy).toHaveBeenCalledTimes(3)
+    expect(await fsp.readFile(path.join(target, 'document'), 'utf8')).toBe('完整内容')
+    expect(fs.existsSync(source)).toBe(false)
+    spy.mockRestore()
+
+    if (process.platform !== 'win32') return
+    await fsp.rm(target, { recursive: true })
+    await fsp.mkdir(source)
+    await fsp.writeFile(path.join(source, 'document'), '原件')
+    const occupied = vi.spyOn(fsp, 'rename').mockImplementationOnce(async () => {
+      setTimeout(() => {
+        fs.mkdirSync(target)
+        fs.writeFileSync(path.join(target, 'document'), '他人修改')
+      }, 10)
+      throw Object.assign(new Error('busy'), { code: 'EPERM' })
+    }).mockImplementation(rename)
+    await expect(moveDirectoryNoOverwrite(source, target)).rejects.toBeInstanceOf(EntryExistsError)
+    expect(occupied).toHaveBeenCalledTimes(2)
+    expect(await fsp.readFile(path.join(source, 'document'), 'utf8')).toBe('原件')
+    expect(await fsp.readFile(path.join(target, 'document'), 'utf8')).toBe('他人修改')
+  })
+
   it('非硬链接独占创建的占位句柄关闭失败也清理占位，可再次创建', async () => {
     const target = path.join(root, 'a.json')
     vi.spyOn(fsp, 'link').mockRejectedValue(Object.assign(new Error('unsupported'), { code: 'ENOTSUP' }))

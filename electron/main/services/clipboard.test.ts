@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url'
 
 const mocks = vi.hoisted(() => ({
   write: vi.fn(), read: vi.fn(), createFromBuffer: vi.fn(), readFile: vi.fn(), resolveSourceBytes: vi.fn(),
-  info: vi.fn(), error: vi.fn(), warn: vi.fn(), stat: vi.fn(), boundedRead: vi.fn(),
+  info: vi.fn(), error: vi.fn(), warn: vi.fn(), stat: vi.fn(), readBytes: vi.fn(),
 }))
 vi.mock('electron', () => ({
   clipboard: { write: mocks.write, read: mocks.read },
@@ -12,7 +12,7 @@ vi.mock('electron', () => ({
   nativeImage: { createFromBuffer: mocks.createFromBuffer },
 }))
 vi.mock('node:fs/promises', () => ({ default: { readFile: mocks.readFile, stat: mocks.stat } }))
-vi.mock('./system', () => ({ readFileBytes: mocks.boundedRead }))
+vi.mock('./system', () => ({ readFileBytes: mocks.readBytes }))
 vi.mock('./image/source', () => ({ resolveSourceBytes: mocks.resolveSourceBytes }))
 vi.mock('./logging/main-logger', () => ({ createMainLogger: () => mocks }))
 
@@ -52,24 +52,28 @@ describe('共享图片剪贴板写入', () => {
     expect(mocks.read.mock.calls.length).toBeGreaterThan(1)
   })
 
-  it('文件图片回退先筛选类型，视频不读取，只读第一张有界图片', async () => {
+  it('文件图片回退先筛选类型，视频不读取，只读第一张图片', async () => {
     const imagePath = path.resolve('image.png')
     setFilePaths([path.resolve('huge.mp4'), imagePath, path.resolve('second.jpg')])
     mocks.stat.mockResolvedValue({ isFile: () => true, size: 3 })
-    mocks.boundedRead.mockResolvedValue(new Uint8Array([1, 2, 3]))
+    mocks.readBytes.mockResolvedValue(new Uint8Array([1, 2, 3]))
     expect(await readClipboardImage()).toMatchObject({ origin: 'file', name: 'image.png', dataUrl: 'data:image/png;base64,AQID' })
-    expect(mocks.boundedRead).toHaveBeenCalledOnce()
-    expect(mocks.boundedRead).toHaveBeenCalledWith(imagePath, { maxBytes: 16 * 1024 * 1024 })
+    expect(mocks.readBytes).toHaveBeenCalledOnce()
+    expect(mocks.readBytes).toHaveBeenCalledWith(imagePath)
     expect(mocks.readFile).not.toHaveBeenCalled()
   })
 
-  it('超大图片不读；文件列表返回路径，读取失败记录警告', async () => {
+  it('生成的大图片字节完整传给剪贴板调用方，文件列表仍只返回元数据', async () => {
+    const bytes = Buffer.alloc(17 * 1024 ** 2, 123)
     setFilePaths([path.resolve('huge.png')])
-    mocks.stat.mockResolvedValue({ isFile: () => true, size: 100 * 1024 * 1024 })
-    expect(await readClipboardImage()).toBeNull()
-    expect(await readClipboardFiles()).toEqual([{ path: path.resolve('huge.png'), size: 100 * 1024 * 1024, mimeType: 'image/png' }])
-    expect(mocks.readFile).not.toHaveBeenCalled(); expect(mocks.boundedRead).not.toHaveBeenCalled()
-    expect(mocks.warn).toHaveBeenCalled()
+    mocks.stat.mockResolvedValue({ isFile: () => true, size: bytes.length })
+    mocks.readBytes.mockResolvedValue(bytes)
+    const image = await readClipboardImage()
+    expect(image?.origin).toBe('file')
+    expect(Buffer.from(image!.dataUrl.split(',')[1], 'base64').equals(bytes)).toBe(true)
+    expect(await readClipboardFiles()).toEqual([{ path: path.resolve('huge.png'), size: bytes.length, mimeType: 'image/png' }])
+    expect(mocks.readFile).not.toHaveBeenCalled()
+    expect(mocks.readBytes).toHaveBeenCalledOnce()
     mocks.stat.mockRejectedValue(new Error('文件已移除'))
     expect(await readClipboardFiles()).toEqual([])
     expect(mocks.warn).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ error: expect.any(Error) }))
@@ -83,7 +87,7 @@ describe('共享图片剪贴板写入', () => {
       { path: path.resolve('large.mp4'), mimeType: 'video/mp4', size: 2 * 1024 * 1024 * 1024 },
       { path: path.resolve('image.png'), mimeType: 'image/png', size: 2 * 1024 * 1024 * 1024 },
     ])
-    expect(mocks.boundedRead).not.toHaveBeenCalled(); expect(mocks.readFile).not.toHaveBeenCalled()
+    expect(mocks.readBytes).not.toHaveBeenCalled(); expect(mocks.readFile).not.toHaveBeenCalled()
   })
 
   it('公布的图片始终不可读时有界结束，保留实际失败事实', async () => {

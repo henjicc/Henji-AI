@@ -196,7 +196,6 @@ it('发布失败恢复已写文件与索引，原版本仍可读取，恢复后�
   expect(await service.readCodeFile(first.files[0])).toBe('export default {}')
   expect(await new CodeGitRepository(path.join(project.path, '代码')).versions()).toHaveLength(1)
   await expect(service.writeCodeVersion({ target, definitionId: 'bad', name: '失败', contents: { entry: 'main.ts', files: { 'main.ts': 'retry' } } })).resolves.toMatchObject({ folder: '失败' })
-  await expect(service.publishCodeComponent({ target, name: '超限', source: 'x'.repeat(16 * 1024 ** 2), description: '', exports: [], imports: [] })).rejects.toThrow('16MiB')
 })
 
 it('正式写入入口并发分配版本序号，没有覆盖或丢失提交', async () => {

@@ -13,7 +13,6 @@ import { createMainLogger } from '../logging'
 
 const MAX_BUFFER_BYTES = 32 * 1024 * 1024
 const logger = createMainLogger('main.media.shared')
-const MAX_REMOTE_BYTES = 4 * 1024 * 1024 * 1024
 const REMOTE_TIMEOUT_MS = 10 * 60 * 1000
 interface RemoteMediaLimits { maxBytes?: number; timeoutMs?: number }
 
@@ -52,9 +51,9 @@ export async function resolveLocalMediaPath(source: string, signal?: AbortSignal
 }
 
 async function downloadToTempFile(url: string, signal: AbortSignal | undefined, limits: RemoteMediaLimits): Promise<string> {
-  const maxBytes = limits.maxBytes ?? MAX_REMOTE_BYTES
+  const maxBytes = limits.maxBytes
   const timeoutMs = limits.timeoutMs ?? REMOTE_TIMEOUT_MS
-  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > MAX_REMOTE_BYTES || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > REMOTE_TIMEOUT_MS) throw new Error('远程媒体下载预算无效。')
+  if ((maxBytes !== undefined && (!Number.isSafeInteger(maxBytes) || maxBytes < 1)) || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > REMOTE_TIMEOUT_MS) throw new Error('远程媒体下载预算无效。')
   const timeout = AbortSignal.timeout(timeoutMs)
   const combined = signal ? AbortSignal.any([signal, timeout]) : timeout
   const ext = path.extname(new URL(url).pathname) || '.bin'
@@ -70,13 +69,13 @@ async function downloadToTempFile(url: string, signal: AbortSignal | undefined, 
       throw new Error(`Remote media request failed with status ${response.status}`)
     }
     const contentLength = Number(response.headers.get('content-length'))
-    if (contentLength > maxBytes) {
+    if (maxBytes !== undefined && contentLength > maxBytes) {
       await response.body.cancel()
       throw new Error(`远程媒体超过下载上限（${maxBytes} 字节）。`)
     }
     const budget = new Transform({ transform(chunk: Buffer, _encoding, callback) {
       receivedBytes += chunk.byteLength
-      callback(receivedBytes > maxBytes ? new Error(`远程媒体超过下载上限（${maxBytes} 字节）。`) : null, chunk)
+      callback(maxBytes !== undefined && receivedBytes > maxBytes ? new Error(`远程媒体超过下载上限（${maxBytes} 字节）。`) : null, chunk)
     } })
     // 主进程 fetch 返回 Node WebStream；双工程编译时 DOM 的旧声明缺少异步迭代成员。
     const sourceStream = response.body as unknown as NodeReadableStream<Uint8Array>

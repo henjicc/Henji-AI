@@ -4,7 +4,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createTestEnvironment, listFiles, type TestEnvironment } from './documents.test-support'
+import { createTestEnvironment, listFiles, silentLogger, type TestEnvironment } from './documents.test-support'
 import { remapDocumentLinks } from './package-service'
 import { videoEditExportHistorySchema } from '../../../../src/core/videoEdit/document'
 
@@ -35,6 +35,39 @@ async function writeZip(target: string, entries: Record<string, string>): Promis
 describe('通用单文件包（4.1）', () => {
   beforeEach(() => { env = createTestEnvironment() })
   afterEach(async () => { await env.cleanup() })
+
+  it('打包包含直属子项目，跳过更深项目及不可访问项，正常文件仍可导入', async () => {
+    await env.cleanup()
+    const logger = { ...silentLogger(), warn: vi.fn() }
+    env = createTestEnvironment({ logger })
+    const { service, workspace } = env.services
+    const project = await service.createProject({ name: '项目树' })
+    const child = path.join(project.path, '直属项目')
+    const deep = path.join(child, '深层项目')
+    const blocked = path.join(project.path, '受限目录')
+    await fsp.mkdir(blocked)
+    const manifest = (await workspace.readManifest(project.path))!
+    await workspace.writeManifest(child, { ...manifest, id: 'child-project' })
+    await workspace.writeManifest(deep, { ...manifest, id: 'deep-project' })
+    write(path.join(child, '应包含.txt'), 'child')
+    write(path.join(deep, '应跳过.txt'), 'deep')
+    const dangling = path.join(project.path, '悬空链接')
+    await fsp.symlink(path.join(env.outside, '不存在'), dangling, process.platform === 'win32' ? 'junction' : 'dir')
+    const readdir = fsp.readdir.bind(fsp)
+    const spy = vi.spyOn(fsp, 'readdir').mockImplementation((target, ...args) => {
+      if (String(target) === blocked) return Promise.reject(Object.assign(new Error('denied'), { code: 'EPERM' }))
+      return Reflect.apply(readdir, fsp, [target, ...args]) as ReturnType<typeof fsp.readdir>
+    })
+    let exported
+    try { exported = await service.exportProjectPackage({ projectId: project.id }) }
+    finally { spy.mockRestore() }
+    expect(exported.missingPaths.sort()).toEqual([blocked, dangling].sort())
+    const imported = await service.importPackage({ source: exported.path })
+    if (imported.type !== 'project') throw new Error('应为项目')
+    expect(await fsp.readFile(path.join(imported.project.path, '直属项目', '应包含.txt'), 'utf8')).toBe('child')
+    expect(fs.existsSync(path.join(imported.project.path, '直属项目', '深层项目', '应跳过.txt'))).toBe(false)
+    for (const target of [blocked, dangling]) expect(logger.warn).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ event: 'documents.package.entry_skipped', context: { path: target } }))
+  })
 
   it('项目已经发布后索引刷新失败仍返回成功，保留已导入项目', async () => {
     const { service, scanner } = env.services
@@ -248,4 +281,76 @@ describe('通用单文件包（4.1）', () => {
     const untouched = { d: 1 }
     expect(remapDocumentLinks(untouched, idMap)).toBe(untouched)
   })
+  it('大包说明超过原条目数和字节预算仍能流式读取并导入主文档', async () => {
+    const created = await env.services.service.createDocument({ kind: 'canvas', name: '主文档', container: { kind: 'user' }, content: { value: '完整内容' } })
+    const source = path.join(env.outside, 'large.hjpak')
+    const record = { id: created.meta.id, path: 'main.hjcvs' }
+    const manifest = { format: 'henji-package', version: 1, type: 'document', name: '大说明', exportedAt: '',
+      folders: { generated: '生成结果', materials: '素材' }, document: record, documents: Array.from({ length: 150001 }, () => record) }
+    const text = JSON.stringify(manifest)
+    expect(Buffer.byteLength(text)).toBeGreaterThan(4 * 1024 ** 2)
+    await writeZip(source, { 'henji-package.json': text, 'content/main.hjcvs': await fsp.readFile(created.meta.path, 'utf8') })
+    const imported = await env.services.service.importPackage({ source })
+    if (imported.type !== 'document') throw new Error('应导入文档')
+    expect((await env.services.service.readDocument(imported.meta)).content).toEqual({ value: '完整内容' })
+  })
+
+  it('深层项目完整扫描和打包，目录链接回环不会重复收集', async () => {
+    const project = await env.services.service.createProject({ name: '深层项目' })
+    const created = await env.services.service.createDocument({ kind: 'canvas', container: { kind: 'project', projectId: project.id }, name: '深层文档', content: { value: '末层' } })
+    const nested = path.join(project.path, ...Array.from({ length: 72 }, () => 'd'))
+    await fsp.mkdir(nested, { recursive: true })
+    const moved = path.join(nested, path.basename(created.meta.path))
+    await fsp.rename(created.meta.path, moved)
+    await fsp.symlink(path.dirname(nested), path.join(nested, 'loop'), process.platform === 'win32' ? 'junction' : 'dir')
+    await env.services.scanner.refresh()
+    expect(env.catalog.getDocument(created.meta.id)?.path).toBe(moved)
+    expect((await env.services.service.readDocument({ id: created.meta.id })).meta.container).toEqual({ kind: 'project', projectId: project.id })
+    const packed = await env.services.service.exportProjectPackage({ projectId: project.id })
+    const imported = await env.services.service.importPackage({ source: packed.path })
+    if (imported.type !== 'project') throw new Error('应导入项目')
+    expect(imported.documents).toBe(1)
+    const target = path.join(imported.project.path, path.relative(project.path, moved))
+    expect(JSON.parse(await fsp.readFile(target, 'utf8')).content).toEqual({ value: '末层' })
+  })
+
+  it('项目中同一目录的不同路径别名均保留文件，媒体引用导入后仍可读', async () => {
+    const service = env.services.service
+    const project = await service.createProject({ name: '目录别名' })
+    const source = write(path.join(project.path, '素材', '画面.png'), 'pixels')
+    await fsp.symlink(path.dirname(source), path.join(project.path, '000-alias'), process.platform === 'win32' ? 'junction' : 'dir')
+    await service.createDocument({ kind: 'video_edit', name: '剪辑', container: { kind: 'project', projectId: project.id },
+      content: { media: [{ id: 'frame', path: source }], bins: [], items: [], sequences: [] } })
+    const exported = await service.exportProjectPackage({ projectId: project.id })
+    const imported = await service.importPackage({ source: exported.path })
+    if (imported.type !== 'project') throw new Error('应导入项目')
+    expect(await fsp.readFile(path.join(imported.project.path, '素材', '画面.png'), 'utf8')).toBe('pixels')
+    expect(await fsp.readFile(path.join(imported.project.path, '000-alias', '画面.png'), 'utf8')).toBe('pixels')
+    const document = env.catalog.listDocuments({ projectId: imported.project.id, kind: 'video_edit' })[0]
+    expect((await service.readDocument({ id: document.id })).missingPaths).toEqual([])
+  })
+
+  it('目录别名里的文档导入为独立副本，引用的 ID 与路径指向同一份文件', async () => {
+    const service = env.services.service
+    const project = await service.createProject({ name: '文档别名' })
+    const container = { kind: 'project' as const, projectId: project.id }
+    const source = await service.createDocument({ kind: 'canvas', name: '画布', container })
+    const directory = path.join(project.path, 'z-docs')
+    await fsp.mkdir(directory)
+    const target = path.join(directory, path.basename(source.meta.path))
+    await fsp.rename(source.meta.path, target)
+    await fsp.symlink(directory, path.join(project.path, 'a-docs'), process.platform === 'win32' ? 'junction' : 'dir')
+    await service.createDocument({ kind: 'canvas', name: '引用方', container, content: { source: { docId: source.meta.id, path: target } } })
+    const exported = await service.exportProjectPackage({ projectId: project.id })
+    const imported = await service.importPackage({ source: exported.path })
+    if (imported.type !== 'project') throw new Error('应导入项目')
+    const documents = env.catalog.listDocuments({ projectId: imported.project.id })
+    expect(new Set(documents.map(document => document.id)).size).toBe(3)
+    const referring = documents.find(document => document.name === '引用方')!
+    const content = (await service.readDocument({ id: referring.id })).content as { source: { docId: string; path: string } }
+    const linked = env.catalog.getDocument(content.source.docId)!
+    expect(linked.path).toBe(path.join(imported.project.path, 'z-docs', path.basename(target)))
+    expect(content.source.path).toBe(linked.path)
+  })
+
 })

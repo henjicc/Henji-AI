@@ -12,7 +12,7 @@ const lineSchema = z.object({
   t: finite.int().nonnegative().max(Number.MAX_SAFE_INTEGER), width: finite.nonnegative(), height: finite.nonnegative(),
   items: z.array(z.tuple([z.string(), finite, finite, finite.positive(), finite.positive()])),
 }).strict().refine(line => !line.items.length || (line.width > 0 && line.height > 0))
-const pageSchema = z.object({ offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(200) })
+const pageSchema = z.object({ offset: z.number().int().nonnegative(), limit: z.number().int().min(1) })
 
 export interface BoxTrackEntry {
   key: string

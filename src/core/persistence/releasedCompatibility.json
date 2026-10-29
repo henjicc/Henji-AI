@@ -393,7 +393,8 @@
         "35": "3c64ed50413e846c53b630f75e5c3bc46af08b02d44bc570f950eb1acdf217a4",
         "36": "d7643a14572104afcf4f7cd5af0bf9f4e6187544eccdc57551e3c3c19c11bb8b",
         "37": "514e0aab6c3e0e4f520b863d4dd8c73105dd8ba8b187072454a7fc4f9615a8dd",
-        "38": "36ae7d45be362b74a8c621e6dcc8072e8cb708e18ae00782a84df7218c836a07"
+        "38": "36ae7d45be362b74a8c621e6dcc8072e8cb708e18ae00782a84df7218c836a07",
+        "40": "399834865e605678a7b178e2cfc25577cac9396cd7ecf1cfd172a88c6b6e1045"
       },
       "readers": {
         "17": 17,
@@ -411,7 +412,8 @@
         "35": 34,
         "36": 34,
         "37": 37,
-        "38": 38
+        "38": 38,
+        "40": 38
       },
       "samples": {
         "v17.json": "04f30f2c819759b07c9ca5415541f277636eddce7dd1ee5808abd2e7ee34e414",
@@ -435,7 +437,9 @@
         "v35.json": "680c285ed4af02d982a132d3ab4748c724b189ed7cd18a1549ccfafd107dc221",
         "v36.json": "b85112d4f559723218f27f8a8b1394f3b7bc8143aa954c17f38f162c6f883362",
         "v37.json": "7075d9003e1caef3dce5c17bd2ec7449352b82e2ae508ee352ee44248b89b6b1",
-        "v38.json": "2d40f48ea86fac8eb03d28e519958a984f6091d10d8b4e5af71b194e38014b4e"
+        "v38.json": "2d40f48ea86fac8eb03d28e519958a984f6091d10d8b4e5af71b194e38014b4e",
+        "v39.json": "534257cf943d8f59e531cf78666714935c40bcc9c6b99ea830ff20246da2a664",
+        "v40.json": "4a8dfb7a49c493f5a7fa9b1f61328e6ee08d29c4a411487d0f7abdfdb33e8ea0"
       }
     },
     "document.canvas": {
@@ -547,7 +551,8 @@
         "38": "2544b5aa3c6e8357a0227dc0800735b7e9590b8b82e694f5b2d2017ea0d01bb9",
         "39": "3dba3a5724685e7ed398b16bb1a202d2ecf40b5e3fc1740021c758e7093b89d6",
         "40": "b9dd68c8a43445f5ea1797854a67deb1b6c4b858f86654479a3a72548e8b3984",
-        "41": "51d3878f3485627454f51803965bef0b970fd4038045a904530f2bbb996b5c8c"
+        "41": "51d3878f3485627454f51803965bef0b970fd4038045a904530f2bbb996b5c8c",
+        "43": "32111fab05d2fecfe4e7f3b7271b297503fdaed1af4e8ae31d749f040730bb46"
       },
       "readers": {
         "19": 19,
@@ -566,7 +571,8 @@
         "38": 37,
         "39": 37,
         "40": 40,
-        "41": 41
+        "41": 41,
+        "43": 41
       },
       "samples": {
         "v19.json": "bed3ba5d2510d2fcb6c72a8f0608f39ff45af13e01ff2db2963e4008afd6a5b8",
@@ -591,7 +597,9 @@
         "v38.json": "1d5063597f43828727401dc78483420894f6d1ba5622663edc00a66c47b65936",
         "v39.json": "51d283c09290c1307cfc7ea2e1a25103a2e7a6fb460d298ee56e86249d77d537",
         "v40.json": "b59f24c96b69fcc5cd228747fb7bfc7f60c96f0e7d49cedba256b4902a4c2569",
-        "v41.json": "38d96a7f0b4216be7c8829e97100159fab67e2f0f2a91edeae3d3c9a1a618193"
+        "v41.json": "38d96a7f0b4216be7c8829e97100159fab67e2f0f2a91edeae3d3c9a1a618193",
+        "v42.json": "9d224827c3ab662654e5194546f85455966d940da965cf14b10291f35b6f6798",
+        "v43.json": "d1ae5d5c8f113ecbe7d5d1ccb4e14ded80b578089ad1dcaa4bc735bf5215d657"
       }
     },
     "project": {
@@ -625,14 +633,18 @@
         }
       ],
       "versions": {
-        "1": "0e74080fe193641790a35a451f2a682dce056dda70ed32ac128c0f6757d3ccd2"
+        "1": "0e74080fe193641790a35a451f2a682dce056dda70ed32ac128c0f6757d3ccd2",
+        "2": "48454b2dae73d815b6788e3329cdd7066b1659869a91c8c6c6dbf4a7e0ef65fc"
       },
       "readers": {
-        "1": 1
+        "1": 1,
+        "2": 1
       },
       "samples": {
         "v1.henjipack": "61e1302e79ff9fa669adcfda1b0ae713bc34ec3d0e4ec7d29937b2da3cb2dc7b",
-        "v1.json": "dc5f5a27a1e70ce717e0e9ec40a43890bed7ac22cd4e70862f4ff7c72d6f8fef"
+        "v1.json": "dc5f5a27a1e70ce717e0e9ec40a43890bed7ac22cd4e70862f4ff7c72d6f8fef",
+        "v2.henjipack": "353111bb646803cfb28decd8a4e673cbefd553b9d4d7a9cb3950b8352b1ef6ba",
+        "v2.json": "850fcc9f92ed01bbd9d8d4b9694814e311945033283020af2202dff22769d96d"
       }
     },
     "code-version": {
@@ -647,14 +659,16 @@
         "2": "2367d84fe9864f81581508834754c96be2f55d4e732f817b771be45124c132ad",
         "3": "4990f022451d15a20264d249630ac56f043a1aed40207d766a820f4e63249426",
         "4": "6c26c25a71fb628eda604b67b3a8c45f7e67cd50fb5416d55bf9d38471d4df3a",
-        "5": "7fa108424fd6162244155be687d74bc473ff4b00415436192eb2aa1f5fdc8f5e"
+        "5": "7fa108424fd6162244155be687d74bc473ff4b00415436192eb2aa1f5fdc8f5e",
+        "7": "63fc9d8fb94bf3db77e0c92efc03cda1833fbf197ba9df641f3167058ed5b131"
       },
       "readers": {
         "1": 1,
         "2": 2,
         "3": 2,
         "4": 2,
-        "5": 5
+        "5": 5,
+        "7": 5
       },
       "samples": {
         "v1.json": "e88825a54b171ab584213931a7a0bb916d89616c256fc69787be101bbdb614f0",
@@ -662,7 +676,9 @@
         "v2.json": "022b9f5da716cea67dd08dbb121371e91d74f300d1803c3ca477f9063196bd0b",
         "v3.json": "7e351e82d08d8b90888c1cb893a8849b906c283d4adcf52b79a4614e454a195d",
         "v4.json": "4987ef9e7bc257fe7d85efb38d62586068b54edfde09f8e615a18e0552d01b76",
-        "v5.json": "d04c4c2db1aad58a4e36e7fe94d2761a7f401324d8ad50e0096b890a17f647b8"
+        "v5.json": "d04c4c2db1aad58a4e36e7fe94d2761a7f401324d8ad50e0096b890a17f647b8",
+        "v6.json": "d98cc15b85a01d59dc14c7cb70e6e04d46c5ef0e0218eed9a8fc8e2dc5967925",
+        "v7.json": "d98cc15b85a01d59dc14c7cb70e6e04d46c5ef0e0218eed9a8fc8e2dc5967925"
       }
     },
     "code-author-api": {
@@ -718,21 +734,24 @@
         "7": "dbab223579ec39fdca834ab0b22db31e3965179372a7775f5ba324db06ac7e11",
         "8": "35ae9ed372504630f470d1f06d54bc004b00d51907f1bc3ddaf1783ed77855bd",
         "9": "5de67654575e4a1661db8fe35aa485de6cfc35cccf57ba5bd346ca50a530b891",
-        "10": "6ec4eb7dc60de5734cbe11d86b84a431c3e9028f8000e78e723bd2b1a25de672"
+        "10": "6ec4eb7dc60de5734cbe11d86b84a431c3e9028f8000e78e723bd2b1a25de672",
+        "11": "7674bd014e675c16f1145a18896bbe732c2cc4e42249dda211d4892df6eb51fc"
       },
       "readers": {
         "6": 6,
         "7": 7,
         "8": 7,
         "9": 7,
-        "10": 10
+        "10": 10,
+        "11": 10
       },
       "samples": {
         "v6.json": "650a8d401aecd5675dee8067e8b83275c10413049e324a2faf58c061d4ea1b16",
         "v7.json": "54cc7c738781e482872d0e163d644433e783daaf4fa878aa1c8dd821e9672fa1",
         "v8.json": "4f38c5383320c3b1d8a7a3aaef72528fab94177c5d61032b8a5e2eb5b81c75ec",
         "v9.json": "5279503a75eeccb5e7f99a2fbfcbf29b3f522101b11f072471c9da24001917e1",
-        "v10.json": "3efc2e181ae37134917cfbe25fca0f64e57daeb4e46b5fbaf7bf22e8989ed5c2"
+        "v10.json": "3efc2e181ae37134917cfbe25fca0f64e57daeb4e46b5fbaf7bf22e8989ed5c2",
+        "v11.json": "703f54aa3205bf3007f2a12db25bcea9fe75abb5f790d5d9e1c670dc5044beba"
       }
     },
     "settings": {
@@ -783,13 +802,16 @@
         }
       ],
       "versions": {
-        "3": "5910753ae4946e4405e184bc1383e3a803459d4a80d622fbb718085c5bcd310d"
+        "3": "5910753ae4946e4405e184bc1383e3a803459d4a80d622fbb718085c5bcd310d",
+        "4": "15b14831dad8e38c641edde2beddbbff38b4d36ed05fd5df3bbdd3b07677a5c2"
       },
       "readers": {
-        "3": 3
+        "3": 3,
+        "4": 3
       },
       "samples": {
-        "v3.json": "0873f67425a608820961c8e6409c0254ab6a08e06f6fab84f3cce22cc33d3989"
+        "v3.json": "0873f67425a608820961c8e6409c0254ab6a08e06f6fab84f3cce22cc33d3989",
+        "v4.json": "39e41d9faa24c3186ff751b8b7406d719221e4cfc492e1e7ccb61007e07f52a7"
       }
     },
     "title-templates": {
@@ -877,19 +899,22 @@
         "5": "a330c429373c3c5a97d70b5057a6f111c68ed44fdcc6502de46d69c6fc6646fa",
         "6": "f2620715c48791875c4a7a9ae999e3af7444060bd51ee576165ce5c25ddafc59",
         "7": "a8a24683be345e794c01c6433c5db1da239aa36cbd872a91076e0d48347be803",
-        "8": "65063e37ddc11bced1a90f864d63c1062ff1bd9193a440da256711c9b35272ea"
+        "8": "65063e37ddc11bced1a90f864d63c1062ff1bd9193a440da256711c9b35272ea",
+        "9": "1dd491890403f99f52c010dd702ee2e6bc600931aff80d2f5b76378df437fc89"
       },
       "readers": {
         "5": 5,
         "6": 6,
         "7": 6,
-        "8": 6
+        "8": 6,
+        "9": 6
       },
       "samples": {
         "v5.json": "696b65700dd08633b347e3b529b06a381dc237ecdb7741f2937e950dec56da1e",
         "v6.json": "4a10bb46cb5e048c5721c79f792896b3e22640a4e9d730e19a2f7adb08093f4d",
         "v7.json": "6ec96c25470871b5ad9fcbe973c13f8fc34dfdf8e82c729863849170567e82cb",
-        "v8.json": "0c9b62b9aa2a372a0bf1394296d18f9f6c46d975233a3983677ebdfcd6750b38"
+        "v8.json": "0c9b62b9aa2a372a0bf1394296d18f9f6c46d975233a3983677ebdfcd6750b38",
+        "v9.json": "6dfe119dc3349ecba6e3485cb8fdc6f4355724ebade12b6fd47b558ad428859c"
       }
     },
     "voice-library": {
@@ -1147,13 +1172,16 @@
         }
       ],
       "versions": {
-        "1": "222d49b6818fec35de9a499015a8e03e74e17a1c27d9ac9c6c811056d878da33"
+        "1": "222d49b6818fec35de9a499015a8e03e74e17a1c27d9ac9c6c811056d878da33",
+        "2": "8873fdfa96adb6c94a262f7fdab74be945ac06e61a2b620b24fbf79ed0627851"
       },
       "readers": {
-        "1": 1
+        "1": 1,
+        "2": 1
       },
       "samples": {
-        "v1.json": "255abd379d90d14ce40a1c3620307167d928c69deaf18745aa68e4488739e695"
+        "v1.json": "255abd379d90d14ce40a1c3620307167d928c69deaf18745aa68e4488739e695",
+        "v2.json": "fc80301c94061fd15707fbfadb44956563ba551a538926ee03ab2dcf76597895"
       }
     },
     "video-style-library": {
@@ -1166,18 +1194,22 @@
       "versions": {
         "1": "fc7b19ee664a2fae3ed3afaf188f27b3177399c0203327b48065562c02d72705",
         "2": "7a270e49c1a20528db42b8d691cfe23eeef7c3b80f31c2327da978ed1573e618",
-        "4": "b40ff434689ff57c4fd54e12d463ae1ab4ecdda03de466237421e384deff5dc6"
+        "4": "b40ff434689ff57c4fd54e12d463ae1ab4ecdda03de466237421e384deff5dc6",
+        "6": "a1ec5243acf4aff7ce5c11306056dbbc76e3b59b4847356d20c7ffd7f0a98ac2"
       },
       "readers": {
         "1": 1,
         "2": 1,
-        "4": 1
+        "4": 1,
+        "6": 1
       },
       "samples": {
         "v1.json": "47ad7d6d09febee60274e793a9edb27f6d27d2e223a45dc24a71dc2ae2141a0c",
         "v2.json": "c3b248bda5fc79b1f00b609f3c4205715a40c65ed83c7d052c486e04f60f920b",
         "v3.json": "2cb0b36c41ba9074e60abb79673ee8073f919f2e014f6d14716e53c7f6122c9c",
-        "v4.json": "295ddfebbf55e672b72a86573c748adc1cc08fca2aec74c1b18e7a41ff522fac"
+        "v4.json": "295ddfebbf55e672b72a86573c748adc1cc08fca2aec74c1b18e7a41ff522fac",
+        "v5.json": "0222c8765b03121668fdc5f268e919a3ecea655fda7f104d542dd40a5e26084d",
+        "v6.json": "8597546aa78b58d898296cd6f5b19b02c266c1ce978a69473ebf57d07a93841a"
       }
     },
     "video-template-library": {
@@ -1190,17 +1222,21 @@
       "versions": {
         "1": "49ccebbecb6505d1bac6e0090e7ceb26f8b6758ce539ca8afdfd29eeb502b13b",
         "2": "df20ac3e1331aa8a91d1d6b03aab0804bdb93913a5700babbc207cb38c6bdc76",
-        "3": "1ec7960ab285c15c71ded9bf165bf45bf5cb182c7e91f7346276d6ee5142caa4"
+        "3": "1ec7960ab285c15c71ded9bf165bf45bf5cb182c7e91f7346276d6ee5142caa4",
+        "5": "f18032dc647acc54e3ccfa6417ce5cc6dde9f30719e22eb748cb4aa838df744a"
       },
       "readers": {
         "1": 1,
         "2": 1,
-        "3": 3
+        "3": 3,
+        "5": 3
       },
       "samples": {
         "v1.json": "0482025a22c0107b41cda3c19bc7065531a37413b5836aab4d0eed776f7a45d7",
         "v2.json": "21a19b769f94ba15e74964314dcecdee7b06c3676a8a4e347733205c950a53b5",
-        "v3.json": "eab38da6255ec01dde9a1b498d53762fc3306b5bf7c7e4d97239123394775bba"
+        "v3.json": "eab38da6255ec01dde9a1b498d53762fc3306b5bf7c7e4d97239123394775bba",
+        "v4.json": "4a18e638c405aa983193fa24fdf1695a2ee6355afe030e3f73d612d85947c220",
+        "v5.json": "a773bac65e5bf908bcaae950a3e8a1ca1d491feec5751cc73260036f78adf1d9"
       }
     },
     "video-style-package": {
@@ -1214,13 +1250,15 @@
         "1": "f64ff3c850f12db57ae02ab1364b93700c992e57791ab2259f14273c1dc411c4",
         "2": "e8f5cf319d8357534a9ddfaa72e930b0de57e486936ed8b8cfa7b8b2330ad60f",
         "5": "1ce711ae81601072462262afa97694b7975d5d1fae1db02fa26157897e083a44",
-        "6": "0dbced02275b89daa680ecbd53ce219086f8bd1e75ee5cd7223638175e692049"
+        "6": "0dbced02275b89daa680ecbd53ce219086f8bd1e75ee5cd7223638175e692049",
+        "8": "2dffa9d144a3132a282b6ec62c9cb47aac6bc01064bba25b7730743d2581648b"
       },
       "readers": {
         "1": 1,
         "2": 1,
         "5": 1,
-        "6": 6
+        "6": 6,
+        "8": 6
       },
       "samples": {
         "v1.json": "a744ea1cac3def56301b40bec9bb9977e30ed89cb1322bcab1a8ad208096c650",
@@ -1228,7 +1266,9 @@
         "v5.json": "f9544f46cb9bb2baa3c476811dce510fcee5d31098b92c9e0872e6b4966bf37b",
         "v3.json": "515498dc6d096016f0242ab166ed62ff961d839f3b76b1958339203d7aa882c5",
         "v4.json": "f31ef4a17a9cdffbca1f8b195bb5e88bfd0810b976dbe970c794ce36e44395ff",
-        "v6.json": "13bffac5a86705957ecee9b06693e49d091b6311a8d88f58f47081b98b9ae503"
+        "v6.json": "13bffac5a86705957ecee9b06693e49d091b6311a8d88f58f47081b98b9ae503",
+        "v7.json": "227f09754b5bfd40c8e008147e1730695c69edccca2ef33f2569643e683a61d7",
+        "v8.json": "348cbb4afd9e2ae0f86d02636af86915b906d919f6f4692a23b4d927fa4bb77e"
       }
     },
     "workspace-layouts": {

@@ -221,11 +221,11 @@ export async function prepareLocalRedraw(
       resolveSourceBytes(payload.source),
       resolveSourceBytes(payload.mask),
     ])
-    const sourceMetadata = await sharp(sourceResolved.bytes).metadata()
+    const sourceMetadata = await sharp(sourceResolved.bytes, { limitInputPixels: false }).metadata()
     const width = sourceMetadata.width ?? 0
     const height = sourceMetadata.height ?? 0
     if (width < 1 || height < 1) throw new Error('源图尺寸无效')
-    const { data: maskPixels, info: maskInfo } = await sharp(maskResolved.bytes)
+    const { data: maskPixels, info: maskInfo } = await sharp(maskResolved.bytes, { limitInputPixels: false })
       .ensureAlpha()
       .raw()
       .toBuffer({ resolveWithObject: true })
@@ -241,7 +241,7 @@ export async function prepareLocalRedraw(
       payload.settings,
       payload.preferredAspectRatios ?? [],
     )
-    const cropBytes = await sharp(sourceResolved.bytes)
+    const cropBytes = await sharp(sourceResolved.bytes, { limitInputPixels: false })
       .extract({ left: crop.x, top: crop.y, width: crop.width, height: crop.height })
       .png()
       .toBuffer()
@@ -316,8 +316,8 @@ export async function composeLocalRedraw(
       resolveSourceBytes(payload.generatedSource),
     ])
     const [sourceMetadata, maskMetadata] = await Promise.all([
-      sharp(sourceResolved.bytes).metadata(),
-      sharp(maskResolved.bytes).metadata(),
+      sharp(sourceResolved.bytes, { limitInputPixels: false }).metadata(),
+      sharp(maskResolved.bytes, { limitInputPixels: false }).metadata(),
     ])
     if (sourceMetadata.width !== payload.context.sourceWidth || sourceMetadata.height !== payload.context.sourceHeight) {
       throw new Error('源图尺寸已变化，请重新绘制遮罩后再生成')
@@ -332,21 +332,22 @@ export async function composeLocalRedraw(
       || crop.y + crop.height > payload.context.sourceHeight) {
       throw new Error('局部重绘裁剪上下文无效，请重新生成')
     }
-    const sourcePixels = await sharp(sourceResolved.bytes).toColourspace('srgb').ensureAlpha().raw().toBuffer()
-    const maskPixels = await sharp(maskResolved.bytes).ensureAlpha().raw().toBuffer()
-    let generatedPixels: Uint8Array = await sharp(generatedResolved.bytes)
+    const sourcePixels = await sharp(sourceResolved.bytes, { limitInputPixels: false }).toColourspace('srgb').ensureAlpha().raw().toBuffer()
+    const maskPixels = await sharp(maskResolved.bytes, { limitInputPixels: false }).ensureAlpha().raw().toBuffer()
+    let generatedPixels: Uint8Array = await sharp(generatedResolved.bytes, { limitInputPixels: false })
       .resize(crop.width, crop.height, { fit: 'fill' })
       .toColourspace('srgb')
       .ensureAlpha()
       .raw()
       .toBuffer()
-    const referencePixels = await sharp(sourceResolved.bytes)
+    const referencePixels = await sharp(sourceResolved.bytes, { limitInputPixels: false })
       .extract({ left: crop.x, top: crop.y, width: crop.width, height: crop.height })
       .toColourspace('srgb')
       .ensureAlpha()
       .raw()
       .toBuffer()
     const referenceRgb = await sharp(referencePixels, {
+      limitInputPixels: false,
       raw: { width: crop.width, height: crop.height, channels: 4 },
     }).removeAlpha().raw().toBuffer()
 
@@ -389,6 +390,7 @@ export async function composeLocalRedraw(
     let matteChannels = 1
     if (settings.featherPixels > 0) {
       const feathered = await sharp(matteRaw, {
+        limitInputPixels: false,
         raw: { width: crop.width, height: crop.height, channels: 1 },
       })
         .blur(Math.max(0.3, settings.featherPixels / 2))
@@ -431,6 +433,7 @@ export async function composeLocalRedraw(
       throw new Error('局部重绘结果在回贴过程中丢失了模型修改，请查看回贴诊断日志')
     }
     const output = await sharp(sourcePixels, {
+      limitInputPixels: false,
       raw: { width: payload.context.sourceWidth, height: payload.context.sourceHeight, channels: 4 },
     }).png().toBuffer()
     const source = await persistImageBytes(output, 'png')

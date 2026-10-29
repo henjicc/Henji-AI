@@ -38,7 +38,7 @@ export async function composeLayerStack(
     for (const layer of ordered) {
       throwIfAborted(signal)
       const source = await resolveSourceBytes(layer.source)
-      const metadata = await sharp(source.bytes).metadata()
+      const metadata = await sharp(source.bytes, { limitInputPixels: false }).metadata()
       const width = metadata.width ?? 0
       const height = metadata.height ?? 0
       const format = normalizeFormat(metadata.format)
@@ -78,11 +78,12 @@ export async function composeLayerStack(
       const opacity = item.input.opacity ?? 1
       const overlayBytes = opacity === 1
         ? clipped.bytes
-        : await sharp(clipped.bytes).ensureAlpha().linear([1, 1, 1, opacity], [0, 0, 0, 0]).png().toBuffer()
-      overlays.push({ input: overlayBytes, left: clipped.left, top: clipped.top, blend: 'over' as const })
+        : await sharp(clipped.bytes, { limitInputPixels: false }).ensureAlpha().linear([1, 1, 1, opacity], [0, 0, 0, 0]).png().toBuffer()
+      overlays.push({ input: overlayBytes, limitInputPixels: false, left: clipped.left, top: clipped.top, blend: 'over' as const })
     }
     throwIfAborted(signal)
     const compositeBytes = await sharp({
+      limitInputPixels: false,
       create: {
         width: base.resource.width,
         height: base.resource.height,
@@ -90,11 +91,11 @@ export async function composeLayerStack(
         background: { r: 0, g: 0, b: 0, alpha: 0 },
       },
     }).composite(overlays).toColourspace('srgb').png().toBuffer()
-    const thumbnailBytes = await sharp(compositeBytes)
+    const thumbnailBytes = await sharp(compositeBytes, { limitInputPixels: false })
       .resize(payload.thumbnailMaxSize ?? 512, payload.thumbnailMaxSize ?? 512, { fit: 'inside', withoutEnlargement: true })
       .webp({ quality: 82 })
       .toBuffer()
-    const thumbnailMetadata = await sharp(thumbnailBytes).metadata()
+    const thumbnailMetadata = await sharp(thumbnailBytes, { limitInputPixels: false }).metadata()
     const thumbnailWidth = thumbnailMetadata.width ?? 0
     const thumbnailHeight = thumbnailMetadata.height ?? 0
     if (thumbnailWidth < 1 || thumbnailHeight < 1) throw new Error('图层栈缩略图尺寸无效')
@@ -188,14 +189,14 @@ async function clipOverlay(
   const sharp = await loadSharp()
   const placedBytes = item.resource.width === width && item.resource.height === height
     ? item.bytes
-    : await sharp(item.bytes).resize(width, height, { fit: 'fill' }).png().toBuffer()
+    : await sharp(item.bytes, { limitInputPixels: false }).resize(width, height, { fit: 'fill' }).png().toBuffer()
   const left = Math.max(0, x)
   const top = Math.max(0, y)
   const right = Math.min(canvasWidth, x + width)
   const bottom = Math.min(canvasHeight, y + height)
   if (right <= left || bottom <= top) return null
   if (left === x && top === y && right === x + width && bottom === y + height) return { bytes: placedBytes, left, top }
-  const bytes = await sharp(placedBytes).extract({ left: left - x, top: top - y, width: right - left, height: bottom - top }).png().toBuffer()
+  const bytes = await sharp(placedBytes, { limitInputPixels: false }).extract({ left: left - x, top: top - y, width: right - left, height: bottom - top }).png().toBuffer()
   return { bytes, left, top }
 }
 

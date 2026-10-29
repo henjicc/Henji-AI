@@ -43,8 +43,7 @@ const logger = createMainLogger('main.image_editor_v3.source_provider')
 const MAX_MIP_LEVEL = 30
 const MAX_TILE_HALO = 2048
 const MAX_SOURCE_ICC_PROFILE_BYTES = 16 * 1024 * 1024
-/** 覆盖 200MP 目标并给极端长宽比留余量，同时拒绝无界解压。 */
-export const IMAGE_EDIT_MAX_SOURCE_PIXELS = 1_000_000_000
+/** 元数据缓存可淘汰；图像内容按瓦片读取。 */
 export const IMAGE_EDIT_METADATA_CACHE_LIMIT = 256
 
 export interface SharpSourceProviderOptions {
@@ -209,7 +208,6 @@ export class SharpSourceProvider implements SourceProvider {
       sourcePath: this.resources.getFilesystemPath(resourceId),
       metadata,
       maxDimension,
-      maximumInputPixels: IMAGE_EDIT_MAX_SOURCE_PIXELS,
       sharpLoader: this.sharpLoader,
       cache: this.derivedCache,
       pyramid: this.pyramid,
@@ -316,7 +314,7 @@ export class SharpSourceProvider implements SourceProvider {
             { width: metadata.encodedWidth, height: metadata.encodedHeight }, metadata.orientation)
             let pipeline = sharp(this.resources.getFilesystemPath(request.resourceId), {
               // 每个管线只提取一个矩形；无需随机访问缓存整个解压源图。
-              limitInputPixels: IMAGE_EDIT_MAX_SOURCE_PIXELS, sequentialRead: true, failOn: 'warning',
+              limitInputPixels: false, sequentialRead: true, failOn: 'warning',
             }).extract(encoded).autoOrient().toColourspace(bitDepth === 16 ? 'rgb16' : 'srgb')
               .ensureAlpha().raw({ depth: bitDepth === 16 ? 'ushort' : 'uchar' })
             const standardP3 = metadata.colorSpace === 'display-p3';
@@ -354,7 +352,7 @@ export class SharpSourceProvider implements SourceProvider {
 
     const sharp = await this.sharpLoader()
     let pipeline = sharp(this.resources.getFilesystemPath(request.resourceId), {
-      limitInputPixels: IMAGE_EDIT_MAX_SOURCE_PIXELS,
+      limitInputPixels: false,
       sequentialRead: false,
       failOn: 'warning',
     }).extract({
@@ -436,15 +434,12 @@ export class SharpSourceProvider implements SourceProvider {
   ): Promise<SourceImageMetadata> {
     const sharp = await this.sharpLoader()
     const pipeline = sharp(this.resources.getFilesystemPath(resourceId), {
-      limitInputPixels: IMAGE_EDIT_MAX_SOURCE_PIXELS,
+      limitInputPixels: false,
       sequentialRead: true,
       failOn: 'warning',
     })
     const metadata = await runSharpOperation(pipeline, signal, () => pipeline.metadata())
     if (!metadata.width || !metadata.height) throw new Error(`Image dimensions unavailable: ${resourceId}`)
-    if (metadata.width * metadata.height > IMAGE_EDIT_MAX_SOURCE_PIXELS) {
-      throw new Error(`Image exceeds ${IMAGE_EDIT_MAX_SOURCE_PIXELS} pixel safety limit: ${resourceId}`)
-    }
     const bitsPerSample = sourceBitsPerSample(metadata)
     const orientation = normalizeSourceExifOrientation(metadata.orientation)
     const orientedDimensions = orientedSourceDimensions({

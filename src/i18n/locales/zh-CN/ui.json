@@ -26,7 +26,7 @@
     "directorGoal": "教程目标",
     "directorGoalPlaceholder": "例如：打开设置并切换主题",
     "directorPlan": "让助手规划",
-    "directorPrompt": "请根据当前应用状态，为这个教程规划导演录制：{{goal}}。使用 plan_screen_recording_director 保存有限操作脚本、逐步旁白和预计画面，选择已配置的语音模型及音色，然后打开返回的录制会话供我审阅。不要自动确认或开始录制。",
+    "directorPrompt": "请根据当前应用状态，为这个教程规划导演录制：{{goal}}。使用 plan_screen_recording_director 保存有限操作脚本、逐步旁白和预计画面，选择已配置的语音模型及音色，然后打开返回的录制会话供我查看。",
     "directorBusy": "正在制作教程…",
     "directorSave": "保存修改",
     "directorConfirm": "确认脚本",
@@ -35,8 +35,6 @@
     "directorNarration": "旁白",
     "directorVoice": "配音模型与音色",
     "directorNoChanges": "没有待保存的修改",
-    "directorSaveFirst": "请先保存修改，再确认脚本",
-    "directorConfirmed": "脚本已确认",
     "directorConfirmFirst": "请先确认脚本；已提交的成片请在剪辑中查看",
     "scriptDone": "操作已完成",
     "scriptTitle": "操作脚本",
@@ -413,7 +411,6 @@
     "myPresets": "我的预设 ({{count}})",
     "empty": "暂无预设，快速保存一个吧！",
     "deleteTitle": "删除预设",
-    "confirmDelete": "确定删除预设？",
     "alerts": {
       "loadFailed": "预设读取失败，原有预设未修改。请检查数据目录的访问权限并重启后重试。",
       "saveFailed": "保存预设失败，原有预设未被覆盖。请检查数据目录的访问权限并重试。",
@@ -484,7 +481,6 @@
     "disabled": "已禁用",
     "enable": "启用",
     "disable": "禁用",
-    "confirmDelete": "确定要删除此自定义模型吗？",
     "empty": "还没有添加自定义模型",
     "loading": "加载中...",
     "addFailed": "添加失败",
@@ -590,7 +586,6 @@
     "categories": "资产库",
     "createLibrary": "新建资产库",
     "libraryName": "资产库名称",
-    "confirmDeleteLibrary": "再次点击确认删除",
     "empty": "资产库还是空的",
     "noResults": "没有符合条件的资产",
     "error": "资产加载失败",
@@ -632,7 +627,6 @@
     "batchLibraryAdd": "加入资产库",
     "batchLibraryRemove": "移出资产库",
     "batchDelete": "删除所选资产",
-    "batchConfirmDelete": "再次点击确认删除",
     "batchNoSelection": "请先选择资产",
     "batchPartialFailure": "{{count}} 项处理失败，请重试",
     "batchEmptyMenu": "管理多个资产",
@@ -731,7 +725,6 @@
       "title": "清除历史记录",
       "subtitle": "请选择要执行的操作",
       "failedOnly": "仅删除失败的记录",
-      "confirmDelete": "再次点击确认删除",
       "deleteAll": "清除所有历史记录"
     },
     "toast": {
@@ -1679,7 +1672,6 @@
       "checking": "正在校验…"
     },
     "empty": "暂无自定义模型",
-    "confirmDelete": "确定要删除这个模型吗？",
     "alerts": {
       "deleteFailed": {
         "title": "没能删除模型",

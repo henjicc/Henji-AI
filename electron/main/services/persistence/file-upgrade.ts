@@ -9,7 +9,7 @@ import { persistenceBackupLocation } from '../../../../src/core/persistence/back
 
 const logger = createMainLogger('main.persistence')
 /** Immutable, content-addressed original, streamed by copyFile (no whole-file buffering). */
-export async function backupBeforePersistenceUpgrade(filePath: string, contract: Pick<PersistenceContract, 'id' | 'name' | 'version' | 'migrations'>, fromVersion: number, snapshot?: string | Buffer, forceSnapshot = false): Promise<string | undefined> {
+export async function backupBeforePersistenceUpgrade(filePath: string, contract: Pick<PersistenceContract, 'id' | 'name' | 'version' | 'migrations'>, fromVersion: number, snapshot?: string | Buffer, forceSnapshot = false, expectedFingerprint?: string): Promise<string | undefined> {
   assertPersistenceVersion(contract, fromVersion)
   if (fromVersion === contract.version && !forceSnapshot) return undefined
   const { directory } = persistenceBackupLocation(path.resolve(filePath), fromVersion, '0'.repeat(64))
@@ -24,6 +24,8 @@ export async function backupBeforePersistenceUpgrade(filePath: string, contract:
     try { for await (const chunk of handle.createReadStream({ autoClose: false })) hash.update(chunk); await handle.sync() }
     finally { await handle.close() }
     const fingerprint = hash.digest('hex')
+    // 分块解析不保留原文副本；备份必须与实际解析的字节一致，外部修改后应重新读取。
+    if (expectedFingerprint !== undefined && fingerprint !== expectedFingerprint) throw new Error('文件在读取期间被修改，请重新打开后重试。')
     const { target } = persistenceBackupLocation(path.resolve(filePath), fromVersion, fingerprint)
     // Existing publication primitive also supports exFAT and network shares.
     try { await moveFileNoOverwrite(temporary, target) }

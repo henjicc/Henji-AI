@@ -22,6 +22,7 @@ import {
 import { ContentAddressedResourceStore } from './resource-store'
 import { ImageEditHistoryPageStoreV3 } from './history-pages/store'
 import { createImageEditSourceFingerprint } from './raster-export-snapshot'
+import { normalizeImageEditorV3Document } from '../../ipc/image-editor-v3-payloads'
 
 let rootDir = ''
 
@@ -43,6 +44,19 @@ function documentAt(documentId: string, revision: number, marker = ''): ImageEdi
 }
 
 describe('ImageEditDocumentRepository', () => {
+  it('生成的大工作副本经 IPC 校验与分块落盘后完整读回', async () => {
+    const repository = new ImageEditDocumentRepository(rootDir)
+    const rows = Array.from({ length: 530 }, (_, index) => `${index}:${'汉'.repeat(44_000)}`)
+    const document: ImageEditDocumentV3 = {
+      ...documentAt('large-checkpoint', 0),
+      layers: [createImageEditEffectLayerV3('effect', '参数', 'test.effect', { rows })],
+    }
+    await repository.create(normalizeImageEditorV3Document(document))
+    expect((await fsp.stat(path.join(rootDir, `${document.id}.json`))).size).toBeGreaterThan(64 * 1024 ** 2)
+    const restored = (await repository.load(document.id)).document as ImageEditDocumentV3
+    expect(restored.layers).toEqual(document.layers)
+  }, 60_000)
+
   it('锁内预览发布保持最新检查点，不读写历史页；拒绝过期快照', async () => {
     const resources = new ContentAddressedResourceStore(path.join(rootDir, 'resources'))
     const repository = new ImageEditDocumentRepository(path.join(rootDir, 'documents'), { resources })
@@ -230,22 +244,8 @@ describe('ImageEditDocumentRepository', () => {
       .toBe('latest')
   })
 
-  it('写入前执行与读取一致的体积准入，并阻止 autosave 跨文档串写', async () => {
-    const repository = new ImageEditDocumentRepository(rootDir, { maxDocumentBytes: 1_024 })
-    const oversized: ImageEditDocumentV3 = {
-      ...documentAt('oversized', 0),
-      layers: [createImageEditEffectLayerV3(
-        'oversized-effect',
-        '过大参数',
-        'test.effect',
-        { payload: 'x'.repeat(4_096) },
-      )],
-    }
-    await expect(repository.create({
-      documentId: 'oversized',
-      document: oversized,
-    })).rejects.toThrow('byte limit')
-
+  it('阻止 autosave 跨文档串写', async () => {
+    const repository = new ImageEditDocumentRepository(rootDir)
     await repository.create({ documentId: 'document-a', document: documentAt('document-a', 0) })
     const scheduler = repository.createAutosaveScheduler(10)
     const pending = scheduler.schedule({

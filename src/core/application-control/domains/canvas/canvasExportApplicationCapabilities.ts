@@ -26,7 +26,6 @@ const downloadCanvasMedia = defineApplicationCapability({
   readOnly: false,
   control: capabilityControl('execute', ['canvas.node'], { verificationRequired: false }),
   dataClasses: ['C1'],
-  permission: 'canvas:export',
   idempotent: false,
   destructive: false,
   timeoutMs: 120_000,

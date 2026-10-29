@@ -86,7 +86,7 @@ describe('主体选择同源状态闭环', () => {
       const targetRef = imageEditV3LayerRef(doc.id, 'r'), ref = { ...imageEditV3DocumentRef(doc.id), kind: 'image_edit.selection' }
       const result = await executeApplicationCapabilityResult({ id: 'select_image_edit_region', version: 1, input: { targetRef, region: { kind: 'portrait', quality: 'fast' } } }, { signal: new AbortController().signal, requestId: 'subject-capability' })
       expect(result.ok, JSON.stringify(result)).toBe(true)
-      const read = await getApplicationReflectionRegistry().readEntity(ref, undefined, { exposure: 'assistant', permissions: new Set(['image_edit:read']), acceptedDataClasses: new Set(['C0', 'C1']) })
+      const read = await getApplicationReflectionRegistry().readEntity(ref, undefined, { exposure: 'assistant', acceptedDataClasses: new Set(['C0', 'C1']) })
       expect(read.properties['image_edit.selection.region']).toEqual(bus.getSnapshot().selection)
       if (result.ok) expect(result.data.status).toBe('selected')
     } finally { dispose(); bus.dispose() }

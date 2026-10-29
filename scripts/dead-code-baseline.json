@@ -7640,11 +7640,6 @@
         "count": 1
       },
       {
-        "file": "electron/main/services/documents/index-scanner.ts",
-        "fingerprint": "28433c5f556c6bc973f987fb49a6aaec452f75858904ed4da0f926e32c8d1861",
-        "count": 1
-      },
-      {
         "file": "electron/main/services/documents/index.native.test.ts",
         "fingerprint": "8fb98829d2a8862f4ceb862c53a5dc23c7743cd10cdb4fa5caebd80669f0424b",
         "count": 1

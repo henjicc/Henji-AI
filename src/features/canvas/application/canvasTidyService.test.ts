@@ -47,7 +47,7 @@ describe('canvas tidy commit', () => {
   it('generic assistant position writes use the same batch and can undo once', async () => {
     const before = useCanvasStore.getState().nodes
     const draft = await createCanvasTidyDraft(projectId, before, ['n0', 'n1', 'n2'], null)
-    const context: ApplicationExecutionContext = { requestId: 'tidy', exposure: 'assistant', permissions: new Set(['canvas:read', 'canvas:write']), acceptedDataClasses: new Set(['C0', 'C1']) }
+    const context: ApplicationExecutionContext = { requestId: 'tidy', exposure: 'assistant', acceptedDataClasses: new Set(['C0', 'C1']) }
     const steps: Extract<ApplicationPlannedStep, { kind: 'mutation' }>[] = draft.candidates[0].placements.map(p => ({
       kind: 'mutation', entityType: 'canvas.node', target: { kind: 'canvas.node', id: `${projectId}:${p.nodeId}` }, expectedRevisions: { canvas: 2 },
       mutations: [{ propertyId: 'canvas.node.position', operation: 'set', value: p.position }],

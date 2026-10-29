@@ -78,7 +78,6 @@ describe('readFastSourceProxy', () => {
       sourcePath,
       metadata,
       maxDimension: 512,
-      maximumInputPixels: 10_000_000,
       sharpLoader,
       cache,
       pyramid,

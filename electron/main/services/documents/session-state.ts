@@ -1,10 +1,9 @@
 import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
-import fsp from 'node:fs/promises'
 import path from 'node:path'
 
 import { DOCUMENT_ID_PATTERN } from '../../../../src/core/documents/envelope'
 import type { DocumentSessionStateKey, WriteDocumentSessionStateRequest } from '../../../../src/core/documents/types'
-import { writeBufferAtomically } from '../fs/atomic-file'
+import { readJsonFile, writeJsonFile } from '../fs/json-file'
 import { KeyedSerialExecutor } from '../image-editor-v3/serial-executor'
 import type { MainLogger } from '../logging/main-logger'
 
@@ -20,12 +19,9 @@ import type { MainLogger } from '../logging/main-logger'
 export interface DocumentSessionStateStoreOptions {
   directory: string
   logger: MainLogger
-  /** 单个键的上限（撤销记录可能较大）。 */
-  maxBytes?: number
 }
 
 const KEY_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/
-const DEFAULT_MAX_BYTES = 64 * 1024 * 1024
 
 function errorCode(error: unknown): string | undefined {
   return error instanceof Error && 'code' in error ? String((error as NodeJS.ErrnoException).code) : undefined
@@ -46,14 +42,12 @@ export class DocumentSessionStateStore {
     return path.join(this.folder(request.docId), `${request.key}.json`)
   }
 
-  /** 没有、读不懂或超过上限时返回 null。 */
+  /** 没有或读不懂时返回 null。 */
   async read(request: DocumentSessionStateKey): Promise<unknown> {
     const target = this.file(request)
     return await this.executor.run(request.docId, async () => {
       try {
-        const stat = await fsp.stat(target)
-        if (stat.size > (this.options.maxBytes ?? DEFAULT_MAX_BYTES)) return null
-        return JSON.parse(await fsp.readFile(target, 'utf8')) as unknown
+        return await readJsonFile(target)
       } catch (error) {
         if (errorCode(error) !== 'ENOENT') {
           this.options.logger.warn('文档会话状态无法读取，按没有处理', {
@@ -73,16 +67,7 @@ export class DocumentSessionStateStore {
         await removeUnmanagedCachePath(target, { force: true })
         return
       }
-      const bytes = Buffer.from(JSON.stringify(request.value), 'utf8')
-      if (bytes.byteLength > (this.options.maxBytes ?? DEFAULT_MAX_BYTES)) {
-        // 超过上限不写（旧值也删掉，避免下次恢复到更早的状态）；会话状态只是方便，不阻止编辑。
-        await removeUnmanagedCachePath(target, { force: true })
-        this.options.logger.warn('文档会话状态过大，未保存', {
-          event: 'documents.session_state.write.skipped', context: { documentId: request.docId, key: request.key, bytes: bytes.byteLength },
-        })
-        return
-      }
-      await writeBufferAtomically(target, bytes)
+      await writeJsonFile(target, request.value)
     })
   }
 

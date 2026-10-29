@@ -117,6 +117,7 @@
     "publish:audio-capture-source": "node scripts/publish-audio-capture-source.cjs"
   },
   "dependencies": {
+    "@discoveryjs/json-ext": "1.1.0",
     "@earendil-works/pi-coding-agent": "1.4.0",
     "@fontsource-variable/geist": "5.3.0",
     "@fontsource-variable/geist-mono": "5.3.0",

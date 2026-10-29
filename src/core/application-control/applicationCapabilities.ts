@@ -37,7 +37,6 @@ export const applicationCapabilityDescriptorSchema = z.object({
   side: z.enum(['frontend', 'backend']),
   readOnly: z.boolean(),
   dataClasses: z.array(applicationCapabilityDataClassSchema).min(1).max(4),
-  permission: z.string().min(1).max(120),
   idempotent: z.boolean(),
   destructive: z.boolean(),
   timeoutMs: z.number().int().positive().max(10 * 60 * 1_000),

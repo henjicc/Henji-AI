@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 
@@ -7,17 +8,17 @@ import {
   buildProjectManifest,
   inferProjectLocale,
   INTERNAL_FOLDER_NAME,
-  parseProjectManifestText,
+  parseProjectManifest,
+  ProjectManifestError,
   projectManifestContract,
   PROJECT_MANIFEST_FILE_NAME,
-  serializeProjectManifest,
   carryProjectManifestForward,
   type ProjectManifest,
 } from '../../../../src/core/documents/projectManifest'
 import type { DocumentContainerRef, FolderLocale } from '../../../../src/core/documents/types'
 import type { LocationContext } from '../../../../src/core/storage/locationCodec'
 import { isPathInside, samePath, type PathStyle } from '../../../../src/core/storage/pathSyntax'
-import { writeBufferAtomically } from '../fs/atomic-file'
+import { readJsonFile, writeJsonFile } from '../fs/json-file'
 import { withFileLock } from '../fs/file-lock'
 import { KeyedSerialExecutor } from '../image-editor-v3/serial-executor'
 import type { MainLogger } from '../logging/main-logger'
@@ -78,8 +79,6 @@ export interface DocumentWorkspaceOptions {
   randomId?: () => string
 }
 
-const MAX_MANIFEST_BYTES = 1024 * 1024
-const MAX_PARENT_LEVELS = 64
 
 export class DocumentWorkspace {
   readonly style: PathStyle
@@ -161,26 +160,25 @@ export class DocumentWorkspace {
 
   /** 读项目说明；文件不存在返回 null，内容损坏时抛 ProjectManifestError。 */
   async readManifest(projectRoot: string): Promise<ProjectManifest | null> {
-    let text: string
+    let raw: unknown
+    const hash = createHash('sha256')
     try {
       const stat = await fsp.stat(this.manifestPath(projectRoot))
-      if (!stat.isFile() || stat.size > MAX_MANIFEST_BYTES) return null
-      text = await fsp.readFile(this.manifestPath(projectRoot), 'utf8')
+      if (!stat.isFile()) return null
+      raw = await readJsonFile(this.manifestPath(projectRoot), chunk => { hash.update(chunk) })
     } catch (error) {
       if (errorCode(error) === 'ENOENT' || errorCode(error) === 'ENOTDIR') return null
+      if (error instanceof SyntaxError) throw new ProjectManifestError('项目说明已损坏，无法读取。', { cause: error })
       throw error
     }
-    let raw: unknown
-    try { raw = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text) as unknown }
-    catch { return parseProjectManifestText(text) }
-    const backupPath = raw && typeof raw === 'object' && 'version' in raw && typeof raw.version === 'number' && raw.version < projectManifestContract().version ? await backupBeforePersistenceUpgrade(this.manifestPath(projectRoot), projectManifestContract(), typeof raw.version === 'number' ? raw.version : 0, text) : undefined
-    return parseProjectManifestText(text, backupPath)
+    const backupPath = raw && typeof raw === 'object' && 'version' in raw && typeof raw.version === 'number' && raw.version < projectManifestContract().version ? await backupBeforePersistenceUpgrade(this.manifestPath(projectRoot), projectManifestContract(), raw.version, undefined, false, hash.digest('hex')) : undefined
+    return parseProjectManifest(raw, backupPath)
   }
 
   async writeManifest(projectRoot: string, manifest: ProjectManifest): Promise<void> {
     await this.ensureInternalFolder(projectRoot)
-    const existing = await fsp.readFile(this.manifestPath(projectRoot), 'utf8').catch(() => null)
-    await writeBufferAtomically(this.manifestPath(projectRoot), Buffer.from(serializeProjectManifest(carryProjectManifestForward(existing, manifest)), 'utf8'))
+    const existing = await readJsonFile(this.manifestPath(projectRoot)).catch(() => null)
+    await writeJsonFile(this.manifestPath(projectRoot), carryProjectManifestForward(existing, manifest))
   }
 
   /**
@@ -207,14 +205,13 @@ export class DocumentWorkspace {
   /** 从 directory（含）向上找含项目说明的文件夹。 */
   async findProjectRoot(directory: string): Promise<{ root: string; manifest: ProjectManifest } | null> {
     let current = path.resolve(directory)
-    for (let level = 0; level < MAX_PARENT_LEVELS; level += 1) {
+    for (;;) {
       const manifest = await this.readManifest(current)
       if (manifest) return { root: current, manifest }
       const parent = path.dirname(current)
       if (parent === current) return null
       current = parent
     }
-    return null
   }
 
   // ==================== 容器 ====================

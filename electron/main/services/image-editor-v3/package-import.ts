@@ -75,7 +75,6 @@ export interface RelinkedHenjiImageExternalSource {
   resourceLease: ResourceLease
 }
 
-const MAX_RELINK_SOURCE_BYTES = 8 * 1024 * 1024 * 1024
 
 function abortError(): Error {
   const error = new Error('.hjimg import was cancelled')
@@ -375,7 +374,7 @@ export async function relinkHenjiImageExternalSource(
     const stored = await request.resourceStore.putFile(sourcePath, {
       expectedSha256: request.externalSource.sha256,
       mediaType: request.externalSource.mediaType,
-      maxBytes: expectedBytes ?? MAX_RELINK_SOURCE_BYTES,
+      ...(expectedBytes !== undefined ? { maxBytes: expectedBytes } : {}),
       signal: request.signal,
     })
     if (expectedBytes !== undefined && stored.byteLength !== expectedBytes) {

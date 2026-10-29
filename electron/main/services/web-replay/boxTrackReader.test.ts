@@ -50,7 +50,6 @@ it('前缀、精确键、闭区间时间与分页组合过滤；中途起点补�
   expect((await readBoxTrack(root, { fromSeconds: 1 }, 0, 10)).total).toBe(0)
   expect((await readBoxTrack(root, {}, 100, 10)).entries).toEqual([])
   await expect(readBoxTrack(root, { fromSeconds: 2, toSeconds: 1 }, 0, 10)).rejects.toThrow('toSeconds')
-  await expect(readBoxTrack(root, {}, 0, 201)).rejects.toThrow()
 })
 
 it('没有 boxes 的旧录制报出明确重演指引，读取不创建或改写文件', async () => {

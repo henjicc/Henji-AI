@@ -13,7 +13,7 @@ let dispose: (() => void) | undefined
 beforeEach(installHarnessNativeStorage)
 afterEach(() => { dispose?.(); uninstallHarnessNativeStorage() })
 const context = { exposure: 'assistant' as const, requestId: 'image-batch',
-  permissions: new Set(['image_edit:read', 'image_edit:write']), acceptedDataClasses: new Set(['C0', 'C1'] as const) }
+  acceptedDataClasses: new Set(['C0', 'C1'] as const) }
 
 it.each(['atomic', 'compensatable'] as const)('%s 整批仅保存一次；撤销保存失败不会重复撤销', async (transactionMode) => {
   const document = createImageEditDocumentV3({ width: 8, height: 8, documentId: `batch-${transactionMode}` })

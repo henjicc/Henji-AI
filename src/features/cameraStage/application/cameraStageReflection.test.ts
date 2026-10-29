@@ -70,7 +70,6 @@ describe('三维应用反射注册', () => {
 
     expect(registry.describe({}, {
       exposure: 'assistant',
-      permissions: new Set(['camera_stage:read', 'camera_stage:write']),
       acceptedDataClasses: new Set(['C1']),
     }).entities).toHaveLength(registrations.length)
   })
@@ -132,7 +131,6 @@ describe('三维应用反射注册', () => {
     for (const registration of createCameraStageReflectionRegistrations(() => 7)) registry.register(registration)
     const context = {
       exposure: 'assistant' as const,
-      permissions: new Set(['camera_stage:read', 'camera_stage:write']),
       acceptedDataClasses: new Set(['C1'] as const),
     }
     const parent = { kind: CAMERA_STAGE_ENTITY_TYPES.scene, id: 'project-1' }
@@ -155,7 +153,6 @@ describe('三维应用反射注册', () => {
       ],
       {
         exposure: 'assistant',
-        permissions: new Set(['camera_stage:read', 'camera_stage:write']),
         acceptedDataClasses: new Set(['C1']),
       },
     )

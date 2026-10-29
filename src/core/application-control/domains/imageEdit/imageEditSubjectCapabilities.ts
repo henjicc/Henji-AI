@@ -10,7 +10,7 @@ const bounds = z.object({ x: z.number().finite(), y: z.number().finite(), width:
 export const selectImageEditRegionCapability = defineApplicationCapability({
   id: 'select_image_edit_region', version: 1, domain: 'image_edit', side: 'frontend', title: '选择图片主体', aliases: ['选择区域', '选择主体', '人像选区', '点选主体', '框选主体', 'select region', 'select subject'],
   description: '选择当前像素层的主体或人像，或按未裁剪画面比例坐标点选/框选，可用正负点细化；结果写入可读回、可撤销的独立选区。多主体时返回候选位置与 candidateId，选定后再调用同一能力；候选过期需重新识别。不猜目标、不修改图片像素。首次使用按需下载本地模型，标准色域图片适用。完成后读取 image_edit.selection.region 或观察文档检查边缘，移除可直接消费该选区。',
-  readOnly: false, control: capabilityControl('update', ['image_edit.selection'], { propertyIds: ['image_edit.selection.region'], revisionScopes: ['image_edit'], cancelable: true }), dataClasses: ['C1'], permission: 'image_edit:write', idempotent: false, destructive: false, timeoutMs: 600_000,
+  readOnly: false, control: capabilityControl('update', ['image_edit.selection'], { propertyIds: ['image_edit.selection.region'], revisionScopes: ['image_edit'], cancelable: true }), dataClasses: ['C1'], idempotent: false, destructive: false, timeoutMs: 600_000,
   supportsPreview: false, supportsUndo: true, requiredScopes: ['image_edit'], acceptsRefs: ['image_edit.layer'], producesRefs: ['image_edit.selection'],
   inputSchema: imageEditSubjectSelectionInputSchema,
   outputSchema: capabilityOutputSchema({ ref: selectionRef, status: z.enum(['selected', 'candidates']),

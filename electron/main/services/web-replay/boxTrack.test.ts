@@ -54,8 +54,7 @@ it('过滤自身及祖先隐藏、透明、零尺寸、视口外；保留部分�
   expect(sample().items.map(item => item[0])).toEqual(['partial', 'fade'])
 })
 
-it('无效选择器与超额明确失败，不静默丢轨', () => {
-  expect(() => boxSampleScript(Array.from({ length: 33 }, () => '.ask'))).toThrow('32')
+it('无效选择器明确失败，不静默丢轨', () => {
   expect(() => boxSampleScript([' '])).toThrow('非空')
   expect(() => sample(['['])).toThrow('CSS 选择器无效')
 })

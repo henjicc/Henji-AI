@@ -1,7 +1,11 @@
 import { trashUserFile } from '../recycle/runtime'
 import { imageWorkingCopySchema } from '../../../../src/core/persistence/imageSchemas'
 import crypto from 'node:crypto'
-import { parsePersistenceJson, upgradeStoredFile } from '../persistence/stored-file'
+import { upgradeStoredFile } from '../persistence/stored-file'
+import { persistenceFileContract } from '../../../../src/core/persistence/fileContracts'
+import { PersistenceError } from '../../../../src/core/persistence/migrations'
+import { jsonEqual } from '../../../../src/core/jsonEqual'
+import { jsonChunks, readJsonFile } from '../fs/json-file'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 
@@ -31,7 +35,6 @@ import { rebindImageLayoutDocument } from './layout-rebind'
 import { createImageEditSourceFingerprint } from './raster-export-snapshot'
 
 const DOCUMENT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
-const MAX_DOCUMENT_BYTES = 64 * 1024 * 1024
 const DOCUMENT_LOCK_TIMEOUT_MS = 5_000
 const DOCUMENT_LOCK_STALE_MS = 30_000
 const logger = createMainLogger('main.image_editor_v3.documents')
@@ -81,8 +84,7 @@ export interface ForkDocumentRequest {
 
 export interface DocumentRepositoryDependencies {
   resources?: ContentAddressedResourceStore
-  writeAtomically?: (targetPath: string, content: Uint8Array) => Promise<void>
-  maxDocumentBytes?: number
+  writeAtomically?: typeof writeBufferAtomically
 }
 
 function validateDocumentId(documentId: string): string {
@@ -168,9 +170,9 @@ export function validateImageEditDocumentEnvelope(value: unknown): ImageEditDocu
   return result
 }
 
-function serializeEnvelope(envelope: ImageEditDocumentEnvelope): Buffer {
+function serializeEnvelope(envelope: ImageEditDocumentEnvelope): ReturnType<typeof jsonChunks> {
   const { history: _runtimeHistory, ...persisted } = envelope
-  return Buffer.from(`${JSON.stringify(persisted)}\n`, 'utf8')
+  return jsonChunks(persisted)
 }
 
 export function toDocumentRef(documentId: string): `image-edit-v3:${string}` {
@@ -194,8 +196,7 @@ export function toProjectReference(envelope: ImageEditDocumentEnvelope): ImageEd
 
 export class ImageEditDocumentRepository {
   private readonly executor = new KeyedSerialExecutor()
-  private readonly writeAtomically: (targetPath: string, content: Uint8Array) => Promise<void>
-  private readonly maxDocumentBytes: number
+  private readonly writeAtomically: typeof writeBufferAtomically
   private readonly resources: ContentAddressedResourceStore
   private readonly historyPages: ImageEditHistoryPageStoreV3
 
@@ -206,10 +207,6 @@ export class ImageEditDocumentRepository {
     this.writeAtomically = dependencies.writeAtomically ?? writeBufferAtomically
     this.resources = dependencies.resources ?? new ContentAddressedResourceStore(path.join(rootDir, '.history-resources'))
     this.historyPages = new ImageEditHistoryPageStoreV3(this.resources)
-    this.maxDocumentBytes = dependencies.maxDocumentBytes ?? MAX_DOCUMENT_BYTES
-    if (!Number.isSafeInteger(this.maxDocumentBytes) || this.maxDocumentBytes < 1) {
-      throw new Error('Invalid image edit document byte limit')
-    }
   }
 
   private documentPath(documentId: string): string {
@@ -284,12 +281,16 @@ export class ImageEditDocumentRepository {
       : validateDocumentId(documentIdOrRef)
     const targetPath = this.documentPath(documentId)
     const stats = await fsp.stat(targetPath)
-    if (!stats.isFile() || stats.size > this.maxDocumentBytes) {
-      throw new Error(`Invalid image edit document size: ${stats.size}`)
+    if (!stats.isFile()) throw new Error('Image edit document is not a file')
+    const hash = crypto.createHash('sha256')
+    let raw: unknown
+    try { raw = await readJsonFile(targetPath, chunk => { hash.update(chunk) }) }
+    catch (cause) {
+      if (!(cause instanceof SyntaxError)) throw cause
+      const contract = persistenceFileContract('image-working-copy')
+      throw new PersistenceError('corrupt', contract.id, contract.name, 0, contract.version, [], undefined, { cause })
     }
-    const text = await fsp.readFile(targetPath, 'utf8')
-    const raw = parsePersistenceJson(text, 'image-working-copy')
-    const upgraded = await upgradeStoredFile(targetPath, 'image-working-copy', raw, isRecord(raw) ? raw.formatVersion : 0, text)
+    const upgraded = await upgradeStoredFile(targetPath, 'image-working-copy', raw, isRecord(raw) ? raw.formatVersion : 0, undefined, hash.digest('hex'))
     const envelope = validateImageEditDocumentEnvelope(upgraded)
     if (envelope.documentId !== documentId) throw new Error('Image edit document id does not match file name')
     return envelope
@@ -312,7 +313,7 @@ export class ImageEditDocumentRepository {
         nextRevision,
       )
       if (nextRevision === current.revision
-        && JSON.stringify(document) !== JSON.stringify(current.document)) {
+        && !jsonEqual(document, current.document)) {
         throw new Error('Document content changed without advancing revision')
       }
       const history = normalizePersistedImageEditHistoryV3(
@@ -505,9 +506,6 @@ export class ImageEditDocumentRepository {
       const { history: _runtimeHistory, ...persisted } = envelope
       imageWorkingCopySchema.parse(persisted)
       const serialized = serializeEnvelope(envelope)
-      if (serialized.byteLength > this.maxDocumentBytes) {
-        throw new Error(`Image edit document exceeds ${this.maxDocumentBytes} byte limit`)
-      }
       signal?.throwIfAborted()
       await this.resources.publishReferences(async () => {
         signal?.throwIfAborted()

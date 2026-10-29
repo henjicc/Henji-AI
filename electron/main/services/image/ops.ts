@@ -80,12 +80,12 @@ export async function prepareNodeImageBinary(
 export async function cropImageSource(payload: CropImageSourcePayloadDto): Promise<string> {
   const { bytes } = await resolveSourceBytes(payload.source)
   const sharp = await loadSharp()
-  const meta = await sharp(bytes).metadata()
+  const meta = await sharp(bytes, { limitInputPixels: false }).metadata()
   const swapsAxes = meta.orientation !== undefined && meta.orientation >= 5 && meta.orientation <= 8
   const width = Math.max(1, (swapsAxes ? meta.height : meta.width) ?? 1)
   const height = Math.max(1, (swapsAxes ? meta.width : meta.height) ?? 1)
   const region = resolveCropRegion(payload, width, height)
-  const output = await sharp(bytes).rotate().extract(region).png().toBuffer()
+  const output = await sharp(bytes, { limitInputPixels: false }).rotate().extract(region).png().toBuffer()
   return persistImageBytes(output, 'png')
 }
 
@@ -165,7 +165,7 @@ export async function compressImageSource(
   const sharp = await loadSharp()
   const { bytes: inputBytes } = await resolveSourceBytes(source)
 
-  let pipeline = sharp(inputBytes)
+  let pipeline = sharp(inputBytes, { limitInputPixels: false })
   const meta = await pipeline.metadata()
   const w = meta.width ?? 0
   const h = meta.height ?? 0
@@ -191,13 +191,13 @@ export async function compressImageSource(
 export async function generateImageThumbnailBytes(source: string, maxSize = 200): Promise<Buffer> {
   const sharp = await loadSharp()
   const { bytes } = await resolveSourceBytes(source)
-  return await sharp(bytes).resize(maxSize, maxSize, { fit: 'inside' }).webp({ quality: 80 }).toBuffer()
+  return await sharp(bytes, { limitInputPixels: false }).resize(maxSize, maxSize, { fit: 'inside' }).webp({ quality: 80 }).toBuffer()
 }
 
 export async function readImageInfo(source: string): Promise<ImageInfoResultDto> {
   const { bytes, extension } = await resolveSourceBytes(source)
   const sharp = await loadSharp()
-  const meta = await sharp(bytes).metadata()
+  const meta = await sharp(bytes, { limitInputPixels: false }).metadata()
   const localPath = isLocalSource(source) ? normalizeLocalSource(source) : null
   const stat = localPath && fs.existsSync(localPath) ? fs.statSync(localPath) : null
   return {
@@ -220,6 +220,7 @@ export async function mergeStoryboardImages(payload: MergeStoryboardImagesPayloa
   const layout = await resolveMergeLayout(payload)
   const sharp = await loadSharp()
   const base = sharp({
+    limitInputPixels: false,
     create: {
       width: layout.canvasWidth,
       height: layout.canvasHeight,
@@ -252,7 +253,7 @@ async function splitBuffer(bytes: Buffer, rows: number, cols: number, lineThickn
   const safeCols = Math.max(1, Math.floor(cols))
   const safeLine = Math.max(0, Math.floor(lineThickness))
   const sharp = await loadSharp()
-  const meta = await sharp(bytes).metadata()
+  const meta = await sharp(bytes, { limitInputPixels: false }).metadata()
   const width = Math.max(1, meta.width ?? 1)
   const height = Math.max(1, meta.height ?? 1)
   const line = resolveLineThickness(width, height, safeRows, safeCols, safeLine)
@@ -263,7 +264,7 @@ async function splitBuffer(bytes: Buffer, rows: number, cols: number, lineThickn
   const outputs: Buffer[] = []
   for (let row = 0, y = 0; row < safeRows; row += 1) {
     for (let col = 0, x = 0; col < safeCols; col += 1) {
-      outputs.push(await sharp(bytes).extract({ left: x, top: y, width: colSizes[col], height: rowSizes[row] }).png().toBuffer())
+      outputs.push(await sharp(bytes, { limitInputPixels: false }).extract({ left: x, top: y, width: colSizes[col], height: rowSizes[row] }).png().toBuffer())
       x += colSizes[col] + line
     }
     y += rowSizes[row] + line
@@ -273,7 +274,7 @@ async function splitBuffer(bytes: Buffer, rows: number, cols: number, lineThickn
 
 async function prepareFromBytes(bytes: Buffer, extension: string, maxPreviewDimension: number): Promise<PrepareNodeImageSourceResultDto> {
   const sharp = await loadSharp()
-  const meta = await sharp(bytes).metadata()
+  const meta = await sharp(bytes, { limitInputPixels: false }).metadata()
   const width = Math.max(1, meta.width ?? 1)
   const height = Math.max(1, meta.height ?? 1)
   const persisted = [await persistImageBytesTracked(bytes, extension)]
@@ -288,7 +289,7 @@ async function prepareFromBytes(bytes: Buffer, extension: string, maxPreviewDime
         createdFilePaths: persisted.filter((entry) => entry.created).map((entry) => entry.filePath),
       }
     }
-    const preview = await sharp(bytes).resize(safeMax, safeMax, { fit: 'inside' }).jpeg({ quality: 86 }).toBuffer()
+    const preview = await sharp(bytes, { limitInputPixels: false }).resize(safeMax, safeMax, { fit: 'inside' }).jpeg({ quality: 86 }).toBuffer()
     persisted.push(await persistImageBytesTracked(preview, 'jpg'))
     return {
       imagePath,
@@ -397,7 +398,7 @@ async function resolveMergeLayout(payload: MergeStoryboardImagesPayloadDto): Pro
   if (!firstSource) throw new Error('没有可合并的分镜图片')
   const { bytes } = await resolveSourceBytes(firstSource)
   const sharp = await loadSharp()
-  const meta = await sharp(bytes).metadata()
+  const meta = await sharp(bytes, { limitInputPixels: false }).metadata()
   let cellWidth = Math.max(64, meta.width ?? 64)
   let cellHeight = Math.max(64, meta.height ?? 64)
   const gap = Math.max(0, Math.floor(payload.cellGap))
@@ -430,14 +431,14 @@ async function buildFrameComposites(payload: MergeStoryboardImagesPayloadDto, la
     if (!source) continue
     try {
       const { bytes } = await resolveSourceBytes(source)
-      const input = await sharp(bytes)
+      const input = await sharp(bytes, { limitInputPixels: false })
         .resize(layout.cellWidth, layout.cellHeight, {
           fit: payload.imageFit === 'contain' ? 'contain' : 'cover',
           background: payload.backgroundColor || DEFAULT_BACKGROUND_COLOR,
         })
         .png()
         .toBuffer()
-      overlays.push({ input, left, top })
+      overlays.push({ input, limitInputPixels: false, left, top })
     } catch {
       // Keep placeholder background for failed frames.
     }
@@ -475,7 +476,7 @@ function buildTextOverlaySvg(payload: MergeStoryboardImagesPayloadDto, layout: M
     }
   }
   const svg = `<svg width="${layout.canvasWidth}" height="${layout.canvasHeight}" xmlns="http://www.w3.org/2000/svg">${chunks.join('')}</svg>`
-  return [{ input: Buffer.from(svg), left: 0, top: 0 }]
+  return [{ input: Buffer.from(svg), limitInputPixels: false, left: 0, top: 0 }]
 }
 
 function buildStoryboardMetadata(payload: MergeStoryboardImagesPayloadDto, frameCount: number): StoryboardImageMetadataDto {

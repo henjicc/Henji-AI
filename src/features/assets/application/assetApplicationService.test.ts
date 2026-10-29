@@ -68,7 +68,7 @@ describe('asset application service', () => {
     const engine = new ApplicationControlExecutionEngine(registry)
     const executor = new AssetMutationExecutor({ readRevision: () => revision, bumpRevision: () => { revision++ } })
     engine.registerMutationExecutor(executor)
-    const context: ApplicationExecutionContext = { requestId: 'asset-location', exposure: 'assistant', permissions: new Set(['assets:read', 'assets:write']), acceptedDataClasses: new Set(['C0', 'C1']) }
+    const context: ApplicationExecutionContext = { requestId: 'asset-location', exposure: 'assistant', acceptedDataClasses: new Set(['C0', 'C1']) }
     const descriptor = registry.describe({ entityTypes: ['asset'] }, context).properties.find(item => item.id === 'asset.location')
     expect(descriptor).toMatchObject({ requiredPermissions: { write: ['assets:write'] } })
     expect(executor.propertyOperations.get('asset.location')).toEqual(new Set(['set']))

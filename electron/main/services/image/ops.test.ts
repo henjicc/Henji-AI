@@ -11,6 +11,7 @@ import {
 } from './ops'
 import { loadSharp } from './sharp-loader'
 import { removeTemporaryDirectorySync } from '../../../../src/tests/removeTemporaryDirectory'
+import { createGigapixelTiff } from '../../../../src/tests/gigapixelTiff'
 
 function dataUrl(mime: string, bytes: Buffer): string {
   return `data:${mime};base64,${bytes.toString('base64')}`
@@ -23,6 +24,10 @@ afterEach(() => {
 })
 
 describe('readImageInfo', () => {
+  it('读取十亿像素瓦片图片的真实尺寸，不受解码器默认像素预算拒绝', async () => {
+    await expect(readImageInfo(dataUrl('image/tiff', createGigapixelTiff()))).resolves.toMatchObject({ width: 32768, height: 32768 })
+  })
+
   it('读取透明通道并在没有 EXIF 方向时返回 null', async () => {
     const sharp = await loadSharp()
     const bytes = await sharp({

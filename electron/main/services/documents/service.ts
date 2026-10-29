@@ -299,7 +299,7 @@ export class DocumentService implements DocumentsPlatform {
     const known = new Set(workspace.catalog.listDocuments({}).map(row => row.id))
     await projects.registerExternalDocumentFolder(filePath, (fileName) => Boolean(kinds.forFileName(fileName)))
     await scanner.refresh()
-    const row = workspace.catalog.getDocumentByPath(path.resolve(filePath))
+    const row = scanner.findIndexedDocument(filePath)
     const found = row ? (await this.listDocuments({ includeDrafts: true, includeMissing: false })).find((document) => document.id === row.id) : undefined
     if (!found) throw new DocumentLocationError('没能识别这个文档文件，它可能已损坏或来自更新版本的痕迹AI。')
       const project = found.container.kind === 'project' ? workspace.catalog.getProject(found.container.projectId) : undefined
@@ -307,7 +307,7 @@ export class DocumentService implements DocumentsPlatform {
     for (const document of workspace.catalog.listDocuments({})) {
         if (known.has(document.id)) continue
         const inImportedProject = projectForeign && document.projectId === project!.id
-        if (!inImportedProject && path.dirname(document.path) !== path.dirname(path.resolve(filePath))) continue
+        if (!inImportedProject && path.dirname(document.path) !== path.dirname(found.path)) continue
         await this.parts.repository.markForeign({ id: document.id, path: document.path }, inImportedProject ? projectForeign : { id: document.id, sourceName: document.name, sourceType: 'document_package' })
     }
     return found

@@ -13,10 +13,10 @@ export function parsePersistenceJson(text: string, id: string): unknown {
 }
 
 /** Keep the existing domain validator; this adapter owns only version order and original-file backup. */
-export async function upgradeStoredFile(filePath: string, id: string, raw: unknown, version: unknown, originalText?: string): Promise<unknown> {
+export async function upgradeStoredFile(filePath: string, id: string, raw: unknown, version: unknown, originalText?: string, expectedFingerprint?: string): Promise<unknown> {
   const contract = persistenceFileContract(id)
   const from = typeof version === 'number' ? version : 0
-  const backup = await backupBeforePersistenceUpgrade(filePath, contract, from, originalText)
+  const backup = await backupBeforePersistenceUpgrade(filePath, contract, from, originalText, false, expectedFingerprint)
   return from < contract.version ? upgradePersistenceContent(contract, raw, from, backup) : migratePersistenceContent(contract, raw, from, backup)
 }
 

@@ -77,7 +77,7 @@ it('批量模板删除的撤销中途失败后，只重试尚未恢复的回收�
       items: ['甲', '乙'].map(name => ({ properties: { 'video_edit.template.name': name, 'video_edit.template.body': body } })) }] }) as { resultRefs: Array<{ kind: string; id: string }> }
     const executor = new VideoEditStyleCollectionExecutor('video_edit.template')
     const removed = await executor.apply({ kind: 'collection', parent: library, entityType: 'video_edit.template', expectedRevisions: {}, operation: { kind: 'remove', targets: created.resultRefs } },
-      { requestId: 'remove-templates', exposure: 'assistant', permissions: new Set(), acceptedDataClasses: new Set() })
+      { requestId: 'remove-templates', exposure: 'assistant', acceptedDataClasses: new Set() })
     const settings = getPlatform().settings, restore = settings.restoreDeleted.bind(settings)
     const spy = vi.spyOn(settings, 'restoreDeleted').mockImplementationOnce(restore).mockRejectedValueOnce(new Error('文件占用'))
     try {

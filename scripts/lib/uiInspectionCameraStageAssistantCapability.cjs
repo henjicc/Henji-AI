@@ -237,7 +237,7 @@ async function readCanvasNodes(page, projectId) {
 async function setupCameraStageAssistantCapability(page, context, inspection = {}) {
   const { seedAndOpenCanvasPanoramaProject, settlePage, reopenCanvasProjectFromStorage } = context
   const { projectId: canvasProjectId } = await seedAndOpenCanvasPanoramaProject(page)
-  // 取消视频任务是破坏性操作，需删除授权并提供原读取凭据（与 mcp-camera-render 同一授权档）。
+  // 取消视频任务沿正式任务入口执行，并保留原任务身份。
   const identity = await authorizeMcpConnection(page, { name: `助手3D后台输出验收-${randomUUID().slice(0, 8)}` })
   const client = await connectMcpClient(identity.config, 'Henji camera stage capability Reality')
   try {

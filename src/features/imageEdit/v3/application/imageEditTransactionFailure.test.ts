@@ -11,7 +11,7 @@ const disposals: Array<() => void> = []
 beforeEach(() => { installHarnessNativeStorage() })
 afterEach(() => { disposals.splice(0).reverse().forEach((dispose) => dispose()); uninstallHarnessNativeStorage() })
 const context = { exposure: 'assistant' as const, requestId: 'actual-partial-failure',
-  permissions: new Set(['image_edit:read', 'image_edit:write', 'canvas:write']), acceptedDataClasses: new Set(['C0', 'C1'] as const) }
+  acceptedDataClasses: new Set(['C0', 'C1'] as const) }
 
 it.each(['compensatable', 'non_reversible'] as const)('%s 部分业务修改在最终保存成功后保留真实两域事实且禁止重放', async (transactionMode) => {
   const f = await createAttachedImageEditPersistenceFixture(); disposals.push(f.dispose)

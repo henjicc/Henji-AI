@@ -28,14 +28,8 @@ function executionContext(context: CapabilityExecutionContext) {
     if (!context.requestId) throw new Error('INVALID_INPUT:宿主必须提供操作请求标识。')
     return applicationCallerAccess(context.callerGrant, context.requestId, context.signal)
   }
-  const registry = getApplicationReflectionRegistry()
   return {
     exposure: 'assistant' as const,
-    permissions: new Set([
-      'application:read',
-      'application:write',
-      ...registry.listDeclaredPropertyPermissions(),
-    ]),
     acceptedDataClasses: new Set(['C0', 'C1'] as const),
     requestId: context.requestId ?? `application-reflection-${Date.now()}`,
     signal: context.signal,

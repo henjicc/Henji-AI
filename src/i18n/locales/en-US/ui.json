@@ -26,7 +26,7 @@
     "directorGoal": "Tutorial goal",
     "directorGoalPlaceholder": "For example: open settings and switch themes",
     "directorPlan": "Plan with assistant",
-    "directorPrompt": "Plan a directed tutorial for this goal using current application state: {{goal}}. Use plan_screen_recording_director to save bounded operations, narration and expected pictures, choose a configured speech model and voice, then open the returned recording for review. Do not confirm or start automatically.",
+    "directorPrompt": "Plan a directed tutorial for this goal using current application state: {{goal}}. Use plan_screen_recording_director to save bounded operations, narration and expected pictures, choose a configured speech model and voice, then open the returned recording for review.",
     "directorBusy": "Creating tutorial…",
     "directorSave": "Save changes",
     "directorConfirm": "Confirm plan",
@@ -35,8 +35,6 @@
     "directorNarration": "Narration",
     "directorVoice": "Speech model and voice",
     "directorNoChanges": "No unsaved changes",
-    "directorSaveFirst": "Save changes before confirming",
-    "directorConfirmed": "Plan confirmed",
     "directorConfirmFirst": "Confirm the plan first; view submitted movies in the editor",
     "scriptDone": "Operation completed",
     "scriptTitle": "Operation script",
@@ -413,7 +411,6 @@
     "myPresets": "My presets ({{count}})",
     "empty": "No presets yet. Save one quickly!",
     "deleteTitle": "Delete preset",
-    "confirmDelete": "Delete this preset?",
     "alerts": {
       "loadFailed": "Could not read presets. Your existing presets are unchanged. Check access to the data folder, then restart and try again.",
       "saveFailed": "Could not save the preset. Existing presets were not overwritten. Check access to the data folder and try again.",
@@ -484,7 +481,6 @@
     "disabled": "Disabled",
     "enable": "Enable",
     "disable": "Disable",
-    "confirmDelete": "Are you sure you want to delete this custom model?",
     "empty": "No custom models added yet",
     "loading": "Loading...",
     "addFailed": "Failed to add",
@@ -590,7 +586,6 @@
     "categories": "Asset libraries",
     "createLibrary": "New asset library",
     "libraryName": "Asset library name",
-    "confirmDeleteLibrary": "Click again to confirm deletion",
     "empty": "Your asset library is empty",
     "noResults": "No matching assets",
     "error": "Failed to load assets",
@@ -632,7 +627,6 @@
     "batchLibraryAdd": "Add to library",
     "batchLibraryRemove": "Remove from library",
     "batchDelete": "Delete selected assets",
-    "batchConfirmDelete": "Click again to confirm",
     "batchNoSelection": "Select at least one asset",
     "batchPartialFailure": "{{count}} items failed. Please retry.",
     "batchEmptyMenu": "Manage multiple assets",
@@ -731,7 +725,6 @@
       "title": "Clear history",
       "subtitle": "Choose what to clear",
       "failedOnly": "Delete failed records only",
-      "confirmDelete": "Click again to confirm deletion",
       "deleteAll": "Clear all history"
     },
     "toast": {
@@ -1679,7 +1672,6 @@
       "checking": "Checking…"
     },
     "empty": "No custom models yet",
-    "confirmDelete": "Are you sure you want to delete this model?",
     "alerts": {
       "deleteFailed": {
         "title": "Couldn't delete the model",

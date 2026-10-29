@@ -41,10 +41,8 @@ it.each([false, true])('boxSelectors 通过正常视频/textOnly=%s 重演入口
   expect(boundary.trust.mock.invocationCallOrder[0]).toBeLessThan(boundary.render.mock.invocationCallOrder[0])
 })
 
-it('正式输入拒绝超过 32 个选择器、倒序时间范围与超额分页', () => {
-  expect(renderWebAppReplayCapability.inputSchema.safeParse({ recordingRef, boxSelectors: Array(33).fill('.ask') }).success).toBe(false)
+it('正式输入拒绝倒序时间范围', () => {
   expect(readWebAppRecordingCapability.inputSchema.safeParse({ recordingRef, track: 'boxes', fromSeconds: 3, toSeconds: 1 }).success).toBe(false)
-  expect(readWebAppRecordingCapability.inputSchema.safeParse({ recordingRef, track: 'boxes', limit: 201 }).success).toBe(false)
 })
 
 it('导演稿经正式能力 schema 补上默认值后到平台，版本信息原样交回', async () => {

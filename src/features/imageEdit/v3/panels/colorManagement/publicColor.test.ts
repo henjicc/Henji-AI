@@ -14,7 +14,7 @@ vi.mock('../../smartContent/service', async () => {
   const actual = await vi.importActual<typeof import('../../smartContent/service')>('../../smartContent/service');
   return { ...actual, prepareSmartContentAppearanceV3: async () => ({ source: { kind: 'empty' }, tiles: {}, width: 4, height: 3, bytes: {}, release: async () => undefined }) };
 });
-const access: ApplicationControlAccessContext = { exposure: 'assistant', permissions: new Set(['image_edit:read', 'image_edit:write']), acceptedDataClasses: new Set(['C0', 'C1']) };
+const access: ApplicationControlAccessContext = { exposure: 'assistant', acceptedDataClasses: new Set(['C0', 'C1']) };
 let dispose: (() => void) | undefined;
 beforeEach(installHarnessNativeStorage);
 afterEach(() => { dispose?.(); uninstallHarnessNativeStorage(); });

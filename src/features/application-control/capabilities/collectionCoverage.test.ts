@@ -21,7 +21,6 @@ import {
 
 const accessContext = {
   exposure: 'assistant' as const,
-  permissions: new Set<string>(),
   acceptedDataClasses: new Set(['C0', 'C1', 'C2', 'C3'] as const),
 }
 
@@ -86,17 +85,6 @@ describe('集合写入覆盖一致', () => {
     ).toEqual([])
   })
 
-  it('通用适配器所需领域权限完全来自反射属性声明', () => {
-    const registry = getApplicationReflectionRegistry()
-    const declared = registry.describe({}, {
-      ...accessContext,
-      permissions: new Set(registry.listDeclaredPropertyPermissions()),
-    }).properties.flatMap((property) => [
-      ...property.requiredPermissions.read,
-      ...property.requiredPermissions.write,
-    ])
-    expect(registry.listDeclaredPropertyPermissions()).toEqual([...new Set(declared)].sort())
-  })
 
   /**
    * 覆盖率门禁：**每个实体要么能写，要么写明为什么不能写**。

@@ -27,7 +27,6 @@ export interface ReadFastSourceProxyOptions {
   sourcePath: string
   metadata: SourceImageMetadata
   maxDimension: number
-  maximumInputPixels: number
   sharpLoader: typeof loadSharp
   cache: DerivedDiskCache | null
   pyramid: ManagedSourcePyramid | null
@@ -131,7 +130,7 @@ async function decodeRawBaseLevelFromSource(
   level: SourcePyramidLevel,
 ): Promise<Buffer> {
   let pipeline = sharp(options.sourcePath, {
-    limitInputPixels: options.maximumInputPixels,
+    limitInputPixels: false,
     sequentialRead: true,
     failOn: 'warning',
   }).autoOrient().resize({
@@ -228,7 +227,7 @@ async function encodeProxyFromSource(
   sharp: Awaited<ReturnType<typeof loadSharp>>,
 ) {
   let pipeline = sharp(options.sourcePath, {
-    limitInputPixels: options.maximumInputPixels,
+    limitInputPixels: false,
     sequentialRead: true,
     failOn: 'warning',
   }).autoOrient().resize({

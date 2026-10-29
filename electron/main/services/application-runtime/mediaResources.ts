@@ -88,7 +88,7 @@ export async function readApplicationMediaResource(input: {
         let edge = parsed.maxEdge
         let quality = 95
         while (edge >= 1) {
-          const { data, info } = await sharp(real, { animated: false }).rotate().resize({ width: edge, height: edge, fit: 'inside', withoutEnlargement: true }).jpeg({ quality }).toBuffer({ resolveWithObject: true })
+          const { data, info } = await sharp(real, { limitInputPixels: false, animated: false }).rotate().resize({ width: edge, height: edge, fit: 'inside', withoutEnlargement: true }).jpeg({ quality }).toBuffer({ resolveWithObject: true })
           if (data.length <= parsed.maxBytes) {
             logger.debug('关联图片预览读取完成', { event: 'mcp.media.read.completed', context: { kind: parsed.ref.kind, byteLength: data.length } })
             return { mode: 'image', mimeType: 'image/jpeg', base64: data.toString('base64'), offset: 0, byteLength: data.length, totalBytes: stat.size, eof: true, width: info.width, height: info.height }

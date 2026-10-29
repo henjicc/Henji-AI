@@ -45,7 +45,7 @@ export interface SoundLibraryServiceDeps {
   readFolders(): Promise<SoundLibraryFolderRecord[]>
   writeFolders(folders: SoundLibraryFolderRecord[]): Promise<void>
   chooseFolder(): Promise<string | null>
-  /** 直接给出的文件夹：登记前加入媒体授权目录，返回规范化后的路径。 */
+  /** 直接给出的文件夹：返回规范化后的路径。 */
   allowFolder(folderPath: string): string
   analyze(files: string[], clap: SoundClapModels | null, progress: (done: number, total: number) => void): Promise<SoundAnalysisResult>
   embedText(clap: SoundClapModels, texts: string[]): Promise<number[][]>

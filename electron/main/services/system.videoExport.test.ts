@@ -82,7 +82,7 @@ it('有界文件读取完整保留允许字节，拒绝过大文件及非法预�
   const target = path.join(directory, 'asset.henji-code'); await fs.writeFile(target, new Uint8Array([1, 2, 3]))
   expect([...await readFileBytes(target, { maxBytes: 3 })]).toEqual([1, 2, 3])
   expect([...await readFileBytes(target)]).toEqual([1, 2, 3])
-  for (const maxBytes of [0, -1, 1.5, 16 * 1024 * 1024 + 1, 2]) await expect(readFileBytes(target, { maxBytes })).rejects.toThrow()
+  for (const maxBytes of [0, -1, 1.5, 2]) await expect(readFileBytes(target, { maxBytes })).rejects.toThrow()
 })
 it('有界读取期间文件膨胀仍拒绝，关闭原句柄且不截断原文件', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-code-read-grow-')); directories.push(directory)

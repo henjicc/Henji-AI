@@ -7,10 +7,12 @@ import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
+import { jsonChunks, readJsonStream, writeJsonFile } from '../fs/json-file'
+import { isMissingTraversalEntry, isUnavailableTraversalEntry, resolveLinkedPath } from '../fs/traversal'
 import type { z } from 'zod'
 import { PACKAGE_FORMAT, PACKAGE_VERSION, packageManifestSchema } from '../../../../src/core/persistence/storedSchemas'
 
-import { buildDocumentEnvelope, carryDocumentEnvelopeForward, serializeDocumentEnvelope, type DocumentEnvelope } from '../../../../src/core/documents/envelope'
+import { buildDocumentEnvelope, carryDocumentEnvelopeForward, type DocumentEnvelope } from '../../../../src/core/documents/envelope'
 import { restoreForwardFields } from '../../../../src/core/persistence/forwardCompat'
 import { documentNameForKind, type DocumentKindRegistry } from '../../../../src/core/documents/kinds'
 import { entryNameKey, keepBothEntryName, sameEntryName } from '../../../../src/core/documents/naming'
@@ -26,10 +28,10 @@ import {
 } from '../../../../src/core/documents/types'
 import { createLocationCodec } from '../../../../src/core/storage/locationCodec'
 import { isPathInside, isSafeRelativeSegment, parseAbsolutePath, pathKey, relativeSegments } from '../../../../src/core/storage/pathSyntax'
-import { replaceFileAtomically, writeBufferAtomically } from '../fs/atomic-file'
+import { replaceFileAtomically } from '../fs/atomic-file'
 import { moveDirectoryNoOverwrite, EntryExistsError } from '../fs/no-overwrite'
 import type { MainLogger } from '../logging/main-logger'
-import { isSymbolicLinkEntry, iterateEntries, openEntryReadStream, openZip, readEntryBytes } from '../zip-archive'
+import { isSymbolicLinkEntry, iterateEntries, openEntryReadStream, openZip } from '../zip-archive'
 import { decodeDocumentContent, loadDocumentFile, type LoadedDocumentFile } from './document-file'
 import { DocumentFormatError, DocumentLocationError, ProjectNotFoundError } from './errors'
 import type { DocumentIndexScanner } from './index-scanner'
@@ -59,16 +61,12 @@ import type { DocumentWorkspace, ResolvedContainer } from './workspace'
  *   ID 已被占用时换新）。
  * - 项目包：解到“项目”文件夹里点开头的暂存文件夹（扫描跳过），项目与文档 ID 已被占用的换新
  *   （文档间的 `{ docId, path }` 引用与主剪辑一并改写），再以不覆盖的方式改名到位（重名加序号）。
- * 不信任包内容：条目名逐段校验（不许 `..`、绝对路径、盘符、符号链接），总大小与条目数有上限，
+ * 不信任包内容：条目名逐段校验（不许 `..`、绝对路径、盘符、符号链接），
  * 包说明与文档内容按 schema 校验，失败时清掉暂存、不留半个项目。
  */
 
 const MANIFEST_ENTRY = 'henji-package.json'
 const CONTENT_PREFIX = 'content/'
-const MAX_MANIFEST_BYTES = 4 * 1024 * 1024
-const MAX_ENTRIES = 100_000
-const MAX_TOTAL_BYTES = 64 * 1024 * 1024 * 1024
-const MAX_WALK_DEPTH = 16
 /** 导出时跳过的文件：写到一半的暂存文件与系统生成的缩略图缓存。 */
 const SKIPPED_FILE = /(?:\.tmp|\.partial|\.lock)$|^(?:thumbs\.db|desktop\.ini|\.ds_store)$/i
 
@@ -93,7 +91,7 @@ interface PackageEntry {
   name: string
   /** 磁盘上的来源文件；与 bytes 二选一。 */
   source?: string
-  bytes?: Buffer
+  bytes?: ReturnType<typeof jsonChunks>
 }
 
 /** 包里的条目名集合（比较不分大小写，与 Windows 文件系统一致），用于给收集进来的素材挑不重名的位置。 */
@@ -140,7 +138,9 @@ export class DocumentPackageService {
         entries.unshift({ name: documentEntry, bytes: packed.bytes })
       } else if (file.kind.storage === 'folder') {
         // 文件夹类型（`.hjweb`）：文件夹里的文件原样放进包，导入时还原成同名文件夹。
-        for (const relative of await this.walk(file.path)) entries.push({ name: `${documentEntry}/${relative}`, source: path.join(file.path, ...relative.split('/')) })
+        const walked = await this.walk(file.path)
+        missingPaths.push(...walked.missingPaths)
+        for (const relative of walked.files) entries.push({ name: `${documentEntry}/${relative}`, source: path.join(file.path, ...relative.split('/')) })
       } else {
         entries.unshift({ name: documentEntry, source: file.path })
       }
@@ -176,12 +176,11 @@ export class DocumentPackageService {
       const codeSnapshot = new GitCodePackageSnapshot(this.options.stagingDirectory, container.root, true)
       try {
       await codeSnapshot.initialize()
-      const files = await this.walk(container.root)
+      const { files, missingPaths } = await this.walk(container.root)
       const names = new EntryNames()
       for (const relative of files) names.add(relative)
       const entries: PackageEntry[] = []
       const documents: PackageManifest['documents'] = []
-      const missingPaths: string[] = []
       for (const relative of files) {
         const absolute = path.join(container.root, ...relative.split('/'))
         const kind = this.options.kinds.forFileName(path.basename(absolute))
@@ -236,7 +235,7 @@ export class DocumentPackageService {
     container: ResolvedContainer,
     names: EntryNames,
     options: { includeContainerFiles: boolean; codeSnapshot: GitCodePackageSnapshot },
-  ): Promise<{ bytes: Buffer; entries: PackageEntry[]; missingPaths: string[] }> {
+  ): Promise<{ bytes: ReturnType<typeof jsonChunks>; entries: PackageEntry[]; missingPaths: string[] }> {
     const style = this.workspace.style
     const decoded = decodeDocumentContent(file, container, this.workspace)
     const root = parseAbsolutePath(style, container.root)
@@ -312,7 +311,7 @@ export class DocumentPackageService {
     const rewritten = rewriteContentPaths(decoded.content, mapping, style)
     const content = forward ? restoreForwardFields(rewritten, persistenceForwardFields(decoded.content)) : rewritten
     const encoded = createLocationCodec(this.workspace.locationContext(container)).encodeContent(content)
-    const bytes = Buffer.from(serializeDocumentEnvelope(carryDocumentEnvelopeForward(envelope, buildDocumentEnvelope({
+    const bytes = jsonChunks(carryDocumentEnvelopeForward(envelope, buildDocumentEnvelope({
       kind: envelope.kind,
       kindVersion: forward ? envelope.kindVersion : file.kind.version,
       kindMinReaderVersion: forward ? envelope.kindMinReaderVersion : file.kind.minReaderVersion ?? file.kind.version,
@@ -323,29 +322,52 @@ export class DocumentPackageService {
       revision: envelope.revision,
       draft: envelope.draft === true,
       content: encoded.content,
-    }))), 'utf8')
+    })))
     return { bytes, entries, missingPaths }
   }
 
-  /** 项目文件夹里的全部文件（相对位置，正斜杠）；跳过符号链接、嵌套项目与暂存文件。 */
-  private async walk(root: string): Promise<string[]> {
+  /** 项目文件夹里的全部文件（相对位置，正斜杠）；沿当前路径检查真实目录，保留目录别名对应的引用，跳过嵌套项目与暂存文件。 */
+  private async walk(root: string): Promise<{ files: string[]; missingPaths: string[] }> {
     const result: string[] = []
-    const visit = async (directory: string, prefix: string, depth: number): Promise<void> => {
-      if (depth > MAX_WALK_DEPTH) return
+    const missingPaths: string[] = []
+    const ancestors = new Set<string>()
+    const visit = async (directory: string, prefix: string, real: string): Promise<void> => {
+      if (ancestors.has(real)) return
+      ancestors.add(real)
       for (const entry of await fsp.readdir(directory, { withFileTypes: true })) {
-        if (entry.isSymbolicLink() || SKIPPED_FILE.test(entry.name)) continue
+        if (SKIPPED_FILE.test(entry.name)) continue
         const relative = prefix ? `${prefix}/${entry.name}` : entry.name
         const absolute = path.join(directory, entry.name)
-        if (entry.isDirectory()) {
-          if (depth > 0 && entry.name !== INTERNAL_FOLDER_NAME && await this.workspace.readManifest(absolute).catch(() => null)) continue
-          await visit(absolute, relative, depth + 1)
-        } else if (entry.isFile()) {
-          result.push(relative)
+        try {
+          let physicalPath = path.join(real, entry.name)
+          if (entry.isSymbolicLink()) {
+            try { physicalPath = await fsp.realpath(absolute) }
+            catch (error) {
+              missingPaths.push(absolute)
+              this.options.logger.warn('跳过无法解析的打包链接', { event: 'documents.package.entry_skipped', context: { path: absolute }, error })
+              continue
+            }
+          }
+          const info = entry.isSymbolicLink() ? await fsp.stat(absolute) : entry
+          if (info.isDirectory()) {
+            if (prefix && entry.name !== INTERNAL_FOLDER_NAME && await this.workspace.readManifest(absolute).catch((error: unknown) => {
+              if (isUnavailableTraversalEntry(error) || isMissingTraversalEntry(error)) throw error
+              return null
+            })) continue
+            await visit(absolute, relative, physicalPath)
+          } else if (info.isFile()) {
+            result.push(relative)
+          }
+        } catch (error) {
+          if (!isUnavailableTraversalEntry(error) && !isMissingTraversalEntry(error)) throw error
+          missingPaths.push(absolute)
+          this.options.logger.warn('跳过无法访问的打包项', { event: 'documents.package.entry_skipped', context: { path: absolute }, error })
         }
       }
+      ancestors.delete(real)
     }
-    await visit(root, '', 0)
-    return result.sort()
+    await visit(root, '', await resolveLinkedPath(root))
+    return { files: result.sort(), missingPaths }
   }
 
   private folderNames(container: ResolvedContainer): PackageManifest['folders'] {
@@ -379,7 +401,7 @@ export class DocumentPackageService {
         archive.on('error', reject)
         archive.on('warning', reject)
         archive.pipe(output)
-        archive.append(`${JSON.stringify(manifest, null, 2)}\n`, { name: MANIFEST_ENTRY })
+        archive.append(jsonChunks(manifest), { name: MANIFEST_ENTRY })
         for (const entry of entries) {
           const name = `${CONTENT_PREFIX}${entry.name}`
           // 媒体本身已压缩，存储即可；文档 JSON 压缩
@@ -454,8 +476,9 @@ export class DocumentPackageService {
       projectManifest = { ...projectManifest, foreign: { id: projectManifest.id, sourceName: manifest.name, sourceType: 'project' } }
       // 文档 ID：已被占用或包里重复的换新，再改写文档之间的 { docId, path } 引用与主剪辑
       const idMap = new Map<string, string>()
+      const pathIds = new Map<string, string>()
       const seen = new Set<string>()
-      const documents: Array<{ path: string; file: LoadedDocumentFile }> = []
+      const documents: Array<{ path: string; file: LoadedDocumentFile; nextId: string }> = []
       const unreadable: string[] = []
       const stagedContainer = this.workspace.containerOfProject(staging, projectManifest)
       const documentPaths = new Set(manifest.documents.map(entry => entry.path))
@@ -477,22 +500,28 @@ export class DocumentPackageService {
           continue
         }
         const id = file.header.id
-        if (seen.has(id) || catalog.getDocument(id)) idMap.set(id, this.workspace.randomId())
+        const nextId = seen.has(id) || catalog.getDocument(id) ? this.workspace.randomId() : id
+        // 目录别名解包后是独立副本，按包内路径保留各自身份，文档引用优先跟随路径。
+        if (!idMap.has(id)) idMap.set(id, nextId)
+        pathIds.set(pathKey(this.workspace.style, absolute) ?? absolute, nextId)
         seen.add(id)
-        documents.push({ path: absolute, file })
+        documents.push({ path: absolute, file, nextId })
       }
       if (unreadable.length) throw new DocumentFormatError(`项目包未导入，以下文档无法读取：${unreadable.join('、')}。原包已保留，请修复这些文档后重试。`)
-      for (const { path: filePath, file } of documents) {
-        const nextId = idMap.get(file.header.id)
+      const codec = createLocationCodec(this.workspace.locationContext(stagedContainer))
+      for (const { path: filePath, file, nextId } of documents) {
         if (file.envelope) {
           const importedEnvelope = file.kind.id === 'video_edit' ? markForeignVideoDocument(file, projectManifest.foreign!, stagedContainer, this.workspace) : file.envelope
           const imported = importedEnvelope.content
-          const linked = idMap.size ? remapDocumentLinks(imported, idMap) : imported
-          const content = nextId && file.kind.id === 'video_edit' ? await rehomeVideoMotionResources(linked, file.header.id, nextId, staging) : linked
-          if (!nextId && content === file.envelope.content) continue
+          const linked = remapDocumentLinks(imported, idMap, location => {
+            const absolute = codec.decode(location).value
+            return pathIds.get(pathKey(this.workspace.style, absolute) ?? absolute)
+          })
+          const content = nextId !== file.header.id && file.kind.id === 'video_edit' ? await rehomeVideoMotionResources(linked, file.header.id, nextId, staging) : linked
+          if (nextId === file.header.id && content === file.envelope.content) continue
           const envelope = carryDocumentEnvelopeForward(importedEnvelope, buildDocumentEnvelope({ ...importedEnvelope, draft: importedEnvelope.draft === true, id: nextId ?? importedEnvelope.id, content }))
-          await writeBufferAtomically(filePath, Buffer.from(serializeDocumentEnvelope(envelope), 'utf8'))
-        } else if (nextId || file.kind.id === 'web_recording') {
+          await writeJsonFile(filePath, envelope)
+        } else if (nextId !== file.header.id || file.kind.id === 'web_recording') {
           const adapter = this.options.adapters.get(file.kind.id)
           if (!adapter) throw new DocumentFormatError('包里有暂不支持的文档类型。')
           await adapter.writeHeader(filePath, { ...(nextId ? { id: nextId } : {}), ...(file.kind.id === 'web_recording' ? { foreign: projectManifest.foreign! } : {}) })
@@ -547,11 +576,9 @@ export class DocumentPackageService {
     try {
       for await (const entry of formatErrors(iterateEntries(archive))) {
         if (entry.fileName !== MANIFEST_ENTRY) continue
-        if (entry.uncompressedSize > MAX_MANIFEST_BYTES) throw new DocumentFormatError('包说明过大，文件可能已损坏。')
-        const text = (await readEntryBytes(archive, entry, MANIFEST_ENTRY)).toString('utf8')
         let raw: unknown
         try {
-          raw = JSON.parse(text)
+          raw = await readJsonStream((await openEntryReadStream(archive, entry, MANIFEST_ENTRY)).setEncoding('utf8'))
         } catch (error) {
           throw new DocumentFormatError('包说明已损坏。', { cause: error })
         }
@@ -570,12 +597,10 @@ export class DocumentPackageService {
     throw new DocumentFormatError('不是痕迹AI的单文件包（缺少包说明）。')
   }
 
-  /** 把 content/ 下的条目解到 target（不存在时新建）；逐条校验位置、总大小与条目数。 */
+  /** 把 content/ 下的条目解到 target（不存在时新建）；逐条校验位置。 */
   private async extract(source: string, target: string): Promise<string[]> {
     await fsp.mkdir(target, { recursive: true })
     const archive = await openZip(source)
-    let count = 0
-    let total = 0
     const files: string[] = []
     try {
       for await (const entry of formatErrors(iterateEntries(archive))) {
@@ -586,9 +611,6 @@ export class DocumentPackageService {
         if (relative.endsWith('/')) continue
         const segments = relative.split('/')
         if (!segments.every((segment) => isSafeRelativeSegment('win32', segment))) throw new DocumentFormatError(`包里的位置无效：${entry.fileName}`)
-        count += 1
-        total += entry.uncompressedSize
-        if (count > MAX_ENTRIES || total > MAX_TOTAL_BYTES) throw new DocumentFormatError('包里的文件过多或过大。')
         const destination = path.join(target, ...segments)
         if (!isPathInside(this.workspace.style, target, destination)) throw new DocumentFormatError(`包里的位置无效：${entry.fileName}`)
         await fsp.mkdir(path.dirname(destination), { recursive: true })
@@ -641,7 +663,7 @@ async function* formatErrors<T>(entries: AsyncGenerator<T>): AsyncGenerator<T> {
 }
 
 /** 文档之间的引用 `{ docId, path }`：换了 ID 的文档同步改写引用里的 docId。 */
-export function remapDocumentLinks(content: unknown, idMap: ReadonlyMap<string, string>): unknown {
+export function remapDocumentLinks(content: unknown, idMap: ReadonlyMap<string, string>, resolvePathId?: (location: string) => string | undefined): unknown {
   let changed = false
   const visit = (value: unknown): unknown => {
     if (Array.isArray(value)) {
@@ -653,7 +675,7 @@ export function remapDocumentLinks(content: unknown, idMap: ReadonlyMap<string, 
     let next: Record<string, unknown> | null = null
     for (const [key, item] of Object.entries(record)) {
       let mapped = visit(item)
-      if (key === 'docId' && typeof item === 'string' && typeof record.path === 'string' && idMap.has(item)) mapped = idMap.get(item)
+      if (key === 'docId' && typeof item === 'string' && typeof record.path === 'string') mapped = resolvePathId?.(record.path) ?? idMap.get(item) ?? item
       if (mapped !== item) {
         next ??= { ...record }
         next[key] = mapped

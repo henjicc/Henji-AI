@@ -6,7 +6,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import type { DocumentTarget } from '../../../../src/core/documents/types'
 import type { DocumentKindRegistry } from '../../../../src/core/documents/kinds'
-import { CODE_AUTHOR_SOURCE_MAX_BYTES, codeFilePathSchema, componentFileReferences, type CodeComponentPin, type CodeFileReference } from '../../../../src/core/videoEdit/codeMaterial/sources'
+import { codeFilePathSchema, componentFileReferences, type CodeComponentPin, type CodeFileReference } from '../../../../src/core/videoEdit/codeMaterial/sources'
 import { componentSourceMetadata, packageComponentSource, type CodeComponent, type CodeComponentVersion } from '../../../../src/core/videoEdit/codeMaterial/components'
 import type { DiscardCodeFilesRequest, PublishCodeComponentRequest, WriteCodeVersionRequest, WithdrawCodeComponentRequest } from '../../../../src/core/videoEdit/codeMaterial/storageContract'
 import { isPathInside } from '../../../../src/core/storage/pathSyntax'
@@ -103,7 +103,7 @@ export class DocumentCodeFiles {
     if (!path.isAbsolute(file.location)) throw new Error(`${file.path} 的源码位置必须是绝对路径。`)
     try {
       const stat = await fsp.stat(location)
-      if (!stat.isFile() || stat.size > CODE_AUTHOR_SOURCE_MAX_BYTES) throw new Error(`${file.path} 不是可读取的源码文件或超过16MiB，请恢复原文件。`)
+      if (!stat.isFile()) throw new Error(`${file.path} 不是可读取的源码文件，请恢复原文件。`)
       const bytes = await fsp.readFile(location); const hash = createHash('sha256').update(bytes).digest('hex')
       if (hash !== file.hash) throw new Error(`${file.path} 的源码内容校验失败，请从项目备份恢复原版本后重试。`)
       const known = this.cache.get(hash)
@@ -177,7 +177,6 @@ export class DocumentCodeFiles {
       for (const file of await fsp.readdir(directoryPath)) {
         if (!/^v\d+(?: \(\d+\))?\.ts$/.test(file)) continue
         const location = path.join(library, directory.name, file);
-        const stat = await fsp.stat(location); if (stat.size > CODE_AUTHOR_SOURCE_MAX_BYTES) throw new Error('项目组件源码超过16MiB，请恢复原文件。')
         const source = await fsp.readFile(location, 'utf8'); const hash = digest(source)
         const integrity = `${location}.sha256`;
         const expected = await fsp.readFile(integrity, 'utf8').catch(() => null)

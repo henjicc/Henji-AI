@@ -105,7 +105,6 @@ function createRegistry(betaRevision = 2): ApplicationReflectionRegistry {
 
 const context = {
   exposure: 'assistant' as const,
-  permissions: new Set(['alpha:read', 'beta:read']),
   acceptedDataClasses: new Set(['C0', 'C1'] as const),
 }
 

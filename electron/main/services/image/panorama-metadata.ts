@@ -89,7 +89,7 @@ export async function embedPanoramaMetadataInImage(
   extension: string,
 ): Promise<PanoramaMetadataEmbedResultDto> {
   const sharp = await loadSharp()
-  const imageMetadata = await sharp(bytes).metadata()
+  const imageMetadata = await sharp(bytes, { limitInputPixels: false }).metadata()
   const format = resolveSupportedFormat(imageMetadata.format ?? extension)
   if (!format) {
     throw new Error(`Panorama XMP export does not support image format: ${normalizeExtension(extension)}`)
@@ -109,7 +109,7 @@ export async function readPanoramaMetadataFromImage(
   extension: string,
 ): Promise<PanoramaMetadataReadResultDto> {
   const sharp = await loadSharp()
-  const imageMetadata = await sharp(bytes).metadata()
+  const imageMetadata = await sharp(bytes, { limitInputPixels: false }).metadata()
   const format = resolveSupportedFormat(imageMetadata.format ?? extension)
   if (!format) {
     return { format: 'unsupported', status: 'unsupported', metadata: null }

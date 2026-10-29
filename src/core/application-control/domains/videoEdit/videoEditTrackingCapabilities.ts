@@ -15,7 +15,7 @@ const trackerRef = applicationRefSchema.extend({ kind: z.literal('video_edit.tra
 const frame = z.number().int().nonnegative().max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES)
 const verification = z.object({ verified: z.boolean(), target: applicationRefSchema, condition: z.string() }).strict()
 const common = {
-  version: 1, domain: 'video_edit', readOnly: false, dataClasses: ['C1' as const], permission: 'video_edit:write', idempotent: false, destructive: false,
+  version: 1, domain: 'video_edit', readOnly: false, dataClasses: ['C1' as const], idempotent: false, destructive: false,
   supportsPreview: false, supportsUndo: true, requiredScopes: ['video_edit'],
 }
 const receipt = (result: { resultRef: z.infer<typeof applicationRefSchema>; verification: z.infer<typeof verification> }, entityType: string) => [{ effect: 'execute' as const, propertyIds: [], verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [], entityTypes: [entityType], targetRefs: [result.resultRef], count: 1 }]

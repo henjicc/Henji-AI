@@ -10,7 +10,7 @@ const output = z.object({ resultRef: documentRef, results: z.array(z.object({ cl
 export const measureVideoEditLoudnessCapability = defineApplicationCapability<z.infer<typeof input>, z.infer<typeof output>>({
   id: 'measure_video_edit_loudness', title: '测量剪辑片段响度与真峰值',
   description: '只读测量明确声音片段的积分 LUFS、末尾三秒短期 LUFS、4 倍重建真峰值 dBTP、采样峰值 dBFS。每段独立测量，包含当前音频增益、音量、变速、声道映射、淡化与音频效果，忽略轨道静音和相邻片段过渡；不是整片混音。静音、低于门限或太短时 LUFS 为 null，不是零。',
-  version: 2, domain: 'video_edit', aliases: ['响度测量', 'LUFS', 'true peak'], readOnly: true, dataClasses: ['C1'], permission: 'video_edit:read', idempotent: true, destructive: false, timeoutMs: 600000, supportsPreview: false, supportsUndo: false,
+  version: 2, domain: 'video_edit', aliases: ['响度测量', 'LUFS', 'true peak'], readOnly: true, dataClasses: ['C1'], idempotent: true, destructive: false, timeoutMs: 600000, supportsPreview: false, supportsUndo: false,
   requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.clip'], producesRefs: ['video_edit.document'],
   inputSchema: input, outputSchema: output, concurrencyKey: 'video_edit', resolveConcurrencyKey: parsed => `video_edit:${parsed.documentRef.id}`,
   resolveOperationTargets: parsed => [parsed.documentRef, ...parsed.clipRefs], resolveOperationWriteTargets: () => [],
@@ -20,7 +20,7 @@ export const measureVideoEditLoudnessCapability = defineApplicationCapability<z.
 export const normalizeVideoEditLoudnessCapability = defineApplicationCapability<z.infer<typeof input> & { targetLufs: number }, z.infer<typeof output>>({
   id: 'normalize_video_edit_loudness', title: '把对白片段标准化到目标响度',
   description: '按片段使用范围测量源声音（不含片段增益、音量关键帧、淡化与效果），写入独立 gainDb 并测量增益后源声音确认与目标相差不超过 0.5 LU；不改变音量，多个片段一步撤销。targetLufs 是积分听感响度：网络视频常用 -14，播客 -16，广播 EBU R128 -23；越接近零越响。增益范围 -96～+96 dB。最终听感仍受音量及效果影响；此操作不添加限幅效果，需控制整片真峰值时使用导出响度标准化。',
-  version: 2, domain: 'video_edit', aliases: ['对白音量统一', '响度标准化', 'loudness normalization'], readOnly: false, dataClasses: ['C1'], permission: 'video_edit:write', idempotent: false, destructive: false, timeoutMs: 600000, supportsPreview: false, supportsUndo: true,
+  version: 2, domain: 'video_edit', aliases: ['对白音量统一', '响度标准化', 'loudness normalization'], readOnly: false, dataClasses: ['C1'], idempotent: false, destructive: false, timeoutMs: 600000, supportsPreview: false, supportsUndo: true,
   requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.clip'], producesRefs: ['video_edit.document'],
   inputSchema: input.extend({ targetLufs: z.number().finite().min(-70).max(-5).describe('目标积分响度 LUFS；-14 网络视频、-16 播客、-23 EBU R128 广播。') }), outputSchema: output,
   concurrencyKey: 'video_edit', resolveConcurrencyKey: parsed => `video_edit:${parsed.documentRef.id}`,

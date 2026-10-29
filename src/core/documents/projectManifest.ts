@@ -124,10 +124,12 @@ function projectManifestMinReader(raw: unknown): number | undefined {
  * 写回项目说明前对照磁盘上的现有说明：更新版本写出、本程序可读的说明保留原版本戳与本程序不认识的字段。
  * 现有说明缺失、无法解析或不是更新版本时，原样返回本次说明。
  */
-export function carryProjectManifestForward(existingText: string | null, next: ProjectManifest): unknown {
-  if (!existingText) return next
-  let raw: unknown
-  try { raw = JSON.parse(existingText.charCodeAt(0) === 0xfeff ? existingText.slice(1) : existingText) as unknown } catch { return next }
+export function carryProjectManifestForward(existing: unknown, next: ProjectManifest): unknown {
+  if (!existing) return next
+  let raw: unknown = existing
+  if (typeof existing === 'string') {
+    try { raw = JSON.parse(existing.charCodeAt(0) === 0xfeff ? existing.slice(1) : existing) as unknown } catch { return next }
+  }
   const version = raw && typeof raw === 'object' && 'version' in raw ? Number(raw.version) : 0
   if (!(version > PROJECT_MANIFEST_VERSION)) return next
   try {

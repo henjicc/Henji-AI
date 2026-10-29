@@ -112,7 +112,6 @@ function writableDomains(): string[] {
   ])
   const description = registry.describe({}, {
     exposure: 'assistant',
-    permissions: new Set(registry.listDeclaredPropertyPermissions()),
     acceptedDataClasses: new Set(['C0', 'C1', 'C2']),
   })
   return [...new Set(description.entities

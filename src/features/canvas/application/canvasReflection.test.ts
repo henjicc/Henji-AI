@@ -21,7 +21,6 @@ const nodeId = 'node-1'
 const context: ApplicationExecutionContext = {
   requestId: 'canvas-reflection-test',
   exposure: 'assistant',
-  permissions: new Set(['canvas:read', 'canvas:write']),
   acceptedDataClasses: new Set(['C0', 'C1']),
 }
 

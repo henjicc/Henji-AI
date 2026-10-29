@@ -14,7 +14,7 @@ import { HEX_COLOR_EXAMPLE } from '@/core/theme/colorTokens'
 import { videoEditExportSettingsSchema, VIDEO_EDIT_EXPORT_PRESETS } from '@/core/videoEdit/exportPresets'
 import { VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from '@/core/videoEdit/time'
 
-const access: ApplicationExecutionContext = { exposure: 'assistant', permissions: new Set(['video_edit:read', 'video_edit:write']), acceptedDataClasses: new Set(['C0', 'C1']), signal: new AbortController().signal, requestId: 'test' }
+const access: ApplicationExecutionContext = { exposure: 'assistant', acceptedDataClasses: new Set(['C0', 'C1']), signal: new AbortController().signal, requestId: 'test' }
 const disposers: Array<() => void> = []
 beforeEach(() => { installHarnessNativeStorage(); })
 afterEach(async () => { disposers.splice(0).forEach(dispose => dispose()); await closeAllVideoEdits(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })

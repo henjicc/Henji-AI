@@ -2,6 +2,7 @@ import { once } from 'node:events'
 import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { createGigapixelTiff } from '../../../../src/tests/gigapixelTiff'
 
 import sharp from 'sharp'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -42,6 +43,19 @@ afterEach(async () => {
 })
 
 describe('SharpSourceProvider', () => {
+  it('超过十亿像素的分块 TIFF 按瓦片读取，不解码整张图片', async () => {
+    const side = 32768
+    const tiff = createGigapixelTiff()
+    const resource = await store.putBuffer(tiff, { mediaType: 'image/tiff' })
+    const provider = new SharpSourceProvider(store, { derivedCache: null })
+    expect(await provider.readMetadata(resource.id)).toMatchObject({ width: side, height: side })
+    const tile = await provider.readTile({ resourceId: resource.id, mip: 0, tileX: 63, tileY: 63 })
+    expect(tile.width).toBe(512)
+    expect(tile.height).toBe(512)
+    expect(tile.pixels.byteLength).toBe(512 * 512 * 4)
+    expect(Buffer.from(tile.pixels).subarray(0, 4)).toEqual(Buffer.from([80, 80, 80, 255]))
+  })
+
   it('条带只发布一次，冷提供者直接复用持久条带且保持精确像素', async () => {
     const encoded = await sharp({ create: { width: 1536, height: 1200, channels: 4,
       background: { r: 20, g: 40, b: 80, alpha: 1 } } }).png().toBuffer()

@@ -108,7 +108,7 @@ describe('独立选区正式消费与通用实体', () => {
       expect(result.ok, JSON.stringify(result)).toBe(true)
       if (!result.ok) throw new Error(result.error.message)
       expect(result.data.verification).toEqual({ verified: true })
-      const state = await getApplicationReflectionRegistry().readEntity(imageEditV3LayerRef(document.id, 'raster'), undefined, { exposure: 'assistant', permissions: new Set(['image_edit:read']), acceptedDataClasses: new Set(['C0', 'C1']) })
+      const state = await getApplicationReflectionRegistry().readEntity(imageEditV3LayerRef(document.id, 'raster'), undefined, { exposure: 'assistant', acceptedDataClasses: new Set(['C0', 'C1']) })
       expect(state.properties['image_edit.layer.mask']).not.toBeNull()
       const iterator = exportCurrentImageEditSelectionV3(bus)
       const tile = await iterator.next()
@@ -144,7 +144,7 @@ describe('独立选区正式消费与通用实体', () => {
     const dispose = registerPersistedImageEditTestSession('selection-entity', bus)
     try {
       const ref = { ...imageEditV3DocumentRef(document.id), kind: 'image_edit.selection' }
-      const access = { exposure: 'assistant' as const, permissions: new Set(['image_edit:read', 'image_edit:write']), acceptedDataClasses: new Set(['C0', 'C1'] as const) }
+      const access = { exposure: 'assistant' as const, acceptedDataClasses: new Set(['C0', 'C1'] as const) }
       const registry = getApplicationReflectionRegistry(), engine = getApplicationControlExecutionEngine()
       const descriptors = registry.describe({ entityTypes: ['image_edit.selection'] }, access)
       expect(descriptors.properties.map(p => p.id)).toContain('image_edit.selection.region')

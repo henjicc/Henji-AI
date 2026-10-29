@@ -13,7 +13,7 @@ let dispose: (() => void) | undefined
 beforeEach(installHarnessNativeStorage)
 afterEach(() => { dispose?.(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 const context = { exposure: 'assistant' as const, requestId: 'transaction-scope-test',
-  permissions: new Set(['image_edit:read', 'image_edit:write']), acceptedDataClasses: new Set(['C0', 'C1'] as const) }
+  acceptedDataClasses: new Set(['C0', 'C1'] as const) }
 async function fixture() {
   const document = createImageEditDocumentV3({ width: 8, height: 8, documentId: `concurrency-${crypto.randomUUID()}` })
   document.layers = [createImageEditEffectLayerV3('effect', '原名称', 'gaussian_blur', { sigma_fraction_height: 1 })]

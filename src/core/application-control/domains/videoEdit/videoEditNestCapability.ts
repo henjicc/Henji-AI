@@ -8,7 +8,7 @@ export const nestVideoEditClipsCapability = defineApplicationCapability({
   id: 'nest_video_edit_clips', version: 1, domain: 'video_edit', title: '把片段嵌套成序列',
   description: '把同一序列中的片段移进新序列，在原位置换成一个带画面与声音的序列片段；整个操作可一步撤销。默认连同音画链接与编组，linked=false 只用列出的片段。保留片内效果、速度、关键帧、跟踪、标注与锚定字幕，双击新片段可继续编辑子序列。嵌套片段可用 video_edit.clip 的通用属性改位置、源范围、速度、音量、关键帧和效果；新序列用 video_edit.sequence 读取编辑，素材引用用 video_edit.item.sequence_id。锁轨、会改变叠放顺序的夹层、跨选区跟随或过渡、循环或超过八层时整组拒绝。',
   aliases: ['嵌套', '嵌套序列', 'nest sequence', '把镜头合成一个序列片段'], readOnly: false, dataClasses: ['C1'],
-  permission: 'video_edit:write', idempotent: false, destructive: false, timeoutMs: 30000, supportsPreview: false, supportsUndo: true,
+  idempotent: false, destructive: false, timeoutMs: 30000, supportsPreview: false, supportsUndo: true,
   requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.clip'], producesRefs: ['video_edit.sequence', 'video_edit.item', 'video_edit.clip'],
   inputSchema: z.object({ documentRef, clipRefs: z.array(clipRef).min(1), name: z.string().trim().min(1).max(200).describe('新嵌套序列的名称。'), linked: z.boolean().optional() }).strict(),
   outputSchema: z.object({ resultRef: documentRef, sequenceRef: ref('video_edit.sequence'), parentSequenceRef: ref('video_edit.sequence'), itemRef: ref('video_edit.item'), clipRef, movedClipRefs: z.array(clipRef), message: z.string(),

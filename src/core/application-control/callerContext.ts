@@ -32,7 +32,6 @@ export function applicationCallerAccess(
   assertApplicationCallerGrant(grant)
   return {
     exposure: 'local_adapter',
-    permissions: new Set(),
     acceptedDataClasses: new Set(['C0', 'C1', 'C2']),
     requestId,
     signal,

@@ -164,7 +164,6 @@ function registration(): ApplicationEntityRegistration {
 
 const assistantContext = {
   exposure: 'assistant' as const,
-  permissions: new Set(['sample:read', 'sample:write']),
   acceptedDataClasses: new Set(['C0', 'C1'] as const),
 }
 
@@ -359,7 +358,6 @@ describe('ApplicationReflectionRegistry', () => {
     // sample.owner 是 C2 + sample:secret，用有权限的上下文才走得到值校验那一步
     const privilegedContext = {
       exposure: 'assistant' as const,
-      permissions: new Set(['sample:read', 'sample:write', 'sample:secret']),
       acceptedDataClasses: new Set(['C0', 'C1', 'C2'] as const),
     }
     let message = ''

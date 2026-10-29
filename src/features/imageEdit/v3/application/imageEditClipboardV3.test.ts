@@ -58,7 +58,7 @@ describe('图片剪贴板唯一服务', () => {
       if (!result.ok) throw new Error(result.error.message)
       expect(result.data.verified).toBe(true)
       const output = imageEditClipboardCapability.outputSchema.parse(result.data)
-      const state = await getApplicationReflectionRegistry().readEntity(output.ref, undefined, { exposure: 'assistant', permissions: new Set(['image_edit:read']), acceptedDataClasses: new Set(['C0','C1']) })
+      const state = await getApplicationReflectionRegistry().readEntity(output.ref, undefined, { exposure: 'assistant', acceptedDataClasses: new Set(['C0','C1']) })
       expect(state.properties['image_edit.layer.name']).toBe('截图')
       await bus.undo(); expect(bus.getSnapshot().document.layers).toEqual(document.layers)
     } finally { dispose() }

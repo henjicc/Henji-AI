@@ -95,7 +95,7 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
     }
     const writable = new Set([...engine.mutationExecutors.keys(), ...engine.collectionExecutors.keys()])
     const description = registry.describe({}, { exposure: 'local_adapter',
-      permissions: new Set(registry.listDeclaredPropertyPermissions()), acceptedDataClasses: new Set(['C0', 'C1']) })
+      acceptedDataClasses: new Set(['C0', 'C1']) })
     const domains = [...new Set(description.entities.filter(entity => writable.has(entity.id)).map(entity => entity.domain))]
     // 共享记忆与本地模型位于主进程（本地模型写入会真实下载或删除文件）；其写入/读回分别由
     // sharedMemoryReflection.test + 原生 memory-store.test、localModelsReflection.test + local-models/service.test 覆盖。

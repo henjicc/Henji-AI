@@ -43,7 +43,6 @@ function capability(
       }],
     },
     dataClasses: ['C0'],
-    permission: 'test:read',
     idempotent: true,
     destructive: false,
     timeoutMs: 1_000,
@@ -91,10 +90,8 @@ describe('ApplicationCapabilityRegistry', () => {
     expect(() => registry.register(capability('read_test', 2))).toThrow('版本冲突')
   })
 
-  it('缺少权限和成功证据时注册失败', () => {
-    const missingPermission = { ...capability('missing_permission'), permission: '' }
+  it('缺少成功证据时注册失败', () => {
     const missingEvidence = { ...capability('missing_evidence'), successEvidence: [] }
-    expect(() => new ApplicationCapabilityRegistry().register(missingPermission)).toThrow()
     expect(() => new ApplicationCapabilityRegistry().register(missingEvidence)).toThrow()
   })
 
@@ -143,7 +140,6 @@ describe('ApplicationCapabilityRegistry', () => {
     for (const descriptor of descriptors) {
       expect(applicationCapabilityDescriptorSchema.safeParse(descriptor).success).toBe(true)
       expect(descriptor.successEvidence.length).toBeGreaterThan(0)
-      expect(descriptor.permission).not.toBe('')
       expect(descriptor.failureRecovery.length).toBeGreaterThan(0)
       expect(descriptor.control?.impacts.length).toBeGreaterThan(0)
     }

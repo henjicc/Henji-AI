@@ -45,7 +45,7 @@ function parseReadDirPayload(input: unknown): ReadDirPayload {
 interface ReadFilePayload extends PathPayload { maxBytes?: number }
 function parseReadFilePayload(input: unknown): ReadFilePayload {
   const record = parseRecord(input)
-  if (record.maxBytes !== undefined && (!Number.isSafeInteger(record.maxBytes) || Number(record.maxBytes) < 1 || Number(record.maxBytes) > 16 * 1024 * 1024)) throw new Error('maxBytes必须为1至16MiB的整数。')
+  if (record.maxBytes !== undefined && (!Number.isSafeInteger(record.maxBytes) || Number(record.maxBytes) < 1)) throw new Error('maxBytes必须为正的安全整数。')
   return { ...parsePathPayload(input), ...(record.maxBytes !== undefined ? { maxBytes: Number(record.maxBytes) } : {}) }
 }
 

@@ -12,7 +12,6 @@ import { getSettingsRegistryRevision } from '@/features/settings/application-con
 const context: ApplicationExecutionContext = {
   requestId: 'settings-control-test',
   exposure: 'assistant',
-  permissions: new Set(['settings:read', 'settings:write']),
   acceptedDataClasses: new Set(['C0', 'C1']),
 }
 

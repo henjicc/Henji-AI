@@ -115,7 +115,7 @@ export async function renderSharpDiffusionFallback(
   try {
     const { bytes: sourceBytes } = await resolveSourceBytes(request.source)
     const sharp = await loadSharp()
-    const metadata = await sharp(sourceBytes).metadata()
+    const metadata = await sharp(sourceBytes, { limitInputPixels: false }).metadata()
     const sourceWidth = Math.max(1, metadata.width ?? 1)
     const sourceHeight = Math.max(1, metadata.height ?? 1)
     const parsed = parseParams(request.params, sourceWidth, sourceHeight)
@@ -127,12 +127,11 @@ export async function renderSharpDiffusionFallback(
       )
       : { width: sourceWidth, height: sourceHeight }
 
-    const base = sharp(sourceBytes)
+    const base = sharp(sourceBytes, { limitInputPixels: false })
       .resize(outputSize.width, outputSize.height, { fit: 'fill' })
       .ensureAlpha()
     // 黑柔/白柔按和 WebGPU 同一条公式做能量守恒的部分柔焦：O = (1-f)·I + f·blur(I)。
-    // 此前用的是 screen / soft-light 混合，那是「叠一层亮的上去」，只会整体提亮不会柔化，
-    // 和主链路的雾镜模型完全不是一回事。辉光仍是刻意不守恒的加法层，保持 screen。
+    // 辉光需要刻意不守恒的加法层，使用 screen。
     const isGlow = parsed.mode === 'glow'
     const scatter = await base
       .clone()
@@ -141,8 +140,8 @@ export async function renderSharpDiffusionFallback(
       .png()
       .toBuffer()
     let pipeline = isGlow
-      ? base.composite([{ input: scatter, blend: 'screen' }])
-      : base.clone().linear(1 - parsed.strength, 0).composite([{ input: scatter, blend: 'add' }])
+      ? base.composite([{ input: scatter, limitInputPixels: false, blend: 'screen' }])
+      : base.clone().linear(1 - parsed.strength, 0).composite([{ input: scatter, limitInputPixels: false, blend: 'add' }])
 
     if (parsed.mode === 'white-diffusion') {
       pipeline = pipeline.linear(1, Math.round(8 * parsed.strength))

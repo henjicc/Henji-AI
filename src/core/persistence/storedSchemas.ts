@@ -12,7 +12,7 @@ import { videoEditTextStyleSchema } from '../videoEdit/text'
 // Schemas for previously untyped storage boundaries; the payload itself is unchanged.
 export const videoEditTextPresetSchema = z.object({ id: z.string().min(1).max(100), name: z.string().trim().min(1).max(200), style: videoEditTextStyleSchema }).strict()
 export const PACKAGE_FORMAT = 'henji-package'
-export const PACKAGE_VERSION = 1
+export const PACKAGE_VERSION = 2
 const folder = z.string().min(1).max(120).refine(value => isSafeRelativeSegment('win32', value) && value !== INTERNAL_FOLDER_NAME, '包里的文件夹名无效。')
 const relative = z.string().min(1).max(4096).refine(value => value.split('/').every(segment => isSafeRelativeSegment('win32', segment)), '包里的位置无效。')
 export const packageManifestSchema = z.object({
@@ -20,8 +20,7 @@ export const packageManifestSchema = z.object({
   name: z.string().min(1).max(200), exportedAt: z.string().max(64),
   folders: z.object({ generated: folder, materials: folder }).strict(),
   document: z.object({ id: documentIdSchema, path: relative }).strict().optional(),
-  // ZIP directory count is an existing archive safety budget, not a product entity limit.
-  documents: z.array(z.object({ id: documentIdSchema, path: relative }).strict()).max(100_000),
+  documents: z.array(z.object({ id: documentIdSchema, path: relative }).strict()),
 }).strict().superRefine((value, ctx) => { if (value.type === 'document' && !value.document) ctx.addIssue({ code: 'custom', message: '文档包缺少主文档。' }) })
 
 export const voiceLibraryRecordSchema = z.object({

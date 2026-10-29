@@ -19,7 +19,7 @@ async function renderSourceTile(source: CoverSource, width: number, height: numb
     ? await generateVideoThumbnailBytes(source.source, Math.max(width, height), undefined, source.atSeconds)
     : (await resolveSourceBytes(source.source)).bytes
   const sharp = await loadSharp()
-  return await sharp(input)
+  return await sharp(input, { limitInputPixels: false })
     .resize(width, height, { fit: 'cover', position: 'centre' })
     .webp({ quality: 80 })
     .toBuffer()
@@ -40,11 +40,13 @@ export async function renderCoverImage(sources: readonly CoverSource[]): Promise
   const tileHeight = COVER_HEIGHT / rows
   const tiles = await Promise.all(selected.map(async (source, index) => ({
     input: await renderSourceTile(source, tileWidth, tileHeight),
+    limitInputPixels: false,
     left: (index % columns) * tileWidth,
     top: Math.floor(index / columns) * tileHeight,
   })))
   const sharp = await loadSharp()
   const bytes = await sharp({
+    limitInputPixels: false,
     create: {
       width: COVER_WIDTH,
       height: COVER_HEIGHT,

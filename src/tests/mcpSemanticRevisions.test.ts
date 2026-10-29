@@ -49,7 +49,7 @@ it('紧凑目录可翻页遍历所有已授权领域，JSON 属性都有可读�
   const harness = createApplicationHarness()
   try {
     const reflection = getApplicationReflectionRegistry()
-    const access = { exposure: 'local_adapter' as const, permissions: new Set(reflection.listDeclaredPropertyPermissions()), acceptedDataClasses: new Set(['C0', 'C1'] as const) }
+    const access = { exposure: 'local_adapter' as const, acceptedDataClasses: new Set(['C0', 'C1'] as const) }
     const unresolved: string[] = []
     for (const property of reflection.describe({}, access).properties) {
       if (property.value.kind !== 'json') continue

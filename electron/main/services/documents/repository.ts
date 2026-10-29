@@ -1,3 +1,4 @@
+import { jsonEqual } from '../../../../src/core/jsonEqual'
 import { markForeignVideoDocument } from './foreign-content'
 import type { ContentTrustReference } from '../../../../src/core/contentTrust'
 import fsp from 'node:fs/promises'
@@ -10,7 +11,6 @@ import {
   buildDocumentEnvelope,
   carryDocumentEnvelopeForward,
   DocumentFormatError,
-  serializeDocumentEnvelope,
   type DocumentEnvelope,
 } from '../../../../src/core/documents/envelope'
 import type { DocumentKindDescriptor, DocumentKindRegistry } from '../../../../src/core/documents/kinds'
@@ -39,6 +39,7 @@ import type {
 import type { LocationReport } from '../../../../src/core/storage/locationCodec'
 import { isPathInside, pathKey, samePath } from '../../../../src/core/storage/pathSyntax'
 import { writeBufferAtomically } from '../fs/atomic-file'
+import { jsonChunks } from '../fs/json-file'
 import { withFileLock } from '../fs/file-lock'
 import { copyDirectoryNoOverwrite, copyFileNoOverwrite, createDirectoryExclusively, createFileExclusively, EntryExistsError, moveDirectoryNoOverwrite, moveFileNoOverwrite } from '../fs/no-overwrite'
 import { KeyedSerialExecutor } from '../image-editor-v3/serial-executor'
@@ -271,7 +272,7 @@ export class DocumentRepository {
         const name = documentNameOf(file.kind, file.path)
         const unchanged = file.envelope.kindVersion === stamped.kindVersion
           && file.envelope.name === name
-          && JSON.stringify(encoded.content) === JSON.stringify(file.envelope.content)
+          && jsonEqual(encoded.content, file.envelope.content)
         if (unchanged) {
           await this.options.mediaPublished?.(file.path)
           return { meta: metaFromFile(file, container), unchanged: true }
@@ -786,8 +787,8 @@ export class DocumentRepository {
 
   // ==================== 写入 ====================
 
-  private bytes(envelope: DocumentEnvelope): Buffer {
-    return Buffer.from(serializeDocumentEnvelope(envelope), 'utf8')
+  private bytes(envelope: DocumentEnvelope): ReturnType<typeof jsonChunks> {
+    return jsonChunks(envelope)
   }
 
   /**

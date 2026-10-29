@@ -31,7 +31,7 @@ const describeEntities = defineApplicationCapability({
   description: '默认返回紧凑实体/属性目录与值形状，按 domains 或 entityType/entityTypes 过滤，用 cursor 翻页。写入前用 propertyIds 精确选择属性并设 detail="full" 读取完整值 schema、范围和说明；refs 可查询实例当前可写性。',
   domain: 'application',
   aliases: ['有哪些属性', '能改什么', '可写属性', '实体结构', '关键帧属性', 'describe entities', 'schema'],
-  readOnly: true, dataClasses: ['C1'], permission: 'application:read',
+  readOnly: true, dataClasses: ['C1'],
   idempotent: true, destructive: false, timeoutMs: 10_000, supportsPreview: false, supportsUndo: false,
   requiredScopes: [], acceptsRefs: [], producesRefs: [],
   inputSchema: z.object({
@@ -66,7 +66,7 @@ const listEntities = defineApplicationCapability({
     + '要"按名字找到那一个"就用 where，不要把列表取回来自己遍历——脚本语言不支持遍历读取结果。',
   domain: 'application',
   aliases: ['列出实例', '有哪些对象', '列出关键帧', '按名字查找', 'list entities'],
-  readOnly: true, dataClasses: ['C1'], permission: 'application:read',
+  readOnly: true, dataClasses: ['C1'],
   idempotent: true, destructive: false, timeoutMs: 15_000, supportsPreview: false, supportsUndo: false,
   requiredScopes: [], acceptsRefs: [], producesRefs: [],
   inputSchema: z.object({
@@ -114,7 +114,7 @@ const readEntity = defineApplicationCapability({
   description: '按稳定引用读取一个实体实例的属性值和并发基线。省略 propertyIds 时读取全部可读属性；[] 只返回实体与基线。长文本用 textPage={propertyId,offset,limit} 单独分段读取，从 offset=0 开始，按返回的 nextOffset 续读至 null；每页 revisions 应保持一致，变化时重新从头读取。',
   domain: 'application',
   aliases: ['读取属性', '看看这个对象', 'read entity'],
-  readOnly: true, dataClasses: ['C1'], permission: 'application:read',
+  readOnly: true, dataClasses: ['C1'],
   idempotent: true, destructive: false, timeoutMs: 10_000, supportsPreview: false, supportsUndo: false,
   requiredScopes: [], acceptsRefs: [], producesRefs: [],
   inputSchema: z.object({
@@ -187,7 +187,7 @@ const changeEntities = defineApplicationCapability({
   description: '在一次有序事务里设置、清空或增删实体属性值，也可以在集合中新增或删除成员。changes 会按数组顺序执行，后一步能看到前一步刚建立的状态；同一目标的多步常规改动应合并到一次调用。业务失败会尝试补偿；补偿失败、保存未确认或提交后验证失败时保留实际修改与恢复回执，不要重复已执行的步骤。target 必须原样使用 list_application_entities 或读取结果返回的稳定引用，不要截取 ID。属性键用 describe_application_entities 返回的完整属性 ID，也可以只写 entityType 之后的那一段（例如实体为 camera_stage.state_keyframe 时，time 等价于 camera_stage.state_keyframe.time）。',
   domain: 'application',
   aliases: ['改属性', '增删属性值', '加关键帧', '做动画', '上下漂浮', '新增成员', '删除成员', 'change entities', 'set property'],
-  readOnly: false, dataClasses: ['C1'], permission: 'application:write',
+  readOnly: false, dataClasses: ['C1'],
   idempotent: false, destructive: false, timeoutMs: 30_000, supportsPreview: false, supportsUndo: true,
   requiredScopes: [], acceptsRefs: [], producesRefs: [],
   successEvidence: ['事务返回受影响引用、写入后的并发基线和结构化证据。'],
@@ -297,7 +297,7 @@ const changeEntities = defineApplicationCapability({
 const undoEntities = defineApplicationCapability({
   id: 'undo_application_changes', version: 1, title: '撤销一组应用修改', domain: 'application',
   description: '使用 change_application_entities 返回的 undoRef 撤销整组修改，包括原稿元数据。只接受本连接的未使用回执；仍检查当前版本并确认保存。保存未确认时只恢复保存，不重复撤销。',
-  aliases: ['撤销原稿修改', '撤销事务'], readOnly: false, dataClasses: ['C1'], permission: 'application:write',
+  aliases: ['撤销原稿修改', '撤销事务'], readOnly: false, dataClasses: ['C1'],
   idempotent: false, destructive: false, timeoutMs: 30_000, supportsPreview: false, supportsUndo: false,
   requiredScopes: [], acceptsRefs: ['application.transaction'], producesRefs: [],
   inputSchema: z.object({ undoRef: z.string().min(1) }).strict(), outputSchema: changeEntities.outputSchema,

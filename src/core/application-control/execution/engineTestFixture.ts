@@ -244,11 +244,10 @@ export class FixtureMutationExecutor implements ApplicationMutationExecutor {
   }
 }
 
-export function context(permissions = ['sample:read', 'sample:write']): ApplicationExecutionContext {
+export function context(): ApplicationExecutionContext {
   return {
     requestId: 'request-one',
     exposure: 'assistant',
-    permissions: new Set(permissions),
     acceptedDataClasses: new Set(['C0', 'C1']),
   }
 }

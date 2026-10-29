@@ -471,7 +471,7 @@ it('公共集合的显式请求取消进入同一候选流程，不提交晚到�
   let release!: () => void
   boundary.trialGate = new Promise<void>(resolve => { release = resolve })
   const executor = new VideoEditCollectionExecutor('video_edit.code_material')
-  const rejected = expect(executor.apply({ kind: 'collection', entityType: executor.entityType, parent: { kind: 'video_edit.document', id: instance.document.id }, expectedRevisions: {}, operation: { kind: 'create', items: [{ properties: { 'video_edit.code_material.source': source } }] } }, { requestId: 'cancel-create', exposure: 'assistant', permissions: new Set(['video_edit:read', 'video_edit:write']), acceptedDataClasses: new Set(['C1']), signal: controller.signal })).rejects.toThrow('请求取消')
+  const rejected = expect(executor.apply({ kind: 'collection', entityType: executor.entityType, parent: { kind: 'video_edit.document', id: instance.document.id }, expectedRevisions: {}, operation: { kind: 'create', items: [{ properties: { 'video_edit.code_material.source': source } }] } }, { requestId: 'cancel-create', exposure: 'assistant', acceptedDataClasses: new Set(['C1']), signal: controller.signal })).rejects.toThrow('请求取消')
   await vi.waitFor(() => expect(boundary.trialCalls).toBe(1)); controller.abort(new Error('请求取消')); await rejected
   expect(instance.document.items).toEqual([]); expect(instance.past).toHaveLength(0); await expectRenderersReleased()
   release()
@@ -1006,7 +1006,7 @@ it('文件成功写入后文档提交失败，文档和历史保持原状，孤�
 
 it('组件集合批次失败撤回已发布版本，通用撤销保留源码且不复用版本号', async () => {
   const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id; const executor = new CodeComponentCollectionExecutor()
-  const context = { requestId: 't89-component', exposure: 'assistant' as const, permissions: new Set(['video_edit:read', 'video_edit:write']), acceptedDataClasses: new Set(['C1' as const]) }
+  const context = { requestId: 't89-component', exposure: 'assistant' as const, acceptedDataClasses: new Set(['C1' as const]) }
   const create = (sources: string[]) => executor.apply({ kind: 'collection', entityType: 'video_edit.code_component', parent: { kind: 'video_edit.document', id }, expectedRevisions: {}, operation: { kind: 'create', items: sources.map(source => ({ properties: { 'video_edit.code_component.name': '可撤回', 'video_edit.code_component.source': source } })) } }, context)
   await expect(create(['export const width=1;', 'export default {}'])).rejects.toThrow('默认导出')
   expect(await projectCodeComponents(id)).toEqual([])
@@ -1138,7 +1138,7 @@ it('真实 Git 源码：失败补偿不采用版本，撤销重做与资产往�
     const components = new CodeComponentCollectionExecutor()
     await expect(components.apply({ kind: 'collection', entityType: 'video_edit.code_component', parent, expectedRevisions: {}, operation: {
       kind: 'create', items: ['export const size=1;', 'export default {}'].map(value => ({ properties: { 'video_edit.code_component.name': '失败组件', 'video_edit.code_component.source': value } })),
-    } }, { requestId: 'disk-compensation', exposure: 'assistant', permissions: new Set(['video_edit:write']), acceptedDataClasses: new Set(['C1']) })).rejects.toThrow('默认导出')
+    } }, { requestId: 'disk-compensation', exposure: 'assistant', acceptedDataClasses: new Set(['C1']) })).rejects.toThrow('默认导出')
     expect(owner.document.codeMaterials ?? []).toEqual([])
     expect(await env.services.service.listCodeComponents(target)).toEqual([])
     const [definitionId] = await createVideoEditCodeMaterials(id, [{ source }])

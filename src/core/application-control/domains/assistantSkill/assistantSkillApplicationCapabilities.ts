@@ -37,7 +37,6 @@ export const loadAssistantSkillCapability = defineApplicationCapability({
   readOnly: true,
   control: capabilityControl('observe', ['assistant.skill']),
   dataClasses: ['C1'],
-  permission: 'application:read',
   idempotent: true,
   destructive: false,
   timeoutMs: 5_000,

@@ -67,12 +67,11 @@ describe('application control coverage', () => {
     }
   })
   it('新增业务声明自动进入投影，新写操作缺少目标不能静默消失', () => {
-    const read = { ...BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('get_current_application_context')!, id: 'new_feature_read', permission: 'new_feature:read' }
+    const read = { ...BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('get_current_application_context')!, id: 'new_feature_read' }
     const write = { ...BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('create_visible_generation_task')!, id: 'new_feature_write', resolveOperationTargets: undefined }
     const projected = projectExternalCapabilities([read, write])
     expect(projected.read.map(definition => definition.id)).toContain(read.id)
     expect(projected.write.map(definition => definition.id)).toContain(write.id)
-    expect(projected.read[0].permission).toBe('new_feature:read')
     expect(auditExternalCapabilityCoverage({ definitions: [read, write], handlerIds: [read.id, write.id] }).issues.join('\n')).toContain('new_feature_write: 写操作未绑定实际目标')
   })
   it('软件业务能力逐项映射到当前 MCP 或可执行通用实体，不能只检查已发布子集', () => {
@@ -99,7 +98,6 @@ describe('application control coverage', () => {
     const reflection = getApplicationReflectionRegistry()
     const description = reflection.describe({}, {
       exposure: 'assistant',
-      permissions: new Set(reflection.listDeclaredPropertyPermissions()),
       acceptedDataClasses: new Set(['C0', 'C1', 'C2']),
     })
     const registered = new Set(description.entities.map((entity) => entity.id))

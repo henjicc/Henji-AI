@@ -5,7 +5,7 @@ import { ApplicationExecutionProgressFailure, ApplicationPersistenceBoundaryFail
 import type { ApplicationCompletedStepResult, ApplicationExecutionContext } from './types'
 
 const context: ApplicationExecutionContext = { requestId: 'batch', exposure: 'local_adapter',
-  permissions: new Set(), acceptedDataClasses: new Set(['C0', 'C1']) }
+  acceptedDataClasses: new Set(['C0', 'C1']) }
 const completed: ApplicationCompletedStepResult = { status: 'completed', directRefs: [], evidence: [], resultingRevisions: { image_edit: 2 } }
 const saveFailure = () => new ApplicationPersistenceFailure('内存修改保留，请仅重试保存', {
   memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'document',

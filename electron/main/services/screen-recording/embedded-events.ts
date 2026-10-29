@@ -1,6 +1,9 @@
-import { gunzipSync, gzipSync } from 'node:zlib'
-import { open, appendFile } from 'node:fs/promises'
+import { createGunzip, createGzip } from 'node:zlib'
+import { open } from 'node:fs/promises'
+import { createReadStream, createWriteStream } from 'node:fs'
+import { pipeline } from 'node:stream/promises'
 import { z } from 'zod'
+import { jsonChunks, readJsonStream } from '../fs/json-file'
 
 /**
  * Recording facts that travel inside a quick-mode MP4 as one top-level `uuid` box.
@@ -8,7 +11,6 @@ import { z } from 'zod'
  * pointer path back. Any re-encode by another program drops the box, which is acceptable.
  */
 export const RECORDING_EVENTS_BOX_UUID = Buffer.from('6b8f2a1c4d3e4f5a9b0c7d1e2f3a4b5c', 'hex')
-const MAX_PAYLOAD_BYTES = 64 * 1024 * 1024
 
 /** Compact rows: [outputMs, kind, ...fields]; points are output pixels of the video frame. */
 export const embeddedRecordingEventsSchema = z.object({
@@ -27,17 +29,24 @@ export const embeddedRecordingEventsSchema = z.object({
 }).strict()
 export type EmbeddedRecordingEvents = z.infer<typeof embeddedRecordingEventsSchema>
 
-export function encodeRecordingEventsBox(payload: EmbeddedRecordingEvents): Buffer {
-  const body = gzipSync(Buffer.from(JSON.stringify(embeddedRecordingEventsSchema.parse(payload)), 'utf8'))
-  if (body.length > MAX_PAYLOAD_BYTES) throw new Error('录制事件过多，无法写入视频文件')
-  const header = Buffer.alloc(8)
-  header.writeUInt32BE(8 + 16 + body.length, 0)
-  header.write('uuid', 4, 'ascii')
-  return Buffer.concat([header, RECORDING_EVENTS_BOX_UUID, body])
-}
-
 export async function appendRecordingEventsBox(file: string, payload: EmbeddedRecordingEvents): Promise<void> {
-  await appendFile(file, encodeRecordingEventsBox(payload))
+  const validated = embeddedRecordingEventsSchema.parse(payload)
+  const handle = await open(file, 'r+')
+  const originalSize = (await handle.stat()).size
+  try {
+    // MP4 的扩展长度头允许大事件块；正文分块压缩，完成后才补写长度。
+    const header = Buffer.alloc(32)
+    header.writeUInt32BE(1, 0)
+    header.write('uuid', 4, 'ascii')
+    RECORDING_EVENTS_BOX_UUID.copy(header, 16)
+    await pipeline(jsonChunks(validated), createGzip(), createWriteStream(file, { flags: 'r+', start: originalSize + header.length }))
+    const length = (await handle.stat()).size - originalSize
+    header.writeBigUInt64BE(BigInt(length), 8)
+    await handle.write(header, 0, header.length, originalSize)
+  } catch (error) {
+    await handle.truncate(originalSize)
+    throw error
+  } finally { await handle.close() }
 }
 
 /** Walks top-level boxes only; returns null for ordinary videos without Henji data. */
@@ -54,13 +63,12 @@ export async function readRecordingEventsBox(file: string): Promise<EmbeddedReco
       let headerLength = 8
       if (length === 1) { length = Number(header.readBigUInt64BE(8)); headerLength = 16 }
       else if (length === 0) length = size - offset
-      if (length < headerLength || offset + length > size) return null
+      if (!Number.isSafeInteger(length) || length < headerLength || offset + length > size) return null
       if (type === 'uuid' && length >= headerLength + 16 && header.subarray(headerLength, headerLength + 16).equals(RECORDING_EVENTS_BOX_UUID)) {
         const bodyLength = length - headerLength - 16
-        if (bodyLength > MAX_PAYLOAD_BYTES) return null
-        const body = Buffer.alloc(bodyLength)
-        await handle.read(body, 0, bodyLength, offset + headerLength + 16)
-        return embeddedRecordingEventsSchema.parse(JSON.parse(gunzipSync(body).toString('utf8')))
+        if (bodyLength === 0) return null
+        const raw = await pipeline(createReadStream(file, { start: offset + headerLength + 16, end: offset + length - 1 }), createGunzip(), async chunks => readJsonStream(chunks))
+        return embeddedRecordingEventsSchema.parse(raw)
       }
       offset += length
     }

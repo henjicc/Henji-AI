@@ -8,7 +8,7 @@ import { getSettingsStore } from '../settings/store'
 import { getDb } from '../db'
 import { RecycleStore } from '../recycle/store'
 
-export const SOUND_LIBRARY_FOLDERS_CONTRACT = { id: 'sound-library-folders', name: '音效文件夹', version: SOUND_LIBRARY_FOLDERS_VERSION, schema: soundLibraryFoldersSchema, migrations: formatMigrations('sound-library-folders') }
+export const SOUND_LIBRARY_FOLDERS_CONTRACT = { id: 'sound-library-folders', name: '音效文件夹', version: SOUND_LIBRARY_FOLDERS_VERSION, minReaderVersion: 1, schema: soundLibraryFoldersSchema, migrations: formatMigrations('sound-library-folders') }
 const settings = { getItem: async (key: string) => getSettingsStore().get(key), setItem: async (key: string, value: string) => getSettingsStore().set(key, value, 'json') }
 export async function readSoundLibraryFolders(): Promise<SoundLibraryFolderRecord[]> {
   const text = await settings.getItem(SOUND_LIBRARY_FOLDERS_SETTING_KEY)

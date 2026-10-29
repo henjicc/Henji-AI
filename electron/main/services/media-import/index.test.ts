@@ -2,6 +2,8 @@ import fsp from 'node:fs/promises'
 vi.mock('../media-recycle/queue', () => ({ registerOwnedMedia: vi.fn() }))
 import os from 'node:os'
 import path from 'node:path'
+import sharp from 'sharp'
+import { createGigapixelTiff } from '../../../../src/tests/gigapixelTiff'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -39,6 +41,17 @@ import { registerOwnedMedia } from '../media-recycle/queue'
 vi.mock('../appPaths', () => ({ getProgramStoreDir: () => path.join(mocks.root, 'Thumbnails') }))
 
 describe('main media import service', () => {
+  it('十亿像素图片经正式路径导入生成可读预览', async () => {
+    const sourcePath = path.join(mocks.root, 'large.tiff')
+    await fsp.writeFile(sourcePath, createGigapixelTiff())
+    // 与正式加载器一致，避免 Windows 上 libvips 缓存输入文件句柄妨碍临时目录清理。
+    sharp.cache({ files: 0 })
+    mocks.loadSharp.mockResolvedValue(sharp)
+    const imported = await importMediaFromPath({ importId: 'large-image', sourcePath, expectedKind: 'image', ownership: 'referenced', verifyContent: true })
+    if (imported.kind !== 'image') throw new Error('应导入图片')
+    expect(imported.fullPath).toBe(sourcePath)
+    expect(await sharp(imported.previewPath).metadata()).toMatchObject({ width: 512, height: 512 })
+  })
   it('大图预览写一半失败后不缓存残片，下次重新生成并登记来源', async () => {
     const toFile = vi.fn(async (target: string) => { await fsp.writeFile(target, 'partial'); throw new Error('disk full') })
     const pipeline = { metadata: async () => ({ width: 2048, height: 1024 }), resize: () => pipeline, jpeg: () => pipeline, toFile }

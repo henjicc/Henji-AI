@@ -15,14 +15,11 @@ describe('位置解析与固定组件依赖', () => {
     expect(three).not.toBe(codeVersionContentKey({ ...version, libraries: { three: '0.187.0' } }))
     expect(codeVersionContentKey({ ...version, libraries: { three: '0.186.1', 'opentype.js': '1.3.4' } })).toBe(codeVersionContentKey({ ...version, libraries: { 'opentype.js': '1.3.4', three: '0.186.1' } }))
   })
-  it('共享依赖只读取一次；过大依赖树在递归解析前按内存预算明确拒绝', () => {
+  it('共享依赖只读取一次；循环依赖在递归解析前明确拒绝', () => {
     const leaf: CodeComponentPin = { name: '共用', version: 1, location: '/项目/代码/组件库/共用/v1.ts', hash: 'a'.repeat(64), imports: [] }
     const top = { ...leaf, name: '父组件', location: '/项目/代码/组件库/父组件/v1.ts', hash: 'b'.repeat(64), imports: [leaf, leaf] }
     expect(componentFileReferences([top, leaf])).toHaveLength(2)
     expect(codeComponentPinsSchema.parse([top])).toHaveLength(1)
-    let shared = leaf
-    for (let depth = 0; depth < 18; depth++) shared = { ...leaf, name: `层${depth}`, imports: [shared, shared] }
-    expect(() => codeComponentPinsSchema.parse([shared])).toThrow('32MiB')
     const cyclic = { ...leaf }; cyclic.imports = [cyclic]
     expect(() => codeComponentPinsSchema.parse([cyclic])).toThrow('循环')
   })

@@ -32,7 +32,6 @@ const testModel: ModelDefinition = {
 const context: ApplicationExecutionContext = {
   requestId: 'generation-draft-mutation-test',
   exposure: 'assistant',
-  permissions: new Set(['generation_draft:read', 'generation_draft:write']),
   acceptedDataClasses: new Set(['C0', 'C1']),
 }
 

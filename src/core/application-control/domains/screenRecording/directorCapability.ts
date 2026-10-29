@@ -5,7 +5,7 @@ import { capabilityControl, defineApplicationCapability } from '../shared/define
 
 const sessionRef = z.object({ kind: z.literal('screen_recording.session'), id: z.string().uuid() }).strict()
 const documentRef = z.object({ kind: z.literal('video_edit.document'), id: z.string().min(1) }).strict()
-const common = { version: 1, domain: 'screen_recording', readOnly: false, dataClasses: ['C1' as const], permission: 'screen_recording:write', idempotent: false, destructive: false, timeoutMs: 600000, supportsPreview: false, supportsUndo: false, requiredScopes: [], concurrencyKey: 'screen_recording' }
+const common = { version: 1, domain: 'screen_recording', readOnly: false, dataClasses: ['C1' as const], idempotent: false, destructive: false, timeoutMs: 600000, supportsPreview: false, supportsUndo: false, requiredScopes: [], concurrencyKey: 'screen_recording' }
 export const planDirectorInputSchema = z.object({
   goal: z.string().trim().min(1).max(2000), voice: recordingVoiceSchema,
   steps: z.array(z.object({ title: z.string().trim().min(1).max(120), narration: z.string().trim().min(1).max(2000), picture: z.string().trim().min(1).max(1000), operations: z.array(recordingOperationSchema).min(1).max(16), settleMs: z.number().int().min(100).max(10000).default(700) }).strict()).min(1).max(40),

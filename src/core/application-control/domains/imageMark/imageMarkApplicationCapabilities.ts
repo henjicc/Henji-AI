@@ -13,7 +13,7 @@ export const IMAGE_MARK_APPLICATION_CAPABILITIES = [
     domain: 'image_edit', aliases: ['图片编辑保存失败', '重试保存图片', 'retry image document save'],
     readOnly: false,
     control: capabilityControl('execute', ['image_edit.document'], { revisionScopes: ['image_edit', 'canvas'],
-      alsoImpacts: [{ effect: 'update', entityTypes: ['canvas.node'] }, { effect: 'execute', entityTypes: ['canvas.node'] }] }), dataClasses: ['C1'], permission: 'application:write',
+      alsoImpacts: [{ effect: 'update', entityTypes: ['canvas.node'] }, { effect: 'execute', entityTypes: ['canvas.node'] }] }), dataClasses: ['C1'],
     idempotent: true, destructive: false, timeoutMs: 120_000,
     supportsPreview: false, supportsUndo: false, requiredScopes: ['image_edit', 'canvas'],
     acceptsRefs: ['image_edit.document'], producesRefs: ['image_edit.document'],

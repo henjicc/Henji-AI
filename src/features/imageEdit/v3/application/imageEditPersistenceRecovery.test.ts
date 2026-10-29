@@ -12,7 +12,6 @@ let dispose: (() => void) | undefined
 beforeEach(() => { installHarnessNativeStorage() })
 afterEach(() => { dispose?.(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 const context = { exposure: 'assistant' as const, requestId: 'attached-failure',
-  permissions: new Set(['image_edit:read', 'image_edit:write', 'canvas:read', 'canvas:write']),
   acceptedDataClasses: new Set(['C0', 'C1'] as const) }
 
 it('文档已保存但节点存储拒绝，失败回执保留双域事实且恢复不重新物化或编辑', async () => {

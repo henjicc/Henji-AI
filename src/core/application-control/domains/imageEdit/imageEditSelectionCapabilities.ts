@@ -7,7 +7,7 @@ export const applyImageEditSelectionCapability = defineApplicationCapability({
   id: 'apply_image_edit_selection', version: 1, title: '应用图片选区',
   description: '把当前文档的独立选区栅格化，应用为指定图层蒙版、复制所选内容到新像素层，或删除所选内容为透明。蒙版应用替换目标蒙版；复制/删除保留原蒙版的可见范围。一次应用一次撤销。目标也可为普通图层滤镜，mask 将当前选区快照替换其蒙版，不再跟随临时选区。选区形状和羽化用 image_edit.selection.region 通用修改。',
   domain: 'image_edit', aliases: ['选区蒙版', '复制选区', '删除选区', 'apply selection mask'], side: 'frontend', readOnly: false,
-  control: capabilityControl('update', ['image_edit.layer', 'image_edit.layer_filter'], { revisionScopes: ['image_edit'], alsoImpacts: [{ effect: 'create', entityTypes: ['image_edit.layer'] }] }), dataClasses: ['C1'], permission: 'image_edit:write', idempotent: false, destructive: true,
+  control: capabilityControl('update', ['image_edit.layer', 'image_edit.layer_filter'], { revisionScopes: ['image_edit'], alsoImpacts: [{ effect: 'create', entityTypes: ['image_edit.layer'] }] }), dataClasses: ['C1'], idempotent: false, destructive: true,
   timeoutMs: 120_000, supportsPreview: false, supportsUndo: true, requiredScopes: ['image_edit'], acceptsRefs: ['image_edit.layer', 'image_edit.layer_filter', 'image_edit.selection'], producesRefs: ['image_edit.layer', 'image_edit.layer_filter'],
   inputSchema: z.object({ targetRef: z.union([targetRef, filterRef]), action: z.enum(['mask', 'copy', 'delete']) }).strict().refine(input => input.targetRef.kind !== 'image_edit.layer_filter' || input.action === 'mask', '滤镜只支持选区蒙版快照'),
   outputSchema: capabilityOutputSchema({ ref: z.union([targetRef, filterRef]), commandId: z.string(), verification: z.object({ verified: z.boolean() }).strict() }),

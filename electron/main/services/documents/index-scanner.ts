@@ -2,14 +2,15 @@ import type { Dirent, Stats } from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 
-import { buildDocumentEnvelope, carryDocumentEnvelopeForward, serializeDocumentEnvelope } from '../../../../src/core/documents/envelope'
+import { buildDocumentEnvelope, carryDocumentEnvelopeForward } from '../../../../src/core/documents/envelope'
 import type { DocumentKindRegistry } from '../../../../src/core/documents/kinds'
 import { sameEntryName } from '../../../../src/core/documents/naming'
 import { INTERNAL_FOLDER_NAME, ProjectManifestError, type ProjectManifest } from '../../../../src/core/documents/projectManifest'
 import type { DocumentIndexScanReport } from '../../../../src/core/documents/types'
 import { PersistenceError } from '../../../../src/core/persistence/migrations'
 import { isPathInside, pathKey, samePath } from '../../../../src/core/storage/pathSyntax'
-import { writeBufferAtomically } from '../fs/atomic-file'
+import { writeJsonFile } from '../fs/json-file'
+import { isUnavailableTraversalEntry, resolveLinkedPath } from '../fs/traversal'
 import type { MainLogger } from '../logging/main-logger'
 import type { IndexedDocument } from './catalog'
 import { indexedFromFile, loadDocumentFile, statDocumentLocation, summarizeFile, type LoadedDocumentFile } from './document-file'
@@ -18,11 +19,11 @@ import type { PackageAdapterRegistry } from './package-adapters'
 import type { DocumentWorkspace, ResolvedContainer } from './workspace'
 
 /*
- * 作品索引扫描（实施方案 2.7）。索引只是文件的投影，可以随时删掉重建；扫描范围：
+ * 索引只是作品文件的投影，可根据实际位置和内容重建；扫描范围：
  * - 作品目录“项目”文件夹下的每个子文件夹（项目；没有项目说明的补写一份）与登记过的外部项目；
  *   项目里递归扫描（含用户自建子文件夹），跳过顶层的“生成结果 / 素材 / .henji”与嵌套的其他项目；
  * - 作品目录下各类型的独立存放文件夹（递归，跳过其中的项目文件夹）；
- * - 登记过的外部文件夹（另存位置，只扫这一层）。
+ * - 登记过的外部文件夹（另存位置，只看当前层）。
  *
  * 按修改时间 + 大小增量：没变的文件不重新读取。拷贝出来的副本与原件 ID 重复时给新发现的副本
  * 换新 ID 并写回它的文件头（已在索引里、位置没变的那份保留 ID；都没在索引里时创建时间早的保留）；
@@ -34,12 +35,11 @@ export interface DocumentIndexScannerOptions {
   kinds: DocumentKindRegistry
   adapters: PackageAdapterRegistry
   logger: MainLogger
-  /** 项目与类型文件夹里递归的最大层数。 */
-  maxDepth?: number
 }
 
 interface ScanCandidate {
   path: string
+  physicalPath: string
   container: ResolvedContainer
   mtimeMs: number
   size: number
@@ -53,7 +53,6 @@ interface ProjectCandidate {
 
 type MutableReport = Omit<DocumentIndexScanReport, 'durationMs'>
 
-const DEFAULT_MAX_DEPTH = 8
 
 /** 内容错误可以跳过；备份/磁盘错误仍须中止本轮，保留原索引。 */
 function isUnreadableFileContent(error: unknown): boolean {
@@ -88,11 +87,19 @@ export class DocumentIndexScanner {
   private scannedProjectRoots: string[] = []
   private rebuilding = false
   private readonly invalidPaths = new Set<string>()
+  private readonly skippedPaths = new Set<string>()
+  private documentAliases = new Map<string, string>()
 
   constructor(private readonly options: DocumentIndexScannerOptions) {}
 
   private get workspace(): DocumentWorkspace {
     return this.options.workspace
+  }
+
+  findIndexedDocument(filePath: string): IndexedDocument | null {
+    const absolute = path.resolve(filePath)
+    const key = pathKey(this.workspace.style, absolute) ?? absolute
+    return this.workspace.catalog.getDocumentByPath(this.documentAliases.get(key) ?? absolute)
   }
 
   /** 全量增量扫描。扫描进行中再次调用会在本轮结束后再扫一轮，期间的调用共用这一轮的结果。 */
@@ -125,6 +132,7 @@ export class DocumentIndexScanner {
     this.scannedProjectRoots = []
     this.rebuilding = rebuilding
     this.invalidPaths.clear()
+    this.skippedPaths.clear()
     let publishingIndex = false
     logger.info('开始扫描作品索引', { event: 'documents.index.scan.start' })
     try {
@@ -240,27 +248,39 @@ export class DocumentIndexScanner {
 
   private async scanDocuments(projects: ReadonlyMap<string, ResolvedContainer>, report: MutableReport): Promise<void> {
     const candidates: ScanCandidate[] = []
-    const depth = this.options.maxDepth ?? DEFAULT_MAX_DEPTH
     for (const container of projects.values()) {
       const manifest = container.manifest as ProjectManifest
       const skipTop = [manifest.folders.generated, manifest.folders.materials, INTERNAL_FOLDER_NAME]
-      await this.collect(container.root, container, candidates, { depth, skipTop }, report)
-      // 素材文件夹整体不扫（可能很大），只看素材类文档自己的子文件夹（如 素材/录屏/ 里的 .hjweb），且只看一层。
+      await this.collect(container.root, container, candidates, { skipTop }, report)
+      // 素材文件夹整体不扫（可能很大），只看素材类文档自己的子文件夹（如 素材/录屏/ 里的 .hjweb）。
       for (const name of new Set(this.options.kinds.list().flatMap((kind) => kind.projectMaterialsFolderNames ? [kind.projectMaterialsFolderNames[container.locale]] : []))) {
-        await this.collect(path.join(container.materialsDir, name), container, candidates, { depth: 0, skipTop: [] }, report)
+        await this.collect(path.join(container.materialsDir, name), container, candidates, { skipTop: [] }, report)
       }
     }
-    for (const folder of this.standaloneFolders()) await this.collect(folder, await this.workspace.containerForFolder(folder), candidates, { depth, skipTop: [] }, report)
+    for (const folder of this.standaloneFolders()) await this.collect(folder, await this.workspace.containerForFolder(folder), candidates, { skipTop: [] }, report)
     for (const location of this.workspace.catalog.listExternalLocations()) {
-      if (location.kind === 'folder') await this.collect(location.path, await this.workspace.containerForFolder(location.path), candidates, { depth: 0, skipTop: [] }, report)
+      if (location.kind === 'folder') await this.collect(location.path, await this.workspace.containerForFolder(location.path), candidates, { skipTop: [], recursive: false }, report)
     }
 
     const catalog = this.workspace.catalog
     const claimed = new Set<string>()
     const changed: ScanCandidate[] = []
+    const physicalFiles = new Map<string, ScanCandidate>()
+    for (const candidate of candidates) {
+      const key = pathKey(this.workspace.style, candidate.physicalPath) ?? candidate.physicalPath
+      // 目录别名与交叠扫描根指向同一文件，优先保留已经建立引用的索引位置。
+      if (!physicalFiles.has(key) || catalog.getDocumentByPath(candidate.path)) physicalFiles.set(key, candidate)
+    }
+    const aliases = new Map<string, string>()
+    for (const candidate of candidates) {
+      const physicalKey = pathKey(this.workspace.style, candidate.physicalPath) ?? candidate.physicalPath
+      const indexedPath = physicalFiles.get(physicalKey)!.path
+      if (!samePath(this.workspace.style, candidate.path, indexedPath)) aliases.set(pathKey(this.workspace.style, candidate.path) ?? candidate.path, indexedPath)
+    }
+    this.mutations.push(() => { this.documentAliases = aliases })
     // 第一轮：位置与修改时间、大小都没变的文件直接认领原 ID，不重新读取。
     // 项目可以包含作品目录或其他登记位置，同一物理文件只认领一次。
-    for (const candidate of new Map(candidates.map(candidate => [pathKey(this.workspace.style, candidate.path), candidate])).values()) {
+    for (const candidate of physicalFiles.values()) {
       const row = catalog.getDocumentByPath(candidate.path)
       const projectId = candidate.container.ref.kind === 'project' ? candidate.container.ref.projectId : null
       if (!this.rebuilding && row && !row.missing && !claimed.has(row.id) && row.fileModifiedAt === candidate.mtimeMs
@@ -298,47 +318,85 @@ export class DocumentIndexScanner {
     }
   }
 
-  /** 收集文件夹里的文档文件；跳过符号链接、点开头的文件夹与嵌套的其他项目。 */
+  /** 收集文件夹里的文档文件；真实路径检查回环，跳过点开头的文件夹与嵌套的其他项目。 */
   private async collect(
     directory: string,
     container: ResolvedContainer,
     candidates: ScanCandidate[],
-    options: { depth: number; skipTop: readonly string[] },
+    options: { skipTop: readonly string[]; recursive?: boolean },
     report: MutableReport,
     level = 0,
+    ancestors = new Set<string>(),
+    physicalDirectory?: string,
   ): Promise<void> {
+    let real: string
+    try { real = physicalDirectory ?? await resolveLinkedPath(directory) }
+    catch (error) {
+      if (isMissing(error)) return
+      if (!isUnavailableTraversalEntry(error)) throw error
+      this.skipEntry(directory, error)
+      return
+    }
+    const key = pathKey(this.workspace.style, real) ?? real
+    if (ancestors.has(key)) return
+    ancestors.add(key)
     for (const entry of await this.readDirectory(directory)) {
-      if (entry.isSymbolicLink()) continue
       const entryPath = path.join(directory, entry.name)
       const kind = this.options.kinds.forFileName(entry.name)
-      if (entry.isDirectory() && kind?.storage === 'folder') {
-        // 文件夹类型（`.hjweb`）本身就是一份文档：认领它，不再往里找。
-        const stat = await statDocumentLocation(kind, entryPath, this.options.adapters).catch((error: unknown) => {
-          if (isMissing(error) || error instanceof DocumentUnsupportedError) return null
-          if (!isUnreadableFileContent(error)) throw error
-          this.recordInvalid(entryPath, error, report)
-          return null
-        })
-        if (stat) candidates.push({ path: entryPath, container, mtimeMs: stat.mtimeMs, size: stat.size, birthtimeMs: stat.birthtimeMs })
-        continue
-      }
-      if (entry.isDirectory()) {
-        if (level >= options.depth || entry.name.startsWith('.')) continue
-        if (level === 0 && options.skipTop.some((name) => sameEntryName(name, entry.name))) continue
-        try { if (await this.workspace.readManifest(entryPath)) continue }
-        catch (error) {
-          if (!isUnreadableFileContent(error)) throw error
-          this.recordInvalid(entryPath, error, report, true)
+      if (options.recursive === false && !kind) continue
+      try {
+        let physicalPath = path.join(real, entry.name)
+        if (entry.isSymbolicLink()) {
+          try { physicalPath = await fsp.realpath(entryPath) }
+          catch (error) {
+            if (!isMissing(error) && !isUnavailableTraversalEntry(error)) throw error
+            this.skipEntry(entryPath, error)
+            continue
+          }
+        }
+        const info = entry.isSymbolicLink() ? await statIfPresent(entryPath) : entry
+        if (!info) continue
+        if (info.isDirectory() && kind?.storage === 'folder') {
+          // 文件夹类型（`.hjweb`）本身就是一份文档：认领它，不再往里找。
+          const stat = await statDocumentLocation(kind, entryPath, this.options.adapters).catch((error: unknown) => {
+            if (isMissing(error) || error instanceof DocumentUnsupportedError) return null
+            if (!isUnreadableFileContent(error)) throw error
+            this.recordInvalid(entryPath, error, report)
+            return null
+          })
+          if (stat) candidates.push({ path: entryPath, physicalPath, container, mtimeMs: stat.mtimeMs, size: stat.size, birthtimeMs: stat.birthtimeMs })
           continue
         }
-        await this.collect(entryPath, container, candidates, options, report, level + 1)
-        continue
+        if (info.isDirectory()) {
+          if (options.recursive === false) continue
+          if (entry.name.startsWith('.')) continue
+          if (level === 0 && options.skipTop.some((name) => sameEntryName(name, entry.name))) continue
+          try { if (await this.workspace.readManifest(entryPath)) continue }
+          catch (error) {
+            if (!isUnreadableFileContent(error)) throw error
+            this.recordInvalid(entryPath, error, report, true)
+            continue
+          }
+          await this.collect(entryPath, container, candidates, options, report, level + 1, ancestors, physicalPath)
+          continue
+        }
+        if (!info.isFile() || !kind || kind.storage === 'folder') continue
+        const stat = await statIfPresent(entryPath)
+        if (!stat?.isFile()) continue
+        candidates.push({ path: entryPath, physicalPath, container, mtimeMs: stat.mtimeMs, size: stat.size, birthtimeMs: stat.birthtimeMs })
+      } catch (error) {
+        if (isMissing(error)) continue
+        if (!isUnavailableTraversalEntry(error)) throw error
+        this.skipEntry(entryPath, error)
       }
-      if (!entry.isFile() || !kind || kind.storage === 'folder') continue
-      const stat = await statIfPresent(entryPath)
-      if (!stat?.isFile()) continue
-      candidates.push({ path: entryPath, container, mtimeMs: stat.mtimeMs, size: stat.size, birthtimeMs: stat.birthtimeMs })
     }
+    ancestors.delete(key)
+  }
+
+  private skipEntry(target: string, error: unknown): void {
+    // 已消失的路径仍需参加缺失清点，只有访问受阻才保留原索引。
+    if (isUnavailableTraversalEntry(error)) this.skippedPaths.add(target)
+    this.options.logger.warn('跳过无法访问的扫描项', { event: 'documents.index.entry_skipped', context: { path: target }, error })
   }
 
   private async indexCandidate(candidate: ScanCandidate, claimed: ReadonlySet<string>, report: MutableReport): Promise<IndexedDocument | null> {
@@ -348,6 +406,7 @@ export class DocumentIndexScanner {
       file = await loadDocumentFile(candidate.path, { kinds: this.options.kinds, adapters: this.options.adapters })
     } catch (error) {
       if (error instanceof DocumentUnsupportedError) return null
+      if (isUnavailableTraversalEntry(error)) { this.skipEntry(candidate.path, error); return null }
       if (!isUnreadableFileContent(error) && !isMissing(error)) throw error
       this.recordInvalid(candidate.path, error, report)
       return null
@@ -369,6 +428,7 @@ export class DocumentIndexScanner {
   private async otherCopyStillThere(existing: IndexedDocument | null, candidatePath: string, id: string, report: MutableReport): Promise<boolean> {
     if (!existing || samePath(this.workspace.style, existing.path, candidatePath)) return false
     try {
+      if (samePath(this.workspace.style, await resolveLinkedPath(existing.path), await resolveLinkedPath(candidatePath))) return false
       const other = await loadDocumentFile(existing.path, { kinds: this.options.kinds, adapters: this.options.adapters })
       return other.header.id === id
     } catch (error) {
@@ -398,7 +458,7 @@ export class DocumentIndexScanner {
     const id = this.workspace.randomId()
     if (file.envelope) {
       const envelope = carryDocumentEnvelopeForward(file.envelope, buildDocumentEnvelope({ ...file.envelope, id, draft: file.envelope.draft === true }))
-      await writeBufferAtomically(file.path, Buffer.from(serializeDocumentEnvelope(envelope), 'utf8'))
+      await writeJsonFile(file.path, envelope)
     } else {
       const adapter = this.options.adapters.get(file.kind.id)
       if (!adapter) throw new DocumentUnsupportedError('这种文档的读写尚未接入。')
@@ -424,6 +484,10 @@ export class DocumentIndexScanner {
     const scopes = this.documentScopes()
     for (const row of catalog.listDocuments()) {
       if (claimed.has(row.id)) continue
+      if ([...this.skippedPaths].some(target => isPathInside(this.workspace.style, target, row.path))) {
+        if (this.rebuilding) this.mutations.push(() => catalog.upsertDocument(row))
+        continue
+      }
       const stat = await statIfPresent(row.path)
       const folder = this.options.kinds.get(row.kind)?.storage === 'folder'
       if (stat && (folder ? !stat.isDirectory() : !stat.isFile())) throw new Error(`文档位置不是${folder ? '文件夹' : '文件'}：${row.path}`)
@@ -447,7 +511,7 @@ export class DocumentIndexScanner {
     return [
       ...projectRoots.map((root) => (target: string) => isPathInside(style, root, target)),
       ...this.standaloneFolders().map((folder) => (target: string) => isPathInside(style, folder, target)),
-      ...folders.map((folder) => (target: string) => pathKey(style, path.dirname(target)) === pathKey(style, folder)),
+      ...folders.map((folder) => (target: string) => samePath(style, folder, path.dirname(target))),
     ]
   }
 }

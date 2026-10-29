@@ -104,7 +104,7 @@ function createEngine(
 }
 
 function context(): ApplicationExecutionContext {
-  return { requestId: 'request-failure-reporting', exposure: 'assistant', permissions: new Set<string>(), acceptedDataClasses: new Set(['C0', 'C1', 'C2', 'C3']) } as ApplicationExecutionContext
+  return { requestId: 'request-failure-reporting', exposure: 'assistant', acceptedDataClasses: new Set(['C0', 'C1', 'C2', 'C3']) } as ApplicationExecutionContext
 }
 
 async function commitFailingPlan(fail: () => never) {

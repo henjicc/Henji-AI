@@ -12,8 +12,6 @@ import { restoreForwardFields } from '../persistence/forwardCompat'
 export const DOCUMENT_FORMAT = 'henji-document' as const
 export const DOCUMENT_ENVELOPE_VERSION = 1
 export const DOCUMENT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
-/** 单个文档文件的读取预算，避免一次解析占满主进程内存；超出不等于文件损坏。 */
-export const MAX_DOCUMENT_FILE_BYTES = 256 * 1024 * 1024
 
 export const documentIdSchema = z.string().regex(DOCUMENT_ID_PATTERN, '文档 ID 无效。')
 const isoTimestampSchema = z.iso.datetime({ offset: true })

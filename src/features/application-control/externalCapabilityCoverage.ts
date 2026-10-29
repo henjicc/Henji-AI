@@ -17,7 +17,7 @@ export function auditExternalCapabilityCoverage(input: {
   const published = new Set(input.publishedIds ?? projectExternalCapabilities(definitions).all.map(definition => definition.id))
   const reflection = input.reflection ?? getApplicationReflectionRegistry()
   const description = reflection.describe({}, { exposure: 'local_adapter',
-    permissions: new Set(reflection.listDeclaredPropertyPermissions()), acceptedDataClasses: new Set(['C0', 'C1']) })
+    acceptedDataClasses: new Set(['C0', 'C1']) })
   const entities = new Map(description.entities.map(entity => [entity.id, entity]))
   const properties = new Map(description.properties.map(property => [property.id, property]))
   const issues: string[] = []

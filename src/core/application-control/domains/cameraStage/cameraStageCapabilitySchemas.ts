@@ -121,7 +121,7 @@ export function cameraStageControl(
 ): NonNullable<ApplicationCapabilityDefinition['control']> {
   return {
     execution: {
-      mode: effect === 'delete' ? 'confirmation_required' : 'immediate',
+      mode: 'immediate',
       cancelable: false,
       resultState: effect === 'observe' ? 'observed' : 'completed',
     },

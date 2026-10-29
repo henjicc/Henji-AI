@@ -31,14 +31,14 @@ function resourceState(value: unknown): ResourceState {
     const record = { ...data } as Record<string, unknown>
     const revisions = z.record(z.string(), z.number()).safeParse(record.revisions)
     if (revisions.success) Object.keys(revisions.data).forEach(scope => scopes.add(scope))
-    // 授权读取的时间和基线 ID 每次不同，不代表资源内容变化。
+    // 读取时间和基线 ID 每次不同，不代表资源内容变化。
     delete record.capturedAt; delete record.baselineId
     return { ...content, text: record }
   }) : value
   return { fingerprint: createHash('sha256').update(JSON.stringify(contents)).digest('hex'), scopes: [...scopes] }
 }
 
-/** SDK 仍负责订阅协议；此总线只限定每条流可接收的授权应用事件。 */
+/** SDK 仍负责订阅协议；此总线按资源订阅向每条流派发应用事件。 */
 export class ApplicationResourceSubscriptions implements ServerEventBus {
   private context = new AsyncLocalStorage<SubscriptionOwner>()
   private listeners = new Set<Listener>()
@@ -54,7 +54,7 @@ export class ApplicationResourceSubscriptions implements ServerEventBus {
     const request = z.object({ method: z.string(), params: z.object({
       notifications: z.object({ resourceSubscriptions: z.array(z.string()).optional() }).passthrough().optional(),
     }).passthrough().optional() }).passthrough().safeParse(body)
-    // 协议格式错误交给官方 handler；只有有效的订阅才需要额外领域授权。
+    // 协议格式错误交给官方 handler；有效订阅仍须验证资源可读与连接身份。
     if (envelope.success && !request.success) throw new Error('INVALID_INPUT:资源订阅参数不合法。')
     const uris = envelope.success && request.success && request.data.method === 'subscriptions/listen'
       ? [...new Set(request.data.params?.notifications?.resourceSubscriptions ?? [])] : []

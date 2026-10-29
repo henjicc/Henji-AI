@@ -79,7 +79,7 @@ export function refuseCodeComponentRemoval(name: string, version?: number): neve
     const used = (pins: readonly CodeComponentPin[]): boolean => pins.some(pin => pin.name === name && (version === undefined || pin.version === version) || used(pin.imports))
     return used(source.imports ?? []) ? [`${owner.document.name} / ${definition.name}`] : []
   })))
-  throw new Error(references.length ? `此组件版本仍被素材引用：${[...new Set(references)].join('、')}。请先移除引用；已发布源码不会自动删除。` : '删除整个项目组件需要单独的破坏性授权；此集合只开放读取和发布新版本，不能删除用户可见源码文件。')
+  throw new Error(references.length ? `此组件版本仍被素材引用：${[...new Set(references)].join('、')}。请先移除引用；已发布源码不会自动删除。` : '此集合用于读取组件和发布不可变版本，不能删除已发布的源码文件。')
 }
 export interface CodeComponentReference { materialRef: { kind: string; id: string; label: string }; documentName: string; componentVersion: number }
 /** Saved unopened clips are included; the current in-memory document overrides its saved snapshot. */

@@ -23,7 +23,7 @@ describe('图片编辑唯一保存宿主', () => {
     const { owner, add, write, bus } = setup()
     const batch = owner.begin(), settled = vi.fn(async () => undefined)
     add('layout'); owner.acceptCurrent()
-    const context = { requestId: 'transaction', exposure: 'local_adapter' as const, permissions: new Set<string>(), acceptedDataClasses: new Set(['C1'] as const), persistenceScopes: new Set([owner.key]) }
+    const context = { requestId: 'transaction', exposure: 'local_adapter' as const, acceptedDataClasses: new Set(['C1'] as const), persistenceScopes: new Set([owner.key]) }
     await owner.confirmStep(context, settled)
     expect(write).not.toHaveBeenCalled(); expect(settled).not.toHaveBeenCalled()
     write.mockRejectedValueOnce(new Error('disk unavailable'))

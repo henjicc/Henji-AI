@@ -146,7 +146,6 @@ const planCanvasBatch = defineApplicationCapability({
   aliases: ['批量修改画布', 'plan canvas batch'],
   readOnly: true,
   dataClasses: ['C1'],
-  permission: 'canvas:plan',
   idempotent: false,
   destructive: false,
   timeoutMs: 8_000,
@@ -187,7 +186,6 @@ const previewCanvasBatch = defineApplicationCapability({
   readOnly: true,
   control: capabilityControl('observe', ['canvas.batch_plan']),
   dataClasses: ['C0'],
-  permission: 'canvas:preview',
   idempotent: true,
   destructive: false,
   timeoutMs: 5_000,
@@ -210,19 +208,7 @@ const previewCanvasBatch = defineApplicationCapability({
   summarize: (output) => output.summary,
 })
 
-const compiledApprovalContextSchema = z.object({
-  actionGroupDigest: z.string().min(1).max(200),
-  operationCount: z.number().int().min(1).max(20),
-  targetIds: z.record(z.string().min(1).max(100), z.string().max(500))
-    .refine((targets) => Object.keys(targets).length <= 32, '批次审批目标最多 32 项'),
-  permissions: z.array(z.string().min(1).max(200)).min(1).max(20),
-}).strict()
-
-const commitCanvasBatchInputSchema = z.object({
-  planRef: z.string().min(1),
-  /** 仅由宿主编译器注入；模型可见 schema 不暴露此信封。 */
-  compiledApprovalContext: compiledApprovalContextSchema.optional(),
-}).strict()
+const commitCanvasBatchInputSchema = z.object({ planRef: z.string().min(1) }).strict()
 
 const commitCanvasBatch = defineApplicationCapability({
   id: 'commit_canvas_batch',
@@ -234,7 +220,6 @@ const commitCanvasBatch = defineApplicationCapability({
   aliases: ['执行画布批量计划', 'commit canvas batch'],
   readOnly: false,
   dataClasses: ['C1'],
-  permission: 'canvas:batch_write',
   idempotent: false,
   destructive: true,
   timeoutMs: 30_000,
@@ -262,24 +247,20 @@ const commitCanvasBatch = defineApplicationCapability({
   resolveConcurrencyKey: (input) => `canvas_batch:${input.planRef}`,
   resolveTargetIds: (input) => ({
     planRef: input.planRef,
-    ...(input.compiledApprovalContext?.targetIds ?? {}),
   }),
   preview: (input) => ({
     title: '提交画布批量操作',
-    summary: input.compiledApprovalContext
-      ? `提交 ${input.compiledApprovalContext.operationCount} 项画布操作；涉及权限 ${input.compiledApprovalContext.permissions.join('、')}，成功后提供单次撤销。`
-      : `提交画布批量计划 ${input.planRef}，成功后提供单次撤销。`,
+    summary: `提交画布批量计划 ${input.planRef}，成功后提供单次撤销。`,
     targetIds: {
       planRef: input.planRef,
-      ...(input.compiledApprovalContext?.targetIds ?? {}),
-    },
+      },
     reversible: true,
     dataClasses: ['C1'],
   }),
   summarize: (output) => `画布批量计划已提交，${output.operationCount} 个步骤完成。`,
   createUndo: (output) => ({ kind: 'canvas_history', token: output.undoRef }),
   resolveObservedEffects: (_input, output) => resolveCanvasBatchEffects(output),
-  control: { execution: { mode: 'confirmation_required', cancelable: false, resultState: 'completed' }, impacts: [
+  control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [
     { effect: 'create', entityTypes: ['canvas.node', 'canvas.edge'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true },
     { effect: 'update', entityTypes: ['canvas.node', 'canvas.document'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true },
     { effect: 'delete', entityTypes: ['canvas.node', 'canvas.edge'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true },

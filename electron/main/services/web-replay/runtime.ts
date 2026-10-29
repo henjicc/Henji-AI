@@ -28,13 +28,11 @@ import { listWebReplayTakes, readWebReplayTake, readWebReplayTakeBehavior, rende
 
 const logger = createMainLogger('main.web_replay')
 const importedRecordingSources = new Map<string, ContentTrustReference>()
-const MAX_EXTERNAL_BYTES = 32 * 1024 * 1024
 
 async function fetchExternal(url: string, userAgent: string): Promise<{ status: number; contentType: string; bytes: Uint8Array }> {
   // Same request the WebView made: no referrer (the app uses referrerPolicy="no-referrer"), same UA.
   const response = await net.fetch(url, { headers: { 'user-agent': userAgent }, referrerPolicy: 'no-referrer', bypassCustomProtocolHandlers: true })
   const bytes = new Uint8Array(await response.arrayBuffer())
-  if (bytes.byteLength > MAX_EXTERNAL_BYTES) throw new Error('外部资源过大')
   return { status: response.status, contentType: response.headers.get('content-type') ?? '', bytes }
 }
 

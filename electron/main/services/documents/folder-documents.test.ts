@@ -37,6 +37,22 @@ describe('文件夹类型文档（.hjweb）', () => {
   beforeEach(() => { env = createTestEnvironment({ adapters: createPackageAdapterRegistry([createWebRecordingDocumentAdapter()]) }) })
   afterEach(async () => { await env.cleanup() })
 
+  it('文件夹文档包把无法打包的链接回报为缺项，正常内容仍可导入', async () => {
+    const { service } = env.services
+    vi.spyOn(env.services.workspace, 'randomId').mockImplementation(randomUUID)
+    const project = await service.createProject({ name: '录制项目' })
+    const directory = path.join(project.path, '素材', '录屏', '来源.hjweb')
+    await writeRecording(directory)
+    await service.refreshIndex()
+    const missing = path.join(directory, '悬空链接')
+    await fsp.symlink(path.join(env.outside, '不存在'), missing, process.platform === 'win32' ? 'junction' : 'dir')
+    const exported = await service.exportDocumentPackage({ target: { id: ID }, destination: path.join(env.outside, '不完整录制包') })
+    expect(exported.missingPaths).toEqual([missing])
+    const imported = await service.importPackage({ source: exported.path, container: { kind: 'project', projectId: project.id } })
+    if (imported.type !== 'document') throw new Error('应为文档包')
+    expect(await fsp.readFile(path.join(imported.meta.path, 'blobs', 'nested.hjcvs'), 'utf8')).toBe('{}')
+  })
+
   it('扫描认领 .hjweb 文件夹为一份文档，不把里面的文件当文档；列表摘要来自 recording.json', async () => {
     const { service, workspace } = env.services
     const project = await service.createProject({ name: '元宝搜索' })

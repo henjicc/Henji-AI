@@ -12,7 +12,7 @@ describe('voice library application reflection', () => {
     await voiceLibraryService.upsertVoice(voice)
     const registry = new ApplicationReflectionRegistry(APPLICATION_CAPABILITY_CATALOG_VERSION)
     registry.register(createVoiceLibraryReflectionRegistration())
-    const context = { requestId: 'fixture', exposure: 'assistant' as const, permissions: new Set(['generation:read', 'generation:write']), acceptedDataClasses: new Set(['C0', 'C1'] as const) }
+    const context = { requestId: 'fixture', exposure: 'assistant' as const, acceptedDataClasses: new Set(['C0', 'C1'] as const) }
     expect(registry.describe({ entityTypes: ['generation.voice'] }, context).entities).toHaveLength(1)
     const listed = await registry.listEntities('generation.voice', { limit: 20 }, context)
     const ref = listed.refs[0]

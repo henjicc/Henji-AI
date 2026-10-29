@@ -9,8 +9,6 @@ import type { OperationReviewCommand, OperationReviewSnapshot } from './operatio
 export const APPLICATION_READ_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.read.map(definition => definition.id)
 export const APPLICATION_WRITE_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.write.map(definition => definition.id)
 export const APPLICATION_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.all.map(definition => definition.id)
-export const APPLICATION_WRITE_PERMISSIONS = [...new Set(EXTERNAL_APPLICATION_CAPABILITIES.write.map(definition => definition.permission))]
-export const APPLICATION_READ_PERMISSIONS = [...new Set(EXTERNAL_APPLICATION_CAPABILITIES.read.map(definition => definition.permission))]
 export const localHostRequestSchema = z.object({
   requestId: z.string().uuid(), rendererEpoch: z.string().uuid(), callerId: z.string().uuid(),
   capabilityId: z.enum(APPLICATION_CAPABILITY_IDS), input: z.record(z.string(), z.unknown()),

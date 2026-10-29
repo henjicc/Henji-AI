@@ -13,7 +13,7 @@ const output = z.object({ documentRef, pendingWindows: z.number().int(), readyFr
 export const renderVideoEditPreviewCapability = defineApplicationCapability({
   id: 'render_video_edit_preview', title: '预渲染剪辑预览',
   description: '免费本地后台把当前序列指定范围的段落渲染成预览文件（编码与画质按设置 video_edit.render_format / video_edit.render_quality，码率随序列分辨率与帧率），让节目监视器在完整分辨率下流畅播放，相当于 Premiere 的“渲染入点到出点”。启动后在后台进行并立即返回，进度与完成情况从 video_edit.document.render_cache 读取（rendering 为进行中；all 的请求范围全部 ready 即完成，needed 只处理红黄段）。按剪辑点、转场与字幕边界分段，长段等分到最多五秒，小于半秒的段与相邻段合并，已渲染且内容未改的段落跳过；修改片段、效果参数、代码源码或素材后只有受影响的段落需要重新渲染。只写作品目录下的缓存（受缓存容量上限与自动清理约束），不改剪辑内容；暂停画面、选帧和导出仍实时合成。节目播放时自动暂停渲染，可取消。渲染状态从 video_edit.document.render_cache 读取。',
-  version: 2, domain: 'video_edit', aliases: ['渲染预览', '渲染入点到出点', '预渲染', '渲染条', 'render preview', 'render in to out'], readOnly: false, dataClasses: ['C1'], permission: 'video_edit:write',
+  version: 2, domain: 'video_edit', aliases: ['渲染预览', '渲染入点到出点', '预渲染', '渲染条', 'render preview', 'render in to out'], readOnly: false, dataClasses: ['C1'],
   destructive: false, supportsPreview: false, supportsUndo: false, idempotent: true, timeoutMs: 600000, requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document'], producesRefs: ['video_edit.document'],
   inputSchema: input, outputSchema: output,
   resolveConcurrencyKey: parsed => `video_edit_render_cache:${parsed.documentRef.id}`,

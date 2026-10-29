@@ -70,7 +70,7 @@ export function assertVideoEditEntityExists(ref: ApplicationRef): void {
   if (!VIDEO_EDIT_TYPES.includes(ref.kind as VideoEditEntityType)) throw new Error('未知剪辑实体类型。')
   if (!videoEditEntityItems(instance.document, ref.kind as VideoEditEntityType).some(item => item.id === childId)) throw new Error('NOT_FOUND：目标不属于此剪辑或已删除。')
 }
-export function readVideoEditData(ref: ApplicationRef, codeMetadata = false, propertyIds?: readonly string[], _permissions?: ReadonlySet<string>): VideoEditFieldData {
+export function readVideoEditData(ref: ApplicationRef, codeMetadata = false, propertyIds?: readonly string[]): VideoEditFieldData {
   const { projectId, childId } = splitVideoEditRef(ref); const instance = requireVideoEditInstance(projectId)
   if (ref.kind === 'video_edit.document') return { audioLinkNotices: getVideoEditAudioLinkNotices(projectId).map(n => ({ ...n })), audioAnalysisProgress: videoEditContentAudioProgress(projectId), selectedCodeElement: JSON.parse(JSON.stringify(videoEditSelectedCodeElementContext(instance))), mediaImport: (() => { const task = videoEditImportTask(projectId); return task ? { phase: task.phase, completed: task.completed, total: task.total, totalKnown: task.totalKnown ?? false, discovered: task.discovered ?? task.total, queued: task.queued, requests: task.requests, imported: task.imported, skipped: task.skipped } : null })(), proxyPreference: { ...getVideoEditProxyPreference(projectId) }, colorLuts: (instance.document.colorLuts ?? []).map(({ id, name }) => ({ id, name })), name: instance.document.name, frame: instance.frame, selection: instance.selection ?? '', activeSequenceId: instance.activeSequenceId, dirty: instance.dirty, selectedItemIds: [...instance.selectedItemIds], selectedBinId: instance.selectedBinId, openSequenceIds: [...instance.openSequenceIds], timelineView: { ...getVideoEditTimelineView(projectId) }, programPlayback: { frame: instance.frame, playing: instance.playing, playbackDirection: instance.playbackDirection }, playbackResolution: { ...getVideoEditPlaybackResolution(projectId) }, renderCache: JSON.parse(JSON.stringify(readVideoEditRenderCache(projectId))), renderPreference: { ...getVideoEditRenderPreference(projectId) } }
   if (ref.kind === 'video_edit.source') { if (childId !== 'source') throw new Error('NOT_FOUND：源预览引用无效。'); return { ...readVideoEditSource(projectId) } }
@@ -162,7 +162,7 @@ class VideoEditProvider implements ApplicationEntityProvider {
       await ensureVideoEditCodeParameterMetadata(owner, owner.document, definition.id, this.entityType === 'video_edit.code_material' ? definition.defaultVersionId : childId, context?.signal)
     }
     const fields = request.propertyIds?.length ? VIDEO_EDIT_FIELDS[this.entityType].filter(field => request.propertyIds!.includes(field.propertyId)) : VIDEO_EDIT_FIELDS[this.entityType]
-    const data = fieldReadValues(fields, readVideoEditData(ref, needsMetadata, request.propertyIds, context?.permissions))
+    const data = fieldReadValues(fields, readVideoEditData(ref, needsMetadata, request.propertyIds))
     return { ref, entityType: this.entityType, revisions: { video_edit: videoEditRevision() }, properties: request.propertyIds?.length ? Object.fromEntries(Object.entries(data).filter(([key]) => request.propertyIds!.includes(key))) : data, capturedAt: new Date().toISOString() }
   }
   async getPropertyAvailability(ref: ApplicationRef, propertyIds: string[]) {

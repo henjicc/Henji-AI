@@ -6,10 +6,8 @@ import { codeElementOverridesSchema } from './codeElementOverrides'
 import { formatMigrations } from '../persistence/formatMigrations'
 import { PersistenceError, upgradePersistenceContent, type PersistenceContract } from '../persistence/migrations'
 
-/** Bytes bound a serialized source manifest; image dependency count has no product ceiling. */
-export const CODE_ASSET_LIMITS = Object.freeze({ bytes: 512 * 1024 })
 export const CODE_ASSET_MIME = 'application/x-henji-code'
-export const CODE_ASSET_VERSION = 10
+export const CODE_ASSET_VERSION = 11
 /** v10 可携带作者接口 v6；旧程序不能正确执行排版库，必须明确要求升级。 */
 export const CODE_ASSET_MIN_READER_VERSION = 10
 export const codeAssetContentSchema = z.object({ sizeBytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), fileModifiedAt: z.number().finite().nonnegative(), contentIdentity: z.string().regex(/^[a-f0-9]{64}$/) }).strict()
@@ -61,7 +59,7 @@ export function parseCodeAssetBytes(bytes: Uint8Array, backupPath?: string): unk
   catch (cause) { throw new PersistenceError('corrupt', 'code-asset', '可编辑代码资产', 0, CODE_ASSET_VERSION, [], backupPath, { cause }) }
 }
 export function decodeCodeAsset(bytes: Uint8Array, backupPath?: string): CodeAsset {
-  if (!bytes.byteLength || bytes.byteLength > CODE_ASSET_LIMITS.bytes) throw new Error('代码素材清单不能为空且最多512KiB。')
+  if (!bytes.byteLength) throw new Error('代码素材清单不能为空。')
   const raw = parseCodeAssetBytes(bytes, backupPath)
   const version = raw && typeof raw === 'object' && 'version' in raw && typeof raw.version === 'number' ? raw.version : 0
   const minReaderVersion = raw && typeof raw === 'object' && 'minReaderVersion' in raw && typeof raw.minReaderVersion === 'number' ? raw.minReaderVersion : undefined
@@ -72,6 +70,5 @@ export function decodeCodeAsset(bytes: Uint8Array, backupPath?: string): CodeAss
 export function encodeCodeAsset(input: CodeAsset): Uint8Array {
   const { format, version, minReaderVersion: _minReaderVersion, ...rest } = codeAssetSchema.parse(input)
   const bytes = new TextEncoder().encode(JSON.stringify({ format, version, minReaderVersion: CODE_ASSET_MIN_READER_VERSION, ...rest }))
-  if (bytes.byteLength > CODE_ASSET_LIMITS.bytes) throw new Error('代码素材清单最多512KiB。')
   return bytes
 }

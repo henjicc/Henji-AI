@@ -27,7 +27,6 @@ import { ImageEditV3DocumentMutationExecutor } from './imageEditV3MutationExecut
 
 const accessContext: ApplicationControlAccessContext = {
   exposure: 'assistant',
-  permissions: new Set(['image_edit:read', 'image_edit:write']),
   acceptedDataClasses: new Set(['C0', 'C1']),
 }
 
@@ -216,7 +215,7 @@ describe('图片编辑 V3 实时 Application Control', () => {
     for (const field of fields) if (field.value.kind === 'json') {
       expect(reflection.resolveSchema(field.value.schemaRef, accessContext)).toBeTruthy()
       expect(() => reflection.resolveSchema(field.value.kind === 'json' ? field.value.schemaRef : field.schemaRef,
-        { ...accessContext, permissions: new Set() })).not.toThrow()
+        accessContext)).not.toThrow()
     }
     const before = await reflection.readEntity(parent, undefined, accessContext)
     const created = await commitStep('添加两个图层滤镜', before.revisions, { kind: 'collection', parent,

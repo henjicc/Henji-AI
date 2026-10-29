@@ -88,7 +88,7 @@ export class CreativeExplanationMutationExecutor implements ApplicationMutationE
 export function bindExplanationBodyWriter(getEngine: () => import('@/core/application-control').ApplicationControlExecutionEngine): void {
 registerExplanationBodyWriter(async (ref, changes) => {
   const engine = getEngine(), { domain } = explanationBodyRecord(ref)
-  const context: ApplicationExecutionContext = { exposure: 'ui', permissions: new Set([`${domain}:read`, `${domain}:write`]), acceptedDataClasses: new Set(['C0', 'C1', 'C2']), requestId: crypto.randomUUID() }
+  const context: ApplicationExecutionContext = { exposure: 'ui', acceptedDataClasses: new Set(['C0', 'C1', 'C2']), requestId: crypto.randomUUID() }
   const revisions = intentRevisions(domain)
   const plan = await engine.plan({ summary: '校正讲解', transactionMode: 'atomic', steps: [{ kind: 'mutation', target: ref, entityType: ref.kind, expectedRevisions: revisions, mutations: Object.entries(changes).map(([key, value]) => ({ propertyId: `${ref.kind}.${key}`, operation: 'set', value: JSON.parse(JSON.stringify(value)) as JsonValue })) }] }, context)
   const result = await engine.commit({ planRef: plan.planRef, idempotencyKey: context.requestId, expectedRevisions: revisions }, context)

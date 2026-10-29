@@ -87,7 +87,7 @@ describe('绘画正式助手与人同源', () => {
       const pixels = [...storage.values()][0].data;
       const channels = destination === 'pixels' ? 4 : 1;
       expect(pixels[(8 * 32 + 16) * channels]).toBeCloseTo(destination === 'pixels' ? 1 : .7); expect(pixels[0]).toBe(0);
-      const read = await getApplicationReflectionRegistry().readEntity(imageEditV3LayerRef(document.id, layer.id), undefined, { exposure: 'assistant', permissions: new Set(['image_edit:read']), acceptedDataClasses: new Set(['C0', 'C1']) });
+      const read = await getApplicationReflectionRegistry().readEntity(imageEditV3LayerRef(document.id, layer.id), undefined, { exposure: 'assistant', acceptedDataClasses: new Set(['C0', 'C1']) });
       expect(read.properties['image_edit.layer.name']).toBe('绘画'); expect(bus.getPersistenceSnapshot().history.undo.filter(entry => entry.forward.type === (destination === 'pixels' ? 'raster.apply-tile-delta' : 'mask.apply-tile-delta'))).toHaveLength(1);
       expect(bus.undo()).toBe(true); expect(bus.redo()).toBe(true);
     } finally { dispose(); }

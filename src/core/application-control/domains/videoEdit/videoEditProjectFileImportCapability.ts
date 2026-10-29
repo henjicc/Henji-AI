@@ -36,7 +36,7 @@ export const importVideoEditProjectFilesCapability = defineApplicationCapability
   id: 'import_video_edit_project_files', version: 1, domain: 'video_edit', title: '导入项目文件夹里的素材',
   description: '把剪辑所在项目文件夹里的文件或文件夹直接导入素材面板，不弹选择窗口。paths 可给绝对路径，或以当前项目文件夹为基准的相对路径（如 素材/截图/产品主页.png、../其他素材），目录链接按实际位置读取。路径不存在或无法读取时逐条说明原因，本次不导入。剪辑不在项目里时拒绝。文件夹按剪辑设置递归建同名素材箱，素材引用原文件、不复制，默认跳过已在同一素材箱里的文件。binRef 指定放进哪个已有素材箱，省略时放在素材面板顶层。返回每个素材项的 itemRef、mediaRef、所在素材箱与相对路径（imported 新导入，reused 已有同一文件），以及跳过的文件与原因：unsupported 格式不支持，duplicate 重复，unreadable 读不出或无法解码，repeated_folder 目录回环或重复给出。与拖入、import_video_edit_folder 共用导入队列，进度可读 video_edit.document.media_import；每次请求一步撤销，取消保留已完成部分。',
   aliases: ['导入项目文件', '导入项目素材', '按路径导入素材', '项目文件夹导入', 'import project files'],
-  readOnly: false, dataClasses: ['C1'], permission: 'video_edit:write', idempotent: false, destructive: false,
+  readOnly: false, dataClasses: ['C1'], idempotent: false, destructive: false,
   timeoutMs: 600000, supportsPreview: false, supportsUndo: true,
   requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.bin'], producesRefs: ['video_edit.item', 'video_edit.media'],
   prerequisites: ['剪辑必须在项目里，作为相对路径的定位基准。'],

@@ -44,7 +44,7 @@ const descriptions = {
 } as const
 export const VIDEO_EDIT_EXPORT_CAPABILITIES = (Object.keys(descriptions) as Array<keyof typeof descriptions>).map(id => defineApplicationCapability<z.infer<typeof videoEditExportInputSchema> | z.infer<typeof videoEditExportQuerySchema> | z.infer<typeof videoEditExportTaskInputSchema>, z.infer<typeof output> | z.infer<typeof queryOutput>>({
   id, title: descriptions[id][0], description: descriptions[id][1], version: 1, domain: 'video_edit', aliases: [descriptions[id][0], '导出抖音竖版和B站横版'],
-  readOnly: id === 'query_video_edit_export', dataClasses: ['C1'], permission: id === 'query_video_edit_export' ? 'video_edit:read' : 'video_edit:write',
+  readOnly: id === 'query_video_edit_export', dataClasses: ['C1'],
   idempotent: id !== 'export_video_edit', destructive: false, timeoutMs: 600000, supportsPreview: false, supportsUndo: false, requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.sequence', 'video_edit.export_preset'], producesRefs: ['video_edit.document'],
   concurrencyKey: 'video_edit_export', resolveConcurrencyKey: parsed => `video_edit_export:${parsed.documentRef.id}`,
   inputSchema: id === 'export_video_edit' ? videoEditExportInputSchema : id === 'query_video_edit_export' ? videoEditExportQuerySchema : videoEditExportTaskInputSchema, outputSchema: id === 'query_video_edit_export' ? queryOutput : output,

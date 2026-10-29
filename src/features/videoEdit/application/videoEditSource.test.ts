@@ -273,7 +273,7 @@ it('源补偿保留逆序命令链与真实播放观察，拒绝后续手动操�
   const presenter = async (request: Parameters<Parameters<typeof registerVideoEditSourcePresenter>[1]>[0]) => ({ timeUs: request.timeUs, presentedTimeUs: request.timeUs, playing: request.playing, volume: request.volume })
   const off = registerVideoEditSourcePresenter(id, presenter)
   const executor = new VideoEditSourceExecutor()
-  const context: ApplicationExecutionContext = { requestId: crypto.randomUUID(), exposure: 'assistant', permissions: new Set(['video_edit:read', 'video_edit:write']), acceptedDataClasses: new Set(['C1']) }
+  const context: ApplicationExecutionContext = { requestId: crypto.randomUUID(), exposure: 'assistant', acceptedDataClasses: new Set(['C1']) }
   const step = (time: number): Extract<ApplicationPlannedStep, { kind: 'mutation' }> => ({ kind: 'mutation', entityType: 'video_edit.source', target: { kind: 'video_edit.source', id: `${id}:source` }, expectedRevisions: { video_edit: videoEditDomainRevision() }, mutations: [{ propertyId: 'video_edit.source.time_us', operation: 'set', value: time }] })
   await updateVideoEditSource(id, { itemId: instance.document.items[0].id })
   const first = await executor.apply(step(1000000), context); const second = await executor.apply(step(2000000), context)
@@ -317,7 +317,7 @@ function sourceMutation(projectId: string, timeUs: number): Extract<ApplicationP
   return { kind: 'mutation', entityType: 'video_edit.source', target: { kind: 'video_edit.source', id: `${projectId}:source` }, expectedRevisions: { video_edit: videoEditDomainRevision() }, mutations: [{ propertyId: 'video_edit.source.time_us', operation: 'set', value: timeUs }] }
 }
 function sourceContext(): ApplicationExecutionContext {
-  return { requestId: crypto.randomUUID(), exposure: 'assistant', permissions: new Set(['video_edit:read', 'video_edit:write']), acceptedDataClasses: new Set(['C1']) }
+  return { requestId: crypto.randomUUID(), exposure: 'assistant', acceptedDataClasses: new Set(['C1']) }
 }
 
 it('源请求已确认但回执尚未返回时的新手动定位不能被纳入旧请求回执', async () => {

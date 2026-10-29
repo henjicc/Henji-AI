@@ -12,7 +12,7 @@ export async function encodePngWithStoryboardMetadata(
   metadata: StoryboardImageMetadataDto
 ): Promise<Buffer> {
   const sharp = await loadSharp()
-  const png = await sharp(input).png().toBuffer()
+  const png = await sharp(input, { limitInputPixels: false }).png().toBuffer()
   const chunk = createItxtChunk(METADATA_KEY, JSON.stringify({ version: STORYBOARD_METADATA_VERSION, ...normalizeMetadata(metadata) }))
   return insertChunkAfterIhdr(png, chunk)
 }

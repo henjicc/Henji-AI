@@ -4,7 +4,7 @@ import { backupPersistenceSnapshot } from '@/core/persistence/backup'
 import { PersistenceError } from '@/core/persistence/migrations'
 import { componentFileReferences, documentCodeSourceResolver, loadCodeSourceReferences, type CodeComponentPin } from '@/core/videoEdit/codeMaterial/sources'
 import { createLogger } from '@/core/logging'
-import { CODE_ASSET_VERSION, CODE_ASSET_LIMITS, codeAssetSchema, codeAssetContract, parseCodeAssetBytes, decodeCodeAsset, detachCodeAssetScenes, encodeCodeAsset, type CodeAsset } from '@/core/videoEdit/codeAsset'
+import { CODE_ASSET_VERSION, codeAssetSchema, codeAssetContract, parseCodeAssetBytes, decodeCodeAsset, detachCodeAssetScenes, encodeCodeAsset, type CodeAsset } from '@/core/videoEdit/codeAsset'
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
 import { codeMaterialMediaIds } from '@/core/videoEdit/codeMaterialResources'
 import { prepareCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
@@ -57,8 +57,8 @@ function binding(owner: VideoEditInstance, target: VideoEditCodeAssetTarget): { 
 export async function readVideoEditCodeAsset(assetId: string, signal?: AbortSignal): Promise<{ asset: AssetRecord; manifest: CodeAsset }> {
   signal?.throwIfAborted()
   const asset = await assetApplicationService.inspect(assetId)
-  if (asset.mediaType !== 'code' || asset.inspectionStatus !== 'ready' || !asset.contentIdentity || asset.sizeBytes === null || asset.sizeBytes > CODE_ASSET_LIMITS.bytes) throw new Error('此素材不是可用的可编辑代码资产，请在资产库检查原文件。')
-  const bytes = await getPlatform().system.fs.readFile(asset.filePath, { maxBytes: CODE_ASSET_LIMITS.bytes })
+  if (asset.mediaType !== 'code' || asset.inspectionStatus !== 'ready' || !asset.contentIdentity || asset.sizeBytes === null) throw new Error('此素材不是可用的可编辑代码资产，请在资产库检查原文件。')
+  const bytes = await getPlatform().system.fs.readFile(asset.filePath)
   signal?.throwIfAborted()
   let manifest: CodeAsset
   try {

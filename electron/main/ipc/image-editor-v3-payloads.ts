@@ -25,7 +25,6 @@ import { parseRecord } from './registry'
 const DOCUMENT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9:_-]{1,160}$/
 const RESOURCE_REF_PATTERN = /^sha256:[a-f0-9]{64}$/
-const MAX_DOCUMENT_BYTES = 64 * 1024 * 1024
 const MAX_RESOURCE_REFS = 50_000
 const MAX_PROXY_DIMENSION = 4_096
 const MAX_IPC_TILE_HALO = 512
@@ -209,11 +208,7 @@ function assertUniqueBrushTileKeys(keys: readonly string[]): void {
 export function normalizeImageEditorV3Document(
   value: unknown,
 ): { documentId: string; revision: number; document: unknown } {
-  const serialized = JSON.stringify(value)
-  if (serialized === undefined || Buffer.byteLength(serialized, 'utf8') > MAX_DOCUMENT_BYTES) {
-    throw new Error('Image editor V3 document exceeds IPC limit')
-  }
-  const decoded = decodeImageEditDocumentV3(JSON.parse(serialized) as unknown)
+  const decoded = decodeImageEditDocumentV3(value)
   const document = decoded.document
   if (!document || !DOCUMENT_ID_PATTERN.test(document.id)) {
     throw new Error('Invalid image editor V3 document identity')

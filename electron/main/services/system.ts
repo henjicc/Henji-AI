@@ -61,20 +61,22 @@ export async function readFileBytes(targetPath: string, options?: { maxBytes: nu
   ensureValidPath(targetPath)
   if (!options) return await fs.readFile(targetPath)
   const { maxBytes } = options
-  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 16 * 1024 * 1024) throw new Error('maxBytes必须为1至16MiB的整数。')
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) throw new Error('maxBytes必须为正的安全整数。')
   const handle = await fs.open(targetPath, 'r')
   try {
     const stat = await handle.stat()
     if (!stat.isFile() || stat.size > maxBytes) throw new Error('文件超出读取预算或不是普通文件。')
-    const bytes = Buffer.alloc(maxBytes + 1)
-    let offset = 0
-    while (offset < bytes.byteLength) {
-      const read = await handle.read(bytes, offset, bytes.byteLength - offset, offset)
-      if (!read.bytesRead) return bytes.subarray(0, offset)
-      offset += read.bytesRead
-      if (offset > maxBytes) throw new Error('文件在读取期间超出预算。')
-    }
-    throw new Error('文件在读取期间超出预算。')
+    const chunks: Buffer[] = []
+    let total = 0
+    let bytesRead: number
+    do {
+      const bytes = Buffer.allocUnsafe(Math.min(64 * 1024, maxBytes - total + 1))
+      ;({ bytesRead } = await handle.read(bytes, 0, bytes.length, null))
+      total += bytesRead
+      if (total > maxBytes) throw new Error('文件在读取期间超出预算。')
+      if (bytesRead) chunks.push(bytes.subarray(0, bytesRead))
+    } while (bytesRead > 0)
+    return Buffer.concat(chunks, total)
   } finally { await handle.close() }
 }
 

@@ -4,7 +4,7 @@ import { codeLocationSchema } from '../../storage/gitCodeLocation'
 import { z } from 'zod'
 import { sha256HexString } from '../../../utils/save/hash'
 import { mapWithConcurrency } from '../../../utils/mapWithConcurrency'
-import { CODE_MATERIAL_LIMITS, CodeMaterialError } from './contract'
+import { CodeMaterialError } from './contract'
 import { authorLibraryVersion, type AuthorLibraryVersions } from './authorLibraries'
 import type { CodeAuthorApiVersion } from '../codeAuthorProgram'
 
@@ -18,34 +18,27 @@ export interface CodeSource { hash: string; source: string }
 export interface CodeFileReference { path: string; location: string; hash: string }
 export interface CodeComponentPin { name: string; version: number; location: string; hash: string; imports: CodeComponentPin[] }
 const rawComponentPinSchema: z.ZodType<CodeComponentPin> = z.lazy(() => z.object({ name: z.string().min(1), version: z.number().int().positive(), location: codeLocationSchema, hash: codeSourceHashSchema, imports: z.array(rawComponentPinSchema) }).strict())
-/** Budget the serialized dependency tree before recursive schema parsing can expand a shared DAG. */
-function checkComponentMemory(value: unknown, context: z.RefinementCtx): unknown {
-  const stack: Array<{ value: unknown; depth: number; leaving?: boolean }> = [{ value, depth: 0 }]
-  const active = new WeakSet<object>(); let bytes = 0
+/** 先检查活动路径上的循环，避免递归 schema 在循环对象上无法结束。 */
+function checkComponentCycles(value: unknown, context: z.RefinementCtx): unknown {
+  const stack: Array<{ value: unknown; leaving?: boolean }> = [{ value }]
+  const active = new WeakSet<object>()
   while (stack.length) {
     const entry = stack.pop()!; const item = entry.value
     if (!item || typeof item !== 'object') continue
     if (entry.leaving) { active.delete(item); continue }
-    if (active.has(item) || entry.depth > CODE_MATERIAL_LIMITS.depth) { context.addIssue({ code: 'custom', message: '固定组件依赖存在循环或超出64层编译深度。' }); return z.NEVER }
+    if (active.has(item)) { context.addIssue({ code: 'custom', message: '固定组件依赖存在循环。' }); return z.NEVER }
     active.add(item); stack.push({ ...entry, leaving: true })
-    if (Array.isArray(item)) { for (const child of item) stack.push({ value: child, depth: entry.depth }); continue }
+    if (Array.isArray(item)) { for (const child of item) stack.push({ value: child }); continue }
     const data = item as Record<string, unknown>
-    bytes += 128 + ['name', 'location', 'hash'].reduce((sum, key) => sum + (typeof data[key] === 'string' ? data[key].length * 2 : 0), 0)
-    if (bytes > 32 * 1024 ** 2) { context.addIssue({ code: 'custom', message: '固定组件依赖描述超出32MiB解析内存预算，请减少重复嵌套后重新保存。' }); return z.NEVER }
-    if (Array.isArray(data.imports)) for (const child of data.imports) stack.push({ value: child, depth: entry.depth + 1 })
+    if (Array.isArray(data.imports)) for (const child of data.imports) stack.push({ value: child })
   }
   return value
 }
-export const codeComponentPinSchema: z.ZodType<CodeComponentPin> = z.preprocess(checkComponentMemory, rawComponentPinSchema)
-export const codeComponentPinsSchema = z.preprocess(checkComponentMemory, z.array(rawComponentPinSchema))
+export const codeComponentPinSchema: z.ZodType<CodeComponentPin> = z.preprocess(checkComponentCycles, rawComponentPinSchema)
+export const codeComponentPinsSchema = z.preprocess(checkComponentCycles, z.array(rawComponentPinSchema))
 export const codeFilePathSchema = z.string().min(1).refine(value => /^[a-zA-Z0-9_\-.\u3400-\u9fff/]+\.(?:[cm]?[jt]sx?|json|wgsl|glsl)$/.test(value) && value.split('/').every(part => part !== '.' && part !== '..' && part.length > 0), '文件路径须为版本内的相对 JS、TS、JSON 或着色器路径，只能使用字母、数字、中文、_、-、. 和 /。')
 export const codeSourceHashSchema = z.string().regex(/^[a-f0-9]{64}$/)
-// Bundled third-party author modules (including Three.js) exceed the retired DSL limit.
-export const CODE_AUTHOR_SOURCE_MAX_BYTES = 16 * 1024 ** 2
-const sourceEncoder = new TextEncoder()
-/** 一个 UTF-16 码元在 UTF-8 中最多 3 字节：长度三倍不超限时必然不超限，不必逐次整份编码（每次规范化都会校验全部源码）。 */
-const withinSourceBytes = (value: string): boolean => value.length * 3 <= CODE_AUTHOR_SOURCE_MAX_BYTES || sourceEncoder.encode(value).byteLength <= CODE_AUTHOR_SOURCE_MAX_BYTES
-export const codeSourceTextSchema = z.string().max(CODE_AUTHOR_SOURCE_MAX_BYTES).refine(withinSourceBytes, '单文件源码最多16MiB。')
+export const codeSourceTextSchema = z.string()
 export const codeMaterialFilesSchema = z.object({ entry: codeFilePathSchema, files: z.record(codeFilePathSchema, codeSourceTextSchema), resolvedImports: z.record(z.string(), z.record(z.string(), z.string())).optional() }).strict().refine(value => Object.prototype.hasOwnProperty.call(value.files, value.entry), '入口文件不存在。')
 export const codeSourcesSchema = z.array(z.object({ hash: codeSourceHashSchema, source: codeSourceTextSchema }).strict()).superRefine((sources, context) => {
   if (new Set(sources.map(source => source.hash)).size !== sources.length) context.addIssue({ code: 'custom', message: '源码内容表的哈希不能重复。' })
@@ -53,7 +46,6 @@ export const codeSourcesSchema = z.array(z.object({ hash: codeSourceHashSchema, 
 /** `source` is an authoring shorthand only, never a persisted legacy format. */
 export function normalizeCodeMaterialFiles(input: string | CodeMaterialFiles): CodeMaterialFiles {
   const raw = typeof input === 'string' ? { entry: 'main.ts', files: { 'main.ts': input } } : input
-  if (raw && typeof raw === 'object' && raw.files && typeof raw.files === 'object') for (const [path, source] of Object.entries(raw.files)) if (typeof source === 'string' && (source.length > CODE_AUTHOR_SOURCE_MAX_BYTES || !withinSourceBytes(source))) throw new CodeMaterialError('SOURCE_LIMIT', `${path} 源码最多16MiB。`)
   const { trustContext, ...source } = raw
   const parsed = codeMaterialFilesSchema.safeParse(source)
   if (!parsed.success) throw new CodeMaterialError('SYNTAX', parsed.error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('；'))

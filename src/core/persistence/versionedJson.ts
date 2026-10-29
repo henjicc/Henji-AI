@@ -7,7 +7,7 @@ export interface VersionedPersistenceJson { version: number; minReaderVersion?: 
 /** 每个本机库只有一份当前内容：记住最近一次前向读取，保存时带回未知字段与原版本戳。 */
 const forwardReads = new Map<string, { version: number; minReaderVersion: number; fields: readonly ForwardField[] }>()
 export const LOCAL_LIBRARY_FORMATS: Readonly<Record<string, { id: string; name: string; version: number; minReaderVersion?: number }>> = {
-  'video-edit-style-kits': { id: 'style-kits', name: '本机风格包', version: 3 },
+  'video-edit-style-kits': { id: 'style-kits', name: '本机风格包', version: 4, minReaderVersion: 3 },
   'video-edit-title-templates': { id: 'title-templates', name: '本机标题模板', version: 8, minReaderVersion: 6 },
   'video-edit-text-presets': { id: 'text-presets', name: '本机文字和字幕预设', version: 1 },
   'video-edit-export-presets': { id: 'export-presets', name: '本机导出预设', version: 1 },

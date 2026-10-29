@@ -37,14 +37,12 @@ export const AssetBatchManager: React.FC<Props> = ({
   const [tagDraft, setTagDraft] = useState('')
   const [tags, setTags] = useState<string[]>([])
   const [libraryId, setLibraryId] = useState(libraries[0]?.id ?? '')
-  const [deleteArmed, setDeleteArmed] = useState(false)
   const disabled = busy || selectedCount === 0
   const suggestions = useMemo(() => availableTags.filter((tag) => !tags.includes(tag) && tag.toLocaleLowerCase().includes(tagDraft.trim().toLocaleLowerCase())).slice(0, 10), [availableTags, tagDraft, tags])
 
   useEffect(() => {
     if (!libraries.some((library) => library.id === libraryId)) setLibraryId(libraries[0]?.id ?? '')
   }, [libraries, libraryId])
-  useEffect(() => { if (selectedCount === 0) setDeleteArmed(false) }, [selectedCount])
 
   const addDraftTags = (): void => {
     const nextTags = tagDraft.split(/[,，]/).map((tag) => tag.trim()).filter(Boolean)
@@ -95,18 +93,13 @@ export const AssetBatchManager: React.FC<Props> = ({
 
         <UiGroup divided className="mt-5">
           {error ? <UiError size="xs" align="start" className="pt-0" title={error} message="" /> : null}
-          {/* 二次确认靠文案提示，保持 danger 档：危险实底只用于确认弹窗（同 A-28） */}
           <UiButton variant="danger"
             className="w-full"
             disabled={disabled}
-            onClick={() => {
-              if (!deleteArmed) { setDeleteArmed(true); return }
-              setDeleteArmed(false)
-              void onDelete()
-            }}
+            onClick={() => void onDelete()}
           >
             <Trash2  />
-            {deleteArmed ? t('assetLibrary.batchConfirmDelete') : t('assetLibrary.batchDelete')}
+            {t('assetLibrary.batchDelete')}
           </UiButton>
         </UiGroup>
       </div>

@@ -19,7 +19,6 @@ export function buildExternalCapabilityInventory(registry: ApplicationReflection
   // 调用面来自各领域的显式声明；公共装配不替领域扩展暴露范围。
   const description = registry.describe({}, {
     exposure: 'local_adapter',
-    permissions: new Set(['application:read', 'application:write', ...registry.listDeclaredPropertyPermissions()]),
     acceptedDataClasses: new Set(['C0', 'C1'] as const),
   })
   const writablePropertyCounts = new Map<string, number>()
@@ -50,14 +49,4 @@ export function buildExternalCapabilityInventory(registry: ApplicationReflection
       entities: entities.sort((left, right) => left.id.localeCompare(right.id)).slice(0, 128),
     }))
     .sort((left, right) => left.id.localeCompare(right.id))
-}
-
-/** 通用动词的领域权限同样来自反射声明，新增属性无需补 MCP 权限名单。 */
-export function externalReflectionPermissions(registry: ApplicationReflectionRegistry = getApplicationReflectionRegistry()) {
-  const description = registry.describe({}, { exposure: 'local_adapter',
-    permissions: new Set(registry.listDeclaredPropertyPermissions()), acceptedDataClasses: new Set(['C0', 'C1']) })
-  return {
-    read: [...new Set(description.properties.flatMap(property => property.requiredPermissions.read))],
-    write: [...new Set(description.properties.flatMap(property => property.requiredPermissions.write))],
-  }
 }

@@ -11,7 +11,7 @@ import { videoEditExportJobRegistry } from '../services/video-edit-export/regist
 const id = z.string().min(1).max(100)
 const pageId = z.string().min(8).max(100)
 const absolutePath = z.string().min(1).max(32768).refine(value => path.isAbsolute(value), '输出路径必须是绝对路径。')
-const job = z.object({ invocationId: z.string().optional(), id, projectId: z.string().min(1).max(200), name: z.string().max(500), presetName: z.string().max(500), outputPaths: z.array(absolutePath).min(1).max(4), restorable: z.boolean(), snapshotIndex: z.number().int().nonnegative().optional(), payload: z.unknown().optional() }).strict()
+const job = z.object({ invocationId: z.string().optional(), id, projectId: z.string().min(1).max(200), name: z.string().max(500), presetName: z.string().max(500), outputPaths: z.array(absolutePath).min(1), restorable: z.boolean(), snapshotIndex: z.number().int().nonnegative().optional(), payload: z.unknown().optional() }).strict()
 const schemas = {
   register: z.object({ pageId, snapshots: z.array(z.string()), jobs: z.array(job).min(1) }).strict()
     .refine(value => value.jobs.every(item => item.snapshotIndex === undefined || item.snapshotIndex < value.snapshots.length), '快照下标超出范围。'),

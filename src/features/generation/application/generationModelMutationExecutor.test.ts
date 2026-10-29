@@ -35,7 +35,6 @@ const modelKey = 'test-provider-generation-model-mutation-test'
 const context: ApplicationExecutionContext = {
   requestId: 'generation-model-mutation-test',
   exposure: 'assistant',
-  permissions: new Set(['model_catalog:read', 'model_catalog:write']),
   acceptedDataClasses: new Set(['C0', 'C1']),
 }
 

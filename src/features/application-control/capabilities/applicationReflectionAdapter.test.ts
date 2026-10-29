@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   describe: vi.fn(),
   resolveSchema: vi.fn(),
-  listDeclaredPropertyPermissions: vi.fn(() => ['assets:read', 'assets:write', 'storyboard:read']),
   listProperties: vi.fn((entityType: string) => (
     entityType === 'sample.item'
       ? [
@@ -29,7 +28,6 @@ vi.mock('./applicationControlRegistry', () => ({
   getApplicationReflectionRegistry: () => ({
     describe: mocks.describe,
     resolveSchema: mocks.resolveSchema,
-    listDeclaredPropertyPermissions: mocks.listDeclaredPropertyPermissions,
     listProperties: mocks.listProperties,
     getPropertyAvailability: mocks.getPropertyAvailability,
     getCollectionAvailability: mocks.getCollectionAvailability,
@@ -137,16 +135,6 @@ describe('应用反射通用能力适配器', () => {
       }),
     ])
   })
-  it('内部领域权限完全从反射注册源派生', async () => {
-    mocks.describe.mockReturnValueOnce({ catalogVersion: 'application-capabilities/v2', entities: [], properties: [] })
-    await applicationReflectionHandlers.describeEntities({ domains: [], entityTypes: [] }, context)
-
-    const accessContext = mocks.describe.mock.calls[0]?.[1] as { permissions: Set<string> }
-    expect([...accessContext.permissions]).toEqual(expect.arrayContaining([
-      'application:read', 'application:write', 'assets:read', 'assets:write', 'storyboard:read',
-    ]))
-  })
-
   it('紧凑目录按属性分页，精确查询返回完整 JSON 值 schema', async () => {
     const valueSchema = { type: 'object', properties: { numerator: { type: 'integer' }, denominator: { type: 'integer' } }, required: ['numerator', 'denominator'] }
     const properties = ['rate', 'name'].map((name) => ({ id: `sample.item.${name}`, entityType: 'sample.item', title: name,

@@ -13,7 +13,7 @@ import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
 vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ fonts: { list: async () => ({ revision: 1, faces: [{ ...GENERIC_FONT_FACES[0], id: 'cjk', family: 'MyFont', localizedFamily: '我的字体', fullName: 'MyFont Regular', imported: true }] }), onChanged: () => () => undefined }, settings: { get: async () => null } }) }))
 it('只读 font 实体支持分页和名称/分类/中文字形筛选，不暴露文件路径', async () => {
   const registry = new ApplicationReflectionRegistry(APPLICATION_CAPABILITY_CATALOG_VERSION); registry.register(createFontRegistration())
-  const access = { exposure: 'assistant' as const, permissions: new Set(['video_edit:read']), acceptedDataClasses: new Set(['C0', 'C1'] as const) }
+  const access = { exposure: 'assistant' as const, acceptedDataClasses: new Set(['C0', 'C1'] as const) }
   const first = await registry.listEntities('font', { limit: 3 }, access)
   expect(first.refs).toHaveLength(3); expect(first.nextCursor).toBe('3')
   const found = await registry.listEntities('font', { limit: 3, cursor: first.nextCursor! }, access, { where: { localized_name: '我的字体', category: 'sans-serif', supports_cjk: true }, propertyIds: ['name', 'imported'] })

@@ -12,7 +12,7 @@ export interface BoxLine extends BoxSample { t: number }
 /** 只查询目标元素，不扫描文字。序号从 0 开始，计入隐藏元素，避免显隐导致键漂移；重复的 data-replay-id 按文档顺序加序号。 */
 export function boxSampleScript(selectors: readonly string[] = []): string {
   const parsed = boxSelectorsSchema.safeParse(selectors)
-  if (!parsed.success) throw new Error('boxSelectors 最多 32 个非空 CSS 选择器，每个不超过 1000 字符')
+  if (!parsed.success) throw new Error('boxSelectors 每一项都必须是非空的 CSS 选择器，单个不超过 1000 字符')
   return `(() => {
     const selectors = ${JSON.stringify(parsed.data)}, targets = new Map(), acts = new Map()
     for (const el of document.querySelectorAll('[data-replay-id], [data-act]')) {

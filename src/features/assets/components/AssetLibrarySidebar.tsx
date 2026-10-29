@@ -15,7 +15,6 @@ interface SidebarLabels {
   categories: string
   create: string
   placeholder: string
-  confirmDelete: string
   rename: string
   delete: string
   confirm: string

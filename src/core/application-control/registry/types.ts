@@ -11,7 +11,6 @@ import type { ApplicationDataClass } from '../identifiers'
 export interface ApplicationControlAccessContext {
   signal?: AbortSignal
   exposure: ApplicationExposure
-  permissions: ReadonlySet<string>
   acceptedDataClasses: ReadonlySet<ApplicationDataClass>
 }
 

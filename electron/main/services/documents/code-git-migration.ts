@@ -31,7 +31,7 @@ async function readLegacy(repository: CodeGitRepository, relative: string): Prom
   await repository.safePath(relative)
   const file = path.join(repository.dir, relative)
   const stat = await fsp.stat(file)
-  if (!stat.isFile() || stat.size > 16 * 1024 ** 2) throw new Error('旧源码不是普通文件或超过16MiB，请检查后重试。')
+  if (!stat.isFile()) throw new Error('源码不是普通文件，请检查后重试。')
   return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(await fsp.readFile(file))
 }
 

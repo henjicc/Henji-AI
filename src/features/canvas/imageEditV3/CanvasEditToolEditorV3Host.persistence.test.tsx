@@ -42,7 +42,7 @@ it('异步加载完成后实际宿主登记 durable owner，正式反射修改�
     resourceByteSizes: {}, resourceDescriptors: [] }) })
   await waitFor(() => expect(listImageEditDocumentInstancesV3().find((session) => session.documentId === document.id)?.persistenceOwner).toBeDefined())
   const context = { requestId: 'host-formal-write', exposure: 'assistant' as const,
-    permissions: new Set(['image_edit:read', 'image_edit:write']), acceptedDataClasses: new Set(['C0', 'C1'] as const) }
+    acceptedDataClasses: new Set(['C0', 'C1'] as const) }
   const target = imageEditV3LayerRef(document.id, 'layer')
   const engine = getApplicationControlExecutionEngine()
   const snapshot = await getApplicationReflectionRegistry().readEntity(target, [], context)

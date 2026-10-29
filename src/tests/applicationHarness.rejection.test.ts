@@ -13,7 +13,7 @@ it('真实目录覆盖全部领域，各域拒绝未知实体及属性，错误�
   try {
     const registry = getApplicationReflectionRegistry()
     const description = registry.describe({}, { exposure: 'local_adapter',
-      permissions: new Set(registry.listDeclaredPropertyPermissions()), acceptedDataClasses: new Set(['C0', 'C1']) })
+      acceptedDataClasses: new Set(['C0', 'C1']) })
     const entities = [...new Map(description.entities.map(entity => [entity.domain, entity])).values()]
     expect(entities.length).toBeGreaterThanOrEqual(8)
     expect(app.session.list().length).toBeGreaterThan(30)

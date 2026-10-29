@@ -318,7 +318,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
           activeSort={sort}
           labels={{
             all: t('assetLibrary.all'), recent: t('assetLibrary.recent'), image: t('assetLibrary.image'), video: t('assetLibrary.video'), audio: t('assetLibrary.audio'), code: t('assetLibrary.code'),
-            categories: t('assetLibrary.categories'), create: t('assetLibrary.createLibrary'), placeholder: t('assetLibrary.libraryName'), confirmDelete: t('assetLibrary.confirmDeleteLibrary'),
+            categories: t('assetLibrary.categories'), create: t('assetLibrary.createLibrary'), placeholder: t('assetLibrary.libraryName'),
             rename: t('assetLibrary.renameAsset'), delete: t('assetLibrary.deleteAsset'), confirm: t('assetLibrary.confirm'), cancel: t('cancel'),
           }}
           onShowAll={() => selectSystemView(null, 'created')}
